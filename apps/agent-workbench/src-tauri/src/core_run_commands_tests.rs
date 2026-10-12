@@ -4292,6 +4292,172 @@ fn drain_timer_steering_carries_trigger_source() {
     );
 }
 
+/// CONTEXT_STATE_GROUP 条目被 drain 时直接过滤丢弃，绝不会转化为 role: AgentMessageRole::User 注入消息
+#[test]
+fn drain_pending_filters_context_state_never_generates_user_message() {
+    let mut queue = PendingMessageQueue::new();
+    // 纯 context-state 条目：drain 后应为空，绝不生成任何注入消息（切断伪造 User 角色消息通道）
+    queue.enqueue(
+        SteeringInputEntry::context_state(
+            "cs-1",
+            "当前已切换到模型 ornith:latest（服务商 ollama）。权限模式：full。思考档位：Max。",
+            1_000,
+        )
+        .with_session("s1"),
+    );
+
+    let messages = drain_pending_to_inject_messages(&mut queue, "s1");
+    assert!(
+        messages.is_empty(),
+        "drain_pending_to_inject_messages 遇到 context-state 条目必须丢弃，绝不转化为注入消息"
+    );
+
+    // 混合场景：context-state 与合法 steering 并存时，过滤 context-state 并仅保留 steering 注入
+    queue.enqueue(
+        SteeringInputEntry::context_state("cs-2", "当前已切换到模型 X", 2_000).with_session("s1"),
+    );
+    queue.enqueue(
+        SteeringInputEntry::steering("st-1", "普通 steering 提醒", 2_001).with_session("s1"),
+    );
+
+    let mixed = drain_pending_to_inject_messages(&mut queue, "s1");
+    assert_eq!(mixed.len(), 1, "仅保留合法 steering 消息");
+    assert_eq!(mixed[0].text(), "普通 steering 提醒");
+    assert_ne!(
+        mixed[0]
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("kind"))
+            .and_then(|k| k.as_str()),
+        Some("context-state"),
+        "注入消息元数据绝不可为 context-state"
+    );
+}
+
+/// 测试 1：验证 run_task 传入 context_state 时，用户消息正文正确格式化为 [用户输入]\n...\n\n[系统环境上下文]\n...
+#[tokio::test]
+async fn run_task_with_context_state_formats_envelope_prompt() {
+    let provider = Arc::new(TestProvider::new(vec![
+        ProviderStreamEvent::text("好的，已收到指令。"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]));
+    let (state, db, _emitter) = run_control_test_state(provider.clone());
+    state.run_restore().await;
+
+    let mut options = test_options("run-cs-1", "s1", "分析这个报错");
+    options.context_state = Some("当前已切换到模型 ornith:latest（服务商 ollama）。权限模式：full。思考档位：Max。".to_string());
+
+    run_task_impl(Arc::clone(&state), options)
+        .await
+        .expect("run 发起成功");
+
+    wait_run_terminal(&db, "s1", Duration::from_secs(10)).await;
+
+    // 验证 LLM 接收到的第一轮请求中，用户消息被正确格式化为包含 [用户输入] 与 [系统环境上下文]
+    let requests = provider.requests();
+    assert!(!requests.is_empty(), "provider 必须收到至少 1 次请求");
+    let user_msg = requests[0]
+        .messages
+        .iter()
+        .find(|m| m.role == AgentMessageRole::User)
+        .expect("必须包含 User 消息");
+
+    let expected = "[用户输入]\n分析这个报错\n\n[系统环境上下文]\n当前已切换到模型 ornith:latest（服务商 ollama）。权限模式：full。思考档位：Max。";
+    assert_eq!(user_msg.text(), expected, "用户消息正文必须包含标准信封合体格式");
+}
+
+/// 测试 2：验证 run_task 完成后，state.pending_queue 保持为空，不会触发 decide_idle_resume 生成新的 Run
+#[tokio::test]
+async fn run_task_with_context_state_leaves_pending_queue_empty_and_no_idle_resume() {
+    let provider = Arc::new(TestProvider::new(vec![
+        ProviderStreamEvent::text("处理完毕"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]));
+    let (state, db, _emitter) = run_control_test_state(provider.clone());
+    state.run_restore().await;
+
+    let mut options = test_options("run-cs-2", "s1", "帮我查一下文件");
+    options.context_state = Some("当前已切换到模型 ornith:latest（服务商 ollama）。权限模式：full。思考档位：Max。".to_string());
+
+    run_task_impl(Arc::clone(&state), options)
+        .await
+        .expect("run 发起成功");
+
+    wait_run_terminal(&db, "s1", Duration::from_secs(10)).await;
+
+    // 1. 断言 pending_queue 绝无 context_state 遗留，保持为空
+    let queue_len = state
+        .pending_queue
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .len();
+    assert_eq!(queue_len, 0, "run_task 完成后 pending_queue 必须保持为空，严禁排队 context_state");
+
+    // 2. 断言 decide_idle_resume 返回 None，绝不因 context_state 触发二次唤醒
+    let active = build_active_run(&state, "s1", "run-cs-2").await;
+    let decision = decide_idle_resume(
+        &state,
+        &active,
+        AgentEndReason::Stop,
+        false,
+        &ResumeSignals::default(),
+    )
+    .await;
+    assert!(
+        decision.is_none(),
+        "run 收口后 decide_idle_resume 必须返回 None，绝不生成新的 Run"
+    );
+
+    // 3. 断言 provider 总调用次数恰好为 1，零额外 Turn
+    assert_eq!(
+        provider.requests().len(),
+        1,
+        "全生命周期仅允许 1 次 LLM 调用，0 额外 Turn，切断二次唤醒"
+    );
+}
+
+/// 测试 3：验证无 context_state 时，用户消息保持原始正文，不产生多余标签
+#[tokio::test]
+async fn run_task_without_context_state_keeps_original_prompt() {
+    let provider = Arc::new(TestProvider::new(vec![
+        ProviderStreamEvent::text("收到"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]));
+    let (state, db, _emitter) = run_control_test_state(provider.clone());
+    state.run_restore().await;
+
+    let options = test_options("run-cs-3", "s1", "无状态上下文的常规指令");
+    // options.context_state 缺省即为 None
+
+    run_task_impl(Arc::clone(&state), options)
+        .await
+        .expect("run 发起成功");
+
+    wait_run_terminal(&db, "s1", Duration::from_secs(10)).await;
+
+    let requests = provider.requests();
+    assert!(!requests.is_empty(), "provider 必须收到请求");
+    let user_msg = requests[0]
+        .messages
+        .iter()
+        .find(|m| m.role == AgentMessageRole::User)
+        .expect("必须包含 User 消息");
+
+    assert_eq!(
+        user_msg.text(),
+        "无状态上下文的常规指令",
+        "无 context_state 时必须保持原始 Prompt 正文"
+    );
+    assert!(
+        !user_msg.text().contains("[用户输入]"),
+        "无 context_state 时不得包含 [用户输入] 标签"
+    );
+    assert!(
+        !user_msg.text().contains("[系统环境上下文]"),
+        "无 context_state 时不得包含 [系统环境上下文] 标签"
+    );
+}
+
 /// D6 §3.2 接线：ensure_wake_watcher 幂等持有 + start 生效（不重复 spawn）
 #[tokio::test]
 async fn wake_watcher_ensure_idempotent_and_running() {

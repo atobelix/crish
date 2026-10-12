@@ -138,6 +138,35 @@ pub fn save_session_body_conn(
                 kind: DbFailureKind::CasConflict,
             });
         }
+    } else if messages.is_empty() {
+        // 防未水合空壳误删物理守卫（Task-2 / RC-01 / 根因链一）：
+        // 当传入 messages.is_empty() 且 batch_version.is_none()（即无版本号 CAS 的盲写，如前端启动批量同步未水合空壳）时：
+        // 查询该 session_id 在 session_messages 表中是否已有记录（existing_count > 0），
+        // 或者在 events 表中是否存在 message-start / message-end 对话事件记录。
+        // 如果存在已有消息或历史对话事件，拒绝执行清空删除（直接返回 Ok(())，拦截 DELETE FROM session_messages 与元数据清零）！
+        let existing_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM session_messages WHERE session_id = ?1",
+                rusqlite::params![session_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let has_events: bool = if existing_count > 0 {
+            true
+        } else {
+            conn.query_row(
+                "SELECT 1 FROM events WHERE session_id = ?1 AND event_type IN ('message-start', 'message-end') LIMIT 1",
+                rusqlite::params![session_id],
+                |_| Ok(true),
+            )
+            .unwrap_or(false)
+        };
+
+        if existing_count > 0 || has_events {
+            // 物理拦截：存在历史消息或历史事件，拒绝无 CAS 的空数组删库
+            return Ok(());
+        }
     }
 
     // 3. 增量 Upsert（PRIMARY KEY (session_id, seq)；全字段含 id/sender 等）

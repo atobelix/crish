@@ -261,11 +261,8 @@ pub struct RunTaskOptions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
     /// I1-α②（扩展点 A）：context-state 感知注入文本（前端 provider-profiles
-    /// 状态切换产生器在 `emitUiEvent('profiles-changed')` 处生成的快照文本：
-    /// 「当前已切换到模型 X / 权限 Y / 思考档位 Z」；None = 无状态切换告知）。
-    /// 装配：run_task_impl 收到后经 [PendingMessageQueue::replace_or_enqueue]
-    /// （group_id = [CONTEXT_STATE_GROUP] 去重）排入跨 run 队列——下一次
-    /// 用户提交边界注入时间线（详案 I1-α② 注入载体契约）。
+    /// 状态切换产生器生成的快照文本：「当前已切换到模型 X / 权限 Y / 思考档位 Z」；None = 无状态切换告知）。
+    /// 装配：run_task_impl 收到后与 prompt 融合成合体信封当次生效，0 额外 Turn，绝不入跨 run 队列。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_state: Option<String>,
     /// 多模态 content 桥（plans/04 §4.2）：OpenAI 形 parts（`type: image_url`
@@ -783,40 +780,27 @@ pub(crate) async fn run_task_impl(
     };
     // 用户消息（clientMessageId 透传，03 §5.3-4；多模态 content 桥——
     // plans/04 §4.2：hasImages 时把 OpenAI 形 parts 写入 metadata.contentParts）
+    // 上下文信封融合：当 context_state 存在时，与 prompt 合体，当次生效，0 额外 Turn，严禁入 pending_queue！
+    let effective_prompt = match (
+        prompt.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+        context_state.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+    ) {
+        (Some(p), Some(cs)) => {
+            if p.contains("[用户输入]") && p.contains("[系统环境上下文]") {
+                p.to_string()
+            } else {
+                format!("[用户输入]\n{}\n\n[系统环境上下文]\n{}", p, cs)
+            }
+        }
+        (Some(p), None) => p.to_string(),
+        (None, Some(cs)) => format!("[系统环境上下文]\n{}", cs),
+        (None, None) => String::new(),
+    };
     let message = crate::engine::user_message_with_content(
-        &prompt.unwrap_or_default(),
+        &effective_prompt,
         client_message_id.as_deref(),
         content_parts,
     );
-
-    // ── I1-α②（扩展点 A）：context-state 感知注入 ─────────────────
-    // 前端 provider-profiles 状态切换产生器（emitUiEvent('profiles-changed')
-    // 处生成「当前已切换到模型 X / 权限 Y / 思考档位 Z」快照文本）经
-    // run-task `contextState` 入站 → 本处经 PendingMessageQueue
-    // replace_or_enqueue（group_id = CONTEXT_STATE_GROUP 去重——连切两次
-    // 只注入一次）排入跨 run 队列 → 下一次用户提交边界
-    // drain_pending_to_inject_messages 按 User 文本注入时间线（详案 I1-α②
-    // 注入载体契约；17 审计纪律：仅「状态切换发生」感知注入进 seq，
-    // 配置/偏好本身不进消息流）。
-    if let Some(text) = context_state.filter(|t| !t.trim().is_empty()) {
-        let now = now_ms_internal();
-        let entry = orchestrator::steering_queue::SteeringInputEntry::context_state(
-            format!("context-state-{run_id}-{now}"),
-            text,
-            now,
-        )
-        .with_session(&session_id);
-        state
-            .pending_queue
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .replace_or_enqueue(entry);
-        tracing::info!(
-            target: "run",
-            session_id = %session_id,
-            "context-state 感知注入已排入跨 run 队列（下一次用户提交边界注入时间线）"
-        );
-    }
 
     // ── T-29/T-30 历史参数装配（P4 §3.2.3 混合路线）───────────────
     // 前端 history（store 已完成消息）为冷启动水合兜底；为空/未传时回退

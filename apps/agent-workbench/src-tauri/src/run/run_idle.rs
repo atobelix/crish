@@ -240,6 +240,9 @@ pub(crate) mod idle_resume {
                 } else {
                     Vec::new()
                 };
+                if inject.is_empty() && !timer_active && !cron_enabled && !goal_pending {
+                    return None;
+                }
                 let mode = if goal_pending {
                     "goal-continue"
                 } else {
@@ -534,8 +537,8 @@ pub(crate) mod idle_resume {
     /// 注入文本 = 队列条目原文（生成侧已按 §4.8 模板拼入 wakeup_summary
     /// 摘要，与 prompt 并存）；多条普通条目按序拼接（换行分隔）为一条用户
     /// 角色消息——对齐 D8「条目作为下一条用户消息注入」语义（steering_queue.rs
-    /// into_user_message，普通注入带 kind=steering 枚举 canonical；context-state
-    /// 条目单独成消息带 kind=context-state，I1-α②）。
+    /// into_user_message，普通注入带 kind=steering 枚举 canonical）。
+    /// 过滤丢弃任何残留的 context-state 条目（绝不伪造成用户消息，绝不拉起 idle-resume run）。
     /// 消息 id 沿用首条条目 id 保证幂等（对齐 transfer_follow_up 的 id 沿用）。
     pub(crate) fn drain_pending_to_inject_messages(
         queue: &mut PendingMessageQueue,
@@ -545,91 +548,76 @@ pub(crate) mod idle_resume {
         if entries.is_empty() {
             return Vec::new();
         }
-        // I1-α②（扩展点 A）：context-state 感知注入单独成消息——状态切换
-        // 告知带 kind=context-state（T1a 枚举）进时间线，不并入普通唤醒
-        // 合并文本（否则 kind 丢失且被当作 steering 合并注入）。
-        let (context_states, others): (Vec<_>, Vec<_>) = entries
+        // 彻底移除 context_states 伪造 User 消息逻辑；过滤丢弃任何残留的 CONTEXT_STATE_GROUP 条目
+        let valid_entries: Vec<_> = entries
             .into_iter()
-            .partition(|e| e.group_id.as_deref() == Some(CONTEXT_STATE_GROUP));
-        if !others.is_empty() {
-            // D6 §3.4：合并注入上限（评审 selection-03:220 建议 ≤16 条）——保留
-            // 最新 ≤16 条（FIFO 尾部即最新；省略最旧——旧条目信息过时风险高，
-            // D6 §8 决策 4），超出在文本注明省略 N 条。省略轨迹不丢：恢复域
-            // 条目有 recover_notifications 落库冗余，定时器/子代理终态条目有
-            // 事件表留痕——队列只承载提醒，不承载全量。
-            let mut entries = others;
-            let (kept, omitted) = if entries.len() > RESTORE_MERGE_INJECT_LIMIT {
-                let split = entries.len() - RESTORE_MERGE_INJECT_LIMIT;
-                let omitted = entries[..split].len();
-                (entries.split_off(split), omitted)
-            } else {
-                (entries, 0)
-            };
-            let mut text = kept
-                .iter()
-                .map(|entry| entry.text.as_str())
-                .collect::<Vec<_>>()
-                .join("\n");
-            if omitted > 0 {
-                text = format!("{text}\n（其余 {omitted} 条唤醒通知省略，详情见事件流）");
-            }
-            // 消息 id 沿用保留集首条条目 id 保证幂等（对齐 transfer_follow_up
-            // 的 id 沿用）
-            let first = &kept[0];
-            let trigger_source = if first
-                .group_id
-                .as_deref()
-                .is_some_and(|g| g.starts_with("timer-"))
-                || first.id.starts_with("timer-")
-            {
-                Some("system_timer")
-            } else if first
-                .group_id
-                .as_deref()
-                .is_some_and(|g| g.starts_with("cron-"))
-                || first.id.starts_with("cron-")
-            {
-                Some("cron")
-            } else if first.group_id.as_deref() == Some("subagent-complete")
-                || first.id.starts_with("subagent-")
-            {
-                Some("subagent_complete")
-            } else {
-                None
-            };
-
-            let mut meta = serde_json::json!({
-                "kind": AgentMessageMetadataKind::Steering
-            });
-            if let Some(src) = trigger_source {
-                meta["triggerSource"] = serde_json::json!(src);
-            }
-
-            return vec![AgentMessage {
-                id: first.id.clone(),
-                role: AgentMessageRole::User,
-                created_at: crate::engine::now_iso_utc(),
-                blocks: vec![AgentMessageBlock::Text { text }],
-                metadata: Some(meta),
-                client_message_id: None,
-                content: None,
-            }];
+            .filter(|e| e.group_id.as_deref() != Some(CONTEXT_STATE_GROUP))
+            .collect();
+        if valid_entries.is_empty() {
+            return Vec::new();
         }
-        // 全为 context-state 条目：逐条注入（各带 kind=context-state）
-        context_states
-            .into_iter()
-            .map(|entry| AgentMessage {
-                id: entry.id,
-                role: AgentMessageRole::User,
-                created_at: crate::engine::now_iso_utc(),
-                blocks: vec![AgentMessageBlock::Text { text: entry.text }],
-                metadata: Some(serde_json::json!({
-                    "kind": AgentMessageMetadataKind::ContextState
-                })),
-                client_message_id: None,
-                content: None,
-            })
-            .collect()
+        // D6 §3.4：合并注入上限（评审 selection-03:220 建议 ≤16 条）——保留
+        // 最新 ≤16 条（FIFO 尾部即最新；省略最旧——旧条目信息过时风险高，
+        // D6 §8 决策 4），超出在文本注明省略 N 条。省略轨迹不丢：恢复域
+        // 条目有 recover_notifications 落库冗余，定时器/子代理终态条目有
+        // 事件表留痕——队列只承载提醒，不承载全量。
+        let mut entries = valid_entries;
+        let (kept, omitted) = if entries.len() > RESTORE_MERGE_INJECT_LIMIT {
+            let split = entries.len() - RESTORE_MERGE_INJECT_LIMIT;
+            let omitted = entries[..split].len();
+            (entries.split_off(split), omitted)
+        } else {
+            (entries, 0)
+        };
+        let mut text = kept
+            .iter()
+            .map(|entry| entry.text.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        if omitted > 0 {
+            text = format!("{text}\n（其余 {omitted} 条唤醒通知省略，详情见事件流）");
+        }
+        // 消息 id 沿用保留集首条条目 id 保证幂等（对齐 transfer_follow_up
+        // 的 id 沿用）
+        let first = &kept[0];
+        let trigger_source = if first
+            .group_id
+            .as_deref()
+            .is_some_and(|g| g.starts_with("timer-"))
+            || first.id.starts_with("timer-")
+        {
+            Some("system_timer")
+        } else if first
+            .group_id
+            .as_deref()
+            .is_some_and(|g| g.starts_with("cron-"))
+            || first.id.starts_with("cron-")
+        {
+            Some("cron")
+        } else if first.group_id.as_deref() == Some("subagent-complete")
+            || first.id.starts_with("subagent-")
+        {
+            Some("subagent_complete")
+        } else {
+            None
+        };
+
+        let mut meta = serde_json::json!({
+            "kind": AgentMessageMetadataKind::Steering
+        });
+        if let Some(src) = trigger_source {
+            meta["triggerSource"] = serde_json::json!(src);
+        }
+
+        vec![AgentMessage {
+            id: first.id.clone(),
+            role: AgentMessageRole::User,
+            created_at: crate::engine::now_iso_utc(),
+            blocks: vec![AgentMessageBlock::Text { text }],
+            metadata: Some(meta),
+            client_message_id: None,
+            content: None,
+        }]
     }
 
     /// D7 §8 决策 1：会话树访问器（D3 session_trees 表优先——共享实例直读

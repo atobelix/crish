@@ -150,6 +150,13 @@ pub async fn workbench_window_ready(
     state: tauri::State<'_, Arc<WindowHandshakeState>>,
     diagnostics: tauri::State<'_, Arc<StatusDiagnostics>>,
 ) -> Result<(), String> {
+    if window.label() != MAIN_WINDOW_LABEL {
+        crate::window_backdrop::apply_adaptive_backdrop(&window);
+        let _ = window.show();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+
     if state.is_shown() {
         return Ok(());
     }

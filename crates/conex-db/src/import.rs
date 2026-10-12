@@ -151,6 +151,16 @@ impl LocalDb {
                         kind: DbFailureKind::Other("import_from_localstorage".to_string()),
                     })?;
 
+                    // v12 触发器退役后，同步更新 sessions.message_count 修复计数失步
+                    conn.execute(
+                        "UPDATE sessions SET message_count = (SELECT COUNT(*) FROM session_messages WHERE session_id = ?1) WHERE id = ?1",
+                        rusqlite::params![entry.id],
+                    )
+                    .map_err(|e| DbFailure {
+                        message: format!("import_update_message_count: {e}"),
+                        kind: DbFailureKind::Other("import_from_localstorage".to_string()),
+                    })?;
+
                     stats.messages += messages.len() as u64;
                 }
 

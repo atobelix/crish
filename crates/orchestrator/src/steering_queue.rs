@@ -95,15 +95,9 @@ impl SteeringInputEntry {
 
     /// context-state 感知注入条目（详案 I1-α② 扩展点 A）
     ///
-    /// 状态切换（模型名/权限/思考模式）产生的「切换发生」告知——作为
-    /// **下一条用户消息**在下一 run 边界注入时间线；`group_id` 固定为
-    /// [CONTEXT_STATE_GROUP]（经 [PendingMessageQueue::replace_or_enqueue]
-    /// 去重，连切两次只注入一次）；`is_steering=false`（感知注入不占
-    /// steering 挤占保护位）。转用户消息时 metadata.kind 取枚举
-    /// [AgentMessageMetadataKind::ContextState]（T1a 已定义）。
-    ///
-    /// 17 审计纪律边界：仅「状态切换发生」的**感知注入**进 seq；配置/
-    /// 偏好存储留在独立配置带，不塞消息流。
+    /// 【注意/已废弃】：context-state 属于当次 run 的系统环境上下文元数据，
+    /// 在 run_launch 阶段直接与用户 prompt 融合成合体信封当次生效。
+    /// 本构造方法仅供遗留测试或纯状态标记保留兼容性，禁止在生产中作为唤醒源排入 pending_queue！
     pub fn context_state(id: impl Into<String>, text: impl Into<String>, enqueued_at: u64) -> Self {
         Self {
             session_id: String::new(),
@@ -122,7 +116,7 @@ impl SteeringInputEntry {
     /// 标记规则（I1-α④ 枚举化）：
     /// - steering 条目 → `kind=steering`（[AgentMessageMetadataKind::Steering]）；
     /// - context-state 条目（group_id=[CONTEXT_STATE_GROUP]）→
-    ///   `kind=context-state`（[AgentMessageMetadataKind::ContextState]）；
+    ///   `kind=context-state`（[AgentMessageMetadataKind::ContextState]）（注意：生产路径已彻底斩断 context_state 唤醒逻辑，此分支仅供遗留测试/纯状态标记兼容）；
     /// - 普通条目 → 无 kind 元数据。
     pub fn into_user_message(&self) -> AgentMessage {
         let metadata = if self.group_id.as_deref() == Some(CONTEXT_STATE_GROUP) {
@@ -271,14 +265,18 @@ impl PendingMessageQueue {
         self.transfer_into_input_queue(queue, InputEnqueueMode::FollowUp)
     }
 
-    /// 是否有待处理条目
+    /// 是否有待处理条目（纯 context-state 标记不作为激活唤醒源）
     pub fn has_pending(&self) -> bool {
-        !self.entries.is_empty()
+        self.entries
+            .iter()
+            .any(|e| e.group_id.as_deref() != Some(CONTEXT_STATE_GROUP))
     }
 
-    /// 指定会话是否有待处理条目（防跨会话无差别拉起核心守护）
+    /// 指定会话是否有待处理条目（防跨会话无差别拉起核心守护；纯 context-state 标记不作为激活唤醒源）
     pub fn has_pending_for(&self, session_id: &str) -> bool {
-        self.entries.iter().any(|e| e.session_id == session_id)
+        self.entries.iter().any(|e| {
+            e.session_id == session_id && e.group_id.as_deref() != Some(CONTEXT_STATE_GROUP)
+        })
     }
 
     /// 是否含 steering 条目（对齐 TS hasPendingSteering）
@@ -682,6 +680,7 @@ mod tests {
         // （不新增条目，防连切两次重复注入）
         let mut queue = PendingMessageQueue::new();
         queue.enqueue(cs.clone());
+        assert!(!queue.has_pending(), "context-state 条目不作为激活唤醒源");
         let replaced = queue.replace_or_enqueue(SteeringInputEntry::context_state(
             "ctx-2",
             "当前已切换到模型 Y（思考档位 low）。",
@@ -689,6 +688,7 @@ mod tests {
         ));
         assert!(replaced, "同 group_id 应原位替换");
         assert_eq!(queue.len(), 1, "去重后仍只一条 context-state");
+        assert!(!queue.has_pending(), "去重后 context-state 条目仍不作为激活唤醒源");
         let drained = queue.dequeue_all();
         assert_eq!(drained[0].text, "当前已切换到模型 Y（思考档位 low）。");
     }

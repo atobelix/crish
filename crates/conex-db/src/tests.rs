@@ -705,8 +705,8 @@ fn save_session_body_clear_empty_array_empties_session() {
     .unwrap();
     assert_eq!(db.load_session_body("s1").unwrap().len(), 2);
 
-    // 显式清空（空数组）：seq >= 0 删净 + message_count = 0
-    db.save_session_body("s1", &[]).unwrap();
+    // 显式清空（空数组）：显式 CAS 版本号推进清空
+    db.save_session_body_versioned("s1", &[], Some(1)).unwrap();
 
     assert!(db.load_session_body("s1").unwrap().is_empty());
     assert_eq!(db.list_sessions().unwrap()[0].message_count, 0);
@@ -760,8 +760,73 @@ fn message_count_absolute_assign_tracks_len() {
         .unwrap();
     assert_eq!(db.list_sessions().unwrap()[0].message_count, 1);
 
-    // 清空：0 条
+    // 显式清空：0 条（需带 CAS 版本）
+    db.save_session_body_versioned("s1", &[], Some(1)).unwrap();
+    assert_eq!(db.list_sessions().unwrap()[0].message_count, 0);
+}
+
+/// Task-2 物理防误删守卫：无 CAS 的盲写空数组禁止清空已有历史消息或历史事件的会话。
+#[test]
+fn save_session_body_empty_without_cas_guarded_against_accidental_delete() {
+    let (db, _guard) = open_temp_wal_db();
+    db.upsert_session_entry(&sample_entry("s1")).unwrap();
+
+    // 1. 会话已有 2 条消息，盲写空数组 (batch_version = None) 必须被物理拦截
+    db.save_session_body(
+        "s1",
+        &[
+            sample_message("m1", "user", 1),
+            sample_message("m2", "assistant", 2),
+        ],
+    )
+    .unwrap();
+    assert_eq!(db.load_session_body("s1").unwrap().len(), 2);
+
+    // 模拟前端启动未水合懒壳盲写 []
     db.save_session_body("s1", &[]).unwrap();
+
+    // 消息完好保留，message_count 未被归零
+    assert_eq!(
+        db.load_session_body("s1").unwrap().len(),
+        2,
+        "盲写空数组必须被物理拦截，消息不能丢失"
+    );
+    assert_eq!(
+        db.list_sessions().unwrap()[0].message_count,
+        2,
+        "message_count 必须保持原值"
+    );
+
+    // 2. 会话 session_messages 为空，但在 events 表中存在 message-start / message-end
+    db.upsert_session_entry(&sample_entry("s2")).unwrap();
+    db.append_event(
+        "s2",
+        1,
+        "message-start",
+        r#"{"type":"message-start","sessionId":"s2"}"#,
+        None,
+    )
+    .unwrap();
+    db.append_event(
+        "s2",
+        2,
+        "message-end",
+        r#"{"type":"message-end","sessionId":"s2"}"#,
+        None,
+    )
+    .unwrap();
+
+    // 对 s2 尝试盲写空数组：因为 events 表存在对话事件，同样被守卫拦截
+    db.save_session_body("s2", &[]).unwrap();
+
+    // 3. 真正无消息且无事件的纯新空会话，盲写空数组允许放行
+    db.upsert_session_entry(&sample_entry("s_empty")).unwrap();
+    db.save_session_body("s_empty", &[]).unwrap();
+    assert_eq!(db.load_session_body("s_empty").unwrap().len(), 0);
+
+    // 4. 显式带有 CAS 版本号的清空操作，允许正常清空
+    db.save_session_body_versioned("s1", &[], Some(1)).unwrap();
+    assert_eq!(db.load_session_body("s1").unwrap().len(), 0);
     assert_eq!(db.list_sessions().unwrap()[0].message_count, 0);
 }
 

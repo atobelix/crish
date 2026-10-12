@@ -159,6 +159,7 @@ fn import_from_localstorage_jsonl_body() {
     let body_loaded = db.load_session_body("s1").unwrap();
     assert_eq!(body_loaded.len(), 2);
     assert_eq!(body_loaded[1].id, "m2");
+    assert_eq!(db.list_sessions().unwrap()[0].message_count, 2, "import 必须同步更新 sessions.message_count");
 }
 
 #[test]
@@ -178,6 +179,7 @@ fn import_from_localstorage_idempotent() {
 
     let body_loaded = db.load_session_body("s1").unwrap();
     assert_eq!(body_loaded.len(), 1);
+    assert_eq!(db.list_sessions().unwrap()[0].message_count, 1, "import 幂等且保持正确的 message_count");
 }
 
 // ===== P5 T-39：v5 迁移（runs usage/cache 列 + session_messages.usage_json）=====
