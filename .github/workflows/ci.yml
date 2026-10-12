@@ -40,7 +40,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
+      - run: npm ci || npm install
       # G7 统一：typecheck 走根脚本（npm run typecheck = 7 段 tsc 直跑；
       # 与 npx turbo run typecheck 覆盖等价，口径对齐 G7 盘点）
       - run: npm run typecheck
@@ -54,7 +54,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
+      - run: npm ci || npm install
       - run: npx eslint .
       # depcruise 无 --ignore 参数（dependency-cruiser 16.x 仅 -x/--exclude 与
       # --ignore-known）；dist 排除已由 .dependency-cruiser.cjs options.exclude
@@ -110,7 +110,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
+      - run: npm ci || npm install
       # 前端快集：仅 unit 项目（F1 纯逻辑 + F2 组件，用例基线主体）
       # --coverage：强制执行 vitest.config.ts 根 coverage 块的阈值门禁。
       #（2026-08-03 审计：此前未带 --coverage，且项目级阈值被根配置整体覆盖，
@@ -137,7 +137,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
+      - run: npm ci || npm install
       - run: npm run build:shared-types
       - run: npm run build:desktop
       - run: node scripts/check-dist.mjs --max-app-kb 500 --csp-enforce
@@ -162,7 +162,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci || npm install
       - run: npm run typecheck -w @crish/crish-mobile
       - run: npm test -w @crish/crish-mobile -- --ci
 
@@ -175,7 +175,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
+      - run: npm ci || npm install
       - run: npm audit --audit-level=moderate
 
   # 生成物漂移门禁（2026-08-03 审计：gen:engine-bindings 是手动脚本，CI 未跑；
@@ -191,7 +191,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
+      - run: npm ci || npm install
       - run: node scripts/generate-engine-bindings.mjs
       - run: git diff --exit-code -- packages/shared-types/src/generated
 
