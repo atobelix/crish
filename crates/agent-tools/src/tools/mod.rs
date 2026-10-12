@@ -449,11 +449,9 @@ pub(crate) fn has_escaping_symlink_below_root(path: &Path, root: &Path) -> bool 
 /// 先按原始根匹配，失败再按规范化（符号链接解析后）根匹配，最后回退文件名。
 /// 输出统一使用 `/` 分隔（对齐 TS 语义，避免 Windows 反斜杠干扰模型解析）。
 pub(crate) fn display_path(root: &Path, path: &Path) -> String {
-    let mut rel = display_path_native(root, path);
+    let rel = display_path_native(root, path);
     #[cfg(windows)]
-    {
-        rel = rel.replace('\\', "/");
-    }
+    let rel = rel.replace('\\', "/");
     rel
 }
 

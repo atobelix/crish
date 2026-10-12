@@ -339,9 +339,9 @@ fn lock_inner(
 /// 路径剥离 `\\?\` 前缀后再归一化比较（resolve_workspace_path 输出已剥离，
 /// 防御性兜底：外部传入的绝对路径可能带 verbatim 前缀）
 fn strip_prefix_normalized(path: &Path) -> PathBuf {
-    let s = path.to_string_lossy();
     #[cfg(windows)]
     {
+        let s = path.to_string_lossy();
         if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
             return PathBuf::from(format!("\\{rest}"));
         }
