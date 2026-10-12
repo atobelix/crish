@@ -31,11 +31,15 @@ describe('FoldableToolGroup 独立工具折叠组', () => {
     const items: ToolRenderItem[] = [
       {
         kind: 'single',
-        tc: tc('t1', 'run_command', 'success', { arguments: '{"command":"echo 1"}' }),
+        tc: tc('t1', 'run_command', 'success', {
+          arguments: '{"command":"echo 1"}',
+        }),
       },
       {
         kind: 'single',
-        tc: tc('t2', 'run_command', 'success', { arguments: '{"command":"echo 2"}' }),
+        tc: tc('t2', 'run_command', 'success', {
+          arguments: '{"command":"echo 2"}',
+        }),
       },
     ];
 
@@ -96,6 +100,8 @@ describe('FoldableToolGroup 独立工具折叠组', () => {
     fireEvent.click(header);
     expect(root.getAttribute('data-expanded')).toBe('false');
     expect(onInvalidate).toHaveBeenCalledTimes(2);
+    // 折叠时保留 160ms CSS Grid 过渡缓冲，过渡结束后 (transitionend) 打上 hidden="until-found"
+    fireEvent.transitionEnd(body!, { propertyName: 'grid-template-rows' });
     expect(body?.getAttribute('hidden')).toBe('until-found');
     expect(body?.getAttribute('data-expanded')).toBe('false');
   });
@@ -164,6 +170,8 @@ describe('FoldableToolGroup 独立工具折叠组', () => {
 
     const errorBadge = getByTestId('tool-group-error-badge');
     expect(errorBadge).toBeTruthy();
-    expect(errorBadge.querySelector('[data-icon="alert-triangle"]')).toBeTruthy();
+    expect(
+      errorBadge.querySelector('[data-icon="alert-triangle"]')
+    ).toBeTruthy();
   });
 });

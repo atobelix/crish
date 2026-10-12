@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import React from 'react';
-import { MarkdownBlockItem, markdownBlockItemPropsEqual } from './MarkdownBlockItem';
+import {
+  MarkdownBlockItem,
+  markdownBlockItemPropsEqual,
+} from './MarkdownBlockItem';
 import * as markdownRenderAsync from '../../api/markdownRenderAsync';
 import { Priority } from '../../workers';
+import type { IncrementalMarkdownUnitSnapshot } from '../../api/markdown/IncrementalMarkdownSession';
 
 vi.mock('../../api/markdownRenderAsync', () => ({
   useAsyncMarkdownHtml: vi.fn(),
@@ -64,11 +68,13 @@ describe('MarkdownBlockItem component', () => {
     vi.mocked(markdownRenderAsync.useStreamingMarkdownHtml).mockImplementation(
       (_markdown, enabled, _priority, unitsRef) => {
         if (enabled && unitsRef) {
-          unitsRef.current = [{
-            id: 1,
-            kind: 'paragraph',
-            html: '<p class="md-p">incremental rendered text</p>',
-          }];
+          unitsRef.current = [
+            {
+              id: 1,
+              kind: 'paragraph',
+              html: '<p class="md-p">incremental rendered text</p>',
+            },
+          ];
         }
         return '';
       }
@@ -131,9 +137,9 @@ describe('MarkdownBlockItem component', () => {
         isStreaming={true}
       />
     );
-    expect(container.querySelector('[data-streaming="true"]')?.textContent).toBe(
-      'old block'
-    );
+    expect(
+      container.querySelector('[data-streaming="true"]')?.textContent
+    ).toBe('old block');
 
     liveHtml = '';
     rerender(
@@ -144,7 +150,9 @@ describe('MarkdownBlockItem component', () => {
         isStreaming={true}
       />
     );
-    expect(container.querySelector('[data-streaming="true"]')?.textContent).toBe('');
+    expect(
+      container.querySelector('[data-streaming="true"]')?.textContent
+    ).toBe('');
   });
 
   it('keeps sealed block blank instead of exposing Markdown while compilation is pending', () => {
@@ -193,7 +201,7 @@ describe('MarkdownBlockItem component', () => {
     expect(blockEl?.getAttribute('data-has-html')).toBe('true');
   });
 
-  it('never exposes Markdown source when compilation fails, including during streaming', () => {
+  it('renders safe plaintext fallback when compilation fails for sealed block (VS-03 zero blank DOM)', () => {
     vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockReturnValue({
       html: '',
       loading: false,
@@ -202,7 +210,7 @@ describe('MarkdownBlockItem component', () => {
 
     const { container, rerender } = render(
       <MarkdownBlockItem
-        text="## Source **must never appear**"
+        text="## Source text that failed to compile"
         isSealed={true}
         isLast={false}
         isStreaming={true}
@@ -210,20 +218,61 @@ describe('MarkdownBlockItem component', () => {
     );
 
     const block = container.querySelector('[data-sealed="true"]');
-    expect(block?.textContent).toBe('');
-    expect(container.querySelector('pre.md-text-fallback')).toBeNull();
+    expect(block).toBeTruthy();
+    expect(block?.getAttribute('data-failed')).toBe('true');
+    const fallbackText = container.querySelector('.markdown-fallback-text');
+    expect(fallbackText).not.toBeNull();
+    expect(fallbackText?.textContent).toBe(
+      '## Source text that failed to compile'
+    );
+    // 纯文本节点转义渲染，绝无 HTML 注入
+    expect(fallbackText?.querySelector('h2')).toBeNull();
 
-    // Failure after streaming completes obeys the same no-source boundary.
+    // Failure after streaming completes maintains safe plaintext fallback
     rerender(
       <MarkdownBlockItem
-        text="## Source **must never appear**"
+        text="## Source text that failed to compile"
         isSealed={true}
         isLast={false}
         isStreaming={false}
       />
     );
-    expect(block?.textContent).toBe('');
-    expect(container.querySelector('pre.md-text-fallback')).toBeNull();
+    expect(
+      container.querySelector('.markdown-fallback-text')?.textContent
+    ).toBe('## Source text that failed to compile');
+  });
+
+  it('handles React StrictMode double rendering without ref mutation polluting isContinuation', () => {
+    vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockReturnValue({
+      html: '',
+      loading: false,
+      failed: false,
+    });
+    vi.mocked(markdownRenderAsync.useStreamingMarkdownHtml).mockReturnValue('');
+
+    const { container, rerender } = render(
+      <React.StrictMode>
+        <MarkdownBlockItem
+          text="Block A"
+          isSealed={false}
+          isLast={true}
+          isStreaming={true}
+        />
+      </React.StrictMode>
+    );
+
+    rerender(
+      <React.StrictMode>
+        <MarkdownBlockItem
+          text="Block B completely different"
+          isSealed={false}
+          isLast={true}
+          isStreaming={true}
+        />
+      </React.StrictMode>
+    );
+
+    expect(container.querySelector('[data-streaming="true"]')).toBeTruthy();
   });
 
   it('switches ordinary HTML to a React table subtree safely and preserves its row through sealing', async () => {
@@ -233,7 +282,7 @@ describe('MarkdownBlockItem component', () => {
       failed: false,
     });
     vi.mocked(markdownRenderAsync.useStreamingMarkdownHtml).mockImplementation(
-      (_markdown, enabled) => enabled ? '<p>rendered prose</p>' : ''
+      (_markdown, enabled) => (enabled ? '<p>rendered prose</p>' : '')
     );
 
     const tableText = '| A | B |\n| --- | --- |\n| 1 | 2 |';
@@ -257,7 +306,9 @@ describe('MarkdownBlockItem component', () => {
       />
     );
 
-    await waitFor(() => expect(container.querySelector('table')).not.toBeNull());
+    await waitFor(() =>
+      expect(container.querySelector('table')).not.toBeNull()
+    );
     const streamedRow = container.querySelector('tbody tr');
     expect(streamedRow).not.toBeNull();
     expect(originalParagraph?.isConnected).toBe(false);
@@ -272,7 +323,9 @@ describe('MarkdownBlockItem component', () => {
     );
 
     expect(container.querySelector('tbody tr')).toBe(streamedRow);
-    expect(container.querySelector('[data-streaming="false"] table')).not.toBeNull();
+    expect(
+      container.querySelector('[data-streaming="false"] table')
+    ).not.toBeNull();
   });
 
   it('returns null when text is empty', () => {
@@ -452,5 +505,207 @@ describe('MarkdownBlockItem component', () => {
 
     expect(blockEl?.getAttribute('data-turbo')).toBe('true');
   });
-});
 
+  it('preserves incremental unit DOM nodes during SEALING_PENDING transition and promotes seamlessly when sealedHtml arrives', () => {
+    let asyncResult = {
+      html: '',
+      loading: true,
+      failed: false,
+    };
+    vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockImplementation(
+      () => asyncResult
+    );
+    vi.mocked(markdownRenderAsync.useStreamingMarkdownHtml).mockImplementation(
+      (_markdown, enabled, _priority, unitsRef) => {
+        if (unitsRef) {
+          unitsRef.current = enabled
+            ? [
+                {
+                  id: 1,
+                  kind: 'paragraph',
+                  html: '<p class="md-p">Streaming paragraph content</p>',
+                },
+              ]
+            : null;
+        }
+        return '';
+      }
+    );
+
+    const { container, rerender } = render(
+      <MarkdownBlockItem
+        text="Streaming paragraph content"
+        isSealed={false}
+        isLast={true}
+        isStreaming={true}
+      />
+    );
+
+    const activeBlock = container.querySelector('[data-streaming="true"]');
+    const activeParagraph = activeBlock?.querySelector('p.md-p');
+    expect(activeParagraph).not.toBeNull();
+    expect(activeParagraph?.textContent).toBe('Streaming paragraph content');
+    expect(activeBlock?.getAttribute('data-has-html')).toBe('true');
+
+    // Seal block while async sealedHtml is still pending ("") and streamingUnitsRef becomes null
+    rerender(
+      <MarkdownBlockItem
+        text="Streaming paragraph content"
+        isSealed={true}
+        isLast={false}
+        isStreaming={true}
+      />
+    );
+
+    const pendingSealedBlock = container.querySelector('[data-sealed="true"]');
+    expect(pendingSealedBlock).not.toBeNull();
+    expect(pendingSealedBlock?.getAttribute('data-streaming')).toBe('false');
+    expect(pendingSealedBlock?.getAttribute('data-has-html')).toBe('true');
+    expect(pendingSealedBlock?.textContent).toBe('Streaming paragraph content');
+    expect(pendingSealedBlock?.childNodes.length).toBe(1);
+    expect(pendingSealedBlock?.querySelector('p.md-p')).toBe(activeParagraph);
+
+    // Async sealedHtml arrives from Worker/Rust -> smooth in-place promotion
+    asyncResult = {
+      html: '<p class="md-p" data-authoritative="true">Streaming paragraph content</p>',
+      loading: false,
+      failed: false,
+    };
+    rerender(
+      <MarkdownBlockItem
+        text="Streaming paragraph content"
+        isSealed={true}
+        isLast={false}
+        isStreaming={false}
+      />
+    );
+
+    const finalBlock = container.querySelector('[data-sealed="true"]');
+    const finalParagraph = finalBlock?.querySelector('p.md-p');
+    expect(finalParagraph).toBe(activeParagraph);
+    expect(finalParagraph?.getAttribute('data-authoritative')).toBe('true');
+    expect(finalParagraph?.textContent).toBe('Streaming paragraph content');
+  });
+
+  it('C2 implicit sealing: preserves DOM content when user stops/aborts streaming (isStreaming: true -> false, isSealed: false)', () => {
+    let asyncResult = {
+      html: '',
+      loading: true,
+      failed: false,
+    };
+    vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockImplementation(
+      () => asyncResult
+    );
+    vi.mocked(markdownRenderAsync.useStreamingMarkdownHtml).mockImplementation(
+      (_markdown, enabled, _priority, unitsRef) => {
+        if (unitsRef) {
+          unitsRef.current = enabled
+            ? [
+                {
+                  id: 1,
+                  kind: 'paragraph',
+                  html: '<p class="md-p">Aborted mid-stream text</p>',
+                },
+              ]
+            : null;
+        }
+        return '';
+      }
+    );
+
+    const { container, rerender } = render(
+      <MarkdownBlockItem
+        text="Aborted mid-stream text"
+        isSealed={false}
+        isLast={true}
+        isStreaming={true}
+      />
+    );
+
+    const activeParagraph = container.querySelector('p.md-p');
+    expect(activeParagraph?.textContent).toBe('Aborted mid-stream text');
+
+    // User clicks Stop: isStreaming becomes false while isSealed remains false
+    rerender(
+      <MarkdownBlockItem
+        text="Aborted mid-stream text"
+        isSealed={false}
+        isLast={true}
+        isStreaming={false}
+      />
+    );
+
+    const abortedBlock = container.querySelector('[data-streaming="false"]');
+    expect(abortedBlock).not.toBeNull();
+    expect(abortedBlock?.getAttribute('data-has-html')).toBe('true');
+    expect(abortedBlock?.textContent).toBe('Aborted mid-stream text');
+    expect(abortedBlock?.querySelector('p.md-p')).toBe(activeParagraph);
+
+    // When async compilation later resolves for the implicitly sealed block, it updates smoothly
+    asyncResult = {
+      html: '<p class="md-p" data-aborted-compiled="true">Aborted mid-stream text</p>',
+      loading: false,
+      failed: false,
+    };
+    rerender(
+      <MarkdownBlockItem
+        text="Aborted mid-stream text"
+        isSealed={true}
+        isLast={true}
+        isStreaming={false}
+      />
+    );
+
+    expect(abortedBlock?.querySelector('p.md-p')).toBe(activeParagraph);
+    expect(
+      abortedBlock
+        ?.querySelector('p.md-p')
+        ?.getAttribute('data-aborted-compiled')
+    ).toBe('true');
+  });
+
+  it('clears locked unit snapshots when text is emptied or switched to an unrelated block', () => {
+    vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockReturnValue({
+      html: '',
+      loading: false,
+      failed: false,
+    });
+    let currentUnits: IncrementalMarkdownUnitSnapshot[] | null = [
+      {
+        id: 1,
+        kind: 'paragraph',
+        html: '<p class="md-p">First block snapshot</p>',
+      },
+    ];
+    vi.mocked(markdownRenderAsync.useStreamingMarkdownHtml).mockImplementation(
+      (_markdown, enabled, _priority, unitsRef) => {
+        if (unitsRef && enabled && currentUnits) {
+          unitsRef.current = currentUnits;
+        }
+        return '';
+      }
+    );
+
+    const { container, rerender } = render(
+      <MarkdownBlockItem
+        text="First block snapshot"
+        isSealed={false}
+        isLast={true}
+        isStreaming={true}
+      />
+    );
+    expect(container.textContent).toBe('First block snapshot');
+
+    // Switch to a completely different block while compilation is pending
+    currentUnits = null;
+    rerender(
+      <MarkdownBlockItem
+        text="Unrelated second block"
+        isSealed={false}
+        isLast={true}
+        isStreaming={true}
+      />
+    );
+    expect(container.textContent).toBe('');
+  });
+});

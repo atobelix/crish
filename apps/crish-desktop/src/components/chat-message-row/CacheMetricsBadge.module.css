@@ -1,64 +1,139 @@
+/**
+ * apps/crish-desktop/src/components/chat-message-row/CacheMetricsBadge.module.css
+ *
+ * 消息级缓存命中样式（遵循纯文字无底色、不 hover 不显示、单色克制规范）。
+ */
+
+/* ── 徽标常驻文本（无背景、无边框、纯净文字，hover 仅文字微亮） ── */
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  font-size: var(--font-size-xs, 11px);
-  line-height: 1.4;
-  border-radius: var(--radius-sm);
+  height: 20px;
+  line-height: 20px;
+  padding: 0;
+  margin: 0;
+  font-size: 11px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
   cursor: default;
   user-select: none;
-  font-variant-numeric: tabular-nums;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease;
+  transition: color var(--transition-micro, 120ms ease);
 }
 
-.hit {
-  color: var(--accent-color);
-  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent-color) 25%, transparent);
+.badge:hover {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
 }
 
-.write {
-  color: var(--color-info, var(--text-primary));
-  background: var(--info-soft-bg);
-  border: 1px solid
-    color-mix(in srgb, var(--color-info, var(--text-primary)) 20%, transparent);
-}
-
+.hit,
+.write,
 .miss {
+  background: transparent;
+  border: none;
   color: var(--text-tertiary);
-  background: var(--tint-hover);
-  border: 1px solid var(--border-subtle);
 }
 
-.tooltipContent {
+.hit:hover,
+.write:hover,
+.miss:hover {
+  color: var(--text-primary);
+}
+
+/* ── 悬停弹出卡片（几何卡片，单色克制） ── */
+.popoverCard {
+  border-radius: var(--radius-lg, 8px);
+  padding: 10px 12px;
+  white-space: normal;
+  min-width: 200px;
+  max-width: 260px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-md);
+}
+
+.popoverContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: inherit;
+}
+
+/* 卡片标题行 */
+.popoverHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.popoverTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* 全卡片唯一的单处强调色：仅命中率百分比微带克制翠绿 */
+.popoverRate {
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-success);
+}
+
+/* 结构化双列数据网格（左侧标签，右侧等宽数值） */
+.statsList {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 4px 2px;
+}
+
+.statRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 18px;
 }
 
-.tooltipTitle {
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 2px;
-}
-
-.tooltipRow {
-  color: var(--text-secondary);
-}
-
-.tooltipHighlight {
-  color: var(--accent-color);
-  font-weight: 500;
+.statRowTotal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  line-height: 18px;
   margin-top: 2px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--border-subtle);
 }
 
-.tooltipDesc {
+.statLabel {
   color: var(--text-tertiary);
+}
+
+.statValue {
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.statUnit {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-left: 2px;
+  font-weight: normal;
+}
+
+/* 说明解释文字 */
+.popoverDesc {
   font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
 }

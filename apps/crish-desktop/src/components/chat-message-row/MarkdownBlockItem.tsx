@@ -5,9 +5,7 @@ import {
   useStreamingMarkdownHtml,
 } from '../../api/markdownRenderAsync';
 import { getMarkdownHtmlCache } from '../../api/markdownCache';
-import {
-  normalizeCodeBlockIndent,
-} from '../../api/codeBlockIndent';
+import { normalizeCodeBlockIndent } from '../../api/codeBlockIndent';
 import type { Priority } from '../../workers';
 import type { AdaptiveAnimateTimeline } from '../../api/markdown/AdaptiveAnimateTimeline';
 import type { RateSnapshot } from '../../api/markdown/SlidingWindowRateEstimator';
@@ -38,6 +36,19 @@ export interface MarkdownBlockItemProps {
 }
 
 /**
+ * 判断新旧文本是否属于同一 Markdown 块的流式延续或封口收敛：
+ * - 流式追加：nextText 以 prevText 为前缀；
+ * - 封口收敛：prevText 末尾换行或预读行被切分后，prevText 以 nextText 为前缀。
+ */
+function isSameBlockContinuation(prevText: string, nextText: string): boolean {
+  if (!prevText || !nextText) return false;
+  if (prevText === nextText) return true;
+  const normPrev = prevText.replace(/\r\n?/g, '\n');
+  const normNext = nextText.replace(/\r\n?/g, '\n');
+  return normNext.startsWith(normPrev) || normPrev.startsWith(normNext);
+}
+
+/**
  * 块级 React.memo 比较契约：
  * - 历史已封口块在后续流式帧中，text、virtualClosedText、isSealed、isLast、isStreaming、priority 完全恒定；
  * - 比较器返回 true，协调阶段跳过，实现封口块 0 重渲染。
@@ -63,7 +74,7 @@ export function markdownBlockItemPropsEqual(
  */
 export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
   text,
-  virtualClosedText,
+  virtualClosedText: _virtualClosedText,
   isSealed,
   isLast,
   isStreaming,
@@ -73,17 +84,23 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
 }: MarkdownBlockItemProps) {
   const wasStreamingGfmTableRef = useRef(false);
   const lastSafeHtmlRef = useRef<{ text: string; html: string } | null>(null);
-  const streamingUnitsRef = useRef<readonly IncrementalMarkdownUnitSnapshot[] | null>(null);
+  const streamingUnitsRef = useRef<
+    readonly IncrementalMarkdownUnitSnapshot[] | null
+  >(null);
+  const lockedUnitsRef = useRef<{
+    text: string;
+    units: readonly IncrementalMarkdownUnitSnapshot[];
+  } | null>(null);
   const streamingTextRef = useRef(text);
-  const streamingTextMatches = streamingTextRef.current === text;
+  const isContinuation = isSameBlockContinuation(
+    streamingTextRef.current,
+    text
+  );
   const hadStaleStreamingUnits =
-    !streamingTextMatches && streamingUnitsRef.current !== null;
-  if (!streamingTextMatches) {
-    // React 在 effect 前仍会先完成一次新 props 的 render；清掉旧快照，
-    // 让协调器在这一次 render 就移除旧块，避免旧 HTML 短暂错投。
-    streamingTextRef.current = text;
-    streamingUnitsRef.current = null;
-  }
+    !isContinuation &&
+    (streamingUnitsRef.current !== null || lockedUnitsRef.current !== null);
+
+  const effectiveLockedUnits = isContinuation ? lockedUnitsRef.current : null;
   const renderModeLockedRef = useRef<'SPAN' | 'TURBO' | null>(null);
 
   const codeIndent = useSettingsField((s) =>
@@ -98,27 +115,48 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
     priority,
     streamingUnitsRef
   );
+
+  if (
+    isContinuation &&
+    !isStreamingGfmTable &&
+    streamingUnitsRef.current &&
+    streamingUnitsRef.current.length > 0
+  ) {
+    lockedUnitsRef.current = {
+      text,
+      units: streamingUnitsRef.current,
+    };
+  }
+
+  // 隐式封口封闭律（C2）：显式封口，或流式已中断（Abort/Stop）且持有流式单元快照
+  const isEffectivelySealed =
+    isSealed || (!isStreaming && Boolean(effectiveLockedUnits?.units.length));
+
   const isPriorTable = wasStreamingGfmTableRef.current;
   const shouldRenderStreamingTable =
-    (isActiveTail &&
-      (isStreamingGfmTable || (isPriorTable && !liveHtml))) ||
-    (isSealed && isPriorTable);
-  const { html: sealedHtml } = useAsyncMarkdownHtml(
-    isSealed && !isPriorTable ? text : '',
+    (isActiveTail && (isStreamingGfmTable || (isPriorTable && !liveHtml))) ||
+    ((isEffectivelySealed || !isActiveTail) && isPriorTable);
+  const { html: sealedHtml, failed: sealedFailed } = useAsyncMarkdownHtml(
+    isEffectivelySealed && !isPriorTable ? text : '',
     priority
   );
   const cachedHtml = useMemo(
-    () => isSealed && !isPriorTable ? getMarkdownHtmlCache(text) : undefined,
-    [text, isSealed, isPriorTable]
+    () =>
+      isEffectivelySealed && !isPriorTable
+        ? getMarkdownHtmlCache(text)
+        : undefined,
+    [text, isEffectivelySealed, isPriorTable]
   );
   const sameTextSafeHtml =
-    lastSafeHtmlRef.current?.text === text
+    lastSafeHtmlRef.current &&
+    isSameBlockContinuation(lastSafeHtmlRef.current.text, text)
       ? lastSafeHtmlRef.current.html
       : '';
 
   if (isActiveTail && renderModeLockedRef.current === null) {
-    renderModeLockedRef.current = rateSnapshot?.tier === 'TURBO' ? 'TURBO' : 'SPAN';
-  } else if (isSealed) {
+    renderModeLockedRef.current =
+      rateSnapshot?.tier === 'TURBO' ? 'TURBO' : 'SPAN';
+  } else if (isEffectivelySealed) {
     renderModeLockedRef.current = null;
   }
   const isTurboMode = renderModeLockedRef.current === 'TURBO';
@@ -129,26 +167,53 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
     }
   }, [isActiveTail, isStreamingGfmTable]);
 
+  useLayoutEffect(() => {
+    if (!text || !isContinuation) {
+      streamingUnitsRef.current = null;
+      lockedUnitsRef.current = null;
+      if (!text) {
+        lastSafeHtmlRef.current = null;
+        wasStreamingGfmTableRef.current = false;
+      }
+    }
+    streamingTextRef.current = text;
+  }, [text, isContinuation]);
+
   const renderedHtml = shouldRenderStreamingTable
     ? ''
     : isActiveTail
       ? (hadStaleStreamingUnits ? '' : liveHtml) || sameTextSafeHtml
-      : isSealed
+      : isEffectivelySealed
         ? sealedHtml || cachedHtml || liveHtml || sameTextSafeHtml
         : liveHtml || sameTextSafeHtml;
-  const hasIncrementalHtml = isActiveTail &&
-    streamingTextMatches &&
-    (streamingUnitsRef.current?.some((unit) => unit.html.length > 0) ?? false);
+
+  // SEALING_PENDING 封口过渡态：离开活跃尾块且权威 HTML 尚未就绪时，继续透传锁存单元快照
+  const isSealingPending =
+    !isActiveTail &&
+    !renderedHtml &&
+    Boolean(effectiveLockedUnits?.units.length);
+  const effectiveIncrementalUnits = isActiveTail
+    ? isContinuation
+      ? (streamingUnitsRef.current ?? effectiveLockedUnits?.units ?? null)
+      : null
+    : isSealingPending
+      ? effectiveLockedUnits?.units
+      : undefined;
+  const hasIncrementalHtml =
+    effectiveIncrementalUnits?.some((unit) => unit.html.length > 0) ?? false;
 
   useLayoutEffect(() => {
-    if (liveHtml) lastSafeHtmlRef.current = { text, html: liveHtml };
-    else if (isSealed && sealedHtml) {
-      lastSafeHtmlRef.current = { text, html: sealedHtml };
+    if (liveHtml) {
+      lastSafeHtmlRef.current = { text, html: liveHtml };
+    } else if (isEffectivelySealed && (sealedHtml || cachedHtml)) {
+      lastSafeHtmlRef.current = { text, html: sealedHtml || cachedHtml || '' };
+      lockedUnitsRef.current = null;
     }
-  }, [liveHtml, sealedHtml, isSealed, text]);
+  }, [liveHtml, sealedHtml, cachedHtml, isEffectivelySealed, text]);
 
   const containsTable = useMemo(
-    () => shouldRenderStreamingTable ||
+    () =>
+      shouldRenderStreamingTable ||
       (isActiveTail
         ? /<table(?:\s|>)/i.test(renderedHtml)
         : hasTableBlock(text)),
@@ -160,8 +225,8 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
 
   const className = isActiveTail
     ? `${styles.assistantText} md-rendered ${styles.isStreaming} ${
-      hideCaret ? `${styles.suppressCaret || ''} suppressCaret` : ''
-    } md-block-active`.trim()
+        hideCaret ? `${styles.suppressCaret || ''} suppressCaret` : ''
+      } md-block-active`.trim()
     : `${styles.assistantText} md-rendered md-block-sealed`;
   const dataAttributes = {
     className,
@@ -180,14 +245,28 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
     );
   }
 
+  const isFailedFallback =
+    isEffectivelySealed && Boolean(sealedFailed) && !cachedHtml;
+
+  if (isFailedFallback) {
+    return (
+      <div {...dataAttributes} data-has-html="false" data-failed="true">
+        <div
+          className={`markdown-fallback-text ${styles.mdTextFallback || ''}`.trim()}
+        >
+          {text}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <ReconciledMarkdownHtml
       {...dataAttributes}
       data-has-html={renderedHtml || hasIncrementalHtml ? 'true' : undefined}
       html={renderedHtml}
-      incrementalUnits={isActiveTail
-        ? (streamingTextMatches ? streamingUnitsRef.current : null)
-        : undefined}
+      incrementalUnits={effectiveIncrementalUnits}
+      allowEmptyClear={!isContinuation}
       codeIndent={codeIndent}
     />
   );

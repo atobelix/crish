@@ -4,18 +4,22 @@
  *
  * 核心特性：
  * - 整合 24px 极简思考行（ReasoningRow）与 24px 工具单行（ChatToolStack）；
- * - 展开或收拢思考/工具时，联动 ResizeObserver 触发 VSM 树状数组动态测高自愈（invalidateActual + setActual）；
+ * - 尺寸变化统一交由外层消息行宿主 ResizeObserver 单轨测量，组件内部零私有 RO 与零越权高度作废；
  * - 保持关联子 agent 行渲染器（InlineAgentPanel）懒加载注入。
  */
-import React, { lazy, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
+import React, { lazy, useCallback, useMemo } from 'react';
 import styles from './ChatMessageRow.module.css';
-import { ChatToolStack, type ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
+import {
+  ChatToolStack,
+  type ChatToolStackSharedProps,
+} from '../chat-tool-call/ChatToolCallBlock';
 import type { ToolRenderItem } from '../../api/toolPresentation';
 import type { MessageToolCall, SessionAgent } from '../../store/types';
-import { buildToolStackHostProps, shouldHostToolStack } from './chatMessageRowUtils';
+import {
+  buildToolStackHostProps,
+  shouldHostToolStack,
+} from './chatMessageRowUtils';
 import { ReasoningRow } from './ReasoningRow';
-import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
-import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
 
 /**
  * 关联子 agent 行渲染器：内嵌 InlineAgentPanel（懒加载保持分包）。
@@ -23,7 +27,9 @@ import { ResizeObserverManager } from '../ui/utils/ResizeObserverManager';
  * ChatToolStack → CompactToolRow 环形依赖），组合根在此提供渲染器。
  */
 const InlineAgentPanel = lazy(() =>
-  import('../agent-card/InlineAgentPanel').then((m) => ({ default: m.InlineAgentPanel }))
+  import('../agent-card/InlineAgentPanel').then((m) => ({
+    default: m.InlineAgentPanel,
+  }))
 );
 
 export interface MessageThinkingConfig {
@@ -43,7 +49,8 @@ export type MessageToolSectionThoughtItem = {
   defaultExpanded?: boolean;
 };
 
-export type MessageToolSectionItem = ToolRenderItem | MessageToolSectionThoughtItem;
+export type MessageToolSectionItem =
+  ToolRenderItem | MessageToolSectionThoughtItem;
 
 export interface MessageToolCallsSectionProps {
   items: MessageToolSectionItem[] | ToolRenderItem[] | undefined | null;
@@ -51,8 +58,6 @@ export interface MessageToolCallsSectionProps {
   toolStackProps: ChatToolStackSharedProps;
   /** 可选：24px 极简思考行配置（支持独立传入或在 items 中混合） */
   thinking?: MessageThinkingConfig | undefined;
-  /** 可选：VSM 树状数组动态高度管理器，用于展开/折叠时测高自愈 */
-  virtualScrollManager?: VirtualScrollManager | null | undefined;
 }
 
 export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> =
@@ -61,16 +66,19 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> =
     msgId,
     toolStackProps,
     thinking,
-    virtualScrollManager,
   }) {
-    const sectionRef = useRef<HTMLDivElement>(null);
-
     // 1. 提取思考项（支持 thinking prop 优先，或从 items 中提取 kind: 'thought' 项）
     const thinkingItem = useMemo((): MessageThinkingConfig | null => {
-      if (thinking && thinking.content && thinking.content.trim()) return thinking;
+      if (thinking && thinking.content && thinking.content.trim())
+        return thinking;
       if (Array.isArray(items)) {
         for (const it of items) {
-          if (it && typeof it === 'object' && 'kind' in it && it.kind === 'thought') {
+          if (
+            it &&
+            typeof it === 'object' &&
+            'kind' in it &&
+            it.kind === 'thought'
+          ) {
             const thought = it as MessageToolSectionThoughtItem;
             if (thought.content && thought.content.trim()) {
               return {
@@ -102,33 +110,13 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> =
     const hasTools = shouldHostToolStack(toolRenderItems);
     const hasThinking = Boolean(thinkingItem && thinkingItem.content.trim());
 
-    // 3. 工具展开/折叠拦截：通知外部状态同时立即使 VSM 旧实测高度失效，触发自愈
+    // 3. 工具展开/折叠拦截：通知外部状态（尺寸变化由外层宿主 ResizeObserver 单轨自动测量）
     const handleToggleTool = useCallback(
       (toolId: string, currentlyOpen: boolean) => {
         toolStackProps.onToggleTool?.(toolId, currentlyOpen, msgId);
-        virtualScrollManager?.invalidateActual(msgId);
       },
-      [toolStackProps, virtualScrollManager, msgId]
+      [toolStackProps, msgId]
     );
-
-    // 4. 思考行展开/折叠回调：立即使 VSM 旧实测高度失效
-    const handleToggleThinking = useCallback(() => {
-      virtualScrollManager?.invalidateActual(msgId);
-    }, [virtualScrollManager, msgId]);
-
-    // 5. 监听 DOM 尺寸变化：联动 ResizeObserver 驱动 VSM 动态测高自愈
-    useLayoutEffect(() => {
-      const el = sectionRef.current;
-      if (!el) return;
-      const roManager = ResizeObserverManager.getInstance();
-      const onResize = (entry: ResizeObserverEntry) => {
-        if (entry.contentRect.height > 0) {
-          virtualScrollManager?.invalidateActual(msgId);
-        }
-      };
-      roManager.observe(el, onResize);
-      return () => roManager.unobserve(el, onResize);
-    }, [msgId, virtualScrollManager]);
 
     // D7.4：hostProps / actions 引用稳定（useMemo），供 FoldableToolGroup / ChatToolStack memo 短路
     const host = useMemo(() => {
@@ -148,7 +136,7 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> =
           renderLinkedAgentPanel: (
             agent: SessionAgent,
             parentSessionId: string,
-            tc: MessageToolCall,
+            tc: MessageToolCall
           ) => (
             <InlineAgentPanel
               agent={agent}
@@ -166,7 +154,6 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> =
 
     return (
       <div
-        ref={sectionRef}
         className={styles.timelineTools}
         data-section="tool-calls"
         data-msg-id={msgId}
@@ -180,7 +167,6 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> =
             turnIndex={thinkingItem.turnIndex}
             defaultExpanded={thinkingItem.defaultExpanded}
             messageId={msgId}
-            onToggle={handleToggleThinking}
           />
         ) : null}
 

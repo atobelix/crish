@@ -33,6 +33,45 @@ import type { ChatAttachment } from '../../hooks/useChatStream';
 import { isBusyRetryPending } from '../../api/sessionStreamManager';
 import { DOMAIN_MESSAGES } from '../../api/userFacingErrors';
 import { useInvalidateActualOnChange } from './useInvalidateActualOnChange';
+import { useUserBubbleEntrance } from './useUserBubbleEntrance';
+
+export interface ParsedStructuredUserText {
+  isStructured: boolean;
+  userInputText: string;
+  contextStateText?: string;
+}
+
+export function parseStructuredUserText(
+  text: string | undefined | null
+): ParsedStructuredUserText {
+  const raw = text || '';
+  const userTag = '[用户输入]';
+  const ctxTag = '[系统环境上下文]';
+  const userIdx = raw.indexOf(userTag);
+  const ctxIdx = raw.indexOf(ctxTag);
+
+  if (userIdx === -1 || ctxIdx === -1) {
+    return { isStructured: false, userInputText: raw };
+  }
+
+  let userInputText =
+    userIdx < ctxIdx
+      ? raw.slice(userIdx + userTag.length, ctxIdx).trim()
+      : raw.slice(userIdx + userTag.length).trim();
+  let contextStateText =
+    userIdx < ctxIdx
+      ? raw.slice(ctxIdx + ctxTag.length).trim()
+      : raw.slice(ctxIdx + ctxTag.length, userIdx).trim();
+
+  if (userInputText.startsWith(':') || userInputText.startsWith('：')) {
+    userInputText = userInputText.slice(1).trim();
+  }
+  if (contextStateText.startsWith(':') || contextStateText.startsWith('：')) {
+    contextStateText = contextStateText.slice(1).trim();
+  }
+
+  return { isStructured: true, userInputText, contextStateText };
+}
 
 export type ChatUserMessageRowProps = {
   msg: SessionMessage;
@@ -47,7 +86,7 @@ export type ChatUserMessageRowProps = {
   onRetract?: () => void;
   /** 就地编辑消息模式（受控，由父级 composerElement 驱动） */
   isEditing?: boolean;
-  onStartEdit?: () => void;
+  onStartEdit?: ((sanitizedMsg?: SessionMessage) => void) | (() => void);
   onCancelEdit?: () => void;
   /** 100% 复用的 ChatComposer 组件节点（单实例转移） */
   composerElement?: React.ReactNode;
@@ -71,6 +110,9 @@ function userRowPropsEqual(
     prev.msg.status === next.msg.status &&
     prev.msg.text === next.msg.text &&
     prev.msg.timestamp === next.msg.timestamp &&
+    prev.msg.images === next.msg.images &&
+    prev.msg.attachments === next.msg.attachments &&
+    prev.msg.metadata === next.msg.metadata &&
     prev.isPinned === next.isPinned &&
     prev.pinnedColor === next.pinnedColor &&
     prev.isSearchHit === next.isSearchHit &&
@@ -83,13 +125,10 @@ function userRowPropsEqual(
     prev.onTogglePin === next.onTogglePin &&
     prev.isLastUser === next.isLastUser &&
     prev.onRetract === next.onRetract &&
-    prev.onEditMessageAndResend === next.onEditMessageAndResend &&
-    prev.messageIndex === next.messageIndex &&
     prev.virtualScrollManager === next.virtualScrollManager &&
     prev.onOpenPath === next.onOpenPath &&
-    prev.msg.images === next.msg.images &&
-    prev.msg.attachments === next.msg.attachments &&
-    prev.msg.metadata === next.msg.metadata
+    prev.messageIndex === next.messageIndex &&
+    prev.onEditMessageAndResend === next.onEditMessageAndResend
   );
 }
 
@@ -108,18 +147,37 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   onCancelEdit: _onCancelEdit,
   composerElement,
   onEditMessageAndResend: _onEditMessageAndResend,
-  messageIndex: _messageIndex,
+  messageIndex,
   virtualScrollManager,
   onOpenPath,
 }) => {
-  void _messageIndex;
   void _onCancelEdit;
   void _onEditMessageAndResend;
   const { showToast } = useToast();
+  const { isEntering, handleAnimationEnd } = useUserBubbleEntrance(
+    msg.id,
+    msg.timestamp
+  );
 
   const isLong = isUserBubbleLong(msg.text);
   // 真实签名：userBubbleDisplayText 仅接收 2 个参数 (text, isExpanded)
   const displayText = userBubbleDisplayText(msg.text, isExpanded);
+
+  const parsedStructured = useMemo(() => {
+    const fromDisplay = parseStructuredUserText(displayText);
+    if (fromDisplay.isStructured) {
+      return fromDisplay;
+    }
+    const fromRaw = parseStructuredUserText(msg.text);
+    if (fromRaw.isStructured) {
+      return {
+        isStructured: true,
+        userInputText: userBubbleDisplayText(fromRaw.userInputText, isExpanded),
+        contextStateText: fromRaw.contextStateText,
+      };
+    }
+    return fromDisplay;
+  }, [displayText, msg.text, isExpanded]);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<number | null>(null);
 
@@ -213,6 +271,39 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
 
   const retractHandler = isLastUser && onRetract ? onRetract : undefined;
 
+  const handleStartEdit = useCallback(() => {
+    if (!onStartEdit) return;
+    if (parsedStructured.isStructured) {
+      const sanitizedMsg: SessionMessage = {
+        ...msg,
+        text: parsedStructured.userInputText,
+      };
+      const originalText = msg.text;
+      let mutated = false;
+      try {
+        if (!Object.isFrozen(msg)) {
+          (msg as { text?: string }).text = parsedStructured.userInputText;
+          mutated = true;
+        }
+      } catch {
+        /* swallow-ok: read-only object */
+      }
+      try {
+        (onStartEdit as (m?: SessionMessage) => void)(sanitizedMsg);
+      } finally {
+        if (mutated) {
+          try {
+            (msg as { text?: string }).text = originalText;
+          } catch {
+            /* swallow-ok */
+          }
+        }
+      }
+      return;
+    }
+    onStartEdit();
+  }, [msg, onStartEdit, parsedStructured]);
+
   const toggleExpand = useCallback(() => {
     if (isLong) {
       const sel = window.getSelection()?.toString();
@@ -245,11 +336,30 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   }, [triggerSource]);
 
   const hasTextContent =
-    Boolean(displayText && displayText.trim()) ||
+    Boolean(
+      parsedStructured.isStructured
+        ? (parsedStructured.userInputText &&
+            parsedStructured.userInputText.trim()) ||
+            parsedStructured.contextStateText
+        : displayText && displayText.trim()
+    ) ||
     isQueued ||
     Boolean(triggerBadgeText);
   // S7 只在串行守卫自动重试时作为 Tooltip；用户主动追问的排队不附这段文案。
   const queuedBusyTip = isQueued && isBusyRetryPending(msg.id);
+  const queuedBadge = isQueued ? (
+    queuedBusyTip ? (
+      <Tooltip content={DOMAIN_MESSAGES.S7} side="top">
+        <span className={styles.queued} role="status">
+          <span className={styles.queuedBadge}>排队中</span>
+        </span>
+      </Tooltip>
+    ) : (
+      <span className={styles.queued} role="status">
+        <span className={styles.queuedBadge}>排队中</span>
+      </span>
+    )
+  ) : null;
 
   const isEditingRow = Boolean(isEditing && composerElement);
 
@@ -288,7 +398,10 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
             {/* 统一类输入框卡片：内嵌顶部附件卡片横排流 + 底部正文文本 */}
             {hasAttachmentCards || hasTextContent ? (
               <div
-                className={`${styles.userBubble} ${isLong ? styles.userBubbleExpandable : ''}${isPinned ? ` ${styles.userBubblePinned}` : ''}`}
+                className={`${styles.userBubble}${isEntering ? ` ${styles.userBubbleEntering}` : ''} ${isLong ? styles.userBubbleExpandable : ''}${isPinned ? ` ${styles.userBubblePinned}` : ''}`}
+                data-entering={isEntering ? 'true' : undefined}
+                data-first-message={messageIndex === 0 ? 'true' : undefined}
+                onAnimationEnd={handleAnimationEnd}
                 onClick={toggleExpand}
                 onKeyDown={onBubbleKeyDown}
                 style={{
@@ -357,22 +470,43 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
 
                 {/* 2. 底部：正文文本 */}
                 {hasTextContent ? (
-                  <div className={styles.userBubbleText}>
-                    {displayText}
-                    {isQueued ? (
-                      queuedBusyTip ? (
-                        <Tooltip content={DOMAIN_MESSAGES.S7} side="top">
-                          <span className={styles.queued} role="status">
-                            <span className={styles.queuedBadge}>排队中</span>
+                  parsedStructured.isStructured ? (
+                    <div
+                      className={styles.userBubbleStructuredContent}
+                      data-testid="user-bubble-structured"
+                    >
+                      {/* (a) 顶部主体段：用户的实际输入正文 */}
+                      <div
+                        className={styles.userBubbleText}
+                        data-testid="user-bubble-main-input"
+                      >
+                        {parsedStructured.userInputText}
+                        {queuedBadge}
+                      </div>
+
+                      {/* (b) 底部随附段：系统环境上下文信封 */}
+                      {parsedStructured.contextStateText ? (
+                        <div
+                          className={styles.userBubbleContextEnvelope}
+                          data-testid="user-bubble-context-envelope"
+                          role="note"
+                          aria-label="系统环境上下文"
+                        >
+                          <span className={styles.userBubbleContextBadge}>
+                            [系统环境上下文]
                           </span>
-                        </Tooltip>
-                      ) : (
-                        <span className={styles.queued} role="status">
-                          <span className={styles.queuedBadge}>排队中</span>
-                        </span>
-                      )
-                    ) : null}
-                  </div>
+                          <span className={styles.userBubbleContextContent}>
+                            {parsedStructured.contextStateText}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className={styles.userBubbleText}>
+                      {displayText}
+                      {queuedBadge}
+                    </div>
+                  )
                 ) : null}
               </div>
             ) : null}
@@ -386,7 +520,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
               onCopy={handleCopy}
               onTogglePin={(color?: string) => onTogglePin(msg.id, color)}
               onRetract={retractHandler}
-              onEdit={onStartEdit}
+              onEdit={onStartEdit ? handleStartEdit : undefined}
             />
           </>
         )}

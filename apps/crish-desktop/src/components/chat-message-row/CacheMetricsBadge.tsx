@@ -1,11 +1,16 @@
 /**
- * 消息级缓存命中徽标（四态语义模型落地：缓存命中 / 写入缓存 / 未命中 / 隐藏）。
- * 消除虚假未命中，提供精确 Token 计数与详尽 Tooltip 看板。
+ * apps/crish-desktop/src/components/chat-message-row/CacheMetricsBadge.tsx
+ *
+ * 消息级缓存命中（四态语义模型：缓存命中 / 写入缓存 / 未命中 / 隐藏）。
+ * 遵循极简规范：
+ * 1. 移除闪电等一切图形符号；
+ * 2. 移除背景色与边框，纯净文字呈现；
+ * 3. hover 仅文字微亮，不出现背景色；
+ * 4. 浮层内单色克制（仅单处百分比留色，其余全纸墨纯文字双列对齐）。
  */
 import React from 'react';
 import type { CacheMetrics } from '@crish/shared-types';
 import { Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
 import styles from './CacheMetricsBadge.module.css';
 
 export interface CacheMetricsBadgeProps {
@@ -33,34 +38,55 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
   if (read > 0) {
     const percent = ratio >= 0.01 ? `${Math.round(ratio * 100)}%` : '<1%';
     const writePart = write > 0 ? ` · 写 ${write.toLocaleString()}` : '';
+    const hitRatePct = (ratio * 100).toFixed(1);
+
     return (
       <Tooltip
+        side="top"
+        delayShow={150}
+        contentClassName={styles.popoverCard}
         content={
-          <div className={styles.tooltipContent}>
-            <div className={styles.tooltipTitle}>
-              <AppIcon name="zap" size={13} aria-hidden />
-              <span>提示词缓存加速生效</span>
+          <div className={styles.popoverContainer}>
+            <div className={styles.popoverHeader}>
+              <span className={styles.popoverTitle}>提示词缓存</span>
+              <span className={styles.popoverRate}>{hitRatePct}%</span>
             </div>
-            <div className={styles.tooltipRow}>
-              • 命中读取：{read.toLocaleString()} tokens
-            </div>
-            {write > 0 && (
-              <div className={styles.tooltipRow}>
-                • 本轮写入：{write.toLocaleString()} tokens
+
+            <div className={styles.statsList}>
+              <div className={styles.statRow}>
+                <span className={styles.statLabel}>命中读取</span>
+                <span className={styles.statValue}>
+                  {read.toLocaleString()}{' '}
+                  <span className={styles.statUnit}>tokens</span>
+                </span>
               </div>
-            )}
-            {miss > 0 && (
-              <div className={styles.tooltipRow}>
-                • 未命中量：{miss.toLocaleString()} tokens
-              </div>
-            )}
-            {total > 0 && (
-              <div className={styles.tooltipRow}>
-                • 提示词总量：{total.toLocaleString()} tokens
-              </div>
-            )}
-            <div className={styles.tooltipHighlight}>
-              • 缓存命中率：{(ratio * 100).toFixed(1)}%
+              {write > 0 && (
+                <div className={styles.statRow}>
+                  <span className={styles.statLabel}>本轮写入</span>
+                  <span className={styles.statValue}>
+                    {write.toLocaleString()}{' '}
+                    <span className={styles.statUnit}>tokens</span>
+                  </span>
+                </div>
+              )}
+              {miss > 0 && (
+                <div className={styles.statRow}>
+                  <span className={styles.statLabel}>未命中量</span>
+                  <span className={styles.statValue}>
+                    {miss.toLocaleString()}{' '}
+                    <span className={styles.statUnit}>tokens</span>
+                  </span>
+                </div>
+              )}
+              {total > 0 && (
+                <div className={styles.statRowTotal}>
+                  <span className={styles.statLabel}>提示词总量</span>
+                  <span className={styles.statValue}>
+                    {total.toLocaleString()}{' '}
+                    <span className={styles.statUnit}>tokens</span>
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         }
@@ -70,8 +96,9 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
           data-testid="cache-metrics-badge"
           data-state="hit"
         >
-          <AppIcon name="zap" size={12} aria-hidden />
-          <span>缓存命中 {percent} · 读 {read.toLocaleString()}</span>
+          <span>
+            缓存命中 {percent} · 读 {read.toLocaleString()}
+          </span>
           {writePart}
         </span>
       </Tooltip>
@@ -82,16 +109,24 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
   if (write > 0) {
     return (
       <Tooltip
+        side="top"
+        delayShow={150}
+        contentClassName={styles.popoverCard}
         content={
-          <div className={styles.tooltipContent}>
-            <div className={styles.tooltipTitle}>
-              <AppIcon name="save" size={13} aria-hidden />
-              <span>提示词缓存已建立</span>
+          <div className={styles.popoverContainer}>
+            <div className={styles.popoverHeader}>
+              <span className={styles.popoverTitle}>提示词缓存已建立</span>
             </div>
-            <div className={styles.tooltipRow}>
-              • 本轮写入：{write.toLocaleString()} tokens
+            <div className={styles.statsList}>
+              <div className={styles.statRow}>
+                <span className={styles.statLabel}>本轮写入</span>
+                <span className={styles.statValue}>
+                  {write.toLocaleString()}{' '}
+                  <span className={styles.statUnit}>tokens</span>
+                </span>
+              </div>
             </div>
-            <div className={styles.tooltipDesc}>
+            <div className={styles.popoverDesc}>
               下一轮对话将命中该前缀，显著降低响应延迟与 Token 费用
             </div>
           </div>
@@ -102,7 +137,6 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
           data-testid="cache-metrics-badge"
           data-state="write"
         >
-          <AppIcon name="save" size={12} aria-hidden />
           <span>写入缓存 {write.toLocaleString()}</span>
         </span>
       </Tooltip>
@@ -112,16 +146,27 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
   // 态 4：显式未命中
   return (
     <Tooltip
+      side="top"
+      delayShow={150}
+      contentClassName={styles.popoverCard}
       content={
-        <div className={styles.tooltipContent}>
-          <div className={styles.tooltipTitle}>本次未命中缓存</div>
+        <div className={styles.popoverContainer}>
+          <div className={styles.popoverHeader}>
+            <span className={styles.popoverTitle}>未命中缓存</span>
+          </div>
           {total > 0 && (
-            <div className={styles.tooltipRow}>
-              • 输入总量：{total.toLocaleString()} tokens
+            <div className={styles.statsList}>
+              <div className={styles.statRow}>
+                <span className={styles.statLabel}>输入总量</span>
+                <span className={styles.statValue}>
+                  {total.toLocaleString()}{' '}
+                  <span className={styles.statUnit}>tokens</span>
+                </span>
+              </div>
             </div>
           )}
-          <div className={styles.tooltipDesc}>
-            可能原因：对话前缀改变或内容长度未达到模型缓存阈值
+          <div className={styles.popoverDesc}>
+            对话前缀改变或内容长度未达到模型缓存阈值
           </div>
         </div>
       }

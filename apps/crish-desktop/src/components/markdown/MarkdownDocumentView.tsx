@@ -1,11 +1,15 @@
 import React, { useCallback, useRef } from 'react';
 import { Priority } from '../../workers';
 import { useAsyncMarkdownHtml } from '../../api/markdownRenderAsync';
-import { isSafeHref, sanitizeUrlCandidate } from '../../api/markdown-render/markdownSanitizer';
+import {
+  isSafeHref,
+  sanitizeUrlCandidate,
+} from '../../api/markdown-render/markdownSanitizer';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
 import { ScrollArea } from '../ui/ScrollArea';
 import { AppIcon } from '../ui/icons/index';
 import { copyTextToClipboard } from '@crish/shared-utils';
+import { useLeafScope } from '../../contexts/LeafScopeContext';
 
 /** 超过此阈值（默认 256KB）将强制熔断切入虚拟化极速代码呈现 */
 export const DEFAULT_LARGE_FILE_THRESHOLD_BYTES = 256 * 1024;
@@ -95,8 +99,8 @@ function openExternalUrl(url: string): void {
  *    - 拦截 .md-path-link：拆解 data-path 中的 :line:col 或 #L10，触发 onOpenPath 回调并广播定位事件；
  *    - 拦截 <a class="md-a"> 或普通外部链接：安全移交系统默认浏览器打开。
  */
-export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> = React.memo(
-  function MarkdownDocumentView({
+export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> =
+  React.memo(function MarkdownDocumentView({
     content,
     filePath = 'document.md',
     variant = 'document',
@@ -118,16 +122,25 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> = React.m
     const onCopyFeedbackRef = useRef(onCopyFeedback);
     onCopyFeedbackRef.current = onCopyFeedback;
 
+    const scope = useLeafScope();
+    const scopeRef = useRef(scope);
+    scopeRef.current = scope;
+
     const contentLength = content?.length || 0;
 
     // 1. 大文件前置硬熔断判定（>256KB 严格阻断进入 useAsyncMarkdownHtml）
     const isLargeFile = Boolean(
-      largeFileThreshold && largeFileThreshold > 0 && contentLength > largeFileThreshold
+      largeFileThreshold &&
+      largeFileThreshold > 0 &&
+      contentLength > largeFileThreshold
     );
 
     // 2. 只有非大文件且非空时才交由异步渲染引擎处理；熔断时严格向 Rust / worker 传空串
-    const targetMarkdown = isLargeFile ? '' : (content || '');
-    const { html, loading, failed } = useAsyncMarkdownHtml(targetMarkdown, priority);
+    const targetMarkdown = isLargeFile ? '' : content || '';
+    const { html, loading, failed } = useAsyncMarkdownHtml(
+      targetMarkdown,
+      priority
+    );
 
     // 3. 容器级事件委托中枢（代码复制、路径跳转、外链拦截）
     const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -181,12 +194,28 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> = React.m
         const rawPath =
           pathBtn.getAttribute('data-path') || pathBtn.textContent || '';
         const { cleanPath, line, col } = parsePathAndLocation(rawPath);
-        if (cleanPath) {
+        if (cleanPath && !isExternalNavigableHref(cleanPath)) {
           onOpenPathRef.current?.(cleanPath);
           if (typeof window !== 'undefined') {
+            const currentScope = scopeRef.current;
+            const domLeaf = target
+              .closest<HTMLElement>('[data-leaf-id]')
+              ?.getAttribute('data-leaf-id');
+            const domSession = target
+              .closest<HTMLElement>('[data-session-id]')
+              ?.getAttribute('data-session-id');
+            const leafId = currentScope.leafId || domLeaf || undefined;
+            const sessionId = currentScope.sessionId || domSession || undefined;
+
             window.dispatchEvent(
               new CustomEvent('crish-open-file', {
-                detail: { path: cleanPath, line, col },
+                detail: {
+                  path: cleanPath,
+                  line,
+                  col,
+                  ...(leafId ? { leafId } : {}),
+                  ...(sessionId ? { sessionId } : {}),
+                },
               })
             );
           }
@@ -242,7 +271,10 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> = React.m
           {emptyPlaceholder ? (
             <div
               className="md-empty-placeholder"
-              style={{ color: 'var(--text-tertiary)', padding: 'var(--space-2, 8px) 0' }}
+              style={{
+                color: 'var(--text-tertiary)',
+                padding: 'var(--space-2, 8px) 0',
+              }}
             >
               {emptyPlaceholder}
             </div>
@@ -306,7 +338,12 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> = React.m
               flexShrink: 0,
             }}
           >
-            <AppIcon name="zap" size={14} color="var(--color-warning)" aria-hidden />
+            <AppIcon
+              name="zap"
+              size={14}
+              color="var(--color-warning)"
+              aria-hidden
+            />
             <span>大文件 Markdown（{sizeKb} KB）已启用虚拟化极速代码呈现</span>
           </div>
           <div style={{ flex: 1, minHeight: 0, height: '100%', width: '100%' }}>
@@ -369,11 +406,20 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> = React.m
             onScroll={onScroll}
             className="md-document-scroll-root"
             style={{ width: '100%', height: '100%', flex: 1, minHeight: 0 }}
-            contentStyle={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}
+            contentStyle={{
+              minHeight: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
           >
             {fallbackNode}
             {footerSlot ? (
-              <div className="md-document-footer" style={{ padding: '0 var(--space-3, 12px) var(--space-3, 12px)' }}>
+              <div
+                className="md-document-footer"
+                style={{
+                  padding: '0 var(--space-3, 12px) var(--space-3, 12px)',
+                }}
+              >
                 {footerSlot}
               </div>
             ) : null}
@@ -417,11 +463,18 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> = React.m
           onScroll={onScroll}
           className="md-document-scroll-root"
           style={{ width: '100%', height: '100%', flex: 1, minHeight: 0 }}
-          contentStyle={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}
+          contentStyle={{
+            minHeight: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
         >
           {contentNode}
           {footerSlot ? (
-            <div className="md-document-footer" style={{ padding: '0 var(--space-3, 12px) var(--space-3, 12px)' }}>
+            <div
+              className="md-document-footer"
+              style={{ padding: '0 var(--space-3, 12px) var(--space-3, 12px)' }}
+            >
               {footerSlot}
             </div>
           ) : null}
@@ -435,7 +488,6 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> = React.m
         {footerSlot}
       </>
     );
-  }
-);
+  });
 
 MarkdownDocumentView.displayName = 'MarkdownDocumentView';

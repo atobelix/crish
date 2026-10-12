@@ -39,13 +39,13 @@
 }
 
 .separator {
-  color: var(--text-faint);
+  color: var(--text-tertiary);
   font-size: 14px;
 }
 
 .timer {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: inherit;
   font-size: 14px;
-  color: var(--text-faint);
+  color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }

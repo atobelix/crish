@@ -11,14 +11,44 @@
   min-width: 0;
 }
 
-/* 未展开态严格执行 24px 硬件级尺寸隔离，切断流式回流风暴 */
-.reasoningContainer:not([data-expanded='true']) {
+/* 未展开且未处于过渡折叠中时，严格执行 24px 硬件级尺寸隔离，切断流式回流风暴 */
+.reasoningContainer:not([data-expanded='true']):not([data-collapsing='true']) {
   contain: size layout;
   height: 24px;
   min-height: 24px;
   max-height: 24px;
   box-sizing: border-box;
   overflow: hidden;
+}
+
+/* 思维链平滑折叠外层 Grid 容器：160ms 优雅收拢，消灭视口跳跃 */
+.reasoningExpandGrid {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 160ms var(--ease-emphasized);
+  margin: 0;
+  padding: 0;
+  border: none;
+  overflow: hidden;
+}
+
+.reasoningContainer[data-expanded='true'] .reasoningExpandGrid {
+  grid-template-rows: 1fr;
+}
+
+.reasoningExpandSlot {
+  min-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    opacity 120ms var(--ease-standard),
+    transform 120ms var(--ease-emphasized);
+}
+
+.reasoningContainer[data-expanded='true'] .reasoningExpandSlot {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 /* 24px 极简交互单行按钮：防 Chromium 内核宽度坍塌与单行高度失锁 */
@@ -31,7 +61,7 @@
   min-height: 24px;
   max-height: 24px;
   --btn-h: 24px;
-  --btn-px: var(--space-1, 4px);
+  --btn-px: 0;
   --btn-bg: transparent;
   --btn-hover-overlay: transparent;
   --btn-active-overlay: transparent;
@@ -39,7 +69,7 @@
   contain: size layout;
   align-items: center;
   margin: 0;
-  padding: 0 var(--space-1, 4px);
+  padding: 0;
   border: none;
   background: transparent;
   cursor: pointer;
@@ -76,7 +106,8 @@
   outline: none;
   box-shadow:
     0 0 0 0.5px var(--border-subtle),
-    0 0 0 2px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+    0 0 0 2px
+      color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
   border-radius: var(--radius-sm);
 }
 
@@ -207,6 +238,10 @@
   }
   .statusDot {
     animation: none;
+  }
+  .reasoningExpandGrid,
+  .reasoningExpandSlot {
+    transition: none;
   }
 }
 

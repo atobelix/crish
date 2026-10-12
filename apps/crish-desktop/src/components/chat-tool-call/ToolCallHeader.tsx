@@ -1,10 +1,7 @@
 import React, { useMemo } from 'react';
 import styles from './ChatToolCallBlock.module.css';
-import type { MessageToolCall } from '../../store/types';
-import {
-  toolCommandType,
-  toolCommandIcon,
-} from '../../api/toolPresentation';
+import type { FileDiff, MessageToolCall } from '../../store/types';
+import { toolCommandType, toolCommandIcon } from '../../api/toolPresentation';
 import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons';
 import {
@@ -37,6 +34,7 @@ export interface ToolCallHeaderProps {
   bodyId: string;
   onToggleTool: (toolId: string, currentlyOpen: boolean) => void;
   onOpenPath?: ((filePath: string) => void) | undefined;
+  onOpenDiff?: ((diff: FileDiff) => void) | undefined;
 }
 
 export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
@@ -54,6 +52,7 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
   bodyId,
   onToggleTool,
   onOpenPath,
+  onOpenDiff,
 }) => {
   const { actionText, paramText, isPath } = resolveToolActionAndParam(
     tc,
@@ -63,12 +62,11 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
   );
 
   const isError = tc.status === 'error';
-  const secondaryMeta = useMemo(() => resolveToolSecondaryMeta(tc), [tc]);
   const kind = useMemo(() => toolCommandType(tc), [tc]);
   const kindIconName = useMemo(() => toolCommandIcon(kind), [kind]);
-
   const fullTooltip = filePath || tc.arguments || human || '';
-  const showHumanLabel = Boolean(human && human !== actionText && human !== paramText);
+
+  const targetDiff = tc.diffs?.[0];
 
   return (
     <div
@@ -101,65 +99,74 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
           ) : isError ? (
             <span className={styles.toolErrorDot} aria-hidden="true" />
           ) : (
-            <AppIcon name={kindIconName} size={12} className={styles.toolKindIcon} aria-hidden />
+            <AppIcon
+              name={kindIconName}
+              size={12}
+              className={styles.toolKindIcon}
+              aria-hidden
+            />
           )}
         </span>
         <span className={styles.toolRowText}>
           <span className={styles.toolRowSummary}>
-            {showHumanLabel ? (
-              <>
-                <Tooltip content={human}>
-                  <span className={styles.toolActionText}>{human}</span>
-                </Tooltip>
-                <span className={styles.dotSeparator} aria-hidden="true">·</span>
-              </>
-            ) : null}
             <Tooltip content={fullTooltip}>
               <span className={styles.toolActionText}>{actionText}</span>
             </Tooltip>
             {paramText ? (
-              <>
-                <span className={styles.dotSeparator} aria-hidden="true">·</span>
-                {isError ? (
-                  <Tooltip content={tc.output || fullTooltip}>
-                    <span className={styles.toolErrorParamText}>{paramText}</span>
-                  </Tooltip>
-                ) : isPath && pathClickable && filePath ? (
-                  <Tooltip content={filePath}>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className={styles.toolPathLink}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenPath?.(filePath);
-                      }}
-                    >
-                      {paramText}
-                    </Button>
-                  </Tooltip>
-                ) : (
-                  <Tooltip content={fullTooltip}>
-                    <span className={styles.toolParamText}>{paramText}</span>
-                  </Tooltip>
-                )}
-              </>
+              isError ? (
+                <Tooltip content={tc.output || fullTooltip}>
+                  <span className={styles.toolErrorParamText}>{paramText}</span>
+                </Tooltip>
+              ) : isPath && pathClickable && filePath ? (
+                <Tooltip content={filePath}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className={styles.toolPathLink}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenPath?.(filePath);
+                    }}
+                  >
+                    {paramText}
+                  </Button>
+                </Tooltip>
+              ) : (
+                <Tooltip content={fullTooltip}>
+                  <span className={styles.toolParamText}>{paramText}</span>
+                </Tooltip>
+              )
             ) : null}
 
-            {/* 次要关键指标（行数、匹配数、文件大小）紧随其后在左侧展示，避免人眼视线大幅左右横跳 */}
-            {!isError && secondaryMeta ? (
-              <>
-                <span className={styles.dotSeparator} aria-hidden="true">·</span>
-                <span className={styles.toolSecondaryMetaInline}>{secondaryMeta}</span>
-              </>
-            ) : null}
-
-            {/* 差异统计 (+2 -1) 紧跟在路径与参数后方 */}
+            {/* 差异统计 (+2 -1) 紧跟在路径与参数后方，点击定位至差异面板 */}
             {diffStats ? (
-              <span className={styles.diffStatsInline}>
-                <span className={styles.diffStatsAdd}>+{diffStats.add}</span>
-                <span className={styles.diffStatsDel}>-{diffStats.del}</span>
-              </span>
+              targetDiff && onOpenDiff ? (
+                <Tooltip content="在右侧面板查看差异">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    className={styles.diffStatsBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenDiff(targetDiff);
+                    }}
+                    aria-label={`查看差异：+${diffStats.add} -${diffStats.del}`}
+                  >
+                    <span className={styles.diffStatsAdd}>
+                      +{diffStats.add}
+                    </span>
+                    <span className={styles.diffStatsDel}>
+                      -{diffStats.del}
+                    </span>
+                  </Button>
+                </Tooltip>
+              ) : (
+                <span className={styles.diffStatsInline}>
+                  <span className={styles.diffStatsAdd}>+{diffStats.add}</span>
+                  <span className={styles.diffStatsDel}>-{diffStats.del}</span>
+                </span>
+              )
             ) : null}
           </span>
         </span>

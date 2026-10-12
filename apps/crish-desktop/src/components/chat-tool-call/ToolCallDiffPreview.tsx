@@ -36,7 +36,10 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
   const { flag: copied, trigger: triggerCopied } = useTransientFlag(1500);
   const [showAll, setShowAll] = useState(false);
 
-  const codeLang = useMemo(() => langFromFilename(diff.filePath), [diff.filePath]);
+  const codeLang = useMemo(
+    () => langFromFilename(diff.filePath),
+    [diff.filePath]
+  );
 
   const changes = diff.changes || [];
   const hasMore = changes.length > DIFF_FLAT_PREVIEW_LIMIT;
@@ -55,7 +58,7 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
         code: change.content,
         language: codeLang,
       })),
-    [displayedChanges, diff.filePath, codeLang],
+    [displayedChanges, diff.filePath, codeLang]
   );
   const hlMap = useDiffHighlightMap(hlItems);
 
@@ -63,7 +66,8 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
     e.stopPropagation();
     const unifiedText = changes
       .map((c) => {
-        const prefix = c.type === 'addition' ? '+' : c.type === 'deletion' ? '-' : ' ';
+        const prefix =
+          c.type === 'addition' ? '+' : c.type === 'deletion' ? '-' : ' ';
         return `${prefix} ${c.content}`;
       })
       .join('\n');
@@ -98,7 +102,12 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
         aria-label={`查看差异：${diff.filePath}`}
       >
         <div className={styles.diffFileInfo}>
-          <AppIcon name="file-code" size={15} className={styles.diffFileIcon} aria-hidden="true" />
+          <AppIcon
+            name="file-code"
+            size={15}
+            className={styles.diffFileIcon}
+            aria-hidden="true"
+          />
           <Tooltip content={diff.filePath}>
             <span className={styles.diffFilename}>{diff.filePath}</span>
           </Tooltip>
@@ -122,7 +131,11 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
                 aria-label="复制差异内容"
               >
                 {copied ? (
-                  <AppIcon name="check" size={13} className={styles.copiedCheckIcon} />
+                  <AppIcon
+                    name="check"
+                    size={13}
+                    className={styles.copiedCheckIcon}
+                  />
                 ) : (
                   <AppIcon name="copy" size={13} />
                 )}
@@ -185,8 +198,8 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
           );
         })}
 
-        {/* 超过平铺门限时的平铺控制栏 */}
-        {hasMore && (
+        {/* 超过平铺门限时的平铺控制栏（嵌入卡片内不展示冗余控制栏，保持极简净空） */}
+        {hasMore && cardVariant !== 'embedded' && (
           <div className={styles.diffMoreIndicator}>
             {!showAll ? (
               <Button
@@ -230,7 +243,8 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
                 onClick={handleOpenDiff}
                 aria-label="点击在右侧查看完整 diff"
               >
-                还有 {changes.length - (showAll ? 0 : DIFF_FLAT_PREVIEW_LIMIT)} 行 · 点击在右侧查看完整 diff
+                还有 {changes.length - (showAll ? 0 : DIFF_FLAT_PREVIEW_LIMIT)}{' '}
+                行 · 点击在右侧查看完整 diff
               </Button>
             )}
           </div>

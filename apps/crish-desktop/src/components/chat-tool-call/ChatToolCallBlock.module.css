@@ -42,9 +42,9 @@
 
 .toolGroup > .toolRow,
 .toolGroup > div > .toolRow {
-  margin-left: 10px;
-  padding-left: 14px;
-  border-left: var(--hairline-width) solid var(--border-subtle);
+  margin-left: 0;
+  padding-left: 0;
+  border-left: none;
 }
 
 /* Tool Row */
@@ -91,7 +91,7 @@
   width: 100%;
   border: none;
   background: transparent;
-  padding: 0 4px;
+  padding: 0;
   border-radius: var(--radius-md);
   cursor: pointer;
   font-family: inherit;
@@ -129,9 +129,9 @@
 }
 
 .toolRowIcoSlot {
-  flex: 0 0 16px;
-  width: 16px;
-  height: 16px;
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -145,9 +145,10 @@
 }
 
 /* 100ms 原地替换指示翻转契约；非常驻 will-change（仅动画中短暂提升） */
-.toolRow[data-in-place-flipping="true"] .toolRowIcoSlot,
+.toolRow[data-in-place-flipping='true'] .toolRowIcoSlot,
 .toolRow.inPlaceFlipping .toolRowIcoSlot {
-  animation: toolIndicatorFlip 100ms cubic-bezier(0.2, 0, 1) forwards;
+  animation: toolIndicatorFlip var(--duration-micro) var(--ease-emphasized)
+    forwards;
 }
 
 @keyframes toolIndicatorFlip {
@@ -268,11 +269,12 @@
   animation: tool-dot-pulse 1.6s ease-in-out infinite;
   display: inline-block;
   flex-shrink: 0;
-  margin-right: 5px;
+  margin-right: 0;
 }
 
 @keyframes tool-dot-pulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(0.85);
   }
   50% {
@@ -289,7 +291,7 @@
   background: var(--color-error);
   display: inline-block;
   flex-shrink: 0;
-  margin-right: 5px;
+  margin-right: 0;
 }
 
 .toolParamText {
@@ -330,13 +332,29 @@
   color: var(--text-primary);
 }
 
-.diffStatsInline {
+.diffStatsInline,
+.diffStatsBtn {
   font-family: var(--font-mono, monospace);
   font-size: 14px;
   margin-left: 4px;
   flex-shrink: 0;
   white-space: nowrap;
   line-height: 24px;
+}
+
+.diffStatsBtn {
+  display: inline-flex;
+  align-items: center;
+  background: transparent;
+  border: none;
+  padding: 0 4px;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  transition: background var(--transition-fast, 150ms ease);
+}
+
+.diffStatsBtn:hover {
+  background: var(--tint-hover);
 }
 
 .toolRowHeadRight {
@@ -383,25 +401,37 @@
   transform: rotate(90deg);
 }
 
-/* Collapse animation */
+/* Collapse animation: 彻底淘汰 max-height: 2000px，改走 W3C CSS Grid 纯净折叠 */
 .toolBody {
-  max-height: 0;
+  display: grid;
+  grid-template-rows: 0fr;
+  margin: 0;
+  padding: 0;
+  border: none;
   overflow: hidden;
-  opacity: 0;
-  transition:
-    max-height 220ms var(--ease-emphasized),
-    opacity var(--transition-fast, 150ms ease);
+  transition: grid-template-rows 160ms var(--ease-emphasized);
 }
 
-.toolBody.expanded {
-  max-height: 2000px;
-  opacity: 1;
+.toolBody.expanded,
+.toolBody[data-expanded='true'] {
+  grid-template-rows: 1fr;
 }
 
 .toolBodyInner {
   overflow: hidden;
   min-height: 0;
   contain: content;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    opacity 120ms ease-out,
+    transform 120ms var(--ease-emphasized);
+}
+
+.toolBody.expanded .toolBodyInner,
+.toolBody[data-expanded='true'] .toolBodyInner {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 /* Duration display */
@@ -459,9 +489,9 @@
 
 /*        V1-          inspect /        group  */
 .toolGroup {
-  border-left: 2px solid var(--border-subtle);
+  border-left: none;
   margin: 4px 0;
-  padding-left: 8px;
+  padding-left: 0;
 }
 
 .toolGroupHeader {
@@ -499,7 +529,7 @@
   background: var(--bg-card);
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-subtle);
-  margin: 4px 0 6px 0;
+  margin: 2px 0 4px 0;
   box-sizing: border-box;
   overflow: hidden;
   position: relative;
@@ -521,7 +551,7 @@
   overflow: hidden;
   width: 100%;
   box-sizing: border-box;
-  padding: 10px 14px;
+  padding: 4px 0 6px 0;
 }
 
 /*
@@ -546,7 +576,7 @@
   background: transparent;
   border-bottom: none;
   min-height: 20px;
-  margin-bottom: 6px;
+  margin-bottom: 2px;
   box-sizing: border-box;
 }
 
@@ -660,7 +690,7 @@
 
 /* CLI Shell     */
 .toolSectionShellSingleLine {
-  padding: 6px 12px;
+  padding: 4px 0;
 }
 
 .terminalSingleLineRow {
@@ -709,7 +739,7 @@
   margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
-  color: var(--text-primary);
+  color: var(--text-tertiary);
   font-family: var(--font-mono, monospace);
   font-size: var(--font-size-xs, 12px);
 }
@@ -720,7 +750,7 @@
   font-size: var(--font-size-micro, 11px);
   color: var(--text-tertiary);
   margin-top: 2px;
-  padding-left: 14px;
+  padding-left: 0;
 }
 
 .toolMetaKey {
@@ -751,7 +781,7 @@
 .toolValCell {
   flex: 1;
   min-width: 0;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
 }
 
 .toolValPre {
@@ -791,7 +821,7 @@
 .fileStatTitle {
   font-size: var(--font-size-sm, 13px);
   font-weight: var(--font-weight-medium, 500);
-  color: var(--text-primary);
+  color: var(--text-tertiary);
   font-family: var(--font-mono, monospace);
   word-break: break-all;
 }
@@ -802,7 +832,7 @@
   flex-wrap: wrap;
   gap: 6px;
   font-size: var(--font-size-xs, 12px);
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
 }
 
 .fileStatDot {
@@ -834,7 +864,7 @@
 }
 
 .fileStatVal {
-  color: var(--text-primary);
+  color: var(--text-tertiary);
   font-family: var(--font-mono, monospace);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -867,7 +897,7 @@
 }
 
 .grepMatchText {
-  color: var(--text-primary);
+  color: var(--text-tertiary);
   white-space: pre-wrap;
   word-break: break-word;
   flex: 1;
@@ -887,12 +917,12 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--text-primary);
+  color: var(--text-tertiary);
 }
 
 .dirListIsDir {
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--text-tertiary);
 }
 
 /* 剥除信封后的代码与元信息提示（read_file） */
@@ -910,7 +940,7 @@
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  color: var(--text-primary);
+  color: var(--text-tertiary);
   max-height: none;
   overflow-y: visible;
   font-family: var(--font-mono, monospace);
@@ -962,7 +992,7 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   line-height: 1.45;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   white-space: pre-wrap;
   word-break: break-word;
   font-weight: var(--font-weight-code, 400);
@@ -1335,7 +1365,8 @@
 }
 
 @keyframes pulse-live-tool {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(0.85);
   }
   50% {

@@ -2,7 +2,13 @@
  * 思考预览行：默认 48–64 字 + fade；展开才挂全文。
  * live 计时 ≤ 1Hz；查阅器仍走 thoughtInspector。
  */
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+} from 'react';
 import { Button } from '../../components/ui';
 import {
   useAsyncMarkdownHtml,
@@ -12,8 +18,11 @@ import { Priority } from '../../workers';
 import { FLOW_OUTPUT_STYLE } from './flowOutputStyle';
 import { clipThinkingPreview } from './narrativeModel';
 import { ReconciledMarkdownHtml } from '../../components/markdown/ReconciledMarkdownHtml';
+import { handleSafeExternalLinkClick } from '../../api/markdown-render/markdownSanitizer';
 import type { IncrementalMarkdownUnitSnapshot } from '../../api/markdown/IncrementalMarkdownSession';
 import styles from './narrative.module.css';
+
+export { handleSafeExternalLinkClick };
 
 export interface ThinkingBlockProps {
   content: string;
@@ -23,6 +32,7 @@ export interface ThinkingBlockProps {
   messageId?: string;
   turnIndex?: number;
   defaultOpen?: boolean;
+  onLinkClick?: (href: string) => void;
 }
 
 export function ThinkingBlock({
@@ -31,6 +41,7 @@ export function ThinkingBlock({
   isLive = false,
   durationMs,
   defaultOpen = false,
+  onLinkClick,
 }: ThinkingBlockProps): ReactElement {
   const [open, setOpen] = useState(defaultOpen);
   const [liveSec, setLiveSec] = useState(0);
@@ -39,8 +50,12 @@ export function ThinkingBlock({
     !isLive && !open ? shownPreview : '',
     Priority.Low
   );
-  const previewUnitsRef = useRef<readonly IncrementalMarkdownUnitSnapshot[] | null>(null);
-  const fullUnitsRef = useRef<readonly IncrementalMarkdownUnitSnapshot[] | null>(null);
+  const previewUnitsRef = useRef<
+    readonly IncrementalMarkdownUnitSnapshot[] | null
+  >(null);
+  const fullUnitsRef = useRef<
+    readonly IncrementalMarkdownUnitSnapshot[] | null
+  >(null);
   const livePreviewHtml = useStreamingMarkdownHtml(
     shownPreview,
     isLive && !open,
@@ -81,6 +96,28 @@ export function ThinkingBlock({
 
   const outputMax = FLOW_OUTPUT_STYLE;
 
+  const handleContentClick = useCallback(
+    (e: React.MouseEvent<HTMLElement>) => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+
+      const anchor = target.closest('a');
+      if (anchor instanceof HTMLAnchorElement) {
+        if (onLinkClick) {
+          const href = anchor.getAttribute('href');
+          if (href) {
+            e.preventDefault();
+            e.stopPropagation();
+            onLinkClick(href);
+            return;
+          }
+        }
+        handleSafeExternalLinkClick(e, target);
+      }
+    },
+    [onLinkClick]
+  );
+
   return (
     <div
       className={styles.thinking}
@@ -106,20 +143,24 @@ export function ThinkingBlock({
         </Button>
       </div>
       {open ? (
-          <ReconciledMarkdownHtml
-            className={styles.thinkingFull}
-            style={outputMax}
-            data-flow-thinking-full=""
-            html={fullHtml}
-            incrementalUnits={isLive && open ? fullUnitsRef.current : undefined}
-          />
+        <ReconciledMarkdownHtml
+          className={`${styles.thinkingFull} md-rendered`}
+          style={outputMax}
+          data-flow-thinking-full=""
+          html={fullHtml}
+          incrementalUnits={isLive && open ? fullUnitsRef.current : undefined}
+          onClick={handleContentClick}
+        />
       ) : (
         <div className={styles.previewWrap} data-flow-thinking-preview="">
           <ReconciledMarkdownHtml
-            className={styles.previewText}
+            className={`${styles.previewText} md-rendered`}
             data-flow-thinking-preview-content=""
             html={previewHtml}
-            incrementalUnits={isLive && !open ? previewUnitsRef.current : undefined}
+            incrementalUnits={
+              isLive && !open ? previewUnitsRef.current : undefined
+            }
+            onClick={handleContentClick}
           />
           <span className={styles.previewFade} aria-hidden />
         </div>

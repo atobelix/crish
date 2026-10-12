@@ -6,7 +6,10 @@ import { ToolCallOutputPane } from './ToolCallOutputPane';
 import { extractImageRefs, fullToolOutput } from '../../api/toolPresentation';
 import { toolStatusZh } from './chatToolCallUtils';
 // D0/U-BUDGET：cap 定义收敛至 perfBudgets 镜像（仅 re-export，展示逻辑不改）
-import { TOOL_OUTPUT_LINE_CAP, TOOL_OUTPUT_BYTE_CAP } from '../../api/perfBudgets';
+import {
+  TOOL_OUTPUT_LINE_CAP,
+  TOOL_OUTPUT_BYTE_CAP,
+} from '../../api/perfBudgets';
 
 export { TOOL_OUTPUT_LINE_CAP, TOOL_OUTPUT_BYTE_CAP };
 
@@ -31,7 +34,7 @@ export interface ToolCallOutputProps {
  */
 export function shouldOmitToolInput(name?: string, argsStr?: string): boolean {
   const n = (name || '').toLowerCase().replace(/[\s-]+/g, '_');
-  // 1. 纯检索/查询/读取/状态查看类（grep, glob, find, list_dir, view_file, read_file, file_stat 等）
+  // 1. 纯检索/查询/读取/状态查看类，以及文件编辑/写入类（已有 diff 输出，无需冗余入参大表格）
   if (
     n === 'grep_search' ||
     n.includes('grep') ||
@@ -45,7 +48,16 @@ export function shouldOmitToolInput(name?: string, argsStr?: string): boolean {
     n === 'open_file' ||
     n === 'file_stat' ||
     n.includes('stat') ||
-    n === 'cat'
+    n === 'cat' ||
+    n === 'write_file' ||
+    n === 'write_to_file' ||
+    n === 'create_file' ||
+    n === 'edit_file' ||
+    n === 'replace_file_content' ||
+    n.includes('write') ||
+    n.includes('edit') ||
+    n.includes('replace') ||
+    n.includes('patch')
   ) {
     return true;
   }

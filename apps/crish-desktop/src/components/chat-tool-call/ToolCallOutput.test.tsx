@@ -29,7 +29,9 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
         />
       );
 
-      expect(screen.getByRole('region', { name: '终端命令输入' })).toBeDefined();
+      expect(
+        screen.getByRole('region', { name: '终端命令输入' })
+      ).toBeDefined();
       expect(screen.getByText('$')).toBeDefined();
       expect(screen.getByText('npm run test:coverage')).toBeDefined();
       expect(screen.getByText('(C:/Software/conex)')).toBeDefined();
@@ -199,13 +201,17 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
       expect(root?.getAttribute('role')).toBe('region');
 
       // 验证输入区存在（终端命令输入区）
-      expect(screen.getByRole('region', { name: '终端命令输入' })).toBeDefined();
+      expect(
+        screen.getByRole('region', { name: '终端命令输入' })
+      ).toBeDefined();
       expect(screen.getByText('$')).toBeDefined();
       expect(screen.getByText('cargo test')).toBeDefined();
       expect(screen.getByText('(C:/Software/conex)')).toBeDefined();
 
       // 验证输出区存在
-      expect(screen.getByRole('region', { name: '工具执行输出' })).toBeDefined();
+      expect(
+        screen.getByRole('region', { name: '工具执行输出' })
+      ).toBeDefined();
       expect(screen.getByText('输出')).toBeDefined();
       expect(screen.getByText(/1.5s/)).toBeDefined();
       expect(
@@ -213,27 +219,49 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
       ).toBeDefined();
     });
 
-    it('非 Shell 工具应包含明确的「输入」徽标与入参配置分栏', () => {
+    it('非 Shell 通用工具应包含明确的「输入」徽标与入参配置分栏', () => {
       const tc = {
         id: 'tc-edit-full',
-        name: 'replace_file_content',
+        name: 'custom_lint',
         arguments: JSON.stringify({
           TargetFile: 'C:/Software/conex/src/App.tsx',
           StartLine: 1,
         }),
-        output: 'replaced successfully',
+        output: 'lint passed successfully',
         status: 'success',
       };
 
       render(<ToolCallOutput tc={tc} bodyId="body-tc-edit-full" />);
 
-      expect(screen.getByRole('region', { name: '工具输入参数' })).toBeDefined();
+      expect(
+        screen.getByRole('region', { name: '工具输入参数' })
+      ).toBeDefined();
       expect(screen.getByText('输入')).toBeDefined();
       expect(screen.getByText('TargetFile')).toBeDefined();
       expect(screen.getByText('C:/Software/conex/src/App.tsx')).toBeDefined();
-      expect(screen.getByRole('region', { name: '工具执行输出' })).toBeDefined();
+      expect(
+        screen.getByRole('region', { name: '工具执行输出' })
+      ).toBeDefined();
       expect(screen.getByText('输出')).toBeDefined();
-      expect(screen.getByText('replaced successfully')).toBeDefined();
+      expect(screen.getByText('lint passed successfully')).toBeDefined();
+    });
+
+    it('文件编辑与写入类工具应省略输入区展示，直接呈现输出/差异', () => {
+      const tc = {
+        id: 'tc-write-omit',
+        name: 'write_file',
+        arguments: JSON.stringify({
+          TargetFile: 'C:/Software/conex/src/App.tsx',
+          CodeContent: 'const x = 1;',
+        }),
+        output: 'file written',
+        status: 'success',
+      };
+
+      render(<ToolCallOutput tc={tc} bodyId="body-tc-write-omit" />);
+
+      expect(screen.queryByText('输入')).toBeNull();
+      expect(screen.queryByText('CodeContent')).toBeNull();
     });
 
     it('超出 2000 行限制自动进行轻量视口截断', () => {

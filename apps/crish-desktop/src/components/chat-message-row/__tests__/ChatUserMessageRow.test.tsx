@@ -13,6 +13,7 @@ import {
 } from '../../../api/sessionStreamManager';
 import { DOMAIN_MESSAGES } from '../../../api/userFacingErrors';
 import { DEFAULT_DELAY_SHOW_MS } from '../../ui/Tooltip/Tooltip';
+import { _resetAnimatedMessageIdsForTesting } from '../useUserBubbleEntrance';
 
 // Mock 全局 Toast 上下文
 vi.mock('../../../services/toast/ToastContext', () => ({
@@ -60,6 +61,7 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
     vi.useRealTimers();
     vi.restoreAllMocks();
     resetBusyRetryForTests();
+    _resetAnimatedMessageIdsForTesting();
   });
 
   const defaultProps = {
@@ -418,5 +420,51 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
     );
     expect(cronBadge).not.toBeNull();
     expect(cronBadge?.textContent).toContain('定时计划唤醒');
+  });
+
+  it('用户消息气泡入场动画：新发送消息挂载 data-entering，并在 animationEnd 后卸载 GPU will-change', () => {
+    const freshMsg = createMockUserMessage({
+      id: 'fresh-glide-msg',
+      text: '新消息滑入测试',
+      timestamp: Date.now() - 100,
+    });
+    const { container } = render(
+      <ChatUserMessageRow {...defaultProps} msg={freshMsg} />
+    );
+    const bubble = container.querySelector(`.${styles.userBubble}`);
+    expect(bubble).not.toBeNull();
+    expect(bubble?.getAttribute('data-entering')).toBe('true');
+    expect(bubble?.classList.contains(styles.userBubbleEntering)).toBe(true);
+
+    // 触发 animationEnd（兼容 jsdom 缺少标准 AnimationEvent 时 React 监听 webkitAnimationEnd），剥离 GPU 图层
+    act(() => {
+      fireEvent(bubble!, new Event('webkitAnimationEnd', { bubbles: true }));
+    });
+    expect(bubble?.getAttribute('data-entering')).toBeNull();
+    expect(bubble?.classList.contains(styles.userBubbleEntering)).toBe(false);
+  });
+
+  it('历史消息不触发入场动画：旧消息不挂载 data-entering', () => {
+    const oldMsg = createMockUserMessage({
+      id: 'old-glide-msg',
+      text: '历史已归档消息',
+      timestamp: Date.now() - 10000,
+    });
+    const { container } = render(
+      <ChatUserMessageRow {...defaultProps} msg={oldMsg} />
+    );
+    const bubble = container.querySelector(`.${styles.userBubble}`);
+    expect(bubble).not.toBeNull();
+    expect(bubble?.getAttribute('data-entering')).toBeNull();
+    expect(bubble?.classList.contains(styles.userBubbleEntering)).toBe(false);
+  });
+
+  it('CSS 动效契约守门：.userBubbleEntering 包含 14px glideUp 与 220ms 缓动', () => {
+    const cssPath = path.resolve(__dirname, '../ChatMessageRow.module.css');
+    const cssContent = fs.readFileSync(cssPath, 'utf-8');
+    expect(cssContent).toContain('@keyframes userBubbleGlideUp');
+    expect(cssContent).toContain('translateY(14px)');
+    expect(cssContent).toContain('0.22s');
+    expect(cssContent).toContain('will-change: transform, opacity');
   });
 });

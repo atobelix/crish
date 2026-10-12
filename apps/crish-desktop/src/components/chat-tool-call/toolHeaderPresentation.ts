@@ -71,7 +71,9 @@ export function extractFallbackParam(name: string, args?: string): string {
       }
 
       // 2. 提取前两项 key: val
-      const entries = Object.entries(obj).filter(([_, v]) => v !== undefined && v !== null);
+      const entries = Object.entries(obj).filter(
+        ([_, v]) => v !== undefined && v !== null
+      );
       if (entries.length > 0) {
         const parts = entries.slice(0, 2).map(([k, v]) => {
           const vStr = typeof v === 'object' ? JSON.stringify(v) : String(v);
@@ -101,7 +103,10 @@ export function resolveToolActionAndParam(
 
   // 0. 失败终态时，若包含错误输出直接提炼错误概要展示于摘要行
   if (isError && tc.output) {
-    const lines = tc.output.split('\n').map((l) => l.trim()).filter(Boolean);
+    const lines = tc.output
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
     const firstLine = lines[0] || '执行失败';
     const cleanErr = firstLine.replace(/^\[[^\]]+\]\s*/, '');
     let action = human || '工具';
@@ -110,7 +115,12 @@ export function resolveToolActionAndParam(
     else if (name.includes('edit') || name.includes('replace')) action = '编辑';
     else if (name.includes('grep')) action = 'Grep';
     else if (name.includes('find') || name.includes('glob')) action = 'Glob';
-    else if (name.includes('url') || name.includes('fetch') || name.includes('browser')) action = '网页获取';
+    else if (
+      name.includes('url') ||
+      name.includes('fetch') ||
+      name.includes('browser')
+    )
+      action = '网页获取';
     return {
       actionText: action,
       paramText: cleanErr.length > 70 ? cleanErr.slice(0, 70) + '…' : cleanErr,
@@ -145,7 +155,10 @@ export function resolveToolActionAndParam(
 
   // 2. 差异对比类
   if (name.includes('diff')) {
-    const p = pathLabel || (filePath ? basename(filePath) : '') || extractFallbackParam(name, args);
+    const p =
+      pathLabel ||
+      (filePath ? basename(filePath) : '') ||
+      extractFallbackParam(name, args);
     return {
       actionText: '差异对比',
       paramText: p,
@@ -160,7 +173,11 @@ export function resolveToolActionAndParam(
       try {
         const parsed = JSON.parse(args);
         const pathVal =
-          parsed.path || parsed.Path || parsed.filepath || parsed.filePath || '';
+          parsed.path ||
+          parsed.Path ||
+          parsed.filepath ||
+          parsed.filePath ||
+          '';
         if (pathVal) p = basename(pathVal);
       } catch {
         // ignore
@@ -180,7 +197,9 @@ export function resolveToolActionAndParam(
     name === 'read_text_file' ||
     name === 'open_file' ||
     name === 'cat' ||
-    (name.includes('read') && !name.includes('url') && !name.includes('resource')) ||
+    (name.includes('read') &&
+      !name.includes('url') &&
+      !name.includes('resource')) ||
     (name.includes('view') && !name.includes('preview'))
   ) {
     const p = pathLabel || (filePath ? basename(filePath) : '');
@@ -247,12 +266,20 @@ export function resolveToolActionAndParam(
     }
     return {
       actionText: 'Grep',
-      paramText: q ? (q.startsWith('"') ? q : `"${q}"`) : extractFallbackParam(name, args),
+      paramText: q
+        ? q.startsWith('"')
+          ? q
+          : `"${q}"`
+        : extractFallbackParam(name, args),
       isPath: false,
     };
   }
 
-  if (name === 'find_by_name' || name.includes('glob') || name.includes('find')) {
+  if (
+    name === 'find_by_name' ||
+    name.includes('glob') ||
+    name.includes('find')
+  ) {
     let ptn = '';
     try {
       const p = JSON.parse(args);
@@ -275,9 +302,11 @@ export function resolveToolActionAndParam(
     } catch {
       dir = args;
     }
-    const pText = dir ? basename(dir) || dir : extractFallbackParam(name, args) || '.';
+    const pText = dir
+      ? basename(dir) || dir
+      : extractFallbackParam(name, args) || '.';
     return {
-      actionText: '目录',
+      actionText: '列出目录',
       paramText: pText,
       isPath: Boolean(dir),
     };
@@ -323,7 +352,11 @@ export function resolveToolActionAndParam(
     }
     return {
       actionText: '子任务',
-      paramText: desc ? (desc.length > 50 ? desc.slice(0, 50) + '…' : desc) : extractFallbackParam(name, args),
+      paramText: desc
+        ? desc.length > 50
+          ? desc.slice(0, 50) + '…'
+          : desc
+        : extractFallbackParam(name, args),
       isPath: false,
     };
   }
@@ -331,7 +364,11 @@ export function resolveToolActionAndParam(
   if (name.includes('task') || name.includes('todo')) {
     return {
       actionText: '任务',
-      paramText: args ? (args.length > 50 ? args.slice(0, 50) + '…' : args) : extractFallbackParam(name, args),
+      paramText: args
+        ? args.length > 50
+          ? args.slice(0, 50) + '…'
+          : args
+        : extractFallbackParam(name, args),
       isPath: false,
     };
   }
@@ -369,7 +406,9 @@ export function resolveToolSecondaryMeta(tc: MessageToolCall): string | null {
     name === 'read_text_file' ||
     name === 'open_file' ||
     name === 'cat' ||
-    (name.includes('read') && !name.includes('url') && !name.includes('resource')) ||
+    (name.includes('read') &&
+      !name.includes('url') &&
+      !name.includes('resource')) ||
     (name.includes('view') && !name.includes('preview'))
   ) {
     if (output) {
@@ -423,7 +462,11 @@ export function resolveToolSecondaryMeta(tc: MessageToolCall): string | null {
     if (output) {
       const parsed = parseFileStatOutput(output);
       if (parsed) {
-        return parsed.sizeStr.split(' ')[0] + ' ' + (parsed.sizeStr.split(' ')[1] || '');
+        return (
+          parsed.sizeStr.split(' ')[0] +
+          ' ' +
+          (parsed.sizeStr.split(' ')[1] || '')
+        );
       }
     }
     return null;

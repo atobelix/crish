@@ -21,6 +21,11 @@ type ReconciledMarkdownHtmlProps = Omit<
    * 单元直接复用原 DOM 节点，不再每帧 split 累计 HTML。
    */
   incrementalUnits?: readonly IncrementalMarkdownUnitSnapshot[] | null;
+  /**
+   * 是否允许在 `incrementalUnits` 未激活且 `html === ""` 时清空容器已有 DOM 节点。
+   * 默认 `false`（启用零坍塌硬防御盾 Zero-Collapse Guard）。
+   */
+  allowEmptyClear?: boolean;
 };
 
 /**
@@ -32,6 +37,7 @@ export function ReconciledMarkdownHtml({
   html,
   codeIndent,
   incrementalUnits,
+  allowEmptyClear = false,
   ...attributes
 }: ReconciledMarkdownHtmlProps) {
   const containerRef = useRef<HTMLElement | null>(null);
@@ -43,9 +49,16 @@ export function ReconciledMarkdownHtml({
     const container = containerRef.current;
     if (!container) return;
 
-    if (incrementalUnits) {
+    const hasIncrementalUnits = Boolean(
+      incrementalUnits && incrementalUnits.length > 0
+    );
+
+    if (hasIncrementalUnits && incrementalUnits) {
+      const seedElements = !incrementalModeRef.current
+        ? Array.from(container.children)
+        : [];
+      let seedIndex = 0;
       if (!incrementalModeRef.current) {
-        while (container.firstChild) container.removeChild(container.firstChild);
         unitNodesRef.current.clear();
         unitHtmlRef.current.clear();
         incrementalModeRef.current = true;
@@ -59,24 +72,44 @@ export function ReconciledMarkdownHtml({
         unitHtmlRef.current.delete(id);
       }
 
+      let cursor: ChildNode | null = container.firstChild;
       for (const unit of incrementalUnits) {
         const previousHtml = unitHtmlRef.current.get(unit.id);
-        let node = unitNodesRef.current.get(unit.id) ?? null;
+        const previousNode = unitNodesRef.current.get(unit.id) ?? null;
+        let node = previousNode;
         if (previousHtml !== unit.html || !node) {
           const parsed = splitHtmlIntoUnits(unit.html);
           if (!parsed.length) {
-            if (node?.parentNode === container) container.removeChild(node);
+            if (previousNode?.parentNode === container) {
+              if (cursor === previousNode) cursor = previousNode.nextSibling;
+              container.removeChild(previousNode);
+            }
             unitNodesRef.current.delete(unit.id);
             unitHtmlRef.current.set(unit.id, unit.html);
             continue;
           }
-          node = reconcileUnitNode(node, parsed[0]!);
+          const targetNode =
+            node ??
+            (seedIndex < seedElements.length
+              ? seedElements[seedIndex++]!
+              : null);
+          node = reconcileUnitNode(targetNode, parsed[0]!);
+          if (
+            previousNode &&
+            previousNode !== node &&
+            previousNode.parentNode === container
+          ) {
+            if (cursor === previousNode) cursor = previousNode.nextSibling;
+            container.removeChild(previousNode);
+          }
           unitNodesRef.current.set(unit.id, node);
           unitHtmlRef.current.set(unit.id, unit.html);
         }
-        // appendChild 只会调整顺序，已有节点本身保持不变。
-        if (node.parentNode !== container) container.appendChild(node);
-        else container.appendChild(node);
+        if (node === cursor) {
+          cursor = cursor.nextSibling;
+        } else {
+          container.insertBefore(node, cursor);
+        }
       }
 
       const mountedNodes = new Set(unitNodesRef.current.values());
@@ -84,6 +117,17 @@ export function ReconciledMarkdownHtml({
         if (!mountedNodes.has(child)) container.removeChild(child);
       }
     } else {
+      // 【零坍塌硬防御盾（Zero-Collapse Guard）】：
+      // 当从增量单元模式（或容器已有已渲染子节点）切换到 incrementalUnits 未激活且 html 为空串时，
+      // 除非显式声明 allowEmptyClear=true，否则严禁调用 reconcileUnits(container, []) 清空已有 DOM 树。
+      if (
+        !allowEmptyClear &&
+        !html.trim() &&
+        (incrementalModeRef.current || container.childNodes.length > 0)
+      ) {
+        return;
+      }
+
       incrementalModeRef.current = false;
       unitNodesRef.current.clear();
       unitHtmlRef.current.clear();
@@ -92,7 +136,7 @@ export function ReconciledMarkdownHtml({
     if (codeIndent !== undefined) {
       applyCodeIndentToRenderedRoot(container, codeIndent);
     }
-  }, [html, codeIndent, incrementalUnits]);
+  }, [html, codeIndent, incrementalUnits, allowEmptyClear]);
 
   return React.createElement(as, { ...attributes, ref: containerRef });
 }

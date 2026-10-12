@@ -141,10 +141,8 @@ export function rowToolStackSharedPropsEqual(
   b: ChatToolStackSharedProps,
   msgId: string
 ): boolean {
-  const aExp =
-    a.expandedToolsByMessage?.[msgId] ?? a.expandedTools;
-  const bExp =
-    b.expandedToolsByMessage?.[msgId] ?? b.expandedTools;
+  const aExp = a.expandedToolsByMessage?.[msgId] ?? a.expandedTools;
+  const bExp = b.expandedToolsByMessage?.[msgId] ?? b.expandedTools;
   return (
     aExp === bExp &&
     a.approvalBusy === b.approvalBusy &&
@@ -154,16 +152,17 @@ export function rowToolStackSharedPropsEqual(
   );
 }
 
-export function focusChatComposer(): void {
+export function focusChatComposer(rootElement?: HTMLElement | null): void {
   const scope =
+    rootElement ??
     document.querySelector<HTMLElement>('.chat-body') ??
     document.querySelector<HTMLElement>('.chat-doc-flow') ??
     document.body;
-  const ta =
-    scope.querySelector<HTMLTextAreaElement>(
-      '.input-container textarea:not([disabled])'
-    ) ?? scope.querySelector<HTMLTextAreaElement>('textarea:not([disabled])');
-  ta?.focus();
+  if (!scope) return;
+  const target = scope.querySelector<HTMLElement>(
+    '.tiptap[contenteditable="true"], textarea.chat-input:not([disabled]), [data-testid="chat-input"]:not([disabled]), .input-container textarea:not([disabled]), textarea:not([disabled]), [contenteditable="true"]'
+  );
+  target?.focus();
 }
 
 /**

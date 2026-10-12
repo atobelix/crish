@@ -7,9 +7,16 @@
  * - 流式运行态：极简状态指示灯 + 扫光微交互（@keyframes sweep-shine）+ 512B 尾窗打字追踪；
  * - 终态闭合态：`已思考 3.2s >`，数字等宽对齐 font-variant-numeric: tabular-nums；
  * - 点击展开态：自然向下融入主文档流，零内部滚动条，无 168px 限制，滚动交由外层唯一滚动宿主；
- * - 独立一键复制纯净思考思维链。
+ * - 独立一键复制纯净思考思维链；
+ * - 两阶段平滑收敛：流式思考结束时 160ms CSS Grid 高度收缩，合拢后容器高度自然收敛于 24px，消除视口跳跃。
  */
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, {
+  useState,
+  useMemo,
+  useCallback,
+  useRef,
+  useEffect,
+} from 'react';
 import { Button } from '../ui';
 import styles from './ReasoningRow.module.css';
 import { StreamingMarkdownView } from './StreamingMarkdownView';
@@ -25,7 +32,9 @@ function ReasoningSummaryMarkup({
   markdown: string;
   isLive: boolean;
 }) {
-  const incrementalUnitsRef = useRef<readonly IncrementalMarkdownUnitSnapshot[] | null>(null);
+  const incrementalUnitsRef = useRef<
+    readonly IncrementalMarkdownUnitSnapshot[] | null
+  >(null);
   const html = useStreamingMarkdownHtml(
     markdown,
     Boolean(markdown),
@@ -82,11 +91,17 @@ export function extractLatestLine(text: string): string {
   const trimmed = tail.trimEnd();
   if (!trimmed) return '';
   // 3. 在至多 512 字符的小缓冲区中逆向寻址最后一个换行符（兼容真实换行与 JSX 字面量 \n）
-  const lastReal = Math.max(trimmed.lastIndexOf('\n'), trimmed.lastIndexOf('\r'));
+  const lastReal = Math.max(
+    trimmed.lastIndexOf('\n'),
+    trimmed.lastIndexOf('\r')
+  );
   const lastLit = trimmed.lastIndexOf('\\n');
   let line = trimmed;
   if (lastReal >= 0 && lastLit >= 0) {
-    line = lastReal > lastLit ? trimmed.slice(lastReal + 1) : trimmed.slice(lastLit + 2);
+    line =
+      lastReal > lastLit
+        ? trimmed.slice(lastReal + 1)
+        : trimmed.slice(lastLit + 2);
   } else if (lastReal >= 0) {
     line = trimmed.slice(lastReal + 1);
   } else if (lastLit >= 0) {
@@ -105,10 +120,12 @@ export function extractFirstLine(text: string): string {
   // 1. 仅截取头部最多 512 个字符
   const head = text.length > 512 ? text.slice(0, 512) : text;
   // 2. 寻找第一个有效换行（兼容真实换行与 JSX 字面量 \n）
-  const realIndices = [head.indexOf('\n'), head.indexOf('\r')].filter((i) => i >= 0);
+  const realIndices = [head.indexOf('\n'), head.indexOf('\r')].filter(
+    (i) => i >= 0
+  );
   const firstReal = realIndices.length > 0 ? Math.min(...realIndices) : -1;
   const firstLit = head.indexOf('\\n');
-  
+
   let firstNewline = -1;
   let cutLen = 1;
 
@@ -138,6 +155,8 @@ export function extractFirstLine(text: string): string {
   return trimmed;
 }
 
+const FOLDING_TRANSITION_MS = 160;
+
 export const ReasoningRow: React.FC<ReasoningRowProps> = ({
   content,
   isLive = false,
@@ -151,6 +170,45 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
 }) => {
   const [userInteracted, setUserInteracted] = useState(false);
   const [userExpanded, setUserExpanded] = useState(false);
+  const [isCollapsing, setIsCollapsing] = useState(false);
+  const [prevTurnWorking, setPrevTurnWorking] = useState(isTurnWorking);
+
+  // 终态跃迁状态同步：当模型整轮工作态结束（isTurnWorking 从 true 转为 false）
+  // 且未被外部显式受控或用户手动交互覆盖时，进入第一阶段折叠过渡态（isCollapsing: true），
+  // 保留 DOM 结构由 CSS Grid 执行 160ms 平滑收缩，彻底消除视口跳跃。
+  // 天然兼容生产环境与既有单元测试，零测试环境特判分支。
+  if (prevTurnWorking !== isTurnWorking) {
+    setPrevTurnWorking(isTurnWorking);
+    if (
+      prevTurnWorking &&
+      !isTurnWorking &&
+      isOpen === undefined &&
+      !userInteracted &&
+      !defaultExpanded
+    ) {
+      setIsCollapsing(true);
+    } else if (isTurnWorking && isCollapsing) {
+      setIsCollapsing(false);
+    }
+  }
+
+  // 若外部显式受控传入 isOpen，外部控制优先级最高，立即终止过渡态
+  if (isOpen !== undefined && isCollapsing) {
+    setIsCollapsing(false);
+  }
+
+  // 第二阶段完全卸载：160ms 物理过渡完成后解除 DOM 挂载
+  useEffect(() => {
+    if (!isCollapsing) {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      setIsCollapsing(false);
+    }, FOLDING_TRANSITION_MS);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [isCollapsing]);
 
   // 默认开合策略（2026-09-18 用户裁决）：
   // 1. 若外部显式受控传入 isOpen，遵循 isOpen；
@@ -168,6 +226,7 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
   const handleToggle = useCallback(() => {
     setUserInteracted(true);
     setUserExpanded(!isExpanded);
+    setIsCollapsing(false);
     onToggle?.();
   }, [isExpanded, onToggle]);
 
@@ -194,6 +253,7 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
     <div
       className={`${styles.reasoningContainer} ${isLive ? styles.isLive : ''} ${className}`}
       data-expanded={isExpanded ? 'true' : 'false'}
+      data-collapsing={isCollapsing ? 'true' : undefined}
       data-live={isLive ? 'true' : undefined}
       data-message-id={messageId}
       data-testid="reasoning-container"
@@ -205,16 +265,16 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
         onClick={handleToggle}
         aria-expanded={isExpanded}
         aria-label={
-          isLive
-            ? '思考中'
-            : durationText
-              ? durationText
-              : '思考过程'
+          isLive ? '思考中' : durationText ? durationText : '思考过程'
         }
       >
         {isLive ? (
           <>
-            <span className={styles.statusDot} aria-hidden data-testid="status-dot" />
+            <span
+              className={styles.statusDot}
+              aria-hidden
+              data-testid="status-dot"
+            />
             <span className={styles.reasoningLabel}>思考中</span>
           </>
         ) : (
@@ -225,9 +285,14 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
 
         {displaySummary ? (
           <>
-            <span className={styles.dotSeparator} aria-hidden>·</span>
+            <span className={styles.dotSeparator} aria-hidden>
+              ·
+            </span>
             <span className={styles.reasoningSummary} data-follow-end="true">
-              <ReasoningSummaryMarkup markdown={displaySummary} isLive={isLive} />
+              <ReasoningSummaryMarkup
+                markdown={displaySummary}
+                isLive={isLive}
+              />
             </span>
           </>
         ) : null}
@@ -241,15 +306,22 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
         </span>
       </Button>
 
-      {isExpanded && (
-        <div className={styles.reasoningBody} data-testid="reasoning-body">
-          <div className={styles.reasoningContent}>
-            <StreamingMarkdownView
-              text={content}
-              isStreaming={isLive}
-              priority={Priority.Low}
-              messageId={messageId ? `${messageId}-reasoning` : undefined}
-            />
+      {(isExpanded || isCollapsing) && (
+        <div
+          className={styles.reasoningExpandGrid}
+          data-testid="reasoning-grid"
+        >
+          <div className={styles.reasoningExpandSlot}>
+            <div className={styles.reasoningBody} data-testid="reasoning-body">
+              <div className={styles.reasoningContent}>
+                <StreamingMarkdownView
+                  text={content}
+                  isStreaming={isLive}
+                  priority={Priority.Low}
+                  messageId={messageId ? `${messageId}-reasoning` : undefined}
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}

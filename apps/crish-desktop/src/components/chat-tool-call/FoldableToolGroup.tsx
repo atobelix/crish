@@ -11,7 +11,13 @@
  * ⑤ 运行中流式态直出展开，收口后自收敛折叠。
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { ToolRenderItem } from '../../api/toolPresentation';
 import {
   DOMINANT_ICON_MAP,
@@ -43,6 +49,8 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
     defaultExpanded = false,
   }) {
     const slotRef = useRef<HTMLDivElement | null>(null);
+    const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isInitialMount = useRef(true);
 
     const metrics: ProcessSegmentMetrics = useMemo(() => {
       return aggregateProcessMetrics([
@@ -84,19 +92,55 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
       [handleToggle]
     );
 
-    // 原生 hidden="until-found" 支持 Ctrl+F 穿透
-    const setSlotRef = useCallback(
-      (el: HTMLDivElement | null) => {
-        slotRef.current = el;
-        if (!el) return;
-        if (!isExpanded) {
+    // 解耦 hidden 阻断：展开态确保无 hidden，收起态在 160ms CSS Grid 过渡后安全附加 hidden="until-found"
+    useEffect(() => {
+      const el = slotRef.current;
+      if (!el) return;
+
+      if (collapseTimerRef.current) {
+        clearTimeout(collapseTimerRef.current);
+        collapseTimerRef.current = null;
+      }
+
+      if (isExpanded) {
+        el.removeAttribute('hidden');
+      } else {
+        if (isInitialMount.current) {
           el.setAttribute('hidden', 'until-found');
         } else {
-          el.removeAttribute('hidden');
+          // 延迟附加，允许 CSS Grid 0fr 过渡动画平滑播放，避免 Chromium 掐死动画
+          collapseTimerRef.current = setTimeout(() => {
+            if (!isExpanded && slotRef.current) {
+              slotRef.current.setAttribute('hidden', 'until-found');
+            }
+          }, 180);
+        }
+      }
+      isInitialMount.current = false;
+    }, [isExpanded]);
+
+    // CSS Grid 过渡结束时立即附加 hidden="until-found" 支持 Ctrl+F 页面穿透
+    const handleTransitionEnd = useCallback(
+      (e: React.TransitionEvent<HTMLDivElement>) => {
+        if (e.target !== slotRef.current) return;
+        if (e.propertyName === 'grid-template-rows' && !isExpanded) {
+          if (collapseTimerRef.current) {
+            clearTimeout(collapseTimerRef.current);
+            collapseTimerRef.current = null;
+          }
+          slotRef.current?.setAttribute('hidden', 'until-found');
         }
       },
       [isExpanded]
     );
+
+    useEffect(() => {
+      return () => {
+        if (collapseTimerRef.current) {
+          clearTimeout(collapseTimerRef.current);
+        }
+      };
+    }, []);
 
     useEffect(() => {
       const el = slotRef.current;
@@ -161,11 +205,14 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
         </div>
 
         <div
-          ref={setSlotRef}
+          ref={slotRef}
           className={styles.groupBody}
           data-expanded={isExpanded ? 'true' : 'false'}
+          onTransitionEnd={handleTransitionEnd}
         >
-          <ChatToolStack {...hostProps} />
+          <div className={styles.groupBodyInner}>
+            <ChatToolStack {...hostProps} />
+          </div>
         </div>
       </div>
     );

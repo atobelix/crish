@@ -158,3 +158,64 @@ export function linkDestinationUrl(raw: string): string {
   if (!/\s/.test(dest)) return dest;
   return dest.split(/\s+/)[0] || dest;
 }
+
+/** 与 isSafeHref 一致的外链 scheme 判定（大小写不敏感） */
+export function isExternalNavigableHref(url: string): boolean {
+  return /^https?:\/\//i.test(url) || /^mailto:/i.test(url);
+}
+
+/**
+ * 安全调用外部系统默认浏览器打开链接，杜绝 WebView2 内部跳转。
+ * 唯一安全链路：sanitizeUrlCandidate → isSafeHref → isExternalNavigableHref → window.open
+ */
+export function openExternalUrlSafely(url: string): void {
+  const sanitized = sanitizeUrlCandidate(url);
+  if (!sanitized) return;
+  if (!isSafeHref(sanitized) || !isExternalNavigableHref(sanitized)) return;
+
+  if (typeof window !== 'undefined') {
+    window.open(sanitized, '_blank', 'noopener,noreferrer');
+  }
+}
+
+/**
+ * 容器级事件委托中通用的 safe external link 拦截分发器。
+ * 命中并处理外链或危险链接时返回 true（已阻止默认行为与冒泡），未命中返回 false。
+ */
+export function handleSafeExternalLinkClick(
+  e: { preventDefault: () => void; stopPropagation: () => void },
+  target: HTMLElement
+): boolean {
+  const anchor = target.closest('a');
+  if (!(anchor instanceof HTMLAnchorElement)) return false;
+
+  const href = anchor.getAttribute('href');
+  if (href == null) return false;
+
+  const sanitized = sanitizeUrlCandidate(href);
+  if (!sanitized) {
+    e.preventDefault();
+    e.stopPropagation();
+    return true;
+  }
+
+  // 合法外部协议：通过系统默认浏览器安全唤起
+  if (isExternalNavigableHref(sanitized)) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isSafeHref(sanitized)) {
+      openExternalUrlSafely(sanitized);
+    }
+    return true;
+  }
+
+  // 未知或危险绝对 scheme：强制拦截掐灭，禁止落入 WebView2 原生导航
+  if (/^[a-z][a-z0-9+.-]*:/i.test(sanitized) && !isSafeHref(sanitized)) {
+    e.preventDefault();
+    e.stopPropagation();
+    return true;
+  }
+
+  // 相对路径与页内锚点 # 放行
+  return false;
+}

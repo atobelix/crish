@@ -41,26 +41,6 @@ import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 
 export type { ComposerFieldProps, ChatComposerProps, ComposerLayoutVariant };
 export { ComposerField, STOP_TOOLTIP } from './ComposerField';
-export {
-  ComposerPermissionBar,
-  type ComposerPermissionBarProps,
-} from './ComposerPermissionBar';
-export {
-  ComposerPlanProgressBar,
-  type ComposerPlanProgressBarProps,
-} from './ComposerPlanProgressBar';
-export {
-  ComposerAttachmentBar,
-  type ComposerAttachmentBarProps,
-} from './ComposerAttachmentBar';
-export {
-  ComposerSendControls,
-  type ComposerSendControlsProps,
-} from './ComposerSendControls';
-export {
-  ComposerFusedTrigger,
-  type ComposerFusedTriggerProps,
-} from './ComposerFusedTrigger';
 import { AppIcon } from '../ui/icons/index';
 
 /** 富文本输入（默认主路）：React.lazy 软接，装配失败回落 textarea（F1-γ） */
@@ -208,7 +188,10 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       value: chatInput,
       onChange: (val) => {
         setChatInput(val);
-        if (val.startsWith('/') && !val.includes(' ')) {
+        if (
+          (val.startsWith('/') || val.startsWith('、')) &&
+          !val.includes(' ')
+        ) {
           void loadSkillSlash();
         }
       },

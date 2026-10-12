@@ -110,6 +110,7 @@
   0 HARD BLOCK / 63 BASELINE = 62 + 1 新登记）**。
 
 <!-- BASELINE_START -->
+
 apps/crish-desktop/src/api/VirtualScrollManager.ts 371
 apps/crish-desktop/src/api/conversation/ConversationAssembler.ts 394
 apps/crish-desktop/src/api/modelsCatalogActions.ts 378
@@ -124,7 +125,7 @@ apps/crish-desktop/src/app/UnifiedAppHydrationCoordinator.ts 376
 apps/crish-desktop/src/assets/icons/modelVendorCatalog.ts 366
 apps/crish-desktop/src/components/binary-tree/PaneHeader.tsx 442
 apps/crish-desktop/src/components/binary-tree/TreeLeafPanel.tsx 485
-apps/crish-desktop/src/components/chat-card/useChatAttachments.ts 427
+apps/crish-desktop/src/components/chat-card/useChatAttachments.ts 472
 apps/crish-desktop/src/components/chat-composer/ChatComposer.tsx 460
 apps/crish-desktop/src/components/chat-message-list/MessageVirtualizer.tsx 476
 apps/crish-desktop/src/components/chat-tool-call/toolExpansionState.ts 437

@@ -45,7 +45,8 @@
 /* 外壳 .md-rendered .md-table-wrap */
 .md-rendered .md-table-wrap,
 .conex-markdown .md-table-wrap,
-:is(.conex-markdown, .md-rendered) :is(.md-table-wrap, [role="region"][aria-label="表格"]) {
+:is(.conex-markdown, .md-rendered)
+  :is(.md-table-wrap, [role='region'][aria-label='表格']) {
   position: relative;
   width: 100%;
   margin: 0.75em 0;
@@ -113,7 +114,9 @@
 /* 末行单元格维持极细细线闭合 */
 .md-rendered .md-tr:last-child .md-td,
 .conex-markdown .md-tr:last-child .md-td,
-:is(.conex-markdown, .md-rendered) :is(.md-tr:last-child, tr:last-child) :is(.md-td, td) {
+:is(.conex-markdown, .md-rendered)
+  :is(.md-tr:last-child, tr:last-child)
+  :is(.md-td, td) {
   border-bottom: 1px solid var(--border-subtle);
 }
 /* 斑马纹收敛为极简透明，仅保留行悬停轻微反馈 */
@@ -161,7 +164,8 @@
   line-height: var(--md-line-height-body);
 }
 /* 嵌套列表 */
-:is(.conex-markdown, .md-rendered) :is(.md-ul-nested, ul ul, ol ul, ul ol, ol ol) {
+:is(.conex-markdown, .md-rendered)
+  :is(.md-ul-nested, ul ul, ol ul, ul ol, ol ol) {
   margin: 0.18em 0;
   padding-left: 1.4em;
 }
@@ -246,46 +250,50 @@
    变体 A: Document 模式 (.md-rendered[data-md-variant="document"])
    类似 Typora / GitHub 长文档排版规范，专用于文档阅读面 (FilePreview, SkillDetailPreview)
    -------------------------------------------------------------------------- */
-.md-rendered[data-md-variant="document"],
-.conex-markdown[data-md-variant="document"],
-[data-md-variant="document"] .md-rendered,
-[data-md-variant="document"] .conex-markdown,
-:is(.conex-markdown, .md-rendered)[data-md-variant="document"] {
+.md-rendered[data-md-variant='document'],
+.conex-markdown[data-md-variant='document'],
+[data-md-variant='document'] .md-rendered,
+[data-md-variant='document'] .conex-markdown,
+:is(.conex-markdown, .md-rendered)[data-md-variant='document'] {
   --md-line-height-body: 1.68;
   --md-paragraph-margin-bottom: 0.92em;
   --md-h1-size: 1.85em;
-  --md-h1-margin: 0.95em 0 0.40em;
+  --md-h1-margin: 0.95em 0 0.4em;
   --md-h1-border: 1px solid var(--border-subtle);
   --md-h2-size: 1.45em;
   --md-h2-margin: 0.85em 0 0.32em;
   --md-h2-border: 1px solid var(--border-subtle);
   --md-list-padding-left: 1.6em;
-  --md-list-item-margin: 0.30em 0;
+  --md-list-item-margin: 0.3em 0;
   max-width: min(920px, 100%);
 }
-.md-rendered[data-md-variant="document"] :is(.md-h1, h1),
-.conex-markdown[data-md-variant="document"] :is(.md-h1, h1),
-[data-md-variant="document"] :is(.conex-markdown, .md-rendered) :is(.md-h1, h1) {
+.md-rendered[data-md-variant='document'] :is(.md-h1, h1),
+.conex-markdown[data-md-variant='document'] :is(.md-h1, h1),
+[data-md-variant='document']
+  :is(.conex-markdown, .md-rendered)
+  :is(.md-h1, h1) {
   font-size: var(--md-h1-size);
   margin: var(--md-h1-margin);
   padding-bottom: 0.3em;
   border-bottom: var(--md-h1-border);
   line-height: 1.25;
 }
-.md-rendered[data-md-variant="document"] :is(.md-h2, h2),
-.conex-markdown[data-md-variant="document"] :is(.md-h2, h2),
-[data-md-variant="document"] :is(.conex-markdown, .md-rendered) :is(.md-h2, h2) {
+.md-rendered[data-md-variant='document'] :is(.md-h2, h2),
+.conex-markdown[data-md-variant='document'] :is(.md-h2, h2),
+[data-md-variant='document']
+  :is(.conex-markdown, .md-rendered)
+  :is(.md-h2, h2) {
   font-size: var(--md-h2-size);
   margin: var(--md-h2-margin);
   padding-bottom: 0.25em;
   border-bottom: var(--md-h2-border);
   line-height: 1.3;
 }
-.md-rendered[data-md-variant="document"] .md-p,
-.md-rendered[data-md-variant="document"] :is(.md-p, p),
-.conex-markdown[data-md-variant="document"] .md-p,
-.conex-markdown[data-md-variant="document"] :is(.md-p, p),
-[data-md-variant="document"] :is(.conex-markdown, .md-rendered) :is(.md-p, p) {
+.md-rendered[data-md-variant='document'] .md-p,
+.md-rendered[data-md-variant='document'] :is(.md-p, p),
+.conex-markdown[data-md-variant='document'] .md-p,
+.conex-markdown[data-md-variant='document'] :is(.md-p, p),
+[data-md-variant='document'] :is(.conex-markdown, .md-rendered) :is(.md-p, p) {
   margin-bottom: var(--md-paragraph-margin-bottom);
   line-height: var(--md-line-height-body);
 }
@@ -293,11 +301,11 @@
    变体 B: Chat 模式 (.md-rendered[data-md-variant="chat"])
    面向对话流气泡紧凑排版，高密度、防溢出、末段贴底消除多余内边距
    -------------------------------------------------------------------------- */
-.md-rendered[data-md-variant="chat"],
-.conex-markdown[data-md-variant="chat"],
-[data-md-variant="chat"] .md-rendered,
-[data-md-variant="chat"] .conex-markdown,
-:is(.conex-markdown, .md-rendered)[data-md-variant="chat"] {
+.md-rendered[data-md-variant='chat'],
+.conex-markdown[data-md-variant='chat'],
+[data-md-variant='chat'] .md-rendered,
+[data-md-variant='chat'] .conex-markdown,
+:is(.conex-markdown, .md-rendered)[data-md-variant='chat'] {
   --md-line-height-body: 1.65;
   --md-paragraph-margin-bottom: 0.82em;
   --md-h1-size: 1.45em;
@@ -310,59 +318,97 @@
   --md-list-item-margin: 0.22em 0;
   max-width: 100%;
 }
-.md-rendered[data-md-variant="chat"] :is(.md-h1, h1),
-.conex-markdown[data-md-variant="chat"] :is(.md-h1, h1),
-[data-md-variant="chat"] :is(.conex-markdown, .md-rendered) :is(.md-h1, h1) {
+.md-rendered[data-md-variant='chat'] :is(.md-h1, h1),
+.conex-markdown[data-md-variant='chat'] :is(.md-h1, h1),
+[data-md-variant='chat'] :is(.conex-markdown, .md-rendered) :is(.md-h1, h1) {
   font-size: var(--md-h1-size);
   margin: var(--md-h1-margin);
   padding-bottom: 0;
   border-bottom: none;
   line-height: 1.3;
 }
-.md-rendered[data-md-variant="chat"] :is(.md-h2, h2),
-.conex-markdown[data-md-variant="chat"] :is(.md-h2, h2),
-[data-md-variant="chat"] :is(.conex-markdown, .md-rendered) :is(.md-h2, h2) {
+.md-rendered[data-md-variant='chat'] :is(.md-h2, h2),
+.conex-markdown[data-md-variant='chat'] :is(.md-h2, h2),
+[data-md-variant='chat'] :is(.conex-markdown, .md-rendered) :is(.md-h2, h2) {
   font-size: var(--md-h2-size);
   margin: var(--md-h2-margin);
   padding-bottom: 0;
   border-bottom: none;
   line-height: 1.32;
 }
-.md-rendered[data-md-variant="chat"] .md-p,
-.md-rendered[data-md-variant="chat"] :is(.md-p, p),
-.conex-markdown[data-md-variant="chat"] .md-p,
-.conex-markdown[data-md-variant="chat"] :is(.md-p, p),
-[data-md-variant="chat"] :is(.conex-markdown, .md-rendered) :is(.md-p, p) {
+.md-rendered[data-md-variant='chat'] .md-p,
+.md-rendered[data-md-variant='chat'] :is(.md-p, p),
+.conex-markdown[data-md-variant='chat'] .md-p,
+.conex-markdown[data-md-variant='chat'] :is(.md-p, p),
+[data-md-variant='chat'] :is(.conex-markdown, .md-rendered) :is(.md-p, p) {
   margin-bottom: var(--md-paragraph-margin-bottom);
   line-height: var(--md-line-height-body);
 }
 /* 容器铁律：消除最后一个子元素的外边距溢出 */
 :is(.conex-markdown, .md-rendered) > :last-child,
-.md-rendered[data-md-variant="chat"] > :last-child,
-[data-md-variant="chat"] :is(.conex-markdown, .md-rendered) > :last-child {
+.md-rendered[data-md-variant='chat'] > :last-child,
+[data-md-variant='chat'] :is(.conex-markdown, .md-rendered) > :last-child {
   margin-bottom: 0 !important;
 }
 /* 混合排版相邻规则：避免某些地方空行过大 */
 /* 标题紧随段落/列表/表格之后：顶部留白充足明确区分章节 */
-:is(.conex-markdown, .md-rendered) :is(.md-p, p, .md-ul, ul, .md-ol, ol, .md-table-wrap) + :is(.md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6, h1, h2, h3, h4, h5, h6) {
+:is(.conex-markdown, .md-rendered)
+  :is(.md-p, p, .md-ul, ul, .md-ol, ol, .md-table-wrap)
+  + :is(
+    .md-h1,
+    .md-h2,
+    .md-h3,
+    .md-h4,
+    .md-h5,
+    .md-h6,
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6
+  ) {
   margin-top: 0.65em;
 }
 /* 标题紧随正文/列表/表格：去除多余外顶边距，紧密归属 */
-:is(.conex-markdown, .md-rendered) :is(.md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6, h1, h2, h3, h4, h5, h6) + :is(.md-p, p, .md-ul, ul, .md-ol, ol, .md-table-wrap) {
+:is(.conex-markdown, .md-rendered)
+  :is(.md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6, h1, h2, h3, h4, h5, h6)
+  + :is(.md-p, p, .md-ul, ul, .md-ol, ol, .md-table-wrap) {
   margin-top: 0;
 }
 /* 段落紧随列表/表格：过渡平滑，消除段前空洞 */
-:is(.conex-markdown, .md-rendered) :is(.md-p, p) + :is(.md-ul, ul, .md-ol, ol, .md-table-wrap) {
+:is(.conex-markdown, .md-rendered)
+  :is(.md-p, p)
+  + :is(.md-ul, ul, .md-ol, ol, .md-table-wrap) {
   margin-top: 0.15em;
 }
-:is(.conex-markdown, .md-rendered) :is(.md-ul, ul, .md-ol, ol, .md-table-wrap) + :is(.md-p, p) {
+:is(.conex-markdown, .md-rendered)
+  :is(.md-ul, ul, .md-ol, ol, .md-table-wrap)
+  + :is(.md-p, p) {
   margin-top: 0.35em;
 }
 /* 分割线与相邻元素平滑过渡，消除空行重叠 */
-:is(.conex-markdown, .md-rendered) :is(.md-p, p, .md-ul, ul, .md-ol, ol) + :is(.md-hr, hr) {
+:is(.conex-markdown, .md-rendered)
+  :is(.md-p, p, .md-ul, ul, .md-ol, ol)
+  + :is(.md-hr, hr) {
   margin-top: 0.55em;
 }
-:is(.conex-markdown, .md-rendered) :is(.md-hr, hr) + :is(.md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6, h1, h2, h3, h4, h5, h6) {
+:is(.conex-markdown, .md-rendered)
+  :is(.md-hr, hr)
+  + :is(
+    .md-h1,
+    .md-h2,
+    .md-h3,
+    .md-h4,
+    .md-h5,
+    .md-h6,
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6
+  ) {
   margin-top: 0.55em;
 }
 /* ==========================================================================
@@ -410,9 +456,11 @@
   padding: 0.1em 0.45em;
   color: var(--text-primary);
   background: var(--bg-card-subtle);
-  border: 1px solid color-mix(in srgb, var(--border-color) 85%, var(--text-primary) 15%);
+  border: 1px solid
+    color-mix(in srgb, var(--border-color) 85%, var(--text-primary) 15%);
   border-radius: var(--radius-sm);
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 1px 0
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -435,7 +483,11 @@
   vertical-align: baseline;
   line-height: inherit;
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--text-secondary) 35%, transparent);
+  text-decoration-color: color-mix(
+    in srgb,
+    var(--text-secondary) 35%,
+    transparent
+  );
   text-underline-offset: 3px;
   box-sizing: border-box;
   transition:
@@ -459,17 +511,30 @@
 .md-rendered .md-a,
 .conex-markdown .md-a,
 :is(.conex-markdown, .md-rendered) :is(.md-a, a) {
-  color: var(--md-link-color);
-  text-decoration: underline;
-  text-underline-offset: var(--md-link-underline-offset);
+  color: var(--link-color);
+  text-decoration: underline dashed;
   text-decoration-color: var(--md-link-underline-color);
+  text-underline-offset: 3px;
   transition:
     color var(--transition-fast, 150ms ease),
     text-decoration-color var(--transition-fast, 150ms ease);
 }
-:is(.conex-markdown, .md-rendered) :is(.md-a:hover, a:hover) {
-  color: var(--md-link-hover-color);
-  text-decoration-color: var(--md-link-hover-color);
+:is(.conex-markdown, .md-rendered) :is(.md-a:hover, a:hover),
+:is(.conex-markdown, .md-rendered) :is(.md-a:focus, a:focus),
+:is(.conex-markdown, .md-rendered) :is(.md-a:focus-visible, a:focus-visible) {
+  color: var(--link-hover-color);
+  text-decoration: underline solid;
+}
+.md-rendered a[href^='http']::after,
+.md-rendered a[target='_blank']::after,
+.conex-markdown a[href^='http']::after,
+.conex-markdown a[target='_blank']::after {
+  content: '\a0↗';
+  font-size: 0.8em;
+  vertical-align: 0.1em;
+  opacity: 0.75;
+  text-decoration: none;
+  display: inline;
 }
 /* --- 代码块容器与头部元信息 (.md-code-block & .md-code-header) --- */
 .md-rendered .md-code-block,
@@ -643,8 +708,10 @@
   height: 12px;
   flex-shrink: 0;
   background-color: currentColor;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z'/%3E%3Cpath d='M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z'/%3E%3C/svg%3E") no-repeat center / contain;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z'/%3E%3Cpath d='M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z'/%3E%3C/svg%3E") no-repeat center / contain;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z'/%3E%3Cpath d='M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z'/%3E%3C/svg%3E")
+    no-repeat center / contain;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z'/%3E%3Cpath d='M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z'/%3E%3C/svg%3E")
+    no-repeat center / contain;
 }
 .md-rendered .md-code-copy.is-copied::before,
 .conex-markdown .md-code-copy.is-copied::before,
@@ -684,7 +751,10 @@
 .conex-markdown .md-code-pre,
 :is(.conex-markdown, .md-rendered) .md-code-pre {
   margin: 0;
-  padding: var(--md-code-block-padding, var(--space-2, 8px) var(--space-3, 12px));
+  padding: var(
+    --md-code-block-padding,
+    var(--space-2, 8px) var(--space-3, 12px)
+  );
   overflow-x: auto;
   overscroll-behavior-x: contain;
   font-family: var(--font-mono);
@@ -748,7 +818,8 @@
   width: 4px;
   height: 8px;
   border: solid var(--bg-card);
-  border-width: 0 var(--md-task-check-stroke, 2px) var(--md-task-check-stroke, 2px) 0;
+  border-width: 0 var(--md-task-check-stroke, 2px)
+    var(--md-task-check-stroke, 2px) 0;
   transform: rotate(45deg) translate(-0.5px, -0.5px);
 }
 .md-rendered .md-task-item.done,

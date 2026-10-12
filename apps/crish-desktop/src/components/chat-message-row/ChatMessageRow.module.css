@@ -135,26 +135,98 @@
   gap: var(--space-2, 8px);
   -webkit-user-select: text;
   user-select: text;
-  animation: userBubbleFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   transition:
-    border-color var(--transition-fast, 0.15s) ease,
-    background var(--transition-fast, 0.15s) ease;
+    border-color var(--transition-fast),
+    background var(--transition-fast);
 }
 
-@keyframes userBubbleFadeIn {
-  from {
+.userBubble.userBubbleEntering,
+.userBubble[data-entering='true'] {
+  animation: userBubbleGlideUp 0.22s
+    var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1)) both;
+  will-change: transform, opacity;
+}
+
+/* 首条消息入场：从输入框原高度平滑上浮升入会话流 */
+.userBubble.userBubbleEntering[data-first-message='true'],
+.userBubble[data-entering='true'][data-first-message='true'] {
+  animation: userBubbleFirstMessageFloatUp 0.3s
+    var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1)) both;
+  will-change: transform, opacity;
+}
+
+@keyframes userBubbleGlideUp {
+  0% {
     opacity: 0;
-    transform: translateY(2px);
+    transform: translateY(14px) scale(0.985);
   }
-  to {
+  100% {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes userBubbleFirstMessageFloatUp {
+  0% {
+    opacity: 0;
+    transform: translateY(54px) scale(0.975);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 
 .userBubbleText {
   white-space: pre-wrap;
   width: 100%;
+}
+
+.userBubbleStructuredContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  width: 100%;
+}
+
+.userBubbleContextEnvelope {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-1_5, 6px);
+  padding: 6px 10px;
+  border-radius: var(--radius-md, 6px);
+  border: 1px solid
+    color-mix(in srgb, var(--border-color, currentColor) 35%, transparent);
+  background: var(--tint-hover);
+  box-shadow: none;
+  font-size: var(--font-size-xxs, 11px);
+  line-height: 1.45;
+  color: var(--text-tertiary);
+  user-select: text;
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.userBubbleContextBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs, 4px);
+  background: color-mix(in srgb, var(--text-tertiary) 12%, transparent);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.3;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.userBubbleContextContent {
+  color: var(--text-tertiary);
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 .userBubble:focus-visible {
@@ -851,6 +923,15 @@
   align-items: center;
   font-variant-numeric: tabular-nums;
   user-select: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast, 150ms ease);
+}
+
+.rowAssistant:hover .cacheMetricsInline,
+.rowAssistant:focus-within .cacheMetricsInline {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .iconBtn,
@@ -879,8 +960,8 @@ button.iconBtn,
   appearance: none;
   transform: none;
   transition:
-    color var(--transition-fast, 150ms) ease,
-    background-color var(--transition-fast, 150ms) ease;
+    color var(--transition-fast),
+    background-color var(--transition-fast);
 }
 
 .iconBtn svg {
