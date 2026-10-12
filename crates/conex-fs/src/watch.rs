@@ -477,9 +477,9 @@ fn normalize_abs_path(p: &Path) -> PathBuf {
 
 /// 剥离 `\\?\` / `\\?\UNC\` 前缀（防御性兜底：canonicalize 输出可能带）
 fn strip_verbatim(p: &Path) -> PathBuf {
-    let s = p.to_string_lossy();
     #[cfg(windows)]
     {
+        let s = p.to_string_lossy();
         if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
             return PathBuf::from(format!("\\{rest}"));
         }

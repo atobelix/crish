@@ -7,50 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-12
+
+First official open-source release of Crish — Tauri desktop AI agent workbench.
+Comprehensive release notes are available in [RELEASE_NOTES_v0.1.0.md](RELEASE_NOTES_v0.1.0.md).
+
 ### Added
 
-- **Rust 引擎（Phase A–D）**：`crates/orchestrator`（会话/运行生命周期、事件持久化、审批状态机）、
-  `crates/session-loop`（会话状态机与 steering）、`crates/agent-provider`（OpenAI 兼容 / Anthropic /
-  Gemini / Ollama，reqwest + SSE）、`crates/agent-tools`（fs / shell / search 工具）、
-  `crates/conex-*` 基础设施（db / ipc / types / telemetry / sandbox / search / fs / diff / markdown / compaction）。
-- **引擎契约面**：`core_*` / `config_*` / `session_*` 命令、`workbench-run-event` 事件通道、
-  `CoreError` 统一错误协议（GUI / TUI / Web 三端共用）。
-- **沙箱命令门禁**：`conex-sandbox` `CommandPolicy` 三层管线（语句切分 → token 化 → 策略匹配，
-  动态内容升级审批）。
-- **桌面 UI**：`apps/crish-desktop`（React 19 + Vite + zustand），含 xterm 终端、流式 markdown 增量渲染、
-  会话持久化与全文检索界面。
-- **CI 三层**：快层（`cargo check --locked` + vitest 快集 + 安全门禁）/ 中层（`cargo test` 全量 +
-  clippy）/ 慢层（压力测试 + Criterion 基准）。
-- **Cargo.lock 纳入版本控制**：保证 workspace 可复现构建与依赖审计。
+- **Conex Kernel (Rust 2021)**: High-performance in-process Rust engine (`crates/*`):
+  - `crates/orchestrator` (session lifecycle, event persistence, approval state machine, DAG flow graph scheduler, crash recovery).
+  - `crates/session-loop` (session state machine and interactive steering queue).
+  - `crates/agent-provider` (OpenAI-compatible, Anthropic Claude, Google Gemini, and local Ollama via reqwest + SSE streaming).
+  - `crates/agent-tools` (fs, shell, search, and system tools with approval escalation).
+  - `crates/conex-*` core infrastructure crates (db, ipc, types, telemetry, sandbox, search, fs, diff, markdown, compaction, doc-collab).
+- **Crish Desktop UI (React 19 + TypeScript + Vite)**: Modern desktop interface (`apps/crish-desktop`):
+  - Zustand state islands, virtualized chat timeline scrolling, and fast incremental streaming Markdown rendering.
+  - Native xterm.js terminal integration and side-by-side AST diff viewer.
+  - Interactive canvas workspace powered by `@crish/block-paper`, `@crish/block-paper-contract`, and `@crish/editor-kit`.
+- **Tauri Desktop Shell (`apps/agent-workbench/src-tauri`)**: Unified native desktop wrapper:
+  - Native Windows 11 **Mica Alt (`Tabbed`)** backdrop material with tiered fallback (Mica Alt -> standard Mica -> Windows 10 Acrylic -> Solid).
+  - Dynamic bidirectional light/dark theme synchronization with WebView2.
+- **Internationalization (i18n)**: Out-of-the-box dual language support for Simplified Chinese (`zh-CN`) and English (`en-US`) across UI, error messages, and system directives.
+- **Hardened Security & Sandboxing**:
+  - `conex-sandbox` three-tier command gatekeeper (statement splitting -> tokenization -> policy match with interactive elevation).
+  - Transparent application preview proxy (`/v1/preview/proxy`) with strict SSRF metadata blocking (AWS/GCP/Azure link-local, `metadata.google.internal`, loopback in production).
+  - Zero unwrap runtime panics: disciplined `Result`-driven error propagation across engine and server boundaries.
+- **Open Source Licensing & Compliance**:
+  - Pure MIT License with zero copyleft pollution (GPL/AGPL-free).
+  - Comprehensive third-party license disclosure and notice documentation (`THIRD-PARTY-LICENSES.md`, `NOTICE`) covering MPL-2.0 dependencies and SIL OFL-1.1 fonts.
+- **Three-Tier CI & Cross-Platform Releases**:
+  - Fast tier (cargo check, vitest fast suite, safety gates), mid tier (cargo test, clippy), slow tier (stress test, Criterion benchmarks).
+  - Multi-platform GitHub Actions release automation for Windows (`.msi`, `.exe`, `.zip`), Linux (`.deb`, `.AppImage`), and macOS (`.dmg`).
 
 ### Changed
 
-- **引擎架构**：TS daemon + WebSocket 链路 → Rust 引擎进程内 + Tauri IPC 单路径（invoke + event）。
-- **npm workspaces**：收敛为现存 9 个包（2 apps + 7 packages），移除已删除包声明。
-- **可观测性**：conex-telemetry（tracing + panic hook）接线，sessionId/runId span 注入，日志脱敏。
+- **Engine Architecture**: Unified in-process Rust engine communicating with React UI via Tauri IPC channels, replacing external daemon WebSocket pathways.
+- **Monorepo Cleanup**: Pruned obsolete packages, consolidating active workspace packages under `apps/` and `packages/`.
+- **Full Observability**: Integrated `conex-telemetry` (tracing spans, panic hooks, session/run tracking, and log redaction).
 
 ### Removed
 
-- **TS 后端包**：`agent-daemon` / `agent-orchestrator` / `agent-runtime` / `agent-core` / `agent-model`
-  及 WS 协议层（sidecar、StreamRecovery、zod 协议层、directFetchBridge）——由 Rust 引擎替代
-  （见 `docs/rust-rewrite/00-master-plan.md` §0.3）。
-
-## [0.1.0] - 2026-07-18
-
-### Added
-
-- **Monorepo Structure**: Organized the project into a workspace-based monorepo consisting of:
-  - `apps/crish-desktop` (React UI)
-  - `apps/agent-workbench` (Tauri workbench shell)
-  - `packages/agent-runtime` (LLM/tool execution paths)
-  - `packages/agent-orchestrator` (session lifecycle & execution)
-  - `packages/agent-daemon` (long-running WebSocket daemon)
-  - `packages/shared-types` (TypeScript shared type definitions)
-  - `packages/shared-utils` (TypeScript helper utilities)
-  - `packages/decision-engine` (Agent reasoning & decision loops)
-  - `packages/agent-provider-http` (Rust-based workspace provider integration)
-- **MIT Licensing**: Set up MIT license files, workspace package configuration inherits, and community metadata.
-- **Documentation**: Added core architectural guidelines and documents introducing entrypoints and structure.
+- Deprecated legacy TypeScript backend packages (`agent-daemon`, `agent-orchestrator`, `agent-runtime`, `agent-core`, `agent-model`) in favor of the Rust kernel.
 
 [Unreleased]: https://github.com/conex-community/crish/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/conex-community/crish/releases/tag/v0.1.0

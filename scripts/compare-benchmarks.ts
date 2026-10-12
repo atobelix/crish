@@ -1,5 +1,5 @@
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 
 interface BaselineEntry {
   name: string;
@@ -26,6 +26,7 @@ interface Regression {
 interface ComparisonResult {
   timestamp: string;
   threshold: number;
+  minDeltaMs?: number;
   baselines: BaselineEntry[];
   currents: CurrentResult[];
   regressions: Regression[];
@@ -33,29 +34,39 @@ interface ComparisonResult {
   passed: boolean;
 }
 
-function parseArgs(): { threshold: number; baselinePath?: string } {
+function parseArgs(): {
+  threshold: number;
+  minDeltaMs: number;
+  baselinePath?: string;
+} {
   const args = process.argv.slice(2);
   let threshold = 0.2;
+  let minDeltaMs = 0.5;
   let baselinePath: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--threshold" && i + 1 < args.length) {
+    if (args[i] === '--threshold' && i + 1 < args.length) {
       threshold = parseFloat(args[i + 1]);
       i++;
-    } else if (args[i] === "--baseline" && i + 1 < args.length) {
+    } else if (args[i] === '--min-delta' && i + 1 < args.length) {
+      minDeltaMs = parseFloat(args[i + 1]);
+      i++;
+    } else if (args[i] === '--baseline' && i + 1 < args.length) {
       baselinePath = args[i + 1];
       i++;
-    } else if (args[i] === "--help") {
-      console.log("用法: node scripts/compare-benchmarks.ts [--threshold 0.2] [--baseline <path>]");
+    } else if (args[i] === '--help') {
+      console.log(
+        '用法: node scripts/compare-benchmarks.ts [--threshold 0.2] [--min-delta 0.5] [--baseline <path>]'
+      );
       process.exit(0);
     }
   }
 
-  return { threshold, baselinePath };
+  return { threshold, minDeltaMs, baselinePath };
 }
 
 function loadBaselines(path?: string): BaselineEntry[] {
-  const defaultPath = "perf-report/baseline.json";
+  const defaultPath = 'perf-report/baseline.json';
   const resolvedPath = path || defaultPath;
 
   if (!existsSync(resolvedPath)) {
@@ -64,7 +75,7 @@ function loadBaselines(path?: string): BaselineEntry[] {
   }
 
   try {
-    const raw = readFileSync(resolvedPath, "utf8");
+    const raw = readFileSync(resolvedPath, 'utf8');
     return JSON.parse(raw) as BaselineEntry[];
   } catch (err) {
     console.error(`读取基线文件失败: ${err}`);
@@ -73,29 +84,41 @@ function loadBaselines(path?: string): BaselineEntry[] {
 }
 
 function loadCurrentResults(): CurrentResult[] {
-  const resultPath = "perf-report/benchmark-result.json";
+  const resultPath = 'perf-report/benchmark-result.json';
   if (!existsSync(resultPath)) {
     console.error(`当前基准结果不存在: ${resultPath}`);
     process.exit(1);
   }
 
   try {
-    const raw = readFileSync(resultPath, "utf8");
+    const raw = readFileSync(resultPath, 'utf8');
     const suite = JSON.parse(raw);
-    return suite.benchmarks.map((b: { name: string; avgMs: number; ops: number; p95Ms: number; passed: boolean }) => ({
-      name: b.name,
-      avgMs: b.avgMs,
-      ops: b.ops,
-      p95Ms: b.p95Ms,
-      passed: b.passed,
-    }));
+    return suite.benchmarks.map(
+      (b: {
+        name: string;
+        avgMs: number;
+        ops: number;
+        p95Ms: number;
+        passed: boolean;
+      }) => ({
+        name: b.name,
+        avgMs: b.avgMs,
+        ops: b.ops,
+        p95Ms: b.p95Ms,
+        passed: b.passed,
+      })
+    );
   } catch (err) {
     console.error(`读取当前结果失败: ${err}`);
     process.exit(1);
   }
 }
 
-function writeBaselineBack(baselineFile: string, currents: CurrentResult[], hadBaseline: boolean): void {
+function writeBaselineBack(
+  baselineFile: string,
+  currents: CurrentResult[],
+  hadBaseline: boolean
+): void {
   const entries: BaselineEntry[] = currents.map((c) => ({
     name: c.name,
     avgMs: c.avgMs,
@@ -104,13 +127,15 @@ function writeBaselineBack(baselineFile: string, currents: CurrentResult[], hadB
   }));
   const resolvedPath = resolve(baselineFile);
   mkdirSync(dirname(resolvedPath), { recursive: true });
-  writeFileSync(resolvedPath, JSON.stringify(entries, null, 2), "utf8");
-  console.log(`\n基线${hadBaseline ? "已更新" : "已初始化"}: ${baselineFile}（${entries.length} 个条目）`);
+  writeFileSync(resolvedPath, JSON.stringify(entries, null, 2), 'utf8');
+  console.log(
+    `\n基线${hadBaseline ? '已更新' : '已初始化'}: ${baselineFile}（${entries.length} 个条目）`
+  );
 }
 
 function main() {
-  const { threshold, baselinePath } = parseArgs();
-  const baselineFile = baselinePath ?? "perf-report/baseline.json";
+  const { threshold, minDeltaMs, baselinePath } = parseArgs();
+  const baselineFile = baselinePath ?? 'perf-report/baseline.json';
   const baselines = loadBaselines(baselineFile);
   const currents = loadCurrentResults();
 
@@ -123,9 +148,10 @@ function main() {
     const baseline = baselineMap.get(current.name);
     if (!baseline) continue;
 
-    const changePercent = (current.avgMs - baseline.avgMs) / baseline.avgMs;
+    const deltaMs = current.avgMs - baseline.avgMs;
+    const changePercent = deltaMs / baseline.avgMs;
 
-    if (changePercent > threshold) {
+    if (changePercent > threshold && deltaMs > minDeltaMs) {
       regressions.push({
         name: current.name,
         previousAvgMs: baseline.avgMs,
@@ -145,6 +171,7 @@ function main() {
   const result: ComparisonResult = {
     timestamp: new Date().toISOString(),
     threshold,
+    minDeltaMs,
     baselines,
     currents,
     regressions,
@@ -152,34 +179,43 @@ function main() {
     passed: regressions.length === 0,
   };
 
-  console.log("=".repeat(60));
-  console.log("基准对比报告");
-  console.log("=".repeat(60));
+  console.log('='.repeat(60));
+  console.log('基准对比报告');
+  console.log('='.repeat(60));
   console.log(`阈值: ${(threshold * 100).toFixed(0)}%`);
+  console.log(`最小回归增量: ${minDeltaMs}ms`);
 
   if (improvements.length > 0) {
-    console.log("\n改进:");
+    console.log('\n改进:');
     for (const imp of improvements) {
-      console.log(`  ${imp.name}: ${imp.previousAvgMs}ms -> ${imp.currentAvgMs}ms (${imp.changePercent > 0 ? "+" : ""}${imp.changePercent}%)`);
+      console.log(
+        `  ${imp.name}: ${imp.previousAvgMs}ms -> ${imp.currentAvgMs}ms (${imp.changePercent > 0 ? '+' : ''}${imp.changePercent}%)`
+      );
     }
   }
 
   if (regressions.length > 0) {
-    console.log("\n退化:");
+    console.log('\n退化:');
     for (const reg of regressions) {
-      console.log(`  ${reg.name}: ${reg.previousAvgMs}ms -> ${reg.currentAvgMs}ms (+${reg.changePercent}%)`);
+      console.log(
+        `  ${reg.name}: ${reg.previousAvgMs}ms -> ${reg.currentAvgMs}ms (+${reg.changePercent}%)`
+      );
     }
   }
 
   if (regressions.length === 0) {
-    console.log("\n结果: 通过 - 未检测到性能退化");
+    console.log('\n结果: 通过 - 未检测到性能退化');
   } else {
     console.log(`\n结果: 失败 - 检测到 ${regressions.length} 个性能退化`);
   }
 
-  const reportDir = "perf-report";
+  const reportDir = 'perf-report';
   mkdirSync(reportDir, { recursive: true });
-  writeFileSync(`${reportDir}/comparison-result.json`, JSON.stringify(result, null, 2), "utf8");
+  writeFileSync(
+    `${reportDir}/comparison-result.json`,
+    JSON.stringify(result, null, 2),
+    'utf8'
+  );
   console.log(`\n对比报告已保存到 ${reportDir}/comparison-result.json`);
 
   if (result.passed) {
