@@ -16,11 +16,38 @@ export const EASE_EMPHASIZED = 'cubic-bezier(0.16, 1, 0.3, 1)';
 /** 微交互时长（对应 --duration-micro） */
 export const DURATION_MICRO_MS = 100;
 
+/** 爽快微交互时长（毫秒，对应 tokens.css 中的 --duration-snappy） */
+export const DURATION_SNAPPY_MS = 120;
+
 /** 快速几何时长（对应 --duration-fast） */
 export const DURATION_FAST_MS = 150;
 
 /** 常规时长（对应 --duration-normal） */
 export const DURATION_NORMAL_MS = 200;
+
+/** 减速入场曲线（对应 tokens.css 中的 --ease-decelerate） */
+export const EASE_DECELERATE = 'cubic-bezier(0.2, 0, 0, 1)';
+
+/** 加速退场曲线（对应 tokens.css 中的 --ease-accelerate） */
+export const EASE_ACCELERATE = 'cubic-bezier(0.4, 0, 1, 1)';
+
+/** 消息发送入场时效守卫窗口常量（Batch 3 消息发送入场飞行专用） */
+export const BUBBLE_ENTRANCE_WINDOW_MS = 2000;
+export const BUBBLE_ENTRANCE_CLOCK_SKEW_TOLERANCE_MS = 500;
+
+/** 动效时长常量单一真相源（与 tokens.css 严格同步） */
+export const MOTION_DURATION = {
+  MICRO_MS: DURATION_MICRO_MS,
+  SNAPPY_MS: DURATION_SNAPPY_MS,
+  FAST_MS: DURATION_FAST_MS,
+  NORMAL_MS: DURATION_NORMAL_MS,
+} as const;
+
+/** 消息气泡入场时效配置单一真理源 */
+export const BUBBLE_ENTRANCE_CONFIG = {
+  MAX_AGE_MS: BUBBLE_ENTRANCE_WINDOW_MS,
+  CLOCK_SKEW_TOLERANCE_MS: BUBBLE_ENTRANCE_CLOCK_SKEW_TOLERANCE_MS,
+} as const;
 
 /**
  * 读取元素上指定 transition 属性的真实时长（毫秒）。
@@ -33,15 +60,13 @@ export function readTransitionMs(
 ): number {
   const cs = getComputedStyle(el);
   const props = cs.transitionProperty.split(',').map((s) => s.trim());
-  const durations = cs.transitionDuration
-    .split(',')
-    .map((s) => {
-      const trimmed = s.trim();
-      const val = Number.parseFloat(trimmed) || 0;
-      return trimmed.endsWith('ms') ? val : Math.round(val * 1000);
-    });
+  const durations = cs.transitionDuration.split(',').map((s) => {
+    const trimmed = s.trim();
+    const val = Number.parseFloat(trimmed) || 0;
+    return trimmed.endsWith('ms') ? val : Math.round(val * 1000);
+  });
   const idx = props.indexOf(propertyName);
-  return idx >= 0 ? durations[idx] ?? 0 : durations[0] ?? 0;
+  return idx >= 0 ? (durations[idx] ?? 0) : (durations[0] ?? 0);
 }
 
 /**

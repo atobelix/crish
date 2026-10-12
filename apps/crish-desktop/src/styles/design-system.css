@@ -3,17 +3,34 @@
 /* S7-4 --slate-*      token                   tokens.css    token  */
 
 /* 3. Elevation utility classes */
-.elevation-0 { background: var(--bg-primary); }
-.elevation-1 { background: var(--bg-secondary); }
-.elevation-2 { background: var(--bg-card); box-shadow: var(--shadow-md); }
-.elevation-3 { background: var(--bg-card); box-shadow: var(--shadow-md); }
-.elevation-4 { background: var(--bg-elevated); box-shadow: var(--shadow-lg); }
+.elevation-0 {
+  background: var(--bg-primary);
+}
+.elevation-1 {
+  background: var(--bg-secondary);
+}
+.elevation-2 {
+  background: var(--bg-card);
+  box-shadow: var(--shadow-md);
+}
+.elevation-3 {
+  background: var(--bg-card);
+  box-shadow: var(--shadow-md);
+}
+.elevation-4 {
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+}
 
 /* Dark mode: top-light gradient overlay for E2 E4 */
-html[data-theme="dark"] .elevation-2,
-html[data-theme="dark"] .elevation-3,
-html[data-theme="dark"] .elevation-4 {
-  background-image: linear-gradient(180deg, color-mix(in srgb, var(--text-primary) 2%, transparent) 0%, transparent 100%);
+html[data-theme='dark'] .elevation-2,
+html[data-theme='dark'] .elevation-3,
+html[data-theme='dark'] .elevation-4 {
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--text-primary) 2%, transparent) 0%,
+    transparent 100%
+  );
 }
 
 /*    S7-3         tokens.css    tokens.css    token       */
@@ -25,10 +42,23 @@ html[data-theme="dark"] .elevation-4 {
 }
 
 /* Dynamic Spring Motion & Keyframe Animations */
+/* 默认向下展开 (data-side='bottom') 入场关键帧 */
 @keyframes crish-popover-enter {
   0% {
     opacity: 0;
-    transform: scale(0.96) translateY(-4px);
+    transform: scale(0.97) translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* 向上展开 (data-side='top') 入场关键帧：从下往上微浮 4px */
+@keyframes crish-popover-enter-top {
+  0% {
+    opacity: 0;
+    transform: scale(0.97) translateY(4px);
   }
   100% {
     opacity: 1;
@@ -64,12 +94,12 @@ html[data-theme="dark"] .elevation-4 {
   box-shadow: var(--shadow-lg);
   padding: var(--space-1);
 }
-[data-panel="modal"] {
+[data-panel='modal'] {
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-2xl);
   padding: var(--space-3);
 }
-[data-panel="overlay"] {
+[data-panel='overlay'] {
   background: var(--bg-primary);
   border-radius: 0;
   box-shadow: none;
@@ -77,22 +107,76 @@ html[data-theme="dark"] .elevation-4 {
 
 /*               */
 @keyframes panel-enter {
-  from { opacity: 0; transform: scale(0.96); }
-  to   { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 @keyframes panel-exit {
-  from { opacity: 1; transform: scale(1); }
-  to   { opacity: 0; transform: scale(0.96); }
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
 }
-/*                        */
+/* 默认向下展开退场关键帧 */
 @keyframes crish-popover-exit {
-  from { opacity: 1; transform: scale(1) translateY(0); }
-  to   { opacity: 0; transform: scale(0.96) translateY(-4px); }
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.97) translateY(-4px);
+  }
+}
+
+/* 向上展开退场关键帧 */
+@keyframes crish-popover-exit-top {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.97) translateY(4px);
+  }
 }
 /*                        */
 @keyframes crish-modal-exit {
-  from { opacity: 1; transform: scale(1) translateY(0); }
-  to   { opacity: 0; transform: scale(0.96) translateY(8px); }
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+}
+
+@keyframes crish-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes crish-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
 /* Markdown 代码块与复制按钮视效规范 */
@@ -107,7 +191,10 @@ html[data-theme="dark"] .elevation-4 {
 
 .md-code-pre {
   margin: 0;
-  padding: var(--md-code-block-padding, var(--space-2, 8px) var(--space-3, 12px));
+  padding: var(
+    --md-code-block-padding,
+    var(--space-2, 8px) var(--space-3, 12px)
+  );
   overflow-x: auto;
   font-family: var(--font-mono, monospace);
   font-size: var(--font-size-xs, 12px);
@@ -161,8 +248,10 @@ html[data-theme="dark"] .elevation-4 {
   height: 12px;
   flex-shrink: 0;
   background-color: currentColor;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z'/%3E%3Cpath d='M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z'/%3E%3C/svg%3E") no-repeat center / contain;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z'/%3E%3Cpath d='M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z'/%3E%3C/svg%3E") no-repeat center / contain;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z'/%3E%3Cpath d='M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z'/%3E%3C/svg%3E")
+    no-repeat center / contain;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z'/%3E%3Cpath d='M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z'/%3E%3C/svg%3E")
+    no-repeat center / contain;
 }
 
 .md-code-copy.is-copied::before {
@@ -192,7 +281,7 @@ html[data-theme="dark"] .elevation-4 {
 
 /* Outer Shell (L1: R_outer = 14px, Padding = 6px) */
 .sep-panel-root,
-[data-sep-panel="true"] {
+[data-sep-panel='true'] {
   border-radius: var(--sep-radius-outer, 14px);
   padding: var(--sep-padding, 6px);
   border: 1px solid var(--sep-border-color, var(--border-color));
@@ -202,13 +291,13 @@ html[data-theme="dark"] .elevation-4 {
 
 /* Inner Container (L2: R_inner = 8px) */
 .sep-inner-container,
-[data-sep-inner="true"] {
+[data-sep-inner='true'] {
   border-radius: var(--sep-radius-inner, 8px);
 }
 
 /* Item Row (L3: R_item = 8px, H = 28px) */
 .sep-item-row,
-[data-sep-item="true"] {
+[data-sep-item='true'] {
   border-radius: var(--sep-item-radius, 8px);
   height: var(--sep-item-height, 28px);
   padding: 0 var(--sep-item-padding-h, 10px);
@@ -216,25 +305,25 @@ html[data-theme="dark"] .elevation-4 {
 
 /* Action Button (L4: R_btn = 6px) */
 .sep-btn,
-[data-sep-btn="true"] {
+[data-sep-btn='true'] {
   border-radius: var(--sep-btn-radius, 6px);
 }
 
 /* Badge (L5: R_badge = 4px) */
 .sep-badge,
-[data-sep-badge="true"] {
+[data-sep-badge='true'] {
   border-radius: var(--sep-badge-radius, 4px);
 }
 
 /* Status Pill (L6: R_pill = 9999px) */
 .sep-pill,
-[data-sep-pill="true"] {
+[data-sep-pill='true'] {
   border-radius: var(--sep-pill-radius, 9999px);
 }
 
 /* Circular Button (L7: 50%) */
 .sep-circle-btn,
-[data-sep-circle="true"] {
+[data-sep-circle='true'] {
   border-radius: 50%;
 }
 

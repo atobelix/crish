@@ -99,17 +99,12 @@ html[data-theme='light'] {
   --shell-chrome-bg: var(--surface-chrome);
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
   /* ── 文字灰度阶（light：0% = 黑，100% = 白；四档均为显式灰值，禁止透明度/mix 向背景收敛）──
-     正文/常看到的字 = 10%（近黑，最高对比）→ 次级 32% → 小字/工具调用 = 45% → 极弱 62% */
+     正文/常看到的字 = 10%（近黑，最高对比）→ 次级 32% → 小字/工具调用/思考 = 40% → 极弱 62% */
   --text-primary: #1a1a1a;
   --text-secondary: #525252;
-  /* 文本三级色（小字 / 工具调用 / 路径等）：WCAG AA 达标。
-     取值说明：原 #737373（45% 灰度）在**侧栏背景**（--bg-secondary =
-     --surface-chrome = hsl(30 2.5% 95%)）上仅 4.24:1，未达 AA 4.5:1
-     （a11y-contrast.test.ts 行 2 捕获）。取 #6b6b6b（42% 灰度）：
-     对 tokens.css 侧栏 4.77:1、对 warm-gray 预设侧栏（hsl(35 8% 95%)）
-     4.77:1、对自定义浅色底（≈#f4f4f4）4.85:1 —— 跨皮肤均留 ≥0.27 余量，
-     且比主背景（98.5% L）上的对比度更高，行 1 不受影响。 */
-  --text-tertiary: #6b6b6b;
+  /* 文本三级色（小字 / 工具调用 / 思考内容 / 路径等）：40% 灰度（#666666），WCAG AA 达标。
+     对 tokens.css 主背景 5.50:1、对侧栏背景 5.10:1（均 ≥ 4.5:1，a11y-contrast.test.ts 验证）。 */
+  --text-tertiary: #666666;
   --text-muted: var(--text-tertiary);
   /* 第四级弱化文字（时间戳 / 计数等）：62% 灰度（显式灰值，不再向背景 mix） */
   --text-faint: #9e9e9e;
@@ -529,9 +524,13 @@ html[data-theme='light'] {
    */
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-decelerate: cubic-bezier(0.2, 0, 0, 1);
+  --ease-accelerate: cubic-bezier(0.4, 0, 1, 1);
   /* 历史缓动名 → 正典别名（零消费者，仅保留名字不丢失） */
   --transition-micro: 100ms ease-out;
+  --transition-snappy: var(--duration-snappy) var(--ease-standard);
   --transition-fast: 150ms var(--ease-standard);
+  --transition-normal: var(--duration-normal) var(--ease-standard);
   --transition-smooth: 300ms var(--ease-standard);
   /* Toast 入场：无过冲（y≤1）；旧值 y2=1.275 会越过停点再回 */
   --transition-exit: 250ms var(--ease-standard);
@@ -539,6 +538,7 @@ html[data-theme='light'] {
   --transition-popover-exit: cubic-bezier(0.4, 0, 1, 1) 120ms;
   --transition-modal-enter: var(--ease-emphasized) 220ms;
   --transition-accordion: var(--ease-emphasized) 220ms;
+  --transition-chevron: 150ms var(--ease-emphasized);
   --transition-press: 80ms ease-out;
   --transition-skeleton: 1.5s ease-in-out;
   --transition-spin: 0.8s linear;
@@ -547,6 +547,7 @@ html[data-theme='light'] {
   --transition-pulse: 1.6s ease-in-out;
 
   --duration-micro: 100ms;
+  --duration-snappy: 120ms;
   --duration-fast: 150ms;
   --duration-normal: 200ms;
   --duration-enter: 200ms;
@@ -723,12 +724,17 @@ html[data-theme='light'] {
   --md-quote-padding: 0.45em 0 0.45em 1.1em;
   --md-quote-margin: 0.68em 0;
 
-  --md-link-color: var(--brand-deep, hsl(160 84% 30%));
-  --md-link-hover-color: var(--brand, hsl(160 84% 39%));
+  /* --- 4. 权威超链接与交互标识 Token (Light · 统一科技蓝体系) --- */
+  --color-link: #2563eb; /* hsl(217 91% 54%), 满足 WCAG AA 4.95:1 */
+  --color-link-hover: #1d4ed8; /* hsl(217 91% 42%), 悬停沉着加深 */
+  --link-color: var(--color-link);
+  --link-hover-color: var(--color-link-hover);
+  --md-link-color: var(--color-link);
+  --md-link-hover-color: var(--color-link-hover);
   --md-link-underline-offset: 3px;
   --md-link-underline-color: color-mix(
     in srgb,
-    var(--md-link-color) 35%,
+    var(--md-link-color) 45%,
     transparent
   );
 
@@ -865,7 +871,7 @@ html[data-theme='light'] {
   --stream-anim-word-fade: 100ms;
   --stream-anim-word-offset-y: 2px;
   --stream-anim-marker-fade: 120ms;
-  --stream-anim-easing: cubic-bezier(0.16, 1, 0.3, 1);
+  --stream-anim-easing: var(--ease-emphasized);
 
   --stream-pulse-glow: 0 0 0 3px
     color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 16%, transparent);
@@ -1469,12 +1475,17 @@ html[data-theme='dark'] {
   --md-quote-padding: 0.45em 0 0.45em 1.1em;
   --md-quote-margin: 0.68em 0;
 
-  --md-link-color: var(--brand, hsl(160 84% 39%));
-  --md-link-hover-color: hsl(160 84% 55%);
+  /* --- 4. 权威超链接与交互标识 Token (Dark · 柔和天幕蓝体系) --- */
+  --color-link: #60a5fa; /* hsl(212 96% 68%), 满足 WCAG AAA 7.54:1 */
+  --color-link-hover: #93c5fd; /* hsl(212 96% 78%), 悬停辉光提亮 */
+  --link-color: var(--color-link);
+  --link-hover-color: var(--color-link-hover);
+  --md-link-color: var(--color-link);
+  --md-link-hover-color: var(--color-link-hover);
   --md-link-underline-offset: 3px;
   --md-link-underline-color: color-mix(
     in srgb,
-    var(--md-link-color) 35%,
+    var(--md-link-color) 50%,
     transparent
   );
 
@@ -1604,7 +1615,7 @@ html[data-theme='dark'] {
   --stream-anim-word-fade: 100ms;
   --stream-anim-word-offset-y: 2px;
   --stream-anim-marker-fade: 120ms;
-  --stream-anim-easing: cubic-bezier(0.16, 1, 0.3, 1);
+  --stream-anim-easing: var(--ease-emphasized);
 
   --stream-pulse-glow: 0 0 0 3px
     color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 20%, transparent);
@@ -1917,14 +1928,18 @@ html[data-perf-tier='balanced'] {
 
 /* ECO PERFORMANCE TIER: Strictly flat layout, zero transitions */
 html[data-perf-tier='eco'] {
+  --duration-snappy: 0ms;
   --transition-micro: 0ms;
+  --transition-snappy: 0ms;
   --transition-fast: 0ms;
+  --transition-normal: 0ms;
   --transition-smooth: 0ms;
   --transition-exit: 0ms;
   --transition-popover-enter: 0ms;
   --transition-popover-exit: 0ms;
   --transition-modal-enter: 0ms;
   --transition-accordion: 0ms;
+  --transition-chevron: 0ms;
   --stream-anim-word-fade: 0ms;
   --stream-anim-marker-fade: 0ms;
   --stream-anim-word-offset-y: 0px;
@@ -1940,10 +1955,30 @@ html[data-perf-tier='eco'] {
   html[data-theme='default'],
   html[data-theme='light'],
   html[data-theme='dark'] {
+    --duration-micro: 0ms;
+    --duration-snappy: 0ms;
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+    --duration-enter: 0ms;
+    --duration-exit: 0ms;
+    --transition-micro: 0ms;
+    --transition-snappy: 0ms;
+    --transition-fast: 0ms;
+    --transition-normal: 0ms;
+    --transition-smooth: 0ms;
+    --transition-exit: 0ms;
+    --transition-popover-enter: 0ms;
+    --transition-popover-exit: 0ms;
+    --transition-modal-enter: 0ms;
+    --transition-accordion: 0ms;
+    --transition-chevron: 0ms;
     --stream-anim-word-fade: 0ms;
     --stream-anim-marker-fade: 0ms;
     --stream-anim-word-offset-y: 0px;
     --stream-caret-blink-dur: 0ms;
+    --stream-pulse-duration: 0ms;
+    --stream-pulse-glow: none;
+    --stream-pulse-bg: transparent;
   }
 }
 
