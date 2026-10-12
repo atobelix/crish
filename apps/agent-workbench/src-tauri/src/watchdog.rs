@@ -38,9 +38,11 @@ use orchestrator::PendingMessageQueue;
 
 /// 默认失联阈值（分钟）：对齐 wait_subagents 的 MAX_WAIT_TIMEOUT_MS
 ///（10 分钟硬上限，wait_subagents.rs:75）
+#[allow(dead_code)]
 pub(crate) const DEFAULT_WATCHDOG_IDLE_MINUTES: u64 = MAX_WAIT_TIMEOUT_MS / 60_000;
 
 /// 周期扫描间隔（默认 60s）
+#[allow(dead_code)]
 pub(crate) const DEFAULT_WATCHDOG_PERIOD: Duration = Duration::from_secs(60);
 
 /// 当前 epoch 毫秒（watchdog 全域时间基准）

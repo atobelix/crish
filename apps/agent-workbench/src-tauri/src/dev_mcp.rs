@@ -21,6 +21,7 @@
 //!   仅读环境变量，无 State 依赖）。
 
 /// `CRISH_MCP_SOCKET` 环境变量名：默认开启；仅精确等于 "0" 时显式关闭
+#[allow(dead_code)]
 const MCP_SOCKET_ENV: &str = "CRISH_MCP_SOCKET";
 
 // G11a 备注（登记先行面）：MCP_EXEC_ENV / mcp_exec_enabled / McpEnabledState /
@@ -30,10 +31,12 @@ const MCP_SOCKET_ENV: &str = "CRISH_MCP_SOCKET";
 #[allow(dead_code)]
 const MCP_EXEC_ENV: &str = "CRISH_DEV_MCP_EXEC";
 /// MCP socket 固定端口（loopback）
+#[allow(dead_code)]
 const MCP_SOCKET_PORT: u16 = 4000;
 
 /// 读取开关环境变量（默认开启型）：仅精确等于 "0" 关闭，其余取值一律开启
 /// （防 `CRISH_MCP_SOCKET=false` / `=no` 之类的近似取值误关；未设时默认开启）。
+#[allow(dead_code)]
 fn env_flag_default_on(name: &str) -> bool {
     std::env::var(name)
         .map(|value| value != "0")
@@ -50,6 +53,7 @@ fn env_flag_default_off(name: &str) -> bool {
 
 /// MCP socket 是否开启（debug 构建默认开启 + `CRISH_MCP_SOCKET=0` 显式关闭；
 /// release 由插件自身拒绝兜底）。
+#[allow(dead_code)]
 pub(crate) fn mcp_socket_enabled() -> bool {
     env_flag_default_on(MCP_SOCKET_ENV)
 }
