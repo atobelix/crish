@@ -2,7 +2,6 @@ import React from 'react';
 import type { SessionState } from '../../../store/types';
 import { GENERAL_FOLDER } from '../../../api/projectStore';
 import { navigateToNewDraft } from '../../../store/storeAccess';
-import { getCompositionRoot } from '../../../app/compositionRoot';
 import type { SessionListWindowRange } from '../../../api/sessionListWindow';
 import { WindowedSessionUl } from './WindowedSessionUl';
 import { Button, Tooltip } from '../../ui';
@@ -68,9 +67,12 @@ export function GeneralSection({
             aria-expanded={!generalCollapsed}
           >
             <span>对话</span>
-            <AppIcon name="chevron-down" size={16}
+            <AppIcon
+              name="chevron-down"
+              size={16}
               className={generalCollapsed ? styles.chevCollapsed : ''}
-              aria-hidden />
+              aria-hidden
+            />
           </Button>
           <Tooltip content="排序与过滤">
             <Button
@@ -106,7 +108,6 @@ export function GeneralSection({
       <div
         className={styles.accordionWrapper}
         data-expanded={!generalCollapsed ? 'true' : 'false'}
-        hidden={generalCollapsed || undefined}
       >
         <div
           className={styles.accordionInner}

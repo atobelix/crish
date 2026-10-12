@@ -2,7 +2,7 @@
  * RuntimePanel 区段基座：section 头（标题 + 可选计数 + 可选操作）+ 内容插槽。
  * 空态文案由各业务 Section 传入（empty），无 body 内容时传 null。
  */
-import React from 'react';
+import React, { useId } from 'react';
 import styles from './RuntimePanel.module.css';
 
 type RuntimeSectionCount = {
@@ -13,8 +13,8 @@ type RuntimeSectionCount = {
 };
 
 export type RuntimeSectionProps = {
-  /** aria-labelledby 锚点 id（与 h4 一致） */
-  titleId: string;
+  /** aria-labelledby 锚点 id（与 h4 一致，缺省时自动生成 useId()） */
+  titleId?: string;
   title: string;
   count?: RuntimeSectionCount | null;
   /** 头部右侧附加内容（引擎状态点 / 管理按钮等） */
@@ -35,17 +35,24 @@ export const RuntimeSection: React.FC<RuntimeSectionProps> = ({
   modifier,
   children,
 }) => {
+  const autoTitleId = useId();
+  const resolvedTitleId = titleId || autoTitleId;
+
   return (
     <section
       className={`${styles.section}${modifier ? ` ${styles[modifier]}` : ''}`}
-      aria-labelledby={titleId}
+      aria-labelledby={resolvedTitleId}
     >
       <div className={styles.sectionHead}>
-        <h4 id={titleId} className={styles.sectionTitle}>
+        <h4 id={resolvedTitleId} className={styles.sectionTitle}>
           {title}
         </h4>
         {count ? (
-          <span className={styles.rowMeta} aria-live="polite" aria-label={count.ariaLabel}>
+          <span
+            className={styles.rowMeta}
+            aria-live="polite"
+            aria-label={count.ariaLabel}
+          >
             {count.label}
           </span>
         ) : null}

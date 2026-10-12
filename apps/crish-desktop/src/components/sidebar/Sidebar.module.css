@@ -6,13 +6,15 @@
   flex-direction: column;
   justify-content: space-between;
   flex-shrink: 0;
-  /* 改变宽度零延迟线性跟随，与右侧工作区面板一致无弹簧效果 */
+  transition: width 200ms var(--ease-standard);
   z-index: var(--z-sidebar);
   position: relative;
   overflow: hidden;
   height: 100%;
 }
 
+:global(body.is-resizing) .sidebar,
+:global(body.sidebar-resizing) .sidebar,
 :global(.is-resizing) .sidebar,
 :global(.resizing-active) .sidebar,
 :global(.window-resizing) .sidebar {
@@ -70,6 +72,105 @@
   gap: 4px;
   -webkit-app-region: no-drag;
   app-region: no-drag;
+}
+
+.toggleIconMorph {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.toggleBrandIcon {
+  position: absolute;
+  inset: 0;
+  width: 18px;
+  height: 18px;
+  aspect-ratio: 1 / 1;
+  display: block;
+  overflow: visible;
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  transition:
+    opacity 160ms var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform 220ms var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1));
+  will-change: transform, opacity;
+}
+
+.toggleActionIcon {
+  position: absolute;
+  inset: 0;
+  width: 18px;
+  height: 18px;
+  display: block;
+  opacity: 0;
+  transform: translate3d(3px, 0, 0) scale(0.72);
+  transition:
+    opacity 160ms var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform 220ms var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1));
+  pointer-events: none;
+  color: var(--text-primary);
+  will-change: transform, opacity;
+}
+
+/* 悬停 (Hover) 或键盘聚焦 (Focus) 时的流体形变与方向位移动效 */
+:global(.sidebar-toggle-btn):hover .toggleBrandIcon,
+:global(.sidebar-toggle-btn):focus-visible .toggleBrandIcon {
+  opacity: 0;
+  transform: translate3d(-3px, 0, 0) scale(0.72);
+  transition:
+    opacity 130ms var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform 190ms var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+:global(.sidebar-toggle-btn):hover .toggleActionIcon,
+:global(.sidebar-toggle-btn):focus-visible .toggleActionIcon {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  transition:
+    opacity 170ms var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform 220ms var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
+
+  .toggleBrandIcon,
+  .toggleActionIcon {
+    transform: none;
+    transition: opacity 100ms ease;
+  }
+}
+
+.brandMarkDot {
+  fill: var(--brand-primary);
+}
+
+.brandMarkLines {
+  fill: none;
+  stroke: var(--text-primary);
+  stroke-width: 26;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.brandName {
+  font-size: var(--font-size-base, 14px);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--text-primary);
+  line-height: 1;
+  letter-spacing: -0.01em;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+  -webkit-app-region: drag;
+  app-region: drag;
 }
 
 .sidebarHeaderRight {

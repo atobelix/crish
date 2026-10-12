@@ -73,6 +73,11 @@ const SettingsPersonalizeTab = lazy(() =>
     default: m.SettingsPersonalizeTab,
   }))
 );
+const SettingsArchiveTab = lazy(() =>
+  import('./SettingsArchiveTab').then((m) => ({
+    default: m.SettingsArchiveTab,
+  }))
+);
 const SettingsExtensionsTab = lazy(() =>
   import('../settings-extensions/SettingsExtensionsTab').then((m) => ({
     default: m.SettingsExtensionsTab,
@@ -106,6 +111,7 @@ const TAB_COMPONENTS: Record<
   profile: { label: '个人资料', Component: SettingsProfileTab },
   appearance: { label: '外观', Component: SettingsAppearanceTab },
   personalize: { label: '通用设置', Component: SettingsPersonalizeTab },
+  archive: { label: '已归档', Component: SettingsArchiveTab },
   models: { label: '模型', Component: ModelsSettingsTab },
   plugins: { label: '扩展', Component: SettingsExtensionsTab },
   skills: { label: '扩展', Component: SettingsExtensionsTab },
@@ -354,6 +360,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               >
                 <ActiveTabComponent
                   {...(safeActiveTab === 'rules' ||
+                  safeActiveTab === 'archive' ||
                   safeActiveTab === 'plugins' ||
                   safeActiveTab === 'skills' ||
                   safeActiveTab === 'mcp'

@@ -11,7 +11,7 @@ import styles from './RuntimePanel.module.css';
 import { RuntimeSection } from './RuntimeSection';
 import { useToast } from '../../services/toast/ToastContext';
 import { Button, Tooltip } from '../ui';
-import { useSessionStore } from '../../store/storeAccess';
+import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 import {
   formatTrashedAt,
   listTrashEntries,
@@ -22,6 +22,8 @@ import {
 
 export type TrashSectionProps = {
   className?: string;
+  sessionId?: string | null;
+  leafId?: string | null;
 };
 
 function formatSize(bytes: number): string {
@@ -30,9 +32,13 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export const TrashSection: React.FC<TrashSectionProps> = () => {
+export const TrashSection: React.FC<TrashSectionProps> = ({
+  className: _className,
+  sessionId: sessionIdProp,
+  leafId: _leafId,
+}) => {
   const { showToast } = useToast();
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const scopedSessionId = useScopedSessionId(sessionIdProp);
   const [entries, setEntries] = useState<TrashEntryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -59,7 +65,7 @@ export const TrashSection: React.FC<TrashSectionProps> = () => {
       try {
         const res = await restoreTrashEntry(
           entry.id,
-          activeSessionId || undefined
+          scopedSessionId || undefined
         );
         if (res.ok) {
           await refresh();
@@ -72,7 +78,7 @@ export const TrashSection: React.FC<TrashSectionProps> = () => {
         setBusyId(null);
       }
     },
-    [busyId, activeSessionId, showToast, refresh]
+    [busyId, scopedSessionId, showToast, refresh]
   );
 
   const handlePurge = useCallback(
@@ -82,7 +88,7 @@ export const TrashSection: React.FC<TrashSectionProps> = () => {
       try {
         const res = await purgeTrashEntry(
           entry.id,
-          activeSessionId || undefined
+          scopedSessionId || undefined
         );
         if (res.ok) {
           await refresh();
@@ -95,7 +101,7 @@ export const TrashSection: React.FC<TrashSectionProps> = () => {
         setBusyId(null);
       }
     },
-    [busyId, activeSessionId, showToast, refresh]
+    [busyId, scopedSessionId, showToast, refresh]
   );
 
   const countLabel = entries.length > 0 ? `${entries.length} 项` : null;

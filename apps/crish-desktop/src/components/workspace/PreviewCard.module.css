@@ -60,8 +60,8 @@ input.urlInput {
   color: var(--text-primary);
   cursor: text;
   transition:
-    background var(--transition-micro, 120ms) ease,
-    color var(--transition-micro, 120ms) ease;
+    background var(--transition-snappy),
+    color var(--transition-snappy);
 }
 
 .urlForm input.urlInput::placeholder,
@@ -151,7 +151,8 @@ input.urlInput::-webkit-search-results-decoration {
 }
 
 @keyframes pulseDot {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
@@ -420,8 +421,8 @@ input.urlInput::-webkit-search-results-decoration {
   font-size: var(--font-size-xs, 12px);
   cursor: pointer;
   transition:
-    background var(--transition-micro, 120ms) ease,
-    color var(--transition-micro, 120ms) ease;
+    background var(--transition-snappy),
+    color var(--transition-snappy);
   outline: none;
   text-decoration: none;
 }
@@ -463,8 +464,8 @@ input.urlInput::-webkit-search-results-decoration {
   gap: 6px;
   max-width: 100%;
   transition:
-    background var(--transition-micro, 120ms) ease,
-    color var(--transition-micro, 120ms) ease;
+    background var(--transition-snappy),
+    color var(--transition-snappy);
   outline: none;
   text-decoration: none;
 }

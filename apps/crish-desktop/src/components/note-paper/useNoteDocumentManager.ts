@@ -10,6 +10,11 @@ import {
   noteDocumentDelete,
 } from '../../api/noteApi';
 import { subscribeNoteDocWritten } from '../../bridges/note-doc-written';
+import {
+  shouldConsumeScopedEvent,
+  useLeafScope,
+  useScopedSessionId,
+} from '../../contexts/LeafScopeContext';
 
 /** 历史存量默认文档 ID（doc_meta 出现前的单文档时代遗留；仅作自愈兜底） */
 const LEGACY_DEFAULT_DOC_ID = 'strict-default';
@@ -17,6 +22,8 @@ const LEGACY_DEFAULT_DOC_ID = 'strict-default';
 export interface UseNoteDocumentManagerOptions {
   initialDocId?: string | null;
   flushPendingDraft?: () => Promise<void>;
+  sessionId?: string | null;
+  leafId?: string | null;
 }
 
 export interface UseNoteDocumentManagerResult {
@@ -28,7 +35,9 @@ export interface UseNoteDocumentManagerResult {
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   switchDocument: (targetDocId: string) => Promise<void>;
-  createDocument: (params?: NoteDocumentCreateParams) => Promise<NoteDocumentMeta | null>;
+  createDocument: (
+    params?: NoteDocumentCreateParams
+  ) => Promise<NoteDocumentMeta | null>;
   renameDocument: (docId: string, newTitle: string) => Promise<boolean>;
   deleteDocument: (docId: string) => Promise<boolean>;
   refreshList: () => Promise<void>;
@@ -38,7 +47,23 @@ export interface UseNoteDocumentManagerResult {
 export function useNoteDocumentManager({
   initialDocId,
   flushPendingDraft,
+  sessionId,
+  leafId,
 }: UseNoteDocumentManagerOptions): UseNoteDocumentManagerResult {
+  const scope = useLeafScope();
+  const scopedSessionId = useScopedSessionId(sessionId);
+  const effectiveLeafId = leafId ?? scope.leafId;
+  const scopeRef = useRef({
+    sessionId: scopedSessionId,
+    leafId: effectiveLeafId,
+    isActive: scope.inLeafScope ? scope.isActive : undefined,
+  });
+  scopeRef.current = {
+    sessionId: scopedSessionId,
+    leafId: effectiveLeafId,
+    isActive: scope.inLeafScope ? scope.isActive : undefined,
+  };
+
   const [documents, setDocuments] = useState<NoteDocumentMeta[]>([]);
   const [activeDocId, setActiveDocId] = useState<string>(initialDocId || '');
   const [loading, setLoading] = useState<boolean>(true);
@@ -72,7 +97,10 @@ export function useNoteDocumentManager({
           setDocuments(res.documents);
           // 如果当前没有激活的 docId 或不在列表中，自动激活最新一篇
           setActiveDocId((currentActive) => {
-            if (currentActive && res.documents!.some((d) => d.id === currentActive)) {
+            if (
+              currentActive &&
+              res.documents!.some((d) => d.id === currentActive)
+            ) {
               return currentActive;
             }
             return res.documents?.[0]?.id ?? '';
@@ -106,23 +134,16 @@ export function useNoteDocumentManager({
   }, []);
 
   useEffect(() => {
-    const handleDocWritten = (e: Event) => {
-      const customEvent = e as CustomEvent<{ docId?: string }>;
-      const docId = customEvent?.detail?.docId;
-      if (docId) {
-        touchDocument(docId);
-      }
-      void refreshList();
-    };
-    window.addEventListener('conex:note-doc-written', handleDocWritten);
     const unsubscribeWritten = subscribeNoteDocWritten((event) => {
+      if (!shouldConsumeScopedEvent(event, scopeRef.current)) {
+        return;
+      }
       if (event.docId) {
         touchDocument(event.docId);
       }
       void refreshList();
     });
     return () => {
-      window.removeEventListener('conex:note-doc-written', handleDocWritten);
       unsubscribeWritten();
     };
   }, [refreshList, touchDocument]);
@@ -139,7 +160,10 @@ export function useNoteDocumentManager({
         try {
           await flushPendingDraft();
         } catch (err) {
-          console.error('[useNoteDocumentManager] switchDocument: flushPendingDraft error', err);
+          console.error(
+            '[useNoteDocumentManager] switchDocument: flushPendingDraft error',
+            err
+          );
         }
       }
 
@@ -151,13 +175,18 @@ export function useNoteDocumentManager({
 
   // 3. 新建文档并立即切换激活（可靠等待草稿刷盘，杜绝 500ms 强杀）
   const createDocument = useCallback(
-    async (params?: NoteDocumentCreateParams): Promise<NoteDocumentMeta | null> => {
+    async (
+      params?: NoteDocumentCreateParams
+    ): Promise<NoteDocumentMeta | null> => {
       // 新建前同样可靠刷盘既有草稿，杜绝 500ms 强杀丢数据
       if (flushPendingDraft) {
         try {
           await flushPendingDraft();
         } catch (err) {
-          console.error('[useNoteDocumentManager] createDocument: flushPendingDraft error', err);
+          console.error(
+            '[useNoteDocumentManager] createDocument: flushPendingDraft error',
+            err
+          );
         }
       }
 
@@ -167,7 +196,10 @@ export function useNoteDocumentManager({
 
       if (res.ok && res.document) {
         const created = res.document;
-        setDocuments((prev) => [created, ...prev.filter((d) => d.id !== created.id)]);
+        setDocuments((prev) => [
+          created,
+          ...prev.filter((d) => d.id !== created.id),
+        ]);
         setActiveDocId(created.id);
         return created;
       }

@@ -94,7 +94,7 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
       {
         id: 'branch',
         label: '分叉',
-        shortcut: 'Ctrl+Shift+D',
+        shortcut: 'Ctrl+Shift+F',
         icon: <AppIcon name="git-fork" size={14} aria-hidden />,
         onSelect: () => onSessionAction('branch'),
       },

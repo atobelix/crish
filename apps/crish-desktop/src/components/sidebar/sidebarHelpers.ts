@@ -73,7 +73,9 @@ const DEFAULT_SECTIONS_STATE: SidebarSectionsState = {
 
 export function loadSidebarListPrefs(): SidebarListPrefs {
   try {
-    const parsed = readSidebarListPrefsCache<Partial<SidebarListPrefs> | null>(null);
+    const parsed = readSidebarListPrefsCache<Partial<SidebarListPrefs> | null>(
+      null
+    );
     if (!parsed) return { ...DEFAULT_LIST_PREFS };
     return {
       sortType:
@@ -96,7 +98,8 @@ export function loadSidebarListPrefs(): SidebarListPrefs {
 
 export function loadSidebarSectionsState(): SidebarSectionsState {
   try {
-    const parsed = readSidebarSectionsCache<Partial<SidebarSectionsState> | null>(null);
+    const parsed =
+      readSidebarSectionsCache<Partial<SidebarSectionsState> | null>(null);
     if (!parsed) return { ...DEFAULT_SECTIONS_STATE, projectIds: {} };
     const projectIds =
       parsed.projectIds &&
@@ -131,7 +134,36 @@ export function saveSidebarListPrefs(prefs: SidebarListPrefs): void {
   }
 }
 
+function isTauriRuntime(): boolean {
+  try {
+    return (
+      typeof window !== 'undefined' &&
+      Boolean((window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function buildSessionWindowLabel(sessionId: string): string {
+  const clean = (sessionId || '').trim().replace(/[^a-zA-Z0-9_-]+/g, '_');
+  return `session-${clean || 'view'}`;
+}
+
+export function buildSessionWindowUrl(sessionId: string): string {
+  const sid = (sessionId || '').trim();
+  if (!sid) return '/';
+  return `/?session=${encodeURIComponent(sid)}`;
+}
+
+/**
+ * 在新窗口打开会话：
+ * - Tauri 桌面端：创建独立原生 WebviewWindow（若该会话窗口已打开则直接还原并聚焦），
+ *   通过 `/?session=<id>` 路由冷启动完整交互式工作台并定焦到该会话；
+ * - 浏览器环境：通过 `window.open('/?session=<id>')` 打开独立完整工作台窗口。
+ */
 export function openSessionInNewWindow(session: {
+  id?: string;
   title?: string;
   messages?: Array<{
     sender?: string;
@@ -140,65 +172,68 @@ export function openSessionInNewWindow(session: {
     toolCalls?: Array<{ name?: string; status?: string; output?: string }>;
   }>;
 }): void {
-  const w = window.open(
-    '',
-    '_blank',
-    'noopener,noreferrer,width=960,height=800'
-  );
-  if (!w) return;
-  const esc = (s: string) =>
-    s
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+  const sessionId = (session.id || '').trim();
   const title = sessionListDisplayTitle(session);
-  const lines: string[] = [];
-  lines.push(`<h1>${esc(title)}</h1>`);
-  lines.push(
-    `<p class="meta">会话只读快照 · ${esc(String(session.messages?.length || 0))} 条消息</p>`
-  );
-  for (const m of session.messages || []) {
-    if (m.sender === 'user') {
-      lines.push(`<div class="u">${esc(m.text || '')}</div>`);
-    } else {
-      lines.push(
-        `<div class="a">${esc(m.text || (m.status === 'processing' ? '生成中…' : ''))}</div>`
-      );
-      for (const tc of m.toolCalls || []) {
-        lines.push(
-          `<div class="t"><b>${esc(tc.name || 'tool')}</b> ${esc(tc.status || '')}<pre>${esc(
-            (tc.output || '').slice(0, 2000)
-          )}</pre></div>`
+  const label = buildSessionWindowLabel(sessionId || title);
+  const targetUrl = buildSessionWindowUrl(sessionId);
+
+  if (isTauriRuntime() && sessionId) {
+    void (async () => {
+      try {
+        const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+        const existing = await WebviewWindow.getByLabel(label);
+        if (existing) {
+          await existing.unminimize().catch(() => {
+            /* swallow-ok: window might not be minimized */
+          });
+          await existing.show().catch(() => {
+            /* swallow-ok: window might already be shown */
+          });
+          await existing.setFocus().catch(() => {
+            /* swallow-ok: window focus might fail silently */
+          });
+          return;
+        }
+        const win = new WebviewWindow(label, {
+          url: targetUrl,
+          title: `Crish — ${title}`,
+          width: 1200,
+          height: 820,
+          minWidth: 960,
+          minHeight: 640,
+          resizable: true,
+          decorations: false,
+          dragDropEnabled: true,
+          visible: false,
+          transparent: true,
+        });
+        win.once('tauri://created', () => {
+          window.setTimeout(() => {
+            void win.show().catch(() => {
+              /* swallow-ok: window already shown or destroyed */
+            });
+            void win.setFocus().catch(() => {
+              /* swallow-ok: focus attempt */
+            });
+          }, 1000);
+        });
+        win.once('tauri://error', () => {
+          window.open(
+            targetUrl,
+            label,
+            'noopener,noreferrer,width=1200,height=820'
+          );
+        });
+      } catch {
+        window.open(
+          targetUrl,
+          label,
+          'noopener,noreferrer,width=1200,height=820'
         );
       }
-    }
+    })();
+    return;
   }
-  if (!(session.messages && session.messages.length)) {
-    lines.push('<p class="meta">（暂无消息）</p>');
-  }
-  const html = `<!doctype html><html><head><meta charset="utf-8"/><title>${esc(title)}</title>
-<style>
-body{font-family:system-ui,sans-serif;padding:20px;max-width:800px;margin:0 auto;color:#222;background:#fafafa}
-h1{font-size:18px;margin:0 0 8px}.meta{color:#888;font-size:12px;margin:0 0 20px}
-.u{background:#e8eef8;padding:10px 12px;border-radius:12px;margin:10px 0 10px auto;max-width:85%;width:fit-content;white-space:pre-wrap}
-.a{background:#fff;border:1px solid #eee;padding:10px 12px;border-radius:12px;margin:10px 0;white-space:pre-wrap}
-.t{font-size:12px;color:#666;margin:6px 0 6px 8px}pre{white-space:pre-wrap;font-size:11px;background:#f4f4f5;padding:8px;border-radius:6px}
-</style></head><body>${lines.join('\n')}</body></html>`;
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const revoke = () => {
-    try {
-      URL.revokeObjectURL(url);
-    } catch {
-      /* ignore */
-    }
-  };
-  try {
-    w.addEventListener('load', revoke, { once: true });
-  } catch {
-    /* ignore */
-  }
-  w.location.href = url;
-  window.setTimeout(revoke, 60_000);
+
+  window.open(targetUrl, label, 'noopener,noreferrer,width=1200,height=820');
 }

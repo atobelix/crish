@@ -28,6 +28,7 @@ import {
 } from './flowDagLayout';
 import { invokeTyped } from '../../api/tauriInvoke';
 import { getActiveSessionId } from '../../api/storeAccess';
+import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 import { Tooltip } from '../ui';
 
 /** 快照轻量轮询间隔（≥2s；首查立即执行，此后按此周期刷新） */
@@ -121,14 +122,26 @@ export const FlowDagGraph: React.FC<{
  * - 查询失败（missing / error）静默保持上次数据，不重试风暴；
  * - 卸载清理定时器，无事件订阅、无泄漏。
  */
-export const FlowDagView: React.FC = () => {
+export interface FlowDagViewProps {
+  sessionId?: string | null;
+  leafId?: string | null;
+}
+
+export const FlowDagView: React.FC<FlowDagViewProps> = ({
+  sessionId: sessionIdProp,
+  leafId: _leafId,
+}) => {
   const nodes = useFlowDagStore((s) => s.nodes);
+  const scopedSessionId =
+    useScopedSessionId(sessionIdProp) || getActiveSessionId();
+  const sidRef = React.useRef(scopedSessionId);
+  sidRef.current = scopedSessionId;
 
   useEffect(() => {
     let alive = true;
 
     const poll = async () => {
-      const sessionId = getActiveSessionId();
+      const sessionId = sidRef.current;
       if (!sessionId?.trim()) return; // 无活动会话：跳过本轮查询
       const res = await invokeTyped<{ nodes?: DagNode[] }>(FLOW_SNAPSHOT_CMD, {
         sessionId,
@@ -146,7 +159,7 @@ export const FlowDagView: React.FC = () => {
       alive = false;
       clearInterval(timer);
     };
-  }, []);
+  }, [scopedSessionId]);
 
   if (dagEmpty(nodes)) {
     return (
@@ -157,7 +170,9 @@ export const FlowDagView: React.FC = () => {
       >
         <div className={styles.emptyContent}>
           <div className={styles.emptyTitle}>暂无编排图数据</div>
-          <div className={styles.emptyDesc}>当前会话尚未生成子任务依赖拓扑。</div>
+          <div className={styles.emptyDesc}>
+            当前会话尚未生成子任务依赖拓扑。
+          </div>
         </div>
       </div>
     );

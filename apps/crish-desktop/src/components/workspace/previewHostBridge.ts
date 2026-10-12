@@ -29,9 +29,7 @@ import {
 
 /** iframe 引用形态：支持 React RefObject 或原生元素 */
 export type InspectorIframeRef =
-  | { current: HTMLIFrameElement | null }
-  | HTMLIFrameElement
-  | null;
+  { current: HTMLIFrameElement | null } | HTMLIFrameElement | null;
 
 /** 宿主桥向 UI 层派发的归一化拾取事件 */
 export type PreviewInspectorEvent =
@@ -127,11 +125,7 @@ export function parseClientToHostMessage(
   if (type === 'INSPECT_HOVER') {
     const { tagName, selector } = payload;
     const rect = parseRect(payload.rect);
-    if (
-      typeof tagName !== 'string' ||
-      typeof selector !== 'string' ||
-      !rect
-    ) {
+    if (typeof tagName !== 'string' || typeof selector !== 'string' || !rect) {
       return null;
     }
     return {
@@ -199,7 +193,9 @@ export function parseClientToHostMessage(
  * §4.1：宿主 → iframe 的明确 targetOrigin（禁 '*'）。
  * 预览经同源代理加载时 iframe.origin === 宿主 origin；若可读 contentWindow.location 则用之。
  */
-function resolveInspectorTargetOrigin(iframe: HTMLIFrameElement): string | null {
+function resolveInspectorTargetOrigin(
+  iframe: HTMLIFrameElement
+): string | null {
   try {
     const childOrigin = iframe.contentWindow?.location?.origin;
     if (childOrigin && childOrigin !== 'null') return childOrigin;
@@ -243,12 +239,25 @@ export function enableInspector(
 /**
  * 订阅 iframe 客户端上报的拾取消息。
  * @param listener 归一化拾取事件回调（INSPECT_READY / INSPECT_HOVER / INSPECT_SELECT）
+ * @param iframeRef 可选所属预览 iframe 引用；传入时严格校验 event.source === iframe.contentWindow，阻断跨分屏串扰
  * @returns 取消订阅函数（组件卸载时应调用）
  */
 export function subscribeToInspector(
-  listener: PreviewInspectorListener
+  listener: PreviewInspectorListener,
+  iframeRef?: InspectorIframeRef
 ): () => void {
   const handleMessage = (event: MessageEvent) => {
+    if (iframeRef !== undefined) {
+      const iframe = unwrapIframe(iframeRef);
+      if (
+        !iframe ||
+        (iframe.contentWindow &&
+          event.source &&
+          event.source !== iframe.contentWindow)
+      ) {
+        return;
+      }
+    }
     // §4.1：先校验 origin 白名单，再解析 source/type（防伪造 source）
     if (!isAllowedPreviewMessageOrigin(event.origin)) return;
     const message = parseClientToHostMessage(event.data);
@@ -269,4 +278,14 @@ export function subscribeToInspector(
   return () => {
     window.removeEventListener('message', handleMessage);
   };
+}
+
+/**
+ * 绑定指定预览 iframe 的宿主拾取桥（强制校验 event.source === iframe.contentWindow）。
+ */
+export function attachPreviewHostBridge(
+  iframeRef: InspectorIframeRef,
+  listener: PreviewInspectorListener
+): () => void {
+  return subscribeToInspector(listener, iframeRef);
 }

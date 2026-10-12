@@ -12,6 +12,10 @@ import {
 } from './SidebarContextMenus';
 import { toggleExclusiveMenu } from '../ui/Menu';
 import { openSessionInNewWindow } from './sidebarHelpers';
+import {
+  deleteSessionCascade,
+  triggerSessionMessageHydrateIfNeeded,
+} from '../../store/storeAccess';
 
 type OpenSessionOpts = {
   title?: string;
@@ -19,10 +23,7 @@ type OpenSessionOpts = {
   split?: 'right' | 'left' | 'top' | 'bottom';
 };
 
-function shellOpenSession(
-  sessionId: string,
-  opts?: OpenSessionOpts
-): void {
+function shellOpenSession(sessionId: string, opts?: OpenSessionOpts): void {
   getCompositionRoot().shell.openSession(sessionId, opts);
 }
 
@@ -35,8 +36,6 @@ function openSessionInChatSplit(
 ): void {
   const sid = (sessionId || '').trim();
   if (!sid) return;
-  // 已在某叶 tabs → 门面内部 activateTab（I1，不 mint 第二份）
-  // 未打开 → openSession(..., { split: 'right' }) 出新叶
   shellOpenSession(sid, { ...opts, split: 'right' });
 }
 
@@ -64,8 +63,6 @@ export function useSidebarContextMenu({
   const sortMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuTriggerRef = useRef<HTMLElement | null>(null);
 
-
-
   const handleContextMenu = (e: React.MouseEvent, sessionId: string) => {
     const triggerEl =
       (e.currentTarget instanceof HTMLElement ? e.currentTarget : null) ??
@@ -73,7 +70,7 @@ export function useSidebarContextMenu({
 
     const isMoreTrigger = Boolean(
       triggerEl?.dataset?.testid === 'session-more-button' ||
-        triggerEl?.closest?.('[data-testid="session-more-button"]')
+      triggerEl?.closest?.('[data-testid="session-more-button"]')
     );
 
     const openThis = () => {
@@ -103,9 +100,12 @@ export function useSidebarContextMenu({
     openThis();
   };
 
-  const handleAction = (action: SessionMenuAction) => {
-    if (!contextMenu) return;
-    const { sessionId } = contextMenu;
+  const handleAction = (
+    action: SessionMenuAction,
+    customSessionId?: string
+  ) => {
+    const sessionId = customSessionId || contextMenu?.sessionId;
+    if (!sessionId) return;
     const root = getCompositionRoot();
     const store = root.session.getState();
     const targetSession =
@@ -129,7 +129,12 @@ export function useSidebarContextMenu({
         });
         break;
       case 'open-new': {
-        openSessionInNewWindow(targetSession);
+        void (async () => {
+          await triggerSessionMessageHydrateIfNeeded(sessionId);
+          const current =
+            root.session.getState().sessionsById[sessionId] ?? targetSession;
+          openSessionInNewWindow(current);
+        })();
         break;
       }
       case 'rename':
@@ -144,6 +149,7 @@ export function useSidebarContextMenu({
         break;
       case 'archive': {
         const title = sessionListDisplayTitle(targetSession);
+        root.shell.getState().closeTabBySessionId(sessionId);
         root.session.archiveSession(sessionId);
         toast.show(archiveUndoToastMessage(title), () => {
           root.session.unarchiveSession(sessionId);
@@ -154,23 +160,36 @@ export function useSidebarContextMenu({
         const title = sessionListDisplayTitle(targetSession);
         const newTitle = `${title}${BRANCH_TITLE_SUFFIX}`;
         const oldId = sessionId;
-        root.session.branchSession(sessionId, newTitle);
-        const newBranchId = root.session.getActiveSessionId();
-        toast.show(branchUndoToastMessage(title), () => {
+        void (async () => {
+          await triggerSessionMessageHydrateIfNeeded(sessionId);
+          root.session.branchSession(sessionId, newTitle);
+          const newBranchId = root.session.getActiveSessionId();
           if (newBranchId && newBranchId !== oldId) {
-            root.session.archiveSession(newBranchId);
+            const newSess = root.session.getState().sessionsById[newBranchId];
+            shellOpenSession(newBranchId, {
+              title: newSess?.title ?? newTitle,
+              workspaceKey: newSess?.folder ?? targetSession.folder,
+            });
           }
-          // 回焦点用 getState 命令式写（setActive 非门面入口，避免 god DI）
-          root.session.getState().setActiveSessionId(oldId);
-        });
+          toast.show(branchUndoToastMessage(title), () => {
+            if (newBranchId && newBranchId !== oldId) {
+              root.shell.getState().closeTabBySessionId(newBranchId);
+              root.session.archiveSession(newBranchId);
+            }
+            // 回焦点用 getState 命令式写（setActive 非门面入口，避免 god DI）
+            root.session.getState().setActiveSessionId(oldId);
+          });
+        })();
         break;
       }
       case 'export': {
-        const session = targetSession;
         void (async () => {
           try {
+            await triggerSessionMessageHydrateIfNeeded(sessionId);
             const { tryDownloadSessionMarkdown } =
               await import('../../api/sessionExport');
+            const session =
+              root.session.getState().sessionsById[sessionId] ?? targetSession;
             const result = tryDownloadSessionMarkdown(session, new Date(), {
               sessionsById: root.session.getState().sessionsById,
             });
@@ -184,12 +203,18 @@ export function useSidebarContextMenu({
         break;
       }
       case 'copy-id':
-        navigator.clipboard.writeText(sessionId);
-        toast.show('会话 ID 已复制到剪贴板');
+        navigator.clipboard
+          .writeText(sessionId)
+          .then(() => {
+            toast.show('会话 ID 已复制到剪贴板');
+          })
+          .catch(() => {
+            toast.show('复制失败');
+          });
         break;
       case 'delete': {
         const title = sessionListDisplayTitle(targetSession);
-        // 弹窗确认由宿主装配：确认后走 confirmDelete → deleteSession + toast
+        // 弹窗确认由宿主装配：确认后走 confirmDelete → deleteSessionCascade + toast
         setPendingDelete({ sessionId, title });
         break;
       }
@@ -200,9 +225,7 @@ export function useSidebarContextMenu({
 
   const confirmDelete = React.useCallback(() => {
     if (!pendingDelete) return;
-    const root = getCompositionRoot();
-    // 删除走 sessionStore 命令式入口（SessionFacade 无 deleteSession）
-    root.session.getState().deleteSession(pendingDelete.sessionId);
+    deleteSessionCascade(pendingDelete.sessionId);
     toast.show(`已删除对话: ${pendingDelete.title}`);
     setPendingDelete(null);
   }, [pendingDelete]);

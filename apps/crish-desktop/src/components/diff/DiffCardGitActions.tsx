@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { useLeafScope } from '../../contexts/LeafScopeContext';
 import styles from './DiffCard.module.css';
 import { Button, Textarea, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
@@ -28,10 +29,37 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
   onCommit,
   onPush,
 }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scope = useLeafScope();
+
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        const container = containerRef.current;
+        if (!container) return;
+        const active = document.activeElement;
+        const isFocusedInside = Boolean(active && container.contains(active));
+        if (!isFocusedInside) {
+          if (scope.inLeafScope && !scope.isActive) return;
+          if (
+            active &&
+            active !== document.body &&
+            (active.tagName === 'INPUT' ||
+              active.tagName === 'TEXTAREA' ||
+              (active as HTMLElement).isContentEditable ||
+              Boolean(
+                (active as HTMLElement).closest?.(
+                  'input, textarea, [contenteditable="true"]'
+                )
+              ))
+          ) {
+            return;
+          }
+          if (container.offsetWidth === 0 && container.offsetHeight === 0) {
+            return;
+          }
+        }
         e.preventDefault();
         e.stopPropagation();
         onToggle();
@@ -39,7 +67,7 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [open, onToggle]);
+  }, [open, onToggle, scope.inLeafScope, scope.isActive]);
 
   const canCommit =
     !commitLoading &&
@@ -62,17 +90,25 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
           }
         }}
       >
-        <AppIcon name="git-commit" size={14} className={styles.commitTriggerIcon} />
+        <AppIcon
+          name="git-commit"
+          size={14}
+          className={styles.commitTriggerIcon}
+        />
         <span className={styles.commitTriggerText}>
           输入提交信息… ({stagedCount} 个已暂存 / {unstagedCount} 个未暂存)
         </span>
-        <AppIcon name="chevron-right" size={14} className={styles.commitTriggerArrow} />
+        <AppIcon
+          name="chevron-right"
+          size={14}
+          className={styles.commitTriggerArrow}
+        />
       </div>
     );
   }
 
   return (
-    <div className={styles.commitPanel}>
+    <div ref={containerRef} className={styles.commitPanel}>
       <div className={styles.commitHeader}>
         <span className={styles.commitTitle}>提交与推送 (Commit & Push)</span>
         <Button
@@ -114,7 +150,9 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
           style={{ height: 28, borderRadius: 'var(--radius-sm)' }}
           disabled={!canCommit}
           onClick={onCommit}
-          icon={<AppIcon name="git-commit" size={14} style={{ marginRight: 4 }} />}
+          icon={
+            <AppIcon name="git-commit" size={14} style={{ marginRight: 4 }} />
+          }
         >
           {commitLoading
             ? '提交中…'
@@ -130,13 +168,22 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
             style={{ height: 28, borderRadius: 'var(--radius-sm)' }}
             disabled={commitLoading || pushLoading}
             onClick={onPush}
-            icon={<AppIcon name="cloud-upload" size={14} style={{ marginRight: 4 }} />}
+            icon={
+              <AppIcon
+                name="cloud-upload"
+                size={14}
+                style={{ marginRight: 4 }}
+              />
+            }
           >
             {pushLoading ? '推送中…' : '推送 (Push)'}
           </Button>
         </Tooltip>
         {commitMsg.length > 0 && (
-          <span className={styles.commitCharCount} aria-label={`已输入 ${commitMsg.length} 个字符`}>
+          <span
+            className={styles.commitCharCount}
+            aria-label={`已输入 ${commitMsg.length} 个字符`}
+          >
             {commitMsg.length}
           </span>
         )}

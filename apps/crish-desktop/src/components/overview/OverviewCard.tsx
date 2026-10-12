@@ -1,11 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import styles from './OverviewCard.module.css';
 import {
-  selectActiveSession,
-  selectActiveSessionId,
   selectSessions,
   useSessionField,
+  useSessionStore,
 } from '../../store/storeAccess';
+import {
+  useLeafScope,
+  useScopedSessionId,
+} from '../../contexts/LeafScopeContext';
 import {
   useSettingsField,
   selectScheduledTasks,
@@ -32,15 +35,25 @@ export type OverviewCardProps = {
   wsId?: string;
   onOpenPanel: (id: string) => void;
   /** @deprecated 保留 prop 兼容。@removeWhen 调用方全部迁移后移除 */
+  sessionId?: string | null;
+  leafId?: string | null;
 };
 
 type SecKey =
   'agents' | 'files' | 'usage' | 'activeTasks' | 'bgTasks' | 'cronJobs';
 
-const OverviewCardInner: React.FC<OverviewCardProps> = ({ onOpenPanel }) => {
-  const activeSessionId = useSessionField(selectActiveSessionId);
-  const session = useSessionField(selectActiveSession);
-  const cronJobs = useSettingsField(selectScheduledTasks);
+const OverviewCardInner: React.FC<OverviewCardProps> = ({
+  onOpenPanel,
+  sessionId: sessionIdProp,
+  leafId: leafIdProp,
+}) => {
+  const scope = useLeafScope();
+  const scopedSessionId = useScopedSessionId(sessionIdProp);
+  const _effectiveLeafId = leafIdProp ?? scope.leafId;
+  const session = useSessionStore((s) =>
+    scopedSessionId ? s.sessionsById[scopedSessionId] || null : null
+  );
+  const _cronJobs = useSettingsField(selectScheduledTasks);
   const tokenUsage = useSettingsField(selectTokenUsage);
   const sessions = useSessionField(selectSessions);
   const ds = useEngineState();
@@ -112,7 +125,7 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({ onOpenPanel }) => {
       aria-label="总览"
     >
       <OverviewHeader
-        session={session}
+        session={session || undefined}
         onGoalClick={() => setOpenSec((p) => ({ ...p, activeTasks: true }))}
       />
 
@@ -142,7 +155,7 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({ onOpenPanel }) => {
         open={openSec.agents}
         agents={session?.agents || []}
         runningAgentCount={runningAgentCount}
-        activeSessionId={activeSessionId || undefined}
+        activeSessionId={scopedSessionId || undefined}
         onToggle={() => toggle('agents')}
       />
 

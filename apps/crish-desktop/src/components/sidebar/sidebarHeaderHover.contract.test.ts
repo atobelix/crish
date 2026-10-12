@@ -64,4 +64,23 @@ describe('侧栏分组头 hover 无底色', () => {
       /background/
     );
   });
+
+  it('手风琴折叠遵循 CSS Grid 0fr -> 1fr 与 ease-emphasized 契约', () => {
+    expect(css).toMatch(
+      /\.accordionWrapper\s*\{[\s\S]*display:\s*grid;[\s\S]*grid-template-rows:\s*0fr;[\s\S]*transition:\s*grid-template-rows\s+160ms\s+var\(--ease-emphasized\);/
+    );
+    expect(css).toMatch(
+      /\.accordionWrapper\[data-expanded=['"]true['"]\]\s*\{[\s\S]*grid-template-rows:\s*1fr;/
+    );
+    expect(css).toMatch(
+      /\.accordionInner\s*\{[\s\S]*min-height:\s*0;[\s\S]*opacity:\s*0;[\s\S]*transform:\s*translateY\(-2px\);[\s\S]*transition:[\s\S]*opacity\s+120ms\s+ease-out[\s\S]*transform\s+120ms\s+var\(--ease-emphasized\);/
+    );
+    expect(css).toMatch(
+      /\.accordionWrapper\[data-expanded=['"]true['"]\]\s+\.accordionInner\s*\{[\s\S]*opacity:\s*1;[\s\S]*transform:\s*translateY\(0\);/
+    );
+    // 零 display: none，彻底解耦高度塌缩阻断
+    expect(css).not.toMatch(
+      /\.accordionWrapper\[data-expanded=['"]false['"]\]\s*\{[\s\S]*display:\s*none;/
+    );
+  });
 });

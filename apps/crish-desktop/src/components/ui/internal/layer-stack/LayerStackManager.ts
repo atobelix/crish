@@ -457,22 +457,13 @@ export class LayerStackManager {
       return;
     }
 
+    const evs: [string, EventListener][] = [
+      ['keydown', this.handleGlobalKeyDown as EventListener],
+      ['pointerdown', this.handleGlobalPointerDown as EventListener],
+      ['pointerup', this.handleGlobalPointerUp as EventListener],
+    ];
     for (const target of [window, document]) {
-      target.addEventListener(
-        'keydown',
-        this.handleGlobalKeyDown as EventListener,
-        true
-      );
-      target.addEventListener(
-        'pointerdown',
-        this.handleGlobalPointerDown as EventListener,
-        true
-      );
-      target.addEventListener(
-        'pointerup',
-        this.handleGlobalPointerUp as EventListener,
-        true
-      );
+      for (const [e, fn] of evs) target.addEventListener(e, fn, true);
     }
     this.isListening = true;
   }
@@ -661,29 +652,18 @@ export class LayerStackManager {
    * 销毁并清理全局监听（供热更新与测试使用）
    */
   public dispose(): void {
+    const evs: [string, EventListener][] = [
+      ['keydown', this.handleGlobalKeyDown as EventListener],
+      ['pointerdown', this.handleGlobalPointerDown as EventListener],
+      ['pointerup', this.handleGlobalPointerUp as EventListener],
+    ];
     if (typeof document !== 'undefined') {
-      document.removeEventListener('keydown', this.handleGlobalKeyDown, true);
-      document.removeEventListener(
-        'pointerdown',
-        this.handleGlobalPointerDown,
-        true
-      );
-      document.removeEventListener(
-        'pointerup',
-        this.handleGlobalPointerUp,
-        true
-      );
+      for (const [e, fn] of evs) document.removeEventListener(e, fn, true);
       document.documentElement?.removeAttribute('data-floating-active');
       document.body?.removeAttribute('data-floating-active');
     }
     if (typeof window !== 'undefined') {
-      window.removeEventListener('keydown', this.handleGlobalKeyDown, true);
-      window.removeEventListener(
-        'pointerdown',
-        this.handleGlobalPointerDown,
-        true
-      );
-      window.removeEventListener('pointerup', this.handleGlobalPointerUp, true);
+      for (const [e, fn] of evs) window.removeEventListener(e, fn, true);
     }
     if (this.silenceTimer) {
       clearTimeout(this.silenceTimer);

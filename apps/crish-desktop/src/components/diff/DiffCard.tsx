@@ -5,7 +5,8 @@
 import React, { useCallback, useDeferredValue, useState } from 'react';
 import styles from './DiffCard.module.css';
 import { Button, Input, Tooltip } from '../ui';
-import { selectActiveSession, useSessionField } from '../../store/storeAccess';
+import { useSessionStore } from '../../store/storeAccess';
+import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 import type { FileDiff } from '../../store/types';
 import {
   useTerminalField,
@@ -29,16 +30,24 @@ import { AppIcon } from '../ui/icons/index';
 
 export interface DiffCardProps {
   className?: string;
+  sessionId?: string | null;
+  leafId?: string | null;
 }
 
-const DiffCardInner: React.FC<DiffCardProps> = () => {
+const DiffCardInner: React.FC<DiffCardProps> = ({
+  sessionId: sessionIdProp,
+  leafId: _leafId,
+}) => {
   const { showToast } = useToast();
+  const scopedSessionId = useScopedSessionId(sessionIdProp);
   const activeDiffSource = useTerminalField(selectActiveDiffSource);
   const diffFiles = useTerminalField(selectDiffFiles) as FileDiff[];
   const setActiveDiffSource = useTerminalField((s) => s.setActiveDiffSource);
   const setDiffFiles = useTerminalField((s) => s.setDiffFiles);
-  const removeDiffFile = useTerminalField((s) => s.removeDiffFile);
-  const session = useSessionField(selectActiveSession);
+  const _removeDiffFile = useTerminalField((s) => s.removeDiffFile);
+  const session = useSessionStore((s) =>
+    scopedSessionId ? s.sessionsById[scopedSessionId] || null : null
+  );
 
   const [diffViewMode, setDiffViewMode] = useState<'unified' | 'split'>(
     'unified'
@@ -47,7 +56,7 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
   const diffSearchQuery = useDeferredValue(rawDiffSearchQuery);
   const searchActive = !!rawDiffSearchQuery.trim();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [applyBusy, setApplyBusy] = useState(false);
+  const [applyBusy] = useState(false);
   const [sourceMode, setSourceMode] = useState<DiffSourceMode>('list');
   const [turnKey, setTurnKey] = useState('');
   const [panelErr, setPanelErr] = useState('');
@@ -63,7 +72,7 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
     turnOptions,
     plainLoading,
     plainFileContents,
-    changeFileCompareMode,
+    changeFileCompareMode: _changeFileCompareMode,
     getFileCompareMode,
     getFileDiffData,
     handleExpandBlock,
@@ -210,7 +219,7 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
     dismissSoftHint();
   }, [dismissSoftHint, setActiveDiffSource, setDiffFiles]);
 
-  const handleCopyPatch = useCallback(() => {
+  const _handleCopyPatch = useCallback(() => {
     if (!activeDiffSource) return;
     const patch = formatGitPatch(activeDiffSource);
     navigator.clipboard.writeText(patch);
@@ -289,8 +298,11 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
           role="alert"
           aria-live="assertive"
         >
-          <AppIcon name="alert-circle" size={14}
-            style={{ flexShrink: 0, marginTop: 1 }} />
+          <AppIcon
+            name="alert-circle"
+            size={14}
+            style={{ flexShrink: 0, marginTop: 1 }}
+          />
           <div className={styles.panelErrText}>{panelErr}</div>
           <Tooltip content="关闭错误">
             <Button
@@ -323,12 +335,17 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
             renderInlineDiffContent={renderInlineDiffContent}
             getFileDiffData={getFileDiffData}
             onOpenFileViewer={(filePath) =>
-              openFileViewerInSession(filePath, 'plain')
+              openFileViewerInSession(scopedSessionId, filePath, 'plain')
             }
           />
         ) : !gitLoading ? (
           <div className={styles.empty} role="status" aria-live="polite">
-            <AppIcon name="file-diff" size={22} style={{ opacity: 0.3 }} aria-hidden />
+            <AppIcon
+              name="file-diff"
+              size={22}
+              style={{ opacity: 0.3 }}
+              aria-hidden
+            />
             <div>暂无变更</div>
             <div className={styles.emptySub}>
               上方切换「AI
@@ -360,10 +377,13 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
 
         {gitLoading && fileList.length === 0 ? (
           <div className={styles.empty} role="status" aria-live="polite">
-            <AppIcon name="loader" size={22}
+            <AppIcon
+              name="loader"
+              size={22}
               className="spin"
               style={{ opacity: 0.45 }}
-              aria-hidden />
+              aria-hidden
+            />
             <div>载入 Git 变更…</div>
           </div>
         ) : null}

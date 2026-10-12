@@ -1,0 +1,46 @@
+.archiveSearch {
+  width: 100%;
+}
+
+.rowTitle {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.rowMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-dense);
+}
+
+.metaDot {
+  opacity: 0.55;
+}
+
+.controlGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  flex-shrink: 0;
+}
+
+.deleteBtn {
+  color: var(--text-tertiary);
+}
+
+.deleteBtn:hover {
+  color: var(--color-error);
+}
+
+.emptyTitle {
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-normal);
+}

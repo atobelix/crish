@@ -43,8 +43,9 @@
   justify-content: space-between;
   padding: var(--space-2) var(--space-3);
   cursor: pointer;
-  border-bottom: var(--hairline-width) solid color-mix(in srgb, var(--border-subtle) 40%, transparent);
-  transition: background var(--transition-micro) ease;
+  border-bottom: var(--hairline-width) solid
+    color-mix(in srgb, var(--border-subtle) 40%, transparent);
+  transition: background var(--transition-micro);
   font-family: var(--font-sans);
 }
 
@@ -130,7 +131,10 @@
 .footerCount {
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
-  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-family:
+    'Segoe UI',
+    -apple-system,
+    var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
 }

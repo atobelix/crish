@@ -12,9 +12,10 @@
   overflow: hidden;
   cursor: pointer;
   position: relative;
-  transition: border-color var(--transition-fast) ease,
-              background var(--transition-fast) ease,
-              box-shadow var(--transition-fast) ease;
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast),
+    box-shadow var(--transition-fast);
   user-select: none;
   -webkit-user-select: none;
   flex-shrink: 0;
@@ -103,7 +104,8 @@
    优雅失效 / 丢失态 (Missing Card)
    -------------------------------------------------------------------------- */
 .missingCard {
-  border: 1px dashed color-mix(in srgb, var(--border-color) 85%, var(--text-tertiary) 15%);
+  border: 1px dashed
+    color-mix(in srgb, var(--border-color) 85%, var(--text-tertiary) 15%);
   background: var(--bg-subtle);
   cursor: pointer;
 }
@@ -208,7 +210,6 @@
 .fileNameMissing {
   color: var(--text-tertiary);
   text-decoration: line-through;
-
 }
 
 .fileMeta,
@@ -235,7 +236,9 @@
   height: 16px;
   border-radius: var(--radius-sm);
   /* background: color-mix(in srgb, hsl(38, 95%, 50%) 20%, var(--bg-elevated)); */
-  background: var(--surface-main); /* 三档：主层（原 paper 60% 叠在白色输入框上得到新灰） */
+  background: var(
+    --surface-main
+  ); /* 三档：主层（原 paper 60% 叠在白色输入框上得到新灰） */
   /* border: 1px solid color-mix(in srgb, hsl(38, 95%, 50%) 60%, transparent); */
   color: var(--text-warning-strong);
   backdrop-filter: blur(4px);

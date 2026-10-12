@@ -25,6 +25,7 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
   const sessions = useSessionStore((state) => state.sessions);
   /** 审批按钮防连点；成功静默，仅失败 toast */
   const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);
+  const titleId = React.useId();
 
   if (approvals.length === 0) return null;
 
@@ -119,9 +120,9 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
   };
 
   return (
-    <section className={styles.section} aria-labelledby="rt-sec-approve">
+    <section className={styles.section} aria-labelledby={titleId}>
       <div className={styles.sectionHead}>
-        <h4 id="rt-sec-approve" className={styles.sectionTitle}>
+        <h4 id={titleId} className={styles.sectionTitle}>
           待确认
         </h4>
         {countLabel ? (
@@ -172,26 +173,26 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
                   onClick={(e) => e.stopPropagation()}
                 >
                   <Button
-                      type="button"
-                      variant="primary"
-                      size="sm"
-                      aria-label={`允许 ${toolLabel}`}
-                      aria-busy={busy || undefined}
-                      disabled={Boolean(approvalBusyId)}
-                      onClick={(e) => handleApprovalAllow(a, e)}
-                    >
-                      {busy ? '…' : '允许'}
-                    </Button>
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    aria-label={`允许 ${toolLabel}`}
+                    aria-busy={busy || undefined}
+                    disabled={Boolean(approvalBusyId)}
+                    onClick={(e) => handleApprovalAllow(a, e)}
+                  >
+                    {busy ? '…' : '允许'}
+                  </Button>
                   <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      aria-label={`拒绝 ${toolLabel}`}
-                      disabled={Boolean(approvalBusyId)}
-                      onClick={(e) => handleApprovalDeny(a, e)}
-                    >
-                      拒绝
-                    </Button>
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`拒绝 ${toolLabel}`}
+                    disabled={Boolean(approvalBusyId)}
+                    onClick={(e) => handleApprovalDeny(a, e)}
+                  >
+                    拒绝
+                  </Button>
                 </div>
               </div>
             </Tooltip>

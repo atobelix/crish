@@ -7,7 +7,6 @@ import React from 'react';
 import styles from './PreviewCard.module.css';
 import { Button, Tooltip } from '../ui';
 import { previewDisplayHost } from '../../api/previewBrowserStore';
-import { HIST_PANEL_ID } from './previewCardLib';
 import { AppIcon } from '../ui/icons/index';
 
 export type PreviewHistoryPanelProps = {
@@ -20,6 +19,7 @@ export type PreviewHistoryPanelProps = {
   onRemoveBookmark: (url: string) => void;
   onClearHistory: () => void;
   onRemoveHistory: (url: string) => void;
+  id?: string;
 };
 
 export const PreviewHistoryPanel: React.FC<PreviewHistoryPanelProps> = ({
@@ -32,13 +32,16 @@ export const PreviewHistoryPanel: React.FC<PreviewHistoryPanelProps> = ({
   onRemoveBookmark,
   onClearHistory,
   onRemoveHistory,
+  id,
 }) => {
+  const autoId = React.useId();
+  const panelId = id || autoId;
   const histCount = history.length;
   const bookCount = bookmarks.length;
 
   return (
     <div
-      id={HIST_PANEL_ID}
+      id={panelId}
       ref={histRef}
       className={`${styles.histPanel} ${styles.histPanelFloat}`}
       role="dialog"

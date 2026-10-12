@@ -331,6 +331,8 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
             onStartRename={handleStartRename}
             onCommitRename={handleCommitRename}
             onCancelRename={handleCancelRename}
+            onDeleteSession={(id) => void handleAction('delete', id)}
+            onBranchSession={(id) => void handleAction('branch', id)}
           />
         </div>
 

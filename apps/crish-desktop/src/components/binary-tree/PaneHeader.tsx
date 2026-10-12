@@ -18,7 +18,13 @@
  * - 关闭量测在事件派发期内同步完成，几何数学在 paneHeaderGeometry（可穷举测试）。
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import type { LayoutLeaf } from '../../store/types';
 import {
@@ -26,12 +32,10 @@ import {
   useLayoutStore,
   useLayoutTreeStore,
   collectLeaves,
-  isPendingDraft,
-  mintDraftSessionId,
 } from '../../store/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { useSessionTabDrag } from '../shell/SessionTabDragContext';
-import { DRAG_THRESHOLD_PX, NON_TAB_SPACE_PX, TAB_GAP_PX } from '../../utils/tabStripGeometry';
+import { NON_TAB_SPACE_PX, TAB_GAP_PX } from '../../utils/tabStripGeometry';
 import { paneTabStripVars } from './tabStripVars';
 import { DURATION_FAST_MS, readTransitionMs } from '../../utils/motionTokens';
 import { useTablistKeyboard } from '../../hooks/useTablistKeyboard';
@@ -42,7 +46,13 @@ import {
   nextAvailableNeighborId,
   type LeafSessionTab,
 } from './paneHeaderGeometry';
-import { readActiveTabId, readCommittedLeafTabs } from './paneHeaderModel';
+import { isLeafInDraftMode } from './treeLeafPanelModel';
+import {
+  computeVisibleLeafTabs,
+  isMouseStillInsideHeader,
+  readActiveTabId,
+  readCommittedLeafTabs,
+} from './paneHeaderModel';
 import { PaneTabItem } from './PaneTabItem';
 import { Button } from '../ui';
 import styles from './PaneHeader.module.css';
@@ -94,26 +104,14 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
     const isMultiPane = leavesCount > 1;
 
     // 条带成员计算：已提交会话 tabs，分屏下若无真会话但有草稿保留草稿以支持关闭
-    const visibleTabs = useMemo(() => {
-      const committedTabs = readCommittedLeafTabs(leaf);
-      if (committedTabs.length > 0) {
-        return committedTabs;
-      }
-      const raw = leaf.tabs as unknown;
-      if (Array.isArray(raw) && raw.length > 0) {
-        const first = raw[0] as LeafSessionTab;
-        return [
-          {
-            tabId: first.tabId || `draft-${leaf.id}`,
-            sessionId: first.sessionId || '',
-            title: '新对话',
-          },
-        ];
-      }
-      return isMultiPane
-        ? [{ tabId: `pane-${leaf.id}`, sessionId: '', title: '新对话' }]
-        : [];
-    }, [leaf.id, leaf.tabs, isMultiPane]);
+    const visibleTabs = useMemo(
+      () => computeVisibleLeafTabs(leaf, isMultiPane),
+      [leaf, isMultiPane]
+    );
+    const hasCommittedTabs = useMemo(
+      () => readCommittedLeafTabs(leaf).length > 0,
+      [leaf]
+    );
 
     // 入场动画门控：首轮挂载后的首个副作用之后才允许 @starting-style 生效
     useEffect(() => {
@@ -121,12 +119,10 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
     }, []);
 
     const activeTabId = readActiveTabId(leaf);
-    const activeSessionId = useSessionStore((s) => s.activeSessionId);
-    const isLeafDraft =
-      activeSessionId === mintDraftSessionId(leaf.id) ||
-      (isPendingDraft(activeSessionId) && leaf.activeTabId === '');
+    const isLeafDraft = isLeafInDraftMode(leaf);
     const effectiveActiveTabId =
-      activeTabId || (isLeafDraft ? '' : visibleTabs[0]?.tabId || '');
+      activeTabId ||
+      (isLeafDraft && hasCommittedTabs ? '' : visibleTabs[0]?.tabId || '');
     void isActive;
 
     const clearLockedWidth = useCallback(() => {
@@ -135,41 +131,8 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
 
     const handleHeaderMouseLeave = useCallback(
       (e: React.MouseEvent) => {
-        const headerEl =
-          containerRef.current?.closest('[data-pane-header="true"]') ||
-          (e.currentTarget as HTMLElement).closest('[data-pane-header="true"]') ||
-          (e.currentTarget as HTMLElement);
-
-        // 如果顶栏仍处于物理 :hover 态，说明指针仍在顶部区域内部，忽略子节点卸载引发的伪离开事件
-        if (
-          typeof headerEl.matches === 'function' &&
-          headerEl.matches(':hover')
-        ) {
+        if (isMouseStillInsideHeader(e, containerRef.current)) {
           return;
-        }
-
-        const nextTarget = e.relatedTarget;
-        if (nextTarget && nextTarget instanceof Node) {
-          if (headerEl.contains(nextTarget)) {
-            return;
-          }
-        }
-        // 双重物理保险：如果事件带有真实指针坐标，且坐标仍在顶部条带矩形内部，绝不误清
-        if (
-          typeof e.clientX === 'number' &&
-          typeof e.clientY === 'number' &&
-          e.clientX > 0 &&
-          e.clientY > 0
-        ) {
-          const rect = headerEl.getBoundingClientRect();
-          if (
-            e.clientX >= rect.left &&
-            e.clientX <= rect.right &&
-            e.clientY >= rect.top &&
-            e.clientY <= rect.bottom
-          ) {
-            return;
-          }
         }
         clearLockedWidth();
       },
@@ -220,7 +183,9 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
       () => () => {
         fuseTimersRef.current.forEach((t) => window.clearTimeout(t));
         fuseTimersRef.current.clear();
-        pendingActivateRafsRef.current.forEach((id) => cancelAnimationFrame(id));
+        pendingActivateRafsRef.current.forEach((id) =>
+          cancelAnimationFrame(id)
+        );
         pendingActivateRafsRef.current = [];
       },
       []
@@ -251,7 +216,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
     const currentMeasuredWidth =
       containerWidth > 0
         ? containerWidth
-        : (containerEl?.clientWidth || containerRef.current?.clientWidth || 0);
+        : containerEl?.clientWidth || containerRef.current?.clientWidth || 0;
 
     const effectiveTabWidth =
       lockedTabWidth ??
@@ -326,9 +291,8 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
                 React.startTransition(() => {
                   sessionShell().activateTab(leaf.id, nextActiveId);
                 });
-                pendingActivateRafsRef.current = pendingActivateRafsRef.current.filter(
-                  (id) => id !== raf2
-                );
+                pendingActivateRafsRef.current =
+                  pendingActivateRafsRef.current.filter((id) => id !== raf2);
               });
               pendingActivateRafsRef.current.push(raf2);
             });
@@ -407,7 +371,10 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
         // 保险丝：transitionend 万一丢失，按真实 computed 时长 ×3 兜底摘除
         if (tabEl) {
           const ms = readTransitionMs(tabEl, 'flex-basis') || DURATION_FAST_MS;
-          const fuse = window.setTimeout(() => finalizeClose(tab.tabId), ms * 3);
+          const fuse = window.setTimeout(
+            () => finalizeClose(tab.tabId),
+            ms * 3
+          );
           fuseTimersRef.current.set(tab.tabId, fuse);
         }
       },
@@ -492,7 +459,9 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
                   isLeaving={closingTabIds.has(tab.tabId)}
                   onSelect={handleTabClick}
                   onClose={handleTabClose}
-                  onDragStart={(e, t) => startSessionDrag(leaf.id, t.tabId, title, e)}
+                  onDragStart={(e, t) =>
+                    startSessionDrag(leaf.id, t.tabId, title, e)
+                  }
                   onLeaveTransitionEnd={handleLeaveTransitionEnd}
                 />
               );

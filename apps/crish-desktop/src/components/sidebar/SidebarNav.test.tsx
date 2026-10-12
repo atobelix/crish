@@ -69,4 +69,20 @@ describe('SidebarNav 顶钮', () => {
     expect(sidebarCss).not.toMatch(/\.sidebarTop:hover/);
     expect(navCss).toMatch(/border-radius:\s*var\(--radius-lg\)/);
   });
+
+  it('navItem :active 提供触控按压反馈并声明精准过渡', () => {
+    const navCss = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'SidebarNav.module.css'),
+      'utf8'
+    );
+    expect(navCss).toMatch(
+      /transition:\s*[\s\S]*background\s+80ms\s+ease-out[\s\S]*color\s+80ms\s+ease-out[\s\S]*transform\s+60ms\s+ease-out/
+    );
+    expect(navCss).toMatch(
+      /\.navItem:active\s*\{[\s\S]*transform:\s*scale\(0\.985\);[\s\S]*background:\s*var\(--sidebar-active\);[\s\S]*color:\s*var\(--text-primary\);/
+    );
+    expect(navCss).toMatch(
+      /\.navItem\[role=['"]search['"]\]:active[\s\S]*transform:\s*none;/
+    );
+  });
 });

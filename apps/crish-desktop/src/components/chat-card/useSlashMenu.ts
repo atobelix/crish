@@ -106,19 +106,20 @@ export function useSlashMenu({
 
   const filteredCommands = allSlashCommands.filter((c) => {
     const q = chatInput.toLowerCase();
-    if (!q || q === '/') return true;
+    if (!q || q === '/' || q === '、') return true;
+    const qNorm = q.startsWith('、') ? `/${q.slice(1)}` : q;
     const cmdLower = c.cmd.toLowerCase();
-    if (cmdLower.startsWith(q)) return true;
+    if (cmdLower.startsWith(qNorm) || cmdLower.startsWith(q)) return true;
     const bareCmd = cmdLower.replace(/^\/skill:/, '/');
-    if (bareCmd.startsWith(q)) return true;
+    if (bareCmd.startsWith(qNorm) || bareCmd.startsWith(q)) return true;
     const skillName =
       'skillName' in c && typeof c.skillName === 'string' ? c.skillName : '';
     if (skillName) {
       const nameLower = skillName.toLowerCase();
-      const qWithoutSlash = q.replace(/^\//, '');
+      const qWithoutPrefix = q.replace(/^[、/]/, '');
       if (
-        nameLower.startsWith(qWithoutSlash) ||
-        nameLower.includes(qWithoutSlash)
+        nameLower.startsWith(qWithoutPrefix) ||
+        nameLower.includes(qWithoutPrefix)
       ) {
         return true;
       }

@@ -28,14 +28,19 @@ export const LiveTasksSection: React.FC<LiveTasksSectionProps> = ({
 }) => {
   // D2（C-10）：连接态投影（errorStore 真源），不再由 RuntimePanel props 下传
   const connectionStatus = useConnectionStatus();
+  const titleId = React.useId();
   return (
-    <section className={styles.section} aria-labelledby="rt-sec-live">
+    <section className={styles.section} aria-labelledby={titleId}>
       <div className={styles.sectionHead}>
-        <h4 id="rt-sec-live" className={styles.sectionTitle}>
+        <h4 id={titleId} className={styles.sectionTitle}>
           活动任务
         </h4>
         {countLabel ? (
-          <span className={styles.rowMeta} aria-live="polite" aria-label={`${countLabel} 个进行中`}>
+          <span
+            className={styles.rowMeta}
+            aria-live="polite"
+            aria-label={`${countLabel} 个进行中`}
+          >
             {countLabel}
           </span>
         ) : null}
@@ -76,14 +81,22 @@ export const LiveTasksSection: React.FC<LiveTasksSectionProps> = ({
                 }}
               >
                 <div className={styles.rowMain}>
-                  <div className={`loading-spinner ${styles.spinner}`} aria-hidden />
+                  <div
+                    className={`loading-spinner ${styles.spinner}`}
+                    aria-hidden
+                  />
                   <div className={styles.rowText}>
                     <span className={styles.rowTitle}>{wk.taskName}</span>
                     <span className={styles.rowMeta}>已运行 {elapsedText}</span>
                   </div>
                 </div>
                 {clickable ? (
-                  <AppIcon name="chevron-right" size={16} className={styles.rowChevron} aria-hidden />
+                  <AppIcon
+                    name="chevron-right"
+                    size={16}
+                    className={styles.rowChevron}
+                    aria-hidden
+                  />
                 ) : null}
               </div>
             );

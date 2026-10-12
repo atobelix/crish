@@ -16,10 +16,7 @@ import {
   openBackgroundTaskInTerminal,
   type BackgroundTaskInfo,
 } from '../../api/backgroundTasksApi';
-import {
-  emptyBgTasksHint,
-  formatBgTaskMeta,
-} from './runtimePanelLib';
+import { emptyBgTasksHint, formatBgTaskMeta } from './runtimePanelLib';
 import { useConnectionStatus } from '../../hooks/useConnectionStatus';
 import { SUSPICIOUS_TASK_TEXT } from '../bg-tasks/bgTaskCardLib';
 import { AppIcon } from '../ui/icons/index';
@@ -32,7 +29,7 @@ export type BgTasksSectionProps = {
 export const BgTasksSection: React.FC<BgTasksSectionProps> = ({
   bgTasks,
   countLabel,
-  }) => {
+}) => {
   const { showToast } = useToast();
   // D2（C-10）：连接态投影（errorStore 真源），不再由 RuntimePanel props 下传
   const connectionStatus = useConnectionStatus();
@@ -46,13 +43,16 @@ export const BgTasksSection: React.FC<BgTasksSectionProps> = ({
       // 打开终端是可预期操作：不 toast；面板切换即反馈
       openBackgroundTaskInTerminal(
         t.label,
-        out || t.summary || t.command || BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER,
+        out ||
+          t.summary ||
+          t.command ||
+          BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER
       );
     } catch {
       // 仅错误提示；仍尽量打开终端展示回退内容
       openBackgroundTaskInTerminal(
         t.label,
-        t.summary || t.command || '读取失败',
+        t.summary || t.command || '读取失败'
       );
       showToast('读取后台任务输出失败');
     } finally {
@@ -60,14 +60,20 @@ export const BgTasksSection: React.FC<BgTasksSectionProps> = ({
     }
   };
 
+  const titleId = React.useId();
+
   return (
-    <section className={styles.section} aria-labelledby="rt-sec-bg">
+    <section className={styles.section} aria-labelledby={titleId}>
       <div className={styles.sectionHead}>
-        <h4 id="rt-sec-bg" className={styles.sectionTitle}>
+        <h4 id={titleId} className={styles.sectionTitle}>
           后台常驻
         </h4>
         {countLabel ? (
-          <span className={styles.rowMeta} aria-live="polite" aria-label={`${countLabel} 个后台任务`}>
+          <span
+            className={styles.rowMeta}
+            aria-live="polite"
+            aria-label={`${countLabel} 个后台任务`}
+          >
             {countLabel}
           </span>
         ) : null}
@@ -112,19 +118,33 @@ export const BgTasksSection: React.FC<BgTasksSectionProps> = ({
                   }}
                 >
                   <div className={styles.rowMain}>
-                    <AppIcon name="terminal" size={16} className={styles.rowIco} aria-hidden />
+                    <AppIcon
+                      name="terminal"
+                      size={16}
+                      className={styles.rowIco}
+                      aria-hidden
+                    />
                     <div className={styles.rowText}>
                       <span className={styles.rowTitle}>{t.label}</span>
                       <span className={styles.rowMeta}>{meta}</span>
                       {suspicious ? (
                         <span className={styles.rowMeta}>
-                          <AppIcon name="alert-triangle" size={12} aria-hidden />
+                          <AppIcon
+                            name="alert-triangle"
+                            size={12}
+                            aria-hidden
+                          />
                           {SUSPICIOUS_TASK_TEXT}
                         </span>
                       ) : null}
                     </div>
                   </div>
-                  <AppIcon name="chevron-right" size={16} className={styles.rowChevron} aria-hidden />
+                  <AppIcon
+                    name="chevron-right"
+                    size={16}
+                    className={styles.rowChevron}
+                    aria-hidden
+                  />
                 </div>
               </Tooltip>
             );

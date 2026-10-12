@@ -328,7 +328,9 @@
   cursor: pointer;
   flex-shrink: 0;
   padding: 0;
-  transition: background var(--transition-micro, 120ms) ease, color var(--transition-micro, 120ms) ease;
+  transition:
+    background var(--transition-snappy),
+    color var(--transition-snappy);
 }
 
 .filesBcDirectOpenBtn:hover,
@@ -623,7 +625,9 @@
   left: 3px;
   width: 1px;
   background: var(--hairline, var(--border-subtle));
-  transition: background-color var(--transition-fast, 0.15s) ease, box-shadow var(--transition-fast, 0.15s) ease;
+  transition:
+    background-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .filesSplitResizer:hover::after,
@@ -981,11 +985,13 @@
 @keyframes fileRowPulse {
   0% {
     background: color-mix(in srgb, var(--accent-color) 24%, transparent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-color) 40%, transparent);
+    box-shadow: inset 0 0 0 1px
+      color-mix(in srgb, var(--accent-color) 40%, transparent);
   }
   50% {
     background: color-mix(in srgb, var(--accent-color) 12%, transparent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-color) 20%, transparent);
+    box-shadow: inset 0 0 0 1px
+      color-mix(in srgb, var(--accent-color) 20%, transparent);
   }
   100% {
     background: transparent;

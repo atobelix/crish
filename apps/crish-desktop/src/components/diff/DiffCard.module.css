@@ -36,7 +36,8 @@
   max-height: 32px;
   padding: 0 8px;
   background: var(--bg-card);
-  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 15%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--border-subtle) 15%, transparent);
   box-sizing: border-box;
   user-select: none;
   flex-shrink: 0;
@@ -117,10 +118,23 @@
   display: flex;
   align-items: center;
   padding: 4px 8px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 15%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--border-subtle) 15%, transparent);
   flex-shrink: 0;
   min-width: 0;
   background: var(--bg-card);
+  animation: searchRowSlideDown 140ms var(--ease-emphasized);
+}
+
+@keyframes searchRowSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* 形态 ④：Diff 搜索筛选框（纯光标极简型）
@@ -242,7 +256,8 @@
   width: 100%;
   box-sizing: border-box;
   border: none;
-  box-shadow: inset 0 -1px 0 0 color-mix(in srgb, var(--border-subtle) 15%, transparent);
+  box-shadow: inset 0 -1px 0 0
+    color-mix(in srgb, var(--border-subtle) 15%, transparent);
   background-color: transparent;
   user-select: none;
   outline: none;
@@ -262,7 +277,8 @@
 
 .fileRow.isActive {
   background-color: transparent;
-  box-shadow: inset 0 -1px 0 0 color-mix(in srgb, var(--border-subtle) 15%, transparent);
+  box-shadow: inset 0 -1px 0 0
+    color-mix(in srgb, var(--border-subtle) 15%, transparent);
 }
 
 .fileRow.isActive:hover {
@@ -299,7 +315,7 @@
   margin: 0;
   opacity: 1;
   pointer-events: none;
-  transition: opacity var(--transition-micro, 80ms) ease;
+  transition: opacity var(--transition-micro);
 }
 
 .fileNodeToggle .chevronIcon {
@@ -309,9 +325,9 @@
   opacity: 0;
   pointer-events: none;
   transition:
-    opacity var(--transition-micro, 80ms) ease,
-    transform var(--transition-fast, 120ms) cubic-bezier(0.2, 0, 1),
-    color var(--transition-fast, 120ms);
+    opacity var(--transition-micro),
+    transform var(--duration-snappy) var(--ease-emphasized),
+    color var(--transition-fast);
 }
 
 /* hover 状态或键盘焦点态：字母隐去，展开折叠 Chevron 显现 */
@@ -354,8 +370,8 @@
   height: 14px;
   color: var(--text-tertiary);
   transition:
-    transform var(--transition-fast, 120ms) cubic-bezier(0.2, 0, 1),
-    color var(--transition-fast, 120ms);
+    transform var(--duration-snappy) var(--ease-emphasized),
+    color var(--transition-fast);
 }
 
 .chevronBtn:hover .chevronIcon,
@@ -445,9 +461,10 @@
   transition: color var(--transition-fast, 120ms);
 }
 
-.fileNameLinkBtn:hover .fileName {
-  color: var(--md-link-color, var(--brand-primary));
-  text-decoration: underline;
+.fileNameLinkBtn:hover .fileName,
+.fileNameLinkBtn:focus-visible .fileName {
+  color: var(--link-color);
+  text-decoration: underline dashed;
   text-underline-offset: 3px;
 }
 
@@ -504,7 +521,7 @@
   flex-shrink: 0;
   opacity: 1;
   user-select: none;
-  transition: opacity var(--transition-micro, 80ms) ease-out;
+  transition: opacity var(--transition-micro);
 }
 
 /* 增减行数：固定语义纯色（旧 text-secondary 灰，2026-09-10 7693fe5dd 引入；heson 2026-10-11 改回语义色） */
@@ -536,8 +553,8 @@
   pointer-events: none;
   z-index: 1;
   transition:
-    opacity var(--transition-micro, 80ms) ease-out,
-    visibility var(--transition-micro, 80ms) ease-out;
+    opacity var(--transition-micro),
+    visibility var(--transition-micro);
 }
 
 .fileRow:hover .rowActions,
@@ -616,6 +633,18 @@
   background: var(--bg-card);
   box-sizing: border-box;
   overflow: hidden;
+  animation: diffPaneSlideIn 150ms var(--ease-emphasized);
+}
+
+@keyframes diffPaneSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .diffPane :global(.scrollParent),
@@ -687,7 +716,7 @@
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  transition: max-height var(--transition-normal, 180ms) cubic-bezier(0.2, 0, 0, 1);
+  transition: max-height var(--transition-normal);
   overflow-anchor: none;
 }
 
@@ -722,7 +751,9 @@
 /* Unified 统一视图网格 */
 .line {
   display: grid;
-  grid-template-columns: var(--diff-gutter-width-unified) var(--diff-gutter-width-unified) var(--diff-gutter-marker-width) minmax(0, 1fr);
+  grid-template-columns:
+    var(--diff-gutter-width-unified) var(--diff-gutter-width-unified)
+    var(--diff-gutter-marker-width) minmax(0, 1fr);
   width: 100%;
   align-items: stretch;
   box-sizing: border-box;
@@ -742,7 +773,8 @@
   font-size: var(--font-size-xxs);
   user-select: none;
   text-align: right;
-  border-right: 1px solid color-mix(in srgb, var(--border-subtle) 18%, transparent);
+  border-right: 1px solid
+    color-mix(in srgb, var(--border-subtle) 18%, transparent);
   background: var(--diff-gutter-bg, var(--bg-card));
 }
 
@@ -850,7 +882,9 @@
 
 .splitColumn {
   display: grid;
-  grid-template-columns: var(--diff-gutter-width-split) var(--diff-gutter-marker-width) minmax(0, 1fr);
+  grid-template-columns:
+    var(--diff-gutter-width-split) var(--diff-gutter-marker-width)
+    minmax(0, 1fr);
   align-items: stretch;
   font-size: var(--font-size-xs, 12px);
   font-family: var(--font-mono);
@@ -862,7 +896,8 @@
 }
 
 .splitColumn:first-child {
-  border-right: 1px solid color-mix(in srgb, var(--border-subtle) 18%, transparent);
+  border-right: 1px solid
+    color-mix(in srgb, var(--border-subtle) 18%, transparent);
 }
 
 .diffLineEmpty {
@@ -910,7 +945,8 @@
   min-height: 32px;
   max-height: 32px;
   padding: 0 12px;
-  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 18%, transparent);
+  border-top: 1px solid
+    color-mix(in srgb, var(--border-subtle) 18%, transparent);
   border-left: none;
   border-right: none;
   border-bottom: none;
@@ -961,7 +997,8 @@
   flex-direction: column;
   gap: var(--space-2, 8px);
   padding: 10px 12px;
-  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 18%, transparent);
+  border-top: 1px solid
+    color-mix(in srgb, var(--border-subtle) 18%, transparent);
   background: var(--bg-card);
   flex-shrink: 0;
   box-sizing: border-box;
@@ -1025,7 +1062,11 @@
 .commitInput:focus-visible,
 .commitInput:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 90%,
+    var(--text-primary) 10%
+  );
   box-shadow: none;
 }
 
@@ -1076,7 +1117,8 @@
   padding: 0 12px;
   box-sizing: border-box;
   background: var(--bg-card);
-  box-shadow: inset 0 -1px 0 0 color-mix(in srgb, var(--border-subtle) 18%, transparent);
+  box-shadow: inset 0 -1px 0 0
+    color-mix(in srgb, var(--border-subtle) 18%, transparent);
   position: sticky;
   top: 0;
   z-index: 2;

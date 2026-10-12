@@ -143,9 +143,9 @@
   border-color: transparent;
   box-shadow: none;
   transition:
-    background-color var(--transition-fast) ease,
-    border-color var(--transition-fast) ease,
-    width var(--transition-fast) ease;
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    width var(--transition-fast);
 }
 
 /* 鼠标悬停但未聚焦时，给出极柔和底色，不突兀 */
@@ -164,7 +164,11 @@
 .searchBar[data-has-value='true'] {
   width: 275px;
   background: var(--bg-card);
-  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 92%,
+    var(--text-primary) 8%
+  );
   box-shadow: none;
 }
 

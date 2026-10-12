@@ -11,7 +11,7 @@
  * 3. sash / sessionTabIndicator / 面板 resize
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   useLayoutTreeStore,
   flattenTree,
@@ -70,8 +70,12 @@ function tabsIdentityEqual(a: unknown, b: unknown): boolean {
     return false;
   }
   for (let i = 0; i < a.length; i++) {
-    const x = a[i] as { tabId?: string; dock?: unknown } | string;
-    const y = b[i] as { tabId?: string; dock?: unknown } | string;
+    const x = a[i] as
+      | { tabId?: string; sessionId?: string; title?: string; dock?: unknown }
+      | string;
+    const y = b[i] as
+      | { tabId?: string; sessionId?: string; title?: string; dock?: unknown }
+      | string;
     if (x === y) continue;
     if (
       typeof x === 'object' &&
@@ -79,6 +83,8 @@ function tabsIdentityEqual(a: unknown, b: unknown): boolean {
       x &&
       y &&
       x.tabId === y.tabId &&
+      x.sessionId === y.sessionId &&
+      x.title === y.title &&
       dockIdentityEqual(x.dock, y.dock)
     ) {
       continue;
@@ -233,9 +239,7 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
             ref={canvasRef}
             className={`${styles.canvas} ${styles.treeBody}`}
             data-tree-canvas="true"
-            data-structure-animating={
-              structureAnimating ? 'true' : undefined
-            }
+            data-structure-animating={structureAnimating ? 'true' : undefined}
             role="group"
             aria-label="二叉树布局画布"
           >

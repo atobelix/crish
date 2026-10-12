@@ -7,6 +7,7 @@ import { emitUiEvent } from '../../api/uiEvents';
 import type { FilterType } from './sidebarHelpers';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { currentWorkspaceFolderKey } from '../../api/workspaceChromeTabs';
+import { treeUpdateTabTitle } from '../../store/workspace-shell/treeSessionCommands';
 
 export interface UseSidebarHandlersOptions {
   filterType: FilterType;
@@ -81,6 +82,7 @@ export function useSidebarHandlers({
       setRenamingSessionId(null);
       if (!title) return;
       renameSession(sessionId, title);
+      treeUpdateTabTitle(sessionId, title);
     },
     [renameSession, setRenamingSessionId]
   );

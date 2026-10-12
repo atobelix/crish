@@ -52,13 +52,18 @@ export type PreviewToolbarProps = {
   navigation: PreviewToolbarNavigationProps;
   /** 工具栏动作域 */
   actions: PreviewToolbarActionsProps;
+  /** 历史面板 DOM ID（缺省自动通过 useId 生成） */
+  historyPanelId?: string;
 };
 
 export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
   preview,
   navigation,
   actions,
+  historyPanelId,
 }) => {
+  const autoHistId = React.useId();
+  const histPanelId = historyPanelId || autoHistId;
   const {
     canBack,
     canForward,
@@ -79,9 +84,10 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
     onReload,
     onUrlSubmit,
     onUrlChange,
-    onClearUrl,
+    onClearUrl: _onClearUrl,
   } = navigation;
-  const { onBookmark, onToggleHist, onOpenExternal, onToggleInspector } = actions;
+  const { onBookmark, onToggleHist, onOpenExternal, onToggleInspector } =
+    actions;
   const iconSz = 14;
   return (
     <div
@@ -130,8 +136,7 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
         tooltip="刷新"
         icon={
           loading ? (
-            <AppIcon name="loader" size={iconSz}
-              className={styles.spin} />
+            <AppIcon name="loader" size={iconSz} className={styles.spin} />
           ) : (
             <AppIcon name="rotate-cw" size={iconSz} />
           )
@@ -153,9 +158,7 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
           value={urlInput}
           placeholder="请输入网址"
           onChange={(e) => onUrlChange(e.target.value)}
-          prefixIcon={
-            <AppIcon name="globe" size={13} aria-hidden />
-          }
+          prefixIcon={<AppIcon name="globe" size={13} aria-hidden />}
           spellCheck={false}
           aria-label="预览地址"
           autoComplete="off"
@@ -177,13 +180,9 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
         aria-label="拾取页面元素"
         aria-pressed={isInspectorActive}
         tooltip={
-          isInspectorActive
-            ? '退出元素拾取 (Esc)'
-            : '拾取页面元素 (Inspect)'
+          isInspectorActive ? '退出元素拾取 (Esc)' : '拾取页面元素 (Inspect)'
         }
-        icon={
-          <AppIcon name="mouse-pointer-click" size={iconSz} />
-        }
+        icon={<AppIcon name="mouse-pointer-click" size={iconSz} />}
       />
       <IconButton
         type="button"
@@ -202,8 +201,11 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
               : '加入书签'
         }
         icon={
-          <AppIcon name="star" size={iconSz}
-            fill={bookmarked ? 'currentColor' : 'none'} />
+          <AppIcon
+            name="star"
+            size={iconSz}
+            fill={bookmarked ? 'currentColor' : 'none'}
+          />
         }
       />
       <IconButton
@@ -215,12 +217,10 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
         onClick={onToggleHist}
         aria-label="历史与书签"
         aria-expanded={showHist}
-        aria-controls="preview-hist-panel"
+        aria-controls={histPanelId}
         aria-haspopup="dialog"
         tooltip="历史与书签"
-        icon={
-          <AppIcon name="history" size={iconSz} />
-        }
+        icon={<AppIcon name="history" size={iconSz} />}
       />
       <IconButton
         type="button"

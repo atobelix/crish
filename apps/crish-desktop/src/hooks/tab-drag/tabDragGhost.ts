@@ -21,15 +21,10 @@ function findDropTargetCardEl(
       }
     }
   }
-  const tabs = Array.from(
-    document.querySelectorAll('.card-tab[data-card-id]')
-  );
+  const tabs = Array.from(document.querySelectorAll('.card-tab[data-card-id]'));
   for (let i = 0; i < tabs.length; i++) {
     const t = tabs[i];
-    if (
-      t instanceof HTMLElement &&
-      t.getAttribute('data-card-id') === cardId
-    ) {
+    if (t instanceof HTMLElement && t.getAttribute('data-card-id') === cardId) {
       const card = t.closest('.workspace-card');
       return card instanceof HTMLElement ? card : null;
     }
@@ -67,7 +62,9 @@ function baseOverlayFixedStyle(width: number, height: number): string {
   `;
 }
 
-export function createTabDragOverlay(targetEl: HTMLElement): HTMLDivElement | null {
+export function createTabDragOverlay(
+  targetEl: HTMLElement
+): HTMLDivElement | null {
   const cloned = targetEl.cloneNode(true);
   if (!(cloned instanceof HTMLDivElement)) return null;
 
@@ -222,7 +219,10 @@ export function showTabInsertLine(
   const ref = insertIdx < tabs.length ? tabs[insertIdx] : null;
   if (ref) {
     // 已在正确位置则不动 DOM
-    if (placeholder.nextSibling !== ref || placeholder.parentElement !== tabsBar) {
+    if (
+      placeholder.nextSibling !== ref ||
+      placeholder.parentElement !== tabsBar
+    ) {
       tabsBar.insertBefore(placeholder, ref);
     }
   } else if (
@@ -261,7 +261,7 @@ export function animateOverlayAway(
         ? `translate3d(${m[1]}) scale(0.5)`
         : 'scale(0.5)';
       overlay.style.opacity = '0';
-      window.setTimeout(() => overlay.remove(), 200);
+      window.setTimeout(() => overlay.remove(), 280);
     }
   });
 }

@@ -43,4 +43,8 @@ export interface SidebarSessionListProps {
   /** 提交重命名；空串取消 */
   onCommitRename?: (sessionId: string, title: string) => void;
   onCancelRename?: () => void;
+  /** 删除会话快捷键回调 */
+  onDeleteSession?: (sessionId: string) => void;
+  /** 分叉会话快捷键回调 */
+  onBranchSession?: (sessionId: string) => void;
 }

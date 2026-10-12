@@ -23,6 +23,48 @@ export interface SidebarHeaderProps {
   onSearchChange?: ((val: string) => void) | undefined;
 }
 
+const BRAND_MARK_LINES = [
+  'M 100 116 L 30 116',
+  'M 100 116 L 170 116',
+  'M 100 116 L 60 44',
+  'M 100 116 L 140 44',
+  'M 100 116 L 82 164',
+  'M 100 116 L 118 164',
+];
+
+/**
+ * 侧栏切换按钮图标：常态显示正方形 1:1 软件品牌图标，hover/focus 时过渡显示侧栏操作图标。
+ */
+export const SidebarToggleIcon: React.FC = React.memo(() => (
+  <span className={styles.toggleIconMorph} aria-hidden="true">
+    <svg
+      className={styles.toggleBrandIcon}
+      viewBox="12 9.5 176 176"
+      focusable="false"
+      data-testid="toggle-brand-icon"
+    >
+      <ellipse
+        className={styles.brandMarkDot}
+        cx="100"
+        cy="34"
+        rx="16"
+        ry="16"
+      />
+      <g className={styles.brandMarkLines}>
+        {BRAND_MARK_LINES.map((d) => (
+          <path key={d} d={d} />
+        ))}
+      </g>
+    </svg>
+    <AppIcon
+      name="sidebar-left"
+      size={18}
+      className={styles.toggleActionIcon}
+    />
+  </span>
+));
+SidebarToggleIcon.displayName = 'SidebarToggleIcon';
+
 /**
  * 侧栏开关：挂在主布局上，不进宽度为 0 的侧栏盒，因此收起时也不被裁掉。
  */
@@ -52,7 +94,7 @@ export const SidebarToggle: React.FC<{
         data-testid="sidebar-toggle"
         className="sidebar-toggle-btn"
         onClick={onToggle}
-        icon={<AppIcon name="sidebar-left" size={16} aria-hidden />}
+        icon={<SidebarToggleIcon />}
       />
     </div>
   );
@@ -106,7 +148,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
                 className="sidebar-toggle-btn"
                 data-tauri-drag-region="false"
                 onClick={onToggle}
-                icon={<AppIcon name="sidebar-left" size={16} aria-hidden />}
+                icon={<SidebarToggleIcon />}
               />
             )}
           </div>
@@ -115,7 +157,13 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
             data-testid="sidebar-header-extra"
             data-tauri-drag-region
           >
-            {/* 用户预留扩展区：可在右侧添加其他按钮与信息 */}
+            <span
+              className={styles.brandName}
+              data-testid="sidebar-brand-title"
+              data-tauri-drag-region
+            >
+              Crish
+            </span>
           </div>
         </header>
 

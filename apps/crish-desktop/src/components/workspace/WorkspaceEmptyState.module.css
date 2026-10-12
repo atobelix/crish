@@ -19,7 +19,7 @@
   background: transparent;
   box-shadow: none;
   outline: none;
-  animation: cds-fade-in var(--transition-smooth) forwards;
+  animation: crish-fade-in var(--transition-smooth) forwards;
 }
 
 /* D1     shell .emptyState*    */
@@ -51,7 +51,7 @@
 
 .workspaceEmptyState[data-empty='true'] .emptyStateIconWrapper {
   color: var(--text-faint);
-margin-bottom: var(--space-1);
+  margin-bottom: var(--space-1);
   box-shadow: none;
   transition: opacity var(--transition-smooth);
 }
@@ -117,6 +117,6 @@ margin-bottom: var(--space-1);
 }
 
 .workspaceEmptyStateExit {
-  animation: cds-fade-out var(--transition-smooth) forwards;
+  animation: crish-fade-out var(--transition-smooth) forwards;
   box-shadow: none;
 }

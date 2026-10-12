@@ -32,7 +32,7 @@ function isSessionMoreTarget(el: EventTarget | null): boolean {
     el instanceof Element &&
     Boolean(
       el.closest('[data-testid="session-more-button"]') ||
-        el.closest(`.${styles.sessionActionsBtn}`)
+      el.closest(`.${styles.sessionActionsBtn}`)
     )
   );
 }
@@ -93,7 +93,11 @@ function syntheticContextMenuEvent(
   const clientX =
     isMoreButton && rect != null
       ? rect.right + 6
-      : !anchor && base && 'clientX' in base && typeof (base as React.MouseEvent).clientX === 'number' && (base as React.MouseEvent).clientX > 0
+      : !anchor &&
+          base &&
+          'clientX' in base &&
+          typeof (base as React.MouseEvent).clientX === 'number' &&
+          (base as React.MouseEvent).clientX > 0
         ? (base as React.MouseEvent).clientX
         : rect != null
           ? isTargetButton
@@ -103,7 +107,11 @@ function syntheticContextMenuEvent(
   const clientY =
     isMoreButton && rect != null
       ? rect.top
-      : !anchor && base && 'clientY' in base && typeof (base as React.MouseEvent).clientY === 'number' && (base as React.MouseEvent).clientY > 0
+      : !anchor &&
+          base &&
+          'clientY' in base &&
+          typeof (base as React.MouseEvent).clientY === 'number' &&
+          (base as React.MouseEvent).clientY > 0
         ? (base as React.MouseEvent).clientY
         : rect != null
           ? isTargetButton
@@ -167,6 +175,10 @@ export interface SessionRowActionsProps {
   /** 键盘重排（Alt+↑/↓） */
   onReorderKeyboard?:
     ((sessionId: string, direction: -1 | 1) => void) | undefined;
+  /** 删除会话（Delete 键） */
+  onDeleteSession?: ((sessionId: string) => void) | undefined;
+  /** 分叉会话（Ctrl+Shift+F 键） */
+  onBranchSession?: ((sessionId: string) => void) | undefined;
 }
 
 export type SessionRowProps = {
@@ -207,6 +219,8 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
     onStartSessionDrag,
     onNavigateSession,
     onReorderKeyboard,
+    onDeleteSession,
+    onBranchSession,
   } = props.actions;
   const _rowHeight = props.rowHeight;
   void _rowHeight;
@@ -251,7 +265,6 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
   const ariaLabel = isRunning
     ? `${sessionTitleForA11y}，处理中`
     : sessionTitleForA11y;
-  const tipContent = sessionTitleWithBranch;
 
   const fixedH = SIDEBAR_SESSION_ROW_HEIGHT;
 
@@ -328,6 +341,21 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
           if (e.key === 'Home' || e.key === 'End') {
             e.preventDefault();
             onNavigateSession?.(s.id, e.key === 'Home' ? -Infinity : Infinity);
+            return;
+          }
+          if (e.key === 'Delete') {
+            e.preventDefault();
+            onDeleteSession?.(s.id);
+            return;
+          }
+          if (
+            (e.ctrlKey || e.metaKey) &&
+            e.shiftKey &&
+            (e.key.toLowerCase() === 'f' || e.key.toLowerCase() === 'd')
+          ) {
+            e.preventDefault();
+            onBranchSession?.(s.id);
+            return;
           }
         }}
       >
@@ -409,8 +437,7 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
                         e.stopPropagation();
                       }}
                       icon={
-                        <AppIcon name="more-horizontal" size={16}
-                          aria-hidden />
+                        <AppIcon name="more-horizontal" size={16} aria-hidden />
                       }
                     />
                   </Tooltip>

@@ -52,16 +52,18 @@ export function PinnedSection({
             aria-controls="sb-pinned-zone"
           >
             <span>置顶</span>
-            <AppIcon name="chevron-down" size={16}
+            <AppIcon
+              name="chevron-down"
+              size={16}
               className={pinnedCollapsed ? styles.chevCollapsed : ''}
-              aria-hidden />
+              aria-hidden
+            />
           </Button>
         </div>
       </div>
       <div
         className={styles.accordionWrapper}
         data-expanded={!pinnedCollapsed ? 'true' : 'false'}
-        hidden={pinnedCollapsed || undefined}
       >
         <div className={styles.accordionInner}>
           <div

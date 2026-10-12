@@ -50,12 +50,14 @@ interface FilePreviewActionsProps {
 
 /** Props 分组：file（标识/能力）+ preview（内容/加载/编辑态）+ actions（回调）。 */
 interface FilePreviewProps {
+  targetSessionId?: string | null;
   file: FilePreviewFileProps;
   preview: FilePreviewPreviewProps;
   actions: FilePreviewActionsProps;
 }
 
 export const FilePreview = React.memo(function FilePreview({
+  targetSessionId,
   file,
   preview: previewState,
   actions,
@@ -83,7 +85,6 @@ export const FilePreview = React.memo(function FilePreview({
 
   const displayContent =
     isFormatted && formattedContent ? formattedContent : content;
-
 
   const onPreviewScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
@@ -247,7 +248,9 @@ export const FilePreview = React.memo(function FilePreview({
                     disabled={loadingMore}
                     onClick={onLoadMore}
                   >
-                    {loadingMore ? '加载中…' : `继续加载（已 ${lineBudget} 行）`}
+                    {loadingMore
+                      ? '加载中…'
+                      : `继续加载（已 ${lineBudget} 行）`}
                   </Button>
                 </div>
               ) : truncated ? (
@@ -279,6 +282,7 @@ export const FilePreview = React.memo(function FilePreview({
           <FileAnnotationPopover
             filePath={selected}
             containerRef={previewPaneRef}
+            targetSessionId={targetSessionId}
             disabled={editing}
           />
         ) : null}

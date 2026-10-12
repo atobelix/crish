@@ -7,9 +7,13 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import styles from './TerminalCard.module.css';
 import {
-  useSessionStore,
+  openNewTerminalInLeaf,
   openNewTerminalInActiveTab,
-} from '../../store/storeAccess';
+} from '../../store/workspace-shell/openTool';
+import {
+  useLeafScope,
+  useScopedSessionId,
+} from '../../contexts/LeafScopeContext';
 import { getWorkspacePath } from '../../api/projectStore';
 import {
   InteractiveXtermTerminal,
@@ -23,15 +27,18 @@ export type TerminalCardProps = {
   sessionId?: string | null;
   /** 面板 ID（多终端标签支持，如 'terminal', 'terminal:2' 等） */
   panelId?: string | null;
+  leafId?: string | null;
 };
 
 export const TerminalCard: React.FC<TerminalCardProps> = ({
   sessionId: sessionIdProp,
   panelId: panelIdProp,
+  leafId: leafIdProp,
 }) => {
-  const activeSessionId = useSessionStore((s) => s.activeSessionId);
-  const boundSessionId =
-    (sessionIdProp || '').trim() || (activeSessionId || '').trim() || null;
+  const scope = useLeafScope();
+  const scopedSessionId = useScopedSessionId(sessionIdProp);
+  const effectiveLeafId = leafIdProp ?? scope.leafId;
+  const boundSessionId = (scopedSessionId || '').trim() || null;
   const baseKey = boundSessionId || '_global';
   const sessionKey =
     panelIdProp && panelIdProp !== 'terminal'
@@ -42,7 +49,8 @@ export const TerminalCard: React.FC<TerminalCardProps> = ({
   const [ptyStatus, setPtyStatus] = useState<InteractiveXtermStatus>('idle');
   const [ptyError, setPtyError] = useState('');
   // 分屏副格（pane 2）独立状态：失败可见，不与主格互相覆盖（T5）
-  const [pane2Status, setPane2Status] = useState<InteractiveXtermStatus>('idle');
+  const [pane2Status, setPane2Status] =
+    useState<InteractiveXtermStatus>('idle');
   const [pane2Error, setPane2Error] = useState('');
   const [restartToken] = useState(0);
 
@@ -116,8 +124,12 @@ export const TerminalCard: React.FC<TerminalCardProps> = ({
 
   // 工具栏动作
   const handleNewTerminal = useCallback(() => {
-    openNewTerminalInActiveTab();
-  }, []);
+    if (effectiveLeafId) {
+      openNewTerminalInLeaf(effectiveLeafId);
+    } else {
+      openNewTerminalInActiveTab();
+    }
+  }, [effectiveLeafId]);
 
   const handleSplitHorizontal = useCallback(() => {
     setSplitMode((prev) => (prev === 'horizontal' ? 'none' : 'horizontal'));

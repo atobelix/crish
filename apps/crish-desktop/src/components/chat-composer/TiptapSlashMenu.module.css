@@ -6,6 +6,10 @@
  */
 
 .popoverContent {
+  --slash-pad: 6px;
+  --slash-radius-outer: var(--radius-input);
+  --slash-radius-inner: calc(var(--slash-radius-outer) - var(--slash-pad));
+
   z-index: var(--z-popover);
   width: 100%;
   max-width: calc(100vw - 32px);
@@ -18,8 +22,8 @@
   overflow-y: auto;
   background: var(--bg-elevated);
   border: var(--hairline-width, 1px) solid var(--border-color);
-  border-radius: var(--radius-input);
-  padding: 6px;
+  border-radius: var(--slash-radius-outer);
+  padding: var(--slash-pad);
   outline: none;
   box-shadow: none;
   backdrop-filter: blur(20px);
@@ -108,7 +112,7 @@
   min-height: 32px;
   padding: 4px 10px;
   border: none;
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--slash-radius-inner);
   background: transparent;
   text-align: left;
   cursor: pointer;

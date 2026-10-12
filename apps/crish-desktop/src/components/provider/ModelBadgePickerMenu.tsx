@@ -18,9 +18,7 @@ import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import { openSettings } from '../../api/storeAccess';
 import { Menu, Tooltip, Button, Input } from '../ui';
 import { getActiveProfileId } from '../../api/provider-profiles/profileActiveSelection';
-import { useSessionStore } from '../../store/storeAccess';
 import {
-  getSessionThinkingTitle,
   setSessionThinkingTitle,
   resolveEffectiveThinkingTitle,
   persistThinkingSelection,
@@ -28,8 +26,10 @@ import {
 import { groupLivePickerEntries } from './ModelBadgePickerMenu.data';
 import { recordPendingContextState } from '../../api/provider-profiles/contextStatePending';
 import { AppIcon } from '../ui/icons/index';
+import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 
 export type Props = {
+  sessionId?: string | null;
   activeModel?: string | null;
   onClose: () => void;
   onOpenChange?: (open: boolean) => void;
@@ -40,6 +40,7 @@ export type Props = {
 };
 
 export const ModelBadgePickerMenu: React.FC<Props> = ({
+  sessionId: sessionIdProp,
   activeModel,
   onClose,
   onOpenChange,
@@ -54,7 +55,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const catalogVersion = useModelsCatalogVersion();
-  const sessionId = useSessionStore((s) => s.activeSessionId);
+  const sessionId = useScopedSessionId(sessionIdProp);
 
   const providerId = getActiveProfileId() ?? '';
   const modelId = activeModel || '';
@@ -64,29 +65,31 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
   const entries = useMemo(
     () => listAvailableModelPickerEntries(),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [catalogVersion],
+    [catalogVersion]
   );
 
   const filteredGroups = useMemo(
     () => groupLivePickerEntries(entries, keyword),
-    [entries, keyword],
+    [entries, keyword]
   );
 
   const selectedSpec = useMemo(
-    () => (providerId && modelId ? getLiveModel(providerId, modelId) : undefined),
-    [providerId, modelId, catalogVersion],
+    () =>
+      providerId && modelId ? getLiveModel(providerId, modelId) : undefined,
+    [providerId, modelId, catalogVersion]
   );
 
   const thinkingOptions = useMemo(
-    () => (providerId && modelId ? listThinkingOptions(providerId, modelId) : []),
-    [providerId, modelId, catalogVersion],
+    () =>
+      providerId && modelId ? listThinkingOptions(providerId, modelId) : [],
+    [providerId, modelId, catalogVersion]
   );
 
   // 统一从 SSOT 中枢读取有效思考档位（用户设置优先，跨会话保留）
   const selectedTitle = resolveEffectiveThinkingTitle(
     sessionId,
     providerId,
-    modelId,
+    modelId
   );
   const handoff = useMemo(() => {
     return resolveThinkingHandoffSafe(providerId, modelId, selectedTitle);
@@ -100,7 +103,14 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
     if (!handoff.supported && selectedTitle != null) {
       setSessionThinkingTitle(sessionId, null);
     }
-  }, [sessionId, providerId, modelId, selectedSpec, handoff.supported, selectedTitle]);
+  }, [
+    sessionId,
+    providerId,
+    modelId,
+    selectedSpec,
+    handoff.supported,
+    selectedTitle,
+  ]);
 
   const handleSelectModel = useCallback(
     async (profileId: string, nextModelId: string) => {
@@ -109,19 +119,19 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
       const targetTitle = resolveEffectiveThinkingTitle(
         sessionId,
         profileId,
-        nextModelId,
+        nextModelId
       );
       const nextHandoff = resolveThinkingHandoffSafe(
         profileId,
         nextModelId,
-        targetTitle,
+        targetTitle
       );
       if (nextHandoff.supported && nextHandoff.selectedTitle != null) {
         persistThinkingSelection(
           sessionId,
           profileId,
           nextModelId,
-          nextHandoff.selectedTitle,
+          nextHandoff.selectedTitle
         );
       } else if (!nextHandoff.supported) {
         setSessionThinkingTitle(sessionId, null);
@@ -138,7 +148,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
       onOpenChange?.(false);
       onClose();
     },
-    [onOpenChange, onClose, sessionId],
+    [onOpenChange, onClose, sessionId]
   );
 
   const handleSelectThinking = useCallback(
@@ -148,7 +158,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
       // 仅记录待发送快照，绝不提前向对话流注入卡片（发送按钮触发时才带上）
       recordPendingContextState(sessionId);
     },
-    [sessionId, providerId, modelId],
+    [sessionId, providerId, modelId]
   );
 
   const handleOpenSettings = useCallback(() => {
@@ -159,8 +169,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
 
   // 生效档位：命中当前模型 thinking 声明才显示；未选 / 未命中 → 引导重选（不降级）。
   const currentThinkingDisplay = handoff.selectedTitle ?? '';
-  const thinkingDisplayText =
-    currentThinkingDisplay || '请选择思考档位';
+  const thinkingDisplayText = currentThinkingDisplay || '请选择思考档位';
 
   if (!open) return null;
 
@@ -206,7 +215,20 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
               onClick={handleOpenSettings}
             >
               <AppIcon name="sliders" size={14} />
-              <span style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0 }}>模型管理...</span>
+              <span
+                style={{
+                  position: 'absolute',
+                  width: 1,
+                  height: 1,
+                  padding: 0,
+                  margin: -1,
+                  overflow: 'hidden',
+                  clip: 'rect(0,0,0,0)',
+                  border: 0,
+                }}
+              >
+                模型管理...
+              </span>
             </Button>
           </Tooltip>
         </div>
@@ -236,7 +258,11 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                     >
                       <span className={styles.modelName}>{m.name || m.id}</span>
                       {isSelected ? (
-                        <AppIcon name="check" size={14} className={styles.checkIcon} />
+                        <AppIcon
+                          name="check"
+                          size={14}
+                          className={styles.checkIcon}
+                        />
                       ) : null}
                     </Button>
                   );
@@ -258,8 +284,11 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                 onClick={() => setShowAdvanced((v) => !v)}
               >
                 <span>高级选项</span>
-                <AppIcon name="chevron-down" size={13}
-                  className={`${styles.advancedChevron} ${showAdvanced ? styles.rotated : ''}`} />
+                <AppIcon
+                  name="chevron-down"
+                  size={13}
+                  className={`${styles.advancedChevron} ${showAdvanced ? styles.rotated : ''}`}
+                />
               </Button>
               {showAdvanced ? (
                 <div className={styles.advancedContent}>

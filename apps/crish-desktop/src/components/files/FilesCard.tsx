@@ -20,16 +20,26 @@ import { FileActions } from './FileActions';
 import { AppIcon } from '../ui/icons/index';
 import { preferencesClient } from '../../api/preferences';
 import { useFileListRatio } from './hooks/useFileListRatio';
+import {
+  shouldConsumeScopedEvent,
+  useLeafScope,
+  useScopedSessionId,
+} from '../../contexts/LeafScopeContext';
 
-interface FilesCardProps {
+export interface FilesCardProps {
   initialPath?: string | null;
+  sessionId?: string | null;
+  leafId?: string | null;
 }
 
 const REFRESH_LABEL = '刷新';
 
 export const FilesCard: React.FC<FilesCardProps> = React.memo(
-  ({ initialPath }) => {
+  ({ initialPath, sessionId, leafId }) => {
     const { showToast } = useToast();
+    const scope = useLeafScope();
+    const scopedSessionId = useScopedSessionId(sessionId);
+    const effectiveLeafId = leafId ?? scope.leafId;
     const preview = useFilePreview();
     const nav = useFileNavigation(() => preview.dirty);
     const filterInputRef = useRef<HTMLInputElement>(null);
@@ -39,9 +49,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
 
     const handleSplitResizeStart = useCallback(
       (
-        e:
-          | React.PointerEvent<HTMLDivElement>
-          | React.MouseEvent<HTMLDivElement>
+        e: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>
       ) => {
         if (e.button !== 0) return;
         e.preventDefault();
@@ -59,25 +67,24 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
 
         setIsResizing(true);
         const containerRect = container.getBoundingClientRect();
+        const calcRatio = (clientX: number) => {
+          if (containerRect.width <= 0) return 15;
+          const offsetX = clientX - containerRect.left;
+          return Math.max(
+            15,
+            Math.min(75, (offsetX / containerRect.width) * 100)
+          );
+        };
 
         const handleMove = (moveEv: MouseEvent | PointerEvent) => {
-          const currentWidth = containerRect.width;
-          if (currentWidth <= 0) return;
-          const offsetX = moveEv.clientX - containerRect.left;
-          const newRatio = Math.max(
-            15,
-            Math.min(75, (offsetX / currentWidth) * 100)
-          );
-          setListWidthRatio(newRatio);
+          setListWidthRatio(calcRatio(moveEv.clientX));
         };
 
         const handleUp = (upEv: MouseEvent | PointerEvent) => {
           if ('releasePointerCapture' in handleEl && 'pointerId' in upEv) {
             try {
               if (
-                handleEl.hasPointerCapture?.(
-                  (upEv as PointerEvent).pointerId
-                )
+                handleEl.hasPointerCapture?.((upEv as PointerEvent).pointerId)
               ) {
                 handleEl.releasePointerCapture(
                   (upEv as PointerEvent).pointerId
@@ -94,23 +101,14 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
           window.removeEventListener('mouseup', handleUp);
           setIsResizing(false);
 
-          const currentWidth = containerRect.width;
-          if (currentWidth > 0) {
-            const offsetX = upEv.clientX - containerRect.left;
-            const finalRatio = Math.max(
-              15,
-              Math.min(75, (offsetX / currentWidth) * 100)
-            );
+          if (containerRect.width > 0) {
+            const finalRatio = calcRatio(upEv.clientX);
             setListWidthRatio(finalRatio);
-            try {
-              void preferencesClient
-                .setPreference('files_list_ratio', finalRatio)
-                .catch(() => {
-                  /* swallow-ok: UI 已就地更新；偏好落盘失败不打断拖拽 */
-                });
-            } catch {
-              // ignore
-            }
+            void preferencesClient
+              .setPreference('files_list_ratio', finalRatio)
+              .catch(() => {
+                /* best-effort ratio persist */
+              });
           }
         };
 
@@ -120,7 +118,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
         window.addEventListener('mousemove', handleMove);
         window.addEventListener('mouseup', handleUp);
       },
-      []
+      [setListWidthRatio]
     );
 
     const handleOpenFile = useCallback(
@@ -132,7 +130,6 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
       },
       [nav, preview]
     );
-
 
     const handleRefresh = useCallback(async () => {
       if (!(await nav.confirmNavigation())) return;
@@ -215,24 +212,42 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
 
     useEffect(() => {
       const onOpen = (ev: Event) => {
-        const path = (ev as CustomEvent<{ path?: string }>).detail?.path;
-        if (!path) return;
+        const detail = (
+          ev as CustomEvent<{
+            path?: string;
+            sessionId?: string;
+            leafId?: string;
+          }>
+        ).detail;
+        if (!detail?.path) return;
+        if (
+          !shouldConsumeScopedEvent(detail, {
+            sessionId: scopedSessionId,
+            leafId: effectiveLeafId,
+            isActive: scope.inLeafScope ? scope.isActive : undefined,
+          })
+        ) {
+          return;
+        }
         takePendingOpenPath();
-        const resolved = resolveWorkspacePath(path);
+        const resolved = resolveWorkspacePath(detail.path);
         void handleOpenFile(resolved);
       };
       window.addEventListener('crish-open-file', onOpen);
       return () => window.removeEventListener('crish-open-file', onOpen);
-    }, [handleOpenFile]);
+    }, [handleOpenFile, scopedSessionId, effectiveLeafId, scope]);
 
+    useEffect(() => {
+      preview.setPendingCount(countPendingFileAnnotations(scopedSessionId));
+    }, [preview, scopedSessionId]);
 
     useEffect(() => {
       const onAnn = () =>
-        preview.setPendingCount(countPendingFileAnnotations());
+        preview.setPendingCount(countPendingFileAnnotations(scopedSessionId));
       window.addEventListener('crish-file-annotations-changed', onAnn);
       return () =>
         window.removeEventListener('crish-file-annotations-changed', onAnn);
-    }, [preview]);
+    }, [preview, scopedSessionId]);
 
     useEffect(() => {
       return () => {
@@ -255,8 +270,15 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
         {/* 确认对话框渲染点：useFileNavigation（未保存切换）+ useFilePreview（外部修改覆盖） */}
         {nav.confirmGateView}
         {preview.confirmGateView}
-        <div className={`${styles.filesCard} chat-side-panel`} data-file-preview-host="files">
-          <div className={`${styles.filesBar} side-panel-toolbar`} role="toolbar" aria-label="文件导航">
+        <div
+          className={`${styles.filesCard} chat-side-panel`}
+          data-file-preview-host="files"
+        >
+          <div
+            className={`${styles.filesBar} side-panel-toolbar`}
+            role="toolbar"
+            aria-label="文件导航"
+          >
             <Tooltip content={REFRESH_LABEL}>
               <Button
                 type="button"
@@ -448,6 +470,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                 aria-label="调整目录树与预览宽度"
               />
               <FilePreview
+                targetSessionId={scopedSessionId}
                 file={{
                   selected: preview.selected,
                   kind: preview.kind,
@@ -489,5 +512,3 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
     );
   }
 );
-
-export type { FilesCardProps };

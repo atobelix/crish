@@ -25,8 +25,15 @@ import {
   validateBrowseUrl,
 } from '../../api/previewBrowserStore';
 import { LOAD_TIMEOUT_MS, safeIframeSrc } from './previewCardLib';
+import {
+  shouldConsumeScopedEvent,
+  useLeafScope,
+  useScopedSessionId,
+} from '../../contexts/LeafScopeContext';
 
 export type UsePreviewNavigationOptions = {
+  leafId?: string | null;
+  sessionId?: string | null;
 };
 
 export type UsePreviewNavigationResult = {
@@ -69,8 +76,39 @@ export type UsePreviewNavigationResult = {
 };
 
 export function usePreviewNavigation(
-  _opts: UsePreviewNavigationOptions = {}
+  opts: UsePreviewNavigationOptions = {}
 ): UsePreviewNavigationResult {
+  const leafScope = useLeafScope();
+  const scopedSessionId = useScopedSessionId(opts.sessionId);
+  const effectiveLeafId = opts.leafId ?? leafScope.leafId;
+  const scopeTargetRef = useRef({
+    leafId: effectiveLeafId,
+    sessionId: scopedSessionId,
+    isActive: leafScope.inLeafScope ? leafScope.isActive : undefined,
+  });
+  scopeTargetRef.current = {
+    leafId: effectiveLeafId,
+    sessionId: scopedSessionId,
+    isActive: leafScope.inLeafScope ? leafScope.isActive : undefined,
+  };
+
+  const emitScopedUrlChange = useCallback((url: string) => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.dispatchEvent(
+        new CustomEvent('crish-preview-url-change', {
+          detail: {
+            url,
+            leafId: scopeTargetRef.current.leafId ?? undefined,
+            sessionId: scopeTargetRef.current.sessionId || undefined,
+          },
+        })
+      );
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const [urlInput, setUrlInput] = useState(() => {
     const u = getPreviewUrl();
     return isAboutBlank(u) ? '' : u;
@@ -121,9 +159,11 @@ export function usePreviewNavigation(
       setLoadError(false);
       setLoading(!nextBlank && isEmbeddablePreviewUrl(url));
       setBookmarked(isPreviewBookmarked(url));
+      emitScopedUrlChange(url);
       // 外部事件已由 setPreviewUrl 广播：只同步本地 UI，禁止再 setPreviewUrl，否则事件环栈溢出
       if (fromExternal) return;
-      setPreviewUrl(url);
+      // 内部导航静默持久化，避免无目标 crish-preview-url 广播劫持其他分屏预览实例
+      setPreviewUrl(url, { silent: true });
       setStack((prev) => {
         const base = prev.slice(0, stackIdx + 1);
         if (base[base.length - 1] === url) return base;
@@ -132,7 +172,7 @@ export function usePreviewNavigation(
         return next;
       });
     },
-    [stackIdx]
+    [emitScopedUrlChange, stackIdx]
   );
 
   const navigateRef = useRef(navigate);
@@ -140,7 +180,16 @@ export function usePreviewNavigation(
 
   useEffect(() => {
     const onExt = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ url?: unknown }>).detail;
+      const detail = (
+        ev as CustomEvent<{
+          url?: unknown;
+          leafId?: string;
+          sessionId?: string;
+        }>
+      ).detail;
+      if (!shouldConsumeScopedEvent(detail, scopeTargetRef.current)) {
+        return;
+      }
       const url = detail?.url;
       if (typeof url !== 'string' || !url) return;
       // navigate 内 validateBrowseUrl：外部广播同样拒绝危险 scheme
@@ -209,6 +258,7 @@ export function usePreviewNavigation(
     setUrlInput(nextBlank ? '' : safe);
     setActiveUrl(safe);
     setPreviewUrl(safe, { silent: true });
+    emitScopedUrlChange(safe);
     setLoadError(false);
     setLoading(!nextBlank && isEmbeddablePreviewUrl(safe));
     setBookmarked(isPreviewBookmarked(safe));

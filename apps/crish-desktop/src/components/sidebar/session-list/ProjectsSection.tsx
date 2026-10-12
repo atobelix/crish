@@ -3,7 +3,6 @@ import type { SessionState } from '../../../store/types';
 import type { ProjectEntry } from '../../../api/projectStore';
 import { emitUiEvent } from '../../../api/uiEvents';
 import { navigateToNewDraft } from '../../../store/storeAccess';
-import { getCompositionRoot } from '../../../app/compositionRoot';
 import { Button, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
 import { AppIcon } from '../../ui/icons/index';
@@ -41,21 +40,14 @@ export interface ProjectsSectionProps {
   actions: ProjectsSectionActions;
 }
 
-export function ProjectsSection({
-  data,
-  actions,
-}: ProjectsSectionProps) {
+export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
   const [expandedProjectFolders, setExpandedProjectFolders] = useState<
     Record<string, boolean>
   >({});
   void setExpandedProjectFolders;
 
-  const {
-    projects,
-    collapsedProjects,
-    projectsSectionCollapsed,
-    byProjectId,
-  } = data;
+  const { projects, collapsedProjects, projectsSectionCollapsed, byProjectId } =
+    data;
   const {
     onToggleProjectsSection,
     onToggleProjectCollapsed,
@@ -83,9 +75,12 @@ export function ProjectsSection({
           aria-expanded={!projectsSectionCollapsed}
         >
           <span>项目</span>
-          <AppIcon name="chevron-down" size={16}
+          <AppIcon
+            name="chevron-down"
+            size={16}
             className={projectsSectionCollapsed ? styles.chevCollapsed : ''}
-            aria-hidden />
+            aria-hidden
+          />
         </Button>
         <Tooltip content="管理与选择项目">
           <Button
@@ -105,7 +100,6 @@ export function ProjectsSection({
       <div
         className={styles.accordionWrapper}
         data-expanded={!projectsSectionCollapsed ? 'true' : 'false'}
-        hidden={projectsSectionCollapsed || undefined}
       >
         <div className={styles.accordionInner}>
           {projects.map((p) => {
@@ -140,9 +134,7 @@ export function ProjectsSection({
                       )}
                     </span>
                     <Tooltip content={p.path}>
-                      <span className={styles.folderName}>
-                        {p.name}
-                      </span>
+                      <span className={styles.folderName}>{p.name}</span>
                     </Tooltip>
                   </div>
                   <div className={styles.folderActions}>
@@ -168,7 +160,6 @@ export function ProjectsSection({
                 <div
                   className={styles.accordionWrapper}
                   data-expanded={open ? 'true' : 'false'}
-                  hidden={!open || undefined}
                 >
                   <div className={styles.accordionInner}>
                     {sess.length > 0 ? (
@@ -198,7 +189,9 @@ export function ProjectsSection({
                                   [p.id]: !prev[p.id],
                                 }));
                               }}
-                              aria-expanded={Boolean(expandedProjectFolders[p.id])}
+                              aria-expanded={Boolean(
+                                expandedProjectFolders[p.id]
+                              )}
                             >
                               {expandedProjectFolders[p.id]
                                 ? '收起'

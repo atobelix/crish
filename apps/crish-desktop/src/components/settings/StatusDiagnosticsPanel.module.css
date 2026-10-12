@@ -16,7 +16,7 @@
 }
 
 .spin {
-  animation: diag-spin var(--transition-spin) infinite linear;
+  animation: diag-spin var(--transition-spin) infinite;
 }
 
 @keyframes diag-spin {

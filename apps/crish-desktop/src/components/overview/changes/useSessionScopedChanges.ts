@@ -9,20 +9,24 @@
  */
 
 import { useMemo } from 'react';
+import { useSessionStore, useTerminalField } from '../../../store/storeAccess';
+import { useScopedSessionId } from '../../../contexts/LeafScopeContext';
 import {
-  useSessionField,
-  useTerminalField,
-  selectActiveSessionId,
-  selectActiveSession,
+  selectDiffFiles,
+  selectActiveDiffSource,
 } from '../../../store/storeAccess';
-import { selectDiffFiles, selectActiveDiffSource } from '../../../store/storeAccess';
 import { selectSessionDiffFiles } from '../../../api/sessionDiffDerivation';
 import type { GitStatusCode } from '../../../api/gitTreeHelpers';
 import type { UnifiedFileChange } from './types';
 
-export function useSessionScopedChanges(workspaceRoot?: string) {
-  const activeSessionId = useSessionField(selectActiveSessionId);
-  const session = useSessionField(selectActiveSession);
+export function useSessionScopedChanges(
+  workspaceRoot?: string,
+  sessionIdProp?: string | null
+) {
+  const scopedSessionId = useScopedSessionId(sessionIdProp);
+  const session = useSessionStore((s) =>
+    scopedSessionId ? s.sessionsById[scopedSessionId] || null : null
+  );
   const diffFiles = useTerminalField(selectDiffFiles);
   const activeDiffSource = useTerminalField(selectActiveDiffSource);
 
@@ -54,7 +58,8 @@ export function useSessionScopedChanges(workspaceRoot?: string) {
     for (const diff of sessionDiffs) {
       const normalized = diff.filePath.replace(/\\/g, '/');
       const lastSlash = normalized.lastIndexOf('/');
-      const fileName = lastSlash >= 0 ? normalized.slice(lastSlash + 1) : normalized;
+      const fileName =
+        lastSlash >= 0 ? normalized.slice(lastSlash + 1) : normalized;
       const dirPath = lastSlash >= 0 ? normalized.slice(0, lastSlash) : '';
 
       fileMap.set(normalized, {
@@ -62,7 +67,9 @@ export function useSessionScopedChanges(workspaceRoot?: string) {
         filePath: diff.filePath,
         fileName: fileName || diff.filePath,
         dirPath,
-        status: (diff.gitStatus as GitStatusCode) || (diff.additions > 0 && diff.deletions === 0 ? 'A' : 'M'),
+        status:
+          (diff.gitStatus as GitStatusCode) ||
+          (diff.additions > 0 && diff.deletions === 0 ? 'A' : 'M'),
         additions: diff.additions,
         deletions: diff.deletions,
         rawDiff: diff,
@@ -71,13 +78,23 @@ export function useSessionScopedChanges(workspaceRoot?: string) {
 
     // 仅当会话本身已有消息/改动时，才允许融入当前活跃的终端实时 Diff
     if (sessionDiffs.length > 0) {
-      const liveList = diffFiles?.length ? diffFiles : activeDiffSource ? [activeDiffSource] : [];
+      const liveList = diffFiles?.length
+        ? diffFiles
+        : activeDiffSource
+          ? [activeDiffSource]
+          : [];
       for (const live of liveList) {
         const normalized = live.filePath.replace(/\\/g, '/');
         const existing = fileMap.get(normalized);
         if (existing) {
-          existing.additions = Math.max(existing.additions, live.additions || 0);
-          existing.deletions = Math.max(existing.deletions, live.deletions || 0);
+          existing.additions = Math.max(
+            existing.additions,
+            live.additions || 0
+          );
+          existing.deletions = Math.max(
+            existing.deletions,
+            live.deletions || 0
+          );
           existing.rawDiff = live;
         }
       }
@@ -87,7 +104,7 @@ export function useSessionScopedChanges(workspaceRoot?: string) {
   }, [sessionDiffs, diffFiles, activeDiffSource]);
 
   return {
-    activeSessionId,
+    activeSessionId: scopedSessionId,
     sessionFiles: unifiedFiles,
     totalFiles: unifiedFiles.length,
     isEmpty: unifiedFiles.length === 0,

@@ -6,9 +6,7 @@ import { usePreviewNavigation } from './usePreviewNavigation';
 import { PreviewToolbar } from './PreviewToolbar';
 import { PreviewHistoryPanel } from './PreviewHistoryPanel';
 import { useActiveDevPorts } from './activePortDetector';
-import {
-  buildInspectorAiSnippet,
-} from './previewCardLib';
+import { buildInspectorAiSnippet, HIST_PANEL_ID } from './previewCardLib';
 import { PreviewCardInspectorOverlay } from './PreviewCardInspectorOverlay';
 import { enableInspector, subscribeToInspector } from './previewHostBridge';
 import {
@@ -17,16 +15,14 @@ import {
   type InspectHoverPayload,
   type InspectSelectPayload,
 } from './previewProtocol';
+import { useSessionStore } from '../../store/storeAccess';
 import {
-  selectActiveSession,
-  useSessionField,
-  useSessionStore,
-} from '../../store/storeAccess';
+  useLeafScope,
+  useScopedSessionId,
+} from '../../contexts/LeafScopeContext';
 import { useToast } from '../../services/toast/ToastContext';
-import {
-  setPreviewFavicon,
-  isAboutBlank,
-} from '../../api/previewBrowserStore';
+import { setPreviewFavicon, isAboutBlank } from '../../api/previewBrowserStore';
+import { emitUiEvent } from '../../api/uiEvents';
 import { AppIcon } from '../ui/icons/index';
 
 export interface PreviewCardProps {
@@ -38,6 +34,8 @@ export interface PreviewCardProps {
    * 「带 URL 打开浏览器标签」链路由此贯通。
    */
   initialTarget?: string | null;
+  sessionId?: string | null;
+  leafId?: string | null;
 }
 
 /**
@@ -51,14 +49,24 @@ export interface PreviewCardProps {
 export const PreviewCard: React.FC<PreviewCardProps> = ({
   wsId: _wsId,
   initialTarget,
+  sessionId,
+  leafId,
 }) => {
   const { showToast } = useToast();
-  const nav = usePreviewNavigation();
+  const scope = useLeafScope();
+  const scopedSessionId = useScopedSessionId(sessionId);
+  const effectiveLeafId = leafId ?? scope.leafId;
+  const nav = usePreviewNavigation({
+    leafId: effectiveLeafId,
+    sessionId: scopedSessionId,
+  });
   const { ports: activePorts } = useActiveDevPorts();
-  const session = useSessionField(selectActiveSession);
+  const session = useSessionStore((s) =>
+    scopedSessionId ? s.sessionsById[scopedSessionId] : null
+  );
   const isAiStreaming = Boolean(
     session?.messages?.some((m) => m.status === 'processing') ||
-      session?.agents?.some((a) => a.status === 'running')
+    session?.agents?.some((a) => a.status === 'running')
   );
 
   const [isInspectorActive, setIsInspectorActive] = React.useState(false);
@@ -68,7 +76,18 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
     React.useState<InspectSelectPayload | null>(null);
 
   const handleStopAi = () => {
-    window.dispatchEvent(new CustomEvent('crish:chat-stop'));
+    emitUiEvent('stop-generation', {
+      sessionId: scopedSessionId,
+      leafId: effectiveLeafId ?? undefined,
+    });
+    window.dispatchEvent(
+      new CustomEvent('crish:chat-stop', {
+        detail: {
+          sessionId: scopedSessionId,
+          leafId: effectiveLeafId ?? undefined,
+        },
+      })
+    );
   };
 
   const {
@@ -88,7 +107,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
     blank,
     canEmbed,
     frameSrc,
-    showFrame,
+    showFrame: _showFrame,
     canBack,
     canForward,
     canExternal,
@@ -99,7 +118,8 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
     reload,
     goHome,
     openExternal,
-    onBookmark,    pickHistory,
+    onBookmark,
+    pickHistory,
     removeBookmarkAt,
     clearHistoryAll,
     removeHistoryAt,
@@ -114,7 +134,9 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
 
   // T20：`preview:<target>` 带目标打开——挂载时导航一次（ref 锁防重入；
   // navigate 内部经 validateBrowseUrl 校验，非法目标被拒并 toast）。
-  const initialTargetRef = React.useRef<string | null | undefined>(initialTarget);
+  const initialTargetRef = React.useRef<string | null | undefined>(
+    initialTarget
+  );
   React.useEffect(() => {
     const target = initialTargetRef.current;
     initialTargetRef.current = undefined;
@@ -162,7 +184,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
       }
       setHoverElement(null);
       setSelectedElement(event.payload);
-    });
+    }, iframeRef);
     return unsubscribe;
   }, [iframeRef]);
 
@@ -183,8 +205,19 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
   // 订阅处理，此处按 source 跳过，避免吞掉新协议载荷）。
   React.useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      if (
+        !iframeRef.current ||
+        (iframeRef.current.contentWindow &&
+          event.source &&
+          event.source !== iframeRef.current.contentWindow)
+      ) {
+        return;
+      }
       const source = event.data?.source;
-      if (source === CRISH_PREVIEW_INSPECTOR_SOURCE || source === CRISH_PREVIEW_HOST_SOURCE) {
+      if (
+        source === CRISH_PREVIEW_INSPECTOR_SOURCE ||
+        source === CRISH_PREVIEW_HOST_SOURCE
+      ) {
         return;
       }
       if (
@@ -250,7 +283,6 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
 
   const handleSendToAi = React.useCallback(() => {
     if (!selectedElement) return;
-    const sessionId = useSessionStore.getState().activeSessionId;
     const text = buildInspectorAiSnippet(
       selectedElement.tagName,
       selectedElement.id,
@@ -258,11 +290,11 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
       selectedElement.rect,
       selectedElement.bestSelector
     );
-    if (sessionId) {
-      useSessionStore.getState().setComposerDraft(sessionId, text);
+    if (scopedSessionId) {
+      useSessionStore.getState().setComposerDraft(scopedSessionId, text);
     }
     showToast('已发送到对话输入框');
-  }, [selectedElement, showToast]);
+  }, [selectedElement, scopedSessionId, showToast]);
 
   return (
     <div
@@ -303,6 +335,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
 
       {showHist ? (
         <PreviewHistoryPanel
+          id={HIST_PANEL_ID}
           history={history}
           bookmarks={bookmarks}
           activeUrl={activeUrl}
@@ -338,121 +371,142 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
             </Tooltip>
           </div>
         )}
-            {!canEmbed || blank || !frameSrc ? (
-              <div className={styles.emptyContainer}>
-                {hasEmptyContent ? (
-                  <div className={styles.minimalEmptyContent}>
-                    {activePorts.length > 0 && (
-                      <div className={styles.emptySection} role="group" aria-label="运行中的本地服务">
-                        <div className={styles.textLinksColumn}>
-                          {activePorts.map((port) => (
+        {!canEmbed || blank || !frameSrc ? (
+          <div className={styles.emptyContainer}>
+            {hasEmptyContent ? (
+              <div className={styles.minimalEmptyContent}>
+                {activePorts.length > 0 && (
+                  <div
+                    className={styles.emptySection}
+                    role="group"
+                    aria-label="运行中的本地服务"
+                  >
+                    <div className={styles.textLinksColumn}>
+                      {activePorts.map((port) => (
+                        <Button
+                          key={port}
+                          type="button"
+                          variant="ghost"
+                          className={styles.pureTextLink}
+                          onClick={() => navigate(`http://localhost:${port}`)}
+                          aria-label={`运行中的本地服务: localhost:${port}`}
+                        >
+                          <span className={styles.portLabel}>
+                            运行中的本地服务:{' '}
+                          </span>
+                          <span className={styles.portValue}>
+                            localhost:{port}
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {recentPages.length > 0 && (
+                  <div
+                    className={styles.emptySection}
+                    role="group"
+                    aria-label="最近访问"
+                  >
+                    <span className={styles.emptySectionTitle}>最近访问</span>
+                    <div className={styles.textLinksColumn}>
+                      {recentPages.map((url) => {
+                        let displayHost = url;
+                        try {
+                          const u = new URL(url);
+                          displayHost = `${u.hostname}${u.port ? `:${u.port}` : ''}${u.pathname !== '/' ? u.pathname : ''}`;
+                        } catch {
+                          displayHost = url.replace(/^https?:\/\//, '');
+                        }
+                        return (
+                          <Tooltip key={url} content={url}>
                             <Button
-                              key={port}
                               type="button"
                               variant="ghost"
-                              className={styles.pureTextLink}
-                              onClick={() => navigate(`http://localhost:${port}`)}
-                              aria-label={`运行中的本地服务: localhost:${port}`}
+                              className={styles.pureTextLinkWithIcon}
+                              onClick={() => navigate(url)}
+                              aria-label={`打开最近网页 ${displayHost}`}
                             >
-                              <span className={styles.portLabel}>运行中的本地服务: </span>
-                              <span className={styles.portValue}>localhost:{port}</span>
+                              <AppIcon
+                                name="globe"
+                                size={12}
+                                className={styles.recentIcon}
+                                aria-hidden
+                              />
+                              <span className={styles.recentText}>
+                                {displayHost}
+                              </span>
                             </Button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {recentPages.length > 0 && (
-                      <div className={styles.emptySection} role="group" aria-label="最近访问">
-                        <span className={styles.emptySectionTitle}>最近访问</span>
-                        <div className={styles.textLinksColumn}>
-                          {recentPages.map((url) => {
-                            let displayHost = url;
-                            try {
-                              const u = new URL(url);
-                              displayHost = `${u.hostname}${u.port ? `:${u.port}` : ''}${u.pathname !== '/' ? u.pathname : ''}`;
-                            } catch {
-                              displayHost = url.replace(/^https?:\/\//, '');
-                            }
-                            return (
-                              <Tooltip key={url} content={url}>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  className={styles.pureTextLinkWithIcon}
-                                  onClick={() => navigate(url)}
-                                  aria-label={`打开最近网页 ${displayHost}`}
-                                >
-                                  <AppIcon name="globe" size={12} className={styles.recentIcon} aria-hidden />
-                                  <span className={styles.recentText}>{displayHost}</span>
-                                </Button>
-                              </Tooltip>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className={styles.pureBlankCanvas} aria-hidden="true" />
-                )}
-                {!canEmbed && !blank && (
-                  <div className={styles.localPath}>
-                    <code className={styles.localCode}>{activeUrl}</code>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className={styles.quickChip}
-                      onClick={openExternal}
-                      disabled={!canExternal}
-                    >
-                      外部打开
-                    </Button>
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
-              </div>
-            ) : loadError ? (
-              <div className={styles.errorState} role="alert">
-                <div className={styles.emptyTitle}>无法加载此页面</div>
-                <div className={styles.emptyDesc}>站点可能设置了 X-Frame-Options / CSP，或地址无效。</div>
-                <div className={styles.quickRow}>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className={styles.quickChip}
-                    onClick={reload}
-                  >
-                    重试
-                  </Button>
-                  {!blank && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className={styles.quickChip}
-                      onClick={openExternal}
-                      disabled={!canExternal}
-                    >
-                      系统浏览器打开
-                    </Button>
-                  )}
-                </div>
               </div>
             ) : (
-              <iframe
-                ref={iframeRef}
-                key={activeUrl}
-                aria-label="预览页面"
-                src={frameSrc ?? undefined}
-                className={styles.iframe}
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-                referrerPolicy="no-referrer"
-                loading="lazy"
-                onLoad={handleFrameLoad}
-                onError={nav.onFrameError}
-              />
+              <div className={styles.pureBlankCanvas} aria-hidden="true" />
             )}
+            {!canEmbed && !blank && (
+              <div className={styles.localPath}>
+                <code className={styles.localCode}>{activeUrl}</code>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className={styles.quickChip}
+                  onClick={openExternal}
+                  disabled={!canExternal}
+                >
+                  外部打开
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : loadError ? (
+          <div className={styles.errorState} role="alert">
+            <div className={styles.emptyTitle}>无法加载此页面</div>
+            <div className={styles.emptyDesc}>
+              站点可能设置了 X-Frame-Options / CSP，或地址无效。
+            </div>
+            <div className={styles.quickRow}>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className={styles.quickChip}
+                onClick={reload}
+              >
+                重试
+              </Button>
+              {!blank && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className={styles.quickChip}
+                  onClick={openExternal}
+                  disabled={!canExternal}
+                >
+                  系统浏览器打开
+                </Button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <iframe
+            ref={iframeRef}
+            key={activeUrl}
+            aria-label="预览页面"
+            src={frameSrc ?? undefined}
+            className={styles.iframe}
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+            referrerPolicy="no-referrer"
+            loading="lazy"
+            onLoad={handleFrameLoad}
+            onError={nav.onFrameError}
+          />
+        )}
 
         <PreviewCardInspectorOverlay
           isInspectorActive={isInspectorActive}

@@ -19,6 +19,7 @@ import {
 import { fileExtColor } from '../../api/codeHighlight';
 import type { ViewMode } from './hooks/useFilePreview';
 import { AppIcon } from '../ui/icons/index';
+import { useLeafScope } from '../../contexts/LeafScopeContext';
 
 function joinLocal(base: string, name: string): string {
   const sep = base.includes('\\') ? '\\' : '/';
@@ -31,21 +32,35 @@ function sortEntries(entries: FsDirEntry[]): FsDirEntry[] {
     const aNoise = a.name.startsWith('.') || a.name.startsWith('--');
     const bNoise = b.name.startsWith('.') || b.name.startsWith('--');
     if (aNoise !== bNoise) return aNoise ? 1 : -1;
-    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+    return a.name.localeCompare(b.name, undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    });
   });
 }
 
 function BcFileIcon({ name }: { name: string }) {
   const k = detectFileKind(name);
-  const color = fileExtColor(name);
-  const sz = 14;
-  if (k === 'image') return <AppIcon name="image" size={sz} style={{ color }} aria-hidden />;
-  if (k === 'pdf') return <AppIcon name="file-text" size={sz} style={{ color }} aria-hidden />;
-  if (k === 'table') return <AppIcon name="table" size={sz} style={{ color }} aria-hidden />;
-  if (/\.(ts|tsx|js|jsx|mjs|cjs|rs|py|go|java|css|html|json|md|yml|yaml)$/i.test(name)) {
-    return <AppIcon name="file-code" size={sz} style={{ color }} aria-hidden />;
-  }
-  return <AppIcon name="file" size={sz} style={{ color }} aria-hidden />;
+  const icon =
+    k === 'image'
+      ? 'image'
+      : k === 'pdf'
+        ? 'file-text'
+        : k === 'table'
+          ? 'table'
+          : /\.(ts|tsx|js|jsx|mjs|cjs|rs|py|go|java|css|html|json|md|yml|yaml)$/i.test(
+                name
+              )
+            ? 'file-code'
+            : 'file';
+  return (
+    <AppIcon
+      name={icon as any}
+      size={14}
+      style={{ color: fileExtColor(name) }}
+      aria-hidden
+    />
+  );
 }
 
 interface BreadcrumbItem {
@@ -82,6 +97,7 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
   onOpenFile,
 }: FileBreadcrumbProps) {
   const [bcFlyout, setBcFlyout] = useState<FlyoutState | null>(null);
+  const scope = useLeafScope();
   const crumbsRef = useRef<HTMLDivElement>(null);
   const bcFilterRef = useRef<HTMLInputElement>(null);
   const bcTriggerRef = useRef<HTMLButtonElement>(null);
@@ -94,7 +110,11 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
   // 单轨面包屑推导：无 cwd，依据当前选中的 selected 或 root 进行层级推导
   const breadcrumbs: BreadcrumbItem[] = useMemo(() => {
     if (!root) return [];
-    const targetDir = selected ? (view === 'detail' ? pathDirname(selected) : selected) : root;
+    const targetDir = selected
+      ? view === 'detail'
+        ? pathDirname(selected)
+        : selected
+      : root;
     const rel = pathRelativeToRoot(targetDir || root, root);
     const items: BreadcrumbItem[] = [{ label: rootLabel, path: root }];
     if (rel && rel !== '.') {
@@ -119,11 +139,15 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
     []
   );
 
+  const closeBcFlyout = useCallback(() => {
+    setBcFlyout(null);
+    requestAnimationFrame(() => bcTriggerRef.current?.focus());
+  }, []);
+
   const openBcFlyout = useCallback(
     async (dirPath: string, label: string) => {
       if (bcFlyout?.anchorPath === dirPath) {
-        setBcFlyout(null);
-        requestAnimationFrame(() => bcTriggerRef.current?.focus());
+        closeBcFlyout();
         return;
       }
       setBcFlyout({
@@ -144,44 +168,33 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
         );
         requestAnimationFrame(() => bcFilterRef.current?.focus());
       } catch {
-        setBcFlyout(null);
-        requestAnimationFrame(() => bcTriggerRef.current?.focus());
+        closeBcFlyout();
       }
     },
-    [bcFlyout?.anchorPath, loadDir]
+    [bcFlyout?.anchorPath, closeBcFlyout, loadDir]
   );
 
   const toggleExpand = useCallback(
     async (dirPath: string) => {
       if (!bcFlyout) return;
-
-      if (bcFlyout.expandedPaths.has(dirPath)) {
+      if (bcFlyout.expandedPaths.has(dirPath) || bcFlyout.dirCache[dirPath]) {
         setBcFlyout((prev) => {
           if (!prev) return null;
-          const nextExpanded = new Set(prev.expandedPaths);
-          nextExpanded.delete(dirPath);
-          return { ...prev, expandedPaths: nextExpanded };
-        });
-        return;
-      }
-
-      if (bcFlyout.dirCache[dirPath]) {
-        setBcFlyout((prev) => {
-          if (!prev) return null;
-          const nextExpanded = new Set(prev.expandedPaths);
-          nextExpanded.add(dirPath);
-          return { ...prev, expandedPaths: nextExpanded };
+          const next = new Set(prev.expandedPaths);
+          if (next.has(dirPath)) next.delete(dirPath);
+          else next.add(dirPath);
+          return { ...prev, expandedPaths: next };
         });
         return;
       }
 
       setBcFlyout((prev) => {
         if (!prev) return null;
-        const nextLoading = new Set(prev.loadingPaths);
-        nextLoading.add(dirPath);
-        const nextExpanded = new Set(prev.expandedPaths);
-        nextExpanded.add(dirPath);
-        return { ...prev, loadingPaths: nextLoading, expandedPaths: nextExpanded };
+        return {
+          ...prev,
+          loadingPaths: new Set(prev.loadingPaths).add(dirPath),
+          expandedPaths: new Set(prev.expandedPaths).add(dirPath),
+        };
       });
 
       try {
@@ -203,7 +216,11 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
           nextLoading.delete(dirPath);
           const nextExpanded = new Set(prev.expandedPaths);
           nextExpanded.delete(dirPath);
-          return { ...prev, loadingPaths: nextLoading, expandedPaths: nextExpanded };
+          return {
+            ...prev,
+            loadingPaths: nextLoading,
+            expandedPaths: nextExpanded,
+          };
         });
       }
     },
@@ -213,40 +230,55 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
   const handleDirectOpenCurrentDir = useCallback(() => {
     if (!bcFlyout) return;
     const target = bcFlyout.anchorPath;
-    setBcFlyout(null);
-    requestAnimationFrame(() => bcTriggerRef.current?.focus());
+    closeBcFlyout();
     onNavigate(target);
-  }, [bcFlyout, onNavigate]);
+  }, [bcFlyout, closeBcFlyout, onNavigate]);
 
   const handleDoubleClickFolder = useCallback(
     (folderPath: string) => {
-      setBcFlyout(null);
-      requestAnimationFrame(() => bcTriggerRef.current?.focus());
+      closeBcFlyout();
       onNavigate(folderPath);
     },
-    [onNavigate]
+    [closeBcFlyout, onNavigate]
   );
 
   const handleOpenFile = useCallback(
     (filePath: string) => {
-      setBcFlyout(null);
-      requestAnimationFrame(() => bcTriggerRef.current?.focus());
+      closeBcFlyout();
       onOpenFile(filePath);
     },
-    [onOpenFile]
+    [closeBcFlyout, onOpenFile]
   );
 
   useEffect(() => {
     if (!bcFlyout) return;
     const onDoc = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (crumbsRef.current?.contains(t)) return;
+      if (crumbsRef.current?.contains(e.target as Node)) return;
       setBcFlyout(null);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setBcFlyout(null);
-        requestAnimationFrame(() => bcTriggerRef.current?.focus());
+        const container = crumbsRef.current;
+        const active = document.activeElement as HTMLElement | null;
+        if (!container) return;
+        if (!container.contains(active)) {
+          if (scope.inLeafScope && !scope.isActive) return;
+          if (
+            active &&
+            (active.tagName === 'INPUT' ||
+              active.tagName === 'TEXTAREA' ||
+              active.isContentEditable ||
+              Boolean(
+                active.closest?.('input, textarea, [contenteditable="true"]')
+              ))
+          )
+            return;
+          if (container.offsetWidth === 0 && container.offsetHeight === 0)
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        closeBcFlyout();
       }
     };
     document.addEventListener('mousedown', onDoc);
@@ -255,7 +287,7 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
       document.removeEventListener('mousedown', onDoc);
       window.removeEventListener('keydown', onKey);
     };
-  }, [bcFlyout]);
+  }, [bcFlyout, closeBcFlyout, scope.inLeafScope, scope.isActive]);
 
   const filteredEntries = useMemo(() => {
     if (!bcFlyout) return [];
@@ -296,19 +328,26 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
             role="option"
             className={`${styles.filesBcFlyoutItem} ${selected === ent.path ? styles.isActive : ''}`}
             style={{ paddingLeft: `${8 + depth * 14}px` }}
-            onClick={() => (ent.isDir ? void toggleExpand(ent.path) : handleOpenFile(ent.path))}
+            onClick={() =>
+              ent.isDir ? void toggleExpand(ent.path) : handleOpenFile(ent.path)
+            }
             onDoubleClick={() => ent.isDir && handleDoubleClickFolder(ent.path)}
           >
             {ent.isDir ? (
               <>
-                <AppIcon name="chevron-right" size={13}
+                <AppIcon
+                  name="chevron-right"
+                  size={13}
                   className={`${styles.filesBcFlyoutChev} ${isExpanded ? styles.isExpanded : ''}`}
-                  aria-hidden />
+                  aria-hidden
+                />
                 <AppIcon name="folder" size={14} aria-hidden />
               </>
             ) : (
               <>
-                <span className={`${styles.filesBcFlyoutChev} ${styles.isLeaf}`} />
+                <span
+                  className={`${styles.filesBcFlyoutChev} ${styles.isLeaf}`}
+                />
                 <BcFileIcon name={ent.name} />
               </>
             )}
@@ -318,14 +357,22 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
             isLoading ? (
               <div
                 className={styles.filesBcFlyoutEmpty}
-                style={{ paddingLeft: `${8 + (depth + 1) * 14}px`, textAlign: 'left', paddingBlock: '4px' }}
+                style={{
+                  paddingLeft: `${8 + (depth + 1) * 14}px`,
+                  textAlign: 'left',
+                  paddingBlock: '4px',
+                }}
               >
                 加载中…
               </div>
             ) : children && children.length === 0 ? (
               <div
                 className={styles.filesBcFlyoutEmpty}
-                style={{ paddingLeft: `${8 + (depth + 1) * 14}px`, textAlign: 'left', paddingBlock: '4px' }}
+                style={{
+                  paddingLeft: `${8 + (depth + 1) * 14}px`,
+                  textAlign: 'left',
+                  paddingBlock: '4px',
+                }}
               >
                 空目录
               </div>
@@ -341,9 +388,15 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
   if (!root) return null;
 
   return (
-    <div className={styles.filesCrumbs} ref={crumbsRef} aria-label="工作区相对路径">
+    <div
+      className={styles.filesCrumbs}
+      ref={crumbsRef}
+      aria-label="工作区相对路径"
+    >
       {breadcrumbs.length === 0 ? (
-        <span className={`${styles.filesBcChip} ${styles.filesBcChipMuted}`}>{rootLabel}</span>
+        <span className={`${styles.filesBcChip} ${styles.filesBcChipMuted}`}>
+          {rootLabel}
+        </span>
       ) : (
         breadcrumbs.map((b, i) => {
           const isLast = i === breadcrumbs.length - 1;
@@ -372,8 +425,7 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                         void openBcFlyout(b.path, b.label);
                       }}
                       onDoubleClick={() => {
-                        setBcFlyout(null);
-                        requestAnimationFrame(() => bcTriggerRef.current?.focus());
+                        closeBcFlyout();
                         onNavigate(b.path);
                       }}
                     >
@@ -401,10 +453,7 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                           }
                           onEnter={handleDirectOpenCurrentDir}
                           onKeyDown={(e) => {
-                            if (e.key === 'Escape') {
-                              setBcFlyout(null);
-                              requestAnimationFrame(() => bcTriggerRef.current?.focus());
-                            }
+                            if (e.key === 'Escape') closeBcFlyout();
                           }}
                         />
                         <Tooltip
@@ -423,10 +472,14 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                       </div>
                       <div className={styles.filesBcFlyoutList}>
                         {bcFlyout.loading ? (
-                          <div className={styles.filesBcFlyoutEmpty}>加载中…</div>
+                          <div className={styles.filesBcFlyoutEmpty}>
+                            加载中…
+                          </div>
                         ) : bcFlyout.filter.trim() ? (
                           filteredEntries.length === 0 ? (
-                            <div className={styles.filesBcFlyoutEmpty}>无匹配</div>
+                            <div className={styles.filesBcFlyoutEmpty}>
+                              无匹配
+                            </div>
                           ) : (
                             filteredEntries.map((ent) => (
                               <Button
@@ -436,22 +489,35 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                                 role="option"
                                 className={`${styles.filesBcFlyoutItem} ${selected === ent.path ? styles.isActive : ''}`}
                                 onClick={() =>
-                                  ent.isDir ? void toggleExpand(ent.path) : handleOpenFile(ent.path)
+                                  ent.isDir
+                                    ? void toggleExpand(ent.path)
+                                    : handleOpenFile(ent.path)
                                 }
-                                onDoubleClick={() => ent.isDir && handleDoubleClickFolder(ent.path)}
+                                onDoubleClick={() =>
+                                  ent.isDir && handleDoubleClickFolder(ent.path)
+                                }
                               >
                                 {ent.isDir ? (
-                                  <AppIcon name="folder" size={14} aria-hidden />
+                                  <AppIcon
+                                    name="folder"
+                                    size={14}
+                                    aria-hidden
+                                  />
                                 ) : (
                                   <BcFileIcon name={ent.name} />
                                 )}
-                                <span className={styles.filesBcFlyoutName}>{ent.name}</span>
+                                <span className={styles.filesBcFlyoutName}>
+                                  {ent.name}
+                                </span>
                               </Button>
                             ))
                           )
                         ) : !bcFlyout.dirCache[bcFlyout.anchorPath] ||
-                          bcFlyout.dirCache[bcFlyout.anchorPath]?.length === 0 ? (
-                          <div className={styles.filesBcFlyoutEmpty}>空目录</div>
+                          bcFlyout.dirCache[bcFlyout.anchorPath]?.length ===
+                            0 ? (
+                          <div className={styles.filesBcFlyoutEmpty}>
+                            空目录
+                          </div>
                         ) : (
                           renderTreeNodes(bcFlyout.anchorPath, 0)
                         )}
@@ -478,6 +544,3 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
     </div>
   );
 });
-
-
-

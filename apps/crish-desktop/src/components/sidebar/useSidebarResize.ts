@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLayoutStore } from '../../store/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { configService } from '../../services/ConfigService';
@@ -16,6 +16,7 @@ import {
 export function useSidebarResize() {
   const sidebarCollapsed = useLayoutStore((s) => s.sidebarCollapsed);
   const [sidebarWidthPx, setSidebarWidthPx] = useState(SIDEBAR_WIDTH_DEFAULT);
+  const resizeEndRafRef = useRef<number | null>(null);
 
   useEffect(() => {
     let unmounted = false;
@@ -31,7 +32,8 @@ export function useSidebarResize() {
           restoredWidth > SIDEBAR_WIDTH_MAX
         ) {
           try {
-            const prefWidth = await preferencesClient.getPreference('sidebar_width');
+            const prefWidth =
+              await preferencesClient.getPreference('sidebar_width');
             if (
               typeof prefWidth === 'number' &&
               prefWidth >= SIDEBAR_WIDTH_MIN &&
@@ -73,6 +75,12 @@ export function useSidebarResize() {
     void restoreSidebarWidth();
     return () => {
       unmounted = true;
+      if (resizeEndRafRef.current !== null) {
+        cancelAnimationFrame(resizeEndRafRef.current);
+        resizeEndRafRef.current = null;
+      }
+      document.body.classList.remove('is-resizing');
+      document.body.classList.remove('sidebar-resizing');
     };
   }, []);
 
@@ -145,6 +153,10 @@ export function useSidebarResize() {
   const handleSidebarResizeStart = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
+    if (resizeEndRafRef.current !== null) {
+      cancelAnimationFrame(resizeEndRafRef.current);
+      resizeEndRafRef.current = null;
+    }
     const handleEl = e.currentTarget as HTMLElement;
     try {
       handleEl.setPointerCapture(e.pointerId);
@@ -194,19 +206,24 @@ export function useSidebarResize() {
         /* ignore */
       }
       handleEl.classList.remove('is-dragging');
-      document.body.classList.remove('is-resizing');
-      document.body.classList.remove('sidebar-resizing');
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
       const finalWidth = startWidth + (upEvent.clientX - startX);
       if (shouldCollapseSidebar(finalWidth)) {
         applySidebarWidth(0, { collapse: true, persist: false });
       } else {
         applySidebarWidth(finalWidth, { persist: true });
       }
+      resizeEndRafRef.current = requestAnimationFrame(() => {
+        document.body.classList.remove('is-resizing');
+        document.body.classList.remove('sidebar-resizing');
+        resizeEndRafRef.current = null;
+      });
     };
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
   };
 
   const handleSidebarResizeDoubleClick = (e: React.MouseEvent) => {

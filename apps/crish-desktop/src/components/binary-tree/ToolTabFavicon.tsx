@@ -5,13 +5,16 @@
  * 其余标签回落 viewRegistry 图标语义名（由调用方传入，经 AppIcon 渲染）。
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   getPreviewFavicon,
   getPreviewUrl,
   isAboutBlank,
 } from '../../api/previewBrowserStore';
-import { viewRegistry } from '../../services/view-registry';
+import {
+  shouldConsumeScopedEvent,
+  useLeafScope,
+} from '../../contexts/LeafScopeContext';
 import { AppIcon, type IconName } from '../ui/icons';
 
 export function isBrowserTabId(tabId: string): boolean {
@@ -24,15 +27,30 @@ export function isBrowserTabId(tabId: string): boolean {
   );
 }
 
-function resolveBrowserTabUrl(tabId: string): string | null {
-  if (tabId.startsWith('preview:http://') || tabId.startsWith('preview:https://')) {
+function resolvePinnedBrowserTabUrl(tabId: string): string | null {
+  if (
+    tabId.startsWith('preview:http://') ||
+    tabId.startsWith('preview:https://')
+  ) {
     return tabId.substring('preview:'.length);
   }
-  if (tabId.startsWith('browser:http://') || tabId.startsWith('browser:https://')) {
+  if (
+    tabId.startsWith('browser:http://') ||
+    tabId.startsWith('browser:https://')
+  ) {
     return tabId.substring('browser:'.length);
   }
-  const current = getPreviewUrl();
-  return current && !isAboutBlank(current) ? current : null;
+  return null;
+}
+
+function resolveBrowserTabUrl(
+  tabId: string,
+  scopedUrl?: string | null
+): string | null {
+  const pinned = resolvePinnedBrowserTabUrl(tabId);
+  if (pinned) return pinned;
+  const candidate = scopedUrl ?? getPreviewUrl();
+  return candidate && !isAboutBlank(candidate) ? candidate : null;
 }
 
 export function ToolTabFavicon({
@@ -43,6 +61,10 @@ export function ToolTabFavicon({
   iconName?: IconName | null;
 }) {
   const [faviconUrl, setFaviconUrl] = useState<string | null>(null);
+  const leafScope = useLeafScope();
+  const scopeRef = useRef(leafScope);
+  scopeRef.current = leafScope;
+  const scopedUrlRef = useRef<string | null>(null);
 
   const isBrowserTab = isBrowserTabId(tabId);
 
@@ -50,7 +72,7 @@ export function ToolTabFavicon({
     if (!isBrowserTab) return;
 
     const refresh = () => {
-      const url = resolveBrowserTabUrl(tabId);
+      const url = resolveBrowserTabUrl(tabId, scopedUrlRef.current);
       if (!url || isAboutBlank(url)) {
         setFaviconUrl(null);
         return;
@@ -63,7 +85,7 @@ export function ToolTabFavicon({
 
     const onFavicon = (e: Event) => {
       const customEvent = e as CustomEvent<{ url?: string; favicon?: string }>;
-      const targetUrl = resolveBrowserTabUrl(tabId);
+      const targetUrl = resolveBrowserTabUrl(tabId, scopedUrlRef.current);
       if (
         customEvent.detail &&
         targetUrl &&
@@ -75,13 +97,35 @@ export function ToolTabFavicon({
         refresh();
       }
     };
-    const onUrl = () => refresh();
+    const onUrlChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{
+        url?: string;
+        leafId?: string;
+        sessionId?: string;
+      }>;
+      const scope = scopeRef.current;
+      if (
+        !shouldConsumeScopedEvent(customEvent.detail, {
+          leafId: scope.leafId,
+          sessionId: scope.sessionId,
+          isActive: scope.inLeafScope ? scope.isActive : undefined,
+        })
+      ) {
+        return;
+      }
+      if (typeof customEvent.detail?.url === 'string') {
+        scopedUrlRef.current = customEvent.detail.url;
+      }
+      refresh();
+    };
 
     window.addEventListener('crish-preview-favicon', onFavicon);
-    window.addEventListener('crish-preview-url', onUrl);
+    window.addEventListener('crish-preview-url-change', onUrlChange);
+    window.addEventListener('crish-preview-url', onUrlChange);
     return () => {
       window.removeEventListener('crish-preview-favicon', onFavicon);
-      window.removeEventListener('crish-preview-url', onUrl);
+      window.removeEventListener('crish-preview-url-change', onUrlChange);
+      window.removeEventListener('crish-preview-url', onUrlChange);
     };
   }, [tabId, isBrowserTab]);
 

@@ -85,5 +85,14 @@ describe('SidebarHeader', () => {
 
     const extra = getByTestId('sidebar-header-extra');
     expect(extra).toBeTruthy();
+
+    const brandIcon = toggleBtn.querySelector(
+      '[data-testid="toggle-brand-icon"]'
+    );
+    expect(brandIcon).toBeTruthy();
+
+    const brandTitle = getByTestId('sidebar-brand-title');
+    expect(brandTitle).toBeTruthy();
+    expect(brandTitle.textContent).toBe('Crish');
   });
 });

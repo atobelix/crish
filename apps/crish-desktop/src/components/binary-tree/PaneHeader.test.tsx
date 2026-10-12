@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { LayoutLeaf } from '../../store/types';
-import { useSessionStore } from '../../store/storeAccess';
+import { useSessionStore, useLayoutTreeStore } from '../../store/storeAccess';
 
 const shellMocks = vi.hoisted(() => ({
   activateTab: vi.fn(),
@@ -51,11 +51,7 @@ const DIR =
     ? import.meta.dirname
     : dirname(fileURLToPath(import.meta.url));
 
-function makeTab(
-  tabId: string,
-  sessionId: string,
-  title: string
-) {
+function makeTab(tabId: string, sessionId: string, title: string) {
   return {
     tabId,
     sessionId,
@@ -96,6 +92,12 @@ describe('PaneHeader 叶子拥有会话标签', () => {
         s1: { id: 's1', title: '会话一' },
         s2: { id: 's2', title: '会话二' },
         s3: { id: 's3', title: '会话三' },
+      },
+    } as never);
+    useLayoutTreeStore.setState({
+      tree: {
+        version: 3,
+        root: makeLeaf('leaf-a', [], ''),
       },
     } as never);
   });
@@ -153,6 +155,35 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     expect(shellMocks.addTab).toHaveBeenCalledTimes(1);
     expect(shellMocks.addTab).toHaveBeenCalledWith('leaf-b');
     expect(shellMocks.activateTab).not.toHaveBeenCalled();
+  });
+
+  it('多分屏下空窗格兜底新对话标签处于选中态，点击标签自身关闭按钮触发 removeTab 收拢分屏', () => {
+    useLayoutTreeStore.setState({
+      tree: {
+        version: 3,
+        root: {
+          type: 'branch',
+          id: 'br-1',
+          direction: 'horizontal',
+          children: [makeLeaf('leaf-a', [], ''), makeLeaf('leaf-b', [], '')],
+          splitRatio: 0.5,
+        },
+      },
+    } as never);
+    const leaf = makeLeaf('leaf-a', [], '');
+    const { getByLabelText, container } = render(
+      <PaneHeader leaf={leaf} isActive isChat />
+    );
+    const draftTab = container.querySelector(
+      '[data-tab-id="pane-leaf-a"]'
+    ) as HTMLElement;
+    expect(draftTab).toBeTruthy();
+    expect(draftTab.getAttribute('aria-selected')).toBe('true');
+
+    const closeBtn = getByLabelText('关闭 新对话');
+    fireEvent.click(closeBtn);
+    fireEvent.transitionEnd(draftTab, { propertyName: 'flex-basis' });
+    expect(shellMocks.removeTab).toHaveBeenCalledWith('leaf-a', 'pane-leaf-a');
   });
 
   it('关 active tab：邻居激活延后两帧，removeTab 由 transitionend(flex-basis) 驱动', async () => {
@@ -227,11 +258,7 @@ describe('PaneHeader 叶子拥有会话标签', () => {
   });
 
   it('窗口拖拽遵从系统原生通道：顶行叶子挂载 data-tauri-drag-region，非顶行不挂载，可交互元素免疫', () => {
-    const leaf = makeLeaf(
-      'leaf-a',
-      [makeTab('ta1', 's1', '会话一')],
-      'ta1'
-    );
+    const leaf = makeLeaf('leaf-a', [makeTab('ta1', 's1', '会话一')], 'ta1');
     const { container, rerender } = render(
       <PaneHeader leaf={leaf} isActive isChat isTopRow={true} />
     );
@@ -270,7 +297,10 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     expect(tablist.getAttribute('data-locked')).toBe('false');
 
     const tab1 = tablist.querySelector('[data-tab-id="ta1"]') as HTMLElement;
-    Object.defineProperty(tab1, 'offsetWidth', { configurable: true, value: 120 });
+    Object.defineProperty(tab1, 'offsetWidth', {
+      configurable: true,
+      value: 120,
+    });
 
     fireEvent.click(getByLabelText('关闭 会话一'));
 
@@ -279,7 +309,9 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     expect(tablist.style.getPropertyValue('--tab-item-width')).toBe('120px');
 
     // 场景 A：伪离开事件（如指针仍处于顶部条带矩形内部或子节点卸载）不解锁
-    const header = container.querySelector('[data-pane-header="true"]') as HTMLElement;
+    const header = container.querySelector(
+      '[data-pane-header="true"]'
+    ) as HTMLElement;
     vi.spyOn(header, 'getBoundingClientRect').mockReturnValue({
       left: 0,
       top: 0,
@@ -319,7 +351,10 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     const tablist = container.querySelector('[role="tablist"]') as HTMLElement;
 
     const tab1 = tablist.querySelector('[data-tab-id="ta1"]') as HTMLElement;
-    Object.defineProperty(tab1, 'offsetWidth', { configurable: true, value: 95 });
+    Object.defineProperty(tab1, 'offsetWidth', {
+      configurable: true,
+      value: 95,
+    });
 
     // 第一次点击关闭 ta1
     fireEvent.click(getByLabelText('关闭 会话一'));
@@ -434,8 +469,14 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     const tablist = container.querySelector('[role="tablist"]') as HTMLElement;
 
     act(() => {
-      Object.defineProperty(tablist, 'clientWidth', { configurable: true, value: 500 });
-      Object.defineProperty(tablist, 'scrollWidth', { configurable: true, value: 500 });
+      Object.defineProperty(tablist, 'clientWidth', {
+        configurable: true,
+        value: 500,
+      });
+      Object.defineProperty(tablist, 'scrollWidth', {
+        configurable: true,
+        value: 500,
+      });
       roManagerMock.state.cb?.({} as never);
     });
 

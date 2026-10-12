@@ -27,14 +27,19 @@ export const PlansSection: React.FC<PlansSectionProps> = ({
 }) => {
   // D2（C-10）：连接态投影（errorStore 真源），不再由 RuntimePanel props 下传
   const connectionStatus = useConnectionStatus();
+  const titleId = React.useId();
   return (
-    <section className={styles.section} aria-labelledby="rt-sec-plan">
+    <section className={styles.section} aria-labelledby={titleId}>
       <div className={styles.sectionHead}>
-        <h4 id="rt-sec-plan" className={styles.sectionTitle}>
+        <h4 id={titleId} className={styles.sectionTitle}>
           计划任务
         </h4>
         {countLabel ? (
-          <span className={styles.rowMeta} aria-live="polite" aria-label={`${countLabel} 个计划`}>
+          <span
+            className={styles.rowMeta}
+            aria-live="polite"
+            aria-label={`${countLabel} 个计划`}
+          >
             {countLabel}
           </span>
         ) : null}
@@ -55,7 +60,11 @@ export const PlansSection: React.FC<PlansSectionProps> = ({
           {emptyPlansHint(connectionStatus)}
         </div>
       ) : (
-        <div className={`${styles.list} ${styles.listScroll}`} role="list" aria-label="计划任务列表">
+        <div
+          className={`${styles.list} ${styles.listScroll}`}
+          role="list"
+          aria-label="计划任务列表"
+        >
           {workflows.map((w) => {
             const enabled = w.enabled !== false;
             return (
@@ -71,7 +80,9 @@ export const PlansSection: React.FC<PlansSectionProps> = ({
                       className={`${styles.dot} ${enabled ? styles.on : styles.off}`}
                       aria-hidden
                     />
-                    <span className={styles.cronExpr}>{scheduleLabel(w.schedule)}</span>
+                    <span className={styles.cronExpr}>
+                      {scheduleLabel(w.schedule)}
+                    </span>
                   </div>
                 </div>
                 <div className={styles.cronPrompt}>{w.name}</div>
@@ -96,7 +107,9 @@ export const PlansSection: React.FC<PlansSectionProps> = ({
                       className={`${styles.dot} ${active ? styles.on : styles.off}`}
                       aria-hidden
                     />
-                    <span className={styles.cronExpr}>{job.cronExpression}</span>
+                    <span className={styles.cronExpr}>
+                      {job.cronExpression}
+                    </span>
                   </div>
                 </div>
                 <div className={styles.cronPrompt}>{job.prompt}</div>

@@ -49,6 +49,8 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
     onStartRename,
     onCommitRename,
     onCancelRename,
+    onDeleteSession,
+    onBranchSession,
   } = props;
 
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -162,11 +164,7 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
     );
   }, [dragPreview, sessions, sortedSessions]);
 
-  const {
-    pinnedSessions,
-    byProjectId,
-    generalSessions,
-  } = useSessionGrouping({
+  const { pinnedSessions, byProjectId, generalSessions } = useSessionGrouping({
     sessions,
     sortedSessions,
     projects,
@@ -331,6 +329,8 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
             onContextMenuSession,
             onStartSessionDrag: startSessionDrag,
             onNavigateSession: navigateSession,
+            onDeleteSession,
+            onBranchSession,
           }}
         />
       );
@@ -351,6 +351,8 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
       onStartRename,
       commitRename,
       onCancelRename,
+      onDeleteSession,
+      onBranchSession,
       navigateSession,
       dropIndicator,
       titleHints,

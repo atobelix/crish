@@ -24,7 +24,10 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--workspace-surface-bg, var(--bg-workspace, var(--bg-primary)));
+  background: var(
+    --workspace-surface-bg,
+    var(--bg-workspace, var(--bg-primary))
+  );
   padding: 0;
   box-sizing: border-box;
 }
@@ -101,7 +104,10 @@
 .topSidePanelBtn,
 .topSidePanelBtn {
   position: absolute;
-  top: calc(var(--header-height) + (var(--header-height) - var(--leaf-corner-btn-size)) / 2);
+  top: calc(
+    var(--header-height) +
+      (var(--header-height) - var(--leaf-corner-btn-size)) / 2
+  );
   right: var(--leaf-corner-btn-inset);
   width: var(--leaf-corner-btn-size);
   height: var(--leaf-corner-btn-size);
@@ -121,8 +127,8 @@
   z-index: var(--z-dropdown);
   pointer-events: auto;
   transition:
-    background-color var(--transition-micro) ease,
-    color var(--transition-micro) ease;
+    background-color var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .topSidePanelBtn:hover {
@@ -136,12 +142,10 @@
   color: var(--text-primary);
 }
 
-
 /* live resize 拖拽指示条 + 拖拽中激活 leaf 样式 */
 :global(.tree-resizing) .leaf,
 :global(.tree-dragging) .leaf {
   transition: none;
-  will-change: left, width, top, height;
 }
 
 /* 拖拽悬停 leaf 目标高亮状态 */
@@ -300,7 +304,8 @@
   position: fixed;
   pointer-events: none;
   z-index: var(--z-drag-overlay);
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--shadow-color) 18%, transparent);
+  box-shadow: 0 8px 24px
+    color-mix(in srgb, var(--shadow-color) 18%, transparent);
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--bg-primary);
@@ -448,13 +453,27 @@
   position: relative;
 }
 
+.dockPanelPane[data-active-panel='true'] {
+  animation: panelCrossFadeIn 120ms var(--ease-emphasized) forwards;
+}
+
+@keyframes panelCrossFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.996);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /*
  * 叶内二级 fill 已下沉到各消费者自闭环：
  * - ChatCard `.chatBody` / `.emptyState` 自带 flex: 1 1 0%
  * - NoteLeafHost 内联 style 自带 flex: 1 1 0%；面板绝缘见 NotePaperPanel.module.css
  * 禁止再引入 .leafChatColumn > * 等任意后代穿透。
  */
-
 
 .emptyState {
   display: flex;

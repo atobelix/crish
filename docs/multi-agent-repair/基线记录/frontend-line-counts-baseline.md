@@ -127,13 +127,13 @@ apps/crish-desktop/src/components/binary-tree/PaneHeader.tsx 442
 apps/crish-desktop/src/components/binary-tree/TreeLeafPanel.tsx 485
 apps/crish-desktop/src/components/chat-card/useChatAttachments.ts 472
 apps/crish-desktop/src/components/chat-composer/ChatComposer.tsx 460
-apps/crish-desktop/src/components/chat-message-list/MessageVirtualizer.tsx 476
+apps/crish-desktop/src/components/chat-message-list/MessageVirtualizer.tsx 510
 apps/crish-desktop/src/components/chat-tool-call/toolExpansionState.ts 437
 apps/crish-desktop/src/components/diff/ChangeOverviewCard.tsx 481
 apps/crish-desktop/src/components/diff/useDiffData.ts 426
-apps/crish-desktop/src/components/files/FileBreadcrumb.tsx 450
-apps/crish-desktop/src/components/files/FileViewerCard.tsx 456
-apps/crish-desktop/src/components/files/FilesCard.tsx 465
+apps/crish-desktop/src/components/files/FileBreadcrumb.tsx 517
+apps/crish-desktop/src/components/files/FileViewerCard.tsx 464
+apps/crish-desktop/src/components/files/FilesCard.tsx 473
 apps/crish-desktop/src/components/note-paper/useNoteTextPersistence.ts 454
 apps/crish-desktop/src/components/settings-models/ModelsSettingsTab.tsx 427
 apps/crish-desktop/src/components/sidebar/session-list/useSessionListDrag.ts 582
