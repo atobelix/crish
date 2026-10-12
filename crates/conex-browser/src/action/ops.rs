@@ -257,6 +257,7 @@ impl NetworkCounter {
                         task_in_flight.fetch_add(1, Ordering::Relaxed);
                     }
                     Ok(BrowserEvent::NetworkDone { .. }) => {
+                        #[allow(deprecated)]
                         task_in_flight
                             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
                                 Some(n.saturating_sub(1))

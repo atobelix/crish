@@ -369,7 +369,7 @@ mod platform {
             "chromium",
         ]
         .iter()
-        .filter_map(|n| which(n))
+        .map(|n| which(n).unwrap_or_else(|| std::path::PathBuf::from(format!("/usr/bin/{n}"))))
         .collect()
     }
 
@@ -377,7 +377,7 @@ mod platform {
     pub fn edge_candidates() -> Vec<std::path::PathBuf> {
         ["microsoft-edge", "microsoft-edge-stable"]
             .iter()
-            .filter_map(|n| which(n))
+            .map(|n| which(n).unwrap_or_else(|| std::path::PathBuf::from(format!("/usr/bin/{n}"))))
             .collect()
     }
 }

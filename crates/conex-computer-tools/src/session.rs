@@ -28,10 +28,15 @@
 //! （screenshot/cursor_position 返回形状 `displayNumber` 消费面）。
 
 use async_trait::async_trait;
-use conex_computer::perception::{PerceptionError, PerceptionSnapshot, PerceptionSource};
+use conex_computer::perception::{PerceptionError, PerceptionSnapshot};
+#[cfg(windows)]
+use conex_computer::perception::PerceptionSource;
 use conex_computer::{Action, ActionResult, CapturedFrame, SessionError};
+#[cfg(windows)]
 use conex_shared::gate::{ActionTarget, ActionTargetGate};
+#[cfg(windows)]
 use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(windows)]
 use std::sync::{Arc, Mutex};
 
 /// 电脑操作会话操作抽象（computer_* 工具与 ComputerSession 的唯一交互面）。
@@ -76,14 +81,17 @@ pub trait ComputerOps: Send + Sync {
 /// 库面标记 `Send + Sync`，但感知源以 MTA（`COINIT_MULTITHREADED`）初始化
 /// （perception.rs:332）——MTA 下 `IUIAutomation` 接口可跨线程调用，
 /// `Send + Sync` 语义成立（异步运行时线程迁移安全），unsafe impl 有充分依据。
+#[cfg(windows)]
 struct PerceptionGuard(conex_computer::perception::UiaPerception);
 
 // SAFETY: UiaPerception 经 COINIT_MULTITHREADED 初始化（MTA），COM 对象
 // 可跨线程调用；内部无可变状态面，跨线程共享安全。
+#[cfg(windows)]
 #[allow(unsafe_code)]
 unsafe impl Send for PerceptionGuard {}
 
 // SAFETY: 同上——MTA COM 对象跨线程调用安全（多线程 runtime 线程迁移场景）。
+#[cfg(windows)]
 #[allow(unsafe_code)]
 unsafe impl Sync for PerceptionGuard {}
 

@@ -96,19 +96,15 @@ pub(super) fn normalize_abs_path(p: &Path) -> PathBuf {
 }
 
 fn strip_verbatim(p: &Path) -> PathBuf {
-    let s = p.to_string_lossy();
     #[cfg(windows)]
     {
+        let s = p.to_string_lossy();
         if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
             return PathBuf::from(format!(r"\\{rest}"));
         }
         if let Some(rest) = s.strip_prefix(r"\\?\") {
             return PathBuf::from(rest.to_string());
         }
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = &s;
     }
     p.to_path_buf()
 }

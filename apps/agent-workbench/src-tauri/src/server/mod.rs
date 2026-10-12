@@ -1263,7 +1263,7 @@ mod tests {
             .await
             .map_err(|e| format!("TLS 握手失败：{e}"))?;
         let request = format!(
-            "GET {request_path} HTTP/1.1\r\nHost: crish-remote:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n",
+            "GET {request_path} HTTP/1.1\r\nHost: crish-remote:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n", // gitleaks:allow
             port = addr.port()
         );
         tls.write_all(request.as_bytes())
@@ -1308,7 +1308,7 @@ mod tests {
             .await
             .expect("TCP 必须可连");
         let request = format!(
-            "GET /v1/events?token={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n",
+            "GET /v1/events?token={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n", // gitleaks:allow
             harness.token,
             harness.addr.port()
         );

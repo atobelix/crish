@@ -527,6 +527,7 @@ fn default_route_ip() -> String {
 
 /// 判定 IP 是否属于私有网段：RFC1918（10/8、172.16/12、192.168/16）+
 /// IPv6 ULA（fc00::/7）。来源：pairing.rs:396-406。
+#[cfg_attr(not(windows), allow(dead_code))]
 fn is_private_ip(ip: &std::net::IpAddr) -> bool {
     match ip {
         std::net::IpAddr::V4(v4) => {
@@ -538,6 +539,7 @@ fn is_private_ip(ip: &std::net::IpAddr) -> bool {
 }
 
 /// 字符串形式私有网段判定（排序键用；解析失败按非私有）。
+#[cfg_attr(not(windows), allow(dead_code))]
 fn is_private_ip_str(s: &str) -> bool {
     match s.parse::<std::net::IpAddr>() {
         Ok(ip) => is_private_ip(&ip),
@@ -548,6 +550,7 @@ fn is_private_ip_str(s: &str) -> bool {
 /// 判定 IP 是否可被手机直连：排除回环/未指定/链路本地/组播；
 /// 服务监听为 IPv4（0.0.0.0），IPv6 地址不可直连，不在集合内。
 /// 来源：pairing.rs:408-422。
+#[cfg_attr(not(windows), allow(dead_code))]
 fn is_usable_lan_ip(ip: &std::net::IpAddr) -> bool {
     fn is_link_local(ip: &std::net::IpAddr) -> bool {
         match ip {

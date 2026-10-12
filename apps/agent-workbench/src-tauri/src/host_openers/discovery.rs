@@ -434,7 +434,7 @@ pub(crate) fn opener_candidates(
     candidates
 }
 
-fn system_file_manager_candidate(env_var: &impl Fn(&str) -> Option<OsString>) -> OpenerCandidate {
+fn system_file_manager_candidate(_env_var: &impl Fn(&str) -> Option<OsString>) -> OpenerCandidate {
     #[cfg(windows)]
     {
         OpenerCandidate {
@@ -442,7 +442,7 @@ fn system_file_manager_candidate(env_var: &impl Fn(&str) -> Option<OsString>) ->
             display_name: "File Explorer",
             kind: HostOpenerKind::FileManager,
             commands: &["explorer.exe", "explorer"],
-            known_paths: first_env_path(env_var, &["WINDIR", "SystemRoot"])
+            known_paths: first_env_path(_env_var, &["WINDIR", "SystemRoot"])
                 .map(|root| vec![root.join("explorer.exe")])
                 .unwrap_or_default(),
         }
@@ -562,6 +562,7 @@ fn known_windows_app_paths(
         .collect()
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 fn first_env_path(env_var: &impl Fn(&str) -> Option<OsString>, keys: &[&str]) -> Option<PathBuf> {
     keys.iter().find_map(|key| {
         env_var(key)

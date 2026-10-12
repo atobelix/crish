@@ -196,12 +196,13 @@ impl SecureCredentialStore {
         if !path.exists() {
             return Ok(None);
         }
-        let mut bytes = fs::read(&path)?;
+        let bytes = fs::read(&path)?;
         if bytes.is_empty() {
             return Ok(None);
         }
         #[cfg(target_os = "windows")]
         {
+            let mut bytes = bytes;
             let plain = dpapi::unprotect(&bytes)?;
             bytes.zeroize();
             Ok(Some(plain))

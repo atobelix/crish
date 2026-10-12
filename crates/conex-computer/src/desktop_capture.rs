@@ -26,7 +26,9 @@ use conex_shared::frame::{
 };
 use tokio::sync::watch;
 
-use crate::screen::{CapturedFrame, ScreenCapture};
+use crate::screen::CapturedFrame;
+#[cfg(windows)]
+use crate::screen::ScreenCapture;
 
 /// 截屏产源抽象(最小注入面:生产为 ScreenCapture 适配,测试为 mock)
 pub trait FrameProducer: Send {

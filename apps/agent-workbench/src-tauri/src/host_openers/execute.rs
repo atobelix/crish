@@ -182,74 +182,73 @@ fn open_with_shortcut(
         )));
     }
 
-    let lnk = crate::host_openers::discovery::trusted_start_menu_shortcut_path(Path::new(lnk_path))
-        .ok_or_else(|| {
-            to_core_error(host_opener_error(
-                "PermissionDenied",
-                "Shortcut must resolve to a .lnk inside a Start Menu Programs folder.",
-                Some(lnk_path.to_string()),
-                None,
-            ))
-        })?;
-
-    #[cfg(windows)]
-    let executable = resolve_windows_shortcut_target(&lnk).map_err(|message| {
-        to_core_error(host_opener_error(
-            "host-opener-shortcut-invalid",
-            message,
-            Some(lnk.display().to_string()),
-            Some(file_arg.clone()),
-        ))
-    })?;
-
     #[cfg(not(windows))]
-    let executable = {
-        let _ = (&lnk, &file_arg);
-        return Err(to_core_error(host_opener_error(
+    {
+        let _ = (&opener_id, lnk_path, &file_arg);
+        Err(to_core_error(host_opener_error(
             "host-opener-unavailable",
             "Shortcut open is only implemented on Windows.",
             Some(lnk_path.to_string()),
             None,
-        )));
-    };
-
-    let executable = executable.canonicalize().map_err(|error| {
-        to_core_error(host_opener_error(
-            "host-opener-shortcut-invalid",
-            format!("Shortcut target could not be resolved: {error}"),
-            Some(executable.display().to_string()),
-            Some(file_arg.clone()),
-        ))
-    })?;
-    if !executable.is_file() || !is_safe_shortcut_executable(&executable) {
-        return Err(to_core_error(host_opener_error(
-            "PermissionDenied",
-            "Shortcut target must be an existing application executable.",
-            Some(executable.display().to_string()),
-            Some(file_arg),
-        )));
-    }
-
-    let gatekeeper = &*conex_sandbox::gatekeeper::SHARED_GATEKEEPER;
-    let command_display = executable.display().to_string();
-    let shortcut_display = lnk.display().to_string();
-    let arguments = [file_arg.as_str()];
-    if gatekeeper.check_command(&command_display, &arguments)
-        != conex_sandbox::gatekeeper::GatekeeperResult::Allowed
-        || gatekeeper.patterns().is_match(&shortcut_display)
-        || gatekeeper.patterns().is_match(&command_display)
-        || gatekeeper.patterns().is_match(&file_arg)
-    {
-        return Err(to_core_error(host_opener_error(
-            "PermissionDenied",
-            "Command blocked by safety red-line gatekeeper (InvalidCommand)",
-            Some(command_display),
-            Some(file_arg),
-        )));
+        )))
     }
 
     #[cfg(windows)]
     {
+        let lnk = crate::host_openers::discovery::trusted_start_menu_shortcut_path(Path::new(lnk_path))
+            .ok_or_else(|| {
+                to_core_error(host_opener_error(
+                    "PermissionDenied",
+                    "Shortcut must resolve to a .lnk inside a Start Menu Programs folder.",
+                    Some(lnk_path.to_string()),
+                    None,
+                ))
+            })?;
+
+        let executable = resolve_windows_shortcut_target(&lnk).map_err(|message| {
+            to_core_error(host_opener_error(
+                "host-opener-shortcut-invalid",
+                message,
+                Some(lnk.display().to_string()),
+                Some(file_arg.clone()),
+            ))
+        })?;
+
+        let executable = executable.canonicalize().map_err(|error| {
+            to_core_error(host_opener_error(
+                "host-opener-shortcut-invalid",
+                format!("Shortcut target could not be resolved: {error}"),
+                Some(executable.display().to_string()),
+                Some(file_arg.clone()),
+            ))
+        })?;
+        if !executable.is_file() || !is_safe_shortcut_executable(&executable) {
+            return Err(to_core_error(host_opener_error(
+                "PermissionDenied",
+                "Shortcut target must be an existing application executable.",
+                Some(executable.display().to_string()),
+                Some(file_arg),
+            )));
+        }
+
+        let gatekeeper = &*conex_sandbox::gatekeeper::SHARED_GATEKEEPER;
+        let command_display = executable.display().to_string();
+        let shortcut_display = lnk.display().to_string();
+        let arguments = [file_arg.as_str()];
+        if gatekeeper.check_command(&command_display, &arguments)
+            != conex_sandbox::gatekeeper::GatekeeperResult::Allowed
+            || gatekeeper.patterns().is_match(&shortcut_display)
+            || gatekeeper.patterns().is_match(&command_display)
+            || gatekeeper.patterns().is_match(&file_arg)
+        {
+            return Err(to_core_error(host_opener_error(
+                "PermissionDenied",
+                "Command blocked by safety red-line gatekeeper (InvalidCommand)",
+                Some(command_display),
+                Some(file_arg),
+            )));
+        }
+
         // Shortcut-embedded arguments are deliberately not forwarded. The opener
         // passes only the selected workspace item, matching its existing contract.
         let command = Command::new(&executable)
@@ -286,6 +285,7 @@ fn open_with_shortcut(
     }
 }
 
+#[cfg(windows)]
 fn is_safe_shortcut_executable(path: &Path) -> bool {
     const NON_APPLICATION_EXECUTABLES: &[&str] = &[
         "bash.exe",

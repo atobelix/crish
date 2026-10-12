@@ -453,16 +453,22 @@ mod tests {
         let stripped_unc = strip_verbatim_prefix(unc_path);
         #[cfg(windows)]
         assert_eq!(stripped_unc.to_string_lossy(), r"\\server\share\file.txt");
+        #[cfg(not(windows))]
+        assert_eq!(stripped_unc, unc_path);
 
         let local_path = Path::new(r"\\?\C:\workspace\file.txt");
         let stripped_local = strip_verbatim_prefix(local_path);
         #[cfg(windows)]
         assert_eq!(stripped_local.to_string_lossy(), r"C:\workspace\file.txt");
+        #[cfg(not(windows))]
+        assert_eq!(stripped_local, local_path);
 
         let dot_path = Path::new(r"\\.\pipe\test");
         let stripped_dot = strip_verbatim_prefix(dot_path);
         #[cfg(windows)]
         assert_eq!(stripped_dot.to_string_lossy(), r"pipe\test");
+        #[cfg(not(windows))]
+        assert_eq!(stripped_dot, dot_path);
 
         let plain_path = Path::new(r"C:\simple\path.txt");
         let stripped_plain = strip_verbatim_prefix(plain_path);

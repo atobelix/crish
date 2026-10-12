@@ -45,7 +45,7 @@ pub fn data_root() -> Result<PathBuf, ProcessError> {
     let dir = dirs::data_local_dir();
     #[cfg(target_os = "macos")]
     let dir = dirs::data_dir();
-    #[cfg(target_os = "linux")]
+    #[cfg(not(any(windows, target_os = "macos")))]
     let dir = dirs::data_local_dir();
     dir.ok_or_else(|| ProcessError::Internal("无法定位平台数据根（data_root）".to_string()))
         .map(|p| p.join(APP_DIR_NAME))

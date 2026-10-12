@@ -240,6 +240,7 @@ fn dpapi_unprotect(input: &[u8]) -> Result<Vec<u8>, String> {
 
 // ── hex 编解码（从 Tauri 壳 credentials.rs:326-357 复制）──
 
+#[allow(dead_code)]
 fn encode_hex(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut output = String::with_capacity(bytes.len() * 2);
@@ -250,6 +251,7 @@ fn encode_hex(bytes: &[u8]) -> String {
     output
 }
 
+#[allow(dead_code)]
 fn decode_hex(input: &str) -> Result<Vec<u8>, String> {
     if !input.len().is_multiple_of(2) {
         return Err("Invalid encrypted credential encoding".to_string());
@@ -265,6 +267,7 @@ fn decode_hex(input: &str) -> Result<Vec<u8>, String> {
         .collect()
 }
 
+#[allow(dead_code)]
 fn hex_value(byte: u8) -> Result<u8, String> {
     match byte {
         b'0'..=b'9' => Ok(byte - b'0'),
