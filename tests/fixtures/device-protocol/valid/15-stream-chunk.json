@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "kind": "stream.chunk",
+  "msgId": "s-str-0016",
+  "ts": 1754651206000,
+  "from": "desktop",
+  "to": "mobile",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651206000,
+    "nonce": "n-str-01",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "streamId": "st-01HZ",
+    "seq": 1,
+    "data": "{\"lines\":[\"构建成功\"],\"truncated\":false}",
+    "final": true
+  }
+}

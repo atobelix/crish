@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "kind": "pair.verify",
+  "msgId": "m-iph-001-0003",
+  "ts": 1754651200002,
+  "from": "mobile",
+  "to": "desktop",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651200002,
+    "nonce": "n-ver-01",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "challengeSig": "c2lnLWJhc2U2NA==",
+    "devicePubSig": "c2lnLWRldmljZQ=="
+  }
+}

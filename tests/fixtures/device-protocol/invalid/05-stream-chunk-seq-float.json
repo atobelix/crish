@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "kind": "stream.chunk",
+  "msgId": "s-str-0005",
+  "ts": 1754651206000,
+  "from": "desktop",
+  "to": "mobile",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651206000,
+    "nonce": "n-str-05",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "streamId": "st-01HZ",
+    "seq": 1.5,
+    "data": "hello",
+    "final": true
+  }
+}

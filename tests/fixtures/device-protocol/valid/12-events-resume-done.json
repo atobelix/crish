@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "kind": "events.resume.done",
+  "msgId": "s-evt-0013",
+  "ts": 1754651204200,
+  "from": "desktop",
+  "to": "mobile",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651204200,
+    "nonce": "n-rsm-03",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "sessionId": "sess-01",
+    "resumedTo": 135
+  }
+}

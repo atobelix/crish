@@ -1,0 +1,22 @@
+{
+  "v": 1,
+  "kind": "remote.approve",
+  "msgId": "m-iph-005-0014",
+  "ts": 1754651205000,
+  "from": "mobile",
+  "to": "desktop",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651205000,
+    "nonce": "n-appr-01",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "command": "approve",
+    "params": {
+      "toolCallId": "tc-42",
+      "runId": "run-42"
+    },
+    "timeoutMs": 30000
+  }
+}

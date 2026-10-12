@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "kind": "pair.ok",
+  "msgId": "s-pair-0004",
+  "ts": 1754651200003,
+  "from": "desktop",
+  "to": "mobile",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651200003,
+    "nonce": "n-ok-01",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "desktopId": "d-01HZ",
+    "ttl": 86400
+  }
+}

@@ -443,6 +443,7 @@ apps/agent-workbench/src-tauri/gen/*
 /scripts/**/*.mjs
 /scripts/**/*.txt
 /tests/**/*.json
+!/tests/fixtures/**
 /_agent_patches/**
 /blackhole/**
 /model-price-data/**

@@ -1,0 +1,23 @@
+{
+  "v": 1,
+  "kind": "events.push",
+  "msgId": "s-evt-0004",
+  "ts": 1754651203000,
+  "from": "desktop",
+  "to": "mobile",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651203000,
+    "nonce": "n-psh-04",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "event": {
+      "type": "approval-requested",
+      "runId": "run-42",
+      "sequence": 58,
+      "schemaVersion": 1,
+      "sessionId": "sess-01"
+    }
+  }
+}

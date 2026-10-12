@@ -1,0 +1,38 @@
+{
+  "v": 1,
+  "kind": "events.push",
+  "msgId": "s-evt-0009",
+  "ts": 1754651203000,
+  "from": "desktop",
+  "to": "mobile",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651203000,
+    "nonce": "n-psh-01",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "sessionId": "sess-01",
+    "event": {
+      "type": "approval-requested",
+      "runId": "run-42",
+      "sequence": 58,
+      "schemaVersion": 1,
+      "sessionId": "sess-01",
+      "timestamp": "2026-08-09T10:00:00.000Z",
+      "request": {
+        "id": "approval-tc-42",
+        "sessionId": "sess-01",
+        "cwd": "C:/work",
+        "toolCallId": "tc-42",
+        "toolName": "write_file",
+        "parameters": {
+          "path": "src/main.rs"
+        },
+        "summary": "call write_file",
+        "toolMetadata": {},
+        "metadata": null
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "v": 1,
+  "kind": "events.subscribe",
+  "msgId": "m-iph-003-0008",
+  "ts": 1754651202000,
+  "from": "mobile",
+  "to": "desktop",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651202000,
+    "nonce": "n-sub-01",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "sessions": ["sess-01", "sess-02"],
+    "lastSequences": {
+      "sess-01": 128,
+      "sess-02": 96
+    },
+    "ackMode": "critical",
+    "granularity": "standard"
+  }
+}

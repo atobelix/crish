@@ -1,0 +1,24 @@
+{
+  "v": 1,
+  "kind": "auth.hello",
+  "msgId": "m-iph-002-0005",
+  "ts": 1754651201000,
+  "from": "mobile",
+  "to": "desktop",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651201000,
+    "nonce": "n-hi-01",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "protocolVersions": [1],
+    "capabilities": ["fileRead", "approval", "eventReplay"],
+    "appVersion": "0.1.0",
+    "platform": "ios",
+    "resume": {
+      "sess-01": 128,
+      "sess-02": 96
+    }
+  }
+}

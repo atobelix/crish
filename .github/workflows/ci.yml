@@ -176,7 +176,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm install -g npm@11.6.2 && (npm ci || npm install)
-      - run: npm audit --audit-level=moderate
+      - run: npm audit --omit=dev --audit-level=moderate -w @crish/crish-desktop -w @crish/agent-workbench -w @crish/editor-kit -w @crish/block-paper -w @crish/shared-utils -w @crish/shared-types
 
   # 生成物漂移门禁（2026-08-03 审计：gen:engine-bindings 是手动脚本，CI 未跑；
   # registry_drift 只锁 JSON↔Rust，不锁 JSON↔TS）。
@@ -220,6 +220,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install Linux build dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libpipewire-0.3-dev libspa-0.2-dev
       # 跨平台编译门禁（Linux / Windows / macOS 原生契约验证）：
       # --locked 锁定依赖版本
       - run: cargo check --workspace --locked

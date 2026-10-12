@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "kind": "heartbeat",
+  "msgId": "m-iph-006-0002",
+  "ts": "1754651208000",
+  "from": "mobile",
+  "to": "desktop",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651208000,
+    "nonce": "n-hb-01",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "ts": 1754651208000,
+    "deviceTimeMs": 1754651207950
+  }
+}

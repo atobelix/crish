@@ -1,0 +1,23 @@
+{
+  "v": 1,
+  "kind": "result.approve",
+  "msgId": "s-res-0015",
+  "ts": 1754651205100,
+  "from": "desktop",
+  "to": "mobile",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651205100,
+    "nonce": "n-res-01",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "reqMsgId": "m-iph-005-0014",
+    "ok": true,
+    "result": {
+      "ok": true,
+      "toolCallId": "tc-42",
+      "decision": "approved"
+    }
+  }
+}

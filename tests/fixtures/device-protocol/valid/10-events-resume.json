@@ -1,0 +1,19 @@
+{
+  "v": 1,
+  "kind": "events.resume",
+  "msgId": "m-iph-004-0011",
+  "ts": 1754651204000,
+  "from": "mobile",
+  "to": "desktop",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651204000,
+    "nonce": "n-rsm-01",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "sessionId": "sess-01",
+    "afterSequence": 128,
+    "maxEvents": 200
+  }
+}

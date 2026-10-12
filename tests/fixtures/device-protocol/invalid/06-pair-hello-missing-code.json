@@ -1,0 +1,21 @@
+{
+  "v": 1,
+  "kind": "pair.hello",
+  "msgId": "m-iph-001-0006",
+  "ts": 1754651200000,
+  "from": "mobile",
+  "to": "desktop",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651200000,
+    "nonce": "n-1a2b3c4e",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "deviceId": "dev-mobile-0f3a",
+    "mobilePub": "mPB64Base64==",
+    "mobileLongPub": "mLPB64Base64==",
+    "deviceName": "我的 iPhone",
+    "platform": "ios"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "kind": "error",
+  "msgId": "s-err-0017",
+  "ts": 1754651207000,
+  "from": "desktop",
+  "to": "mobile",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651207000,
+    "nonce": "n-err-01",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "code": "auth.device_revoked",
+    "message": "设备已撤销（dev-mobile-0f3a）",
+    "retryable": false,
+    "reqMsgId": "m-iph-001-0001"
+  }
+}

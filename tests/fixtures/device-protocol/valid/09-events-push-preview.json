@@ -1,0 +1,31 @@
+{
+  "v": 1,
+  "kind": "events.push",
+  "msgId": "s-evt-0010",
+  "ts": 1754651203100,
+  "from": "desktop",
+  "to": "mobile",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651203100,
+    "nonce": "n-psh-02",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "sessionId": "sess-01",
+    "preview": true,
+    "event": {
+      "type": "message-delta",
+      "runId": "run-42",
+      "sequence": null,
+      "schemaVersion": 1,
+      "sessionId": "sess-01",
+      "messageId": "msg-7",
+      "timestamp": "2026-08-09T10:00:00.200Z",
+      "block": {
+        "type": "text",
+        "text": "正在编译…"
+      }
+    }
+  }
+}

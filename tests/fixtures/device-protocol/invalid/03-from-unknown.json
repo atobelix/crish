@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "kind": "events.ack",
+  "msgId": "m-iph-006-0003",
+  "ts": 1754651208000,
+  "from": "hub",
+  "to": "desktop",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651208000,
+    "nonce": "n-ack-01",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "msgId": "s-evt-0009"
+  }
+}

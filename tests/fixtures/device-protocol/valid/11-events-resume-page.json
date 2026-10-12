@@ -1,0 +1,38 @@
+{
+  "v": 1,
+  "kind": "events.resume.page",
+  "msgId": "s-evt-0012",
+  "ts": 1754651204100,
+  "from": "desktop",
+  "to": "mobile",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651204100,
+    "nonce": "n-rsm-02",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "sessionId": "sess-01",
+    "events": [
+      {
+        "type": "message-end",
+        "runId": "run-42",
+        "sequence": 129,
+        "schemaVersion": 1,
+        "sessionId": "sess-01",
+        "messageId": "msg-7",
+        "timestamp": "2026-08-09T10:00:01.000Z"
+      },
+      {
+        "type": "tool-start",
+        "runId": "run-42",
+        "sequence": 130,
+        "schemaVersion": 1,
+        "sessionId": "sess-01",
+        "timestamp": "2026-08-09T10:00:01.200Z"
+      }
+    ],
+    "nextAfterSequence": 131,
+    "hasMore": true
+  }
+}

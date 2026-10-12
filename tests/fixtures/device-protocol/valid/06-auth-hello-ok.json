@@ -1,0 +1,41 @@
+{
+  "v": 1,
+  "kind": "auth.hello.ok",
+  "msgId": "s-hello-0006",
+  "ts": 1754651201001,
+  "from": "desktop",
+  "to": "mobile",
+  "auth": {
+    "deviceId": "dev-mobile-0f3a",
+    "ts": 1754651201001,
+    "nonce": "n-ok2-01",
+    "sig": "sig-placeholder"
+  },
+  "body": {
+    "protocolVersion": 1,
+    "minProtocolVersion": 1,
+    "desktopId": "d-01HZ",
+    "serverTime": 1754651201001,
+    "capabilities": {
+      "approval": true,
+      "streams": true
+    },
+    "manifest": {
+      "contractVersion": "1.0.0",
+      "commands": [
+        {
+          "name": "core_get_status",
+          "family": "core",
+          "surface": "engine",
+          "registered": true
+        },
+        {
+          "name": "core_approve_tool",
+          "family": "core",
+          "surface": "engine",
+          "registered": true
+        }
+      ]
+    }
+  }
+}
