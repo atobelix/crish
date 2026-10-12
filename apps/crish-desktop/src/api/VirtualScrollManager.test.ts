@@ -1,7 +1,19 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   VirtualScrollManager,
   estimateTimelineMessageHeight,
+  makeScopeKey,
+  parseScopeKey,
+  formatScopeKey,
+  registerScope,
+  unregisterScope,
+  getScope,
+  hasScope,
+  clearAllScopes,
+  registerActiveVsm,
+  unregisterActiveVsm,
+  getActiveVsm,
+  _activeVsmByScope,
 } from './VirtualScrollManager';
 import type { SessionMessage } from '../store/types';
 
@@ -619,5 +631,293 @@ describe('W3-C / Review 05：树状数组 NaN、无穷大与负数高度刚性�
       expect(idx).toBeGreaterThanOrEqual(0);
       expect(idx).toBeLessThan(itemIds.length);
     }
+  });
+});
+
+describe('W2-5 / VULN-04：复合作用域隔离 (${paneId}::${sessionId}) 与多窗格状态独立性', () => {
+  beforeEach(() => {
+    clearAllScopes();
+  });
+
+  describe('复合键工具函数契约与边界 (makeScopeKey / parseScopeKey / formatScopeKey)', () => {
+    it('makeScopeKey 正确生成 ${paneId}::${sessionId} 格式', () => {
+      expect(makeScopeKey('session-100', 'pane-left')).toBe(
+        'pane-left::session-100'
+      );
+      expect(makeScopeKey('session-100', 'pane-right')).toBe(
+        'pane-right::session-100'
+      );
+    });
+
+    it('makeScopeKey 在 paneId 为 null/undefined 时回退到 default 窗格', () => {
+      expect(makeScopeKey('session-100')).toBe('default::session-100');
+      expect(makeScopeKey('session-100', null)).toBe('default::session-100');
+      expect(makeScopeKey('session-100', undefined)).toBe(
+        'default::session-100'
+      );
+      expect(makeScopeKey('session-100', '')).toBe('default::session-100');
+    });
+
+    it('makeScopeKey 若传入已是复合键的 sessionId 且无 paneId 时幂等保留', () => {
+      expect(makeScopeKey('pane-x::session-100')).toBe('pane-x::session-100');
+    });
+
+    it('formatScopeKey 格式化一致性', () => {
+      expect(formatScopeKey('pane-a', 'session-b')).toBe('pane-a::session-b');
+      expect(formatScopeKey(null, 'session-b')).toBe('default::session-b');
+    });
+
+    it('parseScopeKey 正确解析复合键结构', () => {
+      const parsed = parseScopeKey('pane-split-1::session-uuid-1234');
+      expect(parsed.paneId).toBe('pane-split-1');
+      expect(parsed.sessionId).toBe('session-uuid-1234');
+      expect(parsed.isComposite).toBe(true);
+    });
+
+    it('parseScopeKey 兼容旧式单个 sessionId 回退', () => {
+      const parsed = parseScopeKey('session-legacy-5678');
+      expect(parsed.paneId).toBe('default');
+      expect(parsed.sessionId).toBe('session-legacy-5678');
+      expect(parsed.isComposite).toBe(false);
+    });
+
+    it('parseScopeKey 边界防御：空字符串与首定界符', () => {
+      const empty = parseScopeKey('');
+      expect(empty.paneId).toBe('default');
+      expect(empty.sessionId).toBe('');
+      expect(empty.isComposite).toBe(false);
+
+      const leadingDelimiter = parseScopeKey('::session-only');
+      expect(leadingDelimiter.paneId).toBe('default');
+      expect(leadingDelimiter.sessionId).toBe('session-only');
+      expect(leadingDelimiter.isComposite).toBe(true);
+    });
+  });
+
+  describe('同一会话多窗格隔离与非对称排版高度独立性 (VULN-04)', () => {
+    it('同一 sessionId 在不同 paneId 下分别注册，两者的实例相互独立且互不覆盖', () => {
+      const vsmLeft = new VirtualScrollManager(100);
+      const vsmRight = new VirtualScrollManager(100);
+      const sessionId = 'session-shared-split';
+
+      registerScope(sessionId, 'pane-left', vsmLeft);
+      registerScope(sessionId, 'pane-right', vsmRight);
+
+      // 验证检索精确匹配各自窗格实例
+      expect(getScope(sessionId, 'pane-left')).toBe(vsmLeft);
+      expect(getScope(sessionId, 'pane-right')).toBe(vsmRight);
+      expect(getScope(sessionId, 'pane-left')).not.toBe(
+        getScope(sessionId, 'pane-right')
+      );
+
+      // 验证实例绑定的作用域属性
+      expect(vsmLeft.getPaneId()).toBe('pane-left');
+      expect(vsmLeft.getSessionId()).toBe(sessionId);
+      expect(vsmLeft.getScopeKey()).toBe('pane-left::session-shared-split');
+
+      expect(vsmRight.getPaneId()).toBe('pane-right');
+      expect(vsmRight.getSessionId()).toBe(sessionId);
+      expect(vsmRight.getScopeKey()).toBe('pane-right::session-shared-split');
+    });
+
+    it('左右两窗格不同宽度下，高度快照缓存（heightCache）与滚动偏移状态各自独立维护', () => {
+      const vsmLeft = new VirtualScrollManager(100); // 模拟窄屏 (450px)
+      const vsmRight = new VirtualScrollManager(100); // 模拟宽屏 (900px)
+      const sessionId = 'session-width-diff';
+
+      registerScope(sessionId, 'pane-narrow', vsmLeft);
+      registerScope(sessionId, 'pane-wide', vsmRight);
+
+      const messageIds = ['msg-short', 'msg-long-text', 'msg-code-block'];
+      vsmLeft.syncOrder(messageIds);
+      vsmRight.syncOrder(messageIds);
+
+      // 窄窗格：长文本折行为更多行，高度明显更高
+      vsmLeft.setActual('msg-short', 60);
+      vsmLeft.setActual('msg-long-text', 360); // 450px 宽度多行排版
+      vsmLeft.setActual('msg-code-block', 200);
+
+      // 宽窗格：长文本仅占更少行，高度显著紧凑
+      vsmRight.setActual('msg-short', 60);
+      vsmRight.setActual('msg-long-text', 140); // 900px 宽度单行排版
+      vsmRight.setActual('msg-code-block', 200);
+
+      // 1. 验证各自实测高度严格隔离，绝无全局污染
+      expect(vsmLeft.getHeight('msg-long-text')).toBe(360);
+      expect(vsmRight.getHeight('msg-long-text')).toBe(140);
+
+      // 2. 验证 Fenwick 树前缀和偏移与总高度各自独立
+      expect(vsmLeft.getOffset(1)).toBe(60);
+      expect(vsmLeft.getOffset(2)).toBe(60 + 360); // 420
+      expect(vsmLeft.getTotalHeight()).toBe(60 + 360 + 200); // 620
+
+      expect(vsmRight.getOffset(1)).toBe(60);
+      expect(vsmRight.getOffset(2)).toBe(60 + 140); // 200
+      expect(vsmRight.getTotalHeight()).toBe(60 + 140 + 200); // 400
+
+      // 3. 验证 heightCache 快照字典严格互不侵扰
+      expect(vsmLeft.heightCache['msg-long-text']).toBe(360);
+      expect(vsmRight.heightCache['msg-long-text']).toBe(140);
+
+      const leftCache = vsmLeft.getHeightCache();
+      const rightCache = vsmRight.getHeightCache();
+      expect(leftCache).toEqual({
+        'msg-short': 60,
+        'msg-long-text': 360,
+        'msg-code-block': 200,
+      });
+      expect(rightCache).toEqual({
+        'msg-short': 60,
+        'msg-long-text': 140,
+        'msg-code-block': 200,
+      });
+
+      // 4. 清空左窗格（例如切换其内部滚动重置）绝不影响右窗格状态
+      vsmLeft.clear();
+      expect(vsmLeft.getHeight('msg-long-text')).toBe(100); // fallback
+      expect(vsmRight.getHeight('msg-long-text')).toBe(140); // 完好保留！
+      expect(vsmRight.getTotalHeight()).toBe(400);
+    });
+
+    it('根治幽灵注销（VULN-04）：当 pane-1 注销时，pane-2 的 VSM 实例依然存活且状态不受损', () => {
+      const vsm1 = new VirtualScrollManager(120);
+      const vsm2 = new VirtualScrollManager(120);
+      const sessionId = 'session-ghost-unregister-guard';
+
+      registerScope(sessionId, 'pane-1', vsm1);
+      registerScope(sessionId, 'pane-2', vsm2);
+
+      vsm1.syncOrder(['m1', 'm2']);
+      vsm1.setActual('m1', 80);
+      vsm1.setActual('m2', 90);
+
+      vsm2.syncOrder(['m1', 'm2']);
+      vsm2.setActual('m1', 150);
+      vsm2.setActual('m2', 160);
+
+      expect(hasScope(sessionId, 'pane-1')).toBe(true);
+      expect(hasScope(sessionId, 'pane-2')).toBe(true);
+
+      // 用户关闭窗格 1：卸载 pane-1 对应的虚拟滚动管理器
+      const unregisterResult = unregisterScope(sessionId, 'pane-1');
+      expect(unregisterResult).toBe(true);
+
+      // 核心断言：pane-1 已被精确移除
+      expect(getScope(sessionId, 'pane-1')).toBeUndefined();
+      expect(hasScope(sessionId, 'pane-1')).toBe(false);
+
+      // 核心反幽灵断言：pane-2 实例必须完整存活，状态与高度快照零损毁！
+      expect(hasScope(sessionId, 'pane-2')).toBe(true);
+      const retrievedPane2 = getScope(sessionId, 'pane-2');
+      expect(retrievedPane2).toBe(vsm2);
+      expect(retrievedPane2?.getHeight('m1')).toBe(150);
+      expect(retrievedPane2?.getHeight('m2')).toBe(160);
+      expect(retrievedPane2?.getOffset(1)).toBe(150);
+      expect(retrievedPane2?.getTotalHeight()).toBe(310);
+      expect(retrievedPane2?.heightCache['m1']).toBe(150);
+
+      // 彻底关闭窗格 2
+      expect(unregisterScope(sessionId, 'pane-2')).toBe(true);
+      expect(getScope(sessionId, 'pane-2')).toBeUndefined();
+      expect(hasScope(sessionId, 'pane-2')).toBe(false);
+    });
+
+    it('支持直接传入复合键字符串进行精确注销', () => {
+      const vsm = new VirtualScrollManager(100);
+      const compKey = 'pane-editor::session-doc-99';
+
+      registerScope(compKey, vsm);
+      expect(getScope(compKey)).toBe(vsm);
+      expect(hasScope(compKey)).toBe(true);
+
+      const removed = unregisterScope(compKey);
+      expect(removed).toBe(true);
+      expect(getScope(compKey)).toBeUndefined();
+      expect(hasScope(compKey)).toBe(false);
+    });
+  });
+
+  describe('旧式单键注册与向后兼容回退检索', () => {
+    it('兼容旧式单个 sessionId 格式注册与检索', () => {
+      const vsmLegacy = new VirtualScrollManager(100);
+      const sessionId = 'session-legacy-single';
+
+      registerScope(sessionId, vsmLegacy);
+
+      // 单键检索
+      expect(getScope(sessionId)).toBe(vsmLegacy);
+      // default 窗格显式检索
+      expect(getScope(sessionId, 'default')).toBe(vsmLegacy);
+      expect(getScope(`default::${sessionId}`)).toBe(vsmLegacy);
+
+      // 单键注销
+      expect(unregisterScope(sessionId)).toBe(true);
+      expect(getScope(sessionId)).toBeUndefined();
+    });
+
+    it('降级匹配：未指定 paneId 时能够查找到任意活跃窗格的同一会话实例', () => {
+      const vsm = new VirtualScrollManager(100);
+      registerScope('session-wildcard', 'pane-right', vsm);
+
+      // 显式指定 paneId 精确命中
+      expect(getScope('session-wildcard', 'pane-right')).toBe(vsm);
+      // 省略 paneId 时降级命中后缀
+      expect(getScope('session-wildcard')).toBe(vsm);
+    });
+
+    it('旧式单键注销不连带伤及已存在的分屏窗格', () => {
+      const vsmPane = new VirtualScrollManager(100);
+      const sessionId = 'session-mix-unregister';
+
+      registerScope(sessionId, 'pane-alpha', vsmPane);
+
+      // 尝试以无 paneId 单键注销（旧式误调）
+      unregisterScope(sessionId);
+
+      // 分屏窗格必须依然安然无恙！
+      expect(getScope(sessionId, 'pane-alpha')).toBe(vsmPane);
+    });
+  });
+
+  describe('作用域注册表与构造函数集成契约', () => {
+    it('作用域函数提供精确的注册与检索 API', () => {
+      const vsm = new VirtualScrollManager(100);
+      const sessionId = 'session-static-test';
+
+      registerScope(sessionId, 'pane-st', vsm);
+      expect(getScope(sessionId, 'pane-st')).toBe(vsm);
+      expect(hasScope(sessionId, 'pane-st')).toBe(true);
+      expect(_activeVsmByScope.has('pane-st::session-static-test')).toBe(true);
+
+      // 别名方法互通
+      expect(getActiveVsm(sessionId, 'pane-st')).toBe(vsm);
+      unregisterActiveVsm(sessionId, 'pane-st');
+      expect(getActiveVsm(sessionId, 'pane-st')).toBeUndefined();
+    });
+
+    it('VirtualScrollManager 构造函数接收 paneId 与 sessionId 自动绑定作用域', () => {
+      const vsm1 = new VirtualScrollManager(100, 'pane-init', 'session-init');
+      expect(vsm1.getPaneId()).toBe('pane-init');
+      expect(vsm1.getSessionId()).toBe('session-init');
+      expect(vsm1.getScopeKey()).toBe('pane-init::session-init');
+
+      const vsm2 = new VirtualScrollManager(100, 'pane-direct::session-direct');
+      expect(vsm2.getPaneId()).toBe('pane-direct');
+      expect(vsm2.getSessionId()).toBe('session-direct');
+      expect(vsm2.getScopeKey()).toBe('pane-direct::session-direct');
+    });
+
+    it('clearAllScopes 清空全部活跃作用域映射', () => {
+      const vsm1 = new VirtualScrollManager(100);
+      const vsm2 = new VirtualScrollManager(100);
+      registerScope('s1', 'p1', vsm1);
+      registerScope('s2', 'p2', vsm2);
+
+      expect(_activeVsmByScope.size).toBeGreaterThanOrEqual(2);
+      clearAllScopes();
+      expect(_activeVsmByScope.size).toBe(0);
+      expect(getScope('s1', 'p1')).toBeUndefined();
+      expect(getScope('s2', 'p2')).toBeUndefined();
+    });
   });
 });

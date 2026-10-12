@@ -47,6 +47,143 @@ import {
   getSessionRenderBuffer,
   flushAndRemoveSessionRenderBuffer,
 } from './sessionStreamManager';
+import type { SessionMessage } from '../../store/types';
+
+/**
+ * scheduleDualRafHandoff：双物理帧延迟握手调度器。
+ *
+ * 彻底废除 queueMicrotask 清除热流缓冲的脆弱做法（依据 REVIEW-02 §4.1 与实施详案 §2.4）。
+ * 保证浏览器至少经历两次完整的帧合成周期（rAF / Style Recalc / Paint），
+ * 确保 React 18/19 调和批处理与 DOM Commit 100% 上屏后才执行清理回调，
+ * 根治由于微任务提前清空热备导致的 VULN-01 单帧退空白屏撕裂闪烁。
+ */
+export function scheduleDualRafHandoff(callback: () => void): () => void {
+  let cancelled = false;
+  let raf1: number | undefined;
+  let raf2: number | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  if (typeof requestAnimationFrame !== 'undefined') {
+    raf1 = requestAnimationFrame(() => {
+      if (cancelled) return;
+      raf2 = requestAnimationFrame(() => {
+        if (cancelled) return;
+        callback();
+      });
+    });
+  } else {
+    timer = setTimeout(() => {
+      if (cancelled) return;
+      callback();
+    }, 32);
+  }
+
+  return () => {
+    cancelled = true;
+    if (raf1 !== undefined && typeof cancelAnimationFrame !== 'undefined') {
+      cancelAnimationFrame(raf1);
+    }
+    if (raf2 !== undefined && typeof cancelAnimationFrame !== 'undefined') {
+      cancelAnimationFrame(raf2);
+    }
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  };
+}
+
+/**
+ * scheduleDualRafClearStream：通过双重 rAF 物理渲染确认后延迟安全清理热流缓冲。
+ */
+export function scheduleDualRafClearStream(
+  sessionId: string,
+  messageId: string
+): () => void {
+  return scheduleDualRafHandoff(() => {
+    clearStream(sessionId, messageId);
+  });
+}
+
+/**
+ * 判断消息状态是否已达到终态（自锁存触发条件）。
+ */
+export function isTerminalStreamStatus(status?: string | null): boolean {
+  return (
+    status === 'completed' ||
+    status === 'error' ||
+    status === 'aborted' ||
+    status === 'cancelled'
+  );
+}
+
+/**
+ * 终态双轨自锁存判定：
+ * 当消息状态进入终态（completed / error / aborted / cancelled）时，
+ * 强制以持久层消息为单一真理源（SSOT），绝对冻结 streamText 穿透（置为 undefined），
+ * 绝不因底层流缓存被清除或传递空字符串而导致 UI 回退为空白或旧状态。
+ */
+export function applyTerminalStatusLatch<
+  T extends { status?: string | null; text?: string | null },
+>(
+  msg: T,
+  streamText?: string | null
+): {
+  msg: T;
+  streamText: string | undefined;
+  latched: boolean;
+} {
+  if (isTerminalStreamStatus(msg.status)) {
+    return {
+      msg,
+      streamText: undefined,
+      latched: true,
+    };
+  }
+
+  return {
+    msg,
+    streamText: streamText ?? undefined,
+    latched: false,
+  };
+}
+
+/**
+ * resolveStreamMessageLatch：ViewModel 语义锁存解析器（对齐 Review-02 §4.1 契约）。
+ */
+export function resolveStreamMessageLatch<M extends SessionMessage>(
+  msg: M,
+  streamText?: string | null
+): {
+  msg: M;
+  streamText: string | undefined;
+  isLatched: boolean;
+} {
+  const result = applyTerminalStatusLatch(msg, streamText);
+  return {
+    msg: result.msg,
+    streamText: result.streamText,
+    isLatched: result.latched,
+  };
+}
+
+/**
+ * 双轨锁存提交：将流内容固化至持久层，并通过双重 rAF 握手安全解冻清除热缓冲。
+ * 替代旧版 commitStreamToSession 中基于 queueMicrotask 的过早清除。
+ */
+export function commitStreamWithDualLatch(
+  sessionId: string,
+  messageId: string,
+  options?: Parameters<typeof commitStreamToSession>[2]
+): string {
+  const text = commitStreamToSession(sessionId, messageId, {
+    ...options,
+    clear: false,
+  });
+  if (options?.clear !== false) {
+    scheduleDualRafClearStream(sessionId, messageId);
+  }
+  return text;
+}
 
 export function useStreamCallbacks(
   options: UseChatStreamOptions & { sessionId?: string | null },
@@ -160,7 +297,7 @@ export function useStreamCallbacks(
     const stopText = (partialText || '').trim();
     commitStreamToolsToSession(sid, cur.assistantMsgId);
     if (stopText) {
-      commitStreamToSession(sid, cur.assistantMsgId, { text: stopText });
+      commitStreamWithDualLatch(sid, cur.assistantMsgId, { text: stopText });
       // F1d（R2-4）：截断防御断言——commit 文本不得短于 buffer 完整终稿，
       // 正常路径恒等，为将来任何 drain 回归的哨兵
       if (stopBufFull && stopText.length < stopBufFull.length) {
@@ -176,7 +313,7 @@ export function useStreamCallbacks(
     } else {
       // 无正文：清空占位（不写 assistant 正文）；停止提示走全局 toast（单轨收敛 §2.4）
       st.updateMessageText(sid, cur.assistantMsgId, '');
-      clearStream(sid, cur.assistantMsgId);
+      scheduleDualRafClearStream(sid, cur.assistantMsgId);
       toast.show(force ? '已强制停止本轮生成。' : '已停止本轮生成。', {
         type: 'info',
       });

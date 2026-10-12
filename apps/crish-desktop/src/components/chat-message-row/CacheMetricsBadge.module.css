@@ -8,12 +8,12 @@
 .badge {
   display: inline-flex;
   align-items: center;
-  height: 20px;
-  line-height: 20px;
+  line-height: var(--control-height-sm, 28px);
   padding: 0;
   margin: 0;
-  font-size: 11px;
+  font-size: var(--font-size-xs, 12px);
   font-family: inherit;
+  font-weight: var(--font-weight-normal, 400);
   font-variant-numeric: tabular-nums;
   border: none;
   background: transparent;
@@ -53,6 +53,9 @@
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow-md);
+  font-size: var(--font-size-xs, 12px);
+  font-family: inherit;
+  font-weight: var(--font-weight-normal, 400);
 }
 
 .popoverContainer {
@@ -60,6 +63,8 @@
   flex-direction: column;
   gap: 8px;
   font-family: inherit;
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-normal, 400);
 }
 
 /* 卡片标题行 */
@@ -71,17 +76,19 @@
 }
 
 .popoverTitle {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-normal, 400);
   color: var(--text-primary);
+  font-family: inherit;
 }
 
 /* 全卡片唯一的单处强调色：仅命中率百分比微带克制翠绿 */
 .popoverRate {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-normal, 400);
   font-variant-numeric: tabular-nums;
   color: var(--color-success);
+  font-family: inherit;
 }
 
 /* 结构化双列数据网格（左侧标签，右侧等宽数值） */
@@ -95,45 +102,56 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: var(--font-size-xs, 12px);
+  line-height: var(--line-height-base, 1.5);
+  font-family: inherit;
+  font-weight: var(--font-weight-normal, 400);
 }
 
 .statRowTotal {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: var(--font-size-xs, 12px);
+  line-height: var(--line-height-base, 1.5);
   margin-top: 2px;
   padding-top: 4px;
   border-top: 1px dashed var(--border-subtle);
+  font-family: inherit;
+  font-weight: var(--font-weight-normal, 400);
 }
 
 .statLabel {
   color: var(--text-tertiary);
+  font-size: var(--font-size-xs, 12px);
+  font-family: inherit;
+  font-weight: var(--font-weight-normal, 400);
 }
 
 .statValue {
-  font-family: var(--font-mono, monospace);
+  font-family: inherit;
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
-  font-weight: 500;
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-normal, 400);
 }
 
 .statUnit {
-  font-size: 10px;
+  font-size: var(--font-size-xs, 12px);
   color: var(--text-tertiary);
-  margin-left: 2px;
-  font-weight: normal;
+  margin-left: 3px;
+  font-family: inherit;
+  font-weight: var(--font-weight-normal, 400);
 }
 
 /* 说明解释文字 */
 .popoverDesc {
-  font-size: 11px;
+  font-size: var(--font-size-xs, 12px);
   line-height: 1.45;
   color: var(--text-tertiary);
   margin-top: 2px;
   padding-top: 6px;
   border-top: 1px solid var(--border-subtle);
+  font-family: inherit;
+  font-weight: var(--font-weight-normal, 400);
 }

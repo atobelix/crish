@@ -14,6 +14,7 @@ import { clearMessageSnapshots } from './messageSnapshotsBridge';
 import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
 import { isPendingDraft } from './draftSession';
 import { useStreamingStore } from './streamingStore';
+import { sessionCascadeCancellation } from './sessionCascadeCancellation';
 import type {
   SessionActions,
   SessionStoreSlice,
@@ -371,6 +372,9 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
     },
 
     deleteSession: (sessionId: string) => {
+      // 【W2-3 三级级联取消总线】单点内聚切入，彻底阻断 VULN-05 幽灵复活与脱缰泄漏
+      sessionCascadeCancellation.cancelSessionCascade(sessionId);
+
       const id = typeof sessionId === 'string' ? sessionId.trim() : '';
       if (!id) return false;
       let removed = false;

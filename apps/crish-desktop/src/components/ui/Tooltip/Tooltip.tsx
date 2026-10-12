@@ -180,7 +180,9 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
         if (!isTestEnv) {
           if (triggerModeRef.current === 'hover') {
             const isTargetHovered =
-              typeof target.matches === 'function' ? target.matches(':hover') : true;
+              typeof target.matches === 'function'
+                ? target.matches(':hover')
+                : true;
             const tipEl = tipRef.current;
             const isTipHovered =
               tipEl && typeof tipEl.matches === 'function'
@@ -196,7 +198,8 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
           } else if (triggerModeRef.current === 'focus') {
             const isTargetFocused =
               typeof document !== 'undefined' &&
-              (document.activeElement === target || target.contains(document.activeElement));
+              (document.activeElement === target ||
+                target.contains(document.activeElement));
             if (!isTargetFocused) {
               hideImmediate();
               return;
@@ -218,7 +221,11 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
 
       const onGlobalPointer = (e: PointerEvent) => {
         const targetNode = e.target as Node | null;
-        if (targetNode && !target.contains(targetNode) && !tipRef.current?.contains(targetNode)) {
+        if (
+          targetNode &&
+          !target.contains(targetNode) &&
+          !tipRef.current?.contains(targetNode)
+        ) {
           hideImmediate();
         }
       };
@@ -227,15 +234,25 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
         if (!e.relatedTarget) hideImmediate();
       };
 
-      window.addEventListener('pointermove', onGlobalPointer, { passive: true });
-      window.addEventListener('pointerdown', onGlobalPointer, { capture: true, passive: true });
+      window.addEventListener('pointermove', onGlobalPointer, {
+        passive: true,
+      });
+      window.addEventListener('pointerdown', onGlobalPointer, {
+        capture: true,
+        passive: true,
+      });
       document.documentElement.addEventListener('mouseleave', onDocMouseLeave);
 
       return () => {
         cancelAnimationFrame(rafId);
         window.removeEventListener('pointermove', onGlobalPointer);
-        window.removeEventListener('pointerdown', onGlobalPointer, { capture: true } as EventListenerOptions);
-        document.documentElement.removeEventListener('mouseleave', onDocMouseLeave);
+        window.removeEventListener('pointerdown', onGlobalPointer, {
+          capture: true,
+        } as EventListenerOptions);
+        document.documentElement.removeEventListener(
+          'mouseleave',
+          onDocMouseLeave
+        );
       };
     }, [visible, hideImmediate]);
 
@@ -272,14 +289,16 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       }
       const tipEl = tipRef.current;
       const tipBoundingRect = tipEl.getBoundingClientRect();
-      const tipWidth =
+      const tipWidth = Math.round(
         tipBoundingRect.width > 0 && tipBoundingRect !== rect
           ? tipBoundingRect.width
-          : tipEl.offsetWidth || tipBoundingRect.width || 0;
-      const tipHeight =
+          : tipEl.offsetWidth || tipBoundingRect.width || 0
+      );
+      const tipHeight = Math.round(
         tipBoundingRect.height > 0 && tipBoundingRect !== rect
           ? tipBoundingRect.height
-          : tipEl.offsetHeight || tipBoundingRect.height || 0;
+          : tipEl.offsetHeight || tipBoundingRect.height || 0
+      );
 
       setClampedPos(computeClampedPosition(side, rect, tipWidth, tipHeight));
     }, [isMounted, rect, side, hideImmediate]);
@@ -463,14 +482,11 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
     // 在组件内部而非元素 props 上——盲目注入会让 handleClick 调到 undefined，
     // 把子组件的内部点击链整个吞掉（开关失效类缺陷的根因）。
     const childClick = childPropsRecord.onClick as
-      | ((e: unknown) => void)
-      | undefined;
+      ((e: unknown) => void) | undefined;
     const restClick = (restProps as { onClick?: unknown }).onClick as
-      | ((e: unknown) => void)
-      | undefined;
+      ((e: unknown) => void) | undefined;
     const childPointerDown = childPropsRecord.onPointerDown as
-      | ((e: unknown) => void)
-      | undefined;
+      ((e: unknown) => void) | undefined;
     const restPointerDown = (restProps as { onPointerDown?: unknown })
       .onPointerDown as ((e: unknown) => void) | undefined;
 
@@ -522,22 +538,42 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
               data-tooltip-portal="true"
               onMouseEnter={interactive ? handleTipMouseEnter : undefined}
               onMouseLeave={interactive ? handleTipMouseLeave : undefined}
-              className={[styles.tooltip, styles[effectiveSide], tooltipStateClass, portalClassName].filter(Boolean).join(' ')}
+              className={[
+                styles.tooltip,
+                styles[effectiveSide],
+                tooltipStateClass,
+                portalClassName,
+              ]
+                .filter(Boolean)
+                .join(' ')}
               style={
                 {
                   top: `${clampedPos?.top ?? rect.top}px`,
                   left: `${clampedPos?.left ?? rect.left}px`,
                   visibility: isPositionReady ? 'visible' : 'hidden',
-                  opacity: isPositionReady && isValidDOMRect(rect) ? undefined : 0,
-                  pointerEvents: state === 'exiting' || !isPositionReady || !isValidDOMRect(rect) ? 'none' : interactive ? 'auto' : undefined,
+                  opacity:
+                    isPositionReady && isValidDOMRect(rect) ? undefined : 0,
+                  pointerEvents:
+                    state === 'exiting' ||
+                    !isPositionReady ||
+                    !isValidDOMRect(rect)
+                      ? 'none'
+                      : interactive
+                        ? 'auto'
+                        : undefined,
                   '--tooltip-translate': translateFor(effectiveSide),
-                  '--tooltip-arrow-offset': clampedPos?.arrowOffset !== undefined ? `${clampedPos.arrowOffset}px` : undefined,
+                  '--tooltip-arrow-offset':
+                    clampedPos?.arrowOffset !== undefined
+                      ? `${clampedPos.arrowOffset}px`
+                      : undefined,
                   ...(portalStyle || {}),
                 } as React.CSSProperties & Record<string, unknown>
               }
             >
               <div
-                className={[styles.tooltipContent, contentClassName].filter(Boolean).join(' ')}
+                className={[styles.tooltipContent, contentClassName]
+                  .filter(Boolean)
+                  .join(' ')}
                 style={contentStyle}
               >
                 {content}

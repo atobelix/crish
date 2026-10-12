@@ -5,7 +5,7 @@
   position: fixed;
   z-index: var(--z-tooltip);
   pointer-events: none;
-  will-change: transform, opacity;
+  transform: var(--tooltip-translate, translate(0));
 }
 
 .tooltipEnter {
@@ -24,22 +24,22 @@
 @keyframes tooltip-enter {
   from {
     opacity: 0;
-    transform: var(--tooltip-translate, translate(0)) scale(0.985);
+    transform: var(--tooltip-translate, translate(0));
   }
   to {
     opacity: 1;
-    transform: var(--tooltip-translate, translate(0)) scale(1);
+    transform: var(--tooltip-translate, translate(0));
   }
 }
 
 @keyframes tooltip-exit {
   from {
     opacity: 1;
-    transform: var(--tooltip-translate, translate(0)) scale(1);
+    transform: var(--tooltip-translate, translate(0));
   }
   to {
     opacity: 0;
-    transform: var(--tooltip-translate, translate(0)) scale(0.985);
+    transform: var(--tooltip-translate, translate(0));
   }
 }
 

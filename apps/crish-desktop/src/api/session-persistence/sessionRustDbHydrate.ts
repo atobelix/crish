@@ -48,26 +48,33 @@ import { coerceSessionTimestamp } from '../sessionTime';
 import { prepareSessionsForUi } from '../sessionTitle';
 import { normalizeAssistantTimeline } from '../toolPresentation';
 import { logger, toErrMeta } from '../../services/LoggerService';
+import {
+  sessionDeltaWriteBarrier,
+  reconcileLateArrivalSnapshot,
+  SessionDeltaWriteBarrier,
+  DeltaWriteBarrier,
+} from './sessionDeltaWriteBarrier';
 
-/**
- * 判断是否为未水合的远程懒壳（未访问、未水合、无消息）。
- * 仅对此类真实未水合懒壳跳过 save_session_body，避免覆盖底层历史。
- * 当会话处于活跃状态、已从 SQLite/Engine 水合、或被显式清空时，必须正常下发持久化指令（即使为空数组）。
- */
-export function isLazySessionShell(
-  session: Pick<
-    SessionState,
-    'id' | 'messages' | 'messagesHydrated' | 'hydratedFromEngine'
-  >,
-  activeSessionId?: string | null
-): boolean {
-  if (session.messages && session.messages.length > 0) return false;
-  if (session.messagesHydrated === false) return true;
-  if (session.messagesHydrated === true) return false;
-  if (session.hydratedFromEngine === true) return false;
-  if (activeSessionId && session.id === activeSessionId) return false;
-  return true;
-}
+export {
+  reconcileLateArrivalSnapshot,
+  sessionDeltaWriteBarrier,
+  SessionDeltaWriteBarrier,
+  DeltaWriteBarrier,
+};
+
+import {
+  isLazySessionShell,
+  bumpHydrateGeneration,
+  currentHydrateGeneration,
+  isHydrateGenerationCurrent,
+} from './sessionHydrationTokens';
+
+export {
+  isLazySessionShell,
+  bumpHydrateGeneration,
+  currentHydrateGeneration,
+  isHydrateGenerationCurrent,
+};
 
 // ── 复合 API：hydrateSessionsFromRust ──────────────────────────────────────
 
@@ -83,28 +90,6 @@ function hasDegradedMarker(sessionId: string): boolean {
   } catch {
     return false;
   }
-}
-
-/**
- * 单调递增 Generation Token（AAI-03 / ACT-502）：会话切换 / 懒水合竞态防线。
- * 每次显式切换自增；过期异步响应对比 token 不一致即丢弃，严禁写主视口。
- */
-let activeSwitchGeneration = 0;
-
-/** 领取新一代切换 token（单调递增） */
-export function bumpHydrateGeneration(): number {
-  activeSwitchGeneration += 1;
-  return activeSwitchGeneration;
-}
-
-/** 当前最新 token（测试钩子 / 调用方对账用） */
-export function currentHydrateGeneration(): number {
-  return activeSwitchGeneration;
-}
-
-/** token 是否仍是最新（true=可提交；false=过期响应必须丢弃） */
-export function isHydrateGenerationCurrent(gen: number): boolean {
-  return gen === activeSwitchGeneration;
 }
 
 /**
@@ -149,21 +134,51 @@ export async function ensureSessionBodyHydrated(sessionId: string): Promise<{
  *
  * 时间戳：一律经 coerceSessionTimestamp 归一为合法 ISO 串（CON-02）。
  */
-export async function hydrateSessionsFromRust(): Promise<{
+export async function hydrateSessionsFromRust(
+  optionsOrLive?:
+    | {
+        liveSessions?: SessionState[];
+      }
+    | SessionState[]
+): Promise<{
   sessions: SessionState[];
   activeSessionId: string | null;
   folderOrder: string[] | null;
 }> {
+  const liveSessions = Array.isArray(optionsOrLive)
+    ? optionsOrLive
+    : (optionsOrLive?.liveSessions ??
+      sessionDeltaWriteBarrier.getLiveSessions());
+
   // 1. 索引：localStorage 优先（真相源），回退 SQLite
   let index = lsLoadSessionIndex();
   if (!index.length) index = await listSessions();
   if (!index.length) {
+    const emptyActiveId = await getSessionMeta('active_session_id');
+    const emptyFolderOrder = parseFolderOrder(
+      safeParseJson<unknown>(await getSessionMeta('folder_order'), null)
+    );
+    sessionDeltaWriteBarrier.setHydrated(true);
+    sessionDeltaWriteBarrier.setFallbackMode(false);
+    if (liveSessions && liveSessions.length > 0) {
+      const rec = reconcileLateArrivalSnapshot(
+        {
+          sessions: [],
+          activeSessionId: emptyActiveId,
+          folderOrder: emptyFolderOrder,
+        },
+        liveSessions
+      );
+      return {
+        sessions: rec.sessions,
+        activeSessionId: rec.activeSessionId,
+        folderOrder: rec.folderOrder,
+      };
+    }
     return {
       sessions: [],
-      activeSessionId: await getSessionMeta('active_session_id'),
-      folderOrder: parseFolderOrder(
-        safeParseJson<unknown>(await getSessionMeta('folder_order'), null)
-      ),
+      activeSessionId: emptyActiveId,
+      folderOrder: emptyFolderOrder,
     };
   }
 
@@ -256,15 +271,32 @@ export async function hydrateSessionsFromRust(): Promise<{
   const prepared = prepareSessionsForUi(sessions, targetActiveId, {
     keepIds: [...lazyKeepIds, ...(targetActiveId ? [targetActiveId] : [])],
   });
-  const activeSessionId =
+  let activeSessionId =
     targetActiveId && prepared.some((s) => s.id === targetActiveId)
       ? targetActiveId
       : null;
-  const folderOrder = parseFolderOrder(
+  let folderOrder = parseFolderOrder(
     safeParseJson<unknown>(await getSessionMeta('folder_order'), null)
   );
 
-  return { sessions: prepared, activeSessionId, folderOrder };
+  let finalSessions = prepared;
+  // 接入写屏障与无损合并：若存在现场活跃会话（例如在水合延迟/降级期间用户已新建或交互），
+  // 调用 reconcileLateArrivalSnapshot 进行集合论无损合并，杜绝冲刷丢失 (VULN-06)
+  if (liveSessions && liveSessions.length > 0) {
+    const rec = reconcileLateArrivalSnapshot(
+      { sessions: prepared, activeSessionId, folderOrder },
+      liveSessions
+    );
+    finalSessions = rec.sessions;
+    if (rec.activeSessionId) activeSessionId = rec.activeSessionId;
+    if (rec.folderOrder?.length) folderOrder = rec.folderOrder;
+  }
+
+  // 水合已完成，解除写屏障降级状态
+  sessionDeltaWriteBarrier.setHydrated(true);
+  sessionDeltaWriteBarrier.setFallbackMode(false);
+
+  return { sessions: finalSessions, activeSessionId, folderOrder };
 }
 
 // ── 复合 API：persistAllSessionsRust ────────────────────────────────────────
@@ -273,18 +305,8 @@ export async function hydrateSessionsFromRust(): Promise<{
 const lastSavedBodyFingerprint = new Map<string, string>();
 
 function bodyFingerprint(msgs: SessionState['messages']): string {
-  // 引用优先：同数组引用直接命中
-  // 内容级：id + status + text 长度 + thinking 长度（避免全量 stringify）
-  const parts: string[] = [String(msgs.length)];
-  for (const m of msgs || []) {
-    parts.push(
-      m.id,
-      m.status ?? '',
-      String(m.text?.length ?? 0),
-      String(m.thinking?.length ?? 0)
-    );
-  }
-  return parts.join('|');
+  if (!msgs?.length) return '0';
+  return `${msgs.length}|${msgs.map((m) => `${m.id}:${m.status || ''}:${m.text?.length || 0}:${m.thinking?.length || 0}`).join('|')}`;
 }
 
 /** 非 dirty 则跳过 save；首帧无快照视为 dirty。 */
@@ -346,6 +368,17 @@ export async function persistAllSessionsRust(
         ? activeSessionId
         : '';
 
+    // 写屏障保护：在初始空数据状态或降级期间，拦截对全盘持久化的盲目冲刷 (VULN-06)
+    if (sessionDeltaWriteBarrier.shouldBlockWrite('full_session_index', list)) {
+      logger.warn(
+        `[persistAllSessionsRust] Blocked empty full flush (${list.length}) by DeltaWriteBarrier`,
+        {
+          module: 'persist',
+        }
+      );
+      return;
+    }
+
     // 索引层：始终写一份到 localStorage（侧栏元数据真相源，过渡期设计）。
     // invoke 缺失时，这就是唯一的索引落盘点。
     if (options?.sessionsToIndex) {
@@ -387,9 +420,12 @@ export async function persistAllSessionsRust(
       const msgs = (s.messages || []).map((m) =>
         m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
       );
-      // 双重硬守卫：消息为空且未明确完成水合（messagesHydrated !== true）时，严禁调用 saveSessionBody 向 SQLite 写入空数组 []
+      // 双重硬守卫：消息为空且未明确完成水合（messagesHydrated !== true）且非活跃/未从引擎补全时，严禁调用 saveSessionBody 向 SQLite 写入空数组 []
       const isUnconfirmedEmptyShell =
-        msgs.length === 0 && s.messagesHydrated !== true;
+        msgs.length === 0 &&
+        s.messagesHydrated !== true &&
+        !s.hydratedFromEngine &&
+        s.id !== activePersistable;
       const shouldSaveBody =
         !isUnconfirmedEmptyShell &&
         (msgs.length > 0 || !isLazySessionShell(s, activePersistable));
@@ -416,11 +452,21 @@ export async function persistAllSessionsRust(
 
     // 3. 孤儿清理
     // P0-2 防护：空会话列表（boot 窗口 hydrate 未完成 / 全删场景）跳过清理——
-    // Rust 壳层对空 keepIds 默认拒绝（guard_cleanup_keep），此处直接不发起，
-    // 避免错误码触发 JS 回退分支清空 LS 镜像（N1-2 双保险）；
-    // 部分 keepIds 的 boot 窗口风险由 Rust 库层护栏兜底（引擎子代理会话豁免
-    // + 活动 run 豁免 + 宽限期，见 conex-db sessions.rs cleanup_orphan_sessions）。
-    if (keepIds.size > 0) await cleanupOrphanSessions(Array.from(keepIds));
+    // 写屏障保护：在降级/未水合期间拦截清理，杜绝将磁盘历史全量抹杀
+    if (keepIds.size > 0) {
+      if (
+        sessionDeltaWriteBarrier.shouldBlockWrite('orphan_cleanup', keepIds)
+      ) {
+        logger.warn(
+          `[persistAllSessionsRust] Blocked orphan cleanup (${keepIds.size}) by DeltaWriteBarrier`,
+          {
+            module: 'persist',
+          }
+        );
+      } else {
+        await cleanupOrphanSessions(Array.from(keepIds));
+      }
+    }
 
     // D-05 S1：probe 成功且批收口 → 持久化降级状态回落健康（恢复点）
     errorStore.setPersistenceStatus('healthy');

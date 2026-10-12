@@ -4,7 +4,10 @@
  */
 
 import type { SessionMessage } from '../store/types';
-import { estimateTimelineMessageHeight } from './virtualScrollEstimate';
+import {
+  estimateTimelineMessageHeight,
+  normalizeNonNegInt,
+} from './virtualScrollEstimate';
 
 export {
   CHAT_ROW_GAP_COMPACT_PX,
@@ -12,12 +15,16 @@ export {
   estimateTimelineMessageHeight,
 } from './virtualScrollEstimate';
 
-export interface VisibleRange {
-  startIndex: number;
-  endIndex: number;
-  startOffset: number;
-  estimatedTotalHeight: number;
-}
+export * from './virtualScrollScope';
+import { makeScopeKey, parseScopeKey } from './virtualScrollScope';
+
+export type { VisibleRange } from './virtualScrollRange';
+export { computeVisibleRange, findIndexAtOffset } from './virtualScrollRange';
+import {
+  computeVisibleRange,
+  findIndexAtOffset,
+  type VisibleRange,
+} from './virtualScrollRange';
 
 export interface VsmDebugInfo {
   orderLength: number;
@@ -31,6 +38,11 @@ export const MESSAGE_ESTIMATED_ROW_HEIGHT = FALLBACK_HEIGHT;
 export class VirtualScrollManager {
   /** 全局流式吸附锁：在 Run 处于 processing 期间强制吸底，免疫历史折叠坍塌 */
   private stickToBottomLock = false;
+
+  /** 所属作用域信息 (W2-5 / VULN-04) */
+  private paneId: string | null = null;
+  private sessionId: string | null = null;
+  private scopeKey: string | null = null;
 
   /** 以 messageId 为键存储高度；estimated 始终为正数，actual 可为 null（待测量） */
   private heightsById = new Map<
@@ -59,13 +71,24 @@ export class VirtualScrollManager {
   /** 缓存每个元素的当前高度值，便于快速求差量 delta */
   private currentHeights: Float64Array = new Float64Array(0);
 
-  constructor(fallbackHeight?: number) {
+  constructor(
+    fallbackHeight?: number,
+    paneIdOrScope?: string | null,
+    sessionId?: string | null
+  ) {
     this.fallbackHeight =
       fallbackHeight != null &&
       Number.isFinite(fallbackHeight) &&
       fallbackHeight > 0
         ? Math.floor(fallbackHeight)
         : FALLBACK_HEIGHT;
+
+    if (sessionId !== undefined && sessionId !== null) {
+      this.setScope(paneIdOrScope ?? 'default', sessionId);
+    } else if (paneIdOrScope) {
+      const parsed = parseScopeKey(paneIdOrScope);
+      this.setScope(parsed.paneId, parsed.sessionId);
+    }
   }
 
   /**
@@ -384,10 +407,6 @@ export class VirtualScrollManager {
 
   /**
    * 计算可视范围区间。
-   * @param scrollTop 当前滚动偏移
-   * @param viewportHeight 视口高度
-   * @param itemCount 总项数
-   * @param overscan 额外上下渲染条数
    */
   computeVisibleRange(
     scrollTop: number,
@@ -395,55 +414,20 @@ export class VirtualScrollManager {
     itemCount: number,
     overscan: number
   ): VisibleRange {
-    const count = normalizeNonNegInt(itemCount);
-    if (count === 0 || this.order.length === 0) {
-      return {
-        startIndex: 0,
-        endIndex: 0,
-        startOffset: 0,
-        estimatedTotalHeight: 0,
-      };
-    }
-    const safeScrollTop = normalizeNonNegFloat(scrollTop);
-    const safeViewportHeight = normalizePositiveFloat(viewportHeight, 600);
-    const safeOverscan = normalizeNonNegInt(overscan);
-    const startIndex = Math.max(
-      0,
-      this.findIndexAtOffset(safeScrollTop) - safeOverscan
+    return computeVisibleRange(
+      this,
+      scrollTop,
+      viewportHeight,
+      itemCount,
+      overscan
     );
-    const visibleEnd = this.findIndexAtOffset(
-      safeScrollTop + safeViewportHeight
-    );
-    const endIndex = Math.min(count, visibleEnd + 1 + safeOverscan);
-    return {
-      startIndex,
-      endIndex,
-      startOffset: this.getOffset(startIndex),
-      estimatedTotalHeight: this.getTotalHeight(count),
-    };
   }
 
   /**
    * 二分查找：给定 scrollTop 偏移，定位对应的起始行下标 (O(log^2 N))
    */
   findIndexAtOffset(offset: number): number {
-    const safeOffset = normalizeNonNegFloat(offset);
-    if (safeOffset <= 0 || this.order.length === 0) return 0;
-    let lo = 0;
-    let hi = this.order.length - 1;
-    let result = 0;
-
-    while (lo <= hi) {
-      const mid = (lo + hi) >>> 1;
-      const currentOffset = this.getOffset(mid);
-      if (currentOffset <= safeOffset) {
-        result = mid;
-        lo = mid + 1;
-      } else {
-        hi = mid - 1;
-      }
-    }
-    return result;
+    return findIndexAtOffset(this, offset);
   }
 
   // ── Fenwick Tree 树状数组核心原语 ─────────────────────────────────────
@@ -463,24 +447,48 @@ export class VirtualScrollManager {
     }
     return sum;
   }
-}
 
-// ── 归一化工具 ─────────────────────────────────────────────────────────
+  /**
+   * 绑定此 VSM 实例所属的复合作用域 (${paneId}::${sessionId})
+   */
+  setScope(paneId: string | null, sessionId: string | null): void {
+    this.paneId = paneId;
+    this.sessionId = sessionId;
+    this.scopeKey = sessionId ? makeScopeKey(sessionId, paneId) : null;
+  }
 
-function normalizeNonNegInt(value: number): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
-    return 0;
-  return Math.floor(value);
-}
+  getScopeKey(): string | null {
+    return this.scopeKey;
+  }
 
-function normalizeNonNegFloat(value: number): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
-    return 0;
-  return value;
-}
+  getPaneId(): string | null {
+    return this.paneId;
+  }
 
-function normalizePositiveFloat(value: number, fallback: number): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0)
-    return fallback;
-  return value;
+  getSessionId(): string | null {
+    return this.sessionId;
+  }
+
+  /**
+   * 获取当前高度快照缓存映射（Record<messageId, height>）。
+   * 各窗格实例独立维护，防止多窗格非对称宽度排版高度相互污染 (VULN-04)。
+   */
+  getHeightCache(): Record<string, number> {
+    const cache: Record<string, number> = {};
+    for (const [id, entry] of this.heightsById.entries()) {
+      cache[id] = entry.actual ?? entry.estimated;
+    }
+    return cache;
+  }
+
+  /**
+   * 兼容属性访问：返回高度快照缓存字典
+   */
+  get heightCache(): Record<string, number> {
+    return this.getHeightCache();
+  }
+
+  getHeightMap(): Record<string, number> {
+    return this.getHeightCache();
+  }
 }

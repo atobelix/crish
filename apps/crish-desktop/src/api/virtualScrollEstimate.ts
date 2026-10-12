@@ -26,11 +26,15 @@ export function estimateTimelineMessageHeight(msg: SessionMessage): number {
   if (msg.sender === 'user') {
     const len = msg.text?.length || 0;
     const textHeight = Math.max(24, Math.ceil(len / 35) * 20);
-    const attachCount = (msg.attachments?.length || 0) + (msg.images?.length || 0);
+    const attachCount =
+      (msg.attachments?.length || 0) + (msg.images?.length || 0);
     const attachHeight = attachCount > 0 ? attachCount * 44 : 0;
     return Math.min(
-      Math.max(textHeight + attachHeight + 4 + META_SLOT_PX + CHAT_ROW_GAP_PX, 44),
-      1000,
+      Math.max(
+        textHeight + attachHeight + 4 + META_SLOT_PX + CHAT_ROW_GAP_PX,
+        44
+      ),
+      1000
     );
   }
 
@@ -41,7 +45,8 @@ export function estimateTimelineMessageHeight(msg: SessionMessage): number {
   if (blocks.length > 0) {
     for (const b of blocks) {
       if (b.type === 'thought') {
-        const thoughtLen = (b.content || (b as { text?: string }).text || '').length;
+        const thoughtLen = (b.content || (b as { text?: string }).text || '')
+          .length;
         // 思考块：基础头部 36px，预览文字根据长度增加，受折叠视口最大约束 260px
         h += Math.min(36 + Math.ceil(thoughtLen / 45) * 20, 260);
       } else if (b.type === 'tool_call') {
@@ -73,4 +78,25 @@ export function estimateTimelineMessageHeight(msg: SessionMessage): number {
   }
 
   return Math.min(Math.max(h, 50), 10000);
+}
+
+export function normalizeNonNegInt(value: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
+    return 0;
+  return Math.floor(value);
+}
+
+export function normalizeNonNegFloat(value: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
+    return 0;
+  return value;
+}
+
+export function normalizePositiveFloat(
+  value: number,
+  fallback: number
+): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0)
+    return fallback;
+  return value;
 }

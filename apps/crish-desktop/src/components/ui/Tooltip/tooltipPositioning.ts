@@ -191,28 +191,40 @@ export function computeClampedPosition(
       break;
   }
 
-  // 4. 视口边缘安全钳位
-  const clampW = Math.max(TOOLTIP_EDGE_PAD, vw - tipWidth - TOOLTIP_EDGE_PAD);
-  const clampH = Math.max(TOOLTIP_EDGE_PAD, vh - tipHeight - TOOLTIP_EDGE_PAD);
-  const cLeft = Math.min(Math.max(TOOLTIP_EDGE_PAD, boxLeft), clampW);
-  const cTop = Math.min(Math.max(TOOLTIP_EDGE_PAD, boxTop), clampH);
+  // 4. 视口边缘安全钳位（物理整型像素对齐，杜绝亚像素坐标导致的字体与边框模糊）
+  const roundedTipW = Math.round(tipWidth);
+  const roundedTipH = Math.round(tipHeight);
+  const clampW = Math.max(
+    TOOLTIP_EDGE_PAD,
+    vw - roundedTipW - TOOLTIP_EDGE_PAD
+  );
+  const clampH = Math.max(
+    TOOLTIP_EDGE_PAD,
+    vh - roundedTipH - TOOLTIP_EDGE_PAD
+  );
+  const cLeft = Math.round(
+    Math.min(Math.max(TOOLTIP_EDGE_PAD, boxLeft), clampW)
+  );
+  const cTop = Math.round(Math.min(Math.max(TOOLTIP_EDGE_PAD, boxTop), clampH));
 
   // 5. 计算小尖角 (Arrow) 动态指向触发器几何中轴的相对位移
   let arrowOffset: number;
   if (effectiveSide === 'top' || effectiveSide === 'bottom') {
     const targetCenterX = rect.left + rect.width / 2;
     const rawArrow = targetCenterX - cLeft;
-    arrowOffset =
-      tipWidth > 24
-        ? Math.max(12, Math.min(tipWidth - 12, rawArrow))
-        : tipWidth / 2;
+    arrowOffset = Math.round(
+      roundedTipW > 24
+        ? Math.max(12, Math.min(roundedTipW - 12, rawArrow))
+        : roundedTipW / 2
+    );
   } else {
     const targetCenterY = rect.top + rect.height / 2;
     const rawArrow = targetCenterY - cTop;
-    arrowOffset =
-      tipHeight > 24
-        ? Math.max(12, Math.min(tipHeight - 12, rawArrow))
-        : tipHeight / 2;
+    arrowOffset = Math.round(
+      roundedTipH > 24
+        ? Math.max(12, Math.min(roundedTipH - 12, rawArrow))
+        : roundedTipH / 2
+    );
   }
 
   // 6. 反算 base 坐标（translate 由 CSS 变量施加）
@@ -220,20 +232,20 @@ export function computeClampedPosition(
   let resTop: number;
   switch (effectiveSide) {
     case 'top':
-      resLeft = cLeft + tipWidth / 2;
-      resTop = cTop + tipHeight;
+      resLeft = cLeft + roundedTipW / 2;
+      resTop = cTop + roundedTipH;
       break;
     case 'bottom':
-      resLeft = cLeft + tipWidth / 2;
+      resLeft = cLeft + roundedTipW / 2;
       resTop = cTop;
       break;
     case 'left':
-      resLeft = cLeft + tipWidth;
-      resTop = cTop + tipHeight / 2;
+      resLeft = cLeft + roundedTipW;
+      resTop = cTop + roundedTipH / 2;
       break;
     case 'right':
       resLeft = cLeft;
-      resTop = cTop + tipHeight / 2;
+      resTop = cTop + roundedTipH / 2;
       break;
   }
 
