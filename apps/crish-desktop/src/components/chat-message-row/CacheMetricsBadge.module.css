@@ -44,7 +44,7 @@
 }
 
 /* ── 悬停弹出卡片（几何卡片，单色克制） ── */
-.popoverCard {
+div.popoverCard {
   border-radius: var(--radius-lg, 8px);
   padding: 10px 12px;
   white-space: normal;
