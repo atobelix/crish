@@ -80,7 +80,7 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       // 故此处断言**独立侧取值**，并由 expectNoDerivedAliasesInjected 钉死
       // 「派生别名零注入」——比断言旧别名更强（旧写法对收敛回归无感知）。
       // 2026-10-10 三档底色：运行时只写 --surface-outer / --surface-main / --surface-input
-      expect(root.style.getPropertyValue('--surface-main')).toBe('#F8F8F8');
+      expect(root.style.getPropertyValue('--surface-main')).toBe('#f8f7f6');
       expect(root.style.getPropertyValue('--surface-outer')).toBe('#f2f1f0');
       expect(root.style.getPropertyValue('--surface-input')).toBe('#ffffff');
       for (const alias of [

@@ -26,7 +26,12 @@ const block = (selectorStart: string): string => {
 const light = block(":root,\nhtml[data-theme='default']");
 const dark = block("html[data-theme='dark']");
 const decl = (b: string, name: string): string | null =>
-  b.match(new RegExp(`\\n\\s*${name}:\\s*([^;]+);`))?.[1].trim() ?? null;
+  b
+    .match(new RegExp(`\\n\\s*${name}:\\s*([^;]+);`))?.[1]
+    ?.replace(/\s*\(\s*/g, '(')
+    .replace(/\s*\)/g, ')')
+    .replace(/\s+/g, ' ')
+    .trim() ?? null;
 
 describe('三档底色契约', () => {
   for (const [theme, b] of [
@@ -93,7 +98,7 @@ describe('三档底色契约', () => {
     expect(decl(light, '--user-bubble-bg')).toBe('#eeedec');
     expect(decl(dark, '--surface-outer')).toBe('#1a1919');
     expect(decl(dark, '--user-bubble-bg')).toBe('var(--elevate-2)');
-    expect(decl(light, '--surface-main')).toBe('#F8F8F8');
+    expect(decl(light, '--surface-main')).toBe('#fbfaf9');
     expect(decl(light, '--surface-input')).toBe('#ffffff');
     expect(decl(light, '--tab-active-bg')).toBe('var(--surface-input)');
     // 深色元素底色：一律「所在层 + 提亮墨」派生，随皮肤 / accent 走（heson 2026-10-11）

@@ -2,22 +2,22 @@
 
 exports[`ToastStack snapshots > renders multiple toasts 1`] = `
 <div
-  class="_toastStack_9bcf44"
+  class="_toastStack_9bce87"
 >
   <div
     aria-live="polite"
-    class="_toastAlert_9bcf44"
+    class="_toastAlert_9bce87"
     data-toast-type="info"
     role="status"
   >
     <span
-      class="_toastMessage_9bcf44"
+      class="_toastMessage_9bce87"
     >
       第一条通知
     </span>
     <button
       aria-label="关闭通知"
-      class="_toastDismissBtn_9bcf44"
+      class="_toastDismissBtn_9bce87"
       type="button"
     >
       <svg
@@ -45,18 +45,18 @@ exports[`ToastStack snapshots > renders multiple toasts 1`] = `
   </div>
   <div
     aria-live="polite"
-    class="_toastAlert_9bcf44"
+    class="_toastAlert_9bce87"
     data-toast-type="success"
     role="status"
   >
     <span
-      class="_toastMessage_9bcf44"
+      class="_toastMessage_9bce87"
     >
       第二条通知
     </span>
     <button
       aria-label="关闭通知"
-      class="_toastDismissBtn_9bcf44"
+      class="_toastDismissBtn_9bce87"
       type="button"
     >
       <svg
@@ -84,18 +84,18 @@ exports[`ToastStack snapshots > renders multiple toasts 1`] = `
   </div>
   <div
     aria-live="polite"
-    class="_toastAlert_9bcf44"
+    class="_toastAlert_9bce87"
     data-toast-type="warning"
     role="status"
   >
     <span
-      class="_toastMessage_9bcf44"
+      class="_toastMessage_9bce87"
     >
       警告信息
     </span>
     <button
       aria-label="关闭通知"
-      class="_toastDismissBtn_9bcf44"
+      class="_toastDismissBtn_9bce87"
       type="button"
     >
       <svg
@@ -126,22 +126,22 @@ exports[`ToastStack snapshots > renders multiple toasts 1`] = `
 
 exports[`ToastStack snapshots > renders single toast 1`] = `
 <div
-  class="_toastStack_9bcf44"
+  class="_toastStack_9bce87"
 >
   <div
     aria-live="polite"
-    class="_toastAlert_9bcf44"
+    class="_toastAlert_9bce87"
     data-toast-type="info"
     role="status"
   >
     <span
-      class="_toastMessage_9bcf44"
+      class="_toastMessage_9bce87"
     >
       操作成功
     </span>
     <button
       aria-label="关闭通知"
-      class="_toastDismissBtn_9bcf44"
+      class="_toastDismissBtn_9bce87"
       type="button"
     >
       <svg
@@ -172,28 +172,28 @@ exports[`ToastStack snapshots > renders single toast 1`] = `
 
 exports[`ToastStack snapshots > renders toast with undo 1`] = `
 <div
-  class="_toastStack_9bcf44"
+  class="_toastStack_9bce87"
 >
   <div
     aria-live="assertive"
-    class="_toastAlert_9bcf44"
+    class="_toastAlert_9bce87"
     data-toast-type="error"
     role="status"
   >
     <span
-      class="_toastMessage_9bcf44"
+      class="_toastMessage_9bce87"
     >
       文件已删除
     </span>
     <button
-      class="_toastUndoBtn_9bcf44"
+      class="_toastUndoBtn_9bce87"
       type="button"
     >
       撤销
     </button>
     <button
       aria-label="关闭通知"
-      class="_toastDismissBtn_9bcf44"
+      class="_toastDismissBtn_9bce87"
       type="button"
     >
       <svg

@@ -2,7 +2,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useChatHandlers } from '../useChatHandlers';
-import { useSessionRuntimeStatusStore } from '../../../store/sessionRuntimeStatusStore';
+import {
+  reportRuntimeStatus,
+  useSessionRuntimeStatusStore,
+} from '../../../store/sessionRuntimeStatusStore';
 import { emitUiEvent } from '../../../api/uiEvents';
 
 const mockWithdrawMessage = vi.fn();
@@ -22,11 +25,16 @@ vi.mock('../../../app/compositionRoot', () => ({
   }),
 }));
 
-vi.mock('../../../store/storeAccess', () => ({
-  clearRuntimeStatus: vi.fn(),
-  useSettingsField: (sel: (s: any) => any) =>
-    sel({ appSettings: { maxRetryAttempts: mockMaxRetries } }),
-}));
+vi.mock('../../../store/storeAccess', async () => {
+  const { reportRuntimeStatus } =
+    await import('../../../store/sessionRuntimeStatusStore');
+  return {
+    clearRuntimeStatus: vi.fn(),
+    reportRuntimeStatus,
+    useSettingsField: (sel: (s: any) => any) =>
+      sel({ appSettings: { maxRetryAttempts: mockMaxRetries } }),
+  };
+});
 
 vi.mock('../../../services/toast/ToastContext', () => ({
   toast: { show: vi.fn() },

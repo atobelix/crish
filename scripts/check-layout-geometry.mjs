@@ -134,12 +134,14 @@ function checkPaneHeaderGeometry(errors) {
   const clean = stripCssComments(raw);
   const rules = extractRules(clean);
 
-  // 1. 检查是否存在基于 [data-top-row="true"][data-right-edge="true"] 的右缘避让规则
-  const winRule = rules.find(
-    (r) =>
-      r.selector.includes('[data-top-row="true"][data-right-edge="true"]') &&
-      !r.selector.includes('data-platform="macos"')
-  );
+  // 1. 检查是否存在基于 [data-top-row="true"][data-right-edge="true"] 的右缘避让规则（兼容 Prettier 单双引号）
+  const winRule = rules.find((r) => {
+    const sel = r.selector.replace(/'/g, '"');
+    return (
+      sel.includes('[data-top-row="true"][data-right-edge="true"]') &&
+      !sel.includes('data-platform="macos"')
+    );
+  });
 
   if (!winRule) {
     errors.push(
@@ -154,12 +156,14 @@ function checkPaneHeaderGeometry(errors) {
     }
   }
 
-  // 2. 检查 macOS 平台的右缘避让规则
-  const macRule = rules.find(
-    (r) =>
-      r.selector.includes('[data-top-row="true"][data-right-edge="true"]') &&
-      r.selector.includes('data-platform="macos"')
-  );
+  // 2. 检查 macOS 平台的右缘避让规则（兼容 Prettier 单双引号）
+  const macRule = rules.find((r) => {
+    const sel = r.selector.replace(/'/g, '"');
+    return (
+      sel.includes('[data-top-row="true"][data-right-edge="true"]') &&
+      sel.includes('data-platform="macos"')
+    );
+  });
 
   if (!macRule) {
     errors.push(
@@ -175,7 +179,7 @@ function checkPaneHeaderGeometry(errors) {
 
   // 3. 拦截任何在顶行避让中裸写数值（如 padding-right: 144px;）
   const rawPixelPadding = clean.match(
-    /\[data-top-row="true"\]\[data-right-edge="true"\][^{]*\{[^}]*padding-right\s*:\s*\d+px/i
+    /\[data-top-row=['"]true['"]\]\[data-right-edge=['"]true['"]\][^{]*\{[^}]*padding-right\s*:\s*\d+px/i
   );
   if (rawPixelPadding) {
     errors.push(

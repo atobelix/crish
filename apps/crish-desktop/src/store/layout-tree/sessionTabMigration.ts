@@ -90,10 +90,7 @@ function isFiniteNumber(n: unknown): n is number {
 }
 
 /** S0：结构门闩。混用 v2/v3 叶 → unknown */
-function inspectStructure(
-  node: unknown,
-  kinds: Set<LeafKind>
-): boolean {
+function inspectStructure(node: unknown, kinds: Set<LeafKind>): boolean {
   if (!node || typeof node !== 'object') return false;
   const n = node as Record<string, unknown>;
   if (typeof n.id !== 'string' || !n.id) return false;
@@ -103,7 +100,8 @@ function inspectStructure(
     return kind !== 'unknown';
   }
   if (n.type === 'branch') {
-    if (n.direction !== 'horizontal' && n.direction !== 'vertical') return false;
+    if (n.direction !== 'horizontal' && n.direction !== 'vertical')
+      return false;
     if (!isFiniteNumber(n.splitRatio)) return false;
     if (!Array.isArray(n.children) || n.children.length !== 2) return false;
     return (
@@ -139,13 +137,18 @@ function isWorkLeaf(n: WorkNode): n is WorkLeaf {
 
 function collectWorkLeaves(node: WorkNode): WorkLeaf[] {
   if (isWorkLeaf(node)) return [node];
-  return [...collectWorkLeaves(node.children[0]), ...collectWorkLeaves(node.children[1])];
+  return [
+    ...collectWorkLeaves(node.children[0]),
+    ...collectWorkLeaves(node.children[1]),
+  ];
 }
 
 function findWorkNode(node: WorkNode, id: string): WorkNode | null {
   if (node.id === id) return node;
   if (isWorkLeaf(node)) return null;
-  return findWorkNode(node.children[0], id) ?? findWorkNode(node.children[1], id);
+  return (
+    findWorkNode(node.children[0], id) ?? findWorkNode(node.children[1], id)
+  );
 }
 
 function findWorkParent(
@@ -201,8 +204,7 @@ function ingestNode(raw: unknown, kind: LeafKind): WorkNode {
     };
   }
   const panelId = typeof n.panelId === 'string' ? n.panelId : 'chat';
-  const legacySid =
-    typeof n.sessionId === 'string' ? n.sessionId.trim() : '';
+  const legacySid = typeof n.sessionId === 'string' ? n.sessionId.trim() : '';
   const toolTabs = Array.isArray(n.tabs)
     ? (n.tabs as unknown[]).filter((t): t is string => typeof t === 'string')
     : [];
@@ -347,7 +349,9 @@ function collectToolPanelIds(node: WorkNode): {
 function stripToolLeaves(root: WorkNode): WorkNode | null {
   let current: WorkNode | null = root;
   for (let guard = 0; guard < 64 && current; guard++) {
-    const tools = collectWorkLeaves(current).filter((l) => l.panelId !== 'chat');
+    const tools = collectWorkLeaves(current).filter(
+      (l) => l.panelId !== 'chat'
+    );
     if (tools.length === 0) return current;
     const next = removeWorkNode(current, tools[0]!.id);
     if (next === current) break;
@@ -464,7 +468,7 @@ export function migrateToLeafOwnedTabs(
 
     if (extras.length > 0) {
       const chats = chatLeaves();
-      let target =
+      const target =
         (input.activeLeafId
           ? chats.find((c) => c.id === input.activeLeafId)
           : undefined) ?? chats[0];

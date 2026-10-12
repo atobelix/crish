@@ -972,8 +972,8 @@ button.iconBtn,
   gap: 4px;
   padding: 1px 7px;
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent, #6366f1) 12%, transparent);
-  color: var(--accent, #6366f1);
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  color: var(--accent-color);
   font-size: var(--font-size-xs);
   font-weight: 500;
   margin-bottom: 4px;

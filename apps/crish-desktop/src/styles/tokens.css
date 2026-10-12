@@ -475,9 +475,8 @@ html[data-theme='light'] {
   --radius-pill: 9999px;
   --radius-circle: 50%; /* Avatar 等正圆；被 ModelsSettingsTab 等消费 */
   --radius-btn: 7px; /* 用户锁 U1（survey 04）：按钮圆角钉死 7px，是 5 档之外唯一的例外；禁止改成 8px */
-  --button-radius: var(
-    --radius-btn
-  ); /* :root 唯一权威定义（U1）；密度档/主题块禁止覆写 */
+  /* :root 唯一权威定义（U1）；密度档/主题块禁止覆写 */
+  --button-radius: var(--radius-btn);
   --radius-xs: var(--radius-s);
   --radius-sm: var(--radius-s);
   --radius-md: var(--radius-m);

@@ -53,7 +53,7 @@ describe('ui/Dialog 遮罩（--modal-scrim）', () => {
 
   it('弹窗叠弹窗：下层遮罩在存在未退场的上层弹窗时让位（只保留最上层遮罩）', () => {
     expect(css).toMatch(
-      /\[data-focus-trap\]:has\(~ \[data-focus-trap\] > \[data-dialog-overlay\]:not\(\[data-dialog-state='exiting'\]\)\)\s*> \[data-dialog-overlay\]\s*> \.backdrop\s*\{\s*background:\s*transparent;/
+      /\[data-focus-trap\]:has\(\s*~\s*\[data-focus-trap\]\s*>\s*\[data-dialog-overlay\]:not\(\[data-dialog-state='exiting'\]\)\s*\)\s*>\s*\[data-dialog-overlay\]\s*>\s*\.backdrop\s*\{\s*background:\s*transparent;/
     );
   });
 

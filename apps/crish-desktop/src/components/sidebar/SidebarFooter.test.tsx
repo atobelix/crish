@@ -104,6 +104,10 @@ describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
     const cardBtn = screen.getByTestId('user-profile-card');
     expect(cardBtn).toHaveAttribute('data-role', '访客用户');
     expect(cardBtn).toHaveAttribute('data-tooltip', '设置导航');
-    expect(cardBtn).toHaveAttribute('title', '设置导航');
+    expect(cardBtn).toHaveAttribute(
+      'aria-label',
+      '用户卡片：tester (访客用户)，点击打开设置导航'
+    );
+    expect(cardBtn).not.toHaveAttribute('title');
   });
 });

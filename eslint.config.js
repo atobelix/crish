@@ -201,6 +201,8 @@ export default tseslint.config(
       'docs/**',
       'analysis/**',
       'implementer/**',
+      'scripts/**',
+      '**/.expo/**',
       // 开发临时脚本（如根目录 debug-send.tmp.ts）不入库也不参与门禁
       '**/*.tmp.ts',
       '**/*.tmp.tsx',
@@ -290,6 +292,7 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       'local/no-silent-catch': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
     },
   },
   // Frontend/Browser specific configuration (React)

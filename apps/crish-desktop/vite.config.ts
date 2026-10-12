@@ -35,11 +35,10 @@ const PROD_CSP_BASE =
   "worker-src 'self' blob:; frame-src 'self' http://localhost:* http://127.0.0.1:* http://*.localhost https://*.localhost asset: http://asset.localhost https://asset.localhost data: blob:; " +
   "frame-ancestors 'self'; form-action 'self'; object-src 'none'; base-uri 'self'";
 
-// chunk 体积门禁阈值（06-步骤2 + Stage 3 ACT-304 三元拆分后重测）：
-// 全局最大候选：chat-provider-catalog ~562 kB / vendor-xterm ~441 kB /
-// vendor-tiptap ~419 kB / index(entry) ~432 kB —— 均低于 600 hard 门禁。
-// 旧稿「chat-bridge 674.4 kB CI 阻断」已撤销；三元拆分后
-// chat-bridge-transport ~140 kB / chat-stream-core ~19 kB / catalog ~562 kB。
+// chunk 体积门禁阈值：
+// 全局最大候选：vendor-xterm ~441 kB / chat-provider-catalog ~422 kB /
+// vendor-tiptap ~419 kB / index(entry) ~322 kB / chat-runtime-core ~305 kB —— 均低于 600 hard 门禁。
+// 消除 chunk 环依赖后：chat-runtime-core ~305 kB / chat-provider-catalog ~422 kB / vendor-shared-utils ~134 kB。
 // 阈值 = 抛错门禁（chunkSizeGatePlugin），与 vite:reporter 的 chunkSizeWarningLimit
 // 同值（单真源），避免 reporter 默认 500 对 lucide 误报。
 const CHUNK_SIZE_GATE_KB = 600;
@@ -99,12 +98,12 @@ function cspPlugin(): Plugin {
         let m: RegExpExecArray | null;
         while ((m = inlineRe.exec(transformedHtml))) {
           hashes.push(
-            `'sha256-${createHash('sha256').update(m[1]).digest('base64')}'`,
+            `'sha256-${createHash('sha256').update(m[1]).digest('base64')}'`
           );
         }
         content = PROD_CSP_BASE.replace(
           "script-src 'self'",
-          `script-src 'self'${hashes.length ? ' ' + hashes.join(' ') : ''}`,
+          `script-src 'self'${hashes.length ? ' ' + hashes.join(' ') : ''}`
         );
       }
       return {
@@ -160,7 +159,7 @@ function inlineCriticalAssets(html: string): string {
     // 压缩失败时退回原始内容内联（仍消除外链往返；hash 由 cspPlugin 扫描计算）
     console.warn(
       '[crish-csp] esbuild 压缩 loader 失败，回退原始内容内联:',
-      err instanceof Error ? err.message : err,
+      err instanceof Error ? err.message : err
     );
     try {
       if (existsSync(cssPath)) minifiedCss = readFileSync(cssPath, 'utf-8');
@@ -171,8 +170,7 @@ function inlineCriticalAssets(html: string): string {
   }
 
   let out = html;
-  const cssLinkRe =
-    /<link\b[^>]*?href=["'][^"']*?loader\.css["'][^>]*?\/?>/i;
+  const cssLinkRe = /<link\b[^>]*?href=["'][^"']*?loader\.css["'][^>]*?\/?>/i;
   if (minifiedCss) {
     const styleTag = `<style id="crish-critical-css">${minifiedCss}</style>`;
     if (cssLinkRe.test(out)) {
@@ -397,7 +395,7 @@ function crishPreviewProxyPlugin(): Plugin {
   let envDispatcher: unknown = undefined;
   try {
     const req = createRequire(import.meta.url);
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+
     const { EnvHttpProxyAgent, setGlobalDispatcher } = req('undici');
     if (EnvHttpProxyAgent) {
       envDispatcher = new EnvHttpProxyAgent();
@@ -567,7 +565,9 @@ function crishPreviewProxyPlugin(): Plugin {
             } else {
               if (upstream.body) {
                 const stream = Readable.fromWeb(
-                  upstream.body as unknown as Parameters<typeof Readable.fromWeb>[0]
+                  upstream.body as unknown as Parameters<
+                    typeof Readable.fromWeb
+                  >[0]
                 );
                 stream.on('error', () => {
                   if (!res.headersSent) {
@@ -688,16 +688,76 @@ export default defineConfig({
     dedupe: ['react', 'react-dom', 'react-dom/client'],
     alias: [
       { find: '@', replacement: resolve(__dirname, 'src') },
-      { find: '@crish/block-paper/chrome.css', replacement: resolve(__dirname, '../../packages/block-paper/src/chrome/blockChrome.css') },
-      { find: '@crish/block-paper/paper-list.css', replacement: resolve(__dirname, '../../packages/block-paper/src/list/paperList.css') },
-      { find: /^@crish\/block-paper$/, replacement: resolve(__dirname, '../../packages/block-paper/src/index.ts') },
-      { find: /^@crish\/block-paper-contract$/, replacement: resolve(__dirname, '../../packages/block-paper-contract/src/index.ts') },
-      { find: '@crish/shared-utils/browser', replacement: resolve(__dirname, '../../packages/shared-utils/src/browser-index.ts') },
-      { find: '@crish/shared-utils/node', replacement: resolve(__dirname, '../../packages/shared-utils/src/node-index.ts') },
-      { find: /^@crish\/shared-utils$/, replacement: resolve(__dirname, '../../packages/shared-utils/src/index.ts') },
-      { find: /^@crish\/shared-types$/, replacement: resolve(__dirname, '../../packages/shared-types/src/index.ts') },
-      { find: /^@crish\/conversation-flow$/, replacement: resolve(__dirname, '../../packages/conversation-flow/src/index.ts') },
-      { find: /^@crish\/editor-kit$/, replacement: resolve(__dirname, '../../packages/editor-kit/src/index.ts') },
+      {
+        find: '@crish/block-paper/chrome.css',
+        replacement: resolve(
+          __dirname,
+          '../../packages/block-paper/src/chrome/blockChrome.css'
+        ),
+      },
+      {
+        find: '@crish/block-paper/paper-list.css',
+        replacement: resolve(
+          __dirname,
+          '../../packages/block-paper/src/list/paperList.css'
+        ),
+      },
+      {
+        find: /^@crish\/block-paper$/,
+        replacement: resolve(
+          __dirname,
+          '../../packages/block-paper/src/index.ts'
+        ),
+      },
+      {
+        find: /^@crish\/block-paper-contract$/,
+        replacement: resolve(
+          __dirname,
+          '../../packages/block-paper-contract/src/index.ts'
+        ),
+      },
+      {
+        find: '@crish/shared-utils/browser',
+        replacement: resolve(
+          __dirname,
+          '../../packages/shared-utils/src/browser-index.ts'
+        ),
+      },
+      {
+        find: '@crish/shared-utils/node',
+        replacement: resolve(
+          __dirname,
+          '../../packages/shared-utils/src/node-index.ts'
+        ),
+      },
+      {
+        find: /^@crish\/shared-utils$/,
+        replacement: resolve(
+          __dirname,
+          '../../packages/shared-utils/src/index.ts'
+        ),
+      },
+      {
+        find: /^@crish\/shared-types$/,
+        replacement: resolve(
+          __dirname,
+          '../../packages/shared-types/src/index.ts'
+        ),
+      },
+      {
+        find: /^@crish\/conversation-flow$/,
+        replacement: resolve(
+          __dirname,
+          '../../packages/conversation-flow/src/index.ts'
+        ),
+      },
+      {
+        find: /^@crish\/editor-kit$/,
+        replacement: resolve(
+          __dirname,
+          '../../packages/editor-kit/src/index.ts'
+        ),
+      },
     ],
   },
   optimizeDeps: {
@@ -757,10 +817,7 @@ export default defineConfig({
             // /react/ 会误伤 @tiptap/react 与 zustand/esm/react/*（→ 循环 chunk
             // vendor-react↔vendor-tiptap/zustand），收窄为仅 react 包本体；
             // react-dom 及其浮层 peer（@floating-ui/react-dom 等）继续归 vendor-react
-            if (
-              n.includes('react-dom') ||
-              n.includes('node_modules/react/')
-            ) {
+            if (n.includes('react-dom') || n.includes('node_modules/react/')) {
               return 'vendor-react';
             }
             if (n.includes('zustand') || n.includes('immer'))
@@ -779,7 +836,13 @@ export default defineConfig({
             if (n.includes('dompurify')) return 'vendor-dompurify';
             if (n.includes('@chenglou')) return 'vendor-pretext';
           }
-          // ── ACT-304 三元解构：catalog / stream / transport（顺序敏感）──
+          if (
+            n.includes('/packages/shared-utils/') ||
+            n.includes('/packages/shared-types/')
+          ) {
+            return 'vendor-shared-utils';
+          }
+
           // 2.1 模型目录元数据独立切块（惰性加载，严禁渗入传输协议）
           if (
             n.includes('/src/api/providerProfiles') ||
@@ -794,24 +857,23 @@ export default defineConfig({
             return 'chat-provider-catalog';
           }
 
-          // 2.2 流式差异计算与重放恢复核心独立切块
+          // 2.2 跨层共享工具与纯函数（切断 catalog/store 与 runtime 核心的双向 chunk 依赖环）
+          if (
+            n.includes('/src/api/chat-bridge/handlers/cacheMetricsCompute') ||
+            n.includes('/src/api/chat-bridge/handlers/eventUtils') ||
+            n.includes('/src/api/chat-bridge/editSessionConsumer')
+          ) {
+            return 'chat-bridge-common';
+          }
+
+          // 2.3 聊天运行时核心（统一收归 transport 与 stream 处理核心）
           if (
             n.includes('/src/api/StreamRenderBuffer') ||
             n.includes('/src/services/StreamRecovery') ||
-            n.includes('/src/api/chat-bridge/dataPlaneRouter') ||
-            n.includes('/src/api/chat-bridge/eventDedupe') ||
-            n.includes('/src/api/chat-bridge/streamSession') ||
-            n.includes('/src/api/chat-bridge/streamFinishControl')
-          ) {
-            return 'chat-stream-core';
-          }
-
-          // 2.3 传输协议层核心（IPC 握手 / EventRouter / ConnectionLifecycle）
-          if (
             n.includes('/src/api/chatBridge') ||
             n.includes('/src/api/chat-bridge/')
           ) {
-            return 'chat-bridge-transport';
+            return 'chat-runtime-core';
           }
 
           if (n.includes('/src/workers/')) return 'vendor-workers';

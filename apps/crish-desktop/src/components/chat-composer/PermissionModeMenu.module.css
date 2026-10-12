@@ -240,18 +240,14 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  color: var(--text-tertiary);
-  opacity: 0.65;
+  color: var(--text-faint);
   border-radius: var(--radius-xs, 4px);
   cursor: help;
-  transition:
-    opacity var(--transition-micro, 100ms ease),
-    color var(--transition-micro, 100ms ease);
+  transition: color var(--transition-micro, 100ms ease);
   flex-shrink: 0;
 }
 
 .infoTrigger:hover {
-  opacity: 1;
   color: var(--text-primary);
 }
 

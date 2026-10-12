@@ -38,7 +38,10 @@ export interface ClientRelayTicket {
 }
 
 /** 从服务端 user 对象解析档案；`id` 与 `email` 缺失 = 契约破坏，直接报错 */
-function parseProfile(user: unknown, fallbackEmail: string): MobileUserProfile {
+function parseProfile(
+  user: unknown,
+  _fallbackEmail: string
+): MobileUserProfile {
   const u = (user ?? {}) as Record<string, unknown>;
   const id = typeof u.id === 'string' && u.id ? u.id : undefined;
   const email = typeof u.email === 'string' && u.email ? u.email : undefined;
@@ -61,7 +64,10 @@ export class CloudAuthClient {
   constructor(private readonly baseUrl = DEFAULT_AUTH_URL) {}
 
   /** 账号密码登录（refreshToken / user.id 缺失一律报错，禁止回退伪造） */
-  async login(email: string, pass: string): Promise<{
+  async login(
+    email: string,
+    pass: string
+  ): Promise<{
     accessToken: string;
     refreshToken: string;
     user: MobileUserProfile;
@@ -74,7 +80,9 @@ export class CloudAuthClient {
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      throw new Error(`登录失败 (${res.status}): ${text || '用户名或密码错误'}`);
+      throw new Error(
+        `登录失败 (${res.status}): ${text || '用户名或密码错误'}`
+      );
     }
 
     const data = (await res.json()) as Record<string, unknown>;
@@ -123,7 +131,8 @@ export class CloudAuthClient {
             : typeof d.label === 'string' && d.label
               ? d.label
               : '电脑',
-        platform: typeof d.platform === 'string' && d.platform ? d.platform : 'desktop',
+        platform:
+          typeof d.platform === 'string' && d.platform ? d.platform : 'desktop',
         // 缺失 = 未知（0），绝不伪造 Date.now()
         lastSeenAt:
           typeof d.lastSeenAt === 'number'

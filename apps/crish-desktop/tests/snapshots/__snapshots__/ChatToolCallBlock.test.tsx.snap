@@ -2,10 +2,10 @@
 
 exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
 <div
-  class="_toolStack_7dc568 tool-stack"
+  class="_toolStack_d18ff4 tool-stack"
 >
   <div
-    class="_toolRow_7dc568 _isError_7dc568 is-error _isCollapsed_7dc568 is-collapsed  tool-row"
+    class="_toolRow_d18ff4 _isError_d18ff4 is-error _isCollapsed_d18ff4 is-collapsed  tool-row"
     data-default-collapsed="true"
     data-expanded="false"
     data-tool-id="tool_error"
@@ -16,43 +16,43 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
       aria-controls="tool-result-tool_error"
       aria-expanded="false"
       aria-label="构建项目，失败，已折叠，按 Enter 或空格展开"
-      class="_toolRowHead_7dc568 tool-row-head"
+      class="_toolRowHead_d18ff4 tool-row-head"
       role="button"
       tabindex="0"
     >
       <span
-        class="_toolRowHeadMain_7dc568"
+        class="_toolRowHeadMain_d18ff4"
       >
         <span
           aria-hidden="true"
-          class="_toolRowIcoSlot_7dc568"
+          class="_toolRowIcoSlot_d18ff4"
         >
           <span
             aria-hidden="true"
-            class="_toolErrorDot_7dc568"
+            class="_toolErrorDot_d18ff4"
           />
         </span>
         <span
-          class="_toolRowText_7dc568"
+          class="_toolRowText_d18ff4"
         >
           <span
-            class="_toolRowSummary_7dc568"
+            class="_toolRowSummary_d18ff4"
           >
             <span
               aria-describedby="_r_0_"
-              class="_toolActionText_7dc568"
+              class="_toolActionText_d18ff4"
             >
               构建项目
             </span>
             <span
               aria-hidden="true"
-              class="_dotSeparator_7dc568"
+              class="_dotSeparator_d18ff4"
             >
               ·
             </span>
             <span
               aria-describedby="_r_1_"
-              class="_toolErrorParamText_7dc568"
+              class="_toolErrorParamText_d18ff4"
             >
               Error: build failed - syntax error in src/index.ts
             </span>
@@ -60,11 +60,11 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
         </span>
       </span>
       <span
-        class="_toolRowHeadRight_7dc568"
+        class="_toolRowHeadRight_d18ff4"
       >
         <span
           aria-hidden="true"
-          class="_toolRowChevron_7dc568 "
+          class="_toolRowChevron_d18ff4 "
           data-testid="tool-chevron-tool_error"
         >
           ›
@@ -72,53 +72,53 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
       </span>
     </div>
     <div
-      class="_toolBody_7dc568"
+      class="_toolBody_d18ff4"
     >
       <div
-        class="_toolBodyInner_7dc568"
+        class="_toolBodyInner_d18ff4"
       >
         <div
           aria-label="失败的工具详情"
-          class="_toolResultBody_7dc568"
+          class="_toolResultBody_d18ff4"
           id="tool-result-tool_error"
           role="region"
         >
           <section
             aria-label="终端命令输入"
-            class="_toolSection_7dc568 _toolSectionInput_7dc568 _toolSectionShellSingleLine_7dc568"
+            class="_toolSection_d18ff4 _toolSectionInput_d18ff4 _toolSectionShellSingleLine_d18ff4"
             data-tool-id="tool_error"
           >
             <div
-              class="_terminalSingleLineRow_7dc568"
+              class="_terminalSingleLineRow_d18ff4"
             >
               <div
-                class="_terminalLine_7dc568"
+                class="_terminalLine_d18ff4"
               >
                 <span
                   aria-hidden="true"
-                  class="_terminalPrompt_7dc568"
+                  class="_terminalPrompt_d18ff4"
                 >
                   $
                 </span>
                 <pre
-                  class="_toolResultPreCmd_7dc568"
+                  class="_toolResultPreCmd_d18ff4"
                 >
                   npm run build
                 </pre>
               </div>
               <div
-                class="_terminalLineEndSlot_7dc568"
+                class="_terminalLineEndSlot_d18ff4"
               >
                 <button
                   aria-describedby="_r_2_"
-                  class="_button_273f36 _buttonGhost_273f36 _buttonSm_273f36 _toolSectionActionBtn_7dc568"
+                  class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
                   type="button"
                 >
                   <span
                     aria-hidden="true"
-                    class="_buttonIcon_273f36"
+                    class="_buttonIcon_ae1db5"
                   >
                     <svg
                       aria-hidden="true"
@@ -150,7 +150,7 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
                     </svg>
                   </span>
                   <span
-                    class="_buttonLabel_273f36"
+                    class="_buttonLabel_ae1db5"
                   >
                     复制
                   </span>
@@ -160,43 +160,43 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
           </section>
           <section
             aria-label="工具执行输出"
-            class="_toolSection_7dc568 _toolSectionOutput_7dc568 _isErrorSection_7dc568"
+            class="_toolSection_d18ff4 _toolSectionOutput_d18ff4 _isErrorSection_d18ff4"
             data-tool-id="tool_error"
           >
             <header
-              class="_toolSectionHeader_7dc568"
+              class="_toolSectionHeader_d18ff4"
             >
               <div
-                class="_toolSectionTitleGroup_7dc568"
+                class="_toolSectionTitleGroup_d18ff4"
               >
                 <span
-                  class="_toolSectionBadge_7dc568 _toolSectionBadgeOutput_7dc568"
+                  class="_toolSectionBadge_d18ff4 _toolSectionBadgeOutput_d18ff4"
                 >
                   输出
                 </span>
                 <span
-                  class="_toolSectionMeta_7dc568"
+                  class="_toolSectionMeta_d18ff4"
                 >
                   <span
-                    class="_errorTag_7dc568"
+                    class="_errorTag_d18ff4"
                   >
                     执行失败
                   </span>
                 </span>
               </div>
               <div
-                class="_toolSectionActions_7dc568"
+                class="_toolSectionActions_d18ff4"
               >
                 <button
                   aria-describedby="_r_3_"
-                  class="_button_273f36 _buttonGhost_273f36 _buttonSm_273f36 _toolSectionActionBtn_7dc568"
+                  class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
                   type="button"
                 >
                   <span
                     aria-hidden="true"
-                    class="_buttonIcon_273f36"
+                    class="_buttonIcon_ae1db5"
                   >
                     <svg
                       aria-hidden="true"
@@ -228,7 +228,7 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
                     </svg>
                   </span>
                   <span
-                    class="_buttonLabel_273f36"
+                    class="_buttonLabel_ae1db5"
                   >
                     复制
                   </span>
@@ -236,10 +236,10 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
               </div>
             </header>
             <div
-              class="_toolSectionContent_7dc568"
+              class="_toolSectionContent_d18ff4"
             >
               <pre
-                class="_toolOutputCode_7dc568"
+                class="_toolOutputCode_d18ff4"
               >
                 Error: build failed - syntax error in src/index.ts
               </pre>
@@ -254,11 +254,11 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
 
 exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
 <div
-  class="_toolStack_7dc568 tool-stack"
+  class="_toolStack_d18ff4 tool-stack"
 >
   <div
     aria-busy="true"
-    class="_toolRow_7dc568 _isRunning_7dc568 is-running _isCollapsed_7dc568 is-collapsed  tool-row"
+    class="_toolRow_d18ff4 _isRunning_d18ff4 is-running _isCollapsed_d18ff4 is-collapsed  tool-row"
     data-default-collapsed="true"
     data-expanded="false"
     data-tool-id="tool_running"
@@ -269,55 +269,55 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
       aria-controls="tool-result-tool_running"
       aria-expanded="false"
       aria-label="运行测试，运行中，已折叠，按 Enter 或空格展开"
-      class="_toolRowHead_7dc568 tool-row-head"
+      class="_toolRowHead_d18ff4 tool-row-head"
       role="button"
       tabindex="0"
     >
       <span
-        class="_toolRowHeadMain_7dc568"
+        class="_toolRowHeadMain_d18ff4"
       >
         <span
           aria-hidden="true"
-          class="_toolRowIcoSlot_7dc568"
+          class="_toolRowIcoSlot_d18ff4"
         >
           <span
             aria-hidden="true"
-            class="_toolPulseDot_7dc568"
+            class="_toolPulseDot_d18ff4"
           />
         </span>
         <span
-          class="_toolRowText_7dc568"
+          class="_toolRowText_d18ff4"
         >
           <span
-            class="_toolRowSummary_7dc568"
+            class="_toolRowSummary_d18ff4"
           >
             <span
               aria-describedby="_r_0_"
-              class="_toolActionText_7dc568"
+              class="_toolActionText_d18ff4"
             >
               运行测试
             </span>
             <span
               aria-hidden="true"
-              class="_dotSeparator_7dc568"
+              class="_dotSeparator_d18ff4"
             >
               ·
             </span>
             <span
               aria-describedby="_r_1_"
-              class="_toolActionText_7dc568"
+              class="_toolActionText_d18ff4"
             >
               终端
             </span>
             <span
               aria-hidden="true"
-              class="_dotSeparator_7dc568"
+              class="_dotSeparator_d18ff4"
             >
               ·
             </span>
             <span
               aria-describedby="_r_2_"
-              class="_toolParamText_7dc568"
+              class="_toolParamText_d18ff4"
             >
               npm test
             </span>
@@ -325,11 +325,11 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
         </span>
       </span>
       <span
-        class="_toolRowHeadRight_7dc568"
+        class="_toolRowHeadRight_d18ff4"
       >
         <span
           aria-hidden="true"
-          class="_toolRowChevron_7dc568 "
+          class="_toolRowChevron_d18ff4 "
           data-testid="tool-chevron-tool_running"
         >
           ›
@@ -337,53 +337,53 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
       </span>
     </div>
     <div
-      class="_toolBody_7dc568"
+      class="_toolBody_d18ff4"
     >
       <div
-        class="_toolBodyInner_7dc568"
+        class="_toolBodyInner_d18ff4"
       >
         <div
           aria-label="运行中的工具详情"
-          class="_toolResultBody_7dc568"
+          class="_toolResultBody_d18ff4"
           id="tool-result-tool_running"
           role="region"
         >
           <section
             aria-label="终端命令输入"
-            class="_toolSection_7dc568 _toolSectionInput_7dc568 _toolSectionShellSingleLine_7dc568"
+            class="_toolSection_d18ff4 _toolSectionInput_d18ff4 _toolSectionShellSingleLine_d18ff4"
             data-tool-id="tool_running"
           >
             <div
-              class="_terminalSingleLineRow_7dc568"
+              class="_terminalSingleLineRow_d18ff4"
             >
               <div
-                class="_terminalLine_7dc568"
+                class="_terminalLine_d18ff4"
               >
                 <span
                   aria-hidden="true"
-                  class="_terminalPrompt_7dc568"
+                  class="_terminalPrompt_d18ff4"
                 >
                   $
                 </span>
                 <pre
-                  class="_toolResultPreCmd_7dc568"
+                  class="_toolResultPreCmd_d18ff4"
                 >
                   npm test
                 </pre>
               </div>
               <div
-                class="_terminalLineEndSlot_7dc568"
+                class="_terminalLineEndSlot_d18ff4"
               >
                 <button
                   aria-describedby="_r_3_"
-                  class="_button_273f36 _buttonGhost_273f36 _buttonSm_273f36 _toolSectionActionBtn_7dc568"
+                  class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
                   type="button"
                 >
                   <span
                     aria-hidden="true"
-                    class="_buttonIcon_273f36"
+                    class="_buttonIcon_ae1db5"
                   >
                     <svg
                       aria-hidden="true"
@@ -415,7 +415,7 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
                     </svg>
                   </span>
                   <span
-                    class="_buttonLabel_273f36"
+                    class="_buttonLabel_ae1db5"
                   >
                     复制
                   </span>
@@ -425,39 +425,39 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
           </section>
           <section
             aria-label="工具执行输出"
-            class="_toolSection_7dc568 _toolSectionOutput_7dc568 "
+            class="_toolSection_d18ff4 _toolSectionOutput_d18ff4 "
             data-tool-id="tool_running"
           >
             <header
-              class="_toolSectionHeader_7dc568"
+              class="_toolSectionHeader_d18ff4"
             >
               <div
-                class="_toolSectionTitleGroup_7dc568"
+                class="_toolSectionTitleGroup_d18ff4"
               >
                 <span
-                  class="_toolSectionBadge_7dc568 _toolSectionBadgeOutput_7dc568"
+                  class="_toolSectionBadge_d18ff4 _toolSectionBadgeOutput_d18ff4"
                 >
                   输出
                 </span>
                 <span
-                  class="_toolSectionMeta_7dc568"
+                  class="_toolSectionMeta_d18ff4"
                 >
                   <span
-                    class="_runningTag_7dc568"
+                    class="_runningTag_d18ff4"
                   >
                     执行中
                   </span>
                 </span>
               </div>
               <div
-                class="_toolSectionActions_7dc568"
+                class="_toolSectionActions_d18ff4"
               />
             </header>
             <div
-              class="_toolSectionContent_7dc568"
+              class="_toolSectionContent_d18ff4"
             >
               <div
-                class="_emptyOutputBlock_7dc568"
+                class="_emptyOutputBlock_d18ff4"
               >
                 <span>
                   （无输出）
@@ -474,10 +474,10 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
 
 exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
 <div
-  class="_toolStack_7dc568 tool-stack"
+  class="_toolStack_d18ff4 tool-stack"
 >
   <div
-    class="_toolRow_7dc568  _isCollapsed_7dc568 is-collapsed  tool-row"
+    class="_toolRow_d18ff4  _isCollapsed_d18ff4 is-collapsed  tool-row"
     data-default-collapsed="true"
     data-expanded="false"
     data-tool-id="tool_success"
@@ -486,19 +486,19 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
   >
     <div
       aria-label="查看 main.ts，完成"
-      class="_toolRowHead_7dc568 _toolRowHeadStatic_7dc568 tool-row-head tool-row-head-static"
+      class="_toolRowHead_d18ff4 _toolRowHeadStatic_d18ff4 tool-row-head tool-row-head-static"
       style="cursor: default;"
     >
       <span
-        class="_toolRowHeadMain_7dc568"
+        class="_toolRowHeadMain_d18ff4"
       >
         <span
           aria-hidden="true"
-          class="_toolRowIcoSlot_7dc568"
+          class="_toolRowIcoSlot_d18ff4"
         >
           <svg
             aria-hidden="true"
-            class="_toolKindIcon_7dc568"
+            class="_toolKindIcon_d18ff4"
             color="currentColor"
             data-icon="file-search"
             fill="none"
@@ -526,44 +526,44 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
           </svg>
         </span>
         <span
-          class="_toolRowText_7dc568"
+          class="_toolRowText_d18ff4"
         >
           <span
-            class="_toolRowSummary_7dc568"
+            class="_toolRowSummary_d18ff4"
           >
             <span
               aria-describedby="_r_0_"
-              class="_toolActionText_7dc568"
+              class="_toolActionText_d18ff4"
             >
               查看 main.ts
             </span>
             <span
               aria-hidden="true"
-              class="_dotSeparator_7dc568"
+              class="_dotSeparator_d18ff4"
             >
               ·
             </span>
             <span
               aria-describedby="_r_1_"
-              class="_toolActionText_7dc568"
+              class="_toolActionText_d18ff4"
             >
               读取
             </span>
             <span
               aria-hidden="true"
-              class="_dotSeparator_7dc568"
+              class="_dotSeparator_d18ff4"
             >
               ·
             </span>
             <button
               aria-describedby="_r_2_"
-              class="_button_273f36 _buttonGhost_273f36 _buttonMd_273f36 _toolPathLink_7dc568"
+              class="_button_ae1db5 _buttonGhost_ae1db5 _buttonMd_ae1db5 _toolPathLink_d18ff4"
               data-size="md"
               data-variant="ghost"
               type="button"
             >
               <span
-                class="_buttonLabel_273f36"
+                class="_buttonLabel_ae1db5"
               >
                 main.ts
               </span>
@@ -572,7 +572,7 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
         </span>
       </span>
       <span
-        class="_toolRowHeadRight_7dc568"
+        class="_toolRowHeadRight_d18ff4"
       />
     </div>
   </div>
@@ -581,10 +581,10 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
 
 exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
 <div
-  class="_toolStack_7dc568 tool-stack"
+  class="_toolStack_d18ff4 tool-stack"
 >
   <div
-    class="_toolRow_7dc568  _isCollapsed_7dc568 is-collapsed  tool-row"
+    class="_toolRow_d18ff4  _isCollapsed_d18ff4 is-collapsed  tool-row"
     data-default-collapsed="true"
     data-expanded="false"
     data-tool-id="tool_duration"
@@ -595,20 +595,20 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
       aria-controls="tool-result-tool_duration"
       aria-expanded="false"
       aria-label="修改 utils.ts，完成，已折叠，按 Enter 或空格展开"
-      class="_toolRowHead_7dc568 tool-row-head"
+      class="_toolRowHead_d18ff4 tool-row-head"
       role="button"
       tabindex="0"
     >
       <span
-        class="_toolRowHeadMain_7dc568"
+        class="_toolRowHeadMain_d18ff4"
       >
         <span
           aria-hidden="true"
-          class="_toolRowIcoSlot_7dc568"
+          class="_toolRowIcoSlot_d18ff4"
         >
           <svg
             aria-hidden="true"
-            class="_toolKindIcon_7dc568"
+            class="_toolKindIcon_d18ff4"
             color="currentColor"
             data-icon="file-edit"
             fill="none"
@@ -635,44 +635,44 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
           </svg>
         </span>
         <span
-          class="_toolRowText_7dc568"
+          class="_toolRowText_d18ff4"
         >
           <span
-            class="_toolRowSummary_7dc568"
+            class="_toolRowSummary_d18ff4"
           >
             <span
               aria-describedby="_r_0_"
-              class="_toolActionText_7dc568"
+              class="_toolActionText_d18ff4"
             >
               修改 utils.ts
             </span>
             <span
               aria-hidden="true"
-              class="_dotSeparator_7dc568"
+              class="_dotSeparator_d18ff4"
             >
               ·
             </span>
             <span
               aria-describedby="_r_1_"
-              class="_toolActionText_7dc568"
+              class="_toolActionText_d18ff4"
             >
               修改
             </span>
             <span
               aria-hidden="true"
-              class="_dotSeparator_7dc568"
+              class="_dotSeparator_d18ff4"
             >
               ·
             </span>
             <button
               aria-describedby="_r_2_"
-              class="_button_273f36 _buttonGhost_273f36 _buttonMd_273f36 _toolPathLink_7dc568"
+              class="_button_ae1db5 _buttonGhost_ae1db5 _buttonMd_ae1db5 _toolPathLink_d18ff4"
               data-size="md"
               data-variant="ghost"
               type="button"
             >
               <span
-                class="_buttonLabel_273f36"
+                class="_buttonLabel_ae1db5"
               >
                 utils.ts
               </span>
@@ -681,11 +681,11 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
         </span>
       </span>
       <span
-        class="_toolRowHeadRight_7dc568"
+        class="_toolRowHeadRight_d18ff4"
       >
         <span
           aria-hidden="true"
-          class="_toolRowChevron_7dc568 "
+          class="_toolRowChevron_d18ff4 "
           data-testid="tool-chevron-tool_duration"
         >
           ›
@@ -693,47 +693,47 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
       </span>
     </div>
     <div
-      class="_toolBody_7dc568"
+      class="_toolBody_d18ff4"
     >
       <div
-        class="_toolBodyInner_7dc568"
+        class="_toolBodyInner_d18ff4"
       >
         <div
           aria-label="完成的工具详情"
-          class="_toolResultBody_7dc568"
+          class="_toolResultBody_d18ff4"
           id="tool-result-tool_duration"
           role="region"
         >
           <section
             aria-label="工具输入参数"
-            class="_toolSection_7dc568 _toolSectionInput_7dc568"
+            class="_toolSection_d18ff4 _toolSectionInput_d18ff4"
             data-tool-id="tool_duration"
           >
             <header
-              class="_toolSectionHeader_7dc568"
+              class="_toolSectionHeader_d18ff4"
             >
               <div
-                class="_toolSectionTitleGroup_7dc568"
+                class="_toolSectionTitleGroup_d18ff4"
               >
                 <span
-                  class="_toolSectionBadge_7dc568"
+                  class="_toolSectionBadge_d18ff4"
                 >
                   输入
                 </span>
               </div>
               <div
-                class="_toolSectionActions_7dc568"
+                class="_toolSectionActions_d18ff4"
               >
                 <button
                   aria-describedby="_r_3_"
-                  class="_button_273f36 _buttonGhost_273f36 _buttonSm_273f36 _toolSectionActionBtn_7dc568"
+                  class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
                   type="button"
                 >
                   <span
                     aria-hidden="true"
-                    class="_buttonIcon_273f36"
+                    class="_buttonIcon_ae1db5"
                   >
                     <svg
                       aria-hidden="true"
@@ -767,14 +767,14 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
                 </button>
                 <button
                   aria-describedby="_r_4_"
-                  class="_button_273f36 _buttonGhost_273f36 _buttonSm_273f36 _toolSectionActionBtn_7dc568"
+                  class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
                   type="button"
                 >
                   <span
                     aria-hidden="true"
-                    class="_buttonIcon_273f36"
+                    class="_buttonIcon_ae1db5"
                   >
                     <svg
                       aria-hidden="true"
@@ -806,7 +806,7 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
                     </svg>
                   </span>
                   <span
-                    class="_buttonLabel_273f36"
+                    class="_buttonLabel_ae1db5"
                   >
                     复制
                   </span>
@@ -814,24 +814,24 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
               </div>
             </header>
             <div
-              class="_toolSectionContent_7dc568"
+              class="_toolSectionContent_d18ff4"
             >
               <div
-                class="_toolKeyValueTable_7dc568"
+                class="_toolKeyValueTable_d18ff4"
               >
                 <div
-                  class="_toolKeyValueRow_7dc568"
+                  class="_toolKeyValueRow_d18ff4"
                 >
                   <span
-                    class="_toolKeyCell_7dc568"
+                    class="_toolKeyCell_d18ff4"
                   >
                     filePath
                   </span>
                   <div
-                    class="_toolValCell_7dc568"
+                    class="_toolValCell_d18ff4"
                   >
                     <span
-                      class="_toolValText_7dc568"
+                      class="_toolValText_d18ff4"
                     >
                       /src/utils.ts
                     </span>
@@ -842,37 +842,37 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
           </section>
           <section
             aria-label="工具执行输出"
-            class="_toolSection_7dc568 _toolSectionOutput_7dc568 "
+            class="_toolSection_d18ff4 _toolSectionOutput_d18ff4 "
             data-tool-id="tool_duration"
           >
             <header
-              class="_toolSectionHeader_7dc568"
+              class="_toolSectionHeader_d18ff4"
             >
               <div
-                class="_toolSectionTitleGroup_7dc568"
+                class="_toolSectionTitleGroup_d18ff4"
               >
                 <span
-                  class="_toolSectionBadge_7dc568 _toolSectionBadgeOutput_7dc568"
+                  class="_toolSectionBadge_d18ff4 _toolSectionBadgeOutput_d18ff4"
                 >
                   输出
                 </span>
                 <span
-                  class="_toolSectionMeta_7dc568"
+                  class="_toolSectionMeta_d18ff4"
                 />
               </div>
               <div
-                class="_toolSectionActions_7dc568"
+                class="_toolSectionActions_d18ff4"
               >
                 <button
                   aria-describedby="_r_5_"
-                  class="_button_273f36 _buttonGhost_273f36 _buttonSm_273f36 _toolSectionActionBtn_7dc568"
+                  class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
                   type="button"
                 >
                   <span
                     aria-hidden="true"
-                    class="_buttonIcon_273f36"
+                    class="_buttonIcon_ae1db5"
                   >
                     <svg
                       aria-hidden="true"
@@ -904,7 +904,7 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
                     </svg>
                   </span>
                   <span
-                    class="_buttonLabel_273f36"
+                    class="_buttonLabel_ae1db5"
                   >
                     复制
                   </span>
@@ -912,10 +912,10 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
               </div>
             </header>
             <div
-              class="_toolSectionContent_7dc568"
+              class="_toolSectionContent_d18ff4"
             >
               <pre
-                class="_toolOutputCode_7dc568"
+                class="_toolOutputCode_d18ff4"
               >
                 Applied 3 changes:
 - Added import

@@ -1,9 +1,13 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isDarkTheme, startBackdropThemeSync } from './backdropThemeSync';
 
 describe('backdropThemeSync：材质跟随应用主题', () => {
   const el = document.documentElement;
-  afterEach(() => { el.removeAttribute('data-theme'); el.className = ''; });
+  afterEach(() => {
+    el.removeAttribute('data-theme');
+    el.className = '';
+  });
 
   it('启动即发一次，之后只在明暗真正变化时发送', async () => {
     el.setAttribute('data-theme', 'light');

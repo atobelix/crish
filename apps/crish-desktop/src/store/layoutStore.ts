@@ -8,12 +8,7 @@ import { immer } from 'zustand/middleware/immer';
 import { withDevtools } from './middleware/withDevtools';
 import { withLogger } from './middleware/withLogger';
 import { withPersist } from './middleware/withPersist';
-import type {
-  } from './types';
-import {
-  clampActiveWorkspaceIndex,
-  createInitialLayoutDefaults,
-} from './layout-helpers/store-initializers';
+import { createInitialLayoutDefaults } from './layout-helpers/store-initializers';
 import type {
   UiSize,
   ShellChromeMode,
@@ -22,12 +17,8 @@ import type {
   TelemetrySyncPayload,
   WorkspaceLayoutSnapshot,
 } from './layout-helpers/store-types';
-import { } from './layout-helpers/store-types';
 import { createLayoutCoreActions } from './layout-helpers/layout-core-actions';
-import {
-  initSessionStorePersistence,
-  waitForHydration as waitForSessionHydration,
-} from './sessionStore';
+import { initSessionStorePersistence } from './sessionStore';
 
 // ── Re-exports for public API backwards compatibility ────────────────────────
 
@@ -87,7 +78,7 @@ export type {
   SessionGoalMode,
   SessionGoalTask,
   SessionState,
-  } from './types';
+} from './types';
 
 // ── LayoutStore interface ───────────────────────────────────────────────────
 
@@ -157,4 +148,3 @@ export function initLayoutStorePersistence(): () => void {
 }
 
 export type { GroupState, AppSettings } from './types';
-

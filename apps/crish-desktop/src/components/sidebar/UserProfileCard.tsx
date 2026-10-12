@@ -47,7 +47,6 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
               data-testid="user-profile-card"
               data-role={roleLabel}
               data-tooltip={tooltip}
-              title={tooltip}
               aria-label={`用户卡片：${activeUser} (${roleLabel})，点击打开${tooltip}`}
               {...triggerProps}
             >

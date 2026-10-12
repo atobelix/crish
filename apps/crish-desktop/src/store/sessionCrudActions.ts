@@ -1,10 +1,7 @@
 import { MAX_FOLDERS } from '@crish/shared-utils/browser';
 import { isDemoMode } from '../api/appMode';
 import { GENERAL_FOLDER, getActiveProjectId } from '../api/projectStore';
-import {
-  EMPTY_SESSION_TITLE,
-  shellPruneKeepIds,
-} from '../api/sessionTitle';
+import { EMPTY_SESSION_TITLE, shellPruneKeepIds } from '../api/sessionTitle';
 import { nowIsoTimestamp } from '../api/sessionTime';
 import type { SessionImportMeta, SessionState } from './types';
 import {
@@ -26,8 +23,6 @@ import type {
 import {
   applyTitleIfDefault,
   dropTerminalForSession,
-  maybeAutoTitleSession,
-  needsEngineMessageHydrate,
   normalizeWritableSessionTitle,
   pruneEmptyShellsInPlace,
   syncActiveTerminalSession,
@@ -355,7 +350,10 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
 
         // 3. 关键：若是活跃会话被删除，在同一次 set 原子事务中转移焦点，彻底消灭悬垂指针与白屏
         if (isDeletingActive) {
-          if (nextActiveIdToSwitch && state.sessionsById[nextActiveIdToSwitch]) {
+          if (
+            nextActiveIdToSwitch &&
+            state.sessionsById[nextActiveIdToSwitch]
+          ) {
             state.activeSessionId = nextActiveIdToSwitch;
             state.draftFolder = '';
             state.activeAgentId = null;
@@ -411,7 +409,11 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
   };
 
   // 草稿态 actions 注入 createSession 引用（避免循环导入）后合并
-  const draftActions = createSessionDraftActions(set, get, actions.createSession);
+  const draftActions = createSessionDraftActions(
+    set,
+    get,
+    actions.createSession
+  );
   // 批量状态 actions（setSessions / patchSession / clearSessionMessages）
   const stateActions = createSessionStateActions(set);
   const injectionActions = createSessionInjectionActions(set);

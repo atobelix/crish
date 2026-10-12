@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import React, { useState } from 'react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+} from '@testing-library/react';
 import { TreeLeafPanel } from './TreeLeafPanel';
 import { useWorkspaceShellStore } from '../../store/storeAccess';
 import { useLayoutTreeStore } from '../../store/layout-tree';
@@ -29,7 +35,9 @@ interface MockInteractiveViewProps {
   ctx: ViewRenderContext;
 }
 
-const MockInteractiveChatView: React.FC<MockInteractiveViewProps> = ({ ctx }) => {
+const MockInteractiveChatView: React.FC<MockInteractiveViewProps> = ({
+  ctx,
+}) => {
   const [inputText, setInputText] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [selectedMode, setSelectedMode] = useState('Agent');
@@ -227,7 +235,10 @@ const MockInteractiveChatView: React.FC<MockInteractiveViewProps> = ({ ctx }) =>
       </div>
 
       {/* Non-interactive blank canvas background */}
-      <div data-testid={`empty-canvas-space-${ctx.leafId}`} style={{ height: '80px' }}>
+      <div
+        data-testid={`empty-canvas-space-${ctx.leafId}`}
+        style={{ height: '80px' }}
+      >
         Empty space in pane {ctx.leafId}
       </div>
     </div>
@@ -237,21 +248,31 @@ const MockInteractiveChatView: React.FC<MockInteractiveViewProps> = ({ ctx }) =>
 const gestureTestFactories: ViewFactoryMap = {
   chat: () =>
     React.lazy(async () => ({
-      default: (ctx: ViewRenderContext) => <MockInteractiveChatView ctx={ctx} />,
+      default: (ctx: ViewRenderContext) => (
+        <MockInteractiveChatView ctx={ctx} />
+      ),
     })),
   files: () =>
     React.lazy(async () => ({
       default: () => <div data-testid="files-view">Files View Content</div>,
     })),
-  'file-viewer': () => (() => null) as unknown as React.ComponentType<ViewRenderContext>,
-  terminal: () => (() => null) as unknown as React.ComponentType<ViewRenderContext>,
-  preview: () => (() => null) as unknown as React.ComponentType<ViewRenderContext>,
-  overview: () => (() => null) as unknown as React.ComponentType<ViewRenderContext>,
+  'file-viewer': () =>
+    (() => null) as unknown as React.ComponentType<ViewRenderContext>,
+  terminal: () =>
+    (() => null) as unknown as React.ComponentType<ViewRenderContext>,
+  preview: () =>
+    (() => null) as unknown as React.ComponentType<ViewRenderContext>,
+  overview: () =>
+    (() => null) as unknown as React.ComponentType<ViewRenderContext>,
   diff: () => (() => null) as unknown as React.ComponentType<ViewRenderContext>,
-  runtime: () => (() => null) as unknown as React.ComponentType<ViewRenderContext>,
-  agent: () => (() => null) as unknown as React.ComponentType<ViewRenderContext>,
-  browser: () => (() => null) as unknown as React.ComponentType<ViewRenderContext>,
-  'flow-dag': () => (() => null) as unknown as React.ComponentType<ViewRenderContext>,
+  runtime: () =>
+    (() => null) as unknown as React.ComponentType<ViewRenderContext>,
+  agent: () =>
+    (() => null) as unknown as React.ComponentType<ViewRenderContext>,
+  browser: () =>
+    (() => null) as unknown as React.ComponentType<ViewRenderContext>,
+  'flow-dag': () =>
+    (() => null) as unknown as React.ComponentType<ViewRenderContext>,
 };
 
 describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stress Suite)', () => {
@@ -269,9 +290,8 @@ describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stres
       const st = useLayoutTreeStore.getState();
       if (st.activeLeafId !== leafId) st.setActiveLeaf(leafId);
     };
-    (
-      root.shell as unknown as { updateTabDock: () => void }
-    ).updateTabDock = () => {};
+    (root.shell as unknown as { updateTabDock: () => void }).updateTabDock =
+      () => {};
     useWorkspaceShellStore.setState({
       activeTabId: 'tab-1',
       openTabs: [
@@ -307,7 +327,10 @@ describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stres
   describe('1. 模式切换下拉菜单与交互元素防抢跑守护 (Interactive Guard & Dropdown)', () => {
     it('断言 1.1：在分屏非激活叶子中点击按钮，onClick 必定触发且不触发抢跑激活', async () => {
       const leaf = createLeaf('chat', ['chat'], 'chat', 'session-2');
-      const setActiveLeafSpy = vi.spyOn(useLayoutTreeStore.getState(), 'setActiveLeaf');
+      const setActiveLeafSpy = vi.spyOn(
+        useLayoutTreeStore.getState(),
+        'setActiveLeaf'
+      );
 
       render(
         <TreeLeafPanel
@@ -323,12 +346,15 @@ describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stres
       fireEvent.click(modeBtn);
 
       expect(mockButtonClick).toHaveBeenCalledWith(leaf.id, 'mode-select');
-      expect(setActiveLeafSpy).not.toHaveBeenCalled();
+      expect(setActiveLeafSpy).toHaveBeenCalledWith(leaf.id);
     });
 
     it('断言 1.2：下拉菜单展开后点击 menuitem，正确触发选择回调且不被抢占阻断', async () => {
       const leaf = createLeaf('chat', ['chat'], 'chat', 'session-2');
-      const setActiveLeafSpy = vi.spyOn(useLayoutTreeStore.getState(), 'setActiveLeaf');
+      const setActiveLeafSpy = vi.spyOn(
+        useLayoutTreeStore.getState(),
+        'setActiveLeaf'
+      );
 
       render(
         <TreeLeafPanel
@@ -349,12 +375,15 @@ describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stres
       fireEvent.click(planMenuItem);
 
       expect(mockMenuItemClick).toHaveBeenCalledWith(leaf.id, 'Plan');
-      expect(setActiveLeafSpy).not.toHaveBeenCalled();
+      expect(setActiveLeafSpy).toHaveBeenCalledWith(leaf.id);
     });
 
     it('断言 1.3：全面放行各类标准交互元素（select, a, summary, contenteditable, role=button, combobox, listbox, option, tab, switch, dialog）', async () => {
       const leaf = createLeaf('chat', ['chat'], 'chat', 'session-2');
-      const setActiveLeafSpy = vi.spyOn(useLayoutTreeStore.getState(), 'setActiveLeaf');
+      const setActiveLeafSpy = vi.spyOn(
+        useLayoutTreeStore.getState(),
+        'setActiveLeaf'
+      );
 
       render(
         <TreeLeafPanel
@@ -369,7 +398,10 @@ describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stres
       const selectEl = await screen.findByTestId('model-select');
       fireEvent.pointerDown(selectEl);
       fireEvent.change(selectEl, { target: { value: 'claude-3-7' } });
-      expect(mockCustomSelectChange).toHaveBeenCalledWith(leaf.id, 'claude-3-7');
+      expect(mockCustomSelectChange).toHaveBeenCalledWith(
+        leaf.id,
+        'claude-3-7'
+      );
 
       // Link <a>
       const linkEl = screen.getByTestId('reference-link');
@@ -390,7 +422,10 @@ describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stres
       const customRoleBtn = screen.getByTestId('custom-role-button');
       fireEvent.pointerDown(customRoleBtn);
       fireEvent.click(customRoleBtn);
-      expect(mockButtonClick).toHaveBeenCalledWith(leaf.id, 'custom-role-button');
+      expect(mockButtonClick).toHaveBeenCalledWith(
+        leaf.id,
+        'custom-role-button'
+      );
 
       // Combobox, Listbox, Option, Tab, Switch, Dialog, Data-Interactive
       const combobox = screen.getByTestId('role-combobox');
@@ -423,15 +458,18 @@ describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stres
       fireEvent.click(dataInteractive);
       expect(mockButtonClick).toHaveBeenCalledWith(leaf.id, 'data-interactive');
 
-      // 所有交互元素均未抢跑激活
-      expect(setActiveLeafSpy).not.toHaveBeenCalled();
+      // A-01: 在非激活叶子中点击交互元素，捕获阶段自动同步激活本分屏
+      expect(setActiveLeafSpy).toHaveBeenCalledWith(leaf.id);
     });
   });
 
   describe('2. 输入框打字、IME 与焦点连续性压测 (Typing, IME & Focus Stability)', () => {
     it('断言 2.1：在分屏非激活叶子中点击并打字，正常聚焦并触发 onChange，不丢字不抢焦点', async () => {
       const leaf = createLeaf('chat', ['chat'], 'chat', 'session-2');
-      const setActiveLeafSpy = vi.spyOn(useLayoutTreeStore.getState(), 'setActiveLeaf');
+      const setActiveLeafSpy = vi.spyOn(
+        useLayoutTreeStore.getState(),
+        'setActiveLeaf'
+      );
 
       render(
         <TreeLeafPanel
@@ -448,14 +486,18 @@ describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stres
       expect(mockInputFocus).toHaveBeenCalledWith(leaf.id, '');
 
       fireEvent.change(inputEl, { target: { value: 'Hello Conex Split' } });
-      expect(mockInputChange).toHaveBeenCalledWith(leaf.id, 'Hello Conex Split');
+      expect(mockInputChange).toHaveBeenCalledWith(
+        leaf.id,
+        'Hello Conex Split'
+      );
 
       const textareaEl = screen.getByTestId(`composer-textarea-${leaf.id}`);
       fireEvent.pointerDown(textareaEl);
       fireEvent.change(textareaEl, { target: { value: 'Line 1\nLine 2' } });
       expect(mockInputChange).toHaveBeenCalledWith(leaf.id, 'Line 1\nLine 2');
 
-      expect(setActiveLeafSpy).not.toHaveBeenCalled();
+      // A-01: 在非激活分屏打字，交互即同步激活本分屏，保障后续快捷键与操作定址
+      expect(setActiveLeafSpy).toHaveBeenCalledWith(leaf.id);
     });
 
     it('断言 2.2：高频打字压力测试 (100 次连续输入)，状态机 100% 稳定，无锁死与事件丢失', async () => {
@@ -569,7 +611,9 @@ describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stres
         />
       );
 
-      const emptySpace = await screen.findByTestId(`empty-canvas-space-${leaf2.id}`);
+      const emptySpace = await screen.findByTestId(
+        `empty-canvas-space-${leaf2.id}`
+      );
       fireEvent.pointerDown(emptySpace);
 
       expect(useLayoutTreeStore.getState().activeLeafId).toBe(leaf2.id);
@@ -578,7 +622,10 @@ describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stres
     it('断言 4.2：若已处于激活态，再次点击空白区域不重复触发无效激活', async () => {
       const leaf1 = createLeaf('chat', ['chat'], 'chat', 'session-1');
       useLayoutTreeStore.setState({ activeLeafId: leaf1.id });
-      const setActiveLeafSpy = vi.spyOn(useLayoutTreeStore.getState(), 'setActiveLeaf');
+      const setActiveLeafSpy = vi.spyOn(
+        useLayoutTreeStore.getState(),
+        'setActiveLeaf'
+      );
 
       render(
         <TreeLeafPanel
@@ -589,7 +636,9 @@ describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stres
         />
       );
 
-      const emptySpace = await screen.findByTestId(`empty-canvas-space-${leaf1.id}`);
+      const emptySpace = await screen.findByTestId(
+        `empty-canvas-space-${leaf1.id}`
+      );
       fireEvent.pointerDown(emptySpace);
 
       expect(setActiveLeafSpy).not.toHaveBeenCalled();
@@ -631,7 +680,9 @@ describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stres
 
       // 活动 pane 挂载草稿会话
       await waitFor(() => {
-        expect(screen.getByTestId(`chat-view-container-${leafActive.id}`)).toBeTruthy();
+        expect(
+          screen.getByTestId(`chat-view-container-${leafActive.id}`)
+        ).toBeTruthy();
       });
 
       // 非活动 pane 保持自身 session-2
@@ -645,7 +696,9 @@ describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stres
       );
 
       await waitFor(() => {
-        expect(screen.getByTestId(`chat-view-container-${leafInactive.id}`)).toBeTruthy();
+        expect(
+          screen.getByTestId(`chat-view-container-${leafInactive.id}`)
+        ).toBeTruthy();
       });
     });
   });
@@ -722,7 +775,9 @@ describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stres
         />
       );
 
-      const leafEl = container.querySelector(`[data-leaf-id="${leaf.id}"]`) as HTMLElement;
+      const leafEl = container.querySelector(
+        `[data-leaf-id="${leaf.id}"]`
+      ) as HTMLElement;
       expect(leafEl).toBeTruthy();
       // 手动模拟 live resize 修改 style
       leafEl.style.width = '60%';
@@ -767,4 +822,3 @@ describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stres
     });
   });
 });
-
