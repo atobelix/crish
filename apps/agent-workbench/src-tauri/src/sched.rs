@@ -254,6 +254,28 @@ pub(crate) trait SchedStore: Send + Sync {
     fn remove(&self, cron_id: &str);
     /// 追加运行记录（到期触发时记录）
     fn append_run(&self, _record: &crate::workflow_commands::WorkflowRunRecord) {}
+    /// 标记单条运行记录终态（完成 / 失败 / 取消）
+    fn finish_run(
+        &self,
+        _workflow_id: &str,
+        _run_id: &str,
+        _status: &str,
+        _finished_at_ms: u64,
+        _duration_ms: u64,
+        _error: Option<String>,
+        _output_summary: Option<String>,
+    ) {
+    }
+    /// 读取任务扩展元数据：(cwd, target_session_id)
+    fn load_task_ext_meta(&self, _cron_id: &str) -> (Option<String>, Option<String>) {
+        (None, None)
+    }
+    /// 检查目标会话是否存在（INT-04 僵尸会话自愈校验用）
+    fn session_exists(&self, _session_id: &str) -> bool {
+        true
+    }
+    /// 清除失效的目标会话绑定（INT-04 自愈降级回写用）
+    fn clear_target_session_id(&self, _cron_id: &str) {}
 }
 
 /// 独立 run 拉起点（is_daemon 路径；A3 装配时以 RunProducer 适配注入）
@@ -261,6 +283,59 @@ pub(crate) trait SchedStore: Send + Sync {
 pub(crate) trait DaemonRunLauncher: Send + Sync {
     /// 拉起独立 run（prompt 作为初始消息）；失败返回 false 供降级
     async fn launch(&self, prompt: String) -> bool;
+}
+
+/// 定时任务执行上下文（自然到期触发与手动立即触发共用，Phase 2）
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub(crate) struct ScheduledExecutionContext {
+    /// 任务 ID（cron-<seq>）
+    pub cron_id: String,
+    /// 本次运行 ID（<cron_id>-fire-<iteration>）
+    pub run_id: String,
+    /// 执行提示词
+    pub prompt: String,
+    /// Cron 表达式原文
+    pub expression: String,
+    /// 第几次触发（从 1 起）
+    pub iteration: u64,
+    /// 触发时刻（epoch 毫秒）
+    pub fired_at_ms: u64,
+    /// 计划触发时刻（epoch 毫秒）
+    pub scheduled_for_ms: u64,
+    /// 触发来源（"cron" | "manual"）
+    pub trigger_kind: String,
+    /// 是否独立常驻模式
+    pub is_daemon: bool,
+    /// 绑定的目标会话 ID（None = 独立后台受管会话）
+    pub target_session_id: Option<String>,
+    /// 任务配置的工作目录（None 或空串时按 INT-02 回退至全局定时任务沙箱目录）
+    pub cwd: Option<String>,
+}
+
+/// 定时任务真实执行启动回执句柄（Phase 2）
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub(crate) struct ScheduledRunHandle {
+    /// 实际运行 ID
+    pub run_id: String,
+    /// 实际执行会话 ID（经历 INT-04 自愈后可能为新建后台会话 ID）
+    pub session_id: String,
+    /// true = 终态由异步后台运行钩子（如 drive_run_loop 收口）负责回写；
+    /// false = launch_scheduled_task 返回时已完成执行，由调用方自动收口为 completed
+    pub async_terminal_managed: bool,
+    /// 当 async_terminal_managed == false 时携带的执行输出摘要
+    pub immediate_output_summary: Option<String>,
+}
+
+/// 生产级定时任务真实执行启动器契约（Phase 2）
+#[async_trait]
+pub(crate) trait ScheduledTaskLauncher: Send + Sync {
+    /// 拉起一次真实定时任务执行
+    async fn launch_scheduled_task(
+        &self,
+        ctx: ScheduledExecutionContext,
+    ) -> Result<ScheduledRunHandle, CoreError>;
 }
 
 /// cron 内部事件形状（适配器单点映射为 AgentEvent 的 CronFired，§4.7
@@ -409,6 +484,10 @@ fn safe_merge_task_json(existing_json: Option<&str>, task: &CronTask) -> Option<
 pub(crate) struct MemorySchedStore {
     /// sched_<cron_id> → CronTask JSON
     map: Mutex<HashMap<String, String>>,
+    /// 运行历史记录（供调度器测试断言 running → completed/failed 流转）
+    runs: Mutex<Vec<crate::workflow_commands::WorkflowRunRecord>>,
+    /// 测试用已知有效会话集合（None = 默认全部存在；Some = 仅集合内会话存在，供 INT-04 测试）
+    existing_sessions: Mutex<Option<std::collections::HashSet<String>>>,
 }
 
 impl MemorySchedStore {
@@ -416,11 +495,46 @@ impl MemorySchedStore {
     pub(crate) fn shared() -> Arc<Self> {
         Arc::new(Self::default())
     }
+
+    /// 读取内存中记录的运行历史（测试断言用）
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn load_runs(&self) -> Vec<crate::workflow_commands::WorkflowRunRecord> {
+        self.runs.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    /// 设置测试环境中存在的会话列表（供 INT-04 僵尸会话自愈测试使用）
+    #[cfg(test)]
+    pub(crate) fn set_existing_sessions(&self, sessions: Vec<String>) {
+        *self
+            .existing_sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(sessions.into_iter().collect());
+    }
 }
 
 /// 持久化键（`sched_` 前缀 + cron id）
 fn store_key(cron_id: &str) -> String {
     format!("{SESSION_META_SCHED_KEY_PREFIX}{cron_id}")
+}
+
+fn extract_ext_meta_from_json(raw: &str) -> (Option<String>, Option<String>) {
+    let Ok(val) = serde_json::from_str::<serde_json::Value>(raw) else {
+        return (None, None);
+    };
+    let cwd = val
+        .get("cwd")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let target_sid = val
+        .get("targetSessionId")
+        .or_else(|| val.get("target_session_id"))
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    (cwd, target_sid)
 }
 
 impl SchedStore for MemorySchedStore {
@@ -456,6 +570,92 @@ impl SchedStore for MemorySchedStore {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .remove(&store_key(cron_id));
+    }
+
+    fn append_run(&self, record: &crate::workflow_commands::WorkflowRunRecord) {
+        let mut runs = self.runs.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(pos) = runs
+            .iter()
+            .position(|r| r.workflow_id == record.workflow_id && r.run_id == record.run_id)
+        {
+            runs[pos] = record.clone();
+        } else {
+            runs.push(record.clone());
+        }
+    }
+
+    fn finish_run(
+        &self,
+        workflow_id: &str,
+        run_id: &str,
+        status: &str,
+        finished_at_ms: u64,
+        duration_ms: u64,
+        error: Option<String>,
+        output_summary: Option<String>,
+    ) {
+        let mut runs = self.runs.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(run) = runs
+            .iter_mut()
+            .find(|r| r.workflow_id == workflow_id && r.run_id == run_id)
+        {
+            run.status = status.to_string();
+            run.finished_at_ms = Some(finished_at_ms);
+            run.duration_ms = Some(duration_ms);
+            run.error = error;
+            run.output_summary = output_summary;
+        } else {
+            let started_at_ms = finished_at_ms.saturating_sub(duration_ms);
+            runs.push(crate::workflow_commands::WorkflowRunRecord {
+                workflow_id: workflow_id.to_string(),
+                run_id: run_id.to_string(),
+                session_id: None,
+                trigger_kind: "cron".to_string(),
+                scheduled_for_ms: started_at_ms,
+                started_at_ms,
+                finished_at_ms: Some(finished_at_ms),
+                duration_ms: Some(duration_ms),
+                status: status.to_string(),
+                prompt: String::new(),
+                error,
+                output_summary,
+            });
+        }
+    }
+
+    fn load_task_ext_meta(&self, cron_id: &str) -> (Option<String>, Option<String>) {
+        self.map
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&store_key(cron_id))
+            .map(|raw| extract_ext_meta_from_json(raw))
+            .unwrap_or((None, None))
+    }
+
+    fn session_exists(&self, session_id: &str) -> bool {
+        match self
+            .existing_sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+        {
+            Some(set) => set.contains(session_id),
+            None => true,
+        }
+    }
+
+    fn clear_target_session_id(&self, cron_id: &str) {
+        let mut map = self.map.lock().unwrap_or_else(|e| e.into_inner());
+        let key = store_key(cron_id);
+        if let Some(raw) = map.get(&key) {
+            if let Ok(mut obj) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(raw) {
+                obj.remove("targetSessionId");
+                obj.remove("target_session_id");
+                if let Ok(updated) = serde_json::to_string(&obj) {
+                    map.insert(key, updated);
+                }
+            }
+        }
     }
 }
 
@@ -570,9 +770,59 @@ impl SchedStore for LocalDbSchedStore {
         let store = crate::workflow_commands::SessionMetaWorkflowStore::new(self.db.clone());
         store.append_or_update_run(record.clone());
     }
+
+    fn finish_run(
+        &self,
+        workflow_id: &str,
+        run_id: &str,
+        status: &str,
+        finished_at_ms: u64,
+        duration_ms: u64,
+        error: Option<String>,
+        output_summary: Option<String>,
+    ) {
+        use crate::workflow_commands::WorkflowStore;
+        let store = crate::workflow_commands::SessionMetaWorkflowStore::new(self.db.clone());
+        store.update_run_finish(
+            workflow_id,
+            run_id,
+            status,
+            finished_at_ms,
+            duration_ms,
+            error,
+            output_summary,
+        );
+    }
+
+    fn load_task_ext_meta(&self, cron_id: &str) -> (Option<String>, Option<String>) {
+        self.db
+            .get_session_meta(&store_key(cron_id))
+            .ok()
+            .flatten()
+            .map(|raw| extract_ext_meta_from_json(&raw))
+            .unwrap_or((None, None))
+    }
+
+    fn session_exists(&self, session_id: &str) -> bool {
+        self.db
+            .list_sessions()
+            .map(|list| list.iter().any(|s| s.id == session_id))
+            .unwrap_or(false)
+    }
+
+    fn clear_target_session_id(&self, cron_id: &str) {
+        let _ = self.db.update_session_meta(&store_key(cron_id), |curr| {
+            let mut obj: serde_json::Map<String, serde_json::Value> = curr
+                .and_then(|raw| serde_json::from_str(raw).ok())
+                .unwrap_or_default();
+            obj.remove("targetSessionId");
+            obj.remove("target_session_id");
+            serde_json::to_string(&obj).ok()
+        });
+    }
 }
 
-// ── SchedulerRegistry（T-CF-09 / Phase 1）───────────────────────────
+// ── SchedulerRegistry（T-CF-09 / Phase 1 & Phase 2）──────────────────
 
 /// 活跃 cron 条目（tasks 表值）
 struct CronEntry {
@@ -599,6 +849,8 @@ pub(crate) struct SchedulerComponents {
     store: Arc<dyn SchedStore>,
     /// is_daemon 独立 run 拉起点（None = 未接线，daemon 降级 steering）
     launcher: Option<Arc<dyn DaemonRunLauncher>>,
+    /// 生产级定时任务真实执行启动器（Phase 2；None = 回退存量 launcher / steering）
+    scheduled_launcher: Arc<Mutex<Option<Arc<dyn ScheduledTaskLauncher>>>>,
     /// 暂停开关（pauseAutomation 落点）
     pause: Arc<Mutex<Option<u64>>>,
     /// 测试钩子：固定短触发延迟
@@ -637,6 +889,7 @@ impl SchedulerRegistry {
                 events,
                 store,
                 launcher,
+                scheduled_launcher: Arc::new(Mutex::new(None)),
                 pause: Arc::new(Mutex::new(None)),
                 #[cfg(test)]
                 fire_override: Arc::new(Mutex::new(None)),
@@ -644,6 +897,29 @@ impl SchedulerRegistry {
             seq: AtomicU64::new(max_seq),
             restored: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// 注入生产级定时任务真实执行启动器（Phase 2 CRIT-03：必须在 restore().await 之前完成注入）
+    pub(crate) fn set_launcher(&self, launcher: Arc<dyn ScheduledTaskLauncher>) {
+        *self
+            .components
+            .scheduled_launcher
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(launcher);
+    }
+
+    /// 清除指定任务的失效目标会话绑定（INT-04 僵尸会话自愈同步用）
+    pub(crate) fn clear_target_session_id(&self, cron_id: &str) {
+        if let Some(entry) = self
+            .components
+            .tasks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_mut(cron_id)
+        {
+            entry.task.target_session_id = None;
+        }
+        self.components.store.clear_target_session_id(cron_id);
     }
 
     /// 注册 cron 任务（T-CF-09 内容 1）
@@ -1227,33 +1503,96 @@ async fn fire_cron(
         }
     };
 
-    // 段 2：唤醒面（事件与数据面已落库；唤醒摘要按 §4.8 Cron 模板拼接）
+    // 段 2：唤醒面 / 真实 Agent 启动面（事件与数据面已落库；唤醒摘要按 §4.8 Cron 模板拼接）
     let fire_text = format!(
         "{}（cron {} 第 {} 次触发）",
         outcome.task.prompt, outcome.task.cron_id, outcome.iteration
     );
-    let launcher = components.launcher.clone();
-    if outcome.task.is_daemon {
-        let launched = match launcher {
-            Some(launcher) => {
-                let prompt = outcome.task.prompt.clone();
-                tokio::task::spawn(async move { launcher.launch(prompt).await })
-                    .await
-                    .unwrap_or(false)
-            }
-            None => false,
+    let scheduled_launcher = components
+        .scheduled_launcher
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    if let Some(sched_launcher) = scheduled_launcher {
+        let ctx = ScheduledExecutionContext {
+            cron_id: outcome.task.cron_id.clone(),
+            run_id: outcome.run_id.clone(),
+            prompt: outcome.task.prompt.clone(),
+            expression: outcome.task.expression.clone(),
+            iteration: outcome.iteration,
+            fired_at_ms: outcome.fired_at_ms,
+            scheduled_for_ms: outcome.scheduled_for_ms,
+            trigger_kind: "cron".to_string(),
+            is_daemon: outcome.task.is_daemon,
+            target_session_id: outcome.effective_target_session_id.clone(),
+            cwd: outcome.cwd.clone(),
         };
-        if !launched {
-            components.pending.enqueue_steering(
-                &outcome.task.cron_id,
-                fire_text,
-                outcome.fired_at_ms,
-            );
+        match sched_launcher.launch_scheduled_task(ctx).await {
+            Ok(handle) => {
+                if !handle.async_terminal_managed {
+                    let finish_now = now_ms();
+                    let duration_ms = finish_now.saturating_sub(outcome.fired_at_ms);
+                    components.store.finish_run(
+                        &outcome.task.cron_id,
+                        &outcome.run_id,
+                        "completed",
+                        finish_now,
+                        duration_ms,
+                        None,
+                        handle.immediate_output_summary,
+                    );
+                }
+            }
+            Err(err) => {
+                tracing::warn!(
+                    target: "sched",
+                    cron_id = %outcome.task.cron_id,
+                    run_id = %outcome.run_id,
+                    error = %err,
+                    "ScheduledTaskLauncher 拉起失败，回写 failed 状态并降级 steering 唤醒"
+                );
+                let finish_now = now_ms();
+                let duration_ms = finish_now.saturating_sub(outcome.fired_at_ms);
+                components.store.finish_run(
+                    &outcome.task.cron_id,
+                    &outcome.run_id,
+                    "failed",
+                    finish_now,
+                    duration_ms,
+                    Some(err.to_string()),
+                    None,
+                );
+                components.pending.enqueue_steering(
+                    &outcome.task.cron_id,
+                    fire_text,
+                    outcome.fired_at_ms,
+                );
+            }
         }
     } else {
-        components
-            .pending
-            .enqueue_steering(&outcome.task.cron_id, fire_text, outcome.fired_at_ms);
+        let launcher = components.launcher.clone();
+        if outcome.task.is_daemon {
+            let launched = match launcher {
+                Some(launcher) => {
+                    let prompt = outcome.task.prompt.clone();
+                    tokio::task::spawn(async move { launcher.launch(prompt).await })
+                        .await
+                        .unwrap_or(false)
+                }
+                None => false,
+            };
+            if !launched {
+                components.pending.enqueue_steering(
+                    &outcome.task.cron_id,
+                    fire_text,
+                    outcome.fired_at_ms,
+                );
+            }
+        } else {
+            components
+                .pending
+                .enqueue_steering(&outcome.task.cron_id, fire_text, outcome.fired_at_ms);
+        }
     }
 
     // 段 3：停止判定 / 重建下一次 sleep（同步，catch_unwind 兜底）
@@ -1347,10 +1686,14 @@ async fn fire_cron(
 /// 计算下一次触发。返回 None = 守卫命中（应跳过）。
 struct FireOutcome {
     task: CronTask,
+    run_id: String,
     iteration: u64,
     fired_at_ms: u64,
+    scheduled_for_ms: u64,
     reached_max: bool,
     no_next: bool,
+    effective_target_session_id: Option<String>,
+    cwd: Option<String>,
 }
 
 fn fire_once(components: &SchedulerComponents, task: &CronTask) -> Option<FireOutcome> {
@@ -1367,6 +1710,7 @@ fn fire_once(components: &SchedulerComponents, task: &CronTask) -> Option<FireOu
     }
     let now = now_ms();
     let iteration = task.fired_count + 1;
+    let scheduled_for_ms = task.next_fire_at_ms;
 
     // 1. 事件（Critical 数据面落库）
     components.events.emit(CronEvent::Fired {
@@ -1406,10 +1750,38 @@ fn fire_once(components: &SchedulerComponents, task: &CronTask) -> Option<FireOu
         updated.set_status(CronTaskStatus::Completed);
     }
 
+    // 3b. INT-04 僵尸会话自愈检测：若绑定了 target_session_id 但该会话已被删除，自动降级为独立会话并清除失效绑定
+    let (ext_cwd, ext_target_sid) = components.store.load_task_ext_meta(&task.cron_id);
+    let candidate_target_sid = updated
+        .target_session_id
+        .clone()
+        .or(ext_target_sid)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let mut target_sid_self_healed = false;
+    let effective_target_session_id = match candidate_target_sid {
+        Some(sid) => {
+            if components.store.session_exists(&sid) {
+                Some(sid)
+            } else {
+                tracing::warn!(
+                    target: "sched",
+                    cron_id = %task.cron_id,
+                    invalid_session_id = %sid,
+                    "到期触发检测：绑定的目标会话已不存在，自动自愈降级为独立后台会话并清除失效绑定（INT-04）"
+                );
+                updated.target_session_id = None;
+                target_sid_self_healed = true;
+                None
+            }
+        }
+        None => None,
+    };
+
     // 4. 防冲刷原子校验：在准备写库前，校验该任务在内存中是否仍处于 Active 态；若在计算期间已被外部置为 Paused/Cancelled，跳过保存
     {
-        let map = components.tasks.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(entry) = map.get(&task.cron_id) {
+        let mut map = components.tasks.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(entry) = map.get_mut(&task.cron_id) {
             if entry.status != CronTaskStatus::Active {
                 tracing::info!(
                     target: "sched",
@@ -1419,37 +1791,74 @@ fn fire_once(components: &SchedulerComponents, task: &CronTask) -> Option<FireOu
                 );
                 return None;
             }
+            if target_sid_self_healed {
+                entry.task.target_session_id = None;
+            }
         }
     }
 
     // 5. 落库
+    if target_sid_self_healed {
+        components.store.clear_target_session_id(&task.cron_id);
+    }
     components.store.save(&updated);
 
-    // 6. 运行历史
+    // 6. 运行历史（绑定了生产 ScheduledTaskLauncher 时先写 running 初始态，待终态钩子回写；未绑定时保持单测同步闭环）
+    let has_scheduled_launcher = components
+        .scheduled_launcher
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .is_some();
     let run_id = format!("{}-fire-{}", task.cron_id, iteration);
-    let session_id = format!("sched-{}-{}", task.cron_id, iteration);
-    let run_record = crate::workflow_commands::WorkflowRunRecord {
-        workflow_id: task.cron_id.clone(),
-        run_id,
-        session_id: Some(session_id),
-        trigger_kind: "cron".to_string(),
-        scheduled_for_ms: task.next_fire_at_ms,
-        started_at_ms: now,
-        finished_at_ms: Some(now),
-        duration_ms: Some(0),
-        status: "completed".to_string(),
-        prompt: task.prompt.clone(),
-        error: None,
-        output_summary: Some(format!("定时调度自动触发（第 {} 次）", iteration)),
+    let run_record = if has_scheduled_launcher {
+        let session_id = effective_target_session_id
+            .clone()
+            .unwrap_or_else(|| format!("sched-run-{}-{}", task.cron_id, now));
+        crate::workflow_commands::WorkflowRunRecord {
+            workflow_id: task.cron_id.clone(),
+            run_id: run_id.clone(),
+            session_id: Some(session_id),
+            trigger_kind: "cron".to_string(),
+            scheduled_for_ms,
+            started_at_ms: now,
+            finished_at_ms: None,
+            duration_ms: None,
+            status: "running".to_string(),
+            prompt: task.prompt.clone(),
+            error: None,
+            output_summary: None,
+        }
+    } else {
+        let session_id = effective_target_session_id
+            .clone()
+            .unwrap_or_else(|| format!("sched-{}-{}", task.cron_id, iteration));
+        crate::workflow_commands::WorkflowRunRecord {
+            workflow_id: task.cron_id.clone(),
+            run_id: run_id.clone(),
+            session_id: Some(session_id),
+            trigger_kind: "cron".to_string(),
+            scheduled_for_ms,
+            started_at_ms: now,
+            finished_at_ms: Some(now),
+            duration_ms: Some(0),
+            status: "completed".to_string(),
+            prompt: task.prompt.clone(),
+            error: None,
+            output_summary: Some(format!("定时调度自动触发（第 {} 次）", iteration)),
+        }
     };
     components.store.append_run(&run_record);
 
     Some(FireOutcome {
         task: updated,
+        run_id,
         iteration,
         fired_at_ms: now,
+        scheduled_for_ms,
         reached_max,
         no_next,
+        effective_target_session_id,
+        cwd: ext_cwd,
     })
 }
 
@@ -2640,5 +3049,156 @@ mod tests {
         let persisted = store.load_all();
         assert_eq!(persisted[0].fired_count, 1);
         assert_eq!(persisted[0].status, CronTaskStatus::Completed);
+    }
+
+    struct ProbeScheduledLauncher {
+        contexts: Mutex<Vec<ScheduledExecutionContext>>,
+        should_fail: bool,
+    }
+
+    impl ProbeScheduledLauncher {
+        fn new(should_fail: bool) -> Self {
+            Self {
+                contexts: Mutex::new(Vec::new()),
+                should_fail,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl ScheduledTaskLauncher for ProbeScheduledLauncher {
+        async fn launch_scheduled_task(
+            &self,
+            ctx: ScheduledExecutionContext,
+        ) -> Result<ScheduledRunHandle, CoreError> {
+            self.contexts
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(ctx.clone());
+            tokio::time::sleep(Duration::from_millis(15)).await;
+            if self.should_fail {
+                Err(CoreError::Internal("模拟真实 Agent 启动失败".to_string()))
+            } else {
+                Ok(ScheduledRunHandle {
+                    run_id: ctx.run_id,
+                    session_id: ctx
+                        .target_session_id
+                        .unwrap_or_else(|| format!("sched-run-{}-{}", ctx.cron_id, ctx.fired_at_ms)),
+                    async_terminal_managed: false,
+                    immediate_output_summary: Some("自动调度执行完成".to_string()),
+                })
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_scheduled_task_launcher_real_async_terminal_writeback() {
+        let store = MemorySchedStore::shared();
+        let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+        let pending = Arc::new(QueuePendingSink::new(Arc::clone(&queue)));
+        let events = Arc::new(ProbeEvents::default());
+        let registry = Arc::new(SchedulerRegistry::new(
+            pending,
+            Arc::clone(&events) as Arc<dyn EventSink>,
+            Arc::clone(&store) as Arc<dyn SchedStore>,
+            None,
+        ));
+        let launcher = Arc::new(ProbeScheduledLauncher::new(false));
+        registry.set_launcher(Arc::clone(&launcher) as Arc<dyn ScheduledTaskLauncher>);
+        registry.set_fire_override_ms(30);
+
+        let cron_id = registry
+            .register(test_input("* * * * *", Some(1), false))
+            .await
+            .expect("注册应成功");
+
+        let store_cond = Arc::clone(&store);
+        wait_until("ScheduledTaskLauncher 终态回写 completed", move || {
+            let runs = store_cond.load_runs();
+            runs.len() == 1 && runs[0].status == "completed"
+        })
+        .await;
+
+        let runs = store.load_runs();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].workflow_id, cron_id);
+        assert_eq!(runs[0].status, "completed");
+        assert!(
+            runs[0].duration_ms.unwrap_or(0) >= 10,
+            "真实异步执行耗时应大于 0ms，实际: {:?}",
+            runs[0].duration_ms
+        );
+        assert!(runs[0].finished_at_ms.is_some());
+        let ctxs = launcher.contexts.lock().unwrap();
+        assert_eq!(ctxs.len(), 1);
+        assert_eq!(ctxs[0].cron_id, cron_id);
+    }
+
+    #[tokio::test]
+    async fn test_scheduled_task_zombie_session_self_healing_int04() {
+        let store = MemorySchedStore::shared();
+        // 仅 valid-session 存在，zombie-session-deleted 已被删除
+        store.set_existing_sessions(vec!["valid-session".to_string()]);
+
+        let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+        let pending = Arc::new(QueuePendingSink::new(Arc::clone(&queue)));
+        let events = Arc::new(ProbeEvents::default());
+        let registry = Arc::new(SchedulerRegistry::new(
+            pending,
+            Arc::clone(&events) as Arc<dyn EventSink>,
+            Arc::clone(&store) as Arc<dyn SchedStore>,
+            None,
+        ));
+        let launcher = Arc::new(ProbeScheduledLauncher::new(false));
+        registry.set_launcher(Arc::clone(&launcher) as Arc<dyn ScheduledTaskLauncher>);
+        registry.set_fire_override_ms(60);
+
+        let cron_id = registry
+            .register(test_input("* * * * *", Some(1), false))
+            .await
+            .expect("注册应成功");
+        registry
+            .update_task(
+                &cron_id,
+                CronTaskUpdatePatch {
+                    expression: None,
+                    prompt: None,
+                    max_iterations: None,
+                    is_daemon: None,
+                    target_session_id: Some(Some("zombie-session-deleted".to_string())),
+                },
+            )
+            .await
+            .expect("更新 target_session_id 应成功");
+
+        let store_cond = Arc::clone(&store);
+        wait_until("僵尸会话自愈并完成执行", move || {
+            let runs = store_cond.load_runs();
+            runs.len() == 1 && runs[0].status == "completed"
+        })
+        .await;
+
+        // 断言 1：持久化任务中的 target_session_id 已被自动抹除为 None
+        let persisted = store.load_all();
+        assert_eq!(persisted.len(), 1);
+        assert_eq!(
+            persisted[0].target_session_id, None,
+            "已删除的目标会话 ID 必须在触发时自愈抹除"
+        );
+
+        // 断言 2：传递给 launcher 的上下文中 target_session_id 已降级为 None，且生成独立 sched-run-* 会话
+        let ctxs = launcher.contexts.lock().unwrap();
+        assert_eq!(ctxs.len(), 1);
+        assert_eq!(ctxs[0].target_session_id, None);
+        let runs = store.load_runs();
+        assert!(
+            runs[0]
+                .session_id
+                .as_deref()
+                .unwrap_or("")
+                .starts_with(&format!("sched-run-{cron_id}-")),
+            "应降级至独立后台会话 sched-run-*，实际: {:?}",
+            runs[0].session_id
+        );
     }
 }

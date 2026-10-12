@@ -4,7 +4,11 @@
  */
 import React from 'react';
 
-import { scheduleLabel, workflowEnabledLabel, type WorkflowDefinition } from '../../api/workflowApi';
+import {
+  scheduleLabel,
+  workflowEnabledLabel,
+  type WorkflowDefinition,
+} from '../../api/workflowApi';
 import { SettingsRow } from './SettingsUI';
 import { Button, Switch, Tooltip } from '../ui';
 import styles from './ScheduledTasksPanel.module.css';
@@ -15,6 +19,10 @@ export type WorkflowListProps = {
   variant: 'settings' | 'chat';
   workflows: WorkflowDefinition[];
   busy: boolean;
+  /** 单行启停物理锁集合（消除点一行冻全表） */
+  togglingIds?: ReadonlySet<string>;
+  /** 单行立即运行物理锁集合 */
+  triggeringIds?: ReadonlySet<string>;
   /** chat 面加载中（空态用非紧凑样式） */
   loading?: boolean;
   /** 空态文案（resolveWorkflowJobsEmptyCopy 结果；null = 渲染列表） */
@@ -22,7 +30,7 @@ export type WorkflowListProps = {
   onToggle: (w: WorkflowDefinition) => void;
   onTrigger: (w: WorkflowDefinition) => void;
   onDelete: (w: WorkflowDefinition) => void;
-  /** settings 面编辑入口 */
+  /** 编辑入口 */
   onEdit?: (w: WorkflowDefinition) => void;
   /** chat 面列表 aria-labelledby */
   listTitleId?: string;
@@ -32,6 +40,8 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
   variant,
   workflows,
   busy,
+  togglingIds,
+  triggeringIds,
   loading = false,
   emptyCopy,
   onToggle,
@@ -48,7 +58,11 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
         {emptyCopy ? (
           <SettingsRow
             title={
-              <span className="sched-settings-empty" role="status" aria-live="polite">
+              <span
+                className="sched-settings-empty"
+                role="status"
+                aria-live="polite"
+              >
                 {emptyCopy.title}
               </span>
             }
@@ -64,6 +78,25 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
               const enabled = w.enabled !== false;
               const statusLabel = workflowEnabledLabel(enabled);
               const schedText = scheduleLabel(w.schedule);
+              const isToggling = togglingIds ? togglingIds.has(w.id) : busy;
+              const isTriggering = triggeringIds
+                ? triggeringIds.has(w.id)
+                : busy;
+              const isRowBusy =
+                togglingIds !== undefined || triggeringIds !== undefined
+                  ? isToggling || isTriggering
+                  : busy;
+              const targetSessionId =
+                typeof w.targetSessionId === 'string' &&
+                w.targetSessionId.trim()
+                  ? w.targetSessionId.trim()
+                  : undefined;
+              const cwdText =
+                typeof w.cwd === 'string' && w.cwd.trim() ? w.cwd.trim() : '';
+              const projectLabel = cwdText
+                ? `项目: ${cwdText.split(/[\\/]/).filter(Boolean).pop() || cwdText}`
+                : '🌐 全局工作区';
+
               return (
                 <SettingsRow
                   key={w.id}
@@ -73,20 +106,34 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                     </Tooltip>
                   }
                   desc={
-                    <Tooltip content={`${schedText}${enabled ? '' : ` · ${statusLabel}`}`}>
-                      <span className="sched-settings-row-schedule">
-                        {schedText}
-                        {!enabled ? ` · ${statusLabel}` : ''}
-                      </span>
-                    </Tooltip>
+                    <div className={settingsStyles.metaRow}>
+                      <Tooltip
+                        content={`${schedText}${enabled ? '' : ` · ${statusLabel}`} · ${projectLabel}`}
+                      >
+                        <span className="sched-settings-row-schedule">
+                          {schedText}
+                          {!enabled ? ` · ${statusLabel}` : ''}
+                          {` · ${projectLabel}`}
+                        </span>
+                      </Tooltip>
+                      {targetSessionId ? (
+                        <Tooltip content={`绑定目标会话: ${targetSessionId}`}>
+                          <span className={settingsStyles.sessionBadge}>
+                            💬 绑定会话
+                          </span>
+                        </Tooltip>
+                      ) : null}
+                    </div>
                   }
                   control={
                     <div className={settingsStyles.controlGroup}>
                       <Tooltip content={enabled ? '暂停' : '启用'}>
                         <Switch
                           checked={enabled}
-                          disabled={busy}
-                          aria-label={enabled ? `暂停 ${w.name}` : `启用 ${w.name}`}
+                          disabled={isToggling}
+                          aria-label={
+                            enabled ? `暂停 ${w.name}` : `启用 ${w.name}`
+                          }
                           onCheckedChange={() => onToggle(w)}
                         />
                       </Tooltip>
@@ -96,18 +143,18 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                           variant="ghost"
                           size="sm"
                           aria-label={`编辑 ${w.name}`}
-                          disabled={busy}
+                          disabled={isRowBusy}
                           onClick={() => onEdit?.(w)}
                           icon={<AppIcon name="pencil" size={16} aria-hidden />}
                         />
                       </Tooltip>
-                      <Tooltip content="立即执行">
+                      <Tooltip content="立即运行">
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          aria-label={`立即执行 ${w.name}`}
-                          disabled={busy}
+                          aria-label={`立即运行 · 立即执行 ${w.name}`}
+                          disabled={isTriggering}
                           onClick={() => onTrigger(w)}
                           icon={<AppIcon name="zap" size={16} aria-hidden />}
                         />
@@ -118,7 +165,7 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                           variant="ghost"
                           size="sm"
                           aria-label={`删除 ${w.name}`}
-                          disabled={busy}
+                          disabled={isRowBusy}
                           onClick={() => onDelete(w)}
                           icon={<AppIcon name="trash" size={16} aria-hidden />}
                         />
@@ -152,28 +199,56 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
           {workflows.map((w) => {
             const paused = w.enabled === false;
             const toggleLabel = paused ? `启用 ${w.name}` : `暂停 ${w.name}`;
+            const isToggling = togglingIds ? togglingIds.has(w.id) : busy;
+            const isTriggering = triggeringIds ? triggeringIds.has(w.id) : busy;
+            const isRowBusy =
+              togglingIds !== undefined || triggeringIds !== undefined
+                ? isToggling || isTriggering
+                : busy;
+            const targetSessionId =
+              typeof w.targetSessionId === 'string' && w.targetSessionId.trim()
+                ? w.targetSessionId.trim()
+                : undefined;
+            const cwdText =
+              typeof w.cwd === 'string' && w.cwd.trim() ? w.cwd.trim() : '';
+            const projectLabel = cwdText
+              ? `项目: ${cwdText.split(/[\\/]/).filter(Boolean).pop() || cwdText}`
+              : '🌐 全局工作区';
+
             return (
-              <li key={w.id} className={`${styles.schedItem} ${styles.schedItemDense}`}>
+              <li
+                key={w.id}
+                className={`${styles.schedItem} ${styles.schedItemDense}`}
+              >
                 <div className={styles.schedItemMain}>
                   <Tooltip content={w.prompt || w.name}>
-                    <div className={styles.schedItemName}>
-                      {w.name}
-                    </div>
+                    <div className={styles.schedItemName}>{w.name}</div>
                   </Tooltip>
                   <div className={styles.schedItemMeta}>
-                    {scheduleLabel(w.schedule)}
-                    {paused ? ` · ${workflowEnabledLabel(false)}` : ''}
-                    {w.cwd ? ` · 项目: ${w.cwd.split(/[\\/]/).filter(Boolean).pop() || w.cwd}` : ''}
+                    <span>
+                      {scheduleLabel(w.schedule)}
+                      {paused ? ` · ${workflowEnabledLabel(false)}` : ''}
+                      {` · ${projectLabel}`}
+                    </span>
+                    {targetSessionId ? (
+                      <Tooltip content={`绑定目标会话: ${targetSessionId}`}>
+                        <span className={styles.sessionBadge}>💬 绑定会话</span>
+                      </Tooltip>
+                    ) : null}
                   </div>
                 </div>
-                <div className={styles.schedItemActions} role="group" aria-label={`${w.name} 操作`}>
-                  <Tooltip content="立即触发">
+                <div
+                  className={styles.schedItemActions}
+                  role="group"
+                  aria-label={`${w.name} 操作`}
+                >
+                  <Tooltip content="立即运行">
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      aria-label={`立即触发 ${w.name}`}
-                      disabled={busy}
+                      aria-label={`立即运行 · 立即触发 ${w.name}`}
+                      disabled={isTriggering}
                       onClick={() => onTrigger(w)}
                       icon={<AppIcon name="play" size={16} aria-hidden />}
                     />
@@ -185,7 +260,7 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                       size="sm"
                       aria-label={toggleLabel}
                       aria-pressed={!paused}
-                      disabled={busy}
+                      disabled={isToggling}
                       onClick={() => onToggle(w)}
                       icon={
                         paused ? (
@@ -202,7 +277,7 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                       variant="ghost"
                       size="sm"
                       aria-label={`编辑 ${w.name}`}
-                      disabled={busy}
+                      disabled={isRowBusy}
                       onClick={() => onEdit?.(w)}
                       icon={<AppIcon name="pencil" size={16} aria-hidden />}
                     />
@@ -213,7 +288,7 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                       variant="ghost"
                       size="sm"
                       aria-label={`删除 ${w.name}`}
-                      disabled={busy}
+                      disabled={isRowBusy}
                       onClick={() => onDelete(w)}
                       icon={<AppIcon name="trash" size={16} aria-hidden />}
                     />

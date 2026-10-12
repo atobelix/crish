@@ -1015,8 +1015,19 @@ fn main() {
                 shared_db.local_db(),
                 core_state.steering_queue(),
             );
+            let workflow_backend = workflow_state.backend_handle();
+            workflow_backend.set_app_context(setup_app_dir.clone(), Some(app_handle.clone()));
+            let scheduled_launcher: Arc<dyn sched::ScheduledTaskLauncher> =
+                Arc::new(workflow_commands::ProductionScheduledLauncher::new(
+                    app_handle.clone(),
+                    Arc::clone(&core_state),
+                    Arc::clone(&workflow_backend),
+                    setup_app_dir.clone(),
+                ));
+            workflow_backend.set_launcher(Arc::clone(&scheduled_launcher));
             if let Some(reg) = core_state.scheduler_registry() {
                 workflow_state.set_registry(Arc::clone(&reg));
+                reg.set_launcher(Arc::clone(&scheduled_launcher));
                 let reg_restore = Arc::clone(&reg);
                 tauri::async_runtime::spawn(async move {
                     reg_restore.restore().await;
@@ -1029,7 +1040,7 @@ fn main() {
                 );
             }
 
-            let orphan_reaper = workflow_state.backend_handle();
+            let orphan_reaper = Arc::clone(&workflow_backend);
             tauri::async_runtime::spawn(async move {
                 orphan_reaper.reap_orphan_running_runs();
                 tracing::info!(target: "setup", "历史孤儿运行记录自愈收割完成");

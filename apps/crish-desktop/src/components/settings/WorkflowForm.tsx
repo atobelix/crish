@@ -9,12 +9,91 @@ import {
   WORKFLOW_INTERVAL_MINUTES_MIN,
   WORKFLOW_SCHEDULE_PRESETS,
   WORKFLOW_SCHEDULE_TYPES,
+  cronExpressionLabel,
+  validateCronExpression,
   type WorkflowScheduleDraft,
 } from '../../api/workflowApi';
 import { listProjects } from '../../api/projectStore';
-import { Button, Input, Select, Textarea, Tooltip } from '../ui';
+import { useSessionStore } from '../../store/storeAccess';
+import {
+  Button,
+  Input,
+  SegmentedControl,
+  Select,
+  Textarea,
+  Tooltip,
+} from '../ui';
 import styles from './ScheduledTasksPanel.module.css';
 import scheduleStyles from './SettingsScheduleTab.module.css';
+
+export type WorkflowExecutionTarget = 'isolated_session' | 'current_session';
+
+export type ExtendedWorkflowScheduleDraft = Omit<
+  WorkflowScheduleDraft,
+  'scheduleType'
+> & {
+  scheduleType: WorkflowScheduleDraft['scheduleType'] | 'cron';
+  cronExpression?: string;
+  executionTarget?: WorkflowExecutionTarget;
+  sessionMode?: WorkflowExecutionTarget;
+  targetSessionId?: string;
+};
+
+/** 常用 5 段式 Cron 预设快捷胶囊 */
+export const CRON_QUICK_CHIPS = [
+  { label: '每 5 分钟 (*/5 * * * *)', expression: '*/5 * * * *' },
+  { label: '每小时整点 (0 * * * *)', expression: '0 * * * *' },
+  { label: '工作日 9:00 (0 9 * * 1-5)', expression: '0 9 * * 1-5' },
+  { label: '每日 9:00 & 18:00 (0 9,18 * * *)', expression: '0 9,18 * * *' },
+] as const;
+
+/** 执行会话模式选项 */
+export const EXECUTION_SESSION_MODE_OPTIONS = [
+  {
+    value: 'isolated_session' as const,
+    label: '独立后台会话（默认，每次触发在后台隔离执行）',
+  },
+  {
+    value: 'current_session' as const,
+    label: '注入指定对话（在绑定对话内自动续写执行）',
+  },
+];
+
+function getActiveSessionIdSafe(propSessionId?: string): string {
+  if (propSessionId) return propSessionId;
+  try {
+    return useSessionStore?.getState?.()?.activeSessionId ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/** 实时解析 5 段式 Cron 中文语义预览（复用 cronExpressionLabel 并提供友好语义增强与错误提示） */
+function resolveCronPreview(rawExpr?: string): {
+  valid: boolean;
+  message: string;
+} {
+  const expr = String(rawExpr ?? '').trim();
+  if (!expr) {
+    return {
+      valid: false,
+      message: '请输入 5 段式 Cron 表达式（分 时 日 月 周，如 */30 * * * *）',
+    };
+  }
+  const validation = validateCronExpression(expr);
+  if (!validation.ok) {
+    return { valid: false, message: validation.error };
+  }
+  const norm = validation.expression;
+  const baseLabel = cronExpressionLabel(norm);
+  if (norm === '0 9 * * 1-5' && baseLabel === norm) {
+    return { valid: true, message: '工作日 09:00 · 0 9 * * 1-5' };
+  }
+  if (norm === '0 9,18 * * *' && baseLabel === norm) {
+    return { valid: true, message: '每日 09:00 & 18:00 · 0 9,18 * * *' };
+  }
+  return { valid: true, message: baseLabel };
+}
 
 export type WorkflowFormProps = {
   variant: 'settings' | 'chat';
@@ -25,6 +104,8 @@ export type WorkflowFormProps = {
   isEditing: boolean;
   /** settings 面：工作区路径提示 */
   workspacePath?: string;
+  /** 当前活动会话 ID（可选，缺省自动读取当前活跃会话） */
+  activeSessionId?: string;
   onDraftChange: (d: WorkflowScheduleDraft) => void;
   onApplyPreset: (presetId: string) => void;
   /** 名称失焦：监听类关键词提示（maybeWatchHint） */
@@ -33,6 +114,7 @@ export type WorkflowFormProps = {
   onClose: () => void;
 };
 
+// eslint-disable-next-line max-lines-per-function
 export const WorkflowForm: React.FC<WorkflowFormProps> = ({
   variant,
   formId,
@@ -40,6 +122,7 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
   busy,
   isEditing,
   workspacePath,
+  activeSessionId,
   onDraftChange,
   onApplyPreset,
   onNameBlur,
@@ -47,150 +130,276 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
   onClose,
 }) => {
   const settingsVariant = variant === 'settings';
+  const extDraft = draft as ExtendedWorkflowScheduleDraft;
+  const resolvedActiveSessionId = getActiveSessionIdSafe(activeSessionId);
 
-  const nameInput =
-    settingsVariant ? (
-      <div className={scheduleStyles.formField}>
-        <Input
-          size="sm"
-          placeholder="名称"
-          value={draft.name}
-          disabled={busy}
-          onChange={(e) => onDraftChange({ ...draft, name: e.target.value })}
-          onBlur={onNameBlur}
-          aria-label="名称"
-          autoComplete="off"
-        />
-      </div>
-    ) : (
-      <label className={styles.schedField}>
-        <span className={styles.schedFieldLabel}>名称</span>
-        <Input
-          bare
-          className={styles.schedFieldInput}
-          placeholder="例如：每日代码体检"
-          value={draft.name}
-          disabled={busy}
-          onChange={(e) => onDraftChange({ ...draft, name: e.target.value })}
-          onBlur={onNameBlur}
-          autoComplete="off"
-        />
-      </label>
-    );
+  const updateDraft = (patch: Partial<ExtendedWorkflowScheduleDraft>) => {
+    onDraftChange({
+      ...draft,
+      ...patch,
+    } as WorkflowScheduleDraft);
+  };
 
-  const promptInput = settingsVariant ? (
-    <div className={scheduleStyles.formField}>
-      <Input
-        size="sm"
-        placeholder="要执行的内容"
-        value={draft.prompt}
-        disabled={busy}
-        onChange={(e) => onDraftChange({ ...draft, prompt: e.target.value })}
-        aria-label="执行内容"
-        autoComplete="off"
-      />
-    </div>
-  ) : (
-    <label className={styles.schedField}>
-      <span className={styles.schedFieldLabel}>要做什么</span>
-      <Textarea
-        bare
-        className={`${styles.schedFieldInput} ${styles.schedFieldTextarea}`}
-        placeholder="描述任务内容…"
-        value={draft.prompt}
-        disabled={busy}
-        rows={3}
-        onChange={(e) => onDraftChange({ ...draft, prompt: e.target.value })}
-      />
-    </label>
+  // 关联项目下拉列表：首项固定提供全局默认工作区（不绑定特定项目），彻底根除强制覆写 cwd 的 useEffect
+  const projects = React.useMemo(() => listProjects(), []);
+  const projectOptions = React.useMemo(
+    () => [
+      {
+        id: '',
+        label: '🌐 全局默认工作区（不绑定特定项目）',
+        hint: '在全局独立隔离沙箱中执行，不绑定特定项目',
+      },
+      ...projects.map((p) => ({
+        id: p.path,
+        label: p.name,
+        hint: p.path,
+      })),
+    ],
+    [projects]
+  );
+
+  // 触发方式下拉选项：确保包含 5 段式自定义 Cron
+  const scheduleOptions = React.useMemo(() => {
+    const opts = WORKFLOW_SCHEDULE_TYPES.map((t) => ({
+      id: String(t.value),
+      label: String(t.value) === 'cron' ? '自定义 Cron (5段式)' : t.label,
+      hint: t.hint,
+    }));
+    if (!opts.some((o) => o.id === 'cron')) {
+      opts.push({
+        id: 'cron',
+        label: '自定义 Cron (5段式)',
+        hint: '标准 5 字段 cron（分 时 日 月 周）',
+      });
+    }
+    return opts;
+  }, []);
+
+  const currentExecutionTarget: WorkflowExecutionTarget =
+    extDraft.executionTarget ??
+    extDraft.sessionMode ??
+    (extDraft.targetSessionId ? 'current_session' : 'isolated_session');
+
+  const cronPreview = resolveCronPreview(extDraft.cronExpression);
+  const selectClassProps = settingsVariant
+    ? { className: 'sched-settings-select' }
+    : styles.schedSelect !== undefined
+      ? { className: styles.schedSelect }
+      : {};
+
+  const projectSelect = (
+    <Select
+      {...selectClassProps}
+      value={draft.cwd ?? ''}
+      disabled={busy}
+      options={projectOptions}
+      onChange={(v) => updateDraft({ cwd: v })}
+      aria-label="所属项目"
+    />
   );
 
   const scheduleSelect = (
     <Select
-      {...(settingsVariant
-        ? { className: 'sched-settings-select' }
-        : styles.schedSelect !== undefined
-          ? { className: styles.schedSelect }
-          : {})}
-      value={draft.scheduleType}
+      {...selectClassProps}
+      value={extDraft.scheduleType}
       disabled={busy}
-      options={WORKFLOW_SCHEDULE_TYPES.map((t) => ({
-        id: t.value,
-        label: t.label,
-        hint: t.hint,
-      }))}
+      options={scheduleOptions}
       onChange={(v) =>
-        onDraftChange({
-          ...draft,
-          scheduleType: v as WorkflowScheduleDraft['scheduleType'],
+        updateDraft({
+          scheduleType: v as ExtendedWorkflowScheduleDraft['scheduleType'],
+          ...(v === 'cron' && !extDraft.cronExpression
+            ? { cronExpression: '*/30 * * * *' }
+            : {}),
         })
       }
+      aria-label="触发方式"
     />
   );
 
-  const dailyField = draft.scheduleType === 'daily' ? (
-    settingsVariant ? (
+  const dailyField =
+    extDraft.scheduleType === 'daily' ? (
       <Input
+        bare={!settingsVariant}
         size="sm"
+        className={settingsVariant ? undefined : styles.schedFieldInput}
         type="time"
         value={draft.dailyTime}
         disabled={busy}
-        onChange={(e) => onDraftChange({ ...draft, dailyTime: e.target.value })}
+        onChange={(e) => updateDraft({ dailyTime: e.target.value })}
         aria-label="每日时刻"
       />
-    ) : (
-      <label className={styles.schedField}>
-        <span className={styles.schedFieldLabel}>时间</span>
-        <Input
-          bare
-          className={styles.schedFieldInput}
-          type="time"
-          value={draft.dailyTime}
-          disabled={busy}
-          onChange={(e) => onDraftChange({ ...draft, dailyTime: e.target.value })}
-        />
-      </label>
-    )
-  ) : null;
+    ) : null;
 
-  const intervalField = draft.scheduleType === 'intervalMinutes' ? (
-    settingsVariant ? (
+  const intervalField =
+    extDraft.scheduleType === 'intervalMinutes' ? (
       <Input
+        bare={!settingsVariant}
         size="sm"
+        className={settingsVariant ? undefined : styles.schedFieldInput}
         type="number"
         min={WORKFLOW_INTERVAL_MINUTES_MIN}
         max={WORKFLOW_INTERVAL_MINUTES_MAX}
         step={1}
         inputMode="numeric"
-        placeholder={`${WORKFLOW_INTERVAL_MINUTES_MIN}–${WORKFLOW_INTERVAL_MINUTES_MAX} 分钟`}
+        placeholder={
+          settingsVariant
+            ? `${WORKFLOW_INTERVAL_MINUTES_MIN}–${WORKFLOW_INTERVAL_MINUTES_MAX} 分钟`
+            : `${WORKFLOW_INTERVAL_MINUTES_MIN}–${WORKFLOW_INTERVAL_MINUTES_MAX}`
+        }
         value={draft.intervalMinutes}
         disabled={busy}
-        onChange={(e) =>
-          onDraftChange({ ...draft, intervalMinutes: e.target.value })
-        }
+        onChange={(e) => updateDraft({ intervalMinutes: e.target.value })}
         aria-label="间隔分钟"
       />
-    ) : (
-      <label className={styles.schedField}>
-        <span className={styles.schedFieldLabel}>间隔（分钟）</span>
+    ) : null;
+
+  const cronSection =
+    extDraft.scheduleType === 'cron' ? (
+      <div className={styles.schedField} data-testid="workflow-cron-section">
+        <span className={styles.schedFieldLabel}>
+          Cron 表达式（5段式：分 时 日 月 周）
+        </span>
         <Input
-          bare
-          className={styles.schedFieldInput}
-          type="number"
-          min={WORKFLOW_INTERVAL_MINUTES_MIN}
-          max={WORKFLOW_INTERVAL_MINUTES_MAX}
-          step={1}
-          inputMode="numeric"
-          placeholder={`${WORKFLOW_INTERVAL_MINUTES_MIN}–${WORKFLOW_INTERVAL_MINUTES_MAX}`}
-          value={draft.intervalMinutes}
+          bare={!settingsVariant}
+          size="sm"
+          className={settingsVariant ? undefined : styles.schedFieldInput}
+          style={{ fontFamily: 'var(--font-mono)' }}
+          placeholder="*/30 * * * * (分 时 日 月 周)"
+          value={extDraft.cronExpression ?? ''}
           disabled={busy}
-          onChange={(e) =>
-            onDraftChange({ ...draft, intervalMinutes: e.target.value })
-          }
+          onChange={(e) => updateDraft({ cronExpression: e.target.value })}
+          aria-label="Cron 表达式"
+          autoComplete="off"
+          spellCheck={false}
         />
-      </label>
-    )
-  ) : null;
+        <div
+          className={
+            settingsVariant
+              ? scheduleStyles.presetChips
+              : styles.schedPresetChips
+          }
+          role="group"
+          aria-label="常用 Cron 预设"
+        >
+          {CRON_QUICK_CHIPS.map((chip) => (
+            <Button
+              key={chip.expression}
+              type="button"
+              variant="secondary"
+              size="sm"
+              className={settingsVariant ? undefined : styles.schedPresetChip}
+              disabled={busy}
+              onClick={() => updateDraft({ cronExpression: chip.expression })}
+            >
+              {chip.label}
+            </Button>
+          ))}
+        </div>
+        <div
+          className={`${styles.schedStatusLine} ${
+            cronPreview.valid ? styles.isOk : styles.isErr
+          }`}
+          role={cronPreview.valid ? 'status' : 'alert'}
+          data-testid="cron-preview-status"
+        >
+          {cronPreview.valid
+            ? `✓ 语义预览：${cronPreview.message}`
+            : `✕ ${cronPreview.message}`}
+        </div>
+      </div>
+    ) : null;
+
+  const sessionBindingSection = (
+    <div
+      className={styles.schedField}
+      data-testid="workflow-session-mode-section"
+    >
+      <span className={styles.schedFieldLabel}>执行会话模式</span>
+      <SegmentedControl
+        aria-label="执行会话模式"
+        size="sm"
+        disabled={busy}
+        value={currentExecutionTarget}
+        options={EXECUTION_SESSION_MODE_OPTIONS}
+        onChange={(mode) => {
+          const nextMode = mode as WorkflowExecutionTarget;
+          if (nextMode === 'current_session') {
+            updateDraft({
+              executionTarget: 'current_session',
+              sessionMode: 'current_session',
+              targetSessionId:
+                extDraft.targetSessionId || resolvedActiveSessionId || '',
+            });
+          } else {
+            updateDraft({
+              executionTarget: 'isolated_session',
+              sessionMode: 'isolated_session',
+              targetSessionId: '',
+            });
+          }
+        }}
+      />
+      {currentExecutionTarget === 'current_session' ? (
+        <div className={styles.schedFieldRow}>
+          <div className={`${styles.schedField} ${styles.schedFieldGrow}`}>
+            <Input
+              bare={!settingsVariant}
+              size="sm"
+              className={settingsVariant ? undefined : styles.schedFieldInput}
+              placeholder="输入目标会话 ID（如 sess-...）"
+              value={extDraft.targetSessionId ?? ''}
+              disabled={busy}
+              onChange={(e) =>
+                updateDraft({
+                  executionTarget: 'current_session',
+                  sessionMode: 'current_session',
+                  targetSessionId: e.target.value,
+                })
+              }
+              aria-label="目标会话 ID"
+              autoComplete="off"
+            />
+          </div>
+          {resolvedActiveSessionId ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={
+                busy || extDraft.targetSessionId === resolvedActiveSessionId
+              }
+              onClick={() =>
+                updateDraft({
+                  executionTarget: 'current_session',
+                  sessionMode: 'current_session',
+                  targetSessionId: resolvedActiveSessionId,
+                })
+              }
+            >
+              填入当前活动会话
+            </Button>
+          ) : null}
+          {extDraft.targetSessionId ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() =>
+                updateDraft({
+                  executionTarget: 'isolated_session',
+                  sessionMode: 'isolated_session',
+                  targetSessionId: '',
+                })
+              }
+            >
+              解绑对话
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
 
   if (settingsVariant) {
     return (
@@ -200,7 +409,11 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
         role="form"
         aria-label={isEditing ? '编辑定时任务' : '新建定时任务'}
       >
-        <div className={scheduleStyles.presetChips} role="group" aria-label="模板">
+        <div
+          className={scheduleStyles.presetChips}
+          role="group"
+          aria-label="模板"
+        >
           {WORKFLOW_SCHEDULE_PRESETS.map((p) => (
             <Button
               key={p.id}
@@ -215,10 +428,32 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
           ))}
         </div>
         <div className={scheduleStyles.formRow}>
-          {nameInput}
-          {promptInput}
+          <div className={scheduleStyles.formField}>
+            <Input
+              size="sm"
+              placeholder="名称"
+              value={draft.name}
+              disabled={busy}
+              onChange={(e) => updateDraft({ name: e.target.value })}
+              onBlur={onNameBlur}
+              aria-label="名称"
+              autoComplete="off"
+            />
+          </div>
+          <div className={scheduleStyles.formField}>
+            <Input
+              size="sm"
+              placeholder="要执行的内容"
+              value={draft.prompt}
+              disabled={busy}
+              onChange={(e) => updateDraft({ prompt: e.target.value })}
+              aria-label="执行内容"
+              autoComplete="off"
+            />
+          </div>
         </div>
         <div className={scheduleStyles.formRow}>
+          <div className={scheduleStyles.formField}>{projectSelect}</div>
           {scheduleSelect}
           {dailyField}
           {intervalField}
@@ -239,54 +474,19 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
             aria-busy={busy}
             onClick={onSave}
           >
-            {busy ? '…' : (isEditing ? '保存' : '创建')}
+            {busy ? '…' : isEditing ? '保存' : '创建'}
           </Button>
         </div>
+        {cronSection}
+        {sessionBindingSection}
         {workspacePath ? (
           <Tooltip content={workspacePath}>
-            <div className="sched-settings-path">
-              {workspacePath}
-            </div>
+            <div className="sched-settings-path">{workspacePath}</div>
           </Tooltip>
         ) : null}
       </div>
     );
   }
-
-  const projects = React.useMemo(() => listProjects(), []);
-  const projectOptions = React.useMemo(
-    () =>
-      projects.map((p) => ({
-        id: p.path,
-        label: p.name,
-        hint: p.path,
-      })),
-    [projects]
-  );
-
-  React.useEffect(() => {
-    if (!draft.cwd && projectOptions.length > 0) {
-      const defaultPath = workspacePath || projectOptions[0]?.id || '';
-      if (defaultPath) {
-        onDraftChange({ ...draft, cwd: defaultPath });
-      }
-    }
-  }, [draft.cwd, projectOptions, workspacePath]);
-
-  const projectSelect = (
-    <Select
-      {...(settingsVariant
-        ? { className: 'sched-settings-select' }
-        : styles.schedSelect !== undefined
-          ? { className: styles.schedSelect }
-          : {})}
-      value={draft.cwd || (projectOptions[0]?.id ?? '')}
-      disabled={busy}
-      options={projectOptions}
-      onChange={(v) => onDraftChange({ ...draft, cwd: v })}
-      aria-label="所属项目"
-    />
-  );
 
   return (
     <div
@@ -295,8 +495,31 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
       role="form"
       aria-label="新建计划"
     >
-      {nameInput}
-      {promptInput}
+      <label className={styles.schedField}>
+        <span className={styles.schedFieldLabel}>名称</span>
+        <Input
+          bare
+          className={styles.schedFieldInput}
+          placeholder="例如：每日代码体检"
+          value={draft.name}
+          disabled={busy}
+          onChange={(e) => updateDraft({ name: e.target.value })}
+          onBlur={onNameBlur}
+          autoComplete="off"
+        />
+      </label>
+      <label className={styles.schedField}>
+        <span className={styles.schedFieldLabel}>要做什么</span>
+        <Textarea
+          bare
+          className={`${styles.schedFieldInput} ${styles.schedFieldTextarea}`}
+          placeholder="描述任务内容…"
+          value={draft.prompt}
+          disabled={busy}
+          rows={3}
+          onChange={(e) => updateDraft({ prompt: e.target.value })}
+        />
+      </label>
       <div className={styles.schedFieldRow}>
         <label className={`${styles.schedField} ${styles.schedFieldGrow}`}>
           <span className={styles.schedFieldLabel}>所属项目</span>
@@ -308,9 +531,21 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
           <span className={styles.schedFieldLabel}>频率</span>
           {scheduleSelect}
         </label>
-        {dailyField}
-        {intervalField}
+        {dailyField ? (
+          <label className={styles.schedField}>
+            <span className={styles.schedFieldLabel}>时间</span>
+            {dailyField}
+          </label>
+        ) : null}
+        {intervalField ? (
+          <label className={styles.schedField}>
+            <span className={styles.schedFieldLabel}>间隔（分钟）</span>
+            {intervalField}
+          </label>
+        ) : null}
       </div>
+      {cronSection}
+      {sessionBindingSection}
       <div className={styles.schedFormActions}>
         <Button
           type="button"

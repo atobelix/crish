@@ -87,7 +87,161 @@ pub(crate) async fn finalize_failed(state: &Arc<CoreRunState>, active: &ActiveRu
             .on_subagent_run_terminal(&cfg, conex_db::RunStatus::Failed)
             .await;
     }
+    notify_scheduled_run_failed(state, active, message);
     state.save_snapshot_now().await;
+}
+
+// ── 定时任务真实 Agent 运行终态回写钩子（Phase 2）──────────────────────
+
+/// 定时任务运行终态回调载荷
+#[derive(Debug, Clone)]
+pub(crate) struct ScheduledRunTerminalOutcome {
+    pub workflow_id: String,
+    pub run_id: String,
+    pub session_id: String,
+    pub status: String,
+    pub started_at_ms: u64,
+    pub finished_at_ms: u64,
+    pub duration_ms: u64,
+    pub output_summary: Option<String>,
+    pub error: Option<String>,
+}
+
+/// 定时任务终态回调函数类型
+pub(crate) type ScheduledTerminalHook =
+    Arc<dyn Fn(ScheduledRunTerminalOutcome) + Send + Sync + 'static>;
+
+struct ScheduledRunHookEntry {
+    workflow_id: String,
+    started_at_ms: u64,
+    hook: ScheduledTerminalHook,
+}
+
+fn scheduled_run_hooks() -> &'static Mutex<HashMap<String, ScheduledRunHookEntry>> {
+    static HOOKS: std::sync::OnceLock<Mutex<HashMap<String, ScheduledRunHookEntry>>> =
+        std::sync::OnceLock::new();
+    HOOKS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn scheduled_now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or_default()
+}
+
+/// 注册指定 run_id 的定时任务终态回写钩子（在 run_task_impl 启动前登记）
+pub(crate) fn register_scheduled_run_hook(
+    run_id: String,
+    workflow_id: String,
+    started_at_ms: u64,
+    hook: ScheduledTerminalHook,
+) {
+    scheduled_run_hooks()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(
+            run_id,
+            ScheduledRunHookEntry {
+                workflow_id,
+                started_at_ms,
+                hook,
+            },
+        );
+}
+
+/// 取出并注销指定 run_id 的定时任务终态钩子（保证幂等单次触发）
+pub(crate) fn take_scheduled_run_hook(
+    run_id: &str,
+) -> Option<(String, u64, ScheduledTerminalHook)> {
+    scheduled_run_hooks()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(run_id)
+        .map(|entry| (entry.workflow_id, entry.started_at_ms, entry.hook))
+}
+
+/// 从会话历史消息中提取最后一条 Assistant 回复摘要（截断至最多 300 字符）
+pub(crate) fn extract_scheduled_output_summary(messages: &[HistoryMessage]) -> Option<String> {
+    let last_text = messages
+        .iter()
+        .rev()
+        .filter(|m| m.sender == "assistant")
+        .find_map(|m| m.text.as_deref().map(str::trim).filter(|t| !t.is_empty()))?;
+    const MAX_SUMMARY_CHARS: usize = 300;
+    let char_count = last_text.chars().count();
+    if char_count <= MAX_SUMMARY_CHARS {
+        Some(last_text.to_string())
+    } else {
+        let truncated: String = last_text.chars().take(MAX_SUMMARY_CHARS).collect();
+        Some(format!("{truncated}..."))
+    }
+}
+
+/// 失败收口路径触发定时任务终态回写（finalize_failed / finalize_orphan_run 共用）
+fn notify_scheduled_run_failed(state: &Arc<CoreRunState>, active: &ActiveRun, message: &str) {
+    let Some((workflow_id, started_at_ms, hook)) = take_scheduled_run_hook(&active.run_id) else {
+        return;
+    };
+    let finished_at_ms = scheduled_now_ms();
+    let duration_ms = finished_at_ms.saturating_sub(started_at_ms);
+    let output_summary = state
+        .session_history
+        .get(&active.session_id)
+        .and_then(|msgs| extract_scheduled_output_summary(&msgs));
+    hook(ScheduledRunTerminalOutcome {
+        workflow_id,
+        run_id: active.run_id.clone(),
+        session_id: active.session_id.clone(),
+        status: "failed".to_string(),
+        started_at_ms,
+        finished_at_ms,
+        duration_ms,
+        output_summary,
+        error: Some(message.to_string()),
+    });
+}
+
+/// drive_run_loop 正常收口后触发定时任务终态回写（若已由 finalize_failed 消费则自动跳过）
+async fn notify_scheduled_run_terminal_after_drive(
+    state: &Arc<CoreRunState>,
+    active: &ActiveRun,
+) {
+    let Some((workflow_id, started_at_ms, hook)) = take_scheduled_run_hook(&active.run_id) else {
+        return;
+    };
+    let run_status = active.handle.lock().await.status.clone();
+    let status_str = match run_status {
+        conex_db::RunStatus::Completed => "completed",
+        conex_db::RunStatus::Cancelled => "cancelled",
+        _ => "failed",
+    };
+    let finished_at_ms = scheduled_now_ms();
+    let duration_ms = finished_at_ms.saturating_sub(started_at_ms);
+    let output_summary = state
+        .session_history
+        .get(&active.session_id)
+        .and_then(|msgs| extract_scheduled_output_summary(&msgs));
+    let error = match status_str {
+        "completed" => None,
+        "cancelled" => Some("定时任务运行已取消".to_string()),
+        _ => state
+            .diagnostics
+            .last_error()
+            .map(|e| e.message)
+            .or_else(|| Some("定时任务运行失败".to_string())),
+    };
+    hook(ScheduledRunTerminalOutcome {
+        workflow_id,
+        run_id: active.run_id.clone(),
+        session_id: active.session_id.clone(),
+        status: status_str.to_string(),
+        started_at_ms,
+        finished_at_ms,
+        duration_ms,
+        output_summary,
+        error,
+    });
 }
 
 /// 错误文案 → CrishErrorPayload（lastError 槽载荷；77 码显式兜底）
@@ -130,7 +284,9 @@ pub(crate) fn active_run(state: &CoreRunState, run_id: &str) -> Result<Arc<Activ
 /// 同源：workspace_root → cwd → 当前目录；壳层 workspace_root 恒 None，
 /// 等效 cwd → current_dir）。
 pub(crate) fn resolve_run_workspace_root(cwd: Option<&str>) -> PathBuf {
-    cwd.map(PathBuf::from)
+    cwd.map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
 }
 
@@ -303,7 +459,13 @@ pub(crate) fn assemble_browser_estop(
 pub(crate) fn is_user_initiated_mode(mode: Option<&str>) -> bool {
     !matches!(
         mode,
-        Some("idle-resume" | "recovery-retry" | "content-resume" | "goal-continue")
+        Some(
+            "idle-resume"
+                | "recovery-retry"
+                | "content-resume"
+                | "goal-continue"
+                | "scheduled"
+        )
     )
 }
 
@@ -320,7 +482,12 @@ pub(crate) async fn run_task_impl(
     let session_id = options.session_id.trim().to_string();
     let prompt = options.prompt;
     let mode = options.mode;
-    let cwd = options.cwd;
+    // INT-02 全局沙箱目录兜底：若 mode == "scheduled" 且未配置 cwd 或 cwd 为空串，自动解析并创建 scheduled-tasks-sandbox
+    let cwd = if mode.as_deref() == Some("scheduled") {
+        crate::workflow_commands::resolve_effective_workflow_cwd(options.cwd.as_deref(), None)
+    } else {
+        options.cwd
+    };
     let permission_mode = options.permission_mode;
     let client_message_id = options.client_message_id;
     let assistant_client_message_id = options.assistant_client_message_id;
@@ -917,11 +1084,17 @@ pub(crate) async fn run_task_impl(
     // 任务持同一 active 实例）；收口不 await（JoinHandle drop 即 detach，
     // tokio 语义，防挂起）；句柄供可观测与未来 join（测试经
     // driver_finished 轮询断言）
-    let driver = tauri::async_runtime::spawn(drive_run_loop(
-        state,
-        Arc::clone(&active),
-        Box::new(producer),
-    ));
+    let driver_state = Arc::clone(&state);
+    let driver_active = Arc::clone(&active);
+    let driver = tauri::async_runtime::spawn(async move {
+        drive_run_loop(
+            Arc::clone(&driver_state),
+            Arc::clone(&driver_active),
+            Box::new(producer),
+        )
+        .await;
+        notify_scheduled_run_terminal_after_drive(&driver_state, &driver_active).await;
+    });
     active.set_driver(driver);
 
     tracing::info!(

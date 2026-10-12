@@ -11,10 +11,11 @@ import {
   normalizeDailyTime,
   parseIntervalMinutes,
   tryNormalizeDailyTime,
+  validateCronExpression,
   type WorkflowSchedule,
 } from './workflowScheduler';
 
-/** 引擎当前支持的调度类型（UI 下拉与说明共用） */
+/** 引擎支持的四大标准调度类型（单轨契约） */
 export const WORKFLOW_SCHEDULE_TYPES = [
   { value: 'manual' as const, label: '手动', hint: '仅手动触发，不自动运行' },
   { value: 'daily' as const, label: '每天', hint: '每日固定时刻（本机时区）' },
@@ -23,20 +24,37 @@ export const WORKFLOW_SCHEDULE_TYPES = [
     label: '间隔（分钟）',
     hint: '按分钟周期轮询执行',
   },
-];
+  {
+    value: 'cron' as const,
+    label: 'Cron 表达式',
+    hint: '标准 5 字段 cron（分 时 日 月 周）',
+  },
+] as const;
 
 export type WorkflowScheduleType =
-  (typeof WORKFLOW_SCHEDULE_TYPES)[number]['value'];
+  | (typeof WORKFLOW_SCHEDULE_TYPES)[number]['value']
+  | 'interval'
+  | 'weekly'
+  | 'once';
 
-/** 新建表单草稿字段（设置页 / 主区面板共用） */
+/** 执行输出目标模式：当前活跃对话 vs 独立新后台会话 */
+export type WorkflowExecutionTarget = 'current_session' | 'isolated_session';
+
+/** 新建与编辑表单受控草稿结构（设置页 / 主区面板共用） */
 export type WorkflowScheduleDraft = {
   name: string;
   prompt: string;
   scheduleType: WorkflowScheduleType;
   dailyTime: string;
   intervalMinutes: string;
+  cronExpression: string;
   cwd?: string;
+  targetSessionId?: string;
+  executionTarget: WorkflowExecutionTarget;
 };
+
+/** WorkflowScheduleDraft 别名 */
+export type WorkflowDraft = WorkflowScheduleDraft;
 
 export type WorkflowSchedulePreset = {
   id: string;
@@ -56,6 +74,9 @@ export const WORKFLOW_SCHEDULE_PRESETS: WorkflowSchedulePreset[] = [
       scheduleType: 'daily',
       dailyTime: '18:00',
       intervalMinutes: '30',
+      cronExpression: '0 18 * * *',
+      targetSessionId: '',
+      executionTarget: 'current_session',
     },
   },
   {
@@ -68,6 +89,9 @@ export const WORKFLOW_SCHEDULE_PRESETS: WorkflowSchedulePreset[] = [
       scheduleType: 'daily',
       dailyTime: '09:00',
       intervalMinutes: '30',
+      cronExpression: '0 9 * * *',
+      targetSessionId: '',
+      executionTarget: 'isolated_session',
     },
   },
   {
@@ -80,6 +104,24 @@ export const WORKFLOW_SCHEDULE_PRESETS: WorkflowSchedulePreset[] = [
       scheduleType: 'intervalMinutes',
       dailyTime: '09:00',
       intervalMinutes: '30',
+      cronExpression: '*/30 * * * *',
+      targetSessionId: '',
+      executionTarget: 'current_session',
+    },
+  },
+  {
+    id: 'weekday-morning-sync',
+    label: '工作日早 9 点巡检',
+    draft: {
+      name: '工作日早 9 点巡检',
+      prompt:
+        '早上好！请汇总昨日至今日未解决的 Issue 与待办事项，按优先级排布。用结构化中文汇报。',
+      scheduleType: 'cron',
+      dailyTime: '09:00',
+      intervalMinutes: '60',
+      cronExpression: '0 9 * * 1-5',
+      targetSessionId: '',
+      executionTarget: 'current_session',
     },
   },
 ];
@@ -164,6 +206,7 @@ export function workflowEnabledLabel(enabled?: boolean | null): string {
 
 /**
  * 新建草稿校验：名称/提示词必填 + 调度字段守卫。
+ * 解绑强制项目路径校验（允许 cwd 为空字符串，代表全局工作区沙箱）。
  * 返回中文错误；通过则 null。
  */
 export function validateWorkflowDraft(
@@ -178,9 +221,6 @@ export function validateWorkflowDraft(
   if (!name) return '请填写名称';
   if (!prompt) return '请填写提示词';
 
-  const cwd = String(draft.cwd ?? '').trim();
-  if (!cwd) return '请选择所属工作区项目';
-
   const st = draft.scheduleType;
   if (st === 'daily') {
     const t = String(draft.dailyTime ?? '').trim();
@@ -189,7 +229,7 @@ export function validateWorkflowDraft(
     }
     return null;
   }
-  if (st === 'intervalMinutes') {
+  if (st === 'intervalMinutes' || st === 'interval') {
     const raw = String(draft.intervalMinutes ?? '').trim();
     if (!raw) return '请填写间隔分钟';
     if (parseIntervalMinutes(raw) == null) {
@@ -197,7 +237,16 @@ export function validateWorkflowDraft(
     }
     return null;
   }
-  if (st === 'manual') return null;
+  if (st === 'cron') {
+    const expr = String(draft.cronExpression ?? '').trim();
+    if (!expr) return '请填写 Cron 表达式';
+    const validation = validateCronExpression(expr);
+    if (validation.ok === false) {
+      return validation.error;
+    }
+    return null;
+  }
+  if (st === 'manual' || st === 'once') return null;
   return '不支持的调度类型';
 }
 
@@ -208,7 +257,10 @@ export function emptyWorkflowDraft(defaultCwd?: string): WorkflowScheduleDraft {
     scheduleType: 'manual',
     dailyTime: DEFAULT_DAILY_TIME,
     intervalMinutes: String(DEFAULT_INTERVAL_MINUTES),
+    cronExpression: '0 9 * * *',
     cwd: defaultCwd ? defaultCwd.trim() : '',
+    targetSessionId: '',
+    executionTarget: 'isolated_session',
   };
 }
 
@@ -229,10 +281,119 @@ export function buildScheduleFromDraft(
       timezone: defaultTimezone(),
     };
   }
-  if (draft.scheduleType === 'intervalMinutes') {
+  if (
+    draft.scheduleType === 'intervalMinutes' ||
+    draft.scheduleType === 'interval'
+  ) {
     const n =
       parseIntervalMinutes(draft.intervalMinutes) ?? DEFAULT_INTERVAL_MINUTES;
     return { type: 'intervalMinutes', intervalMinutes: n };
   }
+  if (draft.scheduleType === 'cron') {
+    const expr = String(draft.cronExpression ?? '')
+      .trim()
+      .replace(/\s+/g, ' ');
+    return { type: 'cron', expression: expr || '0 9 * * *' };
+  }
   return { type: 'manual' };
+}
+
+/** 供 draftFromWorkflow 接收的最小结构契约（与 WorkflowDefinition 兼容且零循环依赖） */
+export type WorkflowDraftSource = {
+  name?: string | null;
+  prompt?: string | null;
+  cwd?: string | null;
+  targetSessionId?: string | null;
+  schedule?: WorkflowSchedule | Record<string, unknown> | null;
+};
+
+/**
+ * 从服务端实体回填表单草稿（单轨纯净实现，去兼容）：
+ * - intervalMinutes 单轨读取 sch.intervalMinutes（不再读取旧 sch.minutes）；
+ * - cron 5 段式表达式保持 scheduleType: 'cron' 与完整 cronExpression，绝不降级为 manual 或 interval 60；
+ * - 回填 targetSessionId 与 executionTarget。
+ */
+export function draftFromWorkflow(
+  w: WorkflowDraftSource,
+  currentActiveSessionId?: string
+): WorkflowScheduleDraft {
+  const d = emptyWorkflowDraft();
+  d.name = String(w.name ?? '');
+  d.prompt = String(w.prompt || '');
+  d.cwd = String(w.cwd || '');
+
+  const rawTargetId = w.targetSessionId;
+  const targetId = typeof rawTargetId === 'string' ? rawTargetId.trim() : '';
+  if (targetId) {
+    d.targetSessionId = targetId;
+    d.executionTarget = 'current_session';
+  } else {
+    d.targetSessionId = currentActiveSessionId ?? '';
+    d.executionTarget = 'isolated_session';
+  }
+
+  const s = w.schedule;
+  if (s && typeof s === 'object') {
+    const sch = s as {
+      type?: string;
+      time?: string;
+      intervalMinutes?: number;
+      expression?: string;
+    };
+    if (sch.type === 'daily') {
+      d.scheduleType = 'daily';
+      d.dailyTime = sch.time || '';
+      if (d.dailyTime) {
+        const norm = tryNormalizeDailyTime(d.dailyTime);
+        if (norm) {
+          const [hh, mm] = norm.split(':');
+          d.cronExpression = `${Number(mm ?? 0)} ${Number(hh ?? 9)} * * *`;
+        }
+      }
+    } else if (sch.type === 'intervalMinutes') {
+      d.scheduleType = 'intervalMinutes';
+      const mins = parseIntervalMinutes(sch.intervalMinutes);
+      d.intervalMinutes =
+        mins != null ? String(mins) : String(DEFAULT_INTERVAL_MINUTES);
+      if (mins != null && mins >= 1 && mins <= 59) {
+        d.cronExpression = `*/${mins} * * * *`;
+      }
+    } else if (sch.type === 'cron') {
+      const expr = String(sch.expression ?? '')
+        .trim()
+        .replace(/\s+/g, ' ');
+      d.scheduleType = 'cron';
+      d.cronExpression = expr || '0 9 * * *';
+      const parts = d.cronExpression.split(' ');
+      if (parts.length === 5) {
+        const [min, hour, dom, mon, dow] = parts;
+        if (
+          dom === '*' &&
+          mon === '*' &&
+          dow === '*' &&
+          /^\d+$/.test(min!) &&
+          /^\d+$/.test(hour!)
+        ) {
+          const normTime = tryNormalizeDailyTime(
+            `${hour!.padStart(2, '0')}:${min!.padStart(2, '0')}`
+          );
+          if (normTime) d.dailyTime = normTime;
+        } else if (
+          dom === '*' &&
+          mon === '*' &&
+          dow === '*' &&
+          hour === '*' &&
+          /^\*\/\d+$/.test(min!)
+        ) {
+          const step = parseIntervalMinutes(min!.slice(2));
+          if (step != null) d.intervalMinutes = String(step);
+        }
+      }
+    } else {
+      d.scheduleType = 'manual';
+    }
+  } else {
+    d.scheduleType = 'manual';
+  }
+  return d;
 }

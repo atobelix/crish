@@ -29,8 +29,8 @@ export function isValidDailyTime(value: unknown): boolean {
 }
 
 /**
-  * 尝试将输入收成 HH:mm；无法规范化时返回 null（不悄悄改成 09:00）。
-  */
+ * 尝试将输入收成 HH:mm；无法规范化时返回 null（不悄悄改成 09:00）。
+ */
 export function tryNormalizeDailyTime(value: unknown): string | null {
   const t = String(value ?? '').trim();
   if (!t) return null;
@@ -162,8 +162,7 @@ function isValidCronField(field: string, min: number, max: number): boolean {
 }
 
 export type CronValidationResult =
-  | { ok: true; expression: string }
-  | { ok: false; error: string };
+  { ok: true; expression: string } | { ok: false; error: string };
 
 /**
  * 校验标准 5 字段 cron 表达式（展示/守卫用；T-CF-14 起表达式合法即可下发，
@@ -212,27 +211,166 @@ export function isValidCronExpression(expr: unknown): boolean {
   return validateCronExpression(expr).ok;
 }
 
+const CRON_WEEKDAY_NAMES: Record<number, string> = {
+  0: '周日',
+  1: '周一',
+  2: '周二',
+  3: '周三',
+  4: '周四',
+  5: '周五',
+  6: '周六',
+  7: '周日',
+};
+
+function formatCronTime(hourStr: string, minStr: string): string {
+  return `${hourStr.padStart(2, '0')}:${minStr.padStart(2, '0')}`;
+}
+
+function formatCronDowPrefix(dow: string): string | null {
+  if (dow === '*') return '每天';
+  if (dow === '1-5') return '工作日';
+  if (dow === '0,6' || dow === '6,0' || dow === '6-7' || dow === '0,7') {
+    return '周末';
+  }
+  if (/^[0-7]$/.test(dow)) {
+    const dayName = CRON_WEEKDAY_NAMES[Number(dow)];
+    return dayName ? `每周${dayName}` : null;
+  }
+  if (/^[0-7](?:,[0-7])+$/.test(dow)) {
+    const names = dow
+      .split(',')
+      .map((d) => CRON_WEEKDAY_NAMES[Number(d)])
+      .filter((n): n is string => Boolean(n));
+    if (names.length > 0) {
+      return `每${names.join('、')}`;
+    }
+  }
+  return null;
+}
+
 /**
- * cron 中文/可读标签：合法则回显表达式，常见模式给短标签；非法 →「无效 cron」。
+ * cron 中文/可读标签：对常见与复杂 5 段式 Cron 提供准确中文语义描述；
+ * 其余合法 5 段式展示 `Cron: <expr>`；非法 →「无效 Cron 表达式」。
  */
 export function cronExpressionLabel(expr: unknown): string {
   const v = validateCronExpression(expr);
   if (v.ok === false) return '无效 cron';
-  const e = v.expression;
-  // 常见模式短标签（仍保留表达式后缀便于核对）
-  if (e === '0 * * * *') return '每小时 · 0 * * * *';
-  if (e === '0 0 * * *') return '每天 0 点 · 0 0 * * *';
-  if (e === '0 9 * * *') return '每天 9 点 · 0 9 * * *';
-  if (e === '*/5 * * * *') return '每 5 分钟 · */5 * * * *';
-  if (e === '*/15 * * * *') return '每 15 分钟 · */15 * * * *';
-  if (e === '*/30 * * * *') return '每 30 分钟 · */30 * * * *';
-  if (e === '0 0 * * 0' || e === '0 0 * * 7') return '每周日 0 点 · ' + e;
+  const e = v.expression.trim();
+
+  const parts = e.split(' ');
+  const [min, hour, dom, mon, dow] = parts as [
+    string,
+    string,
+    string,
+    string,
+    string,
+  ];
+
+  if (dom === '*' && mon === '*') {
+    // 每分钟: * * * * *
+    if (min === '*' && hour === '*' && dow === '*') {
+      return '每分钟';
+    }
+
+    // 步进分钟: */N * * * * 或 */N * * * 1-5
+    const minStepMatch = min.match(/^\*\/(\d+)$/);
+    if (minStepMatch && hour === '*') {
+      const step = Number(minStepMatch[1]);
+      if (dow === '*') return `每 ${step} 分钟`;
+      if (dow === '1-5') return `工作日每 ${step} 分钟`;
+    }
+
+    // 每小时整点或定分: M * * * *
+    if (/^\d+$/.test(min) && hour === '*') {
+      const m = Number(min);
+      if (dow === '*') {
+        return m === 0 ? '每小时整点' : `每小时第 ${m} 分钟`;
+      }
+      if (dow === '1-5') {
+        return m === 0 ? '工作日每小时整点' : `工作日每小时第 ${m} 分钟`;
+      }
+    }
+
+    // 步进小时: M */H * * *
+    const hourStepMatch = hour.match(/^\*\/(\d+)$/);
+    if (/^\d+$/.test(min) && hourStepMatch) {
+      const hStep = Number(hourStepMatch[1]);
+      const m = Number(min);
+      const prefix = dow === '1-5' ? '工作日' : dow === '*' ? '' : null;
+      if (prefix !== null) {
+        return m === 0
+          ? `${prefix}每 ${hStep} 小时整点`
+          : `${prefix}每 ${hStep} 小时（第 ${m} 分钟）`;
+      }
+    }
+
+    // 固定单时刻: M H * * * / M H * * 1-5 / M H * * D
+    if (/^\d+$/.test(min) && /^\d+$/.test(hour)) {
+      if (dow === '*' && Number(min) === 0) {
+        return `每天 ${Number(hour)} 点 (${formatCronTime(hour, min)})`;
+      }
+      const prefix = formatCronDowPrefix(dow);
+      if (prefix) {
+        return `${prefix} ${formatCronTime(hour, min)}`;
+      }
+    }
+
+    // 多小时列表: M H1,H2 * * * / M H1,H2 * * 1-5
+    if (/^\d+$/.test(min) && /^\d+(?:,\d+)+$/.test(hour)) {
+      const prefix = formatCronDowPrefix(dow);
+      if (prefix) {
+        const times = hour
+          .split(',')
+          .map((h) => formatCronTime(h, min))
+          .join('、');
+        return `${prefix} ${times}`;
+      }
+    }
+  }
+
+  // 每月固定日期: M H D * *
+  if (
+    /^\d+$/.test(min) &&
+    /^\d+$/.test(hour) &&
+    /^\d+$/.test(dom) &&
+    mon === '*' &&
+    dow === '*'
+  ) {
+    return `每月 ${Number(dom)} 日 ${formatCronTime(hour, min)}`;
+  }
+
   return e;
 }
 
+export type ClientCronValidationResult = {
+  valid: boolean;
+  label: string;
+  error?: string;
+};
+
+/**
+ * 供前端表单（WorkflowForm.tsx）实时预览调用的纯函数校验器：
+ * 合法时返回 `{ valid: true, label }`，非法时返回 `{ valid: false, label, error }`。
+ */
+export function validateCronExpressionClient(
+  expr: string
+): ClientCronValidationResult {
+  const v = validateCronExpression(expr);
+  if (v.ok === false) {
+    return {
+      valid: false,
+      label: '无效 Cron 表达式',
+      error: v.error,
+    };
+  }
+  return {
+    valid: true,
+    label: cronExpressionLabel(v.expression),
+  };
+}
+
 export type ScheduleValidationResult =
-  | { ok: true; schedule: WorkflowSchedule }
-  | { ok: false; error: string };
+  { ok: true; schedule: WorkflowSchedule } | { ok: false; error: string };
 
 export function defaultTimezone(): string {
   try {
@@ -288,9 +426,7 @@ export function validateWorkflowSchedule(
   }
 
   if (t === 'intervalMinutes') {
-    const n =
-      parseIntervalMinutes(o.intervalMinutes) ??
-      parseIntervalMinutes(o.minutes);
+    const n = parseIntervalMinutes(o.intervalMinutes);
     if (n == null) {
       return {
         ok: false,
@@ -356,17 +492,17 @@ export function scheduleLabel(
     return `每天 ${displayTime}`;
   }
   if (t === 'intervalMinutes') {
-    const m =
-      parseIntervalMinutes(o.intervalMinutes) ??
-      parseIntervalMinutes(o.minutes);
+    const m = parseIntervalMinutes(o.intervalMinutes);
     return m != null ? `每 ${m} 分钟` : '间隔';
   }
   if (t === 'manual') return '手动';
   if (t === 'cron') {
     const expr = o.expression ?? o.cron ?? o.cronExpression ?? o.expr;
     if (expr != null && String(expr).trim()) {
-      const label = cronExpressionLabel(expr);
-      return label === '无效 cron' ? '高级 · cron（无效）' : `cron · ${label}`;
+      if (!isValidCronExpression(expr)) {
+        return '高级 · cron（无效）';
+      }
+      return `cron · ${cronExpressionLabel(expr)}`;
     }
     return '高级 · cron';
   }

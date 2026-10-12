@@ -360,21 +360,21 @@ describe('validateWorkflowSchedule / normalizeWorkflowSchedule', () => {
 });
 
 describe('validateWorkflowDraft', () => {
-  it('requires name and prompt', () => {
+  it('requires name and prompt, and allows empty cwd for global workspace sandbox', () => {
     const base = emptyWorkflowDraft('/test/workspace');
     expect(validateWorkflowDraft(base)).toBe('请填写名称与提示词');
     expect(validateWorkflowDraft({ ...base, name: 'n' })).toBe('请填写提示词');
     expect(validateWorkflowDraft({ ...base, prompt: 'p' })).toBe('请填写名称');
     expect(
       validateWorkflowDraft({ ...base, name: 'n', prompt: 'p', cwd: '' })
-    ).toBe('请选择所属工作区项目');
+    ).toBeNull();
     expect(
       validateWorkflowDraft({ ...base, name: 'n', prompt: 'p' })
     ).toBeNull();
     expect(validateWorkflowDraft(null)).toBe('请填写名称与提示词');
   });
 
-  it('guards daily time and interval fields', () => {
+  it('guards daily time, interval, and 5-field cron fields', () => {
     const base = emptyWorkflowDraft('/test/workspace');
     expect(
       validateWorkflowDraft({
@@ -421,6 +421,86 @@ describe('validateWorkflowDraft', () => {
         intervalMinutes: '45',
       })
     ).toBeNull();
+    expect(
+      validateWorkflowDraft({
+        ...base,
+        name: 'n',
+        prompt: 'p',
+        scheduleType: 'cron',
+        cronExpression: '',
+      })
+    ).toBe('请填写 Cron 表达式');
+    expect(
+      validateWorkflowDraft({
+        ...base,
+        name: 'n',
+        prompt: 'p',
+        scheduleType: 'cron',
+        cronExpression: '0 0 0 * * *',
+      })
+    ).toMatch(/5 字段/);
+    expect(
+      validateWorkflowDraft({
+        ...base,
+        name: 'n',
+        prompt: 'p',
+        scheduleType: 'cron',
+        cronExpression: '0 9,18 * * 1-5',
+      })
+    ).toBeNull();
+  });
+});
+
+describe('draftFromWorkflow & validateCronExpressionClient', () => {
+  it('preserves complex 5-field cron expressions without downgrading and maps targetSessionId / executionTarget', async () => {
+    const { draftFromWorkflow, validateCronExpressionClient } =
+      await import('../components/settings/workflowsSharedLib');
+
+    const complexCronWf = {
+      id: 'wf-cron-1',
+      name: '工作日双次巡检',
+      prompt: '检查 PR 状态',
+      cwd: '',
+      targetSessionId: 'sess-bound-42',
+      schedule: { type: 'cron' as const, expression: '0 9,18 * * 1-5' },
+    };
+    const draft1 = draftFromWorkflow(complexCronWf);
+    expect(draft1.scheduleType).toBe('cron');
+    expect(draft1.cronExpression).toBe('0 9,18 * * 1-5');
+    expect(draft1.targetSessionId).toBe('sess-bound-42');
+    expect(draft1.executionTarget).toBe('current_session');
+
+    const stepHourWf = {
+      id: 'wf-cron-2',
+      name: '每4小时检查',
+      prompt: '检查构建',
+      targetSessionId: null,
+      schedule: { type: 'cron' as const, expression: '15 */4 * * *' },
+    };
+    const draft2 = draftFromWorkflow(stepHourWf);
+    expect(draft2.scheduleType).toBe('cron');
+    expect(draft2.cronExpression).toBe('15 */4 * * *');
+    expect(draft2.targetSessionId).toBe('');
+    expect(draft2.executionTarget).toBe('isolated_session');
+
+    const intervalWf = {
+      id: 'wf-int-1',
+      name: '间隔任务',
+      prompt: '执行检查',
+      schedule: { type: 'intervalMinutes' as const, intervalMinutes: 45 },
+    };
+    const draft3 = draftFromWorkflow(intervalWf);
+    expect(draft3.scheduleType).toBe('intervalMinutes');
+    expect(draft3.intervalMinutes).toBe('45');
+
+    const validPreview = validateCronExpressionClient('0 9,18 * * 1-5');
+    expect(validPreview.valid).toBe(true);
+    expect(validPreview.label).toContain('工作日');
+    expect(validPreview.error).toBeUndefined();
+
+    const invalidPreview = validateCronExpressionClient('60 9 * * *');
+    expect(invalidPreview.valid).toBe(false);
+    expect(invalidPreview.error).toMatch(/分钟/);
   });
 });
 

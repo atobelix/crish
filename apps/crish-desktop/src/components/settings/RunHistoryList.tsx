@@ -19,8 +19,13 @@ import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 import { RunDetailDialog } from './RunDetailDialog';
 
+export type RunHistoryEntryItem = WorkflowRunEntry & {
+  /** 扩展输出内容（用于悬停查看完整输出详情） */
+  output?: string;
+};
+
 export type RunHistoryListProps = {
-  runs: WorkflowRunEntry[];
+  runs: RunHistoryEntryItem[];
   workflows: WorkflowDefinition[];
   /** 打开运行会话（无关联会话时由壳层自动创建或导航） */
   onOpenRun?: (run: WorkflowRunEntry) => void;
@@ -84,6 +89,8 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
     ? workflows.find((w) => w.id === selectedRun.workflowId)
     : undefined;
 
+  const st = styles as Record<string, string | undefined>;
+
   return (
     <div
       className={`${styles.runsContainer} ${
@@ -105,34 +112,44 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
           const wfName = wf?.name || r.workflowId;
           const whenInfo = formatRunWhen(r.startedAt || r.scheduledFor);
           const durationStr = formatDurationMini(r.durationMs);
+          const statusNorm = (r.status || '').trim().toLowerCase();
 
           const isSuccess =
-            r.status === 'completed' ||
-            r.status === 'success' ||
-            r.status === 'ok';
+            statusNorm === 'completed' ||
+            statusNorm === 'success' ||
+            statusNorm === 'ok';
+          const isInterrupted = statusNorm === 'interrupted';
           const isFailed =
-            r.status === 'failed' ||
-            r.status === 'error' ||
-            r.status === 'errored';
+            statusNorm === 'failed' ||
+            statusNorm === 'error' ||
+            statusNorm === 'errored';
           const isRunning =
-            r.status === 'running' ||
-            r.status === 'in_progress' ||
-            r.status === 'pending';
+            !isInterrupted &&
+            (statusNorm === 'running' ||
+              statusNorm === 'in_progress' ||
+              statusNorm === 'pending');
 
           const badgeClass = isSuccess
             ? styles.badgeSuccess
-            : isFailed
-              ? styles.badgeFailed
-              : isRunning
-                ? styles.badgeRunning
-                : styles.badgeCancelled;
+            : isInterrupted
+              ? (st.badgeInterrupted ?? styles.badgeFailed)
+              : isFailed
+                ? styles.badgeFailed
+                : isRunning
+                  ? styles.badgeRunning
+                  : styles.badgeCancelled;
+
+          const detailTooltipContent = r.error || r.output;
 
           const handleRowClick = () => {
             setSelectedRun(r);
           };
 
           const handleKeyDown = (e: React.KeyboardEvent) => {
-            if (e.key === 'Enter' || e.key === ' ') {
+            if (
+              !e.nativeEvent.isComposing &&
+              (e.key === 'Enter' || e.key === ' ')
+            ) {
               e.preventDefault();
               setSelectedRun(r);
             }
@@ -154,7 +171,10 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
                   <Tooltip content={wfName}>
                     <span className={styles.runItemName}>{wfName}</span>
                   </Tooltip>
-                  <span className={`${styles.runBadge} ${badgeClass}`}>
+                  <span
+                    className={`${styles.runBadge} ${badgeClass}`}
+                    data-status={statusNorm || 'unknown'}
+                  >
                     {workflowRunStatusLabel(r.status)}
                   </span>
                 </div>
@@ -188,11 +208,13 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
                     </>
                   ) : null}
 
-                  {r.error ? (
+                  {detailTooltipContent ? (
                     <>
                       <span>·</span>
-                      <Tooltip content={r.error}>
-                        <span className={styles.errorSnippet}>{r.error}</span>
+                      <Tooltip content={detailTooltipContent}>
+                        <span className={styles.errorSnippet}>
+                          {detailTooltipContent}
+                        </span>
                       </Tooltip>
                     </>
                   ) : null}

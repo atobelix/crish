@@ -44,6 +44,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use async_trait::async_trait;
 use conex_db::LocalDb;
 use conex_types::cron::parse_cron;
 use orchestrator::steering_queue::SteeringInputEntry;
@@ -563,6 +564,11 @@ pub(crate) trait WorkflowStore: Send + Sync {
         }
         reaped_count
     }
+
+    /// 检查指定目标会话是否存在（INT-04 僵尸会话自愈校验用；默认 true 兼容无会话表纯内存测试）
+    fn session_exists(&self, _session_id: &str) -> bool {
+        true
+    }
 }
 
 /// session_meta 真适配（LocalDb `sched_<cronId>` 键 + `sched_index` 索引 +
@@ -718,6 +724,13 @@ impl WorkflowStore for SessionMetaWorkflowStore {
             let _ = self.db.set_session_meta(SESSION_META_RUNS_KEY, &json);
         }
     }
+
+    fn session_exists(&self, session_id: &str) -> bool {
+        self.db
+            .list_sessions()
+            .map(|list| list.iter().any(|s| s.id == session_id))
+            .unwrap_or(false)
+    }
 }
 
 /// 内存适配（测试专用；生产走 SessionMetaWorkflowStore）
@@ -726,6 +739,18 @@ impl WorkflowStore for SessionMetaWorkflowStore {
 pub(crate) struct MemoryWorkflowStore {
     map: Mutex<Vec<(String, StoredWorkflow)>>,
     runs: Mutex<Vec<WorkflowRunRecord>>,
+    existing_sessions: Mutex<Option<std::collections::HashSet<String>>>,
+}
+
+impl MemoryWorkflowStore {
+    /// 设置测试环境中存在的会话列表（供 INT-04 僵尸会话自愈测试使用）
+    #[cfg(test)]
+    pub(crate) fn set_existing_sessions(&self, sessions: Vec<String>) {
+        *self
+            .existing_sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(sessions.into_iter().collect());
+    }
 }
 
 impl WorkflowStore for MemoryWorkflowStore {
@@ -791,6 +816,18 @@ impl WorkflowStore for MemoryWorkflowStore {
 
     fn save_runs(&self, runs: &[WorkflowRunRecord]) {
         *self.runs.lock().unwrap_or_else(|e| e.into_inner()) = runs.to_vec();
+    }
+
+    fn session_exists(&self, session_id: &str) -> bool {
+        match self
+            .existing_sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+        {
+            Some(set) => set.contains(session_id),
+            None => true,
+        }
     }
 }
 
@@ -974,7 +1011,7 @@ impl agent_tools::WorkflowCreationChannel for WorkflowCreationChannelBinding {
         let schedule = WorkflowScheduleWire::parse(&schedule_value)
             .map_err(agent_tools::WorkflowCreateError::InvalidInput)?;
 
-        let view = bound
+        let mut view = bound
             .backend
             .create(
                 input.name,
@@ -988,6 +1025,27 @@ impl agent_tools::WorkflowCreationChannel for WorkflowCreationChannelBinding {
             .map_err(|e: CoreError| {
                 agent_tools::WorkflowCreateError::InvalidInput(e.to_string())
             })?;
+
+        if input.target_session_id.is_some()
+            || input.execution_mode.is_some()
+            || input.target_mode.is_some()
+        {
+            let exec_mode = input.execution_mode.or(input.target_mode);
+            view = bound
+                .backend
+                .update(
+                    &view.id,
+                    WorkflowPatch {
+                        target_session_id: input.target_session_id,
+                        execution_mode: exec_mode,
+                        ..WorkflowPatch::default()
+                    },
+                )
+                .await
+                .map_err(|e: CoreError| {
+                    agent_tools::WorkflowCreateError::InvalidInput(e.to_string())
+                })?;
+        }
 
         // 全域状态广播（05 详案 §2.5）：工具路径与 IPC 命令路径共用同一
         // 发射 helper，前端 useWorkflowsState 监听后刷新列表
@@ -1018,6 +1076,214 @@ pub(crate) fn emit_workflow_event(app: &tauri::AppHandle, event: &str, payload: 
     }
 }
 
+/// 全局默认安全沙箱目录兜底（INT-02）：
+/// - 若 `configured_cwd` 非空且在磁盘上存在，直接返回该路径；
+/// - 若 `configured_cwd` 为 `None`、空字符串或目录不存在，自动解析并创建
+///   `<app_data_dir>/scheduled-tasks-sandbox`（无 `app_data_dir` 时退化到系统临时目录下的同名子目录），
+///   确保 `ReadFile` / `WriteFile` / `Bash` 等内置工具拥有合法工作目录，杜绝因空 `cwd` 报 `InvalidConfig`。
+pub(crate) fn resolve_effective_workflow_cwd(
+    configured_cwd: Option<&str>,
+    app_data_dir: Option<&std::path::Path>,
+) -> Option<String> {
+    if let Some(raw) = configured_cwd {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() && std::path::Path::new(trimmed).exists() {
+            return Some(trimmed.to_string());
+        }
+    }
+    let base = app_data_dir
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(std::env::temp_dir);
+    let sandbox = base.join("scheduled-tasks-sandbox");
+    if let Err(e) = std::fs::create_dir_all(&sandbox) {
+        tracing::warn!(
+            target: "workflow",
+            path = %sandbox.display(),
+            "创建定时任务默认沙箱目录失败: {e}"
+        );
+    }
+    Some(sandbox.to_string_lossy().to_string())
+}
+
+/// 生产环境定时任务真实 Agent 执行派发器（连接 `SchedulerRegistry` / `WorkflowBackend` 与 `run_task_impl`）
+pub(crate) struct ProductionScheduledLauncher {
+    app: tauri::AppHandle,
+    core_state: Arc<crate::core_run_commands::CoreRunState>,
+    workflow_backend: Arc<WorkflowBackend>,
+    app_data_dir: std::path::PathBuf,
+}
+
+impl ProductionScheduledLauncher {
+    pub(crate) fn new(
+        app: tauri::AppHandle,
+        core_state: Arc<crate::core_run_commands::CoreRunState>,
+        workflow_backend: Arc<WorkflowBackend>,
+        app_data_dir: std::path::PathBuf,
+    ) -> Self {
+        Self {
+            app,
+            core_state,
+            workflow_backend,
+            app_data_dir,
+        }
+    }
+}
+
+#[async_trait]
+impl crate::sched::ScheduledTaskLauncher for ProductionScheduledLauncher {
+    async fn launch_scheduled_task(
+        &self,
+        ctx: crate::sched::ScheduledExecutionContext,
+    ) -> Result<crate::sched::ScheduledRunHandle, CoreError> {
+        let started_at_ms = ctx.fired_at_ms;
+        // 1. INT-02：空 cwd 或目录不存在时回退到 <app_data_dir>/scheduled-tasks-sandbox
+        let effective_cwd =
+            resolve_effective_workflow_cwd(ctx.cwd.as_deref(), Some(&self.app_data_dir));
+
+        // 2. INT-04：判定 target_session_id 是否存在，若原会话已被删除则自愈降级并抹除脏绑定
+        let effective_session_id = match ctx
+            .target_session_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            Some(sid) => {
+                if self.workflow_backend.store.session_exists(sid) {
+                    sid.to_string()
+                } else {
+                    tracing::warn!(
+                        target: "workflow",
+                        workflow_id = %ctx.cron_id,
+                        deleted_session_id = %sid,
+                        "绑定的目标会话已不存在，自动抹除 target_session_id 并自愈降级为独立后台会话"
+                    );
+                    self.workflow_backend.clear_invalid_target_session(&ctx.cron_id);
+                    format!("sched-run-{}-{}", ctx.cron_id, started_at_ms)
+                }
+            }
+            None => format!("sched-run-{}-{}", ctx.cron_id, started_at_ms),
+        };
+
+        // 3. 若目标会话当前已有活跃 run 在执行（busy），通过 steering 队列注入唤醒，避免并发冲突报错
+        let session_busy = {
+            let active = self
+                .core_state
+                .active_runs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            active.values().any(|r| r.session_id == effective_session_id)
+        };
+        if session_busy {
+            let entry = SteeringInputEntry {
+                session_id: effective_session_id.clone(),
+                id: format!("{}-{started_at_ms}", ctx.cron_id),
+                text: ctx.prompt.clone(),
+                attachments: Vec::new(),
+                enqueued_at: started_at_ms,
+                group_id: Some(format!("{CRON_ID_PREFIX}{}", ctx.cron_id)),
+                is_steering: true,
+            };
+            let mut queue = self
+                .core_state
+                .pending_queue
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            queue.replace_or_enqueue(entry);
+            return Ok(crate::sched::ScheduledRunHandle {
+                run_id: ctx.run_id,
+                session_id: effective_session_id.clone(),
+                async_terminal_managed: false,
+                immediate_output_summary: Some(format!(
+                    "目标会话 {} 忙碌中，已通过 steering 队列注入唤醒",
+                    effective_session_id
+                )),
+            });
+        }
+
+        // 4. 在调用 run_task_impl 前预注册终态回写钩子（零竞态）：
+        //    当 Agent Loop 在后台真正结束（Completed / Failed / Cancelled）时，
+        //    回写 WorkflowRunRecord 终态并广播 workflow:run-Completed 与 workflow:updated 事件
+        let backend = Arc::clone(&self.workflow_backend);
+        let app = self.app.clone();
+        crate::core_run_commands::register_scheduled_run_hook(
+            ctx.run_id.clone(),
+            ctx.cron_id.clone(),
+            started_at_ms,
+            Arc::new(move |outcome| {
+                backend.finish_run(
+                    &outcome.workflow_id,
+                    &outcome.run_id,
+                    &outcome.status,
+                    outcome.finished_at_ms,
+                    outcome.duration_ms,
+                    outcome.error.clone(),
+                    outcome.output_summary.clone(),
+                );
+                emit_workflow_event(
+                    &app,
+                    "workflow:run-Completed",
+                    serde_json::json!({
+                        "workflowId": outcome.workflow_id,
+                        "runId": outcome.run_id,
+                        "sessionId": outcome.session_id,
+                        "status": outcome.status,
+                        "startedAtMs": outcome.started_at_ms,
+                        "finishedAtMs": outcome.finished_at_ms,
+                        "durationMs": outcome.duration_ms,
+                        "error": outcome.error,
+                        "outputSummary": outcome.output_summary,
+                    }),
+                );
+                emit_workflow_event(
+                    &app,
+                    "workflow:updated",
+                    serde_json::json!({
+                        "workflowId": outcome.workflow_id,
+                    }),
+                );
+            }),
+        );
+
+        // 5. 调用真实 Agent 执行入口 `run_task_impl`
+        let options = crate::core_run_commands::RunTaskOptions {
+            run_id: ctx.run_id.clone(),
+            session_id: effective_session_id.clone(),
+            prompt: Some(ctx.prompt.clone()),
+            mode: Some("scheduled".to_string()),
+            cwd: effective_cwd,
+            permission_mode: None,
+            client_message_id: None,
+            assistant_client_message_id: None,
+            system_prompt: None,
+            history: None,
+            context_window: None,
+            parent_run_id: None,
+            subagent_config: None,
+            visible_goal: None,
+            max_rounds: None,
+            max_stalled_rounds: None,
+            reasoning_effort: None,
+            context_state: None,
+            content: None,
+            has_images: None,
+        };
+
+        match crate::core_run_commands::run_task_impl(Arc::clone(&self.core_state), options).await {
+            Ok(response) => Ok(crate::sched::ScheduledRunHandle {
+                run_id: response.run_id,
+                session_id: response.session_id,
+                async_terminal_managed: true,
+                immediate_output_summary: None,
+            }),
+            Err(err) => {
+                // 若在启动门禁阶段失败（尚未触发 finalize_failed），注销预注册钩子并交由调用方标记 failed
+                let _ = crate::core_run_commands::take_scheduled_run_hook(&ctx.run_id);
+                Err(err)
+            }
+        }
+    }
+}
+
 /// workflow 命令后端（store 即元数据真源：每次操作以 sched_* 键读写，
 /// 重启无损；seq 自数据推导，重启不撞号；调度真源 = 委托注册表）
 pub(crate) struct WorkflowBackend {
@@ -1026,6 +1292,12 @@ pub(crate) struct WorkflowBackend {
     /// SchedulerRegistry 委托槽（A3 装配收口注入；None = 命令层独立
     /// 承载调度语义——注册/取消/列表退化为元数据操作）
     registry: Mutex<Option<Arc<SchedulerRegistry>>>,
+    /// 真实 Agent 执行驱动槽（注入后 trigger 走真实 Agent Loop 并异步回写终态）
+    launcher: Mutex<Option<Arc<dyn crate::sched::ScheduledTaskLauncher>>>,
+    /// 应用数据目录（供 INT-02 空 cwd 默认沙箱路径解析）
+    app_data_dir: Mutex<Option<std::path::PathBuf>>,
+    /// Tauri AppHandle（供终态事件广播）
+    app_handle: Mutex<Option<tauri::AppHandle>>,
     seq: AtomicU64,
 }
 
@@ -1043,6 +1315,9 @@ impl WorkflowBackend {
             store,
             sink,
             registry: Mutex::new(None),
+            launcher: Mutex::new(None),
+            app_data_dir: Mutex::new(None),
+            app_handle: Mutex::new(None),
             seq: AtomicU64::new(seq),
         };
         backend.reap_orphan_running_runs();
@@ -1059,6 +1334,83 @@ impl WorkflowBackend {
     /// 经本方法注入共享注册表——create 即真实注册调度，不再命令层退化。
     pub(crate) fn set_registry(&self, registry: Arc<SchedulerRegistry>) {
         *self.registry.lock().unwrap_or_else(|e| e.into_inner()) = Some(registry);
+    }
+
+    /// 注入真实 Agent 执行驱动器（生产装配点 = main.rs setup）
+    pub(crate) fn set_launcher(&self, launcher: Arc<dyn crate::sched::ScheduledTaskLauncher>) {
+        *self.launcher.lock().unwrap_or_else(|e| e.into_inner()) = Some(launcher);
+    }
+
+    /// 当前真实 Agent 执行驱动器句柄
+    fn launcher(&self) -> Option<Arc<dyn crate::sched::ScheduledTaskLauncher>> {
+        self.launcher
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// 注入应用上下文（app_data_dir 与 AppHandle）
+    pub(crate) fn set_app_context(
+        &self,
+        app_data_dir: std::path::PathBuf,
+        app_handle: Option<tauri::AppHandle>,
+    ) {
+        *self.app_data_dir.lock().unwrap_or_else(|e| e.into_inner()) = Some(app_data_dir);
+        if let Some(app) = app_handle {
+            *self.app_handle.lock().unwrap_or_else(|e| e.into_inner()) = Some(app);
+        }
+    }
+
+    fn app_data_dir(&self) -> Option<std::path::PathBuf> {
+        self.app_data_dir
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    fn app_handle(&self) -> Option<tauri::AppHandle> {
+        self.app_handle
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// 回写运行记录终态（供 ProductionScheduledLauncher 终态钩子与测试直接调用）
+    pub(crate) fn finish_run(
+        &self,
+        workflow_id: &str,
+        run_id: &str,
+        status: &str,
+        finished_at_ms: u64,
+        duration_ms: u64,
+        error: Option<String>,
+        output_summary: Option<String>,
+    ) {
+        self.store.update_run_finish(
+            workflow_id,
+            run_id,
+            status,
+            finished_at_ms,
+            duration_ms,
+            error,
+            output_summary,
+        );
+    }
+
+    /// INT-04 僵尸会话自愈：抹除已删除的 `target_session_id` 并同步更新注册表与持久化层
+    pub(crate) fn clear_invalid_target_session(&self, cron_id: &str) {
+        let all = self.store.load_all();
+        if let Some(mut workflow) = all.into_iter().find(|w| w.cron_id == cron_id) {
+            if workflow.target_session_id.is_some() {
+                workflow.target_session_id = None;
+                workflow.execution_mode = Some("isolated".to_string());
+                workflow.updated_at_ms = now_ms();
+                self.store.save(&workflow);
+            }
+        }
+        if let Some(registry) = self.registry() {
+            registry.clear_target_session_id(cron_id);
+        }
     }
 
     /// 委托注册表当前句柄
@@ -1319,7 +1671,10 @@ impl WorkflowBackend {
                         },
                         max_iterations: None,
                         is_daemon: None,
-                        target_session_id: patch.target_session_id.clone().map(Some),
+                        target_session_id: patch
+                            .target_session_id
+                            .as_ref()
+                            .map(|_| workflow.target_session_id.clone()),
                     };
                     registry.update_task(cron_id, task_patch).await?;
                 } else if schedule_changed && workflow.expression.is_empty() {
@@ -1367,11 +1722,12 @@ impl WorkflowBackend {
         Ok(())
     }
 
-    /// 立即触发一次（复用触发路径：fired_count 计入 + steering 条目注入）。
+    /// 立即触发一次（复用触发路径：fired_count 计入 + steering 条目注入 + 真实 Agent 执行驱动）。
     ///
-    /// manual 无表达式亦允许触发（仅注入 steering 面；run 由引擎承接）。
-    /// 注册表无「立即触发」API，手动触发不改变注册表调度表——下次自然
-    /// 触发仍按原计划（偏差登记见模块头）。
+    /// - 当 `launcher` 已注入时：先写入 `status: "running"` 运行记录（`duration_ms: None`），
+    ///   随后异步派发 `ScheduledTaskLauncher::launch_scheduled_task` 驱动真实 Agent 执行，
+    ///   在 Agent 执行完毕后回写 `completed` / `failed` 终态、真实耗时与摘要；
+    /// - 当 `launcher` 未注入时（轻量单测环境）：退化为同步落盘 `completed` 记录，保持向后兼容。
     pub(crate) fn trigger(&self, cron_id: &str) -> Result<TriggerResult, CoreError> {
         let all = self.store.load_all();
         let Some(mut workflow) = all.into_iter().find(|w| w.cron_id == cron_id) else {
@@ -1383,6 +1739,41 @@ impl WorkflowBackend {
             )));
         }
         let now = now_ms();
+
+        // INT-04：检查绑定的 target_session_id 是否依然存在，若已被删除则自愈抹除并降级为独立会话
+        let resolved_target_session_id = match workflow
+            .target_session_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            Some(sid) => {
+                if self.store.session_exists(sid) {
+                    Some(sid.to_string())
+                } else {
+                    tracing::warn!(
+                        target: "workflow",
+                        cron_id = %workflow.cron_id,
+                        deleted_session_id = %sid,
+                        "手动触发时发现绑定的目标会话已删除，自动抹除 target_session_id 并自愈降级为独立后台会话"
+                    );
+                    workflow.target_session_id = None;
+                    workflow.execution_mode = Some("isolated".to_string());
+                    if let Some(registry) = self.registry() {
+                        registry.clear_target_session_id(&workflow.cron_id);
+                    }
+                    None
+                }
+            }
+            None => None,
+        };
+
+        // INT-02：空 cwd 或不存在路径兜底至 <app_data_dir>/scheduled-tasks-sandbox
+        let effective_cwd = resolve_effective_workflow_cwd(
+            workflow.cwd.as_deref(),
+            self.app_data_dir().as_deref(),
+        );
+
         workflow.fired_count += 1;
         workflow.last_run_at_ms = Some(now);
         if !workflow.expression.is_empty() {
@@ -1390,38 +1781,178 @@ impl WorkflowBackend {
         }
         workflow.updated_at_ms = now;
         self.store.save(&workflow);
+
         // steering 条目（§4.8 冻结模板：prompt + 第 N 次触发）
-        self.sink.enqueue_steering(
-            cron_id,
-            format!(
-                "{}（cron {} 第 {} 次触发）",
-                workflow.prompt, workflow.cron_id, workflow.fired_count
-            ),
-            now,
+        let formatted_prompt = format!(
+            "{}（cron {} 第 {} 次触发）",
+            workflow.prompt, workflow.cron_id, workflow.fired_count
         );
-        // 运行记录（命令层近似真源；生成可追踪 session_id 与完成状态）
+        self.sink
+            .enqueue_steering(cron_id, formatted_prompt.clone(), now);
+
         let run_id = format!("{}-fire-{}", workflow.cron_id, workflow.fired_count);
-        let session_id = format!("sched-{}-{}", workflow.cron_id, workflow.fired_count);
-        let record = WorkflowRunRecord {
-            workflow_id: workflow.cron_id.clone(),
-            run_id: run_id.clone(),
-            session_id: Some(session_id.clone()),
-            trigger_kind: "manual".to_string(),
-            scheduled_for_ms: now,
-            started_at_ms: now,
-            finished_at_ms: Some(now),
-            duration_ms: Some(0),
-            status: "completed".to_string(),
-            prompt: workflow.prompt.clone(),
-            error: None,
-            output_summary: Some(format!("手动立即触发成功（第 {} 次）", workflow.fired_count)),
-        };
-        self.store.append_or_update_run(record);
+        let launcher_opt = self.launcher();
+        let session_id = resolved_target_session_id.clone().unwrap_or_else(|| {
+            if launcher_opt.is_some() {
+                format!("sched-run-{}-{}", workflow.cron_id, now)
+            } else {
+                format!("sched-{}-{}", workflow.cron_id, workflow.fired_count)
+            }
+        });
+
+        if let Some(launcher) = launcher_opt {
+            // 真实 Agent 执行链路：初始落盘 running（duration_ms = None, finished_at_ms = None）
+            let running_record = WorkflowRunRecord {
+                workflow_id: workflow.cron_id.clone(),
+                run_id: run_id.clone(),
+                session_id: Some(session_id.clone()),
+                trigger_kind: "manual".to_string(),
+                scheduled_for_ms: now,
+                started_at_ms: now,
+                finished_at_ms: None,
+                duration_ms: None,
+                status: "running".to_string(),
+                prompt: workflow.prompt.clone(),
+                error: None,
+                output_summary: None,
+            };
+            self.store.append_or_update_run(running_record);
+
+            let ctx = crate::sched::ScheduledExecutionContext {
+                cron_id: workflow.cron_id.clone(),
+                run_id: run_id.clone(),
+                prompt: formatted_prompt,
+                expression: workflow.expression.clone(),
+                iteration: workflow.fired_count,
+                fired_at_ms: now,
+                scheduled_for_ms: now,
+                trigger_kind: "manual".to_string(),
+                is_daemon: workflow.is_daemon,
+                target_session_id: resolved_target_session_id,
+                cwd: effective_cwd,
+            };
+            let store = Arc::clone(&self.store);
+            let app_opt = self.app_handle();
+            let wf_id_for_task = workflow.cron_id.clone();
+            let run_id_for_task = run_id.clone();
+
+            let drive_fut = async move {
+                match launcher.launch_scheduled_task(ctx).await {
+                    Ok(handle) => {
+                        if !handle.async_terminal_managed {
+                            let finished_at = now_ms().max(now);
+                            let duration = finished_at.saturating_sub(now);
+                            let summary = handle.immediate_output_summary.unwrap_or_else(|| {
+                                format!(
+                                    "手动触发完成（会话 {}，第 {} 次）",
+                                    handle.session_id, workflow.fired_count
+                                )
+                            });
+                            store.update_run_finish(
+                                &wf_id_for_task,
+                                &run_id_for_task,
+                                "completed",
+                                finished_at,
+                                duration,
+                                None,
+                                Some(summary.clone()),
+                            );
+                            if let Some(app) = app_opt.as_ref() {
+                                emit_workflow_event(
+                                    app,
+                                    "workflow:run-Completed",
+                                    serde_json::json!({
+                                        "workflowId": wf_id_for_task,
+                                        "runId": run_id_for_task,
+                                        "sessionId": handle.session_id,
+                                        "status": "completed",
+                                        "startedAtMs": now,
+                                        "finishedAtMs": finished_at,
+                                        "durationMs": duration,
+                                        "outputSummary": summary,
+                                    }),
+                                );
+                                emit_workflow_event(
+                                    app,
+                                    "workflow:updated",
+                                    serde_json::json!({ "workflowId": wf_id_for_task }),
+                                );
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        let finished_at = now_ms().max(now);
+                        let duration = finished_at.saturating_sub(now);
+                        let err_msg = err.to_string();
+                        store.update_run_finish(
+                            &wf_id_for_task,
+                            &run_id_for_task,
+                            "failed",
+                            finished_at,
+                            duration,
+                            Some(err_msg.clone()),
+                            None,
+                        );
+                        if let Some(app) = app_opt.as_ref() {
+                            emit_workflow_event(
+                                app,
+                                "workflow:run-Completed",
+                                serde_json::json!({
+                                    "workflowId": wf_id_for_task,
+                                    "runId": run_id_for_task,
+                                    "status": "failed",
+                                    "startedAtMs": now,
+                                    "finishedAtMs": finished_at,
+                                    "durationMs": duration,
+                                    "error": err_msg,
+                                }),
+                            );
+                            emit_workflow_event(
+                                app,
+                                "workflow:updated",
+                                serde_json::json!({ "workflowId": wf_id_for_task }),
+                            );
+                        }
+                    }
+                }
+            };
+
+            if let Ok(rt) = tokio::runtime::Handle::try_current() {
+                rt.spawn(drive_fut);
+            } else {
+                std::thread::spawn(move || {
+                    if let Ok(rt) = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                    {
+                        rt.block_on(drive_fut);
+                    }
+                });
+            }
+        } else {
+            // 未注入 launcher 时（单元/集成测试环境）：兼容存量同步落盘语义
+            let record = WorkflowRunRecord {
+                workflow_id: workflow.cron_id.clone(),
+                run_id: run_id.clone(),
+                session_id: Some(session_id.clone()),
+                trigger_kind: "manual".to_string(),
+                scheduled_for_ms: now,
+                started_at_ms: now,
+                finished_at_ms: Some(now),
+                duration_ms: Some(0),
+                status: "completed".to_string(),
+                prompt: workflow.prompt.clone(),
+                error: None,
+                output_summary: Some(format!("手动立即触发成功（第 {} 次）", workflow.fired_count)),
+            };
+            self.store.append_or_update_run(record);
+        }
+
         tracing::info!(
             target: "workflow",
             cron_id,
             fired_count = workflow.fired_count,
-            "workflow 已立即触发（steering 条目已注入）"
+            "workflow 已立即触发"
         );
         Ok(TriggerResult {
             run_id: Some(run_id),
@@ -1511,14 +2042,28 @@ pub(crate) async fn create_workflow(
     cwd: Option<String>,
     mode: Option<String>,
     enabled: Option<bool>,
+    target_session_id: Option<String>,
+    execution_mode: Option<String>,
     app: tauri::AppHandle,
     state: tauri::State<'_, WorkflowCommandState>,
 ) -> Result<WorkflowCreateResponse, CoreError> {
     let schedule = parse_schedule_input(schedule.as_ref())?;
     let backend = Arc::clone(&state.inner().backend);
-    let workflow = backend
+    let mut workflow = backend
         .create(name, prompt, schedule, cwd, mode, enabled.unwrap_or(true))
         .await?;
+    if target_session_id.is_some() || execution_mode.is_some() {
+        workflow = backend
+            .update(
+                &workflow.id,
+                WorkflowPatch {
+                    target_session_id,
+                    execution_mode,
+                    ..WorkflowPatch::default()
+                },
+            )
+            .await?;
+    }
     // 全域状态广播（05 详案 §2.5）：前端 useWorkflowsState 监听后即时刷新
     emit_workflow_event(
         &app,
@@ -1553,6 +2098,8 @@ pub(crate) async fn update_workflow(
     cwd: Option<String>,
     mode: Option<String>,
     enabled: Option<bool>,
+    target_session_id: Option<String>,
+    execution_mode: Option<String>,
     app: tauri::AppHandle,
     state: tauri::State<'_, WorkflowCommandState>,
 ) -> Result<WorkflowCreateResponse, CoreError> {
@@ -1570,8 +2117,8 @@ pub(crate) async fn update_workflow(
         cwd,
         mode,
         enabled,
-        target_session_id: None,
-        execution_mode: None,
+        target_session_id,
+        execution_mode,
     };
     let backend = Arc::clone(&state.inner().backend);
     let workflow = backend.update(&workflow_id, patch).await?;
@@ -1607,7 +2154,7 @@ pub(crate) async fn delete_workflow(
     Ok(())
 }
 
-/// `trigger-workflow`：手动立即触发一次（fired_count 计入 + steering 注入）
+/// `trigger-workflow`：手动立即触发一次（fired_count 计入 + steering 注入 + 真实 Agent 驱动）
 #[tauri::command(rename = "trigger-workflow")]
 pub(crate) async fn trigger_workflow(
     workflow_id: String,
@@ -2601,5 +3148,228 @@ mod tests {
         // 保留的是 started_at_ms 最大的最新 20 条（10..30）
         let min_started = pruned.iter().map(|r| r.started_at_ms).min().unwrap();
         assert_eq!(min_started, 1000);
+    }
+
+    /// 测试桩：模拟真实异步 ScheduledTaskLauncher（支持延迟完成或终态钩子管理）
+    struct AsyncTestLauncher {
+        contexts: Mutex<Vec<crate::sched::ScheduledExecutionContext>>,
+        delay_ms: u64,
+        async_terminal_managed: bool,
+        fail_msg: Option<String>,
+    }
+
+    #[async_trait]
+    impl crate::sched::ScheduledTaskLauncher for AsyncTestLauncher {
+        async fn launch_scheduled_task(
+            &self,
+            ctx: crate::sched::ScheduledExecutionContext,
+        ) -> Result<crate::sched::ScheduledRunHandle, CoreError> {
+            self.contexts
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(ctx.clone());
+            if self.delay_ms > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(self.delay_ms)).await;
+            }
+            if let Some(msg) = &self.fail_msg {
+                return Err(CoreError::Internal(msg.clone()));
+            }
+            let session_id = ctx
+                .target_session_id
+                .unwrap_or_else(|| format!("sched-run-{}-{}", ctx.cron_id, ctx.fired_at_ms));
+            Ok(crate::sched::ScheduledRunHandle {
+                run_id: ctx.run_id,
+                session_id,
+                async_terminal_managed: self.async_terminal_managed,
+                immediate_output_summary: None,
+            })
+        }
+    }
+
+    /// 8. 终结假跑：注入真实 ScheduledTaskLauncher 时，trigger 初始写入 running（duration_ms=None），
+    ///    待异步执行或终态回写钩子完成后才跃迁为 completed / failed 并写入真实耗时与摘要
+    #[tokio::test]
+    async fn trigger_with_real_launcher_transitions_running_to_terminal() {
+        let store = Arc::new(MemoryWorkflowStore::default());
+        let sink = Arc::new(ProbeSink::default());
+        let backend = Arc::new(WorkflowBackend::new(
+            Arc::clone(&store) as Arc<dyn WorkflowStore>,
+            Arc::clone(&sink) as Arc<dyn SteeringSink>,
+        ));
+
+        let launcher = Arc::new(AsyncTestLauncher {
+            contexts: Mutex::new(Vec::new()),
+            delay_ms: 40,
+            async_terminal_managed: true,
+            fail_msg: None,
+        });
+        backend.set_launcher(Arc::clone(&launcher) as Arc<dyn crate::sched::ScheduledTaskLauncher>);
+
+        let created = backend
+            .create(
+                "真实驱动测试".to_string(),
+                "总结工作区进度".to_string(),
+                WorkflowScheduleWire::Manual,
+                None,
+                None,
+                true,
+            )
+            .await
+            .expect("创建应成功");
+
+        let res = backend.trigger(&created.id).expect("触发应成功");
+        let run_id = res.run_id.expect("应返回 run_id");
+
+        // 触发刚返回瞬间：store 内的原始记录必须是 running，且 duration_ms / finished_at_ms 均为 None
+        let raw_runs = store.load_runs();
+        assert_eq!(raw_runs.len(), 1);
+        assert_eq!(raw_runs[0].run_id, run_id);
+        assert_eq!(
+            raw_runs[0].status, "running",
+            "注入真实 launcher 后禁止同步秒回 completed 0ms 假数据"
+        );
+        assert_eq!(raw_runs[0].duration_ms, None);
+        assert_eq!(raw_runs[0].finished_at_ms, None);
+
+        // 等待异步 launcher 被调用
+        tokio::time::sleep(std::time::Duration::from_millis(60)).await;
+        assert_eq!(launcher.contexts.lock().unwrap().len(), 1);
+
+        // 模拟真实 Agent Loop 结束并触发 finish_run 回写终态
+        let finished_at = raw_runs[0].started_at_ms + 125;
+        backend.finish_run(
+            &created.id,
+            &run_id,
+            "completed",
+            finished_at,
+            125,
+            None,
+            Some("Agent 已完成定时巡检并输出报告".to_string()),
+        );
+
+        let updated_runs = store.load_runs();
+        assert_eq!(updated_runs.len(), 1);
+        assert_eq!(updated_runs[0].status, "completed");
+        assert_eq!(updated_runs[0].duration_ms, Some(125));
+        assert_eq!(updated_runs[0].finished_at_ms, Some(finished_at));
+        assert_eq!(
+            updated_runs[0].output_summary.as_deref(),
+            Some("Agent 已完成定时巡检并输出报告")
+        );
+    }
+
+    /// 9. INT-02 全局默认沙箱目录兜底：cwd 为 None 或空串时自动解析并创建 <app_data_dir>/scheduled-tasks-sandbox
+    #[test]
+    fn resolve_effective_workflow_cwd_creates_default_sandbox_int02() {
+        let unique_dir = std::env::temp_dir().join(format!(
+            "crish-int02-sandbox-test-{}",
+            now_ms()
+        ));
+        let _ = std::fs::remove_dir_all(&unique_dir);
+
+        // 1. cwd = None -> 自动创建 <unique_dir>/scheduled-tasks-sandbox
+        let resolved_none =
+            resolve_effective_workflow_cwd(None, Some(&unique_dir)).expect("应返回沙箱路径");
+        let expected_sandbox = unique_dir.join("scheduled-tasks-sandbox");
+        assert_eq!(
+            std::path::Path::new(&resolved_none),
+            expected_sandbox.as_path()
+        );
+        assert!(
+            expected_sandbox.exists() && expected_sandbox.is_dir(),
+            "默认沙箱目录必须在磁盘上被真实创建"
+        );
+
+        // 2. cwd = Some("   ") -> 同样回退到默认沙箱目录
+        let resolved_empty =
+            resolve_effective_workflow_cwd(Some("   "), Some(&unique_dir)).expect("应返回沙箱路径");
+        assert_eq!(
+            std::path::Path::new(&resolved_empty),
+            expected_sandbox.as_path()
+        );
+
+        // 3. cwd 指向真实存在目录 -> 原样返回
+        let custom_dir = unique_dir.join("custom-workspace");
+        std::fs::create_dir_all(&custom_dir).expect("创建自定义目录");
+        let custom_str = custom_dir.to_string_lossy().to_string();
+        let resolved_custom =
+            resolve_effective_workflow_cwd(Some(&custom_str), Some(&unique_dir)).unwrap();
+        assert_eq!(resolved_custom, custom_str);
+
+        let _ = std::fs::remove_dir_all(&unique_dir);
+    }
+
+    /// 10. INT-04 僵尸会话自愈：当绑定的 target_session_id 已被删除时，trigger 自动抹除脏绑定并降级至独立会话
+    #[tokio::test]
+    async fn trigger_self_heals_deleted_target_session_id_int04() {
+        let store = Arc::new(MemoryWorkflowStore::default());
+        // 仅登记 alive-session-1 存在，deleted-session-404 不存在
+        store.set_existing_sessions(vec!["alive-session-1".to_string()]);
+
+        let sink = Arc::new(ProbeSink::default());
+        let backend = Arc::new(WorkflowBackend::new(
+            Arc::clone(&store) as Arc<dyn WorkflowStore>,
+            Arc::clone(&sink) as Arc<dyn SteeringSink>,
+        ));
+
+        let launcher = Arc::new(AsyncTestLauncher {
+            contexts: Mutex::new(Vec::new()),
+            delay_ms: 10,
+            async_terminal_managed: false,
+            fail_msg: None,
+        });
+        backend.set_launcher(Arc::clone(&launcher) as Arc<dyn crate::sched::ScheduledTaskLauncher>);
+
+        let created = backend
+            .create(
+                "绑定已删会话任务".to_string(),
+                "执行检查".to_string(),
+                WorkflowScheduleWire::Manual,
+                None,
+                None,
+                true,
+            )
+            .await
+            .expect("创建应成功");
+
+        // 绑定一个已被删除的 target_session_id
+        backend
+            .update(
+                &created.id,
+                WorkflowPatch {
+                    target_session_id: Some("deleted-session-404".to_string()),
+                    execution_mode: Some("current_session".to_string()),
+                    ..WorkflowPatch::default()
+                },
+            )
+            .await
+            .expect("绑定应成功");
+
+        assert_eq!(
+            store.load_all()[0].target_session_id.as_deref(),
+            Some("deleted-session-404")
+        );
+
+        // 触发任务：应触发 INT-04 自愈降级而非报错
+        let trigger_res = backend
+            .trigger(&created.id)
+            .expect("绑定会话被删时触发必须自愈成功而非失败");
+        let fallback_sid = trigger_res.session_id.expect("应返回自愈后的独立会话 ID");
+        assert!(
+            fallback_sid.starts_with(&format!("sched-run-{}-", created.id)),
+            "应降级为独立后台会话 sched-run-*，实际: {fallback_sid}"
+        );
+
+        // 校验持久化层：target_session_id 已被自动抹除为 None，execution_mode 更新为 isolated
+        let persisted = store.load_all();
+        assert_eq!(
+            persisted[0].target_session_id, None,
+            "脏 target_session_id 必须被永久抹除"
+        );
+        assert_eq!(
+            persisted[0].execution_mode.as_deref(),
+            Some("isolated"),
+            "execution_mode 应同步自愈为 isolated"
+        );
     }
 }

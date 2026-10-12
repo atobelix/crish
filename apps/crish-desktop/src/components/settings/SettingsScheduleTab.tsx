@@ -54,6 +54,8 @@ export const SettingsScheduleTab: React.FC<Props> = ({
     runs,
     loading,
     busy,
+    togglingIds,
+    triggeringIds,
     error,
     ok,
     setError,
@@ -67,7 +69,10 @@ export const SettingsScheduleTab: React.FC<Props> = ({
     handleToggle,
     handleTrigger,
     handleDelete,
-  } = state;
+  } = state as typeof state & {
+    togglingIds?: ReadonlySet<string>;
+    triggeringIds?: ReadonlySet<string>;
+  };
 
   /** none | paths 双入口 | form 手动表单 */
   const [createMode, setCreateMode] = useState<'none' | 'paths' | 'form'>(
@@ -107,6 +112,11 @@ export const SettingsScheduleTab: React.FC<Props> = ({
     setError('');
     setOk('');
     setWfDraft(draftFromWorkflow(w));
+    requestAnimationFrame(() => {
+      document
+        .getElementById('sched-settings-form')
+        ?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    });
   };
 
   const handleOpenRunSession = (run: WorkflowRunEntry) => {
@@ -280,6 +290,8 @@ export const SettingsScheduleTab: React.FC<Props> = ({
               variant="settings"
               workflows={filtered}
               busy={busy}
+              togglingIds={togglingIds}
+              triggeringIds={triggeringIds}
               loading={loading}
               emptyCopy={emptyCopy}
               onToggle={(w) => {

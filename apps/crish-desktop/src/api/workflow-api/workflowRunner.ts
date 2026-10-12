@@ -26,11 +26,33 @@ export type WorkflowDefinition = {
   mode?: string;
   enabled?: boolean;
   schedule?: WorkflowSchedule;
+  targetSessionId?: string | null;
   createdAt?: string;
   updatedAt?: string;
   nextRunAt?: string;
   lastRunAt?: string;
   [key: string]: unknown;
+};
+
+/** WorkflowDefinition 别名 */
+export type WorkflowDef = WorkflowDefinition;
+
+export type WorkflowCreateInput = {
+  name: string;
+  prompt: string;
+  schedule?: WorkflowSchedule;
+  cwd?: string;
+  enabled?: boolean;
+  targetSessionId?: string | null;
+};
+
+export type WorkflowUpdatePatch = {
+  name?: string;
+  prompt?: string;
+  schedule?: WorkflowSchedule;
+  enabled?: boolean;
+  cwd?: string;
+  targetSessionId?: string | null;
 };
 
 /** Rust 侧 wire 形状（camelCase；与 WorkflowDefinition 同构） */
@@ -42,6 +64,7 @@ type WorkflowWire = {
   mode?: string | null;
   enabled: boolean;
   schedule?: WorkflowSchedule;
+  targetSessionId?: string | null;
   createdAt: string;
   updatedAt: string;
   nextRunAt?: string | null;
@@ -66,6 +89,9 @@ function parseWorkflowWire(
   if (w.cwd != null) out.cwd = String(w.cwd);
   if (w.mode != null) out.mode = String(w.mode);
   if (w.schedule != null) out.schedule = w.schedule as WorkflowSchedule;
+  if (w.targetSessionId != null && String(w.targetSessionId).trim() !== '') {
+    out.targetSessionId = String(w.targetSessionId);
+  }
   for (const key of [
     'createdAt',
     'updatedAt',
@@ -96,13 +122,7 @@ export async function listWorkflows(): Promise<WorkflowDefinition[]> {
 }
 
 /** 创建：真实走 create-workflow 命令（三态：missing 未就绪 / error 透传消息与错误码） */
-export async function createWorkflow(input: {
-  name: string;
-  prompt: string;
-  schedule?: WorkflowSchedule;
-  cwd?: string;
-  enabled?: boolean;
-}): Promise<{
+export async function createWorkflow(input: WorkflowCreateInput): Promise<{
   ok: boolean;
   workflow?: WorkflowDefinition;
   error?: string;
@@ -114,6 +134,9 @@ export async function createWorkflow(input: {
     schedule: input.schedule,
     ...(input.cwd !== undefined && { cwd: input.cwd }),
     ...(input.enabled !== undefined && { enabled: input.enabled }),
+    ...(input.targetSessionId !== undefined && {
+      targetSessionId: input.targetSessionId,
+    }),
   });
   if (res.status === 'missing') {
     return {
@@ -135,13 +158,7 @@ export async function createWorkflow(input: {
 /** 更新：真实走 update-workflow 命令（部分字段补丁；三态语义同创建） */
 export async function updateWorkflow(
   workflowId: string,
-  patch: {
-    name?: string;
-    prompt?: string;
-    schedule?: WorkflowSchedule;
-    enabled?: boolean;
-    cwd?: string;
-  }
+  patch: WorkflowUpdatePatch
 ): Promise<{
   ok: boolean;
   workflow?: WorkflowDefinition;
@@ -155,6 +172,9 @@ export async function updateWorkflow(
     ...(patch.schedule !== undefined && { schedule: patch.schedule }),
     ...(patch.enabled !== undefined && { enabled: patch.enabled }),
     ...(patch.cwd !== undefined && { cwd: patch.cwd }),
+    ...(patch.targetSessionId !== undefined && {
+      targetSessionId: patch.targetSessionId,
+    }),
   });
   if (res.status === 'missing') {
     return {
@@ -216,6 +236,15 @@ export async function triggerWorkflow(workflowId: string): Promise<{
   return out;
 }
 
+export type WorkflowRunStatus =
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'interrupted'
+  | 'queued'
+  | 'cancelled'
+  | 'pending';
+
 /** 引擎 workflow 运行历史 */
 export type WorkflowRunEntry = {
   workflowId: string;
@@ -269,6 +298,7 @@ export function workflowRunStatusLabel(status?: string): string {
   if (s === 'failed' || s === 'error' || s === 'errored') return '失败';
   if (s === 'cancelled' || s === 'canceled') return '已取消';
   if (s === 'interrupted') return '已中断';
+  if (s === 'queued') return '排队中';
   return status || '未知';
 }
 

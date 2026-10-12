@@ -4,30 +4,48 @@
  */
 import {
   canReplaceSessionTitleWithScheduled,
-  emptyWorkflowDraft,
   scheduledSessionTitle,
   type WorkflowDefinition,
   type WorkflowRunEntry,
-  type WorkflowScheduleDraft,
 } from '../../api/workflowApi';
+import {
+  cronExpressionLabel,
+  validateCronExpressionClient,
+  type ClientCronValidationResult,
+} from '../../api/workflow-api/workflowScheduler';
+import {
+  draftFromWorkflow,
+  type WorkflowDraft,
+  type WorkflowExecutionTarget,
+  type WorkflowScheduleDraft,
+} from '../../api/workflow-api/workflowDraft';
 import {
   createSession,
   getSessionById,
   renameSession,
 } from '../../api/storeAccess';
 import { useSessionStore } from '../../store/storeAccess';
-
-/** 面板读取计划超时（settings 双计时共用） */
-export const WORKFLOWS_LOAD_TIMEOUT_MS = 12_000;
-
-export type WorkflowsSurface = 'settings' | 'chat';
-
 import {
   readWorkflowsCache,
   writeWorkflowsCache,
   readWorkflowRunsCache,
   writeWorkflowRunsCache,
 } from '../../api/cache/runtimeCache';
+
+export {
+  cronExpressionLabel,
+  validateCronExpressionClient,
+  draftFromWorkflow,
+  type ClientCronValidationResult,
+  type WorkflowDraft,
+  type WorkflowExecutionTarget,
+  type WorkflowScheduleDraft,
+};
+
+/** 面板读取计划超时（settings 双计时共用） */
+export const WORKFLOWS_LOAD_TIMEOUT_MS = 12_000;
+
+export type WorkflowsSurface = 'settings' | 'chat';
 
 export function loadWorkflowsCache(): WorkflowDefinition[] {
   return readWorkflowsCache();
@@ -61,7 +79,10 @@ function scheduleTypeOf(w: WorkflowDefinition): string {
   return String((s as { type?: string }).type || 'manual');
 }
 
-export function matchesFilter(w: WorkflowDefinition, filter: ScheduleFilter): boolean {
+export function matchesFilter(
+  w: WorkflowDefinition,
+  filter: ScheduleFilter
+): boolean {
   const enabled = w.enabled !== false;
   const st = scheduleTypeOf(w);
   switch (filter) {
@@ -72,34 +93,10 @@ export function matchesFilter(w: WorkflowDefinition, filter: ScheduleFilter): bo
     case 'manual':
       return st === 'manual';
     case 'timed':
-      return st === 'daily' || st === 'intervalMinutes';
+      return st === 'daily' || st === 'intervalMinutes' || st === 'cron';
     default:
       return true;
   }
-}
-
-/** 从 workflow 回填编辑草稿（daily / intervalMinutes / manual 三态） */
-export function draftFromWorkflow(w: WorkflowDefinition): WorkflowScheduleDraft {
-  const d = emptyWorkflowDraft();
-  d.name = w.name;
-  d.prompt = w.prompt || '';
-  d.cwd = w.cwd || '';
-  const s = w.schedule;
-  if (s && typeof s === 'object') {
-    const sch = s as { type?: string; time?: string; minutes?: number };
-    if (sch.type === 'daily') {
-      d.scheduleType = 'daily';
-      d.dailyTime = sch.time || '';
-    } else if (sch.type === 'intervalMinutes') {
-      d.scheduleType = 'intervalMinutes';
-      d.intervalMinutes = String(sch.minutes ?? '');
-    } else {
-      d.scheduleType = 'manual';
-    }
-  } else {
-    d.scheduleType = 'manual';
-  }
-  return d;
 }
 
 /**
@@ -114,7 +111,7 @@ export function ensureScheduledSession(
     prompt?: string;
     status?: string;
     startedAt?: number;
-  },
+  }
 ) {
   if (!sessionId) return;
   const title = scheduledSessionTitle(workflowName);
@@ -135,7 +132,10 @@ export function ensureScheduledSession(
 
   // 保证会话中包含初始运行记录与提示词消息，避免用户点进会话呈现空白
   const currentSess = getSessionById(sessionId);
-  if (currentSess && (!currentSess.messages || currentSess.messages.length === 0)) {
+  if (
+    currentSess &&
+    (!currentSess.messages || currentSess.messages.length === 0)
+  ) {
     const promptText = (opts?.prompt || '').trim() || '定时任务触发执行';
     const timestamp = opts?.startedAt || Date.now();
     const wsId = 'default';

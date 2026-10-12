@@ -52,6 +52,8 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
     runs,
     loading,
     busy,
+    togglingIds,
+    triggeringIds,
     error,
     ok,
     setError,
@@ -62,7 +64,10 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
     handleTrigger,
     handleDelete,
     maybeWatchHint,
-  } = state;
+  } = state as typeof state & {
+    togglingIds?: ReadonlySet<string>;
+    triggeringIds?: ReadonlySet<string>;
+  };
 
   const [showForm, setShowForm] = useState(false);
   const [editingWorkflow, setEditingWorkflow] =
@@ -95,11 +100,17 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
   };
 
   const handleEdit = (w: WorkflowDefinition) => {
+    setCreateMenuOpen(false);
     setShowForm(true);
     setEditingWorkflow(w);
     setError('');
     setOk('');
     setDraft(draftFromWorkflow(w));
+    requestAnimationFrame(() => {
+      document
+        .getElementById('sched-in-chat-form')
+        ?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    });
   };
 
   const openRunSession = (run: WorkflowRunEntry) => {
@@ -296,6 +307,8 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
         variant="chat"
         workflows={workflows}
         busy={busy}
+        togglingIds={togglingIds}
+        triggeringIds={triggeringIds}
         loading={loading}
         emptyCopy={emptyCopy}
         onToggle={(w) => {
