@@ -10,6 +10,7 @@ assets/
 !apps/crish-desktop/src/assets/
 *.tsbuildinfo
 target-tauri-dev/
+target-test/
 
 # Tauri
 **/target/
