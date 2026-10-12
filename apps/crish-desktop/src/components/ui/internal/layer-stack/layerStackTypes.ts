@@ -21,7 +21,8 @@ export type DismissReason =
   | 'outside-pointer' // 点击外部区域退出
   | 'item-select' // 选中菜单项退出
   | 'programmatic' // 代码显式命令式调用退出
-  | 'parent-dismissed'; // 父层被销毁导致级联关闭
+  | 'parent-dismissed' // 父层被销毁导致级联关闭
+  | 'interaction'; // 全局交互（如分屏拖拽/窗口重置）避险退出
 
 export interface LayerRegistration {
   /** 唯一标识 */

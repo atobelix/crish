@@ -12,7 +12,7 @@
  */
 import type React from 'react';
 import type {
-  DismissReason as BaseDismissReason,
+  DismissReason,
   LayerRegistration,
   LayerTraceRecord,
   DismissedByPointerSnapshot,
@@ -29,13 +29,12 @@ import { LayerStackListeners } from './layerStackListeners';
 // 拆分自本文件的子模块 re-export，保证消费方 import 路径不变
 export type { StackListener } from './layerStackListeners';
 export type {
+  DismissReason,
   LayerType,
   LayerRegistration,
   LayerTraceRecord,
   DismissedByPointerSnapshot,
 } from './layerStackTypes';
-
-export type DismissReason = BaseDismissReason | 'interaction';
 
 const getNow = (): number =>
   typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -515,7 +514,7 @@ export class LayerStackManager {
     }
 
     try {
-      layer.onDismiss(reason as any);
+      layer.onDismiss(reason);
     } catch (err) {
       console.error('[LayerStackManager] Error in layer onDismiss:', err);
     }
