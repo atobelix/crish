@@ -20,7 +20,10 @@ export type UseSettingsNavOptions = {
   /** rules 弹窗打开时 Esc / 快捷键全部让位 */
   rulesModalOpen: boolean;
   /** 选中 tab（壳层实现：写 store + 可选焦点移动） */
-  selectTab: (tab: TabType, opts?: { focusTab?: boolean; focusPanel?: boolean }) => void;
+  selectTab: (
+    tab: TabType,
+    opts?: { focusTab?: boolean; focusPanel?: boolean }
+  ) => void;
   /** roving 焦点状态（壳层持有；selectTab / onFocusTab 写入） */
   navFocusId: TabType | null;
 };
@@ -46,8 +49,17 @@ export type UseSettingsNavResult = {
   handleSettingsEscape: (event: KeyboardEvent) => boolean;
 };
 
-export function useSettingsNav(opts: UseSettingsNavOptions): UseSettingsNavResult {
-  const { mcpAvailable, safeActiveTab, onClose, rulesModalOpen, selectTab, navFocusId } = opts;
+export function useSettingsNav(
+  opts: UseSettingsNavOptions
+): UseSettingsNavResult {
+  const {
+    mcpAvailable,
+    safeActiveTab,
+    onClose,
+    rulesModalOpen,
+    selectTab,
+    navFocusId,
+  } = opts;
   const [navQuery, setNavQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -66,29 +78,39 @@ export function useSettingsNav(opts: UseSettingsNavOptions): UseSettingsNavResul
       onClose();
       return true;
     },
-    [onClose, rulesModalOpen, navQuery],
+    [onClose, rulesModalOpen, navQuery]
   );
 
   // / or Ctrl+F focuses sidebar search
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (rulesModalOpen) return;
+      const input = searchInputRef.current;
+      if (!input) return;
+      // 容器可见性守卫：如果 settings 搜索框不可见（未挂载/隐藏/在后台），不响应全局热键
+      if (input.offsetWidth === 0 && input.offsetHeight === 0) {
+        return;
+      }
       const el = e.target as HTMLElement | null;
       if (
         el &&
         (el.tagName === 'INPUT' ||
           el.tagName === 'TEXTAREA' ||
           el.tagName === 'SELECT' ||
-          el.isContentEditable)
+          el.isContentEditable ||
+          Boolean(
+            el.closest?.('input, textarea, select, [contenteditable="true"]')
+          ))
       ) {
         return;
       }
-      const isFind = (e.key === 'f' || e.key === 'F') && (e.ctrlKey || e.metaKey);
+      const isFind =
+        (e.key === 'f' || e.key === 'F') && (e.ctrlKey || e.metaKey);
       const isSlash = e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey;
       if (!isFind && !isSlash) return;
       e.preventDefault();
-      searchInputRef.current?.focus();
-      searchInputRef.current?.select();
+      input.focus();
+      input.select();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
@@ -98,14 +120,17 @@ export function useSettingsNav(opts: UseSettingsNavOptions): UseSettingsNavResul
     const q = navQuery.trim().toLowerCase();
     return TAB_META.filter((t) => {
       if (t.demoOnly && !isDemoMode()) return false;
-      if (!(allowedTabIds(mcpAvailable) as string[]).includes(t.id)) return false;
+      if (!(allowedTabIds(mcpAvailable) as string[]).includes(t.id))
+        return false;
       return tabMatchesQuery(t, q);
     });
   }, [navQuery, mcpAvailable]);
 
   // 过滤后若当前页不可见：仍保留内容，但 roving 焦点落到首项
   const rovingId: TabType =
-    (navFocusId && visibleTabs.some((t) => t.id === navFocusId) && navFocusId) ||
+    (navFocusId &&
+      visibleTabs.some((t) => t.id === navFocusId) &&
+      navFocusId) ||
     (visibleTabs.some((t) => t.id === safeActiveTab)
       ? safeActiveTab
       : visibleTabs[0]?.id) ||
@@ -115,12 +140,20 @@ export function useSettingsNav(opts: UseSettingsNavOptions): UseSettingsNavResul
   const onTablistKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (visibleTabs.length === 0) return;
-      const keys = ['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'];
+      const keys = [
+        'ArrowDown',
+        'ArrowUp',
+        'ArrowRight',
+        'ArrowLeft',
+        'Home',
+        'End',
+      ];
       if (!keys.includes(e.key)) return;
 
       const ids = visibleTabs.map((t) => t.id);
       const activeEl = document.activeElement as HTMLElement | null;
-      const focusedId = (activeEl?.getAttribute?.('data-settings-tab-id') || '') as TabType | '';
+      const focusedId = (activeEl?.getAttribute?.('data-settings-tab-id') ||
+        '') as TabType | '';
       let idx = focusedId ? ids.indexOf(focusedId) : -1;
       if (idx < 0) {
         idx = ids.indexOf(rovingId);
@@ -142,7 +175,7 @@ export function useSettingsNav(opts: UseSettingsNavOptions): UseSettingsNavResul
       // 方向键：移动焦点并选中（设置页切换应即时可见）
       selectTab(nextId, { focusTab: true });
     },
-    [visibleTabs, rovingId, selectTab],
+    [visibleTabs, rovingId, selectTab]
   );
 
   const onSearchKeyDown = useCallback(
@@ -157,11 +190,12 @@ export function useSettingsNav(opts: UseSettingsNavOptions): UseSettingsNavResul
         if (e.nativeEvent?.isComposing || e.keyCode === 229) return;
         e.preventDefault();
         const hit =
-          visibleTabs.find((t) => t.id === safeActiveTab)?.id ?? visibleTabs[0]!.id;
+          visibleTabs.find((t) => t.id === safeActiveTab)?.id ??
+          visibleTabs[0]!.id;
         selectTab(hit, { focusPanel: true });
       }
     },
-    [visibleTabs, safeActiveTab, selectTab],
+    [visibleTabs, safeActiveTab, selectTab]
   );
 
   const activeLabel =

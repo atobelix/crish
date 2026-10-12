@@ -70,10 +70,7 @@ export interface SessionActions {
   setActiveAgentId: (id: string | null) => void;
   setPanelAgentId: (id: string | null) => void;
   /** 进入草稿态：active = 哨兵（可 per-tab），sessions 不增条目 */
-  enterDraftMode: (
-    folder?: string,
-    opts?: { draftSessionId?: string }
-  ) => void;
+  enterDraftMode: (folder?: string, opts?: { draftSessionId?: string }) => void;
   /** 更新草稿绑定 folder（项目切换时） */
   setDraftFolder: (folder: string) => void;
   /** 退出草稿：清空 draftFolder；若 active 为草稿则清空 active */
@@ -83,7 +80,11 @@ export interface SessionActions {
    * 已有真实 active → 原样返回该 id。
    * 契约：始终返回可用 session id（不再依赖调用方 createSession 兜底）。
    */
-  commitDraftIfNeeded: (opts?: { title?: string; folder?: string }) => string;
+  commitDraftIfNeeded: (opts?: {
+    title?: string;
+    folder?: string;
+    draftSessionId?: string;
+  }) => string;
   upsertSessionAgent: (sessionId: string, agent: SessionAgent) => void;
   patchSessionAgent: (
     sessionId: string,

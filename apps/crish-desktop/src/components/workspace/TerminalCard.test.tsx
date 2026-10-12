@@ -11,6 +11,12 @@ import * as path from 'node:path';
 import { TerminalCard } from './TerminalCard';
 import { mockTauriCommand, mockTauriMissing } from '../../test-setup';
 import { resetPtyRegistryForTests } from '../../api/ptyRegistry';
+import {
+  createPtyWriteGate,
+  MAX_PENDING_BYTES,
+  CHUNK_FLUSH_BYTES,
+  OVERFLOW_WARNING,
+} from './ptyWriteGate';
 import styles from './TerminalCard.module.css';
 
 describe('TerminalCard', () => {
@@ -137,13 +143,11 @@ describe('TerminalCard', () => {
 
   it('exposes fit on InteractiveXtermTerminal ref and can be called safely', async () => {
     const { InteractiveXtermTerminal } = await import('./TerminalCard.xterm');
-    const ref = React.createRef<import('./TerminalCard.xterm').InteractiveXtermHandle>();
+    const ref =
+      React.createRef<import('./TerminalCard.xterm').InteractiveXtermHandle>();
 
     render(
-      <InteractiveXtermTerminal
-        ref={ref}
-        sessionKey="ref-test-session"
-      />
+      <InteractiveXtermTerminal ref={ref} sessionKey="ref-test-session" />
     );
 
     expect(ref.current).not.toBeNull();
@@ -211,7 +215,8 @@ describe('TerminalCard', () => {
   });
 
   it('applyPersonalization 注入 surface/text 独立侧；--terminal-* 由 tokens.css 派生（不再 JS 注入）', async () => {
-    const { applyPersonalization } = await import('../../api/themePersonalization');
+    const { applyPersonalization } =
+      await import('../../api/themePersonalization');
     const root = document.documentElement;
 
     // 1. 应用 warm-gray 浅色皮肤
@@ -281,15 +286,20 @@ describe('TerminalCard', () => {
     expect(tokensCss).toContain('--terminal-fg: var(--text-primary');
     expect(tokensCss).toContain('--terminal-cmd: var(--text-primary');
     expect(tokensCss.match(/--terminal-bg:\s*var\(--bg-card/g)).toHaveLength(2);
-    expect(tokensCss.match(/--terminal-fg:\s*var\(--text-primary/g)).toHaveLength(2);
+    expect(
+      tokensCss.match(/--terminal-fg:\s*var\(--text-primary/g)
+    ).toHaveLength(2);
   });
 
   it('document data-theme 切换时动态触发 xterm 实例主题色刷新', async () => {
     const { InteractiveXtermTerminal } = await import('./TerminalCard.xterm');
-    const ref = React.createRef<import('./TerminalCard.xterm').InteractiveXtermHandle>();
+    const ref =
+      React.createRef<import('./TerminalCard.xterm').InteractiveXtermHandle>();
 
     document.documentElement.setAttribute('data-theme', 'light');
-    render(<InteractiveXtermTerminal ref={ref} sessionKey="theme-switch-session" />);
+    render(
+      <InteractiveXtermTerminal ref={ref} sessionKey="theme-switch-session" />
+    );
 
     // 触发主题切换为 dark
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -308,15 +318,20 @@ describe('TerminalCard', () => {
 
   it('document style 变化时通过 MutationObserver 触发 xterm 实例主题色刷新', async () => {
     const { InteractiveXtermTerminal } = await import('./TerminalCard.xterm');
-    const ref = React.createRef<import('./TerminalCard.xterm').InteractiveXtermHandle>();
+    const ref =
+      React.createRef<import('./TerminalCard.xterm').InteractiveXtermHandle>();
 
-    render(<InteractiveXtermTerminal ref={ref} sessionKey="style-switch-session" />);
+    render(
+      <InteractiveXtermTerminal ref={ref} sessionKey="style-switch-session" />
+    );
 
     // 修改 style 属性（如用户切换个性化皮肤调色）
     document.documentElement.style.setProperty('--terminal-bg', '#fafafa');
 
     await waitFor(() => {
-      expect(document.documentElement.style.getPropertyValue('--terminal-bg')).toBe('#fafafa');
+      expect(
+        document.documentElement.style.getPropertyValue('--terminal-bg')
+      ).toBe('#fafafa');
     });
 
     document.documentElement.style.removeProperty('--terminal-bg');
@@ -378,5 +393,185 @@ describe('TerminalCard', () => {
     expect(writeSpy).toHaveBeenCalledWith('PS C:\\repo> npm test\r\n');
 
     writeSpy.mockRestore();
+  });
+});
+
+describe('ptyWriteGate PTY 流控门闩与异常自愈状态机', () => {
+  it('隐藏态遵循 write=0 门闩，仅进入缓冲并在显现后排空', () => {
+    const written: string[] = [];
+    const gate = createPtyWriteGate({ write: (d) => written.push(d) }, true);
+
+    expect(gate.isHidden()).toBe(true);
+    gate.write('chunk-1\n');
+    gate.write('chunk-2\n');
+
+    // 隐藏期 strict write=0
+    expect(written).toEqual([]);
+    expect(gate.pendingCount()).toBe(2);
+    expect(gate.pendingLength()).toBe('chunk-1\nchunk-2\n'.length);
+
+    // 显现后排空
+    gate.setHidden(false);
+    gate.flushAllPending();
+
+    expect(written).toEqual(['chunk-1\n', 'chunk-2\n']);
+    expect(gate.pendingCount()).toBe(0);
+    expect(gate.pendingLength()).toBe(0);
+  });
+
+  it('512KB 有界上限拦截与最旧数据截断', () => {
+    const written: string[] = [];
+    const gate = createPtyWriteGate({ write: (d) => written.push(d) }, true);
+
+    // 写入 600KB 单块数据（超过 512KB 上限）
+    const largePayload = 'A'.repeat(600 * 1024);
+    gate.write(largePayload);
+
+    // 必须被有界门闩拦截在 512KB 之内
+    expect(gate.pendingLength()).toBeLessThanOrEqual(MAX_PENDING_BYTES);
+    expect(gate.pendingLength()).toBe(MAX_PENDING_BYTES);
+    expect(gate.hasOverflowWarning()).toBe(true);
+
+    gate.setHidden(false);
+    gate.flushAllPending();
+
+    // 合并写入总长度正好等于 512KB
+    const totalFlushed = written.join('');
+    expect(totalFlushed.length).toBe(MAX_PENDING_BYTES);
+    // 头部为 ANSI 警告，尾部为最新的 A 字符
+    expect(totalFlushed.startsWith(OVERFLOW_WARNING)).toBe(true);
+    expect(totalFlushed.endsWith('A'.repeat(100))).toBe(true);
+  });
+
+  it('多块数据累加超过 512KB 时截断最旧块并注入 ANSI 警示', () => {
+    const written: string[] = [];
+    const gate = createPtyWriteGate({ write: (d) => written.push(d) }, true);
+
+    const chunk1 = '1'.repeat(300 * 1024);
+    const chunk2 = '2'.repeat(300 * 1024);
+    gate.write(chunk1);
+    expect(gate.hasOverflowWarning()).toBe(false);
+
+    gate.write(chunk2);
+    expect(gate.hasOverflowWarning()).toBe(true);
+    expect(gate.pendingLength()).toBeLessThanOrEqual(MAX_PENDING_BYTES);
+
+    gate.setHidden(false);
+    gate.flushAllPending();
+
+    const output = written.join('');
+    expect(output.startsWith(OVERFLOW_WARNING)).toBe(true);
+    // 最旧的 1 被部分截断，而最新的 2 完整保留在尾部
+    expect(output.endsWith(chunk2)).toBe(true);
+    expect(output.includes(OVERFLOW_WARNING)).toBe(true);
+  });
+
+  it('分片排空：单帧 rAF 写入上限限制在 32KB', () => {
+    const written: string[] = [];
+    const gate = createPtyWriteGate({ write: (d) => written.push(d) }, true);
+
+    // 写入 100KB 数据
+    const payload = 'B'.repeat(100 * 1024);
+    gate.write(payload);
+    gate.setHidden(false);
+
+    // 帧 1：应精准写入 32KB
+    const frame1 = gate.flushFrame();
+    expect(frame1.bytesWritten).toBe(CHUNK_FLUSH_BYTES);
+    expect(written.length).toBe(1);
+    expect(written[0].length).toBe(CHUNK_FLUSH_BYTES);
+    expect(frame1.remaining).toBe(100 * 1024 - CHUNK_FLUSH_BYTES);
+
+    // 帧 2：再次写入 32KB
+    const frame2 = gate.flushFrame();
+    expect(frame2.bytesWritten).toBe(CHUNK_FLUSH_BYTES);
+    expect(written.length).toBe(2);
+    expect(written[1].length).toBe(CHUNK_FLUSH_BYTES);
+    expect(frame2.remaining).toBe(100 * 1024 - 2 * CHUNK_FLUSH_BYTES);
+
+    // 帧 3：再次写入 32KB
+    const frame3 = gate.flushFrame();
+    expect(frame3.bytesWritten).toBe(CHUNK_FLUSH_BYTES);
+    expect(written.length).toBe(3);
+    expect(frame3.remaining).toBe(100 * 1024 - 3 * CHUNK_FLUSH_BYTES);
+
+    // 帧 4：剩余 4KB 写入完毕
+    const frame4 = gate.flushFrame();
+    expect(frame4.bytesWritten).toBe(100 * 1024 - 3 * CHUNK_FLUSH_BYTES);
+    expect(frame4.remaining).toBe(0);
+    expect(gate.pendingLength()).toBe(0);
+
+    // 验证全部重组后的数据一致性
+    expect(written.join('')).toBe(payload);
+  });
+
+  it('try/catch 异常捕获与自愈排空状态机，防止白屏', () => {
+    let shouldThrow = true;
+    const target = {
+      write: (data: string) => {
+        if (shouldThrow) {
+          throw new Error('xterm instance disposed or reset in progress');
+        }
+      },
+    };
+
+    const gate = createPtyWriteGate(target, true);
+    gate.write('test-data-before-crash\n');
+
+    gate.setHidden(false);
+
+    // 执行排空，内部应当捕获错误并触发自愈重置，不向上抛出异常
+    expect(() => {
+      gate.flushFrame();
+    }).not.toThrow();
+
+    // 队列应当被清空，避免无效死循环抛错
+    expect(gate.pendingCount()).toBe(0);
+    expect(gate.pendingLength()).toBe(0);
+
+    // 验证自愈恢复：当底层终端恢复健康后，后续写入与排空正常运作
+    shouldThrow = false;
+    const healthyWritten: string[] = [];
+    const healthyGate = createPtyWriteGate(
+      { write: (d) => healthyWritten.push(d) },
+      false
+    );
+
+    healthyGate.write('recovered-command-output\n');
+    healthyGate.flushAllPending();
+    expect(healthyWritten).toEqual(['recovered-command-output\n']);
+  });
+
+  it('连续多次溢出时不重复堆叠 ANSI 警告，被消费后再次溢出可重新注入', () => {
+    const written: string[] = [];
+    const gate = createPtyWriteGate({ write: (d) => written.push(d) }, true);
+
+    // 第一次溢出
+    gate.write('X'.repeat(400 * 1024));
+    gate.write('Y'.repeat(300 * 1024));
+    expect(gate.hasOverflowWarning()).toBe(true);
+
+    // 再次写入大块数据造成二次溢出，警告应保持在头部而不重复堆叠
+    gate.write('Z'.repeat(200 * 1024));
+    expect(gate.pendingLength()).toBeLessThanOrEqual(MAX_PENDING_BYTES);
+
+    gate.setHidden(false);
+    gate.flushAllPending();
+
+    const output = written.join('');
+    // 头部有且仅出现一次 ANSI 警告
+    const matches = output.match(
+      /\[Conex Stream Gate: High output rate capped at 512KB\]/g
+    );
+    expect(matches).not.toBeNull();
+    expect(matches?.length).toBe(1);
+
+    // 此时队列已排空，警告已被消费
+    expect(gate.hasOverflowWarning()).toBe(false);
+
+    // 再次涌入超过 512KB 数据，应当能重新注入新的警告
+    gate.setHidden(true);
+    gate.write('W'.repeat(600 * 1024));
+    expect(gate.hasOverflowWarning()).toBe(true);
   });
 });

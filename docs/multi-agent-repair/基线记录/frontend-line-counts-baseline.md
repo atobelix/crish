@@ -116,7 +116,8 @@ apps/crish-desktop/src/api/conversation/ConversationAssembler.ts 394
 apps/crish-desktop/src/api/modelsCatalogActions.ts 378
 apps/crish-desktop/src/api/modelsCatalogStore.ts 375
 apps/crish-desktop/src/api/ptySessionApi.ts 396
-apps/crish-desktop/src/api/sessionEventProjection.ts 350
+apps/crish-desktop/src/api/session-persistence/sessionHydrationMessages.ts 508
+apps/crish-desktop/src/api/sessionEventProjection.ts 427
 apps/crish-desktop/src/api/sessionTitle.ts 348
 apps/crish-desktop/src/api/toolFeedbackDiff.ts 341
 apps/crish-desktop/src/api/transport/tauriTransport.ts 381
@@ -141,15 +142,15 @@ apps/crish-desktop/src/components/ui/PreviewCard/PreviewCard.tsx 683
 apps/crish-desktop/src/components/ui/ScrollArea/ScrollArea.tsx 429
 apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx 473
 apps/crish-desktop/src/components/ui/icons/iconMap.ts 509
-apps/crish-desktop/src/components/ui/internal/layer-stack/LayerStackManager.ts 487
+apps/crish-desktop/src/components/ui/internal/layer-stack/LayerStackManager.ts 635
 apps/crish-desktop/src/components/workspace/useXtermTerminal.ts 528
 apps/crish-desktop/src/hooks/chat-stream/helpers.ts 415
-apps/crish-desktop/src/hooks/chat-stream/slashSendPreflight.ts 380
+apps/crish-desktop/src/hooks/chat-stream/slashSendPreflight.ts 382
 apps/crish-desktop/src/services/TokenRuntimeController.ts 523
 apps/crish-desktop/src/store/layout-tree/layoutTreeStore.ts 435
 apps/crish-desktop/src/store/layout-tree/sessionTabMigration.ts 501
 apps/crish-desktop/src/store/sessionCrudActions.ts 392
-apps/crish-desktop/src/store/sessionSharedHelpers.messageMerge.ts 353
+apps/crish-desktop/src/store/sessionSharedHelpers.messageMerge.ts 364
 apps/crish-desktop/src/store/types.ts 370
 apps/crish-desktop/src/workers/worker-pool.ts 356
 <!-- BASELINE_END -->

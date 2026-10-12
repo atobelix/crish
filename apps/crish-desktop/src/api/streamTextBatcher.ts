@@ -18,7 +18,8 @@ export type StreamValueBatcherOptions<T> = {
   /** 合并间隔（ms），默认 48；≤0 表示 push 后立即 flush（仍会先合并同 tick 内多次 push 需配合手动 flushNow） */
   intervalMs?: number | undefined;
   /** 定时器工厂（可测） */
-  setTimer?: ((fn: () => void, ms: number) => ReturnType<typeof setTimeout>) | undefined;
+  setTimer?:
+    ((fn: () => void, ms: number) => ReturnType<typeof setTimeout>) | undefined;
   clearTimer?: ((id: ReturnType<typeof setTimeout>) => void) | undefined;
   /** 同 key 再次 push 时合并；默认覆盖为最新值 */
   merge?: ((prev: T, next: T) => T) | undefined;
@@ -34,9 +35,10 @@ export type StreamValueBatcherOptions<T> = {
   maxBufferedSize?: number | undefined;
   /**
    * 单条 pending 的 size 估算；用于 maxBufferedSize。
+   * 支持传入 (value, key) 以便按 key 度量增量 buffer。
    * 默认：string 用 length，其余按 1。
    */
-  estimateSize?: ((value: T) => number) | undefined;
+  estimateSize?: ((value: T, key: string) => number) | undefined;
 };
 
 /**
@@ -51,22 +53,31 @@ export class StreamValueBatcher<T> {
   /** 嵌套 flushNow 请求：外层结束后再刷一轮 */
   private flushAgain = false;
   private readonly intervalMs: number;
-  private readonly setTimer: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
+  private readonly setTimer: (
+    fn: () => void,
+    ms: number
+  ) => ReturnType<typeof setTimeout>;
   private readonly clearTimer: (id: ReturnType<typeof setTimeout>) => void;
   private readonly onFlush: StreamValueFlush<T>;
   private readonly merge?: ((prev: T, next: T) => T) | undefined;
   private readonly maxPendingKeys: number | null;
   private readonly maxBufferedSize: number | null;
-  private readonly estimateSize: (value: T) => number;
+  private readonly estimateSize: (value: T, key: string) => number;
 
-  constructor(onFlush: StreamValueFlush<T>, options: StreamValueBatcherOptions<T> = {}) {
+  constructor(
+    onFlush: StreamValueFlush<T>,
+    options: StreamValueBatcherOptions<T> = {}
+  ) {
     this.onFlush = onFlush;
     const rawInterval = options.intervalMs ?? 48;
     // 负值钳为 0（同步 flush 路径）；正数保持
-    this.intervalMs = Number.isFinite(rawInterval) ? Math.max(0, rawInterval) : 48;
+    this.intervalMs = Number.isFinite(rawInterval)
+      ? Math.max(0, rawInterval)
+      : 48;
     this.setTimer = options.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
     this.clearTimer =
-      options.clearTimer ?? ((id) => clearTimeout(id as ReturnType<typeof setTimeout>));
+      options.clearTimer ??
+      ((id) => clearTimeout(id as ReturnType<typeof setTimeout>));
     this.merge = options.merge;
     this.maxPendingKeys =
       options.maxPendingKeys != null && options.maxPendingKeys > 0
@@ -179,17 +190,23 @@ export class StreamValueBatcher<T> {
   /** 当前 pending 累计估算 size（诊断 / 测试） */
   bufferedSize(): number {
     let total = 0;
-    for (const value of this.pending.values()) {
-      total += this.estimateSize(value);
+    for (const [key, value] of this.pending.entries()) {
+      total += this.estimateSize(value, key);
     }
     return total;
   }
 
   private shouldForceFlush(): boolean {
-    if (this.maxPendingKeys != null && this.pending.size >= this.maxPendingKeys) {
+    if (
+      this.maxPendingKeys != null &&
+      this.pending.size >= this.maxPendingKeys
+    ) {
       return true;
     }
-    if (this.maxBufferedSize != null && this.bufferedSize() >= this.maxBufferedSize) {
+    if (
+      this.maxBufferedSize != null &&
+      this.bufferedSize() >= this.maxBufferedSize
+    ) {
       return true;
     }
     return false;
@@ -245,8 +262,8 @@ export type StreamTextBatcherOptions = {
   /** pending key 数上限，触达则强制 flush */
   maxPendingKeys?: number;
   /**
-   * 全部 pending 文本字符数上限，触达则强制 flush。
-   * 防止超长 token 流在 interval 内堆积。
+   * 当前批次尚未刷新的增量字符数上限（pendingDeltaChars / uncommittedChars），触达则强制 flush。
+   * 防止突发超大 chunk 在 interval 内堆积，同时避免历史累积长文本导致每 token 强刷退化。
    */
   maxBufferedChars?: number;
 };
@@ -254,19 +271,44 @@ export type StreamTextBatcherOptions = {
 /**
  * 流式正文/思考批合并：同 key 覆盖为最新全文（非 delta）。
  * 对外 API 与历史版本兼容，内部复用 StreamValueBatcher。
+ *
+ * 缓冲度量：度量自上次 flush 以来尚未提交的增量字符数（pendingDeltaChars / uncommittedChars），
+ * 每次 flush 提交后增量计数器重置为 0。
+ * 避免当思考过程或长回复累积超过阈值（如 8000 字符）时退化为每 token 同步强刷。
  */
 export class StreamTextBatcher {
   private readonly inner: StreamValueBatcher<string>;
+  private readonly committedLengths = new Map<string, number>();
 
-  constructor(onFlush: StreamTextFlush, options: StreamTextBatcherOptions = {}) {
-    this.inner = new StreamValueBatcher(onFlush, {
-      intervalMs: options.intervalMs,
-      setTimer: options.setTimer,
-      clearTimer: options.clearTimer,
-      maxPendingKeys: options.maxPendingKeys,
-      maxBufferedSize: options.maxBufferedChars,
-      estimateSize: (text) => text.length,
-    });
+  constructor(
+    onFlush: StreamTextFlush,
+    options: StreamTextBatcherOptions = {}
+  ) {
+    this.inner = new StreamValueBatcher(
+      (key, text) => {
+        const prevCommitted = this.committedLengths.get(key);
+        this.committedLengths.set(key, text.length);
+        try {
+          onFlush(key, text);
+        } catch (err) {
+          if (prevCommitted !== undefined) {
+            this.committedLengths.set(key, prevCommitted);
+          } else {
+            this.committedLengths.delete(key);
+          }
+          throw err;
+        }
+      },
+      {
+        intervalMs: options.intervalMs,
+        setTimer: options.setTimer,
+        clearTimer: options.clearTimer,
+        maxPendingKeys: options.maxPendingKeys,
+        maxBufferedSize: options.maxBufferedChars,
+        estimateSize: (text, key) =>
+          Math.max(0, text.length - (this.committedLengths.get(key) ?? 0)),
+      }
+    );
   }
 
   /** 推入最新全文（非 delta）；同 key 覆盖 */
@@ -281,16 +323,19 @@ export class StreamTextBatcher {
 
   /** 丢弃某 key 的 pending（消息被撤回时） */
   drop(key: string): void {
+    this.committedLengths.delete(key);
     this.inner.drop(key);
   }
 
   /** 取消/重置：丢弃 pending，不 flush */
   reset(): void {
+    this.committedLengths.clear();
     this.inner.reset();
   }
 
   /** 清空并取消定时器 */
   dispose(): void {
+    this.committedLengths.clear();
     this.inner.dispose();
   }
 
@@ -307,7 +352,7 @@ export class StreamTextBatcher {
     return this.inner.isScheduled();
   }
 
-  /** 当前 pending 文本总字符数 */
+  /** 当前 pending 文本增量字符数（未排空增量积压） */
   bufferedSize(): number {
     return this.inner.bufferedSize();
   }
@@ -323,7 +368,7 @@ export type StreamToolCallPatch = Pick<MessageToolCall, 'id'> &
 /** 同 toolId 合并：后者字段覆盖前者 */
 export function mergeToolCallPatch(
   prev: StreamToolCallPatch,
-  next: StreamToolCallPatch,
+  next: StreamToolCallPatch
 ): StreamToolCallPatch {
   return { ...prev, ...next, id: next.id || prev.id };
 }
@@ -333,9 +378,11 @@ export function mergeToolCallPatch(
  * success / error / pending_approval 立即刷出；running 可批合并。
  */
 export function isImmediateToolStatus(
-  status: StreamToolCallPatch['status'] | undefined,
+  status: StreamToolCallPatch['status'] | undefined
 ): boolean {
-  return status === 'success' || status === 'error' || status === 'pending_approval';
+  return (
+    status === 'success' || status === 'error' || status === 'pending_approval'
+  );
 }
 
 /** 会话 + 消息 id 合成 batch key */
@@ -347,14 +394,14 @@ export function streamBatchKey(sessionId: string, messageId: string): string {
 export function streamToolBatchKey(
   sessionId: string,
   messageId: string,
-  toolId: string,
+  toolId: string
 ): string {
   return `${sessionId}::${messageId}::${toolId}`;
 }
 
 /** 解析工具 batch key；失败返回 null */
 export function parseStreamToolBatchKey(
-  key: string,
+  key: string
 ): { sessionId: string; messageId: string; toolId: string } | null {
   const first = key.indexOf('::');
   const last = key.lastIndexOf('::');

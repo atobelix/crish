@@ -47,7 +47,6 @@ import {
   treeFindTabByTabId,
   treeMoveTab,
   treeOpenSession,
-  treeSplitTab,
   treePromoteDraftTab,
   treeRemoveTab,
   treeResetToSingleDraftLeaf,
@@ -55,7 +54,10 @@ import {
   treeUpdateTabTitle,
 } from './treeSessionCommands';
 
-export { loadLegacyOpenTabsMap, selectActiveTabSessionId } from './shellSelectors';
+export {
+  loadLegacyOpenTabsMap,
+  selectActiveTabSessionId,
+} from './shellSelectors';
 export { registerTreeDockSync } from './treeDockSync';
 
 function workspaceKeyNow(): string {
@@ -114,233 +116,268 @@ function killPty(sessionId: string): void {
     });
 }
 
-export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => ({
-  shellReady: false,
-  lastChatLeafId: null,
+export const useWorkspaceShellStore = create<WorkspaceShellStore>(
+  (set, get) => ({
+    shellReady: false,
+    lastChatLeafId: null,
 
-  getActiveTab: () => pictureFromActiveLeaf(get().lastChatLeafId),
+    getActiveTab: () => pictureFromActiveLeaf(get().lastChatLeafId),
 
-  setShellReady: (ready) => set({ shellReady: ready }),
+    setShellReady: (ready) => set({ shellReady: ready }),
 
-  syncOpenTabTitles: (overrides) => {
-    const root = useLayoutTreeStore.getState().tree.root;
-    for (const tab of scanRealSessionTabs(root)) {
-      if (overrides && overrides[tab.sessionId] === undefined) continue;
-      const resolved = resolveSessionTabTitle(
-        tab.sessionId,
-        overrides?.[tab.sessionId]
-      );
-      if (resolved === tab.title) continue;
-      if (
-        isDefaultSessionTitle(resolved) &&
-        tab.title.trim() &&
-        !isDefaultSessionTitle(tab.title)
-      ) {
-        continue;
+    syncOpenTabTitles: (overrides) => {
+      const root = useLayoutTreeStore.getState().tree.root;
+      for (const tab of scanRealSessionTabs(root)) {
+        if (overrides && overrides[tab.sessionId] === undefined) continue;
+        const resolved = resolveSessionTabTitle(
+          tab.sessionId,
+          overrides?.[tab.sessionId]
+        );
+        if (resolved === tab.title) continue;
+        if (
+          isDefaultSessionTitle(resolved) &&
+          tab.title.trim() &&
+          !isDefaultSessionTitle(tab.title)
+        ) {
+          continue;
+        }
+        treeUpdateTabTitle(tab.sessionId, resolved);
       }
-      treeUpdateTabTitle(tab.sessionId, resolved);
-    }
-  },
+    },
 
-  openOrFocusSession: (sessionId, opts) => {
-    const sid = (sessionId || '').trim();
-    if (!sid || isPendingDraft(sid)) return;
+    openOrFocusSession: (sessionId, opts) => {
+      const sid = (sessionId || '').trim();
+      if (!sid || isPendingDraft(sid)) return;
 
-    const title = resolveSessionTabTitle(sid, opts?.title);
-    const workspaceKey =
-      canonicalSessionFolder(opts?.workspaceKey) ||
-      sessionFromStore(sid)?.folder ||
-      workspaceKeyNow() ||
-      GENERAL_FOLDER;
+      const title = resolveSessionTabTitle(sid, opts?.title);
+      const workspaceKey =
+        canonicalSessionFolder(opts?.workspaceKey) ||
+        sessionFromStore(sid)?.folder ||
+        workspaceKeyNow() ||
+        GENERAL_FOLDER;
 
-    const targetLeaf = opts?.activeLeafId
-      ? { id: opts.activeLeafId }
-      : resolveActiveChatLeaf(get().lastChatLeafId);
+      if (opts?.split) {
+        const targetLeaf = opts?.activeLeafId
+          ? { id: opts.activeLeafId }
+          : resolveActiveChatLeaf(get().lastChatLeafId);
+        const treeStore = useLayoutTreeStore.getState();
+        if (typeof treeStore.splitSessionFromSidebar === 'function') {
+          get().splitSessionFromSidebar(sid, targetLeaf.id, opts.split);
+          return;
+        }
+      }
 
-    const result = treeOpenSession(sid, {
-      title,
-      workspaceKey,
-      activeLeafId: targetLeaf.id,
-      insertIdx: opts?.insertIdx,
-    });
-    if (opts?.split && result.created) {
-      treeSplitTab(result.leafId, result.tabId, result.leafId, opts.split);
-    }
-    rememberChatLeaf(set, result.leafId);
-    useSessionStore.getState().setActiveSessionId(sid);
-    useLayoutStore.getState().setChatMainSurface('chat');
-    syncSessionFromActiveLeaf(result.leafId);
-  },
+      const existingLoc = treeFindTabBySessionId(sid);
+      const existingLeafId = existingLoc?.leafId ?? null;
+      if (
+        existingLoc &&
+        existingLeafId &&
+        (!opts?.activeLeafId || opts.activeLeafId === existingLeafId)
+      ) {
+        treeActivateTab(existingLeafId, existingLoc.tab.tabId);
+        rememberChatLeaf(set, existingLeafId);
+        useSessionStore.getState().setActiveSessionId(sid);
+        useLayoutStore.getState().setChatMainSurface('chat');
+        syncSessionFromActiveLeaf(existingLeafId);
+        return;
+      }
 
-  splitSessionFromSidebar: (sessionId, dstLeafId, region) => {
-    const sid = (sessionId || '').trim();
-    if (!sid || isPendingDraft(sid) || !dstLeafId) return;
+      const targetLeaf = opts?.activeLeafId
+        ? { id: opts.activeLeafId }
+        : resolveActiveChatLeaf(get().lastChatLeafId);
 
-    const treeStore = useLayoutTreeStore.getState();
-    const session = useSessionStore.getState().sessionsById[sid];
-    treeStore.splitSessionFromSidebar(sid, dstLeafId, region, undefined, {
-      title: session?.title,
-      workspaceKey: session?.folder,
-    });
-
-    const updatedTree = useLayoutTreeStore.getState().tree;
-    const leaves = listChatLeaves(updatedTree.root);
-    const fresh = leaves.find((l) => l.tabs.some((t) => t.sessionId === sid));
-    const finalLeafId = fresh ? fresh.id : dstLeafId;
-
-    rememberChatLeaf(set, finalLeafId);
-    useSessionStore.getState().setActiveSessionId(sid);
-    useLayoutStore.getState().setChatMainSurface('chat');
-    syncSessionFromActiveLeaf(finalLeafId);
-  },
-
-  activateTab: (leafId, tabId) => {
-    const loc = treeFindTabByTabId(tabId);
-    if (!loc || loc.leafId !== leafId) return;
-    treeActivateTab(leafId, tabId);
-    rememberChatLeaf(set, leafId);
-    useLayoutStore.getState().setChatMainSurface('chat');
-    syncSessionFromActiveLeaf(leafId);
-  },
-
-  activateTabByTabId: (tabId) => {
-    const loc = treeFindTabByTabId(tabId);
-    if (loc) get().activateTab(loc.leafId, loc.tab.tabId);
-  },
-
-  reorderSessionTab: (sessionId, beforeSessionId) => {
-    const src = treeFindTabBySessionId(sessionId);
-    if (!src) return;
-    const leaf = ownedChatLeaves(
-      useLayoutTreeStore.getState().tree.root
-    ).find((l) => l.id === src.leafId);
-    if (!leaf) return;
-    let insertIdx = leaf.tabs.length;
-    if (beforeSessionId) {
-      const i = leaf.tabs.findIndex((t) => t.sessionId === beforeSessionId);
-      if (i >= 0) insertIdx = i;
-    }
-    treeMoveTab(src.leafId, src.tab.tabId, src.leafId, insertIdx);
-  },
-
-  closeTab: (leafId, tabId) => {
-    const loc = treeFindTabByTabId(tabId);
-    if (!loc || loc.leafId !== leafId) return;
-    const closing = loc.tab;
-    if (!isPendingDraft(closing.sessionId)) {
-      killPty(closing.sessionId);
-    }
-    treeRemoveTab(leafId, tabId);
-
-    const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
-    const still = chats.find((l) => l.id === get().lastChatLeafId);
-    if (!still) {
-      const tree = useLayoutTreeStore.getState();
-      const next =
-        chats.find((l) => l.id === tree.activeLeafId) ?? chats[0] ?? null;
-      set({ lastChatLeafId: next?.id ?? null });
-    }
-    syncSessionFromActiveLeaf(get().lastChatLeafId);
-  },
-
-  closeTabBySessionId: (sessionId, _workspaceKey) => {
-    const sid = (sessionId || '').trim();
-    if (!sid || isPendingDraft(sid)) return;
-    const loc = treeFindTabBySessionId(sid);
-    if (loc) get().closeTab(loc.leafId, loc.tab.tabId);
-    else killPty(sid);
-  },
-
-  updateRightDock: (tabId, patch: Partial<RightToolDockState> | RightToolDockState) => {
-    treeUpdateTabDock(tabId, patch);
-  },
-
-  openNewDraftTab: (opts) => {
-    const args = typeof opts === 'string' ? { workspaceKey: opts } : (opts ?? {});
-    const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
-    const listed = listChatLeaves(useLayoutTreeStore.getState().tree.root);
-    const leaf =
-      (args.leafId &&
-        (chats.find((l) => l.id === args.leafId) ||
-          listed.find((l) => l.id === args.leafId))) ||
-      resolveActiveChatLeaf(get().lastChatLeafId);
-
-    const rawKey = args.workspaceKey?.trim();
-    const workspaceKey = rawKey
-      ? canonicalSessionFolder(rawKey)
-      : resolveMostActiveProjectFolder();
-
-    treeAddTab(leaf.id, { workspaceKey });
-    rememberChatLeaf(set, leaf.id);
-    useLayoutStore.getState().setChatMainSurface('chat');
-    const draftId = mintDraftSessionId(leaf.id);
-    useSessionStore.getState().enterDraftMode(workspaceKey, {
-      draftSessionId: draftId,
-    });
-    draftFolderRegistry.set(draftId, workspaceKey);
-    try {
-      activateWorkspaceForSessionFolder(workspaceKey);
-    } catch {
-      /* ignore */
-    }
-  },
-
-  resetToCleanDraft: (workspaceKey) => {
-    const key =
-      canonicalSessionFolder(workspaceKey) ||
-      workspaceKeyNow() ||
-      GENERAL_FOLDER;
-    void import('../../api/ptyRegistry')
-      .then((m) => m.killAllPtys())
-      .catch(() => {
-        /* ignore */
+      const result = treeOpenSession(sid, {
+        title,
+        workspaceKey,
+        activeLeafId: targetLeaf.id,
+        insertIdx: opts?.insertIdx,
       });
-    treeResetToSingleDraftLeaf(key);
-    const leaf = ownedChatLeaves(useLayoutTreeStore.getState().tree.root)[0];
-    set({ lastChatLeafId: leaf?.id ?? null });
-    useSessionStore.getState().enterDraftMode(key, {
-      draftSessionId: leaf ? mintDraftSessionId(leaf.id) : undefined,
-    });
-  },
+      rememberChatLeaf(set, result.leafId);
+      useSessionStore.getState().setActiveSessionId(sid);
+      useLayoutStore.getState().setChatMainSurface('chat');
+      syncSessionFromActiveLeaf(result.leafId);
+    },
 
-  focusLeaf: (leafId) => {
-    const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
-    const leaf = chats.find((l) => l.id === leafId);
-    if (!leaf) return;
-    if (leaf.activeTabId) {
-      treeActivateTab(leafId, leaf.activeTabId);
-    } else {
-      useLayoutTreeStore.getState().setActiveLeaf(leafId);
-    }
-    rememberChatLeaf(set, leafId);
-    syncSessionFromActiveLeaf(leafId);
-  },
+    splitSessionFromSidebar: (sessionId, dstLeafId, region) => {
+      const sid = (sessionId || '').trim();
+      if (!sid || isPendingDraft(sid) || !dstLeafId) return;
 
-  promoteDraftTab: (draftSessionId, realSessionId, title) => {
-    if (
-      !isPendingDraft(draftSessionId) ||
-      !realSessionId ||
-      isPendingDraft(realSessionId)
-    ) {
-      return;
-    }
-    const existing = treeFindTabBySessionId(realSessionId);
-    if (existing) {
-      get().activateTab(existing.leafId, existing.tab.tabId);
-      return;
-    }
-    treePromoteDraftTab(draftSessionId, realSessionId, { title });
-    syncSessionFromActiveLeaf(get().lastChatLeafId);
-  },
+      const treeStore = useLayoutTreeStore.getState();
+      const session = useSessionStore.getState().sessionsById[sid];
+      treeStore.splitSessionFromSidebar(sid, dstLeafId, region, undefined, {
+        title: session?.title,
+        workspaceKey: session?.folder,
+      });
 
-  deleteSessionAndCloseTab: (sessionId) => {
-    const sid = (sessionId || '').trim();
-    if (!sid || isPendingDraft(sid)) return false;
-    get().closeTabBySessionId(sid);
-    const removed = useSessionStore.getState().deleteSession(sid);
-    syncSessionFromActiveLeaf(get().lastChatLeafId);
-    return removed;
-  },
-}));
+      const updatedTree = useLayoutTreeStore.getState().tree;
+      const leaves = listChatLeaves(updatedTree.root);
+      const fresh = leaves.find((l) => l.tabs.some((t) => t.sessionId === sid));
+      const finalLeafId = fresh ? fresh.id : dstLeafId;
+
+      rememberChatLeaf(set, finalLeafId);
+      useSessionStore.getState().setActiveSessionId(sid);
+      useLayoutStore.getState().setChatMainSurface('chat');
+      syncSessionFromActiveLeaf(finalLeafId);
+    },
+
+    activateTab: (leafId, tabId) => {
+      const loc = treeFindTabByTabId(tabId);
+      if (!loc || loc.leafId !== leafId) return;
+      treeActivateTab(leafId, tabId);
+      rememberChatLeaf(set, leafId);
+      useLayoutStore.getState().setChatMainSurface('chat');
+      syncSessionFromActiveLeaf(leafId);
+    },
+
+    activateTabByTabId: (tabId) => {
+      const loc = treeFindTabByTabId(tabId);
+      if (loc) get().activateTab(loc.leafId, loc.tab.tabId);
+    },
+
+    reorderSessionTab: (sessionId, beforeSessionId) => {
+      const src = treeFindTabBySessionId(sessionId);
+      if (!src) return;
+      const leaf = ownedChatLeaves(
+        useLayoutTreeStore.getState().tree.root
+      ).find((l) => l.id === src.leafId);
+      if (!leaf) return;
+      let insertIdx = leaf.tabs.length;
+      if (beforeSessionId) {
+        const i = leaf.tabs.findIndex((t) => t.sessionId === beforeSessionId);
+        if (i >= 0) insertIdx = i;
+      }
+      treeMoveTab(src.leafId, src.tab.tabId, src.leafId, insertIdx);
+    },
+
+    closeTab: (leafId, tabId) => {
+      const loc = treeFindTabByTabId(tabId);
+      if (loc) {
+        if (loc.leafId !== leafId) return;
+        const closing = loc.tab;
+        if (!isPendingDraft(closing.sessionId)) {
+          killPty(closing.sessionId);
+        }
+      } else {
+        const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
+        const targetLeaf = chats.find((l) => l.id === leafId);
+        if (!targetLeaf) return;
+      }
+      treeRemoveTab(leafId, tabId);
+
+      const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
+      const still = chats.find((l) => l.id === get().lastChatLeafId);
+      if (!still) {
+        const tree = useLayoutTreeStore.getState();
+        const next =
+          chats.find((l) => l.id === tree.activeLeafId) ?? chats[0] ?? null;
+        set({ lastChatLeafId: next?.id ?? null });
+      }
+      syncSessionFromActiveLeaf(get().lastChatLeafId);
+    },
+
+    closeTabBySessionId: (sessionId, _workspaceKey) => {
+      const sid = (sessionId || '').trim();
+      if (!sid || isPendingDraft(sid)) return;
+      const loc = treeFindTabBySessionId(sid);
+      if (loc) get().closeTab(loc.leafId, loc.tab.tabId);
+      else killPty(sid);
+    },
+
+    updateRightDock: (
+      tabId,
+      patch: Partial<RightToolDockState> | RightToolDockState
+    ) => {
+      treeUpdateTabDock(tabId, patch);
+    },
+
+    openNewDraftTab: (opts) => {
+      const args =
+        typeof opts === 'string' ? { workspaceKey: opts } : (opts ?? {});
+      const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
+      const listed = listChatLeaves(useLayoutTreeStore.getState().tree.root);
+      const leaf =
+        (args.leafId &&
+          (chats.find((l) => l.id === args.leafId) ||
+            listed.find((l) => l.id === args.leafId))) ||
+        resolveActiveChatLeaf(get().lastChatLeafId);
+
+      const rawKey = args.workspaceKey?.trim();
+      const workspaceKey = rawKey
+        ? canonicalSessionFolder(rawKey)
+        : resolveMostActiveProjectFolder();
+
+      treeAddTab(leaf.id, { workspaceKey });
+      rememberChatLeaf(set, leaf.id);
+      useLayoutStore.getState().setChatMainSurface('chat');
+      const draftId = mintDraftSessionId(leaf.id);
+      useSessionStore.getState().enterDraftMode(workspaceKey, {
+        draftSessionId: draftId,
+      });
+      draftFolderRegistry.set(draftId, workspaceKey);
+      try {
+        activateWorkspaceForSessionFolder(workspaceKey);
+      } catch {
+        /* ignore */
+      }
+    },
+
+    resetToCleanDraft: (workspaceKey) => {
+      const key =
+        canonicalSessionFolder(workspaceKey) ||
+        workspaceKeyNow() ||
+        GENERAL_FOLDER;
+      void import('../../api/ptyRegistry')
+        .then((m) => m.killAllPtys())
+        .catch(() => {
+          /* ignore */
+        });
+      treeResetToSingleDraftLeaf(key);
+      const leaf = ownedChatLeaves(useLayoutTreeStore.getState().tree.root)[0];
+      set({ lastChatLeafId: leaf?.id ?? null });
+      useSessionStore.getState().enterDraftMode(key, {
+        draftSessionId: leaf ? mintDraftSessionId(leaf.id) : undefined,
+      });
+    },
+
+    focusLeaf: (leafId) => {
+      const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
+      const leaf = chats.find((l) => l.id === leafId);
+      if (!leaf) return;
+      if (leaf.activeTabId) {
+        treeActivateTab(leafId, leaf.activeTabId);
+      } else {
+        useLayoutTreeStore.getState().setActiveLeaf(leafId);
+      }
+      rememberChatLeaf(set, leafId);
+      syncSessionFromActiveLeaf(leafId);
+    },
+
+    promoteDraftTab: (draftSessionId, realSessionId, title) => {
+      if (
+        !isPendingDraft(draftSessionId) ||
+        !realSessionId ||
+        isPendingDraft(realSessionId)
+      ) {
+        return;
+      }
+      const existing = treeFindTabBySessionId(realSessionId);
+      if (existing) {
+        get().activateTab(existing.leafId, existing.tab.tabId);
+        return;
+      }
+      treePromoteDraftTab(draftSessionId, realSessionId, { title });
+      syncSessionFromActiveLeaf(get().lastChatLeafId);
+    },
+
+    deleteSessionAndCloseTab: (sessionId) => {
+      const sid = (sessionId || '').trim();
+      if (!sid || isPendingDraft(sid)) return false;
+      get().closeTabBySessionId(sid);
+      const removed = useSessionStore.getState().deleteSession(sid);
+      syncSessionFromActiveLeaf(get().lastChatLeafId);
+      return removed;
+    },
+  })
+);
 
 registerShellStoreReadApi(useWorkspaceShellStore);

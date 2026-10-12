@@ -20,7 +20,9 @@ export {
   sortMessagesByOrder,
 } from '../../store/sessionSharedHelpers';
 export {
+  compareMessageOrder,
   findInsertIndex,
+  getMessageOrderKey,
   isSortedByMessageOrder,
   messageOrderKey,
 } from '../../store/messageOrderKey';

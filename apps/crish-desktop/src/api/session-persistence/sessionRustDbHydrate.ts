@@ -62,6 +62,7 @@ export function isLazySessionShell(
   activeSessionId?: string | null
 ): boolean {
   if (session.messages && session.messages.length > 0) return false;
+  if (session.messagesHydrated === false) return true;
   if (session.messagesHydrated === true) return false;
   if (session.hydratedFromEngine === true) return false;
   if (activeSessionId && session.id === activeSessionId) return false;
@@ -114,16 +115,15 @@ export async function ensureSessionBodyHydrated(sessionId: string): Promise<{
   messages: SessionState['messages'];
   agents: NonNullable<SessionState['agents']>;
 }> {
-  if (!sessionId || isPendingDraft(sessionId)) {
+  if (!sessionId || isPendingDraft(sessionId))
     return { messages: [], agents: [] };
-  }
   const [messages, agents] = await Promise.all([
     loadSessionBody(sessionId),
     loadSessionAgents(sessionId),
   ]);
   return {
     messages: sanitizeMessagesForHydrate(messages),
-    agents,
+    agents: Array.isArray(agents) ? agents : [],
   };
 }
 
@@ -156,9 +156,7 @@ export async function hydrateSessionsFromRust(): Promise<{
 }> {
   // 1. 索引：localStorage 优先（真相源），回退 SQLite
   let index = lsLoadSessionIndex();
-  if (!index.length) {
-    index = await listSessions();
-  }
+  if (!index.length) index = await listSessions();
   if (!index.length) {
     return {
       sessions: [],
@@ -207,7 +205,7 @@ export async function hydrateSessionsFromRust(): Promise<{
       e.timestamp,
       isActive ? activeMessages : []
     );
-    const base: SessionState = {
+    return {
       id: e.id,
       title: e.title,
       folder: e.folder,
@@ -228,14 +226,13 @@ export async function hydrateSessionsFromRust(): Promise<{
       ...(e.engineLastRunId !== undefined
         ? { engineLastRunId: e.engineLastRunId }
         : {}),
-      ...(e.hydratedFromEngine !== undefined
+      ...(isActive && e.hydratedFromEngine !== undefined
         ? { hydratedFromEngine: e.hydratedFromEngine }
         : {}),
       // importMeta / titleSource 仅存 localStorage 索引；SQLite 行无此列，从 LS 索引水合时带回
       ...(e.importMeta ? { importMeta: e.importMeta } : {}),
       ...(e.titleSource ? { titleSource: e.titleSource } : {}),
     };
-    return base;
   });
 
   // 5. 维度 2 一致性校验：仅对已水合（非懒壳）会话做 index-body 分叉校验
@@ -263,9 +260,8 @@ export async function hydrateSessionsFromRust(): Promise<{
     targetActiveId && prepared.some((s) => s.id === targetActiveId)
       ? targetActiveId
       : null;
-  const folderOrderRaw = await getSessionMeta('folder_order');
   const folderOrder = parseFolderOrder(
-    safeParseJson<unknown>(folderOrderRaw, null)
+    safeParseJson<unknown>(await getSessionMeta('folder_order'), null)
   );
 
   return { sessions: prepared, activeSessionId, folderOrder };
@@ -285,19 +281,24 @@ function bodyFingerprint(msgs: SessionState['messages']): string {
       m.id,
       m.status ?? '',
       String(m.text?.length ?? 0),
-      String(m.thinking?.length ?? 0),
+      String(m.thinking?.length ?? 0)
     );
   }
   return parts.join('|');
 }
 
 /** 非 dirty 则跳过 save；首帧无快照视为 dirty。 */
-function isSessionBodyDirty(sessionId: string, msgs: SessionState['messages']): boolean {
-  const fp = bodyFingerprint(msgs);
-  return lastSavedBodyFingerprint.get(sessionId) !== fp;
+function isSessionBodyDirty(
+  sessionId: string,
+  msgs: SessionState['messages']
+): boolean {
+  return lastSavedBodyFingerprint.get(sessionId) !== bodyFingerprint(msgs);
 }
 
-function markSessionBodySaved(sessionId: string, msgs: SessionState['messages']): void {
+function markSessionBodySaved(
+  sessionId: string,
+  msgs: SessionState['messages']
+): void {
   lastSavedBodyFingerprint.set(sessionId, bodyFingerprint(msgs));
 }
 
@@ -349,8 +350,7 @@ export async function persistAllSessionsRust(
     // invoke 缺失时，这就是唯一的索引落盘点。
     if (options?.sessionsToIndex) {
       try {
-        const entries = options.sessionsToIndex(list);
-        lsSaveSessionIndex(entries);
+        lsSaveSessionIndex(options.sessionsToIndex(list));
       } catch {
         /* swallow-ok: 索引快照回调失败不阻断索引主流程 */
       }
@@ -387,12 +387,17 @@ export async function persistAllSessionsRust(
       const msgs = (s.messages || []).map((m) =>
         m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
       );
-      const shouldSaveBody = msgs.length > 0 || !isLazySessionShell(s, activePersistable);
+      // 双重硬守卫：消息为空且未明确完成水合（messagesHydrated !== true）时，严禁调用 saveSessionBody 向 SQLite 写入空数组 []
+      const isUnconfirmedEmptyShell =
+        msgs.length === 0 && s.messagesHydrated !== true;
+      const shouldSaveBody =
+        !isUnconfirmedEmptyShell &&
+        (msgs.length > 0 || !isLazySessionShell(s, activePersistable));
       if (shouldSaveBody && isSessionBodyDirty(s.id, msgs)) {
         bodyJobs.push(
-          saveSessionBody(s.id, msgs, batchVersion).then(() => {
-            markSessionBodySaved(s.id, msgs);
-          }),
+          saveSessionBody(s.id, msgs, batchVersion).then(() =>
+            markSessionBodySaved(s.id, msgs)
+          )
         );
       }
       bodyJobs.push(saveSessionAgents(s.id, s.agents || []));
@@ -401,14 +406,12 @@ export async function persistAllSessionsRust(
 
     // 2. 元数据：active_session_id / folder_order
     const metaJobs: Promise<void>[] = [];
-    if (activePersistable) {
+    if (activePersistable)
       metaJobs.push(setSessionMeta('active_session_id', activePersistable));
-    }
-    if (folderOrder && folderOrder.length) {
+    if (folderOrder && folderOrder.length)
       metaJobs.push(
         setSessionMeta('folder_order', JSON.stringify(folderOrder))
       );
-    }
     await Promise.allSettled(metaJobs);
 
     // 3. 孤儿清理
@@ -417,9 +420,7 @@ export async function persistAllSessionsRust(
     // 避免错误码触发 JS 回退分支清空 LS 镜像（N1-2 双保险）；
     // 部分 keepIds 的 boot 窗口风险由 Rust 库层护栏兜底（引擎子代理会话豁免
     // + 活动 run 豁免 + 宽限期，见 conex-db sessions.rs cleanup_orphan_sessions）。
-    if (keepIds.size > 0) {
-      await cleanupOrphanSessions(Array.from(keepIds));
-    }
+    if (keepIds.size > 0) await cleanupOrphanSessions(Array.from(keepIds));
 
     // D-05 S1：probe 成功且批收口 → 持久化降级状态回落健康（恢复点）
     errorStore.setPersistenceStatus('healthy');

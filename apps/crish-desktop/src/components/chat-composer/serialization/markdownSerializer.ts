@@ -23,9 +23,13 @@ function serializeInline(node: JSONContent): string {
   }
 
   if (node.type === 'mention') {
-    const label = node.attrs?.label || node.attrs?.name || node.attrs?.id || 'mention';
+    const label =
+      node.attrs?.label || node.attrs?.name || node.attrs?.id || 'mention';
     const id = node.attrs?.id || label;
     const kind = node.attrs?.kind || node.attrs?.mentionType;
+    if (kind === 'command') {
+      return id.startsWith('/') ? id : `/${id}`;
+    }
     return kind ? `@[${label}](${id}:${kind})` : `@[${label}](${id})`;
   }
 
@@ -219,7 +223,9 @@ function serializeBlockNodes(nodes: JSONContent[], indent = ''): string {
 /**
  * Converts ProseMirror AST JSON tree into a GFM Markdown string.
  */
-export function serializeToMarkdown(doc: JSONContent | null | undefined): string {
+export function serializeToMarkdown(
+  doc: JSONContent | null | undefined
+): string {
   if (!doc) return '';
 
   const raw =

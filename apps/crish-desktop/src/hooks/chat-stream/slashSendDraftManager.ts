@@ -5,7 +5,6 @@
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { getSessionById } from '../../store/sessionStore';
 import { isPendingDraft } from '../../store/draftSession';
-import { commitDraftIfNeeded } from '../../api/storeAccess';
 import { deriveSessionTitle } from '../../api/sessionTitle';
 import { resolveStreamSessionId } from './helpers';
 
@@ -123,19 +122,28 @@ export function backfillFromBoundaryText(
   }
 }
 
+export interface CommitDraftAndOpenShellOptions {
+  title?: string;
+  folder?: string;
+  draftSessionId?: string;
+}
+
 /**
  * 草稿 → 真会话：就地 promote 当前草稿 tab，禁止再 openOrFocusSession 多开一张。
  */
-export function commitDraftAndOpenShell(opts?: {
-  title?: string;
-  folder?: string;
-}): string {
+export function commitDraftAndOpenShell(
+  opts?: CommitDraftAndOpenShellOptions
+): string {
   const st = getCompositionRoot().session.getState();
-  const draftId = st.activeSessionId;
-  const newId = commitDraftIfNeeded(opts);
+  const draftId = opts?.draftSessionId ?? st.activeSessionId;
+  const newId = (
+    st as unknown as {
+      commitDraftIfNeeded: (o?: CommitDraftAndOpenShellOptions) => string;
+    }
+  ).commitDraftIfNeeded(opts);
   if (!newId || isPendingDraft(newId)) return newId;
   if (isPendingDraft(draftId)) {
-    const title = getSessionById(newId)?.title;
+    const title = opts?.title ?? getSessionById(newId)?.title;
     getCompositionRoot().shell.promoteDraftTab(draftId, newId, title);
   }
   return newId;
@@ -151,12 +159,15 @@ export function resolveTargetSessionId(
   let sessionId = '';
   if (isPendingDraft(activeSessionId)) {
     sessionId = commitDraftAndOpenShell({
+      draftSessionId: activeSessionId ?? undefined,
       title: rawInput ? deriveSessionTitle(rawInput) : undefined,
     });
   } else {
     sessionId = resolveStreamSessionId(null, activeSessionId) || '';
     if (!sessionId) {
-      sessionId = commitDraftAndOpenShell();
+      sessionId = commitDraftAndOpenShell({
+        draftSessionId: activeSessionId ?? undefined,
+      });
     }
   }
   return resolveStreamSessionId(sessionId, null) || '';

@@ -35,11 +35,12 @@ import {
 } from '../../api/workflow-api/workflowAssistantCard';
 import { buildMultimodalFromAttachments } from './multimodal';
 import { isModelVisionSupported } from '../../api/modelVisionSupport';
-import { getActiveModelId, getActiveProfileId } from '../../api/providerProfiles';
-import { canStreamLocalSession } from './helpers';
+import {
+  getActiveModelId,
+  getActiveProfileId,
+} from '../../api/providerProfiles';
 import { routeReadinessFailure } from './readinessPreflight';
 import { getSessionById } from '../../store/sessionStore';
-import { generateMessageId } from '../../utils/generateMessageId';
 import { invokeTyped } from '../../api/tauriInvoke';
 import { resolveTargetSessionId } from './slashSendDraftManager';
 import type { ChatAttachment } from './types';
@@ -92,7 +93,7 @@ export async function runPreflightChecks(
   const {
     rawInput,
     activeSessionId,
-    wsId,
+    wsId: _wsId,
     attachments,
     skillCommandsEnabled,
     needsKeySetup,
@@ -127,8 +128,8 @@ export async function runPreflightChecks(
   // 多模态输入刚性拦截守卫：当前模型若不支持视觉输入且存在图片附件，坚决阻断发送
   const activeModel = (getActiveModelId() || '').trim();
   const activeProfileId = getActiveProfileId();
-  const hasImage = attachments.some(
-    (a) => Boolean(a.dataUrl || a.imageMeta || a.mime?.startsWith('image/'))
+  const hasImage = attachments.some((a) =>
+    Boolean(a.dataUrl || a.imageMeta || a.mime?.startsWith('image/'))
   );
   if (hasImage && !checkModelVisionSupport(activeModel, activeProfileId)) {
     const errorMsg = '当前模型不支持图片输入，请移除图片或切换至多模态视觉模型';
@@ -209,7 +210,10 @@ export async function runPreflightChecks(
   let modelText = rawInput;
   let displayText = rawInput;
 
-  if (slash.kind === 'skill') {
+  if (
+    slash.kind === 'skill' ||
+    (slash.kind === 'none' && /@\[[^\]]+\]\([^)]+:skill\)/.test(rawInput))
+  ) {
     if (!skillCommandsEnabled) {
       setChatInput('');
       setSlashMenuOpen(false);
@@ -217,25 +221,23 @@ export async function runPreflightChecks(
       return { status: 'handled' };
     }
     try {
-      const { resolveSkillSlash, formatSkillInjection } =
-        await import('../../api/skillsApi');
-      const resolved = await resolveSkillSlash(slash.raw);
-      if (!resolved) {
+      const { resolveSkillForPreflight } = await import('../../api/skillsApi');
+      const res = await resolveSkillForPreflight(
+        rawInput,
+        slash.kind === 'skill' ? slash.raw : undefined
+      );
+      if (!res && slash.kind === 'skill') {
         setChatInput('');
         setSlashMenuOpen(false);
         showToast('未找到该技能，请在设置 → 技能 中确认名称与启用状态');
         return { status: 'handled' };
       }
-      modelText = formatSkillInjection(resolved.skill, resolved.rest);
-      displayText = resolved.rest
-        ? `/skill:${resolved.skill.name} ${resolved.rest}`
-        : `使用技能：${resolved.skill.name}`;
+      if (res?.modelText) modelText = res.modelText;
+      if (res?.displayText) displayText = res.displayText;
     } catch (e) {
       setChatInput('');
       setSlashMenuOpen(false);
-      showToast(
-        `加载技能失败：${e instanceof Error ? e.message : String(e)}`
-      );
+      showToast(`加载技能失败：${e instanceof Error ? e.message : String(e)}`);
       return { status: 'handled' };
     }
   }
@@ -266,9 +268,7 @@ export async function runPreflightChecks(
 
       showToast(`已成功记住规则：${ruleText}`);
     } catch (e) {
-      showToast(
-        `记住规则失败：${e instanceof Error ? e.message : String(e)}`
-      );
+      showToast(`记住规则失败：${e instanceof Error ? e.message : String(e)}`);
     }
     return { status: 'handled' };
   }
@@ -374,9 +374,12 @@ export function assembleChatPayload(opts: AssembleChatPayloadOptions): {
 
   const activeModel = (getActiveModelId() || '').trim();
   const activeProfileId = getActiveProfileId();
-  const isVisionSupported = checkModelVisionSupport(activeModel, activeProfileId);
-  const hasImage = attachments.some(
-    (a) => Boolean(a.dataUrl || a.imageMeta || a.mime?.startsWith('image/'))
+  const isVisionSupported = checkModelVisionSupport(
+    activeModel,
+    activeProfileId
+  );
+  const hasImage = attachments.some((a) =>
+    Boolean(a.dataUrl || a.imageMeta || a.mime?.startsWith('image/'))
   );
 
   if (hasImage && !isVisionSupported) {

@@ -7,22 +7,44 @@
  */
 
 import { GENERAL_FOLDER, getActiveProjectId } from '../api/projectStore';
-import {
-  EMPTY_SESSION_TITLE,
-  shellPruneKeepIds,
-} from '../api/sessionTitle';
+import { EMPTY_SESSION_TITLE, shellPruneKeepIds } from '../api/sessionTitle';
 import { recordDraftCommit, recordDraftEnter } from '../api/controlMetrics';
 import { PENDING_DRAFT_SESSION_ID, isPendingDraft } from './draftSession';
 import { getSessionById } from './sessionIndex';
-import {
-  syncActiveTerminalSession,
-} from './sessionSharedHelpers';
+import { syncActiveTerminalSession } from './sessionSharedHelpers';
 import type {
   SessionActions,
   SessionStoreSlice,
   SessionImmerSet,
   SessionStoreGet,
 } from './sessionActions';
+import { draftFolderRegistry } from './draft-routing/draftFolderRegistry';
+import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
+
+export interface CommitDraftOptions {
+  title?: string;
+  folder?: string;
+  draftSessionId?: string;
+}
+
+export { draftFolderRegistry };
+export const draftFolderBySessionId = draftFolderRegistry;
+
+export function setDraftProjectFolder(
+  folder: string,
+  draftSessionId?: string
+): void {
+  const sid = (draftSessionId || '').trim();
+  if (sid) {
+    draftFolderRegistry.set(sid, folder);
+  }
+}
+
+export function getDraftProjectFolder(
+  draftSessionId?: string
+): string | undefined {
+  return draftSessionId ? draftFolderRegistry.get(draftSessionId) : undefined;
+}
 
 /**
  * 草稿态状态写入（共享辅助）：
@@ -41,11 +63,18 @@ export function applyDraftModeToState(
       ? opts.draftSessionId
       : PENDING_DRAFT_SESSION_ID;
   state.activeSessionId = id;
-  state.draftFolder =
+  const effectiveFolder =
     (typeof folder === 'string' && folder.trim()) ||
+    (opts?.draftSessionId
+      ? draftFolderRegistry.get(opts.draftSessionId)
+      : undefined) ||
     getActiveProjectId() ||
     GENERAL_FOLDER ||
     '';
+  state.draftFolder = effectiveFolder;
+  if (id && effectiveFolder) {
+    draftFolderRegistry.set(id, effectiveFolder);
+  }
   state.activeAgentId = null;
   state.panelAgentId = null;
   syncActiveTerminalSession(id);
@@ -77,9 +106,16 @@ export function createSessionDraftActions<T extends SessionStoreSlice>(
       recordDraftEnter();
     },
 
-    setDraftFolder: (folder: string) => {
+    setDraftFolder: (folder: string, draftSessionId?: string) => {
       set((state) => {
-        state.draftFolder = typeof folder === 'string' ? folder : '';
+        const val = typeof folder === 'string' ? folder : '';
+        const targetId = draftSessionId || state.activeSessionId;
+        if (targetId && isPendingDraft(targetId)) {
+          draftFolderRegistry.set(targetId, val);
+        }
+        if (!draftSessionId || draftSessionId === state.activeSessionId) {
+          state.draftFolder = val;
+        }
       });
     },
 
@@ -94,29 +130,76 @@ export function createSessionDraftActions<T extends SessionStoreSlice>(
      * 草稿 → 真会话：仅在发送首条/需持久化写时调用。
      * 内部唯一「用户路径 → createSession」收口；folder 取 commit 瞬间的 draftFolder。
      * 始终返回可用真 session id（脏 active 也会 enter→mint），调用方无需 createSession 兜底。
+     * 遵循 Guard-3：若显式传入 draftSessionId 且为合法草稿，强制物化，严禁早退全局 activeSessionId。
      */
-    commitDraftIfNeeded: (opts?: { title?: string; folder?: string }) => {
+    commitDraftIfNeeded: (opts?: CommitDraftOptions | string) => {
+      const normalizedOpts =
+        typeof opts === 'string' ? { draftSessionId: opts } : opts;
       const st = get();
-      // 草稿态 或 空 active（遗留脏态）→ mint 真会话
-      if (!isPendingDraft(st.activeSessionId)) {
-        if (st.activeSessionId && getSessionById(st, st.activeSessionId)) {
-          return st.activeSessionId;
+      const targetDraftId = normalizedOpts?.draftSessionId;
+      const isExplicitDraft = Boolean(
+        targetDraftId && isPendingDraft(targetDraftId)
+      );
+
+      // Guard-3：仅在非显式草稿且当前 active 为真实有效会话时早退；
+      // 若是显式草稿分屏触发转正，无论全局焦点在哪个真会话，都必须强制创建新会话！
+      if (!isExplicitDraft) {
+        if (!isPendingDraft(st.activeSessionId)) {
+          if (st.activeSessionId && getSessionById(st, st.activeSessionId)) {
+            return st.activeSessionId;
+          }
+          // 遗留脏态（active 为空或指向不存在的会话）：先进入草稿态再 commit
+          set((state) => applyDraftModeToState(state));
         }
-        // 遗留脏态（active 为空或指向不存在的会话）：先进入草稿态再 commit
-        set((state) => applyDraftModeToState(state));
       }
+
       const cur = get();
+      const effectiveDraftId = isExplicitDraft
+        ? targetDraftId!
+        : cur.activeSessionId;
       const folder =
-        opts?.folder ||
+        normalizedOpts?.folder ||
+        (effectiveDraftId
+          ? draftFolderRegistry.get(effectiveDraftId)
+          : undefined) ||
         cur.draftFolder ||
         getActiveProjectId() ||
         GENERAL_FOLDER;
-      // createSession 允许：commit / 系统 / 测试；用户「新建」禁止直调
+
+      // 仅当当前转正的会话与全局 active 一致时激活，后台转正保持非激活
+      const shouldActivate =
+        !isExplicitDraft || cur.activeSessionId === effectiveDraftId;
       const id = createSessionFn({
-        ...(opts?.title !== undefined ? { title: opts.title } : {}),
+        ...(normalizedOpts?.title !== undefined
+          ? { title: normalizedOpts.title }
+          : {}),
         folder,
-        activate: true,
+        activate: shouldActivate,
       });
+
+      // 迁移草稿内容与运行时附件/思考状态，并清理注册表
+      if (effectiveDraftId && effectiveDraftId !== id) {
+        set((state) => {
+          if (state.composerDrafts[effectiveDraftId]) {
+            state.composerDrafts[id] = state.composerDrafts[effectiveDraftId];
+            delete state.composerDrafts[effectiveDraftId];
+          }
+        });
+        try {
+          if (sessionRuntimeRegistry.exists(effectiveDraftId)) {
+            const runtimeState = sessionRuntimeRegistry.get(effectiveDraftId);
+            sessionRuntimeRegistry.save(id, {
+              attachments: runtimeState.attachments,
+              thinkingTitle: runtimeState.thinkingTitle,
+            });
+            sessionRuntimeRegistry.remove(effectiveDraftId);
+          }
+        } catch {
+          /* ignore */
+        }
+        draftFolderRegistry.delete(effectiveDraftId);
+      }
+
       // D2：draft_commit 计数（仅实际 mint 路径）
       recordDraftCommit();
       return id;

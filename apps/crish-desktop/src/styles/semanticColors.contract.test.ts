@@ -124,7 +124,7 @@ describe('固定语义色契约', () => {
     const menu = readFileSync(
       resolve(ROOT, 'components/ui/SmartPanel/SmartPanel.module.css'),
       'utf8'
-    );
+    ).replace(/\s+/g, ' ');
     expect(menu).toContain(
       '.item.danger:hover, .item.danger.focused { background-color: var(--danger-soft-bg); }'
     );

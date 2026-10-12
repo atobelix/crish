@@ -101,10 +101,8 @@ describe('三档底色契约', () => {
     expect(decl(light, '--surface-main')).toBe('#fbfaf9');
     expect(decl(light, '--surface-input')).toBe('#ffffff');
     expect(decl(light, '--tab-active-bg')).toBe('var(--surface-input)');
-    // 深色元素底色：一律「所在层 + 提亮墨」派生，随皮肤 / accent 走（heson 2026-10-11）
-    expect(decl(dark, '--element-ink')).toBe(
-      'color-mix(in oklab, var(--text-primary) 88%, var(--accent-color) 12%)'
-    );
+    // 深色元素底色：一律「所在层 + 提亮墨」派生，随皮肤走，纯净不偏色（2026-10-12 净化收敛）
+    expect(decl(dark, '--element-ink')).toBe('var(--text-primary)');
     // 深色元素提亮阶梯：全部是 element-ink 透明叠加（任何层上相对增量一致）
     // 阶梯值集中在 --elevate-step-*：只断言结构与单调递增，不钉死百分比（heson 会逐步微调）
     for (const s of ['1', '1-active', '2', '3']) {

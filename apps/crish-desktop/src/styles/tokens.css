@@ -861,7 +861,8 @@ html[data-theme='light'] {
   --aicard-badge-fg: var(--text-tertiary);
 
   /* --- 5. 流式动效与打字机光标体系 (Light) --- */
-  --stream-caret-color: var(--brand-deep);
+  --stream-caret-color: var(--text-primary);
+  --skill-tag-color: hsl(198 85% 36%);
   --stream-caret-width: 2px;
   --stream-caret-height: 0.95em;
   --stream-caret-radius: 1px;
@@ -1012,14 +1013,11 @@ html[data-theme='dark'] {
   --bg-card-active: var(--elevate-1-active);
   --bg-card-subtle: var(--surface-outer);
   /* 用户气泡：主层 K88.2 再加 K4 → K92.2 → RGB 19.9/19.8/19.7 ≈ #141414（与浅色同向：比所在层更「重墨」） */
-  /* 深色「元素底色」派生体系（heson 2026-10-11 00:54 / 01:01）：
-     不写死灰值，一律 = 所在层 token + 一份「提亮墨」，色相随当前皮肤的层色走，并带一点 accent。
-     --element-ink = 主文字色 88% + accent 12%（皮肤切换 / accent 变化自动跟随）。 */
-  --element-ink: color-mix(
-    in oklab,
-    var(--text-primary) 88%,
-    var(--accent-color) 12%
-  );
+  /* 深色「元素底色」派生体系（heson 2026-10-11 00:54 / 01:01；2026-10-12 净化收敛）：
+     不写死灰值，一律 = 所在层 token + 一份「提亮墨」，色相严格随当前皮肤的主文字色走，
+     严禁混入与界面基调冲突的翡翠绿 accent。
+     --element-ink = 主文字色（皮肤切换 / 明暗切换自动跟随，纯净不偏色）。 */
+  --element-ink: var(--text-primary);
   /* ── 深色「元素提亮阶梯」（heson 2026-10-11 01:05）──
      全部是 element-ink 的透明叠加：叠在哪一层就在哪一层上提亮，外层/主层/输入框上的相对增量一致（ΔL ≈ α ×（墨 L − 层 L））。
      ★ 调亮度只改下面 4 个 --elevate-step-*（墨的叠加百分比；每 1.33% ≈ +1 亮度点）★

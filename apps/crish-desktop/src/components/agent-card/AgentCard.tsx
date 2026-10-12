@@ -13,11 +13,11 @@ import {
 } from '../../api/openAgentPanel';
 import { useSessionStore } from '../../store/storeAccess';
 import {
-  selectActiveSessionId,
   selectPanelAgentId,
   selectSessionsById,
   useSessionField,
 } from '../../store/storeAccess';
+import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 import { ComposerField } from '../chat-composer/ChatComposer';
 import { AgentTeamBoard } from './AgentTeamBoard';
 import { useAgentPanel } from '../../hooks/useAgentStream';
@@ -39,6 +39,8 @@ interface AgentCardProps {
   agentId?: string | null;
   /** 所属主会话；缺省取 activeSessionId */
   parentSessionId?: string | null;
+  sessionId?: string | null;
+  leafId?: string | null;
   /**
    * 历史 prop：曾表示主列内嵌全屏。现仅影响关闭钮图标（返回 vs X），
    * 面板始终在侧栏，永不覆盖主对话。
@@ -48,15 +50,22 @@ interface AgentCardProps {
 }
 
 export const AgentCard: React.FC<AgentCardProps> = React.memo(
-  ({ agentId, parentSessionId, embedded, onClose }) => {
+  ({
+    agentId,
+    parentSessionId,
+    sessionId,
+    leafId: _leafId,
+    embedded,
+    onClose,
+  }) => {
     const sessionsById = useSessionField(selectSessionsById);
-    const activeSessionId = useSessionField(selectActiveSessionId);
+    const scopedSessionId = useScopedSessionId(parentSessionId || sessionId);
     const panelAgentId = useSessionField(selectPanelAgentId);
     const patchSessionAgent = useSessionStore((s) => s.patchSessionAgent);
 
     const id = agentId ?? panelAgentId;
 
-    const parentId = parentSessionId || activeSessionId;
+    const parentId = scopedSessionId;
     // 优先 O(1) sessionsById；找不到再扫 index 值，不再订阅 sessions 整表
     const sess =
       (parentId ? sessionsById[parentId] : undefined) ||
@@ -226,8 +235,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(
                       gap: 6,
                     }}
                   >
-                    <AppIcon name="message-square" size={13}
-                      aria-hidden />
+                    <AppIcon name="message-square" size={13} aria-hidden />
                     暂无消息
                   </span>
                   <span

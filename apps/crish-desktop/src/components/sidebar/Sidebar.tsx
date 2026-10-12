@@ -157,6 +157,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
 
     const sidebarRef = useRef<HTMLDivElement>(null);
     const sortTriggerRef = useRef<HTMLButtonElement>(null);
+    const sidebarScrollRef = useRef<HTMLDivElement>(null);
 
     const {
       sidebarWidthPx,
@@ -298,12 +299,15 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
         />
 
         <div
+          ref={sidebarScrollRef}
           className={styles.sidebarScroll}
           data-sidebar-chrome="scroll"
+          data-sidebar-scroll-host="true"
           aria-hidden={chromeHidden || undefined}
           inert={chromeHidden ? true : undefined}
         >
           <SidebarSessionList
+            scrollHostRef={sidebarScrollRef}
             sessions={sessions}
             activeSessionId={activeSessionId}
             searchQuery={searchQuery}

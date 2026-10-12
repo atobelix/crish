@@ -17,6 +17,7 @@ import {
   sanitizeSessionSeed,
 } from './store-initializers';
 import type { WorkspaceLayoutSnapshot } from './store-types';
+import { STORAGE_PERSIST_DEBOUNCE_MS } from '../persistenceConstants';
 
 export interface PersistableStoreState {
   workspaces?: WorkspaceState[];
@@ -89,12 +90,12 @@ export function deserializeWorkspaceLayout<
 }
 
 /** 等待 store 会话回灌完成 */
-export function waitForStoreHydration<S extends { hydrationComplete: boolean }>(
-  store: {
-    getState: () => S;
-    subscribe: (listener: (state: S) => void) => () => void;
-  }
-): Promise<void> {
+export function waitForStoreHydration<
+  S extends { hydrationComplete: boolean },
+>(store: {
+  getState: () => S;
+  subscribe: (listener: (state: S) => void) => () => void;
+}): Promise<void> {
   return new Promise((resolve) => {
     if (store.getState().hydrationComplete) {
       resolve();
@@ -107,6 +108,54 @@ export function waitForStoreHydration<S extends { hydrationComplete: boolean }>(
       }
     });
   });
+}
+
+function readUrlTargetSessionId(): string | null {
+  if (typeof window === 'undefined' || !window.location?.search) return null;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const sid = (params.get('session') || '').trim();
+    return sid || null;
+  } catch {
+    return null;
+  }
+}
+
+function syncActiveSessionToEmptyLayoutLeaf(
+  sessionId: string,
+  sessionTitle?: string
+): void {
+  if (!sessionId) return;
+  void import('../layout-tree')
+    .then((mod: any) => {
+      try {
+        const { useLayoutTreeStore, collectLeaves } = mod;
+        if (typeof useLayoutTreeStore?.getState !== 'function') return;
+        const treeState = useLayoutTreeStore.getState();
+        const root = treeState?.tree?.root;
+        if (!root) return;
+        if (sessionTitle && typeof treeState.updateTabTitle === 'function') {
+          treeState.updateTabTitle(sessionId, sessionTitle);
+        }
+        const leaves = collectLeaves(root);
+        const activeLeafId = treeState.activeLeafId || leaves[0]?.id;
+        if (!activeLeafId) return;
+        const activeLeaf = leaves.find((l: any) => l.id === activeLeafId);
+        if (activeLeaf && (!activeLeaf.tabs || activeLeaf.tabs.length === 0)) {
+          if (typeof treeState.openSession === 'function') {
+            treeState.openSession(sessionId, {
+              activeLeafId,
+              title: sessionTitle || '',
+            });
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    })
+    .catch(() => {
+      /* ignore */
+    });
 }
 
 /**
@@ -163,7 +212,7 @@ export function initStorePersistence<S extends PersistableStoreState>(
       } catch (e) {
         console.warn('[sessionPersistence] save failed', e);
       }
-    }, 350);
+    }, STORAGE_PERSIST_DEBOUNCE_MS);
   });
 
   // 启动时：先迁移，再从 SQLite 回灌会话（替代磁盘镜像）
@@ -181,6 +230,11 @@ export function initStorePersistence<S extends PersistableStoreState>(
         const cur = store.getState();
         let applied = false;
         let filledBodies = false;
+        const urlSessionId = readUrlTargetSessionId();
+        const preferredActiveId =
+          urlSessionId && restored.sessions.some((s) => s.id === urlSessionId)
+            ? urlSessionId
+            : restored.activeSessionId;
         // 经 store 自身 action 激活（依赖倒置：store-persistence 不再反向
         // import api/storeAccess，G13 断环——api → store 大环的收口边）
         const setActiveSessionId = (id: string) =>
@@ -194,7 +248,7 @@ export function initStorePersistence<S extends PersistableStoreState>(
 
             const sanitized = sanitizeSessionSeed({
               sessions: restored.sessions,
-              activeSessionId: restored.activeSessionId,
+              activeSessionId: preferredActiveId,
               folderOrder: restored.folderOrder,
             });
             state.sessions = sanitized.sessions;
@@ -219,7 +273,7 @@ export function initStorePersistence<S extends PersistableStoreState>(
         } else {
           // Stream D 关键：seedSessions 只读 localStorage body，而 body 主存 SQLite。
           // 若 LS 壳 messages=[]、SQLite 有正文，旧逻辑 early-return 会永久跳过回灌，
-          // 随后 350ms persist 还会用空数组把 SQLite 擦掉。此处仅补全空正文，不覆盖
+          // 随后 STORAGE_PERSIST_DEBOUNCE_MS (300ms) persist 还会用空数组把 SQLite 擦掉。此处仅补全空正文，不覆盖
           // 用户已在内存中的消息 / 新建会话。
           store.setState((state: PersistableStoreState) => {
             const byId = new Map(
@@ -237,6 +291,7 @@ export function initStorePersistence<S extends PersistableStoreState>(
                 ...s,
                 messages: r.messages,
                 agents: r.agents?.length ? r.agents : s.agents,
+                messagesHydrated: r.messagesHydrated ?? s.messagesHydrated,
                 ...(r.engineCursor !== undefined
                   ? { engineCursor: r.engineCursor }
                   : {}),
@@ -267,9 +322,6 @@ export function initStorePersistence<S extends PersistableStoreState>(
         if (!applied && !filledBodies) {
           // 即便未改 sessions，active 仍可能是 seed 直接写入、未走 setActiveSessionId，
           // 空正文远程壳需要一次 activate 才拉 read-session-events。
-          // 仅 hydrate 激活、不建 shell tab：建 tab / 绑 leaf 由 shell 手势统一决策
-          // （PE-01 T04.4 回灌编排主责；此处避免 E2 阶段抢先写 shell openTabs 与
-          //  E4 hydrateWorkspaceShell 的 restore 路径竞态）。
           try {
             const after = store.getState();
             if (
@@ -277,6 +329,10 @@ export function initStorePersistence<S extends PersistableStoreState>(
               after.sessionsById[after.activeSessionId]
             ) {
               setActiveSessionId(after.activeSessionId);
+              syncActiveSessionToEmptyLayoutLeaf(
+                after.activeSessionId,
+                after.sessionsById[after.activeSessionId]?.title
+              );
             }
           } catch {
             /* ignore */
@@ -287,12 +343,15 @@ export function initStorePersistence<S extends PersistableStoreState>(
           const after = store.getState();
           // 直接写 activeSessionId 绕过 setActiveSessionId，空正文远程壳不会拉引擎。
           // 再走一遍 setActive：焦点幂等，且触发 needsEngineMessageHydrate 懒水合。
-          // 同上：仅 hydrate 激活，不建 shell tab（open/focus 归 shell 单一手势）。
           if (
             after.activeSessionId &&
             after.sessionsById[after.activeSessionId]
           ) {
             setActiveSessionId(after.activeSessionId);
+            syncActiveSessionToEmptyLayoutLeaf(
+              after.activeSessionId,
+              after.sessionsById[after.activeSessionId]?.title
+            );
           }
           void persistAllSessions(
             after.sessions,

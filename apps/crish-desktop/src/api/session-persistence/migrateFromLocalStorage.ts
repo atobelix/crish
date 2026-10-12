@@ -144,7 +144,9 @@ async function migrateFromLocalStorage(): Promise<{
  */
 export async function ensureMigrated(): Promise<void> {
   const current = await getSessionMeta(SCHEMA_VERSION_KEY);
-  if (current === SCHEMA_VERSION_V3) return;
+  const curNum = Number(current);
+  if (current === SCHEMA_VERSION_V3 || (Number.isFinite(curNum) && curNum >= 3))
+    return;
 
   // 检测 localStorage 是否有待迁移数据
   let hasLocalData = false;
@@ -155,8 +157,10 @@ export async function ensureMigrated(): Promise<void> {
   }
 
   if (!hasLocalData) {
-    // 空环境（新装机 / 全新用户）→ 直接标记已迁移
-    await setSessionMeta(SCHEMA_VERSION_KEY, SCHEMA_VERSION_V3);
+    // 空环境（新装机 / 全新用户）→ 直接标记已迁移（若已有更高版本则不降级）
+    if (!Number.isFinite(curNum) || curNum < 3) {
+      await setSessionMeta(SCHEMA_VERSION_KEY, SCHEMA_VERSION_V3);
+    }
     return;
   }
 
@@ -164,12 +168,14 @@ export async function ensureMigrated(): Promise<void> {
   try {
     const stats = await migrateFromLocalStorage();
     if (stats) {
-      // 迁移成功 → 标记 schema_version + 迁移完成时间戳
-      await setSessionMeta(SCHEMA_VERSION_KEY, SCHEMA_VERSION_V3);
+      // 迁移成功 → 标记 schema_version + 迁移完成时间戳（若已有更高版本则不降级）
+      if (!Number.isFinite(curNum) || curNum < 3) {
+        await setSessionMeta(SCHEMA_VERSION_KEY, SCHEMA_VERSION_V3);
+      }
       await setSessionMeta('migration_completed_at', String(Date.now()));
       // 不立即删除 localStorage（30 天回滚保险）
       console.log(
-        `[migrate] localStorage → SQLite 完成: ${stats.sessions} sessions, ${stats.messages} messages, ${stats.agents} agents`,
+        `[migrate] localStorage → SQLite 完成: ${stats.sessions} sessions, ${stats.messages} messages, ${stats.agents} agents`
       );
     }
     // stats === null 表示 invoke missing 或无数据 → 下次启动重试
@@ -209,7 +215,7 @@ export async function runMigrationCleanupIfNeeded(): Promise<void> {
   } else {
     console.warn(
       `[migrate] 30 天清理保留 ${result.preserved.length} 个会话的 LS 数据` +
-        `（SQLite 无对应数据，降级期唯一副本保留待回迁）`,
+        `（SQLite 无对应数据，降级期唯一副本保留待回迁）`
     );
   }
 }

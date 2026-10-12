@@ -25,7 +25,6 @@ import type {
   TiptapEditorFieldHandle,
   MentionCandidate,
 } from './composerTypes';
-import { slashMenuPick } from '../../api/resolveSlashCommand';
 import { DraftUndoToast } from './DraftUndoToast';
 import {
   COMPOSER_DENSE_LINE_HEIGHT,
@@ -38,41 +37,38 @@ import {
   readSendShortcut,
   SEND_SHORTCUT_CHANGED_EVENT,
 } from '../../api/store-access/settingsAccess';
+import { dispatchUiEvent } from '../../api/uiEvents';
+import { openSettings } from '../../store/storeAccess';
+import { extractEditorScopeTarget } from './AiCommandSlashExtension';
 
 /** 宿主系统斜杠命令默认集（对齐 useChatComposerProps.BASE_SLASH 与 AI 系统指令集） */
 const HOST_SYSTEM_SLASH: ReadonlyArray<{ cmd: string; desc: string }> = [
-  { cmd: '/clear', desc: '清空会话历史' },
-  { cmd: '/stop', desc: '停止当前任务' },
-  { cmd: '/mode', desc: '切换执行模式' },
-  { cmd: '/prompt', desc: '插入提示词' },
-  { cmd: '/compact', desc: '压缩会话上下文' },
-  { cmd: '/goal', desc: '多轮推进直至完成' },
-  { cmd: '/schedule', desc: '定时任务' },
-  { cmd: '/grill-me', desc: '对齐提问，暂不实施' },
-  { cmd: '/teamwork', desc: '协作看板' },
-  { cmd: '/browser', desc: '预览浏览器' },
-  { cmd: '/learn', desc: '记住一条规则' },
-  { cmd: '/settings', desc: '打开设置中心' },
-  { cmd: '/help', desc: '查看指令帮助' },
+  { cmd: '/goal', desc: '开启长程自主推进模式，直到彻底达成目标' },
+  { cmd: '/compact', desc: '压缩会话上下文，释放 Token' },
+  { cmd: '/schedule', desc: '定时/周期性工作流任务编排' },
+  { cmd: '/browser', desc: '唤起内置受管预览浏览器' },
+  { cmd: '/teamwork', desc: '多 Agent 团队并行协同看板' },
+  { cmd: '/learn', desc: '从对话经验沉淀并记住长期规则' },
+  { cmd: '/grill-me', desc: '深度交互式方案推演，严格拷问' },
+  { cmd: '/clear', desc: '清空当前会话上下文并重置状态' },
+  { cmd: '/stop', desc: '停止当前正在生成的回答或运行中的任务' },
+  { cmd: '/settings', desc: '打开工作台设置中心' },
 ];
 
 /** 宿主命令 → 斜杠菜单图标映射 */
 const HOST_SLASH_ICONS: Record<string, string> = {
-  '/clear': 'Eraser',
-  '/stop': 'Square',
-  '/mode': 'Sliders',
-  '/prompt': 'FileCode',
-  '/compact': 'Shrink',
-  '/goal': 'Target',
-  '/learn': 'BookOpen',
-  '/grill-me': 'HelpCircle',
-  '/schedule': 'Calendar',
-  '/teamwork': 'Users',
-  '/browser': 'Globe',
-  '/simulate': 'PlayCircle',
-  '/skill': 'Sparkles',
-  '/settings': 'Sparkles',
-  '/help': 'HelpCircle',
+  '/clear': 'eraser',
+  '/stop': 'cancel-circle',
+  '/compact': 'sliders',
+  '/goal': 'target',
+  '/learn': 'book-open',
+  '/grill-me': 'flame',
+  '/schedule': 'clock',
+  '/teamwork': 'users',
+  '/browser': 'compass',
+  '/simulate': 'play',
+  '/skill': 'blocks',
+  '/settings': 'settings',
 };
 
 export type SlashCommandInputItem = {
@@ -303,16 +299,46 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
                       id: skillPath || skillName,
                       label: c.skillName || c.cmd,
                       kind: 'skill',
+                      iconName: 'blocks',
                     },
                   },
                   { type: 'text', text: ' ' },
                 ])
                 .run();
-            } else {
-              const pick = slashMenuPick(c.cmd);
+            } else if (c.cmd === '/clear') {
               const chain = editor.chain().focus();
               if (range) chain.deleteRange(range);
-              chain.insertContent(pick.text).run();
+              chain.run();
+              const target = extractEditorScopeTarget(editor);
+              dispatchUiEvent('clear-current-session', target);
+            } else if (c.cmd === '/stop') {
+              const chain = editor.chain().focus();
+              if (range) chain.deleteRange(range);
+              chain.run();
+              const target = extractEditorScopeTarget(editor);
+              dispatchUiEvent('stop-generation', target);
+            } else if (c.cmd === '/settings') {
+              const chain = editor.chain().focus();
+              if (range) chain.deleteRange(range);
+              chain.run();
+              openSettings();
+            } else {
+              const chain = editor.chain().focus();
+              if (range) chain.deleteRange(range);
+              chain
+                .insertContent([
+                  {
+                    type: 'mention',
+                    attrs: {
+                      id: c.cmd,
+                      label: c.cmd,
+                      kind: 'command',
+                      iconName: HOST_SLASH_ICONS[c.cmd] ?? 'sparkles',
+                    },
+                  },
+                  { type: 'text', text: ' ' },
+                ])
+                .run();
             }
           },
         };

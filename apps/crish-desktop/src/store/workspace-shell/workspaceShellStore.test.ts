@@ -15,11 +15,7 @@ import { findNodeById } from '../layout-tree/operations';
 import { viewRegistry } from '../../services/view-registry';
 import { isPendingDraft } from '../draftSession';
 import { EMPTY_SESSION_TITLE } from '../../api/sessionTitle';
-import {
-  createDefaultDock,
-  mintTabId,
-  type SessionTab,
-} from './types';
+import { createDefaultDock, mintTabId, type SessionTab } from './types';
 import { ownedChatLeaves } from './treeSessionQuery';
 
 vi.mock('../../api/projectStore', () => ({
@@ -39,7 +35,9 @@ vi.mock('../../api/storeAccess', () => ({
 
 const sessionSetActiveSessionId = vi.fn();
 const sessionEnterDraftMode = vi.fn();
-const sessionDeleteSession = vi.fn((id: string) => id === 's-del' || id === 's1');
+const sessionDeleteSession = vi.fn(
+  (id: string) => id === 's-del' || id === 's1'
+);
 const mockSessionsById: Record<
   string,
   { id: string; title: string; messages: { sender: string; text: string }[] }
@@ -205,7 +203,16 @@ function installTreeCommands(): void {
     const owned = readLeaf(st.tree.root, leafId);
     if (!owned) return;
     const idx = owned.tabs.findIndex((t) => t.tabId === tabId);
-    if (idx < 0) return;
+    if (idx < 0) {
+      if (st.tree.root.type === 'branch') {
+        const keep =
+          st.tree.root.children[0].id === leafId
+            ? st.tree.root.children[1]
+            : st.tree.root.children[0];
+        setTree({ version: 3, root: keep }, keep.id);
+      }
+      return;
+    }
     const nextTabs = owned.tabs.filter((t) => t.tabId !== tabId);
     if (nextTabs.length === 0) {
       if (st.tree.root.type === 'leaf' && st.tree.root.id === leafId) {
@@ -402,23 +409,29 @@ describe('openOrFocusSession — 未放置进活动叶 / 已放置只聚焦', ()
       'leaf-b'
     );
     useWorkspaceShellStore.setState({ lastChatLeafId: 'leaf-b' });
-    const tabsABefore = (findNodeById(
-      useLayoutTreeStore.getState().tree.root,
-      'leaf-a'
-    ) as LayoutLeaf).tabs;
+    const tabsABefore = (
+      findNodeById(
+        useLayoutTreeStore.getState().tree.root,
+        'leaf-a'
+      ) as LayoutLeaf
+    ).tabs;
 
     useWorkspaceShellStore.getState().openOrFocusSession('s3', { title: 'S3' });
 
     const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
     expect(chats).toHaveLength(2);
-    expect(listChatLeaves(useLayoutTreeStore.getState().tree.root)).toHaveLength(
-      2
-    );
+    expect(
+      listChatLeaves(useLayoutTreeStore.getState().tree.root)
+    ).toHaveLength(2);
     const leafA = chats.find((l) => l.id === 'leaf-a')!;
     const leafB = chats.find((l) => l.id === 'leaf-b')!;
     expect(
-      (findNodeById(useLayoutTreeStore.getState().tree.root, 'leaf-a') as LayoutLeaf)
-        .tabs
+      (
+        findNodeById(
+          useLayoutTreeStore.getState().tree.root,
+          'leaf-a'
+        ) as LayoutLeaf
+      ).tabs
     ).toBe(tabsABefore);
     expect(leafA.tabs.map((t) => t.sessionId)).toEqual(['s1']);
     expect(leafB.tabs.map((t) => t.sessionId)).toEqual(['s2', 's3']);
@@ -447,9 +460,9 @@ describe('openOrFocusSession — 未放置进活动叶 / 已放置只聚焦', ()
     useWorkspaceShellStore.getState().openOrFocusSession('s3');
 
     const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
-    expect(chats.find((l) => l.id === 'leaf-a')!.tabs.map((t) => t.sessionId)).toEqual(
-      ['s1']
-    );
+    expect(
+      chats.find((l) => l.id === 'leaf-a')!.tabs.map((t) => t.sessionId)
+    ).toEqual(['s1']);
     const leafB = chats.find((l) => l.id === 'leaf-b')!;
     expect(leafB.tabs.map((t) => t.sessionId)).toEqual(['s2', 's3']);
     expect(leafB.activeTabId).toBe('t3');
@@ -476,18 +489,24 @@ describe('activateTab(leafId, tabId)', () => {
       },
       'leaf-a'
     );
-    const tabsBBefore = (findNodeById(
-      useLayoutTreeStore.getState().tree.root,
-      'leaf-b'
-    ) as LayoutLeaf).tabs;
+    const tabsBBefore = (
+      findNodeById(
+        useLayoutTreeStore.getState().tree.root,
+        'leaf-b'
+      ) as LayoutLeaf
+    ).tabs;
 
     useWorkspaceShellStore.getState().activateTab('leaf-a', 't2');
 
     const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
     expect(chats.find((l) => l.id === 'leaf-a')!.activeTabId).toBe('t2');
     expect(
-      (findNodeById(useLayoutTreeStore.getState().tree.root, 'leaf-b') as LayoutLeaf)
-        .tabs
+      (
+        findNodeById(
+          useLayoutTreeStore.getState().tree.root,
+          'leaf-b'
+        ) as LayoutLeaf
+      ).tabs
     ).toBe(tabsBBefore);
     expect(sessionSetActiveSessionId).toHaveBeenCalledWith('s2');
   });
@@ -532,6 +551,32 @@ describe('closeTab — 不摘 unit，叶内退邻居', () => {
     expect(owned.activeTabId).toBe('');
     expect(sessionEnterDraftMode).toHaveBeenCalled();
   });
+
+  it('多叶下关闭空分屏的虚拟草稿标签（pane-${leafId}）：摘除该空分屏并回退 lastChatLeafId', () => {
+    const a = leaf('leaf-a', [tab('s1', 't1')]);
+    const b = leaf('leaf-b', [], '');
+    resetLayout(
+      {
+        version: 3,
+        root: {
+          type: 'branch',
+          id: 'br',
+          direction: 'horizontal',
+          children: [a, b],
+          splitRatio: 0.5,
+        },
+      },
+      'leaf-b'
+    );
+    useWorkspaceShellStore.setState({ lastChatLeafId: 'leaf-b' });
+
+    useWorkspaceShellStore.getState().closeTab('leaf-b', 'pane-leaf-b');
+
+    const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
+    expect(chats).toHaveLength(1);
+    expect(chats[0]!.id).toBe('leaf-a');
+    expect(useWorkspaceShellStore.getState().lastChatLeafId).toBe('leaf-a');
+  });
 });
 
 describe('openNewDraftTab — 不建标签，只进入新对话界面', () => {
@@ -551,17 +596,23 @@ describe('openNewDraftTab — 不建标签，只进入新对话界面', () => {
       },
       'leaf-b'
     );
-    const tabsABefore = (findNodeById(
-      useLayoutTreeStore.getState().tree.root,
-      'leaf-a'
-    ) as LayoutLeaf).tabs;
+    const tabsABefore = (
+      findNodeById(
+        useLayoutTreeStore.getState().tree.root,
+        'leaf-a'
+      ) as LayoutLeaf
+    ).tabs;
 
     useWorkspaceShellStore.getState().openNewDraftTab({ leafId: 'leaf-b' });
 
     const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
     expect(
-      (findNodeById(useLayoutTreeStore.getState().tree.root, 'leaf-a') as LayoutLeaf)
-        .tabs
+      (
+        findNodeById(
+          useLayoutTreeStore.getState().tree.root,
+          'leaf-a'
+        ) as LayoutLeaf
+      ).tabs
     ).toBe(tabsABefore);
     const leafB = chats.find((l) => l.id === 'leaf-b')!;
     expect(leafB.tabs).toHaveLength(1);
@@ -576,10 +627,7 @@ describe('openNewDraftTab — 不建标签，只进入新对话界面', () => {
   });
 
   it('新对话界面下点已有会话：激活该会话，不留新对话标签', () => {
-    resetLayout(
-      { version: 3, root: leaf('L', [tab('s1', 't1')], '') },
-      'L'
-    );
+    resetLayout({ version: 3, root: leaf('L', [tab('s1', 't1')], '') }, 'L');
     useWorkspaceShellStore.getState().openOrFocusSession('s1');
     const owned = ownedChatLeaves(useLayoutTreeStore.getState().tree.root)[0]!;
     expect(owned.tabs.map((t) => t.sessionId)).toEqual(['s1']);
@@ -611,9 +659,9 @@ describe('promoteDraftTab / deleteSessionAndCloseTab', () => {
       .promoteDraftTab('__pending_draft__:leaf-b', 's-real', '真');
 
     const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
-    expect(chats.find((l) => l.id === 'leaf-a')!.tabs.map((t) => t.sessionId)).toEqual(
-      ['s1']
-    );
+    expect(
+      chats.find((l) => l.id === 'leaf-a')!.tabs.map((t) => t.sessionId)
+    ).toEqual(['s1']);
     const leafB = chats.find((l) => l.id === 'leaf-b')!;
     expect(leafB.tabs.map((t) => t.sessionId)).toEqual(['s2', 's-real']);
     expect(leafB.tabs.find((t) => t.sessionId === 's-real')!.title).toBe('真');
@@ -625,7 +673,9 @@ describe('promoteDraftTab / deleteSessionAndCloseTab', () => {
   it('deleteSessionAndCloseTab 摘已打开 tab', () => {
     const a = leaf('leaf-a', [tab('s1', 't1'), tab('s-del', 'td')]);
     resetLayout({ version: 3, root: a }, 'leaf-a');
-    const ok = useWorkspaceShellStore.getState().deleteSessionAndCloseTab('s-del');
+    const ok = useWorkspaceShellStore
+      .getState()
+      .deleteSessionAndCloseTab('s-del');
     expect(ok).toBe(true);
     const owned = ownedChatLeaves(useLayoutTreeStore.getState().tree.root)[0]!;
     expect(owned.tabs.map((t) => t.sessionId)).toEqual(['s1']);
@@ -636,9 +686,9 @@ describe('promoteDraftTab / deleteSessionAndCloseTab', () => {
 describe('标题回写走 updateTabTitle，不写 openTabs', () => {
   it('open 空标题回落 EMPTY_SESSION_TITLE', () => {
     useWorkspaceShellStore.getState().openOrFocusSession('s-empty');
-    const t = ownedChatLeaves(useLayoutTreeStore.getState().tree.root)[0]!.tabs.find(
-      (x) => x.sessionId === 's-empty'
-    );
+    const t = ownedChatLeaves(
+      useLayoutTreeStore.getState().tree.root
+    )[0]!.tabs.find((x) => x.sessionId === 's-empty');
     expect(t?.title).toBe(EMPTY_SESSION_TITLE);
   });
 
@@ -649,22 +699,26 @@ describe('标题回写走 updateTabTitle，不写 openTabs', () => {
       messages: [],
     };
     useWorkspaceShellStore.getState().openOrFocusSession('s-real');
-    const t = ownedChatLeaves(useLayoutTreeStore.getState().tree.root)[0]!.tabs.find(
-      (x) => x.sessionId === 's-real'
-    );
+    const t = ownedChatLeaves(
+      useLayoutTreeStore.getState().tree.root
+    )[0]!.tabs.find((x) => x.sessionId === 's-real');
     expect(t?.title).toBe('缓存优化方案');
   });
 
   it('syncOpenTabTitles 不把 EMPTY 回落盖掉已有真实标题', () => {
     resetLayout(
-      { version: 3, root: leaf('L', [tab('s-keep', 't-keep', { title: '2' })]) },
+      {
+        version: 3,
+        root: leaf('L', [tab('s-keep', 't-keep', { title: '2' })]),
+      },
       'L'
     );
     useWorkspaceShellStore.getState().syncOpenTabTitles({
       's-keep': EMPTY_SESSION_TITLE,
     });
     expect(
-      ownedChatLeaves(useLayoutTreeStore.getState().tree.root)[0]!.tabs[0]!.title
+      ownedChatLeaves(useLayoutTreeStore.getState().tree.root)[0]!.tabs[0]!
+        .title
     ).toBe('2');
   });
 });
@@ -696,7 +750,9 @@ describe('focusLeaf 契约', () => {
       'L-draft'
     );
     useWorkspaceShellStore.getState().focusLeaf('L-draft');
-    const leafNode = ownedChatLeaves(useLayoutTreeStore.getState().tree.root)[0]!;
+    const leafNode = ownedChatLeaves(
+      useLayoutTreeStore.getState().tree.root
+    )[0]!;
     expect(leafNode.activeTabId).toBe('');
     expect(useLayoutTreeStore.getState().activeLeafId).toBe('L-draft');
     expect(useWorkspaceShellStore.getState().lastChatLeafId).toBe('L-draft');

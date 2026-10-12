@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useId, useMemo } from 'react';
 import styles from './AgentCard.module.css';
 import { Button, Tooltip } from '../ui';
 
@@ -32,6 +32,7 @@ export function AgentBrowsePad({
   onClose?: (() => void) | undefined;
   embedded?: boolean | undefined;
 }) {
+  const headingId = useId();
   const sessionsById = useSessionField(selectSessionsById);
   const activeSessionId = useSessionField(selectActiveSessionId);
   const parentId = parentSessionId || activeSessionId;
@@ -123,9 +124,12 @@ export function AgentBrowsePad({
             aria-live="polite"
           >
             <div className={styles.skeletonTitleRow}>
-              <AppIcon name="bot" size={13}
+              <AppIcon
+                name="bot"
+                size={13}
                 className={styles.skeletonBotIcon}
-                aria-hidden />
+                aria-hidden
+              />
               <span>暂无活跃协作</span>
             </div>
             <div className={styles.skeletonGrid}>
@@ -145,12 +149,9 @@ export function AgentBrowsePad({
           <div
             className={styles.agentLaunchList}
             role="list"
-            aria-label="本会话子智能体"
+            aria-labelledby={headingId}
           >
-            <div
-              className={styles.agentLaunchListH}
-              id="agent-launch-list-heading"
-            >
+            <div className={styles.agentLaunchListH} id={headingId}>
               本会话 · AI 已拉起
             </div>
             {sorted.map((a) => {

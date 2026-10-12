@@ -129,7 +129,9 @@ export function useAppBootstrap({
             if (disposed) return;
             const projects = listProjects();
             for (const p of projects) rememberProjectFolderAlias(p.id, p.path);
-            getCompositionRoot().session.getState().rebindSessionFolders(projects);
+            getCompositionRoot()
+              .session.getState()
+              .rebindSessionFolders(projects);
           }
         );
       } catch (e) {
@@ -279,19 +281,5 @@ export function useAppBootstrap({
     return onUiEvent('pick-workspace', () => {
       void pickWorkspaceFolder();
     });
-  }, []);
-
-  // 10. 二叉树布局迁移：旧 columns/groups → 新 LayoutTree
-  useEffect(() => {
-    let cancelled = false;
-    void import('../store/layout-tree/migration').then(
-      ({ migrateLayoutIfNeeded }) => {
-        if (cancelled) return;
-        migrateLayoutIfNeeded();
-      }
-    );
-    return () => {
-      cancelled = true;
-    };
   }, []);
 }

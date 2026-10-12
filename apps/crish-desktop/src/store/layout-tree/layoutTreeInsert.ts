@@ -97,7 +97,12 @@ export function insertTab(
 
   const tabs = [...leaf.tabs];
   const idx = insertIdx;
-  if (idx === undefined || !Number.isFinite(idx) || idx < 0 || idx > tabs.length) {
+  if (
+    idx === undefined ||
+    !Number.isFinite(idx) ||
+    idx < 0 ||
+    idx > tabs.length
+  ) {
     tabs.push(tab);
   } else {
     tabs.splice(idx, 0, tab);
@@ -270,7 +275,25 @@ export function splitSessionFromSidebar(
   for (const leaf of allLeaves) {
     const existingTab = leaf.tabs.find((t) => t.sessionId === sessionId);
     if (existingTab) {
-      return splitTab(tree, leaf.id, existingTab.tabId, dstLeafId, region, splitRatio);
+      if (
+        leaf.id === dstLeafId &&
+        leaf.tabs.length <= 1 &&
+        region !== 'center'
+      ) {
+        const dir: SplitDirection =
+          region === 'left' || region === 'right' ? 'horizontal' : 'vertical';
+        const pos =
+          region === 'right' || region === 'bottom' ? 'after' : 'before';
+        return splitLeaf(tree, dstLeafId, dir, pos, splitRatio);
+      }
+      return splitTab(
+        tree,
+        leaf.id,
+        existingTab.tabId,
+        dstLeafId,
+        region,
+        splitRatio
+      );
     }
   }
 

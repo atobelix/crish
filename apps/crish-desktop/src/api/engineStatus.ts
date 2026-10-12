@@ -60,8 +60,8 @@ export type EngineLiveStatus = {
   raw?: Record<string, unknown>;
 };
 
-/** T5-1：心跳判死阈值（连续失败/超时 N 次 → 引擎探活失败；默认 2） */
-export const ENGINE_CRASH_PROBE_THRESHOLD = 2;
+/** T5-1：心跳判死阈值（连续失败/超时 N 次 → 引擎探活失败；从 2 提升至 5，防本地模型推理/高负载暂态超时误判崩溃） */
+export const ENGINE_CRASH_PROBE_THRESHOLD = 5;
 
 /** T5-1：心跳失败连续计数（模块级；成功归零） */
 const heartbeatFailStreak = { count: 0 };

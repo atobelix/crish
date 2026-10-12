@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { VirtualScrollManager, estimateTimelineMessageHeight } from './VirtualScrollManager';
+import {
+  VirtualScrollManager,
+  estimateTimelineMessageHeight,
+} from './VirtualScrollManager';
 import type { SessionMessage } from '../store/types';
 
 function ids(n: number, prefix = 'm'): string[] {
@@ -481,10 +484,10 @@ describe('Fenwick Tree (BIT) Dynamic Height & Binary Search Precision', () => {
   it('findIndexAtOffset accurately pinpoints items on boundaries and intermediate offsets', () => {
     const vsm = new VirtualScrollManager(100);
     vsm.syncOrder(['a', 'b', 'c', 'd']);
-    vsm.setActual('a', 50);  // [0, 50)
+    vsm.setActual('a', 50); // [0, 50)
     vsm.setActual('b', 100); // [50, 150)
     vsm.setActual('c', 200); // [150, 350)
-    vsm.setActual('d', 80);  // [350, 430)
+    vsm.setActual('d', 80); // [350, 430)
 
     expect(vsm.findIndexAtOffset(0)).toBe(0);
     expect(vsm.findIndexAtOffset(25)).toBe(0);
@@ -504,7 +507,13 @@ describe('estimateTimelineMessageHeight 几何稳定测试', () => {
       sender: 'assistant',
       text: '',
       injections: [{ id: 's1', metadata: { mode: 'context-state' } }],
-      blocks: [{ type: 'context_injection', id: 's1', injection: { metadata: { mode: 'context-state' } } }],
+      blocks: [
+        {
+          type: 'context_injection',
+          id: 's1',
+          injection: { metadata: { mode: 'context-state' } },
+        },
+      ],
     };
 
     const estHeight = estimateTimelineMessageHeight(carrierMsg);
@@ -540,5 +549,75 @@ describe('lastMeasured survives invalidateActual + preloadEstimates', () => {
     vsm.syncOrder(['a']);
     vsm.preloadEstimates([{ id: 'a', height: 44 }]);
     expect(vsm.getHeight('a')).toBe(44);
+  });
+});
+
+describe('W3-C / Review 05：树状数组 NaN、无穷大与负数高度刚性守门魔鬼用例', () => {
+  it('传入 NaN、Infinity、-Infinity、-50、0 时，setActual/preloadEstimates/hydrateHeightMap 100% 拦截，前缀和与总高零 NaN 污染', () => {
+    const vsm = new VirtualScrollManager(120);
+    const itemIds = ['m0', 'm1', 'm2', 'm3', 'm4', 'm5'];
+    vsm.syncOrder(itemIds);
+
+    // 先写入部分合法实测高度
+    expect(vsm.setActual('m0', 100)).toBe(true);
+    expect(vsm.setActual('m1', 200)).toBe(true);
+    expect(vsm.setActual('m2', 150)).toBe(true);
+
+    // 连续注入魔鬼畸变高度：NaN, Infinity, -Infinity, -50, 0
+    expect(vsm.setActual('m0', Number.NaN)).toBe(false);
+    expect(vsm.setActual('m1', Number.POSITIVE_INFINITY)).toBe(false);
+    expect(vsm.setActual('m2', Number.NEGATIVE_INFINITY)).toBe(false);
+    expect(vsm.setActual('m3', -50)).toBe(false);
+    expect(vsm.setActual('m4', 0)).toBe(false);
+    expect(vsm.setActual('m5', -0.0001)).toBe(false);
+
+    // 批量预估与快照回灌同样注入魔鬼畸变值
+    expect(
+      vsm.preloadEstimates([
+        { id: 'm3', height: Number.NaN },
+        { id: 'm4', height: Number.POSITIVE_INFINITY },
+        { id: 'm5', height: -50 },
+      ])
+    ).toBe(false);
+
+    vsm.hydrateHeightMap({
+      m0: Number.NaN,
+      m1: Number.NEGATIVE_INFINITY,
+      m3: -50,
+      m4: Number.POSITIVE_INFINITY,
+    });
+
+    vsm.setEstimated('m3', Number.NaN);
+    vsm.setEstimated('m4', -50);
+    vsm.setEstimated('m5', Number.POSITIVE_INFINITY);
+
+    // 验证各项高度保持合法有限值（m0=100, m1=200, m2=150, m3..m5=120 fallback）
+    const expectedHeights = [100, 200, 150, 120, 120, 120];
+    let runningOffset = 0;
+    for (let i = 0; i < itemIds.length; i++) {
+      const h = vsm.getHeight(itemIds[i]!);
+      const hAt = vsm.getHeightAt(i);
+      const offset = vsm.getOffset(i);
+
+      expect(Number.isFinite(h)).toBe(true);
+      expect(Number.isFinite(hAt)).toBe(true);
+      expect(Number.isFinite(offset)).toBe(true);
+      expect(h).toBe(expectedHeights[i]);
+      expect(hAt).toBe(expectedHeights[i]);
+      expect(offset).toBe(runningOffset);
+      runningOffset += expectedHeights[i]!;
+    }
+
+    const totalHeight = vsm.getTotalHeight();
+    expect(Number.isFinite(totalHeight)).toBe(true);
+    expect(totalHeight).toBe(810);
+
+    // 验证二分查找与可视区间计算保持严格单调与有限合法
+    for (let offset = 0; offset <= totalHeight + 100; offset += 50) {
+      const idx = vsm.findIndexAtOffset(offset);
+      expect(Number.isFinite(idx)).toBe(true);
+      expect(idx).toBeGreaterThanOrEqual(0);
+      expect(idx).toBeLessThan(itemIds.length);
+    }
   });
 });

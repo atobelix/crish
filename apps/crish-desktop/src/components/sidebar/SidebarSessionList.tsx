@@ -7,10 +7,14 @@ import { GeneralSection } from './session-list/GeneralSection';
 import { useSidebarSessionList } from './session-list/useSidebarSessionList';
 import type {
   SidebarDragItem,
-  SidebarSessionListProps,
+  SidebarSessionListProps as BaseSidebarSessionListProps,
 } from './session-list/sessionListTypes';
 
-export type { SidebarDragItem, SidebarSessionListProps };
+export interface SidebarSessionListProps extends BaseSidebarSessionListProps {
+  scrollHostRef?: React.RefObject<HTMLElement | null>;
+}
+
+export type { SidebarDragItem };
 
 /**
  * 会话列表：置顶区 + 项目分组 + 常规对话，含 session 拖拽 UI。
@@ -18,6 +22,7 @@ export type { SidebarDragItem, SidebarSessionListProps };
  */
 const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
   const {
+    scrollHostRef,
     filterType,
     projects,
     collapsedProjects,
@@ -56,10 +61,54 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
     listClassName,
   } = useSidebarSessionList(props);
 
+  const handleContainerRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      (
+        sessionListRef as React.MutableRefObject<HTMLDivElement | null>
+      ).current = node;
+      if (node) {
+        const getHost = () =>
+          scrollHostRef?.current ||
+          (node.closest(
+            '[data-sidebar-scroll-host="true"], [data-sidebar-chrome="scroll"], .sidebarScroll'
+          ) as HTMLElement | null) ||
+          node.parentElement;
+
+        try {
+          Object.defineProperties(node, {
+            scrollTop: {
+              get() {
+                const host = getHost();
+                return host ? host.scrollTop : 0;
+              },
+              set(v: number) {
+                const host = getHost();
+                if (host) host.scrollTop = v;
+              },
+              configurable: true,
+            },
+            clientHeight: {
+              get() {
+                const host = getHost();
+                return host && host.clientHeight > 0
+                  ? host.clientHeight
+                  : node.clientHeight || 400;
+              },
+              configurable: true,
+            },
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+    [sessionListRef, scrollHostRef]
+  );
+
   return (
     <NowTickContext.Provider value={nowTick}>
       <div
-        ref={sessionListRef}
+        ref={handleContainerRef}
         className={`${styles.listScroll}${listClassName ? ` ${listClassName}` : ''}`}
         data-shell-hidden={shellHiddenCount}
         data-session-input={inputListedCount}

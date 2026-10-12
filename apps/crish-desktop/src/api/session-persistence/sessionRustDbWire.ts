@@ -55,6 +55,8 @@ export interface RustSessionMessage {
    * 未知字段静默丢弃）——前端按契约先行写入，待 Rust 侧补字段后生效。
    */
   usage?: string | null;
+  /** 引擎事件/持久化序列号（RC-04 因果序真源） */
+  engineSequence?: number | null;
 }
 
 /**
@@ -183,6 +185,7 @@ export function toRustSessionMessage(msg: SessionMessage): RustSessionMessage {
   if (tr != null) out.toolCallResultsJson = tr;
   const usage = messageUsageToJson(msg);
   if (usage != null) out.usage = usage;
+  if (msg.engineSequence != null) out.engineSequence = msg.engineSequence;
   return out;
 }
 
@@ -239,7 +242,7 @@ function cacheStateFromUsageJson(
 }
 
 /** Rust SessionMessage → JS SessionMessage（JSON 字符串字段还原为数组） */
-function fromRustSessionMessage(
+export function fromRustSessionMessage(
   rust: RustSessionMessage
 ): SessionMessage | null {
   // 复用 sessionHydration 的形状守卫，确保数据干净
@@ -247,6 +250,9 @@ function fromRustSessionMessage(
     id: rust.id,
     sender: rust.sender,
     timestamp: rust.timestamp,
+    ...(rust.engineSequence != null
+      ? { engineSequence: rust.engineSequence }
+      : {}),
     ...(rust.text != null ? { text: rust.text } : {}),
     ...(rust.thinking != null ? { thinking: rust.thinking } : {}),
     ...(rust.status != null ? { status: rust.status } : {}),
@@ -280,7 +286,8 @@ function fromRustSessionMessage(
     !(parsed.blocks || []).some((b) => b.type === 'thought')
   ) {
     const thinkingTimeSec =
-      typeof rust.thinkingTime === 'number' && Number.isFinite(rust.thinkingTime)
+      typeof rust.thinkingTime === 'number' &&
+      Number.isFinite(rust.thinkingTime)
         ? rust.thinkingTime
         : undefined;
     parsed.blocks = [

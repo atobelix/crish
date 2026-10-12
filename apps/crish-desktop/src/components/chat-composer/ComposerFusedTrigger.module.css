@@ -43,7 +43,9 @@
 
 .prefix :global(button:hover),
 .prefix :global(button:active),
-.prefix :global(button[class*='isOpen']) {
+.prefix :global(button.is-open),
+.prefix :global(button.isOpen),
+.prefix :global(button[aria-expanded='true']) {
   background: var(--composer-control-hover-bg);
 }
 
@@ -76,39 +78,75 @@
 }
 
 /* 场景 A：单行融合三段式（有权限 prefix + 有思考档位） -> 中间矩形直角平切 */
-.capsule[data-has-prefix='true'][data-has-thinking='true'] .left :global(button.model-badge-btn),
-.capsule[data-has-prefix='true'][data-has-thinking='true'] .left :global(button[data-testid='model-selector-button']),
-.capsule[data-has-prefix='true'][data-has-thinking='true'] .left :global(button) {
+.capsule[data-has-prefix='true'][data-has-thinking='true']
+  .left
+  :global(button.model-badge-btn),
+.capsule[data-has-prefix='true'][data-has-thinking='true']
+  .left
+  :global(button[data-testid='model-selector-button']),
+.capsule[data-has-prefix='true'][data-has-thinking='true']
+  .left
+  :global(button) {
   padding: 0 8px;
   border-radius: 0;
 }
 
 /* 场景 B：单行融合两段式（有权限 prefix + 无思考档位） -> 左平切贴合权限，右半圆弧收尾 */
-.capsule[data-has-prefix='true'][data-has-thinking='false'] .left :global(button.model-badge-btn),
-.capsule[data-has-prefix='true'][data-has-thinking='false'] .left :global(button[data-testid='model-selector-button']),
-.capsule[data-has-prefix='true'][data-has-thinking='false'] .left :global(button),
-.capsule[data-has-prefix='true']:not([data-has-thinking='true']) .left :global(button.model-badge-btn),
-.capsule[data-has-prefix='true']:not([data-has-thinking='true']) .left :global(button[data-testid='model-selector-button']),
-.capsule[data-has-prefix='true']:not([data-has-thinking='true']) .left :global(button) {
+.capsule[data-has-prefix='true'][data-has-thinking='false']
+  .left
+  :global(button.model-badge-btn),
+.capsule[data-has-prefix='true'][data-has-thinking='false']
+  .left
+  :global(button[data-testid='model-selector-button']),
+.capsule[data-has-prefix='true'][data-has-thinking='false']
+  .left
+  :global(button),
+.capsule[data-has-prefix='true']:not([data-has-thinking='true'])
+  .left
+  :global(button.model-badge-btn),
+.capsule[data-has-prefix='true']:not([data-has-thinking='true'])
+  .left
+  :global(button[data-testid='model-selector-button']),
+.capsule[data-has-prefix='true']:not([data-has-thinking='true'])
+  .left
+  :global(button) {
   padding: 0 10px 0 8px;
   border-radius: 0 var(--sep-radius-outer) var(--sep-radius-outer) 0;
 }
 
 /* 场景 C：多行态两段式（无权限 prefix + 有思考档位） -> 左半圆弧，右平切贴合思考 */
-.capsule:not([data-has-prefix='true'])[data-has-thinking='true'] .left :global(button.model-badge-btn),
-.capsule:not([data-has-prefix='true'])[data-has-thinking='true'] .left :global(button[data-testid='model-selector-button']),
-.capsule:not([data-has-prefix='true'])[data-has-thinking='true'] .left :global(button) {
+.capsule:not([data-has-prefix='true'])[data-has-thinking='true']
+  .left
+  :global(button.model-badge-btn),
+.capsule:not([data-has-prefix='true'])[data-has-thinking='true']
+  .left
+  :global(button[data-testid='model-selector-button']),
+.capsule:not([data-has-prefix='true'])[data-has-thinking='true']
+  .left
+  :global(button) {
   padding: 0 8px 0 10px;
   border-radius: var(--sep-radius-outer) 0 0 var(--sep-radius-outer);
 }
 
 /* 场景 D：多行态一段式（无权限 prefix + 无思考档位） -> 独立全胶囊全圆弧 */
-.capsule:not([data-has-prefix='true'])[data-has-thinking='false'] .left :global(button.model-badge-btn),
-.capsule:not([data-has-prefix='true'])[data-has-thinking='false'] .left :global(button[data-testid='model-selector-button']),
-.capsule:not([data-has-prefix='true'])[data-has-thinking='false'] .left :global(button),
-.capsule:not([data-has-prefix='true']):not([data-has-thinking='true']) .left :global(button.model-badge-btn),
-.capsule:not([data-has-prefix='true']):not([data-has-thinking='true']) .left :global(button[data-testid='model-selector-button']),
-.capsule:not([data-has-prefix='true']):not([data-has-thinking='true']) .left :global(button) {
+.capsule:not([data-has-prefix='true'])[data-has-thinking='false']
+  .left
+  :global(button.model-badge-btn),
+.capsule:not([data-has-prefix='true'])[data-has-thinking='false']
+  .left
+  :global(button[data-testid='model-selector-button']),
+.capsule:not([data-has-prefix='true'])[data-has-thinking='false']
+  .left
+  :global(button),
+.capsule:not([data-has-prefix='true']):not([data-has-thinking='true'])
+  .left
+  :global(button.model-badge-btn),
+.capsule:not([data-has-prefix='true']):not([data-has-thinking='true'])
+  .left
+  :global(button[data-testid='model-selector-button']),
+.capsule:not([data-has-prefix='true']):not([data-has-thinking='true'])
+  .left
+  :global(button) {
   padding: 0 10px;
   border-radius: var(--sep-radius-outer);
 }
@@ -116,13 +154,20 @@
 /* 独立悬停态与激活态：光标悬停或激活在模型槽时单独高亮 */
 .left :global(button.model-badge-btn:hover),
 .left :global(button.model-badge-btn:active),
-.left :global(button.model-badge-btn[class*='active']),
+.left :global(button.model-badge-btn.active),
+.left :global(button.model-badge-btn[aria-expanded='true']),
+.left :global(button.model-badge-btn[data-active='true']),
 .left :global(button[data-testid='model-selector-button']:hover),
 .left :global(button[data-testid='model-selector-button']:active),
-.left :global(button[data-testid='model-selector-button'][class*='active']),
+.left :global(button[data-testid='model-selector-button'].active),
+.left
+  :global(button[data-testid='model-selector-button'][aria-expanded='true']),
+.left :global(button[data-testid='model-selector-button'][data-active='true']),
 .left :global(button:hover),
 .left :global(button:active),
-.left :global(button[class*='active']) {
+.left :global(button.active),
+.left :global(button[aria-expanded='true']),
+.left :global(button[data-active='true']) {
   background: var(--composer-control-hover-bg);
   color: var(--text-primary);
 }

@@ -195,63 +195,64 @@
   position: relative;
 }
 
-/* Mention chip：文件图标盒 + Skill 变体（中性，无绿底墙） */
+/* Mention chip：现代纯净排版（零底色、零边框、文字字号与基线 100% 对齐，对齐图二风格） */
 .proseMirrorField :global(.mention-chip) {
   display: inline-flex;
   align-items: center;
+  vertical-align: -0.12em;
   gap: 4px;
-  padding: 1px 6px 1px 2px;
-  border-radius: var(--radius-sm);
-  border: var(--hairline-width, 1px) solid var(--border-subtle);
-  background: var(--tint-hover);
-  color: var(--text-primary);
-  font-size: 0.9em;
-  font-weight: var(--font-weight-medium);
+  padding: 0 2px 0 0;
+  margin: 0 1px;
+  border: none;
+  background: transparent;
+  color: var(--skill-tag-color, hsl(198 78% 66%));
+  font-size: inherit;
+  font-weight: 500;
+  line-height: inherit;
   user-select: none;
-  cursor: default;
-  vertical-align: middle;
+  cursor: pointer;
+  transition: opacity var(--transition-micro, 120ms ease);
+}
+
+.proseMirrorField :global(.mention-chip:hover) {
+  opacity: 0.8;
 }
 
 .proseMirrorField :global(.mention-chip-file) {
-  cursor: pointer;
+  color: var(--text-secondary);
 }
 
-.proseMirrorField :global(.mention-chip-skill) {
-  cursor: pointer;
-  background: color-mix(in srgb, var(--brand) 8%, var(--bg-elevated));
-  border-color: color-mix(in srgb, var(--brand) 22%, var(--border-subtle));
+.proseMirrorField :global(.mention-chip-file:hover) {
   color: var(--text-primary);
-  border-radius: var(--radius-md, 8px);
-  padding: 2px 8px 2px 4px;
-  transition:
-    background-color var(--transition-micro),
-    border-color var(--transition-micro);
 }
 
-.proseMirrorField :global(.mention-chip-skill:hover) {
-  background: color-mix(in srgb, var(--brand) 16%, var(--bg-elevated));
-  border-color: color-mix(in srgb, var(--brand) 45%, var(--border-color));
+.proseMirrorField :global(.mention-chip-skill),
+.proseMirrorField :global(.mention-chip-command) {
+  color: var(--skill-tag-color, hsl(198 78% 66%));
 }
 
-.proseMirrorField :global(.mention-chip-skill:active) {
-  background: color-mix(in srgb, var(--brand) 24%, var(--bg-elevated));
-}
-
-.proseMirrorField :global(.mention-icon-box) {
+.proseMirrorField :global(.mention-chip .mention-icon-box) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: var(--radius-xs);
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
+  width: auto;
+  height: auto;
+  background: transparent;
+  color: inherit;
   flex-shrink: 0;
 }
 
-.proseMirrorField :global(.mention-icon-box svg) {
-  width: 12px;
-  height: 12px;
+.proseMirrorField :global(.mention-chip .mention-icon-box svg) {
+  width: 15px;
+  height: 15px;
+  display: block;
+  stroke: currentColor;
+}
+
+.proseMirrorField :global(.mention-chip .mention-label) {
+  color: inherit;
+  line-height: inherit;
+  font-size: inherit;
 }
 
 /* dense      /                 */

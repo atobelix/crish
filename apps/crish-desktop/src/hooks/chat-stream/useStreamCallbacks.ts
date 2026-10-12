@@ -9,7 +9,7 @@
  * - 本文件保留：hook 参数面 / 停止生成（L2 cooperative / L3 force）/
  *   对外返回面 + 兼容 re-export（调用方与测试零改动）。
  */
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { getSessionById } from '../../store/sessionStore';
 import { patchSession } from '../../api/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
@@ -38,18 +38,29 @@ import type {
   StreamRunQueryHelpers,
   StreamRunStarter,
 } from './streamCallbacksSurfaces';
+import {
+  useScopedSessionId,
+  useLeafScope,
+} from '../../contexts/LeafScopeContext';
+import { onScopedUiEvent } from '../useLeafUiEvent';
+import {
+  getSessionRenderBuffer,
+  flushAndRemoveSessionRenderBuffer,
+} from './sessionStreamManager';
 
 export function useStreamCallbacks(
-  options: UseChatStreamOptions,
+  options: UseChatStreamOptions & { sessionId?: string | null },
   refs: StreamBatcherRefs,
   queryHelpers: StreamRunQueryHelpers
 ): {
   runStreamingAssistant: StreamRunStarter;
   /** 默认 Stop = L2 cooperative */
-  handleStopGeneration: () => void;
+  handleStopGeneration: (targetSessionId?: string) => void;
   /** 强制取消 = L3 force（UI 二次确认后调用） */
-  handleForceCancelGeneration: () => void;
+  handleForceCancelGeneration: (targetSessionId?: string) => void;
 } {
+  const scopedSessionId = useScopedSessionId(options.sessionId);
+  const scope = useLeafScope();
   const { streamManagerRef, renderBufferRef, flushStreamBatchers } = refs;
 
   const generationMapRef = useRef<Map<string, number>>(new Map());
@@ -67,19 +78,27 @@ export function useStreamCallbacks(
    *（Wave C：core_run_control 单一命令面，cancel-run 双线已删）。
    * 本函数保留 chat 专属 partials（buffer / goalMode / message status / telemetry）。
    */
-  const finalizeStopGeneration = (force: boolean) => {
+  const finalizeStopGeneration = (force: boolean, targetSessionId?: string) => {
     const sid = resolveStreamSessionId(
-      null,
-      getCompositionRoot().session.getActiveSessionId()
+      targetSessionId || scopedSessionId || null,
+      null
     );
     if (!sid) return;
     const cur = streamManagerRef.current?.get(sid);
 
     if (!cur) {
       // 无物理内存句柄时的安全兜底（如已被后端阻断、排队挂起或竞态已回收）：
-      // 1. 发起 runControl 停止
       const sess = getSessionById(sid);
       const lastRunId = sess?.engineLastRunId ?? null;
+      const hasPendingOrProcessing = sess?.messages?.some(
+        (m) => m.status === 'processing' || m.status === 'queued'
+      );
+      if (!lastRunId && !hasPendingOrProcessing) {
+        // 目标会话无活动流或待处理消息，静默忽略，不弹 Toast 干扰其他分屏
+        return;
+      }
+
+      // 1. 发起 runControl 停止
       const rc = getCompositionRoot().runControl;
       if (force) {
         void rc.forceCancel({
@@ -113,13 +132,15 @@ export function useStreamCallbacks(
     streamManagerRef.current?.delete(sid);
     generationMapRef.current.delete(sid);
     markStreamingActive(false);
-    const stopBuf = renderBufferRef.current;
+    const scopedBuf = getSessionRenderBuffer(sid);
+    const stopBuf = scopedBuf || renderBufferRef.current;
     // T2.2：stop 路径走预算式收口（常态 ≤2 帧同步刷完，行为不变；
     // 大残余分帧，isFinal 帧落盘后收口仍由本函数自管）
     // F1a（R2-4）：不再调用 stopBuf?.stop()——它 cancelScheduledFlush 中断预算
     // 循环，大残余（>16KB）时 isFinal 帧永不到达（P2-1 截断根因）。buffer 已
     // finalMarked，后续 push 被拒绝，预算循环至多 N 帧自然收口于 isFinal 帧。
     stopBuf?.flushFinal();
+    flushAndRemoveSessionRenderBuffer(sid, scopedBuf);
     flushStreamBatchers();
     const st = getCompositionRoot().session.getState();
     if (getSessionById(sid)?.goalMode?.active) {
@@ -196,14 +217,30 @@ export function useStreamCallbacks(
   };
 
   /** 默认 Stop = L2 cooperative_stop */
-  const handleStopGeneration = () => {
-    finalizeStopGeneration(false);
+  const handleStopGeneration = (targetSessionId?: string) => {
+    finalizeStopGeneration(false, targetSessionId);
   };
 
   /** 强制取消 = L3 force_cancel（UI 应二次确认） */
-  const handleForceCancelGeneration = () => {
-    finalizeStopGeneration(true);
+  const handleForceCancelGeneration = (targetSessionId?: string) => {
+    finalizeStopGeneration(true, targetSessionId);
   };
+
+  // 定址化 stop-generation 事件监听：仅当前分屏或当前激活分屏消费
+  useEffect(() => {
+    return onScopedUiEvent(
+      'stop-generation',
+      (detail) => {
+        const targetSid = (detail as { sessionId?: string })?.sessionId;
+        finalizeStopGeneration(false, targetSid);
+      },
+      () => ({
+        sessionId: scopedSessionId,
+        leafId: scope.leafId,
+        isActive: scope.inLeafScope ? scope.isActive : true,
+      })
+    );
+  }, [scopedSessionId, scope.leafId, scope.isActive, scope.inLeafScope]);
 
   return {
     runStreamingAssistant,

@@ -459,11 +459,8 @@ export function migrateToLeafOwnedTabs(
       placed.add(sid);
     };
     for (const t of input.openTabs ?? []) consider(t.sessionId);
-    const map = input.openTabsMap ?? {};
-    for (const key of Object.keys(map).sort()) {
-      const ids = map[key];
-      if (!Array.isArray(ids)) continue;
-      for (const id of ids) consider(id);
+    for (const ids of Object.values(input.openTabsMap ?? {})) {
+      if (Array.isArray(ids)) for (const id of ids) consider(id);
     }
 
     if (extras.length > 0) {
@@ -473,11 +470,10 @@ export function migrateToLeafOwnedTabs(
           ? chats.find((c) => c.id === input.activeLeafId)
           : undefined) ?? chats[0];
       if (target) {
-        for (const sid of extras) {
+        for (const sid of extras)
           target.tabs.push(
             makeTabFromSources(sid, input.openTabs, input.resolveMeta)
           );
-        }
       }
     }
 
@@ -489,14 +485,12 @@ export function migrateToLeafOwnedTabs(
         const fromOpen = input.openTabs?.find(
           (t) => (t.sessionId || '').trim() === tab.sessionId
         );
-        if (fromOpen?.rightDock) {
+        if (fromOpen?.rightDock)
           tab.dock = createDefaultDock(fromOpen.rightDock);
-        }
         const boundToThisLeaf =
           leaf.legacySid && tab.sessionId === leaf.legacySid;
-        if (unitDock && (boundToThisLeaf || !leaf.legacySid)) {
+        if (unitDock && (boundToThisLeaf || !leaf.legacySid))
           tab.dock = unitDock;
-        }
       }
     }
 
@@ -509,14 +503,12 @@ export function migrateToLeafOwnedTabs(
     // S5：真实 sessionId 去重（保留先序第一次）；草稿 tab 丢弃
     const seenReal = new Set<string>();
     for (const leaf of chatLeaves()) {
-      const kept: SessionTab[] = [];
-      for (const tab of leaf.tabs) {
-        if (!isRealSessionId(tab.sessionId)) continue;
-        if (seenReal.has(tab.sessionId)) continue;
-        seenReal.add(tab.sessionId);
-        kept.push(tab);
-      }
-      leaf.tabs = kept;
+      leaf.tabs = leaf.tabs.filter(
+        (tab) =>
+          isRealSessionId(tab.sessionId) &&
+          !seenReal.has(tab.sessionId) &&
+          seenReal.add(tab.sessionId)
+      );
     }
 
     const pruned = pruneEmptyChatLeaves(work);

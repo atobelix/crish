@@ -24,9 +24,6 @@ import type { LayoutTree } from '../store/layout-tree/types';
 import { isPendingDraft } from '../store/draftSession';
 import { staggeredIdleQueue } from '../services/idle/StaggeredIdleQueue';
 
-/** @deprecated use RESTORE_LAST_WORKSPACE_SETTING_KEY */
-const RESTORE_KEY = RESTORE_LAST_WORKSPACE_SETTING_KEY;
-
 type MigrateFn = (input: {
   tree: unknown;
   openTabsMap?: Readonly<Record<string, string[]>>;
@@ -47,10 +44,12 @@ function resolveMigrateFn(): MigrateFn | null {
 export function readRestoreLastWorkspace(): boolean {
   try {
     const settings = getCompositionRoot().layout.getAppSettings() as
-      | Record<string, unknown>
-      | undefined;
-    if (settings && typeof settings[RESTORE_KEY] === 'boolean') {
-      return Boolean(settings[RESTORE_KEY]);
+      Record<string, unknown> | undefined;
+    if (
+      settings &&
+      typeof settings[RESTORE_LAST_WORKSPACE_SETTING_KEY] === 'boolean'
+    ) {
+      return Boolean(settings[RESTORE_LAST_WORKSPACE_SETTING_KEY]);
     }
     if (
       settings?.ui &&
@@ -70,6 +69,17 @@ export function readRestoreLastWorkspace(): boolean {
   return false;
 }
 
+export function readInitialSessionFromUrl(): string | null {
+  if (typeof window === 'undefined' || !window.location?.search) return null;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const sid = (params.get('session') || '').trim();
+    return sid && !isPendingDraft(sid) ? sid : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * 在首帧工作区绘制前调用（bootstrap 链）。
  * clean：单 draft 叶，不读 map。
@@ -77,6 +87,26 @@ export function readRestoreLastWorkspace(): boolean {
  */
 export function hydrateWorkspaceShell(): void {
   const root = getCompositionRoot();
+  const initialSessionId = readInitialSessionFromUrl();
+  if (initialSessionId) {
+    applySafeCleanColdStart();
+    const sessions = root.layout.getSessions() || [];
+    const target =
+      sessions.find((x) => x.id === initialSessionId) ??
+      getSessionById(initialSessionId) ??
+      undefined;
+    root.shell.openSession(initialSessionId, {
+      title: target?.title,
+      workspaceKey: target?.folder,
+    });
+    triggerSessionMessageHydrateIfNeeded(initialSessionId);
+    root.shell.setShellReady(true);
+    void import('../services/startup/startupMetrics').then((m) =>
+      m.markStartupPhase('shellReady')
+    );
+    return;
+  }
+
   const restore = readRestoreLastWorkspace();
   const treeStore = root.tree.getState();
 
@@ -125,9 +155,17 @@ export function hydrateWorkspaceShell(): void {
   // 冷启动自愈扫描：确保全树所有拥有 Tab 的 ChatLeaf 均具备有效 activeTabId
   const currentTree = treeStore.tree;
   let hasRepaired = false;
-  const listChat = (layoutTreePkg as { listChatLeaves?: (root: unknown) => Array<{ id: string; tabs: Array<{ tabId: string }>; activeTabId?: string }> })
-    .listChatLeaves;
-  const chatLeaves = typeof listChat === 'function' ? listChat(currentTree.root) : [];
+  const listChat = (
+    layoutTreePkg as {
+      listChatLeaves?: (root: unknown) => Array<{
+        id: string;
+        tabs: Array<{ tabId: string }>;
+        activeTabId?: string;
+      }>;
+    }
+  ).listChatLeaves;
+  const chatLeaves =
+    typeof listChat === 'function' ? listChat(currentTree.root) : [];
   for (const leaf of chatLeaves) {
     if (leaf.tabs && leaf.tabs.length > 0 && !leaf.activeTabId) {
       const firstId = leaf.tabs[0]?.tabId;
@@ -154,8 +192,13 @@ export function hydrateWorkspaceShell(): void {
   // 遍历所有 ChatLeaf 的首选活动 Tab，自动预流水合（消除刷新后空屏）。
   // ACT-406 / REDLINE-406：激活叶同步水合；非激活叶经 staggeredIdleQueue
   // 串行时间切片，根除多分屏同步并发 trigger 惊群。
-  for (const leaf of chatLeaves as Array<{ id: string; tabs?: Array<{ tabId: string; sessionId?: string }>; activeTabId?: string }>) {
-    const activeTab = leaf.tabs?.find((t) => t.tabId === leaf.activeTabId) || leaf.tabs?.[0];
+  for (const leaf of chatLeaves as Array<{
+    id: string;
+    tabs?: Array<{ tabId: string; sessionId?: string }>;
+    activeTabId?: string;
+  }>) {
+    const activeTab =
+      leaf.tabs?.find((t) => t.tabId === leaf.activeTabId) || leaf.tabs?.[0];
     if (!activeTab?.sessionId || isPendingDraft(activeTab.sessionId)) {
       continue;
     }
@@ -200,14 +243,17 @@ export function setRestoreLastWorkspace(value: boolean): void {
   } catch {
     /* swallow-ok */
   }
-  const prev = (getSettingsState().appSettings || {}) as Record<string, unknown>;
+  const prev = (getSettingsState().appSettings || {}) as Record<
+    string,
+    unknown
+  >;
   const ui = {
     ...((prev.ui as object) || {}),
     restoreLastWorkspace: value,
   };
   getSettingsState().setAppSettings({
     ...prev,
-    [RESTORE_KEY]: value,
+    [RESTORE_LAST_WORKSPACE_SETTING_KEY]: value,
     ui,
   } as Settings);
 }

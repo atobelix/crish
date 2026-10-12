@@ -38,7 +38,8 @@ export type GroupState = {
 export type SettingsTabType =
   | 'profile' | 'appearance' | 'personalize' | 'models' | 'usage'
   | 'devices' | 'schedule' | 'rules' | 'shortcuts' | 'skills'
-  | 'mcp' | 'plugins' | 'browser' | 'security' | 'diagnostics' | 'about';
+  | 'mcp' | 'plugins' | 'browser' | 'security' | 'diagnostics'
+  | 'archive' | 'about';
 
 /** 工作区单卡：id 为面板 key，title 为展示名 */
 export interface CardState {
@@ -536,6 +537,8 @@ export interface SessionMessage extends Pick<
   }>;
   /** epoch ms */
   timestamp: number;
+  /** 引擎事件/持久化存储序列号（因果第一主序键） */
+  engineSequence?: number | undefined;
   toolCalls?: MessageToolCall[] | undefined;
   status?: SessionMessageStatus | undefined;
   /** 预计算 HTML 缓存（Worker 异步 markdown 渲染结果） */

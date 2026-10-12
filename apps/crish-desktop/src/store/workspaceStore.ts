@@ -23,16 +23,13 @@ import { withDevtools } from './middleware/withDevtools';
 import { withPersist } from './middleware/withPersist';
 import { useShallow } from './useShallowSelector';
 
+import { DEFAULT_WORKSPACE_ID } from './layout-helpers/store-types';
 import {
-  DEFAULT_WORKSPACE_ID,
   seedInitialWorkspaces,
   clampActiveWorkspaceIndex,
-  useLayoutStore,
-} from './layoutStore';
-import type {
-  DropPreviewState,
-  WorkspaceState,
-} from './types';
+  createInitialLayoutDefaults,
+} from './layout-helpers/store-initializers';
+import type { DropPreviewState, WorkspaceState } from './types';
 import {
   createWorkspaceActions,
   type DraggedTabState,
@@ -52,7 +49,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       immer((set, get) => ({
         workspaces: _initialWorkspaces,
         activeWorkspaceIndex: clampActiveWorkspaceIndex(_initialWorkspaces, 0),
-        tabModeEnabled: useLayoutStore.getState().tabModeEnabled,
+        tabModeEnabled: createInitialLayoutDefaults().initialTabMode,
         draggedTab: null,
         dropPreview: null,
         ...createWorkspaceActions(set, get),
@@ -66,7 +63,11 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         merge: (persisted, current) => {
           const raw = (persisted ?? {}) as Record<string, unknown>;
           const { tabModeEnabled: _ignored, ...rest } = raw;
-          return { ...current, ...rest, tabModeEnabled: current.tabModeEnabled };
+          return {
+            ...current,
+            ...rest,
+            tabModeEnabled: current.tabModeEnabled,
+          };
         },
       }
     ),
@@ -80,25 +81,29 @@ export const selectWorkspaces = (s: Pick<WorkspaceStoreSlice, 'workspaces'>) =>
   s.workspaces;
 
 export const selectActiveWorkspaceIndex = (
-  s: Pick<WorkspaceStoreSlice, 'activeWorkspaceIndex'>,
+  s: Pick<WorkspaceStoreSlice, 'activeWorkspaceIndex'>
 ) => s.activeWorkspaceIndex;
 
-export const selectTabModeEnabled = (s: Pick<WorkspaceStoreSlice, 'tabModeEnabled'>) =>
-  s.tabModeEnabled;
+export const selectTabModeEnabled = (
+  s: Pick<WorkspaceStoreSlice, 'tabModeEnabled'>
+) => s.tabModeEnabled;
 
 export const selectDraggedTab = (s: Pick<WorkspaceStoreSlice, 'draggedTab'>) =>
   s.draggedTab;
 
-export const selectDropPreview = (s: Pick<WorkspaceStoreSlice, 'dropPreview'>) =>
-  s.dropPreview;
+export const selectDropPreview = (
+  s: Pick<WorkspaceStoreSlice, 'dropPreview'>
+) => s.dropPreview;
 
 export const selectActiveWorkspace = (
-  s: Pick<WorkspaceStoreSlice, 'workspaces' | 'activeWorkspaceIndex'>,
+  s: Pick<WorkspaceStoreSlice, 'workspaces' | 'activeWorkspaceIndex'>
 ): WorkspaceState | undefined => s.workspaces[s.activeWorkspaceIndex];
 
-export function useWorkspaceField<T>(selector: (state: WorkspaceFacade) => T): T {
+export function useWorkspaceField<T>(
+  selector: (state: WorkspaceFacade) => T
+): T {
   return useWorkspaceStore(
-    selector as (state: ReturnType<typeof useWorkspaceStore.getState>) => T,
+    selector as (state: ReturnType<typeof useWorkspaceStore.getState>) => T
   );
 }
 
@@ -111,7 +116,9 @@ export function useActiveWorkspaceIndex(): number {
 }
 
 export function useActiveWorkspace(): WorkspaceState | undefined {
-  return useWorkspaceStore(useShallow((s) => s.workspaces[s.activeWorkspaceIndex]));
+  return useWorkspaceStore(
+    useShallow((s) => s.workspaces[s.activeWorkspaceIndex])
+  );
 }
 
 export function useDraggedTab(): DraggedTabState | null {
@@ -143,7 +150,11 @@ export function setDraggedTab(dragged: DraggedTabState | null): void {
   getWorkspaceStoreState().setDraggedTab(dragged);
 }
 
-export function togglePanel(wsId: string, key: string, isVisible: boolean): void {
+export function togglePanel(
+  wsId: string,
+  key: string,
+  isVisible: boolean
+): void {
   getWorkspaceStoreState().togglePanel(wsId, key, isVisible);
 }
 
@@ -151,7 +162,7 @@ export function setGroupActiveCard(
   wsId: string,
   colIdx: number,
   groupIdx: number,
-  cardId: string,
+  cardId: string
 ): void {
   // P3-4：facade 仅转发（真 action 定义见 workspaceActions.setGroupActiveCard）
   getWorkspaceStoreState().setGroupActiveCard(wsId, colIdx, groupIdx, cardId);

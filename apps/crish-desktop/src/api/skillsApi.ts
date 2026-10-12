@@ -210,8 +210,27 @@ export function skillsToSlashCommands(
       desc: s.description.slice(0, 120),
       skillId: s.id,
       skillName: s.name,
+      filePath: s.filePath,
     }))
     .sort((a, b) => a.cmd.localeCompare(b.cmd));
+}
+
+/** 按 id、路径或名称查找技能 */
+export async function resolveSkillByIdOrName(
+  idOrName: string,
+  skills?: DesktopSkill[]
+): Promise<DesktopSkill | null> {
+  const list = skills ?? (await discoverSkills()).skills;
+  const key = idOrName.toLowerCase().trim();
+  return (
+    list.find(
+      (s) =>
+        s.id === idOrName ||
+        s.filePath === idOrName ||
+        normalizeSlashName(s.name) === key ||
+        s.name.toLowerCase() === key
+    ) ?? null
+  );
 }
 
 /** 解析 /skill:name 并返回技能正文（用于注入用户消息） */
@@ -243,6 +262,45 @@ export function formatSkillInjection(
     skillBody: skill.content || '（技能正文为空）',
     userPrompt: userRest || '请按上述技能执行。',
   });
+}
+
+/** 检测并注入 @[label](id:skill) 技能 Mention */
+export async function tryInjectSkillMention(
+  rawInput: string
+): Promise<string | null> {
+  const m = /@\[([^\]]+)\]\(([^)]+):skill\)/.exec(rawInput);
+  if (!m) return null;
+  try {
+    const skillName = m[1] ?? '';
+    const skillIdOrPath = m[2] ?? '';
+    const skill =
+      (skillIdOrPath ? await resolveSkillByIdOrName(skillIdOrPath) : null) ||
+      (skillName ? await resolveSkillByIdOrName(skillName) : null);
+    if (!skill) return null;
+    const rest = rawInput.replace(m[0], '').trim();
+    return formatSkillInjection(skill, rest);
+  } catch {
+    return null;
+  }
+}
+
+/** 统筹 slash 与 mention 的技能前置解析 */
+export async function resolveSkillForPreflight(
+  rawInput: string,
+  slashRaw?: string
+): Promise<{ modelText: string; displayText?: string } | null> {
+  if (slashRaw) {
+    const resolved = await resolveSkillSlash(slashRaw);
+    if (!resolved) return null;
+    return {
+      modelText: formatSkillInjection(resolved.skill, resolved.rest),
+      displayText: resolved.rest
+        ? `/skill:${resolved.skill.name} ${resolved.rest}`
+        : `使用技能：${resolved.skill.name}`,
+    };
+  }
+  const injected = await tryInjectSkillMention(rawInput);
+  return injected ? { modelText: injected } : null;
 }
 
 /**

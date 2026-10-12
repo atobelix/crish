@@ -28,7 +28,11 @@ export function moveLeaf(
   return moveNode(tree, sourceId, targetId, direction);
 }
 
-function isNodeUnder(root: LayoutNode, ancestorId: string, nodeId: string): boolean {
+function isNodeUnder(
+  root: LayoutNode,
+  ancestorId: string,
+  nodeId: string
+): boolean {
   if (ancestorId === nodeId) return true;
   const ancestor = findNodeById(root, ancestorId);
   if (!ancestor || isLeaf(ancestor)) return false;
@@ -153,12 +157,26 @@ export function removeTab(
   const leaf = requireChatLeaf(tree.root, leafId);
   if (!leaf) return tree;
   const idx = leaf.tabs.findIndex((t) => t.tabId === tabId);
-  if (idx < 0) return tree;
+  if (idx < 0) {
+    const leaves = collectLeaves(tree.root);
+    if (leaves.length > 1) {
+      const next = removeLeafFromTree(tree, leafId);
+      return next ? pruneEmptyLeaves(next) : tree;
+    }
+    if (leaf.activeTabId !== '' || leaf.tabs.length > 0) {
+      const emptied: LayoutLeaf = { ...leaf, tabs: [], activeTabId: '' };
+      return { ...tree, root: replaceNode(tree.root, leafId, emptied) };
+    }
+    return tree;
+  }
 
   const newTabs = leaf.tabs.filter((t) => t.tabId !== tabId);
   if (newTabs.length === 0) {
     const emptied: LayoutLeaf = { ...leaf, tabs: [], activeTabId: '' };
-    const withEmpty = { ...tree, root: replaceNode(tree.root, leafId, emptied) };
+    const withEmpty = {
+      ...tree,
+      root: replaceNode(tree.root, leafId, emptied),
+    };
     return pruneEmptyLeaves(withEmpty);
   }
 

@@ -134,24 +134,34 @@
 }
 
 /* ScrollArea 视口原生滚动支撑（隐藏系统滚动条避免双条重叠） */
-[class*='viewport']::-webkit-scrollbar {
+.viewport::-webkit-scrollbar,
+[data-viewport]::-webkit-scrollbar,
+[data-scroll-area-viewport]::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;
 }
 
-/* 侧栏 / Menu / 设置 cover+nav / Dialog 内容（CSS Modules 哈希后仍命中 local 名）。
+/* 侧栏 / Menu / 设置 cover+nav / Dialog 内容（精确类名与语义属性标记，回归 Blink O(1) 规则桶）。
  * 此处禁止写 scrollbar-width / scrollbar-color：会关掉上面的 webkit 细条。
  * 侧栏列表统一采用 stable 保持无论有无滚动条内容右侧均恒定预留走廊，防止跳变与无滚动条贴边。 */
-[class*='sidebarScroll'] {
+.sidebarScroll,
+[data-sidebar-chrome='scroll'] {
   scrollbar-gutter: stable;
 }
 
 .sidebar,
-[class*='menuContent'],
-[class*='navScroll'],
-[class*='coverContent'],
-[class*='dialogBody'] {
+.menuContent,
+[role='menu'],
+.navScroll,
+[data-nav-scroll],
+[role='tablist'],
+.coverContent,
+[data-cover-content],
+[data-settings-tab],
+[role='tabpanel'],
+.dialogBody,
+[role='dialog'] {
   scrollbar-gutter: auto;
 }
 
@@ -161,113 +171,267 @@
  * 鼠标在哪个区域，仅显示该区域的滚动条，另一侧绝对互斥隐藏。
  * ========================================================================== */
 
-/* 1. 左侧导航栏（[class*='navScroll']）：默认隐藏滑块与上下三角 */
-[class*='navScroll']::-webkit-scrollbar-thumb {
+/* 1. 左侧导航栏（.navScroll / [role='tablist']）：默认隐藏滑块与上下三角 */
+.navScroll::-webkit-scrollbar-thumb,
+[data-nav-scroll]::-webkit-scrollbar-thumb,
+[role='tablist']::-webkit-scrollbar-thumb {
   background-color: transparent;
   transition: background-color var(--transition-fast);
 }
 
-[class*='navScroll']::-webkit-scrollbar-button:vertical:start:decrement,
-[class*='navScroll']::-webkit-scrollbar-button:vertical:end:increment {
+.navScroll::-webkit-scrollbar-button:vertical:start:decrement,
+.navScroll::-webkit-scrollbar-button:vertical:end:increment,
+[data-nav-scroll]::-webkit-scrollbar-button:vertical:start:decrement,
+[data-nav-scroll]::-webkit-scrollbar-button:vertical:end:increment,
+[role='tablist']::-webkit-scrollbar-button:vertical:start:decrement,
+[role='tablist']::-webkit-scrollbar-button:vertical:end:increment {
   background-image: none;
 }
 
 /* 激活左侧滚动条：当指针悬停在左侧 (data-hover-pane='nav') 或左侧容器自身 hover 时 */
-[data-hover-pane='nav'] [class*='navScroll']::-webkit-scrollbar-thumb,
-[class*='settingsNav']:hover [class*='navScroll']::-webkit-scrollbar-thumb,
-[class*='navScroll']:hover::-webkit-scrollbar-thumb {
+[data-hover-pane='nav'] .navScroll::-webkit-scrollbar-thumb,
+[data-hover-pane='nav'] [data-nav-scroll]::-webkit-scrollbar-thumb,
+[data-hover-pane='nav'] [role='tablist']::-webkit-scrollbar-thumb,
+.settingsNav:hover .navScroll::-webkit-scrollbar-thumb,
+.settingsNav:hover [data-nav-scroll]::-webkit-scrollbar-thumb,
+.settingsNav:hover [role='tablist']::-webkit-scrollbar-thumb,
+[data-testid='settings-sidebar']:hover
+  [role='tablist']::-webkit-scrollbar-thumb,
+.navScroll:hover::-webkit-scrollbar-thumb,
+[data-nav-scroll]:hover::-webkit-scrollbar-thumb,
+[role='tablist']:hover::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb-bg, var(--tint-scrollbar-thumb));
 }
 
-[class*='navScroll']::-webkit-scrollbar-thumb:hover,
-[class*='navScroll']::-webkit-scrollbar-thumb:active {
+.navScroll::-webkit-scrollbar-thumb:hover,
+.navScroll::-webkit-scrollbar-thumb:active,
+[data-nav-scroll]::-webkit-scrollbar-thumb:hover,
+[data-nav-scroll]::-webkit-scrollbar-thumb:active,
+[role='tablist']::-webkit-scrollbar-thumb:hover,
+[role='tablist']::-webkit-scrollbar-thumb:active {
   background-color: var(--scrollbar-thumb-active);
 }
 
 [data-hover-pane='nav']
-  [class*='navScroll']::-webkit-scrollbar-button:vertical:start:decrement,
-[class*='settingsNav']:hover
-  [class*='navScroll']::-webkit-scrollbar-button:vertical:start:decrement,
-[class*='navScroll']:hover::-webkit-scrollbar-button:vertical:start:decrement {
+  .navScroll::-webkit-scrollbar-button:vertical:start:decrement,
+[data-hover-pane='nav']
+  [data-nav-scroll]::-webkit-scrollbar-button:vertical:start:decrement,
+[data-hover-pane='nav']
+  [role='tablist']::-webkit-scrollbar-button:vertical:start:decrement,
+.settingsNav:hover
+  .navScroll::-webkit-scrollbar-button:vertical:start:decrement,
+.settingsNav:hover
+  [data-nav-scroll]::-webkit-scrollbar-button:vertical:start:decrement,
+.settingsNav:hover
+  [role='tablist']::-webkit-scrollbar-button:vertical:start:decrement,
+[data-testid='settings-sidebar']:hover
+  [role='tablist']::-webkit-scrollbar-button:vertical:start:decrement,
+.navScroll:hover::-webkit-scrollbar-button:vertical:start:decrement,
+[data-nav-scroll]:hover::-webkit-scrollbar-button:vertical:start:decrement,
+[role='tablist']:hover::-webkit-scrollbar-button:vertical:start:decrement {
   background-image: var(--scrollbar-button-up);
 }
 
 [data-hover-pane='nav']
-  [class*='navScroll']::-webkit-scrollbar-button:vertical:end:increment,
-[class*='settingsNav']:hover
-  [class*='navScroll']::-webkit-scrollbar-button:vertical:end:increment,
-[class*='navScroll']:hover::-webkit-scrollbar-button:vertical:end:increment {
+  .navScroll::-webkit-scrollbar-button:vertical:end:increment,
+[data-hover-pane='nav']
+  [data-nav-scroll]::-webkit-scrollbar-button:vertical:end:increment,
+[data-hover-pane='nav']
+  [role='tablist']::-webkit-scrollbar-button:vertical:end:increment,
+.settingsNav:hover .navScroll::-webkit-scrollbar-button:vertical:end:increment,
+.settingsNav:hover
+  [data-nav-scroll]::-webkit-scrollbar-button:vertical:end:increment,
+.settingsNav:hover
+  [role='tablist']::-webkit-scrollbar-button:vertical:end:increment,
+[data-testid='settings-sidebar']:hover
+  [role='tablist']::-webkit-scrollbar-button:vertical:end:increment,
+.navScroll:hover::-webkit-scrollbar-button:vertical:end:increment,
+[data-nav-scroll]:hover::-webkit-scrollbar-button:vertical:end:increment,
+[role='tablist']:hover::-webkit-scrollbar-button:vertical:end:increment {
   background-image: var(--scrollbar-button-down);
 }
 
 [data-hover-pane='nav']
-  [class*='navScroll']::-webkit-scrollbar-button:vertical:start:decrement:hover,
+  .navScroll::-webkit-scrollbar-button:vertical:start:decrement:hover,
 [data-hover-pane='nav']
-  [class*='navScroll']::-webkit-scrollbar-button:vertical:start:decrement:active,
-[class*='settingsNav']:hover
-  [class*='navScroll']::-webkit-scrollbar-button:vertical:start:decrement:hover,
-[class*='settingsNav']:hover
-  [class*='navScroll']::-webkit-scrollbar-button:vertical:start:decrement:active {
+  .navScroll::-webkit-scrollbar-button:vertical:start:decrement:active,
+[data-hover-pane='nav']
+  [data-nav-scroll]::-webkit-scrollbar-button:vertical:start:decrement:hover,
+[data-hover-pane='nav']
+  [data-nav-scroll]::-webkit-scrollbar-button:vertical:start:decrement:active,
+[data-hover-pane='nav']
+  [role='tablist']::-webkit-scrollbar-button:vertical:start:decrement:hover,
+[data-hover-pane='nav']
+  [role='tablist']::-webkit-scrollbar-button:vertical:start:decrement:active,
+.settingsNav:hover
+  .navScroll::-webkit-scrollbar-button:vertical:start:decrement:hover,
+.settingsNav:hover
+  .navScroll::-webkit-scrollbar-button:vertical:start:decrement:active,
+.settingsNav:hover
+  [data-nav-scroll]::-webkit-scrollbar-button:vertical:start:decrement:hover,
+.settingsNav:hover
+  [data-nav-scroll]::-webkit-scrollbar-button:vertical:start:decrement:active,
+.settingsNav:hover
+  [role='tablist']::-webkit-scrollbar-button:vertical:start:decrement:hover,
+.settingsNav:hover
+  [role='tablist']::-webkit-scrollbar-button:vertical:start:decrement:active,
+[data-testid='settings-sidebar']:hover
+  [role='tablist']::-webkit-scrollbar-button:vertical:start:decrement:hover,
+[data-testid='settings-sidebar']:hover
+  [role='tablist']::-webkit-scrollbar-button:vertical:start:decrement:active {
   background-image: var(--scrollbar-button-up-active);
 }
 
 [data-hover-pane='nav']
-  [class*='navScroll']::-webkit-scrollbar-button:vertical:end:increment:hover,
+  .navScroll::-webkit-scrollbar-button:vertical:end:increment:hover,
 [data-hover-pane='nav']
-  [class*='navScroll']::-webkit-scrollbar-button:vertical:end:increment:active,
-[class*='settingsNav']:hover
-  [class*='navScroll']::-webkit-scrollbar-button:vertical:end:increment:hover,
-[class*='settingsNav']:hover
-  [class*='navScroll']::-webkit-scrollbar-button:vertical:end:increment:active {
+  .navScroll::-webkit-scrollbar-button:vertical:end:increment:active,
+[data-hover-pane='nav']
+  [data-nav-scroll]::-webkit-scrollbar-button:vertical:end:increment:hover,
+[data-hover-pane='nav']
+  [data-nav-scroll]::-webkit-scrollbar-button:vertical:end:increment:active,
+[data-hover-pane='nav']
+  [role='tablist']::-webkit-scrollbar-button:vertical:end:increment:hover,
+[data-hover-pane='nav']
+  [role='tablist']::-webkit-scrollbar-button:vertical:end:increment:active,
+.settingsNav:hover
+  .navScroll::-webkit-scrollbar-button:vertical:end:increment:hover,
+.settingsNav:hover
+  .navScroll::-webkit-scrollbar-button:vertical:end:increment:active,
+.settingsNav:hover
+  [data-nav-scroll]::-webkit-scrollbar-button:vertical:end:increment:hover,
+.settingsNav:hover
+  [data-nav-scroll]::-webkit-scrollbar-button:vertical:end:increment:active,
+.settingsNav:hover
+  [role='tablist']::-webkit-scrollbar-button:vertical:end:increment:hover,
+.settingsNav:hover
+  [role='tablist']::-webkit-scrollbar-button:vertical:end:increment:active,
+[data-testid='settings-sidebar']:hover
+  [role='tablist']::-webkit-scrollbar-button:vertical:end:increment:hover,
+[data-testid='settings-sidebar']:hover
+  [role='tablist']::-webkit-scrollbar-button:vertical:end:increment:active {
   background-image: var(--scrollbar-button-down-active);
 }
 
 /* 互斥强关：当鼠标在右侧 (data-hover-pane='main') 时，强制隐藏左侧滚动条 */
-[data-hover-pane='main'] [class*='navScroll']::-webkit-scrollbar-thumb {
+[data-hover-pane='main'] .navScroll::-webkit-scrollbar-thumb,
+[data-hover-pane='main'] [data-nav-scroll]::-webkit-scrollbar-thumb,
+[data-hover-pane='main'] [role='tablist']::-webkit-scrollbar-thumb {
   background-color: transparent !important;
 }
+
 [data-hover-pane='main']
-  [class*='navScroll']::-webkit-scrollbar-button:vertical:start:decrement,
+  .navScroll::-webkit-scrollbar-button:vertical:start:decrement,
 [data-hover-pane='main']
-  [class*='navScroll']::-webkit-scrollbar-button:vertical:end:increment {
+  .navScroll::-webkit-scrollbar-button:vertical:end:increment,
+[data-hover-pane='main']
+  [data-nav-scroll]::-webkit-scrollbar-button:vertical:start:decrement,
+[data-hover-pane='main']
+  [data-nav-scroll]::-webkit-scrollbar-button:vertical:end:increment,
+[data-hover-pane='main']
+  [role='tablist']::-webkit-scrollbar-button:vertical:start:decrement,
+[data-hover-pane='main']
+  [role='tablist']::-webkit-scrollbar-button:vertical:end:increment {
   background-image: none !important;
 }
 
-/* 2. 右侧主内容区（[class*='coverContent'] 及内部滚动容器）：默认隐藏滑块与上下三角 */
-[class*='settingsMain'] [class*='coverContent']::-webkit-scrollbar-thumb,
-[class*='settingsMain'] [class*='coverContent'] ::-webkit-scrollbar-thumb {
+/* 2. 右侧主内容区（.coverContent 及内部滚动容器）：默认隐藏滑块与上下三角 */
+.settingsMain .coverContent::-webkit-scrollbar-thumb,
+.settingsMain .coverContent ::-webkit-scrollbar-thumb,
+.settingsMain [data-cover-content]::-webkit-scrollbar-thumb,
+.settingsMain [data-cover-content] ::-webkit-scrollbar-thumb,
+.settingsMain [role='tabpanel']::-webkit-scrollbar-thumb,
+.settingsMain [role='tabpanel'] ::-webkit-scrollbar-thumb,
+.settingsMain [data-settings-tab]::-webkit-scrollbar-thumb,
+.settingsMain [data-settings-tab] ::-webkit-scrollbar-thumb,
+.coverContent::-webkit-scrollbar-thumb,
+.coverContent ::-webkit-scrollbar-thumb,
+[data-cover-content]::-webkit-scrollbar-thumb,
+[data-cover-content] ::-webkit-scrollbar-thumb,
+[role='tabpanel']::-webkit-scrollbar-thumb,
+[role='tabpanel'] ::-webkit-scrollbar-thumb {
   background-color: transparent;
   transition: background-color var(--transition-fast);
 }
 
-[class*='settingsMain']
-  [class*='coverContent']::-webkit-scrollbar-button:vertical:start:decrement,
-[class*='settingsMain']
-  [class*='coverContent']::-webkit-scrollbar-button:vertical:end:increment,
-[class*='settingsMain']
-  [class*='coverContent']
+.settingsMain .coverContent::-webkit-scrollbar-button:vertical:start:decrement,
+.settingsMain .coverContent::-webkit-scrollbar-button:vertical:end:increment,
+.settingsMain .coverContent ::-webkit-scrollbar-button:vertical:start:decrement,
+.settingsMain .coverContent ::-webkit-scrollbar-button:vertical:end:increment,
+.settingsMain
+  [data-cover-content]::-webkit-scrollbar-button:vertical:start:decrement,
+.settingsMain
+  [data-cover-content]::-webkit-scrollbar-button:vertical:end:increment,
+.settingsMain
+  [data-cover-content]
   ::-webkit-scrollbar-button:vertical:start:decrement,
-[class*='settingsMain']
-  [class*='coverContent']
-  ::-webkit-scrollbar-button:vertical:end:increment {
+.settingsMain
+  [data-cover-content]
+  ::-webkit-scrollbar-button:vertical:end:increment,
+.settingsMain
+  [role='tabpanel']::-webkit-scrollbar-button:vertical:start:decrement,
+.settingsMain
+  [role='tabpanel']::-webkit-scrollbar-button:vertical:end:increment,
+.settingsMain
+  [role='tabpanel']
+  ::-webkit-scrollbar-button:vertical:start:decrement,
+.settingsMain
+  [role='tabpanel']
+  ::-webkit-scrollbar-button:vertical:end:increment,
+.coverContent::-webkit-scrollbar-button:vertical:start:decrement,
+.coverContent::-webkit-scrollbar-button:vertical:end:increment,
+.coverContent ::-webkit-scrollbar-button:vertical:start:decrement,
+.coverContent ::-webkit-scrollbar-button:vertical:end:increment,
+[data-cover-content]::-webkit-scrollbar-button:vertical:start:decrement,
+[data-cover-content]::-webkit-scrollbar-button:vertical:end:increment,
+[data-cover-content] ::-webkit-scrollbar-button:vertical:start:decrement,
+[data-cover-content] ::-webkit-scrollbar-button:vertical:end:increment,
+[role='tabpanel']::-webkit-scrollbar-button:vertical:start:decrement,
+[role='tabpanel']::-webkit-scrollbar-button:vertical:end:increment,
+[role='tabpanel'] ::-webkit-scrollbar-button:vertical:start:decrement,
+[role='tabpanel'] ::-webkit-scrollbar-button:vertical:end:increment {
   background-image: none;
 }
 
 /* 激活右侧滚动条：当指针悬停在右侧 (data-hover-pane='main') 或右侧容器自身 hover 时 */
-[data-hover-pane='main'] [class*='coverContent']::-webkit-scrollbar-thumb,
-[data-hover-pane='main'] [class*='coverContent'] ::-webkit-scrollbar-thumb,
-[class*='settingsMain']:hover [class*='coverContent']::-webkit-scrollbar-thumb,
-[class*='settingsMain']:hover [class*='coverContent'] ::-webkit-scrollbar-thumb,
-[class*='coverContent']:hover::-webkit-scrollbar-thumb {
+[data-hover-pane='main'] .coverContent::-webkit-scrollbar-thumb,
+[data-hover-pane='main'] .coverContent ::-webkit-scrollbar-thumb,
+[data-hover-pane='main'] [data-cover-content]::-webkit-scrollbar-thumb,
+[data-hover-pane='main'] [data-cover-content] ::-webkit-scrollbar-thumb,
+[data-hover-pane='main'] [role='tabpanel']::-webkit-scrollbar-thumb,
+[data-hover-pane='main'] [role='tabpanel'] ::-webkit-scrollbar-thumb,
+[data-hover-pane='main'] [data-settings-tab]::-webkit-scrollbar-thumb,
+[data-hover-pane='main'] [data-settings-tab] ::-webkit-scrollbar-thumb,
+.settingsMain:hover .coverContent::-webkit-scrollbar-thumb,
+.settingsMain:hover .coverContent ::-webkit-scrollbar-thumb,
+.settingsMain:hover [data-cover-content]::-webkit-scrollbar-thumb,
+.settingsMain:hover [data-cover-content] ::-webkit-scrollbar-thumb,
+.settingsMain:hover [role='tabpanel']::-webkit-scrollbar-thumb,
+.settingsMain:hover [role='tabpanel'] ::-webkit-scrollbar-thumb,
+.coverContent:hover::-webkit-scrollbar-thumb,
+[data-cover-content]:hover::-webkit-scrollbar-thumb,
+[role='tabpanel']:hover::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb-bg, var(--tint-scrollbar-thumb));
 }
 
-[class*='settingsMain'] [class*='coverContent']::-webkit-scrollbar-thumb:hover,
-[class*='settingsMain'] [class*='coverContent']::-webkit-scrollbar-thumb:active,
-[class*='settingsMain'] [class*='coverContent'] ::-webkit-scrollbar-thumb:hover,
-[class*='settingsMain']
-  [class*='coverContent']
-  ::-webkit-scrollbar-thumb:active {
+.settingsMain .coverContent::-webkit-scrollbar-thumb:hover,
+.settingsMain .coverContent::-webkit-scrollbar-thumb:active,
+.settingsMain .coverContent ::-webkit-scrollbar-thumb:hover,
+.settingsMain .coverContent ::-webkit-scrollbar-thumb:active,
+.settingsMain [data-cover-content]::-webkit-scrollbar-thumb:hover,
+.settingsMain [data-cover-content]::-webkit-scrollbar-thumb:active,
+.settingsMain [data-cover-content] ::-webkit-scrollbar-thumb:hover,
+.settingsMain [data-cover-content] ::-webkit-scrollbar-thumb:active,
+.settingsMain [role='tabpanel']::-webkit-scrollbar-thumb:hover,
+.settingsMain [role='tabpanel']::-webkit-scrollbar-thumb:active,
+.settingsMain [role='tabpanel'] ::-webkit-scrollbar-thumb:hover,
+.settingsMain [role='tabpanel'] ::-webkit-scrollbar-thumb:active,
+.coverContent:hover::-webkit-scrollbar-thumb,
+.coverContent:active::-webkit-scrollbar-thumb,
+[data-cover-content]:hover::-webkit-scrollbar-thumb,
+[data-cover-content]:active::-webkit-scrollbar-thumb,
+[role='tabpanel']:hover::-webkit-scrollbar-thumb,
+[role='tabpanel']:active::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb-active);
 }
 

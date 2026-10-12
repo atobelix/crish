@@ -11,7 +11,12 @@ import {
 
 /** 可手动点火的确定性定时器，避免真实 clock 抖动 */
 function createManualTimers() {
-  const timers: Array<{ id: number; fn: () => void; ms: number; cleared: boolean }> = [];
+  const timers: Array<{
+    id: number;
+    fn: () => void;
+    ms: number;
+    cleared: boolean;
+  }> = [];
   let idSeq = 1;
   return {
     timers,
@@ -49,7 +54,7 @@ describe('StreamTextBatcher', () => {
         intervalMs: 50,
         setTimer: mt.setTimer,
         clearTimer: mt.clearTimer,
-      },
+      }
     );
 
     const key = streamBatchKey('sess-1', 'msg-1');
@@ -80,11 +85,19 @@ describe('StreamTextBatcher', () => {
       (_k, text) => {
         flushed.push(text);
       },
-      { intervalMs: 40, setTimer: mt.setTimer, clearTimer: mt.clearTimer },
+      { intervalMs: 40, setTimer: mt.setTimer, clearTimer: mt.clearTimer }
     );
 
     // 模拟 token 流：每次 push 为累计全文，非 delta
-    const tokens = ['H', 'He', 'Hel', 'Hell', 'Hello', 'Hello,', 'Hello, world'];
+    const tokens = [
+      'H',
+      'He',
+      'Hel',
+      'Hell',
+      'Hello',
+      'Hello,',
+      'Hello, world',
+    ];
     for (const t of tokens) batcher.push('k', t);
 
     expect(batcher.pendingCount()).toBe(1);
@@ -113,7 +126,7 @@ describe('StreamTextBatcher', () => {
           cleared += 1;
           timers.length = 0;
         },
-      },
+      }
     );
 
     batcher.push('k', 'hello');
@@ -134,7 +147,7 @@ describe('StreamTextBatcher', () => {
       (_k, text) => {
         flushed.push(text);
       },
-      { intervalMs: 100, setTimer: mt.setTimer, clearTimer: mt.clearTimer },
+      { intervalMs: 100, setTimer: mt.setTimer, clearTimer: mt.clearTimer }
     );
 
     batcher.push('a', 'partial');
@@ -164,7 +177,7 @@ describe('StreamTextBatcher', () => {
       (key, text) => {
         flushed.push({ key, text });
       },
-      { intervalMs: 60, setTimer: mt.setTimer, clearTimer: mt.clearTimer },
+      { intervalMs: 60, setTimer: mt.setTimer, clearTimer: mt.clearTimer }
     );
 
     batcher.push('k1', 'one');
@@ -198,18 +211,122 @@ describe('StreamTextBatcher', () => {
         maxBufferedChars: 10,
         setTimer: mt.setTimer,
         clearTimer: mt.clearTimer,
-      },
+      }
     );
 
     batcher.push('k', '12345'); // 5 chars, under cap
     expect(flushed).toHaveLength(0);
     expect(batcher.isScheduled()).toBe(true);
 
-    // 覆盖为更长全文，触达 cap → 立即 flush
+    // 覆盖为更长全文，增量触达 cap → 立即 flush
     batcher.push('k', '12345678901'); // 11 >= 10
     expect(flushed).toEqual(['12345678901']);
     expect(batcher.pendingCount()).toBe(0);
     expect(batcher.isScheduled()).toBe(false);
+    batcher.dispose();
+  });
+
+  it('does NOT degrade to synchronous flush when cumulative text exceeds 8000 chars (maintains batch throttling)', () => {
+    const flushed: Array<{ key: string; text: string }> = [];
+    const mt = createManualTimers();
+    const batcher = new StreamTextBatcher(
+      (key, text) => {
+        flushed.push({ key, text });
+      },
+      {
+        intervalMs: 50,
+        maxBufferedChars: 8000,
+        setTimer: mt.setTimer,
+        clearTimer: mt.clearTimer,
+      }
+    );
+
+    const key = streamBatchKey('sess-1', 'msg-1');
+    const baseText = 'x'.repeat(8000);
+
+    // 1. 先推入 8000 字符并完成初次 flush（模拟已累积 8000 字符的历史思考/文本）
+    batcher.push(key, baseText);
+    batcher.flushNow();
+    expect(flushed).toHaveLength(1);
+    expect(flushed[0]).toEqual({ key, text: baseText });
+    expect(batcher.pendingCount()).toBe(0);
+    expect(batcher.bufferedSize()).toBe(0);
+    flushed.length = 0;
+
+    // 2. 累积字符已达 8000，后续单次小增量 chunk（例如追加 5 个字符，全文 8005 字符）
+    batcher.push(key, baseText + '12345');
+    // 核心断言：未刷新的增量字符仅 5 字符 (< 8000 阈值)，严禁触发即时同步强刷，必须维持批处理节流
+    expect(flushed).toHaveLength(0);
+    expect(batcher.hasPending(key)).toBe(true);
+    expect(batcher.isScheduled()).toBe(true);
+    expect(batcher.bufferedSize()).toBe(5);
+
+    // 3. 连续推入多个小增量 chunk（模拟思考模型 100Hz 高频 token 流）
+    batcher.push(key, baseText + '1234567890');
+    batcher.push(key, baseText + '1234567890abcde');
+    expect(flushed).toHaveLength(0);
+    expect(batcher.bufferedSize()).toBe(15);
+    expect(batcher.isScheduled()).toBe(true);
+
+    // 4. interval 定时器到期触发正常批合并刷新
+    mt.fireActive();
+    expect(flushed).toEqual([{ key, text: baseText + '1234567890abcde' }]);
+    expect(batcher.pendingCount()).toBe(0);
+    expect(batcher.bufferedSize()).toBe(0);
+    expect(batcher.isScheduled()).toBe(false);
+
+    batcher.dispose();
+  });
+
+  it('safely force-flushes on single huge delta chunk (> threshold) and resets delta counter', () => {
+    const flushed: Array<{ key: string; text: string }> = [];
+    const mt = createManualTimers();
+    const batcher = new StreamTextBatcher(
+      (key, text) => {
+        flushed.push({ key, text });
+      },
+      {
+        intervalMs: 50,
+        maxBufferedChars: 8000,
+        setTimer: mt.setTimer,
+        clearTimer: mt.clearTimer,
+      }
+    );
+
+    const key = streamBatchKey('sess-1', 'msg-1');
+    const baseText = 'y'.repeat(10000);
+
+    // 1. 建立高字符基线（10000 字符）并提交
+    batcher.push(key, baseText);
+    batcher.flushNow();
+    expect(flushed).toHaveLength(1);
+    flushed.length = 0;
+
+    // 2. 单次推入超大增量 chunk（突发 8001 字符，未排空增量 8001 >= 8000 阈值）
+    const hugeDelta = 'Z'.repeat(8001);
+    batcher.push(key, baseText + hugeDelta);
+
+    // 核心断言：单次超大增量触达批次阈值时，仍能安全触发即时同步排空
+    expect(flushed).toHaveLength(1);
+    expect(flushed[0]).toEqual({ key, text: baseText + hugeDelta });
+    expect(batcher.pendingCount()).toBe(0);
+    expect(batcher.bufferedSize()).toBe(0);
+    expect(batcher.isScheduled()).toBe(false);
+
+    // 3. 验证排空后增量计数器彻底重置为 0，后续恢复正常小增量批处理节流
+    batcher.push(key, baseText + hugeDelta + 'next-token');
+    expect(flushed).toHaveLength(1); // 未触发强刷
+    expect(batcher.bufferedSize()).toBe('next-token'.length);
+    expect(batcher.isScheduled()).toBe(true);
+
+    mt.fireActive();
+    expect(flushed).toHaveLength(2);
+    expect(flushed[1]).toEqual({
+      key,
+      text: baseText + hugeDelta + 'next-token',
+    });
+    expect(batcher.bufferedSize()).toBe(0);
+
     batcher.dispose();
   });
 
@@ -225,7 +342,7 @@ describe('StreamTextBatcher', () => {
         maxPendingKeys: 2,
         setTimer: mt.setTimer,
         clearTimer: mt.clearTimer,
-      },
+      }
     );
 
     batcher.push('a', 'A');
@@ -252,7 +369,7 @@ describe('StreamTextBatcher', () => {
           batcher.push('k', 'from-onFlush');
         }
       },
-      { intervalMs: 30, setTimer: mt.setTimer, clearTimer: mt.clearTimer },
+      { intervalMs: 30, setTimer: mt.setTimer, clearTimer: mt.clearTimer }
     );
 
     batcher.push('k', 'first');
@@ -279,7 +396,7 @@ describe('StreamTextBatcher', () => {
           batcher.flushNow(); // 嵌套 flush
         }
       },
-      { intervalMs: 80, setTimer: mt.setTimer, clearTimer: mt.clearTimer },
+      { intervalMs: 80, setTimer: mt.setTimer, clearTimer: mt.clearTimer }
     );
 
     batcher.push('k', 'A');
@@ -297,7 +414,7 @@ describe('StreamTextBatcher', () => {
       (key, text) => {
         flushed.push({ key, text });
       },
-      { intervalMs: 25, setTimer: mt.setTimer, clearTimer: mt.clearTimer },
+      { intervalMs: 25, setTimer: mt.setTimer, clearTimer: mt.clearTimer }
     );
 
     const k1 = streamBatchKey('s', 'm1');
@@ -337,7 +454,7 @@ describe('StreamTextBatcher', () => {
       (_k, text) => {
         flushed.push(text);
       },
-      { intervalMs: 0 },
+      { intervalMs: 0 }
     );
     batcher.push('k', 'sync');
     expect(flushed).toEqual(['sync']);
@@ -363,7 +480,7 @@ describe('StreamValueBatcher', () => {
         merge: (prev, next) => ({ ...prev, ...next }),
         setTimer: mt.setTimer,
         clearTimer: mt.clearTimer,
-      },
+      }
     );
 
     batcher.push('t1', { n: 1, s: 'a' });
@@ -390,7 +507,7 @@ describe('StreamValueBatcher', () => {
       (key) => {
         order.push(key);
       },
-      { intervalMs: 10, setTimer: mt.setTimer, clearTimer: mt.clearTimer },
+      { intervalMs: 10, setTimer: mt.setTimer, clearTimer: mt.clearTimer }
     );
 
     batcher.push('z', 1);
@@ -421,7 +538,7 @@ describe('StreamValueBatcher', () => {
           cleared += 1;
           timers.length = 0;
         },
-      },
+      }
     );
 
     batcher.push('tool-a', { status: 'running', out: '...' });
@@ -452,7 +569,7 @@ describe('StreamValueBatcher', () => {
           return 1 as unknown as ReturnType<typeof setTimeout>;
         },
         clearTimer: () => {},
-      },
+      }
     );
 
     batcher.push('a', 'A1');
@@ -484,7 +601,7 @@ describe('StreamValueBatcher', () => {
         intervalMs: 100,
         setTimer: () => 1 as unknown as ReturnType<typeof setTimeout>,
         clearTimer: () => {},
-      },
+      }
     );
 
     batcher.push('a', 'A1');
@@ -514,7 +631,7 @@ describe('StreamValueBatcher', () => {
         maxPendingKeys: 3,
         setTimer: () => 1 as unknown as ReturnType<typeof setTimeout>,
         clearTimer: () => {},
-      },
+      }
     );
 
     batcher.push('k1', 1);
@@ -533,7 +650,7 @@ describe('StreamValueBatcher', () => {
       (_k, v) => {
         flushed.push(v);
       },
-      { intervalMs: 40, setTimer: mt.setTimer, clearTimer: mt.clearTimer },
+      { intervalMs: 40, setTimer: mt.setTimer, clearTimer: mt.clearTimer }
     );
 
     batcher.push('x', 1);
@@ -563,8 +680,8 @@ describe('tool batch helpers', () => {
     expect(
       mergeToolCallPatch(
         { id: 't', status: 'running', name: 'shell' },
-        { id: 't', status: 'success', output: 'ok' },
-      ),
+        { id: 't', status: 'success', output: 'ok' }
+      )
     ).toEqual({ id: 't', status: 'success', name: 'shell', output: 'ok' });
   });
 

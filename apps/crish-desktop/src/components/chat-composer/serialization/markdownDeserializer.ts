@@ -95,8 +95,10 @@ export function parseInline(text: string): JSONContent[] {
       continue;
     }
 
-    // 2. Mention: @[label](id:kind) or @[label](id)
-    const mentionMatch = remaining.match(/^@\[([^\]]+)\]\(([^):]+)(?::([^)]+))?\)/);
+    // 2. Mention: @[label](id:kind) or @[label](id)（兼容 Windows 盘符路径 C:\... 中含冒号）
+    const mentionMatch = remaining.match(
+      /^@\[([^\]]+)\]\(([\s\S]+?)(?::([a-zA-Z0-9_-]+))?\)/
+    );
     if (mentionMatch) {
       nodes.push({
         type: 'mention',
@@ -248,7 +250,8 @@ export function parseFromMarkdown(markdown: string): JSONContent {
     // 1. Code block: ```lang or ````lang ... ```
     if (trimmedLine.startsWith('```')) {
       const fenceMatch = trimmedLine.match(/^(`{3,})/);
-      const fenceStr: string = fenceMatch && fenceMatch[1] ? fenceMatch[1] : '```';
+      const fenceStr: string =
+        fenceMatch && fenceMatch[1] ? fenceMatch[1] : '```';
       const lang = trimmedLine.slice(fenceStr.length).trim();
       const codeLines: string[] = [];
       i++;
@@ -263,7 +266,11 @@ export function parseFromMarkdown(markdown: string): JSONContent {
         i++;
       }
       const checkLine = lines[i];
-      if (i < lines.length && checkLine !== undefined && checkLine.trim().startsWith(fenceStr)) {
+      if (
+        i < lines.length &&
+        checkLine !== undefined &&
+        checkLine.trim().startsWith(fenceStr)
+      ) {
         i++; // skip closing fence
       }
       content.push({

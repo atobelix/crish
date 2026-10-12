@@ -12,7 +12,11 @@
  * / workspaceShellStore.shellReady），不虚构 settingsStore.theme|isHydrated。
  */
 import React from 'react';
-import { useLayoutStore } from '../store/layoutStore';
+import {
+  useLayoutStore,
+  type UiSize,
+  type ShellChromeMode,
+} from '../store/layoutStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useWorkspaceShellStore } from '../store/workspace-shell';
 import { preferencesClient } from '../api/preferences/preferencesClient';
@@ -34,7 +38,6 @@ import { TokenRuntimeController } from '../services/TokenRuntimeController';
 import { waitLayoutTreeHydration } from '../store/layout-tree';
 import { hydrateWorkspaceShell } from './hydrateWorkspaceShell';
 import { listProjects } from '../api/projectStore';
-import type { UiSize, ShellChromeMode } from '../store/layout-helpers/store-types';
 import { parseShellChromeMode } from '../api/shellChrome';
 
 export interface StartupHydrationSnapshot {
@@ -152,15 +155,11 @@ export class UnifiedAppHydrationCoordinator {
    */
   public canPersistToDisk(): boolean {
     if (this.stage === 'fallback_committed') {
-      console.warn(
-        '[Coordinator] Fallback 挂载态：刚性阻断向磁盘反写配置'
-      );
+      console.warn('[Coordinator] Fallback 挂载态：刚性阻断向磁盘反写配置');
       return false;
     }
     if (this.cachedSnapshot?.isFallback) {
-      console.warn(
-        '[Coordinator] 当前快照携带 Fallback 标记：禁止磁盘持久化'
-      );
+      console.warn('[Coordinator] 当前快照携带 Fallback 标记：禁止磁盘持久化');
       return false;
     }
     return true;
@@ -208,8 +207,7 @@ export class UnifiedAppHydrationCoordinator {
       rawSettingsResult.status === 'fulfilled'
         ? rawSettingsResult.value
         : ({} as Settings);
-    const recentWorkspaces =
-      rawWorkspacesResultValue(recentWorkspacesResult);
+    const recentWorkspaces = rawWorkspacesResultValue(recentWorkspacesResult);
 
     const localStoredTheme = readStoredTheme();
     const themeSource = rawPrefs.theme || rawSettings.theme || localStoredTheme;
@@ -219,8 +217,8 @@ export class UnifiedAppHydrationCoordinator {
 
     const uiSize =
       mapPreferenceUiSize(rawPrefs.ui_size) ??
-      (mapPreferenceUiSize((rawSettings as { uiSize?: unknown }).uiSize) ??
-        'medium');
+      mapPreferenceUiSize((rawSettings as { uiSize?: unknown }).uiSize) ??
+      'medium';
 
     const shellChromeMode = parseShellChromeMode(
       (rawSettings as { shellChromeMode?: unknown }).shellChromeMode ??
@@ -393,14 +391,13 @@ export class UnifiedAppHydrationCoordinator {
 
     // 3. Store 批量注入 —— 必须先于 hydrateWorkspaceShell
     //    （readRestoreLastWorkspace 依赖 layout.getAppSettings 读到本次快照）
-    useSettingsStore.setState({ appSettings: snapshot.appSettings });
+    useSettingsStore.getState().setAppSettings(snapshot.appSettings);
 
-    useLayoutStore.setState({
-      sidebarCollapsed: snapshot.sidebarCollapsed,
-      tabModeEnabled: snapshot.tabModeEnabled,
-      uiSize: snapshot.uiSize,
-      shellChromeMode: snapshot.shellChromeMode,
-    });
+    const layoutActions = useLayoutStore.getState();
+    layoutActions.setSidebarCollapsed(snapshot.sidebarCollapsed);
+    layoutActions.setTabModeEnabled(snapshot.tabModeEnabled);
+    layoutActions.setUiSize(snapshot.uiSize);
+    layoutActions.setShellChromeMode(snapshot.shellChromeMode);
 
     // 4. shellReady 预置位（hydrateWorkspaceShell 内部也会 setShellReady）
     useWorkspaceShellStore.getState().setShellReady(true);
@@ -431,8 +428,8 @@ export class UnifiedAppHydrationCoordinator {
     const prev = this.cachedSnapshot;
     this.cachedSnapshot = trueSnapshot;
 
-    const hasThemeDiff = prev?.theme !== trueSnapshot.theme;
-    const hasSkinDiff =
+    const _hasThemeDiff = prev?.theme !== trueSnapshot.theme;
+    const _hasSkinDiff =
       prev?.personalization.skin !== trueSnapshot.personalization.skin;
     const hasSizeDiff = prev?.uiSize !== trueSnapshot.uiSize;
     const hasSidebarDiff =
@@ -442,11 +439,7 @@ export class UnifiedAppHydrationCoordinator {
       // 真数据就绪后解除 fallback 闸，允许未来用户主动持久化
       this.stage = 'reconciled';
 
-      if (hasThemeDiff || hasSkinDiff) {
-        applyPersonalization(trueSnapshot.personalization, trueSnapshot.theme);
-      } else {
-        applyPersonalization(trueSnapshot.personalization, trueSnapshot.theme);
-      }
+      applyPersonalization(trueSnapshot.personalization, trueSnapshot.theme);
 
       if (hasSizeDiff) {
         TokenRuntimeController.getInstance().setUiScale(trueSnapshot.uiSize);
@@ -456,7 +449,7 @@ export class UnifiedAppHydrationCoordinator {
         applyFontStacks(trueSnapshot.fonts);
       }
 
-      useSettingsStore.setState({ appSettings: trueSnapshot.appSettings });
+      useSettingsStore.getState().setAppSettings(trueSnapshot.appSettings);
 
       if (
         hasSidebarDiff ||
@@ -464,12 +457,11 @@ export class UnifiedAppHydrationCoordinator {
         prev?.tabModeEnabled !== trueSnapshot.tabModeEnabled ||
         prev?.shellChromeMode !== trueSnapshot.shellChromeMode
       ) {
-        useLayoutStore.setState({
-          sidebarCollapsed: trueSnapshot.sidebarCollapsed,
-          tabModeEnabled: trueSnapshot.tabModeEnabled,
-          uiSize: trueSnapshot.uiSize,
-          shellChromeMode: trueSnapshot.shellChromeMode,
-        });
+        const nextLayoutActions = useLayoutStore.getState();
+        nextLayoutActions.setSidebarCollapsed(trueSnapshot.sidebarCollapsed);
+        nextLayoutActions.setTabModeEnabled(trueSnapshot.tabModeEnabled);
+        nextLayoutActions.setUiSize(trueSnapshot.uiSize);
+        nextLayoutActions.setShellChromeMode(trueSnapshot.shellChromeMode);
       }
 
       this.recordTrace('reconcile-late-settled');
@@ -478,7 +470,10 @@ export class UnifiedAppHydrationCoordinator {
       );
     };
 
-    if (typeof React !== 'undefined' && typeof React.startTransition === 'function') {
+    if (
+      typeof React !== 'undefined' &&
+      typeof React.startTransition === 'function'
+    ) {
       React.startTransition(applyUpdate);
     } else {
       applyUpdate();

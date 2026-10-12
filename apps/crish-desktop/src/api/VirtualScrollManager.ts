@@ -92,7 +92,8 @@ export class VirtualScrollManager {
     for (let i = 0; i < n; i++) {
       const id = this.order[i]!;
       this.idToIndexMap.set(id, i);
-      const h = this.getHeight(id);
+      const rawH = this.getHeight(id);
+      const h = Number.isFinite(rawH) && rawH > 0 ? rawH : this.fallbackHeight;
       this.currentHeights[i] = h;
       this.bitAdd(i + 1, h);
     }
@@ -142,9 +143,13 @@ export class VirtualScrollManager {
     if (!Array.isArray(estimates) || estimates.length === 0) return false;
     let anyChanged = false;
     for (const { id, height } of estimates) {
-      if (!id || typeof height !== 'number' || !Number.isFinite(height) || height <= 0) {
+      if (
+        typeof height !== 'number' ||
+        !Number.isFinite(height) ||
+        height <= 0 ||
+        !id
+      )
         continue;
-      }
       // 已有实测的行：作废 actual 后仍保留 lastMeasured，禁止估高覆盖。
       if (this.lastMeasured.has(id)) continue;
       const entry = this.heightsById.get(id);
@@ -205,10 +210,12 @@ export class VirtualScrollManager {
    * @returns 是否实际变更（同值跳过时 false；T4.1 R-04 断言口径）
    */
   setActual(id: string, height: number, callerGeneration?: number): boolean {
-    if (callerGeneration !== undefined && callerGeneration !== this.generation) {
+    if (typeof height !== 'number' || !Number.isFinite(height) || height <= 0)
       return false;
-    }
-    if (!id || typeof height !== 'number' || !Number.isFinite(height) || height <= 0) {
+    if (
+      !id ||
+      (callerGeneration !== undefined && callerGeneration !== this.generation)
+    ) {
       return false;
     }
     const safeHeight = height;
@@ -256,9 +263,13 @@ export class VirtualScrollManager {
 
   /** 设置预测量高度（actual 已存在时跳过） */
   setEstimated(id: string, height: number): void {
-    if (!id || typeof height !== 'number' || !Number.isFinite(height) || height <= 0) {
+    if (
+      typeof height !== 'number' ||
+      !Number.isFinite(height) ||
+      height <= 0 ||
+      !id
+    )
       return;
-    }
     const safeHeight = height;
     const entry = this.heightsById.get(id);
     if (entry) {
@@ -291,7 +302,9 @@ export class VirtualScrollManager {
       const lastKnownHeight = entry.actual ?? entry.estimated;
       entry.actual = null;
       entry.estimated =
-        lastKnownHeight > 0 ? lastKnownHeight : this.fallbackHeight;
+        Number.isFinite(lastKnownHeight) && lastKnownHeight > 0
+          ? lastKnownHeight
+          : this.fallbackHeight;
       // 保持当前高度与 BIT 树不变，平滑过渡防止视口抖动
     }
   }
@@ -304,7 +317,7 @@ export class VirtualScrollManager {
   hydrateHeightMap(heightMap: Readonly<Record<string, number>>): void {
     if (!heightMap) return;
     for (const [id, h] of Object.entries(heightMap)) {
-      if (!id || typeof h !== 'number' || !Number.isFinite(h) || h <= 0)
+      if (typeof h !== 'number' || !Number.isFinite(h) || h <= 0 || !id)
         continue;
       const safeHeight = h;
       this.lastMeasured.set(id, safeHeight);
@@ -353,7 +366,8 @@ export class VirtualScrollManager {
    * 获取 0 到 count-1 项的总高度 (O(log N))
    */
   getTotalHeight(count?: number): number {
-    const totalCount = count !== undefined ? normalizeNonNegInt(count) : this.order.length;
+    const totalCount =
+      count !== undefined ? normalizeNonNegInt(count) : this.order.length;
     if (totalCount <= 0 || this.order.length === 0) return 0;
     return this.bitQuery(Math.min(totalCount, this.order.length));
   }
@@ -434,6 +448,7 @@ export class VirtualScrollManager {
 
   // ── Fenwick Tree 树状数组核心原语 ─────────────────────────────────────
   private bitAdd(idx: number, delta: number): void {
+    if (!Number.isFinite(delta) || delta === 0) return;
     const len = this.bitTree.length;
     for (let i = idx; i < len; i += i & -i) {
       this.bitTree[i] = (this.bitTree[i] ?? 0) + delta;
@@ -443,7 +458,8 @@ export class VirtualScrollManager {
   private bitQuery(idx: number): number {
     let sum = 0;
     for (let i = idx; i > 0; i -= i & -i) {
-      sum += this.bitTree[i] ?? 0;
+      const val = this.bitTree[i] ?? 0;
+      if (Number.isFinite(val)) sum += val;
     }
     return sum;
   }

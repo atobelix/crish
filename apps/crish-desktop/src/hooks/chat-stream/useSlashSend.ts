@@ -2,7 +2,6 @@
  * apps/crish-desktop/src/hooks/chat-stream/useSlashSend.ts
  * 核心聊天发送主协调 Hook（模块化拆解后约 140 有效行）
  */
-import { useSessionStore } from '../../store/sessionStore';
 import { getSessionById } from '../../store/sessionStore';
 import { addMessage } from '../../api/storeAccess';
 import { generateMessageId } from '../../utils/generateMessageId';
@@ -35,9 +34,10 @@ import {
 } from '../../api/attachmentPersistSanitize';
 import { runPreflightChecks, assembleChatPayload } from './slashSendPreflight';
 import { clearRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
+import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 
 export function useSlashSend(
-  options: UseChatStreamOptions,
+  options: UseChatStreamOptions & { sessionId?: string | null },
   refs: StreamBatcherRefs,
   runStreamingAssistant: (
     input: string,
@@ -68,7 +68,8 @@ export function useSlashSend(
   } = options;
 
   // 渲染订阅：仅 activeSessionId
-  const activeSessionId = useSessionStore((s) => s.activeSessionId);
+  const scopedSessionId = useScopedSessionId(options.sessionId);
+  const activeSessionId = scopedSessionId;
   const { streamManagerRef } = refs;
 
   const handleSendChat = async (
@@ -158,7 +159,8 @@ export function useSlashSend(
     }
 
     // 6. 并发忙碌检测与 Follow-up 判定
-    const hasLiveStream = streamManagerRef.current?.hasStream(sessionId) ?? false;
+    const hasLiveStream =
+      streamManagerRef.current?.hasStream(sessionId) ?? false;
     // 强制执行绝对自愈：只要无物理 live stream，立即收口清扫历史 processing/queued 脏数据
     settleStaleSessionProcessingMessages(sessionId, hasLiveStream);
 
@@ -172,15 +174,17 @@ export function useSlashSend(
     const isImageAttachment = (a: ChatAttachment) =>
       Boolean(
         a.dataUrl ||
-          (a.mime && a.mime.startsWith('image/')) ||
-          /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i.test(a.name || a.path || '')
+        (a.mime && a.mime.startsWith('image/')) ||
+        /\.(png|jpe?g|gif|webp|svg|bmp|ico|avif)$/i.test(a.name || a.path || '')
       );
 
     // 落盘走脱敏 SSOT：禁止绝对路径 / dataUrl 本体进消息持久化
     const userImages: import('../../store/types').MessageImageRef[] =
       activeAttachments
         .filter(isImageAttachment)
-        .map((a, idx) => sanitizeImageRefForPersist(a, `img-${userMsgId}-${idx}`));
+        .map((a, idx) =>
+          sanitizeImageRefForPersist(a, `img-${userMsgId}-${idx}`)
+        );
 
     const userAttachments: import('../../store/types').SessionMessageAttachment[] =
       activeAttachments
@@ -217,12 +221,16 @@ export function useSlashSend(
       streamOptionsWithClientMsg.contextState = flushedContextState;
     }
 
+    const finalUserDisplayText = flushedContextState
+      ? `[用户输入]\n${displayText}\n\n[系统环境上下文]\n${flushedContextState}`
+      : displayText;
+
     let enqueued = false;
     try {
       addMessage(wsId, sessionId, {
         id: userMsgId,
         sender: 'user',
-        text: displayText,
+        text: finalUserDisplayText,
         timestamp: Date.now(),
         status: 'processing',
         ...(userImages.length ? { images: userImages } : {}),

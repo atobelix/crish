@@ -10,8 +10,9 @@
  * 4. CJK IME 中文输入法 229 / Process / isComposing 绝对放行门闩；
  * 5. Branch-Aware 外点判定与 LIFO 焦点平滑还原。
  */
+import type React from 'react';
 import type {
-  DismissReason,
+  DismissReason as BaseDismissReason,
   LayerRegistration,
   LayerTraceRecord,
   DismissedByPointerSnapshot,
@@ -29,16 +30,88 @@ import { LayerStackListeners } from './layerStackListeners';
 export type { StackListener } from './layerStackListeners';
 export type {
   LayerType,
-  DismissReason,
   LayerRegistration,
   LayerTraceRecord,
   DismissedByPointerSnapshot,
 } from './layerStackTypes';
 
+export type DismissReason = BaseDismissReason | 'interaction';
+
+const getNow = (): number =>
+  typeof performance !== 'undefined' ? performance.now() : Date.now();
+
+function toWeakRefObject(
+  refOrEl?: React.RefObject<HTMLElement | null> | HTMLElement | null
+): React.RefObject<HTMLElement | null> | null | undefined {
+  if (refOrEl === undefined) return undefined;
+  if (refOrEl === null) return null;
+  if (typeof WeakRef === 'undefined') {
+    return 'current' in refOrEl ? refOrEl : { current: refOrEl };
+  }
+  if (!('current' in refOrEl)) {
+    const weakEl = new WeakRef(refOrEl);
+    return {
+      get current(): HTMLElement | null {
+        return weakEl.deref() ?? null;
+      },
+    };
+  }
+  const refWeak = new WeakRef(refOrEl);
+  let elementWeak =
+    refOrEl.current && typeof refOrEl.current === 'object'
+      ? new WeakRef(refOrEl.current)
+      : null;
+  return {
+    get current(): HTMLElement | null {
+      const ref = refWeak.deref();
+      if (ref) {
+        const raw = ref.current;
+        if (!raw) {
+          elementWeak = null;
+          return null;
+        }
+        if (!elementWeak || elementWeak.deref() !== raw) {
+          elementWeak = new WeakRef(raw);
+        }
+        return elementWeak.deref() ?? null;
+      }
+      return elementWeak?.deref() ?? null;
+    },
+  };
+}
+
+function createDismissedByPointerSnapshot(
+  pointerId: number,
+  layerId: string,
+  anchor: HTMLElement | null,
+  target: EventTarget | null,
+  timestamp: number
+): DismissedByPointerSnapshot {
+  if (typeof WeakRef === 'undefined') {
+    return { pointerId, layerId, anchor, target, timestamp };
+  }
+  const anchorWeak =
+    anchor && typeof anchor === 'object' ? new WeakRef(anchor) : null;
+  const targetWeak =
+    target && typeof target === 'object' ? new WeakRef(target) : null;
+  return {
+    pointerId,
+    layerId,
+    timestamp,
+    get anchor(): HTMLElement | null {
+      return anchorWeak ? (anchorWeak.deref() ?? null) : null;
+    },
+    get target(): EventTarget | null {
+      return targetWeak ? (targetWeak.deref() ?? null) : null;
+    },
+  };
+}
+
 export class LayerStackManager {
   private static instance: LayerStackManager | null = null;
   private static readonly MAX_TRACE_HISTORY = 100;
   private static readonly COOLDOWN_WINDOW_MS = 100;
+  public static readonly UNHOOK_TIMEOUT_MS = 100;
 
   private layers: LayerRegistration[] = [];
   private traceHistory: LayerTraceRecord[] = [];
@@ -49,9 +122,27 @@ export class LayerStackManager {
   private lastCloseTimestamp = 0;
   private lastEscapeDismissTime = 0;
   private silenceTimer: ReturnType<typeof setTimeout> | null = null;
-  private anchorPointerDownTarget: Node | null = null;
+  private unhookTimer: ReturnType<typeof setTimeout> | null = null;
+  private anchorPointerDownTargetRef: WeakRef<Node> | null = null;
   /** 本次 pointerdown 外点关掉的层与触发手势快照；附带时间戳确保 100ms 时效性 */
   private dismissedByPointer: DismissedByPointerSnapshot | null = null;
+
+  private get anchorPointerDownTarget(): Node | null {
+    if (!this.anchorPointerDownTargetRef) return null;
+    return typeof WeakRef !== 'undefined'
+      ? (this.anchorPointerDownTargetRef.deref() ?? null)
+      : (this.anchorPointerDownTargetRef as any);
+  }
+
+  private set anchorPointerDownTarget(node: Node | null) {
+    if (!node) {
+      this.anchorPointerDownTargetRef = null;
+    } else if (typeof WeakRef !== 'undefined') {
+      this.anchorPointerDownTargetRef = new WeakRef(node);
+    } else {
+      this.anchorPointerDownTargetRef = node as any;
+    }
+  }
 
   private constructor() {
     this.attachGlobalListeners();
@@ -71,11 +162,45 @@ export class LayerStackManager {
    * 注册浮层实例，返回注销函数
    */
   public register(layer: Omit<LayerRegistration, 'mountedAt'>): () => void {
+    if (this.unhookTimer) {
+      clearTimeout(this.unhookTimer);
+      this.unhookTimer = null;
+    }
     this.attachGlobalListeners();
+
+    const elementRef = toWeakRefObject(layer.elementRef);
+    const anchorRef = toWeakRefObject(layer.anchorRef);
+    const weakPortal =
+      layer.portalContainer && typeof WeakRef !== 'undefined'
+        ? new WeakRef(layer.portalContainer)
+        : null;
+    const weakRestoreTarget =
+      layer.restoreFocusTarget && typeof WeakRef !== 'undefined'
+        ? new WeakRef(layer.restoreFocusTarget)
+        : null;
+
     const fullLayer: LayerRegistration = {
       ...layer,
+      elementRef,
+      anchorRef,
       mountedAt: ++this.sequence,
     };
+
+    if (weakPortal) {
+      Object.defineProperty(fullLayer, 'portalContainer', {
+        get: () => weakPortal.deref() ?? null,
+        enumerable: true,
+        configurable: true,
+      });
+    }
+
+    if (weakRestoreTarget) {
+      Object.defineProperty(fullLayer, 'restoreFocusTarget', {
+        get: () => weakRestoreTarget.deref() ?? null,
+        enumerable: true,
+        configurable: true,
+      });
+    }
 
     // 避免重复 ID 污染
     this.layers = this.layers.filter((l) => l.id !== fullLayer.id);
@@ -146,6 +271,10 @@ export class LayerStackManager {
 
     this.updateFloatingActiveState();
     if (target) this.stackListeners.notify();
+
+    if (this.layers.length === 0) {
+      this.scheduleUnhookTimeout();
+    }
   }
 
   /**
@@ -153,8 +282,7 @@ export class LayerStackManager {
    */
   public wasLayerDismissedThisGesture(layerId: string): boolean {
     if (!this.dismissedByPointer) return false;
-    const now =
-      typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const now = getNow();
     if (
       now - this.dismissedByPointer.timestamp >
       LayerStackManager.COOLDOWN_WINDOW_MS
@@ -173,21 +301,22 @@ export class LayerStackManager {
     const rec = this.dismissedByPointer;
     if (!rec || !triggerEl) return false;
 
-    const now =
-      typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const now = getNow();
     if (now - rec.timestamp > LayerStackManager.COOLDOWN_WINDOW_MS) {
       this.dismissedByPointer = null;
       return false;
     }
 
     // 只有明确匹配被关层的 anchor 时，才确认为同一 Trigger 反弹误触
+    const anchor = rec.anchor;
+    const target = rec.target;
     if (
-      rec.anchor &&
-      rec.anchor.isConnected &&
-      (rec.anchor === triggerEl ||
-        rec.anchor.contains(triggerEl) ||
-        triggerEl.contains(rec.anchor) ||
-        (rec.target instanceof Node && rec.anchor.contains(rec.target)))
+      anchor &&
+      anchor.isConnected &&
+      (anchor === triggerEl ||
+        anchor.contains(triggerEl) ||
+        triggerEl.contains(anchor) ||
+        (target instanceof Node && anchor.contains(target)))
     ) {
       return true;
     }
@@ -202,17 +331,14 @@ export class LayerStackManager {
   public isWithinCooldown(
     cooldownMs = LayerStackManager.COOLDOWN_WINDOW_MS
   ): boolean {
-    const now =
-      typeof performance !== 'undefined' ? performance.now() : Date.now();
-    return now - this.lastCloseTimestamp < cooldownMs;
+    return getNow() - this.lastCloseTimestamp < cooldownMs;
   }
 
   /**
    * 显式标记关闭高精度时间戳
    */
   public markCloseTimestamp(): void {
-    this.lastCloseTimestamp =
-      typeof performance !== 'undefined' ? performance.now() : Date.now();
+    this.lastCloseTimestamp = getNow();
   }
 
   /**
@@ -335,13 +461,24 @@ export class LayerStackManager {
   }
 
   /**
-   * 关闭所有可退栈浮层
+   * 关闭所有可退栈浮层。
+   * 支持 reason = 'interaction'（例如分屏拖拽/窗口重置等全局交互开始时），
+   * 安全、即时地仅关闭所有非模态（non-modal）的可关闭悬浮层（如 Tooltip、Menu、Popover），保留模态弹窗。
    */
   public dismissAll(reason: DismissReason = 'programmatic'): void {
     this.markCloseTimestamp();
+    this.scheduleUnhookTimeout();
     const toDismiss = [...this.layers].reverse();
     for (const layer of toDismiss) {
       if (layer && layer.dismissible) {
+        if (
+          reason === 'interaction' &&
+          (layer.modal ||
+            layer.type === 'modal-dialog' ||
+            layer.type === 'confirm-dialog')
+        ) {
+          continue;
+        }
         this.dismissLayer(layer.id, reason);
       }
     }
@@ -355,6 +492,7 @@ export class LayerStackManager {
     if (!layer) return;
 
     this.markCloseTimestamp();
+    this.scheduleUnhookTimeout();
 
     // 1. 级联关闭所有子孙浮层
     const descendants = this.getDescendants(layerId);
@@ -377,7 +515,7 @@ export class LayerStackManager {
     }
 
     try {
-      layer.onDismiss(reason);
+      layer.onDismiss(reason as any);
     } catch (err) {
       console.error('[LayerStackManager] Error in layer onDismiss:', err);
     }
@@ -446,6 +584,24 @@ export class LayerStackManager {
   }
 
   /**
+   * 兜底清理保护：当触发 dismiss 时设置 100ms unhook 超时，确保彻底注销事件监听与引用
+   */
+  private scheduleUnhookTimeout(): void {
+    if (this.unhookTimer) {
+      clearTimeout(this.unhookTimer);
+      this.unhookTimer = null;
+    }
+    this.unhookTimer = setTimeout(() => {
+      this.unhookTimer = null;
+      this.dismissedByPointer = null;
+      this.anchorPointerDownTarget = null;
+      if (this.layers.length === 0) {
+        this.detachGlobalListeners();
+      }
+    }, LayerStackManager.UNHOOK_TIMEOUT_MS);
+  }
+
+  /**
    * 绑定全局单一监听器
    */
   private attachGlobalListeners(): void {
@@ -466,6 +622,33 @@ export class LayerStackManager {
       for (const [e, fn] of evs) target.addEventListener(e, fn, true);
     }
     this.isListening = true;
+  }
+
+  /**
+   * 注销全局事件监听器
+   */
+  private detachGlobalListeners(): void {
+    if (!this.isListening) return;
+    const evs: [string, EventListener][] = [
+      ['keydown', this.handleGlobalKeyDown as EventListener],
+      ['pointerdown', this.handleGlobalPointerDown as EventListener],
+      ['pointerup', this.handleGlobalPointerUp as EventListener],
+    ];
+    if (typeof window !== 'undefined') {
+      for (const [e, fn] of evs) window.removeEventListener(e, fn, true);
+    }
+    if (typeof document !== 'undefined') {
+      for (const [e, fn] of evs) document.removeEventListener(e, fn, true);
+    }
+    this.isListening = false;
+  }
+
+  public get isListeningGlobalEvents(): boolean {
+    return this.isListening;
+  }
+
+  public hasActiveUnhookTimer(): boolean {
+    return this.unhookTimer !== null;
   }
 
   /**
@@ -594,13 +777,13 @@ export class LayerStackManager {
 
     if (layersToDismiss.length > 0 && layersToDismiss[0]) {
       const topLayer = layersToDismiss[0];
-      this.dismissedByPointer = {
-        pointerId: event.pointerId,
-        layerId: topLayer.id,
-        anchor: resolveElement(topLayer.anchorRef),
+      this.dismissedByPointer = createDismissedByPointerSnapshot(
+        event.pointerId,
+        topLayer.id,
+        resolveElement(topLayer.anchorRef),
         target,
-        timestamp: now,
-      };
+        now
+      );
 
       // 依次级联退栈关闭所有外部浮层
       for (const l of layersToDismiss) {
@@ -619,8 +802,7 @@ export class LayerStackManager {
     const target = event.target as Node | null;
     if (!target) return;
 
-    const now =
-      typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const now = getNow();
 
     for (let i = this.layers.length - 1; i >= 0; i--) {
       const l = this.layers[i];
@@ -632,13 +814,13 @@ export class LayerStackManager {
           !anchorEl.contains(target) &&
           (!topEl || !topEl.contains(target))
         ) {
-          this.dismissedByPointer = {
-            pointerId: event.pointerId,
-            layerId: l.id,
-            anchor: anchorEl,
+          this.dismissedByPointer = createDismissedByPointerSnapshot(
+            event.pointerId,
+            l.id,
+            anchorEl,
             target,
-            timestamp: now,
-          };
+            now
+          );
           this.dismissLayer(l.id, 'outside-pointer');
           this.anchorPointerDownTarget = null;
           return;
@@ -652,18 +834,14 @@ export class LayerStackManager {
    * 销毁并清理全局监听（供热更新与测试使用）
    */
   public dispose(): void {
-    const evs: [string, EventListener][] = [
-      ['keydown', this.handleGlobalKeyDown as EventListener],
-      ['pointerdown', this.handleGlobalPointerDown as EventListener],
-      ['pointerup', this.handleGlobalPointerUp as EventListener],
-    ];
+    if (this.unhookTimer) {
+      clearTimeout(this.unhookTimer);
+      this.unhookTimer = null;
+    }
+    this.detachGlobalListeners();
     if (typeof document !== 'undefined') {
-      for (const [e, fn] of evs) document.removeEventListener(e, fn, true);
       document.documentElement?.removeAttribute('data-floating-active');
       document.body?.removeAttribute('data-floating-active');
-    }
-    if (typeof window !== 'undefined') {
-      for (const [e, fn] of evs) window.removeEventListener(e, fn, true);
     }
     if (this.silenceTimer) {
       clearTimeout(this.silenceTimer);
@@ -676,7 +854,6 @@ export class LayerStackManager {
     this.anchorPointerDownTarget = null;
     this.dismissedByPointer = null;
     this.sequence = 0;
-    this.isListening = false;
   }
 }
 

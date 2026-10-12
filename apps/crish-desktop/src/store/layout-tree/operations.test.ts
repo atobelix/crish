@@ -51,7 +51,11 @@ function tab(
   });
 }
 
-function leafOf(id: string, tabs: SessionTab[], activeTabId?: string): LayoutLeaf {
+function leafOf(
+  id: string,
+  tabs: SessionTab[],
+  activeTabId?: string
+): LayoutLeaf {
   return createLeaf({ id, tabs, activeTabId: activeTabId ?? tabs[0]!.tabId });
 }
 
@@ -147,9 +151,15 @@ describe('splitLeaf / mergeBranch / moveLeaf / resizeBranch', () => {
       leafOf('A', [tab('s1', 't1')]),
       leafOf('B', [tab('s2', 't2')])
     );
-    expect((resizeBranch(tree, tree.root.id, 0.3).root as LayoutBranch).splitRatio).toBe(0.3);
-    expect((resizeBranch(tree, tree.root.id, 0.01).root as LayoutBranch).splitRatio).toBe(0.12);
-    expect((resizeBranch(tree, tree.root.id, 0.99).root as LayoutBranch).splitRatio).toBe(0.88);
+    expect(
+      (resizeBranch(tree, tree.root.id, 0.3).root as LayoutBranch).splitRatio
+    ).toBe(0.3);
+    expect(
+      (resizeBranch(tree, tree.root.id, 0.01).root as LayoutBranch).splitRatio
+    ).toBe(0.12);
+    expect(
+      (resizeBranch(tree, tree.root.id, 0.99).root as LayoutBranch).splitRatio
+    ).toBe(0.88);
   });
 });
 
@@ -194,6 +204,26 @@ describe('会话 tab 命令矩阵', () => {
     };
     const closeMidKeepA = removeTab(keepA, 'L', 'tb').root as LayoutLeaf;
     expect(closeMidKeepA.activeTabId).toBe('ta');
+  });
+
+  it('多叶分屏：关闭草稿/虚拟 tab（idx < 0）时移除该叶并收拢为单叶', () => {
+    const A = leafOf('A', [tab('s1', 't1')], 't1');
+    const B = leafOf('B', [], '');
+    const tree = twoLeafTree(A, B);
+    const result = removeTab(tree, 'B', 'pane-B');
+    const leaves = collectLeaves(result.root);
+    expect(leaves).toHaveLength(1);
+    expect(leaves[0]!.id).toBe('A');
+  });
+
+  it('多叶分屏两草稿叶：关闭其中一个草稿叶收拢为单草稿叶', () => {
+    const A = leafOf('A', [], '');
+    const B = leafOf('B', [], '');
+    const tree = twoLeafTree(A, B);
+    const result = removeTab(tree, 'B', 'pane-B');
+    const leaves = collectLeaves(result.root);
+    expect(leaves).toHaveLength(1);
+    expect(leaves[0]!.id).toBe('A');
   });
 
   it('B. 两叶 move：对象搬走，源空则 prune', () => {
@@ -247,7 +277,9 @@ describe('会话 tab 命令矩阵', () => {
     const tree = twoLeafTree(A, B);
     const dup = insertTab(tree, 'B', tab('s1', 'new'));
     expect(dup).toBe(tree);
-    expect(collectLeaves(dup.root).find((l) => l.id === 'B')!.tabs).toHaveLength(1);
+    expect(
+      collectLeaves(dup.root).find((l) => l.id === 'B')!.tabs
+    ).toHaveLength(1);
 
     const added = addTab(tree, 'B');
     expect(added).not.toBe(tree);
@@ -279,7 +311,9 @@ describe('会话 tab 命令矩阵', () => {
     expect(result).not.toBe(tree);
     const leaves = collectLeaves(result.root);
     expect(leaves).toHaveLength(2);
-    expect(leaves.some((l) => l.tabs.some((t) => t.sessionId === 's-brand-new'))).toBe(true);
+    expect(
+      leaves.some((l) => l.tabs.some((t) => t.sessionId === 's-brand-new'))
+    ).toBe(true);
   });
 
   it('splitSessionFromSidebar: 从侧栏拖拽已有 Tab 的会话 → 迁移并分屏（保证会话唯一性）', () => {
@@ -290,7 +324,14 @@ describe('会话 tab 命令矩阵', () => {
     expect(result).not.toBe(tree);
     const leaves = collectLeaves(result.root);
     expect(leaves.find((l) => l.id === 'A')!.tabs).toHaveLength(1);
-    expect(leaves.some((l) => l.id !== 'A' && l.id !== 'B' && l.tabs.some((t) => t.sessionId === 's2'))).toBe(true);
+    expect(
+      leaves.some(
+        (l) =>
+          l.id !== 'A' &&
+          l.id !== 'B' &&
+          l.tabs.some((t) => t.sessionId === 's2')
+      )
+    ).toBe(true);
   });
 
   it('单叶一 tab 关掉 → 同叶留下新对话界面', () => {
@@ -323,8 +364,13 @@ describe('会话 tab 命令矩阵', () => {
     expect(activateTabInTree(tree, 'A', 't3')).toBe(tree);
     expect(activateTabInTree(tree, 'missing', 't1')).toBe(tree);
     const switched = activateTabInTree(tree, 'A', 't2');
-    expect((collectLeaves(switched.root).find((l) => l.id === 'A') as LayoutLeaf).activeTabId).toBe('t2');
-    expect(collectLeaves(switched.root).find((l) => l.id === 'B')!.tabs).toBe(B.tabs);
+    expect(
+      (collectLeaves(switched.root).find((l) => l.id === 'A') as LayoutLeaf)
+        .activeTabId
+    ).toBe('t2');
+    expect(collectLeaves(switched.root).find((l) => l.id === 'B')!.tabs).toBe(
+      B.tabs
+    );
   });
 
   it('insertTab 全局哨兵会被工厂挡在测试外；重复 session 拒绝', () => {
@@ -370,7 +416,9 @@ describe('applyDrop 分发', () => {
     const viaMove = moveTab(tree, 'A', 't2', 'B', 1);
     expect(
       collectLeaves(viaDrop.root).map((l) => l.tabs.map((t) => t.tabId))
-    ).toEqual(collectLeaves(viaMove.root).map((l) => l.tabs.map((t) => t.tabId)));
+    ).toEqual(
+      collectLeaves(viaMove.root).map((l) => l.tabs.map((t) => t.tabId))
+    );
   });
 
   it('tab + split-right 等价 splitTab right', () => {
@@ -390,7 +438,9 @@ describe('applyDrop 分发', () => {
       collectLeaves(viaSplit.root).length
     );
     expect(
-      collectLeaves(viaDrop.root).find((l) => l.id === 'B')!.tabs.map((t) => t.tabId)
+      collectLeaves(viaDrop.root)
+        .find((l) => l.id === 'B')!
+        .tabs.map((t) => t.tabId)
     ).toEqual(['t3']);
   });
 
@@ -449,9 +499,24 @@ describe('migrateFromColumns', () => {
         id: 'col-0',
         widthRatio: 1,
         groups: [
-          { id: 'g-0', heightRatio: 0.4, activeCardId: 'chat', cards: [{ id: 'chat', title: 'Chat' }] },
-          { id: 'g-1', heightRatio: 0.4, activeCardId: 'terminal', cards: [{ id: 'terminal', title: 'T' }] },
-          { id: 'g-2', heightRatio: 0.2, activeCardId: 'diff', cards: [{ id: 'diff', title: 'D' }] },
+          {
+            id: 'g-0',
+            heightRatio: 0.4,
+            activeCardId: 'chat',
+            cards: [{ id: 'chat', title: 'Chat' }],
+          },
+          {
+            id: 'g-1',
+            heightRatio: 0.4,
+            activeCardId: 'terminal',
+            cards: [{ id: 'terminal', title: 'T' }],
+          },
+          {
+            id: 'g-2',
+            heightRatio: 0.2,
+            activeCardId: 'diff',
+            cards: [{ id: 'diff', title: 'D' }],
+          },
         ],
       },
     ]);

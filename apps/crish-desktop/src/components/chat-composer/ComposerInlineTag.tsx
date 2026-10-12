@@ -9,8 +9,10 @@ import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import { openFileInPanel } from '../../api/filePanelOpener';
 import { AppIcon, type IconName } from '../ui/icons';
 
-function iconForKind(kind: string): IconName {
+function iconForKind(kind: string, customIcon?: string): IconName {
+  if (customIcon) return customIcon as IconName;
   if (kind === 'skill') return 'blocks';
+  if (kind === 'command') return 'sparkles';
   if (kind === 'agent') return 'bot';
   return 'file-text';
 }
@@ -22,8 +24,11 @@ export const ComposerInlineTag: React.FC<NodeViewProps> = ({
   const kind = String(node.attrs.kind || 'file');
   const label = String(node.attrs.label || node.attrs.id || '');
   const id = String(node.attrs.id || '');
-  const iconName = iconForKind(kind);
-  const text = kind === 'skill' ? label : `@${label}`;
+  const customIcon = node.attrs.iconName
+    ? String(node.attrs.iconName)
+    : undefined;
+  const iconName = iconForKind(kind, customIcon);
+  const text = kind === 'skill' || kind === 'command' ? label : `@${label}`;
   const canOpen = (kind === 'file' || kind === 'skill') && id.length > 0;
 
   const handleOpen = async (e: React.SyntheticEvent) => {
@@ -82,13 +87,6 @@ export const ComposerInlineTag: React.FC<NodeViewProps> = ({
       contentEditable={false}
       role={canOpen ? 'button' : undefined}
       tabIndex={canOpen ? 0 : undefined}
-      title={
-        canOpen
-          ? kind === 'skill'
-            ? `点击打开技能文档 (${label})`
-            : `打开 ${label}`
-          : undefined
-      }
       aria-label={
         canOpen
           ? kind === 'skill'
@@ -110,7 +108,7 @@ export const ComposerInlineTag: React.FC<NodeViewProps> = ({
       }}
     >
       <span className="mention-icon-box" aria-hidden="true">
-        <AppIcon name={iconName} size={12} stroke={1.75} />
+        <AppIcon name={iconName} size={15} stroke={1.75} />
       </span>
       <span className="mention-label">{text}</span>
     </NodeViewWrapper>

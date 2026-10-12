@@ -9,14 +9,12 @@
 
 import type { SessionState } from '../store/types';
 import {
-  type DownloadTextFileDeps,
   type DownloadTextFileOptions,
   type DownloadSessionResult,
   type ExportSessionOptions,
 } from './sessionExportTypes';
 import {
   exportSessionToJson,
-  exportSessionToJsonObject,
   exportSessionToMarkdown,
   formatExportFailure,
 } from './sessionExportRenderers';
@@ -60,7 +58,7 @@ export {
 export function downloadTextFile(
   filename: string,
   content: string,
-  options: DownloadTextFileOptions = {},
+  options: DownloadTextFileOptions = {}
 ): void {
   const mimeType = options.mimeType ?? 'text/markdown;charset=utf-8';
   const deps = options.deps ?? {};
@@ -89,7 +87,17 @@ export function downloadTextFile(
   try {
     clickDownload(filename, url);
   } finally {
-    revokeObjectURL(url);
+    if (deps.revokeObjectURL) {
+      revokeObjectURL(url);
+    } else {
+      setTimeout(() => {
+        try {
+          revokeObjectURL(url);
+        } catch {
+          /* ignore */
+        }
+      }, 1000);
+    }
   }
 }
 
@@ -100,7 +108,7 @@ export function downloadTextFile(
 function downloadSessionMarkdown(
   session: SessionState,
   date = new Date(),
-  options: ExportSessionOptions = {},
+  options: ExportSessionOptions = {}
 ): string {
   const content = exportSessionToMarkdown(session, options);
   const filename = sanitizeExportFilename(session.title || '会话', date, 'md');
@@ -117,10 +125,14 @@ function downloadSessionMarkdown(
 function downloadSessionJson(
   session: SessionState,
   date = new Date(),
-  options: ExportSessionOptions = {},
+  options: ExportSessionOptions = {}
 ): string {
   const content = exportSessionToJson(session, options);
-  const filename = sanitizeExportFilename(session.title || '会话', date, 'json');
+  const filename = sanitizeExportFilename(
+    session.title || '会话',
+    date,
+    'json'
+  );
   downloadTextFile(filename, content, {
     mimeType: 'application/json;charset=utf-8',
     ...(options.downloadDeps !== undefined && { deps: options.downloadDeps }),
@@ -136,7 +148,7 @@ function downloadSessionJson(
 export function tryDownloadSessionMarkdown(
   session: SessionState | null | undefined,
   date = new Date(),
-  options: ExportSessionOptions = {},
+  options: ExportSessionOptions = {}
 ): DownloadSessionResult {
   if (!session) {
     return { ok: false, error: '没有可导出的会话' };
@@ -153,7 +165,7 @@ export function tryDownloadSessionMarkdown(
 export function tryDownloadSessionJson(
   session: SessionState | null | undefined,
   date = new Date(),
-  options: ExportSessionOptions = {},
+  options: ExportSessionOptions = {}
 ): DownloadSessionResult {
   if (!session) {
     return { ok: false, error: '没有可导出的会话' };

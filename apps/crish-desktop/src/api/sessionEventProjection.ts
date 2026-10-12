@@ -2,10 +2,9 @@
  * 引擎 session-events → 本地对话消息的投影核心（从 sessionEventHydrate 拆分）。
  *
  * 仅负责把事件数组组装为 SessionMessage[]；分页拉取 / usage 解析见同目录
- * sessionEventHydrate 与 sessionEventUsage。纯结构性拆分，逻辑与原实现一致。
+ * sessionEventHydrate 与 sessionEventUsage；时间戳与序列号解析见 sessionEventTimestamp。
  */
 
-import { pickStableMessageId } from '@crish/shared-types';
 import type { SessionMessage } from '../store/layoutStore';
 import {
   findInsertIndex,
@@ -16,7 +15,6 @@ import {
 } from './store-access/helperAccess';
 import { normalizeAssistantTimeline } from './toolPresentation';
 import { parseBridgeEvent } from './chat-bridge/handlers/eventParser';
-import { unwrapOrchestratorEnvelope } from './chat-bridge/handlers/eventEnvelope';
 import { blockText } from './chat-bridge/handlers/eventUtils';
 import {
   toolCallFieldsFromEvent,
@@ -27,54 +25,21 @@ import {
   projectAgentMessageContent,
   projectAgentMessageToSessionMessage,
 } from './messageProjection';
+import {
+  applyProjectedOrderMeta,
+  asRec,
+  extractEngineSequence,
+  extractMessageTimestamp,
+  normalizeProjectedAgentMessage,
+  rekeyAssistantIfStable,
+  resolveProjectedMessageId,
+  unwrapProjectedEventEnvelope,
+} from './sessionEventTimestamp';
 
-type AnyRec = Record<string, unknown>;
-
-function asRec(v: unknown): AnyRec | null {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as AnyRec) : null;
-}
-
-/** 从解包出的内层事件读取时间戳（事件元数据，不读消息/块内容字段）。 */
-function eventTimestamp(inner: AnyRec | null): number {
-  if (!inner) return Date.now();
-  const rawTs = inner.timestamp;
-  if (typeof rawTs === 'string') return Date.parse(rawTs) || Date.now();
-  if (typeof rawTs === 'number') return rawTs;
-  return Date.now();
-}
-
-/**
- * 从引擎 message 载荷解析稳定 id（clientMessageId / messageId / id）。
- * 字段优先级与 shared-types pickStableMessageId 对齐。
- * 无稳定 id 时回退到确定性 hyd 前缀 + 序号（同事件流重放 id 不变）。
- */
-function resolveProjectedMessageId(
-  msg: AgentMessage | null,
-  role: 'user' | 'assistant',
-  msgSeq: number
-): string {
-  const stable = pickStableMessageId(msg as unknown as AnyRec);
-  if (stable) return stable;
-  return role === 'user' ? `hyd-user-${msgSeq}` : `hyd-asst-${msgSeq}`;
-}
-
-/**
- * message-end 带来稳定 client id 时，把 delta 阶段的 hyd-* 助手 id 重键到稳定 id，
- * 便于与本地 stream final 同 id merge（不双气泡）。
- */
-function rekeyAssistantIfStable(
-  messages: SessionMessage[],
-  assistant: SessionMessage,
-  stableId: string
-): void {
-  if (!stableId || stableId.startsWith('hyd-') || assistant.id === stableId) {
-    return;
-  }
-  // 仅当当前是 hyd 临时 id 且目标 id 未被占用时重键
-  if (!assistant.id.startsWith('hyd-')) return;
-  if (messages.some((m) => m !== assistant && m.id === stableId)) return;
-  assistant.id = stableId;
-}
+export {
+  extractEngineSequence,
+  extractMessageTimestamp,
+} from './sessionEventTimestamp';
 
 /**
  * 按 id 合并消息列表：同 id 原地 merge；新 id 按 compareMessageOrder
@@ -96,16 +61,11 @@ export function mergeMessagesById(
     if (id) indexById.set(id, i);
   }
 
-  /** 在 out 中按 order key 二分找插入点（list 需保持已序时 O(log n)） */
   const insertPosFor = (msg: SessionMessage): number => {
-    const keys: ReturnType<typeof messageOrderKey>[] = [];
-    for (let i = 0; i < out.length; i++) {
-      keys.push(messageOrderKey(out[i]!));
-    }
+    const keys = out.map((item) => messageOrderKey(item));
     return findInsertIndex(keys, messageOrderKey(msg));
   };
 
-  /** 插入后同步 indexById（pos 及之后下标整体右移） */
   const insertAt = (pos: number, msg: SessionMessage) => {
     out.splice(pos, 0, msg);
     for (const [key, idx] of indexById) {
@@ -121,9 +81,9 @@ export function mergeMessagesById(
     }
     const idx = indexById.get(id);
     if (idx === undefined) {
-      // 浅拷贝，避免调用方改写 incoming 元素污染 out
-      const pos = insertPosFor({ ...msg });
-      insertAt(pos, { ...msg });
+      const cloned = { ...msg };
+      const pos = insertPosFor(cloned);
+      insertAt(pos, cloned);
       indexById.set(id, pos);
     } else {
       const target = { ...out[idx]! };
@@ -131,13 +91,28 @@ export function mergeMessagesById(
       out[idx] = target;
     }
   }
-  // 兜底：existing 若本就无序（历史脏数据），一次幂等排序收敛
   return isSortedByMessageOrder(out) ? out : sortMessagesByOrder(out);
 }
 
 /**
+ * 校验是否为引擎历史 Bug 产生的 context-state 伪用户消息。
+ * 判定依据：metadata.kind === 'context-state'，或无 client_message_id 且正文匹配 /^当前已切换到模型/。
+ */
+export function isContextStateBogusUserMessage(
+  msg: AgentMessage | null | undefined
+): boolean {
+  if (!msg) return false;
+  if (asRec(msg.metadata)?.kind === 'context-state') return true;
+  const raw = msg as unknown as Record<string, unknown>;
+  const clientMsgId = msg.clientMessageId ?? raw.client_message_id;
+  return (
+    !clientMsgId &&
+    /^当前已切换到模型/.test(projectAgentMessageContent(msg).text.trim())
+  );
+}
+
+/**
  * 将 orchestrator session-events 投影为 Chat 消息列表。
- * 只保证文本 + 工具主路径；复杂分支可后续增强。
  */
 export function projectEventsToMessages(events: unknown[]): {
   messages: SessionMessage[];
@@ -149,47 +124,61 @@ export function projectEventsToMessages(events: unknown[]): {
   let lastRunId: string | undefined;
   let maxSequence = 0;
   let msgSeq = 0;
-  /**
-   * messageId → messages 数组下标的 O(1) 索引（与 mergeMessagesById 同模式），
-   * 消灭 messages.find 线性查找（O(N²) → O(N)）。每次 messages.push 前用
-   * messages.length 更新此 Map。
-   */
   const messageIndex = new Map<string, number>();
-  /**
-   * 每消息的 turn 分段账本（G4 / 04 §5.2-5）：messageId → 已固化轮次与该轮
-   * 终态文本。同 turn message-end 幂等覆盖（终态权威），跨 turn 追加新段——
-   * 消灭 M2「多轮 run reload 后只剩末轮文本」；旧载荷（无 turnIndex）按 0。
-   */
   const turnTextByMessage = new Map<
     string,
     { turnIndex: number; text: string }
   >();
 
-  const pushUser = (msg: AgentMessage, ts: number, stableId?: string) => {
+  const pushUser = (
+    msg: AgentMessage,
+    ts: number,
+    stableId?: string,
+    seq?: number
+  ): boolean => {
+    if (isContextStateBogusUserMessage(msg)) return false;
     currentAssistant = null;
     const { text } = projectAgentMessageContent(msg);
-    if (!text) return;
+    const rawMsg = msg as unknown as Record<string, unknown>;
+    const hasAttachments =
+      (Array.isArray(rawMsg.attachments) && rawMsg.attachments.length > 0) ||
+      (Array.isArray(rawMsg.images) && rawMsg.images.length > 0) ||
+      (Array.isArray(msg.blocks) &&
+        msg.blocks.some((b: any) => b.type === 'image'));
+    if (!text && !hasAttachments) return false;
     const id = stableId || `hyd-user-${++msgSeq}`;
-    // 同 id 已存在则 update（事件流内幂等）——O(1) Map 查找
     const existingIdx = messageIndex.get(id);
-    const existing = existingIdx !== undefined ? messages[existingIdx] : undefined;
+    const existing =
+      existingIdx !== undefined ? messages[existingIdx] : undefined;
     if (existing) {
-      existing.text = text;
-      existing.timestamp = ts;
+      if (text) existing.text = text;
       existing.status = 'completed';
-      return;
+      if (Array.isArray(rawMsg.attachments) && rawMsg.attachments.length > 0)
+        existing.attachments =
+          rawMsg.attachments as SessionMessage['attachments'];
+      if (Array.isArray(rawMsg.images) && rawMsg.images.length > 0)
+        existing.images = rawMsg.images as SessionMessage['images'];
+      applyProjectedOrderMeta(existing, ts, seq);
+      return true;
     }
-    // 用户消息走共享投影入口（从 generated AgentMessage 派生的投影装饰）
+    const projected = projectAgentMessageToSessionMessage(msg, {
+      timestamp: ts,
+      id,
+    });
+    if (Array.isArray(rawMsg.attachments) && rawMsg.attachments.length > 0)
+      projected.attachments =
+        rawMsg.attachments as SessionMessage['attachments'];
+    if (Array.isArray(rawMsg.images) && rawMsg.images.length > 0)
+      projected.images = rawMsg.images as SessionMessage['images'];
+    applyProjectedOrderMeta(projected, ts, seq);
     messageIndex.set(id, messages.length);
-    messages.push(
-      projectAgentMessageToSessionMessage(msg, { timestamp: ts, id })
-    );
+    messages.push(projected);
+    return true;
   };
 
-  const ensureAssistant = (ts: number, stableId?: string) => {
+  const ensureAssistant = (ts: number, stableId?: string, seq?: number) => {
     if (!currentAssistant) {
       const id = stableId || `hyd-asst-${++msgSeq}`;
-      // 两步查找：先 Map O(1) 查 id，再断言 sender === 'assistant'
       const existingIdx = messageIndex.get(id);
       const existing =
         existingIdx !== undefined ? messages[existingIdx] : undefined;
@@ -206,6 +195,7 @@ export function projectEventsToMessages(events: unknown[]): {
         toolCalls: [],
         blocks: [],
       };
+      applyProjectedOrderMeta(currentAssistant, ts, seq);
       messageIndex.set(id, messages.length);
       messages.push(currentAssistant);
     }
@@ -215,80 +205,127 @@ export function projectEventsToMessages(events: unknown[]): {
   for (const raw of events) {
     const ev = asRec(raw);
     if (!ev) continue;
-    if (typeof ev.sequence === 'number')
-      maxSequence = Math.max(maxSequence, ev.sequence);
+    const outerSeq = extractEngineSequence(ev);
+    if (outerSeq !== undefined) maxSequence = Math.max(maxSequence, outerSeq);
     if (typeof ev.runId === 'string') lastRunId = ev.runId;
     const payload = asRec(ev.payload);
-    if (payload && typeof payload.runId === 'string')
-      lastRunId = payload.runId as string;
+    if (payload && typeof payload.runId === 'string') lastRunId = payload.runId;
 
-    // 权威解析：信封解包（纯解包，不做字段级解析）→ generated parser（strict → 宽容归一）。
-    // 与实时流同一条解析路径（parseBridgeEvent），不再手写第二套事件解析。
-    const unpacked = unwrapOrchestratorEnvelope(ev);
-    if (!unpacked) {
-      // run 级事件：仅跟踪 runId
-      continue;
-    }
-    const inner = asRec(unpacked.event);
-    if (!inner) continue;
-    const parsed = parseBridgeEvent(unpacked.event);
+    const unpacked = unwrapProjectedEventEnvelope(ev);
+    if (!unpacked) continue;
+    const inner = unpacked.inner;
+    const parsed = parseBridgeEvent(inner);
     if (!parsed.ok || parsed.data.kind !== 'engine') continue;
     const event = parsed.data.event;
-    const ts = eventTimestamp(inner);
+    const ts = extractMessageTimestamp(inner, event.type, ev, {
+      fallbackToZero: true,
+    });
+    const seq = extractEngineSequence(inner, ev);
+    if (seq !== undefined) maxSequence = Math.max(maxSequence, seq);
+
+    if (event.type === 'turn-start' || event.type === 'run-terminal') {
+      currentAssistant = null;
+      continue;
+    }
+
+    if (event.type === 'message-start') {
+      const msg = event.message
+        ? normalizeProjectedAgentMessage(event.message)
+        : null;
+      const role = msg?.role;
+      if (msg && role === 'user') {
+        if (isContextStateBogusUserMessage(msg)) continue;
+        const id = resolveProjectedMessageId(msg, 'user', msgSeq + 1);
+        if (pushUser(msg, ts, id, seq) && id.startsWith('hyd-')) msgSeq += 1;
+      } else {
+        const candidateId = msg
+          ? resolveProjectedMessageId(msg, 'assistant', msgSeq + 1)
+          : undefined;
+        if (
+          currentAssistant &&
+          ((candidateId &&
+            currentAssistant.id !== candidateId &&
+            !currentAssistant.id.startsWith('hyd-')) ||
+            currentAssistant.status === 'completed')
+        ) {
+          currentAssistant = null;
+        }
+        if (
+          candidateId &&
+          !currentAssistant &&
+          candidateId.startsWith('hyd-')
+        ) {
+          msgSeq += 1;
+        }
+        currentAssistant = ensureAssistant(ts, candidateId, seq);
+        if (candidateId) {
+          rekeyAssistantIfStable(
+            messages,
+            currentAssistant,
+            candidateId,
+            messageIndex
+          );
+        }
+        applyProjectedOrderMeta(currentAssistant, ts, seq);
+      }
+      continue;
+    }
 
     if (event.type === 'message-end' && event.message) {
-      const msg = event.message;
+      const msg = normalizeProjectedAgentMessage(event.message);
       const role = msg.role;
       const { text, thought } = projectAgentMessageContent(msg);
       if (role === 'user') {
-        if (text) {
-          // 优先用引擎/客户端稳定 id，便于与本地乐观消息 upsert 合并
-          const id = resolveProjectedMessageId(msg, 'user', msgSeq + 1);
-          if (id.startsWith('hyd-')) msgSeq += 1;
-          pushUser(msg, ts, id);
-        }
+        if (isContextStateBogusUserMessage(msg)) continue;
+        const id = resolveProjectedMessageId(msg, 'user', msgSeq + 1);
+        if (pushUser(msg, ts, id, seq) && id.startsWith('hyd-')) msgSeq += 1;
       } else if (role === 'assistant') {
         const id = resolveProjectedMessageId(msg, 'assistant', msgSeq + 1);
+        if (
+          currentAssistant &&
+          id &&
+          currentAssistant.id !== id &&
+          !currentAssistant.id.startsWith('hyd-')
+        ) {
+          currentAssistant = null;
+        }
         if (!currentAssistant && id.startsWith('hyd-')) msgSeq += 1;
-        const a = ensureAssistant(ts, id);
-        rekeyAssistantIfStable(messages, a, id);
-        // message-end 为终态；后续 partial 不得经 merge 回退
+        const a = ensureAssistant(ts, id, seq);
+        rekeyAssistantIfStable(messages, a, id, messageIndex);
         a.status = 'completed';
+        applyProjectedOrderMeta(a, ts, seq);
         const turnIndex =
           typeof event.turnIndex === 'number' ? event.turnIndex : 0;
         if (thought) {
           a.thinking = thought;
           if (!a.thinkingTurns) a.thinkingTurns = [];
           const thoughtKey = `thought-turn-${turnIndex}`;
-          const ttIdx = a.thinkingTurns.findIndex((tt) => tt.turnIndex === turnIndex);
-          if (ttIdx >= 0) {
-            a.thinkingTurns[ttIdx]!.content = thought;
-          } else {
+          const ttIdx = a.thinkingTurns.findIndex(
+            (tt) => tt.turnIndex === turnIndex
+          );
+          if (ttIdx >= 0) a.thinkingTurns[ttIdx]!.content = thought;
+          else
             a.thinkingTurns.push({
               turnIndex,
               content: thought,
               id: thoughtKey,
             });
-          }
           if (!a.blocks) a.blocks = [];
           const blkIdx = a.blocks.findIndex(
-            (b) => b.type === 'thought' && (b.id === thoughtKey || b.turnIndex === turnIndex)
+            (b) =>
+              b.type === 'thought' &&
+              (b.id === thoughtKey || b.turnIndex === turnIndex)
           );
-          if (blkIdx >= 0) {
-            a.blocks[blkIdx]!.content = thought;
-          } else {
+          if (blkIdx >= 0) a.blocks[blkIdx]!.content = thought;
+          else
             a.blocks.push({
               type: 'thought',
               id: thoughtKey,
               content: thought,
               turnIndex,
             });
-          }
         }
         if (text) {
-          // G4 / 04 §5.2-5：按 turnIndex 分段——同 turn 幂等覆盖（终态权威，
-          // 亦覆盖 delta 累积碎片），跨 turn 追加新段（reload 后多轮文本
-          // 完整）；旧载荷（无 turnIndex）按 0 处理，单段路径与旧行为一致
           const st = turnTextByMessage.get(a.id) ?? { turnIndex: -1, text: '' };
           if (turnIndex === st.turnIndex) {
             st.text = text;
@@ -299,7 +336,6 @@ export function projectEventsToMessages(events: unknown[]): {
             a.text = st.text;
           }
           turnTextByMessage.set(a.id, st);
-          // 合并正文，绝不抹掉已有 tool_call / thought 块
           if (!a.blocks) a.blocks = [];
           const last = a.blocks[a.blocks.length - 1];
           if (last?.type === 'text') last.content = text;
@@ -315,7 +351,7 @@ export function projectEventsToMessages(events: unknown[]): {
       if (!b) continue;
       const t = blockText(b);
       if (!t) continue;
-      const a = ensureAssistant(ts);
+      const a = ensureAssistant(ts, undefined, seq);
       const rawTurn =
         'turnIndex' in event
           ? (event as { turnIndex?: unknown }).turnIndex
@@ -342,7 +378,6 @@ export function projectEventsToMessages(events: unknown[]): {
       } else {
         a.text = (a.text || '') + t;
         if (!a.blocks) a.blocks = [];
-        // 与 live store 类似：当前 text 段
         const offset =
           typeof a.streamTextOffset === 'number' ? a.streamTextOffset : 0;
         const segment =
@@ -357,15 +392,12 @@ export function projectEventsToMessages(events: unknown[]): {
     }
 
     if (event.type === 'tool-start') {
-      // 与 live EventRouter 同一协议解析：兼容 call 包装与顶层字段两种形态
-      //（真实 daemon 回放与 live 桥事件同源，禁止只认 call 包装导致恢复丢工具卡）
       const { id, name, args, explanation } = toolCallFieldsFromEvent(
         event as unknown as Record<string, unknown>
       );
-      const a = ensureAssistant(ts);
+      const a = ensureAssistant(ts, undefined, seq);
       if (!a.toolCalls) a.toolCalls = [];
       if (!a.blocks) a.blocks = [];
-      // 工具前固化正文偏移
       a.streamTextOffset = (a.text || '').length;
       const existing = a.toolCalls.find((t) => t.id === id);
       if (existing) {
@@ -392,7 +424,15 @@ export function projectEventsToMessages(events: unknown[]): {
 
     if (event.type === 'tool-end') {
       const { id, text, isError } = toolResultFields(event.result);
-      const a = currentAssistant as SessionMessage | null;
+      let a = currentAssistant as SessionMessage | null;
+      if (!a || !a.toolCalls?.some((t) => t.id === id)) {
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i]?.toolCalls?.some((t) => t.id === id)) {
+            a = messages[i]!;
+            break;
+          }
+        }
+      }
       if (!a || !a.toolCalls) continue;
       const tc =
         a.toolCalls.find((t) => t.id === id) ||
@@ -405,7 +445,6 @@ export function projectEventsToMessages(events: unknown[]): {
     }
   }
 
-  // 收尾仍 running 的工具标为中断（会在 UI 层隐藏）
   for (const m of messages) {
     if (m.toolCalls) {
       for (const tc of m.toolCalls) {
@@ -418,7 +457,6 @@ export function projectEventsToMessages(events: unknown[]): {
     if (m.status === 'processing') m.status = 'completed';
   }
 
-  // 与 live / 本地持久化共用同一套 blocks 对齐规则
   const normalized = messages.map((m) =>
     m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
   );

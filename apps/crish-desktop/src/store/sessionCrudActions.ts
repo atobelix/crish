@@ -34,11 +34,11 @@ import {
   applyDraftModeToState,
   createSessionDraftActions,
 } from './sessionDraftActions';
-// 批量状态 actions（setSessions / patchSession / clearSessionMessages）从子模块导入
-import { createSessionStateActions } from './sessionStateActions';
+import {
+  createSessionStateActions,
+  evictSessionMessagesInState,
+} from './sessionStateActions';
 import { triggerSessionMessageHydrateIfNeeded } from './sessionActivateHydrate';
-import { findInactiveHydratedSessionIdsToEvict } from './sessionMessageEviction';
-import { evictSessionMessagesInState } from './sessionStateActions';
 import { SESSION_HYDRATE_KEEP_K } from '../api/perfBudgets';
 // 可见注入卡片挂载辅助纯函数（addContextInjection 复用，见 sessionInjectionMount.ts）
 import { createSessionInjectionActions } from './sessionInjectionActions';
@@ -161,19 +161,67 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         return;
       }
       // D5：切换成功后在 microtask 中重新读取状态并软驱逐非活跃已水合消息。
-      queueMicrotask(() => {
+      queueMicrotask(async () => {
         const state = get();
-        const evictedSessionIds = findInactiveHydratedSessionIdsToEvict(
-          nextId,
-          new Set(),
-          state.sessions || [],
-          state.sessionsById || {},
-          SESSION_HYDRATE_KEEP_K
-        );
-        if (evictedSessionIds.length === 0) return;
-        set((current) => {
-          evictSessionMessagesInState(current, evictedSessionIds);
-        });
+        const currentActiveId = (state.activeSessionId || nextId || '').trim();
+        // 收集受保护的会话 ID：实时 activeSessionId 及所有分屏叶当前激活或打开的 Tab
+        const protectedSessionIds = new Set<string>();
+        if (currentActiveId && !isPendingDraft(currentActiveId)) {
+          protectedSessionIds.add(currentActiveId);
+        }
+        try {
+          const { useLayoutTreeStore, listChatLeaves } =
+            await import('./layout-tree');
+          const { ownedChatLeaves } =
+            await import('./workspace-shell/treeSessionQuery');
+          const treeRoot = useLayoutTreeStore.getState()?.tree?.root;
+          if (treeRoot) {
+            for (const owned of ownedChatLeaves(treeRoot)) {
+              if (owned.tabs && Array.isArray(owned.tabs)) {
+                for (const t of owned.tabs) {
+                  if (t.sessionId && !isPendingDraft(t.sessionId)) {
+                    protectedSessionIds.add(t.sessionId);
+                  }
+                }
+              }
+            }
+            for (const leaf of listChatLeaves(treeRoot)) {
+              if (Array.isArray(leaf.tabs)) {
+                for (const t of leaf.tabs) {
+                  const sid = (t as { sessionId?: string })?.sessionId;
+                  if (sid && !isPendingDraft(sid)) {
+                    protectedSessionIds.add(sid);
+                  }
+                }
+              }
+            }
+          }
+        } catch {
+          // 容错守卫
+        }
+
+        try {
+          const { findInactiveHydratedSessionIdsToEvict } =
+            await import('./sessionEviction');
+          const evictedSessionIds = findInactiveHydratedSessionIdsToEvict(
+            currentActiveId,
+            new Set(),
+            state.sessions || [],
+            state.sessionsById || {},
+            SESSION_HYDRATE_KEEP_K,
+            {
+              openTabs: protectedSessionIds,
+              visibleSplitSessionIds: protectedSessionIds,
+            }
+          ).filter((id) => !protectedSessionIds.has(id));
+
+          if (evictedSessionIds.length === 0) return;
+          set((current) => {
+            evictSessionMessagesInState(current, evictedSessionIds);
+          });
+        } catch {
+          // 容错守卫
+        }
       });
       if (!isDemoMode()) {
         const sess = getSessionById(get(), nextId);

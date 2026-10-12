@@ -25,7 +25,10 @@ export function createSessionStateActions<T extends SessionStoreSlice>(
   set: SessionImmerSet<T>
 ): Pick<
   SessionActions,
-  'setSessions' | 'patchSession' | 'clearSessionMessages' | 'evictSessionMessages'
+  | 'setSessions'
+  | 'patchSession'
+  | 'clearSessionMessages'
+  | 'evictSessionMessages'
 > {
   return {
     /**
@@ -50,7 +53,7 @@ export function createSessionStateActions<T extends SessionStoreSlice>(
             s.folder &&
             !state.folderOrder.includes(s.folder) &&
             state.folderOrder.length < MAX_FOLDERS
-) {
+          ) {
             state.folderOrder.push(s.folder);
           }
         }
@@ -105,21 +108,52 @@ export function createSessionStateActions<T extends SessionStoreSlice>(
      * 恢复为 ACT-502 懒壳：messages=[]、messagesHydrated=false、
      * **删除 hydratedFromEngine**——否则 needsEngineMessageHydrate 恒 false。
      * 仅改内存；不调用 saveSessionBody（空数组不得写库）。
-    */
+     */
     evictSessionMessages: (sessionIds: readonly string[]) =>
       set((state) => evictSessionMessagesInState(state, sessionIds)),
   };
 }
 
-/** 在 Immer 更新中按 evictSessionMessages 的同一契约清除正文。 */
+function isSessionStreaming(sess: SessionState): boolean {
+  const ext = sess as { isStreaming?: unknown; status?: unknown };
+  if (
+    ext.isStreaming === true ||
+    ext.status === 'streaming' ||
+    ext.status === 'processing' ||
+    ext.status === 'running'
+  ) {
+    return true;
+  }
+  if (Array.isArray(sess.messages)) {
+    for (let i = sess.messages.length - 1; i >= 0; i--) {
+      const msg = sess.messages[i] as
+        { status?: unknown; isStreaming?: unknown } | undefined;
+      if (!msg) continue;
+      if (
+        msg.isStreaming === true ||
+        msg.status === 'processing' ||
+        msg.status === 'streaming'
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** 在 Immer 更新中按 evictSessionMessages 的同一契约清除正文。增加活动会话与流式态保护守卫。 */
 export function evictSessionMessagesInState<T extends SessionStoreSlice>(
   state: T,
   sessionIds: readonly string[]
 ): void {
-  for (const id of sessionIds) {
+  const activeId = state.activeSessionId ? state.activeSessionId.trim() : '';
+  for (const rawId of sessionIds) {
+    const id = rawId ? rawId.trim() : '';
     if (!id) continue;
+    if (activeId && id === activeId) continue;
     const sess = getSessionForWrite(state, id);
     if (!sess) continue;
+    if (isSessionStreaming(sess)) continue;
     sess.messages = [];
     sess.messagesHydrated = false;
     delete sess.hydratedFromEngine;

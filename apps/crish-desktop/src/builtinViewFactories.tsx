@@ -10,7 +10,10 @@
  * runtime / agent / flow-dag / file-viewer —— 共 10 个，严禁缩减。
  */
 import React, { lazy } from 'react';
-import type { ViewFactoryMap, ViewRenderContext } from './services/view-registry';
+import type {
+  ViewFactoryMap,
+  ViewRenderContext,
+} from './services/view-registry';
 
 export const builtinViewFactories: ViewFactoryMap = {
   chat: () =>
@@ -28,10 +31,7 @@ export const builtinViewFactories: ViewFactoryMap = {
     lazy(() =>
       import('./components/workspace/TerminalCard').then((m) => ({
         default: (ctx: ViewRenderContext) => (
-          <m.TerminalCard
-            sessionId={ctx?.sessionId}
-            panelId={ctx?.panelId}
-          />
+          <m.TerminalCard sessionId={ctx.sessionId} panelId={ctx.panelId} />
         ),
       }))
     ),
@@ -42,6 +42,8 @@ export const builtinViewFactories: ViewFactoryMap = {
         default: (ctx: ViewRenderContext) => (
           <m.PreviewCard
             initialTarget={(ctx?.params?.target as string | undefined) ?? null}
+            sessionId={ctx.sessionId}
+            leafId={ctx.leafId}
           />
         ),
       }))
@@ -57,31 +59,35 @@ export const builtinViewFactories: ViewFactoryMap = {
   files: () =>
     lazy(() =>
       import('./components/files/FilesCard').then((m) => ({
-        default: () => <m.FilesCard />,
+        default: (ctx: ViewRenderContext) => (
+          <m.FilesCard sessionId={ctx.sessionId} leafId={ctx.leafId} />
+        ),
       }))
     ),
   diff: () =>
     lazy(() =>
       import('./components/diff/DiffCard').then((m) => ({
-        default: () => <m.DiffCard />,
+        default: (_ctx: ViewRenderContext) => <m.DiffCard />,
       }))
     ),
   runtime: () =>
     lazy(() =>
       import('./components/workspace/RuntimePanel').then((m) => ({
-        default: () => <m.RuntimePanel />,
+        default: (_ctx: ViewRenderContext) => <m.RuntimePanel />,
       }))
     ),
   agent: () =>
     lazy(() =>
       import('./components/agent-card/AgentCard').then((m) => ({
-        default: () => <m.AgentCard />,
+        default: (ctx: ViewRenderContext) => (
+          <m.AgentCard parentSessionId={ctx.sessionId} />
+        ),
       }))
     ),
   'flow-dag': () =>
     lazy(() =>
       import('./components/workspace/FlowDagView').then((m) => ({
-        default: () => <m.FlowDagView />,
+        default: (_ctx: ViewRenderContext) => <m.FlowDagView />,
       }))
     ),
   'file-viewer': () =>

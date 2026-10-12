@@ -151,12 +151,18 @@ export function useAsyncMarkdownHtml(
 }
 
 /**
- * 流式活跃块的安全 HTML 渲染器。
+ * 流式活跃块的安全 HTML 渲染器（增量状态机与会话代次守护版）。
  *
  * 活跃块使用有状态的前端增量会话：累计输入只用于取得新增后缀，
  * Markdown 分隔符转成安全 HTML 状态，普通文本以增量片段交给现有
- * Rust/worker renderer。renderer 永远不会收到累计全文，且未完成片段
- * 在 HTML 返回前保持空白，不会把 Markdown 原文当作回退内容。
+ * Rust/worker renderer。
+ *
+ * 批合并与代次守护：
+ *   - 会话级 reset 代次（sessionEpochRef）：仅在 session.reset() 或 enabled 关闭/markdown 截断重置时递增，
+ *     确保卸载或重置时安全丢弃死会话的在途 Promise；
+ *   - 增量批次原子收口：单次 advance 产生的所有 textParts 通过 Promise.all 批收口；
+ *     在途增量分片 resolveTextPart 结果平滑并入 unitsRef 与 session，绝不因后续无分片 tick
+ *     或短片段先完成而误丢弃在途正文（根治 RC-06 空壳 <p> 锁存缺陷）。
  */
 export function useStreamingMarkdownHtml(
   markdown: string,
@@ -167,8 +173,12 @@ export function useStreamingMarkdownHtml(
   const [html, setHtml] = useState('');
   const [, setRenderVersion] = useState(0);
   const sessionRef = useRef<IncrementalMarkdownSession | null>(null);
-  if (!sessionRef.current) sessionRef.current = new IncrementalMarkdownSession();
+  if (!sessionRef.current)
+    sessionRef.current = new IncrementalMarkdownSession();
   const mountedRef = useRef(true);
+  const sessionEpochRef = useRef(0);
+  const unitRevisionMapRef = useRef<Map<number, number>>(new Map());
+  const tickRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -176,10 +186,14 @@ export function useStreamingMarkdownHtml(
     if (!session) return;
 
     if (!enabled || !markdown.trim()) {
+      sessionEpochRef.current += 1;
+      unitRevisionMapRef.current.clear();
       session.reset();
       if (unitsRef) {
-        unitsRef.current = null;
-        setRenderVersion((version) => version + 1);
+        if (unitsRef.current !== null) {
+          unitsRef.current = null;
+          setRenderVersion((version) => version + 1);
+        }
       } else {
         setHtml('');
       }
@@ -187,52 +201,77 @@ export function useStreamingMarkdownHtml(
     }
 
     const advance = session.advance(markdown, !unitsRef);
-    if (unitsRef) {
-      // 单元快照是流式 DOM 的唯一更新载荷；不再拼接累计 HTML。
-      unitsRef.current = session.getUnitSnapshots();
-      setRenderVersion((version) => version + 1);
-    } else {
-      setHtml(advance.html);
+    if (advance.reset) {
+      sessionEpochRef.current += 1;
+      unitRevisionMapRef.current.clear();
+    }
+    const sessionEpoch = sessionEpochRef.current;
+    const currentTick = ++tickRef.current;
+
+    const currentSnapshots = session.getUnitSnapshots();
+    for (const u of currentSnapshots) {
+      unitRevisionMapRef.current.set(u.id, currentTick);
     }
 
-    for (const part of advance.textParts) {
-      void parseMarkdownFragmentToHtmlAsync(part.source, priority, part.kind)
-        .then((fragment) => {
-          if (
-            mountedRef.current &&
-            session.getRevision() === advance.revision &&
-            session.resolveTextPart(part.id, fragment)
-          ) {
-            if (unitsRef) {
-              unitsRef.current = session.getUnitSnapshots();
-              setRenderVersion((version) => version + 1);
-            } else {
-              setHtml(session.toHtml());
-            }
-          }
-        })
-        .catch(() => {
-          // 渲染失败时保持该片段为空，绝不把 Markdown 原文写入 DOM。
-          if (
-            mountedRef.current &&
-            session.getRevision() === advance.revision &&
-            session.resolveTextPart(part.id, '')
-          ) {
-            if (unitsRef) {
-              unitsRef.current = session.getUnitSnapshots();
-              setRenderVersion((version) => version + 1);
-            } else {
-              setHtml(session.toHtml());
-            }
-          }
-        });
+    if (advance.textParts.length === 0) {
+      if (unitsRef) {
+        unitsRef.current = currentSnapshots;
+        setRenderVersion((version) => version + 1);
+      } else {
+        setHtml(advance.html);
+      }
+      return;
     }
+
+    if (unitsRef) {
+      // 结构已变化（如新增块包装器）时先同步更新单元快照引用，待全部分片批决议后统一触发 1 次重渲染
+      unitsRef.current = currentSnapshots;
+    }
+
+    const partPromises = advance.textParts.map(async (part) => {
+      try {
+        const fragment = await parseMarkdownFragmentToHtmlAsync(
+          part.source,
+          priority,
+          part.kind
+        );
+        return { id: part.id, fragment };
+      } catch {
+        // 渲染失败时保持该片段为空，绝不把 Markdown 原文写入 DOM。
+        return { id: part.id, fragment: '' };
+      }
+    });
+
+    void Promise.all(partPromises).then((results) => {
+      if (!mountedRef.current) return;
+      if (sessionEpochRef.current !== sessionEpoch) return;
+
+      let anyResolved = false;
+      for (const res of results) {
+        if (session.resolveTextPart(res.id, res.fragment)) {
+          anyResolved = true;
+        }
+      }
+      if (!anyResolved) return;
+
+      if (unitsRef) {
+        unitsRef.current = session.getUnitSnapshots();
+        setRenderVersion((version) => version + 1);
+      } else {
+        setHtml(session.toHtml());
+      }
+    });
   }, [markdown, enabled, priority, unitsRef]);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
-    sessionRef.current?.reset();
-  }, []);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+      sessionEpochRef.current += 1;
+      unitRevisionMapRef.current.clear();
+      sessionRef.current?.reset();
+    },
+    []
+  );
 
   return html;
 }

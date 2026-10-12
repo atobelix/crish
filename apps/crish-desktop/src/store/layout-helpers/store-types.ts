@@ -26,6 +26,7 @@ export const SETTINGS_TAB_IDS = [
   'profile',
   'appearance',
   'personalize',
+  'archive',
   'models',
   'usage',
   'devices',

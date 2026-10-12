@@ -1817,7 +1817,7 @@
   max-width: 100%;
   margin: 0;
   box-sizing: border-box;
-  caret-color: var(--brand-primary, var(--text-primary));
+  caret-color: var(--text-primary);
   outline: none;
 }
 

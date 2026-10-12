@@ -284,7 +284,9 @@ export function openFileViewerInSession(
   let rawPath: string;
   let rawMode: string | undefined;
 
-  const isModeString = (val: unknown): val is FileViewerInitialMode | 'preview' =>
+  const isModeString = (
+    val: unknown
+  ): val is FileViewerInitialMode | 'preview' =>
     val === 'plain' || val === 'diff' || val === 'preview';
 
   if (arg3 !== undefined) {
@@ -314,7 +316,8 @@ export function openFileViewerInSession(
     useLayoutTreeStore.getState().activeLeafId;
   if (!activeId) return;
 
-  const initialMode: FileViewerInitialMode = rawMode === 'diff' ? 'diff' : 'plain';
+  const initialMode: FileViewerInitialMode =
+    rawMode === 'diff' ? 'diff' : 'plain';
   const canonicalTabId = `file-viewer:${trimmed}`;
 
   // 1. 登记初始呈现模式意图（供冷启动挂载读取）
@@ -327,7 +330,12 @@ export function openFileViewerInSession(
   queueMicrotask(() => {
     window.dispatchEvent(
       new CustomEvent('conex:file-viewer-mode', {
-        detail: { canonicalTabId, mode: initialMode },
+        detail: {
+          canonicalTabId,
+          mode: initialMode,
+          leafId: activeId,
+          sessionId: targetSessionId || undefined,
+        },
       })
     );
   });
@@ -336,10 +344,7 @@ export function openFileViewerInSession(
 export function collapseActiveTabRightDock(collapsed: boolean): void {
   const activeId = useLayoutTreeStore.getState().activeLeafId;
   if (!activeId) return;
-  const node = findNodeById(
-    useLayoutTreeStore.getState().tree.root,
-    activeId
-  );
+  const node = findNodeById(useLayoutTreeStore.getState().tree.root, activeId);
   if (!node || !isLeaf(node)) return;
   const dock = readLeafDock(node);
   const patch: Partial<RightToolDockState> = { collapsed };

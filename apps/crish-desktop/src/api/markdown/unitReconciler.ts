@@ -47,18 +47,33 @@ function applyLayoutIsolation(element: Element): void {
   }
 }
 
-function appendUnit(container: Node, unit: MarkdownUnit): void {
+function isWhitespaceTextNode(node: Node): boolean {
+  return (
+    node.nodeType === Node.TEXT_NODE && (node.textContent ?? '').trim() === ''
+  );
+}
+
+function isWhitespaceTextUnit(unit: MarkdownUnit): boolean {
+  return (
+    unit.sourceNode.nodeType === Node.TEXT_NODE &&
+    (unit.sourceNode.textContent ?? '').trim() === ''
+  );
+}
+
+function createUnitNode(unit: MarkdownUnit): Node {
   const clone = unit.sourceNode.cloneNode(true);
   if (clone.nodeType === Node.ELEMENT_NODE) {
     const element = clone as Element;
     applyLayoutIsolation(element);
     for (const nested of Array.from(
-      element.querySelectorAll('.md-table-wrap, [role="region"][aria-label="表格"]')
+      element.querySelectorAll(
+        '.md-table-wrap, [role="region"][aria-label="表格"]'
+      )
     )) {
       applyLayoutIsolation(nested);
     }
   }
-  container.appendChild(clone);
+  return clone;
 }
 
 /**
@@ -67,45 +82,96 @@ function appendUnit(container: Node, unit: MarkdownUnit): void {
  * outside this helper so the incremental caller can parse only the changed
  * unit rather than the cumulative HTML snapshot.
  */
-export function reconcileUnitNode(target: Node | null, unit: MarkdownUnit): Node {
+export function reconcileUnitNode(
+  target: Node | null,
+  unit: MarkdownUnit
+): Node {
   if (target && isCompatible(target, unit)) {
     patchNode(target, unit);
     return target;
   }
-  const holder = document.createElement('div');
-  appendUnit(holder, unit);
-  return holder.firstChild ?? unit.sourceNode.cloneNode(true);
+  return createUnitNode(unit);
 }
 
 /**
- * Reconcile renderer-produced units in place. The common prefix keeps its DOM
- * references; only an incompatible suffix is replaced, while same-tag leaf or
- * container nodes are patched in place. Input must come from splitHtmlIntoUnits.
+ * Reconcile renderer-produced units in place. Same-tag elements are patched in
+ * place across incremental-to-authoritative handovers even when authoritative
+ * HTML introduces inter-block whitespace text nodes or header elements (e.g.
+ * `.md-code-header` before `<pre>`). Input must come from splitHtmlIntoUnits.
  */
 export function reconcileUnits(
   container: Node,
   units: readonly MarkdownUnit[]
 ): void {
-  const current = Array.from(container.childNodes);
-  const sharedLength = Math.min(current.length, units.length);
-  let index = 0;
+  let cursor: ChildNode | null = container.firstChild;
 
-  while (index < sharedLength) {
-    const node = current[index];
-    const unit = units[index];
-    if (!node || !unit || !isCompatible(node, unit)) break;
-    patchNode(node, unit);
-    index += 1;
-  }
+  for (let index = 0; index < units.length; index += 1) {
+    const unit = units[index]!;
 
-  if (index < current.length) {
-    while (container.childNodes.length > index) {
-      container.removeChild(container.childNodes[index]!);
+    while (
+      cursor &&
+      isWhitespaceTextNode(cursor) &&
+      unit.sourceNode.nodeType === Node.ELEMENT_NODE &&
+      cursor.nextSibling &&
+      ((cursor.textContent ?? '').includes('\n') ||
+        isCompatible(cursor.nextSibling, unit))
+    ) {
+      const next = cursor.nextSibling;
+      container.removeChild(cursor);
+      cursor = next;
     }
+
+    if (!cursor) {
+      container.appendChild(createUnitNode(unit));
+      continue;
+    }
+
+    if (isCompatible(cursor, unit)) {
+      patchNode(cursor, unit);
+      cursor = cursor.nextSibling;
+      continue;
+    }
+
+    const nextUnit = index + 1 < units.length ? units[index + 1] : undefined;
+    if (
+      isWhitespaceTextUnit(unit) &&
+      cursor.nodeType === Node.ELEMENT_NODE &&
+      ((unit.sourceNode.textContent ?? '').includes('\n') ||
+        Boolean(nextUnit && isCompatible(cursor, nextUnit)))
+    ) {
+      container.insertBefore(createUnitNode(unit), cursor);
+      continue;
+    }
+
+    if (
+      nextUnit &&
+      isCompatible(cursor, nextUnit) &&
+      !(cursor.nextSibling && isCompatible(cursor.nextSibling, nextUnit))
+    ) {
+      container.insertBefore(createUnitNode(unit), cursor);
+      continue;
+    }
+
+    if (
+      cursor.nextSibling &&
+      isCompatible(cursor.nextSibling, unit) &&
+      !(nextUnit && isCompatible(cursor, nextUnit))
+    ) {
+      const next = cursor.nextSibling;
+      container.removeChild(cursor);
+      patchNode(next, unit);
+      cursor = next.nextSibling;
+      continue;
+    }
+
+    const next = cursor.nextSibling;
+    container.replaceChild(createUnitNode(unit), cursor);
+    cursor = next;
   }
 
-  for (; index < units.length; index += 1) {
-    const unit = units[index];
-    if (unit) appendUnit(container, unit);
+  while (cursor) {
+    const next = cursor.nextSibling;
+    container.removeChild(cursor);
+    cursor = next;
   }
 }

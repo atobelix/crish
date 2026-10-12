@@ -13,7 +13,7 @@ import { useSyncExternalStore } from 'react';
 
 type Listener = () => void;
 
-class DraftFolderRegistry {
+export class DraftFolderRegistry {
   private map = new Map<string, string>();
   private listeners = new Set<Listener>();
   private version = 0;
@@ -91,7 +91,9 @@ const getServerSnapshot = (): number => 0;
 /**
  * React Hook：响应式读取指定草稿的绑定项目 folder
  */
-export function useDraftFolder(draftSessionId: string | undefined | null): string | undefined {
+export function useDraftFolder(
+  draftSessionId: string | undefined | null
+): string | undefined {
   useSyncExternalStore(
     draftFolderRegistry.subscribe,
     draftFolderRegistry.getSnapshot,

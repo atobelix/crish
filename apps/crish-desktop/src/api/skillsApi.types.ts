@@ -29,4 +29,5 @@ export type SkillSlashCommand = {
   desc: string;
   skillId: string;
   skillName: string;
+  filePath?: string;
 };

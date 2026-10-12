@@ -300,6 +300,20 @@ export function mergeSessionMessageFields(
       existing.thinkingTime = incoming.thinkingTime;
     }
   }
+  if (
+    typeof incoming.engineSequence === 'number' &&
+    Number.isFinite(incoming.engineSequence)
+  ) {
+    existing.engineSequence = incoming.engineSequence;
+  }
+  if (incoming.injections !== undefined)
+    existing.injections = incoming.injections;
+  if (incoming.attachments !== undefined)
+    existing.attachments = incoming.attachments;
+  if (incoming.images !== undefined) existing.images = incoming.images;
+  if (incoming.errorDetail !== undefined)
+    Object.assign(existing, { errorDetail: incoming.errorDetail });
+  if (incoming.metadata !== undefined) existing.metadata = incoming.metadata;
 }
 
 export function getMessageById(
@@ -422,7 +436,4 @@ export function getSessionMessage(
   return { session, message };
 }
 
-import {
-  getSessionForWrite,
-  type SessionsIndexed,
-} from './sessionIndex';
+import { getSessionForWrite, type SessionsIndexed } from './sessionIndex';

@@ -5,13 +5,15 @@
 import { addMessage } from '../../api/storeAccess';
 import { getSessionById } from '../../store/sessionStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
-import { isSessionAiBusy, settleStaleSessionProcessingMessages } from './helpers';
+import {
+  isSessionAiBusy,
+  settleStaleSessionProcessingMessages,
+} from './helpers';
 import {
   takePendingContextState,
   readContextStateSnapshot,
   buildContextStateText,
 } from '../../api/provider-profiles/contextStatePending';
-import { contextInjectionDispatcher } from '../../api/contextInjectionDispatcher';
 import {
   diffContextStateSnapshot,
   snapshotFromFields,
@@ -25,8 +27,9 @@ import {
 } from '../../api/SessionRuntimeRegistry';
 
 /**
- * 在向会话追加新消息前，取走并注入可能存在的上下文状态变更卡片。
- * 确保时间线严格满足：[状态切换通知] -> [用户消息] -> [AI 回复]。
+ * 在向会话追加新消息前，取走并计算可能存在的上下文状态变更。
+ * 状态文本将作为 [系统环境上下文] 随附进用户消息正文，后端直通 system_prompt，
+ * 避免在会话中生成冗余的独立载体卡片造成双重提示。
  */
 function rememberContextBaseline(sessionId: string): void {
   const live = readContextStateSnapshot(sessionId);
@@ -47,7 +50,8 @@ function resolveInjectionSnapshot(
 ): { rawText: string; next: ContextStateFieldSnapshot } {
   const rawText =
     typeof contextState === 'string' ? contextState : contextState?.text || '';
-  const fromObject = typeof contextState === 'object' ? contextState : undefined;
+  const fromObject =
+    typeof contextState === 'object' ? contextState : undefined;
   return {
     rawText,
     next: snapshotFromFields({
@@ -72,7 +76,7 @@ export function flushContextStateBeforeSend(
 
     const live = readContextStateSnapshot(sessionId);
     const { rawText, next } = resolveInjectionSnapshot(contextState, live);
-    const { changed, fields } = diffContextStateSnapshot(
+    const { changed } = diffContextStateSnapshot(
       getLastSentContextSnapshot(sessionId),
       next
     );
@@ -84,21 +88,7 @@ export function flushContextStateBeforeSend(
       return undefined;
     }
 
-    // 仅在真实发生切换且在用户点击发送按钮瞬间，将居中提示挂载于会话（位于用户发送的消息上方）
-    // metadata 只写变化字段，并附 changed[]。首次注入（无结构化快照）= 全部字段。
-    contextInjectionDispatcher.inject(sessionId, {
-      kind: 'workspace_env',
-      title: '上下文状态切换',
-      summary: rawText,
-      status: 'injected',
-      source: 'system_event',
-      content: rawText,
-      metadata: {
-        mode: 'context-state',
-        ...fields,
-        changed,
-      },
-    });
+    // 状态已随附进入用户消息本身，不再生成独立的 carrier 载体消息（避免双重提示）
 
     // 成功发送后更新该会话最后发送的状态签名与结构化快照（快照是全量，不只是变化字段）
     if (rawText) setLastSentContextSignature(sessionId, rawText);
@@ -154,11 +144,14 @@ export function enqueueFollowUpMessage(params: EnqueueFollowUpParams): boolean {
     attachments,
   } = params;
   try {
-    flushContextStateBeforeSend(sessionId);
+    const flushedContextState = flushContextStateBeforeSend(sessionId);
+    const finalDisplayText = flushedContextState
+      ? `[用户输入]\n${displayText}\n\n[系统环境上下文]\n${flushedContextState}`
+      : displayText;
     addMessage(wsId, sessionId, {
       id: userMsgId,
       sender: 'user',
-      text: displayText,
+      text: finalDisplayText,
       timestamp: Date.now(),
       status: 'queued',
       ...(images?.length ? { images } : {}),
@@ -168,7 +161,7 @@ export function enqueueFollowUpMessage(params: EnqueueFollowUpParams): boolean {
     void getCompositionRoot().runControl.followUp({
       runId: liveHandleRunId ?? null,
       sessionId,
-      text: displayText,
+      text: finalDisplayText,
       clientMessageId: userMsgId,
       reason: reason || 'ui-send-while-running',
     });

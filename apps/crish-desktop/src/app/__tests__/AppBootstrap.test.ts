@@ -24,7 +24,10 @@ interface EffectEntry {
 
 const APP_PATH = resolve(__dirname, '../AppBootstrap.ts');
 const ENGINE_PATH = resolve(__dirname, '../useEngineBootstrap.ts');
-const BOOTSTRAP_STORES_PATH = resolve(__dirname, '../../store/bootstrapStores.ts');
+const BOOTSTRAP_STORES_PATH = resolve(
+  __dirname,
+  '../../store/bootstrapStores.ts'
+);
 const APP_SRC = readFileSync(APP_PATH, 'utf-8');
 const ENGINE_SRC = readFileSync(ENGINE_PATH, 'utf-8');
 const BOOTSTRAP_STORES_SRC = readFileSync(BOOTSTRAP_STORES_PATH, 'utf-8');
@@ -69,18 +72,19 @@ describe('AppBootstrap — Stage 4 结构收敛', () => {
     expect(engine.every((e) => e.type === 'useEffect')).toBe(true);
   });
 
-  it('AppBootstrap effect 收敛为 14（原 16：hydrate 上提 + data-ui-size 删除）', () => {
-    expect(app.length).toBe(14);
+  it('AppBootstrap effect 收敛为 13（原 16：hydrate 上提 + data-ui-size 删除 + 旧 v1 迁移切除）', () => {
+    expect(app.length).toBe(13);
   });
 
-  it('combined = engine + app = 16', () => {
+  it('combined = engine + app = 15', () => {
     expect(combined).toHaveLength(engine.length + app.length);
-    expect(combined).toHaveLength(16);
+    expect(combined).toHaveLength(15);
   });
 
-  it('hydrateWorkspaceShell 已上提至 Coordinator，AppBootstrap 不再持有', () => {
+  it('hydrateWorkspaceShell 已上提至 Coordinator，AppBootstrap 不再持有且不调用旧 migrateLayoutIfNeeded', () => {
     expect(APP_SRC).not.toContain('hydrateWorkspaceShell');
     expect(APP_SRC).not.toContain('waitLayoutTreeHydration');
+    expect(APP_SRC).not.toContain('migrateLayoutIfNeeded');
   });
 
   it('启动期禁止 saveSettingsEx 反写（REDLINE-402）；settings 水合由 Coordinator 独占', () => {
@@ -127,7 +131,9 @@ describe('AppBootstrap — Stage 4 结构收敛', () => {
   it('T-A-1：bootstrapStores 装配后快照桥已绑定', () => {
     expect(BOOTSTRAP_STORES_SRC).toContain('bindMessageSnapshotsOps(');
     expect(BOOTSTRAP_STORES_SRC).toContain('new MessageSnapshots()');
-    expect(BOOTSTRAP_STORES_SRC).toContain("logger.warn('[Snapshots] bridge bind failed");
+    expect(BOOTSTRAP_STORES_SRC).toContain(
+      "logger.warn('[Snapshots] bridge bind failed"
+    );
   });
 
   it('D5：AppBootstrap 无 layoutStore 自订阅', () => {

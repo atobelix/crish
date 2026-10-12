@@ -27,12 +27,16 @@ export function useSlashMenu({
 
   const BASE_SLASH = useMemo(
     () => [
-      { cmd: '/goal', desc: '多轮推进直至完成' },
-      { cmd: '/learn', desc: '记住一条规则' },
-      { cmd: '/grill-me', desc: '对齐提问，暂不实施' },
-      { cmd: '/schedule', desc: '定时任务' },
-      { cmd: '/teamwork', desc: '协作看板' },
-      { cmd: '/browser', desc: '预览浏览器' },
+      { cmd: '/goal', desc: '开启长程自主推进模式，直到彻底达成目标' },
+      { cmd: '/compact', desc: '压缩会话上下文，释放 Token' },
+      { cmd: '/schedule', desc: '定时/周期性工作流任务编排' },
+      { cmd: '/browser', desc: '唤起内置受管预览浏览器' },
+      { cmd: '/teamwork', desc: '多 Agent 团队并行协同看板' },
+      { cmd: '/learn', desc: '从对话经验沉淀并记住长期规则' },
+      { cmd: '/grill-me', desc: '深度交互式方案推演，严格拷问' },
+      { cmd: '/clear', desc: '清空当前会话上下文并重置状态' },
+      { cmd: '/stop', desc: '停止当前正在生成的回答或运行中的任务' },
+      { cmd: '/settings', desc: '打开工作台设置中心' },
       ...(isDemoMode() ? [{ cmd: '/simulate', desc: '演示流水线' }] : []),
     ],
     []

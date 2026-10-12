@@ -18,10 +18,7 @@ import {
   resetMarkdownHtmlCacheStats,
   getMarkdownHtmlCache,
 } from './markdownCache';
-import {
-  mockTauriCommand,
-  mockTauriMissing,
-} from '../test-setup';
+import { mockTauriCommand, mockTauriMissing } from '../test-setup';
 
 // ── mock worker pool（避免 jsdom 下 new Worker 失败） ───────────────────
 // 必须在 import markdownRenderAsync 之前声明，vi.mock 是 hoisted 的
@@ -44,7 +41,10 @@ import {
   useAsyncMarkdownHtml,
   useStreamingMarkdownHtml,
 } from './markdownRenderAsync';
-import { IncrementalMarkdownSession } from './markdown/IncrementalMarkdownSession';
+import {
+  IncrementalMarkdownSession,
+  type IncrementalMarkdownUnitSnapshot,
+} from './markdown/IncrementalMarkdownSession';
 import { ReconciledMarkdownHtml } from '../components/markdown/ReconciledMarkdownHtml';
 import { Priority } from '../workers';
 
@@ -60,13 +60,18 @@ describe('parseMarkdownToHtmlAsync', () => {
     const rustHtml = '<p>rust rendered</p>';
     mockTauriCommand('core_md_render', async (args) => {
       const text = (args as { text?: string })?.text ?? '';
-      return `<p>rust rendered</p>`.replace('rust rendered', text === 'hi' ? 'rust rendered' : text);
+      return `<p>rust rendered</p>`.replace(
+        'rust rendered',
+        text === 'hi' ? 'rust rendered' : text
+      );
     });
 
     const result = await parseMarkdownToHtmlAsync('hi');
     expect(result).toBe(rustHtml);
     // 调用名 = 真实 wire 键（core_md_render），证明走 Rust 路径而非假键
-    expect(vi.mocked(invoke)).toHaveBeenCalledWith('core_md_render', { text: 'hi' });
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith('core_md_render', {
+      text: 'hi',
+    });
     // 缓存写入
     expect(getMarkdownHtmlCache('hi')).toBe(rustHtml);
     // worker pool 不应被调用
@@ -214,7 +219,7 @@ describe('useAsyncMarkdownHtml', () => {
 
     const { result, rerender } = renderHook(
       ({ md }: { md: string }) => useAsyncMarkdownHtml(md),
-      { initialProps: { md: 'first-md' } },
+      { initialProps: { md: 'first-md' } }
     );
 
     await waitFor(() => expect(resolveFirst).toBeTypeOf('function'));
@@ -298,34 +303,47 @@ describe('useStreamingMarkdownHtml', () => {
       return `<ul><li>${text.replace(/^-\s+/, '')}</li></ul>`;
     });
 
-    await expect(parseMarkdownFragmentToHtmlAsync('- item', Priority.High, 'list-item'))
-      .resolves.toBe('<li>item</li>');
+    await expect(
+      parseMarkdownFragmentToHtmlAsync('- item', Priority.High, 'list-item')
+    ).resolves.toBe('<li>item</li>');
   });
 
   it('列表外层已由增量会话维护时，正文片段仍保留 inline HTML', async () => {
-    mockTauriCommand('core_md_render', async () => '<p class="md-p"><strong>item</strong></p>');
+    mockTauriCommand(
+      'core_md_render',
+      async () => '<p class="md-p"><strong>item</strong></p>'
+    );
 
-    await expect(parseMarkdownFragmentToHtmlAsync('**item**', Priority.High, 'list-item'))
-      .resolves.toBe('<strong>item</strong>');
+    await expect(
+      parseMarkdownFragmentToHtmlAsync('**item**', Priority.High, 'list-item')
+    ).resolves.toBe('<strong>item</strong>');
   });
 
   it('有界结构片段保留标题、围栏和链接的 renderer 语义', async () => {
     mockTauriCommand('core_md_render', async (args) => {
       const text = (args as { text?: string })?.text ?? '';
       if (text.startsWith('#')) return '<h2 class="md-h2">Heading</h2>';
-      if (text.startsWith('```')) return '<pre><code>const value = 1</code></pre>';
+      if (text.startsWith('```'))
+        return '<pre><code>const value = 1</code></pre>';
       if (text.startsWith('[')) {
         return '<p class="md-p"><a class="md-a" href="https://example.test">label</a></p>';
       }
       return `<p class="md-p">${text}</p>`;
     });
 
-    await expect(parseMarkdownFragmentToHtmlAsync('# Heading', Priority.High, 'block'))
-      .resolves.toContain('<h2');
-    await expect(parseMarkdownFragmentToHtmlAsync('```ts\nconst value = 1\n```', Priority.High, 'block'))
-      .resolves.toContain('<pre>');
-    await expect(parseMarkdownFragmentToHtmlAsync('[label](https://example.test)'))
-      .resolves.toContain('<a class="md-a"');
+    await expect(
+      parseMarkdownFragmentToHtmlAsync('# Heading', Priority.High, 'block')
+    ).resolves.toContain('<h2');
+    await expect(
+      parseMarkdownFragmentToHtmlAsync(
+        '```ts\nconst value = 1\n```',
+        Priority.High,
+        'block'
+      )
+    ).resolves.toContain('<pre>');
+    await expect(
+      parseMarkdownFragmentToHtmlAsync('[label](https://example.test)')
+    ).resolves.toContain('<a class="md-a"');
   });
 
   it('renderer 失败时保持空片段，绝不把 Markdown 原文作为回退', async () => {
@@ -334,9 +352,13 @@ describe('useStreamingMarkdownHtml', () => {
     });
     scheduleSpy.mockResolvedValue('');
 
-    await expect(parseMarkdownFragmentToHtmlAsync('**secret source**')).resolves.toBe('');
+    await expect(
+      parseMarkdownFragmentToHtmlAsync('**secret source**')
+    ).resolves.toBe('');
 
-    const { result } = renderHook(() => useStreamingMarkdownHtml('**secret source**', true));
+    const { result } = renderHook(() =>
+      useStreamingMarkdownHtml('**secret source**', true)
+    );
     await waitFor(() => expect(scheduleSpy).toHaveBeenCalled());
     expect(result.current).not.toContain('secret source');
     expect(result.current).not.toContain('**');
@@ -357,11 +379,15 @@ describe('useStreamingMarkdownHtml', () => {
     }
 
     const view = render(React.createElement(View, { markdown: 'a' }));
-    await waitFor(() => expect(view.getByTestId('markdown').textContent).toBe('a'));
+    await waitFor(() =>
+      expect(view.getByTestId('markdown').textContent).toBe('a')
+    );
     const paragraph = view.getByTestId('markdown').querySelector('p');
 
     view.rerender(React.createElement(View, { markdown: 'ab' }));
-    await waitFor(() => expect(view.getByTestId('markdown').textContent).toBe('ab'));
+    await waitFor(() =>
+      expect(view.getByTestId('markdown').textContent).toBe('ab')
+    );
 
     expect(view.getByTestId('markdown').querySelector('p')).toBe(paragraph);
     expect(view.getByTestId('markdown').textContent).not.toContain('**');
@@ -377,20 +403,39 @@ describe('useStreamingMarkdownHtml', () => {
 
     const { result, rerender } = renderHook(
       ({ markdown }: { markdown: string }) => {
-        const unitsRef = React.useRef<readonly {
-          id: number;
-          kind: 'paragraph' | 'heading' | 'list' | 'block' | 'code' | 'blockquote' | 'other';
-          html: string;
-        }[] | null>(null);
-        const html = useStreamingMarkdownHtml(markdown, true, Priority.High, unitsRef);
+        const unitsRef = React.useRef<
+          | readonly {
+              id: number;
+              kind:
+                | 'paragraph'
+                | 'heading'
+                | 'list'
+                | 'block'
+                | 'code'
+                | 'blockquote'
+                | 'other';
+              html: string;
+            }[]
+          | null
+        >(null);
+        const html = useStreamingMarkdownHtml(
+          markdown,
+          true,
+          Priority.High,
+          unitsRef
+        );
         return { html, units: unitsRef.current };
       },
       { initialProps: { markdown: 'a' } }
     );
 
-    await waitFor(() => expect(result.current.units?.[0]?.html).toContain('<p'));
+    await waitFor(() =>
+      expect(result.current.units?.[0]?.html).toContain('<p')
+    );
     rerender({ markdown: 'ab' });
-    await waitFor(() => expect(result.current.units?.[0]?.html).toContain('ab'));
+    await waitFor(() =>
+      expect(result.current.units?.[0]?.html).toContain('ab')
+    );
     expect(result.current.html).toBe('');
     expect(toHtmlSpy).not.toHaveBeenCalled();
     toHtmlSpy.mockRestore();
@@ -418,5 +463,242 @@ describe('useStreamingMarkdownHtml', () => {
       await new Promise((resolve) => setTimeout(resolve, 120));
     });
     expect(result.current).toBe('');
+  });
+
+  it('单次 advance 含多个词法分片时，Promise.all 批合并只触发 1 次批完成重渲染', async () => {
+    let renderCount = 0;
+    let ipcCallCount = 0;
+    mockTauriCommand('core_md_render', async (args) => {
+      ipcCallCount += 1;
+      const text = (args as { text?: string })?.text ?? '';
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      return `<p class="md-p">${text}</p>`;
+    });
+
+    const complexInput =
+      'hello `code` and **bold** with [link](https://example.test)';
+    const latestUnitsRef: {
+      current: readonly IncrementalMarkdownUnitSnapshot[] | null;
+    } = {
+      current: null,
+    };
+
+    function TestComponent({ text }: { text: string }) {
+      const unitsRef = React.useRef<
+        readonly IncrementalMarkdownUnitSnapshot[] | null
+      >(null);
+      useStreamingMarkdownHtml(text, true, Priority.High, unitsRef);
+      latestUnitsRef.current = unitsRef.current;
+      renderCount += 1;
+      return React.createElement(
+        'div',
+        { 'data-testid': 'count' },
+        String(renderCount)
+      );
+    }
+
+    const { rerender } = render(
+      React.createElement(TestComponent, { text: '' })
+    );
+    // 空输入挂载不触发多余 setRenderVersion
+    expect(renderCount).toBe(1);
+
+    // 推进含多个词法分片的复杂输入：1 次 prop rerender + 1 次 Promise.all 批完成重渲染 = 共增加 2 次（其中 Hook 状态触发仅 1 次）
+    renderCount = 0;
+    rerender(React.createElement(TestComponent, { text: complexInput }));
+    expect(renderCount).toBe(1);
+
+    await waitFor(() => {
+      expect(latestUnitsRef.current?.[0]?.html).toContain('hello ');
+      expect(latestUnitsRef.current?.[0]?.html).toContain('`code`');
+      expect(latestUnitsRef.current?.[0]?.html).toContain('**bold**');
+      expect(latestUnitsRef.current?.[0]?.html).toContain(
+        '[link](https://example.test)'
+      );
+    });
+
+    // 确认确实切出了多个分片（7 个独立分片），但批完成仅触发了 1 次额外重渲染（renderCount = 1 prop + 1 batch = 2）
+    expect(ipcCallCount).toBeGreaterThanOrEqual(4);
+    expect(renderCount).toBe(2);
+  });
+
+  it('快速连续增量推进时，滞后完成的先序分片平稳收口并入单元，绝不因新批次到达而丢失正文', async () => {
+    let renderCount = 0;
+    let resolveSlowFirstBatch: (() => void) | null = null;
+
+    mockTauriCommand('core_md_render', async (args) => {
+      const text = (args as { text?: string })?.text ?? '';
+      if (text.includes('irst')) {
+        await new Promise<void>((resolve) => {
+          resolveSlowFirstBatch = resolve;
+        });
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      return `<p class="md-p">${text}</p>`;
+    });
+
+    const latestUnitsRef: {
+      current: readonly IncrementalMarkdownUnitSnapshot[] | null;
+    } = {
+      current: null,
+    };
+
+    function TestComponent({ text }: { text: string }) {
+      const unitsRef = React.useRef<
+        readonly IncrementalMarkdownUnitSnapshot[] | null
+      >(null);
+      useStreamingMarkdownHtml(text, true, Priority.High, unitsRef);
+      latestUnitsRef.current = unitsRef.current;
+      renderCount += 1;
+      return React.createElement('div', null, String(renderCount));
+    }
+
+    const { rerender } = render(
+      React.createElement(TestComponent, { text: 'first **slow**' })
+    );
+    expect(renderCount).toBe(1);
+
+    // 在第一批次尚未决议前，连续输入推进第二批次
+    rerender(
+      React.createElement(TestComponent, {
+        text: 'first **slow** and second **fast**',
+      })
+    );
+    expect(renderCount).toBe(2);
+
+    // 等待第二批次率先完成决议
+    await waitFor(() => {
+      expect(latestUnitsRef.current?.[0]?.html).toContain('second');
+    });
+    expect(renderCount).toBe(3);
+
+    // 此时放行滞后的第一批次微任务回执
+    await act(async () => {
+      resolveSlowFirstBatch?.();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    // 先序分片平稳收口并入单元，完整保留全部段落内容（修复丢正文缺陷）
+    expect(latestUnitsRef.current?.[0]?.html).toContain('first');
+    expect(latestUnitsRef.current?.[0]?.html).toContain('second');
+    expect(renderCount).toBe(4);
+  });
+
+  it('后续 tick 无 textParts（如段落后追加独立换行符）时，上一拍在途异步段落决议不被丢弃并正常锁存内容', async () => {
+    let resolveSlow: (() => void) | null = null;
+
+    mockTauriCommand('core_md_render', async (args) => {
+      const text = (args as { text?: string })?.text ?? '';
+      if (text.includes('slow')) {
+        await new Promise<void>((resolve) => {
+          resolveSlow = resolve;
+        });
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      return `<p class="md-p">${text}</p>`;
+    });
+
+    const latestUnitsRef: {
+      current: readonly IncrementalMarkdownUnitSnapshot[] | null;
+    } = {
+      current: null,
+    };
+
+    function TestComponent({ text }: { text: string }) {
+      const unitsRef = React.useRef<
+        readonly IncrementalMarkdownUnitSnapshot[] | null
+      >(null);
+      useStreamingMarkdownHtml(text, true, Priority.High, unitsRef);
+      latestUnitsRef.current = unitsRef.current;
+      return React.createElement('div', null, 'view');
+    }
+
+    const { rerender } = render(
+      React.createElement(TestComponent, { text: 'first slow text' })
+    );
+
+    // 等待 mockTauriCommand 被调用且 resolveSlow 挂载（在途 IPC 发起）
+    await waitFor(() => {
+      expect(resolveSlow).not.toBeNull();
+    });
+
+    // 后续 tick 为独立换行符，产生 0 个 textParts
+    rerender(
+      React.createElement(TestComponent, { text: 'first slow text\n\n' })
+    );
+
+    // 此时放行滞后的异步段落决议
+    await act(async () => {
+      resolveSlow?.();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    // 单元快照内包含实际段落内容，绝非空壳 <p class="md-p"></p>
+    await waitFor(() => {
+      expect(latestUnitsRef.current?.[0]?.html).toContain('slow');
+    });
+  });
+
+  it('分片异常容错：当批次中个别分片 IPC 失败时，Promise.all 平稳收口且不回退源码', async () => {
+    mockTauriCommand('core_md_render', async (args) => {
+      const text = (args as { text?: string })?.text ?? '';
+      if (text.includes('broken')) {
+        throw new Error('IPC render error');
+      }
+      return `<p class="md-p">${text}</p>`;
+    });
+    scheduleSpy.mockImplementation(
+      async (_channel: string, _type: string, payload: { raw?: string }) => {
+        if (payload?.raw?.includes('broken')) {
+          throw new Error('Worker render error');
+        }
+        return `<p class="md-p">${payload?.raw ?? ''}</p>`;
+      }
+    );
+
+    const { result } = renderHook(() =>
+      useStreamingMarkdownHtml('normal text and `broken code` end', true)
+    );
+
+    await waitFor(() => {
+      expect(result.current).toContain('normal text');
+      expect(result.current).toContain('end');
+    });
+    expect(result.current).not.toContain('broken code');
+  });
+
+  it('无异步分片（textParts.length === 0）时同步更新快照且仅触发 1 次重渲染', () => {
+    let renderCount = 0;
+    let ipcCalls = 0;
+    mockTauriCommand('core_md_render', async () => {
+      ipcCalls += 1;
+      return '';
+    });
+
+    const latestUnitsRef: {
+      current: readonly IncrementalMarkdownUnitSnapshot[] | null;
+    } = {
+      current: null,
+    };
+
+    function TestComponent({ text }: { text: string }) {
+      const unitsRef = React.useRef<
+        readonly IncrementalMarkdownUnitSnapshot[] | null
+      >(null);
+      useStreamingMarkdownHtml(text, true, Priority.High, unitsRef);
+      latestUnitsRef.current = unitsRef.current;
+      renderCount += 1;
+      return React.createElement('div', null, String(renderCount));
+    }
+
+    render(React.createElement(TestComponent, { text: '```ts\nconst x = 1;' }));
+
+    // 代码围栏内容属于纯静态转义，textParts 为空，同步更新快照并触发恰好 1 次重渲染（初始 1 + 同步更新 1 = 2）
+    expect(ipcCalls).toBe(0);
+    expect(renderCount).toBe(2);
+    expect(latestUnitsRef.current?.[0]?.kind).toBe('code');
+    expect(latestUnitsRef.current?.[0]?.html).toContain('const x = 1;');
   });
 });

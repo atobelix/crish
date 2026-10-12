@@ -10,28 +10,39 @@
  * - 单个 handler 抛错不阻断同事件其他订阅者
  */
 
+export interface UiEventScopeTarget {
+  sessionId?: string;
+  leafId?: string;
+}
+
 /** 已迁移的 UI 跨组件事件（按需扩展，勿一次塞满） */
 export type UiEventMap = {
   'project-changed': void;
-  'open-project-picker': void;
+  'open-project-picker': void | UiEventScopeTarget;
   /**
    * 原生目录对话框不可用（ToastBus 死通道迁移后的事件桥）。
    * pickWorkspaceFolder 失败时派发；App.tsx useToastQueue 宿主订阅弹可见 toast。
    */
   'workspace-picker-unavailable': void;
-  'open-scheduled': void;
-  'open-chat': void;
-  'open-overview': void;
-  'open-tasks': void;
+  'open-scheduled': void | UiEventScopeTarget;
+  'open-chat': void | UiEventScopeTarget;
+  'open-overview': void | UiEventScopeTarget;
+  'open-tasks': void | UiEventScopeTarget;
   'pick-workspace': void;
-  'open-agent-panel': { agentId?: string };
+  'open-agent-panel': { agentId?: string; sessionId?: string; leafId?: string };
+  /** 通用工具抽屉面板定址开启 */
+  'open-tool-panel': { panelId: string; sessionId?: string; leafId?: string };
+  /** 右侧工具坞折叠/展开切换 */
+  'toggle-right-panel': void | UiEventScopeTarget;
   'update-changed': void;
   /** 聊天顶栏 ⋯：切换本会话搜索条 */
-  'toggle-msg-filter': void;
+  'toggle-msg-filter': void | UiEventScopeTarget;
+  /** 聊天顶栏 ⋯：清空当前会话消息与草稿 */
+  'clear-current-session': void | UiEventScopeTarget;
   /** 聊天顶栏 ⋯：导出当前会话 Markdown */
-  'export-session-md': void;
+  'export-session-md': void | UiEventScopeTarget;
   /** 聊天顶栏 ⋯：打开对话回溯预览（daemon experimental） */
-  'open-conversation-rewind': void;
+  'open-conversation-rewind': void | UiEventScopeTarget;
   /** 活动服务商/模型已切换（设置页或底栏 Picker） */
   'model-changed': { profileId: string; model: string };
   /** 服务商列表/密钥/模型表变更（设置页保存后刷新选择器） */
@@ -55,11 +66,11 @@ export type UiEventMap = {
    * 会话思考档位 Title 变更（真源 = SessionRuntimeRegistry.thinkingTitle）。
    * Picker 改档后广播，驱动 Composer 思考胶囊同步刷新（单会话载荷，跨会话不串）。
    */
-  'thinking-title-changed': { sessionId: string };
+  'thinking-title-changed': { sessionId: string; leafId?: string };
   /** 快捷键：聚焦主对话输入框 */
-  'focus-composer': void;
+  'focus-composer': void | UiEventScopeTarget;
   /** 快捷键：中断当前生成 */
-  'stop-generation': void;
+  'stop-generation': void | UiEventScopeTarget;
   /** 全站 Popover 互斥关闭 */
   'close-all-popovers': { exceptId?: string } | undefined;
   /**
@@ -77,7 +88,7 @@ export type UiEventMap = {
    * 从 boundary user 节点原文回填 composer（不依赖 draft 快照）。
    * ChatCard 宿主订阅后调 setChatInput + setComposerDraft。
    */
-  'retract-backfill': { sessionId: string; text: string };
+  'retract-backfill': { sessionId: string; text: string; leafId?: string };
   /**
    * 单轨收敛（docs/chat-notice-convergence §2.3）：ComposerErrorBar「重试」按钮派发。
    * ChatCard 宿主（useChatHandlers）订阅后复用 handleRegenerate 原位重发当轮：
@@ -86,15 +97,17 @@ export type UiEventMap = {
   'retry-failed-turn': {
     sessionId: string;
     userMsgId?: string;
+    userMessageId?: string;
     assistantMsgId?: string;
+    leafId?: string;
   };
 };
 
 export type UiEventName = keyof UiEventMap;
 
-/** void 事件的 detail 收窄为 undefined；有载荷则为载荷类型 */
-export type UiEventDetail<K extends UiEventName> = UiEventMap[K] extends void
-  ? undefined
+/** void 事件或包含 void 的可选载荷收窄为 undefined 或有效载荷；严格非 void 则为载荷类型 */
+export type UiEventDetail<K extends UiEventName> = void extends UiEventMap[K]
+  ? Exclude<UiEventMap[K], void> | undefined
   : UiEventMap[K];
 
 export type UiEventHandler<K extends UiEventName> = (
@@ -118,8 +131,11 @@ export const UI_EVENT_NAMES = [
   'open-tasks',
   'pick-workspace',
   'open-agent-panel',
+  'open-tool-panel',
+  'toggle-right-panel',
   'update-changed',
   'toggle-msg-filter',
+  'clear-current-session',
   'export-session-md',
   'open-conversation-rewind',
   'model-changed',
@@ -137,12 +153,12 @@ export const UI_EVENT_NAMES = [
 
 const UI_EVENT_NAME_SET: ReadonlySet<string> = new Set<string>(UI_EVENT_NAMES);
 
-/** 是否需要携带 detail（非 void） */
-type HasDetail<K extends UiEventName> = UiEventMap[K] extends void
+/** 是否需要强制携带 detail（若包含 void 则为可选） */
+type HasDetail<K extends UiEventName> = void extends UiEventMap[K]
   ? false
   : true;
 
-/** emit 可选参：有载荷时必填，void 时可选 */
+/** emit 可选参：有强制非空载荷时必填，void 或包含 void 时可选 */
 type EmitArgs<K extends UiEventName> =
   HasDetail<K> extends true
     ? [detail: UiEventMap[K]]
@@ -210,6 +226,9 @@ export function emitUiEvent<K extends UiEventName>(
     return false;
   }
 }
+
+/** 派发 UI 事件别名（对齐调度契约） */
+export const dispatchUiEvent = emitUiEvent;
 
 /**
  * 订阅 UI 事件；返回幂等取消订阅函数。

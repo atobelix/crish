@@ -131,10 +131,18 @@ function isAsciiToken(token: string): boolean {
   return /^[\x00-\x7F]+$/.test(token);
 }
 
-/** 全角斜杠 → 半角，便于中文输入法 */
+/** 全角斜杠 → 半角，并解包行内 @[/cmd](/cmd:command) 标记便于统一解析 */
 function normalizeSlashInput(input: string): string {
-  const t = (input ?? '').trim();
+  let t = (input ?? '').trim();
   if (!t) return '';
+  const mentionCmdMatch = t.match(/^@\[([^\]]+)\]\(([^):]+)(?::command)?\)\s*/);
+  if (mentionCmdMatch && mentionCmdMatch[1] && mentionCmdMatch[2]) {
+    const p1 = mentionCmdMatch[1];
+    const p2 = mentionCmdMatch[2];
+    const rawCmd = p1.startsWith('/') ? p1 : p2;
+    const prefix = rawCmd.startsWith('/') ? rawCmd : `/${rawCmd}`;
+    t = `${prefix} ${t.slice(mentionCmdMatch[0].length)}`.trim();
+  }
   if (t[0] === '／') return `/${t.slice(1)}`;
   return t;
 }
