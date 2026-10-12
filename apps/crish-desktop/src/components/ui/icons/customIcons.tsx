@@ -5,19 +5,20 @@
 
 import * as React from 'react';
 
-export type CustomIconProps = {
+export type CustomIconProps = React.SVGAttributes<SVGElement> & {
   size?: number | string;
   className?: string;
   strokeWidth?: number;
   style?: React.CSSProperties;
   'aria-hidden'?: boolean | 'true' | 'false';
+  'data-icon'?: string;
 };
 
 function baseProps(
   size: number | string,
   className?: string,
   style?: React.CSSProperties,
-  viewBox = '0 0 24 24',
+  viewBox = '0 0 24 24'
 ) {
   return {
     width: size,
@@ -88,9 +89,10 @@ export function IconChevronDown({
   className,
   strokeWidth = 1.75,
   style,
+  ...rest
 }: CustomIconProps) {
   return (
-    <svg {...baseProps(size, className, style)}>
+    <svg {...baseProps(size, className, style)} {...rest}>
       <path d="M7 10l5 5 5-5" strokeWidth={strokeWidth} />
     </svg>
   );
@@ -101,9 +103,10 @@ export function IconChevronUp({
   className,
   strokeWidth = 1.75,
   style,
+  ...rest
 }: CustomIconProps) {
   return (
-    <svg {...baseProps(size, className, style)}>
+    <svg {...baseProps(size, className, style)} {...rest}>
       <path d="M7 14l5-5 5 5" strokeWidth={strokeWidth} />
     </svg>
   );

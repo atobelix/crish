@@ -40,7 +40,8 @@ describe('Select & Combobox: 1px Hairline Border Guardrails (Plan 09)', () => {
 
     for (const file of files) {
       const css = getFileContent(file);
-      const regex = /border(-color)?:\s*color-mix\([^;]*?var\(--text-primary\)\s*(\d+)%/g;
+      const regex =
+        /border(-color)?:\s*color-mix\([^;]*?var\(--text-primary\)\s*(\d+)%/g;
       let match;
       let matchCount = 0;
       while ((match = regex.exec(css)) !== null) {
@@ -50,5 +51,19 @@ describe('Select & Combobox: 1px Hairline Border Guardrails (Plan 09)', () => {
       }
       expect(matchCount).toBeGreaterThan(0);
     }
+  });
+
+  it('Select.module.css 与 SelectContent.module.css 零 cds-popover 与零 selectPopEnter', () => {
+    const selectCss = getFileContent('Select.module.css');
+    const contentCss = getFileContent('SelectContent.module.css');
+
+    expect(selectCss).not.toContain('cds-popover');
+    expect(contentCss).not.toContain('selectPopEnter');
+    expect(contentCss).not.toMatch(/transform:\s*scale\(0\.95\)/);
+
+    expect(selectCss).toContain("[data-positioned='true']");
+    expect(contentCss).toContain("[data-positioned='true']");
+    expect(selectCss).toContain('crish-popover-enter');
+    expect(contentCss).toContain('crish-popover-enter');
   });
 });

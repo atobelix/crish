@@ -100,7 +100,7 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
   padding: 0;
-  transition: color var(--transition-micro, 100ms) ease;
+  transition: color var(--transition-micro);
 }
 
 .searchClearBtn:hover {
@@ -201,8 +201,8 @@
   outline: none;
   box-sizing: border-box;
   transition:
-    background-color var(--transition-micro, 100ms) ease,
-    color var(--transition-micro, 100ms) ease;
+    background-color var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .hasTrailingAction {
@@ -336,6 +336,9 @@
   gap: var(--sep-item-gap, 4px);
   z-index: var(--z-dropdown-menu, 310);
   outline: none;
+  transform-origin: left top;
+  animation: crish-popover-enter 120ms var(--ease-emphasized) forwards;
+  will-change: transform, opacity;
 }
 
 .cascadeSubmenu .item {

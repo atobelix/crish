@@ -68,14 +68,22 @@ describe('ui/Combobox 关键词高亮算法 (highlightMatches)', () => {
 });
 
 describe('ui/Combobox 单选与过滤', () => {
-  function SingleComboboxDemo({ onValueChange }: { onValueChange?: (v: any) => void }) {
+  function SingleComboboxDemo({
+    onValueChange,
+  }: {
+    onValueChange?: (v: any) => void;
+  }) {
     const [query, setQuery] = useState('');
     const filtered = MODEL_ITEMS.filter((item) =>
       item.label.toLowerCase().includes(query.toLowerCase())
     );
 
     return (
-      <Combobox onValueChange={onValueChange} query={query} onQueryChange={setQuery}>
+      <Combobox
+        onValueChange={onValueChange}
+        query={query}
+        onQueryChange={setQuery}
+      >
         <ComboboxInput placeholder="检索 AI 模型..." />
         <ComboboxContent>
           <ComboboxList>
@@ -103,10 +111,13 @@ describe('ui/Combobox 单选与过滤', () => {
 
     const content = await screen.findByRole('listbox');
     expect(content).toBeInTheDocument();
+    expect(content).toHaveAttribute('data-positioned', 'true');
 
     const gptOption = screen.getByRole('option', { name: /GPT-4o/ });
     expect(gptOption).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: /Claude/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('option', { name: /Claude/ })
+    ).not.toBeInTheDocument();
 
     // 选项内高亮
     const highlight = gptOption.querySelector('span');
@@ -173,7 +184,11 @@ describe('ui/Combobox IME 状态机合成防御 (Composition Guard)', () => {
 });
 
 describe('ui/Combobox 多选 Chips 体系 (ComboboxChips)', () => {
-  function MultiChipsDemo({ onValueChange }: { onValueChange?: (v: any) => void }) {
+  function MultiChipsDemo({
+    onValueChange,
+  }: {
+    onValueChange?: (v: any) => void;
+  }) {
     return (
       <Combobox multiple clearable onValueChange={onValueChange}>
         <ComboboxChips placeholder="选择多个模型..." />
@@ -210,7 +225,11 @@ describe('ui/Combobox 多选 Chips 体系 (ComboboxChips)', () => {
   it('点击 Chip 内的微型叉号移除该项', () => {
     const onValueChange = vi.fn();
     render(
-      <Combobox multiple defaultValue={['gpt-4o', 'deepseek-r1']} onValueChange={onValueChange}>
+      <Combobox
+        multiple
+        defaultValue={['gpt-4o', 'deepseek-r1']}
+        onValueChange={onValueChange}
+      >
         <ComboboxChips />
         <ComboboxContent>
           <ComboboxList>
@@ -224,7 +243,9 @@ describe('ui/Combobox 多选 Chips 体系 (ComboboxChips)', () => {
       </Combobox>
     );
 
-    const removeBtn = screen.getByRole('button', { name: 'Remove GPT-4o (Omni)' });
+    const removeBtn = screen.getByRole('button', {
+      name: 'Remove GPT-4o (Omni)',
+    });
     fireEvent.click(removeBtn);
 
     expect(onValueChange).toHaveBeenCalledWith(['deepseek-r1']);
@@ -233,7 +254,11 @@ describe('ui/Combobox 多选 Chips 体系 (ComboboxChips)', () => {
   it('输入框为空时按 Backspace 键依次高亮并删除末尾 Chip', () => {
     const onValueChange = vi.fn();
     render(
-      <Combobox multiple defaultValue={['gpt-4o', 'deepseek-r1']} onValueChange={onValueChange}>
+      <Combobox
+        multiple
+        defaultValue={['gpt-4o', 'deepseek-r1']}
+        onValueChange={onValueChange}
+      >
         <ComboboxChips />
       </Combobox>
     );

@@ -5,7 +5,6 @@
   z-index: var(--z-dropdown);
 }
 
-
 .menuContent {
   z-index: var(--z-dropdown);
   outline: none;
@@ -32,15 +31,80 @@
   flex-direction: column;
   gap: 2px;
   font-family: var(--font-sans);
+  transform-origin: var(--radix-popover-content-transform-origin, top center);
+  will-change: transform, opacity;
+}
+
+/* 默认向下展开 (data-side='bottom') 入场关键帧 */
+@keyframes crish-popover-enter {
+  0% {
+    opacity: 0;
+    transform: scale(0.97) translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* 向上展开 (data-side='top') 入场关键帧 */
+@keyframes crish-popover-enter-top {
+  0% {
+    opacity: 0;
+    transform: scale(0.97) translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* 默认向下展开退场关键帧 */
+@keyframes crish-popover-exit {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.97) translateY(-4px);
+  }
+}
+
+/* 向上展开退场关键帧 */
+@keyframes crish-popover-exit-top {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.97) translateY(4px);
+  }
+}
+
+.menuContent[data-side='top'] {
+  transform-origin: var(
+    --radix-popover-content-transform-origin,
+    bottom center
+  );
 }
 
 .menuContent[data-state='open'] {
-  animation: cds-popover-enter var(--transition-popover-enter) forwards;
+  animation: crish-popover-enter var(--transition-popover-enter) forwards;
+}
+
+.menuContent[data-state='open'][data-side='top'] {
+  animation-name: crish-popover-enter-top;
 }
 
 .menuContent[data-state='closed'] {
-  animation: none;
-  display: none;
+  animation: crish-popover-exit var(--transition-popover-exit) forwards;
+  pointer-events: none;
+}
+
+.menuContent[data-state='closed'][data-side='top'] {
+  animation-name: crish-popover-exit-top;
 }
 
 .menuTitle {
@@ -97,7 +161,8 @@
   outline: none;
   background: var(--tint-hover);
   color: var(--text-primary);
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
 }
 
 .menuItem:where(.isSelected, [data-selected='true']) {

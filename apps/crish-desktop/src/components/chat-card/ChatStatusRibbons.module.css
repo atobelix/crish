@@ -38,11 +38,7 @@
 
 .dynamicChip.dynamicChipActive {
   background: color-mix(in srgb, var(--brand) 10%, transparent);
-  border-color: color-mix(
-    in srgb,
-    var(--brand) 22%,
-    var(--border-subtle)
-  );
+  border-color: color-mix(in srgb, var(--brand) 22%, var(--border-subtle));
   color: var(--text-primary);
 }
 
@@ -60,17 +56,20 @@
   100% {
     transform: scale(1);
     opacity: 0.9;
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-green) 30%, transparent);
   }
   50% {
-    transform: scale(1.4);
-    opacity: 0.45;
+    transform: scale(1.15);
+    opacity: 0.75;
+    box-shadow: 0 0 4px 1px
+      color-mix(in srgb, var(--accent-green) 35%, transparent);
   }
 }
 
 @keyframes chipFadeIn {
   0% {
     opacity: 0;
-    transform: translateY(4px) scale(0.96);
+    transform: translateY(4px) scale(0.985);
   }
   100% {
     opacity: 1;

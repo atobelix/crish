@@ -129,7 +129,10 @@ describe('ui/Select (Options 模式向后兼容)', () => {
 
   it('支持自定义 id 传递至触发器', () => {
     render(<Select id="custom-select-id" options={OPTIONS} />);
-    expect(screen.getByRole('combobox')).toHaveAttribute('id', 'custom-select-id');
+    expect(screen.getByRole('combobox')).toHaveAttribute(
+      'id',
+      'custom-select-id'
+    );
   });
 
   it('disabled 触发器不可交互', () => {
@@ -201,12 +204,19 @@ describe('ui/Select (Compound 复合组件模式)', () => {
     const trigger = screen.getByRole('combobox');
     expect(trigger).toHaveAttribute('data-slot', 'select-trigger');
     expect(screen.getByTestId('prefix-icon')).toBeInTheDocument();
-    expect(screen.getByText('请选择选项')).toHaveAttribute('data-slot', 'select-value');
+    expect(screen.getByText('请选择选项')).toHaveAttribute(
+      'data-slot',
+      'select-value'
+    );
 
     fireEvent.click(trigger);
     const content = await screen.findByRole('listbox');
     expect(content).toHaveAttribute('data-slot', 'select-content');
-    expect(screen.getByText('主流模型')).toHaveAttribute('data-slot', 'select-group-label');
+    expect(content).toHaveAttribute('data-positioned', 'true');
+    expect(screen.getByText('主流模型')).toHaveAttribute(
+      'data-slot',
+      'select-group-label'
+    );
 
     const deepseekItem = screen.getByRole('option', { name: /DeepSeek-R1/ });
     expect(deepseekItem).toHaveAttribute('data-slot', 'select-item');
@@ -229,7 +239,9 @@ describe('ui/Select (Compound 复合组件模式)', () => {
       </Select>
     );
     expect(screen.getByRole('combobox').className).toContain('triggerSm');
-    expect((await screen.findByRole('listbox')).className).toContain('contentSm');
+    expect((await screen.findByRole('listbox')).className).toContain(
+      'contentSm'
+    );
     expect(screen.getByRole('option').className).toContain('itemSm');
     unmount();
 
@@ -244,7 +256,9 @@ describe('ui/Select (Compound 复合组件模式)', () => {
       </Select>
     );
     expect(screen.getByRole('combobox').className).toContain('triggerLg');
-    expect((await screen.findByRole('listbox')).className).toContain('contentLg');
+    expect((await screen.findByRole('listbox')).className).toContain(
+      'contentLg'
+    );
     expect(screen.getByRole('option').className).toContain('itemLg');
   });
 

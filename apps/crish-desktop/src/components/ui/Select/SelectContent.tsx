@@ -61,9 +61,7 @@ export function SelectContent({
         if (enabledIndices.length > 0) {
           const currentPos = enabledIndices.indexOf(ctx.highlightedIndex);
           const prevPos =
-            currentPos <= 0
-              ? enabledIndices.length - 1
-              : currentPos - 1;
+            currentPos <= 0 ? enabledIndices.length - 1 : currentPos - 1;
           ctx.setHighlightedIndex(enabledIndices[prevPos]!);
         }
       } else if (e.key === 'Home') {
@@ -106,11 +104,7 @@ export function SelectContent({
         ? styles.contentLg
         : styles.contentMd;
 
-  const contentClass = [
-    styles.content,
-    sizeClass,
-    className,
-  ]
+  const contentClass = [styles.content, sizeClass, className]
     .filter(Boolean)
     .join(' ');
 
@@ -133,6 +127,7 @@ export function SelectContent({
       onWheel={handleWheel}
       data-slot="select-content"
       data-floating-layer="true"
+      data-positioned={position.isPositioned ? 'true' : 'false'}
       data-side={position.side}
       data-align={position.align}
       data-state={ctx.open ? 'open' : 'closed'}
@@ -141,5 +136,7 @@ export function SelectContent({
     </div>
   );
 
-  return resolvedContainer ? createPortal(contentNode, resolvedContainer) : contentNode;
+  return resolvedContainer
+    ? createPortal(contentNode, resolvedContainer)
+    : contentNode;
 }

@@ -31,8 +31,18 @@
   box-shadow: var(--sep-shadow);
 }
 
-.headerContainer { display: flex; flex-direction: column; flex-shrink: 0; width: 100%; }
-.panelTitle { font-size: 11px; font-weight: 500; color: var(--sep-text-muted); padding: 2px 6px 4px; }
+.headerContainer {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 100%;
+}
+.panelTitle {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--sep-text-muted);
+  padding: 2px 6px 4px;
+}
 
 /* 28px 嵌入式搜索栏 */
 .sepSearchWrapper {
@@ -73,7 +83,9 @@
   color: var(--sep-text-primary);
   outline: none;
 }
-.searchInput::placeholder { color: var(--sep-text-muted); }
+.searchInput::placeholder {
+  color: var(--sep-text-muted);
+}
 
 .searchClearBtn {
   display: flex;
@@ -89,9 +101,21 @@
   padding: 0;
   transition: color 100ms ease;
 }
-.searchClearBtn:hover { color: var(--sep-text-primary); }
-.searchRightActions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-.sepSearchDivider { height: 1px; background: var(--sep-divider-color); margin: 4px 0 2px 0; flex-shrink: 0; }
+.searchClearBtn:hover {
+  color: var(--sep-text-primary);
+}
+.searchRightActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.sepSearchDivider {
+  height: 1px;
+  background: var(--sep-divider-color);
+  margin: 4px 0 2px 0;
+  flex-shrink: 0;
+}
 
 /* 列表滚动容器 */
 .listContainer {
@@ -104,14 +128,48 @@
   padding: 1px 0;
 }
 
-.emptyState { padding: 12px 8px; text-align: center; font-size: 12px; color: var(--sep-text-muted); }
-.groupSection, .groupItems { display: flex; flex-direction: column; gap: 2px; }
-.groupTitle { font-size: 10.5px; font-weight: 500; color: var(--sep-text-muted); padding: 4px 6px 2px; text-transform: uppercase; letter-spacing: 0.03em; }
-.selectableListGroup { display: flex; flex-direction: column; gap: 2px; max-height: 180px; overflow-y: auto; }
-.groupDivider, .divider { height: 1px; background: var(--sep-divider-color); margin: 3px 0; flex-shrink: 0; }
+.emptyState {
+  padding: 12px 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--sep-text-muted);
+}
+.groupSection,
+.groupItems {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.groupTitle {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--sep-text-muted);
+  padding: 4px 6px 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.selectableListGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.groupDivider,
+.divider {
+  height: 1px;
+  background: var(--sep-divider-color);
+  margin: 3px 0;
+  flex-shrink: 0;
+}
 
 /* 槽位化菜单条目 (Outer 14px - Padding 6px = Item 8px) */
-.itemWrapper { position: relative; display: flex; align-items: center; width: 100%; }
+.itemWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
 .item {
   position: relative;
   display: flex;
@@ -131,36 +189,136 @@
   cursor: pointer;
   outline: none;
   box-sizing: border-box;
-  transition: background-color 100ms ease, color 100ms ease;
+  transition:
+    background-color 100ms ease,
+    color 100ms ease;
 }
-.hasTrailingAction { padding-right: 28px; }
-.item:hover, .item.focused { background-color: var(--tint-hover); }
-.item.selected { background-color: var(--tint-hover); }
-.item.disabled { opacity: 0.45; cursor: not-allowed; }
-.item.danger { color: var(--sep-danger-color); }
-.item.danger:hover, .item.danger.focused { background-color: var(--danger-soft-bg); }
-.item.danger:active { background-color: var(--danger-soft-bg-hover); } /* 按下：固定浅红纯色，不变暗 */
+.hasTrailingAction {
+  padding-right: 28px;
+}
+.item:hover,
+.item.focused {
+  background-color: var(--tint-hover);
+}
+.item.selected {
+  background-color: var(--tint-hover);
+}
+.item.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.item.danger {
+  color: var(--sep-danger-color);
+}
+.item.danger:hover,
+.item.danger.focused {
+  background-color: var(--danger-soft-bg);
+}
+.item.danger:active {
+  background-color: var(--danger-soft-bg-hover);
+} /* 按下：固定浅红纯色，不变暗 */
 
-.itemLeft { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }
-.itemIcon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; opacity: 0.75; }
-.itemTextContainer { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
-.itemLabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 400; }
-.itemSublabel { font-size: 11px; color: var(--sep-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+.itemLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.itemIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+.itemTextContainer {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.itemLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 400;
+}
+.itemSublabel {
+  font-size: 11px;
+  color: var(--sep-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
+}
 
-.itemRight { display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-left: 6px; }
-.badge { font-size: 10px; font-weight: 500; padding: 1px 5px; border-radius: var(--radius-s); background: var(--sep-bg-input); color: var(--sep-text-secondary); }
-.shortcut { font-size: 10.5px; font-family: var(--sep-font-mono, monospace); color: var(--sep-text-muted); }
-.submenuChevron { color: var(--sep-text-muted); }
-.chevronIcon { transition: transform 0.22s cubic-bezier(0.22, 1.25, 0.36, 1); color: var(--sep-text-muted); }
-.chevronRotated { transform: rotate(90deg); }
-.checkIcon { color: var(--sep-accent-check); }
-.trailingActionWrapper { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; z-index: 2; }
+.itemRight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+.badge {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 5px;
+  border-radius: var(--radius-s);
+  background: var(--sep-bg-input);
+  color: var(--sep-text-secondary);
+}
+.shortcut {
+  font-size: 10.5px;
+  font-family: var(--sep-font-mono, monospace);
+  color: var(--sep-text-muted);
+}
+.submenuChevron {
+  color: var(--sep-text-muted);
+}
+.chevronIcon {
+  transition: transform var(--duration-normal) var(--ease-emphasized);
+  color: var(--sep-text-muted);
+}
+.chevronRotated {
+  transform: rotate(90deg);
+}
+.checkIcon {
+  color: var(--sep-accent-check);
+}
+.trailingActionWrapper {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  z-index: 2;
+}
 
 /* CSS Grid 0fr -> 1fr 原地平滑折叠手风琴容器 */
-.collapsibleSection { display: flex; flex-direction: column; width: 100%; }
-.collapsibleContent { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.22s cubic-bezier(0.22, 1.25, 0.36, 1); overflow: hidden; }
-.collapsibleContent.isExpanded { grid-template-rows: 1fr; }
-.collapsibleInner { min-height: 0; display: flex; flex-direction: column; gap: 2px; padding: 2px 0 2px 8px; }
+.collapsibleSection {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.collapsibleContent {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--transition-accordion);
+  overflow: hidden;
+}
+.collapsibleContent.isExpanded {
+  grid-template-rows: 1fr;
+}
+.collapsibleInner {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 0 2px 8px;
+}
 
 /* Safe-Aim 级联二级子菜单 (Outer 8px -> Padding 4px -> Item 4px) */
 .cascadeSubmenu {
@@ -181,5 +339,13 @@
   outline: none;
   box-sizing: border-box;
 }
-.cascadeSubmenu.flipLeft { left: auto; right: calc(100% + 4px); }
-.cascadeSubmenu .item { border-radius: var(--radius-s); min-height: 26px; padding: 3px 6px; font-size: 12.5px; }
+.cascadeSubmenu.flipLeft {
+  left: auto;
+  right: calc(100% + 4px);
+}
+.cascadeSubmenu .item {
+  border-radius: var(--radius-s);
+  min-height: 26px;
+  padding: 3px 6px;
+  font-size: 12.5px;
+}

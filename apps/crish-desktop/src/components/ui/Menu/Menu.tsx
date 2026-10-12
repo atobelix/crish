@@ -135,6 +135,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
         if (shouldSuppressMenuReopen(triggerEl)) {
           return;
         }
+        layerStackService.evictExclusivePeersForId(menuId);
       }
       if (!isControlled) {
         setInternalOpen(nextOpen);
@@ -188,7 +189,15 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
         onSubmenuCollapse: cascade?.onSubmenuCollapse,
       });
     },
-    [isOpen, options, focusedIndex, onSelect, handleOpenChange, onKeyDown, cascade]
+    [
+      isOpen,
+      options,
+      focusedIndex,
+      onSelect,
+      handleOpenChange,
+      onKeyDown,
+      cascade,
+    ]
   );
 
   useEffect(() => {
@@ -404,7 +413,10 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
                       }}
                     >
                       {opt.icon != null ? (
-                        <span className={styles.menuItemIcon} aria-hidden="true">
+                        <span
+                          className={styles.menuItemIcon}
+                          aria-hidden="true"
+                        >
                           {opt.icon}
                         </span>
                       ) : null}
@@ -414,7 +426,9 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
                           <span className={styles.desc}>{opt.description}</span>
                         </div>
                       ) : (
-                        <span className={styles.menuItemLabel}>{opt.label}</span>
+                        <span className={styles.menuItemLabel}>
+                          {opt.label}
+                        </span>
                       )}
                       {opt.hint != null && !opt.description ? (
                         <span className={styles.menuItemHint}>{opt.hint}</span>

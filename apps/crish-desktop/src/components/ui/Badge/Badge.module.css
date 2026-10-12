@@ -19,7 +19,10 @@
   height: var(--badge-h);
   padding: 0 var(--badge-px);
   gap: var(--space-1);
-  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-family:
+    'Segoe UI',
+    -apple-system,
+    var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
   font-size: var(--badge-fs);
@@ -137,7 +140,7 @@
   color: inherit;
   cursor: pointer;
   opacity: 0.7;
-  transition: opacity var(--transition-micro) ease;
+  transition: opacity var(--transition-micro);
 }
 
 .removeButton:hover {

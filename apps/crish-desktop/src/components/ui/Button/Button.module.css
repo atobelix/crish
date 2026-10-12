@@ -41,8 +41,8 @@
   cursor: pointer;
   outline: none;
   transition:
-    border-color var(--transition-micro) ease-out,
-    box-shadow var(--transition-micro) ease-out;
+    border-color var(--transition-micro),
+    box-shadow var(--transition-micro);
 }
 
 /* 物理微光交互层 (Opacity Transition) */
@@ -54,7 +54,7 @@
   background-color: var(--btn-hover-overlay);
   opacity: 0;
   pointer-events: none;
-  transition: opacity var(--transition-micro) ease-out;
+  transition: opacity var(--transition-micro);
 }
 
 .button:where(:hover:not(:disabled):not([aria-disabled='true']))::before {
@@ -69,8 +69,13 @@
 /* 焦点环：严格遵循 AGENTS.md §13 (3%~10% 克制软灰) */
 .button:where(:focus-visible) {
   outline: none;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 90%,
+    var(--text-primary) 10%
+  );
 }
 
 .button:where(:disabled, [aria-disabled='true']) {
@@ -131,9 +136,18 @@
   --btn-bg: var(--brand);
   --btn-fg: var(--text-on-accent);
   --btn-border: var(--brand);
-  --btn-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 12%, transparent);
-  --btn-hover-overlay: color-mix(in srgb, var(--text-on-accent) 15%, transparent);
-  --btn-active-overlay: color-mix(in srgb, var(--shadow-color) 15%, transparent);
+  --btn-shadow: 0 1px 2px
+    color-mix(in srgb, var(--shadow-color) 12%, transparent);
+  --btn-hover-overlay: color-mix(
+    in srgb,
+    var(--text-on-accent) 15%,
+    transparent
+  );
+  --btn-active-overlay: color-mix(
+    in srgb,
+    var(--shadow-color) 15%,
+    transparent
+  );
 }
 
 /* Secondary：纯白实体卡片 + 精致发丝边框 + 低空微阴影
@@ -151,8 +165,10 @@
 }
 
 /* 深色模式：精准抬升灰度明度，塑造清晰高对比度的暗色实体纸片感知 */
-:global(html[data-theme='dark']) .button:where(.buttonSecondary, [data-variant='secondary']),
-:global(.theme-dark) .button:where(.buttonSecondary, [data-variant='secondary']) {
+:global(html[data-theme='dark'])
+  .button:where(.buttonSecondary, [data-variant='secondary']),
+:global(.theme-dark)
+  .button:where(.buttonSecondary, [data-variant='secondary']) {
   /* 次级按钮底色走主题 token（深色稍亮于所在层，heson 2026-10-11；浅色 = bg-card 不变） */
   --btn-bg: var(--button-secondary-bg, var(--bg-card));
   --btn-fg: var(--text-primary);
@@ -190,7 +206,9 @@
 
 .button:where(.buttonDanger, [data-variant='danger']) {
   --btn-bg: transparent;
-  --btn-fg: var(--danger-fg); /* 固定 danger 红；hover / 按下底为固定浅红纯色（heson 2026-10-11） */
+  --btn-fg: var(
+    --danger-fg
+  ); /* 固定 danger 红；hover / 按下底为固定浅红纯色（heson 2026-10-11） */
   --btn-border: transparent;
   --btn-shadow: none;
   --btn-hover-overlay: var(--danger-soft-bg);
@@ -272,7 +290,8 @@
   flex-shrink: 0;
 }
 
-.touchExpand {}
+.touchExpand {
+}
 
 /* 触控热区安全管理：常规紧凑按钮采用 inset: -2px 0 垂直轻量外延，杜绝左右互叠 */
 .buttonXs::after,
@@ -313,7 +332,7 @@
   border-radius: 50%;
   border: var(--border-width-emphasis) solid currentColor;
   border-top-color: transparent;
-  animation: button-spin var(--transition-spin) infinite linear;
+  animation: button-spin var(--transition-spin) infinite;
   flex-shrink: 0;
 }
 

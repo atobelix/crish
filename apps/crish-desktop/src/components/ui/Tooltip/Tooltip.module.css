@@ -5,6 +5,7 @@
   position: fixed;
   z-index: var(--z-tooltip);
   pointer-events: none;
+  will-change: transform, opacity;
 }
 
 .tooltipEnter {
@@ -23,7 +24,7 @@
 @keyframes tooltip-enter {
   from {
     opacity: 0;
-    transform: var(--tooltip-translate, translate(0)) scale(0.95);
+    transform: var(--tooltip-translate, translate(0)) scale(0.985);
   }
   to {
     opacity: 1;
@@ -38,7 +39,7 @@
   }
   to {
     opacity: 0;
-    transform: var(--tooltip-translate, translate(0)) scale(0.95);
+    transform: var(--tooltip-translate, translate(0)) scale(0.985);
   }
 }
 

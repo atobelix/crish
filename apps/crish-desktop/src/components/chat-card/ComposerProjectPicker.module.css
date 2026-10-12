@@ -43,3 +43,21 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.chevron {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  transition:
+    transform var(--transition-chevron),
+    color var(--transition-micro);
+  will-change: transform;
+}
+
+.projectPill:hover .chevron {
+  color: var(--text-secondary);
+}
+
+.projectPill[aria-expanded='true'] .chevron {
+  transform: rotate(180deg);
+  color: var(--text-primary);
+}

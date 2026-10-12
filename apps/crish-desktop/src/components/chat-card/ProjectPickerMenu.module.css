@@ -102,4 +102,7 @@
   background: var(--sep-bg-panel-solid, var(--bg-elevated));
   box-shadow: var(--sep-shadow);
   padding: 4px;
+  transform-origin: left top;
+  animation: crish-popover-enter 120ms var(--ease-emphasized) forwards;
+  will-change: transform, opacity;
 }

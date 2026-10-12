@@ -56,11 +56,7 @@ export function ComboboxContent({
 
   if (!ctx.open) return null;
 
-  const contentClass = [
-    styles.content,
-    styles[`size-${ctx.size}`],
-    className,
-  ]
+  const contentClass = [styles.content, styles[`size-${ctx.size}`], className]
     .filter(Boolean)
     .join(' ');
 
@@ -82,6 +78,7 @@ export function ComboboxContent({
       onWheel={handleWheel}
       data-slot="combobox-content"
       data-floating-layer="true"
+      data-positioned={position.isPositioned ? 'true' : 'false'}
       data-side={position.side}
       data-align={position.align}
       data-state={ctx.open ? 'open' : 'closed'}
@@ -90,5 +87,7 @@ export function ComboboxContent({
     </div>
   );
 
-  return resolvedContainer ? createPortal(contentNode, resolvedContainer) : contentNode;
+  return resolvedContainer
+    ? createPortal(contentNode, resolvedContainer)
+    : contentNode;
 }

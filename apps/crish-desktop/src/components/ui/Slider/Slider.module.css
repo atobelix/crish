@@ -47,7 +47,7 @@
   height: 100%;
   background-color: var(--brand);
   border-radius: inherit;
-  transition: width var(--transition-micro) ease-out;
+  transition: width var(--transition-micro);
 }
 
 /* 12px        (border-radius: 50%    ) */
@@ -66,8 +66,8 @@
   box-sizing: border-box;
   pointer-events: none;
   transition:
-    transform var(--transition-micro) ease,
-    box-shadow var(--transition-micro) ease;
+    transform var(--transition-micro),
+    box-shadow var(--transition-micro);
 }
 
 /*             */
@@ -77,6 +77,11 @@
 
 /*    Focus Ring AGENTS.md   13            3%~10%  */
 .slider:focus-visible .thumb {
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 90%,
+    var(--text-primary) 10%
+  );
 }

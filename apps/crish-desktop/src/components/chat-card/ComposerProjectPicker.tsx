@@ -18,6 +18,8 @@ import {
 } from '../../api/projectStore';
 import { ProjectPickerMenu } from './ProjectPickerMenu';
 import { AppIcon } from '../ui/icons/index';
+import { useScopedSessionId } from '../../contexts/LeafScopeContext';
+import { useDraftFolder } from '../../store/storeAccess';
 
 /** 菜单预估高度（搜索 + 列表 180 上限 + 添加项 + 内衬），用于打开瞬间决定方向 */
 const PANEL_ESTIMATED_HEIGHT_PX = 300;
@@ -37,9 +39,12 @@ function resolvePanelSide(trigger: HTMLElement | null): PanelSide {
   return below >= need || below >= above ? 'bottom' : 'top';
 }
 
-/** 聚焦同一 composer 的输入区（富文本 contenteditable 或 textarea 兜底） */
+/** 聚焦同一 composer 的输入区（限定在当前分屏容器内） */
 function focusComposerInput(trigger: HTMLElement | null): void {
-  const host = trigger?.closest('[data-composer-wrapper]');
+  const host =
+    trigger?.closest('[data-composer-wrapper]') ||
+    trigger?.closest('[data-leaf-panel]') ||
+    trigger?.closest('.chatBody');
   const el = host?.querySelector<HTMLElement>(
     '[data-composer-card] [contenteditable="true"], [data-composer-card] textarea:not([disabled])'
   );
@@ -93,6 +98,7 @@ export function resolveProjectForScope(
 }
 
 export interface ComposerProjectPickerProps {
+  sessionId?: string | null;
   /** 窗格绑定的项目作用域 Key（支持 project.id / folder / GENERAL_FOLDER） */
   workspaceKey?: string | null;
   open: boolean;
@@ -101,11 +107,19 @@ export interface ComposerProjectPickerProps {
 }
 
 export const ComposerProjectPicker: React.FC<ComposerProjectPickerProps> = ({
+  sessionId: sessionIdProp,
   workspaceKey,
   open,
   onOpenChange,
   onProjectChanged,
 }) => {
+  const scopedSessionId = useScopedSessionId(sessionIdProp);
+  const draftFolder = useDraftFolder(scopedSessionId);
+  const effectiveWorkspaceKey =
+    workspaceKey !== undefined && workspaceKey !== null
+      ? workspaceKey
+      : draftFolder || null;
+
   // 不给 trigger 直挂 ref（面板 cloneElement 读 element.ref 在 React 19 告警），经外层容器取
   const rootRef = useRef<HTMLDivElement | null>(null);
   const getTrigger = () =>
@@ -160,7 +174,9 @@ export const ComposerProjectPicker: React.FC<ComposerProjectPickerProps> = ({
     if (!active || active === document.body) trigger?.focus();
   }, []);
 
-  const { project, displayName } = resolveProjectForScope(workspaceKey);
+  const { project, displayName } = resolveProjectForScope(
+    effectiveWorkspaceKey
+  );
   const ariaLabel = project
     ? `当前项目：${displayName}，点击切换`
     : getWorkspacePath()
@@ -170,6 +186,7 @@ export const ComposerProjectPicker: React.FC<ComposerProjectPickerProps> = ({
   return (
     <div ref={rootRef} className={styles.root}>
       <ProjectPickerMenu
+        sessionId={scopedSessionId}
         open={open}
         onOpenChange={handleOpenChange}
         onChanged={handleChanged}
@@ -193,7 +210,12 @@ export const ComposerProjectPicker: React.FC<ComposerProjectPickerProps> = ({
         >
           <AppIcon name="folder" size={12} aria-hidden />
           <span className={styles.projectName}>{displayName}</span>
-          <AppIcon name="chevron-down" size={12} aria-hidden />
+          <AppIcon
+            name="chevron-down"
+            size={12}
+            className={styles.chevron}
+            aria-hidden
+          />
         </Button>
       </ProjectPickerMenu>
     </div>

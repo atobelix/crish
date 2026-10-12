@@ -7,6 +7,8 @@ import { SmartPanelList } from './SmartPanelList';
 import { SmartPanelItem } from './SmartPanelItem';
 import { SafeAimEngine } from '../internal/SafeAimEngine';
 import { useLayerRegistration } from '../internal/layer-registration/useLayerRegistration';
+import { layerStackService } from '../internal/layer-stack/LayerStackManager';
+import { shouldSuppressMenuReopen } from '../Menu/menuOpenGuard';
 import { DialogOverlayContext } from '../Dialog/dialogOverlayContext';
 import { Tooltip } from '../Tooltip/Tooltip';
 import menuStyles from '../Menu/Menu.module.css';
@@ -33,7 +35,7 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   onClose,
   onMouseEnter,
   onMouseLeave,
-  triggerMode = 'both',
+  triggerMode = 'click',
   renderItem,
   children,
 }) => {
@@ -76,6 +78,16 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
       clearHoverTimers();
+      if (nextOpen) {
+        if (layerStackService.wasLayerDismissedThisGesture(panelId)) {
+          return;
+        }
+        const triggerEl = anchor?.current ?? triggerRef.current;
+        if (shouldSuppressMenuReopen(triggerEl)) {
+          return;
+        }
+        layerStackService.evictExclusivePeersForId(panelId);
+      }
       if (!isControlled) {
         setInternalOpen(nextOpen);
       }
@@ -100,6 +112,8 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
       onOpen,
       onClose,
       safeAim,
+      panelId,
+      anchor,
     ]
   );
 

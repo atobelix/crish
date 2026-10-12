@@ -28,11 +28,19 @@
 
 .trigger:focus-visible {
   outline: none;
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 90%,
+    var(--text-primary) 10%
+  );
 }
 
 .trigger.open {
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 90%,
+    var(--text-primary) 10%
+  );
 }
 
 .trigger:disabled {
@@ -107,7 +115,9 @@
   flex-shrink: 0;
   color: var(--text-tertiary);
   margin-left: auto;
-  transition: transform var(--transition-micro), color var(--transition-micro);
+  transition:
+    transform var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .trigger:hover:not(:disabled) .chevron {
@@ -124,7 +134,9 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: background-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    background-color var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .clearBtn:hover {
@@ -165,7 +177,21 @@
   min-width: min(160px, calc(100vw - 16px));
   max-width: min(420px, calc(100vw - 16px));
   width: var(--anchor-width, auto);
-  animation: cds-popover-enter var(--transition-popover-enter) forwards;
+  animation: none;
+  will-change: transform, opacity;
+}
+
+.content[data-state='open'][data-positioned='true'] {
+  animation: crish-popover-enter var(--transition-popover-enter) forwards;
+}
+
+.content[data-state='open'][data-positioned='true'][data-side='top'] {
+  animation-name: crish-popover-enter-top;
+}
+
+.content[data-state='closed'] {
+  animation: crish-popover-exit var(--transition-popover-exit) forwards;
+  pointer-events: none;
 }
 
 /* 同心圆角：外圆角 = 内圆角（选项 --sep-item-radius = --radius-m 8px）+ 内边距（review P2-4） */

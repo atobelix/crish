@@ -273,27 +273,36 @@ export class LayerStackManager {
    */
   private evictExclusivePeers(incoming: LayerRegistration): void {
     if (!isExclusivePeerLayerType(incoming.type)) return;
-
     const incomingAnchor = resolveElement(incoming.anchorRef);
     const incomingEl = resolveElement(incoming.elementRef);
-    const snapshot = this.layers.slice();
 
-    for (const peer of snapshot) {
-      if (peer.id === incoming.id) continue;
-      if (!isExclusivePeerLayerType(peer.type)) continue;
-      if (incoming.parentId === peer.id) continue;
-      if (peer.parentId === incoming.id) continue;
+    for (const peer of this.layers.slice()) {
+      if (peer.id === incoming.id || !isExclusivePeerLayerType(peer.type))
+        continue;
+      if (incoming.parentId === peer.id || peer.parentId === incoming.id)
+        continue;
       if (this.hasAncestor(incoming.parentId, peer.id)) continue;
 
       const peerEl = resolveElement(peer.elementRef);
-      if (peerEl && incomingAnchor && peerEl.contains(incomingAnchor)) {
+      if (
+        peerEl &&
+        ((incomingAnchor && peerEl.contains(incomingAnchor)) ||
+          (incomingEl && peerEl.contains(incomingEl)))
+      ) {
         continue;
       }
-      if (peerEl && incomingEl && peerEl.contains(incomingEl)) {
-        continue;
-      }
-
       this.dismissLayer(peer.id, 'programmatic');
+    }
+  }
+
+  /**
+   * 主动驱逐指定 ID 之外的所有同级互斥浮层（dropdown-menu, popover, context-menu）
+   */
+  public evictExclusivePeersForId(incomingId: string): void {
+    for (const peer of this.layers.slice()) {
+      if (peer.id !== incomingId && isExclusivePeerLayerType(peer.type)) {
+        this.dismissLayer(peer.id, 'programmatic');
+      }
     }
   }
 
@@ -448,16 +457,23 @@ export class LayerStackManager {
       return;
     }
 
-    window.addEventListener('keydown', this.handleGlobalKeyDown, true);
-    window.addEventListener('pointerdown', this.handleGlobalPointerDown, true);
-    window.addEventListener('pointerup', this.handleGlobalPointerUp, true);
-    document.addEventListener('keydown', this.handleGlobalKeyDown, true);
-    document.addEventListener(
-      'pointerdown',
-      this.handleGlobalPointerDown,
-      true
-    );
-    document.addEventListener('pointerup', this.handleGlobalPointerUp, true);
+    for (const target of [window, document]) {
+      target.addEventListener(
+        'keydown',
+        this.handleGlobalKeyDown as EventListener,
+        true
+      );
+      target.addEventListener(
+        'pointerdown',
+        this.handleGlobalPointerDown as EventListener,
+        true
+      );
+      target.addEventListener(
+        'pointerup',
+        this.handleGlobalPointerUp as EventListener,
+        true
+      );
+    }
     this.isListening = true;
   }
 

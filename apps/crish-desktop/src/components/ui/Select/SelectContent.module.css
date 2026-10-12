@@ -20,18 +20,21 @@
   min-width: max(var(--anchor-width, 160px), 220px);
   max-width: min(440px, calc(100vw - 16px));
   width: max(calc(var(--anchor-width, 160px) + 20px), 220px);
-  animation: selectPopEnter 140ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: none;
+  will-change: transform, opacity;
 }
 
-@keyframes selectPopEnter {
-  0% {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
+.content[data-state='open'][data-positioned='true'] {
+  animation: crish-popover-enter var(--transition-popover-enter) forwards;
+}
+
+.content[data-state='open'][data-positioned='true'][data-side='top'] {
+  animation-name: crish-popover-enter-top;
+}
+
+.content[data-state='closed'] {
+  animation: crish-popover-exit var(--transition-popover-exit) forwards;
+  pointer-events: none;
 }
 
 /* 尺寸档位（同心曲率：外圆角 = 内圆角 + 内边距） */
@@ -43,7 +46,9 @@
 
 .contentMd,
 .size-md {
-  border-radius: calc(var(--radius-m) + 6px); /* 内边距 5→6px，避免奇数圆角（DIM-02 ratchet） */
+  border-radius: calc(
+    var(--radius-m) + 6px
+  ); /* 内边距 5→6px，避免奇数圆角（DIM-02 ratchet） */
   padding: 6px;
 }
 

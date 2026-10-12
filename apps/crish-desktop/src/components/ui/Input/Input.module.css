@@ -39,8 +39,8 @@
   appearance: none;
   -webkit-appearance: none;
   transition:
-    border-color var(--transition-micro) ease,
-    background var(--transition-micro) ease;
+    border-color var(--transition-snappy),
+    background var(--transition-snappy);
 }
 
 .input::placeholder {
@@ -48,9 +48,14 @@
 }
 
 .input:where(:hover:not(:focus):not(:focus-visible):not(:disabled)) {
-  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 92%,
+    var(--text-primary) 8%
+  );
   /* hover = 输入档上的统一透明叠加 */
-  background: linear-gradient(var(--tint-hover), var(--tint-hover)), var(--surface-input);
+  background:
+    linear-gradient(var(--tint-hover), var(--tint-hover)), var(--surface-input);
 }
 
 /* 焦点激活态：底色回到输入档（不叠 hover），只靠 token 化的描边加深表达焦点；无论 hover 与否零色差，严禁 box-shadow 粗描边环与加黑 */
@@ -58,7 +63,11 @@
   outline: none;
   background: var(--surface-input);
   box-shadow: none;
-  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 92%,
+    var(--text-primary) 8%
+  );
 }
 
 .input:where(:disabled) {
@@ -161,8 +170,8 @@
   color: var(--text-tertiary);
   cursor: pointer;
   transition:
-    background var(--transition-micro) ease,
-    color var(--transition-micro) ease;
+    background var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .inputWrap[data-size='xs'] .inputAction,
