@@ -1,87 +1,155 @@
-@starting-style {
-  .is-entering {
-    opacity: 0;
-  }
-}
+/* ─────────────────────────────────────────────────────────────
+ * 设置弹窗（ui/Dialog 居中模态）
+ * 三层底色：
+ *   外层 --surface-outer：面板底 = 左侧导航 + 顶部标题行（与主界面左栏 / 顶栏同色）。
+ *     用不透明外层色：弹窗下面是主界面 + 遮罩，透不出系统云母，半透明只会透出压暗后的主界面。
+ *   主层 --surface-main：右侧内容区底。
+ *   输入层 --surface-input：内容区里的设置项卡片 / 分组块（经 --bg-card 作用域覆盖）、输入框。
+ * 层次只靠三层底色区分：弹窗内不画卡片边框、分隔线、顶栏底线、侧栏右线。
+ * ───────────────────────────────────────────────────────────── */
 
-/* 1. 全屏设置容器 */
-.settingsCover {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--shell-chrome-bg, var(--bg-secondary));
+/* 1. 面板：尺寸自适应（最小窗口 1040×720 下 976×656），圆角 + 轻阴影，无外框线。
+ * [role] 抬高特异性，稳定压过 Dialog 基座的 .dialog / 尺寸档（与 CSS 加载顺序无关） */
+[role='dialog'].settingsModal {
+  /* 无边框总开关：弹窗内卡片 / 分组 / 分隔线的边框与卡片投影。
+   * 想加回边框：把 --settings-card-border 改为 var(--border-subtle)；
+   * 想加回卡片投影：把 --settings-card-shadow 改为 var(--shadow-sm)。只改这两行。 */
+  --settings-card-border: transparent;
+  --settings-card-shadow: none;
+  /* 表单控件静止描边取真实发丝线（此处 --border-subtle 尚未被下面的壳层覆盖） */
+  --settings-control-border: var(--border-subtle);
+  --settings-modal-max-width: 1040px; /* 组件尺寸语义：本地自包含 */
+  --settings-modal-max-height: 760px; /* 组件尺寸语义：本地自包含 */
+  --settings-modal-gutter: 64px; /* 与视口四周的留白合计（每边 32） */
+  width: min(
+    var(--settings-modal-max-width),
+    calc(100vw - var(--settings-modal-gutter))
+  );
+  height: min(
+    var(--settings-modal-max-height),
+    calc(100vh - var(--settings-modal-gutter))
+  );
+  max-width: none;
+  max-height: none;
+  background: var(--surface-outer);
+  border: none;
+  box-shadow: var(--shadow-2xl);
+  overflow: hidden;
   color: var(--text-primary);
   font-family: var(--font-sans);
-  pointer-events: auto;
-  isolation: isolate;
+}
+
+/* Dialog 内容区：去掉基座默认内边距与滚动，交给内部两栏布局 */
+.settingsModal .settingsModalBody {
+  display: flex;
+  min-height: 0;
+  padding: 0;
   overflow: hidden;
 }
 
-.settingsPanel {
+/* 2. 两栏壳：左导航贯通 + 右侧（标题行 + 内容区），与主界面「左栏贯通 + 右侧顶行」同拓扑。
+ * 在这里把边框 / 卡片投影改接到上面的总开关（子元素上覆盖，避免与开关自引用成环） */
+.settingsShell {
+  --border-subtle: var(--settings-card-border);
+  --shadow-sm: var(--settings-card-shadow);
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 输入框 / 多行输入保留自身静止描边（可访问性轮廓）：白卡上的白输入框不能只剩占位符。
+ * 只补静止态；hover / focus 描边与焦点环仍由控件自身样式负责，错误态（更高特异性）不受影响 */
+.settingsShell :is(input, textarea):where(:not(:hover):not(:focus)) {
+  border-color: var(--settings-control-border);
+}
+
+.settingsNav {
+  width: var(--settings-nav-width);
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
-  height: 100%;
-  width: 100%;
   min-height: 0;
+  padding: var(--space-3) var(--space-2) var(--space-3) var(--space-2_5);
+  background: var(--surface-outer);
+  box-sizing: border-box;
   overflow: hidden;
-  background: var(--shell-chrome-bg, var(--bg-secondary));
-  color: var(--text-secondary);
-  font-family: var(--font-sans);
 }
 
-/* 2. 顶栏操作区 (36px 硬件对齐) */
-.coverHeader {
+.settingsMain {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 3. 顶部标题行：「设置 / 当前分类」+ 关闭（只关设置）。弹窗不可拖窗口，无拖拽区 */
+.settingsHeader {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: var(--space-2);
   height: var(--header-height);
   min-height: var(--header-height);
-  /* 右侧 0：窗控按钮铺满顶栏高度并贴窗口右缘（Win11 标题栏规范） */
-  padding: 0 0 0 var(--space-3);
-  /* border-bottom: 0.5px solid var(--border-color); */
-  background: var(--shell-chrome-bg, var(--bg-secondary));
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 var(--space-2) 0 var(--space-3);
+  background: var(--surface-outer);
   flex-shrink: 0;
   box-sizing: border-box;
-  -webkit-app-region: drag;
 }
 
-.coverHeaderSpacer {
-  flex: 1;
+.settingsTitle {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1_5);
+  flex: 1 1 auto;
   min-width: 0;
-  height: 100%;
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-ui);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.navBack {
+.settingsTitleSep {
+  color: var(--text-tertiary);
+}
+
+.settingsTitleCurrent {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.settingsClose {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  height: var(--control-height-lg);
-  padding: 0 var(--space-3) 0 var(--space-2_5);
-  border: var(--hairline-width) solid transparent;
-  border-radius: var(--radius-xl);
-  background: transparent;
-  color: var(--text-secondary);
-  font-family: inherit;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-normal);
-  cursor: pointer;
+  justify-content: center;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
   flex-shrink: 0;
-  box-shadow: none;
-  width: 100%;
-  text-align: left;
-  margin-bottom: var(--space-1);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition:
+    background var(--transition-micro),
+    color var(--transition-micro);
 }
 
-.navBack:hover {
+.settingsClose:hover {
   background: var(--tint-hover);
   color: var(--text-primary);
-  border-color: transparent;
+}
+
+.settingsClose:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .sidebarTopActions {
@@ -90,19 +158,6 @@
   gap: var(--space-1_5);
   margin-bottom: var(--space-1);
 }
-
-.sidebarBackBtn {
-  width: 100%;
-  justify-content: flex-start;
-  color: var(--text-secondary);
-  border-radius: var(--radius-btn);
-}
-
-.sidebarBackBtn:hover {
-  color: var(--text-primary);
-  background: var(--tint-hover);
-}
-
 /* ─────────────────────────────────────────────────────────────
  * 形态 ①：侧边栏无边框透明纯净型（图 1 标号 ① 锁定样式）
  * 与主侧栏（SidebarNav）100% 共享无边框、无底框形式
@@ -224,35 +279,6 @@
   padding: var(--space-3) var(--space-2_5);
 }
 
-/* 3. 布局主体 */
-.coverBody {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: row;
-  margin: 0;
-  padding: 0;
-  gap: 0;
-  background: var(--shell-chrome-bg, var(--bg-secondary));
-  overflow: hidden;
-}
-
-/* 4. 侧栏导航 (240px) */
-.coverNav {
-  width: var(--settings-sidebar-width);
-  flex-shrink: 0;
-  height: 100%;
-  background: var(--shell-chrome-bg, var(--bg-secondary));
-  border-right: 1px solid var(--border-subtle);
-  padding: var(--space-2) 0 var(--space-2) var(--space-2_5);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 0;
-  box-sizing: border-box;
-}
-
 .navGroup {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);
@@ -262,14 +288,16 @@
   text-transform: none;
 }
 
-/* 5. 主内容功能区：与主对话卡片 100% 共享纯正工作台纸面 */
+/* 4. 内容区（滚动容器；类名 coverContent 是 overlay-scrollbar 细条出口的命中钩子，勿改名）
+ * 底色 = 主层；外层色从左、上包住它，左上圆角呼应主界面内容矩形。
+ * --bg-card 在此作用域改指输入层：各设置项卡片 / 分组块（消费 --bg-card）= 白 */
 .coverContent {
+  --bg-card: var(--surface-input);
   flex: 1;
   min-width: 0;
   min-height: 0;
-  height: 100%;
   margin: 0;
-  border-radius: var(--radius-lg) 0 0 0;
+  border-radius: var(--radius-l) 0 0 0;
   border: none;
   box-shadow: none;
   padding: var(--space-6) var(--space-8) var(--space-8);
@@ -277,7 +305,7 @@
   flex-direction: column;
   gap: var(--space-3_5);
   position: relative;
-  background: var(--bg-card);
+  background: var(--surface-main);
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
@@ -291,49 +319,54 @@
  * 2. overscroll-behavior: none 阻断任何向外溢出的动量
  * 3. padding-bottom 收口为 24px，确保工作区紧凑对称
  * ───────────────────────────────────────────────────────────── */
-.coverContent[data-settings-tab="models"] {
+.coverContent[data-settings-tab='models'] {
   overflow: hidden;
   overscroll-behavior: none;
   padding: var(--space-5) var(--space-8) var(--space-6);
 }
 
-.sidebarTab,
+/* 5. 导航项：与主侧栏 SidebarNav .navItem 同规格（字号 base、高 control-height、
+ * 选中态 = --sidebar-active 叠加，无白底 / 边框 / 阴影） */
 .sidebarTab {
   display: flex;
   align-items: center;
   justify-content: flex-start;
   gap: var(--space-2);
-  padding: var(--space-1_5) var(--space-2_5);
-  border-radius: var(--radius-lg);
-  border: var(--hairline-width) solid transparent;
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-normal);
-  text-align: left;
   width: 100%;
   min-width: unset;
-  height: auto;
+  height: var(--control-height);
+  min-height: var(--control-height);
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-lg);
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  text-align: left;
+  cursor: pointer;
   box-shadow: none;
+  box-sizing: border-box;
   transition:
     background var(--transition-micro),
     color var(--transition-micro);
-  box-sizing: border-box;
-  min-height: var(--control-height);
 }
 
 .sidebarTab:hover {
-  background: var(--tint-hover);
+  background: var(--sidebar-hover);
   color: var(--text-primary);
 }
 
-.sidebarTab.active {
-  background: var(--tab-active-bg, var(--bg-card));
-  border: var(--hairline-width) solid var(--border-subtle);
-  box-shadow: var(--shadow-sm);
+.sidebarTab.active,
+.sidebarTab.active:hover {
+  background: var(--sidebar-active);
   color: var(--text-primary);
-  font-weight: var(--font-weight-medium);
+}
+
+.sidebarTab:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .sidebarTabIco {
@@ -343,38 +376,16 @@
   width: calc(var(--icon-size) + var(--space-1));
   height: calc(var(--icon-size) + var(--space-1));
   flex-shrink: 0;
-  color: inherit;
-  opacity: 0.88;
+  color: var(--text-secondary);
 }
 
+.sidebarTab:hover .sidebarTabIco,
 .sidebarTab.active .sidebarTabIco {
-  opacity: 1;
-}
-
-.sidebarTab.active svg {
   color: var(--text-primary);
 }
 
-/* 全屏壳层叠只挂 overlay；内部 Menu portal 进此节点。
+/* 弹窗遮罩壳：内部 Menu / Select portal 进此节点（DialogOverlayContext）。
  * popper wrapper 统一继承全局 --z-dropdown */
-.settingsCoverOverlay {
-}
-
-.settingsCoverOverlay :global([data-radix-popper-content-wrapper]) {
+.settingsModalOverlay :global([data-radix-popper-content-wrapper]) {
   z-index: var(--z-dropdown);
-}
-
-/*           */
-.settingsDialogBody {
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--shell-chrome-bg, var(--bg-secondary));
-  color: var(--text-primary);
-  font-family: var(--font-sans);
 }

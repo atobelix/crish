@@ -539,25 +539,46 @@ fn pairing_gate_empty_name_call_excluded() {
     );
 }
 
-/// validate 在 debug_assertions 下对孤儿立即 panic（Fail-Fast，CI 硬阻断）。
-/// Release 下同一输入返回 Err(UnpairedToolCalls)——两种分级行为互斥编译，
-/// 本测试仅覆盖 CI/debug 路径的 panic 语义。
+/// validate 对孤儿返回 Err(UnpairedToolCalls) 并记录结构化日志（Debug 与 Release 统一行为）。
 #[test]
-#[should_panic(expected = "Gemini 导线层校验拦截到孤儿工具调用")]
-fn pairing_gate_validate_panics_on_orphan_in_debug() {
+fn pairing_gate_validate_returns_err_on_orphan() {
     let call = assistant_tool_call("read_file", json!({ "path": "a.txt" }));
     let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_msg("读文件")), Arc::new(call)];
-    let _ = validate_gemini_tool_pairing(&messages);
+    let res = validate_gemini_tool_pairing(&messages);
+    match res {
+        Err(RequestBuildError::UnpairedToolCalls { protocol, orphan_ids }) => {
+            assert_eq!(protocol, "gemini");
+            assert_eq!(orphan_ids, vec!["read_file#0"]);
+        }
+        other => panic!("期望 UnpairedToolCalls 错误，得到：{other:?}"),
+    }
 }
 
-/// build 入口在孤儿输入下 Fail-Closed（Debug 下 panic，与 Anthropic/Chat 轨同构）
-/// 注意：不得经 detect 断言——build 内部 validate 守门会 panic
+/// build 入口在孤儿输入下 Fail-Closed：安全过滤孤儿 functionCall，不发生 panic。
 #[test]
-#[should_panic(expected = "Gemini 导线层校验拦截到孤儿工具调用")]
 fn build_gemini_fail_closed_on_orphan() {
     let call = assistant_tool_call("read_file", json!({ "path": "a.txt" }));
     let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_msg("读文件")), Arc::new(call)];
-    let _ = build_gemini_request_body(&GeminiRequestOptions::default(), &context_for(&messages));
+    let body = build_gemini_request_body(&GeminiRequestOptions::default(), &context_for(&messages));
+    let contents = body["contents"].as_array().expect("contents 必须为数组");
+    let mut found_model = false;
+    for content in contents {
+        if content.get("role").and_then(Value::as_str) == Some("model") {
+            found_model = true;
+            let parts = content["parts"].as_array().expect("model parts 必须为数组");
+            assert_eq!(parts.len(), 1);
+            assert_eq!(parts[0]["text"], WIRE_CONTINUATION_NOTE);
+        }
+        if let Some(parts) = content.get("parts").and_then(Value::as_array) {
+            for part in parts {
+                assert!(
+                    part.get("functionCall").is_none(),
+                    "带毒孤儿 functionCall 必须被过滤掉，不得残留在出站请求体中: {part:?}"
+                );
+            }
+        }
+    }
+    assert!(found_model, "必须包含 model 消息");
 }
 
 /// 成对完整对话经 detect 确认无孤儿（正向回归）

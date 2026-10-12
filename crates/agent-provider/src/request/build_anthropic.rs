@@ -192,9 +192,8 @@ pub fn build_anthropic_request_body(
     let mut messages = to_anthropic_messages(context);
     // W04 · 出站成对性 Fail-Closed 守门（详案 02 §3.4 轨一）：在 messages
     // 序列化完成后、进入请求体前刚性拦截孤儿 tool_use——严禁静默伪造
-    // tool_result 垫片。Debug/CI panic（Fail-Fast 暴露内核断裂）；Release
-    // tracing::error! 后中止组包（绝不产出带毒请求体）。
-    fail_closed_anthropic_pairing_gate(&messages);
+    // tool_result 垫片。过滤带毒孤儿工具调用，安全 Fail-Closed。
+    fail_closed_anthropic_pairing_gate(&mut messages);
     if bp_plan.messages {
         inject_last_message_cache_control(&mut messages);
     }
@@ -240,12 +239,11 @@ pub fn detect_anthropic_unpaired_tool_calls(messages: &[Value]) -> Vec<String> {
 
 /// Anthropic 出站成对性校验入口（详案 02 §3.4 分级守门）。
 ///
-/// - **Debug / CI（`debug_assertions`）**：检测到孤儿 → 立即 panic（Fail-Fast，
-///   迫使开发者在内核层根治，而非在导线层掩盖）；
-/// - **Release**：返回 [RequestBuildError::UnpairedToolCalls]（含排序
-///   `orphan_ids`）并 `tracing::error!` 结构化日志——调用方（会话循环出站
-///   组装处）据此执行「本地合成补齐 → 单次重试组包」；仍失败则标记会话
-///   `wire_pairing_poisoned`。**禁止**在导线层静默插入假 tool_result。
+/// 导线层刚性拦截孤儿工具调用：返回 [RequestBuildError::UnpairedToolCalls]（含排序
+/// `orphan_ids`）并记录 `tracing::error!` 结构化日志——调用方（会话循环出站
+/// 组装处）据此执行「本地合成补齐 → 单次重试组包」；仍失败则标记会话
+/// `wire_pairing_poisoned`。**禁止**在导线层静默插入假 tool_result，也**禁止**
+/// 使用 panic!() 中断进程。
 pub fn validate_anthropic_tool_pairing(messages: &[Value]) -> Result<(), RequestBuildError> {
     let orphan_ids = detect_anthropic_unpaired_tool_calls(messages);
     if orphan_ids.is_empty() {
@@ -255,28 +253,19 @@ pub fn validate_anthropic_tool_pairing(messages: &[Value]) -> Result<(), Request
         protocol: "anthropic",
         orphan_ids,
     };
-    #[cfg(debug_assertions)]
-    {
-        panic!("Anthropic 导线层校验拦截到孤儿工具调用！{err:?}");
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        tracing::error!(
-            target: "agent_provider::wire_pairing",
-            protocol = "anthropic",
-            error = %err,
-            orphan_ids = ?err.orphan_ids(),
-            "导线层刚性拦截带毒请求出站（禁止静默伪造 tool_result；调用方须走补齐重试闭环）"
-        );
-        return Err(err);
-    }
-    #[allow(unreachable_code)]
-    Ok(())
+    tracing::error!(
+        target: "agent_provider::wire_pairing",
+        protocol = "anthropic",
+        error = %err,
+        orphan_ids = ?err.orphan_ids(),
+        "导线层刚性拦截带毒请求出站（禁止静默伪造 tool_result；调用方须走补齐重试闭环）"
+    );
+    Err(err)
 }
 
-/// 出站前从 [RequestBuildContext] 直接成对性预检（不经过 build 入口 panic tripwire）。
+/// 出站前从 [RequestBuildContext] 直接成对性预检（不经过 build 入口）。
 ///
-/// Debug：孤儿 → panic（Fail-Fast）；Release：返回 `Err(UnpairedToolCalls)`。
+/// 孤儿 → 返回 `Err(UnpairedToolCalls)`。
 /// 供 engine_provider 在调用 `build_anthropic_request_body` 前软失败拦截。
 pub fn validate_anthropic_pairing_from_context(
     context: &RequestBuildContext,
@@ -285,22 +274,59 @@ pub fn validate_anthropic_pairing_from_context(
     validate_anthropic_tool_pairing(&messages)
 }
 
-/// build 入口接线的 fail-closed 守门（Debug panic / Release error + 拒绝产出）。
+/// build 入口接线的 fail-closed 守门（安全过滤孤儿 tool_use，绝不产出带毒请求体）。
 ///
 /// `build_anthropic_request_body` 返回签名保持 `Value`（既有 ~100 调用面零
-/// 破坏）：Release 下一旦拦截即 `tracing::error!` 并 panic——语义为「带毒
-/// 请求体绝不静默出站」；会话循环侧须优先捕获 [validate_anthropic_tool_pairing]
-/// 的 `Err(UnpairedToolCalls)` 走补齐重试，正常路径不会抵达本函数的错误分支。
-fn fail_closed_anthropic_pairing_gate(messages: &[Value]) {
+/// 破坏）：拦截到孤儿 tool_use 时 `tracing::error!` 记录并安全过滤掉未配对的 tool_use 块，
+/// 避免 client 进程因 panic 崩溃，同时防止带毒请求出站引发 400 报错。
+fn fail_closed_anthropic_pairing_gate(messages: &mut [Value]) {
     if let Err(err) = validate_anthropic_tool_pairing(messages) {
         tracing::error!(
             target: "agent_provider::wire_pairing",
             protocol = "anthropic",
             error = %err,
             orphan_ids = ?err.orphan_ids(),
-            "build_anthropic 入口守门拦截：拒绝构造带毒请求体"
+            "build_anthropic 入口守门拦截：过滤带毒孤儿工具调用，安全 Fail-Closed"
         );
-        panic!("Anthropic 导线层入口守门拦截到孤儿工具调用（带毒请求体禁止出站）：{err:?}");
+        let orphan_set: std::collections::BTreeSet<&str> =
+            err.orphan_ids().iter().map(|s| s.as_str()).collect();
+        for msg in messages.iter_mut() {
+            if msg.get("role").and_then(Value::as_str) == Some("assistant") {
+                if let Some(content) = msg.get_mut("content").and_then(Value::as_array_mut) {
+                    content.retain(|block| {
+                        if block.get("type").and_then(Value::as_str) == Some("tool_use") {
+                            let id = block.get("id").and_then(Value::as_str).unwrap_or("");
+                            !orphan_set.contains(id)
+                        } else {
+                            true
+                        }
+                    });
+                    let has_text_or_tool = content.iter().any(|block| {
+                        match block.get("type").and_then(Value::as_str) {
+                            Some("tool_use") => true,
+                            Some("text") => block
+                                .get("text")
+                                .and_then(Value::as_str)
+                                .is_some_and(|t| !t.trim().is_empty()),
+                            _ => false,
+                        }
+                    });
+                    if !has_text_or_tool {
+                        content.retain(|block| {
+                            !(block.get("type").and_then(Value::as_str) == Some("text")
+                                && block
+                                    .get("text")
+                                    .and_then(Value::as_str)
+                                    .is_some_and(|t| t.trim().is_empty()))
+                        });
+                        content.push(serde_json::json!({
+                            "type": "text",
+                            "text": WIRE_CONTINUATION_NOTE
+                        }));
+                    }
+                }
+            }
+        }
     }
 }
 

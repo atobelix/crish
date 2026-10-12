@@ -19,11 +19,7 @@ export const UI_SIZE_IDS = [
 export const DEFAULT_UI_SIZE: UiSize = 'medium';
 
 export type { ShellChromeMode };
-export {
-  DEFAULT_SHELL_CHROME,
-  SHELL_CHROME_IDS,
-  parseShellChromeMode,
-};
+export { DEFAULT_SHELL_CHROME, SHELL_CHROME_IDS, parseShellChromeMode };
 
 /** 设置侧栏合法 tab（与 SettingsTabType 同步；openSettings 白名单） */
 export const SETTINGS_TAB_IDS = [
@@ -42,6 +38,7 @@ export const SETTINGS_TAB_IDS = [
   'browser',
   'security',
   'diagnostics',
+  'about',
 ] as const satisfies readonly SettingsTabType[];
 
 export const DEFAULT_SETTINGS_TAB: SettingsTabType = 'profile';

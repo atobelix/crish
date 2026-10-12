@@ -14,6 +14,7 @@ import type {
   DismissReason,
   LayerRegistration,
   LayerTraceRecord,
+  DismissedByPointerSnapshot,
 } from './layerStackTypes';
 import {
   LAYER_TYPE_PRIORITY,
@@ -22,13 +23,16 @@ import {
   resolveElement,
 } from './layerStackTypes';
 import { restoreLayerFocus } from './layerFocusRestore';
+import { LayerStackListeners } from './layerStackListeners';
 
 // 拆分自本文件的子模块 re-export，保证消费方 import 路径不变
+export type { StackListener } from './layerStackListeners';
 export type {
   LayerType,
   DismissReason,
   LayerRegistration,
   LayerTraceRecord,
+  DismissedByPointerSnapshot,
 } from './layerStackTypes';
 
 export class LayerStackManager {
@@ -38,6 +42,8 @@ export class LayerStackManager {
 
   private layers: LayerRegistration[] = [];
   private traceHistory: LayerTraceRecord[] = [];
+  /** 栈变化订阅者（如原生贴靠热区：模态打开时须撤下，避免穿透遮罩） */
+  private readonly stackListeners = new LayerStackListeners();
   private isListening = false;
   private sequence = 0;
   private lastCloseTimestamp = 0;
@@ -45,13 +51,7 @@ export class LayerStackManager {
   private silenceTimer: ReturnType<typeof setTimeout> | null = null;
   private anchorPointerDownTarget: Node | null = null;
   /** 本次 pointerdown 外点关掉的层与触发手势快照；附带时间戳确保 100ms 时效性 */
-  private dismissedByPointer: {
-    pointerId: number;
-    layerId: string;
-    anchor: HTMLElement | null;
-    target: EventTarget | null;
-    timestamp: number;
-  } | null = null;
+  private dismissedByPointer: DismissedByPointerSnapshot | null = null;
 
   private constructor() {
     this.attachGlobalListeners();
@@ -91,10 +91,19 @@ export class LayerStackManager {
     });
 
     this.updateFloatingActiveState();
+    this.stackListeners.notify();
 
     return () => {
       this.unregister(fullLayer.id, 'programmatic');
     };
+  }
+
+  /**
+   * 订阅浮层栈变化（入栈 / 出栈后同步回调）。返回退订函数。
+   * 供 DOM 之外、无法被遮罩覆盖的表面（原生子窗口）据 hasActiveModal() 自行让位。
+   */
+  public subscribe(listener: () => void): () => void {
+    return this.stackListeners.subscribe(listener);
   }
 
   /**
@@ -136,6 +145,7 @@ export class LayerStackManager {
     }
 
     this.updateFloatingActiveState();
+    if (target) this.stackListeners.notify();
   }
 
   /**
@@ -539,9 +549,6 @@ export class LayerStackManager {
       typeof performance !== 'undefined' ? performance.now() : Date.now();
 
     const layersToDismiss: LayerRegistration[] = [];
-    let hitAnchor: HTMLElement | null = null;
-    let hitAnchorLayerId: string | null = null;
-
     let hitAnchorTarget: Node | null = null;
 
     // 倒序扫描所有已注册浮层
@@ -559,8 +566,6 @@ export class LayerStackManager {
       const anchorEl = resolveElement(layer.anchorRef);
       if (anchorEl && anchorEl.contains(target)) {
         hitAnchorTarget = target;
-        hitAnchor = anchorEl;
-        hitAnchorLayerId = layer.id;
         continue; // 命中自身 Trigger，交给 Trigger 的 toggle 逻辑
       }
 

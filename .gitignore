@@ -25,7 +25,9 @@ npm-debug.log*
 .env.*.local
 
 # IDE
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .idea/
 .freebuff/
 *.swp
@@ -42,10 +44,10 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+_build_out.txt
+_test_out.txt
 
 # Root temp & loc scripts
-/*.py
-!scripts/**/*.py
 /.agent-tmp-*
 /test-baseline.md
 /workspace.db*
@@ -97,10 +99,12 @@ reference/crish-desktop/
 
 # Agent runtime data
 .agent-runtime/
+.agents/teamwork/
 .codex-tool-scratch/
 .firecrawl/
 # AI 文档产出根（G03 路径隔离：T-EG-12，与 .crish-trash 等运行期目录并列）
 .agent-outputs/
+.crish-trash/
 
 # Rust build artifacts
 target-tauri-smoke/
@@ -177,11 +181,8 @@ apps/agent-workbench/src-tauri/gen/*
 # 数据资产（曾致 apps/crish-desktop/src/services/modelsAutofillBaselineData.json 从未入库）。
 # 改为「根目录散落产物 + 已知临时/报告/参考/测试目录」显式锚定（不再全局裸匹配）；
 # 源码树 apps/**/src、packages/**/src 下的 .json 恒视为资产，末尾显式放行（见本条末两行）。
-/*.txt
-/*.json
 /*.html
 /*.png
-/*.mjs
 /apps/**/*.html
 /apps/**/.crish-trash/**
 /apps/*/.oxlintrc.json
@@ -219,8 +220,9 @@ apps/agent-workbench/src-tauri/gen/*
 !apps/agent-workbench/src-tauri/gen/schemas/*.json
 !apps/agent-workbench/src-tauri/capabilities/*.json
 !package.json
+!package-lock.json
 !tsconfig.json
-# 注：`!crates/agent-provider/src/models/catalog.json` 已合并至本文件下半部分唯一一处（W9-C，去重）
+!crates/agent-provider/src/models/catalog.json
 
 # Legacy root planning docs moved into docs/archive (keep untracked)
 docs/archive/legacy/0613-0055-plan.md
@@ -266,7 +268,9 @@ npm-debug.log*
 .env.*.local
 
 # IDE
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .idea/
 *.swp
 *.swo
@@ -414,11 +418,8 @@ apps/agent-workbench/src-tauri/gen/*
 # 数据资产（曾致 apps/crish-desktop/src/services/modelsAutofillBaselineData.json 从未入库）。
 # 改为「根目录散落产物 + 已知临时/报告/参考/测试目录」显式锚定（不再全局裸匹配）；
 # 源码树 apps/**/src、packages/**/src 下的 .json 恒视为资产，末尾显式放行（见本条末两行）。
-/*.txt
-/*.json
 /*.html
 /*.png
-/*.mjs
 /apps/**/*.html
 /apps/**/.crish-trash/**
 /apps/*/.oxlintrc.json
@@ -516,58 +517,11 @@ apps/agent-workbench/src-tauri/gen/*
 !scripts/check-legacy-shim.mjs
 !scripts/check-tsc-threshold.mjs
 !scripts/check-ui-negative-churn.mjs
-# markdown-editor 测试资产放行（本区 *.txt/*.json/*.mjs 忽略规则在 267 行白名单之后，须在此显式放行）
-!reference/markdown-editor/tests/cmspec/spec.txt
-!reference/markdown-editor/tests/cmspec/examples.json
-!reference/markdown-editor/scripts/extract-cm-spec.mjs
-!docs/**/*.md
-!docs/**/*.txt
-!analysis/**/*.md
-!analysis/**/*.txt
-!apps/agent-workbench/src-tauri/gen/schemas/*.json
-!apps/agent-workbench/src-tauri/capabilities/*.json
-!package.json
-!package-lock.json
-!tsconfig.json
-!crates/agent-provider/src/models/catalog.json
-
-# Legacy root planning docs moved into docs/archive (keep untracked)
-docs/archive/legacy/0613-0055-plan.md
-docs/archive/legacy/ARCHITECTURE-IMPROVEMENT.md
-docs/archive/legacy/CORE-ARCHITECTURE-IMPROVEMENT.md
-docs/archive/legacy/DEVELOPMENT_LOG.md
-docs/archive/legacy/FRONTEND-DESIGN-PLAN.md
-docs/archive/legacy/IMPROVEMENT-PLAN.md
-docs/archive/legacy/new.md
-docs/archive/legacy/suggestions-v2.md
-docs/archive/legacy/suggestions.md
-
-# Local directories
-scratch/
-test-results/
-temp_icons/
-temp_jcode/
-perf-report/
-debug_investigation/
-apps/crish-desktop/scripts/
-.dependency-cruiser.cjs
-.mcp.json
-.workbuddy/
-.workbuddy-ai/
-.zcode/
-bring-window.ps1
-NUL
-tmp_*
-reference/ui-replica/package-lock.json
-
-
-
 # turbo cache（opencode/agent 缓存目录）
 .turbo/
 
 # 另一会话工作区（codex 会话 scratch 工具 / agent 会话记录）
 .codex-tool-scratch/
-fix-unused.py
 # 运行期备份
 *.bak-*
 orchestrator-snapshot.json.prev

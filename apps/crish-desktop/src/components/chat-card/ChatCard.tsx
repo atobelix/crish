@@ -6,6 +6,8 @@ import '../chat-message-list/workspaceChatStream.slot';
 import './workspaceChatComposerAbove.slot';
 import { SlotOutlet } from '../../services/view-registry';
 import { ChatEmptyState } from './ChatEmptyState';
+import { ComposerProjectPicker } from './ComposerProjectPicker';
+import { ChatLandingBrand } from './ChatLandingBrand';
 import { ChatComposer } from '../chat-composer/ChatComposer';
 import { ModelBadgePicker } from './ChatHeaderControls';
 import { useChatCardState } from './useChatCardState';
@@ -85,11 +87,17 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       };
     }, [state.composerProps]);
 
-    const [editingMessageId, setEditingMessageId] = React.useState<string | null>(null);
+    const [editingMessageId, setEditingMessageId] = React.useState<
+      string | null
+    >(null);
     const [editChatInput, setEditChatInput] = React.useState<string>('');
-    const [editAttachments, setEditAttachments] = React.useState<ChatAttachment[]>([]);
-    const [editIsComposing, setEditIsComposing] = React.useState<boolean>(false);
-    const [editShowPlusMenu, setEditShowPlusMenu] = React.useState<boolean>(false);
+    const [editAttachments, setEditAttachments] = React.useState<
+      ChatAttachment[]
+    >([]);
+    const [editIsComposing, setEditIsComposing] =
+      React.useState<boolean>(false);
+    const [editShowPlusMenu, setEditShowPlusMenu] =
+      React.useState<boolean>(false);
     const editFileInputRef = React.useRef<HTMLInputElement | null>(null);
 
     React.useEffect(() => {
@@ -172,10 +180,15 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       />
     ) : null;
 
+    // 新对话空界面：输入框改多行落地态；品牌居中 + 项目选择紧贴卡片上方左侧
+    const isLanding = state.emptyKind === 'session-empty';
+
     // 底部主输入框：持续常驻，草稿状态完全独立保全
     const mainComposerElement = (
       <ChatComposer
         {...state.composerProps}
+        emptyKind={state.emptyKind}
+        layoutVariant={isLanding ? 'multiline' : 'adaptive'}
         onPasteImage={state.composerProps.handlePasteImage}
         onPasteFiles={state.composerProps.handlePasteFiles}
         onStop={state.composerProps.handleStopGeneration}
@@ -363,9 +376,12 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
               data-testid="chat-drop-overlay"
               aria-hidden
             >
-              <AppIcon name="upload" className={styles.dropOverlayIcon}
+              <AppIcon
+                name="upload"
+                className={styles.dropOverlayIcon}
                 size={28}
-                aria-hidden />
+                aria-hidden
+              />
               <span className={styles.dropOverlayText}>
                 释放文件以添加为附件
               </span>
@@ -387,17 +403,12 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
               <div className={styles.chatCol} data-empty-col="true">
                 <ChatEmptyState
                   kind={state.emptyKind}
-                  workspaceKey={state.workspaceKey}
                   filterQuery={state.localMsgFilter}
                   needsKeySetup={state.needsKeySetup}
                   needsModelSetup={state.needsModelSetup}
                   firstRunOpen={state.firstRunOpen}
                   engineOk={state.engineOk}
                   messagesLoading={state.messagesLoading}
-                  showProjectPicker={state.showProjectPicker}
-                  onShowProjectPicker={state.setShowProjectPicker}
-                  onProjectChanged={() => state.setProjectTick((n) => n + 1)}
-                  onSetChatInput={state.composerProps.setChatInput}
                   onCreateSession={state.handleCreateSessionFromEmpty}
                   onClearFilter={() => state.setLocalMsgFilter('')}
                 />
@@ -431,6 +442,19 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
             handleGlobalTabClick={handleGlobalTabClick}
             isProcessing={state.isProcessing}
             onStopGeneration={state.composerProps.handleStopGeneration}
+            composerLead={
+              isLanding ? (
+                <>
+                  <ChatLandingBrand />
+                  <ComposerProjectPicker
+                    workspaceKey={state.workspaceKey}
+                    open={state.showProjectPicker}
+                    onOpenChange={state.setShowProjectPicker}
+                    onProjectChanged={() => state.setProjectTick((n) => n + 1)}
+                  />
+                </>
+              ) : null
+            }
           />
         </div>
       </>

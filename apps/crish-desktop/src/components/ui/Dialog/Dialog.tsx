@@ -26,7 +26,6 @@ import { useLayerRegistration } from '../internal/layer-registration/useLayerReg
 
 export type DialogSize = 'sm' | 'md' | 'lg';
 export type DialogRole = 'dialog' | 'alertdialog';
-export type DialogVariant = 'modal' | 'fullscreen';
 
 export interface DialogProps {
   /** 受控开关 */
@@ -39,17 +38,22 @@ export interface DialogProps {
   description?: React.ReactNode;
   /** 语义角色：alertdialog 供危险操作确认 */
   role?: DialogRole;
-  /** 尺寸档（fullscreen 形态下忽略） */
+  /** 尺寸档（classNames.panel 可再以 --dialog-width / 自定尺寸覆盖） */
   size?: DialogSize;
-  /** 形态：modal 居中面板（默认）；fullscreen 全屏盖层（SettingsPanel 消费） */
-  variant?: DialogVariant;
   /** 初始聚焦元素；不传则聚焦弹窗内首个可交互元素 */
   initialFocusRef?: React.RefObject<HTMLElement | null>;
   /** 是否允许 Esc/backdrop 关闭（FirstRunWizard 强制步进时置 false） */
   dismissible?: boolean;
+  /**
+   * 点击本弹窗自身遮罩是否关闭，默认随 dismissible。
+   * 设置弹窗用 dismissible=false + closeOnBackdropClick：LayerStack 不把它当作
+   * 「外部点击即退栈」层（portal 进 overlay 的下拉、嵌套弹窗遮罩上的点击不会级联关掉设置），
+   * 只有点在它自己的遮罩上才关闭；Esc 经 onEscapeKeyDown 处理。
+   */
+  closeOnBackdropClick?: boolean;
   /** 是否渲染头部关闭按钮（危险操作确认弹窗设计上无关闭按钮，置 false） */
   showCloseButton?: boolean;
-  /** 无 title 时的可访问名称（aria-label；SettingsPanel 全屏盖层用） */
+  /** 无 title 时的可访问名称（aria-label；无标题弹窗用，如设置弹窗） */
   ariaLabel?: string;
   /** Portal 挂载目标；默认 document.body */
   portalTarget?: HTMLElement | null;
@@ -61,8 +65,9 @@ export interface DialogProps {
    * 自定义类名收敛对象（T4-9c Props 收敛）：
    * - panel 追加到弹窗面板（可设 --dialog-width 等覆盖变量）
    * - overlay 追加到遮罩壳（可设 --dialog-z 覆盖层级）
+   * - body 追加到内容区（自带布局的弹窗用来去掉默认内边距 / 滚动）
    */
-  classNames?: { panel?: string; overlay?: string };
+  classNames?: { panel?: string; overlay?: string; body?: string };
   /**
    * LayerStack 到达本层时的 Esc 钩子（设置壳：先清搜索再关页）。
    * 返回 true / preventDefault 则中枢不再走默认 dismiss。
@@ -84,9 +89,9 @@ export function Dialog({
   description,
   role = 'dialog',
   size = 'md',
-  variant = 'modal',
   initialFocusRef,
   dismissible = true,
+  closeOnBackdropClick = dismissible,
   showCloseButton = true,
   ariaLabel,
   portalTarget,
@@ -100,7 +105,6 @@ export function Dialog({
   const dialogId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [overlayEl, setOverlayEl] = useState<HTMLElement | null>(null);
-  const isFullscreen = variant === 'fullscreen';
 
   // 三件套：进出场动画 + 焦点归还 + 焦点圈定
   // exitDurationMs 与 CSS --duration-exit（150ms）对齐（F7 F5），
@@ -133,15 +137,10 @@ export function Dialog({
       : null);
   if (!target) return null;
 
-  // fullscreen 形态不应用尺寸档与面板进出场动画（盖层整体由遮罩壳动画驱动）
   const panelClasses = [
     styles.dialog,
-    isFullscreen ? styles.dialogFullscreen : SIZE_CLASS[size],
-    isFullscreen
-      ? undefined
-      : state === 'exiting'
-        ? styles.dialogExit
-        : styles.dialogEnter,
+    SIZE_CLASS[size],
+    state === 'exiting' ? styles.dialogExit : styles.dialogEnter,
     classNames?.panel,
   ]
     .filter(Boolean)
@@ -162,12 +161,13 @@ export function Dialog({
           ref={setOverlayEl}
           className={overlayClasses}
           data-dialog-overlay=""
+          data-dialog-state={state === 'exiting' ? 'exiting' : 'open'}
         >
           <DialogOverlayContext.Provider value={overlayEl}>
             <div
               className={styles.backdrop}
               aria-hidden="true"
-              onClick={dismissible ? onClose : undefined}
+              onClick={closeOnBackdropClick ? onClose : undefined}
             />
             <div
               ref={panelRef}
@@ -204,7 +204,13 @@ export function Dialog({
                 </p>
               ) : null}
 
-              <div className={styles.dialogBody}>{children}</div>
+              <div
+                className={[styles.dialogBody, classNames?.body]
+                  .filter(Boolean)
+                  .join(' ')}
+              >
+                {children}
+              </div>
 
               {footer != null ? (
                 <div className={styles.dialogFooter}>{footer}</div>

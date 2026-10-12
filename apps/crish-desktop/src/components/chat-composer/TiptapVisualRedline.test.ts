@@ -15,7 +15,10 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-const STRICT_CSS = ['TiptapEditorField.module.css', 'TiptapSlashMenu.module.css'].map((f) => ({
+const STRICT_CSS = [
+  'TiptapEditorField.module.css',
+  'TiptapSlashMenu.module.css',
+].map((f) => ({
   name: f,
   css: readFileSync(join(here, f), 'utf8'),
 }));
@@ -37,7 +40,9 @@ describe('chat-composer 视觉红线（T10）', () => {
       for (const line of css.split('\n')) {
         const m = line.match(/box-shadow:\s*([^;]+);/);
         if (m) {
-          expect(m[1].trim(), `非 none 阴影：${line.trim()}`).toMatch(/^none(?:\s+!important)?$/);
+          expect(m[1].trim(), `非 none 阴影：${line.trim()}`).toMatch(
+            /^none(?:\s+!important)?$/
+          );
         }
       }
     });
@@ -58,7 +63,9 @@ describe('chat-composer 视觉红线（T10）', () => {
   }
 
   it('弹层 z-index 走 var(--z-popover)（TiptapSlashMenu.module.css）', () => {
-    const popover = STRICT_CSS.find((x) => x.name === 'TiptapSlashMenu.module.css')!.css;
+    const popover = STRICT_CSS.find(
+      (x) => x.name === 'TiptapSlashMenu.module.css'
+    )!.css;
     expect(popover).toMatch(/var\(--z-popover\)/);
     expect(popover).not.toMatch(/z-index:\s*200\b/);
   });
@@ -74,15 +81,19 @@ describe('chat-composer 视觉红线（T10）', () => {
   });
 
   it('占位符走 text-tertiary token（Placeholder 扩展伪元素）', () => {
-    const editor = STRICT_CSS.find((x) => x.name === 'TiptapEditorField.module.css')!.css;
-    const rule = editor.match(/\.proseMirrorField[^{]*is-editor-empty[^{]*\{[^}]*\}/)?.[0];
+    const editor = STRICT_CSS.find(
+      (x) => x.name === 'TiptapEditorField.module.css'
+    )!.css;
+    const rule = editor.match(
+      /\.proseMirrorField[^{]*is-editor-empty[^{]*\{[^}]*\}/
+    )?.[0];
     expect(rule).toBeTruthy();
     expect(rule).toContain('var(--text-tertiary)');
   });
 
-  it('落地面特例：session-empty 焦点混色 5% 存在（RL-01）', () => {
+  it('落地面特例：session-empty 焦点与常态保持一致静态无位移（RL-01 消除边框跳变）', () => {
     expect(HOST_CSS.css).toMatch(
-      /data-empty-kind=['"]session-empty['"][^{]*focus-within[^{]*\{[^}]*95%[^}]*\}/
+      /data-empty-kind=['"]session-empty['"][^{]*focus-within[^{]*\{[^}]*var\(--border-subtle\)[^}]*\}/
     );
   });
 

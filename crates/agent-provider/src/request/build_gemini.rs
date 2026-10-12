@@ -28,7 +28,10 @@ use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
 
-use super::messages::{stringify_tool_output, user_message_content, ChatContent, ChatContentPart};
+use super::messages::{
+    stringify_tool_output, user_message_content, ChatContent, ChatContentPart,
+    WIRE_CONTINUATION_NOTE,
+};
 use super::schema::canonicalize_schema;
 use super::tools::{ToolChoice, ToolDefinition};
 use super::vendor::{ReasoningEffort, ThinkingIntensity};
@@ -84,7 +87,11 @@ pub fn build_gemini_request_body(
     append_system_instruction(&mut body, context);
 
     // contents（块级映射；从 AgentMessage 直接构建，禁复用 chat 轨形状）
-    let contents = to_gemini_contents(context.messages);
+    let mut contents = to_gemini_contents(context.messages);
+    // W04 · 出站成对性 Fail-Closed 守门（详案 02 §3.4 轨三补齐）：在 contents
+    // 组装完成后刚性拦截孤儿 functionCall——严禁静默伪造 functionResponse
+    // 垫片。过滤带毒孤儿工具调用，安全 Fail-Closed。
+    fail_closed_gemini_pairing_gate(&mut contents, context.messages);
     body.insert("contents".to_string(), json!(contents));
 
     // generationConfig（camelCase）：maxOutputTokens / temperature / thinkingConfig
@@ -125,12 +132,6 @@ pub fn build_gemini_request_body(
         );
     }
 
-    // W04 · 出站成对性 Fail-Closed 守门（详案 02 §3.4 轨三补齐）：在 contents
-    // 组装完成后刚性拦截孤儿 functionCall——严禁静默伪造 functionResponse
-    // 垫片。Debug/CI panic（Fail-Fast 暴露内核断裂）；Release tracing::error!
-    // 后中止组包（绝不产出带毒请求体）。会话循环侧应优先调用
-    // [validate_gemini_tool_pairing] 走「补齐后单次重试」闭环。
-    fail_closed_gemini_pairing_gate(context.messages);
 
     Value::Object(body)
 }
@@ -213,12 +214,11 @@ pub fn detect_gemini_unpaired_tool_calls(messages: &[Arc<AgentMessage>]) -> Vec<
 
 /// Gemini 出站成对性校验入口（详案 02 §3.4 分级守门 · 轨三补齐）。
 ///
-/// - **Debug / CI（`debug_assertions`）**：检测到孤儿 → 立即 panic（Fail-Fast，
-///   迫使开发者在内核层根治，而非在导线层掩盖）；
-/// - **Release**：返回 [RequestBuildError::UnpairedToolCalls]（含排序
-///   `orphan_ids`）并 `tracing::error!` 结构化日志——调用方（会话循环出站
-///   组装处）据此执行「本地合成补齐 → 单次重试组包」；仍失败则标记会话
-///   `wire_pairing_poisoned`。**禁止**在导线层静默插入假 functionResponse。
+/// 导线层刚性拦截孤儿工具调用：返回 [RequestBuildError::UnpairedToolCalls]（含排序
+/// `orphan_ids`）并记录 `tracing::error!` 结构化日志——调用方（会话循环出站
+/// 组装处）据此执行「本地合成补齐 → 单次重试组包」；仍失败则标记会话
+/// `wire_pairing_poisoned`。**禁止**在导线层静默插入假 functionResponse，也**禁止**
+/// 使用 panic!() 中断进程。
 pub fn validate_gemini_tool_pairing(
     messages: &[Arc<AgentMessage>],
 ) -> Result<(), RequestBuildError> {
@@ -230,41 +230,71 @@ pub fn validate_gemini_tool_pairing(
         protocol: "gemini",
         orphan_ids,
     };
-    #[cfg(debug_assertions)]
-    {
-        panic!("Gemini 导线层校验拦截到孤儿工具调用！{err:?}");
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        tracing::error!(
-            target: "agent_provider::wire_pairing",
-            protocol = "gemini",
-            error = %err,
-            orphan_ids = ?err.orphan_ids(),
-            "导线层刚性拦截带毒请求出站（禁止静默伪造 functionResponse；调用方须走补齐重试闭环）"
-        );
-        return Err(err);
-    }
-    #[allow(unreachable_code)]
-    Ok(())
+    tracing::error!(
+        target: "agent_provider::wire_pairing",
+        protocol = "gemini",
+        error = %err,
+        orphan_ids = ?err.orphan_ids(),
+        "导线层刚性拦截带毒请求出站（禁止静默伪造 functionResponse；调用方须走补齐重试闭环）"
+    );
+    Err(err)
 }
 
-/// build 入口接线的 fail-closed 守门（Debug panic / Release error + 拒绝产出）。
+/// build 入口接线的 fail-closed 守门（安全过滤孤儿 functionCall，绝不产出带毒请求体）。
 ///
 /// `build_gemini_request_body` 返回签名保持 `Value`（既有调用面零破坏）：
-/// Release 下一旦拦截即 `tracing::error!` 并 panic——语义为「带毒请求体绝不
-/// 静默出站」；会话循环侧须优先捕获 [validate_gemini_tool_pairing] 的
-/// `Err(UnpairedToolCalls)` 走补齐重试，正常路径不会抵达本函数的错误分支。
-fn fail_closed_gemini_pairing_gate(messages: &[Arc<AgentMessage>]) {
+/// 拦截到孤儿 functionCall 时 `tracing::error!` 记录并安全过滤掉未配对的 functionCall 块，
+/// 避免 client 进程因 panic 崩溃，同时防止带毒请求出站引发 400 报错。
+fn fail_closed_gemini_pairing_gate(contents: &mut [Value], messages: &[Arc<AgentMessage>]) {
     if let Err(err) = validate_gemini_tool_pairing(messages) {
         tracing::error!(
             target: "agent_provider::wire_pairing",
             protocol = "gemini",
             error = %err,
             orphan_ids = ?err.orphan_ids(),
-            "build_gemini 入口守门拦截：拒绝构造带毒请求体"
+            "build_gemini 入口守门拦截：过滤带毒孤儿工具调用，安全 Fail-Closed"
         );
-        panic!("Gemini 导线层入口守门拦截到孤儿工具调用（带毒请求体禁止出站）：{err:?}");
+        let orphan_set: std::collections::BTreeSet<&str> =
+            err.orphan_ids().iter().map(|s| s.as_str()).collect();
+        let mut call_seen: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+
+        for content in contents.iter_mut() {
+            if content.get("role").and_then(Value::as_str) == Some("model") {
+                if let Some(parts) = content.get_mut("parts").and_then(Value::as_array_mut) {
+                    parts.retain(|part| {
+                        if let Some(fc) = part.get("functionCall") {
+                            let name = fc.get("name").and_then(Value::as_str).unwrap_or("");
+                            let seen = call_seen.entry(name.to_string()).or_insert(0);
+                            let call_id = format!("{name}#{seen}");
+                            *seen += 1;
+                            if orphan_set.contains(call_id.as_str()) {
+                                return false;
+                            }
+                        }
+                        true
+                    });
+                    let has_valid_content = parts.iter().any(|part| {
+                        if part.get("functionCall").is_some() {
+                            true
+                        } else if let Some(t) = part.get("text").and_then(Value::as_str) {
+                            !t.trim().is_empty()
+                        } else {
+                            false
+                        }
+                    });
+                    if !has_valid_content {
+                        parts.retain(|part| {
+                            !(part
+                                .get("text")
+                                .and_then(Value::as_str)
+                                .is_some_and(|t| t.trim().is_empty()))
+                        });
+                        parts.push(json!({ "text": WIRE_CONTINUATION_NOTE }));
+                    }
+                }
+            }
+        }
     }
 }
 

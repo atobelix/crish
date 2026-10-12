@@ -35,7 +35,6 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
         open={open}
         onClose={ed.handleRequestClose}
         size="lg"
-        variant="modal"
         showCloseButton={true}
         title={
           <div className={styles.modalTitleRow}>
@@ -107,9 +106,14 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
               </div>
 
               {ed.serviceError ? (
-                <div className={`${styles.errorBanner} ${styles.errorBannerStatic}`} role="alert">
+                <div
+                  className={`${styles.errorBanner} ${styles.errorBannerStatic}`}
+                  role="alert"
+                >
                   <AppIcon name="unplug" size={13} aria-hidden />
-                  <span className={styles.errorBannerText}>{ed.serviceError}</span>
+                  <span className={styles.errorBannerText}>
+                    {ed.serviceError}
+                  </span>
                 </div>
               ) : ed.syntaxError ? (
                 <Tooltip content="点击直接跳转到错误行">
@@ -119,7 +123,8 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') ed.handleJumpToError();
+                      if (e.key === 'Enter' || e.key === ' ')
+                        ed.handleJumpToError();
                     }}
                   >
                     <AppIcon name="alert-circle" size={12} aria-hidden />
@@ -136,7 +141,12 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
                   <span>已保存并生效</span>
                 </div>
               )}
-              <Button type="button" variant="ghost" size="sm" onClick={ed.handleRequestClose}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={ed.handleRequestClose}
+              >
                 取消
               </Button>
               <Button
@@ -173,7 +183,9 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
               ed.searchQuery.trim() ? (
                 <div className={styles.searchSuffix}>
                   <span className={styles.searchCount}>
-                    {ed.matchCount > 0 ? `${ed.searchIndex + 1} / ${ed.matchCount}` : '无结果'}
+                    {ed.matchCount > 0
+                      ? `${ed.searchIndex + 1} / ${ed.matchCount}`
+                      : '无结果'}
                   </span>
                   <Tooltip content="上一个匹配项 (Shift+Enter)">
                     <Button
@@ -220,14 +232,22 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
 
           {/* 工具操作按钮 */}
           <div className={styles.toolbarRight}>
-            <Tooltip content={ed.showLineNumbers ? '隐藏代码行数' : '显示代码行数'}>
+            <Tooltip
+              content={ed.showLineNumbers ? '隐藏代码行数' : '显示代码行数'}
+            >
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 onClick={() => ed.setShowLineNumbers((prev) => !prev)}
-                className={ed.showLineNumbers ? styles.toolbarBtnActive : styles.toolbarBtn}
-                aria-label={ed.showLineNumbers ? '隐藏代码行数' : '显示代码行数'}
+                className={
+                  ed.showLineNumbers
+                    ? styles.toolbarBtnActive
+                    : styles.toolbarBtn
+                }
+                aria-label={
+                  ed.showLineNumbers ? '隐藏代码行数' : '显示代码行数'
+                }
                 icon={<AppIcon name="list" size={13} aria-hidden />}
               >
                 行号
@@ -240,7 +260,9 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
                 variant="ghost"
                 size="sm"
                 onClick={() => ed.setWordWrap((prev) => !prev)}
-                className={ed.wordWrap ? styles.toolbarBtnActive : styles.toolbarBtn}
+                className={
+                  ed.wordWrap ? styles.toolbarBtnActive : styles.toolbarBtn
+                }
                 aria-label={ed.wordWrap ? '关闭自动换行' : '开启自动换行'}
                 icon={<AppIcon name="wrap-text" size={13} aria-hidden />}
               >
@@ -256,7 +278,13 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
                 onClick={() => void ed.handleCopyAll()}
                 className={styles.toolbarBtn}
                 aria-label="复制全部内容"
-                icon={<AppIcon name={ed.copied ? 'check' : 'copy'} size={13} aria-hidden />}
+                icon={
+                  <AppIcon
+                    name={ed.copied ? 'check' : 'copy'}
+                    size={13}
+                    aria-hidden
+                  />
+                }
               >
                 {ed.copied ? '已复制' : '复制'}
               </Button>
@@ -311,7 +339,9 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
               autoComplete="off"
               autoCorrect="off"
               placeholder={
-                ed.serviceError ? '配置文件服务不可用' : '请输入 models.yaml 配置内容...'
+                ed.serviceError
+                  ? '配置文件服务不可用'
+                  : '请输入 models.yaml 配置内容...'
               }
               disabled={ed.loading}
             />

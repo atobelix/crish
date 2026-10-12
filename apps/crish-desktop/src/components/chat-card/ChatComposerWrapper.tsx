@@ -43,189 +43,200 @@ export interface ChatComposerWrapperProps {
   onApprovalAllow?: (toolId: string, msgId: string, remember?: boolean) => void;
   onApprovalDeny?: (toolId: string, msgId: string) => void;
   activeSessionId: string | null;
-  openSidePanel: (panelId: 'terminal' | 'diff' | 'preview' | 'tasks' | 'files') => void;
+  openSidePanel: (
+    panelId: 'terminal' | 'diff' | 'preview' | 'tasks' | 'files'
+  ) => void;
   handleGlobalTabClick: (cardId: string) => void;
   isProcessing?: boolean;
   onStopGeneration?: () => void;
+  /** composer 卡片上方区域（空界面品牌 + 项目选择） */
+  composerLead?: React.ReactNode;
 }
 
-export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.memo(({
-  mainSurface,
-  composerElement,
-  ribbons,
-  pendingApprovalCount,
-  showApprovalDock,
-  pendingApprovalSummary,
-  pendingApprovalToolId,
-  pendingApprovalMsgId,
-  approvalBusy = false,
-  onApprovalAllow,
-  onApprovalDeny,
-  activeSessionId,
-  isProcessing = false,
-  onStopGeneration,
-}) => {
-  // §5.2：订阅 session store，禁止一次性会话快照轨冒充实时进度
-  const currentSession = useSessionStore((s) =>
-    activeSessionId ? s.sessionsById[activeSessionId] : undefined
-  );
-  const progressItems = useMemo(
-    () => resolveSessionProgressItems(currentSession),
-    [currentSession]
-  );
-
-  const planSteps: PlanStepItem[] = useMemo(() => {
-    if (!progressItems || progressItems.length === 0) return [];
-    const firstIncompleteIdx = progressItems.findIndex((t) => !t.done);
-    return progressItems.map((item, idx) => ({
-      id: item.id || `step-${idx + 1}`,
-      text: item.text,
-      status: item.done
-        ? 'completed'
-        : idx === firstIncompleteIdx
-          ? 'active'
-          : 'pending',
-    }));
-  }, [progressItems]);
-
-  const isGoalActive = Boolean(ribbons.goal?.goalModeActive);
-  const hasActiveTasks = planSteps.length > 0;
-  const showPlanBar = isGoalActive || hasActiveTasks;
-
-  const activeStepText = useMemo(() => {
-    if (isGoalActive && ribbons.goal?.goalText) {
-      return ribbons.goal.goalText;
-    }
-    const activeStep = planSteps.find((s) => s.status === 'active');
-    return activeStep?.text || planSteps[0]?.text || '';
-  }, [isGoalActive, ribbons.goal?.goalText, planSteps]);
-
-  const activeStepIndex = useMemo(() => {
-    const idx = planSteps.findIndex((s) => s.status === 'active');
-    return idx >= 0 ? idx + 1 : (planSteps.length > 0 ? planSteps.length : 1);
-  }, [planSteps]);
-
-  const liftApproval = useSyncExternalStore(
-    (cb) => slotCore.subscribe('workspace.chat.composerAbove', cb),
-    () => Boolean(slotCore.getSingle('workspace.chat.composerAbove'))
-  );
-
-  // 组装审批域子对象（平铺字段 → ApprovalRibbonProps）
-  const approval: ApprovalRibbonProps = {
-    pendingApprovalCount,
-    showApprovalDock: liftApproval ? false : showApprovalDock,
-    pendingApprovalSummary,
-    pendingApprovalToolId,
-    pendingApprovalMsgId,
-    activeSessionId,
-  };
-
-  // §5.2：审批必有真实 props；缺回调时不塞空实现（Slot 侧显式不可用）
-  const composerAbove: ChatComposerAboveProps | null = useMemo(() => {
-    if (!onApprovalAllow || !onApprovalDeny) return null;
-    return {
-      pendingCount: pendingApprovalCount,
-      firstToolId: pendingApprovalToolId,
-      firstMsgId: pendingApprovalMsgId,
-      firstSummary: pendingApprovalSummary,
-      approvalBusy,
+export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> =
+  React.memo(
+    ({
+      mainSurface,
+      composerElement,
+      ribbons,
+      pendingApprovalCount,
+      showApprovalDock,
+      pendingApprovalSummary,
+      pendingApprovalToolId,
+      pendingApprovalMsgId,
+      approvalBusy = false,
       onApprovalAllow,
       onApprovalDeny,
-    };
-  }, [
-    pendingApprovalCount,
-    pendingApprovalToolId,
-    pendingApprovalMsgId,
-    pendingApprovalSummary,
-    approvalBusy,
-    onApprovalAllow,
-    onApprovalDeny,
-  ]);
+      activeSessionId,
+      isProcessing = false,
+      onStopGeneration,
+      composerLead,
+    }) => {
+      // §5.2：订阅 session store，禁止一次性会话快照轨冒充实时进度
+      const currentSession = useSessionStore((s) =>
+        activeSessionId ? s.sessionsById[activeSessionId] : undefined
+      );
+      const progressItems = useMemo(
+        () => resolveSessionProgressItems(currentSession),
+        [currentSession]
+      );
 
-  const floatHasContent =
-    pendingApprovalCount > 0 ||
-    showPlanBar;
+      const planSteps: PlanStepItem[] = useMemo(() => {
+        if (!progressItems || progressItems.length === 0) return [];
+        const firstIncompleteIdx = progressItems.findIndex((t) => !t.done);
+        return progressItems.map((item, idx) => ({
+          id: item.id || `step-${idx + 1}`,
+          text: item.text,
+          status: item.done
+            ? 'completed'
+            : idx === firstIncompleteIdx
+              ? 'active'
+              : 'pending',
+        }));
+      }, [progressItems]);
 
-  return (
-    <div
-      className={styles.chatFooter}
-      data-testid="chat-footer"
-      style={{
-        display: mainSurface === 'scheduled' ? 'none' : undefined,
-      }}
-    >
-      {/* chatCol 与消息 listInner 同 max-width / 水平 padding，对齐 stream + composer */}
-      <div className={styles.chatCol}>
-        <ChatStatusRibbons
-          streaming={ribbons.streaming}
-          goal={ribbons.goal}
-          approval={approval}
-          omitPlanRibbons
-          omitApprovalDock
-        />
+      const isGoalActive = Boolean(ribbons.goal?.goalModeActive);
+      const hasActiveTasks = planSteps.length > 0;
+      const showPlanBar = isGoalActive || hasActiveTasks;
 
-        <div className={styles.composerDock} data-composer-wrapper="">
-          <div
-            className={styles.floatZone}
-            data-composer-float-zone=""
-            hidden={!floatHasContent && !liftApproval}
-          >
-            {composerAbove ? (
-              <SlotOutlet
-                slotKey="workspace.chat.composerAbove"
-                context={composerAbove}
-                fallback={null}
-              />
-            ) : liftApproval && pendingApprovalCount > 0 ? (
+      const activeStepText = useMemo(() => {
+        if (isGoalActive && ribbons.goal?.goalText) {
+          return ribbons.goal.goalText;
+        }
+        const activeStep = planSteps.find((s) => s.status === 'active');
+        return activeStep?.text || planSteps[0]?.text || '';
+      }, [isGoalActive, ribbons.goal?.goalText, planSteps]);
+
+      const activeStepIndex = useMemo(() => {
+        const idx = planSteps.findIndex((s) => s.status === 'active');
+        return idx >= 0 ? idx + 1 : planSteps.length > 0 ? planSteps.length : 1;
+      }, [planSteps]);
+
+      const liftApproval = useSyncExternalStore(
+        (cb) => slotCore.subscribe('workspace.chat.composerAbove', cb),
+        () => Boolean(slotCore.getSingle('workspace.chat.composerAbove'))
+      );
+
+      // 组装审批域子对象（平铺字段 → ApprovalRibbonProps）
+      const approval: ApprovalRibbonProps = {
+        pendingApprovalCount,
+        showApprovalDock: liftApproval ? false : showApprovalDock,
+        pendingApprovalSummary,
+        pendingApprovalToolId,
+        pendingApprovalMsgId,
+        activeSessionId,
+      };
+
+      // §5.2：审批必有真实 props；缺回调时不塞空实现（Slot 侧显式不可用）
+      const composerAbove: ChatComposerAboveProps | null = useMemo(() => {
+        if (!onApprovalAllow || !onApprovalDeny) return null;
+        return {
+          pendingCount: pendingApprovalCount,
+          firstToolId: pendingApprovalToolId,
+          firstMsgId: pendingApprovalMsgId,
+          firstSummary: pendingApprovalSummary,
+          approvalBusy,
+          onApprovalAllow,
+          onApprovalDeny,
+        };
+      }, [
+        pendingApprovalCount,
+        pendingApprovalToolId,
+        pendingApprovalMsgId,
+        pendingApprovalSummary,
+        approvalBusy,
+        onApprovalAllow,
+        onApprovalDeny,
+      ]);
+
+      const floatHasContent = pendingApprovalCount > 0 || showPlanBar;
+
+      return (
+        <div
+          className={styles.chatFooter}
+          data-testid="chat-footer"
+          style={{
+            display: mainSurface === 'scheduled' ? 'none' : undefined,
+          }}
+        >
+          {/* chatCol 与消息 listInner 同 max-width / 水平 padding，对齐 stream + composer */}
+          <div className={styles.chatCol}>
+            <ChatStatusRibbons
+              streaming={ribbons.streaming}
+              goal={ribbons.goal}
+              approval={approval}
+              omitPlanRibbons
+              omitApprovalDock
+            />
+
+            <div className={styles.composerDock} data-composer-wrapper="">
               <div
-                role="status"
-                aria-live="polite"
-                data-testid="composer-above-approval-unavailable"
-                style={{
-                  padding: '6px 10px',
-                  fontSize: 'var(--font-size-xs)',
-                  color: 'var(--text-secondary)',
-                }}
+                className={styles.floatZone}
+                data-composer-float-zone=""
+                hidden={!floatHasContent && !liftApproval}
               >
-                审批操作不可用（未接入真实回调）
+                {composerAbove ? (
+                  <SlotOutlet
+                    slotKey="workspace.chat.composerAbove"
+                    context={composerAbove}
+                    fallback={null}
+                  />
+                ) : liftApproval && pendingApprovalCount > 0 ? (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    data-testid="composer-above-approval-unavailable"
+                    style={{
+                      padding: '6px 10px',
+                      fontSize: 'var(--font-size-xs)',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    审批操作不可用（未接入真实回调）
+                  </div>
+                ) : null}
+                {liftApproval ? null : (
+                  <ApprovalDock
+                    show={showApprovalDock}
+                    pendingCount={pendingApprovalCount}
+                    summary={pendingApprovalSummary}
+                    toolId={pendingApprovalToolId}
+                    msgId={pendingApprovalMsgId}
+                    activeSessionId={activeSessionId}
+                  />
+                )}
+                {showPlanBar ? (
+                  <ComposerPlanProgressBar
+                    active={true}
+                    mode={isGoalActive ? 'goal' : 'plan'}
+                    modeLabel={isGoalActive ? '目标模式' : '计划模式'}
+                    currentStep={activeStepIndex}
+                    totalSteps={planSteps.length}
+                    steps={planSteps}
+                    activeStepText={activeStepText}
+                    isRunning={isProcessing}
+                    onApprovePlan={
+                      ribbons.goal?.planApproved
+                        ? undefined
+                        : ribbons.goal?.onApprovePlan
+                    }
+                    onStop={
+                      isGoalActive ? ribbons.goal?.onStopGoal : onStopGeneration
+                    }
+                  />
+                ) : null}
               </div>
-            ) : null}
-            {liftApproval ? null : (
-              <ApprovalDock
-                show={showApprovalDock}
-                pendingCount={pendingApprovalCount}
-                summary={pendingApprovalSummary}
-                toolId={pendingApprovalToolId}
-                msgId={pendingApprovalMsgId}
-                activeSessionId={activeSessionId}
-              />
-            )}
-            {showPlanBar ? (
-              <ComposerPlanProgressBar
-                active={true}
-                mode={isGoalActive ? 'goal' : 'plan'}
-                modeLabel={isGoalActive ? '目标模式' : '计划模式'}
-                currentStep={activeStepIndex}
-                totalSteps={planSteps.length}
-                steps={planSteps}
-                activeStepText={activeStepText}
-                isRunning={isProcessing}
-                onApprovePlan={
-                  ribbons.goal?.planApproved ? undefined : ribbons.goal?.onApprovePlan
-                }
-                onStop={
-                  isGoalActive
-                    ? ribbons.goal?.onStopGoal
-                    : onStopGeneration
-                }
-              />
-            ) : null}
-          </div>
 
-          {/* composer 始终在 .chatFooter 渲染（不再注入到 ChatEmptyState 内）。 */}
-          {composerElement}
+              {/* composer 始终在 .chatFooter 渲染（不再注入到 ChatEmptyState 内）。 */}
+              {composerLead ? (
+                <div className={styles.composerLead} data-composer-lead="">
+                  {composerLead}
+                </div>
+              ) : null}
+              {composerElement}
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      );
+    }
   );
-});

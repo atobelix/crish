@@ -39,6 +39,21 @@
   justify-content: center;
 }
 
+/* 新对话空界面：输入框落在内容区中间偏上（剩余高度上 1 : 下 3 分配） */
+.chatBody[data-empty-kind='session-empty'] {
+  /* 左对齐竖线：距 composer 卡片外缘的距离；项目选择图标 / 输入文字 / 「+」图形共用 */
+  --landing-inset-x: 20px;
+}
+
+.chatBody[data-empty-kind='session-empty'] .chatDocFlow {
+  flex: 1 1 0%;
+}
+
+.chatBody[data-empty-kind='session-empty'] .chatFooter {
+  flex: 3 1 0%;
+  background: transparent;
+}
+
 /* 主列栅格对齐容器 */
 .chatCol {
   width: 100%;
@@ -74,6 +89,16 @@
   gap: 0;
   width: 100%;
   position: relative;
+}
+
+/* 空界面品牌 + 项目选择：品牌居中，项目选择紧贴 composer 卡片上方，图标对齐 --landing-inset-x */
+.composerLead {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  margin-bottom: var(--space-1_5);
+  padding-left: var(--landing-inset-x, 20px);
 }
 
 .floatZone {
@@ -192,7 +217,6 @@
     max-width: min(var(--chat-col-max-wide, 840px), 100%);
   }
 }
-
 
 /* ==========================================================================
    全景拖放覆盖层（Drag & Drop Overlay，干净简洁、无虚线、无表情）

@@ -1,0 +1,45 @@
+/* 空界面项目选择胶囊：composer 卡片外上方左侧，小号文字，hover 只变文字色 */
+.root {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.projectPill {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  min-width: 0;
+  height: 22px;
+  padding: 0 var(--space-0_5) 0 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-ui);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.projectPill:hover,
+.projectPill[aria-expanded='true'] {
+  color: var(--text-primary);
+}
+
+.projectPill:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.projectName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

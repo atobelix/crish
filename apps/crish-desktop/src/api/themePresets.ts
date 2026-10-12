@@ -27,9 +27,9 @@ export interface SkinPreset {
 export const SKIN_PRESETS: Record<string, SkinPreset> = {
   'warm-gray': {
     name: '护眼暖灰',
-    // 浅色从外到内逐层变白，同一暖色调 CMYK C0 M0.4 Y0.8：外层 K5 #f2f1f0 → 主界面 K2.8 #f8f7f6 → 输入框纯白（2026-10-11 定稿）
+    // 浅色从外到内逐层变白，同一暖色调 CMYK C0 M0.4 Y0.8：外层 K5 #f2f1f0 → 主界面 #fbfaf9（降低一个灰度点） → 输入框纯白（2026-10-11 定稿）
     //（运行时 TokenRuntimeController 的 warm-gray 分支按同一组数值计算）
-    bgPrimary: '#f8f7f6',
+    bgPrimary: '#fbfaf9',
     bgSecondary: '#f2f1f0',
     bgTertiary: 'hsl(30 8.33% 92.29%)',
     bgCard: '#ffffff',
@@ -43,7 +43,7 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     borderSubtle: '#f0efee',
     mixColor: 'hsl(35 40% 30%)',
   },
-  'cream': {
+  cream: {
     name: '杏仁奶油',
     bgPrimary: 'color-mix(in srgb, var(--accent-orange) 4%, #ffffff)',
     bgSecondary: 'color-mix(in srgb, var(--accent-orange) 6%, #ffffff)',
@@ -58,7 +58,7 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     mixColor: 'hsl(30, 45%, 32%)',
     composerBg: 'color-mix(in srgb, var(--accent-orange) 3%, #ffffff)',
   },
-  'paper': {
+  paper: {
     // review P2-7（2026-10-11）：三层方向统一为「外层最暗 → 主层 → 输入框最亮」（原外层比主层亮）
     name: '极简纸质',
     bgPrimary: '#fafafa',
@@ -88,11 +88,14 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     borderSubtle: '#e9ecef',
     mixColor: 'hsl(210, 10%, 30%)',
   },
-  'sakura': {
+  sakura: {
     name: '落樱微风',
-    bgPrimary: 'color-mix(in srgb, var(--accent-orange) 1%, color-mix(in srgb, #9d4edd 2%, #ffffff))',
-    bgSecondary: 'color-mix(in srgb, var(--accent-orange) 1.5%, color-mix(in srgb, #9d4edd 4%, #ffffff))',
-    bgTertiary: 'color-mix(in srgb, var(--accent-orange) 2%, color-mix(in srgb, #9d4edd 6%, #ffffff))',
+    bgPrimary:
+      'color-mix(in srgb, var(--accent-orange) 1%, color-mix(in srgb, #9d4edd 2%, #ffffff))',
+    bgSecondary:
+      'color-mix(in srgb, var(--accent-orange) 1.5%, color-mix(in srgb, #9d4edd 4%, #ffffff))',
+    bgTertiary:
+      'color-mix(in srgb, var(--accent-orange) 2%, color-mix(in srgb, #9d4edd 6%, #ffffff))',
     bgCard: 'color-mix(in srgb, #9d4edd 1.5%, #ffffff)',
     bgElevated: 'color-mix(in srgb, #9d4edd 2.5%, #ffffff)',
     shellChromeBg: 'color-mix(in srgb, #9d4edd 7%, #ffffff)',
@@ -103,11 +106,14 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     mixColor: 'hsl(285, 30%, 35%)',
     composerBg: 'color-mix(in srgb, #9d4edd 1%, #ffffff)',
   },
-  'matcha': {
+  matcha: {
     name: '抹茶拿铁',
-    bgPrimary: 'color-mix(in srgb, var(--accent-orange) 1.5%, color-mix(in srgb, #2ec4b6 2%, #ffffff))',
-    bgSecondary: 'color-mix(in srgb, var(--accent-orange) 2%, color-mix(in srgb, #2ec4b6 4%, #ffffff))',
-    bgTertiary: 'color-mix(in srgb, var(--accent-orange) 2.5%, color-mix(in srgb, #2ec4b6 6.5%, #ffffff))',
+    bgPrimary:
+      'color-mix(in srgb, var(--accent-orange) 1.5%, color-mix(in srgb, #2ec4b6 2%, #ffffff))',
+    bgSecondary:
+      'color-mix(in srgb, var(--accent-orange) 2%, color-mix(in srgb, #2ec4b6 4%, #ffffff))',
+    bgTertiary:
+      'color-mix(in srgb, var(--accent-orange) 2.5%, color-mix(in srgb, #2ec4b6 6.5%, #ffffff))',
     bgCard: 'color-mix(in srgb, #2ec4b6 1.5%, #ffffff)',
     bgElevated: 'color-mix(in srgb, #2ec4b6 2.5%, #ffffff)',
     shellChromeBg: 'color-mix(in srgb, #2ec4b6 7%, #ffffff)',
@@ -118,7 +124,7 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     mixColor: 'hsl(120, 20%, 30%)',
     composerBg: 'color-mix(in srgb, #2ec4b6 1%, #ffffff)',
   },
-  'glacier': {
+  glacier: {
     name: '冰川薄荷',
     bgPrimary: 'color-mix(in srgb, #e9fcf9 40%, #ffffff)',
     bgSecondary: '#e9fcf9',
@@ -133,11 +139,14 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     mixColor: 'hsl(172, 25%, 32%)',
     composerBg: 'color-mix(in srgb, #e9fcf9 15%, #ffffff)',
   },
-  'pearl': {
+  pearl: {
     name: '金沙流光',
-    bgPrimary: 'color-mix(in srgb, var(--accent-orange) 2%, color-mix(in srgb, #ffe5ec 1%, #faf6f0))',
-    bgSecondary: 'color-mix(in srgb, var(--accent-orange) 3.5%, color-mix(in srgb, #ffe5ec 1.5%, #f4eee2))',
-    bgTertiary: 'color-mix(in srgb, var(--accent-orange) 5%, color-mix(in srgb, #ffe5ec 2%, #ebe2d3))',
+    bgPrimary:
+      'color-mix(in srgb, var(--accent-orange) 2%, color-mix(in srgb, #ffe5ec 1%, #faf6f0))',
+    bgSecondary:
+      'color-mix(in srgb, var(--accent-orange) 3.5%, color-mix(in srgb, #ffe5ec 1.5%, #f4eee2))',
+    bgTertiary:
+      'color-mix(in srgb, var(--accent-orange) 5%, color-mix(in srgb, #ffe5ec 2%, #ebe2d3))',
     bgCard: 'color-mix(in srgb, var(--accent-orange) 2%, #ffffff)',
     bgElevated: 'color-mix(in srgb, var(--accent-orange) 3%, #ffffff)',
     shellChromeBg: 'color-mix(in srgb, var(--accent-orange) 6%, #f6f1e8)',
@@ -198,7 +207,7 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     borderSubtle: '#1a2821',
     mixColor: 'hsl(145, 20%, 75%)',
   },
-  'aurora': {
+  aurora: {
     // review P2-7（2026-10-11）：三层方向统一为「外层最暗 → 主层 → 输入框最亮」（原外层比主层亮）
     name: '北欧极光',
     bgPrimary: '#0a1617',
@@ -214,7 +223,7 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     borderSubtle: '#162829',
     mixColor: 'hsl(180, 25%, 70%)',
   },
-  'cocoa': {
+  cocoa: {
     // review P2-7（2026-10-11）：三层方向统一为「外层最暗 → 主层 → 输入框最亮」（原外层比主层亮）
     name: '可可暗香',
     bgPrimary: '#15100f',
@@ -230,7 +239,7 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     borderSubtle: '#261f1c',
     mixColor: 'hsl(25, 25%, 70%)',
   },
-  'burgundy': {
+  burgundy: {
     // review P2-7（2026-10-11）：三层方向统一为「外层最暗 → 主层 → 输入框最亮」（原外层比主层亮）
     name: '暗红丝绒',
     bgPrimary: '#150a0d',
@@ -246,7 +255,7 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     borderSubtle: '#26161b',
     mixColor: 'hsl(345, 20%, 72%)',
   },
-  'cyber': {
+  cyber: {
     // review P2-7（2026-10-11）：三层方向统一为「外层最暗 → 主层 → 输入框最亮」（原外层比主层亮）
     name: '赛博星空',
     bgPrimary: '#0e0b1a',
@@ -262,7 +271,7 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     borderSubtle: '#1e1930',
     mixColor: 'hsl(255, 25%, 72%)',
   },
-  'obsidian': {
+  obsidian: {
     // review P2-7（2026-10-11）：三层方向统一为「外层最暗 → 主层 → 输入框最亮」（原外层比主层亮）
     name: '黑曜石墨',
     bgPrimary: '#131415',

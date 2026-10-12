@@ -95,9 +95,12 @@
 .sidebarScroll {
   flex: 1;
   overflow-y: auto;
-  /* 右侧 padding 从 10px 精准收窄为 2px (--space-0_5)，为列表项 (.sessionItemWrap) 释放 8px 宽度空间；
-   * 同时保留 10px 滚动条走廊与 4px 对称呼吸空隙，绝不产生遮挡与穿模 */
-  padding: var(--space-2_5) var(--space-0_5, 2px) var(--space-3_5) var(--space-2_5);
+  scrollbar-gutter: stable;
+  /* 始终为滚动条预留 10px 走廊位置（scrollbar-gutter: stable），
+   * 配合右侧 padding 2px (--space-0_5)，使列表内容在有/无滚动条时均恒定保持 12px 留白呼吸感，
+   * 既与左侧及顶底 10px 边距和谐对称，又彻底杜绝滚动条出现/消失时的内容左右跳变与贴边现象 */
+  padding: var(--space-2_5) var(--space-0_5, 2px) var(--space-3_5)
+    var(--space-2_5);
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -143,7 +146,8 @@
   border-right: var(--scrollbar-track-safe-gap, 2px) solid transparent;
 }
 
-.sidebar:hover .sidebarScroll::-webkit-scrollbar-button:vertical:start:decrement,
+.sidebar:hover
+  .sidebarScroll::-webkit-scrollbar-button:vertical:start:decrement,
 .sidebarScroll:focus-within::-webkit-scrollbar-button:vertical:start:decrement {
   background-image: var(--scrollbar-button-up);
 }
@@ -153,15 +157,19 @@
   background-image: var(--scrollbar-button-down);
 }
 
-.sidebar:hover .sidebarScroll::-webkit-scrollbar-button:vertical:start:decrement:hover,
-.sidebar:hover .sidebarScroll::-webkit-scrollbar-button:vertical:start:decrement:active,
+.sidebar:hover
+  .sidebarScroll::-webkit-scrollbar-button:vertical:start:decrement:hover,
+.sidebar:hover
+  .sidebarScroll::-webkit-scrollbar-button:vertical:start:decrement:active,
 .sidebarScroll:focus-within::-webkit-scrollbar-button:vertical:start:decrement:hover,
 .sidebarScroll:focus-within::-webkit-scrollbar-button:vertical:start:decrement:active {
   background-image: var(--scrollbar-button-up-active);
 }
 
-.sidebar:hover .sidebarScroll::-webkit-scrollbar-button:vertical:end:increment:hover,
-.sidebar:hover .sidebarScroll::-webkit-scrollbar-button:vertical:end:increment:active,
+.sidebar:hover
+  .sidebarScroll::-webkit-scrollbar-button:vertical:end:increment:hover,
+.sidebar:hover
+  .sidebarScroll::-webkit-scrollbar-button:vertical:end:increment:active,
 .sidebarScroll:focus-within::-webkit-scrollbar-button:vertical:end:increment:hover,
 .sidebarScroll:focus-within::-webkit-scrollbar-button:vertical:end:increment:active {
   background-image: var(--scrollbar-button-down-active);
@@ -259,11 +267,6 @@
   color: var(--text-primary);
 }
 
-.userChevron {
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-}
-
 .gearUpdatePulseDot {
   position: absolute;
   top: 4px;
@@ -348,6 +351,7 @@
 .iconCollapse .sidebarScroll {
   padding-left: 8px;
   padding-right: 8px;
+  scrollbar-gutter: auto;
 }
 
 .iconCollapse .sidebarFooter {
@@ -376,7 +380,6 @@
   height: 32px;
 }
 
-.iconCollapse .userTextStack,
-.iconCollapse .userChevron {
+.iconCollapse .userTextStack {
   display: none;
 }

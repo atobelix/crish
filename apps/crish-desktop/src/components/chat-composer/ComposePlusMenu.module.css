@@ -8,7 +8,7 @@
   z-index: var(--z-dropdown-menu, var(--z-dropdown));
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
-  border-radius: var(--sep-radius-outer, 14px);
+  border-radius: var(--sep-radius-outer, 12px);
   box-shadow: var(--shadow-lg);
   padding: 6px;
   display: flex;

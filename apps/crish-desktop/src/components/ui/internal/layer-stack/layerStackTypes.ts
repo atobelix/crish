@@ -67,6 +67,14 @@ export interface LayerTraceRecord {
   dismissReason: DismissReason;
 }
 
+export interface DismissedByPointerSnapshot {
+  pointerId: number;
+  layerId: string;
+  anchor: HTMLElement | null;
+  target: EventTarget | null;
+  timestamp: number;
+}
+
 export const LAYER_TYPE_PRIORITY: Record<LayerType, number> = {
   'modal-dialog': 10,
   'confirm-dialog': 15,

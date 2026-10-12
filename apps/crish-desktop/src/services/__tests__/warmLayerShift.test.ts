@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { kOf, shiftWarmLayers } from '../warmLayerShift';
 
-const LIGHT = { outer: '#f2f1f0', main: '#f8f7f6', input: '#ffffff' };
+const LIGHT = { outer: '#f2f1f0', main: '#fbfaf9', input: '#ffffff' };
 const DARK = { outer: '#1a1919', main: '#1e1e1e', input: '#232323' };
-const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const rgb = (h: string) =>
+  [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const lum = (h: string) => Math.max(...rgb(h));
-const cmy = (h: string) => { const [r, g, b] = rgb(h); const m = Math.max(r, g, b); return { M: ((m - g) / m) * 100, Y: ((m - b) / m) * 100 }; };
+const cmy = (h: string) => {
+  const [r, g, b] = rgb(h);
+  const m = Math.max(r, g, b);
+  return { M: ((m - g) / m) * 100, Y: ((m - b) / m) * 100 };
+};
 
 describe('亮度微调只平移 K（review P1-3）', () => {
   it('adjust=0 精确输出定稿值', () => {
@@ -36,7 +41,8 @@ describe('亮度微调只平移 K（review P1-3）', () => {
   }
 
   it('三层同步平移：+3 档时各层都变亮，-3 档时都变暗', () => {
-    const up = shiftWarmLayers(DARK, 3, true), dn = shiftWarmLayers(DARK, -3, true);
+    const up = shiftWarmLayers(DARK, 3, true),
+      dn = shiftWarmLayers(DARK, -3, true);
     for (const k of ['outer', 'main', 'input'] as const) {
       expect(lum(up[k])).toBeGreaterThan(lum(DARK[k]));
       expect(lum(dn[k])).toBeLessThan(lum(DARK[k]));

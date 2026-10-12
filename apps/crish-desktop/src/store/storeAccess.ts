@@ -44,7 +44,7 @@ import {
   type SessionRuntimeStatus,
 } from './sessionRuntimeStatusStore';
 import { useLayoutAnimationStore } from './layoutAnimationStore';
-import type { FileDiff, } from './types';
+import type { FileDiff } from './types';
 import type { PermissionMode } from '../api/permissionModes';
 import type {
   CronJob,
@@ -205,16 +205,17 @@ export { useWorkspaceStore, useActiveWorkspace } from './workspaceStore';
 
 // ── session 域只读与生命周期协调面 ───────────────────────────────────────────
 
-export {
-  getSessionById,
-} from './sessionStore';
+export { getSessionById } from './sessionStore';
 export { SessionCoordinator, deleteSessionCascade } from './SessionCoordinator';
 
 export {
   isContextStateCarrierMessage,
   isContextStateInjection,
 } from './sessionInjectionMount';
-export { clearRuntimeStatus } from './sessionRuntimeStatusStore';
+export {
+  clearRuntimeStatus,
+  reportRuntimeStatus,
+} from './sessionRuntimeStatusStore';
 export { needsEngineMessageHydrate } from './sessionSharedHelpers';
 export { findInactiveHydratedSessionIdsToEvict } from './sessionMessageEviction';
 
@@ -293,10 +294,7 @@ export type {
   DropZone,
 } from './layout-tree';
 
-export {
-  findParent,
-  moveNode,
-} from './layout-tree/operations';
+export { findParent, moveNode } from './layout-tree/operations';
 
 export { focusOrOpenTreePanel } from './layout-tree/treePanelAccess';
 
@@ -340,7 +338,6 @@ export {
 
 export { sortMessagesByOrder } from './sessionSharedHelpers';
 export { triggerSessionMessageHydrateIfNeeded } from './sessionStore';
-
 
 // ── 类型再导出（读面消费方经本模块取类型，避免直连 store 模块）─────────────────
 

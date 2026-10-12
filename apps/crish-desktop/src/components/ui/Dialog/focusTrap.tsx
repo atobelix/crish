@@ -67,7 +67,10 @@ class FocusTrapIsolationManager {
       node.getAttribute('data-toast-container') === 'true' ||
       node.classList.contains('radix-popper-content-wrapper') ||
       node.classList.contains('toaster') ||
-      node.id === 'toast-portal' ||
+      // 全局通知真实挂载点 = index.html 的 #toast-root（ToastContainer 默认 containerId）。
+      // 原写成从未存在的 'toast-portal'：任一模态弹窗打开都会把 #toast-root 打成 inert，
+      // 通知看得见却点不到（命中落到弹窗遮罩）。契约：toastHitTestContract.test.tsx
+      node.id === 'toast-root' ||
       node.id === 'tooltip-portal' ||
       // Plan-09 自研 Select / Combobox 原子浮层白名单放行
       node.getAttribute('data-slot') === 'select-content' ||

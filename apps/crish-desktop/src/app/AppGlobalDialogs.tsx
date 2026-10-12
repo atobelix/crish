@@ -5,6 +5,10 @@ import { openSettings } from '../api/storeAccess';
 import { emitUiEvent } from '../api/uiEvents';
 import { getActiveModelId, getActiveProfileId } from '../api/providerProfiles';
 import type { SettingsTabType } from '../store/types';
+import { useAnimatedPresence } from '../components/ui/Dialog/useAnimatedPresence';
+
+/** 设置弹窗退场时长：与 Dialog 基座退场（--duration-exit 150ms）一致，动画播完才卸载 */
+const SETTINGS_EXIT_MS = 150;
 
 // Lazy loaded components
 const FirstRunWizard = lazy(() =>
@@ -62,6 +66,12 @@ export function AppGlobalDialogs({
   activeWorkspaceId,
   settingsActiveTab,
 }: AppGlobalDialogsProps) {
+  // 设置弹窗挂载跟随动画状态而非开关本身：关闭时先以 isOpen=false 驱动 Dialog 退场，
+  // 退场结束后再卸载（条件渲染直接卸载会让退场动画来不及播，只能硬切）
+  const { isMounted: settingsMounted } = useAnimatedPresence({
+    visible: showSettingsOverlay,
+    exitDurationMs: SETTINGS_EXIT_MS,
+  });
   return (
     <>
       {showFirstRun && (
@@ -89,9 +99,8 @@ export function AppGlobalDialogs({
         <TelemetryDialog onClose={() => setShowTelemetry(false)} />
       )}
 
-      {/* 设置全屏盖层（PE-05 T05.2 #5）：role/aria-modal/层级已由
-          SettingsPanel 内的 ui/Dialog 基座提供，此处不再包 settings-cover */}
-      {showSettingsOverlay && (
+      {/* 设置弹窗：role/aria-modal/层级/遮罩由 SettingsPanel 内的 ui/Dialog 基座提供 */}
+      {settingsMounted && (
         <AppErrorBoundary
           title="设置加载失败"
           onReset={() => {
@@ -123,6 +132,7 @@ export function AppGlobalDialogs({
             }
           >
             <SettingsPanel
+              isOpen={showSettingsOverlay}
               wsId={activeWorkspaceId}
               onClose={() => setShowSettingsOverlay(false)}
               initialTab={settingsActiveTab || 'profile'}

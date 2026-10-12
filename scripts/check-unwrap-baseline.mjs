@@ -51,13 +51,18 @@ const baselinePath = argVal('--baseline')
   ? resolve(root, argVal('--baseline'))
   : join(root, 'docs/multi-agent-repair/基线记录/unwrap-baseline.md');
 
-/** 测试文件判定：tests/、benches/ 目录内，或文件名 tests.rs / test_* / *_tests.rs */
+/** 测试文件判定：tests/、benches/ 目录内，或文件名 tests.rs / test_* / *_tests.rs / tests_* / *_test_* / *_test.rs */
 function isTestFile(file) {
   const p = file.replace(/\\/g, '/');
   if (/\/tests\//.test(p) || /\/benches\//.test(p)) return true;
   const base = basename(p);
   return (
-    base === 'tests.rs' || base.startsWith('test_') || base.endsWith('_tests.rs')
+    base === 'tests.rs' ||
+    base.startsWith('test_') ||
+    base.endsWith('_tests.rs') ||
+    base.startsWith('tests_') ||
+    base.includes('_test_') ||
+    base.endsWith('_test.rs')
   );
 }
 

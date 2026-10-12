@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-import type { SessionGoalTask } from '../../store/layoutStore';
+import type { SessionGoalTask } from '../../store/types';
 import styles from './ChatStatusRibbons.module.css';
 import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
@@ -41,15 +41,9 @@ export const DynamicChipBar: React.FC<DynamicChipBarProps> = ({
 }) => {
   if (!shouldRender) return null;
   return (
-    <div
-      className={styles.dynamicChipBar}
-      role="region"
-      aria-label="快捷状态"
-    >
+    <div className={styles.dynamicChipBar} role="region" aria-label="快捷状态">
       {activeBgTaskCount > 0 && onOpenTerminal ? (
-        <Tooltip
-          content={`点击在终端查看 ${activeBgTaskCount} 个后台运行任务`}
-        >
+        <Tooltip content={`点击在终端查看 ${activeBgTaskCount} 个后台运行任务`}>
           <Button
             type="button"
             variant="ghost"
@@ -139,9 +133,7 @@ export const PlanDrawer: React.FC<PlanDrawerProps> = ({
       aria-label="计划与进度详情"
     >
       <div className={styles.dynamicPlanHeader}>
-        <span>
-          {goalModeActive ? goalText || '目标推进中' : '计划清单'}
-        </span>
+        <span>{goalModeActive ? goalText || '目标推进中' : '计划清单'}</span>
         <Button
           type="button"
           variant="ghost"
@@ -165,11 +157,17 @@ export const PlanDrawer: React.FC<PlanDrawerProps> = ({
               className={`${styles.dynamicPlanItem}${item.done ? ` ${styles.isDone}` : ''}`}
             >
               {item.done ? (
-                <AppIcon name="check-circle" size={13}
-                  style={{ color: 'var(--accent-green)' }} />
+                <AppIcon
+                  name="check-circle"
+                  size={13}
+                  style={{ color: 'var(--accent-green)' }}
+                />
               ) : (
-                <AppIcon name="circle" size={13}
-                  style={{ color: 'var(--text-tertiary)' }} />
+                <AppIcon
+                  name="circle"
+                  size={13}
+                  style={{ color: 'var(--text-tertiary)' }}
+                />
               )}
               <span>{item.text}</span>
             </li>
@@ -177,9 +175,7 @@ export const PlanDrawer: React.FC<PlanDrawerProps> = ({
         </ul>
       ) : (
         <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-          {inPlanMode
-            ? '计划模式生效中，AI 将集中思考规划'
-            : '暂无清单步数'}
+          {inPlanMode ? '计划模式生效中，AI 将集中思考规划' : '暂无清单步数'}
         </div>
       )}
     </div>

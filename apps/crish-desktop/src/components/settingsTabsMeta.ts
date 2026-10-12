@@ -39,6 +39,7 @@ const FORMAL_TAB_IDS: TabType[] = [
   'shortcuts',
   'security',
   'diagnostics',
+  'about',
 ];
 
 export function allowedTabIds(_mcpAvailable: boolean): TabType[] {
@@ -255,6 +256,24 @@ export const TAB_META: TabMeta[] = [
       'diag',
       'log',
       'health',
+    ],
+  },
+  {
+    id: 'about',
+    label: '关于',
+    icon: 'info',
+    group: '关于',
+    keywords: [
+      '关于',
+      '版本',
+      '开源协议',
+      '许可证',
+      '第三方协议',
+      'about',
+      'version',
+      'license',
+      'legal',
+      'copyright',
     ],
   },
 ];

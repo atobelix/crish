@@ -9,47 +9,47 @@
 
 ## 生产代码计数（门禁口径，2026-08-04 建线）
 
-| crate | unwrap | expect | 合计 |
-|---|---|---|---|
-| agent-provider | 0 | 8 | 8 |
-| agent-tools | 0 | 2 | 2 |
-| conex-compaction | 0 | 1 | 1 |
-| conex-db | 0 | 0 | 0 |
-| conex-diff | 0 | 0 | 0 |
-| conex-fs | 0 | 0 | 0 |
-| conex-markdown | 1 | 27 | 28 |
-| conex-net | 0 | 0 | 0 |
-| conex-sandbox | 0 | 0 | 0 |
-| conex-search | 0 | 0 | 0 |
-| conex-stream | 0 | 0 | 0 |
-| conex-telemetry | 0 | 0 | 0 |
-| conex-test-utils | 0 | 13 | 13 |
-| conex-types | 0 | 0 | 0 |
-| orchestrator | 0 | 2 | 2 |
-| session-loop | 10 | 5 | 15 |
+| crate            | unwrap | expect | 合计 |
+| ---------------- | ------ | ------ | ---- |
+| agent-provider   | 0      | 8      | 8    |
+| agent-tools      | 0      | 2      | 2    |
+| conex-compaction | 0      | 1      | 1    |
+| conex-db         | 0      | 0      | 0    |
+| conex-diff       | 0      | 0      | 0    |
+| conex-fs         | 0      | 0      | 0    |
+| conex-markdown   | 1      | 27     | 28   |
+| conex-net        | 0      | 0      | 0    |
+| conex-sandbox    | 0      | 0      | 0    |
+| conex-search     | 0      | 0      | 0    |
+| conex-stream     | 0      | 0      | 0    |
+| conex-telemetry  | 0      | 0      | 0    |
+| conex-test-utils | 0      | 13     | 13   |
+| conex-types      | 0      | 0      | 0    |
+| orchestrator     | 0      | 2      | 2    |
+| session-loop     | 10     | 5      | 15   |
 
 合计：生产 unwrap **11**、expect **58**、共 **69**（16 个 crate）。
 
 ## 测试代码计数（仅观察，不设门禁）
 
-| crate | unwrap | expect |
-|---|---|---|
-| agent-provider | 124 | 213 |
-| agent-tools | 300 | 48 |
-| conex-compaction | 9 | 10 |
-| conex-db | 159 | 3 |
-| conex-diff | 1 | 0 |
-| conex-fs | 62 | 0 |
-| conex-markdown | 0 | 0 |
-| conex-net | 0 | 0 |
-| conex-sandbox | 0 | 0 |
-| conex-search | 0 | 0 |
-| conex-stream | 15 | 0 |
-| conex-telemetry | 16 | 1 |
-| conex-test-utils | 0 | 1 |
-| conex-types | 47 | 0 |
-| orchestrator | 322 | 25 |
-| session-loop | 119 | 85 |
+| crate            | unwrap | expect |
+| ---------------- | ------ | ------ |
+| agent-provider   | 124    | 213    |
+| agent-tools      | 300    | 48     |
+| conex-compaction | 9      | 10     |
+| conex-db         | 159    | 3      |
+| conex-diff       | 1      | 0      |
+| conex-fs         | 62     | 0      |
+| conex-markdown   | 0      | 0      |
+| conex-net        | 0      | 0      |
+| conex-sandbox    | 0      | 0      |
+| conex-search     | 0      | 0      |
+| conex-stream     | 15     | 0      |
+| conex-telemetry  | 16     | 1      |
+| conex-test-utils | 0      | 1      |
+| conex-types      | 47     | 0      |
+| orchestrator     | 322    | 25     |
+| session-loop     | 119    | 85     |
 
 合计：测试 unwrap **1174**、expect **386**（仅观察）。
 
@@ -70,20 +70,29 @@
   生产计数；`--update` 只刷新标记区（git diff 可复核）。
 
 <!-- BASELINE_START -->
-agent-provider 0 8
-agent-tools 0 2
-conex-compaction 0 1
-conex-db 0 0
+
+agent-provider 0 35
+agent-tools 34 63
+conex-browser 0 16
+conex-browser-tools 0 0
+conex-compaction 0 2
+conex-computer 0 39
+conex-computer-tools 0 3
+conex-db 0 2
 conex-diff 0 0
+conex-doc-collab 95 18
 conex-fs 0 0
-conex-markdown 1 27
-conex-net 0 0
+conex-markdown 1 26
+conex-md-ast 0 0
+conex-note-runtime 60 15
+conex-relay 0 0
 conex-sandbox 0 0
 conex-search 0 0
-conex-stream 0 0
+conex-shared 0 0
 conex-telemetry 0 0
 conex-test-utils 0 13
-conex-types 0 0
-orchestrator 0 2
-session-loop 10 5
+conex-types 0 7
+conex-workspace-store 99 8
+orchestrator 52 6
+session-loop 49 28
 <!-- BASELINE_END -->

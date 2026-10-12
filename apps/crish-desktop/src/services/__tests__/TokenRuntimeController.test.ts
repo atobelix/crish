@@ -80,10 +80,18 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       // 故此处断言**独立侧取值**，并由 expectNoDerivedAliasesInjected 钉死
       // 「派生别名零注入」——比断言旧别名更强（旧写法对收敛回归无感知）。
       // 2026-10-10 三档底色：运行时只写 --surface-outer / --surface-main / --surface-input
-      expect(root.style.getPropertyValue('--surface-main')).toBe('#f8f7f6');
+      expect(root.style.getPropertyValue('--surface-main')).toBe('#F8F8F8');
       expect(root.style.getPropertyValue('--surface-outer')).toBe('#f2f1f0');
       expect(root.style.getPropertyValue('--surface-input')).toBe('#ffffff');
-      for (const alias of ['--surface-paper', '--surface-chrome', '--surface-card', '--surface-elevated', '--shell-chrome-bg', '--bg-tertiary', '--composer-bg']) {
+      for (const alias of [
+        '--surface-paper',
+        '--surface-chrome',
+        '--surface-card',
+        '--surface-elevated',
+        '--shell-chrome-bg',
+        '--bg-tertiary',
+        '--composer-bg',
+      ]) {
         expect(root.style.getPropertyValue(alias), alias).toBe('');
       }
       expect(root.style.getPropertyValue('--text-primary')).toBe('#1a1a1a');
@@ -102,10 +110,14 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
 
     it('setCustomProperty 与 removeCustomProperty 提供受控注入面', () => {
       tokenRuntimeController.setCustomProperty('--test-custom-token', '42px');
-      expect(document.documentElement.style.getPropertyValue('--test-custom-token')).toBe('42px');
+      expect(
+        document.documentElement.style.getPropertyValue('--test-custom-token')
+      ).toBe('42px');
 
       tokenRuntimeController.removeCustomProperty('--test-custom-token');
-      expect(document.documentElement.style.getPropertyValue('--test-custom-token')).toBe('');
+      expect(
+        document.documentElement.style.getPropertyValue('--test-custom-token')
+      ).toBe('');
     });
   });
 
@@ -252,13 +264,19 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
   describe('5. visualThemeController 布局尺寸 Token 统一接管', () => {
     it('setUiScale 正确更新 --ui-scale 变量', () => {
       tokenRuntimeController.setUiScale('small');
-      expect(document.documentElement.style.getPropertyValue('--ui-scale')).toBe('0.9');
+      expect(
+        document.documentElement.style.getPropertyValue('--ui-scale')
+      ).toBe('0.9');
 
       tokenRuntimeController.setUiScale('medium');
-      expect(document.documentElement.style.getPropertyValue('--ui-scale')).toBe('1.0');
+      expect(
+        document.documentElement.style.getPropertyValue('--ui-scale')
+      ).toBe('1.0');
 
       tokenRuntimeController.setUiScale('large');
-      expect(document.documentElement.style.getPropertyValue('--ui-scale')).toBe('1.1');
+      expect(
+        document.documentElement.style.getPropertyValue('--ui-scale')
+      ).toBe('1.1');
     });
   });
 
@@ -279,7 +297,9 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       // 自定义极端暗色背景触发对比度防崩安全算法，派生高对比度亮白
       expect(result.tokens['--text-primary']).toBe('hsl(0, 0%, 94%)');
       expect(result.tokens['--surface-outer']).toContain('color-mix(');
-      expect(document.documentElement.style.getPropertyValue('--surface-main')).toBe('#223344');
+      expect(
+        document.documentElement.style.getPropertyValue('--surface-main')
+      ).toBe('#223344');
       expectNoDerivedAliasesInjected(document.documentElement);
     });
   });
@@ -312,10 +332,18 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(result.tokens['--scrollbar-thumb-active']).toContain('color-mix(');
 
       const root = document.documentElement;
-      expect(root.style.getPropertyValue('--text-faint')).toContain('color-mix(');
-      expect(root.style.getPropertyValue('--scrollbar-thumb-bg')).toContain('color-mix(');
-      expect(root.style.getPropertyValue('--scrollbar-button-up')).toContain('data:image/svg+xml');
-      expect(root.style.getPropertyValue('--scrollbar-button-down')).toContain('data:image/svg+xml');
+      expect(root.style.getPropertyValue('--text-faint')).toContain(
+        'color-mix('
+      );
+      expect(root.style.getPropertyValue('--scrollbar-thumb-bg')).toContain(
+        'color-mix('
+      );
+      expect(root.style.getPropertyValue('--scrollbar-button-up')).toContain(
+        'data:image/svg+xml'
+      );
+      expect(root.style.getPropertyValue('--scrollbar-button-down')).toContain(
+        'data:image/svg+xml'
+      );
     });
 
     it('在冰川薄荷 (glacier) 皮肤下应用 #e9fcf9 柔和主题底色并动态生成滚动条微调按钮', () => {
@@ -330,9 +358,12 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
 
       expect(result.tokens['--surface-outer']).toBe('#e9fcf9');
       expect(result.tokens['--shell-chrome-bg']).toBeUndefined();
-      expect(result.tokens['--scrollbar-button-up']).toContain('data:image/svg+xml');
-      expect(result.tokens['--scrollbar-button-down-active']).toContain('data:image/svg+xml');
+      expect(result.tokens['--scrollbar-button-up']).toContain(
+        'data:image/svg+xml'
+      );
+      expect(result.tokens['--scrollbar-button-down-active']).toContain(
+        'data:image/svg+xml'
+      );
     });
   });
 });
-

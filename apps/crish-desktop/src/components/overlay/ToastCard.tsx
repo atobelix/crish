@@ -11,7 +11,8 @@ export interface ToastCardProps {
   index: number;
   frontmostHeight: number;
   offsetY: number;
-  isExpanded: boolean;
+  /** 悬停中：冻结倒计时（与是否扇形展开无关，单条通知同样生效） */
+  isPaused: boolean;
   onHeightMeasure: (el: HTMLElement | null) => void;
   onDismiss: () => void;
 }
@@ -21,7 +22,7 @@ export const ToastCard: React.FC<ToastCardProps> = ({
   index,
   frontmostHeight,
   offsetY,
-  isExpanded,
+  isPaused,
   onHeightMeasure,
   onDismiss,
 }) => {
@@ -58,11 +59,11 @@ export const ToastCard: React.FC<ToastCardProps> = ({
     remainingTimeRef.current = toast.duration ?? 5000;
   }, [toast.duration, toast.updateKey]);
 
-  // 毫秒级倒计时（支持悬停展开暂停与恢复）
+  // 毫秒级倒计时（支持悬停暂停与恢复）
   useEffect(() => {
     if (!toast.duration || toast.duration === Infinity) return;
 
-    if (isExpanded) {
+    if (isPaused) {
       if (startTimeRef.current !== null) {
         const elapsed = performance.now() - startTimeRef.current;
         remainingTimeRef.current = Math.max(
@@ -90,7 +91,7 @@ export const ToastCard: React.FC<ToastCardProps> = ({
         startTimeRef.current = null;
       }
     };
-  }, [toast.duration, toast.updateKey, isExpanded, handleDismissAnimation]);
+  }, [toast.duration, toast.updateKey, isPaused, handleDismissAnimation]);
 
   const setNodeRef = useCallback(
     (el: HTMLDivElement | null) => {
@@ -166,10 +167,10 @@ export const ToastCard: React.FC<ToastCardProps> = ({
   const stateAttr = swipedOut
     ? 'swiping-dismiss'
     : exiting
-    ? 'exiting'
-    : swiping
-    ? 'swiping'
-    : 'idle';
+      ? 'exiting'
+      : swiping
+        ? 'swiping'
+        : 'idle';
 
   return (
     <div

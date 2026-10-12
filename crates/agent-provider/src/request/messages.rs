@@ -678,11 +678,11 @@ pub fn detect_chat_unpaired_tool_calls(messages: &[ChatMessage]) -> Vec<String> 
 
 /// OpenAI chat 出站成对性校验入口（详案 02 §3.4 分级守门 · 轨二）。
 ///
-/// - **Debug / CI（`debug_assertions`）**：检测到孤儿 → 立即 panic（Fail-Fast）；
-/// - **Release**：返回 [RequestBuildError::UnpairedToolCalls]（含排序
-///   `orphan_ids`）并 `tracing::error!` 结构化日志——调用方（会话循环出站
-///   组装处）据此执行「本地合成补齐 → 单次重试组包」；仍失败则标记会话
-///   `wire_pairing_poisoned`。**禁止**在导线层静默插入假 tool 结果。
+/// 导线层刚性拦截孤儿工具调用：返回 [RequestBuildError::UnpairedToolCalls]（含排序
+/// `orphan_ids`）并记录 `tracing::error!` 结构化日志——调用方（会话循环出站
+/// 组装处）据此执行「本地合成补齐 → 单次重试组包」；仍失败则标记会话
+/// `wire_pairing_poisoned`。**禁止**在导线层静默插入假 tool 结果，也**禁止**
+/// 使用 panic!() 中断进程。
 pub fn validate_chat_tool_pairing(messages: &[ChatMessage]) -> Result<(), RequestBuildError> {
     let orphan_ids = detect_chat_unpaired_tool_calls(messages);
     if orphan_ids.is_empty() {
@@ -692,29 +692,20 @@ pub fn validate_chat_tool_pairing(messages: &[ChatMessage]) -> Result<(), Reques
         protocol: "openai_chat",
         orphan_ids,
     };
-    #[cfg(debug_assertions)]
-    {
-        panic!("OpenAI 导线层校验拦截到孤儿工具调用！{err:?}");
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        tracing::error!(
-            target: "agent_provider::wire_pairing",
-            protocol = "openai_chat",
-            error = %err,
-            orphan_ids = ?err.orphan_ids(),
-            "导线层刚性拦截带毒请求出站（禁止静默伪造 tool_result；调用方须走补齐重试闭环）"
-        );
-        return Err(err);
-    }
-    #[allow(unreachable_code)]
-    Ok(())
+    tracing::error!(
+        target: "agent_provider::wire_pairing",
+        protocol = "openai_chat",
+        error = %err,
+        orphan_ids = ?err.orphan_ids(),
+        "导线层刚性拦截带毒请求出站（禁止静默伪造 tool_result；调用方须走补齐重试闭环）"
+    );
+    Err(err)
 }
 
 /// 从 AgentMessage 序列做 chat 轨成对性预检（tool_calls/tool 映射与推理模式无关）。
 ///
-/// Debug：孤儿 → panic；Release：`Err(UnpairedToolCalls)`。供 engine_provider
-/// 在 build 前软失败拦截（不经过 build 入口 tripwire）。
+/// 孤儿 → 返回 `Err(UnpairedToolCalls)`。供 engine_provider
+/// 在 build 前软失败拦截。
 pub fn validate_chat_pairing_from_messages(
     system_prompt: Option<&str>,
     messages: &[std::sync::Arc<AgentMessage>],

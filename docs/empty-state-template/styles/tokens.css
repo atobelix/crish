@@ -1,0 +1,66 @@
+/* ==========================================================================
+   Conex / Crish Design Tokens (SSOT)
+   严格取自 apps/crish-desktop/src/styles/tokens.css
+   零冗余变量，零花哨色彩
+   ========================================================================== */
+
+:root {
+  /* 字体系统 */
+  --font-sans:
+    'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB',
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+
+  /* 字阶与字重 */
+  --font-size-xs: 11px;
+  --font-size-sm: 12.5px;
+  --font-size-base: 14px;
+  --font-size-md: 15px;
+
+  /* 几何半径 */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-xl: 18px;
+  --radius-pill: 9999px;
+
+  /* 动效曲线与标准耗时 */
+  --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-dock: 260ms;
+  --duration-fast: 140ms;
+
+  /* 品牌色与语义色 */
+  --brand: #10b981;
+  --brand-hover: #059669;
+  --text-on-accent: #ffffff;
+  --color-warning: #f59e0b;
+
+  /* 三档暖灰底色 (深色模式默认，与当前软件完全一致) */
+  --surface-outer: #1a1919;
+  --surface-main: #1e1e1e;
+  --surface-input: #232323;
+  --surface-tray: #1f1e1e;
+
+  /* 文字灰阶 */
+  --text-primary: #e6e6e6;
+  --text-secondary: #9e9e9e;
+  --text-tertiary: #6e6e6e;
+
+  /* 边框与微弱分割 */
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-color: rgba(255, 255, 255, 0.12);
+  --border-focus: rgba(255, 255, 255, 0.18);
+
+  /* 交互叠加色 */
+  --tint-hover: rgba(255, 255, 255, 0.05);
+  --tint-active: rgba(255, 255, 255, 0.08);
+
+  /* 用户气泡 */
+  --user-bubble-bg: #272626;
+
+  /* 极简轻量阴影 */
+  --shadow-composer: 0 4px 16px rgba(0, 0, 0, 0.25);
+  --shadow-menu:
+    0 12px 28px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}

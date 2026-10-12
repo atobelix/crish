@@ -3,7 +3,7 @@
  * 状态与副作用逻辑已提取到 useAppearanceSettings；本组件仅负责渲染。
  */
 import React from 'react';
-import { Button } from '../ui';
+import { Button, Select } from '../ui';
 import {
   SettingsPage,
   SettingsSection,
@@ -13,13 +13,17 @@ import {
 import { FontSettingsSection } from './FontSettingsSection';
 import { SettingsSchemaRenderer } from './SettingsSchemaRenderer';
 import { useAppearanceSettings } from './useAppearanceSettings';
+import { useI18n, type SupportedLanguage } from '../../i18n';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
 };
 
-export const SettingsAppearanceTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
+export const SettingsAppearanceTab: React.FC<Props> = ({
+  _onBlockingOverlayChange,
+}) => {
   void _onBlockingOverlayChange;
+  const { language, setLanguage, t } = useI18n();
   const {
     visibilityRef,
     settings,
@@ -36,15 +40,11 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ _onBlockingOverlayChang
 
   if (loadError && !settings) {
     return (
-      <SettingsPage title="外观">
-        <SettingsSection title="错误">
+      <SettingsPage title={t('nav.appearance', '外观')}>
+        <SettingsSection title={t('common.error', '错误')}>
           <SettingsCard>
             <SettingsRow
-              title={
-                <span role="alert">
-                  {loadError}
-                </span>
-              }
+              title={<span role="alert">{loadError}</span>}
               control={
                 <Button
                   type="button"
@@ -55,7 +55,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ _onBlockingOverlayChang
                     setLoadTick((n) => n + 1);
                   }}
                 >
-                  重试
+                  {t('common.retry', '重试')}
                 </Button>
               }
             />
@@ -67,11 +67,11 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ _onBlockingOverlayChang
 
   if (!settings) {
     return (
-      <SettingsPage title="外观">
+      <SettingsPage title={t('nav.appearance', '外观')}>
         <SettingsSection>
           <SettingsCard>
             <SettingsRow
-              title={<span>加载中…</span>}
+              title={<span>{t('common.loading', '加载中…')}</span>}
             />
           </SettingsCard>
         </SettingsSection>
@@ -81,7 +81,34 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ _onBlockingOverlayChang
 
   return (
     <div ref={visibilityRef}>
-      <SettingsPage title="外观">
+      <SettingsPage title={t('nav.appearance', '外观')}>
+        {/* 语言设置 / Language setting */}
+        <SettingsSection title={t('settings.language', '语言')}>
+          <SettingsCard>
+            <SettingsRow
+              title={t('settings.language', '语言')}
+              desc={
+                language === 'zh-CN'
+                  ? '选择应用程序显示语言'
+                  : 'Select application display language'
+              }
+              control={
+                <Select
+                  size="sm"
+                  value={language}
+                  options={[
+                    { id: 'zh-CN', label: '简体中文' },
+                    { id: 'en-US', label: 'English' },
+                  ]}
+                  onChange={(newLang) => {
+                    setLanguage(newLang as SupportedLanguage);
+                  }}
+                />
+              }
+            />
+          </SettingsCard>
+        </SettingsSection>
+
         <SettingsSchemaRenderer
           schema={appearanceSchema}
           values={allValues}

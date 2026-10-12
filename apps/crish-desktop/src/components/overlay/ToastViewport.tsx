@@ -1,4 +1,9 @@
-import React, { useState, useCallback, useSyncExternalStore } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useEffect,
+  useSyncExternalStore,
+} from 'react';
 import type { AppToast, ToastPosition } from '../../services/toast/types';
 import { ToastStore } from '../../services/toast/ToastStore';
 import { useToastStackMeasurement } from './useToastStackMeasurement';
@@ -24,19 +29,24 @@ export const ToastViewport: React.FC<ToastViewportProps> = ({
   );
 
   const toasts = propToasts ?? storeToasts;
-  const [expanded, setExpanded] = useState(false);
+  // 悬停 = 暂停全部倒计时（单条也要停：否则瞄准叉号途中通知自行退场、退场期 pointer-events:none）；
+  // 扇形展开只在多条时才有意义，由悬停派生，不另设状态
+  const [hovered, setHovered] = useState(false);
+  const expanded = hovered && toasts.length > 1;
+  // 清空时本组件 return null，mouseleave 永远不会来；不复位的话下一条通知一出来就被「暂停」
+  useEffect(() => {
+    if (toasts.length === 0) setHovered(false);
+  }, [toasts.length]);
 
   const { registerNode, getOffsetY, frontmostHeight } =
     useToastStackMeasurement(toasts, expanded);
 
   const handleMouseEnter = useCallback(() => {
-    if (toasts.length > 1) {
-      setExpanded(true);
-    }
-  }, [toasts.length]);
+    setHovered(true);
+  }, []);
 
   const handleMouseLeave = useCallback(() => {
-    setExpanded(false);
+    setHovered(false);
   }, []);
 
   const handleDismiss = useCallback(
@@ -78,6 +88,7 @@ export const ToastViewport: React.FC<ToastViewportProps> = ({
       aria-label="通知中心"
       data-position={position}
       data-expanded={expanded}
+      data-paused={hovered}
       className={`${styles.viewport} ${getPositionClass()}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -91,7 +102,7 @@ export const ToastViewport: React.FC<ToastViewportProps> = ({
           offsetY={getOffsetY(index)}
           onHeightMeasure={(el) => registerNode(item.id, el)}
           onDismiss={() => handleDismiss(item.id)}
-          isExpanded={expanded}
+          isPaused={hovered}
         />
       ))}
     </section>

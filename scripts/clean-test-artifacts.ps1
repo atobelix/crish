@@ -7,7 +7,7 @@
     本脚本安全清理这些测试程序，完全不影响正常业务开发与调试。
 #>
 param(
-    [string]$TargetRoot = "C:\Software\conex\target\debug\deps",
+    [string]$TargetRoot = "$PSScriptRoot\..\target\debug\deps",
     [int]$KeepLatestHours = 0
 )
 

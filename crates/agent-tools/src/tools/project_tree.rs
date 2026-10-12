@@ -297,7 +297,7 @@ fn build_tree(params: &ProjectTreeParams) -> TreeEntry {
             }
             // 栈对齐到当前深度（前序：深度先升后降），出栈缓冲挂回父节点
             while stack.len() > depth_rel {
-                let done = stack.pop().unwrap();
+                let Some(done) = stack.pop() else { break; };
                 if let Some(parent) = stack.last_mut().and_then(|lv| lv.last_mut()) {
                     parent.children.extend(done);
                     sort_and_finalize(&mut parent.children);
@@ -321,30 +321,34 @@ fn build_tree(params: &ProjectTreeParams) -> TreeEntry {
                     ),
                 );
                 dirs += 1;
-                stack.last_mut().unwrap().push(TreeNode {
-                    name,
-                    is_dir: true,
-                    size: 1,
-                    children: Vec::new(),
-                });
+                if let Some(last) = stack.last_mut() {
+                    last.push(TreeNode {
+                        name,
+                        is_dir: true,
+                        size: 1,
+                        children: Vec::new(),
+                    });
+                }
                 stack.push(Vec::new());
             } else if params.include_files {
                 if glob_excluded(&params.exclude_globs, &rel_str) {
                     continue;
                 }
                 files += 1;
-                stack.last_mut().unwrap().push(TreeNode {
-                    name,
-                    is_dir: false,
-                    size: 1,
-                    children: Vec::new(),
-                });
+                if let Some(last) = stack.last_mut() {
+                    last.push(TreeNode {
+                        name,
+                        is_dir: false,
+                        size: 1,
+                        children: Vec::new(),
+                    });
+                }
             }
         }
     }
     // 收尾：逐层出栈挂载（自底向上完成排序与 size）
     while stack.len() > 1 {
-        let done = stack.pop().unwrap();
+        let Some(done) = stack.pop() else { break; };
         if let Some(parent) = stack.last_mut().and_then(|lv| lv.last_mut()) {
             parent.children.extend(done);
             sort_and_finalize(&mut parent.children);

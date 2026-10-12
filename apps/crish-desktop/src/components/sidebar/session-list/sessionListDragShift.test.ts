@@ -1,5 +1,9 @@
+/** @vitest-environment jsdom */
 import { describe, expect, it } from 'vitest';
-import { collapseSourceRows, computeRowShiftOffsets } from './sessionListDragShift';
+import {
+  collapseSourceRows,
+  computeRowShiftOffsets,
+} from './sessionListDragShift';
 
 describe('computeRowShiftOffsets', () => {
   it('同容器向下拖：源与目标之间的行上移一格', () => {

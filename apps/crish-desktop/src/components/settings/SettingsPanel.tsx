@@ -8,13 +8,14 @@ import React, {
   Suspense,
 } from 'react';
 import styles from './SettingsPanel.module.css';
-import { useLayoutStore, useSettingsUiStore } from '../../store/storeAccess';
+import { useSettingsUiStore } from '../../store/storeAccess';
 import {
   getCachedCapabilities,
   refreshProductCapabilities,
 } from '../../api/capabilitiesStore';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { Dialog } from '../ui';
+import { Button, Dialog, Tooltip } from '../ui';
+import { AppIcon } from '../ui/icons/index';
 import {
   normalizeSettingsTabId,
   allowedTabIds,
@@ -24,7 +25,6 @@ import {
 } from '../settingsTabsMeta';
 import { useSettingsNav } from '../useSettingsNav';
 import { SettingsSidebar } from './SettingsSidebar';
-import { WindowControls } from '../shell/WindowControls';
 
 /** 设置 tab 懒加载：按需加载，首屏只加载当前激活 tab */
 const ModelsSettingsTab = lazy(() =>
@@ -88,6 +88,11 @@ const SettingsBrowserTab = lazy(() =>
     default: m.SettingsBrowserTab,
   }))
 );
+const SettingsAboutTab = lazy(() =>
+  import('./SettingsAboutTab').then((m) => ({
+    default: m.SettingsAboutTab,
+  }))
+);
 
 type TabComponentProps = {
   onBlockingOverlayChange?: (open: boolean) => void;
@@ -113,6 +118,7 @@ const TAB_COMPONENTS: Record<
   browser: { label: '浏览器', Component: SettingsBrowserTab },
   security: { label: '安全', Component: SettingsSecurityTab },
   diagnostics: { label: '状态诊断', Component: StatusDiagnosticsPanel },
+  about: { label: '关于', Component: SettingsAboutTab },
 };
 
 /** tab 懒加载占位：与设置页骨架样式一致，避免加载抖动 */
@@ -131,13 +137,16 @@ export type { SettingsTabType };
 
 interface SettingsPanelProps {
   wsId?: string;
-  onClose?: () => void;
+  /** 关闭设置（Esc / 点遮罩 / 标题行 X 收敛于此） */
+  onClose: () => void;
   initialTab?: SettingsTabType;
-  isOpen?: boolean;
+  /** 受控开关：置 false 时先播退场动画，结束后由 Dialog 卸载内容 */
+  isOpen: boolean;
 }
 
 /**
- * 设置壳组件：顶栏窗口控制 + 专属侧栏导航（SettingsSidebar）+ 内容区（懒加载 Suspense 分支）。
+ * 设置弹窗：ui/Dialog 居中模态 + 左侧导航（SettingsSidebar）+ 顶部标题行（设置 / 当前分类 + 关闭）
+ * + 内容区（懒加载 Suspense 分支）。不含窗口按钮与拖拽区：窗口按钮只有主顶栏一组。
  */
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   isOpen,
@@ -152,6 +161,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [mcpAvailable, setMcpAvailable] = useState(false);
   const [rulesModalOpen, setRulesModalOpen] = useState(false);
   const [navFocusId, setNavFocusId] = useState<TabType | null>(null);
+  const [hoverPane, setHoverPane] = useState<'nav' | 'main' | null>(null);
+
+  const handleShellPointerOver = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest(`.${styles.settingsNav}`)) {
+        setHoverPane((prev) => (prev === 'nav' ? prev : 'nav'));
+      } else if (target.closest(`.${styles.settingsMain}`)) {
+        setHoverPane((prev) => (prev === 'main' ? prev : 'main'));
+      }
+    },
+    []
+  );
 
   const baseId = useId();
   const tablistId = `${baseId}-tablist`;
@@ -228,61 +251,85 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     navFocusId,
   });
 
-  if (isOpen === false) return null;
-
   const currentTabDef = TAB_COMPONENTS[safeActiveTab] ?? TAB_COMPONENTS.profile;
   const ActiveTabComponent = currentTabDef.Component;
 
   return (
+    // dismissible=false：LayerStack 不对设置做「外部点击即退栈」（portal 进 overlay 的下拉、
+    // 嵌套弹窗遮罩上的点击不会级联关掉设置）；Esc 走 onEscapeKeyDown（栈顶优先，先清搜索再关），
+    // 点设置自己的遮罩由 closeOnBackdropClick 关闭。
     <Dialog
-      open={isOpen ?? true}
-      onClose={onClose ?? (() => {})}
+      open={isOpen}
+      onClose={onClose}
       dismissible={false}
-      variant="fullscreen"
+      closeOnBackdropClick
       ariaLabel="设置"
       initialFocusRef={nav.searchInputRef}
       onEscapeKeyDown={nav.handleSettingsEscape}
-      classNames={{ panel: styles.settingsCover, overlay: styles.settingsCoverOverlay }}
+      classNames={{
+        panel: styles.settingsModal,
+        overlay: styles.settingsModalOverlay,
+        body: styles.settingsModalBody,
+      }}
     >
       <div
         ref={rootRef}
-        className={`${styles.settingsPanel} ${styles.settingsDialogBody}`}
+        className={styles.settingsShell}
         data-testid="settings-panel"
+        data-hover-pane={hoverPane ?? undefined}
+        onPointerOver={handleShellPointerOver}
+        onPointerLeave={() => setHoverPane(null)}
       >
-        <header
-          className={styles.coverHeader}
-          data-tauri-drag-region
+        <SettingsSidebar
+          aria={{
+            baseId,
+            tablistId,
+            searchId,
+            statusId,
+            panelId,
+            tablistRef,
+          }}
+          search={{
+            searchQuery: nav.navQuery,
+            filterStatusText: nav.filterStatusText,
+            searchInputRef: nav.searchInputRef,
+            onSearchChange: nav.setNavQuery,
+            onSearchKeyDown: nav.onSearchKeyDown,
+          }}
+          items={nav.visibleTabs}
+          activeId={safeActiveTab}
+          rovingId={nav.rovingId}
+          onTablistKeyDown={nav.onTablistKeyDown}
+          onSelect={selectTab}
+          onFocusTab={setNavFocusId}
+          onPointerEnter={() => setHoverPane('nav')}
+        />
+
+        <div
+          className={styles.settingsMain}
+          onPointerEnter={() => setHoverPane('main')}
         >
-          <div className={styles.coverHeaderSpacer} data-tauri-drag-region />
-          <WindowControls onClose={onClose} />
-        </header>
-
-        <div className={styles.coverBody}>
-          <SettingsSidebar
-            aria={{
-              baseId,
-              tablistId,
-              searchId,
-              statusId,
-              panelId,
-              tablistRef,
-            }}
-            search={{
-              searchQuery: nav.navQuery,
-              filterStatusText: nav.filterStatusText,
-              searchInputRef: nav.searchInputRef,
-              onSearchChange: nav.setNavQuery,
-              onSearchKeyDown: nav.onSearchKeyDown,
-            }}
-            items={nav.visibleTabs}
-            activeId={safeActiveTab}
-            rovingId={nav.rovingId}
-            onBack={onClose}
-            onTablistKeyDown={nav.onTablistKeyDown}
-            onSelect={selectTab}
-            onFocusTab={setNavFocusId}
-
-          />
+          <header className={styles.settingsHeader}>
+            <h2 className={styles.settingsTitle} data-testid="settings-title">
+              <span>设置</span>
+              <span className={styles.settingsTitleSep} aria-hidden="true">
+                /
+              </span>
+              <span className={styles.settingsTitleCurrent}>{activeLabel}</span>
+            </h2>
+            <Tooltip content="关闭 (Esc)">
+              <Button
+                bare
+                type="button"
+                className={styles.settingsClose}
+                data-testid="settings-close-button"
+                aria-label="关闭设置"
+                onClick={onClose}
+              >
+                <AppIcon name="x" size={16} aria-hidden />
+              </Button>
+            </Tooltip>
+          </header>
 
           <div
             ref={contentAreaRef}

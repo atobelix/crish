@@ -141,8 +141,12 @@
 }
 
 /* 侧栏 / Menu / 设置 cover+nav / Dialog 内容（CSS Modules 哈希后仍命中 local 名）。
- * 此处禁止写 scrollbar-width / scrollbar-color：会关掉上面的 webkit 细条。 */
-[class*='sidebarScroll'],
+ * 此处禁止写 scrollbar-width / scrollbar-color：会关掉上面的 webkit 细条。
+ * 侧栏列表统一采用 stable 保持无论有无滚动条内容右侧均恒定预留走廊，防止跳变与无滚动条贴边。 */
+[class*='sidebarScroll'] {
+  scrollbar-gutter: stable;
+}
+
 .sidebar,
 [class*='menuContent'],
 [class*='navScroll'],
@@ -152,15 +156,198 @@
 }
 
 /* ==========================================================================
+ * 设置中心（SettingsPanel）分区分离滚动条：
+ * 纯指针悬停驱动（data-hover-pane + :hover），彻底移除 :focus-within 焦点劫持；
+ * 鼠标在哪个区域，仅显示该区域的滚动条，另一侧绝对互斥隐藏。
+ * ========================================================================== */
+
+/* 1. 左侧导航栏（[class*='navScroll']）：默认隐藏滑块与上下三角 */
+[class*='navScroll']::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  transition: background-color var(--transition-fast);
+}
+
+[class*='navScroll']::-webkit-scrollbar-button:vertical:start:decrement,
+[class*='navScroll']::-webkit-scrollbar-button:vertical:end:increment {
+  background-image: none;
+}
+
+/* 激活左侧滚动条：当指针悬停在左侧 (data-hover-pane='nav') 或左侧容器自身 hover 时 */
+[data-hover-pane='nav'] [class*='navScroll']::-webkit-scrollbar-thumb,
+[class*='settingsNav']:hover [class*='navScroll']::-webkit-scrollbar-thumb,
+[class*='navScroll']:hover::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-bg, var(--tint-scrollbar-thumb));
+}
+
+[class*='navScroll']::-webkit-scrollbar-thumb:hover,
+[class*='navScroll']::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-active);
+}
+
+[data-hover-pane='nav']
+  [class*='navScroll']::-webkit-scrollbar-button:vertical:start:decrement,
+[class*='settingsNav']:hover
+  [class*='navScroll']::-webkit-scrollbar-button:vertical:start:decrement,
+[class*='navScroll']:hover::-webkit-scrollbar-button:vertical:start:decrement {
+  background-image: var(--scrollbar-button-up);
+}
+
+[data-hover-pane='nav']
+  [class*='navScroll']::-webkit-scrollbar-button:vertical:end:increment,
+[class*='settingsNav']:hover
+  [class*='navScroll']::-webkit-scrollbar-button:vertical:end:increment,
+[class*='navScroll']:hover::-webkit-scrollbar-button:vertical:end:increment {
+  background-image: var(--scrollbar-button-down);
+}
+
+[data-hover-pane='nav']
+  [class*='navScroll']::-webkit-scrollbar-button:vertical:start:decrement:hover,
+[data-hover-pane='nav']
+  [class*='navScroll']::-webkit-scrollbar-button:vertical:start:decrement:active,
+[class*='settingsNav']:hover
+  [class*='navScroll']::-webkit-scrollbar-button:vertical:start:decrement:hover,
+[class*='settingsNav']:hover
+  [class*='navScroll']::-webkit-scrollbar-button:vertical:start:decrement:active {
+  background-image: var(--scrollbar-button-up-active);
+}
+
+[data-hover-pane='nav']
+  [class*='navScroll']::-webkit-scrollbar-button:vertical:end:increment:hover,
+[data-hover-pane='nav']
+  [class*='navScroll']::-webkit-scrollbar-button:vertical:end:increment:active,
+[class*='settingsNav']:hover
+  [class*='navScroll']::-webkit-scrollbar-button:vertical:end:increment:hover,
+[class*='settingsNav']:hover
+  [class*='navScroll']::-webkit-scrollbar-button:vertical:end:increment:active {
+  background-image: var(--scrollbar-button-down-active);
+}
+
+/* 互斥强关：当鼠标在右侧 (data-hover-pane='main') 时，强制隐藏左侧滚动条 */
+[data-hover-pane='main'] [class*='navScroll']::-webkit-scrollbar-thumb {
+  background-color: transparent !important;
+}
+[data-hover-pane='main']
+  [class*='navScroll']::-webkit-scrollbar-button:vertical:start:decrement,
+[data-hover-pane='main']
+  [class*='navScroll']::-webkit-scrollbar-button:vertical:end:increment {
+  background-image: none !important;
+}
+
+/* 2. 右侧主内容区（[class*='coverContent'] 及内部滚动容器）：默认隐藏滑块与上下三角 */
+[class*='settingsMain'] [class*='coverContent']::-webkit-scrollbar-thumb,
+[class*='settingsMain'] [class*='coverContent'] ::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  transition: background-color var(--transition-fast);
+}
+
+[class*='settingsMain']
+  [class*='coverContent']::-webkit-scrollbar-button:vertical:start:decrement,
+[class*='settingsMain']
+  [class*='coverContent']::-webkit-scrollbar-button:vertical:end:increment,
+[class*='settingsMain']
+  [class*='coverContent']
+  ::-webkit-scrollbar-button:vertical:start:decrement,
+[class*='settingsMain']
+  [class*='coverContent']
+  ::-webkit-scrollbar-button:vertical:end:increment {
+  background-image: none;
+}
+
+/* 激活右侧滚动条：当指针悬停在右侧 (data-hover-pane='main') 或右侧容器自身 hover 时 */
+[data-hover-pane='main'] [class*='coverContent']::-webkit-scrollbar-thumb,
+[data-hover-pane='main'] [class*='coverContent'] ::-webkit-scrollbar-thumb,
+[class*='settingsMain']:hover [class*='coverContent']::-webkit-scrollbar-thumb,
+[class*='settingsMain']:hover [class*='coverContent'] ::-webkit-scrollbar-thumb,
+[class*='coverContent']:hover::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-bg, var(--tint-scrollbar-thumb));
+}
+
+[class*='settingsMain'] [class*='coverContent']::-webkit-scrollbar-thumb:hover,
+[class*='settingsMain'] [class*='coverContent']::-webkit-scrollbar-thumb:active,
+[class*='settingsMain'] [class*='coverContent'] ::-webkit-scrollbar-thumb:hover,
+[class*='settingsMain']
+  [class*='coverContent']
+  ::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-active);
+}
+
+[data-hover-pane='main']
+  [class*='coverContent']::-webkit-scrollbar-button:vertical:start:decrement,
+[data-hover-pane='main']
+  [class*='coverContent']
+  ::-webkit-scrollbar-button:vertical:start:decrement,
+[class*='settingsMain']:hover
+  [class*='coverContent']::-webkit-scrollbar-button:vertical:start:decrement,
+[class*='settingsMain']:hover
+  [class*='coverContent']
+  ::-webkit-scrollbar-button:vertical:start:decrement {
+  background-image: var(--scrollbar-button-up);
+}
+
+[data-hover-pane='main']
+  [class*='coverContent']::-webkit-scrollbar-button:vertical:end:increment,
+[data-hover-pane='main']
+  [class*='coverContent']
+  ::-webkit-scrollbar-button:vertical:end:increment,
+[class*='settingsMain']:hover
+  [class*='coverContent']::-webkit-scrollbar-button:vertical:end:increment,
+[class*='settingsMain']:hover
+  [class*='coverContent']
+  ::-webkit-scrollbar-button:vertical:end:increment {
+  background-image: var(--scrollbar-button-down);
+}
+
+[data-hover-pane='main']
+  [class*='coverContent']::-webkit-scrollbar-button:vertical:start:decrement:hover,
+[data-hover-pane='main']
+  [class*='coverContent']::-webkit-scrollbar-button:vertical:start:decrement:active,
+[class*='settingsMain']:hover
+  [class*='coverContent']::-webkit-scrollbar-button:vertical:start:decrement:hover,
+[class*='settingsMain']:hover
+  [class*='coverContent']::-webkit-scrollbar-button:vertical:start:decrement:active {
+  background-image: var(--scrollbar-button-up-active);
+}
+
+[data-hover-pane='main']
+  [class*='coverContent']::-webkit-scrollbar-button:vertical:end:increment:hover,
+[data-hover-pane='main']
+  [class*='coverContent']::-webkit-scrollbar-button:vertical:end:increment:active,
+[class*='settingsMain']:hover
+  [class*='coverContent']::-webkit-scrollbar-button:vertical:end:increment:hover,
+[class*='settingsMain']:hover
+  [class*='coverContent']
+  ::-webkit-scrollbar-button:vertical:end:increment:active {
+  background-image: var(--scrollbar-button-down-active);
+}
+
+/* 互斥强关：当鼠标在左侧 (data-hover-pane='nav') 时，强制隐藏右侧滚动条 */
+[data-hover-pane='nav'] [class*='coverContent']::-webkit-scrollbar-thumb,
+[data-hover-pane='nav'] [class*='coverContent'] ::-webkit-scrollbar-thumb {
+  background-color: transparent !important;
+}
+[data-hover-pane='nav']
+  [class*='coverContent']::-webkit-scrollbar-button:vertical:start:decrement,
+[data-hover-pane='nav']
+  [class*='coverContent']::-webkit-scrollbar-button:vertical:end:increment,
+[data-hover-pane='nav']
+  [class*='coverContent']
+  ::-webkit-scrollbar-button:vertical:start:decrement,
+[data-hover-pane='nav']
+  [class*='coverContent']
+  ::-webkit-scrollbar-button:vertical:end:increment {
+  background-image: none !important;
+}
+
+/* ==========================================================================
  * 全局虚拟滚动与动态内容视口：封死 Blink 原生 Scroll Anchoring
  * 虚拟滚动由前端算法统一管理物理偏移与可见切片，严禁浏览器 Scroll Anchoring 介入
  * 介入会导致向上滚动时被 Blink 误判为上方内容插入并自动下拽回弹死锁。
  * ========================================================================== */
-[data-virtual-scroll="true"],
+[data-virtual-scroll='true'],
 [data-chat-scroll-container],
 [data-chat-list-inner],
 [data-vsm-spacer],
-[role="tree"],
+[role='tree'],
 [class*='scrollParent'],
 [class*='plainScrollParent'],
 [class*='flatFileList'],
@@ -169,4 +356,3 @@
 [class*='toolSectionContent'] {
   overflow-anchor: none !important;
 }
-

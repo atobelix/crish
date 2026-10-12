@@ -39,14 +39,14 @@
 }
 
 .badgeRunning {
-  background: var(--color-brand-muted);
-  color: var(--color-brand);
+  background: var(--color-info-bg);
+  color: var(--color-info);
   border: 1px solid rgba(59, 130, 246, 0.25);
 }
 
 .badgeFailed {
-  background: var(--color-danger-bg);
-  color: var(--color-danger);
+  background: var(--color-error-bg);
+  color: var(--color-error);
   border: 1px solid rgba(239, 68, 68, 0.25);
 }
 
@@ -141,7 +141,7 @@
 .promptBody {
   margin: 0;
   font-size: var(--font-size-sm);
-  line-height: var(--line-height-normal);
+  line-height: var(--line-height-body);
   color: var(--text-primary);
   background: var(--bg-elevated);
   padding: var(--space-2_5) var(--space-3);
@@ -155,7 +155,7 @@
 .outputBody {
   margin: 0;
   font-size: var(--font-size-sm);
-  line-height: var(--line-height-normal);
+  line-height: var(--line-height-body);
   color: var(--text-primary);
   background: var(--bg-elevated);
   padding: var(--space-2_5) var(--space-3);
@@ -172,7 +172,7 @@
 }
 
 .errorTitle {
-  color: var(--color-danger);
+  color: var(--color-error);
 }
 
 .errorCodeBlock {
@@ -180,7 +180,7 @@
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.45;
-  color: var(--color-danger);
+  color: var(--color-error);
   background: rgba(0, 0, 0, 0.35);
   padding: var(--space-2_5) var(--space-3);
   border-radius: var(--radius-md);

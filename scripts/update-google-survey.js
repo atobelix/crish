@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const surveyPath = path.resolve('c:/Software/conex/docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md');
+const surveyPath = path.resolve(__dirname, '../docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md');
 let content = fs.readFileSync(surveyPath, 'utf8');
 
 // 构造经过 Google 官方文档 (ai.google.dev & blog.google) 100% 核准的 Google 章节

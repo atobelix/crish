@@ -20,19 +20,10 @@
   gap: var(--space-2);
 }
 
+/* 新对话落地面：可见内容收进 composer，此处只留零尺寸状态锚点 */
 .sessionEmpty {
-  height: auto;
-  flex: none;
-  padding: calc(var(--space-6) + var(--space-1)) 0 var(--space-3);
-  margin-bottom: 0;
-  width: 100%;
-  max-width: none; /*       .chatCol      composer    */
-  gap: var(--space-4);
-  text-align: center;
-}
-
-.sessionEmpty .chatEmptySub {
-  display: none;
+  height: 0;
+  overflow: hidden;
 }
 
 .chatEmptyIconWrap {
@@ -57,82 +48,6 @@
   color: var(--text-primary);
   margin: 0 0 var(--space-2);
   line-height: var(--line-height-ui);
-}
-
-.chatEmptyHero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: var(--space-6);
-}
-
-.chatEmptyTitleHero {
-  font-size: clamp(22px, 3.2vw, 34px);
-  font-weight: var(--font-weight-content);
-  font-family: var(--font-sans);
-  color: var(--text-primary);
-  letter-spacing: var(--letter-spacing-tightest);
-  margin-bottom: var(--space-2);
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: var(--space-2_5);
-  text-align: center;
-  line-height: var(--line-height-tight);
-  /*              /           */
-  font-synthesis: none;
-}
-
-.chatEmptyProjectInline {
-  display: inline-block;
-  position: relative;
-  vertical-align: middle;
-}
-
-.chatEmptyProjectBtnInline,
-.chatEmptyProjectBtnInline {
-  appearance: none;
-  -webkit-appearance: none;
-  font-size: calc(var(--font-size-2xl) + var(--space-1));
-  font-weight: var(--font-weight-content);
-  min-width: unset;
-  min-height: unset;
-  height: auto;
-  box-shadow: none;
-  padding: var(--space-0_5, 2px) var(--space-2, 8px);
-  border-radius: var(--radius-lg);
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--text-primary);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1_5);
-  transition: background-color var(--transition-fast), border-color var(--transition-fast);
-  cursor: pointer;
-}
-
-.chatEmptyProjectBtnInline:hover {
-  background: var(--tint-hover);
-  border-color: var(--border-subtle);
-}
-
-.chatEmptyProjectBtnInline:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
-
-.chatEmptyProjectText {
-  color: var(--text-primary);
-  background: transparent;
-  padding: 0;
-  border-radius: 0;
-  font-size: calc(var(--font-size-2xl) + var(--space-0_5));
-  font-weight: var(--font-weight-content);
-  font-family: inherit;
-  letter-spacing: inherit;
-  line-height: inherit;
 }
 
 .chatEmptySub {
@@ -183,122 +98,6 @@
   outline: none;
   background: var(--control-soft-bg-active);
   box-shadow: var(--focus-ring);
-}
-
-/* emptyComposer style migrated to ChatCard.module.css emptyComposer */
-
-.chatEmptyPrompts {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2_5, 10px);
-  width: 100%;
-  max-width: min(var(--chat-col-max), 640px);
-  margin: var(--space-5) auto 0 auto;
-  box-sizing: border-box;
-}
-
-.sessionEmpty .chatEmptyPrompts {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2_5, 10px);
-  width: 100%;
-  max-width: min(var(--chat-col-max), 640px);
-  margin-top: var(--space-5);
-  box-sizing: border-box;
-}
-
-.quickPromptCard,
-.sessionEmpty .quickPromptCard,
-.sessionEmpty .quickPromptCard {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  text-align: left;
-  min-width: unset;
-  min-height: unset;
-  height: auto;
-  font-family: inherit;
-  font-weight: normal;
-  padding: var(--space-3, 12px) var(--space-4, 16px);
-  background: var(--bg-card, var(--bg-secondary));
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
-  cursor: pointer;
-  color: var(--text-primary);
-  width: 100%;
-  box-shadow: none;
-  transition:
-    background var(--transition-micro),
-    border-color var(--transition-micro),
-    color var(--transition-micro);
-  box-sizing: border-box;
-  outline: none;
-}
-
-.quickPromptLabel {
-  font-size: var(--font-size-sm, 13px);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  margin-right: var(--space-3, 12px);
-  flex-shrink: 0;
-  letter-spacing: var(--letter-spacing-tight, -0.01em);
-}
-
-.quickPromptDesc {
-  font-size: var(--font-size-xs, 12px);
-  color: var(--text-secondary);
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
-  flex: 1;
-  line-height: var(--line-height-base);
-}
-
-.promptArrow {
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-  margin-left: auto;
-  transition:
-    opacity var(--transition-micro),
-    color var(--transition-micro);
-}
-
-/* Hover 状态：不位移跳动、不染主题色，仅微背景响应与纯净发丝边框 */
-.quickPromptCard:hover,
-.sessionEmpty .quickPromptCard:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--border-subtle);
-}
-
-.quickPromptCard:hover .promptArrow {
-  color: var(--text-secondary);
-  opacity: 1;
-}
-
-.quickPromptCard:active,
-.sessionEmpty .quickPromptCard:active {
-  background: var(--bg-card-active);
-}
-
-.quickPromptCard:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
-}
-
-.quickPromptCard svg {
-  display: block;
-}
-
-@media (max-width: 600px) {
-  .quickPromptCard,
-  .sessionEmpty .quickPromptCard {
-    padding: var(--space-2_5, 10px) var(--space-3, 12px);
-  }
-  .quickPromptLabel {
-    font-size: var(--font-size-sm, 13px);
-    margin-right: var(--space-2, 8px);
-  }
 }
 
 @media (max-width: 720px) {

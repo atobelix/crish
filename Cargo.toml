@@ -35,6 +35,7 @@ license = "MIT"
 authors = ["Conex Community"]
 description = "Crish — Tauri desktop AI agent workbench (Rust engine, React UI)"
 repository = "https://github.com/conex-community/crish"
+publish = false
 
 # workspace 级 lint 基线：子 crate 通过 [lints] workspace = true 继承。
 # 选择依据与豁免记录见 docs/multi-agent-repair/基线记录/clippy-workspace-T13.md：

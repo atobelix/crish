@@ -10,7 +10,9 @@ import { describe, expect, it } from 'vitest';
 const cssPath =
   typeof __dirname !== 'undefined'
     ? path.resolve(__dirname, 'SidebarSessionList.module.css')
-    : fileURLToPath(new URL('./SidebarSessionList.module.css', import.meta.url));
+    : fileURLToPath(
+        new URL('./SidebarSessionList.module.css', import.meta.url)
+      );
 
 const css = readFileSync(cssPath, 'utf8').replace(/\r\n/g, '\n');
 
@@ -25,15 +27,26 @@ function blocksFor(selector: RegExp): string[] {
   return out;
 }
 
-const HEADER = ['sectionLabel', 'sectionNew', 'sectionSortBtn', 'sectionSort', 'foldToggleBtn'];
+const HEADER = [
+  'sectionLabel',
+  'sectionNew',
+  'sectionSortBtn',
+  'sectionSort',
+  'foldToggleBtn',
+  'folderNewBtn',
+  'folderNewSession',
+];
 
 describe('侧栏分组头 hover 无底色', () => {
-  it.each(HEADER)('.%s 把 ghost Button 的 hover / active 覆盖层置透明', (cls) => {
-    const blocks = blocksFor(new RegExp(`^\\.${cls}$`));
-    const joined = blocks.join('\n');
-    expect(joined).toMatch(/--btn-hover-overlay:\s*transparent/);
-    expect(joined).toMatch(/--btn-active-overlay:\s*transparent/);
-  });
+  it.each(HEADER)(
+    '.%s 把 ghost Button 的 hover / active 覆盖层置透明',
+    (cls) => {
+      const blocks = blocksFor(new RegExp(`^\\.${cls}$`));
+      const joined = blocks.join('\n');
+      expect(joined).toMatch(/--btn-hover-overlay:\s*transparent/);
+      expect(joined).toMatch(/--btn-active-overlay:\s*transparent/);
+    }
+  );
 
   it.each(HEADER)('.%s:hover / :active 不设置非透明底色', (cls) => {
     const blocks = blocksFor(new RegExp(`^\\.${cls}:(hover|active)$`));
@@ -44,7 +57,11 @@ describe('侧栏分组头 hover 无底色', () => {
   });
 
   it('会话行 hover / 选中底色保持', () => {
-    expect(blocksFor(/^\.sessionItem:hover$/).join('\n')).toMatch(/background:\s*var\(--sidebar-hover\)/);
-    expect(blocksFor(/^\.sessionItem\.active$/).join('\n')).toMatch(/background/);
+    expect(blocksFor(/^\.sessionItem:hover$/).join('\n')).toMatch(
+      /background:\s*var\(--sidebar-hover\)/
+    );
+    expect(blocksFor(/^\.sessionItem\.active$/).join('\n')).toMatch(
+      /background/
+    );
   });
 });

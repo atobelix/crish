@@ -1,0 +1,119 @@
+name: Release · 多平台桌面端发布（GitHub Release）
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release (${{ matrix.platform }})
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache: true
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build frontend dependencies
+        run: |
+          npm run build:shared-types
+          npm run build:desktop
+
+      - name: Build Tauri Desktop & Draft Release
+        uses: tauri-apps/tauri-action@v0
+        id: tauri
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Crish ${{ github.ref_name }}'
+          releaseDraft: true
+          prerelease: false
+          projectPath: apps/agent-workbench
+
+      - name: Generate and upload SHA256 checksums (Unix)
+        if: runner.os != 'Windows'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for dir in target/release/bundle apps/agent-workbench/src-tauri/target/release/bundle apps/agent-workbench/target/release/bundle; do
+            if [ -d "$dir" ]; then
+              find "$dir" -type f \( -name "*.deb" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.tar.gz" \) | while IFS= read -r file; do
+                if [ -f "$file" ]; then
+                  filename=$(basename "$file")
+                  dirname=$(dirname "$file")
+                  echo "Generating SHA256 checksum for $filename..."
+                  if command -v sha256sum >/dev/null 2>&1; then
+                    (cd "$dirname" && sha256sum "$filename" > "${filename}.sha256")
+                  else
+                    (cd "$dirname" && shasum -a 256 "$filename" > "${filename}.sha256")
+                  fi
+                  echo "Uploading checksum for $filename..."
+                  gh release upload "${{ github.ref_name }}" "${dirname}/${filename}.sha256" --clobber || {
+                    echo "Retrying checksum upload..."
+                    sleep 2
+                    gh release upload "${{ github.ref_name }}" "${dirname}/${filename}.sha256" --clobber
+                  }
+                fi
+              done
+            fi
+          done
+
+      - name: Generate and upload SHA256 checksums (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $paths = @("target\release\bundle", "apps\agent-workbench\src-tauri\target\release\bundle", "apps\agent-workbench\target\release\bundle")
+          foreach ($p in $paths) {
+            if (Test-Path $p) {
+              Get-ChildItem -Path $p -Recurse -File | Where-Object { $_.Extension -in @('.msi', '.exe', '.zip') } | ForEach-Object {
+                $hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLower()
+                $chkFile = "$($_.FullName).sha256"
+                "$hash  $($_.Name)" | Out-File -FilePath $chkFile -Encoding ascii
+                Write-Host "Uploading checksum for $($_.FullName)..."
+                try {
+                  gh release upload "${{ github.ref_name }}" $chkFile --clobber
+                } catch {
+                  Start-Sleep -Seconds 2
+                  gh release upload "${{ github.ref_name }}" $chkFile --clobber
+                }
+              }
+            }
+          }

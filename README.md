@@ -1,5 +1,13 @@
 # Crish — 桌面 AI Agent 工作台
 
+[English](README_en.md) | [简体中文](README.md)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platforms](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#prerequisites)
+[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A520-green.svg)](https://nodejs.org/)
+[![Rust](https://img.shields.io/badge/Rust-2021%20stable-orange.svg)](https://www.rust-lang.org/)
+[![CI](https://img.shields.io/badge/CI-Three--Tier-blueviolet.svg)](.github/workflows/)
+
 > **License** MIT · **平台** Windows · macOS · Linux · **Node** ≥ 20 · **Rust** stable (edition 2021) · **CI** 三层（快 / 中 / 慢）
 >
 > 仓库目录名 `conex`，产品名 **Crish**，由 **Conex Community** 维护（`https://github.com/conex-community/crish`）。
@@ -27,11 +35,30 @@ GUI / TUI / Web 三种界面。
 
 （发布时补充）
 
+<a id="prerequisites"></a>
+
+## ⚙️ 环境依赖与前置准备
+
+在从源码构建前，请确保系统已安装以下前置依赖：
+
+- **Node.js**：≥ 20.0.0（推荐使用 LTS 版本）与 npm
+- **Rust**：Stable 工具链（edition 2021），可通过 [rustup.rs](https://rustup.rs/) 安装
+- **Tauri v2 平台原生依赖**：
+  - **Linux (Ubuntu / Debian)**：
+    ```bash
+    sudo apt update && sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libappindicator3-dev librsvg2-dev patchelf
+    ```
+  - **Windows**：
+    - 安装 [Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)（勾选“使用 C++ 的桌面开发”）；
+    - 确保系统已安装 Microsoft Edge WebView2 Runtime（Windows 10/11 通常已内置）。
+  - **macOS**：
+    - 安装 Xcode Command Line Tools：`xcode-select --install`
+
 ## 🚀 快速开始（从源码构建）
 
 ```bash
 git clone https://github.com/conex-community/crish.git
-cd conex
+cd crish
 
 npm install
 
@@ -108,14 +135,17 @@ npm run dev:workbench   # Tauri 壳 + 桌面联调（加载 crish-desktop）
 | [`CONTRIBUTING.md`](CONTRIBUTING.md)                                                     | 贡献指南：环境、构建、代码规范、PR 流程                   |
 | [`docs/opensource/CONTRIBUTING-PROVIDERS.md`](docs/opensource/CONTRIBUTING-PROVIDERS.md) | Provider 接入指南（Schema、认证、测试、PR checklist）     |
 | [`CHANGELOG.md`](CHANGELOG.md)                                                           | 变更日志（Keep a Changelog）                              |
-| [`SECURITY.md`](SECURITY.md)                                                             | 安全漏洞报告流程                                          |
+| [`SECURITY.md`](SECURITY.md)                                                             | 安全漏洞报告流程与 PVR 支持                               |
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)                                               | 行为准则（Contributor Covenant）                          |
+| [`NOTICE`](NOTICE)                                                                       | 版权与开源声明                                            |
+| [`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md)                                     | 第三方依赖开源许可证                                      |
 | [`docs/rust-rewrite/`](docs/rust-rewrite/00-master-plan.md)                              | Rust 重写阶段方案与审计（内部过渡记录）                   |
 
 ## 🤝 社区
 
 - GitHub Issues / Discussions（仓库 [`conex-community/crish`](https://github.com/conex-community/crish)）
 - 社区邮箱：`contact@conex-community.org`
+- 安全漏洞：`security@conex-community.org` 或通过 [GitHub PVR](https://github.com/conex-community/crish/security/advisories/new)
 - 参与开发请先阅读 [`CONTRIBUTING.md`](CONTRIBUTING.md) 与 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
 
 ## 📄 License

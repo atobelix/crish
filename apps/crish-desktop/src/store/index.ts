@@ -152,6 +152,8 @@ export type {
 } from './types';
 
 export type { LayoutStore } from './layoutStore';
+export type { RuntimeRetryInfo } from './sessionRuntimeStatusStore';
+export type { LayoutTree } from './layout-tree/types';
 
 // T11 域 store（独立 zustand 实例；components 只经 storeAccess 读）
 export { useTerminalStore } from './terminalStore';
@@ -162,7 +164,6 @@ export { usePermissionStore } from './permissionStore';
 export type { PermissionStore } from './permissionStore';
 export { useSettingsStore } from './settingsStore';
 export type { SettingsStore } from './settingsStore';
-
 
 // store 侧公共读面（T11 新域读入口）
 export * from './storeAccess';

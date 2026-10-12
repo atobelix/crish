@@ -14,8 +14,7 @@ Crish 是 Rust + TypeScript 的 npm/Cargo 混合 monorepo：
 - `apps/agent-workbench/src-tauri`：Tauri 2 壳（窗口、IPC 命令注册、CSP、updater）
 - `crates/`：Rust 引擎（orchestrator / session-loop / agent-provider / agent-tools / conex-* 基础设施），
   全部经 Cargo workspace 统一管理（`Cargo.lock` 已提交，构建可复现）
-- `packages/`：TS 侧共享包（logger / plugin-sdk / shared-types / shared-utils /
-  telemetry / test-utils）
+- `packages/`：TS 侧共享包（shared-types / shared-utils / test-utils / block-paper / conversation-flow / editor-kit 等）
 
 > **过渡期已结束**：旧 TS 后端包（`agent-daemon` / `agent-orchestrator` / `agent-runtime` 等）已删除，
 > 引擎为 Rust 进程内实现（Tauri 壳内嵌）。`apps/agent-workbench/src/cli` 已随迁移删除，
@@ -24,18 +23,18 @@ Crish 是 Rust + TypeScript 的 npm/Cargo 混合 monorepo：
 
 ## 前置条件
 
-| 工具                          | 版本                   | 说明                                                                                                                                   |
-| ----------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Node.js                       | ≥ 20（CI 使用 20）     | 前端构建与测试；包管理器 npm（`packageManager: npm@11.6.2`）                                                                           |
-| Rust                          | stable（edition 2021） | 引擎与 Tauri 壳；需含 `cargo` / `rustc` / `clippy` / `rustfmt`                                                                         |
-| Tauri 2 平台依赖              | —                      | Windows：WebView2；Linux：webkit2gtk 等（见 [Tauri 文档](https://v2.tauri.app/start/prerequisites/)）；macOS：Xcode Command Line Tools |
-| （可选）cargo-deny / gitleaks | —                      | 本地复现 CI 安全门禁                                                                                                                   |
+| 工具                          | 版本                   | 说明                                                                                                                                                                                                                                            |
+| ----------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node.js                       | ≥ 20（CI 使用 20）     | 前端构建与测试；包管理器 npm（`packageManager: npm@11.6.2`）                                                                                                                                                                                    |
+| Rust                          | stable（edition 2021） | 引擎与 Tauri 壳；需含 `cargo` / `rustc` / `clippy` / `rustfmt`（[rustup.rs](https://rustup.rs/)）                                                                                                                                               |
+| Tauri 2 平台依赖              | —                      | **Linux**：`sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libappindicator3-dev librsvg2-dev patchelf`；<br>**Windows**：Visual Studio C++ Build Tools + WebView2；<br>**macOS**：`xcode-select --install` |
+| （可选）cargo-deny / gitleaks | —                      | 本地复现 CI 安全门禁                                                                                                                                                                                                                            |
 
 ## 快速开始
 
 ```bash
 git clone https://github.com/conex-community/crish.git
-cd conex
+cd crish
 npm install          # 安装依赖；prepare 钩子自动配置 husky
 ```
 
@@ -107,10 +106,10 @@ Provider（模型服务商）接入请走 [`docs/opensource/CONTRIBUTING-PROVIDE
 
 ## 安全漏洞
 
-请勿在 Issue 中公开漏洞细节；按 [`SECURITY.md`](SECURITY.md) 流程私密报告
-（`security@conex-community.org`）。
+请勿在 Issue 中公开漏洞细节；按 [`SECURITY.md`](SECURITY.md) 流程私密报告（首选 [GitHub Private Vulnerability Reporting](https://github.com/conex-community/crish/security/advisories/new)，或发送邮件至 `security@conex-community.org`）。
 
 ## 社区
 
-- GitHub Issues / Discussions：功能讨论、设计变更建议
+- GitHub Issues / Discussions：功能讨论、设计变更建议（[`conex-community/crish`](https://github.com/conex-community/crish)）
 - 社区邮箱：`contact@conex-community.org`
+- 安全漏洞：`security@conex-community.org`

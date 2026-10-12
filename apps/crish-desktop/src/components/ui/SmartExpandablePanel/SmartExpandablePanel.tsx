@@ -1,10 +1,4 @@
-import React, {
-  useCallback,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, { useCallback, useId, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import * as Popover from '@radix-ui/react-popover';
 import type { MenuItem, MenuGroup, SmartPanelProps } from './types';
@@ -15,7 +9,6 @@ import { SafeAimEngine } from '../internal/SafeAimEngine';
 import { useLayerRegistration } from '../internal/layer-registration/useLayerRegistration';
 import { DialogOverlayContext } from '../Dialog/dialogOverlayContext';
 import { Tooltip } from '../Tooltip/Tooltip';
-import { calculateSubmenuPosition } from '../Menu/position';
 import menuStyles from '../Menu/Menu.module.css';
 import styles from './SmartExpandablePanel.module.css';
 
@@ -31,6 +24,8 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   enableDivider = true,
   enableTriangleAim = true,
   position,
+  avoidCollisions = true,
+  onCloseAutoFocus,
   className,
   style,
   onSelect,
@@ -48,7 +43,9 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
 
   const [query, setQuery] = useState('');
   const [activeSubmenu, setActiveSubmenu] = useState<MenuItem | null>(null);
-  const [submenuStyle, setSubmenuStyle] = useState<React.CSSProperties | null>(null);
+  const [submenuStyle, setSubmenuStyle] = useState<React.CSSProperties | null>(
+    null
+  );
 
   const panelId = useId();
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -96,11 +93,18 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
         onClose?.();
       }
     },
-    [clearHoverTimers, isControlled, externalOnOpenChange, onOpen, onClose, safeAim]
+    [
+      clearHoverTimers,
+      isControlled,
+      externalOnOpenChange,
+      onOpen,
+      onClose,
+      safeAim,
+    ]
   );
 
   const handleTriggerMouseEnter = useCallback(
-    (e: React.MouseEvent<HTMLElement>) => {
+    (_e: React.MouseEvent<HTMLElement>) => {
       clearHoverTimers();
       onMouseEnter?.();
       if (triggerMode === 'hover' || triggerMode === 'both') {
@@ -113,7 +117,7 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   );
 
   const handleTriggerMouseLeave = useCallback(
-    (e: React.MouseEvent<HTMLElement>) => {
+    (_e: React.MouseEvent<HTMLElement>) => {
       if (hoverOpenTimerRef.current) {
         clearTimeout(hoverOpenTimerRef.current);
         hoverOpenTimerRef.current = null;
@@ -183,12 +187,9 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
         safeAimTimeoutRef.current = null;
       }
       const itemRect = el.getBoundingClientRect();
-      const panelRect =
-        contentRef.current?.getBoundingClientRect() ?? itemRect;
-      const vpWidth =
-        typeof window !== 'undefined' ? window.innerWidth : 1280;
-      const vpHeight =
-        typeof window !== 'undefined' ? window.innerHeight : 800;
+      const panelRect = contentRef.current?.getBoundingClientRect() ?? itemRect;
+      const vpWidth = typeof window !== 'undefined' ? window.innerWidth : 1280;
+      const vpHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
 
       // 判断右侧空间是否足够 (至少 160px)
       const spaceRight = vpWidth - panelRect.right - 12;
@@ -281,42 +282,44 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
       }>;
       const originalProps = actualTriggerElement.props;
 
-      const clonedElement = React.cloneElement(
-        actualTriggerElement,
-        {
-          ref: (node: HTMLElement | null) => {
-            triggerRef.current = node;
-            const origRef = (actualTriggerElement as unknown as { ref?: React.Ref<HTMLElement> }).ref;
-            if (typeof origRef === 'function') {
-              origRef(node);
-            } else if (origRef && typeof origRef === 'object' && 'current' in origRef) {
-              (origRef as React.MutableRefObject<HTMLElement | null>).current = node;
-            }
-          },
-          onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
-            originalProps?.onMouseEnter?.(e);
-            handleTriggerMouseEnter(e);
-          },
-          onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
-            originalProps?.onMouseLeave?.(e);
-            handleTriggerMouseLeave(e);
-          },
-          onClick: (e: React.MouseEvent<HTMLElement>) => {
-            clearHoverTimers();
-            originalProps?.onClick?.(e);
-          },
-        } as React.Attributes & {
-          ref: (node: HTMLElement | null) => void;
-          onMouseEnter: (e: React.MouseEvent<HTMLElement>) => void;
-          onMouseLeave: (e: React.MouseEvent<HTMLElement>) => void;
-          onClick: (e: React.MouseEvent<HTMLElement>) => void;
-        }
-      );
+      const clonedElement = React.cloneElement(actualTriggerElement, {
+        ref: (node: HTMLElement | null) => {
+          triggerRef.current = node;
+          const origRef = (
+            actualTriggerElement as unknown as { ref?: React.Ref<HTMLElement> }
+          ).ref;
+          if (typeof origRef === 'function') {
+            origRef(node);
+          } else if (
+            origRef &&
+            typeof origRef === 'object' &&
+            'current' in origRef
+          ) {
+            (origRef as React.MutableRefObject<HTMLElement | null>).current =
+              node;
+          }
+        },
+        onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+          originalProps?.onMouseEnter?.(e);
+          handleTriggerMouseEnter(e);
+        },
+        onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
+          originalProps?.onMouseLeave?.(e);
+          handleTriggerMouseLeave(e);
+        },
+        onClick: (e: React.MouseEvent<HTMLElement>) => {
+          clearHoverTimers();
+          originalProps?.onClick?.(e);
+        },
+      } as React.Attributes & {
+        ref: (node: HTMLElement | null) => void;
+        onMouseEnter: (e: React.MouseEvent<HTMLElement>) => void;
+        onMouseLeave: (e: React.MouseEvent<HTMLElement>) => void;
+        onClick: (e: React.MouseEvent<HTMLElement>) => void;
+      });
 
       const triggerElem = (
-        <Popover.Trigger asChild>
-          {clonedElement}
-        </Popover.Trigger>
+        <Popover.Trigger asChild>{clonedElement}</Popover.Trigger>
       );
 
       renderedTrigger =
@@ -334,11 +337,7 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   const side = position?.side ?? 'bottom';
   const sideOffset = position?.sideOffset ?? 6;
 
-  const panelClasses = [
-    menuStyles.menuContent,
-    styles.panel,
-    className,
-  ]
+  const panelClasses = [menuStyles.menuContent, styles.panel, className]
     .filter(Boolean)
     .join(' ');
 
@@ -351,7 +350,8 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
           align={align}
           side={side}
           sideOffset={sideOffset}
-          avoidCollisions={true}
+          avoidCollisions={avoidCollisions}
+          onCloseAutoFocus={onCloseAutoFocus}
           collisionPadding={12}
           className={panelClasses}
           style={style}
@@ -406,9 +406,13 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
                 enableDivider={enableDivider}
                 query={query}
                 renderItem={renderItem}
-                onSelect={(item, ev) => {
+                onSelect={(item, _ev) => {
                   onSelect?.(item);
-                  if (!item.children || item.children.length === 0) {
+                  if (
+                    !item.children ||
+                    item.children.length === 0 ||
+                    item.closeOnSelect
+                  ) {
                     handleOpenChange(false);
                   }
                 }}
@@ -418,7 +422,9 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
             )}
 
             {/* 二级级联子菜单 (8px 同心圆角 / 4px 内衬 / 4px-6px 条目) */}
-            {activeSubmenu && activeSubmenu.children && submenuStyle && (
+            {activeSubmenu &&
+              activeSubmenu.children &&
+              submenuStyle &&
               ReactDOM.createPortal(
                 <div
                   ref={cascadeSubmenuRef}
@@ -446,9 +452,9 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
                     />
                   ))}
                 </div>,
-                dialogOverlay ?? (typeof document !== 'undefined' ? document.body : null)!
-              )
-            )}
+                dialogOverlay ??
+                  (typeof document !== 'undefined' ? document.body : null)!
+              )}
           </div>
         </Popover.Content>
       </Popover.Portal>

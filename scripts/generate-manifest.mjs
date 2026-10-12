@@ -1,4 +1,6 @@
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const manifestData = {
   "$schema": "http://json-schema.org/draft-07/schema#",
@@ -888,6 +890,6 @@ const manifestData = {
   }
 };
 
-const outputPath = 'C:/Software/conex/scripts/ui-selectors-manifest.json';
+const outputPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'ui-selectors-manifest.json');
 fs.writeFileSync(outputPath, JSON.stringify(manifestData, null, 2), 'utf8');
 console.log(`Successfully generated ${outputPath}`);

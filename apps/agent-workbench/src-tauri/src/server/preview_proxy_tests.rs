@@ -22,6 +22,7 @@ use tower::ServiceExt;
 
 use super::{
     extract_target_url, handle_preview_proxy, is_html_content_type, percent_decode_lenient,
+    validate_target_url_security,
 };
 use crate::server::preview_headers::{
     cors_response_headers, sanitize_response_headers, should_strip_response_header,
@@ -165,19 +166,80 @@ fn test_inject_inspector_before_body_end() {
     assert!(script_end < body_end, "桥接脚本必须位于 </body> 之前");
 }
 
-// ── SSRF 防护测试（preview_proxy；对齐现有行为）──
+// ── SSRF 防护测试（preview_proxy；P1-SEC-02）──
 
-/// 云元数据 IP（169.254.169.254）仍按 http(s) 协议规则放行；本守卫只负责
-/// 代理入口的访问授权，不筛查目标地址，以保留用户明确需要的本地 / 私网预览。
+/// 云元数据 IP（169.254.169.254 与 169.254.0.0/16 链路本地）、IPv6 特殊地址及元数据域名拦截
 #[test]
-fn test_ssrf_cloud_metadata_current_behavior_http_passthrough() {
-    let url = extract_target_url(Some(
-        "url=http%3A%2F%2F169.254.169.254%2Flatest%2Fmeta-data%2F",
-    ));
-    assert!(
-        url.is_ok(),
-        "现状：http 协议放行（IP 级 SSRF 守卫未实现）；见 audits/01 §2 test_ssrf_block_cloud_metadata"
-    );
+fn test_ssrf_block_cloud_metadata_and_restricted_hosts() {
+    let bad_urls = [
+        "url=http%3A%2F%2F169.254.169.254%2Flatest%2Fmeta-data",
+        "url=http://169.254.169.254/latest/meta-data",
+        "url=http://169.254.1.1/info",
+        "url=http://[fe80::1]/",
+        "url=http://[fd00::1]/",
+        "url=http://metadata.google.internal/",
+        "url=http://metadata.google.internal/computeMetadata/v1/",
+        "url=http://sub.metadata.google.internal/test",
+        "url=http://0.0.0.0/",
+        "url=http://[::]/",
+        "url=http://224.0.0.1/",
+        "url=http://255.255.255.255/",
+    ];
+    for bad in bad_urls {
+        let err = extract_target_url(Some(bad)).unwrap_err();
+        assert_eq!(
+            err.device_code(),
+            DeviceErrorCode::CmdInvalid,
+            "必须拦截受限 SSRF 目标: {bad}"
+        );
+        assert_eq!(err.http_status(), StatusCode::BAD_REQUEST);
+    }
+}
+
+/// 验证合法外网 URL 正常放行
+#[test]
+fn test_ssrf_allow_valid_external_url() {
+    let url = extract_target_url(Some("url=https://example.com/preview")).unwrap();
+    assert_eq!(url, "https://example.com/preview");
+
+    let url2 = extract_target_url(Some("url=http://example.com/preview?foo=bar")).unwrap();
+    assert_eq!(url2, "http://example.com/preview?foo=bar");
+}
+
+/// 验证非开发模式下拦截本地回环地址（127.0.0.0/8, ::1, localhost）
+#[test]
+fn test_ssrf_block_loopback_in_non_dev_mode() {
+    for loopback in [
+        "http://127.0.0.1:3000/",
+        "http://127.0.0.2:8080/",
+        "http://localhost:5173/",
+        "http://sub.localhost:8080/",
+        "http://[::1]:3000/",
+    ] {
+        let parsed = url::Url::parse(loopback).unwrap();
+        let err = validate_target_url_security(&parsed, false).unwrap_err();
+        assert_eq!(
+            err.device_code(),
+            DeviceErrorCode::CmdInvalid,
+            "非开发模式下应拦截回环: {loopback}"
+        );
+    }
+}
+
+/// 验证开发模式下放行本地回环地址
+#[test]
+fn test_ssrf_allow_loopback_in_dev_mode() {
+    for loopback in [
+        "http://127.0.0.1:3000/",
+        "http://localhost:5173/",
+        "http://[::1]:3000/",
+    ] {
+        let parsed = url::Url::parse(loopback).unwrap();
+        assert!(
+            validate_target_url_security(&parsed, true).is_ok(),
+            "开发模式下应放行回环: {loopback}"
+        );
+    }
 }
 
 /// 非 http(s) 协议拦截：`file:///etc/passwd` → 400 cmd.invalid（audits/01 §2 test_ssrf_block_non_http_scheme）

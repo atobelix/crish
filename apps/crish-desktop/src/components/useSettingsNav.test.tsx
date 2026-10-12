@@ -78,10 +78,14 @@ describe('useSettingsNav Esc / LayerStack', () => {
   it('下拉打开时 Esc 只关 Menu，不关设置', async () => {
     const onClose = vi.fn();
     render(<SettingsEscHarness onClose={onClose} menuInitiallyOpen />);
-    expect(await screen.findByRole('menuitem', { name: '深色' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('menuitem', { name: '深色' })
+    ).toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => {
-      expect(screen.queryByRole('menuitem', { name: '深色' })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('menuitem', { name: '深色' })
+      ).not.toBeInTheDocument();
     });
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog', { name: '设置' })).toBeInTheDocument();
@@ -112,28 +116,34 @@ describe('useSettingsNav Esc / LayerStack', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('设置封面不再自设 z-index，避免压住 portal 进 overlay 的 Menu', () => {
+  it('设置弹窗面板不再自设 z-index，避免压住 portal 进 overlay 的 Menu', () => {
     const css = readFileSync(
       resolve(__dirname, 'settings/SettingsPanel.module.css'),
       'utf8'
     );
-    const cover = css.match(/\.settingsCover\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
-    expect(cover).not.toMatch(/z-index\s*:/);
+    const modal = css.match(/\.settingsModal\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
+    expect(modal).not.toBe('');
+    expect(modal).not.toMatch(/z-index\s*:/);
     // 层叠契约真源已上移至全局层级 SSOT：--dialog-z 默认 = --z-modal
     // （z-index.css Level 5），Dialog 遮罩以 var(--dialog-z, var(--z-modal))
-    // 消费；故 settingsCoverOverlay 只负责把 portal 进来的 popper 归到
+    // 消费；故 settingsModalOverlay 只负责把 portal 进来的 popper 归到
     // 全局 --z-dropdown，不再本地重声明 --z-dropdown（同值多写属层级双轨）。
-    const zIndexCss = readFileSync(resolve(__dirname, '../styles/z-index.css'), 'utf8');
+    const zIndexCss = readFileSync(
+      resolve(__dirname, '../styles/z-index.css'),
+      'utf8'
+    );
     expect(zIndexCss).toMatch(/--dialog-z:\s*var\(--z-modal\)/);
     expect(zIndexCss).toMatch(/--z-dropdown:/);
     const dialogCss = readFileSync(
       resolve(__dirname, 'ui/Dialog/Dialog.module.css'),
       'utf8'
     );
-    expect(dialogCss).toMatch(/z-index:\s*var\(--dialog-z,\s*var\(--z-modal\)\)/);
+    expect(dialogCss).toMatch(
+      /z-index:\s*var\(--dialog-z,\s*var\(--z-modal\)\)/
+    );
     // 消费面：overlay 内的 popper wrapper 必须吃到全局 --z-dropdown
     expect(css).toMatch(
-      /\.settingsCoverOverlay[\s\S]*z-index:\s*var\(--z-dropdown\)/
+      /\.settingsModalOverlay[\s\S]*z-index:\s*var\(--z-dropdown\)/
     );
     // 反向锁定：不得再本地声明 --z-dropdown（唯一真源在 z-index.css）
     expect(css).not.toMatch(/--z-dropdown\s*:/);

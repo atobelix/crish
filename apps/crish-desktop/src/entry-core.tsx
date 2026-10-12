@@ -16,6 +16,7 @@ import App from './App';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { GlobalErrorBanner } from './components/GlobalErrorBanner';
 import { ToastProvider } from './services/toast/ToastContext';
+import { I18nProvider } from './i18n';
 import { initSsrGlobals } from './createSsrGlobals';
 import { initVisualPresentationController } from './services/visualThemeController';
 import { bootstrapTheme } from './api/themeStore';
@@ -190,11 +191,13 @@ export class StartupCoordinator {
       const root = createRoot(rootElement);
       root.render(
         <StrictMode>
-          <ToastProvider>
-            <AppErrorBoundary>
-              <App />
-            </AppErrorBoundary>
-          </ToastProvider>
+          <I18nProvider>
+            <ToastProvider>
+              <AppErrorBoundary>
+                <App />
+              </AppErrorBoundary>
+            </ToastProvider>
+          </I18nProvider>
           <GlobalErrorBanner />
         </StrictMode>
       );
@@ -279,25 +282,40 @@ export class StartupCoordinator {
             { name: 'bootstrap:core', priority: 0, maxWaitMs }
           )
           .catch((e) => {
-            logger.warn(
-              '[StartupCoordinator] bootstrap-core 失败 (非致命):',
-              {
-                module: 'StartupCoordinator',
-                err:
-                  e instanceof Error
-                    ? { message: e.message, stack: e.stack, name: e.name }
-                    : { message: String(e) },
-              }
-            );
+            logger.warn('[StartupCoordinator] bootstrap-core 失败 (非致命):', {
+              module: 'StartupCoordinator',
+              err:
+                e instanceof Error
+                  ? { message: e.message, stack: e.stack, name: e.name }
+                  : { message: String(e) },
+            });
           });
 
         // 与旧 Promise.allSettled 列表一一对应的 5 大视图 Chunk（真实路径）
-        const secondaryViews: Array<{ name: string; loader: () => Promise<unknown> }> = [
-          { name: 'DiffCard', loader: () => import('./components/diff/DiffCard') },
-          { name: 'FilesCard', loader: () => import('./components/files/FilesCard') },
-          { name: 'OverviewCard', loader: () => import('./components/overview/OverviewCard') },
-          { name: 'PreviewCard', loader: () => import('./components/workspace/PreviewCard') },
-          { name: 'RuntimePanel', loader: () => import('./components/workspace/RuntimePanel') },
+        const secondaryViews: Array<{
+          name: string;
+          loader: () => Promise<unknown>;
+        }> = [
+          {
+            name: 'DiffCard',
+            loader: () => import('./components/diff/DiffCard'),
+          },
+          {
+            name: 'FilesCard',
+            loader: () => import('./components/files/FilesCard'),
+          },
+          {
+            name: 'OverviewCard',
+            loader: () => import('./components/overview/OverviewCard'),
+          },
+          {
+            name: 'PreviewCard',
+            loader: () => import('./components/workspace/PreviewCard'),
+          },
+          {
+            name: 'RuntimePanel',
+            loader: () => import('./components/workspace/RuntimePanel'),
+          },
         ];
         for (const view of secondaryViews) {
           staggeredIdleQueue
@@ -329,16 +347,13 @@ export class StartupCoordinator {
             { name: 'bootstrap:full', priority: 0, maxWaitMs }
           )
           .catch((e) => {
-            logger.warn(
-              '[StartupCoordinator] bootstrap-full 失败 (非致命):',
-              {
-                module: 'StartupCoordinator',
-                err:
-                  e instanceof Error
-                    ? { message: e.message, stack: e.stack, name: e.name }
-                    : { message: String(e) },
-              }
-            );
+            logger.warn('[StartupCoordinator] bootstrap-full 失败 (非致命):', {
+              module: 'StartupCoordinator',
+              err:
+                e instanceof Error
+                  ? { message: e.message, stack: e.stack, name: e.name }
+                  : { message: String(e) },
+            });
           });
       })
       .catch((e) => {

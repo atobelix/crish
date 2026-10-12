@@ -1,13 +1,13 @@
 /**
  * sessionDragGuard.ts — 跨域拖拽分屏互斥守门状态机
- * 
+ *
  * 核心原则：
  * 1. 单窗口单会话自裂变拦截（当全树仅 1 个活动 Chat 叶且拖拽当前活动会话时，禁止分屏）；
  * 2. 多窗口或拖拽历史非活动会话时，完全放行分屏与跨叶迁移；
  * 3. 纯函数设计，可独立测试。
  */
 
-import type { LayoutTree } from '../../../store/layout-tree/types';
+import type { LayoutTree } from '../../../store';
 import { collectLeaves, activeSessionIdOf } from '../../../store/storeAccess';
 
 export type PaneDropRegion = 'left' | 'right' | 'top' | 'bottom' | 'center';
@@ -19,7 +19,7 @@ export interface GuardEvaluation {
 
 /**
  * 形式化互斥规则判定谓词
- * 
+ *
  * @param tree 全局二叉树
  * @param draggedSessionId 当前正在被拖拽的会话 ID
  * @param targetLeafId 指针悬停的目标叶 ID
@@ -35,7 +35,9 @@ export function evaluateSessionSplitGuard(
     return { allowed: false, reason: 'OK' };
   }
 
-  const chatLeaves = collectLeaves(tree.root).filter((l) => l.panelId === 'chat');
+  const chatLeaves = collectLeaves(tree.root).filter(
+    (l) => l.panelId === 'chat'
+  );
   const leafCount = chatLeaves.length;
 
   if (leafCount === 1) {

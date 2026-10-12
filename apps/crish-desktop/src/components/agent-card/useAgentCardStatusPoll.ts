@@ -6,9 +6,11 @@ import { useEffect, useRef } from 'react';
 import type { SessionAgent } from '../../store/types';
 import { getSubagentStatus } from '../../api/subagentApi';
 import { getSessionAgent } from '../../store/storeAccess';
-import type { useSessionStore } from '../../store/sessionStore';
+import type { useSessionStore } from '../../store';
 
-type PatchSessionAgent = ReturnType<typeof useSessionStore.getState>['patchSessionAgent'];
+type PatchSessionAgent = ReturnType<
+  typeof useSessionStore.getState
+>['patchSessionAgent'];
 
 /**
  * 运行中轮询 daemon 状态（兜底 UI 纠正 status）。
@@ -17,7 +19,7 @@ type PatchSessionAgent = ReturnType<typeof useSessionStore.getState>['patchSessi
 export function useAgentCardStatusPoll(
   agent: SessionAgent | undefined,
   sessId: string | undefined,
-  patchSessionAgent: PatchSessionAgent,
+  patchSessionAgent: PatchSessionAgent
 ): React.MutableRefObject<ReturnType<typeof setInterval> | null> {
   const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 

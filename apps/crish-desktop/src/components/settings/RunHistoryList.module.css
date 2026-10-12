@@ -59,7 +59,7 @@
 }
 
 .runItem:focus-visible {
-  outline: 2px solid var(--color-brand);
+  outline: 2px solid var(--accent-primary);
   outline-offset: -1px;
 }
 
@@ -106,13 +106,13 @@
 }
 
 .badgeRunning {
-  background: var(--color-brand-muted);
-  color: var(--color-brand);
+  background: var(--color-info-bg);
+  color: var(--color-info);
 }
 
 .badgeFailed {
-  background: var(--color-danger-bg);
-  color: var(--color-danger);
+  background: var(--color-error-bg);
+  color: var(--color-error);
 }
 
 .badgeCancelled {
@@ -138,7 +138,7 @@
 }
 
 .errorSnippet {
-  color: var(--color-danger);
+  color: var(--color-error);
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;

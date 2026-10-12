@@ -1,11 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 
+const ROOT_DIR = path.resolve(__dirname, '..');
+
 // 1. 读取四个全量数据集
-const mcModels = JSON.parse(fs.readFileSync('c:/Software/conex/docs/model-capability/surveys/modelcompare-full-1636.json', 'utf8')).models;
-const arenaRows = JSON.parse(fs.readFileSync('c:/Software/conex/docs/model-capability/surveys/arena-full-693.json', 'utf8')).rows;
-const orModels = JSON.parse(fs.readFileSync('c:/Software/conex/docs/model-capability/surveys/openrouter-full-models.json', 'utf8')).data;
-const aaDatasets = JSON.parse(fs.readFileSync('c:/Software/conex/docs/model-capability/surveys/artificial-analysis-data.json', 'utf8')).datasets;
+const mcModels = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'docs/model-capability/surveys/modelcompare-full-1636.json'), 'utf8')).models;
+const arenaRows = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'docs/model-capability/surveys/arena-full-693.json'), 'utf8')).rows;
+const orModels = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'docs/model-capability/surveys/openrouter-full-models.json'), 'utf8')).data;
+const aaDatasets = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'docs/model-capability/surveys/artificial-analysis-data.json'), 'utf8')).datasets;
 
 console.log(`Loaded: ModelCompare(${mcModels.length}), Arena(${arenaRows.length}), OpenRouter(${orModels.length}), AA(${aaDatasets.length} datasets)`);
 
@@ -134,7 +136,7 @@ for (const m of mcModels) {
 }
 
 // 写入全景聚合 JSON
-fs.writeFileSync('c:/Software/conex/docs/model-capability/surveys/comprehensive-aggregated-models.json', JSON.stringify(vendorCatalog, null, 2), 'utf8');
+fs.writeFileSync(path.join(ROOT_DIR, 'docs/model-capability/surveys/comprehensive-aggregated-models.json'), JSON.stringify(vendorCatalog, null, 2), 'utf8');
 
 console.log('Saved comprehensive-aggregated-models.json with vendors count:', Object.keys(vendorCatalog).length);
 

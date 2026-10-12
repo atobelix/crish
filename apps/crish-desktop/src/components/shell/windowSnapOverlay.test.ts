@@ -35,14 +35,26 @@ import {
 const WINDOWS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)';
 
 function setUserAgent(ua: string): void {
-  Object.defineProperty(window.navigator, 'userAgent', { value: ua, configurable: true });
+  Object.defineProperty(window.navigator, 'userAgent', {
+    value: ua,
+    configurable: true,
+  });
 }
 
 function makeButton(x: number, width = 46, height = 36): HTMLElement {
   const el = document.createElement('div');
   document.body.appendChild(el);
   el.getBoundingClientRect = () =>
-    ({ left: x, top: 0, width, height, right: x + width, bottom: height, x, y: 0 }) as DOMRect;
+    ({
+      left: x,
+      top: 0,
+      width,
+      height,
+      right: x + width,
+      bottom: height,
+      x,
+      y: 0,
+    }) as DOMRect;
   return el;
 }
 
@@ -80,13 +92,19 @@ describe('windowSnapOverlay（Win11 贴靠布局热区前端控制器）', () =>
   it('登记后以 CSS 逻辑像素上报最大化按钮矩形，成功后监听热区事件并转给按钮', async () => {
     const phases: SnapOverlayPhase[] = [];
     const el = makeButton(1000);
-    registerSnapOverlayTarget({ getElement: () => el, onPhase: (p) => phases.push(p) });
+    registerSnapOverlayTarget({
+      getElement: () => el,
+      onPhase: (p) => phases.push(p),
+    });
     await flush();
 
     expect(invokeTyped).toHaveBeenCalledWith(SNAP_OVERLAY_COMMAND, {
       rect: { x: 1000, y: 0, width: 46, height: 36 },
     });
-    expect(listen).toHaveBeenCalledWith(SNAP_OVERLAY_EVENT, expect.any(Function));
+    expect(listen).toHaveBeenCalledWith(
+      SNAP_OVERLAY_EVENT,
+      expect.any(Function)
+    );
 
     eventHandler?.({ payload: { phase: 'enter' } });
     eventHandler?.({ payload: { phase: 'press' } });
@@ -106,42 +124,57 @@ describe('windowSnapOverlay（Win11 贴靠布局热区前端控制器）', () =>
     expect(warn).toHaveBeenCalledTimes(2);
   });
 
-  it('多组窗控：后挂载者拥有热区；卸载后交还前一组并重报其矩形；全部卸载则撤销热区', async () => {
-    const bottomPhases: SnapOverlayPhase[] = [];
-    const topPhases: SnapOverlayPhase[] = [];
-    const bottom = makeButton(900);
-    const top = makeButton(800);
-    const offBottom = registerSnapOverlayTarget({
-      getElement: () => bottom,
-      onPhase: (p) => bottomPhases.push(p),
+  it('单实例：注销即撤销热区（上报 null）；注销后的旧注销函数再次调用无副作用', async () => {
+    const el = makeButton(900);
+    const off = registerSnapOverlayTarget({
+      getElement: () => el,
+      onPhase: vi.fn(),
     });
-    await flush();
-    eventHandler?.({ payload: { phase: 'enter' } });
-
-    const offTop = registerSnapOverlayTarget({
-      getElement: () => top,
-      onPhase: (p) => topPhases.push(p),
-    });
-    await flush();
-    // 被压下的一组先复位 hover，避免残留高亮
-    expect(bottomPhases).toEqual(['enter', 'leave']);
-    expect(invokeTyped).toHaveBeenLastCalledWith(SNAP_OVERLAY_COMMAND, {
-      rect: { x: 800, y: 0, width: 46, height: 36 },
-    });
-    eventHandler?.({ payload: { phase: 'enter' } });
-    expect(topPhases).toEqual(['enter']);
-
-    offTop();
     await flush();
     expect(invokeTyped).toHaveBeenLastCalledWith(SNAP_OVERLAY_COMMAND, {
       rect: { x: 900, y: 0, width: 46, height: 36 },
     });
-
-    offBottom();
+    off();
     await flush();
-    expect(invokeTyped).toHaveBeenLastCalledWith(SNAP_OVERLAY_COMMAND, { rect: null });
+    expect(invokeTyped).toHaveBeenLastCalledWith(SNAP_OVERLAY_COMMAND, {
+      rect: null,
+    });
+    const calls = invokeTyped.mock.calls.length;
+    off();
+    await flush();
+    expect(invokeTyped.mock.calls.length).toBe(calls);
   });
 
+  it('重复登记属接线错误：记 warn，旧目标复位 hover，后登记者接管；旧注销函数不撤销新目标', async () => {
+    const oldPhases: SnapOverlayPhase[] = [];
+    const newPhases: SnapOverlayPhase[] = [];
+    const oldEl = makeButton(900);
+    const newEl = makeButton(800);
+    const offOld = registerSnapOverlayTarget({
+      getElement: () => oldEl,
+      onPhase: (p) => oldPhases.push(p),
+    });
+    await flush();
+    eventHandler?.({ payload: { phase: 'enter' } });
+    registerSnapOverlayTarget({
+      getElement: () => newEl,
+      onPhase: (p) => newPhases.push(p),
+    });
+    await flush();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain('重复登记');
+    expect(oldPhases).toEqual(['enter', 'leave']);
+    expect(invokeTyped).toHaveBeenLastCalledWith(SNAP_OVERLAY_COMMAND, {
+      rect: { x: 800, y: 0, width: 46, height: 36 },
+    });
+    eventHandler?.({ payload: { phase: 'enter' } });
+    expect(newPhases).toEqual(['enter']);
+    offOld();
+    await flush();
+    expect(invokeTyped).not.toHaveBeenLastCalledWith(SNAP_OVERLAY_COMMAND, {
+      rect: null,
+    });
+  });
   it('窗口缩放稳定（app:window-resize-settled）时重报矩形（最大化 / 还原后按钮位置变化）', async () => {
     let x = 1000;
     const el = makeButton(0);
@@ -200,7 +233,12 @@ describe('windowSnapOverlay（Win11 贴靠布局热区前端控制器）', () =>
     expect(measureSnapButton(null)).toBeNull();
     expect(measureSnapButton(document.createElement('div'))).toBeNull();
     expect(measureSnapButton(makeButton(10, 0, 36))).toBeNull();
-    expect(measureSnapButton(makeButton(10))).toEqual({ x: 10, y: 0, width: 46, height: 36 });
+    expect(measureSnapButton(makeButton(10))).toEqual({
+      x: 10,
+      y: 0,
+      width: 46,
+      height: 36,
+    });
   });
 
   it('phase 解析只认四个 wire 字面量（与 Rust SnapOverlayPhase::as_str 同值）', () => {

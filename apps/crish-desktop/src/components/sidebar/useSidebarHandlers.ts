@@ -1,10 +1,8 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { useSessionStore, useMainSurface } from '../../store/storeAccess';
-import { useLayoutStore } from '../../store/layoutStore';
 import { getActiveProjectId } from '../../api/projectStore';
 import { setDraftFolder } from '../../api/storeAccess';
 import { isPendingDraft } from '../../store/storeAccess';
-import { clearAgentPanelFocus } from '../../api/openAgentPanel';
 import { emitUiEvent } from '../../api/uiEvents';
 import type { FilterType } from './sidebarHelpers';
 import { getCompositionRoot } from '../../app/compositionRoot';
@@ -48,8 +46,12 @@ export function useSidebarHandlers({
   setSidebarCollapsed,
 }: UseSidebarHandlersOptions) {
   const renameSession = useSessionStore((s) => s.renameSession);
-  const { meta: surfaceMeta, toggleSurface, navigateToChatSession, navigateToNewDraft } =
-    useMainSurface();
+  const {
+    meta: surfaceMeta,
+    toggleSurface,
+    navigateToChatSession,
+    navigateToNewDraft,
+  } = useMainSurface();
   const activeNav = surfaceMeta.sidebarNavKey;
   const newSessionLockRef = useRef(false);
 
@@ -66,7 +68,13 @@ export function useSidebarHandlers({
         newSessionLockRef.current = false;
       });
     }
-  }, [filterType, setFilterType, setGeneralCollapsed, setRenamingSessionId, navigateToNewDraft]);
+  }, [
+    filterType,
+    setFilterType,
+    setGeneralCollapsed,
+    setRenamingSessionId,
+    navigateToNewDraft,
+  ]);
 
   const handleCommitRename = useCallback(
     (sessionId: string, title: string) => {
@@ -100,7 +108,12 @@ export function useSidebarHandlers({
         }
       }
     },
-    [setRenamingSessionId, setGeneralCollapsed, setCollapsedProjects, navigateToChatSession]
+    [
+      setRenamingSessionId,
+      setGeneralCollapsed,
+      setCollapsedProjects,
+      navigateToChatSession,
+    ]
   );
 
   const handleOpenProject = useCallback(

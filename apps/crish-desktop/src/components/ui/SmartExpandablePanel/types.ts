@@ -162,6 +162,10 @@ export interface SmartPanelProps {
   enableTriangleAim?: boolean;
   /** 定位配置 */
   position?: PositionOptions;
+  /** 碰撞翻转/平移（默认 true）；false = 调用方已锁定 side，打开后方向固定 */
+  avoidCollisions?: boolean;
+  /** 关闭后焦点去向（Radix onCloseAutoFocus；preventDefault 后自行聚焦） */
+  onCloseAutoFocus?: (event: Event) => void;
   /** 面板最大高度限制（默认 760px 或 min(70vh, 360px)） */
   maxPanelHeight?: number | string;
   /** 是否使用局部容器作为边界约束（而非全局 window） */

@@ -31,7 +31,7 @@ describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
     // 左列用户卡片：纯净单行昵称，无工作空间副文本与头像状态标点
     const userCard = screen.getByTestId('user-profile-card');
     expect(userCard).toBeInTheDocument();
-    expect(screen.getByText('orange')).toBeInTheDocument();
+    expect(screen.getByText('Developer')).toBeInTheDocument();
     expect(screen.queryByText('Conex Workspace')).toBeNull();
     expect(screen.queryByLabelText('在线')).toBeNull();
 
@@ -99,4 +99,11 @@ describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
     expect(screen.getByLabelText('新版本可用提示')).toBeInTheDocument();
   });
 
+  it('UserProfileCard 消费 useI18n 注入 roleLabel 与 tooltip (带 fallback)', () => {
+    render(<UserProfileCard username="tester" />);
+    const cardBtn = screen.getByTestId('user-profile-card');
+    expect(cardBtn).toHaveAttribute('data-role', '访客用户');
+    expect(cardBtn).toHaveAttribute('data-tooltip', '设置导航');
+    expect(cardBtn).toHaveAttribute('title', '设置导航');
+  });
 });

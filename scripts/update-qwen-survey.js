@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const surveyPath = path.resolve('c:/Software/conex/docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md');
+const surveyPath = path.resolve(__dirname, '../docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md');
 let content = fs.readFileSync(surveyPath, 'utf8');
 
 // 构造经阿里云百炼平台 (help.aliyun.com/zh/model-studio/model-pricing) 100% 核准的 Qwen 章节

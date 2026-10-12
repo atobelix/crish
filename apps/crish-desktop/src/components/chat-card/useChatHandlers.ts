@@ -6,8 +6,7 @@ import { onUiEvent } from '../../api/uiEvents';
 import { generateMessageId } from '../../utils/generateMessageId';
 import { getTransport } from '../../api/transport';
 import { backfillFromBoundaryText } from '../../hooks/chat-stream/slashSendDraftManager';
-import { reportRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
-import { useSettingsField } from '../../store/storeAccess';
+import { reportRuntimeStatus, useSettingsField } from '../../store/storeAccess';
 import type { ChatAttachment } from '../../hooks/useChatStream';
 import type {
   ChatContentPart,

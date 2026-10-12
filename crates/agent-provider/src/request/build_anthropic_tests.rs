@@ -505,17 +505,49 @@ fn pairing_gate_partial_closure_leaves_only_unanswered() {
     assert_eq!(orphans, ["call_open"]);
 }
 
-/// validate 在 debug_assertions 下对孤儿立即 panic（Fail-Fast，CI 硬阻断）。
-/// Release 下同一输入返回 Err(UnpairedToolCalls)——两种分级行为互斥编译，
-/// 本测试仅覆盖 CI/debug 路径的 panic 语义。
+/// validate 对孤儿返回 Err(UnpairedToolCalls) 并记录结构化日志（Debug 与 Release 统一行为）。
 #[test]
-#[should_panic(expected = "Anthropic 导线层校验拦截到孤儿工具调用")]
-fn pairing_gate_validate_panics_on_orphan_in_debug() {
+fn pairing_gate_validate_returns_err_on_orphan() {
     let messages = vec![json!({
         "role": "assistant",
         "content": [{ "type": "tool_use", "id": "call_x", "name": "a", "input": {} }]
     })];
-    let _ = validate_anthropic_tool_pairing(&messages);
+    let res = validate_anthropic_tool_pairing(&messages);
+    match res {
+        Err(RequestBuildError::UnpairedToolCalls { protocol, orphan_ids }) => {
+            assert_eq!(protocol, "anthropic");
+            assert_eq!(orphan_ids, vec!["call_x"]);
+        }
+        other => panic!("期望 UnpairedToolCalls 错误，得到：{other:?}"),
+    }
+}
+
+/// build 入口在孤儿输入下 Fail-Closed：安全过滤孤儿 tool_use，不发生 panic。
+#[test]
+fn build_anthropic_fail_closed_on_orphan() {
+    let messages = vec![
+        Arc::new(user_message("读文件")),
+        Arc::new(assistant_with_thought_and_tool("我来读取", "先想想路径")),
+    ];
+    let context = RequestBuildContext {
+        system_prompt: None,
+        messages: &messages,
+        tools: Vec::new(),
+        wire_mode: SystemPromptWireMode::NativeSystemRole,
+    };
+    let body = build_anthropic_request_body(&AnthropicRequestOptions::default(), &context);
+    let msgs = body["messages"].as_array().expect("messages 必须为数组");
+    for msg in msgs {
+        if let Some(content) = msg.get("content").and_then(Value::as_array) {
+            for block in content {
+                assert_ne!(
+                    block.get("type").and_then(Value::as_str),
+                    Some("tool_use"),
+                    "带毒孤儿 tool_use 必须被过滤掉: {block:?}"
+                );
+            }
+        }
+    }
 }
 
 /// 从完整对话剔除 Tool 结果消息后的 wire 等价物：assistant 带 tool_use、
@@ -535,4 +567,93 @@ fn pairing_gate_missing_tool_result_message_detected() {
     ];
     let orphans = detect_anthropic_unpaired_tool_calls(&wire);
     assert_eq!(orphans, ["call_1"]);
+}
+
+/// build 入口在纯孤儿 tool_use（无文本正文）下：过滤 tool_use 并补入 WIRE_CONTINUATION_NOTE 占位文本，杜绝 400
+#[test]
+fn build_anthropic_fail_closed_on_orphan_no_text_injects_continuation_note() {
+    let orphan_call = AgentMessage {
+        id: "a1".to_string(),
+        role: AgentMessageRole::Assistant,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        blocks: vec![AgentMessageBlock::ToolCall(ToolCallBlock {
+            id: "call_orphan".to_string(),
+            tool_name: "test_tool".to_string(),
+            input: json!({}),
+        })],
+        metadata: None,
+        client_message_id: None,
+        content: None,
+    };
+    let messages = vec![
+        Arc::new(user_message("hello")),
+        Arc::new(orphan_call),
+    ];
+    let context = RequestBuildContext {
+        system_prompt: None,
+        messages: &messages,
+        tools: Vec::new(),
+        wire_mode: SystemPromptWireMode::NativeSystemRole,
+    };
+    let body = build_anthropic_request_body(&AnthropicRequestOptions::default(), &context);
+    let msgs = body["messages"].as_array().expect("messages 必须为数组");
+    let mut found_assistant = false;
+    for msg in msgs {
+        if msg.get("role").and_then(Value::as_str) == Some("assistant") {
+            found_assistant = true;
+            let content = msg["content"].as_array().expect("assistant content 必须为数组");
+            assert_eq!(content.len(), 1);
+            assert_eq!(content[0]["type"], "text");
+            assert_eq!(content[0]["text"], WIRE_CONTINUATION_NOTE);
+        }
+    }
+    assert!(found_assistant, "必须包含 assistant 消息");
+}
+
+/// build 入口在思考 + 孤儿 tool_use（无文本）下：过滤 tool_use 并跟进 WIRE_CONTINUATION_NOTE，满足 thinking 必须跟随 text 的规范
+#[test]
+fn build_anthropic_fail_closed_on_orphan_thinking_only_injects_continuation_note() {
+    let orphan_call = AgentMessage {
+        id: "a1".to_string(),
+        role: AgentMessageRole::Assistant,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        blocks: vec![
+            AgentMessageBlock::Thought {
+                text: "思考中...".to_string(),
+                redacted: None,
+            },
+            AgentMessageBlock::ToolCall(ToolCallBlock {
+                id: "call_orphan_thought".to_string(),
+                tool_name: "test_tool".to_string(),
+                input: json!({}),
+            }),
+        ],
+        metadata: None,
+        client_message_id: None,
+        content: None,
+    };
+    let messages = vec![
+        Arc::new(user_message("hello")),
+        Arc::new(orphan_call),
+    ];
+    let context = RequestBuildContext {
+        system_prompt: None,
+        messages: &messages,
+        tools: Vec::new(),
+        wire_mode: SystemPromptWireMode::NativeSystemRole,
+    };
+    let body = build_anthropic_request_body(&AnthropicRequestOptions::default(), &context);
+    let msgs = body["messages"].as_array().expect("messages 必须为数组");
+    let mut found_assistant = false;
+    for msg in msgs {
+        if msg.get("role").and_then(Value::as_str) == Some("assistant") {
+            found_assistant = true;
+            let content = msg["content"].as_array().expect("assistant content 必须为数组");
+            assert_eq!(content.len(), 2);
+            assert_eq!(content[0]["type"], "thinking");
+            assert_eq!(content[1]["type"], "text");
+            assert_eq!(content[1]["text"], WIRE_CONTINUATION_NOTE);
+        }
+    }
+    assert!(found_assistant, "必须包含 assistant 消息");
 }

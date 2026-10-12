@@ -1,0 +1,39 @@
+/* 空界面品牌：应用图形 + 名称，图形与文字视觉等高、垂直居中 */
+.brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  align-self: center;
+  margin-bottom: var(--space-6);
+  font-size: var(--font-size-xl);
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+/* 高度按 em 跟随文字字号：等于「Crish」字形整体高度（h 升部顶到基线） */
+.mark {
+  display: block;
+  height: 0.78em;
+  /* 「Crish」无降部，字形中心比行盒中心偏上；下边距让图形中心随之上移 */
+  margin-bottom: 0.11em;
+  width: auto;
+  aspect-ratio: 166 / 159;
+  overflow: visible;
+}
+
+.markDot {
+  fill: var(--brand-primary);
+}
+
+.markLines {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 26;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.name {
+  font-weight: var(--font-weight-medium);
+}

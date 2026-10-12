@@ -15,6 +15,7 @@
 //! Header 清洗引擎见 `preview_headers.rs`，HTML 注入引擎见 `preview_injector.rs`，
 //! 测试见 `preview_proxy_tests.rs`。
 
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::OnceLock;
 
 use axum::body::Body;
@@ -205,6 +206,42 @@ pub fn extract_target_url(raw: Option<&str>) -> Result<String, ServerError> {
         )
     })?;
 
+    validate_target_url_security(&parsed, is_development_mode())?;
+
+    Ok(trimmed.to_string())
+}
+
+/// 判断当前是否处于开发模式（允许预览回环地址）
+pub fn is_development_mode() -> bool {
+    // 环境变量显式覆盖（优先判断）
+    if let Ok(val) = std::env::var("CONEX_PREVIEW_ALLOW_LOOPBACK") {
+        return val == "1" || val.eq_ignore_ascii_case("true");
+    }
+    if let Ok(env) = std::env::var("CONEX_ENV") {
+        if env.eq_ignore_ascii_case("development") {
+            return true;
+        }
+        if env.eq_ignore_ascii_case("production") {
+            return false;
+        }
+    }
+    if let Ok(env) = std::env::var("NODE_ENV") {
+        if env.eq_ignore_ascii_case("development") {
+            return true;
+        }
+        if env.eq_ignore_ascii_case("production") {
+            return false;
+        }
+    }
+    // 默认在 debug profile 构建下启用
+    cfg!(debug_assertions)
+}
+
+/// 校验目标 URL 是否符合安全要求（SSRF 防护与协议限制）
+pub fn validate_target_url_security(
+    parsed: &url::Url,
+    allow_loopback: bool,
+) -> Result<(), ServerError> {
     let scheme = parsed.scheme();
     if scheme != "http" && scheme != "https" {
         return Err(ServerError::protocol(
@@ -213,7 +250,184 @@ pub fn extract_target_url(raw: Option<&str>) -> Result<String, ServerError> {
         ));
     }
 
-    Ok(trimmed.to_string())
+    validate_host_and_ip(parsed, allow_loopback)
+}
+
+/// 验证 IPv4 地址安全性
+fn validate_ipv4(ip: Ipv4Addr, allow_loopback: bool) -> Result<(), &'static str> {
+    let octets = ip.octets();
+
+    // 1. 云实例元数据与链路本地 (169.254.0.0/16, 含 169.254.169.254)
+    if octets[0] == 169 && octets[1] == 254 {
+        return Err("云实例元数据与链路本地地址禁止访问 (169.254.0.0/16)");
+    }
+
+    // 2. 全零 / 当前网络 (0.0.0.0/8)
+    if octets[0] == 0 {
+        return Err("全零与当前网络地址禁止访问 (0.0.0.0/8)");
+    }
+
+    // 3. 广播地址 (255.255.255.255)
+    if ip.is_broadcast() {
+        return Err("广播地址禁止访问 (255.255.255.255)");
+    }
+
+    // 4. 多播地址 (224.0.0.0/4)
+    if ip.is_multicast() {
+        return Err("多播地址禁止访问 (224.0.0.0/4)");
+    }
+
+    // 5. 回环地址 (127.0.0.0/8)
+    if ip.is_loopback() && !allow_loopback {
+        return Err("非开发模式下禁止访问本地回环地址 (127.0.0.0/8)");
+    }
+
+    Ok(())
+}
+
+/// 验证 IPv6 地址安全性
+fn validate_ipv6(ip: Ipv6Addr, allow_loopback: bool) -> Result<(), &'static str> {
+    // 检查是否为 IPv4 映射或 IPv4 兼容地址
+    let segments = ip.segments();
+    let is_ipv4_mapped = matches!(segments, [0, 0, 0, 0, 0, 0xffff, _, _]);
+    let is_ipv4_compat = matches!(segments, [0, 0, 0, 0, 0, 0, _, _])
+        && !ip.is_unspecified()
+        && !ip.is_loopback();
+    if is_ipv4_mapped || is_ipv4_compat {
+        let oct = ip.octets();
+        let v4 = Ipv4Addr::new(oct[12], oct[13], oct[14], oct[15]);
+        return validate_ipv4(v4, allow_loopback);
+    }
+
+    // 1. 全零未指定 (::)
+    if ip.is_unspecified() {
+        return Err("IPv6 未指定地址禁止访问 (::)");
+    }
+
+    // 2. 链路本地 (fe80::/10)
+    if (segments[0] & 0xffc0) == 0xfe80 {
+        return Err("IPv6 链路本地地址禁止访问 (fe80::/10)");
+    }
+
+    // 3. 唯一本地地址 / ULA (fd00::/8 及 fc00::/7)
+    if (segments[0] & 0xfe00) == 0xfc00 {
+        return Err("IPv6 唯一本地地址禁止访问 (fd00::/8)");
+    }
+
+    // 4. 多播 (ff00::/8)
+    if ip.is_multicast() {
+        return Err("IPv6 多播地址禁止访问 (ff00::/8)");
+    }
+
+    // 5. 回环地址 (::1)
+    if ip.is_loopback() && !allow_loopback {
+        return Err("非开发模式下禁止访问本地回环地址 (::1)");
+    }
+
+    Ok(())
+}
+
+/// 验证 URL 目标主机与 IP 地址
+fn validate_host_and_ip(parsed: &url::Url, allow_loopback: bool) -> Result<(), ServerError> {
+    let host = parsed.host().ok_or_else(|| {
+        tracing::warn!(target: "preview_proxy", "SSRF 保护拦截：目标 URL 缺少主机名");
+        ServerError::protocol(
+            DeviceErrorCode::CmdInvalid,
+            "目标 URL 缺少有效的主机名",
+        )
+    })?;
+
+    let host_str = parsed.host_str().unwrap_or_default();
+
+    match host {
+        url::Host::Ipv4(v4) => {
+            if let Err(reason) = validate_ipv4(v4, allow_loopback) {
+                tracing::warn!(
+                    target: "preview_proxy",
+                    host = %host_str,
+                    reason = %reason,
+                    "SSRF 保护拦截：不允许访问受限 IP 地址"
+                );
+                return Err(ServerError::protocol(
+                    DeviceErrorCode::CmdInvalid,
+                    format!("SSRF 保护拦截：不允许访问受限地址 '{host_str}': {reason}"),
+                ));
+            }
+        }
+        url::Host::Ipv6(v6) => {
+            if let Err(reason) = validate_ipv6(v6, allow_loopback) {
+                tracing::warn!(
+                    target: "preview_proxy",
+                    host = %host_str,
+                    reason = %reason,
+                    "SSRF 保护拦截：不允许访问受限 IP 地址"
+                );
+                return Err(ServerError::protocol(
+                    DeviceErrorCode::CmdInvalid,
+                    format!("SSRF 保护拦截：不允许访问受限地址 '{host_str}': {reason}"),
+                ));
+            }
+        }
+        url::Host::Domain(domain) => {
+            // 若 domain 可以解析为 IP（如特殊格式 IP 字符串）
+            if let Ok(ip) = domain.parse::<IpAddr>() {
+                let res = match ip {
+                    IpAddr::V4(v4) => validate_ipv4(v4, allow_loopback),
+                    IpAddr::V6(v6) => validate_ipv6(v6, allow_loopback),
+                };
+                if let Err(reason) = res {
+                    tracing::warn!(
+                        target: "preview_proxy",
+                        host = %host_str,
+                        reason = %reason,
+                        "SSRF 保护拦截：不允许访问受限 IP 地址"
+                    );
+                    return Err(ServerError::protocol(
+                        DeviceErrorCode::CmdInvalid,
+                        format!("SSRF 保护拦截：不允许访问受限地址 '{host_str}': {reason}"),
+                    ));
+                }
+            }
+
+            let normalized = domain.trim_end_matches('.').to_ascii_lowercase();
+
+            // 1. 云实例元数据域名 (metadata.google.internal)
+            if normalized == "metadata.google.internal"
+                || normalized.ends_with(".metadata.google.internal")
+            {
+                let reason = "云实例元数据域名禁止访问 (metadata.google.internal)";
+                tracing::warn!(
+                    target: "preview_proxy",
+                    host = %host_str,
+                    reason = %reason,
+                    "SSRF 保护拦截：不允许访问云元数据域名"
+                );
+                return Err(ServerError::protocol(
+                    DeviceErrorCode::CmdInvalid,
+                    format!("SSRF 保护拦截：不允许访问受限域名 '{host_str}': {reason}"),
+                ));
+            }
+
+            // 2. 本地回环域名 (localhost)
+            if normalized == "localhost" || normalized.ends_with(".localhost") {
+                if !allow_loopback {
+                    let reason = "非开发模式下禁止访问本地回环域名 (localhost)";
+                    tracing::warn!(
+                        target: "preview_proxy",
+                        host = %host_str,
+                        reason = %reason,
+                        "SSRF 保护拦截：不允许访问本地回环域名"
+                    );
+                    return Err(ServerError::protocol(
+                        DeviceErrorCode::CmdInvalid,
+                        format!("SSRF 保护拦截：不允许访问受限域名 '{host_str}': {reason}"),
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// 宽松百分号解码（容错非标准序列与已解码文本）

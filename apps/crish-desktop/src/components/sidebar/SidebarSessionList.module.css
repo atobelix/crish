@@ -38,7 +38,9 @@
 .section {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1_5); /* Elegant 6px gap between section titles and contents */
+  gap: var(
+    --space-1_5
+  ); /* Elegant 6px gap between section titles and contents */
   padding-left: 0; /* Remove sub-container padding-left */
   padding-right: 0; /* Remove sub-container padding-right */
   margin-bottom: var(--space-2); /* Pulled slightly closer to 8px */
@@ -92,7 +94,9 @@
 .sectionNew,
 .sectionSortBtn,
 .sectionSort,
-.foldToggleBtn {
+.foldToggleBtn,
+.folderNewBtn,
+.folderNewSession {
   --btn-hover-overlay: transparent;
   --btn-active-overlay: transparent;
 }
@@ -138,7 +142,10 @@
   cursor: pointer;
   opacity: 0;
   padding: 0;
-  transition: opacity var(--transition-micro), color var(--transition-micro), background-color var(--transition-micro);
+  transition:
+    opacity var(--transition-micro),
+    color var(--transition-micro),
+    background-color var(--transition-micro);
 }
 
 .sectionLabelRow:hover .sectionNew,
@@ -184,7 +191,9 @@
 .folderGroup {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1); /* Vertical gap between folder header (e.g. conex) and its session list items */
+  gap: var(
+    --space-1
+  ); /* Vertical gap between folder header (e.g. conex) and its session list items */
   margin-bottom: var(--space-2); /* Pulled slightly closer to 8px */
 }
 
@@ -282,7 +291,10 @@
   padding: 0;
   margin: 0;
   line-height: 1;
-  transition: opacity var(--transition-micro), color var(--transition-micro), background-color var(--transition-micro);
+  transition:
+    opacity var(--transition-micro),
+    color var(--transition-micro),
+    background-color var(--transition-micro);
 }
 
 .folderHeaderRow:hover .folderNewBtn,
@@ -293,9 +305,11 @@
 }
 
 .folderNewBtn:hover,
-.folderNewSession:hover {
+.folderNewSession:hover,
+.folderNewBtn:active,
+.folderNewSession:active {
   color: var(--text-primary);
-  background-color: var(--tint-hover);
+  background-color: transparent;
 }
 
 .folderSessions {
@@ -337,7 +351,9 @@
   border: none;
   font-weight: var(--font-weight-normal, 400);
   box-shadow: none;
-  transition: color var(--transition-press), background-color var(--transition-press);
+  transition:
+    color var(--transition-press),
+    background-color var(--transition-press);
   box-sizing: border-box;
   text-align: left;
   cursor: pointer;
@@ -366,7 +382,11 @@
 
 /* 按下介于 hover（tint-hover）与选中（tint-active）之间，且不改字重 */
 .sessionItem:active {
-  background: color-mix(in srgb, var(--sidebar-hover) 50%, var(--sidebar-active));
+  background: color-mix(
+    in srgb,
+    var(--sidebar-hover) 50%,
+    var(--sidebar-active)
+  );
   color: var(--text-primary);
 }
 
@@ -395,7 +415,9 @@
 
 .branchIcon {
   color: var(--accent-primary);
-  transition: color var(--transition-micro), opacity var(--transition-micro);
+  transition:
+    color var(--transition-micro),
+    opacity var(--transition-micro);
 }
 
 .sessionItem:hover .branchIcon,
@@ -459,8 +481,16 @@
   font-size: var(--font-size-base);
   line-height: 28px;
   /* mask-image 只消费 alpha 通道，#000 此处无色彩语义，仅用于文字末端渐变淡出 */
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent 100%);
-  mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent 100%);
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - 14px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - 14px),
+    transparent 100%
+  );
 }
 
 /*           multiLine /      */
@@ -536,7 +566,10 @@
   align-items: center;
   justify-content: center;
   -webkit-app-region: no-drag;
-  transition: opacity var(--transition-micro), color var(--transition-micro), background var(--transition-micro);
+  transition:
+    opacity var(--transition-micro),
+    color var(--transition-micro),
+    background var(--transition-micro);
   z-index: 5;
 }
 
@@ -604,8 +637,12 @@
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .sessionItem.isRunning:not(.active) {
@@ -613,11 +650,13 @@
 }
 
 .sessionItemWrap.isRunning > .sessionItem.active {
-  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent-primary) 55%, transparent);
+  box-shadow: inset 3px 0 0
+    color-mix(in srgb, var(--accent-primary) 55%, transparent);
 }
 
 @keyframes session-running-pulse {
-  0%, 100% {
+  0%,
+  100% {
     background: transparent;
   }
   50% {
@@ -635,7 +674,9 @@
 
 .dropIndicator {
   height: 0;
-  transition: height var(--transition-micro), opacity var(--transition-micro);
+  transition:
+    height var(--transition-micro),
+    opacity var(--transition-micro);
   pointer-events: none;
   flex-shrink: 0;
 }
@@ -685,7 +726,7 @@ li.isDraggingSource > *,
 }
 
 /* 拖拽期间全局静音/隐藏任何浮层气泡 Tooltip */
-:global(body.sidebar-dragging) [role="tooltip"],
+:global(body.sidebar-dragging) [role='tooltip'],
 :global(body.sidebar-dragging) [data-tooltip-portal],
 :global(body.sidebar-dragging) [data-floating-ui-portal],
 :global(body.sidebar-dragging) .tooltip {
@@ -768,7 +809,9 @@ li.isDraggingSource > *,
   padding: 0 8px;
   border-radius: var(--radius-md);
   line-height: 1;
-  transition: color var(--transition-fast), background-color var(--transition-fast);
+  transition:
+    color var(--transition-fast),
+    background-color var(--transition-fast);
   user-select: none;
   -webkit-user-select: none;
 }

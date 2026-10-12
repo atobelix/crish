@@ -3,7 +3,6 @@ import React from 'react';
 import styles from './SettingsPanel.module.css';
 import { Button, Input, Tooltip } from '../ui';
 import type { TabMeta, TabType } from '../settingsTabsMeta';
-import { SidebarFooter } from '../sidebar/SidebarFooter';
 import { AppIcon } from '../ui/icons/index';
 
 export interface SettingsSidebarAria {
@@ -27,7 +26,6 @@ export interface SettingsSidebarProps {
   items: TabMeta[];
   activeId: TabType;
   rovingId: TabType;
-  onBack?: () => void;
   onTablistKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   onSelect: (
     tab: TabType,
@@ -38,6 +36,8 @@ export interface SettingsSidebarProps {
   aria: SettingsSidebarAria;
   /** 搜索相关组（query/filterStatusText/ref/change/keyDown） */
   search: SettingsSidebarSearch;
+  /** 指针移入侧栏通知（用于分区分离滚动条悬停感知） */
+  onPointerEnter?: () => void;
 }
 
 export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
@@ -45,21 +45,14 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
     items,
     activeId,
     rovingId,
-    onBack,
     onTablistKeyDown,
     onSelect,
     onFocusTab,
     aria,
     search,
-    }) => {
-    const {
-      baseId,
-      tablistId,
-      searchId,
-      statusId,
-      panelId,
-      tablistRef,
-    } = aria;
+    onPointerEnter,
+  }) => {
+    const { baseId, tablistId, searchId, statusId, panelId, tablistRef } = aria;
     const {
       searchQuery,
       filterStatusText,
@@ -69,31 +62,14 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
     } = search;
     return (
       <nav
-        className={styles.coverNav}
+        className={styles.settingsNav}
         aria-label="设置导航"
         data-testid="settings-sidebar"
+        onPointerEnter={onPointerEnter}
       >
         <div className={styles.sidebarTopActions}>
-          {onBack ? (
-            <Tooltip content="返回应用 (Esc)">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={`${styles.sidebarBackBtn} no-drag`}
-                onClick={onBack}
-                aria-label="返回应用，关闭设置"
-                icon={
-                  <AppIcon name="arrow-left" size={16} aria-hidden />
-                }
-              >
-                返回应用
-              </Button>
-            </Tooltip>
-          ) : null}
-
           <div
-            className={`${styles.searchWrap} no-drag`}
+            className={styles.searchWrap}
             role="search"
             aria-label="设置搜索"
             onClick={() => searchInputRef.current?.focus()}
@@ -194,9 +170,6 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
             </div>
           ) : null}
         </div>
-
-        {/* 侧栏底栏：左列 UserProfileCard + 右列 SettingsIconButton */}
-        <SidebarFooter />
 
         {/* 读屏播报当前页 / 筛选结果（视觉隐藏） */}
         <div

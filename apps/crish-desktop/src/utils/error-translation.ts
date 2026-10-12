@@ -203,13 +203,19 @@ const BUILTIN_ERROR_DISPLAY: Readonly<
 };
 
 /** 未知码的通用英文回退（未命中 BUILTIN_ERROR_DISPLAY 时使用） */
-const DEFAULT_DISPLAY: Readonly<{ readonly title: string; readonly action: string }> = {
+const DEFAULT_DISPLAY: Readonly<{
+  readonly title: string;
+  readonly action: string;
+}> = {
   title: 'Error',
   action: 'Please try again or contact support.',
 };
 
 /** 查内置英文映射表，未命中返回通用回退 */
-function resolveDisplay(code: string): { readonly title: string; readonly action: string } {
+function resolveDisplay(code: string): {
+  readonly title: string;
+  readonly action: string;
+} {
   return BUILTIN_ERROR_DISPLAY[code] ?? DEFAULT_DISPLAY;
 }
 
@@ -226,7 +232,10 @@ function resolveDisplay(code: string): { readonly title: string; readonly action
  */
 function mapSeverity(payload: CrishErrorPayload): UserVisibleError['severity'] {
   // 用户主动取消：silent（不打扰）
-  if (payload.code === 'runtime.aborted' || payload.code === 'provider.cancelled') {
+  if (
+    payload.code === 'runtime.aborted' ||
+    payload.code === 'provider.cancelled'
+  ) {
     return 'silent';
   }
   switch (payload.category) {
@@ -243,6 +252,23 @@ function mapSeverity(payload: CrishErrorPayload): UserVisibleError['severity'] {
   }
 }
 
+let activeTranslateFn: TranslateFn | null = null;
+
+/**
+ * 注册全局默认的错误翻译函数（通常由 I18nProvider / useI18n 注入）。
+ * 当未显式传入 translate 时，自动使用已注册的翻译函数解析错误标题与操作建议。
+ */
+export function registerErrorTranslateFn(fn: TranslateFn | null): void {
+  activeTranslateFn = fn;
+}
+
+/**
+ * 获取当前全局注册的错误翻译函数。
+ */
+export function getErrorTranslateFn(): TranslateFn | null {
+  return activeTranslateFn;
+}
+
 /**
  * 将 CrishErrorPayload 转换为用户可见的错误展示模型。
  *
@@ -253,19 +279,20 @@ function mapSeverity(payload: CrishErrorPayload): UserVisibleError['severity'] {
  * - action 为 i18n 键，translate 提供时按 key 查本地化文案，否则用内置英文回退
  *
  * @param payload Rust 端 / daemon 传来的结构化错误负载
- * @param translate 可选的 i18n 查表函数，未提供时使用内置英文回退
+ * @param translate 可选的 i18n 查表函数，未提供时使用内置英文回退（或全局已注册的翻译器）
  */
 export function toUserVisibleError(
   payload: CrishErrorPayload,
-  translate?: TranslateFn,
+  translate?: TranslateFn
 ): UserVisibleError {
+  const effectiveTranslate = translate ?? activeTranslateFn ?? undefined;
   const severity = mapSeverity(payload);
   const display = resolveDisplay(payload.code);
-  const title = translate
-    ? translate(`error.${payload.code}.title`, display.title)
+  const title = effectiveTranslate
+    ? effectiveTranslate(`error.${payload.code}.title`, display.title)
     : display.title;
-  const action = translate
-    ? translate(payload.action, display.action)
+  const action = effectiveTranslate
+    ? effectiveTranslate(payload.action, display.action)
     : display.action;
   return {
     visible: payload.public,
@@ -282,30 +309,32 @@ export function toUserVisibleError(
  * 解析 payload 的 action i18n 键为用户可见文案。
  *
  * translate 提供时按 payload.action（i18n 键）查本地化文案，未命中回退到内置英文 title。
- * translate 未提供时直接返回内置英文 title。
+ * translate 未提供时使用全局注册的翻译器或直接返回内置英文 title。
  */
 export function resolveActionText(
   payload: CrishErrorPayload,
-  translate?: TranslateFn,
+  translate?: TranslateFn
 ): string {
+  const effectiveTranslate = translate ?? activeTranslateFn ?? undefined;
   const display = resolveDisplay(payload.code);
-  if (!translate) return display.action;
-  return translate(payload.action, display.action);
+  if (!effectiveTranslate) return display.action;
+  return effectiveTranslate(payload.action, display.action);
 }
 
 /**
  * 解析 payload 的 title i18n 键为用户可见文案。
  *
  * translate 提供时按 `error.<code>.title` 查本地化文案，未命中回退到内置英文 title。
- * translate 未提供时直接返回内置英文 title。
+ * translate 未提供时使用全局注册的翻译器或直接返回内置英文 title。
  */
 export function resolveTitleText(
   payload: CrishErrorPayload,
-  translate?: TranslateFn,
+  translate?: TranslateFn
 ): string {
+  const effectiveTranslate = translate ?? activeTranslateFn ?? undefined;
   const display = resolveDisplay(payload.code);
-  if (!translate) return display.title;
-  return translate(`error.${payload.code}.title`, display.title);
+  if (!effectiveTranslate) return display.title;
+  return effectiveTranslate(`error.${payload.code}.title`, display.title);
 }
 
 /**
@@ -356,7 +385,7 @@ export function normalizeCrishError(error: unknown): CrishErrorPayload {
  */
 export function fromErrorPayload(
   payload: CrishErrorPayload,
-  depth = 0,
+  depth = 0
 ): CrishError {
   const cause =
     depth < CRISH_ERROR_CAUSE_MAX_DEPTH && payload.cause !== undefined
@@ -375,6 +404,6 @@ export function fromErrorPayload(
     payload.category,
     payload.retryable,
     payload.metadata,
-    options,
+    options
   );
 }

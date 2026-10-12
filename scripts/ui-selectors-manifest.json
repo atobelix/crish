@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Crish Desktop UI Elements and Interaction Selectors Manifest",
   "version": "1.0.0",
-  "generatedAt": "2026-07-25T19:12:05.507Z",
+  "generatedAt": "2026-10-11T12:44:29.361Z",
   "targetDirectory": "apps/crish-desktop/src/components/",
   "summary": {
     "category1Count": 12,

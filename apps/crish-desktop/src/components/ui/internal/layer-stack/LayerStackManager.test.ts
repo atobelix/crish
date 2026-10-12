@@ -273,4 +273,31 @@ describe('LayerStackManager 单核调度中枢与 100ms 冷却防重入锁', () 
     expect(trace[0]?.id).toBe('trace-test-1');
     expect(trace[0]?.dismissReason).toBe('programmatic');
   });
+
+  it('subscribe 订阅者在入栈与出栈时同步收到通知并支持安全退订', () => {
+    const listener = vi.fn();
+    const unsubscribe = layerStackManager.subscribe(listener);
+
+    const unregister = layerStackManager.register({
+      id: 'sub-test-1',
+      type: 'modal-dialog',
+      dismissible: true,
+      onDismiss: vi.fn(),
+    });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unregister();
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    unsubscribe();
+    layerStackManager.register({
+      id: 'sub-test-2',
+      type: 'popover',
+      dismissible: true,
+      onDismiss: vi.fn(),
+    });
+    // 退订后不再触发
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
 });

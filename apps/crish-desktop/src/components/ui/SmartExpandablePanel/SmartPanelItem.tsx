@@ -62,12 +62,17 @@ export const SmartPanelItem: React.FC<SmartPanelItemProps> = ({
           >
             <span className={styles.itemLeft}>
               {item.icon && (
-                <span className={`${menuStyles.menuItemIcon} ${styles.itemIcon}`} aria-hidden="true">
+                <span
+                  className={`${menuStyles.menuItemIcon} ${styles.itemIcon}`}
+                  aria-hidden="true"
+                >
                   {item.icon}
                 </span>
               )}
               <span className={styles.itemTextContainer}>
-                <span className={`${menuStyles.menuItemLabel} ${styles.itemLabel}`}>
+                <span
+                  className={`${menuStyles.menuItemLabel} ${styles.itemLabel}`}
+                >
                   {item.label}
                 </span>
               </span>
@@ -75,15 +80,28 @@ export const SmartPanelItem: React.FC<SmartPanelItemProps> = ({
             <span className={styles.itemRight}>
               {item.badge && <span className={styles.badge}>{item.badge}</span>}
               {expanded ? (
-                <AppIcon name="chevron-down" size={13} className={styles.submenuChevron} aria-hidden="true" />
+                <AppIcon
+                  name="chevron-down"
+                  size={13}
+                  className={styles.submenuChevron}
+                  aria-hidden="true"
+                />
               ) : (
-                <AppIcon name="chevron-right" size={13} className={styles.submenuChevron} aria-hidden="true" />
+                <AppIcon
+                  name="chevron-right"
+                  size={13}
+                  className={styles.submenuChevron}
+                  aria-hidden="true"
+                />
               )}
             </span>
           </button>
         </div>
         {item.children && (
-          <div className={styles.groupItems} style={{ paddingLeft: 12, display: expanded ? 'block' : 'none' }}>
+          <div
+            className={styles.groupItems}
+            style={{ paddingLeft: 12, display: expanded ? 'block' : 'none' }}
+          >
             {item.children.map((child, cIdx) => (
               <SmartPanelItem
                 key={child.id}
@@ -101,8 +119,11 @@ export const SmartPanelItem: React.FC<SmartPanelItemProps> = ({
     );
   }
 
-  const isSelectable = item.type === 'selectable' || item.selected !== undefined;
-  const hasSubmenu = item.type === 'submenu' || Boolean(item.children && item.children.length > 0);
+  const isSelectable =
+    item.type === 'selectable' || item.selected !== undefined;
+  const hasSubmenu =
+    item.type === 'submenu' ||
+    Boolean(item.children && item.children.length > 0);
 
   const itemClassNames = [
     menuStyles.menuItem,
@@ -121,6 +142,11 @@ export const SmartPanelItem: React.FC<SmartPanelItemProps> = ({
     if (hasSubmenu) {
       if (itemRef.current) {
         onHoverSubmenu?.(item, itemRef.current);
+      }
+      if (item.onSelect || item.onClick) {
+        item.onSelect?.(item, e);
+        item.onClick?.();
+        onSelect?.(item, e);
       }
       return;
     }
@@ -155,7 +181,10 @@ export const SmartPanelItem: React.FC<SmartPanelItemProps> = ({
       >
         <span className={styles.itemLeft}>
           {item.icon && (
-            <span className={`${menuStyles.menuItemIcon} ${styles.itemIcon}`} aria-hidden="true">
+            <span
+              className={`${menuStyles.menuItemIcon} ${styles.itemIcon}`}
+              aria-hidden="true"
+            >
               {item.icon}
             </span>
           )}
@@ -179,10 +208,20 @@ export const SmartPanelItem: React.FC<SmartPanelItemProps> = ({
             <span className={styles.shortcut}>{item.shortcut}</span>
           )}
           {hasSubmenu && (
-            <AppIcon name="chevron-right" size={13} className={styles.submenuChevron} aria-hidden="true" />
+            <AppIcon
+              name="chevron-right"
+              size={13}
+              className={styles.submenuChevron}
+              aria-hidden="true"
+            />
           )}
           {isSelectable && item.selected && (
-            <AppIcon name="check" size={13} className={styles.checkIcon} aria-hidden="true" />
+            <AppIcon
+              name="check"
+              size={13}
+              className={styles.checkIcon}
+              aria-hidden="true"
+            />
           )}
         </span>
       </button>

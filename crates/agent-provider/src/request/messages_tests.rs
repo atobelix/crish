@@ -1615,12 +1615,9 @@ fn chat_pairing_gate_partial_closure_leaves_only_unanswered() {
     assert_eq!(orphans, ["call_open"]);
 }
 
-/// validate 在 debug_assertions 下对孤儿立即 panic（Fail-Fast，CI 硬阻断）。
-/// Release 下同一输入返回 Err(UnpairedToolCalls)——两种分级行为互斥编译，
-/// 本测试仅覆盖 CI/debug 路径的 panic 语义。
+/// validate 对孤儿返回 Err(UnpairedToolCalls) 并记录结构化日志（Debug 与 Release 统一行为）。
 #[test]
-#[should_panic(expected = "OpenAI 导线层校验拦截到孤儿工具调用")]
-fn chat_pairing_gate_validate_panics_on_orphan_in_debug() {
+fn chat_pairing_gate_validate_returns_err_on_orphan() {
     let orphan_msg = ChatMessage {
         role: "assistant".to_string(),
         content: None,
@@ -1633,5 +1630,50 @@ fn chat_pairing_gate_validate_panics_on_orphan_in_debug() {
         })],
         cache_control: None,
     };
-    let _ = validate_chat_tool_pairing(&[orphan_msg]);
+    let res = validate_chat_tool_pairing(&[orphan_msg]);
+    match res {
+        Err(RequestBuildError::UnpairedToolCalls { protocol, orphan_ids }) => {
+            assert_eq!(protocol, "openai_chat");
+            assert_eq!(orphan_ids, vec!["call_x"]);
+        }
+        other => panic!("期望 UnpairedToolCalls 错误，得到：{other:?}"),
+    }
+}
+
+/// validate_chat_pairing_from_messages 对孤儿返回 Err(UnpairedToolCalls)
+#[test]
+fn chat_pairing_from_messages_returns_err_on_orphan() {
+    let orphan_call = AgentMessage {
+        id: "a1".to_string(),
+        role: AgentMessageRole::Assistant,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        blocks: vec![AgentMessageBlock::ToolCall(ToolCallBlock {
+            id: "call_y".to_string(),
+            tool_name: "test_tool".to_string(),
+            input: json!({}),
+        })],
+        metadata: None,
+        client_message_id: None,
+        content: None,
+    };
+    let user_message = AgentMessage {
+        id: "u1".to_string(),
+        role: AgentMessageRole::User,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        blocks: vec![AgentMessageBlock::Text {
+            text: "hello".to_string(),
+        }],
+        metadata: None,
+        client_message_id: None,
+        content: None,
+    };
+    let messages = vec![std::sync::Arc::new(user_message), std::sync::Arc::new(orphan_call)];
+    let res = validate_chat_pairing_from_messages(None, &messages);
+    match res {
+        Err(RequestBuildError::UnpairedToolCalls { protocol, orphan_ids }) => {
+            assert_eq!(protocol, "openai_chat");
+            assert_eq!(orphan_ids, vec!["call_y"]);
+        }
+        other => panic!("期望 UnpairedToolCalls 错误，得到：{other:?}"),
+    }
 }

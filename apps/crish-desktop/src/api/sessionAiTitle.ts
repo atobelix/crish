@@ -11,7 +11,7 @@ import { getPreference } from './preferences/preferencesClient';
 import { effectiveTitleSource } from './sessionTitleSource';
 import { invokeTyped } from './tauriInvoke';
 import { logInternalError } from './userFacingErrors';
-import { getSessionById } from '../store/sessionStore';
+import { getSessionById } from '../store';
 
 export const AI_SESSION_TITLE_MAX_CHARS = 12;
 const AI_SESSION_TITLE_INPUT_CAP = 400;
@@ -31,8 +31,7 @@ export type AiTitleSession = {
 };
 
 export type AiSessionTitleInvokeResult =
-  | { status: 'ok'; title: string }
-  | { status: 'error'; message: string };
+  { status: 'ok'; title: string } | { status: 'error'; message: string };
 
 export interface AiSessionTitleDeps {
   getSession: (sessionId: string) => AiTitleSession | undefined;
@@ -95,13 +94,17 @@ export function isFirstNonEmptyAssistantReply(
 function defaultDeps(): AiSessionTitleDeps {
   return {
     getSession: (sessionId) => getSessionById(sessionId),
-    getAiTitleEnabled: async () => (await getPreference('aiSessionTitle')) === true,
+    getAiTitleEnabled: async () =>
+      (await getPreference('aiSessionTitle')) === true,
     invokeGenerate: async (args) => {
-      const res = await invokeTyped<{ title?: unknown }>('core_generate_session_title', {
-        sessionId: args.sessionId,
-        userText: args.userText,
-        assistantText: args.assistantText,
-      });
+      const res = await invokeTyped<{ title?: unknown }>(
+        'core_generate_session_title',
+        {
+          sessionId: args.sessionId,
+          userText: args.userText,
+          assistantText: args.assistantText,
+        }
+      );
       if (res.status === 'ok') {
         return {
           status: 'ok',
@@ -109,7 +112,10 @@ function defaultDeps(): AiSessionTitleDeps {
         };
       }
       if (res.status === 'missing') {
-        return { status: 'error', message: 'core_generate_session_title missing' };
+        return {
+          status: 'error',
+          message: 'core_generate_session_title missing',
+        };
       }
       return {
         status: 'error',
@@ -170,7 +176,10 @@ export async function maybeRequestAiSessionTitle(
     AI_SESSION_TITLE_INPUT_CAP
   );
   const assistant = messages?.find((message) => message.id === assistantMsgId);
-  const assistantText = capCodePoints(visibleText(assistant), AI_SESSION_TITLE_INPUT_CAP);
+  const assistantText = capCodePoints(
+    visibleText(assistant),
+    AI_SESSION_TITLE_INPUT_CAP
+  );
   if (!userText && !assistantText) {
     deps.logError(AI_SESSION_TITLE_SCOPE, {
       sessionId: sid,
@@ -186,7 +195,10 @@ export async function maybeRequestAiSessionTitle(
       assistantText,
     });
     if (res.status !== 'ok') {
-      deps.logError(AI_SESSION_TITLE_SCOPE, { sessionId: sid, err: res.message });
+      deps.logError(AI_SESSION_TITLE_SCOPE, {
+        sessionId: sid,
+        err: res.message,
+      });
       return;
     }
     const title = sanitizeAiSessionTitle(res.title);

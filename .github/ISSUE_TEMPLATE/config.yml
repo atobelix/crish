@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Community Discussions & Questions
+    url: https://github.com/conex-community/crish/discussions
+    about: Ask questions, share ideas, and connect with other Crish community members.
+  - name: 🔒 Security Vulnerability Report
+    url: https://github.com/conex-community/crish/security/advisories/new
+    about: Report security issues privately through GitHub's advisory system.

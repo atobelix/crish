@@ -2,7 +2,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SKIN_PRESETS } from '../themePresets';
 import { applyPersonalization } from '../themePersonalization';
-import type { PersonalizationSettings } from '../themeTypes';
 import { shiftWarmLayers } from '../../services/warmLayerShift';
 
 describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
@@ -22,7 +21,7 @@ describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
     // 2026-10-10 三档底色：外层灰度 3.5（L 96.5%），主层 2.0（L 98%），输入框纯白
     expect(warmGray.bgSecondary).toBe('#f2f1f0');
     expect(warmGray.shellChromeBg).toBe('#f2f1f0');
-    expect(warmGray.bgPrimary).toBe('#f8f7f6');
+    expect(warmGray.bgPrimary).toBe('#F8F8F8');
     expect(warmGray.bgCard).toBe('#ffffff');
   });
 
@@ -39,11 +38,15 @@ describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
           themeBrightnessVibrant: false,
           themeAutoTimeTransition: false,
         },
-        'default',
+        'default'
       );
 
       // review P1-3：亮度微调只平移 K（保持 M0.4/Y0.8），三层夹紧不反转
-      const exp = shiftWarmLayers({ outer: '#f2f1f0', main: '#f8f7f6', input: '#ffffff' }, adjust, false);
+      const exp = shiftWarmLayers(
+        { outer: '#f2f1f0', main: '#F8F8F8', input: '#ffffff' },
+        adjust,
+        false
+      );
       const expMain = exp.main;
       const expOuter = exp.outer;
 
@@ -80,7 +83,7 @@ describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
         themeBrightnessVibrant: false,
         themeAutoTimeTransition: false,
       },
-      'default',
+      'default'
     );
     // T7 别名收敛：注入面真源为 `--surface-chrome`（tokens.css:52 派生 --bg-secondary）
     expect(root.style.getPropertyValue('--surface-outer')).toBe('#f2f1f0');

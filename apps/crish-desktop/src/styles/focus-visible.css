@@ -70,19 +70,24 @@ a:focus-visible,
  * 严禁全局焦点阴影穿透污染！全态只有光标闪烁，其他什么变化也没有！
  * ───────────────────────────────────────────────────────────── */
 :is(
-  [role='search'],
-  [role='menu'],
-  [role='listbox'],
-  nav,
-  .searchHeader,
-  .mbInner,
-  .smartPanelHeader,
-  .sepHeader,
-  [data-embedded]
-) :is(input, textarea):is(:focus, :focus-visible),
+    [role='search'],
+    [role='menu'],
+    [role='listbox'],
+    nav,
+    .searchHeader,
+    .mbInner,
+    .smartPanelHeader,
+    .sepHeader,
+    [data-embedded],
+    [data-composer-card],
+    [class*='composerCard']
+  )
+  :is(input, textarea, [contenteditable='true']):is(:focus, :focus-visible),
 .searchInput:is(:focus, :focus-visible),
 [class*='searchInput']:is(:focus, :focus-visible),
 [class*='filesPathFilter']:is(:focus, :focus-visible),
+[class*='proseMirrorField']:is(:focus, :focus-visible),
+.ProseMirror:is(:focus, :focus-visible),
 input[type='search']:is(:focus, :focus-visible) {
   outline: none !important;
   border: none !important;

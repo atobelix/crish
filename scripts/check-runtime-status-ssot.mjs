@@ -120,11 +120,11 @@ for (const file of walk(SRC)) {
       }
     }
   }
-  // reportRuntimeStatus 只能经 SSOT 模块定义（import 方式消费）
+  // reportRuntimeStatus 只能经 SSOT 模块定义或 facade 导出（import 方式消费）
   if (
     /\breportRuntimeStatus\b/.test(src) &&
     !isSsot &&
-    !/from\s+'[^']*sessionRuntimeStatusStore'/.test(src)
+    !/from\s+'[^']*(?:sessionRuntimeStatusStore|storeAccess)'/.test(src)
   ) {
     violations.push(`[report-without-ssot-import] ${r}`);
   }

@@ -42,9 +42,9 @@ html[data-theme='light'] {
    */
   /* heson 实测定稿（2026-10-11）：所有层同一暖色调 CMYK C0 M0.4 Y0.8，只改 K：
      外层 K5 → RGB 242.25/241.28/240.32 #f2f1f0（2026-10-11 由 K4 #f4f3f2 加深：侧栏/顶栏不够深）；
-     主层 K2.8 → 248/247/246 #f8f7f6（HSB 30°/1%/97%）；输入框纯白。 */
+     主层（由 #f8f7f6 降低一个灰度点更亮一档）→ 251/250/249 #fbfaf9（K≈1.6%）；输入框纯白。 */
   --surface-outer: #f2f1f0;
-  --surface-main: #f8f7f6;
+  --surface-main: #fbfaf9;
   --surface-input: #ffffff;
   /* 内容矩形 .leafBody 的框线（只画左边 + 顶边 1px）：外层 K5 再加 3 → K8 → RGB 234.6/233.7/232.7 #ebeae9
      （10-11 heson 由 K11 #e3e2e1 改浅）。线色，不是第四档底色。 */
@@ -80,12 +80,22 @@ html[data-theme='light'] {
   --button-secondary-bg: var(--bg-card);
   --bg-elevated: var(--surface-elevated);
   --bg-subtle: var(--surface-chrome);
-  --bg-workspace: var(--surface-outer); /* 布局模型：body/.section = 通底（外层），内容矩形 .leafBody = 主层 */
+  --bg-workspace: var(
+    --surface-outer
+  ); /* 布局模型：body/.section = 通底（外层），内容矩形 .leafBody = 主层 */
   --bg-page: var(--surface-paper);
   --bg-canvas: var(--surface-paper);
   --composer-attach-card-bg: var(--surface-input);
-  --composer-attach-remove-bg: color-mix(in srgb, var(--surface-card) 72%, transparent);
-  --composer-attach-remove-border: color-mix(in srgb, var(--border-color) 70%, transparent);
+  --composer-attach-remove-bg: color-mix(
+    in srgb,
+    var(--surface-card) 72%,
+    transparent
+  );
+  --composer-attach-remove-border: color-mix(
+    in srgb,
+    var(--border-color) 70%,
+    transparent
+  );
   --shell-chrome-bg: var(--surface-chrome);
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
   /* ── 文字灰度阶（light：0% = 黑，100% = 白；四档均为显式灰值，禁止透明度/mix 向背景收敛）──
@@ -115,14 +125,19 @@ html[data-theme='light'] {
   /* 族内最轻一档：极弱底/分隔 */
   --tint-subtle: color-mix(in srgb, var(--text-primary) 1.5%, transparent);
   --tint-focus-ring: color-mix(in srgb, var(--text-primary) 8%, transparent);
-  --tint-divider: var(--border-color); /* 线色统一：border-color（强）/ border-subtle（弱）两档 */
+  --tint-divider: var(
+    --border-color
+  ); /* 线色统一：border-color（强）/ border-subtle（弱）两档 */
   /* ==========================================================================
      统一滚动条二元色彩与几何尺寸 Token 体系（Unified Scrollbar Design Tokens）
      遵循用户最高定案铁律：二元灰度 (8.2% vs 20.2%，差值死锁 12.0%)，四级宽度零裸写
      ========================================================================== */
 
   /* --- 1. 二元色彩与灰度系统 (Binary Optical Color System) --- */
-  --scrollbar-track-safe-gap: var(--space-0_5, 2px); /* 滑块左右对称 2px 隔离裕量；净宽 6px 精致舒适，圆角对称不截断 (SSOT) */
+  --scrollbar-track-safe-gap: var(
+    --space-0_5,
+    2px
+  ); /* 滑块左右对称 2px 隔离裕量；净宽 6px 精致舒适，圆角对称不截断 (SSOT) */
   --scrollbar-thumb-bg: #dedddc;
 
   /* 激活态滑块：加深至沉着明确的 #6b6a69，触感坚实笃定，交互反馈清晰区分 */
@@ -150,7 +165,9 @@ html[data-theme='light'] {
   --scrollbar-thumb-width: var(--scrollbar-width);
 
   /* --- 3. 几何与圆角 Token (Geometry) --- */
-  --scrollbar-thumb-radius: var(--radius-full); /* 胶囊圆角，保证两端半圆完全对称 */
+  --scrollbar-thumb-radius: var(
+    --radius-full
+  ); /* 胶囊圆角，保证两端半圆完全对称 */
 
   /* --- 向后兼容别名安全网 (Deprecated Aliases Bridge) ---
      警告：以下别名仅供存量代码渐进过渡，全新业务严禁直接引用，将在维度 6 门禁收口后全面废弃 */
@@ -178,7 +195,11 @@ html[data-theme='light'] {
   --border-subtle: #f0efee;
   --composer-bg: var(--surface-input);
   /* 输入框底部操作区按钮统一底色（默认透明，hover/click/active 均为同一 3% 灰度 #F7F7F7，单一灰度无级差） */
-  --composer-control-hover-bg: color-mix(in srgb, var(--text-primary) 3.3%, transparent);
+  --composer-control-hover-bg: color-mix(
+    in srgb,
+    var(--text-primary) 3.3%,
+    transparent
+  );
   --hairline-width: 1px;
   --hairline: var(--border-subtle);
   --hairline-strong: var(--border-color);
@@ -235,8 +256,23 @@ html[data-theme='light'] {
   --sep-item-padding-h: 10px;
   --sep-item-gap: 2px;
 
-  --sep-font-sans: var(--font-sans, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
-  --sep-font-mono: var(--font-mono, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace);
+  --sep-font-sans: var(
+    --font-sans,
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif
+  );
+  --sep-font-mono: var(
+    --font-mono,
+    SFMono-Regular,
+    Consolas,
+    'Liberation Mono',
+    Menlo,
+    monospace
+  );
 
   --sep-bg-panel-solid: var(--bg-elevated);
   --sep-bg-item-hover: var(--tint-hover);
@@ -251,33 +287,50 @@ html[data-theme='light'] {
 
   --sep-accent-check: hsl(160 84% 39%);
   --sep-danger-color: var(--danger-fg); /* 菜单危险项文字：固定 danger 红 */
-  --sep-danger-light: var(--danger-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
+  --sep-danger-light: var(
+    --danger-soft-bg
+  ); /* 固定纯色 soft 底（旧为半透明） */
 
   --sep-shadow:
-    0 4px 16px -2px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 4%, transparent),
-    0 1px 3px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 2%, transparent);
-
+    0 4px 16px -2px
+      color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 4%, transparent),
+    0 1px 3px
+      color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 2%, transparent);
 
   --accent-color: hsl(160 84% 36%); /* 品牌翡翠绿活态签名 */
-  --accent-orange: oklch(0.70 0.16 65);
-  --accent-green: oklch(0.60 0.16 150); /* 纯净翡翠翠绿，满足 WCAG AA 状态点 ≥ 3:1 */
-  --accent-green-light: var(--success-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
-  --accent-green-muted: oklch(0.60 0.16 150 / 0.22);
-  --accent-red: oklch(0.61 0.19 31.8); /* 纯净温暖朱红，基准 #de4931，鲜艳不刺眼 */
-  --accent-red-light: var(--danger-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
-  --accent-blue: oklch(0.50 0.18 250); /* 纯净天蓝，满足 WCAG AA 文字 ≥ 4.5:1 */
+  --accent-orange: oklch(0.7 0.16 65);
+  --accent-green: oklch(
+    0.6 0.16 150
+  ); /* 纯净翡翠翠绿，满足 WCAG AA 状态点 ≥ 3:1 */
+  --accent-green-light: var(
+    --success-soft-bg
+  ); /* 固定纯色 soft 底（旧为半透明） */
+  --accent-green-muted: oklch(0.6 0.16 150 / 0.22);
+  --accent-red: oklch(
+    0.61 0.19 31.8
+  ); /* 纯净温暖朱红，基准 #de4931，鲜艳不刺眼 */
+  --accent-red-light: var(
+    --danger-soft-bg
+  ); /* 固定纯色 soft 底（旧为半透明） */
+  --accent-blue: oklch(0.5 0.18 250); /* 纯净天蓝，满足 WCAG AA 文字 ≥ 4.5:1 */
   --accent-primary: #10b981;
-  --accent-green-light-adaptive: var(--success-soft-bg); /* 固定纯色（旧为与白/底色混色） */
+  --accent-green-light-adaptive: var(
+    --success-soft-bg
+  ); /* 固定纯色（旧为与白/底色混色） */
   --accent-red-light-adaptive: var(--danger-soft-bg); /* 固定纯色 */
   /* primary     FirstRunWizard        light = text-primary   dark = text-secondary    */
   --text-on-accent: #ffffff;
 
   /* semantic color roles (纯净 OKLCH 直通，零混浊 dirty mix) */
   --color-success: var(--accent-green);
-  --color-success-bg: var(--success-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
+  --color-success-bg: var(
+    --success-soft-bg
+  ); /* 固定纯色 soft 底（旧为半透明） */
   --color-success-border: var(--accent-green-muted);
   --color-warning: var(--accent-orange);
-  --color-warning-bg: var(--warning-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
+  --color-warning-bg: var(
+    --warning-soft-bg
+  ); /* 固定纯色 soft 底（旧为半透明） */
   --color-warning-border: oklch(0.78 0.16 80 / 0.25);
   --color-error: var(--accent-red);
   --color-error-bg: var(--danger-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
@@ -316,7 +369,9 @@ html[data-theme='light'] {
   --notice-text-success: #15803d;
 
   /* 堆叠层级微阴影（改浅一半，对齐 4% / 2% 取值） */
-  --notice-shadow-deck-1: 0 4px 14px -2px color-mix(in srgb, var(--shadow-color) 4%, transparent), 0 1px 3px 0 color-mix(in srgb, var(--shadow-color) 2%, transparent);
+  --notice-shadow-deck-1:
+    0 4px 14px -2px color-mix(in srgb, var(--shadow-color) 4%, transparent),
+    0 1px 3px 0 color-mix(in srgb, var(--shadow-color) 2%, transparent);
 
   /* legacy/semantic aliases used across modules (prefer --color-* going forward) */
   --danger-color: var(--color-error);
@@ -339,11 +394,16 @@ html[data-theme='light'] {
   /* Win11 标题栏关闭钮：hover 整块红底白叉（Fluent 规范色），pressed 为 90% 不透明 */
   --window-close-hover-bg: #c42b1c;
   --window-close-hover-fg: #ffffff;
-  --window-close-active-bg: color-mix(in srgb, var(--window-close-hover-bg) 90%, transparent);
+  --window-close-active-bg: color-mix(
+    in srgb,
+    var(--window-close-hover-bg) 90%,
+    transparent
+  );
 
   /* shadow base color unified source for 28 color-mix(in srgb, #000 ...) */
   --shadow-color: #000;
-  /* modal / dialog scrim (settings eco backdrop, wizards, cheatsheet) */
+  /* 弹窗遮罩唯一来源（ui/Dialog 全部弹窗共用，含设置弹窗）：轻压暗、无模糊 */
+  --modal-scrim: color-mix(in srgb, var(--shadow-color) 12%, transparent);
 
   /* model/active status color (9 uses of #16a34a) */
   /*    6.1       08     5      #16a34a   2.91:1   #15803d   4.41:1 WCAG AA UI  3:1
@@ -415,7 +475,9 @@ html[data-theme='light'] {
   --radius-pill: 9999px;
   --radius-circle: 50%; /* Avatar 等正圆；被 ModelsSettingsTab 等消费 */
   --radius-btn: 7px; /* 用户锁 U1（survey 04）：按钮圆角钉死 7px，是 5 档之外唯一的例外；禁止改成 8px */
-  --button-radius: var(--radius-btn); /* :root 唯一权威定义（U1）；密度档/主题块禁止覆写 */
+  --button-radius: var(
+    --radius-btn
+  ); /* :root 唯一权威定义（U1）；密度档/主题块禁止覆写 */
   --radius-xs: var(--radius-s);
   --radius-sm: var(--radius-s);
   --radius-md: var(--radius-m);
@@ -525,7 +587,7 @@ html[data-theme='light'] {
   --leaf-corner-btn-size: 28px;
   --leaf-corner-btn-inset: 10px;
   --sidebar-width: 260px; /* overridden by JS constants at runtime */
-  --settings-sidebar-width: 240px;
+  --settings-nav-width: 220px; /* 设置弹窗左侧导航固定宽，与主侧栏宽度无关 */
 
   /*
    *       ?14
@@ -544,10 +606,10 @@ html[data-theme='light'] {
   /* ==========================================================================
      DIM-01 Phase 1 别名桥接层 (Temporary Bridge - 仅在 Phase 1 存活)
      ========================================================================== */
-  --font-size-nano: var(--font-size-xxs);      /* 10px -> 11px */
-  --font-size-micro: var(--font-size-xxs);     /* 11.5px -> 11px */
-  --font-size-xs-plus: var(--font-size-xs);    /* 12.5px -> 12px */
-  --font-size-sm-plus: var(--font-size-sm);    /* 13.5px -> 13px */
+  --font-size-nano: var(--font-size-xxs); /* 10px -> 11px */
+  --font-size-micro: var(--font-size-xxs); /* 11.5px -> 11px */
+  --font-size-xs-plus: var(--font-size-xs); /* 12.5px -> 12px */
+  --font-size-sm-plus: var(--font-size-sm); /* 13.5px -> 13px */
   --font-weight-normal: 400;
   --font-weight-code: 400; /* 代码块字重；被 ChatMessageRow 等消费 */
   --font-weight-medium: 500;
@@ -559,7 +621,6 @@ html[data-theme='light'] {
   --letter-spacing-snug: 0.01em;
   --letter-spacing-wide: 0.02em;
   --letter-spacing-tighter: -0.02em;
-  --letter-spacing-tightest: -0.025em;
 
   /* Z-Index levels are authoritative in styles/z-index.css */
 
@@ -569,8 +630,22 @@ html[data-theme='light'] {
      ========================================================================== */
 
   /* --- 1. Markdown 排版与正文体系 (Light) --- */
-  --md-font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif);
-  --md-font-mono: var(--font-mono, "IBM Plex Mono", "JetBrains Mono", monospace);
+  --md-font-family: var(
+    --font-sans,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    sans-serif
+  );
+  --md-font-mono: var(
+    --font-mono,
+    'IBM Plex Mono',
+    'JetBrains Mono',
+    monospace
+  );
   --md-line-height-body: 1.68;
   --md-paragraph-margin-bottom: 0.88em;
 
@@ -585,15 +660,15 @@ html[data-theme='light'] {
   --md-h1-margin: 0.85em 0 0.36em;
   --md-h1-border: 1px solid var(--border-subtle);
   --md-h2-size: 1.45em;
-  --md-h2-margin: 0.75em 0 0.30em;
+  --md-h2-margin: 0.75em 0 0.3em;
   --md-h2-border: 1px solid var(--border-subtle);
   --md-h3-size: 1.25em;
   --md-h3-margin: 0.65em 0 0.26em;
-  --md-h4-size: 1.10em;
+  --md-h4-size: 1.1em;
   --md-h4-margin: 0.55em 0 0.22em;
-  --md-h5-size: 1.00em;
+  --md-h5-size: 1em;
   --md-h5-margin: 0.45em 0 0.18em;
-  --md-h6-size: 0.90em;
+  --md-h6-size: 0.9em;
   --md-h6-margin: 0.38em 0 0.15em;
 
   --md-heading-font-weight: 600;
@@ -638,18 +713,25 @@ html[data-theme='light'] {
   --md-list-indent: 1.5em;
 
   --md-quote-border: 3px solid var(--border-color);
-  --md-quote-border-color: color-mix(in srgb, var(--text-primary) 8%, var(--border-color));
+  --md-quote-border-color: color-mix(
+    in srgb,
+    var(--text-primary) 8%,
+    var(--border-color)
+  );
   --md-quote-border-width: 3px;
   --md-quote-bg: transparent;
   --md-quote-text: var(--text-secondary, hsl(0 0% 33%));
   --md-quote-padding: 0.45em 0 0.45em 1.1em;
   --md-quote-margin: 0.68em 0;
 
-
   --md-link-color: var(--brand-deep, hsl(160 84% 30%));
   --md-link-hover-color: var(--brand, hsl(160 84% 39%));
   --md-link-underline-offset: 3px;
-  --md-link-underline-color: color-mix(in srgb, var(--md-link-color) 35%, transparent);
+  --md-link-underline-color: color-mix(
+    in srgb,
+    var(--md-link-color) 35%,
+    transparent
+  );
 
   /* --- 5. 表格系统变量收敛 (Light) --- */
   --md-table-border: var(--hairline-strong, var(--border-color));
@@ -676,18 +758,26 @@ html[data-theme='light'] {
   /* --- 3. 自定义富交互与 Artifacts 体系 (Light) --- */
   --artifact-card-bg: var(--bg-card, #ffffff);
   --artifact-card-border: var(--border-color);
-  --artifact-card-border-hover: color-mix(in srgb, var(--border-subtle) 95%, var(--text-primary) 5%);
+  --artifact-card-border-hover: color-mix(
+    in srgb,
+    var(--border-subtle) 95%,
+    var(--text-primary) 5%
+  );
   --artifact-card-radius: var(--radius-l);
   --artifact-header-bg: var(--surface-outer);
   --artifact-header-border: var(--border-subtle);
   --artifact-btn-bg: var(--bg-primary);
   --artifact-btn-border: var(--border-subtle);
   --artifact-btn-hover-bg: var(--tint-hover);
-  --artifact-btn-hover-border: color-mix(in srgb, var(--border-subtle) 92%, var(--text-primary) 8%);
+  --artifact-btn-hover-border: color-mix(
+    in srgb,
+    var(--border-subtle) 92%,
+    var(--text-primary) 8%
+  );
   --artifact-btn-active-bg: var(--tint-active);
 
   /* Diff 比对 (OKLCH 纯净通透配色，基准：红 #de4931，绿 #4b984f / #00b478，黄 #f0b100，无混色、不灰蒙) */
-  --diff-add-bg: oklch(0.60 0.17 152 / 0.08);
+  --diff-add-bg: oklch(0.6 0.17 152 / 0.08);
   --diff-add-fg: oklch(0.55 0.17 152);
   --diff-add-gutter-bg: transparent;
   --diff-add-gutter-fg: var(--diff-add-fg);
@@ -699,10 +789,13 @@ html[data-theme='light'] {
   --diff-del-gutter-fg: var(--diff-del-fg);
   --diff-del-indicator: var(--diff-del-fg);
 
-
   --diff-linenum-fg: var(--text-tertiary, #696969);
   --diff-gutter-bg: var(--bg-card);
-  --diff-split-divider: color-mix(in srgb, var(--border-subtle) 25%, transparent);
+  --diff-split-divider: color-mix(
+    in srgb,
+    var(--border-subtle) 25%,
+    transparent
+  );
   --diff-bg-header: var(--diff-split-header-bg);
   /* diff 行号槽宽度（布局常量；原仅以 fallback 存在，无提供方） */
   --diff-gutter-width-unified: 40px;
@@ -714,10 +807,13 @@ html[data-theme='light'] {
   --diff-mode-item-active-bg: var(--seg-slider-bg);
   --diff-mode-item-active-fg: var(--text-primary, #111111);
 
-
   /* FileTree 工程文件树 */
   --filetree-indent-unit: 14px;
-  --filetree-node-hover-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --filetree-node-hover-bg: color-mix(
+    in srgb,
+    var(--text-primary) 5%,
+    transparent
+  );
   --filetree-node-active-bg: color-mix(in srgb, var(--brand) 10%, transparent);
   --filetree-node-active-fg: var(--text-primary);
   --filetree-node-fg: var(--text-secondary);
@@ -759,8 +855,6 @@ html[data-theme='light'] {
   --aicard-badge-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
   --aicard-badge-fg: var(--text-tertiary);
 
-
-
   /* --- 5. 流式动效与打字机光标体系 (Light) --- */
   --stream-caret-color: var(--brand-deep);
   --stream-caret-width: 2px;
@@ -774,15 +868,18 @@ html[data-theme='light'] {
   --stream-anim-marker-fade: 120ms;
   --stream-anim-easing: cubic-bezier(0.16, 1, 0.3, 1);
 
-  --stream-pulse-glow: 0 0 0 3px color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 16%, transparent);
-  --stream-pulse-bg: color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 3%, transparent);
+  --stream-pulse-glow: 0 0 0 3px
+    color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 16%, transparent);
+  --stream-pulse-bg: color-mix(
+    in srgb,
+    var(--brand, hsl(160 84% 39%)) 3%,
+    transparent
+  );
   --stream-pulse-duration: 1.6s;
-
 
   /*         styles/z-index.css       */
   /* --font-mono-features   fontStore.ts
    *                         */
-
 
   --opacity-disabled: 0.5;
 
@@ -913,7 +1010,11 @@ html[data-theme='dark'] {
   /* 深色「元素底色」派生体系（heson 2026-10-11 00:54 / 01:01）：
      不写死灰值，一律 = 所在层 token + 一份「提亮墨」，色相随当前皮肤的层色走，并带一点 accent。
      --element-ink = 主文字色 88% + accent 12%（皮肤切换 / accent 变化自动跟随）。 */
-  --element-ink: color-mix(in oklab, var(--text-primary) 88%, var(--accent-color) 12%);
+  --element-ink: color-mix(
+    in oklab,
+    var(--text-primary) 88%,
+    var(--accent-color) 12%
+  );
   /* ── 深色「元素提亮阶梯」（heson 2026-10-11 01:05）──
      全部是 element-ink 的透明叠加：叠在哪一层就在哪一层上提亮，外层/主层/输入框上的相对增量一致（ΔL ≈ α ×（墨 L − 层 L））。
      ★ 调亮度只改下面 4 个 --elevate-step-*（墨的叠加百分比；每 1.33% ≈ +1 亮度点）★
@@ -925,10 +1026,26 @@ html[data-theme='dark'] {
   --elevate-step-1-active: 13.3%;
   --elevate-step-2: 16%;
   --elevate-step-3: 18.7%;
-  --elevate-1: color-mix(in srgb, var(--element-ink) var(--elevate-step-1), transparent);
-  --elevate-1-active: color-mix(in srgb, var(--element-ink) var(--elevate-step-1-active), transparent);
-  --elevate-2: color-mix(in srgb, var(--element-ink) var(--elevate-step-2), transparent);
-  --elevate-3: color-mix(in srgb, var(--element-ink) var(--elevate-step-3), transparent);
+  --elevate-1: color-mix(
+    in srgb,
+    var(--element-ink) var(--elevate-step-1),
+    transparent
+  );
+  --elevate-1-active: color-mix(
+    in srgb,
+    var(--element-ink) var(--elevate-step-1-active),
+    transparent
+  );
+  --elevate-2: color-mix(
+    in srgb,
+    var(--element-ink) var(--elevate-step-2),
+    transparent
+  );
+  --elevate-3: color-mix(
+    in srgb,
+    var(--element-ink) var(--elevate-step-3),
+    transparent
+  );
   /* 用户气泡 = elevate-2（旧 #141414，比主层还暗） */
   --user-bubble-bg: var(--elevate-2);
   /* 激活标签页 = 输入框档（深色最亮一层 #232323；旧值 hsl(0 0% 25%) 是第四种灰）；未激活透明 */
@@ -938,7 +1055,9 @@ html[data-theme='dark'] {
   --button-secondary-bg: var(--elevate-2);
   --bg-elevated: var(--surface-elevated);
   --bg-subtle: var(--surface-chrome);
-  --bg-workspace: var(--surface-outer); /* 布局模型：body/.section = 通底（外层），内容矩形 .leafBody = 主层 */
+  --bg-workspace: var(
+    --surface-outer
+  ); /* 布局模型：body/.section = 通底（外层），内容矩形 .leafBody = 主层 */
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
   --bg-page: var(--surface-paper);
   --bg-canvas: var(--surface-paper);
@@ -965,7 +1084,9 @@ html[data-theme='dark'] {
   /* 族内最轻一档：极弱底/分隔 */
   --tint-subtle: color-mix(in srgb, var(--text-primary) 2%, transparent);
   --tint-focus-ring: color-mix(in srgb, var(--text-primary) 10%, transparent);
-  --tint-divider: var(--border-color); /* 线色统一：border-color（强）/ border-subtle（弱）两档 */
+  --tint-divider: var(
+    --border-color
+  ); /* 线色统一：border-color（强）/ border-subtle（弱）两档 */
   /* ==========================================================================
      暗色环境二元滚动条色彩适配 (Dark Theme Binary Scrollbar Tokens)
      遵循用户最高定案铁律：二元灰度，暗色防刺眼低眩光，四级宽度与几何继承全局
@@ -1020,7 +1141,9 @@ html[data-theme='dark'] {
   --border-width-emphasis: 2px;
   --composer-bg: var(--surface-input);
   /* 暗色环境输入框底部操作区按钮底色适配（默认透明，hover/active 统一） */
-  --composer-control-hover-bg: var(--elevate-1); /* 并入阶梯（旧 text-primary 8%） */
+  --composer-control-hover-bg: var(
+    --elevate-1
+  ); /* 并入阶梯（旧 text-primary 8%） */
   /* S6      theme-dark.css                           */
   --md-code-bg: var(--md-code-block-bg);
   --md-code-border: var(--md-code-block-border);
@@ -1077,23 +1200,29 @@ html[data-theme='dark'] {
 
   --sep-accent-check: hsl(160 84% 45%);
   --sep-danger-color: var(--danger-fg); /* 菜单危险项文字：固定 danger 红 */
-  --sep-danger-light: var(--danger-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
+  --sep-danger-light: var(
+    --danger-soft-bg
+  ); /* 固定纯色 soft 底（旧为半透明） */
 
-  --sep-shadow:
-    0 4px 18px hsl(0 0% 0% / 0.28),
-    0 1px 3px hsl(0 0% 0% / 0.18);
+  --sep-shadow: 0 4px 18px hsl(0 0% 0% / 0.28), 0 1px 3px hsl(0 0% 0% / 0.18);
 
   --accent-color: hsl(160 84% 45%);
   --accent-hover: #ffffff;
 
-  --accent-orange: oklch(0.80 0.17 75);
+  --accent-orange: oklch(0.8 0.17 75);
   --accent-green: oklch(0.76 0.16 152);
-  --accent-green-light: var(--success-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
+  --accent-green-light: var(
+    --success-soft-bg
+  ); /* 固定纯色 soft 底（旧为半透明） */
   --accent-green-muted: oklch(0.76 0.16 152 / 0.26);
   --accent-red: oklch(0.72 0.19 27.5);
-  --accent-red-light: var(--danger-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
+  --accent-red-light: var(
+    --danger-soft-bg
+  ); /* 固定纯色 soft 底（旧为半透明） */
   /* themeStore applyTheme dark */
-  --accent-green-light-adaptive: var(--success-soft-bg); /* 固定纯色（旧为与白/底色混色） */
+  --accent-green-light-adaptive: var(
+    --success-soft-bg
+  ); /* 固定纯色（旧为与白/底色混色） */
   --accent-red-light-adaptive: var(--danger-soft-bg); /* 固定纯色 */
   --accent-blue: oklch(0.74 0.16 250);
   --accent-primary: #10b981;
@@ -1112,14 +1241,22 @@ html[data-theme='dark'] {
   /* Win11 标题栏关闭钮（深色同 Fluent 规范色；不可复用 --text-on-accent，深色下它是暗色） */
   --window-close-hover-bg: #c42b1c;
   --window-close-hover-fg: #ffffff;
-  --window-close-active-bg: color-mix(in srgb, var(--window-close-hover-bg) 90%, transparent);
+  --window-close-active-bg: color-mix(
+    in srgb,
+    var(--window-close-hover-bg) 90%,
+    transparent
+  );
 
   /* semantic color roles */
   --color-success: var(--accent-green);
-  --color-success-bg: var(--success-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
+  --color-success-bg: var(
+    --success-soft-bg
+  ); /* 固定纯色 soft 底（旧为半透明） */
   --color-success-border: var(--accent-green-muted);
   --color-warning: var(--accent-orange);
-  --color-warning-bg: var(--warning-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
+  --color-warning-bg: var(
+    --warning-soft-bg
+  ); /* 固定纯色 soft 底（旧为半透明） */
   --color-warning-border: color-mix(
     in srgb,
     var(--accent-orange) 25%,
@@ -1153,18 +1290,16 @@ html[data-theme='dark'] {
   --notice-border-success: rgba(22, 163, 74, 0.22);
   --notice-text-success: #4ade80;
 
-  --notice-shadow-deck-1: 0 6px 18px -2px rgba(0, 0, 0, 0.4), 0 2px 6px 0 rgba(0, 0, 0, 0.2);
+  --notice-shadow-deck-1:
+    0 6px 18px -2px rgba(0, 0, 0, 0.4), 0 2px 6px 0 rgba(0, 0, 0, 0.2);
+
+  /* 弹窗遮罩（深色）：深底上压暗感知更弱，比例高于浅色，仍属轻压暗 */
+  --modal-scrim: color-mix(in srgb, var(--shadow-color) 30%, transparent);
 
   /* Premium Soft Dark Shadows */
-  --shadow-sm:
-    0 1px 2px hsl(0 0% 0% / 0.16),
-    0 1px 1px hsl(0 0% 0% / 0.10);
-  --shadow-md:
-    0 2px 8px hsl(0 0% 0% / 0.20),
-    0 1px 2px hsl(0 0% 0% / 0.12);
-  --shadow-lg:
-    0 4px 18px hsl(0 0% 0% / 0.28),
-    0 1px 3px hsl(0 0% 0% / 0.18);
+  --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.16), 0 1px 1px hsl(0 0% 0% / 0.1);
+  --shadow-md: 0 2px 8px hsl(0 0% 0% / 0.2), 0 1px 2px hsl(0 0% 0% / 0.12);
+  --shadow-lg: 0 4px 18px hsl(0 0% 0% / 0.28), 0 1px 3px hsl(0 0% 0% / 0.18);
   --shadow-2xl:
     0 12px 24px color-mix(in srgb, var(--shadow-color) 30%, transparent),
     0 32px 64px color-mix(in srgb, var(--shadow-color) 40%, transparent),
@@ -1209,7 +1344,6 @@ html[data-theme='dark'] {
   --ui-text-info: #74c0fc;
   --ui-text-warning: #ffa94d;
 
-
   /* syntax highlighting dark (sRGB fallback; progressive enhancement via @supports) */
   --syntax-keyword: #ff8b9a;
   --syntax-type: #3be1e1;
@@ -1242,8 +1376,22 @@ html[data-theme='dark'] {
      ========================================================================== */
 
   /* --- 1. Markdown 排版与正文体系 (Dark) --- */
-  --md-font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif);
-  --md-font-mono: var(--font-mono, "IBM Plex Mono", "JetBrains Mono", monospace);
+  --md-font-family: var(
+    --font-sans,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    sans-serif
+  );
+  --md-font-mono: var(
+    --font-mono,
+    'IBM Plex Mono',
+    'JetBrains Mono',
+    monospace
+  );
   --md-line-height-body: 1.68;
   --md-paragraph-margin-bottom: 0.88em;
 
@@ -1258,15 +1406,15 @@ html[data-theme='dark'] {
   --md-h1-margin: 0.85em 0 0.36em;
   --md-h1-border: 1px solid var(--border-subtle);
   --md-h2-size: 1.45em;
-  --md-h2-margin: 0.75em 0 0.30em;
+  --md-h2-margin: 0.75em 0 0.3em;
   --md-h2-border: 1px solid var(--border-subtle);
   --md-h3-size: 1.25em;
   --md-h3-margin: 0.65em 0 0.26em;
-  --md-h4-size: 1.10em;
+  --md-h4-size: 1.1em;
   --md-h4-margin: 0.55em 0 0.22em;
-  --md-h5-size: 1.00em;
+  --md-h5-size: 1em;
   --md-h5-margin: 0.45em 0 0.18em;
-  --md-h6-size: 0.90em;
+  --md-h6-size: 0.9em;
   --md-h6-margin: 0.38em 0 0.15em;
 
   --md-heading-font-weight: 600;
@@ -1311,18 +1459,25 @@ html[data-theme='dark'] {
   --md-list-indent: 1.5em;
 
   --md-quote-border: 3px solid var(--border-color);
-  --md-quote-border-color: color-mix(in srgb, var(--text-primary) 8%, var(--border-color));
+  --md-quote-border-color: color-mix(
+    in srgb,
+    var(--text-primary) 8%,
+    var(--border-color)
+  );
   --md-quote-border-width: 3px;
   --md-quote-bg: transparent;
   --md-quote-text: var(--text-secondary, hsl(0 0% 64%));
   --md-quote-padding: 0.45em 0 0.45em 1.1em;
   --md-quote-margin: 0.68em 0;
 
-
   --md-link-color: var(--brand, hsl(160 84% 39%));
   --md-link-hover-color: hsl(160 84% 55%);
   --md-link-underline-offset: 3px;
-  --md-link-underline-color: color-mix(in srgb, var(--md-link-color) 35%, transparent);
+  --md-link-underline-color: color-mix(
+    in srgb,
+    var(--md-link-color) 35%,
+    transparent
+  );
 
   /* --- 5. 表格系统变量收敛 (Dark) --- */
   --md-table-border: var(--hairline-strong, var(--border-color));
@@ -1349,14 +1504,22 @@ html[data-theme='dark'] {
   /* --- 3. 自定义富交互与 Artifacts 体系 (Dark) --- */
   --artifact-card-bg: var(--surface-main);
   --artifact-card-border: var(--border-color);
-  --artifact-card-border-hover: color-mix(in srgb, var(--border-subtle) 94%, var(--text-primary) 6%);
+  --artifact-card-border-hover: color-mix(
+    in srgb,
+    var(--border-subtle) 94%,
+    var(--text-primary) 6%
+  );
   --artifact-card-radius: var(--radius-l);
   --artifact-header-bg: var(--surface-outer);
   --artifact-header-border: var(--border-subtle);
   --artifact-btn-bg: var(--surface-main);
   --artifact-btn-border: var(--border-subtle);
   --artifact-btn-hover-bg: var(--tint-hover);
-  --artifact-btn-hover-border: color-mix(in srgb, var(--border-subtle) 90%, var(--text-primary) 10%);
+  --artifact-btn-hover-border: color-mix(
+    in srgb,
+    var(--border-subtle) 90%,
+    var(--text-primary) 10%
+  );
   --artifact-btn-active-bg: var(--tint-active);
 
   /* Diff 比对 (Dark OKLCH 纯净通透配色，高对比鲜艳不刺眼，无灰蒙脏感) */
@@ -1372,25 +1535,29 @@ html[data-theme='dark'] {
   --diff-del-gutter-fg: var(--diff-del-fg);
   --diff-del-indicator: var(--diff-del-fg);
 
-
   --diff-linenum-fg: hsl(0 0% 56%);
   --diff-gutter-bg: var(--bg-card);
-  --diff-split-divider: color-mix(in srgb, var(--border-subtle) 25%, transparent);
+  --diff-split-divider: color-mix(
+    in srgb,
+    var(--border-subtle) 25%,
+    transparent
+  );
   --diff-split-header-bg: var(--bg-secondary);
   --diff-split-header-fg: var(--text-secondary);
   --diff-mode-segmented-bg: var(--seg-track-bg);
   --diff-mode-item-active-bg: var(--seg-slider-bg);
   --diff-mode-item-active-fg: var(--text-primary, #f0f0f0);
 
-
   /* FileTree 工程文件树 */
   --filetree-indent-unit: 14px;
-  --filetree-node-hover-bg: var(--elevate-1); /* 并入阶梯（旧 text-primary 6%） */
+  --filetree-node-hover-bg: var(
+    --elevate-1
+  ); /* 并入阶梯（旧 text-primary 6%） */
   --filetree-node-active-bg: color-mix(in srgb, var(--brand) 14%, transparent);
   --filetree-node-active-fg: var(--text-primary);
   --filetree-node-fg: var(--text-secondary);
   --filetree-icon-color: var(--text-tertiary);
-  --filetree-badge-add-bg: hsl(142 60% 45% / 0.20);
+  --filetree-badge-add-bg: hsl(142 60% 45% / 0.2);
   /* 固定语义色（heson 2026-10-11 收尾）：所有皮肤共用的纯色，不与主题色 / accent / 底色混色，不加透明；运行时皮肤不覆盖。深色 */
   --diff-add: #3fb950;
   --diff-del: #f85149;
@@ -1414,9 +1581,9 @@ html[data-theme='dark'] {
   --info-soft-bg: #14263d;
   --info-soft-bg-hover: #1b304d;
   --filetree-badge-add-fg: var(--status-added); /* 旧 hsl(142 75% 70%) */
-  --filetree-badge-mod-bg: hsl(38 92% 50% / 0.20);
+  --filetree-badge-mod-bg: hsl(38 92% 50% / 0.2);
   --filetree-badge-mod-fg: var(--status-modified); /* 旧 hsl(45 93% 65%) */
-  --filetree-badge-del-bg: hsl(0 75% 55% / 0.20);
+  --filetree-badge-del-bg: hsl(0 75% 55% / 0.2);
   --filetree-badge-del-fg: var(--status-deleted); /* 旧 hsl(0 75% 72%) */
 
   /* AI 步骤卡片 */
@@ -1426,8 +1593,6 @@ html[data-theme='dark'] {
   --aicard-status-error: var(--accent-red, hsl(0 55% 55%));
   --aicard-badge-bg: color-mix(in srgb, var(--text-primary) 7%, transparent);
   --aicard-badge-fg: var(--text-tertiary);
-
-
 
   /* --- 5. 流式动效与打字机光标体系 (Dark) --- */
   --stream-caret-color: var(--brand);
@@ -1442,15 +1607,21 @@ html[data-theme='dark'] {
   --stream-anim-marker-fade: 120ms;
   --stream-anim-easing: cubic-bezier(0.16, 1, 0.3, 1);
 
-  --stream-pulse-glow: 0 0 0 3px color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 20%, transparent);
-  --stream-pulse-bg: color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 5%, transparent);
+  --stream-pulse-glow: 0 0 0 3px
+    color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 20%, transparent);
+  --stream-pulse-bg: color-mix(
+    in srgb,
+    var(--brand, hsl(160 84% 45%)) 5%,
+    transparent
+  );
   --stream-pulse-duration: 1.6s;
-
 
   /* --- 6. 用量监控与时序分析（Usage Dashboard）暗色体系 (Dark) --- */
   --usage-capsule-outer-radius: var(--radius-pill);
   --usage-capsule-pad: 3px;
-  --usage-capsule-inner-radius: calc(var(--usage-capsule-outer-radius) - var(--usage-capsule-pad)); /* 6px */
+  --usage-capsule-inner-radius: calc(
+    var(--usage-capsule-outer-radius) - var(--usage-capsule-pad)
+  ); /* 6px */
 
   --usage-color-brand: hsl(160 84% 45%);
   --usage-color-brand-bg: hsl(160 84% 45% / 0.18);
@@ -1468,9 +1639,21 @@ html[data-theme='dark'] {
   --usage-color-cost-total-bg: hsl(221 83% 60% / 0.18);
 
   --usage-heat-0: color-mix(in srgb, var(--border-color) 60%, transparent);
-  --usage-heat-1: color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 30%, transparent);
-  --usage-heat-2: color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 55%, transparent);
-  --usage-heat-3: color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 80%, transparent);
+  --usage-heat-1: color-mix(
+    in srgb,
+    var(--brand, hsl(160 84% 45%)) 30%,
+    transparent
+  );
+  --usage-heat-2: color-mix(
+    in srgb,
+    var(--brand, hsl(160 84% 45%)) 55%,
+    transparent
+  );
+  --usage-heat-3: color-mix(
+    in srgb,
+    var(--brand, hsl(160 84% 45%)) 80%,
+    transparent
+  );
   --usage-heat-4: var(--brand, hsl(160 84% 45%));
 
   color-scheme: dark;
@@ -1485,7 +1668,7 @@ html[data-theme='dark'] {
  * 同特异性下靠源码序取胜（密度档在文件更靠后），故两主题下密度档均正确生效。
  * 由 layout-contract.test.ts 的 G-CASCADE 断言守护。 */
 html[data-ui-size='small'] {
-  --settings-sidebar-width: 220px;
+  --settings-nav-width: 200px;
   --header-height: 32px;
 
   /*     13      10       body      */
@@ -1553,7 +1736,7 @@ html[data-ui-size='small'] {
 }
 
 html[data-ui-size='large'] {
-  --settings-sidebar-width: 260px;
+  --settings-nav-width: 240px;
   --header-height: 40px;
 
   /*            body        */
@@ -1625,7 +1808,9 @@ html[data-ui-size='large'] {
   /* 胶囊进度行：outer(9px) = inner(6px) + pad(3px) */
   --usage-capsule-outer-radius: var(--radius-pill);
   --usage-capsule-pad: 3px;
-  --usage-capsule-inner-radius: calc(var(--usage-capsule-outer-radius) - var(--usage-capsule-pad)); /* 6px */
+  --usage-capsule-inner-radius: calc(
+    var(--usage-capsule-outer-radius) - var(--usage-capsule-pad)
+  ); /* 6px */
 
   /* 色彩体系回退 (现代 HSL / 斜杠透明度，严格零 rgba) */
   --usage-color-brand: hsl(160 84% 39%);
@@ -1641,7 +1826,7 @@ html[data-ui-size='large'] {
   --usage-color-input: hsl(200 98% 39%);
   --usage-color-cache: hsl(258 90% 66%);
   --usage-color-cost-total: hsl(221 83% 53%);
-  --usage-color-cost-total-bg: hsl(221 83% 53% / 0.10);
+  --usage-color-cost-total-bg: hsl(221 83% 53% / 0.1);
 
   /* 热力图 5 级颜色 */
   --usage-heat-0: color-mix(in srgb, var(--border-color) 40%, transparent);
@@ -1698,16 +1883,16 @@ html[data-ui-size='large'] {
     --usage-color-brand-bg: oklch(0.72 0.16 150 / 0.11);
     --usage-color-claude: oklch(0.72 0.17 45);
     --usage-color-claude-bg: oklch(0.72 0.17 45 / 0.11);
-    --usage-color-minimax: oklch(0.70 0.18 290);
-    --usage-color-minimax-bg: oklch(0.70 0.18 290 / 0.11);
-    --usage-color-kimi: oklch(0.70 0.16 230);
-    --usage-color-kimi-bg: oklch(0.70 0.16 230 / 0.11);
+    --usage-color-minimax: oklch(0.7 0.18 290);
+    --usage-color-minimax-bg: oklch(0.7 0.18 290 / 0.11);
+    --usage-color-kimi: oklch(0.7 0.16 230);
+    --usage-color-kimi-bg: oklch(0.7 0.16 230 / 0.11);
     --usage-color-other: oklch(0.75 0.15 85);
     --usage-color-other-bg: oklch(0.75 0.15 85 / 0.11);
-    --usage-color-input: oklch(0.70 0.16 230);
-    --usage-color-cache: oklch(0.70 0.18 290);
-    --usage-color-cost-total: oklch(0.65 0.20 255);
-    --usage-color-cost-total-bg: oklch(0.65 0.20 255 / 0.10);
+    --usage-color-input: oklch(0.7 0.16 230);
+    --usage-color-cache: oklch(0.7 0.18 290);
+    --usage-color-cost-total: oklch(0.65 0.2 255);
+    --usage-color-cost-total-bg: oklch(0.65 0.2 255 / 0.1);
   }
 }
 
@@ -1767,7 +1952,10 @@ html[data-perf-tier='eco'] {
    Western-First 等宽数值字体工具类 (防止 Windows 微软雅黑 tnum 缺失)
    ========================================================================== */
 .tabular-nums {
-  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-family:
+    'Segoe UI',
+    -apple-system,
+    var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
 }
@@ -1779,9 +1967,9 @@ html[data-perf-tier='eco'] {
 @supports (color: oklch(0 0 0)) {
   :root,
   [data-theme='light'] {
-    --syntax-keyword: oklch(0.48 0.20 15);
+    --syntax-keyword: oklch(0.48 0.2 15);
     --syntax-type: oklch(0.44 0.15 220);
-    --syntax-operator: oklch(0.40 0.04 260);
+    --syntax-operator: oklch(0.4 0.04 260);
     --syntax-punctuation: oklch(0.55 0.02 260);
     --syntax-string: oklch(0.45 0.14 150);
     --syntax-number: oklch(0.48 0.18 55);
@@ -1792,14 +1980,14 @@ html[data-perf-tier='eco'] {
     --syntax-attr: oklch(0.46 0.16 35);
     --syntax-variable: oklch(0.28 0.02 260);
     --syntax-comment: oklch(0.58 0.02 260);
-    --syntax-meta: oklch(0.45 0.10 290);
+    --syntax-meta: oklch(0.45 0.1 290);
     --syntax-addition: oklch(0.45 0.18 142);
-    --syntax-deletion: oklch(0.48 0.20 25);
+    --syntax-deletion: oklch(0.48 0.2 25);
   }
 
   :root[data-theme='dark'],
   [data-theme='dark'] {
-    --syntax-keyword: oklch(0.80 0.17 15);
+    --syntax-keyword: oklch(0.8 0.17 15);
     --syntax-type: oklch(0.83 0.13 195);
     --syntax-operator: oklch(0.76 0.06 250);
     --syntax-punctuation: oklch(0.58 0.01 260);
@@ -1812,7 +2000,7 @@ html[data-perf-tier='eco'] {
     --syntax-attr: oklch(0.82 0.15 55);
     --syntax-variable: oklch(0.86 0.04 260);
     --syntax-comment: oklch(0.58 0.02 260);
-    --syntax-meta: oklch(0.70 0.08 300);
+    --syntax-meta: oklch(0.7 0.08 300);
     --syntax-addition: oklch(0.82 0.16 142);
     --syntax-deletion: oklch(0.75 0.18 25);
   }

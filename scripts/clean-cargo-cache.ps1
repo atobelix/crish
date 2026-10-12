@@ -7,7 +7,7 @@
     3. 严格保留每个 crate 最后一个最新的有效构建产物，保证不影响正常增量编译与即刻调试。
 #>
 param(
-    [string]$DepsDir = "C:\Software\conex\target\debug\deps",
+    [string]$DepsDir = "$PSScriptRoot\..\target\debug\deps",
     [switch]$SkipTestExes = $false,
     [switch]$SkipDeadHashes = $false
 )

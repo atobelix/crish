@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const rawPath = path.resolve('c:/Software/conex/docs/model-capability/surveys/openrouter-full-models.json');
+const ROOT_DIR = path.resolve(__dirname, '..');
+const rawPath = path.join(ROOT_DIR, 'docs/model-capability/surveys/openrouter-full-models.json');
 const raw = JSON.parse(fs.readFileSync(rawPath, 'utf8')).data;
 
 // 严格死线：2025-06-01T00:00:00Z = 1748736000
@@ -80,7 +81,7 @@ for (const v in grouped) {
   md += '\n---\n\n';
 }
 
-const outPath = path.resolve('c:/Software/conex/docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md');
+const outPath = path.join(ROOT_DIR, 'docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md');
 fs.writeFileSync(outPath, md, 'utf8');
 console.log('Successfully written strictly verified survey to:', outPath);
 console.log('Total verified non-batch models:', models.length);

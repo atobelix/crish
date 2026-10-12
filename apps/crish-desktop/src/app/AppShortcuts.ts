@@ -7,7 +7,6 @@ import {
   setActiveSessionId,
   toggleSettingsOverlay,
 } from '../api/storeAccess';
-import { getActiveProjectId } from '../api/projectStore';
 import { ShortcutService } from '../services/ShortcutService';
 import { emitUiEvent } from '../api/uiEvents';
 import { formatBranchUndoToast } from '../hooks/useToastQueue';
@@ -17,16 +16,12 @@ import { getCompositionRoot } from './compositionRoot';
 import { navigateToNewDraft } from '../store/surfaceRouter';
 
 export interface UseAppShortcutsOptions {
-  showSettingsOverlay: boolean;
-  setShowSettingsOverlay: (show: boolean) => void;
   showFirstRun: boolean;
   setShowTelemetry: (show: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
 }
 
 export function useAppShortcuts({
-  showSettingsOverlay,
-  setShowSettingsOverlay,
   showFirstRun,
   setShowTelemetry,
   setSidebarCollapsed,
@@ -39,14 +34,10 @@ export function useAppShortcuts({
       openSettings(tab);
     };
 
+    // 设置弹窗的 Esc 只走 LayerStack（Dialog onEscapeKeyDown）：栈顶的下拉 / 嵌套弹窗先退，
+    // 再到设置本层（先清搜索再关）。这里不再有第二条「无条件关设置」的捕获路径。
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (showSettingsOverlay) {
-        e.preventDefault();
-        e.stopPropagation();
-        setShowSettingsOverlay(false);
-        return;
-      }
       if (showFirstRun) {
         e.stopPropagation();
         return;
@@ -157,13 +148,7 @@ export function useAppShortcuts({
       document.removeEventListener('keydown', handleEscape, true);
       svc.destroy();
     };
-  }, [
-    showSettingsOverlay,
-    showFirstRun,
-    setShowSettingsOverlay,
-    setShowTelemetry,
-    setSidebarCollapsed,
-  ]);
+  }, [showFirstRun, setShowTelemetry, setSidebarCollapsed]);
 
   useEffect(() => {
     // 冲突检测生产接线（T2-2）：改键/注册表变更后任何环境都兜底告警，防绑定漂移静默生效
@@ -175,8 +160,7 @@ export function useAppShortcuts({
           '[crish] 冲突明细：',
           conflicts
             .map(
-              (c) =>
-                `${c.actionId}（${c.binding}）与 ${c.conflictsWith} 同绑定`
+              (c) => `${c.actionId}（${c.binding}）与 ${c.conflictsWith} 同绑定`
             )
             .join('；')
         );

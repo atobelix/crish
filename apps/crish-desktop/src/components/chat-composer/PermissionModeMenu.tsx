@@ -112,9 +112,12 @@ export const PermissionModeMenu: React.FC<Props> = ({
           </span>
           <span className={styles.permLabel}>{meta.label}</span>
           {!hideChevron && (
-            <AppIcon name="chevron-down" size={11}
+            <AppIcon
+              name="chevron-down"
+              size={11}
               className={styles.permPillChev}
-              aria-hidden="true" />
+              aria-hidden="true"
+            />
           )}
         </Button>
       </Tooltip>
@@ -134,38 +137,51 @@ export const PermissionModeMenu: React.FC<Props> = ({
           renderItem={(opt) => {
             const itemMeta = permissionModeMeta(opt.id);
             const isSelected = opt.id === mode;
-            const icon =
-              MODE_ICON_MAP[opt.id as PermissionMode] ?? (
-                <AppIcon name="shield" size={14} />
-              );
+            const icon = MODE_ICON_MAP[opt.id as PermissionMode] ?? (
+              <AppIcon name="shield" size={14} />
+            );
             const sublabel =
               MODE_SUBLABEL_MAP[opt.id as PermissionMode] ??
               itemMeta.description;
             return (
-              <Tooltip key={opt.id} content={itemMeta.matrixHint}>
-                <Button
-                  bare
-                  type="button"
-                  className={`${styles.permMenuItem} ${isSelected ? styles.isSelected : ''}`}
-                  role="menuitem"
-                  onClick={() => {
-                    opt.onClick?.();
-                  }}
-                >
-                  <span className={styles.iconWrapper} aria-hidden="true">
-                    {icon}
-                  </span>
-                  <div className={styles.textCol}>
-                    <span className={styles.title}>{itemMeta.label}</span>
-                    <span className={styles.desc}>{sublabel}</span>
-                  </div>
-                  {isSelected ? (
-                    <AppIcon name="check" size={13}
-                      className={styles.checkIcon}
-                      aria-hidden="true" />
-                  ) : null}
-                </Button>
-              </Tooltip>
+              <Button
+                key={opt.id}
+                bare
+                type="button"
+                className={`${styles.permMenuItem} ${isSelected ? styles.isSelected : ''}`}
+                role="menuitem"
+                onClick={() => {
+                  opt.onClick?.();
+                }}
+              >
+                <span className={styles.iconWrapper} aria-hidden="true">
+                  {icon}
+                </span>
+                <div className={styles.labelRow}>
+                  <span className={styles.title}>{itemMeta.label}</span>
+                  <Tooltip content={sublabel} side="right">
+                    <span
+                      className={styles.infoTrigger}
+                      role="note"
+                      aria-label={`${itemMeta.label}说明：${sublabel}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        opt.onClick?.();
+                      }}
+                    >
+                      <AppIcon name="help-circle" size={13} aria-hidden />
+                    </span>
+                  </Tooltip>
+                </div>
+                {isSelected ? (
+                  <AppIcon
+                    name="check"
+                    size={13}
+                    className={styles.checkIcon}
+                    aria-hidden="true"
+                  />
+                ) : null}
+              </Button>
             );
           }}
         />

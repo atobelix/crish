@@ -12,14 +12,17 @@
  *    `crish://window-snap-overlay` 事件，把 enter / leave / press / release 转给按钮画状态；
  *    点击（最大化 / 还原）由 Rust 在热区内直接执行。
  *
- * 多实例：主顶栏与设置全屏页各有一组窗控，同一时刻只有最上层（最后挂载）那组拥有热区；
- * 它卸载后热区交还给下一组；全部卸载则撤销热区。
+ * 单实例：全应用只有主顶栏一组窗控（设置是弹窗，不带窗口按钮），只登记一个目标；
+ * 注销即撤销热区。重复登记属于接线错误：logger.warn 可观测，后登记者接管。
+ * 热区是 WebView 之上的原生子窗口，DOM 遮罩盖不住它：LayerStack 存在模态层（设置等 Dialog）时
+ * 上报 null 撤下热区，模态全部关闭后重测重报；按钮测不到有效矩形时同样上报 null（隐藏）。
  *
  * 失败语义（QUALITY-GATE）：上报失败 / 命令缺失 → logger.warn（同一原因只记一次），
  * 按钮保持普通前端 onClick 实现；不在 Windows 桌面壳内时不启用（Mac 不渲染窗控）。
  */
 import { invokeTyped } from '../../api/tauriInvoke';
 import { logger, toErrMeta } from '../../services/LoggerService';
+import { layerStackManager } from '../ui/internal/layer-stack/LayerStackManager';
 
 export const SNAP_OVERLAY_COMMAND = 'workbench_set_snap_overlay_rect';
 /** 与 Rust `window_snap_overlay::SNAP_OVERLAY_EVENT` 同值 */
@@ -27,7 +30,12 @@ export const SNAP_OVERLAY_EVENT = 'crish://window-snap-overlay';
 
 export type SnapOverlayPhase = 'enter' | 'leave' | 'press' | 'release';
 
-const PHASES: ReadonlySet<string> = new Set(['enter', 'leave', 'press', 'release']);
+const PHASES: ReadonlySet<string> = new Set([
+  'enter',
+  'leave',
+  'press',
+  'release',
+]);
 
 /** 上报给 Rust 的按钮矩形（CSS 逻辑像素，相对视口左上角） */
 export interface SnapButtonRect {
@@ -46,7 +54,7 @@ export interface SnapOverlayTarget {
 
 const LOG_MODULE = 'window-snap';
 
-const stack: SnapOverlayTarget[] = [];
+let current: SnapOverlayTarget | null = null;
 let frameId: number | null = null;
 let listenerReady: Promise<void> | null = null;
 let detachEnvironment: (() => void) | null = null;
@@ -62,7 +70,9 @@ export function isSnapLayoutHost(): boolean {
   );
 }
 
-export function parseSnapOverlayPhase(payload: unknown): SnapOverlayPhase | null {
+export function parseSnapOverlayPhase(
+  payload: unknown
+): SnapOverlayPhase | null {
   if (typeof payload !== 'object' || payload === null) return null;
   const phase = (payload as { phase?: unknown }).phase;
   return typeof phase === 'string' && PHASES.has(phase)
@@ -70,7 +80,9 @@ export function parseSnapOverlayPhase(payload: unknown): SnapOverlayPhase | null
     : null;
 }
 
-export function measureSnapButton(el: HTMLElement | null): SnapButtonRect | null {
+export function measureSnapButton(
+  el: HTMLElement | null
+): SnapButtonRect | null {
   if (!el || !el.isConnected) return null;
   const r = el.getBoundingClientRect();
   if (!(r.width > 0 && r.height > 0)) return null;
@@ -99,14 +111,17 @@ function ensureEventListener(): Promise<void> {
           });
           return;
         }
-        stack[stack.length - 1]?.onPhase(phase);
+        current?.onPhase(phase);
       });
     })().catch((err: unknown) => {
       listenerReady = null;
-      logger.warn('[window-snap] 监听热区事件失败：最大化钮 hover/按下态将不显示（点击仍由原生热区执行）', {
-        module: LOG_MODULE,
-        err: toErrMeta(err),
-      });
+      logger.warn(
+        '[window-snap] 监听热区事件失败：最大化钮 hover/按下态将不显示（点击仍由原生热区执行）',
+        {
+          module: LOG_MODULE,
+          err: toErrMeta(err),
+        }
+      );
     });
   }
   return listenerReady;
@@ -128,17 +143,21 @@ async function sendRect(rect: SnapButtonRect | null): Promise<void> {
   reportFailure(res.message, res.raw);
 }
 
-async function reportTop(): Promise<void> {
-  const top = stack[stack.length - 1];
-  if (!top) return;
-  await sendRect(measureSnapButton(top.getElement()));
+async function reportCurrent(): Promise<void> {
+  if (!current) return;
+  // 模态遮罩下的最大化按钮不可交互；原生热区若还在，点遮罩该处会直接最大化窗口
+  if (layerStackManager.hasActiveModal()) {
+    await sendRect(null);
+    return;
+  }
+  await sendRect(measureSnapButton(current.getElement()));
 }
 
 function scheduleReport(): void {
   if (frameId !== null) return;
   frameId = window.requestAnimationFrame(() => {
     frameId = null;
-    void reportTop();
+    void reportCurrent();
   });
 }
 
@@ -162,9 +181,19 @@ function attachEnvironment(): void {
         : null;
     dprQuery?.addEventListener('change', onDprChange);
   };
+  // 模态开 / 关切换时重报（开 → 撤下热区；关 → 重测并恢复）；其它浮层进出栈不触发
+  let modalActive = layerStackManager.hasActiveModal();
+  const onLayerStackChange = (): void => {
+    const next = layerStackManager.hasActiveModal();
+    if (next === modalActive) return;
+    modalActive = next;
+    scheduleReport();
+  };
+  const unsubscribeLayers = layerStackManager.subscribe(onLayerStackChange);
   window.addEventListener(WINDOW_RESIZE_SETTLED_EVENT, onResize);
   bindDprQuery();
   detachEnvironment = () => {
+    unsubscribeLayers();
     window.removeEventListener(WINDOW_RESIZE_SETTLED_EVENT, onResize);
     dprQuery?.removeEventListener('change', onDprChange);
     detachEnvironment = null;
@@ -173,40 +202,45 @@ function attachEnvironment(): void {
 
 /** 按钮自身尺寸变化（ResizeObserver）等场景主动请求重报。 */
 export function requestSnapOverlayReport(): void {
-  if (stack.length > 0) scheduleReport();
+  if (current) scheduleReport();
 }
 
 /**
- * 登记一个最大化按钮为贴靠热区目标（后登记者在上）。返回注销函数。
+ * 登记最大化按钮为贴靠热区目标（全应用唯一）。返回注销函数。
  * 非 Windows 桌面壳返回空注销（该平台无贴靠布局，按钮走普通点击）。
  */
-export function registerSnapOverlayTarget(target: SnapOverlayTarget): () => void {
+export function registerSnapOverlayTarget(
+  target: SnapOverlayTarget
+): () => void {
   if (!isSnapLayoutHost()) return () => undefined;
-  stack[stack.length - 1]?.onPhase('leave');
-  stack.push(target);
+  if (current && current !== target) {
+    logger.warn(
+      '[window-snap] 重复登记贴靠热区目标：窗口按钮应只有主顶栏一组，后登记者接管',
+      {
+        module: LOG_MODULE,
+        err: toErrMeta('duplicate snap overlay target'),
+      }
+    );
+    current.onPhase('leave');
+  }
+  current = target;
   attachEnvironment();
   scheduleReport();
   return () => {
-    const index = stack.indexOf(target);
-    if (index < 0) return;
-    const wasTop = index === stack.length - 1;
-    stack.splice(index, 1);
-    if (stack.length === 0) {
-      detachEnvironment?.();
-      if (frameId !== null) {
-        window.cancelAnimationFrame(frameId);
-        frameId = null;
-      }
-      void sendRect(null);
-      return;
+    if (current !== target) return;
+    current = null;
+    detachEnvironment?.();
+    if (frameId !== null) {
+      window.cancelAnimationFrame(frameId);
+      frameId = null;
     }
-    if (wasTop) scheduleReport();
+    void sendRect(null);
   };
 }
 
 /** 测试专用：重置模块级状态。 */
 export function __resetSnapOverlayForTests(): void {
-  stack.length = 0;
+  current = null;
   detachEnvironment?.();
   if (frameId !== null && typeof window !== 'undefined') {
     window.cancelAnimationFrame(frameId);

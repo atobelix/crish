@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act, renderHook } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  renderHook,
+} from '@testing-library/react';
 import type { AppToast } from '../../../services/toast/types';
 import { ToastCard } from '../ToastCard';
 import { ToastViewport } from '../ToastViewport';
@@ -9,7 +15,9 @@ import { useToastStackMeasurement } from '../useToastStackMeasurement';
 import { useSwipeDismiss } from '../useSwipeDismiss';
 import { ToastStore } from '../../../services/toast/ToastStore';
 
-const mockToast = (partial: Partial<AppToast> & Pick<AppToast, 'id' | 'message'>): AppToast => ({
+const mockToast = (
+  partial: Partial<AppToast> & Pick<AppToast, 'id' | 'message'>
+): AppToast => ({
   type: 'info',
   duration: 3000,
   ariaLive: 'polite',
@@ -49,7 +57,7 @@ describe('ToastCard & ToastViewport 现代化 3D 层叠通知套件测试', () =
         index={0}
         frontmostHeight={60}
         offsetY={0}
-        isExpanded={false}
+        isPaused={false}
         onHeightMeasure={vi.fn()}
         onDismiss={onDismiss}
       />
@@ -58,8 +66,13 @@ describe('ToastCard & ToastViewport 现代化 3D 层叠通知套件测试', () =
     expect(screen.getByText('任务完成')).toBeInTheDocument();
     expect(screen.getByText('所有工程文件索引已更新')).toBeInTheDocument();
     expect(screen.getByText('耗时 120ms')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveAttribute('data-toast-type', 'success');
-    expect(screen.getByRole('button', { name: '关闭通知' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveAttribute(
+      'data-toast-type',
+      'success'
+    );
+    expect(
+      screen.getByRole('button', { name: '关闭通知' })
+    ).toBeInTheDocument();
   });
 
   it('ToastCard 注入正确的 3D 几何 CSS 自定义变量', () => {
@@ -70,7 +83,7 @@ describe('ToastCard & ToastViewport 现代化 3D 层叠通知套件测试', () =
         index={2}
         frontmostHeight={56}
         offsetY={136}
-        isExpanded={false}
+        isPaused={false}
         onHeightMeasure={vi.fn()}
         onDismiss={vi.fn()}
       />
@@ -78,7 +91,9 @@ describe('ToastCard & ToastViewport 现代化 3D 层叠通知套件测试', () =
 
     const card = container.querySelector('[role="status"]') as HTMLElement;
     expect(card.style.getPropertyValue('--toast-index')).toBe('2');
-    expect(card.style.getPropertyValue('--toast-frontmost-height')).toBe('56px');
+    expect(card.style.getPropertyValue('--toast-frontmost-height')).toBe(
+      '56px'
+    );
     expect(card.style.getPropertyValue('--toast-offset-y')).toBe('136px');
   });
 
@@ -97,7 +112,7 @@ describe('ToastCard & ToastViewport 现代化 3D 层叠通知套件测试', () =
         index={0}
         frontmostHeight={56}
         offsetY={0}
-        isExpanded={false}
+        isPaused={false}
         onHeightMeasure={vi.fn()}
         onDismiss={onDismiss}
       />
@@ -136,7 +151,7 @@ describe('ToastCard & ToastViewport 现代化 3D 层叠通知套件测试', () =
         index={0}
         frontmostHeight={56}
         offsetY={0}
-        isExpanded={false}
+        isPaused={false}
         onHeightMeasure={vi.fn()}
         onDismiss={vi.fn()}
       />
@@ -164,7 +179,7 @@ describe('ToastCard & ToastViewport 现代化 3D 层叠通知套件测试', () =
         index={0}
         frontmostHeight={56}
         offsetY={0}
-        isExpanded={false}
+        isPaused={false}
         onHeightMeasure={vi.fn()}
         onDismiss={onDismiss}
       />
@@ -197,7 +212,7 @@ describe('ToastCard & ToastViewport 现代化 3D 层叠通知套件测试', () =
           index={0}
           frontmostHeight={56}
           offsetY={0}
-          isExpanded={false}
+          isPaused={false}
           onHeightMeasure={vi.fn()}
           onDismiss={onDismiss}
         />
@@ -210,7 +225,7 @@ describe('ToastCard & ToastViewport 现代化 3D 层叠通知套件测试', () =
     });
     expect(onDismiss).not.toHaveBeenCalled();
 
-    // 悬停展开 (isExpanded = true)
+    // 悬停暂停 (isPaused = true)
     act(() => {
       rendered.rerender(
         <ToastCard
@@ -218,7 +233,7 @@ describe('ToastCard & ToastViewport 现代化 3D 层叠通知套件测试', () =
           index={0}
           frontmostHeight={56}
           offsetY={0}
-          isExpanded={true}
+          isPaused={true}
           onHeightMeasure={vi.fn()}
           onDismiss={onDismiss}
         />
@@ -231,7 +246,7 @@ describe('ToastCard & ToastViewport 现代化 3D 层叠通知套件测试', () =
     });
     expect(onDismiss).not.toHaveBeenCalled();
 
-    // 移出恢复折叠 (isExpanded = false)
+    // 移出恢复 (isPaused = false)
     act(() => {
       rendered.rerender(
         <ToastCard
@@ -239,7 +254,7 @@ describe('ToastCard & ToastViewport 现代化 3D 层叠通知套件测试', () =
           index={0}
           frontmostHeight={56}
           offsetY={0}
-          isExpanded={false}
+          isPaused={false}
           onHeightMeasure={vi.fn()}
           onDismiss={onDismiss}
         />
@@ -317,7 +332,11 @@ describe('ToastCard & ToastViewport 现代化 3D 层叠通知套件测试', () =
   it('useSwipeDismiss 手势滑离超过阈值触发 onDismiss', () => {
     const onDismiss = vi.fn();
     const { result } = renderHook(() =>
-      useSwipeDismiss({ onDismiss, allowedAxes: ['down', 'right'], threshold: 60 })
+      useSwipeDismiss({
+        onDismiss,
+        allowedAxes: ['down', 'right'],
+        threshold: 60,
+      })
     );
 
     const mockTarget = document.createElement('div');
@@ -355,7 +374,11 @@ describe('ToastCard & ToastViewport 现代化 3D 层叠通知套件测试', () =
   it('useSwipeDismiss 未达到阈值释放时弹性归零复位', () => {
     const onDismiss = vi.fn();
     const { result } = renderHook(() =>
-      useSwipeDismiss({ onDismiss, allowedAxes: ['down', 'right'], threshold: 60 })
+      useSwipeDismiss({
+        onDismiss,
+        allowedAxes: ['down', 'right'],
+        threshold: 60,
+      })
     );
 
     const mockTarget = document.createElement('div');

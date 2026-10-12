@@ -280,7 +280,12 @@ impl DocSession {
             return Err(ApplyError::Invariant("move cycle".into()));
         }
 
-        let old_parent = self.tree.nodes.get(&id).unwrap().parent;
+        let old_parent = self
+            .tree
+            .nodes
+            .get(&id)
+            .ok_or_else(|| ApplyError::NotFound(id.to_string()))?
+            .parent;
 
         // 从旧父移除
         if let Some(op) = old_parent {
@@ -301,7 +306,11 @@ impl DocSession {
             self.tree.root_children.push(id);
         }
 
-        let n = self.tree.nodes.get_mut(&id).unwrap();
+        let n = self
+            .tree
+            .nodes
+            .get_mut(&id)
+            .ok_or_else(|| ApplyError::NotFound(id.to_string()))?;
         n.parent = new_parent;
         n.order = order.to_string();
 

@@ -19,12 +19,16 @@
   min-height: var(--header-height);
   max-height: var(--header-height);
   /* 顶部标签栏属于外层：无材质 = 不透明外层色；有云母时透明，透出 body 的唯一外层着色 */
-  background: var(--outer-layer-child-bg, var(--shell-chrome-bg, var(--bg-secondary)));
+  background: var(
+    --outer-layer-child-bg,
+    var(--shell-chrome-bg, var(--bg-secondary))
+  );
   display: flex;
   align-items: center;
   justify-content: flex-start;
   padding: 0 4px;
-  border-bottom: 1px solid var(--border-subtle);
+  /* 沉浸式外层通底：不画底边直线，由下方 .leafBody 内容矩形自适应圆角与框线承担分界，根除割裂圆角的水平死线 */
+  border-bottom: none;
   user-select: none;
   flex-shrink: 0;
   box-sizing: border-box;
@@ -36,21 +40,28 @@
 
 /* 声明式避让规则：让位值来自壳几何 token（tokens.css --edge-reserve-*） */
 /* 顶行最左叶子：侧栏收起时让出悬浮按钮空间（SidebarToggle 仍 absolute 浮在 main-layout 左缘） */
-:global([data-top-row="true"][data-left-edge="true"]) .paneHeader {
+:global([data-top-row='true'][data-left-edge='true']) .paneHeader {
   padding-left: 0px;
 }
-:global([data-sidebar-collapsed="true"]) :global([data-top-row="true"][data-left-edge="true"]) .paneHeader {
+:global([data-sidebar-collapsed='true'])
+  :global([data-top-row='true'][data-left-edge='true'])
+  .paneHeader {
   padding-left: var(--edge-reserve-left);
 }
-:global([data-platform="macos"]:not([data-fullscreen="true"])) :global([data-sidebar-collapsed="true"]) :global([data-top-row="true"][data-left-edge="true"]) .paneHeader {
+:global([data-platform='macos']:not([data-fullscreen='true']))
+  :global([data-sidebar-collapsed='true'])
+  :global([data-top-row='true'][data-left-edge='true'])
+  .paneHeader {
   padding-left: var(--edge-reserve-left-macos);
 }
 
 /* 右缘：恢复顶行最右叶子节点的右缘避让规则，严格引用 Design Tokens，严禁裸写魔术数字 */
-:global([data-top-row="true"][data-right-edge="true"]) .paneHeader {
+:global([data-top-row='true'][data-right-edge='true']) .paneHeader {
   padding-right: var(--edge-reserve-right-win);
 }
-:global([data-platform="macos"]) :global([data-top-row="true"][data-right-edge="true"]) .paneHeader {
+:global([data-platform='macos'])
+  :global([data-top-row='true'][data-right-edge='true'])
+  .paneHeader {
   padding-right: var(--edge-reserve-right-macos);
 }
 
@@ -164,7 +175,11 @@
 }
 
 .tabItem:hover:not(.tabItemActive) {
-  background: color-mix(in srgb, var(--tab-active-bg, var(--bg-card)) 35%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--tab-active-bg, var(--bg-card)) 35%,
+    transparent
+  );
   border-color: color-mix(in srgb, var(--border-color) 60%, transparent);
   box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 4%, transparent);
   color: var(--text-primary);
@@ -174,7 +189,10 @@
   background: var(--tab-active-bg, var(--bg-card));
   color: var(--text-primary);
   font-weight: 500;
-  border-color: var(--border-subtle, color-mix(in srgb, var(--border-color) 80%, transparent));
+  border-color: var(
+    --border-subtle,
+    color-mix(in srgb, var(--border-color) 80%, transparent)
+  );
   box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color) 6%, transparent);
 }
 

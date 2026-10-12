@@ -214,14 +214,60 @@ describe('ui/Dialog', () => {
     expect(document.activeElement).toBe(opener);
   });
 
-  it('fullscreen 形态：面板铺满视口、忽略尺寸档、无面板进出场动画', () => {
-    render(<DialogHarness variant="fullscreen" title="设置" />);
+  it('closeOnBackdropClick：dismissible=false 时点自身遮罩仍关闭，Esc 交给 onEscapeKeyDown', () => {
+    const onClose = vi.fn();
+    const onEscapeKeyDown = vi.fn(() => true);
+    render(
+      <DialogHarness
+        ariaLabel="设置"
+        dismissible={false}
+        closeOnBackdropClick
+        onEscapeKeyDown={onEscapeKeyDown}
+        onClose={onClose}
+      />
+    );
+    const overlay = document.querySelector('[data-dialog-overlay]')!;
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onEscapeKeyDown).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(overlay.firstElementChild as HTMLElement);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('dismissible=false 且未开 closeOnBackdropClick：点遮罩不关闭', () => {
+    const onClose = vi.fn();
+    render(
+      <DialogHarness ariaLabel="向导" dismissible={false} onClose={onClose} />
+    );
+    const overlay = document.querySelector('[data-dialog-overlay]')!;
+    fireEvent.click(overlay.firstElementChild as HTMLElement);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('classNames.body 追加到内容区；面板始终挂进出场动画类', () => {
+    render(<DialogHarness title="尺寸" classNames={{ body: 'customBody' }} />);
     const dialog = screen.getByRole('dialog');
-    // fullscreen 不应用尺寸档宽度（480px 默认被替换）
-    expect(dialog.classList.contains('dialogMd')).toBe(false);
-    // 遮罩壳仍挂动画类（盖层整体淡入淡出），面板自身不挂动画类
-    const overlay = dialog.parentElement!;
-    expect(overlay.className).toMatch(/overlayEnter|overlayExit/);
+    expect(dialog.querySelector('.customBody')).not.toBeNull();
+    expect(dialog.className).toMatch(/dialogEnter/);
+  });
+
+  it('退场：open=false 后先挂 exiting（data-dialog-state / overlayExit），动画时长结束才卸载', async () => {
+    vi.useFakeTimers();
+    try {
+      render(<DialogHarness title="退场" />);
+      fireEvent.keyDown(document, { key: 'Escape' });
+      const overlay = document.querySelector('[data-dialog-overlay]');
+      expect(overlay).not.toBeNull();
+      expect(overlay).toHaveAttribute('data-dialog-state', 'exiting');
+      expect(overlay!.className).toMatch(/overlayExit/);
+      expect(screen.getByRole('dialog').className).toMatch(/dialogExit/);
+      act(() => {
+        vi.advanceTimersByTime(160);
+      });
+      expect(document.querySelector('[data-dialog-overlay]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('ariaLabel 在无 title 时作为可访问名称', () => {
@@ -248,7 +294,9 @@ describe('ui/Dialog', () => {
   });
 
   it('overlayClassName 追加到遮罩壳（--dialog-z 层级覆盖落点）', () => {
-    render(<DialogHarness title="层级" classNames={{ overlay: 'custom-overlay' }} />);
+    render(
+      <DialogHarness title="层级" classNames={{ overlay: 'custom-overlay' }} />
+    );
     const overlay = screen.getByRole('dialog').parentElement!;
     expect(overlay.classList.contains('custom-overlay')).toBe(true);
     expect(overlay).toHaveAttribute('data-dialog-overlay');

@@ -43,7 +43,7 @@
     "startup:cold": "npx tsx tests/startup/measure-cold-start.ts",
     "startup:warm": "npx tsx tests/startup/measure-warm-start.ts",
     "check:workbench": "npm --workspace @crish/agent-workbench run cli:check",
-    "typecheck": "tsc --noEmit -p apps/crish-desktop/tsconfig.app.json && tsc --noEmit -p apps/crish-desktop/tsconfig.node.json && tsc --noEmit -p apps/agent-workbench/tsconfig.json && tsc --noEmit -p packages/shared-types && tsc --noEmit -p packages/shared-utils",
+    "typecheck": "tsc --noEmit -p apps/crish-desktop/tsconfig.app.json && tsc --noEmit -p apps/crish-desktop/tsconfig.node.json && tsc --noEmit -p apps/agent-workbench/tsconfig.json && tsc --noEmit -p packages/shared-types && tsc --noEmit -p packages/shared-utils && tsc --noEmit -p packages/block-paper-contract && tsc --noEmit -p packages/editor-kit && tsc --noEmit -p packages/block-paper && tsc --noEmit -p packages/conversation-flow && tsc --noEmit -p packages/plugin-import-claude-codex && tsc --noEmit -p packages/test-utils",
     "diff:all": "node scripts/show-full-diff.mjs",
     "diff:save": "node scripts/show-full-diff.mjs --silent --out .agent-outputs/workspace-full-diff.patch",
     "check:runtime-status-ssot": "node scripts/check-runtime-status-ssot.mjs",
@@ -78,6 +78,7 @@
     "check:swallowed-errors-frontend": "node scripts/check-swallowed-errors-frontend.mjs --report",
     "check:css-encoding": "node scripts/check-css-encoding.mjs --whitelist-dirty-check",
     "check:chunk-cycles": "node scripts/check-chunk-cycles.mjs",
+    "check:npm-licenses": "node scripts/check-npm-licenses.mjs",
     "check:store-types": "node scripts/check-no-as-any-store.mjs",
     "check:store-writes": "node scripts/check-no-raw-setstate.mjs",
     "check:store-facade": "node scripts/check-store-facade.mjs",
@@ -134,17 +135,5 @@
   },
   "overrides": {
     "esbuild": "^0.28.1"
-  },
-  "lint-staged": {
-    "*.{ts,tsx}": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "*.{json,md,yml,yaml,css}": [
-      "prettier --write"
-    ],
-    "*.{ts,tsx,js,mjs,cjs,json,md,yml,yaml,css}": [
-      "git diff --check"
-    ]
   }
 }

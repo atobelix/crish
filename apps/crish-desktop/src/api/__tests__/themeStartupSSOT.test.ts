@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { applyTextContrastGuard, getContrastGuardedText } from '../oklchColorGuard';
+import {
+  applyTextContrastGuard,
+  getContrastGuardedText,
+} from '../oklchColorGuard';
 import { SKIN_PRESETS } from '../themePresets';
 import {
   bootstrapTheme,
@@ -32,7 +35,10 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
     const warmGray = SKIN_PRESETS['warm-gray'];
     expect(warmGray).toBeDefined();
 
-    document.documentElement.style.setProperty('--text-primary', warmGray.textPrimary);
+    document.documentElement.style.setProperty(
+      '--text-primary',
+      warmGray.textPrimary
+    );
 
     // 调用守卫，传入官方预设配置
     applyTextContrastGuard(warmGray.bgPrimary, false, {
@@ -41,7 +47,8 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
     });
 
     // 验证 --text-primary 保持中性深灰 #1a1a1a，未被篡改为 hsl(35, 12%, 11%)
-    const currentVal = document.documentElement.style.getPropertyValue('--text-primary');
+    const currentVal =
+      document.documentElement.style.getPropertyValue('--text-primary');
     expect(currentVal).toBe('#1a1a1a');
   });
 
@@ -52,7 +59,8 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
       explicitTextPrimary: '#222222', // 不可读的深灰字
     });
 
-    const guardedVal = document.documentElement.style.getPropertyValue('--text-primary');
+    const guardedVal =
+      document.documentElement.style.getPropertyValue('--text-primary');
     expect(guardedVal).toBe('hsl(0, 0%, 94%)'); // 触发高对比白色兜底
   });
 
@@ -64,14 +72,24 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
 
     expect(resultTheme).toBe('dark');
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-    expect(document.documentElement.classList.contains('theme-dark')).toBe(true);
+    expect(document.documentElement.classList.contains('theme-dark')).toBe(
+      true
+    );
     // T7 别名收敛后：--bg-primary 由 tokens.css 静态派生自 --surface-paper；
     // applyTokens 只写独立 surface 侧（TokenRuntimeController 合流）
     // 2026-10-10 三档底色：运行时只写 outer / main / input 三个独立源
-    expect(document.documentElement.style.getPropertyValue('--surface-main')).toBe('#1e1e1e');
-    expect(document.documentElement.style.getPropertyValue('--surface-outer')).toBe('#1a1919');
-    expect(document.documentElement.style.getPropertyValue('--surface-input')).toBe('#232323');
-    expect(document.documentElement.style.getPropertyValue('--bg-tertiary')).toBe('');
+    expect(
+      document.documentElement.style.getPropertyValue('--surface-main')
+    ).toBe('#1e1e1e');
+    expect(
+      document.documentElement.style.getPropertyValue('--surface-outer')
+    ).toBe('#1a1919');
+    expect(
+      document.documentElement.style.getPropertyValue('--surface-input')
+    ).toBe('#232323');
+    expect(
+      document.documentElement.style.getPropertyValue('--bg-tertiary')
+    ).toBe('');
   });
 
   it('SSOT-04: dark-cozy 与 warm-gray 官方预设满足 WCAG 单真源契约', () => {
@@ -84,8 +102,8 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
 
     const warmGray = SKIN_PRESETS['warm-gray'];
     expect(warmGray).toBeDefined();
-    // 2026-10-11 定稿：同一暖色调 CMYK C0 M0.4 Y0.8 —— 主层 K2.8 #f8f7f6、外层 K5 #f2f1f0
-    expect(warmGray.bgPrimary).toBe('#f8f7f6');
+    // 2026-10-11 定稿：同一暖色调 CMYK C0 M0.4 Y0.8 —— 主层 #fbfaf9、外层 K5 #f2f1f0
+    expect(warmGray.bgPrimary).toBe('#fbfaf9');
     expect(warmGray.bgSecondary).toBe('#f2f1f0');
     expect(warmGray.bgTertiary).toBe('hsl(30 8.33% 92.29%)');
     expect(warmGray.textPrimary).toBe('#1a1a1a');
@@ -94,7 +112,9 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
   it('SSOT-05: getContrastGuardedText 算法在浅色与深色背景下的对比度判定', () => {
     // 浅色背景 -> 深色字
     expect(getContrastGuardedText('#ffffff', false)).toBe('hsl(35, 12%, 11%)');
-    expect(getContrastGuardedText('hsl(35 8% 94.5%)', false)).toBe('hsl(35, 12%, 11%)');
+    expect(getContrastGuardedText('hsl(35 8% 94.5%)', false)).toBe(
+      'hsl(35, 12%, 11%)'
+    );
 
     // 深色背景 -> 亮白字
     expect(getContrastGuardedText('#1b1b1b', true)).toBe('hsl(0, 0%, 94%)');
@@ -138,7 +158,7 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
 
   it('SSOT-07: Commit Ack 失败时清理 crish_theme 镜像（防陈旧镜像二次闪白）', async () => {
     vi.spyOn(preferencesClient, 'setPreference').mockRejectedValue(
-      new Error('sqlite offline'),
+      new Error('sqlite offline')
     );
 
     setTheme('dark');

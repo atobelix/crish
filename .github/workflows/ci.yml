@@ -98,6 +98,8 @@ jobs:
       # 接受集，并委派词表镜像 / 源码资产入库两条子门禁。与 check:desktop 同口径，
       # CI 单独接线确保 PR 级拦截。
       - run: npm run check:model-config-ssot
+      # 自动化 npm 许可证扫描门禁（P1-LIC-01）：扫描生产依赖，阻断强 Copyleft
+      - run: node scripts/check-npm-licenses.mjs
 
   vitest-fast:
     runs-on: ubuntu-latest
@@ -209,13 +211,17 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
 
   rust-check:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-      # 快层只做编译门禁（--locked 锁定 Cargo.lock，T10.1）；
-      # clippy 已归中层（ci-mid.yml，全量验证门禁）
+      # 跨平台编译门禁（Linux / Windows / macOS 原生契约验证）：
+      # --locked 锁定依赖版本
       - run: cargo check --workspace --locked
 
   rust-unit-fast:

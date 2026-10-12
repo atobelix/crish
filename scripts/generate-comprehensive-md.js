@@ -1,7 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const catalog = JSON.parse(fs.readFileSync('c:/Software/conex/docs/model-capability/surveys/comprehensive-aggregated-models.json', 'utf8'));
+const ROOT_DIR = path.resolve(__dirname, '..');
+
+const catalog = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'docs/model-capability/surveys/comprehensive-aggregated-models.json'), 'utf8'));
 
 let md = '# 全球主流大模型多源全景调研与核心资产库（2025.06–2026.09 全集）\n\n';
 md += '> **核查基准**：2026-09-03\n';
@@ -40,6 +42,6 @@ for (const [v, list] of vendorList) {
   md += '\n---\n\n';
 }
 
-const outPath = path.resolve('c:/Software/conex/docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md');
+const outPath = path.join(ROOT_DIR, 'docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md');
 fs.writeFileSync(outPath, md, 'utf8');
 console.log('Successfully updated survey markdown, total vendors:', vendorList.length);

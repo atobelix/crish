@@ -1,8 +1,8 @@
-/* ui/Dialog        PE-05 T05.1.3 
- *      tokens.css / z-index.css       hex/rgba 
+/* ui/Dialog        PE-05 T05.1.3
+ *      tokens.css / z-index.css       hex/rgba
  *        --transition-modal-enter / --duration-exit    */
 
-/*    +               
+/*    +
  *       overlayClassName   --dialog-z      SettingsPanel/Cheatsheet    */
 .overlayEnter,
 .overlayExit {
@@ -11,19 +11,24 @@
   z-index: var(--dialog-z, var(--z-modal));
 }
 
+/* 遮罩：全部弹窗共用一个轻压暗 token（--modal-scrim，浅/深各一份，见 tokens.css），不做模糊 */
 .backdrop {
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, var(--shadow-color) 22%, transparent);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-  transition: opacity 180ms ease-out;
+  background: var(--modal-scrim);
+  transition: background-color var(--duration-enter) ease-out;
 }
 
-:global(html[data-theme='dark']) .backdrop {
-  background: color-mix(in srgb, var(--shadow-color) 48%, transparent);
-  backdrop-filter: blur(20px) saturate(190%);
-  -webkit-backdrop-filter: blur(20px) saturate(190%);
+/* 弹窗叠弹窗（如设置弹窗里再开模型配置）：只保留最上层遮罩，下层遮罩让位，避免两层叠暗。
+ * 结构：portal 目标 > [data-focus-trap] > [data-dialog-overlay] > .backdrop，后开的弹窗是后面的兄弟。
+ * 上层退场中（data-dialog-state=exiting）即把遮罩交还下层，与上层淡出交叉过渡 */
+[data-focus-trap]:has(
+    ~ [data-focus-trap]
+      > [data-dialog-overlay]:not([data-dialog-state='exiting'])
+  )
+  > [data-dialog-overlay]
+  > .backdrop {
+  background: transparent;
 }
 
 .dialog {
@@ -59,30 +64,6 @@
 .dialogLg {
   --dialog-width: 640px; /* 组件尺寸语义：本地自包含（F2 收敛，原真源散落 SettingsRulesTab） */
   width: var(--dialog-width);
-}
-
-/*        SettingsPanel            
- *       /   /  /  /            */
-.dialogFullscreen {
-  top: 0;
-  left: 0;
-  transform: none;
-  width: 100vw;
-  height: 100vh;
-  max-width: 100vw;
-  max-height: 100vh;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  background: var(--bg-primary);
-  padding: 0;
-}
-
-.dialogFullscreen .dialogBody {
-  padding: 0;
-  overflow: visible;
-  width: 100%;
-  height: 100%;
 }
 
 /*         --transition-modal-enter/exit     */
@@ -183,8 +164,13 @@
 
 .dialogClose:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 90%,
+    var(--text-primary) 10%
+  );
 }
 
 .dialogDescription {
@@ -209,13 +195,4 @@
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   border-top: 1px solid var(--hairline);
-}
-
-/* 无透明度与低性能降级 */
-@media (prefers-reduced-transparency: reduce) {
-  .backdrop {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    background: color-mix(in srgb, var(--shadow-color) 65%, transparent);
-  }
 }

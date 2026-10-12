@@ -4,6 +4,10 @@
    ========================================================================== */
 
 .viewport {
+  /* 顶部锚点：落在 36px 顶栏带（窗口拖拽 spacer + 窗控 / 贴靠热区）正下方。
+   * 顶栏带内的命中由 WebView2 原生 app-region 与贴靠子 HWND 先行处理、与 CSS 层级无关；
+   * 通知若伸进这条带，叉号上半截会变成「拖窗口」。契约：toastHitTestContract.test.tsx */
+  --toast-viewport-top: calc(var(--header-height, 36px) + var(--space-2, 8px));
   position: fixed;
   z-index: var(--z-toast, 1000);
   width: 380px;
@@ -34,18 +38,18 @@
 }
 
 .viewportTopRight {
-  top: 16px;
+  top: var(--toast-viewport-top);
   right: 16px;
 }
 
 .viewportTopCenter {
-  top: 16px;
+  top: var(--toast-viewport-top);
   left: 50%;
   transform: translateX(-50%);
 }
 
 .viewportTopLeft {
-  top: 16px;
+  top: var(--toast-viewport-top);
   left: 16px;
 }
 
@@ -66,6 +70,10 @@
   z-index: calc(1000 - var(--toast-index, 0));
   width: 100%;
   pointer-events: auto;
+  /* 可交互悬浮层：显式退出原生拖拽区（app-region 不继承、只按自身声明参与命中），
+   * 任何锚点 / 宽度下都不会被顶栏 spacer 的 drag 吞掉点击 */
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
   box-sizing: border-box;
 
   /* 紧凑优雅的通知尺寸：锁定单行 44~48px，严格限制最大高度杜绝变长失控 */
@@ -91,10 +99,11 @@
   box-shadow: var(--notice-shadow-deck-1);
 
   /* 3D 堆叠阻尼升格物理动画 (320ms Apple Spring Damping) */
-  transition: transform 0.32s var(--ease-emphasized),
-              opacity 0.28s var(--ease-emphasized),
-              box-shadow 0.28s ease,
-              border-color 0.2s ease;
+  transition:
+    transform 0.32s var(--ease-emphasized),
+    opacity 0.28s var(--ease-emphasized),
+    box-shadow 0.28s ease,
+    border-color 0.2s ease;
   will-change: transform, opacity;
   touch-action: none;
 }
@@ -112,8 +121,13 @@
 
   /* 堆叠态 Transform */
   transform: translateX(var(--swipe-x))
-             translateY(calc(var(--swipe-y) - (var(--toast-index, 0) * var(--peek)) - (var(--shrink) * var(--height))))
-             scale(var(--scale));
+    translateY(
+      calc(
+        var(--swipe-y) - (var(--toast-index, 0) * var(--peek)) -
+          (var(--shrink) * var(--height))
+      )
+    )
+    scale(var(--scale));
 }
 
 /* 悬停扇形展开态 (Hover Expanded - Bottom) */
@@ -123,9 +137,11 @@
   min-height: 44px;
   max-height: 64px;
   transform: translateX(var(--swipe-x))
-             translateY(calc(-1 * var(--toast-offset-y, 0px) + var(--swipe-y)))
-             scale(1);
-  box-shadow: var(--shadow-lg, 0 10px 25px -5px color-mix(in srgb, var(--shadow-color) 10%, transparent));
+    translateY(calc(-1 * var(--toast-offset-y, 0px) + var(--swipe-y))) scale(1);
+  box-shadow: var(
+    --shadow-lg,
+    0 10px 25px -5px color-mix(in srgb, var(--shadow-color) 10%, transparent)
+  );
 }
 
 /* ==========================================================================
@@ -140,10 +156,16 @@
 
   /* 堆叠态 Transform */
   transform: translateX(var(--swipe-x))
-             translateY(calc(var(--swipe-y) + (var(--toast-index, 0) * var(--peek)) + (var(--shrink) * var(--height))))
-             scale(var(--scale));
-  box-shadow: 0 4px 16px -2px color-mix(in srgb, var(--shadow-color) 6%, transparent),
-              0 2px 6px -1px color-mix(in srgb, var(--shadow-color) 4%, transparent);
+    translateY(
+      calc(
+        var(--swipe-y) + (var(--toast-index, 0) * var(--peek)) +
+          (var(--shrink) * var(--height))
+      )
+    )
+    scale(var(--scale));
+  box-shadow:
+    0 4px 16px -2px color-mix(in srgb, var(--shadow-color) 6%, transparent),
+    0 2px 6px -1px color-mix(in srgb, var(--shadow-color) 4%, transparent);
 }
 
 /* 悬停扇形展开态 (Hover Expanded - Top) */
@@ -152,9 +174,11 @@
   min-height: 44px;
   max-height: 64px;
   transform: translateX(var(--swipe-x))
-             translateY(calc(var(--toast-offset-y, 0px) + var(--swipe-y)))
-             scale(1);
-  box-shadow: var(--shadow-lg, 0 10px 25px -5px color-mix(in srgb, var(--shadow-color) 10%, transparent));
+    translateY(calc(var(--toast-offset-y, 0px) + var(--swipe-y))) scale(1);
+  box-shadow: var(
+    --shadow-lg,
+    0 10px 25px -5px color-mix(in srgb, var(--shadow-color) 10%, transparent)
+  );
 }
 
 /* ==========================================================================
@@ -201,7 +225,9 @@
   opacity: 0;
   transform: translateX(calc(100% + 40px)) scale(0.96);
   pointer-events: none;
-  transition: transform 0.26s var(--ease-emphasized), opacity 0.22s ease-out;
+  transition:
+    transform 0.26s var(--ease-emphasized),
+    opacity 0.22s ease-out;
 }
 
 .viewport[data-expanded] .toastCard[data-state='swiping'],
@@ -214,9 +240,12 @@
 .viewport .toastCard[data-state='swiping-dismiss'],
 .toastCard[data-state='swiping-dismiss'] {
   opacity: 0;
-  transform: translateX(calc(var(--swipe-x) * 1.8 + 120px)) translateY(var(--swipe-y));
+  transform: translateX(calc(var(--swipe-x) * 1.8 + 120px))
+    translateY(var(--swipe-y));
   pointer-events: none;
-  transition: transform 0.26s var(--ease-emphasized), opacity 0.22s ease-out;
+  transition:
+    transform 0.26s var(--ease-emphasized),
+    opacity 0.22s ease-out;
 }
 
 /* ==========================================================================
@@ -379,7 +408,9 @@
   color: inherit;
   cursor: pointer;
   border-radius: var(--radius-md);
-  transition: opacity var(--transition-fast), background-color var(--transition-fast);
+  transition:
+    opacity var(--transition-fast),
+    background-color var(--transition-fast);
 }
 
 .undoButton:hover,
@@ -401,7 +432,9 @@
   background-color: color-mix(in srgb, currentColor 8%, transparent);
   color: inherit;
   white-space: nowrap;
-  transition: background-color var(--transition-fast), opacity var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    opacity var(--transition-fast);
 }
 
 .actionButton:hover,

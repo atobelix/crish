@@ -18,6 +18,7 @@ import { useConfirmGate } from '../../hooks/useConfirmGate';
 import {
   SmartExpandablePanel,
   type MenuItem,
+  type SmartPanelProps,
 } from '../ui/SmartExpandablePanel';
 import styles from './ProjectPickerMenu.module.css';
 import { AppIcon } from '../ui/icons/index';
@@ -39,6 +40,11 @@ export interface ProjectPickerMenuProps {
   children: React.ReactNode;
   onContentMouseEnter?: () => void;
   onContentMouseLeave?: () => void;
+  /** 以下透传 SmartExpandablePanel；未传沿用默认（居中、hover+click、可翻转） */
+  position?: SmartPanelProps['position'];
+  triggerMode?: SmartPanelProps['triggerMode'];
+  avoidCollisions?: boolean;
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
@@ -49,6 +55,10 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
   children,
   onContentMouseEnter,
   onContentMouseLeave,
+  position = { side: 'bottom', align: 'center', sideOffset: 6 },
+  triggerMode,
+  avoidCollisions,
+  onCloseAutoFocus,
 }) => {
   const [projectListVersion, setProjectListVersion] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -207,7 +217,10 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
         items={menuItems}
         enableSearch={true}
         searchPlaceholder="搜索项目"
-        position={{ side: 'bottom', align: 'center', sideOffset: 6 }}
+        position={position}
+        triggerMode={triggerMode}
+        avoidCollisions={avoidCollisions}
+        onCloseAutoFocus={onCloseAutoFocus}
         className={styles.pickerPanel}
         onMouseEnter={onContentMouseEnter}
         onMouseLeave={onContentMouseLeave}

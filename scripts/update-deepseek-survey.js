@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const surveyPath = path.resolve('c:/Software/conex/docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md');
+const surveyPath = path.resolve(__dirname, '../docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md');
 let content = fs.readFileSync(surveyPath, 'utf8');
 
 // 构造经 DeepSeek 官方平台 (api-docs.deepseek.com) 100% 核准的 DeepSeek 章节

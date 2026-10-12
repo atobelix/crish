@@ -23,7 +23,10 @@ import type { Settings } from '../api/clientApi';
 // （metadata: JsonValue、含 content?: string）字段不对齐。故经 `EngineAgentMessage`
 // 别名取 generated 版（与 shared-types/index.ts 的 alias 一致），本地仍用
 // `AgentMessage` 名以保持下游引用面稳定。
-import type { EngineAgentMessage as AgentMessage, MessageCacheState } from '@crish/shared-types';
+import type {
+  EngineAgentMessage as AgentMessage,
+  MessageCacheState,
+} from '@crish/shared-types';
 export type AppSettings = Settings;
 export type GroupState = {
   id: string;
@@ -31,22 +34,11 @@ export type GroupState = {
   activeCardId: string | null;
 };
 
+// prettier-ignore
 export type SettingsTabType =
-  | 'profile'
-  | 'appearance'
-  | 'personalize'
-  | 'models'
-  | 'usage'
-  | 'devices'
-  | 'schedule'
-  | 'rules'
-  | 'shortcuts'
-  | 'skills'
-  | 'mcp'
-  | 'plugins'
-  | 'browser'
-  | 'security'
-  | 'diagnostics';
+  | 'profile' | 'appearance' | 'personalize' | 'models' | 'usage'
+  | 'devices' | 'schedule' | 'rules' | 'shortcuts' | 'skills'
+  | 'mcp' | 'plugins' | 'browser' | 'security' | 'diagnostics' | 'about';
 
 /** 工作区单卡：id 为面板 key，title 为展示名 */
 export interface CardState {
@@ -730,7 +722,8 @@ export type SessionImportMeta = {
  */
 export interface SessionState {
   id: string;
-  title: string; titleSource?: 'auto-trivial' | 'auto' | 'user';
+  title: string;
+  titleSource?: 'auto-trivial' | 'auto' | 'user';
   /** 侧栏文件夹/项目归组键；缺省「常规会话」由创建路径写入 */
   folder: string;
   isPinned: boolean;

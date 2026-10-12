@@ -14,8 +14,8 @@ use crate::request::cache::{
     CacheMechanism,
 };
 use crate::request::messages::{
-    to_chat_messages_with_compat, validate_chat_tool_pairing, ChatMessage, ReasoningContentMode,
-    WireCompat,
+    to_chat_messages_with_compat, validate_chat_tool_pairing, ChatContent, ChatMessage,
+    ReasoningContentMode, WireCompat, WIRE_CONTINUATION_NOTE,
 };
 use crate::request::tools::{to_cache_aware_tool, to_chat_tool_choice, ToolChoice};
 
@@ -130,8 +130,8 @@ pub fn build_chat_completions_request_body(
 
     // W04 · 出站成对性 Fail-Closed 守门（详案 02 §3.4 轨二）：在 wire 消息
     // 映射完成后刚性拦截孤儿 tool_calls——严禁静默伪造 tool 结果垫片。
-    // Debug/CI panic（Fail-Fast 暴露内核断裂）；Release tracing::error! 后
-    // 拒绝组包（绝不产出带毒请求体）。会话循环侧应优先调用
+    // 过滤并丢弃孤儿 tool_calls，记录结构化 error 日志，杜绝带毒请求体出站，
+    // 同时避免 client 进程因 panic 崩溃。会话循环侧应优先调用
     // [validate_chat_tool_pairing] 走「补齐后单次重试」闭环。
     if let Err(err) = validate_chat_tool_pairing(&wire) {
         tracing::error!(
@@ -139,9 +139,24 @@ pub fn build_chat_completions_request_body(
             protocol = "openai_chat",
             error = %err,
             orphan_ids = ?err.orphan_ids(),
-            "build_chat 入口守门拦截：拒绝构造带毒请求体"
+            "build_chat 入口守门拦截：过滤带毒孤儿工具调用，安全 Fail-Closed"
         );
-        panic!("OpenAI 导线层入口守门拦截到孤儿工具调用（带毒请求体禁止出站）：{err:?}");
+        let orphan_set: std::collections::BTreeSet<&str> =
+            err.orphan_ids().iter().map(|s| s.as_str()).collect();
+        for msg in &mut wire {
+            if msg.role == "assistant" && !msg.tool_calls.is_empty() {
+                msg.tool_calls.retain(|call| {
+                    let call_id = call.get("id").and_then(Value::as_str).unwrap_or("");
+                    !orphan_set.contains(call_id)
+                });
+                if msg.tool_calls.is_empty()
+                    && (msg.content.is_none()
+                        || matches!(&msg.content, Some(ChatContent::Text(t)) if t.trim().is_empty()))
+                {
+                    msg.content = Some(ChatContent::Text(WIRE_CONTINUATION_NOTE.to_string()));
+                }
+            }
+        }
     }
 
     // 出站清洗保障（代理兼容模式 / Omit 模式）：
@@ -298,5 +313,63 @@ mod dialect_wiring_tests {
         let body_off =
             build_chat_completions_request_body(&opts_off, &RequestBuildContext::default());
         assert_eq!(body_off["enable_thinking"], false);
+    }
+
+    #[test]
+    fn test_build_chat_fail_closed_on_orphan_sanitization() {
+        use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
+        use std::sync::Arc;
+
+        let orphan_call = AgentMessage {
+            id: "a1".to_string(),
+            role: AgentMessageRole::Assistant,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            blocks: vec![AgentMessageBlock::ToolCall(ToolCallBlock {
+                id: "call_orphan".to_string(),
+                tool_name: "test_tool".to_string(),
+                input: json!({}),
+            })],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        };
+        let user_msg = AgentMessage {
+            id: "u1".to_string(),
+            role: AgentMessageRole::User,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            blocks: vec![AgentMessageBlock::Text {
+                text: "hello".to_string(),
+            }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        };
+        let messages = vec![Arc::new(user_msg), Arc::new(orphan_call)];
+        let context = RequestBuildContext {
+            messages: &messages,
+            system_prompt: None,
+            tools: Vec::new(),
+            wire_mode: conex_types::tool::SystemPromptWireMode::NativeSystemRole,
+        };
+        let body = build_chat_completions_request_body(&ChatCompletionsRequestOptions::default(), &context);
+        let msgs = body["messages"].as_array().expect("messages must be an array");
+        let mut found_assistant = false;
+        for msg in msgs {
+            if let Some(tool_calls) = msg.get("tool_calls").and_then(Value::as_array) {
+                assert!(
+                    tool_calls.is_empty(),
+                    "orphan tool calls must be sanitized out: {tool_calls:?}"
+                );
+            }
+            if msg.get("role").and_then(Value::as_str) == Some("assistant") {
+                found_assistant = true;
+                assert_eq!(
+                    msg.get("content").and_then(Value::as_str),
+                    Some(WIRE_CONTINUATION_NOTE),
+                    "assistant message with orphan tool calls dropped must contain non-empty WIRE_CONTINUATION_NOTE placeholder"
+                );
+            }
+        }
+        assert!(found_assistant, "assistant message must be present");
     }
 }

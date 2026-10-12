@@ -1,11 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 
+const ROOT_DIR = path.resolve(__dirname, '..');
+
 // 1. 读取基础原始数据
-const orModels = JSON.parse(fs.readFileSync('c:/Software/conex/docs/model-capability/surveys/openrouter-full-models.json', 'utf8')).data;
-const mcModels = JSON.parse(fs.readFileSync('c:/Software/conex/docs/model-capability/surveys/modelcompare-full-1636.json', 'utf8')).models;
-const arenaRows = JSON.parse(fs.readFileSync('c:/Software/conex/docs/model-capability/surveys/arena-full-693.json', 'utf8')).rows;
-const aaDatasets = JSON.parse(fs.readFileSync('c:/Software/conex/docs/model-capability/surveys/artificial-analysis-data.json', 'utf8')).datasets;
+const orModels = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'docs/model-capability/surveys/openrouter-full-models.json'), 'utf8')).data;
+const mcModels = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'docs/model-capability/surveys/modelcompare-full-1636.json'), 'utf8')).models;
+const arenaRows = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'docs/model-capability/surveys/arena-full-693.json'), 'utf8')).rows;
+const aaDatasets = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'docs/model-capability/surveys/artificial-analysis-data.json'), 'utf8')).datasets;
 
 // 2. 建立索引
 const aaScores = {};
@@ -505,6 +507,6 @@ for (const [vKey, vTitle] of Object.entries(extraVendors)) {
   md += '\n---\n\n';
 }
 
-const outPath = path.resolve('c:/Software/conex/docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md');
+const outPath = path.join(ROOT_DIR, 'docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md');
 fs.writeFileSync(outPath, md, 'utf8');
 console.log('Successfully built unified master survey! Total chars:', md.length);
