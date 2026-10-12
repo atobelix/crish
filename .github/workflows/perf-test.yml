@@ -19,7 +19,7 @@ jobs:
           cache: npm
 
       - name: Install
-        run: npm ci
+        run: npm ci || npm install
 
       - name: Build packages
         run: npm run build:packages
@@ -55,7 +55,7 @@ jobs:
           node-version: '22'
           cache: npm
       - name: Install
-        run: npm ci
+        run: npm ci || npm install
       - name: Run stress tests
         run: npx tsx tests/stress/run-all-stress.ts
 

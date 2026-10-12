@@ -46,7 +46,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
+      - run: npm ci || npm install
       # TS 压力轨（stress-runner：AI 流 / diff 加载 / 会话切换）
       - run: npm run stress
 
@@ -59,7 +59,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
+      - run: npm ci || npm install
       - run: npx playwright install --with-deps chromium
       # L2 mock-IPC e2e（根 config：tests/e2e，webServer 自动拉起 dev server）
       # G7 统一：走根脚本 npm run test:e2e（等价 npx playwright test tests/e2e）
