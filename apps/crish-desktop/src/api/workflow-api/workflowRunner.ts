@@ -268,6 +268,7 @@ export function workflowRunStatusLabel(status?: string): string {
   }
   if (s === 'failed' || s === 'error' || s === 'errored') return '失败';
   if (s === 'cancelled' || s === 'canceled') return '已取消';
+  if (s === 'interrupted') return '已中断';
   return status || '未知';
 }
 

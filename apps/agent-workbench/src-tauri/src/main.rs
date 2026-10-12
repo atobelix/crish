@@ -1016,13 +1016,24 @@ fn main() {
                 core_state.steering_queue(),
             );
             if let Some(reg) = core_state.scheduler_registry() {
-                workflow_state.set_registry(reg);
+                workflow_state.set_registry(Arc::clone(&reg));
+                let reg_restore = Arc::clone(&reg);
+                tauri::async_runtime::spawn(async move {
+                    reg_restore.restore().await;
+                    tracing::info!(target: "setup", "SchedulerRegistry 异步启动恢复完成");
+                });
             } else {
                 tracing::warn!(
                     target: "setup",
                     "SchedulerRegistry 装配降级（workflow 走命令层独立退化路径，Cron 不参与续 run 判定）"
                 );
             }
+
+            let orphan_reaper = workflow_state.backend_handle();
+            tauri::async_runtime::spawn(async move {
+                orphan_reaper.reap_orphan_running_runs();
+                tracing::info!(target: "setup", "历史孤儿运行记录自愈收割完成");
+            });
             // 维度五（05 详案 §2.4 路径 A）：create_workflow 工具通道生产
             // 转正——backend + AppHandle 注入引擎侧延迟绑定面（绑定前工具
             // 返回 common.unsupported；注册链路复用 create-workflow 同一

@@ -51,7 +51,7 @@ use orchestrator::PendingMessageQueue;
 use serde::{Deserialize, Serialize};
 
 use crate::core_error::CoreError;
-use crate::sched::{CronTaskInput, SchedulerRegistry};
+use crate::sched::{CronTaskInput, CronTaskStatus, CronTaskUpdatePatch, SchedulerRegistry};
 
 /// cron id 前缀（`cron-<seq>`，§4.4 冻结命名）
 const CRON_ID_PREFIX: &str = "cron-";
@@ -270,39 +270,76 @@ fn epoch_ms_to_iso(ms: u64) -> String {
 /// 前八字段与 §4.4 `CronTask` 冻结字段逐项对齐（camelCase），sched.rs
 /// 恢复扫描按同键同形解析；扩展字段为本命令面所需（workflow 名称 /
 /// 目录 / 运行时刻 / 调度原形）。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct StoredWorkflow {
     // ── §4.4 CronTask 冻结字段 ──
     pub cron_id: String,
     /// 5 字段 cron 表达式（manual 为空串）
+    #[serde(default)]
     pub expression: String,
     /// 每次触发的通知内容（= workflow 提示词）
+    #[serde(default)]
     pub prompt: String,
     /// None = 无限触发；到达即停止（当前命令面不消费，注册表触发路径消费）
+    #[serde(default)]
     pub max_iterations: Option<u64>,
     /// true = 独立常驻（拉起独立 run；当前命令面恒 false，AB 方案裁决后接线）
+    #[serde(default)]
     pub is_daemon: bool,
     /// 下次触发时刻（parse_cron 估算；真实调度与补发以注册表为准）
+    #[serde(default)]
     pub next_fire_at_ms: u64,
     /// 已触发次数（trigger-workflow 立即执行计入；委托激活时与
     /// CronTask.fired_count 存在窗口差——见模块头「委托边界」）
+    #[serde(default)]
     pub fired_count: u64,
-    /// 是否启用（false = 暂停；挂起语义由注册表 cancel 承载）
+    /// 生命周期状态（单一真理源）
+    #[serde(default = "default_cron_status")]
+    pub status: CronTaskStatus,
+    /// 是否启用（兼容字段；投影自 status == Active）
+    #[serde(default = "default_true")]
     pub enabled: bool,
     // ── workflow 扩展字段 ──
+    #[serde(default = "default_workflow_name")]
     pub name: String,
+    #[serde(default)]
     pub cwd: Option<String>,
+    #[serde(default)]
     pub mode: Option<String>,
+    #[serde(default = "default_manual_schedule")]
     pub schedule: WorkflowScheduleWire,
+    #[serde(default = "now_ms")]
     pub created_at_ms: u64,
+    #[serde(default = "now_ms")]
     pub updated_at_ms: u64,
+    #[serde(default)]
     pub last_run_at_ms: Option<u64>,
+    #[serde(default)]
+    pub target_session_id: Option<String>,
+    #[serde(default)]
+    pub execution_mode: Option<String>,
+}
+
+fn default_cron_status() -> CronTaskStatus {
+    CronTaskStatus::Active
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_workflow_name() -> String {
+    "未命名任务".to_string()
+}
+
+fn default_manual_schedule() -> WorkflowScheduleWire {
+    WorkflowScheduleWire::Manual
 }
 
 impl StoredWorkflow {
     /// 命令输出视图（camelCase wire 形状，对齐前端 WorkflowDefinition）
-    fn view(&self) -> WorkflowView {
+    pub(crate) fn view(&self) -> WorkflowView {
         WorkflowView {
             id: self.cron_id.clone(),
             name: self.name.clone(),
@@ -313,18 +350,20 @@ impl StoredWorkflow {
             schedule: self.schedule.clone(),
             created_at: epoch_ms_to_iso(self.created_at_ms),
             updated_at: epoch_ms_to_iso(self.updated_at_ms),
-            next_run_at: if self.next_fire_at_ms == 0 {
+            next_run_at: if self.next_fire_at_ms == 0 || !self.enabled {
                 None
             } else {
                 Some(epoch_ms_to_iso(self.next_fire_at_ms))
             },
             last_run_at: self.last_run_at_ms.map(epoch_ms_to_iso),
+            target_session_id: self.target_session_id.clone(),
+            execution_mode: self.execution_mode.clone(),
         }
     }
 }
 
 /// 命令输出：workflow 条目（对齐前端 WorkflowDefinition 类型面）
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkflowView {
     pub id: String,
@@ -338,6 +377,10 @@ pub(crate) struct WorkflowView {
     pub updated_at: String,
     pub next_run_at: Option<String>,
     pub last_run_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_mode: Option<String>,
 }
 
 /// 运行记录（`sched_runs` 键条目；触发时登记，事件面接线后替换真源）
@@ -369,32 +412,25 @@ fn default_trigger_kind() -> String {
     "cron".to_string()
 }
 
-/// 运行历史滚动淘汰策略（单工作流上限 20 条，全局上限 100 条；保护 running 在途任务）
-pub(crate) fn prune_runs(runs: Vec<WorkflowRunRecord>) -> Vec<WorkflowRunRecord> {
+/// 运行历史滚动淘汰策略（单工作流上限 20 条，全局上限 100 条；基于 started_at 降序保留最新记录，废除对 running 的盲目永久豁免）
+pub(crate) fn prune_runs(mut runs: Vec<WorkflowRunRecord>) -> Vec<WorkflowRunRecord> {
     const PER_WORKFLOW_LIMIT: usize = 20;
     const GLOBAL_LIMIT: usize = 100;
 
-    let (running, mut finished): (Vec<_>, Vec<_>) = runs
-        .into_iter()
-        .partition(|r| r.status == "running");
-
-    finished.sort_by_key(|r| std::cmp::Reverse(r.started_at_ms));
+    runs.sort_by_key(|r| std::cmp::Reverse(r.started_at_ms));
 
     let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-    let mut kept_finished = Vec::new();
+    let mut kept = Vec::new();
 
-    for run in finished {
+    for run in runs {
         let count = counts.entry(run.workflow_id.clone()).or_insert(0);
-        if *count < PER_WORKFLOW_LIMIT && kept_finished.len() < GLOBAL_LIMIT {
+        if *count < PER_WORKFLOW_LIMIT && kept.len() < GLOBAL_LIMIT {
             *count += 1;
-            kept_finished.push(run);
+            kept.push(run);
         }
     }
 
-    let mut result = running;
-    result.extend(kept_finished);
-    result.sort_by_key(|r| std::cmp::Reverse(r.started_at_ms));
-    result
+    kept
 }
 
 impl WorkflowRunRecord {
@@ -464,8 +500,7 @@ pub(crate) trait WorkflowStore: Send + Sync {
         self.save_runs(&pruned);
     }
 
-    /// 标记单条运行记录完成/终态
-    #[allow(dead_code)]
+    /// 标记单条运行记录完成/终态（Upsert 语义：未找到已有记录时原地创建终态记录，杜绝静默丢失）
     fn update_run_finish(
         &self,
         workflow_id: &str,
@@ -486,9 +521,47 @@ pub(crate) trait WorkflowStore: Send + Sync {
             run.duration_ms = Some(duration_ms);
             run.error = error;
             run.output_summary = output_summary;
+        } else {
+            let started_at_ms = finished_at_ms.saturating_sub(duration_ms);
+            runs.push(WorkflowRunRecord {
+                workflow_id: workflow_id.to_string(),
+                run_id: run_id.to_string(),
+                session_id: None,
+                trigger_kind: "cron".to_string(),
+                scheduled_for_ms: started_at_ms,
+                started_at_ms,
+                finished_at_ms: Some(finished_at_ms),
+                duration_ms: Some(duration_ms),
+                status: status.to_string(),
+                prompt: String::new(),
+                error,
+                output_summary,
+            });
+        }
+        let pruned = prune_runs(runs);
+        self.save_runs(&pruned);
+    }
+
+    /// 孤儿运行收割：扫描所有运行记录，将处于在途态的孤儿记录自动收割为 interrupted 并持久化
+    fn reap_orphan_running_runs(&self) -> usize {
+        let mut runs = self.load_runs();
+        let mut reaped_count = 0;
+        for run in &mut runs {
+            if matches!(
+                run.status.as_str(),
+                "running" | "queued" | "pending" | "in_progress" | "accepted" | "started"
+            ) {
+                run.status = "interrupted".to_string();
+                run.duration_ms = None;
+                run.error = Some("应用重启或异常终止，历史在途记录已被系统自愈收割".to_string());
+                reaped_count += 1;
+            }
+        }
+        if reaped_count > 0 {
             let pruned = prune_runs(runs);
             self.save_runs(&pruned);
         }
+        reaped_count
     }
 }
 
@@ -510,34 +583,95 @@ impl SessionMetaWorkflowStore {
     }
 }
 
+/// 对读取到的 StoredWorkflow 执行启发式自愈（Heuristic Rehydration）：
+/// 若 schedule 为 Manual 但 expression 为有效 5 字段 cron，自愈为 WorkflowScheduleWire::Cron 并返回 true 表示发生自愈
+fn heuristic_rehydrate_workflow(wf: &mut StoredWorkflow) -> bool {
+    if wf.schedule == WorkflowScheduleWire::Manual && !wf.expression.trim().is_empty() {
+        if let Ok(normalized) = validate_cron_expression(&wf.expression) {
+            tracing::info!(
+                target: "workflow",
+                cron_id = %wf.cron_id,
+                expression = %normalized,
+                "历史任务调度配置启发式自愈：Manual -> Cron"
+            );
+            wf.schedule = WorkflowScheduleWire::Cron {
+                expression: normalized,
+            };
+            return true;
+        }
+    }
+    false
+}
+
 impl WorkflowStore for SessionMetaWorkflowStore {
     fn load_all(&self) -> Vec<StoredWorkflow> {
-        let index: Vec<String> = self
+        let mut index: Vec<String> = self
             .db
             .get_session_meta(SESSION_META_INDEX_KEY)
             .ok()
             .flatten()
             .and_then(|json| serde_json::from_str(&json).ok())
             .unwrap_or_default();
-        index
-            .into_iter()
-            .filter_map(|cron_id| {
-                self.db
-                    .get_session_meta(&store_key(&cron_id))
-                    .ok()
-                    .flatten()
-                    .and_then(|json| serde_json::from_str(&json).ok())
-            })
-            .collect()
+
+        // 统一索引真源：兼容合并存量历史索引数据（sched_ids）
+        if let Some(legacy_raw) = self.db.get_session_meta("sched_ids").ok().flatten() {
+            if let Ok(legacy_ids) = serde_json::from_str::<Vec<String>>(&legacy_raw) {
+                let mut appended = false;
+                for id in legacy_ids {
+                    if !index.contains(&id) {
+                        index.push(id);
+                        appended = true;
+                    }
+                }
+                if appended {
+                    if let Ok(json) = serde_json::to_string(&index) {
+                        let _ = self.db.set_session_meta(SESSION_META_INDEX_KEY, &json);
+                    }
+                }
+            }
+        }
+
+        let mut results = Vec::new();
+        for cron_id in index {
+            if let Some(raw) = self.db.get_session_meta(&store_key(&cron_id)).ok().flatten() {
+                if let Ok(mut wf) = serde_json::from_str::<StoredWorkflow>(&raw) {
+                    if heuristic_rehydrate_workflow(&mut wf) {
+                        // 自愈后立即持久化回写，杜绝未来降级丢失
+                        self.save(&wf);
+                    }
+                    results.push(wf);
+                }
+            }
+        }
+        results
     }
 
     fn save(&self, workflow: &StoredWorkflow) {
-        if let Ok(json) = serde_json::to_string(workflow) {
-            let _ = self
-                .db
-                .set_session_meta(&store_key(&workflow.cron_id), &json);
+        let key = store_key(&workflow.cron_id);
+        // Safe Field Merge: 读取已有 session_meta JSON 进行安全增量合并，
+        // 保证调度字段与扩展业务字段双向互不冲刷覆盖
+        let mut base_val = self
+            .db
+            .get_session_meta(&key)
+            .ok()
+            .flatten()
+            .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+            .unwrap_or_else(|| serde_json::json!({}));
+
+        if let Ok(new_val) = serde_json::to_value(workflow) {
+            if let (Some(base_map), Some(new_map)) = (base_val.as_object_mut(), new_val.as_object()) {
+                for (k, v) in new_map {
+                    base_map.insert(k.clone(), v.clone());
+                }
+            } else {
+                base_val = new_val;
+            }
+            if let Ok(merged_json) = serde_json::to_string(&base_val) {
+                let _ = self.db.set_session_meta(&key, &merged_json);
+            }
         }
-        // 索引追加（已存在则不动，保持创建顺序稳定）
+
+        // 索引追加到唯一真源 sched_index（已存在则不动，保持创建顺序稳定）
         let mut index: Vec<String> = self
             .db
             .get_session_meta(SESSION_META_INDEX_KEY)
@@ -596,18 +730,50 @@ pub(crate) struct MemoryWorkflowStore {
 
 impl WorkflowStore for MemoryWorkflowStore {
     fn load_all(&self) -> Vec<StoredWorkflow> {
-        self.map
+        let mut list: Vec<StoredWorkflow> = self.map
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .iter()
             .map(|(_, w)| w.clone())
-            .collect()
+            .collect();
+        let mut rehydrated = Vec::new();
+        for wf in &mut list {
+            if heuristic_rehydrate_workflow(wf) {
+                rehydrated.push(wf.clone());
+            }
+        }
+        if !rehydrated.is_empty() {
+            let mut map = self.map.lock().unwrap_or_else(|e| e.into_inner());
+            for h in rehydrated {
+                if let Some((_, slot)) = map.iter_mut().find(|(id, _)| id == &h.cron_id) {
+                    *slot = h;
+                }
+            }
+        }
+        list
     }
 
     fn save(&self, workflow: &StoredWorkflow) {
         let mut map = self.map.lock().unwrap_or_else(|e| e.into_inner());
         match map.iter_mut().find(|(id, _)| id == &workflow.cron_id) {
-            Some((_, slot)) => *slot = workflow.clone(),
+            Some((_, slot)) => {
+                // 内存版 Safe Field Merge：以 JSON Value 合并模拟无损覆盖
+                if let (Ok(old_val), Ok(new_val)) = (
+                    serde_json::to_value(&*slot),
+                    serde_json::to_value(workflow),
+                ) {
+                    if let (Some(mut base_map), Some(new_map)) = (old_val.as_object().cloned(), new_val.as_object()) {
+                        for (k, v) in new_map {
+                            base_map.insert(k.clone(), v.clone());
+                        }
+                        if let Ok(merged) = serde_json::from_value::<StoredWorkflow>(serde_json::Value::Object(base_map)) {
+                            *slot = merged;
+                            return;
+                        }
+                    }
+                }
+                *slot = workflow.clone();
+            }
             None => map.push((workflow.cron_id.clone(), workflow.clone())),
         }
     }
@@ -864,7 +1030,7 @@ pub(crate) struct WorkflowBackend {
 }
 
 impl WorkflowBackend {
-    /// 新建后端（适配器由装配方注入；seq 初始为数据内最大序号 +1）
+    /// 新建后端（适配器由装配方注入；seq 初始为数据内最大序号 +1；启动即收割在途孤儿记录）
     pub(crate) fn new(store: Arc<dyn WorkflowStore>, sink: Arc<dyn SteeringSink>) -> Self {
         let seq = store
             .load_all()
@@ -873,12 +1039,19 @@ impl WorkflowBackend {
             .max()
             .map(|n| n + 1)
             .unwrap_or(0);
-        Self {
+        let backend = Self {
             store,
             sink,
             registry: Mutex::new(None),
             seq: AtomicU64::new(seq),
-        }
+        };
+        backend.reap_orphan_running_runs();
+        backend
+    }
+
+    /// 孤儿运行收割（主进程冷启动与测试点直接代理）
+    pub(crate) fn reap_orphan_running_runs(&self) -> usize {
+        self.store.reap_orphan_running_runs()
     }
 
     /// 注入 SchedulerRegistry 委托（装配收口唯一入口；重复注入覆盖）。
@@ -929,6 +1102,11 @@ impl WorkflowBackend {
                     is_daemon: false,
                 };
                 let cron_id = registry.register(input).await.map_err(map_scheduler_err)?;
+                if !enabled {
+                    if let Err(e) = registry.pause_task(&cron_id).await {
+                        tracing::warn!(target: "workflow", %cron_id, "创建未启用任务时初始暂停失败: {e:?}");
+                    }
+                }
                 // manual（无表达式）不经注册表：命令层独立 id 分配
                 let now = now_ms();
                 let next_fire_at_ms = next_fire_after_ms(&expression, now).unwrap_or(0);
@@ -940,11 +1118,18 @@ impl WorkflowBackend {
                     is_daemon: false,
                     next_fire_at_ms,
                     fired_count: 0,
+                    status: if enabled {
+                        CronTaskStatus::Active
+                    } else {
+                        CronTaskStatus::Paused
+                    },
                     enabled,
                     name,
                     cwd: cwd.map(|c| c.trim().to_string()).filter(|c| !c.is_empty()),
                     mode: mode.map(|m| m.trim().to_string()).filter(|m| !m.is_empty()),
                     schedule,
+                    target_session_id: None,
+                    execution_mode: None,
                     created_at_ms: now,
                     updated_at_ms: now,
                     last_run_at_ms: None,
@@ -984,11 +1169,18 @@ impl WorkflowBackend {
             is_daemon: false,
             next_fire_at_ms,
             fired_count: 0,
+            status: if enabled {
+                CronTaskStatus::Active
+            } else {
+                CronTaskStatus::Paused
+            },
             enabled,
             name,
             cwd: cwd.map(|c| c.trim().to_string()).filter(|c| !c.is_empty()),
             mode: mode.map(|m| m.trim().to_string()).filter(|m| !m.is_empty()),
             schedule,
+            target_session_id: None,
+            execution_mode: None,
             created_at_ms: now,
             updated_at_ms: now,
             last_run_at_ms: None,
@@ -1004,18 +1196,19 @@ impl WorkflowBackend {
     }
 
     /// 列出全部 workflow（按创建时间升序，稳定展示；委托激活时以
-    /// 注册表 snapshot 为准刷新运行态字段）
+    /// 注册表 snapshot 为准刷新运行态字段，彻底杜绝冲刷覆盖 DB 启用状态）
     pub(crate) fn list(&self) -> Vec<WorkflowView> {
         let mut all = self.store.load_all();
-        // 委托激活：snapshot（CronTask）刷新 fired_count / enabled /
-        // next_fire_at（注册表为调度真源）
+        // 委托激活：snapshot（CronTask）刷新 fired_count / next_fire_at（注册表为调度真源）
+        // 彻底删除 workflow.enabled = task.enabled 脏冲刷！仅在 workflow.enabled 为 true 时同步 task.next_fire_at_ms
         if let Some(registry) = self.registry() {
             let snapshot = registry.snapshot();
             for workflow in &mut all {
                 if let Some(task) = snapshot.iter().find(|t| t.cron_id == workflow.cron_id) {
                     workflow.fired_count = task.fired_count;
-                    workflow.enabled = task.enabled;
-                    workflow.next_fire_at_ms = task.next_fire_at_ms;
+                    if workflow.enabled {
+                        workflow.next_fire_at_ms = task.next_fire_at_ms;
+                    }
                 }
             }
         }
@@ -1024,8 +1217,7 @@ impl WorkflowBackend {
     }
 
     /// 更新 workflow（部分字段补丁；调度变化 → 重算表达式与 next_fire；
-    /// 委托激活时表达式变化 → cancel + 重新注册，cron_id 可能变更
-    /// （注册表无「固定 id 更新」API，偏差登记见模块头））
+    /// 原地热更新保持 cron_id 与 created_at_ms 恒定不变；启停联动底座 pause/resume）
     pub(crate) async fn update(
         &self,
         cron_id: &str,
@@ -1042,13 +1234,17 @@ impl WorkflowBackend {
             }
             workflow.name = name;
         }
-        if let Some(prompt) = patch.prompt {
+        let prompt_changed = if let Some(prompt) = patch.prompt {
             let prompt = prompt.trim().to_string();
             if prompt.is_empty() {
                 return Err(CoreError::InvalidInput("提示词不能为空".to_string()));
             }
+            let changed = prompt != workflow.prompt;
             workflow.prompt = prompt;
-        }
+            changed
+        } else {
+            false
+        };
         if let Some(cwd) = patch.cwd {
             let cwd = cwd.trim().to_string();
             workflow.cwd = if cwd.is_empty() { None } else { Some(cwd) };
@@ -1057,9 +1253,26 @@ impl WorkflowBackend {
             let mode = mode.trim().to_string();
             workflow.mode = if mode.is_empty() { None } else { Some(mode) };
         }
-        if let Some(enabled) = patch.enabled {
-            workflow.enabled = enabled;
+        if let Some(target_sid) = patch.target_session_id.as_ref() {
+            let target_sid = target_sid.trim().to_string();
+            workflow.target_session_id = if target_sid.is_empty() {
+                None
+            } else {
+                Some(target_sid)
+            };
         }
+        if let Some(exec_mode) = patch.execution_mode.as_ref() {
+            let exec_mode = exec_mode.trim().to_string();
+            workflow.execution_mode = if exec_mode.is_empty() {
+                None
+            } else {
+                Some(exec_mode)
+            };
+        }
+
+        let enabled_changed = patch.enabled.is_some() && patch.enabled != Some(workflow.enabled);
+        let target_enabled = patch.enabled.unwrap_or(workflow.enabled);
+
         let schedule_changed = patch.schedule.is_some();
         if let Some(schedule) = patch.schedule {
             let expression = schedule_to_expression(&schedule).unwrap_or_default();
@@ -1079,28 +1292,62 @@ impl WorkflowBackend {
                 })?
             };
         }
-        workflow.updated_at_ms = now_ms();
-        // 委托激活 + 表达式变化：取消旧注册 → 重新注册（真实调度切换；
-        // id 可能变更，返回视图以新 id 为准）
+
+        // 委托注册表热更新与启停联动（保持 cron_id 与 created_at_ms 恒定不变）
         if let Some(registry) = self.registry() {
-            let old_id = workflow.cron_id.clone();
-            if schedule_changed && !workflow.expression.is_empty() {
-                let _ = registry.cancel(&old_id).await;
-                let input = CronTaskInput {
-                    expression: workflow.expression.clone(),
-                    prompt: workflow.prompt.clone(),
-                    max_iterations: workflow.max_iterations,
-                    is_daemon: workflow.is_daemon,
-                };
-                let new_id = registry.register(input).await.map_err(map_scheduler_err)?;
-                let now = now_ms();
-                // 元数据迁移到新 id（旧键残留孤儿，见 store 注记）
-                self.store.remove(&old_id);
-                workflow.cron_id = new_id;
-                workflow.created_at_ms = now;
-                workflow.updated_at_ms = now;
+            let in_registry = registry.snapshot().iter().any(|t| t.cron_id == cron_id);
+            if in_registry {
+                // 1. 若要暂停且发生状态变化，先调用 pause_task
+                if enabled_changed && !target_enabled {
+                    registry.pause_task(cron_id).await?;
+                }
+
+                // 2. 调度表达式或提示词等原地热更新
+                if (schedule_changed || prompt_changed || patch.target_session_id.is_some())
+                    && !workflow.expression.is_empty()
+                {
+                    let task_patch = CronTaskUpdatePatch {
+                        expression: if schedule_changed {
+                            Some(workflow.expression.clone())
+                        } else {
+                            None
+                        },
+                        prompt: if prompt_changed {
+                            Some(workflow.prompt.clone())
+                        } else {
+                            None
+                        },
+                        max_iterations: None,
+                        is_daemon: None,
+                        target_session_id: patch.target_session_id.clone().map(Some),
+                    };
+                    registry.update_task(cron_id, task_patch).await?;
+                } else if schedule_changed && workflow.expression.is_empty() {
+                    // 转为 manual：从注册表中取消调度协程
+                    let _ = registry.cancel(cron_id).await;
+                }
+
+                // 3. 若要启用且发生状态变化，执行恢复
+                if enabled_changed && target_enabled {
+                    registry.resume_task(cron_id).await?;
+                }
+
+                // 同步注册表运行态中的 next_fire_at_ms
+                if let Some(task) = registry.snapshot().iter().find(|t| t.cron_id == cron_id) {
+                    if target_enabled {
+                        workflow.next_fire_at_ms = task.next_fire_at_ms;
+                    }
+                }
             }
         }
+
+        workflow.enabled = target_enabled;
+        workflow.status = if target_enabled {
+            CronTaskStatus::Active
+        } else {
+            CronTaskStatus::Paused
+        };
+        workflow.updated_at_ms = now_ms();
         self.store.save(&workflow);
         Ok(workflow.view())
     }
@@ -1182,12 +1429,13 @@ impl WorkflowBackend {
         })
     }
 
-    /// 运行历史（可按 workflowId 过滤；按开始时间倒序；支持上限数量限制）
+    /// 运行历史（可按 workflowId 过滤；按开始时间倒序；支持上限数量限制；每次扫描先收割在途孤儿）
     pub(crate) fn list_runs(
         &self,
         workflow_id: Option<&str>,
         limit: Option<usize>,
     ) -> Vec<WorkflowRunView> {
+        self.reap_orphan_running_runs();
         let mut runs = self.store.load_runs();
         if let Some(id) = workflow_id {
             runs.retain(|r| r.workflow_id == id);
@@ -1207,6 +1455,8 @@ pub(crate) struct WorkflowPatch {
     pub cwd: Option<String>,
     pub mode: Option<String>,
     pub enabled: Option<bool>,
+    pub target_session_id: Option<String>,
+    pub execution_mode: Option<String>,
 }
 
 /// 立即触发结果（runId / sessionId 由引擎触发路径产出，当前为空）
@@ -1320,6 +1570,8 @@ pub(crate) async fn update_workflow(
         cwd,
         mode,
         enabled,
+        target_session_id: None,
+        execution_mode: None,
     };
     let backend = Arc::clone(&state.inner().backend);
     let workflow = backend.update(&workflow_id, patch).await?;
@@ -1974,5 +2226,380 @@ mod tests {
             .await
             .expect("创建应成功");
         assert_eq!(second.id, "cron-1", "重启后 seq 不得撞号");
+    }
+
+    // ── Wave 1 存储无损合并与孤儿运行收割实施专项测试 ─────────────
+
+    /// 1. ID 恒定铁律：委托模式下修改调度表达式与提示词，cron_id 与 created_at 严格不变
+    #[tokio::test]
+    async fn update_workflow_preserves_id_and_invariance() {
+        use crate::sched::{MemorySchedStore, SchedEventSink, SchedStore};
+
+        let pending: Arc<dyn crate::sched::PendingSink> = Arc::new(SchedProbe::default());
+        let events: Arc<dyn crate::sched::EventSink> = Arc::new(SchedEventSink::new());
+        let sched_store: Arc<dyn SchedStore> = MemorySchedStore::shared();
+        let registry = Arc::new(SchedulerRegistry::new(pending, events, sched_store, None));
+
+        let sink = Arc::new(ProbeSink::default());
+        let backend = Arc::new(WorkflowBackend::new(
+            Arc::new(MemoryWorkflowStore::default()),
+            Arc::clone(&sink) as Arc<dyn SteeringSink>,
+        ));
+        backend.set_registry(Arc::clone(&registry));
+
+        let created = backend
+            .create(
+                "恒定任务".to_string(),
+                "初始提示词".to_string(),
+                daily_schedule("08:00"),
+                None,
+                None,
+                true,
+            )
+            .await
+            .expect("创建应成功");
+
+        let original_id = created.id.clone();
+        let original_created_at = created.created_at.clone();
+
+        // 更新调度表达式与提示词
+        let updated = backend
+            .update(
+                &original_id,
+                WorkflowPatch {
+                    prompt: Some("热更新提示词".to_string()),
+                    schedule: Some(daily_schedule("18:30")),
+                    ..WorkflowPatch::default()
+                },
+            )
+            .await
+            .expect("更新应成功");
+
+        // 核心断言：ID 与创建时间绝对恒定
+        assert_eq!(updated.id, original_id, "cron_id 必须绝对恒定，严禁因更新表达式重分 ID");
+        assert_eq!(
+            updated.created_at, original_created_at,
+            "created_at 必须绝对恒定，严禁被重置"
+        );
+        assert_eq!(updated.prompt, "热更新提示词");
+
+        // 注册表快照检验：注册表中也是同一个 ID，且表达式已热更新
+        let snapshot = registry.snapshot();
+        assert_eq!(snapshot.len(), 1);
+        assert_eq!(snapshot[0].cron_id, original_id);
+        assert_eq!(snapshot[0].expression, "30 18 * * *");
+        assert_eq!(snapshot[0].prompt, "热更新提示词");
+    }
+
+    /// 2. 启停联动：更新 enabled 联动触发底座 pause_task / resume_task，且 list() 真实回显
+    #[tokio::test]
+    async fn update_workflow_pause_resume_linkage() {
+        use crate::sched::{MemorySchedStore, SchedEventSink, SchedStore};
+
+        let pending: Arc<dyn crate::sched::PendingSink> = Arc::new(SchedProbe::default());
+        let events: Arc<dyn crate::sched::EventSink> = Arc::new(SchedEventSink::new());
+        let sched_store: Arc<dyn SchedStore> = MemorySchedStore::shared();
+        let registry = Arc::new(SchedulerRegistry::new(pending, events, sched_store, None));
+
+        let sink = Arc::new(ProbeSink::default());
+        let backend = Arc::new(WorkflowBackend::new(
+            Arc::new(MemoryWorkflowStore::default()),
+            Arc::clone(&sink) as Arc<dyn SteeringSink>,
+        ));
+        backend.set_registry(Arc::clone(&registry));
+
+        let created = backend
+            .create(
+                "联动任务".to_string(),
+                "提示词".to_string(),
+                daily_schedule("09:00"),
+                None,
+                None,
+                true,
+            )
+            .await
+            .expect("创建应成功");
+
+        assert!(registry.snapshot()[0].enabled, "注册后初始为 active");
+
+        // 暂停任务
+        let paused = backend
+            .update(
+                &created.id,
+                WorkflowPatch {
+                    enabled: Some(false),
+                    ..WorkflowPatch::default()
+                },
+            )
+            .await
+            .expect("暂停应成功");
+
+        assert!(!paused.enabled);
+        assert!(paused.next_run_at.is_none(), "暂停态 next_run_at 必须为 None");
+        assert!(!registry.snapshot()[0].enabled, "注册表中任务必须同步置为 paused");
+
+        // 恢复任务
+        let resumed = backend
+            .update(
+                &created.id,
+                WorkflowPatch {
+                    enabled: Some(true),
+                    ..WorkflowPatch::default()
+                },
+            )
+            .await
+            .expect("恢复应成功");
+
+        assert!(resumed.enabled);
+        assert!(resumed.next_run_at.is_some(), "恢复后应有 next_run_at");
+        assert!(registry.snapshot()[0].enabled, "注册表中任务必须同步置为 active");
+    }
+
+    /// 3. Safe Field Merge 治理：save 不会冲刷业务或底座自定义 JSON 字段，实现双向安全无损
+    #[test]
+    fn safe_field_merge_preserves_business_and_scheduling_fields() {
+        let db = LocalDb::open_in_memory().expect("内存库应打开成功");
+        let store = SessionMetaWorkflowStore::new(db.clone());
+
+        // 预置存量 JSON，包含上层业务私有扩展字段与底座扩展字段
+        let raw_json = serde_json::json!({
+            "cronId": "cron-42",
+            "expression": "0 10 * * *",
+            "prompt": "原始提示词",
+            "enabled": true,
+            "status": "Active",
+            "name": "业务工作流",
+            "customBusinessField": "important_value",
+            "extraMeta": { "nested": 123 },
+            "createdAtMs": 1000u64,
+            "updatedAtMs": 1000u64
+        });
+        db.set_session_meta("sched_cron-42", &raw_json.to_string())
+            .expect("预置元数据应成功");
+        db.set_session_meta(
+            SESSION_META_INDEX_KEY,
+            &serde_json::to_string(&vec!["cron-42"]).unwrap(),
+        )
+        .expect("预置索引应成功");
+
+        // 从 store 加载
+        let mut loaded = store.load_all();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].cron_id, "cron-42");
+
+        // 修改某字段后调用 store.save
+        loaded[0].prompt = "修改后的提示词".to_string();
+        store.save(&loaded[0]);
+
+        // 直接读取底座 JSON 校验：业务扩展字段未被冲刷丢失
+        let saved_json_str = db
+            .get_session_meta("sched_cron-42")
+            .expect("读取")
+            .expect("存在");
+        let saved_val: serde_json::Value = serde_json::from_str(&saved_json_str).unwrap();
+
+        assert_eq!(saved_val["prompt"], "修改后的提示词");
+        assert_eq!(saved_val["customBusinessField"], "important_value");
+        assert_eq!(saved_val["extraMeta"]["nested"], 123);
+    }
+
+    /// 4. 启发式自愈：Manual 调度但有合法 cron 表达式的历史脏数据，在 load_all 时自动自愈为 Cron
+    #[test]
+    fn heuristic_rehydration_restores_manual_with_valid_expression() {
+        let db = LocalDb::open_in_memory().expect("内存库应打开成功");
+        let store = SessionMetaWorkflowStore::new(db.clone());
+
+        // 预置存量脏数据：schedule 为 manual，但 expression 为有效 5 字段表达式
+        let legacy_json = serde_json::json!({
+            "cronId": "cron-legacy-1",
+            "expression": "*/15 * * * *",
+            "prompt": "历史脏任务",
+            "enabled": true,
+            "name": "自愈测试",
+            "schedule": { "type": "manual" },
+            "createdAtMs": 2000u64,
+            "updatedAtMs": 2000u64
+        });
+        db.set_session_meta("sched_cron-legacy-1", &legacy_json.to_string())
+            .unwrap();
+        // 且索引位于老键 sched_ids 中，测试索引合并
+        db.set_session_meta(
+            "sched_ids",
+            &serde_json::to_string(&vec!["cron-legacy-1"]).unwrap(),
+        )
+        .unwrap();
+
+        let all = store.load_all();
+        assert_eq!(all.len(), 1);
+        let wf = &all[0];
+        // 断言自愈成功
+        assert_eq!(
+            wf.schedule,
+            WorkflowScheduleWire::Cron {
+                expression: "*/15 * * * *".to_string()
+            },
+            "启发式自愈应将 Manual + 有效表达式恢复为 WorkflowScheduleWire::Cron"
+        );
+
+        // 断言已回写持久化库，并且新索引 sched_index 已写入
+        let reloaded_index: Vec<String> = serde_json::from_str(
+            &db.get_session_meta(SESSION_META_INDEX_KEY)
+                .unwrap()
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(reloaded_index.contains(&"cron-legacy-1".to_string()));
+    }
+
+    /// 5. 孤儿运行收割与 update_run_finish Upsert 语义验证
+    #[test]
+    fn orphan_running_runs_reaped_and_update_run_finish_upsert() {
+        let store = MemoryWorkflowStore::default();
+
+        // 插入各种在途状态记录与一条已完成记录
+        let statuses = [
+            ("r1", "running"),
+            ("r2", "queued"),
+            ("r3", "pending"),
+            ("r4", "in_progress"),
+            ("r5", "accepted"),
+            ("r6", "started"),
+            ("r7", "completed"),
+        ];
+        for (rid, st) in statuses {
+            store.append_or_update_run(WorkflowRunRecord {
+                workflow_id: "wf-1".to_string(),
+                run_id: rid.to_string(),
+                session_id: None,
+                trigger_kind: "cron".to_string(),
+                scheduled_for_ms: 1000,
+                started_at_ms: 1000,
+                finished_at_ms: None,
+                duration_ms: Some(999),
+                status: st.to_string(),
+                prompt: "测试".to_string(),
+                error: None,
+                output_summary: None,
+            });
+        }
+
+        // 执行收割
+        let reaped = store.reap_orphan_running_runs();
+        assert_eq!(reaped, 6, "6 条在途记录应全部被收割");
+
+        let runs = store.load_runs();
+        for run in &runs {
+            if run.run_id == "r7" {
+                assert_eq!(run.status, "completed");
+            } else {
+                assert_eq!(run.status, "interrupted");
+                assert_eq!(run.duration_ms, None);
+                assert!(run.error.as_deref().unwrap_or("").contains("自愈收割"));
+            }
+        }
+
+        // 验证 update_run_finish Upsert：更新已有记录
+        store.update_run_finish(
+            "wf-1",
+            "r1",
+            "success",
+            2000,
+            1000,
+            None,
+            Some("完成摘要".to_string()),
+        );
+        let updated_r1 = store.load_runs().into_iter().find(|r| r.run_id == "r1").unwrap();
+        assert_eq!(updated_r1.status, "success");
+        assert_eq!(updated_r1.duration_ms, Some(1000));
+        assert_eq!(updated_r1.output_summary.as_deref(), Some("完成摘要"));
+
+        // 验证 update_run_finish Upsert：若记录不存在，原地创建终态记录
+        store.update_run_finish(
+            "wf-1",
+            "r-brand-new",
+            "failed",
+            3000,
+            500,
+            Some("外部超时".to_string()),
+            None,
+        );
+        let created_new = store.load_runs().into_iter().find(|r| r.run_id == "r-brand-new").unwrap();
+        assert_eq!(created_new.status, "failed");
+        assert_eq!(created_new.started_at_ms, 2500);
+        assert_eq!(created_new.finished_at_ms, Some(3000));
+        assert_eq!(created_new.error.as_deref(), Some("外部超时"));
+    }
+
+    /// 6. list() 杜绝冲刷覆盖 DB 启用状态
+    #[tokio::test]
+    async fn list_does_not_overwrite_db_enabled_state() {
+        use crate::sched::{MemorySchedStore, SchedEventSink, SchedStore};
+
+        let pending: Arc<dyn crate::sched::PendingSink> = Arc::new(SchedProbe::default());
+        let events: Arc<dyn crate::sched::EventSink> = Arc::new(SchedEventSink::new());
+        let sched_store: Arc<dyn SchedStore> = MemorySchedStore::shared();
+        let registry = Arc::new(SchedulerRegistry::new(pending, events, sched_store, None));
+
+        let sink = Arc::new(ProbeSink::default());
+        let store = Arc::new(MemoryWorkflowStore::default());
+        let backend = Arc::new(WorkflowBackend::new(
+            Arc::clone(&store) as Arc<dyn WorkflowStore>,
+            Arc::clone(&sink) as Arc<dyn SteeringSink>,
+        ));
+        backend.set_registry(Arc::clone(&registry));
+
+        let created = backend
+            .create(
+                "禁用任务".to_string(),
+                "提示词".to_string(),
+                daily_schedule("10:00"),
+                None,
+                None,
+                false,
+            )
+            .await
+            .expect("创建应成功");
+
+        assert!(!created.enabled);
+
+        // 调用 list()，断言其 enabled 依然为 false，且 next_run_at 为 None
+        let list = backend.list();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id, created.id);
+        assert!(!list[0].enabled, "list() 严禁覆盖库中的禁用状态");
+        assert!(list[0].next_run_at.is_none());
+    }
+
+    /// 7. prune_runs 针对所有运行记录限制单任务与全局容量（不豁免 running）
+    #[test]
+    fn prune_runs_limits_all_runs() {
+        let mut runs = Vec::new();
+        // 单工作流插入 30 条 running 状态的记录
+        for i in 0..30 {
+            runs.push(WorkflowRunRecord {
+                workflow_id: "wf-prune".to_string(),
+                run_id: format!("run-{i}"),
+                session_id: None,
+                trigger_kind: "cron".to_string(),
+                scheduled_for_ms: i * 100,
+                started_at_ms: i * 100,
+                finished_at_ms: None,
+                duration_ms: None,
+                status: "running".to_string(),
+                prompt: "提示".to_string(),
+                error: None,
+                output_summary: None,
+            });
+        }
+
+        let pruned = prune_runs(runs);
+        assert_eq!(
+            pruned.len(),
+            20,
+            "单工作流上限为 20，即使全部为 running 也必须滚动淘汰最老记录"
+        );
+        // 保留的是 started_at_ms 最大的最新 20 条（10..30）
+        let min_started = pruned.iter().map(|r| r.started_at_ms).min().unwrap();
+        assert_eq!(min_started, 1000);
     }
 }

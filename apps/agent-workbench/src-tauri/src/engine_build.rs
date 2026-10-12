@@ -898,19 +898,8 @@ pub(crate) fn assemble_scheduler_registry(
         sched_store,
         None,
     ));
-    // 启动恢复：扫描已持久化声明重建 cron sleep（与 TimerRegistry::restore
-    // 同模式；try_current 守卫：纯同步构造上下文跳过，不 panic）
-    if let Ok(runtime) = tokio::runtime::Handle::try_current() {
-        let registry = Arc::clone(&registry);
-        runtime.spawn(async move {
-            registry.restore().await;
-        });
-    } else {
-        tracing::debug!(
-            target: "engine",
-            "SchedulerRegistry 启动恢复跳过：当前上下文无 tokio runtime"
-        );
-    }
+    // 注：启动恢复（restore）统一移至 main.rs 异步生命周期装配点（CRIT-03），
+    // 确保与 workflow_state 与真实执行器装配完成后可靠触发，不在本同步函数内尝试调用。
     Some(registry)
 }
 // ── P5 S5 / T-40：缓存测量引擎侧装配 ──────────────────────────────
