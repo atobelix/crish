@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLayoutStore } from '../../store/storeAccess';
 import { onUiEvent } from '../../api/uiEvents';
+import { onScopedUiEvent } from '../../hooks/useLeafUiEvent';
+import { useLeafScope } from '../../contexts/LeafScopeContext';
 
 type ChatMainSurface = 'chat' | 'scheduled';
 
@@ -27,6 +29,12 @@ export interface UseChatProjectPickerResult {
 export function useChatProjectPicker({
   activeSessionId,
 }: UseChatProjectPickerOptions): UseChatProjectPickerResult {
+  const scope = useLeafScope();
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
+  const activeSessionIdRef = useRef(activeSessionId);
+  activeSessionIdRef.current = activeSessionId;
+
   const [showProjectPicker, setShowProjectPicker] = useState(false);
   const mainSurface: ChatMainSurface =
     useLayoutStore((s) => s.chatMainSurface) ?? 'chat';
@@ -36,34 +44,60 @@ export function useChatProjectPicker({
   const [showMsgFilter, setShowMsgFilter] = useState(false);
   const msgFilterInputRef = useRef<HTMLInputElement>(null);
 
-  // UI 事件监听（project-changed/open-project-picker/open-scheduled/
-  // open-chat/toggle-msg-filter/focus-composer）
+  // UI 事件监听（定址化隔离：快捷键/菜单仅作用于所属/激活分屏）
   useEffect(() => {
+    const getTarget = () => ({
+      sessionId: activeSessionIdRef.current,
+      leafId: scopeRef.current.leafId,
+      isActive: scopeRef.current.inLeafScope
+        ? scopeRef.current.isActive
+        : undefined,
+    });
+
     const offs = [
       onUiEvent('project-changed', () => setProjectTick((n) => n + 1)),
-      onUiEvent('open-project-picker', () => setShowProjectPicker(true)),
-      onUiEvent('open-scheduled', () => setMainSurface('scheduled')),
-      onUiEvent('open-chat', () => setMainSurface('chat')),
-      onUiEvent('toggle-msg-filter', () => {
-        setShowMsgFilter((v) => {
-          const next = !v;
-          if (!next) setLocalMsgFilter('');
-          return next;
-        });
-      }),
-      onUiEvent('focus-composer', () => {
-        setMainSurface('chat');
-        window.requestAnimationFrame(() => {
-          const el =
-            document.querySelector<HTMLTextAreaElement>(
-              'textarea[data-chat-composer], .chat-composer textarea, .composer-textarea'
-            ) ||
-            document.querySelector<HTMLTextAreaElement>(
-              '.chat-footer textarea'
-            );
-          el?.focus();
-        });
-      }),
+      onScopedUiEvent(
+        'open-project-picker',
+        () => setShowProjectPicker(true),
+        getTarget
+      ),
+      onScopedUiEvent(
+        'open-scheduled',
+        () => setMainSurface('scheduled'),
+        getTarget
+      ),
+      onScopedUiEvent('open-chat', () => setMainSurface('chat'), getTarget),
+      onScopedUiEvent(
+        'toggle-msg-filter',
+        () => {
+          setShowMsgFilter((v) => {
+            const next = !v;
+            if (!next) setLocalMsgFilter('');
+            return next;
+          });
+        },
+        getTarget
+      ),
+      onScopedUiEvent(
+        'focus-composer',
+        () => {
+          setMainSurface('chat');
+          window.requestAnimationFrame(() => {
+            const curScope = scopeRef.current;
+            const root = curScope.leafRootRef.current;
+            const selector =
+              '.tiptap[contenteditable="true"], [data-chat-composer] [contenteditable="true"], textarea[data-chat-composer], textarea.chat-input, .chat-composer textarea, .composer-textarea, .chat-footer textarea, [contenteditable="true"]';
+            const el =
+              (root ? root.querySelector<HTMLElement>(selector) : null) ||
+              curScope.queryWithinLeaf<HTMLElement>(selector) ||
+              (typeof document !== 'undefined'
+                ? document.querySelector<HTMLElement>(selector)
+                : null);
+            el?.focus();
+          });
+        },
+        getTarget
+      ),
     ];
     return () => offs.forEach((off) => off());
   }, [setMainSurface]);

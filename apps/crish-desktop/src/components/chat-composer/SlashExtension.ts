@@ -108,6 +108,11 @@ export interface MentionSuggestionOptions {
 /** 斜杠 suggestion 独立 keyed plugin */
 export const slashSuggestionKey = new PluginKey('crishSlashSuggestion');
 
+/** 中文顿号 suggestion 独立 keyed plugin */
+export const slashChineseSuggestionKey = new PluginKey(
+  'crishSlashChineseSuggestion'
+);
+
 /** 提及 suggestion 独立 keyed plugin */
 export const mentionSuggestionKey = new PluginKey('crishMentionSuggestion');
 
@@ -138,6 +143,16 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
       | null = null;
     let lastSuggestedSide: 'top' | 'bottom' | undefined = undefined;
 
+    const destroyComponent = () => {
+      if (component) {
+        if (component.element?.parentNode) {
+          component.element.parentNode.removeChild(component.element);
+        }
+        component.destroy();
+        component = null;
+      }
+    };
+
     const buildProps = (props: any) => ({
       items: props.items,
       command: (item: SlashCommandItem) => {
@@ -147,8 +162,7 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
       range: props.range,
       isOpen: true,
       onClose: () => {
-        component?.destroy();
-        component = null;
+        destroyComponent();
       },
       clientRect: () => {
         const view = props.editor?.view;
@@ -160,6 +174,32 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
         }
 
         try {
+          // 斜杠指令优先以主输入卡片（Composer Card）为锚定目标（对齐 ChatGPT Work 浮动卡片）
+          const cardEl =
+            (view.dom?.closest('[data-composer-card]') as HTMLElement | null) ||
+            (ctx.containerRef?.current as HTMLElement | null);
+          if (cardEl && typeof cardEl.getBoundingClientRect === 'function') {
+            const cardRect = cardEl.getBoundingClientRect();
+            if (cardRect.width > 0 && cardRect.height > 0) {
+              const extendedRect = Object.assign(
+                new DOMRect(
+                  cardRect.left,
+                  cardRect.top,
+                  cardRect.width,
+                  cardRect.height
+                ),
+                {
+                  suggestedSide: 'top' as const,
+                  nearEdge: false,
+                  isFallback: false,
+                  isValid: true,
+                }
+              );
+              lastCachedBox = extendedRect;
+              return lastCachedBox;
+            }
+          }
+
           const rawBox = measureCursorLineBox(view, props.range.from, 1);
           const safeAnchor = calculateSafeCursorAnchor({
             rawCursorRect: rawBox,
@@ -209,6 +249,9 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
         props: buildProps(props),
         editor: props.editor,
       });
+      if (component.element && typeof document !== 'undefined') {
+        document.body.appendChild(component.element);
+      }
     };
 
     return {
@@ -223,8 +266,7 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
         propsRef = props;
         const empty = !props.items || props.items.length === 0;
         if (empty && ctx.skipEmpty) {
-          component?.destroy();
-          component = null;
+          destroyComponent();
           return;
         }
         if (component) {
@@ -246,10 +288,7 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
             return false;
           }
 
-          if (component) {
-            component.destroy();
-            component = null;
-          }
+          destroyComponent();
           if (props.view && ctx.pluginKey) {
             exitSuggestion(props.view, ctx.pluginKey);
           }
@@ -265,8 +304,7 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
           dom.removeAttribute('aria-controls');
           dom.removeAttribute('aria-activedescendant');
         }
-        component?.destroy();
-        component = null;
+        destroyComponent();
         propsRef = null;
         lastCachedBox = null;
         lastSuggestedSide = undefined;
@@ -296,6 +334,16 @@ export const SlashExtension = Extension.create<SlashExtensionOptions>({
   },
 
   addProseMirrorPlugins() {
+    const makeRenderer = (pluginKey: PluginKey) =>
+      createSuggestionRenderer({
+        listboxId: this.options.listboxId,
+        label: 'AI 会话系统指令',
+        emptyMessage: '无匹配指令',
+        skipEmpty: true,
+        pluginKey,
+        containerRef: this.options.containerRef,
+      });
+
     return [
       Suggestion({
         editor: this.editor,
@@ -306,13 +354,18 @@ export const SlashExtension = Extension.create<SlashExtensionOptions>({
         command: ({ editor, range, props }: any) => {
           props.command({ editor, range });
         },
-        render: createSuggestionRenderer({
-          listboxId: this.options.listboxId,
-          label: 'AI 会话系统指令',
-          emptyMessage: '无匹配指令',
-          pluginKey: slashSuggestionKey,
-          containerRef: this.options.containerRef,
-        }),
+        render: makeRenderer(slashSuggestionKey),
+      }),
+      Suggestion({
+        editor: this.editor,
+        char: '、',
+        pluginKey: slashChineseSuggestionKey,
+        items: ({ query }: { query: string }) =>
+          getSuggestionItems(query, this.options.extraItemsRef?.current ?? []),
+        command: ({ editor, range, props }: any) => {
+          props.command({ editor, range });
+        },
+        render: makeRenderer(slashChineseSuggestionKey),
       }),
     ];
   },
@@ -339,7 +392,13 @@ export const MentionSuggestionExtension =
           allowSpaces: true,
           allowedPrefixes: null,
           pluginKey: mentionSuggestionKey,
-          allow: ({ state, range }: { state: any; range: { from: number; to: number } }) => {
+          allow: ({
+            state,
+            range,
+          }: {
+            state: any;
+            range: { from: number; to: number };
+          }) => {
             try {
               const text = state.doc.textBetween(range.from, range.to, '');
               if (text.startsWith('@@')) return false;

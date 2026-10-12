@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useLeafScope } from '../../contexts/LeafScopeContext';
 
 import type { SessionGoalTask } from '../../store/types';
 import styles from './ChatStatusRibbons.module.css';
@@ -36,8 +37,8 @@ export const DynamicChipBar: React.FC<DynamicChipBarProps> = ({
   goalIteration,
   checklistDone,
   checklistTotal,
-  diffCount,
-  onOpenDiff,
+  diffCount: _diffCount,
+  onOpenDiff: _onOpenDiff,
 }) => {
   if (!shouldRender) return null;
   return (
@@ -76,22 +77,6 @@ export const DynamicChipBar: React.FC<DynamicChipBarProps> = ({
                   ? `计划任务 · ${checklistDone}/${checklistTotal}`
                   : '计划模式'}
             </span>
-          </Button>
-        </Tooltip>
-      ) : null}
-
-      {diffCount > 0 && onOpenDiff ? (
-        <Tooltip content="在右侧查看代码变更">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className={styles.dynamicChip}
-            aria-label="查看代码变更"
-            onClick={onOpenDiff}
-          >
-            <AppIcon name="git-branch" size={13} aria-hidden />
-            <span>{diffCount} 个文件变更</span>
           </Button>
         </Tooltip>
       ) : null}
@@ -186,11 +171,36 @@ export const PlanDrawer: React.FC<PlanDrawerProps> = ({
 export function usePlanDrawerState() {
   const [showPlanDrawer, setShowPlanDrawer] = useState(false);
   const planDrawerRef = useRef<HTMLDivElement>(null);
+  const scope = useLeafScope();
 
   useEffect(() => {
     if (!showPlanDrawer) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        const drawer = planDrawerRef.current;
+        if (!drawer) return;
+        const active = document.activeElement;
+        const isFocusedInside = Boolean(active && drawer.contains(active));
+        if (!isFocusedInside) {
+          if (scope.inLeafScope && !scope.isActive) return;
+          if (
+            active &&
+            active !== document.body &&
+            (active.tagName === 'INPUT' ||
+              active.tagName === 'TEXTAREA' ||
+              (active as HTMLElement).isContentEditable ||
+              Boolean(
+                (active as HTMLElement).closest?.(
+                  'input, textarea, [contenteditable="true"]'
+                )
+              ))
+          ) {
+            return;
+          }
+          if (drawer.offsetWidth === 0 && drawer.offsetHeight === 0) {
+            return;
+          }
+        }
         e.preventDefault();
         e.stopPropagation();
         setShowPlanDrawer(false);
@@ -198,7 +208,7 @@ export function usePlanDrawerState() {
     };
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [showPlanDrawer]);
+  }, [showPlanDrawer, scope.inLeafScope, scope.isActive]);
 
   useEffect(() => {
     if (!showPlanDrawer) return;

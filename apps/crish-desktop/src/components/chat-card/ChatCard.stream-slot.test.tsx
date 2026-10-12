@@ -57,6 +57,14 @@ vi.mock('./useChatCardState', () => ({
   useChatCardState: () => stateHolder.current,
 }));
 
+vi.mock('./useChatCardDragDrop', () => ({
+  useChatCardDragDrop: () => ({
+    rootRef: { current: null },
+    isDragOver: false,
+    dragHandlers: {},
+  }),
+}));
+
 const STREAM_KIND: SlotMap['workspace.chat.stream']['kind'] = 'single';
 const ABOVE_KIND: SlotMap['workspace.chat.composerAbove']['kind'] = 'single';
 
@@ -181,8 +189,12 @@ describe('ChatCard workspace.chat.stream 槽', () => {
     const { container } = render(
       <ChatCard handleGlobalTabClick={vi.fn()} sessionId="sess-1" />
     );
-    expect(container.querySelector('[data-empty-kind="session-empty"]')).toBeTruthy();
-    expect(container.querySelector('[data-messages-loading="true"]')).toBeTruthy();
+    expect(
+      container.querySelector('[data-empty-kind="session-empty"]')
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-messages-loading="true"]')
+    ).toBeTruthy();
     expect(
       container.querySelector('[data-slot="workspace.chat.stream"]')
     ).toBeNull();

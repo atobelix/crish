@@ -6,7 +6,13 @@
  * 原选档位不在当前模型声明中 → 视为未选，显示「请选择思考档位」引导（不降级）。
  * 无思考选项则物理卸载右侧槽。
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import styles from './ComposerFusedTrigger.module.css';
 import { Button, Menu, Tooltip } from '../ui';
@@ -22,27 +28,27 @@ import {
   resolveThinkingHandoffSafe,
 } from '../../api/modelsCatalogLive';
 import {
-  getSessionThinkingTitle,
-  setSessionThinkingTitle,
   resolveEffectiveThinkingTitle,
   persistThinkingSelection,
 } from '../../api/SessionRuntimeRegistry';
 import { recordPendingContextState } from '../../api/provider-profiles/contextStatePending';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
-import { useSessionStore } from '../../store/storeAccess';
 import { AppIcon } from '../ui/icons/index';
+import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 
 export type ComposerFusedTriggerProps = {
   prefix?: React.ReactNode;
   children?: React.ReactNode;
+  sessionId?: string | null;
 };
 
 export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
   prefix,
   children,
+  sessionId: sessionIdProp,
 }) => {
   const catalogVersion = useModelsCatalogVersion();
-  const sessionId = useSessionStore((s) => s.activeSessionId);
+  const sessionId = useScopedSessionId(sessionIdProp);
   const [open, setOpen] = useState(false);
   const [identity, setIdentity] = useState(() => ({
     providerId: (getActiveProfileId() ?? '').trim(),
@@ -201,9 +207,12 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
                   >
                     <span>{opt.label}</span>
                     {selected ? (
-                      <AppIcon name="check" size={13}
+                      <AppIcon
+                        name="check"
+                        size={13}
                         className={styles.check}
-                        aria-hidden="true" />
+                        aria-hidden="true"
+                      />
                     ) : null}
                   </Button>
                 );

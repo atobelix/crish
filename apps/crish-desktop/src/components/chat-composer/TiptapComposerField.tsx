@@ -75,11 +75,19 @@ const HOST_SLASH_ICONS: Record<string, string> = {
   '/help': 'HelpCircle',
 };
 
+export type SlashCommandInputItem = {
+  cmd: string;
+  desc: string;
+  skillId?: string;
+  skillName?: string;
+  filePath?: string;
+};
+
 export type TiptapComposerFieldProps = ComposerFieldProps & {
   /** 宿主 skill 斜杠命令（动态加载后由宿主传入） */
-  skillSlashCommands?: ReadonlyArray<{ cmd: string; desc: string }>;
+  skillSlashCommands?: ReadonlyArray<SlashCommandInputItem>;
   /** 宿主系统斜杠命令（缺省用内置 BASE_SLASH 对齐集） */
-  baseSlashCommands?: ReadonlyArray<{ cmd: string; desc: string }>;
+  baseSlashCommands?: ReadonlyArray<SlashCommandInputItem>;
   /** 宿主文件选择链（编辑器拖放直达） */
   onFilesSelected?: (files: File[]) => void | Promise<void>;
   /** 宿主文件粘贴链（编辑器剪贴板文件直达） */
@@ -261,21 +269,54 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
   }, [draftInjectionTick]);
 
   const slashExtraItems = useMemo(() => {
-    const base = baseSlashCommands ?? HOST_SYSTEM_SLASH;
+    const base: ReadonlyArray<SlashCommandInputItem> =
+      baseSlashCommands ?? HOST_SYSTEM_SLASH;
     return [...base, ...(skillSlashCommands ?? [])].map<SlashCommandItem>(
-      (c) => ({
-        id: `host-${c.cmd}`,
-        title: c.cmd,
-        description: c.desc,
-        iconName: HOST_SLASH_ICONS[c.cmd] ?? HOST_SLASH_ICONS['/skill'],
-        keywords: [c.cmd.replace(/^\/+/, '')],
-        command: ({ editor, range }) => {
-          const pick = slashMenuPick(c.cmd);
-          const chain = editor.chain().focus();
-          if (range) chain.deleteRange(range);
-          chain.insertContent(pick.text).run();
-        },
-      })
+      (c) => {
+        const isSkill = Boolean(
+          c.skillName || c.cmd.startsWith('/skill:') || c.filePath
+        );
+        const skillName =
+          c.skillName ||
+          (c.cmd.startsWith('/skill:') ? c.cmd.slice('/skill:'.length) : c.cmd);
+        const title = c.skillName ? c.skillName : c.cmd;
+        const skillPath = c.filePath || '';
+
+        return {
+          id: `host-${c.cmd}`,
+          title,
+          description: c.desc,
+          iconName: isSkill
+            ? 'blocks'
+            : (HOST_SLASH_ICONS[c.cmd] ?? HOST_SLASH_ICONS['/skill']),
+          keywords: [c.cmd.replace(/^\/+/, ''), skillName],
+          category: isSkill ? 'skill' : 'system',
+          command: ({ editor, range }) => {
+            if (isSkill) {
+              const chain = editor.chain().focus();
+              if (range) chain.deleteRange(range);
+              chain
+                .insertContent([
+                  {
+                    type: 'mention',
+                    attrs: {
+                      id: skillPath || skillName,
+                      label: c.skillName || c.cmd,
+                      kind: 'skill',
+                    },
+                  },
+                  { type: 'text', text: ' ' },
+                ])
+                .run();
+            } else {
+              const pick = slashMenuPick(c.cmd);
+              const chain = editor.chain().focus();
+              if (range) chain.deleteRange(range);
+              chain.insertContent(pick.text).run();
+            }
+          },
+        };
+      }
     );
   }, [baseSlashCommands, skillSlashCommands]);
 

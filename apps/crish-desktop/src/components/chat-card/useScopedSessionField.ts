@@ -1,6 +1,7 @@
-import { useEffect, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 import { useSessionStore } from '../../store/storeAccess';
 import type { SessionState } from '../../store/types';
+import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 
 export const EMPTY_ARRAY: never[] = [];
 
@@ -10,23 +11,42 @@ export type SessionStoreStateShape = {
 };
 
 /**
- * 会话级订阅短路（T4.2，R-05，08-detail 4.1-2）。
+ * 会话级订阅短路（T4.2，A-10，B-01，清退全局 activeSessionId 耦合）。
  *
- * 任何 session 域变更（工具快照/审批/subagent 事件 immer patch）都会触发
- * zustand 订阅——普通 selector 路径每次变更都要重求值 + Object.is 比较。
- * 本 hook 用 vanilla subscribe((state, prev) => ...) 在监听器层短路：
- * 本会话引用未变（immer 结构共享保证未变会话引用不变）且 activeSessionId
- * 未变 -> 不重求值、不触发渲染。
- *
- * 语义边界：短路仅省求值与渲染，不改变渲染结果（依赖「activeSessionId
- * 恒与渲染中的 ChatCard 一致」的既有假设；多会话多 Tab 现状已在 R-05
- * 判定为浪费面，短路后视觉无变化——07 方案风险 7）。
+ * 1. 优先通过 useScopedSessionId 获取当前子窗口绑定的 sessionId（SSOT），
+ *    消除非活跃分屏对全局 activeSessionId 的无谓订阅；
+ * 2. 只要本组件解析出的 sid 未变（prevSid === sid）、且该 session 引用未变，直接短路；
+ * 3. 增加 Object.is 校验阻断无效 forceUpdate。
  */
 export function useScopedSessionField<T>(
-  resolveSid: (state: SessionStoreStateShape) => string,
+  resolveSidOrSessionId:
+    string | null | undefined | ((state: SessionStoreStateShape) => string),
   selector: (session: SessionState | undefined) => T
 ): T {
   const [, forceUpdate] = useReducer((n: number) => n + 1, 0);
+
+  // 若传入的是显式 sessionId（或未传函数），优先经 useScopedSessionId 获取作用域会话 ID
+  const explicitOrNullSid =
+    typeof resolveSidOrSessionId === 'string' || resolveSidOrSessionId == null
+      ? resolveSidOrSessionId
+      : undefined;
+  const leafScopedSid = useScopedSessionId(explicitOrNullSid);
+
+  const resolveSid = useCallback(
+    (st: SessionStoreStateShape): string => {
+      if (typeof resolveSidOrSessionId === 'function') {
+        const resolved = resolveSidOrSessionId(st);
+        // 若函数返回了全局 activeSessionId，但在子窗口内有专属会话 ID，优先收敛为子窗口专属 ID
+        if (resolved === st.activeSessionId && leafScopedSid) {
+          return leafScopedSid;
+        }
+        return resolved;
+      }
+      return leafScopedSid;
+    },
+    [resolveSidOrSessionId, leafScopedSid]
+  );
+
   const resolveSidRef = useRef(resolveSid);
   resolveSidRef.current = resolveSid;
   const selectorRef = useRef(selector);
@@ -44,16 +64,24 @@ export function useScopedSessionField<T>(
       const prevSid = resolveSidRef.current(prev);
       const session = st.sessionsById[sid];
       const cached = cacheRef.current;
-      // 会话级订阅短路：本会话引用未变 + activeSessionId 未变 -> 直接短路
+
+      // 会话级订阅短路：本组件解析出的 sid 未变且 session 引用未变 -> 直接短路
       if (
         cached &&
-        cached.sid === prevSid &&
-        cached.session === session &&
-        prev.activeSessionId === st.activeSessionId
+        cached.sid === sid &&
+        prevSid === sid &&
+        cached.session === session
       ) {
         return;
       }
-      cacheRef.current = { sid, session, value: selectorRef.current(session) };
+
+      const nextValue = selectorRef.current(session);
+      if (cached && cached.sid === sid && Object.is(cached.value, nextValue)) {
+        cached.session = session;
+        return;
+      }
+
+      cacheRef.current = { sid, session, value: nextValue };
       forceUpdate();
     });
   }, []);
@@ -64,7 +92,8 @@ export function useScopedSessionField<T>(
   const session = st.sessionsById[sid];
   const cached = cacheRef.current;
   if (!cached || cached.sid !== sid || cached.session !== session) {
-    cacheRef.current = { sid, session, value: selector(session) };
+    const value = selector(session);
+    cacheRef.current = { sid, session, value };
   }
   return cacheRef.current!.value;
 }

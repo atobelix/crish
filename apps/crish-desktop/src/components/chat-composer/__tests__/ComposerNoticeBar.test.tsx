@@ -4,7 +4,13 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { fireEvent, render, screen, act, cleanup } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  act,
+  cleanup,
+} from '@testing-library/react';
 import { ComposerNoticeBar, type ComposerNotice } from '../ComposerNoticeBar';
 import {
   DEFAULT_DELAY_SHOW_MS,
@@ -62,7 +68,9 @@ describe('ComposerNoticeBar (输入框上方高级提示条组件)', () => {
       type: 'warning',
       message: '上下文窗口接近上限（85%）',
     };
-    rerender(<ComposerNoticeBar notice={warningNotice} onDismiss={onDismiss} />);
+    rerender(
+      <ComposerNoticeBar notice={warningNotice} onDismiss={onDismiss} />
+    );
     const warningBar = screen.getByTestId('composer-notice-bar');
     expect(warningBar).toHaveAttribute('data-notice-type', 'warning');
     expect(screen.getByText('上下文窗口接近上限（85%）')).toBeInTheDocument();
@@ -76,7 +84,9 @@ describe('ComposerNoticeBar (输入框上方高级提示条组件)', () => {
     rerender(<ComposerNoticeBar notice={errorNotice} onDismiss={onDismiss} />);
     const errorBar = screen.getByTestId('composer-notice-bar');
     expect(errorBar).toHaveAttribute('data-notice-type', 'error');
-    expect(screen.getByText('模型连接中断，请检查网络或代理配置')).toBeInTheDocument();
+    expect(
+      screen.getByText('模型连接中断，请检查网络或代理配置')
+    ).toBeInTheDocument();
   });
 
   it('3. 传递自定义 className 正确合并到容器类名', () => {
@@ -324,5 +334,28 @@ describe('ComposerNoticeBar (输入框上方高级提示条组件)', () => {
     expect(bar).toHaveAttribute('data-notice-type', 'success');
     expect(screen.getByText('环境检查全绿')).toBeInTheDocument();
   });
-});
 
+  it('11. 传递 isClosing 为 true 时挂载 noticeBarClosing 类与 data-closing 属性', () => {
+    const notice: ComposerNotice = {
+      id: 'closing-1',
+      type: 'info',
+      message: '即将退场的通知',
+    };
+
+    const { rerender } = render(
+      <ComposerNoticeBar
+        notice={notice}
+        onDismiss={vi.fn()}
+        isClosing={false}
+      />
+    );
+    const bar = screen.getByTestId('composer-notice-bar');
+    expect(bar).not.toHaveAttribute('data-closing');
+
+    rerender(
+      <ComposerNoticeBar notice={notice} onDismiss={vi.fn()} isClosing={true} />
+    );
+    expect(bar).toHaveAttribute('data-closing', 'true');
+    expect(bar.className).toMatch(/noticeBarClosing/);
+  });
+});

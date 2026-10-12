@@ -49,7 +49,7 @@
   max-width: 200px;
   outline: none;
   box-shadow: none;
-  transition: background-color var(--transition-micro, 120ms) ease;
+  transition: background-color var(--transition-snappy);
 }
 
 .titleBtn:hover:not(.disabled) {
@@ -71,7 +71,7 @@
   color: var(--text-tertiary);
   opacity: 0;
   flex-shrink: 0;
-  transition: opacity var(--transition-micro, 120ms) ease;
+  transition: opacity var(--transition-snappy);
 }
 
 .titleBtn:hover:not(.disabled) .editIcon {

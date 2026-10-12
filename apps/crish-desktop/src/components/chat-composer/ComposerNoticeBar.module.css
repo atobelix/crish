@@ -30,7 +30,7 @@
     background-color var(--transition-fast),
     border-color var(--transition-fast),
     box-shadow var(--transition-fast);
-  animation: noticeIn 260ms var(--ease-emphasized) forwards;
+  animation: noticeIn 160ms var(--ease-emphasized) forwards;
 }
 
 @keyframes noticeIn {
@@ -41,6 +41,23 @@
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+.noticeBarClosing {
+  animation: noticeOut 100ms var(--ease-accelerate, cubic-bezier(0.4, 0, 1, 1))
+    forwards;
+  pointer-events: none;
+}
+
+@keyframes noticeOut {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
   }
 }
 
@@ -142,7 +159,10 @@
   cursor: pointer;
   white-space: nowrap;
   outline: none;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast), opacity var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    opacity var(--transition-fast);
 }
 
 .actionPill:hover,
@@ -180,7 +200,10 @@
   font-family: inherit;
   line-height: 1;
   cursor: pointer;
-  transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .detailBadge:hover {
@@ -219,7 +242,9 @@
   line-height: 1;
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color var(--transition-fast), opacity var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    opacity var(--transition-fast);
 }
 
 .copyBtn:hover,
@@ -250,13 +275,16 @@
   min-height: unset;
   padding: 0;
   margin-left: 2px;
-  border: var(--hairline-width) solid color-mix(in srgb, currentColor 45%, transparent);
+  border: var(--hairline-width) solid
+    color-mix(in srgb, currentColor 45%, transparent);
   border-radius: 50%;
   background-color: transparent;
   color: inherit;
   opacity: 0.6;
   cursor: pointer;
-  transition: opacity var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    opacity var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .dismissBtn:hover {

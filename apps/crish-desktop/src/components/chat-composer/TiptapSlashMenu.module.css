@@ -5,52 +5,110 @@
  *                /    z-index   var(--z-popover) 
  */
 
-/*           0.15s       --transition-popover-enter           */
-@keyframes popoverFadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 .popoverContent {
   z-index: var(--z-popover);
-  width: 256px;
+  width: 100%;
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
   max-height: min(
-    var(--radix-popover-content-available-height, 320px),
-    70vh,
-    320px
+    var(--radix-popover-content-available-height, 380px),
+    60vh,
+    380px
   );
   overflow-y: auto;
   background: var(--bg-elevated);
   border: var(--hairline-width, 1px) solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: var(--space-1);
+  border-radius: var(--radius-input);
+  padding: 6px;
   outline: none;
   box-shadow: none;
-  animation: popoverFadeIn var(--transition-fast);
+  backdrop-filter: blur(20px);
+  will-change: transform, opacity;
+  transform-origin: var(
+    --radix-popover-content-transform-origin,
+    center bottom
+  );
   -webkit-app-region: no-drag;
+}
+
+.popoverContent[data-state='open'][data-side='top'] {
+  animation: slashMenuEnterTop 150ms var(--ease-emphasized) forwards;
+}
+
+.popoverContent[data-state='open'][data-side='bottom'] {
+  animation: slashMenuEnterBottom 150ms var(--ease-emphasized) forwards;
+}
+
+.popoverContent[data-state='closed'] {
+  animation: slashMenuExit 100ms
+    var(--ease-accelerate, cubic-bezier(0.4, 0, 1, 1)) forwards;
+  pointer-events: none;
+}
+
+@keyframes slashMenuEnterTop {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes slashMenuEnterBottom {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes slashMenuExit {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
 }
 
 .menuList {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
-.menuItem,
+.groupHeader {
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-tertiary);
+  padding: 6px 10px 2px;
+  user-select: none;
+  letter-spacing: 0.02em;
+}
+
+.groupDivider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 3px 6px;
+}
+
 .menuItem {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 8px;
   width: 100%;
-  min-width: unset;
-  min-height: unset;
-  padding: var(--space-1) var(--space-2);
+  min-width: 0;
+  min-height: 32px;
+  padding: 4px 10px;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md, 8px);
   background: transparent;
   text-align: left;
   cursor: pointer;
@@ -61,8 +119,10 @@
   box-shadow: none;
   transition:
     background-color var(--transition-micro),
-    color var(--transition-micro);
+    color var(--transition-micro),
+    transform var(--transition-micro);
   outline: none;
+  user-select: none;
 }
 
 .menuItem:hover,
@@ -70,41 +130,53 @@
   background: var(--tint-active);
 }
 
+.menuItem:active {
+  transform: scale(0.985);
+}
+
 .iconWrapper {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
-  color: var(--text-secondary);
+  width: 18px;
+  height: 18px;
   flex-shrink: 0;
+  background: transparent;
+  color: var(--text-secondary);
 }
 
 .itemText {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   overflow: hidden;
   min-width: 0;
+  flex: 1;
 }
 
 .itemTitle {
-  font-weight: var(--font-weight-medium);
-  line-height: var(--line-height-dense);
+  font-weight: var(--font-weight-medium, 500);
+  line-height: var(--line-height-dense, 1.4);
   color: var(--text-primary);
   white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .itemDescription {
-  font-size: var(--font-size-micro);
+  font-size: var(--font-size-xs, 12px);
   color: var(--text-tertiary);
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
-  margin-top: 2px;
+  flex: 1;
+}
+
+.itemTag {
+  font-size: var(--font-size-nano, 11px);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  user-select: none;
+  padding-left: 6px;
 }
 
 .emptyMessage {

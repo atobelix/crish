@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useRef, useState, useEffect } from 'react';
 import styles from './ChatCard.module.css';
 import { ChatMessageList } from '../chat-message-list/ChatMessageList';
 import type { ChatMessageListProps } from '../chat-message-list/chatMessageListProps';
@@ -14,8 +14,6 @@ import { useChatCardState } from './useChatCardState';
 import { anyProfileHasKey } from '../../api/providerProfiles';
 import { ChatComposerWrapper } from './ChatComposerWrapper';
 import { openSettings, patchSession } from '../../api/storeAccess';
-import { hasFiles } from '../chat-composer/ComposerDropHost';
-
 import { normalizeMessageAttachments } from '../chat-attachment/AttachmentCard';
 import type { SessionMessage } from '../../store/types';
 import type { ChatAttachment } from '../../hooks/useChatStream';
@@ -26,7 +24,7 @@ const ScheduledTasksPanel = lazy(() =>
   }))
 );
 
-import { useIpcListener } from '../../hooks/useIpcListener';
+import { useChatCardDragDrop } from './useChatCardDragDrop';
 import { AppIcon } from '../ui/icons/index';
 
 export interface ChatCardProps {
@@ -43,49 +41,10 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       sessionId,
     });
 
-    const [isDragOver, setIsDragOver] = React.useState(false);
-    const dragDepthRef = React.useRef(0);
-
-    useIpcListener<{ paths?: string[] }>('tauri://drag-enter', () => {
-      setIsDragOver(true);
+    const { rootRef, isDragOver, dragHandlers } = useChatCardDragDrop({
+      handlePathsSelected: state.composerProps.handlePathsSelected,
+      handleDroppedFiles: state.composerProps.handleDroppedFiles,
     });
-    useIpcListener('tauri://drag-leave', () => {
-      setIsDragOver(false);
-    });
-    useIpcListener<{ paths?: string[] }>('tauri://drag-drop', (event) => {
-      setIsDragOver(false);
-      dragDepthRef.current = 0;
-      const paths = event.payload?.paths ?? [];
-      if (paths.length > 0) {
-        void state.composerProps.handlePathsSelected(paths);
-      }
-    });
-
-    React.useEffect(() => {
-      const onWindowDragOver = (e: DragEvent) => {
-        if (hasFiles(e.dataTransfer)) {
-          e.preventDefault();
-          if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-        }
-      };
-      const onWindowDrop = (e: DragEvent) => {
-        if (hasFiles(e.dataTransfer)) {
-          e.preventDefault();
-          setIsDragOver(false);
-          dragDepthRef.current = 0;
-          const files = Array.from(e.dataTransfer?.files ?? []);
-          if (files.length > 0) {
-            void state.composerProps.handleDroppedFiles(files);
-          }
-        }
-      };
-      window.addEventListener('dragover', onWindowDragOver);
-      window.addEventListener('drop', onWindowDrop);
-      return () => {
-        window.removeEventListener('dragover', onWindowDragOver);
-        window.removeEventListener('drop', onWindowDrop);
-      };
-    }, [state.composerProps]);
 
     const [editingMessageId, setEditingMessageId] = React.useState<
       string | null
@@ -162,6 +121,32 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       setEditAttachments((prev) => [...prev, ...mapped]);
     }, []);
 
+    const handleEditPasteImage = React.useCallback(
+      async (e: React.ClipboardEvent) => {
+        const items = e.clipboardData?.items;
+        if (!items?.length) return;
+        const imageFiles: File[] = [];
+        for (const item of Array.from(items)) {
+          if (!item.type.startsWith('image/')) continue;
+          const file = item.getAsFile();
+          if (file) imageFiles.push(file);
+        }
+        if (!imageFiles.length) return;
+        try {
+          const { blobToImageAttachment } =
+            await import('../../api/imageProcessing');
+          const next: ChatAttachment[] = [];
+          for (const f of imageFiles) {
+            next.push(await blobToImageAttachment(f, f.name || undefined));
+          }
+          setEditAttachments((prev) => [...prev, ...next]);
+        } catch {
+          // ignore
+        }
+      },
+      []
+    );
+
     const mainModelBadgeNode = state.showModelPicker ? (
       <ModelBadgePicker
         engineModel={state.engineModel}
@@ -182,6 +167,27 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
 
     // 新对话空界面：输入框改多行落地态；品牌居中 + 项目选择紧贴卡片上方左侧
     const isLanding = state.emptyKind === 'session-empty';
+    const prevEmptyKindRef = useRef(state.emptyKind);
+    const [isLandingSettling, setIsLandingSettling] = useState(false);
+
+    useEffect(() => {
+      let timer: number | undefined;
+      if (
+        prevEmptyKindRef.current === 'session-empty' &&
+        state.emptyKind == null
+      ) {
+        setIsLandingSettling(true);
+        timer = window.setTimeout(() => {
+          setIsLandingSettling(false);
+        }, 380);
+      }
+      prevEmptyKindRef.current = state.emptyKind;
+      return () => {
+        if (timer !== undefined) {
+          window.clearTimeout(timer);
+        }
+      };
+    }, [state.emptyKind]);
 
     // 底部主输入框：持续常驻，草稿状态完全独立保全
     const mainComposerElement = (
@@ -214,8 +220,8 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         setIsComposing={setEditIsComposing}
         filteredCommands={state.composerProps.filteredCommands}
         loadSkillSlash={state.composerProps.loadSkillSlash}
-        onPasteImage={state.composerProps.handlePasteImage}
-        onPasteFiles={state.composerProps.handlePasteFiles}
+        onPasteImage={handleEditPasteImage}
+        onPasteFiles={handleEditDroppedFiles}
         onSend={handleSaveEditMessage}
         onStop={state.composerProps.handleStopGeneration}
         canSend={Boolean(editChatInput.trim() || editAttachments.length > 0)}
@@ -325,6 +331,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
     return (
       <>
         <div
+          ref={rootRef}
           className={styles.chatBody}
           data-testid="chat-body"
           role="region"
@@ -332,6 +339,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           aria-busy={state.messagesLoading || undefined}
           data-main-surface={state.mainSurface}
           data-empty-kind={state.emptyKind ?? undefined}
+          data-settling={isLandingSettling ? 'true' : undefined}
           data-messages-loading={state.messagesLoading ? 'true' : undefined}
           data-engine-ok={
             state.engineOk === false
@@ -341,34 +349,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
                 : 'unknown'
           }
           data-approval-mode={state.approvalState.approvalUiPlan.mode}
-          onDragEnter={(e) => {
-            if (!hasFiles(e.dataTransfer)) return;
-            e.preventDefault();
-            dragDepthRef.current += 1;
-            setIsDragOver(true);
-          }}
-          onDragOver={(e) => {
-            if (!hasFiles(e.dataTransfer)) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
-          }}
-          onDragLeave={() => {
-            dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-            if (dragDepthRef.current === 0) {
-              setIsDragOver(false);
-            }
-          }}
-          onDrop={(e) => {
-            if (!hasFiles(e.dataTransfer)) return;
-            e.preventDefault();
-            e.stopPropagation();
-            dragDepthRef.current = 0;
-            setIsDragOver(false);
-            const files = Array.from(e.dataTransfer.files ?? []);
-            if (files.length > 0) {
-              void state.composerProps.handleDroppedFiles(files);
-            }
-          }}
+          {...dragHandlers}
         >
           {isDragOver && (
             <div
@@ -425,6 +406,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           <ChatComposerWrapper
             mainSurface={state.mainSurface}
             emptyKind={state.emptyKind}
+            isSettling={isLandingSettling}
             composerElement={mainComposerElement}
             ribbons={ribbons}
             pendingApprovalCount={state.approvalState.pendingApprovalCount}
@@ -443,11 +425,12 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
             isProcessing={state.isProcessing}
             onStopGeneration={state.composerProps.handleStopGeneration}
             composerLead={
-              isLanding ? (
+              isLanding || isLandingSettling ? (
                 <>
                   <ChatLandingBrand />
                   <ComposerProjectPicker
                     workspaceKey={state.workspaceKey}
+                    sessionId={state.activeSessionId}
                     open={state.showProjectPicker}
                     onOpenChange={state.setShowProjectPicker}
                     onProjectChanged={() => state.setProjectTick((n) => n + 1)}

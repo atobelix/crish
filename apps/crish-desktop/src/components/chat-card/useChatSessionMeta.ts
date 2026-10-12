@@ -1,8 +1,6 @@
 import { useCallback, useRef, useEffect } from 'react';
 import {
   useLayoutStore,
-  useSessionField,
-  selectActiveSessionId,
   useLayoutTreeStore,
   collectLeaves,
   useDraftFolder,
@@ -10,8 +8,13 @@ import {
 } from '../../store/storeAccess';
 import { isDemoMode } from '../../api/appMode';
 import { isFirstRunOverlayOpen } from '../firstRunOverlayFlag';
-import { useScopedSessionField, type SessionStoreStateShape } from './useScopedSessionField';
+import {
+  useScopedSessionField,
+  type SessionStoreStateShape,
+} from './useScopedSessionField';
 import type { SessionState } from '../../store/types';
+import { useScopedSessionId } from '../../contexts/LeafScopeContext';
+import { isPendingDraft } from '../../store/draftSession';
 
 import { GENERAL_FOLDER } from '../../api/projectStore';
 
@@ -32,16 +35,12 @@ export interface UseChatSessionMetaResult {
 export function useChatSessionMeta({
   sessionIdProp,
 }: UseChatSessionMetaOptions): UseChatSessionMetaResult {
-  const activeSessionId = useSessionField(
-    useCallback(
-      (s) => sessionIdProp ?? selectActiveSessionId(s),
-      [sessionIdProp]
-    )
-  );
+  const scopedSessionId = useScopedSessionId(sessionIdProp);
+  const activeSessionId = scopedSessionId;
 
   const resolveSessionId = useCallback(
-    (s: SessionStoreStateShape) => sessionIdProp ?? s.activeSessionId ?? '',
-    [sessionIdProp]
+    (s: SessionStoreStateShape) => scopedSessionId || s.activeSessionId || '',
+    [scopedSessionId]
   );
 
   const activeSessionTitle = useScopedSessionField(
@@ -55,27 +54,32 @@ export function useChatSessionMeta({
   );
 
   const tabWorkspaceKey = useLayoutTreeStore(
-    useCallback((s) => {
-      if (!sessionIdProp) return null;
-      const leaves = collectLeaves(s.tree.root);
-      for (const leaf of leaves) {
-        const tab = leaf.tabs.find((t) => t.sessionId === sessionIdProp || t.tabId === sessionIdProp);
-        if (tab) return tab.workspaceKey;
-      }
-      return null;
-    }, [sessionIdProp])
+    useCallback(
+      (s) => {
+        const sid = scopedSessionId;
+        if (!sid) return null;
+        const leaves = collectLeaves(s.tree.root);
+        for (const leaf of leaves) {
+          const tab = leaf.tabs.find(
+            (t) => t.sessionId === sid || t.tabId === sid
+          );
+          if (tab) return tab.workspaceKey;
+        }
+        return null;
+      },
+      [scopedSessionId]
+    )
   );
 
-  const targetSid = sessionIdProp ?? activeSessionId;
-  const draftFolder = useDraftFolder(targetSid);
+  const draftFolder = useDraftFolder(scopedSessionId);
   const storeDraftFolder = useSessionStore((s) => s.draftFolder);
 
   const workspaceKey =
     sessionFolder ||
     tabWorkspaceKey ||
     draftFolder ||
-    storeDraftFolder ||
-    (sessionIdProp ? GENERAL_FOLDER : '');
+    (isPendingDraft(scopedSessionId) ? GENERAL_FOLDER : storeDraftFolder) ||
+    (scopedSessionId ? GENERAL_FOLDER : '');
 
   const goalMode = useScopedSessionField(
     resolveSessionId,

@@ -2,9 +2,10 @@ import { useState } from 'react';
 import {
   useChatStream,
   type ChatAttachment,
-} from '../../hooks/useChatStream';
+} from '../../hooks/chat-stream/useChatStream';
 
 export interface UseChatSendOptions {
+  sessionId?: string | null;
   wsId: string;
   needsKeySetup: boolean;
   needsModelSetup: boolean;
@@ -23,15 +24,19 @@ export interface UseChatSendResult {
   canSend: boolean;
   showPlusMenu: boolean;
   setShowPlusMenu: React.Dispatch<React.SetStateAction<boolean>>;
-  runStreamingAssistant: ReturnType<typeof useChatStream>['runStreamingAssistant'];
+  runStreamingAssistant: ReturnType<
+    typeof useChatStream
+  >['runStreamingAssistant'];
   handleSendChat: ReturnType<typeof useChatStream>['handleSendChat'];
-  handleStopGeneration: ReturnType<typeof useChatStream>['handleStopGeneration'];
-  handleForceCancelGeneration: ReturnType<typeof useChatStream>['handleForceCancelGeneration'];
+  handleStopGeneration: ReturnType<
+    typeof useChatStream
+  >['handleStopGeneration'];
+  handleForceCancelGeneration: ReturnType<
+    typeof useChatStream
+  >['handleForceCancelGeneration'];
 }
 
-export function useChatSend(
-  options: UseChatSendOptions
-): UseChatSendResult {
+export function useChatSend(options: UseChatSendOptions): UseChatSendResult {
   const [showPlusMenu, setShowPlusMenu] = useState(false);
 
   const {
@@ -40,6 +45,7 @@ export function useChatSend(
     handleStopGeneration,
     handleForceCancelGeneration,
   } = useChatStream({
+    sessionId: options.sessionId,
     wsId: options.wsId,
     handleGlobalTabClick: options.handleGlobalTabClick,
     chatInput: options.chatInput,

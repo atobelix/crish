@@ -54,12 +54,17 @@
 
 .permPillChev {
   opacity: 0.55;
-  transition: transform var(--transition-micro, 100ms ease);
+  transition:
+    transform var(--transition-chevron),
+    opacity var(--transition-micro);
   flex-shrink: 0;
+  will-change: transform;
 }
 
-.permPill.isOpen .permPillChev {
+.permPill.isOpen .permPillChev,
+.permPill[aria-expanded='true'] .permPillChev {
   transform: rotate(180deg);
+  opacity: 0.9;
 }
 
 .permIcon {
@@ -145,10 +150,7 @@
   gap: 2px;
   min-width: min(240px, calc(100vw - 16px));
   max-width: min(320px, calc(100vw - 16px));
-  animation: cds-popover-enter
-    var(--transition-popover-enter, 180ms cubic-bezier(0.16, 1, 0.3, 1))
-    forwards;
-  transform-origin: var(--radix-popover-content-transform-origin, top left);
+  /* 动效与几何锚点完全由基座 Menu.module.css 托管，彻底清除 cds-popover-* 幽灵引用 */
   max-height: min(
     var(--radix-popover-content-available-height, 360px),
     70vh,
@@ -161,10 +163,6 @@
   box-sizing: border-box;
   color: var(--text-primary);
   font-family: var(--font-sans, var(--sep-font-sans));
-}
-
-.permMenuExit {
-  animation: cds-popover-exit var(--transition-popover-exit) forwards;
 }
 
 .permMenuItem,

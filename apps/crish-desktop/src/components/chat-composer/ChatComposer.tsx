@@ -8,14 +8,7 @@
  * - Layer 3: 上下文与文件引用卡片区（ComposerAttachmentBar，24px 高度圆角芯片卡片）
  * - Layer 4: 主输入区（Composer Card：加号/权限盾牌 + 富文本/兜底输入 + 融合模型胶囊 + 统计/语音 + 墨绿实体正圆发送按钮）
  */
-import React, {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, { useCallback, useId, useMemo, useRef, useState } from 'react';
 
 import styles from './ChatComposer.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
@@ -23,14 +16,10 @@ import { ComposePlusMenu } from './ComposePlusMenu';
 import { PermissionModeMenu } from './PermissionModeMenu';
 import { Button, Input, Tooltip } from '../ui';
 import { shouldSuppressMenuReopen } from '../ui/Menu';
-import type { PermissionMode } from '../../api/permissionModes';
-import type { ChatAttachment } from '../../hooks/useChatStream';
 import { ComposerField } from './ComposerField';
 import type {
   ComposerFieldProps,
   ComposerSendApi,
-  ComposerPermissionBarProps,
-  ComposerPlanProgressBarProps,
   ChatComposerProps,
   ComposerLayoutVariant,
 } from './composerTypes';
@@ -43,31 +32,42 @@ import { removePendingFileAnnotation } from '../../api/workspaceFsApi';
 import { ComposerSendControls } from './ComposerSendControls';
 import { useComposerMultiline } from './useComposerMultiline';
 import { useComposerHiddenFileInputProps } from '../../api/modelVisionSupport';
-import {
-  ComposerNoticeBar,
-  type ComposerNotice,
-} from './ComposerNoticeBar';
+import { ComposerNoticeBar } from './ComposerNoticeBar';
 import { useComposerNotice } from './useComposerNotice';
 import { useComposerEmptyKind } from './useComposerEmptyKind';
 import { useComposerProtectedSend } from './useComposerProtectedSend';
 import { InputFieldErrorBoundary } from './InputFieldErrorBoundary';
+import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 
-export type {
-  ComposerFieldProps,
-  ChatComposerProps,
-  ComposerLayoutVariant,
-};
+export type { ComposerFieldProps, ChatComposerProps, ComposerLayoutVariant };
 export { ComposerField, STOP_TOOLTIP } from './ComposerField';
-export { ComposerPermissionBar, type ComposerPermissionBarProps } from './ComposerPermissionBar';
-export { ComposerPlanProgressBar, type ComposerPlanProgressBarProps } from './ComposerPlanProgressBar';
-export { ComposerAttachmentBar, type ComposerAttachmentBarProps } from './ComposerAttachmentBar';
-export { ComposerSendControls, type ComposerSendControlsProps } from './ComposerSendControls';
-export { ComposerFusedTrigger, type ComposerFusedTriggerProps } from './ComposerFusedTrigger';
+export {
+  ComposerPermissionBar,
+  type ComposerPermissionBarProps,
+} from './ComposerPermissionBar';
+export {
+  ComposerPlanProgressBar,
+  type ComposerPlanProgressBarProps,
+} from './ComposerPlanProgressBar';
+export {
+  ComposerAttachmentBar,
+  type ComposerAttachmentBarProps,
+} from './ComposerAttachmentBar';
+export {
+  ComposerSendControls,
+  type ComposerSendControlsProps,
+} from './ComposerSendControls';
+export {
+  ComposerFusedTrigger,
+  type ComposerFusedTriggerProps,
+} from './ComposerFusedTrigger';
 import { AppIcon } from '../ui/icons/index';
 
 /** 富文本输入（默认主路）：React.lazy 软接，装配失败回落 textarea（F1-γ） */
 const TiptapComposerFieldLazy = React.lazy(() =>
-  import('./TiptapComposerField').then((m) => ({ default: m.TiptapComposerField }))
+  import('./TiptapComposerField').then((m) => ({
+    default: m.TiptapComposerField,
+  }))
 );
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -114,6 +114,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   onCancelEdit,
   layoutVariant = 'adaptive',
 }) => {
+  const scopedSessionId = useScopedSessionId();
   const plusMenuId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const fieldContainerRef = useRef<HTMLDivElement>(null);
@@ -163,12 +164,12 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         if (targetIndex === -1) return prev;
         const target = prev[targetIndex];
         if (target?.annotation?.id) {
-          removePendingFileAnnotation(target.annotation.id);
+          removePendingFileAnnotation(target.annotation.id, scopedSessionId);
         }
         return prev.filter((_, idx) => idx !== targetIndex);
       });
     },
-    [setAttachments]
+    [setAttachments, scopedSessionId]
   );
 
   const handleFileOpenClick = useCallback(
@@ -258,7 +259,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   });
 
   const isMultiline =
-    !isEditingMessage && layoutVariant === 'adaptive' ? multilineFromHook : true;
+    !isEditingMessage && layoutVariant === 'adaptive'
+      ? multilineFromHook
+      : true;
 
   /**
    * 统一输入区装配：默认主路 = TiptapComposerField（React.lazy 软接 + Suspense，
@@ -284,17 +287,19 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     );
   };
 
-  const { effectiveNotice, handleDismissNotice } = useComposerNotice({
-    attachments,
-    noticeProp,
-    onDismissNotice,
-  });
+  const { effectiveNotice, isClosing, handleDismissNotice } = useComposerNotice(
+    {
+      attachments,
+      noticeProp,
+      onDismissNotice,
+    }
+  );
 
   const hasFloatLayer = Boolean(
     permissionBarNode ||
-      permissionBarProps ||
-      planProgressNode ||
-      planProgressProps
+    permissionBarProps ||
+    planProgressNode ||
+    planProgressProps
   );
 
   return (
@@ -325,12 +330,19 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
 
         {/* 输入框上方精致提示条（极细浅描边通白背景，叹号hover详情，复制，反馈，关闭） */}
         {effectiveNotice ? (
-          <div className={styles.composerNoticeZone} data-composer-notice-zone="">
-            <ComposerNoticeBar
-              notice={effectiveNotice}
-              onDismiss={handleDismissNotice}
-              onFeedback={onNoticeFeedback}
-            />
+          <div
+            className={styles.composerNoticeZone}
+            data-closing={isClosing ? 'true' : undefined}
+            data-composer-notice-zone=""
+          >
+            <div className={styles.composerNoticeZoneInner}>
+              <ComposerNoticeBar
+                notice={effectiveNotice}
+                isClosing={isClosing}
+                onDismiss={handleDismissNotice}
+                onFeedback={onNoticeFeedback}
+              />
+            </div>
           </div>
         ) : null}
 

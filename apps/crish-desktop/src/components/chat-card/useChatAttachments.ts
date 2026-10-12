@@ -19,11 +19,34 @@ import {
   notifyImageIntakeBlocked,
   shouldStripImagesForActiveModel,
 } from '../../api/modelVisionSupport';
+import {
+  useScopedSessionId,
+  shouldConsumeScopedEvent,
+  useLeafScope,
+} from '../../contexts/LeafScopeContext';
 
 const DRAFT_SESSION_KEY = '__composer_draft_session__';
 
+const TEXT_EXT_RE =
+  /\.(txt|md|markdown|json|ts|tsx|js|jsx|css|html|py|rs|go|java|c|cpp|h|ya?ml|toml|xml|csv|log|sh|ps1)$/i;
+
+const MIME_EXT_MAP: Record<string, string> = {
+  pptx: 'application/vnd.ms-powerpoint',
+  ppt: 'application/vnd.ms-powerpoint',
+  docx: 'application/msword',
+  doc: 'application/msword',
+  xlsx: 'application/vnd.ms-excel',
+  xls: 'application/vnd.ms-excel',
+  pdf: 'application/pdf',
+};
+
+function guessDocMime(name: string): string {
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  return MIME_EXT_MAP[ext] || 'application/octet-stream';
+}
+
 export interface UseChatAttachmentsOptions {
-  activeSessionId: string | null;
+  activeSessionId?: string | null;
 }
 
 export interface UseChatAttachmentsResult {
@@ -32,6 +55,7 @@ export interface UseChatAttachmentsResult {
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   handleFilesSelected: (files: File[]) => Promise<void>;
   handlePathsSelected: (paths: string[]) => Promise<void>;
+  handlePastePath: (paths: string[]) => Promise<void>;
   /** §3.1 拖放唯一入口：有 File.path 收敛为 paths；否则 blob */
   handleDroppedFiles: (files: File[]) => Promise<void>;
   handlePickFiles: () => Promise<void>;
@@ -41,39 +65,41 @@ export interface UseChatAttachmentsResult {
 
 export function useChatAttachments({
   activeSessionId,
-}: UseChatAttachmentsOptions): UseChatAttachmentsResult {
-  const currentKey = activeSessionId || DRAFT_SESSION_KEY;
+}: UseChatAttachmentsOptions = {}): UseChatAttachmentsResult {
+  const scopedSid = useScopedSessionId(activeSessionId);
+  const scope = useLeafScope();
+  const currentKey = scopedSid || DRAFT_SESSION_KEY;
   const [attachments, setAttachments] = useState<ChatAttachment[]>(() => {
     return (sessionRuntimeRegistry.get(currentKey).attachments ??
       []) as ChatAttachment[];
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const prevSessionIdRef = useRef(activeSessionId);
+  const prevSessionIdRef = useRef(scopedSid);
   const intakeDedupeRef = useRef(createAttachmentIntakeDedupe());
 
   useEffect(() => {
     const prevKey = prevSessionIdRef.current || DRAFT_SESSION_KEY;
-    const effectiveCurrentKey = activeSessionId || DRAFT_SESSION_KEY;
+    const effectiveCurrentKey = scopedSid || DRAFT_SESSION_KEY;
     if (prevKey !== effectiveCurrentKey) {
       sessionRuntimeRegistry.save(prevKey, {
         attachments: attachments as Attachment[],
       });
     }
-    prevSessionIdRef.current = activeSessionId || '';
+    prevSessionIdRef.current = scopedSid || '';
     const restored = sessionRuntimeRegistry.get(effectiveCurrentKey);
     let next = (restored.attachments ?? []) as ChatAttachment[];
     if (shouldStripImagesForActiveModel()) {
       next = next.filter((a) => !isImageChatAttachment(a));
     }
     setAttachments(next);
-  }, [activeSessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scopedSid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const key = activeSessionId || DRAFT_SESSION_KEY;
+    const key = scopedSid || DRAFT_SESSION_KEY;
     sessionRuntimeRegistry.save(key, {
       attachments: attachments as Attachment[],
     });
-  }, [activeSessionId, attachments]);
+  }, [scopedSid, attachments]);
 
   useEffect(() => {
     const strip = () => {
@@ -97,26 +123,30 @@ export function useChatAttachments({
   // 监听外部注入附件事件（如文件选区批注作为附件挂载）
   useEffect(() => {
     const handleAttachmentsChanged = (e: Event) => {
-      const customEvent = e as CustomEvent<{ sessionId?: string }>;
-      const targetSid = customEvent.detail?.sessionId;
-      const effectiveCurrentKey = activeSessionId || DRAFT_SESSION_KEY;
-      if (!targetSid || targetSid === effectiveCurrentKey) {
-        const latest = (sessionRuntimeRegistry.get(effectiveCurrentKey)
-          .attachments ?? []) as ChatAttachment[];
-        setAttachments([...latest]);
-      }
+      const d = (e as CustomEvent<{ sessionId?: string; leafId?: string }>)
+        .detail;
+      if (
+        !shouldConsumeScopedEvent(d, {
+          sessionId: scopedSid,
+          leafId: scope.leafId,
+          isActive: scope.inLeafScope ? scope.isActive : true,
+        })
+      )
+        return;
+      const latest = (sessionRuntimeRegistry.get(scopedSid || DRAFT_SESSION_KEY)
+        .attachments ?? []) as ChatAttachment[];
+      setAttachments([...latest]);
     };
     window.addEventListener(
       'crish-attachments-changed',
       handleAttachmentsChanged
     );
-    return () => {
+    return () =>
       window.removeEventListener(
         'crish-attachments-changed',
         handleAttachmentsChanged
       );
-    };
-  }, [activeSessionId]);
+  }, [scopedSid, scope.leafId, scope.isActive, scope.inLeafScope]);
 
   const addAttachments = useCallback((items: ChatAttachment[]) => {
     if (!items.length) return;
@@ -140,9 +170,8 @@ export function useChatAttachments({
       }
       e.preventDefault();
       try {
-        const { blobToImageAttachment } = await import(
-          '../../api/imageProcessing'
-        );
+        const { blobToImageAttachment } =
+          await import('../../api/imageProcessing');
         const next: ChatAttachment[] = [];
         for (const f of imageFiles) {
           next.push(await blobToImageAttachment(f, f.name || undefined));
@@ -180,9 +209,8 @@ export function useChatAttachments({
         if (isImg) {
           let mime = 'image/png';
           try {
-            const { getMimeFromPath } = await import(
-              '../../api/localFileReader'
-            );
+            const { getMimeFromPath } =
+              await import('../../api/localFileReader');
             const detected = getMimeFromPath(safePath);
             if (detected && detected.startsWith('image/')) {
               mime = detected;
@@ -203,22 +231,15 @@ export function useChatAttachments({
           }
 
           try {
-            const { readLocalImageAsDataUrl } = await import(
-              '../../api/localFileReader'
-            );
+            const { readLocalImageAsDataUrl } =
+              await import('../../api/localFileReader');
             const dataUrl = await readLocalImageAsDataUrl(safePath);
             if (!dataUrl) {
-              next.push({
-                name,
-                path: safePath,
-                mime,
-                isImage: true,
-              });
+              next.push({ name, path: safePath, mime, isImage: true });
               continue;
             }
-            const { generateSquareThumbnail } = await import(
-              '../../api/imageProcessing'
-            );
+            const { generateSquareThumbnail } =
+              await import('../../api/imageProcessing');
             const thumbnailUrl = await generateSquareThumbnail(dataUrl);
             next.push({
               name,
@@ -231,39 +252,26 @@ export function useChatAttachments({
               progress: 100,
             });
           } catch {
-            next.push({
-              name,
-              path: safePath,
-              mime,
-              isImage: true,
-            });
+            next.push({ name, path: safePath, mime, isImage: true });
           }
           continue;
         }
 
-        const isCodeOrText =
-          /\.(txt|md|markdown|json|ts|tsx|js|jsx|css|html|py|rs|go|java|c|cpp|h|ya?ml|toml|xml|csv|log|sh|ps1)$/i.test(
-            lower
-          );
+        const isCodeOrText = TEXT_EXT_RE.test(lower);
         if (isCodeOrText) {
           let text: string | undefined;
           try {
-            const { readLocalTextBestEffort } = await import(
-              '../../api/localFileReader'
-            );
-            const read = await readLocalTextBestEffort(safePath);
-            text = read ?? undefined;
+            const { readLocalTextBestEffort } =
+              await import('../../api/localFileReader');
+            text = (await readLocalTextBestEffort(safePath)) ?? undefined;
           } catch {
             try {
-              const { readTextFileAtPath } = await import(
-                '../../api/browserImportApi'
-              );
+              const { readTextFileAtPath } =
+                await import('../../api/browserImportApi');
               const read = await readTextFileAtPath(safePath);
-              if (read) {
-                text = read.slice(0, 512_000);
-              }
+              if (read) text = read.slice(0, 512_000);
             } catch {
-              // Best-effort read; continue with undefined text
+              // Best-effort read
             }
           }
           next.push({
@@ -278,17 +286,10 @@ export function useChatAttachments({
         let mime = 'application/octet-stream';
         try {
           const { getMimeFromPath } = await import('../../api/localFileReader');
-          mime = getMimeFromPath(safePath);
+          mime = getMimeFromPath(safePath) || guessDocMime(name);
         } catch {
-          // ignore
+          mime = guessDocMime(name);
         }
-        if (mime === 'application/octet-stream') {
-          if (/\.pptx?$/i.test(lower)) mime = 'application/vnd.ms-powerpoint';
-          else if (/\.docx?$/i.test(lower)) mime = 'application/msword';
-          else if (/\.xlsx?$/i.test(lower)) mime = 'application/vnd.ms-excel';
-          else if (/\.pdf$/i.test(lower)) mime = 'application/pdf';
-        }
-
         next.push({ name, path: safePath, mime });
       }
 
@@ -310,6 +311,52 @@ export function useChatAttachments({
     },
     [addAttachments]
   );
+
+  useEffect(() => {
+    const handleAttachTextFile = (e: Event) => {
+      const d = (
+        e as CustomEvent<{
+          path?: string;
+          name?: string;
+          text?: string;
+          sessionId?: string;
+          leafId?: string;
+        }>
+      ).detail;
+      if (
+        !shouldConsumeScopedEvent(d, {
+          sessionId: scopedSid,
+          leafId: scope.leafId,
+          isActive: scope.inLeafScope ? scope.isActive : true,
+        })
+      )
+        return;
+      if (d?.path) void handlePathsSelected([d.path]);
+      else if (d?.text)
+        addAttachments([
+          {
+            name: d.name || 'attachment.txt',
+            text: d.text,
+            mime: 'text/plain',
+            status: 'ready',
+            progress: 100,
+          },
+        ]);
+    };
+    window.addEventListener('conex:attach-text-file', handleAttachTextFile);
+    return () =>
+      window.removeEventListener(
+        'conex:attach-text-file',
+        handleAttachTextFile
+      );
+  }, [
+    scopedSid,
+    scope.leafId,
+    scope.isActive,
+    scope.inLeafScope,
+    handlePathsSelected,
+    addAttachments,
+  ]);
 
   const handleFilesSelected = useCallback(
     async (files: File[]) => {
@@ -335,9 +382,8 @@ export function useChatAttachments({
           }
           try {
             if (!blobToImageAttachment) {
-              ({ blobToImageAttachment } = await import(
-                '../../api/imageProcessing'
-              ));
+              ({ blobToImageAttachment } =
+                await import('../../api/imageProcessing'));
             }
             const imgAtt = await blobToImageAttachment(f, f.name);
             next.push(imgAtt);
@@ -456,6 +502,7 @@ export function useChatAttachments({
     fileInputRef,
     handleFilesSelected,
     handlePathsSelected,
+    handlePastePath: handlePathsSelected,
     handleDroppedFiles,
     handlePickFiles,
     handlePasteImage,

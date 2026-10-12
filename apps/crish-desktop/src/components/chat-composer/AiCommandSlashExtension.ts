@@ -7,6 +7,25 @@
  */
 
 import type { SlashCommandItem } from './composerTypes';
+import { dispatchUiEvent } from '../../api/uiEvents';
+import { openSettings } from '../../store/storeAccess';
+
+function extractEditorScopeTarget(editor: any): {
+  sessionId?: string;
+  leafId?: string;
+} {
+  try {
+    const dom = editor?.view?.dom as HTMLElement | null | undefined;
+    if (!dom || typeof dom.closest !== 'function') return {};
+    const leafEl = dom.closest<HTMLElement>('[data-leaf-id]');
+    const sessionEl = dom.closest<HTMLElement>('[data-session-id]');
+    const leafId = leafEl?.getAttribute('data-leaf-id') || undefined;
+    const sessionId = sessionEl?.getAttribute('data-session-id') || undefined;
+    return { sessionId, leafId };
+  } catch {
+    return {};
+  }
+}
 
 export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   {
@@ -27,9 +46,8 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
     keywords: ['clear', '清空', '重置', 'reset', 'cls'],
     command: ({ editor, range }: any) => {
       editor.chain().focus().deleteRange(range).run();
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('crish:chat-clear'));
-      }
+      const target = extractEditorScopeTarget(editor);
+      dispatchUiEvent('clear-current-session', target);
     },
   },
   {
@@ -40,9 +58,8 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
     keywords: ['stop', '停止', '终止', 'cancel', 'abort'],
     command: ({ editor, range }: any) => {
       editor.chain().focus().deleteRange(range).run();
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('crish:chat-stop'));
-      }
+      const target = extractEditorScopeTarget(editor);
+      dispatchUiEvent('stop-generation', target);
     },
   },
   {
@@ -72,10 +89,12 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
     iconName: 'Sliders',
     keywords: ['compact', '压缩', '摘要', 'summarize', 'budget'],
     command: ({ editor, range }: any) => {
-      editor.chain().focus().deleteRange(range).run();
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('crish:chat-compact'));
-      }
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .insertContent('/compact ')
+        .run();
     },
   },
   {
@@ -156,9 +175,7 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
     keywords: ['settings', '设置', '偏好', 'config', 'preferences'],
     command: ({ editor, range }: any) => {
       editor.chain().focus().deleteRange(range).run();
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('crish:open-settings'));
-      }
+      openSettings();
     },
   },
   {

@@ -63,16 +63,21 @@
   accent-color: var(--accent-color);
 }
 
-/*    mark Link     token               */
+/* 超链接排版统一（遵循科技蓝与虚线下划线设计契约） */
 .proseMirrorField :global(a) {
-  color: var(--accent-color);
-  text-decoration: none;
-  border-bottom: var(--hairline-width, 1px) solid
-    color-mix(in srgb, var(--accent-color) 30%, transparent);
+  color: var(--link-color);
+  text-decoration: underline dashed;
+  text-underline-offset: 3px;
+  transition:
+    color var(--transition-fast, 150ms ease),
+    text-decoration-color var(--transition-fast, 150ms ease);
 }
 
-.proseMirrorField :global(a:hover) {
-  border-bottom-color: var(--accent-color);
+.proseMirrorField :global(a:hover),
+.proseMirrorField :global(a:focus),
+.proseMirrorField :global(a:focus-visible) {
+  color: var(--link-hover-color);
+  text-decoration: underline solid;
 }
 
 /*           textarea              */
@@ -212,7 +217,24 @@
 }
 
 .proseMirrorField :global(.mention-chip-skill) {
-  background: var(--tint-active);
+  cursor: pointer;
+  background: color-mix(in srgb, var(--brand) 8%, var(--bg-elevated));
+  border-color: color-mix(in srgb, var(--brand) 22%, var(--border-subtle));
+  color: var(--text-primary);
+  border-radius: var(--radius-md, 8px);
+  padding: 2px 8px 2px 4px;
+  transition:
+    background-color var(--transition-micro),
+    border-color var(--transition-micro);
+}
+
+.proseMirrorField :global(.mention-chip-skill:hover) {
+  background: color-mix(in srgb, var(--brand) 16%, var(--bg-elevated));
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--border-color));
+}
+
+.proseMirrorField :global(.mention-chip-skill:active) {
+  background: color-mix(in srgb, var(--brand) 24%, var(--bg-elevated));
 }
 
 .proseMirrorField :global(.mention-icon-box) {

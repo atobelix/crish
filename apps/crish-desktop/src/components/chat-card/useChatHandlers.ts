@@ -2,11 +2,18 @@ import { useCallback, useEffect, useRef } from 'react';
 import { toast } from '../../services/toast/ToastContext';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { formatBranchUndoToast } from '../../hooks/useToastQueue';
-import { onUiEvent } from '../../api/uiEvents';
+import { onScopedUiEvent } from '../../hooks/useLeafUiEvent';
+import { useLeafScope } from '../../contexts/LeafScopeContext';
+import { useLayoutTreeStore } from '../../store/layout-tree';
+import { resolveLeafIdForSession } from '../../store/workspace-shell/openTool';
 import { generateMessageId } from '../../utils/generateMessageId';
 import { getTransport } from '../../api/transport';
 import { backfillFromBoundaryText } from '../../hooks/chat-stream/slashSendDraftManager';
-import { reportRuntimeStatus, useSettingsField } from '../../store/storeAccess';
+import {
+  openToolInSession,
+  reportRuntimeStatus,
+  useSettingsField,
+} from '../../store/storeAccess';
 import type { ChatAttachment } from '../../hooks/useChatStream';
 import type {
   ChatContentPart,
@@ -31,6 +38,12 @@ export interface UseChatHandlersOptions {
     textOverride?: string,
     attachmentsOverride?: ChatAttachment[]
   ) => Promise<void>;
+  openSidePanel?: (
+    panelId: 'terminal' | 'diff' | 'preview' | 'tasks' | 'files',
+    targetSessionId?: string | null
+  ) => void;
+  onToggleMsgFilter?: () => void;
+  subscribeLifecycleEvents?: boolean;
 }
 
 export function useChatHandlers({
@@ -41,7 +54,27 @@ export function useChatHandlers({
   setChatInput,
   runStreamingAssistant,
   handleSendChat,
+  openSidePanel,
+  onToggleMsgFilter,
+  subscribeLifecycleEvents,
 }: UseChatHandlersOptions) {
+  const scope = useLeafScope();
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
+  const activeSessionIdRef = useRef(activeSessionId);
+  activeSessionIdRef.current = activeSessionId;
+
+  const getScopeTarget = useCallback(
+    () => ({
+      sessionId: activeSessionIdRef.current,
+      leafId: scopeRef.current.leafId,
+      isActive: scopeRef.current.inLeafScope
+        ? scopeRef.current.isActive
+        : undefined,
+    }),
+    []
+  );
+
   const lastRetryTimeRef = useRef<Record<string, number>>({});
   const retryCountRef = useRef<Record<string, number>>({});
   const configuredMaxRetries = useSettingsField(
@@ -68,44 +101,91 @@ export function useChatHandlers({
     })();
   }, [activeSessionId]);
 
-  useEffect(() => {
-    return onUiEvent('export-session-md', () => {
-      handleExportMarkdown();
-    });
-  }, [handleExportMarkdown]);
-
-  useEffect(() => {
-    return onUiEvent('open-conversation-rewind', () => {
-      void (async () => {
-        const sid = activeSessionId;
-        if (!sid || sid.startsWith('__pending')) {
-          toast.show('当前无可用会话，无法回溯');
+  const handleOpenConversationRewind = useCallback(() => {
+    void (async () => {
+      const sid = activeSessionId;
+      if (!sid || sid.startsWith('__pending')) {
+        toast.show('当前无可用会话，无法回溯');
+        return;
+      }
+      try {
+        const { previewConversationRewind } =
+          await import('../../api/conversationRewindApi');
+        const preview = await previewConversationRewind({ sessionId: sid });
+        if (!preview.ok) {
+          toast.show(
+            preview.error
+              ? `回溯预览失败：${preview.error}`
+              : '回溯预览失败：引擎未返回边界事实'
+          );
           return;
         }
-        try {
-          const { previewConversationRewind } =
-            await import('../../api/conversationRewindApi');
-          const preview = await previewConversationRewind({ sessionId: sid });
-          if (!preview.ok) {
-            toast.show(
-              preview.error
-                ? `回溯预览失败：${preview.error}`
-                : '回溯预览失败：引擎未返回边界事实'
-            );
-            return;
-          }
-          const rawType =
-            typeof preview.raw.type === 'string' ? preview.raw.type : 'preview';
-          toast.show(
-            `已收到回溯预览（${rawType}）。确认应用请使用引擎 apply-conversation-rewind；缺 leaf 事实时不会改写会话。`
-          );
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          toast.show(`回溯不可用：${msg}`);
-        }
-      })();
-    });
+        const rawType =
+          typeof preview.raw.type === 'string' ? preview.raw.type : 'preview';
+        toast.show(
+          `已收到回溯预览（${rawType}）。确认应用请使用引擎 apply-conversation-rewind；缺 leaf 事实时不会改写会话。`
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        toast.show(`回溯不可用：${msg}`);
+      }
+    })();
   }, [activeSessionId]);
+
+  const handleClearSession = useCallback(() => {
+    if (!activeSessionId) return;
+    handleStopGeneration();
+    setChatInput('');
+    getCompositionRoot()
+      .session.getState()
+      .clearSessionMessages(activeSessionId);
+  }, [activeSessionId, handleStopGeneration, setChatInput]);
+
+  const handleViewPlan = useCallback(() => {
+    const sid = activeSessionId;
+    if (!sid) return;
+    if (openSidePanel) {
+      openSidePanel('files', sid);
+    } else {
+      openToolInSession(sid, 'files');
+    }
+  }, [activeSessionId, openSidePanel]);
+
+  useEffect(() => {
+    if (subscribeLifecycleEvents === false) return;
+    return onScopedUiEvent(
+      'export-session-md',
+      () => handleExportMarkdown(),
+      getScopeTarget
+    );
+  }, [handleExportMarkdown, getScopeTarget, subscribeLifecycleEvents]);
+
+  useEffect(() => {
+    if (subscribeLifecycleEvents === false) return;
+    return onScopedUiEvent(
+      'open-conversation-rewind',
+      () => handleOpenConversationRewind(),
+      getScopeTarget
+    );
+  }, [handleOpenConversationRewind, getScopeTarget, subscribeLifecycleEvents]);
+
+  useEffect(() => {
+    if (subscribeLifecycleEvents === false) return;
+    return onScopedUiEvent(
+      'clear-current-session',
+      () => handleClearSession(),
+      getScopeTarget
+    );
+  }, [handleClearSession, getScopeTarget, subscribeLifecycleEvents]);
+
+  useEffect(() => {
+    if (!onToggleMsgFilter) return;
+    return onScopedUiEvent(
+      'toggle-msg-filter',
+      () => onToggleMsgFilter(),
+      getScopeTarget
+    );
+  }, [onToggleMsgFilter, getScopeTarget]);
 
   // ── R1 撤回与就地编辑：引擎入口 + 回填消费 ──
   // 用户锁：入口在消息流（最后一条 user / 正在生成的助手行），不在 composer 页脚。
@@ -115,12 +195,16 @@ export function useChatHandlers({
   // timeline-truncate 消费端派发的回填事件 → setChatInput + setComposerDraft
   //（数据源 = boundary user 节点 text，不依赖 draft 快照）
   useEffect(() => {
-    return onUiEvent('retract-backfill', ({ sessionId, text }) => {
-      if (!sessionId || !text) return;
-      if (suppressRetractBackfillRef.current) return;
-      backfillFromBoundaryText(sessionId, text, setChatInput);
-    });
-  }, [setChatInput]);
+    return onScopedUiEvent(
+      'retract-backfill',
+      ({ sessionId, text }) => {
+        if (!sessionId || !text) return;
+        if (suppressRetractBackfillRef.current) return;
+        backfillFromBoundaryText(sessionId, text, setChatInput);
+      },
+      getScopeTarget
+    );
+  }, [setChatInput, getScopeTarget]);
 
   // 撤回上一条 user 消息（消息行动作栏）：定位活跃会话最后一条
   // user 消息 → 引擎 core_session_retract（流式中不停用）
@@ -395,14 +479,18 @@ export function useChatHandlers({
 
   // ComposerErrorBar「重试」（单轨收敛 §2.3）：复用原消息位重发当轮，严禁新建用户消息
   useEffect(() => {
-    return onUiEvent(
+    return onScopedUiEvent(
       'retry-failed-turn',
-      ({ sessionId, userMsgId, assistantMsgId }) => {
+      (detail) => {
+        if (!detail) return;
+        const { sessionId, assistantMsgId } = detail;
+        const userMsgId = detail.userMsgId || detail.userMessageId;
         if (!sessionId || (!assistantMsgId && !userMsgId)) return;
         regenerateTurn({ sessionId, assistantMsgId, userMsgId });
-      }
+      },
+      getScopeTarget
     );
-  }, [regenerateTurn]);
+  }, [regenerateTurn, getScopeTarget]);
 
   const handleBranch = useCallback(() => {
     if (!activeSessionId) return;
@@ -412,19 +500,34 @@ export function useChatHandlers({
     const session = getCompositionRoot().session;
     session.getState().branchSession(activeSessionId, newTitle);
     const newBranchId = session.getState().activeSessionId;
+    if (newBranchId) {
+      const targetLeafId = scope.leafId || resolveLeafIdForSession(oldId);
+      if (targetLeafId) {
+        const treeState = useLayoutTreeStore.getState();
+        if (typeof treeState?.openSession === 'function') {
+          treeState.openSession(newBranchId, {
+            activeLeafId: targetLeafId,
+            title: newTitle,
+          });
+        }
+      }
+    }
     toast.show(formatBranchUndoToast(base), () => {
       if (newBranchId && newBranchId !== oldId) {
         session.getState().archiveSession(newBranchId);
       }
       session.getState().setActiveSessionId(oldId);
     });
-  }, [activeSessionId, activeSessionTitle]);
+  }, [activeSessionId, activeSessionTitle, scope.leafId]);
 
   return {
     handleExportMarkdown,
+    handleOpenConversationRewind,
+    handleClearSession,
     handleRegenerate,
     handleBranch,
     handleRetract,
     handleEditMessageAndResend,
+    handleViewPlan,
   };
 }

@@ -11,7 +11,6 @@ import {
   type ProjectEntry,
 } from '../../api/projectStore';
 import { openDirectoryDialogSafe } from '../../api/openDirectoryDialog';
-import { getSessionStoreState, setDraftFolder } from '../../api/storeAccess';
 import { isPendingDraft } from '../../store/storeAccess';
 import { Button, ConfirmDialog, Tooltip } from '../ui';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
@@ -22,15 +21,11 @@ import {
 } from '../ui/SmartExpandablePanel';
 import styles from './ProjectPickerMenu.module.css';
 import { AppIcon } from '../ui/icons/index';
-
-/** 草稿态切项目：同步 draftFolder，不 mint 真会话 */
-function syncDraftFolderOnProjectChange(folder: string): void {
-  if (isPendingDraft(getSessionStoreState().activeSessionId)) {
-    setDraftFolder(folder);
-  }
-}
+import { useScopedSessionId } from '../../contexts/LeafScopeContext';
+import { setDraftProjectFolder } from '../../store/sessionDraftActions';
 
 export interface ProjectPickerMenuProps {
+  sessionId?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** @deprecated 优先使用 onOpenChange(false)。@see onOpenChange */
@@ -48,6 +43,7 @@ export interface ProjectPickerMenuProps {
 }
 
 export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
+  sessionId: sessionIdProp,
   open,
   onOpenChange,
   onClose,
@@ -60,10 +56,20 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
   avoidCollisions,
   onCloseAutoFocus,
 }) => {
+  const scopedSessionId = useScopedSessionId(sessionIdProp);
   const [projectListVersion, setProjectListVersion] = useState(0);
   const [busy, setBusy] = useState(false);
   const activeId = getActiveProjectId();
   const [confirmGate, renderConfirmGate] = useConfirmGate();
+
+  const syncDraftFolderOnProjectChange = useCallback(
+    (folder: string) => {
+      if (isPendingDraft(scopedSessionId)) {
+        setDraftProjectFolder(folder, scopedSessionId || undefined);
+      }
+    },
+    [scopedSessionId]
+  );
 
   const refresh = useCallback(() => {
     setProjectListVersion((v) => v + 1);
@@ -123,7 +129,7 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
       onChanged?.();
       onOpenChange(false);
     },
-    [onChanged, onOpenChange]
+    [onChanged, onOpenChange, syncDraftFolderOnProjectChange]
   );
 
   // 纯数据驱动 Schema 构造
@@ -204,7 +210,15 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
         ],
       },
     ];
-  }, [projects, activeId, busy, pickProject, onChanged, onOpenChange]);
+  }, [
+    projects,
+    activeId,
+    busy,
+    pickProject,
+    onChanged,
+    onOpenChange,
+    syncDraftFolderOnProjectChange,
+  ]);
 
   return (
     <>

@@ -54,10 +54,21 @@ export function useChatMessages({
     useCallback((session) => session?.engineLastRunId, [])
   );
 
+  const hasSessionShell = useScopedSessionField(
+    resolveSessionId,
+    useCallback((session) => Boolean(session), [])
+  );
+  const messagesHydrated = useScopedSessionField(
+    resolveSessionId,
+    useCallback((session) => session?.messagesHydrated === true, [])
+  );
+
   useEffect(() => {
     if (!activeSessionId) return;
-    triggerSessionMessageHydrateIfNeeded(activeSessionId);
-  }, [activeSessionId]);
+    if (hasSessionShell && !messagesHydrated) {
+      triggerSessionMessageHydrateIfNeeded(activeSessionId);
+    }
+  }, [activeSessionId, hasSessionShell, messagesHydrated]);
 
   // S-6 展示投影唯一入口（排序 → 搜索 → 可渲染过滤 → 载体折叠）
   const projection = useMemo(
@@ -66,22 +77,18 @@ export function useChatMessages({
   );
   const displayMessages = projection.display;
 
-  const {
-    messagesLoading,
-    emptyKind,
-    onEmptySurface,
-    chatRegionAria,
-  } = useChatEmptyKind({
-    activeSessionId,
-    // G5：投影后、搜索前的条数——全部不可渲染时落到 session-empty（欢迎面），不白屏
-    messageCount: projection.visibleCount,
-    displayCount: displayMessages.length,
-    localMsgFilter,
-    mainSurface,
-    hydratedFromEngine,
-    engineCursor,
-    engineLastRunId,
-  });
+  const { messagesLoading, emptyKind, onEmptySurface, chatRegionAria } =
+    useChatEmptyKind({
+      activeSessionId,
+      // G5：投影后、搜索前的条数——全部不可渲染时落到 session-empty（欢迎面），不白屏
+      messageCount: projection.visibleCount,
+      displayCount: displayMessages.length,
+      localMsgFilter,
+      mainSurface,
+      hydratedFromEngine,
+      engineCursor,
+      engineLastRunId,
+    });
 
   const isProcessing = useMemo(
     () => messages.some((m) => m.status === 'processing'),

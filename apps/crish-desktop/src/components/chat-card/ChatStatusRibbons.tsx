@@ -25,7 +25,7 @@ import {
   resolveNeedsModelSoftHintText,
 } from '../../api/chatEmptyState';
 import { isFirstRunOverlayOpen } from '../firstRunOverlayFlag';
-import { Button, Tooltip } from '../ui';
+import { Button } from '../ui';
 import { SetupHintBanner, type SetupHintState } from './SetupHintBanner';
 import {
   PlanGoalRibbons,
@@ -208,8 +208,7 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
     [progressItems]
   );
 
-  const hasActivePlan =
-    goalModeActive || checklistProgress.total > 0;
+  const hasActivePlan = goalModeActive || checklistProgress.total > 0;
   // 盖层生命周期优先于 LS gate（密钥步落盘后向导仍可能打开）
   const firstRunOpen = isFirstRunOverlayOpen();
   const engineOk = engineHint == null ? null : engineHint.ok;
@@ -273,10 +272,7 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
 
   // ── 核心门闩 1：动态快捷状态浮条受到 !onEmptySurface 刚性拦截 ──
   const shouldRenderDynamicChipBar =
-    !onEmptySurface &&
-    (activeBgTasks.length > 0 ||
-      hasActivePlan ||
-      (diffCount > 0 && Boolean(onOpenDiff)));
+    !onEmptySurface && (activeBgTasks.length > 0 || hasActivePlan);
 
   // ── 核心门闩 2：计划详情抽屉受到 !onEmptySurface 刚性拦截 ──
   const shouldRenderPlanDrawer =
@@ -325,9 +321,12 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
           aria-live="assertive"
           aria-label={engineCrashedText}
         >
-          <AppIcon name="alert-triangle" size={14}
+          <AppIcon
+            name="alert-triangle"
+            size={14}
             aria-hidden
-            style={{ flexShrink: 0 }} />
+            style={{ flexShrink: 0 }}
+          />
           <span className={styles.crashRibbonText}>{engineCrashedText}</span>
           <Button
             type="button"

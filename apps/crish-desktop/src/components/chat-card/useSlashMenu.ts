@@ -82,9 +82,8 @@ export function useSlashMenu({
   const loadSkillSlash = useCallback(async () => {
     if (!skillCommandsEnabled) return;
     try {
-      const { getSkillSlashCommandsCached } = await import(
-        '../../api/skillsApi'
-      );
+      const { getSkillSlashCommandsCached } =
+        await import('../../api/skillsApi');
       const { commands } = await getSkillSlashCommandsCached();
       setSkillSlash(commands);
     } catch {
@@ -94,14 +93,38 @@ export function useSlashMenu({
 
   const allSlashCommands = useMemo(() => {
     const skillPart = skillCommandsEnabled
-      ? skillSlash.map((s) => ({ cmd: s.cmd, desc: s.desc }))
+      ? skillSlash.map((s) => ({
+          cmd: s.cmd,
+          desc: s.desc,
+          skillId: s.skillId,
+          skillName: s.skillName,
+          filePath: s.filePath,
+        }))
       : [];
     return [...BASE_SLASH, ...skillPart];
   }, [BASE_SLASH, skillSlash, skillCommandsEnabled]);
 
-  const filteredCommands = allSlashCommands.filter((c) =>
-    c.cmd.toLowerCase().startsWith(chatInput.toLowerCase())
-  );
+  const filteredCommands = allSlashCommands.filter((c) => {
+    const q = chatInput.toLowerCase();
+    if (!q || q === '/') return true;
+    const cmdLower = c.cmd.toLowerCase();
+    if (cmdLower.startsWith(q)) return true;
+    const bareCmd = cmdLower.replace(/^\/skill:/, '/');
+    if (bareCmd.startsWith(q)) return true;
+    const skillName =
+      'skillName' in c && typeof c.skillName === 'string' ? c.skillName : '';
+    if (skillName) {
+      const nameLower = skillName.toLowerCase();
+      const qWithoutSlash = q.replace(/^\//, '');
+      if (
+        nameLower.startsWith(qWithoutSlash) ||
+        nameLower.includes(qWithoutSlash)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  });
 
   return {
     slashMenuOpen,

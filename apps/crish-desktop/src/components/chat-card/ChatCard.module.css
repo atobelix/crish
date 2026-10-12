@@ -41,8 +41,8 @@
 
 /* 新对话空界面：输入框落在内容区中间偏上（剩余高度上 1 : 下 3 分配） */
 .chatBody[data-empty-kind='session-empty'] {
-  /* 左对齐竖线：距 composer 卡片外缘的距离；项目选择图标 / 输入文字 / 「+」图形共用 */
-  --landing-inset-x: 20px;
+  /* 左对齐竖线：距 composer 卡片外缘的距离；项目选择图标 / 输入文字 / 「+」图形共用 (10px + 7px = 17px) */
+  --landing-inset-x: calc(var(--composer-pad-x-start, 10px) + 7px);
 }
 
 .chatBody[data-empty-kind='session-empty'] .chatDocFlow {
@@ -50,7 +50,13 @@
 }
 
 .chatBody[data-empty-kind='session-empty'] .chatFooter {
-  flex: 3 1 0%;
+  flex: 3 1 auto;
+  background: transparent;
+}
+
+/* 首次发送过渡状态：输入框从居中偏上平滑变形落底 */
+.chatBody[data-settling='true'] .chatFooter {
+  flex: 0 1 auto;
   background: transparent;
 }
 
@@ -74,6 +80,8 @@
   z-index: var(--z-card-footer);
   flex-shrink: 0;
   margin-top: 0;
+  transition: flex-grow 360ms
+    var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1));
 }
 
 .chatFooter .chatCol {
@@ -99,6 +107,22 @@
   min-width: 0;
   margin-bottom: var(--space-1_5);
   padding-left: var(--landing-inset-x, 20px);
+  transition:
+    opacity 240ms var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1)),
+    transform 240ms var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1)),
+    max-height 360ms var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1)),
+    margin-bottom 360ms var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1));
+  max-height: 180px;
+  overflow: visible;
+}
+
+.composerLead[data-settling='true'] {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.96);
+  max-height: 0;
+  margin-bottom: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .floatZone {

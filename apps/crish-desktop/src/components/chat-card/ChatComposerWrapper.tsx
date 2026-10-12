@@ -51,6 +51,8 @@ export interface ChatComposerWrapperProps {
   onStopGeneration?: () => void;
   /** composer 卡片上方区域（空界面品牌 + 项目选择） */
   composerLead?: React.ReactNode;
+  /** 首次发送过渡状态：输入框平滑落底 */
+  isSettling?: boolean;
 }
 
 export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> =
@@ -71,6 +73,7 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> =
       isProcessing = false,
       onStopGeneration,
       composerLead,
+      isSettling = false,
     }) => {
       // §5.2：订阅 session store，禁止一次性会话快照轨冒充实时进度
       const currentSession = useSessionStore((s) =>
@@ -229,7 +232,11 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> =
 
               {/* composer 始终在 .chatFooter 渲染（不再注入到 ChatEmptyState 内）。 */}
               {composerLead ? (
-                <div className={styles.composerLead} data-composer-lead="">
+                <div
+                  className={styles.composerLead}
+                  data-composer-lead=""
+                  data-settling={isSettling ? 'true' : undefined}
+                >
                   {composerLead}
                 </div>
               ) : null}

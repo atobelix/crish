@@ -18,8 +18,9 @@
   font-family: inherit;
   cursor: pointer;
   box-sizing: border-box;
-  transition: background-color var(--transition-micro, 120ms) ease,
-              color var(--transition-micro, 120ms) ease;
+  transition:
+    background-color var(--transition-snappy),
+    color var(--transition-snappy);
 }
 
 .agentTrigger:hover,
@@ -52,7 +53,8 @@
 }
 
 @keyframes agentDotPulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     opacity: 0.8;
   }
@@ -80,7 +82,7 @@
   color: var(--text-tertiary);
   flex-shrink: 0;
   margin-left: 2px;
-  transition: transform var(--transition-micro, 120ms) ease;
+  transition: transform var(--duration-fast) var(--ease-emphasized);
 }
 
 .agentTrigger:hover .bcChevron,
@@ -104,7 +106,7 @@
   padding: 6px 8px;
   border-radius: var(--radius-sm);
   gap: 8px;
-  transition: background-color var(--transition-micro, 120ms) ease;
+  transition: background-color var(--transition-snappy);
 }
 
 .agentItemRow:hover {

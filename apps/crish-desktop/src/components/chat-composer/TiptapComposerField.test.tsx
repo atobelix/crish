@@ -268,7 +268,22 @@ describe('TiptapComposerField 适配层契约（T2）', () => {
       expect(getEditorDom().textContent).toContain('/skill:检视');
     });
     await waitFor(() => {
-      expect(onChangeLog).toContain('/skill:检视');
+      expect(onChangeLog.some((val) => val.includes('/skill:检视'))).toBe(true);
+    });
+  });
+
+  it('中文顿号（、）同样触发斜杠指令菜单并在选定后注入', async () => {
+    const { onChangeLog } = renderAdapter({});
+    await typeText('、');
+    const goalItem = await screen.findByRole('option', {
+      name: /\/goal/,
+    });
+    fireEvent.click(goalItem);
+    await waitFor(() => {
+      expect(getEditorDom().textContent).toContain('/goal');
+    });
+    await waitFor(() => {
+      expect(onChangeLog).toContain('/goal');
     });
   });
 

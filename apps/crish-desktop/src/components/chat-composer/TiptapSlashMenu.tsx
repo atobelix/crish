@@ -58,6 +58,8 @@ const ICON_MAP: Record<string, IconName> = {
   Flame: 'zap',
   Compass: 'globe',
   Settings: 'settings',
+  blocks: 'blocks',
+  Blocks: 'blocks',
 };
 
 export interface SlashMenuRefHandle {
@@ -83,7 +85,7 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
       onClose,
       clientRect,
       label = 'AI 会话系统指令',
-      emptyMessage = '无匹配指令',
+      emptyMessage: _emptyMessage = '无匹配指令',
       listboxId,
     } = props;
     const [selectedIndex, setSelectedIndex] = useState(0);
@@ -189,10 +191,11 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
       });
     }
 
-    // 终极熔断防线：无有效几何包围盒时拒绝挂载 Portal
+    // 终极熔断防线：无有效几何包围盒或空指令集时拒绝挂载 Portal（自动隐藏）
     if (
       !isOpen ||
       !items ||
+      items.length === 0 ||
       !anchor ||
       !isPhysicallyVisibleNonZeroRect(anchor)
     ) {
@@ -222,6 +225,71 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
       zIndex: 'var(--z-popover)',
     };
 
+    const skillEntries: { item: SlashCommandItem; index: number }[] = [];
+    const systemEntries: { item: SlashCommandItem; index: number }[] = [];
+
+    items.forEach((item: SlashCommandItem, index: number) => {
+      const isSkill =
+        item.category === 'skill' ||
+        item.id.includes('skill') ||
+        item.title.startsWith('/skill:') ||
+        item.iconName === 'blocks';
+      if (isSkill) {
+        skillEntries.push({ item, index });
+      } else {
+        systemEntries.push({ item, index });
+      }
+    });
+
+    const renderItemButton = ({
+      item,
+      index,
+    }: {
+      item: SlashCommandItem;
+      index: number;
+    }) => {
+      const isSkill =
+        item.category === 'skill' ||
+        item.id.includes('skill') ||
+        item.title.startsWith('/skill:') ||
+        item.iconName === 'blocks';
+      const iconName: IconName =
+        (item.iconName && ICON_MAP[item.iconName]) ||
+        (isSkill ? 'blocks' : 'help-circle');
+      const isActive = index === selectedIndex;
+
+      return (
+        <Button
+          key={item.id || item.title}
+          ref={(el) => {
+            itemRefs.current[index] = el;
+          }}
+          bare
+          type="button"
+          role="option"
+          id={`${listboxId ?? 'tiptap-suggestion'}-opt-${index}`}
+          aria-selected={isActive}
+          className={`${styles.menuItem} ${isActive ? styles.menuItemActive : ''}`}
+          onClick={(e) => {
+            e.preventDefault();
+            selectItem(index);
+          }}
+          onMouseEnter={() => setSelectedIndex(index)}
+        >
+          <div className={styles.iconWrapper}>
+            <AppIcon name={iconName} size={15} aria-hidden />
+          </div>
+          <div className={styles.itemText}>
+            <span className={styles.itemTitle}>{item.title}</span>
+            {item.description && (
+              <span className={styles.itemDescription}>{item.description}</span>
+            )}
+          </div>
+          {isSkill && <span className={styles.itemTag}>个人</span>}
+        </Button>
+      );
+    };
+
     return (
       <Popover.Root open={isOpen}>
         <Popover.Anchor asChild>
@@ -230,6 +298,11 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
         <Popover.Portal>
           <Popover.Content
             className={styles.popoverContent}
+            style={{
+              width: anchor?.width
+                ? `${Math.round(anchor.width)}px`
+                : undefined,
+            }}
             side={side}
             align="start"
             sideOffset={8}
@@ -244,48 +317,14 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
               aria-label={label}
               id={listboxId}
             >
-              {items.length === 0 ? (
-                <div className={styles.emptyMessage} role="presentation">
-                  {emptyMessage}
-                </div>
+              {skillEntries.length > 0 && systemEntries.length > 0 ? (
+                <>
+                  {systemEntries.map(renderItemButton)}
+                  <div className={styles.groupHeader}>技能</div>
+                  {skillEntries.map(renderItemButton)}
+                </>
               ) : (
-                items.map((item: SlashCommandItem, index: number) => {
-                  const iconName: IconName =
-                    (item.iconName && ICON_MAP[item.iconName]) || 'help-circle';
-                  const isActive = index === selectedIndex;
-
-                  return (
-                    <Button
-                      key={item.id || item.title}
-                      ref={(el) => {
-                        itemRefs.current[index] = el;
-                      }}
-                      bare
-                      type="button"
-                      role="option"
-                      id={`${listboxId ?? 'tiptap-suggestion'}-opt-${index}`}
-                      aria-selected={isActive}
-                      className={`${styles.menuItem} ${isActive ? styles.menuItemActive : ''}`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        selectItem(index);
-                      }}
-                      onMouseEnter={() => setSelectedIndex(index)}
-                    >
-                      <div className={styles.iconWrapper}>
-                        <AppIcon name={iconName} size={16} aria-hidden />
-                      </div>
-                      <div className={styles.itemText}>
-                        <span className={styles.itemTitle}>{item.title}</span>
-                        {item.description && (
-                          <span className={styles.itemDescription}>
-                            {item.description}
-                          </span>
-                        )}
-                      </div>
-                    </Button>
-                  );
-                })
+                items.map((item, index) => renderItemButton({ item, index }))
               )}
             </div>
           </Popover.Content>

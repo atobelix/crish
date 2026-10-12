@@ -7,9 +7,15 @@ import type { ChatMessageListProps } from '../chat-message-list/chatMessageListP
 import type { ChatComposerProps } from '../chat-composer/ChatComposer';
 import type { ChatComposerWrapperProps } from './ChatComposerWrapper';
 
-const capturedStreamProps: { current: ChatMessageListProps | null } = { current: null };
-const capturedComposerProps: { current: ChatComposerProps | null } = { current: null };
-const capturedWrapperProps: { current: ChatComposerWrapperProps | null } = { current: null };
+const capturedStreamProps: { current: ChatMessageListProps | null } = {
+  current: null,
+};
+const capturedComposerProps: { current: ChatComposerProps | null } = {
+  current: null,
+};
+const capturedWrapperProps: { current: ChatComposerWrapperProps | null } = {
+  current: null,
+};
 
 const { mockState } = vi.hoisted(() => {
   const setChatInput = vi.fn();
@@ -20,7 +26,9 @@ const { mockState } = vi.hoisted(() => {
       composerProps: {
         chatInput: '底部的草稿输入',
         setChatInput,
-        attachments: [{ id: 'draft-att-1', name: 'draft.png', path: 'c:/draft.png' }],
+        attachments: [
+          { id: 'draft-att-1', name: 'draft.png', path: 'c:/draft.png' },
+        ],
         setAttachments,
         handlePasteImage: vi.fn(),
         handleStopGeneration: vi.fn(),
@@ -89,6 +97,14 @@ vi.mock('./useChatCardState', () => ({
   useChatCardState: () => mockState,
 }));
 
+vi.mock('./useChatCardDragDrop', () => ({
+  useChatCardDragDrop: () => ({
+    rootRef: { current: null },
+    isDragOver: false,
+    dragHandlers: {},
+  }),
+}));
+
 vi.mock('../../hooks/useIpcListener', () => ({
   useIpcListener: vi.fn(),
 }));
@@ -114,7 +130,9 @@ vi.mock('../chat-composer/ChatComposer', () => ({
     capturedAllComposers.push(props);
     return (
       <div
-        data-testid={props.isEditingMessage ? 'edit-chat-composer' : 'main-chat-composer'}
+        data-testid={
+          props.isEditingMessage ? 'edit-chat-composer' : 'main-chat-composer'
+        }
         data-editing={props.isEditingMessage ? 'true' : 'false'}
       />
     );
@@ -124,14 +142,20 @@ vi.mock('../chat-composer/ChatComposer', () => ({
 vi.mock('./ChatComposerWrapper', () => ({
   ChatComposerWrapper: (props: ChatComposerWrapperProps) => {
     capturedWrapperProps.current = props;
-    return <div data-testid="chat-composer-wrapper">{props.composerElement}</div>;
+    return (
+      <div data-testid="chat-composer-wrapper">{props.composerElement}</div>
+    );
   },
 }));
 
 vi.mock('../chat-message-list/ChatMessageList', () => ({
   ChatMessageList: (props: ChatMessageListProps) => {
     capturedStreamProps.current = props;
-    return <div data-testid="chat-message-list">{props.composer.composerElement}</div>;
+    return (
+      <div data-testid="chat-message-list">
+        {props.composer.composerElement}
+      </div>
+    );
   },
 }));
 
@@ -166,8 +190,12 @@ describe('ChatCard 底部输入框常驻与原位消息编辑独立流测试', (
     expect(capturedWrapperProps.current?.composerElement).not.toBeNull();
 
     // 2) 核心断言：消息流获得专属 editComposerElement
-    expect(capturedStreamProps.current?.composer.editingMessageId).toBe('target-user-msg-99');
-    expect(capturedStreamProps.current?.composer.composerElement).not.toBeNull();
+    expect(capturedStreamProps.current?.composer.editingMessageId).toBe(
+      'target-user-msg-99'
+    );
+    expect(
+      capturedStreamProps.current?.composer.composerElement
+    ).not.toBeNull();
 
     // 3) 验证编辑输入框已初始载入目标消息的内容与附件
     const editProps = capturedAllComposers.find((p) => p.isEditingMessage);

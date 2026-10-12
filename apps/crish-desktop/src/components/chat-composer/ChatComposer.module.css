@@ -39,13 +39,29 @@
 }
 
 .composerNoticeZone {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  display: grid;
+  grid-template-rows: 1fr;
   width: 100%;
   position: relative;
   z-index: var(--z-base);
   margin-bottom: 6px;
+  transition:
+    grid-template-rows 120ms var(--ease-emphasized),
+    margin-bottom 120ms var(--ease-emphasized);
+}
+
+.composerNoticeZone[data-closing='true'] {
+  grid-template-rows: 0fr;
+  margin-bottom: 0;
+}
+
+.composerNoticeZoneInner {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
 }
 
 /* ==========================================================================
@@ -1290,10 +1306,11 @@
   gap: 2px;
 }
 
-/* 单行模式（默认）：所有控件位于同一行：左侧[＋]，中间输入框，右侧动作组（含融合胶囊） */
+/* 单行模式（默认）：所有控件位于同一行：左侧[＋]，中间输入框，右侧动作组（含融合胶囊），保留充足呼吸留白 */
 .composerCard:not(.isMultiline) .inputMainLayout {
   grid-template-areas: 'left-ctrl text actions';
   grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 8px;
 }
 
 /* 多行模式：输入框占满顶部，控制按钮移至底部，充足呼吸间距 */
@@ -1332,9 +1349,9 @@
   box-sizing: border-box;
 }
 
-/* 多行态 fieldSlot 呼吸内衬：四周由 composerCard 的 14px 统一提供，文字左缘与加号视觉同轴对齐 */
+/* 多行态 fieldSlot 呼吸内衬：四周由 composerCard 与 7px 内衬协同提供，文字左右缘与加号/发送按钮视觉同轴对齐 (10px + 7px = 17px) */
 .composerCard.isMultiline .fieldSlot {
-  padding: 0 2px;
+  padding: 0 7px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -1784,7 +1801,6 @@
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  overflow: hidden;
 }
 
 .composerCard:not(.isMultiline) .fieldInGrid .textarea,
@@ -1792,32 +1808,30 @@
   min-height: 28px;
   max-height: 28px;
   height: 28px;
-  line-height: 28px;
-  overflow: hidden;
+  line-height: 20px;
+  padding: 4px 0;
   white-space: nowrap;
-  display: flex;
-  align-items: center;
+  display: block;
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  padding: 0;
   margin: 0;
   box-sizing: border-box;
+  caret-color: var(--brand-primary, var(--text-primary));
+  outline: none;
 }
 
 .composerCard:not(.isMultiline) .fieldInGrid :global(.ProseMirror > p) {
-  display: flex;
-  align-items: center;
-  height: 28px;
-  line-height: 28px;
+  display: block;
+  height: 20px;
+  line-height: 20px;
   margin: 0;
   padding: 0;
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  position: relative;
 }
 
 .composerCard:not(.isMultiline)
@@ -1832,11 +1846,9 @@
   position: absolute;
   left: 0;
   top: 0;
-  bottom: 0;
-  height: 28px;
-  line-height: 28px;
-  display: flex;
-  align-items: center;
+  height: 20px;
+  line-height: 20px;
+  display: block;
   pointer-events: none;
   white-space: nowrap;
   overflow: hidden;
@@ -1865,6 +1877,21 @@
   box-sizing: border-box;
 }
 
+/* 空界面落地输入：文本区内衬，首行保持充裕垂直呼吸间距，水平与多行轴线严格统一 */
+.composerCard[data-empty-kind='session-empty'].isMultiline .fieldSlot {
+  padding: 8px 7px 0 7px;
+}
+
+/* 空界面落地输入：新对话默认四行（三行空消息行 + 一行工具行），空间充裕呼吸感强 */
+.composerCard[data-empty-kind='session-empty'].isMultiline
+  .fieldInGrid
+  .textarea,
+.composerCard[data-empty-kind='session-empty'].isMultiline
+  .fieldInGrid
+  :global(.ProseMirror) {
+  min-height: calc(1em * var(--composer-line-height, 1.5) * 3);
+}
+
 /* 空界面落地输入：发送按钮常驻（空输入为 disabled 态，占位不收起） */
 .composerCard[data-empty-kind='session-empty'] .sendCircle:disabled {
   width: 28px;
@@ -1873,29 +1900,6 @@
   margin-left: 6px;
   opacity: var(--opacity-disabled);
   transform: scale(1);
-}
-
-/* 空界面落地输入：文本区内衬，首行距卡片顶边 / 左边均为 --landing-inset-x（扣除卡片内衬与 1px 边框），placeholder 与光标同位 */
-.composerCard[data-empty-kind='session-empty'].isMultiline .fieldSlot {
-  padding: calc(var(--landing-inset-x, 20px) - 9px) 2px 0
-    calc(var(--landing-inset-x, 20px) - var(--composer-pad-x-start, 10px) - 1px);
-}
-
-/* 空界面落地输入：「+」可见图形对齐 --landing-inset-x（28px 点击区内图标居中 7px + 图形内缩约 2px） */
-.composerCard[data-empty-kind='session-empty'] .actionLeft {
-  margin-left: calc(
-    var(--landing-inset-x, 20px) - var(--composer-pad-x-start, 10px) - 1px - 9px
-  );
-}
-
-/* 空界面落地输入：多行起步约 3 行，随内容增高（上限沿用多行 max-height） */
-.composerCard[data-empty-kind='session-empty'].isMultiline
-  .fieldInGrid
-  .textarea,
-.composerCard[data-empty-kind='session-empty'].isMultiline
-  .fieldInGrid
-  :global(.ProseMirror) {
-  min-height: calc(1em * var(--composer-line-height, 1.5) * 3);
 }
 
 .dropMask {

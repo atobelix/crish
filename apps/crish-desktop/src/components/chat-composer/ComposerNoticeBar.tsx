@@ -30,6 +30,7 @@ export interface ComposerNoticeBarProps {
   onDismiss: () => void;
   onFeedback?: () => void;
   className?: string;
+  isClosing?: boolean;
 }
 
 export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
@@ -37,6 +38,7 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
   onDismiss,
   onFeedback,
   className = '',
+  isClosing = false,
 }) => {
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -100,6 +102,7 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
   const rootClasses = [
     styles.noticeBar,
     styles[notice.type] || styles.info,
+    isClosing ? styles.noticeBarClosing : '',
     className,
   ]
     .filter(Boolean)
@@ -114,6 +117,7 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
       aria-live="polite"
       data-testid="composer-notice-bar"
       data-notice-type={notice.type}
+      data-closing={isClosing ? 'true' : undefined}
     >
       {/* 1. 左槽：固定微图标 (20px 视窗) */}
       <div className={styles.capsuleSlotLeft} aria-hidden="true">
@@ -123,9 +127,7 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
       {/* 2. 中槽：单行主文本 + 详情徽标 */}
       <div className={styles.capsuleSlotCenter}>
         <Tooltip content={notice.message}>
-          <span className={styles.message}>
-            {notice.message}
-          </span>
+          <span className={styles.message}>{notice.message}</span>
         </Tooltip>
 
         {/* 详情叹号微标 */}
@@ -168,12 +170,22 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
         >
           {copied ? (
             <>
-              <AppIcon name="check" size={12} className={styles.btnIcon} aria-hidden="true" />
+              <AppIcon
+                name="check"
+                size={12}
+                className={styles.btnIcon}
+                aria-hidden="true"
+              />
               <span>已复制</span>
             </>
           ) : (
             <>
-              <AppIcon name="copy" size={12} className={styles.btnIcon} aria-hidden="true" />
+              <AppIcon
+                name="copy"
+                size={12}
+                className={styles.btnIcon}
+                aria-hidden="true"
+              />
               <span>复制</span>
             </>
           )}
@@ -188,7 +200,12 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
           aria-label="反馈"
           data-testid="composer-notice-feedback-btn"
         >
-          <AppIcon name="message-square-plus" size={12} className={styles.btnIcon} aria-hidden="true" />
+          <AppIcon
+            name="message-square-plus"
+            size={12}
+            className={styles.btnIcon}
+            aria-hidden="true"
+          />
           <span>反馈</span>
         </Button>
 

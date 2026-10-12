@@ -122,6 +122,7 @@ export interface SlashCommandItem {
   description: string;
   iconName?: string;
   keywords?: string[];
+  category?: 'skill' | 'system' | 'mention' | string;
   command: (props: { editor: any; range?: any }) => void;
 }
 

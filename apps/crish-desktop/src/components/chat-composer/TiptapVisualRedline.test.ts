@@ -56,9 +56,15 @@ describe('chat-composer 视觉红线（T10）', () => {
       expect(css).not.toMatch(/z-index:\s*\d/);
     });
 
-    it(`${name}：克制动效（无 transform 位移入场、无 will-change）`, () => {
-      expect(css).not.toMatch(/transform:/);
-      expect(css).not.toMatch(/will-change/);
+    it(`${name}：克制动效（编辑器无位移；斜杠菜单走微位移与 token 缓动）`, () => {
+      if (name === 'TiptapSlashMenu.module.css') {
+        expect(css).toMatch(/var\(--ease-emphasized\)/);
+        expect(css).toMatch(/scale\(0\.985\)/);
+        expect(css).not.toMatch(/translateY\([1-9]\d+px\)/);
+      } else {
+        expect(css).not.toMatch(/transform:/);
+        expect(css).not.toMatch(/will-change/);
+      }
     });
   }
 

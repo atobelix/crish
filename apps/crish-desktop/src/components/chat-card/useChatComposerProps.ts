@@ -17,27 +17,63 @@ export interface UseChatComposerPropsOptions {
 }
 
 export function useChatComposerProps(options: UseChatComposerPropsOptions) {
-  const { activeSessionId, wsId, needsKeySetup, needsModelSetup, isProcessing,
-    handleGlobalTabClick, setShowModelDropdown, setPickerInlineError } = options;
+  const {
+    activeSessionId,
+    wsId,
+    needsKeySetup,
+    needsModelSetup,
+    isProcessing: _isProcessing,
+    handleGlobalTabClick,
+    setShowModelDropdown,
+    setPickerInlineError,
+  } = options;
 
-  const { chatInput, setChatInput, isComposing, setIsComposing,
-    hasUndo, handleUndoDraft, draftInjectionTick } =
-    useChatInput({ activeSessionId });
+  const {
+    chatInput,
+    setChatInput,
+    isComposing,
+    setIsComposing,
+    hasUndo,
+    handleUndoDraft,
+    draftInjectionTick,
+  } = useChatInput({ activeSessionId });
 
-  const { slashMenuOpen, setSlashMenuOpen, slashSelectedIndex,
-    setSlashSelectedIndex, filteredCommands, loadSkillSlash,
-    skillCommandsEnabled } = useSlashMenu({ chatInput });
+  const {
+    slashMenuOpen,
+    setSlashMenuOpen,
+    slashSelectedIndex,
+    setSlashSelectedIndex,
+    filteredCommands,
+    loadSkillSlash,
+    skillCommandsEnabled,
+  } = useSlashMenu({ chatInput });
 
-  const { attachments, setAttachments, fileInputRef,
-    handleFilesSelected, handlePathsSelected, handleDroppedFiles, handlePickFiles,
-    handlePasteImage, handlePasteFiles } =
-    useChatAttachments({ activeSessionId });
+  const {
+    attachments,
+    setAttachments,
+    fileInputRef,
+    handleFilesSelected,
+    handlePathsSelected,
+    handleDroppedFiles,
+    handlePickFiles,
+    handlePasteImage,
+    handlePasteFiles,
+  } = useChatAttachments({ activeSessionId });
 
   const send = useChatSend({
-    wsId, needsKeySetup, needsModelSetup, handleGlobalTabClick,
-    setShowModelDropdown, setPickerInlineError,
-    chatInput, setChatInput, setSlashMenuOpen, attachments, setAttachments,
+    wsId,
+    needsKeySetup,
+    needsModelSetup,
+    handleGlobalTabClick,
+    setShowModelDropdown,
+    setPickerInlineError,
+    chatInput,
+    setChatInput,
+    setSlashMenuOpen,
+    attachments,
+    setAttachments,
     skillCommandsEnabled,
+    sessionId: activeSessionId,
   });
 
   const onSend = useCallback(() => {
@@ -50,14 +86,31 @@ export function useChatComposerProps(options: UseChatComposerPropsOptions) {
   }, [send.handleSendChat, activeSessionId]);
 
   return {
-    chatInput, setChatInput, isComposing, setIsComposing,
-    hasUndo, handleUndoDraft, draftInjectionTick,
-    slashMenuOpen, setSlashMenuOpen, slashSelectedIndex,
-    setSlashSelectedIndex, filteredCommands, loadSkillSlash,
-    attachments, setAttachments, fileInputRef, handleFilesSelected,
-    handlePathsSelected, handleDroppedFiles, handlePickFiles,
-    handlePasteImage, handlePasteFiles,
-    canSend: send.canSend, showPlusMenu: send.showPlusMenu,
+    chatInput,
+    setChatInput,
+    isComposing,
+    setIsComposing,
+    hasUndo,
+    handleUndoDraft,
+    draftInjectionTick,
+    slashMenuOpen,
+    setSlashMenuOpen,
+    slashSelectedIndex,
+    setSlashSelectedIndex,
+    filteredCommands,
+    loadSkillSlash,
+    attachments,
+    setAttachments,
+    fileInputRef,
+    handleFilesSelected,
+    handlePathsSelected,
+    handleDroppedFiles,
+    handlePickFiles,
+    handlePasteImage,
+    handlePasteFiles,
+    handlePastePath: handlePathsSelected,
+    canSend: send.canSend,
+    showPlusMenu: send.showPlusMenu,
     setShowPlusMenu: send.setShowPlusMenu,
     runStreamingAssistant: send.runStreamingAssistant,
     handleSendChat: send.handleSendChat,
