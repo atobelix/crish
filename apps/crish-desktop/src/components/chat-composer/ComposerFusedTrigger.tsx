@@ -141,21 +141,25 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
     },
   }));
 
+  const hasPrefix = Boolean(prefix);
+  const hasChildren = Boolean(children);
+
   return (
     <div
       className={styles.capsule}
       data-testid="composer-fused-trigger"
       data-catalog-tick={catalogVersion}
       data-live-model-id={liveModel?.id ?? ''}
-      data-has-prefix={prefix ? 'true' : 'false'}
+      data-has-prefix={hasPrefix ? 'true' : 'false'}
+      data-has-children={hasChildren ? 'true' : 'false'}
       data-has-thinking={showThinking ? 'true' : 'false'}
     >
-      {prefix ? <div className={styles.prefix}>{prefix}</div> : null}
-      {prefix && children ? (
+      {hasPrefix ? <div className={styles.prefix}>{prefix}</div> : null}
+      {hasPrefix && (hasChildren || showThinking) ? (
         <span className={styles.divider} aria-hidden />
       ) : null}
-      {children ? <div className={styles.left}>{children}</div> : null}
-      {showThinking && children ? (
+      {hasChildren ? <div className={styles.left}>{children}</div> : null}
+      {showThinking && hasChildren ? (
         <span className={styles.divider} aria-hidden />
       ) : null}
       {showThinking ? (

@@ -29,7 +29,7 @@
 /* 融合模式（单行胶囊左段）：左圆弧 14px，右平切贴合中间模型槽 */
 .permPill.fused {
   border-radius: var(--sep-radius-outer) 0 0 var(--sep-radius-outer);
-  padding: 0 8px 0 10px;
+  padding: 0 10px;
 }
 
 .permPill:hover,

@@ -1310,7 +1310,7 @@
 .composerCard:not(.isMultiline) .inputMainLayout {
   grid-template-areas: 'left-ctrl text actions';
   grid-template-columns: auto minmax(0, 1fr) auto;
-  column-gap: 8px;
+  column-gap: 6px;
 }
 
 /* 多行模式：输入框占满顶部，控制按钮移至底部，充足呼吸间距 */
@@ -1340,7 +1340,7 @@
   overflow: hidden;
 }
 
-/* 单行态 fieldSlot 水平留白微调，避免贴挤加号 */
+/* 单行态 fieldSlot 水平留白微调，与 column-gap: 6px 合计 10px，对齐左侧 --composer-pad-x-start (10px) */
 .composerCard:not(.isMultiline) .fieldSlot {
   display: flex;
   align-items: center;
@@ -1371,7 +1371,7 @@
   flex-shrink: 0;
   justify-self: end;
   height: 28px;
-  gap: 4px;
+  gap: 0;
 }
 
 .cancelEditBtn,
@@ -1384,6 +1384,7 @@
   --btn-h: 28px;
   --btn-px: 0px;
   padding: 0;
+  margin-left: 4px;
   border-radius: 50%;
   color: var(--text-secondary);
   background: transparent;
@@ -1473,6 +1474,7 @@
   line-height: 1;
   box-sizing: border-box;
   padding: 0;
+  margin-left: 4px;
   transition:
     color var(--transition-fast, 120ms ease),
     background var(--transition-fast, 120ms ease);

@@ -149,12 +149,10 @@ describe('ComposerFusedTrigger（S3 融合触发 · live 档位）', () => {
     await waitFor(() => {
       expect(getSessionThinkingTitle(h.sessionId)).toBe('High');
     });
-    expect(
-      useSettingsStore.getState().appSettings?.defaultThinkingLevel
-    ).toBe('default');
-    expect(
-      screen.getByRole('button', { name: /思考档位：High/ })
-    ).toBeTruthy();
+    expect(useSettingsStore.getState().appSettings?.defaultThinkingLevel).toBe(
+      'default'
+    );
+    expect(screen.getByRole('button', { name: /思考档位：High/ })).toBeTruthy();
   });
 
   it('Picker 等外部写 thinkingTitle 后胶囊经事件同步刷新（γ-9 补洞）', async () => {
@@ -297,14 +295,27 @@ describe('ComposerFusedTrigger（S3 融合触发 · live 档位）', () => {
     expect(css).not.toMatch(/\.capsule:hover/);
     expect(css).not.toMatch(/\.capsule:active/);
     // 左半胶囊几何（左圆右平贴合）
-    expect(css).toMatch(/(?:14px|var\(--sep-radius-outer\))\s+0\s+0\s+(?:14px|var\(--sep-radius-outer\))/);
+    expect(css).toMatch(
+      /(?:14px|var\(--sep-radius-outer\))\s+0\s+0\s+(?:14px|var\(--sep-radius-outer\))/
+    );
     // 右半胶囊几何（左平贴合右圆）
-    expect(css).toMatch(/0\s+(?:14px|var\(--sep-radius-outer\))\s+(?:14px|var\(--sep-radius-outer\))\s+0/);
+    expect(css).toMatch(
+      /0\s+(?:14px|var\(--sep-radius-outer\))\s+(?:14px|var\(--sep-radius-outer\))\s+0/
+    );
     // 中间弱发丝竖线不占据水平排版空间（margin-left: -1px）
     expect(css).toMatch(/margin-left:\s*-1px/);
     // 左右各自独立 hover
     expect(css).toMatch(/\.thinkBtn:hover/);
     expect(css).toMatch(/button.*:hover/);
+    // 单项显示（仅 prefix 或仅 thinking）必须为完整全圆弧胶囊，左右 padding 对称 (0 10px)
+    expect(css).toMatch(
+      /\.capsule:not\(\[data-has-children='true'\]\):not\(\[data-has-thinking='true'\]\)\s+\.prefix\s+:global\(button\)/
+    );
+    expect(css).toMatch(
+      /\.capsule:not\(\[data-has-prefix='true'\]\):not\(\[data-has-children='true'\]\)\s+\.thinkBtn/
+    );
+    expect(css).not.toMatch(/padding:\s*0\s+8px\s+0\s+10px/);
+    expect(css).not.toMatch(/padding:\s*0\s+10px\s+0\s+8px/);
   });
 
   it('prefix 插槽契约：支持前置插槽与 data-has-prefix="true"，分割线正确隔离', () => {
@@ -315,11 +326,42 @@ describe('ComposerFusedTrigger（S3 融合触发 · live 档位）', () => {
         <span>model-a</span>
       </ComposerFusedTrigger>
     );
-    const trigger = container.querySelector('[data-testid="composer-fused-trigger"]');
+    const trigger = container.querySelector(
+      '[data-testid="composer-fused-trigger"]'
+    );
     expect(trigger?.getAttribute('data-has-prefix')).toBe('true');
+    expect(trigger?.getAttribute('data-has-children')).toBe('true');
     expect(screen.getByTestId('prefix-btn')).toBeInTheDocument();
     // 存在 prefix 与 model 之间的 divider，以及 model 与 thinking 之间的 divider
     const dividers = container.querySelectorAll('span[class*="divider"]');
     expect(dividers.length).toBe(2);
+  });
+
+  it('单项与两项缺省契约：仅 prefix 时无分割线且 data-has-children="false"；prefix + thinking 无 children 时保留 1 条分割线', () => {
+    // 1. 仅 prefix + thinking（无 children）
+    const { container: c1, unmount: u1 } = render(
+      <ComposerFusedTrigger
+        prefix={<button data-testid="prefix-only">需确认</button>}
+      />
+    );
+    const t1 = c1.querySelector('[data-testid="composer-fused-trigger"]');
+    expect(t1?.getAttribute('data-has-prefix')).toBe('true');
+    expect(t1?.getAttribute('data-has-children')).toBe('false');
+    expect(t1?.getAttribute('data-has-thinking')).toBe('true');
+    expect(c1.querySelectorAll('span[class*="divider"]').length).toBe(1);
+    u1();
+
+    // 2. 仅 prefix（无 children，无 thinking）
+    h.setOptions([]);
+    const { container: c2 } = render(
+      <ComposerFusedTrigger
+        prefix={<button data-testid="prefix-standalone">需确认</button>}
+      />
+    );
+    const t2 = c2.querySelector('[data-testid="composer-fused-trigger"]');
+    expect(t2?.getAttribute('data-has-prefix')).toBe('true');
+    expect(t2?.getAttribute('data-has-children')).toBe('false');
+    expect(t2?.getAttribute('data-has-thinking')).toBe('false');
+    expect(c2.querySelectorAll('span[class*="divider"]').length).toBe(0);
   });
 });

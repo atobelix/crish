@@ -1,25 +1,34 @@
-/* Setup soft banner   ChatStatusRibbons.module.css        */
+/* Setup soft banner — 与主对话输入框同宽居中、中性发丝边框、图标与文本同水平中线 */
 .chatSoftHint {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin: 0 0 6px;
+  margin: 0 auto;
   padding: 6px 10px;
   border-radius: var(--radius-md);
   background: transparent;
   border: 1px solid var(--hairline, var(--border-subtle));
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
-  line-height: var(--line-height-base);
+  line-height: 20px;
   box-sizing: border-box;
   width: 100%;
-  max-width: min(var(--chat-col-max, 760px), 100%);
+  max-width: 100%;
   box-shadow: none;
 }
 
 .chatSoftHintIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  height: 20px;
+  line-height: 1;
   color: var(--text-tertiary);
+}
+
+.chatSoftHintIcon svg {
+  display: block;
 }
 
 .chatSoftHintText {
@@ -28,13 +37,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 20px;
 }
 
 .chatSoftHintAction,
 .chatSoftHintAction {
+  display: inline-flex;
+  align-items: center;
   min-width: unset;
   min-height: unset;
-  height: auto;
+  height: 20px;
+  line-height: 20px;
   border: none;
   box-shadow: none;
   background: transparent;
@@ -61,11 +74,7 @@
 }
 
 .chatSoftHint[data-setup-hint='needs-key'] {
-  border-color: color-mix(
-    in srgb,
-    var(--brand) 18%,
-    var(--border-subtle)
-  );
+  border-color: var(--hairline, var(--border-subtle));
 }
 
 .chatSoftHint[data-setup-hint='needs-model'] .chatSoftHintIcon {
@@ -85,11 +94,7 @@
 }
 
 .chatSoftHint[data-setup-hint='sync-engine'] {
-  border-color: color-mix(
-    in srgb,
-    var(--brand) 12%,
-    var(--border-subtle)
-  );
+  border-color: var(--hairline, var(--border-subtle));
 }
 
 .chatSoftHint[data-setup-hint='sync-engine'] .chatSoftHintIcon {

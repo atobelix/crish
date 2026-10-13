@@ -2,6 +2,8 @@
  * setup soft-hint 可见性：与 FirstRun / 空态协调，禁止 toast 引导。
  * 互斥出口 resolveSetupHintKind + chatEmptyState 纯函数契约。
  */
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   resolveNeedsKeySoftHintText,
@@ -9,7 +11,10 @@ import {
   shouldShowNeedsKeySoftHint,
   shouldShowNeedsModelSoftHint,
 } from '../../api/chatEmptyState';
-import { resolveSetupHintKind, type SetupHintKind } from './chatStatusRibbonsLib';
+import {
+  resolveSetupHintKind,
+  type SetupHintKind,
+} from './chatStatusRibbonsLib';
 
 describe('ChatStatusRibbons setup soft-hint branches', () => {
   it('hides key hint while FirstRun overlay is open', () => {
@@ -18,7 +23,7 @@ describe('ChatStatusRibbons setup soft-hint branches', () => {
         needsKeySetup: true,
         firstRunOpen: true,
         engineOk: true,
-      }),
+      })
     ).toBe(false);
   });
 
@@ -28,7 +33,7 @@ describe('ChatStatusRibbons setup soft-hint branches', () => {
         needsKeySetup: true,
         firstRunOpen: false,
         engineOk: true,
-      }),
+      })
     ).toBe(true);
   });
 
@@ -38,7 +43,7 @@ describe('ChatStatusRibbons setup soft-hint branches', () => {
         needsModelSetup: true,
         firstRunOpen: true,
         engineOk: true,
-      }),
+      })
     ).toBe(false);
     expect(
       shouldShowNeedsModelSoftHint({
@@ -46,7 +51,7 @@ describe('ChatStatusRibbons setup soft-hint branches', () => {
         needsKeySetup: true,
         firstRunOpen: false,
         engineOk: true,
-      }),
+      })
     ).toBe(false);
   });
 
@@ -57,7 +62,7 @@ describe('ChatStatusRibbons setup soft-hint branches', () => {
         needsKeySetup: false,
         firstRunOpen: false,
         engineOk: true,
-      }),
+      })
     ).toBe(true);
   });
 
@@ -67,14 +72,14 @@ describe('ChatStatusRibbons setup soft-hint branches', () => {
         needsKeySetup: true,
         firstRunOpen: false,
         engineOk: false,
-      }),
+      })
     ).toBe(false);
     expect(
       shouldShowNeedsModelSoftHint({
         needsModelSetup: true,
         firstRunOpen: false,
         engineOk: false,
-      }),
+      })
     ).toBe(false);
   });
 
@@ -85,7 +90,9 @@ describe('ChatStatusRibbons setup soft-hint branches', () => {
     expect(keyCompact).toMatch(/密钥/);
 
     const modelFull = resolveNeedsModelSoftHintText({ onEmptySurface: false });
-    const modelCompact = resolveNeedsModelSoftHintText({ onEmptySurface: true });
+    const modelCompact = resolveNeedsModelSoftHintText({
+      onEmptySurface: true,
+    });
     expect(modelCompact.length).toBeLessThan(modelFull.length);
     expect(modelCompact).toMatch(/手填|模型/);
   });
@@ -114,7 +121,7 @@ describe('ChatStatusRibbons setup soft-hint branches', () => {
         needsKeySetup: false,
         firstRunOpen: false,
         engineOk: null,
-      }),
+      })
     ).toBe(true);
   });
 });
@@ -128,7 +135,7 @@ describe('resolveSetupHintKind (mutual exclusion)', () => {
         engineOk: false,
         localHasKey: true,
         firstRunOpen: true,
-      }),
+      })
     ).toBeNull();
   });
 
@@ -141,7 +148,7 @@ describe('resolveSetupHintKind (mutual exclusion)', () => {
         engineHasApiKey: false,
         localHasKey: true,
         firstRunOpen: false,
-      }),
+      })
     ).toBe('engine-down');
   });
 
@@ -154,7 +161,7 @@ describe('resolveSetupHintKind (mutual exclusion)', () => {
         engineHasApiKey: false,
         localHasKey: true,
         firstRunOpen: false,
-      }),
+      })
     ).toBe('needs-key');
   });
 
@@ -167,7 +174,7 @@ describe('resolveSetupHintKind (mutual exclusion)', () => {
         engineHasApiKey: true,
         localHasKey: true,
         firstRunOpen: false,
-      }),
+      })
     ).toBe('needs-model');
   });
 
@@ -180,7 +187,7 @@ describe('resolveSetupHintKind (mutual exclusion)', () => {
         engineHasApiKey: false,
         localHasKey: true,
         firstRunOpen: false,
-      }),
+      })
     ).toBe('sync-engine');
   });
 
@@ -193,7 +200,7 @@ describe('resolveSetupHintKind (mutual exclusion)', () => {
         engineHasApiKey: false,
         localHasKey: false,
         firstRunOpen: false,
-      }),
+      })
     ).toBeNull();
   });
 
@@ -206,7 +213,7 @@ describe('resolveSetupHintKind (mutual exclusion)', () => {
         engineHasApiKey: true,
         localHasKey: true,
         firstRunOpen: false,
-      }),
+      })
     ).toBeNull();
   });
 
@@ -218,7 +225,7 @@ describe('resolveSetupHintKind (mutual exclusion)', () => {
         engineHasApiKey: null,
         localHasKey: true,
         firstRunOpen: false,
-      }),
+      })
     ).toBe('needs-key');
     expect(
       resolveSetupHintKind({
@@ -228,7 +235,7 @@ describe('resolveSetupHintKind (mutual exclusion)', () => {
         engineHasApiKey: false,
         localHasKey: true,
         firstRunOpen: false,
-      }),
+      })
     ).toBeNull();
   });
 
@@ -277,5 +284,17 @@ describe('resolveSetupHintKind (mutual exclusion)', () => {
     expect(kinds.has('needs-key')).toBe(true);
     expect(kinds.has('needs-model')).toBe(true);
     expect(kinds.has('sync-engine')).toBe(true);
+  });
+
+  it('SetupHintBanner CSS 契约：中性边框（无 --brand 绿边）、与输入框同宽居中、图标与文本同水平中线', () => {
+    const css = fs.readFileSync(
+      path.join(__dirname, 'SetupHintBanner.module.css'),
+      'utf8'
+    );
+    expect(css).not.toMatch(/var\(--brand\)/);
+    expect(css).toMatch(/margin:\s*0\s+auto/);
+    expect(css).toMatch(/max-width:\s*100%/);
+    expect(css).toMatch(/\.chatSoftHintIcon\s*\{[^}]*display:\s*inline-flex/s);
+    expect(css).toMatch(/\.chatSoftHintIcon\s*\{[^}]*align-items:\s*center/s);
   });
 });
