@@ -15,6 +15,13 @@ import {
   restoreScrollAnchor,
   computePrependHeightDelta,
   prependIdsWithScrollAnchor,
+  InertialGestureGuard,
+  computeHybridBuckets,
+  createHybridBucketCssStyle,
+  DEFAULT_GESTURE_SETTLE_WINDOW_MS,
+  DEFAULT_HYBRID_BUCKET_SIZE,
+  MAX_ACTIVE_HYBRID_BUCKETS,
+  HYBRID_BUCKET_CSS_STYLE,
 } from './VirtualScrollManager';
 import type { SessionMessage } from '../store/types';
 
@@ -1067,5 +1074,63 @@ describe('virtualScrollAnchor 独立纯函数与委托契约', () => {
     expect(proto['hasScrollAnchor']).toBeUndefined();
 
     clearAllScopes();
+  });
+});
+
+describe('virtualScrollGestureGuard 与 VirtualScrollManager 协同契约', () => {
+  it('VirtualScrollManager 门面重新导出全部手势保护与混合分桶原语', () => {
+    expect(InertialGestureGuard).toBeDefined();
+    expect(computeHybridBuckets).toBeDefined();
+    expect(createHybridBucketCssStyle).toBeDefined();
+    expect(DEFAULT_GESTURE_SETTLE_WINDOW_MS).toBe(120);
+    expect(DEFAULT_HYBRID_BUCKET_SIZE).toBe(100);
+    expect(MAX_ACTIVE_HYBRID_BUCKETS).toBe(3);
+    expect(HYBRID_BUCKET_CSS_STYLE.contentVisibility).toBe('auto');
+  });
+
+  it('VSM 测高数据无缝注入 computeHybridBuckets 保持高度与视口计算一致', () => {
+    const vsm = new VirtualScrollManager(80);
+    const order = Array.from({ length: 250 }, (_, i) => `msg_${i}`);
+    vsm.syncOrder(order);
+    vsm.setActual('msg_0', 120);
+    vsm.setActual('msg_1', 150);
+
+    const buckets = computeHybridBuckets({
+      messageIds: vsm.getOrder(),
+      getItemHeight: (id) => vsm.getHeight(id),
+      bucketSize: 100,
+      scrollTop: 0,
+      viewportHeight: 600,
+    });
+
+    expect(buckets.bucketSize).toBe(100);
+    expect(buckets.length).toBe(3); // 250 条消息划分为 3 个桶 (100, 100, 50)
+    expect(buckets.activeBuckets.length).toBeLessThanOrEqual(
+      MAX_ACTIVE_HYBRID_BUCKETS
+    );
+    expect(buckets.totalEstimatedHeight).toBe(vsm.getTotalHeight());
+  });
+
+  it('InertialGestureGuard 与 VSM stickToBottomLock 协同防抖熔断', () => {
+    const vsm = new VirtualScrollManager(100);
+    const guard = new InertialGestureGuard();
+
+    // 模拟流式生成开始：锁定吸底
+    vsm.setStickToBottomLock(true);
+    guard.setPinnedToBottom(vsm.isStickToBottomLocked());
+
+    expect(guard.isPinnedToBottom).toBe(true);
+
+    // 测量更新产生折叠导致的负差量（例如 -200px）
+    const decision = guard.recordHeightDelta(-200);
+    expect(decision.fusedByPinnedBottom).toBe(true);
+    expect(decision.immediateScrollDelta).toBe(0);
+    expect(guard.pendingHeightDelta).toBe(0);
+    expect(guard.fusedCount).toBe(1);
+
+    // 流式结束释放吸底锁
+    vsm.setStickToBottomLock(false);
+    guard.setPinnedToBottom(vsm.isStickToBottomLocked());
+    expect(guard.isPinnedToBottom).toBe(false);
   });
 });

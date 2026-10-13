@@ -2,10 +2,10 @@
  * 右侧变更面板：Git 工作区变更 + 本会话 AI 回合汇总（下拉）。
  * 瘦身为 ≤300 行的组装层。
  */
-import React, { useCallback, useDeferredValue, useState } from 'react';
+import React, { useCallback, useDeferredValue, useMemo, useState } from 'react';
 import styles from './DiffCard.module.css';
 import { Button, Input, Tooltip } from '../ui';
-import { useSessionStore } from '../../store/storeAccess';
+import { useSessionMessages } from '../../store';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 import type { FileDiff } from '../../store/types';
 import {
@@ -45,8 +45,10 @@ const DiffCardInner: React.FC<DiffCardProps> = ({
   const setActiveDiffSource = useTerminalField((s) => s.setActiveDiffSource);
   const setDiffFiles = useTerminalField((s) => s.setDiffFiles);
   const _removeDiffFile = useTerminalField((s) => s.removeDiffFile);
-  const session = useSessionStore((s) =>
-    scopedSessionId ? s.sessionsById[scopedSessionId] || null : null
+  const sessionMessages = useSessionMessages(scopedSessionId ?? '');
+  const session = useMemo(
+    () => (scopedSessionId ? { messages: sessionMessages } : null),
+    [scopedSessionId, sessionMessages]
   );
 
   const [diffViewMode, setDiffViewMode] = useState<'unified' | 'split'>(

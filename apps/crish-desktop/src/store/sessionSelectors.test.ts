@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import React from 'react';
@@ -10,6 +13,7 @@ import {
   useSessionTitle,
   useSessionFolder,
   useSessionIsPinned,
+  useSessionEpoch,
   useActiveSessionId,
   selectSessionMeta,
   selectSessionMessages,
@@ -17,6 +21,9 @@ import {
   selectSessionTitle,
   selectSessionFolder,
   selectSessionIsPinned,
+  selectSessionEpoch,
+  bumpSessionEpoch,
+  getSessionEpoch,
   selectActiveSessionId,
   clearSessionSelectorsCache,
   EMPTY_MESSAGES,
@@ -638,6 +645,140 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       expect(folderRenderCount).toBe(2);
       expect(pinnedRenderCount).toBe(2);
       expect(screen.getByTestId('scalar-pinned').textContent).toBe('pinned');
+    });
+  });
+
+  describe('Revision Epoch Slots (标量版本代数槽位与单轨收敛验证)', () => {
+    it('bumpSessionEpoch / getSessionEpoch / selectSessionEpoch 维护 32 位整型代数版本号，消息引用不变时保持恒定整数', () => {
+      const msg1 = createMockMessage('m1', 'hello');
+      const sess1 = createMockSession('sess-1', '代数槽位测试', [msg1]);
+      const sess2 = createMockSession('sess-2', '旁路会话', [
+        createMockMessage('m2', 'world'),
+      ]);
+
+      useSessionStore.setState((st) => {
+        st.sessions = [sess1, sess2];
+        st.sessionsById = {
+          [sess1.id]: sess1,
+          [sess2.id]: sess2,
+        };
+      });
+
+      // 空 sessionId 安全返回 0
+      expect(getSessionEpoch('')).toBe(0);
+      expect(bumpSessionEpoch('')).toBe(0);
+      expect(selectSessionEpoch('')(useSessionStore.getState())).toBe(0);
+
+      // 初始快照基线为 0，且同一状态重复调用严格幂等 (Object.is(number, number) === true)
+      const state0 = useSessionStore.getState();
+      const epoch0A = selectSessionEpoch('sess-1')(state0);
+      const epoch0B = selectSessionEpoch('sess-1')(state0);
+      expect(epoch0A).toBe(0);
+      expect(Object.is(epoch0A, epoch0B)).toBe(true);
+      expect(getSessionEpoch('sess-1')).toBe(0);
+
+      // 修改非消息元数据（重命名）或其他会话消息：sess-1 的 messages 引用未变，epoch 恒定不变
+      useSessionStore.getState().renameSession('sess-1', '新标题');
+      useSessionStore
+        .getState()
+        .updateMessageText('sess-2', 'm2', 'other session stream');
+      const stateMetaChanged = useSessionStore.getState();
+      const epochAfterMeta = selectSessionEpoch('sess-1')(stateMetaChanged);
+      expect(Object.is(epochAfterMeta, epoch0A)).toBe(true);
+
+      // 目标会话消息发生变更：messages 引用变化，epoch 递增为 1（且同状态多次读取幂等）
+      useSessionStore
+        .getState()
+        .updateMessageText('sess-1', 'm1', 'hello + token');
+      const stateMsgChanged = useSessionStore.getState();
+      const epoch1A = selectSessionEpoch('sess-1')(stateMsgChanged);
+      const epoch1B = selectSessionEpoch('sess-1')(stateMsgChanged);
+      expect(epoch1A).toBe(1);
+      expect(Object.is(epoch1A, epoch1B)).toBe(true);
+      expect(getSessionEpoch('sess-1')).toBe(1);
+
+      // 显式调用 bumpSessionEpoch：原地递增代数版本号
+      const bumped = bumpSessionEpoch('sess-1');
+      expect(bumped).toBe(2);
+      expect(getSessionEpoch('sess-1')).toBe(2);
+      expect(selectSessionEpoch('sess-1')(useSessionStore.getState())).toBe(2);
+
+      // clearSessionSelectorsCache 同步清空 epochBySessionId
+      clearSessionSelectorsCache();
+      expect(getSessionEpoch('sess-1')).toBe(0);
+    });
+
+    it('useSessionEpoch 仅在目标会话消息或显式代数递增时触发重渲染，元数据变更与其他会话推流保持 0 重渲染', () => {
+      const sess1 = createMockSession('sess-1', '会话1', [
+        createMockMessage('m1', 'init 1'),
+      ]);
+      const sess2 = createMockSession('sess-2', '会话2', [
+        createMockMessage('m2', 'init 2'),
+      ]);
+
+      useSessionStore.setState((st) => {
+        st.sessions = [sess1, sess2];
+        st.sessionsById = {
+          [sess1.id]: sess1,
+          [sess2.id]: sess2,
+        };
+      });
+
+      let epochRenderCount = 0;
+
+      function EpochObserver({ sessionId }: { sessionId: string }) {
+        const epoch = useSessionEpoch(sessionId);
+        epochRenderCount++;
+        return React.createElement(
+          'span',
+          { 'data-testid': 'session-epoch' },
+          String(epoch)
+        );
+      }
+
+      render(React.createElement(EpochObserver, { sessionId: 'sess-1' }));
+
+      expect(epochRenderCount).toBe(1);
+      expect(screen.getByTestId('session-epoch').textContent).toBe('0');
+
+      // 1. 修改 sess-1 的标题、置顶态，以及向 sess-2 推流：sess-1 的 EpochObserver 保持 0 重渲染
+      act(() => {
+        useSessionStore.getState().renameSession('sess-1', '标题变更');
+        useSessionStore.getState().pinSession('sess-1');
+        useSessionStore
+          .getState()
+          .updateMessageText('sess-2', 'm2', 'sess-2 streaming');
+      });
+
+      expect(epochRenderCount).toBe(1);
+      expect(screen.getByTestId('session-epoch').textContent).toBe('0');
+
+      // 2. 向 sess-1 推送流式更新：epoch 递增至 1，精准重渲染 1 次
+      act(() => {
+        useSessionStore
+          .getState()
+          .updateMessageText('sess-1', 'm1', 'sess-1 token 1');
+      });
+
+      expect(epochRenderCount).toBe(2);
+      expect(screen.getByTestId('session-epoch').textContent).toBe('1');
+    });
+
+    it('单轨架构锁死：过渡期伪兼容适配层 sessionStoreCompatibilityAdapter.ts 已物理下线', () => {
+      const currentDir = dirname(fileURLToPath(import.meta.url));
+      const adapterPath = join(
+        currentDir,
+        'compat',
+        'sessionStoreCompatibilityAdapter.ts'
+      );
+      const adapterTestPath = join(
+        currentDir,
+        'compat',
+        'sessionStoreCompatibilityAdapter.test.ts'
+      );
+
+      expect(existsSync(adapterPath)).toBe(false);
+      expect(existsSync(adapterTestPath)).toBe(false);
     });
   });
 });

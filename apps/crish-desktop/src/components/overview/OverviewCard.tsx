@@ -1,10 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import styles from './OverviewCard.module.css';
 import {
+  makeSelectSessionById,
   selectSessions,
   useSessionField,
   useSessionStore,
 } from '../../store/storeAccess';
+import { useSessionFolder } from '../../store';
 import {
   useLeafScope,
   useScopedSessionId,
@@ -50,8 +52,15 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({
   const scope = useLeafScope();
   const scopedSessionId = useScopedSessionId(sessionIdProp);
   const _effectiveLeafId = leafIdProp ?? scope.leafId;
-  const session = useSessionStore((s) =>
-    scopedSessionId ? s.sessionsById[scopedSessionId] || null : null
+  const sessionFolder = useSessionFolder(scopedSessionId ?? '');
+  const session = useSessionStore(
+    useCallback(
+      (s) =>
+        scopedSessionId
+          ? (makeSelectSessionById(scopedSessionId)(s) ?? null)
+          : null,
+      [scopedSessionId]
+    )
   );
   const _cronJobs = useSettingsField(selectScheduledTasks);
   const tokenUsage = useSettingsField(selectTokenUsage);
@@ -103,15 +112,17 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({
 
   const currentWorkspacePath = useMemo(() => {
     const projects = listProjects();
-    const folder = session?.folder;
-    if (folder) {
+    if (sessionFolder) {
       const match = projects.find(
-        (p) => p.id === folder || p.name === folder || p.path === folder
+        (p) =>
+          p.id === sessionFolder ||
+          p.name === sessionFolder ||
+          p.path === sessionFolder
       );
       if (match) return match.path;
     }
     return getWorkspacePath() || (projects[0]?.path ?? '');
-  }, [session?.folder]);
+  }, [sessionFolder]);
 
   const workspaceWorkflows = useMemo(
     () => filterWorkflowsByWorkspace(ds.workflows, currentWorkspacePath),

@@ -61,12 +61,18 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
     sessionId: scopedSessionId,
   });
   const { ports: activePorts } = useActiveDevPorts();
-  const session = useSessionStore((s) =>
-    scopedSessionId ? s.sessionsById[scopedSessionId] : null
-  );
-  const isAiStreaming = Boolean(
-    session?.messages?.some((m) => m.status === 'processing') ||
-    session?.agents?.some((a) => a.status === 'running')
+  const isAiStreaming = useSessionStore(
+    React.useCallback(
+      (s) => {
+        if (!scopedSessionId) return false;
+        const sess = s.sessionsById[scopedSessionId];
+        return Boolean(
+          sess?.messages?.some((m) => m.status === 'processing') ||
+          sess?.agents?.some((a) => a.status === 'running')
+        );
+      },
+      [scopedSessionId]
+    )
   );
 
   const [isInspectorActive, setIsInspectorActive] = React.useState(false);

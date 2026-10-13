@@ -184,13 +184,38 @@ export function extractSessionMeta(sess: SessionState): SessionMeta {
   return Object.freeze({ ...meta }) as unknown as SessionMeta;
 }
 
-// ── 细粒度选择器缓存表 ────────────────────────────────────────────────────────
+// ── 细粒度选择器缓存表与标量版本代数槽位 (Revision Epoch Slots) ───────────────
 
 const metaCache = new Map<string, SessionMeta>();
+const epochBySessionId = new Map<string, number>();
+const lastMessagesRefBySessionId = new Map<
+  string,
+  readonly SessionMessage[] | undefined
+>();
 
-/** 清除元数据选择器缓存（供测试重置与状态彻底重建时调用） */
+/** 清除元数据选择器缓存与代数槽位（供测试重置与状态彻底重建时调用） */
 export function clearSessionSelectorsCache(): void {
   metaCache.clear();
+  epochBySessionId.clear();
+  lastMessagesRefBySessionId.clear();
+}
+
+/**
+ * 显式递增并返回指定会话的 32 位整型代数版本号 (Revision Epoch Slot)
+ */
+export function bumpSessionEpoch(sessionId: string): number {
+  if (!sessionId) return 0;
+  const next = ((epochBySessionId.get(sessionId) ?? 0) + 1) | 0;
+  epochBySessionId.set(sessionId, next);
+  return next;
+}
+
+/**
+ * 读取指定会话当前的 32 位整型代数版本号
+ */
+export function getSessionEpoch(sessionId: string): number {
+  if (!sessionId) return 0;
+  return epochBySessionId.get(sessionId) ?? 0;
 }
 
 // ── 纯选择器函数 (Pure Selectors) ─────────────────────────────────────────────
@@ -284,6 +309,28 @@ export const selectSessionIsPinned =
   };
 
 /**
+ * 单会话标量版本代数选择器 (Revision Epoch Slot Selector)
+ * 当目标会话的 messages 引用或显式 epoch 发生变化时返回递增的 32 位整数，
+ * 引用不变时返回恒定整数，供 useSyncExternalStore 进行 1 CPU 时钟周期的寄存器级比对
+ */
+export const selectSessionEpoch =
+  (sessionId: string) =>
+  (s: SessionStoreState): number => {
+    if (!sessionId) return 0;
+    const currentMessages = s.sessionsById?.[sessionId]?.messages;
+    if (!lastMessagesRefBySessionId.has(sessionId)) {
+      lastMessagesRefBySessionId.set(sessionId, currentMessages);
+      return epochBySessionId.get(sessionId) ?? 0;
+    }
+    const prevMessages = lastMessagesRefBySessionId.get(sessionId);
+    if (prevMessages !== currentMessages) {
+      lastMessagesRefBySessionId.set(sessionId, currentMessages);
+      return bumpSessionEpoch(sessionId);
+    }
+    return epochBySessionId.get(sessionId) ?? 0;
+  };
+
+/**
  * 当前活跃会话 ID 选择器
  */
 export const selectActiveSessionId = (s: SessionStoreState): string =>
@@ -358,6 +405,18 @@ export function useSessionFolder(sessionId: string): string | undefined {
 export function useSessionIsPinned(sessionId: string): boolean {
   const selector = useCallback(
     (state: SessionStoreState) => selectSessionIsPinned(sessionId)(state),
+    [sessionId]
+  );
+  return useSessionStore(selector);
+}
+
+/**
+ * 订阅单个会话的标量版本代数槽位 (Revision Epoch Slot)
+ * 利用 Object.is(number, number) 寄存器级比对，仅在目标会话消息或显式代数递增时唤醒组件。
+ */
+export function useSessionEpoch(sessionId: string): number {
+  const selector = useCallback(
+    (state: SessionStoreState) => selectSessionEpoch(sessionId)(state),
     [sessionId]
   );
   return useSessionStore(selector);

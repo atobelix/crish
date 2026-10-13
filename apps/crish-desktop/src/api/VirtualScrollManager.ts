@@ -35,6 +35,8 @@ import {
   type ScrollAnchorSnapshot,
 } from './virtualScrollAnchor';
 
+export * from './virtualScrollGestureGuard';
+
 export interface VsmDebugInfo {
   orderLength: number;
   heightsSize: number;
