@@ -83,12 +83,16 @@ impl LocalDb {
         })
     }
 
-    /// 列出所有会话索引条目，按 `updated_at` 降序（最近更新在前）。
+    /// 列出所有会话索引条目，按 `(updated_at DESC, id ASC)` 排序（最近更新在前）。
+    ///
+    /// SQL `ORDER BY updated_at DESC, id ASC` 与复合索引
+    /// `idx_sessions_updated ON sessions(updated_at DESC, id ASC)` 物理对齐（SEC-10 / SEC-12），
+    /// SQLite 直接沿索引单向扫描输出，彻底消除 `USE TEMP B-TREE FOR ORDER BY` 临时表排序。
     /// 读路径经 [`LocalDb::read`]：优先 ReaderPool 并发读，无池时回退主连接。
     pub fn list_sessions(&self) -> Result<Vec<SessionIndexEntry>, DbFailure> {
         self.read(|conn| {
             let mut stmt = conn
-                .prepare(
+                .prepare_cached(
                     "SELECT id, title, folder, is_pinned, is_archived, branch_parent_id,
                             timestamp, updated_at, message_count, pinned_message_ids,
                             engine_cursor, engine_last_run_id, hydrated_from_engine
@@ -98,31 +102,74 @@ impl LocalDb {
                 .map_err(|e| self.latch_error("list_sessions_prepare", e))?;
 
             let entries = stmt
-                .query_map([], |row| {
-                    let is_pinned: i64 = row.get(3)?;
-                    let is_archived: i64 = row.get(4)?;
-                    let hydrated: Option<i64> = row.get(12)?;
-                    Ok(SessionIndexEntry {
-                        id: row.get(0)?,
-                        title: row.get(1)?,
-                        folder: row.get(2)?,
-                        is_pinned: is_pinned != 0,
-                        is_archived: is_archived != 0,
-                        branch_parent_id: row.get(5)?,
-                        timestamp: row.get(6)?,
-                        updated_at: row.get(7)?,
-                        message_count: row.get(8)?,
-                        pinned_message_ids: row.get(9)?,
-                        engine_cursor: row.get(10)?,
-                        engine_last_run_id: row.get(11)?,
-                        hydrated_from_engine: hydrated.map(|v| v != 0),
-                    })
-                })
+                .query_map([], map_session_index_entry)
                 .map_err(|e| self.latch_error("list_sessions_map", e))?
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|e| self.latch_error("list_sessions_collect", e))?;
 
             Ok(entries)
+        })
+    }
+
+    /// 基于 `(updated_at DESC, id ASC)` 复合游标的 Keyset 分页查询会话索引列表（SEC-10）。
+    ///
+    /// - `after_cursor`: `Some((cursor_updated_at, cursor_id))` 时，利用顶层 `updated_at <= ?1`
+    ///   索引前导列定界 + `(updated_at < ?1 OR id > ?2)` 精确游标推进；`None` 时返回首页；
+    /// - `limit`: 单页最大条数（`0` 时直接返回空向量）；
+    /// - 全程命中 `idx_sessions_updated (updated_at DESC, id ASC)`，零 filesort 临时表。
+    pub fn list_sessions_page(
+        &self,
+        after_cursor: Option<(i64, &str)>,
+        limit: usize,
+    ) -> Result<Vec<SessionIndexEntry>, DbFailure> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let limit_i64 = limit as i64;
+        let cursor_owned = after_cursor.map(|(ts, id)| (ts, id.to_string()));
+        self.read(move |conn| match &cursor_owned {
+            None => {
+                let mut stmt = conn
+                    .prepare_cached(
+                        "SELECT id, title, folder, is_pinned, is_archived, branch_parent_id,
+                                timestamp, updated_at, message_count, pinned_message_ids,
+                                engine_cursor, engine_last_run_id, hydrated_from_engine
+                         FROM sessions
+                         ORDER BY updated_at DESC, id ASC
+                         LIMIT ?1",
+                    )
+                    .map_err(|e| self.latch_error("list_sessions_page_prepare", e))?;
+
+                let entries = stmt
+                    .query_map(rusqlite::params![limit_i64], map_session_index_entry)
+                    .map_err(|e| self.latch_error("list_sessions_page_map", e))?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|e| self.latch_error("list_sessions_page_collect", e))?;
+                Ok(entries)
+            }
+            Some((cursor_updated_at, cursor_id)) => {
+                let mut stmt = conn
+                    .prepare_cached(
+                        "SELECT id, title, folder, is_pinned, is_archived, branch_parent_id,
+                                timestamp, updated_at, message_count, pinned_message_ids,
+                                engine_cursor, engine_last_run_id, hydrated_from_engine
+                         FROM sessions
+                         WHERE updated_at <= ?1 AND (updated_at < ?1 OR id > ?2)
+                         ORDER BY updated_at DESC, id ASC
+                         LIMIT ?3",
+                    )
+                    .map_err(|e| self.latch_error("list_sessions_page_prepare", e))?;
+
+                let entries = stmt
+                    .query_map(
+                        rusqlite::params![cursor_updated_at, cursor_id, limit_i64],
+                        map_session_index_entry,
+                    )
+                    .map_err(|e| self.latch_error("list_sessions_page_map", e))?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|e| self.latch_error("list_sessions_page_collect", e))?;
+                Ok(entries)
+            }
         })
     }
 
@@ -390,6 +437,27 @@ impl LocalDb {
     }
 }
 
+fn map_session_index_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionIndexEntry> {
+    let is_pinned: i64 = row.get(3)?;
+    let is_archived: i64 = row.get(4)?;
+    let hydrated: Option<i64> = row.get(12)?;
+    Ok(SessionIndexEntry {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        folder: row.get(2)?,
+        is_pinned: is_pinned != 0,
+        is_archived: is_archived != 0,
+        branch_parent_id: row.get(5)?,
+        timestamp: row.get(6)?,
+        updated_at: row.get(7)?,
+        message_count: row.get(8)?,
+        pinned_message_ids: row.get(9)?,
+        engine_cursor: row.get(10)?,
+        engine_last_run_id: row.get(11)?,
+        hydrated_from_engine: hydrated.map(|v| v != 0),
+    })
+}
+
 /// 孤儿会话清理连接级纯函数（D-P11：供 `write_blocking` 闭包调用；
 /// 绝对禁止捕获 `LocalDb` / 调用 `self.*` / 开启 `conn.transaction()`——
 /// 外层 Actor 已持 `BEGIN IMMEDIATE`，本函数直接在其事务内顺序执行）。
@@ -431,14 +499,9 @@ pub(crate) fn cleanup_orphan_sessions_conn(
                 WHERE p.session_id = sessions.id
             )";
 
-    let total_before: i64 = conn
-        .query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))
-        .map_err(|e| DbFailure {
-            message: format!("cleanup_orphan_count_before: {e}"),
-            kind: DbFailureKind::Other("cleanup_orphan_sessions".to_string()),
-        })?;
-
-    if active_ids.is_empty() {
+    // SEC-11：直接采用 conn.execute() 返回的受影响行数（sqlite3_changes 仅计入直接目标表 sessions，
+    // 不计入外键级联子表），彻底消除删除前后两次全表 SELECT COUNT(*) 扫描。
+    let deleted = if active_ids.is_empty() {
         // 空 keepIds 的全表清理由壳层守卫（confirm_empty）把关；
         // 库层仍执行宽限期 + 豁免保护（近宽限期内新建 / 引擎 / 活动 run 保留）。
         conn.execute(
@@ -448,7 +511,7 @@ pub(crate) fn cleanup_orphan_sessions_conn(
         .map_err(|e| DbFailure {
             message: format!("cleanup_orphan_delete_all: {e}"),
             kind: DbFailureKind::Other("cleanup_orphan_sessions".to_string()),
-        })?;
+        })?
     } else {
         // 构造 IN (?, ?, ...) 占位符
         let placeholders: Vec<String> = (0..active_ids.len()).map(|_| "?".to_string()).collect();
@@ -466,15 +529,119 @@ pub(crate) fn cleanup_orphan_sessions_conn(
             .map_err(|e| DbFailure {
                 message: format!("cleanup_orphan_delete: {e}"),
                 kind: DbFailureKind::Other("cleanup_orphan_sessions".to_string()),
-            })?;
+            })?
+    };
+
+    Ok(deleted)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_entry(id: &str, updated_at: i64) -> SessionIndexEntry {
+        SessionIndexEntry {
+            id: id.to_string(),
+            title: format!("Title {id}"),
+            folder: "常规会话".to_string(),
+            is_pinned: false,
+            is_archived: false,
+            branch_parent_id: None,
+            timestamp: "2026-10-13T00:00:00Z".to_string(),
+            updated_at,
+            message_count: 0,
+            pinned_message_ids: None,
+            engine_cursor: None,
+            engine_last_run_id: None,
+            hydrated_from_engine: None,
+        }
     }
 
-    let total_after: i64 = conn
-        .query_row("SELECT COUNT(*) FROM sessions", [], |row| row.get(0))
-        .map_err(|e| DbFailure {
-            message: format!("cleanup_orphan_count_after: {e}"),
-            kind: DbFailureKind::Other("cleanup_orphan_sessions".to_string()),
-        })?;
+    #[test]
+    fn list_sessions_and_keyset_pagination_use_aligned_index_without_temp_btree() {
+        let db = LocalDb::open_in_memory().unwrap();
+        for (id, ts) in [
+            ("s-c", 200),
+            ("s-a", 300),
+            ("s-b", 300),
+            ("s-d", 100),
+            ("s-e", 200),
+        ] {
+            db.upsert_session_entry(&sample_entry(id, ts)).unwrap();
+        }
 
-    Ok((total_before - total_after) as usize)
+        // 1. 验证 EXPLAIN QUERY PLAN：全表排序与 Keyset 游标分页均走 idx_sessions_updated，零 TEMP B-TREE
+        let (plan_full, plan_page) = db
+            .read(|conn| {
+                let mut s1 = conn
+                    .prepare(
+                        "EXPLAIN QUERY PLAN
+                         SELECT id, title FROM sessions
+                         ORDER BY updated_at DESC, id ASC",
+                    )
+                    .unwrap();
+                let p1 = s1
+                    .query_map([], |r| r.get::<_, String>(3))
+                    .unwrap()
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap()
+                    .join(" | ");
+
+                let mut s2 = conn
+                    .prepare(
+                        "EXPLAIN QUERY PLAN
+                         SELECT id, title FROM sessions
+                         WHERE updated_at <= ?1 AND (updated_at < ?1 OR id > ?2)
+                         ORDER BY updated_at DESC, id ASC
+                         LIMIT ?3",
+                    )
+                    .unwrap();
+                let p2 = s2
+                    .query_map(rusqlite::params![300i64, "s-a", 2i64], |r| {
+                        r.get::<_, String>(3)
+                    })
+                    .unwrap()
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap()
+                    .join(" | ");
+
+                Ok((p1, p2))
+            })
+            .unwrap();
+
+        assert!(
+            plan_full.contains("idx_sessions_updated") && !plan_full.contains("TEMP B-TREE"),
+            "list_sessions must use idx_sessions_updated without TEMP B-TREE, got: {plan_full}"
+        );
+        assert!(
+            plan_page.contains("idx_sessions_updated") && !plan_page.contains("TEMP B-TREE"),
+            "list_sessions_page must use idx_sessions_updated without TEMP B-TREE, got: {plan_page}"
+        );
+
+        // 2. 验证排序顺序：(300, s-a), (300, s-b), (200, s-c), (200, s-e), (100, s-d)
+        let all = db.list_sessions().unwrap();
+        let all_ids: Vec<&str> = all.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(all_ids, vec!["s-a", "s-b", "s-c", "s-e", "s-d"]);
+
+        // 3. 验证 Keyset 游标分页（每次取 2 条，涵盖同 updated_at 的次级键 id ASC 推进）
+        let mut paged_ids = Vec::new();
+        let mut cursor: Option<(i64, String)> = None;
+        loop {
+            let page = db
+                .list_sessions_page(
+                    cursor.as_ref().map(|(ts, id)| (*ts, id.as_str())),
+                    2,
+                )
+                .unwrap();
+            if page.is_empty() {
+                break;
+            }
+            let last = page.last().unwrap();
+            cursor = Some((last.updated_at, last.id.clone()));
+            for item in page {
+                paged_ids.push(item.id);
+            }
+        }
+        assert_eq!(paged_ids, all_ids);
+    }
 }

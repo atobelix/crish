@@ -96,6 +96,29 @@ pub enum EscalateReason {
     RetriesExhausted,
 }
 
+/// 阶梯 1 单次运行最大重试次数硬性安全上限（防配置异常或网络震荡引发瞬态重试死循环，DEFECT-10）
+pub const RECOVERY_MAX_RETRIES_HARD_LIMIT: u32 = 32;
+
+/// Episode 预算单指纹最大恢复次数硬性安全上限（DEFECT-10）
+pub const RECOVERY_MAX_EPISODES_HARD_LIMIT: u32 = 16;
+
+/// 恢复预算表跟踪的最大操作指纹容量上限（防长周期会话指纹集合无界膨胀，DEFECT-10）
+pub const RECOVERY_MAX_TRACKED_FINGERPRINTS: usize = 1024;
+
+/// 计算已完成 `completed_retries` 次重试所消耗的累计理论最小退避时长（毫秒）。
+///
+/// 当宿主时钟停滞、回拨或瞬态网络故障在 0ms 内立即报错且调用方未累加等待耗时时，
+/// 以累计理论退避时长作为 `elapsed_ms` 的单调下界，彻底阻断瞬态重试死循环（DEFECT-10）。
+pub fn cumulative_backoff_ms(policy: &RecoveryRetryPolicy, completed_retries: u32) -> u64 {
+    let bounded = completed_retries.min(RECOVERY_MAX_RETRIES_HARD_LIMIT);
+    let mut total = 0u64;
+    for attempt in 1..=bounded {
+        let step_ms = backoff_delay_ms(policy, attempt).as_millis() as u64;
+        total = total.saturating_add(step_ms);
+    }
+    total
+}
+
 /// 阶梯 1 判定（镜像 retry.rs `should_retry` + `provider_stream` 语义：
 /// 已产出内容不重试 → 瞬态分类 → 次数上限 → 总预算 → 退避钳制）
 pub fn ladder1_decision(
@@ -117,20 +140,25 @@ pub fn ladder1_decision(
             reason: EscalateReason::NonTransient,
         };
     }
-    if retries >= policy.max_retries {
+    // 硬性次数护栏：钳制 max_retries 防配置畸变或整数溢出导致死循环（DEFECT-10）
+    let effective_max_retries = policy.max_retries.min(RECOVERY_MAX_RETRIES_HARD_LIMIT);
+    if retries >= effective_max_retries {
         return Ladder1Decision::Escalate {
             reason: EscalateReason::RetriesExhausted,
         };
     }
-    // 预算：elapsed < total_budget 才继续（对齐 withinRetryBudget 的严格小于）
-    if elapsed_ms >= policy.total_budget_ms {
+    // 预算：融合调用方实测耗时与已完成重试的理论退避下界（防时钟异常或 0ms 瞬态震荡死循环）
+    let effective_elapsed_ms = elapsed_ms.max(cumulative_backoff_ms(policy, retries));
+    if effective_elapsed_ms >= policy.total_budget_ms {
         return Ladder1Decision::Escalate {
             reason: EscalateReason::BudgetExhausted,
         };
     }
-    let attempt = retries + 1;
-    let remaining_budget_ms = policy.total_budget_ms - elapsed_ms;
-    let delay = backoff_delay_ms(policy, attempt).min(Duration::from_millis(remaining_budget_ms));
+    let attempt = retries.saturating_add(1);
+    let remaining_budget_ms = policy.total_budget_ms - effective_elapsed_ms;
+    let delay = backoff_delay_ms(policy, attempt)
+        .min(Duration::from_millis(remaining_budget_ms))
+        .max(Duration::from_millis(1));
     Ladder1Decision::Retry {
         attempt,
         delay,
@@ -166,10 +194,10 @@ pub struct RecoveryBudget {
 }
 
 impl RecoveryBudget {
-    /// 新建预算（默认上限 [Self::default_limit] = 3）
+    /// 新建预算（默认上限 [Self::default_limit] = 3，受硬上限钳制防死循环）
     pub fn new(limit: u32) -> Self {
         Self {
-            limit: limit.max(1),
+            limit: limit.clamp(1, RECOVERY_MAX_EPISODES_HARD_LIMIT),
             counts: HashMap::new(),
         }
     }
@@ -207,8 +235,22 @@ impl RecoveryBudget {
                 max: self.limit,
             });
         }
+        if !self.counts.contains_key(fingerprint)
+            && self.counts.len() >= RECOVERY_MAX_TRACKED_FINGERPRINTS
+        {
+            // 容量保护：优先移除计数未饱和的条目，若全部饱和则淘汰任意一条旧条目
+            let evict_key = self
+                .counts
+                .iter()
+                .find(|(_, &c)| c < self.limit)
+                .or_else(|| self.counts.iter().next())
+                .map(|(k, _)| k.clone());
+            if let Some(key) = evict_key {
+                self.counts.remove(&key);
+            }
+        }
         let entry = self.counts.entry(fingerprint.to_string()).or_insert(0);
-        *entry += 1;
+        *entry = entry.saturating_add(1);
         Ok(*entry)
     }
 
@@ -219,12 +261,79 @@ impl RecoveryBudget {
 
     /// 从持久化恢复（宽容解析：缺失 / 坏 JSON → 空预算，fail-open 不 panic）
     pub fn from_json(raw: Option<&str>, limit: u32) -> Self {
-        let counts = raw
+        let mut counts = raw
             .and_then(|raw| serde_json::from_str::<HashMap<String, u32>>(raw).ok())
             .unwrap_or_default();
+        if counts.len() > RECOVERY_MAX_TRACKED_FINGERPRINTS {
+            counts.retain(|_, &mut c| c > 0);
+            while counts.len() > RECOVERY_MAX_TRACKED_FINGERPRINTS {
+                let Some(first_key) = counts.keys().next().cloned() else {
+                    break;
+                };
+                counts.remove(&first_key);
+            }
+        }
         Self {
-            limit: limit.max(1),
+            limit: limit.clamp(1, RECOVERY_MAX_EPISODES_HARD_LIMIT),
             counts,
         }
+    }
+}
+
+#[cfg(test)]
+mod policy_guard_tests {
+    use super::*;
+
+    #[test]
+    fn zero_elapsed_oscillation_still_exhausts_budget() {
+        // 模拟宿主时钟停滞或 0ms 瞬态震荡（调用方始终传 elapsed_ms = 0，且配置了大 max_retries）
+        let policy = RecoveryRetryPolicy {
+            max_retries: 100,
+            base_delay_ms: 750,
+            max_delay_ms: 8_000,
+            total_budget_ms: 10_000,
+        };
+        // attempt 1(750) + 2(1500) + 3(3000) + 4(4750 钳制) -> 累计理论退避在第 4 次后达到 11250 >= 10000
+        let mut escalated_at = None;
+        for retries in 0..20 {
+            match ladder1_decision(ProviderErrorKind::Network, retries, 0, false, &policy) {
+                Ladder1Decision::Retry { delay, .. } => {
+                    assert!(!delay.is_zero(), "重试退避延迟决不能为 0ms");
+                }
+                Ladder1Decision::Escalate { reason } => {
+                    assert_eq!(reason, EscalateReason::BudgetExhausted);
+                    escalated_at = Some(retries);
+                    break;
+                }
+            }
+        }
+        assert_eq!(
+            escalated_at,
+            Some(4),
+            "即使 elapsed_ms 恒为 0，累计理论退避在第 4 次重试后必须触发 BudgetExhausted 熔断"
+        );
+    }
+
+    #[test]
+    fn max_retries_hard_limit_clamps_runaway_config() {
+        let policy = RecoveryRetryPolicy {
+            max_retries: u32::MAX,
+            base_delay_ms: 1,
+            max_delay_ms: 1,
+            total_budget_ms: u64::MAX,
+        };
+        let decision = ladder1_decision(
+            ProviderErrorKind::ServerError,
+            RECOVERY_MAX_RETRIES_HARD_LIMIT,
+            0,
+            false,
+            &policy,
+        );
+        assert_eq!(
+            decision,
+            Ladder1Decision::Escalate {
+                reason: EscalateReason::RetriesExhausted
+            }
+        );
     }
 }

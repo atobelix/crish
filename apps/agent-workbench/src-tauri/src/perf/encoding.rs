@@ -14,6 +14,9 @@ pub(crate) struct EncodingDetectResult {
     pub(crate) has_bom: bool,
 }
 
+/// Maximum sample window fed to `chardetng` statistical detector (64 KiB).
+const CHARDET_SAMPLE_LIMIT: usize = 64 * 1024;
+
 /// Detect encoding by checking BOM markers first, then using chardetng.
 fn detect_encoding(data: &[u8]) -> EncodingDetectResult {
     if let Some(bom_enc) = detect_bom(data) {
@@ -25,7 +28,8 @@ fn detect_encoding(data: &[u8]) -> EncodingDetectResult {
     }
 
     let mut detector = EncodingDetector::new();
-    detector.feed(data, true);
+    let sample_len = data.len().min(CHARDET_SAMPLE_LIMIT);
+    detector.feed(&data[..sample_len], sample_len == data.len());
     let (encoding, is_reliable) = detector.guess_assess(None, true);
     let encoding_name = encoding.name().to_string();
     let confidence = if is_reliable { 0.95 } else { 0.6 };
@@ -86,7 +90,6 @@ fn decode_to_utf8(data: &[u8], encoding_hint: Option<&str>) -> Result<String, St
 ///
 /// First checks for BOM signatures (UTF-8, UTF-16LE, UTF-16BE, etc.),
 /// then falls back to `chardetng` statistical detection.
-#[tauri::command]
 pub(crate) fn perf_encoding_detect(data: Vec<u8>) -> Result<EncodingDetectResult, String> {
     Ok(detect_encoding(&data))
 }
@@ -96,7 +99,6 @@ pub(crate) fn perf_encoding_detect(data: Vec<u8>) -> Result<EncodingDetectResult
 /// If `encoding` is specified, decodes using that encoding.
 /// If `encoding` is None, auto-detects the encoding first.
 /// Invalid bytes are replaced with U+FFFD (never panics).
-#[tauri::command]
 pub(crate) fn perf_encoding_decode(
     data: Vec<u8>,
     encoding: Option<String>,

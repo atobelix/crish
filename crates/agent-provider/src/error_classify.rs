@@ -64,6 +64,8 @@ pub(super) fn detect_rate_limit_message(lower: &str) -> bool {
 }
 
 /// 判定是否包含长周期限流/配额锁定的字样（hours/days/tomorrow/minute 等，无法通过短时瞬态重试自愈）
+///
+/// 全程基于 `&str` 原地切片与单位解析，彻底消除 `.replace(...)` 与 `.collect::<String>()` 堆分配。
 pub(super) fn detect_long_rate_limit_lock(lower: &str) -> bool {
     if lower.contains("hour")
         || lower.contains("day")
@@ -73,22 +75,24 @@ pub(super) fn detect_long_rate_limit_lock(lower: &str) -> bool {
     {
         return true;
     }
-    // 检查明确的长等待分钟数（先排除 "per minute" 速率单位）
-    let clean = lower.replace("per minute", "").replace("per min", "");
+    // 检查锚点后明确跟随的分钟数（原地字节切片提取数字 + parse_wait_unit 精确识别单位）
     for anchor in &["try again in ", "wait ", "retry after ", "retry in "] {
-        if let Some(idx) = clean.find(anchor) {
-            let slice = &clean[idx + anchor.len()..];
-            let num_str: String = slice.chars().take_while(|c| c.is_ascii_digit()).collect();
-            if let Ok(mins) = num_str.parse::<u32>() {
-                if slice.contains("min") || slice.contains("minute") {
-                    return mins >= 3;
+        if let Some(idx) = lower.find(anchor) {
+            let slice = &lower[idx + anchor.len()..];
+            let num_len = slice.bytes().take_while(|b| b.is_ascii_digit()).count();
+            if num_len > 0 {
+                if let Ok(mins) = slice[..num_len].parse::<u32>() {
+                    let after_num = &slice[num_len..];
+                    if matches!(parse_wait_unit(after_num), Some(WaitUnit::Min)) {
+                        return mins >= 3;
+                    }
                 }
             }
         }
     }
-    // 若文案包含等待若干分钟字样
-    if (clean.contains("minutes") || clean.contains("mins"))
-        && (clean.contains("wait") || clean.contains("retry"))
+    // 若文案包含复数分钟等待字样（"minutes" / "mins" 天然不与速率单位 "per minute" / "per min" 冲突）
+    if (lower.contains("minutes") || lower.contains("mins"))
+        && (lower.contains("wait") || lower.contains("retry"))
     {
         return true;
     }
@@ -159,7 +163,7 @@ fn is_bare_after_number(after_num: &str) -> bool {
 /// 从错误文本中尝试提取短时重试等待时长（毫秒）。
 ///
 /// 策略：
-/// 1. 在 "try again in " / "retry after " / "wait " / "retry in " / "after " 锚点后取数字；
+/// 1. 在 "try again in " / "retry after " / "wait " / "retry in " / "after " 锚点后取数字（原地 `&str` 切片零分配）；
 /// 2. 优先按显式单位换算：ms 不转换，s 不转换，min ×60（再 ×1000 转 ms）；
 /// 3. 纯数字无单位 → 保留历史契约「视为秒」（已由单测钉死）；
 /// 4. 有未知单位 token → 不猜测，返回 None（避免 "5 hours" 被当成 5 秒）。
@@ -173,13 +177,16 @@ pub(super) fn extract_seconds_from_text(lower: &str) -> Option<u64> {
     ] {
         if let Some(idx) = lower.find(anchor) {
             let slice = &lower[idx + anchor.len()..];
-            let num_str: String = slice
-                .chars()
-                .take_while(|c| c.is_ascii_digit() || *c == '.')
-                .collect();
-            if let Ok(n) = num_str.parse::<f64>() {
+            let num_len = slice
+                .bytes()
+                .take_while(|b| b.is_ascii_digit() || *b == b'.')
+                .count();
+            if num_len == 0 {
+                continue;
+            }
+            if let Ok(n) = slice[..num_len].parse::<f64>() {
                 if n > 0.0 {
-                    let after_num = &slice[num_str.len()..];
+                    let after_num = &slice[num_len..];
                     // 转换为毫秒（上限 300_000 ms = 300 s）
                     let ms: f64 = match parse_wait_unit(after_num) {
                         Some(WaitUnit::Ms) => n,
@@ -222,19 +229,24 @@ pub(super) fn looks_like_payload_too_large_message(lower: &str) -> bool {
 }
 
 /// 5xx 状态码集合（覆盖全部 500..=599，含 529 Overloaded 及 Cloudflare 52x 错误）
-pub(super) fn is_server_status(status: Option<u16>) -> bool {
+#[inline]
+pub(super) const fn is_server_status(status: Option<u16>) -> bool {
     matches!(status, Some(500..=599))
 }
 
-/// server 消息字样（:283-293）：\b502\b…|bad gateway|gateway timeout|server error|overloaded|temporarily unavailable
+/// server 消息字样（:283-293）：统一覆盖 HTTP 5xx 状态码整词与 HTTP/RPC 服务端瞬态文案
 pub(super) fn detect_server_message(lower: &str) -> bool {
-    ["502", "503", "504", "520", "522", "523", "524"]
-        .iter()
-        .any(|code| contains_word(lower, code))
+    [
+        "502", "503", "504", "520", "521", "522", "523", "524", "529",
+    ]
+    .iter()
+    .any(|code| contains_word(lower, code))
         || [
             "bad gateway",
             "gateway timeout",
             "server error",
+            "internal server error",
+            "service unavailable",
             "overloaded",
             "temporarily unavailable",
         ]
@@ -242,26 +254,50 @@ pub(super) fn detect_server_message(lower: &str) -> bool {
         .any(|pattern| lower.contains(pattern))
 }
 
-/// 整词匹配（等价 TS \bword\b；按非字母数字切分）
+/// 整词匹配（等价 TS `\bword\b`）：基于子串查找 + ASCII 词边界字节判定，避免全串切分迭代
 pub(super) fn contains_word(text: &str, word: &str) -> bool {
-    text.split(|c: char| !c.is_ascii_alphanumeric())
-        .any(|token| token == word)
+    if word.is_empty() {
+        return false;
+    }
+    let bytes = text.as_bytes();
+    let mut start = 0;
+    while let Some(rel) = text[start..].find(word) {
+        let idx = start + rel;
+        let end = idx + word.len();
+        let prev_ok = idx == 0 || !bytes[idx - 1].is_ascii_alphanumeric();
+        let next_ok = end == bytes.len() || !bytes[end].is_ascii_alphanumeric();
+        if prev_ok && next_ok {
+            return true;
+        }
+        start = idx + 1;
+    }
+    false
 }
 
-/// timeout 字样（:295-302）：timeout|timed out
+/// timeout 字样（:295-302）：统一覆盖 HTTP 与 RPC/gRPC 超时文案（timeout / timed out / deadline exceeded）
 pub(super) fn detect_timeout_message(lower: &str) -> bool {
-    lower.contains("timeout") || lower.contains("timed out")
+    lower.contains("timeout")
+        || lower.contains("timed out")
+        || lower.contains("deadline exceeded")
+        || lower.contains("deadline_exceeded")
 }
 
-/// network 字样（:304-314）：econnreset|enotfound|econnrefused|fetch failed|network|socket hang up
-/// "network" 改为整词匹配，避免 "internetwork" / "networking123" 等误伤
+/// network 字样（:304-314）：统一覆盖 HTTP/RPC 传输层瞬态断连字样与整词 "network"
+/// （"network" 保持整词匹配，避免 "internetwork" / "networking123" 等误伤）
 pub(super) fn detect_network_message(lower: &str) -> bool {
     [
         "econnreset",
         "enotfound",
         "econnrefused",
+        "etimedout",
+        "epipe",
         "fetch failed",
         "socket hang up",
+        "connection reset",
+        "connection refused",
+        "connection closed",
+        "broken pipe",
+        "unexpected eof",
     ]
     .iter()
     .any(|pattern| lower.contains(pattern))

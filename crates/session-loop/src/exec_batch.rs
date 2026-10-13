@@ -248,7 +248,7 @@ impl BatchRunner<'_> {
         &self,
         idx: usize,
         events: &mut Vec<ToolEvent>,
-        results: &mut Vec<Option<ClassifiedToolResult>>,
+        results: &mut [Option<ClassifiedToolResult>],
         fatal: &mut Option<String>,
     ) {
         let r = self
@@ -277,7 +277,7 @@ impl BatchRunner<'_> {
         &self,
         group: &[usize],
         events: &mut Vec<ToolEvent>,
-        results: &mut Vec<Option<ClassifiedToolResult>>,
+        results: &mut [Option<ClassifiedToolResult>],
         fatal: &mut Option<String>,
     ) {
         self.emit_group_starts(group, events);
@@ -291,6 +291,8 @@ impl BatchRunner<'_> {
 
     /// 并行组起始事件（每个成员 tool-start 打点）
     fn emit_group_starts(&self, group: &[usize], events: &mut Vec<ToolEvent>) {
+        // EV-09（D-03）：工具开始时刻打点（翻译层回填 timestamp；同组批量起始单次采样）
+        let occurred_at_ms = Some(conex_shared::time::unix_millis() as u64);
         for &idx in group {
             let call = &self.calls[idx];
             events.push(ToolEvent::ToolStart {
@@ -300,8 +302,7 @@ impl BatchRunner<'_> {
                 category: call.category,
                 concurrency: call.concurrency,
                 summary: call.summary.clone(),
-                // EV-09（D-03）：工具开始时刻打点（翻译层回填 timestamp）
-                occurred_at_ms: Some(conex_shared::time::unix_millis() as u64),
+                occurred_at_ms,
             });
         }
     }
@@ -386,7 +387,7 @@ impl BatchRunner<'_> {
 
     /// 执行阶段：已批准项 join_all 并行执行（拒绝/过期/abort 中断/权限拒绝
     /// 项不执行，直接构造结果）。B4 并发上限：轻量信号量（默认 4 /
-    /// max_parallel 可配）——acquire_owned 排队不拒绝（FIFO 等待 permit），
+    /// max_parallel 可配）——acquire 排队不拒绝（FIFO 等待 permit），
     /// permit 覆盖单工具执行全程，future drop（含 abort 收场）自动释放；
     /// 并发计数点（AtomicUsize active/peak）随执行器实例观测。禁滑动窗口 /
     /// 熔断器（反过度设计红线）。
@@ -398,19 +399,22 @@ impl BatchRunner<'_> {
         approval_active: bool,
         events: &mut Vec<ToolEvent>,
     ) -> Vec<Option<(ClassifiedToolResult, Vec<ToolEvent>)>> {
-        // I5 共享引用收敛：热路径按需零克隆，BatchRunner 持有 &ToolExecutor 共享引用，消除每批 6*(N+1) 次 Arc::clone
+        // I5 / SL-COMPAT-18 共享引用收敛：BatchRunner 全程传递 `&ToolExecutor` / `&ToolBatchCall` /
+        // `&ToolExecCtx` / `&ToolBatchOptions` / `Option<&AbortSignal>` / `&Semaphore` 引用，
+        // 消除每批 N 次 `ToolBatchCall`（含大体积 `input: Value`）与上下文深克隆。
         let exec = self.executor;
-        let ctx_own = self.ctx.clone();
-        let options_own = self.options.clone();
-        let approval_own = self.approval.clone();
+        let ctx = self.ctx;
+        let options = self.options;
+        let abort = self.abort;
         let max_parallel = self
             .options
             .max_parallel
             .unwrap_or(DEFAULT_MAX_PARALLEL)
             .max(1);
-        let semaphore = Arc::new(Semaphore::new(max_parallel));
-        let obs = Arc::clone(&exec.concurrency_obs);
-        let mut futures = Vec::new();
+        let semaphore = Semaphore::new(max_parallel);
+        let sem_ref = &semaphore;
+        let obs = &exec.concurrency_obs;
+        let mut futures = Vec::with_capacity(group.len());
         let mut executed: Vec<Option<(ClassifiedToolResult, Vec<ToolEvent>)>> =
             vec![None; group.len()];
         for (pos, &idx) in group.iter().enumerate() {
@@ -432,7 +436,6 @@ impl BatchRunner<'_> {
                 _ => true,
             };
             if !should_execute {
-                let call = &self.calls[idx];
                 let r = match verdict {
                     PermissionVerdict::Deny => denied_result(call, self.options),
                     // A3 fail-closed（P1 权限归一）：无审批基础设施 → 需审批
@@ -451,7 +454,7 @@ impl BatchRunner<'_> {
                             &call.id,
                             &call.tool_name,
                             ToolErrorKind::UserDenied,
-                            denied_message(requesters[pos].is_some(), &reason),
+                            denied_message(requesters[pos].is_some(), reason),
                             0,
                         ),
                         Some(ApprovalDecision::Expired) => {
@@ -483,21 +486,14 @@ impl BatchRunner<'_> {
                 executed[pos] = Some((r, Vec::new()));
                 continue;
             }
-            let call = self.calls[idx].clone();
-            let e = exec; // 共享引用，零克隆
-            let c = ctx_own.clone();
-            let o = options_own.clone();
-            let ab = self.abort.cloned();
-            let g = approval_own.clone();
-            let s = Arc::clone(&semaphore);
-            let obs = Arc::clone(&obs);
+            let g = self.approval.clone();
             futures.push(async move {
                 // 信号量排队获取（不拒绝；`ok()` 仅在信号量被关闭时为 None——
                 // 本批内永不关闭，防御性兜底照常执行）
-                let permit = s.acquire_owned().await.ok();
+                let permit = sem_ref.acquire().await.ok();
                 let _active = obs.enter();
-                let (r, extra) = e
-                    .execute_single_with_retry(&call, &c, &o, ab.as_ref(), g)
+                let (r, extra) = exec
+                    .execute_single_with_retry(call, ctx, options, abort, g)
                     .await;
                 obs.leave();
                 drop(permit);
@@ -518,7 +514,7 @@ impl BatchRunner<'_> {
         group: &[usize],
         mut executed: Vec<Option<(ClassifiedToolResult, Vec<ToolEvent>)>>,
         events: &mut Vec<ToolEvent>,
-        results: &mut Vec<Option<ClassifiedToolResult>>,
+        results: &mut [Option<ClassifiedToolResult>],
         fatal: &mut Option<String>,
     ) {
         for (pos, &idx) in group.iter().enumerate() {

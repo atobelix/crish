@@ -108,6 +108,8 @@ pub struct UndeclaredWrite {
 struct PendingRemove {
     /// 规范化绝对路径（待配对源路径）
     path: PathBuf,
+    /// 预计算的归一化比较键（避免配对与排重时重复分配）
+    norm_key: String,
     /// 删除事件时刻（纪元毫秒）
     occurred_at_ms: i64,
 }
@@ -118,6 +120,89 @@ type PendingRemoves = std::sync::Arc<std::sync::Mutex<Vec<PendingRemove>>>;
 
 /// flush 线程轮询间隔（毫秒）：删除转正的实时性粒度
 const FLUSH_POLL_MS: u64 = 100;
+
+/// KFS-07：高频同路径同类事件防抖合并时间窗（毫秒）。
+///
+/// 密集写入或单次落盘触发多次 OS 通知（如 Data + Metadata + Any）时，
+/// 窗口内对同路径同类型事件执行前沿发射 + 尾随排重，防止通道溢出与广播风暴。
+pub const DEBOUNCE_WINDOW_MS: i64 = 50;
+
+/// 防抖状态表最大容量上限（超出时惰性淘汰过期项，确保内存严格 $O(1)$ 有界）
+const MAX_DEBOUNCE_ENTRIES: usize = 1024;
+
+/// KFS-07：对一批文件变更事件执行同路径状态机合并排重（保序输出）。
+///
+/// 合并规则：
+/// - `Created` + `Modified` -> 保持 `Created`（更新时间戳）；
+/// - `Modified` + `Modified` -> 合并为单条最新 `Modified`；
+/// - `Renamed` + `Modified` -> 保持 `Renamed`（更新时间戳）；
+/// - 任意状态 + `Removed` -> 收敛为 `Removed`；
+/// - `Removed` + `Created`（同路径重建） -> 收敛为 `Modified`。
+pub fn coalesce_file_events(
+    events: impl IntoIterator<Item = FileChangeEvent>,
+) -> Vec<FileChangeEvent> {
+    let iter = events.into_iter();
+    let (lower, _) = iter.size_hint();
+    let mut index_by_key: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::with_capacity(lower);
+    let mut merged: Vec<Option<FileChangeEvent>> = Vec::with_capacity(lower);
+
+    for ev in iter {
+        if ev.kind == ChangeKind::Renamed {
+            if let Some(ref from_path) = ev.from {
+                let from_key = normalize_for_compare(from_path);
+                if let Some(&prev_idx) = index_by_key.get(&from_key) {
+                    // 若源路径此前在同一批次中已有未配对的 Removed，移除该中间态
+                    if merged[prev_idx]
+                        .as_ref()
+                        .is_some_and(|prev| prev.kind == ChangeKind::Removed)
+                    {
+                        merged[prev_idx] = None;
+                        index_by_key.remove(&from_key);
+                    }
+                }
+            }
+        }
+
+        let key = normalize_for_compare(&ev.path);
+        if let Some(&idx) = index_by_key.get(&key) {
+            if let Some(existing) = merged[idx].as_mut() {
+                existing.occurred_at_ms = existing.occurred_at_ms.max(ev.occurred_at_ms);
+                existing.path = ev.path;
+                match (existing.kind, ev.kind) {
+                    (ChangeKind::Created, ChangeKind::Modified) => {
+                        // 新建后紧跟修改：仍视为新建
+                    }
+                    (ChangeKind::Renamed, ChangeKind::Modified) => {
+                        // 改名后紧跟修改：保留改名及源路径
+                    }
+                    (ChangeKind::Removed, ChangeKind::Created) => {
+                        // 删除后同路径重建：收敛为内容修改
+                        existing.kind = ChangeKind::Modified;
+                        existing.from = None;
+                    }
+                    (_, ChangeKind::Renamed) => {
+                        existing.kind = ChangeKind::Renamed;
+                        existing.from = ev.from;
+                    }
+                    (_, next_kind) => {
+                        existing.kind = next_kind;
+                        if next_kind != ChangeKind::Renamed {
+                            existing.from = None;
+                        }
+                    }
+                }
+                continue;
+            }
+        }
+
+        let idx = merged.len();
+        merged.push(Some(ev));
+        index_by_key.insert(key, idx);
+    }
+
+    merged.into_iter().flatten().collect()
+}
 
 /// 工作区文件监视服务（notify 8 封装）
 ///
@@ -240,19 +325,21 @@ impl WorkspaceWatcher {
     }
 }
 
-/// notify 回调状态机（move 进回调闭包；路径过滤 + Rename 聚合 + 发射）
+/// notify 回调状态机（move 进回调闭包；路径过滤 + Rename 聚合 + 防抖排重 + 发射）
 struct WatcherState {
     tx: tokio::sync::mpsc::Sender<FileChangeEvent>,
     /// 规范化监视根（排除判定基准）
     root: PathBuf,
-    /// 排除根（绝对化，组件级前缀匹配）
-    exclude: Vec<PathBuf>,
+    /// KFS-12：构造期预归一化的排除目录列表（消除事件循环内重复字符串分配）
+    exclude_norm: Vec<String>,
     /// 排除 glob（"**/*.snap" 形态，路径段级匹配）
     excludes_glob: Vec<String>,
     /// 待配对删除记录（Rename 聚合中间态；flush 线程共享）
     pending_removes: PendingRemoves,
     /// Rename 聚合窗口（毫秒）
     rename_window_ms: i64,
+    /// KFS-07：同路径高频事件防抖表（归一化路径 -> (最近发射类型, 时间戳)）
+    recent_emits: std::collections::HashMap<String, (ChangeKind, i64)>,
 }
 
 impl WatcherState {
@@ -263,18 +350,22 @@ impl WatcherState {
         pending_removes: PendingRemoves,
         rename_window_ms: i64,
     ) -> Self {
-        // 排除清单绝对化（相对工作区解析为 root 下的绝对路径）
-        let exclude: Vec<PathBuf> = exclude
+        // KFS-12：排除清单在构造期一次性完成绝对化与归一化
+        let exclude_norm: Vec<String> = exclude
             .iter()
-            .map(|e| normalize_abs_path(&root.join(e)))
+            .map(|e| {
+                let abs = normalize_abs_path(&root.join(e));
+                normalize_for_compare(&abs)
+            })
             .collect();
         Self {
             tx,
             root,
-            exclude,
+            exclude_norm,
             excludes_glob: Vec::new(),
             pending_removes,
             rename_window_ms,
+            recent_emits: std::collections::HashMap::with_capacity(64),
         }
     }
 
@@ -314,8 +405,13 @@ impl WatcherState {
                     if self.is_excluded(p) {
                         continue;
                     }
+                    let abs_path = self.resolve_event_path(p);
+                    let norm_key = normalize_for_compare(&abs_path);
+                    if !self.should_emit_debounced(norm_key, ChangeKind::Modified, now) {
+                        continue;
+                    }
                     self.emit(FileChangeEvent {
-                        path: normalize_abs_path(p),
+                        path: abs_path,
                         kind: ChangeKind::Modified,
                         from: None,
                         occurred_at_ms: now,
@@ -332,15 +428,56 @@ impl WatcherState {
         }
     }
 
-    /// 删除事件入待配对队列（排除清单过滤先行；flush 线程负责转正）
+    /// KFS-07：判定同路径事件是否通过防抖窗口（前沿立即放行，窗口内重复同类事件合并抑制）
+    fn should_emit_debounced(&mut self, norm_key: String, kind: ChangeKind, now: i64) -> bool {
+        if let Some(&(last_kind, last_ts)) = self.recent_emits.get(&norm_key) {
+            if last_kind == kind && now.saturating_sub(last_ts) < DEBOUNCE_WINDOW_MS {
+                return false;
+            }
+        }
+        if self.recent_emits.len() >= MAX_DEBOUNCE_ENTRIES {
+            self.recent_emits
+                .retain(|_, (_, ts)| now.saturating_sub(*ts) < DEBOUNCE_WINDOW_MS);
+            if self.recent_emits.len() >= MAX_DEBOUNCE_ENTRIES {
+                self.recent_emits.clear();
+            }
+        }
+        self.recent_emits.insert(norm_key, (kind, now));
+        true
+    }
+
+    /// KFS-13：纯词法解析事件路径（基于已 canonicalize 的 root，避免回调热路径触发磁盘 I/O）
+    #[inline]
+    fn resolve_event_path(&self, path: &Path) -> PathBuf {
+        let candidate = if path.is_absolute() {
+            strip_verbatim(path)
+        } else {
+            strip_verbatim(&self.root.join(path))
+        };
+        lexical_clean_path(&candidate)
+    }
+
+    /// 删除事件入待配对队列（排除清单过滤先行；同路径去重；flush 线程负责转正）
     fn pend_remove(&mut self, path: &Path, now: i64) {
         if self.is_excluded(path) {
             return;
         }
-        lock_pending(&self.pending_removes).push(PendingRemove {
-            path: normalize_abs_path(path),
-            occurred_at_ms: now,
-        });
+        let abs_path = self.resolve_event_path(path);
+        let norm_key = normalize_for_compare(&abs_path);
+        // 删除发生时清除该路径的防抖记录，确保后续同名重建或修改不被误抑制
+        self.recent_emits.remove(&norm_key);
+
+        let mut inner = lock_pending(&self.pending_removes);
+        if let Some(existing) = inner.iter_mut().find(|pr| pr.norm_key == norm_key) {
+            existing.occurred_at_ms = now;
+            existing.path = abs_path;
+        } else {
+            inner.push(PendingRemove {
+                path: abs_path,
+                norm_key,
+                occurred_at_ms: now,
+            });
+        }
     }
 
     /// 新建事件：窗口内优先与待配对删除聚合为 Renamed，否则独立 Created
@@ -348,22 +485,26 @@ impl WatcherState {
         if self.is_excluded(path) {
             return;
         }
-        let path = normalize_abs_path(path);
+        let path = self.resolve_event_path(path);
         // 配对约束：窗口内 + 同父目录（防跨目录独立删除+新建误聚合）
-        let parent = path.parent().map(Path::to_path_buf);
+        let parent_key = path.parent().map(normalize_for_compare);
         let mut inner = lock_pending(&self.pending_removes);
         let hit = inner.iter().position(|pr| {
             let age = now - pr.occurred_at_ms;
             age >= 0
                 && age <= self.rename_window_ms
-                && pr.path.parent().map(Path::to_path_buf) == parent
+                && pr.path.parent().map(normalize_for_compare) == parent_key
         });
         if let Some(idx) = hit {
             let from = inner.remove(idx);
             drop(inner);
-            self.emit_renamed(&from.path, &path, now);
+            self.emit_renamed_resolved(from.path, path, now);
         } else {
             drop(inner);
+            let norm_key = normalize_for_compare(&path);
+            if !self.should_emit_debounced(norm_key, ChangeKind::Created, now) {
+                return;
+            }
             self.emit(FileChangeEvent {
                 path,
                 kind: ChangeKind::Created,
@@ -378,9 +519,19 @@ impl WatcherState {
         if self.is_excluded(from) || self.is_excluded(to) {
             return;
         }
-        let from = normalize_abs_path(from);
-        let to = normalize_abs_path(to);
-        if from == to {
+        let from = self.resolve_event_path(from);
+        let to = self.resolve_event_path(to);
+        self.emit_renamed_resolved(from, to, now);
+    }
+
+    fn emit_renamed_resolved(&mut self, from: PathBuf, to: PathBuf, now: i64) {
+        let from_key = normalize_for_compare(&from);
+        let to_key = normalize_for_compare(&to);
+        if from_key == to_key {
+            return;
+        }
+        self.recent_emits.remove(&from_key);
+        if !self.should_emit_debounced(to_key, ChangeKind::Renamed, now) {
             return;
         }
         self.emit(FileChangeEvent {
@@ -396,17 +547,24 @@ impl WatcherState {
         let _ = self.tx.try_send(ev);
     }
 
-    /// 排除判定：内部瞬态文件过滤、绝对路径命中排除根（组件级前缀）或排除 glob 即排除
+    /// 排除判定（KFS-12）：内部瞬态文件过滤、绝对路径命中预归一化排除根或排除 glob 即排除
     fn is_excluded(&self, path: &Path) -> bool {
         if watcher_filter(path) {
             return true;
         }
-        let np = normalize_for_compare(path);
-        for e in &self.exclude {
-            let ne = normalize_for_compare(e);
-            if np == ne || np.starts_with(&format!("{ne}{MAIN_SEP}")) {
-                return true;
+        if !self.exclude_norm.is_empty() {
+            let np = normalize_for_compare(path);
+            for ne in &self.exclude_norm {
+                if np == *ne
+                    || (np.starts_with(ne.as_str())
+                        && np.as_bytes().get(ne.len()) == Some(&(MAIN_SEP as u8)))
+                {
+                    return true;
+                }
             }
+        }
+        if self.excludes_glob.is_empty() {
+            return false;
         }
         let rel = path.strip_prefix(&self.root).unwrap_or(path);
         let rel_norm = rel
@@ -465,14 +623,38 @@ fn spawn_flush_loop(
 /// 统一分隔符（排除前缀拼接用）
 const MAIN_SEP: char = std::path::MAIN_SEPARATOR;
 
-/// 规范化绝对路径：symlink 解析（canonicalize）+ 剥离 `\\?\` verbatim 前缀
-///
-/// 与 write_paths 的 resolve_workspace_path 输出形态对齐（strip
-/// `\\?\` / `\\?\UNC\`），保证事件路径与声明路径可比较；
-/// Windows 大小写折叠由比较层（normalize_for_compare）承担。
+/// 规范化绝对路径（仅用于启动期 root 与配置初始化）：symlink 解析（canonicalize）+ 剥离 `\\?\` verbatim 前缀
 fn normalize_abs_path(p: &Path) -> PathBuf {
     let canon = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
     strip_verbatim(&canon)
+}
+
+/// KFS-13：纯词法清理 `.` 与 `..` 组件，不发起任何磁盘系统调用
+fn lexical_clean_path(p: &Path) -> PathBuf {
+    let mut needs_clean = false;
+    for comp in p.components() {
+        if matches!(
+            comp,
+            std::path::Component::CurDir | std::path::Component::ParentDir
+        ) {
+            needs_clean = true;
+            break;
+        }
+    }
+    if !needs_clean {
+        return p.to_path_buf();
+    }
+    let mut out = PathBuf::new();
+    for comp in p.components() {
+        match comp {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                let _ = out.pop();
+            }
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
 }
 
 /// 剥离 `\\?\` / `\\?\UNC\` 前缀（防御性兜底：canonicalize 输出可能带）
@@ -542,33 +724,96 @@ fn glob_segs(pat: &[&str], path: &[&str]) -> bool {
     }
 }
 
-/// 单段 glob 匹配（`*` 任意序列、`?` 单字符，递归展开；字符级切片，
-/// 避免对多字节字符（中文路径）在非 UTF-8 边界切片 panic；Windows 下大小写折叠）
+/// 单段 glob 匹配（KFS-12：ASCII 快速路径零堆分配 + 双指针迭代匹配避免指数回溯；
+/// 多字节路径回退至字符级安全匹配，杜绝非 UTF-8 边界切片 panic）
 fn seg_match(pat: &str, s: &str) -> bool {
+    if pat.is_ascii() && s.is_ascii() {
+        return seg_match_ascii(pat.as_bytes(), s.as_bytes());
+    }
     #[cfg(windows)]
     {
-        let pat: Vec<char> = pat.chars().flat_map(|c| c.to_lowercase()).collect();
-        let s: Vec<char> = s.chars().flat_map(|c| c.to_lowercase()).collect();
-        seg_match_chars(&pat, &s)
+        let pat_chars: Vec<char> = pat.chars().flat_map(|c| c.to_lowercase()).collect();
+        let s_chars: Vec<char> = s.chars().flat_map(|c| c.to_lowercase()).collect();
+        seg_match_chars(&pat_chars, &s_chars)
     }
     #[cfg(not(windows))]
     {
-        let pat: Vec<char> = pat.chars().collect();
-        let s: Vec<char> = s.chars().collect();
-        seg_match_chars(&pat, &s)
+        let pat_chars: Vec<char> = pat.chars().collect();
+        let s_chars: Vec<char> = s.chars().collect();
+        seg_match_chars(&pat_chars, &s_chars)
     }
 }
 
-/// 字符级 glob 匹配核心（`*` 吞 0..n 个字符）
-fn seg_match_chars(pat: &[char], s: &[char]) -> bool {
-    match (pat, s) {
-        ([], []) => true,
-        ([], _) => false,
-        (['*', rest @ ..], _) => (0..=s.len()).any(|take| seg_match_chars(rest, &s[take..])),
-        (['?', rest @ ..], [_, s_rest @ ..]) => seg_match_chars(rest, s_rest),
-        ([c, rest @ ..], [sc, s_rest @ ..]) if c == sc => seg_match_chars(rest, s_rest),
-        _ => false,
+/// ASCII 字节级线性双指针通配匹配（零堆分配）
+fn seg_match_ascii(pat: &[u8], s: &[u8]) -> bool {
+    let mut pi = 0usize;
+    let mut si = 0usize;
+    let mut star_idx: Option<usize> = None;
+    let mut match_idx = 0usize;
+
+    while si < s.len() {
+        if pi < pat.len() && (pat[pi] == b'?' || ascii_byte_eq(pat[pi], s[si])) {
+            pi += 1;
+            si += 1;
+        } else if pi < pat.len() && pat[pi] == b'*' {
+            star_idx = Some(pi);
+            match_idx = si;
+            pi += 1;
+        } else if let Some(star) = star_idx {
+            pi = star + 1;
+            match_idx += 1;
+            si = match_idx;
+        } else {
+            return false;
+        }
     }
+
+    while pi < pat.len() && pat[pi] == b'*' {
+        pi += 1;
+    }
+    pi == pat.len()
+}
+
+#[inline]
+fn ascii_byte_eq(a: u8, b: u8) -> bool {
+    #[cfg(windows)]
+    {
+        a.eq_ignore_ascii_case(&b)
+    }
+    #[cfg(not(windows))]
+    {
+        a == b
+    }
+}
+
+/// 字符级双指针迭代 glob 匹配核心（`*` 吞 0..n 个字符，消除递归回溯）
+fn seg_match_chars(pat: &[char], s: &[char]) -> bool {
+    let mut pi = 0usize;
+    let mut si = 0usize;
+    let mut star_idx: Option<usize> = None;
+    let mut match_idx = 0usize;
+
+    while si < s.len() {
+        if pi < pat.len() && (pat[pi] == '?' || pat[pi] == s[si]) {
+            pi += 1;
+            si += 1;
+        } else if pi < pat.len() && pat[pi] == '*' {
+            star_idx = Some(pi);
+            match_idx = si;
+            pi += 1;
+        } else if let Some(star) = star_idx {
+            pi = star + 1;
+            match_idx += 1;
+            si = match_idx;
+        } else {
+            return false;
+        }
+    }
+
+    while pi < pat.len() && pat[pi] == '*' {
+        pi += 1;
+    }
+    pi == pat.len()
 }
 
 /// 当前纪元毫秒（对齐全仓 epoch ms 惯例；本 crate 叶子依赖不引
@@ -889,5 +1134,77 @@ mod tests {
         assert!(!watcher_filter(Path::new("c:/workspace/doc.md")));
         assert!(!watcher_filter(Path::new("c:/workspace/src/lib.rs")));
         assert!(!watcher_filter(Path::new("c:/workspace/README.md")));
+    }
+
+    #[test]
+    fn coalesce_file_events_merges_redundant_states_per_path() {
+        let p_a = PathBuf::from("C:/ws/a.rs");
+        let p_b = PathBuf::from("C:/ws/b.rs");
+        let raw = vec![
+            FileChangeEvent {
+                path: p_a.clone(),
+                kind: ChangeKind::Created,
+                from: None,
+                occurred_at_ms: 100,
+            },
+            FileChangeEvent {
+                path: p_a.clone(),
+                kind: ChangeKind::Modified,
+                from: None,
+                occurred_at_ms: 105,
+            },
+            FileChangeEvent {
+                path: p_a.clone(),
+                kind: ChangeKind::Modified,
+                from: None,
+                occurred_at_ms: 110,
+            },
+            FileChangeEvent {
+                path: p_b.clone(),
+                kind: ChangeKind::Modified,
+                from: None,
+                occurred_at_ms: 112,
+            },
+            FileChangeEvent {
+                path: p_b.clone(),
+                kind: ChangeKind::Modified,
+                from: None,
+                occurred_at_ms: 115,
+            },
+        ];
+
+        let merged = coalesce_file_events(raw);
+        assert_eq!(merged.len(), 2, "同路径高频冗余事件必须合并为单条");
+        assert_eq!(merged[0].path, p_a);
+        assert_eq!(merged[0].kind, ChangeKind::Created);
+        assert_eq!(merged[0].occurred_at_ms, 110);
+        assert_eq!(merged[1].path, p_b);
+        assert_eq!(merged[1].kind, ChangeKind::Modified);
+        assert_eq!(merged[1].occurred_at_ms, 115);
+    }
+
+    #[test]
+    fn watcher_debounces_dense_write_burst_without_storm() {
+        let ws = TempWorkspace::new("watch_burst");
+        ws.write_file("burst.txt", "init");
+        let (mut watcher, mut rx) = start_fast(&ws, vec![]);
+        let _ = drain(&mut rx, 100);
+
+        // 模拟单文件密集写入 30 次
+        let target = ws.path().join("burst.txt");
+        for i in 0..30 {
+            fs::write(&target, format!("payload-{i}")).unwrap();
+        }
+        let events = drain(&mut rx, 600);
+        let mod_count = events
+            .iter()
+            .filter(|e| e.kind == ChangeKind::Modified && e.path == target)
+            .count();
+        assert!(
+            mod_count >= 1 && mod_count < 15,
+            "密集写入应至少产出 1 条 Modified 且经防抖抑制风暴（实测 {mod_count} 条）：{events:?}"
+        );
+
+        watcher.stop();
     }
 }

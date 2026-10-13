@@ -124,13 +124,38 @@ impl<'a> DerefMut for PooledReader<'a> {
 
 impl<'a> Drop for PooledReader<'a> {
     fn drop(&mut self) {
-        // 先释放底层连接 MutexGuard，确保被唤醒的等待者调用 try_acquire 时立即可见空闲槽位
-        drop(self.guard.take());
+        if let Some(guard) = self.guard.take() {
+            // 防护：若借用方开启了显式只读事务但未提交/回滚，归还前主动回滚，
+            // 避免残留事务长持 WAL read-mark 阻塞 checkpoint
+            if !guard.is_autocommit() {
+                let _ = guard.execute_batch("ROLLBACK;");
+            }
+            // 先释放底层连接 MutexGuard，确保被唤醒的等待者调用 try_acquire 时立即可见空闲槽位
+            drop(guard);
+        }
         if self.inner.waiters.load(Ordering::SeqCst) > 0 {
-            let _wait_guard = self.inner.wait_lock.lock();
+            let _wait_guard = match self.inner.wait_lock.lock() {
+                Ok(g) => g,
+                Err(poisoned) => poisoned.into_inner(),
+            };
             self.inner.slot_cvar.notify_one();
         }
         self.inner.async_notify.notify_one();
+    }
+}
+
+struct SyncWaiterGuard<'a>(&'a AtomicUsize);
+
+impl<'a> SyncWaiterGuard<'a> {
+    fn new(counter: &'a AtomicUsize) -> Self {
+        counter.fetch_add(1, Ordering::SeqCst);
+        Self(counter)
+    }
+}
+
+impl<'a> Drop for SyncWaiterGuard<'a> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
@@ -236,7 +261,9 @@ impl ReaderPool {
     /// 尝试非阻塞获取一个空闲的只读连接。
     ///
     /// 算法：基于无锁递增游标作为起点，执行全槽位 `try_lock` 扫描。
-    /// 若有任意连接空闲，立即无阻塞借出，耗时 < 5µs。
+    /// 若有任意连接空闲，立即无阻塞借出，耗时 < 5µs；
+    /// 若前序持锁线程发生 panic 导致槽位 Poisoned，执行非阻塞自愈（提取底层连接、
+    /// 回滚残留未决事务并执行健康探针），防止槽位永久死锁泄露（SEC-01）。
     pub fn try_acquire(&self) -> Option<PooledReader<'_>> {
         let pool_size = self.inner.slots.len();
         if pool_size == 0 {
@@ -247,31 +274,60 @@ impl ReaderPool {
         for i in 0..pool_size {
             let idx = (start + i) % pool_size;
             let slot = &self.inner.slots[idx];
-            if let Ok(guard) = slot.conn.try_lock() {
-                slot.borrow_count.fetch_add(1, Ordering::Relaxed);
+            let guard = match slot.conn.try_lock() {
+                Ok(g) => {
+                    if !g.is_autocommit() {
+                        let _ = g.execute_batch("ROLLBACK;");
+                    }
+                    g
+                }
+                Err(std::sync::TryLockError::Poisoned(poisoned)) => {
+                    let g = poisoned.into_inner();
+                    if !g.is_autocommit() {
+                        let _ = g.execute_batch("ROLLBACK;");
+                    }
+                    if g.execute_batch("SELECT 1;").is_err() {
+                        continue;
+                    }
+                    g
+                }
+                Err(std::sync::TryLockError::WouldBlock) => continue,
+            };
+
+            slot.borrow_count.fetch_add(1, Ordering::Relaxed);
+            self.inner
+                .stats
+                .total_acquisitions
+                .fetch_add(1, Ordering::Relaxed);
+            if i == 0 {
                 self.inner
                     .stats
-                    .total_acquisitions
+                    .fast_path_hits
                     .fetch_add(1, Ordering::Relaxed);
-                if i == 0 {
-                    self.inner
-                        .stats
-                        .fast_path_hits
-                        .fetch_add(1, Ordering::Relaxed);
-                } else {
-                    self.inner
-                        .stats
-                        .probe_retries
-                        .fetch_add(1, Ordering::Relaxed);
-                }
-                return Some(PooledReader {
-                    guard: Some(guard),
-                    slot_id: idx,
-                    inner: &self.inner,
-                });
+            } else {
+                self.inner
+                    .stats
+                    .probe_retries
+                    .fetch_add(1, Ordering::Relaxed);
             }
+            return Some(PooledReader {
+                guard: Some(guard),
+                slot_id: idx,
+                inner: &self.inner,
+            });
         }
         None
+    }
+
+    /// 探测当前是否至少存在一个可立即借出的空闲槽位。
+    #[inline]
+    pub fn has_idle_slot(&self) -> bool {
+        self.inner.slots.iter().any(|slot| {
+            !matches!(
+                slot.conn.try_lock(),
+                Err(std::sync::TryLockError::WouldBlock)
+            )
+        })
     }
 
     /// 同步阻塞获取只读连接（带自适应非阻塞探测与 Condvar 微秒级精准唤醒）。
@@ -311,14 +367,13 @@ impl ReaderPool {
                 std::hint::spin_loop();
                 std::thread::yield_now();
             } else {
-                self.inner.waiters.fetch_add(1, Ordering::SeqCst);
+                let _waiter_guard = SyncWaiterGuard::new(&self.inner.waiters);
                 let wait_guard = match self.inner.wait_lock.lock() {
                     Ok(g) => g,
                     Err(poisoned) => poisoned.into_inner(),
                 };
                 // 持锁二次校验：消除 try_acquire 失败与进入 wait_timeout 之间的唤醒丢失窗口
                 if let Some(reader) = self.try_acquire() {
-                    self.inner.waiters.fetch_sub(1, Ordering::SeqCst);
                     drop(wait_guard);
                     return Ok(reader);
                 }
@@ -329,7 +384,6 @@ impl ReaderPool {
                 } else {
                     drop(wait_guard);
                 }
-                self.inner.waiters.fetch_sub(1, Ordering::SeqCst);
             }
         }
     }
@@ -361,11 +415,17 @@ impl ReaderPool {
             if attempt <= 3 {
                 tokio::task::yield_now().await;
             } else {
+                let notified = self.inner.async_notify.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                // 启用监听器后二次探测，消除丢唤醒窗口
+                if let Some(reader) = self.try_acquire() {
+                    return Ok(reader);
+                }
                 let remaining = timeout.saturating_sub(start_time.elapsed());
                 if !remaining.is_zero() {
                     let wait_slice = remaining.min(Duration::from_millis(2));
-                    let _ =
-                        tokio::time::timeout(wait_slice, self.inner.async_notify.notified()).await;
+                    let _ = tokio::time::timeout(wait_slice, notified).await;
                 }
             }
         }
@@ -380,15 +440,54 @@ impl ReaderPool {
         f(&reader)
     }
 
-    /// 异步执行只读闭包（在 spawn_blocking 中借用池连接）。
+    /// 异步执行只读闭包（防饥饿保护：全槽位饱和时先在异步上下文让渡等待，
+    /// 避免直接涌入 `spawn_blocking` 耗尽 Tokio 阻塞线程池，SEC-01 / SEC-17）。
     pub async fn read_async<F, R>(&self, f: F) -> Result<R, DbFailure>
     where
         F: FnOnce(&Connection) -> Result<R, DbFailure> + Send + 'static,
         R: Send + 'static,
     {
+        let start_time = Instant::now();
+        let timeout = self.inner.config.max_wait_timeout;
+        let mut attempt = 0u32;
+
+        while !self.has_idle_slot() {
+            if start_time.elapsed() >= timeout {
+                self.inner.stats.timeouts.fetch_add(1, Ordering::Relaxed);
+                return Err(DbFailure {
+                    message: format!(
+                        "ReaderPool async timeout: all {} connections busy after {:?}",
+                        self.inner.slots.len(),
+                        timeout
+                    ),
+                    kind: DbFailureKind::Lock,
+                });
+            }
+
+            attempt = attempt.saturating_add(1);
+            if attempt <= 3 {
+                tokio::task::yield_now().await;
+            } else {
+                let notified = self.inner.async_notify.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                if self.has_idle_slot() {
+                    break;
+                }
+                let remaining = timeout.saturating_sub(start_time.elapsed());
+                if !remaining.is_zero() {
+                    let wait_slice = remaining.min(Duration::from_millis(2));
+                    let _ = tokio::time::timeout(wait_slice, notified).await;
+                }
+            }
+        }
+
+        let remaining = timeout
+            .saturating_sub(start_time.elapsed())
+            .max(Duration::from_millis(1));
         let pool = self.clone();
         tokio::task::spawn_blocking(move || {
-            let reader = pool.acquire()?;
+            let reader = pool.acquire_timeout(remaining)?;
             f(&reader)
         })
         .await
@@ -419,7 +518,10 @@ impl ReaderPool {
         let pool_size = self.inner.slots.len();
         let mut active = 0;
         for slot in &self.inner.slots {
-            if slot.conn.try_lock().is_err() {
+            if matches!(
+                slot.conn.try_lock(),
+                Err(std::sync::TryLockError::WouldBlock)
+            ) {
                 active += 1;
             }
         }
@@ -436,13 +538,48 @@ impl ReaderPool {
         }
     }
 
-    /// 对池中所有连接进行健康探测。
+    /// 对池中所有连接进行有界健康探测与非阻塞自愈恢复（SEC-01）。
+    ///
+    /// - 若槽位曾因线程 panic 处于 Poisoned 状态，自动提取底层连接并回滚未决事务；
+    /// - 若槽位被慢查询长期占用超过 `max_wait_timeout`，返回 `DbFailureKind::Lock` 超时错误而非无限死锁。
     pub fn check_health(&self) -> Result<(), DbFailure> {
+        let deadline = Instant::now() + self.inner.config.max_wait_timeout;
         for slot in &self.inner.slots {
-            let guard = slot.conn.lock().map_err(|_| DbFailure {
-                message: format!("reader slot #{} mutex is poisoned", slot.id),
-                kind: DbFailureKind::Other("lock_poisoned".to_string()),
-            })?;
+            let guard = loop {
+                match slot.conn.try_lock() {
+                    Ok(g) => break g,
+                    Err(std::sync::TryLockError::Poisoned(poisoned)) => {
+                        break poisoned.into_inner();
+                    }
+                    Err(std::sync::TryLockError::WouldBlock) => {
+                        let now = Instant::now();
+                        if now >= deadline {
+                            return Err(DbFailure {
+                                message: format!(
+                                    "reader slot #{} health check lock timeout after {:?}",
+                                    slot.id, self.inner.config.max_wait_timeout
+                                ),
+                                kind: DbFailureKind::Lock,
+                            });
+                        }
+                        let _waiter_guard = SyncWaiterGuard::new(&self.inner.waiters);
+                        let wait_guard = match self.inner.wait_lock.lock() {
+                            Ok(g) => g,
+                            Err(poisoned) => poisoned.into_inner(),
+                        };
+                        let remaining = deadline.saturating_duration_since(Instant::now());
+                        if !remaining.is_zero() {
+                            let wait_slice = remaining.min(Duration::from_millis(2));
+                            let _ = self.inner.slot_cvar.wait_timeout(wait_guard, wait_slice);
+                        } else {
+                            drop(wait_guard);
+                        }
+                    }
+                }
+            };
+            if !guard.is_autocommit() {
+                let _ = guard.execute_batch("ROLLBACK;");
+            }
             guard.execute_batch("SELECT 1;").map_err(|e| DbFailure {
                 message: format!("reader slot #{} health check failed: {e}", slot.id),
                 kind: DbFailureKind::Other("health_check_failed".to_string()),
@@ -464,5 +601,70 @@ impl ReaderPool {
     /// 检查连接池是否为空。
     pub fn is_empty(&self) -> bool {
         self.inner.slots.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn poisoned_reader_slot_recovers_non_blocking_and_passes_health_check() {
+        let conn = Connection::open_in_memory().expect("open in-memory");
+        let pool = ReaderPool::from_connections(
+            vec![conn],
+            ReaderPoolConfig {
+                pool_size: 1,
+                max_wait_timeout: Duration::from_millis(200),
+                ..Default::default()
+            },
+        );
+
+        let pool_clone = pool.clone();
+        let handle = std::thread::spawn(move || {
+            let reader = pool_clone.acquire().expect("acquire before panic");
+            reader
+                .execute_batch("BEGIN;")
+                .expect("start unfinished transaction");
+            panic!("simulated reader panic while holding slot and transaction");
+        });
+        assert!(handle.join().is_err(), "worker must have panicked");
+
+        // Poisoned 槽位不应被误判为活跃占用
+        let stats = pool.stats();
+        assert_eq!(stats.active_readers, 0);
+        assert_eq!(stats.idle_readers, 1);
+
+        // try_acquire 应立即非阻塞自愈并回滚残留事务
+        let recovered = pool
+            .try_acquire()
+            .expect("poisoned slot must recover via try_acquire");
+        assert!(
+            recovered.is_autocommit(),
+            "dangling transaction must be rolled back on recovery"
+        );
+        drop(recovered);
+
+        // check_health 必须顺利通过
+        pool.check_health()
+            .expect("health check must succeed after poison recovery");
+    }
+
+    #[test]
+    fn dangling_transaction_is_rolled_back_on_pooled_reader_drop() {
+        let conn = Connection::open_in_memory().expect("open in-memory");
+        let pool = ReaderPool::from_connections(vec![conn], ReaderPoolConfig::default());
+
+        {
+            let reader = pool.acquire().expect("acquire");
+            reader.execute_batch("BEGIN;").expect("begin tx");
+            assert!(!reader.is_autocommit());
+        }
+
+        let reader2 = pool.acquire().expect("re-acquire");
+        assert!(
+            reader2.is_autocommit(),
+            "PooledReader::drop must rollback uncommitted transaction"
+        );
     }
 }

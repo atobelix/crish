@@ -84,11 +84,56 @@ impl Default for StreamingTagExtractor {
     }
 }
 
+/// 内部输出汇聚抽象：消除 `push_text` / `finish` 中先构造 `Vec<ExtractedPiece>`
+/// 再二次分配 `Vec<ProviderStreamEvent>` 的中间堆开销。
+trait PieceSink: Sized {
+    fn from_text(text: String) -> Self;
+    fn from_thought(text: String) -> Self;
+
+    #[inline]
+    fn single_text(text: String) -> Vec<Self> {
+        vec![Self::from_text(text)]
+    }
+
+    #[inline]
+    fn single_thought(text: String) -> Vec<Self> {
+        vec![Self::from_thought(text)]
+    }
+}
+
+impl PieceSink for ExtractedPiece {
+    #[inline]
+    fn from_text(text: String) -> Self {
+        ExtractedPiece::Text(text)
+    }
+
+    #[inline]
+    fn from_thought(text: String) -> Self {
+        ExtractedPiece::Thought(text)
+    }
+}
+
+impl PieceSink for ProviderStreamEvent {
+    #[inline]
+    fn from_text(text: String) -> Self {
+        ProviderStreamEvent::TextDelta { text }
+    }
+
+    #[inline]
+    fn from_thought(text: String) -> Self {
+        ProviderStreamEvent::ThoughtDelta {
+            text,
+            redacted: None,
+        }
+    }
+}
+
 impl StreamingTagExtractor {
     pub fn new(tags: &'static [TagPair]) -> Self {
         Self {
             state: TagState::Text,
-            lookahead_buf: String::with_capacity(32),
+            // 惰性零分配：无跨 Chunk 标签前缀时不分配堆内存
+            lookahead_buf: String::new(),
             tags,
             active_tag_index: None,
             strip_leading_newline: false,
@@ -112,40 +157,140 @@ impl StreamingTagExtractor {
     }
 
     /// 消费一个文本块，产出提取的片段列表
+    #[inline]
     pub fn push_chunk(&mut self, chunk: &str) -> Vec<ExtractedPiece> {
-        let mut pieces = Vec::new();
+        self.push_into(chunk)
+    }
+
+    /// 消费文本并直接转换为 ProviderStreamEvent（无中间 Vec<ExtractedPiece> 二次分配）
+    #[inline]
+    pub fn push_text(&mut self, text: &str) -> Vec<ProviderStreamEvent> {
+        self.push_into(text)
+    }
+
+    /// 流终止收尾：冲刷剩余缓冲区并返回 ExtractedPiece 列表
+    #[inline]
+    pub fn finish_pieces(&mut self) -> Vec<ExtractedPiece> {
+        self.finish_into()
+    }
+
+    /// 流终止收尾：冲刷剩余缓冲区并返回 ProviderStreamEvent 列表
+    #[inline]
+    pub fn finish(&mut self) -> Vec<ProviderStreamEvent> {
+        self.finish_into()
+    }
+
+    /// 重置状态机到初始状态
+    pub fn reset(&mut self) {
+        self.state = TagState::Text;
+        self.lookahead_buf.clear();
+        self.active_tag_index = None;
+        self.strip_leading_newline = false;
+    }
+
+    /// 消除标签后紧随的首个换行符（`\r\n` 或 `\n`），全程在 `&str` 切片上零拷贝推进
+    #[inline]
+    fn consume_leading_newline<'a>(&mut self, mut rest: &'a str) -> &'a str {
+        while let Some(after_cr) = rest.strip_prefix('\r') {
+            rest = after_cr;
+        }
+        if rest.is_empty() {
+            return "";
+        }
+        self.strip_leading_newline = false;
+        if let Some(after_lf) = rest.strip_prefix('\n') {
+            rest = after_lf;
+        }
+        rest
+    }
+
+    fn push_into<S: PieceSink>(&mut self, chunk: &str) -> Vec<S> {
+        if chunk.is_empty() {
+            return Vec::new();
+        }
+
+        let mut rest = if self.strip_leading_newline {
+            let trimmed = self.consume_leading_newline(chunk);
+            if trimmed.is_empty() {
+                return Vec::new();
+            }
+            trimmed
+        } else {
+            chunk
+        };
+
+        // 快速直通路径：无未决前瞻缓冲且不含 '<' 时，跳过状态机循环与临时缓冲直接发射
+        if self.lookahead_buf.is_empty() && !rest.as_bytes().contains(&b'<') {
+            return match self.state {
+                TagState::Text | TagState::MatchingOpen => S::single_text(rest.to_owned()),
+                TagState::Thinking | TagState::MatchingClose => S::single_thought(rest.to_owned()),
+            };
+        }
+
+        let mut pieces: Vec<S> = Vec::new();
         let mut current_text_batch = String::new();
         let mut current_thought_batch = String::new();
-        let mut rest = chunk;
 
         while !rest.is_empty() {
-            // 处理标签后首个换行符消除逻辑（\r\n 或 \n）
             if self.strip_leading_newline {
-                while let Some(after_cr) = rest.strip_prefix('\r') {
-                    rest = after_cr;
-                }
+                rest = self.consume_leading_newline(rest);
                 if rest.is_empty() {
                     break;
-                }
-                self.strip_leading_newline = false;
-                if let Some(after_lf) = rest.strip_prefix('\n') {
-                    rest = after_lf;
-                    if rest.is_empty() {
-                        break;
-                    }
                 }
             }
 
             match self.state {
                 TagState::Text => {
-                    if let Some(pos) = rest.find('<') {
-                        if pos > 0 {
-                            current_text_batch.push_str(&rest[..pos]);
+                    let mut search_pos = 0;
+                    let mut transitioned = false;
+                    while let Some(rel_pos) = rest[search_pos..].find('<') {
+                        let pos = search_pos + rel_pos;
+                        let candidate = &rest[pos..];
+
+                        // 1. 原地切片完整匹配开标签（零 lookahead_buf 拷贝）
+                        if let Some(idx) =
+                            self.tags.iter().position(|t| candidate.starts_with(t.open))
+                        {
+                            let open_tag = self.tags[idx].open;
+                            let before = &rest[..pos];
+                            if !current_text_batch.is_empty() {
+                                current_text_batch.push_str(before);
+                                pieces.push(S::from_text(std::mem::take(&mut current_text_batch)));
+                            } else if !before.is_empty() {
+                                pieces.push(S::from_text(before.to_owned()));
+                            }
+                            self.state = TagState::Thinking;
+                            self.active_tag_index = Some(idx);
+                            self.strip_leading_newline = true;
+                            rest = &candidate[open_tag.len()..];
+                            transitioned = true;
+                            break;
                         }
-                        self.lookahead_buf.push('<');
-                        self.state = TagState::MatchingOpen;
-                        rest = &rest[pos + 1..];
-                    } else {
+
+                        // 2. 切片尾部属于某开标签前缀（仅跨 Chunk 边界时写入 lookahead_buf）
+                        if self.tags.iter().any(|t| t.open.starts_with(candidate)) {
+                            let before = &rest[..pos];
+                            if !before.is_empty() {
+                                current_text_batch.push_str(before);
+                            }
+                            self.lookahead_buf.push_str(candidate);
+                            self.state = TagState::MatchingOpen;
+                            rest = "";
+                            transitioned = true;
+                            break;
+                        }
+
+                        // 3. 普通 '<'（如数学符号 "1 < 2" 或非思考 HTML 标签），原地跳过零拷贝
+                        search_pos = pos + 1;
+                    }
+
+                    if !transitioned {
+                        if current_text_batch.is_empty()
+                            && pieces.is_empty()
+                            && current_thought_batch.is_empty()
+                        {
+                            return S::single_text(rest.to_owned());
+                        }
                         current_text_batch.push_str(rest);
                         break;
                     }
@@ -157,14 +302,74 @@ impl StreamingTagExtractor {
                     self.process_matching_open(&mut pieces, &mut current_text_batch);
                 }
                 TagState::Thinking => {
-                    if let Some(pos) = rest.find('<') {
-                        if pos > 0 {
-                            current_thought_batch.push_str(&rest[..pos]);
+                    let mut search_pos = 0;
+                    let mut transitioned = false;
+                    while let Some(rel_pos) = rest[search_pos..].find('<') {
+                        let pos = search_pos + rel_pos;
+                        let candidate = &rest[pos..];
+
+                        // 1. 原地切片完整匹配对应闭标签（零 lookahead_buf 拷贝）
+                        let matched_close_len = if let Some(idx) = self.active_tag_index {
+                            self.tags
+                                .get(idx)
+                                .and_then(|t| candidate.starts_with(t.close).then_some(t.close.len()))
+                        } else {
+                            self.tags
+                                .iter()
+                                .find(|t| candidate.starts_with(t.close))
+                                .map(|t| t.close.len())
+                        };
+
+                        if let Some(close_len) = matched_close_len {
+                            let before = &rest[..pos];
+                            if !current_thought_batch.is_empty() {
+                                current_thought_batch.push_str(before);
+                                pieces.push(S::from_thought(std::mem::take(
+                                    &mut current_thought_batch,
+                                )));
+                            } else if !before.is_empty() {
+                                pieces.push(S::from_thought(before.to_owned()));
+                            }
+                            self.state = TagState::Text;
+                            self.active_tag_index = None;
+                            self.strip_leading_newline = true;
+                            rest = &candidate[close_len..];
+                            transitioned = true;
+                            break;
                         }
-                        self.lookahead_buf.push('<');
-                        self.state = TagState::MatchingClose;
-                        rest = &rest[pos + 1..];
-                    } else {
+
+                        // 2. 切片尾部属于对应闭标签前缀（仅跨 Chunk 边界时写入 lookahead_buf）
+                        let is_prefix = if let Some(idx) = self.active_tag_index {
+                            self.tags
+                                .get(idx)
+                                .is_some_and(|t| t.close.starts_with(candidate))
+                        } else {
+                            self.tags.iter().any(|t| t.close.starts_with(candidate))
+                        };
+
+                        if is_prefix {
+                            let before = &rest[..pos];
+                            if !before.is_empty() {
+                                current_thought_batch.push_str(before);
+                            }
+                            self.lookahead_buf.push_str(candidate);
+                            self.state = TagState::MatchingClose;
+                            rest = "";
+                            transitioned = true;
+                            break;
+                        }
+
+                        // 3. 思考链内的非匹配 '<'（如 "</div>" 或异名闭标签），原地跳过零拷贝
+                        search_pos = pos + 1;
+                    }
+
+                    if !transitioned {
+                        if current_thought_batch.is_empty()
+                            && pieces.is_empty()
+                            && current_text_batch.is_empty()
+                        {
+                            return S::single_thought(rest.to_owned());
+                        }
                         current_thought_batch.push_str(rest);
                         break;
                     }
@@ -179,67 +384,38 @@ impl StreamingTagExtractor {
         }
 
         if !current_text_batch.is_empty() {
-            pieces.push(ExtractedPiece::Text(current_text_batch));
+            pieces.push(S::from_text(current_text_batch));
         }
         if !current_thought_batch.is_empty() {
-            pieces.push(ExtractedPiece::Thought(current_thought_batch));
+            pieces.push(S::from_thought(current_thought_batch));
         }
 
         pieces
     }
 
-    /// 消费文本并直接转换为 ProviderStreamEvent
-    pub fn push_text(&mut self, text: &str) -> Vec<ProviderStreamEvent> {
-        self.push_chunk(text)
-            .into_iter()
-            .map(ExtractedPiece::into_stream_event)
-            .collect()
-    }
-
-    /// 流终止收尾：冲刷剩余缓冲区并返回 ExtractedPiece 列表
-    pub fn finish_pieces(&mut self) -> Vec<ExtractedPiece> {
-        let mut pieces = Vec::new();
-        if !self.lookahead_buf.is_empty() {
+    fn finish_into<S: PieceSink>(&mut self) -> Vec<S> {
+        let pieces = if !self.lookahead_buf.is_empty() {
             match self.state {
                 TagState::MatchingOpen | TagState::Text => {
-                    pieces.push(ExtractedPiece::Text(std::mem::take(
-                        &mut self.lookahead_buf,
-                    )));
                     self.state = TagState::Text;
+                    S::single_text(std::mem::take(&mut self.lookahead_buf))
                 }
                 TagState::MatchingClose | TagState::Thinking => {
-                    pieces.push(ExtractedPiece::Thought(std::mem::take(
-                        &mut self.lookahead_buf,
-                    )));
                     self.state = TagState::Thinking;
+                    S::single_thought(std::mem::take(&mut self.lookahead_buf))
                 }
             }
-        }
-        self.lookahead_buf.clear();
+        } else {
+            Vec::new()
+        };
         self.active_tag_index = None;
         self.strip_leading_newline = false;
         pieces
     }
 
-    /// 流终止收尾：冲刷剩余缓冲区并返回 ProviderStreamEvent 列表
-    pub fn finish(&mut self) -> Vec<ProviderStreamEvent> {
-        self.finish_pieces()
-            .into_iter()
-            .map(ExtractedPiece::into_stream_event)
-            .collect()
-    }
-
-    /// 重置状态机到初始状态
-    pub fn reset(&mut self) {
-        self.state = TagState::Text;
-        self.lookahead_buf.clear();
-        self.active_tag_index = None;
-        self.strip_leading_newline = false;
-    }
-
-    fn process_matching_open(
+    fn process_matching_open<S: PieceSink>(
         &mut self,
-        pieces: &mut Vec<ExtractedPiece>,
+        pieces: &mut Vec<S>,
         current_text_batch: &mut String,
     ) {
         let mut cursor = 0;
@@ -251,7 +427,7 @@ impl StreamingTagExtractor {
                     current_text_batch.push_str(&self.lookahead_buf[..cursor]);
                 }
                 if !current_text_batch.is_empty() {
-                    pieces.push(ExtractedPiece::Text(std::mem::take(current_text_batch)));
+                    pieces.push(S::from_text(std::mem::take(current_text_batch)));
                 }
                 self.lookahead_buf.clear();
                 self.state = TagState::Thinking;
@@ -284,9 +460,9 @@ impl StreamingTagExtractor {
         self.state = TagState::Text;
     }
 
-    fn process_matching_close(
+    fn process_matching_close<S: PieceSink>(
         &mut self,
-        pieces: &mut Vec<ExtractedPiece>,
+        pieces: &mut Vec<S>,
         current_thought_batch: &mut String,
     ) {
         let mut cursor = 0;
@@ -304,9 +480,7 @@ impl StreamingTagExtractor {
                     current_thought_batch.push_str(&self.lookahead_buf[..cursor]);
                 }
                 if !current_thought_batch.is_empty() {
-                    pieces.push(ExtractedPiece::Thought(std::mem::take(
-                        current_thought_batch,
-                    )));
+                    pieces.push(S::from_thought(std::mem::take(current_thought_batch)));
                 }
                 self.lookahead_buf.clear();
                 self.state = TagState::Text;

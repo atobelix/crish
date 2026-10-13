@@ -44,7 +44,7 @@ use super::handlers::{compaction_shape_ok, new_message_id, streaming, LoopState}
 use super::SessionLoopOptions;
 use crate::cache_tracker::CacheStatsTracker;
 use crate::r#loop::summary_coordinator::SessionSummaryCoordinator;
-use crate::r#loop::summary_dispatch::{summarize_via_blocking, SummaryDispatch};
+use crate::r#loop::summary_dispatch::{summarize_via_blocking_with_abort, SummaryDispatch};
 
 // ── P4 预算层（阶段 2-2/2-3）：估算 + 钳制 ─────────────────────────────
 
@@ -93,27 +93,56 @@ pub(crate) fn estimate_context(state: &LoopState) -> EstimateContext {
     let engine = CompactionEngine::new(0);
     engine.estimate_context_tokens(
         &state.conversation,
-        tools_prefix_json(state).as_deref(),
+        tools_prefix_json(state),
         state.options.assembly.system_prompt.as_deref(),
         state.compaction.last_compaction_at,
     )
 }
 
 /// 工具前缀折算输入（P4 §3.3.1 源 2：工具 schema 整体 JSON 体积折算；
-/// 快照未构建时返回 None——调用前必须已执行 ensure_tools_snapshot）
-fn tools_prefix_json(state: &LoopState) -> Option<String> {
+/// 快照未构建时返回 None——调用前必须已执行 ensure_tools_snapshot）。
+///
+/// SL-PERF-05：工具快照在会话运行期内只读不可变，首次按借用投影流式序列化后
+/// 缓存在 `state.compaction.tools_prefix_json`（`OnceLock<String>`），后续每轮
+/// 边界压缩、预检压缩与 `max_tokens` 钳制直接 O(1) 返回 `&str` 引用，彻底消除
+/// 每轮重复的 `serde_json::Value` 树深克隆与 `to_string` 堆分配。
+fn tools_prefix_json(state: &LoopState) -> Option<&str> {
     let tools = state.tools_snapshot.as_deref()?;
-    let value: Vec<serde_json::Value> = tools
-        .iter()
-        .map(|t| {
-            serde_json::json!({
-                "name": t.name.clone(),
-                "description": t.description.clone(),
-                "input_schema": t.input_schema.clone(),
-            })
-        })
-        .collect();
-    serde_json::to_string(&value).ok()
+    let cached = state
+        .compaction
+        .tools_prefix_json
+        .get_or_init(|| serialize_tools_prefix(tools));
+    Some(cached.as_str())
+}
+
+fn serialize_tools_prefix(tools: &[crate::provider::ToolSchema]) -> String {
+    #[derive(serde::Serialize)]
+    struct ToolPrefixProjection<'a> {
+        description: &'a str,
+        input_schema: &'a serde_json::Value,
+        name: &'a str,
+    }
+
+    struct ToolsPrefixSlice<'a>(&'a [crate::provider::ToolSchema]);
+    impl serde::Serialize for ToolsPrefixSlice<'_> {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            use serde::ser::SerializeSeq;
+            let mut seq = serializer.serialize_seq(Some(self.0.len()))?;
+            for t in self.0 {
+                seq.serialize_element(&ToolPrefixProjection {
+                    description: &t.description,
+                    input_schema: &t.input_schema,
+                    name: &t.name,
+                })?;
+            }
+            seq.end()
+        }
+    }
+
+    serde_json::to_string(&ToolsPrefixSlice(tools)).unwrap_or_default()
 }
 
 // ── P4 压缩层（阶段 3-2/3-3）：预检触发 + 应用 + 事件广播 ─────────────
@@ -295,8 +324,14 @@ pub(crate) async fn compact_with_llm_guard(
                     .map(|c| c.max_wall_ms)
                     .unwrap_or(crate::r#loop::summary_dispatch::LOOP_SUMMARY_MAX_WALL_MS);
                 Some(
-                    summarize_via_blocking(summarizer, preview.dropped, preview.existing, wall_ms)
-                        .await,
+                    summarize_via_blocking_with_abort(
+                        summarizer,
+                        preview.dropped,
+                        preview.existing,
+                        wall_ms,
+                        Some(&state.abort_signal),
+                    )
+                    .await,
                 )
             }
             None => None,
@@ -362,16 +397,23 @@ pub(crate) async fn compact_with_llm_guard(
 /// 不阻塞发送、不消耗压缩计数；存活任务去重由协调器 / 调度器保证——
 /// 重复触发幂等（摘要成功升级 committed 由后台任务回调面完成）。
 fn maybe_retry_pending_summary(state: &mut LoopState) {
-    let Some(pending) = state.compaction.pending_summary_retry.clone() else {
+    // SL-PERF-06：先借用检查块是否仍在对话中及 summarizer 是否就绪，避免无谓深拷贝 `dropped`
+    let Some(pending_ref) = state.compaction.pending_summary_retry.as_ref() else {
         return;
     };
-    // 块已不在对话（摘要成功替换 / 清理）→ 不再待重试
-    if !state.conversation.iter().any(|m| m.id == pending.block_id) {
+    // 块已不在对话（摘要成功替换 / 清理）→ 清理待重试快照并返回
+    if !state
+        .conversation
+        .iter()
+        .any(|m| m.id == pending_ref.block_id)
+    {
+        state.compaction.pending_summary_retry = None;
         return;
     }
     let Some(summarizer) = state.compaction.summarizer.clone() else {
         return;
     };
+    let pending = pending_ref.clone();
     let task = crate::r#loop::summary_dispatch::SummaryDispatchTask {
         session_id: state.machine.context().session_id.clone(),
         block_id: pending.block_id,
@@ -426,19 +468,6 @@ pub(crate) async fn apply_compaction(
     }
     // 时间戳护栏边界（epoch ms；与 usage 源消息时间戳同精度）
     let boundary_ms = conex_shared::time::unix_millis() as i64;
-    // 摘要后台重试的丢弃消息（**对话替换前**捕获——plan 只携带 dropped
-    // id，消息正文须取自压缩前对话，与同步尝试同源；T-32 任务入参）
-    let dropped_for_retry: Vec<conex_types::message::AgentMessage> = plan
-        .dropped_ids
-        .iter()
-        .filter_map(|id| {
-            state
-                .conversation
-                .iter()
-                .find(|m| &m.id == id)
-                .map(|m| (**m).clone())
-        })
-        .collect();
     tracing::info!(
         tokens_before = plan.tokens_before,
         tokens_after = plan.tokens_after,
@@ -453,11 +482,17 @@ pub(crate) async fn apply_compaction(
         reason: compression_reason_str(info.reason).to_string(),
         tokens_before: plan.tokens_before,
     });
-    // 对话替换（压缩是唯一前缀重写点；plan 已保留 system 消息）
-    state.conversation = plan.messages.clone();
+    // 对话替换（压缩是唯一前缀重写点；plan 已保留 system 消息；
+    // SL-PERF-06：以 `mem::replace` 暂存旧对话，仅在同步摘要失败需后台重试时按需提取丢弃消息）
+    let prev_conversation = std::mem::replace(&mut state.conversation, plan.messages.clone());
     // 护栏：单 run 压缩计数 + 时间戳护栏重置（§3.4.6）
     state.compaction.compactions_this_run += 1;
     state.compaction.last_compaction_at = Some(boundary_ms);
+    let system_text = plan
+        .messages
+        .iter()
+        .find(|m| m.role == AgentMessageRole::System)
+        .map(|m| m.text());
     // 缓存审计基线重置（P5 S2 / T-36，C13）：压缩是唯一前缀重写点——
     // tracker 代数 +1、签名基线作废（压缩后是新内容非重放，不计 miss；
     // jcode KvCacheBaseline 双保险 / pi prev=undefined）。
@@ -470,14 +505,9 @@ pub(crate) async fn apply_compaction(
     if let Some(tracker) = &mut state.compaction.cache_tracker {
         tracker.on_compaction();
         tracker.apply_external_generation(plan.generation);
-        let system = plan
-            .messages
-            .iter()
-            .find(|m| m.role == AgentMessageRole::System)
-            .map(|m| m.text());
         let tools: &[crate::provider::ToolSchema] =
             state.tools_snapshot.as_deref().unwrap_or_default();
-        tracker.capture_post_compaction(system.as_deref(), tools, &plan.messages);
+        tracker.capture_post_compaction(system_text.as_deref(), tools, &plan.messages);
     }
     // T-31 块元数据推导（R-B：块 id = `compacted-summary-{gen}-{fold}`，
     // 与链内摘要消息 id 同名；prevBlockId = 链尾块——fold_chain_prev 为
@@ -510,93 +540,94 @@ pub(crate) async fn apply_compaction(
     // 压缩后签名（system + 链哈希；链 = 链消息的投影签名——稳定前缀
     // 身份，评审 02 §3.1「链是前缀内的稳定区段」）
     let boundary_hash = {
-        let system = plan
-            .messages
-            .iter()
-            .find(|m| m.role == AgentMessageRole::System)
-            .map(|m| m.text());
         let chain: Vec<Arc<AgentMessage>> = plan
             .messages
             .iter()
             .filter(|m| m.id.starts_with("compacted-summary"))
             .cloned()
             .collect();
-        let sig = crate::cache_tracker::build_request_signature(system.as_deref(), &[], &chain);
+        let sig =
+            crate::cache_tracker::build_request_signature(system_text.as_deref(), &[], &chain);
         format!("{:016x}-{:016x}", sig.system_hash, sig.messages_hash)
     };
     // T-32 摘要后台触发登记（00-plan §6.4）：同步已失败（stub 产出）且
     // Summarizer 注入存在 → 登记后台退避重试任务（单飞；任务结果经回调
     // 移交壳层写库，V1 未接线回调时只落日志——见 summary_dispatch.rs
-    // 架构决策）。丢弃消息已在对话替换前捕获（dropped_for_retry），
-    // existing 取链尾文本（与同步尝试同源）。
-    if !plan.summary_is_llm && !block_id.is_empty() && !dropped_for_retry.is_empty() {
+    // 架构决策）。SL-PERF-06：仅在需要重试时以 O(N + D) 哈希索引提取并
+    // `Arc::unwrap_or_clone` 回收被丢弃消息，同步摘要成功路径 0 次深拷贝。
+    if !plan.summary_is_llm && !block_id.is_empty() && !plan.dropped_ids.is_empty() {
         if let Some(summarizer) = &state.compaction.summarizer {
-            let existing = plan
-                .messages
+            let dropped_id_set: std::collections::HashSet<&str> =
+                plan.dropped_ids.iter().map(String::as_str).collect();
+            let mut by_id: std::collections::HashMap<String, conex_types::message::AgentMessage> =
+                prev_conversation
+                    .into_iter()
+                    .filter(|m| dropped_id_set.contains(m.id.as_str()))
+                    .map(|m| {
+                        let msg = Arc::unwrap_or_clone(m);
+                        (msg.id.clone(), msg)
+                    })
+                    .collect();
+            let dropped_for_retry: Vec<conex_types::message::AgentMessage> = plan
+                .dropped_ids
                 .iter()
-                .filter(|m| m.id.starts_with("compacted-summary"))
-                .filter_map(|m| {
-                    let text = m.text();
-                    if text.is_empty() {
-                        None
-                    } else {
-                        Some(text)
-                    }
-                })
-                .next_back();
-            let max_bytes = state
-                .compaction
-                .compaction_policy
-                .as_ref()
-                .map(|p| p.max_summary_tokens.saturating_mul(4))
-                .unwrap_or(4096);
-            // E2 F3：记录摘要待重试快照（用户消息边界被动触发点素材，
-            // 07 方案 §2.4 断言 4）——与后台任务同一入参源
-            // （dropped/existing/max_bytes），边界触发经
-            // [maybe_retry_pending_summary] 重建任务单飞续试
-            state.compaction.pending_summary_retry = Some(PendingSummaryRetry {
-                block_id: block_id.clone(),
-                generation: plan.generation,
-                dropped: dropped_for_retry.clone(),
-                existing: existing.clone(),
-                max_bytes,
-            });
-            let spawned = match &state.compaction.summary_coordinator {
-                // T-42：会话级协调器（壳层注入）——跨 run 单飞 + 全局
-                // 并发上限 + 任务跨 run 存活；默认回调（壳层装配：落
-                // compression_blocks 表）随协调器携带
-                Some(coordinator) => coordinator.try_trigger(
-                    crate::r#loop::summary_dispatch::SummaryDispatchTask {
-                        session_id: session_id.clone(),
-                        block_id: block_id.clone(),
-                        generation: plan.generation,
-                        dropped: dropped_for_retry,
-                        existing,
-                        max_bytes,
-                        summarizer: summarizer.clone(),
-                    },
-                    None,
-                ),
-                // 轮次 4 兜底：run 级 dispatch（未注入会话级容器时）
-                None => state.compaction.summary_dispatch.try_spawn(
-                    crate::r#loop::summary_dispatch::SummaryDispatchTask {
-                        session_id: session_id.clone(),
-                        block_id: block_id.clone(),
-                        generation: plan.generation,
-                        dropped: dropped_for_retry,
-                        existing,
-                        max_bytes,
-                        summarizer: summarizer.clone(),
-                    },
-                    None,
-                ),
-            };
-            if spawned {
-                tracing::info!(
-                    block_id = %block_id,
-                    generation = plan.generation,
-                    "摘要同步失败 → 后台退避重试任务已登记（单飞）"
-                );
+                .filter_map(|id| by_id.remove(id.as_str()))
+                .collect();
+            if !dropped_for_retry.is_empty() {
+                let existing = plan
+                    .messages
+                    .iter()
+                    .filter(|m| m.id.starts_with("compacted-summary"))
+                    .filter_map(|m| {
+                        let text = m.text();
+                        if text.is_empty() {
+                            None
+                        } else {
+                            Some(text)
+                        }
+                    })
+                    .next_back();
+                let max_bytes = state
+                    .compaction
+                    .compaction_policy
+                    .as_ref()
+                    .map(|p| p.max_summary_tokens.saturating_mul(4))
+                    .unwrap_or(4096);
+                // E2 F3：记录摘要待重试快照（用户消息边界被动触发点素材，
+                // 07 方案 §2.4 断言 4）——与后台任务同一入参源
+                // （dropped/existing/max_bytes），边界触发经
+                // [maybe_retry_pending_summary] 重建任务单飞续试
+                state.compaction.pending_summary_retry = Some(PendingSummaryRetry {
+                    block_id: block_id.clone(),
+                    generation: plan.generation,
+                    dropped: dropped_for_retry.clone(),
+                    existing: existing.clone(),
+                    max_bytes,
+                });
+                let task = crate::r#loop::summary_dispatch::SummaryDispatchTask {
+                    session_id: session_id.clone(),
+                    block_id: block_id.clone(),
+                    generation: plan.generation,
+                    dropped: dropped_for_retry,
+                    existing,
+                    max_bytes,
+                    summarizer: summarizer.clone(),
+                };
+                let spawned = match &state.compaction.summary_coordinator {
+                    // T-42：会话级协调器（壳层注入）——跨 run 单飞 + 全局
+                    // 并发上限 + 任务跨 run 存活；默认回调（壳层装配：落
+                    // compression_blocks 表）随协调器携带
+                    Some(coordinator) => coordinator.try_trigger(task, None),
+                    // 轮次 4 兜底：run 级 dispatch（未注入会话级容器时）
+                    None => state.compaction.summary_dispatch.try_spawn(task, None),
+                };
+                if spawned {
+                    tracing::info!(
+                        block_id = %block_id,
+                        generation = plan.generation,
+                        "摘要同步失败 → 后台退避重试任务已登记（单飞）"
+                    );
+                }
             }
         }
     }
@@ -751,6 +782,9 @@ pub(crate) struct CompactionRuntime {
     /// 替换 / 清理则自然失效。fresh run 不重置（跨 run 待重试语义延续，
     /// 与 summary_coordinator 任务存活语义对齐）。None = 无待重试摘要。
     pub(crate) pending_summary_retry: Option<PendingSummaryRetry>,
+    /// SL-PERF-05：工具 schema 前缀 JSON 惰性单次缓存（`ensure_tools_snapshot`
+    /// 锁定后首次 `tools_prefix_json` 计算并冻结，后续轮次 O(1) 借用 `&str`）。
+    pub(crate) tools_prefix_json: std::sync::OnceLock<String>,
 }
 
 /// 预算/用量运行态子结构（C1c 收敛 · 07 §4.2-2 / §6.2）：P4 预算配置 +
@@ -797,6 +831,7 @@ impl CompactionRuntime {
             summary_coordinator: options.summary.summary_coordinator.clone(),
             // E2 F3：无待重试摘要（fresh state）
             pending_summary_retry: None,
+            tools_prefix_json: std::sync::OnceLock::new(),
         }
     }
 }

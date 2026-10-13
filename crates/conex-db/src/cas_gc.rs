@@ -329,40 +329,112 @@ impl LocalDb {
         Ok(count as usize)
     }
 
+    /// 扫描并标记孤儿 Blob 进入软删除隔离期（SEC-13 / SEC-18 清理出锁）：
+    /// 1. 阶段一（锁外只读扫描）：经 `self.read` (ReaderPool) 执行 4 表 `NOT EXISTS` 候选扫描并过滤内存租约，零写锁占用；
+    /// 2. 阶段二（按分片微事务更新）：无候选时直接返回（0 次写事务）；有候选时按 `CAS_GC_BATCH_CHUNK`
+    ///    分片提交短写事务，写事务内仅按主键 `hash IN (...)` 校验引用并 `RETURNING hash`，消除长事务阻塞在线写入。
     pub fn mark_quarantine_orphans(&self, config: &CasGcConfig) -> Result<Vec<String>, DbFailure> {
-        let config = config.clone();
-        self.write_blocking(move |conn| {
-            mark_quarantine_orphans_conn(conn, &config).map_err(|e| DbFailure {
-                message: format!("mark_quarantine_orphans: {e}"),
+        let cfg_scan = config.clone();
+        let candidate_hashes = self.read(move |conn| {
+            scan_quarantine_orphan_candidates_conn(conn, &cfg_scan).map_err(|e| DbFailure {
+                message: format!("mark_quarantine_orphans_scan: {e}"),
                 kind: DbFailureKind::Other("mark_quarantine_orphans".to_string()),
             })
-        })
+        })?;
+
+        let candidate_hashes: Vec<String> = candidate_hashes
+            .into_iter()
+            .filter(|h| !self.lease_guard.is_leased(h))
+            .collect();
+
+        if candidate_hashes.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut marked = Vec::with_capacity(candidate_hashes.len());
+        for chunk in candidate_hashes.chunks(CAS_GC_BATCH_CHUNK) {
+            let chunk_vec = chunk.to_vec();
+            let cfg_chunk = config.clone();
+            let chunk_marked = self.write_blocking(move |conn| {
+                mark_quarantine_chunk_conn(conn, &chunk_vec, &cfg_chunk).map_err(|e| DbFailure {
+                    message: format!("mark_quarantine_orphans: {e}"),
+                    kind: DbFailureKind::Other("mark_quarantine_orphans".to_string()),
+                })
+            })?;
+            marked.extend(chunk_marked);
+        }
+        Ok(marked)
     }
 
+    /// 扫描并物理清除已过隔离期的孤儿 Blob（SEC-13 / SEC-18 清理出锁）：
+    /// 1. 阶段一（锁外只读扫描）：经 `self.read` (ReaderPool) 扫描过期隔离候选与过期租约存在性，不占写锁；
+    /// 2. 阶段二（按分片微事务删除）：仅在存在待删候选或过期租约时发起短写事务，按主键校验并删除；
+    /// 3. 阶段三（事务外磁盘清理）：写事务提交释放锁后，在事务边界外部执行外置文件 `remove_file`。
     pub fn purge_expired_quarantined(
         &self,
         config: &CasGcConfig,
     ) -> Result<Vec<String>, DbFailure> {
-        let config = config.clone();
-        // 短写临界区：批量 DELETE + 过期租约清扫在 Writer 事务内；
-        // 外置文件 unlink 放到事务提交后（避免长窗口持写连接）。
-        let (purged, files_to_delete) = self.write_blocking(move |conn| {
-            purge_expired_quarantined_conn(conn, &config).map_err(|e| DbFailure {
-                message: format!("purge_expired_quarantined: {e}"),
-                kind: DbFailureKind::Other("purge_expired_quarantined".to_string()),
-            })
+        let cfg_scan = config.clone();
+        let (candidate_hashes, has_expired_leases) = self.read(move |conn| {
+            let candidates =
+                scan_expired_quarantined_candidates_conn(conn, &cfg_scan).map_err(|e| {
+                    DbFailure {
+                        message: format!("purge_expired_quarantined_scan: {e}"),
+                        kind: DbFailureKind::Other("purge_expired_quarantined".to_string()),
+                    }
+                })?;
+            let expired_leases = has_expired_blob_leases_conn(conn).unwrap_or(false);
+            Ok((candidates, expired_leases))
         })?;
 
-        for file_path in files_to_delete {
-            let p = std::path::Path::new(&file_path);
-            if p.exists() {
-                if let Err(e) = std::fs::remove_file(p) {
-                    tracing::warn!(target: "conex_db", "CAS GC 物理删除外置文件失败 `{file_path}`: {e}");
-                } else {
-                    tracing::info!(target: "conex_db", "CAS GC 物理删除外置文件成功 `{file_path}`");
-                }
+        let candidate_hashes: Vec<String> = candidate_hashes
+            .into_iter()
+            .filter(|h| !self.lease_guard.is_leased(h))
+            .collect();
+
+        if candidate_hashes.is_empty() {
+            if has_expired_leases {
+                let _ = self.write_blocking(|conn| {
+                    let _ = conn.execute(
+                        "DELETE FROM active_blob_leases WHERE expires_at <= datetime('now')",
+                        [],
+                    );
+                    Ok(())
+                });
             }
+            return Ok(Vec::new());
         }
+
+        let mut purged = Vec::with_capacity(candidate_hashes.len());
+        let mut files_to_delete = Vec::new();
+        let chunks: Vec<Vec<String>> = candidate_hashes
+            .chunks(CAS_GC_BATCH_CHUNK)
+            .map(|c| c.to_vec())
+            .collect();
+        let total_chunks = chunks.len();
+
+        for (idx, chunk_vec) in chunks.into_iter().enumerate() {
+            let cfg_chunk = config.clone();
+            let clean_leases = has_expired_leases && (idx + 1 == total_chunks);
+            let (chunk_purged, chunk_files) = self.write_blocking(move |conn| {
+                let res = purge_expired_quarantined_chunk_conn(conn, &chunk_vec, &cfg_chunk)
+                    .map_err(|e| DbFailure {
+                        message: format!("purge_expired_quarantined: {e}"),
+                        kind: DbFailureKind::Other("purge_expired_quarantined".to_string()),
+                    })?;
+                if clean_leases {
+                    let _ = conn.execute(
+                        "DELETE FROM active_blob_leases WHERE expires_at <= datetime('now')",
+                        [],
+                    );
+                }
+                Ok(res)
+            })?;
+            purged.extend(chunk_purged);
+            files_to_delete.extend(chunk_files);
+        }
+
+        remove_purged_external_files(&files_to_delete);
         Ok(purged)
     }
 
@@ -633,13 +705,13 @@ fn in_placeholders(n: usize) -> String {
         .join(", ")
 }
 
-pub fn mark_quarantine_orphans_conn(
+/// 在事务边界外（ReaderPool 只读连接）扫描待进入软删除隔离期的候选孤儿 Hash（SEC-13 / SEC-18）。
+pub(crate) fn scan_quarantine_orphan_candidates_conn(
     conn: &Connection,
     config: &CasGcConfig,
 ) -> Result<Vec<String>, rusqlite::Error> {
     let grace_param = format!("-{} seconds", config.creation_grace_secs);
-    // NOT EXISTS 替代 NOT IN DISTINCT（05-Q4）；候选扫描无写锁定长窗口。
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare_cached(
         r#"
         SELECT b.hash FROM blob_cas b
         WHERE
@@ -662,45 +734,74 @@ pub fn mark_quarantine_orphans_conn(
         "#,
     )?;
     let rows = stmt.query_map(params![grace_param], |r| r.get::<_, String>(0))?;
-    let mut candidate_hashes = Vec::new();
-    for r in rows {
-        candidate_hashes.push(r?);
-    }
-    drop(stmt);
+    rows.collect()
+}
 
-    // 批量 UPDATE … WHERE hash IN (…)（05-G2 / D3-6）：分片避免变量上限。
-    let mut marked = Vec::new();
+/// 针对单个候选分片，在写事务内按主键二次校验多源引用并原子标记软隔离（防 TOCTOU 竞态）。
+pub(crate) fn mark_quarantine_chunk_conn(
+    conn: &Connection,
+    chunk: &[String],
+    config: &CasGcConfig,
+) -> Result<Vec<String>, rusqlite::Error> {
+    if chunk.is_empty() {
+        return Ok(Vec::new());
+    }
+    let grace_param = format!("-{} seconds", config.creation_grace_secs);
+    let ph = in_placeholders(chunk.len());
+    let grace_idx = chunk.len() + 1;
+    let sql = format!(
+        r#"
+        UPDATE blob_cas
+        SET marked_for_delete_at = CURRENT_TIMESTAMP, updated_at = datetime('now')
+        WHERE hash IN ({ph})
+          AND marked_for_delete_at IS NULL
+          AND (pinned = 0 OR pinned IS NULL)
+          AND created_at <= datetime('now', ?{grace_idx})
+          AND NOT EXISTS (
+              SELECT 1 FROM block_attachments a WHERE a.hash = blob_cas.hash
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM doc_snapshots_attachments s WHERE s.blob_hash = blob_cas.hash
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM session_undo_blobs u WHERE u.blob_hash = blob_cas.hash
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM active_blob_leases l
+              WHERE l.blob_hash = blob_cas.hash AND l.expires_at > datetime('now')
+          )
+        RETURNING hash
+        "#
+    );
+    let mut params_vec: Vec<&dyn rusqlite::ToSql> =
+        chunk.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+    params_vec.push(&grace_param);
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(params_vec.as_slice(), |r| r.get::<_, String>(0))?;
+    rows.collect()
+}
+
+pub fn mark_quarantine_orphans_conn(
+    conn: &Connection,
+    config: &CasGcConfig,
+) -> Result<Vec<String>, rusqlite::Error> {
+    let candidate_hashes = scan_quarantine_orphan_candidates_conn(conn, config)?;
+    let mut marked = Vec::with_capacity(candidate_hashes.len());
     for chunk in candidate_hashes.chunks(CAS_GC_BATCH_CHUNK) {
-        let ph = in_placeholders(chunk.len());
-        let sql = format!(
-            r#"
-            UPDATE blob_cas
-            SET marked_for_delete_at = CURRENT_TIMESTAMP, updated_at = datetime('now')
-            WHERE marked_for_delete_at IS NULL AND hash IN ({ph})
-            "#
-        );
-        let mut stmt = conn.prepare(&sql)?;
-        let count = stmt.execute(rusqlite::params_from_iter(chunk.iter()))?;
-        if count > 0 {
-            marked.extend_from_slice(chunk);
-        }
+        marked.extend(mark_quarantine_chunk_conn(conn, chunk, config)?);
     }
     Ok(marked)
 }
 
-/// 扫描 + 批量物理清除过期隔离 Blob。
-///
-/// 返回 `(purged_hashes, files_to_delete)`：外置文件的 `unlink` 由调用方在
-/// 事务提交后执行（禁止在 Writer 事务内做磁盘 IO）。
-/// 顺带（05-G6）：清除已过期的 `active_blob_leases` 行。
-pub fn purge_expired_quarantined_conn(
+/// 在事务边界外（ReaderPool 只读连接）扫描隔离期已届满且无引用的待物理清除候选 Hash（SEC-13 / SEC-18）。
+pub(crate) fn scan_expired_quarantined_candidates_conn(
     conn: &Connection,
     config: &CasGcConfig,
-) -> Result<(Vec<String>, Vec<String>), rusqlite::Error> {
+) -> Result<Vec<String>, rusqlite::Error> {
     let quarantine_param = format!("-{} seconds", config.quarantine_duration_secs);
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare_cached(
         r#"
-        SELECT b.hash, b.path, b.storage_type FROM blob_cas b
+        SELECT b.hash FROM blob_cas b
         WHERE
             b.marked_for_delete_at IS NOT NULL
             AND b.marked_for_delete_at <= datetime('now', ?1)
@@ -720,34 +821,108 @@ pub fn purge_expired_quarantined_conn(
             )
         "#,
     )?;
-    let rows = stmt.query_map(params![quarantine_param], |r| {
+    let rows = stmt.query_map(params![quarantine_param], |r| r.get::<_, String>(0))?;
+    rows.collect()
+}
+
+/// 只读探测是否存在已过期的 `active_blob_leases` 记录。
+pub(crate) fn has_expired_blob_leases_conn(conn: &Connection) -> Result<bool, rusqlite::Error> {
+    let exists: i64 = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM active_blob_leases WHERE expires_at <= datetime('now'))",
+        [],
+        |r| r.get(0),
+    )?;
+    Ok(exists != 0)
+}
+
+/// 针对单个候选分片，在写事务内按主键二次校验引用并物理删除过期隔离行（防 TOCTOU 竞态）。
+pub(crate) fn purge_expired_quarantined_chunk_conn(
+    conn: &Connection,
+    chunk: &[String],
+    config: &CasGcConfig,
+) -> Result<(Vec<String>, Vec<String>), rusqlite::Error> {
+    if chunk.is_empty() {
+        return Ok((Vec::new(), Vec::new()));
+    }
+    let quarantine_param = format!("-{} seconds", config.quarantine_duration_secs);
+    let ph = in_placeholders(chunk.len());
+    let quarantine_idx = chunk.len() + 1;
+    let sql = format!(
+        r#"
+        DELETE FROM blob_cas
+        WHERE hash IN ({ph})
+          AND marked_for_delete_at IS NOT NULL
+          AND marked_for_delete_at <= datetime('now', ?{quarantine_idx})
+          AND (pinned = 0 OR pinned IS NULL)
+          AND NOT EXISTS (
+              SELECT 1 FROM block_attachments a WHERE a.hash = blob_cas.hash
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM doc_snapshots_attachments s WHERE s.blob_hash = blob_cas.hash
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM session_undo_blobs u WHERE u.blob_hash = blob_cas.hash
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM active_blob_leases l
+              WHERE l.blob_hash = blob_cas.hash AND l.expires_at > datetime('now')
+          )
+        RETURNING hash, path, storage_type
+        "#
+    );
+    let mut params_vec: Vec<&dyn rusqlite::ToSql> =
+        chunk.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+    params_vec.push(&quarantine_param);
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(params_vec.as_slice(), |r| {
         Ok((
             r.get::<_, String>(0)?,
             r.get::<_, String>(1)?,
             r.get::<_, String>(2)?,
         ))
     })?;
-    let mut to_purge = Vec::new();
+    let mut purged = Vec::with_capacity(chunk.len());
     let mut files_to_delete = Vec::new();
     for r in rows {
         let (hash, path, storage_type) = r?;
         if storage_type != "inline" && !path.trim().is_empty() {
             files_to_delete.push(path);
         }
-        to_purge.push(hash);
+        purged.push(hash);
     }
-    drop(stmt);
+    Ok((purged, files_to_delete))
+}
 
-    // 批量 DELETE … WHERE hash IN (…)（05-G2 / D3-6）
-    let mut purged = Vec::new();
-    for chunk in to_purge.chunks(CAS_GC_BATCH_CHUNK) {
-        let ph = in_placeholders(chunk.len());
-        let sql = format!("DELETE FROM blob_cas WHERE hash IN ({ph})");
-        let mut stmt = conn.prepare(&sql)?;
-        let count = stmt.execute(rusqlite::params_from_iter(chunk.iter()))?;
-        if count > 0 {
-            purged.extend_from_slice(chunk);
+fn remove_purged_external_files(files_to_delete: &[String]) {
+    for file_path in files_to_delete {
+        let p = std::path::Path::new(file_path);
+        if p.exists() {
+            if let Err(e) = std::fs::remove_file(p) {
+                tracing::warn!(target: "conex_db", "CAS GC 物理删除外置文件失败 `{file_path}`: {e}");
+            } else {
+                tracing::info!(target: "conex_db", "CAS GC 物理删除外置文件成功 `{file_path}`");
+            }
         }
+    }
+}
+
+/// 扫描 + 批量物理清除过期隔离 Blob。
+///
+/// 返回 `(purged_hashes, files_to_delete)`：外置文件的 `unlink` 由调用方在
+/// 事务提交后执行（禁止在 Writer 事务内做磁盘 IO）。
+/// 顺带（05-G6）：清除已过期的 `active_blob_leases` 行。
+pub fn purge_expired_quarantined_conn(
+    conn: &Connection,
+    config: &CasGcConfig,
+) -> Result<(Vec<String>, Vec<String>), rusqlite::Error> {
+    let candidate_hashes = scan_expired_quarantined_candidates_conn(conn, config)?;
+    let mut purged = Vec::with_capacity(candidate_hashes.len());
+    let mut files_to_delete = Vec::new();
+    for chunk in candidate_hashes.chunks(CAS_GC_BATCH_CHUNK) {
+        let (chunk_purged, chunk_files) =
+            purge_expired_quarantined_chunk_conn(conn, chunk, config)?;
+        purged.extend(chunk_purged);
+        files_to_delete.extend(chunk_files);
     }
 
     // 05-G6：顺带清除过期租约行（与 purge 同一短写事务）
@@ -780,9 +955,9 @@ pub fn run_cas_gc_conn(
         .query_row(
             r#"
             SELECT COUNT(DISTINCT b.hash) FROM blob_cas b
-            WHERE b.hash IN (SELECT hash FROM block_attachments WHERE hash IS NOT NULL)
-               OR b.hash IN (SELECT blob_hash FROM doc_snapshots_attachments WHERE blob_hash IS NOT NULL)
-               OR b.hash IN (SELECT blob_hash FROM session_undo_blobs WHERE blob_hash IS NOT NULL)
+            WHERE EXISTS (SELECT 1 FROM block_attachments a WHERE a.hash = b.hash)
+               OR EXISTS (SELECT 1 FROM doc_snapshots_attachments s WHERE s.blob_hash = b.hash)
+               OR EXISTS (SELECT 1 FROM session_undo_blobs u WHERE u.blob_hash = b.hash)
             "#,
             [],
             |r| r.get(0),
@@ -799,15 +974,7 @@ pub fn run_cas_gc_conn(
 
     let quarantined_hashes = mark_quarantine_orphans_conn(conn, config)?;
     let (purged_hashes, files_to_delete) = purge_expired_quarantined_conn(conn, config)?;
-    // 外置文件 unlink 与 LocalDb::purge_expired_quarantined 一致（事务外）
-    for file_path in files_to_delete {
-        let p = std::path::Path::new(&file_path);
-        if p.exists() {
-            if let Err(e) = std::fs::remove_file(p) {
-                tracing::warn!(target: "conex_db", "CAS GC 物理删除外置文件失败 `{file_path}`: {e}");
-            }
-        }
-    }
+    remove_purged_external_files(&files_to_delete);
 
     Ok(GcScanStats {
         total_blobs_scanned: total_blobs_scanned as usize,
@@ -869,4 +1036,82 @@ pub fn spawn_cas_gc_loop(
             }
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gc_scan_without_candidates_does_not_acquire_writer_lock() {
+        let db = LocalDb::open_in_memory().unwrap();
+        let h1 = db.put_blob(b"protected-by-block").unwrap();
+        db.link_block_attachment("doc-1", "blk-1", &h1).unwrap();
+
+        let batches_before = db.writer().stats().total_batches;
+        let reads_before = db.reader_pool().stats().total_acquisitions;
+
+        // 执行零宽限 GC：h1 受引用保护，无任何孤儿或过期隔离候选
+        let stats = db.run_cas_gc(&CasGcConfig::zero_grace()).unwrap();
+        assert!(stats.quarantined_hashes.is_empty());
+        assert!(stats.purged_hashes.is_empty());
+
+        let batches_after = db.writer().stats().total_batches;
+        let reads_after = db.reader_pool().stats().total_acquisitions;
+
+        assert_eq!(
+            batches_after, batches_before,
+            "GC scan with zero candidates must not submit any write_blocking transactions"
+        );
+        assert!(
+            reads_after >= reads_before + 3,
+            "GC scan must execute candidate queries on ReaderPool"
+        );
+    }
+
+    #[test]
+    fn gc_chunk_update_and_delete_guard_against_toctou_concurrent_reference() {
+        let db = LocalDb::open_in_memory().unwrap();
+        let h1 = db.put_blob(b"toctou-blob-1").unwrap();
+        let h2 = db.put_blob(b"toctou-blob-2").unwrap();
+        let cfg = CasGcConfig::immediate_purge();
+
+        // 模拟阶段一：在只读连接上扫描出 h1, h2 均为孤儿候选
+        let candidates = db
+            .read({
+                let cfg = cfg.clone();
+                move |conn| {
+                    scan_quarantine_orphan_candidates_conn(conn, &cfg).map_err(|e| DbFailure {
+                        message: e.to_string(),
+                        kind: DbFailureKind::Other("test".to_string()),
+                    })
+                }
+            })
+            .unwrap();
+        assert_eq!(candidates.len(), 2);
+
+        // 模拟 TOCTOU 窗口：在阶段二写事务执行前，h1 被关联到 block_attachments
+        db.link_block_attachment("doc-race", "blk-race", &h1)
+            .unwrap();
+
+        // 阶段二：将旧候选列表 [h1, h2] 送入写分片——h1 必须被写事务内 NOT EXISTS 拦截保护，仅 h2 被标记
+        let marked = db
+            .write_blocking({
+                let cfg = cfg.clone();
+                move |conn| {
+                    mark_quarantine_chunk_conn(conn, &candidates, &cfg).map_err(|e| DbFailure {
+                        message: e.to_string(),
+                        kind: DbFailureKind::Other("test".to_string()),
+                    })
+                }
+            })
+            .unwrap();
+        assert_eq!(marked, vec![h2.clone()]);
+        assert!(db
+            .peek_blob_meta(&h1)
+            .unwrap()
+            .unwrap()
+            .marked_for_delete_at
+            .is_none());
+    }
 }

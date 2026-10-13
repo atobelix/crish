@@ -76,7 +76,6 @@ mod multi_device_network;
 mod note_commands;
 mod note_runtime;
 mod perf;
-mod power;
 mod preferences_commands;
 mod probe;
 mod process;
@@ -122,6 +121,7 @@ mod watchdog;
 //   has_active_run = active_runs 锁内同会话扫描；empty_streak =
 //   resume_empty_streak 只读；launcher = spawn_idle_resume_run 包装；
 // - user_stopped：run_control L2/L3 路径 set、用户新 run 装配 clear。
+#[cfg_attr(not(test), allow(dead_code))]
 mod outputs_config;
 mod wake_watcher;
 mod workspace;
@@ -240,9 +240,7 @@ command_registry![
         models_yaml::workbench_read_capability_dictionary
     ),
     // T-F 06：fs 命令经 `#[tauri::command(rename = "workbench_*")]` 对齐
-    // wire 键（元组名 = manifest 登记名 = wire 键逐字一致，分裂已消除）；
-    // workbench_select_folder 已退役（四方同步移除，见 command-contract-drift
-    // 债务清零记录）——前端目录选择统一走 `@tauri-apps/plugin-dialog`
+    // wire 键（元组名 = manifest 登记名 = wire 键逐字一致，分裂已消除）
     ("workbench_list_directory", fs_commands::list_directory),
     (
         "workbench_read_file_content",
@@ -256,9 +254,6 @@ command_registry![
         "workbench_discover_skills",
         fs_commands::workbench_discover_skills
     ),
-    // workbench_http_request 已退役（四方同步移除）——唯一调用点在
-    // `commands.rs` 的 `#[cfg(test)]` 内，前端出站走 provider_probe_ping /
-    // directFetchBridge
     ("workbench_apply_update", commands::workbench_apply_update),
     // ── 凭据事务：模型配置与活动选择只由 models 命令提交 ──
     ("config_secret_set", config::config_secret_set),
@@ -272,10 +267,6 @@ command_registry![
         "provider_probe_scan_models",
         probe::provider_probe_scan_models
     ),
-    // ── G03 产出根配置（T-EG-12）：config_get_outputs_root /
-    //    config_set_outputs_root 已退役（四方同步移除，前端 agentOutputsRoot
-    //    设置面不存在）；产出根解析能力（outputs_config::resolve_outputs_root
-    //    + OutputsRootConfig 托管状态）保留，供工具侧默认根与清理链消费 ──
     // ── 工具旧组（E1，§2.2-E）──
     ("core_check_command", core_commands::core_check_command),
     ("core_search_files", core_commands::core_search_files),
@@ -391,9 +382,6 @@ command_registry![
     // F11b（T-D-12）：DAG 只读快照查询（flow_dag_visible 开关关闭时不调用，
     // 只读通用面保留无害）
     ("get_flow_snapshot", session_commands::get_flow_snapshot),
-    // G03 会话级产出根覆盖：set_session_output_root 已退役（四方同步移除，
-    // 前端会话级产出根无消费方）；session_meta `{session_id}:output_root`
-    // 读取面仍由工具侧 resolve_output_dir 消费
     // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族；实现函数在
     //    markdown_commands.rs，经 `#[tauri::command(rename = ...)]` 对齐 wire 名）──
     ("core_md_render", markdown_commands::md_render),
@@ -469,11 +457,6 @@ command_registry![
         "browser_list_history",
         browser_commands::browser_list_history
     ),
-    // ── 电脑操作会话命令：computer_session_enable / computer_session_disable /
-    //    computer_status 已退役并**物理删除**（四方同步移除 + 实现体
-    //    computer_commands.rs 删除；前端 computerSessionApi / ComputerPanel /
-    //    useComputerSession 已物理删除，生产代码零消费）。恢复接线须走四方
-    //    登记流程重新注册，不得靠注释或 #[allow(dead_code)] 续命 ──
     // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc / noteMirrorIpc）──
     (
         "note_document_apply_md",
@@ -665,10 +648,6 @@ fn log_level_from_env() -> String {
     })
 }
 
-/// 打开会话数据库——**已物理切除**（Stage 1 ACT-102）。
-/// 现由 [`db_setup::setup_databases_concurrently`] 并发装配取代；
-/// 严禁回潮为 setup 内同步串行 open。
-
 fn main() {
     // setup 序列 ①（前置）：tracing 初始化在 Builder 装配之前，保证后续
     // 日志可用（PE-04 T04.1-1 双通道：文件层 + stderr）。
@@ -836,12 +815,6 @@ fn main() {
             // 工作区 `.crish-trash`，与删除工具兜底一致；对齐
             // BuiltinToolConfig.trash_root 语义）
             app.manage(core_run_commands::TrashRootConfig::default());
-
-            // ④c 全局产出根配置注入（G03 T-EG-12：agentOutputsRoot 默认
-            // `.agent-outputs`；`config_set_outputs_root` 等设置面命令已随
-            // 单轨收敛退役并物理删除，产出根现由配置树 / 默认值唯一决定，
-            // 校验保证产出根位于工作区内）
-            app.manage(outputs_config::OutputsRootConfig::default());
 
             // ⑤ 共享状态：命令闸门 / 搜索索引 / 压缩能力标记
             app.manage(core_commands::SharedGatekeeper::new());

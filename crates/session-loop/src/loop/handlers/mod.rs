@@ -176,11 +176,14 @@ impl LoopState {
         }
     }
 
-    /// 统一单点事件发射：同时推入持久化事件轨与实时通知轨（保证严格因果序）
+    /// 统一单点事件发射：同时推入持久化事件轨与实时通知轨（保证严格因果序；
+    /// SL-PERF-02：仅在挂载实时通知消费者 `live_sink` 时按需克隆，无消费者时直接移入 `events` 消除冗余深拷贝）
     pub(crate) fn emit_event(&mut self, event: AgentEvent) {
-        self.events.push(event.clone());
         if let Some(sink) = &self.options.hooks.live_sink {
+            self.events.push(event.clone());
             sink.push_live(event);
+        } else {
+            self.events.push(event);
         }
     }
 }
@@ -244,22 +247,24 @@ pub(crate) fn dispatch(state: &mut LoopState, event: E) -> Result<(), LoopError>
 /// compaction 是唯一前缀重写点）。
 pub(crate) fn record_message(state: &mut LoopState, message: AgentMessage) {
     // EV-12 删点：消息出队被消费成为 message-start → 删除待处理输入行
-    //（fire-and-forget fail-open；未落库的内部消息 delete 无行可删，
-    // 幂等无害——对应「每条用户消息 1 DELETE」）
-    if let Some(store) = &state.options.assembly.pending_input_store {
-        if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            let store = Arc::clone(store);
-            let id = message.id.clone();
-            handle.spawn(async move {
-                if let Err(err) = store.delete_pending_input(&id).await {
-                    tracing::warn!(
-                        target: "session_loop",
-                        message_id = %id,
-                        error = %err,
-                        "待处理输入删除失败（fail-open：不阻断消费）"
-                    );
-                }
-            });
+    //（fire-and-forget fail-open；SL-PERF-03：仅对 User 角色消息发起删除，
+    // 避免 ToolResult / 孤儿补齐消息触发无效 DB 写锁协程——对应「每条用户消息 1 DELETE」）
+    if message.role == AgentMessageRole::User {
+        if let Some(store) = &state.options.assembly.pending_input_store {
+            if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                let store = Arc::clone(store);
+                let id = message.id.clone();
+                handle.spawn(async move {
+                    if let Err(err) = store.delete_pending_input(&id).await {
+                        tracing::warn!(
+                            target: "session_loop",
+                            message_id = %id,
+                            error = %err,
+                            "待处理输入删除失败（fail-open：不阻断消费）"
+                        );
+                    }
+                });
+            }
         }
     }
     let session_id = state.machine.context().session_id.clone();
@@ -1125,7 +1130,7 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         let total = *calls.lock().unwrap();
         assert!(
-            total >= after_first + 1,
+            total > after_first,
             "用户消息边界必须触发被动摘要重试（{after_first} → {total}）"
         );
     }
@@ -1726,5 +1731,94 @@ mod tests {
             "后台重试必须收到与同步尝试同源的丢弃消息（dropped_for_retry 对话替换前捕获）"
         );
         assert_eq!(recorded[0].len(), 8, "丢弃 8 条消息全部进入重试任务");
+    }
+
+    /// SL-PERF-05：tools_prefix_json 惰性单次序列化缓存且与原 BTreeMap JSON 逐字节一致
+    #[test]
+    fn tools_prefix_json_caches_and_matches_canonical_json() {
+        let mut state = test_state(SessionLoopOptions::default());
+        assert!(
+            state.compaction.tools_prefix_json.get().is_none(),
+            "未构建快照前不得初始化缓存"
+        );
+        // 首次估算（tools_snapshot = None）→ 缓存仍保持未初始化
+        let _ = estimate_context(&state);
+        assert!(state.compaction.tools_prefix_json.get().is_none());
+
+        // 注入工具快照后触发估算 → 初始化 OnceLock 并复用同一堆内存地址
+        state.tools_snapshot = Some(vec![crate::provider::ToolSchema {
+            name: "read_file".to_string(),
+            description: "读取文件".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": { "path": { "type": "string" } }
+            }),
+        }]);
+        let est1 = estimate_context(&state);
+        let ptr1 = state
+            .compaction
+            .tools_prefix_json
+            .get()
+            .expect("估算后必须已缓存 tools_prefix_json")
+            .as_ptr();
+        let est2 = estimate_context(&state);
+        let ptr2 = state
+            .compaction
+            .tools_prefix_json
+            .get()
+            .expect("二次估算复用缓存")
+            .as_ptr();
+        assert_eq!(est1.tokens, est2.tokens);
+        assert!(
+            std::ptr::eq(ptr1, ptr2),
+            "后续估算必须 O(1) 复用同一缓存字符串指针"
+        );
+
+        let expected = serde_json::to_string(&vec![serde_json::json!({
+            "name": "read_file",
+            "description": "读取文件",
+            "input_schema": {
+                "type": "object",
+                "properties": { "path": { "type": "string" } }
+            }
+        })])
+        .unwrap();
+        assert_eq!(
+            state.compaction.tools_prefix_json.get().map(String::as_str),
+            Some(expected.as_str()),
+            "借用流式投影必须与原 serde_json::json! 序列化字节完全一致"
+        );
+    }
+
+    /// SL-PERF-02：无 live_sink 时 emit_event 直接移入 events（Arc 强引用计数保持 1，零深拷贝）；
+    /// 挂载 live_sink 时按需克隆并同步推送实时轨。
+    #[test]
+    fn emit_event_zero_clone_without_sink_and_dual_track_with_sink() {
+        let mut state_no_sink = test_state(SessionLoopOptions::default());
+        let msg = Arc::new(AgentMessage {
+            id: "m-perf-02".to_string(),
+            role: AgentMessageRole::User,
+            created_at: "2026-08-03T10:00:00.000Z".to_string(),
+            blocks: vec![AgentMessageBlock::Text {
+                text: "零拷贝测试".to_string(),
+            }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        });
+        state_no_sink.emit_event(AgentEvent::MessageStart {
+            session_id: "s1".to_string(),
+            message: msg,
+        });
+        assert_eq!(state_no_sink.events.len(), 1);
+        if let AgentEvent::MessageStart { message, .. } = &state_no_sink.events[0] {
+            assert_eq!(
+                Arc::strong_count(message),
+                1,
+                "无 live_sink 时事件应直接 move 进 events，不产生额外克隆"
+            );
+        } else {
+            panic!("expected MessageStart");
+        }
     }
 }

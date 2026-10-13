@@ -13,7 +13,7 @@ use conex_types::CoreError;
 
 /// 渲染单条 markdown 为 HTML。
 ///
-/// - 输入超长（>100KB）由 crate 内部截断，不返回错误
+/// - 输入超长（>5MB，`conex_markdown::MAX_MARKDOWN_INPUT`）由 crate 内部按 UTF-8 字符边界安全截断，不返回错误
 /// - CPU 密集（pulldown-cmark 解析 + syntect 高亮 + ammonia sanitize），走 spawn_blocking
 /// - 结果自带 LRU 缓存（moka），重复输入 O(1) 命中
 ///
@@ -29,7 +29,7 @@ pub async fn md_render(text: String) -> Result<String, CoreError> {
 /// 批量渲染 markdown 为 HTML。
 ///
 /// 用于首屏一次性渲染整个会话的多条消息，避免 N 次 IPC 往返。
-/// 内部串行调用 `render_markdown`（每条独立缓存命中）。
+/// 每条独立享受 moka LRU 缓存命中。
 ///
 /// wire 名 = `core_md_render_batch`（T03.4 更名 core_md_*）。
 #[tauri::command(rename = "core_md_render_batch")]

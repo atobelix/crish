@@ -42,13 +42,28 @@ impl Default for RetryPolicy {
 
 impl RetryPolicy {
     /// 边界钳制（对齐 normalizeRetryOptions：initial≥1、max≥initial、budget≥1）
-    pub fn normalized(&self) -> Self {
-        let base_delay_ms = self.base_delay_ms.max(1);
+    #[inline]
+    pub const fn normalized(&self) -> Self {
+        let base_delay_ms = if self.base_delay_ms < 1 {
+            1
+        } else {
+            self.base_delay_ms
+        };
+        let max_delay_ms = if self.max_delay_ms < base_delay_ms {
+            base_delay_ms
+        } else {
+            self.max_delay_ms
+        };
+        let total_budget_ms = if self.total_budget_ms < 1 {
+            1
+        } else {
+            self.total_budget_ms
+        };
         Self {
             max_retries: self.max_retries,
             base_delay_ms,
-            max_delay_ms: self.max_delay_ms.max(base_delay_ms),
-            total_budget_ms: self.total_budget_ms.max(1),
+            max_delay_ms,
+            total_budget_ms,
         }
     }
 }
@@ -89,18 +104,56 @@ pub struct RetryDecision {
     pub remaining_budget_ms: u64,
 }
 
+/// 统一判定错误类别是否属于可由传输层退避自愈的 HTTP/RPC 瞬态错误
+///
+/// - `RateLimit` / `ServerError` / `Timeout` / `Network` 四类瞬态错误返回 `true`；
+/// - `ContextLengthExceeded` 虽在分类层标记 retryable，但由上层会话压缩处理，不纳入本退避循环。
+#[inline]
+pub const fn is_transient_kind(kind: ProviderErrorKind) -> bool {
+    matches!(
+        kind,
+        ProviderErrorKind::RateLimit
+            | ProviderErrorKind::ServerError
+            | ProviderErrorKind::Timeout
+            | ProviderErrorKind::Network
+    )
+}
+
+/// 统一判定 [ProviderError] 是否属于可重试的 HTTP/RPC 瞬态错误
+#[inline]
+pub fn is_transient_error(err: &ProviderError) -> bool {
+    is_transient_kind(err.kind())
+}
+
+#[inline]
+const fn compute_normalized_backoff(normalized: &RetryPolicy, attempt: u32) -> Duration {
+    let attempt_clamped = if attempt < 1 { 1 } else { attempt };
+    let exponent = if attempt_clamped - 1 > 62 {
+        62
+    } else {
+        attempt_clamped - 1
+    };
+    let backoff = normalized.base_delay_ms.saturating_mul(1u64 << exponent);
+    let clamped = if backoff > normalized.max_delay_ms {
+        normalized.max_delay_ms
+    } else {
+        backoff
+    };
+    Duration::from_millis(clamped)
+}
+
 /// 指数退避（attempt 从 1 起；对齐 retryDelayMs，openai-retry.ts:104-119）
 ///
 /// `min(max_delay, base * 2^(attempt-1))`；指数上限 62 防溢出（saturating）。
+#[inline]
 pub fn retry_delay_ms(policy: &RetryPolicy, attempt: u32) -> Duration {
     let policy = policy.normalized();
-    let exponent = (attempt.max(1) - 1).min(62);
-    let backoff = policy.base_delay_ms.saturating_mul(1u64 << exponent);
-    Duration::from_millis(backoff.min(policy.max_delay_ms))
+    compute_normalized_backoff(&policy, attempt)
 }
 
 /// 合并等待：Retry-After 与退避取大，再钳 max_delay 与剩余预算
 /// （对齐 chooseRetryDelayMs，openai-retry.ts:161-175）
+#[inline]
 pub fn choose_retry_delay_ms(
     policy: &RetryPolicy,
     attempt: u32,
@@ -108,12 +161,22 @@ pub fn choose_retry_delay_ms(
     remaining_budget_ms: Option<u64>,
 ) -> Duration {
     let policy = policy.normalized();
-    let backoff = retry_delay_ms(&policy, attempt);
+    choose_normalized_retry_delay(&policy, attempt, retry_after, remaining_budget_ms)
+}
+
+#[inline]
+fn choose_normalized_retry_delay(
+    normalized: &RetryPolicy,
+    attempt: u32,
+    retry_after: Option<Duration>,
+    remaining_budget_ms: Option<u64>,
+) -> Duration {
+    let backoff = compute_normalized_backoff(normalized, attempt);
     let wait = match retry_after {
         Some(after) => backoff.max(after),
         None => backoff,
     };
-    let wait = wait.min(Duration::from_millis(policy.max_delay_ms));
+    let wait = wait.min(Duration::from_millis(normalized.max_delay_ms));
     match remaining_budget_ms {
         Some(budget) => wait.min(Duration::from_millis(budget)),
         None => wait,
@@ -133,17 +196,10 @@ pub fn should_retry(
     policy: &RetryPolicy,
     state: &RetryState,
 ) -> Option<RetryDecision> {
-    let policy = policy.normalized();
-    let retryable = matches!(
-        err.kind(),
-        ProviderErrorKind::RateLimit
-            | ProviderErrorKind::ServerError
-            | ProviderErrorKind::Timeout
-            | ProviderErrorKind::Network
-    );
-    if !retryable {
+    if !is_transient_error(err) {
         return None;
     }
+    let policy = policy.normalized();
     if state.retries >= policy.max_retries {
         return None;
     }
@@ -154,7 +210,7 @@ pub fn should_retry(
     }
     let attempt = state.retries + 1;
     let remaining_budget_ms = policy.total_budget_ms - elapsed_ms;
-    let delay = choose_retry_delay_ms(
+    let delay = choose_normalized_retry_delay(
         &policy,
         attempt,
         err.retry_after(),
@@ -196,28 +252,34 @@ pub fn parse_retry_after_ms(value: Option<&str>, now: SystemTime) -> Option<Dura
 }
 
 /// 钳制到 [0, MAX_RETRY_AFTER_MS]（对齐 clampRetryAfterMs）
+#[inline]
 fn clamp_retry_after(duration: Duration) -> Duration {
     duration.min(Duration::from_millis(MAX_RETRY_AFTER_MS))
 }
 
 /// HTTP-date 解析（RFC 7231 §7.1.1.1）：IMF-fixdate、RFC 850、asctime 三种格式，
-/// 返回 UNIX epoch 秒。手工解析，不引入新依赖。
+/// 返回 UNIX epoch 秒。栈上定长数组零分配解析，不引入堆 Vec。
 ///
 /// - `Sun, 06 Nov 1994 08:49:37 GMT`（IMF-fixdate）
 /// - `Sunday, 06-Nov-94 08:49:37 GMT`（RFC 850，2 位年份按 70 分界）
 /// - `Sun Nov  6 08:49:37 1994`（asctime）
 fn parse_http_date(value: &str) -> Option<i64> {
-    let tokens: Vec<&str> = value
-        .split([' ', '\t', ','])
-        .filter(|token| !token.is_empty())
-        .collect();
-    let (day, month, year, time) = match tokens.as_slice() {
+    let mut token_buf = [""; 6];
+    let mut token_len = 0usize;
+    for token in value.split([' ', '\t', ',']).filter(|t| !t.is_empty()) {
+        if token_len >= token_buf.len() {
+            return None;
+        }
+        token_buf[token_len] = token;
+        token_len += 1;
+    }
+    let (day, month, year, time) = match &token_buf[..token_len] {
         // IMF-fixdate：[星期,] 日 月 年 时:分:秒 GMT
         [_, day, month, year, time, "GMT"] => (
             day.parse::<u32>().ok()?,
             month_index(month)?,
             year.parse::<i64>().ok()?,
-            time,
+            *time,
         ),
         // RFC 850：[星期,] 日-月-年 时:分:秒 GMT
         [_, date, time, "GMT"] => {
@@ -226,14 +288,14 @@ fn parse_http_date(value: &str) -> Option<i64> {
             let month = month_index(parts.next()?)?;
             let yy = parts.next()?.parse::<i64>().ok()?;
             let year = if yy >= 70 { 1900 + yy } else { 2000 + yy };
-            (day, month, year, time)
+            (day, month, year, *time)
         }
         // asctime：星期 月 日 时:分:秒 年（日可为空格补位）
         [_, month, day, time, year] => (
             day.parse::<u32>().ok()?,
             month_index(month)?,
             year.parse::<i64>().ok()?,
-            time,
+            *time,
         ),
         _ => return None,
     };
@@ -248,14 +310,14 @@ fn parse_http_date(value: &str) -> Option<i64> {
     Some(days * 86_400 + hour as i64 * 3_600 + minute as i64 * 60 + second as i64)
 }
 
-/// 月份缩写 → 1-12
+/// 月份缩写 → 1-12（零分配 ASCII 忽略大小写匹配）
 fn month_index(token: &str) -> Option<u32> {
     const MONTHS: &[&str] = &[
         "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
     ];
     MONTHS
         .iter()
-        .position(|month| *month == token.to_ascii_lowercase())
+        .position(|month| month.eq_ignore_ascii_case(token))
         .map(|index| index as u32 + 1)
 }
 

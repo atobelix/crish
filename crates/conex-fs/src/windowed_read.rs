@@ -194,8 +194,13 @@ pub fn windowed_read(
         return Ok(empty_binary_result(file_bytes));
     }
 
-    // 严格编码：前缀非法 UTF-8 序列 → 拒绝
-    if opts.strict_encoding && utf8_has_invalid_sequence(&probe) {
+    // 严格编码：前缀非法 UTF-8 序列 → 拒绝（KFS-05：对齐至完整 UTF-8 字符边界后再做探测校验）
+    let probe_utf8_slice = if (probe.len() as u64) < file_bytes {
+        truncate_utf8_bytes_at_char_boundary(&probe, probe.len())
+    } else {
+        &probe[..]
+    };
+    if opts.strict_encoding && utf8_has_invalid_sequence(probe_utf8_slice) {
         return Err(WindowReadError::UnsupportedEncoding);
     }
     if !opts.allow_utf16 && probe.starts_with(&[0xFF, 0xFE]) {
@@ -214,7 +219,168 @@ pub fn windowed_read(
     read_utf8_windowed(file, file_bytes, opts, has_bom)
 }
 
-/// UTF-8 流式窗口读：仅物化窗口行并统计窗口字符；视口外行跳过冗余缓冲克隆与字符计数（KFS-10）。
+/// KFS-05：寻找字节切片在 `max_bytes` 以内的最大安全 UTF-8 字符边界偏移。
+///
+/// 若 `max_bytes` 恰好落在多字节 UTF-8 字符（2~4 字节）的中间，向前回退至该字符起始字节，
+/// 保证截断后的切片绝不产生半个多字节字符、乱码（`U+FFFD`）或切片 panic。
+#[inline]
+pub fn floor_utf8_char_boundary(bytes: &[u8], max_bytes: usize) -> usize {
+    let limit = max_bytes.min(bytes.len());
+    if limit == 0 {
+        return 0;
+    }
+    if limit == bytes.len() {
+        return match std::str::from_utf8(bytes) {
+            Ok(_) => bytes.len(),
+            Err(err) if err.error_len().is_none() => err.valid_up_to(),
+            Err(_) => bytes.len(),
+        };
+    }
+
+    // 若下一个字节不是 UTF-8 续字节（10xxxxxx），则 limit 已经是字符边界
+    if (bytes[limit] & 0b1100_0000) != 0b1000_0000 {
+        return limit;
+    }
+
+    // 向前回退最多 3 个续字节，定位多字节字符的首字节
+    let mut cursor = limit;
+    let min_pos = limit.saturating_sub(3);
+    while cursor > min_pos && (bytes[cursor - 1] & 0b1100_0000) == 0b1000_0000 {
+        cursor -= 1;
+    }
+    if cursor > 0 && (bytes[cursor - 1] & 0b1100_0000) != 0b1000_0000 {
+        cursor - 1
+    } else {
+        limit
+    }
+}
+
+/// KFS-05：在多字节 UTF-8 字符边界上安全截断字节切片。
+#[inline]
+pub fn truncate_utf8_bytes_at_char_boundary(bytes: &[u8], max_bytes: usize) -> &[u8] {
+    let boundary = floor_utf8_char_boundary(bytes, max_bytes);
+    &bytes[..boundary]
+}
+
+/// KFS-05：在多字节 UTF-8 字符边界上安全截断字符串切片，杜绝非字符边界切片 panic。
+#[inline]
+pub fn truncate_utf8_at_char_boundary(s: &str, max_bytes: usize) -> &str {
+    if max_bytes >= s.len() {
+        return s;
+    }
+    let mut idx = max_bytes;
+    while idx > 0 && !s.is_char_boundary(idx) {
+        idx -= 1;
+    }
+    &s[..idx]
+}
+
+/// KFS-05：跨分块边界的流式 UTF-8 拼接器。
+///
+/// 通过 4 字节栈上尾缓冲 `utf8_tail` 缝合跨越 `READ_CHUNK_BYTES` 边界的多字节 UTF-8 序列，
+/// 直接解码进 `current_line`，消除整行 `Vec<u8>` 二次拷贝并保证多字节字符零截断乱码。
+fn append_utf8_chunk_with_tail(
+    mut slice: &[u8],
+    is_line_end: bool,
+    utf8_tail: &mut [u8; 4],
+    utf8_tail_len: &mut usize,
+    current_line: &mut String,
+    lossy_replaced: &mut bool,
+) {
+    // 1. 先缝合上一分块遗留的未完成多字节前缀（1..=3 字节）
+    while *utf8_tail_len > 0 && !slice.is_empty() {
+        let take = slice.len().min(4);
+        let mut combined = [0_u8; 7];
+        combined[..*utf8_tail_len].copy_from_slice(&utf8_tail[..*utf8_tail_len]);
+        combined[*utf8_tail_len..*utf8_tail_len + take].copy_from_slice(&slice[..take]);
+        let comb_len = *utf8_tail_len + take;
+
+        match std::str::from_utf8(&combined[..comb_len]) {
+            Ok(valid) => {
+                current_line.push_str(valid);
+                *utf8_tail_len = 0;
+                slice = &slice[take..];
+            }
+            Err(err) if err.valid_up_to() > 0 => {
+                let valid_len = err.valid_up_to();
+                if let Ok(valid) = std::str::from_utf8(&combined[..valid_len]) {
+                    current_line.push_str(valid);
+                }
+                let consumed = valid_len - *utf8_tail_len;
+                *utf8_tail_len = 0;
+                slice = &slice[consumed..];
+            }
+            Err(err) => match err.error_len() {
+                Some(err_len) => {
+                    current_line.push('\u{FFFD}');
+                    *lossy_replaced = true;
+                    if err_len < *utf8_tail_len {
+                        utf8_tail.copy_within(err_len..*utf8_tail_len, 0);
+                        *utf8_tail_len -= err_len;
+                    } else {
+                        let consumed = err_len - *utf8_tail_len;
+                        *utf8_tail_len = 0;
+                        slice = &slice[consumed..];
+                    }
+                }
+                None => {
+                    // combined 仍不足一个完整多字节字符（slice 极短）
+                    utf8_tail[*utf8_tail_len..comb_len].copy_from_slice(&slice[..take]);
+                    *utf8_tail_len = comb_len;
+                    slice = &[];
+                    break;
+                }
+            },
+        }
+    }
+
+    // 2. 解码当前分块主体
+    while !slice.is_empty() {
+        match std::str::from_utf8(slice) {
+            Ok(valid) => {
+                current_line.push_str(valid);
+                break;
+            }
+            Err(err) => {
+                let valid_len = err.valid_up_to();
+                if valid_len > 0 {
+                    if let Ok(valid) = std::str::from_utf8(&slice[..valid_len]) {
+                        current_line.push_str(valid);
+                    }
+                    slice = &slice[valid_len..];
+                }
+                match err.error_len() {
+                    Some(err_len) => {
+                        current_line.push('\u{FFFD}');
+                        *lossy_replaced = true;
+                        slice = &slice[err_len..];
+                    }
+                    None => {
+                        // 分块尾部存在被截断的合法多字节前缀（1..=3 字节）
+                        if is_line_end {
+                            current_line.push('\u{FFFD}');
+                            *lossy_replaced = true;
+                        } else {
+                            let rem_len = slice.len();
+                            utf8_tail[..rem_len].copy_from_slice(slice);
+                            *utf8_tail_len = rem_len;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. 若已到达行尾/文件尾但仍有残余半字符前缀，按 lossy 语义置换为 U+FFFD
+    if is_line_end && *utf8_tail_len > 0 {
+        current_line.push('\u{FFFD}');
+        *lossy_replaced = true;
+        *utf8_tail_len = 0;
+    }
+}
+
+/// UTF-8 流式窗口读：仅物化窗口行并统计窗口字符；视口外行跳过冗余缓冲克隆与字符计数（KFS-05, KFS-10）。
 fn read_utf8_windowed(
     mut file: File,
     file_bytes: u64,
@@ -228,11 +394,18 @@ fn read_utf8_windowed(
         .unwrap_or(window_start0.saturating_add(opts.max_lines))
         .max(window_start0);
 
-    let mut window_lines: Vec<String> = Vec::new();
+    let estimated_window_cap = window_end0_exclusive
+        .saturating_sub(window_start0)
+        .min(opts.max_lines)
+        .min(1024);
+    let mut window_lines: Vec<String> = Vec::with_capacity(estimated_window_cap);
     let mut total_lines = 0_usize;
     let mut total_chars = 0_usize;
     let mut line_idx = 0_usize;
-    let mut pending: Vec<u8> = Vec::with_capacity(256);
+    let mut current_line = String::new();
+    let mut utf8_tail = [0_u8; 4];
+    let mut utf8_tail_len = 0_usize;
+    let mut in_window_line_started = false;
     let mut outside_line_non_empty = false;
     let mut ends_with_newline_in_window = false;
     let mut lossy_replaced = false;
@@ -247,30 +420,55 @@ fn read_utf8_windowed(
         let chunk = &buffer[..read];
         let mut start = 0_usize;
         while start < chunk.len() {
+            // KFS-10：一旦越过窗口末尾，剩余字节流直接按块统计换行符，跳过逐行切片
+            if line_idx >= window_end0_exclusive {
+                let rest = &chunk[start..];
+                let newlines = rest.iter().filter(|&&b| b == b'\n').count();
+                total_lines += newlines;
+                line_idx += newlines;
+                if rest.last() == Some(&b'\n') {
+                    outside_line_non_empty = false;
+                    file_ends_with_newline = true;
+                } else {
+                    outside_line_non_empty = true;
+                    file_ends_with_newline = false;
+                }
+                break;
+            }
+
             let in_window = line_idx >= window_start0 && line_idx < window_end0_exclusive;
             match chunk[start..].iter().position(|&b| b == b'\n') {
                 Some(rel) => {
                     let end = start + rel;
                     if in_window {
-                        let line_slice = &chunk[start..end];
-                        let mut line_bytes: &[u8] = if pending.is_empty() {
-                            line_slice
+                        let mut line_slice = &chunk[start..end];
+                        if !in_window_line_started && utf8_tail_len == 0 {
+                            if line_slice.last() == Some(&b'\r') {
+                                line_slice = &line_slice[..line_slice.len() - 1];
+                            }
+                            let (line, lossy) = decode_line_utf8(line_slice);
+                            if lossy {
+                                lossy_replaced = true;
+                            }
+                            total_chars += line.chars().count() + 1; // +1 for \n
+                            window_lines.push(line);
                         } else {
-                            pending.extend_from_slice(line_slice);
-                            &pending
-                        };
-                        // \r\n → 剥 \r
-                        if line_bytes.last() == Some(&b'\r') {
-                            line_bytes = &line_bytes[..line_bytes.len() - 1];
+                            append_utf8_chunk_with_tail(
+                                line_slice,
+                                true,
+                                &mut utf8_tail,
+                                &mut utf8_tail_len,
+                                &mut current_line,
+                                &mut lossy_replaced,
+                            );
+                            if current_line.ends_with('\r') {
+                                current_line.pop();
+                            }
+                            total_chars += current_line.chars().count() + 1; // +1 for \n
+                            window_lines.push(std::mem::take(&mut current_line));
+                            in_window_line_started = false;
                         }
-                        let (line, lossy) = decode_line_utf8(line_bytes);
-                        if lossy {
-                            lossy_replaced = true;
-                        }
-                        total_chars += line.chars().count() + 1; // +1 for \n
-                        window_lines.push(line);
                         ends_with_newline_in_window = true;
-                        pending.clear();
                     } else {
                         outside_line_non_empty = false;
                     }
@@ -281,10 +479,19 @@ fn read_utf8_windowed(
                 }
                 None => {
                     if in_window {
-                        pending.extend_from_slice(&chunk[start..]);
+                        in_window_line_started = true;
+                        append_utf8_chunk_with_tail(
+                            &chunk[start..],
+                            false,
+                            &mut utf8_tail,
+                            &mut utf8_tail_len,
+                            &mut current_line,
+                            &mut lossy_replaced,
+                        );
                     } else {
                         outside_line_non_empty = true;
                     }
+                    file_ends_with_newline = false;
                     start = chunk.len();
                 }
             }
@@ -292,20 +499,22 @@ fn read_utf8_windowed(
     }
 
     // 尾部无换行的最后一行
-    if !pending.is_empty() || outside_line_non_empty {
-        if !pending.is_empty() {
-            let mut line_bytes: &[u8] = &pending;
-            if line_bytes.last() == Some(&b'\r') {
-                line_bytes = &line_bytes[..line_bytes.len() - 1];
+    if in_window_line_started || outside_line_non_empty {
+        if in_window_line_started {
+            append_utf8_chunk_with_tail(
+                &[],
+                true,
+                &mut utf8_tail,
+                &mut utf8_tail_len,
+                &mut current_line,
+                &mut lossy_replaced,
+            );
+            if current_line.ends_with('\r') {
+                current_line.pop();
             }
-            let (line, lossy) = decode_line_utf8(line_bytes);
-            if lossy {
-                lossy_replaced = true;
-            }
-            total_chars += line.chars().count();
-            window_lines.push(line);
+            total_chars += current_line.chars().count();
+            window_lines.push(current_line);
             ends_with_newline_in_window = false;
-            pending.clear();
         }
         total_lines += 1;
         file_ends_with_newline = false;
@@ -351,32 +560,19 @@ fn decode_line_utf8(line_bytes: &[u8]) -> (String, bool) {
     }
 }
 
-/// UTF-16 整读后切窗（BOM 路径；调用方已确认 BOM）
+/// KFS-11：UTF-16 流式块级解码与窗口读取（BOM 路径；调用方已确认 2 字节 BOM）。
+///
+/// 采用固定 16KB 缓冲按块流式读取，携带跨块奇数字节与代理对（Surrogate Pair）状态，
+/// 仅物化窗口内文本行，消除全文件 `Vec<u8>` / `Vec<u16>` / `String` 驻留。
 fn read_utf16_window(
     path: &Path,
     file_bytes: u64,
     little_endian: bool,
     opts: &WindowReadOptions,
 ) -> Result<WindowReadResult, WindowReadError> {
-    let bytes = std::fs::read(path).map_err(WindowReadError::Io)?;
-    let body = &bytes[2..];
-    let units: Vec<u16> = body
-        .chunks_exact(2)
-        .map(|c| {
-            if little_endian {
-                u16::from_le_bytes([c[0], c[1]])
-            } else {
-                u16::from_be_bytes([c[0], c[1]])
-            }
-        })
-        .collect();
-    let (text, lossy_replaced) = match String::from_utf16(&units) {
-        Ok(s) => (s, false),
-        Err(_) => (String::from_utf16_lossy(&units), true),
-    };
-    if opts.strict_encoding && lossy_replaced {
-        return Err(WindowReadError::UnsupportedEncoding);
-    }
+    let mut file = File::open(path).map_err(WindowReadError::Io)?;
+    // 跳过 2 字节 UTF-16 BOM
+    file.seek(SeekFrom::Start(2)).map_err(WindowReadError::Io)?;
 
     let window_start0 = (opts.start_line.saturating_sub(1)).max(opts.content_offset);
     let window_end0_exclusive = opts
@@ -385,23 +581,146 @@ fn read_utf16_window(
         .unwrap_or(window_start0.saturating_add(opts.max_lines))
         .max(window_start0);
 
+    let estimated_window_cap = window_end0_exclusive
+        .saturating_sub(window_start0)
+        .min(opts.max_lines)
+        .min(1024);
+    let mut window_lines: Vec<String> = Vec::with_capacity(estimated_window_cap);
+    let mut pending_units: Vec<u16> = Vec::with_capacity(128);
     let mut total_lines = 0_usize;
     let mut total_chars = 0_usize;
-    let mut window_slice: Vec<&str> = Vec::new();
-    for (line_idx, line) in text.lines().enumerate() {
-        total_lines += 1;
-        if line_idx >= window_start0 && line_idx < window_end0_exclusive {
-            total_chars += line.chars().count() + 1;
-            window_slice.push(line);
+    let mut line_idx = 0_usize;
+    let mut in_window_line_started = false;
+    let mut outside_line_non_empty = false;
+    let mut ends_with_newline_in_window = false;
+    let mut file_ends_with_newline = false;
+    let mut lossy_replaced = false;
+    let mut pending_high_surrogate = false;
+    let mut carry_byte: Option<u8> = None;
+    let mut buffer = vec![0_u8; READ_CHUNK_BYTES * 2]; // 16KB 流式块缓冲
+
+    let flush_utf16_line = |units: &mut Vec<u16>,
+                            lossy_replaced: &mut bool,
+                            total_chars: &mut usize,
+                            with_newline: bool|
+     -> String {
+        if units.last() == Some(&0x000D) {
+            units.pop();
+        }
+        let line = match String::from_utf16(units) {
+            Ok(s) => s,
+            Err(_) => {
+                *lossy_replaced = true;
+                String::from_utf16_lossy(units)
+            }
+        };
+        *total_chars += line.chars().count() + usize::from(with_newline);
+        units.clear();
+        line
+    };
+
+    loop {
+        let read = file.read(&mut buffer).map_err(WindowReadError::Io)?;
+        if read == 0 {
+            break;
+        }
+        let mut slice = &buffer[..read];
+
+        // 拼接上一块遗留的单字节，确保双字节对齐
+        let mut first_unit: Option<u16> = None;
+        if let Some(prev) = carry_byte.take() {
+            let b1 = slice[0];
+            slice = &slice[1..];
+            first_unit = Some(if little_endian {
+                u16::from_le_bytes([prev, b1])
+            } else {
+                u16::from_be_bytes([prev, b1])
+            });
+        }
+        if slice.len() % 2 == 1 {
+            carry_byte = slice.last().copied();
+            slice = &slice[..slice.len() - 1];
+        }
+
+        let iter = first_unit.into_iter().chain(slice.chunks_exact(2).map(|c| {
+            if little_endian {
+                u16::from_le_bytes([c[0], c[1]])
+            } else {
+                u16::from_be_bytes([c[0], c[1]])
+            }
+        }));
+
+        for u in iter {
+            // 流式校验 UTF-16 代理对合法性（确保严格模式下视口外非法序列同样可检出）
+            if pending_high_surrogate {
+                if (0xDC00..=0xDFFF).contains(&u) {
+                    pending_high_surrogate = false;
+                } else {
+                    lossy_replaced = true;
+                    pending_high_surrogate = (0xD800..=0xDBFF).contains(&u);
+                }
+            } else if (0xD800..=0xDBFF).contains(&u) {
+                pending_high_surrogate = true;
+            } else if (0xDC00..=0xDFFF).contains(&u) {
+                lossy_replaced = true;
+            }
+
+            let in_window = line_idx >= window_start0 && line_idx < window_end0_exclusive;
+            if u == 0x000A {
+                if in_window {
+                    let line = flush_utf16_line(
+                        &mut pending_units,
+                        &mut lossy_replaced,
+                        &mut total_chars,
+                        true,
+                    );
+                    window_lines.push(line);
+                    in_window_line_started = false;
+                    ends_with_newline_in_window = true;
+                } else {
+                    outside_line_non_empty = false;
+                }
+                total_lines += 1;
+                line_idx += 1;
+                file_ends_with_newline = true;
+            } else {
+                if in_window {
+                    in_window_line_started = true;
+                    pending_units.push(u);
+                } else {
+                    outside_line_non_empty = true;
+                }
+                file_ends_with_newline = false;
+            }
         }
     }
-    let text_window = window_slice.join("\n");
-    let shown_lines = window_slice.len();
+
+    if carry_byte.is_some() || pending_high_surrogate {
+        lossy_replaced = true;
+    }
+
+    if in_window_line_started || outside_line_non_empty {
+        if in_window_line_started {
+            let line = flush_utf16_line(
+                &mut pending_units,
+                &mut lossy_replaced,
+                &mut total_chars,
+                false,
+            );
+            window_lines.push(line);
+            ends_with_newline_in_window = false;
+        }
+        total_lines += 1;
+        file_ends_with_newline = false;
+    }
+
+    if opts.strict_encoding && lossy_replaced {
+        return Err(WindowReadError::UnsupportedEncoding);
+    }
+
+    let shown_lines = window_lines.len();
+    let text_window = window_lines.join("\n");
     let content_truncated = window_start0 + shown_lines < total_lines;
-    let ends_with_newline_in_window = text_window.ends_with('\n') || {
-        // 窗口覆盖到文件末行且源以换行结束
-        window_start0 + shown_lines == total_lines && text.ends_with('\n')
-    };
 
     Ok(WindowReadResult {
         text: text_window,
@@ -426,7 +745,7 @@ fn read_utf16_window(
         lossy_replaced,
         file_bytes,
         ends_with_newline_in_window,
-        file_ends_with_newline: text.ends_with('\n'),
+        file_ends_with_newline,
     })
 }
 
@@ -498,27 +817,37 @@ pub fn clamp_window_text_by_chars(
     limit_chars: usize,
     limit_lines: usize,
 ) -> (String, usize, bool) {
-    if text.chars().count() <= limit_chars && text.lines().count() <= limit_lines {
-        return (text.to_string(), text.lines().count(), false);
+    if text.is_empty() {
+        return (String::new(), 0, false);
     }
-    let kept: Vec<&str> = text.lines().take(limit_lines).collect();
-    let line_truncated = kept.len() < text.lines().count();
+    let mut kept: Vec<&str> = Vec::with_capacity(limit_lines.min(1024));
     let mut used_chars = 0usize;
-    let mut take = 0usize;
-    for line in &kept {
-        let need = line.chars().count() + usize::from(take > 0);
-        if used_chars + need > limit_chars {
+    let mut char_truncated = false;
+    let mut line_truncated = false;
+
+    for (idx, line) in text.lines().enumerate() {
+        if idx >= limit_lines {
+            line_truncated = true;
             break;
         }
-        used_chars += need;
-        take += 1;
+        if !char_truncated {
+            let need = line.chars().count() + usize::from(!kept.is_empty());
+            if used_chars + need <= limit_chars {
+                used_chars += need;
+                kept.push(line);
+            } else {
+                char_truncated = true;
+            }
+        }
     }
-    let char_truncated = take < kept.len();
-    (
-        kept[..take].join("\n"),
-        take,
-        line_truncated || char_truncated,
-    )
+
+    let truncated = line_truncated || char_truncated;
+    if !truncated {
+        let total_lines = kept.len();
+        // 若源文本无 `\r\n` 且未截断，直接克隆或按行连接保持原语义
+        return (kept.join("\n"), total_lines, false);
+    }
+    (kept.join("\n"), kept.len(), true)
 }
 
 #[cfg(test)]
@@ -752,5 +1081,69 @@ mod tests {
             assert!(!r.lossy_replaced);
             assert!(r.text.contains("Conex / Crish — Agent 协作指令"));
         }
+    }
+
+    #[test]
+    fn utf8_char_boundary_truncation_never_panics_or_corrupts_multibyte() {
+        // 包含 ASCII(1B)、拉丁扩展(2B: é)、中文(3B: 中)、Emoji(4B: 🚀)
+        let sample = "Aé中🚀B";
+        let bytes = sample.as_bytes();
+        // 合法字符边界偏移集合：0(""), 1("A"), 3("Aé"), 6("Aé中"), 10("Aé中🚀"), 11("Aé中🚀B")
+        let expected_boundaries = [0, 1, 1, 3, 3, 3, 6, 6, 6, 6, 10, 11, 11];
+        for (limit, &expected) in expected_boundaries.iter().enumerate() {
+            let truncated_str = truncate_utf8_at_char_boundary(sample, limit);
+            assert_eq!(truncated_str.len(), expected, "str limit={limit}");
+            let truncated_bytes = truncate_utf8_bytes_at_char_boundary(bytes, limit);
+            assert_eq!(truncated_bytes.len(), expected, "bytes limit={limit}");
+            assert!(
+                std::str::from_utf8(truncated_bytes).is_ok(),
+                "截断后的字节切片必须是合法 UTF-8 (limit={limit})"
+            );
+        }
+    }
+
+    #[test]
+    fn windowed_read_utf8_4byte_emoji_straddling_every_chunk_offset() {
+        // 验证 4 字节 UTF-8 Emoji 在 8192 字节边界的任意切分位置（1+3、2+2、3+1）均无损拼接
+        for prefix_pad in [8189_usize, 8190, 8191] {
+            let mut content = "x".repeat(prefix_pad);
+            content.push_str("🚀🎉中文字段跨越边界\r\n第二行正常内容\n");
+            let path = write_temp(&format!("emoji_boundary_{prefix_pad}"), content.as_bytes());
+            let mut opts = default_opts();
+            opts.strict_encoding = true;
+            let r = windowed_read(&path, &opts).unwrap();
+            assert!(!r.lossy_replaced, "pad={prefix_pad} 不应触发 lossy 替换");
+            assert_eq!(r.total_lines, 2);
+            assert!(r.text.ends_with("🚀🎉中文字段跨越边界\n第二行正常内容"));
+            let _ = std::fs::remove_dir_all(path.parent().unwrap());
+        }
+    }
+
+    #[test]
+    fn windowed_read_utf16_streaming_surrogate_pairs_and_window() {
+        // 构造跨越 16KB 块边界的 UTF-16BE 内容（含 4 字节代理对 Emoji 🚀 与 CRLF）
+        let mut bytes = vec![0xFE, 0xFF]; // UTF-16BE BOM
+        let mut lines_expected = Vec::new();
+        for i in 1..=300 {
+            let line = format!("第{i:04}行-🚀-测试UTF16流式块解码");
+            lines_expected.push(line.clone());
+            for u in format!("{line}\r\n").encode_utf16() {
+                bytes.extend_from_slice(&u.to_be_bytes());
+            }
+        }
+        let path = write_temp("utf16be_stream", &bytes);
+        let mut opts = default_opts();
+        opts.start_line = 150;
+        opts.end_line = Some(152);
+        opts.allow_utf16 = true;
+        opts.strict_encoding = true;
+        let r = windowed_read(&path, &opts).unwrap();
+        assert_eq!(r.encoding, WindowEncoding::Utf16Be);
+        assert_eq!(r.total_lines, 300);
+        assert_eq!(r.shown_lines, 3);
+        assert!(r.content_truncated);
+        assert!(!r.lossy_replaced);
+        assert_eq!(r.text, lines_expected[149..152].join("\n"));
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 }

@@ -460,9 +460,19 @@ impl FlowScheduler {
         self.wakeups.len()
     }
 
-    /// 消费合成唤醒队列（引擎侧经 L1 注入通知主 agent / 转呈）
+    /// 消费合成唤醒队列（引擎侧在释放内部同步锁后经 L1 注入通知主 agent / 转呈，DEFECT-03）
     pub fn take_wakeups(&mut self) -> Vec<FlowWakeup> {
         self.wakeups.drain(..).collect()
+    }
+
+    /// 取出积压的重启不一致上报（供调用方在内部同步锁外分发，DEFECT-03）
+    pub fn take_restart_reports(&mut self) -> Vec<FlowReport> {
+        std::mem::take(&mut self.restart_reports)
+    }
+
+    /// 获取子代理事件发射器只读引用（供锁外克隆或状态检查，DEFECT-03）
+    pub fn subagent_event_emitter(&self) -> Option<&SubagentEventEmitter> {
+        self.subagent_events.as_ref()
     }
 
     /// run id → 节点 id 反查
@@ -474,7 +484,7 @@ impl FlowScheduler {
     }
 
     /// 声明编排（04 C6 行为 1/6）：staged-clone 校验（环 / 自依赖 /
-    /// 重复 id / 未知引用）→ 原子落库 → 立即推进首波。
+    /// 重复 id / 未知引用）→ 配置预检 → 原子落库 → 立即推进首波。
     pub async fn declare_flow(&mut self, decl: &FlowDeclaration) -> Result<FlowAdvance, FlowError> {
         let graph = FlowGraph::from_declaration(decl)?;
         if let Some(existing) = &self.graph {
@@ -488,29 +498,32 @@ impl FlowScheduler {
                 return Err(FlowError::AlreadyDeclared);
             }
         }
+        // 前置校验元数据配置与策略，避免中途报错导致内存状态与持久化半途污染
+        let (max_siblings, max_concurrent, auto_spawn_composite) = read_meta_config(&*self.meta)?;
+        let default_strategy = read_meta_strategy(&*self.meta)?;
+
         self.planner_run_id = decl.planner_run_id.clone();
         self.persist_declaration(&graph)?;
         self.meta.set_meta(FLOW_STATE_KEY, "[]")?;
         self.meta.set_meta(FLOW_RESERVED_KEY, "0")?;
         self.meta.set_meta(FLOW_RELEASED_KEY, "0")?;
-        self.graph = Some(graph);
-        self.planner_run_id = decl.planner_run_id.clone();
-        let (max_siblings, max_concurrent, auto_spawn_composite) = read_meta_config(&*self.meta)?;
+
         self.guard = RecursionGuardConfig {
             max_depth: DEFAULT_RECURSION_GUARD.max_depth,
             max_siblings,
             max_concurrent,
         };
         self.auto_spawn_composite = auto_spawn_composite;
-        self.default_strategy = read_meta_strategy(&*self.meta)?;
+        self.default_strategy = default_strategy;
         self.runtime.clear();
         self.states.clear();
         self.wakeups.clear();
         self.restart_reports.clear();
         self.dirty_set.clear();
-        for node in self.graph.as_ref().expect("声明已写入").nodes() {
+        for node in graph.nodes() {
             self.states.insert(node.id.clone(), FlowNodeState::Pending);
         }
+        self.graph = Some(graph);
         self.budget = ConcurrencyBudget::new();
         self.advance().await
     }
@@ -541,11 +554,12 @@ impl FlowScheduler {
                 message: format!("节点 {node_id} 前置未全部 completed，不能挂接 run"),
             });
         }
-        let runtime = self
+        if self
             .runtime
-            .entry(node_id.to_string())
-            .or_insert_with(|| FlowNodeRuntime::new(node_id.to_string()));
-        if runtime.subagent_run_id.is_some() {
+            .get(node_id)
+            .and_then(|rt| rt.subagent_run_id.as_ref())
+            .is_some()
+        {
             return Err(FlowError::InvalidState {
                 message: format!("节点 {node_id} 已有关联 run"),
             });
@@ -559,7 +573,13 @@ impl FlowScheduler {
         if let Err(rejection) = check_recursion_guard(snapshot, self.guard) {
             return Err(FlowError::from_guard_rejection(rejection));
         }
-        runtime.subagent_run_id = Some(subagent_run_id.to_string());
+        {
+            let runtime = self
+                .runtime
+                .entry(node_id.to_string())
+                .or_insert_with(|| FlowNodeRuntime::new(node_id.to_string()));
+            runtime.subagent_run_id = Some(subagent_run_id.to_string());
+        }
         self.states
             .insert(node_id.to_string(), FlowNodeState::Running);
         self.mark_successors_dirty(node_id);
@@ -673,7 +693,7 @@ impl FlowScheduler {
         let scheduler = Self {
             session_id,
             graph: Some(graph),
-            planner_run_id: declaration.planner_run_id.clone(),
+            planner_run_id: declaration.planner_run_id,
             default_strategy,
             guard: RecursionGuardConfig {
                 max_depth: DEFAULT_RECURSION_GUARD.max_depth,
@@ -713,9 +733,16 @@ impl FlowScheduler {
     }
 
     pub(crate) fn persist_declaration(&self, graph: &FlowGraph) -> Result<(), FlowError> {
-        let declaration = FlowDeclaration {
-            tasks: graph.nodes().to_vec(),
-            planner_run_id: self.planner_run_id.clone(),
+        #[derive(serde::Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct BorrowedFlowDeclaration<'a> {
+            tasks: &'a [super::model::FlowNode],
+            #[serde(skip_serializing_if = "Option::is_none")]
+            planner_run_id: Option<&'a str>,
+        }
+        let declaration = BorrowedFlowDeclaration {
+            tasks: graph.nodes(),
+            planner_run_id: self.planner_run_id.as_deref(),
         };
         let json = serde_json::to_string(&declaration).map_err(|e| FlowError::InvalidState {
             message: format!("编排声明序列化失败：{e}"),
@@ -724,8 +751,8 @@ impl FlowScheduler {
     }
 
     pub(crate) fn persist_runtime(&self) -> Result<(), FlowError> {
-        let mut runtimes: Vec<FlowNodeRuntime> = self.runtime.values().cloned().collect();
-        runtimes.sort_by(|a, b| a.node_id.cmp(&b.node_id));
+        let mut runtimes: Vec<&FlowNodeRuntime> = self.runtime.values().collect();
+        runtimes.sort_unstable_by(|a, b| a.node_id.cmp(&b.node_id));
         let json = serde_json::to_string(&runtimes).map_err(|e| FlowError::InvalidState {
             message: format!("flow_state 序列化失败：{e}"),
         })?;
@@ -737,5 +764,134 @@ impl FlowScheduler {
             .set_meta(FLOW_RESERVED_KEY, &self.budget.reserved().to_string())?;
         self.meta
             .set_meta(FLOW_RELEASED_KEY, &self.budget.released().to_string())
+    }
+}
+
+impl FlowAdvance {
+    /// 批量取出本轮外部事件分发载荷（started / wakeups / reports），供调用方在释放内部同步锁后安全分发（DEFECT-03）
+    pub fn take_dispatch_batch(
+        &mut self,
+    ) -> (Vec<FlowStarted>, Vec<FlowWakeup>, Vec<FlowReport>) {
+        (
+            std::mem::take(&mut self.started),
+            std::mem::take(&mut self.wakeups),
+            std::mem::take(&mut self.reports),
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use agent_tools::tools::subagent::{
+        SubagentSpawnError, SubagentSpawnRequest, SubagentSpawnResult,
+    };
+    use async_trait::async_trait;
+
+    use super::super::model::FlowNode;
+    use super::*;
+
+    #[derive(Default)]
+    struct TestMetaStore {
+        store: Mutex<HashMap<String, String>>,
+    }
+
+    impl FlowMetaStore for TestMetaStore {
+        fn get_meta(&self, key: &str) -> Result<Option<String>, FlowError> {
+            Ok(self.store.lock().unwrap().get(key).cloned())
+        }
+
+        fn set_meta(&self, key: &str, value: &str) -> Result<(), FlowError> {
+            self.store
+                .lock()
+                .unwrap()
+                .insert(key.to_string(), value.to_string());
+            Ok(())
+        }
+    }
+
+    #[derive(Debug)]
+    struct NoopSubagentSpawner;
+
+    #[async_trait]
+    impl SubagentSpawner for NoopSubagentSpawner {
+        async fn spawn(
+            &self,
+            req: &SubagentSpawnRequest,
+        ) -> Result<SubagentSpawnResult, SubagentSpawnError> {
+            Ok(SubagentSpawnResult {
+                subagent_id: "sub-0".to_string(),
+                subagent_run_id: "run-0".to_string(),
+                session_id: "sess-0".to_string(),
+                status: SubagentState::Running,
+                summary: None,
+                flow_node_id: req.flow_node_id.clone(),
+                display_label: req.display_label.clone(),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn declare_flow_prevalidates_meta_config_before_mutating_state() {
+        let meta = Arc::new(TestMetaStore::default());
+        let mut scheduler = FlowScheduler::new(
+            "sess-1",
+            Arc::new(NoopSubagentSpawner),
+            meta.clone(),
+        )
+        .expect("初始配置合法");
+        // 在 declare_flow 前注入非法的 flow_on_failed 配置
+        meta.set_meta(FLOW_ON_FAILED_KEY, "invalid-strategy")
+            .unwrap();
+        let err = scheduler
+            .declare_flow(&FlowDeclaration {
+                tasks: vec![FlowNode {
+                    id: "A".into(),
+                    task: "Node A".into(),
+                    depends_on: vec![],
+                    parallel: false,
+                    on_failed: None,
+                    is_composite: false,
+                }],
+                planner_run_id: Some("planner-1".into()),
+            })
+            .await
+            .expect_err("invalid meta config must fail before mutating scheduler");
+        assert!(matches!(err, FlowError::InvalidState { .. }));
+        assert!(
+            scheduler.graph().is_none(),
+            "校验失败不得残留半初始化的 graph 状态"
+        );
+        assert!(
+            meta.get_meta(FLOW_DECLARATION_KEY).unwrap().is_none(),
+            "校验失败不得提前落盘 flow_declaration"
+        );
+    }
+
+    #[test]
+    fn flow_advance_take_dispatch_batch_drains_vectors_without_clone() {
+        let mut advance = FlowAdvance {
+            started: vec![FlowStarted {
+                node_id: "A".into(),
+                subagent_run_id: "run-a".into(),
+                is_composite: false,
+            }],
+            wakeups: vec![FlowWakeup {
+                node_id: "B".into(),
+                is_composite: true,
+                planner_run_id: Some("planner".into()),
+                auto_spawned: false,
+            }],
+            blocked: vec![],
+            reports: vec![],
+            flow_terminal: false,
+        };
+        let (started, wakeups, reports) = advance.take_dispatch_batch();
+        assert_eq!(started.len(), 1);
+        assert_eq!(wakeups.len(), 1);
+        assert!(reports.is_empty());
+        assert!(advance.started.is_empty());
+        assert!(advance.wakeups.is_empty());
     }
 }

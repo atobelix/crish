@@ -49,6 +49,23 @@ pub const MAX_TRACKED_TASK_OWNERS: usize = 1024;
 /// S8e Run 终止来源映射最大容量（防常驻进程无界内存增长，ISSUE-14）
 pub const MAX_TRACKED_RUN_SOURCES: usize = 1024;
 
+/// S8e Run 终止来源最大保留时长（30 分钟，对齐 S10a 窗口）
+pub const RUN_TERM_SOURCE_TTL_MS: u64 = S10A_SUPPRESS_MS;
+
+/// S10a run-failed 抑制表最大容量（防 30min 窗口内高频失败风暴导致无界增长）
+pub const MAX_TRACKED_RUN_FAILED: usize = 1024;
+
+/// 静默时段夜间摘要折叠桶最大容量（防 9 小时静默窗口内高频事件无界累积）
+pub const MAX_FOLDED_NIGHT_ITEMS: usize = 1024;
+
+/// 极端高频广播防洪滑动窗口时长（1 秒，ISSUE-12）
+pub const FLOOD_WINDOW_MS: u64 = 1_000;
+
+/// 单滑动窗口（1 秒）内允许进入去重/合并/持久化的最大推送意图数（ISSUE-12）：
+/// 超过该水位的瞬时洪峰在 $O(1)$ 时间内直接执行背压降级（`DecisionOutcome::Throttled`），
+/// 防止高频事件风暴触发同步 SQLite 去重写入或无界合并桶膨胀而阻塞 Tokio 异步运行时。
+pub const FLOOD_MAX_INTENTS_PER_WINDOW: usize = 64;
+
 /// 决策引擎配置（R3-01；R3-02/03 接线时从设置面装配）
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
@@ -105,16 +122,18 @@ pub enum DecisionOutcome {
     FoldedToNightSummary,
     /// 静默时段不推（P2）
     QuietSkipped,
-    /// 节流超限折叠进摘要
+    /// 节流超限折叠进摘要（含防洪滑窗背压限频）
     Throttled,
 }
 
-/// 决策引擎（管线状态机：去重 → 合并 → 静默 → 节流；时钟注入可测）
+/// 决策引擎（管线状态机：防洪背压 → 去重 → 合并 → 静默 → 节流；时钟注入可测）
 pub struct PushDecisionEngine {
     dedupe: DedupeState,
     coalesce: CoalesceState,
     throttle: ThrottleTracker,
     quiet_cfg: QuietHoursConfig,
+    /// 1s 滑动窗口防洪水位追踪器（记录最近进入管线的意图时间戳，ISSUE-12）
+    flood_window: std::collections::VecDeque<u64>,
     /// run-terminal(failed) 时刻表（runId → epoch ms；S10a 双推抑制）
     run_failed_at: std::collections::HashMap<String, u64>,
     /// S8e 事件流观察（R3-01a 补强）：task_id → 归属 run（task-started 登记，ISSUE-14 有界）
@@ -147,6 +166,7 @@ impl PushDecisionEngine {
             coalesce: CoalesceState::new(cfg.windows),
             throttle: ThrottleTracker::new(cfg.limits),
             quiet_cfg: cfg.quiet,
+            flood_window: std::collections::VecDeque::with_capacity(FLOOD_MAX_INTENTS_PER_WINDOW),
             run_failed_at: std::collections::HashMap::new(),
             task_owner_run: std::collections::HashMap::new(),
             task_owner_order: std::collections::VecDeque::new(),
@@ -177,7 +197,7 @@ impl PushDecisionEngine {
                 self.record_task_owner(task_id.clone(), owner_run_id.clone());
             }
             AgentEvent::TaskCompleted { task_id, .. } | AgentEvent::TaskFailed { task_id, .. } => {
-                self.task_owner_run.remove(task_id);
+                self.remove_task_owner(task_id);
             }
             AgentEvent::RunTerminal {
                 run_id, terminal, ..
@@ -209,7 +229,7 @@ impl PushDecisionEngine {
                     .get(task_id)
                     .and_then(|run_id| self.run_term_source.get(run_id))
                     .map(|(src, _)| *src);
-                self.task_owner_run.remove(task_id);
+                self.remove_task_owner(task_id);
                 source
             }
             _ => None,
@@ -219,6 +239,13 @@ impl PushDecisionEngine {
         else {
             return Vec::new();
         };
+
+        // 0. 极端高频广播防洪背压护栏（ISSUE-12）：
+        // 在进入同步去重（可能涉及 SQLite 锁/落盘）和合并桶分配前，执行 O(1) 滑动窗口限频，
+        // 确保异常高频事件风暴下绝不阻塞 Tokio 异步运行时或撑爆合并桶。
+        if !self.check_flood_backpressure(now_ms) {
+            return vec![self.decision_from_intent(&intent, false, DecisionOutcome::Throttled)];
+        }
 
         // 1. S10a 双推抑制：run-failed 后 30min 内不再推 runtime-error
         if intent.scene == SceneId::RuntimeError {
@@ -245,7 +272,10 @@ impl PushDecisionEngine {
             QuietPolicy::InQuietFoldNight => {
                 // 夜间摘要折叠（R3-01a 补强）：P1 折叠条目入累积桶，
                 // 次日静默结束经 [Self::take_night_summary] 合成；
-                // `push_night_summary` 表持久化接线由 R3-02/03 承担
+                // 容量受 MAX_FOLDED_NIGHT_ITEMS 保护，超限时淘汰最旧条目防止静默期洪峰内存膨胀
+                if self.folded.len() >= MAX_FOLDED_NIGHT_ITEMS {
+                    self.folded.remove(0);
+                }
                 self.folded.push(NightSummaryItem {
                     scene: intent.scene,
                     session_id: intent.payload.session_id.clone(),
@@ -306,16 +336,19 @@ impl PushDecisionEngine {
 
         // 5. 单条直发（S4 记录 run-failed 时刻，供 S10a 抑制）
         if intent.scene == SceneId::RunFailed {
-            self.run_failed_at
-                .insert(intent.payload.biz_key.clone(), now_ms);
-            self.prune_run_failed(now_ms);
+            self.record_run_failed(intent.payload.biz_key.clone(), now_ms);
         }
         self.finalize_intent(&intent, now_ms)
     }
 
-    /// 周期 drain：产出窗口到期的合并桶（对齐 main.rs:430-441 的 500ms
-    /// drain 先例；R3-02/03 装配在 drain loop 中调用）
+    /// 周期 drain：产出窗口到期的合并桶，并顺带执行滑动窗口与关联状态垃圾回收
+    /// （对齐 main.rs:430-441 的 500ms drain 先例与 Audit-17 ISSUE-14/16 自治清理要求）
     pub fn flush(&mut self, now_ms: u64) -> Vec<PushDecision> {
+        self.throttle.prune(now_ms);
+        self.prune_flood_window(now_ms);
+        self.prune_run_failed(now_ms);
+        self.prune_run_term_sources(now_ms);
+
         self.coalesce
             .flush(now_ms)
             .into_iter()
@@ -467,6 +500,46 @@ impl PushDecisionEngine {
         }
     }
 
+    /// $O(1)$ 滑动窗口防洪检查（ISSUE-12）：
+    /// 清理超过 1s 窗口的时间戳；若当前 1s 窗口内意图数已达 `FLOOD_MAX_INTENTS_PER_WINDOW`，
+    /// 返回 `false` 触发背压限频。
+    fn check_flood_backpressure(&mut self, now_ms: u64) -> bool {
+        self.prune_flood_window(now_ms);
+        if self.flood_window.len() >= FLOOD_MAX_INTENTS_PER_WINDOW {
+            return false;
+        }
+        self.flood_window.push_back(now_ms);
+        true
+    }
+
+    fn prune_flood_window(&mut self, now_ms: u64) {
+        while self
+            .flood_window
+            .front()
+            .is_some_and(|&t| now_ms.saturating_sub(t) >= FLOOD_WINDOW_MS)
+        {
+            self.flood_window.pop_front();
+        }
+    }
+
+    /// 记录 run-failed 时刻并执行过期与容量淘汰（S10a 抑制）
+    fn record_run_failed(&mut self, run_id: String, now_ms: u64) {
+        self.prune_run_failed(now_ms);
+        if !self.run_failed_at.contains_key(&run_id)
+            && self.run_failed_at.len() >= MAX_TRACKED_RUN_FAILED
+        {
+            if let Some(oldest_key) = self
+                .run_failed_at
+                .iter()
+                .min_by_key(|(_, &at)| at)
+                .map(|(k, _)| k.clone())
+            {
+                self.run_failed_at.remove(&oldest_key);
+            }
+        }
+        self.run_failed_at.insert(run_id, now_ms);
+    }
+
     /// 清理过期的 run-failed 时刻（超过 30min 抑制窗口即失效）
     fn prune_run_failed(&mut self, now_ms: u64) {
         self.run_failed_at
@@ -474,25 +547,73 @@ impl PushDecisionEngine {
     }
 
     fn record_task_owner(&mut self, task_id: String, owner_run_id: String) {
-        const MAX_TASK_OWNERS: usize = 1024;
-        if self.task_owner_run.len() >= MAX_TASK_OWNERS {
-            if let Some(oldest) = self.task_owner_order.pop_front() {
-                self.task_owner_run.remove(&oldest);
+        if !self.task_owner_run.contains_key(&task_id) {
+            while self.task_owner_run.len() >= MAX_TRACKED_TASK_OWNERS {
+                let Some(oldest) = self.task_owner_order.pop_front() else {
+                    break;
+                };
+                if self.task_owner_run.remove(&oldest).is_some() {
+                    break;
+                }
             }
+            self.task_owner_order.push_back(task_id.clone());
         }
-        self.task_owner_order.push_back(task_id.clone());
         self.task_owner_run.insert(task_id, owner_run_id);
+        if self.task_owner_order.len() > MAX_TRACKED_TASK_OWNERS * 2 {
+            self.task_owner_order
+                .retain(|id| self.task_owner_run.contains_key(id));
+        }
+    }
+
+    fn remove_task_owner(&mut self, task_id: &str) {
+        self.task_owner_run.remove(task_id);
+        while self
+            .task_owner_order
+            .front()
+            .is_some_and(|id| !self.task_owner_run.contains_key(id))
+        {
+            self.task_owner_order.pop_front();
+        }
+        if self.task_owner_order.len() > MAX_TRACKED_TASK_OWNERS * 2 {
+            self.task_owner_order
+                .retain(|id| self.task_owner_run.contains_key(id));
+        }
     }
 
     fn record_run_term_source(&mut self, run_id: String, source: RunTerminationSource, now_ms: u64) {
-        const MAX_RUN_TERMS: usize = 1024;
-        if self.run_term_source.len() >= MAX_RUN_TERMS {
-            if let Some(oldest) = self.run_term_order.pop_front() {
-                self.run_term_source.remove(&oldest);
+        self.prune_run_term_sources(now_ms);
+        if !self.run_term_source.contains_key(&run_id) {
+            while self.run_term_source.len() >= MAX_TRACKED_RUN_SOURCES {
+                let Some(oldest) = self.run_term_order.pop_front() else {
+                    break;
+                };
+                if self.run_term_source.remove(&oldest).is_some() {
+                    break;
+                }
+            }
+            self.run_term_order.push_back(run_id.clone());
+        }
+        self.run_term_source.insert(run_id, (source, now_ms));
+        if self.run_term_order.len() > MAX_TRACKED_RUN_SOURCES * 2 {
+            self.run_term_order
+                .retain(|id| self.run_term_source.contains_key(id));
+        }
+    }
+
+    fn prune_run_term_sources(&mut self, now_ms: u64) {
+        while let Some(front_id) = self.run_term_order.front() {
+            let expired = match self.run_term_source.get(front_id) {
+                Some(&(_, at)) => now_ms.saturating_sub(at) >= RUN_TERM_SOURCE_TTL_MS,
+                None => true,
+            };
+            if expired {
+                if let Some(id) = self.run_term_order.pop_front() {
+                    self.run_term_source.remove(&id);
+                }
+            } else {
+                break;
             }
         }
-        self.run_term_order.push_back(run_id.clone());
-        self.run_term_source.insert(run_id, (source, now_ms));
     }
 }
 
@@ -1046,5 +1167,73 @@ mod tests {
         let replay = engine.decide(&task_suspicious("t-1"), &ctx(), T0 + 1_000);
         assert_eq!(replay[0].outcome, DecisionOutcome::DedupeSuppressed);
         assert!(!replay[0].deliver);
+    }
+
+    #[test]
+    fn flood_backpressure_throttles_burst_and_recovers_after_window() {
+        let mut cfg = EngineConfig::default();
+        cfg.limits = ThrottleLimits {
+            per_device_per_minute: 1000,
+            per_session_per_10min: 1000,
+            per_device_per_day: 1000,
+        };
+        let mut engine = PushDecisionEngine::new(cfg);
+
+        for i in 0..FLOOD_MAX_INTENTS_PER_WINDOW {
+            let out = engine.decide(&task_suspicious(&format!("t-{i}")), &ctx(), T0 + i as u64);
+            assert_eq!(out[0].outcome, DecisionOutcome::Delivered);
+            assert!(out[0].deliver);
+        }
+
+        // 第 65 条（同 1s 窗口内）触发防洪背压降级
+        let overflow = engine.decide(&task_suspicious("t-overflow"), &ctx(), T0 + 500);
+        assert!(!overflow[0].deliver);
+        assert_eq!(overflow[0].outcome, DecisionOutcome::Throttled);
+
+        // 1s 滑动窗口过后自动恢复放行
+        let recovered = engine.decide(
+            &task_suspicious("t-recovered"),
+            &ctx(),
+            T0 + FLOOD_WINDOW_MS + 100,
+        );
+        assert!(recovered[0].deliver);
+        assert_eq!(recovered[0].outcome, DecisionOutcome::Delivered);
+    }
+
+    #[test]
+    fn task_owner_and_run_source_eviction_remains_strictly_bounded() {
+        let mut engine = PushDecisionEngine::default();
+        // 先启动并完成 1500 个任务，验证完成态清理不会在 task_owner_order 中残留僵尸键
+        for i in 0..1500 {
+            let tid = format!("done-{i}");
+            engine.decide(&task_started(&tid, "run-0"), &ctx(), T0);
+            engine.decide(&task_failed(&tid), &ctx(), T0 + 1);
+        }
+        assert_eq!(engine.task_owner_run.len(), 0);
+        assert_eq!(engine.task_owner_order.len(), 0);
+
+        // 连续启动 1200 个未完成任务，验证严格受限于 MAX_TRACKED_TASK_OWNERS
+        for i in 0..1200 {
+            engine.decide(
+                &task_started(&format!("active-{i}"), &format!("run-{i}")),
+                &ctx(),
+                T0 + 10,
+            );
+        }
+        assert_eq!(engine.task_owner_run.len(), MAX_TRACKED_TASK_OWNERS);
+        assert!(engine.task_owner_order.len() <= MAX_TRACKED_TASK_OWNERS * 2);
+
+        // 连续记录 1200 个 run 终止来源，验证容量上限与 flush 过期淘汰
+        for i in 0..1200 {
+            engine.record_run_term_source(
+                format!("run-term-{i}"),
+                RunTerminationSource::EngineTerminated,
+                T0 + 20,
+            );
+        }
+        assert_eq!(engine.run_term_source.len(), MAX_TRACKED_RUN_SOURCES);
+        engine.flush(T0 + 20 + RUN_TERM_SOURCE_TTL_MS + 1);
+        assert_eq!(engine.run_term_source.len(), 0);
+        assert_eq!(engine.run_term_order.len(), 0);
     }
 }

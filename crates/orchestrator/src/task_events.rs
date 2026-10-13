@@ -99,7 +99,7 @@ impl TaskWakeBatch {
     /// 消费一个任务终态事件（completed/failed/killed/suspicious）。
     ///
     /// 返回 `true` 表示产出了新摘要（事件被消费）；同任务已存在旧摘要
-    /// 时原位替换（保留最新终态，不重复注入）。
+    /// 时原位替换（保留最新终态，不重复注入且不重复分配 key）。
     pub fn push(&mut self, event: &AgentEvent) -> bool {
         let Some(summary) = task_wake_summary(event) else {
             return false;
@@ -108,28 +108,41 @@ impl TaskWakeBatch {
             AgentEvent::TaskCompleted { task_id, .. }
             | AgentEvent::TaskFailed { task_id, .. }
             | AgentEvent::TaskSuspicious { task_id, .. }
-            | AgentEvent::TaskKilled { task_id, .. } => task_id.clone(),
+            | AgentEvent::TaskKilled { task_id, .. } => task_id.as_str(),
             _ => return false,
         };
-        self.entries.insert(task_id, summary);
+        if let Some(slot) = self.entries.get_mut(task_id) {
+            *slot = summary;
+        } else {
+            self.entries.insert(task_id.to_owned(), summary);
+        }
         true
     }
 
     /// 取出全部摘要合并为一条文本（换行拼接，按任务 id 有序）并清空批次。
     ///
+    /// - 单条批次直接移动已有 `String`（零克隆、零额外分配）；
+    /// - 多条批次预计算字节总容量后直接消费 `BTreeMap::into_values()` 拼接，
+    ///   消除中间 `Vec<String>` 与逐条 `.cloned()` 内存拷贝。
+    ///
     /// 返回 None 表示批次为空（无注入内容）。
     pub fn drain_merged(&mut self) -> Option<String> {
-        if self.entries.is_empty() {
-            return None;
+        match self.entries.len() {
+            0 => None,
+            1 => self.entries.pop_first().map(|(_, summary)| summary),
+            count => {
+                let entries = std::mem::take(&mut self.entries);
+                let total_bytes = entries.values().map(String::len).sum::<usize>() + (count - 1);
+                let mut merged = String::with_capacity(total_bytes);
+                for (idx, summary) in entries.into_values().enumerate() {
+                    if idx > 0 {
+                        merged.push('\n');
+                    }
+                    merged.push_str(&summary);
+                }
+                Some(merged)
+            }
         }
-        let merged = self
-            .entries
-            .values()
-            .cloned()
-            .collect::<Vec<_>>()
-            .join("\n");
-        self.entries.clear();
-        Some(merged)
     }
 
     /// 是否有待注入摘要
@@ -304,15 +317,46 @@ pub fn task_audit_decision(result: TaskAuditResult) -> SecurityAuditDecision {
 /// 无工具调用上下文 None，禁空串；用户命令时为 None）、impact 为空
 /// 影响面（任务域无文件影响面语义）。
 pub fn build_task_audit_event(session_id: &str, record: &TaskAuditRecord) -> AgentEvent {
+    build_task_audit_event_with_timestamp(session_id, record, now_iso_utc())
+}
+
+/// 使用预生成的时间戳构造任务域 security-audit 事件（批量发射共享同一格式化的 ISO 时间戳）。
+pub fn build_task_audit_event_with_timestamp(
+    session_id: &str,
+    record: &TaskAuditRecord,
+    timestamp: String,
+) -> AgentEvent {
     let tool_call_id = match &record.operator {
         TaskAuditOperator::AiTool { tool_call_id } => tool_call_id.clone(),
         TaskAuditOperator::UserCommand => None,
     };
     AgentEvent::SecurityAudit {
         session_id: session_id.to_string(),
-        timestamp: now_iso_utc(),
+        timestamp,
         operation: SecurityAuditOperation::CommandExec,
         targets: vec![record.task_id.clone()],
+        impact: ImpactAssessment::default(),
+        decision: task_audit_decision(record.result),
+        permission_mode: None,
+        tool_call_id,
+    }
+}
+
+/// 消费 [TaskAuditRecord] 所有权直接构造任务域 security-audit 事件（零克隆移动 `task_id` 与 `tool_call_id`）。
+pub fn into_task_audit_event_with_timestamp(
+    session_id: &str,
+    record: TaskAuditRecord,
+    timestamp: String,
+) -> AgentEvent {
+    let tool_call_id = match record.operator {
+        TaskAuditOperator::AiTool { tool_call_id } => tool_call_id,
+        TaskAuditOperator::UserCommand => None,
+    };
+    AgentEvent::SecurityAudit {
+        session_id: session_id.to_string(),
+        timestamp,
+        operation: SecurityAuditOperation::CommandExec,
+        targets: vec![record.task_id],
         impact: ImpactAssessment::default(),
         decision: task_audit_decision(record.result),
         permission_mode: None,
@@ -367,34 +411,59 @@ impl TaskAuditAccumulator {
     ///
     /// 操作者由接线方传入（壳层知道任务由 AI 工具调用还是用户命令
     /// 发起）；返回 `true` 表示产生了审计记录。
-    /// 进入终态（Completed / Failed / Killed）时即时清理 `commands` 映射。
+    /// 进入终态（Completed / Failed / Killed）时即时移除并复用 `commands` 映射中的命令摘要。
     pub fn push(&mut self, event: &AgentEvent, operator: TaskAuditOperator) -> bool {
         match event {
             AgentEvent::TaskStarted {
                 task_id, command, ..
             } => {
-                if self.commands.len() >= DEFAULT_MAX_COMMANDS {
-                    if let Some(first_key) = self.commands.keys().next().cloned() {
-                        self.commands.remove(&first_key);
-                    }
+                if !self.commands.contains_key(task_id.as_str())
+                    && self.commands.len() >= DEFAULT_MAX_COMMANDS
+                {
+                    self.commands.pop_first();
                 }
                 self.commands.insert(task_id.clone(), command.clone());
-                self.record(task_id.clone(), operator, TaskAuditResult::Started)
+                let at_ms = crate::now_ms() as u64;
+                self.record_with(
+                    task_id.as_str(),
+                    command.clone(),
+                    operator,
+                    at_ms,
+                    TaskAuditResult::Started,
+                )
             }
             AgentEvent::TaskCompleted { task_id, .. } => {
-                let ok = self.record(task_id.clone(), operator, TaskAuditResult::Completed);
-                self.commands.remove(task_id);
-                ok
+                let command = self.commands.remove(task_id.as_str()).unwrap_or_default();
+                let at_ms = crate::now_ms() as u64;
+                self.record_with(
+                    task_id.as_str(),
+                    command,
+                    operator,
+                    at_ms,
+                    TaskAuditResult::Completed,
+                )
             }
             AgentEvent::TaskFailed { task_id, .. } => {
-                let ok = self.record(task_id.clone(), operator, TaskAuditResult::Failed);
-                self.commands.remove(task_id);
-                ok
+                let command = self.commands.remove(task_id.as_str()).unwrap_or_default();
+                let at_ms = crate::now_ms() as u64;
+                self.record_with(
+                    task_id.as_str(),
+                    command,
+                    operator,
+                    at_ms,
+                    TaskAuditResult::Failed,
+                )
             }
             AgentEvent::TaskKilled { task_id, .. } => {
-                let ok = self.record(task_id.clone(), operator, TaskAuditResult::Killed);
-                self.commands.remove(task_id);
-                ok
+                let command = self.commands.remove(task_id.as_str()).unwrap_or_default();
+                let at_ms = crate::now_ms() as u64;
+                self.record_with(
+                    task_id.as_str(),
+                    command,
+                    operator,
+                    at_ms,
+                    TaskAuditResult::Killed,
+                )
             }
             _ => false,
         }
@@ -412,7 +481,7 @@ impl TaskAuditAccumulator {
     ) -> bool {
         self.commands.remove(task_id);
         self.record_with(
-            task_id.to_string(),
+            task_id,
             command.to_string(),
             operator,
             at_ms,
@@ -420,46 +489,38 @@ impl TaskAuditAccumulator {
         )
     }
 
-    /// 聚合记录（同 task+result 原位替换，防重复终态无限增长）
-    fn record(
-        &mut self,
-        task_id: String,
-        operator: TaskAuditOperator,
-        result: TaskAuditResult,
-    ) -> bool {
-        let at_ms = crate::now_ms() as u64;
-        let command = self.commands.get(&task_id).cloned().unwrap_or_default();
-        self.record_with(task_id, command, operator, at_ms, result)
-    }
-
     /// 聚合记录落位（同 task+result 原位替换，超限 FIFO 淘汰）
     fn record_with(
         &mut self,
-        task_id: String,
+        task_id: &str,
         command: String,
         operator: TaskAuditOperator,
         at_ms: u64,
         result: TaskAuditResult,
     ) -> bool {
-        let record = TaskAuditRecord {
-            task_id,
-            command,
-            operator,
-            at_ms,
-            result,
-        };
+        if self.max_records == 0 {
+            return false;
+        }
         if let Some(existing) = self
             .records
             .iter_mut()
-            .find(|r| r.task_id == record.task_id && r.result == record.result)
+            .find(|r| r.task_id == task_id && r.result == result)
         {
-            *existing = record;
+            existing.command = command;
+            existing.operator = operator;
+            existing.at_ms = at_ms;
             return true;
         }
         if self.records.len() >= self.max_records {
             self.records.remove(0);
         }
-        self.records.push(record);
+        self.records.push(TaskAuditRecord {
+            task_id: task_id.to_owned(),
+            command,
+            operator,
+            at_ms,
+            result,
+        });
         true
     }
 
@@ -478,6 +539,26 @@ impl TaskAuditAccumulator {
         self.records.iter().filter(|r| r.result == result).count()
     }
 
+    /// 排空全部待发审计记录并转换为 [AgentEvent] 批次（零克隆移动 `task_id` 与 `tool_call_id`）。
+    pub fn drain_audit_events(&mut self, session_id: &str) -> Vec<AgentEvent> {
+        if self.records.is_empty() {
+            return Vec::new();
+        }
+        let mut batch_timestamp = Some(now_iso_utc());
+        let records = std::mem::take(&mut self.records);
+        let total = records.len();
+        let mut events = Vec::with_capacity(total);
+        for (idx, record) in records.into_iter().enumerate() {
+            let ts = if idx + 1 < total {
+                batch_timestamp.as_ref().expect("timestamp present").clone()
+            } else {
+                batch_timestamp.take().expect("timestamp present")
+            };
+            events.push(into_task_audit_event_with_timestamp(session_id, record, ts));
+        }
+        events
+    }
+
     /// 逐条发射 security-audit 事件（经 [EventQueue] 落库，Critical 必达）。
     ///
     /// 返回发射条数；任一条落库失败即返回错误（审计必达语义，
@@ -487,12 +568,25 @@ impl TaskAuditAccumulator {
         store: Arc<dyn Store>,
         session_id: &str,
     ) -> Result<usize, PersistError> {
+        if self.records.is_empty() {
+            return Ok(0);
+        }
         // D-01 DM-04：任务域审计事件无 run 归属（队列绑 None = 会话域）
         let mut queue = EventQueue::new(store, 1, None);
+        let mut batch_timestamp = Some(now_iso_utc());
+        let total = self.records.len();
         let mut count = 0;
-        for record in &self.records {
+        for (idx, record) in self.records.iter().enumerate() {
+            let ts = if idx + 1 < total {
+                batch_timestamp.as_ref().expect("timestamp present").clone()
+            } else {
+                batch_timestamp.take().expect("timestamp present")
+            };
             queue
-                .push(session_id, build_task_audit_event(session_id, record))
+                .push(
+                    session_id,
+                    build_task_audit_event_with_timestamp(session_id, record, ts),
+                )
                 .await?;
             count += 1;
         }
@@ -946,5 +1040,47 @@ mod tests {
         // completed 后 commands 映射即时释放
         acc.push(&completed("t-1", 0), ai.clone());
         assert_eq!(acc.commands.get("t-1"), None);
+    }
+
+    #[test]
+    fn drain_audit_events_moves_records_and_shares_batch_timestamp() {
+        let mut acc = TaskAuditAccumulator::new();
+        acc.push(
+            &started("t-1", "run-main"),
+            TaskAuditOperator::AiTool {
+                tool_call_id: Some("tc-drain-1".into()),
+            },
+        );
+        acc.push(&completed("t-1", 0), TaskAuditOperator::UserCommand);
+
+        let drained = acc.drain_audit_events("s1");
+        assert_eq!(drained.len(), 2, "drain 产出两条 security-audit 事件");
+        assert_eq!(acc.count(), 0, "drain 后内部审计记录已排空");
+        assert!(acc.drain_audit_events("s1").is_empty(), "二次 drain 为空");
+
+        let (ts0, ts1) = match (&drained[0], &drained[1]) {
+            (
+                AgentEvent::SecurityAudit {
+                    timestamp: t0,
+                    targets: tg0,
+                    tool_call_id: tc0,
+                    ..
+                },
+                AgentEvent::SecurityAudit {
+                    timestamp: t1,
+                    targets: tg1,
+                    tool_call_id: tc1,
+                    ..
+                },
+            ) => {
+                assert_eq!(tg0, &vec!["t-1".to_string()]);
+                assert_eq!(tg1, &vec!["t-1".to_string()]);
+                assert_eq!(tc0.as_deref(), Some("tc-drain-1"));
+                assert_eq!(tc1, &None);
+                (t0, t1)
+            }
+            _ => panic!("expected SecurityAudit events"),
+        };
+        assert_eq!(ts0, ts1, "同批次 drain 共享同一 ISO8601 时间戳");
     }
 }
