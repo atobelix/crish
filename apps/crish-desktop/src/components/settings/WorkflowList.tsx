@@ -32,6 +32,8 @@ export type WorkflowListProps = {
   onDelete: (w: WorkflowDefinition) => void;
   /** 编辑入口 */
   onEdit?: (w: WorkflowDefinition) => void;
+  /** 点击绑定会话徽标跳转至目标会话 */
+  onOpenSession?: (sessionId: string, workflow: WorkflowDefinition) => void;
   /** chat 面列表 aria-labelledby */
   listTitleId?: string;
 };
@@ -48,6 +50,7 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
   onTrigger,
   onDelete,
   onEdit,
+  onOpenSession,
   listTitleId,
 }) => {
   const settingsVariant = variant === 'settings';
@@ -117,10 +120,25 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                         </span>
                       </Tooltip>
                       {targetSessionId ? (
-                        <Tooltip content={`绑定目标会话: ${targetSessionId}`}>
-                          <span className={settingsStyles.sessionBadge}>
-                            💬 绑定会话
-                          </span>
+                        <Tooltip
+                          content={`点击跳转至绑定会话: ${targetSessionId}`}
+                        >
+                          {onOpenSession ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="xs"
+                              className={settingsStyles.sessionBadge}
+                              aria-label={`跳转至绑定会话 ${targetSessionId}`}
+                              onClick={() => onOpenSession(targetSessionId, w)}
+                            >
+                              💬 绑定会话
+                            </Button>
+                          ) : (
+                            <span className={settingsStyles.sessionBadge}>
+                              💬 绑定会话
+                            </span>
+                          )}
                         </Tooltip>
                       ) : null}
                     </div>
@@ -231,8 +249,25 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                       {` · ${projectLabel}`}
                     </span>
                     {targetSessionId ? (
-                      <Tooltip content={`绑定目标会话: ${targetSessionId}`}>
-                        <span className={styles.sessionBadge}>💬 绑定会话</span>
+                      <Tooltip
+                        content={`点击跳转至绑定会话: ${targetSessionId}`}
+                      >
+                        {onOpenSession ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            className={styles.sessionBadge}
+                            aria-label={`跳转至绑定会话 ${targetSessionId}`}
+                            onClick={() => onOpenSession(targetSessionId, w)}
+                          >
+                            💬 绑定会话
+                          </Button>
+                        ) : (
+                          <span className={styles.sessionBadge}>
+                            💬 绑定会话
+                          </span>
+                        )}
                       </Tooltip>
                     ) : null}
                   </div>

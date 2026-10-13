@@ -232,8 +232,28 @@ impl SchedulerError {
 /// steering 条目落点（PendingMessageQueue 适配；触发 / 完成通知共用）
 pub(crate) trait PendingSink: Send + Sync {
     /// 写入一条 steering 条目（group_id = cron-<id>，replaceOrEnqueue 去重；
-    /// is_steering 受保护位，容量挤占时优先保留）
-    fn enqueue_steering(&self, cron_id: &str, text: String, enqueued_at_ms: u64);
+    /// is_steering 受保护位，容量挤占时优先保留）。
+    /// 当 `target_session_id` 为有效非空会话 ID 时路由至该目标会话，否则回退至 `sched-<cron_id>`。
+    fn enqueue_steering(
+        &self,
+        cron_id: &str,
+        text: String,
+        enqueued_at_ms: u64,
+        target_session_id: Option<&str>,
+    );
+}
+
+/// 解析 steering 条目的目标 session_id：
+/// - 当 `target_session_id` 为 `Some(sid)` 且 `sid.trim()` 非空时，返回 `sid.trim().to_string()`；
+/// - 当 `target_session_id` 为 `None` 或空串时，回退至默认的 `sched-{cron_id}`。
+pub(crate) fn resolve_steering_session_id(
+    cron_id: &str,
+    target_session_id: Option<&str>,
+) -> String {
+    match target_session_id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(sid) => sid.to_string(),
+        None => format!("sched-{cron_id}"),
+    }
 }
 
 /// 事件发射点（EventQueue 适配；CronFired = Critical 的分级由适配器承载，
@@ -374,9 +394,15 @@ impl QueuePendingSink {
 }
 
 impl PendingSink for QueuePendingSink {
-    fn enqueue_steering(&self, cron_id: &str, text: String, enqueued_at_ms: u64) {
+    fn enqueue_steering(
+        &self,
+        cron_id: &str,
+        text: String,
+        enqueued_at_ms: u64,
+        target_session_id: Option<&str>,
+    ) {
         let entry = SteeringInputEntry {
-            session_id: format!("sched-{cron_id}"),
+            session_id: resolve_steering_session_id(cron_id, target_session_id),
             id: format!("{cron_id}-{enqueued_at_ms}"),
             text,
             attachments: Vec::new(),
@@ -1566,10 +1592,18 @@ async fn fire_cron(
                     &outcome.task.cron_id,
                     fire_text,
                     outcome.fired_at_ms,
+                    outcome
+                        .effective_target_session_id
+                        .as_deref()
+                        .or(outcome.task.target_session_id.as_deref()),
                 );
             }
         }
     } else {
+        let target_sid = outcome
+            .effective_target_session_id
+            .as_deref()
+            .or(outcome.task.target_session_id.as_deref());
         let launcher = components.launcher.clone();
         if outcome.task.is_daemon {
             let launched = match launcher {
@@ -1586,12 +1620,16 @@ async fn fire_cron(
                     &outcome.task.cron_id,
                     fire_text,
                     outcome.fired_at_ms,
+                    target_sid,
                 );
             }
         } else {
-            components
-                .pending
-                .enqueue_steering(&outcome.task.cron_id, fire_text, outcome.fired_at_ms);
+            components.pending.enqueue_steering(
+                &outcome.task.cron_id,
+                fire_text,
+                outcome.fired_at_ms,
+                target_sid,
+            );
         }
     }
 
@@ -1612,6 +1650,10 @@ async fn fire_cron(
                                     outcome.task.cron_id, max
                                 ),
                                 now_ms(),
+                                outcome
+                                    .effective_target_session_id
+                                    .as_deref()
+                                    .or(outcome.task.target_session_id.as_deref()),
                             );
                         }
                     } else {
@@ -3199,6 +3241,75 @@ mod tests {
                 .starts_with(&format!("sched-run-{cron_id}-")),
             "应降级至独立后台会话 sched-run-*，实际: {:?}",
             runs[0].session_id
+        );
+    }
+
+    #[tokio::test]
+    async fn test_steering_routes_to_bound_target_session_or_fallback() {
+        let (registry, pending, events, _store) = test_registry();
+        registry.set_fire_override_ms(60);
+
+        // 1. 绑定 target_session_id = Some("sess-bound-chat-42".into()) 的任务
+        let bound_cron_id = registry
+            .register(test_input("* * * * *", Some(1), false))
+            .await
+            .expect("注册绑定任务应成功");
+        registry
+            .update_task(
+                &bound_cron_id,
+                CronTaskUpdatePatch {
+                    target_session_id: Some(Some("sess-bound-chat-42".into())),
+                    ..Default::default()
+                },
+            )
+            .await
+            .expect("绑定 target_session_id 应成功");
+
+        let events_cond = Arc::clone(&events);
+        let pending_cond = Arc::clone(&pending);
+        wait_until("绑定任务触发并写入 steering 队列", move || {
+            events_cond
+                .emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .len()
+                == 1
+                && queue_len(&pending_cond) == 1
+        })
+        .await;
+
+        let bound_entries = snapshot_queue(&pending);
+        assert_eq!(bound_entries.len(), 1);
+        assert_eq!(
+            bound_entries[0].session_id, "sess-bound-chat-42",
+            "绑定了 target_session_id 时，SteeringInputEntry.session_id 必须精确路由至目标对话会话"
+        );
+
+        // 2. 未绑定 target_session_id（None）的任务：回退至默认的 sched-{cron_id}
+        let unbound_cron_id = registry
+            .register(test_input("* * * * *", Some(1), false))
+            .await
+            .expect("注册未绑定任务应成功");
+
+        let events_cond2 = Arc::clone(&events);
+        let pending_cond2 = Arc::clone(&pending);
+        wait_until("未绑定任务触发并写入 steering 队列", move || {
+            events_cond2
+                .emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .len()
+                == 2
+                && queue_len(&pending_cond2) == 1
+        })
+        .await;
+
+        let unbound_entries = snapshot_queue(&pending);
+        assert_eq!(unbound_entries.len(), 1);
+        assert_eq!(
+            unbound_entries[0].session_id,
+            format!("sched-{unbound_cron_id}"),
+            "未绑定 target_session_id 时，SteeringInputEntry.session_id 必须回退为 sched-<cron_id>"
         );
     }
 }

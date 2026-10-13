@@ -321,6 +321,10 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
         onDelete={(w) => {
           void handleDelete(w);
         }}
+        onOpenSession={(sid) => {
+          navigateToChatSession(sid);
+          onBackToChat?.();
+        }}
         listTitleId="sched-in-chat-title"
       />
 

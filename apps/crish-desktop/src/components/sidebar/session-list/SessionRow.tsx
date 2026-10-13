@@ -3,9 +3,15 @@ import React, {
   memo,
   useCallback,
   useContext,
+  useEffect,
   useRef,
 } from 'react';
 import type { SessionState } from '../../../store/types';
+import {
+  ensureScheduleBadgeStoreHydrated,
+  useSessionActiveScheduleCount,
+  useSessionSchedules,
+} from '../../../store/sessionScheduleBadgeStore';
 import {
   formatSessionListAbsoluteTime,
   formatSessionListCompactTime,
@@ -70,6 +76,39 @@ const SessionRowTime = memo(function SessionRowTime({
       >
         {timeLabel}
       </time>
+    </Tooltip>
+  );
+});
+
+/** 专门给会话定时任务徽标显示的小组件，订阅原子 Selector，更新不会拖带整行重渲染 */
+const SessionRowScheduleBadge = memo(function SessionRowScheduleBadge({
+  sessionId,
+}: {
+  sessionId: string;
+}) {
+  useEffect(() => {
+    ensureScheduleBadgeStoreHydrated();
+  }, []);
+  const activeCount = useSessionActiveScheduleCount(sessionId);
+  const schedules = useSessionSchedules(sessionId);
+  if (activeCount <= 0) return null;
+  const activeList = schedules.filter((w) => w.enabled !== false);
+  const tooltipText = `已绑定 ${activeCount} 个运行中定时任务：${activeList.map((w) => w.name).join('、')}`;
+  return (
+    <Tooltip content={tooltipText}>
+      <span
+        className={styles.sessionScheduleBadge}
+        data-testid="session-schedule-badge"
+        data-schedule-count={activeCount}
+        aria-label={tooltipText}
+      >
+        <AppIcon name="clock" size={12} aria-hidden />
+        {activeCount > 1 ? (
+          <span className={styles.sessionScheduleBadgeCount}>
+            {activeCount}
+          </span>
+        ) : null}
+      </span>
     </Tooltip>
   );
 });
@@ -402,6 +441,7 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
                 </Tooltip>
               ) : (
                 <>
+                  <SessionRowScheduleBadge sessionId={s.id} />
                   <SessionRowTime s={s} className={styles.sessionTime ?? ''} />
                   <Tooltip content="更多操作">
                     <Button

@@ -304,6 +304,10 @@ export const SettingsScheduleTab: React.FC<Props> = ({
                 void handleDelete(w);
               }}
               onEdit={handleEditClick}
+              onOpenSession={(sid) => {
+                closeSettings();
+                navigateToChatSession(sid);
+              }}
             />
           </SettingsCard>
         </SettingsSection>

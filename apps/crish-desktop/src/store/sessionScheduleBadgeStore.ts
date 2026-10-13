@@ -16,7 +16,8 @@
 
 import { useCallback } from 'react';
 import { create } from 'zustand';
-import type { WorkflowDefinition } from '../api/workflowApi';
+import { listWorkflows, type WorkflowDefinition } from '../api/workflowApi';
+import { listenWorkflowEvents } from '../api/workflow-api/workflowEvents';
 
 export type WorkflowDef = WorkflowDefinition & {
   targetSessionId?: string | null;
@@ -162,19 +163,98 @@ export const useSessionScheduleBadgeStore =
       });
     },
 
-    clear: () =>
+    clear: () => {
+      hasExternalSync = false;
       set((state) =>
         Object.keys(state.bySessionId).length === 0
           ? state
           : { bySessionId: {} }
-      ),
+      );
+    },
   }));
+
+let isHydrated = false;
+let hasExternalSync = false;
+let unlistenWorkflowEvents: (() => void) | null = null;
 
 /**
  * 命令式同步入口：当工作流列表加载或变更时调用，自动按会话粒度比对更新
  */
-export function syncFromWorkflows(workflows: WorkflowDef[]): void {
+export function syncScheduleBadgeStore(workflows: WorkflowDef[]): void {
+  hasExternalSync = true;
   useSessionScheduleBadgeStore.getState().syncFromWorkflows(workflows);
+}
+
+/**
+ * 命令式同步入口别名（向后兼容既有调用方）
+ */
+export function syncFromWorkflows(workflows: WorkflowDef[]): void {
+  syncScheduleBadgeStore(workflows);
+}
+
+async function refreshScheduleBadgeStoreFromBackend(
+  isInitialHydration: boolean
+): Promise<void> {
+  try {
+    const workflows = await listWorkflows();
+    if (!Array.isArray(workflows)) return;
+    if (
+      isInitialHydration &&
+      hasExternalSync &&
+      workflows.length === 0 &&
+      (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window))
+    ) {
+      return;
+    }
+    useSessionScheduleBadgeStore
+      .getState()
+      .syncFromWorkflows(workflows as WorkflowDef[]);
+  } catch {
+    /* swallow-ok: 非 Tauri 环境或单测未 mock listWorkflows 时静默兜底 */
+  }
+}
+
+/**
+ * 幂等全局自水合：
+ * 1. 首次调用时异步拉取 `listWorkflows()` 并灌入 `syncScheduleBadgeStore`；
+ * 2. 监听 `'workflow:created'` / `'workflow:updated'` / `'workflow:deleted'` 事件自动重拉同步。
+ */
+export function ensureScheduleBadgeStoreHydrated(): void {
+  if (isHydrated) return;
+  isHydrated = true;
+
+  void refreshScheduleBadgeStoreFromBackend(true);
+
+  void listenWorkflowEvents(() => {
+    void refreshScheduleBadgeStoreFromBackend(false);
+  })
+    .then((unlisten) => {
+      if (!isHydrated) {
+        unlisten();
+        return;
+      }
+      unlistenWorkflowEvents = unlisten;
+    })
+    .catch(() => {
+      /* swallow-ok: 非 Tauri 环境事件订阅失败时静默降级 */
+    });
+}
+
+/**
+ * 供测试重置水合状态与事件监听并清空 Store
+ */
+export function resetScheduleBadgeStoreHydrationForTest(): void {
+  isHydrated = false;
+  hasExternalSync = false;
+  if (unlistenWorkflowEvents) {
+    try {
+      unlistenWorkflowEvents();
+    } catch {
+      /* swallow-ok: 测试卸载回调异常忽略 */
+    }
+    unlistenWorkflowEvents = null;
+  }
+  useSessionScheduleBadgeStore.getState().clear();
 }
 
 /**
@@ -228,8 +308,11 @@ export function useSessionActiveScheduleCount(
  */
 export const sessionScheduleBadgeStore = {
   syncFromWorkflows,
+  syncScheduleBadgeStore,
+  ensureScheduleBadgeStoreHydrated,
+  resetScheduleBadgeStoreHydrationForTest,
   updateCountsFromWorkflows(workflows: WorkflowDef[]): void {
-    syncFromWorkflows(workflows);
+    syncScheduleBadgeStore(workflows);
   },
   getSchedules(sessionId: string | null | undefined): WorkflowDef[] {
     const sid = typeof sessionId === 'string' ? sessionId.trim() : '';

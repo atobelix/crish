@@ -840,8 +840,15 @@ fn store_key(cron_id: &str) -> String {
 
 /// steering 条目落点（PendingMessageQueue 适配；触发 / 立即执行共用）
 pub(crate) trait SteeringSink: Send + Sync {
-    /// 写入一条 steering 条目（group_id = cron-<cronId>，replaceOrEnqueue 去重）
-    fn enqueue_steering(&self, cron_id: &str, text: String, enqueued_at_ms: u64);
+    /// 写入一条 steering 条目（group_id = cron-<cronId>，replaceOrEnqueue 去重）。
+    /// 当 `target_session_id` 为有效非空会话 ID 时路由至该目标会话，否则回退至 `sched-<cron_id>`。
+    fn enqueue_steering(
+        &self,
+        cron_id: &str,
+        text: String,
+        enqueued_at_ms: u64,
+        target_session_id: Option<&str>,
+    );
 }
 
 /// PendingMessageQueue 适配（与 sched.rs QueuePendingSink 同构）
@@ -857,9 +864,15 @@ impl QueueSteeringSink {
 }
 
 impl SteeringSink for QueueSteeringSink {
-    fn enqueue_steering(&self, cron_id: &str, text: String, enqueued_at_ms: u64) {
+    fn enqueue_steering(
+        &self,
+        cron_id: &str,
+        text: String,
+        enqueued_at_ms: u64,
+        target_session_id: Option<&str>,
+    ) {
         let entry = SteeringInputEntry {
-            session_id: format!("sched-{cron_id}"),
+            session_id: crate::sched::resolve_steering_session_id(cron_id, target_session_id),
             id: format!("{cron_id}-{enqueued_at_ms}"),
             text,
             attachments: Vec::new(),
@@ -1782,13 +1795,17 @@ impl WorkflowBackend {
         workflow.updated_at_ms = now;
         self.store.save(&workflow);
 
-        // steering 条目（§4.8 冻结模板：prompt + 第 N 次触发）
+        // steering 条目（§4.8 冻结模板：prompt + 第 N 次触发；§4.3 绑定目标会话动态路由）
         let formatted_prompt = format!(
             "{}（cron {} 第 {} 次触发）",
             workflow.prompt, workflow.cron_id, workflow.fired_count
         );
-        self.sink
-            .enqueue_steering(cron_id, formatted_prompt.clone(), now);
+        self.sink.enqueue_steering(
+            cron_id,
+            formatted_prompt.clone(),
+            now,
+            resolved_target_session_id.as_deref(),
+        );
 
         let run_id = format!("{}-fire-{}", workflow.cron_id, workflow.fired_count);
         let launcher_opt = self.launcher();
@@ -2204,7 +2221,13 @@ mod tests {
     }
 
     impl SteeringSink for ProbeSink {
-        fn enqueue_steering(&self, cron_id: &str, text: String, enqueued_at_ms: u64) {
+        fn enqueue_steering(
+            &self,
+            cron_id: &str,
+            text: String,
+            enqueued_at_ms: u64,
+            _target_session_id: Option<&str>,
+        ) {
             self.entries
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
@@ -2219,7 +2242,13 @@ mod tests {
     }
 
     impl crate::sched::PendingSink for SchedProbe {
-        fn enqueue_steering(&self, cron_id: &str, text: String, _enqueued_at_ms: u64) {
+        fn enqueue_steering(
+            &self,
+            cron_id: &str,
+            text: String,
+            _enqueued_at_ms: u64,
+            _target_session_id: Option<&str>,
+        ) {
             self.entries
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
@@ -3370,6 +3399,80 @@ mod tests {
             persisted[0].execution_mode.as_deref(),
             Some("isolated"),
             "execution_mode 应同步自愈为 isolated"
+        );
+    }
+
+    /// 11. 阶段 3 §4.3 Steering 动态会话路由验证：绑定 target_session_id 时精确路由至目标对话会话，未绑定时回退至 sched-{cron_id}
+    #[tokio::test]
+    async fn trigger_workflow_steering_routes_to_bound_target_session_or_fallback() {
+        let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+        let store = Arc::new(MemoryWorkflowStore::default());
+        let backend = Arc::new(WorkflowBackend::new(
+            Arc::clone(&store) as Arc<dyn WorkflowStore>,
+            Arc::new(QueueSteeringSink::new(Arc::clone(&queue))),
+        ));
+
+        // 1. 绑定 target_session_id = Some("sess-bound-chat-42".into()) 的任务
+        let bound_wf = backend
+            .create(
+                "绑定会话巡检".to_string(),
+                "检查当前对话分支状态".to_string(),
+                WorkflowScheduleWire::Manual,
+                None,
+                None,
+                true,
+            )
+            .await
+            .expect("创建绑定任务应成功");
+
+        backend
+            .update(
+                &bound_wf.id,
+                WorkflowPatch {
+                    target_session_id: Some("sess-bound-chat-42".to_string()),
+                    execution_mode: Some("current_session".to_string()),
+                    ..WorkflowPatch::default()
+                },
+            )
+            .await
+            .expect("更新 target_session_id 应成功");
+
+        backend.trigger(&bound_wf.id).expect("触发绑定任务应成功");
+
+        let bound_entries = queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .dequeue_all();
+        assert_eq!(bound_entries.len(), 1);
+        assert_eq!(
+            bound_entries[0].session_id, "sess-bound-chat-42",
+            "绑定 target_session_id 时，SteeringInputEntry.session_id 必须精确等于 sess-bound-chat-42"
+        );
+
+        // 2. 未绑定 target_session_id（None）的任务：回退至 sched-{cron_id}
+        let unbound_wf = backend
+            .create(
+                "独立后台巡检".to_string(),
+                "执行全局巡检".to_string(),
+                WorkflowScheduleWire::Manual,
+                None,
+                None,
+                true,
+            )
+            .await
+            .expect("创建未绑定任务应成功");
+
+        backend.trigger(&unbound_wf.id).expect("触发未绑定任务应成功");
+
+        let unbound_entries = queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .dequeue_all();
+        assert_eq!(unbound_entries.len(), 1);
+        assert_eq!(
+            unbound_entries[0].session_id,
+            format!("sched-{}", unbound_wf.id),
+            "未绑定 target_session_id 时，SteeringInputEntry.session_id 必须回退为 sched-<cron_id>"
         );
     }
 }

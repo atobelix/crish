@@ -115,6 +115,12 @@
   color: var(--color-error);
 }
 
+.badgeInterrupted {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning-border);
+}
+
 .badgeCancelled {
   background: var(--bg-secondary);
   color: var(--text-tertiary);

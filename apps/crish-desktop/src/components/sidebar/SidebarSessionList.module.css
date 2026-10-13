@@ -554,6 +554,23 @@
   pointer-events: none;
 }
 
+.sessionScheduleBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-secondary);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.sessionScheduleBadgeCount {
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
 .sessionItem .sessionActionsBtn {
   --btn-icon-size: 16px;
   position: absolute;

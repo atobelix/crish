@@ -89,8 +89,6 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
     ? workflows.find((w) => w.id === selectedRun.workflowId)
     : undefined;
 
-  const st = styles as Record<string, string | undefined>;
-
   return (
     <div
       className={`${styles.runsContainer} ${
@@ -132,7 +130,7 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
           const badgeClass = isSuccess
             ? styles.badgeSuccess
             : isInterrupted
-              ? (st.badgeInterrupted ?? styles.badgeFailed)
+              ? styles.badgeInterrupted
               : isFailed
                 ? styles.badgeFailed
                 : isRunning

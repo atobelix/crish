@@ -82,26 +82,31 @@ export const RunDetailDialog: React.FC<RunDetailDialogProps> = ({
   const statusLabel = workflowRunStatusLabel(run.status);
   const promptText = run.prompt || workflow?.prompt || '（无提示词记录）';
 
+  const statusNorm = (run.status || '').trim().toLowerCase();
   const isSuccess =
-    run.status === 'completed' ||
-    run.status === 'success' ||
-    run.status === 'ok';
+    statusNorm === 'completed' ||
+    statusNorm === 'success' ||
+    statusNorm === 'ok';
+  const isInterrupted = statusNorm === 'interrupted';
   const isFailed =
-    run.status === 'failed' ||
-    run.status === 'error' ||
-    run.status === 'errored';
+    statusNorm === 'failed' ||
+    statusNorm === 'error' ||
+    statusNorm === 'errored';
   const isRunning =
-    run.status === 'running' ||
-    run.status === 'in_progress' ||
-    run.status === 'pending';
+    !isInterrupted &&
+    (statusNorm === 'running' ||
+      statusNorm === 'in_progress' ||
+      statusNorm === 'pending');
 
   const badgeClass = isSuccess
     ? styles.badgeSuccess
-    : isFailed
-      ? styles.badgeFailed
-      : isRunning
-        ? styles.badgeRunning
-        : styles.badgeCancelled;
+    : isInterrupted
+      ? styles.badgeInterrupted
+      : isFailed
+        ? styles.badgeFailed
+        : isRunning
+          ? styles.badgeRunning
+          : styles.badgeCancelled;
 
   const copyToClipboard = async (text: string, key: string) => {
     try {
