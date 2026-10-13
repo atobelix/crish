@@ -1,25 +1,14 @@
 /**
- * 二叉树 resize 控制器 — 处理 branch 分割线的拖拽调整。
+ * 二叉树 resize 控制器 — 处理 branch 分割线的拖拽调整 (Stage 06 Gated Resizing)。
  *
- * 与列/组 resize 不同，二叉树的 resize 针对单个 branch：
- * 拖动 sash 时，根据指针位移计算新的 splitRatio。
- *
- * 要点：
+ * 核心机制：
  * 1. sash 挂在 branch 的两个 child 之间，方向由 branch.direction 决定
- * 2. horizontal branch：sash 沿 X 轴移动，调整左右 child 宽度比
- * 3. vertical branch：sash 沿 Y 轴移动，调整上下 child 高度比
- * 4. 拖拽期间只写 CSS / DOM（`--live-ratio-{branchId}` + 叶子/sash 几何），
- *    不调用 store.resizeBranch，避免全树 re-render
- * 5. pointerup 时 pushHistory + 一次性 resizeBranch(commit=false)；
- *    单击无位移不入历史；Escape 取消不写 store
- * 6. setPointerCapture + disableIframePointerEvents，指针离开窗口仍可干净结束
- *
- * branchRect 来源（系统性修复）：
- * 旧实现查询 `[data-branch-id]` DOM 元素作为 container rect — 但该元素是
- * 6px 宽的 sash 本身，而非 branch 容器，导致 ratio 计算完全错误。
- * 现由 TreeResizeSash 传入 flattenTree 计算的 branch.rect（0-1 占比），
- * 启动时一次性换算为像素坐标（canvas DOM rect × branch.rect），
- * 拖拽期间不再查询 DOM 量测 container。
+ * 2. 拖拽启动时通过 collectSubtreeLeafIds(root, branchId) 精准识别受物理形变影响的叶子集合
+ * 3. 仅对受影响的叶子调用 ResizeObserverManager.suspendPanes(affectedLeafIds) 并标记 data-gated-resizing="true"，
+ *    彻底拔除 document.body.classList.add('tree-resizing') 全局广播，100% 放行后台独立窗格推流与全局浮层
+ * 4. 拖拽期间只写 CSS / DOM（--live-ratio-{branchId} + 叶子/sash 几何），零 Zustand Store 写入、零 React 重渲染
+ * 5. pointerup 时一次性提交 store 并调用 resumePanes(affectedLeafIds) 启动 8ms 时间预算分片排空
+ * 6. 联合 200ms WindowBlurWatchdog（监听 blur / pointercancel / lostpointercapture）实现异常中断快速自愈
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -29,12 +18,14 @@ import {
   flattenTree,
   resizeBranch as resizeBranchTree,
 } from '../store/layout-tree/operations';
+import { collectSubtreeLeafIds } from '../store/layout-tree/topology';
 import { clampSplitRatio } from '../store/layout-tree/types';
 import { disableIframePointerEvents } from '../utils/dragOverlay';
 import {
-  clampSplitRatioForParent,
-  parentPxAlongAxis,
-} from './treeResizeClamp';
+  ResizeObserverManager,
+  WindowBlurWatchdog,
+} from '../utils/ResizeObserverManager';
+import { clampSplitRatioForParent, parentPxAlongAxis } from './treeResizeClamp';
 
 // ── Hook 签名 ───────────────────────────────────────────────────────
 
@@ -64,6 +55,8 @@ export interface UseTreeResizeResult {
 interface ResizeCtx {
   branchId: string;
   direction: 'horizontal' | 'vertical';
+  /** 受本次分支拖拽物理形变影响的叶子节点 ID 集合 */
+  affectedLeafIds: string[];
   /** branch 在屏幕上的像素 rect（启动时一次性计算） */
   pixelRect: { left: number; top: number; width: number; height: number };
   /** 手势开始时的 splitRatio（取消时无需写 store） */
@@ -79,12 +72,17 @@ interface ResizeCtx {
   restoreIframes: () => void;
 }
 
+function escapeCssIdent(value: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(value);
+  }
+  return value.replace(/["\\]/g, '\\$&');
+}
+
 // ── 纯 DOM 实时布局（不写 store） ────────────────────────────────────
 
 function liveRatioVarName(branchId: string): string {
-  // CSS 自定义属性名：id 仅含 [a-z0-9-] 时安全；否则做简单转义
-  const safe = branchId.replace(/[^a-zA-Z0-9_-]/g, '_');
-  return `--live-ratio-${safe}`;
+  return `--live-ratio-${branchId.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
 }
 
 /**
@@ -116,9 +114,7 @@ export function collectLiveResizeDomMap(
 }
 
 function getLiveResizeDomMap(): LiveResizeDomMap {
-  if (!liveResizeDomMap) {
-    liveResizeDomMap = collectLiveResizeDomMap();
-  }
+  if (!liveResizeDomMap) liveResizeDomMap = collectLiveResizeDomMap();
   return liveResizeDomMap;
 }
 
@@ -138,16 +134,14 @@ function paintFlatLayout(
   for (const leaf of leaves) {
     let el = map.leaves.get(leaf.leafId);
     if (!el) {
-      // 缓存未命中时回退查询并补入 map（极少数 id 晚挂载）
       el =
         document.querySelector<HTMLElement>(
-          `[data-leaf-id="${CSS.escape(leaf.leafId)}"]`
+          `[data-leaf-id="${escapeCssIdent(leaf.leafId)}"]`
         ) ?? undefined;
       if (el) map.leaves.set(leaf.leafId, el);
     }
     if (!el) continue;
     const { rect } = leaf;
-    // 两侧 leaf 同步写几何，保证 chat|tool 分屏时右侧面板跟手
     el.style.top = `${rect.y * 100}%`;
     el.style.left = `${rect.x * 100}%`;
     el.style.width = `${rect.width * 100}%`;
@@ -159,7 +153,7 @@ function paintFlatLayout(
     if (!el) {
       el =
         document.querySelector<HTMLElement>(
-          `[data-branch-id="${CSS.escape(branch.branchId)}"]`
+          `[data-branch-id="${escapeCssIdent(branch.branchId)}"]`
         ) ?? undefined;
       if (el) map.branches.set(branch.branchId, el);
     }
@@ -181,8 +175,7 @@ function paintFlatLayout(
 
 function getActiveCollapsedDomain(): 'tool' | undefined {
   const root = getCompositionRoot();
-  const shell = root.shell.getState();
-  const tab = shell.getActiveTab();
+  const tab = root.shell.getState().getActiveTab();
   const collapsed = tab?.dock
     ? tab.dock.collapsed
     : root.tree.getState().toolColumnCollapsed;
@@ -218,15 +211,11 @@ function clearLiveCssVar(ctx: ResizeCtx): void {
 export function useTreeResize(): UseTreeResizeResult {
   const [resizingBranchId, setResizingBranchId] = useState<string | null>(null);
 
-  // 拖拽上下文（ref 避免频繁 re-render）
   const resizeCtxRef = useRef<ResizeCtx | null>(null);
   const rafIdRef = useRef<number | null>(null);
   const pendingPointerRef = useRef<PointerEvent | null>(null);
 
-  // 动作引用稳定；勿在 render 路径订阅 tree / past（避免 sash 父级无谓 re-render）
-  // endResize 内用 getState() 取最新 action，deps 不必绑 store selector
-
-  // ── 启动 resize ──────────────────────────────────────────────
+  // ── 启动 resize (Gated Resizing) ─────────────────────────────
 
   const startResize = useCallback(
     (branchId: string, branchRect: BranchRect, e: React.PointerEvent) => {
@@ -234,13 +223,10 @@ export function useTreeResize(): UseTreeResizeResult {
       e.preventDefault();
       e.stopPropagation();
 
-      // 从 compositionRoot.tree 读取 branch 信息（命令式；不订阅）
       const state = getCompositionRoot().tree.getState();
       const node = findNodeById(state.tree.root, branchId);
       if (!node || !isBranch(node)) return;
 
-      // 将 branch.rect（0-1 占比）转换为屏幕像素坐标
-      // 需要查询 canvas DOM 一次（启动时，非拖拽中）
       const canvas = document.querySelector<HTMLElement>(
         '[data-tree-canvas="true"]'
       );
@@ -260,6 +246,12 @@ export function useTreeResize(): UseTreeResizeResult {
         /* ignore — 部分环境 / 非 primary 指针可能失败 */
       }
 
+      // 1. 拓扑分析：精准锁定受本次分屏拖拽形变影响的叶子节点 ID 集合
+      const affectedLeafIds = collectSubtreeLeafIds(state.tree.root, branchId);
+
+      // 2. 细粒度窗格级挂起：仅挂起受影响叶子，放行后台推流窗格与全局浮层
+      ResizeObserverManager.getInstance().suspendPanes(affectedLeafIds);
+
       const restoreIframes = disableIframePointerEvents();
       const liveCssVar = liveRatioVarName(branchId);
       const startRatio = clampSplitRatio(node.splitRatio);
@@ -267,6 +259,7 @@ export function useTreeResize(): UseTreeResizeResult {
       resizeCtxRef.current = {
         branchId,
         direction: node.direction,
+        affectedLeafIds,
         pixelRect,
         startRatio,
         lastRatio: startRatio,
@@ -278,30 +271,41 @@ export function useTreeResize(): UseTreeResizeResult {
         restoreIframes,
       };
 
+      // 3. 标记局部 Canvas 属性与受影响 Leaf 的 data-gated-resizing 属性
       canvas.setAttribute('data-live-resize-branch', branchId);
       canvas.style.setProperty(liveCssVar, String(startRatio));
 
-      // S4.3：手势开始预热 leaf/sash DOM map，pointermove 热路径只查 Map
       liveResizeDomMap = collectLiveResizeDomMap();
+      for (const leafId of affectedLeafIds) {
+        const leafEl =
+          liveResizeDomMap.leaves.get(leafId) ??
+          canvas.querySelector<HTMLElement>(
+            `[data-leaf-id="${escapeCssIdent(leafId)}"]`
+          );
+        leafEl?.setAttribute('data-gated-resizing', 'true');
+      }
 
-      setResizingBranchId(branchId);
-      document.body.classList.add('tree-resizing');
+      // 4. 绝不向 document.body 广播 tree-resizing 全局冻结类名，仅设置交互光标
       document.body.style.cursor =
         node.direction === 'horizontal' ? 'col-resize' : 'row-resize';
+      setResizingBranchId(branchId);
     },
     []
   );
 
   // ── 计算 ratio（像素感知 min child + store 绝对上下限） ─────
 
-  const ratioFromEvent = useCallback((e: PointerEvent, ctx: ResizeCtx): number => {
-    const parentPx = parentPxAlongAxis(ctx.pixelRect, ctx.direction);
-    const raw =
-      ctx.direction === 'horizontal'
-        ? (e.clientX - ctx.pixelRect.left) / parentPx
-        : (e.clientY - ctx.pixelRect.top) / parentPx;
-    return clampSplitRatioForParent(raw, parentPx);
-  }, []);
+  const ratioFromEvent = useCallback(
+    (e: PointerEvent, ctx: ResizeCtx): number => {
+      const parentPx = parentPxAlongAxis(ctx.pixelRect, ctx.direction);
+      const raw =
+        ctx.direction === 'horizontal'
+          ? (e.clientX - ctx.pixelRect.left) / parentPx
+          : (e.clientY - ctx.pixelRect.top) / parentPx;
+      return clampSplitRatioForParent(raw, parentPx);
+    },
+    []
+  );
 
   // ── 拖拽移动（rAF 节流；只写 CSS/DOM） ───────────────────────
 
@@ -318,9 +322,7 @@ export function useTreeResize(): UseTreeResizeResult {
     ctx.didMove = true;
     ctx.lastRatio = ratio;
 
-    // 1) canvas CSS 变量 — 布局可读取；当前由 hook 直接刷 DOM 消费
     ctx.canvas.style.setProperty(ctx.liveCssVar, String(ratio));
-    // 2) 叶子 + sash 几何（不写 store）— 两侧 leaf 同帧更新
     applyLiveLayout(ctx.branchId, ratio);
   }, [ratioFromEvent]);
 
@@ -352,16 +354,31 @@ export function useTreeResize(): UseTreeResizeResult {
     }
 
     clearLiveCssVar(ctx);
+
+    // 移除受影响 Leaf 上的 data-gated-resizing 局部属性
+    for (const leafId of ctx.affectedLeafIds) {
+      const leafEl =
+        liveResizeDomMap?.leaves.get(leafId) ??
+        ctx.canvas.querySelector<HTMLElement>(
+          `[data-leaf-id="${escapeCssIdent(leafId)}"]`
+        ) ??
+        document.querySelector<HTMLElement>(
+          `[data-leaf-id="${escapeCssIdent(leafId)}"]`
+        );
+      leafEl?.removeAttribute('data-gated-resizing');
+    }
+
+    // 解冻受影响窗格并启动 8ms 时间预算分片排空循环
+    ResizeObserverManager.getInstance().resumePanes(ctx.affectedLeafIds);
+
     try {
       ctx.restoreIframes();
     } catch {
       /* ignore */
     }
 
-    // S4.3：手势结束丢弃 DOM map，下一轮 resize 重新扫描
     clearLiveResizeDomCache();
 
-    document.body.classList.remove('tree-resizing');
     document.body.style.cursor = '';
     resizeCtxRef.current = null;
     setResizingBranchId(null);
@@ -371,9 +388,6 @@ export function useTreeResize(): UseTreeResizeResult {
     const ctx = resizeCtxRef.current;
     if (!ctx) return;
 
-    // 吞掉尚未绘制的 pointermove（rAF 可能尚未跑）
-    // 只用 move 事件更新 ratio — 不用 pointerup 坐标，避免单击 sash
-    // 时因 6px 热区中心偏移把 startRatio 误当成变化并 commit。
     if (rafIdRef.current !== null) {
       cancelAnimationFrame(rafIdRef.current);
       rafIdRef.current = null;
@@ -387,21 +401,15 @@ export function useTreeResize(): UseTreeResizeResult {
 
     const { branchId, lastRatio, didMove, startRatio } = ctx;
 
-    // 提交：有 move 且 ratio 相对起点有变化时写一次 store
-    // 历史在 commit 前推入（store 仍是 pre-resize）
     if (didMove && lastRatio !== startRatio) {
-      // 确保最终帧已刷到 DOM（pending move 可能跳过了 rAF）
       applyLiveLayout(branchId, lastRatio);
       ctx.canvas.style.setProperty(ctx.liveCssVar, String(lastRatio));
       const store = getCompositionRoot().tree.getState();
       store.pushHistory();
       store.resizeBranch(branchId, lastRatio, false);
-      // store 更新后 React 会用新 rect 刷 style；DOM 已是 final ratio，无闪烁
     } else if (didMove) {
-      // 移回起点：恢复 store 几何（store 未改，需手动还原 live DOM）
       restoreLayoutFromStore();
     }
-    // 单击无移动：无历史、无 store 写
 
     cleanupGesture(ctx);
   }, [cleanupGesture, ratioFromEvent]);
@@ -409,19 +417,35 @@ export function useTreeResize(): UseTreeResizeResult {
   const cancelResize = useCallback(() => {
     const ctx = resizeCtxRef.current;
     if (!ctx) return;
-    // 取消：不写 store，把 live DOM 还原为 store 几何
     restoreLayoutFromStore();
     cleanupGesture(ctx);
   }, [cleanupGesture]);
 
-  // ── 全局事件监听（仅在 resize 中挂载） ───────────────────────
+  // ── 全局事件监听与 200ms Windows 异常中断看门狗 ──────────────
 
   useEffect(() => {
     if (!resizingBranchId) return;
 
+    const mgr = ResizeObserverManager.getInstance();
+    const captureEl = resizeCtxRef.current?.captureEl;
+
+    const handleInterrupt = () => {
+      if (resizeCtxRef.current) {
+        mgr.armWatchdog(WindowBlurWatchdog.DEFAULT_TIMEOUT_MS);
+      }
+    };
+
+    const unsubWatchdog = mgr.onWatchdogRecover(() => {
+      if (resizeCtxRef.current) {
+        endResize();
+      }
+    });
+
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', endResize);
-    window.addEventListener('pointercancel', endResize);
+    window.addEventListener('blur', handleInterrupt);
+    window.addEventListener('pointercancel', handleInterrupt);
+    captureEl?.addEventListener('lostpointercapture', handleInterrupt);
 
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -431,15 +455,25 @@ export function useTreeResize(): UseTreeResizeResult {
     window.addEventListener('keydown', handleEscape);
 
     return () => {
+      unsubWatchdog();
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', endResize);
-      window.removeEventListener('pointercancel', endResize);
+      window.removeEventListener('blur', handleInterrupt);
+      window.removeEventListener('pointercancel', handleInterrupt);
+      captureEl?.removeEventListener('lostpointercapture', handleInterrupt);
       window.removeEventListener('keydown', handleEscape);
     };
   }, [resizingBranchId, handlePointerMove, endResize, cancelResize]);
 
-  // 稳定返回对象：避免父级把 controller 当 prop 时默认 React.memo 每次失效
-  // （TreeResizeSash 已改为收 startResize + isResizing，此处仍保持 API 稳定）
+  // 组件卸载保底清理：防止拖拽中途卸载遗留挂起窗格
+  useEffect(() => {
+    return () => {
+      if (resizeCtxRef.current) {
+        cleanupGesture(resizeCtxRef.current);
+      }
+    };
+  }, [cleanupGesture]);
+
   return useMemo(
     () => ({
       resizingBranchId,

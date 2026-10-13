@@ -1,4 +1,10 @@
-import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
+import React, {
+  useState,
+  useRef,
+  useMemo,
+  useEffect,
+  useCallback,
+} from 'react';
 import { createPortal } from 'react-dom';
 import type { SmartPanelProps, MenuItem, MenuGroup } from './types';
 import { SmartSearchHeader } from './SmartSearchHeader';
@@ -11,47 +17,89 @@ import { useWheelIsolation } from './hooks/useWheelIsolation';
 import styles from './SmartPanel.module.css';
 
 function isMenuGroup(entry: MenuItem | MenuGroup): entry is MenuGroup {
-  return typeof entry === 'object' && entry !== null && Array.isArray((entry as MenuGroup).items);
+  return (
+    typeof entry === 'object' &&
+    entry !== null &&
+    Array.isArray((entry as MenuGroup).items)
+  );
 }
 
 export const SmartPanel: React.FC<SmartPanelProps> = (props) => {
   const {
-    items = [], open, trigger, triggerRef, anchor, point,
-    searchPlaceholder = '搜索...', enableSearch = false, searchRightActions,
-    enableDivider = true, enableTriangleAim = true, position: positionConfig,
-    useContainerBoundary, containerBoundaryRef, container,
-    title, header, footer, ariaLabel, role = 'menu',
-    className = '', style, panelRef: panelRefProp, dataTestId,
-    onSelect, onOpen, onClose, onOpenChange, renderItem, children,
+    items = [],
+    open,
+    trigger,
+    triggerRef,
+    anchor,
+    point,
+    searchPlaceholder = '搜索...',
+    enableSearch = false,
+    searchRightActions,
+    enableDivider = true,
+    enableTriangleAim = true,
+    position: positionConfig,
+    useContainerBoundary,
+    containerBoundaryRef,
+    container,
+    title,
+    header,
+    footer,
+    ariaLabel,
+    role = 'menu',
+    className = '',
+    style,
+    panelRef: panelRefProp,
+    dataTestId,
+    onSelect,
+    onOpen,
+    onClose,
+    onOpenChange,
+    renderItem,
+    children,
   } = props;
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeSubmenuItem, setActiveSubmenuItem] = useState<MenuItem | null>(null);
+  const [activeSubmenuItem, setActiveSubmenuItem] = useState<MenuItem | null>(
+    null
+  );
   const [parentItemRect, setParentItemRect] = useState<DOMRect | null>(null);
 
   const internalPanelRef = useRef<HTMLDivElement | null>(null);
   const panelRef = panelRefProp || internalPanelRef;
   const listRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const { isPointerInSafeZone, clearSubmenu } = useSafeAim({ enabled: enableTriangleAim });
+  const { isPointerInSafeZone, clearSubmenu } = useSafeAim({
+    enabled: enableTriangleAim,
+  });
 
   useWheelIsolation(listRef, open);
 
   const filteredGroups = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return items;
-    const match = (it: MenuItem) => Boolean(
-      it.label?.toLowerCase().includes(q) ||
-      it.sublabel?.toLowerCase().includes(q) ||
-      it.searchKeywords?.toLowerCase().includes(q)
-    );
+    const match = (it: MenuItem) =>
+      Boolean(
+        it.label?.toLowerCase().includes(q) ||
+        it.sublabel?.toLowerCase().includes(q) ||
+        it.searchKeywords?.toLowerCase().includes(q)
+      );
     return items
-      .map((entry) => (isMenuGroup(entry) ? { ...entry, items: entry.items.filter(match) } : match(entry) ? entry : null))
-      .filter((entry): entry is MenuItem | MenuGroup => (entry ? (isMenuGroup(entry) ? entry.items.length > 0 : true) : false));
+      .map((entry) =>
+        isMenuGroup(entry)
+          ? { ...entry, items: entry.items.filter(match) }
+          : match(entry)
+            ? entry
+            : null
+      )
+      .filter((entry): entry is MenuItem | MenuGroup =>
+        entry ? (isMenuGroup(entry) ? entry.items.length > 0 : true) : false
+      );
   }, [items, searchQuery]);
 
   const flatNavItems = useMemo(() => {
     const flat: MenuItem[] = [];
-    filteredGroups.forEach((e) => (isMenuGroup(e) ? e.items.forEach((i) => flat.push(i)) : flat.push(e)));
+    filteredGroups.forEach((e) =>
+      isMenuGroup(e) ? e.items.forEach((i) => flat.push(i)) : flat.push(e)
+    );
     return flat;
   }, [filteredGroups]);
 
@@ -96,7 +144,12 @@ export const SmartPanel: React.FC<SmartPanelProps> = (props) => {
     if (!open) return;
     const onMouseDown = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (panelRef.current?.contains(target) || triggerRef?.current?.contains(target) || anchor?.current?.contains(target)) return;
+      if (
+        panelRef.current?.contains(target) ||
+        triggerRef?.current?.contains(target) ||
+        anchor?.current?.contains(target)
+      )
+        return;
       handleClose();
     };
     document.addEventListener('mousedown', onMouseDown, true);
@@ -116,7 +169,10 @@ export const SmartPanel: React.FC<SmartPanelProps> = (props) => {
       setParentItemRect(el.getBoundingClientRect());
       return;
     }
-    const pt = { x: el.getBoundingClientRect().left, y: el.getBoundingClientRect().top };
+    const pt = {
+      x: el.getBoundingClientRect().left,
+      y: el.getBoundingClientRect().top,
+    };
     if (!isPointerInSafeZone(pt)) {
       setActiveSubmenuItem(null);
       clearSubmenu();
@@ -131,8 +187,16 @@ export const SmartPanel: React.FC<SmartPanelProps> = (props) => {
       role={role}
       aria-label={ariaLabel || title}
       data-testid={dataTestId || props['data-testid']}
+      data-state="open"
+      data-side={position.directionY === 'up' ? 'top' : 'bottom'}
       className={`${styles.container} ${className}`}
-      style={{ position: 'fixed', left: `${position.x}px`, top: `${position.y}px`, transformOrigin: position.origin, ...style }}
+      style={{
+        position: 'fixed',
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        transformOrigin: position.origin,
+        ...style,
+      }}
       onKeyDown={handleKeyDown}
     >
       <div className={styles.panel}>
@@ -150,7 +214,11 @@ export const SmartPanel: React.FC<SmartPanelProps> = (props) => {
         <div
           ref={listRef}
           className={styles.listContainer}
-          style={{ maxHeight: position.allowedListHeight ? `${position.allowedListHeight}px` : undefined }}
+          style={{
+            maxHeight: position.allowedListHeight
+              ? `${position.allowedListHeight}px`
+              : undefined,
+          }}
         >
           {children || (
             <SmartPanelList
@@ -181,8 +249,14 @@ export const SmartPanel: React.FC<SmartPanelProps> = (props) => {
     </div>
   );
 
-  const mountTarget = container || (typeof document !== 'undefined' ? document.body : null);
-  return mountTarget ? <>{trigger}{createPortal(portalContent, mountTarget)}</> : null;
+  const mountTarget =
+    container || (typeof document !== 'undefined' ? document.body : null);
+  return mountTarget ? (
+    <>
+      {trigger}
+      {createPortal(portalContent, mountTarget)}
+    </>
+  ) : null;
 };
 
 SmartPanel.displayName = 'SmartPanel';

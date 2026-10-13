@@ -17,7 +17,11 @@ import { buildSectionTitleHints } from '../../../api/sessionListTitleHint';
 import { storeSessionSearchQuery } from '../../../api/sessionSearch';
 import styles from '../SidebarSessionList.module.css';
 import { SessionRow } from './SessionRow';
-import { dedupeSessionsById } from './sessionListUtils';
+import {
+  dedupeSessionsById,
+  SESSION_LIST_GENERAL_LABEL,
+  sessionListProjectLabel,
+} from './sessionListUtils';
 import type { SidebarSessionListProps } from './sessionListTypes';
 import { useSessionListDrag } from './useSessionListDrag';
 import { useSessionGrouping } from './useSessionGrouping';
@@ -40,6 +44,7 @@ export function useSidebarSessionList(
     activeSessionId,
     searchQuery,
     sortType,
+    groupType = 'folder',
     filterType,
     projects,
     collapsedProjects,
@@ -174,6 +179,8 @@ export function useSidebarSessionList(
     sortedSessions,
     projects,
     sortType,
+    groupType,
+    filterType,
     dragPreview,
     dragSession,
     isDragging,
@@ -181,15 +188,23 @@ export function useSidebarSessionList(
     onTogglePinned,
   });
 
-  const titleHints = useMemo(
-    () =>
-      buildSectionTitleHints([
-        pinnedSessions,
-        ...Object.values(byProjectId),
-        generalSessions,
-      ]),
-    [pinnedSessions, byProjectId, generalSessions]
-  );
+  const titleHints = useMemo(() => {
+    const base = buildSectionTitleHints([
+      pinnedSessions,
+      ...Object.values(byProjectId),
+      generalSessions,
+    ]);
+    if (groupType !== 'none') return base;
+    const merged = new Map(base);
+    for (const s of generalSessions) {
+      const projLabel = sessionListProjectLabel(s.folder, projects);
+      if (projLabel && projLabel !== SESSION_LIST_GENERAL_LABEL) {
+        const existing = merged.get(s.id);
+        merged.set(s.id, existing ? `${projLabel} · ${existing}` : projLabel);
+      }
+    }
+    return merged;
+  }, [pinnedSessions, byProjectId, generalSessions, groupType, projects]);
 
   const activeGeneralIndex = useMemo(() => {
     if (!activeSessionId) return null;
@@ -202,7 +217,11 @@ export function useSidebarSessionList(
     if (!pinnedCollapsed) {
       for (const s of pinnedSessions) ids.push(s.id);
     }
-    if (!projectsSectionCollapsed && filterType !== 'pinned') {
+    if (
+      groupType !== 'none' &&
+      !projectsSectionCollapsed &&
+      filterType !== 'pinned'
+    ) {
       for (const p of projects) {
         if (collapsedProjects[p.id]) continue;
         const sess = byProjectId[p.id] || [];
@@ -216,6 +235,7 @@ export function useSidebarSessionList(
   }, [
     pinnedCollapsed,
     pinnedSessions,
+    groupType,
     projectsSectionCollapsed,
     filterType,
     projects,
@@ -365,8 +385,10 @@ export function useSidebarSessionList(
     ]
   );
 
-  const isAllEmpty = !isSearching && visibleSessions.length === 0;
+  const isAllEmpty =
+    !isSearching && filterType === 'all' && visibleSessions.length === 0;
   const showProjectsAndGeneral = filterType !== 'pinned';
+  const showProjectsSection = filterType !== 'pinned' && groupType !== 'none';
 
   return {
     visibleSessions,
@@ -386,6 +408,7 @@ export function useSidebarSessionList(
     isSearchEmpty,
     isAllEmpty,
     showProjectsAndGeneral,
+    showProjectsSection,
     nowTick,
     renderSessionItem,
     listClassName: isDragging ? styles.sidebarDragging : undefined,

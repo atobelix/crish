@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { SessionState } from '../../../store/types';
 import { groupUnpinnedByProject } from '../../../store/storeAccess';
 import type { ProjectEntry } from '../../../api/projectStore';
-import { sessionListDisplayTitle } from '../../../api/sessionTitle';
 import {
   applyDragPreview,
   isPreviewTargetSection,
@@ -11,71 +10,52 @@ import {
 
 /**
  * 分组/折叠状态 hook（03-detail T10 拆分：useSessionGrouping）。
- * 分区排序 + 拖拽预览覆盖 + 空置顶自动折叠/拖拽展开内聚于此。
+ * 分区排序 + 分组方式（folder/none）+ 拖拽预览覆盖 + 空置顶自动折叠/拖拽展开内聚于此。
  */
 export function useSessionGrouping({
-  sessions,
   sortedSessions,
   projects,
-  sortType,
+  groupType = 'folder',
+  filterType = 'all',
   dragPreview,
   dragSession,
   isDragging,
   pinnedCollapsed,
   onTogglePinned,
 }: {
-  sessions: SessionState[];
+  sessions?: SessionState[];
   sortedSessions: SessionState[];
   projects: ProjectEntry[];
-  sortType: 'active' | 'name';
+  sortType?: 'active' | 'name';
+  groupType?: 'folder' | 'none';
+  filterType?: 'all' | 'pinned';
   dragPreview: SessionDragPreview | null;
   dragSession: SessionState | null;
   isDragging: boolean;
   pinnedCollapsed: boolean;
   onTogglePinned: () => void;
 }) {
-  /** sessions[] index — pin stack free-reorder is stored here via moveSessionRealtime. */
-  const sessionOrderIndex = useMemo(() => {
-    const m = new Map<string, number>();
-    sessions.forEach((s, i) => m.set(s.id, i));
-    return m;
-  }, [sessions]);
-
-  // 分区内一律按 sessions[] 顺序展示（拖拽重排才能持久）；仅 sortType==='name' 时按标题排。
-  // 拖拽中 applyDragPreview 覆盖预览顺序。
-  const bySessionArrayOrder = useCallback(
-    (list: SessionState[]) => {
-      if (sortType === 'name') {
-        return [...list].sort((a, b) =>
-          sessionListDisplayTitle(a).localeCompare(sessionListDisplayTitle(b))
-        );
-      }
-      return [...list].sort(
-        (a, b) =>
-          (sessionOrderIndex.get(a.id) ?? 0) -
-          (sessionOrderIndex.get(b.id) ?? 0)
-      );
-    },
-    [sortType, sessionOrderIndex]
-  );
-
+  // sortedSessions 已在 useSessionSearch 中按 sortType ('active' 最近活跃 / 'name' 名称) 完成排序
   const basePinned = useMemo(
-    () => bySessionArrayOrder(sortedSessions.filter((s) => s.isPinned)),
-    [sortedSessions, bySessionArrayOrder]
+    () => sortedSessions.filter((s) => s.isPinned),
+    [sortedSessions]
   );
 
   const baseUnpinned = useMemo(
-    () => bySessionArrayOrder(sortedSessions.filter((s) => !s.isPinned)),
-    [sortedSessions, bySessionArrayOrder]
+    () => sortedSessions.filter((s) => !s.isPinned),
+    [sortedSessions]
   );
 
-  const { byProjectId: baseByProjectId, general: baseGeneral } = useMemo(
-    () => groupUnpinnedByProject(baseUnpinned, projects),
-    [baseUnpinned, projects]
-  );
+  const { byProjectId: baseByProjectId, general: baseGeneral } = useMemo(() => {
+    if (groupType === 'none') {
+      const emptyByProj: Record<string, SessionState[]> = Object.create(null);
+      for (const p of projects) emptyByProj[p.id] = [];
+      return { byProjectId: emptyByProj, general: baseUnpinned };
+    }
+    return groupUnpinnedByProject(baseUnpinned, projects);
+  }, [baseUnpinned, projects, groupType]);
 
-  // Live drag: inject optimistic section order so rows shift in place (activity
-  // sort alone cannot reflect array-position moves from moveSessionRealtime).
+  // Live drag: inject optimistic section order so rows shift in place
   const pinnedSessions = useMemo(() => {
     if (!dragPreview || !dragSession) return basePinned;
     return applyDragPreview(
@@ -87,7 +67,9 @@ export function useSessionGrouping({
   }, [basePinned, dragPreview, dragSession]);
 
   const byProjectId = useMemo(() => {
-    if (!dragPreview || !dragSession) return baseByProjectId;
+    if (groupType === 'none' || !dragPreview || !dragSession) {
+      return baseByProjectId;
+    }
     const next: Record<string, SessionState[]> = {};
     for (const p of projects) {
       const list = baseByProjectId[p.id] || [];
@@ -109,26 +91,25 @@ export function useSessionGrouping({
       );
     }
     return next;
-  }, [baseByProjectId, dragPreview, dragSession, projects]);
+  }, [baseByProjectId, dragPreview, dragSession, projects, groupType]);
 
   const generalSessions = useMemo(() => {
     if (!dragPreview || !dragSession) return baseGeneral;
-    return applyDragPreview(
-      baseGeneral,
-      dragPreview,
-      dragSession,
-      isPreviewTargetSection(dragPreview, 'general')
-    );
-  }, [baseGeneral, dragPreview, dragSession]);
+    const isTarget =
+      groupType === 'none'
+        ? !dragPreview.isPinned
+        : isPreviewTargetSection(dragPreview, 'general');
+    return applyDragPreview(baseGeneral, dragPreview, dragSession, isTarget);
+  }, [baseGeneral, dragPreview, dragSession, groupType]);
 
-  // Auto-collapse empty pin section — skip while dragging so the drop zone stays open.
+  // Auto-collapse empty pin section — skip while dragging or when filterType === 'pinned'.
   useEffect(() => {
-    if (isDragging) return;
+    if (isDragging || filterType === 'pinned') return;
     if (pinnedSessions.length === 0 && !pinnedCollapsed) {
       onTogglePinned();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 原始依赖面保留
-  }, [pinnedSessions.length, isDragging]);
+  }, [pinnedSessions.length, isDragging, filterType]);
 
   // Expand pin zone when a drag starts so empty/collapsed 置顶 still accepts drops.
   useEffect(() => {

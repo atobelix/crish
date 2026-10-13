@@ -12,15 +12,19 @@ import { AppIcon } from '../ui/icons/index';
 
 type FlyKey = 'sort' | 'group' | 'filter' | null;
 
+const FLY_ORDER: NonNullable<FlyKey>[] = ['sort', 'group', 'filter'];
+
 /** 排序下拉 flyout 行（sort/group/filter 三行同构基件） */
 const FlyoutRow: React.FC<{
   type: NonNullable<FlyKey>;
   label: string;
+  valueLabel: string;
   open: boolean;
   flyoutRef: (el: HTMLDivElement | null) => void;
   rowRef: (el: HTMLDivElement | null) => void;
   onFlyEnter: () => void;
   onFlyLeave: () => void;
+  onFlyClick: () => void;
   onFlyoutEnter: () => void;
   onFlyoutLeave: () => void;
   onRowKeyDown: (e: React.KeyboardEvent) => void;
@@ -29,11 +33,13 @@ const FlyoutRow: React.FC<{
 }> = ({
   type,
   label,
+  valueLabel,
   open,
   flyoutRef,
   rowRef,
   onFlyEnter,
   onFlyLeave,
+  onFlyClick,
   onFlyoutEnter,
   onFlyoutLeave,
   onRowKeyDown,
@@ -63,8 +69,8 @@ const FlyoutRow: React.FC<{
   useLayoutEffect(() => {
     if (!open || !localRowElRef.current) return;
     const rowRect = localRowElRef.current.getBoundingClientRect();
-    const flyoutWidth = localFlyoutElRef.current?.offsetWidth || 148;
-    setFlipLeft(rowRect.right + flyoutWidth > window.innerWidth - 8);
+    const flyoutWidth = localFlyoutElRef.current?.offsetWidth || 156;
+    setFlipLeft(rowRect.right + flyoutWidth + 10 > window.innerWidth - 8);
   }, [open]);
 
   return (
@@ -78,12 +84,28 @@ const FlyoutRow: React.FC<{
       aria-expanded={open}
       onMouseEnter={onFlyEnter}
       onMouseLeave={onFlyLeave}
+      onClick={(e) => {
+        if (
+          localFlyoutElRef.current &&
+          e.target instanceof Node &&
+          localFlyoutElRef.current.contains(e.target)
+        ) {
+          return;
+        }
+        onFlyClick();
+      }}
       onKeyDown={onRowKeyDown}
     >
       <span className={styles.sortFilterRowLabel}>{label}</span>
-      <AppIcon name="chevron-right" size={14}
-        className={styles.sortFilterChev}
-        aria-hidden />
+      <span className={styles.sortFilterRowRight}>
+        <span className={styles.sortFilterRowValue}>{valueLabel}</span>
+        <AppIcon
+          name="chevron-right"
+          size={14}
+          className={styles.sortFilterChev}
+          aria-hidden
+        />
+      </span>
       {open ? (
         <div
           ref={handleFlyoutRef}
@@ -109,18 +131,24 @@ const FlyoutOption: React.FC<{
 }> = ({ checked, onSelect, children }) => {
   return (
     <Button
-      variant="ghost"
+      bare
       type="button"
       role="menuitemradio"
       aria-checked={checked}
       className={`${styles.sortFilterOption} ${checked ? styles.isOn : ''}`}
-      onClick={onSelect}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect();
+      }}
     >
       <span>{children}</span>
       {checked ? (
-        <AppIcon name="check" size={16}
+        <AppIcon
+          name="check"
+          size={14}
           className={styles.sortFilterCheck}
-          aria-hidden />
+          aria-hidden
+        />
       ) : null}
     </Button>
   );
@@ -128,7 +156,7 @@ const FlyoutOption: React.FC<{
 
 /**
  * 排序/分组/过滤下拉（ui/Menu 基座 + 自研 flyout 状态机）。
- * flyout 状态机 + 键盘漫游（ArrowRight/ArrowLeft/Esc）+ 宽限期关闭语义
+ * flyout 状态机 + 键盘漫游（ArrowRight/ArrowLeft/ArrowUp/ArrowDown/Esc）+ 宽限期关闭语义
  * 全部内聚于本基件（03-detail T10 拆分）。
  */
 export const ContextMenuFlyout: React.FC<{
@@ -159,8 +187,22 @@ export const ContextMenuFlyout: React.FC<{
   const [fly, setFly] = useState<FlyKey>(null);
   const flyTimerRef = useRef<{ enter?: number; leave?: number }>({});
 
+  const clearFlyTimers = useCallback(() => {
+    clearTimeout(flyTimerRef.current.enter);
+    clearTimeout(flyTimerRef.current.leave);
+  }, []);
+
+  useEffect(() => {
+    if (!sortDropdownOpen) {
+      clearFlyTimers();
+      setFly(null);
+    }
+    return clearFlyTimers;
+  }, [sortDropdownOpen, clearFlyTimers]);
+
   const handleFlyEnter = useCallback((type: FlyKey) => {
     clearTimeout(flyTimerRef.current.leave);
+    clearTimeout(flyTimerRef.current.enter);
     flyTimerRef.current.enter = window.setTimeout(() => {
       setFly(type);
     }, 80);
@@ -170,6 +212,7 @@ export const ContextMenuFlyout: React.FC<{
   // 宽限期内移入飞层内部（onMouseEnter 取消）不误关
   const handleFlyLeave = useCallback((type: FlyKey) => {
     clearTimeout(flyTimerRef.current.enter);
+    clearTimeout(flyTimerRef.current.leave);
     flyTimerRef.current.leave = window.setTimeout(() => {
       setFly((prev) => (prev === type ? null : prev));
     }, 150);
@@ -179,8 +222,15 @@ export const ContextMenuFlyout: React.FC<{
     clearTimeout(flyTimerRef.current.leave);
   }, []);
 
-  // F7-F12：flyout/入口行 DOM 引用（键盘导航焦点落点；sortMenuRef 由
-  // 外部持有但未挂载到元素，不可依赖）
+  const handleFlyClick = useCallback(
+    (type: NonNullable<FlyKey>) => {
+      clearFlyTimers();
+      setFly(type);
+    },
+    [clearFlyTimers]
+  );
+
+  // F7-F12：flyout/入口行 DOM 引用
   const flyoutRefs = useRef<Record<NonNullable<FlyKey>, HTMLDivElement | null>>(
     {
       sort: null,
@@ -194,13 +244,13 @@ export const ContextMenuFlyout: React.FC<{
     filter: null,
   });
 
-  // F7-F12：ArrowRight 打开 flyout 并聚焦首项；ArrowLeft/Esc 关闭
-  // flyout 并聚焦回入口行（行 role=menuitem + tabIndex=0，键盘可达）
+  // F7-F12：ArrowRight/Enter/Space 打开 flyout 并聚焦首项；ArrowUp/ArrowDown 在父行间导航
   const handleRowKeyDown = useCallback(
     (type: NonNullable<FlyKey>, e: React.KeyboardEvent) => {
-      if (e.key === 'ArrowRight') {
+      if (e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         e.stopPropagation();
+        clearFlyTimers();
         setFly(type);
         requestAnimationFrame(() => {
           const first = flyoutRefs.current[type]?.querySelector<HTMLElement>(
@@ -208,9 +258,21 @@ export const ContextMenuFlyout: React.FC<{
           );
           first?.focus();
         });
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        e.stopPropagation();
+        const idx = FLY_ORDER.indexOf(type);
+        const nextIdx =
+          (idx + (e.key === 'ArrowDown' ? 1 : -1) + FLY_ORDER.length) %
+          FLY_ORDER.length;
+        const nextType = FLY_ORDER[nextIdx]!;
+        setFly(null);
+        rowRefs.current[nextType]?.focus();
       }
     },
-    []
+    [clearFlyTimers]
   );
 
   const handleFlyoutKeyDown = useCallback(
@@ -218,26 +280,51 @@ export const ContextMenuFlyout: React.FC<{
       if (e.key === 'ArrowLeft' || e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
+        clearFlyTimers();
         setFly(null);
         rowRefs.current[type]?.focus();
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        const container = flyoutRefs.current[type];
+        if (!container) return;
+        const radios = Array.from(
+          container.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+        );
+        if (radios.length === 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const activeIdx = radios.indexOf(document.activeElement as HTMLElement);
+        const nextIdx =
+          activeIdx < 0
+            ? 0
+            : (activeIdx + (e.key === 'ArrowDown' ? 1 : -1) + radios.length) %
+              radios.length;
+        radios[nextIdx]?.focus();
       }
     },
-    []
+    [clearFlyTimers]
   );
 
   const sortDropdownRestoreRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (!sortDropdownOpen || !sortMenuRef.current) return;
+    if (!sortDropdownOpen) return;
     sortDropdownRestoreRef.current =
       document.activeElement as HTMLElement | null;
     requestAnimationFrame(() => {
-      const first = sortMenuRef.current?.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
+      const first =
+        rowRefs.current.sort ??
+        sortMenuRef.current?.querySelector<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
       first?.focus();
     });
   }, [sortDropdownOpen, sortMenuRef]);
+
+  const sortValueLabel = sortType === 'name' ? '按名称' : '按最近活跃';
+  const groupValueLabel = groupType === 'none' ? '平铺列表' : '按项目分组';
+  const filterValueLabel = filterType === 'pinned' ? '仅置顶' : '全部会话';
 
   return (
     <Menu
@@ -251,6 +338,7 @@ export const ContextMenuFlyout: React.FC<{
         onEscapeKeyDown: (event) => {
           if (fly !== null) {
             event.preventDefault();
+            clearFlyTimers();
             setFly(null);
             rowRefs.current[fly]?.focus();
           }
@@ -277,6 +365,7 @@ export const ContextMenuFlyout: React.FC<{
       <FlyoutRow
         type="sort"
         label="排序方式"
+        valueLabel={sortValueLabel}
         open={fly === 'sort'}
         flyoutRef={(el) => {
           flyoutRefs.current.sort = el;
@@ -286,6 +375,7 @@ export const ContextMenuFlyout: React.FC<{
         }}
         onFlyEnter={() => handleFlyEnter('sort')}
         onFlyLeave={() => handleFlyLeave('sort')}
+        onFlyClick={() => handleFlyClick('sort')}
         onFlyoutEnter={cancelFlyLeave}
         onFlyoutLeave={() => handleFlyLeave('sort')}
         onRowKeyDown={(e) => handleRowKeyDown('sort', e)}
@@ -314,6 +404,7 @@ export const ContextMenuFlyout: React.FC<{
       <FlyoutRow
         type="group"
         label="分组方式"
+        valueLabel={groupValueLabel}
         open={fly === 'group'}
         flyoutRef={(el) => {
           flyoutRefs.current.group = el;
@@ -323,6 +414,7 @@ export const ContextMenuFlyout: React.FC<{
         }}
         onFlyEnter={() => handleFlyEnter('group')}
         onFlyLeave={() => handleFlyLeave('group')}
+        onFlyClick={() => handleFlyClick('group')}
         onFlyoutEnter={cancelFlyLeave}
         onFlyoutLeave={() => handleFlyLeave('group')}
         onRowKeyDown={(e) => handleRowKeyDown('group', e)}
@@ -351,6 +443,7 @@ export const ContextMenuFlyout: React.FC<{
       <FlyoutRow
         type="filter"
         label="列表范围"
+        valueLabel={filterValueLabel}
         open={fly === 'filter'}
         flyoutRef={(el) => {
           flyoutRefs.current.filter = el;
@@ -360,6 +453,7 @@ export const ContextMenuFlyout: React.FC<{
         }}
         onFlyEnter={() => handleFlyEnter('filter')}
         onFlyLeave={() => handleFlyLeave('filter')}
+        onFlyClick={() => handleFlyClick('filter')}
         onFlyoutEnter={cancelFlyLeave}
         onFlyoutLeave={() => handleFlyLeave('filter')}
         onRowKeyDown={(e) => handleRowKeyDown('filter', e)}

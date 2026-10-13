@@ -83,11 +83,6 @@ html.theme-dark {
   z-index: 99999;
 }
 
-html[data-backdrop='mica'] .app-initial-loader,
-html[data-backdrop='acrylic'] .app-initial-loader {
-  background-color: transparent;
-}
-
 .app-initial-loader * {
   pointer-events: none;
 }

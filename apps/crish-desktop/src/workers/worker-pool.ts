@@ -1,20 +1,47 @@
-import { Priority, type Task, type WorkerRequest, type WorkerResponse, type WorkerType } from './types';
+import {
+  Priority,
+  type Task as BaseTask,
+  type WorkerRequest,
+  type WorkerResponse,
+  type WorkerType,
+} from './types';
 import { logger } from '../services/LoggerService';
 import {
   DEFAULT_OPTIONS,
   MINIMAL_OPTIONS,
-  type WorkerEntry,
+  type WorkerEntry as BaseWorkerEntry,
   type WorkerPoolOptions,
 } from './worker-pool-options';
 
-// 配置类型与默认值已拆分到 ./worker-pool-options（纯结构性重构，re-export 保持 import 路径稳定）。
-export type { WorkerPoolOptions, WorkerEntry } from './worker-pool-options';
+export type { WorkerPoolOptions } from './worker-pool-options';
+
+export interface WorkerEntry extends BaseWorkerEntry {
+  currentSessionId: string | null;
+}
+
+export interface TaskOptions {
+  signal?: AbortSignal;
+  dedupKey?: string;
+  transferables?: Transferable[];
+  sessionId?: string;
+}
+
+export interface Task<T = unknown> extends BaseTask<T> {
+  sessionId?: string;
+}
 
 export class WorkerPool {
   private readonly options: WorkerPoolOptions;
   private entries: WorkerEntry[] = [];
   private taskQueue: Task<unknown>[] = [];
-  private pendingTasks = new Map<string, { resolve: (value: unknown) => void; reject: (reason: unknown) => void; timeout?: ReturnType<typeof setTimeout> }>();
+  private pendingTasks = new Map<
+    string,
+    {
+      resolve: (value: unknown) => void;
+      reject: (reason: unknown) => void;
+      timeout?: ReturnType<typeof setTimeout>;
+    }
+  >();
   private dedupCache = new Map<string, { taskId: string; ts: number }>();
   private taskIdCounter = 0;
   private idleTimer: ReturnType<typeof setInterval> | null = null;
@@ -42,14 +69,10 @@ export class WorkerPool {
   }
 
   private initWorkers(): void {
-    const configs: Array<{ type: WorkerType; count: number; url: string }> = [
-      { type: 'render', count: this.options.renderWorkers, url: this.options.workerUrlOverrides?.render ?? new URL('./render-worker.ts', import.meta.url).href },
-      { type: 'compute', count: this.options.computeWorkers, url: this.options.workerUrlOverrides?.compute ?? new URL('./compute-worker.ts', import.meta.url).href },
-      { type: 'io', count: this.options.ioWorkers, url: this.options.workerUrlOverrides?.io ?? new URL('./io-worker.ts', import.meta.url).href },
-      { type: 'network', count: this.options.networkWorkers, url: this.options.workerUrlOverrides?.network ?? new URL('./compute-worker.ts', import.meta.url).href },
-    ];
-
-    for (const { type, count, url } of configs) {
+    const types: WorkerType[] = ['render', 'compute', 'io', 'network'];
+    for (const type of types) {
+      const count = this.targetCountFor(type);
+      const url = this.urlFor(type);
       for (let i = 0; i < count; i++) {
         this.createWorker(type, url);
       }
@@ -58,10 +81,14 @@ export class WorkerPool {
 
   private targetCountFor(type: WorkerType): number {
     switch (type) {
-      case 'render': return this.options.renderWorkers;
-      case 'compute': return this.options.computeWorkers;
-      case 'io': return this.options.ioWorkers;
-      case 'network': return this.options.networkWorkers;
+      case 'render':
+        return this.options.renderWorkers;
+      case 'compute':
+        return this.options.computeWorkers;
+      case 'io':
+        return this.options.ioWorkers;
+      case 'network':
+        return this.options.networkWorkers;
     }
   }
 
@@ -69,23 +96,25 @@ export class WorkerPool {
     const override = this.options.workerUrlOverrides?.[type];
     if (override) return override;
     switch (type) {
-      case 'render': return new URL('./render-worker.ts', import.meta.url).href;
-      case 'compute': return new URL('./compute-worker.ts', import.meta.url).href;
-      case 'io': return new URL('./io-worker.ts', import.meta.url).href;
-      case 'network': return new URL('./compute-worker.ts', import.meta.url).href;
+      case 'render':
+        return new URL('./render-worker.ts', import.meta.url).href;
+      case 'compute':
+        return new URL('./compute-worker.ts', import.meta.url).href;
+      case 'io':
+        return new URL('./io-worker.ts', import.meta.url).href;
+      case 'network':
+        return new URL('./compute-worker.ts', import.meta.url).href;
     }
   }
 
   /**
    * ACT-302 JIT：FCP 前禁止创建；FCP 后按需补 1 个 render Worker（或对应类型上限内）。
-   * 不创建平行池，增量落在本类。
    */
   private maybeJitSpawn(type: WorkerType): void {
     if (!this.isFirstScreenRendered) return;
     if (this.findIdleWorker(type)) return;
     const existing = this.entries.filter((e) => e.type === type).length;
-    const target = this.targetCountFor(type);
-    if (existing < target) {
+    if (existing < this.targetCountFor(type)) {
       this.createWorker(type, this.urlFor(type));
     }
   }
@@ -98,6 +127,7 @@ export class WorkerPool {
       busy: false,
       idleSince: Date.now(),
       currentTaskId: null,
+      currentSessionId: null,
       abortController: null,
     };
 
@@ -108,9 +138,10 @@ export class WorkerPool {
     worker.onerror = (err) => {
       logger.error(`[WorkerPool] worker error (${type})`, {
         module: 'WorkerPool',
-        err: err instanceof Error
-          ? { message: err.message, stack: err.stack, name: err.name }
-          : { message: String(err) },
+        err:
+          err instanceof Error
+            ? { message: err.message, stack: err.stack, name: err.name }
+            : { message: String(err) },
       });
       this.handleWorkerCrash(entry);
     };
@@ -119,9 +150,13 @@ export class WorkerPool {
     return entry;
   }
 
-  private handleWorkerResponse(entry: WorkerEntry, response: WorkerResponse): void {
+  private handleWorkerResponse(
+    entry: WorkerEntry,
+    response: WorkerResponse
+  ): void {
     entry.busy = false;
     entry.idleSince = Date.now();
+    entry.currentSessionId = null;
     entry.abortController = null;
 
     const pending = this.pendingTasks.get(response.id);
@@ -154,18 +189,23 @@ export class WorkerPool {
     if (entry.currentTaskId) {
       const pending = this.pendingTasks.get(entry.currentTaskId);
       if (pending) {
+        if (pending.timeout) clearTimeout(pending.timeout);
         this.pendingTasks.delete(entry.currentTaskId);
         pending.reject(new Error('Worker crashed'));
       }
     }
 
-    const url = new URL(`./${type}-worker.ts`, import.meta.url).href;
-    this.createWorker(type, url);
-
+    this.createWorker(type, this.urlFor(type));
     this.drainQueue();
   }
 
-  schedule<T>(workerType: WorkerType, type: string, payload: unknown, priority: Priority = Priority.Normal, options?: { signal?: AbortSignal; dedupKey?: string; transferables?: Transferable[] }): Promise<T> {
+  schedule<T>(
+    workerType: WorkerType,
+    type: string,
+    payload: unknown,
+    priority: Priority = Priority.Normal,
+    options?: TaskOptions
+  ): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const id = this.nextTaskId();
 
@@ -182,12 +222,17 @@ export class WorkerPool {
         workerType,
         resolve: resolve as (value: T) => void,
         reject,
-        // 治理防线 #2（exactOptionalPropertyTypes）：Task.signal/transferables/dedupKey
-        // 均为 `field?: T`，不接受 undefined 值；用条件展开剔除 undefined 键
         ...(options?.signal !== undefined ? { signal: options.signal } : {}),
-        ...(options?.transferables !== undefined ? { transferables: options.transferables } : {}),
+        ...(options?.transferables !== undefined
+          ? { transferables: options.transferables }
+          : {}),
         createdAt: Date.now(),
-        ...(options?.dedupKey !== undefined ? { dedupKey: options.dedupKey } : {}),
+        ...(options?.dedupKey !== undefined
+          ? { dedupKey: options.dedupKey }
+          : {}),
+        ...(options?.sessionId !== undefined
+          ? { sessionId: options.sessionId }
+          : {}),
       };
 
       if (options?.dedupKey) {
@@ -201,24 +246,26 @@ export class WorkerPool {
       }
 
       if (options?.signal) {
-        // 治理防线 #4（全局事件与资源缺少生命周期卸载闭环）：
-        // 旧实现注册了两个独立的 abort 监听器（第二个缺 { once: true }），
-        // 且职责重叠（都操作 pendingTasks）。合并为单一监听器，统一处理
-        // 「队列中移除 + 运行中 abort + pendingTasks 清理 + reject」四件事。
-        options.signal.addEventListener('abort', () => {
-          const idx = this.taskQueue.findIndex((t) => t.id === id);
-          if (idx >= 0) {
-            this.taskQueue.splice(idx, 1);
-          }
-          const entry = this.entries.find((e) => e.currentTaskId === id);
-          if (entry && entry.abortController) {
-            entry.abortController.abort();
-          }
-          if (this.pendingTasks.has(id)) {
-            this.pendingTasks.delete(id);
-            reject(new DOMException('Task cancelled', 'AbortError'));
-          }
-        }, { once: true });
+        options.signal.addEventListener(
+          'abort',
+          () => {
+            const idx = this.taskQueue.findIndex((t) => t.id === id);
+            if (idx >= 0) {
+              this.taskQueue.splice(idx, 1);
+            }
+            const entry = this.entries.find((e) => e.currentTaskId === id);
+            if (entry && entry.abortController) {
+              entry.abortController.abort();
+            }
+            const pending = this.pendingTasks.get(id);
+            if (pending) {
+              if (pending.timeout) clearTimeout(pending.timeout);
+              this.pendingTasks.delete(id);
+              reject(new DOMException('Task cancelled', 'AbortError'));
+            }
+          },
+          { once: true }
+        );
       }
 
       this.pendingTasks.set(id, {
@@ -226,20 +273,17 @@ export class WorkerPool {
         reject,
       });
 
-      // 队列内部只处理 dispatch / cancel / 排序，不关心 resolve 的 T 类型；
-      // Task<T> 的 resolve 在 T 上逆变，无法直接赋给 Task<unknown>，
-      // 但 enqueueTask / dispatchToWorker 内部从不调用 task.resolve（仅 pendingTasks 中存的 resolve 调用），
-      // 所以这里安全地把 Task<T> 视为 Task<unknown>
       this.enqueueTask(task as Task<unknown>);
     });
   }
 
   private enqueueTask(task: Task<unknown>): void {
     this.maybeJitSpawn(task.workerType);
-    const canDispatch = this.tryDispatchDirect(task);
-    if (!canDispatch) {
+    if (!this.tryDispatchDirect(task)) {
       this.taskQueue.push(task);
-      this.taskQueue.sort((a, b) => a.priority - b.priority || a.createdAt - b.createdAt);
+      this.taskQueue.sort(
+        (a, b) => a.priority - b.priority || a.createdAt - b.createdAt
+      );
     }
   }
 
@@ -258,6 +302,7 @@ export class WorkerPool {
     entry.busy = true;
     entry.idleSince = 0;
     entry.currentTaskId = task.id;
+    entry.currentSessionId = task.sessionId ?? null;
     entry.abortController = new AbortController();
 
     const request: WorkerRequest = {
@@ -267,21 +312,7 @@ export class WorkerPool {
       priority: task.priority,
     };
 
-    const pending = this.pendingTasks.get(task.id);
-    const timeoutMs = this.options.taskTimeoutMs ?? 0;
-    if (pending && timeoutMs > 0) {
-      pending.timeout = setTimeout(() => {
-        if (entry.currentTaskId === task.id) {
-          entry.busy = false;
-          entry.idleSince = Date.now();
-          entry.currentTaskId = null;
-          entry.abortController = null;
-          this.pendingTasks.delete(task.id);
-          task.reject(new Error(`Task ${task.id} timed out after ${timeoutMs}ms`));
-          this.dispatchNext(entry);
-        }
-      }, this.options.taskTimeoutMs);
-    }
+    this.setupTaskTimeout(entry, task, this.options.taskTimeoutMs ?? 0);
 
     if (task.transferables && task.transferables.length > 0) {
       entry.worker.postMessage(request, task.transferables);
@@ -290,12 +321,41 @@ export class WorkerPool {
     }
   }
 
+  /**
+   * 任务超时处理：物理调用 worker.terminate() 强杀底层线程并原地补建新实例，严禁仅置 busy=false。
+   */
+  private setupTaskTimeout(
+    entry: WorkerEntry,
+    task: Task<unknown>,
+    timeoutMs: number
+  ): void {
+    const pending = this.pendingTasks.get(task.id);
+    if (!pending || timeoutMs <= 0) return;
+
+    pending.timeout = setTimeout(() => {
+      if (entry.currentTaskId === task.id) {
+        logger.error(
+          `[WorkerPool] Task ${task.id} timed out after ${timeoutMs}ms. Hard-terminating worker thread!`
+        );
+        entry.worker.terminate();
+        this.pendingTasks.delete(task.id);
+        task.reject(
+          new Error(`Task ${task.id} timed out after ${timeoutMs}ms`)
+        );
+
+        const idx = this.entries.indexOf(entry);
+        if (idx >= 0) this.entries.splice(idx, 1);
+        this.createWorker(entry.type, this.urlFor(entry.type));
+        this.drainQueue();
+      }
+    }, timeoutMs);
+  }
+
   private dispatchNext(entry: WorkerEntry): void {
-    const task = this.taskQueue.find((t) => t.workerType === entry.type);
-    if (task) {
-      const idx = this.taskQueue.indexOf(task);
-      this.taskQueue.splice(idx, 1);
-      this.dispatchToWorker(entry, task);
+    const idx = this.taskQueue.findIndex((t) => t.workerType === entry.type);
+    if (idx >= 0) {
+      const [task] = this.taskQueue.splice(idx, 1);
+      if (task) this.dispatchToWorker(entry, task);
     }
   }
 
@@ -307,12 +367,69 @@ export class WorkerPool {
     }
   }
 
+  /**
+   * 三级级联取消总线 Tier 1 核心实现：
+   * 会话切换/删除时，剔除该会话排队任务，物理强杀正在运行该会话的繁忙 Worker 并原地补建全新实例。
+   */
+  cancelBySession(sessionId: string): void {
+    if (!sessionId) return;
+
+    const remainingQueue: Task<unknown>[] = [];
+    for (let i = 0; i < this.taskQueue.length; i++) {
+      const task = this.taskQueue[i]!;
+      if (task.sessionId === sessionId) {
+        const pending = this.pendingTasks.get(task.id);
+        if (pending) {
+          if (pending.timeout) clearTimeout(pending.timeout);
+          this.pendingTasks.delete(task.id);
+          pending.reject(
+            new DOMException(
+              `Task ${task.id} cancelled by session disposal`,
+              'AbortError'
+            )
+          );
+        }
+      } else {
+        remainingQueue.push(task);
+      }
+    }
+    this.taskQueue = remainingQueue;
+
+    for (let i = this.entries.length - 1; i >= 0; i--) {
+      const entry = this.entries[i]!;
+      if (entry.busy && entry.currentSessionId === sessionId) {
+        logger.warn(
+          `[WorkerPool] Terminating busy worker (type=${entry.type}) running cancelled session: ${sessionId}`
+        );
+        entry.worker.terminate();
+        if (entry.currentTaskId) {
+          const pending = this.pendingTasks.get(entry.currentTaskId);
+          if (pending) {
+            if (pending.timeout) clearTimeout(pending.timeout);
+            this.pendingTasks.delete(entry.currentTaskId);
+            pending.reject(
+              new DOMException(
+                `Task ${entry.currentTaskId} cancelled: worker terminated due to session cancel`,
+                'AbortError'
+              )
+            );
+          }
+        }
+        this.entries.splice(i, 1);
+        this.createWorker(entry.type, this.urlFor(entry.type));
+      }
+    }
+
+    this.drainQueue();
+  }
+
   cancel(taskId: string): void {
     const idx = this.taskQueue.findIndex((t) => t.id === taskId);
     if (idx >= 0) {
       this.taskQueue.splice(idx, 1);
       const pending = this.pendingTasks.get(taskId);
       if (pending) {
+        if (pending.timeout) clearTimeout(pending.timeout);
         this.pendingTasks.delete(taskId);
         pending.reject(new DOMException('Task cancelled', 'AbortError'));
       }
@@ -331,6 +448,7 @@ export class WorkerPool {
     for (const task of toRemove) {
       const pending = this.pendingTasks.get(task.id);
       if (pending) {
+        if (pending.timeout) clearTimeout(pending.timeout);
         this.pendingTasks.delete(task.id);
         pending.reject(new DOMException('Task cancelled', 'AbortError'));
       }
@@ -351,25 +469,41 @@ export class WorkerPool {
     this.broadcast('io', { kind: 'clear-cache' });
   }
 
-  getMetrics(): { totalWorkers: number; busyWorkers: number; queuedTasks: number; pendingTasks: number; entries: Array<{ type: WorkerType; busy: boolean; idleSince: number }> } {
+  getMetrics(): {
+    totalWorkers: number;
+    busyWorkers: number;
+    queuedTasks: number;
+    pendingTasks: number;
+    entries: Array<{ type: WorkerType; busy: boolean; idleSince: number }>;
+  } {
     return {
       totalWorkers: this.entries.length,
       busyWorkers: this.entries.filter((e) => e.busy).length,
       queuedTasks: this.taskQueue.length,
       pendingTasks: this.pendingTasks.size,
-      entries: this.entries.map((e) => ({ type: e.type, busy: e.busy, idleSince: e.idleSince })),
+      entries: this.entries.map((e) => ({
+        type: e.type,
+        busy: e.busy,
+        idleSince: e.idleSince,
+      })),
     };
   }
 
   private startIdleMonitor(): void {
     this.idleTimer = setInterval(() => {
       const now = Date.now();
-      // 治理防线 #3：options.idleTimeoutMs 可选，缺省时跳过 idle 回收
       const idleTimeoutMs = this.options.idleTimeoutMs;
       if (idleTimeoutMs === undefined) return;
       for (const entry of this.entries) {
-        if (!entry.busy && entry.idleSince > 0 && (now - entry.idleSince) > idleTimeoutMs) {
-          if (this.entries.filter((e) => e.type === entry.type && !e.busy).length > 1) {
+        if (
+          !entry.busy &&
+          entry.idleSince > 0 &&
+          now - entry.idleSince > idleTimeoutMs
+        ) {
+          if (
+            this.entries.filter((e) => e.type === entry.type && !e.busy)
+              .length > 1
+          ) {
             entry.worker.terminate();
             const idx = this.entries.indexOf(entry);
             if (idx >= 0) this.entries.splice(idx, 1);
@@ -390,15 +524,7 @@ export class WorkerPool {
     return `task_${++this.taskIdCounter}_${Date.now().toString(36)}`;
   }
 
-  /**
-   * Phase 2 扩容：补充 Worker 至完整数量。
-   *
-   * Stream E 后：compute / io / network 默认目标为 0（任务下沉 Rust + 主线程 JS fallback），
-   * 因此 scaleUp 实际只补充 render worker。若调用方需要恢复 worker 路径，
-   * 可通过 `new WorkerPool({ computeWorkers: N })` 显式启用。
-   */
   scaleUp(): void {
-    // FCP 前（lazyInit + 未 markFirstScreenRendered）禁止扩容，保持 Worker = 0
     if (this.options.lazyInit && !this.isFirstScreenRendered) return;
 
     const current = new Map<WorkerType, number>();
@@ -406,29 +532,33 @@ export class WorkerPool {
       current.set(e.type, (current.get(e.type) || 0) + 1);
     }
 
-    const targets: Array<{ type: WorkerType; target: number; url: string }> = [
-      { type: 'render', target: DEFAULT_OPTIONS.renderWorkers, url: './render-worker.ts' },
-      { type: 'compute', target: DEFAULT_OPTIONS.computeWorkers, url: './compute-worker.ts' },
-      { type: 'io', target: DEFAULT_OPTIONS.ioWorkers, url: './io-worker.ts' },
-      { type: 'network', target: DEFAULT_OPTIONS.networkWorkers, url: './compute-worker.ts' },
+    const targets: Array<{ type: WorkerType; target: number }> = [
+      { type: 'render', target: DEFAULT_OPTIONS.renderWorkers },
+      { type: 'compute', target: DEFAULT_OPTIONS.computeWorkers },
+      { type: 'io', target: DEFAULT_OPTIONS.ioWorkers },
+      { type: 'network', target: DEFAULT_OPTIONS.networkWorkers },
     ];
 
-    for (const { type, target, url } of targets) {
+    for (const { type, target } of targets) {
       const existing = current.get(type) || 0;
       for (let i = existing; i < target; i++) {
-        this.createWorker(type, new URL(url, import.meta.url).href);
+        this.createWorker(type, this.urlFor(type));
       }
     }
   }
 
   dispose(): void {
-    if (this.idleTimer) { clearInterval(this.idleTimer); this.idleTimer = null; }
+    if (this.idleTimer) {
+      clearInterval(this.idleTimer);
+      this.idleTimer = null;
+    }
     for (const entry of this.entries) {
       entry.worker.terminate();
     }
     this.entries = [];
     this.taskQueue = [];
     for (const [, pending] of this.pendingTasks) {
+      if (pending.timeout) clearTimeout(pending.timeout);
       pending.reject(new DOMException('WorkerPool disposed', 'AbortError'));
     }
     this.pendingTasks.clear();

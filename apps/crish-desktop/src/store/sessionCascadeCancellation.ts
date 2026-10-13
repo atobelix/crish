@@ -13,9 +13,15 @@
  */
 
 import { sharedSessionStreamManager } from '../hooks/chat-stream/sessionStreamManager';
+import {
+  DEFAULT_TOMBSTONE_CAPACITY,
+  bindSessionTombstoneOracle,
+  getSharedTombstoneSet,
+  setSharedTombstoneCapacity,
+} from '../utils/lifecycle/ScopedLifecycleRegistry';
 import { useStreamingStore } from './streamingStore';
 
-export const DEFAULT_TOMBSTONE_CAPACITY = 500;
+export { DEFAULT_TOMBSTONE_CAPACITY };
 
 export type WorkerCancelCallback = (sessionId: string) => void | Promise<void>;
 export type TransportAbortCallback = (
@@ -38,12 +44,13 @@ export interface CascadeCancellationSubscriber {
 
 export class SessionCascadeCancellation {
   /**
-   * 容量为 500 的 LRU 墓碑集合。
+   * 容量为 500 的严格 LRU 墓碑集合。
    * 采用 Set 保留插入/刷新时序，超限时淘汰首个（最旧）记录。
    */
-  public readonly tombstoneSessionIds = new Set<string>();
+  public readonly tombstoneSessionIds: Set<string>;
 
   private maxCapacity: number;
+  private readonly usesSharedTombstoneSet: boolean;
   private workerPool: WorkerCancelablePool | null = null;
   private readonly workerCancelCallbacks = new Set<WorkerCancelCallback>();
   private readonly transportAbortCallbacks = new Set<TransportAbortCallback>();
@@ -53,8 +60,18 @@ export class SessionCascadeCancellation {
     CascadeCancellationSubscriber
   >();
 
-  constructor(maxCapacity: number = DEFAULT_TOMBSTONE_CAPACITY) {
+  constructor(
+    maxCapacity: number = DEFAULT_TOMBSTONE_CAPACITY,
+    useSharedBackingSet = false
+  ) {
     this.maxCapacity = Math.max(1, maxCapacity);
+    this.usesSharedTombstoneSet = useSharedBackingSet;
+    this.tombstoneSessionIds = useSharedBackingSet
+      ? getSharedTombstoneSet()
+      : new Set<string>();
+    if (useSharedBackingSet) {
+      setSharedTombstoneCapacity(this.maxCapacity);
+    }
   }
 
   /**
@@ -118,7 +135,7 @@ export class SessionCascadeCancellation {
   }
 
   /**
-   * 记录会话墓碑，遵循容量上限的 LRU 淘汰语义。
+   * 记录会话墓碑，遵循容量上限的严格 LRU 淘汰语义。
    */
   public recordTombstone(sessionId: string): void {
     const sid = typeof sessionId === 'string' ? sessionId.trim() : '';
@@ -139,6 +156,13 @@ export class SessionCascadeCancellation {
       }
     }
     this.tombstoneSessionIds.add(sid);
+  }
+
+  /**
+   * 标记会话进入墓碑状态（recordTombstone 的标准语义别名，遵循 500 容量严格 LRU 语义）
+   */
+  public markSessionTombstone(sessionId: string): void {
+    this.recordTombstone(sessionId);
   }
 
   /**
@@ -169,7 +193,7 @@ export class SessionCascadeCancellation {
     // =========================================================================
     // 【Tier 2 通信级】发送 abort 信号，清理活跃流句柄，并在墓碑集合中登记 sessionId
     // =========================================================================
-    this.recordTombstone(sid);
+    this.markSessionTombstone(sid);
     this.executeTier2(sid);
 
     // =========================================================================
@@ -311,6 +335,9 @@ export class SessionCascadeCancellation {
     this.storageBarrierCallbacks.clear();
     this.subscribers.clear();
     this.maxCapacity = DEFAULT_TOMBSTONE_CAPACITY;
+    if (this.usesSharedTombstoneSet) {
+      setSharedTombstoneCapacity(DEFAULT_TOMBSTONE_CAPACITY);
+    }
   }
 
   /**
@@ -318,6 +345,9 @@ export class SessionCascadeCancellation {
    */
   public setMaxCapacityForTest(capacity: number): void {
     this.maxCapacity = Math.max(1, capacity);
+    if (this.usesSharedTombstoneSet) {
+      setSharedTombstoneCapacity(this.maxCapacity);
+    }
     while (this.tombstoneSessionIds.size > this.maxCapacity) {
       const oldest = this.tombstoneSessionIds.values().next().value;
       if (oldest !== undefined) {
@@ -330,9 +360,33 @@ export class SessionCascadeCancellation {
 }
 
 /**
- * 全局单例
+ * 全局单例（绑定跨层共享 500 容量 LRU 墓碑集合）
  */
-export const sessionCascadeCancellation = new SessionCascadeCancellation();
+export const sessionCascadeCancellation = new SessionCascadeCancellation(
+  DEFAULT_TOMBSTONE_CAPACITY,
+  true
+);
+
+bindSessionTombstoneOracle({
+  isSessionTombstoned: (sessionId: string) =>
+    sessionCascadeCancellation.isSessionTombstoned(sessionId),
+  markSessionTombstone: (sessionId: string) =>
+    sessionCascadeCancellation.markSessionTombstone(sessionId),
+});
+
+/**
+ * 便捷导出函数：标记会话进入墓碑状态（500 容量严格 LRU 淘汰）
+ */
+export function markSessionTombstone(sessionId: string): void {
+  sessionCascadeCancellation.markSessionTombstone(sessionId);
+}
+
+/**
+ * 便捷导出函数：记录会话墓碑
+ */
+export function recordTombstone(sessionId: string): void {
+  sessionCascadeCancellation.recordTombstone(sessionId);
+}
 
 /**
  * 便捷导出函数：检查会话是否已进入墓碑

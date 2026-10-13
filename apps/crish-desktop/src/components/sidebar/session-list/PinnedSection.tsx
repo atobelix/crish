@@ -1,6 +1,6 @@
 import React from 'react';
 import type { SessionState } from '../../../store/types';
-import { Button } from '../../ui';
+import { Button, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
 import { AppIcon } from '../../ui/icons/index';
 
@@ -11,6 +11,10 @@ export interface PinnedSectionProps {
   dragOverPinned: boolean;
   filterType: 'all' | 'pinned';
   onTogglePinned: () => void;
+  onSortBtnClick?: (e: React.MouseEvent) => void;
+  sortTriggerRef?: React.RefObject<HTMLButtonElement | null>;
+  sortDropdownOpen?: boolean;
+  hasActiveSortFilter?: boolean;
   /** Kept for SidebarSessionList API; reorder is pointer drop-only via SessionRow. */
   onMoveSessionRealtime: (
     sessionId: string,
@@ -28,6 +32,10 @@ export function PinnedSection({
   dragOverPinned,
   filterType,
   onTogglePinned,
+  onSortBtnClick,
+  sortTriggerRef,
+  sortDropdownOpen = false,
+  hasActiveSortFilter = false,
   onMoveSessionRealtime: _onMoveSessionRealtime,
   renderSessionItem,
 }: PinnedSectionProps) {
@@ -60,6 +68,28 @@ export function PinnedSection({
             />
           </Button>
         </div>
+        {filterType === 'pinned' && onSortBtnClick ? (
+          <div className={styles.sectionLabelRight}>
+            <Tooltip content="排序与过滤">
+              <Button
+                ref={sortTriggerRef}
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={styles.sectionSortBtn}
+                aria-label="排序与过滤"
+                aria-expanded={sortDropdownOpen}
+                aria-haspopup="menu"
+                data-active={hasActiveSortFilter ? 'true' : undefined}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSortBtnClick(e);
+                }}
+                icon={<AppIcon name="chevrons-up-down" size={16} aria-hidden />}
+              />
+            </Tooltip>
+          </div>
+        ) : null}
       </div>
       <div
         className={styles.accordionWrapper}

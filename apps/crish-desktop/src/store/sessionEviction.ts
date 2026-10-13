@@ -8,6 +8,7 @@
  */
 
 import { SESSION_HYDRATE_KEEP_K } from '../api/perfBudgets';
+import { _activeVsmByScope } from '../api/virtualScrollScope';
 import { getSessionForWrite } from './sessionIndex';
 import type { SessionState } from './types';
 import {

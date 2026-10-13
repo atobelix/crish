@@ -411,6 +411,62 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       }
     });
 
+    it('当传入 defaultExpanded={true}（默认未开启隐藏思考块）时：思考中展开、生成完自动关闭、历史对话重开默认折叠', () => {
+      vi.useFakeTimers();
+      try {
+        // 1. 思考中展开
+        const { rerender, container, unmount } = render(
+          <ReasoningRow
+            content="正在生成思考过程"
+            isTurnWorking={true}
+            defaultExpanded={true}
+          />
+        );
+        const root = container.querySelector(
+          '[data-testid="reasoning-container"]'
+        );
+        expect(root?.getAttribute('data-expanded')).toBe('true');
+
+        // 2. 生成完自动关闭（160ms 平滑收起）
+        rerender(
+          <ReasoningRow
+            content="正在生成思考过程"
+            isTurnWorking={false}
+            defaultExpanded={true}
+            durationMs={2000}
+          />
+        );
+        expect(root?.getAttribute('data-expanded')).toBe('false');
+        expect(root?.getAttribute('data-collapsing')).toBe('true');
+        act(() => {
+          vi.advanceTimersByTime(160);
+        });
+        expect(
+          container.querySelector('[data-testid="reasoning-body"]')
+        ).toBeNull();
+        unmount();
+
+        // 3. 关闭对话再打开（历史消息首次挂载 isTurnWorking=false, defaultExpanded=true）：默认折叠
+        const reopened = render(
+          <ReasoningRow
+            content="历史对话思考内容"
+            isTurnWorking={false}
+            defaultExpanded={true}
+            durationMs={2000}
+          />
+        );
+        const reopenedRoot = reopened.container.querySelector(
+          '[data-testid="reasoning-container"]'
+        );
+        expect(reopenedRoot?.getAttribute('data-expanded')).toBe('false');
+        expect(
+          reopened.container.querySelector('[data-testid="reasoning-body"]')
+        ).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('手动点击折叠不进入 collapsing 动画延迟，直接即时收起', () => {
       const { container } = render(
         <ReasoningRow content="手动测试内容" isTurnWorking={false} />

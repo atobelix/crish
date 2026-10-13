@@ -25,6 +25,10 @@ import type { ModelMeta } from './modelCatalogTypes';
 import { modelRefKey } from './modelsCatalogTypes';
 import { modelsCatalogStore } from './modelsCatalogStore';
 import { emitUiEvent } from './uiEvents';
+import {
+  ScopedLifecycleRegistry,
+  type Disposer,
+} from '../utils/lifecycle/ScopedLifecycleRegistry';
 
 const META_KEY = 'crish_model_meta_v1';
 
@@ -48,7 +52,9 @@ function loadMap(): MetaMap {
   }
   try {
     const raw =
-      typeof localStorage !== 'undefined' ? localStorage.getItem(META_KEY) : null;
+      typeof localStorage !== 'undefined'
+        ? localStorage.getItem(META_KEY)
+        : null;
     if (!raw) {
       memoryMetaCache = {};
       return memoryMetaCache;
@@ -76,14 +82,65 @@ function saveMap(map: MetaMap): void {
   }
 }
 
+const storageLifecycleRegistry = new ScopedLifecycleRegistry();
+let activeStorageListenerDisposer: Disposer | null = null;
+
+function handleModelCatalogStorageEvent(e: StorageEvent): void {
+  if (e.key === META_KEY) {
+    memoryMetaCache = null;
+  }
+}
+
 /**
- * 监听跨窗口/跨标签页 StorageEvent，自动失效内存缓存
+ * 挂载跨窗口/跨标签页 StorageEvent 监听（经 ScopedLifecycleRegistry 统一托管，幂等防重复堆积）。
+ * 支持传入外部 SLR 容器托管，卸载时自动解绑，根除 HMR 与多实例重复挂载导致的永久监听器泄漏。
  */
-if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-  window.addEventListener('storage', (e: StorageEvent) => {
-    if (e.key === META_KEY) {
-      memoryMetaCache = null;
+export function setupModelCatalogStorageListener(
+  slr: ScopedLifecycleRegistry = storageLifecycleRegistry
+): Disposer {
+  if (activeStorageListenerDisposer) {
+    activeStorageListenerDisposer();
+    activeStorageListenerDisposer = null;
+  }
+  if (slr === storageLifecycleRegistry && storageLifecycleRegistry.isDisposed) {
+    storageLifecycleRegistry.reset();
+  }
+  if (
+    typeof window === 'undefined' ||
+    typeof window.addEventListener !== 'function'
+  ) {
+    return () => {};
+  }
+  const disposer = slr.listen(
+    window,
+    'storage',
+    handleModelCatalogStorageEvent
+  );
+  activeStorageListenerDisposer = disposer;
+  return () => {
+    disposer();
+    if (activeStorageListenerDisposer === disposer) {
+      activeStorageListenerDisposer = null;
     }
+  };
+}
+
+/**
+ * 注销跨窗口 StorageEvent 监听并释放模块级生命周期注册表。
+ */
+export function disposeModelCatalogStorageListener(): void {
+  if (activeStorageListenerDisposer) {
+    activeStorageListenerDisposer();
+    activeStorageListenerDisposer = null;
+  }
+  storageLifecycleRegistry.dispose();
+}
+
+// 模块初始化时通过受控 SLR 绑定单实例监听，并在 HMR 卸载时自动回收
+setupModelCatalogStorageListener();
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    disposeModelCatalogStorageListener();
   });
 }
 
@@ -125,7 +182,9 @@ export function purgeMetaForProfile(profileId: string): void {
  * （档案删除 / 历史迁移残留的孤立数据）。
  * 幂等：无孤儿则零写回零广播。
  */
-export function purgeOrphanMetaKeys(validProfileIds: ReadonlySet<string>): void {
+export function purgeOrphanMetaKeys(
+  validProfileIds: ReadonlySet<string>
+): void {
   const map = loadMap();
   const doomed = Object.keys(map).filter((k) => {
     const sep = k.indexOf('::');

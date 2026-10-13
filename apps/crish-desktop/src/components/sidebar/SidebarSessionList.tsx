@@ -5,6 +5,7 @@ import { PinnedSection } from './session-list/PinnedSection';
 import { ProjectsSection } from './session-list/ProjectsSection';
 import { GeneralSection } from './session-list/GeneralSection';
 import { useSidebarSessionList } from './session-list/useSidebarSessionList';
+import { resolveActualScrollHost } from './sidebarWindowing';
 import type {
   SidebarDragItem,
   SidebarSessionListProps as BaseSidebarSessionListProps,
@@ -19,10 +20,15 @@ export type { SidebarDragItem };
 /**
  * 会话列表：置顶区 + 项目分组 + 常规对话，含 session 拖拽 UI。
  * 瘦身组装层（<=300行）。
+ *
+ * Stage 06 单轨收敛：彻底切除原型属性劫持补丁，
+ * 端到端直连外层真实滚动宿主 .sidebarScroll（[data-sidebar-scroll-host="true"]）。
  */
 const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
   const {
     scrollHostRef,
+    sortType,
+    groupType,
     filterType,
     projects,
     collapsedProjects,
@@ -36,8 +42,15 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
     onOpenProject,
     onSortBtnClick,
     sortTriggerRef,
+    sortDropdownOpen = false,
     onMoveSessionRealtime,
   } = props;
+
+  const hasActiveSortFilter =
+    sortType !== 'active' || groupType !== 'folder' || filterType !== 'all';
+
+  const fallbackScrollHostRef = React.useRef<HTMLElement | null>(null);
+  const effectiveScrollHostRef = scrollHostRef ?? fallbackScrollHostRef;
 
   const {
     visibleSessions,
@@ -56,51 +69,26 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
     isSearchEmpty,
     isAllEmpty,
     showProjectsAndGeneral,
+    showProjectsSection,
     nowTick,
     renderSessionItem,
     listClassName,
-  } = useSidebarSessionList(props);
+  } = useSidebarSessionList({
+    ...props,
+    scrollHostRef: effectiveScrollHostRef,
+  });
 
   const handleContainerRef = React.useCallback(
     (node: HTMLDivElement | null) => {
       (
         sessionListRef as React.MutableRefObject<HTMLDivElement | null>
       ).current = node;
-      if (node) {
-        const getHost = () =>
-          scrollHostRef?.current ||
-          (node.closest(
-            '[data-sidebar-scroll-host="true"], [data-sidebar-chrome="scroll"], .sidebarScroll'
-          ) as HTMLElement | null) ||
-          node.parentElement;
-
-        try {
-          Object.defineProperties(node, {
-            scrollTop: {
-              get() {
-                const host = getHost();
-                return host ? host.scrollTop : 0;
-              },
-              set(v: number) {
-                const host = getHost();
-                if (host) host.scrollTop = v;
-              },
-              configurable: true,
-            },
-            clientHeight: {
-              get() {
-                const host = getHost();
-                return host && host.clientHeight > 0
-                  ? host.clientHeight
-                  : node.clientHeight || 400;
-              },
-              configurable: true,
-            },
-          });
-        } catch {
-          /* ignore */
-        }
+      if (!scrollHostRef) {
+        fallbackScrollHostRef.current = node
+          ? resolveActualScrollHost(null, node)
+          : null;
       }
+      // 保持原生 DOM 节点纯净与 V8 Inline Cache 高速通道
     },
     [sessionListRef, scrollHostRef]
   );
@@ -114,6 +102,9 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
         data-session-input={inputListedCount}
         data-session-visible={visibleSessions.length}
         data-session-sorted={sortedSessions.length}
+        data-sort-type={sortType}
+        data-group-type={groupType}
+        data-filter-type={filterType}
         data-general-windowed={
           generalWindowEnabled && generalRenderRange.windowed ? '1' : '0'
         }
@@ -158,12 +149,18 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
             dragOverPinned={dragOverPinned}
             filterType={filterType}
             onTogglePinned={onTogglePinned}
+            onSortBtnClick={onSortBtnClick}
+            sortTriggerRef={
+              filterType === 'pinned' ? sortTriggerRef : undefined
+            }
+            sortDropdownOpen={sortDropdownOpen}
+            hasActiveSortFilter={hasActiveSortFilter}
             onMoveSessionRealtime={onMoveSessionRealtime}
             renderSessionItem={renderSessionItem}
           />
         ) : null}
 
-        {!isSearchEmpty && !isAllEmpty && showProjectsAndGeneral ? (
+        {!isSearchEmpty && !isAllEmpty && showProjectsSection ? (
           <ProjectsSection
             data={{
               projects,
@@ -191,6 +188,8 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
             onToggleGeneral={onToggleGeneral}
             onSortBtnClick={onSortBtnClick}
             sortTriggerRef={sortTriggerRef}
+            sortDropdownOpen={sortDropdownOpen}
+            hasActiveSortFilter={hasActiveSortFilter}
             onMoveSessionRealtime={onMoveSessionRealtime}
             renderSessionItem={renderSessionItem}
           />

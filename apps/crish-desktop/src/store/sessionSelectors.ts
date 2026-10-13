@@ -1,459 +1,362 @@
 /**
- * sessionSelectors — 细粒度状态切片与高效选择器 (Wave 3 W3-2)
+ * sessionSelectors — Stage 01 零反射 O(1) 会话选择器与细粒度订阅 Hooks
  *
- * 核心目标：
- * 1. 彻底解决组件直接从全局 store 解构全量 `sessionsById` 导致的级联重渲染扩散问题；
- * 2. 构建单轨细粒度按需订阅通道：
- *    - `useSessionMeta(sessionId)`：仅订阅单个会话的元数据（标题、时间戳、归组、固定态等），与高频流式消息彻底物理隔离；
- *    - `useSessionMessages(sessionId)`：仅订阅单个会话的消息数组引用；
- *    - `useSessionMessageCount(sessionId)`：仅订阅单个会话的消息计数；
- *    - `useActiveSessionId()`：仅订阅当前活跃会话 ID；
- * 3. 结合 Zustand 的 selector 机制与缓存比较算法，实现流式 Token 推送期间侧边栏等低频组件 0 重渲染。
+ * 核心架构原则 (FINAL-PLAN-STAGE-01-STATE-RERENDER):
+ * 1. 彻底废除历史 Object.keys 双向反射遍历与外部全局 Map 旁路缓存 (metaCache / epochBySessionId)。
+ * 2. 直接寻址正交三子树 (metaById / messagesBySessionId / agentsBySessionId / sessionOrder)
+ *    与内置双标量版本代数槽位 (metaEpochById / messageEpochById)，实现 O(1) 引用短路与零分配读取。
+ * 3. 100 Token/s 流式文本更新期间，useSessionMeta / useSessionTitle / useSessionFolder 保持绝对 0 重渲染。
  */
 
-import { useCallback } from 'react';
-import { useShallow } from './useShallowSelector';
-import { useSessionStore, type SessionStoreState } from './sessionStore';
-import type {
-  SessionState,
-  SessionMessage,
-  SessionGoalMode,
-  SessionImportMeta,
-  SessionAgent,
-} from './types';
+import { getSessionById } from './sessionIndex';
+import {
+  selectActiveAgentId,
+  selectActiveSessionId,
+  selectFolderOrder,
+  selectPanelAgentId,
+  selectSessionHydrated,
+  useActiveAgentId,
+  useActiveSessionId,
+  usePanelAgentId,
+  useSessionStore,
+  type SessionStoreState,
+} from './sessionStore';
+import {
+  bumpEpochScalar,
+  EMPTY_AGENTS,
+  EMPTY_MESSAGES,
+  extractSessionMeta,
+  isSessionMetaEqual,
+  type SessionMeta,
+  type SessionMetaExtensions,
+} from './sessionSubtreeModel';
+import type { SessionAgent, SessionMessage, SessionState } from './types';
 
-/**
- * 会话轻量元数据切片 (SessionMeta)
- * 物理上与高频 messages 和 agents 数组解耦，专供侧边栏、标题栏与面板元信息组件订阅。
- */
-export interface SessionMeta {
-  readonly id: string;
-  title: string;
-  titleSource?: 'auto-trivial' | 'auto' | 'user';
-  folder?: string;
-  isPinned?: boolean;
-  isArchived?: boolean;
-  branchParentId?: string;
-  timestamp?: string;
-  timestampSource?: 'local' | 'remote';
-  pinnedMessageIds?: string[];
-  pinnedMessageColors?: Record<string, string>;
-  engineCursor?: number;
-  engineLastRunId?: string;
-  hydratedFromEngine?: boolean;
-  messagesHydrated?: boolean;
-  messageCount?: number;
-  hydrateTruncated?: boolean;
-  goalMode?: SessionGoalMode;
-  truncatedToolChainIds?: string[];
-  importMeta?: SessionImportMeta;
-  unreadCount?: number;
-  createdAt?: string;
-  updatedAt?: string;
-  activeAgentId?: string | null;
-  [key: string]: unknown;
+export {
+  EMPTY_AGENTS,
+  EMPTY_MESSAGES,
+  extractSessionMeta,
+  isSessionMetaEqual,
+  selectActiveAgentId,
+  selectActiveSessionId,
+  selectFolderOrder,
+  selectPanelAgentId,
+  selectSessionHydrated,
+  useActiveAgentId,
+  useActiveSessionId,
+  usePanelAgentId,
+  type SessionMeta,
+};
+
+/** 支持正交三子树 Store 状态及测试夹具最小索引切片的联合输入契约 */
+export type SelectorStateSlice = {
+  sessions: SessionState[];
+  sessionsById: Record<string, SessionState>;
+  metaById?: Record<string, SessionMeta>;
+  sessionOrder?: string[];
+  messagesBySessionId?: Record<string, SessionMessage[]>;
+  agentsBySessionId?: Record<string, SessionAgent[]>;
+  metaEpochById?: Record<string, number>;
+  messageEpochById?: Record<string, number>;
+};
+
+/** 同时支持柯里化调用 selector(sessionId)(state) 与直接调用 selector(state, sessionId) 的双模选择器契约 */
+export interface DualSessionSelector<R> {
+  (sessionId: string | null | undefined): (state: SelectorStateSlice) => R;
+  (state: SelectorStateSlice, sessionId: string | null | undefined): R;
 }
 
-/** 不可变全局空消息数组常量，彻底杜绝 fallback [] 导致的引用漂移与无效重绘 */
-export const EMPTY_MESSAGES: readonly SessionMessage[] = Object.freeze([]);
-
-/** 不可变全局空子 Agent 数组常量，彻底杜绝 fallback [] 导致的引用漂移与无效重绘 */
-export const EMPTY_AGENTS: readonly SessionAgent[] = Object.freeze([]);
-
-/** 浅比较数组元素引用一致性 */
-function shallowArrayEqual<T>(a: T[] | undefined, b: T[] | undefined): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
-}
-
-/** 浅比较 Record 属性一致性 */
-function shallowRecordEqual(
-  a: Record<string, unknown> | undefined,
-  b: Record<string, unknown> | undefined
-): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  const keysA = Object.keys(a);
-  const keysB = Object.keys(b);
-  if (keysA.length !== keysB.length) return false;
-  for (const k of keysA) {
-    if (a[k] !== b[k]) return false;
-  }
-  return true;
-}
-
-/**
- * 判断 SessionMeta 与当前 SessionState 的元数据字段是否保持绝对一致。
- * 忽略高频变化的 messages 与 agents 数组。
- */
-export function isSessionMetaEqual(
-  prev: SessionMeta,
-  sess: SessionState
-): boolean {
-  if (prev.id !== sess.id) return false;
-  if (prev.title !== sess.title) return false;
-  if (prev.titleSource !== sess.titleSource) return false;
-  if (prev.folder !== sess.folder) return false;
-  if (prev.isPinned !== sess.isPinned) return false;
-  if (prev.isArchived !== sess.isArchived) return false;
-  if (prev.branchParentId !== sess.branchParentId) return false;
-  if (prev.timestamp !== sess.timestamp) return false;
-  if (prev.timestampSource !== sess.timestampSource) return false;
-  if (prev.engineCursor !== sess.engineCursor) return false;
-  if (prev.engineLastRunId !== sess.engineLastRunId) return false;
-  if (prev.hydratedFromEngine !== sess.hydratedFromEngine) return false;
-  if (prev.messagesHydrated !== sess.messagesHydrated) return false;
-  if (prev.messageCount !== sess.messageCount) return false;
-  if (prev.hydrateTruncated !== sess.hydrateTruncated) return false;
-  if (prev.goalMode !== sess.goalMode) return false;
-  if (prev.unreadCount !== (sess as any).unreadCount) return false;
-  if (prev.createdAt !== (sess as any).createdAt) return false;
-  if (prev.updatedAt !== (sess as any).updatedAt) return false;
-  if (prev.activeAgentId !== (sess as any).activeAgentId) return false;
-
-  if (!shallowArrayEqual(prev.pinnedMessageIds, sess.pinnedMessageIds)) {
-    return false;
-  }
-  if (
-    !shallowArrayEqual(prev.truncatedToolChainIds, sess.truncatedToolChainIds)
-  ) {
-    return false;
-  }
-  if (!shallowRecordEqual(prev.pinnedMessageColors, sess.pinnedMessageColors)) {
-    return false;
-  }
-  if (!shallowRecordEqual(prev.importMeta, sess.importMeta)) {
-    return false;
-  }
-
-  // 遍历 sess 上可能存在的扩展属性（排除 messages 和 agents）
-  const sessRecord = sess as unknown as Record<string, unknown>;
-  const sessKeys = Object.keys(sess);
-  for (const key of sessKeys) {
-    if (key === 'messages' || key === 'agents') continue;
-    if (!(key in prev)) return false;
-    const prevVal = (prev as Record<string, unknown>)[key];
-    const sessVal = sessRecord[key];
-    if (prevVal !== sessVal) {
-      if (Array.isArray(prevVal) && Array.isArray(sessVal)) {
-        if (!shallowArrayEqual(prevVal, sessVal)) return false;
-      } else if (
-        prevVal &&
-        sessVal &&
-        typeof prevVal === 'object' &&
-        typeof sessVal === 'object'
-      ) {
-        if (
-          !shallowRecordEqual(
-            prevVal as Record<string, unknown>,
-            sessVal as Record<string, unknown>
-          )
-        ) {
-          return false;
-        }
-      } else {
-        return false;
-      }
+function createDualSelector<R>(
+  fn: (state: SelectorStateSlice, sessionId: string | null | undefined) => R
+): DualSessionSelector<R> {
+  function selector(
+    arg1: SelectorStateSlice | string | null | undefined,
+    arg2?: string | null | undefined
+  ): R | ((state: SelectorStateSlice) => R) {
+    if (typeof arg1 === 'object' && arg1 !== null) {
+      return fn(arg1, arg2);
     }
+    return (state: SelectorStateSlice) => fn(state, arg1);
   }
-
-  const prevKeys = Object.keys(prev);
-  for (const key of prevKeys) {
-    if (key === 'messages' || key === 'agents') continue;
-    if (
-      !(key in sess) &&
-      (prev as Record<string, unknown>)[key] !== undefined
-    ) {
-      return false;
-    }
-  }
-
-  return true;
+  return selector as DualSessionSelector<R>;
 }
+
+// 仅用于直接传入非 Store 原生测试夹具 (无 metaById 字典) 时的轻量回退槽位
+let fixtureMetaSlot: Record<string, SessionMeta> = {};
+let fixtureLastMsgsSlot: Record<string, readonly SessionMessage[]> = {};
+let epochResetBaseline: Record<string, number> = {};
 
 /**
- * 从 SessionState 中剥离 messages 与 agents，提取纯元数据对象
+ * 重置选择器测试夹具回退槽位与版本代数基线（供单元测试 beforeEach/afterEach 隔离调用，不触发组件外重绘）
  */
-export function extractSessionMeta(sess: SessionState): SessionMeta {
-  const {
-    messages: _m,
-    agents: _a,
-    ...meta
-  } = sess as unknown as Record<string, unknown>;
-  return Object.freeze({ ...meta }) as unknown as SessionMeta;
-}
-
-// ── 细粒度选择器缓存表与标量版本代数槽位 (Revision Epoch Slots) ───────────────
-
-const metaCache = new Map<string, SessionMeta>();
-const epochBySessionId = new Map<string, number>();
-const lastMessagesRefBySessionId = new Map<
-  string,
-  readonly SessionMessage[] | undefined
->();
-
-/** 清除元数据选择器缓存与代数槽位（供测试重置与状态彻底重建时调用） */
 export function clearSessionSelectorsCache(): void {
-  metaCache.clear();
-  epochBySessionId.clear();
-  lastMessagesRefBySessionId.clear();
+  fixtureMetaSlot = {};
+  fixtureLastMsgsSlot = {};
+  epochResetBaseline = { ...useSessionStore.getState().messageEpochById };
 }
 
-/**
- * 显式递增并返回指定会话的 32 位整型代数版本号 (Revision Epoch Slot)
- */
-export function bumpSessionEpoch(sessionId: string): number {
-  if (!sessionId) return 0;
-  const next = ((epochBySessionId.get(sessionId) ?? 0) + 1) | 0;
-  epochBySessionId.set(sessionId, next);
+// ── 内部 O(1) 纯读取核心 ────────────────────────────────────────────────────
+
+function readSessionMeta(
+  state: SelectorStateSlice,
+  sessionId: string | null | undefined
+): SessionMeta | undefined {
+  if (!sessionId) return undefined;
+  const direct = state.metaById?.[sessionId];
+  if (direct) return direct;
+  const sess = getSessionById(state, sessionId) as
+    (SessionState & SessionMetaExtensions) | undefined;
+  if (!sess) {
+    delete fixtureMetaSlot[sessionId];
+    return undefined;
+  }
+  const cached = fixtureMetaSlot[sessionId];
+  if (cached && isSessionMetaEqual(cached, sess)) return cached;
+  const next = extractSessionMeta(sess);
+  fixtureMetaSlot[sessionId] = next;
   return next;
 }
 
-/**
- * 读取指定会话当前的 32 位整型代数版本号
- */
+function readSessionMessages(
+  state: SelectorStateSlice,
+  sessionId: string | null | undefined
+): SessionMessage[] {
+  if (!sessionId) return EMPTY_MESSAGES;
+  const subtreeMsgs = state.messagesBySessionId?.[sessionId];
+  if (subtreeMsgs !== undefined)
+    return subtreeMsgs.length === 0 ? EMPTY_MESSAGES : subtreeMsgs;
+  const sess = getSessionById(state, sessionId);
+  if (!sess || !Array.isArray(sess.messages) || sess.messages.length === 0)
+    return EMPTY_MESSAGES;
+  return sess.messages;
+}
+
+function readSessionMessageCount(
+  state: SelectorStateSlice,
+  sessionId: string | null | undefined
+): number {
+  if (!sessionId) return 0;
+  const subtreeMsgs = state.messagesBySessionId?.[sessionId];
+  if (subtreeMsgs !== undefined) {
+    if (subtreeMsgs.length > 0) return subtreeMsgs.length;
+    return state.metaById?.[sessionId]?.messageCount ?? 0;
+  }
+  const sess = getSessionById(state, sessionId);
+  if (!sess) return 0;
+  return Array.isArray(sess.messages) && sess.messages.length > 0
+    ? sess.messages.length
+    : (sess.messageCount ?? 0);
+}
+
+function readSessionAgents(
+  state: SelectorStateSlice,
+  sessionId: string | null | undefined
+): SessionAgent[] {
+  if (!sessionId) return EMPTY_AGENTS;
+  const subtreeAgents = state.agentsBySessionId?.[sessionId];
+  if (subtreeAgents !== undefined)
+    return subtreeAgents.length === 0 ? EMPTY_AGENTS : subtreeAgents;
+  const sess = getSessionById(state, sessionId);
+  if (!sess || !Array.isArray(sess.agents) || sess.agents.length === 0)
+    return EMPTY_AGENTS;
+  return sess.agents;
+}
+
+function readSessionTitle(
+  state: SelectorStateSlice,
+  sessionId: string | null | undefined
+): string {
+  if (!sessionId) return '';
+  const meta = state.metaById?.[sessionId];
+  if (meta) return meta.title ?? '';
+  return getSessionById(state, sessionId)?.title ?? '';
+}
+
+function readSessionFolder(
+  state: SelectorStateSlice,
+  sessionId: string | null | undefined
+): string | undefined {
+  if (!sessionId) return undefined;
+  const meta = state.metaById?.[sessionId];
+  if (meta) return meta.folder;
+  return getSessionById(state, sessionId)?.folder;
+}
+
+function readSessionIsPinned(
+  state: SelectorStateSlice,
+  sessionId: string | null | undefined
+): boolean {
+  if (!sessionId) return false;
+  const meta = state.metaById?.[sessionId];
+  if (meta) return Boolean(meta.isPinned);
+  return Boolean(getSessionById(state, sessionId)?.isPinned);
+}
+
+function readSessionMetaEpoch(
+  state: SelectorStateSlice,
+  sessionId: string | null | undefined
+): number {
+  if (!sessionId) return 0;
+  return (state.metaEpochById?.[sessionId] ?? 0) | 0;
+}
+
+function normalizeEpochWithBaseline(
+  sessionId: string,
+  raw: number | undefined
+): number {
+  const val = (raw ?? 0) | 0;
+  const base = epochResetBaseline[sessionId];
+  if (base === undefined) return val;
+  return val === base ? 0 : val;
+}
+
+function readSessionMessageEpoch(
+  state: SelectorStateSlice,
+  sessionId: string | null | undefined
+): number {
+  if (!sessionId) return 0;
+  if (state.messageEpochById && sessionId in state.messageEpochById) {
+    return normalizeEpochWithBaseline(
+      sessionId,
+      state.messageEpochById[sessionId]
+    );
+  }
+  const sess = getSessionById(state, sessionId);
+  if (!sess)
+    return normalizeEpochWithBaseline(
+      sessionId,
+      useSessionStore.getState().messageEpochById[sessionId]
+    );
+  const msgs = Array.isArray(sess.messages) ? sess.messages : EMPTY_MESSAGES;
+  const storeEpochs = useSessionStore.getState().messageEpochById;
+  if (!(sessionId in fixtureLastMsgsSlot)) {
+    fixtureLastMsgsSlot[sessionId] = msgs;
+    return normalizeEpochWithBaseline(sessionId, storeEpochs[sessionId]);
+  }
+  if (fixtureLastMsgsSlot[sessionId] !== msgs) {
+    fixtureLastMsgsSlot[sessionId] = msgs;
+    return bumpSessionEpoch(sessionId);
+  }
+  return normalizeEpochWithBaseline(sessionId, storeEpochs[sessionId]);
+}
+
+// ── 纯函数与柯里化双模选择器导出 ─────────────────────────────────────────────
+
+export const selectSessionMeta = createDualSelector(readSessionMeta);
+export const selectSessionMessages = createDualSelector(readSessionMessages);
+export const selectSessionMessageCount = createDualSelector(
+  readSessionMessageCount
+);
+export const selectSessionAgents = createDualSelector(readSessionAgents);
+export const selectSessionTitle = createDualSelector(readSessionTitle);
+export const selectSessionFolder = createDualSelector(readSessionFolder);
+export const selectSessionIsPinned = createDualSelector(readSessionIsPinned);
+export const selectSessionMetaEpoch = createDualSelector(readSessionMetaEpoch);
+export const selectSessionMessageEpoch = createDualSelector(
+  readSessionMessageEpoch
+);
+export const selectSessionEpoch = selectSessionMessageEpoch;
+
+export const makeSelectSessionMeta = (sessionId: string | null | undefined) =>
+  selectSessionMeta(sessionId);
+export const makeSelectSessionMessages = (
+  sessionId: string | null | undefined
+) => selectSessionMessages(sessionId);
+export const makeSelectSessionMessageCount = (
+  sessionId: string | null | undefined
+) => selectSessionMessageCount(sessionId);
+export const makeSelectSessionAgents = (sessionId: string | null | undefined) =>
+  selectSessionAgents(sessionId);
+
+/** 显式原子递增指定会话的 messageEpochById 槽位：((prev + 1) | 0) */
+export function bumpSessionEpoch(sessionId: string): number {
+  if (!sessionId) return 0;
+  const current = getSessionEpoch(sessionId);
+  delete epochResetBaseline[sessionId];
+  const next = bumpEpochScalar(current);
+  useSessionStore.setState((s) => ({
+    messageEpochById: { ...s.messageEpochById, [sessionId]: next },
+  }));
+  return next;
+}
+
+/** 读取指定会话当前的 messageEpochById 标量值 */
 export function getSessionEpoch(sessionId: string): number {
   if (!sessionId) return 0;
-  return epochBySessionId.get(sessionId) ?? 0;
-}
-
-// ── 纯选择器函数 (Pure Selectors) ─────────────────────────────────────────────
-
-/**
- * 单会话元数据选择器
- * 基于 sessionId 从 sessionsById 检索，命中缓存且未发生元数据变更时返回相同引用
- */
-export const selectSessionMeta =
-  (sessionId: string) =>
-  (s: SessionStoreState): SessionMeta | undefined => {
-    if (!sessionId) return undefined;
-    const sess = s.sessionsById?.[sessionId];
-    if (!sess) {
-      if (metaCache.has(sessionId)) {
-        metaCache.delete(sessionId);
-      }
-      return undefined;
-    }
-
-    const cached = metaCache.get(sessionId);
-    if (cached && isSessionMetaEqual(cached, sess)) {
-      return cached;
-    }
-
-    const nextMeta = extractSessionMeta(sess);
-    metaCache.set(sessionId, nextMeta);
-    return nextMeta;
-  };
-
-export const makeSelectSessionMeta = selectSessionMeta;
-
-/**
- * 单会话消息数组选择器
- * 仅返回当前会话的消息数组引用，会话不存在时返回不可变常量 EMPTY_MESSAGES
- */
-export const selectSessionMessages =
-  (sessionId: string) =>
-  (s: SessionStoreState): SessionMessage[] =>
-    (s.sessionsById?.[sessionId]?.messages as SessionMessage[]) ??
-    (EMPTY_MESSAGES as SessionMessage[]);
-
-export const makeSelectSessionMessages = selectSessionMessages;
-
-/**
- * 单会话子 Agent 列表选择器
- * 仅返回当前会话的 agents 数组引用，会话不存在或无子 Agent 时返回不可变常量 EMPTY_AGENTS
- */
-export const selectSessionAgents =
-  (sessionId: string) =>
-  (s: SessionStoreState): SessionAgent[] =>
-    (s.sessionsById?.[sessionId]?.agents as SessionAgent[]) ??
-    (EMPTY_AGENTS as SessionAgent[]);
-
-export const makeSelectSessionAgents = selectSessionAgents;
-
-/**
- * 单会话消息数量选择器
- * 优先取 messages 数组长度，未水合时回退至 messageCount
- */
-export const selectSessionMessageCount =
-  (sessionId: string) =>
-  (s: SessionStoreState): number => {
-    const sess = s.sessionsById?.[sessionId];
-    if (!sess) return 0;
-    if (Array.isArray(sess.messages)) return sess.messages.length;
-    return sess.messageCount ?? 0;
-  };
-
-export const makeSelectSessionMessageCount = selectSessionMessageCount;
-
-/**
- * 单会话标题标量选择器
- * 仅返回目标会话的 title 字符串，会话不存在时返回空字符串
- */
-export const selectSessionTitle =
-  (sessionId: string) =>
-  (s: SessionStoreState): string => {
-    if (!sessionId) return '';
-    return s.sessionsById?.[sessionId]?.title ?? '';
-  };
-
-/**
- * 单会话所属文件夹标量选择器
- * 仅返回目标会话的 folder 字符串，会话不存在时返回 undefined
- */
-export const selectSessionFolder =
-  (sessionId: string) =>
-  (s: SessionStoreState): string | undefined => {
-    if (!sessionId) return undefined;
-    return s.sessionsById?.[sessionId]?.folder;
-  };
-
-/**
- * 单会话置顶状态标量选择器
- * 仅返回目标会话的 isPinned 布尔值，会话不存在时返回 false
- */
-export const selectSessionIsPinned =
-  (sessionId: string) =>
-  (s: SessionStoreState): boolean => {
-    if (!sessionId) return false;
-    return Boolean(s.sessionsById?.[sessionId]?.isPinned);
-  };
-
-/**
- * 单会话标量版本代数选择器 (Revision Epoch Slot Selector)
- * 当目标会话的 messages 引用或显式 epoch 发生变化时返回递增的 32 位整数，
- * 引用不变时返回恒定整数，供 useSyncExternalStore 进行 1 CPU 时钟周期的寄存器级比对
- */
-export const selectSessionEpoch =
-  (sessionId: string) =>
-  (s: SessionStoreState): number => {
-    if (!sessionId) return 0;
-    const currentMessages = s.sessionsById?.[sessionId]?.messages;
-    if (!lastMessagesRefBySessionId.has(sessionId)) {
-      lastMessagesRefBySessionId.set(sessionId, currentMessages);
-      return epochBySessionId.get(sessionId) ?? 0;
-    }
-    const prevMessages = lastMessagesRefBySessionId.get(sessionId);
-    if (prevMessages !== currentMessages) {
-      lastMessagesRefBySessionId.set(sessionId, currentMessages);
-      return bumpSessionEpoch(sessionId);
-    }
-    return epochBySessionId.get(sessionId) ?? 0;
-  };
-
-/**
- * 当前活跃会话 ID 选择器
- */
-export const selectActiveSessionId = (s: SessionStoreState): string =>
-  s.activeSessionId ?? '';
-
-// ── React Hooks 订阅接口 (Fine-Grained Zustand Hooks) ─────────────────────────
-
-/**
- * 订阅单个会话的元数据切片
- * 消息流式推流（仅变更 text/thinking 等消息内容）绝不触发本 Hook 的订阅者重渲染。
- */
-export function useSessionMeta(sessionId: string): SessionMeta | undefined {
-  const selector = useCallback(
-    (state: SessionStoreState) => selectSessionMeta(sessionId)(state),
-    [sessionId]
+  return normalizeEpochWithBaseline(
+    sessionId,
+    useSessionStore.getState().messageEpochById[sessionId]
   );
-  return useSessionStore(useShallow(selector));
 }
 
-/**
- * 订阅单个会话的消息数组引用
- * 仅当本会话消息发生变动时触发更新，其他会话消息变动不引发重渲染。
- */
-export function useSessionMessages(sessionId: string): SessionMessage[] {
-  const selector = useCallback(
-    (state: SessionStoreState) => selectSessionMessages(sessionId)(state),
-    [sessionId]
-  );
-  return useSessionStore(selector);
+/** O(1) 选择会话 ID 拓扑顺序数组 */
+export const selectSessionOrder = (
+  state: Pick<SessionStoreState, 'sessionOrder'>
+): string[] => state.sessionOrder;
+
+/** O(1) 选择 Store 水合完成标志 */
+export const selectHydrationComplete = (
+  state: Pick<SessionStoreState, 'hydrationComplete'>
+): boolean => state.hydrationComplete;
+
+// ── React 细粒度订阅 Hooks (Fine-Grained Subscription Hooks) ──────────────
+
+export function useSessionMeta(
+  sessionId: string | null | undefined
+): SessionMeta | undefined {
+  return useSessionStore((state) => readSessionMeta(state, sessionId));
 }
 
-/**
- * 订阅单个会话的子 Agent 列表
- * 使用 useShallow 保持引用稳定，仅在当前会话的 agents 真正变动时唤醒订阅者。
- * 消息流式推流（仅变更 text/thinking 等消息内容）绝不触发本 Hook 的订阅者重渲染。
- */
-export function useSessionAgents(sessionId: string): SessionAgent[] {
-  const selector = useCallback(
-    (state: SessionStoreState) => selectSessionAgents(sessionId)(state),
-    [sessionId]
-  );
-  return useSessionStore(useShallow(selector));
+export function useSessionMessages(
+  sessionId: string | null | undefined
+): SessionMessage[] {
+  return useSessionStore((state) => readSessionMessages(state, sessionId));
 }
 
-/**
- * 订阅单个会话的消息数量
- * 消息流式输出期间长度不变，绝不触发重绘；仅在新增或撤回消息时响应。
- */
-export function useSessionMessageCount(sessionId: string): number {
-  const selector = useCallback(
-    (state: SessionStoreState) => selectSessionMessageCount(sessionId)(state),
-    [sessionId]
-  );
-  return useSessionStore(selector);
+export function useSessionMessageCount(
+  sessionId: string | null | undefined
+): number {
+  return useSessionStore((state) => readSessionMessageCount(state, sessionId));
 }
 
-/**
- * 订阅单个会话的标题标量
- * 消息流式输出与非标题元数据变动不触发重绘；仅在 title 变化时更新。
- */
-export function useSessionTitle(sessionId: string): string {
-  const selector = useCallback(
-    (state: SessionStoreState) => selectSessionTitle(sessionId)(state),
-    [sessionId]
-  );
-  return useSessionStore(selector);
+export function useSessionAgents(
+  sessionId: string | null | undefined
+): SessionAgent[] {
+  return useSessionStore((state) => readSessionAgents(state, sessionId));
 }
 
-/**
- * 订阅单个会话的所属文件夹标量
- * 消息流式输出与非文件夹元数据变动不触发重绘；仅在 folder 变化时更新。
- */
-export function useSessionFolder(sessionId: string): string | undefined {
-  const selector = useCallback(
-    (state: SessionStoreState) => selectSessionFolder(sessionId)(state),
-    [sessionId]
-  );
-  return useSessionStore(selector);
+export function useSessionTitle(sessionId: string | null | undefined): string {
+  return useSessionStore((state) => readSessionTitle(state, sessionId));
 }
 
-/**
- * 订阅单个会话的置顶状态标量
- * 消息流式输出与非置顶元数据变动不触发重绘；仅在 isPinned 变化时更新。
- */
-export function useSessionIsPinned(sessionId: string): boolean {
-  const selector = useCallback(
-    (state: SessionStoreState) => selectSessionIsPinned(sessionId)(state),
-    [sessionId]
-  );
-  return useSessionStore(selector);
+export function useSessionFolder(
+  sessionId: string | null | undefined
+): string | undefined {
+  return useSessionStore((state) => readSessionFolder(state, sessionId));
 }
 
-/**
- * 订阅单个会话的标量版本代数槽位 (Revision Epoch Slot)
- * 利用 Object.is(number, number) 寄存器级比对，仅在目标会话消息或显式代数递增时唤醒组件。
- */
-export function useSessionEpoch(sessionId: string): number {
-  const selector = useCallback(
-    (state: SessionStoreState) => selectSessionEpoch(sessionId)(state),
-    [sessionId]
-  );
-  return useSessionStore(selector);
+export function useSessionIsPinned(
+  sessionId: string | null | undefined
+): boolean {
+  return useSessionStore((state) => readSessionIsPinned(state, sessionId));
 }
 
-/**
- * 订阅当前活跃会话 ID
- */
-export function useActiveSessionId(): string {
-  return useSessionStore(selectActiveSessionId);
+export function useSessionMetaEpoch(
+  sessionId: string | null | undefined
+): number {
+  return useSessionStore((state) => readSessionMetaEpoch(state, sessionId));
+}
+
+export function useSessionMessageEpoch(
+  sessionId: string | null | undefined
+): number {
+  return useSessionStore((state) => readSessionMessageEpoch(state, sessionId));
+}
+
+export function useSessionEpoch(sessionId: string | null | undefined): number {
+  return useSessionStore((state) => readSessionMessageEpoch(state, sessionId));
+}
+
+export function useSessionOrder(): string[] {
+  return useSessionStore(selectSessionOrder);
 }

@@ -5,6 +5,134 @@ export interface ResizeObserveOptions {
   paneId?: string;
 }
 
+/**
+ * 8ms 时间预算分片排空引擎 (SlicedTaskFlusher / Time-Budgeted Drain Loop)。
+ *
+ * 在拖拽松手或窗格解冻时，按单帧 8.0ms 时间预算（基于 performance.now()）分片排空积压测高任务；
+ * 超出 8ms 预算的任务自动顺延至下一物理帧 rAF，彻底消除 60~180ms 的 Long Task 峰值。
+ */
+export class SlicedTaskFlusher {
+  private flushRafId: number | null = null;
+  private readonly queue = new Set<Element>();
+  private readonly isSuspendedCheck: (el: Element) => boolean;
+  private readonly dispatchFn: (el: Element) => void;
+  public static readonly DEFAULT_TIME_BUDGET_MS = 8.0;
+
+  constructor(
+    isSuspendedCheck: (el: Element) => boolean,
+    dispatchFn: (el: Element) => void
+  ) {
+    this.isSuspendedCheck = isSuspendedCheck;
+    this.dispatchFn = dispatchFn;
+  }
+
+  enqueue(el: Element): void {
+    this.queue.add(el);
+  }
+
+  delete(el: Element): boolean {
+    return this.queue.delete(el);
+  }
+
+  has(el: Element): boolean {
+    return this.queue.has(el);
+  }
+
+  cancel(): void {
+    if (this.flushRafId !== null) {
+      cancelAnimationFrame(this.flushRafId);
+      this.flushRafId = null;
+    }
+  }
+
+  clear(): void {
+    this.cancel();
+    this.queue.clear();
+  }
+
+  get size(): number {
+    return this.queue.size;
+  }
+
+  flushWithBudget(
+    maxDurationMs = SlicedTaskFlusher.DEFAULT_TIME_BUDGET_MS
+  ): void {
+    if (this.flushRafId !== null || this.queue.size === 0) return;
+
+    const hasUnsuspended = Array.from(this.queue).some(
+      (el) => !this.isSuspendedCheck(el)
+    );
+    if (!hasUnsuspended) return;
+
+    const runSlice = () => {
+      this.flushRafId = null;
+      const startTime = performance.now();
+      let budgetExceeded = false;
+
+      for (const el of Array.from(this.queue)) {
+        if (this.isSuspendedCheck(el)) {
+          continue;
+        }
+        this.queue.delete(el);
+        this.dispatchFn(el);
+
+        if (performance.now() - startTime >= maxDurationMs) {
+          budgetExceeded = true;
+          break;
+        }
+      }
+
+      if (budgetExceeded && this.queue.size > 0) {
+        const hasRemainingUnsuspended = Array.from(this.queue).some(
+          (el) => !this.isSuspendedCheck(el)
+        );
+        if (hasRemainingUnsuspended) {
+          this.flushRafId = requestAnimationFrame(runSlice);
+        }
+      }
+    };
+
+    this.flushRafId = requestAnimationFrame(runSlice);
+  }
+}
+
+/**
+ * 200ms Windows 异常中断快速自愈看门狗 (WindowBlurWatchdog)。
+ *
+ * 针对 Windows 桌面宿主下 Alt+Tab 切屏、Win+D、系统手势拦截或指针丢失捕获（blur / pointercancel / lostpointercapture）
+ * 导致 pointerup 丢失的边界工况，在 200ms 内自动触发安全解冻与手势恢复。
+ */
+export class WindowBlurWatchdog {
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private readonly onRecover: () => void;
+  public static readonly DEFAULT_TIMEOUT_MS = 200;
+
+  constructor(onRecover: () => void) {
+    this.onRecover = onRecover;
+  }
+
+  arm(timeoutMs = WindowBlurWatchdog.DEFAULT_TIMEOUT_MS): void {
+    this.clear();
+    if (typeof setTimeout === 'function') {
+      this.timer = setTimeout(() => {
+        this.timer = null;
+        this.onRecover();
+      }, timeoutMs);
+    }
+  }
+
+  clear(): void {
+    if (this.timer !== null) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+  }
+
+  get isArmed(): boolean {
+    return this.timer !== null;
+  }
+}
+
 export class ResizeObserverManager {
   private static instance: ResizeObserverManager | null = null;
   private ro: ResizeObserver;
@@ -12,9 +140,9 @@ export class ResizeObserverManager {
   private callbacks = new Map<Element, Set<ResizeCallback>>();
   private elementPaneMap = new Map<Element, string>();
   private suspendedPaneIds = new Set<string>();
-  private pendingQueue = new Set<Element>();
-  private flushRafId: number | null = null;
-  private watchdogTimer: number | null = null;
+  private recoverListeners = new Set<() => void>();
+  private readonly flusher: SlicedTaskFlusher;
+  private readonly watchdog: WindowBlurWatchdog;
 
   static getInstance(): ResizeObserverManager {
     if (!ResizeObserverManager.instance) {
@@ -24,11 +152,37 @@ export class ResizeObserverManager {
   }
 
   private constructor() {
+    this.flusher = new SlicedTaskFlusher(
+      (el) => this.isElementSuspended(el),
+      (el) => {
+        const entry = this.entries.get(el);
+        if (entry) {
+          this.dispatch(entry);
+        }
+      }
+    );
+
+    this.watchdog = new WindowBlurWatchdog(() => {
+      if (this.suspendedPaneIds.size > 0) {
+        console.warn(
+          '[ResizeObserverManager] Watchdog timeout triggered after interaction interrupt, forcing defrost'
+        );
+        this.resumePanes();
+        for (const listener of Array.from(this.recoverListeners)) {
+          try {
+            listener();
+          } catch (err) {
+            console.error('[ResizeObserverManager] recoverListener error', err);
+          }
+        }
+      }
+    });
+
     this.ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
         this.entries.set(entry.target, entry);
         if (this.isElementSuspended(entry.target)) {
-          this.pendingQueue.add(entry.target);
+          this.flusher.enqueue(entry.target);
         } else {
           this.dispatch(entry);
         }
@@ -41,51 +195,45 @@ export class ResizeObserverManager {
     ) {
       window.addEventListener('blur', this.handleInteractionInterrupt);
       window.addEventListener('pointercancel', this.handleInteractionInterrupt);
+      window.addEventListener(
+        'lostpointercapture',
+        this.handleInteractionInterrupt,
+        true
+      );
     }
   }
 
   /**
-   * 监听交互中断（Windows 失焦或指针取消），防止分屏拖拽由于出窗/Alt+Tab 导致窗格永久锁死在冻结态
+   * 监听交互中断（Windows 失焦、指针取消或丢失指针捕获），防止分屏拖拽由于出窗/Alt+Tab 导致窗格永久锁死在冻结态
    */
   private handleInteractionInterrupt = (): void => {
     if (this.suspendedPaneIds.size > 0) {
-      this.armWatchdog(200);
+      this.armWatchdog(WindowBlurWatchdog.DEFAULT_TIMEOUT_MS);
     }
   };
 
   /**
+   * 注册看门狗自愈回调（供 useTreeResize 等手势控制器同步清理 DOM 属性与光标）
+   */
+  onWatchdogRecover(listener: () => void): () => void {
+    this.recoverListeners.add(listener);
+    return () => {
+      this.recoverListeners.delete(listener);
+    };
+  }
+
+  /**
    * 装配看门狗定时器：超时强制解冻并分片排空
    */
-  armWatchdog(timeoutMs = 200): void {
-    this.clearWatchdog();
-    if (
-      typeof window !== 'undefined' &&
-      typeof window.setTimeout === 'function'
-    ) {
-      this.watchdogTimer = window.setTimeout(() => {
-        this.watchdogTimer = null;
-        if (this.suspendedPaneIds.size > 0) {
-          console.warn(
-            '[ResizeObserverManager] Watchdog timeout triggered after interaction interrupt, forcing defrost'
-          );
-          this.resumePanes();
-        }
-      }, timeoutMs);
-    }
+  armWatchdog(timeoutMs = WindowBlurWatchdog.DEFAULT_TIMEOUT_MS): void {
+    this.watchdog.arm(timeoutMs);
   }
 
   /**
    * 清除看门狗定时器
    */
   clearWatchdog(): void {
-    if (this.watchdogTimer !== null) {
-      if (typeof window !== 'undefined') {
-        window.clearTimeout(this.watchdogTimer);
-      } else {
-        clearTimeout(this.watchdogTimer);
-      }
-      this.watchdogTimer = null;
-    }
+    this.watchdog.clear();
   }
 
   /**
@@ -121,7 +269,7 @@ export class ResizeObserverManager {
       this.callbacks.delete(el);
       this.ro.unobserve(el);
       this.entries.delete(el);
-      this.pendingQueue.delete(el);
+      this.flusher.delete(el);
       this.elementPaneMap.delete(el);
     }
   }
@@ -130,6 +278,7 @@ export class ResizeObserverManager {
    * 细粒度窗格级冻结：仅冻结指定窗格
    */
   suspendPane(paneId: string): void {
+    if (!paneId) return;
     this.suspendedPaneIds.add(paneId);
   }
 
@@ -141,7 +290,7 @@ export class ResizeObserverManager {
     if (this.suspendedPaneIds.size === 0) {
       this.clearWatchdog();
     }
-    this.flushPendingWithBudget(8);
+    this.flushPendingWithBudget(SlicedTaskFlusher.DEFAULT_TIME_BUDGET_MS);
   }
 
   /**
@@ -150,7 +299,9 @@ export class ResizeObserverManager {
   suspendPanes(paneIds: string[]): void {
     if (!paneIds || paneIds.length === 0) return;
     for (const id of paneIds) {
-      this.suspendedPaneIds.add(id);
+      if (id) {
+        this.suspendedPaneIds.add(id);
+      }
     }
   }
 
@@ -168,7 +319,7 @@ export class ResizeObserverManager {
     if (this.suspendedPaneIds.size === 0) {
       this.clearWatchdog();
     }
-    this.flushPendingWithBudget(8);
+    this.flushPendingWithBudget(SlicedTaskFlusher.DEFAULT_TIME_BUDGET_MS);
   }
 
   /**
@@ -216,56 +367,21 @@ export class ResizeObserverManager {
   }
 
   getPendingQueueSize(): number {
-    return this.pendingQueue.size;
+    return this.flusher.size;
   }
 
   /**
    * 8ms 时间预算分片排空机制：
    * 在当前 rAF 帧内按时间预算执行测高；若单帧执行超过 8ms，自动将剩余测量任务排程至下一帧 rAF。
    */
-  flushPendingWithBudget(maxDurationMs = 8): void {
-    if (this.flushRafId !== null || this.pendingQueue.size === 0) return;
-
-    const hasUnsuspended = Array.from(this.pendingQueue).some(
-      (el) => !this.isElementSuspended(el)
-    );
-    if (!hasUnsuspended) return;
-
-    const runSlice = () => {
-      this.flushRafId = null;
-      const startTime = performance.now();
-      let budgetExceeded = false;
-
-      for (const el of Array.from(this.pendingQueue)) {
-        if (this.isElementSuspended(el)) {
-          continue;
-        }
-        this.pendingQueue.delete(el);
-        const entry = this.entries.get(el);
-        if (entry) {
-          this.dispatch(entry);
-        }
-        if (performance.now() - startTime >= maxDurationMs) {
-          budgetExceeded = true;
-          break;
-        }
-      }
-
-      if (budgetExceeded) {
-        const hasRemainingUnsuspended = Array.from(this.pendingQueue).some(
-          (el) => !this.isElementSuspended(el)
-        );
-        if (hasRemainingUnsuspended) {
-          this.flushRafId = requestAnimationFrame(runSlice);
-        }
-      }
-    };
-
-    this.flushRafId = requestAnimationFrame(runSlice);
+  flushPendingWithBudget(
+    maxDurationMs = SlicedTaskFlusher.DEFAULT_TIME_BUDGET_MS
+  ): void {
+    this.flusher.flushWithBudget(maxDurationMs);
   }
 
   flushPending(): void {
-    this.flushPendingWithBudget(8);
+    this.flushPendingWithBudget(SlicedTaskFlusher.DEFAULT_TIME_BUDGET_MS);
   }
 
   private dispatch(entry: ResizeObserverEntry): void {
@@ -284,9 +400,10 @@ export class ResizeObserverManager {
     this.ro.disconnect();
     this.callbacks.clear();
     this.entries.clear();
-    this.pendingQueue.clear();
+    this.flusher.clear();
     this.elementPaneMap.clear();
     this.suspendedPaneIds.clear();
+    this.recoverListeners.clear();
     this.clearWatchdog();
     if (
       typeof window !== 'undefined' &&
@@ -297,10 +414,11 @@ export class ResizeObserverManager {
         'pointercancel',
         this.handleInteractionInterrupt
       );
-    }
-    if (this.flushRafId !== null) {
-      cancelAnimationFrame(this.flushRafId);
-      this.flushRafId = null;
+      window.removeEventListener(
+        'lostpointercapture',
+        this.handleInteractionInterrupt,
+        true
+      );
     }
     if (ResizeObserverManager.instance === this) {
       ResizeObserverManager.instance = null;

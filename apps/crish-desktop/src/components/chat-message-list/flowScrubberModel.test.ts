@@ -5,6 +5,7 @@ import {
   buildScrubberSegments,
   capScrubberSegments,
   countScrubberTicks,
+  extractFastSnippetFromMessage,
   formatTickTooltip,
   isConversationFlowOn,
   readPurposeLabel,
@@ -13,6 +14,7 @@ import {
   snippetFromUserText,
   wheelDeltaY,
 } from './flowScrubberModel';
+import { extractEntryBlockSize } from './messageVirtualizerMeasure';
 
 function msg(
   id: string,
@@ -26,9 +28,9 @@ function msg(
 describe('flowScrubberModel', () => {
   it('无消息 / 无用户气泡返回空（不画空柱）', () => {
     expect(buildScrubberSegments([], () => 100)).toEqual([]);
-    expect(
-      buildScrubberSegments([msg('a1', 'assistant')], () => 100)
-    ).toEqual([]);
+    expect(buildScrubberSegments([msg('a1', 'assistant')], () => 100)).toEqual(
+      []
+    );
   });
 
   it('tick 数 = 用户气泡数，高度比按 VSM 像素而不是等高校', () => {
@@ -38,17 +40,21 @@ describe('flowScrubberModel', () => {
       u2: 200,
     };
     const segs = buildScrubberSegments(
-      [msg('u1', 'user', '问一'), msg('a1', 'assistant'), msg('u2', 'user', '问二')],
+      [
+        msg('u1', 'user', '问一'),
+        msg('a1', 'assistant'),
+        msg('u2', 'user', '问二'),
+      ],
       (id) => heights[id] ?? 0
     );
     expect(countScrubberTicks(segs)).toBe(2);
     const ticks = segs.filter((s) => s.type === 'tick');
-    expect(ticks[0]?.type === 'tick' && ticks[0].tick.heightPercent).toBeCloseTo(
-      100 / 600
-    );
-    expect(ticks[1]?.type === 'tick' && ticks[1].tick.heightPercent).toBeCloseTo(
-      200 / 600
-    );
+    expect(
+      ticks[0]?.type === 'tick' && ticks[0].tick.heightPercent
+    ).toBeCloseTo(100 / 600);
+    expect(
+      ticks[1]?.type === 'tick' && ticks[1].tick.heightPercent
+    ).toBeCloseTo(200 / 600);
     expect(ticks[0]?.type === 'tick' && ticks[0].tick.flex).toBe(100);
     expect(ticks[1]?.type === 'tick' && ticks[1].tick.flex).toBe(200);
     const gaps = segs.filter((s) => s.type === 'gap');
@@ -58,7 +64,11 @@ describe('flowScrubberModel', () => {
 
   it('关插件 tooltip 只用 snippet；开插件拼 purpose/时间', () => {
     expect(
-      formatTickTooltip({ snippet: '你好世界', flowOn: false, timeLabel: '14:00' })
+      formatTickTooltip({
+        snippet: '你好世界',
+        flowOn: false,
+        timeLabel: '14:00',
+      })
     ).toBe('你好世界');
     expect(
       formatTickTooltip({
@@ -69,7 +79,11 @@ describe('flowScrubberModel', () => {
       })
     ).toBe('梳理 IPC · 你好世界');
     expect(
-      formatTickTooltip({ snippet: '你好世界', flowOn: true, timeLabel: '14:00' })
+      formatTickTooltip({
+        snippet: '你好世界',
+        flowOn: true,
+        timeLabel: '14:00',
+      })
     ).toBe('14:00 · 你好世界');
   });
 
@@ -130,8 +144,14 @@ describe('flowScrubberModel', () => {
     tallRow.setAttribute('data-msg-id', 'a_tall');
     const tallIntoView = vi.fn();
     tallRow.scrollIntoView = tallIntoView;
-    Object.defineProperty(tallRow, 'offsetHeight', { value: 350, configurable: true });
-    Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true });
+    Object.defineProperty(tallRow, 'offsetHeight', {
+      value: 350,
+      configurable: true,
+    });
+    Object.defineProperty(scroller, 'clientHeight', {
+      value: 500,
+      configurable: true,
+    });
     scroller.appendChild(tallRow);
     scrollToScrubberTarget(scroller, 'a_tall', manager);
     expect(tallIntoView).toHaveBeenCalledWith({
@@ -156,7 +176,11 @@ describe('flowScrubberModel', () => {
     const segs = buildScrubberSegments(
       [
         msg('u1', 'user', '### 如何实现无轨刻度？'),
-        msg('a1', 'assistant', '**方案如下**：\n```ts\nconst a = 1;\n```\n非常简单。'),
+        msg(
+          'a1',
+          'assistant',
+          '**方案如下**：\n```ts\nconst a = 1;\n```\n非常简单。'
+        ),
       ],
       () => 100
     );
@@ -176,7 +200,10 @@ describe('capScrubberSegments（有界刻度渲染）', () => {
   function segsOf(n: number) {
     const list = [];
     for (let i = 0; i < n; i++) {
-      list.push(msg(`u${i}`, 'user', `问 ${i}`), msg(`a${i}`, 'assistant', `答 ${i}`));
+      list.push(
+        msg(`u${i}`, 'user', `问 ${i}`),
+        msg(`a${i}`, 'assistant', `答 ${i}`)
+      );
     }
     return buildScrubberSegments(list, () => 100);
   }
@@ -228,5 +255,41 @@ describe('capScrubberSegments（有界刻度渲染）', () => {
   it('容量非法（<1）时视为不需要聚合，原样返回', () => {
     const segs = segsOf(30);
     expect(capScrubberSegments(segs, 0)).toHaveLength(segs.length);
+  });
+
+  it('[VS-U04] FlowScrubber extractFastSnippetFromMessage 零 AST 解析且 WeakMap 缓存命中', () => {
+    const hugeMarkdown =
+      '# 标题\n\n```typescript\n' +
+      'const x = 1;\n'.repeat(5000) +
+      '```\n尾部文字';
+    const msgObj = { text: hugeMarkdown };
+
+    const start = performance.now();
+    const snippet1 = extractFastSnippetFromMessage(msgObj);
+    const duration1 = performance.now() - start;
+
+    expect(duration1).toBeLessThan(0.5);
+    expect(snippet1).toContain('[代码]');
+    expect(snippet1.length).toBeLessThanOrEqual(51);
+
+    // 二次读取命中 WeakMap (< 0.005ms)
+    const start2 = performance.now();
+    const snippet2 = extractFastSnippetFromMessage(msgObj);
+    const duration2 = performance.now() - start2;
+    expect(snippet2).toBe(snippet1);
+    expect(duration2).toBeLessThan(0.05);
+  });
+
+  it('extractEntryBlockSize 优先使用 borderBoxSize[0].blockSize 实现零回流测高', () => {
+    const entryWithBorderBox = {
+      borderBoxSize: [{ blockSize: 214.4, inlineSize: 600 }],
+      contentRect: { height: 198 },
+    } as unknown as ResizeObserverEntry;
+    expect(extractEntryBlockSize(entryWithBorderBox)).toBe(214);
+
+    const entryFallback = {
+      contentRect: { height: 180.2 },
+    } as unknown as ResizeObserverEntry;
+    expect(extractEntryBlockSize(entryFallback)).toBe(181);
   });
 });

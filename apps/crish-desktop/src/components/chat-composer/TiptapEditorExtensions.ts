@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * TiptapEditorField 编辑器装配（F1-β 拆分）：
+ * TiptapEditorField 编辑器装配（F1-β 拆分 + Stage 05 两级块缓存与 IME/拖拽联锁）：
  * - buildTiptapEditorOptions：extensions + onUpdate + editorProps（keydown/drop/paste）
  *   一次性稳定装配（useMemo 空依赖），运行期动态 prop 全部经 ref 桥（bridge）取最新值，
  *   避免 tiptap v3 useEditor 每渲染 setOptions 重建 ExtensionManager。
  * - Enter/IME 决策来自 ./TiptapKeymap（纯函数）。
+ * - 增量 Markdown 序列化由 ./twoTierBlockEditorCache (IncrementalMarkdownSerializer) 承载。
  */
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -19,7 +20,8 @@ import {
 } from './SlashExtension';
 import { DirTreeExtension, dirTreeSuggestionKey } from './DirTreeExtension';
 import { openFileInPanel } from '../../api/filePanelOpener';
-import { serializeToMarkdown } from './serialization/markdownSerializer';
+import { IncrementalMarkdownSerializer } from './twoTierBlockEditorCache';
+import type { ComposerImeDragGuard } from './composerImeDragGuard';
 import { isImeComposition, resolveTiptapKeydown } from './TiptapKeymap';
 import { readCodeBlockIndent } from '../../api/codeBlockIndent';
 import {
@@ -43,20 +45,17 @@ export const SERIALIZE_WARN_CHARS = 50000;
 export const TIPTAP_PASTE_DOMPURIFY_CONFIG = {
   FORBID_TAGS: [
     'script',
-    'style',
     'iframe',
     'object',
     'embed',
     'form',
-    'link',
-    'meta',
-    'img',
-    'video',
-    'audio',
-    'source',
     'input',
     'button',
-    'textarea',
+    'style',
+    'link',
+    'meta',
+    'svg',
+    'math',
   ],
   FORBID_ATTR: ['style', 'onerror', 'onload', 'onclick'],
   ALLOW_UNKNOWN_PROTOCOLS: false as const,
@@ -92,6 +91,8 @@ export interface TiptapEditorBridge {
   slashListboxId: string;
   mentionListboxId: string;
   dirTreeListboxId?: string;
+  serializerRef?: { current: IncrementalMarkdownSerializer };
+  imeDragGuardRef?: { current: ComposerImeDragGuard };
 }
 
 /**
@@ -113,12 +114,83 @@ function createOversizeWatcher(bridge: TiptapEditorBridge) {
 }
 
 /**
+ * 从 ProseMirror 事务与当前选区标记受影响的顶层块索引区间
+ */
+function markTransactionDirtyBlocks(
+  serializer: IncrementalMarkdownSerializer,
+  editor: any,
+  transaction: any
+): void {
+  const doc = editor?.state?.doc;
+  if (!doc || typeof doc.childCount !== 'number' || doc.childCount <= 0) return;
+
+  const maxIdx = Math.max(0, doc.childCount - 1);
+  const maxPos = Math.max(0, doc.content?.size ?? 0);
+  const resolveBlockIdx = (pos: number): number => {
+    try {
+      const clamped = Math.max(0, Math.min(pos, maxPos));
+      return Math.max(0, Math.min(doc.resolve(clamped).index(0), maxIdx));
+    } catch {
+      return 0;
+    }
+  };
+
+  let marked = false;
+  const steps = transaction?.steps;
+  if (Array.isArray(steps) && steps.length > 0) {
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      if (typeof step?.from === 'number') {
+        const mappedFrom =
+          transaction.mapping?.slice?.(i + 1)?.map?.(step.from, -1) ??
+          step.from;
+        const rawTo = typeof step.to === 'number' ? step.to : step.from;
+        const mappedTo =
+          transaction.mapping?.slice?.(i + 1)?.map?.(rawTo, 1) ?? rawTo;
+        serializer.markDirtyRange(
+          resolveBlockIdx(mappedFrom),
+          resolveBlockIdx(mappedTo)
+        );
+        marked = true;
+      }
+    }
+  }
+
+  if (!marked && editor?.state?.selection) {
+    const { from, to } = editor.state.selection;
+    serializer.markDirtyRange(resolveBlockIdx(from), resolveBlockIdx(to));
+  }
+}
+
+/**
+ * 使用两级块缓存增量序列化编辑器文档为 Markdown
+ */
+export function serializeEditorToMarkdown(
+  editor: any,
+  serializer: IncrementalMarkdownSerializer
+): string {
+  if (!editor) return '';
+  const doc = editor.state?.doc;
+  if (
+    doc &&
+    typeof doc.childCount === 'number' &&
+    typeof doc.child === 'function'
+  ) {
+    return serializer.serializeDoc(doc);
+  }
+  return serializer.serializeJsonDoc(editor.getJSON?.());
+}
+
+/**
  * 一次性稳定装配：extensions + onUpdate + editorProps。
  * 注意：装配一次性固定（调用方 useMemo 空依赖），回调全部经 bridge 取最新值；
  * aria 属性为运行期动态值，走 DOM setAttribute 同步（不经装配重建）。
  */
 export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
   const checkOversize = createOversizeWatcher(bridge);
+  const fallbackSerializer = new IncrementalMarkdownSerializer();
+  const getSerializer = () =>
+    bridge.serializerRef?.current ?? fallbackSerializer;
 
   const extensions = [
     StarterKit.configure({
@@ -165,13 +237,16 @@ export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
 
   return {
     extensions,
-    onUpdate: ({ editor }: any) => {
-      // 性能优化：防抖处理海量节点下的 serializeToMarkdown 计算，避免主线程卡顿
+    onUpdate: ({ editor, transaction }: any) => {
+      const serializer = getSerializer();
+      markTransactionDirtyBlocks(serializer, editor, transaction);
+
+      // 性能优化：防抖 + 两级块缓存增量序列化，避免大文档主线程全量遍历卡顿
       if (bridge.debounceTimerRef.current) {
         clearTimeout(bridge.debounceTimerRef.current);
       }
       bridge.debounceTimerRef.current = setTimeout(() => {
-        const markdown = serializeToMarkdown(editor.getJSON());
+        const markdown = serializeEditorToMarkdown(editor, serializer);
         bridge.lastContentRef.current = markdown;
         // R-08：防抖窗口末帧全量序列化的大文档预算提示（宿主 toast）
         checkOversize(markdown);
@@ -190,13 +265,20 @@ export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
           return false; // Pass through to browser native CJK IME candidate selection
         }
 
+        // Stage 05 §4.2: 分栏拖拽期间按键白名单保护
+        const guard = bridge.imeDragGuardRef?.current;
+        if (guard?.isDragging() && !guard.isKeyWhitelistedDuringDrag(event)) {
+          event.preventDefault?.();
+          return true;
+        }
+
         // CodeBlock Enter 保护（SRS 3.7.1）：代码块内 Enter 只换行，绝不触发发送
         const inCodeBlock =
           view.state.selection.$from.parent.type.name === 'codeBlock';
         const suggestionActive = Boolean(
           slashSuggestionKey.getState(view.state)?.active ||
-            mentionSuggestionKey.getState(view.state)?.active ||
-            dirTreeSuggestionKey.getState(view.state)?.active
+          mentionSuggestionKey.getState(view.state)?.active ||
+          dirTreeSuggestionKey.getState(view.state)?.active
         );
 
         const action = resolveTiptapKeydown(event, {
@@ -229,10 +311,11 @@ export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
           const editor = bridge.editorRef.current;
           if (!editor) return true;
 
-          // 强制立即执行一次同步转换以保证发送内容最新
-          const json = editor.getJSON();
+          // 强制立即执行一次增量转换以保证发送内容最新
+          const serializer = getSerializer();
           const markdown =
-            serializeToMarkdown(json).trim() || editor.getText().trim();
+            serializeEditorToMarkdown(editor, serializer).trim() ||
+            editor.getText().trim();
 
           // R-08：发送瞬间同步全量序列化的大文档预算提示
           checkOversize(markdown);
@@ -240,6 +323,7 @@ export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
           if (markdown && bridge.callbacksRef.current.onSendMarkdown) {
             bridge.callbacksRef.current.onSendMarkdown(markdown);
             editor.commands.clearContent();
+            serializer.getCache().clear();
             bridge.lastContentRef.current = '';
             bridge.callbacksRef.current.onMarkdownChange?.('');
           }
@@ -255,7 +339,7 @@ export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
           requestAnimationFrame(() => {
             const editor = bridge.editorRef.current;
             if (!editor || editor.isDestroyed) return;
-            const markdown = serializeToMarkdown(editor.getJSON());
+            const markdown = serializeEditorToMarkdown(editor, getSerializer());
             bridge.lastContentRef.current = markdown;
             checkOversize(markdown);
             bridge.callbacksRef.current.onMarkdownChange?.(markdown);
@@ -284,8 +368,8 @@ export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
         if (
           event.dataTransfer &&
           (event.dataTransfer.files?.length > 0 ||
-            Array.from(event.dataTransfer.types ?? []).some((t: any) =>
-              String(t).toLowerCase() === 'files'
+            Array.from(event.dataTransfer.types ?? []).some(
+              (t: any) => String(t).toLowerCase() === 'files'
             ))
         ) {
           event.preventDefault();
@@ -295,7 +379,7 @@ export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
         return false;
       },
       handleDrop: (
-        view: any,
+        _view: any,
         event: DragEvent | any,
         _slice: any,
         moved: boolean
@@ -344,8 +428,8 @@ export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
 
         if (files.length > 0) {
           event.preventDefault();
-          const allImages = files.every(
-            (f) => Boolean(f.type && f.type.startsWith('image/'))
+          const allImages = files.every((f) =>
+            Boolean(f.type && f.type.startsWith('image/'))
           );
           if (allImages) {
             if (!activeModelAcceptsImage()) {
@@ -356,7 +440,11 @@ export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
 
           if (bridge.callbacksRef.current.onPasteFiles) {
             void bridge.callbacksRef.current.onPasteFiles(files);
-          } else if (bridge.callbacksRef.current.onPasteImage && allImages && files[0]) {
+          } else if (
+            bridge.callbacksRef.current.onPasteImage &&
+            allImages &&
+            files[0]
+          ) {
             bridge.callbacksRef.current.onPasteImage(files[0], event);
           } else if (bridge.callbacksRef.current.onDropFiles) {
             bridge.callbacksRef.current.onDropFiles(files);
@@ -368,7 +456,10 @@ export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
         const html = clipboardData.getData('text/html');
         if (html) {
           event.preventDefault();
-          const cleaned = DOMPurify.sanitize(html, TIPTAP_PASTE_DOMPURIFY_CONFIG);
+          const cleaned = DOMPurify.sanitize(
+            html,
+            TIPTAP_PASTE_DOMPURIFY_CONFIG
+          );
           view.pasteHTML(cleaned);
           return true;
         }

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  DEFAULT_STREAM_MAX_DELTA_CHARS,
   StreamTextBatcher,
   StreamValueBatcher,
   streamBatchKey,
@@ -326,6 +327,51 @@ describe('StreamTextBatcher', () => {
       text: baseText + hugeDelta + 'next-token',
     });
     expect(batcher.bufferedSize()).toBe(0);
+
+    batcher.dispose();
+  });
+
+  it('defaults to DEFAULT_STREAM_MAX_DELTA_CHARS = 120 and measures uncommitted delta (fullText.length - lastFlushedLength)', () => {
+    expect(DEFAULT_STREAM_MAX_DELTA_CHARS).toBe(120);
+    const flushed: Array<{ key: string; text: string }> = [];
+    const mt = createManualTimers();
+    const batcher = new StreamTextBatcher(
+      (key, text) => {
+        flushed.push({ key, text });
+      },
+      {
+        intervalMs: 48,
+        setTimer: mt.setTimer,
+        clearTimer: mt.clearTimer,
+      }
+    );
+
+    const key = streamBatchKey('sess-delta', 'msg-delta');
+    const longPrefix = 'A'.repeat(12000);
+
+    // 1. 初次推入 12000 字符（delta = 12000 >= 120），立即强刷并记录 lastFlushedLength = 12000
+    batcher.push(key, longPrefix);
+    expect(flushed).toHaveLength(1);
+    expect(batcher.getLastFlushedLength(key)).toBe(12000);
+    expect(batcher.getUnflushedDeltaChars()).toBe(0);
+    flushed.length = 0;
+
+    // 2. 在 12000 字符基础上追加 50 字符（delta = 50 < 120），严禁退化为每 token 同步强刷
+    batcher.push(key, longPrefix + 'b'.repeat(50));
+    expect(flushed).toHaveLength(0);
+    expect(batcher.getUnflushedDeltaChars()).toBe(50);
+    expect(batcher.isScheduled()).toBe(true);
+
+    // 3. 继续追加到 119 字符（delta = 119 < 120），仍处于批合并窗口内
+    batcher.push(key, longPrefix + 'b'.repeat(119));
+    expect(flushed).toHaveLength(0);
+    expect(batcher.getUnflushedDeltaChars()).toBe(119);
+
+    // 4. 跨过 120 字符增量阈值（delta = 120 >= 120），触发即时 flush 并归零未排空增量
+    batcher.push(key, longPrefix + 'b'.repeat(120));
+    expect(flushed).toHaveLength(1);
+    expect(batcher.getLastFlushedLength(key)).toBe(12120);
+    expect(batcher.getUnflushedDeltaChars()).toBe(0);
 
     batcher.dispose();
   });

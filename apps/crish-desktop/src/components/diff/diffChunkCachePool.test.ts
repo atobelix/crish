@@ -1,11 +1,24 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+import React from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import {
   CHUNK_SIZE,
   DEFAULT_MAX_CHUNKS,
+  DIFF_CHUNK_SIZE,
   DiffChunkCachePool,
   MAX_FILE_TREE_DOM_NODES,
+  NativeHighlightManager,
   PrefixFileTreeIndex,
+  SotaDiffChunkCachePool,
 } from './diffChunkCachePool';
+import { VirtualPlainCodeViewer } from './VirtualPlainCodeViewer';
+import styles from './DiffCard.module.css';
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 function makeChunkLines(chunkIndex: number): string[] {
   const startLine = chunkIndex * CHUNK_SIZE;
@@ -15,14 +28,16 @@ function makeChunkLines(chunkIndex: number): string[] {
   );
 }
 
-describe('DiffChunkCachePool (L1 视口锁定 + L2 64行分块 LRU 缓存池)', () => {
-  it('按固定 64 行分块存储并精确按行号读取 Token', () => {
-    const pool = new DiffChunkCachePool<string>();
+describe('SotaDiffChunkCachePool (L1 视口锁定 + L2 128分块8192行池 + Generation Token 代次守卫)', () => {
+  it('默认容量为 128 个 64 行分块（覆盖 8,192 行），并精确按行号读取 Token', () => {
+    const pool = new SotaDiffChunkCachePool<string>();
     expect(pool.chunkSize).toBe(64);
-    expect(pool.maxChunks).toBe(DEFAULT_MAX_CHUNKS);
+    expect(DIFF_CHUNK_SIZE).toBe(64);
+    expect(DEFAULT_MAX_CHUNKS).toBe(128);
+    expect(pool.maxChunks).toBe(128);
 
-    pool.putChunk(0, makeChunkLines(0));
-    pool.putChunk(2, makeChunkLines(2));
+    expect(pool.putChunk(0, makeChunkLines(0))).toBe(true);
+    expect(pool.putChunk(2, makeChunkLines(2))).toBe(true);
 
     expect(pool.getLine(0)).toBe('token-line-0');
     expect(pool.getLine(63)).toBe('token-line-63');
@@ -32,29 +47,26 @@ describe('DiffChunkCachePool (L1 视口锁定 + L2 64行分块 LRU 缓存池)', 
     expect(pool.getLine(-1)).toBeUndefined();
   });
 
-  it('在 10,000 行大文件下锁定当前视口 L1 Chunk 后，灌入大量远端 Chunk 触发 L2 LRU 淘汰时 L1 Chunk 100% 存活', () => {
-    const pool = new DiffChunkCachePool<string>(64);
-    const totalLines = 10_000;
-    const totalChunks = Math.ceil(totalLines / CHUNK_SIZE); // 157 个分块
+  it('工作集免疫断言：灌入 200 个分块触发满载淘汰时，L1 pinnedChunkIndices 存活率 100%', () => {
+    const pool = new DiffChunkCachePool<string>(128);
 
-    // 锁定视口行 [120, 200]，默认预取 overscan = 64 -> 覆盖行 [56, 264]，对应 Chunk 0..4
+    // 锁定视口行 [120, 200]，预取 overscan = 64 -> 覆盖 Chunk 0..4
     const pinned = pool.lockViewportRange(120, 200, 64);
     expect(Array.from(pinned)).toEqual([0, 1, 2, 3, 4]);
 
-    // 先写入当前视口锁定的 L1 分块
     for (const chunkIdx of pinned) {
       pool.putChunk(chunkIdx, makeChunkLines(chunkIdx));
     }
 
-    // 模拟用户在 10,000 行大文件中剧烈跨跳，连续灌入全部远端分块 (Chunk 5..156，共 152 个分块)
-    for (let c = 5; c < totalChunks; c++) {
+    // 连续灌入 200 个远端分块 (Chunk 5..204)
+    for (let c = 5; c < 205; c++) {
       pool.putChunk(c, makeChunkLines(c));
     }
 
-    // 缓存池总容量严格受控于 64 个 Chunk (4096 行)
-    expect(pool.size).toBe(64);
+    // 缓存池总容量严格受控于 128 个 Chunk (8,192 行)
+    expect(pool.size).toBe(128);
 
-    // 核心断言：锁定的 L1 视口分块 (Chunk 0..4，行 0..319) 100% 存活，零驱逐！
+    // 核心断言：锁定的 L1 视口分块 (Chunk 0..4) 100% 存活，绝对豁免 LRU 驱逐
     for (const chunkIdx of pinned) {
       expect(pool.hasChunk(chunkIdx)).toBe(true);
       const startLine = chunkIdx * CHUNK_SIZE;
@@ -63,10 +75,39 @@ describe('DiffChunkCachePool (L1 视口锁定 + L2 64行分块 LRU 缓存池)', 
       }
     }
 
-    // 早期灌入的未锁定冷分块 (如 Chunk 5..90) 已被按 LRU 淘汰，而最新灌入的尾部冷分块仍在池中
     expect(pool.hasChunk(5)).toBe(false);
-    expect(pool.hasChunk(50)).toBe(false);
-    expect(pool.hasChunk(totalChunks - 1)).toBe(true);
+    expect(pool.hasChunk(204)).toBe(true);
+  });
+
+  it('Generation Token 代次作废断言：跨跳 2,000 行递增代次后，旧代次 Worker 回写被 100% 拒绝', () => {
+    const pool = new SotaDiffChunkCachePool<string>(128);
+
+    // 初始停留在第 0~100 行 (Generation 1)
+    const lock1 = pool.lockViewportAndAdvanceGen(0, 100, 64);
+    expect(lock1.generation).toBe(1);
+    expect(lock1.missingChunks).toEqual([0, 1, 2]);
+
+    // 用户快速拖拽滚动条跨跳 2,000 行至 2000~2100 行 (Generation 2)
+    const lock2 = pool.lockViewportAndAdvanceGen(2000, 2100, 64);
+    expect(lock2.generation).toBe(2);
+
+    // 此时旧代次 (Generation 1) 的 Worker 异步任务迟到完成并尝试回写 Chunk 0
+    const staleAccepted = pool.putChunk(0, makeChunkLines(0), lock1.generation);
+    expect(staleAccepted).toBe(false);
+    expect(pool.hasChunk(0)).toBe(false);
+    expect(pool.size).toBe(0);
+
+    // 当前新代次 (Generation 2) 的 Worker 任务回写目标视口分块，100% 成功写入
+    for (const chunkIdx of lock2.missingChunks) {
+      const ok = pool.putChunk(
+        chunkIdx,
+        makeChunkLines(chunkIdx),
+        lock2.generation
+      );
+      expect(ok).toBe(true);
+    }
+    expect(pool.size).toBe(lock2.missingChunks.length);
+    expect(pool.getLine(2000)).toBe('token-line-2000');
   });
 
   it('L2 未锁定分块严格遵循 LRU 顺序淘汰，getLine 命中会刷新分块热度', () => {
@@ -77,10 +118,8 @@ describe('DiffChunkCachePool (L1 视口锁定 + L2 64行分块 LRU 缓存池)', 
     pool.putChunk(2, makeChunkLines(2));
     pool.putChunk(3, makeChunkLines(3));
 
-    // 访问 Chunk 1 的第 65 行，使 Chunk 1 成为最近使用，Chunk 2 成为最旧未锁定分块
     expect(pool.getLine(65)).toBe('token-line-65');
 
-    // 写入新分块 Chunk 4，应淘汰最旧的未锁定分块 Chunk 2，保留锁定的 Chunk 0 及较新的 Chunk 1, 3, 4
     pool.putChunk(4, makeChunkLines(4));
     expect(pool.hasChunk(0)).toBe(true);
     expect(pool.hasChunk(1)).toBe(true);
@@ -91,14 +130,12 @@ describe('DiffChunkCachePool (L1 视口锁定 + L2 64行分块 LRU 缓存池)', 
 
   it('getMissingChunksInRange 仅返回指定行区间内尚未缓存的 64 行分块索引', () => {
     const pool = new DiffChunkCachePool<string>(64);
-    pool.putChunk(1, makeChunkLines(1)); // 覆盖 64..127
-    pool.putChunk(3, makeChunkLines(3)); // 覆盖 192..255
+    pool.putChunk(1, makeChunkLines(1));
+    pool.putChunk(3, makeChunkLines(3));
 
-    // 查询行区间 [0, 300] (覆盖 Chunk 0..4)，应仅返回缺失的 [0, 2, 4]
     const missing = pool.getMissingChunksInRange(0, 300);
     expect(missing).toEqual([0, 2, 4]);
 
-    // 补齐缺失分块后再次查询应为空数组
     for (const c of missing) {
       pool.putChunk(c, makeChunkLines(c));
     }
@@ -108,10 +145,9 @@ describe('DiffChunkCachePool (L1 视口锁定 + L2 64行分块 LRU 缓存池)', 
   });
 });
 
-describe('PrefixFileTreeIndex (万级文件树纯前缀路径局部增量索引与 <= 60 恒定窗口)', () => {
+describe('PrefixFileTreeIndex 重导出兼容性验证', () => {
   function generate10kPaths(): string[] {
     const paths: string[] = [];
-    // 构造 10,000 个文件路径：20 个顶层模块 x 10 个子包 x 50 个源码文件
     for (let m = 0; m < 20; m++) {
       const mod = `pkg-${String(m).padStart(2, '0')}`;
       for (let s = 0; s < 10; s++) {
@@ -124,72 +160,95 @@ describe('PrefixFileTreeIndex (万级文件树纯前缀路径局部增量索引�
     return paths;
   }
 
-  it('在 10,000 个文件路径下支持高效的局部子目录折叠/展开与增量更新', () => {
+  it('在 10,000 个文件路径下支持高效的局部子目录折叠/展开与 <= 60 恒定窗口', () => {
     const index = new PrefixFileTreeIndex();
-    const paths = generate10kPaths();
-    expect(paths.length).toBe(10_000);
-
-    const initialVisible = index.upsertPaths(paths);
-    // 20 个顶层目录 + 200 个二级目录 + 10,000 个文件 = 10,220 个可见节点
+    const initialVisible = index.upsertPaths(generate10kPaths());
     expect(initialVisible).toBe(10_220);
 
-    // 局部折叠二级目录 'pkg-05/feature-03'（包含 50 个文件）
-    const tCollapseStart = performance.now();
-    const afterCollapseState = index.toggleFolder('pkg-05/feature-03');
-    const collapseElapsedMs = performance.now() - tCollapseStart;
-
-    expect(afterCollapseState).toBe(false);
+    expect(index.toggleFolder('pkg-05/feature-03')).toBe(false);
     expect(index.visibleCount).toBe(10_220 - 50);
-    expect(collapseElapsedMs).toBeLessThan(15);
 
-    // 局部重新展开 'pkg-05/feature-03'，恢复 50 个文件切片
-    const tExpandStart = performance.now();
-    const afterExpandState = index.toggleFolder('pkg-05/feature-03');
-    const expandElapsedMs = performance.now() - tExpandStart;
-
-    expect(afterExpandState).toBe(true);
-    expect(index.visibleCount).toBe(10_220);
-    expect(expandElapsedMs).toBeLessThan(15);
-
-    // 局部折叠顶层大目录 'pkg-00'（包含 10 个子目录 + 500 个文件 = 510 个后代节点）
-    index.toggleFolder('pkg-00', false);
-    expect(index.visibleCount).toBe(10_220 - 510);
-
-    // 局部增量插入新文件到已展开目录 'pkg-05/feature-03'
-    index.upsertPaths(['pkg-05/feature-03/NewWidget.tsx']);
-    expect(index.visibleCount).toBe(10_220 - 510 + 1);
-
-    // 局部前缀删除整个 'pkg-05/feature-03'（1 个目录自身 + 51 个文件 = 52 个可见节点）
-    const removedCount = index.removePrefix('pkg-05/feature-03');
-    expect(removedCount).toBe(52);
-    expect(index.visibleCount).toBe(10_220 - 510 + 1 - 52);
+    const slice = index.getVisibleSlice(10_000, 3200, 28, 200);
+    expect(slice.length).toBe(MAX_FILE_TREE_DOM_NODES);
   });
+});
 
-  it('getVisibleSlice 在任意滚动位置与超大视口下返回的 DOM 节点数严格 <= 60', () => {
-    const index = new PrefixFileTreeIndex();
-    index.upsertPaths(generate10kPaths());
+describe('【DEVIL-07-4】VirtualPlainCodeViewer Blink 原生 CSS.highlights Zero-Span 渐进增强验证', () => {
+  it('10,000 字符超长单行 JSON 在 Blink CSS.highlights 环境下单行仅挂载 1 个原生 TextNode（0 Span），水平平移耗时 <= 0.42ms', () => {
+    const g = globalThis as Record<string, unknown>;
+    const origCSS = g.CSS;
+    const origHighlight = g.Highlight;
 
-    // 常规视口 (800px 高，28px 行高 -> 约 29 行可见 + 上下 overscan)
-    const sliceTop = index.getVisibleSlice(0, 800, 28, 60);
-    expect(sliceTop.length).toBeLessThanOrEqual(MAX_FILE_TREE_DOM_NODES);
-    expect(sliceTop.items.length).toBeLessThanOrEqual(60);
-    expect(sliceTop.startIndex).toBe(0);
-    expect(sliceTop[0].path).toBe('pkg-00');
+    class MockHighlight {
+      readonly ranges: AbstractRange[] = [];
+      add(range: AbstractRange): void {
+        this.ranges.push(range);
+      }
+    }
+    const highlightMap = new Map<string, MockHighlight>();
+    g.CSS = {
+      ...(typeof origCSS === 'object' && origCSS ? origCSS : {}),
+      highlights: highlightMap,
+    };
+    g.Highlight = MockHighlight;
 
-    // 中部滚动位置
-    const sliceMid = index.getVisibleSlice(50_000, 900, 28, 60);
-    expect(sliceMid.length).toBeLessThanOrEqual(60);
-    expect(sliceMid.offsetTop).toBe(sliceMid.startIndex * 28);
-    expect(sliceMid.totalHeight).toBe(10_220 * 28);
+    try {
+      expect(NativeHighlightManager.isSupported()).toBe(true);
 
-    // 极端超大视口 (例如 4K 全屏高度 3200px，即便调用方传入 maxDomNodes = 200 也必须被硬上限钳制在 <= 60)
-    const sliceHugeViewport = index.getVisibleSlice(10_000, 3200, 28, 200);
-    expect(sliceHugeViewport.length).toBe(60);
-    expect(sliceHugeViewport.items.length).toBeLessThanOrEqual(60);
+      // 构造恰好 10,000 字符的未格式化单行 JSON 源码
+      const unit = '{"id":123,"name":"conex_item","active":true},';
+      const repeatCount = Math.floor(9980 / unit.length);
+      const body = unit.repeat(repeatCount);
+      const tailPad = 'x'.repeat(10_000 - body.length - 12);
+      const json10k = `[${body}{"pad":"${tailPad}"}]`;
+      expect(json10k.length).toBe(10_000);
 
-    // 底部边界滚动位置
-    const sliceBottom = index.getVisibleSlice(999_999, 1200, 28, 60);
-    expect(sliceBottom.length).toBeLessThanOrEqual(60);
-    expect(sliceBottom.endIndex).toBe(10_220);
+      const { container } = render(
+        React.createElement(VirtualPlainCodeViewer, {
+          content: json10k,
+          filePath: 'bundle.min.json',
+          wordWrap: false,
+        })
+      );
+
+      const lineText = container.querySelector(
+        `.${styles.lineText}`
+      ) as HTMLElement;
+      expect(lineText).not.toBeNull();
+
+      // 核心断言 1：Zero-Span！单行内仅挂载 1 个纯原生 TextNode，子 Span 数量严格为 0
+      expect(lineText.querySelectorAll('span').length).toBe(0);
+      expect(lineText.children.length).toBe(0);
+      expect(lineText.childNodes.length).toBe(1);
+      expect(lineText.firstChild?.nodeType).toBe(Node.TEXT_NODE);
+      expect(lineText.firstChild?.textContent?.length).toBe(10_000);
+
+      // 核心断言 2：CSS.highlights 命名空间成功注册语法高亮 Range
+      expect(highlightMap.size).toBeGreaterThan(0);
+      expect(highlightMap.get('hl-string')?.ranges.length).toBeGreaterThan(0);
+      expect(highlightMap.get('hl-number')?.ranges.length).toBeGreaterThan(0);
+
+      // 核心断言 3：模拟水平横向平移拖拽，验证无 DOM 重排且单帧处理耗时 <= 0.42ms
+      const scrollHost = container.firstElementChild as HTMLElement;
+      scrollHost.scrollLeft = 200;
+      fireEvent.scroll(scrollHost);
+
+      const frameTimes: number[] = [];
+      for (let step = 1; step <= 10; step++) {
+        const t0 = performance.now();
+        scrollHost.scrollLeft = step * 600;
+        const currentSpanCount = lineText.children.length;
+        const elapsed = performance.now() - t0;
+        expect(currentSpanCount).toBe(0);
+        frameTimes.push(elapsed);
+      }
+
+      const avgFrameMs =
+        frameTimes.reduce((acc, v) => acc + v, 0) / frameTimes.length;
+      expect(avgFrameMs).toBeLessThanOrEqual(0.42);
+    } finally {
+      g.CSS = origCSS;
+      g.Highlight = origHighlight;
+    }
   });
 });

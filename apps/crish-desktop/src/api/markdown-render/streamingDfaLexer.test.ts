@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   createMarkdownDfaTransformStream,
+  MarkdownDfaTransformStream,
   MemoryBlockGeometryBook,
+  parseFenceLanguage,
   StreamingMarkdownDfaLexer,
   type DfaLexEvent,
 } from './streamingDfaLexer';
 
-describe('StreamingMarkdownDfaLexer', () => {
+describe('StreamingMarkdownDfaLexer (5-State DFA)', () => {
   it('流式段落识别：单 chunk 与跨 chunk 段落正确发射 BLOCK_START/TOKEN_CHUNK/BLOCK_END', () => {
     const lexer = new StreamingMarkdownDfaLexer();
 
@@ -46,43 +48,130 @@ describe('StreamingMarkdownDfaLexer', () => {
     ]);
   });
 
-  it('代码块识别：跨 chunk 切开的 ```ts 与 ``` 准确发射 BLOCK_START(code, ts) -> TOKEN_CHUNK -> BLOCK_END(code)', () => {
+  it('[MD-A01] DFA Lexer 严格 O(N) 单遍流式解析且零投机反引号注入', () => {
+    const lexer = new StreamingMarkdownDfaLexer();
+    const chunks = [
+      '```',
+      'types',
+      'cript\n',
+      'const a = 1;\n',
+      'console.',
+      'log(a);\n',
+      '```\n',
+    ];
+    const events: DfaLexEvent[] = [];
+
+    for (const chunk of chunks) {
+      events.push(...lexer.feed(chunk));
+    }
+    events.push(...lexer.finish());
+
+    const startEvent = events.find(
+      (e) => e.type === 'BLOCK_START' && e.kind === 'code'
+    );
+    const endEvent = events.find(
+      (e) => e.type === 'BLOCK_END' && e.kind === 'code'
+    );
+    expect(startEvent).toBeDefined();
+    expect(startEvent?.language).toBe('typescript');
+    expect(endEvent).toBeDefined();
+
+    const chunkEvents = events.filter(
+      (e) => e.type === 'TOKEN_CHUNK' && e.kind === 'code'
+    );
+    const fullCode = chunkEvents.map((e) => e.text).join('');
+    expect(fullCode).toBe('const a = 1;\nconsole.log(a);\n');
+    expect(fullCode.includes('```')).toBe(false);
+  });
+
+  it('[MD-A02] 围栏符号跨多 Chunk 切割时精准识别不漏网（含 5 态流转验证）', () => {
     const lexer = new StreamingMarkdownDfaLexer();
 
-    // 模拟逐字符/微切片流式输入
-    const chunks = [
-      '`',
-      '`',
-      '`',
-      'ts',
-      '\n',
-      'const a = 1;\n',
-      'console.log(a);\n',
-      '`',
-      '`',
-      '`',
-      '\n',
-    ];
-    const collected: DfaLexEvent[] = [];
-    for (const chunk of chunks) {
-      collected.push(...lexer.feed(chunk));
-    }
-    collected.push(...lexer.finish());
+    // 1. FENCE_OPENING 探测态
+    expect(lexer.feed('`')).toEqual([]);
+    expect(lexer.getState()).toBe('FENCE_OPENING');
+    expect(lexer.feed('`')).toEqual([]);
+    expect(lexer.getState()).toBe('FENCE_OPENING');
+    expect(lexer.feed('`js')).toEqual([]);
+    expect(lexer.getState()).toBe('FENCE_OPENING');
 
-    expect(collected).toEqual([
-      { type: 'BLOCK_START', blockId: 1, kind: 'code', language: 'ts' },
-      { type: 'TOKEN_CHUNK', blockId: 1, kind: 'code', text: 'const a = 1;\n' },
+    // 2. 遇到换行转入 CODE_BLOCK
+    const startEv = lexer.feed('\n');
+    expect(lexer.getState()).toBe('CODE_BLOCK');
+    expect(startEv).toEqual([
+      { type: 'BLOCK_START', blockId: 1, kind: 'code', language: 'js' },
+    ]);
+
+    // 3. 代码块字面量输出
+    const codeEv = lexer.feed('const a = 1;\nconsole.log(a);\n');
+    expect(lexer.getState()).toBe('CODE_BLOCK');
+    expect(codeEv).toEqual([
       {
         type: 'TOKEN_CHUNK',
         blockId: 1,
         kind: 'code',
-        text: 'console.log(a);\n',
+        text: 'const a = 1;\nconsole.log(a);\n',
       },
-      { type: 'BLOCK_END', blockId: 1, kind: 'code', language: 'ts' },
+    ]);
+
+    // 4. CODE_CLOSING 闭合探测态
+    expect(lexer.feed('`')).toEqual([]);
+    expect(lexer.getState()).toBe('CODE_CLOSING');
+    expect(lexer.feed('`')).toEqual([]);
+    expect(lexer.getState()).toBe('CODE_CLOSING');
+    expect(lexer.feed('`')).toEqual([]);
+    expect(lexer.getState()).toBe('CODE_CLOSING');
+
+    // 5. 遇到换行闭合回到 TEXT_PARAGRAPH
+    const endEv = lexer.feed('\n');
+    expect(lexer.getState()).toBe('TEXT_PARAGRAPH');
+    expect(endEv).toEqual([
+      { type: 'BLOCK_END', blockId: 1, kind: 'code', language: 'js' },
     ]);
   });
 
+  it('CODE_CLOSING 闭合符数量不足或夹杂非空字符时确定性退化回 CODE_BLOCK', () => {
+    const lexer = new StreamingMarkdownDfaLexer();
+    const events: DfaLexEvent[] = [];
+
+    events.push(...lexer.feed('```ts\n'));
+    // 仅 2 个反引号加换行：闭合符不足，退化为代码行字面量
+    events.push(...lexer.feed('``\n'));
+    expect(lexer.getState()).toBe('CODE_BLOCK');
+
+    // 3 个反引号后跟非空字符：不是合法纯闭合行，退化为代码行字面量
+    events.push(...lexer.feed('```not-close\n'));
+    expect(lexer.getState()).toBe('CODE_BLOCK');
+
+    // 真正闭合
+    events.push(...lexer.feed('```\n'));
+    expect(lexer.getState()).toBe('TEXT_PARAGRAPH');
+
+    const codeText = events
+      .filter((e) => e.type === 'TOKEN_CHUNK' && e.kind === 'code')
+      .map((e) => e.text)
+      .join('');
+    expect(codeText).toBe('``\n```not-close\n');
+  });
+
+  it('有界前缀缓冲（prefixBuf <= 128）：单行围栏信息超长无换行时退化为普通段落', () => {
+    const lexer = new StreamingMarkdownDfaLexer();
+    const overlongFenceLine = '```' + 'a'.repeat(130);
+    const events = lexer.feed(overlongFenceLine);
+
+    expect(lexer.getState()).toBe('TEXT_PARAGRAPH');
+    const text = events
+      .filter((e) => e.type === 'TOKEN_CHUNK' && e.kind === 'paragraph')
+      .map((e) => e.text)
+      .join('');
+    expect(text).toBe(overlongFenceLine);
+  });
+
   it('波浪号围栏与语言前缀清洗：~~~language-python 正确清洗为 python 并在闭合时完成状态流转', () => {
+    expect(parseFenceLanguage('language-typescript')).toBe('typescript');
+    expect(parseFenceLanguage('.python')).toBe('python');
+    expect(parseFenceLanguage('   ')).toBeUndefined();
+
     const lexer = new StreamingMarkdownDfaLexer();
     const collected: DfaLexEvent[] = [
       ...lexer.feed('~~~language-python\nprint("hello")\n~~~\n'),
@@ -142,7 +231,6 @@ describe('StreamingMarkdownDfaLexer', () => {
   it('未闭合代码块流式收尾：中途不注入投机反引号，调用 finish() 时安全闭合未完成块', () => {
     const lexer = new StreamingMarkdownDfaLexer();
 
-    // 喂入一段未闭合的代码
     const ev1 = lexer.feed('```rust\nfn main() {\n    println!("hello");\n');
     expect(ev1).toEqual([
       { type: 'BLOCK_START', blockId: 1, kind: 'code', language: 'rust' },
@@ -155,7 +243,6 @@ describe('StreamingMarkdownDfaLexer', () => {
     ]);
     expect(lexer.getState()).toBe('CODE_BLOCK');
 
-    // 模拟 LLM 流式输出中断，流式过程中绝对没有投机注入的反引号
     const ev2 = lexer.feed('    let x = 42;');
     expect(ev2).toEqual([
       {
@@ -166,7 +253,6 @@ describe('StreamingMarkdownDfaLexer', () => {
       },
     ]);
 
-    // 调用 finish() 收尾，安全发射 BLOCK_END(code, rust)
     const finishEv = lexer.finish();
     expect(finishEv).toEqual([
       { type: 'BLOCK_END', blockId: 1, kind: 'code', language: 'rust' },
@@ -177,7 +263,6 @@ describe('StreamingMarkdownDfaLexer', () => {
   it('未闭合数学块与未闭合围栏前缀流式收尾', () => {
     const lexer = new StreamingMarkdownDfaLexer();
 
-    // 未闭合数学块在 finish 时闭合
     lexer.feed('$$x^2 + y^2 = z^2');
     expect(lexer.getState()).toBe('MATH_BLOCK');
     const mathFinish = lexer.finish();
@@ -186,12 +271,10 @@ describe('StreamingMarkdownDfaLexer', () => {
     ]);
     expect(lexer.getState()).toBe('TEXT_PARAGRAPH');
 
-    // reset 状态测试
     lexer.reset();
     expect(lexer.getState()).toBe('TEXT_PARAGRAPH');
     expect(lexer.getCurrentBlockId()).toBe(0);
 
-    // 小于 3 个反引号结尾
     lexer.feed('`');
     const tickFinish = lexer.finish();
     expect(tickFinish).toEqual([
@@ -202,13 +285,15 @@ describe('StreamingMarkdownDfaLexer', () => {
   });
 });
 
-describe('createMarkdownDfaTransformStream', () => {
+describe('MarkdownDfaTransformStream & createMarkdownDfaTransformStream', () => {
   it('Web Streams TransformStream 管道：端到端可读可写流正常工作', async () => {
-    const stream = createMarkdownDfaTransformStream();
+    const stream = new MarkdownDfaTransformStream();
+    expect(stream).toBeInstanceOf(TransformStream);
     const writer = stream.writable.getWriter();
     const reader = stream.readable.getReader();
 
     const writePromise = (async () => {
+      await writer.write('');
       await writer.write('Text header\n\n');
       await writer.write('```typescript\n');
       await writer.write('const isDone: boolean = true;\n');
@@ -242,76 +327,25 @@ describe('createMarkdownDfaTransformStream', () => {
       },
       { type: 'BLOCK_END', blockId: 2, kind: 'code', language: 'typescript' },
     ]);
+
+    const factoryStream = createMarkdownDfaTransformStream();
+    expect(factoryStream).toBeInstanceOf(MarkdownDfaTransformStream);
   });
 });
 
-describe('MemoryBlockGeometryBook', () => {
-  it('纯内存几何账本：记录、读取、增量更新及总高计算', () => {
-    const book = new MemoryBlockGeometryBook();
-    const sessionId = 'session-101';
-    const messageId = 'msg-202';
-
-    // 契约二守门：ResizeObserver 计数必须恒为 0
-    expect(book.getObserverCount()).toBe(0);
-
-    // 未记录时返回 fallback 或 undefined
-    expect(book.getBlockHeight(sessionId, messageId, 1)).toBeUndefined();
-    expect(book.getBlockHeight(sessionId, messageId, 1, 40)).toBe(40);
-    expect(book.getMessageTotalHeight(sessionId, messageId)).toBe(0);
-
-    // 记录 block 1 高度 50
-    book.recordBlockHeight(sessionId, messageId, 1, 50);
-    expect(book.getBlockHeight(sessionId, messageId, 1)).toBe(50);
-    expect(book.getMessageTotalHeight(sessionId, messageId)).toBe(50);
-
-    // 记录 block 2 高度 120
-    book.recordBlockHeight(sessionId, messageId, 2, 120);
-    expect(book.getBlockHeight(sessionId, messageId, 2)).toBe(120);
-    expect(book.getMessageTotalHeight(sessionId, messageId)).toBe(170);
-
-    // 增量更新 block 1 高度为 80 (delta +30)
-    book.recordBlockHeight(sessionId, messageId, 1, 80);
-    expect(book.getBlockHeight(sessionId, messageId, 1)).toBe(80);
-    expect(book.getMessageTotalHeight(sessionId, messageId)).toBe(200);
-
-    // 带活跃末尾预估高度计算
-    expect(book.getMessageTotalHeight(sessionId, messageId, 25)).toBe(225);
-    expect(book.getMessageTotalHeight(sessionId, messageId, -10)).toBe(200);
-    expect(book.getMessageTotalHeight(sessionId, messageId, NaN)).toBe(200);
-
-    // 异常与边界输入防御
-    book.recordBlockHeight('', messageId, 3, 100);
-    book.recordBlockHeight(sessionId, '', 3, 100);
-    book.recordBlockHeight(sessionId, messageId, 3, -50); // 负值归零
-    expect(book.getBlockHeight(sessionId, messageId, 3)).toBe(0);
-    expect(book.getMessageTotalHeight(sessionId, messageId)).toBe(200);
-  });
-
-  it('纯内存几何账本：evictSession 会话级联清理与 clear 全局重置', () => {
-    const book = new MemoryBlockGeometryBook();
-    const sessionA = 'session-A';
-    const sessionB = 'session-B';
-    const msgId = 'msg-1';
-
-    book.recordBlockHeight(sessionA, msgId, 1, 100);
-    book.recordBlockHeight(sessionB, msgId, 1, 200);
-
-    expect(book.getMessageTotalHeight(sessionA, msgId)).toBe(100);
-    expect(book.getMessageTotalHeight(sessionB, msgId)).toBe(200);
-
-    // 清理 sessionA
-    const evicted = book.evictSession(sessionA);
-    expect(evicted).toBe(true);
-    expect(book.getMessageTotalHeight(sessionA, msgId)).toBe(0);
-    expect(book.getBlockHeight(sessionA, msgId, 1)).toBeUndefined();
-    // 再次清理不存在的 session 返回 false
-    expect(book.evictSession(sessionA)).toBe(false);
-
-    // sessionB 不受影响
-    expect(book.getMessageTotalHeight(sessionB, msgId)).toBe(200);
-
-    // clear 清理全部
+describe('[MD-A05] MemoryBlockGeometryBook re-export 契约验证', () => {
+  it('纯内存几何账本契约守门：Observer 实例数恒为 0 且会话级联清理', () => {
+    const book = MemoryBlockGeometryBook.getInstance();
     book.clear();
-    expect(book.getMessageTotalHeight(sessionB, msgId)).toBe(0);
+
+    book.recordBlockHeight('session-1', 'msg-1', 1, 120, 'code');
+    book.recordBlockHeight('session-1', 'msg-1', 2, 80, 'paragraph');
+
+    expect(book.getObserverCount()).toBe(0);
+    expect(book.getMessageTotalHeight('session-1', 'msg-1')).toBe(200);
+
+    const evicted = book.evictSession('session-1');
+    expect(evicted).toBe(true);
+    expect(book.getMessageTotalHeight('session-1', 'msg-1')).toBe(0);
   });
 });

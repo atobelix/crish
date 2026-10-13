@@ -46,8 +46,24 @@ import {
   safeParseJson,
 } from './sessionHydration';
 
-// re-export 写竞态防线（拆分自本文件，对外路径不变；Wave C 后仅队列+版本戳）
-export { enqueuePersist, nextBatchVersion } from './sessionRustDbWriteGuard';
+import {
+  enqueuePersist,
+  filterTombstonedSessions,
+  isSessionTombstoned,
+  markSessionTombstone,
+  nextBatchVersion,
+  shouldBlockTombstonedWrite,
+} from './sessionRustDbWriteGuard';
+
+// re-export 写竞态防线与 Tier 3 墓碑写屏障（拆分自本文件，对外路径不变）
+export {
+  enqueuePersist,
+  filterTombstonedSessions,
+  isSessionTombstoned,
+  markSessionTombstone,
+  nextBatchVersion,
+  shouldBlockTombstonedWrite,
+};
 // re-export 旧 localStorage 清理（拆分自本文件，对外路径不变）
 export {
   cleanupLegacyLocalStorageSessionsGuarded,
@@ -128,6 +144,7 @@ export async function loadSessionBody(
  * T2-1 剥镜像：SQLite 为唯一落点，命令缺失/错误不改写 LS、不打降级戳，
  * 失败经 errorStore 数据面带呈现（persist-degraded-ls，非静默回退）。
  * I-DRAFT：PENDING_DRAFT 哨兵永不写 body。
+ * VULN-05（Tier 3 存储墓碑屏障）：若会话已进入墓碑状态，写路径最前端直接拦截返回。
  *
  * @param batchVersion 批次版本戳（R9 单调递增，随 IPC 传递；Wave C 后内存侧
  * 不再做 CAS 丢弃——后端 Upsert 为唯一写安全源）。**`null` = 进程首批的显式
@@ -139,7 +156,13 @@ export async function saveSessionBody(
   messages: SessionMessage[],
   batchVersion: number | null
 ): Promise<void> {
-  if (!sessionId?.trim() || isPendingDraft(sessionId)) return;
+  if (
+    !sessionId?.trim() ||
+    isPendingDraft(sessionId) ||
+    isSessionTombstoned(sessionId)
+  ) {
+    return;
+  }
   const msgs = messages || [];
   const rustMessages = msgs.map(toRustSessionMessage);
 
@@ -197,6 +220,7 @@ export async function loadSessionAgents(
 /**
  * 保存会话下的协作子 agent。
  * I-DRAFT：PENDING_DRAFT 哨兵永不写 agents。
+ * VULN-05（Tier 3 存储墓碑屏障）：已删会话写路径最前端直接拦截返回。
  *
  * D-F06 偏离 #2 收尾（与正文同构）：SQLite 为唯一落点，命令缺失/错误不改写
  * LS agents 镜像，失败经 errorStore 数据面带呈现（persist-degraded-ls）。
@@ -211,7 +235,13 @@ export async function saveSessionAgents(
   sessionId: string,
   agents: SessionAgent[]
 ): Promise<void> {
-  if (!sessionId?.trim() || isPendingDraft(sessionId)) return;
+  if (
+    !sessionId?.trim() ||
+    isPendingDraft(sessionId) ||
+    isSessionTombstoned(sessionId)
+  ) {
+    return;
+  }
   if (!agents || agents.length === 0) {
     // 空列表仍调 invoke 让 Rust 侧清空；missing/error 时仅留痕，不写 LS
     const res = await invokeResult<void>('save_session_agents', {

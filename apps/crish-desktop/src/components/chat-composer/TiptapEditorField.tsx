@@ -5,9 +5,9 @@
  * 40 方案 T3 补全：Mention 注册、CodeBlock Enter 保护、DOMPurify 粘贴清洗、动态占位符。
  * T8 扩展：Mention 建议（@ 触发，候选人引用桥接）、combobox aria 全链
  * （role/haspopup/autocomplete 常驻，expanded/controls/activedescendant 由 suggestion 生命周期驱动）。
- * F1-β 拆分：编辑器装配（extensions/onUpdate/editorProps）迁至 ./TiptapEditorExtensions，
- * Enter/IME keymap 决策迁至 ./TiptapKeymap（纯函数）；本文件保留核心编辑器装配壳
- * （ref 桥接 + 生命周期 effects + forwardRef handle + IME DOM 保护 + 渲染）。
+ * F1-β 拆分 + Stage 05 增量块缓存 & IME/分栏拖拽双态联锁守卫：
+ * 编辑器装配迁至 ./TiptapEditorExtensions，两级块缓存由 ./twoTierBlockEditorCache 承载，
+ * IME 与拖拽期间的选区快照保护与外部受控延迟消费由 ./composerImeDragGuard 承载。
  * CI Guardrail: UI Component (Max 500 lines of effective code, Max 12 useState)
  */
 
@@ -26,7 +26,6 @@ import { exitSuggestion } from '@tiptap/suggestion';
 import { slashSuggestionKey, mentionSuggestionKey } from './SlashExtension';
 import { dirTreeSuggestionKey } from './DirTreeExtension';
 import type { SlashCommandItem, MentionCandidate } from './composerTypes';
-import { serializeToMarkdown } from './serialization/markdownSerializer';
 import { parseFromMarkdown } from './serialization/markdownDeserializer';
 import { focusAndSelectFirstPlaceholder } from './tiptapInjectionUtils';
 import type {
@@ -35,9 +34,16 @@ import type {
 } from './composerTypes';
 import {
   buildTiptapEditorOptions,
+  serializeEditorToMarkdown,
   type TiptapEditorBridge,
   type TiptapEditorCallbacks,
 } from './TiptapEditorExtensions';
+import { IncrementalMarkdownSerializer } from './twoTierBlockEditorCache';
+import {
+  ComposerImeDragGuard,
+  restoreSelectionSafely,
+  type ComposerSelectionSnapshot,
+} from './composerImeDragGuard';
 import styles from './TiptapEditorField.module.css';
 
 /**
@@ -59,6 +65,17 @@ function safeViewDom(
   } catch {
     return null;
   }
+}
+
+function captureEditorSelection(editor: any): ComposerSelectionSnapshot {
+  const from = editor?.state?.selection?.from ?? 0;
+  const to = editor?.state?.selection?.to ?? from;
+  return {
+    selectionStart: from,
+    selectionEnd: to,
+    blockId: null,
+    capturedAtMs: Date.now(),
+  };
 }
 
 /** 编辑器最大长度防爆上限（与草稿截断一致，SRS 安全红线兜底） */
@@ -99,6 +116,13 @@ export const TiptapEditorField = React.forwardRef<
     const lastContentRef = useRef<string | undefined>(undefined);
     const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
     const editorRef = useRef<any>(null);
+    const serializerRef = useRef<IncrementalMarkdownSerializer>(
+      new IncrementalMarkdownSerializer()
+    );
+    const imeDragGuardRef = useRef<ComposerImeDragGuard>(
+      new ComposerImeDragGuard()
+    );
+
     // 弹层 listbox id 命名空间（斜杠/提及各一实例，aria-controls/activedescendant 全链）
     const listboxBaseId = useId();
     const slashListboxId = `${listboxBaseId}-slash`;
@@ -187,6 +211,8 @@ export const TiptapEditorField = React.forwardRef<
       slashListboxId,
       mentionListboxId,
       dirTreeListboxId,
+      serializerRef,
+      imeDragGuardRef,
     };
 
     // 注意：装配一次性固定（useMemo 空依赖），bridge 内均为稳定 ref；
@@ -207,10 +233,14 @@ export const TiptapEditorField = React.forwardRef<
     }, [editor]);
 
     useEffect(() => {
+      const serializer = serializerRef.current;
+      const guard = imeDragGuardRef.current;
       return () => {
         if (debounceTimerRef.current) {
           clearTimeout(debounceTimerRef.current);
         }
+        serializer.getCache().clear();
+        guard.reset();
       };
     }, []);
 
@@ -222,10 +252,6 @@ export const TiptapEditorField = React.forwardRef<
     }, [editor, disabled]);
 
     // aria 属性动态同步（装配 attributes 静态，运行期经 DOM setAttribute 更新）。
-    // combobox 基链（role/haspopup/autocomplete）常驻：斜杠与提及双菜单均为 listbox；
-    // expanded/controls/activedescendant 优先由宿主 props 驱动，运行期弹层打开时
-    // 由 suggestion 生命周期（SlashExtension render 工厂）直接置位，两者不会互踩
-    // （宿主 props 恒定 undefined 时仅在挂载期执行一次移除）。
     useEffect(() => {
       if (!editor) return;
       const dom = safeViewDom(editor);
@@ -276,9 +302,29 @@ export const TiptapEditorField = React.forwardRef<
       }
     }, [editor, placeholder]);
 
+    const applyHydratedMarkdown = useCallback(
+      (
+        targetEditor: any,
+        nextContent: string,
+        selectionToRestore?: ComposerSelectionSnapshot | null
+      ) => {
+        if (!targetEditor || targetEditor.isDestroyed) return;
+        try {
+          const doc = parseFromMarkdown(nextContent);
+          targetEditor.commands.setContent(doc);
+          if (selectionToRestore) {
+            restoreSelectionSafely(targetEditor, selectionToRestore);
+          }
+        } catch {
+          // 挂载竞态下 view 未就绪：放弃本次水合（后续内容变更会再次触发）
+        }
+        lastContentRef.current = nextContent;
+      },
+      []
+    );
+
     // Sync editor DOM content with content prop (CRM-02 Session Draft Hydration)
-    // 性能优化：流式输出与海量节点场景下，移除 O(N) 的 currentMarkdown 序列化
-    // 添加内存截断防爆策略
+    // Stage 05 §4 & §5: 受 ComposerImeDragGuard 联锁保护，IME 合成或分栏拖拽期间延迟外部同步
     useEffect(() => {
       if (!editor || content === undefined) return;
 
@@ -300,50 +346,85 @@ export const TiptapEditorField = React.forwardRef<
 
       if (safeContent === lastContentRef.current) return;
 
-      // 采用 requestAnimationFrame 调度渲染，确保 120Hz/60Hz 不掉帧
-      // 卸载清理：组件销毁后回调不再触碰编辑器（防 destroyed 编辑器空指针）
-      const rafId = requestAnimationFrame(() => {
-        if (!editor || editor.isDestroyed) return;
-        try {
-          const doc = parseFromMarkdown(safeContent);
-          editor.commands.setContent(doc);
-        } catch {
-          // 挂载竞态下 view 未就绪：放弃本次水合（后续内容变更会再次触发）
+      if (lastContentRef.current !== undefined) {
+        const decision = imeDragGuardRef.current.tryApplyExternalSync(
+          safeContent,
+          lastContentRef.current
+        );
+        if (!decision.applyNow || decision.valueToApply === null) {
+          return;
         }
-        lastContentRef.current = safeContent;
+        safeContent = decision.valueToApply;
+      }
+
+      // 采用 requestAnimationFrame 调度渲染，确保 120Hz/60Hz 不掉帧
+      const rafId = requestAnimationFrame(() => {
+        applyHydratedMarkdown(editor, safeContent);
       });
       return () => cancelAnimationFrame(rafId);
-    }, [editor, content]);
+    }, [editor, content, applyHydratedMarkdown]);
 
-    // Track composition events directly on the editor DOM node for CJK protection
+    // Track composition & drag events directly on the editor DOM node for CJK + split-pane drag protection
     useEffect(() => {
       const dom = safeViewDom(editor);
       if (!dom) return;
 
       const handleCompositionStart = () => {
         isComposingRef.current = true;
+        imeDragGuardRef.current.beginComposition(
+          captureEditorSelection(editor)
+        );
         callbacksRef.current.onCompositionChange?.(true);
       };
 
       const handleCompositionEnd = () => {
         isComposingRef.current = false;
+        const deferred = imeDragGuardRef.current.endComposition();
         callbacksRef.current.onCompositionChange?.(false);
+        if (deferred !== null && deferred !== lastContentRef.current) {
+          requestAnimationFrame(() => {
+            applyHydratedMarkdown(
+              editor,
+              deferred,
+              imeDragGuardRef.current.getSelectionSnapshot()
+            );
+          });
+        }
+      };
+
+      const handleDragStart = () => {
+        imeDragGuardRef.current.beginDrag(captureEditorSelection(editor));
+      };
+
+      const handleDragEnd = () => {
+        const { deferredValue, restoredSelection } =
+          imeDragGuardRef.current.endDrag();
+        if (
+          deferredValue !== null &&
+          deferredValue !== lastContentRef.current
+        ) {
+          requestAnimationFrame(() => {
+            applyHydratedMarkdown(editor, deferredValue, restoredSelection);
+          });
+        } else if (restoredSelection) {
+          restoreSelectionSafely(editor, restoredSelection);
+        }
       };
 
       dom.addEventListener('compositionstart', handleCompositionStart);
       dom.addEventListener('compositionend', handleCompositionEnd);
+      dom.addEventListener('dragstart', handleDragStart);
+      dom.addEventListener('dragend', handleDragEnd);
 
       return () => {
         dom.removeEventListener('compositionstart', handleCompositionStart);
         dom.removeEventListener('compositionend', handleCompositionEnd);
+        dom.removeEventListener('dragstart', handleDragStart);
+        dom.removeEventListener('dragend', handleDragEnd);
       };
-    }, [editor]);
+    }, [editor, applyHydratedMarkdown]);
 
-    // Esc 退出建议状态（capture 阶段兜底）：Radix 弹层在 document-capture 已对
-    // Escape preventDefault，PM 的 keydown 链因 defaultPrevented 被整体跳过
-    // （prosemirror-view eventBelongsToView），suggestion 插件收不到 Esc，
-    // 弹层与 combobox aria 链会滞留。此处以捕获监听直接派发 exit 事务，
-    // 走 onExit 统一清理（aria-expanded/controls/activedescendant + 弹层销毁）。
+    // Esc 退出建议状态（capture 阶段兜底）
     useEffect(() => {
       if (!editor) return;
       const dom = safeViewDom(editor);
@@ -388,22 +469,24 @@ export const TiptapEditorField = React.forwardRef<
       return () => cancelAnimationFrame(id);
     }, [autoFocus, focusEditor]);
 
-    // 命令式句柄：发送前同步取最新 markdown（绕过防抖）
+    // 命令式句柄：发送前同步取最新 markdown（绕过防抖，走两级块缓存增量序列化）
     useImperativeHandle(
       ref,
       () => ({
         getMarkdown: () => {
-          const editor = editorRef.current;
-          if (!editor) return '';
+          const currentEditor = editorRef.current;
+          if (!currentEditor) return '';
           return (
-            serializeToMarkdown(editor.getJSON()).trim() ||
-            editor.getText().trim()
+            serializeEditorToMarkdown(
+              currentEditor,
+              serializerRef.current
+            ).trim() || currentEditor.getText().trim()
           );
         },
         focusPlaceholder: () => {
-          const editor = editorRef.current;
-          if (!editor) return false;
-          return focusAndSelectFirstPlaceholder(editor);
+          const currentEditor = editorRef.current;
+          if (!currentEditor) return false;
+          return focusAndSelectFirstPlaceholder(currentEditor);
         },
       }),
       []

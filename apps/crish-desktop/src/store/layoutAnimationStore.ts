@@ -1,11 +1,13 @@
 import { create } from 'zustand';
-import { ResizeObserverManager } from '../utils/ResizeObserverManager';
+import {
+  ResizeObserverManager,
+  WindowBlurWatchdog,
+} from '../utils/ResizeObserverManager';
 
 /** 动画/拖拽类型枚举 */
 export type LayoutAnimationType =
   | 'sidebar-transition'
   | 'workspace-resizing'
-  /** OS / 浏览器窗口缩放 pulse（R3 桥；独立于 sash 的 workspace-resizing，避免 Set 无引用计数时误 end） */
   | 'window-resizing'
   | 'tab-dragging';
 
@@ -16,73 +18,44 @@ export type AnimationPhase = 'idle' | 'animating' | 'catching-up';
 export type CatchupTask = () => void;
 
 /**
- * 兼容期：各动画类型 → 额外 body class（`is-layout-frozen` 由 active 集合统一管理）。
- * 业务禁止再以「仅 classList」作为唯一冻结信号；可经 helper 双写。
- * 契约见 docs/ui-jank-message-dnd-rootfix/01-contract.md §2。
- *
- * 类型约定：
- * - workspace-resizing ← 列宽 / 组高 sash / 侧栏拖宽
- * - window-resizing ← OS 窗口缩放（WindowResizeBridge）；同步兼容 class `window-resizing`
- * - tab-dragging / sidebar-transition / panel-split-resizing / modal-animating
+ * Windows 异常中断快速自愈看门狗超时阈值（200ms）。
+ * 彻底取代历史 30,000ms 宏观定时器，当发生 blur / pointercancel / lostpointercapture 时 200ms 内瞬时自愈。
  */
-const TYPE_BODY_CLASSES: Record<LayoutAnimationType, readonly string[]> = {
-  'sidebar-transition': [],
-  // 列宽/组高 sash、侧栏拖宽共用；is-resizing 兼容旧 CSS
-  'workspace-resizing': ['resizing-active', 'is-resizing'],
-  // 窗口缩放：兼容旧 CSS 选择器 body.window-resizing；is-layout-frozen 由 active 统一加
-  'window-resizing': ['window-resizing'],
-  'tab-dragging': ['dragging-card'],
-};
-
-/** 由 store / helper 管理的 body class（含 window-resizing：R3 已接入 store） */
-const STORE_MANAGED_BODY_CLASSES = [
-  'is-layout-frozen',
-  'resizing-active',
-  'is-resizing',
-  'dragging-card',
-  'window-resizing',
-] as const;
+export const WATCHDOG_TIMEOUT_MS = WindowBlurWatchdog.DEFAULT_TIMEOUT_MS;
 
 /**
- * 单类型最大冻结时长（watchdog）。
- * 超时 force endAnimation + console.warn，防止 sash/cancel 泄漏导致永久 frozen。
- * 按 type 独立计时，不破坏 window-resizing 与 workspace-resizing 隔离。
+ * 单帧 Catch-up 排空时间预算（8.0ms）。
+ * 超出 8ms 的剩余任务自动顺延至下一物理帧 rAF，彻底消除松手瞬间 Long Task。
  */
-export const MAX_FREEZE_MS = 30_000;
+export const CATCHUP_TIME_BUDGET_MS = 8.0;
 
-/** 各 type 的 freeze watchdog 定时器（start arm / end clear） */
-const freezeWatchdogs = new Map<
-  LayoutAnimationType,
-  ReturnType<typeof setTimeout>
->();
+let catchupRafId: number | null = null;
 
-function clearFreezeWatchdog(type: LayoutAnimationType): void {
-  const id = freezeWatchdogs.get(type);
-  if (id !== undefined) {
-    clearTimeout(id);
-    freezeWatchdogs.delete(type);
+function cancelCatchupRaf(): void {
+  if (catchupRafId !== null && typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(catchupRafId);
+    catchupRafId = null;
   }
 }
 
-function armFreezeWatchdog(type: LayoutAnimationType): void {
-  clearFreezeWatchdog(type);
-  if (typeof setTimeout === 'undefined') return;
-  const id = setTimeout(() => {
-    freezeWatchdogs.delete(type);
-    const state = useLayoutAnimationStore.getState();
-    if (!state.activeAnimations.has(type)) return;
-    console.warn(
-      `[LayoutAnimationStore] Freeze watchdog: force-ending '${type}' after ${MAX_FREEZE_MS}ms (possible permanent freeze leak)`
-    );
-    state.endAnimation(type);
-  }, MAX_FREEZE_MS);
-  freezeWatchdogs.set(type, id);
-}
+const storeWatchdog = new WindowBlurWatchdog(() => {
+  const state = useLayoutAnimationStore.getState();
+  if (state.activeAnimations.size === 0 && state.suspendedPaneIds.size === 0) {
+    return;
+  }
+  console.warn(
+    `[LayoutAnimationStore] Interaction interrupted for ${WATCHDOG_TIMEOUT_MS}ms. Force recovering active animations and pane gates.`
+  );
+  state.forceRecoverAll();
+});
 
-/** LayoutAnimationStore 状态定义 */
+/** LayoutAnimationStore 状态定义（已物理拔除全局单例 isLayoutFrozen 与 document.body 类名广播） */
 export interface LayoutAnimationState {
-  /** 活跃的动画/拖拽任务集合 */
+  /** 活跃的独立动画/拖拽任务集合 */
   activeAnimations: Set<LayoutAnimationType>;
+
+  /** 窗格级细粒度门控集合（Gated Resizing） */
+  suspendedPaneIds: Set<string>;
 
   /** 快捷派生状态 */
   isSidebarTransitioning: boolean;
@@ -90,13 +63,10 @@ export interface LayoutAnimationState {
   isWindowResizing: boolean;
   isTabDragging: boolean;
 
-  /** 核心全局挂起标记：只要有任何动画或拖拽正在进行，即为 true */
-  isLayoutFrozen: boolean;
-
   /** 当前动画阶段 */
   phase: AnimationPhase;
 
-  /** 动画结束时需延迟/单次执行的 Catch-up 任务队列 */
+  /** 动画结束时需按 8ms 时间预算分片执行的 Catch-up 任务队列 */
   catchupQueue: Map<string, CatchupTask>;
 }
 
@@ -108,58 +78,36 @@ export interface LayoutAnimationActions {
   /** 结束指定的动画/拖拽 */
   endAnimation: (type: LayoutAnimationType) => void;
 
-  /** 注册 Catch-up 测量任务（若被挂起，会在动画结束后批量刷新） */
+  /** 细粒度挂起受分屏形变影响的窗格叶子集合 */
+  suspendPanes: (paneIds: string[]) => void;
+
+  /** 细粒度解冻窗格叶子集合（未传参时解冻全部） */
+  resumePanes: (paneIds?: string[]) => void;
+
+  /** 查询指定窗格是否处于细粒度门控挂起态 */
+  isPaneSuspended: (paneId: string) => boolean;
+
+  /** 触发 200ms 异常中断看门狗 */
+  armInterruptWatchdog: (timeoutMs?: number) => void;
+
+  /** 清除异常中断看门狗 */
+  clearInterruptWatchdog: () => void;
+
+  /** 强制自愈所有活跃动画与窗格门控 */
+  forceRecoverAll: () => void;
+
+  /** 注册 Catch-up 测量任务 */
   registerCatchupTask: (key: string, task: CatchupTask) => void;
 
   /** 取消注册 Catch-up 任务 */
   unregisterCatchupTask: (key: string) => void;
 
-  /** 立即刷新并清空 Catch-up 任务队列 */
-  flushCatchupTasks: () => void;
+  /** 按 8ms 单帧时间预算分片排空 Catch-up 任务队列 */
+  flushCatchupTasks: (maxDurationMs?: number) => void;
 }
 
 export type LayoutAnimationStore = LayoutAnimationState &
   LayoutAnimationActions;
-
-function deriveBodyClasses(active: Set<LayoutAnimationType>): Set<string> {
-  const classes = new Set<string>();
-  if (active.size > 0) {
-    classes.add('is-layout-frozen');
-  }
-  for (const type of active) {
-    const mapped = TYPE_BODY_CLASSES[type];
-    if (!mapped) continue;
-    for (const cls of mapped) {
-      classes.add(cls);
-    }
-  }
-  return classes;
-}
-
-/** 根据 activeAnimations 同步 data 属性与兼容期 body class */
-function syncBodyFromActive(active: Set<LayoutAnimationType>): void {
-  if (typeof document === 'undefined') return;
-  try {
-    const desired = deriveBodyClasses(active);
-    const isFrozen = active.size > 0;
-
-    if (isFrozen) {
-      document.body.setAttribute('data-layout-frozen', 'true');
-    } else {
-      document.body.removeAttribute('data-layout-frozen');
-    }
-
-    for (const cls of STORE_MANAGED_BODY_CLASSES) {
-      if (desired.has(cls)) {
-        document.body.classList.add(cls);
-      } else {
-        document.body.classList.remove(cls);
-      }
-    }
-  } catch {
-    /* SSR / detached document — ignore */
-  }
-}
 
 function deriveFlags(active: Set<LayoutAnimationType>) {
   return {
@@ -168,33 +116,26 @@ function deriveFlags(active: Set<LayoutAnimationType>) {
     isWorkspaceResizing: active.has('workspace-resizing'),
     isWindowResizing: active.has('window-resizing'),
     isTabDragging: active.has('tab-dragging'),
-    isLayoutFrozen: active.size > 0,
   };
 }
 
 export const useLayoutAnimationStore = create<LayoutAnimationStore>(
   (set, get) => ({
     activeAnimations: new Set(),
+    suspendedPaneIds: new Set(),
     isSidebarTransitioning: false,
     isWorkspaceResizing: false,
     isWindowResizing: false,
     isTabDragging: false,
-    isLayoutFrozen: false,
     phase: 'idle',
     catchupQueue: new Map(),
 
     startAnimation: (type) => {
       const current = get().activeAnimations;
-      // 已在集合中：仍强制同步 body，避免外部误清 class 后永久失步
       if (current.has(type)) {
-        syncBodyFromActive(current);
-        // 刷新 watchdog，避免长驻交互在首次 arm 后超时误杀
-        armFreezeWatchdog(type);
         return;
       }
       const nextSet = new Set(current).add(type);
-      syncBodyFromActive(nextSet);
-      armFreezeWatchdog(type);
       set({
         ...deriveFlags(nextSet),
         phase: 'animating',
@@ -202,27 +143,96 @@ export const useLayoutAnimationStore = create<LayoutAnimationStore>(
     },
 
     endAnimation: (type) => {
-      clearFreezeWatchdog(type);
       const current = get().activeAnimations;
       if (!current.has(type)) {
-        // 对称清理：重复 end 时仍校正 body，避免永久 frozen class 泄漏
-        syncBodyFromActive(current);
         return;
       }
 
       const nextSet = new Set(current);
       nextSet.delete(type);
-      const isStillFrozen = nextSet.size > 0;
-      syncBodyFromActive(nextSet);
+      const hasRemaining = nextSet.size > 0 || get().suspendedPaneIds.size > 0;
+
+      if (!hasRemaining) {
+        storeWatchdog.clear();
+      }
 
       set({
         ...deriveFlags(nextSet),
-        phase: isStillFrozen ? 'animating' : 'catching-up',
+        phase: hasRemaining ? 'animating' : 'catching-up',
       });
 
-      if (!isStillFrozen) {
+      if (!hasRemaining) {
         get().flushCatchupTasks();
       }
+    },
+
+    suspendPanes: (paneIds) => {
+      if (!paneIds || paneIds.length === 0) return;
+      const nextPanes = new Set(get().suspendedPaneIds);
+      for (const id of paneIds) {
+        if (id) nextPanes.add(id);
+      }
+      ResizeObserverManager.getInstance().suspendPanes(paneIds);
+      set({
+        suspendedPaneIds: nextPanes,
+        phase: 'animating',
+      });
+    },
+
+    resumePanes: (paneIds) => {
+      const nextPanes = new Set(get().suspendedPaneIds);
+      if (!paneIds || paneIds.length === 0) {
+        nextPanes.clear();
+      } else {
+        for (const id of paneIds) {
+          nextPanes.delete(id);
+        }
+      }
+      ResizeObserverManager.getInstance().resumePanes(paneIds);
+
+      const hasRemaining =
+        get().activeAnimations.size > 0 || nextPanes.size > 0;
+      if (!hasRemaining) {
+        storeWatchdog.clear();
+      }
+
+      set({
+        suspendedPaneIds: nextPanes,
+        phase: hasRemaining ? 'animating' : 'catching-up',
+      });
+
+      if (!hasRemaining) {
+        get().flushCatchupTasks();
+      }
+    },
+
+    isPaneSuspended: (paneId) => {
+      return (
+        get().suspendedPaneIds.has(paneId) ||
+        ResizeObserverManager.getInstance().isPaneSuspended(paneId)
+      );
+    },
+
+    armInterruptWatchdog: (timeoutMs = WATCHDOG_TIMEOUT_MS) => {
+      if (get().activeAnimations.size > 0 || get().suspendedPaneIds.size > 0) {
+        storeWatchdog.arm(timeoutMs);
+      }
+    },
+
+    clearInterruptWatchdog: () => {
+      storeWatchdog.clear();
+    },
+
+    forceRecoverAll: () => {
+      storeWatchdog.clear();
+      ResizeObserverManager.getInstance().resumePanes();
+      const emptyAnimations = new Set<LayoutAnimationType>();
+      set({
+        ...deriveFlags(emptyAnimations),
+        suspendedPaneIds: new Set(),
+        phase: 'catching-up',
+      });
+      get().flushCatchupTasks();
     },
 
     registerCatchupTask: (key, task) => {
@@ -233,128 +243,127 @@ export const useLayoutAnimationStore = create<LayoutAnimationStore>(
       get().catchupQueue.delete(key);
     },
 
-    flushCatchupTasks: () => {
+    flushCatchupTasks: (maxDurationMs = CATCHUP_TIME_BUDGET_MS) => {
+      cancelCatchupRaf();
       const { catchupQueue } = get();
       if (catchupQueue.size === 0) {
         set({ phase: 'idle' });
         return;
       }
 
-      catchupQueue.forEach((task) => {
-        try {
-          task();
-        } catch (e) {
-          console.error('[LayoutAnimationStore] Catch-up task failed:', e);
+      const runSlice = () => {
+        catchupRafId = null;
+        const queue = get().catchupQueue;
+        if (queue.size === 0) {
+          set({ phase: 'idle' });
+          return;
         }
-      });
 
-      catchupQueue.clear();
-      set({ phase: 'idle' });
+        const startTime = performance.now();
+        let budgetExceeded = false;
+
+        for (const [key, task] of Array.from(queue.entries())) {
+          queue.delete(key);
+          try {
+            task();
+          } catch (e) {
+            console.error('[LayoutAnimationStore] Catch-up task failed:', e);
+          }
+
+          if (
+            queue.size > 0 &&
+            performance.now() - startTime >= maxDurationMs
+          ) {
+            budgetExceeded = true;
+            break;
+          }
+        }
+
+        if (budgetExceeded && queue.size > 0) {
+          set({ phase: 'catching-up' });
+          if (typeof requestAnimationFrame === 'function') {
+            catchupRafId = requestAnimationFrame(runSlice);
+          } else {
+            runSlice();
+          }
+        } else {
+          set({ phase: 'idle' });
+        }
+      };
+
+      runSlice();
     },
   })
 );
 
 export interface LayoutInteractionOptions {
-  /**
-   * 额外 body class（会在 begin 时 add、end 时按引用摘除）。
-   * 优先走 type 映射；仅在兼容旧 CSS 需要时使用。
-   */
-  extraBodyClasses?: readonly string[];
-}
-
-/** extra class 引用计数，支持嵌套/并行 interaction */
-const extraClassRefCounts = new Map<string, number>();
-
-function addExtraBodyClasses(classes: readonly string[] | undefined): void {
-  if (!classes?.length || typeof document === 'undefined') return;
-  for (const cls of classes) {
-    const next = (extraClassRefCounts.get(cls) ?? 0) + 1;
-    extraClassRefCounts.set(cls, next);
-    if (next === 1) {
-      try {
-        document.body.classList.add(cls);
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-}
-
-function removeExtraBodyClasses(classes: readonly string[] | undefined): void {
-  if (!classes?.length || typeof document === 'undefined') return;
-  for (const cls of classes) {
-    const prev = extraClassRefCounts.get(cls) ?? 0;
-    if (prev <= 1) {
-      extraClassRefCounts.delete(cls);
-      // 若仍由 active type 映射持有，则不要 remove
-      const stillDesired = deriveBodyClasses(
-        useLayoutAnimationStore.getState().activeAnimations
-      ).has(cls);
-      if (!stillDesired) {
-        try {
-          document.body.classList.remove(cls);
-        } catch {
-          /* ignore */
-        }
-      }
-    } else {
-      extraClassRefCounts.set(cls, prev - 1);
-    }
-  }
+  /** 可选关联的受影响窗格 ID 集合（用于细粒度门控） */
+  paneIds?: readonly string[];
 }
 
 /**
- * 统一布局交互 begin：写入 store + 同步兼容 body class。
- * 业务组件应调用本 helper（或 startAnimation），禁止仅 classList 作为冻结信号。
+ * 统一布局交互 begin：仅更新轻量状态与可选窗格级门控，绝不向 document.body 广播全局冻结类名。
  */
 export function beginLayoutInteraction(
   type: LayoutAnimationType,
   options?: LayoutInteractionOptions
 ): void {
-  addExtraBodyClasses(options?.extraBodyClasses);
-  useLayoutAnimationStore.getState().startAnimation(type);
+  const state = useLayoutAnimationStore.getState();
+  if (options?.paneIds?.length) {
+    state.suspendPanes([...options.paneIds]);
+  }
+  state.startAnimation(type);
 }
 
 /**
- * 统一布局交互 end：对称清理 store + body class。
- * 必须在 pointerup / pointercancel / lostpointercapture / 卸载路径调用。
+ * 统一布局交互 end：对称清理状态并按 8ms 时间预算分片排空 Catch-up 任务。
  */
 export function endLayoutInteraction(
   type: LayoutAnimationType,
   options?: LayoutInteractionOptions
 ): void {
-  useLayoutAnimationStore.getState().endAnimation(type);
-  removeExtraBodyClasses(options?.extraBodyClasses);
+  const state = useLayoutAnimationStore.getState();
+  if (options?.paneIds?.length) {
+    state.resumePanes([...options.paneIds]);
+  }
+  state.endAnimation(type);
 }
 
-// 核心连接点：自动将 isLayoutFrozen 桥接至 ResizeObserverManager 细粒度作用域（'layout-shell'），
-// 避免 setSuspended 全局 '*' 通配符冻结后台正在推流的独立会话窗格。
-// T06.9.1：原模块级永久订阅（AA-03 Q06，永不退订）改为显式生命周期——
-// bootstrapServices 调用 registerLayoutAnimationBridge() 注册，cleanup 退订；
-// 重复注册幂等（StrictMode 双执行安全）。
-export const LAYOUT_SHELL_PANE_ID = 'layout-shell';
-let layoutAnimationBridgeRegistered = false;
+let interruptListenersRegistered = false;
 
 /**
- * 注册 isLayoutFrozen → ResizeObserverManager 细粒度挂起（'layout-shell'）桥接订阅，
- * 返回退订函数（幂等；退订后可重新注册）。
+ * 注册 Windows 宿主交互中断（blur / pointercancel / lostpointercapture）200ms 快速自愈看门狗桥接。
+ * 已物理拔除历史 LAYOUT_SHELL_PANE_ID = 'layout-shell' 伪作用域与全局 isLayoutFrozen 订阅。
  */
 export function registerLayoutAnimationBridge(): () => void {
-  if (layoutAnimationBridgeRegistered) return () => {};
-  layoutAnimationBridgeRegistered = true;
-  const unsubscribe = useLayoutAnimationStore.subscribe((state, prevState) => {
-    if (state.isLayoutFrozen !== prevState.isLayoutFrozen) {
-      const mgr = ResizeObserverManager.getInstance();
-      if (state.isLayoutFrozen) {
-        mgr.suspendPane(LAYOUT_SHELL_PANE_ID);
-      } else {
-        mgr.resumePane(LAYOUT_SHELL_PANE_ID);
-      }
-    }
-  });
+  if (interruptListenersRegistered) return () => {};
+  interruptListenersRegistered = true;
+
+  const onInterrupt = () => {
+    useLayoutAnimationStore
+      .getState()
+      .armInterruptWatchdog(WATCHDOG_TIMEOUT_MS);
+  };
+
+  if (
+    typeof window !== 'undefined' &&
+    typeof window.addEventListener === 'function'
+  ) {
+    window.addEventListener('blur', onInterrupt);
+    window.addEventListener('pointercancel', onInterrupt);
+    window.addEventListener('lostpointercapture', onInterrupt, true);
+  }
+
   return () => {
-    unsubscribe();
-    ResizeObserverManager.getInstance().resumePane(LAYOUT_SHELL_PANE_ID);
-    layoutAnimationBridgeRegistered = false;
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.removeEventListener === 'function'
+    ) {
+      window.removeEventListener('blur', onInterrupt);
+      window.removeEventListener('pointercancel', onInterrupt);
+      window.removeEventListener('lostpointercapture', onInterrupt, true);
+    }
+    useLayoutAnimationStore.getState().clearInterruptWatchdog();
+    interruptListenersRegistered = false;
   };
 }

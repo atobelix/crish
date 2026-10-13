@@ -184,7 +184,7 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
       !isTurnWorking &&
       isOpen === undefined &&
       !userInteracted &&
-      !defaultExpanded
+      defaultExpanded !== false
     ) {
       setIsCollapsing(true);
     } else if (isTurnWorking && isCollapsing) {
@@ -210,17 +210,16 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
     };
   }, [isCollapsing]);
 
-  // 默认开合策略（2026-09-18 用户裁决）：
+  // 默认开合策略（2026-09-18 / 2026-10-13 用户裁决）：
   // 1. 若外部显式受控传入 isOpen，遵循 isOpen；
-  // 2. 若用户曾手动交互，持久保持用户的意图；
-  // 3. 模型工作态 (isTurnWorking) 期间：直接平铺展开显示思考思维链；
-  // 4. 终态 (!isTurnWorking，所有内容吐完)：自动折叠收起，仅显示已思考单行；
-  // 5. 兜底回退 defaultExpanded。
+  // 2. 若用户曾手动交互（主动打开/关闭），持久保持用户的意图，生成完也不自动关闭；
+  // 3. 模型工作态 (isTurnWorking) 期间：默认展开显示思考思维链（除非 defaultExpanded 显式为 false）；
+  // 4. 终态 (!isTurnWorking，生成完成或关闭对话再打开的历史消息)：一律默认折叠收起为 24px 单行。
   const isExpanded = useMemo(() => {
     if (isOpen !== undefined) return isOpen;
     if (userInteracted) return userExpanded;
-    if (isTurnWorking) return true;
-    return defaultExpanded ?? false;
+    if (isTurnWorking) return defaultExpanded ?? true;
+    return false;
   }, [isOpen, userInteracted, userExpanded, isTurnWorking, defaultExpanded]);
 
   const handleToggle = useCallback(() => {

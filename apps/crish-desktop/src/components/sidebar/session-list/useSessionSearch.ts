@@ -38,9 +38,15 @@ export function useSessionSearch({
     let list = visibleSessions;
     if (q) list = list.filter((s) => searchHits.has(s.id));
     if (sortType === 'name') {
-      return [...list].sort((a, b) =>
-        sessionListDisplayTitle(a).localeCompare(sessionListDisplayTitle(b))
-      );
+      return [...list].sort((a, b) => {
+        const cmp = sessionListDisplayTitle(a).localeCompare(
+          sessionListDisplayTitle(b),
+          'zh-CN',
+          { numeric: true, sensitivity: 'base' }
+        );
+        if (cmp !== 0) return cmp;
+        return compareSessionsByActivity(a, b);
+      });
     }
     return [...list].sort(compareSessionsByActivity);
   }, [visibleSessions, searchQuery, searchHits, sortType]);

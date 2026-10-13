@@ -10,13 +10,13 @@
 
 .emptyHint {
   font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  color: var(--text-faint);
   padding: 12px 10px;
   text-align: center;
 }
 
 .subtle {
-  color: var(--text-tertiary);
+  color: var(--text-faint);
 }
 
 .accordionWrapper {
@@ -80,10 +80,9 @@
 
 .sectionLabel {
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium, 500);
-  /* 分组标签比会话行再弱一档。暗色 --text-tertiary 对侧栏 chrome 为 4.50:1，
-     对主背景 5.57:1，a11y-contrast 暗色断言仍过。 */
-  color: var(--text-tertiary);
+  font-weight: var(--font-weight-normal, 400);
+  /* 分组折叠控制行（置顶 / 项目 / 对话）作为次要导航结构信息，退居第四级弱化灰阶（--text-faint）并使用常规 400 字重，让位于会话列表与顶部快捷入口 */
+  color: var(--text-faint);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -97,7 +96,7 @@
 }
 
 .sectionLabel:hover {
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 /* 分组标题 / 分组右侧图标钮 / 查看全部：hover 只改文字与图标颜色，不出底色。
@@ -115,7 +114,7 @@
 }
 
 .sectionLabel svg {
-  color: var(--text-tertiary);
+  color: var(--text-faint);
   transition: transform var(--transition-fast);
 }
 
@@ -151,7 +150,7 @@
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-faint);
   cursor: pointer;
   opacity: 0;
   padding: 0;
@@ -165,15 +164,21 @@
 .sectionLabelRow:focus-within .sectionNew,
 .sectionLabelRow:hover .sectionSortBtn,
 .sectionLabelRow:focus-within .sectionSortBtn,
+.sectionSortBtn[aria-expanded='true'],
+.sectionSortBtn[data-active='true'],
 .sectionLabelRow:hover .sectionSort,
 .sectionLabelRow:focus-within .sectionSort {
   opacity: 1;
 }
 
+.sectionSortBtn[aria-expanded='true'] {
+  color: var(--text-secondary);
+}
+
 .sectionNew:hover,
 .sectionSortBtn:hover,
 .sectionSort:hover {
-  color: var(--text-primary);
+  color: var(--text-secondary);
   background-color: transparent;
 }
 
@@ -254,12 +259,12 @@
 }
 
 .folderHeader svg {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   transition: transform var(--transition-fast);
 }
 
 .folderHeader:hover svg {
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .folderName {
@@ -297,7 +302,7 @@
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-faint);
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
@@ -321,7 +326,7 @@
 .folderNewSession:hover,
 .folderNewBtn:active,
 .folderNewSession:active {
-  color: var(--text-primary);
+  color: var(--text-secondary);
   background-color: transparent;
 }
 
@@ -403,7 +408,7 @@
 }
 
 .sessionItem.active .sessionTime {
-  color: var(--text-secondary);
+  color: var(--text-faint);
 }
 
 .sessionItem:focus-visible {
@@ -543,7 +548,7 @@
   font-weight: var(--font-weight-normal, 400);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
-  color: var(--text-tertiary);
+  color: var(--text-faint);
   flex-shrink: 0;
   white-space: nowrap;
   max-width: 60px;
@@ -558,7 +563,7 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  color: var(--text-secondary);
+  color: var(--text-faint);
   padding: 1px 4px;
   border-radius: var(--radius-sm);
   font-size: 11px;

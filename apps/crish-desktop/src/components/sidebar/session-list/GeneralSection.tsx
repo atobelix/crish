@@ -18,6 +18,8 @@ export interface GeneralSectionProps {
   onToggleGeneral: () => void;
   onSortBtnClick: (e: React.MouseEvent) => void;
   sortTriggerRef?: React.RefObject<HTMLButtonElement | null>;
+  sortDropdownOpen?: boolean;
+  hasActiveSortFilter?: boolean;
   /** Kept for SidebarSessionList API; reorder is pointer drop-only via SessionRow. */
   onMoveSessionRealtime: (
     sessionId: string,
@@ -39,6 +41,8 @@ export function GeneralSection({
   onToggleGeneral,
   onSortBtnClick,
   sortTriggerRef,
+  sortDropdownOpen = false,
+  hasActiveSortFilter = false,
   onMoveSessionRealtime: _onMoveSessionRealtime,
   renderSessionItem,
 }: GeneralSectionProps) {
@@ -82,6 +86,8 @@ export function GeneralSection({
               aria-hidden
             />
           </Button>
+        </div>
+        <div className={styles.sectionLabelRight}>
           <Tooltip content="排序与过滤">
             <Button
               ref={sortTriggerRef}
@@ -90,6 +96,9 @@ export function GeneralSection({
               size="sm"
               className={styles.sectionSortBtn}
               aria-label="排序与过滤"
+              aria-expanded={sortDropdownOpen}
+              aria-haspopup="menu"
+              data-active={hasActiveSortFilter ? 'true' : undefined}
               onClick={(e) => {
                 e.stopPropagation();
                 onSortBtnClick(e);
@@ -97,21 +106,23 @@ export function GeneralSection({
               icon={<AppIcon name="chevrons-up-down" size={16} aria-hidden />}
             />
           </Tooltip>
+          <Tooltip content="新建常规对话">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={styles.sectionNew}
+              aria-label="新建常规对话"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigateToNewDraft(GENERAL_FOLDER);
+              }}
+              icon={
+                <AppIcon name="message-circle-plus" size={16} aria-hidden />
+              }
+            />
+          </Tooltip>
         </div>
-        <Tooltip content="新建常规对话">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className={styles.sectionNew}
-            aria-label="新建常规对话"
-            onClick={(e) => {
-              e.stopPropagation();
-              navigateToNewDraft(GENERAL_FOLDER);
-            }}
-            icon={<AppIcon name="message-circle-plus" size={16} aria-hidden />}
-          />
-        </Tooltip>
       </div>
       <div
         className={styles.accordionWrapper}

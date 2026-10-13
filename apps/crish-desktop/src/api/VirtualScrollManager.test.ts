@@ -1134,3 +1134,85 @@ describe('virtualScrollGestureGuard 与 VirtualScrollManager 协同契约', () =
     expect(guard.isPinnedToBottom).toBe(false);
   });
 });
+
+describe('Stage 03 终案融合最先进单轨架构单元测试断言 (VS-U01 / VS-U02 / 增量与批量更新)', () => {
+  it('[VS-U01] Fenwick 树二进制倍增寻址算法复杂度严格为 O(log N) 且单次平均耗时 < 0.005ms', () => {
+    const vsm = new VirtualScrollManager();
+    const count = 10000;
+    const itemIds = Array.from({ length: count }, (_, i) => `msg-${i}`);
+
+    const buildStart = performance.now();
+    vsm.syncOrder(itemIds);
+    vsm.preloadEstimates(itemIds.map((id) => ({ id, height: 80 })));
+    const buildDuration = performance.now() - buildStart;
+    expect(buildDuration).toBeLessThan(20.0);
+
+    const start = performance.now();
+    let checksum = 0;
+    for (let i = 0; i < 5000; i++) {
+      const targetOffset = (i * 159.7) % 800000;
+      checksum += vsm.findIndexAtOffset(targetOffset);
+    }
+    const avgMs = (performance.now() - start) / 5000;
+    expect(avgMs).toBeLessThan(0.005);
+    expect(checksum).toBeGreaterThan(0);
+
+    for (let i = 0; i < 200; i++) {
+      const targetOffset = (i * 3991.3) % 800000;
+      const idx = vsm.findIndexAtOffset(targetOffset);
+      expect(idx).toBe(Math.min(count - 1, Math.floor(targetOffset / 80)));
+    }
+  });
+
+  it('[VS-U02] Float64Array 内存池复用：同容量连续 syncOrder 原地复用底层 TypedArray 引用', () => {
+    const vsm = new VirtualScrollManager();
+    const ids1 = Array.from({ length: 500 }, (_, i) => `m1-${i}`);
+    vsm.syncOrder(ids1);
+    const bitRef1 = (vsm as unknown as { bitTree: Float64Array }).bitTree;
+    const heightsRef1 = (vsm as unknown as { currentHeights: Float64Array })
+      .currentHeights;
+
+    const ids2 = Array.from({ length: 500 }, (_, i) => `m2-${i}`);
+    vsm.syncOrder(ids2);
+    const bitRef2 = (vsm as unknown as { bitTree: Float64Array }).bitTree;
+    const heightsRef2 = (vsm as unknown as { currentHeights: Float64Array })
+      .currentHeights;
+
+    expect(bitRef1).toBe(bitRef2);
+    expect(heightsRef1).toBe(heightsRef2);
+    expect(vsm.getTotalHeight()).toBe(500 * 120);
+  });
+
+  it('appendItem O(log N) 增量追加尾部项与 updateActualBatch 批量更新保持树状数组精确一致', () => {
+    const vsm = new VirtualScrollManager(100);
+    vsm.syncOrder(['m0', 'm1']);
+    vsm.setActual('m0', 60);
+    vsm.setActual('m1', 90);
+    expect(vsm.getTotalHeight()).toBe(150);
+
+    // 连续增量追加尾部项（覆盖奇偶与 2 的幂次边界）
+    vsm.appendItem('m2', 110);
+    vsm.appendItem('m3', 140);
+    vsm.appendItem('m4', 80);
+
+    expect(vsm.getOrder()).toEqual(['m0', 'm1', 'm2', 'm3', 'm4']);
+    expect(vsm.getOffset(0)).toBe(0);
+    expect(vsm.getOffset(1)).toBe(60);
+    expect(vsm.getOffset(2)).toBe(150);
+    expect(vsm.getOffset(3)).toBe(260);
+    expect(vsm.getOffset(4)).toBe(400);
+    expect(vsm.getTotalHeight()).toBe(480);
+
+    // 批量更新实测高度
+    const changed = vsm.updateActualBatch([
+      { id: 'm2', height: 210 },
+      { id: 'm4', height: 180 },
+    ]);
+    expect(changed).toBe(true);
+    expect(vsm.getOffset(3)).toBe(360);
+    expect(vsm.getOffset(4)).toBe(500);
+    expect(vsm.getTotalHeight()).toBe(680);
+    expect(vsm.findIndexAtOffset(360)).toBe(3);
+    expect(vsm.findIndexAtOffset(500)).toBe(4);
+  });
+});

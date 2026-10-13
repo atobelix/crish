@@ -1,11 +1,23 @@
 /**
- * 基于有限状态自动机 (DFA) 的单遍流式增量 Markdown Lexer 与纯内存块几何账本。
+ * 基于 5 态确定性有限状态自动机 (DFA) 的单遍流式增量 Markdown Lexer 与 Web Streams 管道。
  * 遵循零 DOM ResizeObserver 契约，支持跨 chunk 切开的代码围栏与数学公式块识别。
+ * 使用 Web API 原生全局 TransformStream，严禁导入 node:stream/web。
  */
 
+import {
+  MemoryBlockGeometryBook,
+  type BlockGeometryEntry,
+  type DfaBlockKind,
+} from './memoryBlockGeometryBook';
+
+export { MemoryBlockGeometryBook, type BlockGeometryEntry, type DfaBlockKind };
+
 export type DfaLexerState =
-  'TEXT_PARAGRAPH' | 'FENCE_OPENING' | 'CODE_BLOCK' | 'MATH_BLOCK';
-export type DfaBlockKind = 'paragraph' | 'code' | 'math';
+  | 'TEXT_PARAGRAPH'
+  | 'FENCE_OPENING'
+  | 'CODE_BLOCK'
+  | 'CODE_CLOSING'
+  | 'MATH_BLOCK';
 
 export type DfaLexEvent =
   | {
@@ -22,11 +34,13 @@ export type DfaLexEvent =
       language?: string;
     };
 
-function parseFenceLanguage(rawInfo: string): string | undefined {
+export function parseFenceLanguage(rawInfo: string): string | undefined {
   const first = rawInfo.trim().split(/\s+/)[0] ?? '';
   const cleaned = first.replace(/^language-/, '').replace(/^\./, '');
   return cleaned.length > 0 ? cleaned : undefined;
 }
+
+const MAX_PREFIX_BUF_LEN = 128;
 
 function makeDfaState() {
   return {
@@ -43,6 +57,7 @@ function makeDfaState() {
     codeLineStart: true,
     closeBuf: '',
     closeTicks: 0,
+    closingTrailingSpace: false,
     pendingDollar: false,
     skipOpenLf: false,
     skipLineRest: false,
@@ -50,8 +65,9 @@ function makeDfaState() {
 }
 
 /**
- * 单遍流式增量 Markdown DFA 词法状态机。
- * 单次 feed 严格为 O(chunk.length)，通过前缀缓冲精准处理跨 chunk 边界围栏。
+ * 5 态单遍流式增量 Markdown DFA 词法状态机。
+ * 状态集：TEXT_PARAGRAPH | FENCE_OPENING | CODE_BLOCK | CODE_CLOSING | MATH_BLOCK
+ * 单次 feed 严格为 O(chunk.length)，通过有界前缀缓冲（prefixBuf <= 128）精准处理跨 chunk 边界围栏。
  */
 export class StreamingMarkdownDfaLexer {
   private s = makeDfaState();
@@ -59,9 +75,11 @@ export class StreamingMarkdownDfaLexer {
   public getState(): DfaLexerState {
     return this.s.state;
   }
+
   public getCurrentBlockId(): number {
     return this.s.blockId;
   }
+
   public reset(): void {
     this.s = makeDfaState();
   }
@@ -133,7 +151,6 @@ export class StreamingMarkdownDfaLexer {
             s.fenceLen++;
             s.prefixBuf += ch;
             if (s.fenceLen >= 3) {
-              s.prefixBuf = '';
               pending = this.closeParagraph(out, pending);
             }
             continue;
@@ -142,23 +159,38 @@ export class StreamingMarkdownDfaLexer {
           s.prefixBuf = '';
           s.state = 'TEXT_PARAGRAPH';
           s.fenceChar = '';
+          s.fenceLen = 0;
         } else {
           if (s.fenceInfoBuf.length === 0 && ch === s.fenceChar) {
             s.fenceLen++;
+            s.prefixBuf += ch;
             continue;
           }
           if (ch === '\n') {
             s.lang = parseFenceLanguage(s.fenceInfoBuf);
             s.fenceInfoBuf = '';
+            s.prefixBuf = '';
             s.blockId = ++s.nextId;
             s.state = 'CODE_BLOCK';
             s.codeLineStart = true;
             s.closeBuf = '';
             s.closeTicks = 0;
+            s.closingTrailingSpace = false;
             this.emitCtrl(out, 'BLOCK_START', 'code', s.lang);
             continue;
           }
-          if (ch !== '\r') s.fenceInfoBuf += ch;
+          if (ch !== '\r') {
+            s.fenceInfoBuf += ch;
+            s.prefixBuf += ch;
+            if (s.prefixBuf.length > MAX_PREFIX_BUF_LEN) {
+              pending += s.prefixBuf;
+              s.prefixBuf = '';
+              s.fenceInfoBuf = '';
+              s.fenceChar = '';
+              s.fenceLen = 0;
+              s.state = 'TEXT_PARAGRAPH';
+            }
+          }
           continue;
         }
       }
@@ -208,30 +240,26 @@ export class StreamingMarkdownDfaLexer {
 
       if (s.state === 'CODE_BLOCK') {
         if (s.codeLineStart) {
-          if (s.closeTicks === 0 && ch === ' ' && s.closeBuf.length < 3) {
+          if (ch === ' ' && s.closeBuf.length < 3) {
             s.closeBuf += ch;
             continue;
           }
           if (ch === s.fenceChar) {
-            s.closeTicks++;
-            s.closeBuf += ch;
-            if (s.closeTicks >= s.fenceLen) {
+            if (pending) {
               this.emitChunk(out, 'code', pending);
               pending = '';
-              this.emitCtrl(out, 'BLOCK_END', 'code', s.lang);
-              s.closeBuf = '';
-              s.closeTicks = 0;
-              s.lang = undefined;
-              s.state = 'TEXT_PARAGRAPH';
-              s.atLineStart = false;
-              s.skipLineRest = true;
             }
+            s.state = 'CODE_CLOSING';
+            s.prefixBuf = s.closeBuf + ch;
+            s.closeBuf = '';
+            s.closeTicks = 1;
+            s.closingTrailingSpace = false;
+            s.codeLineStart = false;
             continue;
           }
           if (s.closeBuf.length > 0) {
             pending += s.closeBuf;
             s.closeBuf = '';
-            s.closeTicks = 0;
           }
           s.codeLineStart = false;
         }
@@ -239,8 +267,62 @@ export class StreamingMarkdownDfaLexer {
         if (ch === '\n') {
           s.codeLineStart = true;
           s.closeBuf = '';
-          s.closeTicks = 0;
         }
+        continue;
+      }
+
+      if (s.state === 'CODE_CLOSING') {
+        if (ch === s.fenceChar && !s.closingTrailingSpace) {
+          s.closeTicks++;
+          s.prefixBuf += ch;
+          if (s.prefixBuf.length > MAX_PREFIX_BUF_LEN) {
+            pending += s.prefixBuf;
+            s.prefixBuf = '';
+            s.closeTicks = 0;
+            s.closingTrailingSpace = false;
+            s.state = 'CODE_BLOCK';
+          }
+          continue;
+        }
+        if (ch === ' ' || ch === '\t' || ch === '\r') {
+          s.closingTrailingSpace = true;
+          s.prefixBuf += ch;
+          if (s.prefixBuf.length > MAX_PREFIX_BUF_LEN) {
+            pending += s.prefixBuf;
+            s.prefixBuf = '';
+            s.closeTicks = 0;
+            s.closingTrailingSpace = false;
+            s.state = 'CODE_BLOCK';
+          }
+          continue;
+        }
+        if (ch === '\n') {
+          if (s.closeTicks >= s.fenceLen) {
+            this.emitCtrl(out, 'BLOCK_END', 'code', s.lang);
+            s.prefixBuf = '';
+            s.closeTicks = 0;
+            s.closingTrailingSpace = false;
+            s.lang = undefined;
+            s.fenceChar = '';
+            s.fenceLen = 0;
+            s.state = 'TEXT_PARAGRAPH';
+            s.atLineStart = true;
+          } else {
+            pending += s.prefixBuf + '\n';
+            s.prefixBuf = '';
+            s.closeTicks = 0;
+            s.closingTrailingSpace = false;
+            s.state = 'CODE_BLOCK';
+            s.codeLineStart = true;
+          }
+          continue;
+        }
+        pending += s.prefixBuf + ch;
+        s.prefixBuf = '';
+        s.closeTicks = 0;
+        s.closingTrailingSpace = false;
+        s.state = 'CODE_BLOCK';
+        s.codeLineStart = false;
         continue;
       }
 
@@ -273,7 +355,7 @@ export class StreamingMarkdownDfaLexer {
 
     if (pending.length > 0) {
       const kind: DfaBlockKind =
-        s.state === 'CODE_BLOCK'
+        s.state === 'CODE_BLOCK' || s.state === 'CODE_CLOSING'
           ? 'code'
           : s.state === 'MATH_BLOCK'
             ? 'math'
@@ -294,6 +376,7 @@ export class StreamingMarkdownDfaLexer {
       } else {
         const lang = parseFenceLanguage(s.fenceInfoBuf);
         s.fenceInfoBuf = '';
+        s.prefixBuf = '';
         s.blockId = ++s.nextId;
         this.emitCtrl(out, 'BLOCK_START', 'code', lang);
         this.emitCtrl(out, 'BLOCK_END', 'code', lang);
@@ -309,6 +392,20 @@ export class StreamingMarkdownDfaLexer {
       s.closeBuf = '';
       this.emitCtrl(out, 'BLOCK_END', 'code', s.lang);
       s.lang = undefined;
+      s.fenceChar = '';
+      s.fenceLen = 0;
+      s.state = 'TEXT_PARAGRAPH';
+    } else if (s.state === 'CODE_CLOSING') {
+      if (s.closeTicks < s.fenceLen) {
+        this.emitChunk(out, 'code', s.prefixBuf);
+      }
+      s.prefixBuf = '';
+      s.closeTicks = 0;
+      s.closingTrailingSpace = false;
+      this.emitCtrl(out, 'BLOCK_END', 'code', s.lang);
+      s.lang = undefined;
+      s.fenceChar = '';
+      s.fenceLen = 0;
       s.state = 'TEXT_PARAGRAPH';
     } else if (s.state === 'MATH_BLOCK') {
       if (s.pendingDollar) {
@@ -327,92 +424,42 @@ export class StreamingMarkdownDfaLexer {
 }
 
 /**
- * 标准 Web Streams TransformStream 封装：将分片字符串流转换为 DfaLexEvent 流。
+ * 遵循 Web Streams API 标准的 MarkdownDfaTransformStream 单轨流式管道
+ * （使用全局 Web API TransformStream，零 node:stream/web 依赖）。
+ */
+export class MarkdownDfaTransformStream extends TransformStream<
+  string,
+  DfaLexEvent
+> {
+  constructor() {
+    const lexer = new StreamingMarkdownDfaLexer();
+    super({
+      transform(
+        chunk: string,
+        controller: TransformStreamDefaultController<DfaLexEvent>
+      ) {
+        if (!chunk) return;
+        const events = lexer.feed(chunk);
+        for (let i = 0; i < events.length; i++) {
+          controller.enqueue(events[i]!);
+        }
+      },
+      flush(controller: TransformStreamDefaultController<DfaLexEvent>) {
+        const tailEvents = lexer.finish();
+        for (let i = 0; i < tailEvents.length; i++) {
+          controller.enqueue(tailEvents[i]!);
+        }
+      },
+    });
+  }
+}
+
+/**
+ * 标准 Web Streams TransformStream 封装工厂：将分片字符串流转换为 DfaLexEvent 流。
  */
 export function createMarkdownDfaTransformStream(): TransformStream<
   string,
   DfaLexEvent
 > {
-  const lexer = new StreamingMarkdownDfaLexer();
-  return new TransformStream<string, DfaLexEvent>({
-    transform(chunk, controller) {
-      for (const ev of lexer.feed(chunk)) controller.enqueue(ev);
-    },
-    flush(controller) {
-      for (const ev of lexer.finish()) controller.enqueue(ev);
-    },
-  });
-}
-
-interface MessageGeometryLedger {
-  blocks: Map<string | number, number>;
-  totalHeight: number;
-}
-
-/**
- * 纯内存块几何账本（零 DOM ResizeObserver 契约）。
- * 按 (sessionId, messageId, blockId) 维护块高度快照与 O(1) 消息累计高度，支持会话级级联清理。
- */
-export class MemoryBlockGeometryBook {
-  private readonly sessions = new Map<
-    string,
-    Map<string, MessageGeometryLedger>
-  >();
-
-  public recordBlockHeight(
-    sessionId: string,
-    messageId: string,
-    blockId: number | string,
-    height: number
-  ): void {
-    if (!sessionId || !messageId) return;
-    const normalized = Number.isFinite(height) && height >= 0 ? height : 0;
-    let msgMap = this.sessions.get(sessionId);
-    if (!msgMap) this.sessions.set(sessionId, (msgMap = new Map()));
-    let ledger = msgMap.get(messageId);
-    if (!ledger)
-      msgMap.set(messageId, (ledger = { blocks: new Map(), totalHeight: 0 }));
-    const prev = ledger.blocks.get(blockId) ?? 0;
-    ledger.blocks.set(blockId, normalized);
-    ledger.totalHeight += normalized - prev;
-  }
-
-  public getBlockHeight(
-    sessionId: string,
-    messageId: string,
-    blockId: number | string,
-    fallbackEstimate?: number
-  ): number | undefined {
-    const recorded = this.sessions
-      .get(sessionId)
-      ?.get(messageId)
-      ?.blocks.get(blockId);
-    return recorded !== undefined ? recorded : fallbackEstimate;
-  }
-
-  public getMessageTotalHeight(
-    sessionId: string,
-    messageId: string,
-    activeTailEstimate = 0
-  ): number {
-    const total =
-      this.sessions.get(sessionId)?.get(messageId)?.totalHeight ?? 0;
-    const tail =
-      Number.isFinite(activeTailEstimate) && activeTailEstimate > 0
-        ? activeTailEstimate
-        : 0;
-    return total + tail;
-  }
-
-  public evictSession(sessionId: string): boolean {
-    return this.sessions.delete(sessionId);
-  }
-
-  public getObserverCount(): 0 {
-    return 0;
-  }
-
-  public clear(): void {
-    this.sessions.clear();
-  }
+  return new MarkdownDfaTransformStream();
 }

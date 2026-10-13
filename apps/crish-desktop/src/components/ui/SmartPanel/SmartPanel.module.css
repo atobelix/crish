@@ -8,6 +8,28 @@
   outline: none;
 }
 
+@keyframes crish-popover-enter {
+  0% {
+    opacity: 0;
+    transform: scale(0.97) translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes crish-popover-enter-top {
+  0% {
+    opacity: 0;
+    transform: scale(0.97) translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 .panel {
   position: relative;
   display: flex;
@@ -23,6 +45,13 @@
   font-family: var(--font-sans, sans-serif);
   box-sizing: border-box;
   outline: none;
+  transform-origin: inherit;
+  will-change: transform, opacity;
+  animation: crish-popover-enter var(--transition-popover-enter) forwards;
+}
+
+.container[data-side='top'] .panel {
+  animation-name: crish-popover-enter-top;
 }
 
 :global(.dark) .panel {
@@ -338,14 +367,32 @@
   z-index: var(--z-smart-panel-sub, 510);
   outline: none;
   box-sizing: border-box;
+  transform-origin: top left;
+  will-change: transform, opacity;
+  animation: crish-popover-enter var(--transition-popover-enter) forwards;
 }
 .cascadeSubmenu.flipLeft {
   left: auto;
   right: calc(100% + 4px);
+  transform-origin: top right;
 }
 .cascadeSubmenu .item {
   border-radius: var(--radius-s);
   min-height: 26px;
   padding: 3px 6px;
   font-size: 12.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .cascadeSubmenu {
+    animation: none;
+    transition: opacity 100ms ease;
+  }
+}
+
+:global(html[data-perf-tier='eco']) .panel,
+:global(html[data-perf-tier='eco']) .cascadeSubmenu {
+  animation: none;
+  transition: none;
 }

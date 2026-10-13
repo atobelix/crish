@@ -8,7 +8,7 @@
  * - Layer 3: 上下文与文件引用卡片区（ComposerAttachmentBar，24px 高度圆角芯片卡片）
  * - Layer 4: 主输入区（Composer Card：加号/权限盾牌 + 富文本/兜底输入 + 融合模型胶囊 + 统计/语音 + 墨绿实体正圆发送按钮）
  */
-import React, { useCallback, useId, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useId, useMemo, useRef } from 'react';
 
 import styles from './ChatComposer.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
@@ -16,7 +16,7 @@ import { ComposePlusMenu } from './ComposePlusMenu';
 import { PermissionModeMenu } from './PermissionModeMenu';
 import { Button, Input, Tooltip } from '../ui';
 import { shouldSuppressMenuReopen } from '../ui/Menu';
-import { ComposerField } from './ComposerField';
+import { ComposerField, STOP_TOOLTIP } from './ComposerField';
 import type {
   ComposerFieldProps,
   ComposerSendApi,
@@ -36,11 +36,10 @@ import { ComposerNoticeBar } from './ComposerNoticeBar';
 import { useComposerNotice } from './useComposerNotice';
 import { useComposerEmptyKind } from './useComposerEmptyKind';
 import { useComposerProtectedSend } from './useComposerProtectedSend';
-import { InputFieldErrorBoundary } from './InputFieldErrorBoundary';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 
 export type { ComposerFieldProps, ChatComposerProps, ComposerLayoutVariant };
-export { ComposerField, STOP_TOOLTIP } from './ComposerField';
+export { ComposerField, STOP_TOOLTIP };
 import { AppIcon } from '../ui/icons/index';
 
 /** 富文本输入（默认主路）：React.lazy 软接，装配失败回落 textarea（F1-γ） */
@@ -112,9 +111,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     },
     [isEditingMessage, onCancelEdit]
   );
-
-  /** F1-γ：富文本装配失败（lazy 加载 / 渲染抛错）后永久回落 textarea 分支 */
-  const [richTextFailed, setRichTextFailed] = useState(false);
 
   const emptyKind = useComposerEmptyKind(emptyKindProp, wrapperRef);
 
@@ -247,28 +243,19 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       : true;
 
   /**
-   * 统一输入区装配：默认主路 = TiptapComposerField（React.lazy 软接 + Suspense，
-   * 加载期以 textarea 同契约兜底渲染）；富文本装配失败（lazy 加载 / 渲染抛错，
-   * InputFieldErrorBoundary 捕获）→ 永久回落 ComposerField（textarea），纯文本可发送。
+   * 统一输入区装配（Stage 05 单轨收敛）：固定主路 = TiptapComposerField（React.lazy 软接 + Suspense）。
    */
-  const renderInputField = () => {
-    if (richTextFailed) {
-      return <ComposerField {...fieldContract} />;
-    }
-    return (
-      <InputFieldErrorBoundary onFail={() => setRichTextFailed(true)}>
-        <React.Suspense fallback={<ComposerField {...fieldContract} />}>
-          <TiptapComposerFieldLazy
-            {...fieldContract}
-            baseSlashCommands={filteredCommands}
-            emptyKind={emptyKind}
-            onFilesSelected={onFilesSelected}
-            onPasteFiles={onPasteFiles}
-          />
-        </React.Suspense>
-      </InputFieldErrorBoundary>
-    );
-  };
+  const renderInputField = () => (
+    <React.Suspense fallback={<ComposerField {...fieldContract} />}>
+      <TiptapComposerFieldLazy
+        {...fieldContract}
+        baseSlashCommands={filteredCommands}
+        emptyKind={emptyKind}
+        onFilesSelected={onFilesSelected}
+        onPasteFiles={onPasteFiles}
+      />
+    </React.Suspense>
+  );
 
   const { effectiveNotice, isClosing, handleDismissNotice } = useComposerNotice(
     {
@@ -290,7 +277,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       <ComposerDropHost
         ref={wrapperRef}
         className={`${styles.composerWrapper}${className ? ` ${className}` : ''}`}
-        data-input-field={richTextFailed ? 'textarea' : 'rich-text'}
+        data-input-field="rich-text"
         onClick={handleFileOpenClick}
         onKeyDown={handleHostKeyDown}
         onDropFiles={(files) => {

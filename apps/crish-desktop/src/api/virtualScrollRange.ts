@@ -1,7 +1,7 @@
 /**
  * apps/crish-desktop/src/api/virtualScrollRange.ts
  *
- * 虚拟滚动可视范围与二分查找算法计算器
+ * 虚拟滚动可视范围与树状数组纯 O(log N) 二进制倍增寻址（Binary Lifting）计算器
  */
 
 import {
@@ -21,33 +21,71 @@ export interface VirtualScrollOffsetProvider {
   getOffset(index: number): number;
   getTotalHeight(count?: number): number;
   getOrderCount(): number;
+  findIndexAtOffset?(offset: number): number;
+  getBitTree?(): Float64Array;
 }
 
 /**
- * 二分查找：给定 scrollTop 偏移，定位对应的起始行下标 (O(log^2 N))
+ * 树状数组纯 O(log N) 二进制倍增寻址（Binary Lifting on Fenwick Tree）：
+ * 利用 V8 硬件指令 Math.clz32 在 O(1) 内获取最高二进制幂位，
+ * 在连续 Float64Array 上执行纯位运算跳跃，彻底消除 O(log^2 N) 外层二分嵌套。
+ */
+export function binaryLiftIndexAtOffset(
+  bitTree: Float64Array,
+  count: number,
+  targetOffset: number
+): number {
+  if (count <= 0 || !Number.isFinite(targetOffset) || targetOffset <= 0) {
+    return 0;
+  }
+  let idx = 0;
+  let accumulatedSum = 0;
+  let bitMask = 1 << (31 - Math.clz32(count));
+
+  while (bitMask > 0) {
+    const nextIdx = idx + bitMask;
+    if (nextIdx <= count) {
+      const val = bitTree[nextIdx] ?? 0;
+      if (accumulatedSum + val <= targetOffset) {
+        idx = nextIdx;
+        accumulatedSum += val;
+      }
+    }
+    bitMask >>>= 1;
+  }
+
+  // 数学不变量保证：idx 恰为满足 offset(idx) <= targetOffset 的最大 0-indexed 行下标
+  return Math.min(idx, count - 1);
+}
+
+/**
+ * 纯 O(log N) 二进制倍增寻址：给定 scrollTop 偏移，定位对应的起始行下标
  */
 export function findIndexAtOffset(
   provider: VirtualScrollOffsetProvider,
   offset: number
 ): number {
+  if (typeof provider.findIndexAtOffset === 'function') {
+    return provider.findIndexAtOffset(offset);
+  }
   const safeOffset = normalizeNonNegFloat(offset);
   const count = provider.getOrderCount();
-  if (safeOffset <= 0 || count === 0) return 0;
-  let lo = 0;
-  let hi = count - 1;
-  let result = 0;
+  if (safeOffset <= 0 || count <= 0) return 0;
 
-  while (lo <= hi) {
-    const mid = (lo + hi) >>> 1;
-    const currentOffset = provider.getOffset(mid);
-    if (currentOffset <= safeOffset) {
-      result = mid;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
+  if (typeof provider.getBitTree === 'function') {
+    return binaryLiftIndexAtOffset(provider.getBitTree(), count, safeOffset);
   }
-  return result;
+
+  let idx = 0;
+  let bitMask = 1 << (31 - Math.clz32(count));
+  while (bitMask > 0) {
+    const nextIdx = idx + bitMask;
+    if (nextIdx < count && provider.getOffset(nextIdx) <= safeOffset) {
+      idx = nextIdx;
+    }
+    bitMask >>>= 1;
+  }
+  return Math.min(idx, count - 1);
 }
 
 /**

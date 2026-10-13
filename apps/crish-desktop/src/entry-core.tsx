@@ -174,19 +174,27 @@ export class StartupCoordinator {
   }
 
   /**
-   * Stage 4 编排闭环：预取 → applyAtomicCommit（先 setState 再 hydrateShell）→ 挂载。
-   * 软超时 fallback 由 Coordinator 保证；异常时走致命降级。
+   * Stage 4 / Stage 10 编排闭环：0ms 瞬时内存快照原子 Commit → 立即挂载 createRoot
+   * → 后台并发 IPC 预取与 startTransition 调和 → 首帧回放预水合事件队列。
    */
-  private static async hydrateAndMount(
+  private static hydrateAndMount(
     rootElement: HTMLElement,
     t0: number,
     options?: StartupCoordinatorOptions
-  ): Promise<void> {
+  ): void {
     try {
       const coordinator = UnifiedAppHydrationCoordinator.getInstance();
-      const snapshot = await coordinator.preloadHydrationSnapshot();
-      markStartupPhase('preloadSnapshotDone');
-      coordinator.applyAtomicCommit(snapshot);
+      const instantSnapshot = coordinator.createInstantMemorySnapshot();
+      coordinator.applyAtomicCommit(instantSnapshot);
+
+      void coordinator
+        .triggerAsyncBackgroundPreheat()
+        .then(() => {
+          markStartupPhase('preloadSnapshotDone');
+        })
+        .catch(() => {
+          /* 预取失败已在 Coordinator 内降级为 fallback 快照 */
+        });
 
       const root = createRoot(rootElement);
       root.render(
@@ -219,9 +227,13 @@ export class StartupCoordinator {
         }
       }
 
-      // 首帧：解除 .preload 门闩 + 解锁 WorkerPool JIT + 闲时交接
+      // 首帧：解除 .preload / .skeleton-latched 门闩 + 因果序回放预水合事件 + 解锁 WorkerPool JIT + 闲时交接
       requestAnimationFrame(() => {
-        document.documentElement.classList.remove('preload');
+        document.documentElement.classList.remove(
+          'preload',
+          'skeleton-latched'
+        );
+        coordinator.replayPreHydrationQueue();
         markStartupPhase('reactInteractiveReady');
         window.__crish_perf = {
           ...window.__crish_perf,

@@ -63,9 +63,30 @@ export type HydrationStage =
   | 'fallback_committed'
   | 'reconciled'
   | 'failed';
-
 export interface CoordinatorOptions {
   timeoutMs?: number;
+}
+
+export interface PreHydrationQueueEvent {
+  type: string;
+  action: string | null;
+  key?: string | null;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  shiftKey?: boolean;
+  altKey?: boolean;
+  timestamp: number;
+}
+
+export interface PreHydrationQueueController {
+  maxSize: number;
+  events: PreHydrationQueueEvent[];
+  droppedCount: number;
+  push: (entry: Partial<PreHydrationQueueEvent> & { type?: string }) => void;
+  drain: () => PreHydrationQueueEvent[];
+  release: (
+    replayDispatcher?: (events: PreHydrationQueueEvent[]) => void
+  ) => PreHydrationQueueEvent[];
 }
 
 interface CoordinatorTrace {
@@ -73,7 +94,51 @@ interface CoordinatorTrace {
   timestamp: number;
 }
 
-/** 偏好 ui_size（compact/normal/spacious）→ layoutStore UiSize（small/medium/large） */
+export function createPreHydrationQueue(
+  maxSize = 32
+): PreHydrationQueueController {
+  const events: PreHydrationQueueEvent[] = [];
+  let isReleased = false;
+  const controller: PreHydrationQueueController = {
+    maxSize,
+    events,
+    droppedCount: 0,
+    push(entry) {
+      if (isReleased || !entry) return;
+      if (events.length >= maxSize) {
+        events.shift();
+        controller.droppedCount += 1;
+      }
+      events.push({
+        type: entry.type || 'click',
+        action: entry.action ?? null,
+        key: entry.key ?? null,
+        ctrlKey: Boolean(entry.ctrlKey),
+        metaKey: Boolean(entry.metaKey),
+        shiftKey: Boolean(entry.shiftKey),
+        altKey: Boolean(entry.altKey),
+        timestamp:
+          typeof entry.timestamp === 'number'
+            ? entry.timestamp
+            : performance.now(),
+      });
+    },
+    drain() {
+      isReleased = true;
+      const sorted = events.slice().sort((a, b) => a.timestamp - b.timestamp);
+      events.length = 0;
+      return sorted;
+    },
+    release(replayDispatcher) {
+      const sorted = controller.drain();
+      if (typeof replayDispatcher === 'function' && sorted.length > 0)
+        replayDispatcher(sorted);
+      return sorted;
+    },
+  };
+  return controller;
+}
+
 function mapPreferenceUiSize(raw: unknown): UiSize | null {
   if (raw === 'compact' || raw === 'small') return 'small';
   if (raw === 'normal' || raw === 'medium') return 'medium';
@@ -97,10 +162,6 @@ function buildPersonalization(prefs: PreferencesMap): PersonalizationSettings {
   };
 }
 
-/**
- * 全局统一应用水合汇聚协调器。
- * 冷启动生命周期内仅一次 preload → 一次原子 Commit；fallback 后允许 Late-Arrival。
- */
 export class UnifiedAppHydrationCoordinator {
   private static instance: UnifiedAppHydrationCoordinator | null = null;
   private stage: HydrationStage = 'uninitialized';
@@ -111,48 +172,34 @@ export class UnifiedAppHydrationCoordinator {
   private constructor() {}
 
   public static getInstance(): UnifiedAppHydrationCoordinator {
-    if (!this.instance) {
-      this.instance = new UnifiedAppHydrationCoordinator();
-    }
+    if (!this.instance) this.instance = new UnifiedAppHydrationCoordinator();
     return this.instance;
   }
 
-  /** 测试隔离：重置单例状态（仅单测调用） */
   public static resetInstanceForTests(): void {
     this.instance = null;
   }
-
   public getStage(): HydrationStage {
     return this.stage;
   }
-
   public getSnapshot(): StartupHydrationSnapshot | null {
     return this.cachedSnapshot;
   }
-
   public getTraceLogs(): CoordinatorTrace[] {
     return [...this.traceLogs];
   }
 
   private recordTrace(step: string): void {
-    if (typeof performance !== 'undefined') {
+    if (typeof performance !== 'undefined')
       this.traceLogs.push({ step, timestamp: performance.now() });
-    }
   }
 
-  /**
-   * 硬件自适应软超时：双核及以下 800ms，常规 400ms。
-   */
   private getAdaptiveTimeout(): number {
     const cores =
       typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4;
     return cores <= 2 ? 800 : 400;
   }
 
-  /**
-   * Fallback 磁盘写入拦截铁闸。
-   * fallback_committed 期间严禁将默认配置写盘覆写真实数据。
-   */
   public canPersistToDisk(): boolean {
     if (this.stage === 'fallback_committed') {
       console.warn('[Coordinator] Fallback 挂载态：刚性阻断向磁盘反写配置');
@@ -165,9 +212,6 @@ export class UnifiedAppHydrationCoordinator {
     return true;
   }
 
-  /**
-   * 构建安全保底快照（软超时 / 预取异常时使用；isFallback=true）。
-   */
   public createFallbackSnapshot(): StartupHydrationSnapshot {
     return {
       theme: normalizeTheme(readStoredTheme()),
@@ -194,62 +238,116 @@ export class UnifiedAppHydrationCoordinator {
     };
   }
 
+  public createInstantMemorySnapshot(): StartupHydrationSnapshot {
+    this.recordTrace('instant-memory-snapshot');
+    const snapshot = this.createFallbackSnapshot();
+    this.cachedSnapshot = snapshot;
+    return snapshot;
+  }
+
+  public triggerAsyncBackgroundPreheat(
+    options?: CoordinatorOptions
+  ): Promise<StartupHydrationSnapshot> {
+    return this.preloadHydrationSnapshot(options).then((snapshot) => {
+      if (!snapshot.isFallback && this.stage === 'fallback_committed') {
+        this.reconcileLateSnapshot(snapshot);
+      }
+      return snapshot;
+    });
+  }
+
+  public replayPreHydrationQueue(
+    customDispatcher?: (event: PreHydrationQueueEvent) => void
+  ): PreHydrationQueueEvent[] {
+    if (typeof window === 'undefined') return [];
+    const win = window as unknown as {
+      __CRISH_PRE_HYDRATION_QUEUE__?: PreHydrationQueueController;
+      __CRISH_RELEASE_COMPENSATION__?: (
+        cb?: (events: PreHydrationQueueEvent[]) => void
+      ) => PreHydrationQueueEvent[];
+    };
+
+    const dispatchSingle = (evt: PreHydrationQueueEvent): void => {
+      if (customDispatcher) {
+        customDispatcher(evt);
+        return;
+      }
+      if (evt.action === 'new-session') {
+        (
+          useLayoutStore.getState() as { addSession?: () => void }
+        ).addSession?.();
+      } else if (
+        evt.action === 'focus-composer' &&
+        typeof document !== 'undefined'
+      ) {
+        document
+          .querySelector<HTMLElement>(
+            '[data-composer-input], .ProseMirror, textarea'
+          )
+          ?.focus?.();
+      }
+    };
+
+    if (win.__CRISH_PRE_HYDRATION_QUEUE__?.release) {
+      return win.__CRISH_PRE_HYDRATION_QUEUE__.release((events) => {
+        for (const evt of events) dispatchSingle(evt);
+      });
+    }
+    if (typeof win.__CRISH_RELEASE_COMPENSATION__ === 'function') {
+      return win.__CRISH_RELEASE_COMPENSATION__((events) => {
+        for (const evt of events) dispatchSingle(evt);
+      });
+    }
+    return [];
+  }
+
   private assembleSnapshot(
     rawPrefsResult: PromiseSettledResult<PreferencesMap>,
     rawSettingsResult: PromiseSettledResult<Settings>,
     recentWorkspacesResult: PromiseSettledResult<string[]>
   ): StartupHydrationSnapshot {
-    const rawPrefs: PreferencesMap =
+    const rawPrefs =
       rawPrefsResult.status === 'fulfilled'
         ? rawPrefsResult.value
         : ({} as PreferencesMap);
-    const rawSettings: Settings =
+    const rawSettings =
       rawSettingsResult.status === 'fulfilled'
         ? rawSettingsResult.value
         : ({} as Settings);
     const recentWorkspaces = rawWorkspacesResultValue(recentWorkspacesResult);
-
-    const localStoredTheme = readStoredTheme();
-    const themeSource = rawPrefs.theme || rawSettings.theme || localStoredTheme;
-    const finalTheme = normalizeTheme(themeSource);
-
+    const finalTheme = normalizeTheme(
+      rawPrefs.theme || rawSettings.theme || readStoredTheme()
+    );
     const personalization = buildPersonalization(rawPrefs);
-
     const uiSize =
       mapPreferenceUiSize(rawPrefs.ui_size) ??
       mapPreferenceUiSize((rawSettings as { uiSize?: unknown }).uiSize) ??
       'medium';
-
     const shellChromeMode = parseShellChromeMode(
       (rawSettings as { shellChromeMode?: unknown }).shellChromeMode ??
         (rawPrefs.shell_chrome_mode as unknown) ??
         'classic'
     );
-
     const sidebarCollapsed =
       typeof rawPrefs.sidebar_collapsed === 'boolean'
         ? rawPrefs.sidebar_collapsed
         : false;
-
     const sidebarWidth =
       typeof rawPrefs.sidebar_width === 'number' &&
       Number.isFinite(rawPrefs.sidebar_width)
         ? rawPrefs.sidebar_width
         : null;
-
     const tabModeEnabled =
       typeof rawPrefs.tab_mode_enabled === 'boolean'
         ? rawPrefs.tab_mode_enabled
         : typeof rawSettings.tabModeEnabled === 'boolean'
           ? rawSettings.tabModeEnabled
           : true;
-
-    let fonts: FontPreferences | null = null;
-    if (rawPrefs.fonts) {
-      fonts = normalizeFontPrefs(rawPrefs.fonts);
-    } else if (rawSettings.fonts) {
-      fonts = normalizeFontPrefs(rawSettings.fonts);
-    }
+    const fonts = rawPrefs.fonts
+      ? normalizeFontPrefs(rawPrefs.fonts)
+      : rawSettings.fonts
+        ? normalizeFontPrefs(rawSettings.fonts)
+        : null;
 
     return {
       theme: finalTheme,
@@ -268,16 +366,10 @@ export class UnifiedAppHydrationCoordinator {
     };
   }
 
-  /**
-   * 并发静默预取。超时仅 resolve fallback（绝不丢弃后置真数据）。
-   * 非 async：保证二次调用返回同一 Promise 引用（async 会包装新 Promise）。
-   */
   public preloadHydrationSnapshot(
     options?: CoordinatorOptions
   ): Promise<StartupHydrationSnapshot> {
-    if (this.preloadPromise) {
-      return this.preloadPromise;
-    }
+    if (this.preloadPromise) return this.preloadPromise;
 
     const timeoutMs = options?.timeoutMs ?? this.getAdaptiveTimeout();
     this.stage = 'preloading';
@@ -319,7 +411,6 @@ export class UnifiedAppHydrationCoordinator {
           );
 
           if (isFallbackResolved) {
-            // ACT-406：后置真数据绝不丢弃，微任务调度 Late-Arrival 补灌
             this.recordTrace('late-arrival-reconciliation-triggered');
             console.info(
               '[Coordinator] Late-Arrival Reconciliation：后置真数据平滑合并'
@@ -349,48 +440,26 @@ export class UnifiedAppHydrationCoordinator {
     return this.preloadPromise;
   }
 
-  /**
-   * 近期工作区路径（现网无 getRecentWorkspaces IPC；以 projectStore.listProjects 为真源）。
-   */
   private async fetchRecentWorkspaces(): Promise<string[]> {
     try {
-      const projects = listProjects();
-      return projects.map((p) => p.path).filter(Boolean);
+      return listProjects()
+        .map((p) => p.path)
+        .filter(Boolean);
     } catch {
       return [];
     }
   }
 
-  /**
-   * 单拍原子 Commit：先 setState 注入 Store，再 hydrateWorkspaceShell。
-   *
-   * 顺序锁定（单测断言）：
-   * 1. Token/字体/主题内存应用；
-   * 2. settingsStore / layoutStore setState；
-   * 3. shellReady 预置位；
-   * 4. hydrateWorkspaceShell（依赖 step 2 的 getAppSettings）。
-   *
-   * 启动热路径零磁盘写入（REDLINE-402）：不调用 persistTheme / persistFonts / settings 回写。
-   */
   public applyAtomicCommit(snapshot: StartupHydrationSnapshot): void {
-    if (this.stage === 'committed' || this.stage === 'reconciled') {
-      return;
-    }
+    if (this.stage === 'committed' || this.stage === 'reconciled') return;
 
     this.recordTrace('atomic-commit-start');
     this.cachedSnapshot = snapshot;
 
-    // 1. 主题 + 个性化 Token（纯内存应用）
     applyPersonalization(snapshot.personalization, snapshot.theme);
     TokenRuntimeController.getInstance().setUiScale(snapshot.uiSize);
+    if (snapshot.fonts) applyFontStacks(snapshot.fonts);
 
-    // 2. 字体（仅 apply；禁止 persistFonts 写盘）
-    if (snapshot.fonts) {
-      applyFontStacks(snapshot.fonts);
-    }
-
-    // 3. Store 批量注入 —— 必须先于 hydrateWorkspaceShell
-    //    （readRestoreLastWorkspace 依赖 layout.getAppSettings 读到本次快照）
     useSettingsStore.getState().setAppSettings(snapshot.appSettings);
 
     const layoutActions = useLayoutStore.getState();
@@ -399,10 +468,8 @@ export class UnifiedAppHydrationCoordinator {
     layoutActions.setUiSize(snapshot.uiSize);
     layoutActions.setShellChromeMode(snapshot.shellChromeMode);
 
-    // 4. shellReady 预置位（hydrateWorkspaceShell 内部也会 setShellReady）
     useWorkspaceShellStore.getState().setShellReady(true);
 
-    // 5. 全量快照写入完毕后再触发工作区 Shell 水合
     try {
       hydrateWorkspaceShell();
     } catch (e) {
@@ -410,45 +477,27 @@ export class UnifiedAppHydrationCoordinator {
       useWorkspaceShellStore.getState().setShellReady(true);
     }
 
-    // fallback 快照保持 fallback_committed 闸；真数据进入 committed
-    if (snapshot.isFallback || this.stage === 'fallback_committed') {
-      this.stage = 'fallback_committed';
-    } else {
-      this.stage = 'committed';
-    }
+    this.stage =
+      snapshot.isFallback || this.stage === 'fallback_committed'
+        ? 'fallback_committed'
+        : 'committed';
     this.recordTrace('atomic-commit-settled');
   }
 
-  /**
-   * Late-Arrival Reconciliation：fallback 首绘后，迟到真数据经 startTransition 补灌。
-   * 绝不把 fallback 默认值写盘；canPersistToDisk 闸在切换 reconciled 后对真数据放行。
-   */
   public reconcileLateSnapshot(trueSnapshot: StartupHydrationSnapshot): void {
     this.recordTrace('reconcile-late-start');
     const prev = this.cachedSnapshot;
     this.cachedSnapshot = trueSnapshot;
-
-    const _hasThemeDiff = prev?.theme !== trueSnapshot.theme;
-    const _hasSkinDiff =
-      prev?.personalization.skin !== trueSnapshot.personalization.skin;
     const hasSizeDiff = prev?.uiSize !== trueSnapshot.uiSize;
     const hasSidebarDiff =
       prev?.sidebarCollapsed !== trueSnapshot.sidebarCollapsed;
 
     const applyUpdate = (): void => {
-      // 真数据就绪后解除 fallback 闸，允许未来用户主动持久化
       this.stage = 'reconciled';
-
       applyPersonalization(trueSnapshot.personalization, trueSnapshot.theme);
-
-      if (hasSizeDiff) {
+      if (hasSizeDiff)
         TokenRuntimeController.getInstance().setUiScale(trueSnapshot.uiSize);
-      }
-
-      if (trueSnapshot.fonts) {
-        applyFontStacks(trueSnapshot.fonts);
-      }
-
+      if (trueSnapshot.fonts) applyFontStacks(trueSnapshot.fonts);
       useSettingsStore.getState().setAppSettings(trueSnapshot.appSettings);
 
       if (

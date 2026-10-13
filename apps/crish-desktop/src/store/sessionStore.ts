@@ -1,32 +1,41 @@
 /**
- * sessionStore — 会话域专属独立 Zustand 实例 (Tier 2 Session-Scoped Store)。
+ * sessionStore — 会话域专属独立 Zustand 实例 (Stage 01 SOTA 正交三子树与内置双标量版本代数槽位)。
  * 彻底销毁 export const useSessionStore = useLayoutStore 伪门面别名同体，
- * 独占单一事件总线与订阅者集合，会话流式 Token 不触发全局 Layout 订阅者遍历。
+ * 独占单一事件总线与订阅者集合，会话流式 Token 不触发全局 Layout 或元数据订阅者重绘。
  */
+import { produce } from 'immer';
 import { useCallback, useRef, useSyncExternalStore } from 'react';
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { useShallow } from '../store/useShallowSelector';
-import { withDevtools } from './middleware/withDevtools';
-import { withLogger } from './middleware/withLogger';
-import { withPersist } from './middleware/withPersist';
-import { sidebarSessionsEqual } from './sessionListEqual';
-import type { SessionState, SessionAgent, SessionMessage } from './types';
-import { createSessionActions, type SessionActions } from './sessionActions';
-import {
-  triggerSessionMessageHydrateIfNeeded as triggerSessionMessageHydrate,
-} from './sessionActivateHydrate';
-import { getSessionById as getSessionByIdFromIndex } from './sessionIndex';
 import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
+import { ensureSessionStoreShellKeyMigrated } from '../api/session-persistence/sessionShellKeyMigration';
+import { useShallow } from '../store/useShallowSelector';
 import {
   initStorePersistence,
   waitForStoreHydration,
   type SessionActivatableStore,
   type StoreApiLike,
 } from './layout-helpers/store-persistence';
-import { ensureSessionStoreShellKeyMigrated } from '../api/session-persistence/sessionShellKeyMigration';
+import { withDevtools } from './middleware/withDevtools';
+import { withLogger } from './middleware/withLogger';
+import { withPersist } from './middleware/withPersist';
+import { createSessionActions, type SessionActions } from './sessionActions';
+import { triggerSessionMessageHydrateIfNeeded as triggerSessionMessageHydrate } from './sessionActivateHydrate';
+import { getSessionById as getSessionByIdFromIndex } from './sessionIndex';
+import { sidebarSessionsEqual } from './sessionListEqual';
+import {
+  bumpEpochScalar,
+  createInitialSubtreeSlice,
+  EMPTY_MESSAGES,
+  patchSubtreeSessionMeta,
+  syncSubtreeFromIndexedState,
+  updateSubtreeMessageText,
+  type SessionMeta,
+  type SessionSubtreeSlice,
+} from './sessionSubtreeModel';
+import type { SessionAgent, SessionMessage, SessionState } from './types';
 
-export interface SessionStoreState {
+export interface SessionStoreState extends SessionSubtreeSlice {
   sessions: SessionState[];
   sessionsById: Record<string, SessionState>;
   folderOrder: string[];
@@ -38,38 +47,188 @@ export interface SessionStoreState {
   hydrationComplete: boolean;
 }
 
-export type SessionStore = SessionStoreState & SessionActions;
+export interface SessionSubtreeActions {
+  patchSessionMeta: (sessionId: string, patch: Partial<SessionMeta>) => void;
+}
 
+export type SessionStore = SessionStoreState &
+  SessionActions &
+  SessionSubtreeActions;
+export type SotaSessionStoreState = SessionStoreState;
+export type SotaSessionStore = SessionStore;
 export type SessionFacadeState = SessionStoreState;
 export type SessionFacade = SessionStore;
 
 /**
  * U-PERSIST-A（D4 票 A）：persist 键在 create 前完成一次迁移——
  * 旧全量 sessions 镜像剥离为轻量 meta 壳；正文唯一来源 = SQLite hydrate。
- * 零兼容读：merge 永不接受 persisted.sessions/sessionsById。
  */
 ensureSessionStoreShellKeyMigrated();
 
+function applyUpdaterWithSubtreeSync(
+  prev: SessionStore,
+  updater:
+    | SessionStore
+    | Partial<SessionStore>
+    | ((state: SessionStore) => void | SessionStore | Partial<SessionStore>),
+  replace?: boolean
+): SessionStore {
+  const produced =
+    typeof updater === 'function'
+      ? produce(prev, (draft) => {
+          const ret = (updater as (d: SessionStore) => unknown)(
+            draft as SessionStore
+          );
+          if (ret && typeof ret === 'object' && ret !== draft) {
+            Object.assign(draft, ret);
+          }
+        })
+      : replace
+        ? (updater as SessionStore)
+        : ({ ...prev, ...updater } as SessionStore);
+  if (produced === prev) return prev;
+  return syncSubtreeFromIndexedState(prev, produced);
+}
+
 /**
- * 物理独立 SessionStore 实例 (彻底清除 autoIndexMiddleware 隐式全量重构)
- * 彻底消除与 layoutStore 的别名同体引用，独占单一事件总线与订阅者集合
+ * 物理独立 SessionStore 实例（正交三子树 + 内置双标量 Epoch 槽位）
  */
 export const useSessionStore = create<SessionStore>()(
   withDevtools(
     withLogger(
       withPersist(
-        immer<SessionStore>((set, get) => ({
-          sessions: [],
-          sessionsById: {},
-          folderOrder: [],
-          activeSessionId: '',
-          draftFolder: '',
-          activeAgentId: null,
-          panelAgentId: null,
-          composerDrafts: {},
-          hydrationComplete: false,
-          ...createSessionActions(set, get),
-        })),
+        immer<SessionStore>((rawSet, get, store) => {
+          const set: typeof rawSet = (updater, replace) => {
+            const prev = get();
+            const next = applyUpdaterWithSubtreeSync(
+              prev,
+              updater as Parameters<typeof applyUpdaterWithSubtreeSync>[1],
+              replace
+            );
+            if (next !== prev) rawSet(next, true);
+          };
+          store.setState = set;
+
+          const baseActions = createSessionActions(set, get);
+
+          return {
+            ...createInitialSubtreeSlice(),
+            sessions: [],
+            sessionsById: {},
+            folderOrder: [],
+            activeSessionId: '',
+            draftFolder: '',
+            activeAgentId: null,
+            panelAgentId: null,
+            composerDrafts: {},
+            hydrationComplete: false,
+            ...baseActions,
+            updateMessageText: (
+              sessionId,
+              messageId,
+              text,
+              precomputedHtml
+            ) => {
+              const prev = get();
+              const nextSub = updateSubtreeMessageText(
+                prev,
+                sessionId,
+                messageId,
+                text,
+                precomputedHtml
+              );
+              if (nextSub === prev) {
+                if (
+                  prev.sessionsById[sessionId] &&
+                  !prev.messagesBySessionId[sessionId]
+                ) {
+                  baseActions.updateMessageText(
+                    sessionId,
+                    messageId,
+                    text,
+                    precomputedHtml
+                  );
+                }
+                return;
+              }
+              const nextMsgs = nextSub.messagesBySessionId[sessionId]!;
+              const legacySess = prev.sessionsById[sessionId];
+              if (!legacySess) {
+                rawSet(nextSub, true);
+                return;
+              }
+              const updatedSess: SessionState = {
+                ...legacySess,
+                messages: nextMsgs,
+              };
+              const nextById = {
+                ...prev.sessionsById,
+                [sessionId]: updatedSess,
+              };
+              const idx = prev.sessions.indexOf(legacySess);
+              const sIdx =
+                idx >= 0
+                  ? idx
+                  : prev.sessions.findIndex((s) => s.id === sessionId);
+              const nextSessions = prev.sessions.slice();
+              if (sIdx >= 0) nextSessions[sIdx] = updatedSess;
+              rawSet(
+                {
+                  ...nextSub,
+                  sessions: nextSessions,
+                  sessionsById: nextById,
+                },
+                true
+              );
+            },
+            patchSessionMeta: (sessionId, patch) => {
+              const prev = get();
+              const nextSub = patchSubtreeSessionMeta(prev, sessionId, patch);
+              if (nextSub === prev) return;
+              const legacySess = prev.sessionsById[sessionId];
+              if (!legacySess) {
+                rawSet(nextSub, true);
+                return;
+              }
+              const updatedSess: SessionState = {
+                ...legacySess,
+                ...patch,
+                id: legacySess.id,
+              };
+              const nextById = {
+                ...prev.sessionsById,
+                [sessionId]: updatedSess,
+              };
+              const idx = prev.sessions.indexOf(legacySess);
+              const sIdx =
+                idx >= 0
+                  ? idx
+                  : prev.sessions.findIndex((s) => s.id === sessionId);
+              const nextSessions = prev.sessions.slice();
+              if (sIdx >= 0) nextSessions[sIdx] = updatedSess;
+              rawSet(
+                {
+                  ...nextSub,
+                  sessions: nextSessions,
+                  sessionsById: nextById,
+                },
+                true
+              );
+            },
+            renameSession: (sessionId, newTitle) => {
+              const prev = get();
+              if (prev.metaById[sessionId] && !prev.sessionsById[sessionId]) {
+                const nextSub = patchSubtreeSessionMeta(prev, sessionId, {
+                  title: newTitle,
+                  titleSource: 'user',
+                });
+                if (nextSub !== prev) rawSet(nextSub, true);
+                return;
+              }
+              baseActions.renameSession(sessionId, newTitle);
+            },
+          };
+        }),
         {
           name: 'crish_session_store',
           // 票 A：partialize 仅轻量 meta 壳——sessions/sessionsById 物理切除（DEL-5）
@@ -94,7 +253,6 @@ export const useSessionStore = create<SessionStore>()(
                 p.composerDrafts && typeof p.composerDrafts === 'object'
                   ? (p.composerDrafts as Record<string, string>)
                   : current.composerDrafts,
-              // sessions / sessionsById 一律以内存初始值为准，禁止 LS 回灌
             };
           },
         }
@@ -104,34 +262,37 @@ export const useSessionStore = create<SessionStore>()(
   )
 );
 
+const innerSetState = useSessionStore.setState;
+useSessionStore.setState = ((updater, replace) => {
+  const prev = useSessionStore.getState();
+  const next = applyUpdaterWithSubtreeSync(
+    prev,
+    updater as Parameters<typeof applyUpdaterWithSubtreeSync>[1],
+    replace
+  );
+  if (next !== prev) innerSetState(next, true);
+}) as typeof useSessionStore.setState;
+
 // ── 不可变原子选择器契约 (Atomic Selectors) ──────────────────────────────────
 
 export const selectActiveSessionId = (s: SessionStoreState): string =>
   s.activeSessionId;
-
 export const selectActiveAgentId = (s: SessionStoreState): string | null =>
   s.activeAgentId;
-
 export const selectPanelAgentId = (s: SessionStoreState): string | null =>
   s.panelAgentId;
-
 export const selectSessionHydrated = (s: SessionStoreState): boolean =>
   s.hydrationComplete;
-
 export const selectFolderOrder = (s: SessionStoreState): string[] =>
   s.folderOrder;
-
 export const selectSessions = (s: SessionStoreState): SessionState[] =>
   s.sessions;
-
 export const selectSessionsById = (
   s: SessionStoreState
 ): Record<string, SessionState> => s.sessionsById;
-
 export const selectComposerDrafts = (
   s: SessionStoreState
 ): Record<string, string> => s.composerDrafts;
-
 export const selectDraftFolder = (s: SessionStoreState): string =>
   s.draftFolder;
 
@@ -139,35 +300,26 @@ export const selectActiveSession = (
   s: Pick<SessionStoreState, 'sessions' | 'sessionsById' | 'activeSessionId'>
 ): SessionState | undefined => getSessionByIdFromIndex(s, s.activeSessionId);
 
-/**
- * 细粒度单会话实体选择器
- * 基于 sessionsById 进行 O(1) 查找，利用 Object.is 拦截无变化重绘
- */
 export const makeSelectSessionById =
   (sessionId: string) =>
   (s: SessionStoreState): SessionState | undefined =>
     s.sessionsById[sessionId];
 
-/**
- * 细粒度消息流选择器
- * 核心设计：返回不可变全局空数组常量 EMPTY_MESSAGES，彻底杜绝 fallback [] 导致的引用漂移与无效重绘
- */
-const EMPTY_MESSAGES: readonly SessionMessage[] = Object.freeze([]);
 export const makeSelectSessionMessages =
   (sessionId: string) =>
-  (s: SessionStoreState): readonly SessionMessage[] =>
-    s.sessionsById[sessionId]?.messages ?? EMPTY_MESSAGES;
+  (s: SessionStoreState): SessionMessage[] =>
+    s.messagesBySessionId[sessionId] ??
+    s.sessionsById[sessionId]?.messages ??
+    EMPTY_MESSAGES;
 
-/** 细粒度 GoalMode 选择器 */
 export const makeSelectSessionGoalMode =
   (sessionId: string) => (s: SessionStoreState) =>
-    s.sessionsById[sessionId]?.goalMode;
+    s.metaById[sessionId]?.goalMode ?? s.sessionsById[sessionId]?.goalMode;
 
-/** 细粒度会话标题选择器 */
 export const makeSelectSessionTitle =
   (sessionId: string) =>
   (s: SessionStoreState): string =>
-    s.sessionsById[sessionId]?.title || '';
+    s.metaById[sessionId]?.title ?? s.sessionsById[sessionId]?.title ?? '';
 
 // ── Hooks 封装 ─────────────────────────────────────────────────────────────
 
@@ -241,28 +393,32 @@ export function getActiveSessionId(): string {
 
 export function getSessionIndex(sessionId: string): number {
   const state = getSessionStoreState();
-  return state.sessions.findIndex((s) => s.id === sessionId);
+  const orderIdx = state.sessionOrder.indexOf(sessionId);
+  return orderIdx >= 0
+    ? orderIdx
+    : state.sessions.findIndex((s) => s.id === sessionId);
 }
 
 export function getSessionAgent(
   sessionId: string,
   agentId: string
 ): SessionAgent | undefined {
-  const sess = getSessionById(sessionId);
-  return sess?.agents?.find((a) => a.id === agentId);
+  const state = getSessionStoreState();
+  const agents =
+    state.agentsBySessionId[sessionId] ??
+    getSessionByIdFromIndex(state, sessionId)?.agents;
+  return agents?.find((a) => a.id === agentId);
 }
 
 /** 等待 store 会话回灌完成 */
 export function waitForHydration(): Promise<void> {
-  return waitForStoreHydration(
-    useSessionStore as StoreApiLike<any>
-  );
+  return waitForStoreHydration(useSessionStore as StoreApiLike<SessionStore>);
 }
 
 /** 挂载会话持久化与回灌 */
 export function initSessionStorePersistence(): () => void {
   return initStorePersistence(
-    useSessionStore as SessionActivatableStore<any>
+    useSessionStore as SessionActivatableStore<SessionStore>
   );
 }
 
@@ -270,8 +426,11 @@ export function initSessionStorePersistence(): () => void {
 
 export {
   getSessionById as getSessionByIdFromState,
+  getSessionMetaById,
   buildSessionsById,
   reindexSessionsById,
+  reorderSessionOrderById,
+  reorderSessionOrderByIdList,
   checkSessionsIndex,
   isSessionsIndexConsistent,
   assertSessionsIndexConsistent,
@@ -297,7 +456,9 @@ export {
   sessionShellFingerprint,
 } from './sessionListEqual';
 
+export { bumpEpochScalar };
 export type { SessionActions } from './sessionActions';
+export type { SessionMeta, SessionSubtreeSlice } from './sessionSubtreeModel';
 export type { SessionState, SessionAgent, SessionMessage } from './types';
 
 /** Store-backed public wrapper; the hydration helper itself remains store-agnostic. */

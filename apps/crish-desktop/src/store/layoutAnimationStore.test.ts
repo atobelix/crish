@@ -1,11 +1,15 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as layoutAnimationModule from './layoutAnimationStore';
 import {
   beginLayoutInteraction,
+  CATCHUP_TIME_BUDGET_MS,
   endLayoutInteraction,
-  MAX_FREEZE_MS,
+  registerLayoutAnimationBridge,
   useLayoutAnimationStore,
+  WATCHDOG_TIMEOUT_MS,
 } from './layoutAnimationStore';
+import { ResizeObserverManager } from '../utils/ResizeObserverManager';
 
 class MockResizeObserver {
   observe() {}
@@ -13,195 +17,169 @@ class MockResizeObserver {
   disconnect() {}
 }
 if (typeof globalThis.ResizeObserver === 'undefined') {
-  (globalThis as unknown as Record<string, unknown>).ResizeObserver = MockResizeObserver;
+  (globalThis as unknown as Record<string, unknown>).ResizeObserver =
+    MockResizeObserver;
 }
 
 function resetStore() {
-  const s = useLayoutAnimationStore.getState();
-  for (const type of [...s.activeAnimations]) {
-    s.endAnimation(type);
-  }
-  // 强制清空 body 兼容 class
+  useLayoutAnimationStore.getState().forceRecoverAll();
   document.body.className = '';
   document.body.removeAttribute('data-layout-frozen');
   useLayoutAnimationStore.setState({
     activeAnimations: new Set(),
+    suspendedPaneIds: new Set(),
     isSidebarTransitioning: false,
     isWorkspaceResizing: false,
     isWindowResizing: false,
     isTabDragging: false,
-    isLayoutFrozen: false,
     phase: 'idle',
     catchupQueue: new Map(),
   });
 }
 
-describe('layoutAnimationStore freeze protocol', () => {
+describe('layoutAnimationStore (Stage 06 单轨收敛：零全局冻结、窗格级门控、8ms 分片排空与 200ms 看门狗)', () => {
   beforeEach(() => {
+    ResizeObserverManager.resetInstanceForTest();
     resetStore();
   });
 
   afterEach(() => {
     vi.useRealTimers();
     resetStore();
+    ResizeObserverManager.resetInstanceForTest();
   });
 
-  it('begin/end workspace-resizing freezes and syncs body classes', () => {
+  it('单轨契约断言：彻底拔除全局 isLayoutFrozen、MAX_FREEZE_MS (30s) 与 LAYOUT_SHELL_PANE_ID 伪映射', () => {
+    const state = useLayoutAnimationStore.getState() as unknown as Record<
+      string,
+      unknown
+    >;
+    expect('isLayoutFrozen' in state).toBe(false);
+    expect('MAX_FREEZE_MS' in layoutAnimationModule).toBe(false);
+    expect('LAYOUT_SHELL_PANE_ID' in layoutAnimationModule).toBe(false);
+    expect(WATCHDOG_TIMEOUT_MS).toBe(200);
+    expect(CATCHUP_TIME_BUDGET_MS).toBe(8);
+  });
+
+  it('begin/end 动画仅更新轻量状态，绝不向 document.body 广播 is-layout-frozen / tree-resizing / data-layout-frozen', () => {
     beginLayoutInteraction('workspace-resizing');
     const mid = useLayoutAnimationStore.getState();
-    expect(mid.isLayoutFrozen).toBe(true);
     expect(mid.isWorkspaceResizing).toBe(true);
-    expect(document.body.classList.contains('is-layout-frozen')).toBe(true);
-    expect(document.body.classList.contains('resizing-active')).toBe(true);
-    expect(document.body.classList.contains('is-resizing')).toBe(true);
-    expect(document.body.getAttribute('data-layout-frozen')).toBe('true');
+    expect(mid.phase).toBe('animating');
 
-    endLayoutInteraction('workspace-resizing');
-    const end = useLayoutAnimationStore.getState();
-    expect(end.isLayoutFrozen).toBe(false);
-    expect(end.isWorkspaceResizing).toBe(false);
+    // 断言 document.body 保持 100% 纯净，零全局冻结类名污染
     expect(document.body.classList.contains('is-layout-frozen')).toBe(false);
     expect(document.body.classList.contains('resizing-active')).toBe(false);
     expect(document.body.classList.contains('is-resizing')).toBe(false);
-  });
-
-  it('double end is safe (no permanent freeze / no throw)', () => {
-    beginLayoutInteraction('workspace-resizing');
-    endLayoutInteraction('workspace-resizing');
-    endLayoutInteraction('workspace-resizing');
-    expect(useLayoutAnimationStore.getState().isLayoutFrozen).toBe(false);
-    expect(document.body.classList.contains('is-layout-frozen')).toBe(false);
-  });
-
-  it('nested types: end one keeps frozen until all end', () => {
-    beginLayoutInteraction('workspace-resizing');
-    beginLayoutInteraction('sidebar-transition');
-    expect(useLayoutAnimationStore.getState().isLayoutFrozen).toBe(true);
+    expect(document.body.classList.contains('tree-resizing')).toBe(false);
+    expect(document.body.getAttribute('data-layout-frozen')).toBeNull();
 
     endLayoutInteraction('workspace-resizing');
-    expect(useLayoutAnimationStore.getState().isLayoutFrozen).toBe(true);
-    expect(document.body.classList.contains('is-layout-frozen')).toBe(true);
-    // workspace classes cleared, frozen remains via sidebar-transition
-    expect(document.body.classList.contains('resizing-active')).toBe(false);
-
-    endLayoutInteraction('sidebar-transition');
-    expect(useLayoutAnimationStore.getState().isLayoutFrozen).toBe(false);
+    const end = useLayoutAnimationStore.getState();
+    expect(end.isWorkspaceResizing).toBe(false);
+    expect(end.phase).toBe('idle');
   });
 
-  it('tab-dragging maps dragging-card', () => {
-    beginLayoutInteraction('tab-dragging');
-    expect(document.body.classList.contains('dragging-card')).toBe(true);
-    expect(document.body.classList.contains('is-layout-frozen')).toBe(true);
-    endLayoutInteraction('tab-dragging');
-    expect(document.body.classList.contains('dragging-card')).toBe(false);
+  it('细粒度窗格级门控 (suspendPanes / resumePanes) 与 ResizeObserverManager 同步联动', () => {
+    const mgr = ResizeObserverManager.getInstance();
+    beginLayoutInteraction('workspace-resizing', {
+      paneIds: ['leaf-a', 'leaf-b'],
+    });
+
+    const state = useLayoutAnimationStore.getState();
+    expect(state.isPaneSuspended('leaf-a')).toBe(true);
+    expect(state.isPaneSuspended('leaf-b')).toBe(true);
+    expect(state.isPaneSuspended('leaf-c')).toBe(false);
+    expect(mgr.isPaneSuspended('leaf-a')).toBe(true);
+    expect(mgr.isPaneSuspended('leaf-c')).toBe(false);
+
+    endLayoutInteraction('workspace-resizing', {
+      paneIds: ['leaf-a', 'leaf-b'],
+    });
+    expect(useLayoutAnimationStore.getState().isPaneSuspended('leaf-a')).toBe(
+      false
+    );
+    expect(mgr.isPaneSuspended('leaf-a')).toBe(false);
   });
 
-  it('window-resizing freezes with is-layout-frozen + window-resizing class', () => {
-    beginLayoutInteraction('window-resizing');
-    const mid = useLayoutAnimationStore.getState();
-    expect(mid.isLayoutFrozen).toBe(true);
-    expect(mid.isWindowResizing).toBe(true);
-    expect(document.body.classList.contains('is-layout-frozen')).toBe(true);
-    expect(document.body.classList.contains('window-resizing')).toBe(true);
-    // 不与 sash 的 resizing-active 混淆（窗口类型仅映射 window-resizing）
-    expect(document.body.classList.contains('resizing-active')).toBe(false);
-
-    endLayoutInteraction('window-resizing');
-    expect(useLayoutAnimationStore.getState().isLayoutFrozen).toBe(false);
-    expect(document.body.classList.contains('window-resizing')).toBe(false);
-  });
-
-  it('window-resizing and workspace-resizing stay isolated in the active set', () => {
+  it('多类型并发隔离：workspace-resizing 与 window-resizing 互不误清', () => {
     beginLayoutInteraction('workspace-resizing');
     beginLayoutInteraction('window-resizing');
     const mid = useLayoutAnimationStore.getState();
     expect(mid.isWorkspaceResizing).toBe(true);
     expect(mid.isWindowResizing).toBe(true);
-    expect(document.body.classList.contains('resizing-active')).toBe(true);
-    expect(document.body.classList.contains('window-resizing')).toBe(true);
 
-    // end sash 不得误清 window-resizing
     endLayoutInteraction('workspace-resizing');
     const afterSash = useLayoutAnimationStore.getState();
     expect(afterSash.isWorkspaceResizing).toBe(false);
     expect(afterSash.isWindowResizing).toBe(true);
-    expect(afterSash.isLayoutFrozen).toBe(true);
-    expect(document.body.classList.contains('resizing-active')).toBe(false);
-    expect(document.body.classList.contains('window-resizing')).toBe(true);
+    expect(afterSash.phase).toBe('animating');
 
     endLayoutInteraction('window-resizing');
-    expect(useLayoutAnimationStore.getState().isLayoutFrozen).toBe(false);
-  });
-
-  it('flushCatchupTasks runs registered tasks on full unfreeze', () => {
-    let ran = 0;
-    beginLayoutInteraction('workspace-resizing');
-    useLayoutAnimationStore.getState().registerCatchupTask('t1', () => {
-      ran += 1;
-    });
-    endLayoutInteraction('workspace-resizing');
-    expect(ran).toBe(1);
+    expect(useLayoutAnimationStore.getState().isWindowResizing).toBe(false);
     expect(useLayoutAnimationStore.getState().phase).toBe('idle');
   });
 
-  it('MAX_FREEZE_MS watchdog force-ends stale freeze + warns', () => {
+  it('8ms 时间预算分片排空 Catch-up 队列：轻任务当帧完成，超预算重任务自动跨帧 rAF 接力', () => {
     vi.useFakeTimers();
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let mockNow = 1000;
+    vi.spyOn(performance, 'now').mockImplementation(() => mockNow);
 
     beginLayoutInteraction('workspace-resizing');
-    expect(useLayoutAnimationStore.getState().isLayoutFrozen).toBe(true);
 
-    vi.advanceTimersByTime(MAX_FREEZE_MS - 1);
+    const executed: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const key = `task-${i}`;
+      useLayoutAnimationStore.getState().registerCatchupTask(key, () => {
+        mockNow += 3; // 每个任务耗时 3ms，3 个任务后达到 9ms >= 8ms 预算
+        executed.push(key);
+      });
+    }
+
+    endLayoutInteraction('workspace-resizing');
+
+    // 首片同步执行 3 个任务后达到 9ms >= 8ms，立即让出主线程，剩余 3 个排入下一帧 rAF
+    expect(executed).toEqual(['task-0', 'task-1', 'task-2']);
+    expect(useLayoutAnimationStore.getState().phase).toBe('catching-up');
+
+    // 推进下一帧 rAF
+    vi.advanceTimersByTime(16);
+    expect(executed).toEqual([
+      'task-0',
+      'task-1',
+      'task-2',
+      'task-3',
+      'task-4',
+      'task-5',
+    ]);
+    expect(useLayoutAnimationStore.getState().phase).toBe('idle');
+  });
+
+  it('200ms Windows 异常中断看门狗：触发 blur / pointercancel / lostpointercapture 时 200ms 内自动自愈解冻', () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const cleanupBridge = registerLayoutAnimationBridge();
+
+    beginLayoutInteraction('workspace-resizing', { paneIds: ['leaf-1'] });
+    expect(useLayoutAnimationStore.getState().isWorkspaceResizing).toBe(true);
+    expect(useLayoutAnimationStore.getState().isPaneSuspended('leaf-1')).toBe(
+      true
+    );
+
+    // 模拟用户拖拽中按下 Alt+Tab 触发 window blur
+    window.dispatchEvent(new Event('blur'));
+
+    vi.advanceTimersByTime(WATCHDOG_TIMEOUT_MS - 1);
     expect(useLayoutAnimationStore.getState().isWorkspaceResizing).toBe(true);
 
     vi.advanceTimersByTime(1);
     const after = useLayoutAnimationStore.getState();
     expect(after.isWorkspaceResizing).toBe(false);
-    expect(after.isLayoutFrozen).toBe(false);
-    expect(document.body.classList.contains('is-layout-frozen')).toBe(false);
+    expect(after.isPaneSuspended('leaf-1')).toBe(false);
+    expect(after.phase).toBe('idle');
     expect(warn).toHaveBeenCalled();
-    expect(String(warn.mock.calls[0]?.[0] ?? '')).toContain('workspace-resizing');
-    expect(String(warn.mock.calls[0]?.[0] ?? '')).toContain('Freeze watchdog');
 
-    warn.mockRestore();
-  });
-
-  it('normal end cancels watchdog (no force-end warn)', () => {
-    vi.useFakeTimers();
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    beginLayoutInteraction('workspace-resizing');
-    endLayoutInteraction('workspace-resizing');
-    vi.advanceTimersByTime(MAX_FREEZE_MS + 1000);
-
-    expect(useLayoutAnimationStore.getState().isLayoutFrozen).toBe(false);
-    expect(warn).not.toHaveBeenCalled();
-
-    warn.mockRestore();
-  });
-
-  it('watchdog is per-type: ending workspace does not end window-resizing timer isolation', () => {
-    vi.useFakeTimers();
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    beginLayoutInteraction('workspace-resizing');
-    vi.advanceTimersByTime(1000);
-    beginLayoutInteraction('window-resizing');
-
-    // workspace 还剩 MAX_FREEZE_MS - 1000；window 全量 MAX_FREEZE_MS
-    vi.advanceTimersByTime(MAX_FREEZE_MS - 1000);
-    const mid = useLayoutAnimationStore.getState();
-    expect(mid.isWorkspaceResizing).toBe(false);
-    expect(mid.isWindowResizing).toBe(true);
-    expect(mid.isLayoutFrozen).toBe(true);
-    expect(document.body.classList.contains('window-resizing')).toBe(true);
-    expect(document.body.classList.contains('resizing-active')).toBe(false);
-
-    vi.advanceTimersByTime(1000);
-    const end = useLayoutAnimationStore.getState();
-    expect(end.isWindowResizing).toBe(false);
-    expect(end.isLayoutFrozen).toBe(false);
-
+    cleanupBridge();
     warn.mockRestore();
   });
 });

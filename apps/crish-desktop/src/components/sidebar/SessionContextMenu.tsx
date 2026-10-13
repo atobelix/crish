@@ -127,6 +127,7 @@ export const SessionContextMenu: React.FC<SessionContextMenuProps> = ({
 
   return (
     <SmartPanel
+      key={contextMenu.sessionId}
       open={Boolean(contextMenu)}
       point={{ x: contextMenu.x, y: contextMenu.y }}
       triggerRef={contextMenuTriggerRef}

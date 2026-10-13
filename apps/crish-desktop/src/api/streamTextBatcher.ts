@@ -251,6 +251,12 @@ export class StreamValueBatcher<T> {
   }
 }
 
+/**
+ * Stage 02 默认单批次未排空增量字符上限（deltaChars = fullText.length - lastFlushedLength >= 120）。
+ * 配合 48ms 节流窗口，既避免长文本（>8000 字）退化为每 token 同步强刷，又保证突发大 chunk 及时排空。
+ */
+export const DEFAULT_STREAM_MAX_DELTA_CHARS = 120;
+
 export type StreamTextFlush = (key: string, text: string) => void;
 
 export type StreamTextBatcherOptions = {
@@ -262,8 +268,15 @@ export type StreamTextBatcherOptions = {
   /** pending key 数上限，触达则强制 flush */
   maxPendingKeys?: number;
   /**
-   * 当前批次尚未刷新的增量字符数上限（pendingDeltaChars / uncommittedChars），触达则强制 flush。
-   * 防止突发超大 chunk 在 interval 内堆积，同时避免历史累积长文本导致每 token 强刷退化。
+   * 距离上次 flush 的未刷增量字符数上限（deltaChars = fullText.length - lastFlushedLength >= maxDeltaChars）。
+   * 默认 DEFAULT_STREAM_MAX_DELTA_CHARS (120)。
+   */
+  maxDeltaChars?: number;
+  /** maxDeltaChars 的同义配置项（兼容 Stage 01/02 详案命名） */
+  maxBufferedDelta?: number;
+  /**
+   * 历史兼容命名：同样度量当前批次尚未刷新的增量字符数（而非全文累计长度），
+   * 杜绝长文本跨过阈值后退化为每 token 同步强刷。
    */
   maxBufferedChars?: number;
 };
@@ -272,9 +285,9 @@ export type StreamTextBatcherOptions = {
  * 流式正文/思考批合并：同 key 覆盖为最新全文（非 delta）。
  * 对外 API 与历史版本兼容，内部复用 StreamValueBatcher。
  *
- * 缓冲度量：度量自上次 flush 以来尚未提交的增量字符数（pendingDeltaChars / uncommittedChars），
- * 每次 flush 提交后增量计数器重置为 0。
- * 避免当思考过程或长回复累积超过阈值（如 8000 字符）时退化为每 token 同步强刷。
+ * 缓冲度量：严格度量距离上次 flush 的未刷增量字符数
+ * `deltaChars = fullText.length - lastFlushedLength >= maxDeltaChars`（默认 120 字符），
+ * 每次 flush 提交后 `lastFlushedLength` 推进至最新 `text.length`，增量计数器归零。
  */
 export class StreamTextBatcher {
   private readonly inner: StreamValueBatcher<string>;
@@ -284,6 +297,12 @@ export class StreamTextBatcher {
     onFlush: StreamTextFlush,
     options: StreamTextBatcherOptions = {}
   ) {
+    const resolvedMaxDelta =
+      options.maxDeltaChars ??
+      options.maxBufferedDelta ??
+      options.maxBufferedChars ??
+      DEFAULT_STREAM_MAX_DELTA_CHARS;
+
     this.inner = new StreamValueBatcher(
       (key, text) => {
         const prevCommitted = this.committedLengths.get(key);
@@ -304,9 +323,13 @@ export class StreamTextBatcher {
         setTimer: options.setTimer,
         clearTimer: options.clearTimer,
         maxPendingKeys: options.maxPendingKeys,
-        maxBufferedSize: options.maxBufferedChars,
-        estimateSize: (text, key) =>
-          Math.max(0, text.length - (this.committedLengths.get(key) ?? 0)),
+        maxBufferedSize: resolvedMaxDelta,
+        estimateSize: (text, key) => {
+          const lastFlushedLength = this.committedLengths.get(key) ?? 0;
+          return text.length >= lastFlushedLength
+            ? text.length - lastFlushedLength
+            : text.length;
+        },
       }
     );
   }
@@ -354,6 +377,16 @@ export class StreamTextBatcher {
 
   /** 当前 pending 文本增量字符数（未排空增量积压） */
   bufferedSize(): number {
+    return this.inner.bufferedSize();
+  }
+
+  /** 读取指定 key 上次已 flush 提交的字符长度（lastFlushedLength） */
+  getLastFlushedLength(key: string): number {
+    return this.committedLengths.get(key) ?? 0;
+  }
+
+  /** 读取当前尚未 flush 的增量字符数（deltaChars） */
+  getUnflushedDeltaChars(): number {
     return this.inner.bufferedSize();
   }
 }

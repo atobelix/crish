@@ -1,14 +1,19 @@
 /**
- * 会话 id → 引用 索引，热路径 O(1) 查找。
- * 与 sessions 数组并存：数组保序，Record 加速 by-id。
- * immer 下 sessionsById[id] 与数组内对象须为同一 draft 引用（reindex 同步）。
+ * 会话 id → 引用 索引与 sessionOrder 轻量顺序重排引擎，热路径 O(1) 查找。
+ * 与正交三子树 (metaById + sessionOrder) 及兼容层 (sessions + sessionsById) 协同工作。
  *
  * 本文件聚焦核心索引 + 重排 + 诊断；侧栏投影（空壳标志 / 轻量搜索 / 分区 /
  * 按项目归组）已拆至 ./sessionSidebarProjection，此处再导出以保持 import 路径不变。
  */
 
 import { original } from 'immer';
+import {
+  extractSessionMeta,
+  shallowArrayEqual,
+  type SessionMeta,
+} from './sessionSubtreeModel';
 import type { SessionState } from './types';
+
 // 侧栏投影域再导出（保持外部 import 路径 `./sessionIndex` 不变）
 export {
   EMPTY_SESSION_TITLE,
@@ -40,7 +45,6 @@ function isSameSessionBase(
   try {
     const oa = original(a);
     const ob = original(b);
-    // 同 base 的不同 draft proxy：original 相同且非 undefined
     if (oa !== undefined && ob !== undefined && oa === ob) return true;
   } catch {
     /* non-draft / frozen */
@@ -54,6 +58,20 @@ export type SessionsIndexed = {
   sessionsById: Record<string, SessionState>;
 };
 
+/** O(1) 按 id 读取纯净 SessionMeta（优先正交三子树 metaById） */
+export function getSessionMetaById(
+  state: { metaById?: Record<string, SessionMeta> } & Partial<SessionsIndexed>,
+  sessionId: string
+): SessionMeta | undefined {
+  if (!sessionId) return undefined;
+  const direct = state.metaById?.[sessionId];
+  if (direct) return direct;
+  const sess =
+    state.sessionsById?.[sessionId] ??
+    state.sessions?.find((s) => s?.id === sessionId);
+  return sess ? extractSessionMeta(sess) : undefined;
+}
+
 /** 从数组重建索引（结构变更后调用：create/delete/setSessions/branch） */
 export function reindexSessionsById(state: SessionsIndexed): void {
   const map: Record<string, SessionState> = Object.create(null);
@@ -63,10 +81,7 @@ export function reindexSessionsById(state: SessionsIndexed): void {
   state.sessionsById = map;
 }
 
-/**
- * 确保 sessionsById 可用；缺失则就地重建并返回。
- * 读路径防御：部分 hydrate / 测试夹具可能只塞了 sessions。
- */
+/** 确保 sessionsById 可用；缺失则就地重建并返回。 */
 export function ensureSessionsById(
   state: SessionsIndexed
 ): Record<string, SessionState> {
@@ -78,8 +93,17 @@ export function ensureSessionsById(
 
 /** 按 sessions 数组顺序列出 id（跳过空 id） */
 export function listSessionIds(
-  state: Pick<SessionsIndexed, 'sessions'>
+  state: Pick<SessionsIndexed, 'sessions'> & {
+    sessionOrder?: readonly string[];
+  }
 ): string[] {
+  if (
+    Array.isArray(state.sessionOrder) &&
+    state.sessionOrder.length > 0 &&
+    state.sessions.length === 0
+  ) {
+    return state.sessionOrder.slice();
+  }
   const ids: string[] = [];
   for (const s of state.sessions) {
     if (s?.id) ids.push(s.id);
@@ -98,7 +122,6 @@ export function getSessionById(
     const hit = byId[sessionId];
     if (hit) return hit;
   }
-  // 索引缺失或尚未同步：线性扫描；可扩展时安全回填（frozen/sealed 则跳过）
   const found = state.sessions.find((s) => s.id === sessionId);
   if (found && byId && Object.isExtensible(byId)) {
     try {
@@ -110,54 +133,36 @@ export function getSessionById(
   return found;
 }
 
-/**
- * Immer 写路径取会话：始终返回 `sessions[]` 元素，必要时把 `sessionsById[id]` 绑回同一对象。
- *
- * 为何不用 getSessionById：
- * - getSessionById 先读 sessionsById；若仅经 map 路径 mutate，immer 会把 map 值 fork 成
- *   新对象，而 sessions[] 仍保留旧引用 → 调试/MCP 见 sessions[].messages 空、UI（读 byId）有正文。
- * - 经数组元素写入会弄脏 sessions 分支，withAutoIndex 在数组引用变化时从 sessions 重建 map。
- *
- * 为何不用 indexOf(hit)：
- * - immer 下 sessionsById[id] 与 sessions[i] 即使同源也是不同 draft proxy，indexOf 恒为 -1，
- *   误 rebind 会弄脏 state，破坏 message no-op short-circuit。
- * - 用 original() 判断同源；仅在真正 fork / 缺失时写回 map。
- */
+/** Immer 写路径取会话：始终返回 `sessions[]` 元素，必要时把 `sessionsById[id]` 绑回同一对象。 */
 export function getSessionForWrite(
   state: SessionsIndexed,
   sessionId: string
 ): SessionState | undefined {
   if (!sessionId) return undefined;
-  const idx = state.sessions.findIndex((s) => s?.id === sessionId);
+  const byId = state.sessionsById;
+  const hit = byId?.[sessionId];
+  let idx = hit ? state.sessions.indexOf(hit) : -1;
+  if (idx < 0) idx = state.sessions.findIndex((s) => s?.id === sessionId);
   if (idx < 0) return undefined;
   const sess = state.sessions[idx]!;
-  const byId = state.sessionsById;
-  if (byId && Object.isExtensible(byId)) {
-    const hit = byId[sessionId];
-    // 已 fork / 缺失才 rebind；同源 draft 不写 map，避免 no-op 路径弄脏 state
-    if (!isSameSessionBase(hit, sess)) {
-      try {
-        byId[sessionId] = sess;
-      } catch {
-        /* frozen / sealed */
-      }
+  if (byId && Object.isExtensible(byId) && !isSameSessionBase(hit, sess)) {
+    try {
+      byId[sessionId] = sess;
+    } catch {
+      /* frozen / sealed */
     }
   }
   return sess;
 }
 
-/**
- * 写完 sessions[] 元素后把 map 绑回同一引用。
- * immer 下即使同源，只动 sessions[] 也会让 sessionsById 留下旧 finalized 对象。
- */
+/** 写完 sessions[] 元素后把 map 绑回同一引用。 */
 export function rebindSessionById(
   state: SessionsIndexed,
   sessionId: string,
   sess?: SessionState
 ): void {
   if (!sessionId || !state.sessionsById) return;
-  const target =
-    sess ?? state.sessions.find((s) => s?.id === sessionId);
+  const target = sess ?? state.sessions.find((s) => s?.id === sessionId);
   if (!target || !Object.isExtensible(state.sessionsById)) return;
   try {
     state.sessionsById[sessionId] = target;
@@ -173,11 +178,9 @@ export function getSessionIndex(
 ): number {
   const sess = getSessionById(state, sessionId);
   if (!sess) return -1;
-  // 同引用快速定位
   const arr = state.sessions;
   const direct = arr.indexOf(sess);
-  if (direct >= 0) return direct;
-  return arr.findIndex((s) => s.id === sessionId);
+  return direct >= 0 ? direct : arr.findIndex((s) => s.id === sessionId);
 }
 
 /** 从 sessions 数组构建全新索引对象（非 immer 场景 / 初始 state） */
@@ -191,13 +194,57 @@ export function buildSessionsById(
   return map;
 }
 
-// ── 重排（纯数组 + indexed 就地）────────────────────────────────────
+// ── 正交三子树 sessionOrder 纯 ID 数组重排（零实体触碰，FINAL-PLAN §4）────────
 
-/**
- * 将 sessionId 移到 toIndex（clamp 到 [0, len-1]）。
- * 不存在 id → 返回原数组引用；无实际位移 → 原引用；否则新数组。
- * 纯函数，不 mutate 输入。
- */
+/** 纯 ID 顺序列表单点位移：仅重排 sessionOrder，零克隆 metaById / messagesBySessionId */
+export function reorderSessionOrderById(
+  sessionOrder: readonly string[],
+  sessionId: string,
+  toIndex: number
+): string[] {
+  if (!sessionId || sessionOrder.length === 0) return sessionOrder as string[];
+  const from = sessionOrder.indexOf(sessionId);
+  if (from < 0) return sessionOrder as string[];
+  const max = sessionOrder.length - 1;
+  const target = Number.isFinite(toIndex)
+    ? Math.max(0, Math.min(max, Math.floor(toIndex)))
+    : max;
+  if (from === target) return sessionOrder as string[];
+  const next = sessionOrder.slice();
+  const [item] = next.splice(from, 1);
+  if (item === undefined) return sessionOrder as string[];
+  next.splice(target, 0, item);
+  return next;
+}
+
+/** 按 orderedIds 重排纯 ID 顺序列表：零触碰底层实体字典 */
+export function reorderSessionOrderByIdList(
+  sessionOrder: readonly string[],
+  orderedIds: readonly string[]
+): string[] {
+  if (!sessionOrder.length || !orderedIds.length)
+    return sessionOrder as string[];
+  const existing = new Set(sessionOrder);
+  const seen = new Set<string>();
+  const head: string[] = [];
+  for (const id of orderedIds) {
+    if (id && existing.has(id) && !seen.has(id)) {
+      seen.add(id);
+      head.push(id);
+    }
+  }
+  if (seen.size === 0) return sessionOrder as string[];
+  for (const id of sessionOrder) {
+    if (id && !seen.has(id)) head.push(id);
+  }
+  return shallowArrayEqual(head, sessionOrder)
+    ? (sessionOrder as string[])
+    : head;
+}
+
+// ── 兼容层重排（纯数组 + indexed 就地）────────────────────────────────────
+
+/** 将 sessionId 移到 toIndex（clamp 到 [0, len-1]）。纯函数，不 mutate 输入。 */
 export function reorderSessionById(
   sessions: SessionState[],
   sessionId: string,
@@ -212,18 +259,13 @@ export function reorderSessionById(
     : max;
   if (from === target) return sessions;
   const next = sessions.slice();
-  // 治理防线 #3（noUncheckedIndexedAccess）：splice 返回数组，解构后 item 可能 undefined
-  // from 已被 clamp 到 [0, sessions.length)，splice(from, 1) 在 length >= 1 时必返回单元素数组
   const [item] = next.splice(from, 1);
   if (item === undefined) return sessions;
   next.splice(target, 0, item);
   return next;
 }
 
-/**
- * 按 orderedIds 重排：出现在列表中的 id 按该序排前，其余保持相对序接尾。
- * 未知 id 忽略；纯函数。
- */
+/** 按 orderedIds 重排：出现在列表中的 id 按该序排前，其余保持相对序接尾。纯函数。 */
 export function reorderSessionsByIdList(
   sessions: SessionState[],
   orderedIds: readonly string[]
@@ -240,28 +282,13 @@ export function reorderSessionsByIdList(
     head.push(s);
   }
   if (seen.size === 0) return sessions;
-  // 未点名的保持原相对序
   for (const s of sessions) {
     if (s?.id && !seen.has(s.id)) head.push(s);
   }
-  // 长度不变且顺序相同 → 原引用
-  if (head.length === sessions.length) {
-    let same = true;
-    for (let i = 0; i < head.length; i++) {
-      if (head[i] !== sessions[i]) {
-        same = false;
-        break;
-      }
-    }
-    if (same) return sessions;
-  }
-  return head;
+  return shallowArrayEqual(head, sessions) ? sessions : head;
 }
 
-/**
- * 在 SessionsIndexed 上就地重排并 reindex（immer draft 友好）。
- * @returns 是否发生了位移
- */
+/** 在 SessionsIndexed 上就地重排并 reindex（immer draft 友好）。 */
 export function moveSessionInIndexed(
   state: SessionsIndexed,
   sessionId: string,
@@ -274,10 +301,7 @@ export function moveSessionInIndexed(
   return true;
 }
 
-/**
- * 按 orderedIds 就地重排 indexed 状态并 reindex。
- * @returns 是否顺序变化
- */
+/** 按 orderedIds 就地重排 indexed 状态并 reindex。 */
 export function reorderIndexedByIdList(
   state: SessionsIndexed,
   orderedIds: readonly string[]
@@ -289,10 +313,7 @@ export function reorderIndexedByIdList(
   return true;
 }
 
-/**
- * 从 indexed 状态删除会话（数组 + 索引），不碰 activeSessionId。
- * @returns 是否删除了条目
- */
+/** 从 indexed 状态删除会话（数组 + 索引），不碰 activeSessionId。 */
 export function deleteSessionFromIndexed(
   state: SessionsIndexed,
   sessionId: string
@@ -300,7 +321,6 @@ export function deleteSessionFromIndexed(
   if (!sessionId) return false;
   const idx = getSessionIndex(state, sessionId);
   if (idx < 0) {
-    // 仅清陈旧索引项
     if (state.sessionsById && sessionId in state.sessionsById) {
       delete state.sessionsById[sessionId];
       return true;
@@ -327,21 +347,14 @@ export function checkSessionsIndex(
   const seen = new Set<string>();
   for (const s of state.sessions) {
     if (!s?.id) continue;
-    if (seen.has(s.id)) {
-      issues.push({ kind: 'duplicate_id', id: s.id });
-    }
+    if (seen.has(s.id)) issues.push({ kind: 'duplicate_id', id: s.id });
     seen.add(s.id);
     const hit = byId[s.id];
-    if (!hit) {
-      issues.push({ kind: 'missing_in_index', id: s.id });
-    } else if (hit !== s) {
-      issues.push({ kind: 'ref_mismatch', id: s.id });
-    }
+    if (!hit) issues.push({ kind: 'missing_in_index', id: s.id });
+    else if (hit !== s) issues.push({ kind: 'ref_mismatch', id: s.id });
   }
   for (const id of Object.keys(byId)) {
-    if (!seen.has(id)) {
-      issues.push({ kind: 'stale_in_index', id });
-    }
+    if (!seen.has(id)) issues.push({ kind: 'stale_in_index', id });
   }
   return issues;
 }
@@ -357,6 +370,3 @@ export function assertSessionsIndexConsistent(state: SessionsIndexed): void {
     throw new Error(`index inconsistent: ${summary}`);
   }
 }
-
-// 空壳 / 占位 / 搜索 filter / 侧栏分区 / 按项目归组已拆至 ./sessionSidebarProjection，
-// 见文件顶部再导出块（保持 import 路径不变）。

@@ -1,4 +1,4 @@
-import type { SessionState, WorkspaceState } from '../types';
+import type { WorkspaceState } from '../types';
 import { isDemoMode } from '../../api/appMode';
 import {
   ensureMigrated,
@@ -18,39 +18,29 @@ import {
 } from './store-initializers';
 import type { WorkspaceLayoutSnapshot } from './store-types';
 import { STORAGE_PERSIST_DEBOUNCE_MS } from '../persistenceConstants';
+import { isSessionTombstoned } from '../sessionCascadeCancellation';
+import {
+  BootHoldBarrier,
+  DeltaWriteBarrier,
+  EmptySanitizeBarrier,
+  performThreeWaySessionMerge,
+  syncOrthogonalSessionSubtrees,
+  type PersistableStoreState,
+  type SessionActivatableStore,
+} from '../store-persistence';
 
-export interface PersistableStoreState {
-  workspaces?: WorkspaceState[];
-  sidebarCollapsed?: boolean;
-  activeWorkspaceIndex?: number;
-  sessions: SessionState[];
-  sessionsById: Record<string, SessionState>;
-  activeSessionId: string;
-  folderOrder: string[];
-  hydrationComplete: boolean;
-  activeAgentId: string | null;
-  panelAgentId: string | null;
-}
-
-export interface StoreApiLike<S extends { hydrationComplete: boolean }> {
-  getState: () => S;
-  setState: (
-    partial: S | Partial<S> | ((state: S) => void),
-    replace?: boolean
-  ) => void;
-  subscribe: (listener: (state: S) => void) => () => void;
-}
-
-/**
- * 依赖倒置（G13 断环）：会话激活由调用方 store 自身 action 提供，
- * 避免 store-persistence 反向 import api/storeAccess（api → store 大环）。
- * layoutStore 与 sessionStore 天然满足该接口。
- */
-export type SessionActivatableStore<S extends PersistableStoreState> =
-  StoreApiLike<S> & {
-    /** 会话激活（触发引擎懒水合）；不存在时降级为空操作 */
-    setActiveSessionId?: (id: string) => void;
-  };
+export {
+  BootHoldBarrier,
+  DeltaWriteBarrier,
+  EmptySanitizeBarrier,
+  performThreeWaySessionMerge,
+  syncOrthogonalSessionSubtrees,
+  type PersistableStoreState,
+  type SessionActivatableStore,
+  type SessionWriteDelta,
+  type StoreApiLike,
+  type ThreeWayMergeResult,
+} from '../store-persistence';
 
 export function serializeWorkspaceLayout<
   S extends {
@@ -127,7 +117,7 @@ function syncActiveSessionToEmptyLayoutLeaf(
 ): void {
   if (!sessionId) return;
   void import('../layout-tree')
-    .then((mod: any) => {
+    .then((mod) => {
       try {
         const { useLayoutTreeStore, collectLeaves } = mod;
         if (typeof useLayoutTreeStore?.getState !== 'function') return;
@@ -140,7 +130,7 @@ function syncActiveSessionToEmptyLayoutLeaf(
         const leaves = collectLeaves(root);
         const activeLeafId = treeState.activeLeafId || leaves[0]?.id;
         if (!activeLeafId) return;
-        const activeLeaf = leaves.find((l: any) => l.id === activeLeafId);
+        const activeLeaf = leaves.find((l) => l.id === activeLeafId);
         if (activeLeaf && (!activeLeaf.tabs || activeLeaf.tabs.length === 0)) {
           if (typeof treeState.openSession === 'function') {
             treeState.openSession(sessionId, {
@@ -159,16 +149,7 @@ function syncActiveSessionToEmptyLayoutLeaf(
 }
 
 /**
- * 挂载会话持久化订阅（SQLite 主路径 + localStorage 回退）。
- * demo 模式不持久化，直接返回 no-op cleanup。
- *
- * Stream D 改造后：
- *   - 启动时先 `ensureMigrated`（localStorage → SQLite 一次性迁移）
- *   - 再用 `hydrateSessionsFromRust` 从 SQLite 回灌会话（替代磁盘镜像）
- *   - 订阅变更时走 `persistAllSessions`（委托 SQLite，回退 localStorage）
- *   - 已删除磁盘镜像（mirrorSessionsToDisk / restoreSessionsFromDiskMirror）
- *
- * 由 App 在 mount 时调用一次，unmount 时执行返回的 cleanup。
+ * 挂载会话持久化订阅（SQLite 主路径 + localStorage 回退 + 三道物理写屏障 + 3-Way Merge）。
  */
 export function initStorePersistence<S extends PersistableStoreState>(
   store: SessionActivatableStore<S>
@@ -178,25 +159,30 @@ export function initStorePersistence<S extends PersistableStoreState>(
   }
 
   const abortController = new AbortController();
+  const initialState = store.getState();
+  const baseSessionIds = new Set<string>(
+    initialState.sessions.map((s) => s.id).filter(Boolean)
+  );
+  const knownPersistedIds = new Set<string>(baseSessionIds);
+  const deltaBarrier = new DeltaWriteBarrier();
+  deltaBarrier.seedFromSessions(
+    initialState.sessions,
+    initialState.activeSessionId,
+    initialState.folderOrder
+  );
 
   let persistTimer: ReturnType<typeof setTimeout> | null = null;
-  /** 上一份会话域切片：遥测等字段变更时引用不变 → 跳过落盘 */
-  let lastDomain: SessionDomainSlice | null = pickSessionDomain(
-    store.getState()
-  );
+  let lastDomain: SessionDomainSlice | null = pickSessionDomain(initialState);
 
   const unsub = store.subscribe((state) => {
     const domain = pickSessionDomain(state);
-    // 仅 sessions / activeSessionId / folderOrder 变化时调度写入
     if (!sessionDomainChanged(lastDomain, domain)) {
       return;
     }
     lastDomain = domain;
 
-    // boot 窗口守卫（PERSIST-01 P0-2 残余闭合）：hydrate 未完成时
-    // 只允许「非空会话集」的持久化，禁止空列表经 debounce 触发全删
-    // （配合 Rust 库层三护栏 + JS 空 keep 守卫，从时序面堵死清理竞态）。
-    if (!state.hydrationComplete && state.sessions.length === 0) {
+    // 写屏障 1（BootHoldBarrier）：3-Way Merge 完成前严禁抢跑写盘覆写历史会话
+    if (BootHoldBarrier.shouldHold(state)) {
       return;
     }
 
@@ -204,6 +190,30 @@ export function initStorePersistence<S extends PersistableStoreState>(
     persistTimer = setTimeout(() => {
       try {
         const cur = store.getState();
+        if (BootHoldBarrier.shouldHold(cur)) {
+          return;
+        }
+        // 写屏障 3（EmptySanitizeBarrier）：非空库未全墓碑时严禁写空数组
+        if (
+          EmptySanitizeBarrier.shouldBlockEmptyWrite(
+            cur.sessions,
+            knownPersistedIds
+          )
+        ) {
+          return;
+        }
+        // 写屏障 2（DeltaWriteBarrier）：无实质脏会话或元数据变化时跳过写盘
+        const delta = deltaBarrier.computeDelta(
+          cur.sessions,
+          cur.activeSessionId,
+          cur.folderOrder
+        );
+        if (!delta.hasChanges) {
+          return;
+        }
+        for (const s of cur.sessions) {
+          if (s?.id) knownPersistedIds.add(s.id);
+        }
         void persistAllSessions(
           cur.sessions,
           cur.activeSessionId,
@@ -215,11 +225,10 @@ export function initStorePersistence<S extends PersistableStoreState>(
     }, STORAGE_PERSIST_DEBOUNCE_MS);
   });
 
-  // 启动时：先迁移，再从 SQLite 回灌会话（替代磁盘镜像）
+  // 启动时：先迁移，再从 SQLite 回灌会话并执行集合论 3-Way Merge
   void ensureMigrated()
     .then(async () => {
       const restored = await hydrateSessionsFromRust();
-      // 迁移完成 30 天后清理 localStorage（非阻塞，不影响首屏）
       void runMigrationCleanupIfNeeded();
       return restored;
     })
@@ -227,40 +236,67 @@ export function initStorePersistence<S extends PersistableStoreState>(
       if (abortController.signal.aborted) return;
 
       if (restored?.sessions?.length) {
-        const cur = store.getState();
-        let applied = false;
-        let filledBodies = false;
+        for (const rs of restored.sessions) {
+          if (rs?.id && !isSessionTombstoned(rs.id)) {
+            knownPersistedIds.add(rs.id);
+          }
+        }
+
+        let appliedOrMerged = false;
         const urlSessionId = readUrlTargetSessionId();
-        const preferredActiveId =
-          urlSessionId && restored.sessions.some((s) => s.id === urlSessionId)
-            ? urlSessionId
-            : restored.activeSessionId;
-        // 经 store 自身 action 激活（依赖倒置：store-persistence 不再反向
-        // import api/storeAccess，G13 断环——api → store 大环的收口边）
         const setActiveSessionId = (id: string) =>
           store.setActiveSessionId?.(id);
 
-        if (cur.sessions.length === 0) {
-          // 冷启动无 seed：全量回灌 SQLite
-          store.setState((state: PersistableStoreState) => {
-            // 二次检查：recipe 内仍空才写入
-            if (state.sessions.length > 0) return;
+        store.setState((state: PersistableStoreState) => {
+          const wasEmpty = state.sessions.length === 0;
+          const mergeResult = performThreeWaySessionMerge(
+            baseSessionIds,
+            state.sessions,
+            restored.sessions,
+            isSessionTombstoned
+          );
 
-            const sanitized = sanitizeSessionSeed({
-              sessions: restored.sessions,
-              activeSessionId: preferredActiveId,
-              folderOrder: restored.folderOrder,
-            });
-            state.sessions = sanitized.sessions;
-            state.sessionsById = sanitized.sessionsById;
-            state.activeSessionId = sanitized.activeSessionId;
-            state.folderOrder = sanitized.folderOrder.length
-              ? sanitized.folderOrder
-              : state.folderOrder;
-            // 回灌后清 ghost agent 焦点（会话集合已变）
+          const hasMergeChanges =
+            wasEmpty ||
+            mergeResult.addedFromRemoteCount > 0 ||
+            mergeResult.preservedLocalNewCount > 0 ||
+            mergeResult.filledBodiesCount > 0 ||
+            mergeResult.skippedTombstonedCount > 0;
+
+          if (!hasMergeChanges) return;
+
+          const preferredActiveId =
+            urlSessionId && mergeResult.mergedById[urlSessionId]
+              ? urlSessionId
+              : state.activeSessionId &&
+                  mergeResult.mergedById[state.activeSessionId]
+                ? state.activeSessionId
+                : restored.activeSessionId;
+
+          const mergedFolders = Array.from(
+            new Set([
+              ...(state.folderOrder ?? []),
+              ...(restored.folderOrder ?? []),
+            ])
+          );
+
+          const sanitized = sanitizeSessionSeed({
+            sessions: mergeResult.mergedSessions,
+            activeSessionId: preferredActiveId,
+            folderOrder: mergedFolders,
+          });
+
+          state.sessions = sanitized.sessions;
+          state.sessionsById = sanitized.sessionsById;
+          state.activeSessionId = sanitized.activeSessionId;
+          state.folderOrder = sanitized.folderOrder.length
+            ? sanitized.folderOrder
+            : state.folderOrder;
+          syncOrthogonalSessionSubtrees(state, sanitized.sessions);
+
+          if (wasEmpty) {
             state.activeAgentId = null;
             state.panelAgentId = null;
-            // empty workspace seed：若被外部掏空则重种
             if (state.workspaces) {
               state.workspaces = ensureNonEmptyWorkspaces(state.workspaces);
               state.activeWorkspaceIndex = clampActiveWorkspaceIndex(
@@ -268,81 +304,17 @@ export function initStorePersistence<S extends PersistableStoreState>(
                 state.activeWorkspaceIndex ?? 0
               );
             }
-            applied = true;
-          });
-        } else {
-          // Stream D 关键：seedSessions 只读 localStorage body，而 body 主存 SQLite。
-          // 若 LS 壳 messages=[]、SQLite 有正文，旧逻辑 early-return 会永久跳过回灌，
-          // 随后 STORAGE_PERSIST_DEBOUNCE_MS (300ms) persist 还会用空数组把 SQLite 擦掉。此处仅补全空正文，不覆盖
-          // 用户已在内存中的消息 / 新建会话。
-          store.setState((state: PersistableStoreState) => {
-            const byId = new Map(
-              restored.sessions.map((s) => [s.id, s] as const)
-            );
-            let any = false;
-            const next = state.sessions.map((s) => {
-              if (!s?.id) return s;
-              const localLen = s.messages?.length ?? 0;
-              if (localLen > 0) return s;
-              const r = byId.get(s.id);
-              if (!r || !(r.messages?.length > 0)) return s;
-              any = true;
-              return {
-                ...s,
-                messages: r.messages,
-                agents: r.agents?.length ? r.agents : s.agents,
-                messagesHydrated: r.messagesHydrated ?? s.messagesHydrated,
-                ...(r.engineCursor !== undefined
-                  ? { engineCursor: r.engineCursor }
-                  : {}),
-                ...(r.engineLastRunId !== undefined
-                  ? { engineLastRunId: r.engineLastRunId }
-                  : {}),
-                ...(r.hydratedFromEngine !== undefined
-                  ? { hydratedFromEngine: r.hydratedFromEngine }
-                  : {}),
-                ...(r.pinnedMessageIds?.length
-                  ? { pinnedMessageIds: r.pinnedMessageIds }
-                  : {}),
-              };
-            });
-            if (!any) return;
-            const sanitized = sanitizeSessionSeed({
-              sessions: next,
-              activeSessionId: state.activeSessionId,
-              folderOrder: state.folderOrder,
-            });
-            state.sessions = sanitized.sessions;
-            state.sessionsById = sanitized.sessionsById;
-            filledBodies = true;
-          });
-        }
-
-        // 全量回灌或补正文后：再 activate 触发引擎懒水合；有写入则落盘对齐 LS 镜像
-        if (!applied && !filledBodies) {
-          // 即便未改 sessions，active 仍可能是 seed 直接写入、未走 setActiveSessionId，
-          // 空正文远程壳需要一次 activate 才拉 read-session-events。
-          try {
-            const after = store.getState();
-            if (
-              after.activeSessionId &&
-              after.sessionsById[after.activeSessionId]
-            ) {
-              setActiveSessionId(after.activeSessionId);
-              syncActiveSessionToEmptyLayoutLeaf(
-                after.activeSessionId,
-                after.sessionsById[after.activeSessionId]?.title
-              );
-            }
-          } catch {
-            /* ignore */
           }
-          return;
-        }
+          appliedOrMerged = true;
+        });
+
         try {
           const after = store.getState();
-          // 直接写 activeSessionId 绕过 setActiveSessionId，空正文远程壳不会拉引擎。
-          // 再走一遍 setActive：焦点幂等，且触发 needsEngineMessageHydrate 懒水合。
+          deltaBarrier.seedFromSessions(
+            after.sessions,
+            after.activeSessionId,
+            after.folderOrder
+          );
           if (
             after.activeSessionId &&
             after.sessionsById[after.activeSessionId]
@@ -353,11 +325,13 @@ export function initStorePersistence<S extends PersistableStoreState>(
               after.sessionsById[after.activeSessionId]?.title
             );
           }
-          void persistAllSessions(
-            after.sessions,
-            after.activeSessionId,
-            after.folderOrder
-          );
+          if (appliedOrMerged && after.sessions.length > 0) {
+            void persistAllSessions(
+              after.sessions,
+              after.activeSessionId,
+              after.folderOrder
+            );
+          }
         } catch {
           /* ignore */
         }
@@ -371,6 +345,24 @@ export function initStorePersistence<S extends PersistableStoreState>(
         store.setState((state: PersistableStoreState) => {
           state.hydrationComplete = true;
         });
+        const finalState = store.getState();
+        if (
+          finalState.sessions.length > 0 &&
+          deltaBarrier.computeDelta(
+            finalState.sessions,
+            finalState.activeSessionId,
+            finalState.folderOrder
+          ).hasChanges
+        ) {
+          for (const s of finalState.sessions) {
+            if (s?.id) knownPersistedIds.add(s.id);
+          }
+          void persistAllSessions(
+            finalState.sessions,
+            finalState.activeSessionId,
+            finalState.folderOrder
+          );
+        }
       }
     });
 

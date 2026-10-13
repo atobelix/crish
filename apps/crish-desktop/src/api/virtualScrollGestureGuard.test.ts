@@ -420,4 +420,59 @@ describe('virtualScrollGestureGuard', () => {
       expect(res[0].messageIds).toEqual(['m1', 'm2', 'm3']);
     });
   });
+
+  describe('[VS-U03] 硬件 Capture 拦截、代际计数与程序性滚动豁免撤销', () => {
+    it('手势启动递增 gestureEpoch 并自动撤销 programmaticScrollExempt 令牌', () => {
+      let now = 1000;
+      const guard = new InertialGestureGuard({
+        settleWindowMs: 120,
+        now: () => now,
+      });
+
+      guard.markProgrammaticScroll();
+      expect(guard.programmaticScrollExempt).toBe(true);
+      expect(guard.gestureEpoch).toBe(0);
+
+      guard.markWheelOrTouchActivity(now);
+      expect(guard.isGestureActive(now)).toBe(true);
+      expect(guard.programmaticScrollExempt).toBe(false);
+      expect(guard.gestureEpoch).toBe(1);
+
+      // 同一手势窗口内连续输入不重复递增 epoch
+      now += 40;
+      guard.markWheelOrTouchActivity(now);
+      expect(guard.gestureEpoch).toBe(1);
+
+      const dec1 = guard.recordHeightDelta(40, { timestampMs: now });
+      expect(dec1.immediateScrollDelta).toBe(0);
+      expect(dec1.pendingHeightDelta).toBe(40);
+      expect(dec1.deferredByGesture).toBe(true);
+
+      guard.setPinnedToBottom(true);
+      expect(guard.pendingHeightDelta).toBe(0);
+      expect(guard.fusedCount).toBe(1);
+
+      now += 150;
+      expect(guard.isGestureActive(now)).toBe(false);
+      expect(guard.flushPendingDelta({ timestampMs: now })).toBe(0);
+    });
+
+    it('bindCaptureGestureListeners 以 Capture 模式拦截物理事件并支持干净解绑', () => {
+      const guard = new InertialGestureGuard();
+      const target = new EventTarget();
+      const onInterrupt = vi.fn();
+
+      const unbind = guard.bindCaptureGestureListeners(target, onInterrupt);
+      target.dispatchEvent(new Event('wheel'));
+
+      expect(guard.isGestureActive()).toBe(true);
+      expect(onInterrupt).toHaveBeenCalledTimes(1);
+
+      guard.reset();
+      unbind();
+      target.dispatchEvent(new Event('wheel'));
+      expect(guard.isGestureActive()).toBe(false);
+      expect(onInterrupt).toHaveBeenCalledTimes(1);
+    });
+  });
 });

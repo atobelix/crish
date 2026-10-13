@@ -1,28 +1,30 @@
 // @vitest-environment jsdom
 /**
- * 会话草稿管理器三级流转单元测试（详案 03 §六 断言矩阵）：
+ * 会话草稿管理器三级流转单元测试（详案 03 §六 & Stage 05 §6 & 审计 03 §7.1 断言矩阵）：
  * - Invariant 1: 多会话高频切换绝对隔离（manager 内存池级验证）
  * - Invariant 2: 定向注入不影响非活跃会话
  * - Invariant 3: 模板覆盖后可 100% 原位撤销恢复（safe_seed / replace）
  * - Barrier 强刷：flushSession / flushAll 清空挂起计时器并立即写 Level 3
  * - 防抖合并：300ms 窗口内多次 setDraft 只产生一次持久化写
+ * - Stage 05 §6: (sessionId, leafId) 复合键多窗格草稿隔离与 evictLeaf 回收
+ * - 审计 03 §7.1: pendingTimers Map 多键独立防抖计时器，消除并发输入互相覆盖
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DRAFT_HISTORY_LIMIT,
   DRAFT_PERSIST_DEBOUNCE_MS,
+  PartitionedSessionDraftManager,
   SessionDraftManager,
+  makeDraftScopeKey,
   sessionDraftManager,
 } from '../sessionDraftManager';
 
 const h = vi.hoisted(() => {
   const drafts: Record<string, string> = {};
-  const setComposerDraft = vi.fn(
-    (sessionId: string, draft: string) => {
-      if (!draft) delete drafts[sessionId];
-      else drafts[sessionId] = draft;
-    }
-  );
+  const setComposerDraft = vi.fn((sessionId: string, draft: string) => {
+    if (!draft) delete drafts[sessionId];
+    else drafts[sessionId] = draft;
+  });
   return { drafts, setComposerDraft };
 });
 
@@ -242,6 +244,7 @@ describe('SessionDraftManager · 会话隔离三级草稿流转', () => {
     const a = SessionDraftManager.getInstance();
     const b = SessionDraftManager.getInstance();
     expect(a).toBe(b);
+    expect(PartitionedSessionDraftManager).toBe(SessionDraftManager);
     // 模块级导出单例与工厂一致
     expect(sessionDraftManager).toBeInstanceOf(SessionDraftManager);
     SessionDraftManager.resetInstance();
@@ -262,5 +265,91 @@ describe('SessionDraftManager · 会话隔离三级草稿流转', () => {
       content: 't2',
     });
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  describe('Stage 05 §6 & 审计 03 §7.1：(sessionId, leafId) 复合键隔离与多键防抖计时器', () => {
+    it('makeDraftScopeKey：缺省或 default leafId 退化为纯 sessionId，有效 leafId 生成复合键', () => {
+      expect(makeDraftScopeKey('sess-1')).toBe('sess-1');
+      expect(makeDraftScopeKey('sess-1', null)).toBe('sess-1');
+      expect(makeDraftScopeKey('sess-1', 'default')).toBe('sess-1');
+      expect(makeDraftScopeKey('sess-1', 'leaf-left')).toBe(
+        'sess-1::leaf-left'
+      );
+      expect(makeDraftScopeKey('', 'leaf-right')).toBe('default::leaf-right');
+    });
+
+    it('同一 sessionId 在左右双开分栏（leaf-left / leaf-right）下草稿、撤销栈与打字屏障完全物理隔离', () => {
+      manager.setDraft('sess-shared', '左窗格草稿', false, 'leaf-left');
+      manager.setDraft('sess-shared', '右窗格草稿', false, 'leaf-right');
+
+      expect(manager.getDraft('sess-shared', 'leaf-left')).toBe('左窗格草稿');
+      expect(manager.getDraft('sess-shared', 'leaf-right')).toBe('右窗格草稿');
+
+      // 仅对左窗格定向注入模板并验证撤销栈隔离
+      manager.injectSeed({
+        targetSessionId: 'sess-shared',
+        targetLeafId: 'leaf-left',
+        content: '左窗格注入模板',
+        mode: 'replace',
+      });
+
+      expect(manager.getDraft('sess-shared', 'leaf-left')).toBe(
+        '左窗格注入模板'
+      );
+      expect(manager.getDraft('sess-shared', 'leaf-right')).toBe('右窗格草稿');
+      expect(manager.hasUndo('sess-shared', 'leaf-left')).toBe(true);
+      expect(manager.hasUndo('sess-shared', 'leaf-right')).toBe(false);
+
+      expect(manager.undoDraft('sess-shared', 'leaf-left')).toBe('左窗格草稿');
+    });
+
+    it('审计 03 §7.1：多窗格/多会话在 300ms 防抖窗口内并发输入时，pendingTimers Map 独立计时互不覆盖', () => {
+      manager.setDraft('sess-1', 'pane-A-draft', false, 'leaf-a');
+      vi.advanceTimersByTime(100);
+      manager.setDraft('sess-1', 'pane-B-draft', false, 'leaf-b');
+
+      expect(manager.getPendingTimerCount()).toBe(2);
+
+      // 单独强刷 leaf-a 不应取消 leaf-b 的防抖计时器
+      manager.flushSession('sess-1', 'leaf-a');
+      expect(h.drafts['sess-1::leaf-a']).toBe('pane-A-draft');
+      expect(h.drafts['sess-1::leaf-b']).toBeUndefined();
+      expect(manager.getPendingTimerCount()).toBe(1);
+
+      // 推进完整防抖窗口，leaf-b 的防抖计时器正常到期写盘
+      vi.advanceTimersByTime(DRAFT_PERSIST_DEBOUNCE_MS);
+      expect(h.drafts['sess-1::leaf-b']).toBe('pane-B-draft');
+      expect(manager.getPendingTimerCount()).toBe(0);
+    });
+
+    it('evictLeaf：分栏销毁时精确清理该 leafId 下的挂起防抖计时器、内存草稿与打字焦点锁', () => {
+      manager.setDraft('sess-1', 'draft-leaf-closing', false, 'leaf-closing');
+      manager.setDraft('sess-2', 'draft-2-leaf-closing', false, 'leaf-closing');
+      manager.setDraft('sess-1', 'draft-leaf-kept', true, 'leaf-kept');
+      manager.setTypingActive('sess-1', true, 'leaf-closing');
+      manager.setTypingActive('sess-1', true, 'leaf-kept');
+
+      expect(manager.getPendingTimerCount()).toBe(2);
+      expect(manager.isTypingBarrierActive('sess-1', 0, 'leaf-closing')).toBe(
+        true
+      );
+
+      // 销毁分栏 leaf-closing
+      manager.evictLeaf('leaf-closing');
+
+      // leaf-closing 关联的计时器、内存草稿与焦点锁全部清零
+      expect(manager.getPendingTimerCount()).toBe(0);
+      expect(manager.getDraft('sess-1', 'leaf-closing')).toBe('');
+      expect(manager.getDraft('sess-2', 'leaf-closing')).toBe('');
+      expect(manager.isTypingBarrierActive('sess-1', 0, 'leaf-closing')).toBe(
+        false
+      );
+
+      // 其他分栏 leaf-kept 毫发无损
+      expect(manager.getDraft('sess-1', 'leaf-kept')).toBe('draft-leaf-kept');
+      expect(manager.isTypingBarrierActive('sess-1', 0, 'leaf-kept')).toBe(
+        true
+      );
+    });
   });
 });

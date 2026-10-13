@@ -82,13 +82,15 @@ const toDecision = (
 });
 
 /**
- * 惯性手势保护网状态机 (`InertialGestureGuard`)。
+ * 120ms 硬件 Capture 级惯性手势保护网状态机 (`InertialGestureGuard`)。
  */
 export class InertialGestureGuard {
   public readonly settleWindowMs: number;
   public isPinnedToBottom: boolean;
   public pendingHeightDelta = 0;
   public fusedCount = 0;
+  public gestureEpoch = 0;
+  public programmaticScrollExempt = false;
   private readonly nowFn: () => number;
   private readonly onSettleFlush?: (flushedDelta: number) => void;
   private _gestureActive = false;
@@ -114,6 +116,16 @@ export class InertialGestureGuard {
     }
   }
 
+  /** 签发程序性滚动豁免令牌 */
+  public markProgrammaticScroll(): void {
+    this.programmaticScrollExempt = true;
+  }
+
+  /** 物理手势触发时立即撤销程序性滚动豁免令牌 */
+  public cancelProgrammaticScroll(): void {
+    this.programmaticScrollExempt = false;
+  }
+
   /** 记录滚轮或触控板滑动活跃状态，开启或顺延 `settleWindowMs` 静默保护窗口 */
   public markWheelOrTouchActivity(timestampMs?: number): void {
     const clockNow = this.nowFn();
@@ -121,7 +133,9 @@ export class InertialGestureGuard {
       typeof timestampMs === 'number' && Number.isFinite(timestampMs);
     this._lastExplicitTs = hasExplicit ? timestampMs : clockNow;
     this._lastClockTs = clockNow;
+    if (!this._gestureActive) this.gestureEpoch += 1;
     this._gestureActive = true;
+    this.cancelProgrammaticScroll();
 
     this.clearSettleTimer();
     this._settleTimerId = setTimeout(() => {
@@ -129,6 +143,25 @@ export class InertialGestureGuard {
       this._gestureActive = false;
       this.onSettleFlush?.(this.flushPendingDelta({ force: true }));
     }, this.settleWindowMs);
+  }
+
+  /** 在容器上挂载硬件 Capture 级物理手势监听（wheel/touchstart/touchmove/pointerdown） */
+  public bindCaptureGestureListeners(
+    target: EventTarget | null | undefined,
+    onUserInterrupt?: () => void
+  ): () => void {
+    if (!target || typeof target.addEventListener !== 'function')
+      return () => {};
+    const handler = () => {
+      this.markWheelOrTouchActivity();
+      onUserInterrupt?.();
+    };
+    const opts: AddEventListenerOptions = { capture: true, passive: true };
+    const events = ['wheel', 'touchstart', 'touchmove', 'pointerdown'] as const;
+    for (const ev of events) target.addEventListener(ev, handler, opts);
+    return () => {
+      for (const ev of events) target.removeEventListener(ev, handler, opts);
+    };
   }
 
   /** 判定当前是否处于滚轮/触控板手势活跃窗口内 */
@@ -214,6 +247,7 @@ export class InertialGestureGuard {
   public reset(): void {
     this.clearSettleTimer();
     this._gestureActive = false;
+    this.programmaticScrollExempt = false;
     this.pendingHeightDelta = 0;
     this._lastExplicitTs = this._lastClockTs = null;
   }
@@ -278,21 +312,21 @@ function findBucketIndexAtOffset(
   buckets: readonly { offsetTop: number; estimatedHeight: number }[],
   targetOffset: number
 ): number {
-  if (buckets.length === 0 || targetOffset <= 0) return 0;
-  let lo = 0;
-  let hi = buckets.length - 1;
-  let matched = hi;
-  while (lo <= hi) {
-    const mid = (lo + hi) >>> 1;
-    const bucket = buckets[mid];
-    if (bucket && bucket.offsetTop + bucket.estimatedHeight <= targetOffset) {
-      lo = mid + 1;
-    } else {
-      matched = mid;
-      hi = mid - 1;
+  const count = buckets.length;
+  if (count === 0 || targetOffset <= 0) return 0;
+  let idx = 0;
+  let bitMask = 1 << (31 - Math.clz32(count));
+  while (bitMask > 0) {
+    const nextIdx = idx + bitMask;
+    if (nextIdx <= count) {
+      const prev = buckets[nextIdx - 1];
+      if (prev && prev.offsetTop + prev.estimatedHeight <= targetOffset) {
+        idx = nextIdx;
+      }
     }
+    bitMask >>>= 1;
   }
-  return matched;
+  return Math.min(idx, count - 1);
 }
 
 /**

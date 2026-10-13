@@ -817,22 +817,34 @@ export default defineConfig({
             // /react/ 会误伤 @tiptap/react 与 zustand/esm/react/*（→ 循环 chunk
             // vendor-react↔vendor-tiptap/zustand），收窄为仅 react 包本体；
             // react-dom 及其浮层 peer（@floating-ui/react-dom 等）继续归 vendor-react
-            if (n.includes('react-dom') || n.includes('node_modules/react/')) {
+            if (
+              n.includes('react-dom') ||
+              n.includes('node_modules/react/') ||
+              n.includes('node_modules/scheduler/')
+            ) {
               return 'vendor-react';
             }
-            if (n.includes('zustand') || n.includes('immer'))
+            if (
+              n.includes('zustand') ||
+              n.includes('immer') ||
+              n.includes('use-sync-external-store')
+            ) {
               return 'vendor-zustand';
+            }
             if (n.includes('@hugeicons')) return 'vendor-hugeicons';
             if (n.includes('highlight.js')) return 'vendor-highlight';
             if (n.includes('@fontsource')) return 'vendor-fonts';
-            // 06-步骤2（P2-4）：tiptap 族（含 @tiptap/pm 的 prosemirror）
-            // 与 xterm 族拆出主 chunk；运行时懒加载点归 07 性能轨道
-            // （T2-4 移交：ChatComposer.tsx:21 / CardPanelLayout.tsx:5）
-            if (n.includes('@tiptap')) return 'vendor-tiptap';
+            // 06-步骤2 / Stage 10：tiptap 族（含 prosemirror 与 @codemirror）
+            // 与 xterm 族拆出主 chunk，保持 vendor-tiptap / vendor-xterm 命名对齐 check-dist.mjs
+            if (
+              n.includes('@tiptap') ||
+              n.includes('prosemirror') ||
+              n.includes('@codemirror')
+            ) {
+              return 'vendor-tiptap';
+            }
             if (n.includes('@xterm')) return 'vendor-xterm';
-            // 06-步骤2 实测校准（拆分后清单 2026-08-10）：App chunk 残留的
-            // dompurify（121.8KB rendered）与 @chenglou/pretext（122.7KB rendered）
-            // 拆出后 App 实测 ≈455KB，达成 <500KB 目标（check-dist 断言承载）
+            // App chunk 残留的 dompurify 与 @chenglou/pretext 独立切块
             if (n.includes('dompurify')) return 'vendor-dompurify';
             if (n.includes('@chenglou')) return 'vendor-pretext';
           }
@@ -875,6 +887,10 @@ export default defineConfig({
           ) {
             return 'chat-runtime-core';
           }
+
+          // 2.4 次级重型视图异步切块（Diff / Terminal 脱离首屏同步评估）
+          if (n.includes('/src/components/diff/')) return 'view-diff';
+          if (n.includes('/src/components/terminal/')) return 'view-terminal';
 
           if (n.includes('/src/workers/')) return 'vendor-workers';
         },

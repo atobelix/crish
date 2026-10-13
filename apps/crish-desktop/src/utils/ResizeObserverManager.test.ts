@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ResizeObserverManager } from './ResizeObserverManager';
+import {
+  ResizeObserverManager,
+  SlicedTaskFlusher,
+  WindowBlurWatchdog,
+} from './ResizeObserverManager';
 
 class MockResizeObserver {
   private cb: (entries: ResizeObserverEntry[]) => void;
@@ -26,7 +30,7 @@ let activeMockRO: MockResizeObserver | null = null;
     }
   };
 
-describe('ResizeObserverManager (细粒度窗格级门控与 8ms 分片排空)', () => {
+describe('ResizeObserverManager (细粒度窗格级门控、8ms SlicedTaskFlusher 与 200ms WindowBlurWatchdog)', () => {
   let mgr: ResizeObserverManager;
 
   beforeEach(() => {
@@ -48,10 +52,6 @@ describe('ResizeObserverManager (细粒度窗格级门控与 8ms 分片排空)',
 
   describe('1. 细粒度窗格级冻结 (Gated Resizing)', () => {
     it('独立窗格冻结时不影响未挂起窗格与全局 UI 的测量分发', () => {
-      // 准备三个 DOM 节点：
-      // 1. paneAContainer (data-leaf-id="pane-A")
-      // 2. paneBContainer (data-leaf-id="pane-B")
-      // 3. globalTooltip (挂在 body 下，无 pane 标记)
       const paneA = document.createElement('div');
       paneA.setAttribute('data-leaf-id', 'pane-A');
       const childA = document.createElement('div');
@@ -96,24 +96,21 @@ describe('ResizeObserverManager (细粒度窗格级门控与 8ms 分片排空)',
         contentRect: { width: 80, height: 40 } as DOMRectReadOnly,
       } as ResizeObserverEntry;
 
-      // 批量触发三个元素的尺寸变更通知
       activeMockRO?.__trigger([entryA, entryB, entryGlobal]);
 
-      // 断言：未挂起的 pane-B 和全局 Tooltip 立即分发，零停滞！
+      // 未挂起的 pane-B 和全局 Tooltip 立即分发，零停滞
       expect(cbB).toHaveBeenCalledTimes(1);
       expect(cbB).toHaveBeenCalledWith(entryB);
       expect(cbGlobal).toHaveBeenCalledTimes(1);
       expect(cbGlobal).toHaveBeenCalledWith(entryGlobal);
 
-      // 断言：被挂起的 pane-A 元素被抑制，进入 pendingQueue
+      // 被挂起的 pane-A 元素被抑制，进入 flusher 队列
       expect(cbA).not.toHaveBeenCalled();
       expect(mgr.getPendingQueueSize()).toBe(1);
 
-      // 解冻 pane-A
       mgr.resumePane('pane-A');
       expect(mgr.isPaneSuspended('pane-A')).toBe(false);
 
-      // 推进 1 帧 rAF
       vi.advanceTimersByTime(16);
       expect(cbA).toHaveBeenCalledTimes(1);
       expect(cbA).toHaveBeenCalledWith(entryA);
@@ -171,7 +168,7 @@ describe('ResizeObserverManager (细粒度窗格级门控与 8ms 分片排空)',
       vi.advanceTimersByTime(16);
 
       expect(cb1).toHaveBeenCalledTimes(1);
-      expect(cb2).not.toHaveBeenCalled(); // pane-2 依然挂起
+      expect(cb2).not.toHaveBeenCalled();
 
       // 解冻 pane-2
       mgr.resumePane('pane-2');
@@ -180,7 +177,7 @@ describe('ResizeObserverManager (细粒度窗格级门控与 8ms 分片排空)',
     });
   });
 
-  describe('2. 8ms 时间预算分片排空机制 (Time-Sliced Flush)', () => {
+  describe('2. 8ms 时间预算分片排空机制 (SlicedTaskFlusher)', () => {
     it('当积压任务执行耗时超过 8ms 时，自动分片顺延至下一帧 rAF，零任务丢失', () => {
       const PANE_ID = 'heavy-pane';
       const ELEMENT_COUNT = 10;
@@ -200,7 +197,6 @@ describe('ResizeObserverManager (细粒度窗格级门控与 8ms 分片排空)',
         mgr.observe(el, cb, { paneId: PANE_ID });
       }
 
-      // 挂起窗格并积累全部 10 个测高请求
       mgr.suspendPane(PANE_ID);
       activeMockRO?.__trigger(entries);
 
@@ -209,36 +205,30 @@ describe('ResizeObserverManager (细粒度窗格级门控与 8ms 分片排空)',
         expect(cb).not.toHaveBeenCalled();
       }
 
-      // 模拟 performance.now()：
-      // 让每次 dispatch 执行耗时递增 3ms，因此 8ms 预算下单帧最多执行 3 个（0 -> 3 -> 6 -> 9ms，第 3 个之后超过 8ms 触发 break）
       let mockTime = 1000;
       vi.spyOn(performance, 'now').mockImplementation(() => {
         return mockTime;
       });
 
-      // 每个回调被触发时将 mockTime 增加 3ms
       callbacks.forEach((cb) => {
         cb.mockImplementation(() => {
           mockTime += 3;
         });
       });
 
-      // 解冻窗格，触发 8ms 时间预算排空
       mgr.resumePane(PANE_ID);
 
-      // 第一帧调度前，回调尚未执行
       expect(callbacks[0]).not.toHaveBeenCalled();
 
-      // 推进第 1 帧 rAF (16ms)
+      // 第 1 帧 rAF (16ms)：执行前 3 个元素（耗时 9ms >= 8ms break）
       vi.advanceTimersByTime(16);
-      // 第一帧内执行了前 3 个元素（耗时 9ms >= 8ms break）
       expect(callbacks[0]).toHaveBeenCalledTimes(1);
       expect(callbacks[1]).toHaveBeenCalledTimes(1);
       expect(callbacks[2]).toHaveBeenCalledTimes(1);
       expect(callbacks[3]).not.toHaveBeenCalled();
       expect(mgr.getPendingQueueSize()).toBe(7);
 
-      // 推进第 2 帧 rAF (16ms)
+      // 第 2 帧 rAF (16ms)
       vi.advanceTimersByTime(16);
       expect(callbacks[3]).toHaveBeenCalledTimes(1);
       expect(callbacks[4]).toHaveBeenCalledTimes(1);
@@ -246,7 +236,7 @@ describe('ResizeObserverManager (细粒度窗格级门控与 8ms 分片排空)',
       expect(callbacks[6]).not.toHaveBeenCalled();
       expect(mgr.getPendingQueueSize()).toBe(4);
 
-      // 推进第 3 帧 rAF (16ms)
+      // 第 3 帧 rAF (16ms)
       vi.advanceTimersByTime(16);
       expect(callbacks[6]).toHaveBeenCalledTimes(1);
       expect(callbacks[7]).toHaveBeenCalledTimes(1);
@@ -254,20 +244,57 @@ describe('ResizeObserverManager (细粒度窗格级门控与 8ms 分片排空)',
       expect(callbacks[9]).not.toHaveBeenCalled();
       expect(mgr.getPendingQueueSize()).toBe(1);
 
-      // 推进第 4 帧 rAF (16ms)
+      // 第 4 帧 rAF (16ms)
       vi.advanceTimersByTime(16);
       expect(callbacks[9]).toHaveBeenCalledTimes(1);
       expect(mgr.getPendingQueueSize()).toBe(0);
 
-      // 验证 100% 任务全部被分派，零任务丢失
       for (let i = 0; i < ELEMENT_COUNT; i++) {
         expect(callbacks[i]).toHaveBeenCalledTimes(1);
         expect(callbacks[i]).toHaveBeenCalledWith(entries[i]);
       }
     });
+
+    it('SlicedTaskFlusher 独立压测：100 个 2ms 任务跨帧接力排空，单帧耗时严格 <= 8ms 预算', () => {
+      let mockNow = 0;
+      vi.spyOn(performance, 'now').mockImplementation(() => mockNow);
+
+      const frameDurations: number[] = [];
+      let currentFrameStart = -1;
+      const dispatched: Element[] = [];
+
+      const flusher = new SlicedTaskFlusher(
+        () => false,
+        (el) => {
+          if (currentFrameStart < 0) {
+            currentFrameStart = mockNow;
+          }
+          mockNow += 2;
+          dispatched.push(el);
+        }
+      );
+
+      for (let i = 0; i < 100; i++) {
+        flusher.enqueue(document.createElement('div'));
+      }
+      expect(flusher.size).toBe(100);
+
+      flusher.flushWithBudget(8);
+
+      while (flusher.size > 0) {
+        currentFrameStart = mockNow;
+        vi.advanceTimersByTime(16);
+        const frameCost = mockNow - currentFrameStart;
+        frameDurations.push(frameCost);
+        expect(frameCost).toBeLessThanOrEqual(8.5);
+      }
+
+      expect(dispatched.length).toBe(100);
+      expect(frameDurations.length).toBe(25); // 每帧 4 个 * 2ms = 8ms，共 25 帧
+    });
   });
 
-  describe('3. Windows 失焦与交互中断 200ms 自动解冻看门狗', () => {
+  describe('3. Windows 失焦与交互中断 200ms 自动解冻看门狗 (WindowBlurWatchdog)', () => {
     it('窗口触发 blur 事件时，200ms 后看门狗自动强制解冻并排空积压队列', () => {
       const el = document.createElement('div');
       const cb = vi.fn();
@@ -283,19 +310,15 @@ describe('ResizeObserverManager (细粒度窗格级门控与 8ms 分片排空)',
       activeMockRO?.__trigger([entry]);
       expect(cb).not.toHaveBeenCalled();
 
-      // 用户拖拽出窗外，触发 window blur
       window.dispatchEvent(new Event('blur'));
 
-      // 100ms 过去，仍处于防御期
       vi.advanceTimersByTime(100);
       expect(mgr.isPaneSuspended('pane-lost-focus')).toBe(true);
       expect(cb).not.toHaveBeenCalled();
 
-      // 推进至 200ms，看门狗超时触发解冻
       vi.advanceTimersByTime(100);
       expect(mgr.isPaneSuspended('pane-lost-focus')).toBe(false);
 
-      // rAF 排空完成
       vi.advanceTimersByTime(16);
       expect(cb).toHaveBeenCalledTimes(1);
       expect(cb).toHaveBeenCalledWith(entry);
@@ -316,22 +339,59 @@ describe('ResizeObserverManager (细粒度窗格级门控与 8ms 分片排空)',
       expect(mgr.isPaneSuspended('pane-cancel')).toBe(false);
     });
 
+    it('Sash 元素或窗口触发 lostpointercapture 事件时，200ms 后看门狗自动解冻并通知 recoverListener', () => {
+      const sashEl = document.createElement('div');
+      document.body.appendChild(sashEl);
+      const recoverSpy = vi.fn();
+      const unsub = mgr.onWatchdogRecover(recoverSpy);
+
+      mgr.suspendPane('pane-capture-lost');
+      sashEl.dispatchEvent(new Event('lostpointercapture', { bubbles: false }));
+
+      vi.advanceTimersByTime(190);
+      expect(mgr.isPaneSuspended('pane-capture-lost')).toBe(true);
+      expect(recoverSpy).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(10);
+      expect(mgr.isPaneSuspended('pane-capture-lost')).toBe(false);
+      expect(recoverSpy).toHaveBeenCalledTimes(1);
+
+      unsub();
+    });
+
     it('如果在 200ms 内正常手动解冻，看门狗定时器应被取消，避免后续误解冻', () => {
       mgr.suspendPane('pane-test');
       window.dispatchEvent(new Event('blur'));
 
-      // 100ms 时正常 pointerup 解冻
       mgr.resumePane('pane-test');
       expect(mgr.isPaneSuspended('pane-test')).toBe(false);
 
-      // 再次挂起新窗格
       mgr.suspendPane('new-pane');
       expect(mgr.isPaneSuspended('new-pane')).toBe(true);
 
-      // 推进 150ms（超过了之前 blur 的 200ms 总阈值）
       vi.advanceTimersByTime(150);
-      // new-pane 绝不会被之前的看门狗误解冻！
       expect(mgr.isPaneSuspended('new-pane')).toBe(true);
+    });
+
+    it('WindowBlurWatchdog 独立生命周期测试：190ms 不触发、200ms 触发、clear 立即撤防', () => {
+      const onRecover = vi.fn();
+      const watchdog = new WindowBlurWatchdog(onRecover);
+
+      watchdog.arm();
+      expect(watchdog.isArmed).toBe(true);
+
+      vi.advanceTimersByTime(190);
+      expect(onRecover).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(10);
+      expect(onRecover).toHaveBeenCalledTimes(1);
+      expect(watchdog.isArmed).toBe(false);
+
+      watchdog.arm();
+      watchdog.clear();
+      expect(watchdog.isArmed).toBe(false);
+      vi.advanceTimersByTime(300);
+      expect(onRecover).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -349,7 +409,6 @@ describe('ResizeObserverManager (细粒度窗格级门控与 8ms 分片排空)',
       expect(mgr.isSuspended).toBe(true);
       expect(mgr.isPaneSuspended('pane-1')).toBe(true);
       expect(mgr.isElementSuspended(el1)).toBe(true);
-      // 关键断言：未绑定窗格的全局元素绝不被通配符误杀
       expect(mgr.isElementSuspended(elGlobal)).toBe(false);
 
       const entry1 = {

@@ -2,8 +2,34 @@ import { useCallback, useRef } from 'react';
 import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
 
 /**
+ * 原生零回流提取 ResizeObserverEntry 边框盒块级高度（borderBoxSize[0].blockSize）。
+ * 仅在无头测试环境缺失 borderBoxSize 时降级至 contentRect.height。
+ */
+export function extractEntryBlockSize(entry: ResizeObserverEntry): number {
+  if (entry.borderBoxSize && entry.borderBoxSize.length > 0) {
+    const blockSize = entry.borderBoxSize[0]?.blockSize;
+    if (
+      typeof blockSize === 'number' &&
+      Number.isFinite(blockSize) &&
+      blockSize > 0
+    ) {
+      return Math.round(blockSize);
+    }
+  }
+  const contentHeight = entry.contentRect?.height;
+  if (
+    typeof contentHeight === 'number' &&
+    Number.isFinite(contentHeight) &&
+    contentHeight > 0
+  ) {
+    return Math.ceil(contentHeight);
+  }
+  return 0;
+}
+
+/**
  * 单行测高回调。挂到带 data-vindex 的节点上：挂载 observe，卸载 unobserve。
- * 只经 ResizeObserverManager（G-03，禁止裸 ResizeObserver）。
+ * 只经 ResizeObserverManager（G-03，禁止裸 ResizeObserver），100% 消费 borderBoxSize 零回流。
  */
 export function createRowMeasureRef(
   id: string,
@@ -14,8 +40,7 @@ export function createRowMeasureRef(
     const el = entry.target;
     if (!(el instanceof HTMLElement)) return;
     const msgId = el.dataset.vindex ?? id;
-    const measuredHeight =
-      el.offsetHeight || Math.ceil(entry.contentRect.height);
+    const measuredHeight = extractEntryBlockSize(entry);
     if (msgId != null && measuredHeight > 0) {
       setActual(msgId, measuredHeight);
     }

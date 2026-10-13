@@ -1,8 +1,9 @@
 /**
- * sessionRustDb 写竞态防线（从 sessionRustDbSql 拆出）
+ * sessionRustDb 写竞态防线与 Tier 3 存储墓碑写屏障（从 sessionRustDbSql 拆出）
  *
- * 职责：模块级串行队列 + 批次版本戳（PS-03 T3.2 D6；Wave C 收敛后）。
- * - enqueuePersist：把持久化任务串入模块级写队列（主防线）
+ * 职责：模块级串行队列 + 批次版本戳 + 500 容量 LRU 墓碑写前硬拦截（Stage 09 / VULN-05）。
+ * - enqueuePersist：把持久化任务串入模块级写队列，写前校验 isSessionTombstoned
+ * - shouldBlockTombstonedWrite / filterTombstonedSessions：写路径最前端墓碑硬拦截
  * - nextBatchVersion：发起序版本戳（随 IPC batchVersion 传递）
  *
  * Wave C（06 §3.4 D-F01/D-F02）后已删：
@@ -10,12 +11,24 @@
  * - writtenBodyBatchVersions 内存 CAS 映射（为全量覆盖防御设计的脆弱补丁）
  */
 
+import {
+  isSessionTombstoned,
+  markSessionTombstone,
+} from '../../utils/lifecycle/ScopedLifecycleRegistry';
+
+export { isSessionTombstoned, markSessionTombstone };
+
+export interface EnqueuePersistOptions {
+  /** 可选关联会话 ID；若该会话已进入墓碑态，写任务在入队与执行前均被硬拦截 */
+  sessionId?: string;
+}
+
 /**
  * 模块级写串行队列（主防线）。
  *
- * 问题背景（R2 §5 / F5-02）：persist 批次间无队列、无版本戳；store 层 350ms
- * debounce（store-persistence.ts:136-145）只保证「调度串行」，不保证「IPC
- * 飞行期互斥」——store 高频变更时两个 persist 周期可并发飞行，旧批次晚完成
+ * 问题背景（R2 §5 / F5-02）：persist 批次间无队列、无版本戳；store 层 300ms
+ * debounce（STORAGE_PERSIST_DEBOUNCE_MS，store-persistence.ts:136-145）只保证「调度串行」，
+ * 不保证「IPC 飞行期互斥」——store 高频变更时两个 persist 周期可并发飞行，旧批次晚完成
  * 整体覆盖新批次（sessionRustDbWriteModel.test.ts 曾把回滚固化为契约，
  * T3.2 已翻转）。本队列把每个 persist 批次整体串入 promise 链：
  *
@@ -41,13 +54,63 @@ let writeChain: Promise<void> = Promise.resolve();
 let batchVersionCounter = 0;
 
 /**
- * 把持久化任务串入模块级写队列。
+ * 检查目标会话写操作是否应被 Tier 3 墓碑屏障硬拦截（防止已删会话迟到宏任务幽灵复活）
+ */
+export function shouldBlockTombstonedWrite(
+  sessionId: string | null | undefined
+): boolean {
+  const sid = typeof sessionId === 'string' ? sessionId.trim() : '';
+  if (!sid) return true;
+  return isSessionTombstoned(sid);
+}
+
+/**
+ * 过滤持久化批次中已被打上墓碑标记的会话
+ */
+export function filterTombstonedSessions<T extends { id?: string }>(
+  sessions: readonly T[] | null | undefined
+): T[] {
+  if (!Array.isArray(sessions)) return [];
+  return sessions.filter((s) => Boolean(s?.id) && !isSessionTombstoned(s.id!));
+}
+
+function resolveSessionIdOption(
+  sessionIdOrOptions?: string | EnqueuePersistOptions
+): string {
+  if (typeof sessionIdOrOptions === 'string') {
+    return sessionIdOrOptions.trim();
+  }
+  if (
+    sessionIdOrOptions &&
+    typeof sessionIdOrOptions === 'object' &&
+    typeof sessionIdOrOptions.sessionId === 'string'
+  ) {
+    return sessionIdOrOptions.sessionId.trim();
+  }
+  return '';
+}
+
+/**
+ * 把持久化任务串入模块级写队列，并在入队与执行最前端注入 Tier 3 墓碑硬拦截。
  * 返回任务自身 promise（调用方可 await 感知完成）；链尾由 writeChain 承接，
  * 单轮失败由 catch 吞掉，保证链永不因单轮异常而断裂。
  */
-export function enqueuePersist(task: () => Promise<void>): Promise<void> {
+export function enqueuePersist(
+  task: () => Promise<void>,
+  sessionIdOrOptions?: string | EnqueuePersistOptions
+): Promise<void> {
+  const targetSessionId = resolveSessionIdOption(sessionIdOrOptions);
+  if (targetSessionId && isSessionTombstoned(targetSessionId)) {
+    return Promise.resolve();
+  }
+
   const run = writeChain
-    .then(() => task())
+    .then(() => {
+      if (targetSessionId && isSessionTombstoned(targetSessionId)) {
+        return;
+      }
+      return task();
+    })
     .catch(() => {
       /* 单轮失败吞掉：不影响链上后续批次 */
     });

@@ -331,6 +331,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
             onOpenProject={handleOpenProject}
             onSortBtnClick={handleSortBtnClick}
             sortTriggerRef={sortTriggerRef}
+            sortDropdownOpen={sortDropdownOpen}
             onNewSession={handleNewSession}
             onAddProject={handleAddProject}
             onMoveSessionRealtime={moveSessionRealtime}

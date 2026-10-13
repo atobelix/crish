@@ -5,6 +5,7 @@ import type {
   SessionStoreSlice,
   SessionImmerSet,
 } from './sessionActions';
+import type { SessionAgent, SessionState } from './types';
 import {
   applyMessageToolCallPatch,
   applySessionAgentPatch,
@@ -21,6 +22,164 @@ import {
   getStreamText,
   getStreamThinking,
 } from './streamingStore';
+import {
+  dualLatchStateMachine,
+  scheduleDualRafClearStreams,
+} from '../api/dualLatchProtocol';
+import { StreamValueBatcher } from '../api/streamTextBatcher';
+import type { FinalSubagentSnapshot } from './sessionMessageActionsCore';
+
+/**
+ * 子代理运行期增量更新载荷（Stage 02 12 子代理并发防抖契约）
+ */
+export interface SubagentRuntimeDelta {
+  readonly sessionId: string;
+  readonly agentId: string;
+  readonly messageId?: string;
+  readonly text?: string;
+  readonly thinking?: string;
+  readonly summary?: string;
+  readonly status?: 'running' | 'completed' | 'failed' | 'stopped';
+}
+
+/**
+ * 12 子代理并发增量节流器（48ms 窗口合并）：
+ * 运行期仅向独立子代理分支刷写合并后的增量，严禁在每个子代理 token chunk 到达时克隆主消息数组。
+ */
+export class SubagentRuntimeBatcher {
+  private readonly inner: StreamValueBatcher<SubagentRuntimeDelta>;
+
+  constructor(
+    onFlushDelta: (delta: SubagentRuntimeDelta) => void,
+    options: {
+      intervalMs?: number;
+      setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
+      clearTimer?: (id: ReturnType<typeof setTimeout>) => void;
+    } = {}
+  ) {
+    this.inner = new StreamValueBatcher<SubagentRuntimeDelta>(
+      (_key, delta) => {
+        onFlushDelta(delta);
+      },
+      {
+        intervalMs: options.intervalMs ?? 48,
+        setTimer: options.setTimer,
+        clearTimer: options.clearTimer,
+        merge: (prev, next) => ({
+          ...prev,
+          ...next,
+          text: next.text !== undefined ? next.text : prev.text,
+          thinking: next.thinking !== undefined ? next.thinking : prev.thinking,
+          summary: next.summary !== undefined ? next.summary : prev.summary,
+          status: next.status !== undefined ? next.status : prev.status,
+        }),
+      }
+    );
+  }
+
+  push(delta: SubagentRuntimeDelta): void {
+    const key = `${delta.sessionId}::${delta.agentId}`;
+    this.inner.push(key, delta);
+  }
+
+  flushNow(): void {
+    this.inner.flushNow();
+  }
+
+  reset(): void {
+    this.inner.reset();
+  }
+}
+
+/**
+ * 从会话内子代理列表提取终态归档快照（`FinalSubagentSnapshot[]`），
+ * 同时收集仅归属目标子代理的流式消息 ID 列表（供精确 `clearStreams(sessionId, finalizedMsgIds)` 回收）。
+ */
+export function buildFinalSubagentSnapshots(
+  sessionId: string,
+  agents: readonly SessionAgent[],
+  targetAgentIds?: ReadonlySet<string>
+): {
+  readonly snapshots: FinalSubagentSnapshot[];
+  readonly finalizedMessageIds: string[];
+} {
+  const snapshots: FinalSubagentSnapshot[] = [];
+  const finalizedMessageIds: string[] = [];
+  const now = Date.now();
+
+  for (const ag of agents) {
+    if (targetAgentIds && !targetAgentIds.has(ag.id)) continue;
+
+    let finalText = ag.summary || '';
+    let finalThinking: string | undefined;
+
+    for (const m of ag.messages || []) {
+      if (m.sender !== 'assistant') continue;
+      finalizedMessageIds.push(m.id);
+      const liveText = getStreamText(sessionId, m.id);
+      const candidateText =
+        liveText && (!m.text || liveText.length >= m.text.length)
+          ? liveText
+          : m.text || '';
+      if (candidateText) {
+        finalText = candidateText;
+      }
+      const liveThinking = getStreamThinking(sessionId, m.id) || m.thinking;
+      if (liveThinking && liveThinking !== '正在处理…') {
+        finalThinking = liveThinking;
+      }
+    }
+
+    const mappedStatus: FinalSubagentSnapshot['status'] =
+      ag.status === 'failed'
+        ? 'error'
+        : ag.status === 'stopped'
+          ? 'cancelled'
+          : 'completed';
+
+    snapshots.push({
+      id: ag.id,
+      name: ag.displayLabel || ag.description || ag.mode || ag.id,
+      role: ag.mode || 'subagent',
+      status: mappedStatus,
+      finalText,
+      ...(finalThinking !== undefined ? { finalThinking } : {}),
+      completedAt: ag.endedAt ?? now,
+    });
+  }
+
+  return { snapshots, finalizedMessageIds };
+}
+
+/**
+ * 将子代理终态快照原子归档至 `session.finalAgents` 并从运行期活跃列表中解绑已归档项。
+ */
+export function archiveFinalAgentsToSession(
+  session: SessionState,
+  snapshots: readonly FinalSubagentSnapshot[],
+  removeArchivedFromActive = false
+): FinalSubagentSnapshot[] {
+  const carrier: { id: string; finalAgents?: FinalSubagentSnapshot[] } =
+    session;
+  const current = carrier.finalAgents ? carrier.finalAgents.slice() : [];
+  const archivedIds = new Set<string>();
+
+  for (const snap of snapshots) {
+    archivedIds.add(snap.id);
+    const idx = current.findIndex((item) => item.id === snap.id);
+    if (idx >= 0) {
+      current[idx] = snap;
+    } else {
+      current.push(snap);
+    }
+  }
+
+  carrier.finalAgents = current;
+  if (removeArchivedFromActive && Array.isArray(session.agents)) {
+    session.agents = session.agents.filter((ag) => !archivedIds.has(ag.id));
+  }
+  return current;
+}
 
 export function createSessionAgentActions<T extends SessionStoreSlice>(
   set: SessionImmerSet<T>
@@ -140,7 +299,13 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
         const ag = getSessionAgent(sess, agentId);
         if (!ag) return;
         // wire 归一终态（completed/failed/stopped，mapSubagentEndStatus 同口径）
-        ag.status = opts.status as 'completed' | 'failed' | 'stopped';
+        const normalizedStatus: SessionAgent['status'] =
+          opts.status === 'failed'
+            ? 'failed'
+            : opts.status === 'stopped'
+              ? 'stopped'
+              : 'completed';
+        ag.status = normalizedStatus;
         if (opts.summary) ag.summary = opts.summary;
         ag.endedAt = Date.now();
         const summary = opts.summary || ag.summary || '';
@@ -180,7 +345,7 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
             m.status = 'completed';
             if (m.thinking === '正在处理…') m.thinking = '';
 
-            // 关键补齐：从 streamingStore 提取残余流式正文并合入持久化消息
+            // 从 streamingStore 提取残余流式正文并合入持久化消息（语义自锁存）
             const liveText = getStreamText(sessionId, m.id);
             if (liveText && (!m.text || liveText.length > m.text.length)) {
               m.text = liveText;
@@ -189,6 +354,12 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
             if (liveThinking && !m.thinking) {
               m.thinking = liveThinking;
             }
+            Reflect.deleteProperty(m, 'streamText');
+            dualLatchStateMachine.markLatched(
+              sessionId,
+              m.id,
+              (m.text || '').length
+            );
           }
           for (const tc of m.toolCalls || []) {
             if (tc.status === 'running' || tc.status === 'pending_approval') {
@@ -198,13 +369,22 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
             }
           }
         }
+
+        // 将当前子代理终态快照同步归档至会话 finalAgents
+        const { snapshots } = buildFinalSubagentSnapshots(
+          sessionId,
+          [ag],
+          new Set([agentId])
+        );
+        if (snapshots.length > 0) {
+          archiveFinalAgentsToSession(sess, snapshots, false);
+        }
+
         rebindSessionById(state, sessionId, sess);
 
-        // 精确清理当前 Agent 关联的消息流，绝不误伤同会话下其它 Agent 的并发流
+        // 走 Dual-Latch 双帧物理交接后精确清理当前 Agent 关联的消息流，严禁调用 clearSession(sessionId)
         if (finalizedMsgIds.length > 0) {
-          queueMicrotask(() => {
-            clearStreams(sessionId, finalizedMsgIds);
-          });
+          scheduleDualRafClearStreams(sessionId, finalizedMsgIds, clearStreams);
         }
       }),
   };
