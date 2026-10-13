@@ -335,27 +335,54 @@ describe('ResizeObserverManager (细粒度窗格级门控与 8ms 分片排空)',
     });
   });
 
-  describe('4. 向后兼容性与生命周期防御', () => {
-    it('setSuspended(true/false) 向后兼容通配符挂起与解冻', () => {
-      const el = document.createElement('div');
-      const cb = vi.fn();
-      mgr.observe(el, cb);
+  describe('4. 细粒度窗格挂起与生命周期防御', () => {
+    it('suspendPanes 与 resumePanes 细粒度窗格挂起与解冻，0 全局通配符泄漏', () => {
+      const el1 = document.createElement('div');
+      const elGlobal = document.createElement('div');
+      const cb1 = vi.fn();
+      const cbGlobal = vi.fn();
 
-      mgr.setSuspended(true);
+      mgr.observe(el1, cb1, { paneId: 'pane-1' });
+      mgr.observe(elGlobal, cbGlobal);
+
+      mgr.suspendPanes(['pane-1']);
       expect(mgr.isSuspended).toBe(true);
-      expect(mgr.isElementSuspended(el)).toBe(true);
+      expect(mgr.isPaneSuspended('pane-1')).toBe(true);
+      expect(mgr.isElementSuspended(el1)).toBe(true);
+      // 关键断言：未绑定窗格的全局元素绝不被通配符误杀
+      expect(mgr.isElementSuspended(elGlobal)).toBe(false);
 
-      const entry = {
-        target: el,
+      const entry1 = {
+        target: el1,
         contentRect: {} as DOMRectReadOnly,
       } as ResizeObserverEntry;
-      activeMockRO?.__trigger([entry]);
-      expect(cb).not.toHaveBeenCalled();
+      const entryGlobal = {
+        target: elGlobal,
+        contentRect: {} as DOMRectReadOnly,
+      } as ResizeObserverEntry;
+      activeMockRO?.__trigger([entry1, entryGlobal]);
 
-      mgr.setSuspended(false);
+      expect(cb1).not.toHaveBeenCalled();
+      expect(cbGlobal).toHaveBeenCalledTimes(1);
+      expect(cbGlobal).toHaveBeenCalledWith(entryGlobal);
+
+      mgr.resumePanes(['pane-1']);
       expect(mgr.isSuspended).toBe(false);
+      expect(mgr.isPaneSuspended('pane-1')).toBe(false);
+      expect(mgr.isElementSuspended(el1)).toBe(false);
       vi.advanceTimersByTime(16);
-      expect(cb).toHaveBeenCalledTimes(1);
+      expect(cb1).toHaveBeenCalledTimes(1);
+      expect(cb1).toHaveBeenCalledWith(entry1);
+    });
+
+    it('空参数调用 suspendPanes 不注入全局通配符', () => {
+      const el = document.createElement('div');
+      mgr.observe(el, vi.fn());
+
+      mgr.suspendPanes([]);
+      expect(mgr.isSuspended).toBe(false);
+      expect(mgr.isElementSuspended(el)).toBe(false);
+      expect(mgr.isPaneSuspended('*')).toBe(false);
     });
 
     it('unobserve 正确清理 DOM 元素、回调与待办队列映射', () => {

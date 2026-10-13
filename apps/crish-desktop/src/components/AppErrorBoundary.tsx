@@ -6,7 +6,6 @@
  * - compact:    面板/标签级错误，行内卡片 + "重试" + "关闭面板" + "重新加载"链接
  * - minimal:    小区域级错误，仅错误图标 + "此区域出错"文本，不影响周围布局
  *
- * 兼容旧版 compact boolean prop (视为 variant="compact")。
  * Fix #19: 按钮顺序统一为 [重试] [其他操作]
  * Fix #20: dismiss 后焦点自动移到第一个可聚焦元素
  * Fix #21: 添加 onError 回调
@@ -29,7 +28,7 @@ type Props = {
   onClose?: () => void;
   /** 错误捕获回调，每次捕获到错误时触发 */
   onError?: (error: Error) => void;
-  /** @deprecated 使用 variant="compact"。@see variant="compact" */
+  /** @deprecated 兼容直接传 compact 的调用；内部自动归一为 variant="compact"。@see variant */
   compact?: boolean;
   /** 显示变体，默认 fullscreen */
   variant?: Variant;
@@ -92,11 +91,19 @@ export class AppErrorBoundary extends React.Component<Props, State> {
     try {
       if (!import.meta.env.DEV) {
         const err = toError(error);
-        sessionStorage.setItem('crish_error_boundary_crash', JSON.stringify({
-          message: err.message, name: err.name, stack: err.stack?.split('\n').slice(0,6).join('\n'), timestamp: Date.now(),
-        }));
+        sessionStorage.setItem(
+          'crish_error_boundary_crash',
+          JSON.stringify({
+            message: err.message,
+            name: err.name,
+            stack: err.stack?.split('\n').slice(0, 6).join('\n'),
+            timestamp: Date.now(),
+          })
+        );
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return { error: toError(error), retryCount: 0, circuitOpen: false };
   }
 
@@ -104,14 +111,21 @@ export class AppErrorBoundary extends React.Component<Props, State> {
     try {
       const saved = sessionStorage.getItem(CIRCUIT_KEY);
       if (saved) return JSON.parse(saved);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return { count: 0, windowStart: 0 };
   }
 
-  private writeCircuitState(state: { count: number; windowStart: number }): void {
+  private writeCircuitState(state: {
+    count: number;
+    windowStart: number;
+  }): void {
     try {
       sessionStorage.setItem(CIRCUIT_KEY, JSON.stringify(state));
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
@@ -151,7 +165,9 @@ export class AppErrorBoundary extends React.Component<Props, State> {
         ...(technical !== undefined && { technical }),
         autoResolve: true,
       });
-    } catch { /* prevent recursive crash */ }
+    } catch {
+      /* prevent recursive crash */
+    }
   }
 
   componentDidMount() {
@@ -162,10 +178,16 @@ export class AppErrorBoundary extends React.Component<Props, State> {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Date.now() - parsed.timestamp < 30000) {
-          this.setState({ error: new Error(parsed.message), retryCount: 0, circuitOpen: false });
+          this.setState({
+            error: new Error(parsed.message),
+            retryCount: 0,
+            circuitOpen: false,
+          });
         }
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   componentDidUpdate(_prevProps: Props, prevState: State) {
@@ -198,7 +220,9 @@ export class AppErrorBoundary extends React.Component<Props, State> {
     this.props.onReset?.();
     try {
       sessionStorage.removeItem('crish_error_boundary_crash');
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   };
 
   private copyError = () => {
@@ -226,7 +250,11 @@ export class AppErrorBoundary extends React.Component<Props, State> {
 
   render() {
     if (!this.state.error) {
-      return <div ref={this.containerRef} style={{ display: 'contents' }}>{this.props.children}</div>;
+      return (
+        <div ref={this.containerRef} style={{ display: 'contents' }}>
+          {this.props.children}
+        </div>
+      );
     }
 
     const variant = this.resolveVariant();
@@ -240,8 +268,12 @@ export class AppErrorBoundary extends React.Component<Props, State> {
       if (variant === 'minimal') {
         return (
           <div className={styles.appErrorMinimal} role="alert">
-            <span className={styles.appErrorMinimalIcon} aria-hidden="true">!</span>
-            <span className={styles.appErrorMinimalText}>重复出错，请重新加载</span>
+            <span className={styles.appErrorMinimalIcon} aria-hidden="true">
+              !
+            </span>
+            <span className={styles.appErrorMinimalText}>
+              重复出错，请重新加载
+            </span>
           </div>
         );
       }
@@ -250,7 +282,8 @@ export class AppErrorBoundary extends React.Component<Props, State> {
           <div className={styles.appErrorCard}>
             <div className={styles.appErrorTitle}>频繁出错</div>
             <div className={styles.appErrorMsg} role="alert">
-              应用连续 {retryCount} 次发生渲染错误（{RETRY_WINDOW_MS / 1000}秒内），暂时无法自动恢复。
+              应用连续 {retryCount} 次发生渲染错误（{RETRY_WINDOW_MS / 1000}
+              秒内），暂时无法自动恢复。
             </div>
             <div className={styles.appErrorActions}>
               <Button
@@ -287,7 +320,9 @@ export class AppErrorBoundary extends React.Component<Props, State> {
     if (variant === 'minimal') {
       return (
         <div className={styles.appErrorMinimal} role="alert">
-          <span className={styles.appErrorMinimalIcon} aria-hidden="true">!</span>
+          <span className={styles.appErrorMinimalIcon} aria-hidden="true">
+            !
+          </span>
           <span className={styles.appErrorMinimalText}>此区域出错</span>
         </div>
       );
@@ -297,8 +332,12 @@ export class AppErrorBoundary extends React.Component<Props, State> {
     if (variant === 'compact') {
       const compactTitle = this.props.title || '此面板出错';
       return (
-        <div className={`${styles.appErrorBoundary} ${styles.appErrorBoundaryCompact}`}>
-          <div className={`${styles.appErrorCard} ${styles.appErrorCardCompact}`}>
+        <div
+          className={`${styles.appErrorBoundary} ${styles.appErrorBoundaryCompact}`}
+        >
+          <div
+            className={`${styles.appErrorCard} ${styles.appErrorCardCompact}`}
+          >
             <div className={styles.appErrorTitle}>{compactTitle}</div>
             <Tooltip content={msg}>
               <div className={styles.appErrorMsg} role="alert">

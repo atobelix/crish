@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { SessionMessage } from '../../store/types';
 import { isDemoMode } from '../../api/appMode';
 import {
   chatEmptyKindAriaLabel,
@@ -11,8 +10,6 @@ export interface UseChatEmptyKindOptions {
   activeSessionId: string | null;
   messageCount?: number;
   displayCount?: number;
-  /** @deprecated 兼容直接传 messages 的旧调用/测试 */
-  messages?: SessionMessage[];
   localMsgFilter: string;
   mainSurface: string;
   hydratedFromEngine: boolean | undefined;
@@ -24,7 +21,6 @@ export function useChatEmptyKind({
   activeSessionId,
   messageCount: messageCountProp,
   displayCount: displayCountProp,
-  messages,
   localMsgFilter,
   mainSurface,
   hydratedFromEngine,
@@ -37,7 +33,7 @@ export function useChatEmptyKind({
     setHydrateTimedOut(false);
   }, [activeSessionId]);
 
-  const messageCount = messageCountProp ?? messages?.length ?? 0;
+  const messageCount = messageCountProp ?? 0;
   const displayCount = displayCountProp ?? messageCount;
 
   const messagesLoadingCandidate = useMemo(() => {

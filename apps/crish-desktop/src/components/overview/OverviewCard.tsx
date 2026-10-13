@@ -1,12 +1,7 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import styles from './OverviewCard.module.css';
-import {
-  makeSelectSessionById,
-  selectSessions,
-  useSessionField,
-  useSessionStore,
-} from '../../store/storeAccess';
-import { useSessionFolder } from '../../store';
+import { selectSessions, useSessionField } from '../../store/storeAccess';
+import { useSessionFolder, useSessionAgents } from '../../store';
 import {
   useLeafScope,
   useScopedSessionId,
@@ -36,8 +31,6 @@ import { useOverviewState } from './useOverviewState';
 export type OverviewCardProps = {
   wsId?: string;
   onOpenPanel: (id: string) => void;
-  /** @deprecated 保留 prop 兼容。@removeWhen 调用方全部迁移后移除 */
-  sessionId?: string | null;
   leafId?: string | null;
 };
 
@@ -46,22 +39,13 @@ type SecKey =
 
 const OverviewCardInner: React.FC<OverviewCardProps> = ({
   onOpenPanel,
-  sessionId: sessionIdProp,
   leafId: leafIdProp,
 }) => {
   const scope = useLeafScope();
-  const scopedSessionId = useScopedSessionId(sessionIdProp);
+  const scopedSessionId = useScopedSessionId();
   const _effectiveLeafId = leafIdProp ?? scope.leafId;
   const sessionFolder = useSessionFolder(scopedSessionId ?? '');
-  const session = useSessionStore(
-    useCallback(
-      (s) =>
-        scopedSessionId
-          ? (makeSelectSessionById(scopedSessionId)(s) ?? null)
-          : null,
-      [scopedSessionId]
-    )
-  );
+  const agents = useSessionAgents(scopedSessionId ?? '');
   const _cronJobs = useSettingsField(selectScheduledTasks);
   const tokenUsage = useSettingsField(selectTokenUsage);
   const sessions = useSessionField(selectSessions);
@@ -105,7 +89,6 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({
         ? '免费'
         : '未定价';
   void modelId;
-  const agents = session?.agents || [];
   const runningAgentCount = agents.filter((a) => a.status === 'running').length;
 
   const branch = git?.found && git.branch ? git.branch : '';
@@ -136,7 +119,6 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({
       aria-label="总览"
     >
       <OverviewHeader
-        session={session || undefined}
         onGoalClick={() => setOpenSec((p) => ({ ...p, activeTasks: true }))}
       />
 
@@ -164,7 +146,7 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({
 
       <AgentSection
         open={openSec.agents}
-        agents={session?.agents || []}
+        agents={agents}
         runningAgentCount={runningAgentCount}
         activeSessionId={scopedSessionId || undefined}
         onToggle={() => toggle('agents')}

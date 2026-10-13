@@ -145,24 +145,17 @@ export class ResizeObserverManager {
   }
 
   /**
-   * 批量挂起窗格。若未提供 paneIds 则挂起全部（通配符 '*'）
+   * 细粒度批量挂起窗格
    */
-  suspendPanes(paneIds?: string[]): void {
-    if (!paneIds || paneIds.length === 0) {
-      this.suspendedPaneIds.add('*');
-      if (this.flushRafId !== null) {
-        cancelAnimationFrame(this.flushRafId);
-        this.flushRafId = null;
-      }
-    } else {
-      for (const id of paneIds) {
-        this.suspendedPaneIds.add(id);
-      }
+  suspendPanes(paneIds: string[]): void {
+    if (!paneIds || paneIds.length === 0) return;
+    for (const id of paneIds) {
+      this.suspendedPaneIds.add(id);
     }
   }
 
   /**
-   * 批量解冻窗格。若未提供 paneIds 则解冻全部
+   * 细粒度批量解冻窗格。若未提供 paneIds 则解冻全部已挂起窗格
    */
   resumePanes(paneIds?: string[]): void {
     if (!paneIds || paneIds.length === 0) {
@@ -179,21 +172,10 @@ export class ResizeObserverManager {
   }
 
   /**
-   * 向后兼容老旧全量挂起调用
-   */
-  setSuspended(suspended: boolean): void {
-    if (suspended) {
-      this.suspendPanes();
-    } else {
-      this.resumePanes();
-    }
-  }
-
-  /**
    * 查询指定窗格是否处于挂起状态
    */
   isPaneSuspended(paneId: string): boolean {
-    return this.suspendedPaneIds.has('*') || this.suspendedPaneIds.has(paneId);
+    return this.suspendedPaneIds.has(paneId);
   }
 
   /**
@@ -201,7 +183,6 @@ export class ResizeObserverManager {
    */
   isElementSuspended(el: Element): boolean {
     if (this.suspendedPaneIds.size === 0) return false;
-    if (this.suspendedPaneIds.has('*')) return true;
 
     // 1. 显式注册的 paneId
     const explicitPaneId = this.elementPaneMap.get(el);

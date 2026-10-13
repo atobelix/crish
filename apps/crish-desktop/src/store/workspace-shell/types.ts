@@ -5,9 +5,6 @@
  * 与命令接口；`SessionTab` / dock 工厂可临时 re-export，维 07 再删。
  */
 
-/** @deprecated 树上只有 chat 叶，维 07 删除。@see SessionTab */
-export type TabKind = 'conversation' | 'tool';
-
 export interface RightToolDockState {
   collapsed: boolean;
   /** 如 files | diff | terminal | overview | agent | runtime | preview */

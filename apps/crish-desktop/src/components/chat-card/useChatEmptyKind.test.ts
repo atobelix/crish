@@ -3,23 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useChatEmptyKind } from './useChatEmptyKind';
 import { PENDING_DRAFT_SESSION_ID } from '../../store/draftSession';
-import type { SessionMessage } from '../../store/types';
-
-function msg(id: string, text: string): SessionMessage {
-  return {
-    id,
-    sender: 'user',
-    timestamp: 1,
-    text,
-  } as SessionMessage;
-}
 
 describe('useChatEmptyKind', () => {
   it('有会话、零消息、水合中：emptyKind 仍是 session-empty', () => {
     const { result } = renderHook(() =>
       useChatEmptyKind({
         activeSessionId: 'sess-remote-1',
-        messages: [],
+        messageCount: 0,
         localMsgFilter: '',
         mainSurface: 'chat',
         hydratedFromEngine: false,
@@ -36,7 +26,7 @@ describe('useChatEmptyKind', () => {
     const { result } = renderHook(() =>
       useChatEmptyKind({
         activeSessionId: PENDING_DRAFT_SESSION_ID,
-        messages: [],
+        messageCount: 0,
         localMsgFilter: '',
         mainSurface: 'chat',
         hydratedFromEngine: false,
@@ -52,7 +42,7 @@ describe('useChatEmptyKind', () => {
     const { result } = renderHook(() =>
       useChatEmptyKind({
         activeSessionId: 'sess-123',
-        messages: [],
+        messageCount: 0,
         localMsgFilter: '',
         mainSurface: 'chat',
         hydratedFromEngine: undefined,
@@ -68,7 +58,7 @@ describe('useChatEmptyKind', () => {
     const { result } = renderHook(() =>
       useChatEmptyKind({
         activeSessionId: null,
-        messages: [],
+        messageCount: 0,
         localMsgFilter: '',
         mainSurface: 'chat',
         hydratedFromEngine: undefined,

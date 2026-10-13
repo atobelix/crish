@@ -10,6 +10,7 @@ import {
   useSessionMeta,
   useSessionMessages,
   useSessionMessageCount,
+  useSessionAgents,
   useSessionTitle,
   useSessionFolder,
   useSessionIsPinned,
@@ -18,6 +19,7 @@ import {
   selectSessionMeta,
   selectSessionMessages,
   selectSessionMessageCount,
+  selectSessionAgents,
   selectSessionTitle,
   selectSessionFolder,
   selectSessionIsPinned,
@@ -27,8 +29,9 @@ import {
   selectActiveSessionId,
   clearSessionSelectorsCache,
   EMPTY_MESSAGES,
+  EMPTY_AGENTS,
 } from './sessionSelectors';
-import type { SessionState, SessionMessage } from './types';
+import type { SessionState, SessionMessage, SessionAgent } from './types';
 
 function createMockMessage(
   id: string,
@@ -58,6 +61,25 @@ function createMockSession(
     timestamp: '2026-10-12T10:00:00.000Z',
     messages,
     agents: [],
+  };
+}
+
+function createMockAgent(
+  id: string,
+  parentSessionId: string,
+  description = 'Test Agent',
+  status: 'running' | 'completed' = 'running'
+): SessionAgent {
+  return {
+    id,
+    subagentRunId: `run-${id}`,
+    parentSessionId,
+    parentRunId: `parent-run-${parentSessionId}`,
+    description,
+    mode: 'general',
+    status,
+    messages: [],
+    startedAt: 1700000000000,
   };
 }
 
@@ -280,6 +302,62 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
       expect(selectSessionFolder('')(state)).toBeUndefined();
       expect(selectSessionIsPinned('not-found')(state)).toBe(false);
       expect(selectSessionIsPinned('')(state)).toBe(false);
+    });
+
+    it('selectSessionAgents 返回当前会话的 agents 数组，会话不存在或无 agents 时返回不可变常量 EMPTY_AGENTS', () => {
+      const sess1 = createMockSession('sess-1', '会话一');
+      const agent1 = createMockAgent('ag-1', 'sess-1', '探索子代理');
+      sess1.agents = [agent1];
+
+      const sess2 = createMockSession('sess-2', '会话二');
+      delete (sess2 as any).agents;
+
+      useSessionStore.setState((st) => {
+        st.sessions = [sess1, sess2];
+        st.sessionsById = { [sess1.id]: sess1, [sess2.id]: sess2 };
+      });
+
+      const state = useSessionStore.getState();
+      const agents1 = selectSessionAgents('sess-1')(state);
+      expect(agents1).toEqual([agent1]);
+      expect(agents1[0].id).toBe('ag-1');
+
+      // sess2 无 agents 字段时安全回退至 EMPTY_AGENTS
+      const agents2 = selectSessionAgents('sess-2')(state);
+      expect(agents2).toBe(EMPTY_AGENTS);
+
+      // 不存在的会话返回 EMPTY_AGENTS，且不可修改
+      const agentsNonExistent = selectSessionAgents('non-existent')(state);
+      expect(agentsNonExistent).toBe(EMPTY_AGENTS);
+      expect(Object.isFrozen(agentsNonExistent)).toBe(true);
+
+      const agentsEmptyId = selectSessionAgents('')(state);
+      expect(agentsEmptyId).toBe(EMPTY_AGENTS);
+    });
+
+    it('当会话进行高频消息推流 (updateMessageText / updateMessageThinking) 时，selectSessionAgents 保持引用一致', () => {
+      const msg1 = createMockMessage('m1', 'hello');
+      const agent1 = createMockAgent('ag-1', 'sess-1', '代码编写');
+      const sess1 = createMockSession('sess-1', '流式隔离测试', [msg1]);
+      sess1.agents = [agent1];
+
+      useSessionStore.setState((st) => {
+        st.sessions = [sess1];
+        st.sessionsById = { [sess1.id]: sess1 };
+      });
+
+      const stateBefore = useSessionStore.getState();
+      const agentsBefore = selectSessionAgents('sess-1')(stateBefore);
+
+      stateBefore.updateMessageText('sess-1', 'm1', 'token 1 token 2');
+      const stateAfter1 = useSessionStore.getState();
+      const agentsAfter1 = selectSessionAgents('sess-1')(stateAfter1);
+      expect(agentsAfter1).toBe(agentsBefore);
+
+      stateAfter1.updateMessageThinking('sess-1', 'm1', 'thinking...');
+      const stateAfter2 = useSessionStore.getState();
+      const agentsAfter2 = selectSessionAgents('sess-1')(stateAfter2);
+      expect(agentsAfter2).toBe(agentsBefore);
     });
   });
 
@@ -762,6 +840,115 @@ describe('sessionSelectors (Wave 3 W3-2)', () => {
 
       expect(epochRenderCount).toBe(2);
       expect(screen.getByTestId('session-epoch').textContent).toBe('1');
+    });
+
+    it('useSessionAgents 仅在当前会话的 agents 真正变动时触发重渲染，消息流式推流与元数据变更保持 0 重渲染', () => {
+      const msg1 = createMockMessage('m1', 'hello');
+      const agent1 = createMockAgent('ag-1', 'sess-1', '初始子代理');
+      const sess1 = createMockSession('sess-1', '会话1', [msg1]);
+      sess1.agents = [agent1];
+
+      const sess2 = createMockSession('sess-2', '会话2', [
+        createMockMessage('m2', 'sess-2 msg'),
+      ]);
+      sess2.agents = [];
+
+      useSessionStore.setState((st) => {
+        st.sessions = [sess1, sess2];
+        st.sessionsById = {
+          [sess1.id]: sess1,
+          [sess2.id]: sess2,
+        };
+      });
+
+      let overviewRenderCount = 0;
+
+      function OverviewAgentsObserver({ sessionId }: { sessionId: string }) {
+        const agents = useSessionAgents(sessionId);
+        overviewRenderCount++;
+        return React.createElement(
+          'div',
+          { 'data-testid': 'overview-agents' },
+          agents.map((a) =>
+            React.createElement(
+              'span',
+              { key: a.id, 'data-testid': `agent-${a.id}` },
+              a.description
+            )
+          )
+        );
+      }
+
+      render(
+        React.createElement(OverviewAgentsObserver, { sessionId: 'sess-1' })
+      );
+
+      // 1. 首屏渲染 1 次
+      expect(overviewRenderCount).toBe(1);
+      expect(screen.getByTestId('agent-ag-1').textContent).toBe('初始子代理');
+
+      // 2. 模拟高频流式 Token 追加推送 sess-1：Overview 必须保持 0 重渲染！
+      act(() => {
+        useSessionStore
+          .getState()
+          .updateMessageText('sess-1', 'm1', 'token chunk 1');
+        useSessionStore
+          .getState()
+          .updateMessageText('sess-1', 'm1', 'token chunk 2');
+        useSessionStore
+          .getState()
+          .updateMessageThinking('sess-1', 'm1', 'thinking chunk');
+      });
+
+      expect(overviewRenderCount).toBe(1);
+
+      // 3. 模拟 sess-1 元数据变更（重命名、置顶）：Overview 必须保持 0 重渲染！
+      act(() => {
+        useSessionStore.getState().renameSession('sess-1', '新标题');
+        useSessionStore.getState().pinSession('sess-1');
+      });
+
+      expect(overviewRenderCount).toBe(1);
+
+      // 4. 模拟向其他会话 (sess-2) 添加子 Agent：sess-1 订阅者保持 0 重渲染！
+      act(() => {
+        useSessionStore.setState((st) => {
+          const s2 = st.sessionsById['sess-2'];
+          if (s2) {
+            s2.agents = [createMockAgent('ag-2', 'sess-2', 'sess-2 子代理')];
+          }
+        });
+      });
+
+      expect(overviewRenderCount).toBe(1);
+
+      // 5. 模拟 useShallow 保护：赋入相同子代理元素的浅拷贝数组，由于元素未变保持 0 重渲染
+      act(() => {
+        useSessionStore.setState((st) => {
+          const s1 = st.sessionsById['sess-1'];
+          if (s1 && s1.agents) {
+            s1.agents = [...s1.agents];
+          }
+        });
+      });
+
+      expect(overviewRenderCount).toBe(1);
+
+      // 6. 真实变动：为 sess-1 新增子 Agent，触发精准重渲染 1 次
+      act(() => {
+        useSessionStore.setState((st) => {
+          const s1 = st.sessionsById['sess-1'];
+          if (s1) {
+            s1.agents = [
+              agent1,
+              createMockAgent('ag-new', 'sess-1', '新子代理'),
+            ];
+          }
+        });
+      });
+
+      expect(overviewRenderCount).toBe(2);
+      expect(screen.getByTestId('agent-ag-new').textContent).toBe('新子代理');
     });
 
     it('单轨架构锁死：过渡期伪兼容适配层 sessionStoreCompatibilityAdapter.ts 已物理下线', () => {

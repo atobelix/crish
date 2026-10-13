@@ -34,10 +34,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from '../settings/SettingsUI';
-import {
-  emptyAddDraft,
-  useModelProfilesState,
-} from './useModelProfilesState';
+import { emptyAddDraft, useModelProfilesState } from './useModelProfilesState';
 import { ModelProfileList, ModelsCascadeSelect } from './ModelProfileList';
 import { ModelConfigEditor } from './ModelConfigEditor';
 import { YamlConfigEditorModal } from './YamlConfigEditorModal';
@@ -61,7 +58,10 @@ export function isLiveModelEnabled(profileId: string, model: string): boolean {
 export function resolveActiveModelAfterMetaChange(
   currentActive: { providerId: string; modelId: string } | null,
   isModelEnabled: (providerId: string, modelId: string) => boolean
-): { nextActive: { providerId: string; modelId: string } | null; selfHealed: boolean } {
+): {
+  nextActive: { providerId: string; modelId: string } | null;
+  selfHealed: boolean;
+} {
   if (!currentActive || !currentActive.providerId || !currentActive.modelId) {
     return { nextActive: currentActive, selfHealed: false };
   }
@@ -72,9 +72,9 @@ export function resolveActiveModelAfterMetaChange(
   }
 
   // 2. 当前活动模型已被停用！仅在【同服务商】内部寻找下一个已启用的模型
-  const storeIds = (getLiveProvider(currentActive.providerId)?.models ?? []).map(
-    (m) => m.id
-  );
+  const storeIds = (
+    getLiveProvider(currentActive.providerId)?.models ?? []
+  ).map((m) => m.id);
   const sameProviderNext = storeIds.find((m) => {
     if (m === currentActive.modelId) return false;
     return isModelEnabled(currentActive.providerId, m);
@@ -82,7 +82,10 @@ export function resolveActiveModelAfterMetaChange(
 
   if (sameProviderNext) {
     return {
-      nextActive: { providerId: currentActive.providerId, modelId: sameProviderNext },
+      nextActive: {
+        providerId: currentActive.providerId,
+        modelId: sameProviderNext,
+      },
       selfHealed: true,
     };
   }
@@ -111,37 +114,57 @@ export const AddProviderButton: React.FC<{
   </Button>
 );
 
-/**
- * @deprecated 兼容旧测试入口：历史下拉菜单已废除，现转发为直进配置。
- * @see AddProviderButton
- */
-export const AddProviderMenu: React.FC<{
-  addOpen: boolean;
-  setAddOpen: (v: boolean) => void;
-  onAddTemplate?: (format: 'openai' | 'anthropic') => void;
-  onAddPreset?: (preset: { id: string; name: string }) => void;
-  onAddDirect?: () => void;
-}> = ({ onAddDirect }) => {
-  // 废弃壳：保持可 import 的旧导出；实际行为 = 直接添加
-  return <AddProviderButton onAdd={() => onAddDirect?.()} />;
-};
-
-export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
+export const ModelsSettingsTab: React.FC<Props> = ({
+  _onBlockingOverlayChange,
+}) => {
   const { showToast: _showToast } = useToast();
   const {
-    profiles, selectedId, setSelectedId, selected,
-    keyDraft, setKeyDraft,
-    testBusy, scanBusy, checkBusy,
-    modelFilter, setModelFilter, configOpenId,
-    manualOpen, setManualOpen, addDraft, setAddDraft,
-    cfgDraft, setCfgDraft, editingName, setEditingName,
-    nameDraft, setNameDraft, confirmDeleteId, setConfirmDeleteId,
-    refresh, notify, runAsLocalMutation, saveKey, addCustomProvider,
-    handleManualAdd, openConfigFor, closeConfig, saveConfig,
-    runTest, runScan, runCheck,
-    scanModalOpen, setScanModalOpen, scannedModelsList, confirmScannedModels,
-    modelsList, modelsCount,
-    selectedLabel, hasKeySelected, activeProfileId, globalActiveModelId,
+    profiles,
+    selectedId,
+    setSelectedId,
+    selected,
+    keyDraft,
+    setKeyDraft,
+    testBusy,
+    scanBusy,
+    checkBusy,
+    modelFilter,
+    setModelFilter,
+    configOpenId,
+    manualOpen,
+    setManualOpen,
+    addDraft,
+    setAddDraft,
+    cfgDraft,
+    setCfgDraft,
+    editingName,
+    setEditingName,
+    nameDraft,
+    setNameDraft,
+    confirmDeleteId,
+    setConfirmDeleteId,
+    refresh,
+    notify,
+    runAsLocalMutation,
+    saveKey,
+    addCustomProvider,
+    handleManualAdd,
+    openConfigFor,
+    closeConfig,
+    saveConfig,
+    runTest,
+    runScan,
+    runCheck,
+    scanModalOpen,
+    setScanModalOpen,
+    scannedModelsList,
+    confirmScannedModels,
+    modelsList,
+    modelsCount,
+    selectedLabel,
+    hasKeySelected,
+    activeProfileId,
+    globalActiveModelId,
   } = useModelProfilesState();
 
   /**
@@ -173,7 +196,8 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
   const [yamlEditorOpen, setYamlEditorOpen] = useState(false);
   const [yamlMenuOpen, setYamlMenuOpen] = useState(false);
   const [availableOpeners, setAvailableOpeners] = useState<HostOpener[]>([]);
-  const [systemFileManagerOpener, setSystemFileManagerOpener] = useState<HostOpener | null>(null);
+  const [systemFileManagerOpener, setSystemFileManagerOpener] =
+    useState<HostOpener | null>(null);
   // 真源路径唯一定点 = 字典镜像（Rust workbench_read_models_yaml 返回）；
   // 订阅镜像版本号保证镜像重载后路径与回调同步更新
   const catalogVersion = useModelsCatalogVersion();
@@ -193,7 +217,8 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
     listHostOpeners()
       .then((openers) => {
         if (!active) return;
-        const fileManager = openers.find((o) => o.id === 'system-file-manager') ?? null;
+        const fileManager =
+          openers.find((o) => o.id === 'system-file-manager') ?? null;
         setSystemFileManagerOpener(fileManager);
         const filtered = openers.filter(
           (o) =>
@@ -236,14 +261,20 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
       if (!selfHealed) return;
       void applyActiveModel(nextActive);
       if (nextActive) {
-        notify(true, `当前模型已停用，已自动切换至同厂商模型: ${nextActive.modelId}`);
+        notify(
+          true,
+          `当前模型已停用，已自动切换至同厂商模型: ${nextActive.modelId}`
+        );
       } else {
         notify(false, `当前服务商已无可用模型，请手动选择`);
       }
       return;
     }
 
-    if (!previous || isLiveModelEnabled(previous.providerId, previous.modelId)) {
+    if (
+      !previous ||
+      isLiveModelEnabled(previous.providerId, previous.modelId)
+    ) {
       return;
     }
     const { nextActive } = resolveActiveModelAfterMetaChange(
@@ -252,11 +283,20 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
     );
     if (nextActive) {
       void applyActiveModel(nextActive);
-      notify(true, `当前模型已停用，已自动切换至同厂商模型: ${nextActive.modelId}`);
+      notify(
+        true,
+        `当前模型已停用，已自动切换至同厂商模型: ${nextActive.modelId}`
+      );
     } else {
       notify(false, `当前服务商已无可用模型，请手动选择`);
     }
-  }, [catalogVersion, activeProfileId, globalActiveModelId, notify, applyActiveModel]);
+  }, [
+    catalogVersion,
+    activeProfileId,
+    globalActiveModelId,
+    notify,
+    applyActiveModel,
+  ]);
 
   // 调起指定外部编辑器
   const handleOpenExternal = useCallback(
@@ -324,8 +364,16 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
       label: op.displayName || op.label || op.id,
       onClick: () => void handleOpenExternal(op.id),
     })),
-    { id: 'default', label: '系统默认程序打开', onClick: () => void handleOpenDefault() },
-    { id: 'reveal', label: '在文件资源管理器中定位', onClick: () => void handleReveal() },
+    {
+      id: 'default',
+      label: '系统默认程序打开',
+      onClick: () => void handleOpenDefault(),
+    },
+    {
+      id: 'reveal',
+      label: '在文件资源管理器中定位',
+      onClick: () => void handleReveal(),
+    },
     { id: 'copy-path', label: '复制绝对路径', onClick: handleCopyPath },
   ];
 
@@ -338,7 +386,14 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
           type="button"
           variant="secondary"
           size="sm"
-          icon={<AppIcon name="file-code" size={13} className={styles.yamlConfigIcon} aria-hidden />}
+          icon={
+            <AppIcon
+              name="file-code"
+              size={13}
+              className={styles.yamlConfigIcon}
+              aria-hidden
+            />
+          }
           onClick={() => setYamlEditorOpen(true)}
           aria-label="在内置编辑器中编辑模型配置文件 (models.yaml)"
         >
@@ -361,7 +416,9 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
           }
         >
           <div role="menu" aria-label="模型配置文件直达选项">
-            <div className={yamlStyles.menuSectionTitle}>模型配置文件 (models.yaml)</div>
+            <div className={yamlStyles.menuSectionTitle}>
+              模型配置文件 (models.yaml)
+            </div>
             <Button
               bare
               type="button"
@@ -389,7 +446,9 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
                 onClick={() => void handleOpenExternal(op.id)}
               >
                 {getOpenerIcon(op, 14)}
-                <span className={yamlStyles.openerName}>{op.displayName || op.label || op.id}</span>
+                <span className={yamlStyles.openerName}>
+                  {op.displayName || op.label || op.id}
+                </span>
               </Button>
             ))}
 
@@ -452,21 +511,23 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
       {/* Default model */}
       <div className={styles.mrdDefaultSection}>
         <SettingsSection title="默认模型">
-        <SettingsCard>
-          <SettingsRow
-            title="全局默认模型"
-            desc="可选。不指定时，在对话里选择模型即可"
-            control={
-              <ModelsCascadeSelect
-                activeProfileId={activeProfileId || ''}
-                activeModelId={globalActiveModelId || ''}
-              onChange={(pId, mId) => void applyActiveModel({ providerId: pId, modelId: mId })}
-              onClear={() => void applyActiveModel(null)}
-              />
-            }
-          />
-        </SettingsCard>
-      </SettingsSection>
+          <SettingsCard>
+            <SettingsRow
+              title="全局默认模型"
+              desc="可选。不指定时，在对话里选择模型即可"
+              control={
+                <ModelsCascadeSelect
+                  activeProfileId={activeProfileId || ''}
+                  activeModelId={globalActiveModelId || ''}
+                  onChange={(pId, mId) =>
+                    void applyActiveModel({ providerId: pId, modelId: mId })
+                  }
+                  onClear={() => void applyActiveModel(null)}
+                />
+              }
+            />
+          </SettingsCard>
+        </SettingsSection>
       </div>
 
       {/* Provider split layout */}
@@ -478,22 +539,55 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
 
         <ModelConfigEditor
           providerConfig={{
-            selected, profiles, selectedLabel, hasKeySelected,
-            editingName, nameDraft, setNameDraft, setEditingName,
-            confirmDeleteId, setConfirmDeleteId, keyDraft, setKeyDraft,
-            saveKey, refresh, notify, runAsLocalMutation, setSelectedId,
+            selected,
+            profiles,
+            selectedLabel,
+            hasKeySelected,
+            editingName,
+            nameDraft,
+            setNameDraft,
+            setEditingName,
+            confirmDeleteId,
+            setConfirmDeleteId,
+            keyDraft,
+            setKeyDraft,
+            saveKey,
+            refresh,
+            notify,
+            runAsLocalMutation,
+            setSelectedId,
           }}
           modelConfig={{
-            runCheck, runScan, checkBusy, scanBusy,
-            modelFilter, setModelFilter, manualOpen, setManualOpen,
-            addDraft, setAddDraft, handleManualAdd, emptyAddDraft,
-            modelsList, modelsCount,
-            scanModalOpen, setScanModalOpen, scannedModelsList, confirmScannedModels,
+            runCheck,
+            runScan,
+            checkBusy,
+            scanBusy,
+            modelFilter,
+            setModelFilter,
+            manualOpen,
+            setManualOpen,
+            addDraft,
+            setAddDraft,
+            handleManualAdd,
+            emptyAddDraft,
+            modelsList,
+            modelsCount,
+            scanModalOpen,
+            setScanModalOpen,
+            scannedModelsList,
+            confirmScannedModels,
           }}
           capConfig={{
-            configOpenId, cfgDraft, setCfgDraft,
-            openConfigFor, closeConfig, saveConfig, runTest, testBusy,
-            notify, runAsLocalMutation,
+            configOpenId,
+            cfgDraft,
+            setCfgDraft,
+            openConfigFor,
+            closeConfig,
+            saveConfig,
+            runTest,
+            testBusy,
+            notify,
+            runAsLocalMutation,
           }}
         />
       </div>

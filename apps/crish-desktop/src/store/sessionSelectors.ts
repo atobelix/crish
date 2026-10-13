@@ -19,6 +19,7 @@ import type {
   SessionMessage,
   SessionGoalMode,
   SessionImportMeta,
+  SessionAgent,
 } from './types';
 
 /**
@@ -55,6 +56,9 @@ export interface SessionMeta {
 
 /** 不可变全局空消息数组常量，彻底杜绝 fallback [] 导致的引用漂移与无效重绘 */
 export const EMPTY_MESSAGES: readonly SessionMessage[] = Object.freeze([]);
+
+/** 不可变全局空子 Agent 数组常量，彻底杜绝 fallback [] 导致的引用漂移与无效重绘 */
+export const EMPTY_AGENTS: readonly SessionAgent[] = Object.freeze([]);
 
 /** 浅比较数组元素引用一致性 */
 function shallowArrayEqual<T>(a: T[] | undefined, b: T[] | undefined): boolean {
@@ -261,6 +265,18 @@ export const selectSessionMessages =
 export const makeSelectSessionMessages = selectSessionMessages;
 
 /**
+ * 单会话子 Agent 列表选择器
+ * 仅返回当前会话的 agents 数组引用，会话不存在或无子 Agent 时返回不可变常量 EMPTY_AGENTS
+ */
+export const selectSessionAgents =
+  (sessionId: string) =>
+  (s: SessionStoreState): SessionAgent[] =>
+    (s.sessionsById?.[sessionId]?.agents as SessionAgent[]) ??
+    (EMPTY_AGENTS as SessionAgent[]);
+
+export const makeSelectSessionAgents = selectSessionAgents;
+
+/**
  * 单会话消息数量选择器
  * 优先取 messages 数组长度，未水合时回退至 messageCount
  */
@@ -360,6 +376,19 @@ export function useSessionMessages(sessionId: string): SessionMessage[] {
     [sessionId]
   );
   return useSessionStore(selector);
+}
+
+/**
+ * 订阅单个会话的子 Agent 列表
+ * 使用 useShallow 保持引用稳定，仅在当前会话的 agents 真正变动时唤醒订阅者。
+ * 消息流式推流（仅变更 text/thinking 等消息内容）绝不触发本 Hook 的订阅者重渲染。
+ */
+export function useSessionAgents(sessionId: string): SessionAgent[] {
+  const selector = useCallback(
+    (state: SessionStoreState) => selectSessionAgents(sessionId)(state),
+    [sessionId]
+  );
+  return useSessionStore(useShallow(selector));
 }
 
 /**

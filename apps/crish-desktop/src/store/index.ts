@@ -79,6 +79,7 @@ export {
   useSessionMeta,
   useSessionMessages,
   useSessionMessageCount,
+  useSessionAgents,
   useSessionTitle,
   useSessionFolder,
   useSessionIsPinned,
@@ -86,6 +87,7 @@ export {
   selectSessionMeta,
   selectSessionMessages,
   selectSessionMessageCount,
+  selectSessionAgents,
   selectSessionTitle,
   selectSessionFolder,
   selectSessionIsPinned,
@@ -95,10 +97,12 @@ export {
   makeSelectSessionMeta,
   makeSelectSessionMessages,
   makeSelectSessionMessageCount,
+  makeSelectSessionAgents,
   clearSessionSelectorsCache,
   isSessionMetaEqual,
   extractSessionMeta,
   EMPTY_MESSAGES,
+  EMPTY_AGENTS,
 } from './sessionSelectors';
 export type { SessionMeta } from './sessionSelectors';
 

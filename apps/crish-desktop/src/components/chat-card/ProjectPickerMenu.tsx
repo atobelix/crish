@@ -28,8 +28,6 @@ export interface ProjectPickerMenuProps {
   sessionId?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** @deprecated 优先使用 onOpenChange(false)。@see onOpenChange */
-  onClose?: () => void;
   onChanged?: () => void;
   /** 真实触发器（项目名按钮），用于锚定 Popover */
   children: React.ReactNode;
@@ -46,7 +44,6 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
   sessionId: sessionIdProp,
   open,
   onOpenChange,
-  onClose,
   onChanged,
   children,
   onContentMouseEnter,
@@ -226,7 +223,6 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
       <SmartExpandablePanel
         open={open}
         onOpenChange={onOpenChange}
-        onClose={onClose}
         trigger={children}
         items={menuItems}
         enableSearch={true}
