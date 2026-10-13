@@ -319,7 +319,7 @@ impl ToolExecutor {
         if abort.map(|s| s.is_aborted()).unwrap_or(false) {
             let mut r = Self::cancelled_result(call, duration_ms);
             r.attempt = attempt;
-            r.executed_input = Some(exec_input.clone());
+            r.executed_input = Some(exec_input);
             r.occurred_at_ms = Some(occurred_at_ms);
             return (r, recorded);
         }
@@ -442,16 +442,18 @@ impl ToolExecutor {
         mw_ctx: &ToolExecutionContext,
         abort: Option<&crate::safe_point::AbortSignal>,
     ) -> PreExecOutcome {
-        let initial = call.input.clone();
         let after_mw = match self
-            .run_middleware_before(tool, initial, mw_ctx, abort)
+            .run_middleware_before(tool, call, mw_ctx, abort)
             .await
         {
             Ok(v) => v,
             Err(e) => return e,
         };
-        if let Some(reason) = self.dispatch_pre_hook(call, ctx, after_mw.clone()).await {
-            return PreExecOutcome::Blocked(reason);
+        // SL-PERF-12：无 pre hook 时直接跳过克隆
+        if self.hooks.is_some() {
+            if let Some(reason) = self.dispatch_pre_hook(call, ctx, after_mw.clone()).await {
+                return PreExecOutcome::Blocked(reason);
+            }
         }
         PreExecOutcome::Proceed(after_mw)
     }
@@ -459,15 +461,21 @@ impl ToolExecutor {
     async fn run_middleware_before(
         &self,
         tool: &dyn agent_tools::definition::Tool,
-        mut current_input: Value,
+        call: &ToolBatchCall,
         mw_ctx: &ToolExecutionContext,
         abort: Option<&crate::safe_point::AbortSignal>,
     ) -> Result<Value, PreExecOutcome> {
+        // SL-PERF-12：无中间件时零冗余深拷贝
+        if self.middleware.is_empty() {
+            return Ok(call.input.clone());
+        }
+        let mut current_input: Option<Value> = None;
         for m in &self.middleware {
+            let input_for_mw = current_input.as_ref().unwrap_or(&call.input).clone();
             let result = run_hook_with_timeout(
                 self.middleware_timeouts.before_execute,
                 abort,
-                m.before_execute(tool, current_input.clone(), mw_ctx),
+                m.before_execute(tool, input_for_mw, mw_ctx),
             )
             .await;
             let Some(result) = result else {
@@ -476,7 +484,7 @@ impl ToolExecutor {
             match result {
                 Ok(Ok(BeforeExecuteResult::Proceed { modified_input })) => {
                     if let Some(v) = modified_input {
-                        current_input = v;
+                        current_input = Some(v);
                     }
                 }
                 Ok(Ok(BeforeExecuteResult::Block { reason })) => {
@@ -500,7 +508,7 @@ impl ToolExecutor {
                 }
             }
         }
-        Ok(current_input)
+        Ok(current_input.unwrap_or_else(|| call.input.clone()))
     }
 
     async fn dispatch_pre_hook(
@@ -536,12 +544,11 @@ impl ToolExecutor {
     ) -> Option<
         Result<Result<agent_tools::executor::ToolResult, ToolError>, tokio::time::error::Elapsed>,
     > {
-        let exec_input_clone = exec_input.clone();
         let execute = async move {
             if let Some(g) = guard {
                 execute_stream_with_output_policy(
                     tool,
-                    exec_input_clone,
+                    exec_input,
                     tool_ctx,
                     exec_ctx,
                     Some(g),
@@ -552,7 +559,7 @@ impl ToolExecutor {
             } else {
                 execute_stream_with_output_policy(
                     tool,
-                    exec_input_clone,
+                    exec_input,
                     tool_ctx,
                     exec_ctx,
                     None,
@@ -686,7 +693,8 @@ impl ToolExecutor {
         let mut r = ClassifiedToolResult::ok(&call.id, &call.tool_name, tool_result.output, 0);
         r.attempt = attempt;
         r.deduplicated = true;
-        r.executed_input = Some(exec_input.clone());
+        // SL-PERF-12：直接移交所有权，避免 Value 深克隆
+        r.executed_input = Some(exec_input);
         r.occurred_at_ms = Some(occurred_at_ms);
         (r, recorded)
     }
@@ -705,9 +713,13 @@ impl ToolExecutor {
         recorded: Vec<ToolEvent>,
     ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
         // U-OUT-RS：中间件链仍操作 Value；ok() 收口时包 Arc 作出口共享
-        let final_output = self
-            .apply_on_result_chain(tool, &exec_input, tool_result.output, mw_ctx)
-            .await;
+        // SL-PERF-12：无中间件时直接使用工具原生输出，不进入链式处理
+        let final_output = if self.middleware.is_empty() {
+            tool_result.output
+        } else {
+            self.apply_on_result_chain(tool, &exec_input, tool_result.output, mw_ctx)
+                .await
+        };
         if let Some(hooks) = &self.hooks {
             let _ = hooks
                 .dispatch(&HookEvent::ToolPost {
@@ -721,7 +733,8 @@ impl ToolExecutor {
         }
         let mut r = ClassifiedToolResult::ok(&call.id, &call.tool_name, final_output, duration_ms);
         r.attempt = attempt;
-        r.executed_input = Some(exec_input.clone());
+        // SL-PERF-12：直接移交所有权，避免 Value 深克隆
+        r.executed_input = Some(exec_input);
         r.occurred_at_ms = Some(occurred_at_ms);
         (r, recorded)
     }
@@ -733,6 +746,9 @@ impl ToolExecutor {
         mut output: Value,
         mw_ctx: &ToolExecutionContext,
     ) -> Value {
+        if self.middleware.is_empty() {
+            return output;
+        }
         for m in &self.middleware {
             let result = run_hook_with_timeout(
                 self.middleware_timeouts.on_result,
@@ -770,8 +786,10 @@ impl ToolExecutor {
         occurred_at_ms: u64,
         recorded: Vec<ToolEvent>,
     ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
-        self.apply_on_error_chain(tool, &exec_input, &err, mw_ctx)
-            .await;
+        if !self.middleware.is_empty() {
+            self.apply_on_error_chain(tool, &exec_input, &err, mw_ctx)
+                .await;
+        }
         if let Some(hooks) = &self.hooks {
             let _ = hooks
                 .dispatch(&HookEvent::ToolPost {
@@ -793,7 +811,8 @@ impl ToolExecutor {
         let (kind, msg) = classify_tool_error(&err);
         let mut r = ClassifiedToolResult::error(&call.id, &call.tool_name, kind, msg, duration_ms);
         r.attempt = attempt;
-        r.executed_input = Some(exec_input.clone());
+        // SL-PERF-12：直接移交所有权，避免 Value 深克隆
+        r.executed_input = Some(exec_input);
         r.occurred_at_ms = Some(occurred_at_ms);
         (r, recorded)
     }
@@ -805,6 +824,9 @@ impl ToolExecutor {
         err: &ToolError,
         mw_ctx: &ToolExecutionContext,
     ) {
+        if self.middleware.is_empty() {
+            return;
+        }
         for m in &self.middleware {
             let result = run_hook_with_timeout(
                 self.middleware_timeouts.on_error,

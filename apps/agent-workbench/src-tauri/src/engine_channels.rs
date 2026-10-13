@@ -701,7 +701,9 @@ pub(crate) struct BridgeLiveSink {
     /// 本 run 标识（信封 runId 注入）
     run_id: String,
     /// 真缓冲：上次 flush 时间戳 ms（D1-E）
-    last_flush_ms: std::sync::atomic::AtomicU64,
+    last_flush_ms: Arc<std::sync::atomic::AtomicU64>,
+    /// 尾帧保底定时器调度标志（ISSUE-08：防范停顿期末尾 Token 悬挂）
+    trailing_scheduled: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl BridgeLiveSink {
@@ -710,12 +712,15 @@ impl BridgeLiveSink {
         Self {
             bridge,
             run_id: run_id.into(),
-            last_flush_ms: std::sync::atomic::AtomicU64::new(0),
+            last_flush_ms: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            trailing_scheduled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
     }
 
     /// 真缓冲：距上次 flush 超过 LIVE_FLUSH_INTERVAL_MS 才冲刷，使缓冲层生效。
     /// message-end / run-terminal 等 Critical 事件仍可被调用方在更高层 flush。
+    /// ISSUE-08：若处于时间窗内未达冲刷门限，安排 8ms 后的保底冲刷（Trailing Edge Flush Guard），
+    /// 确保在文本输出停顿期或回合结束时剩余 Token 及时发射，避免末帧悬挂。
     fn maybe_flush_live(&self) {
         use std::sync::atomic::Ordering;
         const LIVE_FLUSH_INTERVAL_MS: u64 = 8;
@@ -724,7 +729,8 @@ impl BridgeLiveSink {
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
         let last = self.last_flush_ms.load(Ordering::Relaxed);
-        if now_ms.saturating_sub(last) >= LIVE_FLUSH_INTERVAL_MS {
+        let elapsed = now_ms.saturating_sub(last);
+        if elapsed >= LIVE_FLUSH_INTERVAL_MS {
             if self
                 .last_flush_ms
                 .compare_exchange(last, now_ms, Ordering::Relaxed, Ordering::Relaxed)
@@ -732,6 +738,25 @@ impl BridgeLiveSink {
             {
                 let _ = self.bridge.flush();
             }
+        } else if self
+            .trailing_scheduled
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+        {
+            let wait_ms = LIVE_FLUSH_INTERVAL_MS.saturating_sub(elapsed).max(1);
+            let bridge = Arc::clone(&self.bridge);
+            let last_flush_ms = Arc::clone(&self.last_flush_ms);
+            let trailing_scheduled = Arc::clone(&self.trailing_scheduled);
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
+                trailing_scheduled.store(false, Ordering::SeqCst);
+                let now_ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                last_flush_ms.store(now_ms, Ordering::Relaxed);
+                let _ = bridge.flush();
+            });
         }
     }
 }

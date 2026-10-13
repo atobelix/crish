@@ -155,9 +155,9 @@ pub(crate) fn create_v5_schema() -> &'static str {
         FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
     ) WITHOUT ROWID;
 
-    -- D3-5 索引：events 按类型过滤 / sessions 按 updated_at 排序
+    -- D3-5 / SEC-12 索引：events 按类型过滤 / sessions 按 updated_at 排序对齐
     CREATE INDEX IF NOT EXISTS idx_events_session_type ON events(session_id, event_type, sequence);
-    CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at, id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC, id ASC);
 
     CREATE TABLE IF NOT EXISTS runs (
         run_id TEXT PRIMARY KEY,

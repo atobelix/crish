@@ -1,11 +1,9 @@
 //! request/vendor.rs 测试旁挂（SR-06e · 拆分 · ≠ EL；经 #[path] 接线，非直接 mod）
 //!
 //! 轨A SSOT 净清后：只保留仍存在的生产符号测试（infer_reasoning_vendor /
-//! normalize_thinking_intensity / 换算纯函数 / resolve_reasoning_level 拒绝路径 /
-//! deprecated 的 infer_thinking_capability 行为钉死）。已删除的双轨入口
-//! （reasoning_effort_object / resolve_thinking_params / build_reasoning_wire /
-//! reasoning_effort_headers*）的测试随函数一并移除——出站思考键唯一入口 =
-//! assemble_thinking_dialect（dialect.rs 单测 + build_chat_tests 钉死）。
+//! normalize_thinking_intensity / 换算纯函数 / resolve_reasoning_level 拒绝路径）。
+//! 已删除的双轨入口与已切除的废弃 infer_thinking_capability 测试随代码一并移除——
+//! 出站思考键唯一入口 = assemble_thinking_dialect（dialect.rs 单测 + build_chat_tests 钉死）。
 
 use super::*;
 use crate::config::Endpoint;
@@ -124,40 +122,6 @@ fn budget_and_level_conversion_tables() {
     assert_eq!(thinking_to_gemini_thinking_level(I::Max), "high");
 }
 
-// ── deprecated infer_thinking_capability：行为钉死（禁止再接入生产出站路径）──
-
-#[test]
-#[allow(deprecated)]
-fn infer_capability_series_table_behavior() {
-    use crate::request::ReasoningFormat as F;
-    let cap = infer_thinking_capability("o3-mini");
-    assert!(cap.supported);
-    assert_eq!(cap.format, F::ReasoningEffort);
-
-    let cap = infer_thinking_capability("claude-sonnet-4-20250514");
-    assert!(cap.supported);
-    assert_eq!(cap.format, F::ThinkingBudget);
-
-    let cap = infer_thinking_capability("claude-opus-4-7");
-    assert!(cap.supported);
-    assert_eq!(
-        cap.format,
-        F::ThinkingAdaptive,
-        "Opus 4.7+ 新代际应为 ThinkingAdaptive"
-    );
-
-    let cap = infer_thinking_capability("gemini-2.5-flash");
-    assert!(cap.supported);
-    assert_eq!(cap.format, F::ThinkingLevel);
-
-    let cap = infer_thinking_capability("deepseek-reasoner");
-    assert!(cap.supported);
-
-    assert!(!infer_thinking_capability("deepseek-chat").supported);
-    assert!(!infer_thinking_capability("deepseek-v3").supported);
-    assert!(!infer_thinking_capability("gpt-4o").supported);
-    assert!(!infer_thinking_capability("unknown-model").supported);
-}
 
 // ── normalize_thinking_intensity（降级钳制；AllowDegrade 路径消费）──
 

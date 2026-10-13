@@ -165,6 +165,35 @@ pub mod fuzzy {
 pub mod search {
     use super::fuzzy::{FuzzyMatcher, PreparedQuery};
     use conex_types::FileHit;
+    use std::cmp::Ordering;
+    use std::collections::BinaryHeap;
+
+    #[derive(Debug)]
+    struct TopKEntry {
+        score: i32,
+        hit: FileHit,
+    }
+
+    impl PartialEq for TopKEntry {
+        fn eq(&self, other: &Self) -> bool {
+            self.score == other.score
+        }
+    }
+
+    impl Eq for TopKEntry {}
+
+    impl Ord for TopKEntry {
+        fn cmp(&self, other: &Self) -> Ordering {
+            // Min-Heap: 反转 score 比较，使堆顶始终为 Top-K 中的最小得分
+            other.score.cmp(&self.score)
+        }
+    }
+
+    impl PartialOrd for TopKEntry {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
 
     pub(crate) fn search_files_with_prepared(
         prepared: &PreparedQuery,
@@ -176,37 +205,64 @@ pub mod search {
             return vec![];
         }
 
-        let mut hits: Vec<FileHit> = paths
-            .iter()
-            .filter_map(|path| {
-                // Match against filename (last component) for better relevance
-                let filename = path.rsplit(['/', '\\']).next().unwrap_or(path);
-                let (score, indices) = matcher.score_and_indices_prepared(prepared, filename);
-                if score > 0 {
-                    Some(FileHit {
-                        path: path.clone(),
-                        score,
-                        match_indices: indices,
-                    })
-                } else {
-                    // Fallback: try matching against full path
-                    let (path_score, path_indices) =
-                        matcher.score_and_indices_prepared(prepared, path);
-                    if path_score > 0 {
-                        Some(FileHit {
-                            path: path.clone(),
-                            score: path_score / 2, // penalize full-path matches
-                            match_indices: path_indices,
-                        })
-                    } else {
-                        None
-                    }
-                }
-            })
-            .collect();
+        // KS-01: 采用容量固定为 limit 的 Top-K 有界最小堆，
+        // 避免对全量数十万候选文件进行全量克隆与全排序。未进入门槛的候选绝对不执行 path.clone()
+        let mut heap: BinaryHeap<TopKEntry> = BinaryHeap::with_capacity(limit);
 
+        for path in paths {
+            let min_top_score = if heap.len() == limit {
+                heap.peek().map(|top| top.score).unwrap_or(0)
+            } else {
+                0
+            };
+
+            // Match against filename (last component) for better relevance
+            let filename = path.rsplit(['/', '\\']).next().unwrap_or(path);
+            let (score, indices) = matcher.score_and_indices_prepared(prepared, filename);
+
+            let (final_score, final_indices) = if score > 0 {
+                (score, indices)
+            } else {
+                // Fallback: try matching against full path
+                let (path_score, path_indices) =
+                    matcher.score_and_indices_prepared(prepared, path);
+                let penalized = path_score / 2;
+                if penalized > 0 {
+                    (penalized, path_indices)
+                } else {
+                    continue;
+                }
+            };
+
+            if final_score <= 0 {
+                continue;
+            }
+
+            // 仅在当前得分能入围 Top-K 时才执行路径字符串克隆与入堆
+            if heap.len() < limit {
+                heap.push(TopKEntry {
+                    score: final_score,
+                    hit: FileHit {
+                        path: path.clone(),
+                        score: final_score,
+                        match_indices: final_indices,
+                    },
+                });
+            } else if final_score > min_top_score {
+                heap.pop();
+                heap.push(TopKEntry {
+                    score: final_score,
+                    hit: FileHit {
+                        path: path.clone(),
+                        score: final_score,
+                        match_indices: final_indices,
+                    },
+                });
+            }
+        }
+
+        let mut hits: Vec<FileHit> = heap.into_iter().map(|entry| entry.hit).collect();
         hits.sort_by(|a, b| b.score.cmp(&a.score));
-        hits.truncate(limit);
         hits
     }
 
@@ -529,5 +585,22 @@ mod tests {
 
         assert_eq!(files.len(), 1);
         assert!(files[0].ends_with("index.ts"));
+    }
+
+    #[test]
+    fn search_files_top_k_large_candidate_set() {
+        // KS-01: 50,000 个候选路径下的 Top-K 有界堆收集与排序测试
+        let matcher = FuzzyMatcher::new(false);
+        let paths: Vec<String> = (0..50_000)
+            .map(|i| format!("src/components/item_{i}/file_{i}.rs"))
+            .collect();
+        let limit = 20;
+        let hits = search_files("file_42", &paths, limit, &matcher);
+        assert!(!hits.is_empty());
+        assert!(hits.len() <= limit);
+        for window in hits.windows(2) {
+            assert!(window[0].score >= window[1].score);
+        }
+        assert!(hits[0].path.contains("file_42"));
     }
 }

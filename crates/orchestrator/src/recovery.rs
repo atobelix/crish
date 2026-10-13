@@ -565,7 +565,7 @@ impl RecoveryCoordinator {
         };
         let payload = fork_node_payload(&record, &ctx.task);
         // fork 与读路径同一次持锁：消除 fork 后、读路径前的 TOCTOU
-        let path_json = {
+        let path_ids: Vec<String> = {
             let mut tree = self.tree.lock().map_err(|e| RecoveryError::InvalidState {
                 message: format!("会话树锁中毒：{e}"),
             })?;
@@ -579,12 +579,12 @@ impl RecoveryCoordinator {
                     message: format!("工作流路径读取失败：{e}"),
                 }
             })?;
-            serde_json::to_string(&path.iter().map(|e| e.id.clone()).collect::<Vec<_>>()).map_err(
-                |e| RecoveryError::InvalidState {
-                    message: format!("工作流路径序列化失败：{e}"),
-                },
-            )?
+            path.into_iter().map(|e| e.id).collect()
         };
+        // 关键性能优化（DEFECT-08）：将耗时的 JSON 序列化移出 Mutex<SessionTree> 同步互斥锁临界区，避免阻塞其他线程
+        let path_json = serde_json::to_string(&path_ids).map_err(|e| RecoveryError::InvalidState {
+            message: format!("工作流路径序列化失败：{e}"),
+        })?;
         // 新 run 启动（spawner 契约：守卫校验 + 落库 + 独立 run，引擎侧实现）
         // LK-02：fork 前反查原 run 的 session_agents 行，传播其
         // parent_tool_call_id（链路键随 fork 延续，行 + 事件体真值）；

@@ -77,6 +77,22 @@ pub struct FlowNode {
     pub is_composite: bool,
 }
 
+impl FlowNode {
+    /// 卸载终态节点的任务大载荷（prompt/task），防止在长生命周期会话中海量节点内存单调无界驻留（DEFECT-17）。
+    /// 保留拓扑结构（id, depends_on, parallel, on_failed, is_composite 等）以供依赖与串行判定。
+    pub fn unload_payload(&mut self) {
+        if !self.task.is_empty() {
+            self.task = String::new();
+            self.task.shrink_to_fit();
+        }
+    }
+
+    /// 查询大载荷是否已被卸载
+    pub fn is_payload_unloaded(&self) -> bool {
+        self.task.is_empty()
+    }
+}
+
 /// 编排声明（主 agent 一次性声明整图；存 session_meta 单键 JSON，
 /// Q3 裁决：任务数 >20 再建独立表）
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -215,6 +231,27 @@ impl FlowGraph {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// 卸载指定终态节点的任务大载荷（DEFECT-17）
+    pub fn unload_node_payload(&mut self, node_id: &str) -> bool {
+        if let Some(&idx) = self.node_index.get(node_id) {
+            if let Some(node) = self.nodes.get_mut(idx) {
+                node.unload_payload();
+                return true;
+            }
+        }
+        false
+    }
+
+    /// 批量卸载所有指定终态节点的任务大载荷（DEFECT-17）
+    pub fn unload_terminal_payloads<'a, I>(&mut self, terminal_node_ids: I)
+    where
+        I: IntoIterator<Item = &'a str>,
+    {
+        for id in terminal_node_ids {
+            self.unload_node_payload(id);
+        }
     }
 
     /// 从声明构建图（staged-clone 语义：候选即输入克隆，全量校验通过才
@@ -379,7 +416,7 @@ fn dfs_visit_cycle(
 // ── 节点运行态 ────────────────────────────────────────────────────
 
 /// 流程节点状态（运行期内存态；重启时从 session_agents 行重建，
-/// Blocked 为 Block 策略的派生终态——只推进不回溯）
+/// Blocked 为 Block 策略的派生终态，Cancelled 为主动取消终态——只推进不回溯）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FlowNodeState {
     /// 待启动（未 spawn；依赖未满足或等待预算）
@@ -392,6 +429,8 @@ pub enum FlowNodeState {
     Failed,
     /// 被阻塞（前置 failed 且 Block 策略；终态，永不启动）
     Blocked,
+    /// 已取消（主动取消或批量强停；终态，永不启动，DEFECT-17）
+    Cancelled,
 }
 
 impl FlowNodeState {
@@ -403,10 +442,24 @@ impl FlowNodeState {
             Self::Completed => "completed",
             Self::Failed => "failed",
             Self::Blocked => "blocked",
+            Self::Cancelled => "cancelled",
         }
     }
 
-    /// 从子代理状态映射（Blocked 不来自子代理——阻塞节点不会被 spawn）
+    /// 从 wire 名解析（未知返回 None）
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "pending" => Some(Self::Pending),
+            "running" => Some(Self::Running),
+            "completed" => Some(Self::Completed),
+            "failed" => Some(Self::Failed),
+            "blocked" => Some(Self::Blocked),
+            "cancelled" => Some(Self::Cancelled),
+            _ => None,
+        }
+    }
+
+    /// 从子代理状态映射（Blocked / Cancelled 不来自子代理——阻塞/取消节点有独立迁移路径）
     pub fn from_subagent(state: SubagentState) -> Self {
         match state {
             SubagentState::Pending => Self::Pending,
@@ -416,9 +469,12 @@ impl FlowNodeState {
         }
     }
 
-    /// 是否终态（终态节点不重复启动）
+    /// 是否终态（终态节点不重复启动，并允许卸载大载荷）
     pub fn is_terminal(&self) -> bool {
-        matches!(self, Self::Completed | Self::Failed | Self::Blocked)
+        matches!(
+            self,
+            Self::Completed | Self::Failed | Self::Blocked | Self::Cancelled
+        )
     }
 }
 
@@ -453,5 +509,113 @@ impl FlowNodeRuntime {
             subagent_session_id: None,
             wakeup_sent: false,
         }
+    }
+
+    /// 卸载终态节点运行态冗余大载荷与瞬态字段（DEFECT-17）。
+    /// 保留核心定位键 `subagent_run_id` 与 `node_id`，清理其他非核心字段并释放内存容量。
+    pub fn unload_runtime_data(&mut self) {
+        if let Some(mut s) = self.subagent_id.take() {
+            s.clear();
+            s.shrink_to_fit();
+        }
+        if let Some(mut s) = self.subagent_session_id.take() {
+            s.clear();
+            s.shrink_to_fit();
+        }
+    }
+
+    /// 判断运行态数据是否已卸载
+    pub fn is_runtime_unloaded(&self) -> bool {
+        self.subagent_id.is_none() && self.subagent_session_id.is_none()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_node_payload_unloading() {
+        let mut node = FlowNode {
+            id: "node_1".to_string(),
+            task: "这是一段长提示词内容".repeat(100),
+            depends_on: vec!["dep_0".to_string()],
+            parallel: false,
+            on_failed: Some(FailStrategy::Block),
+            is_composite: false,
+        };
+        assert!(!node.is_payload_unloaded());
+        assert!(!node.task.is_empty());
+
+        node.unload_payload();
+        assert!(node.is_payload_unloaded());
+        assert!(node.task.is_empty());
+        // 拓扑属性依然保留完整
+        assert_eq!(node.id, "node_1");
+        assert_eq!(node.depends_on, vec!["dep_0"]);
+        assert_eq!(node.on_failed, Some(FailStrategy::Block));
+    }
+
+    #[test]
+    fn test_graph_payload_unloading() {
+        let decl = FlowDeclaration {
+            tasks: vec![
+                FlowNode {
+                    id: "a".to_string(),
+                    task: "task a prompt".to_string(),
+                    depends_on: vec![],
+                    parallel: false,
+                    on_failed: None,
+                    is_composite: false,
+                },
+                FlowNode {
+                    id: "b".to_string(),
+                    task: "task b prompt".to_string(),
+                    depends_on: vec!["a".to_string()],
+                    parallel: true,
+                    on_failed: None,
+                    is_composite: false,
+                },
+            ],
+            planner_run_id: None,
+        };
+        let mut graph = FlowGraph::from_declaration(&decl).expect("合法图");
+        assert_eq!(graph.node("a").unwrap().task, "task a prompt");
+
+        assert!(graph.unload_node_payload("a"));
+        assert!(graph.node("a").unwrap().is_payload_unloaded());
+        assert_eq!(graph.node("a").unwrap().task, "");
+        assert_eq!(graph.node("b").unwrap().task, "task b prompt");
+
+        graph.unload_terminal_payloads(["b"]);
+        assert!(graph.node("b").unwrap().is_payload_unloaded());
+    }
+
+    #[test]
+    fn test_runtime_unloading() {
+        let mut runtime = FlowNodeRuntime::new("node_x".to_string());
+        runtime.subagent_run_id = Some("run-123".to_string());
+        runtime.subagent_id = Some("sub-456".to_string());
+        runtime.subagent_session_id = Some("sess-789".to_string());
+
+        assert!(!runtime.is_runtime_unloaded());
+        runtime.unload_runtime_data();
+        assert!(runtime.is_runtime_unloaded());
+        assert_eq!(runtime.subagent_run_id.as_deref(), Some("run-123"));
+        assert!(runtime.subagent_id.is_none());
+        assert!(runtime.subagent_session_id.is_none());
+    }
+
+    #[test]
+    fn test_flow_node_state_terminal() {
+        assert!(!FlowNodeState::Pending.is_terminal());
+        assert!(!FlowNodeState::Running.is_terminal());
+        assert!(FlowNodeState::Completed.is_terminal());
+        assert!(FlowNodeState::Failed.is_terminal());
+        assert!(FlowNodeState::Blocked.is_terminal());
+        assert!(FlowNodeState::Cancelled.is_terminal());
+
+        assert_eq!(FlowNodeState::parse("cancelled"), Some(FlowNodeState::Cancelled));
+        assert_eq!(FlowNodeState::Cancelled.as_str(), "cancelled");
     }
 }

@@ -362,6 +362,26 @@ impl StreamParser {
         }
         Ok(())
     }
+
+    /// 借用检查事件序列并推进状态，避免调用方全量深拷贝（Audit-13 §5.4）
+    pub fn check_events(&mut self, events: &[ProviderStreamEvent]) -> Result<(), StreamParseError> {
+        for event in events {
+            match event {
+                ProviderStreamEvent::Stop { .. } => {
+                    if matches!(self.phase, StreamPhase::Stopped) {
+                        return Err(StreamParseError::DuplicateStop);
+                    }
+                    self.phase = StreamPhase::Stopped;
+                }
+                _ => {
+                    if matches!(self.phase, StreamPhase::Stopped) {
+                        return Err(StreamParseError::EventAfterStop);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -730,6 +750,19 @@ mod tests {
         let mut parser = StreamParser::new();
         parser.extend(Vec::<ProviderStreamEvent>::new()).unwrap();
         assert!(!parser.is_stopped());
+    }
+
+    #[test]
+    fn parser_check_events_validates_borrowed() {
+        let mut parser = StreamParser::new();
+        let events = vec![text_event(), stop_event(StopReason::Stop)];
+        parser.check_events(&events).unwrap();
+        assert!(parser.is_stopped());
+        let bad = vec![text_event()];
+        assert_eq!(
+            parser.check_events(&bad).unwrap_err(),
+            StreamParseError::EventAfterStop
+        );
     }
 
     // ---- cache_breakdown：两种口径 + miss 优先值 + 钳 0（P2 §3.3 D、§5.1 测试组） ----

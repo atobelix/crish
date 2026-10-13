@@ -298,7 +298,7 @@ fn process_batch(conn: &mut rusqlite::Connection, batch: &mut Vec<WriteTask>, st
     stats.record_batch(batch_len);
 
     if batch_len == 1 {
-        // 单条快速路径：直接事务
+        // 单条快速路径（SEC-05 / SEC-06）：直接事务 BEGIN IMMEDIATE / COMMIT，免除内部单任务 SAVEPOINT / RELEASE 包装与解析开销
         let task = batch.remove(0);
         let res = match conn.execute_batch("BEGIN IMMEDIATE;") {
             Ok(()) => {
@@ -601,5 +601,25 @@ mod blocking_write_tests {
                 kind: DbFailureKind::Other("writer_closed".to_string()),
             }
         );
+    }
+
+    #[tokio::test]
+    async fn single_task_fast_path_executes_without_savepoint() {
+        let writer = new_writer(GroupCommitConfig::default());
+        let val = writer
+            .write(|conn| {
+                conn.execute_batch("CREATE TABLE test_single (id INT); INSERT INTO test_single VALUES (99);")
+                    .map_err(|e| DbFailure {
+                        message: e.to_string(),
+                        kind: DbFailureKind::Other("test".to_string()),
+                    })?;
+                Ok::<_, DbFailure>(99usize)
+            })
+            .await
+            .expect("single task write succeeds");
+        assert_eq!(val, 99);
+        assert_eq!(writer.stats().total_operations, 1);
+        assert_eq!(writer.stats().total_batches, 1);
+        assert_eq!(writer.stats().max_batch_size_seen, 1);
     }
 }

@@ -15,7 +15,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use crate::ammonia_config;
-use crate::cache::{entry_within_budget, render_cache};
+use crate::cache::{get_render_cached, insert_render_cached};
 use crate::highlight::highlight_code;
 use crate::sanitizer::{
     is_local_path_ref, is_safe_href, is_safe_img_src, link_destination_url, sanitize_url_candidate,
@@ -159,9 +159,14 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    #[allow(dead_code)]
     fn new() -> Self {
+        Self::with_capacity(0)
+    }
+
+    fn with_capacity(capacity: usize) -> Self {
         Self {
-            output: String::new(),
+            output: String::with_capacity(capacity),
             list_stack: Vec::new(),
             table: None,
             fence: None,
@@ -198,7 +203,7 @@ impl Renderer {
         // 全量 ammonia 会 parse+reserialize,把 `&#39;`/`&quot;` 等实体按 HTML5 规则
         // un-escape (双引号属性中的 `'`、文本中的 `"` 不需要转义),破坏 byte-for-byte 兼容。
         // void 元素归一化仍需处理 handle_html 内 ammonia 输出的 `<img>` (HTML5 风格)。
-        post_process_void_elements(&self.output)
+        post_process_void_elements(std::mem::take(&mut self.output))
     }
 
     fn handle_event(&mut self, event: Event) {
@@ -278,17 +283,14 @@ impl Renderer {
         // - Rust regex crate 不支持 lookbehind, 改用 find_iter + 检查前一个字符的方式
         //   实现 `(?<!["`>])` 等效语义 (避免在 HTML 属性内识别路径)。
         // - 路径段输出 button, 非路径段走 escape_html + wrap_cjk_text_segment。
-        let emoji_translated = translate_gfm_emoji(text);
-        let html = wrap_bare_paths_and_escape(&emoji_translated);
-        self.output.push_str(&html);
+        let emoji_translated = translate_gfm_emoji_cow(text);
+        wrap_bare_paths_and_escape_into(&emoji_translated, &mut self.output);
     }
 
     fn handle_inline_code(&mut self, code: &str) {
-        let escaped = escape_html(code);
-        self.output.push_str(&format!(
-            "<code class=\"md-inline-code\">{}</code>",
-            escaped
-        ));
+        self.output.push_str("<code class=\"md-inline-code\">");
+        escape_html_into(code, &mut self.output);
+        self.output.push_str("</code>");
     }
 
     fn handle_html(&mut self, html: &str) {
@@ -305,13 +307,13 @@ impl Renderer {
             let sanitized = ammonia_config::sanitize(html);
             self.output.push_str(&sanitized);
         } else {
-            self.output.push_str(&escape_html(html));
+            escape_html_into(html, &mut self.output);
         }
     }
 
     /// 内联 raw HTML (段落/列表内的 `<script>`/`<img>`/`<em>` 等) 一律 escape。
     fn handle_inline_html(&mut self, html: &str) {
-        self.output.push_str(&escape_html(html));
+        escape_html_into(html, &mut self.output);
     }
 
     fn handle_break(&mut self) {
@@ -396,15 +398,24 @@ impl Renderer {
             pulldown_cmark::HeadingLevel::H6 => 4,
         };
         // JS: level = Math.min(hashes.length, 4)
-        self.output
-            .push_str(&format!("<h{} class=\"md-h{}\">", n, n));
+        match n {
+            1 => self.output.push_str("<h1 class=\"md-h1\">"),
+            2 => self.output.push_str("<h2 class=\"md-h2\">"),
+            3 => self.output.push_str("<h3 class=\"md-h3\">"),
+            _ => self.output.push_str("<h4 class=\"md-h4\">"),
+        }
         // 记录当前 heading level 用于 end
         self.current_heading_level = Some(n);
     }
 
     fn end_heading(&mut self) {
         if let Some(n) = self.current_heading_level.take() {
-            self.output.push_str(&format!("</h{}>", n));
+            match n {
+                1 => self.output.push_str("</h1>"),
+                2 => self.output.push_str("</h2>"),
+                3 => self.output.push_str("</h3>"),
+                _ => self.output.push_str("</h4>"),
+            }
         }
     }
 
@@ -431,22 +442,27 @@ impl Renderer {
 
     /// 把当前 fence buffer 刷出为 HTML 并追加到 output。
     /// 根据 stream_mode 选择高亮路径:
-    ///   - false → build_code_fence_html (syntect 高亮)
-    ///   - true  → build_code_fence_html_streaming (plain text, 跳过 syntect)
+    ///   - false → build_code_fence_html_into (syntect 高亮)
+    ///   - true  → build_code_fence_html_streaming_into (plain text, 跳过 syntect)
     ///
     /// 单一派发点,被 end_code_block (正常闭合) 和 render() 末尾 (软闭合未闭合 fence) 共用。
     fn flush_fence(&mut self) {
         if let Some(fence) = self.fence.take() {
-            let html = if self.stream_mode {
-                build_code_fence_html_streaming(
+            if self.stream_mode {
+                build_code_fence_html_streaming_into(
                     &fence.buffer,
                     &fence.lang,
                     fence.file_path.as_deref(),
-                )
+                    &mut self.output,
+                );
             } else {
-                build_code_fence_html(&fence.buffer, &fence.lang, fence.file_path.as_deref())
-            };
-            self.output.push_str(&html);
+                build_code_fence_html_into(
+                    &fence.buffer,
+                    &fence.lang,
+                    fence.file_path.as_deref(),
+                    &mut self.output,
+                );
+            }
         }
     }
 
@@ -467,21 +483,25 @@ impl Renderer {
             (ListKind::Unordered, 0) => ("ul", "md-ul"),
             (ListKind::Unordered, _) => ("ul", "md-ul md-ul-nested"),
         };
-        let start_attr = match kind {
-            ListKind::Ordered if start_val > 1 => format!(" start=\"{}\"", start_val),
-            _ => String::new(),
-        };
-        self.output
-            .push_str(&format!("<{} class=\"{}\"{}>", tag, class, start_attr));
+        self.output.push('<');
+        self.output.push_str(tag);
+        self.output.push_str(" class=\"");
+        self.output.push_str(class);
+        self.output.push('"');
+        if matches!(kind, ListKind::Ordered) && start_val > 1 {
+            use std::fmt::Write;
+            let _ = write!(self.output, " start=\"{}\"", start_val);
+        }
+        self.output.push('>');
     }
 
     fn end_list(&mut self) {
         if let Some(list) = self.list_stack.pop() {
             let tag = match list.kind {
-                ListKind::Ordered => "ol",
-                ListKind::Unordered => "ul",
+                ListKind::Ordered => "</ol>",
+                ListKind::Unordered => "</ul>",
             };
-            self.output.push_str(&format!("</{}>", tag));
+            self.output.push_str(tag);
         }
     }
 
@@ -492,21 +512,11 @@ impl Renderer {
             list.item_is_task = false;
             list.item_checked = false;
         }
-        // li 的初始 class 取决于列表类型:
-        //   - 有序列表项: `md-li md-ol-item` (对齐 JS markdownPlugins.ts:148/289/331)
-        //   - 无序列表项: `md-li`
-        //   - 任务列表项: pulldown-cmark 的 TaskListMarker 事件在 start_item 紧后触发,
-        //     handle_task_marker 会把刚输出的 li 标签替换为 `md-li md-task-item[ done]`。
-        //
-        // 设计理由: pulldown-cmark 不暴露 lookahead,无法在 start_item 时知道是否是 task。
-        // 改为在 start_item 时输出按 list.kind 决定的初始 li 标签,handle_task_marker 用
-        // 正则 rfind 替换最后一个 `<li class="md-li[^"]*">` 为 task 版本。
         let li_class = match self.list_stack.last().map(|l| l.kind) {
-            Some(ListKind::Ordered) => "md-li md-ol-item",
-            _ => "md-li",
+            Some(ListKind::Ordered) => "<li class=\"md-li md-ol-item\">",
+            _ => "<li class=\"md-li\">",
         };
-        self.output
-            .push_str(&format!("<li class=\"{}\">", li_class));
+        self.output.push_str(li_class);
     }
 
     fn end_item(&mut self) {
@@ -527,11 +537,12 @@ impl Renderer {
         let url = link_destination_url(dest);
         if is_local_path_ref(&url) {
             let path = sanitize_url_candidate(&url);
-            self.output.push_str(&format!(
-                "<button type=\"button\" class=\"md-path-link\" data-path=\"{}\" title=\"{}\">",
-                escape_html(&path),
-                escape_html(&path)
-            ));
+            self.output
+                .push_str("<button type=\"button\" class=\"md-path-link\" data-path=\"");
+            escape_html_into(&path, &mut self.output);
+            self.output.push_str("\" title=\"");
+            escape_html_into(&path, &mut self.output);
+            self.output.push_str("\">");
             self.link_kind = Some(LinkKind::PathLink);
             return;
         }
@@ -541,10 +552,11 @@ impl Renderer {
             return;
         }
         let safe = sanitize_url_candidate(&url);
-        self.output.push_str(&format!(
-            "<a class=\"md-a\" href=\"{}\" target=\"_blank\" rel=\"noreferrer\">",
-            escape_html_attr(&safe)
-        ));
+        self.output
+            .push_str("<a class=\"md-a\" href=\"");
+        escape_html_attr_into(&safe, &mut self.output);
+        self.output
+            .push_str("\" target=\"_blank\" rel=\"noreferrer\">");
         self.link_kind = Some(LinkKind::Anchor);
     }
 
@@ -572,11 +584,11 @@ impl Renderer {
     fn end_image(&mut self) {
         if let Some(url) = self.image_safe_url.take() {
             let alt = std::mem::take(&mut self.image_alt);
-            self.output.push_str(&format!(
-                "<img class=\"md-img\" src=\"{}\" alt=\"{}\" loading=\"lazy\" />",
-                escape_html_attr(&url),
-                escape_html_attr(&alt)
-            ));
+            self.output.push_str("<img class=\"md-img\" src=\"");
+            escape_html_attr_into(&url, &mut self.output);
+            self.output.push_str("\" alt=\"");
+            escape_html_attr_into(&alt, &mut self.output);
+            self.output.push_str("\" loading=\"lazy\" />");
         } else if self.image_unsafe {
             // 不安全图片: 降级输出 alt 文本
             let alt = std::mem::take(&mut self.image_alt);
@@ -651,8 +663,9 @@ impl Renderer {
                 }
                 t.has_body = true;
                 let stripe = stripe_class(t.body_row_index);
-                self.output
-                    .push_str(&format!("<tr class=\"md-tr{}\">", stripe));
+                self.output.push_str("<tr class=\"md-tr");
+                self.output.push_str(stripe);
+                self.output.push_str("\">");
             }
         }
     }
@@ -667,8 +680,9 @@ impl Renderer {
                         .copied()
                         .unwrap_or(Align::Left);
                     let align_attr = table_cell_align_attr(align);
-                    self.output
-                        .push_str(&format!("<td class=\"md-td\"{}></td>", align_attr));
+                    self.output.push_str("<td class=\"md-td\"");
+                    self.output.push_str(align_attr);
+                    self.output.push_str("></td>");
                     t.cell_index += 1;
                 }
                 t.body_row_index += 1;
@@ -690,11 +704,13 @@ impl Renderer {
         };
         let align_attr = table_cell_align_attr(align);
         if is_head {
-            self.output
-                .push_str(&format!("<th class=\"md-th\" scope=\"col\"{}>", align_attr));
+            self.output.push_str("<th class=\"md-th\" scope=\"col\"");
+            self.output.push_str(align_attr);
+            self.output.push('>');
         } else {
-            self.output
-                .push_str(&format!("<td class=\"md-td\"{}>", align_attr));
+            self.output.push_str("<td class=\"md-td\"");
+            self.output.push_str(align_attr);
+            self.output.push('>');
         }
     }
 
@@ -726,16 +742,14 @@ pub fn render_markdown(text: &str) -> String {
     if text.is_empty() {
         return String::new();
     }
-    // 检查缓存（零拷贝 &str 引用查表，仅在未命中且写入缓存时分配 String key）
-    if let Some(cached) = render_cache().get(text) {
+    // 检查缓存（DEF-05：零拷贝 &str 引用查表，仅在未命中且写入缓存时分配 String key）
+    if let Some(cached) = get_render_cached(text) {
         return (*cached).clone();
     }
 
     let html = render_markdown_uncached(text);
 
-    if entry_within_budget(text, &html) {
-        render_cache().insert(text.to_string(), Arc::new(html.clone()));
-    }
+    insert_render_cached(text, Arc::new(html.clone()));
     html
 }
 
@@ -754,7 +768,7 @@ pub fn render_markdown_batch(texts: Vec<String>) -> Vec<String> {
 ///
 /// 典型用法: 流式输出期间 `stream_mode=true`,最终完成态 `stream_mode=false` 走完整高亮。
 pub fn render_markdown_stream(text: &str, stream_mode: bool) -> String {
-    let mut renderer = Renderer::new();
+    let mut renderer = Renderer::with_capacity(text.len() + 256);
     renderer.stream_mode = stream_mode;
     renderer.render(text)
 }
@@ -796,7 +810,7 @@ fn render_markdown_uncached(raw: &str) -> String {
     //    否则不解析为表格。JS 实现会自动补齐,这里对齐行为。
     let table_padded = normalize_table_separators(&compact);
 
-    let mut renderer = Renderer::new();
+    let mut renderer = Renderer::with_capacity(table_padded.len() + 256);
     renderer.render(&table_padded)
 }
 
@@ -892,9 +906,28 @@ fn soft_trim_markdown_slice(s: &str) -> &str {
 ///
 /// pulldown-cmark 要求分隔行列数 ≥ 表头列数才会解析为表格。
 /// JS 实现自动补齐,这里对齐行为。仅处理 `|` 管道表格。
-fn normalize_table_separators(md: &str) -> String {
+fn normalize_table_separators<'a>(md: &'a str) -> Cow<'a, str> {
+    if !md.contains('|') {
+        return Cow::Borrowed(md);
+    }
     use crate::table::{is_table_sep_line, split_table_cells};
     let lines: Vec<&str> = md.lines().collect();
+    let mut needs_padding = false;
+    for i in 0..lines.len().saturating_sub(1) {
+        let cur = lines[i];
+        if cur.contains('|') && is_table_sep_line(lines[i + 1]) {
+            let header_cells = split_table_cells(cur);
+            let sep_cells = split_table_cells(lines[i + 1]);
+            if header_cells.len() > sep_cells.len() && header_cells.len() >= 2 {
+                needs_padding = true;
+                break;
+            }
+        }
+    }
+    if !needs_padding {
+        return Cow::Borrowed(md);
+    }
+
     let mut out = String::with_capacity(md.len() + 32);
     let mut i = 0;
     while i < lines.len() {
@@ -936,7 +969,7 @@ fn normalize_table_separators(md: &str) -> String {
     if md.ends_with('\n') && !out.ends_with('\n') {
         out.push('\n');
     }
-    out
+    Cow::Owned(out)
 }
 
 // ── 辅助函数 ──────────────────────────────────────────────────
@@ -946,12 +979,17 @@ fn normalize_table_separators(md: &str) -> String {
 /// html5ever 序列化 `<br>` `<img ...>` (无斜杠);
 /// 现有 CSS 契约与 JS DOMPurify 输出均为 `<br />` `<img ... />`。
 /// 仅处理渲染器产出的 void 元素: br / img。wbr 已是无斜杠形式,保持不变。
-fn post_process_void_elements(html: &str) -> String {
+fn post_process_void_elements(html: String) -> String {
+    let has_br = html.contains("<br>");
+    let has_img = html.contains("<img");
+    if !has_br && !has_img {
+        return html;
+    }
     // <br> → <br />
-    let s: Cow<'_, str> = if html.contains("<br>") {
-        BR_RE.replace_all(html, "<br />")
+    let s: Cow<'_, str> = if has_br {
+        BR_RE.replace_all(&html, "<br />")
     } else {
-        Cow::Borrowed(html)
+        Cow::Borrowed(&html)
     };
     // <img ...> → <img ... />  (仅在尚未自闭合时)
     if s.contains("<img") {
@@ -971,35 +1009,43 @@ fn post_process_void_elements(html: &str) -> String {
     }
 }
 
+/// HTML 正文/属性转义到目标 String 缓冲区，消除中间临时堆分配。
+#[inline]
+pub fn escape_html_into(s: &str, out: &mut String) {
+    let mut last = 0;
+    for (i, b) in s.bytes().enumerate() {
+        let rep = match b {
+            b'&' => "&amp;",
+            b'<' => "&lt;",
+            b'>' => "&gt;",
+            b'"' => "&quot;",
+            b'\'' => "&#39;",
+            _ => continue,
+        };
+        out.push_str(&s[last..i]);
+        out.push_str(rep);
+        last = i + 1;
+    }
+    out.push_str(&s[last..]);
+}
+
+/// HTML 属性值转义到目标 String 缓冲区。
+#[inline]
+pub fn escape_html_attr_into(s: &str, out: &mut String) {
+    escape_html_into(s, out);
+}
+
 /// HTML 正文/属性转义。
 pub fn escape_html(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&#39;"),
-            _ => out.push(c),
-        }
-    }
+    escape_html_into(s, &mut out);
     out
 }
 
 /// HTML 属性值转义(双引号包裹的属性值)。
 pub fn escape_html_attr(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&#39;"),
-            _ => out.push(c),
-        }
-    }
+    escape_html_attr_into(s, &mut out);
     out
 }
 
@@ -1023,20 +1069,17 @@ static BARE_PATH_RE: Lazy<Regex> = Lazy::new(|| {
     .expect("valid bare path regex")
 });
 
-/// 扫描文本中的裸路径, 包装为 `<button class="md-path-link">`。
-///
-/// 流程:
-/// 1. 用 `BARE_PATH_RE` 找出所有候选路径
-/// 2. 对每个候选, 检查前一个字符是否为 `"` / `` ` `` / `>` (JS 的 `(?<!["`>])` 等效)
-///    - 若是, 跳过该匹配 (避免在 HTML 属性内识别路径)
-/// 3. 路径段输出 button (path 经 escape_html_attr 转义)
-/// 4. 非路径段走 escape_html + wrap_cjk_text_segment
-///
-/// 与 JS 实现一致的行为:
-/// - 路径长度 > 160 不包装 (regex 已限制 {2,160}, 不会匹配超长路径)
-/// - 路径必须以 `.[A-Za-z0-9]{1,12}` 结尾 (必须有扩展名)
-fn wrap_bare_paths_and_escape(text: &str) -> String {
-    let mut out = String::with_capacity(text.len() * 2);
+/// 扫描文本中的裸路径, 包装为 `<button class="md-path-link">` 并直接写入缓冲区。
+fn wrap_bare_paths_and_escape_into(text: &str, out: &mut String) {
+    if !text.contains('.')
+        || (!text.contains('/') && !text.contains('\\') && !text.contains('~'))
+    {
+        let escaped = escape_html(text);
+        let wrapped = wrap_cjk_text_segment(&escaped);
+        out.push_str(&wrapped);
+        return;
+    }
+
     let mut last_end = 0usize;
 
     for m in BARE_PATH_RE.find_iter(text) {
@@ -1059,13 +1102,14 @@ fn wrap_bare_paths_and_escape(text: &str) -> String {
             out.push_str(&wrapped);
         }
 
-        // 输出路径段包装为 button (path 经 escape_html_attr 转义属性值, escape_html 转义文本)
-        out.push_str(&format!(
-            "<button type=\"button\" class=\"md-path-link\" data-path=\"{}\" title=\"{}\">{}</button>",
-            escape_html_attr(path),
-            escape_html_attr(path),
-            escape_html(path),
-        ));
+        // 输出路径段包装为 button (path 经 escape_html_attr_into 转义属性值, escape_html_into 转义文本)
+        out.push_str("<button type=\"button\" class=\"md-path-link\" data-path=\"");
+        escape_html_attr_into(path, out);
+        out.push_str("\" title=\"");
+        escape_html_attr_into(path, out);
+        out.push_str("\">");
+        escape_html_into(path, out);
+        out.push_str("</button>");
 
         last_end = end;
     }
@@ -1077,13 +1121,24 @@ fn wrap_bare_paths_and_escape(text: &str) -> String {
         let wrapped = wrap_cjk_text_segment(&escaped);
         out.push_str(&wrapped);
     }
+}
 
+/// 扫描文本中的裸路径, 包装为 `<button class="md-path-link">`。
+#[allow(dead_code)]
+fn wrap_bare_paths_and_escape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() * 2);
+    wrap_bare_paths_and_escape_into(text, &mut out);
     out
 }
 
 /// fence info string → 语言 id(首 token;c++ 等别名归一)。
 /// 与 markdownPlugins.ts::langFromFenceInfo 一致。
 pub fn lang_from_fence_info(info: &str) -> String {
+    lang_from_fence_info_cow(info).into_owned()
+}
+
+/// fence info string → 语言 id(首 token;c++ 等别名归一) — 零拷贝 Cow 版。
+pub fn lang_from_fence_info_cow(info: &str) -> Cow<'_, str> {
     let trimmed = info.trim();
     let first_token = trimmed.split_whitespace().next().unwrap_or("");
     let stripped = first_token
@@ -1091,125 +1146,176 @@ pub fn lang_from_fence_info(info: &str) -> String {
         .or_else(|| first_token.strip_prefix('.'))
         .unwrap_or(first_token);
     if stripped.is_empty() {
-        return String::new();
+        return Cow::Borrowed("");
     }
-    let lower = stripped.to_lowercase();
-    match lower.as_str() {
-        "c++" => "cpp".to_string(),
-        "c#" | "cs" => "csharp".to_string(),
-        "js" | "jsx" => "javascript".to_string(),
-        "kt" => "kotlin".to_string(),
-        "ts" | "tsx" => "typescript".to_string(),
-        "py" => "python".to_string(),
-        "rb" => "ruby".to_string(),
-        "rs" => "rust".to_string(),
-        "sh" | "shell" | "zsh" | "ps1" | "powershell" => "bash".to_string(),
-        "yml" => "yaml".to_string(),
-        "md" => "markdown".to_string(),
-        other => other.to_string(),
+    match stripped {
+        "c++" | "C++" => Cow::Borrowed("cpp"),
+        "c#" | "cs" | "C#" | "CS" => Cow::Borrowed("csharp"),
+        "js" | "jsx" | "JS" | "JSX" => Cow::Borrowed("javascript"),
+        "kt" | "KT" => Cow::Borrowed("kotlin"),
+        "ts" | "tsx" | "TS" | "TSX" => Cow::Borrowed("typescript"),
+        "py" | "PY" => Cow::Borrowed("python"),
+        "rb" | "RB" => Cow::Borrowed("ruby"),
+        "rs" | "RS" => Cow::Borrowed("rust"),
+        "sh" | "shell" | "zsh" | "ps1" | "powershell"
+        | "SH" | "SHELL" | "ZSH" | "PS1" | "POWERSHELL" => Cow::Borrowed("bash"),
+        "yml" | "YML" => Cow::Borrowed("yaml"),
+        "md" | "MD" => Cow::Borrowed("markdown"),
+        other => {
+            if other.bytes().all(|b| !b.is_ascii_uppercase()) {
+                Cow::Borrowed(other)
+            } else {
+                let lower = other.to_lowercase();
+                match lower.as_str() {
+                    "c++" => Cow::Borrowed("cpp"),
+                    "c#" | "cs" => Cow::Borrowed("csharp"),
+                    "js" | "jsx" => Cow::Borrowed("javascript"),
+                    "kt" => Cow::Borrowed("kotlin"),
+                    "ts" | "tsx" => Cow::Borrowed("typescript"),
+                    "py" => Cow::Borrowed("python"),
+                    "rb" => Cow::Borrowed("ruby"),
+                    "rs" => Cow::Borrowed("rust"),
+                    "sh" | "shell" | "zsh" | "ps1" | "powershell" => Cow::Borrowed("bash"),
+                    "yml" => Cow::Borrowed("yaml"),
+                    "md" => Cow::Borrowed("markdown"),
+                    _ => Cow::Owned(lower),
+                }
+            }
+        }
     }
 }
 
 /// 从 fence info string 提取 file="..." 属性值。
 pub fn extract_file_path_from_fence_info(info: &str) -> Option<String> {
+    extract_file_path_from_fence_info_str(info).map(|s| s.to_string())
+}
+
+/// 从 fence info string 提取 file="..." 属性值 — 零拷贝切片版。
+#[inline]
+pub fn extract_file_path_from_fence_info_str(info: &str) -> Option<&str> {
     if !info.contains("file=") {
         return None;
     }
-    FENCE_FILE_RE.captures(info).map(|c| {
-        c.get(1)
-            .or_else(|| c.get(2))
-            .map(|m| m.as_str().to_string())
-            .unwrap_or_default()
+    FENCE_FILE_RE.captures(info).and_then(|c| {
+        c.get(1).or_else(|| c.get(2)).map(|m| m.as_str())
     })
 }
 
 /// 构建 fence 代码块的 HTML。
 /// 与 markdownPlugins.ts::buildCodeFenceHtml 一致。
 pub fn build_code_fence_html(body_raw: &str, lang: &str, file_path: Option<&str>) -> String {
-    // 去尾部单个换行
+    let mut out = String::new();
+    build_code_fence_html_into(body_raw, lang, file_path, &mut out);
+    out
+}
+
+fn build_code_fence_html_into(
+    body_raw: &str,
+    lang: &str,
+    file_path: Option<&str>,
+    out: &mut String,
+) {
     let body = body_raw.strip_suffix('\n').unwrap_or(body_raw);
     let inner = highlight_code(body, if lang.is_empty() { None } else { Some(lang) });
-    build_code_fence_html_shell(lang, file_path, inner)
+    build_code_fence_html_shell_into(lang, file_path, &inner, out);
 }
 
 /// 构建 fence 代码块的 HTML (流式模式)。
-/// 保持与 build_code_fence_html 相同的 HTML 外壳,
-/// 但内部 code 内容用 escape_html 而非 syntect 高亮。
-/// 这样流式期和完成态的 HTML 结构一致,切换时无视觉跳变。
+#[allow(dead_code)]
 fn build_code_fence_html_streaming(body_raw: &str, lang: &str, file_path: Option<&str>) -> String {
+    let mut out = String::new();
+    build_code_fence_html_streaming_into(body_raw, lang, file_path, &mut out);
+    out
+}
+
+fn build_code_fence_html_streaming_into(
+    body_raw: &str,
+    lang: &str,
+    file_path: Option<&str>,
+    out: &mut String,
+) {
     let body = body_raw.strip_suffix('\n').unwrap_or(body_raw);
-    let inner = escape_html(body);
-    build_code_fence_html_shell(lang, file_path, inner)
+    let mut inner = String::with_capacity(body.len());
+    escape_html_into(body, &mut inner);
+    build_code_fence_html_shell_into(lang, file_path, &inner, out);
 }
 
 /// 构建 fence 代码块的 HTML 外壳 (lang 徽章 / file 面包屑 / copy 按钮 / pre>code 结构)。
 /// `inner` 为已高亮或已 escape 的 code 内容。
-/// 高亮路径 (syntect) 与流式路径 (plain text) 共用此外壳,
-/// 确保两种模式输出结构一致,切换 stream_mode 时无视觉跳变。
+#[allow(dead_code)]
 fn build_code_fence_html_shell(lang: &str, file_path: Option<&str>, inner: String) -> String {
-    let lang_badge = if lang.is_empty() {
+    let mut out = String::new();
+    build_code_fence_html_shell_into(lang, file_path, &inner, &mut out);
+    out
+}
+
+fn build_code_fence_html_shell_into(
+    lang: &str,
+    file_path: Option<&str>,
+    inner: &str,
+    out: &mut String,
+) {
+    let lang_escaped = if lang.is_empty() {
         String::new()
     } else {
-        format!(
-            "<span class=\"md-code-lang\" data-lang=\"{}\" aria-label=\"{}\">{}</span>",
-            escape_html(lang),
-            escape_html(lang),
-            escape_html(lang)
-        )
-    };
-    let block_attr = if lang.is_empty() {
-        String::new()
-    } else {
-        format!(" data-lang=\"{}\"", escape_html(lang))
+        escape_html(lang)
     };
 
-    let breadcrumb = if let Some(fp) = file_path {
+    out.push_str("<div class=\"md-code-block\"");
+    if !lang.is_empty() {
+        out.push_str(" data-lang=\"");
+        out.push_str(&lang_escaped);
+        out.push('"');
+    }
+    out.push_str("><div class=\"md-code-header\"><div class=\"md-code-header-left\">");
+
+    if let Some(fp) = file_path {
+        out.push_str("<span class=\"md-code-breadcrumb\">");
         let segments: Vec<&str> = fp.split('/').collect();
-        let parts: Vec<String> = segments
-            .iter()
-            .enumerate()
-            .map(|(i, s)| {
-                let is_last = i == segments.len() - 1;
-                let cls = if is_last {
-                    "md-code-breadcrumb-file"
-                } else {
-                    "md-code-breadcrumb-segment"
-                };
-                format!("<span class=\"{}\">{}</span>", cls, escape_html(s))
-            })
-            .collect();
-        format!(
-            "<span class=\"md-code-breadcrumb\">{}</span>",
-            parts.join("<span class=\"md-code-breadcrumb-separator\">/</span>")
-        )
-    } else {
-        String::new()
-    };
+        for (i, s) in segments.iter().enumerate() {
+            if i > 0 {
+                out.push_str("<span class=\"md-code-breadcrumb-separator\">/</span>");
+            }
+            let is_last = i == segments.len() - 1;
+            let cls = if is_last {
+                "md-code-breadcrumb-file"
+            } else {
+                "md-code-breadcrumb-segment"
+            };
+            out.push_str("<span class=\"");
+            out.push_str(cls);
+            out.push_str("\">");
+            escape_html_into(s, out);
+            out.push_str("</span>");
+        }
+        out.push_str("</span>");
+    } else if !lang.is_empty() {
+        out.push_str("<span class=\"md-code-lang\" data-lang=\"");
+        out.push_str(&lang_escaped);
+        out.push_str("\" aria-label=\"");
+        out.push_str(&lang_escaped);
+        out.push_str("\">");
+        out.push_str(&lang_escaped);
+        out.push_str("</span>");
+    }
 
-    let (left_content, right_lang) = if !breadcrumb.is_empty() {
-        (breadcrumb, lang_badge)
-    } else {
-        (lang_badge, String::new())
-    };
-
-    let actions = format!(
-        "<div class=\"md-code-actions\">{}<button type=\"button\" class=\"md-code-copy\" title=\"复制\" aria-label=\"复制代码\">复制</button></div>",
-        right_lang
-    );
-
-    let header = format!(
-        "<div class=\"md-code-header\"><div class=\"md-code-header-left\">{}</div>{}</div>",
-        left_content, actions
-    );
-
-    format!(
-        "<div class=\"md-code-block\"{}>{}{}<pre class=\"md-code-pre hljs\"><code class=\"language-{}\">{}</code></pre></div>",
-        block_attr,
-        header,
-        "",
-        escape_html(lang),
-        inner
-    )
+    out.push_str("</div><div class=\"md-code-actions\">");
+    if file_path.is_some() && !lang.is_empty() {
+        out.push_str("<span class=\"md-code-lang\" data-lang=\"");
+        out.push_str(&lang_escaped);
+        out.push_str("\" aria-label=\"");
+        out.push_str(&lang_escaped);
+        out.push_str("\">");
+        out.push_str(&lang_escaped);
+        out.push_str("</span>");
+    }
+    out.push_str("<button type=\"button\" class=\"md-code-copy\" title=\"复制\" aria-label=\"复制代码\">复制</button></div></div><pre class=\"md-code-pre hljs\"><code class=\"language-");
+    if !lang.is_empty() {
+        out.push_str(&lang_escaped);
+    }
+    out.push_str("\">");
+    out.push_str(inner);
+    out.push_str("</code></pre></div>");
 }
 
 // ── GFM Emoji 短代码转义 ────────────────────────────────────────
@@ -1292,18 +1398,24 @@ pub fn lookup_gfm_emoji(name: &str) -> Option<&'static str> {
 /// 将文本中的 GFM Emoji 短代码转义为 Unicode 字符（受默认开关约束）。
 /// 默认关闭，对齐 AGENTS §21；显式开启请用 [`translate_gfm_emoji_with`]。
 pub fn translate_gfm_emoji(text: &str) -> String {
-    translate_gfm_emoji_with(text, GFM_EMOJI_SHORTCODES_DEFAULT)
+    translate_gfm_emoji_cow(text).into_owned()
+}
+
+/// 将文本中的 GFM Emoji 短代码转义为 Unicode 字符 — 零拷贝 Cow 版。
+pub fn translate_gfm_emoji_cow<'a>(text: &'a str) -> Cow<'a, str> {
+    translate_gfm_emoji_with_cow(text, GFM_EMOJI_SHORTCODES_DEFAULT)
 }
 
 /// 将文本中的 GFM Emoji 短代码转义为 Unicode 字符。
 /// `enabled=false` 时原样返回；保证 O(N) 复杂度，无短代码时零额外分配路径。
 pub fn translate_gfm_emoji_with(text: &str, enabled: bool) -> String {
-    if !enabled {
-        return text.to_string();
-    }
-    // 快速启发式路径：如果不含冒号，直接借用
-    if !text.contains(':') {
-        return text.to_string();
+    translate_gfm_emoji_with_cow(text, enabled).into_owned()
+}
+
+/// 将文本中的 GFM Emoji 短代码转义为 Unicode 字符 — 零拷贝 Cow 版。
+pub fn translate_gfm_emoji_with_cow<'a>(text: &'a str, enabled: bool) -> Cow<'a, str> {
+    if !enabled || !text.contains(':') {
+        return Cow::Borrowed(text);
     }
 
     let mut out = String::with_capacity(text.len());
@@ -1352,13 +1464,13 @@ pub fn translate_gfm_emoji_with(text: &str, enabled: bool) -> String {
     }
 
     if last_idx == 0 {
-        return text.to_string();
+        return Cow::Borrowed(text);
     }
 
     if last_idx < len {
         out.push_str(&text[last_idx..]);
     }
-    out
+    Cow::Owned(out)
 }
 
 #[cfg(test)]
@@ -1470,5 +1582,47 @@ mod tests {
         assert_eq!(html.matches("md-task-item").count(), 50);
         assert_eq!(html.matches("md-task-item done").count(), 25);
         assert_eq!(html.matches("md-task-box checked").count(), 25);
+    }
+
+    #[test]
+    fn normalize_table_separators_returns_borrowed_when_no_pipe_or_padding_needed() {
+        let no_pipe = "# 标题\n\n正文段落，没有表格。";
+        assert!(matches!(
+            normalize_table_separators(no_pipe),
+            Cow::Borrowed(_)
+        ));
+
+        let valid_table = "| A | B |\n| --- | --- |\n| 1 | 2 |\n";
+        assert!(matches!(
+            normalize_table_separators(valid_table),
+            Cow::Borrowed(_)
+        ));
+
+        let short_sep_table = "| A | B | C |\n| --- | --- |\n| 1 | 2 | 3 |\n";
+        let padded = normalize_table_separators(short_sep_table);
+        assert!(matches!(padded, Cow::Owned(_)));
+        assert!(padded.contains(" --- |"));
+    }
+
+    #[test]
+    fn post_process_void_elements_returns_original_string_when_no_void_tags() {
+        let clean_html = "<div class=\"md-p\"><p>普通内容</p></div>".to_string();
+        let ptr = clean_html.as_ptr();
+        let processed = post_process_void_elements(clean_html);
+        assert_eq!(processed.as_ptr(), ptr, "无 void 元素时不重新分配");
+    }
+
+    #[test]
+    fn fence_info_cow_returns_borrowed_for_standard_languages() {
+        assert_eq!(lang_from_fence_info_cow("rust"), Cow::Borrowed("rust"));
+        assert_eq!(lang_from_fence_info_cow("typescript"), Cow::Borrowed("typescript"));
+        assert_eq!(lang_from_fence_info_cow("ts"), Cow::Borrowed("typescript"));
+        assert_eq!(lang_from_fence_info_cow("c++"), Cow::Borrowed("cpp"));
+
+        let info_with_file = "ts file=\"src/index.ts\"";
+        assert_eq!(
+            extract_file_path_from_fence_info_str(info_with_file),
+            Some("src/index.ts")
+        );
     }
 }

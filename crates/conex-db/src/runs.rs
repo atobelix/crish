@@ -6,11 +6,6 @@ use conex_types::RunCacheStats;
 use rusqlite::OptionalExtension;
 use std::str::FromStr;
 
-// ════════════════════════════════════════════════════════════════════
-// 临时验证垫片（R6 落地后删除）：run 生命周期 + 待处理输入 + 会话级
-// 序列号计数器——orchestrator persist/restore 层消费的最小 API 面。
-// ════════════════════════════════════════════════════════════════════
-
 /// run 状态字面量（对齐 restore.rs 快照 / frontend RunStatus 契约）
 ///
 /// 裁决 D3（11-T1）：新增 [Unknown] 变体透传未知字面量，放弃 `Copy`
@@ -124,8 +119,14 @@ impl LocalDb {
         self.write_blocking(move |conn| {
             let now = now_millis();
             conn.execute(
-                "INSERT OR REPLACE INTO runs (run_id, session_id, status, end_reason, cursor, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT INTO runs (run_id, session_id, status, end_reason, cursor, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 ON CONFLICT(run_id) DO UPDATE SET
+                     session_id = excluded.session_id,
+                     status = excluded.status,
+                     end_reason = excluded.end_reason,
+                     cursor = excluded.cursor,
+                     updated_at = excluded.updated_at",
                 rusqlite::params![
                     run_id,
                     session_id,
@@ -345,8 +346,13 @@ impl LocalDb {
         let payload = payload.to_string();
         self.write_blocking(move |conn| {
             conn.execute(
-                "INSERT OR REPLACE INTO pending_inputs (id, session_id, run_id, payload, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO pending_inputs (id, session_id, run_id, payload, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(id) DO UPDATE SET
+                     session_id = excluded.session_id,
+                     run_id = excluded.run_id,
+                     payload = excluded.payload,
+                     created_at = excluded.created_at",
                 rusqlite::params![id, session_id, run_id, payload, now_millis()],
             )
             .map_err(|e| DbFailure {
@@ -432,4 +438,76 @@ fn now_millis() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn insert_run_upsert_preserves_created_at_and_no_cascade_delete() {
+        let db = LocalDb::open_in_memory().unwrap();
+        db.write_blocking(|conn| {
+            conn.execute(
+                "INSERT INTO sessions (id, title) VALUES ('s1', 'Session 1')",
+                [],
+            )
+            .map_err(|e| DbFailure {
+                message: e.to_string(),
+                kind: DbFailureKind::Other("test".to_string()),
+            })?;
+            Ok(())
+        })
+        .unwrap();
+
+        // 1. Initial insert_run
+        db.insert_run("r1", "s1", RunStatus::Running, None, 10).unwrap();
+        let run1 = db.get_run("r1").unwrap().expect("run exists");
+        assert_eq!(run1.run_id, "r1");
+        assert_eq!(run1.session_id, "s1");
+        assert_eq!(run1.status, RunStatus::Running);
+        assert_eq!(run1.cursor, 10);
+        let created_at_1 = run1.created_at;
+
+        std::thread::sleep(std::time::Duration::from_millis(5));
+
+        // 2. Second insert_run with same run_id: must UPSERT and keep created_at
+        db.insert_run("r1", "s1", RunStatus::Completed, Some("done"), 20).unwrap();
+        let run2 = db.get_run("r1").unwrap().expect("run exists");
+        assert_eq!(run2.run_id, "r1");
+        assert_eq!(run2.status, RunStatus::Completed);
+        assert_eq!(run2.end_reason.as_deref(), Some("done"));
+        assert_eq!(run2.cursor, 20);
+        assert_eq!(run2.created_at, created_at_1, "created_at must be preserved on conflict");
+        assert!(run2.updated_at >= created_at_1);
+    }
+
+    #[test]
+    fn save_pending_input_upsert_works_without_replace() {
+        let db = LocalDb::open_in_memory().unwrap();
+        db.write_blocking(|conn| {
+            conn.execute(
+                "INSERT INTO sessions (id, title) VALUES ('s1', 'Session 1')",
+                [],
+            )
+            .map_err(|e| DbFailure {
+                message: e.to_string(),
+                kind: DbFailureKind::Other("test".to_string()),
+            })?;
+            Ok(())
+        })
+        .unwrap();
+
+        db.save_pending_input("p1", "s1", None, "payload-1").unwrap();
+        let inputs1 = db.load_pending_inputs("s1").unwrap();
+        assert_eq!(inputs1.len(), 1);
+        assert_eq!(inputs1[0].payload, "payload-1");
+
+        // Upsert same id with new payload
+        db.save_pending_input("p1", "s1", Some("r1"), "payload-2").unwrap();
+        let inputs2 = db.load_pending_inputs("s1").unwrap();
+        assert_eq!(inputs2.len(), 1);
+        assert_eq!(inputs2[0].payload, "payload-2");
+        assert_eq!(inputs2[0].run_id.as_deref(), Some("r1"));
+    }
 }

@@ -26,6 +26,39 @@ pub use conex_shared::perf_budget::{
 /// 渲染缓存: key = String, value = Arc<String>。
 pub type RenderCache = Cache<String, Arc<String>>;
 
+/// 允许借用切片 `&str` 零拷贝查表的扩展接口（DEF-05）。
+pub trait CacheBorrowExt {
+    /// 以 `&str` 借用切片查询缓存条目，避免在查表前强制克隆 String 堆内存。
+    fn get_borrowed(&self, key: &str) -> Option<Arc<String>>;
+}
+
+impl CacheBorrowExt for RenderCache {
+    #[inline]
+    fn get_borrowed(&self, key: &str) -> Option<Arc<String>> {
+        self.get(key)
+    }
+}
+
+/// 借用切片 `&str` 零拷贝查询全局渲染缓存（DEF-05）。
+///
+/// 允许直接以 `&str` 零拷贝查询，未命中时零堆分配；
+/// 仅在未命中且写入缓存时由写入方提升为 String。
+#[inline]
+pub fn get_render_cached(key: &str) -> Option<Arc<String>> {
+    render_cache().get(key)
+}
+
+/// 写入全局渲染缓存（预检查字节预算，若超预算则不插入）。
+#[inline]
+pub fn insert_render_cached(key: &str, value: Arc<String>) -> bool {
+    if entry_within_budget(key, &value) {
+        render_cache().insert(key.to_string(), value);
+        true
+    } else {
+        false
+    }
+}
+
 /// 字节估算: UTF-16 风格 (len * 2),与 JS LruCache.estimateSize 一致。
 fn estimate_size<K: AsRef<str>, V: AsRef<str>>(key: &K, value: &V) -> u32 {
     let bytes = (key.as_ref().len() + value.as_ref().len()) * 2;
@@ -94,6 +127,20 @@ mod tests {
         assert_eq!(
             r_cache.get(key_slice).as_deref().map(|s| s.as_str()),
             Some("rendered-html")
+        );
+        assert_eq!(
+            r_cache.get_borrowed(key_slice).as_deref().map(|s| s.as_str()),
+            Some("rendered-html")
+        );
+        assert_eq!(
+            get_render_cached(key_slice).as_deref().map(|s| s.as_str()),
+            Some("rendered-html")
+        );
+
+        assert!(insert_render_cached("helper-key", Arc::new("helper-val".to_string())));
+        assert_eq!(
+            get_render_cached("helper-key").as_deref().map(|s| s.as_str()),
+            Some("helper-val")
         );
 
         let h_cache = highlight_cache();

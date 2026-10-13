@@ -1,6 +1,6 @@
 //! Stream B + PE-08：Tauri 命令层 —— 会话 SQLite 持久化入口
 //!
-//! 本模块提供 13 个 `#[tauri::command]`，包装 `conex_db::LocalDb` 的会话存储方法，
+//! 本模块提供 10 个 `#[tauri::command]`，包装 `conex_db::LocalDb` 的会话存储方法，
 //! 对齐 `crish-desktop/src/api/session-persistence/sessionRustDb.ts` 的调用面。
 //! CPU/IO 密集操作统一走 `tokio::task::spawn_blocking`，避免阻塞 Tauri 命令线程。
 //! 命令错误统一为 `CoreError`（serde tagged enum，`{kind, detail}`），JS 侧可按
@@ -161,29 +161,10 @@ pub async fn save_session_body(
     Ok(())
 }
 
-/// delete_session 返回（G03 T-EG-12：清理通知载荷 = 清理结果 + 回收站位置）。
-///
-/// 前端可据 `notice` 展示清理结果，据 `trashRoot` 引导用户到回收站恢复。
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DeleteSessionResult {
-    /// 是否清理了产出目录（false = 无产出目录或越界被安全跳过）
-    pub cleaned: bool,
-    /// 已移入回收站的产出目录清单（绝对路径）
-    pub trashed_dirs: Vec<String>,
-    /// 回收站根位置（误删恢复入口，与删除工具同源）
-    pub trash_root: String,
-    /// 通知文案（清理结果 + 回收站位置，供前端展示）
-    pub notice: String,
-}
-
-/// delete_session 的 spawn_blocking 段（可测）：删除前读取产出元数据
+/// delete_session_and_read_meta（测试使用）：删除前读取产出元数据
 /// （`{session_id}:output_dir` / `{session_id}:output_root`，G01/G03 键），
 /// 再删除会话行——meta 必须先读后删，否则行消失后无法定位产出目录。
-///
-/// T-F 06 退役登记：仅随 delete_session 使用（测试直调保留），与命令一同
-/// 保留待存储架构裁决后恢复。
-#[allow(dead_code)]
+#[cfg(test)]
 fn delete_session_and_read_meta(
     db: &LocalDb,
     session_id: &str,
@@ -202,40 +183,6 @@ fn delete_session_and_read_meta(
     Ok((dir, root))
 }
 
-/// T-F 06（通信契约）退役登记：命令注册与 manifest 已退役（前端删除走
-/// IndexedDB 本地面，Rust LocalDb 面待存储架构裁决后决定是否恢复；changelog
-/// 33 可查）。函数保留待恢复。
-#[allow(dead_code)]
-#[tauri::command]
-pub async fn delete_session(
-    session_id: String,
-    app: tauri::AppHandle,
-    db_state: State<'_, SharedDb>,
-) -> Result<DeleteSessionResult, CoreError> {
-    require_session_id(&session_id)?;
-    let db = db_state.inner().local_db();
-    // 删除前读产出 meta → 删除会话行（spawn_blocking 内，避免阻塞命令线程）
-    let meta_session_id = session_id.clone();
-    let meta =
-        tokio::task::spawn_blocking(move || delete_session_and_read_meta(&db, &meta_session_id))
-            .await
-            .map_err(|e| CoreError::Internal(format!("delete_session join: {e}")))?
-            .map_err(map_db_err)?;
-    // 产出目录清理（G03 T-EG-12 完整链路：删除 → 进回收站（trash 接管）→
-    // 通知用户；越界安全红线由清理侧裁决）
-    let cleanup = crate::outputs_config::cleanup_session_outputs(
-        &app,
-        &session_id,
-        meta.0.as_deref(),
-        meta.1.as_deref(),
-    )?;
-    Ok(DeleteSessionResult {
-        cleaned: cleanup.cleaned,
-        trashed_dirs: cleanup.trashed_dirs,
-        trash_root: cleanup.trash_root,
-        notice: cleanup.notice,
-    })
-}
 
 #[tauri::command]
 pub async fn load_session_agents(
@@ -348,22 +295,6 @@ pub async fn import_from_localstorage(
     Ok(stats)
 }
 
-/// T-F 06（通信契约）退役登记：命令注册与 manifest 已退役（无消费意图；
-/// 如需会话列表按活跃排序再恢复；changelog 33 可查）。函数保留待恢复。
-#[allow(dead_code)]
-#[tauri::command]
-pub async fn touch_session(
-    session_id: String,
-    db_state: State<'_, SharedDb>,
-) -> Result<(), CoreError> {
-    require_session_id(&session_id)?;
-    let db = db_state.inner().local_db();
-    tokio::task::spawn_blocking(move || db.touch_session(&session_id))
-        .await
-        .map_err(|e| CoreError::Internal(format!("touch_session join: {e}")))?
-        .map_err(map_db_err)?;
-    Ok(())
-}
 
 // ── F11b（T-D-12）：DAG 只读快照查询 ────────────────────────────────
 

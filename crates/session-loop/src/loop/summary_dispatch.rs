@@ -57,6 +57,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use crate::safe_point::AbortSignal;
 use conex_compaction::summary_document::{summary_to_markdown, validate_summary_document};
 use conex_compaction::{recovery::SummaryState, Summarizer};
 use conex_types::events::AgentEvent;
@@ -447,6 +448,8 @@ pub struct SummaryDispatch {
     /// 护栏接线由壳层批次在 SessionSummaryCoordinator 侧装配**
     /// （summary_coordinator.rs，07 §5.4 文件域；本结构为 run 级兜底面）。
     retry_gate: Arc<Mutex<SummaryRetryGate>>,
+    /// 关联的 abort 信号（SL-PERF-04：用于支持长耗时阻塞摘要及时响应取消）
+    abort_signal: Arc<Mutex<Option<Arc<AbortSignal>>>>,
 }
 
 impl SummaryDispatch {
@@ -458,7 +461,30 @@ impl SummaryDispatch {
             retry_gate: Arc::new(Mutex::new(SummaryRetryGate::new(
                 SummaryRetryGuardConfig::default(),
             ))),
+            abort_signal: Arc::new(Mutex::new(None)),
         }
+    }
+
+    /// 装配 abort 信号（SL-PERF-04）
+    pub fn set_abort_signal(&self, signal: Option<Arc<AbortSignal>>) {
+        *self
+            .abort_signal
+            .lock()
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary abort_signal 锁中毒：{e}");
+                e.into_inner()
+            }) = signal;
+    }
+
+    /// 当前 abort 信号快照
+    pub fn abort_signal(&self) -> Option<Arc<AbortSignal>> {
+        self.abort_signal
+            .lock()
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary abort_signal 锁中毒：{e}");
+                e.into_inner()
+            })
+            .clone()
     }
 
     /// 装配 summary-background 事件发射器（EV-06 观测面；None = 不发射，
@@ -598,8 +624,9 @@ impl SummaryDispatch {
         };
 
         let (task, config, recorder, background, spawned_session_id, spawned_block_id) = prepared;
+        let abort_signal = self.abort_signal();
         let handle = tokio::spawn(async move {
-            run_summary_task(task, config, Some(recorder), background).await;
+            run_summary_task_with_abort(task, config, Some(recorder), background, abort_signal).await;
         });
         {
             let mut guard = self.task.lock().unwrap_or_else(|e| {
@@ -651,6 +678,17 @@ pub(crate) async fn run_summary_task(
     on_done: Option<SummaryOutcomeCallback>,
     background: Option<SummaryBackgroundSinkRef>,
 ) {
+    run_summary_task_with_abort(task, config, on_done, background, None).await
+}
+
+/// 支持 AbortSignal 抢断的后台任务主体（SL-PERF-04）
+pub(crate) async fn run_summary_task_with_abort(
+    task: SummaryDispatchTask,
+    config: SummaryDispatchConfig,
+    on_done: Option<SummaryOutcomeCallback>,
+    background: Option<SummaryBackgroundSinkRef>,
+    abort_signal: Option<Arc<AbortSignal>>,
+) {
     let mut attempts: u32 = 1; // 含同步那次
     let mut outcome: Option<SummaryDispatchOutcome> = None;
     for delay_ms in &config.backoff_ms {
@@ -659,7 +697,21 @@ pub(crate) async fn run_summary_task(
         }
         // 退避（±jitter；sleep 不阻塞主循环——任务独立于 run）
         let delay = jittered_ms(*delay_ms, config.jitter);
-        tokio::time::sleep(Duration::from_millis(delay)).await;
+        if let Some(sig) = abort_signal.as_ref() {
+            tokio::select! {
+                biased;
+                _ = sig.wait_aborted() => {
+                    tracing::info!(session_id = %task.session_id, "摘要重试退避被 abort 抢断");
+                    break;
+                }
+                _ = tokio::time::sleep(Duration::from_millis(delay)) => {}
+            }
+        } else {
+            tokio::time::sleep(Duration::from_millis(delay)).await;
+        }
+        if abort_signal.as_ref().map(|s| s.is_aborted()).unwrap_or(false) {
+            break;
+        }
         attempts += 1;
         // EV-06：每次退避重试发射 attempt（reason = 本次退避延迟；attempt
         // 序号单调递增，含同步那次口径）
@@ -671,7 +723,7 @@ pub(crate) async fn run_summary_task(
             Some(format!("退避重试（第 {attempts} 次；延迟 {delay}ms）")),
             Some(task.block_id.clone()),
         );
-        match summarize_once(&task, config.max_wall_ms).await {
+        match summarize_once_with_abort(&task, config.max_wall_ms, abort_signal.as_deref()).await {
             Ok(json) => {
                 // 合法 Schema V1 文档 → committed（R-G：JSON 规范面）；
                 // 校验失败按失败尝试继续（不 byte 截断 JSON，保解析）
@@ -780,12 +832,23 @@ pub(crate) async fn run_summary_task(
 /// 单次摘要调用（墙钟上限内；阻塞调用经 spawn_blocking 承接——trait 为
 /// 同步签名，真实实现可能涉及网络往返，不占用主循环 worker）。
 /// D10-A：收敛到 [summarize_via_blocking] 单源实现。
+#[allow(dead_code)]
 async fn summarize_once(task: &SummaryDispatchTask, max_wall_ms: u64) -> Result<String, String> {
-    summarize_via_blocking(
+    summarize_once_with_abort(task, max_wall_ms, None).await
+}
+
+/// 支持 AbortSignal 抢断的单次摘要调用（SL-PERF-04）
+async fn summarize_once_with_abort(
+    task: &SummaryDispatchTask,
+    max_wall_ms: u64,
+    abort_signal: Option<&AbortSignal>,
+) -> Result<String, String> {
+    summarize_via_blocking_with_abort(
         task.summarizer.clone(),
         task.dropped.clone(),
         task.existing.clone(),
         max_wall_ms,
+        abort_signal,
     )
     .await
 }
@@ -804,9 +867,42 @@ pub(crate) async fn summarize_via_blocking(
     existing: Option<String>,
     max_wall_ms: u64,
 ) -> Result<String, String> {
+    summarize_via_blocking_with_abort(summarizer, dropped, existing, max_wall_ms, None).await
+}
+
+/// 支持 AbortSignal 抢断的阻塞摘要 helper（SL-PERF-04 / D10-A / U-SUMMARY · OVL-06）
+///
+/// 与 `abort_signal.wait_aborted()` 进行 `tokio::select!` 竞速：若在阻塞计算或超时等待期间触发中止，
+/// 立即返回中断错误，避免主循环卡死达 60s 墙钟上限。
+pub(crate) async fn summarize_via_blocking_with_abort(
+    summarizer: Arc<dyn Summarizer>,
+    dropped: Vec<AgentMessage>,
+    existing: Option<String>,
+    max_wall_ms: u64,
+    abort_signal: Option<&AbortSignal>,
+) -> Result<String, String> {
+    if let Some(sig) = abort_signal {
+        if sig.is_aborted() {
+            return Err("摘要调用被中断（abort 信号已置位）".to_string());
+        }
+    }
     let call =
         tokio::task::spawn_blocking(move || summarizer.summarize(&dropped, existing.as_deref()));
-    match tokio::time::timeout(Duration::from_millis(max_wall_ms), call).await {
+    let timeout_fut = tokio::time::timeout(Duration::from_millis(max_wall_ms), call);
+
+    let res = if let Some(sig) = abort_signal {
+        tokio::select! {
+            biased;
+            _ = sig.wait_aborted() => {
+                return Err("摘要调用被中断（abort 信号触发）".to_string());
+            }
+            r = timeout_fut => r,
+        }
+    } else {
+        timeout_fut.await
+    };
+
+    match res {
         Ok(Ok(Ok(text))) => Ok(text),
         Ok(Ok(Err(err))) => Err(err),
         Ok(Err(err)) => Err(format!("摘要任务 panic：{err}")),
@@ -1624,5 +1720,86 @@ mod tests {
             .await
             .expect_err("超时必须 Err");
         assert!(err.contains("超时"), "超时文案含「超时」：{err}");
+    }
+
+    /// SL-PERF-04：信号已置位时直接中断，不进入阻塞调用
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn summarize_via_blocking_with_abort_pre_aborted() {
+        let summarizer = Arc::new(RecordingSummarizer {
+            calls: std::sync::Mutex::new(Vec::new()),
+            result: std::sync::Mutex::new(Ok(valid_json("compacted-summary-1-1"))),
+        });
+        let signal = AbortSignal::new();
+        signal.abort();
+        let err = summarize_via_blocking_with_abort(
+            summarizer.clone(),
+            dropped_messages(),
+            None,
+            5_000,
+            Some(&signal),
+        )
+        .await
+        .expect_err("已 abort 必须直接 Err");
+        assert!(err.contains("abort"), "错误信息包含 abort：{err}");
+        assert_eq!(summarizer.calls.lock().unwrap().len(), 0, "不应进入阻塞执行");
+    }
+
+    /// SL-PERF-04：阻塞调用期间 abort 信号触发，及时抢断（不卡死 5000ms）
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn summarize_via_blocking_with_abort_interrupts_hung() {
+        struct LongTask;
+        impl Summarizer for LongTask {
+            fn summarize(
+                &self,
+                _dropped: &[AgentMessage],
+                _existing: Option<&str>,
+            ) -> Result<String, String> {
+                std::thread::sleep(Duration::from_millis(3_000));
+                Ok(valid_json("compacted-summary-1-1"))
+            }
+        }
+        let signal = Arc::new(AbortSignal::new());
+        let signal_clone = signal.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            signal_clone.abort();
+        });
+        let start = std::time::Instant::now();
+        let err = summarize_via_blocking_with_abort(
+            Arc::new(LongTask),
+            dropped_messages(),
+            None,
+            10_000,
+            Some(&signal),
+        )
+        .await
+        .expect_err("抢断必须 Err");
+        assert!(err.contains("abort"), "错误信息包含 abort：{err}");
+        assert!(start.elapsed() < Duration::from_millis(1_000), "必须在 1 秒内及时抢断");
+    }
+
+    /// SL-PERF-04：后台任务退避睡眠期间监听 abort 信号并及时退出
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn run_summary_task_with_abort_interrupts_backoff() {
+        let summarizer = Arc::new(RecordingSummarizer {
+            calls: std::sync::Mutex::new(Vec::new()),
+            result: std::sync::Mutex::new(Err("初次失败".to_string())),
+        });
+        let task = task_with(summarizer, "compacted-summary-1-1");
+        let config = SummaryDispatchConfig {
+            backoff_ms: vec![5_000, 5_000],
+            jitter: 0.0,
+            max_wall_ms: 1_000,
+            max_attempts: 3,
+        };
+        let signal = Arc::new(AbortSignal::new());
+        let signal_clone = signal.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            signal_clone.abort();
+        });
+        let start = std::time::Instant::now();
+        run_summary_task_with_abort(task, config, None, None, Some(signal)).await;
+        assert!(start.elapsed() < Duration::from_millis(1_000), "退避睡眠被抢断，耗时应远小于 5000ms");
     }
 }

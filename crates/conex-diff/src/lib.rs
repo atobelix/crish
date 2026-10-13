@@ -1,8 +1,11 @@
 pub mod diff_engine {
     use conex_types::{DiffHunk, DiffLine, DiffLineKind, DiffResult};
-    use similar::{ChangeTag, TextDiff};
+    use similar::{Algorithm, ChangeTag, TextDiff};
 
     const CONTEXT_LINES: usize = 3;
+    const MAX_SAFE_DIFF_LINES: usize = 20_000;
+    const MAX_SAFE_DIFF_BYTES: usize = 5 * 1024 * 1024; // 5 MB
+    const DIFF_TIMEOUT_MS: u64 = 200;
 
     pub struct DiffEngine;
 
@@ -12,6 +15,7 @@ pub mod diff_engine {
         }
 
         /// Compute a unified diff between old_text and new_text, returning hunk-structured output.
+        /// Includes KD-03 adaptive algorithm selection and execution deadline protection.
         pub fn diff(old_text: &str, new_text: &str) -> DiffResult {
             if (std::ptr::eq(old_text.as_ptr(), new_text.as_ptr())
                 && old_text.len() == new_text.len())
@@ -24,7 +28,25 @@ pub mod diff_engine {
                 };
             }
 
-            let diff = TextDiff::from_lines(old_text, new_text);
+            let total_bytes = old_text.len() + new_text.len();
+            let old_newline_count = old_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
+            let new_newline_count = new_text.as_bytes().iter().filter(|&&b| b == b'\n').count();
+            let total_lines = old_newline_count + new_newline_count;
+
+            // KD-03: 自适应算法分流与安全预算保护
+            // 超大文本（>20,000行或>5MB）自动使用 Patience Diff 切分独立区间，避免 Myers O(N^2) CPU 爆炸；
+            // 同时挂载 200ms 执行超时保护，防止单行超大或极低相似度导致的计算停滞。
+            let algorithm = if total_lines > MAX_SAFE_DIFF_LINES || total_bytes > MAX_SAFE_DIFF_BYTES {
+                Algorithm::Patience
+            } else {
+                Algorithm::Myers
+            };
+
+            let diff = TextDiff::configure()
+                .algorithm(algorithm)
+                .timeout(std::time::Duration::from_millis(DIFF_TIMEOUT_MS))
+                .diff_lines(old_text, new_text);
+
             let mut added_lines: usize = 0;
             let mut removed_lines: usize = 0;
 
@@ -319,5 +341,36 @@ mod tests {
                 line.content
             );
         }
+    }
+
+    #[test]
+    fn large_file_budget_patience_diff_completes_without_hang() {
+        // KD-03: 生成超过 20,000 行的大文本，验证自适应切换至 Patience Diff 并在预算内瞬间完成
+        let n = 22_000;
+        let mut old_lines = Vec::with_capacity(n);
+        let mut new_lines = Vec::with_capacity(n);
+        for i in 0..n {
+            old_lines.push(format!("constant_line_{i}"));
+            if i == 100 || i == 20_000 {
+                new_lines.push(format!("modified_line_{i}"));
+            } else {
+                new_lines.push(format!("constant_line_{i}"));
+            }
+        }
+        let old_text = old_lines.join("\n") + "\n";
+        let new_text = new_lines.join("\n") + "\n";
+
+        let start = std::time::Instant::now();
+        let result = DiffEngine::diff(&old_text, &new_text);
+        let elapsed = start.elapsed();
+
+        assert_eq!(result.added_lines, 2);
+        assert_eq!(result.removed_lines, 2);
+        assert_eq!(result.hunks.len(), 2);
+        assert!(
+            elapsed.as_secs_f64() < 5.0,
+            "Diff computation exceeded safe budget: {:?}",
+            elapsed
+        );
     }
 }

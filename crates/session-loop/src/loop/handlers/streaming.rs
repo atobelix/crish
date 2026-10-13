@@ -133,6 +133,8 @@ async fn consume_stream(
             // 3-1：session_id 在流消费入口缓存一次；热路径按帧借用，构造
             // MessageDelta 时再 to_string（事件字段契约要求 owned String）。
             let session_id = state.machine.context().session_id.clone();
+            // SL-PERF-01：流消费单次基准时间戳，消除高频流式热路径每帧 now_iso_utc() 完整日历与堆分配
+            let base_timestamp = conex_shared::time::now_iso_utc();
             // Q21（T09.9）：流式消费竞速——`stream.next()` 与 abort 监听
             // future 并置，abort 触发即停收并丢弃流（取消挂起的读取）：
             // 及时中断而非等流结束 / 传输层超时（AA-01 Q21 流式消费侧
@@ -160,15 +162,21 @@ async fn consume_stream(
                         // 到达即发射（信封 sequence=None；丢帧类目 Delta——
                         // 丢帧不丢 message-end，03 §5.3-6）
                         if let Some(sink) = delta_sink {
-                            if let Some(delta) =
-                                delta_to_message_event(&session_id, assistant_message_id, &event)
-                            {
+                            if let Some(delta) = delta_to_message_event(
+                                &session_id,
+                                assistant_message_id,
+                                &base_timestamp,
+                                &event,
+                            ) {
                                 sink.push(delta);
                             }
                         } else if let Some(sink) = &state.options.hooks.live_sink {
-                            if let Some(delta) =
-                                delta_to_message_event(&session_id, assistant_message_id, &event)
-                            {
+                            if let Some(delta) = delta_to_message_event(
+                                &session_id,
+                                assistant_message_id,
+                                &base_timestamp,
+                                &event,
+                            ) {
                                 sink.push_live(delta);
                             }
                         }
@@ -715,9 +723,13 @@ fn commit_message_with_deltas(state: &mut LoopState, message: AgentMessage) {
 /// [AgentEvent::MessageDelta]；其余事件（ToolCall / ProviderDiagnostic /
 /// Stop）不进实时轨——仍走收口批量 emit（增量通道只承载 delta，PE-09 §0.3
 /// 契约点 2）
+///
+/// SL-PERF-01：timestamp 采用单次基准时间戳透传，移除高频流式热路径每帧无意义的
+/// [conex_shared::time::now_iso_utc] 完整公历换算与 `format!` 堆分配。
 fn delta_to_message_event(
     session_id: &str,
     message_id: &str,
+    timestamp: &str,
     event: &ProviderStreamEvent,
 ) -> Option<AgentEvent> {
     let block = match event {
@@ -730,7 +742,7 @@ fn delta_to_message_event(
     };
     Some(AgentEvent::MessageDelta {
         session_id: session_id.to_string(),
-        timestamp: conex_shared::time::now_iso_utc(),
+        timestamp: timestamp.to_string(),
         message_id: message_id.to_string(),
         block,
     })
@@ -738,8 +750,11 @@ fn delta_to_message_event(
 
 /// 收口 message-delta 构建（T09.1 收口轨：逐正文/思考块；start/end 由
 /// [commit_message_with_deltas] 成对夹持，01 §五.6 序列契约）
+///
+/// SL-PERF-01：同条消息的收口 deltas 共享单次时间戳，避免逐块日历格式化。
 fn emit_message_deltas(state: &mut LoopState, message: &AgentMessage) {
     let session_id = state.machine.context().session_id.clone();
+    let timestamp = conex_shared::time::now_iso_utc();
     for block in &message.blocks {
         if matches!(
             block,
@@ -747,7 +762,7 @@ fn emit_message_deltas(state: &mut LoopState, message: &AgentMessage) {
         ) {
             state.events.push(AgentEvent::MessageDelta {
                 session_id: session_id.clone(),
-                timestamp: conex_shared::time::now_iso_utc(),
+                timestamp: timestamp.clone(),
                 message_id: message.id.clone(),
                 block: block.clone(),
             });

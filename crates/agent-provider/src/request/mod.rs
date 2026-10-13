@@ -73,8 +73,6 @@ pub use tools::{
     default_input_schema, to_chat_tool_choice, to_openai_tool, to_responses_tool,
     to_responses_tool_choice, ToolChoice, ToolDefinition,
 };
-#[allow(deprecated)]
-pub use vendor::infer_thinking_capability;
 pub use vendor::{
     effort_to_budget_tokens, effort_to_gemini_thinking_level, infer_reasoning_vendor,
     normalize_reasoning_effort, normalize_thinking_intensity, resolve_reasoning_level,

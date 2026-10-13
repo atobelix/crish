@@ -24,7 +24,7 @@
 //! 顺序契约：先 `set_task_event_consumer` 后 `set_event_bridge`
 //! （批 3 main.rs 装配轮按此序，30 文档 §5 改动点 3）。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 use conex_types::events::{AgentEvent, AgentEventEnvelope};
@@ -47,10 +47,12 @@ pub(crate) struct TaskEventConsumer {
     /// 事件体 session_id（空串占位，与 EventBridgeSink 先例一致——任务
     /// 为会话级存活，归属经 payload ownerRunId 表达）
     session_id: String,
-    /// 按 owner_run_id 归组的唤醒批次（None 组 = 无归属任务，仅审计不注入）
+    /// 按 owner_run_id 归组的唤醒批次（None 组 = 无归属任务，仅审计不注入；ISSUE-15 终态即时释放空槽）
     batches: Mutex<HashMap<Option<String>, TaskWakeBatch>>,
-    /// task_id → owner_run_id（task-started 记忆；None = daemon 无归属）
+    /// task_id → owner_run_id（task-started 记忆；None = daemon 无归属；ISSUE-15 有界清理）
     owners: Mutex<HashMap<String, Option<String>>>,
+    /// 终态任务淘汰队列（保持最多 MAX_TERMINAL_OWNERS 个最近终态任务用于去重，超限即淘汰防内存发散，ISSUE-15）
+    terminal_order: Mutex<VecDeque<String>>,
     /// 任务审计聚合器（启停/终止留痕；同 task+result 原位替换防无限增长）
     audit: Mutex<TaskAuditAccumulator>,
 }
@@ -69,6 +71,7 @@ impl TaskEventConsumer {
             session_id,
             batches: Mutex::new(HashMap::new()),
             owners: Mutex::new(HashMap::new()),
+            terminal_order: Mutex::new(VecDeque::new()),
             audit: Mutex::new(TaskAuditAccumulator::new()),
         }
     }
@@ -168,6 +171,9 @@ impl TaskEventConsumer {
     /// 边界，事件到达即 drain 当前 owner 批次写共享队列；「同 run 合并
     /// 一条」语义 v1 由 group_id = `task-wake` 原位替换去重降级表达，
     /// owner 聚合完整语义留 v2）。
+    ///
+    /// ISSUE-15：任务终结时清理已完成的任务元数据映射，释放 batches 与 owners，
+    /// 消除长期运行下的无界内存发散。
     fn enqueue_wake_summary(&self, event: &AgentEvent) {
         let task_id = match event {
             AgentEvent::TaskCompleted { task_id, .. }
@@ -184,6 +190,8 @@ impl TaskEventConsumer {
             .cloned()
             .flatten();
         let Some(owner) = owner else {
+            // 无归属（daemon 任务或缺失 started 记忆）：清理已记录的 daemon 元数据（None 映射）
+            self.prune_terminal_owner(&task_id, true);
             tracing::debug!(
                 target: "task_events",
                 task_id = %task_id,
@@ -194,7 +202,7 @@ impl TaskEventConsumer {
         // 终态即入队：归组批次 push（同任务多终态原位替换）→ 合并文本 →
         // steering 条目（is_steering 受保护位）→ 共享队列 replace_or_enqueue
         let mut batches = self.batches.lock().unwrap_or_else(|e| e.into_inner());
-        let batch = batches.entry(Some(owner)).or_default();
+        let batch = batches.entry(Some(owner.clone())).or_default();
         if batch.push(event) {
             if let Some(text) = batch.drain_merged() {
                 let entry = build_wake_steering_entry(text);
@@ -203,6 +211,40 @@ impl TaskEventConsumer {
                     .unwrap_or_else(|e| e.into_inner())
                     .replace_or_enqueue(entry);
             }
+        }
+        // ISSUE-15：若批次已无待排队摘要，立即移除该 owner 槽位，防止空 TaskWakeBatch 驻留
+        if !batch.has_pending() {
+            batches.remove(&Some(owner));
+        }
+        // ISSUE-15：终态任务登记入有界淘汰队列，淘汰过时映射
+        self.prune_terminal_owner(&task_id, false);
+    }
+
+    /// 终态任务元数据解注册与有界清理（ISSUE-15）：
+    /// - daemon 任务（is_daemon = true）：不参与唤醒去重，终态立即从 owners 移除；
+    /// - 普通有属任务：在 terminal_order 中保持最多 MAX_TERMINAL_OWNERS 个（256）
+    ///   最近终态任务用于同任务二次终态去重更新；超出容量时先进先出淘汰最旧条目并从
+    ///   owners 彻底擦除，防止长期运行内存发散。
+    fn prune_terminal_owner(&self, task_id: &str, is_daemon: bool) {
+        if is_daemon {
+            self.owners
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(task_id);
+            return;
+        }
+
+        const MAX_TERMINAL_OWNERS: usize = 256;
+        let mut order = self.terminal_order.lock().unwrap_or_else(|e| e.into_inner());
+        let mut owners = self.owners.lock().unwrap_or_else(|e| e.into_inner());
+
+        if !order.iter().any(|id| id == task_id) {
+            if order.len() >= MAX_TERMINAL_OWNERS {
+                if let Some(oldest) = order.pop_front() {
+                    owners.remove(&oldest);
+                }
+            }
+            order.push_back(task_id.to_string());
         }
     }
 }
@@ -426,6 +468,50 @@ mod tests {
             queue.peek().unwrap().text,
             "任务 t-k 已被终止",
             "killed 摘要快照"
+        );
+    }
+
+    /// 验收（ISSUE-15）：终态任务元数据解注册与 batches 槽位即时清空
+    #[test]
+    fn consumer_terminal_metadata_pruned_and_batches_cleared() {
+        let (consumer, _emitter, _queue) = consumer();
+
+        // 1. 测试 daemon 任务终态立即从 owners 中移除
+        consumer.on_task_event(&started("t-daemon", ""));
+        assert!(consumer.owners.lock().unwrap().contains_key("t-daemon"));
+        consumer.on_task_event(&completed("t-daemon", 0));
+        assert!(
+            !consumer.owners.lock().unwrap().contains_key("t-daemon"),
+            "daemon 终态任务应立即从 owners 移除"
+        );
+
+        // 2. 测试有归属任务在 drain 后 batches 立即清空，不遗留空槽
+        consumer.on_task_event(&started("t-user", "run-1"));
+        consumer.on_task_event(&completed("t-user", 0));
+        assert!(
+            consumer.batches.lock().unwrap().is_empty(),
+            "batches 消费完成后应立即解注册 owner 槽位，不得常驻内存"
+        );
+
+        // 3. 测试终态元数据在达到 MAX_TERMINAL_OWNERS (256) 后的有界淘汰
+        for i in 0..300 {
+            let tid = format!("bulk-{i}");
+            consumer.on_task_event(&started(&tid, "run-1"));
+            consumer.on_task_event(&completed(&tid, 0));
+        }
+
+        let owners_count = consumer.owners.lock().unwrap().len();
+        assert!(
+            owners_count <= 256,
+            "终态任务 owners 表应受限于容量上限 256，实测 {owners_count}"
+        );
+        assert!(
+            !consumer.owners.lock().unwrap().contains_key("bulk-0"),
+            "最旧的终态任务 bulk-0 应已被 FIFO 淘汰解注册"
+        );
+        assert!(
+            consumer.batches.lock().unwrap().is_empty(),
+            "批量终态后 batches 表必须为空"
         );
     }
 }

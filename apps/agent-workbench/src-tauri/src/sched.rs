@@ -31,6 +31,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use async_trait::async_trait;
 use conex_db::LocalDb;
 use conex_types::cron::{parse_cron, CronSchedule};
+#[cfg(test)]
 use conex_types::error::codes;
 use conex_types::events::AgentEvent;
 use conex_types::CoreError;
@@ -93,12 +94,8 @@ impl CronTaskStatus {
     pub(crate) fn is_active(self) -> bool {
         matches!(self, Self::Active)
     }
-
-    #[allow(dead_code)]
-    pub(crate) fn is_enabled(self) -> bool {
-        self.is_active()
-    }
 }
+
 
 fn default_cron_status() -> CronTaskStatus {
     CronTaskStatus::Active
@@ -149,17 +146,8 @@ impl CronTask {
         self.enabled = status.is_active();
         self.updated_at_ms = now_ms();
     }
-
-    #[allow(dead_code)]
-    pub(crate) fn is_active(&self) -> bool {
-        self.status.is_active()
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn is_enabled(&self) -> bool {
-        self.status.is_enabled()
-    }
 }
+
 
 /// 注册入参（命令面 T-CF-14 委托的输入形状；next_fire_at_ms 等运行态
 /// 字段由注册表计算，不入参）
@@ -190,9 +178,6 @@ pub(crate) struct CronTaskUpdatePatch {
     pub target_session_id: Option<Option<String>>,
 }
 
-#[allow(dead_code)]
-pub(crate) type CronTaskPatch = CronTaskUpdatePatch;
-
 /// 调度错误（结构化，对齐 TimerError 风格 set_timer.rs:49-97）
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum SchedulerError {
@@ -204,28 +189,17 @@ pub(crate) enum SchedulerError {
     IdNotFound,
 }
 
+#[cfg(test)]
 impl SchedulerError {
-    /// 错误码（映射 conex-types 码表；T-CF-09 验收「结构化错误」）
-    #[allow(dead_code)]
+    /// 错误码（映射 conex-types 码表；测试断言消费）
     pub(crate) fn code(&self) -> &'static str {
         match self {
             Self::InvalidExpression(_) | Self::NoNextFire(_) => codes::TOOL_INVALID_INPUT,
             Self::IdNotFound => codes::COMMON_NOT_FOUND,
         }
     }
-
-    /// 错误文案
-    #[allow(dead_code)]
-    pub(crate) fn message(&self) -> String {
-        match self {
-            Self::InvalidExpression(detail) => format!("cron 表达式非法：{detail}"),
-            Self::NoNextFire(expression) => {
-                format!("cron 表达式 {expression} 无未来触发时刻（如 2 月 30 日），拒绝注册")
-            }
-            Self::IdNotFound => "cron 任务不存在或已停止".to_string(),
-        }
-    }
 }
+
 
 // ── 适配器契约（对齐 timers.rs 范式）──────────────────────────────
 
@@ -270,7 +244,7 @@ pub(crate) trait SchedStore: Send + Sync {
     /// 保存声明（安全合并，保留非调度业务字段）
     fn save(&self, task: &CronTask);
     /// 删除声明
-    #[allow(dead_code)]
+    #[cfg_attr(not(test), allow(dead_code))]
     fn remove(&self, cron_id: &str);
     /// 追加运行记录（到期触发时记录）
     fn append_run(&self, _record: &crate::workflow_commands::WorkflowRunRecord) {}
@@ -307,7 +281,6 @@ pub(crate) trait DaemonRunLauncher: Send + Sync {
 
 /// 定时任务执行上下文（自然到期触发与手动立即触发共用，Phase 2）
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct ScheduledExecutionContext {
     /// 任务 ID（cron-<seq>）
     pub cron_id: String,
@@ -316,16 +289,21 @@ pub(crate) struct ScheduledExecutionContext {
     /// 执行提示词
     pub prompt: String,
     /// Cron 表达式原文
+    #[allow(dead_code)]
     pub expression: String,
     /// 第几次触发（从 1 起）
+    #[allow(dead_code)]
     pub iteration: u64,
     /// 触发时刻（epoch 毫秒）
     pub fired_at_ms: u64,
     /// 计划触发时刻（epoch 毫秒）
+    #[allow(dead_code)]
     pub scheduled_for_ms: u64,
     /// 触发来源（"cron" | "manual"）
+    #[allow(dead_code)]
     pub trigger_kind: String,
     /// 是否独立常驻模式
+    #[allow(dead_code)]
     pub is_daemon: bool,
     /// 绑定的目标会话 ID（None = 独立后台受管会话）
     pub target_session_id: Option<String>,
@@ -335,9 +313,9 @@ pub(crate) struct ScheduledExecutionContext {
 
 /// 定时任务真实执行启动回执句柄（Phase 2）
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct ScheduledRunHandle {
     /// 实际运行 ID
+    #[allow(dead_code)]
     pub run_id: String,
     /// 实际执行会话 ID（经历 INT-04 自愈后可能为新建后台会话 ID）
     pub session_id: String,
@@ -433,13 +411,11 @@ impl SchedEventSink {
     }
 
     /// 唤醒句柄（main.rs drain 协程持有 clone；与 emit 同一 Notify 实例）
-    #[allow(dead_code)]
     pub(crate) fn wake_notify(&self) -> Arc<tokio::sync::Notify> {
         Arc::clone(&self.notify)
     }
 
     /// 取走缓冲事件（drain 转发 helper 与测试断言消费）
-    #[allow(dead_code)]
     pub(crate) fn drain(&self) -> Vec<AgentEvent> {
         std::mem::take(&mut *self.buffered.lock().unwrap_or_else(|e| e.into_inner()))
     }
@@ -523,7 +499,7 @@ impl MemorySchedStore {
     }
 
     /// 读取内存中记录的运行历史（测试断言用）
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg(test)]
     pub(crate) fn load_runs(&self) -> Vec<crate::workflow_commands::WorkflowRunRecord> {
         self.runs.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
@@ -1002,7 +978,6 @@ impl SchedulerRegistry {
     }
 
     /// 暂停指定 cron 任务（严格遵循 AA-02 锁规约：精确 abort 对应 sleep_task，置空 sleep_task，generation += 1，status 置为 Paused，写库持久化）
-    #[allow(dead_code)]
     pub(crate) async fn pause_task(&self, cron_id: &str) -> Result<(), CoreError> {
         let task_to_save: CronTask;
 
@@ -1044,7 +1019,6 @@ impl SchedulerRegistry {
     }
 
     /// 恢复指定 cron 任务（重算 next_fire_after，generation += 1，spawn 新 sleep 协程，status 置为 Active，写库持久化）
-    #[allow(dead_code)]
     pub(crate) async fn resume_task(&self, cron_id: &str) -> Result<(), CoreError> {
         let now = now_ms();
         let task_to_save: CronTask;
@@ -1103,7 +1077,6 @@ impl SchedulerRegistry {
     }
 
     /// 原地就地更新 cron 任务（严守 CRIT-01 代际-协程物理绑定铁律）
-    #[allow(dead_code)]
     pub(crate) async fn update_task(
         &self,
         cron_id: &str,
@@ -1345,20 +1318,6 @@ impl SchedulerRegistry {
         self.components.store.load_all()
     }
 
-    /// 获取单任务声明（优先内存表，回退 store）
-    #[allow(dead_code)]
-    pub(crate) fn get_task(&self, cron_id: &str) -> Option<CronTask> {
-        let tasks = self.components.tasks.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(entry) = tasks.get(cron_id) {
-            return Some(entry.task.clone());
-        }
-        self.components
-            .store
-            .load_all()
-            .into_iter()
-            .find(|t| t.cron_id == cron_id)
-    }
-
     /// 测试钩子：注入固定短触发延迟（毫秒），免等分钟级真实触发
     #[cfg(test)]
     pub(crate) fn set_fire_override_ms(&self, ms: u64) {
@@ -1386,8 +1345,8 @@ impl SchedulerRegistry {
         paused_until
     }
 
-    /// 当前暂停截止时刻（None = 未暂停）
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// 当前暂停截止时刻（测试断言消费）
+    #[cfg(test)]
     pub(crate) fn pause_deadline(&self) -> Option<u64> {
         *self
             .components
@@ -1404,13 +1363,6 @@ impl SchedulerRegistry {
             .pause
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = until;
-    }
-
-    /// 测试钩子：重置恢复标记
-    #[cfg(test)]
-    #[allow(dead_code)]
-    pub(crate) fn reset_restored_for_test(&self) {
-        self.restored.store(false, Ordering::SeqCst);
     }
 }
 
@@ -1920,6 +1872,7 @@ fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use conex_types::error::codes;
 
     /// 测试桩：事件发射记录
     #[derive(Default)]

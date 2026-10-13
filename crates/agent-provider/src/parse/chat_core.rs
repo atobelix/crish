@@ -81,7 +81,7 @@ impl ChatCompletionsParser {
                 error_kind: Some(kind),
                 usage: None,
             });
-            self.stream.extend(events.clone())?;
+            self.stream.check_events(&events)?;
             self.terminated = true;
             return Ok(events);
         }
@@ -184,7 +184,7 @@ impl ChatCompletionsParser {
             }
         }
 
-        self.stream.extend(events.clone())?;
+        self.stream.check_events(&events)?;
         Ok(events)
     }
 
@@ -241,7 +241,7 @@ impl ChatCompletionsParser {
             usage: self.usage.clone(),
         });
 
-        self.stream.extend(events.clone())?;
+        self.stream.check_events(&events)?;
         self.terminated = true;
         Ok(events)
     }

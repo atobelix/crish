@@ -14,7 +14,9 @@ use conex_types::events::SubagentEndStatus;
 
 use crate::subagent_events::{started_info_from_spawn, SubagentEmitContext, SubagentEndedInfo};
 
-use super::model::{FailStrategy, FlowGraph, FlowNode, FlowNodeId, FlowNodeRuntime, FlowNodeState};
+use super::model::{
+    FailStrategy, FlowGraph, FlowNode, FlowNodeId, FlowNodeRuntime, FlowNodeState,
+};
 use super::scheduler::{
     FlowAdvance, FlowError, FlowReport, FlowReportKind, FlowScheduler, FlowStarted, FlowWakeup,
 };
@@ -81,11 +83,10 @@ impl FlowScheduler {
                 .filter_map(|id| {
                     order_index
                         .get(id.as_str())
-                        .and_then(|&idx| graph.nodes().get(idx))
-                        .map(|n| (n, id.clone()))
+                        .and_then(|&idx| graph.nodes().get(idx).map(|n| (n, idx, id.clone())))
                 })
-                .filter(|(node, _)| self.is_ready(node))
-                .map(|(_, id)| id)
+                .filter(|(node, idx, _)| self.is_ready_with_order(node, Some(*idx), Some(&order_index)))
+                .map(|(_, _, id)| id)
                 .collect();
             ready_ids.sort_by_key(|id| order_index.get(id.as_str()).copied().unwrap_or(usize::MAX));
             // 本轮脏集已判定；后续仅由状态迁移 / Block 波及再入集
@@ -220,6 +221,7 @@ impl FlowScheduler {
                         self.budget.release();
                         self.states.insert(node_id.clone(), FlowNodeState::Failed);
                         self.mark_successors_dirty(&node_id);
+                        self.unload_terminal_node(&node_id);
                         out.reports.push(FlowReport {
                             node_id: node_id.clone(),
                             run_id: None,
@@ -332,6 +334,9 @@ impl FlowScheduler {
                 }
             }
         }
+        if next.is_terminal() {
+            self.unload_terminal_node(&node_id);
+        }
         let mut fail_reports = Vec::new();
         if next == FlowNodeState::Failed {
             let strategy = self.effective_strategy(&node_id);
@@ -365,6 +370,15 @@ impl FlowScheduler {
     }
 
     pub(crate) fn is_ready(&self, node: &FlowNode) -> bool {
+        self.is_ready_with_order(node, None, None)
+    }
+
+    pub(crate) fn is_ready_with_order(
+        &self,
+        node: &FlowNode,
+        known_idx: Option<usize>,
+        order_index: Option<&HashMap<&str, usize>>,
+    ) -> bool {
         if self.states.get(&node.id).copied() != Some(FlowNodeState::Pending) {
             return false;
         }
@@ -382,19 +396,27 @@ impl FlowScheduler {
         {
             return false;
         }
-        !self.serial_predecessor_pending(node)
+        !self.serial_predecessor_pending(node, known_idx, order_index)
     }
 
-    fn serial_predecessor_pending(&self, node: &FlowNode) -> bool {
+    pub(crate) fn serial_predecessor_pending(
+        &self,
+        node: &FlowNode,
+        known_idx: Option<usize>,
+        order_index: Option<&HashMap<&str, usize>>,
+    ) -> bool {
         if node.parallel {
             return false;
         }
         let Some(graph) = self.graph.as_ref() else {
             return false;
         };
-        let end_idx = graph
-            .node_order(&node.id)
-            .unwrap_or_else(|| graph.nodes().iter().position(|n| n.id == node.id).unwrap_or(0));
+        // O(1) 索引查找：直接使用传入的已知下标，或局部栈 order_index 查表，或 graph.node_order
+        // 彻底消除对 graph.nodes() 的 O(V) 嵌套线性 position 扫描（DEFECT-02）
+        let end_idx = known_idx
+            .or_else(|| order_index.and_then(|idx_map| idx_map.get(node.id.as_str()).copied()))
+            .or_else(|| graph.node_order(&node.id))
+            .unwrap_or(0);
         graph.nodes()[..end_idx].iter().any(|n| {
             !n.parallel
                 && same_dependency_set(&n.depends_on, &node.depends_on)
@@ -404,7 +426,11 @@ impl FlowScheduler {
 
     fn serial_predecessor_satisfied(&self, node: &FlowNode) -> bool {
         match self.states.get(&node.id).copied() {
-            Some(FlowNodeState::Completed | FlowNodeState::Blocked) => true,
+            Some(
+                FlowNodeState::Completed
+                | FlowNodeState::Blocked
+                | FlowNodeState::Cancelled,
+            ) => true,
             Some(FlowNodeState::Failed) => matches!(
                 self.effective_strategy(&node.id),
                 FailStrategy::Skip | FailStrategy::Report
@@ -439,6 +465,7 @@ impl FlowScheduler {
                     .cloned();
                 if let Some(blocker) = blocker {
                     self.states.insert(node_id.clone(), FlowNodeState::Blocked);
+                    self.unload_terminal_node(&node_id);
                     out.blocked.push(node_id.clone());
                     out.reports.push(FlowReport {
                         node_id: node_id.clone(),
@@ -518,10 +545,28 @@ impl FlowScheduler {
             })
             .unwrap_or(false)
     }
+
+    /// 终态数据卸载（DEFECT-17）：卸载指定终态节点的 task prompt 与 runtime 瞬态数据，防止海量节点内存单调无界驻留
+    pub fn unload_terminal_node(&mut self, node_id: &str) {
+        if let Some(graph) = self.graph.as_mut() {
+            graph.unload_node_payload(node_id);
+        }
+        if let Some(runtime) = self.runtime.get_mut(node_id) {
+            runtime.unload_runtime_data();
+        }
+    }
+
+    /// 将节点置为 Cancelled 终态并触发数据卸载（DEFECT-17）
+    pub fn cancel_node(&mut self, node_id: &str) {
+        self.states.insert(node_id.to_string(), FlowNodeState::Cancelled);
+        self.mark_successors_dirty(node_id);
+        self.unload_terminal_node(node_id);
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::model::FlowDeclaration;
     use super::*;
 
     #[test]
@@ -535,5 +580,41 @@ mod tests {
         assert!(!same_dependency_set(&a, &c), "元素不同应判定不等价");
         assert!(!same_dependency_set(&a, &d), "长度不同应判定不等价");
         assert!(same_dependency_set(&[], &[]), "空集合等价");
+    }
+
+    #[test]
+    fn is_ready_with_order_index_fast_path() {
+        let decl = FlowDeclaration {
+            tasks: vec![
+                FlowNode {
+                    id: "a".to_string(),
+                    task: "task a".to_string(),
+                    depends_on: vec![],
+                    parallel: false,
+                    on_failed: None,
+                    is_composite: false,
+                },
+                FlowNode {
+                    id: "b".to_string(),
+                    task: "task b".to_string(),
+                    depends_on: vec!["a".to_string()],
+                    parallel: false,
+                    on_failed: None,
+                    is_composite: false,
+                },
+            ],
+            planner_run_id: None,
+        };
+        let graph = FlowGraph::from_declaration(&decl).expect("合法图");
+        let order_index: HashMap<&str, usize> = graph
+            .nodes()
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.id.as_str(), i))
+            .collect();
+
+        // 验证 order_index 与 is_ready_with_order 无需 position 扫描即能准确定位下标
+        assert_eq!(order_index.get("a"), Some(&0));
+        assert_eq!(order_index.get("b"), Some(&1));
     }
 }

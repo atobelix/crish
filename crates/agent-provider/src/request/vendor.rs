@@ -7,12 +7,12 @@
 //! SSOT（轨A 净清）：出站思考键唯一入口 = `assemble_thinking_dialect`
 //! （`request/vendor/dialect.rs`，四个 builder 共用）。已物理删除旧双轨入口：
 //! `reasoning_effort_object` / `resolve_thinking_params` / `build_reasoning_wire` /
-//! `reasoning_effort_headers*` / `is_adaptive_thinking_model`——无生产调用者，
-//! 且 `infer_thinking_capability`（模型名前缀猜思考能力）已标 deprecated。
+//! `reasoning_effort_headers*` / `is_adaptive_thinking_model` /
+//! `infer_thinking_capability`——无生产调用者，已物理移除。
 //! 自适应思考由 yaml 字典值 `High: "adaptive"` 经 dialect 表达，不触 MODEL_SERIES。
 //!
 //! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分（测试旁挂 vendor_tests.rs）：
-//! [vendor_capability] 系列能力映射（deprecated）· [vendor_wire] wire 换算 ·
+//! [vendor_capability] 系列能力声明 · [vendor_wire] wire 换算 ·
 //! [reject] R4 T4.1 拒绝校验（三态+开关）。
 
 #[path = "vendor/reject.rs"]
@@ -26,8 +26,7 @@ mod vendor_wire;
 // 本模块不再声明第二个 `#[path]` 副本——四个 builder 共用同一
 // `assemble_thinking_dialect`，杜绝双份类型与双实现漂移。
 pub use reject::{resolve_reasoning_level, DegradePolicy, ReasoningEffortState, ReasoningReject};
-#[allow(deprecated)]
-pub use vendor_capability::infer_thinking_capability;
+pub use vendor_capability::{ThinkingCapability, NO_THINKING};
 pub use vendor_wire::{
     effort_to_budget_tokens, effort_to_gemini_thinking_level, normalize_reasoning_effort,
     thinking_to_budget_tokens, thinking_to_gemini_thinking_level,
@@ -145,24 +144,6 @@ pub enum ReasoningFormat {
     /// 不支持思考
     None,
 }
-
-/// 模型思考能力声明（对齐 ThinkingCapability）
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ThinkingCapability {
-    pub supported: bool,
-    /// 支持档位（不含 Off）
-    pub levels: &'static [ThinkingIntensity],
-    pub format: ReasoningFormat,
-    pub vendor: ReasoningVendor,
-}
-
-/// 不支持思考的默认能力声明
-pub const NO_THINKING: ThinkingCapability = ThinkingCapability {
-    supported: false,
-    levels: &[],
-    format: ReasoningFormat::None,
-    vendor: ReasoningVendor::Auto,
-};
 
 /// 推断 reasoning vendor（对齐 `shared:thinking-intensity.ts:154-173`；02 §五 #2）。
 /// 优先级 baseUrl 关键字 → model 前缀：anthropic/deepseek/gemini/openai(gpt/o1/o3/o4)/qwen/glm/kimi；

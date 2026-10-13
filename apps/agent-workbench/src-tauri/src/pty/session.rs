@@ -556,12 +556,15 @@ pub(crate) fn create_session(
                         let elapsed_ms = now_ms.saturating_sub(last);
                         if should_flush_pty_batch(pending_len, n, buf.len(), elapsed_ms) {
                             flush_now(&pending, &last_flush_ms, now_ms);
-                        } else if elapsed_ms < PTY_FRAME_PACING_MS
-                            && trailing_scheduled
-                                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                                .is_ok()
+                        } else if trailing_scheduled
+                            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                            .is_ok()
                         {
-                            let wait_ms = PTY_FRAME_PACING_MS.saturating_sub(elapsed_ms).max(1);
+                            let wait_ms = if elapsed_ms < PTY_FRAME_PACING_MS {
+                                PTY_FRAME_PACING_MS - elapsed_ms
+                            } else {
+                                PTY_FRAME_PACING_MS
+                            };
                             let pending_clone = Arc::clone(&pending);
                             let last_flush_clone = Arc::clone(&last_flush_ms);
                             let scheduled_clone = Arc::clone(&trailing_scheduled);
@@ -569,13 +572,14 @@ pub(crate) fn create_session(
                             let id_for_timer = emit_id.clone();
                             tauri::async_runtime::spawn(async move {
                                 tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
-                                scheduled_clone.store(false, Ordering::SeqCst);
                                 let chunk = if let Ok(mut guard) = pending_clone.lock() {
+                                    scheduled_clone.store(false, Ordering::SeqCst);
                                     if guard.is_empty() {
                                         return;
                                     }
                                     std::mem::take(&mut *guard)
                                 } else {
+                                    scheduled_clone.store(false, Ordering::SeqCst);
                                     return;
                                 };
                                 last_flush_clone.store(crate::server::now_ms(), Ordering::Relaxed);
