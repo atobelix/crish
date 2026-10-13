@@ -138,7 +138,7 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
     () => [
       {
         id: '',
-        label: '🌐 全局工作区',
+        label: '全局工作区',
         hint: '默认沙箱',
       },
       ...projects.map((p) => ({

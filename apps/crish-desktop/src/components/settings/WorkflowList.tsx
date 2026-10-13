@@ -98,7 +98,7 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                 typeof w.cwd === 'string' && w.cwd.trim() ? w.cwd.trim() : '';
               const projectLabel = cwdText
                 ? `项目: ${cwdText.split(/[\\/]/).filter(Boolean).pop() || cwdText}`
-                : '🌐 全局工作区';
+                : '全局工作区';
 
               return (
                 <SettingsRow
@@ -132,11 +132,11 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                               aria-label={`跳转至绑定会话 ${targetSessionId}`}
                               onClick={() => onOpenSession(targetSessionId, w)}
                             >
-                              💬 绑定会话
+                              绑定会话
                             </Button>
                           ) : (
                             <span className={settingsStyles.sessionBadge}>
-                              💬 绑定会话
+                              绑定会话
                             </span>
                           )}
                         </Tooltip>
@@ -231,7 +231,7 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
               typeof w.cwd === 'string' && w.cwd.trim() ? w.cwd.trim() : '';
             const projectLabel = cwdText
               ? `项目: ${cwdText.split(/[\\/]/).filter(Boolean).pop() || cwdText}`
-              : '🌐 全局工作区';
+              : '全局工作区';
 
             return (
               <li
@@ -261,12 +261,10 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                             aria-label={`跳转至绑定会话 ${targetSessionId}`}
                             onClick={() => onOpenSession(targetSessionId, w)}
                           >
-                            💬 绑定会话
+                            绑定会话
                           </Button>
                         ) : (
-                          <span className={styles.sessionBadge}>
-                            💬 绑定会话
-                          </span>
+                          <span className={styles.sessionBadge}>绑定会话</span>
                         )}
                       </Tooltip>
                     ) : null}

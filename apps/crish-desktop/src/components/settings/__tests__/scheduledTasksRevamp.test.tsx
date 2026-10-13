@@ -473,7 +473,7 @@ describe('Scheduled Tasks Revamp — 前端五大核心维度专项单元测试'
 
       // 验证所属项目下拉框默认选中“全局工作区”
       const projectCombo = screen.getByRole('combobox', { name: '所属项目' });
-      expect(projectCombo).toHaveTextContent('🌐 全局工作区');
+      expect(projectCombo).toHaveTextContent('全局工作区');
 
       // 展开下拉框，切换到具体项目，再切回全局工作区
       fireEvent.click(projectCombo);
@@ -626,12 +626,12 @@ describe('Scheduled Tasks Revamp — 前端五大核心维度专项单元测试'
         />
       );
 
-      // 1) 验证徽标展示：wfRow1（空 cwd + targetSessionId）展示“🌐 全局工作区”与“💬 绑定会话”
-      expect(screen.getByText(/🌐 全局工作区/)).toBeInTheDocument();
-      expect(screen.getByText('💬 绑定会话')).toBeInTheDocument();
-      // wfRow2（有 cwd + 无 targetSessionId）展示项目名，且全表仅 1 个“💬 绑定会话”徽标
+      // 1) 验证徽标展示：wfRow1（空 cwd + targetSessionId）展示“全局工作区”与“绑定会话”
+      expect(screen.getByText(/全局工作区/)).toBeInTheDocument();
+      expect(screen.getByText('绑定会话')).toBeInTheDocument();
+      // wfRow2（有 cwd + 无 targetSessionId）展示项目名，且全表仅 1 个“绑定会话”徽标
       expect(screen.getByText(/项目: conex-engine/)).toBeInTheDocument();
-      expect(screen.getAllByText('💬 绑定会话')).toHaveLength(1);
+      expect(screen.getAllByText('绑定会话')).toHaveLength(1);
 
       // 2) 验证行级 togglingIds 锁隔离：仅 wfRow1 的开关/编辑/删除被禁用，wfRow1 立即运行及 wfRow2 全部控件保持可用
       const switchRow1 = screen.getByRole('switch', {
@@ -726,9 +726,9 @@ describe('Scheduled Tasks Revamp — 前端五大核心维度专项单元测试'
         />
       );
 
-      expect(screen.getByText(/🌐 全局工作区/)).toBeInTheDocument();
+      expect(screen.getByText(/全局工作区/)).toBeInTheDocument();
       expect(screen.getByText(/项目: conex-engine/)).toBeInTheDocument();
-      expect(screen.getAllByText('💬 绑定会话')).toHaveLength(1);
+      expect(screen.getAllByText('绑定会话')).toHaveLength(1);
 
       // wfRow1 正在切换启停：暂停按钮禁用，立即触发按钮可用
       expect(
