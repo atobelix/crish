@@ -15,6 +15,7 @@ import { MESSAGE_ESTIMATED_ROW_HEIGHT } from '../../api/VirtualScrollManager';
 import {
   registerActiveVsm,
   unregisterActiveVsm,
+  useLayoutStore,
 } from '../../store/storeAccess';
 import { useUndoWithScrollAnchor } from './useUndoWithScrollAnchor';
 import { FlowScrubber } from './FlowScrubber';
@@ -168,11 +169,23 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId, clearHeights, manager]);
 
+  const uiSize = useLayoutStore((s) => s.uiSize);
+  const uiSizeSeededRef = useRef(false);
+
+  useEffect(() => {
+    if (!uiSizeSeededRef.current) {
+      uiSizeSeededRef.current = true;
+      return;
+    }
+    clearHeights();
+    reseedAllMessageHeights(manager, msgIds, messages);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uiSize, clearHeights]);
+
   useVirtualizerHeightLifecycle({
     manager,
     msgIds,
     messages,
-    clearHeights,
     syncOrder,
     preloadEstimates,
   });
@@ -204,7 +217,8 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     searchHighlightQuery,
     thinkingMsgId,
     editingMessageId: composer?.editingMessageId,
-    isScrolling: fastScroll.isScrolling(vs.isGestureActive()),
+    isScrolling:
+      fastScroll.isFastScrolling || fastScroll.isFastScrollingRef.current,
   });
 
   const touchStartYRef = useRef(0);

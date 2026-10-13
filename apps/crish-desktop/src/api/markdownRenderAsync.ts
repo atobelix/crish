@@ -293,10 +293,22 @@ export async function parseMarkdownFragmentToHtmlAsync(
   kind: IncrementalMarkdownFragmentKind = 'inline'
 ): Promise<string> {
   if (!fragment) return '';
+  if (kind !== 'block' && /^[ \t]+$/.test(fragment)) {
+    return ' ';
+  }
   const rendered = await parseMarkdownToHtmlAsync(fragment, priority);
   if (!rendered) return '';
 
   if (kind === 'block') return rendered;
+
+  const preserveInlineBoundarySpaces = (innerHtml: string): string => {
+    if (!innerHtml) return innerHtml;
+    const hasLeadingSpace = /^[ \t]+/.test(fragment);
+    const hasTrailingSpace = /[ \t]+$/.test(fragment);
+    const prefix = hasLeadingSpace && !/^\s/.test(innerHtml) ? ' ' : '';
+    const suffix = hasTrailingSpace && !/\s$/.test(innerHtml) ? ' ' : '';
+    return `${prefix}${innerHtml}${suffix}`;
+  };
 
   if (typeof DOMParser !== 'undefined') {
     const template = document.createElement('template');
@@ -307,11 +319,11 @@ export async function parseMarkdownFragmentToHtmlAsync(
       // 活跃列表项的外层 `<li>` 由增量会话维护；正文片段仍可直接
       // 使用普通 inline renderer，不能因为没有再次传入 `- ` 就丢失正文。
       const root = template.content.firstElementChild;
-      return root?.innerHTML ?? '';
+      return preserveInlineBoundarySpaces(root?.innerHTML ?? '');
     }
     const roots = Array.from(template.content.childNodes);
     if (roots.length === 1 && roots[0]?.nodeType === Node.ELEMENT_NODE) {
-      return (roots[0] as Element).innerHTML;
+      return preserveInlineBoundarySpaces((roots[0] as Element).innerHTML);
     }
   }
 
@@ -319,9 +331,9 @@ export async function parseMarkdownFragmentToHtmlAsync(
     const listItem = rendered.match(/<li\b[^>]*>[\s\S]*<\/li>/i);
     if (listItem) return listItem[0];
     const paragraph = rendered.match(/^<p\b[^>]*>([\s\S]*)<\/p>$/i);
-    return paragraph?.[1] ?? '';
+    return preserveInlineBoundarySpaces(paragraph?.[1] ?? '');
   }
 
   const paragraph = rendered.match(/^<p\b[^>]*>([\s\S]*)<\/p>$/i);
-  return paragraph?.[1] ?? rendered;
+  return preserveInlineBoundarySpaces(paragraph?.[1] ?? rendered);
 }

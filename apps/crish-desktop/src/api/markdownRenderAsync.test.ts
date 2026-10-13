@@ -701,4 +701,45 @@ describe('useStreamingMarkdownHtml', () => {
     expect(latestUnitsRef.current?.[0]?.kind).toBe('code');
     expect(latestUnitsRef.current?.[0]?.html).toContain('const x = 1;');
   });
+
+  it('行内代码块前后紧邻的空格在增量分片渲染后不丢失（修复 The `crates` directory 粘连缺陷）', async () => {
+    // 模拟真实 CommonMark / pulldown-cmark 段落渲染行为：首尾空格在 <p> 内被裁剪
+    mockTauriCommand('core_md_render', async (args) => {
+      const text = ((args as { text?: string })?.text ?? '').trim();
+      if (text.startsWith('`') && text.endsWith('`') && text.length >= 2) {
+        return `<p class="md-p"><code class="md-inline-code">${text.slice(1, -1)}</code></p>`;
+      }
+      return `<p class="md-p">${text}</p>`;
+    });
+
+    await expect(parseMarkdownFragmentToHtmlAsync('The ')).resolves.toBe(
+      'The '
+    );
+    await expect(parseMarkdownFragmentToHtmlAsync('`crates`')).resolves.toBe(
+      '<code class="md-inline-code">crates</code>'
+    );
+    await expect(
+      parseMarkdownFragmentToHtmlAsync(' directory contains')
+    ).resolves.toBe(' directory contains');
+    await expect(parseMarkdownFragmentToHtmlAsync(' ')).resolves.toBe(' ');
+
+    const unitsRef: {
+      current: readonly IncrementalMarkdownUnitSnapshot[] | null;
+    } = { current: null };
+
+    renderHook(() =>
+      useStreamingMarkdownHtml(
+        'The `crates` directory contains these subdirectories.',
+        true,
+        Priority.High,
+        unitsRef
+      )
+    );
+
+    await waitFor(() => {
+      expect(unitsRef.current?.[0]?.html).toContain(
+        'The <code class="md-inline-code">crates</code> directory contains these subdirectories.'
+      );
+    });
+  });
 });

@@ -9,10 +9,8 @@
  */
 import React, { lazy, useCallback, useMemo } from 'react';
 import styles from './ChatMessageRow.module.css';
-import {
-  ChatToolStack,
-  type ChatToolStackSharedProps,
-} from '../chat-tool-call/ChatToolCallBlock';
+import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
+import { FoldableToolGroup } from '../chat-tool-call/FoldableToolGroup';
 import type { ToolRenderItem } from '../../api/toolPresentation';
 import type { MessageToolCall, SessionAgent } from '../../store/types';
 import {
@@ -171,7 +169,11 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> =
         ) : null}
 
         {hasTools && hostWithAgentPanel ? (
-          <ChatToolStack {...hostWithAgentPanel} />
+          <FoldableToolGroup
+            items={toolRenderItems}
+            msgId={msgId}
+            hostProps={hostWithAgentPanel}
+          />
         ) : null}
       </div>
     );

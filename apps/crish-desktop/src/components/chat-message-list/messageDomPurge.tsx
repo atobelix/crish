@@ -12,28 +12,27 @@ import {
   type VirtualScrollManager,
 } from '../../api/VirtualScrollManager';
 import { messageMatchesSearch } from '../../api/sessionSearch';
-import { useLayoutStore } from '../../store/storeAccess';
 import type { SessionMessage } from '../../store/types';
 import { chatSpacerHeight } from './chatScrollGeometry';
 import { DEFAULT_VIEWPORT_HEIGHT_PX } from '../../hooks/virtualScrollConstants';
 
-/** 单帧滚动位移阈值（px）：超过即判定进入快速滚动窗口 */
-export const FAST_SCROLL_DELTA_PX = 20;
-/** 滚动瞬时速度阈值（px/ms）：超过即判定进入快速滚动窗口 */
-export const FAST_SCROLL_VELOCITY_PX_PER_MS = 0.3;
+/** 单帧跨屏滚动位移阈值（px）：仅单步跨屏跃迁（>450px）才进入快速滚动卸载窗口，杜绝常规滚轮/拖拽误触发 */
+export const FAST_SCROLL_DELTA_PX = 450;
+/** 滚动瞬时速度阈值（px/ms）：仅极速跨屏跳转（>25px/ms）才进入快速滚动卸载窗口 */
+export const FAST_SCROLL_VELOCITY_PX_PER_MS = 25;
 /** 快速滚动停止后的静止恢复延迟（ms） */
 export const FAST_SCROLL_SETTLE_MS = 150;
 /** 超视距回收距离阈值（以视口高度倍数计，>2 屏高度卸载重型子 DOM） */
 export const PURGE_BEYOND_VIEWPORT_SCREENS = 2;
-/** 快速滚动期间视口首部保留完整渲染的活跃行数，确保总 DOM 节点 <= 120 */
-export const ACTIVE_SCROLL_KEEP_VISIBLE_ROWS = 2;
+/** 视口内活跃保留行数基准常量（保留命名导出以兼容 HMR 与外部引用） */
+export const ACTIVE_SCROLL_KEEP_VISIBLE_ROWS = 8;
 
 export interface FastScrollPurgeTracker {
   isFastScrolling: boolean;
   isFastScrollingRef: React.MutableRefObject<boolean>;
   reset: () => void;
   onScrollSample: (currentScrollTop: number) => void;
-  isScrolling: (isGestureActive: boolean) => boolean;
+  isScrolling: (isGestureActive?: boolean) => boolean;
 }
 
 /**
@@ -60,6 +59,8 @@ export function useFastScrollPurgeTracker(): FastScrollPurgeTracker {
       window.clearTimeout(fastScrollTimerRef.current);
       fastScrollTimerRef.current = null;
     }
+    lastScrollTopForVelocityRef.current = 0;
+    lastScrollTimeRef.current = 0;
     isFastScrollingRef.current = false;
     setIsFastScrolling(false);
   }, []);
@@ -69,7 +70,10 @@ export function useFastScrollPurgeTracker(): FastScrollPurgeTracker {
       currentScrollTop - lastScrollTopForVelocityRef.current
     );
     const now = performance.now();
-    const dt = Math.max(1, now - lastScrollTimeRef.current);
+    const dt =
+      lastScrollTimeRef.current > 0
+        ? Math.max(16, now - lastScrollTimeRef.current)
+        : 16;
     const velocity = scrollDelta / dt;
     lastScrollTopForVelocityRef.current = currentScrollTop;
     lastScrollTimeRef.current = now;
@@ -94,8 +98,7 @@ export function useFastScrollPurgeTracker(): FastScrollPurgeTracker {
   }, []);
 
   const isScrolling = useCallback(
-    (isGestureActive: boolean) =>
-      isFastScrolling || isFastScrollingRef.current || isGestureActive,
+    () => isFastScrolling || isFastScrollingRef.current,
     [isFastScrolling]
   );
 
@@ -127,36 +130,17 @@ export function reseedAllMessageHeights(
 }
 
 /**
- * 维护字号变更与增量消息的虚拟高度预估播种，确保骨架占位高度精确无跳变。
+ * 维护增量消息的虚拟高度预估播种，确保骨架占位高度精确无跳变。
  */
 export function useVirtualizerHeightLifecycle(params: {
   manager: VirtualScrollManager;
   msgIds: string[];
   messages: SessionMessage[];
-  clearHeights: () => void;
+  clearHeights?: () => void;
   syncOrder: (ids: string[]) => void;
   preloadEstimates: (items: Array<{ id: string; height: number }>) => void;
 }): void {
-  const {
-    manager,
-    msgIds,
-    messages,
-    clearHeights,
-    syncOrder,
-    preloadEstimates,
-  } = params;
-  const uiSize = useLayoutStore((s) => s.uiSize);
-  const uiSizeSeededRef = useRef(false);
-
-  useEffect(() => {
-    if (!uiSizeSeededRef.current) {
-      uiSizeSeededRef.current = true;
-      return;
-    }
-    clearHeights();
-    reseedAllMessageHeights(manager, msgIds, messages);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uiSize, clearHeights]);
+  const { manager, msgIds, messages, syncOrder, preloadEstimates } = params;
 
   useLayoutEffect(() => {
     syncOrder(msgIds);
@@ -223,8 +207,11 @@ export interface ActiveRowWindow {
 
 /**
  * 超视距 DOM 回收判定函数（W3-3）：
- * - 距离视口超过 2 屏高度的行卸载内部重型子 DOM；
- * - 快速滚动期间仅保留视口顶部活跃窗口（firstVisibleIndex 起前 N 行）完整渲染，其余骨架化以将总 DOM 节点压制在 <= 120；
+ * - 视口内及紧邻半屏保护区神圣不可卸载铁律（Viewport Sacred Invariant）：
+ *   任何处于当前可视视口内（distanceFromViewport === 0）以及紧邻视口半屏缓冲带（distanceFromViewport <= vHeight * 0.5）的消息行，
+ *   无论静止、慢滚还是快滚，isPurged 严格为 false，严禁将视野区内容替换为空白骨架，并消除手势期间估高偏差导致的误判；
+ * - 仅对远离视口（distanceFromViewport > vHeight * 0.5）的视口外远端 overscan 节点执行 DOM 回收：
+ *   静止/常规滚动时仅回收距离视口超过 2 屏高度的节点，高速跨屏滚动期间可回收远端 overscan 缓冲行；
  * - 正在流式生成（thinking/processing）或正在编辑的消息豁免回收。
  */
 export function evaluateMessageRowDomPurge(
@@ -245,7 +232,6 @@ export function evaluateMessageRowDomPurge(
     vsManager,
     scrollTop: vTop,
     viewportHeight: vHeight,
-    firstVisibleIndex,
     thinkingMsgId,
     editingMessageId,
     isScrolling,
@@ -263,19 +249,18 @@ export function evaluateMessageRowDomPurge(
     distanceFromViewport = itemOffset - vBottom;
   }
 
+  const nearViewportGuardPx = vHeight * 0.5;
+  const isViewportProtected = distanceFromViewport <= nearViewportGuardPx;
   const twoScreenHeights = PURGE_BEYOND_VIEWPORT_SCREENS * vHeight;
   const isBeyondTwoScreens = distanceFromViewport > twoScreenHeights;
   const isLive = msg.id === thinkingMsgId || msg.status === 'processing';
   const isEditing = editingMessageId === msg.id;
 
-  const isFirstVisibleFew =
-    virtualIndex >= firstVisibleIndex &&
-    virtualIndex < firstVisibleIndex + ACTIVE_SCROLL_KEEP_VISIBLE_ROWS;
-
   const isPurged =
+    !isViewportProtected &&
     !isLive &&
     !isEditing &&
-    (isBeyondTwoScreens || (isScrolling && !isFirstVisibleFew));
+    (isBeyondTwoScreens || isScrolling);
 
   return {
     isPurged,

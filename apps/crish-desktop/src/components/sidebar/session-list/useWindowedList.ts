@@ -10,7 +10,12 @@ import {
   windowContainsIndex,
   type HeightGetter,
 } from '../../../api/sessionListWindow';
-import { FULL_RANGE, useSessionListWindow } from './useSessionListWindow';
+import {
+  FULL_RANGE,
+  MAX_SIDEBAR_WINDOW_ROWS,
+  resolveActualScrollHost,
+  useSessionListWindow,
+} from './useSessionListWindow';
 
 /**
  * 列表窗口化 hook（03-detail T10 拆分：useWindowedList）。
@@ -27,6 +32,7 @@ export function useWindowedList({
   activeGeneralIndex,
   sessionListRef,
   generalListRef,
+  scrollHostRef,
 }: {
   visibleSessions: SessionState[];
   generalSessions: SessionState[];
@@ -38,6 +44,7 @@ export function useWindowedList({
   activeGeneralIndex: number | null;
   sessionListRef: React.RefObject<HTMLDivElement | null>;
   generalListRef: React.RefObject<HTMLUListElement | null>;
+  scrollHostRef?: React.RefObject<HTMLElement | null>;
 }) {
   // 固定单行高度，禁止按标题测量成两行
   const rowHeightById = useMemo(() => {
@@ -73,7 +80,8 @@ export function useWindowedList({
     generalListRef,
     generalWindowEnabled,
     activeGeneralIndex,
-    getGeneralHeight
+    getGeneralHeight,
+    scrollHostRef
   );
 
   const generalRenderRange = useMemo(() => {
@@ -90,13 +98,19 @@ export function useWindowedList({
       activeGeneralIndex != null &&
       !windowContainsIndex(r, activeGeneralIndex)
     ) {
-      r = expandWindowToIndex(
+      const expanded = expandWindowToIndex(
         r,
         activeGeneralIndex,
         generalSessions.length,
         undefined,
         getGeneralHeight
       );
+      if (
+        !generalWindowEnabled ||
+        expanded.end - expanded.start <= MAX_SIDEBAR_WINDOW_ROWS
+      ) {
+        r = expanded;
+      }
     }
     return r;
   }, [
@@ -113,12 +127,13 @@ export function useWindowedList({
     if (activeGeneralIndex == null || !activeSessionId) return;
     const revealKey = `${activeSessionId}@${activeGeneralIndex}`;
     if (lastRevealedActiveRef.current === revealKey) return;
-    const scrollEl = sessionListRef.current;
+    const rawEl = scrollHostRef?.current || sessionListRef.current;
+    const scrollEl =
+      resolveActualScrollHost(rawEl, generalListRef.current) ||
+      sessionListRef.current;
     if (!scrollEl) return;
     const listEl = generalListRef.current;
-    const listOffsetTop = listEl
-      ? measureListOffsetTop(scrollEl, listEl)
-      : 0;
+    const listOffsetTop = listEl ? measureListOffsetTop(scrollEl, listEl) : 0;
     const nextTop = scrollTopToRevealIndex({
       index: activeGeneralIndex,
       count: generalSessions.length,
@@ -142,6 +157,7 @@ export function useWindowedList({
     getGeneralHeight,
     sessionListRef,
     generalListRef,
+    scrollHostRef,
   ]);
 
   return {

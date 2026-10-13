@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   computeSessionListWindow,
   clampSessionListWindowRange,
+  expandWindowToIndex,
   measureListOffsetTop,
   sessionListWindowRangeEqual,
   SIDEBAR_SESSION_ROW_HEIGHT,
@@ -73,6 +74,10 @@ export function resolveActualScrollHost(
 
 /**
  * 根据窗口高度 + 动态 overscan 计算窗口范围，并严格约束渲染节点数 <= 45。
+ * 视口窗口绝对优先铁律（Viewport Window First）：
+ * 1. 第一步先不带 ensureIndex 计算纯视口窗口 viewportRange（100% 覆盖当前可视区 + overscan 且 <= 45 行）；
+ * 2. 第二步仅当合并 ensureIndex 后总行数 <= MAX_SIDEBAR_WINDOW_ROWS 时才合并；
+ * 3. 若 ensureIndex 距离当前视口太远（合并后超过 45 行），无条件保留完整 viewportRange，绝不裁剪当前可视视口内的任何一行。
  */
 export function computeWindowWithConstraint(opts: {
   count: number;
@@ -82,36 +87,10 @@ export function computeWindowWithConstraint(opts: {
   getHeight?: HeightGetter;
 }): SessionListWindowRange {
   const { count, scrollEl, listEl, ensureIndex, getHeight } = opts;
-  if (!scrollEl) {
-    let initial = computeSessionListWindow({
-      count,
-      scrollTop: 0,
-      viewportHeight: 400,
-      listOffsetTop: 0,
-      ...(ensureIndex !== null && ensureIndex !== undefined
-        ? { ensureIndex }
-        : {}),
-      ...(getHeight !== undefined ? { getHeight } : {}),
-    });
-    if (
-      initial.windowed &&
-      initial.end - initial.start > MAX_SIDEBAR_WINDOW_ROWS
-    ) {
-      initial = clampSessionListWindowRange(
-        {
-          start: initial.start,
-          end: initial.start + MAX_SIDEBAR_WINDOW_ROWS,
-        },
-        count,
-        undefined,
-        getHeight
-      );
-    }
-    return initial;
-  }
-
-  const vh = scrollEl.clientHeight || 400;
-  const listOffsetTop = listEl ? measureListOffsetTop(scrollEl, listEl) : 0;
+  const vh = scrollEl ? scrollEl.clientHeight || 400 : 400;
+  const scrollTop = scrollEl ? scrollEl.scrollTop : 0;
+  const listOffsetTop =
+    scrollEl && listEl ? measureListOffsetTop(scrollEl, listEl) : 0;
 
   // 动态 overscan：根据视口高度反推剩余行数配额，在保障总渲染行 <= 45 的前提下分配 overscan
   const estimatedRowH = getHeight
@@ -127,48 +106,50 @@ export function computeWindowWithConstraint(opts: {
         )
       : 0;
 
-  let next = computeSessionListWindow({
+  let viewportRange = computeSessionListWindow({
     count,
-    scrollTop: scrollEl.scrollTop,
+    scrollTop,
     viewportHeight: vh,
     listOffsetTop,
     overscan: dynamicOverscan,
-    ...(ensureIndex !== null && ensureIndex !== undefined
-      ? { ensureIndex }
-      : {}),
     ...(getHeight !== undefined ? { getHeight } : {}),
   });
 
-  // 严格约束活跃 DOM 节点 <= 45 行
-  if (next.windowed && next.end - next.start > MAX_SIDEBAR_WINDOW_ROWS) {
-    let start = next.start;
-    let end = next.end;
-    if (
-      ensureIndex !== null &&
-      ensureIndex !== undefined &&
-      ensureIndex >= start &&
-      ensureIndex <= start + MAX_SIDEBAR_WINDOW_ROWS
-    ) {
-      end = start + MAX_SIDEBAR_WINDOW_ROWS;
-    } else if (
-      ensureIndex !== null &&
-      ensureIndex !== undefined &&
-      ensureIndex >= end - MAX_SIDEBAR_WINDOW_ROWS &&
-      ensureIndex < end
-    ) {
-      start = end - MAX_SIDEBAR_WINDOW_ROWS;
-    } else {
-      end = start + MAX_SIDEBAR_WINDOW_ROWS;
-    }
-    next = clampSessionListWindowRange(
-      { start, end },
+  // 严格约束纯视口窗口活跃 DOM 节点 <= 45 行
+  if (
+    viewportRange.windowed &&
+    viewportRange.end - viewportRange.start > MAX_SIDEBAR_WINDOW_ROWS
+  ) {
+    viewportRange = clampSessionListWindowRange(
+      {
+        start: viewportRange.start,
+        end: viewportRange.start + MAX_SIDEBAR_WINDOW_ROWS,
+      },
       count,
       undefined,
       getHeight
     );
   }
 
-  return next;
+  // 仅当合并 ensureIndex 后的总行数 <= MAX_SIDEBAR_WINDOW_ROWS 时才扩展，严禁挤占当前视口行
+  if (
+    viewportRange.windowed &&
+    ensureIndex !== null &&
+    ensureIndex !== undefined
+  ) {
+    const expanded = expandWindowToIndex(
+      viewportRange,
+      ensureIndex,
+      count,
+      undefined,
+      getHeight
+    );
+    if (expanded.end - expanded.start <= MAX_SIDEBAR_WINDOW_ROWS) {
+      return expanded;
+    }
+  }
+
+  return viewportRange;
 }
 
 export type UseSessionListWindowOptions = {
@@ -254,16 +235,19 @@ export function useSessionListWindow(
     }
 
     let raf = 0;
+    const roManager = ResizeObserverManager.getInstance();
+    const observedElements = new Set<HTMLElement>();
     const update = () => {
       const currentRaw =
         scrollHostRef?.current || scrollParentRef?.current || null;
+      const currentListEl = listRef?.current || null;
       const actualHost =
-        resolveActualScrollHost(currentRaw, listRef?.current || null) ||
-        scrollEl;
+        resolveActualScrollHost(currentRaw, currentListEl) || scrollEl;
+      syncObservedElements(actualHost, currentListEl);
       const next = computeWindowWithConstraint({
         count,
         scrollEl: actualHost,
-        listEl: listRef?.current || null,
+        listEl: currentListEl,
         ensureIndex,
         getHeight,
       });
@@ -271,27 +255,33 @@ export function useSessionListWindow(
         sessionListWindowRangeEqual(prev, next) ? prev : next
       );
     };
+    const handleRo = () => {
+      update();
+    };
+    const syncObservedElements = (
+      hostEl: HTMLElement,
+      currentListEl: HTMLElement | null
+    ) => {
+      const candidates: (HTMLElement | null | undefined)[] = [
+        hostEl,
+        currentListEl,
+        currentListEl?.parentElement !== hostEl
+          ? currentListEl?.parentElement
+          : null,
+      ];
+      for (const el of candidates) {
+        if (el && !observedElements.has(el)) {
+          observedElements.add(el);
+          roManager.observe(el, handleRo);
+        }
+      }
+    };
 
     update();
     raf = requestAnimationFrame(() => {
       update();
     });
     scrollEl.addEventListener('scroll', update, { passive: true });
-    const roManager = ResizeObserverManager.getInstance();
-    const handleRo = () => {
-      update();
-    };
-    const observedElements: HTMLElement[] = [scrollEl];
-    const listEl = listRef?.current;
-    if (listEl) {
-      observedElements.push(listEl);
-      if (listEl.parentElement && listEl.parentElement !== scrollEl) {
-        observedElements.push(listEl.parentElement);
-      }
-    }
-    observedElements.forEach((el) => {
-      roManager.observe(el, handleRo);
-    });
 
     return () => {
       cancelAnimationFrame(raf);

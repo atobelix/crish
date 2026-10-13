@@ -132,24 +132,40 @@ describe('FoldableToolGroup 独立工具折叠组', () => {
     expect(root.getAttribute('data-expanded')).toBe('false');
   });
 
-  it('流式运行中存在 running 工具时，自动展开', () => {
-    const items: ToolRenderItem[] = [
+  it('流式运行中存在 running 工具时自动展开，全部完成后自动收敛折叠（手动切换除外）', () => {
+    const runningItems: ToolRenderItem[] = [
       {
         kind: 'single',
         tc: tc('t1', 'run_command', 'running'),
       },
     ];
+    const completedItems: ToolRenderItem[] = [
+      {
+        kind: 'single',
+        tc: tc('t1', 'run_command', 'success'),
+      },
+    ];
 
-    const { getByTestId } = render(
+    const { getByTestId, rerender } = render(
       <FoldableToolGroup
-        items={items}
+        items={runningItems}
         msgId="m1"
-        hostProps={{ ...baseHostProps(), items }}
+        hostProps={{ ...baseHostProps(), items: runningItems }}
       />
     );
 
     const root = getByTestId('foldable-tool-group');
     expect(root.getAttribute('data-expanded')).toBe('true');
+
+    // 工具执行完成 → 自动收敛折叠为单行摘要
+    rerender(
+      <FoldableToolGroup
+        items={completedItems}
+        msgId="m1"
+        hostProps={{ ...baseHostProps(), items: completedItems }}
+      />
+    );
+    expect(root.getAttribute('data-expanded')).toBe('false');
   });
 
   it('存在执行错误时展示错误标记', () => {

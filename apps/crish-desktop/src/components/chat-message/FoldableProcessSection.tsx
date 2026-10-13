@@ -26,7 +26,10 @@
 import * as React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { AssistantTimelineItem, ProcessSegmentMetrics } from '../../api/toolPresentation';
+import type {
+  AssistantTimelineItem,
+  ProcessSegmentMetrics,
+} from '../../api/toolPresentation';
 import {
   buildSlotId,
   DOMINANT_ICON_MAP,
@@ -86,8 +89,8 @@ export interface FoldableProcessSectionProps {
 }
 
 /** 主导动作图标（emoji 已废除，统一经 AppIcon / @hugeicons/core-free-icons 渲染） */
-const SectionLeadIcon: React.FC<{ metrics: ProcessSegmentMetrics }> = React.memo(
-  function SectionLeadIcon({ metrics }) {
+const SectionLeadIcon: React.FC<{ metrics: ProcessSegmentMetrics }> =
+  React.memo(function SectionLeadIcon({ metrics }) {
     const leadAction = arbitrateLeadAction(metrics);
     return (
       <AppIcon
@@ -98,8 +101,7 @@ const SectionLeadIcon: React.FC<{ metrics: ProcessSegmentMetrics }> = React.memo
         data-testid={`process-lead-icon-${leadAction}`}
       />
     );
-  }
-);
+  });
 
 /**
  * 段耗时计算（唯一口径）。
@@ -145,8 +147,8 @@ export function useSectionElapsedMs(
  * Slot DOM ID 唯一生成规则由 SSOT 承载（`toolPresentationTypes.buildSlotId`），
  * 本组件仅消费，禁止在此重复定义（防止规则漂移）。
  */
-export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> = React.memo(
-  function FoldableProcessSection({
+export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
+  React.memo(function FoldableProcessSection({
     msgId,
     sectionId,
     items,
@@ -205,7 +207,12 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> = Rea
     }, [sectionId, msgId, onExpand, onInvalidateActual]);
 
     // 段耗时：运行中跳秒，终态定格（唯一口径，禁止组件层自行计算）
-    const elapsedMs = useSectionElapsedMs(startTime, endTime, isLive, metrics.totalDurationMs);
+    const elapsedMs = useSectionElapsedMs(
+      startTime,
+      endTime,
+      isLive,
+      metrics.totalDurationMs
+    );
 
     /**
      * 控制栏文案：工作时间优先，单元素段退化为极简语义标签。
@@ -238,22 +245,30 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> = Rea
       metrics.toolCount === 0 &&
       metrics.subagentCount === 0;
 
-    if (isSingleThought) {
+    // 单思考段或非工作时间段（子项已由 ReasoningRow / FoldableToolGroup 自带 24px 独立折叠栏）
+    // 直接渲染内容槽位，避免与内部 FoldableToolGroup 产生重复的双层摘要折叠栏
+    const omitOuterControlBar =
+      isSingleThought || (!showWorkTime && items.length > 0 && !forceExpanded);
+
+    if (omitOuterControlBar) {
       return (
         <div
           className={`${styles.section} ${className}`}
           data-process-segment={sectionId}
-          data-single-thought="true"
+          data-single-thought={isSingleThought ? 'true' : undefined}
           data-foldable={isFoldable ? 'true' : 'false'}
           data-expanded={expanded ? 'true' : 'false'}
         >
           <div
             id={bodyId}
+            ref={setSlotRef}
             className={styles.sectionBody}
             data-testid={`process-slot-${sectionId}`}
           >
             {items.map((item, index) => (
-              <React.Fragment key={item.key}>{renderItem(item, index)}</React.Fragment>
+              <React.Fragment key={item.key}>
+                {renderItem(item, index)}
+              </React.Fragment>
             ))}
           </div>
         </div>
@@ -305,12 +320,13 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> = Rea
           data-testid={`process-slot-${sectionId}`}
         >
           {items.map((item, index) => (
-            <React.Fragment key={item.key}>{renderItem(item, index)}</React.Fragment>
+            <React.Fragment key={item.key}>
+              {renderItem(item, index)}
+            </React.Fragment>
           ))}
         </div>
       </div>
     );
-  }
-);
+  });
 
 FoldableProcessSection.displayName = 'FoldableProcessSection';

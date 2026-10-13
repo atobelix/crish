@@ -29,8 +29,13 @@ import { useWindowedList } from './useWindowedList';
  * 窗口化 → useWindowedList；分组/折叠 → useSessionGrouping；
  * 搜索/排序 → useSessionSearch；拖拽 → 既有 useSessionListDrag。
  */
-export function useSidebarSessionList(props: SidebarSessionListProps) {
+export function useSidebarSessionList(
+  props: SidebarSessionListProps & {
+    scrollHostRef?: React.RefObject<HTMLElement | null>;
+  }
+) {
   const {
+    scrollHostRef,
     sessions,
     activeSessionId,
     searchQuery,
@@ -236,6 +241,7 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
     activeGeneralIndex,
     sessionListRef,
     generalListRef,
+    scrollHostRef,
   });
 
   const navigateSession = useCallback(

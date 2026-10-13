@@ -137,6 +137,69 @@ describe('useSessionListWindow & 滚动宿主绑定与 <=45 节点虚拟化', ()
       expect(ensureIndex).toBeLessThan(range.end);
       expect(range.end - range.start).toBeLessThanOrEqual(45);
     });
+
+    it('防回归：当 count=78、ensureIndex=70（在底部）而用户滚动到顶部/中部（scrollTop=280，可视区第 10~25 行）时，[start, end) 必须 100% 覆盖可视行，topPad 绝不侵入上半屏', () => {
+      const scrollEl = document.createElement('div');
+      const viewportHeight = 400;
+      const scrollTop = 280; // 第 10 行 (10 * 28 = 280) .. 第 25 行 (25 * 28 = 700)
+      Object.defineProperty(scrollEl, 'clientHeight', {
+        value: viewportHeight,
+        configurable: true,
+      });
+      Object.defineProperty(scrollEl, 'scrollTop', {
+        value: scrollTop,
+        configurable: true,
+      });
+
+      const range = computeWindowWithConstraint({
+        count: 78,
+        scrollEl,
+        listEl: null,
+        ensureIndex: 70,
+      });
+
+      expect(range.windowed).toBe(true);
+      expect(range.end - range.start).toBeLessThanOrEqual(
+        MAX_SIDEBAR_WINDOW_ROWS
+      );
+      // 必须 100% 覆盖 scrollTop(280) .. scrollTop+vh(680) 内的所有可视行（第 10 ~ 25 行）
+      expect(range.start).toBeLessThanOrEqual(10);
+      expect(range.end).toBeGreaterThanOrEqual(25);
+      // topPad 绝不侵入当前可视视口上半部分
+      expect(range.topPad).toBeLessThanOrEqual(scrollTop);
+      expect(range.end * 28).toBeGreaterThanOrEqual(scrollTop + viewportHeight);
+    });
+
+    it('防回归：当 count=78、ensureIndex=0（在顶部）而用户滚动到底部（scrollTop=1400，可视区第 50~65 行）时，[start, end) 必须 100% 覆盖可视行，bottomPad 绝不裁剪下半屏', () => {
+      const scrollEl = document.createElement('div');
+      const viewportHeight = 400;
+      const scrollTop = 1400; // 第 50 行 (50 * 28 = 1400) .. 第 65 行 (65 * 28 = 1820)
+      Object.defineProperty(scrollEl, 'clientHeight', {
+        value: viewportHeight,
+        configurable: true,
+      });
+      Object.defineProperty(scrollEl, 'scrollTop', {
+        value: scrollTop,
+        configurable: true,
+      });
+
+      const range = computeWindowWithConstraint({
+        count: 78,
+        scrollEl,
+        listEl: null,
+        ensureIndex: 0,
+      });
+
+      expect(range.windowed).toBe(true);
+      expect(range.end - range.start).toBeLessThanOrEqual(
+        MAX_SIDEBAR_WINDOW_ROWS
+      );
+      // 必须 100% 覆盖 scrollTop(1400) .. scrollTop+vh(1800) 内的所有可视行（第 50 ~ 65 行）
+      expect(range.start).toBeLessThanOrEqual(50);
+      expect(range.end).toBeGreaterThanOrEqual(65);
+      expect(range.topPad).toBeLessThanOrEqual(scrollTop);
+      expect(range.end * 28).toBeGreaterThanOrEqual(scrollTop + viewportHeight);
+    });
   });
 
   describe('useSessionListWindow (全子树 MutationObserver 彻底拔除断言)', () => {

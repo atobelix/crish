@@ -51,6 +51,7 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
     const slotRef = useRef<HTMLDivElement | null>(null);
     const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isInitialMount = useRef(true);
+    const userInteractedRef = useRef(false);
 
     const metrics: ProcessSegmentMetrics = useMemo(() => {
       return aggregateProcessMetrics([
@@ -62,19 +63,32 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
       ]);
     }, [items]);
 
-    // 默认折叠，若当前正在运行则直出展开
+    const prevHasRunningRef = useRef(metrics.hasRunning);
+
+    // 默认折叠；若当前正在运行或包含子代理（铁律四）则直出展开
     const [isExpanded, setIsExpanded] = useState<boolean>(
-      () => defaultExpanded || metrics.hasRunning
+      () => defaultExpanded || metrics.hasRunning || metrics.subagentCount > 0
     );
 
-    // 流式执行中进入 running 时保持展开
+    // 流式执行中进入 running 时保持展开；全部工具执行完毕后自动收敛折叠（用户手动切换或子代理除外）
     useEffect(() => {
-      if (metrics.hasRunning) {
+      const wasRunning = prevHasRunningRef.current;
+      prevHasRunningRef.current = metrics.hasRunning;
+      if (metrics.hasRunning || metrics.subagentCount > 0) {
         setIsExpanded(true);
+      } else if (wasRunning && !userInteractedRef.current && !defaultExpanded) {
+        setIsExpanded(false);
+        onInvalidate?.();
       }
-    }, [metrics.hasRunning]);
+    }, [
+      metrics.hasRunning,
+      metrics.subagentCount,
+      defaultExpanded,
+      onInvalidate,
+    ]);
 
     const handleToggle = useCallback(() => {
+      userInteractedRef.current = true;
       setIsExpanded((prev) => {
         const next = !prev;
         onInvalidate?.();

@@ -4,6 +4,7 @@ import { GENERAL_FOLDER } from '../../../api/projectStore';
 import { navigateToNewDraft } from '../../../store/storeAccess';
 import type { SessionListWindowRange } from '../../../api/sessionListWindow';
 import { WindowedSessionUl } from './WindowedSessionUl';
+import { resolveActualScrollHost } from './useSessionListWindow';
 import { Button, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
 import { AppIcon } from '../../ui/icons/index';
@@ -43,6 +44,13 @@ export function GeneralSection({
 }: GeneralSectionProps) {
   void _onMoveSessionRealtime;
   const [isExpanded, setIsExpanded] = React.useState(false);
+
+  React.useEffect(() => {
+    const listEl = generalListRef.current;
+    if (!listEl) return;
+    const host = resolveActualScrollHost(null, listEl);
+    host?.dispatchEvent(new Event('scroll'));
+  }, [isExpanded, generalWindowEnabled, generalListRef]);
 
   const displayedSessions = isExpanded
     ? generalSessions
