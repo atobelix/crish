@@ -92,7 +92,6 @@ import {
   type OptimisticLockEntry,
 } from '../useWorkflowsState';
 import {
-  CRON_QUICK_CHIPS,
   WorkflowForm,
   type ExtendedWorkflowScheduleDraft,
 } from '../WorkflowForm';
@@ -419,7 +418,7 @@ describe('Scheduled Tasks Revamp — 前端五大核心维度专项单元测试'
       );
     }
 
-    it('选择自定义 Cron 时渲染 5 段式输入框与快捷预设胶囊，点击胶囊自动填入表达式并更新语义预览', () => {
+    it('选择自定义 Cron 时渲染 5 段式输入框与标题行内联语义预览，无冗余预设胶囊', () => {
       const onDraftChangeSpy = vi.fn();
       render(
         <ControlledWorkflowFormWrapper
@@ -440,23 +439,12 @@ describe('Scheduled Tasks Revamp — 前端五大核心维度专项单元测试'
       ) as HTMLInputElement;
       expect(cronInput.value).toBe('*/30 * * * *');
 
-      // 验证语义预览显示
+      // 验证标题行内联语义预览显示
       const previewStatus = screen.getByTestId('cron-preview-status');
-      expect(previewStatus.textContent).toContain('✓ 语义预览：');
-      expect(previewStatus.textContent).toContain('每 30 分钟');
+      expect(previewStatus.textContent).toBe('每 30 分钟');
 
-      // 验证所有快捷预设胶囊均已渲染，点击「工作日 9:00 (0 9 * * 1-5)」胶囊自动填入表达式
-      for (const chip of CRON_QUICK_CHIPS) {
-        expect(
-          screen.getByRole('button', { name: chip.label })
-        ).toBeInTheDocument();
-      }
-
-      const weekdayChip = screen.getByRole('button', {
-        name: '工作日 9:00 (0 9 * * 1-5)',
-      });
-      fireEvent.click(weekdayChip);
-
+      // 动态修改 Cron 表达式，实时内联更新
+      fireEvent.change(cronInput, { target: { value: '0 9 * * 1-5' } });
       expect(cronInput.value).toBe('0 9 * * 1-5');
       expect(onDraftChangeSpy).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -464,10 +452,10 @@ describe('Scheduled Tasks Revamp — 前端五大核心维度专项单元测试'
           cronExpression: '0 9 * * 1-5',
         })
       );
-      expect(previewStatus.textContent).toContain('工作日 09:00');
+      expect(previewStatus.textContent).toBe('工作日 09:00');
     });
 
-    it('项目下拉框支持“全局默认工作区”（cwd = ""），不会强制覆写为空外项目，且空 cwd 通过草稿校验', async () => {
+    it('项目下拉框支持“全局工作区”（cwd = ""），不会强制覆写为空外项目，且空 cwd 通过草稿校验', async () => {
       const onDraftChangeSpy = vi.fn();
       render(
         <ControlledWorkflowFormWrapper
@@ -483,13 +471,11 @@ describe('Scheduled Tasks Revamp — 前端五大核心维度专项单元测试'
       // 挂载后绝不触发强制覆写 cwd 的副作用
       expect(onDraftChangeSpy).not.toHaveBeenCalled();
 
-      // 验证所属项目下拉框默认选中“全局默认工作区”
+      // 验证所属项目下拉框默认选中“全局工作区”
       const projectCombo = screen.getByRole('combobox', { name: '所属项目' });
-      expect(projectCombo).toHaveTextContent(
-        '🌐 全局默认工作区（不绑定特定项目）'
-      );
+      expect(projectCombo).toHaveTextContent('🌐 全局工作区');
 
-      // 展开下拉框，切换到具体项目，再切回全局默认工作区
+      // 展开下拉框，切换到具体项目，再切回全局工作区
       fireEvent.click(projectCombo);
       const projectOption = await screen.findByRole('option', {
         name: /Conex 核心仓/,
@@ -501,7 +487,7 @@ describe('Scheduled Tasks Revamp — 前端五大核心维度专项单元测试'
 
       fireEvent.click(projectCombo);
       const globalOption = await screen.findByRole('option', {
-        name: /全局默认工作区/,
+        name: /全局工作区/,
       });
       fireEvent.click(globalOption);
       expect(onDraftChangeSpy).toHaveBeenLastCalledWith(
@@ -537,7 +523,7 @@ describe('Scheduled Tasks Revamp — 前端五大核心维度专项单元测试'
       expect(roundTripCron.targetSessionId).toBe('sess-bound-9');
     });
 
-    it('验证执行会话模式切换（独立后台会话 vs 注入指定对话）与目标会话绑定/解绑', () => {
+    it('验证执行模式切换（后台独立执行 vs 绑定当前对话）与目标会话绑定/解绑', () => {
       const onDraftChangeSpy = vi.fn();
       render(
         <ControlledWorkflowFormWrapper
@@ -551,17 +537,17 @@ describe('Scheduled Tasks Revamp — 前端五大核心维度专项单元测试'
       );
 
       const isolatedRadio = screen.getByRole('radio', {
-        name: /独立后台会话/,
+        name: /后台独立执行/,
       });
       const currentSessionRadio = screen.getByRole('radio', {
-        name: /注入指定对话/,
+        name: /绑定当前对话/,
       });
 
       expect(isolatedRadio).toHaveAttribute('aria-checked', 'true');
       expect(currentSessionRadio).toHaveAttribute('aria-checked', 'false');
       expect(screen.queryByLabelText('目标会话 ID')).toBeNull();
 
-      // 切换到「注入指定对话」模式：自动带入当前活跃会话 ID
+      // 切换到「绑定当前对话」模式：自动带入当前活跃会话 ID
       fireEvent.click(currentSessionRadio);
       expect(currentSessionRadio).toHaveAttribute('aria-checked', 'true');
       expect(onDraftChangeSpy).toHaveBeenLastCalledWith(
@@ -580,7 +566,7 @@ describe('Scheduled Tasks Revamp — 前端五大核心维度专项单元测试'
       fireEvent.change(sessionInput, { target: { value: 'sess-custom-999' } });
       expect(sessionInput.value).toBe('sess-custom-999');
 
-      // 点击「解绑对话」按钮切回独立后台会话并清空 targetSessionId
+      // 点击「解绑对话」按钮切回后台独立执行并清空 targetSessionId
       const unbindBtn = screen.getByRole('button', { name: '解绑对话' });
       fireEvent.click(unbindBtn);
 

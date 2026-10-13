@@ -147,6 +147,31 @@
   flex: 1 1 160px;
 }
 
+.schedFieldLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.cronInlinePreview {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cronInlineError {
+  font-size: var(--font-size-xs);
+  color: var(--accent-orange);
+  font-weight: var(--font-weight-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .schedFieldLabel {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);

@@ -406,7 +406,7 @@ export const ScheduledTaskExecutionCard: React.FC<
               className={styles.runningHint}
               data-testid="scheduled-card-running-hint"
             >
-              <span>正在执行定时任务并等待 Agent 响应…</span>
+              <span>正在执行…</span>
             </div>
           ) : null}
         </div>
