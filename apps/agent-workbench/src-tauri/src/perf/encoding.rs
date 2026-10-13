@@ -104,25 +104,6 @@ pub(crate) fn perf_encoding_decode(
     decode_to_utf8(&data, encoding.as_deref())
 }
 
-/// Encode UTF-8 string to target encoding bytes.
-fn encode_from_utf8(text: &str, target_encoding: &str) -> Result<Vec<u8>, String> {
-    let encoding = Encoding::for_label(target_encoding.as_bytes())
-        .ok_or_else(|| format!("Unsupported encoding: {target_encoding}"))?;
-    let (cow, _, _) = encoding.encode(text);
-    Ok(cow.into_owned())
-}
-
-/// Encode UTF-8 text to bytes in the specified target encoding.
-// G11a 备注：perf_encoding_encode 为 PE-03 删除注册后的旧登记名命令面
-// （core_text_encode 已接线，本名保留兼容），dead_code 静音。
-#[allow(dead_code)]
-#[tauri::command]
-pub(crate) fn perf_encoding_encode(
-    text: String,
-    target_encoding: String,
-) -> Result<Vec<u8>, String> {
-    encode_from_utf8(&text, &target_encoding)
-}
 
 #[cfg(test)]
 mod tests {

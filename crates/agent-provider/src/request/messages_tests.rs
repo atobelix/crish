@@ -1087,13 +1087,10 @@ fn domain_messages_remain_100_percent_pure_and_unmodified() {
 
 // ── G5-a/G5-b（T2.2/T2.3）：WireCompat 驱动的模型级序列化消费面 ──
 
-/// 便捷构造 DeepSeek 判定上下文（vendor=deepseek，模型/URL 兜底）
+/// 便捷构造 DeepSeek 判定上下文（vendor=deepseek）
 fn deepseek_compat() -> WireCompat<'static> {
     WireCompat {
         vendor: Some("deepseek"),
-        model: Some("deepseek-chat"),
-        base_url: Some("https://api.deepseek.com"),
-        supports_reasoning: true,
         thinking_format: None,
         supports_developer_role: false,
     }
@@ -1202,9 +1199,6 @@ fn non_deepseek_does_not_force_reasoning_content_key() {
     // Include 有思考才带，属既有 mode 语义，不做强制）。
     let non_deepseek = WireCompat {
         vendor: Some("openai"),
-        model: Some("gpt-5"),
-        base_url: Some("https://api.openai.com"),
-        supports_reasoning: true,
         thinking_format: None,
         supports_developer_role: false,
     };
@@ -1276,9 +1270,6 @@ fn developer_role_openrouter_anthropic_prefix_reasoning_uses_developer() {
     // （不再走 openrouter URL / 模型前缀启发式；supports_developer_role 是唯一开关）
     let compat = WireCompat {
         vendor: Some("openrouter"),
-        model: Some("anthropic/claude-sonnet-4"),
-        base_url: Some("https://openrouter.ai/api/v1"),
-        supports_reasoning: true,
         thinking_format: None,
         supports_developer_role: true,
     };
@@ -1301,9 +1292,6 @@ fn developer_role_openai_prefix_reasoning_uses_developer() {
     // 同上：supports_developer_role=true → developer（与 vendor/前缀无关）
     let compat = WireCompat {
         vendor: Some("openrouter"),
-        model: Some("openai/gpt-5"),
-        base_url: Some("https://openrouter.ai/api/v1"),
-        supports_reasoning: true,
         thinking_format: None,
         supports_developer_role: true,
     };
@@ -1319,37 +1307,18 @@ fn developer_role_openai_prefix_reasoning_uses_developer() {
 
 #[test]
 fn developer_role_not_reasoning_or_not_openrouter_uses_system() {
-    // 未显式声明 supports_developer_role（含 openrouter+前缀+reasoning 组合）→
-    // role:"system"（yaml 驱动，URL / 前缀启发式已从生产路径拆除）
+    // 未显式声明 supports_developer_role → role:"system"
     let cases: Vec<WireCompat<'static>> = vec![
-        // 未声明 developer role（即便 openrouter+anthropic 前缀+reasoning）
         WireCompat {
             vendor: Some("openrouter"),
-            model: Some("anthropic/claude-sonnet-4"),
-            base_url: Some("https://openrouter.ai/api/v1"),
-            supports_reasoning: true,
             thinking_format: None,
             supports_developer_role: false,
         },
-        // 非 reasoning（supports_reasoning=false）
-        WireCompat {
-            vendor: Some("openrouter"),
-            model: Some("anthropic/claude-sonnet-4"),
-            base_url: Some("https://openrouter.ai/api/v1"),
-            supports_reasoning: false,
-            thinking_format: None,
-            supports_developer_role: false,
-        },
-        // 非 openrouter（anthropic 官方）
         WireCompat {
             vendor: Some("anthropic"),
-            model: Some("claude-sonnet-4"),
-            base_url: Some("https://api.anthropic.com"),
-            supports_reasoning: true,
             thinking_format: None,
             supports_developer_role: false,
         },
-        // 缺省 compat（全 None → supports_reasoning=false）
         WireCompat::default(),
     ];
     for (i, compat) in cases.iter().enumerate() {
@@ -1371,9 +1340,6 @@ fn developer_role_not_reasoning_or_not_openrouter_uses_system() {
         SystemPromptWireMode::UserPrefix,
         WireCompat {
             vendor: Some("openrouter"),
-            model: Some("anthropic/claude-sonnet-4"),
-            base_url: Some("https://openrouter.ai/api/v1"),
-            supports_reasoning: true,
             thinking_format: None,
             supports_developer_role: true,
         },
@@ -1399,17 +1365,10 @@ fn wire_compat_deepseek_inference() {
         ..WireCompat::default()
     }
     .is_deepseek());
-    // URL 盲猜已被彻底废除：仅带 base_url 但无 vendor/thinking_format 声明时不再盲猜
-    assert!(!WireCompat {
-        base_url: Some("https://api.deepseek.com"),
-        ..WireCompat::default()
-    }
-    .is_deepseek());
     // 非 DeepSeek / 缺省 → false
     assert!(!WireCompat::default().is_deepseek());
     assert!(!WireCompat {
         vendor: Some("openai"),
-        base_url: Some("https://api.openai.com"),
         ..WireCompat::default()
     }
     .is_deepseek());

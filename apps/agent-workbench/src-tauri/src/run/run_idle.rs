@@ -548,20 +548,12 @@ pub(crate) mod idle_resume {
         if entries.is_empty() {
             return Vec::new();
         }
-        // 彻底移除 context_states 伪造 User 消息逻辑；过滤丢弃任何残留的 CONTEXT_STATE_GROUP 条目
-        let valid_entries: Vec<_> = entries
-            .into_iter()
-            .filter(|e| e.group_id.as_deref() != Some(CONTEXT_STATE_GROUP))
-            .collect();
-        if valid_entries.is_empty() {
-            return Vec::new();
-        }
         // D6 §3.4：合并注入上限（评审 selection-03:220 建议 ≤16 条）——保留
         // 最新 ≤16 条（FIFO 尾部即最新；省略最旧——旧条目信息过时风险高，
         // D6 §8 决策 4），超出在文本注明省略 N 条。省略轨迹不丢：恢复域
         // 条目有 recover_notifications 落库冗余，定时器/子代理终态条目有
         // 事件表留痕——队列只承载提醒，不承载全量。
-        let mut entries = valid_entries;
+        let mut entries = entries;
         let (kept, omitted) = if entries.len() > RESTORE_MERGE_INJECT_LIMIT {
             let split = entries.len() - RESTORE_MERGE_INJECT_LIMIT;
             let omitted = entries[..split].len();

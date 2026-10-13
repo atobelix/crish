@@ -13,7 +13,10 @@ pub mod diff_engine {
 
         /// Compute a unified diff between old_text and new_text, returning hunk-structured output.
         pub fn diff(old_text: &str, new_text: &str) -> DiffResult {
-            if old_text == new_text {
+            if (std::ptr::eq(old_text.as_ptr(), new_text.as_ptr())
+                && old_text.len() == new_text.len())
+                || old_text == new_text
+            {
                 return DiffResult {
                     hunks: vec![],
                     added_lines: 0,
@@ -25,13 +28,13 @@ pub mod diff_engine {
             let mut added_lines: usize = 0;
             let mut removed_lines: usize = 0;
 
-            // Collect all changes with positions
-            let mut changes: Vec<(ChangeTag, Option<usize>, Option<usize>, String)> = Vec::new();
+            // Collect changes with zero-copy line slices and CRLF/LF normalization (KD-01, KD-04)
+            let mut changes: Vec<(ChangeTag, Option<usize>, Option<usize>, &str)> = Vec::new();
             for change in diff.iter_all_changes() {
                 let tag = change.tag();
                 let old_idx = change.old_index();
                 let new_idx = change.new_index();
-                let content = change.value().trim_end_matches('\n').to_string();
+                let content = change.value().trim_end_matches(['\r', '\n']);
 
                 match tag {
                     ChangeTag::Equal => {}
@@ -64,7 +67,7 @@ pub mod diff_engine {
 
     /// Build hunk groups from a flat list of changes, including context lines around modifications.
     fn build_hunks(
-        changes: &[(ChangeTag, Option<usize>, Option<usize>, String)],
+        changes: &[(ChangeTag, Option<usize>, Option<usize>, &str)],
         context: usize,
     ) -> Vec<DiffHunk> {
         if changes.is_empty() {
@@ -96,8 +99,12 @@ pub mod diff_engine {
         }
         groups.push((group_start, mod_indices.len() - 1));
 
-        // Build hunks from groups
-        let mut hunks = Vec::new();
+        // Build hunks from groups using a single-pass monotonic cursor (KD-02)
+        let mut hunks = Vec::with_capacity(groups.len());
+        let mut scan_cursor: usize = 0;
+        let mut prev_old: usize = 0;
+        let mut prev_new: usize = 0;
+
         for (g_start, g_end) in groups {
             let first_mod = mod_indices[g_start];
             let last_mod = mod_indices[g_end];
@@ -105,25 +112,24 @@ pub mod diff_engine {
             let hunk_start = first_mod.saturating_sub(context);
             let hunk_end = (last_mod + context + 1).min(changes.len());
 
-            let mut lines = Vec::new();
+            // Advance monotonic cursor to hunk_start in O(1) amortized time per change
+            while scan_cursor < hunk_start {
+                if let Some(o) = changes[scan_cursor].1 {
+                    prev_old = o + 1;
+                }
+                if let Some(n) = changes[scan_cursor].2 {
+                    prev_new = n + 1;
+                }
+                scan_cursor += 1;
+            }
+
+            let mut lines = Vec::with_capacity(hunk_end - hunk_start);
             let mut old_start = None;
             let mut new_start = None;
             let mut old_count: usize = 0;
             let mut new_count: usize = 0;
 
-            // 预先定位 hunk_start 之前最近的历史行号
-            let mut prev_old = 0;
-            let mut prev_new = 0;
-            for i in 0..hunk_start {
-                if let Some(o) = changes[i].1 {
-                    prev_old = o + 1;
-                }
-                if let Some(n) = changes[i].2 {
-                    prev_new = n + 1;
-                }
-            }
-
-            for (tag, old_idx, new_idx, content) in changes.iter().take(hunk_end).skip(hunk_start) {
+            for &(tag, old_idx, new_idx, content) in &changes[hunk_start..hunk_end] {
                 if old_start.is_none() {
                     if let Some(idx) = old_idx {
                         old_start = Some(idx + 1); // 1-based
@@ -153,7 +159,7 @@ pub mod diff_engine {
 
                 lines.push(DiffLine {
                     kind,
-                    content: content.clone(),
+                    content: content.to_string(),
                 });
             }
 
@@ -295,6 +301,23 @@ mod tests {
             assert!(hunk["newStart"].is_number());
             assert!(hunk["newLines"].is_number());
             assert!(hunk["lines"].is_array());
+        }
+    }
+
+    #[test]
+    fn crlf_lines_strip_carriage_return() {
+        let old = "alpha\r\nbeta\r\ngamma\r\n";
+        let new = "alpha\r\nbeta_modified\r\ngamma\r\n";
+        let result = DiffEngine::diff(old, new);
+        assert_eq!(result.added_lines, 1);
+        assert_eq!(result.removed_lines, 1);
+        assert_eq!(result.hunks.len(), 1);
+        for line in &result.hunks[0].lines {
+            assert!(
+                !line.content.ends_with('\r'),
+                "Line content should not contain trailing CR: {:?}",
+                line.content
+            );
         }
     }
 }

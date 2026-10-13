@@ -78,11 +78,8 @@ impl AgentSessionLoop {
             // C1b：中间件链（默认空；写前自动备份由壳层注入 options 后
             // 经本处同步）注入执行器——with_options 派生同步会整体替换链
             // （options 同源）
-            tool_executor: {
-                let mut exec = ToolExecutor::new(tool_registry);
-                let _ = exec.with_middleware(options.tool_exec.tool_middleware.clone());
-                exec
-            },
+            tool_executor: ToolExecutor::new(tool_registry)
+                .with_middleware(options.tool_exec.tool_middleware),
             tool_ctx: ToolExecCtx {
                 run_id,
                 session_id: session_id.clone(),
@@ -204,15 +201,11 @@ impl AgentSessionLoop {
         } else {
             None
         };
-        let _ = self.tool_executor.with_idempotency_opt(idempotency);
-        // 中间件链 / 插件钩子派生同步（中间件与审批的优先级语义见
-        // tool_exec.rs 模块头注）
-        let _ = self
-            .tool_executor
-            .with_middleware(options.tool_exec.tool_middleware.clone());
-        let _ = self
-            .tool_executor
-            .with_hooks(options.tool_exec.hooks.clone());
+        // 中间件链 / 插件钩子派生原位同步（SL-COMPAT-18：消除冗余克隆丢弃）
+        self.tool_executor
+            .set_idempotency_opt(idempotency)
+            .set_middleware(options.tool_exec.tool_middleware)
+            .set_hooks(options.tool_exec.hooks);
         self
     }
 

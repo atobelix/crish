@@ -432,21 +432,6 @@ impl TrashService {
         Ok(original.clone())
     }
 
-    /// 撤回批量回滚入口（统一输入流收敛战役 R1 · 详案 §1.2-④ 接线）
-    /// 旧 path-only 回滚面已停用：非空路径缺少事件 owner，必须使用
-    /// [Self::rollback_operations]；空清单保留为幂等 no-op。
-    pub fn rollback_before(
-        &self,
-        boundary: u64,
-        target_paths: &[std::path::PathBuf],
-    ) -> Result<Vec<RollbackOutcome>> {
-        let _boundary = boundary;
-        if !target_paths.is_empty() {
-            bail!("路径级回滚缺少事件 owner，拒绝越过撤回边界；请使用 rollback_operations");
-        }
-        Ok(Vec::new())
-    }
-
     /// 按 ToolEnd sequence 逆序恢复精确选中的写操作。
     /// `operations` 按事件 sequence 升序提供；同一 owner 的重试快照按
     /// 持久化顺序逆序恢复，使最终内容回到该 operation 首次写入前。
@@ -1751,15 +1736,5 @@ mod tests {
             .rollback_operations(&[operation("selected", "a.txt")])
             .unwrap_err();
         assert!(err.to_string().contains("解析登记文件失败"));
-    }
-
-    /// path-only API 不知道事件 owner，拒绝执行可能越过撤回边界的恢复。
-    #[test]
-    fn rollback_before_rejects_path_only_selection() {
-        let ws = TempDir::new("rb_legacy_ws");
-        let trash_root = TempDir::new("rb_legacy_trash");
-        let svc = TrashService::new(trash_root.path());
-        let file = ws.write("a.txt", "v0");
-        assert!(svc.rollback_before(42, &[file]).is_err());
     }
 }

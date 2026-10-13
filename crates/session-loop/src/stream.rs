@@ -445,7 +445,7 @@ fn finish(aggregate: Aggregate, aborted: bool, accounting: CacheAccounting) -> C
     };
     let metadata = build_message_metadata(&aggregate, stop_reason, false, accounting);
     ConsumeResult {
-        response: ProviderOutput::message(aggregate.text.clone(), aggregate.tool_calls.clone()),
+        response: ProviderOutput::message(aggregate.text, aggregate.tool_calls),
         diagnostics: aggregate.diagnostics,
         metadata,
     }
@@ -472,7 +472,7 @@ fn finish_after_abort(aggregate: Aggregate, accounting: CacheAccounting) -> Cons
     }
     let metadata = build_message_metadata(&aggregate, ConsumeStopReason::Aborted, true, accounting);
     ConsumeResult {
-        response: ProviderOutput::message(aggregate.text.clone(), aggregate.tool_calls.clone()),
+        response: ProviderOutput::message(aggregate.text, aggregate.tool_calls),
         diagnostics: aggregate.diagnostics,
         metadata,
     }

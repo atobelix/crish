@@ -257,19 +257,27 @@ pub fn collect_checkpoint_from_messages(
         if message.role == AgentMessageRole::System {
             continue;
         }
-        let mut text = message.text();
-        for block in &message.blocks {
-            if let AgentMessageBlock::ToolResult { output, .. } = block {
-                if let Some(output_text) = &output.text {
-                    text.push_str(output_text);
+        let text_slices = message
+            .blocks
+            .iter()
+            .filter_map(|block| match block {
+                AgentMessageBlock::Text { text } => Some(text.as_str()),
+                _ => None,
+            })
+            .chain(message.blocks.iter().filter_map(|block| match block {
+                AgentMessageBlock::ToolResult { output, .. } => output.text.as_deref(),
+                _ => None,
+            }));
+        for slice in text_slices {
+            if !slice.contains(CHECKPOINT_MARKER) && !slice.contains(CONEX_CHECKPOINT_MARKER) {
+                continue;
+            }
+            if let Some(mut checkpoint) = parse_checkpoint_marker(slice)? {
+                if checkpoint.timestamp.is_none() {
+                    checkpoint.timestamp = Some(conex_shared::time::now_iso_utc());
                 }
+                return Ok(Some(checkpoint));
             }
-        }
-        if let Some(mut checkpoint) = parse_checkpoint_marker(&text)? {
-            if checkpoint.timestamp.is_none() {
-                checkpoint.timestamp = Some(conex_shared::time::now_iso_utc());
-            }
-            return Ok(Some(checkpoint));
         }
     }
     Ok(None)

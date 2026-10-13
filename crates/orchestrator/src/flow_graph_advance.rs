@@ -6,7 +6,6 @@
 //! 预算判定与 spawn 在本模块内完成。
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, OnceLock};
 
 use agent_tools::tools::subagent::{
     check_recursion_guard, RecursionGuardSnapshot, SubagentSpawnRequest, SubagentState,
@@ -20,76 +19,12 @@ use super::scheduler::{
     FlowAdvance, FlowError, FlowReport, FlowReportKind, FlowScheduler, FlowStarted, FlowWakeup,
 };
 
-// ── 声明序索引缓存（预计算一次，复用）─────────────────────────────
-// 审计02指出 advance 每轮重建 HashMap（每轮分配）。此处改为会话级缓存复用：
-// FlowGraph 构造（声明校验通过）后首次计算 `id -> 声明序` 并缓存；同会话
-// 后续 advance 仅查表（Arc 复用），不再每轮重建 HashMap。图声明变更（节点
-// 增删或重排导致 ids 序列变化）时重算。实现语义等价于“FlowGraph 构造时一次
-// 计算声明序索引”，但不改 FlowGraph 结构，仅在本推进域内缓存。
-
-struct CachedDeclarationOrder {
-    ids: Vec<FlowNodeId>,
-    map: Arc<HashMap<FlowNodeId, usize>>,
-}
-
-fn declaration_order_cache() -> &'static Mutex<HashMap<String, CachedDeclarationOrder>> {
-    static CACHE: OnceLock<Mutex<HashMap<String, CachedDeclarationOrder>>> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-/// 获取声明序索引（会话级预计算复用，advance 内仅查表）
-///
-/// 命中缓存且 ids 序列一致时直接复用 Arc（无 HashMap 重建）；未命中或图
-/// 声明变更时重算一次并更新缓存。
-fn cached_declaration_order(
-    session_id: &str,
-    graph: &FlowGraph,
-) -> Arc<HashMap<FlowNodeId, usize>> {
-    // 快路径：尝试命中
-    {
-        let cache = declaration_order_cache().lock().unwrap_or_else(|e| {
-            tracing::error!(
-                target: "orchestrator",
-                "declaration_order_cache 锁中毒，已恢复"
-            );
-            e.into_inner()
-        });
-        if let Some(cached) = cache.get(session_id) {
-            if cached.ids.len() == graph.len()
-                && cached
-                    .ids
-                    .iter()
-                    .zip(graph.nodes())
-                    .all(|(a, b)| a == &b.id)
-            {
-                return Arc::clone(&cached.map);
-            }
-        }
-    }
-    // 未命中：重算
-    let map: HashMap<FlowNodeId, usize> = graph
-        .nodes()
-        .iter()
-        .enumerate()
-        .map(|(i, n)| (n.id.clone(), i))
-        .collect();
-    let arc = Arc::new(map);
-    let ids = graph.nodes().iter().map(|n| n.id.clone()).collect();
-    let mut cache = declaration_order_cache().lock().unwrap_or_else(|e| {
-        tracing::error!(
-            target: "orchestrator",
-            "declaration_order_cache 锁中毒，已恢复"
-        );
-        e.into_inner()
-    });
-    cache.insert(
-        session_id.to_string(),
-        CachedDeclarationOrder {
-            ids,
-            map: Arc::clone(&arc),
-        },
-    );
-    arc
+/// 判断两个节点的 `depends_on` 集合是否等价（排序无关的集合等价判定，修复 DEFECT-03）。
+#[inline]
+fn same_dependency_set(a: &[FlowNodeId], b: &[FlowNodeId]) -> bool {
+    a.len() == b.len()
+        && a.iter().all(|dep| b.contains(dep))
+        && b.iter().all(|dep| a.contains(dep))
 }
 
 impl FlowScheduler {
@@ -115,8 +50,13 @@ impl FlowScheduler {
 
         let mut mutated = false;
         let mut iteration = 0usize;
-        // 声明序索引改为会话级缓存复用（预计算一次，advance 内仅查表，不再每轮重建 HashMap）
-        let order_index = cached_declaration_order(&self.session_id, &graph);
+        // 局部栈上构建轻量级 O(V) 节点索引映射（彻底消除进程级全局静态锁争用与会话内存泄漏）
+        let order_index: HashMap<&str, usize> = graph
+            .nodes()
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.id.as_str(), i))
+            .collect();
         loop {
             iteration += 1;
             // 防御性上界：每轮至少一个节点发生状态迁移，节点数 + 1 轮内收敛
@@ -134,15 +74,20 @@ impl FlowScheduler {
             if self.dirty_set.is_empty() {
                 break;
             }
-            // 2. 仅遍历 dirty 集 O(dirty)（按声明序排序，与原全量扫描语义一致）
+            // 2. 仅遍历 dirty 集 O(dirty)（按声明序排序，O(1) 索引查表）
             let mut ready_ids: Vec<FlowNodeId> = self
                 .dirty_set
                 .iter()
-                .filter_map(|id| graph.node(id).map(|n| (n, id.clone())))
+                .filter_map(|id| {
+                    order_index
+                        .get(id.as_str())
+                        .and_then(|&idx| graph.nodes().get(idx))
+                        .map(|n| (n, id.clone()))
+                })
                 .filter(|(node, _)| self.is_ready(node))
                 .map(|(_, id)| id)
                 .collect();
-            ready_ids.sort_by_key(|id| order_index.get(id).copied().unwrap_or(usize::MAX));
+            ready_ids.sort_by_key(|id| order_index.get(id.as_str()).copied().unwrap_or(usize::MAX));
             // 本轮脏集已判定；后续仅由状态迁移 / Block 波及再入集
             self.dirty_set.clear();
             if ready_ids.is_empty() {
@@ -152,7 +97,11 @@ impl FlowScheduler {
             let mut budget_blocked: Vec<FlowNodeId> = Vec::new();
             for (idx, node_id) in ready_ids.iter().enumerate() {
                 let node_id = node_id.clone();
-                let node = graph.node(&node_id).expect("就绪集合来自图节点");
+                let node_idx = order_index
+                    .get(node_id.as_str())
+                    .copied()
+                    .expect("就绪集合来自图节点");
+                let node = &graph.nodes()[node_idx];
                 // 合成唤醒：综合节点就绪即产事件（不轮询；同节点只唤醒一次）
                 if node.is_composite {
                     let runtime = self
@@ -443,15 +392,14 @@ impl FlowScheduler {
         let Some(graph) = self.graph.as_ref() else {
             return false;
         };
-        graph
-            .nodes()
-            .iter()
-            .take_while(|n| n.id != node.id)
-            .any(|n| {
-                n.depends_on == node.depends_on
-                    && !n.parallel
-                    && !self.serial_predecessor_satisfied(n)
-            })
+        let end_idx = graph
+            .node_order(&node.id)
+            .unwrap_or_else(|| graph.nodes().iter().position(|n| n.id == node.id).unwrap_or(0));
+        graph.nodes()[..end_idx].iter().any(|n| {
+            !n.parallel
+                && same_dependency_set(&n.depends_on, &node.depends_on)
+                && !self.serial_predecessor_satisfied(n)
+        })
     }
 
     fn serial_predecessor_satisfied(&self, node: &FlowNode) -> bool {
@@ -536,15 +484,11 @@ impl FlowScheduler {
             .into_iter()
             .map(|n| n.id.clone())
             .collect();
-        if let Some(changed) = graph.node(node_id) {
+        if let Some(changed_idx) = graph.node_order(node_id) {
+            let changed = &graph.nodes()[changed_idx];
             if !changed.parallel {
-                let mut past = false;
-                for n in graph.nodes() {
-                    if n.id == node_id {
-                        past = true;
-                        continue;
-                    }
-                    if past && !n.parallel && n.depends_on == changed.depends_on {
+                for n in &graph.nodes()[changed_idx + 1..] {
+                    if !n.parallel && same_dependency_set(&n.depends_on, &changed.depends_on) {
                         ids.push(n.id.clone());
                     }
                 }
@@ -573,5 +517,23 @@ impl FlowScheduler {
                 })
             })
             .unwrap_or(false)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn same_dependency_set_is_order_independent() {
+        let a = vec!["task_1".to_string(), "task_2".to_string()];
+        let b = vec!["task_2".to_string(), "task_1".to_string()];
+        let c = vec!["task_1".to_string(), "task_3".to_string()];
+        let d = vec!["task_1".to_string()];
+
+        assert!(same_dependency_set(&a, &b), "乱序声明的相同依赖集合应判定等价");
+        assert!(!same_dependency_set(&a, &c), "元素不同应判定不等价");
+        assert!(!same_dependency_set(&a, &d), "长度不同应判定不等价");
+        assert!(same_dependency_set(&[], &[]), "空集合等价");
     }
 }

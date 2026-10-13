@@ -195,8 +195,6 @@ pub enum ControlDrainAction {
     None,
     /// L1 注入聚合（分环）
     SoftInject {
-        /// 全部 L1 消息（steer + followUp），兼容既有消费者
-        messages: Vec<AgentMessage>,
         /// soft_inject / steer → 下一安全点
         steer_messages: Vec<AgentMessage>,
         /// follow_up → 仅 idle
@@ -449,20 +447,19 @@ impl ControlBus {
             .filter(|i| inject_ring_for_kind(i.kind) == Some(RingChoice::FollowUp))
             .filter_map(|i| i.message.clone())
             .collect();
-        let mut messages = steer_messages.clone();
-        messages.extend(follow_up_messages.iter().cloned());
-
         if !stop.is_empty() {
+            let reason = stop.last().and_then(|i| i.reason.clone());
+            let mut pending_messages = steer_messages;
+            pending_messages.extend(follow_up_messages);
             return ControlDrainAction::CooperativeStop {
-                reason: stop.last().and_then(|i| i.reason.clone()),
+                reason,
                 intents,
-                pending_messages: messages,
+                pending_messages,
             };
         }
 
-        if !messages.is_empty() {
+        if !steer_messages.is_empty() || !follow_up_messages.is_empty() {
             return ControlDrainAction::SoftInject {
-                messages,
                 steer_messages,
                 follow_up_messages,
                 intents,
@@ -593,16 +590,14 @@ mod tests {
 
         match bus.drain_as_action() {
             ControlDrainAction::SoftInject {
-                messages,
                 steer_messages,
                 follow_up_messages,
                 intents,
             } => {
                 assert_eq!(steer_messages.len(), 2, "steer 环 2 条");
                 assert_eq!(follow_up_messages.len(), 1, "followUp 环 1 条");
-                assert_eq!(messages.len(), 3, "全部消息 = steer + followUp");
                 assert_eq!(intents.len(), 3);
-                assert_eq!(messages[2].text(), "follow-1", "followUp 排在末尾");
+                assert_eq!(follow_up_messages[0].text(), "follow-1", "followUp 独立成环");
             }
             other => panic!("应为 SoftInject，实际 {other:?}"),
         }
@@ -731,7 +726,6 @@ mod tests {
 
         match bus.drain_as_action() {
             ControlDrainAction::SoftInject {
-                messages,
                 steer_messages,
                 follow_up_messages,
                 ..
@@ -741,8 +735,7 @@ mod tests {
                     "注入只走 steer 环，不进 followUp 环"
                 );
                 assert_eq!(steer_messages.len(), 1);
-                assert_eq!(messages.len(), 1);
-                assert_eq!(messages[0].text(), "调整方向：优先低风险改动");
+                assert_eq!(steer_messages[0].text(), "调整方向：优先低风险改动");
             }
             other => panic!("注入应聚合为 SoftInject（L1），实际 {other:?}"),
         }

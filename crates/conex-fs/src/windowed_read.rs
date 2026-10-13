@@ -214,7 +214,7 @@ pub fn windowed_read(
     read_utf8_windowed(file, file_bytes, opts, has_bom)
 }
 
-/// UTF-8 流式窗口读：仅物化窗口行；全文行数/字符数迭代计数。
+/// UTF-8 流式窗口读：仅物化窗口行并统计窗口字符；视口外行跳过冗余缓冲克隆与字符计数（KFS-10）。
 fn read_utf8_windowed(
     mut file: File,
     file_bytes: u64,
@@ -233,6 +233,7 @@ fn read_utf8_windowed(
     let mut total_chars = 0_usize;
     let mut line_idx = 0_usize;
     let mut pending: Vec<u8> = Vec::with_capacity(256);
+    let mut outside_line_non_empty = false;
     let mut ends_with_newline_in_window = false;
     let mut lossy_replaced = false;
     let mut buffer = vec![0_u8; READ_CHUNK_BYTES];
@@ -246,39 +247,44 @@ fn read_utf8_windowed(
         let chunk = &buffer[..read];
         let mut start = 0_usize;
         while start < chunk.len() {
+            let in_window = line_idx >= window_start0 && line_idx < window_end0_exclusive;
             match chunk[start..].iter().position(|&b| b == b'\n') {
                 Some(rel) => {
                     let end = start + rel;
-                    let line_slice = &chunk[start..end];
-                    let mut line_bytes: &[u8] = if pending.is_empty() {
-                        line_slice
+                    if in_window {
+                        let line_slice = &chunk[start..end];
+                        let mut line_bytes: &[u8] = if pending.is_empty() {
+                            line_slice
+                        } else {
+                            pending.extend_from_slice(line_slice);
+                            &pending
+                        };
+                        // \r\n → 剥 \r
+                        if line_bytes.last() == Some(&b'\r') {
+                            line_bytes = &line_bytes[..line_bytes.len() - 1];
+                        }
+                        let (line, lossy) = decode_line_utf8(line_bytes);
+                        if lossy {
+                            lossy_replaced = true;
+                        }
+                        total_chars += line.chars().count() + 1; // +1 for \n
+                        window_lines.push(line);
+                        ends_with_newline_in_window = true;
+                        pending.clear();
                     } else {
-                        pending.extend_from_slice(line_slice);
-                        &pending
-                    };
-                    // \r\n → 剥 \r
-                    if line_bytes.last() == Some(&b'\r') {
-                        line_bytes = &line_bytes[..line_bytes.len() - 1];
+                        outside_line_non_empty = false;
                     }
-                    push_window_line(
-                        &mut window_lines,
-                        &mut ends_with_newline_in_window,
-                        line_idx,
-                        window_start0,
-                        window_end0_exclusive,
-                        line_bytes,
-                        &mut lossy_replaced,
-                    );
-                    total_chars += line_bytes_char_count(line_bytes);
-                    total_chars += 1; // \n
                     total_lines += 1;
                     line_idx += 1;
                     file_ends_with_newline = true;
-                    pending.clear();
                     start = end + 1;
                 }
                 None => {
-                    pending.extend_from_slice(&chunk[start..]);
+                    if in_window {
+                        pending.extend_from_slice(&chunk[start..]);
+                    } else {
+                        outside_line_non_empty = true;
+                    }
                     start = chunk.len();
                 }
             }
@@ -286,28 +292,23 @@ fn read_utf8_windowed(
     }
 
     // 尾部无换行的最后一行
-    if !pending.is_empty() || (file_bytes > 0 && line_idx == 0) {
-        // 空文件：pending 空且 line_idx=0 → 不计行
+    if !pending.is_empty() || outside_line_non_empty {
         if !pending.is_empty() {
             let mut line_bytes: &[u8] = &pending;
             if line_bytes.last() == Some(&b'\r') {
                 line_bytes = &line_bytes[..line_bytes.len() - 1];
             }
-            push_window_line(
-                &mut window_lines,
-                &mut ends_with_newline_in_window,
-                line_idx,
-                window_start0,
-                window_end0_exclusive,
-                line_bytes,
-                &mut lossy_replaced,
-            );
-            total_chars += line_bytes_char_count(line_bytes);
-            total_lines += 1;
+            let (line, lossy) = decode_line_utf8(line_bytes);
+            if lossy {
+                lossy_replaced = true;
+            }
+            total_chars += line.chars().count();
+            window_lines.push(line);
             ends_with_newline_in_window = false;
-            file_ends_with_newline = false;
             pending.clear();
         }
+        total_lines += 1;
+        file_ends_with_newline = false;
     }
 
     // 严格模式：窗口内 lossy 已置位 → 拒绝（壳口径）
@@ -343,33 +344,6 @@ fn read_utf8_windowed(
     })
 }
 
-fn push_window_line(
-    window_lines: &mut Vec<String>,
-    ends_with_newline_in_window: &mut bool,
-    line_idx: usize,
-    window_start0: usize,
-    window_end0_exclusive: usize,
-    line_bytes: &[u8],
-    lossy_replaced: &mut bool,
-) {
-    if line_idx < window_start0 || line_idx >= window_end0_exclusive {
-        return;
-    }
-    let (line, lossy) = decode_line_utf8(line_bytes);
-    if lossy {
-        *lossy_replaced = true;
-    }
-    window_lines.push(line);
-    *ends_with_newline_in_window = true;
-}
-
-fn line_bytes_char_count(line_bytes: &[u8]) -> usize {
-    match std::str::from_utf8(line_bytes) {
-        Ok(s) => s.chars().count(),
-        Err(_) => String::from_utf8_lossy(line_bytes).chars().count(),
-    }
-}
-
 fn decode_line_utf8(line_bytes: &[u8]) -> (String, bool) {
     match std::str::from_utf8(line_bytes) {
         Ok(s) => (s.to_string(), false),
@@ -385,11 +359,7 @@ fn read_utf16_window(
     opts: &WindowReadOptions,
 ) -> Result<WindowReadResult, WindowReadError> {
     let bytes = std::fs::read(path).map_err(WindowReadError::Io)?;
-    let body = if little_endian {
-        &bytes[2..]
-    } else {
-        &bytes[2..]
-    };
+    let body = &bytes[2..];
     let units: Vec<u16> = body
         .chunks_exact(2)
         .map(|c| {
@@ -408,9 +378,6 @@ fn read_utf16_window(
         return Err(WindowReadError::UnsupportedEncoding);
     }
 
-    let total_lines = text.lines().count();
-    let total_chars = text.chars().count();
-    let all_lines: Vec<&str> = text.lines().collect();
     let window_start0 = (opts.start_line.saturating_sub(1)).max(opts.content_offset);
     let window_end0_exclusive = opts
         .end_line
@@ -418,14 +385,16 @@ fn read_utf16_window(
         .unwrap_or(window_start0.saturating_add(opts.max_lines))
         .max(window_start0);
 
-    let end = window_end0_exclusive
-        .min(all_lines.len())
-        .max(window_start0);
-    let window_slice = if window_start0 >= all_lines.len() {
-        &[][..]
-    } else {
-        &all_lines[window_start0..end]
-    };
+    let mut total_lines = 0_usize;
+    let mut total_chars = 0_usize;
+    let mut window_slice: Vec<&str> = Vec::new();
+    for (line_idx, line) in text.lines().enumerate() {
+        total_lines += 1;
+        if line_idx >= window_start0 && line_idx < window_end0_exclusive {
+            total_chars += line.chars().count() + 1;
+            window_slice.push(line);
+        }
+    }
     let text_window = window_slice.join("\n");
     let shown_lines = window_slice.len();
     let content_truncated = window_start0 + shown_lines < total_lines;

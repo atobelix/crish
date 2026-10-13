@@ -95,7 +95,6 @@ pub(crate) use orchestrator::restore::{
 };
 pub(crate) use orchestrator::run::{CancelMode, RunEngine, RunHandle, RunManager};
 pub(crate) use orchestrator::session::{SessionRecord, SessionTree};
-pub(crate) use orchestrator::steering_queue::CONTEXT_STATE_GROUP;
 pub(crate) use orchestrator::subagent_events::{
     SubagentEmitContext, SubagentEventEmitter, SubagentEventInfo,
 };

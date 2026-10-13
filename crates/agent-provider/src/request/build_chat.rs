@@ -113,13 +113,7 @@ pub fn build_chat_completions_request_body(
     // 不再灌 `WireCompat::default()`；plans/04 §3.3），再 post-pass 施加断点
     // （P2 §3.1.3：纯后处理，与映射解耦；plan 全 false → 请求字节与未施加时完全一致）
     let reasoning_mode = opts.reasoning_content.unwrap_or(ReasoningContentMode::Omit);
-    let wire_compat = WireCompat::from_compat(
-        opts.vendor.map(|v| v.as_str()),
-        opts.model.as_deref(),
-        None, // 不再传 base_url 给启发式（plans/04 §3.3）
-        opts.supports_reasoning,
-        opts.compat.as_ref(),
-    );
+    let wire_compat = WireCompat::from_compat(opts.vendor.map(|v| v.as_str()), opts.compat.as_ref());
     let mut wire = to_chat_messages_with_compat(
         context.system_prompt.as_deref(),
         context.messages,

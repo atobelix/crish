@@ -19,36 +19,22 @@ use super::messages_content::thought_content;
 
 /// wire 消息序列化 compat 上下文（G5-a/G5-b · T2.2/T2.3；R2 消息序列化消费面）
 ///
-/// 承载 R1 T1.7 纯函数面的消费入参：vendor/model/base_url 用于判定 DeepSeek
-/// （reasoning_content 模型级强制键）与 developer role。全部 `None`/`false` 的
-/// 缺省形态 = 非 DeepSeek 默认轨：reasoning_content 不强制、system role 恒
-/// `"system"`，与既有 `to_chat_messages` 四参入口的 wire 字节逐字节一致
-/// （适配层 R3 T3.2 接线前，本入口不影响既有请求形状）。
+/// 承载模型级兼容判定入参：vendor/thinking_format 用于判定 DeepSeek
+/// （reasoning_content 模型级强制键），supports_developer_role 用于判定 developer role。
 #[derive(Debug, Clone, Copy, Default)]
 pub struct WireCompat<'a> {
-    /// 厂商名（DeepSeek 判定与 developer role 判定入参；`None` → 非 DeepSeek 轨）
+    /// 厂商名（DeepSeek 判定入参；`None` → 非 DeepSeek 轨）
     pub vendor: Option<&'a str>,
-    /// 模型名（[resolve_developer_role] 的 `anthropic/`|`openai/` 前缀判定）
-    pub model: Option<&'a str>,
-    /// base_url（developer role 的 openrouter 判定；生产已不再传，恒 None）
-    pub base_url: Option<&'a str>,
-    /// 是否支持 reasoning（developer role 判定的三要素之一）
-    pub supports_reasoning: bool,
     /// 思考方言格式配置（如 "deepseek"）
     pub thinking_format: Option<&'a str>,
-    /// 显式 developer role 支持（yaml `compat.supportsDeveloperRole`；优先于
-    /// 旧 openrouter 启发式——plans/04 §2.4「resolve_developer_role_from_compat，
-    /// 缺省 false」）
+    /// 显式 developer role 支持（yaml `compat.supportsDeveloperRole`，缺省 false）
     pub supports_developer_role: bool,
 }
 
 impl<'a> WireCompat<'a> {
-    /// 从供应商/模型及 CompatSpec 构造 WireCompat
+    /// 从供应商及 CompatSpec 构造 WireCompat
     pub fn from_compat(
         vendor: Option<&'a str>,
-        model: Option<&'a str>,
-        base_url: Option<&'a str>,
-        supports_reasoning: bool,
         compat: Option<&'a crate::models::catalog_types::CompatSpec>,
     ) -> Self {
         let thinking_format = compat.and_then(|c| c.thinking_format).map(|tf| match tf {
@@ -61,9 +47,6 @@ impl<'a> WireCompat<'a> {
         });
         Self {
             vendor,
-            model,
-            base_url,
-            supports_reasoning,
             thinking_format,
             supports_developer_role: compat
                 .and_then(|c| c.supports_developer_role)
@@ -81,10 +64,7 @@ impl<'a> WireCompat<'a> {
 }
 
 /// system 消息 wire 角色（G5-a · T2.3）：yaml 显式声明 developer role →
-/// `"developer"`，否则恒 `"system"`（plans/04 §2.4「resolve_developer_role_
-/// from_compat，缺省 false」——生产不再走 openrouter / o 系列 URL 启发式，
-/// 旧 [resolve_developer_role] 保留给 S7 删除面）。user-prefix 分支由调用方
-/// 恒置 `"user"` 不参与本判定。
+/// `"developer"`，否则恒 `"system"`。user-prefix 分支由调用方恒置 `"user"` 不参与本判定。
 pub fn resolve_system_role(compat: &WireCompat<'_>) -> &'static str {
     if compat.supports_developer_role {
         "developer"
@@ -148,26 +128,12 @@ mod tests {
         }
         .is_deepseek());
 
-        // base_url containing deepseek MUST NOT trigger is_deepseek (url substring guess removed)
-        assert!(!WireCompat {
-            base_url: Some("https://api.deepseek.com"),
-            ..WireCompat::default()
-        }
-        .is_deepseek());
-
-        assert!(!WireCompat {
-            base_url: Some("https://API.DEEPSEEK.COM/v1"),
-            ..WireCompat::default()
-        }
-        .is_deepseek());
-
         // Default WireCompat must not be deepseek
         assert!(!WireCompat::default().is_deepseek());
 
         // Non-deepseek vendor
         assert!(!WireCompat {
             vendor: Some("openai"),
-            base_url: Some("https://api.openai.com"),
             ..WireCompat::default()
         }
         .is_deepseek());

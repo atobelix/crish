@@ -6,6 +6,7 @@
 //! 直接对应 apps/crish-desktop/src/api/codeHighlight.ts。
 
 use once_cell::sync::Lazy;
+use std::borrow::Cow;
 use std::sync::Arc;
 use syntect::html::{ClassStyle, ClassedHTMLGenerator};
 use syntect::parsing::SyntaxSet;
@@ -18,30 +19,46 @@ static SYNTAX_SET: Lazy<SyntaxSet> = Lazy::new(SyntaxSet::load_defaults_newlines
 
 /// 语言别名 → 标准 scope 语言名。
 /// 与 markdownPlugins.ts::langFromFenceInfo 一致。
-fn normalize_lang(raw: &str) -> String {
+fn normalize_lang(raw: &str) -> Cow<'_, str> {
     let trimmed = raw.trim();
-    let lower = trimmed.to_lowercase();
+    if trimmed.is_empty() {
+        return Cow::Borrowed("");
+    }
+    let lower: Cow<'_, str> = if trimmed.bytes().any(|b| b.is_ascii_uppercase()) {
+        Cow::Owned(trimmed.to_ascii_lowercase())
+    } else {
+        Cow::Borrowed(trimmed)
+    };
     let stripped = lower
         .strip_prefix("language-")
         .or_else(|| lower.strip_prefix('.'))
         .unwrap_or(&lower);
     if stripped.is_empty() {
-        return String::new();
+        return Cow::Borrowed("");
     }
     match stripped {
-        "c++" => "cpp".to_string(),
-        "c#" | "cs" => "csharp".to_string(),
-        "js" | "jsx" | "mjs" | "cjs" => "javascript".to_string(),
-        "kt" => "kotlin".to_string(),
-        "ts" | "tsx" => "typescript".to_string(),
-        "py" => "python".to_string(),
-        "rb" => "ruby".to_string(),
-        "rs" => "rust".to_string(),
-        "sh" | "shell" | "zsh" | "ps1" | "powershell" => "bash".to_string(),
-        "yml" => "yaml".to_string(),
-        "md" | "mdx" => "markdown".to_string(),
-        // 已是标准名: 直接返回
-        other => other.to_string(),
+        "c++" => Cow::Borrowed("cpp"),
+        "c#" | "cs" => Cow::Borrowed("csharp"),
+        "js" | "jsx" | "mjs" | "cjs" => Cow::Borrowed("javascript"),
+        "kt" => Cow::Borrowed("kotlin"),
+        "ts" | "tsx" => Cow::Borrowed("typescript"),
+        "py" => Cow::Borrowed("python"),
+        "rb" => Cow::Borrowed("ruby"),
+        "rs" => Cow::Borrowed("rust"),
+        "sh" | "shell" | "zsh" | "ps1" | "powershell" => Cow::Borrowed("bash"),
+        "yml" => Cow::Borrowed("yaml"),
+        "md" | "mdx" => Cow::Borrowed("markdown"),
+        // 已是标准名: 若原本即为小写则零拷贝借用，否则保留已转换的小写 String
+        other => match lower {
+            Cow::Borrowed(_) => {
+                let borrowed = trimmed
+                    .strip_prefix("language-")
+                    .or_else(|| trimmed.strip_prefix('.'))
+                    .unwrap_or(trimmed);
+                Cow::Borrowed(borrowed)
+            }
+            Cow::Owned(_) => Cow::Owned(other.to_string()),
+        },
     }
 }
 
@@ -80,21 +97,21 @@ pub fn escape_html_plain(s: &str) -> String {
 ///
 /// 缓存键: `lang:code`,缓存命中直接返回。
 pub fn highlight_code(code: &str, lang: Option<&str>) -> String {
-    let raw = code.replace("\r\n", "\n");
-    let lang_norm = lang.map(normalize_lang).unwrap_or_default();
+    let raw: Cow<'_, str> = if code.contains("\r\n") {
+        Cow::Owned(code.replace("\r\n", "\n"))
+    } else {
+        Cow::Borrowed(code)
+    };
+    let lang_norm: Cow<'_, str> = lang.map(normalize_lang).unwrap_or(Cow::Borrowed(""));
 
     let cache_key = format!("{}:{}", lang_norm, raw);
-    if let Some(cached) = highlight_cache().get(&cache_key) {
+    if let Some(cached) = highlight_cache().get(cache_key.as_str()) {
         return (*cached).clone();
     }
 
-    let html = if let Some(syntax) = find_syntax(&lang_norm) {
-        match render_with_syntect(&raw, syntax) {
-            Ok(h) => h,
-            Err(_) => escape_html_plain(&raw),
-        }
-    } else {
-        escape_html_plain(&raw)
+    let html = match find_syntax(&lang_norm) {
+        Some(syntax) => render_with_syntect(&raw, syntax).unwrap_or_else(|_| escape_html_plain(&raw)),
+        None => escape_html_plain(&raw),
     };
 
     // 缓存 — 单条目字节预算超出时不入缓存（1C-8：用独立高亮缓存）

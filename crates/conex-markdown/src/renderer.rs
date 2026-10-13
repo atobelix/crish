@@ -11,6 +11,7 @@
 use once_cell::sync::Lazy;
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 use regex::Regex;
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use crate::ammonia_config;
@@ -33,8 +34,54 @@ static THOUGHT_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^(正在思考中[….\s]{0,50}|正在处理[….\s]{0,50}){1,50}")
         .expect("valid thought regex")
 });
-
-// 思考占位 / "本轮总结" 标题行由 strip_thought_placeholders 手写处理,不依赖此 regex。
+static ZH_HEADING_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(&format!(
+        r"(?m)^#{{1,6}}\s*{}\s*[:：·.\-—–]*\s*$",
+        RE_ROUND_SUMMARY_ZH
+    ))
+    .expect("valid zh heading regex")
+});
+static ZH_BOLD_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(&format!(
+        r"(?m)^\*{{1,2}}\s*{}\s*[:：]?\s*\*{{1,2}}\s*[:：·.\-—–]*\s*$",
+        RE_ROUND_SUMMARY_ZH
+    ))
+    .expect("valid zh bold regex")
+});
+static ZH_BRACKET_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(&format!(
+        r"(?m)^[【\[]\s*{}\s*[】\]]\s*[:：·.\-—–]*\s*$",
+        RE_ROUND_SUMMARY_ZH
+    ))
+    .expect("valid zh bracket regex")
+});
+static ZH_BARE_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(&format!(r"(?m)^{}\s*[:：·.\-—–]*\s*$", RE_ROUND_SUMMARY_ZH))
+        .expect("valid zh bare regex")
+});
+static EN_HEADING_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(&format!(
+        r"(?im)^#{{1,6}}\s*{}\s*[:：·.\-—–]*\s*$",
+        RE_ROUND_SUMMARY_EN
+    ))
+    .expect("valid en heading regex")
+});
+static EN_BOLD_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(&format!(
+        r"(?im)^\*{{1,2}}\s*{}\s*[:：]?\s*\*{{1,2}}\s*[:：·.\-—–]*\s*$",
+        RE_ROUND_SUMMARY_EN
+    ))
+    .expect("valid en bold regex")
+});
+static EN_BARE_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(&format!(r"(?im)^{}\s*[:：·.\-—–]*\s*$", RE_ROUND_SUMMARY_EN))
+        .expect("valid en bare regex")
+});
+static FENCE_FILE_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r#"\bfile=(?:"([^"]*)"|(\S+))"#).expect("valid file regex"));
+static BR_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"<br>").expect("valid br regex"));
+static IMG_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"<img(?:[^a-zA-Z>][^>]*)?>").expect("valid img regex"));
 
 /// 列表种类(用于 li 渲染)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -287,35 +334,26 @@ impl Renderer {
             list.item_is_task = true;
             list.item_checked = checked;
         }
-        // pulldown-cmark 事件顺序: Start(Item) → TaskListMarker → Start(Paragraph) → ...
-        // start_item 已输出 `<li class="md-li[ md-ol-item]">`,这里回退替换为 task-item 版本
-        // 并插入 checkbox。用正则查找**最后一个** `<li class="md-li[^"]*">` (当前 li) 以兼容两种初始 class。
-        use std::sync::OnceLock;
-        static LI_TAG_RE: OnceLock<Regex> = OnceLock::new();
-        let li_re = LI_TAG_RE
-            .get_or_init(|| Regex::new(r#"<li class="md-li[^"]*">"#).expect("valid li tag regex"));
-        // find_iter().last() 取最后一个匹配,避免替换到前一个 li
-        if let Some(m) = li_re.find_iter(&self.output).last() {
-            let pos = m.start();
-            let end = m.end();
-            let mut new_out = String::with_capacity(self.output.len() + 64);
-            // 替换 li 的 class 为 task 版本
-            let li_new = if checked {
-                "<li class=\"md-li md-task-item done\">"
-            } else {
-                "<li class=\"md-li md-task-item\">"
-            };
-            new_out.push_str(&self.output[..pos]);
-            new_out.push_str(li_new);
-            new_out.push_str(&self.output[end..]);
-            // 插入 task box
-            if checked {
-                new_out
-                    .push_str("<span class=\"md-task-box checked\" aria-checked=\"true\"></span>");
-            } else {
-                new_out.push_str("<span class=\"md-task-box\" aria-checked=\"false\"></span>");
+        // pulldown-cmark 事件顺序: Start(Item) → [Start(Paragraph)] → TaskListMarker → ...
+        // start_item 已在 self.output 尾部输出 `<li class="md-li[ md-ol-item]">`,
+        // 通过 rfind("<li") 从尾部 O(1) 定位当前刚打开的最后一个 <li> 标签，原位替换并追加 checkbox。
+        if let Some(pos) = self.output.rfind("<li") {
+            if let Some(rel_end) = self.output[pos..].find('>') {
+                let end = pos + rel_end + 1;
+                let li_new = if checked {
+                    "<li class=\"md-li md-task-item done\">"
+                } else {
+                    "<li class=\"md-li md-task-item\">"
+                };
+                self.output.replace_range(pos..end, li_new);
+                if checked {
+                    self.output
+                        .push_str("<span class=\"md-task-box checked\" aria-checked=\"true\"></span>");
+                } else {
+                    self.output
+                        .push_str("<span class=\"md-task-box\" aria-checked=\"false\"></span>");
+                }
             }
-            self.output = new_out;
         }
     }
 
@@ -688,16 +726,15 @@ pub fn render_markdown(text: &str) -> String {
     if text.is_empty() {
         return String::new();
     }
-    // 检查缓存
-    let cache_key = text.to_string();
-    if let Some(cached) = render_cache().get(&cache_key) {
+    // 检查缓存（零拷贝 &str 引用查表，仅在未命中且写入缓存时分配 String key）
+    if let Some(cached) = render_cache().get(text) {
         return (*cached).clone();
     }
 
     let html = render_markdown_uncached(text);
 
     if entry_within_budget(text, &html) {
-        render_cache().insert(cache_key, Arc::new(html.clone()));
+        render_cache().insert(text.to_string(), Arc::new(html.clone()));
     }
     html
 }
@@ -735,15 +772,23 @@ fn render_markdown_uncached(raw: &str) -> String {
     } else {
         raw
     };
-    // 2. CRLF 归一化
-    let normalized = truncated.replace("\r\n", "\n").replace('\r', "\n");
-    // 3. strip thought placeholders
-    let stripped = strip_thought_placeholders(&normalized);
+    // 2. CRLF 归一化（不含 \r 时零拷贝借用）
+    let normalized: Cow<'_, str> = if truncated.contains('\r') {
+        Cow::Owned(truncated.replace("\r\n", "\n").replace('\r', "\n"))
+    } else {
+        Cow::Borrowed(truncated)
+    };
+    // 3. strip thought placeholders（零成本快速预检 + Cow 零拷贝通路）
+    let stripped = strip_thought_placeholders_cow(&normalized);
     if stripped.is_empty() {
         return String::new();
     }
-    // 4. 压缩 3+ 空行为 2 空
-    let compact = MULTI_BLANK_RE.replace_all(&stripped, "\n\n").to_string();
+    // 4. 压缩 3+ 空行为 2 空（不含 \n\n\n 时跳过）
+    let compact: Cow<'_, str> = if stripped.contains("\n\n\n") {
+        Cow::Owned(MULTI_BLANK_RE.replace_all(&stripped, "\n\n").into_owned())
+    } else {
+        stripped
+    };
     if compact.trim().is_empty() {
         return String::new();
     }
@@ -755,83 +800,92 @@ fn render_markdown_uncached(raw: &str) -> String {
     renderer.render(&table_padded)
 }
 
-/// 剥离"正在思考"占位与"本轮总结"类噪音标题行。
-pub fn strip_thought_placeholders(text: &str) -> String {
-    if text.is_empty() {
-        return String::new();
-    }
-    if text.trim().is_empty() {
-        return String::new();
-    }
-
-    // soft trim: 去首尾空行/BOM,但保留行尾有意义空格
-    let soft_trimmed = soft_trim_markdown(text);
-
-    // 1. 剥"正在思考中…"/"正在处理…" 等独立行
-    let after_thought = THOUGHT_RE.replace_all(&soft_trimmed, "").to_string();
-
-    // 2. 剥"本轮总结" 类标题行(中英)
-    let zh_pat = format!(
-        r"(?m)^#{{1,6}}\s*{}\s*[:：·.\-—–]*\s*$",
-        RE_ROUND_SUMMARY_ZH
-    );
-    let re_zh_h = Regex::new(&zh_pat).expect("valid zh heading regex");
-    let after_zh_h = re_zh_h.replace_all(&after_thought, "").to_string();
-
-    let zh_bold_pat = format!(
-        r"(?m)^\*{{1,2}}\s*{}\s*[:：]?\s*\*{{1,2}}\s*[:：·.\-—–]*\s*$",
-        RE_ROUND_SUMMARY_ZH
-    );
-    let re_zh_b = Regex::new(&zh_bold_pat).expect("valid zh bold regex");
-    let after_zh_b = re_zh_b.replace_all(&after_zh_h, "").to_string();
-
-    let zh_bracket_pat = format!(
-        r"(?m)^[【\[]\s*{}\s*[】\]]\s*[:：·.\-—–]*\s*$",
-        RE_ROUND_SUMMARY_ZH
-    );
-    let re_zh_br = Regex::new(&zh_bracket_pat).expect("valid zh bracket regex");
-    let after_zh_br = re_zh_br.replace_all(&after_zh_b, "").to_string();
-
-    let zh_bare_pat = format!(r"(?m)^{}\s*[:：·.\-—–]*\s*$", RE_ROUND_SUMMARY_ZH);
-    let re_zh_bar = Regex::new(&zh_bare_pat).expect("valid zh bare regex");
-    let after_zh_bar = re_zh_bar.replace_all(&after_zh_br, "").to_string();
-
-    // 英文 Round/Session/Turn summary
-    let en_h_pat = format!(
-        r"(?im)^#{{1,6}}\s*{}\s*[:：·.\-—–]*\s*$",
-        RE_ROUND_SUMMARY_EN
-    );
-    let re_en_h = Regex::new(&en_h_pat).expect("valid en heading regex");
-    let after_en_h = re_en_h.replace_all(&after_zh_bar, "").to_string();
-
-    let en_bold_pat = format!(
-        r"(?im)^\*{{1,2}}\s*{}\s*[:：]?\s*\*{{1,2}}\s*[:：·.\-—–]*\s*$",
-        RE_ROUND_SUMMARY_EN
-    );
-    let re_en_b = Regex::new(&en_bold_pat).expect("valid en bold regex");
-    let after_en_b = re_en_b.replace_all(&after_en_h, "").to_string();
-
-    let en_bare_pat = format!(r"(?im)^{}\s*[:：·.\-—–]*\s*$", RE_ROUND_SUMMARY_EN);
-    let re_en_bar = Regex::new(&en_bare_pat).expect("valid en bare regex");
-    let after_en_bar = re_en_bar.replace_all(&after_en_b, "").to_string();
-
-    // 压缩 3+ 空行为 2 空
-    let compact = MULTI_BLANK_RE
-        .replace_all(&after_en_bar, "\n\n")
-        .to_string();
-
-    soft_trim_markdown(&compact)
+/// 零成本快速预检：判断输入文本是否可能包含思考占位或“本轮总结”特征子串。
+/// 若均不包含，可直接跳过全部 8 个业务正则扫描与级联堆拷贝。
+#[inline]
+fn may_contain_thought_or_summary(s: &str) -> bool {
+    s.contains("<thought")
+        || s.contains("[thought")
+        || s.contains("<!--")
+        || s.contains("本轮总结")
+        || s.contains("本轮")
+        || s.contains("本回合")
+        || s.contains("正在思考")
+        || s.contains("正在处理")
+        || s.as_bytes()
+            .windows(7)
+            .any(|w| w.eq_ignore_ascii_case(b"summary"))
 }
 
-/// 去首尾空行/BOM,但保留行尾有意义空格(如 `- ` 空列表项)。
-fn soft_trim_markdown(s: &str) -> String {
-    let trimmed_start: &str = s.trim_start_matches(|c: char| c.is_whitespace() || c == '\u{feff}');
-    // 去尾部空行 + 行尾空白
-    let mut out = String::from(trimmed_start);
-    while out.ends_with('\n') || out.ends_with(' ') || out.ends_with('\t') || out.ends_with('\r') {
-        out.pop();
+#[inline]
+fn replace_cow<'a>(re: &Regex, input: Cow<'a, str>, rep: &str) -> Cow<'a, str> {
+    match re.replace_all(&input, rep) {
+        Cow::Borrowed(_) => input,
+        Cow::Owned(s) => Cow::Owned(s),
     }
-    out
+}
+
+/// 内部零拷贝版本：在无占位符特征且无多余空行时直接返回 `Cow::Borrowed` 切片。
+fn strip_thought_placeholders_cow(text: &str) -> Cow<'_, str> {
+    if text.is_empty() {
+        return Cow::Borrowed("");
+    }
+    let soft_trimmed = soft_trim_markdown_slice(text);
+    if soft_trimmed.is_empty() {
+        return Cow::Borrowed("");
+    }
+
+    // 快速预检：若不含 "<thought"、"[thought"、"<!--"、"本轮总结" 等特征子串，直接走零拷贝通路
+    if !may_contain_thought_or_summary(soft_trimmed) {
+        if !soft_trimmed.contains("\n\n\n") {
+            return Cow::Borrowed(soft_trimmed);
+        }
+        let compact = MULTI_BLANK_RE.replace_all(soft_trimmed, "\n\n");
+        return Cow::Owned(soft_trim_markdown_slice(&compact).to_string());
+    }
+
+    // 1. 剥"正在思考中…"/"正在处理…" 等独立行
+    let cur = replace_cow(&THOUGHT_RE, Cow::Borrowed(soft_trimmed), "");
+
+    // 2. 剥"本轮总结" 类标题行(中英)，全部复用模块级 static Lazy<Regex>
+    let cur = replace_cow(&ZH_HEADING_RE, cur, "");
+    let cur = replace_cow(&ZH_BOLD_RE, cur, "");
+    let cur = replace_cow(&ZH_BRACKET_RE, cur, "");
+    let cur = replace_cow(&ZH_BARE_RE, cur, "");
+    let cur = replace_cow(&EN_HEADING_RE, cur, "");
+    let cur = replace_cow(&EN_BOLD_RE, cur, "");
+    let cur = replace_cow(&EN_BARE_RE, cur, "");
+
+    // 3. 压缩 3+ 空行为 2 空
+    let cur = if cur.contains("\n\n\n") {
+        replace_cow(&MULTI_BLANK_RE, cur, "\n\n")
+    } else {
+        cur
+    };
+
+    match cur {
+        Cow::Borrowed(s) => Cow::Borrowed(soft_trim_markdown_slice(s)),
+        Cow::Owned(s) => {
+            let trimmed = soft_trim_markdown_slice(&s);
+            if trimmed.len() == s.len() {
+                Cow::Owned(s)
+            } else {
+                Cow::Owned(trimmed.to_string())
+            }
+        }
+    }
+}
+
+/// 剥离"正在思考"占位与"本轮总结"类噪音标题行。
+pub fn strip_thought_placeholders(text: &str) -> String {
+    strip_thought_placeholders_cow(text).into_owned()
+}
+
+/// 去首尾空行/BOM,但保留行尾有意义空格(如 `- ` 空列表项) —— 零拷贝切片版。
+#[inline]
+fn soft_trim_markdown_slice(s: &str) -> &str {
+    let trimmed_start = s.trim_start_matches(|c: char| c.is_whitespace() || c == '\u{feff}');
+    trimmed_start.trim_end_matches(['\n', ' ', '\t', '\r'])
 }
 
 /// 预处理: 检测 GFM 表格中分隔行列数少于表头列数的情况,自动补齐 `---` 列。
@@ -893,31 +947,28 @@ fn normalize_table_separators(md: &str) -> String {
 /// 现有 CSS 契约与 JS DOMPurify 输出均为 `<br />` `<img ... />`。
 /// 仅处理渲染器产出的 void 元素: br / img。wbr 已是无斜杠形式,保持不变。
 fn post_process_void_elements(html: &str) -> String {
-    use std::sync::OnceLock;
-    static BR_RE: OnceLock<Regex> = OnceLock::new();
-    static IMG_RE: OnceLock<Regex> = OnceLock::new();
-    let br_re = BR_RE.get_or_init(|| Regex::new(r"<br>").expect("valid br regex"));
-    // Rust `regex` crate 不支持 look-around,故用字符类替代 `(?![a-zA-Z])`:
-    // `<img>` (空)、`<img/>`、`<img src=...>` 均匹配;`<image>` 等不匹配。
-    // `(?:[^a-zA-Z>][^>]*)?` 允许 `<img>` 紧接 `>` 的情形(可选组为空)。
-    let img_re =
-        IMG_RE.get_or_init(|| Regex::new(r"<img(?:[^a-zA-Z>][^>]*)?>").expect("valid img regex"));
-
     // <br> → <br />
-    let s = br_re.replace_all(html, "<br />").to_string();
+    let s: Cow<'_, str> = if html.contains("<br>") {
+        BR_RE.replace_all(html, "<br />")
+    } else {
+        Cow::Borrowed(html)
+    };
     // <img ...> → <img ... />  (仅在尚未自闭合时)
-    let s = img_re
-        .replace_all(&s, |caps: &regex::Captures| {
-            let tag = caps.get(0).unwrap().as_str();
-            if tag.ends_with("/>") {
-                tag.to_string()
-            } else {
-                let inner = &tag[..tag.len() - 1]; // 去掉末尾 '>'
-                format!("{} />", inner)
-            }
-        })
-        .to_string();
-    s
+    if s.contains("<img") {
+        IMG_RE
+            .replace_all(&s, |caps: &regex::Captures| {
+                let tag = caps.get(0).unwrap().as_str();
+                if tag.ends_with("/>") {
+                    tag.to_string()
+                } else {
+                    let inner = &tag[..tag.len() - 1]; // 去掉末尾 '>'
+                    format!("{} />", inner)
+                }
+            })
+            .into_owned()
+    } else {
+        s.into_owned()
+    }
 }
 
 /// HTML 正文/属性转义。
@@ -1061,8 +1112,10 @@ pub fn lang_from_fence_info(info: &str) -> String {
 
 /// 从 fence info string 提取 file="..." 属性值。
 pub fn extract_file_path_from_fence_info(info: &str) -> Option<String> {
-    let re = Lazy::new(|| Regex::new(r#"\bfile=(?:"([^"]*)"|(\S+))"#).expect("valid file regex"));
-    re.captures(info).map(|c| {
+    if !info.contains("file=") {
+        return None;
+    }
+    FENCE_FILE_RE.captures(info).map(|c| {
         c.get(1)
             .or_else(|| c.get(2))
             .map(|m| m.as_str().to_string())
@@ -1390,5 +1443,32 @@ mod tests {
         assert_eq!(s.floor_char_boundary(6), 6);
         // 边界本身不变
         assert_eq!(s.floor_char_boundary(3), 3);
+    }
+
+    #[test]
+    fn strip_thought_placeholders_fast_path_returns_borrowed_without_copy() {
+        let clean = "### 标题\n\n普通正文内容，不含任何思考占位或总结噪音。";
+        let res = strip_thought_placeholders_cow(clean);
+        assert!(
+            matches!(res, Cow::Borrowed(_)),
+            "常规无噪音文本应走零拷贝 Cow::Borrowed 快速预检分支"
+        );
+        assert_eq!(res.as_ref(), clean);
+    }
+
+    #[test]
+    fn handle_task_marker_o1_in_place_renders_large_task_list_accurately() {
+        let mut md = String::new();
+        for i in 0..50 {
+            if i % 2 == 0 {
+                md.push_str(&format!("- [ ] task item {i}\n"));
+            } else {
+                md.push_str(&format!("- [x] task item {i}\n"));
+            }
+        }
+        let html = render_markdown(&md);
+        assert_eq!(html.matches("md-task-item").count(), 50);
+        assert_eq!(html.matches("md-task-item done").count(), 25);
+        assert_eq!(html.matches("md-task-box checked").count(), 25);
     }
 }

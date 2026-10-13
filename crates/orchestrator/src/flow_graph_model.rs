@@ -127,10 +127,20 @@ impl std::error::Error for FlowGraphError {}
 
 /// 依赖图（纯结构：声明校验 / 环检测 / 依赖查询；运行推进在
 /// [FlowScheduler]，状态落库在 session_meta `flow_*` 键）
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct FlowGraph {
     /// 节点列表（声明序 = 同层串行顺序）
     nodes: Vec<FlowNode>,
+    /// 节点 id → 声明序下标映射（O(1) 查表，随图生命周期内聚释放）
+    node_index: HashMap<FlowNodeId, usize>,
+    /// 节点 id → 依赖本节点的后继节点下标列表（O(out_deg) 反向边查表）
+    dependents_index: HashMap<FlowNodeId, Vec<usize>>,
+}
+
+impl PartialEq for FlowGraph {
+    fn eq(&self, other: &Self) -> bool {
+        self.nodes == other.nodes
+    }
 }
 
 impl Default for FlowGraph {
@@ -142,7 +152,29 @@ impl Default for FlowGraph {
 impl FlowGraph {
     /// 新建空图
     pub fn new() -> Self {
-        Self { nodes: Vec::new() }
+        Self {
+            nodes: Vec::new(),
+            node_index: HashMap::new(),
+            dependents_index: HashMap::new(),
+        }
+    }
+
+    /// 重建内部 O(1) 节点索引与反向依赖邻接表
+    fn rebuild_indices(&mut self) {
+        self.node_index.clear();
+        self.dependents_index.clear();
+        self.node_index.reserve(self.nodes.len());
+        for (i, node) in self.nodes.iter().enumerate() {
+            self.node_index.insert(node.id.clone(), i);
+        }
+        for (i, node) in self.nodes.iter().enumerate() {
+            for dep in &node.depends_on {
+                self.dependents_index
+                    .entry(dep.clone())
+                    .or_default()
+                    .push(i);
+            }
+        }
     }
 
     /// 节点列表（声明序）
@@ -160,26 +192,41 @@ impl FlowGraph {
         self.nodes.is_empty()
     }
 
-    /// 按 id 查节点
+    /// 按 id 查节点（O(1) 索引查表）
     pub fn node(&self, id: &str) -> Option<&FlowNode> {
-        self.nodes.iter().find(|n| n.id == id)
+        self.node_index
+            .get(id)
+            .and_then(|&idx| self.nodes.get(idx))
     }
 
-    /// 依赖本节点的全部节点（反向边，Block 传播用）
+    /// 按 id 查节点声明序下标（O(1) 索引查表）
+    pub fn node_order(&self, id: &str) -> Option<usize> {
+        self.node_index.get(id).copied()
+    }
+
+    /// 依赖本节点的全部节点（反向边，Block 传播用；O(out_deg) 索引直达）
     pub fn dependents(&self, node_id: &str) -> Vec<&FlowNode> {
-        self.nodes
-            .iter()
-            .filter(|n| n.depends_on.iter().any(|d| d == node_id))
-            .collect()
+        self.dependents_index
+            .get(node_id)
+            .map(|indices| {
+                indices
+                    .iter()
+                    .filter_map(|&idx| self.nodes.get(idx))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// 从声明构建图（staged-clone 语义：候选即输入克隆，全量校验通过才
     /// 产出——失败时调用方不写库、不 spawn 任何 run，原子回滚）
     pub fn from_declaration(decl: &FlowDeclaration) -> Result<Self, FlowGraphError> {
-        let graph = Self {
+        let mut graph = Self {
             nodes: decl.tasks.clone(),
+            node_index: HashMap::new(),
+            dependents_index: HashMap::new(),
         };
         graph.validate()?;
+        graph.rebuild_indices();
         Ok(graph)
     }
 
@@ -237,25 +284,31 @@ impl FlowGraph {
         }
         // staged-clone：先克隆候选再校验，失败回滚（self 不变）
         let mut staged = self.clone();
-        let after_exists = staged.nodes.iter().any(|n| &n.id == after);
+        let after_exists = staged
+            .node_index
+            .get(after)
+            .is_some_and(|&idx| idx < staged.nodes.len())
+            || staged.nodes.iter().any(|n| &n.id == after);
         if !after_exists {
             return Err(FlowGraphError::UnknownDependency {
                 node: node.clone(),
                 dependency: after.clone(),
             });
         }
-        let target = staged
-            .nodes
-            .iter_mut()
-            .find(|n| &n.id == node)
-            .ok_or_else(|| FlowGraphError::UnknownDependency {
-                node: node.clone(),
-                dependency: after.clone(),
-            })?;
+        let target = if let Some(&idx) = staged.node_index.get(node) {
+            staged.nodes.get_mut(idx)
+        } else {
+            staged.nodes.iter_mut().find(|n| &n.id == node)
+        }
+        .ok_or_else(|| FlowGraphError::UnknownDependency {
+            node: node.clone(),
+            dependency: after.clone(),
+        })?;
         if !target.depends_on.iter().any(|d| d == after) {
             target.depends_on.push(after.clone());
         }
         staged.validate()?;
+        staged.rebuild_indices();
         *self = staged;
         Ok(())
     }

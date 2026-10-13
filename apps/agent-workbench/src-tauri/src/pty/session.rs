@@ -38,6 +38,33 @@ pub(crate) const ACTIVE_IDLE_TIMEOUT_MS: u64 = 120_000;
 /// Detached 游离态托管宽限期（2 小时无任何 stdout 输出与重连 → 安全 GC 回收）
 pub(crate) const DETACHED_GC_GRACE_MS: u64 = 7_200_000;
 
+/// PTY 单批最大字节数（64 KiB）
+pub(crate) const BATCH_MAX_BYTES: usize = 64 * 1024;
+
+/// PTY 输出 60Hz 帧率同步合批时间窗（16ms，平息高频短读 IPC 广播风暴，ISSUE-10）
+pub(crate) const PTY_FRAME_PACING_MS: u64 = 16;
+
+/// 判定当前累积的 PTY 输出缓冲是否应立即冲刷（ISSUE-10）：
+/// - 空缓冲不冲刷；
+/// - 达到 64 KiB 硬上限立即冲刷；
+/// - 距上次冲刷已满 16ms 帧窗口且当前 OS 读取为短读（`read_len < buf_len`）时前沿立即冲刷，
+///   既保证交互式回显 0ms 延迟，又将 16ms 窗口内的连续高频短读合并至窗口末尾统一发射。
+#[inline]
+pub(crate) fn should_flush_pty_batch(
+    pending_len: usize,
+    read_len: usize,
+    buf_len: usize,
+    elapsed_ms: u64,
+) -> bool {
+    if pending_len == 0 {
+        return false;
+    }
+    if pending_len >= BATCH_MAX_BYTES {
+        return true;
+    }
+    elapsed_ms >= PTY_FRAME_PACING_MS && read_len < buf_len
+}
+
 // ── event payloads ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize)]
@@ -456,36 +483,49 @@ pub(crate) fn create_session(
     }
 
     // Reader + wait thread. Emits output then exit; marks Dead on EOF / error.
-    // 02-X2 / D8.2：PTY 输出合批——同 ptyId 在 64KB 或短读（突发结束）时合并 emit。
+    // 02-X2 / D8.2 & ISSUE-10：PTY 输出 16ms 帧率同步合批——消除高频短读（n < 8192）
+    // 无条件冲刷导致的 IPC 广播风暴，同时保证交互式首帧 0ms 延迟与尾帧保底送达。
     let emit_id = pty_id.clone();
     let app_reader = app.clone();
     thread::Builder::new()
         .name(format!("pty-read-{pty_id}"))
         .spawn(move || {
-            const BATCH_MAX_BYTES: usize = 64 * 1024;
             let mut buf = [0u8; 8192];
             let mut decoder = Utf8ChunkBuffer::new();
-            let mut pending: String = String::new();
+            let pending = Arc::new(Mutex::new(String::with_capacity(8192)));
+            let last_flush_ms = Arc::new(AtomicU64::new(0));
+            let trailing_scheduled = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
-            let flush_pending = |pending: &mut String| {
-                if pending.is_empty() {
-                    return;
-                }
-                let _ = app_reader.emit(
-                    "workbench://pty-output",
-                    PtyOutputEvent {
-                        pty_id: emit_id.clone(),
-                        data: std::mem::take(pending),
-                    },
-                );
-            };
+            let flush_now =
+                |pending: &Arc<Mutex<String>>, last_flush_ms: &Arc<AtomicU64>, now_ms: u64| {
+                    let chunk = if let Ok(mut guard) = pending.lock() {
+                        if guard.is_empty() {
+                            return;
+                        }
+                        std::mem::take(&mut *guard)
+                    } else {
+                        return;
+                    };
+                    last_flush_ms.store(now_ms, Ordering::Relaxed);
+                    let _ = app_reader.emit(
+                        "workbench://pty-output",
+                        PtyOutputEvent {
+                            pty_id: emit_id.clone(),
+                            data: chunk,
+                        },
+                    );
+                };
 
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => {
                         let flushed = decoder.flush_lossy();
-                        pending.push_str(&flushed);
-                        flush_pending(&mut pending);
+                        if !flushed.is_empty() {
+                            if let Ok(mut guard) = pending.lock() {
+                                guard.push_str(&flushed);
+                            }
+                        }
+                        flush_now(&pending, &last_flush_ms, crate::server::now_ms());
                         // 子进程退出
                         if let Ok(reg) = registry().lock() {
                             if let Some(sess) = reg.get(&emit_id) {
@@ -495,23 +535,68 @@ pub(crate) fn create_session(
                         break;
                     }
                     Ok(n) => {
+                        let now_ms = crate::server::now_ms();
                         // 只要产生输出（stdout > 0 字节），自动续约活性，绝不误杀正在进行的长编译任务！
                         if let Ok(reg) = registry().lock() {
                             if let Some(sess) = reg.get(&emit_id) {
-                                sess.touch();
+                                sess.touch_at(now_ms);
                             }
                         }
                         let data = decoder.push(&buf[..n]);
-                        pending.push_str(&data);
-                        // 满窗或短读（当前可读数据耗尽）→ 合并 emit
-                        if pending.len() >= BATCH_MAX_BYTES || n < buf.len() {
-                            flush_pending(&mut pending);
+                        if data.is_empty() {
+                            continue;
+                        }
+                        let pending_len = if let Ok(mut guard) = pending.lock() {
+                            guard.push_str(&data);
+                            guard.len()
+                        } else {
+                            continue;
+                        };
+                        let last = last_flush_ms.load(Ordering::Relaxed);
+                        let elapsed_ms = now_ms.saturating_sub(last);
+                        if should_flush_pty_batch(pending_len, n, buf.len(), elapsed_ms) {
+                            flush_now(&pending, &last_flush_ms, now_ms);
+                        } else if elapsed_ms < PTY_FRAME_PACING_MS
+                            && trailing_scheduled
+                                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                                .is_ok()
+                        {
+                            let wait_ms = PTY_FRAME_PACING_MS.saturating_sub(elapsed_ms).max(1);
+                            let pending_clone = Arc::clone(&pending);
+                            let last_flush_clone = Arc::clone(&last_flush_ms);
+                            let scheduled_clone = Arc::clone(&trailing_scheduled);
+                            let app_for_timer = app_reader.clone();
+                            let id_for_timer = emit_id.clone();
+                            tauri::async_runtime::spawn(async move {
+                                tokio::time::sleep(std::time::Duration::from_millis(wait_ms)).await;
+                                scheduled_clone.store(false, Ordering::SeqCst);
+                                let chunk = if let Ok(mut guard) = pending_clone.lock() {
+                                    if guard.is_empty() {
+                                        return;
+                                    }
+                                    std::mem::take(&mut *guard)
+                                } else {
+                                    return;
+                                };
+                                last_flush_clone.store(crate::server::now_ms(), Ordering::Relaxed);
+                                let _ = app_for_timer.emit(
+                                    "workbench://pty-output",
+                                    PtyOutputEvent {
+                                        pty_id: id_for_timer,
+                                        data: chunk,
+                                    },
+                                );
+                            });
                         }
                     }
                     Err(e) => {
                         let flushed = decoder.flush_lossy();
-                        pending.push_str(&flushed);
-                        flush_pending(&mut pending);
+                        if !flushed.is_empty() {
+                            if let Ok(mut guard) = pending.lock() {
+                                guard.push_str(&flushed);
+                            }
+                        }
+                        flush_now(&pending, &last_flush_ms, crate::server::now_ms());
                         tracing::debug!(
                             target: "pty",
                             pty_id = %emit_id,
@@ -766,5 +851,26 @@ mod tests {
 
         let none = resolve_cwd(None);
         assert!(none.is_dir(), "None 参数必须降级到合法目录");
+    }
+
+    #[test]
+    fn test_should_flush_pty_batch_frame_pacing_and_cap() {
+        // 空缓冲不触发冲刷
+        assert!(!should_flush_pty_batch(0, 10, 8192, 100));
+
+        // 交互式回显（距上次冲刷 >= 16ms 且短读）→ 前沿立即冲刷（0ms 延迟）
+        assert!(should_flush_pty_batch(12, 12, 8192, 16));
+        assert!(should_flush_pty_batch(1, 1, 8192, 500));
+
+        // 16ms 帧窗口内的连续短读（elapsed < 16ms 且未满 64KB）→ 抑制立即冲刷以合并批次
+        assert!(!should_flush_pty_batch(120, 120, 8192, 0));
+        assert!(!should_flush_pty_batch(4096, 256, 8192, 15));
+
+        // 满 8KB 管道读取且未满 64KB → 继续拼接下一块
+        assert!(!should_flush_pty_batch(8192, 8192, 8192, 20));
+
+        // 达到 64KB 硬上限 → 无论时间或读取长度均立即冲刷
+        assert!(should_flush_pty_batch(BATCH_MAX_BYTES, 8192, 8192, 2));
+        assert!(should_flush_pty_batch(BATCH_MAX_BYTES + 10, 10, 8192, 1));
     }
 }

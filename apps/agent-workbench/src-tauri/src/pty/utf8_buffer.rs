@@ -22,35 +22,77 @@ impl Utf8ChunkBuffer {
         }
     }
 
+    /// 根据 UTF-8 首字节判定该码点的期望总字节数（1..=4）
+    #[inline]
+    fn expected_utf8_len(first_byte: u8) -> usize {
+        match first_byte {
+            0x00..=0x7F => 1,
+            0xC2..=0xDF => 2,
+            0xE0..=0xEF => 3,
+            0xF0..=0xF4 => 4,
+            _ => 1,
+        }
+    }
+
     /// 增量接收字节切片并解码出完整的合法 UTF-8 字符串。
     /// 尾部不完整的 1~3 字节将自动暂存，等待下一次 push 拼合。
+    ///
+    /// 性能优化（ISSUE-12）：当存在 1~3 字节残存时，仅从新 `chunk` 头部取最多
+    /// 3 个字节在栈数组 `self.carry`（4 字节）内完成单字符边界拼合，随后对剩余
+    /// `chunk` 切片执行原地零拷贝 `std::str::from_utf8` 解码，彻底消除整块 8KB
+    /// `Vec` 重分配与内存搬移。
     pub fn push(&mut self, chunk: &[u8]) -> String {
-        if chunk.is_empty() && self.carry_len == 0 {
+        if chunk.is_empty() {
             return String::new();
         }
 
-        // 若存在上期残存字节，拼合后解码
+        let mut result = String::with_capacity(self.carry_len + chunk.len());
+        let mut remaining = chunk;
+
+        // 若存在上期残存字节，仅在 4 字节栈缓冲上补齐当前字符所需字节
         if self.carry_len > 0 {
-            let mut combined = Vec::with_capacity(self.carry_len + chunk.len());
-            combined.extend_from_slice(&self.carry[..self.carry_len]);
-            combined.extend_from_slice(chunk);
-            self.carry_len = 0;
-            return self.decode_slice(&combined);
+            let old_carry_len = self.carry_len;
+            let expected_len = Self::expected_utf8_len(self.carry[0])
+                .max(old_carry_len + 1)
+                .min(4);
+            let need = expected_len - old_carry_len;
+            let take = remaining.len().min(need);
+
+            self.carry[old_carry_len..old_carry_len + take].copy_from_slice(&remaining[..take]);
+            let total = old_carry_len + take;
+
+            match std::str::from_utf8(&self.carry[..total]) {
+                Ok(valid_str) => {
+                    result.push_str(valid_str);
+                    self.carry_len = 0;
+                    remaining = &remaining[take..];
+                }
+                Err(error) => match error.error_len() {
+                    None => {
+                        // 新 chunk 字节数仍不足以补齐该字符，全部暂存等待下一块
+                        self.carry_len = total;
+                        return result;
+                    }
+                    Some(invalid_len) => {
+                        // 残存序列与新字节无法构成合法字符，输出替换符并归还剩余切片
+                        result.push('\u{FFFD}');
+                        self.carry_len = 0;
+                        let consumed = invalid_len.saturating_sub(old_carry_len);
+                        remaining = &remaining[consumed..];
+                    }
+                },
+            }
         }
 
-        self.decode_slice(chunk)
+        self.decode_slice_into(remaining, &mut result);
+        result
     }
 
-    /// 核心切片解码与残存提取算法
-    fn decode_slice(&mut self, bytes: &[u8]) -> String {
-        let mut result = String::with_capacity(bytes.len());
+    /// 核心切片原地零拷贝解码与尾部残存提取算法
+    fn decode_slice_into(&mut self, bytes: &[u8], result: &mut String) {
         let mut current = bytes;
 
-        loop {
-            if current.is_empty() {
-                break;
-            }
-
+        while !current.is_empty() {
             match std::str::from_utf8(current) {
                 Ok(valid_str) => {
                     result.push_str(valid_str);
@@ -84,8 +126,6 @@ impl Utf8ChunkBuffer {
                 }
             }
         }
-
-        result
     }
 
     /// 流终止（EOF / 进程退出）时排空并清空残存缓冲区
@@ -160,5 +200,32 @@ mod tests {
         let out = buf.push(b"abc\xFFdef");
         assert_eq!(out, "abc\u{FFFD}def");
         assert_eq!(buf.flush_lossy(), "");
+    }
+
+    #[test]
+    fn test_incomplete_carry_followed_by_invalid_continuation_and_multibyte() {
+        let mut buf = Utf8ChunkBuffer::new();
+        // Chunk 1 末尾留下孤立的 3 字节首字节 0xE4
+        assert_eq!(buf.push(&[0xE4]), "");
+        // Chunk 2 紧跟合法 4 字节 Emoji "🦀" + ASCII，0xE4 应转为 \u{FFFD} 且不吞噬后续 Emoji
+        let out = buf.push(&[0xF0, 0x9F, 0xA6, 0x80, b'!']);
+        assert_eq!(out, "\u{FFFD}🦀!");
+        assert_eq!(buf.flush_lossy(), "");
+    }
+
+    #[test]
+    fn test_8kb_boundary_split_zero_copy_equivalence() {
+        let mut buf = Utf8ChunkBuffer::new();
+        let mut chunk1 = vec![b'a'; 8190];
+        // 在 8192 边界处放入 "中" [0xE4, 0xB8, 0xAD] 的前 2 字节
+        chunk1.extend_from_slice(&[0xE4, 0xB8]);
+        let mut chunk2 = vec![0xAD];
+        chunk2.extend_from_slice(&vec![b'b'; 8191]);
+
+        let out1 = buf.push(&chunk1);
+        assert_eq!(out1.len(), 8190);
+        let out2 = buf.push(&chunk2);
+        assert!(out2.starts_with('中'));
+        assert_eq!(out2.len(), "中".len() + 8191);
     }
 }

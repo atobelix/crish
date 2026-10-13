@@ -27,11 +27,6 @@ use session_loop::input::{AgentInputQueue, InputEnqueueMode};
 /// 队列默认容量（任务书 B4.4 规定：默认 100）
 pub const DEFAULT_QUEUE_CAPACITY: usize = 100;
 
-/// context-state 感知注入分组键（详案 I1-α②：group_id 去重——连切两次
-/// 状态只注入一次 context-state；同一键也用于 [SteeringInputEntry::into_user_message]
-/// 识别并产出 `kind=context-state`）。
-pub const CONTEXT_STATE_GROUP: &str = "context-state";
-
 /// 消息附件（对齐 TS MessageAttachment：type/data/mimeType）
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct MessageAttachment {
@@ -93,35 +88,14 @@ impl SteeringInputEntry {
         self
     }
 
-    /// context-state 感知注入条目（详案 I1-α② 扩展点 A）
-    ///
-    /// 【注意/已废弃】：context-state 属于当次 run 的系统环境上下文元数据，
-    /// 在 run_launch 阶段直接与用户 prompt 融合成合体信封当次生效。
-    /// 本构造方法仅供遗留测试或纯状态标记保留兼容性，禁止在生产中作为唤醒源排入 pending_queue！
-    pub fn context_state(id: impl Into<String>, text: impl Into<String>, enqueued_at: u64) -> Self {
-        Self {
-            session_id: String::new(),
-            id: id.into(),
-            text: text.into(),
-            attachments: Vec::new(),
-            enqueued_at,
-            group_id: Some(CONTEXT_STATE_GROUP.to_string()),
-            is_steering: false,
-        }
-    }
-
     /// 转用户角色消息
     ///
     /// D8：条目作为**下一条用户消息**注入；id 沿用条目 id 保证幂等；
     /// 标记规则（I1-α④ 枚举化）：
     /// - steering 条目 → `kind=steering`（[AgentMessageMetadataKind::Steering]）；
-    /// - context-state 条目（group_id=[CONTEXT_STATE_GROUP]）→
-    ///   `kind=context-state`（[AgentMessageMetadataKind::ContextState]）（注意：生产路径已彻底斩断 context_state 唤醒逻辑，此分支仅供遗留测试/纯状态标记兼容）；
     /// - 普通条目 → 无 kind 元数据。
     pub fn into_user_message(&self) -> AgentMessage {
-        let metadata = if self.group_id.as_deref() == Some(CONTEXT_STATE_GROUP) {
-            Some(serde_json::json!({ "kind": AgentMessageMetadataKind::ContextState }))
-        } else if self.is_steering {
+        let metadata = if self.is_steering {
             Some(serde_json::json!({ "kind": AgentMessageMetadataKind::Steering }))
         } else {
             None
@@ -265,18 +239,14 @@ impl PendingMessageQueue {
         self.transfer_into_input_queue(queue, InputEnqueueMode::FollowUp)
     }
 
-    /// 是否有待处理条目（纯 context-state 标记不作为激活唤醒源）
+    /// 是否有待处理条目（O(1) 判定）
     pub fn has_pending(&self) -> bool {
-        self.entries
-            .iter()
-            .any(|e| e.group_id.as_deref() != Some(CONTEXT_STATE_GROUP))
+        !self.entries.is_empty()
     }
 
-    /// 指定会话是否有待处理条目（防跨会话无差别拉起核心守护；纯 context-state 标记不作为激活唤醒源）
+    /// 指定会话是否有待处理条目（防跨会话无差别拉起核心守护）
     pub fn has_pending_for(&self, session_id: &str) -> bool {
-        self.entries.iter().any(|e| {
-            e.session_id == session_id && e.group_id.as_deref() != Some(CONTEXT_STATE_GROUP)
-        })
+        self.entries.iter().any(|e| e.session_id == session_id)
     }
 
     /// 是否含 steering 条目（对齐 TS hasPendingSteering）
@@ -650,78 +620,50 @@ mod tests {
         assert!(plain.metadata.is_none(), "普通条目不带 steering 元数据");
     }
 
-    /// context-state 感知注入（详案 I1-α② 扩展点 A）：
-    /// - 构造入口带 group_id=CONTEXT_STATE_GROUP（replace_or_enqueue 去重）；
-    /// - 转用户消息 metadata.kind = context-state（T1a 枚举标记）；
-    /// - 容量挤占按普通消息处理（不占 steering 保护位）。
+    /// 分组普通条目去重与 O(1) has_pending 验证：
+    /// - 同一 group_id 通过 replace_or_enqueue 原位替换（不新增条目）；
+    /// - 非 steering 分组条目转用户消息不携带 steering 元数据；
+    /// - has_pending 为纯粹 O(1) 非空判定。
     #[test]
-    fn context_state_entry_dedups_and_marks_kind() {
-        // 构造：状态切换告知文本
-        let cs = SteeringInputEntry::context_state(
-            "ctx-1",
-            "当前已切换到模型 X（思考档位 high）。",
-            1_785_456_100_000,
-        );
-        assert_eq!(cs.group_id.as_deref(), Some(CONTEXT_STATE_GROUP));
-        assert!(!cs.is_steering, "context-state 不占 steering 保护位");
+    fn grouped_entry_dedups_and_has_pending_is_non_empty() {
+        let g1 = grouped_entry("g-1", "首次分组通知", 100, "notify-group");
+        assert_eq!(g1.group_id.as_deref(), Some("notify-group"));
+        assert!(!g1.is_steering, "普通分组条目不占 steering 保护位");
 
-        // 转用户消息：User 角色 + kind=context-state 枚举标记
-        let message = cs.into_user_message();
+        let message = g1.into_user_message();
         assert_eq!(message.role, AgentMessageRole::User);
-        assert_eq!(message.text(), "当前已切换到模型 X（思考档位 high）。");
-        let metadata = message.metadata.as_ref().expect("context-state 须带元数据");
-        assert_eq!(
-            metadata.get("kind").and_then(|k| k.as_str()),
-            Some(metadata_kind_wire(AgentMessageMetadataKind::ContextState).as_str()),
-            "kind 走 T1a 枚举 ContextState canonical wire"
-        );
+        assert_eq!(message.text(), "首次分组通知");
+        assert!(message.metadata.is_none(), "非 steering 条目无 kind 元数据");
 
-        // 去重：同一 group_id（context-state）replace_or_enqueue 原位替换
-        // （不新增条目，防连切两次重复注入）
         let mut queue = PendingMessageQueue::new();
-        queue.enqueue(cs.clone());
-        assert!(!queue.has_pending(), "context-state 条目不作为激活唤醒源");
-        let replaced = queue.replace_or_enqueue(SteeringInputEntry::context_state(
-            "ctx-2",
-            "当前已切换到模型 Y（思考档位 low）。",
-            1_785_456_200_000,
-        ));
+        queue.enqueue(g1);
+        assert!(queue.has_pending(), "入队后 has_pending 立即为 true");
+        let replaced =
+            queue.replace_or_enqueue(grouped_entry("g-2", "更新后的分组通知", 200, "notify-group"));
         assert!(replaced, "同 group_id 应原位替换");
-        assert_eq!(queue.len(), 1, "去重后仍只一条 context-state");
-        assert!(!queue.has_pending(), "去重后 context-state 条目仍不作为激活唤醒源");
+        assert_eq!(queue.len(), 1, "去重后仍只一条记录");
+        assert!(queue.has_pending());
         let drained = queue.dequeue_all();
-        assert_eq!(drained[0].text, "当前已切换到模型 Y（思考档位 low）。");
+        assert_eq!(drained[0].text, "更新后的分组通知");
     }
 
-    /// context-state 与 steering/普通条目并存：互不干扰
+    /// 分组普通条目与 steering/普通条目并存：互不干扰
     #[test]
-    fn context_state_coexists_with_steering_and_plain() {
+    fn grouped_entry_coexists_with_steering_and_plain() {
         let mut queue = PendingMessageQueue::new();
         queue.enqueue(user_entry("u1", "plain", 1));
         queue.enqueue(steering_entry("s1", "steer", 2));
-        queue.enqueue(SteeringInputEntry::context_state(
-            "ctx-1",
-            "已切换到模型 X。",
-            3,
-        ));
+        queue.enqueue(grouped_entry("g1", "grouped", 3, "custom-group"));
 
         assert_eq!(queue.len(), 3);
         let drained = queue.dequeue_all();
-        // context-state 条目普通优先级：metadata.kind=context-state、
-        // 非 steering（不因 is_steering 误标）
-        let cs = drained
+        let g = drained
             .iter()
-            .find(|e| e.group_id.as_deref() == Some(CONTEXT_STATE_GROUP))
-            .expect("context-state 条目存在");
-        assert!(!cs.is_steering);
-        let msg = cs.into_user_message();
-        assert_eq!(
-            msg.metadata
-                .as_ref()
-                .and_then(|m| m.get("kind"))
-                .and_then(|k| k.as_str()),
-            Some(metadata_kind_wire(AgentMessageMetadataKind::ContextState).as_str())
-        );
+            .find(|e| e.group_id.as_deref() == Some("custom-group"))
+            .expect("分组条目存在");
+        assert!(!g.is_steering);
+        assert!(g.into_user_message().metadata.is_none());
+
         // steering 条目仍标 steering
         let s = drained
             .iter()

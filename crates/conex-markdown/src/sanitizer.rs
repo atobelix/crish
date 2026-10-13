@@ -44,8 +44,19 @@ static CODE_EXT_RE: Lazy<Regex> = Lazy::new(|| {
         .expect("valid code ext regex")
 });
 
+static TITLED_LINK_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r#"^(\S+)\s+["'][\s\S]*["']\s*$"#).expect("valid titled regex"));
+
 /// CJK 范围 (含扩展 A/兼容) — 仅用于 wrap_cjk_text_segment 内部 regex 字符类。
 const CJK_CLASS: &str = r"\u{3400}-\u{4dbf}\u{4e00}-\u{9fff}\u{f900}-\u{faff}";
+
+static CJK_BOUNDARY_RE: Lazy<Regex> = Lazy::new(|| {
+    let pattern = format!(
+        r"([{cjk}])([A-Za-z0-9@._/\\-])|([A-Za-z0-9@._/\\-])([{cjk}])",
+        cjk = CJK_CLASS
+    );
+    Regex::new(&pattern).expect("valid cjk boundary regex")
+});
 
 /// 剥控制符 / BOM / 零宽 / bidi 覆盖, 防止 smuggle `javascript:` 等危险 scheme。
 /// 用于 href/src 安全判定前的归一化(不改变展示用原文 escape 路径)。
@@ -226,17 +237,11 @@ pub fn is_local_path_ref(s: &str) -> bool {
 /// - CJK ↔ 拉丁/数字/路径字符边界插入 `<wbr>`
 /// - 纯 CJK 长文本不再强插 `<wbr>`，交由现代 CSS 引擎接管，杜绝表格单元格列宽畸变。
 pub fn wrap_cjk_text_segment(text: &str) -> String {
-    use std::sync::OnceLock;
-    static BOUNDARY_RE: OnceLock<Regex> = OnceLock::new();
-    let boundary_re = BOUNDARY_RE.get_or_init(|| {
-        let pattern = format!(
-            r"([{cjk}])([A-Za-z0-9@._/\\-])|([A-Za-z0-9@._/\\-])([{cjk}])",
-            cjk = CJK_CLASS
-        );
-        Regex::new(&pattern).expect("valid cjk boundary regex")
-    });
+    if text.is_ascii() {
+        return text.to_string();
+    }
 
-    boundary_re
+    CJK_BOUNDARY_RE
         .replace_all(text, |caps: &regex::Captures| {
             // 1+2 or 3+4 — 任一匹配
             if let (Some(a), Some(b)) = (caps.get(1), caps.get(2)) {
@@ -266,9 +271,7 @@ pub fn link_destination_url(raw: &str) -> String {
         dest = dest[1..].trim().to_string();
     }
     // url "title" / url 'title'
-    let titled_re =
-        Lazy::new(|| Regex::new(r#"^(\S+)\s+["'][\s\S]*["']\s*$"#).expect("valid titled regex"));
-    if let Some(caps) = titled_re.captures(&dest) {
+    if let Some(caps) = TITLED_LINK_RE.captures(&dest) {
         return caps.get(1).map(|m| m.as_str().to_string()).unwrap_or(dest);
     }
     // 无 title: 整段(可含 alert(1) 的括号)视为 URL,仅在空白处截断首 token

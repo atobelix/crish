@@ -539,24 +539,82 @@ pub(crate) fn build_tracker(config: Option<&CacheTrackingConfig>) -> Option<Cach
 
 // ── 请求签名投影（P5 §3.4.1：简单稳定哈希）──────────────────────────────
 
+/// FNV-1a 栈上零分配流式哈希写入器（SL-PERF-14：实现 `std::fmt::Write` 与
+/// `std::io::Write`，彻底消除 `Vec<u8>` 扩容与 `serde_json::to_string` 堆分配）
+#[derive(Debug, Clone, Copy)]
+struct Fnv1aWriter(u64);
+
+impl Default for Fnv1aWriter {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Fnv1aWriter {
+    #[inline]
+    const fn new() -> Self {
+        Self(FNV_OFFSET_BASIS)
+    }
+
+    #[inline]
+    fn update(&mut self, bytes: &[u8]) {
+        let mut hash = self.0;
+        for &byte in bytes {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(FNV_PRIME);
+        }
+        self.0 = hash;
+    }
+
+    #[inline]
+    fn update_byte(&mut self, byte: u8) {
+        self.0 ^= u64::from(byte);
+        self.0 = self.0.wrapping_mul(FNV_PRIME);
+    }
+
+    #[inline]
+    const fn finish(self) -> u64 {
+        self.0
+    }
+}
+
+impl std::fmt::Write for Fnv1aWriter {
+    #[inline]
+    fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        self.update(s.as_bytes());
+        Ok(())
+    }
+}
+
+impl std::io::Write for Fnv1aWriter {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.update(buf);
+        Ok(buf.len())
+    }
+
+    #[inline]
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 /// FNV-1a 64 位哈希（简单稳定：跨进程 / 跨编译器版本确定，供基线持久化后
 /// 跨 run 比对；对齐 jcode 用 DefaultHasher 的等价目的，P5 §3.4.1「与 jcode
 /// 同」——FNV 实现无标准库算法版本漂移风险）
 fn fnv1a(bytes: &[u8]) -> u64 {
-    let mut hash = FNV_OFFSET_BASIS;
-    for &byte in bytes {
-        hash ^= u64::from(byte);
-        hash = hash.wrapping_mul(FNV_PRIME);
-    }
-    hash
+    let mut writer = Fnv1aWriter::new();
+    writer.update(bytes);
+    writer.finish()
 }
 
 /// 折叠两条哈希（FNV 增量风格：两段 8 字节小端拼接再哈希——顺序敏感）
 fn fnv1a_mix(a: u64, b: u64) -> u64 {
-    let mut buf = [0u8; 16];
-    buf[..8].copy_from_slice(&a.to_le_bytes());
-    buf[8..].copy_from_slice(&b.to_le_bytes());
-    fnv1a(&buf)
+    let mut writer = Fnv1aWriter::new();
+    writer.update(&a.to_le_bytes());
+    writer.update(&b.to_le_bytes());
+    writer.finish()
 }
 
 /// 角色标签（投影输入；显式常量避免依赖 serde 的 rename 细节）
@@ -571,40 +629,37 @@ fn role_tag(role: AgentMessageRole) -> &'static str {
 
 /// 消息哈希投影（保留项 = role + blocks 类型与内容 + 工具调用参数；
 /// 剔除项 = created_at / metadata / client_message_id / content 兜底，
-/// P5 §3.4.1 投影清单）
+/// P5 §3.4.1 投影清单；SL-PERF-14 零堆分配流式哈希）
 fn message_hash(message: &AgentMessage) -> u64 {
-    let mut bytes = Vec::with_capacity(64);
-    bytes.extend_from_slice(role_tag(message.role).as_bytes());
+    let mut hasher = Fnv1aWriter::new();
+    hasher.update(role_tag(message.role).as_bytes());
     for block in &message.blocks {
-        block_hash(block, &mut bytes);
+        block_hash(block, &mut hasher);
     }
-    fnv1a(&bytes)
+    hasher.finish()
 }
 
-/// 块哈希投影（带类型标签前缀——「text」与「thought」同文不混淆）
-fn block_hash(block: &AgentMessageBlock, out: &mut Vec<u8>) {
+/// 块哈希投影（带类型标签前缀——「text」与「thought」同文不混淆；
+/// SL-PERF-14：直接写入栈上 `Fnv1aWriter`，0 字节堆分配）
+fn block_hash(block: &AgentMessageBlock, out: &mut Fnv1aWriter) {
     match block {
         AgentMessageBlock::Text { text } => {
-            out.extend_from_slice(b"text\0");
-            out.extend_from_slice(text.as_bytes());
+            out.update(b"text\0");
+            out.update(text.as_bytes());
         }
         AgentMessageBlock::Thought { text, redacted } => {
-            out.extend_from_slice(b"thought\0");
-            out.extend_from_slice(text.as_bytes());
-            out.push(redacted.unwrap_or(false) as u8);
+            out.update(b"thought\0");
+            out.update(text.as_bytes());
+            out.update_byte(redacted.unwrap_or(false) as u8);
         }
         AgentMessageBlock::ToolCall(call) => {
-            out.extend_from_slice(b"tool-call\0");
-            out.extend_from_slice(call.id.as_bytes());
-            out.push(0);
-            out.extend_from_slice(call.tool_name.as_bytes());
-            out.push(0);
-            // 入参 JSON（serde_json::Value 为 BTreeMap 键序 → 序列化确定）
-            out.extend_from_slice(
-                serde_json::to_string(&call.input)
-                    .unwrap_or_default()
-                    .as_bytes(),
-            );
+            out.update(b"tool-call\0");
+            out.update(call.id.as_bytes());
+            out.update_byte(0);
+            out.update(call.tool_name.as_bytes());
+            out.update_byte(0);
+            // 入参 JSON（serde_json::Value 为 BTreeMap 键序 → 流式 to_writer 字节序列与 to_string 完全一致）
+            let _ = serde_json::to_writer(&mut *out, &call.input);
         }
         AgentMessageBlock::ToolResult {
             tool_call_id,
@@ -612,32 +667,45 @@ fn block_hash(block: &AgentMessageBlock, out: &mut Vec<u8>) {
             output,
             is_error,
         } => {
-            out.extend_from_slice(b"tool-result\0");
-            out.extend_from_slice(tool_call_id.as_bytes());
-            out.push(0);
-            out.extend_from_slice(tool_name.as_bytes());
-            out.push(0);
-            out.push(*is_error as u8);
+            out.update(b"tool-result\0");
+            out.update(tool_call_id.as_bytes());
+            out.update_byte(0);
+            out.update(tool_name.as_bytes());
+            out.update_byte(0);
+            out.update_byte(*is_error as u8);
             // 输出内容投影 text 正文（剔除状态 / 元数据噪声）
-            out.extend_from_slice(output.text.as_deref().unwrap_or("").as_bytes());
+            out.update(output.text.as_deref().unwrap_or("").as_bytes());
         }
     }
 }
 
 /// 工具集合哈希投影（{name, description, input_schema} 按序序列化；
-/// 与 P4 `tools_prefix_json` 同源投影，serde_json::Value 键序确定）
+/// 与 P4 `tools_prefix_json` 同源投影，字段顺序按 `serde_json::Value` 的 BTreeMap
+/// 字典序 `description` → `input_schema` → `name` 借用流式写入 `Fnv1aWriter`，
+/// 哈希结果与原 `serde_json::to_string` 字节序列完全一致，且 0 字节堆分配）
 fn tools_hash(tools: &[ToolSchema]) -> u64 {
-    let value: Vec<serde_json::Value> = tools
-        .iter()
-        .map(|t| {
-            serde_json::json!({
-                "name": t.name.clone(),
-                "description": t.description.clone(),
-                "input_schema": t.input_schema.clone(),
-            })
-        })
-        .collect();
-    fnv1a(serde_json::to_string(&value).unwrap_or_default().as_bytes())
+    #[derive(serde::Serialize)]
+    struct ToolSchemaHashProjection<'a> {
+        description: &'a str,
+        input_schema: &'a serde_json::Value,
+        name: &'a str,
+    }
+
+    let mut hasher = Fnv1aWriter::new();
+    hasher.update_byte(b'[');
+    for (i, t) in tools.iter().enumerate() {
+        if i > 0 {
+            hasher.update_byte(b',');
+        }
+        let proj = ToolSchemaHashProjection {
+            description: &t.description,
+            input_schema: &t.input_schema,
+            name: &t.name,
+        };
+        let _ = serde_json::to_writer(&mut hasher, &proj);
+    }
+    hasher.update_byte(b']');
+    hasher.finish()
 }
 
 /// 构建请求签名（system / tools / messages 投影 + 逐消息哈希链）。

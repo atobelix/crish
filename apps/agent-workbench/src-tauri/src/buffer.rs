@@ -39,10 +39,77 @@ pub struct EnqueueOutcome {
     pub dropped: usize,
 }
 
-/// 单个 run 的事件队列（按插入序）
+/// 单个 run 的双队列分级环形事件缓冲（ISSUE-09：O(1) 驱逐 + 归并保序）
 #[derive(Debug, Default)]
 struct RunQueue {
-    entries: VecDeque<(DropClass, String)>,
+    /// Soft（Delta）事件环形队列：高水位淘汰最旧 Soft 帧直接 `pop_front()`，严格 O(1)
+    soft_queue: VecDeque<(u64, String)>,
+    /// Critical 事件队列：永不丢弃
+    critical_queue: VecDeque<(u64, String)>,
+    /// 单调递增序号：在 drain 冲刷时通过双指针归并还原精确全局插入序
+    next_seq: u64,
+}
+
+impl RunQueue {
+    fn with_soft_capacity(soft_limit: usize) -> Self {
+        Self {
+            soft_queue: VecDeque::with_capacity(soft_limit),
+            critical_queue: VecDeque::new(),
+            next_seq: 0,
+        }
+    }
+
+    #[inline]
+    fn len(&self) -> usize {
+        self.soft_queue.len() + self.critical_queue.len()
+    }
+
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.soft_queue.is_empty() && self.critical_queue.is_empty()
+    }
+
+    #[inline]
+    fn pop_oldest_soft(&mut self) -> bool {
+        self.soft_queue.pop_front().is_some()
+    }
+
+    #[inline]
+    fn push(&mut self, class: DropClass, payload: String) {
+        let seq = self.next_seq;
+        self.next_seq = self.next_seq.wrapping_add(1);
+        match class {
+            DropClass::Soft => self.soft_queue.push_back((seq, payload)),
+            DropClass::Critical => self.critical_queue.push_back((seq, payload)),
+        }
+    }
+
+    fn drain_ordered(mut self) -> Vec<String> {
+        let mut out = Vec::with_capacity(self.len());
+        loop {
+            match (self.soft_queue.front(), self.critical_queue.front()) {
+                (Some((s_seq, _)), Some((c_seq, _))) => {
+                    if s_seq < c_seq {
+                        if let Some((_, payload)) = self.soft_queue.pop_front() {
+                            out.push(payload);
+                        }
+                    } else if let Some((_, payload)) = self.critical_queue.pop_front() {
+                        out.push(payload);
+                    }
+                }
+                (Some(_), None) => {
+                    out.extend(self.soft_queue.into_iter().map(|(_, payload)| payload));
+                    break;
+                }
+                (None, Some(_)) => {
+                    out.extend(self.critical_queue.into_iter().map(|(_, payload)| payload));
+                    break;
+                }
+                (None, None) => break,
+            }
+        }
+        out
+    }
 }
 
 /// 按 runId 的事件缓冲（高水位丢 Delta 旧帧，Critical 永不丢）
@@ -71,23 +138,22 @@ impl EventBuffer {
 
     /// 入队一条已序列化的事件载荷（按 runId 缓冲）
     ///
-    /// 丢帧规则（03 §5.3-6 / PE-09 §0.3 契约点 2）：
-    /// 1. 已达 Critical 水位 → 先驱逐 Soft 旧帧（Critical 永不丢）；
-    /// 2. Soft 事件：已达 Soft 水位 → 优先丢 Soft 旧帧；缓冲全 Critical 时
+    /// 丢帧规则（03 §5.3-6 / PE-09 §0.3 契约点 2 / ISSUE-09 O(1) 驱逐）：
+    /// 1. 已达 Critical 水位 → 先 O(1) 驱逐 Soft 旧帧（Critical 永不丢）；
+    /// 2. Soft 事件：已达 Soft 水位 → O(1) 优先丢 Soft 旧帧；缓冲全 Critical 时
     ///    丢本帧自身（不占用空间）；
     /// 3. Critical 事件：永不丢（无 Soft 可驱逐时缓冲可超限）。
     pub fn enqueue(&mut self, run_id: &str, class: DropClass, payload: String) -> EnqueueOutcome {
-        let queue = self.runs.entry(run_id.to_string()).or_default();
+        let soft_limit = self.soft_limit;
+        let queue = self
+            .runs
+            .entry(run_id.to_string())
+            .or_insert_with(|| RunQueue::with_soft_capacity(soft_limit));
         let mut dropped = 0usize;
 
-        // 1. Critical 水位：先为 Critical 事件腾位（驱逐 Soft 旧帧）
-        while queue.entries.len() >= self.critical_limit {
-            if let Some(position) = queue
-                .entries
-                .iter()
-                .position(|(c, _)| matches!(c, DropClass::Soft))
-            {
-                queue.entries.remove(position);
+        // 1. Critical 水位：先为 Critical 事件腾位（O(1) 驱逐 Soft 旧帧）
+        while queue.len() >= self.critical_limit {
+            if queue.pop_oldest_soft() {
                 dropped += 1;
             } else {
                 // 全 Critical：永不丢，接受超限（防御性）
@@ -97,14 +163,9 @@ impl EventBuffer {
 
         match class {
             DropClass::Soft => {
-                if queue.entries.len() >= self.soft_limit {
-                    // Soft 水位：优先丢最早的 Soft 旧帧
-                    if let Some(position) = queue
-                        .entries
-                        .iter()
-                        .position(|(c, _)| matches!(c, DropClass::Soft))
-                    {
-                        queue.entries.remove(position);
+                if queue.len() >= self.soft_limit {
+                    // Soft 水位：O(1) 优先丢最早的 Soft 旧帧
+                    if queue.pop_oldest_soft() {
                         dropped += 1;
                     } else {
                         // 缓冲已全 Critical：丢本帧自身（可丢类目）
@@ -114,7 +175,7 @@ impl EventBuffer {
                         };
                     }
                 }
-                queue.entries.push_back((class, payload));
+                queue.push(class, payload);
                 EnqueueOutcome {
                     buffered: true,
                     dropped,
@@ -122,7 +183,7 @@ impl EventBuffer {
             }
             DropClass::Critical => {
                 // Critical 永不丢
-                queue.entries.push_back((class, payload));
+                queue.push(class, payload);
                 EnqueueOutcome {
                     buffered: true,
                     dropped,
@@ -135,13 +196,7 @@ impl EventBuffer {
     pub fn drain(&mut self, run_id: &str) -> Vec<String> {
         self.runs
             .remove(run_id)
-            .map(|queue| {
-                queue
-                    .entries
-                    .into_iter()
-                    .map(|(_, payload)| payload)
-                    .collect()
-            })
+            .map(RunQueue::drain_ordered)
             .unwrap_or_default()
     }
 
@@ -152,19 +207,19 @@ impl EventBuffer {
     /// 指定 run 的缓冲长度（观测）
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn len(&self, run_id: &str) -> usize {
-        self.runs.get(run_id).map(|q| q.entries.len()).unwrap_or(0)
+        self.runs.get(run_id).map(RunQueue::len).unwrap_or(0)
     }
 
     /// 是否为空（观测）
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn is_empty(&self) -> bool {
-        self.runs.values().all(|q| q.entries.is_empty())
+        self.runs.values().all(RunQueue::is_empty)
     }
 
     /// 缓冲中待发的总条数（观测）
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn total_len(&self) -> usize {
-        self.runs.values().map(|q| q.entries.len()).sum()
+        self.runs.values().map(RunQueue::len).sum()
     }
 
     /// 已缓冲的 run id 列表（观测）
@@ -176,10 +231,7 @@ impl EventBuffer {
     /// 丢弃整个 run 的缓冲（run 终态清理；返回被丢弃条数）
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn remove_run(&mut self, run_id: &str) -> usize {
-        self.runs
-            .remove(run_id)
-            .map(|q| q.entries.len())
-            .unwrap_or(0)
+        self.runs.remove(run_id).map(|q| q.len()).unwrap_or(0)
     }
 
     /// 清空全部缓冲

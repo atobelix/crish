@@ -43,6 +43,12 @@ use super::{PushLevel, PushSeverity};
 /// 30 分钟内不再推 runtime-error）
 pub const S10A_SUPPRESS_MS: u64 = 30 * 60_000;
 
+/// S8e 任务归属映射最大容量（防常驻进程无界内存增长，ISSUE-14）
+pub const MAX_TRACKED_TASK_OWNERS: usize = 1024;
+
+/// S8e Run 终止来源映射最大容量（防常驻进程无界内存增长，ISSUE-14）
+pub const MAX_TRACKED_RUN_SOURCES: usize = 1024;
+
 /// 决策引擎配置（R3-01；R3-02/03 接线时从设置面装配）
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
@@ -111,11 +117,14 @@ pub struct PushDecisionEngine {
     quiet_cfg: QuietHoursConfig,
     /// run-terminal(failed) 时刻表（runId → epoch ms；S10a 双推抑制）
     run_failed_at: std::collections::HashMap<String, u64>,
-    /// S8e 事件流观察（R3-01a 补强）：task_id → 归属 run（task-started 登记）
+    /// S8e 事件流观察（R3-01a 补强）：task_id → 归属 run（task-started 登记，ISSUE-14 有界）
     task_owner_run: std::collections::HashMap<String, String>,
-    /// S8e 事件流观察（R3-01a 补强）：run_id → 终止来源（run-terminal 登记；
-    ///   装配层有 agent-end reason 时可注入更精确的 [RunTerminationSource]）
-    run_term_source: std::collections::HashMap<String, RunTerminationSource>,
+    /// task_owner_run 的 FIFO 插入序队列（超容量淘汰最旧条目）
+    task_owner_order: std::collections::VecDeque<String>,
+    /// S8e 事件流观察（R3-01a 补强）：run_id → (终止来源, 记录时刻)（run-terminal 登记，ISSUE-14 有界）
+    run_term_source: std::collections::HashMap<String, (RunTerminationSource, u64)>,
+    /// run_term_source 的 FIFO 插入序队列（超容量淘汰最旧条目）
+    run_term_order: std::collections::VecDeque<String>,
     /// 夜间摘要折叠累积（R3-01a 补强：静默时段 P1 折叠条目；
     ///   `push_night_summary` 表持久化接线由 R3-02/03 承担）
     folded: Vec<NightSummaryItem>,
@@ -140,7 +149,9 @@ impl PushDecisionEngine {
             quiet_cfg: cfg.quiet,
             run_failed_at: std::collections::HashMap::new(),
             task_owner_run: std::collections::HashMap::new(),
+            task_owner_order: std::collections::VecDeque::new(),
             run_term_source: std::collections::HashMap::new(),
+            run_term_order: std::collections::VecDeque::new(),
             folded: Vec::new(),
         }
     }
@@ -155,25 +166,29 @@ impl PushDecisionEngine {
         ctx: &PushIntentCtx,
         now_ms: u64,
     ) -> Vec<PushDecision> {
-        // S8e 事件流观察（R3-01a 补强）：task-started 登记任务归属 run；
-        // run-terminal 登记 run 终止来源（供 task-killed 精确来源判定）
-        if let AgentEvent::TaskStarted {
-            task_id,
-            owner_run_id,
-            ..
-        } = event
-        {
-            self.task_owner_run
-                .insert(task_id.clone(), owner_run_id.clone());
-        }
-        if let AgentEvent::RunTerminal {
-            run_id, terminal, ..
-        } = event
-        {
-            self.run_term_source.insert(
-                run_id.clone(),
-                super::intent::run_terminal_source(*terminal),
-            );
+        // S8e 事件流观察（R3-01a 补强 & ISSUE-14 有界清理）：
+        // task-started 登记任务归属 run；task 终态即时释放；run-terminal 登记 run 终止来源
+        match event {
+            AgentEvent::TaskStarted {
+                task_id,
+                owner_run_id,
+                ..
+            } => {
+                self.record_task_owner(task_id.clone(), owner_run_id.clone());
+            }
+            AgentEvent::TaskCompleted { task_id, .. } | AgentEvent::TaskFailed { task_id, .. } => {
+                self.task_owner_run.remove(task_id);
+            }
+            AgentEvent::RunTerminal {
+                run_id, terminal, ..
+            } => {
+                self.record_run_term_source(
+                    run_id.clone(),
+                    super::intent::run_terminal_source(*terminal),
+                    now_ms,
+                );
+            }
+            _ => {}
         }
 
         // 批次关闭信号：审批「全组先发」，批次结束即提前出桶
@@ -186,14 +201,17 @@ impl PushDecisionEngine {
                 .collect();
         }
 
-        // S8e：task-killed 来源注入（task → 归属 run → 终止来源；缺失回退
-        // via_force 近似——见 [super::intent::task_killed_should_push]）
+        // S8e：task-killed 来源注入（task → 归属 run → 终止来源；消费后即清理 task_owner_run）
         let kill_source = match event {
-            AgentEvent::TaskKilled { task_id, .. } => self
-                .task_owner_run
-                .get(task_id)
-                .and_then(|run_id| self.run_term_source.get(run_id))
-                .copied(),
+            AgentEvent::TaskKilled { task_id, .. } => {
+                let source = self
+                    .task_owner_run
+                    .get(task_id)
+                    .and_then(|run_id| self.run_term_source.get(run_id))
+                    .map(|(src, _)| *src);
+                self.task_owner_run.remove(task_id);
+                source
+            }
             _ => None,
         };
 
@@ -453,6 +471,28 @@ impl PushDecisionEngine {
     fn prune_run_failed(&mut self, now_ms: u64) {
         self.run_failed_at
             .retain(|_, at| now_ms.saturating_sub(*at) < S10A_SUPPRESS_MS);
+    }
+
+    fn record_task_owner(&mut self, task_id: String, owner_run_id: String) {
+        const MAX_TASK_OWNERS: usize = 1024;
+        if self.task_owner_run.len() >= MAX_TASK_OWNERS {
+            if let Some(oldest) = self.task_owner_order.pop_front() {
+                self.task_owner_run.remove(&oldest);
+            }
+        }
+        self.task_owner_order.push_back(task_id.clone());
+        self.task_owner_run.insert(task_id, owner_run_id);
+    }
+
+    fn record_run_term_source(&mut self, run_id: String, source: RunTerminationSource, now_ms: u64) {
+        const MAX_RUN_TERMS: usize = 1024;
+        if self.run_term_source.len() >= MAX_RUN_TERMS {
+            if let Some(oldest) = self.run_term_order.pop_front() {
+                self.run_term_source.remove(&oldest);
+            }
+        }
+        self.run_term_order.push_back(run_id.clone());
+        self.run_term_source.insert(run_id, (source, now_ms));
     }
 }
 

@@ -1,13 +1,13 @@
 //! Stream A: Tauri 命令层 —— Rust Markdown 渲染入口
 //!
-//! 本模块提供 5 个 `#[tauri::command]`，包装 `conex_markdown` 的渲染 API，
+//! 本模块提供 2 个 `#[tauri::command]`，包装 `conex_markdown` 的渲染 API，
 //! 替代 JS 主线程同步渲染（长会话首屏 4-15s 卡顿的根因）。
 //! CPU 密集操作统一走 `tokio::task::spawn_blocking`，参考 `core_commands.rs` 模式。
 //!
 //! 命令错误统一为 `CoreError`（serde tagged enum），JS 侧可按 `error.kind` 分类处理。
 //!
 //! 对应 JS wrapper: `crish-desktop/src/api/rustCore.ts` 中的
-//! `renderMarkdown` / `renderMarkdownBatch` / `renderMarkdownStream` / `highlightCode` / `clearMarkdownCache`。
+//! `renderMarkdown` / `renderMarkdownBatch`。
 
 use conex_types::CoreError;
 
@@ -37,42 +37,4 @@ pub async fn md_render_batch(texts: Vec<String>) -> Result<Vec<String>, CoreErro
     tokio::task::spawn_blocking(move || conex_markdown::render_markdown_batch(texts))
         .await
         .map_err(|e| CoreError::Internal(format!("md_render_batch join: {e}")))
-}
-
-/// 流式渲染 markdown 为 HTML。
-///
-/// - `stream_mode = true`：跳过 syntect 高亮（Rust 侧快速路径），用于完成态渲染的
-///   流式 fallback 或 Rust 侧测试。流式期主路径是 JS IncrementalMarkdownParser（零 IPC）。
-/// - `stream_mode = false`：等价于 `md_render`（完整渲染 + 缓存）。
-///
-/// CPU 密集（pulldown-cmark 解析 + 可选 syntect 高亮 + ammonia sanitize），走 spawn_blocking。
-///
-/// wire 名 = `core_md_render_stream`（T03.4 更名 core_md_*）。
-///
-/// T-F 06（通信契约）退役登记：命令注册与 manifest 已退役（流式主路径
-/// JS 零 IPC 定稿，无消费意图；changelog 33 可查）。函数保留待恢复——
-/// 如需恢复先接前端消费再翻注册。
-#[allow(dead_code)]
-#[tauri::command(rename = "core_md_render_stream")]
-pub async fn md_render_stream(text: String, stream_mode: bool) -> Result<String, CoreError> {
-    tokio::task::spawn_blocking(move || conex_markdown::render_markdown_stream(&text, stream_mode))
-        .await
-        .map_err(|e| CoreError::Internal(format!("md_render_stream join: {e}")))
-}
-
-/// 清空 markdown 渲染缓存与代码高亮缓存。
-///
-/// 用于内存压力场景或测试隔离。正常运行时无需调用（moka 自动 LRU 淘汰）。
-///
-/// wire 名 = `core_md_clear_cache`（T03.4 更名 core_md_*）。
-///
-/// T-F 06（通信契约）退役登记：命令注册与 manifest 已退役（moka 自动 LRU，
-/// 仅测试隔离用途；changelog 33 可查）。函数保留待恢复——Rust 侧测试直接调
-/// `conex_markdown::clear_cache` 不占命令面。
-#[allow(dead_code)]
-#[tauri::command(rename = "core_md_clear_cache")]
-pub async fn md_clear_cache() -> Result<(), CoreError> {
-    tokio::task::spawn_blocking(conex_markdown::clear_cache)
-        .await
-        .map_err(|e| CoreError::Internal(format!("md_clear_cache join: {e}")))
 }

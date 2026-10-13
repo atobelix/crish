@@ -137,7 +137,7 @@ impl<'a> RollbackExecutor<'a> {
                     }
                 }
                 RollbackStrategy::TrashRestore => {
-                    let Some(trash) = self.trash else {
+                    let Some(_trash) = self.trash else {
                         for p in paths {
                             results.push(PathRollbackResult::Skipped {
                                 path: p.clone(),
@@ -146,34 +146,12 @@ impl<'a> RollbackExecutor<'a> {
                         }
                         continue;
                     };
-                    let abs_paths: Vec<std::path::PathBuf> =
-                        paths.iter().map(std::path::PathBuf::from).collect();
-                    match trash.rollback_before(boundary, &abs_paths) {
-                        Ok(outcomes) => {
-                            for outcome in outcomes {
-                                match outcome {
-                                    conex_fs::trash::RollbackOutcome::Restored(path) => {
-                                        results.push(PathRollbackResult::Restored {
-                                            path: path.to_string_lossy().into_owned(),
-                                        });
-                                    }
-                                    conex_fs::trash::RollbackOutcome::Skipped { path, reason } => {
-                                        results.push(PathRollbackResult::Skipped {
-                                            path: path.to_string_lossy().into_owned(),
-                                            reason,
-                                        });
-                                    }
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            for p in paths {
-                                results.push(PathRollbackResult::Failed {
-                                    path: p.clone(),
-                                    error: e.to_string(),
-                                });
-                            }
-                        }
+                    let _ = boundary;
+                    for p in paths {
+                        results.push(PathRollbackResult::Failed {
+                            path: p.clone(),
+                            error: "path-only 回滚缺少事件 owner；生产回滚须使用 owner-aware rollback_operations".into(),
+                        });
                     }
                 }
                 RollbackStrategy::GitRevertGated => {

@@ -82,8 +82,27 @@ mod tests {
     fn cache_returns_inserted_value() {
         let cache = render_cache();
         cache.insert("k1".to_string(), Arc::new("v1".to_string()));
-        let got = cache.get(&"k1".to_string());
+        let got = cache.get("k1");
         assert_eq!(got.as_deref().map(|s| s.as_str()), Some("v1"));
+    }
+
+    #[test]
+    fn cache_supports_zero_copy_str_lookup() {
+        let r_cache = render_cache();
+        r_cache.insert("str-lookup-key".to_string(), Arc::new("rendered-html".to_string()));
+        let key_slice: &str = "str-lookup-key";
+        assert_eq!(
+            r_cache.get(key_slice).as_deref().map(|s| s.as_str()),
+            Some("rendered-html")
+        );
+
+        let h_cache = highlight_cache();
+        h_cache.insert("ts:const x = 1;".to_string(), Arc::new("<span>const</span>".to_string()));
+        let hl_slice: &str = "ts:const x = 1;";
+        assert_eq!(
+            h_cache.get(hl_slice).as_deref().map(|s| s.as_str()),
+            Some("<span>const</span>")
+        );
     }
 
     #[test]

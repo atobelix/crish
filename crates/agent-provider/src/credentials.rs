@@ -88,14 +88,13 @@ impl CredentialStore {
     }
 
     pub fn read(&self, path: &Path) -> Result<Option<SecretString>, CredentialError> {
-        let text = match fs::read_to_string(path) {
-            Ok(text) => text,
+        let encrypted = match fs::read(path) {
+            Ok(bytes) => bytes,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(CredentialError::Io(error)),
         };
         #[cfg(windows)]
         {
-            let encrypted = decode_hex(text.trim()).map_err(CredentialError::InvalidEncoding)?;
             let plain = dpapi_unprotect(&encrypted).map_err(CredentialError::Decrypt)?;
             let text = String::from_utf8(plain)
                 .map_err(|_| CredentialError::InvalidEncoding("凭据不是 UTF-8".into()))?;
@@ -103,7 +102,7 @@ impl CredentialStore {
         }
         #[cfg(not(windows))]
         {
-            let _ = text;
+            let _ = encrypted;
             Err(CredentialError::Unsupported)
         }
     }
@@ -116,7 +115,7 @@ impl CredentialStore {
         #[cfg(windows)]
         {
             let encrypted = dpapi_protect(value.as_bytes()).map_err(CredentialError::Encrypt)?;
-            conex_fs::atomic_write_file(path, encode_hex(&encrypted).as_bytes())?;
+            conex_fs::atomic_write_file(path, &encrypted)?;
             Ok(CredentialPersistence::Persisted)
         }
         #[cfg(not(windows))]
@@ -238,45 +237,6 @@ fn dpapi_unprotect(input: &[u8]) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-// ── hex 编解码（从 Tauri 壳 credentials.rs:326-357 复制）──
-
-#[allow(dead_code)]
-fn encode_hex(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut output = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        output.push(HEX[(byte >> 4) as usize] as char);
-        output.push(HEX[(byte & 0x0f) as usize] as char);
-    }
-    output
-}
-
-#[allow(dead_code)]
-fn decode_hex(input: &str) -> Result<Vec<u8>, String> {
-    if !input.len().is_multiple_of(2) {
-        return Err("Invalid encrypted credential encoding".to_string());
-    }
-    input
-        .as_bytes()
-        .chunks(2)
-        .map(|chunk| {
-            let high = hex_value(chunk[0])?;
-            let low = hex_value(chunk[1])?;
-            Ok((high << 4) | low)
-        })
-        .collect()
-}
-
-#[allow(dead_code)]
-fn hex_value(byte: u8) -> Result<u8, String> {
-    match byte {
-        b'0'..=b'9' => Ok(byte - b'0'),
-        b'a'..=b'f' => Ok(byte - b'a' + 10),
-        b'A'..=b'F' => Ok(byte - b'A' + 10),
-        _ => Err("Invalid encrypted credential encoding".to_string()),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -326,12 +286,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn invalid_hex_decoding_errors() {
-        assert!(decode_hex("broken").is_err());
-        assert!(decode_hex("xx").is_err());
-    }
-
     #[cfg(windows)]
     #[test]
     fn dpapi_file_roundtrip_and_independent_clear() {
@@ -341,7 +295,7 @@ mod tests {
         let b = dir.path().join("b.dpapi");
         store.write(&a, "secret-a").unwrap();
         store.write(&b, "secret-b").unwrap();
-        assert!(!fs::read_to_string(&a).unwrap().contains("secret-a"));
+        assert!(!String::from_utf8_lossy(&fs::read(&a).unwrap()).contains("secret-a"));
         assert_eq!(store.read(&a).unwrap().unwrap().as_str(), "secret-a");
         store.clear(&a).unwrap();
         assert!(store.read(&a).unwrap().is_none());

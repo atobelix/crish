@@ -15,7 +15,7 @@ use rusqlite::{Connection, OpenFlags};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 /// 默认只读连接池大小（8 连接）
@@ -47,8 +47,9 @@ impl Default for ReaderPoolConfig {
             custom_pragmas: vec![
                 "PRAGMA query_only = ON;".to_string(),
                 "PRAGMA synchronous = NORMAL;".to_string(),
-                "PRAGMA cache_size = -2000;".to_string(),
+                "PRAGMA cache_size = -4000;".to_string(),
                 "PRAGMA temp_store = MEMORY;".to_string(),
+                "PRAGMA mmap_size = 268435456;".to_string(),
             ],
         }
     }
@@ -89,10 +90,12 @@ struct ReaderSlot {
 
 /// 借出的只读连接句柄（RAII Guard）
 ///
-/// 离开作用域时自动释放锁并归还连接槽位。
+/// 离开作用域时自动释放锁并归还连接槽位，同时通过 `Condvar` / `Notify`
+/// 精准唤醒正在等待空闲槽位的同步或异步读者线程（消除 Windows 15.6ms 粗粒度休眠）。
 pub struct PooledReader<'a> {
-    guard: MutexGuard<'a, Connection>,
+    guard: Option<MutexGuard<'a, Connection>>,
     slot_id: usize,
+    inner: &'a ReaderPoolInner,
 }
 
 impl<'a> PooledReader<'a> {
@@ -105,13 +108,29 @@ impl<'a> PooledReader<'a> {
 impl<'a> Deref for PooledReader<'a> {
     type Target = Connection;
     fn deref(&self) -> &Self::Target {
-        &self.guard
+        self.guard
+            .as_ref()
+            .expect("PooledReader guard must be present before drop")
     }
 }
 
 impl<'a> DerefMut for PooledReader<'a> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.guard
+        self.guard
+            .as_mut()
+            .expect("PooledReader guard must be present before drop")
+    }
+}
+
+impl<'a> Drop for PooledReader<'a> {
+    fn drop(&mut self) {
+        // 先释放底层连接 MutexGuard，确保被唤醒的等待者调用 try_acquire 时立即可见空闲槽位
+        drop(self.guard.take());
+        if self.inner.waiters.load(Ordering::SeqCst) > 0 {
+            let _wait_guard = self.inner.wait_lock.lock();
+            self.inner.slot_cvar.notify_one();
+        }
+        self.inner.async_notify.notify_one();
     }
 }
 
@@ -124,6 +143,10 @@ pub struct ReaderPool {
 struct ReaderPoolInner {
     slots: Vec<ReaderSlot>,
     cursor: AtomicUsize,
+    waiters: AtomicUsize,
+    wait_lock: Mutex<()>,
+    slot_cvar: Condvar,
+    async_notify: tokio::sync::Notify,
     config: ReaderPoolConfig,
     stats: StatsInner,
     db_path: Option<PathBuf>,
@@ -172,6 +195,10 @@ impl ReaderPool {
             inner: Arc::new(ReaderPoolInner {
                 slots,
                 cursor: AtomicUsize::new(0),
+                waiters: AtomicUsize::new(0),
+                wait_lock: Mutex::new(()),
+                slot_cvar: Condvar::new(),
+                async_notify: tokio::sync::Notify::new(),
                 config,
                 stats: StatsInner::default(),
                 db_path: Some(path_ref.to_path_buf()),
@@ -195,6 +222,10 @@ impl ReaderPool {
             inner: Arc::new(ReaderPoolInner {
                 slots,
                 cursor: AtomicUsize::new(0),
+                waiters: AtomicUsize::new(0),
+                wait_lock: Mutex::new(()),
+                slot_cvar: Condvar::new(),
+                async_notify: tokio::sync::Notify::new(),
                 config,
                 stats: StatsInner::default(),
                 db_path: None,
@@ -234,20 +265,26 @@ impl ReaderPool {
                         .fetch_add(1, Ordering::Relaxed);
                 }
                 return Some(PooledReader {
-                    guard,
+                    guard: Some(guard),
                     slot_id: idx,
+                    inner: &self.inner,
                 });
             }
         }
         None
     }
 
-    /// 同步阻塞获取只读连接（带自适应非阻塞探测与微秒退避）。
+    /// 同步阻塞获取只读连接（带自适应非阻塞探测与 Condvar 微秒级精准唤醒）。
     pub fn acquire(&self) -> Result<PooledReader<'_>, DbFailure> {
         self.acquire_timeout(self.inner.config.max_wait_timeout)
     }
 
     /// 指定超时的同步自适应获取。
+    ///
+    /// 前 4 轮使用 `spin_loop` + `thread::yield_now()` 吸收超短瞬态争用；
+    /// 第 5 轮起进入 `Condvar::wait_timeout`，由 `PooledReader::drop` 归还槽位时
+    /// 立即执行 `notify_one()` 精准唤醒，彻底根除 Windows 平台 `thread::sleep(50µs)`
+    /// 退化为 15.625ms 时钟中断的延迟断崖（SEC-01）。
     pub fn acquire_timeout(&self, timeout: Duration) -> Result<PooledReader<'_>, DbFailure> {
         let start_time = Instant::now();
         let mut attempt = 0u32;
@@ -271,15 +308,33 @@ impl ReaderPool {
 
             attempt = attempt.saturating_add(1);
             if attempt <= 4 {
+                std::hint::spin_loop();
                 std::thread::yield_now();
             } else {
-                let sleep_us = (attempt as u64 * 50).min(1000);
-                std::thread::sleep(Duration::from_micros(sleep_us));
+                self.inner.waiters.fetch_add(1, Ordering::SeqCst);
+                let wait_guard = match self.inner.wait_lock.lock() {
+                    Ok(g) => g,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                // 持锁二次校验：消除 try_acquire 失败与进入 wait_timeout 之间的唤醒丢失窗口
+                if let Some(reader) = self.try_acquire() {
+                    self.inner.waiters.fetch_sub(1, Ordering::SeqCst);
+                    drop(wait_guard);
+                    return Ok(reader);
+                }
+                let remaining = timeout.saturating_sub(start_time.elapsed());
+                if !remaining.is_zero() {
+                    let wait_slice = remaining.min(Duration::from_millis(2));
+                    let _ = self.inner.slot_cvar.wait_timeout(wait_guard, wait_slice);
+                } else {
+                    drop(wait_guard);
+                }
+                self.inner.waiters.fetch_sub(1, Ordering::SeqCst);
             }
         }
     }
 
-    /// 异步获取只读连接，竞争时让渡 Tokio 执行权，不占用 OS 阻塞线程。
+    /// 异步获取只读连接，竞争时让渡 Tokio 执行权并通过 `Notify` 精准唤醒，不占用 OS 阻塞线程。
     pub async fn acquire_async(&self) -> Result<PooledReader<'_>, DbFailure> {
         let start_time = Instant::now();
         let timeout = self.inner.config.max_wait_timeout;
@@ -306,8 +361,12 @@ impl ReaderPool {
             if attempt <= 3 {
                 tokio::task::yield_now().await;
             } else {
-                let sleep_ms = (attempt / 2).clamp(1, 5);
-                tokio::time::sleep(Duration::from_millis(sleep_ms as u64)).await;
+                let remaining = timeout.saturating_sub(start_time.elapsed());
+                if !remaining.is_zero() {
+                    let wait_slice = remaining.min(Duration::from_millis(2));
+                    let _ =
+                        tokio::time::timeout(wait_slice, self.inner.async_notify.notified()).await;
+                }
             }
         }
     }

@@ -1,4 +1,20 @@
 pub mod fuzzy {
+    /// Pre-compiled query representation avoiding repeated char collection and Unicode
+    /// lowercase folding across candidate evaluations (KS-02).
+    #[derive(Debug, Clone)]
+    pub struct PreparedQuery {
+        orig_q: Vec<char>,
+        q: Vec<char>,
+        q_to_orig: Vec<usize>,
+    }
+
+    impl PreparedQuery {
+        #[inline]
+        pub fn is_empty(&self) -> bool {
+            self.q.is_empty()
+        }
+    }
+
     /// Fuzzy matcher using subsequence scoring with bonuses for consecutive matches,
     /// word boundaries, and case-exact matches.
     pub struct FuzzyMatcher {
@@ -10,47 +26,43 @@ pub mod fuzzy {
             Self { case_sensitive }
         }
 
-        /// Score a query against a target string.
-        /// Returns (score, match_indices). Score 0 means no match.
-        pub fn score_and_indices(&self, query: &str, target: &str) -> (i32, Vec<usize>) {
-            if query.is_empty() {
-                return (0, vec![]);
-            }
-
-            // Pre-collect chars to avoid O(n) nth() calls in the loop
+        /// Pre-compile a query string once before scanning candidate paths (KS-02).
+        pub fn prepare_query(&self, query: &str) -> PreparedQuery {
             let orig_q: Vec<char> = query.chars().collect();
-            let orig_t: Vec<char> = target.chars().collect();
-
-            // 折叠 case 时逐字符构建「折叠后位置 → 原始位置」映射（F3-03 根因修复）：
-            // to_lowercase 可将单个字符展开为多个（如 İ(U+0130) → i + U+0307），使折叠
-            // 后的 Vec 比原始 Vec 更长；若用折叠索引直接回查原始 Vec（旧实现 :68）会越界
-            // panic。匹配索引与 case-exact bonus 均须经该映射对齐回原始坐标，而不是用
-            // 下标截断掩盖（clamp 会丢失坐标语义）。
-            let fold_with_map = |orig: &[char]| -> (Vec<char>, Vec<usize>) {
-                let mut folded = Vec::with_capacity(orig.len());
-                let mut to_orig = Vec::with_capacity(orig.len());
-                for (i, &c) in orig.iter().enumerate() {
-                    for fc in c.to_lowercase() {
-                        folded.push(fc);
-                        to_orig.push(i);
-                    }
-                }
-                (folded, to_orig)
-            };
-
-            let identity_map = |len: usize| (0..len).collect::<Vec<usize>>();
-
             let (q, q_to_orig) = if self.case_sensitive {
-                (orig_q.clone(), identity_map(orig_q.len()))
+                let to_orig = (0..orig_q.len()).collect();
+                (orig_q.clone(), to_orig)
             } else {
                 fold_with_map(&orig_q)
             };
-            let (t, t_to_orig) = if self.case_sensitive {
-                (orig_t.clone(), identity_map(orig_t.len()))
+            PreparedQuery {
+                orig_q,
+                q,
+                q_to_orig,
+            }
+        }
+
+        /// Score a pre-compiled query against a target string.
+        /// Returns (score, match_indices). Score 0 means no match.
+        pub fn score_and_indices_prepared(
+            &self,
+            prepared: &PreparedQuery,
+            target: &str,
+        ) -> (i32, Vec<usize>) {
+            if prepared.is_empty() {
+                return (0, vec![]);
+            }
+
+            let orig_t: Vec<char> = target.chars().collect();
+            let (folded_t, folded_t_to_orig);
+            let (t, t_to_orig): (&[char], Option<&[usize]>) = if self.case_sensitive {
+                (&orig_t, None)
             } else {
-                fold_with_map(&orig_t)
+                (folded_t, folded_t_to_orig) = fold_with_map(&orig_t);
+                (&folded_t, Some(&folded_t_to_orig))
             };
 
+            let q = &prepared.q;
             if q.len() > t.len() {
                 return (0, vec![]);
             }
@@ -68,7 +80,8 @@ pub mod fuzzy {
                 if tc == q[qi] {
                     // 记录原始坐标（多字符展开的多个折叠字符可映射到同一原始索引，
                     // 坐标不越界且单调不减）
-                    match_indices.push(t_to_orig[ti]);
+                    let orig_ti = t_to_orig.map_or(ti, |m| m[ti]);
+                    match_indices.push(orig_ti);
                     qi += 1;
                     consecutive += 1;
 
@@ -87,7 +100,9 @@ pub mod fuzzy {
 
                     // Case-exact bonus: 两侧均经折叠映射对齐回原始坐标，折叠展开
                     // （查询或目标任一侧）都不会越界
-                    if !self.case_sensitive && orig_t[t_to_orig[ti]] == orig_q[q_to_orig[qi - 1]] {
+                    if !self.case_sensitive
+                        && orig_t[orig_ti] == prepared.orig_q[prepared.q_to_orig[qi - 1]]
+                    {
                         score += 1;
                     }
                 } else {
@@ -109,10 +124,37 @@ pub mod fuzzy {
             (score, match_indices)
         }
 
+        /// Score a query against a target string.
+        /// Returns (score, match_indices). Score 0 means no match.
+        pub fn score_and_indices(&self, query: &str, target: &str) -> (i32, Vec<usize>) {
+            if query.is_empty() {
+                return (0, vec![]);
+            }
+            let prepared = self.prepare_query(query);
+            self.score_and_indices_prepared(&prepared, target)
+        }
+
         /// Simple score-only interface (backward compatible).
         pub fn score(&self, query: &str, target: &str) -> i32 {
             self.score_and_indices(query, target).0
         }
+    }
+
+    // 折叠 case 时逐字符构建「折叠后位置 → 原始位置」映射（F3-03 根因修复）：
+    // to_lowercase 可将单个字符展开为多个（如 İ(U+0130) → i + U+0307），使折叠
+    // 后的 Vec 比原始 Vec 更长；若用折叠索引直接回查原始 Vec（旧实现 :68）会越界
+    // panic。匹配索引与 case-exact bonus 均须经该映射对齐回原始坐标，而不是用
+    // 下标截断掩盖（clamp 会丢失坐标语义）。
+    fn fold_with_map(orig: &[char]) -> (Vec<char>, Vec<usize>) {
+        let mut folded = Vec::with_capacity(orig.len());
+        let mut to_orig = Vec::with_capacity(orig.len());
+        for (i, &c) in orig.iter().enumerate() {
+            for fc in c.to_lowercase() {
+                folded.push(fc);
+                to_orig.push(i);
+            }
+        }
+        (folded, to_orig)
     }
 
     fn is_separator(c: char) -> bool {
@@ -121,17 +163,16 @@ pub mod fuzzy {
 }
 
 pub mod search {
-    use super::fuzzy::FuzzyMatcher;
+    use super::fuzzy::{FuzzyMatcher, PreparedQuery};
     use conex_types::FileHit;
 
-    /// Search paths using fuzzy matching, returning top-N hits sorted by score.
-    pub fn search_files(
-        query: &str,
+    pub(crate) fn search_files_with_prepared(
+        prepared: &PreparedQuery,
         paths: &[String],
         limit: usize,
         matcher: &FuzzyMatcher,
     ) -> Vec<FileHit> {
-        if query.is_empty() || paths.is_empty() || limit == 0 {
+        if prepared.is_empty() || paths.is_empty() || limit == 0 {
             return vec![];
         }
 
@@ -140,7 +181,7 @@ pub mod search {
             .filter_map(|path| {
                 // Match against filename (last component) for better relevance
                 let filename = path.rsplit(['/', '\\']).next().unwrap_or(path);
-                let (score, indices) = matcher.score_and_indices(query, filename);
+                let (score, indices) = matcher.score_and_indices_prepared(prepared, filename);
                 if score > 0 {
                     Some(FileHit {
                         path: path.clone(),
@@ -149,7 +190,8 @@ pub mod search {
                     })
                 } else {
                     // Fallback: try matching against full path
-                    let (path_score, path_indices) = matcher.score_and_indices(query, path);
+                    let (path_score, path_indices) =
+                        matcher.score_and_indices_prepared(prepared, path);
                     if path_score > 0 {
                         Some(FileHit {
                             path: path.clone(),
@@ -168,6 +210,22 @@ pub mod search {
         hits
     }
 
+    /// Search paths using fuzzy matching, returning top-N hits sorted by score.
+    pub fn search_files(
+        query: &str,
+        paths: &[String],
+        limit: usize,
+        matcher: &FuzzyMatcher,
+    ) -> Vec<FileHit> {
+        if query.is_empty() || paths.is_empty() || limit == 0 {
+            return vec![];
+        }
+
+        // Pre-compile query once outside the candidate loop (KS-02)
+        let prepared = matcher.prepare_query(query);
+        search_files_with_prepared(&prepared, paths, limit, matcher)
+    }
+
     /// Parallel version: splits paths into chunks and searches concurrently using thread::scope.
     pub fn search_files_parallel(
         query: &str,
@@ -178,6 +236,10 @@ pub mod search {
         if query.is_empty() || paths.is_empty() || limit == 0 {
             return vec![];
         }
+
+        // Pre-compile query once and share across all worker threads (KS-02)
+        let prepared = matcher.prepare_query(query);
+        let prepared_ref = &prepared;
 
         let thread_count = std::thread::available_parallelism()
             .map(|n| n.get())
@@ -190,7 +252,9 @@ pub mod search {
         let all_hits: Vec<FileHit> = std::thread::scope(|s| {
             let handles: Vec<_> = paths
                 .chunks(chunk_size)
-                .map(|chunk| s.spawn(move || search_files(query, chunk, limit, matcher)))
+                .map(|chunk| {
+                    s.spawn(move || search_files_with_prepared(prepared_ref, chunk, limit, matcher))
+                })
                 .collect();
 
             handles
@@ -225,12 +289,23 @@ pub mod walker {
     pub fn build_directory_index(dir: &str) -> Vec<String> {
         let mut files = Vec::new();
 
+        // Prune ignored directories directly at entry level via filter_entry (KS-04)
         let walker = WalkBuilder::new(dir)
             .hidden(true)
             .git_ignore(true)
             .git_global(true)
             .git_exclude(true)
             .max_depth(Some(12))
+            .filter_entry(|entry| {
+                if entry.depth() > 0 && entry.file_type().is_some_and(|ft| ft.is_dir()) {
+                    if let Some(name) = entry.file_name().to_str() {
+                        if SKIP_DIRS.contains(&name) {
+                            return false;
+                        }
+                    }
+                }
+                true
+            })
             .build();
 
         for entry in walker {
@@ -239,24 +314,11 @@ pub mod walker {
                 Err(_) => continue,
             };
 
-            if !entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
+            if !entry.file_type().is_some_and(|ft| ft.is_file()) {
                 continue;
             }
 
-            let path = entry.path();
-
-            // Skip known non-source directories
-            let should_skip = path.components().any(|comp| {
-                comp.as_os_str()
-                    .to_str()
-                    .map(|s| SKIP_DIRS.contains(&s))
-                    .unwrap_or(false)
-            });
-            if should_skip {
-                continue;
-            }
-
-            if let Some(path_str) = path.to_str() {
+            if let Some(path_str) = entry.path().to_str() {
                 files.push(path_str.to_string());
             }
         }
@@ -445,5 +507,27 @@ mod tests {
         assert!(files
             .iter()
             .any(|f| f.ends_with("src/lib.rs") || f.ends_with("src\\lib.rs")));
+    }
+
+    #[test]
+    #[allow(clippy::disallowed_methods)]
+    fn build_directory_index_prunes_skip_dirs() {
+        let dir = std::env::temp_dir().join(format!(
+            "conex_search_prune_test_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::create_dir_all(dir.join("node_modules/pkg")).unwrap();
+        std::fs::create_dir_all(dir.join("target/debug")).unwrap();
+        std::fs::write(dir.join("src/index.ts"), "export {};").unwrap();
+        std::fs::write(dir.join("node_modules/pkg/index.js"), "module.exports = {};").unwrap();
+        std::fs::write(dir.join("target/debug/out.rlib"), "bin").unwrap();
+
+        let files = build_directory_index(dir.to_str().unwrap());
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(files.len(), 1);
+        assert!(files[0].ends_with("index.ts"));
     }
 }

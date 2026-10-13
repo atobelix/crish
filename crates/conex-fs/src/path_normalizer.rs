@@ -208,17 +208,17 @@ impl ConexPathNormalizer {
         let cand_upper = cand_str.to_ascii_uppercase();
         let root_upper = root_str.to_ascii_uppercase();
 
-        if cand_upper == root_upper {
-            return true;
-        }
-
-        let prefix = if root_upper.ends_with('/') {
-            root_upper
+        if let Some(rest) = cand_upper.strip_prefix(&root_upper) {
+            rest.is_empty() || root_upper.ends_with('/') || rest.starts_with('/')
         } else {
-            format!("{root_upper}/")
-        };
+            false
+        }
+    }
 
-        cand_upper.starts_with(&prefix)
+    #[inline]
+    fn has_critical_prefix(path: &str, prefix: &str) -> bool {
+        path.strip_prefix(prefix)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
     }
 
     /// 检查路径是否命中系统核心关键目录（物理红线）
@@ -253,33 +253,29 @@ impl ConexPathNormalizer {
                 "DUMPSTACK.LOG",
             ];
 
-            // 检查是否形如 X:/PATTERN 或 X:/PATTERN/...
+            // 检查是否形如 X:/PATTERN 或 X:/PATTERN/...（零分配 strip_prefix，KFS-06）
             if upper.len() >= 3 && &upper[1..3] == ":/" {
                 let after_drive = &upper[3..];
                 for pat in &drive_relative_patterns {
-                    if after_drive == *pat || after_drive.starts_with(&format!("{pat}/")) {
+                    if Self::has_critical_prefix(after_drive, pat) {
                         return true;
                     }
                 }
             }
 
-            // 动态感知环境变量前缀与用户敏感凭据
+            // 动态感知环境变量前缀与用户敏感凭据（零分配 strip_prefix，KFS-06）
             for prefix in get_system_critical_prefixes() {
-                if upper == *prefix || upper.starts_with(&format!("{prefix}/")) {
+                if Self::has_critical_prefix(&upper, prefix) {
                     return true;
                 }
             }
 
-            // 系统底层危险工具/二进制硬拦截
+            // 系统底层危险工具/二进制硬拦截（零分配末段提取，KFS-06）
             let critical_binaries = ["DISKPART", "BCDEDIT", "FORMAT", "VSSADMIN", "WBADMIN"];
-            for bin in &critical_binaries {
-                if upper.ends_with(&format!("/{bin}"))
-                    || upper.ends_with(&format!("/{bin}.EXE"))
-                    || upper == *bin
-                    || upper == format!("{bin}.EXE")
-                {
-                    return true;
-                }
+            let file_name = upper.rsplit('/').next().unwrap_or(&upper);
+            let stem = file_name.strip_suffix(".EXE").unwrap_or(file_name);
+            if critical_binaries.contains(&stem) {
+                return true;
             }
         }
 
@@ -291,7 +287,7 @@ impl ConexPathNormalizer {
             }
 
             for prefix in get_system_critical_prefixes() {
-                if upper == *prefix || upper.starts_with(&format!("{prefix}/")) {
+                if Self::has_critical_prefix(&upper, prefix) {
                     return true;
                 }
             }

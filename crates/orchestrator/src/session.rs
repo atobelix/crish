@@ -16,7 +16,7 @@
 //! §2.8 orchestrator.test.ts:813（叶子移动经 session-leaf-moved 事件
 //! 持久化）。
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use conex_db::RunStatus;
@@ -320,16 +320,27 @@ fn days_from_civil(year: i64, month: u32, day: u32) -> Option<i64> {
 ///
 /// 与 TS 的分歧说明：条目 id 由调用方显式提供（TS 自动生成随机 id），
 /// 以便上层生成幂等 id 并与持久化事件对齐。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct SessionTree {
     /// 会话标识
     session_id: String,
     /// 分支历史条目（插入序）
     entries: Vec<SessionTreeEntry>,
+    /// 条目 id → entries 下标映射（O(1) 查找与 O(D) 路径回溯）
+    entry_index: HashMap<String, usize>,
     /// 当前活动叶子指针
     current_leaf_id: Option<String>,
     /// 最后插入的条目 id
     last_inserted_id: Option<String>,
+}
+
+impl PartialEq for SessionTree {
+    fn eq(&self, other: &Self) -> bool {
+        self.session_id == other.session_id
+            && self.entries == other.entries
+            && self.current_leaf_id == other.current_leaf_id
+            && self.last_inserted_id == other.last_inserted_id
+    }
 }
 
 impl SessionTree {
@@ -338,6 +349,7 @@ impl SessionTree {
         Self {
             session_id: session_id.into(),
             entries: Vec::new(),
+            entry_index: HashMap::new(),
             current_leaf_id: None,
             last_inserted_id: None,
         }
@@ -358,8 +370,15 @@ impl SessionTree {
         &self.entries
     }
 
-    /// 按 id 查条目
+    /// 按 id 查条目（O(1) 索引查表）
     pub fn entry(&self, id: &str) -> Option<&SessionTreeEntry> {
+        if let Some(&idx) = self.entry_index.get(id) {
+            if let Some(entry) = self.entries.get(idx) {
+                if entry.id == id {
+                    return Some(entry);
+                }
+            }
+        }
         self.entries.iter().find(|e| e.id == id)
     }
 
@@ -383,7 +402,7 @@ impl SessionTree {
         id: impl Into<String>,
         payload: serde_json::Value,
     ) -> Result<SessionTreeEntry, SessionTreeError> {
-        if !self.entries.iter().any(|e| e.id == from_leaf_id) {
+        if self.entry(from_leaf_id).is_none() {
             return Err(SessionTreeError::NotFound {
                 id: from_leaf_id.to_string(),
             });
@@ -412,7 +431,7 @@ impl SessionTree {
             }
         }
         if let Some(target) = target_leaf_id {
-            if !self.entries.iter().any(|e| e.id == target) {
+            if self.entry(target).is_none() {
                 return Err(SessionTreeError::NotFound {
                     id: target.to_string(),
                 });
@@ -433,12 +452,12 @@ impl SessionTree {
     ) -> Result<SessionTreeEntry, SessionTreeError> {
         let target = target_leaf_id.map(str::to_string);
         if let Some(t) = &target {
-            if !self.entries.iter().any(|e| e.id == *t) {
+            if self.entry(t).is_none() {
                 return Err(SessionTreeError::NotFound { id: t.clone() });
             }
         }
         let id = id.into();
-        if self.entries.iter().any(|e| e.id == id) {
+        if self.entry(&id).is_some() {
             return Err(SessionTreeError::DuplicateId { id });
         }
         let entry = SessionTreeEntry {
@@ -464,7 +483,7 @@ impl SessionTree {
             None => self.last_inserted_id.clone(),
         };
         if let Some(id) = &requested {
-            if !self.entries.iter().any(|e| e.id == *id) {
+            if self.entry(id).is_none() {
                 return Err(SessionTreeError::NotFound { id: id.clone() });
             }
         }
@@ -472,30 +491,29 @@ impl SessionTree {
         Ok(())
     }
 
-    /// 读取从根到指定叶子的分支路径（None = 空路径；环检测防御，
-    /// session-tree.test.ts:156 语义）
-    pub fn read_branch_path(
+    /// 读取从根到指定叶子的分支路径引用链（内部 O(D) 零克隆回溯）
+    fn traverse_branch_refs(
         &self,
         leaf_id: Option<&str>,
-    ) -> Result<Vec<SessionTreeEntry>, SessionTreeError> {
+    ) -> Result<Vec<&SessionTreeEntry>, SessionTreeError> {
         let leaf_id = match leaf_id {
             Some(id) => id,
             None => return Ok(Vec::new()),
         };
         let mut path = Vec::new();
-        let mut seen = HashSet::new();
+        let mut seen: HashSet<&str> = HashSet::new();
         let mut current = self
             .entry(leaf_id)
             .ok_or_else(|| SessionTreeError::NotFound {
                 id: leaf_id.to_string(),
             })?;
         loop {
-            if !seen.insert(current.id.clone()) {
+            if !seen.insert(current.id.as_str()) {
                 return Err(SessionTreeError::Cycle {
                     id: current.id.clone(),
                 });
             }
-            path.push(current.clone());
+            path.push(current);
             current = match &current.parent_id {
                 Some(parent) => match self.entry(parent) {
                     Some(entry) => entry,
@@ -510,6 +528,25 @@ impl SessionTree {
         }
         path.reverse();
         Ok(path)
+    }
+
+    /// 读取从根到指定叶子的分支路径（None = 空路径；环检测防御，
+    /// session-tree.test.ts:156 语义）
+    pub fn read_branch_path(
+        &self,
+        leaf_id: Option<&str>,
+    ) -> Result<Vec<SessionTreeEntry>, SessionTreeError> {
+        let refs = self.traverse_branch_refs(leaf_id)?;
+        Ok(refs.into_iter().cloned().collect())
+    }
+
+    /// 仅读取从根到指定叶子的分支节点 ID 路径（O(D) 零 payload 克隆，供持锁临界区快速提取路径 ID）
+    pub fn read_branch_path_ids(
+        &self,
+        leaf_id: Option<&str>,
+    ) -> Result<Vec<String>, SessionTreeError> {
+        let refs = self.traverse_branch_refs(leaf_id)?;
+        Ok(refs.into_iter().map(|e| e.id.clone()).collect())
     }
 
     // ===== C1 checkpoint 叶子 payload（M5A 最小落库面） =====
@@ -566,13 +603,16 @@ impl SessionTree {
         leaf_id: &str,
         checkpoint: &CheckpointPayload,
     ) -> Result<(), SessionTreeError> {
-        let entry = self
-            .entries
-            .iter_mut()
-            .find(|entry| entry.id == leaf_id)
+        let idx = self
+            .entry_index
+            .get(leaf_id)
+            .copied()
+            .filter(|&i| self.entries.get(i).is_some_and(|e| e.id == leaf_id))
+            .or_else(|| self.entries.iter().position(|e| e.id == leaf_id))
             .ok_or_else(|| SessionTreeError::NotFound {
                 id: leaf_id.to_string(),
             })?;
+        let entry = &mut self.entries[idx];
         let SessionTreeEntryKind::Node { payload } = &mut entry.kind else {
             return Err(SessionTreeError::InvalidState {
                 message: format!("条目 {leaf_id} 不是会话节点，不能写入检查点"),
@@ -620,15 +660,15 @@ impl SessionTree {
         current_leaf_id: Option<String>,
     ) -> Result<Self, SessionTreeError> {
         // 两阶段校验（与 TS loadEntries 一致：容量淘汰与结构校验解耦）
-        let mut seen = HashSet::new();
-        for entry in &entries {
-            if !seen.insert(entry.id.clone()) {
+        let mut entry_index = HashMap::with_capacity(entries.len());
+        for (idx, entry) in entries.iter().enumerate() {
+            if entry_index.contains_key(&entry.id) {
                 return Err(SessionTreeError::DuplicateId {
                     id: entry.id.clone(),
                 });
             }
             if let Some(parent) = &entry.parent_id {
-                if !seen.contains(parent) {
+                if !entry_index.contains_key(parent) {
                     return Err(SessionTreeError::InvalidState {
                         message: format!(
                             "条目 {} 的父节点 {} 必须先于子条目出现",
@@ -642,17 +682,19 @@ impl SessionTree {
                 ..
             } = &entry.kind
             {
-                if !seen.contains(abandoned) {
+                if !entry_index.contains_key(abandoned) {
                     return Err(SessionTreeError::NotFound {
                         id: abandoned.clone(),
                     });
                 }
             }
+            entry_index.insert(entry.id.clone(), idx);
         }
         let last_inserted_id = entries.last().map(|e| e.id.clone());
         let mut tree = Self {
             session_id,
             entries,
+            entry_index,
             current_leaf_id: None,
             last_inserted_id,
         };
@@ -668,7 +710,7 @@ impl SessionTree {
         payload: serde_json::Value,
     ) -> Result<SessionTreeEntry, SessionTreeError> {
         let id = id.into();
-        if self.entries.iter().any(|e| e.id == id) {
+        if self.entry(&id).is_some() {
             return Err(SessionTreeError::DuplicateId { id });
         }
         Ok(SessionTreeEntry::node(id, parent_id, payload))
@@ -676,6 +718,8 @@ impl SessionTree {
 
     /// 追加条目并推进 last_inserted / current_leaf（appendEntry 语义）
     fn push_entry(&mut self, entry: SessionTreeEntry) {
+        let idx = self.entries.len();
+        self.entry_index.insert(entry.id.clone(), idx);
         self.last_inserted_id = Some(entry.id.clone());
         self.current_leaf_id = Some(entry.id.clone());
         self.entries.push(entry);
