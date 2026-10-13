@@ -99,7 +99,7 @@
   color: var(--text-tertiary);
   transform: rotate(0deg);
   transition:
-    transform var(--transition-fast),
+    transform var(--transition-accordion),
     color var(--transition-micro);
   flex-shrink: 0;
   user-select: none;
@@ -117,7 +117,7 @@
   border: none;
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 160ms var(--ease-emphasized);
+  transition: grid-template-rows var(--transition-accordion);
   overflow: hidden;
 }
 
@@ -131,8 +131,8 @@
   opacity: 0;
   transform: translateY(-2px);
   transition:
-    opacity 120ms ease-out,
-    transform 120ms var(--ease-emphasized);
+    opacity var(--transition-accordion-fade),
+    transform var(--transition-accordion-fade);
 }
 
 .groupBody[data-expanded='true'] .groupBodyInner {

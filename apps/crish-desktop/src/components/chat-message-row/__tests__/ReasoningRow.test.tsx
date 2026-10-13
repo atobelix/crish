@@ -398,7 +398,7 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
 
         // 推进 160ms 物理动画周期
         act(() => {
-          vi.advanceTimersByTime(160);
+          vi.advanceTimersByTime(220);
         });
 
         // 阶段二：完全卸载态（DOM 安全注销，data-collapsing 标记移除）
@@ -427,7 +427,7 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         );
         expect(root?.getAttribute('data-expanded')).toBe('true');
 
-        // 2. 生成完自动关闭（160ms 平滑收起）
+        // 2. 生成完自动关闭（220ms 平滑收起）
         rerender(
           <ReasoningRow
             content="正在生成思考过程"
@@ -439,7 +439,7 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         expect(root?.getAttribute('data-expanded')).toBe('false');
         expect(root?.getAttribute('data-collapsing')).toBe('true');
         act(() => {
-          vi.advanceTimersByTime(160);
+          vi.advanceTimersByTime(220);
         });
         expect(
           container.querySelector('[data-testid="reasoning-body"]')
@@ -528,7 +528,7 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       }
     });
 
-    it('CSS 样式验证：包含 160ms 与 var(--ease-emphasized) 的 CSS Grid 平滑收缩契约', () => {
+    it('CSS 样式验证：包含 var(--transition-accordion) 的 CSS Grid 平滑收缩契约', () => {
       const cssPath = path.resolve(__dirname, '../ReasoningRow.module.css');
       const cssContent = fs.readFileSync(cssPath, 'utf8');
 
@@ -536,7 +536,7 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       expect(cssContent).toMatch(/\.reasoningExpandGrid\s*\{/);
       expect(cssContent).toMatch(/grid-template-rows:\s*0fr/);
       expect(cssContent).toMatch(
-        /grid-template-rows\s+160ms\s+var\(--ease-emphasized\)/
+        /transition:\s*grid-template-rows\s+var\(--transition-accordion\)/
       );
       expect(cssContent).toMatch(/grid-template-rows:\s*1fr/);
 

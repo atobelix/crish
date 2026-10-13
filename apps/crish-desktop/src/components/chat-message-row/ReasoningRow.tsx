@@ -24,6 +24,7 @@ import { Priority } from '../../workers';
 import { useStreamingMarkdownHtml } from '../../api/markdownRenderAsync';
 import { ReconciledMarkdownHtml } from '../markdown/ReconciledMarkdownHtml';
 import type { IncrementalMarkdownUnitSnapshot } from '../../api/markdown/IncrementalMarkdownSession';
+import { DURATION_ACCORDION_MS } from '../../utils/motionTokens';
 
 function ReasoningSummaryMarkup({
   markdown,
@@ -155,7 +156,7 @@ export function extractFirstLine(text: string): string {
   return trimmed;
 }
 
-const FOLDING_TRANSITION_MS = 160;
+const FOLDING_TRANSITION_MS = DURATION_ACCORDION_MS;
 
 export const ReasoningRow: React.FC<ReasoningRowProps> = ({
   content,

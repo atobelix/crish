@@ -25,6 +25,18 @@ export const DURATION_FAST_MS = 150;
 /** 常规时长（对应 --duration-normal） */
 export const DURATION_NORMAL_MS = 200;
 
+/** 手风琴折叠展开平滑过渡时长（对应 tokens.css 中 --transition-accordion 220ms） */
+export const DURATION_ACCORDION_MS = 220;
+
+/** 手风琴内部插槽渐隐/渐显时长（对应 tokens.css 中 --duration-accordion-fade 180ms） */
+export const DURATION_ACCORDION_FADE_MS = 180;
+
+/** 新对话落地框平滑变形过渡时长（对应 tokens.css 中 --transition-landing-settle 360ms） */
+export const DURATION_LANDING_SETTLE_MS = 360;
+
+/** 新对话落地品牌渐隐时长（对应 tokens.css 中 --duration-landing-fade 240ms） */
+export const DURATION_LANDING_FADE_MS = 240;
+
 /** 减速入场曲线（对应 tokens.css 中的 --ease-decelerate） */
 export const EASE_DECELERATE = 'cubic-bezier(0.2, 0, 0, 1)';
 
@@ -41,6 +53,10 @@ export const MOTION_DURATION = {
   SNAPPY_MS: DURATION_SNAPPY_MS,
   FAST_MS: DURATION_FAST_MS,
   NORMAL_MS: DURATION_NORMAL_MS,
+  ACCORDION_MS: DURATION_ACCORDION_MS,
+  ACCORDION_FADE_MS: DURATION_ACCORDION_FADE_MS,
+  LANDING_SETTLE_MS: DURATION_LANDING_SETTLE_MS,
+  LANDING_FADE_MS: DURATION_LANDING_FADE_MS,
 } as const;
 
 /** 消息气泡入场时效配置单一真理源 */

@@ -80,8 +80,7 @@
   z-index: var(--z-card-footer);
   flex-shrink: 0;
   margin-top: 0;
-  transition: flex-grow 360ms
-    var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1));
+  transition: flex-grow var(--transition-landing-settle);
 }
 
 .chatFooter .chatCol {
@@ -99,6 +98,13 @@
   position: relative;
 }
 
+.landingRibbons {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin-top: var(--space-3, 12px);
+}
+
 /* 空界面品牌 + 项目选择：品牌居中，项目选择紧贴 composer 卡片上方，图标对齐 --landing-inset-x */
 .composerLead {
   display: flex;
@@ -107,22 +113,35 @@
   min-width: 0;
   margin-bottom: var(--space-1_5);
   padding-left: var(--landing-inset-x, 20px);
-  transition:
-    opacity 240ms var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1)),
-    transform 240ms var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1)),
-    max-height 360ms var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1)),
-    margin-bottom 360ms var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1));
   max-height: 180px;
   overflow: visible;
+  animation: composerLeadFadeIn 180ms var(--ease-emphasized) forwards;
+}
+
+@keyframes composerLeadFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .composerLead[data-settling='true'] {
+  animation: none;
   opacity: 0;
   transform: translateY(-8px) scale(0.96);
   max-height: 0;
   margin-bottom: 0;
   overflow: hidden;
   pointer-events: none;
+  transition:
+    opacity var(--transition-landing-fade),
+    transform var(--transition-landing-fade),
+    max-height var(--transition-landing-settle),
+    margin-bottom var(--transition-landing-settle);
 }
 
 .floatZone {

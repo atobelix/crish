@@ -17,11 +17,22 @@ const { observe, unobserve } = vi.hoisted(() => ({
   unobserve: vi.fn(),
 }));
 
-vi.mock('../../utils/ResizeObserverManager', () => ({
-  ResizeObserverManager: {
-    getInstance: () => ({ observe, unobserve }),
-  },
-}));
+vi.mock('../../utils/ResizeObserverManager', () => {
+  class MockWindowBlurWatchdog {
+    public static readonly DEFAULT_TIMEOUT_MS = 200;
+    arm = vi.fn();
+    clear = vi.fn();
+    get isArmed() {
+      return false;
+    }
+  }
+  return {
+    ResizeObserverManager: {
+      getInstance: () => ({ observe, unobserve }),
+    },
+    WindowBlurWatchdog: MockWindowBlurWatchdog,
+  };
+});
 
 vi.mock('../../services/toast/ToastContext', () => ({
   useToast: () => ({ showToast: vi.fn(), toast: { show: vi.fn() } }),

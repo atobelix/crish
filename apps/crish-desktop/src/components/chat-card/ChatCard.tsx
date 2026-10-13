@@ -17,6 +17,7 @@ import { openSettings, patchSession } from '../../api/storeAccess';
 import { normalizeMessageAttachments } from '../chat-attachment/AttachmentCard';
 import type { SessionMessage } from '../../store/types';
 import type { ChatAttachment } from '../../hooks/useChatStream';
+import { DURATION_LANDING_SETTLE_MS } from '../../utils/motionTokens';
 
 const ScheduledTasksPanel = lazy(() =>
   import('../settings/ScheduledTasksPanel').then((m) => ({
@@ -165,29 +166,36 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       />
     ) : null;
 
-    // 新对话空界面：输入框改多行落地态；品牌居中 + 项目选择紧贴卡片上方左侧
+    // 新对话空界面：输入框改多行落地态；仅在同一会话发送首条消息时启用落地过渡，切标签页立即切换
     const isLanding = state.emptyKind === 'session-empty';
     const prevEmptyKindRef = useRef(state.emptyKind);
+    const prevSessionIdForLandingRef = useRef(state.activeSessionId);
     const [isLandingSettling, setIsLandingSettling] = useState(false);
 
     useEffect(() => {
       let timer: number | undefined;
+      const isSameSession =
+        prevSessionIdForLandingRef.current === state.activeSessionId;
       if (
+        isSameSession &&
         prevEmptyKindRef.current === 'session-empty' &&
         state.emptyKind == null
       ) {
         setIsLandingSettling(true);
         timer = window.setTimeout(() => {
           setIsLandingSettling(false);
-        }, 380);
+        }, DURATION_LANDING_SETTLE_MS);
+      } else if (!isSameSession) {
+        setIsLandingSettling(false);
       }
       prevEmptyKindRef.current = state.emptyKind;
+      prevSessionIdForLandingRef.current = state.activeSessionId;
       return () => {
         if (timer !== undefined) {
           window.clearTimeout(timer);
         }
       };
-    }, [state.emptyKind]);
+    }, [state.emptyKind, state.activeSessionId]);
 
     // 底部主输入框：持续常驻，草稿状态完全独立保全
     const mainComposerElement = (

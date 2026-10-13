@@ -358,13 +358,14 @@ export function useVirtualScroll(
     }
     manager.clear();
     prevIdsRef.current = idsRef.current;
+    markProgrammaticScroll(0);
     if (containerRef.current) {
       containerRef.current.scrollTop = 0;
     }
     latestScrollTopRef.current = 0;
     setScrollTop(0);
     setActualTick((t) => t + 1);
-  }, [manager, resetGestureState]);
+  }, [manager, markProgrammaticScroll, resetGestureState]);
 
   return {
     visibleRange,

@@ -34,6 +34,8 @@ import {
 import {
   BOTTOM_STICK_EPSILON_PX,
   DEFAULT_VIEWPORT_HEIGHT_PX,
+  MESSAGE_VIEWPORT_OVERSCAN,
+  NEAR_BOTTOM_EPSILON_PX,
   SCROLL_BOTTOM_THRESHOLD_PX,
   SCROLL_TOP_EPSILON_PX,
 } from '../../hooks/virtualScrollConstants';
@@ -123,7 +125,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   const vs = useVirtualScroll({
     ids: msgIds,
     itemCount: messages.length,
-    overscan: 8,
+    overscan: MESSAGE_VIEWPORT_OVERSCAN,
     fallbackHeight: MESSAGE_ESTIMATED_ROW_HEIGHT,
   });
   const {
@@ -150,9 +152,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   const prevSessionIdRef = useRef<string | null>(activeSessionId);
 
   // VS-01：会话切换必须在同步 layout 阶段（且置于 preloadEstimates 与吸底滚动之前！）重置几何状态；
-  // 使用 prevSessionIdRef 仅在 activeSessionId 真正发生切换时调用 clearHeights()，
-  // 首次挂载时绝不清空首帧 DOM Ref 回调与 ResizeObserver 刚测得的真实高度，
-  // 也绝不在 performProgrammaticScroll 之后销毁刚签发的 programmaticScrollStateRef.current.active = true 吸底豁免令牌！
+  // 使用 prevSessionIdRef 仅在 activeSessionId 真正发生切换时调用 clearHeights()
   useLayoutEffect(() => {
     if (prevSessionIdRef.current === activeSessionId) {
       return;
@@ -162,9 +162,8 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     isAtBottomRef.current = true;
     setIsAtBottom(true);
     setShowFloorButton(false);
-    fastScroll.reset();
 
-    // 会话切换：立刻回灌 order + 估高，杜绝 clear 后空 order 空屏
+    // 会话切换：立刻回灌 order + 已测高度记忆 + 估高，杜绝 clear 后空 order 空屏
     reseedAllMessageHeights(manager, msgIds, messages);
 
     // 会话切换立即直达目标吸底位置，绝不向 0 归零引发顶底往复跳动
@@ -176,6 +175,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
       vs.viewportHeight ||
       DEFAULT_VIEWPORT_HEIGHT_PX;
     const targetBottomScrollTop = Math.max(0, estimatedTotalHeight - viewH);
+    fastScroll.reset(targetBottomScrollTop);
 
     const isTop = targetBottomScrollTop <= SCROLL_TOP_EPSILON_PX;
     isAtTopRef.current = isTop;
@@ -187,7 +187,6 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
       performProgrammaticScroll(targetBottomScrollTop);
     }
     observedTopRef.current = targetBottomScrollTop;
-    // 仅会话切换清几何；禁止把 messages/msgIds 放进依赖（否则每次消息更新清空导致空屏）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId, clearHeights, manager]);
 
@@ -199,6 +198,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
       uiSizeSeededRef.current = true;
       return;
     }
+    manager.clearRememberedHeights();
     clearHeights();
     reseedAllMessageHeights(manager, msgIds, messages);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -227,6 +227,19 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     [pinnedItems]
   );
 
+  const { handlePointerDownCapture, handleKeyDownCapture, isAnchorLocked } =
+    useScrollAnchoringOnToggle({
+      containerRef,
+      isAtBottomRef,
+      setIsAtBottom,
+      cancelProgrammaticScroll,
+      expandedUserMsgs,
+      expandedTools: toolStackProps?.expandedTools,
+      messages,
+    });
+
+  const isSessionSwitch = prevSessionIdRef.current !== activeSessionId;
+
   // VS-04 & W3-3：计算活跃行裁剪窗口、文档坐标系总高度与每行超视距回收状态
   const { startOffset, totalHeight, activeRows } = computeActiveRowWindow({
     visibleRange: vs.visibleRange,
@@ -241,7 +254,10 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     thinkingMsgId,
     editingMessageId: composer?.editingMessageId,
     isScrolling:
-      fastScroll.isFastScrolling || fastScroll.isFastScrollingRef.current,
+      !isSessionSwitch &&
+      (fastScroll.isFastScrolling || fastScroll.isFastScrollingRef.current),
+    isSessionSwitch,
+    stickToBottom: isAtBottomRef.current && !isAnchorLocked(),
   });
 
   const touchStartYRef = useRef(0);
@@ -279,28 +295,27 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     [cancelProgrammaticScroll]
   );
 
-  const { handlePointerDownCapture, handleKeyDownCapture, isAnchorLocked } =
-    useScrollAnchoringOnToggle({
-      containerRef,
-      isAtBottomRef,
-      setIsAtBottom,
-      cancelProgrammaticScroll,
-      expandedUserMsgs,
-      expandedTools: toolStackProps?.expandedTools,
-      messages,
-    });
-
   const handleScroll = useCallback<React.UIEventHandler<HTMLDivElement>>(
     (e) => {
       vs.onScroll(e);
 
       const el = e.currentTarget;
       const currentScrollTop = el.scrollTop;
-      const maxScrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+      const scrollH = el.scrollHeight || totalHeight;
+      const clientH =
+        el.clientHeight || vs.viewportHeight || DEFAULT_VIEWPORT_HEIGHT_PX;
+      const maxScrollTop = Math.max(0, scrollH - clientH);
+      const prevObservedTop = observedTopRef.current;
+      const isProgrammaticConfirm =
+        Math.abs(currentScrollTop - prevObservedTop) <= BOTTOM_STICK_EPSILON_PX;
+      const isUserScrolledUp =
+        currentScrollTop < prevObservedTop - BOTTOM_STICK_EPSILON_PX;
 
       // 1. 评估与物理底部的亚像素距离
-      const distanceToBottom = Math.max(0, maxScrollTop - currentScrollTop);
-      const isPhysicallyAtBottom = distanceToBottom <= BOTTOM_STICK_EPSILON_PX;
+      const distanceToBottom = maxScrollTop - currentScrollTop;
+      const isPhysicallyAtBottom =
+        maxScrollTop > 0 &&
+        Math.abs(distanceToBottom) <= BOTTOM_STICK_EPSILON_PX;
 
       if (isPhysicallyAtBottom) {
         if (!isAtBottomRef.current && !isAnchorLocked()) {
@@ -308,7 +323,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
           setIsAtBottom(true);
         }
         setShowFloorButton(false);
-      } else {
+      } else if (isUserScrolledUp || vs.isGestureActive() || isAnchorLocked()) {
         if (isAtBottomRef.current) {
           isAtBottomRef.current = false;
           setIsAtBottom(false);
@@ -326,19 +341,21 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
       // 3. 更新真理账本
       observedTopRef.current = currentScrollTop;
 
-      // 4. 快速滚动状态检测（W3-3：长列表中超视距 DOM 惰性回收与总节点数压制）
-      fastScroll.onScrollSample(currentScrollTop);
+      // 4. 快速滚动状态检测（排除程序化吸底确认事件，防止切会话吸底误触发 150ms 骨架屏闪烁）
+      if (!isProgrammaticConfirm) {
+        fastScroll.onScrollSample(currentScrollTop);
+      }
     },
-    [vs, isAnchorLocked, fastScroll]
+    [vs, isAnchorLocked, fastScroll, totalHeight]
   );
 
   const handleScrollToBottom = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
-    const maxScroll = Math.max(
-      0,
-      container.scrollHeight - container.clientHeight
-    );
+    const scrollH = container.scrollHeight || totalHeight;
+    const clientH =
+      container.clientHeight || vs.viewportHeight || DEFAULT_VIEWPORT_HEIGHT_PX;
+    const maxScroll = Math.max(0, scrollH - clientH);
     performProgrammaticScroll(container, maxScroll, () => {
       if (typeof container.scrollTo === 'function') {
         container.scrollTo({ top: maxScroll, behavior: 'smooth' });
@@ -353,19 +370,23 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
       setIsAtTop(false);
     }
     setShowFloorButton(false);
-  }, [containerRef, performProgrammaticScroll]);
+  }, [containerRef, performProgrammaticScroll, totalHeight, vs.viewportHeight]);
 
-  // 流式打字自动跟随：处于底部时，随内容增长经程序滚动豁免令牌无感平滑贴底；
-  // 用户点击折叠/展开或向上浏览时：严格锚定当前位置自然向下展开，禁止强行吸底
+  // 流式打字与动态测高自动跟随：处于底部时，随内容高度收敛无感平滑贴底
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const maxScroll = Math.max(
-      0,
-      container.scrollHeight - container.clientHeight
-    );
+    const scrollH = container.scrollHeight || totalHeight;
+    const clientH =
+      container.clientHeight || vs.viewportHeight || DEFAULT_VIEWPORT_HEIGHT_PX;
+    const maxScroll = Math.max(0, scrollH - clientH);
 
-    if (!isAtBottomRef.current || isAnchorLocked()) {
+    const isNearPhysicalBottom =
+      maxScroll <= NEAR_BOTTOM_EPSILON_PX ||
+      (maxScroll - container.scrollTop <= NEAR_BOTTOM_EPSILON_PX &&
+        maxScroll - vs.scrollTop <= NEAR_BOTTOM_EPSILON_PX);
+
+    if (!isAtBottomRef.current || isAnchorLocked() || !isNearPhysicalBottom) {
       if (container.scrollTop > maxScroll) {
         container.scrollTop = maxScroll;
         observedTopRef.current = maxScroll;
@@ -373,7 +394,10 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
       return;
     }
 
-    if (Math.abs(container.scrollTop - maxScroll) > BOTTOM_STICK_EPSILON_PX) {
+    if (
+      Math.abs(container.scrollTop - maxScroll) > BOTTOM_STICK_EPSILON_PX ||
+      Math.abs(vs.scrollTop - maxScroll) > BOTTOM_STICK_EPSILON_PX
+    ) {
       performProgrammaticScroll(container, maxScroll);
       observedTopRef.current = maxScroll;
     }
@@ -383,6 +407,8 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     containerRef,
     performProgrammaticScroll,
     isAnchorLocked,
+    vs.scrollTop,
+    vs.viewportHeight,
   ]);
 
   return (

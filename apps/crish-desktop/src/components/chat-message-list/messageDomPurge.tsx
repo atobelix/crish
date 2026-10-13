@@ -14,7 +14,11 @@ import {
 import { messageMatchesSearch } from '../../api/sessionSearch';
 import type { SessionMessage } from '../../store/types';
 import { chatSpacerHeight } from './chatScrollGeometry';
-import { DEFAULT_VIEWPORT_HEIGHT_PX } from '../../hooks/virtualScrollConstants';
+import {
+  DEFAULT_VIEWPORT_HEIGHT_PX,
+  MESSAGE_VIEWPORT_OVERSCAN,
+  NEAR_BOTTOM_EPSILON_PX,
+} from '../../hooks/virtualScrollConstants';
 
 /** 单帧跨屏滚动位移阈值（px）：仅单步跨屏跃迁（>450px）才进入快速滚动卸载窗口，杜绝常规滚轮/拖拽误触发 */
 export const FAST_SCROLL_DELTA_PX = 450;
@@ -25,12 +29,12 @@ export const FAST_SCROLL_SETTLE_MS = 150;
 /** 超视距回收距离阈值（以视口高度倍数计，>2 屏高度卸载重型子 DOM） */
 export const PURGE_BEYOND_VIEWPORT_SCREENS = 2;
 /** 视口内活跃保留行数基准常量（保留命名导出以兼容 HMR 与外部引用） */
-export const ACTIVE_SCROLL_KEEP_VISIBLE_ROWS = 8;
+export const ACTIVE_SCROLL_KEEP_VISIBLE_ROWS = MESSAGE_VIEWPORT_OVERSCAN;
 
 export interface FastScrollPurgeTracker {
   isFastScrolling: boolean;
   isFastScrollingRef: React.MutableRefObject<boolean>;
-  reset: () => void;
+  reset: (initialScrollTop?: number) => void;
   onScrollSample: (currentScrollTop: number) => void;
   isScrolling: (isGestureActive?: boolean) => boolean;
 }
@@ -54,12 +58,12 @@ export function useFastScrollPurgeTracker(): FastScrollPurgeTracker {
     };
   }, []);
 
-  const reset = useCallback(() => {
+  const reset = useCallback((initialScrollTop = 0) => {
     if (fastScrollTimerRef.current != null) {
       window.clearTimeout(fastScrollTimerRef.current);
       fastScrollTimerRef.current = null;
     }
-    lastScrollTopForVelocityRef.current = 0;
+    lastScrollTopForVelocityRef.current = initialScrollTop;
     lastScrollTimeRef.current = 0;
     isFastScrollingRef.current = false;
     setIsFastScrolling(false);
@@ -112,7 +116,7 @@ export function useFastScrollPurgeTracker(): FastScrollPurgeTracker {
 }
 
 /**
- * 会话切换或 UI 字号变更时，同步消息顺序并全量播种预估高度。
+ * 会话切换或 UI 字号变更时，同步消息顺序、恢复已实测高度并全量播种未测项预估高度。
  */
 export function reseedAllMessageHeights(
   manager: VirtualScrollManager,
@@ -121,6 +125,7 @@ export function reseedAllMessageHeights(
 ): void {
   if (msgIds.length === 0) return;
   manager.syncOrder(msgIds);
+  manager.restoreRememberedActuals(msgIds);
   manager.preloadEstimates(
     messages.map((m) => ({
       id: m.id,
@@ -172,6 +177,8 @@ export interface ActiveRowWindowParams {
   thinkingMsgId?: string | null;
   editingMessageId?: string | null;
   isScrolling: boolean;
+  isSessionSwitch?: boolean;
+  stickToBottom?: boolean;
 }
 
 export interface MessageRowDomPurgeResult {
@@ -290,42 +297,58 @@ export function computeActiveRowWindow(
     thinkingMsgId,
     editingMessageId,
     isScrolling,
+    isSessionSwitch = false,
+    stickToBottom = false,
   } = params;
 
   const itemCount = msgIds.length;
-  if (itemCount > 0 && vsManager.getOrderCount() !== itemCount) {
+  if (isSessionSwitch && itemCount > 0) {
+    reseedAllMessageHeights(vsManager, msgIds, messages);
+  } else if (itemCount > 0 && vsManager.getOrderCount() !== itemCount) {
     vsManager.syncOrder(msgIds);
   }
 
+  const viewportHeight =
+    rawViewportHeight > 0 ? rawViewportHeight : DEFAULT_VIEWPORT_HEIGHT_PX;
+  const contentHeight =
+    itemCount > 0 &&
+    (isSessionSwitch || rawTotalHeight === 0) &&
+    vsManager.getOrderCount() > 0
+      ? vsManager.getTotalHeight(itemCount)
+      : rawTotalHeight;
+  const totalHeight = chatSpacerHeight(contentHeight);
+  const maxScroll = Math.max(0, totalHeight - viewportHeight);
+  const isNearPhysicalBottom =
+    maxScroll > 0 && maxScroll - scrollTop <= NEAR_BOTTOM_EPSILON_PX;
+  const shouldProjectBottom =
+    itemCount > 0 &&
+    (isSessionSwitch || (stickToBottom && isNearPhysicalBottom));
+  const effectiveScrollTop = shouldProjectBottom ? maxScroll : scrollTop;
+
   const visibleRange =
     itemCount > 0 &&
-    rawVisibleRange.endIndex === 0 &&
-    vsManager.getOrderCount() > 0
+    vsManager.getOrderCount() > 0 &&
+    (isSessionSwitch ||
+      rawVisibleRange.endIndex === 0 ||
+      (shouldProjectBottom && Math.abs(effectiveScrollTop - scrollTop) > 1))
       ? vsManager.computeVisibleRange(
-          scrollTop,
-          rawViewportHeight,
+          effectiveScrollTop,
+          viewportHeight,
           itemCount,
-          8
+          MESSAGE_VIEWPORT_OVERSCAN
         )
       : rawVisibleRange;
 
-  const contentHeight =
-    itemCount > 0 && rawTotalHeight === 0 && vsManager.getOrderCount() > 0
-      ? vsManager.getTotalHeight(itemCount)
-      : rawTotalHeight;
-
-  const viewportHeight =
-    rawViewportHeight > 0 ? rawViewportHeight : DEFAULT_VIEWPORT_HEIGHT_PX;
-  const firstVisibleIndex = vsManager.findIndexAtOffset(scrollTop);
+  const firstVisibleIndex = vsManager.findIndexAtOffset(effectiveScrollTop);
   const { startIndex, endIndex, startOffset } = visibleRange;
 
   const baseWindow = {
     startIndex,
     endIndex,
     startOffset,
-    totalHeight: chatSpacerHeight(contentHeight),
+    totalHeight,
     firstVisibleIndex,
-    scrollTop,
+    scrollTop: effectiveScrollTop,
     viewportHeight,
     vsManager,
     thinkingMsgId,

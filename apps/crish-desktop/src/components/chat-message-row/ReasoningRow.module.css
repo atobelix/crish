@@ -21,19 +21,45 @@
   overflow: hidden;
 }
 
-/* 思维链平滑折叠外层 Grid 容器：160ms 优雅收拢，消灭视口跳跃 */
+/* 思维链平滑折叠外层 Grid 容器：优雅收拢展开，消灭视口跳跃 */
+@keyframes reasoning-grid-expand {
+  from {
+    grid-template-rows: 0fr;
+  }
+  to {
+    grid-template-rows: 1fr;
+  }
+}
+
 .reasoningExpandGrid {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 160ms var(--ease-emphasized);
+  transition: grid-template-rows var(--transition-accordion);
   margin: 0;
   padding: 0;
   border: none;
   overflow: hidden;
 }
 
+.reasoningContainer[data-expanded='true']:not([data-collapsing='true'])
+  .reasoningExpandGrid {
+  animation: reasoning-grid-expand var(--transition-accordion) forwards;
+  grid-template-rows: 1fr;
+}
+
 .reasoningContainer[data-expanded='true'] .reasoningExpandGrid {
   grid-template-rows: 1fr;
+}
+
+@keyframes reasoning-slot-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .reasoningExpandSlot {
@@ -42,8 +68,13 @@
   opacity: 0;
   transform: translateY(-2px);
   transition:
-    opacity 120ms var(--ease-standard),
-    transform 120ms var(--ease-emphasized);
+    opacity var(--transition-accordion-fade),
+    transform var(--transition-accordion-fade);
+}
+
+.reasoningContainer[data-expanded='true']:not([data-collapsing='true'])
+  .reasoningExpandSlot {
+  animation: reasoning-slot-fade-in var(--transition-accordion-fade) forwards;
 }
 
 .reasoningContainer[data-expanded='true'] .reasoningExpandSlot {
@@ -276,7 +307,7 @@
   margin-left: auto;
   color: var(--text-tertiary);
   transition:
-    transform var(--transition-fast, 150ms ease),
+    transform var(--transition-accordion),
     color var(--transition-fast, 150ms ease);
   flex-shrink: 0;
   font-size: 14px;

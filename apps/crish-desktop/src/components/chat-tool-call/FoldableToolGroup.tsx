@@ -30,6 +30,7 @@ import {
 import { AppIcon, type IconName } from '../ui/icons';
 import { Tooltip } from '../ui/Tooltip/Tooltip';
 import { ChatToolStack, type ChatToolStackProps } from './ChatToolCallBlock';
+import { DURATION_ACCORDION_MS } from '../../utils/motionTokens';
 import styles from './FoldableToolGroup.module.css';
 
 export interface FoldableToolGroupProps {
@@ -127,7 +128,7 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
             if (!isExpanded && slotRef.current) {
               slotRef.current.setAttribute('hidden', 'until-found');
             }
-          }, 180);
+          }, DURATION_ACCORDION_MS);
         }
       }
       isInitialMount.current = false;

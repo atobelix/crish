@@ -29,6 +29,9 @@ export const NEAR_BOTTOM_EPSILON = NEAR_BOTTOM_EPSILON_PX;
 /** 默认虚拟滚动 overscan 条数 */
 export const DEFAULT_OVERSCAN = 6;
 
+/** 消息列表虚拟滚动视口外缓冲行数（SSOT） */
+export const MESSAGE_VIEWPORT_OVERSCAN = 8;
+
 /** 默认容器可视高度兜底值（px） */
 export const DEFAULT_VIEWPORT_HEIGHT_PX = 600;
 

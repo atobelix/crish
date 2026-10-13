@@ -1,3 +1,13 @@
+/* 会话加载平滑过渡：轻柔淡入，零 Layout Reflow，GPU 合成一镜到底 */
+@keyframes streamHostEnter {
+  from {
+    opacity: 0.92;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* 叶 scroller + 滚动条左侧 scrubber 的定位包含块（跟叶走，不钉视口） */
 .streamHost {
   position: relative;
@@ -8,6 +18,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  animation: streamHostEnter var(--transition-fast) both;
 }
 
 /* 顶部与底部平滑渐隐遮罩（双极过渡，文字进出视野不生硬，且右侧避让滚动条轨道） */

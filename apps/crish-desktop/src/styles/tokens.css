@@ -99,15 +99,15 @@ html[data-theme='light'] {
   --shell-chrome-bg: var(--surface-chrome);
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
   /* ── 文字灰度阶（light：0% = 黑，100% = 白；四档均为显式灰值，禁止透明度/mix 向背景收敛）──
-     正文/常看到的字 = 10%（近黑，最高对比）→ 次级 32% → 小字/工具调用/思考 = 40% → 极弱 62% */
+     正文/常看到的字 = 10%（近黑，最高对比）→ 次级/会话列表 = 22%（#383838）→ 小字/工具调用/思考 = 40%（#666666）→ 极弱/折叠控制行/时间戳 = 59%（#969696） */
   --text-primary: #1a1a1a;
-  --text-secondary: #525252;
+  --text-secondary: #383838;
   /* 文本三级色（小字 / 工具调用 / 思考内容 / 路径等）：40% 灰度（#666666），WCAG AA 达标。
      对 tokens.css 主背景 5.50:1、对侧栏背景 5.10:1（均 ≥ 4.5:1，a11y-contrast.test.ts 验证）。 */
   --text-tertiary: #666666;
   --text-muted: var(--text-tertiary);
-  /* 第四级弱化文字（时间戳 / 计数等）：62% 灰度（显式灰值，不再向背景 mix） */
-  --text-faint: #9e9e9e;
+  /* 第四级弱化文字（侧栏分组折叠控制行 / 时间戳 / 计数等）：显式灰值，不再向背景 mix */
+  --text-faint: #969696;
   /* 反色前景（与 --text-on-accent 同源，随主题翻转） */
   --text-inverse: var(--text-on-accent);
   /* 浮层/遮罩之上的前景 */
@@ -237,6 +237,8 @@ html[data-theme='light'] {
   --brand-primary: #10b981;
   --brand: #10b981;
   --brand-deep: hsl(160 84% 30%); /* #047857, 4.77:1 >= 4.5:1 */
+  --selection-bg: #0d9668; /* 方案 A：温润翡翠绿 hsl(160 84% 32%)，配纯白字 3.76:1 */
+  --selection-fg: #ffffff;
 
   /* --- SmartExpandablePanel & Zero-Blue Design System Tokens (Light) --- */
   --sep-radius-outer: var(--radius-l);
@@ -438,7 +440,7 @@ html[data-theme='light'] {
   --xterm-bright-magenta: #9333ea;
   --xterm-bright-cyan: #0891b2;
   --xterm-bright-white: #0f1419;
-  --xterm-selection: rgba(0, 0, 0, 0.15);
+  --xterm-selection: var(--selection-bg);
 
   /* macOS traffic-light chrome (decorative terminal mockups) */
 
@@ -523,10 +525,19 @@ html[data-theme='light'] {
   --transition-smooth: 300ms var(--ease-standard);
   /* Toast 入场：无过冲（y≤1）；旧值 y2=1.275 会越过停点再回 */
   --transition-exit: 250ms var(--ease-standard);
-  --transition-popover-enter: var(--ease-emphasized) 180ms;
-  --transition-popover-exit: cubic-bezier(0.4, 0, 1, 1) 120ms;
-  --transition-modal-enter: var(--ease-emphasized) 220ms;
-  --transition-accordion: var(--ease-emphasized) 220ms;
+  --transition-popover-enter: 180ms var(--ease-emphasized);
+  --transition-popover-exit: 120ms cubic-bezier(0.4, 0, 1, 1);
+  --transition-modal-enter: 220ms var(--ease-emphasized);
+  --duration-accordion: 220ms;
+  --transition-accordion: var(--duration-accordion) var(--ease-emphasized);
+  --duration-accordion-fade: 180ms;
+  --transition-accordion-fade: var(--duration-accordion-fade)
+    var(--ease-emphasized);
+  --duration-landing-settle: 360ms;
+  --transition-landing-settle: var(--duration-landing-settle)
+    var(--ease-emphasized);
+  --duration-landing-fade: 240ms;
+  --transition-landing-fade: var(--duration-landing-fade) var(--ease-emphasized);
   --transition-chevron: 150ms var(--ease-emphasized);
   --transition-press: 80ms ease-out;
   --transition-skeleton: 1.5s ease-in-out;
@@ -847,7 +858,7 @@ html[data-theme='light'] {
   --aicard-badge-fg: var(--text-tertiary);
 
   /* --- 5. 流式动效与打字机光标体系 (Light) --- */
-  --stream-caret-color: var(--text-primary);
+  --stream-caret-color: var(--brand-deep);
   --skill-tag-color: hsl(198 85% 36%);
   --stream-caret-width: 2px;
   --stream-caret-height: 0.95em;
@@ -1052,14 +1063,14 @@ html[data-theme='dark'] {
   --bg-canvas: var(--surface-paper);
   --shell-chrome-bg: var(--surface-chrome);
   /* ── 文字灰度阶（dark：与 light 镜像，0% = 黑，100% = 白；四档均为显式灰值）──
-     正文/常看到的字 = 90%（近白，10% 灰度）→ 次级 72% → 小字 55%（45% 灰度）→ 极弱 45% */
+     正文/常看到的字 = 90%（近白，10% 灰度）→ 次级/会话列表 = 80%（#cccccc）→ 小字 55%（#8c8c8c）→ 极弱/折叠控制行/时间戳 = 40%（#666666） */
   --text-primary: #e6e6e6;
-  --text-secondary: #b8b8b8;
+  --text-secondary: #cccccc;
   /* 文本三级色（小字 / 工具调用 / 路径等）：45% 灰度（55% 亮度），显式灰值零透明度，达标 WCAG AA */
   --text-tertiary: #8c8c8c;
   --text-muted: var(--text-tertiary);
-  /* 第四级弱化文字（时间戳 / 计数等） */
-  --text-faint: #737373;
+  /* 第四级弱化文字（侧栏分组折叠控制行 / 时间戳 / 计数等） */
+  --text-faint: #666666;
   /* 反色前景（与 --text-on-accent 同源，随主题翻转） */
   --text-inverse: var(--text-on-accent);
   /* 浮层/遮罩之上的前景 */
@@ -1162,6 +1173,8 @@ html[data-theme='dark'] {
   --brand-primary: #10b981;
   --brand: #10b981;
   --brand-deep: hsl(160 84% 30%);
+  --selection-bg: #0d9668;
+  --selection-fg: #ffffff;
 
   /* --- SmartExpandablePanel & Zero-Blue Design System Tokens (Dark) --- */
   --sep-radius-outer: var(--radius-l);
@@ -1294,7 +1307,7 @@ html[data-theme='dark'] {
   --terminal-cmd: var(--text-primary, #ffffff);
   --terminal-prompt: #4ade80;
   --terminal-bar-fill: var(--bg-card, #0c0c0c);
-  --xterm-selection: hsl(0 0% 100% / 0.18);
+  --xterm-selection: var(--selection-bg);
   /* xterm 16 色深色主题标准 Windows Terminal (Campbell) 调色板 */
   --xterm-black: #0c0c0c;
   --xterm-red: #c50f1f;
@@ -1908,7 +1921,14 @@ html[data-perf-tier='eco'] {
   --transition-popover-enter: 0ms;
   --transition-popover-exit: 0ms;
   --transition-modal-enter: 0ms;
+  --duration-accordion: 0ms;
   --transition-accordion: 0ms;
+  --duration-accordion-fade: 0ms;
+  --transition-accordion-fade: 0ms;
+  --duration-landing-settle: 0ms;
+  --transition-landing-settle: 0ms;
+  --duration-landing-fade: 0ms;
+  --transition-landing-fade: 0ms;
   --transition-chevron: 0ms;
   --stream-anim-word-fade: 0ms;
   --stream-anim-marker-fade: 0ms;
@@ -1931,6 +1951,10 @@ html[data-perf-tier='eco'] {
     --duration-normal: 0ms;
     --duration-enter: 0ms;
     --duration-exit: 0ms;
+    --duration-accordion: 0ms;
+    --duration-accordion-fade: 0ms;
+    --duration-landing-settle: 0ms;
+    --duration-landing-fade: 0ms;
     --transition-micro: 0ms;
     --transition-snappy: 0ms;
     --transition-fast: 0ms;
@@ -1941,6 +1965,9 @@ html[data-perf-tier='eco'] {
     --transition-popover-exit: 0ms;
     --transition-modal-enter: 0ms;
     --transition-accordion: 0ms;
+    --transition-accordion-fade: 0ms;
+    --transition-landing-settle: 0ms;
+    --transition-landing-fade: 0ms;
     --transition-chevron: 0ms;
     --stream-anim-word-fade: 0ms;
     --stream-anim-marker-fade: 0ms;
