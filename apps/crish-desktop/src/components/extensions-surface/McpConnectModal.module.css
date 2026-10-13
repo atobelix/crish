@@ -1,0 +1,389 @@
+/* apps/crish-desktop/src/components/extensions-surface/McpConnectModal.module.css
+ * MCP 接入模态框样式表（McpConnectModal）
+ * 100% 遵循 Design Tokens 单一真源，去除硬编码色值与覆盖规则，按钮圆角锁定 7px
+ */
+
+.modalContainer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  min-height: 480px;
+  max-height: 82vh;
+  padding: 0 4px;
+  box-sizing: border-box;
+}
+
+/* 顶部三大 Tab 导航栏 */
+.tabNav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg, 9px);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 16px;
+}
+
+.tabBtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--button-radius, 7px);
+  cursor: pointer;
+  transition: all var(--duration-fast, 150ms) ease;
+}
+
+.tabBtn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.tabBtnActive {
+  color: var(--text-primary);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+  font-weight: 600;
+}
+
+/* 内容承载区 */
+.tabContent {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-right: 4px;
+}
+
+/* ── Tab 1: 手动配置（manual） ── */
+.formSection {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.presetBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+}
+
+.presetLabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-right: 2px;
+}
+
+.presetBtn {
+  --btn-h: 26px;
+  --btn-px: 10px;
+  --btn-fs: 11px;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 11px;
+  border-radius: var(--button-radius, 7px);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  width: 100%;
+}
+
+.formFieldFull {
+  grid-column: span 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.formField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.fieldLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.fieldHint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.textareaField {
+  width: 100%;
+  min-height: 68px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: var(--font-mono, monospace);
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--surface-input, var(--bg-card));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--button-radius, 7px);
+  box-sizing: border-box;
+  resize: vertical;
+  outline: none;
+  transition: border-color var(--duration-fast, 150ms) ease;
+}
+
+.textareaField:focus {
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 92%,
+    var(--text-primary) 8%
+  );
+}
+
+/* ── Tab 2: 词法 JSON（syntax） ── */
+.syntaxContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.syntaxHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.syntaxTips {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.syntaxTextarea {
+  width: 100%;
+  height: 260px;
+  padding: 12px;
+  font-size: 12px;
+  font-family: var(--font-mono, monospace);
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  box-sizing: border-box;
+  resize: none;
+  outline: none;
+  white-space: pre;
+  tab-size: 2;
+  transition: border-color var(--duration-fast, 150ms) ease;
+}
+
+.syntaxTextarea:focus {
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 92%,
+    var(--text-primary) 8%
+  );
+}
+
+.validationBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--button-radius, 7px);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.validationSuccess {
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success-border);
+  color: var(--color-success);
+}
+
+.validationError {
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error-border);
+  color: var(--color-error);
+}
+
+.validationNeutral {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+/* ── Tab 3: 快速接入（quick） ── */
+.quickContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.quickStatusBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 2px;
+}
+.quickCountText {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.serverCardsList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.serverCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 9px);
+  transition: all var(--duration-fast, 150ms) ease;
+}
+
+.serverCard:hover {
+  border-color: var(--border-subtle);
+  background: var(--bg-hover);
+}
+.cardLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.cardTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.serverCardName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sourceBadge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border: 1px solid var(--border-subtle);
+}
+
+.sourceAntigravity {
+  background: var(--tint-hover, var(--bg-secondary));
+  color: var(--color-primary);
+}
+.sourceClaude {
+  background: var(--tint-hover, var(--bg-secondary));
+  color: var(--accent-orange, var(--text-primary));
+}
+.sourceCursor {
+  background: var(--tint-hover, var(--bg-secondary));
+  color: var(--accent-blue, var(--text-primary));
+}
+
+.serverCommandPreview {
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 480px;
+}
+
+.cardRight {
+  flex-shrink: 0;
+}
+
+.emptyQuickState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+  gap: 8px;
+  text-align: center;
+}
+
+.emptyTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.emptyDesc {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  max-width: 360px;
+  line-height: 1.5;
+}
+
+/* 底部操作按钮栏 */
+.modalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.actionBtn {
+  border-radius: var(--button-radius, 7px);
+}
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

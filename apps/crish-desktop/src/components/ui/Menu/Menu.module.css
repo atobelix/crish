@@ -33,29 +33,32 @@
   font-family: var(--font-sans);
   transform-origin: var(--radix-popover-content-transform-origin, top center);
   will-change: transform, opacity;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-/* 默认向下展开 (data-side='bottom') 入场关键帧 */
+/* 默认向下展开 (data-side='bottom') 入场关键帧：优雅放大展开 */
 @keyframes crish-popover-enter {
   0% {
     opacity: 0;
-    transform: scale(0.97) translateY(-4px);
+    transform: scale(0.93) translateY(-6px);
   }
   100% {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: none;
   }
 }
 
-/* 向上展开 (data-side='top') 入场关键帧 */
+/* 向上展开 (data-side='top') 入场关键帧：从触发区向上优雅放大入场 */
 @keyframes crish-popover-enter-top {
   0% {
     opacity: 0;
-    transform: scale(0.97) translateY(4px);
+    transform: scale(0.93) translateY(6px);
   }
   100% {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: none;
   }
 }
 
@@ -67,7 +70,7 @@
   }
   to {
     opacity: 0;
-    transform: scale(0.97) translateY(-4px);
+    transform: scale(0.95) translateY(-4px);
   }
 }
 
@@ -79,15 +82,16 @@
   }
   to {
     opacity: 0;
-    transform: scale(0.97) translateY(4px);
+    transform: scale(0.95) translateY(4px);
   }
 }
 
 .menuContent[data-side='top'] {
-  transform-origin: var(
-    --radix-popover-content-transform-origin,
-    bottom center
-  );
+  transform-origin: var(--radix-popover-content-transform-origin, bottom left);
+}
+
+.menuContent[data-side='bottom'] {
+  transform-origin: var(--radix-popover-content-transform-origin, top left);
 }
 
 .menuContent[data-state='open'] {

@@ -1,0 +1,101 @@
+/* ==========================================================================
+   外部对话导入二级设置弹窗样式表（ImportPluginSettingsModal）
+   遵循系统标准 Design Token：居中轻量模态、大圆角（--radius-xl）与去过度装饰
+   ========================================================================== */
+
+.modalPanel {
+  --dialog-width: 520px;
+  width: var(--dialog-width);
+  border-radius: var(--radius-xl, 12px);
+  background: var(--bg-card);
+  border: var(--hairline-width, 1px) solid var(--border-color);
+  box-shadow: 0 20px 48px -12px
+    color-mix(in srgb, var(--shadow-color) 16%, transparent);
+}
+
+.modalTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  font-size: var(--font-size-base, 14px);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--text-primary);
+}
+
+.modalBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+  padding: var(--space-2, 8px) var(--space-4, 16px) var(--space-4, 16px);
+}
+
+/* 设置项卡片：大圆角与柔和背景 */
+.settingCard {
+  background: var(--bg-secondary);
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  border-radius: var(--radius-l, 12px);
+  padding: var(--space-3_5, 14px);
+  display: flex;
+  box-sizing: border-box;
+}
+
+.settingSwitchCard {
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3, 12px);
+}
+
+.settingFieldCard {
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+
+.settingMain {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.settingTitle {
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+}
+
+.settingDesc {
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--text-tertiary);
+  line-height: 1.4;
+}
+
+.settingHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+}
+
+.settingHint {
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--text-tertiary);
+}
+
+.inputActionRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  width: 100%;
+}
+
+.pathInput {
+  flex: 1;
+}
+
+.modalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+}

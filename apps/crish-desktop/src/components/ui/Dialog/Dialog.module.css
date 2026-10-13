@@ -8,6 +8,9 @@
 .overlayExit {
   position: fixed;
   inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   z-index: var(--dialog-z, var(--z-modal));
 }
 
@@ -32,13 +35,11 @@
 }
 
 .dialog {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  will-change: transform, opacity;
+  position: relative;
+  margin: auto;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
   max-width: calc(100vw - var(--space-8));
   max-height: calc(100vh - var(--space-8));
   background: var(--bg-card);
@@ -48,22 +49,41 @@
     0 24px 48px -12px color-mix(in srgb, var(--shadow-color) 16%, transparent),
     0 8px 16px -4px color-mix(in srgb, var(--shadow-color) 6%, transparent);
   outline: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-/*           className   --dialog-width         */
 .dialogSm {
-  --dialog-width: 320px; /* 组件尺寸语义：本地自包含（F2 收敛，原真源散落 SettingsRulesTab） */
-  width: var(--dialog-width);
+  --dialog-width: 320px;
+  width: min(var(--dialog-width), calc(100vw - var(--space-8)));
 }
 
 .dialogMd {
-  --dialog-width: 480px; /* 组件尺寸语义：本地自包含（F2 收敛，原真源散落 SettingsRulesTab） */
-  width: var(--dialog-width);
+  --dialog-width: 480px;
+  width: min(var(--dialog-width), calc(100vw - var(--space-8)));
 }
 
 .dialogLg {
-  --dialog-width: 640px; /* 组件尺寸语义：本地自包含（F2 收敛，原真源散落 SettingsRulesTab） */
-  width: var(--dialog-width);
+  --dialog-width: 640px;
+  width: min(var(--dialog-width), calc(100vw - var(--space-8)));
+}
+
+.dialogXl {
+  --dialog-width: 800px;
+  width: min(var(--dialog-width), calc(100vw - var(--space-8)));
+}
+
+.dialog2xl {
+  --dialog-width: 1040px;
+  width: min(var(--dialog-width), calc(100vw - var(--space-8)));
+}
+
+.dialogAuto {
+  --dialog-width: auto;
+  width: fit-content;
+  max-width: min(calc(100vw - var(--space-8)), 1100px);
+  min-width: min(380px, calc(100vw - var(--space-8)));
 }
 
 /*         --transition-modal-enter/exit     */
@@ -88,22 +108,22 @@
 @keyframes dialog-enter {
   from {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.985);
+    transform: scale(0.985);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    transform: none;
   }
 }
 
 @keyframes dialog-exit {
   from {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    transform: none;
   }
   to {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.985);
+    transform: scale(0.985);
   }
 }
 
@@ -144,6 +164,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  margin-left: auto;
   width: var(--control-height-sm);
   height: var(--control-height-sm);
   border: none;
@@ -182,8 +203,10 @@
 }
 
 .dialogBody {
+  box-sizing: border-box;
   padding: var(--space-1) var(--space-4);
   overflow-y: auto;
+  overflow-x: hidden;
   color: var(--text-primary);
   flex: 1 1 auto;
 }

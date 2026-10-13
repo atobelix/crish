@@ -157,7 +157,9 @@ export interface McpServer {
   type: 'stdio' | 'sse';
   command?: string;
   args?: string[];
+  env?: Record<string, string>;
   url?: string;
   status: 'connected' | 'disconnected' | 'connecting';
   tools: string[];
+  disabledTools?: string[];
 }

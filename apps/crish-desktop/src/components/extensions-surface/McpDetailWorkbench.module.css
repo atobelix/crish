@@ -1,0 +1,270 @@
+/* apps/crish-desktop/src/components/extensions-surface/McpDetailWorkbench.module.css
+ * MCP 扩展详情与工具细粒度控制工作台（Design Tokens 单一真源）
+ */
+
+.workbenchContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.detailHeader {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-bottom: var(--space-5);
+  border-bottom: var(--hairline-width) solid var(--border-subtle);
+}
+
+.detailTitleRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.detailTitleInfo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.detailTitle {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.detailSubtitle {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-2_5);
+  font-size: var(--font-size-xs);
+  border-radius: var(--button-radius);
+  border: var(--hairline-width) solid var(--border-subtle);
+  color: var(--text-tertiary);
+}
+
+.statusOnline {
+  color: var(--color-success, var(--success-fg, #10b981));
+  border-color: var(--color-success, var(--success-fg, #10b981));
+  background-color: var(--success-soft-bg, hsl(150 80% 95% / 0.8));
+  font-weight: var(--font-weight-medium);
+}
+
+.statusOffline {
+  color: var(--text-tertiary);
+  border-color: var(--border-subtle);
+}
+
+.pluginSettingsRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--bg-surface);
+  border: var(--hairline-width) solid var(--border-subtle);
+  border-radius: var(--button-radius);
+}
+
+.settingItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.settingLabelGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settingTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.settingDesc {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.detailBodySection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.toolsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.toolsHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.sectionHeaderTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.toolsStatsBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  background-color: var(--bg-surface);
+  border: var(--hairline-width) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.toolsHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.toolsListGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+
+.toolItemCard {
+  background: var(--bg-card);
+  border: var(--hairline-width) solid var(--border-subtle);
+  border-radius: var(--button-radius);
+  padding: var(--space-3_5);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-3);
+  transition:
+    border-color var(--transition-micro),
+    opacity var(--transition-micro);
+}
+
+.toolItemCard:hover {
+  border-color: var(--border-color);
+}
+
+.toolItemCardDisabled {
+  opacity: 0.7;
+  background-color: var(--bg-surface);
+}
+
+.toolCardTop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1_5);
+}
+
+.toolItemHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.toolItemHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5);
+  min-width: 0;
+}
+
+.toolIcon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.toolName {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolDesc {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  line-height: var(--line-height-relaxed);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 28px;
+}
+
+.toolCardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-2);
+  border-top: var(--hairline-width) solid var(--border-subtle);
+}
+
+.toolStateLabel {
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+}
+
+.toolStateEnabled {
+  color: var(--color-success, var(--success-fg, #10b981));
+}
+
+.toolStateDisabled {
+  color: var(--text-muted, var(--text-tertiary, #94a3b8));
+}
+
+.emptyWorkbenchState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--text-tertiary);
+  gap: var(--space-2);
+}
+
+.emptyTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+}
+
+.emptyDesc {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}

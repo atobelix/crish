@@ -1,0 +1,98 @@
+/* apps/crish-desktop/src/components/extensions-surface/PluginShareModal.module.css
+ * 插件分享模态框样式
+ * 遵循系统 Design Token 规范，按钮圆角严格保持 7px，禁止硬编码颜色
+ */
+
+.modalPanel {
+  --dialog-width: 560px;
+  width: var(--dialog-width);
+  border-radius: var(--radius-xl, 12px);
+  background: var(--bg-card);
+  border: var(--hairline-width, 1px) solid var(--border-color);
+  box-shadow: 0 20px 48px -12px
+    color-mix(in srgb, var(--shadow-color) 16%, transparent);
+}
+
+.modalPanel button {
+  border-radius: 7px;
+}
+
+.modalBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+  padding: var(--space-2, 8px) var(--space-4, 16px) var(--space-3, 12px);
+  max-height: 72vh;
+  box-sizing: border-box;
+}
+
+.pluginMetaHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2_5, 10px) var(--space-3_5, 14px);
+  background: var(--bg-secondary);
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  border-radius: var(--radius-l, 10px);
+}
+
+.pluginInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.pluginName {
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+}
+
+.pluginVersion {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono, monospace);
+}
+
+.jsonViewerWrapper {
+  position: relative;
+  border-radius: var(--radius-l, 10px);
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.jsonViewer {
+  margin: 0;
+  padding: var(--space-3, 12px);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.55;
+  color: var(--text-primary);
+  max-height: 320px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  box-sizing: border-box;
+}
+
+.modalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: var(--space-2, 8px);
+}
+
+.footerLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.footerRight {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  margin-left: auto;
+}

@@ -82,7 +82,7 @@ export function applyMcpToolDisabled(
   map: Record<string, string[]>,
   serverId: string,
   tool: string,
-  disabled: boolean,
+  disabled: boolean
 ): Record<string, string[]> {
   const next: Record<string, string[]> = { ...map };
   const cur = new Set(next[serverId] || []);
@@ -96,103 +96,8 @@ export function applyMcpToolDisabled(
 
 const INSTALLED_CATALOG_KEY = 'crish_extension_catalog_installed_v1';
 
-/** 官方 + 三方策展（不预装，仅展示；安装后记入 INSTALLED_CATALOG_KEY） */
-export const EXTENSION_CATALOG: readonly CatalogEntry[] = [
-  // —— 官方插件 ——
-  {
-    id: 'plugin:conex-audit',
-    kind: 'plugin',
-    source: 'official',
-    name: '代码审计助手',
-    description: '工作区变更扫描、风险提示与提交前检查清单',
-    installRef: '@conex/plugin-audit',
-    tags: ['官方', '质量'],
-  },
-  {
-    id: 'plugin:conex-docs',
-    kind: 'plugin',
-    source: 'official',
-    name: '文档生成',
-    description: '从会话与 diff 生成变更说明 / README 片段',
-    installRef: '@conex/plugin-docs',
-    tags: ['官方', '文档'],
-  },
-  // —— 三方插件 ——
-  {
-    id: 'plugin:community-theme-pack',
-    kind: 'plugin',
-    source: 'community',
-    name: '社区主题包',
-    description: '额外浅色 / 深色主题与字体预设',
-    installRef: 'github:conex-community/theme-pack',
-    tags: ['三方', '外观'],
-  },
-  // —— 官方 MCP ——
-  {
-    id: 'mcp:filesystem',
-    kind: 'mcp',
-    source: 'official',
-    name: 'Filesystem',
-    description: '安全范围内的文件读写与目录浏览（stdio）',
-    installRef: 'npx -y @modelcontextprotocol/server-filesystem',
-    tags: ['官方', '文件'],
-  },
-  {
-    id: 'mcp:github',
-    kind: 'mcp',
-    source: 'official',
-    name: 'GitHub',
-    description: 'Issue / PR / 仓库检索（需 token）',
-    installRef: 'npx -y @modelcontextprotocol/server-github',
-    tags: ['官方', '协作'],
-  },
-  {
-    id: 'mcp:memory',
-    kind: 'mcp',
-    source: 'community',
-    name: 'Memory',
-    description: '跨会话知识片段记忆（社区实现）',
-    installRef: 'npx -y @modelcontextprotocol/server-memory',
-    tags: ['三方', '记忆'],
-  },
-  // —— 官方 / 常见技能 ——
-  {
-    id: 'skill:git-pr',
-    kind: 'skill',
-    source: 'official',
-    name: 'Git PR 助手',
-    description: '整理提交说明、生成 PR 描述与检查清单',
-    installRef: 'skill:git-pr',
-    tags: ['官方', 'Git'],
-  },
-  {
-    id: 'skill:code-review',
-    kind: 'skill',
-    source: 'official',
-    name: '代码审阅',
-    description: '按项目规则审阅 diff，输出问题分级',
-    installRef: 'skill:code-review',
-    tags: ['官方', '质量'],
-  },
-  {
-    id: 'skill:docx',
-    kind: 'skill',
-    source: 'community',
-    name: 'Word 文档',
-    description: '读写与生成 .docx（社区 skill）',
-    installRef: 'skill:docx',
-    tags: ['三方', '文档'],
-  },
-  {
-    id: 'skill:web-research',
-    kind: 'skill',
-    source: 'community',
-    name: '网页调研',
-    description: '结构化检索与摘要（需网络权限）',
-    installRef: 'skill:web-research',
-    tags: ['三方', '检索'],
-  },
-] as const;
+/** 官方 + 三方策展（仅展示真实落地的扩展生态，杜绝虚假占位 Mock 项） */
+export const EXTENSION_CATALOG: readonly CatalogEntry[] = [];
 
 export function kindLabel(kind: ExtensionKind): string {
   if (kind === 'plugin') return '插件';
@@ -230,4 +135,33 @@ export function unmarkCatalogInstalled(id: string): void {
   const s = loadCatalogInstalledIds();
   s.delete(id);
   saveCatalogInstalledIds(s);
+}
+
+const UNINSTALLED_OFFICIAL_KEY = 'crish_official_plugins_uninstalled_v1';
+
+export function isOfficialPluginUninstalled(id: string): boolean {
+  try {
+    const raw = localStorage.getItem(UNINSTALLED_OFFICIAL_KEY);
+    if (!raw) return false;
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) && arr.includes(id);
+  } catch {
+    return false;
+  }
+}
+
+export function setOfficialPluginUninstalled(
+  id: string,
+  uninstalled: boolean
+): void {
+  try {
+    const raw = localStorage.getItem(UNINSTALLED_OFFICIAL_KEY);
+    const arr: string[] = raw ? JSON.parse(raw) : [];
+    const set = new Set(Array.isArray(arr) ? arr : []);
+    if (uninstalled) set.add(id);
+    else set.delete(id);
+    localStorage.setItem(UNINSTALLED_OFFICIAL_KEY, JSON.stringify([...set]));
+  } catch {
+    /* quota */
+  }
 }

@@ -1,0 +1,83 @@
+/* apps/crish-desktop/src/components/extensions-surface/PluginCreateModal.module.css
+ * 制作与导入自定义插件模态框样式
+ * 遵循系统 Design Token 规范，按钮圆角严格保持 7px，禁止硬编码颜色
+ */
+
+.modalPanel {
+  --dialog-width: 620px;
+  width: var(--dialog-width);
+  border-radius: var(--radius-xl, 12px);
+  background: var(--bg-card);
+  border: var(--hairline-width, 1px) solid var(--border-color);
+  box-shadow: 0 20px 48px -12px
+    color-mix(in srgb, var(--shadow-color) 16%, transparent);
+}
+
+.modalPanel button {
+  border-radius: 7px;
+}
+
+.modalBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+  padding: var(--space-2, 8px) var(--space-4, 16px) var(--space-3, 12px);
+  max-height: 72vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.tabWrapper {
+  margin-bottom: var(--space-1, 4px);
+}
+
+.formGrid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.rowInputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3, 12px);
+}
+
+.guideCard {
+  background: var(--bg-secondary);
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  border-radius: var(--radius-l, 10px);
+  padding: var(--space-3, 12px) var(--space-3_5, 14px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1_5, 6px);
+}
+
+.guideTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+}
+
+.guideDesc {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+  line-height: 1.45;
+}
+
+.codeArea {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.5;
+}
+
+.modalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  gap: var(--space-2, 8px);
+}

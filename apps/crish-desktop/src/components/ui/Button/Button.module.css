@@ -50,6 +50,7 @@
   content: '';
   position: absolute;
   inset: 0;
+  z-index: 0;
   border-radius: inherit;
   background-color: var(--btn-hover-overlay);
   opacity: 0;
@@ -206,13 +207,11 @@
 
 .button:where(.buttonDanger, [data-variant='danger']) {
   --btn-bg: transparent;
-  --btn-fg: var(
-    --danger-fg
-  ); /* 固定 danger 红；hover / 按下底为固定浅红纯色（heson 2026-10-11） */
+  --btn-fg: var(--danger-fg);
   --btn-border: transparent;
   --btn-shadow: none;
-  --btn-hover-overlay: var(--danger-soft-bg);
-  --btn-active-overlay: var(--danger-soft-bg-hover);
+  --btn-hover-overlay: color-mix(in srgb, var(--danger-fg) 10%, transparent);
+  --btn-active-overlay: color-mix(in srgb, var(--danger-fg) 18%, transparent);
 }
 
 /* 选中激活态：彻底消除硬编码黑框、硬黑边与厚重投影，统一接入柔和的 var(--tint-active) 微背景 */
@@ -270,7 +269,11 @@
   height: 100%;
 }
 
-.buttonLabel {
+.buttonLabel,
+.buttonIcon,
+.spinner {
+  position: relative;
+  z-index: 1;
   overflow: hidden;
   text-overflow: ellipsis;
 }

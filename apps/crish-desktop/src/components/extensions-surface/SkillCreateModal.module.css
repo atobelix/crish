@@ -1,0 +1,104 @@
+/* apps/crish-desktop/src/components/extensions-surface/SkillCreateModal.module.css
+ * 技能创建与导入模态框样式（SkillCreateModal）
+ * 彻底遵循系统 Design Token，禁止硬编码色值，按钮圆角严格锁定 7px
+ */
+
+.modalPanel {
+  --dialog-width: 680px;
+  --button-radius: 7px;
+  width: var(--dialog-width);
+  border-radius: var(--radius-xl, 12px);
+  background: var(--bg-card);
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  box-shadow: 0 20px 48px -12px
+    color-mix(in srgb, var(--shadow-color) 16%, transparent);
+}
+
+.modalPanel button {
+  border-radius: 7px;
+}
+
+.modalBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+  padding: var(--space-2, 8px) var(--space-4, 16px) var(--space-3, 12px);
+  max-height: 72vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.cardsContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.methodCard {
+  background: var(--bg-secondary);
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  border-radius: var(--radius-xl, 12px);
+  padding: var(--space-3_5, 14px) var(--space-4, 16px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+  transition:
+    background-color var(--duration-fast, 150ms) ease,
+    border-color var(--duration-fast, 150ms) ease;
+}
+
+.methodCard:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-subtle);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2_5, 10px);
+}
+
+.cardIconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.cardHeaderText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.cardTitle {
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+}
+
+.cardDescription {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+  line-height: 1.45;
+}
+
+.cardAction {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.modalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  gap: var(--space-2, 8px);
+}

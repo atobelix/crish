@@ -37,6 +37,7 @@ import { useComposerNotice } from './useComposerNotice';
 import { useComposerEmptyKind } from './useComposerEmptyKind';
 import { useComposerProtectedSend } from './useComposerProtectedSend';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
+import { InputFieldErrorBoundary } from './InputFieldErrorBoundary';
 
 export type { ComposerFieldProps, ChatComposerProps, ComposerLayoutVariant };
 export { ComposerField, STOP_TOOLTIP };
@@ -112,6 +113,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     [isEditingMessage, onCancelEdit]
   );
 
+  const [richTextFailed, setRichTextFailed] = React.useState(false);
   const emptyKind = useComposerEmptyKind(emptyKindProp, wrapperRef);
 
   const focusComposerTextarea = useCallback(() => {
@@ -243,19 +245,26 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       : true;
 
   /**
-   * 统一输入区装配（Stage 05 单轨收敛）：固定主路 = TiptapComposerField（React.lazy 软接 + Suspense）。
+   * 统一输入区装配：默认主路 = TiptapComposerField（React.lazy 软接 + Suspense，
+   * 加载期以 textarea 同契约兜底渲染）；富文本装配失败（lazy 加载 / 渲染抛错，
+   * InputFieldErrorBoundary 捕获）→ 永久回落 ComposerField（textarea），纯文本可发送（F1-γ）。
    */
-  const renderInputField = () => (
-    <React.Suspense fallback={<ComposerField {...fieldContract} />}>
-      <TiptapComposerFieldLazy
-        {...fieldContract}
-        baseSlashCommands={filteredCommands}
-        emptyKind={emptyKind}
-        onFilesSelected={onFilesSelected}
-        onPasteFiles={onPasteFiles}
-      />
-    </React.Suspense>
-  );
+  const renderInputField = () => {
+    if (richTextFailed) return <ComposerField {...fieldContract} />;
+    return (
+      <InputFieldErrorBoundary onFail={() => setRichTextFailed(true)}>
+        <React.Suspense fallback={<ComposerField {...fieldContract} />}>
+          <TiptapComposerFieldLazy
+            {...fieldContract}
+            baseSlashCommands={filteredCommands}
+            emptyKind={emptyKind}
+            onFilesSelected={onFilesSelected}
+            onPasteFiles={onPasteFiles}
+          />
+        </React.Suspense>
+      </InputFieldErrorBoundary>
+    );
+  };
 
   const { effectiveNotice, isClosing, handleDismissNotice } = useComposerNotice(
     {
@@ -277,7 +286,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       <ComposerDropHost
         ref={wrapperRef}
         className={`${styles.composerWrapper}${className ? ` ${className}` : ''}`}
-        data-input-field="rich-text"
+        data-input-field={richTextFailed ? 'textarea' : 'rich-text'}
         onClick={handleFileOpenClick}
         onKeyDown={handleHostKeyDown}
         onDropFiles={(files) => {
@@ -341,7 +350,10 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           >
             {/* 左侧控制区：[ ＋ 加号按钮 ] + [ 权限盾牌按钮 ]（icon-only 模式） */}
             <div className={styles.actionLeft} data-composer-grid="left">
-              <Tooltip content="添加文件、技能、扩展…" disabled={showPlusMenu}>
+              <Tooltip
+                content="添加文件或附件、使用 skill…"
+                disabled={showPlusMenu}
+              >
                 <Button
                   ref={plusBtnRef}
                   type="button"
@@ -385,6 +397,11 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                   if (!chatInput.startsWith('/')) {
                     setChatInput(chatInput ? `/${chatInput}` : '/');
                   }
+                  void loadSkillSlash();
+                  requestAnimationFrame(focusComposerTextarea);
+                }}
+                onSelectSkillCommand={(cmd) => {
+                  setChatInput(`${cmd} `);
                   void loadSkillSlash();
                   requestAnimationFrame(focusComposerTextarea);
                 }}

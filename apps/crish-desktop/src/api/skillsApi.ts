@@ -81,6 +81,7 @@ export async function setSkillActivation(
     delete map[legacyId];
   }
   saveActivationMap(map);
+  invalidateSkillSlashCache();
   return { ok: true, engineSynced: false };
 }
 
@@ -97,42 +98,28 @@ export async function pickSkillDirectory(): Promise<string | null> {
 }
 
 // ── 资源管理器定位（plugin-opener / plugin-shell 回退） ────────────────
+import { openPathDefault } from './hostOpenersApi';
 
-const PLUGIN_OPENER_PKG = '@tauri-apps/plugin-opener';
-const PLUGIN_SHELL_PKG = '@tauri-apps/plugin-shell';
+// ── 资源管理器定位 ──────────────────────────────────────────────────
 
-/** 在系统资源管理器中显示路径 */
+/** 在系统资源管理器中显示路径对应目录 */
 export async function revealSkillPath(filePath: string): Promise<boolean> {
+  const raw = (filePath || '').trim();
+  if (!raw) return false;
+  // 若目标为文件（如 SKILL.md），定位其所在父级目录；若本身已是目录，直接打开
+  const targetDir =
+    raw.endsWith('.md') || raw.includes('.') ? dirname(raw) : raw;
   try {
-    const opener = (await (
-      import(/* @vite-ignore */ PLUGIN_OPENER_PKG) as Promise<unknown>
-    ).catch(() => null)) as {
-      openPath?: (p: string) => Promise<unknown>;
-      revealItemInDir?: (p: string) => Promise<unknown>;
-    } | null;
-    if (opener?.openPath) {
-      await opener.openPath(filePath);
-      return true;
-    }
-    if (opener?.revealItemInDir) {
-      await opener.revealItemInDir(filePath);
-      return true;
-    }
+    await openPathDefault(targetDir || raw);
+    return true;
   } catch {
-    /* swallow-ok */
-  }
-  try {
-    const shell = (await (
-      import(/* @vite-ignore */ PLUGIN_SHELL_PKG) as Promise<unknown>
-    ).catch(() => null)) as { open?: (url: string) => Promise<unknown> } | null;
-    if (shell?.open) {
-      await shell.open(dirname(filePath));
+    try {
+      await openPathDefault(raw);
       return true;
+    } catch {
+      return false;
     }
-  } catch {
-    /* swallow-ok */
   }
-  return false;
 }
 
 // ── 创建项目技能模板 ──────────────────────────────────────────────────
@@ -146,6 +133,7 @@ export async function createProjectSkill(opts: {
   name: string;
   description?: string;
   workspacePath?: string | null;
+  content?: string;
 }): Promise<CreateSkillResult> {
   const workspace = (opts.workspacePath ?? getWorkspacePath() ?? '').trim();
   if (!workspace) return { ok: false, error: '未打开工作区，无法创建项目技能' };
@@ -158,26 +146,45 @@ export async function createProjectSkill(opts: {
   if (existing != null) return { ok: false, error: `已存在：${skillPath}` };
 
   const desc = (opts.description || `${opts.name} 技能`).trim();
-  const body = [
-    '---',
-    `name: ${slug}`,
-    `description: ${JSON.stringify(desc)}`,
-    'activation: recommended',
-    '---',
-    '',
-    `# ${opts.name.trim() || slug}`,
-    '',
-    '## 何时使用',
-    '',
-    `- ${desc}`,
-    '',
-    '## 步骤',
-    '',
-    '1. 阅读任务上下文',
-    '2. 按本技能约定执行',
-    '3. 完成后做简要校验',
-    '',
-  ].join('\n');
+  let body: string;
+  if (opts.content && opts.content.trim()) {
+    const rawContent = opts.content.trim();
+    if (rawContent.startsWith('---')) {
+      body = rawContent;
+    } else {
+      body = [
+        '---',
+        `name: ${slug}`,
+        `description: ${JSON.stringify(desc)}`,
+        'activation: recommended',
+        '---',
+        '',
+        rawContent,
+        '',
+      ].join('\n');
+    }
+  } else {
+    body = [
+      '---',
+      `name: ${slug}`,
+      `description: ${JSON.stringify(desc)}`,
+      'activation: recommended',
+      '---',
+      '',
+      `# ${opts.name.trim() || slug}`,
+      '',
+      '## 何时使用',
+      '',
+      `- ${desc}`,
+      '',
+      '## 步骤',
+      '',
+      '1. 阅读任务上下文',
+      '2. 按本技能约定执行',
+      '3. 完成后做简要校验',
+      '',
+    ].join('\n');
+  }
 
   const mk = await mkdirAny(skillDir);
   if (!mk) {
@@ -190,6 +197,7 @@ export async function createProjectSkill(opts: {
       error: '无法写入 SKILL.md（需要桌面壳 plugin-fs 权限）',
     };
   }
+  invalidateSkillSlashCache();
   return { ok: true, skillPath, skillDir };
 }
 

@@ -2,11 +2,12 @@
 /**
  * ComposePlusMenu（ui/Menu 基座）样式契约与交互测试：
  * 1. 样式契约：尺寸修饰类 plusMenu、消除 flex-end 交叉轴虚位、死选择器清零
- * 2. 交互测试：打开/渲染全部选项/点击事件/Esc 关闭
+ * 2. 交互测试：仅渲染【添加文件或附件】与【使用 skill】两个项；子菜单动态加载；移除【定时任务】
  * 3. 锚点机制：P1-F4 真实按钮锚点与浮动定位
  */
 import React from 'react';
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import {
@@ -19,18 +20,28 @@ import {
 import { ComposePlusMenu } from './ComposePlusMenu';
 import styles from './ComposePlusMenu.module.css';
 import { openSettings } from '../../api/storeAccess';
-import { emitUiEvent } from '../../api/uiEvents';
 
 vi.mock('../../api/storeAccess', () => ({
   openSettings: vi.fn(),
 }));
 
-vi.mock('../../api/uiEvents', () => ({
-  emitUiEvent: vi.fn(),
-}));
+const mockSkillCommands = [
+  {
+    cmd: '/skill:code-review',
+    desc: '代码检视技能',
+    skillId: 'code-review',
+    skillName: '代码检视',
+    filePath: '/path/to/skill',
+  },
+];
 
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+vi.mock('../../api/skillsApi', () => ({
+  getSkillSlashCommandsCached: vi.fn(async () => ({
+    commands: mockSkillCommands,
+    skills: [],
+  })),
+  invalidateSkillSlashCache: vi.fn(),
+}));
 
 const here =
   typeof __dirname !== 'undefined'
@@ -74,16 +85,16 @@ describe('ComposePlusMenu（ui/Menu 基座交互与渲染）', () => {
     vi.restoreAllMocks();
   });
 
-  it('受控打开后渲染全部 6 个功能选项且容器带有 plusMenu 修饰类', async () => {
+  it('受控打开后仅渲染【添加文件或附件】与【使用 skill】两个顶级项', async () => {
     render(
       <ComposePlusMenu open={true} onClose={() => {}} onAddFiles={() => {}} />
     );
-    expect(await screen.findByText('添加文件')).toBeInTheDocument();
-    expect(screen.getByText('使用技能')).toBeInTheDocument();
-    expect(screen.getByText('插件')).toBeInTheDocument();
-    expect(screen.getByText('MCP 工具')).toBeInTheDocument();
-    expect(screen.getByText('扩展中心')).toBeInTheDocument();
-    expect(screen.getByText('定时任务')).toBeInTheDocument();
+    expect(await screen.findByText('添加文件或附件')).toBeInTheDocument();
+    expect(screen.getByText('使用 skill')).toBeInTheDocument();
+    expect(screen.queryByText('定时任务')).toBeNull();
+    expect(screen.queryByText('插件')).toBeNull();
+    expect(screen.queryByText('MCP 工具')).toBeNull();
+    expect(screen.queryByText('扩展中心')).toBeNull();
 
     const menu = await screen.findByRole('menu');
     const content = menu.parentElement as HTMLElement;
@@ -92,18 +103,18 @@ describe('ComposePlusMenu（ui/Menu 基座交互与渲染）', () => {
     expect(content.className).toContain('no-drag');
   });
 
-  it('点击「添加文件」触发 onAddFiles 并关闭', async () => {
+  it('点击「添加文件或附件」触发 onAddFiles 并关闭', async () => {
     const onAddFiles = vi.fn();
     const onClose = vi.fn();
     render(
       <ComposePlusMenu open={true} onClose={onClose} onAddFiles={onAddFiles} />
     );
-    fireEvent.click(await screen.findByText('添加文件'));
+    fireEvent.click(await screen.findByText('添加文件或附件'));
     expect(onAddFiles).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 
-  it('点击「使用技能」触发 onInsertSkillSlash、恢复焦点并关闭', async () => {
+  it('点击「使用 skill」顶级项触发 onInsertSkillSlash、恢复焦点并关闭', async () => {
     const onInsertSkillSlash = vi.fn();
     const onClose = vi.fn();
     const btn = document.createElement('button');
@@ -120,42 +131,61 @@ describe('ComposePlusMenu（ui/Menu 基座交互与渲染）', () => {
         restoreFocusRef={anchorRef}
       />
     );
-    fireEvent.click(await screen.findByText('使用技能'));
+    fireEvent.click(await screen.findByText('使用 skill'));
     expect(onInsertSkillSlash).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(focusSpy).toHaveBeenCalled());
     document.body.removeChild(btn);
   });
 
-  it('点击「插件」、「MCP 工具」、「扩展中心」调用 openSettings', async () => {
+  it('展开「使用 skill」子菜单渲染真实技能列表并支持点击具体技能', async () => {
+    const onSelectSkillCommand = vi.fn();
     const onClose = vi.fn();
-    const { unmount } = render(
-      <ComposePlusMenu open={true} onClose={onClose} onAddFiles={() => {}} />
-    );
-    fireEvent.click(await screen.findByText('插件'));
-    expect(openSettings).toHaveBeenCalledWith('plugins');
-    expect(onClose).toHaveBeenCalled();
-
-    unmount();
-
     render(
-      <ComposePlusMenu open={true} onClose={onClose} onAddFiles={() => {}} />
+      <ComposePlusMenu
+        open={true}
+        onClose={onClose}
+        onAddFiles={() => {}}
+        onSelectSkillCommand={onSelectSkillCommand}
+      />
     );
-    fireEvent.click(await screen.findByText('MCP 工具'));
-    expect(openSettings).toHaveBeenCalledWith('plugins');
+    const skillItem = await screen.findByText('使用 skill');
+    const triggerEl = skillItem.closest('button') || skillItem;
+    fireEvent.mouseEnter(triggerEl);
 
-    fireEvent.click(await screen.findByText('扩展中心'));
-    expect(openSettings).toHaveBeenCalledWith('plugins');
+    const subItem = await screen.findByText('代码检视');
+    expect(subItem).toBeInTheDocument();
+    fireEvent.click(subItem);
+    expect(onSelectSkillCommand).toHaveBeenCalledWith('/skill:code-review');
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
-  it('点击「定时任务」触发 emitUiEvent(open-scheduled)', async () => {
-    const onClose = vi.fn();
+  it('点击「使用 skill」子菜单中的「管理技能...」触发 openSettings', async () => {
     render(
-      <ComposePlusMenu open={true} onClose={onClose} onAddFiles={() => {}} />
+      <ComposePlusMenu open={true} onClose={() => {}} onAddFiles={() => {}} />
     );
-    fireEvent.click(await screen.findByText('定时任务'));
-    expect(emitUiEvent).toHaveBeenCalledWith('open-scheduled');
-    expect(onClose).toHaveBeenCalled();
+    const skillItem = await screen.findByText('使用 skill');
+    const triggerEl = skillItem.closest('button') || skillItem;
+    fireEvent.mouseEnter(triggerEl);
+
+    const manageBtn = await screen.findByText('管理技能...');
+    expect(manageBtn).toBeInTheDocument();
+    fireEvent.click(manageBtn);
+    expect(openSettings).toHaveBeenCalledWith('skills');
+  });
+
+  it('监听 crish-skills-changed 全局事件动态刷新技能', async () => {
+    const { getSkillSlashCommandsCached } = await import('../../api/skillsApi');
+    render(
+      <ComposePlusMenu open={true} onClose={() => {}} onAddFiles={() => {}} />
+    );
+    await screen.findByText('添加文件或附件');
+    expect(getSkillSlashCommandsCached).toHaveBeenCalled();
+
+    window.dispatchEvent(new CustomEvent('crish-skills-changed'));
+    await waitFor(() => {
+      expect(getSkillSlashCommandsCached).toHaveBeenCalledWith(true);
+    });
   });
 
   it('Esc 关闭（经基座 onOpenChange → onClose）', async () => {
