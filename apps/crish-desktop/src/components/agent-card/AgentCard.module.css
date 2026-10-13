@@ -7,7 +7,6 @@
   color: var(--text-primary);
 }
 
-
 .agentCardEmbedded {
   flex: 1;
   min-height: 0;
@@ -59,26 +58,23 @@
   padding: 0 5px;
   border-radius: var(--radius-sm);
   background: transparent;
-  border: 1px solid var(--hairline, var(--border-subtle));
+  border: none;
   color: var(--text-secondary);
   flex-shrink: 0;
   line-height: 1.45;
 }
 
 .agentCardBadgeRunning {
-  border-color: color-mix(in srgb, var(--accent-green) 45%, var(--hairline, var(--border-subtle)));
   color: var(--text-primary);
   background: transparent;
 }
 
 .agentCardBadgeFailed {
-  border-color: color-mix(in srgb, var(--accent-red) 40%, var(--hairline, var(--border-subtle)));
   color: var(--accent-red, var(--text-secondary));
   background: transparent;
 }
 
 .agentCardBadgeStopped {
-  border-color: var(--hairline, var(--border-subtle));
   color: var(--text-secondary);
   background: transparent;
 }
@@ -195,6 +191,7 @@
   display: flex;
   flex-direction: column;
   gap: 1px;
+  margin-top: var(--space-0_5);
   padding: 4px 6px 6px;
   border-bottom: 1px solid var(--hairline, var(--border-subtle));
   flex-shrink: 0;
@@ -246,14 +243,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-1_5);
-}
-
-/*                   extarea/profile chips                        ?*/
-.agentLaunchList {
-  margin-top: var(--space-0_5);
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
 }
 
 .agentLaunchListH {
@@ -350,7 +339,7 @@
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
   background: transparent;
-  border: 1px solid var(--hairline, var(--border-subtle));
+  border: none;
   padding: 0 5px;
   border-radius: var(--radius-sm);
   line-height: var(--line-height-base);
@@ -388,7 +377,9 @@
   min-height: unset;
   height: auto;
   box-shadow: none;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .agentTeamCard:hover {
@@ -396,7 +387,9 @@
 }
 
 .agentTeamCard.isActive {
-  background: var(--sidebar-active); /* Premium, warm active background matching the sidebar */
+  background: var(
+    --sidebar-active
+  ); /* Premium, warm active background matching the sidebar */
   box-shadow: none;
 }
 

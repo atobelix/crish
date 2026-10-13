@@ -263,7 +263,7 @@ export function useSidebarSessionList(
             ? CSS.escape(fromId)
             : fromId.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         const row = sessionListRef.current?.querySelector(
-          `[data-session-id="${safeFrom}"] .session-item`
+          `[data-session-id="${safeFrom}"] [data-testid="sidebar-session-item"]`
         ) as HTMLElement | null;
         row?.focus({ preventScroll: true });
         return;
@@ -278,7 +278,7 @@ export function useSidebarSessionList(
               ? CSS.escape(id)
               : id.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
           const row = sessionListRef.current?.querySelector(
-            `[data-session-id="${safe}"] .session-item`
+            `[data-session-id="${safe}"] [data-testid="sidebar-session-item"]`
           ) as HTMLElement | null;
           row?.focus({ preventScroll: true });
         });

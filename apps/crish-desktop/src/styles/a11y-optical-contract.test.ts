@@ -59,9 +59,9 @@ describe('契约测试：色彩语义、排版防抖与焦点无障碍护栏 (DI
   const tsxFiles = collectTsxFiles(SRC_DIR);
   const cssFiles = collectCssFiles(SRC_DIR);
 
-  // Phase 0 存量基线快照：全仓现存 2 处未注 aria-label 的 <IconButton>
+  // Phase 0 存量基线快照：全仓现存 0 处未注 aria-label 的 <IconButton>（已全量收敛）
   // Phase 4 补齐无障碍命名后此阈值收敛至 0
-  const ICON_BUTTON_A11Y_PHASE0_BASELINE = 2;
+  const ICON_BUTTON_A11Y_PHASE0_BASELINE = 0;
 
   it('1. 无障碍命名闭环：所有 <IconButton> 必须强制提供显式 aria-label（Ratchet 模式防劣化）', () => {
     const ICON_BUTTON_RE = /<IconButton\b([^>]*?)(\/?>)/gs;
@@ -82,7 +82,10 @@ describe('契约测试：色彩语义、排版防抖与焦点无障碍护栏 (DI
 
         if (!hasAriaLabel) {
           violations.push({
-            file: file.replace(SRC_DIR, 'src/').replace(/\\/g, '/').replace(/\/+/g, '/'),
+            file: file
+              .replace(SRC_DIR, 'src/')
+              .replace(/\\/g, '/')
+              .replace(/\/+/g, '/'),
             matchSnippet: match[0].slice(0, 100),
           });
         }
@@ -119,8 +122,8 @@ describe('契约测试：色彩语义、排版防抖与焦点无障碍护栏 (DI
     { relPath: 'components/chat-message-list/FlowScrubber.module.css' },
   ];
 
-  // Phase 0 存量基线快照：16 处中当前 14 处待 Phase 4 注入 tabular-nums
-  const MISSING_TABULAR_PHASE0_BASELINE = 14;
+  // Phase 0 存量基线快照：16 处中当前 2 处待注入 tabular-nums
+  const MISSING_TABULAR_PHASE0_BASELINE = 2;
 
   it('2. 动态跳动数字防抖：定案矩阵 16 处真实物理靶标路径 100% 存在且受控（Ratchet 模式）', () => {
     const missingFiles: string[] = [];
@@ -156,9 +159,9 @@ describe('契约测试：色彩语义、排版防抖与焦点无障碍护栏 (DI
     ).toBeLessThanOrEqual(MISSING_TABULAR_PHASE0_BASELINE);
   });
 
-  // Phase 0 存量基线快照：全仓现存 20 处历史焦点样式问题（outline: none 且未配 shadow 等）
+  // Phase 0 存量基线快照：全仓现存 19 处历史焦点样式问题（outline: none 且未配 shadow 等）
   // Phase 4 统一柔化焦点环后此阈值收敛至 0
-  const FOCUS_VISIBLE_PHASE0_BASELINE = 20;
+  const FOCUS_VISIBLE_PHASE0_BASELINE = 19;
 
   it('3. 柔和焦点环防线：全站 :focus-visible 严禁粗黑硬线与丢失焦点替代（Ratchet 模式防劣化）', () => {
     const FOCUS_VISIBLE_RE = /:focus-visible\s*\{([^}]+)\}/g;
@@ -174,16 +177,26 @@ describe('契约测试：色彩语义、排版防抖与焦点无障碍护栏 (DI
         // 检查 1：严禁 outline: none 且未配 box-shadow
         if (/outline\s*:\s*none\b/.test(body) && !/box-shadow\s*:/.test(body)) {
           violations.push({
-            file: file.replace(SRC_DIR, 'src/').replace(/\\/g, '/').replace(/\/+/g, '/'),
+            file: file
+              .replace(SRC_DIR, 'src/')
+              .replace(/\\/g, '/')
+              .replace(/\/+/g, '/'),
             rule: body.trim(),
             reason: 'outline: none 丢失视觉焦点替代，违反 A11y 准则',
           });
         }
 
         // 检查 2：严禁纯黑实体粗线 (#000, #111, solid black)，放行 2px solid transparent (Review-03 §4.1.3)
-        if (/#000000|#111111|\bsolid\s+black\b|\b2px\s+solid\s+(?!transparent)/.test(body)) {
+        if (
+          /#000000|#111111|\bsolid\s+black\b|\b2px\s+solid\s+(?!transparent)/.test(
+            body
+          )
+        ) {
           violations.push({
-            file: file.replace(SRC_DIR, 'src/').replace(/\\/g, '/').replace(/\/+/g, '/'),
+            file: file
+              .replace(SRC_DIR, 'src/')
+              .replace(/\\/g, '/')
+              .replace(/\/+/g, '/'),
             rule: body.trim(),
             reason: '高对比粗黑硬线违反 AGENTS.md §13',
           });

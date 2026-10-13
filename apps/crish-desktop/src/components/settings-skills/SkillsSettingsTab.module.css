@@ -19,7 +19,10 @@
 }
 
 .skillsHeadStats {
-  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-family:
+    'Segoe UI',
+    -apple-system,
+    var(--font-sans);
   font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
@@ -202,7 +205,10 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1_5);
-  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-family:
+    'Segoe UI',
+    -apple-system,
+    var(--font-sans);
   font-size: var(--font-size-xs);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
@@ -320,10 +326,10 @@
   display: flex;
   flex: 1;
   min-height: min(360px, calc(100vh - 220px));
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: none;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  background: transparent;
+  background: var(--bg-card);
 }
 
 .skillsRail {
@@ -728,12 +734,12 @@
   text-underline-offset: 2px;
 }
 
+.skillsPreviewBody,
 .skillsPreview {
   flex: 1;
   min-height: 140px;
-  padding: var(--space-2) 0;
+  padding: 0;
   border: none;
-  border-top: var(--hairline-width) solid var(--border-subtle);
   border-radius: 0;
   background: transparent;
   overflow-y: auto;

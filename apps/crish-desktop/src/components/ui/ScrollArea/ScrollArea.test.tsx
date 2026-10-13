@@ -36,76 +36,112 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
     Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
       configurable: true,
       get(this: HTMLElement) {
-        if ((this as unknown as { _customClientHeight?: number })._customClientHeight !== undefined) {
-          return (this as unknown as { _customClientHeight: number })._customClientHeight;
+        if (
+          (this as unknown as { _customClientHeight?: number })
+            ._customClientHeight !== undefined
+        ) {
+          return (this as unknown as { _customClientHeight: number })
+            ._customClientHeight;
         }
         if (
           this.getAttribute('role') === 'region' ||
-          (typeof this.className === 'string' && this.className.includes(styles.viewport))
+          (typeof this.className === 'string' &&
+            this.className.includes(styles.viewport))
         ) {
           return 200;
         }
-        return originalClientHeight?.get ? originalClientHeight.get.call(this) : 0;
+        return originalClientHeight?.get
+          ? originalClientHeight.get.call(this)
+          : 0;
       },
       set(this: HTMLElement, val: number) {
-        (this as unknown as { _customClientHeight?: number })._customClientHeight = val;
+        (
+          this as unknown as { _customClientHeight?: number }
+        )._customClientHeight = val;
       },
     });
 
     Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
       configurable: true,
       get(this: HTMLElement) {
-        if ((this as unknown as { _customScrollHeight?: number })._customScrollHeight !== undefined) {
-          return (this as unknown as { _customScrollHeight: number })._customScrollHeight;
+        if (
+          (this as unknown as { _customScrollHeight?: number })
+            ._customScrollHeight !== undefined
+        ) {
+          return (this as unknown as { _customScrollHeight: number })
+            ._customScrollHeight;
         }
         if (
           this.getAttribute('role') === 'region' ||
-          (typeof this.className === 'string' && this.className.includes(styles.viewport))
+          (typeof this.className === 'string' &&
+            this.className.includes(styles.viewport))
         ) {
           return 1000;
         }
-        return originalScrollHeight?.get ? originalScrollHeight.get.call(this) : 0;
+        return originalScrollHeight?.get
+          ? originalScrollHeight.get.call(this)
+          : 0;
       },
       set(this: HTMLElement, val: number) {
-        (this as unknown as { _customScrollHeight?: number })._customScrollHeight = val;
+        (
+          this as unknown as { _customScrollHeight?: number }
+        )._customScrollHeight = val;
       },
     });
 
     Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
       configurable: true,
       get(this: HTMLElement) {
-        if ((this as unknown as { _customClientWidth?: number })._customClientWidth !== undefined) {
-          return (this as unknown as { _customClientWidth: number })._customClientWidth;
+        if (
+          (this as unknown as { _customClientWidth?: number })
+            ._customClientWidth !== undefined
+        ) {
+          return (this as unknown as { _customClientWidth: number })
+            ._customClientWidth;
         }
         if (
           this.getAttribute('role') === 'region' ||
-          (typeof this.className === 'string' && this.className.includes(styles.viewport))
+          (typeof this.className === 'string' &&
+            this.className.includes(styles.viewport))
         ) {
           return 300;
         }
-        return originalClientWidth?.get ? originalClientWidth.get.call(this) : 0;
+        return originalClientWidth?.get
+          ? originalClientWidth.get.call(this)
+          : 0;
       },
       set(this: HTMLElement, val: number) {
-        (this as unknown as { _customClientWidth?: number })._customClientWidth = val;
+        (
+          this as unknown as { _customClientWidth?: number }
+        )._customClientWidth = val;
       },
     });
 
     Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
       configurable: true,
       get(this: HTMLElement) {
-        if ((this as unknown as { _customScrollWidth?: number })._customScrollWidth !== undefined) {
-          return (this as unknown as { _customScrollWidth: number })._customScrollWidth;
+        if (
+          (this as unknown as { _customScrollWidth?: number })
+            ._customScrollWidth !== undefined
+        ) {
+          return (this as unknown as { _customScrollWidth: number })
+            ._customScrollWidth;
         }
         if (
           this.getAttribute('role') === 'region' ||
-          (typeof this.className === 'string' && this.className.includes(styles.viewport))
+          (typeof this.className === 'string' &&
+            this.className.includes(styles.viewport))
         ) {
           return 1200;
         }
-        return originalScrollWidth?.get ? originalScrollWidth.get.call(this) : 0;
+        return originalScrollWidth?.get
+          ? originalScrollWidth.get.call(this)
+          : 0;
       },
       set(this: HTMLElement, val: number) {
-        (this as unknown as { _customScrollWidth?: number })._customScrollWidth = val;
+        (
+          this as unknown as { _customScrollWidth?: number }
+        )._customScrollWidth = val;
       },
     });
 
@@ -155,16 +191,32 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
     vi.restoreAllMocks();
 
     if (originalClientHeight) {
-      Object.defineProperty(HTMLElement.prototype, 'clientHeight', originalClientHeight);
+      Object.defineProperty(
+        HTMLElement.prototype,
+        'clientHeight',
+        originalClientHeight
+      );
     }
     if (originalScrollHeight) {
-      Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
+      Object.defineProperty(
+        HTMLElement.prototype,
+        'scrollHeight',
+        originalScrollHeight
+      );
     }
     if (originalClientWidth) {
-      Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth);
+      Object.defineProperty(
+        HTMLElement.prototype,
+        'clientWidth',
+        originalClientWidth
+      );
     }
     if (originalScrollWidth) {
-      Object.defineProperty(HTMLElement.prototype, 'scrollWidth', originalScrollWidth);
+      Object.defineProperty(
+        HTMLElement.prototype,
+        'scrollWidth',
+        originalScrollWidth
+      );
     }
   });
 
@@ -245,7 +297,7 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
     expect(screen.getByLabelText('Scroll Down')).toBeInTheDocument();
   });
 
-  it('TC-SA-03: size=\'xs\' 显式开启与默认关闭行为', () => {
+  it("TC-SA-03: size='xs' 显式开启与默认关闭行为", () => {
     // 1. 未显式传入 showButtons 时，xs 默认无按钮
     const { rerender } = render(
       <ScrollArea size="xs">
@@ -466,7 +518,9 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
       fireEvent.scroll(viewport);
     });
 
-    const thumb = container.querySelector(`.${styles.thumbIndicator}`) as HTMLElement;
+    const thumb = container.querySelector(
+      `.${styles.thumbIndicator}`
+    ) as HTMLElement;
     expect(thumb).toBeInTheDocument();
 
     const setCaptureSpy = vi.spyOn(thumb, 'setPointerCapture');
@@ -508,7 +562,9 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
       </ScrollArea>
     );
 
-    const trackCol = container.querySelector(`.${styles.stepperTrackColumn}`) as HTMLElement;
+    const trackCol = container.querySelector(
+      `.${styles.stepperTrackColumn}`
+    ) as HTMLElement;
     expect(trackCol).toBeInTheDocument();
     // top 与 bottom 应为 safeInset(8) + trackMargin(2) = 10px
     expect(trackCol.style.top).toBe('10px');
@@ -519,7 +575,12 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
   it('TC-SA-10: 可用轨道 < 16px 退化紧凑态降级', () => {
     const handleRef = createRef<ScrollAreaHandle>();
     const { container } = render(
-      <ScrollArea ref={handleRef} radius={14} trackMargin={2} showButtons={true}>
+      <ScrollArea
+        ref={handleRef}
+        radius={14}
+        trackMargin={2}
+        showButtons={true}
+      >
         <div>Content</div>
       </ScrollArea>
     );
@@ -536,7 +597,9 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
     expect(screen.queryByLabelText('Scroll Up')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Scroll Down')).not.toBeInTheDocument();
     // 全行程滑块仍保留在轨道中
-    expect(container.querySelector(`.${styles.thumbIndicator}`)).toBeInTheDocument();
+    expect(
+      container.querySelector(`.${styles.thumbIndicator}`)
+    ).toBeInTheDocument();
 
     // 2. 容器高度较小且圆角占用导致可用轨道算术下溢 (< 16px)
     // clientHeight = 36px, insetTop=10, insetBottom=10, btnDimension=8, safeGap=2
@@ -549,7 +612,8 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
     expect(screen.queryByLabelText('Scroll Down')).not.toBeInTheDocument();
 
     // 3. 视口恢复正常高度 (200px) 时，自愈恢复渲染按钮
-    (vp as unknown as { _customClientHeight: number })._customClientHeight = 200;
+    (vp as unknown as { _customClientHeight: number })._customClientHeight =
+      200;
     act(() => {
       fireEvent.scroll(vp);
     });
@@ -557,7 +621,7 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
     expect(screen.getByLabelText('Scroll Down')).toBeInTheDocument();
   });
 
-  it('TC-SA-11: orientation=\'horizontal\' 基础渲染与向左向右 40px 步进', () => {
+  it("TC-SA-11: orientation='horizontal' 基础渲染与向左向右 40px 步进", () => {
     const handleRef = createRef<ScrollAreaHandle>();
     const { container } = render(
       <ScrollArea
@@ -576,8 +640,12 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
 
     // 1. 验证横向专属容器与类名
     expect(vp.className).toContain(styles.viewportHorizontal);
-    expect(container.querySelector(`.${styles.stepperTrackRow}`)).toBeInTheDocument();
-    expect(container.querySelector(`.${styles.stepperTrackColumn}`)).not.toBeInTheDocument();
+    expect(
+      container.querySelector(`.${styles.stepperTrackRow}`)
+    ).toBeInTheDocument();
+    expect(
+      container.querySelector(`.${styles.stepperTrackColumn}`)
+    ).not.toBeInTheDocument();
 
     const leftBtn = screen.getByLabelText('Scroll Left');
     const rightBtn = screen.getByLabelText('Scroll Right');
@@ -600,7 +668,7 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
     );
   });
 
-  it('TC-SA-12: orientation=\'both\' 双轴共存与右下角安全避让', () => {
+  it("TC-SA-12: orientation='both' 双轴共存与右下角安全避让", () => {
     const { container } = render(
       <ScrollArea
         orientation="both"
@@ -608,12 +676,18 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
         type="always"
         data-testid="sa-both"
       >
-        <div style={{ width: '1200px', height: '1000px' }}>Dual Axis Content</div>
+        <div style={{ width: '1200px', height: '1000px' }}>
+          Dual Axis Content
+        </div>
       </ScrollArea>
     );
 
-    const trackCol = container.querySelector(`.${styles.stepperTrackColumn}`) as HTMLElement;
-    const trackRow = container.querySelector(`.${styles.stepperTrackRow}`) as HTMLElement;
+    const trackCol = container.querySelector(
+      `.${styles.stepperTrackColumn}`
+    ) as HTMLElement;
+    const trackRow = container.querySelector(
+      `.${styles.stepperTrackRow}`
+    ) as HTMLElement;
 
     // 垂直侧柱与水平底栏必须同时挂载
     expect(trackCol).toBeInTheDocument();
@@ -642,7 +716,9 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
     const vp = handleRef.current?.getViewport();
     if (!vp) throw new Error('Viewport not found');
 
-    const thumbX = container.querySelector(`.${styles.thumbIndicatorHorizontal}`) as HTMLElement;
+    const thumbX = container.querySelector(
+      `.${styles.thumbIndicatorHorizontal}`
+    ) as HTMLElement;
     expect(thumbX).toBeInTheDocument();
 
     // 触发 pointerDown 启动拖拽
@@ -665,5 +741,35 @@ describe('ScrollArea Atomic Component (UI Layer Red Team Test Suite)', () => {
       pointerId: 2,
     });
     expect(thumbX.releasePointerCapture).toHaveBeenCalledWith(2);
+  });
+
+  it("TC-SA-14: 默认 type='auto' 溢出时常显滚动条，显式 type='hover' 时仅在鼠标移入容器区域才显示", () => {
+    const { container, rerender } = render(
+      <ScrollArea data-testid="sa-vis">
+        <div style={{ height: '1000px' }}>Overflow Content</div>
+      </ScrollArea>
+    );
+
+    const root = screen.getByTestId('sa-vis');
+    const trackCol = container.querySelector(
+      `.${styles.stepperTrackColumn}`
+    ) as HTMLElement;
+    expect(trackCol).toBeInTheDocument();
+    // 默认 type='auto'：未 hover 容器时，只要内容溢出即保持常显
+    expect(trackCol.className).toContain(styles.visible);
+
+    // 显式开启 type='hover'：未 hover 容器时隐藏，鼠标移入容器区域时显示，移出后隐藏
+    rerender(
+      <ScrollArea type="hover" data-testid="sa-vis">
+        <div style={{ height: '1000px' }}>Overflow Content</div>
+      </ScrollArea>
+    );
+    expect(trackCol.className).not.toContain(styles.visible);
+
+    fireEvent.mouseEnter(root);
+    expect(trackCol.className).toContain(styles.visible);
+
+    fireEvent.mouseLeave(root);
+    expect(trackCol.className).not.toContain(styles.visible);
   });
 });

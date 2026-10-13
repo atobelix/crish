@@ -43,26 +43,31 @@
   border-left-color: var(--accent-danger);
 }
 
-.approvalCard[data-risk-level="critical"] {
+.approvalCard[data-risk-level='critical'] {
   border-left-width: 6px;
   border-left-color: var(--accent-danger);
 }
 
-.approvalCard[data-risk-level="high"] {
+.approvalCard[data-risk-level='high'] {
   border-left-color: var(--accent-danger);
 }
 
-.approvalCard[data-risk-level="medium"] {
+.approvalCard[data-risk-level='medium'] {
   border-left-color: var(--accent-orange);
 }
 
-.approvalCard[data-risk-level="low"] {
+.approvalCard[data-risk-level='low'] {
   border-left-color: var(--accent-green);
 }
 
 .approvalCard.isConfirmArmed {
-  border-color: color-mix(in srgb, var(--accent-orange) 45%, var(--hairline, var(--border-subtle)));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-orange) 18%, transparent);
+  border-color: color-mix(
+    in srgb,
+    var(--accent-orange) 45%,
+    var(--hairline, var(--border-subtle))
+  );
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--accent-orange) 18%, transparent);
 }
 
 .approvalCardHint {
@@ -94,7 +99,7 @@
   max-width: 100%;
   padding: 1px 6px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--hairline, var(--border-subtle));
+  border: none;
   font-size: var(--font-size-xxs, 11px);
   font-family: var(--font-mono);
   line-height: var(--line-height-base);
@@ -107,17 +112,14 @@
 
 .approvalCardChipWarn {
   color: var(--accent-orange);
-  border-color: color-mix(in srgb, var(--accent-orange) 35%, var(--hairline, var(--border-subtle)));
 }
 
 .approvalCardChipDanger {
   color: var(--accent-danger);
-  border-color: color-mix(in srgb, var(--accent-danger) 35%, var(--hairline, var(--border-subtle)));
 }
 
 .approvalCardChipInfo {
   color: var(--text-secondary);
-  border-color: var(--hairline-strong, var(--border-subtle));
 }
 
 .approvalCardChipNeutral {
@@ -175,7 +177,8 @@
   min-height: 40px;
   max-height: 96px;
   resize: vertical;
-  border: 1px solid var(--hairline-strong, var(--border-color, var(--border-subtle)));
+  border: 1px solid
+    var(--hairline-strong, var(--border-color, var(--border-subtle)));
   border-radius: var(--radius-md);
   padding: 6px 8px;
   font-family: inherit;
@@ -184,12 +187,18 @@
   color: var(--text-primary);
   box-sizing: border-box;
   line-height: 1.35;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .approvalCardInput:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
   box-shadow: none;
 }
 
@@ -211,13 +220,17 @@
   height: 28px;
   padding: 0 12px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--hairline-strong, var(--border-color, var(--border-subtle)));
+  border: 1px solid
+    var(--hairline-strong, var(--border-color, var(--border-subtle)));
   font-family: inherit;
   font-size: var(--font-size-xs);
   cursor: pointer;
   background: var(--bg-primary);
   color: var(--text-secondary);
-  transition: background var(--transition-micro), border-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    background var(--transition-micro),
+    border-color var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .approvalCardBtn:disabled {
@@ -241,11 +254,6 @@
   background: var(--accent-hover, var(--accent-color));
 }
 
-.approvalCardBtn.allow.isArmed {
-  outline: 1px solid var(--accent-orange);
-  outline-offset: 1px;
-}
-
 .approvalCardBtn.ghost {
   background: transparent;
 }
@@ -257,23 +265,6 @@
 .approvalCardBtn:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
-}
-
-:global(.agent-card--dense) .approvalCard {
-  margin: 4px 0;
-  padding: var(--space-2);
-  border-radius: var(--radius-lg);
-  border-color: var(--hairline-strong, var(--border-color));
-}
-
-:global(.agent-card--dense) .approvalCardActions {
-  gap: var(--space-1);
-}
-
-:global(.agent-card--dense) .approvalCardBtn {
-  min-height: 28px;
-  padding: 4px 8px;
-  font-size: var(--font-size-xs);
 }
 
 /*            */

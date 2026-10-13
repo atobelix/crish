@@ -6,14 +6,18 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Settings } from '../../api/clientApi';
 import { clientApi } from '../../api/clientApi';
 import { getWorkspacePath } from '../../api/projectStore';
-import { useLayoutStore, useSettingsField } from '../../store/storeAccess';
+import {
+  closeSettings,
+  useLayoutStore,
+  useSettingsField,
+} from '../../store/storeAccess';
 import {
   SettingsPage,
   SettingsCard,
   SettingsRow,
   SettingsSection,
 } from './SettingsUI';
-import { Button } from '../ui';
+import { Button, Switch } from '../ui';
 import { SettingsSchemaRenderer } from './SettingsSchemaRenderer';
 import type { SchemaSection } from './SettingsSchemaRenderer';
 import {
@@ -21,6 +25,12 @@ import {
   persistSendShortcut,
 } from '../../api/store-access/settingsAccess';
 import { telemetry } from '../../services/TelemetryService';
+import {
+  setShowOnboardingOnStartup,
+  shouldShowFirstRunWizard,
+  WIZARD_STEP_META,
+  type WizardStep,
+} from '../firstRunWizardLib';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
@@ -38,6 +48,21 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadTick, setLoadTick] = useState(0);
+  const [showOnboardingOnStartup, setShowOnboardingOnStartupState] = useState(
+    () => shouldShowFirstRunWizard()
+  );
+
+  const handleToggleOnboardingOnStartup = useCallback((next: boolean) => {
+    setShowOnboardingOnStartup(next);
+    setShowOnboardingOnStartupState(next);
+  }, []);
+
+  const handleOpenFirstRunWizard = useCallback((step: WizardStep = 0) => {
+    closeSettings?.();
+    window.dispatchEvent(
+      new CustomEvent('crish-open-first-run', { detail: { step } })
+    );
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -261,6 +286,67 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
 
   return (
     <SettingsPage title="通用设置">
+      <SettingsSection title="首次使用与新手引导">
+        <SettingsCard>
+          <SettingsRow
+            title="启动时显示新手引导界面"
+            desc="开启后，每次打开软件时都会显示首次使用向导；关闭后启动直接进入主工作区"
+            control={
+              <Switch
+                aria-label="启动时显示新手引导界面"
+                checked={showOnboardingOnStartup}
+                onCheckedChange={handleToggleOnboardingOnStartup}
+              />
+            }
+          />
+          <SettingsRow
+            title="首次使用引导界面"
+            desc="随时查看新装软件首次启动时的引导向导，支持按步体验或直接打开指定步骤"
+            control={
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  handleOpenFirstRunWizard(0);
+                }}
+              >
+                立即查看引导
+              </Button>
+            }
+          />
+          <SettingsRow
+            vertical
+            title="按步骤直接预览首次使用界面"
+            desc={
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 'var(--space-2)',
+                  marginTop: 'var(--space-1_5)',
+                }}
+                role="group"
+                aria-label="首次使用引导步骤列表"
+              >
+                {WIZARD_STEP_META.map((stepMeta) => (
+                  <Button
+                    key={stepMeta.id}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      handleOpenFirstRunWizard(stepMeta.id);
+                    }}
+                  >
+                    {`${stepMeta.id + 1}. ${stepMeta.title}`}
+                  </Button>
+                ))}
+              </div>
+            }
+          />
+        </SettingsCard>
+      </SettingsSection>
       <SettingsSchemaRenderer
         schema={personalizeSchema}
         values={schemaValues}

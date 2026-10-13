@@ -7,7 +7,6 @@ import styles from './McpSettingsTab.module.css';
 import { Button, Switch, Tooltip } from '../ui';
 import {
   EMPTY_DEMO_HINT,
-  EMPTY_FILTER_HINT,
   EMPTY_LIVE_HINT_CONFIGURED,
   EMPTY_LIVE_HINT_UNCONFIGURED,
   START_STOP_HINT,
@@ -23,6 +22,14 @@ import type {
   McpActionsGroup,
 } from './useMcpServerListState';
 import { AppIcon } from '../ui/icons/index';
+
+const kindClassMap: Record<'ok' | 'warn' | 'err' | 'idle', string | undefined> =
+  {
+    ok: styles.kindOk,
+    warn: styles.kindWarn,
+    err: styles.kindErr,
+    idle: styles.kindIdle,
+  };
 
 export type McpServerListProps = {
   servers: McpServersGroup;
@@ -69,8 +76,6 @@ export const McpServerList: React.FC<McpServerListProps> = ({
   const liveEmptyHint = status?.configured
     ? EMPTY_LIVE_HINT_CONFIGURED
     : EMPTY_LIVE_HINT_UNCONFIGURED;
-
-
 
   const renderSharedToolbar = () => (
     <McpServerToolbar
@@ -119,10 +124,22 @@ export const McpServerList: React.FC<McpServerListProps> = ({
             {emptyContent}
           </div>
         ) : null}
-        {!isBusy && totalCount > 0 && items.length === 0 && filterActive
-          ? <McpServerFilterEmpty loading={isBusy} hasAny filterActive onClearFilter={onClearFilter} />
-          : null}
-        {isBusy && totalCount === 0 ? <McpServerFilterEmpty loading={isBusy} hasAny filterActive onClearFilter={onClearFilter} /> : null}
+        {!isBusy && totalCount > 0 && items.length === 0 && filterActive ? (
+          <McpServerFilterEmpty
+            loading={isBusy}
+            hasAny
+            filterActive
+            onClearFilter={onClearFilter}
+          />
+        ) : null}
+        {isBusy && totalCount === 0 ? (
+          <McpServerFilterEmpty
+            loading={isBusy}
+            hasAny
+            filterActive
+            onClearFilter={onClearFilter}
+          />
+        ) : null}
       </div>
     );
   };
@@ -175,7 +192,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                 <div className={`${styles.mcpRowMain} mcp-row-main`}>
                   <Tooltip content={on ? '已启用' : '已禁用'}>
                     <span
-                      className={`${styles.mcpDot} mcp-dot kind-${on ? 'ok' : 'idle'}`}
+                      className={`${styles.mcpDot} mcp-dot kind-${on ? 'ok' : 'idle'} ${on ? styles.kindOk : styles.kindIdle}`}
                       aria-hidden
                     />
                   </Tooltip>
@@ -192,7 +209,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                     </Button>
                   </Tooltip>
                   <span
-                    className={`${styles.mcpStateBadge} mcp-state-badge kind-${on ? 'ok' : 'idle'}`}
+                    className={`${styles.mcpStateBadge} mcp-state-badge kind-${on ? 'ok' : 'idle'} ${on ? styles.kindOk : styles.kindIdle}`}
                   >
                     {on ? '启用' : '禁用'}
                   </span>
@@ -285,7 +302,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({
               <div className={`${styles.mcpRowMain} mcp-row-main`}>
                 <Tooltip content={mcpStateLabel(srv.state)}>
                   <span
-                    className={`${styles.mcpDot} mcp-dot kind-${kind}`}
+                    className={`${styles.mcpDot} mcp-dot kind-${kind} ${kindClassMap[kind] ?? ''}`}
                     aria-hidden
                   />
                 </Tooltip>
@@ -303,7 +320,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                 </Tooltip>
                 <Tooltip content={mcpStateLabel(srv.state)}>
                   <span
-                    className={`${styles.mcpStateBadge} mcp-state-badge kind-${kind}`}
+                    className={`${styles.mcpStateBadge} mcp-state-badge kind-${kind} ${kindClassMap[kind] ?? ''}`}
                   >
                     {mcpStateLabel(srv.state)}
                   </span>

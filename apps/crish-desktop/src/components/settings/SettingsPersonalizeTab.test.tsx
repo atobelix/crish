@@ -17,6 +17,7 @@ const {
   showToast,
   setTabModeEnabled,
   setAppSettings,
+  closeSettings,
   telemetrySetEnabled,
 } = vi.hoisted(() => ({
   getSettingsEx: vi.fn(),
@@ -24,6 +25,7 @@ const {
   showToast: vi.fn(),
   setTabModeEnabled: vi.fn(),
   setAppSettings: vi.fn(),
+  closeSettings: vi.fn(),
   telemetrySetEnabled: vi.fn(),
 }));
 
@@ -45,6 +47,7 @@ vi.mock('../../services/toast/ToastContext', () => ({
 }));
 
 vi.mock('../../store/storeAccess', () => ({
+  closeSettings: (...args: unknown[]) => closeSettings(...args),
   useLayoutStore: (
     sel: (s: { setTabModeEnabled: typeof setTabModeEnabled }) => unknown
   ) => sel({ setTabModeEnabled }),
@@ -60,6 +63,7 @@ vi.mock('../../services/TelemetryService', () => ({
 }));
 
 import { SettingsPersonalizeTab } from './SettingsPersonalizeTab';
+import { shouldShowFirstRunWizard } from '../firstRunWizardLib';
 
 describe('SettingsPersonalizeTab 写读钥匙', () => {
   beforeEach(() => {
@@ -69,6 +73,7 @@ describe('SettingsPersonalizeTab 写读钥匙', () => {
     showToast.mockReset();
     setTabModeEnabled.mockReset();
     setAppSettings.mockReset();
+    closeSettings.mockReset();
     telemetrySetEnabled.mockReset();
     getSettingsEx.mockResolvedValue({
       ...DEFAULT_SETTINGS,
@@ -154,5 +159,40 @@ describe('SettingsPersonalizeTab 写读钥匙', () => {
       );
     });
     expect(showToast).not.toHaveBeenCalled();
+  });
+
+  it('启动时显示新手引导界面开关可切换，且支持直接打开引导或跳到指定步骤', async () => {
+    render(<SettingsPersonalizeTab />);
+    const onboardingSw = await screen.findByRole('switch', {
+      name: '启动时显示新手引导界面',
+    });
+    expect(onboardingSw).toHaveAttribute('aria-checked', 'true');
+    expect(shouldShowFirstRunWizard()).toBe(true);
+
+    fireEvent.click(onboardingSw);
+    expect(onboardingSw).toHaveAttribute('aria-checked', 'false');
+    expect(shouldShowFirstRunWizard()).toBe(false);
+
+    fireEvent.click(onboardingSw);
+    expect(onboardingSw).toHaveAttribute('aria-checked', 'true');
+    expect(shouldShowFirstRunWizard()).toBe(true);
+
+    const receivedSteps: number[] = [];
+    const onOpenWizard = (e: Event) => {
+      const detail = (e as CustomEvent<{ step?: number }>).detail;
+      receivedSteps.push(detail?.step ?? -1);
+    };
+    window.addEventListener('crish-open-first-run', onOpenWizard);
+    try {
+      fireEvent.click(screen.getByRole('button', { name: '立即查看引导' }));
+      expect(closeSettings).toHaveBeenCalledTimes(1);
+      expect(receivedSteps).toEqual([0]);
+
+      fireEvent.click(screen.getByRole('button', { name: '3. 选择工作目录' }));
+      expect(closeSettings).toHaveBeenCalledTimes(2);
+      expect(receivedSteps).toEqual([0, 2]);
+    } finally {
+      window.removeEventListener('crish-open-first-run', onOpenWizard);
+    }
   });
 });

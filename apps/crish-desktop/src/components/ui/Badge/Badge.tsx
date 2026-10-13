@@ -70,7 +70,6 @@ export const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
       styles.badge,
       TONE_CLASS_MAP[resolvedTone],
       SIZE_CLASS_MAP[size],
-      onRemove ? styles.badgeInteractive : null,
       className,
     ]
       .filter(Boolean)

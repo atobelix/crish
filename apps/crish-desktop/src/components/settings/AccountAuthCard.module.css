@@ -23,7 +23,6 @@
   font-weight: var(--font-weight-medium);
 }
 
-
 .formActions {
   display: flex;
   align-items: center;
@@ -66,8 +65,8 @@
   width: 36px; /* 刻度外裸值：无既有档，授权保留 */
   height: 36px; /* 刻度外裸值：无既有档，授权保留 */
   border-radius: 50%;
-  background: var(--bg-secondary);
-  border: var(--hairline-width) solid var(--border-subtle);
+  background: var(--tint-hover);
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -132,10 +131,15 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  border: var(--hairline-width) solid var(--border-subtle);
+  padding: var(--space-2) 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  border-bottom: var(--hairline-width) solid var(--tint-divider);
+}
+
+.deviceItem:last-child {
+  border-bottom: none;
 }
 
 .deviceLeft {

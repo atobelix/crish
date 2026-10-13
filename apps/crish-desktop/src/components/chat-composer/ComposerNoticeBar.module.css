@@ -176,11 +176,10 @@
 }
 
 .actionPill:focus-visible {
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, currentColor 40%, transparent);
+  box-shadow: 0 0 0 1.5px var(--tint-focus-ring);
 }
 
 /* 叹号详情徽标 */
-.detailBadge,
 .detailBadge {
   flex-shrink: 0;
   display: inline-flex;
@@ -217,7 +216,7 @@
 
 .detailBadge:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, currentColor 40%, transparent);
+  box-shadow: 0 0 0 1.5px var(--tint-focus-ring);
 }
 
 /* 复制与反馈按钮 */
@@ -263,7 +262,6 @@
 }
 
 /* 0.8px 发丝微圈关闭按钮 */
-.dismissBtn,
 .dismissBtn {
   flex-shrink: 0;
   display: inline-flex;
@@ -298,5 +296,5 @@
 
 .dismissBtn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, currentColor 40%, transparent);
+  box-shadow: 0 0 0 1.5px var(--tint-focus-ring);
 }

@@ -60,7 +60,6 @@
   user-select: none;
 }
 
-
 /* Tabs Track：复刻参考 .side-panel-tabs-track（横向滚动 + 滚动条全隐） */
 .tabsTrack {
   display: flex;
@@ -131,8 +130,6 @@
   background: var(--tab-active-bg, var(--bg-card));
   color: var(--text-primary);
   font-weight: 500;
-  border-color: var(--border-subtle);
-  box-shadow: var(--shadow-sm);
 }
 
 /* 入场：@starting-style 首帧以左侧实际落地位置为锚点展开，无纵向浮动漂移；首轮挂载由 data-booted 关闭。
@@ -313,7 +310,9 @@
   gap: 2px;
   padding-left: var(--tab-gap);
   /* 叶上坞开关钉在抽屉右上（--leaf-corner-btn-* 三元组），本簇把加号/最大化让到它左边 */
-  padding-right: calc(var(--leaf-corner-btn-size) + var(--leaf-corner-btn-inset));
+  padding-right: calc(
+    var(--leaf-corner-btn-size) + var(--leaf-corner-btn-inset)
+  );
   height: 100%;
   position: relative;
   z-index: var(--z-sticky, 2);
@@ -435,7 +434,8 @@
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
-  animation: launcherHubFadeIn var(--duration-normal) var(--ease-emphasized) forwards;
+  animation: launcherHubFadeIn var(--duration-normal) var(--ease-emphasized)
+    forwards;
 }
 
 @keyframes launcherHubFadeIn {
@@ -480,12 +480,9 @@
     box-shadow var(--duration-micro) var(--ease-standard);
 }
 
-.launcherCard:hover,
 .launcherCard:hover {
   background: var(--bg-card-hover);
   border-color: var(--border-color);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
 }
 
 .launcherCard:active {
@@ -540,13 +537,13 @@
 
 /* Active Port Capsule / Card */
 .activePortCard {
-  border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
+  border: none;
   background: var(--success-soft-bg);
 }
 
 .activePortCard:hover {
   background: var(--success-soft-bg);
-  border-color: color-mix(in srgb, var(--color-success) 60%, transparent);
+  border: none;
 }
 
 .activePortIconBox {
@@ -558,12 +555,14 @@
   height: 8px;
   border-radius: 50%;
   background-color: var(--color-success);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-success) 25%, transparent);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--color-success) 25%, transparent);
   animation: activePortPulse var(--transition-pulse) infinite;
 }
 
 @keyframes activePortPulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(0.9);
   }
   50% {

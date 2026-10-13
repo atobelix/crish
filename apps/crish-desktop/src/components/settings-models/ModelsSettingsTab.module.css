@@ -89,9 +89,9 @@
 
 /* 选中态：对齐系统一级侧边栏 .sidebarTab.active 实体白卡微浮起质感 */
 .mrlItem.isActive {
-  background: var(--bg-card);
-  border-color: var(--border-subtle);
-  box-shadow: var(--shadow-sm);
+  background: var(--sidebar-active);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .mrlItemRowTop {
@@ -153,42 +153,6 @@
   min-height: 0;
   height: 100%;
   gap: var(--space-3);
-}
-
-/* 状态按钮与删除确认弹层 */
-.mrdStatusBtn {
-  height: 26px; /* 布局约束，不入刻度 */
-  padding: 0 var(--space-2_5);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  border-radius: var(--button-radius);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.mrdStatusBtn.isOn {
-  border: var(--hairline-width) solid color-mix(in srgb, var(--color-active) 30%, transparent);
-  background: color-mix(in srgb, var(--color-active) 12%, transparent);
-  color: var(--color-active);
-}
-
-.mrdStatusBtn.isOff {
-  border: var(--hairline-width) solid var(--border-subtle);
-  background: var(--tint-hover);
-  color: var(--text-tertiary);
-}
-
-.mrdConfirmPopup {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1_5);
-  background: var(--bg-elevated, var(--bg-card));
-  border: var(--hairline-width) solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  padding: var(--space-1) var(--space-2);
-  white-space: nowrap;
-  box-shadow: var(--shadow-sm);
-  z-index: var(--z-card-footer);
 }
 
 /* ── 4. 凭据表单输入框（纯白底 + 系统控件高度 + 软灰焦点） ── */
@@ -701,7 +665,9 @@
   font-size: var(--font-size-sm);
   cursor: pointer;
   box-sizing: border-box;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .cascadeSelectTrigger:hover {
@@ -745,8 +711,12 @@
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── 4.1 连接与凭据高级卡片折叠栏 ── */
@@ -757,7 +727,9 @@
   border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(--button-radius);
   overflow: hidden;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
 }
 
 .credentialsContainer:hover {
@@ -920,7 +892,9 @@
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .mrdModalityChip:hover {
@@ -967,7 +941,7 @@
 
 .mrdThinkingRow {
   display: grid;
-  grid-template-columns: 1fr 1fr 28px;
+  grid-template-columns: 1fr 1fr 48px;
   gap: var(--space-1_5);
   align-items: center;
 }
@@ -996,7 +970,9 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .mrdCurrencyBtn:hover:not(.mrdCurrencyBtnActive) {
@@ -1100,12 +1076,6 @@
   border-radius: var(--radius-sm);
 }
 
-.mrdThinkingTable {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
 .mrdThinkingHeader {
   display: grid;
   grid-template-columns: 1fr 1fr 48px;
@@ -1127,13 +1097,6 @@
   padding: 0 var(--space-0_5);
   height: 20px;
   color: var(--text-tertiary);
-}
-
-.mrdThinkingRow {
-  display: grid;
-  grid-template-columns: 1fr 1fr 48px;
-  gap: var(--space-1_5);
-  align-items: center;
 }
 
 /* ── T24 · 内联样式归一（详情区容器与行内小件，归宿见各 TSX） ────────── */

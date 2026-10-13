@@ -25,24 +25,6 @@
   box-sizing: border-box;
 }
 
-/* 锚定侧边框缝合强化 */
-.popup[data-side='top'] {
-  border-bottom-width: 2px;
-  transform-origin: bottom center;
-}
-.popup[data-side='bottom'] {
-  border-top-width: 2px;
-  transform-origin: top center;
-}
-.popup[data-side='left'] {
-  border-right-width: 2px;
-  transform-origin: right center;
-}
-.popup[data-side='right'] {
-  border-left-width: 2px;
-  transform-origin: left center;
-}
-
 /* 物理弹性微动效 */
 .enter {
   animation: previewCardEnter 200ms var(--ease-emphasized) forwards;

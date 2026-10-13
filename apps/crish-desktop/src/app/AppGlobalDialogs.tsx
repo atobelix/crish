@@ -5,6 +5,7 @@ import { openSettings } from '../api/storeAccess';
 import { emitUiEvent } from '../api/uiEvents';
 import { getActiveModelId, getActiveProfileId } from '../api/providerProfiles';
 import type { SettingsTabType } from '../store/types';
+import type { WizardStep } from '../components/firstRunWizardLib';
 import { useAnimatedPresence } from '../components/ui/Dialog/useAnimatedPresence';
 
 /** 设置弹窗退场时长：与 Dialog 基座退场（--duration-exit 150ms）一致，动画播完才卸载 */
@@ -48,6 +49,7 @@ export function SkeletonFallback({
 export interface AppGlobalDialogsProps {
   showFirstRun: boolean;
   setShowFirstRun: (show: boolean) => void;
+  firstRunInitialStep?: WizardStep;
   showTelemetry: boolean;
   setShowTelemetry: (show: boolean) => void;
   showSettingsOverlay: boolean;
@@ -59,6 +61,7 @@ export interface AppGlobalDialogsProps {
 export function AppGlobalDialogs({
   showFirstRun,
   setShowFirstRun,
+  firstRunInitialStep,
   showTelemetry,
   setShowTelemetry,
   showSettingsOverlay,
@@ -78,6 +81,9 @@ export function AppGlobalDialogs({
         <AppErrorBoundary compact title="首次运行向导出错">
           <Suspense fallback={<SkeletonFallback height={400} />}>
             <FirstRunWizard
+              {...(firstRunInitialStep !== undefined
+                ? { initialStep: firstRunInitialStep }
+                : {})}
               onDone={() => {
                 setShowFirstRun(false);
                 const model = getActiveModelId();

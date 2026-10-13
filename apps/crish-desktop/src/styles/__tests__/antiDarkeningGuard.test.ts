@@ -2,7 +2,7 @@
 /**
  * antiDarkeningGuard.test.ts
  * 全界面防变黑、Token 单源与 A11y 胶囊设计规范静态守卫测试套件
- * 
+ *
  * 严格落实 AGENTS.md §12 (A11y Tooltip)、§13 (柔和焦点与克制边框)、§14 (Zero-Blue 纯中性与现代 CSS)
  * 覆盖详案 02 与详案 05 终态集成 10 项严密断言
  */
@@ -81,13 +81,14 @@ describe('Design System: Anti-Darkening, SSOT & A11y Guardrails (Master Suite)',
   it('RULE-03: enforces border color-mix with text-primary is <= 10% (AGENTS.md §13)', () => {
     const cssFiles = walkFiles(srcRoot, ['.css']);
     const violations: string[] = [];
-    const regex = /border(-color)?:\s*color-mix\([^;]*?var\(--text-primary\)\s*(\d+)%/g;
+    const regex =
+      /border[\w-]*:[^;]*?color-mix\((?:(?![;])[\s\S])*?var\(--text-primary\)(?:(?![;])[\s\S])*?(\d+)%/g;
 
     for (const file of cssFiles) {
       const content = readFileSync(file, 'utf8');
       let match;
       while ((match = regex.exec(content)) !== null) {
-        const percentage = parseInt(match[2], 10);
+        const percentage = parseInt(match[1], 10);
         if (percentage > 10) {
           violations.push(`${relative(srcRoot, file)} (${percentage}%)`);
         }
@@ -144,7 +145,8 @@ describe('Design System: Anti-Darkening, SSOT & A11y Guardrails (Master Suite)',
   it('RULE-06: enforces zero native DOM title= attributes across components', () => {
     const tsxFiles = walkFiles(join(srcRoot, 'components'), ['.tsx']);
     const violations: string[] = [];
-    const domTitleRegex = /<(?:button|div|span|input|a|p|section|svg|label|li|ul|ol|img|select|textarea)\b[^>]*?\stitle\s*=/i;
+    const domTitleRegex =
+      /<(?:button|div|span|input|a|p|section|svg|label|li|ul|ol|img|select|textarea)\b[^>]*?\stitle\s*=/i;
 
     for (const file of tsxFiles) {
       const content = readFileSync(file, 'utf8');
@@ -169,8 +171,12 @@ describe('Design System: Anti-Darkening, SSOT & A11y Guardrails (Master Suite)',
 
   // 8. Zero-Blue 铁律，Git 徽标与改动列表 Hue 210°~215° 偏色清零
   it('RULE-08: enforces zero blue hue (Hue 200-240) in GitStatusBadge and changes list', () => {
-    const gitBadgeCss = readFile('src/components/overview/GitStatusBadge.module.css');
-    const overviewListCss = readFile('src/components/overview/OverviewChangesList.module.css');
+    const gitBadgeCss = readFile(
+      'src/components/overview/GitStatusBadge.module.css'
+    );
+    const overviewListCss = readFile(
+      'src/components/overview/OverviewChangesList.module.css'
+    );
 
     expect(gitBadgeCss).not.toMatch(/hsl\(21[0-9]\s/);
     expect(gitBadgeCss).not.toMatch(/hsl\(20[0-9]\s/);
@@ -208,18 +214,26 @@ describe('Design System: Anti-Darkening, SSOT & A11y Guardrails (Master Suite)',
     const filesCardCss = readFile('src/components/files/FilesCard.module.css');
 
     expect(diffCardCss).not.toMatch(/\.actionBtn:hover\s*\{[^}]*background/);
-    expect(diffCardCss).not.toMatch(/\.actionBtn\.isActive\s*\{[^}]*background/);
-    expect(filesCardCss).not.toMatch(/\.filesNavBtn:hover[^}]*\{[^}]*background/);
+    expect(diffCardCss).not.toMatch(
+      /\.actionBtn\.isActive\s*\{[^}]*background/
+    );
+    expect(filesCardCss).not.toMatch(
+      /\.filesNavBtn:hover[^}]*\{[^}]*background/
+    );
   });
 
   it('RULE-11B: enforces Select.module.css trigger has min-height: 0 to allow compact scaling', () => {
     const selectCss = readFile('src/components/ui/Select/Select.module.css');
-    expect(selectCss).not.toMatch(/\.trigger\s*\{[^}]*min-height:\s*var\(--control-height,\s*32px\)/);
+    expect(selectCss).not.toMatch(
+      /\.trigger\s*\{[^}]*min-height:\s*var\(--control-height,\s*32px\)/
+    );
     expect(selectCss).toMatch(/\.trigger\s*\{[^}]*min-height:\s*0/);
   });
 
   it('RULE-11C: enforces DiffHeaderControls explicitly sets size="sm" on all Select instances', () => {
-    const diffHeaderTsx = readFile('src/components/diff/DiffHeaderControls.tsx');
+    const diffHeaderTsx = readFile(
+      'src/components/diff/DiffHeaderControls.tsx'
+    );
     const selectMatches = diffHeaderTsx.match(/<Select\b[^>]*>/g) || [];
     expect(selectMatches.length).toBeGreaterThan(0);
     for (const selectTag of selectMatches) {

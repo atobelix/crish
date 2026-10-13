@@ -54,7 +54,7 @@
 
 .donutTrack {
   fill: none;
-  stroke: color-mix(in srgb, var(--border-subtle) 60%, transparent);
+  stroke: var(--tint-divider);
   stroke-width: 24;
 }
 
@@ -62,7 +62,9 @@
   fill: none;
   stroke-width: 24;
   cursor: pointer;
-  transition: stroke-width var(--transition-normal), filter var(--transition-normal);
+  transition:
+    stroke-width var(--transition-normal),
+    filter var(--transition-normal);
 }
 
 .donutCenterContent {

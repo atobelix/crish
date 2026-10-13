@@ -1107,7 +1107,8 @@
   border-radius: var(--radius-sm);
 }
 
-.annSnippetQuote:hover::-webkit-scrollbar-thumb {
+.annSnippetQuote::-webkit-scrollbar-thumb:hover,
+.annSnippetQuote::-webkit-scrollbar-thumb:active {
   background: var(--border-color);
 }
 

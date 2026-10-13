@@ -35,6 +35,7 @@ import {
   DEFAULT_WIZARD_PROTOCOL,
   decideWizardKeySave,
   isFirstRunDone,
+  isShowOnboardingOnStartupEnabled,
   isWizardModelIdError,
   isWizardModelIdOk,
   isWizardStep,
@@ -42,6 +43,8 @@ import {
   nextWizardStep,
   normalizeHandFilledModelId,
   prevWizardStep,
+  resetFirstRunDone,
+  setShowOnboardingOnStartup,
   shouldShowFirstRunWizard,
   validateWizardConnectForm,
   validateWizardModelId,
@@ -95,6 +98,34 @@ describe('FirstRunWizard gate', () => {
     expect(shouldShowFirstRunWizard()).toBe(false);
   });
 
+  it('respects setShowOnboardingOnStartup toggle even when marked done or profile has key', async () => {
+    saveProfiles([
+      {
+        id: 'custom-demo',
+        name: '演示服务',
+        baseUrl: 'https://api.example.com/v1',
+        models: [],
+        hasKey: false,
+      },
+    ]);
+    await setProfileKey('custom-demo', 'sk-test');
+    markFirstRunDone();
+    expect(shouldShowFirstRunWizard()).toBe(false);
+
+    setShowOnboardingOnStartup(true);
+    expect(isShowOnboardingOnStartupEnabled()).toBe(true);
+    expect(isFirstRunDone()).toBe(false);
+    expect(shouldShowFirstRunWizard()).toBe(true);
+
+    setShowOnboardingOnStartup(false);
+    expect(isShowOnboardingOnStartupEnabled()).toBe(false);
+    expect(isFirstRunDone()).toBe(true);
+    expect(shouldShowFirstRunWizard()).toBe(false);
+
+    resetFirstRunDone();
+    expect(isFirstRunDone()).toBe(false);
+  });
+
   it('default seeds: empty (neutral product, no third-party shells)', () => {
     // 中立产品：DEFAULT_PROFILES 恒为空；用户在向导/设置自建服务商
     expect(getDefaultProviderProfiles()).toEqual([]);
@@ -103,16 +134,36 @@ describe('FirstRunWizard gate', () => {
 
   it('validateWizardConnectForm requires name/baseUrl/key', () => {
     expect(
-      validateWizardConnectForm({ name: '', baseUrl: 'https://x', apiKey: 'k', protocol: 'openai/chat' })
+      validateWizardConnectForm({
+        name: '',
+        baseUrl: 'https://x',
+        apiKey: 'k',
+        protocol: 'openai/chat',
+      })
     ).toMatchObject({ ok: false, error: expect.stringMatching(/名称/) });
     expect(
-      validateWizardConnectForm({ name: 'n', baseUrl: '', apiKey: 'k', protocol: 'openai/chat' })
+      validateWizardConnectForm({
+        name: 'n',
+        baseUrl: '',
+        apiKey: 'k',
+        protocol: 'openai/chat',
+      })
     ).toMatchObject({ ok: false, error: expect.stringMatching(/Base URL/) });
     expect(
-      validateWizardConnectForm({ name: 'n', baseUrl: 'ftp://x', apiKey: 'k', protocol: 'openai/chat' })
+      validateWizardConnectForm({
+        name: 'n',
+        baseUrl: 'ftp://x',
+        apiKey: 'k',
+        protocol: 'openai/chat',
+      })
     ).toMatchObject({ ok: false, error: expect.stringMatching(/http/) });
     expect(
-      validateWizardConnectForm({ name: 'n', baseUrl: 'https://x/v1', apiKey: '', protocol: 'openai/chat' })
+      validateWizardConnectForm({
+        name: 'n',
+        baseUrl: 'https://x/v1',
+        apiKey: '',
+        protocol: 'openai/chat',
+      })
     ).toMatchObject({ ok: false, error: expect.stringMatching(/密钥/) });
     const ok = validateWizardConnectForm({
       name: ' 本地 ',
@@ -137,7 +188,9 @@ describe('FirstRunWizard gate', () => {
 
 describe('hand-filled model id', () => {
   it('normalize trims whitespace', () => {
-    expect(normalizeHandFilledModelId('  deepseek-chat  ')).toBe('deepseek-chat');
+    expect(normalizeHandFilledModelId('  deepseek-chat  ')).toBe(
+      'deepseek-chat'
+    );
     expect(normalizeHandFilledModelId('')).toBe('');
     expect(normalizeHandFilledModelId('   ')).toBe('');
   });
@@ -160,7 +213,10 @@ describe('hand-filled model id', () => {
   it('validate rejects empty (page error, no toast contract)', () => {
     const r = validateWizardModelId('  ');
     expect(r.ok).toBe(false);
-    expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/手填|模型/) });
+    expect(r).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/手填|模型/),
+    });
     expect(isWizardModelIdError(r)).toBe(true);
     if (isWizardModelIdError(r)) {
       expect(typeof r.error).toBe('string');
@@ -171,7 +227,10 @@ describe('hand-filled model id', () => {
   it('validate rejects internal spaces', () => {
     const r = validateWizardModelId('bad model');
     expect(r.ok).toBe(false);
-    expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/空格/) });
+    expect(r).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/空格/),
+    });
   });
 
   it('validate rejects control characters', () => {
@@ -209,7 +268,10 @@ describe('union type guards (WizardModelIdResult)', () => {
 
 describe('page error mappers (no toast)', () => {
   it('decideWizardKeySave continues on ok', () => {
-    const d = decideWizardKeySave({ ok: true, synced: true } as { ok: boolean; error?: string });
+    const d = decideWizardKeySave({ ok: true, synced: true } as {
+      ok: boolean;
+      error?: string;
+    });
     expect(d).toEqual({ action: 'continue' });
   });
 
@@ -231,7 +293,10 @@ describe('page error mappers (no toast)', () => {
 
   it('decideWizardKeySave blocks profile_not_found', () => {
     const d = decideWizardKeySave({ ok: false, error: 'profile_not_found' });
-    expect(d).toMatchObject({ action: 'block', error: expect.stringMatching(/服务商/) });
+    expect(d).toMatchObject({
+      action: 'block',
+      error: expect.stringMatching(/服务商/),
+    });
   });
 
   it('decideWizardKeySave continues on soft engine sync failure (key already local)', () => {
@@ -247,23 +312,30 @@ describe('page error mappers (no toast)', () => {
   });
 
   it('wizardActivatePageError maps known codes to page copy', () => {
-    expect(wizardActivatePageError({ ok: false, error: 'empty_model' })).toMatch(/模型/);
-    expect(wizardActivatePageError({ ok: false, error: 'profile_not_found' })).toMatch(/服务商/);
-    expect(wizardActivatePageError({ ok: false, error: 'not_connected' })?.length).toBeGreaterThan(
-      0,
+    expect(
+      wizardActivatePageError({ ok: false, error: 'empty_model' })
+    ).toMatch(/模型/);
+    expect(
+      wizardActivatePageError({ ok: false, error: 'profile_not_found' })
+    ).toMatch(/服务商/);
+    expect(
+      wizardActivatePageError({ ok: false, error: 'not_connected' })?.length
+    ).toBeGreaterThan(0);
+    expect(wizardActivatePageError({ ok: false, error: 'mystery' })).toMatch(
+      /启用失败/
     );
-    expect(wizardActivatePageError({ ok: false, error: 'mystery' })).toMatch(/启用失败/);
     expect(wizardActivatePageError({ ok: false })).toMatch(/启用失败/);
   });
 });
 
 describe('WizardStep union navigation', () => {
-  it('isWizardStep accepts only 0..4', () => {
+  it('isWizardStep accepts only 0..3', () => {
     expect(isWizardStep(0)).toBe(true);
+    expect(isWizardStep(1)).toBe(true);
+    expect(isWizardStep(2)).toBe(true);
     expect(isWizardStep(3)).toBe(true);
-    expect(isWizardStep(4)).toBe(true);
     expect(isWizardStep(-1)).toBe(false);
-    expect(isWizardStep(5)).toBe(false);
+    expect(isWizardStep(4)).toBe(false);
     expect(isWizardStep(1.5)).toBe(false);
   });
 
@@ -273,10 +345,9 @@ describe('WizardStep union navigation', () => {
     expect(nextWizardStep(start)).toBe(1);
     expect(nextWizardStep(1)).toBe(2);
     expect(nextWizardStep(2)).toBe(3);
-    expect(nextWizardStep(3)).toBe(4);
-    expect(nextWizardStep(4)).toBe(4);
-    expect(prevWizardStep(4)).toBe(3);
+    expect(nextWizardStep(3)).toBe(3);
     expect(prevWizardStep(3)).toBe(2);
+    expect(prevWizardStep(2)).toBe(1);
     expect(prevWizardStep(1)).toBe(0);
   });
 });

@@ -1,103 +1,114 @@
-/*      PE-05 T05.2 #6      ui/Dialog        /  /
- *               --dialog-z    */
+/* 对齐 ui/Dialog 基座与极简高信噪比引导弹窗 */
 
-/*     --dialog-z        */
 .firstRunOverlay {
 }
 
-/*          min(480px, 100%)   +     /   */
 .firstRunDialog {
-  --dialog-width: min(480px, calc(100vw - var(--space-8)));
+  --dialog-width: min(560px, calc(100vw - var(--space-8)));
   background: var(--bg-primary);
   border-radius: var(--radius-xl);
   border-color: var(--hairline-strong, var(--border-color));
 }
 
-/*          dialogBody         22/16px      18px    */
 .firstRunCard {
   margin: calc(var(--space-1) * -1) calc(var(--space-4) * -1);
-  padding: 22px 22px 16px;
+  padding: 16px 20px 14px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
 }
 
-.firstRunBrand {
+.firstRunHeader {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  justify-content: space-between;
+  width: 100%;
 }
 
-.firstRunLogo {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-2xl);
-  background: var(--brand-deep);
-  color: var(--text-on-accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: var(--font-weight-normal);
-  font-size: var(--font-size-base);
-}
-
-.firstRunTitle {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-normal);
+.firstRunHeaderTitle {
+  font-size: var(--font-size-base, 15px);
+  font-weight: 600;
   color: var(--text-primary);
 }
 
-/*     activeMeta.desc      description    dialogDescription
- * firstRunSub         */
-.firstRunSteps {
+.firstRunStepBadge {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+  padding: 2px 8px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.firstRunChips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1_5);
+  gap: 6px;
+  margin-bottom: 2px;
 }
 
-.firstRunStep {
+.firstRunChip {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1_5);
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  background: transparent;
-}
-
-.firstRunStep.isActive {
-  color: var(--text-primary);
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
   background: var(--bg-secondary);
-  font-weight: var(--font-weight-normal);
-}
-
-.firstRunStep.isDone {
   color: var(--text-secondary);
+  font-size: var(--font-size-xs, 12px);
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
-.firstRunStepNum {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--bg-tertiary);
-  display: inline-flex;
+.firstRunChip:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 92%,
+    var(--text-primary) 8%
+  );
+  background: var(--bg-hover);
+}
+
+.firstRunChip.isActive {
+  color: var(--text-primary);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 90%,
+    var(--text-primary) 10%
+  );
+  background: var(--bg-secondary);
+  font-weight: 500;
+}
+
+.firstRunChip:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.firstRunToggleRow {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: var(--font-size-xxs);
-  font-weight: var(--font-weight-normal);
+  justify-content: space-between;
+  padding: 8px 0 2px;
 }
 
-.firstRunStep.isActive .firstRunStepNum {
-  background: var(--brand-deep);
-  color: var(--text-on-accent);
+.firstRunToggleLabel {
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-secondary);
+  cursor: pointer;
 }
 
 .firstRunBody {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  min-height: 140px;
+  min-height: 120px;
+  max-height: min(65vh, 520px);
+  overflow-y: auto;
 }
 
 .firstRunLabel {
@@ -107,7 +118,6 @@
   margin-top: var(--space-1);
 }
 
-/*          ettingsSelect           */
 .firstRunSelect :global(.settings-select) {
   width: 100%;
   max-width: none;
@@ -116,8 +126,8 @@
 
 .firstRunSelect :global(.settings-select-trigger) {
   width: 100%;
-  min-height: 40px;
-  height: 40px;
+  min-height: 38px;
+  height: 38px;
   border-radius: var(--radius-xl);
 }
 
@@ -160,7 +170,7 @@
   justify-content: space-between;
   align-items: center;
   gap: var(--space-3);
-  padding-top: var(--space-1);
+  padding-top: var(--space-2);
   border-top: 1px solid var(--border-subtle);
   border-top-color: var(--hairline, var(--border-subtle));
 }
@@ -187,55 +197,12 @@
   padding-bottom: var(--space-1);
 }
 
-/*                       /             toast */
 .firstRunModelAlt {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: var(--space-0_5);
-  padding: 0 4px 8px;
-}
-
-.firstRunModelAlt .firstRunLinkCenter {
-  margin-top: 0;
-}
-
-.firstRunBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1_5);
-  border-radius: var(--radius-xl);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-normal);
-  font-family: inherit;
-  padding: 9px 14px;
-  cursor: pointer;
-  border: 1px solid transparent;
-}
-
-.firstRunBtn.primary {
-  background: var(--brand-deep);
-  border-color: var(--brand-primary);
-  color: var(--text-on-accent);
-}
-
-.firstRunBtn.primary:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-.firstRunBtn.ghost {
-  background: transparent;
-  border-color: var(--border-color);
-  color: var(--text-secondary);
-}
-
-.firstRunBtn.secondary {
-  width: 100%;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border-color: var(--border-color);
+  padding: 0 4px 4px;
 }
 
 .firstRunProjectOk {
@@ -254,5 +221,5 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-2_5);
-  padding: 16px 8px;
+  padding: 20px 8px 16px;
 }

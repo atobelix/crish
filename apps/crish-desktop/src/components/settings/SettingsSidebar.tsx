@@ -65,6 +65,8 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
         className={styles.settingsNav}
         aria-label="设置导航"
         data-testid="settings-sidebar"
+        data-settings-nav="true"
+        data-scrollbar-hover-host="nav"
         onPointerEnter={onPointerEnter}
       >
         <div className={styles.sidebarTopActions}>
@@ -116,6 +118,8 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
           id={tablistId}
           ref={tablistRef}
           className={styles.navScroll}
+          data-nav-scroll="true"
+          data-scrollbar-visibility="hover"
           role="tablist"
           aria-label="设置分类"
           aria-orientation="vertical"

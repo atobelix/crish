@@ -45,7 +45,10 @@
   right: var(--space-1_5);
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
-  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-family:
+    'Segoe UI',
+    -apple-system,
+    var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
   transform: translateY(-50%);
@@ -60,13 +63,13 @@
 }
 
 .gridLine {
-  stroke: color-mix(in srgb, var(--border-subtle) 65%, transparent);
+  stroke: var(--tint-divider);
   stroke-width: var(--hairline-width);
   stroke-dasharray: 4 4;
 }
 
 .axisLine {
-  stroke: var(--border-subtle);
+  stroke: var(--tint-divider);
   stroke-width: var(--hairline-width);
 }
 
@@ -75,7 +78,9 @@
   fill: none;
   stroke-linejoin: round;
   stroke-linecap: round;
-  transition: opacity var(--transition-normal), stroke-width var(--transition-fast);
+  transition:
+    opacity var(--transition-normal),
+    stroke-width var(--transition-fast);
 }
 
 .pathArea {
@@ -134,7 +139,10 @@
 }
 
 .tooltipRowVal {
-  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-family:
+    'Segoe UI',
+    -apple-system,
+    var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
   font-weight: var(--font-weight-semibold);
@@ -155,7 +163,10 @@
   position: absolute;
   top: 0;
   white-space: nowrap;
-  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-family:
+    'Segoe UI',
+    -apple-system,
+    var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
 }

@@ -44,7 +44,7 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
       trackMargin = 2,
       orientation = 'vertical',
       scrollbarGutter = 'auto',
-      type = 'hover',
+      type = 'auto',
       stepSize = 'auto',
       as: Component = 'div',
       className,

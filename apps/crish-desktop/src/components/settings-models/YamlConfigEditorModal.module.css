@@ -278,7 +278,7 @@
   box-sizing: border-box;
 }
 
-.editorGutter .gutterLine.gutterLineError {
+.gutter .gutterLine.gutterLineError {
   background: var(--danger-soft-bg-hover);
   color: var(--danger-color);
   font-weight: var(--font-weight-heavy);
@@ -413,8 +413,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  background: var(--color-error-bg);
-  border: var(--hairline-width) solid var(--color-error-border);
+  background: var(--danger-soft-bg);
+  border: none;
   border-radius: var(--radius-md);
   padding: var(--space-1) var(--space-2_5);
   color: var(--danger-color);
@@ -439,8 +439,8 @@
   align-items: center;
   gap: var(--space-1);
   padding: 2px var(--space-2);
-  background: var(--color-error-bg);
-  border: var(--hairline-width) solid var(--color-error-border);
+  background: var(--danger-soft-bg);
+  border: none;
   border-radius: var(--radius-sm);
   color: var(--color-error);
   font-size: var(--font-size-xxs);

@@ -11,10 +11,7 @@ import { getLiveModel } from '../../api/modelsCatalogLive';
 import { Button, Switch, Tooltip } from '../ui';
 import { ModelConfigDialog } from './ModelConfigDialog';
 import type { CfgDraft } from './useModelProfilesState';
-import {
-  defaultLocalMutation,
-  prepareCatalogWrite,
-} from './catalogWriteGate';
+import { defaultLocalMutation, prepareCatalogWrite } from './catalogWriteGate';
 import styles from './ModelsSettingsTab.module.css';
 import { AppIcon } from '../ui/icons';
 
@@ -67,14 +64,13 @@ export const ModelList: React.FC<{
         // lastTest 是连通性探测结果，不是 modalities/thinking/pricing 真源
         const lastTest = getModelMeta(providerId, m).lastTest;
         const off = model?.enabled === false;
-        const tKey = modelRefKey({ providerId, modelId: m });
         const isLive =
           activeRef?.providerId === providerId && activeRef?.modelId === m;
         const expanded = configOpenId === m && !!cfgDraft;
         const display =
           expanded && cfgDraft?.displayName?.trim()
             ? cfgDraft.displayName.trim()
-            : (model?.displayName?.trim() || m);
+            : model?.displayName?.trim() || m;
         const liveCtxVal =
           expanded && cfgDraft
             ? (() => {
@@ -89,12 +85,8 @@ export const ModelList: React.FC<{
         const showCtx = liveCtxLabel && liveCtxLabel !== '—';
         // 能力徽标只读规范字段：supportsTools / modalities / thinking。
         const hasTools = Boolean(model?.supportsTools);
-        const hasImage = Boolean(
-          model?.modalities?.input?.includes('image')
-        );
-        const hasVideo = Boolean(
-          model?.modalities?.input?.includes('video')
-        );
+        const hasImage = Boolean(model?.modalities?.input?.includes('image'));
+        const hasVideo = Boolean(model?.modalities?.input?.includes('video'));
         const hasReasoning = Boolean(
           model?.thinking && Object.keys(model.thinking).length > 0
         );
@@ -102,7 +94,7 @@ export const ModelList: React.FC<{
         return (
           <div
             key={m}
-            className={`${styles.mrdModelRow} mrd-model-row ${off ? 'is-off' : ''} ${isLive ? 'is-live' : ''} ${expanded ? 'is-expanded' : ''}`}
+            className={`${styles.mrdModelRow} mrd-model-row ${off ? `${styles.isOff} is-off` : ''} ${isLive ? `${styles.isLive} is-live` : ''} ${expanded ? `${styles.isExpanded} is-expanded` : ''}`}
             onClick={(e) => {
               const target = e.target as HTMLElement;
               if (
@@ -196,7 +188,9 @@ export const ModelList: React.FC<{
                     variant="ghost"
                     size="sm"
                     aria-label="检查连通性"
-                    disabled={testBusy === modelRefKey({ providerId, modelId: m })}
+                    disabled={
+                      testBusy === modelRefKey({ providerId, modelId: m })
+                    }
                     className={styles.mrdRowMiniBtn}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -204,7 +198,11 @@ export const ModelList: React.FC<{
                     }}
                     icon={
                       testBusy === modelRefKey({ providerId, modelId: m }) ? (
-                        <AppIcon name="loader" size={13} className={styles.loadingSpinner} />
+                        <AppIcon
+                          name="loader"
+                          size={13}
+                          className={styles.loadingSpinner}
+                        />
                       ) : (
                         <AppIcon name="wifi" size={13} />
                       )
@@ -300,7 +298,6 @@ export const ModelList: React.FC<{
                 </Tooltip>
               </div>
             </div>
-
           </div>
         );
       })}

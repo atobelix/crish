@@ -456,11 +456,9 @@
   padding: 0.1em 0.45em;
   color: var(--text-primary);
   background: var(--bg-card-subtle);
-  border: 1px solid
-    color-mix(in srgb, var(--border-color) 85%, var(--text-primary) 15%);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  box-shadow: 0 1px 0
-    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: none;
   line-height: 1.2;
   white-space: nowrap;
 }
@@ -743,8 +741,8 @@
 .md-rendered .md-code-copy.is-copied,
 .conex-markdown .md-code-copy.is-copied {
   color: var(--brand);
-  border-color: color-mix(in srgb, var(--brand) 40%, transparent);
-  background: color-mix(in srgb, var(--brand) 12%, var(--bg-card));
+  border-color: transparent;
+  background: transparent;
   opacity: 1;
 }
 .md-rendered .md-code-pre,

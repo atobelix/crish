@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -22,7 +24,9 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
       filePath: 'src/components/Button.tsx',
       additions: 3,
       deletions: 1,
-      changes: [{ type: 'addition', content: 'export const Button = () => null;' }],
+      changes: [
+        { type: 'addition', content: 'export const Button = () => null;' },
+      ],
       provisional: true,
     };
 
@@ -32,12 +36,12 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
     expect(isAcceptDisabled).toBe(true);
   });
 
-  it('渲染 Flat List 平直列表，具备标准 role="list" / role="listitem" 语义且无圆角', () => {
+  it('渲染 Flat List 平直列表，具备标准 role="list" / role="listitem" 语义且全链路嵌套容器为纯直角 (border-radius: 0)', () => {
     const { container } = render(
       <DiffCardFileList
         files={[mockFileDiff]}
         sourceMode="session"
-        current={null}
+        current={mockFileDiff}
         applyBusy={false}
         stagingPaths={{}}
         onSetActiveDiffSource={vi.fn()}
@@ -46,7 +50,9 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
         onDiscardChanges={vi.fn()}
         onStageAll={vi.fn()}
         onUnstageAll={vi.fn()}
-        renderInlineDiffContent={() => <div data-testid="diff-body">diff content</div>}
+        renderInlineDiffContent={() => (
+          <div data-testid="diff-body">diff content</div>
+        )}
       />
     );
 
@@ -59,9 +65,37 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
     const item = container.querySelector('[role="listitem"]');
     expect(item).not.toBeNull();
 
-    // 3. 直角化契约：验证容器与条目绝不含有圆角类或行内 border-radius 样式
+    // 3. 直角化契约：验证容器与条目绝不含有圆角类或行内 border-radius 样式，且 CSS 规则显式锁死 border-radius: 0
     expect(container.querySelector('[class*="rounded"]')).toBeNull();
     expect(container.querySelector('[class*="radius"]')).toBeNull();
+
+    const css = readFileSync(
+      resolve(__dirname, './DiffCard.module.css'),
+      'utf8'
+    ).replace(/\r\n/g, '\n');
+    const rule = (selector: string) => {
+      const esc = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return (
+        css.match(new RegExp(`(?:^|\\n)${esc}\\s*\\{[\\s\\S]*?\\n\\}`))?.[0] ??
+        ''
+      );
+    };
+    for (const sel of [
+      '.flatFileList',
+      '.fileNode',
+      '.fileRow',
+      '.diffPane',
+      '.scrollParent',
+      '.linesContainer',
+    ]) {
+      const r = rule(sel);
+      expect(r, sel).toMatch(/border-radius:\s*0;/);
+      expect(r, sel).not.toMatch(/border-radius:[^;]*var\(--radius/);
+    }
+    const diffScrollRule =
+      css.match(/\.diffPane\s+\.scrollParent\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
+    expect(diffScrollRule).toMatch(/border-radius:\s*0;/);
+    expect(diffScrollRule).not.toMatch(/border-radius:[^;]*var\(--radius/);
   });
 
   it('三大正交子域验证：点击 Chevron 仅触发内联折叠展开，绝不触发独立 Tab 打开', () => {
@@ -123,7 +157,9 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
     );
 
     // 1. 查找文件名超链接按钮 (子域 B)
-    const linkBtn = screen.getByRole('button', { name: /在独立标签页预览文件 Button\.tsx/ });
+    const linkBtn = screen.getByRole('button', {
+      name: /在独立标签页预览文件 Button\.tsx/,
+    });
     expect(linkBtn).toBeInTheDocument();
 
     // 2. 单击 → 切换展开，不打开 Tab
@@ -134,7 +170,9 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
     // 3. 双击 → 在独立标签页打开
     fireEvent.doubleClick(linkBtn);
     expect(handleOpenFileViewer).toHaveBeenCalledTimes(1);
-    expect(handleOpenFileViewer).toHaveBeenCalledWith('src/components/Button.tsx');
+    expect(handleOpenFileViewer).toHaveBeenCalledWith(
+      'src/components/Button.tsx'
+    );
   });
 
   it('三大正交子域验证：点击 Git 暂存按钮仅触发暂存，严格阻止冒泡', () => {
@@ -198,7 +236,9 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
     );
 
     // 1. 查找放弃修改（撤回）按钮 (子域 C)
-    const discardBtn = screen.getByRole('button', { name: '放弃此文件的所有修改' });
+    const discardBtn = screen.getByRole('button', {
+      name: '放弃此文件的所有修改',
+    });
     expect(discardBtn).toBeInTheDocument();
 
     // 2. 点击放弃修改按钮
@@ -206,7 +246,9 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
 
     // 断言：仅触发放弃修改，严格未触发折叠或新 Tab
     expect(handleDiscardChanges).toHaveBeenCalledTimes(1);
-    expect(handleDiscardChanges).toHaveBeenCalledWith('src/components/Button.tsx');
+    expect(handleDiscardChanges).toHaveBeenCalledWith(
+      'src/components/Button.tsx'
+    );
     expect(handleSetActive).not.toHaveBeenCalled();
     expect(handleOpenFileViewer).not.toHaveBeenCalled();
   });
@@ -225,7 +267,9 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
         onDiscardChanges={vi.fn()}
         onStageAll={vi.fn()}
         onUnstageAll={vi.fn()}
-        renderInlineDiffContent={() => <div data-testid="diff-pane-content">Code Comparison Body</div>}
+        renderInlineDiffContent={() => (
+          <div data-testid="diff-pane-content">Code Comparison Body</div>
+        )}
       />
     );
 
@@ -300,7 +344,9 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
     expect(fileRowEl?.getAttribute('role')).toBe('row');
 
     // 3. 验证内部独立超链接按钮存在且具备完整 aria 标签
-    const linkBtn = screen.getByRole('button', { name: /在独立标签页预览文件/ });
+    const linkBtn = screen.getByRole('button', {
+      name: /在独立标签页预览文件/,
+    });
     expect(linkBtn.tagName.toLowerCase()).toBe('button');
   });
 
@@ -333,7 +379,9 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
     );
 
     // 1. 查找复制差异 Patch 按钮
-    const copyBtn = screen.getByRole('button', { name: '复制此文件差异 Patch' });
+    const copyBtn = screen.getByRole('button', {
+      name: '复制此文件差异 Patch',
+    });
     expect(copyBtn).toBeInTheDocument();
     expect(copyBtn).toHaveAttribute('data-size', 'xs');
     expect(copyBtn).toHaveAttribute('data-variant', 'ghost');
@@ -346,12 +394,18 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
     // 断言：触发了剪贴板写入与 Toast 提示，且阻止事件冒泡
     //（T24：写入经 await 后才提示，断言须等微任务完成）
     expect(writeTextSpy).toHaveBeenCalledTimes(1);
-    expect(writeTextSpy.mock.calls[0][0]).toContain('diff --git a/src/components/Button.tsx');
+    expect(writeTextSpy.mock.calls[0][0]).toContain(
+      'diff --git a/src/components/Button.tsx'
+    );
     expect(handleSetActive).not.toHaveBeenCalled();
     expect(handleOpenFileViewer).not.toHaveBeenCalled();
 
     await waitFor(() => {
-      expect(showSpy).toHaveBeenCalledWith('已复制 Button.tsx 差异 Patch', undefined, undefined);
+      expect(showSpy).toHaveBeenCalledWith(
+        '已复制 Button.tsx 差异 Patch',
+        undefined,
+        undefined
+      );
     });
     showSpy.mockRestore();
   });
@@ -379,8 +433,12 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: '复制此文件差异 Patch' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '取消暂存此文件' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '复制此文件差异 Patch' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '取消暂存此文件' })
+    ).toBeInTheDocument();
   });
 
   it('行操作区全面换装原子组件 <IconButton size="xs" variant="ghost">，常态中性且无私有黑混色', () => {

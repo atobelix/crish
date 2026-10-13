@@ -53,7 +53,8 @@
   max-height: 32px;
   padding: 0 8px;
   background: var(--bg-card);
-  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--border-subtle) 25%, transparent);
   box-sizing: border-box;
   user-select: none;
   flex-shrink: 0;
@@ -84,16 +85,6 @@
   outline: none;
   box-shadow: none;
   background: transparent;
-}
-
-.titleHeading {
-  margin: 0;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-  font-size: inherit;
-  font-weight: inherit;
 }
 
 .titleDisplay {
@@ -166,7 +157,9 @@
   color: var(--text-tertiary);
   border-radius: var(--radius-xs);
   cursor: pointer;
-  transition: background var(--transition-micro, 100ms ease-out), color var(--transition-micro, 100ms ease-out);
+  transition:
+    background var(--transition-micro, 100ms ease-out),
+    color var(--transition-micro, 100ms ease-out);
   flex-shrink: 0;
 }
 
@@ -306,14 +299,6 @@
   display: none;
 }
 
-.saveStatusSaved {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  color: var(--color-success);
-  font-size: var(--font-size-xs, 12px);
-}
-
 .saveStatusSyncing {
   display: inline-flex;
   align-items: center;
@@ -351,9 +336,9 @@
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono, monospace);
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-secondary);
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
   user-select: none;
   flex-shrink: 0;
 }
@@ -365,35 +350,6 @@
   font-size: 11px;
   line-height: 1.4;
   font-variant-numeric: tabular-nums;
-}
-
-.slashTriggerBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
-  padding: 0;
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs, 12px);
-  font-weight: var(--font-weight-semibold, 600);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background var(--transition-micro, 100ms ease-out), color var(--transition-micro, 100ms ease-out);
-}
-
-.slashTriggerBtn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.slashTriggerBtn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 1.5px var(--np-focus-edge);
 }
 
 .slashModeBadge {
@@ -484,11 +440,6 @@
   border-radius: var(--radius-sm);
 }
 
-.badgeSilent {
-  font-size: var(--font-size-xs, 12px);
-  color: var(--text-tertiary);
-}
-
 /* ---------- 3. 焦点管理与全局按键防御 ---------- */
 
 button.badge:focus-visible {
@@ -519,7 +470,8 @@ button.badge:focus-visible {
 .panel :global(input).titleInput:focus-visible,
 .panel :global(input[data-testid='note-paper-strict-title-input']),
 .panel :global(input[data-testid='note-paper-strict-title-input']):focus,
-.panel :global(input[data-testid='note-paper-strict-title-input']):focus-visible {
+.panel
+  :global(input[data-testid='note-paper-strict-title-input']):focus-visible {
   background: transparent;
   border: none;
   outline: none;
@@ -562,27 +514,7 @@ button.badge:focus-visible {
   max-width: calc(100% - var(--space-2, 8px));
 }
 
-/* ---------- 5. PaperList 宿主容器挂载 ---------- */
-
-.paperListHost :global(.np-paper-list-mount) {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  width: 100%;
-  min-height: 0;
-}
-
-.paperListMountRoot {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  width: 100%;
-  min-height: 0;
-}
-
-/* ---------- 6. 块行结构与状态排版 ---------- */
+/* ---------- 5. 块行结构与状态排版 ---------- */
 
 .blockRow {
   position: relative;
@@ -649,16 +581,8 @@ button.badge:focus-visible {
   border-radius: var(--radius-xs);
   opacity: 0;
   background-image:
-    radial-gradient(
-      circle,
-      var(--text-tertiary) 1.1px,
-      transparent 1.2px
-    ),
-    radial-gradient(
-      circle,
-      var(--text-tertiary) 1.1px,
-      transparent 1.2px
-    );
+    radial-gradient(circle, var(--text-tertiary) 1.1px, transparent 1.2px),
+    radial-gradient(circle, var(--text-tertiary) 1.1px, transparent 1.2px);
   background-size:
     6px 6px,
     6px 6px;
@@ -800,7 +724,10 @@ button.badge:focus-visible {
   border: var(--hairline-width, 1px) solid
     var(--md-code-border, var(--border-color));
   border-radius: var(--radius-sm);
-  padding: var(--md-code-block-padding, var(--space-2, 8px) var(--space-3, 12px));
+  padding: var(
+    --md-code-block-padding,
+    var(--space-2, 8px) var(--space-3, 12px)
+  );
   margin-top: var(--space-2, 8px);
   margin-bottom: var(--space-2, 8px);
   tab-size: var(--md-code-tab-size, 2);
@@ -810,8 +737,7 @@ button.badge:focus-visible {
 .blockRow[data-flavour='quote'] .text,
 .blockRow[data-flavour='blockquote'] .text,
 .blockRow[data-flavour='Quote'] .text {
-  border-left: 2px solid
-    var(--hairline-strong, var(--border-color));
+  border-left: 2px solid var(--hairline-strong, var(--border-color));
   padding-left: var(--space-3, 12px);
   color: var(--text-secondary);
   margin-top: var(--space-2, 8px);

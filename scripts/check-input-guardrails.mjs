@@ -810,7 +810,7 @@ export function runCheckFileSuite(targetErrors = errors) {
         message: '提交输入框聚焦态必须维持 outline: none',
       },
       {
-        regex: /\.commitInput:(?:focus-visible|focus)[^{]*\{[^}]*border-color:\s*color-mix\(.*?var\(--text-primary\)\s*(?:[1-9]|10)%\)/,
+        regex: /\.commitInput:(?:focus-visible|focus)[^{]*\{[^}]*border-color:\s*color-mix\(.*?var\(--text-primary\)\s*(?:[1-9]|10)%\s*\)/s,
         message: '提交输入框聚焦态混入文本色上限必须严格保持 <= 10% (AGENTS.md §13)',
       },
     ],

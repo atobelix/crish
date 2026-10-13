@@ -168,7 +168,10 @@ describe('ManualAddForm (手动添加模型与配置面板 1:1 对齐一等公�
 
     const options = screen.getAllByRole('option');
     expect(input).toHaveAttribute('aria-expanded', 'true');
-    expect(input).toHaveAttribute('aria-controls', screen.getByRole('listbox').id);
+    expect(input).toHaveAttribute(
+      'aria-controls',
+      screen.getByRole('listbox').id
+    );
 
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     expect(options[0]).toHaveAttribute('aria-selected', 'true');
@@ -229,7 +232,9 @@ describe('ManualAddForm (手动添加模型与配置面板 1:1 对齐一等公�
 
     // 思考推理开启按钮
     expect(screen.getByText('思考推理')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '配置思考档位' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '配置思考档位' })
+    ).toBeInTheDocument();
 
     // 底部没有旧 CapEditor 的复选框（工具/识图/视频/推理等独立 checkbox 已废弃）
     expect(screen.queryByLabelText('推理 (Thinking / Reasoning)')).toBeNull();
@@ -259,5 +264,53 @@ describe('ManualAddForm (手动添加模型与配置面板 1:1 对齐一等公�
     expect(screen.getByText('界面档位名称')).toBeInTheDocument();
     expect(screen.getByText('API参数值')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Max')).toBeInTheDocument();
+  });
+
+  it('WizardModelStep 直接复用 ManualAddForm（无陈旧硬编码预设模型标签，具备在线获取与完整模型配置）', async () => {
+    const { WizardModelStep } = await import('../WizardModelStep');
+    const runScan = vi.fn().mockResolvedValue(undefined);
+    function StepWrapper() {
+      const [draft, setDraft] = useState<AddModelDraft>(emptyAddDraft());
+      return (
+        <WizardModelStep
+          addDraft={draft}
+          setAddDraft={setDraft}
+          runScan={runScan}
+          scanBusy={false}
+          providerVendor="deepseek"
+          scannedModels={['deepseek-v4-pro']}
+          existingModels={[]}
+          busy={false}
+          onEnter={vi.fn()}
+        />
+      );
+    }
+
+    render(<StepWrapper />);
+
+    // 严禁任何陈旧硬编码模型胶囊
+    expect(
+      screen.queryByRole('group', { name: '常用模型快捷填入' })
+    ).toBeNull();
+    expect(screen.queryByText('gpt-4o')).toBeNull();
+    expect(screen.queryByText('claude-3-5-sonnet')).toBeNull();
+    expect(screen.queryByText('deepseek-reasoner (R1)')).toBeNull();
+
+    // 具备与设置页一致的在线获取按钮及完整模型配置项
+    const fetchBtn = screen.getByRole('button', { name: '在线获取' });
+    expect(fetchBtn).toBeInTheDocument();
+    expect(screen.getByText('展示名称')).toBeInTheDocument();
+    expect(screen.getByText('上下文长度')).toBeInTheDocument();
+    expect(screen.getByText('最大输出')).toBeInTheDocument();
+    expect(screen.getByText('多模态支持')).toBeInTheDocument();
+    expect(screen.getByText('思考推理')).toBeInTheDocument();
+    expect(screen.getByText('设为默认模型')).toBeInTheDocument();
+
+    // 点击在线获取即打开探测模型下拉并触发自动补齐
+    fireEvent.click(fetchBtn);
+    expect(runScan).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getAllByText('deepseek-v4-pro')[0]!);
+    expect(screen.getByDisplayValue('DeepSeek V4 Pro')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('1048576')).toBeInTheDocument();
   });
 });

@@ -270,6 +270,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
         role="navigation"
         aria-label="侧栏导航"
         data-sidebar-root="true"
+        data-scrollbar-hover-host="sidebar"
         data-testid="sidebar"
         data-sidebar-filter={filterType}
         data-sidebar-density={densityHint}
@@ -303,6 +304,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
           className={styles.sidebarScroll}
           data-sidebar-chrome="scroll"
           data-sidebar-scroll-host="true"
+          data-scrollbar-visibility="hover"
           aria-hidden={chromeHidden || undefined}
           inert={chromeHidden ? true : undefined}
         >

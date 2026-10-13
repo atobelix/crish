@@ -1,15 +1,9 @@
 /**
- * 正式版首次向导：连接（名称/URL/密钥/协议）→ 模型（可手填）→ 导入对话（可选）→ 项目 → 开始
+ * 首次使用引导向导：极简高信噪比设计。
+ * 步骤：0 配置服务商 → 1 启用模型 → 2 选择工作目录 → 3 开始使用
  *
- * 壳组件：步进轨道 / 状态行 / 页内 error / 页脚按钮 / 步内容装配。
- * 步进状态机见 useFirstRunWizard；校验/文案纯函数见 firstRunWizardLib；
- * 盖层挂载标记见 firstRunOverlayFlag；各步表单见 Wizard*Step 子组件。
- *
- * 契约：写入 providerProfiles（LS）+ activateProfileModel（ENGINE-CONFIG）。
- * 引导态只用页内 error/hint，成功路径禁止 toast。
- * 中立产品：不预置任何第三方服务商 / 不发明远程演示默认；协议层仅做接口兼容。
- * 模型步可「稍后手填」——由底栏 ModelPicker / needsModel soft-hint 接手。
- * 导入步可跳过，稍后在设置 · 账户完成。
+ * 顶栏简洁：当前步骤标题 + 步骤计数徽标。
+ * 第 1 步直接复用设置页 ManualAddForm（在线获取模型 + 完整能力与思考档位配置）。
  */
 
 import React, { useEffect, useId, useRef } from 'react';
@@ -19,22 +13,26 @@ import { Button, Dialog } from '../ui';
 import { useFirstRunWizard } from '../useFirstRunWizard';
 import { WizardKeyStep } from '../WizardKeyStep';
 import { WizardModelStep } from '../WizardModelStep';
-import { WizardImportStep } from '../WizardImportStep';
 import { WizardProjectStep } from '../WizardProjectStep';
 import {
-  markFirstRunDone,
   WIZARD_STEP_META,
   wizardPrimaryCtaLabel,
   wizardStepMeta,
+  type WizardStep,
 } from '../firstRunWizardLib';
 import { AppIcon } from '../ui/icons/index';
 
 type Props = {
   onDone: () => void;
   onOpenSettings?: () => void;
+  initialStep?: WizardStep;
 };
 
-export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
+export const FirstRunWizard: React.FC<Props> = ({
+  onDone,
+  onOpenSettings,
+  initialStep,
+}) => {
   const reactId = useId();
   const stepStatusId = `first-run-step-status-${reactId}`;
   const errorId = `first-run-error-${reactId}`;
@@ -42,8 +40,6 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
   const baseUrlId = `first-run-base-url-${reactId}`;
   const protocolId = `first-run-protocol-${reactId}`;
   const keyId = `first-run-key-${reactId}`;
-  const modelIdField = `first-run-model-${reactId}`;
-  const modelCustomId = `first-run-model-custom-${reactId}`;
   const pathId = `first-run-path-${reactId}`;
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
@@ -53,29 +49,37 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
     baseUrl,
     protocol,
     apiKey,
-    modelId,
+    addDraft,
+    isDefaultModel,
+    scanBusy,
+    scannedModels,
     pathDraft,
     busy,
     error,
     activeProfile,
     listedModels,
-    hasProfiles,
     hasProject,
     currentProjectLabel,
     setVendorName,
     setBaseUrl,
     setProtocol,
     setApiKey,
-    setModelId,
+    setAddDraft,
+    setIsDefaultModel,
     setPathDraft,
     setError,
+    runScan,
     advanceFromStep,
     goPrev,
+    skipConnectStep,
     skipModelStep,
-    skipImportStep,
+    skipProjectStep,
     finish,
     pickProjectFolder,
-  } = useFirstRunWizard({ onDone });
+  } = useFirstRunWizard({
+    onDone,
+    ...(initialStep !== undefined ? { initialStep } : {}),
+  });
 
   // 步进后把焦点送入正文，便于读屏与键盘用户
   useEffect(() => {
@@ -88,71 +92,39 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
   }, [step]);
 
   const activeMeta = wizardStepMeta(step);
-  const stepProgressLabel = `第 ${step + 1} / ${WIZARD_STEP_META.length} 步 · ${activeMeta.title}`;
   const fieldDescribedBy = error ? errorId : undefined;
   const stepIds = {
     nameId,
     baseUrlId,
     protocolId,
     keyId,
-    modelIdField,
-    modelCustomId,
     pathId,
   };
 
-  // 弹窗基座（PE-05 T05.2 #6）：盖层/Esc 三层/焦点圈定/动画由基座与
-  // useFirstRunWizard 接管；dismissible=false 强制步进（不可 Esc/遮罩关闭，
-  // Esc 由状态机消费：有错误先清 → 上一步），onClose 为占位（不会触发）
+  const providerVendor =
+    activeProfile?.id && !activeProfile.id.startsWith('custom-')
+      ? activeProfile.id
+      : activeProfile?.name || vendorName || undefined;
+
   return (
     <Dialog
       open
       onClose={() => {}}
       dismissible={false}
       title={
-        <span className={styles.firstRunBrand}>
-          <span className={styles.firstRunLogo} aria-hidden="true">
-            C
+        <div className={styles.firstRunHeader}>
+          <span className={styles.firstRunHeaderTitle}>{activeMeta.title}</span>
+          <span className={styles.firstRunStepBadge}>
+            {`步骤 ${step + 1} / ${WIZARD_STEP_META.length}`}
           </span>
-          <span className={styles.firstRunTitle}>欢迎使用 Crish</span>
-        </span>
+        </div>
       }
-      description={activeMeta.desc}
-      classNames={{ panel: styles.firstRunDialog, overlay: styles.firstRunOverlay }}
+      classNames={{
+        panel: styles.firstRunDialog,
+        overlay: styles.firstRunOverlay,
+      }}
     >
       <div className={styles.firstRunCard}>
-        <div className={styles.firstRunSteps} role="list" aria-label="设置步骤">
-          {WIZARD_STEP_META.map((s) => {
-            const isActive = step === s.id;
-            const isDone = step > s.id;
-            return (
-              <div
-                key={s.id}
-                role="listitem"
-                className={`${styles.firstRunStep} ${isActive ? styles.isActive : ''} ${isDone ? styles.isDone : ''}`}
-                aria-current={isActive ? 'step' : undefined}
-              >
-                <span className={styles.firstRunStepNum} aria-hidden="true">
-                  {isDone ? (
-                    <AppIcon name="check" size={14} />
-                  ) : (
-                    s.id + 1
-                  )}
-                </span>
-                <span className="first-run-step-label">{s.title}</span>
-              </div>
-            );
-          })}
-        </div>
-
-        <p
-          id={stepStatusId}
-          className={styles.firstRunHint}
-          style={{ margin: 0 }}
-          aria-live="polite"
-        >
-          {stepProgressLabel}
-        </p>
-
         <div
           className={styles.firstRunBody}
           ref={bodyRef}
@@ -199,26 +171,28 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
 
           {step === 1 && (
             <WizardModelStep
-              ids={stepIds}
-              modelId={modelId}
-              listedModels={listedModels}
-              hasProfile={hasProfiles && Boolean(activeProfile)}
-              busy={busy}
-              error={error}
-              describedBy={fieldDescribedBy}
-              onChange={(v) => {
-                setModelId(v);
+              addDraft={addDraft}
+              setAddDraft={(updater) => {
+                setAddDraft(updater);
                 setError('');
               }}
+              isDefaultModel={isDefaultModel}
+              onDefaultChange={(v) => {
+                setIsDefaultModel(v);
+              }}
+              runScan={runScan}
+              scanBusy={scanBusy}
+              {...(providerVendor !== undefined ? { providerVendor } : {})}
+              scannedModels={scannedModels}
+              existingModels={listedModels}
+              busy={busy}
               onEnter={() => {
                 void advanceFromStep();
               }}
             />
           )}
 
-          {step === 2 && <WizardImportStep />}
-
-          {step === 3 && (
+          {step === 2 && (
             <WizardProjectStep
               ids={stepIds}
               hasProject={hasProject}
@@ -240,17 +214,20 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
             />
           )}
 
-          {step === 4 && (
+          {step === 3 && (
             <div className={styles.firstRunReady}>
-              <AppIcon name="check-circle" size={28}
-                style={{ color: 'var(--text-secondary)' }}
-                aria-hidden="true" />
-              <div style={{ fontWeight: 600, fontSize: 15 }}>可以开始了</div>
+              <AppIcon
+                name="check-circle"
+                size={36}
+                style={{ color: 'var(--brand-deep)' }}
+                aria-hidden="true"
+              />
+              <div style={{ fontWeight: 600, fontSize: 16 }}>配置已就绪</div>
               <p
                 className={styles.firstRunHint}
-                style={{ textAlign: 'center' }}
+                style={{ textAlign: 'center', margin: 0 }}
               >
-                在主界面输入问题即可。随时可在设置中改模型、项目与权限。
+                点击下方按钮即可进入 Crish 开始对话
               </p>
             </div>
           )}
@@ -265,27 +242,25 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
             disabled={busy}
             onClick={finish}
           >
-            跳过向导
+            稍后配置
           </Button>
           <div style={{ display: 'flex', gap: 8 }}>
             {step > 0 && (
               <Button
                 type="button"
-                variant="ghost"
+                variant="secondary"
                 size="md"
-                className={`${styles.firstRunBtn} ${styles.ghost}`}
                 disabled={busy}
                 onClick={goPrev}
               >
                 上一步
               </Button>
             )}
-            {step < 4 ? (
+            {step < 3 ? (
               <Button
                 type="button"
                 variant="primary"
                 size="md"
-                className={`${styles.firstRunBtn} ${styles.primary}`}
                 disabled={busy}
                 aria-busy={busy || undefined}
                 onClick={() => {
@@ -299,14 +274,32 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
                 type="button"
                 variant="primary"
                 size="md"
-                className={`${styles.firstRunBtn} ${styles.primary}`}
                 onClick={finish}
               >
-                {wizardPrimaryCtaLabel(4, false)}
+                {wizardPrimaryCtaLabel(3, false)}
               </Button>
             )}
           </div>
         </div>
+
+        {step === 0 ? (
+          <div
+            className={styles.firstRunModelAlt}
+            role="group"
+            aria-label="连接其它方式"
+          >
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={`${styles.firstRunLink} ${styles.firstRunLinkCenter}`}
+              disabled={busy}
+              onClick={skipConnectStep}
+            >
+              暂不配置连接，浏览下一步
+            </Button>
+          </div>
+        ) : null}
 
         {step === 1 ? (
           <div
@@ -322,7 +315,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
               disabled={busy}
               onClick={skipModelStep}
             >
-              稍后在底栏手填模型
+              暂不启用模型，浏览下一步
             </Button>
             {onOpenSettings ? (
               <Button
@@ -332,12 +325,11 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
                 className={`${styles.firstRunLink} ${styles.firstRunLinkCenter}`}
                 disabled={busy}
                 onClick={() => {
-                  // 高级：扫描列表在设置页；不 toast
-                  markFirstRunDone();
+                  finish();
                   onOpenSettings();
                 }}
               >
-                打开设置获取模型列表
+                打开设置详细配置模型
               </Button>
             ) : null}
           </div>
@@ -347,7 +339,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
           <div
             className={styles.firstRunModelAlt}
             role="group"
-            aria-label="导入其它方式"
+            aria-label="项目其它方式"
           >
             <Button
               type="button"
@@ -355,9 +347,9 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
               size="sm"
               className={`${styles.firstRunLink} ${styles.firstRunLinkCenter}`}
               disabled={busy}
-              onClick={skipImportStep}
+              onClick={skipProjectStep}
             >
-              跳过，稍后在设置中导入
+              暂不选择目录，进入主界面
             </Button>
           </div>
         ) : null}

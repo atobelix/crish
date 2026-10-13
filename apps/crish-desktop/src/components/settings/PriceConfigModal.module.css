@@ -31,7 +31,10 @@
 .tableRow {
   display: grid;
   grid-template-columns:
-    minmax(96px, 1.5fr) minmax(80px, 1.2fr) minmax(66px, 1fr) minmax(66px, 1fr) minmax(66px, 1fr)
+    minmax(96px, 1.5fr) minmax(80px, 1.2fr) minmax(66px, 1fr) minmax(
+      66px,
+      1fr
+    ) minmax(66px, 1fr)
     76px 92px;
   align-items: center;
   padding: var(--space-1_5) var(--space-3);
@@ -59,7 +62,8 @@
 /* 价格行：默认透明，hover 柔和高光 */
 .tableRow {
   background: transparent;
-  border-bottom: var(--hairline-width) solid color-mix(in srgb, var(--border-subtle) 40%, transparent);
+  border-bottom: var(--hairline-width) solid var(--tint-divider);
+  font-variant-numeric: tabular-nums;
   transition: background var(--transition-fast);
 }
 
@@ -94,6 +98,7 @@
   font-size: var(--font-size-sm);
   font-family: var(--font-sans);
   font-weight: var(--font-weight-normal);
+  font-variant-numeric: tabular-nums;
   background: var(--bg-card);
   color: var(--text-primary);
   outline: none;

@@ -29,9 +29,9 @@
   font-size: var(--font-size-xxs);
   padding: 0 var(--space-1_5);
   border-radius: var(--radius-sm);
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: none;
   color: var(--text-tertiary);
-  background: transparent;
+  background: var(--tint-subtle);
   line-height: 1.5;
   white-space: nowrap;
   height: 20px;
@@ -41,22 +41,22 @@
 
 .mcpStatusPill.isOn {
   color: var(--accent-green);
-  border-color: color-mix(in srgb, var(--accent-green) 35%, transparent);
+  background: var(--success-soft-bg);
 }
 
 .mcpStatusPill.kindOk {
   color: var(--accent-green);
-  border-color: color-mix(in srgb, var(--accent-green) 30%, transparent);
+  background: var(--success-soft-bg);
 }
 
 .mcpStatusPill.kindWarn {
   color: var(--accent-orange);
-  border-color: color-mix(in srgb, var(--accent-orange) 30%, transparent);
+  background: var(--warning-soft-bg);
 }
 
 .mcpStatusPill.kindErr {
   color: var(--accent-red);
-  border-color: color-mix(in srgb, var(--accent-red) 30%, transparent);
+  background: var(--danger-soft-bg);
 }
 
 .mcpToolbar {
@@ -162,7 +162,8 @@
   font-size: var(--font-size-xxs);
   padding: 0 var(--space-1_5);
   border-radius: var(--radius-sm);
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: none;
+  background: var(--tint-subtle);
   color: var(--text-tertiary);
   line-height: 1.5;
   flex-shrink: 0;
@@ -171,21 +172,22 @@
 
 .mcpStateBadge.kindOk {
   color: var(--accent-green);
-  border-color: color-mix(in srgb, var(--accent-green) 30%, transparent);
+  background: var(--success-soft-bg);
 }
 
 .mcpStateBadge.kindWarn {
   color: var(--accent-orange);
-  border-color: color-mix(in srgb, var(--accent-orange) 30%, transparent);
+  background: var(--warning-soft-bg);
 }
 
 .mcpStateBadge.kindErr {
   color: var(--accent-red);
-  border-color: color-mix(in srgb, var(--accent-red) 30%, transparent);
+  background: var(--danger-soft-bg);
 }
 
 .mcpStateBadge.kindIdle {
   color: var(--text-tertiary);
+  background: var(--tint-subtle);
 }
 
 .mcpRowMeta {
@@ -229,7 +231,8 @@
 .mcpTools {
   margin-top: var(--space-0_5);
   padding: var(--space-0_5) 0 var(--space-0_5) var(--space-3);
-  border-top: var(--hairline-width) solid var(--border-subtle);
+  border: none;
+  background: transparent;
 }
 
 .mcpTools ul {

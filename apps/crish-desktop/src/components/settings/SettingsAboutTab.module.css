@@ -15,9 +15,9 @@
   width: 44px;
   height: 44px;
   border-radius: var(--radius-lg);
-  background: var(--surface-input);
+  background: var(--tint-hover);
   color: var(--text-primary);
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: none;
   flex-shrink: 0;
 }
 
@@ -55,9 +55,9 @@
   font-size: var(--font-size-xs);
   padding: var(--space-0_5) var(--space-2);
   border-radius: var(--radius-sm);
-  background: var(--surface-input);
+  background: var(--tint-hover);
   color: var(--text-primary);
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: none;
 }
 
 .monoBadge {
@@ -67,9 +67,9 @@
   font-size: var(--font-size-xs);
   padding: var(--space-0_5) var(--space-2);
   border-radius: var(--radius-sm);
-  background: var(--surface-input);
+  background: var(--tint-hover);
   color: var(--text-primary);
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: none;
 }
 
 .licenseBadge {
@@ -79,9 +79,9 @@
   font-weight: var(--font-weight-medium);
   padding: var(--space-0_5) var(--space-2);
   border-radius: var(--radius-sm);
-  background: var(--surface-input);
+  background: var(--tint-hover);
   color: var(--text-primary);
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: none;
 }
 
 .copyrightNotice {
@@ -148,9 +148,9 @@
   border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
   font-family: var(--font-mono);
-  background: var(--surface-input);
+  background: var(--tint-hover);
   color: var(--text-secondary);
-  border: var(--hairline-width) solid var(--border-subtle);
+  border: none;
 }
 
 .depTable {
@@ -166,8 +166,8 @@
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
-  background: var(--surface-input);
-  border: var(--hairline-width) solid var(--border-subtle);
+  background: var(--tint-hover);
+  border: none;
 }
 
 .depInfo {
@@ -205,16 +205,16 @@
   text-decoration: none;
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
-  background: var(--surface-outer);
-  border: var(--hairline-width) solid var(--border-subtle);
+  background: var(--tint-hover);
+  border: none;
   transition:
     color 0.15s ease,
-    border-color 0.15s ease;
+    background 0.15s ease;
 }
 
 .depLink:hover {
   color: var(--text-primary);
-  border-color: var(--border-color);
+  background: var(--sidebar-hover);
 }
 
 .fontGrid {
@@ -229,8 +229,8 @@
   gap: var(--space-1);
   padding: var(--space-2_5) var(--space-3);
   border-radius: var(--radius-md);
-  background: var(--surface-input);
-  border: var(--hairline-width) solid var(--border-subtle);
+  background: var(--tint-hover);
+  border: none;
 }
 
 .fontName {
@@ -252,8 +252,8 @@
 .noticeBox {
   padding: var(--space-2_5) var(--space-3);
   border-radius: var(--radius-md);
-  background: var(--surface-input);
-  border: var(--hairline-width) solid var(--border-subtle);
+  background: var(--tint-hover);
+  border: none;
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   line-height: var(--line-height-body);
@@ -268,16 +268,15 @@
   text-decoration: none;
   padding: var(--space-1) var(--space-2_5);
   border-radius: var(--radius-sm);
-  background: var(--surface-input);
-  border: var(--hairline-width) solid var(--border-subtle);
+  background: var(--tint-hover);
+  border: none;
   transition:
     background 0.15s ease,
-    border-color 0.15s ease;
+    color 0.15s ease;
 }
 
 .externalLink:hover {
   background: var(--sidebar-hover);
-  border-color: var(--border-color);
 }
 
 .modalBody {

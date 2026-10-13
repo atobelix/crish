@@ -46,7 +46,8 @@
 
 .jsonToolHead:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 /* 折叠指示器：中性灰 Chevron */
@@ -123,7 +124,8 @@
 }
 
 @keyframes pulseDot {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.3;
     transform: scale(0.85);
   }
@@ -272,7 +274,10 @@
   cursor: pointer;
   box-shadow: none;
   opacity: 0;
-  transition: opacity var(--transition-micro, 120ms ease), background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
+  transition:
+    opacity var(--transition-micro, 120ms ease),
+    background var(--transition-micro, 120ms ease),
+    color var(--transition-micro, 120ms ease);
 }
 
 .terminalCard:hover .terminalCopyBtn,
@@ -287,7 +292,8 @@
 
 .terminalCopyBtn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .copiedCheckIcon {
@@ -323,7 +329,9 @@
   overflow-y: visible;
   cursor: text;
   box-sizing: border-box;
-  background: var(--tint-hover); /* 三档：层上统一叠加（原 bg-card 96% + text 4% 不透明新灰） */
+  background: var(
+    --tint-hover
+  ); /* 三档：层上统一叠加（原 bg-card 96% + text 4% 不透明新灰） */
 }
 
 .terminalLine {
@@ -364,17 +372,21 @@
   user-select: none;
   border-radius: var(--radius-sm);
   box-sizing: border-box;
-  transition: background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
+  transition:
+    background var(--transition-micro, 120ms ease),
+    color var(--transition-micro, 120ms ease);
 }
 
 .terminalMidFoldBar:hover {
-  background: linear-gradient(var(--tint-hover), var(--tint-hover)), var(--tint-active); /* hover = 静止态再叠一层 tint-hover */
+  background:
+    linear-gradient(var(--tint-hover), var(--tint-hover)), var(--tint-active); /* hover = 静止态再叠一层 tint-hover */
   color: var(--text-primary);
 }
 
 .terminalMidFoldBar:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .midFoldIcon {
@@ -402,7 +414,9 @@
   cursor: pointer;
   box-shadow: none;
   user-select: none;
-  transition: background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
+  transition:
+    background var(--transition-micro, 120ms ease),
+    color var(--transition-micro, 120ms ease);
 }
 
 .terminalCollapseBtn:hover {
@@ -412,7 +426,8 @@
 
 .terminalCollapseBtn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 /* --------------------------------------------------------------------------
@@ -632,7 +647,8 @@
 
 .codeBlockCopyBtn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .codeBlockBody {
@@ -715,7 +731,8 @@
 .diffCardHeader:focus-visible,
 .gitDiffCardHeader:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .diffFileInfo,
@@ -761,22 +778,6 @@
   font-weight: 600;
 }
 
-.diffStatAdd,
-.gitDiffAdd {
-  padding: 1px 6px;
-  border-radius: var(--radius-xs);
-  background: var(--diff-add-bg);
-  color: var(--diff-add-fg);
-}
-
-.diffStatDel,
-.gitDiffDel {
-  padding: 1px 6px;
-  border-radius: var(--radius-xs);
-  background: var(--diff-del-bg);
-  color: var(--diff-del-fg);
-}
-
 .diffActions {
   display: inline-flex;
   align-items: center;
@@ -784,7 +785,6 @@
 }
 
 .diffActionBtn,
-.diffCopyBtn,
 .diffCopyBtn {
   display: inline-flex;
   align-items: center;
@@ -800,7 +800,9 @@
   color: var(--text-tertiary);
   cursor: pointer;
   box-shadow: none;
-  transition: background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
+  transition:
+    background var(--transition-micro, 120ms ease),
+    color var(--transition-micro, 120ms ease);
 }
 
 .diffActionBtn:hover,
@@ -812,11 +814,11 @@
 .diffActionBtn:focus-visible,
 .diffCopyBtn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .diffPreviewTag,
-.gitDiffPreviewTag,
 .gitDiffPreviewTag {
   display: inline-flex;
   align-items: center;
@@ -830,10 +832,12 @@
   font-weight: normal;
   color: var(--text-secondary);
   background: var(--tint-hover);
-  border: 1px solid var(--border-subtle);
+  border: none;
   cursor: pointer;
   box-shadow: none;
-  transition: background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
+  transition:
+    background var(--transition-micro, 120ms ease),
+    color var(--transition-micro, 120ms ease);
 }
 
 .diffPreviewTag:hover,
@@ -845,7 +849,8 @@
 .diffPreviewTag:focus-visible,
 .gitDiffPreviewTag:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .diffLinesContainer,
@@ -949,7 +954,9 @@
   justify-content: center;
   gap: var(--space-3, 12px);
   padding: 8px 12px;
-  background: var(--tint-hover); /* 三档：层上统一叠加（原 bg-card 96% + text 4% 不透明新灰） */
+  background: var(
+    --tint-hover
+  ); /* 三档：层上统一叠加（原 bg-card 96% + text 4% 不透明新灰） */
   color: var(--text-secondary);
   font-size: var(--font-size-micro, 11px);
   border-top: 1px solid var(--border-subtle);
@@ -957,7 +964,6 @@
   box-sizing: border-box;
 }
 
-.diffMoreBtn,
 .diffMoreBtn {
   display: inline-flex;
   align-items: center;
@@ -966,15 +972,17 @@
   min-height: unset;
   padding: 3px 10px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-card);
+  border: none;
+  background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
   font-weight: normal;
   font-size: var(--font-size-micro, 11px);
   cursor: pointer;
   box-shadow: none;
-  transition: background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
+  transition:
+    background var(--transition-micro, 120ms ease),
+    color var(--transition-micro, 120ms ease);
 }
 
 .diffMoreBtn:hover {
@@ -984,7 +992,8 @@
 
 .diffMoreBtn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .diffEmpty {
@@ -993,5 +1002,3 @@
   color: var(--text-tertiary);
   font-size: var(--font-size-xs, 12px);
 }
-
-

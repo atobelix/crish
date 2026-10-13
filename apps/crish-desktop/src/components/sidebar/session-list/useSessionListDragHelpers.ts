@@ -79,7 +79,10 @@ export function isPreviewTargetSection(
 /**
  * 原汁原味克隆当前会话行的真实 DOM 外观，并进行深层事件脱敏（杜绝 pointer-events 遮挡穿透）
  */
-export function createSidebarSessionGhost(rowLi: HTMLElement, rowRect: DOMRect): HTMLDivElement {
+export function createSidebarSessionGhost(
+  rowLi: HTMLElement,
+  rowRect: DOMRect
+): HTMLDivElement {
   const ghost = rowLi.cloneNode(true) as HTMLDivElement;
   ghost.className = 'sidebar-drag-ghost';
   ghost.setAttribute('aria-hidden', 'true');
@@ -95,7 +98,7 @@ export function createSidebarSessionGhost(rowLi: HTMLElement, rowRect: DOMRect):
     'opacity: 0.94',
     'border-radius: 8px',
     'background: var(--bg-card)',
-    'box-shadow: 0 10px 28px rgba(0, 0, 0, 0.15), 0 3px 8px rgba(0, 0, 0, 0.08)',
+    'box-shadow: var(--shadow-lg)',
     'border: 1px solid var(--border-color)',
     'will-change: transform',
     'transform: translate3d(-9999px, -9999px, 0)',

@@ -192,7 +192,10 @@ describe('批次 2 · ② 禁新裸混色（text-primary 基底，严格清零�
     for (const p of cssFiles) {
       const base = p.split(/[\\/]/).pop() ?? '';
       if (MIX_SKIP_FILE_NAMES.includes(base)) continue;
-      const lines = readFileSync(p, 'utf8').split(/\r?\n/);
+      const raw = readFileSync(p, 'utf8');
+      // 剥离块注释 /* ... */
+      const clean = raw.replace(/\/\*[\s\S]*?\*\//g, '');
+      const lines = clean.split(/\r?\n/);
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         if (DEF_LINE_RE.test(line)) continue;
@@ -201,6 +204,29 @@ describe('批次 2 · ② 禁新裸混色（text-primary 基底，严格清零�
           total += matches.length;
           violations.push(`${p}:${i + 1}: ${line.trim()}`);
         }
+      }
+
+      // 扫描跨行 multiline color-mix([\s\S]*?) 块
+      const multilineBlocks = clean.matchAll(/color-mix\([\s\S]*?\)/g);
+      for (const m of multilineBlocks) {
+        const block = m[0];
+        if (!block.includes('\n')) continue; // 单行已在逐行扫描中覆盖
+        if (
+          !/color-mix\(\s*in\s+srgb\s*,\s*var\(--text-primary\)\s*\d+(?:\.\d+)?%/s.test(
+            block
+          )
+        )
+          continue;
+        // 检查该块是否在 CSS 变量定义行 (--*:) 上
+        const prefix = clean.slice(Math.max(0, m.index - 120), m.index);
+        const lastDecl = prefix.split(/[;{}]/).pop() ?? '';
+        if (DEF_LINE_RE.test(lastDecl.trim())) continue;
+
+        total++;
+        const lineNum = clean.slice(0, m.index).split('\n').length;
+        violations.push(
+          `${p}:${lineNum} (multiline): ${block.replace(/\s+/g, ' ')}`
+        );
       }
     }
     expect(
@@ -211,7 +237,7 @@ describe('批次 2 · ② 禁新裸混色（text-primary 基底，严格清零�
 });
 
 describe('批次 2 · ③ 禁裸 999px / 裸 99999', () => {
-  const RADIUS_999_BASELINE = 62; // 当前基线（S5 表面族收敛后递减）
+  const RADIUS_999_BASELINE = 0; // 当前基线（S5 表面族收敛后递减）
   const BARE_99999_WHITELIST = ['ChatComposer.module.css']; // autofill hack（R-11）
 
   it(`border-radius: 999px 裸值计数 ≤ ${RADIUS_999_BASELINE}`, () => {
@@ -284,12 +310,18 @@ describe('批次 2 · ④ scrollbar 块 ratchet', () => {
 
     // light 模式必须显式定义实体像素且非透明（彻底杜绝浅色底板透明滚动条缺陷）
     expect(lightBlock).toMatch(/--scrollbar-thumb-bg:\s*#dedddc/);
-    expect(lightBlock).toMatch(/--tint-scrollbar-thumb:\s*var\(--scrollbar-thumb-bg\)/);
+    expect(lightBlock).toMatch(
+      /--tint-scrollbar-thumb:\s*var\(--scrollbar-thumb-bg\)/
+    );
     expect(lightBlock).toMatch(/--tint-scrollbar-track:\s*transparent/);
 
     // dark 模式必须显式重定义且非透明
-    expect(darkBlock).toMatch(/--scrollbar-thumb-bg:\s*(?:#[0-9a-fA-F]+|color-mix\([^;]+var\(--text-primary[^;]+\))/);
-    expect(darkBlock).toMatch(/--tint-scrollbar-thumb:\s*var\(--scrollbar-thumb-bg\)/);
+    expect(darkBlock).toMatch(
+      /--scrollbar-thumb-bg:\s*(?:#[0-9a-fA-F]+|color-mix\([^;]+var\(--text-primary[^;]+\))/
+    );
+    expect(darkBlock).toMatch(
+      /--tint-scrollbar-thumb:\s*var\(--scrollbar-thumb-bg\)/
+    );
     expect(darkBlock).toMatch(/--tint-scrollbar-track:\s*transparent/);
 
     // 严禁未激活态滚动条 thumb 回落为透明或未定义
@@ -349,13 +381,40 @@ describe('批次 2 · ④ scrollbar 块 ratchet', () => {
     }
     expect(extras, `私有 scrollbar 块：${extras.join('; ')}`).toEqual([]);
   });
+
+  it('滚动条容器悬停仅显示浅灰静止色（--scrollbar-thumb-bg），仅滑块自身 :hover/:active 才可设为激活深色（--scrollbar-thumb-active），且支持 data-scrollbar-visibility 自由定义', () => {
+    const css = readFile(`src/styles/${SCROLLBAR_EXPORT}`);
+    expect(css).toContain("[data-scrollbar-visibility='hover']");
+    expect(css).toContain("[data-scrollbar-visibility='always']");
+
+    // 扫描所有设置 --scrollbar-thumb-active 的 CSS 规则块，确保每一条选择器都以 ::-webkit-scrollbar-thumb:hover 或 :active 结尾
+    const blocks = [
+      ...css.matchAll(/([^{}]+)\{([^}]*--scrollbar-thumb-active[^}]*)\}/g),
+    ];
+    expect(blocks.length).toBeGreaterThan(0);
+    for (const match of blocks) {
+      const selectors = match[1]!
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const sel of selectors) {
+        expect(
+          sel,
+          `禁止在容器 hover/active 时直接把滑块染成激活黑灰色：${sel}`
+        ).toMatch(
+          /::-webkit-scrollbar-thumb(?::horizontal)?\s*:(?:hover|active)$/
+        );
+      }
+    }
+  });
 });
 
 describe('批次 2 · ⑤ !important ratchet', () => {
   // 基线 633 = 批次 9.1 治理后（settings-base segment 组 12 处 + chat.css 双重
   // border 2 处去除；reduced-motion.css 白名单——R-04 双通道机制性 !important
   // 按 01 方案 S7 口径「保留 reduced-motion 27 处 + 白名单注明」豁免，防误伤）。
-  const IMPORTANT_BASELINE = 626;
+  const IMPORTANT_BASELINE = 32;
   const IMPORTANT_SKIP_FILE_NAMES = ['reduced-motion.css'];
 
   it(`全仓 !important 计数 ≤ ${IMPORTANT_BASELINE}（reduced-motion 白名单）`, () => {
@@ -437,9 +496,7 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
     expect(darkBlock).toContain(
       '--tint-hover: var(--elevate-1)' // 深色并入元素提亮阶梯（heson 2026-10-11 01:05）
     );
-    expect(darkBlock).toContain(
-      '--tint-active: var(--elevate-1-active)'
-    );
+    expect(darkBlock).toContain('--tint-active: var(--elevate-1-active)');
   });
 });
 
@@ -508,7 +565,9 @@ describe('设置按钮圆角 7px 契约（用户锁，survey 04）', () => {
     // （见上方 it），消费点一律无兜底直连 var(--button-radius) / var(--seg-outer-radius)。
     expect(button).toContain('--btn-radius: var(--button-radius)');
     expect(seg).toContain('--seg-outer-radius: var(--button-radius)');
-    expect(seg).toContain('--seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad))');
+    expect(seg).toContain(
+      '--seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad))'
+    );
     expect(seg).toContain('border-radius: var(--seg-outer-radius)');
     expect(seg).toContain('border-radius: var(--seg-inner-radius)');
     expect(seg).not.toMatch(/border-radius:\s*8px/);
@@ -522,19 +581,26 @@ describe('批次 6 · T4 hover-only 键盘闭环契约（08-步5 · 平直列表
       /\r\n/g,
       '\n'
     );
-    const block = css.match(/\.(rowActions|hoverActions)\s*\{[\s\S]*?\}/)?.[0] ?? '';
+    const block =
+      css.match(/\.(rowActions|hoverActions)\s*\{[\s\S]*?\}/)?.[0] ?? '';
     expect(block, '.rowActions/.hoverActions 应存在').toContain('opacity: 0');
     expect(block).toContain('visibility: hidden');
     expect(block).not.toContain('display: none');
 
     // 就地平滑迁移：支持平直列表行 .fileRow 与 .rowActions / .hoverActions，彻底切除旧手风琴 .accordionHeaderRow 依赖
-    const hasRowHover = css.includes('.fileRow:hover .rowActions') || css.includes('.fileRow:hover .hoverActions');
+    const hasRowHover =
+      css.includes('.fileRow:hover .rowActions') ||
+      css.includes('.fileRow:hover .hoverActions');
     expect(hasRowHover, '必须支持 .fileRow:hover 揭示操作栏').toBe(true);
-    const hasRowFocus = css.includes('.fileRow:focus-within .rowActions') || css.includes('.fileRow:focus-within .hoverActions');
+    const hasRowFocus =
+      css.includes('.fileRow:focus-within .rowActions') ||
+      css.includes('.fileRow:focus-within .hoverActions');
     expect(hasRowFocus, '必须支持 .fileRow:focus-within 揭示操作栏').toBe(true);
 
     // 刚性防回潮负向断言：旧手风琴选择器严禁在样式表中复活
-    expect(css, '严禁残留旧手风琴行类名 .accordionHeaderRow').not.toContain('.accordionHeaderRow');
+    expect(css, '严禁残留旧手风琴行类名 .accordionHeaderRow').not.toContain(
+      '.accordionHeaderRow'
+    );
   });
 
   it('DiffCardFileList 列表语义已降级为 role="list"（无 listbox/option 滥用）', () => {
@@ -581,22 +647,36 @@ describe('composer 水平内衬光学 token 对（2026-09-21 用户视觉裁决�
 
   it('.composerCard 单/多行两条规则消费同一 token 对，兜底值与静态默认同值', () => {
     // 规则块提取用原始文本（^ 行首锚定依赖换行）；断言前再对块内空白归一化
-    const single = ruleBlock(readFile(COMPOSER_CSS), '.composerCard').replace(/\s+/g, ' ');
-    const multi = ruleBlock(readFile(COMPOSER_CSS), '.composerCard.isMultiline').replace(/\s+/g, ' ');
+    const single = ruleBlock(readFile(COMPOSER_CSS), '.composerCard').replace(
+      /\s+/g,
+      ' '
+    );
+    const multi = ruleBlock(
+      readFile(COMPOSER_CSS),
+      '.composerCard.isMultiline'
+    ).replace(/\s+/g, ' ');
     expect(single, '.composerCard 规则应存在').not.toBe('');
     expect(multi, '.composerCard.isMultiline 规则应存在').not.toBe('');
     // 单行：上 6 / 右=结束侧 / 下 6 / 左=起始侧（等宽 10px）
-    expect(single).toContain('padding: 6px var(--composer-pad-x, 10px) 6px var(--composer-pad-x-start, 10px)');
+    expect(single).toContain(
+      'padding: 6px var(--composer-pad-x, 10px) 6px var(--composer-pad-x-start, 10px)'
+    );
     // 多行：垂直 8，水平同一对 token——＋ 同列（left-ctrl）切换 X 轴零位移
-    expect(multi).toContain('padding: 8px var(--composer-pad-x, 10px) 8px var(--composer-pad-x-start, 10px)');
+    expect(multi).toContain(
+      'padding: 8px var(--composer-pad-x, 10px) 8px var(--composer-pad-x-start, 10px)'
+    );
   });
 
   it('负向：composer 卡片 padding 禁 calc() 魔术补偿（光学量必须命名化为 token）', () => {
     const css = readFile(COMPOSER_CSS);
     for (const sel of ['.composerCard', '.composerCard.isMultiline']) {
       const block = ruleBlock(css, sel);
-      const padLine = block.split('\n').find((l) => l.includes('padding:')) ?? '';
-      expect(padLine, `${sel} 的 padding 不得使用 calc() 魔术补偿（AGENTS.md §7）`).not.toContain('calc(');
+      const padLine =
+        block.split('\n').find((l) => l.includes('padding:')) ?? '';
+      expect(
+        padLine,
+        `${sel} 的 padding 不得使用 calc() 魔术补偿（AGENTS.md §7）`
+      ).not.toContain('calc(');
     }
   });
 });

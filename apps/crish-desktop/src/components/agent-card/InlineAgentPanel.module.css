@@ -76,20 +76,23 @@
   height: 5px;
   border-radius: 50%;
   background: var(--accent-color);
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--accent-color) 22%, transparent);
+  box-shadow: 0 0 0 2.5px
+    color-mix(in srgb, var(--accent-color) 22%, transparent);
   animation: subagent-dot-pulse 1.4s ease-in-out infinite;
   display: inline-block;
   flex-shrink: 0;
 }
 
 @keyframes subagent-dot-pulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(0.85);
   }
   50% {
     transform: scale(1.3);
     opacity: 1;
-    box-shadow: 0 0 0 4.5px color-mix(in srgb, var(--accent-color) 32%, transparent);
+    box-shadow: 0 0 0 4.5px
+      color-mix(in srgb, var(--accent-color) 32%, transparent);
   }
 }
 
@@ -243,8 +246,8 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
+  background: transparent;
+  border: none;
   border-radius: var(--radius-sm);
   color: var(--text-tertiary);
   cursor: pointer;
@@ -252,18 +255,15 @@
   transition:
     background var(--transition-micro),
     color var(--transition-micro),
-    border-color var(--transition-micro),
     opacity var(--transition-fast);
 }
 .agentHeadBtn:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text-primary);
-  border-color: var(--border-color);
 }
 .agentHeadBtn.isActive {
   background: color-mix(in srgb, var(--accent-color) 12%, transparent);
   color: var(--accent-color);
-  border-color: color-mix(in srgb, var(--accent-color) 30%, transparent);
 }
 .agentHeadBtn:disabled {
   opacity: 0.4;
@@ -306,48 +306,31 @@
   padding: 0 5px;
   border-radius: var(--radius-sm);
   background: transparent;
-  border: 1px solid var(--hairline, var(--border-subtle));
+  border: none;
   color: var(--text-secondary);
   line-height: var(--line-height-ui);
 }
 
 .inlineAgentBadgeRunning {
-  border-color: color-mix(
-    in srgb,
-    var(--accent-green) 40%,
-    var(--hairline, var(--border-subtle))
-  );
   color: var(--text-secondary);
   background: transparent;
 }
 
 .inlineAgentBadgeFailed {
-  border-color: color-mix(
-    in srgb,
-    var(--accent-red) 40%,
-    var(--hairline, var(--border-subtle))
-  );
   color: var(--accent-red);
   background: transparent;
 }
 
 .inlineAgentBadgeStopped {
-  border-color: var(--hairline, var(--border-subtle));
   color: var(--text-secondary);
   background: transparent;
 }
 
 .inlineAgentBadgePending {
-  border-color: color-mix(
-    in srgb,
-    var(--accent-orange) 50%,
-    var(--hairline, var(--border-subtle))
-  );
   color: var(--accent-orange, var(--text-secondary));
 }
 
 .inlineAgentBadgeSide {
-  border-color: var(--hairline, var(--border-subtle));
   color: var(--text-secondary);
   background: transparent;
 }
@@ -370,8 +353,7 @@
 .accordionWrapper {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows
-    var(--transition-accordion);
+  transition: grid-template-rows var(--transition-accordion);
 }
 
 .accordionWrapper[data-expanded='true'] {
@@ -466,14 +448,14 @@
 .inlineAgentFailRetries {
   padding: 1px 8px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--hairline, var(--border-subtle));
+  border: none;
   background: var(--bg-hover, transparent);
 }
 
 .inlineAgentFailNeedsUser {
   padding: 1px 8px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--accent-orange, var(--border-subtle));
+  border: none;
   color: var(--accent-orange, var(--text-secondary));
 }
 

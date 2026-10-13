@@ -313,6 +313,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
         <div
           className={styles.settingsMain}
+          data-settings-main="true"
+          data-scrollbar-hover-host="main"
           onPointerEnter={() => setHoverPane('main')}
         >
           <header className={styles.settingsHeader}>
@@ -345,6 +347,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             className={styles.coverContent}
             aria-label={activeLabel}
             aria-labelledby={activeTabBtnId}
+            data-cover-content="true"
+            data-scrollbar-visibility="hover"
             data-settings-tab={safeActiveTab}
           >
             <Suspense

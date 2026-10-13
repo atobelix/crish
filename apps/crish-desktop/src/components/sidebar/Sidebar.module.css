@@ -236,10 +236,12 @@
 }
 
 .sidebar:hover .sidebarScroll::-webkit-scrollbar-thumb,
-.sidebarScroll:focus-within::-webkit-scrollbar-thumb {
+.sidebarScroll:hover::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb-bg, var(--tint-scrollbar-thumb));
 }
 
+.sidebar:hover .sidebarScroll::-webkit-scrollbar-thumb:hover,
+.sidebar:hover .sidebarScroll::-webkit-scrollbar-thumb:active,
 .sidebarScroll::-webkit-scrollbar-thumb:hover,
 .sidebarScroll::-webkit-scrollbar-thumb:active {
   background-color: var(--scrollbar-thumb-active);
@@ -249,12 +251,12 @@
 
 .sidebar:hover
   .sidebarScroll::-webkit-scrollbar-button:vertical:start:decrement,
-.sidebarScroll:focus-within::-webkit-scrollbar-button:vertical:start:decrement {
+.sidebarScroll:hover::-webkit-scrollbar-button:vertical:start:decrement {
   background-image: var(--scrollbar-button-up);
 }
 
 .sidebar:hover .sidebarScroll::-webkit-scrollbar-button:vertical:end:increment,
-.sidebarScroll:focus-within::-webkit-scrollbar-button:vertical:end:increment {
+.sidebarScroll:hover::-webkit-scrollbar-button:vertical:end:increment {
   background-image: var(--scrollbar-button-down);
 }
 
@@ -262,8 +264,8 @@
   .sidebarScroll::-webkit-scrollbar-button:vertical:start:decrement:hover,
 .sidebar:hover
   .sidebarScroll::-webkit-scrollbar-button:vertical:start:decrement:active,
-.sidebarScroll:focus-within::-webkit-scrollbar-button:vertical:start:decrement:hover,
-.sidebarScroll:focus-within::-webkit-scrollbar-button:vertical:start:decrement:active {
+.sidebarScroll::-webkit-scrollbar-button:vertical:start:decrement:hover,
+.sidebarScroll::-webkit-scrollbar-button:vertical:start:decrement:active {
   background-image: var(--scrollbar-button-up-active);
 }
 
@@ -271,8 +273,8 @@
   .sidebarScroll::-webkit-scrollbar-button:vertical:end:increment:hover,
 .sidebar:hover
   .sidebarScroll::-webkit-scrollbar-button:vertical:end:increment:active,
-.sidebarScroll:focus-within::-webkit-scrollbar-button:vertical:end:increment:hover,
-.sidebarScroll:focus-within::-webkit-scrollbar-button:vertical:end:increment:active {
+.sidebarScroll::-webkit-scrollbar-button:vertical:end:increment:hover,
+.sidebarScroll::-webkit-scrollbar-button:vertical:end:increment:active {
   background-image: var(--scrollbar-button-down-active);
 }
 

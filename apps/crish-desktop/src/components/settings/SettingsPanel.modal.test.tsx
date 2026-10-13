@@ -318,7 +318,7 @@ describe('设置弹窗：不再渲染窗口按钮 / 拖拽区', () => {
   });
 });
 
-describe('设置弹窗：三层底色 / 无边框开关 / 遮罩 token 契约', () => {
+describe('设置弹窗：两层底色 / 无边框开关 / 遮罩 token 契约', () => {
   const css = readFileSync(
     resolve(__dirname, './SettingsPanel.module.css'),
     'utf8'
@@ -334,19 +334,20 @@ describe('设置弹窗：三层底色 / 无边框开关 / 遮罩 token 契约', 
     );
   };
 
-  it('面板 / 左导航 / 顶部标题行 = 外层 --surface-outer（不透明）', () => {
+  it('面板 / 左导航 / 顶部标题行 / 内容区 = 主层 --surface-main（统一底板，稍微浅一点，不与滑块底轨混淆）', () => {
     for (const sel of [
       "[role='dialog'].settingsModal",
       '.settingsNav',
       '.settingsHeader',
+      '.coverContent',
     ]) {
       const r = rule(sel);
       expect(r, sel).not.toBe('');
-      expect(r, sel).toMatch(/background:\s*var\(--surface-outer\);/);
+      expect(r, sel).toMatch(/background:\s*var\(--surface-main\);/);
     }
   });
 
-  it('内容区 = 主层 --surface-main；卡片（--bg-card）在内容区作用域改指 --surface-input', () => {
+  it('内容区与左栏/顶栏统一为 --surface-main；卡片（--bg-card）在内容区作用域改指 --surface-input', () => {
     const r = rule('.coverContent');
     expect(r).toMatch(/background:\s*var\(--surface-main\);/);
     expect(r).toMatch(/--bg-card:\s*var\(--surface-input\);/);

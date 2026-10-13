@@ -1,13 +1,53 @@
 /**
- * 向导第 0 步：配置连接（中立表单）。
- * 厂商名称 + Base URL + API 密钥 + 协议 —— 与设置 · 连接与凭据同构。
- * 不预置任何第三方服务商下拉。
+ * 向导第 0 步：配置连接（模型服务商）。
+ * 提供 DeepSeek、智谱 GLM、OpenAI、Anthropic、Kimi 等常见 API 服务商快捷填入连接地址与协议，
+ * 不预填任何旧模型 ID。
  */
 import React from 'react';
 import styles from './overlay/FirstRunWizard.module.css';
-import { Select, Input } from './ui';
+import { Button, Select, Input } from './ui';
 import { YAML_PROTOCOL_SELECT_OPTIONS } from './settings-models/catalogWriteGate';
 import { DEFAULT_WIZARD_PROTOCOL } from './firstRunWizardLib';
+
+export type ProviderPreset = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  protocol: string;
+};
+
+export const POPULAR_PROVIDER_PRESETS: readonly ProviderPreset[] = [
+  {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    protocol: 'openai/chat',
+  },
+  {
+    id: 'z-ai',
+    name: '智谱 GLM',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    protocol: 'openai/chat',
+  },
+  {
+    id: 'openai',
+    name: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    protocol: 'openai/responses',
+  },
+  {
+    id: 'anthropic',
+    name: 'Anthropic',
+    baseUrl: 'https://api.anthropic.com',
+    protocol: 'anthropic/messages',
+  },
+  {
+    id: 'moonshotai',
+    name: 'Kimi',
+    baseUrl: 'https://api.moonshot.cn/v1',
+    protocol: 'openai/chat',
+  },
+];
 
 /** 本步用到的可访问 id（useId 生成，壳层透传防重复渲染串 id） */
 export type WizardKeyStepIds = {
@@ -31,6 +71,7 @@ export type WizardKeyStepProps = {
   onBaseUrlChange: (v: string) => void;
   onKeyChange: (v: string) => void;
   onProtocolChange: (v: string) => void;
+  onPresetSelect?: (preset: ProviderPreset) => void;
   onEnter: () => void;
 };
 
@@ -47,6 +88,7 @@ export const WizardKeyStep: React.FC<WizardKeyStepProps> = ({
   onBaseUrlChange,
   onKeyChange,
   onProtocolChange,
+  onPresetSelect,
   onEnter,
 }) => {
   const inputProps = {
@@ -59,6 +101,35 @@ export const WizardKeyStep: React.FC<WizardKeyStepProps> = ({
 
   return (
     <>
+      <div
+        className={styles.firstRunChips}
+        role="group"
+        aria-label="快捷选择常用服务商"
+      >
+        {POPULAR_PROVIDER_PRESETS.map((preset) => {
+          const isSelected =
+            name.trim().toLowerCase() === preset.name.toLowerCase() ||
+            baseUrl.trim().toLowerCase() === preset.baseUrl.toLowerCase();
+          return (
+            <Button
+              bare
+              key={preset.id}
+              type="button"
+              className={`${styles.firstRunChip} ${isSelected ? styles.isActive : ''}`}
+              disabled={busy}
+              onClick={() => {
+                onNameChange(preset.name);
+                onBaseUrlChange(preset.baseUrl);
+                onProtocolChange(preset.protocol);
+                onPresetSelect?.(preset);
+              }}
+            >
+              {preset.name}
+            </Button>
+          );
+        })}
+      </div>
+
       <label className={styles.firstRunLabel} htmlFor={ids.nameId}>
         服务商名称
       </label>
@@ -66,7 +137,7 @@ export const WizardKeyStep: React.FC<WizardKeyStepProps> = ({
         bare
         id={ids.nameId}
         className={styles.firstRunInput}
-        placeholder="例如: 自建网关、公司代理"
+        placeholder="例如 DeepSeek、智谱 GLM、OpenAI、Kimi"
         value={name}
         {...inputProps}
         onChange={(e) => onNameChange(e.target.value)}
@@ -78,13 +149,13 @@ export const WizardKeyStep: React.FC<WizardKeyStepProps> = ({
       />
 
       <label className={styles.firstRunLabel} htmlFor={ids.baseUrlId}>
-        Base URL
+        Base URL (API 地址)
       </label>
       <Input
         bare
         id={ids.baseUrlId}
         className={styles.firstRunInput}
-        placeholder="https://api.example.com/v1"
+        placeholder="https://api.deepseek.com/v1"
         value={baseUrl}
         {...inputProps}
         onChange={(e) => onBaseUrlChange(e.target.value)}
@@ -96,7 +167,7 @@ export const WizardKeyStep: React.FC<WizardKeyStepProps> = ({
       />
 
       <label className={styles.firstRunLabel} htmlFor={ids.protocolId}>
-        首要通信协议
+        通信协议
       </label>
       <Select
         {...(styles.firstRunSelect !== undefined && {
@@ -121,7 +192,7 @@ export const WizardKeyStep: React.FC<WizardKeyStepProps> = ({
         id={ids.keyId}
         type="password"
         className={styles.firstRunInput}
-        placeholder="粘贴密钥"
+        placeholder="粘贴 API 密钥"
         value={apiKey}
         {...inputProps}
         onChange={(e) => onKeyChange(e.target.value)}
@@ -131,9 +202,6 @@ export const WizardKeyStep: React.FC<WizardKeyStepProps> = ({
           }
         }}
       />
-      <p className={styles.firstRunHint}>
-        密钥仅保存在本机。不绑定任何第三方服务商；协议层仅做接口兼容。
-      </p>
     </>
   );
 };

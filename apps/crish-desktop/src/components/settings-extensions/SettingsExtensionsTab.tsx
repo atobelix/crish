@@ -77,9 +77,8 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
   if (manage === 'skill' || manage === 'mcp') {
     const label = manage === 'skill' ? '技能' : 'MCP';
     return (
-      <SettingsPage
-        title={label}
-        meta={
+      <div className={styles.manageWrapper}>
+        <div className={styles.manageBackBar}>
           <Button
             type="button"
             variant="ghost"
@@ -92,8 +91,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
           >
             返回扩展
           </Button>
-        }
-      >
+        </div>
         <Suspense
           fallback={
             <div className={styles.empty} role="status">
@@ -113,7 +111,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
             )}
           </AppErrorBoundary>
         </Suspense>
-      </SettingsPage>
+      </div>
     );
   }
 
@@ -130,19 +128,18 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
             disabled={loading}
             aria-label="刷新"
             icon={
-              <AppIcon name="refresh" size={14}
+              <AppIcon
+                name="refresh"
+                size={14}
                 className={loading ? 'spin' : undefined}
-                aria-hidden />
+                aria-hidden
+              />
             }
           />
         </SettingsHeadTools>
       }
     >
-      <div
-        className={styles.toolbar}
-        role="group"
-        aria-label="筛选"
-      >
+      <div className={styles.toolbar} role="group" aria-label="筛选">
         <SegmentedControl
           aria-label="视图"
           size="sm"

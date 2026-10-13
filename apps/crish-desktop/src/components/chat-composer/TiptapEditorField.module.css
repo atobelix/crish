@@ -205,7 +205,7 @@
   margin: 0 1px;
   border: none;
   background: transparent;
-  color: var(--skill-tag-color, hsl(198 78% 66%));
+  color: var(--skill-tag-color);
   font-size: inherit;
   font-weight: 500;
   line-height: inherit;
@@ -228,7 +228,7 @@
 
 .proseMirrorField :global(.mention-chip-skill),
 .proseMirrorField :global(.mention-chip-command) {
-  color: var(--skill-tag-color, hsl(198 78% 66%));
+  color: var(--skill-tag-color);
 }
 
 .proseMirrorField :global(.mention-chip .mention-icon-box) {

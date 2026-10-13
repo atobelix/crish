@@ -14,8 +14,11 @@ import { networkUserMessage } from '../api/userFacingErrors';
 import { DEFAULT_PROTOCOL } from '../api/modelsNormalize';
 
 import {
+  clearFirstRunWizardDone,
   readFirstRunWizardDone,
+  readShowOnboardingOnStartup,
   writeFirstRunWizardDone,
+  writeShowOnboardingOnStartup,
 } from '../api/cache/runtimeCache';
 
 export function isFirstRunDone(): boolean {
@@ -26,12 +29,32 @@ export function markFirstRunDone(): void {
   writeFirstRunWizardDone();
 }
 
+export function resetFirstRunDone(): void {
+  clearFirstRunWizardDone();
+}
+
+export function isShowOnboardingOnStartupEnabled(): boolean {
+  return readShowOnboardingOnStartup();
+}
+
+export function setShowOnboardingOnStartup(enabled: boolean): void {
+  writeShowOnboardingOnStartup(enabled);
+  if (enabled) {
+    clearFirstRunWizardDone();
+  } else {
+    writeFirstRunWizardDone();
+  }
+}
+
 /**
- * 冷启动是否应挂载向导：正式版、未完成、且本机尚未配密钥。
- * 已有密钥则落盘完成标记（模型可在底栏手填 / 设置页完成）。
+ * 冷启动是否应挂载向导：
+ * 1. 用户显式开启「启动时显示新手引导界面」时，每次启动均显示；
+ * 2. 否则：未完成首次向导且本机尚未配密钥时显示。
+ * 已有密钥且未开启常驻启动引导时落盘完成标记（模型可在底栏手填 / 设置页完成）。
  * 无副作用查询请用 isFirstRunDone / anyProfileHasKey；盖层是否打开用 isFirstRunOverlayOpen。
  */
 export function shouldShowFirstRunWizard(): boolean {
+  if (isShowOnboardingOnStartupEnabled()) return true;
   if (isFirstRunDone()) return false;
   // 已有密钥视为用户会用，不再强制向导（模型可手填）
   if (anyProfileHasKey()) {
@@ -54,19 +77,18 @@ export const WIZARD_MODEL_ID_MAX_LEN = 128;
 
 /** 向导模型 id 校验结果（判别联合，供 UI / 测试共用） */
 export type WizardModelIdResult =
-  | { ok: true; modelId: string }
-  | { ok: false; error: string };
+  { ok: true; modelId: string } | { ok: false; error: string };
 
 /** 成功支路 type guard：调用侧可安全读 modelId */
 export function isWizardModelIdOk(
-  r: WizardModelIdResult,
+  r: WizardModelIdResult
 ): r is Extract<WizardModelIdResult, { ok: true }> {
   return r.ok === true;
 }
 
 /** 失败支路 type guard：调用侧可安全读 error（页内 alert 文案） */
 export function isWizardModelIdError(
-  r: WizardModelIdResult,
+  r: WizardModelIdResult
 ): r is Extract<WizardModelIdResult, { ok: false }> {
   return r.ok === false;
 }
@@ -89,7 +111,10 @@ export function validateWizardModelId(raw: string): WizardModelIdResult {
     return { ok: false, error: '模型 id 含有非法字符' };
   }
   if (modelId.length > WIZARD_MODEL_ID_MAX_LEN) {
-    return { ok: false, error: `模型 id 过长（最多 ${WIZARD_MODEL_ID_MAX_LEN} 字符）` };
+    return {
+      ok: false,
+      error: `模型 id 过长（最多 ${WIZARD_MODEL_ID_MAX_LEN} 字符）`,
+    };
   }
   return { ok: true, modelId };
 }
@@ -99,7 +124,7 @@ export function validateWizardModelId(raw: string): WizardModelIdResult {
  * 空 catalog → []，绝不发明远程演示 id（如 mimo）。
  */
 export function wizardListedModels(
-  profile: Pick<ProviderProfile, 'models'> | null | undefined,
+  profile: Pick<ProviderProfile, 'models'> | null | undefined
 ): string[] {
   return normalizeModelIds(profile?.models);
 }
@@ -159,15 +184,11 @@ export function validateWizardConnectForm(input: {
 
 /** 密钥步 saveProfileKey 返回的已知 error code（宽字符串兼容未知支路） */
 export type WizardKeySaveErrorCode =
-  | 'empty_key'
-  | 'not_connected'
-  | 'profile_not_found'
-  | (string & {});
+  'empty_key' | 'not_connected' | 'profile_not_found' | (string & {});
 
 /** 密钥步页内决策：block 停步展示 error；continue 进模型手填步 */
 export type WizardKeySaveDecision =
-  | { action: 'block'; error: string }
-  | { action: 'continue' };
+  { action: 'block'; error: string } | { action: 'continue' };
 
 /**
  * 将 saveProfileKey 结果映射为页内决策（判别联合）。
@@ -195,10 +216,7 @@ export function decideWizardKeySave(res: {
 
 /** 模型激活失败时的已知 code */
 export type WizardActivateErrorCode =
-  | 'not_connected'
-  | 'empty_model'
-  | 'profile_not_found'
-  | (string & {});
+  'not_connected' | 'empty_model' | 'profile_not_found' | (string & {});
 
 /**
  * activateProfileModel 失败 → 页内 error 文案（成功返回 null，调用方不 toast）。
@@ -217,11 +235,11 @@ export function wizardActivatePageError(res: {
 
 /**
  * 向导步（字面量联合，禁止任意 number）
- * 0 密钥 → 1 模型 → 2 导入外部对话（可选）→ 3 项目 → 4 开始
+ * 0 服务商 → 1 模型 → 2 项目 → 3 开始
  */
-export type WizardStep = 0 | 1 | 2 | 3 | 4;
+export type WizardStep = 0 | 1 | 2 | 3;
 
-const WIZARD_STEPS: readonly WizardStep[] = [0, 1, 2, 3, 4];
+const WIZARD_STEPS: readonly WizardStep[] = [0, 1, 2, 3];
 
 export function isWizardStep(n: number): n is WizardStep {
   return (WIZARD_STEPS as readonly number[]).includes(n);
@@ -234,11 +252,11 @@ export function prevWizardStep(s: WizardStep): WizardStep {
   return isWizardStep(prev) ? prev : 0;
 }
 
-/** 下一步：到 4 为止，无 as 断言 */
+/** 下一步：到 3 为止，无 as 断言 */
 export function nextWizardStep(s: WizardStep): WizardStep {
-  if (s === 4) return 4;
+  if (s === 3) return 3;
   const next = s + 1;
-  return isWizardStep(next) ? next : 4;
+  return isWizardStep(next) ? next : 3;
 }
 
 /** 中文步骤元数据（标题 + 简述；纯，供轨与副标题共用） */
@@ -249,15 +267,10 @@ export type WizardStepMeta = {
 };
 
 export const WIZARD_STEP_META: readonly WizardStepMeta[] = [
-  {
-    id: 0,
-    title: '配置连接',
-    desc: '填写名称、Base URL、密钥与协议（不绑定第三方服务商）',
-  },
-  { id: 1, title: '启用模型', desc: '手填或选择模型 id 并写入引擎' },
-  { id: 2, title: '导入对话', desc: '可选：从 Claude Code / Codex 导入' },
-  { id: 3, title: '选择项目', desc: '可选，也可稍后选择' },
-  { id: 4, title: '开始使用', desc: '进入主界面' },
+  { id: 0, title: '配置模型服务商', desc: '' },
+  { id: 1, title: '启用模型', desc: '' },
+  { id: 2, title: '选择工作目录', desc: '' },
+  { id: 3, title: '开始使用', desc: '' },
 ];
 
 /** 安全取步骤元数据（越界回落首步，无 as） */
@@ -269,9 +282,8 @@ export function wizardStepMeta(step: WizardStep): WizardStepMeta {
 /** 主按钮中文文案（按步密度区分，纯） */
 export function wizardPrimaryCtaLabel(step: WizardStep, busy: boolean): string {
   if (busy) return '处理中…';
-  if (step === 0) return '保存连接并继续';
+  if (step === 0) return '保存并继续';
   if (step === 1) return '启用并继续';
   if (step === 2) return '继续';
-  if (step === 3) return '继续';
   return '进入 Crish';
 }

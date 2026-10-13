@@ -408,7 +408,7 @@
 
 .sessionItem:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1.5px var(--focus-border-color);
+  box-shadow: 0 0 0 1px var(--tint-focus-ring);
   background-color: var(--tint-hover);
 }
 
@@ -651,7 +651,7 @@
 .sessionItem.isRenaming {
   padding: var(--space-1) var(--space-2) var(--space-1) var(--space-8);
   background: transparent;
-  box-shadow: 0 0 0 1.5px var(--focus-border-color);
+  box-shadow: 0 0 0 1px var(--tint-focus-ring);
 }
 
 .sessionRunningSpinner {
@@ -676,11 +676,6 @@
 
 .sessionItem.isRunning:not(.active) {
   animation: session-running-pulse var(--transition-pulse) infinite;
-}
-
-.sessionItemWrap.isRunning > .sessionItem.active {
-  box-shadow: inset 3px 0 0
-    color-mix(in srgb, var(--accent-primary) 55%, transparent);
 }
 
 @keyframes session-running-pulse {

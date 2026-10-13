@@ -11,7 +11,11 @@ import {
 import { createDebounced } from './api/debouncedValue';
 import { onUiEvent } from './api/uiEvents';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
-import { shouldShowFirstRunWizard } from './components/firstRunWizardLib';
+import {
+  isWizardStep,
+  shouldShowFirstRunWizard,
+  type WizardStep,
+} from './components/firstRunWizardLib';
 import styles from './App.module.css';
 
 import { useAppBootstrap } from './app/AppBootstrap';
@@ -99,6 +103,7 @@ function App() {
   const [showFirstRun, setShowFirstRun] = useState(
     () => !isDemoModeFast() && shouldShowFirstRunWizard()
   );
+  const [firstRunInitialStep, setFirstRunInitialStep] = useState<WizardStep>(0);
   // 引擎就绪门闩（T06.8 归一：useEngineBootstrap 取代 useAppBootstrap setEngineReady）
   const engineReady = useEngineBootstrap();
 
@@ -118,9 +123,14 @@ function App() {
     setSidebarCollapsed,
   });
 
-  // 快捷键 / 全局手势触发向导（测试 / 诊断入口）
+  // 快捷键 / 全局手势 / 设置页触发向导（支持指定初始步骤）
   useEffect(() => {
-    const handler = () => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ step?: number } | undefined>).detail;
+      const rawStep = detail?.step;
+      setFirstRunInitialStep(
+        typeof rawStep === 'number' && isWizardStep(rawStep) ? rawStep : 0
+      );
       setShowFirstRun(true);
     };
     window.addEventListener('crish-open-first-run', handler);
@@ -229,6 +239,7 @@ function App() {
           <AppGlobalDialogs
             showFirstRun={showFirstRun}
             setShowFirstRun={setShowFirstRun}
+            firstRunInitialStep={firstRunInitialStep}
             showTelemetry={showTelemetry}
             setShowTelemetry={setShowTelemetry}
             showSettingsOverlay={showSettingsOverlay}

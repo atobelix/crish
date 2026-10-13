@@ -1,115 +1,75 @@
 /**
  * 向导第 1 步：启用模型。
- * 列表选择（SettingsSelect）+ 手填输入（可拆分模型），空 catalog 走纯输入。
- * 提示文案由 firstRunWizardLib 计算（页内 hint，不 toast）。
+ * 直接复用设置页 `ManualAddForm`（无硬编码旧模型标签，支持在线获取模型列表、
+ * 自动预填展示名/上下文长度/最大输出/多模态支持/思考档位），避免另起门户。
  */
 import React from 'react';
 import styles from './overlay/FirstRunWizard.module.css';
-import { Select, Input } from './ui';
-import { wizardEmptyModelCatalogHint } from './firstRunWizardLib';
-
-/** 本步用到的可访问 id（useId 生成，壳层透传） */
-export type WizardModelStepIds = {
-  modelIdField: string;
-  modelCustomId: string;
-};
+import { Switch } from './ui';
+import { ManualAddForm } from './settings-models/ManualAddForm';
+import type { AddDraft } from './settings-models/useModelProfilesState';
 
 export type WizardModelStepProps = {
-  ids: WizardModelStepIds;
-  modelId: string;
-  listedModels: string[];
-  /** 空 catalog 时 hint 的 hasProfile 入参 */
-  hasProfile: boolean;
+  addDraft: AddDraft;
+  setAddDraft: React.Dispatch<React.SetStateAction<AddDraft>>;
+  isDefaultModel?: boolean;
+  onDefaultChange?: (v: boolean) => void;
+  runScan?: () => Promise<void>;
+  scanBusy?: boolean;
+  providerVendor?: string;
+  scannedModels?: string[];
+  existingModels?: string[];
   busy: boolean;
-  /** 壳层 role=alert 文案（仅用于 aria-invalid / aria-describedby） */
-  error: string;
-  describedBy?: string;
-  onChange: (v: string) => void;
   onEnter: () => void;
 };
 
 export const WizardModelStep: React.FC<WizardModelStepProps> = ({
-  ids,
-  modelId,
-  listedModels,
-  hasProfile,
+  addDraft,
+  setAddDraft,
+  isDefaultModel = true,
+  onDefaultChange,
+  runScan,
+  scanBusy = false,
+  providerVendor,
+  scannedModels = [],
+  existingModels = [],
   busy,
-  error,
-  describedBy,
-  onChange,
   onEnter,
 }) => {
-  const hasListedModels = listedModels.length > 0;
-  const modelInList = hasListedModels && listedModels.includes(modelId);
-  const inputProps = {
-    disabled: busy,
-    spellCheck: false,
-    autoComplete: 'off',
-    'aria-invalid': error ? true : undefined,
-    'aria-describedby': describedBy,
-  } as const;
-
   return (
     <>
-      <label className={styles.firstRunLabel} htmlFor={ids.modelIdField}>
-        模型 id
-      </label>
-      {hasListedModels ? (
-        <>
-          <Select
-            {...(styles.firstRunSelect !== undefined && {
-              className: styles.firstRunSelect,
-            })}
-            value={modelInList ? modelId : ''}
-            disabled={busy}
-            placeholder="从本机列表选择…"
-            options={[
-              { id: '', label: '从本机列表选择…' },
-              ...listedModels.map((m) => ({ id: m, label: m })),
-            ]}
-            onChange={(v) => {
-              onChange(v);
-            }}
-          />
-          <label className={styles.firstRunLabel} htmlFor={ids.modelCustomId}>
-            或手填模型 id
-          </label>
-          <Input
-            bare
-            id={ids.modelCustomId}
-            className={styles.firstRunInput}
-            placeholder="例如 deepseek-v4-flash、gpt-5.6"
-            value={modelInList ? '' : modelId}
-            {...inputProps}
-            onChange={(e) => onChange(e.target.value)}
-            onEnter={() => {
-              if (!busy) {
-                onEnter();
-              }
-            }}
-          />
-        </>
-      ) : (
-        <Input
-          bare
-          id={ids.modelIdField}
-          className={styles.firstRunInput}
-          placeholder="输入模型 id（如 deepseek-v4-flash）"
-          value={modelId}
-          {...inputProps}
-          onChange={(e) => onChange(e.target.value)}
-          onEnter={() => {
-            if (!busy) {
-              onEnter();
-            }
-          }}
+      <ManualAddForm
+        plain
+        showActions={false}
+        addDraft={addDraft}
+        setAddDraft={setAddDraft}
+        handleManualAdd={() => {
+          if (!busy) {
+            onEnter();
+          }
+        }}
+        setManualOpen={() => {}}
+        {...(runScan !== undefined ? { runScan } : {})}
+        scanBusy={scanBusy}
+        {...(providerVendor !== undefined ? { providerVendor } : {})}
+        scannedModels={scannedModels}
+        existingModels={existingModels}
+      />
+
+      <div className={styles.firstRunToggleRow}>
+        <label
+          className={styles.firstRunToggleLabel}
+          htmlFor="wizard-default-model-switch"
+        >
+          设为默认模型
+        </label>
+        <Switch
+          id="wizard-default-model-switch"
+          checked={isDefaultModel}
+          disabled={busy}
+          onCheckedChange={(next) => onDefaultChange?.(next)}
         />
-      )}
-      <p className={styles.firstRunHint} role="status">
-        {hasListedModels
-          ? '选用本机已有 id，或手填供应商文档中的 model id；也可跳过，在主界面底栏手填。'
-          : wizardEmptyModelCatalogHint(hasProfile)}
-      </p>
+      </div>
     </>
   );
 };

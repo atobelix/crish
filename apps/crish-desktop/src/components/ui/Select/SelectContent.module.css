@@ -211,12 +211,6 @@
   white-space: normal;
 }
 
-.itemHint {
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-}
-
 .itemShortcut {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
@@ -253,6 +247,7 @@
 .separator {
   height: 0;
   margin: 3px 6px;
+  border-top: 1px solid var(--border-subtle);
   flex-shrink: 0;
   padding: 0;
 }

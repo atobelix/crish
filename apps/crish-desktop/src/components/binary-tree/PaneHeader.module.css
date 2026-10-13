@@ -173,14 +173,11 @@
   border-radius: var(--radius-lg);
 }
 
-.tabItem:hover:not(.tabItemActive) {
-  background: color-mix(
-    in srgb,
-    var(--tab-active-bg, var(--bg-card)) 35%,
-    transparent
-  );
-  border-color: color-mix(in srgb, var(--border-color) 60%, transparent);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 4%, transparent);
+.tabItem:hover:not(.tabItemActive),
+.tabItem:focus-visible:not(.tabItemActive) {
+  background: var(--tint-hover);
+  border-color: transparent;
+  box-shadow: none;
   color: var(--text-primary);
 }
 
@@ -337,11 +334,16 @@
     box-shadow var(--duration-micro) var(--ease-standard);
 }
 
-.newTabBtn:active,
-.newTabBtn:hover,
+.newTabBtn:hover {
+  background: var(--tint-hover);
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-primary);
+}
+
 .newTabBtn:active {
-  background: color-mix(in srgb, var(--bg-card) 65%, transparent);
-  border-color: color-mix(in srgb, var(--border-color) 60%, transparent);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 4%, transparent);
+  background: var(--tint-active);
+  border-color: transparent;
+  box-shadow: none;
   color: var(--text-primary);
 }

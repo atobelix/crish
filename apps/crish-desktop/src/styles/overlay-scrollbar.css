@@ -51,6 +51,13 @@
   border-left: none;
 }
 
+/* 默认关闭 Blink 未使用的双端副按钮幽灵占位（如 start:increment / end:decrement），消除滑块两端 16px 空隙 */
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 /* 上下端点大圆角贝塞尔三角按钮：宽度 100% 自动吃满 padding-box，与滑块净宽 100% 严格绝对等宽同轴！ */
 ::-webkit-scrollbar-button:vertical:start:decrement {
   display: block;
@@ -166,9 +173,117 @@
 }
 
 /* ==========================================================================
+ * 通用可配置滚动条显隐契约（data-scrollbar-visibility="always" | "hover"）：
+ * - 默认（未声明或 data-scrollbar-visibility="always"）：常显浅灰（--scrollbar-thumb-bg），
+ *   仅在鼠标 hover/按住滚动条滑块本身（::-webkit-scrollbar-thumb:hover/:active）时加深（--scrollbar-thumb-active）。
+ * - 按需悬停显隐（data-scrollbar-visibility="hover"，可配合外层宿主 data-scrollbar-hover-host）：
+ *   未悬停滚动容器区域时完全隐藏；鼠标移入滚动容器（或宿主区域）时显示浅灰滑块与三角；
+ *   仅当鼠标直接悬停或按住滑块/三角按钮本身时才切换为深色激活态。
+ * ========================================================================== */
+[data-scrollbar-visibility='hover']::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  transition: background-color var(--transition-fast);
+}
+
+[data-scrollbar-visibility='hover']::-webkit-scrollbar-button:vertical:start:decrement,
+[data-scrollbar-visibility='hover']::-webkit-scrollbar-button:vertical:end:increment,
+[data-scrollbar-visibility='hover']::-webkit-scrollbar-button:horizontal:start:decrement,
+[data-scrollbar-visibility='hover']::-webkit-scrollbar-button:horizontal:end:increment {
+  background-image: none;
+}
+
+[data-scrollbar-hover-host]:hover
+  [data-scrollbar-visibility='hover']::-webkit-scrollbar-thumb,
+[data-scrollbar-visibility='hover']:hover::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-bg, var(--tint-scrollbar-thumb));
+}
+
+[data-scrollbar-hover-host]:hover
+  [data-scrollbar-visibility='hover']::-webkit-scrollbar-thumb:hover,
+[data-scrollbar-hover-host]:hover
+  [data-scrollbar-visibility='hover']::-webkit-scrollbar-thumb:active,
+[data-scrollbar-visibility='hover']:hover::-webkit-scrollbar-thumb:hover,
+[data-scrollbar-visibility='hover']:hover::-webkit-scrollbar-thumb:active,
+[data-scrollbar-visibility='hover']::-webkit-scrollbar-thumb:hover,
+[data-scrollbar-visibility='hover']::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-active);
+}
+
+[data-scrollbar-hover-host]:hover
+  [data-scrollbar-visibility='hover']::-webkit-scrollbar-button:vertical:start:decrement,
+[data-scrollbar-visibility='hover']:hover::-webkit-scrollbar-button:vertical:start:decrement {
+  background-image: var(--scrollbar-button-up);
+}
+
+[data-scrollbar-hover-host]:hover
+  [data-scrollbar-visibility='hover']::-webkit-scrollbar-button:vertical:end:increment,
+[data-scrollbar-visibility='hover']:hover::-webkit-scrollbar-button:vertical:end:increment {
+  background-image: var(--scrollbar-button-down);
+}
+
+[data-scrollbar-hover-host]:hover
+  [data-scrollbar-visibility='hover']::-webkit-scrollbar-button:horizontal:start:decrement,
+[data-scrollbar-visibility='hover']:hover::-webkit-scrollbar-button:horizontal:start:decrement {
+  background-image: var(--scrollbar-button-left);
+}
+
+[data-scrollbar-hover-host]:hover
+  [data-scrollbar-visibility='hover']::-webkit-scrollbar-button:horizontal:end:increment,
+[data-scrollbar-visibility='hover']:hover::-webkit-scrollbar-button:horizontal:end:increment {
+  background-image: var(--scrollbar-button-right);
+}
+
+[data-scrollbar-hover-host]:hover
+  [data-scrollbar-visibility='hover']::-webkit-scrollbar-button:vertical:start:decrement:hover,
+[data-scrollbar-hover-host]:hover
+  [data-scrollbar-visibility='hover']::-webkit-scrollbar-button:vertical:start:decrement:active,
+[data-scrollbar-visibility='hover']::-webkit-scrollbar-button:vertical:start:decrement:hover,
+[data-scrollbar-visibility='hover']::-webkit-scrollbar-button:vertical:start:decrement:active {
+  background-image: var(--scrollbar-button-up-active);
+}
+
+[data-scrollbar-hover-host]:hover
+  [data-scrollbar-visibility='hover']::-webkit-scrollbar-button:vertical:end:increment:hover,
+[data-scrollbar-hover-host]:hover
+  [data-scrollbar-visibility='hover']::-webkit-scrollbar-button:vertical:end:increment:active,
+[data-scrollbar-visibility='hover']::-webkit-scrollbar-button:vertical:end:increment:hover,
+[data-scrollbar-visibility='hover']::-webkit-scrollbar-button:vertical:end:increment:active {
+  background-image: var(--scrollbar-button-down-active);
+}
+
+[data-scrollbar-hover-host]:hover
+  [data-scrollbar-visibility='hover']::-webkit-scrollbar-button:horizontal:start:decrement:hover,
+[data-scrollbar-hover-host]:hover
+  [data-scrollbar-visibility='hover']::-webkit-scrollbar-button:horizontal:start:decrement:active,
+[data-scrollbar-visibility='hover']::-webkit-scrollbar-button:horizontal:start:decrement:hover,
+[data-scrollbar-visibility='hover']::-webkit-scrollbar-button:horizontal:start:decrement:active {
+  background-image: var(--scrollbar-button-left-active);
+}
+
+[data-scrollbar-hover-host]:hover
+  [data-scrollbar-visibility='hover']::-webkit-scrollbar-button:horizontal:end:increment:hover,
+[data-scrollbar-hover-host]:hover
+  [data-scrollbar-visibility='hover']::-webkit-scrollbar-button:horizontal:end:increment:active,
+[data-scrollbar-visibility='hover']::-webkit-scrollbar-button:horizontal:end:increment:hover,
+[data-scrollbar-visibility='hover']::-webkit-scrollbar-button:horizontal:end:increment:active {
+  background-image: var(--scrollbar-button-right-active);
+}
+
+/* 显式声明常显（data-scrollbar-visibility='always'）：即使位于悬停显隐宿主内部也保持常显浅灰 */
+[data-scrollbar-visibility='always']::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb-bg, var(--tint-scrollbar-thumb));
+}
+
+[data-scrollbar-visibility='always']::-webkit-scrollbar-thumb:hover,
+[data-scrollbar-visibility='always']::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-active);
+}
+
+/* ==========================================================================
  * 设置中心（SettingsPanel）分区分离滚动条：
  * 纯指针悬停驱动（data-hover-pane + :hover），彻底移除 :focus-within 焦点劫持；
- * 鼠标在哪个区域，仅显示该区域的滚动条，另一侧绝对互斥隐藏。
+ * 鼠标在哪个区域，仅显示该区域的浅灰滚动条，另一侧绝对互斥隐藏；
+ * 仅在鼠标直接 hover/active 滚动条滑块或三角按钮本身时才切换为激活深色。
  * ========================================================================== */
 
 /* 1. 左侧导航栏（.navScroll / [role='tablist']）：默认隐藏滑块与上下三角 */
@@ -188,7 +303,7 @@
   background-image: none;
 }
 
-/* 激活左侧滚动条：当指针悬停在左侧 (data-hover-pane='nav') 或左侧容器自身 hover 时 */
+/* 激活左侧滚动条：当指针悬停在左侧 (data-hover-pane='nav') 或左侧容器自身 hover 时，显示浅灰色静止态 */
 [data-hover-pane='nav'] .navScroll::-webkit-scrollbar-thumb,
 [data-hover-pane='nav'] [data-nav-scroll]::-webkit-scrollbar-thumb,
 [data-hover-pane='nav'] [role='tablist']::-webkit-scrollbar-thumb,
@@ -203,6 +318,23 @@
   background-color: var(--scrollbar-thumb-bg, var(--tint-scrollbar-thumb));
 }
 
+/* 仅当指针直接 hover/active 左侧滚动条滑块本身时，才加深为激活色 */
+[data-hover-pane='nav'] .navScroll::-webkit-scrollbar-thumb:hover,
+[data-hover-pane='nav'] .navScroll::-webkit-scrollbar-thumb:active,
+[data-hover-pane='nav'] [data-nav-scroll]::-webkit-scrollbar-thumb:hover,
+[data-hover-pane='nav'] [data-nav-scroll]::-webkit-scrollbar-thumb:active,
+[data-hover-pane='nav'] [role='tablist']::-webkit-scrollbar-thumb:hover,
+[data-hover-pane='nav'] [role='tablist']::-webkit-scrollbar-thumb:active,
+.settingsNav:hover .navScroll::-webkit-scrollbar-thumb:hover,
+.settingsNav:hover .navScroll::-webkit-scrollbar-thumb:active,
+.settingsNav:hover [data-nav-scroll]::-webkit-scrollbar-thumb:hover,
+.settingsNav:hover [data-nav-scroll]::-webkit-scrollbar-thumb:active,
+.settingsNav:hover [role='tablist']::-webkit-scrollbar-thumb:hover,
+.settingsNav:hover [role='tablist']::-webkit-scrollbar-thumb:active,
+[data-testid='settings-sidebar']:hover
+  [role='tablist']::-webkit-scrollbar-thumb:hover,
+[data-testid='settings-sidebar']:hover
+  [role='tablist']::-webkit-scrollbar-thumb:active,
 .navScroll::-webkit-scrollbar-thumb:hover,
 .navScroll::-webkit-scrollbar-thumb:active,
 [data-nav-scroll]::-webkit-scrollbar-thumb:hover,
@@ -393,7 +525,7 @@
   background-image: none;
 }
 
-/* 激活右侧滚动条：当指针悬停在右侧 (data-hover-pane='main') 或右侧容器自身 hover 时 */
+/* 激活右侧滚动条：当指针悬停在右侧 (data-hover-pane='main') 或右侧容器自身 hover 时，显示浅灰色静止态 */
 [data-hover-pane='main'] .coverContent::-webkit-scrollbar-thumb,
 [data-hover-pane='main'] .coverContent ::-webkit-scrollbar-thumb,
 [data-hover-pane='main'] [data-cover-content]::-webkit-scrollbar-thumb,
@@ -402,6 +534,10 @@
 [data-hover-pane='main'] [role='tabpanel'] ::-webkit-scrollbar-thumb,
 [data-hover-pane='main'] [data-settings-tab]::-webkit-scrollbar-thumb,
 [data-hover-pane='main'] [data-settings-tab] ::-webkit-scrollbar-thumb,
+[data-settings-main]:hover [data-cover-content]::-webkit-scrollbar-thumb,
+[data-settings-main]:hover [data-cover-content] ::-webkit-scrollbar-thumb,
+[data-settings-main]:hover [role='tabpanel']::-webkit-scrollbar-thumb,
+[data-settings-main]:hover [role='tabpanel'] ::-webkit-scrollbar-thumb,
 .settingsMain:hover .coverContent::-webkit-scrollbar-thumb,
 .settingsMain:hover .coverContent ::-webkit-scrollbar-thumb,
 .settingsMain:hover [data-cover-content]::-webkit-scrollbar-thumb,
@@ -409,11 +545,41 @@
 .settingsMain:hover [role='tabpanel']::-webkit-scrollbar-thumb,
 .settingsMain:hover [role='tabpanel'] ::-webkit-scrollbar-thumb,
 .coverContent:hover::-webkit-scrollbar-thumb,
+.coverContent:hover ::-webkit-scrollbar-thumb,
 [data-cover-content]:hover::-webkit-scrollbar-thumb,
-[role='tabpanel']:hover::-webkit-scrollbar-thumb {
+[data-cover-content]:hover ::-webkit-scrollbar-thumb,
+[role='tabpanel']:hover::-webkit-scrollbar-thumb,
+[role='tabpanel']:hover ::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb-bg, var(--tint-scrollbar-thumb));
 }
 
+/* 仅当指针直接 hover/active 右侧滚动条滑块本身（::-webkit-scrollbar-thumb:hover/:active）时，才加深为激活色 */
+[data-hover-pane='main'] .coverContent::-webkit-scrollbar-thumb:hover,
+[data-hover-pane='main'] .coverContent::-webkit-scrollbar-thumb:active,
+[data-hover-pane='main'] .coverContent ::-webkit-scrollbar-thumb:hover,
+[data-hover-pane='main'] .coverContent ::-webkit-scrollbar-thumb:active,
+[data-hover-pane='main'] [data-cover-content]::-webkit-scrollbar-thumb:hover,
+[data-hover-pane='main'] [data-cover-content]::-webkit-scrollbar-thumb:active,
+[data-hover-pane='main'] [data-cover-content] ::-webkit-scrollbar-thumb:hover,
+[data-hover-pane='main'] [data-cover-content] ::-webkit-scrollbar-thumb:active,
+[data-hover-pane='main'] [role='tabpanel']::-webkit-scrollbar-thumb:hover,
+[data-hover-pane='main'] [role='tabpanel']::-webkit-scrollbar-thumb:active,
+[data-hover-pane='main'] [role='tabpanel'] ::-webkit-scrollbar-thumb:hover,
+[data-hover-pane='main'] [role='tabpanel'] ::-webkit-scrollbar-thumb:active,
+[data-hover-pane='main'] [data-settings-tab]::-webkit-scrollbar-thumb:hover,
+[data-hover-pane='main'] [data-settings-tab]::-webkit-scrollbar-thumb:active,
+[data-hover-pane='main'] [data-settings-tab] ::-webkit-scrollbar-thumb:hover,
+[data-hover-pane='main'] [data-settings-tab] ::-webkit-scrollbar-thumb:active,
+[data-settings-main]:hover [data-cover-content]::-webkit-scrollbar-thumb:hover,
+[data-settings-main]:hover [data-cover-content]::-webkit-scrollbar-thumb:active,
+[data-settings-main]:hover [data-cover-content] ::-webkit-scrollbar-thumb:hover,
+[data-settings-main]:hover
+  [data-cover-content]
+  ::-webkit-scrollbar-thumb:active,
+[data-settings-main]:hover [role='tabpanel']::-webkit-scrollbar-thumb:hover,
+[data-settings-main]:hover [role='tabpanel']::-webkit-scrollbar-thumb:active,
+[data-settings-main]:hover [role='tabpanel'] ::-webkit-scrollbar-thumb:hover,
+[data-settings-main]:hover [role='tabpanel'] ::-webkit-scrollbar-thumb:active,
 .settingsMain .coverContent::-webkit-scrollbar-thumb:hover,
 .settingsMain .coverContent::-webkit-scrollbar-thumb:active,
 .settingsMain .coverContent ::-webkit-scrollbar-thumb:hover,
@@ -426,69 +592,199 @@
 .settingsMain [role='tabpanel']::-webkit-scrollbar-thumb:active,
 .settingsMain [role='tabpanel'] ::-webkit-scrollbar-thumb:hover,
 .settingsMain [role='tabpanel'] ::-webkit-scrollbar-thumb:active,
-.coverContent:hover::-webkit-scrollbar-thumb,
-.coverContent:active::-webkit-scrollbar-thumb,
-[data-cover-content]:hover::-webkit-scrollbar-thumb,
-[data-cover-content]:active::-webkit-scrollbar-thumb,
-[role='tabpanel']:hover::-webkit-scrollbar-thumb,
-[role='tabpanel']:active::-webkit-scrollbar-thumb {
+.coverContent:hover::-webkit-scrollbar-thumb:hover,
+.coverContent:hover::-webkit-scrollbar-thumb:active,
+.coverContent:hover ::-webkit-scrollbar-thumb:hover,
+.coverContent:hover ::-webkit-scrollbar-thumb:active,
+[data-cover-content]:hover::-webkit-scrollbar-thumb:hover,
+[data-cover-content]:hover::-webkit-scrollbar-thumb:active,
+[data-cover-content]:hover ::-webkit-scrollbar-thumb:hover,
+[data-cover-content]:hover ::-webkit-scrollbar-thumb:active,
+[role='tabpanel']:hover::-webkit-scrollbar-thumb:hover,
+[role='tabpanel']:hover::-webkit-scrollbar-thumb:active,
+[role='tabpanel']:hover ::-webkit-scrollbar-thumb:hover,
+[role='tabpanel']:hover ::-webkit-scrollbar-thumb:active,
+.coverContent::-webkit-scrollbar-thumb:hover,
+.coverContent::-webkit-scrollbar-thumb:active,
+.coverContent ::-webkit-scrollbar-thumb:hover,
+.coverContent ::-webkit-scrollbar-thumb:active,
+[data-cover-content]::-webkit-scrollbar-thumb:hover,
+[data-cover-content]::-webkit-scrollbar-thumb:active,
+[data-cover-content] ::-webkit-scrollbar-thumb:hover,
+[data-cover-content] ::-webkit-scrollbar-thumb:active,
+[role='tabpanel']::-webkit-scrollbar-thumb:hover,
+[role='tabpanel']::-webkit-scrollbar-thumb:active,
+[role='tabpanel'] ::-webkit-scrollbar-thumb:hover,
+[role='tabpanel'] ::-webkit-scrollbar-thumb:active {
   background-color: var(--scrollbar-thumb-active);
 }
 
+[data-hover-pane='main']
+  [data-cover-content]::-webkit-scrollbar-button:vertical:start:decrement,
+[data-hover-pane='main']
+  [data-cover-content]
+  ::-webkit-scrollbar-button:vertical:start:decrement,
+[data-hover-pane='main']
+  [role='tabpanel']::-webkit-scrollbar-button:vertical:start:decrement,
+[data-hover-pane='main']
+  [role='tabpanel']
+  ::-webkit-scrollbar-button:vertical:start:decrement,
 [data-hover-pane='main']
   [class*='coverContent']::-webkit-scrollbar-button:vertical:start:decrement,
 [data-hover-pane='main']
   [class*='coverContent']
   ::-webkit-scrollbar-button:vertical:start:decrement,
+[data-settings-main]:hover
+  [data-cover-content]::-webkit-scrollbar-button:vertical:start:decrement,
+[data-settings-main]:hover
+  [data-cover-content]
+  ::-webkit-scrollbar-button:vertical:start:decrement,
+[data-settings-main]:hover
+  [role='tabpanel']::-webkit-scrollbar-button:vertical:start:decrement,
+[data-settings-main]:hover
+  [role='tabpanel']
+  ::-webkit-scrollbar-button:vertical:start:decrement,
 [class*='settingsMain']:hover
   [class*='coverContent']::-webkit-scrollbar-button:vertical:start:decrement,
 [class*='settingsMain']:hover
   [class*='coverContent']
-  ::-webkit-scrollbar-button:vertical:start:decrement {
+  ::-webkit-scrollbar-button:vertical:start:decrement,
+[data-cover-content]:hover::-webkit-scrollbar-button:vertical:start:decrement,
+[data-cover-content]:hover ::-webkit-scrollbar-button:vertical:start:decrement,
+[role='tabpanel']:hover::-webkit-scrollbar-button:vertical:start:decrement,
+[role='tabpanel']:hover ::-webkit-scrollbar-button:vertical:start:decrement {
   background-image: var(--scrollbar-button-up);
 }
 
+[data-hover-pane='main']
+  [data-cover-content]::-webkit-scrollbar-button:vertical:end:increment,
+[data-hover-pane='main']
+  [data-cover-content]
+  ::-webkit-scrollbar-button:vertical:end:increment,
+[data-hover-pane='main']
+  [role='tabpanel']::-webkit-scrollbar-button:vertical:end:increment,
+[data-hover-pane='main']
+  [role='tabpanel']
+  ::-webkit-scrollbar-button:vertical:end:increment,
 [data-hover-pane='main']
   [class*='coverContent']::-webkit-scrollbar-button:vertical:end:increment,
 [data-hover-pane='main']
   [class*='coverContent']
   ::-webkit-scrollbar-button:vertical:end:increment,
+[data-settings-main]:hover
+  [data-cover-content]::-webkit-scrollbar-button:vertical:end:increment,
+[data-settings-main]:hover
+  [data-cover-content]
+  ::-webkit-scrollbar-button:vertical:end:increment,
+[data-settings-main]:hover
+  [role='tabpanel']::-webkit-scrollbar-button:vertical:end:increment,
+[data-settings-main]:hover
+  [role='tabpanel']
+  ::-webkit-scrollbar-button:vertical:end:increment,
 [class*='settingsMain']:hover
   [class*='coverContent']::-webkit-scrollbar-button:vertical:end:increment,
 [class*='settingsMain']:hover
   [class*='coverContent']
-  ::-webkit-scrollbar-button:vertical:end:increment {
+  ::-webkit-scrollbar-button:vertical:end:increment,
+[data-cover-content]:hover::-webkit-scrollbar-button:vertical:end:increment,
+[data-cover-content]:hover ::-webkit-scrollbar-button:vertical:end:increment,
+[role='tabpanel']:hover::-webkit-scrollbar-button:vertical:end:increment,
+[role='tabpanel']:hover ::-webkit-scrollbar-button:vertical:end:increment {
   background-image: var(--scrollbar-button-down);
 }
 
 [data-hover-pane='main']
+  [data-cover-content]::-webkit-scrollbar-button:vertical:start:decrement:hover,
+[data-hover-pane='main']
+  [data-cover-content]::-webkit-scrollbar-button:vertical:start:decrement:active,
+[data-hover-pane='main']
+  [role='tabpanel']::-webkit-scrollbar-button:vertical:start:decrement:hover,
+[data-hover-pane='main']
+  [role='tabpanel']::-webkit-scrollbar-button:vertical:start:decrement:active,
+[data-hover-pane='main']
   [class*='coverContent']::-webkit-scrollbar-button:vertical:start:decrement:hover,
 [data-hover-pane='main']
   [class*='coverContent']::-webkit-scrollbar-button:vertical:start:decrement:active,
+[data-settings-main]:hover
+  [data-cover-content]::-webkit-scrollbar-button:vertical:start:decrement:hover,
+[data-settings-main]:hover
+  [data-cover-content]::-webkit-scrollbar-button:vertical:start:decrement:active,
+[data-settings-main]:hover
+  [role='tabpanel']::-webkit-scrollbar-button:vertical:start:decrement:hover,
+[data-settings-main]:hover
+  [role='tabpanel']::-webkit-scrollbar-button:vertical:start:decrement:active,
 [class*='settingsMain']:hover
   [class*='coverContent']::-webkit-scrollbar-button:vertical:start:decrement:hover,
 [class*='settingsMain']:hover
-  [class*='coverContent']::-webkit-scrollbar-button:vertical:start:decrement:active {
+  [class*='coverContent']::-webkit-scrollbar-button:vertical:start:decrement:active,
+[data-cover-content]::-webkit-scrollbar-button:vertical:start:decrement:hover,
+[data-cover-content]::-webkit-scrollbar-button:vertical:start:decrement:active,
+[role='tabpanel']::-webkit-scrollbar-button:vertical:start:decrement:hover,
+[role='tabpanel']::-webkit-scrollbar-button:vertical:start:decrement:active {
   background-image: var(--scrollbar-button-up-active);
 }
 
 [data-hover-pane='main']
+  [data-cover-content]::-webkit-scrollbar-button:vertical:end:increment:hover,
+[data-hover-pane='main']
+  [data-cover-content]::-webkit-scrollbar-button:vertical:end:increment:active,
+[data-hover-pane='main']
+  [role='tabpanel']::-webkit-scrollbar-button:vertical:end:increment:hover,
+[data-hover-pane='main']
+  [role='tabpanel']::-webkit-scrollbar-button:vertical:end:increment:active,
+[data-hover-pane='main']
   [class*='coverContent']::-webkit-scrollbar-button:vertical:end:increment:hover,
 [data-hover-pane='main']
   [class*='coverContent']::-webkit-scrollbar-button:vertical:end:increment:active,
+[data-settings-main]:hover
+  [data-cover-content]::-webkit-scrollbar-button:vertical:end:increment:hover,
+[data-settings-main]:hover
+  [data-cover-content]::-webkit-scrollbar-button:vertical:end:increment:active,
+[data-settings-main]:hover
+  [role='tabpanel']::-webkit-scrollbar-button:vertical:end:increment:hover,
+[data-settings-main]:hover
+  [role='tabpanel']::-webkit-scrollbar-button:vertical:end:increment:active,
 [class*='settingsMain']:hover
   [class*='coverContent']::-webkit-scrollbar-button:vertical:end:increment:hover,
 [class*='settingsMain']:hover
   [class*='coverContent']
-  ::-webkit-scrollbar-button:vertical:end:increment:active {
+  ::-webkit-scrollbar-button:vertical:end:increment:active,
+[data-cover-content]::-webkit-scrollbar-button:vertical:end:increment:hover,
+[data-cover-content]::-webkit-scrollbar-button:vertical:end:increment:active,
+[role='tabpanel']::-webkit-scrollbar-button:vertical:end:increment:hover,
+[role='tabpanel']::-webkit-scrollbar-button:vertical:end:increment:active {
   background-image: var(--scrollbar-button-down-active);
 }
 
 /* 互斥强关：当鼠标在左侧 (data-hover-pane='nav') 时，强制隐藏右侧滚动条 */
+[data-hover-pane='nav'] [data-cover-content]::-webkit-scrollbar-thumb,
+[data-hover-pane='nav'] [data-cover-content] ::-webkit-scrollbar-thumb,
+[data-hover-pane='nav'] [role='tabpanel']::-webkit-scrollbar-thumb,
+[data-hover-pane='nav'] [role='tabpanel'] ::-webkit-scrollbar-thumb,
 [data-hover-pane='nav'] [class*='coverContent']::-webkit-scrollbar-thumb,
 [data-hover-pane='nav'] [class*='coverContent'] ::-webkit-scrollbar-thumb {
   background-color: transparent !important;
 }
+[data-hover-pane='nav']
+  [data-cover-content]::-webkit-scrollbar-button:vertical:start:decrement,
+[data-hover-pane='nav']
+  [data-cover-content]::-webkit-scrollbar-button:vertical:end:increment,
+[data-hover-pane='nav']
+  [data-cover-content]
+  ::-webkit-scrollbar-button:vertical:start:decrement,
+[data-hover-pane='nav']
+  [data-cover-content]
+  ::-webkit-scrollbar-button:vertical:end:increment,
+[data-hover-pane='nav']
+  [role='tabpanel']::-webkit-scrollbar-button:vertical:start:decrement,
+[data-hover-pane='nav']
+  [role='tabpanel']::-webkit-scrollbar-button:vertical:end:increment,
+[data-hover-pane='nav']
+  [role='tabpanel']
+  ::-webkit-scrollbar-button:vertical:start:decrement,
+[data-hover-pane='nav']
+  [role='tabpanel']
+  ::-webkit-scrollbar-button:vertical:end:increment,
 [data-hover-pane='nav']
   [class*='coverContent']::-webkit-scrollbar-button:vertical:start:decrement,
 [data-hover-pane='nav']

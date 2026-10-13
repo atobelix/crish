@@ -27,6 +27,7 @@ export const RUNTIME_CACHE_KEYS = {
   MCP_SERVERS: 'crish_mcp_servers_cache_v1',
   SKILLS: 'crish_skills_cache_v1',
   FIRST_RUN_DONE: 'crish_first_run_done_v1',
+  SHOW_ONBOARDING_ON_STARTUP: 'crish_show_onboarding_on_startup_v1',
   PLUGIN_ENABLED: 'crish_plugin_enabled_v1',
   SKILL_KNOWN_IDS: 'crish_skill_known_ids_v1',
   NOTE_EMERGENCY_DRAFT_PREFIX: 'crish_note_emergency_draft_',
@@ -128,7 +129,11 @@ export function getRuntimeCache<T>(key: string, fallback: T): T {
   if (!raw) return fallback;
   try {
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && parsed.__crish_cache__ === true) {
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      parsed.__crish_cache__ === true
+    ) {
       const envelope = parsed as CacheEnvelope<T>;
       if (envelope.ttl && Date.now() - envelope.t > envelope.ttl) {
         safeRemoveItem(key);
@@ -184,7 +189,10 @@ export function clearFontScanCache(): void {
 
 // 2. 工作流定义与运行记录缓存
 export function readWorkflowsCache(): WorkflowDefinition[] {
-  const res = safeGetJson<WorkflowDefinition[]>(RUNTIME_CACHE_KEYS.WORKFLOWS, []);
+  const res = safeGetJson<WorkflowDefinition[]>(
+    RUNTIME_CACHE_KEYS.WORKFLOWS,
+    []
+  );
   return Array.isArray(res) ? res : [];
 }
 
@@ -193,7 +201,10 @@ export function writeWorkflowsCache(list: WorkflowDefinition[]): void {
 }
 
 export function readWorkflowRunsCache(): WorkflowRunEntry[] {
-  const res = safeGetJson<WorkflowRunEntry[]>(RUNTIME_CACHE_KEYS.WORKFLOW_RUNS, []);
+  const res = safeGetJson<WorkflowRunEntry[]>(
+    RUNTIME_CACHE_KEYS.WORKFLOW_RUNS,
+    []
+  );
   return Array.isArray(res) ? res : [];
 }
 
@@ -221,7 +232,7 @@ export function writeSkillsCache(list: DesktopSkill[]): void {
   safeSetJson(RUNTIME_CACHE_KEYS.SKILLS, list);
 }
 
-// 5. 首次运行向导状态
+// 5. 首次运行向导状态与启动显示开关
 export function readFirstRunWizardDone(): boolean {
   try {
     return safeGetItem(RUNTIME_CACHE_KEYS.FIRST_RUN_DONE) === '1';
@@ -232,6 +243,26 @@ export function readFirstRunWizardDone(): boolean {
 
 export function writeFirstRunWizardDone(): void {
   safeSetItem(RUNTIME_CACHE_KEYS.FIRST_RUN_DONE, '1');
+}
+
+export function clearFirstRunWizardDone(): void {
+  safeRemoveItem(RUNTIME_CACHE_KEYS.FIRST_RUN_DONE);
+}
+
+export function readShowOnboardingOnStartup(): boolean {
+  try {
+    return safeGetItem(RUNTIME_CACHE_KEYS.SHOW_ONBOARDING_ON_STARTUP) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function writeShowOnboardingOnStartup(enabled: boolean): void {
+  if (enabled) {
+    safeSetItem(RUNTIME_CACHE_KEYS.SHOW_ONBOARDING_ON_STARTUP, '1');
+  } else {
+    safeRemoveItem(RUNTIME_CACHE_KEYS.SHOW_ONBOARDING_ON_STARTUP);
+  }
 }
 
 // 6. 插件启用清单（启停状态）
@@ -262,13 +293,18 @@ export interface EmergencyDraftPayload {
   savedAt: number;
 }
 
-export function readEmergencyDraft(docId: string): Record<string, string> | null {
+export function readEmergencyDraft(
+  docId: string
+): Record<string, string> | null {
   const key = `${RUNTIME_CACHE_KEYS.NOTE_EMERGENCY_DRAFT_PREFIX}${docId}`;
   const payload = safeGetJson<EmergencyDraftPayload | null>(key, null);
   return payload?.drafts ?? null;
 }
 
-export function writeEmergencyDraft(docId: string, drafts: Record<string, string>): void {
+export function writeEmergencyDraft(
+  docId: string,
+  drafts: Record<string, string>
+): void {
   const key = `${RUNTIME_CACHE_KEYS.NOTE_EMERGENCY_DRAFT_PREFIX}${docId}`;
   if (Object.keys(drafts).length === 0) {
     safeRemoveItem(key);
@@ -299,4 +335,3 @@ export function readSidebarListPrefsCache<T>(fallback: T): T {
 export function writeSidebarListPrefsCache<T>(prefs: T): void {
   safeSetJson(RUNTIME_CACHE_KEYS.SIDEBAR_LIST_PREFS, prefs);
 }
-

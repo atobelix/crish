@@ -9,11 +9,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: var(--hairline-width) solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  /* 静止态不用 hover 叠加：凹槽区归外层档 */
-  background: var(--surface-outer);
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 .importRootRow {
@@ -102,7 +101,8 @@
   margin: 0;
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
-  background: var(--bg-tertiary);
+  background: var(--danger-soft-bg);
+  border: none;
   border-radius: var(--radius-lg);
   padding: var(--space-2) var(--space-2_5);
 }
@@ -128,9 +128,9 @@
   flex-direction: column;
   max-height: min(280px, 40vh);
   overflow: auto;
-  border: var(--hairline-width) solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  background: var(--bg-card);
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 .importItem {

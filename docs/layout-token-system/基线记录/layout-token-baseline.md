@@ -4,7 +4,8 @@
 > 语义：实测 > 基线 → FAIL；实测 ≤ 基线 → 通过（存量按分维文档收敛）。
 
 <!-- BASELINE_START -->
-negative_margin_gt2 7
+
+negative_margin_gt2 5
 bad_space_fallback 0
 density_matrix_viol 0
 chat_row_gap_hardcode 0

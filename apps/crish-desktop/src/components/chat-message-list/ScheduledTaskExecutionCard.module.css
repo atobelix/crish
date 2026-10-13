@@ -13,11 +13,11 @@
 }
 
 .cardRunning {
-  border-color: var(--color-info);
+  /* running border override removed */
 }
 
 .cardFailed {
-  border-color: var(--color-error);
+  /* failed border override removed */
 }
 
 .headerBar {
@@ -178,10 +178,10 @@
 
 .sectionContent {
   margin: 0;
-  padding: var(--space-2) var(--space-2_5);
-  background: var(--bg-secondary);
-  border: var(--hairline-width) solid var(--border-color);
-  border-radius: var(--radius-sm);
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
   font-size: var(--font-size-xs);
   line-height: 1.5;
   color: var(--text-primary);
@@ -192,8 +192,8 @@
 .errorBox {
   margin: 0;
   padding: var(--space-2) var(--space-2_5);
-  background: var(--color-error-bg);
-  border: var(--hairline-width) solid var(--color-error);
+  background: var(--danger-soft-bg);
+  border: none;
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);

@@ -31,9 +31,9 @@
   gap: var(--space-2_5);
   padding: var(--space-3) var(--space-3_5);
   margin-bottom: var(--space-4);
-  border: var(--hairline-width) solid var(--color-error-border);
+  border: none;
   border-radius: var(--radius-lg);
-  background: var(--color-error-bg);
+  background: var(--danger-soft-bg);
   color: var(--text-danger);
 }
 
@@ -115,9 +115,9 @@
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-3_5);
-  border: var(--hairline-width) solid var(--color-error-border);
+  border: none;
   border-radius: var(--radius-lg);
-  background: var(--color-error-bg);
+  background: var(--danger-soft-bg);
 }
 
 .lastErrorHead {

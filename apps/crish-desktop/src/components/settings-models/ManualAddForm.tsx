@@ -1,4 +1,11 @@
-import React, { useMemo, useRef, useState, useEffect, useCallback, useId } from 'react';
+import React, {
+  useMemo,
+  useRef,
+  useState,
+  useEffect,
+  useCallback,
+  useId,
+} from 'react';
 import { createPortal } from 'react-dom';
 
 import { Button, Input } from '../ui';
@@ -49,7 +56,9 @@ export const ManualAddForm: React.FC<{
   const inputId = useId();
   const listboxId = useId();
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [activeSuggestionId, setActiveSuggestionId] = useState<string | null>(null);
+  const [activeSuggestionId, setActiveSuggestionId] = useState<string | null>(
+    null
+  );
   const inputContainerRef = useRef<HTMLDivElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const [dropdownRect, setDropdownRect] = useState<{
@@ -188,8 +197,14 @@ export const ManualAddForm: React.FC<{
       setShowSuggestions(true);
       updateDropdownPos();
       const direction = e.key === 'ArrowDown' ? 1 : -1;
-      const start = activeSuggestionIndex < 0 ? (direction > 0 ? -1 : 0) : activeSuggestionIndex;
-      const nextIndex = (start + direction + suggestions.length) % suggestions.length;
+      const start =
+        activeSuggestionIndex < 0
+          ? direction > 0
+            ? -1
+            : 0
+          : activeSuggestionIndex;
+      const nextIndex =
+        (start + direction + suggestions.length) % suggestions.length;
       setActiveSuggestionId(suggestions[nextIndex] ?? null);
       return;
     }
@@ -202,7 +217,11 @@ export const ManualAddForm: React.FC<{
       return;
     }
 
-    if (e.key === 'Enter' && isSuggestionMenuOpen && activeSuggestionIndex >= 0) {
+    if (
+      e.key === 'Enter' &&
+      isSuggestionMenuOpen &&
+      activeSuggestionIndex >= 0
+    ) {
       e.preventDefault();
       const selected = suggestions[activeSuggestionIndex];
       if (selected) handleSelectSuggestion(selected);
@@ -227,10 +246,7 @@ export const ManualAddForm: React.FC<{
         {/* 模型 ID 智能输入行（集成在线获取） */}
         <div ref={inputContainerRef} className={styles.mrdAddModelIdField}>
           <div className={styles.mrdAddModelIdHeader}>
-            <label
-              htmlFor={inputId}
-              className={styles.mrdAddModelIdLabel}
-            >
+            <label htmlFor={inputId} className={styles.mrdAddModelIdLabel}>
               模型 ID *
             </label>
             {runScan && (
@@ -239,13 +255,20 @@ export const ManualAddForm: React.FC<{
                 variant="ghost"
                 size="xs"
                 disabled={scanBusy}
-                onClick={() => void runScan()}
+                onClick={() => {
+                  setShowSuggestions(true);
+                  updateDropdownPos();
+                  void runScan();
+                }}
                 aria-label="在线获取"
                 className={styles.mrdAddScanBtn}
                 icon={
                   scanBusy ? (
-                    <AppIcon name="loader" size={11}
-                      className={styles.loadingSpinner} />
+                    <AppIcon
+                      name="loader"
+                      size={11}
+                      className={styles.loadingSpinner}
+                    />
                   ) : (
                     <AppIcon name="refresh" size={11} />
                   )
@@ -263,7 +286,9 @@ export const ManualAddForm: React.FC<{
             aria-autocomplete="list"
             aria-expanded={isSuggestionMenuOpen}
             aria-controls={isSuggestionMenuOpen ? listboxId : undefined}
-            aria-activedescendant={isSuggestionMenuOpen ? activeOptionId : undefined}
+            aria-activedescendant={
+              isSuggestionMenuOpen ? activeOptionId : undefined
+            }
             value={addDraft.modelId}
             onChange={(e) => {
               const val = e.target.value;
@@ -384,9 +409,7 @@ export const ManualAddForm: React.FC<{
             output: ['text'],
           }
         }
-        onChange={(next) =>
-          setAddDraft((d) => ({ ...d, modalities: next }))
-        }
+        onChange={(next) => setAddDraft((d) => ({ ...d, modalities: next }))}
       />
 
       <ModelThinkingSection

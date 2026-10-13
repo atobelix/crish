@@ -1,11 +1,9 @@
 /* ─────────────────────────────────────────────────────────────
  * 设置弹窗（ui/Dialog 居中模态）
- * 三层底色：
- *   外层 --surface-outer：面板底 = 左侧导航 + 顶部标题行（与主界面左栏 / 顶栏同色）。
- *     用不透明外层色：弹窗下面是主界面 + 遮罩，透不出系统云母，半透明只会透出压暗后的主界面。
- *   主层 --surface-main：右侧内容区底。
+ * 两层底色：
+ *   主层 --surface-main：面板通底 = 左侧导航 + 顶部标题行 + 右侧内容画布（稍微浅一点的底色，不与滑块底轨混淆）。
  *   输入层 --surface-input：内容区里的设置项卡片 / 分组块（经 --bg-card 作用域覆盖）、输入框。
- * 层次只靠三层底色区分：弹窗内不画卡片边框、分隔线、顶栏底线、侧栏右线。
+ * 层次只靠两层底色区分：弹窗内不画卡片边框、分隔线、顶栏底线、侧栏右线。
  * ───────────────────────────────────────────────────────────── */
 
 /* 1. 面板：尺寸自适应（最小窗口 1040×720 下 976×656），圆角 + 轻阴影，无外框线。
@@ -31,7 +29,7 @@
   );
   max-width: none;
   max-height: none;
-  background: var(--surface-outer);
+  background: var(--surface-main);
   border: none;
   box-shadow: var(--shadow-2xl);
   overflow: hidden;
@@ -73,7 +71,7 @@
   flex-direction: column;
   min-height: 0;
   padding: var(--space-3) var(--space-2) var(--space-3) var(--space-2_5);
-  background: var(--surface-outer);
+  background: var(--surface-main);
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -94,7 +92,7 @@
   height: var(--header-height);
   min-height: var(--header-height);
   padding: 0 var(--space-2) 0 var(--space-3);
-  background: var(--surface-outer);
+  background: var(--surface-main);
   flex-shrink: 0;
   box-sizing: border-box;
 }
@@ -289,7 +287,7 @@
 }
 
 /* 4. 内容区（滚动容器；类名 coverContent 是 overlay-scrollbar 细条出口的命中钩子，勿改名）
- * 底色 = 主层；外层色从左、上包住它，左上圆角呼应主界面内容矩形。
+ * 底色 = 主层 --surface-main（稍微浅一点的底色，不与滑块底轨混淆）。
  * --bg-card 在此作用域改指输入层：各设置项卡片 / 分组块（消费 --bg-card）= 白 */
 .coverContent {
   --bg-card: var(--surface-input);
@@ -297,7 +295,7 @@
   min-width: 0;
   min-height: 0;
   margin: 0;
-  border-radius: var(--radius-l) 0 0 0;
+  border-radius: 0;
   border: none;
   box-shadow: none;
   padding: var(--space-6) var(--space-8) var(--space-8);

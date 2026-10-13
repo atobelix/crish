@@ -240,15 +240,10 @@ html[data-theme='light'] {
 
   /* --- SmartExpandablePanel & Zero-Blue Design System Tokens (Light) --- */
   --sep-radius-outer: var(--radius-l);
-  --sep-padding: 6px;
-  --sep-radius-inner: var(--radius-m);
   --sep-item-radius: var(--radius-m);
-  --sep-btn-radius: var(--radius-m);
   --sep-badge-radius: var(--radius-s);
-  --sep-pill-radius: var(--radius-pill);
 
   --sep-item-height: 28px;
-  --sep-item-padding-h: 10px;
   --sep-item-gap: 2px;
 
   --sep-font-sans: var(
@@ -297,16 +292,10 @@ html[data-theme='light'] {
   --accent-green: oklch(
     0.6 0.16 150
   ); /* 纯净翡翠翠绿，满足 WCAG AA 状态点 ≥ 3:1 */
-  --accent-green-light: var(
-    --success-soft-bg
-  ); /* 固定纯色 soft 底（旧为半透明） */
   --accent-green-muted: oklch(0.6 0.16 150 / 0.22);
   --accent-red: oklch(
     0.61 0.19 31.8
   ); /* 纯净温暖朱红，基准 #de4931，鲜艳不刺眼 */
-  --accent-red-light: var(
-    --danger-soft-bg
-  ); /* 固定纯色 soft 底（旧为半透明） */
   --accent-blue: oklch(0.5 0.18 250); /* 纯净天蓝，满足 WCAG AA 文字 ≥ 4.5:1 */
   --accent-primary: #10b981;
   --accent-green-light-adaptive: var(
@@ -771,8 +760,6 @@ html[data-theme='light'] {
   --artifact-card-radius: var(--radius-l);
   --artifact-header-bg: var(--surface-outer);
   --artifact-header-border: var(--border-subtle);
-  --artifact-btn-bg: var(--bg-primary);
-  --artifact-btn-border: var(--border-subtle);
   --artifact-btn-hover-bg: var(--tint-hover);
   --artifact-btn-hover-border: color-mix(
     in srgb,
@@ -794,7 +781,6 @@ html[data-theme='light'] {
   --diff-del-gutter-fg: var(--diff-del-fg);
   --diff-del-indicator: var(--diff-del-fg);
 
-  --diff-linenum-fg: var(--text-tertiary, #696969);
   --diff-gutter-bg: var(--bg-card);
   --diff-split-divider: color-mix(
     in srgb,
@@ -1179,15 +1165,10 @@ html[data-theme='dark'] {
 
   /* --- SmartExpandablePanel & Zero-Blue Design System Tokens (Dark) --- */
   --sep-radius-outer: var(--radius-l);
-  --sep-padding: 6px;
-  --sep-radius-inner: var(--radius-m);
   --sep-item-radius: var(--radius-m);
-  --sep-btn-radius: var(--radius-m);
   --sep-badge-radius: var(--radius-s);
-  --sep-pill-radius: var(--radius-pill);
 
   --sep-item-height: 28px;
-  --sep-item-padding-h: 10px;
   --sep-item-gap: 2px;
 
   --sep-bg-panel-solid: var(--bg-elevated);
@@ -1214,14 +1195,8 @@ html[data-theme='dark'] {
 
   --accent-orange: oklch(0.8 0.17 75);
   --accent-green: oklch(0.76 0.16 152);
-  --accent-green-light: var(
-    --success-soft-bg
-  ); /* 固定纯色 soft 底（旧为半透明） */
   --accent-green-muted: oklch(0.76 0.16 152 / 0.26);
   --accent-red: oklch(0.72 0.19 27.5);
-  --accent-red-light: var(
-    --danger-soft-bg
-  ); /* 固定纯色 soft 底（旧为半透明） */
   /* themeStore applyTheme dark */
   --accent-green-light-adaptive: var(
     --success-soft-bg
@@ -1520,8 +1495,6 @@ html[data-theme='dark'] {
   --artifact-card-radius: var(--radius-l);
   --artifact-header-bg: var(--surface-outer);
   --artifact-header-border: var(--border-subtle);
-  --artifact-btn-bg: var(--surface-main);
-  --artifact-btn-border: var(--border-subtle);
   --artifact-btn-hover-bg: var(--tint-hover);
   --artifact-btn-hover-border: color-mix(
     in srgb,
@@ -1543,7 +1516,6 @@ html[data-theme='dark'] {
   --diff-del-gutter-fg: var(--diff-del-fg);
   --diff-del-indicator: var(--diff-del-fg);
 
-  --diff-linenum-fg: hsl(0 0% 56%);
   --diff-gutter-bg: var(--bg-card);
   --diff-split-divider: color-mix(
     in srgb,

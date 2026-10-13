@@ -286,7 +286,7 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> =
         return (
           <ScrollArea
             size="sm"
-            type="hover"
+            type="auto"
             orientation="both"
             onScroll={onScroll}
             className="md-document-scroll-root"
@@ -401,7 +401,7 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> =
         return (
           <ScrollArea
             size="sm"
-            type="hover"
+            type="auto"
             orientation="both"
             onScroll={onScroll}
             className="md-document-scroll-root"
@@ -458,7 +458,7 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> =
       return (
         <ScrollArea
           size="sm"
-          type="hover"
+          type="auto"
           orientation="both"
           onScroll={onScroll}
           className="md-document-scroll-root"

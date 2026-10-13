@@ -19,7 +19,8 @@
   max-height: 32px;
   padding: 0 8px;
   border-top: none;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--border-subtle) 25%, transparent);
   background: var(--bg-card);
   flex-shrink: 0;
   box-sizing: border-box;
@@ -53,7 +54,6 @@
   box-sizing: border-box;
 }
 
-.toggleTab,
 .toggleTab {
   padding: 0 8px;
   font-size: var(--font-size-xs, 12px);
@@ -71,24 +71,21 @@
   transition: all var(--transition-fast);
 }
 
-.toggleTab:hover:not(:disabled),
 .toggleTab:hover:not(:disabled) {
   color: var(--text-primary);
   background: var(--tint-hover);
 }
 
-.toggleTabActive,
 .toggleTabActive {
-  background: var(--bg-card);
+  background: var(--tint-active);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium, 500);
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 35%, transparent);
+  border: none;
   box-shadow: none;
 }
 
-.toggleTabActive:hover,
 .toggleTabActive:hover {
-  background: var(--bg-card);
+  background: var(--tint-active);
   color: var(--text-primary);
 }
 
@@ -157,7 +154,8 @@
 
 .bodyWrap :global(.gutterNum) {
   background: var(--diff-gutter-bg, var(--bg-card));
-  border-right: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
+  border-right: 1px solid
+    color-mix(in srgb, var(--border-subtle) 25%, transparent);
 }
 
 .detailLoading {
@@ -171,133 +169,6 @@
   font-size: var(--font-size-xs, 12px);
   overflow: hidden;
   -webkit-app-region: no-drag;
-}
-
-/* 打开方式胶囊 */
-.filesOpenCapsule {
-  display: inline-flex;
-  align-items: stretch;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
-  border-radius: var(--radius-md);
-  background: var(--bg-card);
-  height: 26px;
-  position: relative;
-  box-sizing: border-box;
-  flex-shrink: 0;
-}
-
-.filesOpenCapsule .filesOpenMain {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0 8px;
-  height: 24px;
-  min-height: 24px;
-  border: none;
-  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: var(--font-size-xs, 12px);
-  font-weight: var(--font-weight-medium, 500);
-  cursor: pointer;
-  white-space: nowrap;
-  box-sizing: border-box;
-  transition: all var(--transition-fast);
-}
-
-.filesOpenCapsule .filesOpenMain:hover {
-  color: var(--text-primary);
-  background: var(--tint-hover);
-}
-
-.filesOpenCapsule .filesOpenChev {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  min-width: 22px;
-  height: 24px;
-  min-height: 24px;
-  border: none;
-  border-left: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 0;
-  box-sizing: border-box;
-  transition: all var(--transition-fast);
-}
-
-.filesOpenCapsule .filesOpenChev:hover {
-  color: var(--text-primary);
-  background: var(--tint-hover);
-}
-
-/* Diff 视图 (与 DiffCard 视觉风格 100% 全量对齐) */
-.diffContainer {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-  overflow-y: auto;
-  font-family: var(--font-mono, monospace);
-  font-size: var(--font-size-xs, 12px);
-  background: var(--bg-card);
-}
-
-.diffLine {
-  display: grid;
-  grid-template-columns: 50px 1fr;
-  min-height: 22px;
-  line-height: 22px;
-  border-left: 3px solid transparent;
-}
-
-.diffGutter {
-  color: var(--diff-linenum-fg, var(--text-tertiary));
-  text-align: right;
-  padding-right: 8px;
-  background: var(--diff-gutter-bg, var(--bg-card));
-  border-right: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
-  user-select: none;
-}
-
-.diffContent {
-  padding-left: 8px;
-  white-space: pre-wrap;
-  word-break: break-all;
-  color: var(--text-primary);
-}
-
-.diffAddition {
-  background: var(--diff-add-bg);
-  border-left: 3px solid var(--diff-add-indicator, var(--diff-add-fg));
-  color: var(--text-primary);
-}
-
-.diffAddition .diffGutter {
-  background: var(--diff-add-gutter-bg, transparent);
-  color: var(--diff-add-gutter-fg, var(--diff-add-fg));
-}
-
-.diffDeletion {
-  background: var(--diff-del-bg);
-  border-left: 3px solid var(--diff-del-indicator, var(--diff-del-fg));
-  color: var(--text-primary);
-}
-
-.diffDeletion .diffGutter {
-  background: var(--diff-del-gutter-bg, transparent);
-  color: var(--diff-del-gutter-fg, var(--diff-del-fg));
-}
-
-.diffWordAdd,
-.diffWordDel {
-  background: transparent;
-  border-radius: var(--radius-xs);
-  padding: 0 1px;
 }
 
 .diffEmpty {
@@ -334,19 +205,14 @@
   flex-shrink: 0;
 }
 
-/* 激活态操作按钮 */
-.actBtnActive {
-  color: var(--text-primary);
-  background: var(--tint-hover);
-}
-
 /* 历史记录侧边抽屉 */
 .historyDrawer {
   width: 280px;
   min-width: 240px;
   max-width: 340px;
   height: 100%;
-  border-left: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
+  border-left: 1px solid
+    color-mix(in srgb, var(--border-subtle) 25%, transparent);
   background: var(--bg-card);
   display: flex;
   flex-direction: column;
@@ -361,7 +227,8 @@
   height: 32px;
   min-height: 32px;
   padding: 0 8px 0 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--border-subtle) 25%, transparent);
   background: var(--bg-card);
   box-sizing: border-box;
 }
@@ -409,27 +276,27 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
 }
 
 .historyWorkingItem {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 8px 10px;
-  background: color-mix(in srgb, var(--tint-hover) 50%, transparent);
-  border: 1px dashed color-mix(in srgb, var(--border-subtle) 40%, transparent);
-  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--hairline, var(--border-subtle));
+  border-radius: 0;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .historyWorkingItem:hover {
   background: var(--tint-hover);
-  border-color: color-mix(in srgb, var(--border-subtle) 70%, transparent);
 }
 
 .historyWorkingHeader {
@@ -458,23 +325,23 @@
 .historyList {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
 }
 
 .historyItem {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 6px 8px;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 20%, transparent);
-  border-radius: var(--radius-sm);
-  background: var(--bg-card);
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--hairline, var(--border-subtle));
+  border-radius: 0;
   transition: all var(--transition-fast);
 }
 
 .historyItem:hover {
   background: var(--tint-hover);
-  border-color: color-mix(in srgb, var(--border-subtle) 40%, transparent);
 }
 
 .commitMeta {
@@ -483,17 +350,16 @@
   gap: 6px;
 }
 
-.hashBadge,
 .hashBadge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 1px 6px;
+  padding: 0;
   height: auto;
   min-height: unset;
-  background: color-mix(in srgb, var(--tint-hover) 80%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 30%, transparent);
-  border-radius: var(--radius-xs);
+  background: transparent;
+  border: none;
+  border-radius: 0;
   font-family: var(--font-mono, monospace);
   font-size: 11px;
   line-height: 1.4;
@@ -502,9 +368,8 @@
   transition: all var(--transition-fast);
 }
 
-.hashBadge:hover,
 .hashBadge:hover {
-  background: var(--tint-hover);
+  background: transparent;
   color: var(--accent-color);
 }
 

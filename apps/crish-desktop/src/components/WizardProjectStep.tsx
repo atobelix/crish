@@ -43,13 +43,10 @@ export const WizardProjectStep: React.FC<WizardProjectStepProps> = ({
 }) => {
   return (
     <>
-      <p className={styles.firstRunHint} style={{ marginTop: 0 }}>
-        选择工作目录后，助手会在该项目下读写文件。也可跳过，无项目直接对话。
-      </p>
       {hasProject ? (
         <div className={styles.firstRunProjectOk} role="status">
           <AppIcon name="folder-check" size={16} aria-hidden="true" />
-          <span>当前：{currentProjectLabel}</span>
+          <span>当前工作目录：{currentProjectLabel}</span>
         </div>
       ) : (
         <>
@@ -58,7 +55,6 @@ export const WizardProjectStep: React.FC<WizardProjectStepProps> = ({
             variant="secondary"
             size="md"
             block
-            className={styles.firstRunBtn}
             disabled={busy}
             aria-busy={busy || undefined}
             onClick={() => {
