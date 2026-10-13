@@ -30,14 +30,18 @@
   width: 100%;
   box-sizing: border-box;
   margin: var(--space-1, 4px) 0;
+  padding-left: 0;
+  border-left: none;
 }
 
 .toolGroupHeader {
   font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
   color: var(--text-tertiary);
   padding: 0 var(--space-1, 4px);
   height: 20px;
   line-height: 20px;
+  letter-spacing: 0.03em;
 }
 
 .toolGroup > .toolRow,
@@ -487,21 +491,6 @@
   color: var(--diff-del-fg);
 }
 
-/*        V1-          inspect /        group  */
-.toolGroup {
-  border-left: none;
-  margin: 4px 0;
-  padding-left: 0;
-}
-
-.toolGroupHeader {
-  font-size: var(--font-size-xxs);
-  font-weight: var(--font-weight-medium, 500);
-  color: var(--text-secondary);
-  padding: 2px 0 4px;
-  letter-spacing: 0.03em;
-}
-
 /* Batch approval bar */
 .batchBar {
   display: flex;
@@ -533,7 +522,7 @@
   box-sizing: border-box;
   overflow: hidden;
   position: relative;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 .toolResultBody > * {
@@ -551,7 +540,7 @@
   overflow: hidden;
   width: 100%;
   box-sizing: border-box;
-  padding: 4px 0 6px 0;
+  padding: 4px 10px 6px;
 }
 
 /*
@@ -651,7 +640,7 @@
 .toolSectionActionBtn:hover {
   color: var(--text-primary);
   background: var(--tint-hover);
-  border-color: var(--border-subtle);
+  border-color: transparent;
 }
 
 .copiedIcon {
@@ -786,10 +775,10 @@
 
 .toolValPre {
   margin: 0;
-  padding: 4px 6px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
   white-space: pre-wrap;
   max-height: 160px;
   overflow-y: auto;
@@ -1165,213 +1154,8 @@
   text-decoration: none;
 }
 
-/* Git Diff Card */
-.gitDiffCard {
-  margin: 8px 0;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  background-color: var(--bg-primary);
-  box-shadow: none;
-}
-
-.gitDiffCardHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--card-header-pad-y, 4px) var(--card-header-pad-x, 8px);
-  min-height: var(--card-header-min-height, 36px);
-  background-color: var(--bg-secondary);
-  border-bottom: none;
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
-  gap: var(--card-header-gap, 6px);
-  min-width: 0;
-  max-width: 100%;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-.gitDiffCardHeader:hover {
-  background-color: var(--bg-hover);
-}
-
-.gitDiffFileInfo {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--font-size-sm);
-  min-width: 0;
-  flex: 1 1 auto;
-  overflow: hidden;
-}
-
-.gitDiffFilename {
-  font-weight: var(--font-weight-code, 400);
-  font-family: var(--font-mono);
-  color: var(--text-primary);
-  font-size: var(--font-size-sm);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.gitDiffPreviewTag {
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  font-weight: var(--font-weight-normal);
-  white-space: nowrap;
-}
-
-.gitDiffBadge {
-  display: flex;
-  gap: var(--space-1_5);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-code, 400);
-  flex-shrink: 0;
-}
-
-.gitDiffAdd {
-  color: var(--accent-green);
-}
-
-.gitDiffDel {
-  color: var(--accent-red);
-}
-
-.gitDiffLinesContainer {
-  display: flex;
-  flex-direction: column;
-  background-color: var(--bg-primary);
-  overflow-x: auto;
-  overflow-y: hidden;
-  max-width: 100%;
-  min-width: 0;
-  overscroll-behavior-x: contain;
-}
-
-.gitDiffLineRow {
-  display: flex;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-code, 400);
-  line-height: 1.5;
-  background: var(--bg-primary);
-  min-width: min-content;
-}
-
-.gitDiffLineRow.addition {
-  background-color: var(--accent-green-light);
-}
-
-.gitDiffLineRow.deletion {
-  background-color: var(--accent-red-light);
-}
-
-.lineNumCol {
-  width: 22px;
-  text-align: center;
-  user-select: none;
-  border-right: none;
-  padding: 2px 0;
-  flex-shrink: 0;
-  font-weight: var(--font-weight-code, 400);
-}
-
-.gitDiffLineRow.addition .lineNumCol {
-  color: var(--accent-green);
-  background-color: transparent;
-}
-
-.gitDiffLineRow.deletion .lineNumCol {
-  color: var(--diff-del-fg, var(--accent-red));
-  background-color: transparent;
-}
-
-.lineContent {
-  margin: 0;
-  padding: 2px 10px;
-  white-space: pre;
-  overflow-x: visible;
-  flex: 1;
-  color: var(--text-primary);
-  font-weight: var(--font-weight-code, 400);
-}
-
-.gitDiffLineRow.addition .lineContent {
-  color: var(--diff-add-fg);
-}
-
-.gitDiffLineRow.deletion .lineContent {
-  color: var(--diff-del-fg);
-}
-
-.gitDiffMoreIndicator {
-  padding: 8px 12px;
-  background-color: transparent;
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-normal);
-  text-align: center;
-  border-top: 1px solid var(--border-subtle);
-  user-select: none;
-  cursor: pointer;
-}
-
-.gitDiffMoreIndicator:hover {
-  background-color: var(--bg-hover);
-  color: var(--text-primary);
-}
-
 .toolRowLive {
   display: inline-flex;
   align-items: center;
   margin-right: var(--space-0_5);
-}
-
-@keyframes pulse-dot {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(0.85);
-  }
-}
-
-.liveIndicator {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--brand);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 25%, transparent);
-  animation: pulse-dot var(--transition-pulse) infinite;
-  display: inline-block;
-  flex-shrink: 0;
-}
-
-.toolLivePulseDot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--brand);
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--brand) 22%, transparent);
-  animation: pulse-live-tool 1.4s ease-in-out infinite;
-  display: inline-block;
-  flex-shrink: 0;
-}
-
-@keyframes pulse-live-tool {
-  0%,
-  100% {
-    transform: scale(0.85);
-  }
-  50% {
-    transform: scale(1.2);
-    opacity: 1;
-    box-shadow: 0 0 0 4.5px color-mix(in srgb, var(--brand) 32%, transparent);
-  }
 }

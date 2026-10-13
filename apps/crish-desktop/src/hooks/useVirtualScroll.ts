@@ -196,13 +196,35 @@ export function useVirtualScroll(
     bumpGestureEpoch,
     resetGestureState,
     markProgrammaticScroll,
-    performProgrammaticScroll,
+    performProgrammaticScroll: gesturePerformProgrammaticScroll,
     cancelProgrammaticScroll,
     isProgrammaticScrollEvent,
   } = useVirtualScrollGesture({
     containerRef,
     onGestureEnd: flushActualMeasurements,
   });
+
+  const performProgrammaticScroll = useCallback<PerformProgrammaticScrollFn>(
+    (
+      arg1: HTMLElement | null | undefined | number,
+      arg2?: number | (() => void),
+      arg3?: () => void
+    ) => {
+      const targetTop =
+        typeof arg1 === 'number' ? arg1 : typeof arg2 === 'number' ? arg2 : 0;
+      latestScrollTopRef.current = targetTop;
+      if (typeof arg1 === 'number') {
+        gesturePerformProgrammaticScroll(
+          arg1,
+          arg2 as (() => void) | undefined
+        );
+      } else {
+        gesturePerformProgrammaticScroll(arg1, arg2 as number, arg3);
+      }
+      setScrollTop((prev) => (prev === targetTop ? prev : targetTop));
+    },
+    [gesturePerformProgrammaticScroll]
+  );
 
   const scheduleActualFlush = useCallback(() => {
     if (actualRafRef.current != null) return;

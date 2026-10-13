@@ -50,8 +50,8 @@ export function estimateTimelineMessageHeight(msg: SessionMessage): number {
         // 思考块：基础头部 36px，预览文字根据长度增加，受折叠视口最大约束 260px
         h += Math.min(36 + Math.ceil(thoughtLen / 45) * 20, 260);
       } else if (b.type === 'tool_call') {
-        // 工具卡片：包含头部、命令输入与输出区域，实测均值约 130px
-        h += 130;
+        // 工具卡片：默认折叠状态约 28-36px（展开时约 130px）
+        h += 36;
       } else if (b.type === 'context_injection') {
         // 上下文注入卡片紧凑单行约 44px
         h += 44;
@@ -68,7 +68,7 @@ export function estimateTimelineMessageHeight(msg: SessionMessage): number {
       h += Math.min(36 + Math.ceil(thinkLen / 45) * 20, 260);
     }
     if (msg.toolCalls?.length) {
-      h += msg.toolCalls.length * 130;
+      h += msg.toolCalls.length * 36;
     }
     if (msg.injections?.length) {
       h += msg.injections.length * 44;

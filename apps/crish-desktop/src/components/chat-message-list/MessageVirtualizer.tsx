@@ -26,9 +26,14 @@ import {
   type MessageVirtualizerProps,
   type PinnedItem,
 } from './messageVirtualizerMemo';
-import { CHAT_SCROLL_PAD_TOP, CHAT_SCROLL_PAD_X } from './chatScrollGeometry';
+import {
+  CHAT_SCROLL_PAD_TOP,
+  CHAT_SCROLL_PAD_X,
+  chatSpacerHeight,
+} from './chatScrollGeometry';
 import {
   BOTTOM_STICK_EPSILON_PX,
+  DEFAULT_VIEWPORT_HEIGHT_PX,
   SCROLL_BOTTOM_THRESHOLD_PX,
   SCROLL_TOP_EPSILON_PX,
 } from '../../hooks/virtualScrollConstants';
@@ -156,15 +161,32 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     clearHeights();
     isAtBottomRef.current = true;
     setIsAtBottom(true);
-    isAtTopRef.current = true;
-    setIsAtTop(true);
     setShowFloorButton(false);
     fastScroll.reset();
-    if (containerRef.current) {
-      containerRef.current.scrollTop = 0;
-    }
+
     // 会话切换：立刻回灌 order + 估高，杜绝 clear 后空 order 空屏
     reseedAllMessageHeights(manager, msgIds, messages);
+
+    // 会话切换立即直达目标吸底位置，绝不向 0 归零引发顶底往复跳动
+    const estimatedContentHeight = manager.getTotalHeight(messages.length);
+    const estimatedTotalHeight = chatSpacerHeight(estimatedContentHeight);
+    const container = containerRef.current;
+    const viewH =
+      container?.clientHeight ||
+      vs.viewportHeight ||
+      DEFAULT_VIEWPORT_HEIGHT_PX;
+    const targetBottomScrollTop = Math.max(0, estimatedTotalHeight - viewH);
+
+    const isTop = targetBottomScrollTop <= SCROLL_TOP_EPSILON_PX;
+    isAtTopRef.current = isTop;
+    setIsAtTop(isTop);
+
+    if (container) {
+      performProgrammaticScroll(container, targetBottomScrollTop);
+    } else {
+      performProgrammaticScroll(targetBottomScrollTop);
+    }
+    observedTopRef.current = targetBottomScrollTop;
     // 仅会话切换清几何；禁止把 messages/msgIds 放进依赖（否则每次消息更新清空导致空屏）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId, clearHeights, manager]);
@@ -182,6 +204,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uiSize, clearHeights]);
 
+  // 维护增量消息 unmeasuredEstimates 估高与生命周期
   useVirtualizerHeightLifecycle({
     manager,
     msgIds,
