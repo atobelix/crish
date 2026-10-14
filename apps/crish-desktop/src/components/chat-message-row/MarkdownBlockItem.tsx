@@ -14,6 +14,7 @@ import type { Priority } from '../../workers';
 import type { AdaptiveAnimateTimeline } from '../../api/markdown/AdaptiveAnimateTimeline';
 import type { RateSnapshot } from '../../api/markdown/SlidingWindowRateEstimator';
 import { hasTableBlock } from '../../api/markdown/tableProbe';
+import { toMarkdownPlainTextFallback } from '../../api/markdown/markdownPlainTextFallback';
 import { looksLikeStreamingGfmTable } from '../../api/markdown/StreamingGfmTableParser';
 import { StreamingGfmTable } from './StreamingGfmTable';
 import { ReconciledMarkdownHtml } from '../markdown/ReconciledMarkdownHtml';
@@ -314,7 +315,7 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
         <div
           className={`markdown-fallback-text ${styles.mdTextFallback || ''}`.trim()}
         >
-          {text}
+          {toMarkdownPlainTextFallback(text)}
         </div>
       </div>
     );

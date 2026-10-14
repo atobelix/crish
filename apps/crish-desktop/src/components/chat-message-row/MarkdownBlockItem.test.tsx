@@ -207,7 +207,7 @@ describe('MarkdownBlockItem component', () => {
     expect(blockEl?.getAttribute('data-has-html')).toBe('true');
   });
 
-  it('renders safe plaintext fallback when compilation fails for sealed block (VS-03 zero blank DOM)', () => {
+  it('renders source-free safe plaintext fallback when compilation fails for sealed block (VS-03 zero blank DOM)', () => {
     vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockReturnValue({
       html: '',
       loading: false,
@@ -228,9 +228,11 @@ describe('MarkdownBlockItem component', () => {
     expect(block?.getAttribute('data-failed')).toBe('true');
     const fallbackText = container.querySelector('.markdown-fallback-text');
     expect(fallbackText).not.toBeNull();
+    // 语义正文保留（零空白 DOM），Markdown 控制符被剥离（绝不回退源码）
     expect(fallbackText?.textContent).toBe(
-      '## Source text that failed to compile'
+      'Source text that failed to compile'
     );
+    expect(fallbackText?.textContent).not.toContain('##');
     // 纯文本节点转义渲染，绝无 HTML 注入
     expect(fallbackText?.querySelector('h2')).toBeNull();
 
@@ -245,7 +247,10 @@ describe('MarkdownBlockItem component', () => {
     );
     expect(
       container.querySelector('.markdown-fallback-text')?.textContent
-    ).toBe('## Source text that failed to compile');
+    ).toBe('Source text that failed to compile');
+    expect(
+      container.querySelector('.markdown-fallback-text')?.textContent
+    ).not.toContain('##');
   });
 
   it('handles React StrictMode double rendering without ref mutation polluting isContinuation', () => {

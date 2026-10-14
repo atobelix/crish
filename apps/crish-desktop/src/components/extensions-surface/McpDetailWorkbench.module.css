@@ -472,7 +472,7 @@
 }
 
 .requiredAsterisk {
-  color: var(--danger-color, #ef4444);
+  color: var(--danger-color);
   margin-left: 2px;
 }
 

@@ -265,42 +265,29 @@ export function useStreamingMarkdownHtml(
       unitsRef.current = currentSnapshots;
     }
 
-    const partPromises = advance.textParts.map(async (part) => {
-      try {
-        const fragment = await parseMarkdownFragmentToHtmlAsync(
-          part.source,
-          priority,
-          part.kind,
-          {
-            signal: currentSignal,
-            ...(sessionId !== undefined ? { sessionId } : {}),
+    // 逐片段独立提交：任一在途片段（慢渲染 / 未闭合 token / 被取消预览）
+    // 都不得阻塞已就绪片段进入 DOM，否则单个挂起片段会让整段正文停在空白态。
+    // 预览片段在 token 闭合时被同步取消，resolveTextPart 对其返回 false，
+    // 因此被取消的中间态不会被写回 DOM。
+    for (const part of advance.textParts) {
+      void parseMarkdownFragmentToHtmlAsync(part.source, priority, part.kind, {
+        signal: currentSignal,
+        ...(sessionId !== undefined ? { sessionId } : {}),
+      })
+        .catch(() => '')
+        .then((fragment) => {
+          if (!mountedRef.current) return;
+          if (sessionEpochRef.current !== sessionEpoch) return;
+          if (!session.resolveTextPart(part.id, fragment)) return;
+
+          if (unitsRef) {
+            unitsRef.current = session.getUnitSnapshots();
+            setRenderVersion((version) => version + 1);
+          } else {
+            setHtml(session.toHtml());
           }
-        );
-        return { id: part.id, fragment };
-      } catch {
-        return { id: part.id, fragment: '' };
-      }
-    });
-
-    void Promise.all(partPromises).then((results) => {
-      if (!mountedRef.current) return;
-      if (sessionEpochRef.current !== sessionEpoch) return;
-
-      let anyResolved = false;
-      for (const res of results) {
-        if (session.resolveTextPart(res.id, res.fragment)) {
-          anyResolved = true;
-        }
-      }
-      if (!anyResolved) return;
-
-      if (unitsRef) {
-        unitsRef.current = session.getUnitSnapshots();
-        setRenderVersion((version) => version + 1);
-      } else {
-        setHtml(session.toHtml());
-      }
-    });
+        });
+    }
   }, [markdown, enabled, priority, unitsRef, sessionId]);
 
   useEffect(

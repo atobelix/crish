@@ -24,7 +24,13 @@ describe('StreamingMarkdownView & MarkdownBlockItem & useStreamingBlocks', () =>
 
   describe('useStreamingBlocks Hook', () => {
     it('returns empty blocks when input is empty', () => {
-      function TestComp({ text, isStreaming }: { text: string; isStreaming: boolean }) {
+      function TestComp({
+        text,
+        isStreaming,
+      }: {
+        text: string;
+        isStreaming: boolean;
+      }) {
         const { blocks } = useStreamingBlocks(text, isStreaming, 'msg-1');
         return <div data-count={blocks.length} />;
       }
@@ -36,7 +42,13 @@ describe('StreamingMarkdownView & MarkdownBlockItem & useStreamingBlocks', () =>
       const text = '# Title\n\nParagraph 1.\n\nActive paragraph in progress';
       let capturedBlocks: any[] = [];
 
-      function TestComp({ text, isStreaming }: { text: string; isStreaming: boolean }) {
+      function TestComp({
+        text,
+        isStreaming,
+      }: {
+        text: string;
+        isStreaming: boolean;
+      }) {
         const { blocks } = useStreamingBlocks(text, isStreaming, 'msg-1');
         capturedBlocks = blocks;
         return null;
@@ -56,7 +68,13 @@ describe('StreamingMarkdownView & MarkdownBlockItem & useStreamingBlocks', () =>
       const text = '# Title\n\nParagraph 1.\n\nFinal paragraph.';
       let capturedBlocks: any[] = [];
 
-      function TestComp({ text, isStreaming }: { text: string; isStreaming: boolean }) {
+      function TestComp({
+        text,
+        isStreaming,
+      }: {
+        text: string;
+        isStreaming: boolean;
+      }) {
         const { blocks } = useStreamingBlocks(text, isStreaming, 'msg-1');
         capturedBlocks = blocks;
         return null;
@@ -195,21 +213,27 @@ describe('StreamingMarkdownView & MarkdownBlockItem & useStreamingBlocks', () =>
       );
 
       const block = container.querySelector('[data-sealed="true"]');
-      expect(block?.textContent).toBe('');
+      // 绝不回退 Markdown 源码：heading 标记与强调标记一个都不进入 DOM
+      expect(block?.textContent).not.toContain('##');
+      expect(block?.textContent).not.toContain('**');
+      // 同时守住 VS-03「零空白 DOM」：语义正文仍在，只是不带控制符
+      expect(block?.textContent).toBe('Source must never appear');
       expect(container.querySelector('pre.md-text-fallback')).toBeNull();
     });
   });
 
   describe('StreamingMarkdownView container', () => {
     it('renders list of blocks correctly during streaming', () => {
-      vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockImplementation((text) => {
-        if (!text) return { html: '', loading: false, failed: false };
-        return {
-          html: `<div class="compiled">${text}</div>`,
-          loading: false,
-          failed: false,
-        };
-      });
+      vi.mocked(markdownRenderAsync.useAsyncMarkdownHtml).mockImplementation(
+        (text) => {
+          if (!text) return { html: '', loading: false, failed: false };
+          return {
+            html: `<div class="compiled">${text}</div>`,
+            loading: false,
+            failed: false,
+          };
+        }
+      );
 
       const content = '# Heading\n\nParagraph text.\n\nTyping active tail...';
       vi.mocked(markdownRenderAsync.useStreamingMarkdownHtml).mockReturnValue(
@@ -268,7 +292,7 @@ describe('StreamingMarkdownView & MarkdownBlockItem & useStreamingBlocks', () =>
       // Sample 2
       rerender(
         <StreamingMarkdownView
-          content={"Initial text chunk" + " A".repeat(1000)}
+          content={'Initial text chunk' + ' A'.repeat(1000)}
           isStreaming={true}
           messageId="test-msg"
         />
@@ -279,7 +303,7 @@ describe('StreamingMarkdownView & MarkdownBlockItem & useStreamingBlocks', () =>
       // Sample 3 (Cold start complete, extreme high throughput burst)
       rerender(
         <StreamingMarkdownView
-          content={"Initial text chunk" + " A".repeat(2000)}
+          content={'Initial text chunk' + ' A'.repeat(2000)}
           isStreaming={true}
           messageId="test-msg"
         />
@@ -289,4 +313,3 @@ describe('StreamingMarkdownView & MarkdownBlockItem & useStreamingBlocks', () =>
     });
   });
 });
-

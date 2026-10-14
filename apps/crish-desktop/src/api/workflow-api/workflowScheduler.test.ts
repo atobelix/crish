@@ -42,42 +42,77 @@ describe('workflowScheduler', () => {
   });
 
   it('放行合法 cron 调度（T-CF-14 解除拒绝）', () => {
-    const v = validateWorkflowSchedule({ type: 'cron', expression: '0 9 * * *' });
+    const v = validateWorkflowSchedule({
+      type: 'cron',
+      expression: '0 9 * * *',
+    });
     expect(v).toEqual({
       ok: true,
       schedule: { type: 'cron', expression: '0 9 * * *' },
     });
     // 步进 / 范围 / 列表表达式同样放行
-    expect(validateWorkflowSchedule({ type: 'cron', expression: '*/30 * * * *' }).ok).toBe(
-      true
-    );
     expect(
-      validateWorkflowSchedule({ type: 'cron', expression: '0,30 9-18 * * 1-5' }).ok
+      validateWorkflowSchedule({ type: 'cron', expression: '*/30 * * * *' }).ok
+    ).toBe(true);
+    expect(
+      validateWorkflowSchedule({
+        type: 'cron',
+        expression: '0,30 9-18 * * 1-5',
+      }).ok
     ).toBe(true);
   });
 
   it('非法 cron 仍拒绝（双重校验第一道）', () => {
     // 6 字段（含秒）
-    const six = validateWorkflowSchedule({ type: 'cron', expression: '0 0 0 * * *' });
+    const six = validateWorkflowSchedule({
+      type: 'cron',
+      expression: '0 0 0 * * *',
+    });
     expect(six.ok).toBe(false);
     // 越界字段
-    const bad = validateWorkflowSchedule({ type: 'cron', expression: '60 * * * *' });
+    const bad = validateWorkflowSchedule({
+      type: 'cron',
+      expression: '60 * * * *',
+    });
     expect(bad.ok).toBe(false);
     // @ 宏
-    expect(validateWorkflowSchedule({ type: 'cron', expression: '@daily' }).ok).toBe(
+    expect(
+      validateWorkflowSchedule({ type: 'cron', expression: '@daily' }).ok
+    ).toBe(false);
+    // 空表达式
+    expect(validateWorkflowSchedule({ type: 'cron', expression: '' }).ok).toBe(
       false
     );
-    // 空表达式
-    expect(validateWorkflowSchedule({ type: 'cron', expression: '' }).ok).toBe(false);
   });
 
-  it('validates and builds schedules from drafts with required cwd', () => {
-    const draftWithoutCwd = { ...emptyWorkflowDraft(), name: 'Test', prompt: 'Do something' };
-    expect(validateWorkflowDraft(draftWithoutCwd)).toBe('请选择所属工作区项目');
+  it('validates and builds schedules from drafts for bound project and global workspace', () => {
+    // 关联项目允许为空串：WorkflowForm 首项即"全局工作区（默认沙箱）"，
+    // 因此 cwd 为空不是校验失败项。
+    const draftOnGlobalWorkspace = {
+      ...emptyWorkflowDraft(),
+      name: 'Test',
+      prompt: 'Do something',
+    };
+    expect(draftOnGlobalWorkspace.cwd).toBe('');
+    expect(validateWorkflowDraft(draftOnGlobalWorkspace)).toBeNull();
+    expect(buildScheduleFromDraft(draftOnGlobalWorkspace)).toEqual({
+      type: 'manual',
+    });
 
-    const draftWithCwd = { ...draftWithoutCwd, cwd: 'c:/Software/conex' };
+    const draftWithCwd = {
+      ...draftOnGlobalWorkspace,
+      cwd: 'c:/Software/conex',
+    };
     expect(validateWorkflowDraft(draftWithCwd)).toBeNull();
     expect(buildScheduleFromDraft(draftWithCwd)).toEqual({ type: 'manual' });
+
+    // 解绑路径校验不等于放弃必填校验：名称与提示词仍然必填
+    expect(validateWorkflowDraft({ ...draftOnGlobalWorkspace, name: '' })).toBe(
+      '请填写名称'
+    );
+    expect(
+      validateWorkflowDraft({ ...draftOnGlobalWorkspace, prompt: '' })
+    ).toBe('请填写提示词');
 
     const valid = validateWorkflowSchedule({ type: 'daily', time: '12:00' });
     expect(valid.ok).toBe(true);
@@ -85,19 +120,27 @@ describe('workflowScheduler', () => {
 
   describe('areWorkspacePathsEqual and filterWorkflowsByWorkspace', () => {
     it('handles Windows drive casing and slash normalization', async () => {
-      const { areWorkspacePathsEqual, normalizeWorkspacePath } = await import(
-        './workflowScheduler'
+      const { areWorkspacePathsEqual, normalizeWorkspacePath } =
+        await import('./workflowScheduler');
+      expect(normalizeWorkspacePath('  "C:\\Software\\conex\\" ')).toBe(
+        'C:/Software/conex'
       );
-      expect(normalizeWorkspacePath('  "C:\\Software\\conex\\" ')).toBe('C:/Software/conex');
-      expect(areWorkspacePathsEqual('c:/software/conex', 'C:/Software/conex/')).toBe(true);
-      expect(areWorkspacePathsEqual('c:\\Software\\conex', 'C:/Software/conex')).toBe(true);
-      expect(areWorkspacePathsEqual('c:/project-a', 'c:/project-b')).toBe(false);
+      expect(
+        areWorkspacePathsEqual('c:/software/conex', 'C:/Software/conex/')
+      ).toBe(true);
+      expect(
+        areWorkspacePathsEqual('c:\\Software\\conex', 'C:/Software/conex')
+      ).toBe(true);
+      expect(areWorkspacePathsEqual('c:/project-a', 'c:/project-b')).toBe(
+        false
+      );
       expect(areWorkspacePathsEqual(null, 'c:/project-b')).toBe(false);
       expect(areWorkspacePathsEqual('', '')).toBe(false);
     });
 
     it('filters workflows strictly by workspace path', async () => {
-      const { filterWorkflowsByWorkspace } = await import('./workflowScheduler');
+      const { filterWorkflowsByWorkspace } =
+        await import('./workflowScheduler');
       const list = [
         { id: '1', name: 'Task A', cwd: 'c:/Software/conex' },
         { id: '2', name: 'Task B', cwd: 'C:\\Software\\conex' },
@@ -109,7 +152,9 @@ describe('workflowScheduler', () => {
       const filtered = filterWorkflowsByWorkspace(list, 'C:/Software/conex/');
       expect(filtered.map((w) => w.id)).toEqual(['1', '2']);
 
-      expect(filterWorkflowsByWorkspace(list, 'c:/Software/empty-project')).toEqual([]);
+      expect(
+        filterWorkflowsByWorkspace(list, 'c:/Software/empty-project')
+      ).toEqual([]);
       expect(filterWorkflowsByWorkspace(list, '')).toEqual([]);
       expect(filterWorkflowsByWorkspace(list, undefined)).toEqual([]);
     });
