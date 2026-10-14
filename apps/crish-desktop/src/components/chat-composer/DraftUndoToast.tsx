@@ -11,6 +11,7 @@ import React, { useEffect, useState } from 'react';
 
 import styles from './DraftUndoToast.module.css';
 import { Button } from '../ui';
+import { useI18n } from '../../i18n';
 import { AppIcon } from '../ui/icons/index';
 
 export interface DraftUndoToastProps {
@@ -25,10 +26,12 @@ export interface DraftUndoToastProps {
 export const DraftUndoToast: React.FC<DraftUndoToastProps> = ({
   show,
   onUndo,
-  message = '已应用模板并保留原草稿快照',
+  message,
   autoDismissMs = 6000,
 }) => {
+  const { t } = useI18n();
   const [visible, setVisible] = useState(false);
+  const displayMessage = message ?? t('chat.composer.appliedTemplateSnapshot');
 
   useEffect(() => {
     if (show) {
@@ -51,7 +54,7 @@ export const DraftUndoToast: React.FC<DraftUndoToastProps> = ({
       aria-live="polite"
       data-draft-undo-toast=""
     >
-      <span className={styles.toastText}>{message}</span>
+      <span className={styles.toastText}>{displayMessage}</span>
       <Button
         type="button"
         variant="ghost"
@@ -62,14 +65,14 @@ export const DraftUndoToast: React.FC<DraftUndoToastProps> = ({
         }}
       >
         <AppIcon name="undo" size={12} aria-hidden />
-        <span>撤销恢复</span>
+        <span>{t('chat.composer.undoRestore')}</span>
       </Button>
       <Button
         type="button"
         variant="ghost"
         className={styles.closeBtn}
         onClick={dismiss}
-        aria-label="关闭提示"
+        aria-label={t('common.closeNotice')}
       >
         <AppIcon name="x" size={12} aria-hidden />
       </Button>

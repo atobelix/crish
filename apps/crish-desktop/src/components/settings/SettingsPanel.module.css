@@ -382,6 +382,14 @@
   color: var(--text-primary);
 }
 
+.sidebarTabLabel {
+  white-space: nowrap;
+  min-width: 0;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  flex: 1 1 auto;
+}
+
 /* 弹窗遮罩壳：内部 Menu / Select portal 进此节点（DialogOverlayContext）。
  * popper wrapper 统一继承全局 --z-dropdown */
 .settingsModalOverlay :global([data-radix-popper-content-wrapper]) {

@@ -2,6 +2,7 @@ import React from 'react';
 import { Button, Input } from '../ui';
 import styles from './SidebarNav.module.css';
 import { AppIcon } from '../ui/icons/index';
+import { useI18n } from '../../i18n';
 
 import { openSettings } from '../../api/storeAccess';
 
@@ -23,6 +24,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   searchInput = '',
   onSearchChange,
 }) => {
+  const { t } = useI18n();
   const scheduledActive = activeNav === 'scheduled';
   const extensionsActive =
     activeNav === 'extensions' || activeNav === 'plugins';
@@ -45,7 +47,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
         onClick={onNewSession}
       >
         <AppIcon name="new-chat" size={16} aria-hidden="true" />
-        <span>新对话</span>
+        <span>{t('sidebar.newChat', '新对话')}</span>
       </Button>
       <Button
         variant="ghost"
@@ -56,7 +58,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
         onClick={onOpenScheduled}
       >
         <AppIcon name="clock" size={16} aria-hidden />
-        <span>定时任务</span>
+        <span>{t('sidebar.scheduledTasks', '定时任务')}</span>
       </Button>
       <Button
         variant="ghost"
@@ -67,20 +69,20 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
         onClick={handleOpenExtensions}
       >
         <AppIcon name="puzzle" size={16} aria-hidden />
-        <span>扩展</span>
+        <span>{t('nav.extensions', '扩展')}</span>
       </Button>
       {onSearchChange && (
         <div
           className={`${styles.navItem} no-drag`}
           role="search"
-          aria-label="会话搜索"
+          aria-label={t('sidebar.searchSessions', '会话搜索')}
         >
           <AppIcon name="search" size={16} aria-hidden="true" />
           <Input
             bare
             type="search"
-            placeholder="搜索会话与消息…"
-            aria-label="搜索会话与消息"
+            placeholder={t('sidebar.searchPlaceholderFull', '搜索会话与消息…')}
+            aria-label={t('sidebar.searchPlaceholderFull', '搜索会话与消息')}
             value={searchInput}
             onChange={(e) => onSearchChange(e.target.value)}
           />

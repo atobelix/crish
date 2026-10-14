@@ -3,6 +3,7 @@ import type { SessionState } from '../../../store/types';
 import { Button, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
 import { AppIcon } from '../../ui/icons/index';
+import { useI18n } from '../../../i18n';
 
 export interface PinnedSectionProps {
   pinnedSessions: SessionState[];
@@ -38,8 +39,13 @@ export function PinnedSection({
   renderSessionItem,
 }: PinnedSectionProps) {
   void _onMoveSessionRealtime;
+  const { t } = useI18n();
+
   return (
-    <section className={styles.section} aria-label="置顶会话">
+    <section
+      className={styles.section}
+      aria-label={t('sidebar.pinnedSessions', '置顶会话')}
+    >
       <div
         className={styles.sectionLabelRow}
         onClick={onTogglePinned}
@@ -57,7 +63,7 @@ export function PinnedSection({
             aria-expanded={!pinnedCollapsed}
             aria-controls="sb-pinned-zone"
           >
-            <span>置顶</span>
+            <span>{t('sidebar.pinned', '置顶')}</span>
             <AppIcon
               name="chevron-down"
               size={16}
@@ -68,14 +74,14 @@ export function PinnedSection({
         </div>
         {filterType === 'pinned' && onSortBtnClick ? (
           <div className={styles.sectionLabelRight}>
-            <Tooltip content="排序与过滤">
+            <Tooltip content={t('sidebar.sortAndFilter', '排序与过滤')}>
               <Button
                 ref={sortTriggerRef}
                 type="button"
                 variant="ghost"
                 size="sm"
                 className={styles.sectionSortBtn}
-                aria-label="排序与过滤"
+                aria-label={t('sidebar.sortAndFilter', '排序与过滤')}
                 aria-expanded={sortDropdownOpen}
                 aria-haspopup="menu"
                 onClick={(e) => {
@@ -103,7 +109,7 @@ export function PinnedSection({
               <ul
                 className={`${styles.pinnedList} ${styles.folderSessions}`}
                 role="tree"
-                aria-label="置顶会话列表"
+                aria-label={t('sidebar.pinnedListAria', '置顶会话列表')}
               >
                 {pinnedSessions.map((s) => renderSessionItem(s))}
               </ul>
@@ -113,8 +119,8 @@ export function PinnedSection({
                 role="status"
               >
                 {filterType === 'pinned'
-                  ? '还没有置顶的对话'
-                  : '置顶的对话会出现在这里'}
+                  ? t('sidebar.noPinnedYet', '还没有置顶的对话')
+                  : t('sidebar.pinnedWillAppearHere', '置顶的对话会出现在这里')}
               </div>
             )}
           </div>

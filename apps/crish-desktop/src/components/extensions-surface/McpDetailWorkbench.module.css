@@ -424,3 +424,70 @@
   color: var(--text-tertiary);
   gap: var(--space-3);
 }
+
+.toolSchemaBox {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-2_5);
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  border: var(--hairline-width) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+}
+
+.toolSchemaTitle {
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-1);
+}
+
+.toolSchemaParams {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.toolParamRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  font-family: var(--font-mono, monospace);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.toolParamName {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  flex-shrink: 0;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.requiredAsterisk {
+  color: var(--danger-color, #ef4444);
+  margin-left: 2px;
+}
+
+.toolParamType {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.toolParamDesc {
+  color: var(--text-tertiary);
+  font-family: var(--font-sans, inherit);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}

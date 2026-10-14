@@ -2,6 +2,7 @@ import React from 'react';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { ContextMenuFlyout } from './ContextMenuFlyout';
 import { SessionContextMenu } from './SessionContextMenu';
+import { t } from '../../i18n';
 
 export type SessionContextMenuState = {
   x: number;
@@ -24,12 +25,18 @@ export type SessionMenuAction =
   | 'delete';
 
 /** 归档/分叉可撤销 toast 文案（与 useToastQueue 策略 /^已归档:/ /^已分叉:/ 一致） */
-export function archiveUndoToastMessage(title: string): string {
-  return `已归档: ${title}`;
+export function archiveUndoToastMessage(
+  title: string,
+  prefix = t('sidebar.archivedPrefix', '已归档: ')
+): string {
+  return `${prefix}${title}`;
 }
 
-export function branchUndoToastMessage(title: string): string {
-  return `已分叉: ${title}`;
+export function branchUndoToastMessage(
+  title: string,
+  prefix = t('sidebar.forkedPrefix', '已分叉: ')
+): string {
+  return `${prefix}${title}`;
 }
 
 /** 分叉新建会话标题后缀（侧栏/顶栏/快捷键路径宜一致用「分支」作为标题片段） */

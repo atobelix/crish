@@ -50,6 +50,16 @@ export const common: CommonTranslations = {
   unknown: '未知',
   collapse: '折叠',
   expand: '展开',
+  add: '添加',
+  open: '打开',
+  restore: '还原',
+  items: '项',
+  results: '结果',
+  online: '在线',
+  offline: '离线',
+  confirmDelete: '确认删除',
+  feedback: '反馈',
+  closeNotice: '关闭提示',
 };
 
 export default common;

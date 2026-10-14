@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 
 import styles from './SettingsPanel.module.css';
 import { Button, Input, Tooltip } from '../ui';
 import type { TabMeta, TabType } from '../settingsTabsMeta';
 import { AppIcon } from '../ui/icons/index';
+import { useI18n } from '../../i18n';
 
 export interface SettingsSidebarAria {
   baseId: string;
@@ -40,6 +41,101 @@ export interface SettingsSidebarProps {
   onPointerEnter?: () => void;
 }
 
+export function getTabLabel(
+  tab: TabMeta,
+  tOrLegacy?: boolean | ((key: string, fallback?: string) => string),
+  maybeT?: (key: string, fallback?: string) => string
+): string {
+  const translateFn = typeof tOrLegacy === 'function' ? tOrLegacy : maybeT;
+  if (translateFn) {
+    return translateFn(`settings.tabs.${tab.id}`, tab.label);
+  }
+  return tab.label;
+}
+
+export function getGroupLabel(
+  group: string,
+  tabId: string,
+  tOrLegacy?: boolean | ((key: string, fallback?: string) => string),
+  maybeT?: (key: string, fallback?: string) => string
+): string {
+  const translateFn = typeof tOrLegacy === 'function' ? tOrLegacy : maybeT;
+  if (translateFn) {
+    return translateFn(`settings.groups.${tabId}`, group);
+  }
+  return group;
+}
+
+interface SidebarTabItemProps {
+  tab: TabMeta;
+  tabLabel: string;
+  isTabActive: boolean;
+  isRoving: boolean;
+  tabBtnId: string;
+  panelId: string;
+  groupLabel: string;
+  onSelect: (id: TabType) => void;
+  onFocusTab: (id: TabType) => void;
+}
+
+const SidebarTabItem: React.FC<SidebarTabItemProps> = ({
+  tab,
+  tabLabel,
+  isTabActive,
+  isRoving,
+  tabBtnId,
+  panelId,
+  groupLabel,
+  onSelect,
+  onFocusTab,
+}) => {
+  const labelRef = useRef<HTMLSpanElement>(null);
+  const [isTruncated, setIsTruncated] = useState(false);
+
+  const checkTruncation = useCallback(() => {
+    const el = labelRef.current;
+    if (el) {
+      setIsTruncated(el.scrollWidth > el.clientWidth);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkTruncation();
+  }, [tabLabel, checkTruncation]);
+
+  const buttonElement = (
+    <Button
+      bare
+      type="button"
+      id={tabBtnId}
+      role="tab"
+      data-testid={`settings-tab-${tab.id}`}
+      data-settings-tab-id={tab.id}
+      aria-selected={isTabActive}
+      aria-controls={isTabActive ? panelId : undefined}
+      tabIndex={isRoving ? 0 : -1}
+      aria-label={`${groupLabel} · ${tabLabel}`}
+      onClick={() => onSelect(tab.id)}
+      onFocus={() => onFocusTab(tab.id)}
+      onPointerEnter={checkTruncation}
+      className={`${styles.sidebarTab} ${isTabActive ? styles.active : ''}`}
+    >
+      <span className={styles.sidebarTabIco} aria-hidden>
+        <AppIcon name={tab.icon} size={16} aria-hidden />
+      </span>
+      <span ref={labelRef} className={styles.sidebarTabLabel}>
+        {tabLabel}
+      </span>
+    </Button>
+  );
+
+  return (
+    <Tooltip content={tabLabel} disabled={!isTruncated} delayShow={300}>
+      {buttonElement}
+    </Tooltip>
+  );
+};
+
 export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
   ({
     items,
@@ -52,6 +148,8 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
     search,
     onPointerEnter,
   }) => {
+    const { t } = useI18n();
+
     const { baseId, tablistId, searchId, statusId, panelId, tablistRef } = aria;
     const {
       searchQuery,
@@ -60,10 +158,11 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
       onSearchChange,
       onSearchKeyDown,
     } = search;
+
     return (
       <nav
         className={styles.settingsNav}
-        aria-label="设置导航"
+        aria-label={t('workspace.settingsNav', '设置导航')}
         data-testid="settings-sidebar"
         data-settings-nav="true"
         data-scrollbar-hover-host="nav"
@@ -73,7 +172,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
           <div
             className={styles.searchWrap}
             role="search"
-            aria-label="设置搜索"
+            aria-label={t('settings.frame.searchAria', '设置搜索')}
             onClick={() => searchInputRef.current?.focus()}
           >
             <span className={styles.searchIco} aria-hidden="true">
@@ -85,11 +184,11 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
               id={searchId}
               type="search"
               className={styles.search}
-              placeholder="搜索设置…"
+              placeholder={t('settings.frame.searchPlaceholder', '搜索设置…')}
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               onKeyDown={onSearchKeyDown}
-              aria-label="搜索设置分类"
+              aria-label={t('settings.sidebar.searchCategoriesAria')}
               aria-controls={tablistId}
               aria-describedby={statusId}
               autoComplete="off"
@@ -106,7 +205,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
                   onSearchChange('');
                   searchInputRef.current?.focus();
                 }}
-                aria-label="清空搜索"
+                aria-label={t('settings.frame.clearSearch', '清空搜索')}
               >
                 <AppIcon name="x" size={12} />
               </Button>
@@ -121,16 +220,17 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
           data-nav-scroll="true"
           data-scrollbar-visibility="hover"
           role="tablist"
-          aria-label="设置分类"
+          aria-label={t('settings.nav.categories', '设置分类')}
           aria-orientation="vertical"
           onKeyDown={onTablistKeyDown}
         >
           {items.map((tab, idx, arr) => {
             const isTabActive = activeId === tab.id;
             const isRoving = rovingId === tab.id;
-            const iconName = tab.icon;
             const showGroup = idx === 0 || arr[idx - 1]?.group !== tab.group;
             const tabBtnId = `${baseId}-tab-${tab.id}`;
+            const tabLabel = getTabLabel(tab, t);
+            const groupLabel = getGroupLabel(tab.group, tab.id, t);
 
             return (
               <React.Fragment key={tab.id}>
@@ -140,37 +240,26 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
                     role="presentation"
                     aria-hidden="true"
                   >
-                    {tab.group}
+                    {groupLabel}
                   </div>
                 ) : null}
-                <Tooltip content={tab.keywords.slice(0, 4).join(' · ')}>
-                  <Button
-                    bare
-                    type="button"
-                    id={tabBtnId}
-                    role="tab"
-                    data-testid={`settings-tab-${tab.id}`}
-                    data-settings-tab-id={tab.id}
-                    aria-selected={isTabActive}
-                    aria-controls={isTabActive ? panelId : undefined}
-                    tabIndex={isRoving ? 0 : -1}
-                    aria-label={`${tab.group} · ${tab.label}`}
-                    onClick={() => onSelect(tab.id)}
-                    onFocus={() => onFocusTab(tab.id)}
-                    className={`${styles.sidebarTab} ${isTabActive ? styles.active : ''}`}
-                  >
-                    <span className={styles.sidebarTabIco} aria-hidden>
-                      <AppIcon name={iconName} size={16} aria-hidden />
-                    </span>
-                    <span>{tab.label}</span>
-                  </Button>
-                </Tooltip>
+                <SidebarTabItem
+                  tab={tab}
+                  tabLabel={tabLabel}
+                  isTabActive={isTabActive}
+                  isRoving={isRoving}
+                  tabBtnId={tabBtnId}
+                  panelId={panelId}
+                  groupLabel={groupLabel}
+                  onSelect={onSelect}
+                  onFocusTab={onFocusTab}
+                />
               </React.Fragment>
             );
           })}
           {items.length === 0 ? (
             <div className={styles.navEmpty} role="status">
-              无匹配项
+              {t('settings.frame.emptyResult', '未找到匹配项')}
             </div>
           ) : null}
         </div>

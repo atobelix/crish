@@ -19,12 +19,11 @@ import { AppIcon } from '../ui/icons/index';
 import {
   normalizeSettingsTabId,
   allowedTabIds,
-  TAB_META,
-  FALLBACK_TAB_META,
   type TabType,
 } from '../settingsTabsMeta';
 import { useSettingsNav } from '../useSettingsNav';
 import { SettingsSidebar } from './SettingsSidebar';
+import { useI18n } from '../../i18n';
 
 /** 设置 tab 懒加载：按需加载，首屏只加载当前激活 tab */
 const ModelsSettingsTab = lazy(() =>
@@ -106,35 +105,64 @@ type TabComponentProps = {
 
 const TAB_COMPONENTS: Record<
   TabType,
-  { label: string; Component: React.ComponentType<TabComponentProps> }
+  { labelKey: string; Component: React.ComponentType<TabComponentProps> }
 > = {
-  profile: { label: '个人资料', Component: SettingsProfileTab },
-  appearance: { label: '外观', Component: SettingsAppearanceTab },
-  personalize: { label: '通用设置', Component: SettingsPersonalizeTab },
-  archive: { label: '已归档', Component: SettingsArchiveTab },
-  models: { label: '模型', Component: ModelsSettingsTab },
-  plugins: { label: '扩展', Component: SettingsExtensionsTab },
-  skills: { label: '扩展', Component: SettingsExtensionsTab },
-  mcp: { label: '扩展', Component: SettingsExtensionsTab },
-  usage: { label: '用量', Component: SettingsUsageTab },
-  devices: { label: '多端互通', Component: SettingsDevicesTab },
-  schedule: { label: '定时任务', Component: SettingsScheduleTab },
-  rules: { label: '规则', Component: SettingsRulesTab },
-  shortcuts: { label: '快捷键', Component: SettingsShortcutsTab },
-  browser: { label: '浏览器', Component: SettingsBrowserTab },
-  security: { label: '安全', Component: SettingsSecurityTab },
-  diagnostics: { label: '状态诊断', Component: StatusDiagnosticsPanel },
-  about: { label: '关于', Component: SettingsAboutTab },
+  profile: { labelKey: 'settings.tabs.profile', Component: SettingsProfileTab },
+  appearance: {
+    labelKey: 'settings.tabs.appearance',
+    Component: SettingsAppearanceTab,
+  },
+  personalize: {
+    labelKey: 'settings.tabs.personalize',
+    Component: SettingsPersonalizeTab,
+  },
+  archive: { labelKey: 'settings.tabs.archive', Component: SettingsArchiveTab },
+  models: { labelKey: 'settings.tabs.models', Component: ModelsSettingsTab },
+  plugins: {
+    labelKey: 'settings.tabs.plugins',
+    Component: SettingsExtensionsTab,
+  },
+  skills: {
+    labelKey: 'settings.tabs.plugins',
+    Component: SettingsExtensionsTab,
+  },
+  mcp: { labelKey: 'settings.tabs.plugins', Component: SettingsExtensionsTab },
+  usage: { labelKey: 'settings.tabs.usage', Component: SettingsUsageTab },
+  devices: { labelKey: 'settings.tabs.devices', Component: SettingsDevicesTab },
+  schedule: {
+    labelKey: 'settings.tabs.schedule',
+    Component: SettingsScheduleTab,
+  },
+  rules: { labelKey: 'settings.tabs.rules', Component: SettingsRulesTab },
+  shortcuts: {
+    labelKey: 'settings.tabs.shortcuts',
+    Component: SettingsShortcutsTab,
+  },
+  browser: { labelKey: 'settings.tabs.browser', Component: SettingsBrowserTab },
+  security: {
+    labelKey: 'settings.tabs.security',
+    Component: SettingsSecurityTab,
+  },
+  diagnostics: {
+    labelKey: 'settings.tabs.diagnostics',
+    Component: StatusDiagnosticsPanel,
+  },
+  about: { labelKey: 'settings.tabs.about', Component: SettingsAboutTab },
 };
 
 /** tab 懒加载占位：与设置页骨架样式一致，避免加载抖动 */
-const SettingsTabSuspenseFallback: React.FC<{ tabName: string }> = ({
-  tabName,
-}) => (
-  <div className="settings-tab-loading" role="status" aria-live="polite">
-    <span className="settings-tab-loading-text">加载 {tabName}…</span>
-  </div>
-);
+const SettingsTabSuspenseFallback: React.FC<{
+  tabName: string;
+}> = ({ tabName }) => {
+  const { t } = useI18n();
+  return (
+    <div className="settings-tab-loading" role="status" aria-live="polite">
+      <span className="settings-tab-loading-text">
+        {t('common.loading')} {tabName}
+      </span>
+    </div>
+  );
+};
 
 /** re-export：既有 `from './SettingsPanel'` 消费者保持可用 */
 import type { SettingsTabType } from '../../store/types';
@@ -160,6 +188,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   onClose,
   initialTab,
 }) => {
+  const { t } = useI18n();
+
   const storeTab = useSettingsUiStore((s) => s.settingsActiveTab);
   const setSettingsActiveTab = useSettingsUiStore(
     (s) => s.setSettingsActiveTab
@@ -233,11 +263,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   );
 
   const safeActiveTab: TabType = resolveTab(activeTab);
-  const activeTabMeta =
-    TAB_META.find((t) => t.id === safeActiveTab) ??
-    TAB_META[0] ??
-    FALLBACK_TAB_META;
-  const activeLabel = activeTabMeta.label || '设置';
+  const currentTabDef = TAB_COMPONENTS[safeActiveTab] ?? TAB_COMPONENTS.profile;
+  const ActiveTabComponent = currentTabDef.Component;
+  const activeLabel = t(currentTabDef.labelKey);
   const panelId = `${baseId}-panel-${safeActiveTab}`;
   const activeTabBtnId = `${baseId}-tab-${safeActiveTab}`;
 
@@ -257,9 +285,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     navFocusId,
   });
 
-  const currentTabDef = TAB_COMPONENTS[safeActiveTab] ?? TAB_COMPONENTS.profile;
-  const ActiveTabComponent = currentTabDef.Component;
-
   return (
     // dismissible=false：LayerStack 不对设置做「外部点击即退栈」（portal 进 overlay 的下拉、
     // 嵌套弹窗遮罩上的点击不会级联关掉设置）；Esc 走 onEscapeKeyDown（栈顶优先，先清搜索再关），
@@ -269,7 +294,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       onClose={onClose}
       dismissible={false}
       closeOnBackdropClick
-      ariaLabel="设置"
+      ariaLabel={t('settings.title')}
       initialFocusRef={nav.searchInputRef}
       onEscapeKeyDown={nav.handleSettingsEscape}
       classNames={{
@@ -319,19 +344,19 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         >
           <header className={styles.settingsHeader}>
             <h2 className={styles.settingsTitle} data-testid="settings-title">
-              <span>设置</span>
+              <span>{t('settings.title')}</span>
               <span className={styles.settingsTitleSep} aria-hidden="true">
                 /
               </span>
               <span className={styles.settingsTitleCurrent}>{activeLabel}</span>
             </h2>
-            <Tooltip content="关闭 (Esc)">
+            <Tooltip content={t('settings.frame.closeWithEsc')} delayShow={300}>
               <Button
                 bare
                 type="button"
                 className={styles.settingsClose}
                 data-testid="settings-close-button"
-                aria-label="关闭设置"
+                aria-label={t('settings.frame.close')}
                 onClick={onClose}
               >
                 <AppIcon name="x" size={16} aria-hidden />
@@ -353,14 +378,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           >
             <Suspense
               key={`tab-${safeActiveTab}-suspense`}
-              fallback={
-                <SettingsTabSuspenseFallback tabName={currentTabDef.label} />
-              }
+              fallback={<SettingsTabSuspenseFallback tabName={activeLabel} />}
             >
               <AppErrorBoundary
                 key={`tab-${safeActiveTab}`}
                 compact
-                title="设置页面出错"
+                title={t('common.error')}
               >
                 <ActiveTabComponent
                   {...(safeActiveTab === 'rules' ||

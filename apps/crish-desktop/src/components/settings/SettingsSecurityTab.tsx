@@ -31,6 +31,7 @@ import {
 } from '../../api/permissionModes';
 import { sanitizeWhitelistEntry } from '../../api/commandPermissions';
 import { AppIcon } from '../ui/icons/index';
+import { useI18n } from '../../i18n';
 
 /** 常用只读命令 */
 const QUICK_WHITELIST_CMDS = [
@@ -66,6 +67,7 @@ const PERM_ICON_MAP: Record<string, React.ReactNode> = {
 };
 
 export const SettingsSecurityTab: React.FC = () => {
+  const { t } = useI18n();
   const { showToast } = useToast();
   const permissionModeRaw = usePermissionField(selectPermissionMode);
   const setPermissionMode = usePermissionField((s) => s.setPermissionMode);
@@ -134,7 +136,13 @@ export const SettingsSecurityTab: React.FC = () => {
     try {
       const cmd = sanitizeWhitelistEntry(source);
       if (!cmd) {
-        if (source.trim()) showToast('无效命令', undefined, { type: 'error' });
+        if (source.trim()) {
+          showToast(
+            t('settings.security.invalidCommand', '无效命令'),
+            undefined,
+            { type: 'error' }
+          );
+        }
         return;
       }
       const exists = whitelist.some(
@@ -144,7 +152,13 @@ export const SettingsSecurityTab: React.FC = () => {
       addCommandPermissionStore(cmd);
       if (!raw) setNewWhitelistCmd('');
     } catch (err) {
-      showToast('添加失败：' + String(err), undefined, { type: 'error' });
+      showToast(
+        t('settings.security.addFailed', '添加失败：{error}', {
+          error: String(err),
+        }),
+        undefined,
+        { type: 'error' }
+      );
     }
   };
 
@@ -152,7 +166,13 @@ export const SettingsSecurityTab: React.FC = () => {
     try {
       removeCommandPermissionStore(cmd);
     } catch (err) {
-      showToast('移除失败：' + String(err), undefined, { type: 'error' });
+      showToast(
+        t('settings.security.removeFailed', '移除失败：{error}', {
+          error: String(err),
+        }),
+        undefined,
+        { type: 'error' }
+      );
     }
   };
 
@@ -161,7 +181,13 @@ export const SettingsSecurityTab: React.FC = () => {
       setCommandPermissions([]);
       setShowClearConfirm(false);
     } catch (err) {
-      showToast('清空失败：' + String(err), undefined, { type: 'error' });
+      showToast(
+        t('settings.security.clearFailed', '清空失败：{error}', {
+          error: String(err),
+        }),
+        undefined,
+        { type: 'error' }
+      );
     }
   };
 
@@ -171,21 +197,44 @@ export const SettingsSecurityTab: React.FC = () => {
       if (next === permissionMode) return;
       setPermissionMode(next as PermissionMode);
     } catch (err) {
-      showToast('权限切换失败：' + String(err), undefined, { type: 'error' });
+      showToast(
+        t('settings.security.permChangeFailed', '权限切换失败：{error}', {
+          error: String(err),
+        }),
+        undefined,
+        { type: 'error' }
+      );
     }
   };
 
+  const whitelistMatchHint = t(
+    'settings.security.whitelistMatchHint',
+    WHITELIST_MATCH_HINT
+  );
+  const whitelistRememberHint = t(
+    'settings.security.whitelistRememberHint',
+    WHITELIST_REMEMBER_HINT
+  );
+  const pressEnterToAdd = t('settings.security.pressEnterToAdd', '回车添加');
+
   const _inputRiskTitle = draftTrimmed
-    ? `${WHITELIST_REMEMBER_HINT} · 回车添加`
-    : `${WHITELIST_MATCH_HINT} · 回车添加`;
+    ? `${whitelistRememberHint} · ${pressEnterToAdd}`
+    : `${whitelistMatchHint} · ${pressEnterToAdd}`;
 
   return (
-    <SettingsPage title="安全">
-      <SettingsSection title="权限">
+    <SettingsPage title={t('nav.security', '安全')}>
+      <SettingsSection title={t('settings.security.permissionSection', '权限')}>
         <SettingsCard>
           <SettingsRow
-            title={<span id={`${permLabelId}-row`}>权限模式</span>}
-            desc="工具执行前要不要先确认"
+            title={
+              <span id={`${permLabelId}-row`}>
+                {t('settings.security.permissionMode', '权限模式')}
+              </span>
+            }
+            desc={t(
+              'settings.security.permissionModeDesc',
+              '工具执行前要不要先确认'
+            )}
             control={
               <Select
                 id={permLabelId}
@@ -194,8 +243,8 @@ export const SettingsSecurityTab: React.FC = () => {
                 value={permissionMode}
                 options={PERMISSION_MODES.map((m) => ({
                   id: m.id,
-                  label: m.label,
-                  hint: m.description,
+                  label: t(`chat.permission.${m.id}.label`, m.label),
+                  hint: t(`chat.permission.${m.id}.description`, m.description),
                   icon: PERM_ICON_MAP[m.id],
                 }))}
                 onChange={onPermissionChange}
@@ -205,7 +254,7 @@ export const SettingsSecurityTab: React.FC = () => {
         </SettingsCard>
       </SettingsSection>
 
-      <SettingsSection title="工作区">
+      <SettingsSection title={t('nav.workspace', '工作区')}>
         <SettingsCard>
           {workspacePaths.length > 0 ? (
             <>
@@ -233,7 +282,9 @@ export const SettingsSecurityTab: React.FC = () => {
                     className="settings-chip-btn"
                     onClick={() => setShowAllPaths(true)}
                   >
-                    +{extraCount} 更多
+                    {t('settings.security.morePaths', '+{count} 更多', {
+                      count: extraCount,
+                    })}
                   </Button>
                 </div>
               ) : null}
@@ -245,43 +296,58 @@ export const SettingsSecurityTab: React.FC = () => {
                     className="settings-chip-btn"
                     onClick={() => setShowAllPaths(false)}
                   >
-                    收起
+                    {t('common.collapse', '收起')}
                   </Button>
                 </div>
               ) : null}
             </>
           ) : (
             <SettingsRow
-              title={<span className="settings-list-empty">未打开项目</span>}
-              desc="打开项目后会显示在这里"
+              title={
+                <span className="settings-list-empty">
+                  {t('settings.security.noOpenProjects', '未打开项目')}
+                </span>
+              }
+              desc={t(
+                'settings.security.noOpenProjectsDesc',
+                '打开项目后会显示在这里'
+              )}
             />
           )}
         </SettingsCard>
       </SettingsSection>
 
-      <SettingsSection title="信任命令">
+      <SettingsSection
+        title={t('settings.security.trustedCommandsSection', '信任命令')}
+      >
         <SettingsCard>
           <div className={styles.wlRow}>
             <div className={styles.labelCol}>
               <label htmlFor={wlInputId} className={styles.labelTitle}>
-                添加命令
+                {t('settings.security.addCommandTitle', '添加命令')}
               </label>
               <span className={styles.labelDesc}>
-                加入批准记忆（放行仍由引擎裁决）
+                {t(
+                  'settings.security.addCommandDesc',
+                  '加入批准记忆（放行仍由引擎裁决）'
+                )}
               </span>
             </div>
             <div className={styles.inputGroup}>
               <Input
                 id={wlInputId}
                 size="sm"
-                placeholder="如 git status"
+                placeholder={t(
+                  'settings.security.cmdInputPlaceholder',
+                  '如 git status'
+                )}
                 value={newWhitelistCmd}
                 onChange={(e) => setNewWhitelistCmd(e.target.value)}
                 spellCheck={false}
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
-                aria-label="要信任的命令"
+                aria-label={t('settings.security.cmdInputAria', '要信任的命令')}
                 className={styles.inputGrow}
                 onEnter={addWhitelist}
                 onKeyDown={(e) => {
@@ -292,38 +358,58 @@ export const SettingsSecurityTab: React.FC = () => {
                 }}
               />
               <Tooltip
-                content={draftTrimmed ? '加入白名单（批准记忆）' : '请输入命令'}
+                content={
+                  draftTrimmed
+                    ? t(
+                        'settings.security.addToWhitelistTooltip',
+                        '加入白名单（批准记忆）'
+                      )
+                    : t('settings.security.enterCmdTooltip', '请输入命令')
+                }
               >
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
                   className={styles.actionBtn}
-                  aria-label="添加命令"
+                  aria-label={t('settings.security.addCommandAria', '添加命令')}
                   disabled={!draftTrimmed}
                   onClick={() => addWhitelist()}
                 >
-                  添加
+                  {t('common.add', '添加')}
                 </Button>
               </Tooltip>
               {whitelist.length > 0 && !showClearConfirm ? (
-                <Tooltip content={`清空全部 ${whitelist.length} 条（需确认）`}>
+                <Tooltip
+                  content={t(
+                    'settings.security.clearAllTooltip',
+                    '清空全部 {count} 条（需确认）',
+                    { count: whitelist.length }
+                  )}
+                >
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     className={styles.actionBtn}
-                    aria-label={`清空全部 ${whitelist.length} 条白名单`}
+                    aria-label={t(
+                      'settings.security.clearAllAria',
+                      '清空全部 {count} 条白名单',
+                      { count: whitelist.length }
+                    )}
                     onClick={() => setShowClearConfirm(true)}
                   >
-                    清空
+                    {t('common.clear', '清空')}
                   </Button>
                 </Tooltip>
               ) : null}
               {showClearConfirm ? (
                 <div className={styles.confirmClearGroup}>
                   <span className={styles.confirmClearPrompt}>
-                    确定清除所有白名单命令？此操作不可撤销
+                    {t(
+                      'settings.security.confirmClearPrompt',
+                      '确定清除所有白名单命令？此操作不可撤销'
+                    )}
                   </span>
                   <Button
                     type="button"
@@ -332,7 +418,7 @@ export const SettingsSecurityTab: React.FC = () => {
                     className={styles.actionBtn}
                     onClick={doClearWhitelist}
                   >
-                    确认
+                    {t('common.confirm', '确认')}
                   </Button>
                   <Button
                     type="button"
@@ -341,7 +427,7 @@ export const SettingsSecurityTab: React.FC = () => {
                     className={styles.actionBtn}
                     onClick={() => setShowClearConfirm(false)}
                   >
-                    取消
+                    {t('common.cancel', '取消')}
                   </Button>
                 </div>
               ) : null}
@@ -350,8 +436,12 @@ export const SettingsSecurityTab: React.FC = () => {
 
           <div className={styles.wlRowNoBorder}>
             <div className={styles.labelCol}>
-              <span className={styles.labelTitle}>常用预设</span>
-              <span className={styles.labelDesc}>点击一键加入信任</span>
+              <span className={styles.labelTitle}>
+                {t('settings.security.presetsTitle', '常用预设')}
+              </span>
+              <span className={styles.labelDesc}>
+                {t('settings.security.presetsDesc', '点击一键加入信任')}
+              </span>
             </div>
             <div className={styles.presetGroup}>
               {QUICK_WHITELIST_CMDS.map((cmd) => {
@@ -363,7 +453,13 @@ export const SettingsSecurityTab: React.FC = () => {
                 return (
                   <Tooltip
                     key={cmd}
-                    content={already ? '已添加' : `添加 ${cmd}`}
+                    content={
+                      already
+                        ? t('settings.security.cmdAlreadyAdded', '已添加')
+                        : t('settings.security.addCmdPrompt', '添加 {cmd}', {
+                            cmd,
+                          })
+                    }
                   >
                     <Button
                       bare
@@ -371,7 +467,17 @@ export const SettingsSecurityTab: React.FC = () => {
                       className={styles.presetChip}
                       disabled={already}
                       aria-pressed={already}
-                      aria-label={already ? `${cmd} 已添加` : `添加 ${cmd}`}
+                      aria-label={
+                        already
+                          ? t(
+                              'settings.security.cmdAlreadyAddedAria',
+                              '{cmd} 已添加',
+                              { cmd }
+                            )
+                          : t('settings.security.addCmdAria', '添加 {cmd}', {
+                              cmd,
+                            })
+                      }
                       onClick={() => addWhitelist(cmd)}
                     >
                       {cmd}
@@ -384,14 +490,25 @@ export const SettingsSecurityTab: React.FC = () => {
         </SettingsCard>
       </SettingsSection>
 
-      <SettingsSection title={`已信任命令 (${whitelist.length})`}>
+      <SettingsSection
+        title={t(
+          'settings.security.trustedCommandsCount',
+          '已信任命令 ({count})',
+          { count: whitelist.length }
+        )}
+      >
         <SettingsCard>
           {whitelist.length === 0 ? (
             <SettingsRow
               title={
-                <span className="settings-list-empty">还没有信任的命令</span>
+                <span className="settings-list-empty">
+                  {t('settings.security.noTrustedCommands', '还没有信任的命令')}
+                </span>
               }
-              desc="上方输入命令并添加，或点击常用预设"
+              desc={t(
+                'settings.security.noTrustedCommandsDesc',
+                '上方输入命令并添加，或点击常用预设'
+              )}
             />
           ) : (
             whitelist.map((cmd) => {
@@ -399,15 +516,28 @@ export const SettingsSecurityTab: React.FC = () => {
                 <SettingsRow
                   key={cmd}
                   title={<span className={styles.cmdSpan}>{cmd}</span>}
-                  desc="批准记忆：匹配后仍需引擎按当前权限模式裁决"
+                  desc={t(
+                    'settings.security.trustedCmdNote',
+                    '批准记忆：匹配后仍需引擎按当前权限模式裁决'
+                  )}
                   control={
-                    <Tooltip content={`移除 ${cmd}`}>
+                    <Tooltip
+                      content={t(
+                        'settings.security.removeCmdTooltip',
+                        '移除 {cmd}',
+                        { cmd }
+                      )}
+                    >
                       <Button
                         type="button"
                         variant="danger"
                         size="sm"
                         onClick={() => removeWhitelist(cmd)}
-                        aria-label={`移除 ${cmd}`}
+                        aria-label={t(
+                          'settings.security.removeCmdAria',
+                          '移除 {cmd}',
+                          { cmd }
+                        )}
                         icon={<AppIcon name="trash" size={14} aria-hidden />}
                       />
                     </Tooltip>

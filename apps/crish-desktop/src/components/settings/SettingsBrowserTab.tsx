@@ -6,20 +6,20 @@ import React from 'react';
 import { SettingsPage } from './SettingsUI';
 import { BrowserImportSection } from '../workspace/browser-panel/BrowserImportSection';
 import { useBrowserSession } from '../workspace/useBrowserSession';
+import { useI18n } from '../../i18n';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
   saveExport?: (filename: string, content: string) => void;
 };
 
-export const SettingsBrowserTab: React.FC<Props> = ({
-  saveExport,
-}) => {
+export const SettingsBrowserTab: React.FC<Props> = ({ saveExport }) => {
   const { state } = useBrowserSession();
+  const { t } = useI18n();
   const browserRunning = state === 'running';
 
   return (
-    <SettingsPage title="浏览器">
+    <SettingsPage title={t('settings.tabs.browser')}>
       <BrowserImportSection
         browserRunning={browserRunning}
         saveExport={saveExport}

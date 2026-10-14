@@ -9,6 +9,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styles from './ComposerNoticeBar.module.css';
 import { Button, Tooltip } from '../ui';
+import { useI18n } from '../../i18n';
 import { AppIcon } from '../ui/icons/index';
 
 export interface ComposerNoticeAction {
@@ -40,6 +41,7 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
   className = '',
   isClosing = false,
 }) => {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -110,6 +112,10 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
 
   const detailContent = notice.detail || notice.message;
 
+  const copiedText = t('common.copied');
+  const copyText = t('common.copy');
+  const feedbackText = t('common.feedback');
+
   return (
     <div
       className={rootClasses}
@@ -136,7 +142,7 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
             bare
             type="button"
             className={styles.detailBadge}
-            aria-label="查看详细信息"
+            aria-label={t('chat.composer.notice.viewDetail')}
             data-testid="composer-notice-detail-badge"
           >
             !
@@ -165,7 +171,7 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
           type="button"
           className={styles.copyBtn}
           onClick={handleCopy}
-          aria-label={copied ? '已复制' : '复制'}
+          aria-label={copied ? copiedText : copyText}
           data-testid="composer-notice-copy-btn"
         >
           {copied ? (
@@ -176,7 +182,7 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
                 className={styles.btnIcon}
                 aria-hidden="true"
               />
-              <span>已复制</span>
+              <span>{copiedText}</span>
             </>
           ) : (
             <>
@@ -186,7 +192,7 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
                 className={styles.btnIcon}
                 aria-hidden="true"
               />
-              <span>复制</span>
+              <span>{copyText}</span>
             </>
           )}
         </Button>
@@ -197,7 +203,7 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
           type="button"
           className={styles.feedbackBtn}
           onClick={() => onFeedback?.()}
-          aria-label="反馈"
+          aria-label={feedbackText}
           data-testid="composer-notice-feedback-btn"
         >
           <AppIcon
@@ -206,7 +212,7 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
             className={styles.btnIcon}
             aria-hidden="true"
           />
-          <span>反馈</span>
+          <span>{feedbackText}</span>
         </Button>
 
         {/* 0.8px 发丝微圈关闭按钮 */}
@@ -215,7 +221,7 @@ export const ComposerNoticeBar: React.FC<ComposerNoticeBarProps> = ({
           type="button"
           className={styles.dismissBtn}
           onClick={onDismiss}
-          aria-label="关闭提示"
+          aria-label={t('chat.composer.notice.dismiss')}
           data-testid="composer-notice-dismiss-btn"
         >
           <AppIcon name="x" size={11} aria-hidden="true" />

@@ -83,15 +83,11 @@ export const SettingsAppearanceTab: React.FC<Props> = ({
     <div ref={visibilityRef}>
       <SettingsPage title={t('nav.appearance', '外观')}>
         {/* 语言设置 / Language setting */}
-        <SettingsSection title={t('settings.language', '语言')}>
+        <SettingsSection title={t('settings.general.language')}>
           <SettingsCard>
             <SettingsRow
-              title={t('settings.language', '语言')}
-              desc={
-                language === 'zh-CN'
-                  ? '选择应用程序显示语言'
-                  : 'Select application display language'
-              }
+              title={t('settings.general.language')}
+              desc={t('settings.general.languageDesc')}
               control={
                 <Select
                   size="sm"
@@ -121,13 +117,17 @@ export const SettingsAppearanceTab: React.FC<Props> = ({
           - 包含字体加载状态、预览文本、异步字体加载等复杂交互
           - 与 fontStore 深度耦合，不适合 Schema 抽象
         */}
-        <SettingsSection title="字体">
+        <SettingsSection
+          title={t('settings.appearance.groupTypography', '字体与排版')}
+        >
           <SettingsCard>
             <FontSettingsSection
               onPersistSettings={async (fonts) => {
                 const ok = await save({ fonts });
                 if (!ok) {
-                  throw new Error('字体设置未写入 settings');
+                  throw new Error(
+                    t('settings.frame.saveFailed', '字体设置未写入 settings')
+                  );
                 }
               }}
             />
@@ -140,10 +140,10 @@ export const SettingsAppearanceTab: React.FC<Props> = ({
           - SchemaRenderer 目前没有 "button"/"action" 类型
           - 若用 Schema 实现需新增 type，超出当前需求范围
         */}
-        <SettingsSection title="其他">
+        <SettingsSection title={t('common.more', '其他')}>
           <SettingsCard>
             <SettingsRow
-              title="重置外观"
+              title={t('settings.frame.reset', '重置外观')}
               control={
                 <Button
                   type="button"
@@ -154,7 +154,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({
                     void resetAppearance();
                   }}
                 >
-                  重置
+                  {t('common.reset', '重置')}
                 </Button>
               }
             />

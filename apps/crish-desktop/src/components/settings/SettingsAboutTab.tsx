@@ -26,6 +26,7 @@ import {
   SettingsSection,
 } from './SettingsUI';
 import styles from './SettingsAboutTab.module.css';
+import { useI18n } from '../../i18n';
 
 export interface SystemInfo {
   appVersion: string;
@@ -189,106 +190,132 @@ interface ThirdPartyDisclosureContentProps {
 
 const ThirdPartyDisclosureContent: React.FC<
   ThirdPartyDisclosureContentProps
-> = ({ idPrefix = 'about' }) => (
-  <div
-    className={styles.thirdPartyDisclosure}
-    data-testid={`${idPrefix}-disclosure-content`}
-  >
-    {/* 1. 宽松开源协议 */}
-    <div className={styles.subSection}>
-      <h4 className={styles.subSectionTitle}>
-        <AppIcon name="blocks" size={14} />
-        <span>宽松开源依赖 (Permissive Open-Source Libraries)</span>
-      </h4>
-      <p className={styles.subSectionDesc}>
-        Crish Desktop 使用并包含了众多遵循宽松开源协议（Permissive Open-Source
-        Licenses）的优秀依赖项。这些项目以其各自协议授权分发，完整的版权声明与许可条款均保留在各自源代码及分发包中：
-      </p>
-      <div className={styles.pillsRow}>
-        {PERMISSIVE_LICENSES.map((lic) => (
-          <span key={lic} className={styles.pill}>
-            {lic}
+> = ({ idPrefix = 'about' }) => {
+  const { t } = useI18n();
+  return (
+    <div
+      className={styles.thirdPartyDisclosure}
+      data-testid={`${idPrefix}-disclosure-content`}
+    >
+      {/* 1. 宽松开源协议 */}
+      <div className={styles.subSection}>
+        <h4 className={styles.subSectionTitle}>
+          <AppIcon name="blocks" size={14} />
+          <span>
+            {t(
+              'about.permissiveTitle',
+              '宽松开源依赖 (Permissive Open-Source Libraries)'
+            )}
           </span>
-        ))}
+        </h4>
+        <p className={styles.subSectionDesc}>
+          {t(
+            'about.permissiveDesc',
+            'Crish Desktop 使用并包含了众多遵循宽松开源协议（Permissive Open-Source Licenses）的优秀依赖项。这些项目以其各自协议授权分发，完整的版权声明与许可条款均保留在各自源代码及分发包中：'
+          )}
+        </p>
+        <div className={styles.pillsRow}>
+          {PERMISSIVE_LICENSES.map((lic) => (
+            <span key={lic} className={styles.pill}>
+              {lic}
+            </span>
+          ))}
+        </div>
       </div>
-    </div>
 
-    {/* 2. MPL-2.0 弱互惠组件披露 */}
-    <div className={styles.subSection}>
-      <h4 className={styles.subSectionTitle}>
-        <AppIcon name="file-text" size={14} />
-        <span>
-          弱互惠型依赖开源披露 (Weak Copyleft — MPL-2.0 Section 3.1 & 3.2)
-        </span>
-      </h4>
-      <p className={styles.subSectionDesc}>
-        根据 Mozilla Public License 2.0 (MPL-2.0) 第 3.1 条与第 3.2
-        条要求，本项目特此公开以下以未修改库形式（Unmodified library
-        form）直接引用的第三方组件。您可通过下述链接直接访问并获取其完整源代码：
-      </p>
-      <div className={styles.depTable}>
-        {MPL_DEPENDENCIES.map((dep) => (
-          <div key={dep.name} className={styles.depItem}>
-            <div className={styles.depInfo}>
-              <span className={styles.depName}>{dep.name}</span>
-              <span className={styles.depForm}>未修改库形式 (Unmodified)</span>
+      {/* 2. MPL-2.0 弱互惠组件披露 */}
+      <div className={styles.subSection}>
+        <h4 className={styles.subSectionTitle}>
+          <AppIcon name="file-text" size={14} />
+          <span>
+            {t(
+              'about.weakCopyleftTitle',
+              '弱互惠型依赖开源披露 (Weak Copyleft — MPL-2.0 Section 3.1 & 3.2)'
+            )}
+          </span>
+        </h4>
+        <p className={styles.subSectionDesc}>
+          {t(
+            'about.weakCopyleftDesc',
+            '根据 Mozilla Public License 2.0 (MPL-2.0) 第 3.1 条与第 3.2 条要求，本项目特此公开以下以未修改库形式（Unmodified library form）直接引用的第三方组件。您可通过下述链接直接访问并获取其完整源代码：'
+          )}
+        </p>
+        <div className={styles.depTable}>
+          {MPL_DEPENDENCIES.map((dep) => (
+            <div key={dep.name} className={styles.depItem}>
+              <div className={styles.depInfo}>
+                <span className={styles.depName}>{dep.name}</span>
+                <span className={styles.depForm}>
+                  {t('about.unmodifiedForm', '未修改库形式 (Unmodified)')}
+                </span>
+              </div>
+              <div className={styles.depActions}>
+                <span className={styles.licenseBadge}>MPL-2.0</span>
+                <a
+                  href={dep.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.depLink}
+                  aria-label={`${dep.name} on ${dep.sourceType}`}
+                >
+                  <span>{dep.sourceType}</span>
+                  <AppIcon name="external-link" size={12} />
+                </a>
+              </div>
             </div>
-            <div className={styles.depActions}>
-              <span className={styles.licenseBadge}>MPL-2.0</span>
-              <a
-                href={dep.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.depLink}
-                aria-label={`${dep.name} on ${dep.sourceType}`}
-              >
-                <span>{dep.sourceType}</span>
-                <AppIcon name="external-link" size={12} />
-              </a>
+          ))}
+        </div>
+      </div>
+
+      {/* 3. 随附字体授权 */}
+      <div className={styles.subSection}>
+        <h4 className={styles.subSectionTitle}>
+          <AppIcon name="palette" size={14} />
+          <span>
+            {t(
+              'about.fontsTitle',
+              '随附字体许可声明 (Bundled Fonts — SIL OFL-1.1)'
+            )}
+          </span>
+        </h4>
+        <p className={styles.subSectionDesc}>
+          {t(
+            'about.fontsDesc',
+            '本项目随附并使用了以下开源字体家族，均遵循 SIL Open Font License 1.1 (SIL OFL-1.1) 协议分发：'
+          )}
+        </p>
+        <div className={styles.fontGrid}>
+          {BUNDLED_FONTS.map((font) => (
+            <div key={font.name} className={styles.fontCard}>
+              <div className={styles.fontName}>{font.name}</div>
+              <div className={styles.fontMeta}>{font.license}</div>
+              <div className={styles.fontCopyright}>{font.copyright}</div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
-    </div>
 
-    {/* 3. 随附字体授权 */}
-    <div className={styles.subSection}>
-      <h4 className={styles.subSectionTitle}>
-        <AppIcon name="palette" size={14} />
-        <span>随附字体许可声明 (Bundled Fonts — SIL OFL-1.1)</span>
-      </h4>
-      <p className={styles.subSectionDesc}>
-        本项目随附并使用了以下开源字体家族，均遵循 SIL Open Font License 1.1
-        (SIL OFL-1.1) 协议分发：
-      </p>
-      <div className={styles.fontGrid}>
-        {BUNDLED_FONTS.map((font) => (
-          <div key={font.name} className={styles.fontCard}>
-            <div className={styles.fontName}>{font.name}</div>
-            <div className={styles.fontMeta}>{font.license}</div>
-            <div className={styles.fontCopyright}>{font.copyright}</div>
-          </div>
-        ))}
+      {/* 4. 商业模型商标合理使用声明 */}
+      <div className={styles.subSection}>
+        <h4 className={styles.subSectionTitle}>
+          <AppIcon name="shield" size={14} />
+          <span>
+            {t(
+              'about.trademarkTitle',
+              '商业模型商标合理使用声明 (Commercial LLM Trademark Fair Use)'
+            )}
+          </span>
+        </h4>
+        <div className={styles.noticeBox}>
+          {t(
+            'about.trademarkDesc',
+            'OpenAI、Anthropic、Google Gemini、DeepSeek 等商标及其相关标识均为其各自所有者的财产。Crish Desktop 与 Conex Kernel 为独立开发的开源软件客户端，仅在模型连接、协议适配与兼容性说明的合理使用（Fair Use）范围内使用上述商标，不代表与各商标所有者存在从属、赞助、授权或许可关联关系。'
+          )}
+        </div>
       </div>
     </div>
-
-    {/* 4. 商业模型商标合理使用声明 */}
-    <div className={styles.subSection}>
-      <h4 className={styles.subSectionTitle}>
-        <AppIcon name="shield" size={14} />
-        <span>
-          商业模型商标合理使用声明 (Commercial LLM Trademark Fair Use)
-        </span>
-      </h4>
-      <div className={styles.noticeBox}>
-        OpenAI、Anthropic、Google Gemini、DeepSeek
-        等商标及其相关标识均为其各自所有者的财产。Crish Desktop 与 Conex Kernel
-        为独立开发的开源软件客户端，仅在模型连接、协议适配与兼容性说明的合理使用（Fair
-        Use）范围内使用上述商标，不代表与各商标所有者存在从属、赞助、授权或许可关联关系。
-      </div>
-    </div>
-  </div>
-);
+  );
+};
 
 type Props = {
   onBlockingOverlayChange?: (open: boolean) => void;
@@ -299,6 +326,7 @@ export const SettingsAboutTab: React.FC<Props> = ({
   onBlockingOverlayChange,
   _onBlockingOverlayChange,
 }) => {
+  const { t } = useI18n();
   const { showToast } = useToast();
   const [copied, setCopied] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -311,10 +339,10 @@ export const SettingsAboutTab: React.FC<Props> = ({
     const ok = await copyTextToClipboard(text);
     if (ok) {
       setCopied(true);
-      showToast('系统信息已复制到剪贴板');
+      showToast(t('about.copySysInfoSuccess', '系统信息已复制到剪贴板'));
       setTimeout(() => setCopied(false), 2000);
     }
-  }, [systemInfo, showToast]);
+  }, [systemInfo, showToast, t]);
 
   const handleSetModalOpen = useCallback(
     (open: boolean) => {
@@ -326,9 +354,9 @@ export const SettingsAboutTab: React.FC<Props> = ({
   );
 
   return (
-    <SettingsPage title="关于">
+    <SettingsPage title={t('about.title', '关于')}>
       {/* 应用品牌与版本信息 */}
-      <SettingsSection title="应用信息">
+      <SettingsSection title={t('about.appInfo', '应用信息')}>
         <SettingsCard>
           <div className={styles.brandHeader}>
             <div className={styles.brandLogo} aria-hidden="true">
@@ -342,14 +370,17 @@ export const SettingsAboutTab: React.FC<Props> = ({
                 </span>
               </div>
               <p className={styles.brandDesc}>
-                现代化本地优先自主 Agent 桌面工作台与多模型协作开发环境
+                {t(
+                  'about.description',
+                  '现代化本地优先自主 Agent 桌面工作台与多模型协作开发环境'
+                )}
               </p>
             </div>
           </div>
 
           <SettingsRow
-            title="内核版本"
-            desc="Rust 内核会话引擎与调度编排核心"
+            title={t('about.kernelVersion', '内核版本')}
+            desc={t('about.kernelDesc', 'Rust 内核会话引擎与调度编排核心')}
             control={
               <span className={styles.monoBadge} data-testid="kernel-version">
                 Conex Kernel {systemInfo.kernelVersion}
@@ -358,19 +389,33 @@ export const SettingsAboutTab: React.FC<Props> = ({
           />
 
           <SettingsRow
-            title="系统与运行架构"
+            title={t('about.systemArch', '系统与运行架构')}
             desc={`${systemInfo.os} · ${systemInfo.architecture} (${systemInfo.runtime})`}
             control={
-              <Tooltip content="复制操作系统、应用版本与内核架构信息">
+              <Tooltip
+                content={t(
+                  'about.copySysInfoTooltip',
+                  '复制操作系统、应用版本与内核架构信息'
+                )}
+              >
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
                   onClick={handleCopySystemInfo}
                   data-testid="copy-system-info-btn"
+                  aria-label={
+                    copied
+                      ? t('common.copied', '已复制')
+                      : t('about.copySysInfo', '复制系统信息')
+                  }
                 >
                   <AppIcon name={copied ? 'check' : 'copy'} size={14} />
-                  <span>{copied ? '已复制' : '复制系统信息'}</span>
+                  <span>
+                    {copied
+                      ? t('common.copied', '已复制')
+                      : t('about.copySysInfo', '复制系统信息')}
+                  </span>
                 </Button>
               </Tooltip>
             }
@@ -379,10 +424,10 @@ export const SettingsAboutTab: React.FC<Props> = ({
       </SettingsSection>
 
       {/* 主开源许可证 */}
-      <SettingsSection title="开源许可证">
+      <SettingsSection title={t('about.openSourceLicense', '开源许可证')}>
         <SettingsCard>
           <SettingsRow
-            title="主许可证 (Primary License)"
+            title={t('about.primaryLicense', '主许可证 (Primary License)')}
             desc="MIT License"
             control={<span className={styles.licenseBadge}>MIT</span>}
           />
@@ -393,18 +438,25 @@ export const SettingsAboutTab: React.FC<Props> = ({
             Copyright (c) 2026 Conex Community
           </div>
           <div className={styles.licenseText}>
-            本软件基于 MIT
-            许可证开放源代码。允许任何人免费获得本软件及其相关文档的副本，不受限制地处理本软件，包括但不限于使用、复制、修改、合并、发布、分发、再许可和/或出售本软件副本的权利。
+            {t(
+              'about.mitLicenseText',
+              '本软件基于 MIT 许可证开放源代码。允许任何人免费获得本软件及其相关文档的副本，不受限制地处理本软件，包括但不限于使用、复制、修改、合并、发布、分发、再许可和/或出售本软件副本的权利。'
+            )}
           </div>
         </SettingsCard>
       </SettingsSection>
 
       {/* 第三方开源许可证与版权披露 */}
-      <SettingsSection title="第三方开源协议与披露">
+      <SettingsSection
+        title={t('about.thirdPartyTitle', '第三方开源协议与披露')}
+      >
         <SettingsCard>
           <SettingsRow
-            title="第三方开源依赖与许可证"
-            desc="包含宽松协议依赖、MPL-2.0 弱互惠组件披露、SIL OFL-1.1 字体授权与商业模型商标使用声明"
+            title={t('about.thirdPartyNotices', '第三方开源依赖与许可证')}
+            desc={t(
+              'about.thirdPartyDesc',
+              '包含宽松协议依赖、MPL-2.0 弱互惠组件披露、SIL OFL-1.1 字体授权与商业模型商标使用声明'
+            )}
             control={
               <div className={styles.thirdPartyControls}>
                 <Button
@@ -419,7 +471,15 @@ export const SettingsAboutTab: React.FC<Props> = ({
                     size={14}
                   />
                   <span>
-                    {isExpanded ? '收起第三方许可证' : '查看第三方许可证'}
+                    {isExpanded
+                      ? t(
+                          'settings.about.collapseThirdPartyLicenses',
+                          '收起第三方许可证'
+                        )
+                      : t(
+                          'settings.about.viewThirdPartyLicenses',
+                          '查看第三方许可证'
+                        )}
                   </span>
                 </Button>
                 <Button
@@ -430,7 +490,9 @@ export const SettingsAboutTab: React.FC<Props> = ({
                   data-testid="open-licenses-modal-btn"
                 >
                   <AppIcon name="external-link" size={14} />
-                  <span>弹窗查看完整协议</span>
+                  <span>
+                    {t('about.viewFullLicenseModal', '弹窗查看完整协议')}
+                  </span>
                 </Button>
               </div>
             }
@@ -441,10 +503,10 @@ export const SettingsAboutTab: React.FC<Props> = ({
       </SettingsSection>
 
       {/* 社区与支持 */}
-      <SettingsSection title="社区与支持">
+      <SettingsSection title={t('about.communityTitle', '社区与支持')}>
         <SettingsCard>
           <SettingsRow
-            title="GitHub 源码仓库"
+            title={t('about.githubRepo', 'GitHub 源码仓库')}
             desc="https://github.com/conex-community/crish"
             control={
               <a
@@ -454,15 +516,18 @@ export const SettingsAboutTab: React.FC<Props> = ({
                 className={styles.externalLink}
                 data-testid="github-link"
               >
-                <span>访问仓库</span>
+                <span>{t('about.visitRepo', '访问仓库')}</span>
                 <AppIcon name="external-link" size={12} />
               </a>
             }
           />
 
           <SettingsRow
-            title="安全漏洞报告"
-            desc="如发现安全隐患或漏洞，请通过 GitHub Security Advisory 或 security@conex.dev 报告"
+            title={t('about.securityReport', '安全漏洞报告')}
+            desc={t(
+              'about.securityReportDesc',
+              '如发现安全隐患或漏洞，请通过 GitHub Security Advisory 或 security@conex.dev 报告'
+            )}
             control={
               <a
                 href="https://github.com/conex-community/crish/security/advisories"
@@ -471,7 +536,7 @@ export const SettingsAboutTab: React.FC<Props> = ({
                 className={styles.externalLink}
                 data-testid="security-report-link"
               >
-                <span>提交漏洞</span>
+                <span>{t('about.submitVulnerability', '提交漏洞')}</span>
                 <AppIcon name="shield" size={12} />
               </a>
             }
@@ -483,7 +548,7 @@ export const SettingsAboutTab: React.FC<Props> = ({
       <Dialog
         open={isModalOpen}
         onClose={() => handleSetModalOpen(false)}
-        title="第三方开源许可证与版权披露"
+        title={t('about.thirdPartyModalTitle', '第三方开源许可证与版权披露')}
         size="lg"
       >
         <div className={styles.modalBody}>

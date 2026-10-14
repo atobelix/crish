@@ -3,6 +3,7 @@ import styles from './Sidebar.module.css';
 import { IconButton } from '../ui';
 import { SidebarNav } from './SidebarNav';
 import { AppIcon } from '../ui/icons/index';
+import { useI18n } from '../../i18n';
 
 export interface SidebarHeaderProps {
   sidebarBehavior: string;
@@ -73,13 +74,16 @@ export const SidebarToggle: React.FC<{
   collapsed: boolean;
   onToggle: () => void;
 }> = React.memo(({ collapsed, onToggle }) => {
+  const { t } = useI18n();
   const isMacDesktop = useMemo(() => {
     return (
       typeof navigator !== 'undefined' &&
       /Macintosh|Mac OS X/i.test(navigator.userAgent)
     );
   }, []);
-  const toggleLabel = collapsed ? '展开侧栏' : '收起侧栏';
+  const toggleLabel = collapsed
+    ? t('sidebar.expandSidebar', '展开侧栏')
+    : t('sidebar.collapseSidebar', '收起侧栏');
   return (
     <div
       className={`${styles.sidebarHeader} sidebar-header`}
@@ -125,7 +129,10 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
     onOpenExtensions,
     onSearchChange,
   }) => {
-    const toggleLabel = collapsed ? '展开侧栏' : '收起侧栏';
+    const { t } = useI18n();
+    const toggleLabel = collapsed
+      ? t('sidebar.expandSidebar', '展开侧栏')
+      : t('sidebar.collapseSidebar', '收起侧栏');
 
     return (
       <>
@@ -175,7 +182,11 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
             size="md"
             active={isOverlayActive}
             className={styles.hamburger}
-            aria-label={isOverlayActive ? '关闭侧栏菜单' : '打开侧栏菜单'}
+            aria-label={
+              isOverlayActive
+                ? t('sidebar.closeMenu', '关闭侧栏菜单')
+                : t('sidebar.openMenu', '打开侧栏菜单')
+            }
             aria-expanded={isOverlayActive}
             onClick={onHamburgerClick}
             icon={<AppIcon name="menu" size={18} aria-hidden />}
@@ -208,7 +219,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
         >
           {searchStatusText}
           {!isSearching && filterType === 'pinned'
-            ? `筛选：${filterLabel}`
+            ? `${t('common.filter', '筛选')}：${filterLabel}`
             : null}
         </div>
 
@@ -217,7 +228,10 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
           aria-hidden={chromeHidden || undefined}
           inert={chromeHidden ? true : undefined}
           role="group"
-          aria-label="侧栏快捷操作：新建对话与定时任务"
+          aria-label={t(
+            'sidebar.quickActions',
+            '侧栏快捷操作：新建对话与定时任务'
+          )}
         >
           <SidebarNav
             activeNav={activeNav}

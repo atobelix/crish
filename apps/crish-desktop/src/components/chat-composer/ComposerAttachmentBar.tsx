@@ -24,7 +24,8 @@ export interface ComposerAttachmentBarProps {
   onOpenPath?: (path: string) => void;
 }
 
-export type AttachKind = 'image' | 'code' | 'table' | 'text' | 'file' | 'annotation';
+export type AttachKind =
+  'image' | 'code' | 'table' | 'text' | 'file' | 'annotation';
 
 export function attachKind(a: ChatAttachment): AttachKind {
   if (a.annotation || a.mime === 'text/x-annotation') {
@@ -41,15 +42,23 @@ export function attachKind(a: ChatAttachment): AttachKind {
   if (/\.(csv|tsv|xlsx?)$/i.test(a.name || a.path || '')) {
     return 'table';
   }
-  if (/\.(ts|tsx|js|jsx|py|rs|go|java|c|cpp|h|css|json)$/i.test(a.name || a.path || '')) {
+  if (
+    /\.(ts|tsx|js|jsx|py|rs|go|java|c|cpp|h|css|json)$/i.test(
+      a.name || a.path || ''
+    )
+  ) {
     return 'code';
   }
-  if (a.text || /\.(md|markdown|txt|log|ya?ml|toml)$/i.test(a.name || a.path || '')) {
+  if (
+    a.text ||
+    /\.(md|markdown|txt|log|ya?ml|toml)$/i.test(a.name || a.path || '')
+  ) {
     return 'text';
   }
   return 'file';
 }
 
+import { useI18n } from '../../i18n';
 import { AnnotationChipItem } from './AnnotationChipItem';
 
 export const ComposerAttachmentBar: React.FC<ComposerAttachmentBarProps> = ({
@@ -57,6 +66,7 @@ export const ComposerAttachmentBar: React.FC<ComposerAttachmentBarProps> = ({
   onRemoveAttachment,
   onOpenPath,
 }) => {
+  const { t } = useI18n();
   const [activePopoverId, setActivePopoverId] = useState<string | null>(null);
 
   if (attachments.length === 0) return null;
@@ -68,7 +78,8 @@ export const ComposerAttachmentBar: React.FC<ComposerAttachmentBarProps> = ({
       return;
     }
     if (a.dataUrl) {
-      const win = typeof window !== 'undefined' ? window.open('', '_blank') : null;
+      const win =
+        typeof window !== 'undefined' ? window.open('', '_blank') : null;
       if (win) {
         win.document.write(
           `<!DOCTYPE html><html><head><title>${a.name}</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;height:100vh;background:#111;}img{max-width:95vw;max-height:95vh;object-fit:contain;}</style></head><body><img src="${a.dataUrl}" alt="${a.name}"/></body></html>`
@@ -82,16 +93,22 @@ export const ComposerAttachmentBar: React.FC<ComposerAttachmentBarProps> = ({
     open(targetPath);
   };
 
+  const attachAriaLabel = t('chat.composer.attachmentCountAria', {
+    count: attachments.length,
+  });
+
   return (
     <div
       className={`${styles.fileZone} ${styles.attachStrip} file-zone`}
       role="list"
-      aria-label={`附件，共 ${attachments.length} 个`}
+      aria-label={attachAriaLabel}
       data-testid="composer-attach-strip"
     >
       {attachments.map((a, index) => {
         const kind = attachKind(a);
-        const itemKey = a.id || (a.annotation ? a.annotation.id : `${a.path || a.name}_${index}`);
+        const itemKey =
+          a.id ||
+          (a.annotation ? a.annotation.id : `${a.path || a.name}_${index}`);
         if (kind === 'annotation' && a.annotation) {
           return (
             <AnnotationChipItem

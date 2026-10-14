@@ -3,6 +3,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import styles from './PermissionModeMenu.module.css';
 import { Button, Menu, Tooltip } from '../ui';
 import { toggleExclusiveMenu } from '../ui/Menu';
+import { useI18n } from '../../i18n';
 import {
   DESKTOP_PERMISSION_MODE_IDS,
   coercePermissionMode,
@@ -52,6 +53,7 @@ export const PermissionModeMenu: React.FC<Props> = ({
   hideChevron = false,
   variant = 'default',
 }) => {
+  const { t } = useI18n();
   const mode = coercePermissionMode(modeRaw);
   const meta = permissionModeMeta(mode);
   const [open, setOpen] = useState(false);
@@ -78,17 +80,22 @@ export const PermissionModeMenu: React.FC<Props> = ({
     onClick: () => selectMode(m),
   }));
 
+  const tooltipContent = t('chat.permission.tooltip', {
+    mode: meta.label,
+    hint: meta.matrixHint,
+  });
+
+  const pillAriaLabel = t('chat.permission.ariaLabel', {
+    mode: meta.label,
+  });
+
   return (
     <div
       className={styles.permModeWrap}
       data-density="compact"
       style={{ position: 'relative', display: 'inline-block' }}
     >
-      <Tooltip
-        content={`当前权限模式：${meta.label} · ${meta.matrixHint}`}
-        disabled={open}
-        side="top"
-      >
+      <Tooltip content={tooltipContent} disabled={open} side="top">
         <Button
           ref={pillBtnRef}
           type="button"
@@ -105,7 +112,7 @@ export const PermissionModeMenu: React.FC<Props> = ({
           onClick={handleToggle}
           aria-expanded={open}
           aria-haspopup="menu"
-          aria-label={`当前权限模式：${meta.label}`}
+          aria-label={pillAriaLabel}
         >
           <span className={styles.permIcon} aria-hidden="true">
             {MODE_ICON_MAP[mode] ?? <AppIcon name="shield" size={14} />}
@@ -143,6 +150,10 @@ export const PermissionModeMenu: React.FC<Props> = ({
             const sublabel =
               MODE_SUBLABEL_MAP[opt.id as PermissionMode] ??
               itemMeta.description;
+            const noteAriaLabel = t('chat.permission.modeNoteAria', {
+              mode: itemMeta.label,
+              desc: sublabel,
+            });
             return (
               <Button
                 key={opt.id}
@@ -163,7 +174,7 @@ export const PermissionModeMenu: React.FC<Props> = ({
                     <span
                       className={styles.infoTrigger}
                       role="note"
-                      aria-label={`${itemMeta.label}说明：${sublabel}`}
+                      aria-label={noteAriaLabel}
                       onClick={(e) => {
                         e.stopPropagation();
                         opt.onClick?.();

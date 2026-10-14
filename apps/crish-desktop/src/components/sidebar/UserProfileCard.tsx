@@ -36,6 +36,11 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
         ? user.name || user.email.split('@')[0]
         : username) || roleLabel;
 
+    const cardAriaLabel = `${t(
+      'sidebar.userCardPrefix',
+      '用户卡片：'
+    )}${activeUser} (${roleLabel})${t('sidebar.clickToOpen', '，点击打开')}${tooltip}`;
+
     return (
       <SettingsQuickMenu
         renderTrigger={({ open, triggerProps }) => (
@@ -47,7 +52,7 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
               data-testid="user-profile-card"
               data-role={roleLabel}
               data-tooltip={tooltip}
-              aria-label={`用户卡片：${activeUser} (${roleLabel})，点击打开${tooltip}`}
+              aria-label={cardAriaLabel}
               {...triggerProps}
             >
               <div className={styles.userAvatarContainer}>

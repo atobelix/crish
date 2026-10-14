@@ -48,6 +48,22 @@ export const chat: ChatTranslations = {
   'composer.undoDraftHint': 'Restored previous input draft',
   'composer.editingMessage': 'Editing previous message',
   'composer.cancelEdit': 'Cancel edit (Esc)',
+  'composer.attachmentCountAria': 'Attachments, {count} total',
+  'composer.dropToAttach': 'Drop here to add attachments',
+  'composer.notice.viewDetail': 'View Details',
+  'composer.notice.dismiss': 'Dismiss Notice',
+  'composer.sendDisabledProcessing': 'Please enter a message to queue',
+  'composer.sendDisabledNormal': 'Please enter a message or add attachments',
+  'composer.queueTooltip':
+    'Queue message, send after current response completes',
+  'composer.appendTooltip': 'Send supplementary instruction',
+  'composer.sendTooltip': 'Send (Enter)',
+  'composer.cannotQueue': 'Cannot queue: please enter content first',
+  'composer.cannotSend':
+    'Cannot send: please enter a message or add attachments',
+  'composer.appliedTemplateSnapshot':
+    'Template applied, draft snapshot preserved',
+  'composer.undoRestore': 'Undo Restore',
 
   // ── 2. Plus Menu and Quick Actions (plusMenu.*) ──
   'plusMenu.title': 'Add Content and Extensions',
@@ -93,6 +109,9 @@ export const chat: ChatTranslations = {
   'permission.full.matrixHint': 'Low interruption',
   'permission.planModeBadge': 'Plan Mode',
   'permission.planApprovedBadge': 'Plan Approved',
+  'permission.tooltip': 'Current permission mode: {mode} · {hint}',
+  'permission.ariaLabel': 'Current permission mode: {mode}',
+  'permission.modeNoteAria': '{mode} Note: {desc}',
 
   // ── 4. Slash Commands and Quick Hints (slash.*) ──
   'slash.menuTitle': 'Quick Slash Commands',

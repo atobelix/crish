@@ -31,6 +31,7 @@ import {
   WIZARD_STEP_META,
   type WizardStep,
 } from '../firstRunWizardLib';
+import { useI18n } from '../../i18n';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
@@ -40,6 +41,8 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
   _onBlockingOverlayChange,
 }) => {
   void _onBlockingOverlayChange;
+  const { t } = useI18n();
+
   const { showToast } = useToast();
   const cwd = getWorkspacePath() || '__global__';
   const setTabModeEnabled = useLayoutStore((s) => s.setTabModeEnabled);
@@ -78,7 +81,9 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
         }
       } catch (err) {
         if (!cancelled) {
-          const msg = '读取失败：' + String(err);
+          const msg = t('settings.personalize.loadFailed', {
+            error: String(err),
+          });
           setLoadError(msg);
           showToast(msg);
         }
@@ -87,7 +92,7 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
     return () => {
       cancelled = true;
     };
-  }, [cwd, setAppSettings, setTabModeEnabled, loadTick, showToast]);
+  }, [cwd, setAppSettings, setTabModeEnabled, loadTick, showToast, t]);
 
   const save = useCallback(
     async (updates: Partial<Settings>): Promise<boolean> => {
@@ -104,11 +109,11 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
       } catch (err) {
         setSettings(previous);
         setAppSettings(previous);
-        showToast('保存失败：' + String(err));
+        showToast(t('settings.personalize.saveFailed', { error: String(err) }));
         return false;
       }
     },
-    [cwd, setAppSettings, settings, showToast]
+    [cwd, setAppSettings, settings, showToast, t]
   );
 
   const ready = Boolean(settings);
@@ -117,96 +122,118 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
   const personalizeSchema: SchemaSection[] = useMemo(
     () => [
       {
-        title: '对话偏好',
+        title: t('settings.personalize.conversationPrefs'),
         properties: [
           {
             key: 'responseStyle',
             type: 'select',
-            title: '回答风格',
-            desc: '回答的篇幅、详细程度与分步要点说明',
+            title: t('settings.personalize.responseStyleTitle'),
+            desc: t('settings.personalize.responseStyleDesc'),
             options: [
-              { value: 'minimal', label: '简洁', hint: '尽量短，直接给结论' },
-              { value: 'low', label: '标准', hint: '适中，要点清楚篇幅适中' },
-              { value: 'medium', label: '详细', hint: '分步，步骤更完整' },
-              { value: 'high', label: '深入', hint: '展开，分析更充分' },
+              {
+                value: 'minimal',
+                label: t('settings.personalize.styleMinimal'),
+                hint: t('settings.personalize.styleMinimalHint'),
+              },
+              {
+                value: 'low',
+                label: t('settings.personalize.styleStandard'),
+                hint: t('settings.personalize.styleStandardHint'),
+              },
+              {
+                value: 'medium',
+                label: t('settings.personalize.styleDetailed'),
+                hint: t('settings.personalize.styleDetailedHint'),
+              },
+              {
+                value: 'high',
+                label: t('settings.personalize.styleDeep'),
+                hint: t('settings.personalize.styleDeepHint'),
+              },
             ],
           },
           {
             key: 'sendShortcut',
             type: 'toggle-group',
-            title: '发送消息快捷键',
-            desc: 'Enter 发送（Shift+Enter 换行），或 Ctrl+Enter 发送（Enter 换行）',
+            title: t('settings.personalize.sendShortcutTitle'),
+            desc: t('settings.personalize.sendShortcutDesc'),
             toggleOptions: [
-              { value: 'enter', label: 'Enter 发送' },
-              { value: 'ctrlEnter', label: 'Ctrl+Enter 发送' },
+              {
+                value: 'enter',
+                label: t('settings.personalize.sendShortcutEnter'),
+              },
+              {
+                value: 'ctrlEnter',
+                label: t('settings.personalize.sendShortcutCmdEnter'),
+              },
             ],
           },
           {
             key: 'maxRetryAttempts',
             type: 'number',
-            title: '单次重试上限次数',
-            desc: '手动重试的最大尝试次数（默认 10 次，配合指数退避保护；调整数字即实时保存）',
+            title: t('settings.personalize.maxRetryTitle'),
+            desc: t('settings.personalize.maxRetryDesc'),
             min: 1,
             max: 50,
             step: 1,
-            unit: '次',
+            unit: t('settings.personalize.timesUnit'),
           },
           {
             key: 'hideThinkingBlock',
             type: 'boolean',
-            title: '默认折叠思考过程',
-            desc: '在对话流中默认隐藏或折叠深度思考模型的大段推理内容',
+            title: t('settings.personalize.hideThinkingTitle'),
+            desc: t('settings.personalize.hideThinkingDesc'),
           },
         ],
       },
       {
-        title: '界面偏好',
+        title: t('settings.personalize.uiPrefs'),
         properties: [
           {
             key: 'tabModeEnabled',
             type: 'boolean',
-            title: '合并右侧面板',
-            desc: '将总览、文件树等多个侧栏板块收纳合并为统一的右侧标签页栏',
+            title: t('settings.personalize.tabModeTitle'),
+            desc: t('settings.personalize.tabModeDesc'),
           },
           {
             key: 'collapseChangelog',
             type: 'boolean',
-            title: '默认折叠更新日志',
-            desc: '进入工作台时，默认收起右侧的系统版本更新日志抽屉',
+            title: t('settings.personalize.collapseChangelogTitle'),
+            desc: t('settings.personalize.collapseChangelogDesc'),
           },
         ],
       },
       {
-        title: '系统与遥测',
+        title: t('settings.personalize.systemTelemetry'),
         properties: [
           {
             key: 'enableSkillCommands',
             type: 'boolean',
-            title: '启用行内斜杠命令',
-            desc: '允许在对话输入框中通过键入 / 触发快速执行的指令与技能菜单',
+            title: t('settings.personalize.enableSkillCommandsTitle'),
+            desc: t('settings.personalize.enableSkillCommandsDesc'),
           },
           {
             key: 'quietStartup',
             type: 'boolean',
-            title: '启用静默启动日志',
-            desc: '启动客户端时，自动隐藏环境加载、初始化等冗余调试信息',
+            title: t('settings.personalize.quietStartupTitle'),
+            desc: t('settings.personalize.quietStartupDesc'),
           },
           {
             key: 'enableAnalytics',
             type: 'boolean',
-            title: '分享匿名产品分析',
-            desc: '传输安全脱敏、完全不包含任何代码或隐私的遥测数据以帮助改进本软件',
+            title: t('settings.personalize.enableAnalyticsTitle'),
+            desc: t('settings.personalize.enableAnalyticsDesc'),
           },
           {
             key: 'enableCrashTelemetry',
             type: 'boolean',
-            title: '自动收集错误日志',
-            desc: '检测到异常退出时自动收集诊断日志并上传，用于排查崩溃与稳定性问题',
+            title: t('settings.personalize.enableCrashTelemetryTitle'),
+            desc: t('settings.personalize.enableCrashTelemetryDesc'),
           },
         ],
       },
     ],
-    []
+    [t]
   );
 
   // Map values correctly to feed the dynamic fields
@@ -259,8 +286,8 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
 
   if (loadError && !settings) {
     return (
-      <SettingsPage title="通用设置">
-        <SettingsSection title="错误">
+      <SettingsPage title={t('settings.personalize.title')}>
+        <SettingsSection title={t('common.error')}>
           <SettingsCard>
             <SettingsRow
               title={<span role="alert">{loadError}</span>}
@@ -274,7 +301,7 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
                     setLoadTick((n) => n + 1);
                   }}
                 >
-                  重试
+                  {t('common.retry')}
                 </Button>
               }
             />
@@ -285,23 +312,23 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
   }
 
   return (
-    <SettingsPage title="通用设置">
-      <SettingsSection title="首次使用与新手引导">
+    <SettingsPage title={t('settings.personalize.title')}>
+      <SettingsSection title={t('settings.personalize.onboardingSection')}>
         <SettingsCard>
           <SettingsRow
-            title="启动时显示新手引导界面"
-            desc="开启后，每次打开软件时都会显示首次使用向导；关闭后启动直接进入主工作区"
+            title={t('settings.personalize.showOnboardingTitle')}
+            desc={t('settings.personalize.showOnboardingDesc')}
             control={
               <Switch
-                aria-label="启动时显示新手引导界面"
+                aria-label={t('settings.personalize.showOnboardingTitle')}
                 checked={showOnboardingOnStartup}
                 onCheckedChange={handleToggleOnboardingOnStartup}
               />
             }
           />
           <SettingsRow
-            title="首次使用引导界面"
-            desc="随时查看新装软件首次启动时的引导向导，支持按步体验或直接打开指定步骤"
+            title={t('settings.personalize.openWizardTitle')}
+            desc={t('settings.personalize.openWizardDesc')}
             control={
               <Button
                 type="button"
@@ -311,13 +338,13 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
                   handleOpenFirstRunWizard(0);
                 }}
               >
-                立即查看引导
+                {t('settings.personalize.openWizardBtn')}
               </Button>
             }
           />
           <SettingsRow
             vertical
-            title="按步骤直接预览首次使用界面"
+            title={t('settings.personalize.previewStepsTitle')}
             desc={
               <div
                 style={{
@@ -327,7 +354,7 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
                   marginTop: 'var(--space-1_5)',
                 }}
                 role="group"
-                aria-label="首次使用引导步骤列表"
+                aria-label={t('settings.personalize.previewStepsAria')}
               >
                 {WIZARD_STEP_META.map((stepMeta) => (
                   <Button
@@ -339,7 +366,7 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({
                       handleOpenFirstRunWizard(stepMeta.id);
                     }}
                   >
-                    {`${stepMeta.id + 1}. ${stepMeta.title}`}
+                    {`${stepMeta.id + 1}. ${t(`settings.personalize.wizardStep${stepMeta.id}`)}`}
                   </Button>
                 ))}
               </div>

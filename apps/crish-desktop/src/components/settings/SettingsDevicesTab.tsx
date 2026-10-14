@@ -43,6 +43,7 @@ import { useDeviceRename } from './useDeviceRename';
 import { SettingsDevicesNetworkEnv } from './SettingsDevicesNetworkEnv';
 import { SettingsDevicesList } from './SettingsDevicesList';
 import { AppIcon } from '../ui/icons/index';
+import { useI18n } from '../../i18n';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
@@ -105,7 +106,10 @@ function networkEnvReducer(
   }
 }
 
-export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
+export const SettingsDevicesTab: React.FC<Props> = ({
+  _onBlockingOverlayChange,
+}) => {
+  const { t } = useI18n();
   const { showToast } = useToast();
   const [deviceList, dispatchDeviceList] = useReducer(
     deviceListReducer,
@@ -130,11 +134,13 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
     handleCopyCode,
   } = useDevicePairing({ mountedRef, load, showToast });
 
-  const { rename, dispatchRename, startRename, handleRename } = useDeviceRename({
-    mountedRef,
-    load,
-    showToast,
-  });
+  const { rename, dispatchRename, startRename, handleRename } = useDeviceRename(
+    {
+      mountedRef,
+      load,
+      showToast,
+    }
+  );
 
   const inFlightRef = useRef(false);
   const netEnvFetchedRef = useRef(false);
@@ -182,45 +188,52 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
     if (!mountedRef.current) return;
     dispatchDeviceList({ type: 'setRevokeHash', hash: null });
     if (ok) {
-      showToast('设备已撤销（令牌失效并已断开）');
+      showToast(
+        t('settings.devices.deviceRevoked', '设备已撤销（令牌失效并已断开）')
+      );
     } else {
-      showToast('撤销失败：设备不存在或已撤销');
+      showToast(
+        t('settings.devices.revokeFailed', '撤销失败：设备不存在或已撤销')
+      );
     }
     await load();
-  }, [deviceList.revokeHash, load, showToast]);
+  }, [deviceList.revokeHash, load, showToast, t]);
 
-  const handleRevokeRequest = useCallback(
-    (deviceId: string) => {
-      dispatchDeviceList({ type: 'setRevokeHash', hash: deviceId });
-    },
-    []
-  );
+  const handleRevokeRequest = useCallback((deviceId: string) => {
+    dispatchDeviceList({ type: 'setRevokeHash', hash: deviceId });
+  }, []);
 
   // 配对态生效条件：服务开启 + 服务端配对态翻转（服务关闭时即使轮询
   // 残留 pairing_enabled 也不展示配对面——服务关闭即零监听）。
-  const enabled = Boolean(pairing.status?.pairing_enabled) && pairing.serviceEnabled;
+  const enabled =
+    Boolean(pairing.status?.pairing_enabled) && pairing.serviceEnabled;
   // 二维码数据仅本会话保留：开启成功即显示（不等待轮询翻转）；
   // 服务端配对开启但本会话无码（如重启后）时给提示条，可重新生成。
   const showPairCard = pairing.pairResult !== null && pairing.serviceEnabled;
 
   return (
     <SettingsPage
-      title="多端互通"
+      title={t('settings.devices.pageTitle', '多端互通')}
       meta={<AppIcon name="smartphone" size={16} aria-hidden />}
     >
-      <SettingsSection title="配对模式">
+      <SettingsSection
+        title={t('settings.devices.pairingModeSection', '配对模式')}
+      >
         <SettingsCard>
           {pairing.serviceEnabled ? (
             <>
               <SettingsRow
                 icon={<AppIcon name="radio" size={18} aria-hidden />}
-                title="多端互通服务"
+                title={t('settings.devices.serviceTitle', '多端互通服务')}
                 desc={
                   <span
                     className={styles.serviceDesc}
                     data-testid="service-disable-hint"
                   >
-                    服务运行中 · 关闭服务将断开所有已配对设备
+                    {t(
+                      'settings.devices.serviceRunningDesc',
+                      '服务运行中 · 关闭服务将断开所有已配对设备'
+                    )}
                   </span>
                 }
                 control={
@@ -230,14 +243,18 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                     onClick={() => void handleDisableService()}
                     disabled={pairing.busy}
                   >
-                    <AppIcon name="power" size={14} aria-hidden /> 关闭服务
+                    <AppIcon name="power" size={14} aria-hidden />{' '}
+                    {t('settings.devices.stopService', '关闭服务')}
                   </Button>
                 }
               />
               <SettingsRow
                 icon={<AppIcon name="qr-code" size={18} aria-hidden />}
-                title="开启局域网配对"
-                desc="生成一次性配对码，移动端扫码即可连接本机"
+                title={t('settings.devices.enableLanPairing', '开启局域网配对')}
+                desc={t(
+                  'settings.devices.enableLanPairingDesc',
+                  '生成一次性配对码，移动端扫码即可连接本机'
+                )}
                 control={
                   <Switch
                     checked={enabled}
@@ -252,7 +269,10 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                         });
                       }
                     }}
-                    aria-label="配对模式开关"
+                    aria-label={t(
+                      'settings.devices.pairingSwitchAria',
+                      '配对模式开关'
+                    )}
                   />
                 }
               />
@@ -262,7 +282,10 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                   data-testid="pair-code-missing"
                 >
                   <AppIcon name="info" size={14} aria-hidden />
-                  配对已开启但配对码已过期。点击上方开关重新开启即可生成新码。
+                  {t(
+                    'settings.devices.pairCodeExpiredHint',
+                    '配对已开启但配对码已过期。点击上方开关重新开启即可生成新码。'
+                  )}
                 </div>
               )}
             </>
@@ -270,8 +293,14 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
             <div data-testid="service-off">
               <SettingsRow
                 icon={<AppIcon name="radio" size={18} aria-hidden />}
-                title="多端互通服务未开启"
-                desc="开启后本机可被局域网内的移动设备发现并连接"
+                title={t(
+                  'settings.devices.serviceOffTitle',
+                  '多端互通服务未开启'
+                )}
+                desc={t(
+                  'settings.devices.serviceOffDesc',
+                  '开启后本机可被局域网内的移动设备发现并连接'
+                )}
                 control={
                   <Button
                     size="sm"
@@ -279,7 +308,8 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                     onClick={() => void handleEnableService()}
                     disabled={pairing.busy}
                   >
-                    <AppIcon name="power" size={14} aria-hidden /> 开启服务
+                    <AppIcon name="power" size={14} aria-hidden />{' '}
+                    {t('settings.devices.startService', '开启服务')}
                   </Button>
                 }
               />
@@ -289,7 +319,9 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
       </SettingsSection>
 
       {showPairCard && (
-        <SettingsSection title="扫码配对">
+        <SettingsSection
+          title={t('settings.devices.scanQrSection', '扫码配对')}
+        >
           <SettingsCard>
             <div className={styles.qrWrap} data-testid="pair-qr-card">
               <div className={styles.qrBox}>
@@ -297,7 +329,7 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                   value={pairing.pairResult!.qr}
                   size={180}
                   level="M"
-                  aria-label="配对二维码"
+                  aria-label={t('settings.devices.qrCodeAria', '配对二维码')}
                 />
               </div>
               <div className={styles.codeContainer}>
@@ -308,15 +340,16 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                   size="sm"
                   variant="secondary"
                   onClick={() => void handleCopyCode()}
-                  title="复制配对码"
+                  title={t('settings.devices.copyPairCode', '复制配对码')}
                 >
-                  <AppIcon name="copy" size={13} aria-hidden /> 复制配对码
+                  <AppIcon name="copy" size={13} aria-hidden />{' '}
+                  {t('settings.devices.copyPairCode', '复制配对码')}
                 </Button>
               </div>
               <div className={styles.qrMeta}>
                 <AppIcon name="clock" size={13} aria-hidden />
                 <span>
-                  剩余有效时间：
+                  {t('settings.devices.remainingTime', '剩余有效时间：')}
                   {formatRemaining(pairing.status?.code_remaining_ms ?? null)}
                 </span>
               </div>
@@ -344,7 +377,8 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                   disabled={pairing.busy}
                   className={styles.closePairBtn}
                 >
-                  <AppIcon name="x" size={14} aria-hidden /> 关闭配对
+                  <AppIcon name="x" size={14} aria-hidden />{' '}
+                  {t('settings.devices.closePairing', '关闭配对')}
                 </Button>
               </div>
             </div>
@@ -366,9 +400,12 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
       <ConfirmDialog
         open={deviceList.revokeHash !== null}
         danger
-        title="撤销设备"
-        description="撤销后该设备将立即断开，令牌失效，需重新扫码配对才能连接。确定撤销？"
-        confirmLabel="撤销"
+        title={t('settings.devices.revokeConfirmTitle', '撤销设备')}
+        description={t(
+          'settings.devices.revokeConfirmDesc',
+          '撤销后该设备将立即断开，令牌失效，需重新扫码配对才能连接。确定撤销？'
+        )}
+        confirmLabel={t('settings.devices.revokeConfirmBtn', '撤销')}
         onConfirm={() => void handleRevoke()}
         onCancel={() =>
           dispatchDeviceList({ type: 'setRevokeHash', hash: null })
@@ -378,9 +415,12 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
       <ConfirmDialog
         open={pairing.confirmClosePairing}
         danger
-        title="关闭配对"
-        description="关闭配对将撤销全部已配对设备并断开连接（令牌全部失效，已连接设备立即断开，需重新扫码配对才能连接）。确定关闭配对？"
-        confirmLabel="关闭配对"
+        title={t('settings.devices.closePairingConfirmTitle', '关闭配对')}
+        description={t(
+          'settings.devices.closePairingConfirmDesc',
+          '关闭配对将撤销全部已配对设备并断开连接（令牌全部失效，已连接设备立即断开，需重新扫码配对才能连接）。确定关闭配对？'
+        )}
+        confirmLabel={t('settings.devices.closePairingConfirmBtn', '关闭配对')}
         onConfirm={() => {
           dispatchPairing({ type: 'setConfirmClosePairing', open: false });
           void handleToggle(false);

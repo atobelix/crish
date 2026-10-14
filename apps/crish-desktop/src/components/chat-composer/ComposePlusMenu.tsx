@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import styles from './ComposePlusMenu.module.css';
 import { openSettings } from '../../api/storeAccess';
 import { navigateToSurface } from '../../store/storeAccess';
+import { useI18n } from '../../i18n';
 import {
   SmartExpandablePanel,
   type MenuItem,
@@ -29,6 +30,7 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
   onSelectSkillCommand,
   restoreFocusRef,
 }) => {
+  const { t } = useI18n();
   const [skills, setSkills] = useState<
     Array<{ id: string; name: string; desc?: string; cmd?: string }>
   >([]);
@@ -89,7 +91,7 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
         : [
             {
               id: 'no-skills',
-              label: '暂无已启用的技能',
+              label: t('chat.plusMenu.noSkills', '暂无已启用的技能'),
               disabled: true,
             },
           ]),
@@ -99,7 +101,7 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
       },
       {
         id: 'action:manage-skills',
-        label: '管理技能...',
+        label: t('chat.plusMenu.manageSkills', '管理技能...'),
         icon: <AppIcon name="settings" size={13} />,
         onSelect: () => {
           openSettings('skills');
@@ -111,8 +113,8 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
     return [
       {
         id: 'file',
-        label: '添加文件或附件',
-        sublabel: '图片、代码或文档',
+        label: t('chat.plusMenu.addFiles', '添加文件或附件'),
+        sublabel: t('chat.plusMenu.addFilesDesc', '图片、代码或文档'),
         icon: <AppIcon name="paperclip" size={14} />,
         onSelect: () => {
           onAddFiles();
@@ -122,8 +124,8 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
         id: 'skill',
         type: 'submenu',
         closeOnSelect: true,
-        label: '使用 skill',
-        sublabel: '选择或键入技能指令',
+        label: t('chat.plusMenu.useSkill'),
+        sublabel: t('chat.plusMenu.useSkillDesc', '选择或键入技能指令'),
         icon: <AppIcon name="sparkles" size={14} />,
         children: skillChildren,
         onSelect: () => {
@@ -133,6 +135,7 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
       },
     ];
   }, [
+    t,
     skills,
     onAddFiles,
     onInsertSkillSlash,

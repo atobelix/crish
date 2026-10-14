@@ -212,66 +212,75 @@ describe('McpDetailWorkbench - Tool Granularity Control', () => {
     expect(server?.disabledTools).toEqual([]);
   });
 
-  it('injects and resolves preset tools for filesystem, fetch, sqlite, git, and node_repl when tools array is empty', () => {
-    const presetServers: McpServerInfo[] = [
-      {
-        id: 'fs-1',
-        name: 'filesystem',
-        state: 'ready',
-        status: 'connected',
-        tools: [],
-      },
-      {
-        id: 'fetch-1',
-        name: 'fetch',
-        state: 'ready',
-        status: 'connected',
-        tools: [],
-      },
-      {
-        id: 'sqlite-1',
-        name: 'sqlite',
-        state: 'ready',
-        status: 'connected',
-        tools: [],
-      },
-      {
-        id: 'git-1',
-        name: 'git',
-        state: 'ready',
-        status: 'connected',
-        tools: [],
-      },
-      {
-        id: 'repl-1',
-        name: 'node_repl',
-        state: 'ready',
-        status: 'connected',
-        tools: [],
-      },
-    ];
+  it('displays empty state when tools array is empty and renders dynamically when real tools are reflected', () => {
+    const emptyServer: McpServerInfo = {
+      id: 'fs-1',
+      name: 'filesystem',
+      state: 'ready',
+      status: 'connected',
+      tools: [],
+    };
 
-    for (const ps of presetServers) {
-      const { unmount } = render(
-        <ToastProvider>
-          <McpDetailWorkbench server={ps} />
-        </ToastProvider>
-      );
+    const { unmount } = render(
+      <ToastProvider>
+        <McpDetailWorkbench server={emptyServer} />
+      </ToastProvider>
+    );
 
-      if (ps.name === 'filesystem') {
-        expect(screen.getByText('read_file')).toBeInTheDocument();
-        expect(screen.getByText('write_file')).toBeInTheDocument();
-      } else if (ps.name === 'fetch') {
-        expect(screen.getByText('fetch_url')).toBeInTheDocument();
-      } else if (ps.name === 'sqlite') {
-        expect(screen.getByText('read_query')).toBeInTheDocument();
-      } else if (ps.name === 'git') {
-        expect(screen.getByText('git_status')).toBeInTheDocument();
-      } else if (ps.name === 'node_repl') {
-        expect(screen.getByText('eval_js')).toBeInTheDocument();
-      }
-      unmount();
-    }
+    expect(screen.getByText('暂未发现导出的工具')).toBeInTheDocument();
+    unmount();
+
+    // 未连接状态展示“未连接，启动后动态反射”
+    const unconnServer: McpServerInfo = {
+      id: 'fs-unconn',
+      name: 'filesystem',
+      state: 'stopped',
+      status: 'disconnected',
+      tools: [],
+    };
+
+    const { unmount: unmountUnconn } = render(
+      <ToastProvider>
+        <McpDetailWorkbench server={unconnServer} />
+      </ToastProvider>
+    );
+
+    expect(screen.getByText('未连接，启动后动态反射')).toBeInTheDocument();
+    unmountUnconn();
+
+    // 动态反射真实工具与 Schema
+    const reflectedServer: McpServerInfo = {
+      id: 'fs-real',
+      name: 'filesystem',
+      state: 'ready',
+      status: 'connected',
+      tools: ['read_file', 'write_file'],
+      toolDefs: [
+        {
+          name: 'read_file',
+          description: '读取本地文件内容',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              path: { type: 'string', description: '文件相对或绝对路径' },
+            },
+            required: ['path'],
+          },
+        },
+      ],
+    };
+
+    render(
+      <ToastProvider>
+        <McpDetailWorkbench server={reflectedServer} />
+      </ToastProvider>
+    );
+
+    expect(screen.getByText('read_file')).toBeInTheDocument();
+    expect(screen.getByText('write_file')).toBeInTheDocument();
+    expect(screen.getByText('读取本地文件内容')).toBeInTheDocument();
+    expect(screen.getByText('入参 Schema')).toBeInTheDocument();
+    expect(screen.getByText('path')).toBeInTheDocument();
   });
 
   it('executes connectivity test when online and shows success badge with latency', async () => {
@@ -377,5 +386,81 @@ describe('McpDetailWorkbench - Tool Granularity Control', () => {
         mcpServers: expect.any(Array),
       })
     );
+  });
+
+  it('handles external MCP server with lastError in empty states gracefully', () => {
+    const errorServer: McpServerInfo = {
+      id: 'failed-mcp',
+      name: 'failed-mcp-service',
+      state: 'error',
+      status: 'disconnected',
+      tools: [],
+      lastError: 'Spawn error: process exited with code 1',
+    };
+
+    render(
+      <ToastProvider>
+        <McpDetailWorkbench server={errorServer} />
+      </ToastProvider>
+    );
+
+    expect(
+      screen.getByText('Spawn error: process exited with code 1')
+    ).toBeInTheDocument();
+  });
+
+  it('gracefully renders malformed or extreme toolDefs and schema without crashing', () => {
+    const extremeServer: McpServerInfo = {
+      id: 'extreme-mcp',
+      name: 'extreme-mcp-service',
+      state: 'ready',
+      status: 'connected',
+      tools: ['extreme_tool', 'malformed_tool'],
+      toolDefs: [
+        null as any,
+        { name: undefined as any },
+        {
+          name: 'extreme_tool',
+          description: 'A tool with massive parameter schema',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              param_ultra_long_name_abcdefghijklmnopqrstuvwxyz_123456789: {
+                type: 'string',
+                description:
+                  'Super long parameter description testing boundary wrapping behavior',
+              },
+              null_prop: null as any,
+            },
+            required: [
+              'param_ultra_long_name_abcdefghijklmnopqrstuvwxyz_123456789',
+            ],
+          },
+        },
+        {
+          name: 'malformed_tool',
+          description: 'A tool with malformed array properties',
+          inputSchema: {
+            type: 'object',
+            properties: ['invalid_array_format'] as any,
+          },
+        },
+      ],
+    };
+
+    render(
+      <ToastProvider>
+        <McpDetailWorkbench server={extremeServer} />
+      </ToastProvider>
+    );
+
+    expect(screen.getByText('extreme_tool')).toBeInTheDocument();
+    expect(screen.getByText('malformed_tool')).toBeInTheDocument();
+    expect(screen.getByText('入参 Schema')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'param_ultra_long_name_abcdefghijklmnopqrstuvwxyz_123456789'
+      )
+    ).toBeInTheDocument();
   });
 });

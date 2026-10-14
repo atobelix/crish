@@ -4,7 +4,7 @@ import { useToast } from '../../services/toast/ToastContext';
  * 壳组件：筛选与创建方式走 SegmentedControl（7px），动作走 ui/Button；
  * 状态/动作见 useWorkflowsState，表单/列表见 WorkflowForm / WorkflowList。
  */
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { getWorkspacePath } from '../../api/projectStore';
 import { emitUiEvent } from '../../api/uiEvents';
 import {
@@ -31,19 +31,16 @@ import { WorkflowForm } from './WorkflowForm';
 import { WorkflowList } from './WorkflowList';
 import { RunHistoryList } from './RunHistoryList';
 import { AppIcon } from '../ui/icons/index';
+import { useI18n } from '../../i18n';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
 };
 
-const CREATE_PATH_OPTIONS = [
-  { value: 'ai', label: '用对话创建（推荐）' },
-  { value: 'manual', label: '手动创建' },
-];
-
 export const SettingsScheduleTab: React.FC<Props> = ({
   _onBlockingOverlayChange,
 }) => {
+  const { t } = useI18n();
   const { showToast } = useToast();
   const state = useWorkflowsState({
     surface: 'settings',
@@ -85,6 +82,20 @@ export const SettingsScheduleTab: React.FC<Props> = ({
 
   const workspacePath = getWorkspacePath() || '';
 
+  const createPathOptions = useMemo(
+    () => [
+      {
+        value: 'ai',
+        label: t('settings.schedule.createAi', '用对话创建（推荐）'),
+      },
+      {
+        value: 'manual',
+        label: t('settings.schedule.createManual', '手动创建'),
+      },
+    ],
+    [t]
+  );
+
   const resetDraft = () => {
     setWfDraft(emptyWorkflowDraft());
   };
@@ -121,17 +132,22 @@ export const SettingsScheduleTab: React.FC<Props> = ({
 
   const handleOpenRunSession = (run: WorkflowRunEntry) => {
     const matchedWf = workflows.find((w) => w.id === run.workflowId);
-    const wfName = matchedWf?.name || '定时任务';
+    const wfName =
+      matchedWf?.name || t('settings.schedule.defaultTaskName', '定时任务');
     const targetSessionId =
       run.sessionId || `sched-${run.workflowId}-${run.runId || Date.now()}`;
     ensureScheduledSession(targetSessionId, wfName, {
       activate: true,
-      prompt: matchedWf?.prompt || '按计划执行定时任务',
+      prompt:
+        matchedWf?.prompt ||
+        t('settings.schedule.defaultPrompt', '按计划执行定时任务'),
       status: run.status,
       startedAt: run.startedAt ? new Date(run.startedAt).getTime() : Date.now(),
     });
     closeSettings();
-    navigateToChatSession(targetSessionId, { title: `[定时] ${wfName}` });
+    navigateToChatSession(targetSessionId, {
+      title: `[${t('settings.schedule.tag', '定时')}] ${wfName}`,
+    });
   };
 
   /** 关闭设置，在对话里用 AI 写定时任务名称与提示词（定向注入 + 可见助手卡片） */
@@ -147,12 +163,25 @@ export const SettingsScheduleTab: React.FC<Props> = ({
           '我想用它来：',
         ].join('\n'),
         mode: 'safe_seed',
-        metadata: { source: 'settings_tab', title: '定时任务对话创建' },
+        metadata: {
+          source: 'settings_tab',
+          title: t('settings.schedule.aiCreateTitle', '定时任务对话创建'),
+        },
       });
-      showToast('已填入定时任务对话创建提示，请返回对话补全');
+      showToast(
+        t(
+          'settings.schedule.injectSuccessToast',
+          '已填入定时任务对话创建提示，请返回对话补全'
+        )
+      );
     } else {
       console.warn('[SettingsScheduleTab] 无活跃会话，跳过草稿注入');
-      showToast('无活跃会话，无法注入创建提示');
+      showToast(
+        t(
+          'settings.schedule.noActiveSessionToast',
+          '无活跃会话，无法注入创建提示'
+        )
+      );
     }
     setCreateMode('none');
     closeSettings();
@@ -174,15 +203,18 @@ export const SettingsScheduleTab: React.FC<Props> = ({
   };
 
   return (
-    <SettingsPage title="定时任务">
-      <div aria-busy={loading || busy} aria-label="定时任务">
+    <SettingsPage title={t('settings.schedule.pageTitle', '定时任务')}>
+      <div
+        aria-busy={loading || busy}
+        aria-label={t('settings.schedule.pageTitle', '定时任务')}
+      >
         <div
           className={`sched-settings-toolbar ${styles.toolbar}`}
           role="toolbar"
-          aria-label="筛选与新建"
+          aria-label={t('settings.schedule.toolbarAria', '筛选与新建')}
         >
           <SegmentedControl
-            aria-label="任务筛选"
+            aria-label={t('settings.schedule.filterAria', '任务筛选')}
             size="sm"
             className={styles.segment}
             value={filter}
@@ -211,7 +243,9 @@ export const SettingsScheduleTab: React.FC<Props> = ({
             }}
             icon={<AppIcon name="plus" size={16} aria-hidden />}
           >
-            {createMode !== 'none' ? '收起' : '新建'}
+            {createMode !== 'none'
+              ? t('settings.schedule.collapse', '收起')
+              : t('settings.schedule.new', '新建')}
           </Button>
         </div>
 
@@ -246,13 +280,13 @@ export const SettingsScheduleTab: React.FC<Props> = ({
             id={createMode === 'paths' ? 'sched-settings-form' : undefined}
           >
             <SegmentedControl
-              aria-label="创建方式"
+              aria-label={t('settings.schedule.createModeAria', '创建方式')}
               size="sm"
               block
               className={styles.segment}
               disabled={busy}
               value={createMode === 'form' ? 'manual' : ''}
-              options={CREATE_PATH_OPTIONS}
+              options={createPathOptions}
               onChange={(v) => {
                 if (v === 'ai') {
                   handleAiCreateSchedule();
@@ -312,7 +346,9 @@ export const SettingsScheduleTab: React.FC<Props> = ({
           </SettingsCard>
         </SettingsSection>
 
-        <SettingsSection title="运行历史记录">
+        <SettingsSection
+          title={t('settings.schedule.runHistorySection', '运行历史记录')}
+        >
           <SettingsCard>
             <RunHistoryList
               variant="settings"

@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import styles from './ChatComposer.module.css';
 import { Button, ConfirmDialog, Tooltip } from '../ui';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
+import { useI18n } from '../../i18n';
 import { AppIcon } from '../ui/icons/index';
 
 export const STOP_TOOLTIP = '停止生成（协作停止）。Shift+点击或长按：强制取消';
@@ -40,6 +41,7 @@ export const ComposerSendControls: React.FC<ComposerSendControlsProps> = ({
   processingSendLabel = '排队',
   appearance = 'field',
 }) => {
+  const { t } = useI18n();
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFiredRef = useRef(false);
   const [confirmGate, renderConfirmGate] = useConfirmGate();
@@ -57,15 +59,15 @@ export const ComposerSendControls: React.FC<ComposerSendControlsProps> = ({
     const run = onForceStop ?? onStop;
     if (!run) return false;
     const ok = await confirmGate({
-      title: '强制取消',
-      description: FORCE_CANCEL_CONFIRM,
-      confirmLabel: '确认强制取消',
+      title: t('chat.composer.stop.forceConfirmTitle'),
+      description: t('chat.composer.stop.forceConfirmDesc'),
+      confirmLabel: t('chat.composer.stop.forceConfirmBtn'),
       danger: true,
     });
     if (!ok) return false;
     run();
     return true;
-  }, [onForceStop, onStop, confirmGate]);
+  }, [onForceStop, onStop, confirmGate, t]);
 
   const handleStopClick = useCallback(
     (e: React.MouseEvent) => {
@@ -102,26 +104,34 @@ export const ComposerSendControls: React.FC<ComposerSendControlsProps> = ({
     onSend();
   }, [disabled, canSend, onSend]);
 
+  const resolvedQueueLabel =
+    processingSendLabel === '排队'
+      ? t('chat.composer.queue')
+      : processingSendLabel;
+
   const sendDisabled = !canSend || Boolean(disabled);
   const sendTitle = sendDisabled
     ? isProcessing
-      ? '请输入要排队的消息'
-      : '请输入消息或添加附件'
+      ? t('chat.composer.sendDisabledProcessing')
+      : t('chat.composer.sendDisabledNormal')
     : isProcessing
       ? processingSendLabel === '排队'
-        ? '加入队列，当前回复结束后发送'
-        : '发送补充指示'
-      : '发送 (Enter)';
+        ? t('chat.composer.queueTooltip')
+        : t('chat.composer.appendTooltip')
+      : t('chat.composer.sendTooltip');
   const sendAria = sendDisabled
     ? isProcessing
-      ? '无法排队：请先输入内容'
-      : '无法发送：请输入消息或添加附件'
+      ? t('chat.composer.cannotQueue')
+      : t('chat.composer.cannotSend')
     : isProcessing
-      ? processingSendLabel
-      : '发送';
+      ? resolvedQueueLabel
+      : t('chat.composer.send');
+
+  const stopTooltip = t('chat.composer.stop.tooltip');
+  const stopAria = t('chat.composer.stop.ariaLabel');
 
   const stopBtn = onStop ? (
-    <Tooltip content={STOP_TOOLTIP}>
+    <Tooltip content={stopTooltip}>
       <Button
         type="button"
         variant="ghost"
@@ -129,13 +139,15 @@ export const ComposerSendControls: React.FC<ComposerSendControlsProps> = ({
         className={`${styles.stop} ${appearance === 'circle' ? styles.stopCircleBtn : ''}`}
         data-testid="composer-stop"
         data-stop-level="l2"
-        aria-label={STOP_ARIA_LABEL}
+        aria-label={stopAria}
         onClick={handleStopClick}
         onPointerDown={handleStopPointerDown}
         onPointerUp={clearLongPress}
         onPointerLeave={clearLongPress}
         onPointerCancel={clearLongPress}
-        icon={<AppIcon name="square" size={14} fill="currentColor" aria-hidden />}
+        icon={
+          <AppIcon name="square" size={14} fill="currentColor" aria-hidden />
+        }
       />
     </Tooltip>
   ) : null;
@@ -156,7 +168,7 @@ export const ComposerSendControls: React.FC<ComposerSendControlsProps> = ({
                 onClick={trySend}
                 disabled={sendDisabled}
               >
-                {processingSendLabel}
+                {resolvedQueueLabel}
               </Button>
             </Tooltip>
             {stopBtn}

@@ -43,6 +43,19 @@ export const chat: ChatTranslations = {
   'composer.undoDraftHint': '已恢复上一版输入草稿',
   'composer.editingMessage': '正在编辑上一条消息',
   'composer.cancelEdit': '取消编辑 (Esc)',
+  'composer.attachmentCountAria': '附件，共 {count} 个',
+  'composer.dropToAttach': '放到这里添加附件',
+  'composer.notice.viewDetail': '查看详细信息',
+  'composer.notice.dismiss': '关闭提示',
+  'composer.sendDisabledProcessing': '请输入要排队的消息',
+  'composer.sendDisabledNormal': '请输入消息或添加附件',
+  'composer.queueTooltip': '加入队列，当前回复结束后发送',
+  'composer.appendTooltip': '发送补充指示',
+  'composer.sendTooltip': '发送 (Enter)',
+  'composer.cannotQueue': '无法排队：请先输入内容',
+  'composer.cannotSend': '无法发送：请输入消息或添加附件',
+  'composer.appliedTemplateSnapshot': '已应用模板并保留原草稿快照',
+  'composer.undoRestore': '撤销恢复',
 
   // ── 2. 加号菜单与快捷面板 (plusMenu.*) ──
   'plusMenu.title': '添加内容与扩展',
@@ -56,7 +69,7 @@ export const chat: ChatTranslations = {
   'plusMenu.importChatDesc': '从 JSON、Markdown 或外部导出导入历史',
   'plusMenu.newFromTemplate': '基于模板新建',
   'plusMenu.newFromTemplateDesc': '使用工程架构、调试或评审模板',
-  'plusMenu.useSkill': '使用技能',
+  'plusMenu.useSkill': '使用 skill',
   'plusMenu.useSkillDesc': '选择或键入技能指令',
   'plusMenu.noSkills': '暂无已启用的技能',
   'plusMenu.manageSkills': '管理技能...',
@@ -83,6 +96,9 @@ export const chat: ChatTranslations = {
   'permission.full.matrixHint': '少打扰',
   'permission.planModeBadge': '计划模式',
   'permission.planApprovedBadge': '计划已批准',
+  'permission.tooltip': '当前权限模式：{mode} · {hint}',
+  'permission.ariaLabel': '当前权限模式：{mode}',
+  'permission.modeNoteAria': '{mode}说明：{desc}',
 
   // ── 4. 斜杠命令与快捷提示 (slash.*) ──
   'slash.menuTitle': '快捷斜杠命令',

@@ -16,18 +16,19 @@ import {
   SettingsRow,
 } from './SettingsUI';
 import { useRulesState } from './useRulesState';
-import {
-  RULE_PRESETS,
-  normalizeRuleLine,
-} from './settingsRulesLib';
+import { RULE_PRESETS, normalizeRuleLine } from './settingsRulesLib';
 import { RulesEditorDialog } from './RulesEditorDialog';
 import { AppIcon } from '../ui/icons/index';
+import { useI18n } from '../../i18n';
 
 type Props = {
   onBlockingOverlayChange?: (open: boolean) => void;
 };
 
-export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) => {
+export const SettingsRulesTab: React.FC<Props> = ({
+  onBlockingOverlayChange,
+}) => {
+  const { t } = useI18n();
   const { showToast } = useToast();
   const state = useRulesState({
     onBlockingOverlayChange,
@@ -80,7 +81,7 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
 
   const openFullEditor = () => {
     if (!state.isGlobal && !scopeKey) {
-      showToast('请先选择项目');
+      showToast(t('settings.rules.selectProjectFirst', '请先选择项目'));
       return;
     }
     setEditingOpen(true);
@@ -91,10 +92,15 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
       <div className="settings-pane settings-pane--modern settings-pane--rules">
         <header className="settings-page-head">
           <div className="settings-head-inline">
-            <h2 className="settings-page-title">规则</h2>
+            <h2 className="settings-page-title">
+              {t('settings.rules.pageTitle', '规则')}
+            </h2>
           </div>
         </header>
-        <section className="settings-group" aria-label="错误">
+        <section
+          className="settings-group"
+          aria-label={t('common.error', '错误')}
+        >
           <div className="settings-list">
             <div className="settings-list-row settings-list-row--rule">
               <div className="settings-list-copy">
@@ -110,10 +116,13 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
                   type="button"
                   variant="secondary"
                   size="sm"
-                  aria-label="重新加载规则"
+                  aria-label={t(
+                    'settings.rules.reloadRulesAria',
+                    '重新加载规则'
+                  )}
                   onClick={retryLoad}
                 >
-                  重试
+                  {t('common.retry', '重试')}
                 </Button>
               </div>
             </div>
@@ -125,10 +134,10 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
 
   if (!loaded) {
     return (
-      <SettingsPage title="规则">
+      <SettingsPage title={t('settings.rules.pageTitle', '规则')}>
         <SettingsSection>
           <SettingsCard>
-            <SettingsRow title="加载中…" />
+            <SettingsRow title={t('common.loading', '加载中…')} />
           </SettingsCard>
         </SettingsSection>
       </SettingsPage>
@@ -138,7 +147,7 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
   const headerMeta = (
     <div className={styles.headerMetaRow}>
       <label htmlFor={scopeSelectId} className="sr-only">
-        规则作用域
+        {t('settings.rules.scopeLabel', '规则作用域')}
       </label>
       <Select
         id={scopeSelectId}
@@ -152,30 +161,50 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
         disabled={busy}
         size="sm"
       />
-      <Tooltip content={`编辑${scopeLabel}全文`}>
+      <Tooltip
+        content={t('settings.rules.editFullTextTooltip', '编辑{scope}全文', {
+          scope: scopeLabel,
+        })}
+      >
         <Button
           ref={fullEditorBtnRef}
           type="button"
           variant="secondary"
           size="sm"
           onClick={openFullEditor}
-          aria-label={`编辑${scopeLabel}全文`}
+          aria-label={t('settings.rules.editFullTextAria', '编辑{scope}全文', {
+            scope: scopeLabel,
+          })}
           disabled={busy}
         >
-          编辑全文
+          {t('settings.rules.editFullText', '编辑全文')}
         </Button>
       </Tooltip>
     </div>
   );
 
   return (
-    <SettingsPage title="规则" meta={headerMeta}>
-      <SettingsSection title={`当前规则 (${scopeLabel})`}>
+    <SettingsPage
+      title={t('settings.rules.pageTitle', '规则')}
+      meta={headerMeta}
+    >
+      <SettingsSection
+        title={t('settings.rules.currentRulesSection', '当前规则 ({scope})', {
+          scope: scopeLabel,
+        })}
+      >
         <SettingsCard>
           {ruleCount === 0 ? (
             <SettingsRow
-              title={<span className="settings-list-empty">还没有规则</span>}
-              desc="可点下方常用项，或自己输入"
+              title={
+                <span className="settings-list-empty">
+                  {t('settings.rules.noRulesYet', '还没有规则')}
+                </span>
+              }
+              desc={t(
+                'settings.rules.noRulesDesc',
+                '可点下方常用项，或自己输入'
+              )}
             />
           ) : (
             customRules.map((rule, idx) => (
@@ -187,13 +216,22 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
                   </Tooltip>
                 }
                 control={
-                  <Tooltip content="删除此规则">
+                  <Tooltip
+                    content={t(
+                      'settings.rules.deleteRuleTooltip',
+                      '删除此规则'
+                    )}
+                  >
                     <Button
                       type="button"
                       onClick={() => handleDeleteCustomRule(idx)}
                       variant="danger"
                       size="sm"
-                      aria-label={`删除规则：${rule}`}
+                      aria-label={t(
+                        'settings.rules.deleteRuleAria',
+                        '删除规则：{rule}',
+                        { rule }
+                      )}
                       disabled={busy}
                       icon={<AppIcon name="trash" size={14} aria-hidden />}
                     />
@@ -205,20 +243,37 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
         </SettingsCard>
       </SettingsSection>
 
-      <SettingsSection title="快速添加">
+      <SettingsSection title={t('settings.rules.quickAddSection', '快速添加')}>
         <SettingsCard>
           <div className={styles.sectionRow}>
             <div className={styles.labelCol}>
-              <span className={styles.labelTitle}>常用</span>
-              <span className={styles.labelDesc}>一键加入</span>
+              <span className={styles.labelTitle}>
+                {t('settings.rules.presetsTitle', '常用')}
+              </span>
+              <span className={styles.labelDesc}>
+                {t('settings.rules.presetsDesc', '一键加入')}
+              </span>
             </div>
             <div className={styles.presetGroup}>
               {RULE_PRESETS.map((preset) => {
                 const exists = customRules.some(
-                  (r) => normalizeRuleLine(r) === normalizeRuleLine(preset),
+                  (r) => normalizeRuleLine(r) === normalizeRuleLine(preset)
                 );
                 return (
-                  <Tooltip key={preset} content={exists ? '已添加' : `添加：${preset}`}>
+                  <Tooltip
+                    key={preset}
+                    content={
+                      exists
+                        ? t('settings.rules.presetAlreadyAdded', '已添加')
+                        : t(
+                            'settings.rules.addPresetTooltip',
+                            '添加：{preset}',
+                            {
+                              preset,
+                            }
+                          )
+                    }
+                  >
                     <Button
                       bare
                       type="button"
@@ -226,7 +281,17 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
                       onClick={() => handleAddPreset(preset)}
                       disabled={exists || busy}
                       aria-label={
-                        exists ? `已添加：${preset}` : `添加预设：${preset}`
+                        exists
+                          ? t(
+                              'settings.rules.presetAlreadyAddedAria',
+                              '已添加：{preset}',
+                              { preset }
+                            )
+                          : t(
+                              'settings.rules.addPresetAria',
+                              '添加预设：{preset}',
+                              { preset }
+                            )
                       }
                     >
                       {preset}
@@ -239,25 +304,38 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
 
           <div className={styles.sectionRowNoBorder}>
             <div className={styles.labelCol}>
-              <label htmlFor={addInputId} className={styles.labelTitle}>自定义</label>
-              <span className={styles.labelDesc}>输入后添加</span>
+              <label htmlFor={addInputId} className={styles.labelTitle}>
+                {t('settings.rules.customTitle', '自定义')}
+              </label>
+              <span className={styles.labelDesc}>
+                {t('settings.rules.customDesc', '输入后添加')}
+              </span>
             </div>
             <div className={styles.inputGroup}>
               <Input
                 ref={addInputRef}
                 id={addInputId}
                 size="sm"
-                placeholder="写一条规则…"
+                placeholder={t(
+                  'settings.rules.customRulePlaceholder',
+                  '写一条规则…'
+                )}
                 value={newRuleText}
                 onChange={(e) => setNewRuleText(e.target.value)}
                 className={styles.inputGrow}
                 disabled={busy}
-                aria-label="自定义规则"
+                aria-label={t('settings.rules.customRuleAria', '自定义规则')}
                 autoComplete="off"
                 spellCheck={false}
                 onEnter={handleAddCustomRule}
               />
-              <Tooltip content={`加入${scopeLabel}短规则`}>
+              <Tooltip
+                content={t(
+                  'settings.rules.addShortRuleTooltip',
+                  '加入{scope}短规则',
+                  { scope: scopeLabel }
+                )}
+              >
                 <Button
                   type="button"
                   onClick={handleAddCustomRule}
@@ -265,9 +343,9 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
                   size="sm"
                   className={styles.actionBtn}
                   disabled={busy || !normalizeRuleLine(newRuleText)}
-                  aria-label="添加规则"
+                  aria-label={t('settings.rules.addRuleAria', '添加规则')}
                 >
-                  添加
+                  {t('common.add', '添加')}
                 </Button>
               </Tooltip>
             </div>

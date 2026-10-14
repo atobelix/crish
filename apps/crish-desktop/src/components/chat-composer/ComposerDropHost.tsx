@@ -5,6 +5,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 
 import styles from './ChatComposer.module.css';
+import { useI18n } from '../../i18n';
 import { AppIcon } from '../ui/icons/index';
 
 export function hasFiles(dt: DataTransfer | null | undefined): boolean {
@@ -32,6 +33,7 @@ export const ComposerDropHost = React.forwardRef<
   { onDropFiles, className, children, onDragEnter, onDragLeave, ...rest },
   ref
 ) {
+  const { t } = useI18n();
   const [over, setOver] = useState(false);
   const depthRef = useRef(0);
 
@@ -80,7 +82,7 @@ export const ComposerDropHost = React.forwardRef<
           aria-hidden
         >
           <AppIcon name="upload" size={20} aria-hidden />
-          <span>放到这里添加附件</span>
+          <span>{t('chat.composer.dropToAttach')}</span>
         </div>
       ) : null}
     </div>

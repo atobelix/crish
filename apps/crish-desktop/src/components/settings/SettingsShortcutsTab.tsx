@@ -1,7 +1,14 @@
 /**
  * 设置 · 快捷键：查看与改键；成功静默，冲突/写入失败才提示。
  */
-import { useId, useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import {
+  useId,
+  useState,
+  useMemo,
+  useCallback,
+  useRef,
+  useEffect,
+} from 'react';
 import styles from './SettingsShortcutsTab.module.css';
 import { clientApi } from '../../api/clientApi';
 import { configService } from '../../services/ConfigService';
@@ -15,6 +22,7 @@ import {
 import uiStyles from './SettingsUI.module.css';
 import { Button, Input, Tooltip } from '../ui';
 import { useToast } from '../../services/toast/ToastContext';
+import { useI18n } from '../../i18n';
 import {
   SHORTCUT_ITEMS,
   defaultBindingOf,
@@ -30,10 +38,46 @@ import {
 export { buildShortcutItems };
 export type { ShortcutItem };
 
+export type ShortcutCategoryKey = 'system' | 'session' | 'workspace' | 'other';
+
+export const SHORTCUT_CATEGORY_MAP: Record<string, ShortcutCategoryKey> = {
+  toggle_settings: 'system',
+  open_models: 'system',
+  open_usage: 'system',
+  open_security: 'system',
+  open_shortcuts: 'system',
+  open_extensions: 'system',
+  open_schedule: 'system',
+  export_logs: 'system',
+  new_session: 'session',
+  focus_composer: 'session',
+  branch_session: 'session',
+  stop_generation: 'session',
+  toggle_plan_mode: 'session',
+  toggle_sidebar: 'workspace',
+};
+
+export const CATEGORY_I18N_KEYS: Record<
+  ShortcutCategoryKey,
+  { key: string; fallback: string }
+> = {
+  system: { key: 'settings.shortcuts.groupGlobal', fallback: '全局快捷键' },
+  session: { key: 'settings.shortcuts.groupChat', fallback: '对话与编辑' },
+  workspace: {
+    key: 'settings.shortcuts.groupNavigation',
+    fallback: '界面导航',
+  },
+  other: { key: 'common.more', fallback: '其他' },
+};
+
 export const SettingsShortcutsTab: React.FC = () => {
+  const { t } = useI18n();
   const { showToast } = useToast();
-  const [customShortcuts, setCustomShortcuts] = useState<Record<string, string>>(loadShortcuts);
-  const [recordingShortcutId, setRecordingShortcutId] = useState<string | null>(null);
+  const [customShortcuts, setCustomShortcuts] =
+    useState<Record<string, string>>(loadShortcuts);
+  const [recordingShortcutId, setRecordingShortcutId] = useState<string | null>(
+    null
+  );
   const [query, setQuery] = useState('');
   const [focusIndex, setFocusIndex] = useState(0);
 
@@ -60,11 +104,13 @@ export const SettingsShortcutsTab: React.FC = () => {
   }, [query, customShortcuts]);
 
   const grouped = useMemo(() => {
-    const map = new Map<string, ShortcutItem[]>();
+    const map = new Map<ShortcutCategoryKey, ShortcutItem[]>();
     for (const item of filtered) {
-      const list = map.get(item.group) || [];
+      const category: ShortcutCategoryKey =
+        SHORTCUT_CATEGORY_MAP[item.id] ?? 'other';
+      const list = map.get(category) || [];
       list.push(item);
-      map.set(item.group, list);
+      map.set(category, list);
     }
     return Array.from(map.entries());
   }, [filtered]);
@@ -86,19 +132,27 @@ export const SettingsShortcutsTab: React.FC = () => {
         configService.set('shortcuts.overrides', updated);
         setCustomShortcuts(updated);
         try {
-          clientApi.saveSettingsEx('__global__', 'global', {
-            shortcuts: updated,
-          }).catch(() => {
-            /* swallow-ok: 远端保存失败时本地已生效，不阻断用户操作 */
-          });
-        } catch { /* 远端保存失败时本地已生效，不阻断 */ }
+          clientApi
+            .saveSettingsEx('__global__', 'global', {
+              shortcuts: updated,
+            })
+            .catch(() => {
+              /* swallow-ok: 远端保存失败时本地已生效，不阻断用户操作 */
+            });
+        } catch {
+          /* 远端保存失败时本地已生效，不阻断 */
+        }
         return true;
       } catch {
-        showToast('保存失败：无法写入快捷键', undefined, { type: 'error' });
+        showToast(
+          t('settings.shortcuts.saveFailed', '保存失败：无法写入快捷键'),
+          undefined,
+          { type: 'error' }
+        );
         return false;
       }
     },
-    [showToast],
+    [showToast, t]
   );
 
   const restoreDefault = useCallback(
@@ -108,7 +162,17 @@ export const SettingsShortcutsTab: React.FC = () => {
       if ((customShortcuts[id] || '') === def) return;
       const conflict = findConflict(customShortcuts, id, def);
       if (conflict) {
-        showToast(`恢复失败：与「${conflict.label}」键位冲突`, undefined, { type: 'error' });
+        showToast(
+          t(
+            'settings.shortcuts.conflictWarning',
+            `恢复失败：与「${conflict.label}」键位冲突`,
+            {
+              action: conflict.label,
+            }
+          ),
+          undefined,
+          { type: 'error' }
+        );
         return;
       }
       const updated = { ...customShortcuts, [id]: def };
@@ -116,7 +180,7 @@ export const SettingsShortcutsTab: React.FC = () => {
       persist(updated);
       if (recordingShortcutId === id) setRecordingShortcutId(null);
     },
-    [customShortcuts, showToast, persist, recordingShortcutId],
+    [customShortcuts, showToast, persist, recordingShortcutId, t]
   );
 
   useEffect(() => {
@@ -127,7 +191,13 @@ export const SettingsShortcutsTab: React.FC = () => {
       e.preventDefault();
       e.stopPropagation();
 
-      if (e.key === 'Escape' && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+      if (
+        e.key === 'Escape' &&
+        !e.ctrlKey &&
+        !e.shiftKey &&
+        !e.altKey &&
+        !e.metaKey
+      ) {
         setRecordingShortcutId(null);
         return;
       }
@@ -137,22 +207,48 @@ export const SettingsShortcutsTab: React.FC = () => {
       if (e.shiftKey) keys.push('Shift');
       if (e.altKey) keys.push('Alt');
       if (e.metaKey) keys.push('Meta');
-      if (!['Control', 'Shift', 'Alt', 'Meta', 'Process', 'Unidentified'].includes(e.key)) {
+      if (
+        ![
+          'Control',
+          'Shift',
+          'Alt',
+          'Meta',
+          'Process',
+          'Unidentified',
+        ].includes(e.key)
+      ) {
         let keyName = e.key;
         if (keyName === ' ') keyName = 'Space';
         keys.push(keyName.length === 1 ? keyName.toUpperCase() : keyName);
       }
 
       // 仅修饰键：继续等待完整组合
-      if (keys.length === 0 || keys.every((k) => ['Ctrl', 'Shift', 'Alt', 'Meta'].includes(k))) {
+      if (
+        keys.length === 0 ||
+        keys.every((k) => ['Ctrl', 'Shift', 'Alt', 'Meta'].includes(k))
+      ) {
         return;
       }
 
       const newKey = keys.join(' + ');
-      const conflict = findConflict(customShortcuts, recordingShortcutId, newKey);
+      const conflict = findConflict(
+        customShortcuts,
+        recordingShortcutId,
+        newKey
+      );
       if (conflict) {
         setRecordingShortcutId(null);
-        showToast(`录制失败：与「${conflict.label}」键位冲突`, undefined, { type: 'error' });
+        showToast(
+          t(
+            'settings.shortcuts.conflictWarning',
+            `录制失败：与「${conflict.label}」键位冲突`,
+            {
+              action: conflict.label,
+            }
+          ),
+          undefined,
+          { type: 'error' }
+        );
         return;
       }
 
@@ -167,20 +263,21 @@ export const SettingsShortcutsTab: React.FC = () => {
 
   const hasQuery = query.trim().length > 0;
   const customCount = useMemo(
-    () => SHORTCUT_ITEMS.filter((s) => isCustomized(customShortcuts, s.id)).length,
-    [customShortcuts],
+    () =>
+      SHORTCUT_ITEMS.filter((s) => isCustomized(customShortcuts, s.id)).length,
+    [customShortcuts]
   );
 
   const recordingItem = recordingShortcutId
-    ? SHORTCUT_ITEMS.find((s) => s.id === recordingShortcutId) ?? null
+    ? (SHORTCUT_ITEMS.find((s) => s.id === recordingShortcutId) ?? null)
     : null;
 
   const headMetaText = recordingItem
-    ? `录制中 · ${recordingItem.label}`
+    ? `${t('settings.shortcuts.recording', '录制中')} · ${recordingItem.label}`
     : hasQuery
-      ? `${filtered.length} 个结果`
+      ? `${filtered.length} ${t('common.results', '个结果')}`
       : customCount > 0
-        ? `已改 ${customCount} 项`
+        ? `${t('settings.shortcuts.customized', '已改')} ${customCount} ${t('common.items', '项')}`
         : '';
 
   const clearQuery = useCallback(() => setQuery(''), []);
@@ -197,7 +294,7 @@ export const SettingsShortcutsTab: React.FC = () => {
         return next;
       });
     },
-    [flatIds.length],
+    [flatIds.length]
   );
 
   const onListKeyDown = useCallback(
@@ -220,7 +317,7 @@ export const SettingsShortcutsTab: React.FC = () => {
         requestAnimationFrame(() => btnRefs.current[last]?.focus());
       }
     },
-    [flatIds.length, moveFocus, recordingShortcutId],
+    [flatIds.length, moveFocus, recordingShortcutId]
   );
 
   let flatIdx = -1;
@@ -235,12 +332,15 @@ export const SettingsShortcutsTab: React.FC = () => {
           className={styles.shortcutSearch}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="搜索…"
+          placeholder={t(
+            'settings.shortcuts.searchPlaceholder',
+            '搜索快捷键...'
+          )}
           spellCheck={false}
           autoComplete="off"
           autoCorrect="off"
           autoCapitalize="off"
-          aria-label="搜索快捷键"
+          aria-label={t('settings.shortcuts.searchPlaceholder', '搜索快捷键')}
           aria-controls={listId}
           aria-describedby={headMetaId}
           onKeyDown={(e) => {
@@ -260,14 +360,14 @@ export const SettingsShortcutsTab: React.FC = () => {
       </div>
       {hasQuery ? (
         <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            onClick={clearQuery}
-            aria-label="清空筛选"
-          >
-            清空
-          </Button>
+          type="button"
+          variant="ghost"
+          size="xs"
+          onClick={clearQuery}
+          aria-label={t('common.clear', '清空筛选')}
+        >
+          {t('common.clear', '清空')}
+        </Button>
       ) : null}
       {headMetaText ? (
         <span
@@ -286,13 +386,28 @@ export const SettingsShortcutsTab: React.FC = () => {
   );
 
   return (
-    <SettingsPage title="快捷键" meta={headerMeta}>
+    <SettingsPage title={t('nav.shortcuts', '快捷键')} meta={headerMeta}>
       {grouped.length === 0 ? (
         <SettingsSection>
           <SettingsCard>
             <SettingsRow
-              title={hasQuery ? `无匹配「${query.trim()}」` : '暂无快捷键'}
-              desc={hasQuery ? '试试更短关键词，或清空筛选' : ''}
+              title={
+                hasQuery
+                  ? t(
+                      'settings.shortcuts.noMatch',
+                      `无匹配「${query.trim()}」`,
+                      { query: query.trim() }
+                    )
+                  : t('settings.shortcuts.empty', '暂无快捷键')
+              }
+              desc={
+                hasQuery
+                  ? t(
+                      'settings.shortcuts.noMatchDesc',
+                      '试试更短关键词，或清空筛选'
+                    )
+                  : ''
+              }
               control={
                 hasQuery ? (
                   <Button
@@ -300,9 +415,12 @@ export const SettingsShortcutsTab: React.FC = () => {
                     variant="ghost"
                     size="sm"
                     onClick={clearQuery}
-                    aria-label="清空筛选并显示全部快捷键"
+                    aria-label={t(
+                      'settings.shortcuts.clearFilterAria',
+                      '清空筛选并显示全部快捷键'
+                    )}
                   >
-                    清空筛选
+                    {t('settings.shortcuts.clearFilter', '清空筛选')}
                   </Button>
                 ) : null
               }
@@ -310,10 +428,17 @@ export const SettingsShortcutsTab: React.FC = () => {
           </SettingsCard>
         </SettingsSection>
       ) : (
-        <div id={listId} aria-labelledby={`${listId}-title`} onKeyDown={onListKeyDown}>
-          {grouped.map(([groupName, items]) => {
+        <div
+          id={listId}
+          aria-labelledby={`${listId}-title`}
+          onKeyDown={onListKeyDown}
+        >
+          {grouped.map(([categoryKey, items]) => {
+            const config =
+              CATEGORY_I18N_KEYS[categoryKey] ?? CATEGORY_I18N_KEYS.other;
+            const groupTitle = t(config.key, config.fallback);
             return (
-              <SettingsSection key={groupName} title={groupName}>
+              <SettingsSection key={categoryKey} title={groupTitle}>
                 <SettingsCard>
                   {items.map((sh) => {
                     flatIdx += 1;
@@ -335,32 +460,64 @@ export const SettingsShortcutsTab: React.FC = () => {
                         title={sh.label}
                         desc={sh.desc}
                         control={
-                          <div className={`settings-list-control settings-list-control--shortcuts ${styles.controlGroup}`}>
+                          <div
+                            className={`settings-list-control settings-list-control--shortcuts ${styles.controlGroup}`}
+                          >
                             {customized && !isRecording ? (
-                              <Tooltip content={`恢复默认：${formatShortcutLabel(defaultBindingOf(sh.id))}`}>
+                              <Tooltip
+                                content={t(
+                                  'settings.shortcuts.restoreDefaultTooltip',
+                                  `恢复默认：${formatShortcutLabel(defaultBindingOf(sh.id))}`,
+                                  {
+                                    default: formatShortcutLabel(
+                                      defaultBindingOf(sh.id)
+                                    ),
+                                  }
+                                )}
+                              >
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="xs"
                                   onClick={() => restoreDefault(sh.id)}
-                                  aria-label={`恢复「${sh.label}」为默认 ${formatShortcutLabel(defaultBindingOf(sh.id))}`}
+                                  aria-label={t(
+                                    'settings.shortcuts.restoreDefaultAria',
+                                    `恢复「${sh.label}」为默认 ${formatShortcutLabel(defaultBindingOf(sh.id))}`,
+                                    {
+                                      label: sh.label,
+                                      default: formatShortcutLabel(
+                                        defaultBindingOf(sh.id)
+                                      ),
+                                    }
+                                  )}
                                 >
-                                  还原
+                                  {t('common.reset', '还原')}
                                 </Button>
                               </Tooltip>
                             ) : null}
-                            <Tooltip content={
-                              isRecording
-                                ? '按键录制中，Esc 取消'
-                                : `当前：${displayKey}，点击重新录制`
-                            }>
+                            <Tooltip
+                              content={
+                                isRecording
+                                  ? t(
+                                      'settings.shortcuts.recordingTooltip',
+                                      '按键录制中，Esc 取消'
+                                    )
+                                  : t(
+                                      'settings.shortcuts.currentKeyTooltip',
+                                      `当前：${displayKey}，点击重新录制`,
+                                      { key: displayKey }
+                                    )
+                              }
+                            >
                               <Button
                                 type="button"
                                 ref={(el) => {
                                   btnRefs.current[rowIndex] = el;
                                 }}
                                 onClick={() =>
-                                  setRecordingShortcutId(isRecording ? null : sh.id)
+                                  setRecordingShortcutId(
+                                    isRecording ? null : sh.id
+                                  )
                                 }
                                 onFocus={() => setFocusIndex(rowIndex)}
                                 className={`${styles.shortcutKeyBtn} shortcut-key-btn${isRecording ? ` ${styles.recording} recording` : ''}`}
@@ -370,12 +527,25 @@ export const SettingsShortcutsTab: React.FC = () => {
                                 aria-pressed={isRecording}
                                 aria-label={
                                   isRecording
-                                    ? `正在录制「${sh.label}」，按键设置，Esc 取消`
-                                    : `「${sh.label}」当前 ${displayKey}，点击重新录制`
+                                    ? t(
+                                        'settings.shortcuts.recordingAria',
+                                        `正在录制「${sh.label}」，按键设置，Esc 取消`,
+                                        { label: sh.label }
+                                      )
+                                    : t(
+                                        'settings.shortcuts.currentKeyAria',
+                                        `「${sh.label}」当前 ${displayKey}，点击重新录制`,
+                                        { label: sh.label, key: displayKey }
+                                      )
                                 }
                                 tabIndex={tabIndex}
                               >
-                                {isRecording ? '按下新键…' : displayKey}
+                                {isRecording
+                                  ? t(
+                                      'settings.shortcuts.recordPrompt',
+                                      '按下快捷键组合...'
+                                    )
+                                  : displayKey}
                               </Button>
                             </Tooltip>
                           </div>

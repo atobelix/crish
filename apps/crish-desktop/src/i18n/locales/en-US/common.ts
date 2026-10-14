@@ -50,6 +50,16 @@ export const common: CommonTranslations = {
   unknown: 'Unknown',
   collapse: 'Collapse',
   expand: 'Expand',
+  add: 'Add',
+  open: 'Open',
+  restore: 'Restore',
+  items: 'items',
+  results: 'results',
+  online: 'Online',
+  offline: 'Offline',
+  confirmDelete: 'Confirm Delete',
+  feedback: 'Feedback',
+  closeNotice: 'Dismiss Notice',
 };
 
 export default common;

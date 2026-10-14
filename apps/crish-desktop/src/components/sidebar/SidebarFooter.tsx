@@ -10,6 +10,7 @@ import {
 } from '../../store/storeAccess';
 import { UserProfileCard } from './UserProfileCard';
 import { AppIcon } from '../ui/icons/index';
+import { useI18n } from '../../i18n';
 
 export interface SettingsIconButtonProps {
   updateAvailable?: boolean | undefined;
@@ -19,10 +20,16 @@ export interface SettingsIconButtonProps {
 
 export const SettingsIconButton: React.FC<SettingsIconButtonProps> = React.memo(
   ({ updateAvailable }) => {
+    const { t } = useI18n();
     const showSettings = useSettingsUiStore(selectShowSettingsOverlay);
-    const tooltipText = `${showSettings ? '关闭' : '打开'}设置中心 (Cmd/Ctrl + ,)${
-      updateAvailable ? ' · 有新版本可用' : ''
-    }`;
+    const closeOrOpen = showSettings
+      ? t('common.close', '关闭')
+      : t('sidebar.open', '打开');
+    const settingsCenter = t('sidebar.settingsCenter', '设置中心');
+    const updateAvailableText = updateAvailable
+      ? ` · ${t('sidebar.updateAvailable', '有新版本可用')}`
+      : '';
+    const tooltipText = `${closeOrOpen}${settingsCenter} (Cmd/Ctrl + ,)${updateAvailableText}`;
 
     return (
       <IconButton
@@ -40,7 +47,7 @@ export const SettingsIconButton: React.FC<SettingsIconButtonProps> = React.memo(
             {updateAvailable && (
               <span
                 className={styles.gearUpdatePulseDot}
-                aria-label="新版本可用提示"
+                aria-label={t('sidebar.newVersionHint', '新版本可用提示')}
               />
             )}
           </>
@@ -61,16 +68,16 @@ export interface SidebarFooterProps {
 
 export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
   ({ chromeHidden, updateAvailable, setUpdateAvailableState }) => {
+    const { t } = useI18n();
     const { showToast } = useToast();
     return (
       <div
         className={styles.sidebarFooter}
         role="contentinfo"
-        aria-label="侧栏底栏"
+        aria-label={t('sidebar.footerAriaLabel', '侧栏底栏')}
         aria-hidden={chromeHidden || undefined}
         inert={chromeHidden ? true : undefined}
       >
-
         {/* 底部左列：用户个人卡片与快捷设置菜单 */}
         <div className={styles.footerUserCol}>
           <UserProfileCard />
@@ -79,12 +86,14 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
         {/* 底部右列：更新按钮（若有）+ 独立设置齿轮按钮 */}
         <div className={styles.footerGearCol}>
           {updateAvailable ? (
-            <Tooltip content="有新版本，点击安装更新">
+            <Tooltip
+              content={t('sidebar.updateTooltip', '有新版本，点击安装更新')}
+            >
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                aria-label="安装更新"
+                aria-label={t('sidebar.installUpdate', '安装更新')}
                 onClick={() => {
                   void (async () => {
                     const { applyUpdateWhenIdle } =
@@ -94,11 +103,9 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
                     if (r.ok) setUpdateAvailableState?.(false);
                   })();
                 }}
-                icon={
-                  <AppIcon name="refresh" size={16} aria-hidden />
-                }
+                icon={<AppIcon name="refresh" size={16} aria-hidden />}
               >
-                更新
+                {t('sidebar.updateButton', '更新')}
               </Button>
             </Tooltip>
           ) : null}

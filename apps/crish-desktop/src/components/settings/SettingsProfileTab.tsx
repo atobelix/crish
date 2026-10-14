@@ -22,6 +22,7 @@ import { Button, Input, Tooltip } from '../ui';
 import { AccountAuthCard } from './AccountAuthCard';
 import styles from './SettingsProfileTab.module.css';
 import { AppIcon } from '../ui/icons/index';
+import { useI18n } from '../../i18n';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
@@ -36,6 +37,9 @@ function pathLeaf(path: string): string {
 export const SettingsProfileTab: React.FC<Props> = ({
   _onBlockingOverlayChange,
 }) => {
+  void _onBlockingOverlayChange;
+  const { t } = useI18n();
+
   const { showToast } = useToast();
   const cwd = getWorkspacePath() || '__global__';
   const headMetaId = useId();
@@ -49,7 +53,7 @@ export const SettingsProfileTab: React.FC<Props> = ({
 
   const hasWorkspace = cwd !== '__global__' && Boolean(cwd);
   // Stream D 改造后：存储统一为 SQLite（本机数据库），不再有磁盘镜像 / localStorage 分支
-  const dataLocation = '本机 SQLite 数据库';
+  const dataLocation = t('settings.profile.dataLocation');
 
   const handleExportSettings = async () => {
     if (exporting) return;
@@ -70,7 +74,7 @@ export const SettingsProfileTab: React.FC<Props> = ({
       URL.revokeObjectURL(url);
       // 成功静默（用户裁决：导出/导入成功提示不必每次说）
     } catch (err) {
-      showToast('导出失败：' + String(err));
+      showToast(t('settings.profile.exportFailed', { error: String(err) }));
     } finally {
       setExporting(false);
     }
@@ -94,11 +98,11 @@ export const SettingsProfileTab: React.FC<Props> = ({
         try {
           parsed = JSON.parse(text);
         } catch {
-          showToast('导入失败：不是合法 JSON');
+          showToast(t('settings.profile.invalidJson'));
           return;
         }
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          showToast('导入失败：根节点须为对象');
+          showToast(t('settings.profile.rootMustBeObject'));
           return;
         }
         await clientApi.saveSettingsEx(
@@ -108,7 +112,7 @@ export const SettingsProfileTab: React.FC<Props> = ({
         );
         // 成功静默（用户裁决：导出/导入成功提示不必每次说）
       } catch (err) {
-        showToast('导入失败：' + String(err));
+        showToast(t('settings.profile.importFailed', { error: String(err) }));
       } finally {
         setImporting(false);
       }
@@ -118,46 +122,52 @@ export const SettingsProfileTab: React.FC<Props> = ({
   const handleTestDaemon = () => {
     if (busy) return;
     setBusy(true);
-    setDaemonConnHint('连接中…');
+    setDaemonConnHint(t('settings.profile.connecting'));
     void ensureEngineConnected()
       .then((r) => {
         setDaemonConnHint(
-          r.ok ? '已连接' : networkUserMessage(r.error) || '未连接'
+          r.ok
+            ? t('settings.profile.connected')
+            : networkUserMessage(r.error) || t('settings.profile.notConnected')
         );
         // 失败结果行内展示；成功也行内，均不 toast
       })
       .catch((err) => {
-        const msg = networkUserMessage(err) || '未连接';
+        const msg =
+          networkUserMessage(err) || t('settings.profile.notConnected');
         setDaemonConnHint(msg);
-        showToast('连接失败：' + msg);
+        showToast(t('settings.profile.connectionFailed', { error: msg }));
       })
       .finally(() => setBusy(false));
   };
 
-  const workspaceDisplay = hasWorkspace ? pathLeaf(cwd) : '未选择工作区';
-  const workspaceTitle = hasWorkspace
-    ? cwd
-    : '可在空对话页选择项目；工具与 shell 将以该目录为工作区';
+  const workspaceDisplay = hasWorkspace
+    ? pathLeaf(cwd)
+    : t('workspace.noWorkspace');
+  const workspaceTitle = hasWorkspace ? cwd : t('workspace.noWorkspaceHint');
   /** 短显示：路径叶名 / 本机；长说明进 title */
   const storageDisplay = 'SQLite';
   const storageIsPath = false;
 
   const engineOnline = getTransport().isReady();
-  const engineStatus = engineConnHint || (engineOnline ? '在线' : '离线');
+  const defaultEngineStatus = engineOnline
+    ? t('common.online')
+    : t('common.offline');
+  const engineStatus = engineConnHint || defaultEngineStatus;
   const showDeveloper = isDeveloperEngineUiEnabled();
   const engineMeta =
     showDeveloper && !engineOnline
-      ? '服务未连接'
+      ? t('settings.profile.serviceDisconnected')
       : showDeveloper && engineConnHint
         ? engineConnHint
         : null;
 
   return (
     <SettingsPage
-      title="账户"
+      title={t('settings.profile.title')}
       meta={
         engineMeta ? (
-          <Tooltip content="连接异常">
+          <Tooltip content={t('settings.profile.connAbnormal')} delayShow={300}>
             <span
               id={headMetaId}
               className={`${styles.settingsHeadMeta} ${styles.settingsHeadMetaError}`}
@@ -170,25 +180,29 @@ export const SettingsProfileTab: React.FC<Props> = ({
         ) : null
       }
     >
-      <SettingsSection title="Flowbit 账号与多端协同">
+      <SettingsSection title={t('settings.profile.flowbitSection')}>
         <AccountAuthCard />
       </SettingsSection>
 
-      <SettingsSection title="当前环境">
+      <SettingsSection title={t('settings.profile.currentEnvSection')}>
         <SettingsCard>
           <SettingsRow
             icon={<AppIcon name="user" size={18} />}
-            title="当前项目"
-            desc={hasWorkspace ? '本机工作区' : '尚未打开项目'}
+            title={t('settings.profile.currentProject')}
+            desc={
+              hasWorkspace
+                ? t('settings.profile.localWorkspace')
+                : t('settings.profile.noProjectOpen')
+            }
             control={
               hasWorkspace ? (
-                <Tooltip content={cwd}>
+                <Tooltip content={cwd} delayShow={300}>
                   <span className={styles.settingsPathEllipsis}>
                     {workspaceDisplay}
                   </span>
                 </Tooltip>
               ) : (
-                <Tooltip content={workspaceTitle}>
+                <Tooltip content={workspaceTitle} delayShow={300}>
                   <span className={styles.settingsListEmpty} role="status">
                     {workspaceDisplay}
                   </span>
@@ -199,22 +213,27 @@ export const SettingsProfileTab: React.FC<Props> = ({
         </SettingsCard>
       </SettingsSection>
 
-      <SettingsSection title="数据">
+      <SettingsSection title={t('settings.profile.dataSection')}>
         <SettingsCard>
           <SettingsRow
-            title="会话数据"
-            desc="仅保存在本机"
+            title={t('settings.profile.sessionData')}
+            desc={t('settings.profile.savedLocallyOnly')}
             control={
-              <Tooltip content="不上传云端">
-                <span className={styles.settingsListMeta}>本机</span>
+              <Tooltip
+                content={t('settings.profile.noCloudUpload')}
+                delayShow={300}
+              >
+                <span className={styles.settingsListMeta}>
+                  {t('settings.profile.localDevice')}
+                </span>
               </Tooltip>
             }
           />
           <SettingsRow
-            title="存储位置"
-            desc="应用数据目录"
+            title={t('settings.profile.storageLocation')}
+            desc={t('settings.profile.appDataDir')}
             control={
-              <Tooltip content={dataLocation}>
+              <Tooltip content={dataLocation} delayShow={300}>
                 <span
                   className={
                     storageIsPath
@@ -228,11 +247,18 @@ export const SettingsProfileTab: React.FC<Props> = ({
             }
           />
           <SettingsRow
-            title="设置备份"
-            desc="导出或导入配置"
+            title={t('settings.profile.settingsBackup')}
+            desc={t('settings.profile.exportImportConfig')}
             control={
               <>
-                <Tooltip content={exporting ? '正在导出…' : '导出备份'}>
+                <Tooltip
+                  content={
+                    exporting
+                      ? t('settings.profile.exporting')
+                      : t('settings.profile.exportBackup')
+                  }
+                  delayShow={300}
+                >
                   <Button
                     type="button"
                     variant="secondary"
@@ -240,10 +266,19 @@ export const SettingsProfileTab: React.FC<Props> = ({
                     disabled={exporting}
                     onClick={() => handleExportSettings()}
                   >
-                    {exporting ? '导出中…' : '导出'}
+                    {exporting
+                      ? t('settings.profile.exportingShort')
+                      : t('settings.profile.exportBtn')}
                   </Button>
                 </Tooltip>
-                <Tooltip content={importing ? '正在导入…' : '从备份导入'}>
+                <Tooltip
+                  content={
+                    importing
+                      ? t('settings.profile.importing')
+                      : t('settings.profile.importBackup')
+                  }
+                  delayShow={300}
+                >
                   <Button
                     type="button"
                     variant="secondary"
@@ -251,7 +286,9 @@ export const SettingsProfileTab: React.FC<Props> = ({
                     disabled={importing}
                     onClick={handleImportSettings}
                   >
-                    {importing ? '导入中…' : '导入'}
+                    {importing
+                      ? t('settings.profile.importingShort')
+                      : t('settings.profile.importBtn')}
                   </Button>
                 </Tooltip>
                 <Input
@@ -269,11 +306,15 @@ export const SettingsProfileTab: React.FC<Props> = ({
       </SettingsSection>
 
       {showDeveloper ? (
-        <SettingsSection title="高级">
+        <SettingsSection title={t('settings.profile.advancedSection')}>
           <SettingsCard>
             <SettingsRow
-              title={<label htmlFor={engineStatusId}>核心连接</label>}
-              desc="Tauri IPC 进程内核心（无 WS 地址）；可测试「核心已初始化」"
+              title={
+                <label htmlFor={engineStatusId}>
+                  {t('settings.profile.coreConn')}
+                </label>
+              }
+              desc={t('settings.profile.coreConnDesc')}
               control={
                 <>
                   <Button
@@ -283,7 +324,9 @@ export const SettingsProfileTab: React.FC<Props> = ({
                     disabled={busy}
                     onClick={handleTestDaemon}
                   >
-                    {busy ? '测试中…' : '测试'}
+                    {busy
+                      ? t('settings.profile.testing')
+                      : t('settings.profile.testBtn')}
                   </Button>
                   <span
                     id={engineStatusId}

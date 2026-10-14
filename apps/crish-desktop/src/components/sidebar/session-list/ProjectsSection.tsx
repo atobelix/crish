@@ -6,6 +6,7 @@ import { Button, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
 import { AppIcon } from '../../ui/icons/index';
 import { ProjectManageModal } from './ProjectManageModal';
+import { useI18n } from '../../../i18n';
 
 const PROJECT_FOLD_LIMIT = 6;
 
@@ -44,6 +45,7 @@ export interface ProjectsSectionProps {
 }
 
 export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
+  const { t } = useI18n();
   const [expandedProjectFolders, setExpandedProjectFolders] = useState<
     Record<string, boolean>
   >({});
@@ -67,7 +69,10 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
   void _onMoveSessionRealtime;
 
   return (
-    <section className={styles.section} aria-label="项目">
+    <section
+      className={styles.section}
+      aria-label={t('sidebar.projects', '项目')}
+    >
       <div
         className={styles.sectionLabelRow}
         onClick={onToggleProjectsSection}
@@ -84,7 +89,7 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
             }}
             aria-expanded={!projectsSectionCollapsed}
           >
-            <span>项目</span>
+            <span>{t('sidebar.projects', '项目')}</span>
             <AppIcon
               name="chevron-down"
               size={16}
@@ -98,14 +103,14 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
           onClick={(e) => e.stopPropagation()}
         >
           {onSortBtnClick ? (
-            <Tooltip content="排序与过滤">
+            <Tooltip content={t('sidebar.sortAndFilter', '排序与过滤')}>
               <Button
                 ref={sortTriggerRef}
                 type="button"
                 variant="ghost"
                 size="sm"
                 className={styles.sectionSortBtn}
-                aria-label="排序与过滤"
+                aria-label={t('sidebar.sortAndFilter', '排序与过滤')}
                 aria-expanded={sortDropdownOpen}
                 aria-haspopup="menu"
                 onClick={(e) => {
@@ -116,13 +121,13 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
               />
             </Tooltip>
           ) : null}
-          <Tooltip content="新建项目">
+          <Tooltip content={t('sidebar.newProject', '新建项目')}>
             <Button
               type="button"
               variant="ghost"
               size="sm"
               className={styles.sectionNew}
-              aria-label="新建项目"
+              aria-label={t('sidebar.newProject', '新建项目')}
               aria-expanded={createProjectOpen}
               aria-haspopup="dialog"
               onClick={() => setCreateProjectOpen(true)}
@@ -176,13 +181,22 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
                     className={styles.folderActions}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <Tooltip content="项目设置与更多操作">
+                    <Tooltip
+                      content={t(
+                        'sidebar.projectSettingsAndMore',
+                        '项目设置与更多操作'
+                      )}
+                    >
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         className={styles.folderMoreBtn}
-                        aria-label={`项目 ${p.name} 更多操作`}
+                        aria-label={t(
+                          'sidebar.projectMoreActions',
+                          `项目 ${p.name} 更多操作`,
+                          { name: p.name }
+                        )}
                         aria-expanded={isMoreOpen}
                         aria-haspopup="dialog"
                         onClick={() => setManagingProjectId(p.id)}
@@ -195,13 +209,22 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
                         }
                       />
                     </Tooltip>
-                    <Tooltip content="在本项目新建对话">
+                    <Tooltip
+                      content={t(
+                        'sidebar.newSessionInProject',
+                        '在本项目新建对话'
+                      )}
+                    >
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         className={styles.folderNewBtn}
-                        aria-label={`在 ${p.name} 新建对话`}
+                        aria-label={t(
+                          'sidebar.newSessionInProjectAria',
+                          `在 ${p.name} 新建对话`,
+                          { name: p.name }
+                        )}
                         onClick={(e) => {
                           e.stopPropagation();
                           onOpenProject(p.id);
@@ -224,7 +247,11 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
                         <ul
                           className={`${styles.pinnedList} ${styles.folderSessions}`}
                           role="tree"
-                          aria-label={`${p.name} 会话`}
+                          aria-label={t(
+                            'sidebar.projectSessionsAria',
+                            `${p.name} 会话`,
+                            { name: p.name }
+                          )}
                           data-drop-zone="project"
                           data-folder-name={p.id}
                         >
@@ -251,8 +278,12 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
                               )}
                             >
                               {expandedProjectFolders[p.id]
-                                ? '收起'
-                                : `查看全部 (${sess.length})`}
+                                ? t('sidebar.foldCollapse', '收起')
+                                : t(
+                                    'sidebar.viewAllWithCount',
+                                    `查看全部 (${sess.length})`,
+                                    { count: sess.length }
+                                  )}
                             </Button>
                           </div>
                         )}
@@ -270,7 +301,7 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
               style={{ cursor: 'pointer' }}
               onClick={() => setCreateProjectOpen(true)}
             >
-              点击分区旁 + 新建项目
+              {t('sidebar.clickPlusToNewProject', '点击分区旁 + 新建项目')}
             </div>
           )}
         </div>

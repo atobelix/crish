@@ -8,6 +8,7 @@ import { resolveActualScrollHost } from './useSessionListWindow';
 import { Button, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
 import { AppIcon } from '../../ui/icons/index';
+import { useI18n } from '../../../i18n';
 
 export interface GeneralSectionProps {
   generalSessions: SessionState[];
@@ -47,6 +48,7 @@ export function GeneralSection({
   renderSessionItem,
 }: GeneralSectionProps) {
   void _onMoveSessionRealtime;
+  const { t } = useI18n();
   const [isExpanded, setIsExpanded] = React.useState(false);
   const isFlatList = groupType === 'none';
 
@@ -63,7 +65,10 @@ export function GeneralSection({
     : generalSessions.slice(0, GENERAL_FOLD_LIMIT);
 
   return (
-    <section className={styles.section} aria-label="对话">
+    <section
+      className={styles.section}
+      aria-label={t('sidebar.conversations', '对话')}
+    >
       <div
         className={styles.sectionLabelRow}
         onClick={onToggleGeneral}
@@ -80,7 +85,7 @@ export function GeneralSection({
             }}
             aria-expanded={!generalCollapsed}
           >
-            <span>对话</span>
+            <span>{t('sidebar.conversations', '对话')}</span>
             <AppIcon
               name="chevron-down"
               size={16}
@@ -91,14 +96,14 @@ export function GeneralSection({
         </div>
         <div className={styles.sectionLabelRight}>
           {isFlatList ? (
-            <Tooltip content="排序与过滤">
+            <Tooltip content={t('sidebar.sortAndFilter', '排序与过滤')}>
               <Button
                 ref={sortTriggerRef}
                 type="button"
                 variant="ghost"
                 size="sm"
                 className={styles.sectionSortBtn}
-                aria-label="排序与过滤"
+                aria-label={t('sidebar.sortAndFilter', '排序与过滤')}
                 aria-expanded={sortDropdownOpen}
                 aria-haspopup="menu"
                 onClick={(e) => {
@@ -109,13 +114,13 @@ export function GeneralSection({
               />
             </Tooltip>
           ) : null}
-          <Tooltip content="新建常规对话">
+          <Tooltip content={t('sidebar.newGeneralSession', '新建常规对话')}>
             <Button
               type="button"
               variant="ghost"
               size="sm"
               className={styles.sectionNew}
-              aria-label="新建常规对话"
+              aria-label={t('sidebar.newGeneralSession', '新建常规对话')}
               onClick={(e) => {
                 e.stopPropagation();
                 navigateToNewDraft(GENERAL_FOLDER);
@@ -145,14 +150,14 @@ export function GeneralSection({
                   listRef={generalListRef}
                   className={`${styles.pinnedList} ${styles.folderSessions}`}
                   renderRow={renderSessionItem}
-                  ariaLabel="对话列表"
+                  ariaLabel={t('sidebar.conversationsListAria', '对话列表')}
                 />
               ) : (
                 <ul
                   ref={generalListRef}
                   className={`${styles.pinnedList} ${styles.folderSessions}`}
                   role="tree"
-                  aria-label="对话列表"
+                  aria-label={t('sidebar.conversationsListAria', '对话列表')}
                   data-windowed="0"
                   data-window-count={displayedSessions.length}
                   data-drop-zone={isFlatList ? 'flat' : 'general'}
@@ -171,8 +176,12 @@ export function GeneralSection({
                     aria-expanded={isExpanded}
                   >
                     {isExpanded
-                      ? '收起'
-                      : `查看全部 (${generalSessions.length})`}
+                      ? t('sidebar.foldCollapse', '收起')
+                      : t(
+                          'sidebar.viewAllWithCount',
+                          `查看全部 (${generalSessions.length})`,
+                          { count: generalSessions.length }
+                        )}
                   </Button>
                 </div>
               )}
@@ -183,8 +192,14 @@ export function GeneralSection({
               role="status"
             >
               {isFlatList
-                ? '暂无常规对话，点击右上角 + 新建对话'
-                : '不在项目中的对话会出现在这里'}
+                ? t(
+                    'sidebar.noGeneralYet',
+                    '暂无常规对话，点击右上角 + 新建对话'
+                  )
+                : t(
+                    'sidebar.generalWillAppearHere',
+                    '不在项目中的对话会出现在这里'
+                  )}
             </div>
           )}
         </div>
