@@ -68,6 +68,26 @@ export const registeredKeys: Readonly<Record<string, RegisteredKey>> = {
     removeDate: '2027-01-01',
   },
 
+  // 外部会话导入域（检测缓存 + 删除墓碑）
+  crish_external_sessions_cache_v1: {
+    owner: 'externalSessionCache',
+    type: 'cache',
+  },
+  crish_deleted_external_sessions_v1: {
+    owner: 'externalSessionTombstone',
+    type: 'state',
+  },
+  // 项目文件夹别名（folderIdOrLegacy → 绝对路径）
+  crish_project_folder_aliases_v1: {
+    owner: 'projectAliases',
+    type: 'state',
+  },
+  // 界面语言偏好（i18n）
+  'crish-locale': {
+    owner: 'i18n/I18nContext',
+    type: 'state',
+  },
+
   // 运行期临时缓存与非偏好状态（收敛至 runtimeCache）
   crish_local_fonts_cache_v1: {
     owner: 'runtimeCache/fontStoreScan',

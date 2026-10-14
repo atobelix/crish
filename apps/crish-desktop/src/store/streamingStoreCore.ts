@@ -21,6 +21,10 @@ import type {
   MessageToolCallStatus,
   MessageImageRef,
 } from './types';
+import {
+  sessionMessageKey,
+  sessionMessageKeyPrefix,
+} from '../api/compositeSessionKeys';
 
 /** Live tool row patch held only while status is intermediate (usually running). */
 export type StreamToolLive = {
@@ -104,9 +108,9 @@ export type StreamingState = {
   ) => StreamEntry | undefined;
 };
 
-/** Same shape as streamBatchKey / design contract. */
+/** Same shape as streamBatchKey / design contract（形状契约真源 = api/compositeSessionKeys）。 */
 export function streamStoreKey(sessionId: string, messageId: string): string {
-  return `${sessionId}::${messageId}`;
+  return sessionMessageKey(sessionId, messageId);
 }
 
 function preserveRest(
@@ -302,7 +306,7 @@ export const useStreamingStore = create<StreamingState>((set, get) => ({
   },
 
   clearSession: (sessionId) => {
-    const prefix = `${sessionId}::`;
+    const prefix = sessionMessageKeyPrefix(sessionId);
     set((state) => {
       let changed = false;
       const next: Record<string, StreamEntry> = Object.create(null);

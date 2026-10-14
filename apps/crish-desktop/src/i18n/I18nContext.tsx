@@ -1,3 +1,5 @@
+import { safeSetItem } from '../api/localStorageApi';
+
 import React, {
   createContext,
   useCallback,
@@ -339,11 +341,8 @@ export function getInitialLanguage(): SupportedLanguage {
  */
 export function persistLanguage(lang: SupportedLanguage): void {
   if (typeof window !== 'undefined' && window.localStorage) {
-    try {
-      window.localStorage.setItem(STORAGE_KEY_LOCALE, lang);
-    } catch {
-      /* swallow-ok */
-    }
+    // 统一存储单轨：safeSetItem 内置 quota/隐私模式容错
+    safeSetItem(STORAGE_KEY_LOCALE, lang);
   }
   if (typeof document !== 'undefined' && document.documentElement) {
     document.documentElement.setAttribute('lang', lang);

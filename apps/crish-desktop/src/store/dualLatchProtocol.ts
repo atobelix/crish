@@ -10,6 +10,11 @@
  *    两个完整物理渲染帧上屏后，才安全排空 streamingStore 热备缓冲。
  */
 
+import {
+  sessionMessageKeyOrDefault,
+  sessionMessageKeyPrefix,
+} from '../api/compositeSessionKeys';
+
 import { clearStream, clearStreams } from './streamingStore';
 import type {
   DualLatchPhase,
@@ -167,7 +172,7 @@ export function scheduleDualRafClearStreams(
 }
 
 export function makeDualLatchKey(sessionId: string, messageId: string): string {
-  return `${sessionId || '__default__'}::${messageId}`;
+  return sessionMessageKeyOrDefault(sessionId, messageId);
 }
 
 export interface DualLatchTurnRecord {
@@ -371,7 +376,7 @@ export class DualLatchStateMachine {
 
   public abortSession(sessionId: string): void {
     if (!sessionId) return;
-    const prefix = `${sessionId}::`;
+    const prefix = sessionMessageKeyPrefix(sessionId);
     for (const [key, rec] of this.records.entries()) {
       if (key.startsWith(prefix)) {
         rec.cancelPendingDrain?.();

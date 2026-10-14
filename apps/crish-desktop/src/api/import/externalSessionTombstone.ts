@@ -7,6 +7,7 @@
  */
 
 import { makeExternalImportKey, type ExternalSessionSource } from './types';
+import { safeSetJson } from '../localStorageApi';
 
 const DELETED_EXTERNAL_SESSIONS_STORAGE_KEY =
   'crish_deleted_external_sessions_v1';
@@ -83,10 +84,7 @@ export function getDeletedExternalSessionKeys(): Set<string> {
 }
 
 function writeDeletedExternalSessionKeys(keys: Set<string>): void {
-  localStorage.setItem(
-    DELETED_EXTERNAL_SESSIONS_STORAGE_KEY,
-    JSON.stringify(Array.from(keys))
-  );
+  safeSetJson(DELETED_EXTERNAL_SESSIONS_STORAGE_KEY, Array.from(keys));
 }
 
 export function recordDeletedExternalSession(

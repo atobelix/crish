@@ -1,3 +1,5 @@
+import { subagentDeltaKey } from '../api/compositeSessionKeys';
+
 import { MAX_MESSAGES_PER_AGENT } from '@crish/shared-utils/browser';
 import { getSessionForWrite, rebindSessionById } from './sessionIndex';
 import type {
@@ -78,7 +80,7 @@ export class SubagentRuntimeBatcher {
   }
 
   push(delta: SubagentRuntimeDelta): void {
-    const key = `${delta.sessionId}::${delta.agentId}`;
+    const key = subagentDeltaKey(delta.sessionId, delta.agentId);
     this.inner.push(key, delta);
   }
 

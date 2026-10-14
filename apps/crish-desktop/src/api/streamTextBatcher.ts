@@ -11,6 +11,11 @@
  */
 
 import type { MessageToolCall } from '../store/types';
+import {
+  parseSessionMessageToolKey,
+  sessionMessageKey,
+  sessionMessageToolKey,
+} from './compositeSessionKeys';
 
 export type StreamValueFlush<T> = (key: string, value: T) => void;
 
@@ -418,9 +423,9 @@ export function isImmediateToolStatus(
   );
 }
 
-/** 会话 + 消息 id 合成 batch key */
+/** 会话 + 消息 id 合成 batch key（形状契约真源 = api/compositeSessionKeys） */
 export function streamBatchKey(sessionId: string, messageId: string): string {
-  return `${sessionId}::${messageId}`;
+  return sessionMessageKey(sessionId, messageId);
 }
 
 /** 会话 + 消息 + 工具 id 合成 batch key */
@@ -429,19 +434,12 @@ export function streamToolBatchKey(
   messageId: string,
   toolId: string
 ): string {
-  return `${sessionId}::${messageId}::${toolId}`;
+  return sessionMessageToolKey(sessionId, messageId, toolId);
 }
 
 /** 解析工具 batch key；失败返回 null */
 export function parseStreamToolBatchKey(
   key: string
 ): { sessionId: string; messageId: string; toolId: string } | null {
-  const first = key.indexOf('::');
-  const last = key.lastIndexOf('::');
-  if (first < 0 || last <= first) return null;
-  const sessionId = key.slice(0, first);
-  const messageId = key.slice(first + 2, last);
-  const toolId = key.slice(last + 2);
-  if (!sessionId || !messageId || !toolId) return null;
-  return { sessionId, messageId, toolId };
+  return parseSessionMessageToolKey(key);
 }

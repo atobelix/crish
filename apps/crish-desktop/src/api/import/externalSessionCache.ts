@@ -9,6 +9,7 @@
 
 import type { DetectedExternalSession } from './types';
 import { scanClaudeCodeSessions, scanCodexSessions } from './scan';
+import { safeSetJson } from '../localStorageApi';
 
 const CACHE_KEY = 'crish_external_sessions_cache_v1';
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 分钟缓存有效期
@@ -40,7 +41,7 @@ export function saveExternalSessionsToCache(
       timestamp: Date.now(),
       sessions,
     };
-    localStorage.setItem(CACHE_KEY, JSON.stringify(payload));
+    safeSetJson(CACHE_KEY, payload);
   } catch {
     /* ignore quota error */
   }

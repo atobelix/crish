@@ -13,6 +13,8 @@
  *    触发向上层 AST 块级提交器的升级信号，确保重型块级组件仅在跨过语法边界时按需挂载一次。
  */
 
+import { sessionMessageKeyOrDefault } from './compositeSessionKeys';
+
 export const MAX_DIRECT_DOM_SLOTS = 256;
 
 export type StructuralBoundaryKind =
@@ -78,7 +80,7 @@ const BOUNDARY_PATTERNS: ReadonlyArray<
 ];
 
 function makeSlotKey(sessionId: string, messageId: string): string {
-  return `${sessionId || '__default__'}::${messageId}`;
+  return sessionMessageKeyOrDefault(sessionId, messageId);
 }
 
 /**

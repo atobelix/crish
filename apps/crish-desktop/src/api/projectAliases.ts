@@ -5,6 +5,8 @@
  * 拆分来源：api/projectStore.ts（行数门禁收口，行为不变）。
  */
 
+import { safeSetJson } from './localStorageApi';
+
 const FOLDER_ALIASES_KEY = 'crish_project_folder_aliases_v1';
 
 export function normalizePath(path: string): string {
@@ -32,11 +34,8 @@ export function loadAliases(): AliasMap {
 }
 
 function saveAliases(map: AliasMap) {
-  try {
-    localStorage.setItem(FOLDER_ALIASES_KEY, JSON.stringify(map));
-  } catch {
-    /* swallow-ok: 别名映射尽力写，quota/隐私模式失败时下次启动重试 */
-  }
+  // 统一存储单轨：safeSetJson 内置序列化/quota 容错（swallow-ok：尽力写，失败下次启动重试）
+  safeSetJson(FOLDER_ALIASES_KEY, map);
 }
 
 /** 记录 id→path，供幽灵 proj-* 找回 */
