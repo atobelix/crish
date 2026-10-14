@@ -31,44 +31,17 @@ import {
   findConflict,
   isCustomized,
   buildShortcutItems,
+  eventToShortcutKeys,
+  SHORTCUT_CATEGORY_MAP,
+  CATEGORY_I18N_KEYS,
+  type ShortcutCategoryKey,
   type ShortcutItem,
 } from './SettingsShortcutsHelpers';
 
-// 单源契约测试仍从本文件 import buildShortcutItems（T2-5），这里 re-export 保持兼容
-export { buildShortcutItems };
-export type { ShortcutItem };
-
-export type ShortcutCategoryKey = 'system' | 'session' | 'workspace' | 'other';
-
-export const SHORTCUT_CATEGORY_MAP: Record<string, ShortcutCategoryKey> = {
-  toggle_settings: 'system',
-  open_models: 'system',
-  open_usage: 'system',
-  open_security: 'system',
-  open_shortcuts: 'system',
-  open_extensions: 'system',
-  open_schedule: 'system',
-  export_logs: 'system',
-  new_session: 'session',
-  focus_composer: 'session',
-  branch_session: 'session',
-  stop_generation: 'session',
-  toggle_plan_mode: 'session',
-  toggle_sidebar: 'workspace',
-};
-
-export const CATEGORY_I18N_KEYS: Record<
-  ShortcutCategoryKey,
-  { key: string; fallback: string }
-> = {
-  system: { key: 'settings.shortcuts.groupGlobal', fallback: '全局快捷键' },
-  session: { key: 'settings.shortcuts.groupChat', fallback: '对话与编辑' },
-  workspace: {
-    key: 'settings.shortcuts.groupNavigation',
-    fallback: '界面导航',
-  },
-  other: { key: 'common.more', fallback: '其他' },
-};
+// 单源契约测试仍从本文件 import buildShortcutItems（T2-5），这里 re-export 保持兼容；
+// 分类常量真源在 Helpers，tab 侧 re-export 维持对外导出面不变
+export { buildShortcutItems, SHORTCUT_CATEGORY_MAP, CATEGORY_I18N_KEYS };
+export type { ShortcutItem, ShortcutCategoryKey };
 
 export const SettingsShortcutsTab: React.FC = () => {
   const { t } = useI18n();
@@ -202,33 +175,9 @@ export const SettingsShortcutsTab: React.FC = () => {
         return;
       }
 
-      const keys: string[] = [];
-      if (e.ctrlKey) keys.push('Ctrl');
-      if (e.shiftKey) keys.push('Shift');
-      if (e.altKey) keys.push('Alt');
-      if (e.metaKey) keys.push('Meta');
-      if (
-        ![
-          'Control',
-          'Shift',
-          'Alt',
-          'Meta',
-          'Process',
-          'Unidentified',
-        ].includes(e.key)
-      ) {
-        let keyName = e.key;
-        if (keyName === ' ') keyName = 'Space';
-        keys.push(keyName.length === 1 ? keyName.toUpperCase() : keyName);
-      }
-
+      const keys = eventToShortcutKeys(e);
       // 仅修饰键：继续等待完整组合
-      if (
-        keys.length === 0 ||
-        keys.every((k) => ['Ctrl', 'Shift', 'Alt', 'Meta'].includes(k))
-      ) {
-        return;
-      }
+      if (!keys) return;
 
       const newKey = keys.join(' + ');
       const conflict = findConflict(

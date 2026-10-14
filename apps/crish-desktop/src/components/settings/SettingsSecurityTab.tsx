@@ -30,34 +30,13 @@ import {
   type PermissionMode,
 } from '../../api/permissionModes';
 import { sanitizeWhitelistEntry } from '../../api/commandPermissions';
+import {
+  QUICK_WHITELIST_CMDS,
+  dedupeWhitelist,
+  pathLeaf,
+} from './settingsSecurityModel';
 import { AppIcon } from '../ui/icons/index';
 import { useI18n } from '../../i18n';
-
-/** 常用只读命令 */
-const QUICK_WHITELIST_CMDS = [
-  'git status',
-  'git diff',
-  'git log',
-  'npm test',
-  'npm run typecheck',
-] as const;
-
-const WHITELIST_MATCH_HINT = '按整条命令匹配；后面可带参数，不会误伤相似命令名';
-
-/**
- * 纯 UX 提示（P1 权限归一 B2，主控裁决 3）：白名单仅为批准记忆——是否放行
- * 由引擎按权限模式裁决；高危命令（rm / format 等）即使加入白名单也不会被
- * 自动放行（引擎红线/审批门禁兜底），本处不做任何 allow/deny 判定、不读
- * 风险正则表。
- */
-const WHITELIST_REMEMBER_HINT =
-  '高危命令（如 rm、format）不会被自动放行——白名单仅为批准记忆，放行由引擎按权限模式裁决';
-
-/** 路径短名 */
-function pathLeaf(path: string): string {
-  const parts = path.replace(/\\/g, '/').split('/').filter(Boolean);
-  return parts[parts.length - 1] || path;
-}
 
 const PERM_ICON_MAP: Record<string, React.ReactNode> = {
   ask: <AppIcon name="shield-check" size={14} />,
@@ -115,19 +94,10 @@ export const SettingsSecurityTab: React.FC = () => {
 
   const extraCount = workspacePaths.length - 5;
 
-  const whitelist = useMemo(() => {
-    const raw: string[] = commandPermissions || [];
-    const cleaned = raw.map((x) => sanitizeWhitelistEntry(x)).filter(Boolean);
-    const seen = new Set<string>();
-    const deduped: string[] = [];
-    for (const cmd of cleaned) {
-      const key = cmd.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      deduped.push(cmd);
-    }
-    return deduped.slice().sort((a, b) => a.localeCompare(b, 'zh'));
-  }, [commandPermissions]);
+  const whitelist = useMemo(
+    () => dedupeWhitelist(commandPermissions || []),
+    [commandPermissions]
+  );
 
   const draftTrimmed = newWhitelistCmd.trim();
 
@@ -206,20 +176,6 @@ export const SettingsSecurityTab: React.FC = () => {
       );
     }
   };
-
-  const whitelistMatchHint = t(
-    'settings.security.whitelistMatchHint',
-    WHITELIST_MATCH_HINT
-  );
-  const whitelistRememberHint = t(
-    'settings.security.whitelistRememberHint',
-    WHITELIST_REMEMBER_HINT
-  );
-  const pressEnterToAdd = t('settings.security.pressEnterToAdd', '回车添加');
-
-  const _inputRiskTitle = draftTrimmed
-    ? `${whitelistRememberHint} · ${pressEnterToAdd}`
-    : `${whitelistMatchHint} · ${pressEnterToAdd}`;
 
   return (
     <SettingsPage title={t('nav.security', '安全')}>

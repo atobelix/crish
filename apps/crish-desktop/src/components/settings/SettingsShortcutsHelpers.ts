@@ -9,22 +9,23 @@
 import { BUILTIN_SHORTCUTS } from '../../services/ShortcutRegistry';
 import { configService } from '../../services/ConfigService';
 
-export const SHORTCUT_DISPLAY: Record<string, { group: string; desc: string }> = {
-  toggle_settings: { group: '系统', desc: '打开或关闭' },
-  open_models: { group: '系统', desc: '打开模型设置' },
-  open_usage: { group: '系统', desc: '打开用量' },
-  open_security: { group: '系统', desc: '权限与白名单' },
-  open_shortcuts: { group: '系统', desc: '打开本页' },
-  open_extensions: { group: '系统', desc: '插件、MCP、技能' },
-  open_schedule: { group: '系统', desc: '打开定时任务' },
-  export_logs: { group: '系统', desc: '导出诊断日志' },
-  new_session: { group: '会话', desc: '开始新会话' },
-  focus_composer: { group: '会话', desc: '定位到输入框' },
-  branch_session: { group: '会话', desc: '从当前对话分出一支' },
-  stop_generation: { group: '会话', desc: '中断输出' },
-  toggle_plan_mode: { group: '会话', desc: '切换计划权限' },
-  toggle_sidebar: { group: '工作区', desc: '展开或收起' },
-};
+export const SHORTCUT_DISPLAY: Record<string, { group: string; desc: string }> =
+  {
+    toggle_settings: { group: '系统', desc: '打开或关闭' },
+    open_models: { group: '系统', desc: '打开模型设置' },
+    open_usage: { group: '系统', desc: '打开用量' },
+    open_security: { group: '系统', desc: '权限与白名单' },
+    open_shortcuts: { group: '系统', desc: '打开本页' },
+    open_extensions: { group: '系统', desc: '插件、MCP、技能' },
+    open_schedule: { group: '系统', desc: '打开定时任务' },
+    export_logs: { group: '系统', desc: '导出诊断日志' },
+    new_session: { group: '会话', desc: '开始新会话' },
+    focus_composer: { group: '会话', desc: '定位到输入框' },
+    branch_session: { group: '会话', desc: '从当前对话分出一支' },
+    stop_generation: { group: '会话', desc: '中断输出' },
+    toggle_plan_mode: { group: '会话', desc: '切换计划权限' },
+    toggle_sidebar: { group: '工作区', desc: '展开或收起' },
+  };
 
 export type ShortcutItem = {
   id: string;
@@ -57,17 +58,46 @@ export function defaultBindingOf(id: string): string {
 
 /** 键名片段 → 中文展示（存储仍为英文 token，仅 UI 本地化） */
 export const KEY_PART_ZH: Record<string, string> = {
-  Ctrl: 'Ctrl', Control: 'Ctrl', Shift: 'Shift', Alt: 'Alt', Meta: 'Win',
-  Command: '⌘', Cmd: '⌘', Escape: 'Esc', Esc: 'Esc', Space: '空格',
-  Enter: '回车', Return: '回车', Backspace: '退格', Delete: '删除', Del: '删除',
-  Tab: 'Tab', Insert: '插入', Home: 'Home', End: 'End', PageUp: '上页', PageDown: '下页',
-  ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
-  Up: '↑', Down: '↓', Left: '←', Right: '→',
-  MiddleClick: '鼠标中键', Middle: '鼠标中键', LeftClick: '鼠标左键',
-  RightClick: '鼠标右键', DoubleClick: '双击', Click: '单击',
+  Ctrl: 'Ctrl',
+  Control: 'Ctrl',
+  Shift: 'Shift',
+  Alt: 'Alt',
+  Meta: 'Win',
+  Command: '⌘',
+  Cmd: '⌘',
+  Escape: 'Esc',
+  Esc: 'Esc',
+  Space: '空格',
+  Enter: '回车',
+  Return: '回车',
+  Backspace: '退格',
+  Delete: '删除',
+  Del: '删除',
+  Tab: 'Tab',
+  Insert: '插入',
+  Home: 'Home',
+  End: 'End',
+  PageUp: '上页',
+  PageDown: '下页',
+  ArrowUp: '↑',
+  ArrowDown: '↓',
+  ArrowLeft: '←',
+  ArrowRight: '→',
+  Up: '↑',
+  Down: '↓',
+  Left: '←',
+  Right: '→',
+  MiddleClick: '鼠标中键',
+  Middle: '鼠标中键',
+  LeftClick: '鼠标左键',
+  RightClick: '鼠标右键',
+  DoubleClick: '双击',
+  Click: '单击',
 };
 
-export function normalizeKeyPart(raw: string): string { return raw.trim(); }
+export function normalizeKeyPart(raw: string): string {
+  return raw.trim();
+}
 
 export function formatShortcutLabel(raw: string | undefined | null): string {
   if (raw == null) return '未设置';
@@ -81,7 +111,10 @@ export function formatShortcutLabel(raw: string | undefined | null): string {
     }
     return parts.map((p) => KEY_PART_ZH[p] || p).join(' · ');
   }
-  const combo = s.split(/\s*\+\s*/).map(normalizeKeyPart).filter(Boolean);
+  const combo = s
+    .split(/\s*\+\s*/)
+    .map(normalizeKeyPart)
+    .filter(Boolean);
   if (combo.length === 0) return '未设置';
   return combo.map((p) => KEY_PART_ZH[p] || p).join(' + ');
 }
@@ -94,7 +127,9 @@ export function loadShortcuts(): Record<string, string> {
   const defaults: Record<string, string> = {};
   for (const item of SHORTCUT_ITEMS) defaults[item.id] = item.binding;
   try {
-    const saved = configService.get<Record<string, string>>('shortcuts.overrides');
+    const saved = configService.get<Record<string, string>>(
+      'shortcuts.overrides'
+    );
     const merged: Record<string, string> = { ...defaults };
     for (const item of SHORTCUT_ITEMS) {
       const v = saved[item.id];
@@ -109,10 +144,10 @@ export function loadShortcuts(): Record<string, string> {
 export function findConflict(
   map: Record<string, string>,
   id: string,
-  key: string,
+  key: string
 ): ShortcutItem | null {
   const hit = SHORTCUT_ITEMS.find(
-    (item) => item.id !== id && (map[item.id] || '') === key,
+    (item) => item.id !== id && (map[item.id] || '') === key
   );
   return hit ?? null;
 }
@@ -121,4 +156,64 @@ export function isCustomized(map: Record<string, string>, id: string): boolean {
   const cur = (map[id] || '').trim();
   const def = defaultBindingOf(id).trim();
   return Boolean(cur) && cur !== def;
+}
+
+/** 快捷键分组键：设置页展示分组（从 SettingsShortcutsTab 拆出，tab 侧 re-export 保持兼容） */
+export type ShortcutCategoryKey = 'system' | 'session' | 'workspace' | 'other';
+
+export const SHORTCUT_CATEGORY_MAP: Record<string, ShortcutCategoryKey> = {
+  toggle_settings: 'system',
+  open_models: 'system',
+  open_usage: 'system',
+  open_security: 'system',
+  open_shortcuts: 'system',
+  open_extensions: 'system',
+  open_schedule: 'system',
+  export_logs: 'system',
+  new_session: 'session',
+  focus_composer: 'session',
+  branch_session: 'session',
+  stop_generation: 'session',
+  toggle_plan_mode: 'session',
+  toggle_sidebar: 'workspace',
+};
+
+export const CATEGORY_I18N_KEYS: Record<
+  ShortcutCategoryKey,
+  { key: string; fallback: string }
+> = {
+  system: { key: 'settings.shortcuts.groupGlobal', fallback: '全局快捷键' },
+  session: { key: 'settings.shortcuts.groupChat', fallback: '对话与编辑' },
+  workspace: {
+    key: 'settings.shortcuts.groupNavigation',
+    fallback: '界面导航',
+  },
+  other: { key: 'common.more', fallback: '其他' },
+};
+
+/** 键盘事件 → 快捷键组合 token（与原 SettingsShortcutsTab 录制逻辑一致）；仅修饰键未成完整组合时返回 null */
+export function eventToShortcutKeys(e: KeyboardEvent): string[] | null {
+  const keys: string[] = [];
+  if (e.ctrlKey) keys.push('Ctrl');
+  if (e.shiftKey) keys.push('Shift');
+  if (e.altKey) keys.push('Alt');
+  if (e.metaKey) keys.push('Meta');
+  if (
+    !['Control', 'Shift', 'Alt', 'Meta', 'Process', 'Unidentified'].includes(
+      e.key
+    )
+  ) {
+    let keyName = e.key;
+    if (keyName === ' ') keyName = 'Space';
+    keys.push(keyName.length === 1 ? keyName.toUpperCase() : keyName);
+  }
+
+  // 仅修饰键：继续等待完整组合
+  if (
+    keys.length === 0 ||
+    keys.every((k) => ['Ctrl', 'Shift', 'Alt', 'Meta'].includes(k))
+  ) {
+    return null;
+  }
+  return keys;
 }
