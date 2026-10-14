@@ -2,6 +2,7 @@
  * apps/crish-desktop/src/hooks/chat-stream/slashSendQueueHelper.ts
  * 负责并发检测、排队消息入库与 Follow-up 队列调度（单一职责叶）
  */
+import { addContextInjection } from '../../api/storeAccess';
 import { addMessage } from '../../api/storeAccess';
 import { getSessionById } from '../../store/sessionStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
@@ -88,7 +89,23 @@ export function flushContextStateBeforeSend(
       return undefined;
     }
 
-    // 状态已随附进入用户消息本身，不再生成独立的 carrier 载体消息（避免双重提示）
+    // 状态已随附进入用户消息本身，不再生成独立的 carrier 载体消息（避免双重提示）；
+    // 但感知注入仍需以 workspace_env 卡片落载体（所见即所知，P1-e 契约）
+    addContextInjection(sessionId, {
+      id: `context-state-${sessionId}-${Date.now()}`,
+      kind: 'memory',
+      status: 'active',
+      source: 'context_state',
+      title: 'Context state switch',
+      content: rawText,
+      timestamp: Date.now(),
+      metadata: {
+        mode: 'context-state',
+        changed: [...changed],
+        // P1-e：只写变化字段（未变化字段不进 metadata，消费侧不得猜测）
+        ...Object.fromEntries(changed.map((k) => [k, next[k]])),
+      },
+    });
 
     // 成功发送后更新该会话最后发送的状态签名与结构化快照（快照是全量，不只是变化字段）
     if (rawText) setLastSentContextSignature(sessionId, rawText);

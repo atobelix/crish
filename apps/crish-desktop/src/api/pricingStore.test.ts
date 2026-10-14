@@ -24,7 +24,11 @@ import {
 } from './pricingStore';
 import { modelsCatalogStore } from './modelsCatalogStore';
 import { catalogSnapshot } from '../test-utils/modelsCatalogSnapshot';
-import type { ModelRef, PricingConfig, ProviderSpec } from './modelsCatalogTypes';
+import type {
+  ModelRef,
+  PricingConfig,
+  ProviderSpec,
+} from './modelsCatalogTypes';
 import type {
   CatalogCacheSnapshot,
   CatalogSnapshotPrice,
@@ -155,7 +159,9 @@ describe('pricingStore 4D（树用户声明价 + 全局乘数；与 v3 向下兼
     expect(resolveModelPrice(TEST)?.inputPerMTok).toBe(10);
     expect(resolveModelPrice(TEST)?.model).toBe('test-model');
     // 旧 fuzzy（model.includes(key) / key.includes(model)）已按裁决 ③ 废止
-    expect(resolveModelPrice(ref('custom', 'prefix-test-model-suffix'))).toBeNull();
+    expect(
+      resolveModelPrice(ref('custom', 'prefix-test-model-suffix'))
+    ).toBeNull();
     expect(resolveModelPrice(ref('custom', 'test'))).toBeNull();
     expect(resolveModelPrice(ref('custom', 'test-model-0731'))).toBeNull();
     expect(resolveModelPrice(ref('custom', 'no-such-model'))).toBeNull();
@@ -280,9 +286,9 @@ describe('v4 出厂字典快照（前端零本地副本；御十家）', () => {
   });
 
   it('御十家全量覆盖：条目数 ≥ 100（官方 ID + apiModel 别名）', () => {
-    expect(Object.keys(dictionarySnapshot().prices).length).toBeGreaterThanOrEqual(
-      100
-    );
+    expect(
+      Object.keys(dictionarySnapshot().prices).length
+    ).toBeGreaterThanOrEqual(100);
   });
 
   it('各厂商代表条目四指标绝对价正确（数据源 = Rust 出厂字典）', () => {
@@ -295,14 +301,18 @@ describe('v4 出厂字典快照（前端零本地副本；御十家）', () => {
     expect(ds.cacheWriteFree).toBe(true);
 
     // OpenAI：5.6 系有写价 1.25x；旧轨写免费
-    expect(resolve4dPrices(ref('openai', 'gpt-5.6-sol'))!.cacheWritePerMTok).toBe(
-      6.25
-    );
+    expect(
+      resolve4dPrices(ref('openai', 'gpt-5.6-sol'))!.cacheWritePerMTok
+    ).toBe(6.25);
     expect(resolve4dPrices(ref('openai', 'gpt-5.6-sol'))!.cacheWriteFree).toBe(
       false
     );
-    expect(resolve4dPrices(ref('openai', 'gpt-5.5'))!.cacheWriteFree).toBe(true);
-    expect(resolve4dPrices(ref('openai', 'gpt-5.5'))!.cacheWritePerMTok).toBe(0);
+    expect(resolve4dPrices(ref('openai', 'gpt-5.5'))!.cacheWriteFree).toBe(
+      true
+    );
+    expect(resolve4dPrices(ref('openai', 'gpt-5.5'))!.cacheWritePerMTok).toBe(
+      0
+    );
     expect(
       resolve4dPrices(ref('openai', 'gpt-5.4-mini'))!.cacheReadPerMTok
     ).toBeCloseTo(0.075, 10);
@@ -326,14 +336,15 @@ describe('v4 出厂字典快照（前端零本地副本；御十家）', () => {
     // Kimi：CNY + 写免费
     expect(getModelCurrency(ref('kimi', 'kimi-k3'))).toBe('CNY');
     expect(resolve4dPrices(ref('kimi', 'kimi-k3'))!.cacheReadPerMTok).toBe(2);
-    expect(resolve4dPrices(ref('kimi', 'kimi-k2-6'))!.cacheReadPerMTok).toBe(1.1);
+    expect(resolve4dPrices(ref('kimi', 'kimi-k2-6'))!.cacheReadPerMTok).toBe(
+      1.1
+    );
 
     // GLM（zai USD 站）
     expect(getModelCurrency(ref('zai', 'glm-5-2'))).toBe('USD');
-    expect(resolve4dPrices(ref('zai', 'glm-5-2'))!.cacheReadPerMTok).toBeCloseTo(
-      0.26,
-      10
-    );
+    expect(
+      resolve4dPrices(ref('zai', 'glm-5-2'))!.cacheReadPerMTok
+    ).toBeCloseTo(0.26, 10);
     expect(
       resolve4dPrices(ref('zai', 'glm-4-5-air'))!.cacheReadPerMTok
     ).toBeCloseTo(0.03, 10);
@@ -394,9 +405,11 @@ describe('v4 出厂字典快照（前端零本地副本；御十家）', () => {
       expect(resolveCatalogCachePrices(alias)).toEqual(a);
     }
 
-    // **歧义别名 = 未收录**：`glm-5.2` 在出厂字典里被两条**不同价**条目主张
-    // （实测 claims=2），按 fail-closed 语义整键作废——**不得**按 entries 顺序任选一个。
-    expect(resolveCatalogCachePrices(ref('zai', 'glm-5.2'))).toBeNull();
+    // 2026-10-14 数据修复：glm-5.2 曾被 `-cny` 变体条目经 apiModel 误主张（claims=2）
+    // → 歧义已从出厂字典清零，别名恢复收录且与官方 ID 同价。
+    expect(resolveCatalogCachePrices(ref('zai', 'glm-5.2'))).toEqual(
+      resolveCatalogCachePrices(ref('zai', 'glm-5-2'))
+    );
 
     // 出厂字典按 **模型 id** 索引（字典内 id 唯一）：providerId 不属于字典命名空间，
     // 故同一 id 换 provider 仍命中同一条目 —— 这不是「跨 provider 串价」，
@@ -405,6 +418,34 @@ describe('v4 出厂字典快照（前端零本地副本；御十家）', () => {
     expect(resolveCatalogCachePrices(ref('openai', 'qwen3.7-max'))).toEqual(
       resolveCatalogCachePrices(ref('dashscope', 'qwen3.7-max'))
     );
+  });
+
+  it('同键不同价 fail-closed（claim 冲突整键作废——机制由构造夹具钉死）', () => {
+    const snap = toCatalogCacheSnapshot({
+      version: 1,
+      entries: [
+        {
+          model: 'dual-price-model',
+          inputPrice: 1,
+          outputPrice: 2,
+          currency: 'USD',
+        },
+        {
+          model: 'dual-price-model-cny',
+          apiModel: 'dual-price-model',
+          inputPrice: 8,
+          outputPrice: 20,
+          currency: 'CNY',
+        },
+      ],
+    } as never) as { prices: Record<string, unknown> };
+    // 同一别名被两条不同价主张 → 歧义别名键作废；变体条目自身主 id 正常收录
+    expect(snap.prices['dual-price-model']).toBeUndefined();
+    expect(snap.prices['dual-price-model-cny']).toMatchObject({
+      currency: 'CNY',
+      inputPerMTok: 8,
+      outputPerMTok: 20,
+    });
   });
 
   it('精确二元组：版本后缀 / 子串命中目录键的旧 fuzzy 行为已废止', () => {
@@ -416,7 +457,8 @@ describe('v4 出厂字典快照（前端零本地副本；御十家）', () => {
     expect(resolveCatalogCachePrices(ref('deepseek', 'flash'))).toBeNull();
     // 精确命中仍在
     expect(
-      resolveCatalogCachePrices(ref('deepseek', 'deepseek-v4-flash'))?.readPerMTok
+      resolveCatalogCachePrices(ref('deepseek', 'deepseek-v4-flash'))
+        ?.readPerMTok
     ).toBeCloseTo(0.0028, 10);
   });
 });
@@ -702,7 +744,10 @@ describe('v4 1h 档（Anthropic 双档写价）与运行时快照', () => {
       // 估算函数按 input 长度落档（DEEPCHECK-05 §8 场景：500K in + 50K out
       // 基础档 $1.60 vs 长档 $2.90，低估 ≈45% 修复）
       const baseCost = estimateCostUsd4d(g, 500_000, 50_000, 0, 0);
-      expect(baseCost).toBeCloseTo(500_000 / 1e6 * 4 + 50_000 / 1e6 * 18, 10);
+      expect(baseCost).toBeCloseTo(
+        (500_000 / 1e6) * 4 + (50_000 / 1e6) * 18,
+        10
+      );
       expect(baseCost).toBeGreaterThan(1.6);
       // 2D 估算同样落档
       expect(estimateCostUsd(g, 200_000, 0)).toBeCloseTo(0.8, 10);
@@ -724,9 +769,9 @@ describe('v4 1h 档（Anthropic 双档写价）与运行时快照', () => {
 
     it('qwen3-6-plus ≥256K 档覆盖写价（档内 cacheWrite 10 vs 基础 2.5）', () => {
       const qwen = ref('dashscope', 'qwen3-6-plus');
-      expect(
-        resolve4dPricesForTokens(qwen, 255_999)?.cacheWritePerMTok
-      ).toBe(2.5);
+      expect(resolve4dPricesForTokens(qwen, 255_999)?.cacheWritePerMTok).toBe(
+        2.5
+      );
       expect(resolve4dPricesForTokens(qwen, 256_000)?.cacheWritePerMTok).toBe(
         10
       );
@@ -755,8 +800,10 @@ describe('v4 1h 档（Anthropic 双档写价）与运行时快照', () => {
         cacheReadPerMTok: 0.6,
       });
       expect(
-        resolve4dPricesForTokens(ref('deepseek', 'deepseek-v4-flash'), 1_000_000)
-          ?.inputPerMTok
+        resolve4dPricesForTokens(
+          ref('deepseek', 'deepseek-v4-flash'),
+          1_000_000
+        )?.inputPerMTok
       ).toBe(0.14);
     });
 
@@ -808,7 +855,7 @@ describe('v4 1h 档（Anthropic 双档写价）与运行时快照', () => {
           cacheReadPerMTok: 0.6,
         });
         expect(estimateCostUsd4d(g, 250_000, 10_000, 0, 0)).toBeCloseTo(
-          250_000 / 1e6 * 6 + 10_000 / 1e6 * 26,
+          (250_000 / 1e6) * 6 + (10_000 / 1e6) * 26,
           10
         );
       } finally {
@@ -819,7 +866,11 @@ describe('v4 1h 档（Anthropic 双档写价）与运行时快照', () => {
     it('快照缺基础四价 → 未收录（不回退任何本地表）', () => {
       const g = ref('google', 'gemini-3-1-pro-preview');
       applyFixture(3, [
-        ['google', 'gemini-3-1-pro-preview', { readPerMTok: 0.5, writePerMTok: 0 }],
+        [
+          'google',
+          'gemini-3-1-pro-preview',
+          { readPerMTok: 0.5, writePerMTok: 0 },
+        ],
       ]);
       try {
         // 只有缓存价、无 input/output → 2D/4D 均无法成立 → 未收录

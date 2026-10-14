@@ -32,6 +32,10 @@ const roManagerMock = vi.hoisted(() => {
 
 vi.mock('../../utils/ResizeObserverManager', () => ({
   ResizeObserverManager: { getInstance: () => roManagerMock.instance },
+  WindowBlurWatchdog: class {
+    static DEFAULT_TIMEOUT_MS = 200;
+    armWatchdog() {}
+  },
 }));
 
 vi.mock('../../app/compositionRoot', () => ({

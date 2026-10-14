@@ -3,6 +3,7 @@
  *
  * ↑↓ 移动高亮；Enter 确认；Escape 关闭。仅 open 时监听。
  * 跳过 IME composing / Process 键。
+ * ≠ EL-01：本实现为 SD-13 独立键位漫游面（非 EL-01 复用件，域与职责不同）。
  * 结合 LeafScope 与焦点包含守卫，杜绝非活跃分屏全局截获按键。
  */
 
