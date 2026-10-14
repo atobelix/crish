@@ -24,6 +24,12 @@ import {
   type JsonObject,
 } from '@crish/shared-types';
 
+declare module '@crish/shared-types' {
+  interface CrishErrorPayload {
+    readonly params?: Record<string, unknown> | undefined;
+  }
+}
+
 /** 用户可见的错误展示模型 */
 export interface UserVisibleError {
   /** 是否对终端用户可见（由 payload.public 决定；severity=silent 时消费方也应隐藏） */
@@ -522,6 +528,7 @@ export function resolveActionKeyFallback(actionKey: string): string {
 
 /**
  * 安全的模板参数插值函数，严格防御原型链注入（__proto__ / constructor / prototype）。
+ * 针对复杂对象/数组自动以安全 JSON 序列化，杜绝 "[object Object]" 裸露。
  */
 export function interpolateParams(
   template: string,
@@ -546,8 +553,58 @@ export function interpolateParams(
     if (val === null || val === undefined) {
       return '';
     }
+    if (typeof val === 'number') {
+      if (Number.isNaN(val) || !Number.isFinite(val)) {
+        return '-';
+      }
+      return String(val);
+    }
+    if (val instanceof Error) {
+      return val.message || String(val);
+    }
+    if (typeof val === 'object') {
+      try {
+        const json = JSON.stringify(val);
+        return json !== undefined ? json : '';
+      } catch {
+        return '';
+      }
+    }
+    if (typeof val === 'function') {
+      return '';
+    }
     return String(val);
   });
+}
+
+/**
+ * 提取并合并用于模板插值的动态参数：
+ * 优先级：payload 基础字段 ({ code, message, category }) < metadata < params (Rust/IPC 动态参数) < 显式调用参数 params
+ */
+function extractPayloadParams(
+  payload: CrishErrorPayload,
+  explicitParams?: Record<string, unknown>
+): Record<string, unknown> {
+  const rawParams = (payload as { params?: unknown }).params;
+  const metadataMap =
+    payload.metadata &&
+    typeof payload.metadata === 'object' &&
+    !Array.isArray(payload.metadata)
+      ? (payload.metadata as Record<string, unknown>)
+      : {};
+  const paramsMap =
+    rawParams && typeof rawParams === 'object' && !Array.isArray(rawParams)
+      ? (rawParams as Record<string, unknown>)
+      : {};
+
+  return {
+    code: payload.code,
+    message: payload.message,
+    category: payload.category,
+    ...metadataMap,
+    ...paramsMap,
+    ...(explicitParams ?? {}),
+  };
 }
 
 /**
@@ -625,10 +682,7 @@ export function toUserVisibleError(
   const severity = mapSeverity(payload);
   const display = resolveDisplay(payload.code);
 
-  const mergedParams: Record<string, unknown> = {
-    ...(payload.metadata ?? {}),
-    ...(params ?? {}),
-  };
+  const mergedParams = extractPayloadParams(payload, params);
 
   const title = safeTranslate(
     effectiveTranslate,
@@ -684,7 +738,7 @@ export function resolveActionText(
   const payload = normalizeCrishError(input);
   const effectiveTranslate = translate ?? activeTranslateFn ?? undefined;
   const display = resolveDisplay(payload.code);
-  const mergedParams = { ...(payload.metadata ?? {}), ...(params ?? {}) };
+  const mergedParams = extractPayloadParams(payload, params);
 
   if (
     payload.code === 'runtime.aborted' ||
@@ -719,7 +773,7 @@ export function resolveTitleText(
   const payload = normalizeCrishError(input);
   const effectiveTranslate = translate ?? activeTranslateFn ?? undefined;
   const display = resolveDisplay(payload.code);
-  const mergedParams = { ...(payload.metadata ?? {}), ...(params ?? {}) };
+  const mergedParams = extractPayloadParams(payload, params);
 
   return safeTranslate(
     effectiveTranslate,
@@ -746,7 +800,19 @@ export function normalizeCrishError(error: unknown): CrishErrorPayload {
   }
   // CrishError 优先于鸭子类型检查（CrishError 也有 code/category 字段但缺 timestamp）
   if (error instanceof CrishError) {
-    return toErrorPayload(error);
+    const payload = toErrorPayload(error);
+    const rawParams = (error as { params?: unknown }).params;
+    if (
+      rawParams &&
+      typeof rawParams === 'object' &&
+      !Array.isArray(rawParams)
+    ) {
+      return {
+        ...payload,
+        params: rawParams as Record<string, unknown>,
+      };
+    }
+    return payload;
   }
   // 鸭子类型识别 CrishErrorPayload（纯数据对象，含 code + category 字符串字段）
   if (
@@ -780,6 +846,11 @@ export function normalizeCrishError(error: unknown): CrishErrorPayload {
           ? obj.action
           : 'action.common.report_bug',
       timestamp: Date.now(),
+      ...(obj.params !== undefined &&
+      typeof obj.params === 'object' &&
+      !Array.isArray(obj.params)
+        ? { params: obj.params as Record<string, unknown> }
+        : {}),
       ...(obj.metadata !== undefined
         ? { metadata: obj.metadata as JsonObject }
         : {}),

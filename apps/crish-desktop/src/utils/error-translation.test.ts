@@ -785,3 +785,123 @@ describe('global error translation registration and text resolvers', () => {
     expect(action).toBe('Please check tool parameters and try again.');
   });
 });
+
+describe('IPC dynamic error params & complex structure interpolation (AGENT-W4-TAURI-IPC-PAYLOAD)', () => {
+  it('safely serializes complex objects and arrays into JSON without producing [object Object]', () => {
+    const res = interpolateParams('Error context: {context}, items: {items}', {
+      context: { endpoint: 'https://api.openai.com/v1', attempts: 3 },
+      items: ['read', 'write'],
+    });
+    expect(res).not.toContain('[object Object]');
+    expect(res).toBe(
+      'Error context: {"endpoint":"https://api.openai.com/v1","attempts":3}, items: ["read","write"]'
+    );
+  });
+
+  it('safely handles NaN and non-finite numbers as dash', () => {
+    const res = interpolateParams('Rate: {rate}, Timeout: {timeout}', {
+      rate: Number.NaN,
+      timeout: Number.POSITIVE_INFINITY,
+    });
+    expect(res).toBe('Rate: -, Timeout: -');
+  });
+
+  it('extracts Error instance message cleanly in interpolation', () => {
+    const res = interpolateParams('Cause: {error}', {
+      error: new Error('Disk I/O failure'),
+    });
+    expect(res).toBe('Cause: Disk I/O failure');
+  });
+
+  it('toUserVisibleError automatically extracts payload.params from Rust IPC payload', () => {
+    const ipcPayload = {
+      ...makePayload({
+        code: 'tool.write_not_allowed',
+        message: 'Write denied for path {path}: policy violation',
+      }),
+      params: {
+        path: '/etc/shadow',
+        target: 'system_root',
+      },
+    };
+
+    const visible = toUserVisibleError(ipcPayload);
+    expect(visible.code).toBe('tool.write_not_allowed');
+    expect(visible.message).toBe(
+      'Write denied for path /etc/shadow: policy violation'
+    );
+  });
+
+  it('toUserVisibleError automatically injects payload.code as {code} placeholder', () => {
+    const ipcPayload = {
+      ...makePayload({
+        code: 'provider.network',
+        message: 'Request failed with error code {code}',
+      }),
+    };
+
+    const visible = toUserVisibleError(ipcPayload);
+    expect(visible.message).toBe(
+      'Request failed with error code provider.network'
+    );
+  });
+
+  it('correctly handles precedence: code < metadata < params < explicitParams', () => {
+    const ipcPayload = {
+      ...makePayload({
+        code: 'provider.timeout',
+        message: '{target} operation timed out ({code}) detail: {detail}',
+        metadata: {
+          target: 'metadata_target',
+          detail: 'meta_detail',
+        },
+      }),
+      params: {
+        target: 'params_target', // overrides metadata
+        detail: { reason: 'socket_hangup' },
+      },
+    };
+
+    // 1. Without explicit params: params overrides metadata, detail serialized to JSON
+    const visible1 = toUserVisibleError(ipcPayload);
+    expect(visible1.message).toBe(
+      'params_target operation timed out (provider.timeout) detail: {"reason":"socket_hangup"}'
+    );
+
+    // 2. With explicit params: explicit overrides params
+    const visible2 = toUserVisibleError(ipcPayload, undefined, {
+      target: 'explicit_target',
+    });
+    expect(visible2.message).toBe(
+      'explicit_target operation timed out (provider.timeout) detail: {"reason":"socket_hangup"}'
+    );
+  });
+
+  it('resolveActionText and resolveTitleText properly interpolate dynamic IPC params', () => {
+    const ipcPayload = {
+      ...makePayload({
+        code: 'tool.path_escape',
+        action: 'action.common.report_bug',
+        message: 'Path {path} is invalid',
+      }),
+      params: {
+        path: '../secret',
+      },
+    };
+
+    const actionText = resolveActionText(
+      ipcPayload,
+      (key, fallback, params) => {
+        return `Action on ${params?.path}: ${fallback}`;
+      }
+    );
+    expect(actionText).toContain('Action on ../secret:');
+  });
+
+  it('api/error-translation bridge re-exports error translation utilities', async () => {
+    const apiBridge = await import('../api/error-translation');
+    expect(apiBridge.toUserVisibleError).toBeTypeOf('function');
+    expect(apiBridge.interpolateParams).toBeTypeOf('function');
+    expect(apiBridge.normalizeCrishError).toBeTypeOf('function');
+  });
+});

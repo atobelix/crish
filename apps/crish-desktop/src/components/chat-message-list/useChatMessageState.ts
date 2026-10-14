@@ -7,6 +7,7 @@ import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlo
 import type { PinnedItem } from './MessageVirtualizer';
 import { pinSnippet } from './useScrollAnchor';
 import { DEFAULT_PIN_COLOR } from '../chat-message-row/colorPickerUtils';
+import { useI18n } from '../../i18n';
 
 // Stable references for selector fallbacks (React 19 useSyncExternalStore requires
 // getSnapshot to return the same reference when the underlying data hasn't changed).
@@ -107,6 +108,7 @@ export function useChatMessageState({
   onBatchApprove,
   onBatchDeny,
 }: UseChatMessageStateOptions) {
+  const { t } = useI18n();
   const [expandedToolsBySession, setExpandedToolsBySession] = useState<
     Record<string, Record<string, Record<string, boolean>>>
   >({});
@@ -138,7 +140,7 @@ export function useChatMessageState({
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const onShowToastRef = useRef((m: string) => toast.show(m));
-  
+
   const onRegenerateRef = useRef(onRegenerate);
   onRegenerateRef.current = onRegenerate;
   const onSendFollowUpRef = useRef(onSendFollowUp);
@@ -151,7 +153,9 @@ export function useChatMessageState({
     (s) => s.sessionsById[activeSessionId]?.pinnedMessageIds ?? EMPTY_PINNED_IDS
   );
   const pinnedMessageColors = useSessionStore(
-    (s) => s.sessionsById[activeSessionId]?.pinnedMessageColors ?? EMPTY_PINNED_COLORS
+    (s) =>
+      s.sessionsById[activeSessionId]?.pinnedMessageColors ??
+      EMPTY_PINNED_COLORS
   );
   const pinnedIdSet = useMemo(
     () => new Set(pinnedMessageIds),
@@ -224,19 +228,25 @@ export function useChatMessageState({
         e.preventDefault();
         e.stopPropagation();
         const text =
-          copyBtn.closest('.md-code-block')?.querySelector('pre')?.textContent ?? '';
+          copyBtn.closest('.md-code-block')?.querySelector('pre')
+            ?.textContent ?? '';
         if (!text) return;
         void navigator.clipboard.writeText(text).then(
           () => {
             copyBtn.classList.add('is-copied');
             const originalText = copyBtn.textContent;
-            copyBtn.textContent = '已复制';
+            copyBtn.textContent = t('common.copied');
+            copyBtn.setAttribute('aria-label', t('common.copied'));
             window.setTimeout(() => {
               copyBtn.classList.remove('is-copied');
-              copyBtn.textContent = originalText || '复制';
+              copyBtn.textContent = originalText || t('common.copy');
+              copyBtn.setAttribute(
+                'aria-label',
+                originalText || t('common.copy')
+              );
             }, 1500);
           },
-          () => toast.show('复制失败')
+          () => toast.show(t('common.copyFailed'))
         );
         return;
       }
@@ -244,14 +254,15 @@ export function useChatMessageState({
       if (pathBtn instanceof HTMLElement) {
         e.preventDefault();
         e.stopPropagation();
-        const path = pathBtn.getAttribute('data-path') || pathBtn.textContent || '';
+        const path =
+          pathBtn.getAttribute('data-path') || pathBtn.textContent || '';
         if (path.trim()) {
           onOpenPathRef.current?.(path.trim());
         }
         return;
       }
     },
-    []
+    [t]
   );
 
   const onToggleExpandUser = useCallback(

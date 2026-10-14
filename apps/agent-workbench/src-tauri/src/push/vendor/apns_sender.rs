@@ -269,11 +269,7 @@ mod tests {
 
     fn notification(token: &str) -> VendorNotification {
         VendorNotification::new(
-            VendorDevice {
-                device_id: "dev-1".to_string(),
-                push_token: token.to_string(),
-                platform: VendorPlatform::Ios,
-            },
+            VendorDevice::new("dev-1", token, VendorPlatform::Ios),
             PushLevel::P0Critical,
             "approval-requested:tc-9f3a",
             Some("session:s-7".to_string()),

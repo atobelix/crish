@@ -181,31 +181,60 @@ pub(crate) fn extract_goal_round_signals(messages: &[Arc<AgentMessage>]) -> Goal
     }
 }
 
+fn text_contains_chinese(text: &str) -> bool {
+    text.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c))
+}
+
 /// D5 §3.7：续轮注入文本构造（主源 = goal 前缀，增强 = nextSteps；
-/// 模板对齐 buildGoalModePrefix，goalModeController.ts:74-95）
+/// 模板对齐 buildGoalModePrefix，goalModeController.ts:74-95）。
+/// 支持中英双语自适应感知，避免纯英文会话被突发中文指令污染。
 pub(crate) fn build_goal_continuation_prompt(
     goal_state: &GoalState,
     next_steps: &[String],
 ) -> String {
     let round = goal_state.current_round + 1;
-    let mut text = format!(
-        "[目标模式 · 系统指令]\n\
-         你正在执行长期目标，请持续推进直至完成，并在每轮结束前自检进度。\n\
-         目标：{}\n\
-         当前第 {}/{} 轮（自动续写上限 {} 轮）。\n\
-         请工作直至目标实质完成；不要半途停下或只列计划而不执行。\n\
-         请在回复中维护 markdown 任务清单（`- [ ]` / `- [x]`），便于进度同步。\n\
-         若目标已完成，请在回复末尾明确写出 DONE 或「目标已完成」。",
-        goal_state.goal, round, goal_state.max_rounds, goal_state.max_rounds
-    );
-    if !next_steps.is_empty() {
-        text.push_str("\n上轮进度小结（供续接）：\n");
-        for step in next_steps {
-            text.push_str(&format!("- 下一步：{step}\n"));
+    let is_chinese = text_contains_chinese(&goal_state.goal)
+        || next_steps.iter().any(|s| text_contains_chinese(s));
+
+    if is_chinese {
+        let mut text = format!(
+            "[目标模式 · 系统指令]\n\
+             你正在执行长期目标，请持续推进直至完成，并在每轮结束前自检进度。\n\
+             目标：{}\n\
+             当前第 {}/{} 轮（自动续写上限 {} 轮）。\n\
+             请工作直至目标实质完成；不要半途停下或只列计划而不执行。\n\
+             请在回复中维护 markdown 任务清单（`- [ ]` / `- [x]`），便于进度同步。\n\
+             若目标已完成，请在回复末尾明确写出 DONE 或「目标已完成」。",
+            goal_state.goal, round, goal_state.max_rounds, goal_state.max_rounds
+        );
+        if !next_steps.is_empty() {
+            text.push_str("\n上轮进度小结（供续接）：\n");
+            for step in next_steps {
+                text.push_str(&format!("- 下一步：{step}\n"));
+            }
         }
+        text.push_str("---");
+        text
+    } else {
+        let mut text = format!(
+            "[Goal Mode · System Directive]\n\
+             You are executing a long-term goal. Please continue making progress until completion, and self-check your progress before the end of each round.\n\
+             Goal: {}\n\
+             Current round: {}/{} (auto-continuation limit: {} rounds).\n\
+             Please work until the goal is substantially completed; do not stop halfway or merely plan without executing.\n\
+             Please maintain a markdown task checklist (`- [ ]` / `- [x]`) in your reply to keep progress synchronized.\n\
+             If the goal has been achieved, explicitly write DONE or \"goal completed\" at the end of your response.",
+            goal_state.goal, round, goal_state.max_rounds, goal_state.max_rounds
+        );
+        if !next_steps.is_empty() {
+            text.push_str("\nPrevious round progress summary (for continuation):\n");
+            for step in next_steps {
+                text.push_str(&format!("- Next step: {step}\n"));
+            }
+        }
+        text.push_str("---");
+        text
     }
-    text.push_str("---");
-    text
 }
 
 /// D5 §3.9：GoalDecision → wire 值（Continue/Completed/NoProgress/
@@ -847,4 +876,34 @@ pub(crate) fn production_resume_launcher() -> ResumeLauncher {
         })
     });
     launcher
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_goal_continuation_prompt_chinese() {
+        let state = GoalState::new("重构认证模块", 10, 2);
+        let next_steps = vec!["运行测试".to_string()];
+        let prompt = build_goal_continuation_prompt(&state, &next_steps);
+        assert!(prompt.contains("[目标模式 · 系统指令]"));
+        assert!(prompt.contains("目标：重构认证模块"));
+        assert!(prompt.contains("当前第 1/10 轮"));
+        assert!(prompt.contains("- 下一步：运行测试"));
+        assert!(prompt.contains("若目标已完成，请在回复末尾明确写出 DONE 或「目标已完成」"));
+    }
+
+    #[test]
+    fn test_build_goal_continuation_prompt_english() {
+        let state = GoalState::new("Refactor authentication module", 10, 2);
+        let next_steps = vec!["Run test suite".to_string()];
+        let prompt = build_goal_continuation_prompt(&state, &next_steps);
+        assert!(prompt.contains("[Goal Mode · System Directive]"));
+        assert!(prompt.contains("Goal: Refactor authentication module"));
+        assert!(prompt.contains("Current round: 1/10"));
+        assert!(prompt.contains("- Next step: Run test suite"));
+        assert!(prompt.contains("explicitly write DONE or \"goal completed\""));
+        assert!(!prompt.contains("目标模式"));
+    }
 }

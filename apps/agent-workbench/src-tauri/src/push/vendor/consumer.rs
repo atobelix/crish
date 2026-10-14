@@ -370,19 +370,11 @@ mod tests {
     }
 
     fn ios_device(device_key: &str, token: &str) -> VendorDevice {
-        VendorDevice {
-            device_id: format!("dev-{device_key}"),
-            push_token: token.to_string(),
-            platform: VendorPlatform::Ios,
-        }
+        VendorDevice::new(format!("dev-{device_key}"), token, VendorPlatform::Ios)
     }
 
     fn android_device(device_key: &str, token: &str) -> VendorDevice {
-        VendorDevice {
-            device_id: format!("dev-{device_key}"),
-            push_token: token.to_string(),
-            platform: VendorPlatform::Android,
-        }
+        VendorDevice::new(format!("dev-{device_key}"), token, VendorPlatform::Android)
     }
 
     // ── 用例 ──

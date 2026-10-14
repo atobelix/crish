@@ -10,6 +10,7 @@ import { ScrollArea } from '../ui/ScrollArea';
 import { AppIcon } from '../ui/icons/index';
 import { copyTextToClipboard } from '@crish/shared-utils';
 import { useLeafScope } from '../../contexts/LeafScopeContext';
+import { useI18n } from '../../i18n';
 
 /** 超过此阈值（默认 256KB）将强制熔断切入虚拟化极速代码呈现 */
 export const DEFAULT_LARGE_FILE_THRESHOLD_BYTES = 256 * 1024;
@@ -126,6 +127,8 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> =
     const scopeRef = useRef(scope);
     scopeRef.current = scope;
 
+    const { t } = useI18n();
+
     const contentLength = content?.length || 0;
 
     // 1. 大文件前置硬熔断判定（>256KB 严格阻断进入 useAsyncMarkdownHtml）
@@ -143,116 +146,128 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> =
     );
 
     // 3. 容器级事件委托中枢（代码复制、路径跳转、外链拦截）
-    const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-      const target = e.target;
-      if (!(target instanceof HTMLElement)) return;
+    const handleClick = useCallback(
+      (e: React.MouseEvent<HTMLDivElement>) => {
+        const target = e.target;
+        if (!(target instanceof HTMLElement)) return;
 
-      // 3.1 拦截代码块复制按钮 (.md-code-copy)
-      const copyBtn = target.closest('.md-code-copy');
-      if (copyBtn instanceof HTMLElement) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const codeBlock = copyBtn.closest('.md-code-block');
-        const codeEl =
-          codeBlock?.querySelector('pre code') ||
-          codeBlock?.querySelector('pre') ||
-          codeBlock?.querySelector('code');
-        const textToCopy = codeEl?.textContent ?? '';
-
-        if (!textToCopy) return;
-
-        const applyCopiedState = () => {
-          copyBtn.classList.add('is-copied');
-          const originalText = copyBtn.textContent;
-          copyBtn.textContent = '✓ 已复制';
-
-          setTimeout(() => {
-            copyBtn.classList.remove('is-copied');
-            copyBtn.textContent = originalText || '复制';
-          }, 1500);
-
-          onCopyFeedbackRef.current?.('success', textToCopy);
-        };
-
-        copyTextToClipboard(textToCopy).then((ok) => {
-          if (ok) {
-            applyCopiedState();
-          } else {
-            onCopyFeedbackRef.current?.('error', '写入剪贴板失败');
-          }
-        });
-        return;
-      }
-
-      // 3.2 拦截本地路径超链接微胶囊 (.md-path-link)
-      const pathBtn = target.closest('.md-path-link');
-      if (pathBtn instanceof HTMLElement) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const rawPath =
-          pathBtn.getAttribute('data-path') || pathBtn.textContent || '';
-        const { cleanPath, line, col } = parsePathAndLocation(rawPath);
-        if (cleanPath && !isExternalNavigableHref(cleanPath)) {
-          onOpenPathRef.current?.(cleanPath);
-          if (typeof window !== 'undefined') {
-            const currentScope = scopeRef.current;
-            const domLeaf = target
-              .closest<HTMLElement>('[data-leaf-id]')
-              ?.getAttribute('data-leaf-id');
-            const domSession = target
-              .closest<HTMLElement>('[data-session-id]')
-              ?.getAttribute('data-session-id');
-            const leafId = currentScope.leafId || domLeaf || undefined;
-            const sessionId = currentScope.sessionId || domSession || undefined;
-
-            window.dispatchEvent(
-              new CustomEvent('crish-open-file', {
-                detail: {
-                  path: cleanPath,
-                  line,
-                  col,
-                  ...(leafId ? { leafId } : {}),
-                  ...(sessionId ? { sessionId } : {}),
-                },
-              })
-            );
-          }
-        }
-        return;
-      }
-
-      // 3.3 外链导航单轨：sanitizeUrlCandidate + isSafeHref（禁止大小写敏感 startsWith 启发式）
-      const anchor = target.closest('a');
-      if (anchor instanceof HTMLAnchorElement) {
-        const href = anchor.getAttribute('href');
-        if (href == null) return;
-
-        const sanitized = sanitizeUrlCandidate(href);
-        if (!sanitized) {
+        // 3.1 拦截代码块复制按钮 (.md-code-copy)
+        const copyBtn = target.closest('.md-code-copy');
+        if (copyBtn instanceof HTMLElement) {
           e.preventDefault();
           e.stopPropagation();
+
+          const codeBlock = copyBtn.closest('.md-code-block');
+          const codeEl =
+            codeBlock?.querySelector('pre code') ||
+            codeBlock?.querySelector('pre') ||
+            codeBlock?.querySelector('code');
+          const textToCopy = codeEl?.textContent ?? '';
+
+          if (!textToCopy) return;
+
+          const applyCopiedState = () => {
+            copyBtn.classList.add('is-copied');
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = `✓ ${t('common.copied')}`;
+            copyBtn.setAttribute('aria-label', t('common.copied'));
+
+            setTimeout(() => {
+              copyBtn.classList.remove('is-copied');
+              copyBtn.textContent = originalText || t('common.copy');
+              copyBtn.setAttribute(
+                'aria-label',
+                originalText || t('common.copy')
+              );
+            }, 1500);
+
+            onCopyFeedbackRef.current?.('success', textToCopy);
+          };
+
+          copyTextToClipboard(textToCopy).then((ok) => {
+            if (ok) {
+              applyCopiedState();
+            } else {
+              onCopyFeedbackRef.current?.('error', t('common.copyFailed'));
+            }
+          });
           return;
         }
 
-        if (isExternalNavigableHref(sanitized)) {
+        // 3.2 拦截本地路径超链接微胶囊 (.md-path-link)
+        const pathBtn = target.closest('.md-path-link');
+        if (pathBtn instanceof HTMLElement) {
           e.preventDefault();
           e.stopPropagation();
-          if (isSafeHref(sanitized)) {
-            openExternalUrl(sanitized);
+
+          const rawPath =
+            pathBtn.getAttribute('data-path') || pathBtn.textContent || '';
+          const { cleanPath, line, col } = parsePathAndLocation(rawPath);
+          if (cleanPath && !isExternalNavigableHref(cleanPath)) {
+            onOpenPathRef.current?.(cleanPath);
+            if (typeof window !== 'undefined') {
+              const currentScope = scopeRef.current;
+              const domLeaf = target
+                .closest<HTMLElement>('[data-leaf-id]')
+                ?.getAttribute('data-leaf-id');
+              const domSession = target
+                .closest<HTMLElement>('[data-session-id]')
+                ?.getAttribute('data-session-id');
+              const leafId = currentScope.leafId || domLeaf || undefined;
+              const sessionId =
+                currentScope.sessionId || domSession || undefined;
+
+              window.dispatchEvent(
+                new CustomEvent('crish-open-file', {
+                  detail: {
+                    path: cleanPath,
+                    line,
+                    col,
+                    ...(leafId ? { leafId } : {}),
+                    ...(sessionId ? { sessionId } : {}),
+                  },
+                })
+              );
+            }
           }
           return;
         }
 
-        // 未知/危险绝对 scheme：禁止落入 WebView 默认导航
-        if (/^[a-z][a-z0-9+.-]*:/i.test(sanitized) && !isSafeHref(sanitized)) {
-          e.preventDefault();
-          e.stopPropagation();
+        // 3.3 外链导航单轨：sanitizeUrlCandidate + isSafeHref（禁止大小写敏感 startsWith 启发式）
+        const anchor = target.closest('a');
+        if (anchor instanceof HTMLAnchorElement) {
+          const href = anchor.getAttribute('href');
+          if (href == null) return;
+
+          const sanitized = sanitizeUrlCandidate(href);
+          if (!sanitized) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
+
+          if (isExternalNavigableHref(sanitized)) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (isSafeHref(sanitized)) {
+              openExternalUrl(sanitized);
+            }
+            return;
+          }
+
+          // 未知/危险绝对 scheme：禁止落入 WebView 默认导航
+          if (
+            /^[a-z][a-z0-9+.-]*:/i.test(sanitized) &&
+            !isSafeHref(sanitized)
+          ) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+          // 相对路径 / #锚点：保持既有默认行为（不外开）
         }
-        // 相对路径 / #锚点：保持既有默认行为（不外开）
-      }
-    }, []);
+      },
+      [t]
+    );
 
     // 4. 空内容分支优雅呈现
     if (!content || !content.trim()) {

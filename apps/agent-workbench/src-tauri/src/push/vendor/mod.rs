@@ -62,7 +62,7 @@ pub use credentials::{CredentialsProvider, EnvCredentialsProvider};
 pub use hms_sender::{HmsSender, HmsTokenCache};
 
 /// 设备平台（D7 §8.2 `push_devices.platform` 枚举子集）
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum VendorPlatform {
     /// iOS（APNs）
     Ios,
@@ -81,7 +81,7 @@ impl VendorPlatform {
 }
 
 /// 推送目标设备（发送寻址最小集；完整注册表字段见 D7 §8.2 `push_devices`）
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct VendorDevice {
     /// 设备注册 id（registry 主键）
     pub device_id: String,
@@ -89,6 +89,31 @@ pub struct VendorDevice {
     pub push_token: String,
     /// 设备平台（决定通道选择）
     pub platform: VendorPlatform,
+    /// 设备偏好语言（如 "zh-CN", "en-US"，默认为 None 时走兜底语言）
+    #[serde(default)]
+    pub preferred_language: Option<String>,
+}
+
+impl VendorDevice {
+    /// 构造新设备（缺省偏好语言为 None）
+    pub fn new(
+        device_id: impl Into<String>,
+        push_token: impl Into<String>,
+        platform: VendorPlatform,
+    ) -> Self {
+        Self {
+            device_id: device_id.into(),
+            push_token: push_token.into(),
+            platform,
+            preferred_language: None,
+        }
+    }
+
+    /// 设置偏好语言（构建器风格）
+    pub fn with_language(mut self, language: impl Into<String>) -> Self {
+        self.preferred_language = Some(language.into());
+        self
+    }
 }
 
 /// 单条厂商推送通知（R3 装配轮的输入契约）
@@ -319,11 +344,7 @@ mod tests {
     }
 
     fn device(token: &str) -> VendorDevice {
-        VendorDevice {
-            device_id: "dev-1".to_string(),
-            push_token: token.to_string(),
-            platform: VendorPlatform::Ios,
-        }
+        VendorDevice::new("dev-1", token, VendorPlatform::Ios)
     }
 
     fn notification(token: &str) -> VendorNotification {

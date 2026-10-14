@@ -167,6 +167,16 @@ pub fn night_summary_date(now_ms: u64, cfg: &QuietHoursConfig) -> String {
 /// 到窗口起始日）；日期键取首条折叠时刻的窗口起始日。空列表返回
 /// 零统计摘要（total=0，groups 空——调用方通常应在空时跳过生成）。
 pub fn compose_night_summary(items: &[NightSummaryItem], cfg: &QuietHoursConfig) -> NightSummary {
+    compose_night_summary_with_locale(items, cfg, None)
+}
+
+/// 携带设备偏好语言的多语言夜间摘要合成纯函数
+pub fn compose_night_summary_with_locale(
+    items: &[NightSummaryItem],
+    cfg: &QuietHoursConfig,
+    locale: Option<&str>,
+) -> NightSummary {
+    let is_en = matches!(locale, Some(l) if l.trim().to_ascii_lowercase().starts_with("en"));
     let mut groups: Vec<NightSummaryGroup> = Vec::new();
     for item in items {
         match groups.iter_mut().find(|g| g.scene == item.scene) {
@@ -192,11 +202,24 @@ pub fn compose_night_summary(items: &[NightSummaryItem], cfg: &QuietHoursConfig)
         .unwrap_or_default();
 
     // 正文：D7 §3.4.3 样例同构（类型/数量；单条形态带业务键样本）
-    let clauses: Vec<String> = groups.iter().map(summary_group_clause).collect();
-    let mut body = format!("夜间完成 {total} 项");
+    let clauses: Vec<String> = groups.iter().map(|g| summary_group_clause_localized(g, is_en)).collect();
+    let mut body = if is_en {
+        if total == 1 {
+            format!("{total} item completed during quiet hours")
+        } else {
+            format!("{total} items completed during quiet hours")
+        }
+    } else {
+        format!("夜间完成 {total} 项")
+    };
     if !clauses.is_empty() {
-        body.push('：');
-        body.push_str(&clauses.join("、"));
+        if is_en {
+            body.push_str(": ");
+            body.push_str(&clauses.join(", "));
+        } else {
+            body.push('：');
+            body.push_str(&clauses.join("、"));
+        }
     }
     NightSummary {
         date,
@@ -208,55 +231,112 @@ pub fn compose_night_summary(items: &[NightSummaryItem], cfg: &QuietHoursConfig)
     }
 }
 
-/// 场景 → 摘要正文片段（单条带业务键样本；多条 ×N 计数；cron 同族计数）
+/// 场景 → 摘要正文片段（向后兼容默认中文）
+#[allow(dead_code)]
 fn summary_group_clause(group: &NightSummaryGroup) -> String {
+    summary_group_clause_localized(group, false)
+}
+
+/// 场景 → 摘要正文片段（多语言支持）
+fn summary_group_clause_localized(group: &NightSummaryGroup, is_en: bool) -> String {
     let n = group.count;
-    match group.scene {
-        SceneId::RunCompleted => single_or_many(
-            n,
-            &format!("任务 {} 已完成", group.first_biz_key),
-            &format!("任务完成 ×{n}"),
-        ),
-        SceneId::RunCancelled => single_or_many(
-            n,
-            &format!("任务 {} 已取消", group.first_biz_key),
-            &format!("任务取消 ×{n}"),
-        ),
-        SceneId::SubagentCompleted => single_or_many(
-            n,
-            &format!("子代理 {} 完成", group.first_biz_key),
-            &format!("子代理完成 ×{n}"),
-        ),
-        SceneId::TaskCompleted => single_or_many(
-            n,
-            &format!("任务 {} 已完成", group.first_biz_key),
-            &format!("任务完成 ×{n}"),
-        ),
-        SceneId::TaskKilled => single_or_many(
-            n,
-            &format!("任务 {} 已被终止", group.first_biz_key),
-            &format!("任务终止 ×{n}"),
-        ),
-        SceneId::TaskFailed => single_or_many(
-            n,
-            &format!("任务 {} 失败", group.first_biz_key),
-            &format!("任务失败 ×{n}"),
-        ),
-        SceneId::TaskSuspicious => single_or_many(
-            n,
-            &format!("任务 {} 疑似卡死", group.first_biz_key),
-            &format!("任务疑似卡死 ×{n}"),
-        ),
-        SceneId::TimerFired => single_or_many(
-            n,
-            &format!("定时器 {} 已到期", group.first_biz_key),
-            &format!("定时器到期 ×{n}"),
-        ),
-        // cron 同族折叠计数（S9b：同 cron_id 静默时段只推首条，其余进摘要；
-        // biz_key 即 cronId，正文形态 = D7 样例「cron-2 触发 3 次」）
-        SceneId::CronFired => format!("{} 触发 {n} 次", group.first_biz_key),
-        // 其他场景保守回退（登记表外 P1 折叠兜底）
-        _ => format!("{} ×{n}", group.scene.as_str()),
+    if is_en {
+        match group.scene {
+            SceneId::RunCompleted => single_or_many(
+                n,
+                &format!("Task {} completed", group.first_biz_key),
+                &format!("{n} tasks completed"),
+            ),
+            SceneId::RunCancelled => single_or_many(
+                n,
+                &format!("Task {} cancelled", group.first_biz_key),
+                &format!("{n} tasks cancelled"),
+            ),
+            SceneId::SubagentCompleted => single_or_many(
+                n,
+                &format!("Subagent {} completed", group.first_biz_key),
+                &format!("{n} subagents completed"),
+            ),
+            SceneId::TaskCompleted => single_or_many(
+                n,
+                &format!("Task {} completed", group.first_biz_key),
+                &format!("{n} tasks completed"),
+            ),
+            SceneId::TaskKilled => single_or_many(
+                n,
+                &format!("Task {} terminated", group.first_biz_key),
+                &format!("{n} tasks terminated"),
+            ),
+            SceneId::TaskFailed => single_or_many(
+                n,
+                &format!("Task {} failed", group.first_biz_key),
+                &format!("{n} tasks failed"),
+            ),
+            SceneId::TaskSuspicious => single_or_many(
+                n,
+                &format!("Task {} suspected stalled", group.first_biz_key),
+                &format!("{n} tasks suspected stalled"),
+            ),
+            SceneId::TimerFired => single_or_many(
+                n,
+                &format!("Timer {} expired", group.first_biz_key),
+                &format!("{n} timers expired"),
+            ),
+            SceneId::CronFired => if n == 1 {
+                format!("{} triggered 1 time", group.first_biz_key)
+            } else {
+                format!("{} triggered {n} times", group.first_biz_key)
+            },
+            _ => format!("{} ×{n}", group.scene.as_str()),
+        }
+    } else {
+        match group.scene {
+            SceneId::RunCompleted => single_or_many(
+                n,
+                &format!("任务 {} 已完成", group.first_biz_key),
+                &format!("任务完成 ×{n}"),
+            ),
+            SceneId::RunCancelled => single_or_many(
+                n,
+                &format!("任务 {} 已取消", group.first_biz_key),
+                &format!("任务取消 ×{n}"),
+            ),
+            SceneId::SubagentCompleted => single_or_many(
+                n,
+                &format!("子代理 {} 完成", group.first_biz_key),
+                &format!("子代理完成 ×{n}"),
+            ),
+            SceneId::TaskCompleted => single_or_many(
+                n,
+                &format!("任务 {} 已完成", group.first_biz_key),
+                &format!("任务完成 ×{n}"),
+            ),
+            SceneId::TaskKilled => single_or_many(
+                n,
+                &format!("任务 {} 已被终止", group.first_biz_key),
+                &format!("任务终止 ×{n}"),
+            ),
+            SceneId::TaskFailed => single_or_many(
+                n,
+                &format!("任务 {} 失败", group.first_biz_key),
+                &format!("任务失败 ×{n}"),
+            ),
+            SceneId::TaskSuspicious => single_or_many(
+                n,
+                &format!("任务 {} 疑似卡死", group.first_biz_key),
+                &format!("任务疑似卡死 ×{n}"),
+            ),
+            SceneId::TimerFired => single_or_many(
+                n,
+                &format!("定时器 {} 已到期", group.first_biz_key),
+                &format!("定时器到期 ×{n}"),
+            ),
+            // cron 同族折叠计数（S9b：同 cron_id 静默时段只推首条，其余进摘要；
+            // biz_key 即 cronId，正文形态 = D7 样例「cron-2 触发 3 次」）
+            SceneId::CronFired => format!("{} 触发 {n} 次", group.first_biz_key),
+            // 其他场景保守回退（登记表外 P1 折叠兜底）
+            _ => format!("{} ×{n}", group.scene.as_str()),
+        }
     }
 }
 

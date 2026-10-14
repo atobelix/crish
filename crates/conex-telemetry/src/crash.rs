@@ -77,6 +77,7 @@ fn payload_to_panic_error(payload: &Box<dyn std::any::Any + Send>) -> CrishError
         retryable: false,
         is_public: false,
         action: "action.common.report_bug".to_string(),
+        params: None,
         metadata: Some(serde_json::json!({ "thread": thread })),
         cause: None,
         stack: None,

@@ -124,7 +124,11 @@ mod throttle;
 mod vendor;
 
 pub use coalesce::{CoalesceState, CoalesceWindows, MergedPush, PendingPush};
-pub use copy::{message_with_copy, render_copy, CopyText};
+pub use copy::{
+    message_with_copy, message_with_copy_for_device, message_with_copy_locale, render_copy,
+    render_copy_for_device, render_copy_with_locale, render_night_summary_copy,
+    render_night_summary_for_device, render_night_summary_with_locale, CopyText,
+};
 pub use dedupe::{DedupeBackend, DedupeState, MemoryDedupeBackend, SqliteDedupeBackend};
 pub use engine::{DecisionOutcome, PushDecision, PushDecisionEngine};
 pub use intent::{
@@ -142,8 +146,9 @@ pub use pusher::{
     PushDispatcher,
 };
 pub use quiet::{
-    compose_night_summary, night_summary_date, NightSummary, NightSummaryGroup, NightSummaryItem,
-    QuietHoursConfig, QuietPolicy, DEFAULT_QUIET_END_MINUTES, DEFAULT_QUIET_START_MINUTES,
+    compose_night_summary, compose_night_summary_with_locale, night_summary_date, NightSummary,
+    NightSummaryGroup, NightSummaryItem, QuietHoursConfig, QuietPolicy, DEFAULT_QUIET_END_MINUTES,
+    DEFAULT_QUIET_START_MINUTES,
 };
 pub use scenes::SceneId;
 pub use schema::{

@@ -54,19 +54,24 @@ pub const DEFAULT_REF_AGE_THRESHOLD_HOURS: u64 = DEFAULT_REVERT_MAX_REF_AGE_HOUR
 /// started_at 注入段标题（M1 `ContextInjection.title` 使用；render 渲染为
 /// `## 会话注入（started_at）`，快照断言锚点）
 pub const STARTED_AT_SECTION_TITLE: &str = "会话注入（started_at）";
+pub const STARTED_AT_SECTION_TITLE_EN: &str = "Session Injection (started_at)";
 /// git 回退指引段标题（M1 `ContextInjection.title` 使用；render 渲染为
 /// `## git 回退谨慎指引`，快照断言锚点）
 pub const REVERT_CAUTION_TITLE: &str = "git 回退谨慎指引";
+pub const REVERT_CAUTION_TITLE_EN: &str = "Git Revert Caution Guideline";
 /// 注释保留规范段标题（M1 `ContextInjection.title` 使用；render 渲染为
 /// `## 注释保留规范`，快照断言锚点）
 pub const COMMENT_PRESERVATION_TITLE: &str = "注释保留规范";
+pub const COMMENT_PRESERVATION_TITLE_EN: &str = "Comment Preservation Guideline";
 /// 权限申请指引段标题（T-D-14 权限传递层；M1 `ContextInjection.title`
 /// 使用；render 渲染为 `## 权限申请指引`，快照断言锚点）
 pub const PERMISSION_RELAY_TITLE: &str = "权限申请指引";
+pub const PERMISSION_RELAY_TITLE_EN: &str = "Permission Request Guideline";
 /// 文档产出目录注入段标题（T-EG-09 REQ-G01 通知 AI；M1
 /// `ContextInjection.title` 使用；render 渲染为 `## 文档产出目录`，
 /// 快照断言锚点）
 pub const OUTPUT_DIR_SECTION_TITLE: &str = "文档产出目录";
+pub const OUTPUT_DIR_SECTION_TITLE_EN: &str = "Document Output Directory";
 
 /// epoch ms → ISO8601（毫秒精度 UTC，`2026-07-31T08:00:00.000Z`；与
 /// engine.rs now_iso_utc / session-loop hydrate.rs 同源的 Howard Hinnant
@@ -97,21 +102,36 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 }
 
 /// started_at 注入正文（不含标题行；`@dynamic` 标记 + ISO8601 + epoch ms +
-/// 隔离边界声明）。
+/// started_at 注入正文（不含标题行；`@dynamic` 标记 + ISO8601 + epoch ms +
+/// 隔离边界声明）。支持可选 locale 语言适配（en 时输出英文）。
 ///
 /// 注入内容是 C2 验收 1 的断言对象：系统提示词包含 started_at 且等于库内
 /// session_agents.started_at（epoch ms 精确匹配 + ISO8601 可读形态双呈现）。
 /// 挂载方经 `ContextInjection::new(kind, STARTED_AT_SECTION_TITLE, content)`
 /// 挂载，标题由 M1 render 渲染为 `## {title}`。
-pub fn started_at_section(started_at_ms: i64) -> String {
+pub fn started_at_section_with_locale(started_at_ms: i64, locale: Option<&str>) -> String {
+    let is_en = locale.map_or(false, |l| l.to_ascii_lowercase().starts_with("en"));
     let iso = iso8601_from_epoch_ms(started_at_ms);
-    format!(
-        "{DYNAMIC_MARKER}：时间戳字段，字节级一致断言豁免\n\
-         - started_at（创建时间 ISO8601）：{iso}\n\
-         - started_at（创建时间 epoch ms）：{started_at_ms}\n\
-         - 该时间点是隔离边界的一部分：你创建于上述时间点；续跑（resume/fork 复用）\
-         共享同一 started_at，不随会话推进刷新。"
-    )
+    if is_en {
+        format!(
+            "{DYNAMIC_MARKER}: Timestamp field, exempt from byte-level consistency assertion\n\
+             - started_at (ISO8601 creation time): {iso}\n\
+             - started_at (epoch ms creation time): {started_at_ms}\n\
+             - This timestamp is part of the isolation boundary: you were created at the time above. Resumed runs (resume/fork reuse) share the same started_at and are not refreshed as the session progresses."
+        )
+    } else {
+        format!(
+            "{DYNAMIC_MARKER}：时间戳字段，字节级一致断言豁免\n\
+             - started_at（创建时间 ISO8601）：{iso}\n\
+             - started_at（创建时间 epoch ms）：{started_at_ms}\n\
+             - 该时间点是隔离边界的一部分：你创建于上述时间点；续跑（resume/fork 复用）\
+             共享同一 started_at，不随会话推进刷新。"
+        )
+    }
+}
+
+pub fn started_at_section(started_at_ms: i64) -> String {
+    started_at_section_with_locale(started_at_ms, None)
 }
 
 /// 续跑不刷新（C2 边界 2）：库中已存在（首次创建时间）→ 原值；
@@ -126,25 +146,39 @@ pub fn resolve_started_at(existing: Option<i64>, fallback_now_ms: i64) -> i64 {
 }
 
 /// git 回退谨慎指引正文（不含标题行；提示词协议层固定片段，
-/// 04 C2 验收 3 快照断言对象）。
+/// 04 C2 验收 3 快照断言对象）。支持可选 locale 语言适配（en 时输出英文）。
 ///
 /// 阈值参数化：文案结构固定，`{threshold_hours}` 数字随配置变化；命中
 /// 「早于阈值」输出固定指引——单文件修复优先（git checkout -- <file> 级），
 /// 整体回退仅在单文件修复失败后发起并走 C3 审批门禁。
 /// 挂载方经 `ContextInjection::new(kind, REVERT_CAUTION_TITLE, content)`
 /// 挂载。
+pub fn git_revert_caution_section_with_locale(threshold_hours: u64, locale: Option<&str>) -> String {
+    let is_en = locale.map_or(false, |l| l.to_ascii_lowercase().starts_with("en"));
+    if is_en {
+        format!(
+            "- You are a subagent created at started_at (see above; this timestamp is part of the isolation boundary);\n\
+             - Before executing git revert operations, check the target ref age: if the commit timestamp of the target ref is older than your started_at by more than {threshold_hours} hours (configurable threshold, default 24 hours), prioritize single-file repairs (git checkout -- <file> level within your file domain), and avoid overall revert;\n\
+             - Only initiate an overall revert when single-file repair fails and a full revert is strictly necessary. Overall revert must go through approval gating (C3: large-scale revert approval, approver=user, full-access not exempt) and will not be executed without approval;\n\
+             - When revert is rejected or exceeds threshold, narrow the revert scope or switch to single-file repair."
+        )
+    } else {
+        format!(
+            "- 你是子代理，创建于 started_at（见上，该时间点是隔离边界的一部分）；\n\
+             - 执行 git 回退类操作前先自查目标状态年代：若目标 ref 的提交时间早于你的 \
+             started_at 超过 {threshold_hours} 小时（判定阈值可配，默认 24 小时），\
+             优先采用单文件修复（git checkout -- <file> 级别，在你的文件域内直接改文件），\
+             不要整体回退；\n\
+             - 只有单文件修复失败、且确需整体回退时，才发起整体回退——整体回退必须走\
+             审批门禁（C3：大面积回退审批，审批人=user，full-access 不豁免），\
+             未经审批不会执行；\n\
+             - 回退被拒或超阈值时，请缩小回退范围或改用单文件修复。"
+        )
+    }
+}
+
 pub fn git_revert_caution_section(threshold_hours: u64) -> String {
-    format!(
-        "- 你是子代理，创建于 started_at（见上，该时间点是隔离边界的一部分）；\n\
-         - 执行 git 回退类操作前先自查目标状态年代：若目标 ref 的提交时间早于你的 \
-         started_at 超过 {threshold_hours} 小时（判定阈值可配，默认 24 小时），\
-         优先采用单文件修复（git checkout -- <file> 级别，在你的文件域内直接改文件），\
-         不要整体回退；\n\
-         - 只有单文件修复失败、且确需整体回退时，才发起整体回退——整体回退必须走\
-         审批门禁（C3：大面积回退审批，审批人=user，full-access 不豁免），\
-         未经审批不会执行；\n\
-         - 回退被拒或超阈值时，请缩小回退范围或改用单文件修复。"
-    )
+    git_revert_caution_section_with_locale(threshold_hours, None)
 }
 
 /// 注释保留规范注入段正文（不含标题行；REQ-E03 提示词面落地，提示词协议层
@@ -261,27 +295,47 @@ pub fn ref_older_than_threshold(
 
 /// 子代理会话注入项集合（M1 挂载点转录形状）：`(标题, 正文)` 列表，
 /// 挂载方逐项 `ContextInjector::push(ContextInjection::new(kind, title, content))`。
+/// 支持可选 locale 语言适配（en 时输出英文）。
 ///
 /// - `started_at_ms = Some(ts)`：产出 started_at 段 + git 回退指引段两条；
 /// - `None`（主 agent / 非子代理 run 上下文）：空列表——无注入时行为不变
 ///   （C2 只作用于子代理 run 上下文）。
-pub fn subagent_session_injections(
+pub fn subagent_session_injections_with_locale(
     started_at_ms: Option<i64>,
     threshold_hours: u64,
+    locale: Option<&str>,
 ) -> Vec<(String, String)> {
     let Some(started_at_ms) = started_at_ms else {
         return Vec::new();
     };
+    let is_en = locale.map_or(false, |l| l.to_ascii_lowercase().starts_with("en"));
+    let title_started = if is_en {
+        STARTED_AT_SECTION_TITLE_EN
+    } else {
+        STARTED_AT_SECTION_TITLE
+    };
+    let title_revert = if is_en {
+        REVERT_CAUTION_TITLE_EN
+    } else {
+        REVERT_CAUTION_TITLE
+    };
     vec![
         (
-            STARTED_AT_SECTION_TITLE.to_string(),
-            started_at_section(started_at_ms),
+            title_started.to_string(),
+            started_at_section_with_locale(started_at_ms, locale),
         ),
         (
-            REVERT_CAUTION_TITLE.to_string(),
-            git_revert_caution_section(threshold_hours),
+            title_revert.to_string(),
+            git_revert_caution_section_with_locale(threshold_hours, locale),
         ),
     ]
+}
+
+pub fn subagent_session_injections(
+    started_at_ms: Option<i64>,
+    threshold_hours: u64,
+) -> Vec<(String, String)> {
+    subagent_session_injections_with_locale(started_at_ms, threshold_hours, None)
 }
 
 #[cfg(test)]
@@ -329,6 +383,19 @@ mod tests {
         assert!(system_prompt.contains("## git 回退谨慎指引"));
         // 注入不吞 base 段（顺序保持：base 在前、会话注入在后）
         assert!(system_prompt.starts_with(base));
+    }
+
+    #[test]
+    fn injected_system_prompt_english_locale() {
+        let sections =
+            subagent_session_injections_with_locale(Some(ANCHOR_MS), DEFAULT_REF_AGE_THRESHOLD_HOURS, Some("en"));
+        assert_eq!(sections.len(), 2);
+        assert_eq!(sections[0].0, STARTED_AT_SECTION_TITLE_EN);
+        assert!(sections[0].1.contains("ISO8601 creation time"));
+        assert!(sections[0].1.contains("This timestamp is part of the isolation boundary"));
+        assert_eq!(sections[1].0, REVERT_CAUTION_TITLE_EN);
+        assert!(sections[1].1.contains("You are a subagent created at started_at"));
+        assert!(sections[1].1.contains("git checkout -- <file>"));
     }
 
     /// 续跑不刷新（C2 边界 2）：已存在库值 → 原值；同一库值两次构建字节一致

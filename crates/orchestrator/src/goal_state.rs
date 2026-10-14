@@ -503,24 +503,45 @@ fn parse_checklist_line(line: &str) -> Option<(bool, &str)> {
     Some((done, body.trim_end()))
 }
 
-/// 伪任务判据（前端 PSEUDO_TASK_RE 同构：`本轮总结` / `本轮小结` /
-/// `本轮回顾` 开头）
+/// 伪任务判据（前端 PSEUDO_TASK_RE 同构扩充：`本轮总结` / `本轮小结` /
+/// `本轮回顾` 或英文 `round summary` / `summary of this round` / `round recap` / `iteration summary` 开头）
 fn is_pseudo_task(body: &str) -> bool {
-    body.starts_with("本轮总结") || body.starts_with("本轮小结") || body.starts_with("本轮回顾")
+    let trimmed = body.trim_start();
+    if trimmed.starts_with("本轮总结")
+        || trimmed.starts_with("本轮小结")
+        || trimmed.starts_with("本轮回顾")
+    {
+        return true;
+    }
+    let lower = trimmed.to_lowercase();
+    lower.starts_with("round summary")
+        || lower.starts_with("summary of this round")
+        || lower.starts_with("round recap")
+        || lower.starts_with("iteration summary")
 }
 
 /// 文案 DONE 信号（L0 候选；对齐前端 replyLooksGoalDone，
 /// goalModeController.ts:52-56）：`\bDONE\b`（大小写不敏感，ASCII 单词
-/// 边界）或「目标已完成」
+/// 边界）或「目标已完成」/「全部任务完成」/「目标达成」/
+/// "goal completed" / "all tasks completed" / "goal achieved"
 pub fn reply_looks_goal_done(text: &str) -> bool {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         return false;
     }
-    if trimmed.contains("目标已完成") {
+    if trimmed.contains("目标已完成")
+        || trimmed.contains("全部任务完成")
+        || trimmed.contains("目标达成")
+    {
         return true;
     }
     let lower = trimmed.to_lowercase();
+    if lower.contains("goal completed")
+        || lower.contains("all tasks completed")
+        || lower.contains("goal achieved")
+    {
+        return true;
+    }
     let bytes = lower.as_bytes();
     for (index, window) in bytes.windows(4).enumerate() {
         if window == b"done" {
@@ -961,10 +982,10 @@ mod tests {
         );
     }
 
-    /// 伪任务三前缀全部丢弃
+    /// 伪任务中英文前缀全部丢弃
     #[test]
     fn checklist_pseudo_tasks_dropped() {
-        let text = "- [x] 本轮总结\n- [x] 本轮小结\n- [x] 本轮回顾\n- [x] 真实任务";
+        let text = "- [x] 本轮总结\n- [x] 本轮小结\n- [x] 本轮回顾\n- [x] Round Summary: next\n- [x] Summary of this round\n- [x] Round recap\n- [x] iteration summary\n- [x] 真实任务";
         let items = parse_checklist(text);
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].text, "真实任务");
@@ -978,6 +999,11 @@ mod tests {
         assert!(reply_looks_goal_done("done"));
         assert!(reply_looks_goal_done("全部完成 DONE"));
         assert!(reply_looks_goal_done("目标已完成"));
+        assert!(reply_looks_goal_done("全部任务完成"));
+        assert!(reply_looks_goal_done("目标达成"));
+        assert!(reply_looks_goal_done("Goal completed successfully"));
+        assert!(reply_looks_goal_done("All tasks completed."));
+        assert!(reply_looks_goal_done("The goal achieved"));
         assert!(reply_looks_goal_done("  完成 DONE  "));
         assert!(!reply_looks_goal_done(""));
         assert!(

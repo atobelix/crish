@@ -28,6 +28,51 @@ use super::super::handlers::{
 };
 use super::super::LoopError;
 
+/// 会话推导语言环境（避免跨语言 Steering 污染）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionLanguage {
+    Chinese,
+    English,
+}
+
+/// 会话语言检测器（基于会话特征推导语言环境）
+pub struct SessionLanguageDetector;
+
+impl SessionLanguageDetector {
+    /// 判定文本是否包含汉字字符（CJK 统一表意文字）
+    pub fn contains_chinese(text: &str) -> bool {
+        text.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c) || ('\u{3400}'..='\u{4dbf}').contains(&c))
+    }
+
+    /// 基于助手文本与会话上下文推导语言环境
+    pub fn detect(state: &LoopState, assistant_text: &str) -> SessionLanguage {
+        // 1. 若助手当前回复直接包含中文，判定为中文
+        if Self::contains_chinese(assistant_text) {
+            return SessionLanguage::Chinese;
+        }
+
+        // 2. 检查会话历史中最近的 User 消息
+        for msg in state.conversation.iter().rev() {
+            if msg.role == AgentMessageRole::User {
+                let user_text = msg.text();
+                if Self::contains_chinese(&user_text) {
+                    return SessionLanguage::Chinese;
+                }
+                if !user_text.trim().is_empty() {
+                    return SessionLanguage::English;
+                }
+            }
+        }
+
+        // 3. 兜底：若助手文本非空且无中文，推导为英文，否则回退为中文
+        if !assistant_text.trim().is_empty() && !Self::contains_chinese(assistant_text) {
+            SessionLanguage::English
+        } else {
+            SessionLanguage::Chinese
+        }
+    }
+}
+
 /// no-tool-calls handler（01 §2.6 / RUL-02）
 pub(crate) async fn handle(
     state: &mut LoopState,
@@ -91,11 +136,18 @@ pub(crate) async fn handle(
                             "检测到 AI 行动宣誓但未调用工具，触发 Tool-Promise 自愈推进"
                         );
 
-                        // 构造针对性的 Steering Nudge 注入下一轮
-                        let nudge_prompt = format!(
-                            "【系统自动推进】：你刚刚在回复中表达了执行动作的意图（“{}”），但当前轮次未检测到结构化的工具调用。请立即调用相应的系统工具（如 `shell_command`、`write_file` 等）执行操作，或者给出明确针对用户的最终结论。",
-                            snippet
-                        );
+                        // 构造针对性的 Steering Nudge 注入下一轮（依据会话语言自适应）
+                        let language = SessionLanguageDetector::detect(state, &text);
+                        let nudge_prompt = match language {
+                            SessionLanguage::English => format!(
+                                "[System Auto-Steer]: You expressed an intent to execute an action (\"{}\"), but no structured tool call was detected in the current turn. Please immediately call the appropriate system tool (such as `shell_command`, `write_file`, etc.) to execute the action, or provide a definitive final conclusion for the user.",
+                                snippet
+                            ),
+                            SessionLanguage::Chinese => format!(
+                                "【系统自动推进】：你刚刚在回复中表达了执行动作的意图（“{}”），但当前轮次未检测到结构化的工具调用。请立即调用相应的系统工具（如 `shell_command`、`write_file` 等）执行操作，或者给出明确针对用户的最终结论。",
+                                snippet
+                            ),
+                        };
 
                         let nudge_msg = AgentMessage {
                             id: new_message_id("nudge-promise"),
@@ -218,5 +270,51 @@ mod tests {
             DEFAULT_MAX_TOKENS * 4,
             "max_tokens 不得超出 32768 阶梯上限"
         );
+    }
+
+    #[test]
+    fn language_detector_classifies_correctly() {
+        assert!(SessionLanguageDetector::contains_chinese("你好世界"));
+        assert!(!SessionLanguageDetector::contains_chinese("Hello world"));
+
+        let state = streaming_state();
+        assert_eq!(
+            SessionLanguageDetector::detect(&state, "Hello world, I will execute the command"),
+            SessionLanguage::English
+        );
+        assert_eq!(
+            SessionLanguageDetector::detect(&state, "我来调用 shell_command"),
+            SessionLanguage::Chinese
+        );
+    }
+
+    #[tokio::test]
+    async fn english_action_promise_triggers_english_auto_steer_nudge() {
+        let mut state = streaming_state();
+        state.options.tool_exec.tool_promise_recovery_enabled = true;
+        state.options.tool_exec.max_tool_promise_heals = 2;
+
+        let assistant_msg = Arc::new(AgentMessage {
+            id: "msg-asst-1".into(),
+            role: AgentMessageRole::Assistant,
+            created_at: conex_shared::time::now_iso_utc(),
+            blocks: vec![AgentMessageBlock::Text {
+                text: "I will now run `cargo test` to verify the build.".into(),
+            }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        });
+        state.conversation.push(assistant_msg);
+
+        let outcome = handle(&mut state, None).await.unwrap();
+        assert!(outcome.end.is_none());
+        assert_eq!(state.tool_promise_heals, 1);
+
+        // 验证进入 steering 队列的消息为纯英文，无中文字符
+        let steer_msg = state.input_queue.dequeue().expect("应有 steering 消息入队");
+        let text = steer_msg.text();
+        assert!(text.starts_with("[System Auto-Steer]: You expressed an intent to execute an action"));
+        assert!(!SessionLanguageDetector::contains_chinese(&text), "英文会话自愈推进不得包含汉字");
     }
 }

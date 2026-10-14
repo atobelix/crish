@@ -349,3 +349,68 @@ fn run_terminal_serialization() {
     assert_eq!(json["reason"], "stop");
     assert!(json.get("error").is_none());
 }
+
+// ── 跨端动态参数序列化契约与兼容性（AGENT-W4-TAURI-IPC-PAYLOAD）──
+
+#[test]
+fn crish_error_and_payload_dynamic_params_serialization() {
+    let mut params = std::collections::HashMap::new();
+    params.insert("target".to_string(), serde_json::json!("workspace/foo.rs"));
+    params.insert("code".to_string(), serde_json::json!(403));
+    params.insert("detail".to_string(), serde_json::json!({ "subsystem": "sandbox" }));
+
+    let err = CrishError::new(codes::TOOL_WRITE_NOT_ALLOWED, "path access denied")
+        .with_params(params)
+        .with_param("attempt", 2);
+
+    let payload = err.to_error_payload(0);
+    assert_eq!(payload.code, codes::TOOL_WRITE_NOT_ALLOWED);
+    assert!(payload.params.is_some());
+
+    let json = serde_json::to_value(&payload).unwrap();
+    assert_eq!(json["code"], "tool.write_not_allowed");
+    assert_eq!(json["params"]["target"], "workspace/foo.rs");
+    assert_eq!(json["params"]["code"], 403);
+    assert_eq!(json["params"]["attempt"], 2);
+    assert_eq!(json["params"]["detail"]["subsystem"], "sandbox");
+
+    // 反序列化还原验证
+    let back: CrishErrorPayload = serde_json::from_value(json).unwrap();
+    assert_eq!(
+        back.params.as_ref().unwrap().get("target"),
+        Some(&serde_json::json!("workspace/foo.rs"))
+    );
+    assert_eq!(
+        back.params.as_ref().unwrap().get("attempt"),
+        Some(&serde_json::json!(2))
+    );
+}
+
+#[test]
+fn crish_error_payload_params_forward_backward_compatibility() {
+    // 1. 无 params 时 skip_serializing_if 成立，不输出 "params" 字段
+    let err_without_params = CrishError::new(codes::PROVIDER_NETWORK, "network down");
+    let payload = err_without_params.to_error_payload(0);
+    let json_val = serde_json::to_value(&payload).unwrap();
+    assert!(json_val.get("params").is_none());
+
+    // 2. 旧版无 params 的 JSON 能无缝反序列化为 None
+    let old_json = serde_json::json!({
+        "code": "provider.timeout",
+        "message": "timed out",
+        "category": "transient",
+        "retryable": true,
+        "public": true,
+        "action": "action.provider.retry",
+        "timestamp": 1700000000000i64
+    });
+    let restored: CrishErrorPayload = serde_json::from_value(old_json).unwrap();
+    assert!(restored.params.is_none());
+
+    // 3. 直接通过 payload.with_param / with_params 配置动态参数
+    let direct_payload = restored.with_param("retryAfterMs", 3000);
+    assert_eq!(
+        direct_payload.params.as_ref().unwrap().get("retryAfterMs"),
+        Some(&serde_json::json!(3000))
+    );
+}

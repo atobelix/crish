@@ -1461,6 +1461,8 @@ pub struct CrishError {
     pub category: CrishErrorCategory,
     pub retryable: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub params: Option<HashMap<String, serde_json::Value>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cause: Option<Box<CrishError>>,
@@ -1476,10 +1478,27 @@ impl CrishError {
             message: message.into(),
             category: info.category,
             retryable: info.retryable,
+            params: None,
             metadata: None,
             cause: None,
             timestamp: now_millis(),
         }
+    }
+
+    /// 附加单个动态参数（TS 端模板插值 {param} 消费）
+    pub fn with_param(mut self, key: impl Into<String>, value: impl Into<serde_json::Value>) -> Self {
+        let map = self.params.get_or_insert_with(HashMap::new);
+        map.insert(key.into(), value.into());
+        self
+    }
+
+    /// 附加多个动态参数
+    pub fn with_params(mut self, params: HashMap<String, serde_json::Value>) -> Self {
+        match self.params.as_mut() {
+            Some(existing) => existing.extend(params),
+            None => self.params = Some(params),
+        }
+        self
     }
 
     /// 覆盖 category（对齐 §2.1 设计原则 3：retryable 与 category 解耦）
@@ -1522,6 +1541,7 @@ impl CrishError {
                 retryable: false,
                 is_public: false,
                 action: "action.runtime.none".to_string(),
+                params: None,
                 metadata: Some(serde_json::json!({ "truncated": true })),
                 cause: None,
                 stack: None,
@@ -1536,6 +1556,7 @@ impl CrishError {
             retryable: self.retryable,
             is_public: info_val.is_public,
             action: info_val.action.to_string(),
+            params: self.params.clone(),
             metadata: self.metadata.clone(),
             cause: self
                 .cause
@@ -1550,7 +1571,7 @@ impl CrishError {
 /// 跨进程序列化错误负载（TS 端 CrishErrorPayload 同构）
 ///
 /// 字段一一对应 packages/shared-types/src/errors/serialize.ts 的 CrishErrorPayload：
-/// code / message / category / retryable / public / action / metadata / cause / stack / timestamp
+/// code / message / category / retryable / public / action / params / metadata / cause / stack / timestamp
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct CrishErrorPayload {
@@ -1563,6 +1584,8 @@ pub struct CrishErrorPayload {
     pub is_public: bool,
     pub action: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub params: Option<HashMap<String, serde_json::Value>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cause: Option<Box<CrishErrorPayload>>,
@@ -1572,6 +1595,22 @@ pub struct CrishErrorPayload {
 }
 
 impl CrishErrorPayload {
+    /// 附加单个动态参数
+    pub fn with_param(mut self, key: impl Into<String>, value: impl Into<serde_json::Value>) -> Self {
+        let map = self.params.get_or_insert_with(HashMap::new);
+        map.insert(key.into(), value.into());
+        self
+    }
+
+    /// 附加多个动态参数
+    pub fn with_params(mut self, params: HashMap<String, serde_json::Value>) -> Self {
+        match self.params.as_mut() {
+            Some(existing) => existing.extend(params),
+            None => self.params = Some(params),
+        }
+        self
+    }
+
     /// 从任意 std::error::Error 构造兜底 payload（TS 端 fromUnknownError 同构）
     ///
     /// 若 e 已是 CrishError，直接 to_error_payload(0)；否则用 common.unknown 兜底。
@@ -1587,6 +1626,7 @@ impl CrishErrorPayload {
             retryable: false,
             is_public: true,
             action: "action.common.report_bug".to_string(),
+            params: None,
             metadata: None,
             cause: None,
             stack: None,

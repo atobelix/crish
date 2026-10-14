@@ -248,11 +248,7 @@ mod tests {
 
     fn notification(level: PushLevel, token: &str) -> VendorNotification {
         VendorNotification::new(
-            VendorDevice {
-                device_id: "dev-9".to_string(),
-                push_token: token.to_string(),
-                platform: VendorPlatform::Android,
-            },
+            VendorDevice::new("dev-9", token, VendorPlatform::Android),
             level,
             "approval-requested:tc-9f3a",
             Some("session:s-7".to_string()),
@@ -346,11 +342,7 @@ mod tests {
     fn send_request_guards_and_optional_data() {
         let creds = credentials();
         let empty = VendorNotification::new(
-            VendorDevice {
-                device_id: "d".to_string(),
-                push_token: String::new(),
-                platform: VendorPlatform::Android,
-            },
+            VendorDevice::new("d", "", VendorPlatform::Android),
             PushLevel::P0Critical,
             "k",
             None,
@@ -363,11 +355,7 @@ mod tests {
         ));
 
         let no_session = VendorNotification::new(
-            VendorDevice {
-                device_id: "d".to_string(),
-                push_token: "tok".to_string(),
-                platform: VendorPlatform::Android,
-            },
+            VendorDevice::new("d", "tok", VendorPlatform::Android),
             PushLevel::P1Important,
             "k",
             None,

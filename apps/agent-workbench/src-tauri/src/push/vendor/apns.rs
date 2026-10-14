@@ -385,11 +385,7 @@ mod tests {
 
     fn notification(level: PushLevel, token: &str) -> VendorNotification {
         VendorNotification::new(
-            VendorDevice {
-                device_id: "dev-1".to_string(),
-                push_token: token.to_string(),
-                platform: VendorPlatform::Ios,
-            },
+            VendorDevice::new("dev-1", token, VendorPlatform::Ios),
             level,
             "approval-requested:tc-9f3a",
             Some("session:s-7".to_string()),
@@ -511,11 +507,7 @@ mod tests {
     fn payload_truncates_long_text() {
         let long = "超长正文".repeat(50); // 200 字
         let n = VendorNotification::new(
-            VendorDevice {
-                device_id: "d".to_string(),
-                push_token: "tok".to_string(),
-                platform: VendorPlatform::Ios,
-            },
+            VendorDevice::new("d", "tok", VendorPlatform::Ios),
             PushLevel::P1Important,
             "run-terminal:run-1",
             None,
@@ -539,11 +531,7 @@ mod tests {
     #[test]
     fn payload_falls_back_when_text_missing() {
         let n = VendorNotification::new(
-            VendorDevice {
-                device_id: "d".to_string(),
-                push_token: "tok".to_string(),
-                platform: VendorPlatform::Ios,
-            },
+            VendorDevice::new("d", "tok", VendorPlatform::Ios),
             PushLevel::P2Collapsible,
             "cache-waste-alert:run-9",
             None,
@@ -590,11 +578,7 @@ mod tests {
 
         // 空 token → Build 错误
         let empty = VendorNotification::new(
-            VendorDevice {
-                device_id: "d".to_string(),
-                push_token: String::new(),
-                platform: VendorPlatform::Ios,
-            },
+            VendorDevice::new("d", "", VendorPlatform::Ios),
             PushLevel::P0Critical,
             "k",
             None,

@@ -1339,6 +1339,8 @@ impl ContextInjector {
 /// [ContextInjector::render] 渲染为 `## 子代理角色约束`）
 #[allow(dead_code)] // F11 T-D-13 接线：spawn 装配路径消费（本文件测试先行断言）
 pub(crate) const SUBAGENT_ROLE_CONSTRAINT_TITLE: &str = "子代理角色约束";
+#[allow(dead_code)]
+pub(crate) const SUBAGENT_ROLE_CONSTRAINT_TITLE_EN: &str = "Subagent Role Constraint";
 
 /// 子代理角色约束注入段正文（T-D-03 冻结文案：测试断言全文匹配）。
 ///
@@ -1349,6 +1351,36 @@ pub(crate) const SUBAGENT_ROLE_CONSTRAINT_TITLE: &str = "子代理角色约束";
 pub(crate) const SUBAGENT_ROLE_CONSTRAINT_CONTENT: &str =
     "你没有创建子 Agent 的能力；所有子 Agent 由主 Agent 分配。\
      如需并行子任务、拆解或汇报，请通过消息/上报通道向主 Agent 提出，由主 Agent 统一派发。";
+
+#[allow(dead_code)]
+pub(crate) const SUBAGENT_ROLE_CONSTRAINT_CONTENT_EN: &str =
+    "You do not have the capability to create subagents; all subagents are assigned by the primary Agent. \
+     If parallel subtasks, decomposition, or reporting are needed, request them through the message/report channel to the primary Agent for unified dispatch.";
+
+/// 向 [ContextInjector] 追加「子代理角色约束」注入段（System 段），支持可选 locale。
+#[allow(dead_code)]
+pub(crate) fn push_subagent_role_constraint_with_locale(
+    injector: &mut ContextInjector,
+    locale: Option<&str>,
+) {
+    let is_en = locale.map_or(false, |l| l.to_ascii_lowercase().starts_with("en"));
+    let (title, content) = if is_en {
+        (
+            SUBAGENT_ROLE_CONSTRAINT_TITLE_EN,
+            SUBAGENT_ROLE_CONSTRAINT_CONTENT_EN,
+        )
+    } else {
+        (
+            SUBAGENT_ROLE_CONSTRAINT_TITLE,
+            SUBAGENT_ROLE_CONSTRAINT_CONTENT,
+        )
+    };
+    injector.push(ContextInjection::new(
+        ContextInjectionKind::System,
+        title,
+        content,
+    ));
+}
 
 /// T-D-03：向 [ContextInjector] 追加「子代理角色约束」注入段（System 段）。
 ///
@@ -1366,11 +1398,7 @@ pub(crate) const SUBAGENT_ROLE_CONSTRAINT_CONTENT: &str =
 /// 调用 `push_subagent_role_constraint(&mut injector)` 挂载本段。
 #[allow(dead_code)] // F11 T-D-13 接线：spawn 装配路径消费（本文件测试先行断言）
 pub(crate) fn push_subagent_role_constraint(injector: &mut ContextInjector) {
-    injector.push(ContextInjection::new(
-        ContextInjectionKind::System,
-        SUBAGENT_ROLE_CONSTRAINT_TITLE,
-        SUBAGENT_ROLE_CONSTRAINT_CONTENT,
-    ));
+    push_subagent_role_constraint_with_locale(injector, None);
 }
 // ── SessionLoopProducer ───────────────────────────────────────────
 
@@ -1708,5 +1736,25 @@ impl SessionLoopProducer {
         {
             sink.push(event);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_push_subagent_role_constraint_chinese_and_english() {
+        let mut injector_zh = ContextInjector::new();
+        push_subagent_role_constraint(&mut injector_zh);
+        let rendered_zh = injector_zh.render(None).expect("rendered prompt");
+        assert!(rendered_zh.contains("## 子代理角色约束"));
+        assert!(rendered_zh.contains(SUBAGENT_ROLE_CONSTRAINT_CONTENT));
+
+        let mut injector_en = ContextInjector::new();
+        push_subagent_role_constraint_with_locale(&mut injector_en, Some("en"));
+        let rendered_en = injector_en.render(None).expect("rendered prompt");
+        assert!(rendered_en.contains("## Subagent Role Constraint"));
+        assert!(rendered_en.contains(SUBAGENT_ROLE_CONSTRAINT_CONTENT_EN));
     }
 }
