@@ -19,6 +19,11 @@ export type TabMeta = {
   /** 搜索别名：中文同义词 + 常见英文缩写，便于键盘/搜索定位 */
   keywords: string[];
   demoOnly?: boolean;
+  /** 国际化键：侧栏与面板通用键 */
+  labelKey?: string;
+  titleKey?: string;
+  descriptionKey?: string;
+  groupKey?: string;
 };
 
 /**

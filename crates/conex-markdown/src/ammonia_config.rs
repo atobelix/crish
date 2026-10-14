@@ -69,10 +69,20 @@ fn build_ammonia() -> Builder<'static> {
     b.add_tag_attributes("img", ["src", "alt", "loading", "width", "height", "title"]);
     b.add_tag_attributes(
         "button",
-        ["type", "data-path", "title", "aria-label", "disabled"],
+        [
+            "type",
+            "data-path",
+            "title",
+            "aria-label",
+            "disabled",
+            "data-copy-button",
+        ],
     );
     b.add_tag_attributes("span", ["data-lang", "aria-label", "title"]);
-    b.add_tag_attributes("div", ["data-lang", "role", "aria-label", "title"]);
+    b.add_tag_attributes(
+        "div",
+        ["data-lang", "role", "aria-label", "title", "data-md-table"],
+    );
     b.add_tag_attributes("ol", ["start", "reversed"]);
     b.add_tag_attributes("th", ["scope", "style", "colspan", "rowspan"]);
     b.add_tag_attributes("td", ["style", "colspan", "rowspan"]);
@@ -139,5 +149,21 @@ mod tests {
             cleaned.contains("text-align:right"),
             "expected style attr preserved, got: {cleaned}"
         );
+    }
+
+    #[test]
+    fn sanitize_keeps_data_md_table_and_data_copy_button() {
+        let cleaned_div = sanitize(
+            "<div class=\"md-table-wrap\" role=\"region\" data-md-table=\"true\" aria-label=\"Table\"><table class=\"md-table\"><tbody></tbody></table></div>",
+        );
+        assert!(cleaned_div.contains("data-md-table=\"true\""));
+        assert!(cleaned_div.contains("aria-label=\"Table\""));
+
+        let cleaned_btn = sanitize(
+            "<button type=\"button\" class=\"md-code-copy\" data-copy-button=\"true\" title=\"Copy\" aria-label=\"Copy code\">Copy</button>",
+        );
+        assert!(cleaned_btn.contains("data-copy-button=\"true\""));
+        assert!(cleaned_btn.contains("title=\"Copy\""));
+        assert!(cleaned_btn.contains("aria-label=\"Copy code\""));
     }
 }

@@ -16,10 +16,12 @@ import type { CrishErrorCode, CrishErrorCategory } from './codes';
 export interface CrishErrorInfo {
   readonly code: CrishErrorCode;
   readonly title: string;
+  readonly titleKey?: string;
   readonly category: CrishErrorCategory;
   readonly retryable: boolean;
   readonly public: boolean;
   readonly action: string;
+  readonly actionKey?: string;
 }
 
 export const CRISH_ERROR_REGISTRY: Readonly<
@@ -391,17 +393,14 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     action: 'action.tool.wait_retry',
   },
   // session-integrity-repair 02 §4.1 F01：中断/取消/未知三码。
-  // 元信息与 Rust 注册表逐字一致（crates/conex-types/src/error.rs:721-747）。
-  // 注意：这三条的 action 在 Rust 侧是描述性文案而非 action.* i18n 键
-  // （Rust 原样保留），本表按「逐字一致」不变量照录——后续若归一为
-  // action.* 键需 Rust/TS 同步改，不可单侧漂移。
+  // i18n-full-remediation Wave 1：规范化收口为 action.* 命名空间键。
   'tool.aborted_before_dispatch': {
     code: 'tool.aborted_before_dispatch',
     title: '工具分发前已中止',
     category: 'permanent',
     retryable: false,
     public: true,
-    action: '请求已被用户或控制总线中止，无需重试',
+    action: 'action.tool.aborted_before_dispatch',
   },
   'tool.cancelled': {
     code: 'tool.cancelled',
@@ -409,7 +408,7 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     category: 'permanent',
     retryable: false,
     public: true,
-    action: '兄弟工具执行失败或批处理取消，跳过执行',
+    action: 'action.tool.cancelled',
   },
   'tool.outcome_unknown': {
     code: 'tool.outcome_unknown',
@@ -417,7 +416,7 @@ export const CRISH_ERROR_REGISTRY: Readonly<
     category: 'permanent',
     retryable: false,
     public: true,
-    action: '系统冷启动恢复自动合成未闭合调用，继续会话',
+    action: 'action.tool.outcome_unknown',
   },
   // ── tool.browser 子域（9 正式码，维度 17 §1.3 码表 + 22 裁决 U-12）──
   // 浏览器工具面：恢复期 gating（R-9）/域名门禁/能力位红线/急停/快照版本
@@ -917,5 +916,11 @@ export const CRISH_ERROR_REGISTRY: Readonly<
 
 /** 查询错误码元信息，未知码回退到 common.unknown */
 export function getErrorInfo(code: CrishErrorCode): CrishErrorInfo {
-  return CRISH_ERROR_REGISTRY[code] ?? CRISH_ERROR_REGISTRY['common.unknown'];
+  const info =
+    CRISH_ERROR_REGISTRY[code] ?? CRISH_ERROR_REGISTRY['common.unknown'];
+  return {
+    ...info,
+    titleKey: info.titleKey ?? `error.${info.code}.title`,
+    actionKey: info.actionKey ?? info.action,
+  };
 }

@@ -149,6 +149,9 @@ fn renders_gfm_tables_with_wrap_and_inline_bold_in_cells() {
     let md = "### 改进建议优先级\n\n| 优先级 | 建议 | 说明 |\n| --- | --- | --- |\n| **P0** | 重复列表 | 必须 |\n| P1 | 窄屏表格 | 应该 |\n";
     let html = render_markdown(md);
     assert!(html.contains("md-table-wrap"));
+    assert!(html.contains("data-md-table=\"true\""));
+    assert!(html.contains("aria-label=\"Table\""));
+    assert!(!html.contains("aria-label=\"表格\""));
     assert!(html.contains("md-table"));
     assert!(html.contains("<strong>P0</strong>"));
     assert_eq!(count_substr(&html, "<table"), 1);
@@ -446,6 +449,11 @@ fn renders_code_fence_copy_button_without_data_copy_payload() {
     setup();
     let html = render_markdown("```\nconst s = 'hi';\n```");
     assert!(html.contains("md-code-copy"));
+    assert!(html.contains("data-copy-button=\"true\""));
+    assert!(html.contains("title=\"Copy\""));
+    assert!(html.contains("aria-label=\"Copy code\""));
+    assert!(!html.contains("title=\"复制\""));
+    assert!(!html.contains("aria-label=\"复制代码\""));
     assert!(!html.contains("data-copy="));
     assert!(html.contains("md-code-pre"));
     assert_match(&html, r"const|hljs-keyword|keyword");

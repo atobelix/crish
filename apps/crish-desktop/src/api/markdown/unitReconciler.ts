@@ -41,8 +41,11 @@ function patchNode(target: Node, unit: MarkdownUnit): void {
   applyLayoutIsolation(targetElement);
 }
 
+export const TABLE_LAYOUT_ISOLATION_SELECTOR =
+  '.md-table-wrap, [data-md-table="true"], [role="region"][aria-label="表格"]';
+
 function applyLayoutIsolation(element: Element): void {
-  if (element.matches('.md-table-wrap, [role="region"][aria-label="表格"]')) {
+  if (element.matches(TABLE_LAYOUT_ISOLATION_SELECTOR)) {
     (element as HTMLElement).style.contain = 'layout';
   }
 }
@@ -66,9 +69,7 @@ function createUnitNode(unit: MarkdownUnit): Node {
     const element = clone as Element;
     applyLayoutIsolation(element);
     for (const nested of Array.from(
-      element.querySelectorAll(
-        '.md-table-wrap, [role="region"][aria-label="表格"]'
-      )
+      element.querySelectorAll(TABLE_LAYOUT_ISOLATION_SELECTOR)
     )) {
       applyLayoutIsolation(nested);
     }

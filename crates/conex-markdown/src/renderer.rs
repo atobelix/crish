@@ -616,7 +616,7 @@ impl Renderer {
             has_body: false,
         });
         self.output.push_str(
-            "<div class=\"md-table-wrap\" role=\"region\" aria-label=\"表格\"><table class=\"md-table\">",
+            "<div class=\"md-table-wrap\" role=\"region\" data-md-table=\"true\" aria-label=\"Table\"><table class=\"md-table\">",
         );
     }
 
@@ -1309,7 +1309,7 @@ fn build_code_fence_html_shell_into(
         out.push_str(&lang_escaped);
         out.push_str("</span>");
     }
-    out.push_str("<button type=\"button\" class=\"md-code-copy\" title=\"复制\" aria-label=\"复制代码\">复制</button></div></div><pre class=\"md-code-pre hljs\"><code class=\"language-");
+    out.push_str("<button type=\"button\" class=\"md-code-copy\" data-copy-button=\"true\" title=\"Copy\" aria-label=\"Copy code\">Copy</button></div></div><pre class=\"md-code-pre hljs\"><code class=\"language-");
     if !lang.is_empty() {
         out.push_str(&lang_escaped);
     }

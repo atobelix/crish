@@ -33,6 +33,23 @@ export const SESSION_ACTIONS_BTN_PX = 24;
 /** Drop indicator place; local type avoids circular runtime import with useSessionListDrag */
 export type SessionRowDropPlace = 'before' | 'after';
 
+/**
+ * 语言中立的会话标题纯净化函数。
+ * 剥离已知的多语言分支后缀（支持 - 分支, - branch, – branch, 以及可选圆括号）。
+ */
+export function getSessionCleanTitle(
+  titleOrSession:
+    string | SessionState | Parameters<typeof sessionListDisplayTitle>[0]
+): string {
+  const raw =
+    typeof titleOrSession === 'string'
+      ? titleOrSession
+      : sessionListDisplayTitle(titleOrSession);
+  return raw
+    .replace(/\s*[-–—]\s*(?:分支|branch)\s*$/i, '')
+    .replace(/\s*[(（](?:分支|branch)[)）]\s*$/i, '');
+}
+
 function isSessionMoreTarget(el: EventTarget | null): boolean {
   return (
     el instanceof Element &&
@@ -266,8 +283,7 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
   const dropPlace: SessionRowDropPlace | null = dropPlaceProp ?? null;
 
   const isBranched = !!s.branchParentId;
-  const baseTitle = sessionListDisplayTitle(s);
-  const displayText = baseTitle.replace(/ - 分支$/, '');
+  const displayText = getSessionCleanTitle(s);
   const titleHint = (titleHintProp ?? '').trim();
   const isRunning = s.messages?.some((m) => m.status === 'processing') ?? false;
   const sessionActive = s.id === activeSessionId;

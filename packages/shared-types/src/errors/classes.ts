@@ -18,6 +18,8 @@ export class CrishError extends Error {
   readonly retryable: boolean;
   readonly public: boolean;
   readonly action: string;
+  readonly titleKey?: string;
+  readonly actionKey?: string;
   readonly metadata?: JsonObject | undefined;
   readonly cause?: CrishError | undefined;
 
@@ -27,7 +29,13 @@ export class CrishError extends Error {
     category: CrishErrorCategory,
     retryable: boolean,
     metadata?: JsonObject,
-    options?: { cause?: CrishError; public?: boolean; action?: string }
+    options?: {
+      cause?: CrishError;
+      public?: boolean;
+      action?: string;
+      titleKey?: string;
+      actionKey?: string;
+    }
   ) {
     super(
       message,
@@ -46,6 +54,9 @@ export class CrishError extends Error {
         : CRISH_ERROR_REGISTRY['common.unknown'];
     this.public = options?.public ?? info.public;
     this.action = options?.action ?? info.action;
+    this.titleKey =
+      options?.titleKey ?? info.titleKey ?? `error.${info.code}.title`;
+    this.actionKey = options?.actionKey ?? info.actionKey ?? info.action;
     this.name = 'CrishError';
   }
 }

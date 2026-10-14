@@ -42,6 +42,9 @@ fn parity_code_fence_language_and_copy_chrome() {
     assert!(html.contains("md-code-block"));
     assert!(html.contains("md-code-lang"));
     assert!(html.contains("md-code-copy"));
+    assert!(html.contains("data-copy-button=\"true\""));
+    assert!(html.contains("title=\"Copy\""));
+    assert!(html.contains("aria-label=\"Copy code\""));
     assert!(html.contains("md-code-pre"));
     assert!(!html.contains("data-copy="));
     assert!(!html.contains("```"));

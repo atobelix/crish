@@ -160,7 +160,80 @@ describe('SettingsSchemaRenderer I4 死皮拉回', () => {
     );
 
     expect(document.querySelector('input[type="range"]')).toBeNull();
-    expect(screen.getByRole('slider', { name: '界面字号' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('slider', { name: '界面字号' })
+    ).toBeInTheDocument();
     expect(screen.getByText('14px')).toBeInTheDocument();
+  });
+
+  it('支持 i18n 键动态解析与 fallback 回退', () => {
+    const onSave = vi.fn();
+    render(
+      <SettingsSchemaRenderer
+        ready
+        onSave={onSave}
+        values={{ theme: 'dark', size: 16 }}
+        schema={[
+          {
+            title: '外观设置',
+            titleKey: 'settings.theme',
+            properties: [
+              {
+                key: 'theme',
+                type: 'select',
+                title: '主题',
+                titleKey: 'settings.theme',
+                desc: '界面主题外观',
+                descKey: 'custom.unmatched.desc',
+                placeholder: '请选择主题',
+                placeholderKey: 'custom.unmatched.placeholder',
+                options: [
+                  {
+                    value: 'dark',
+                    label: '深色模式',
+                    labelKey: 'settings.dark',
+                  },
+                ],
+              },
+              {
+                key: 'size',
+                type: 'range',
+                title: '字体大小',
+                titleKey: 'settings.fontSize',
+                unit: 'px',
+                unitKey: 'custom.unmatched.unit',
+                showValue: true,
+              },
+              {
+                key: 'skin',
+                type: 'preset-grid',
+                title: '预设',
+                presets: [
+                  {
+                    id: 'dark-preset',
+                    name: '深色主题预设',
+                    nameKey: 'settings.dark',
+                    preview: '#000',
+                  },
+                ],
+              },
+            ],
+          },
+        ]}
+      />
+    );
+
+    // Section title matched via settings.theme -> '主题' (in default zh-CN)
+    expect(screen.getAllByText('主题').length).toBeGreaterThanOrEqual(1);
+    // Unmatched descKey falls back to static desc '界面主题外观'
+    expect(screen.getByText('界面主题外观')).toBeInTheDocument();
+    // Options labelKey and Preset nameKey both matched settings.dark -> '深色'
+    expect(screen.getAllByText('深色').length).toBe(2);
+    // Range slider name matched settings.fontSize -> '字体大小'
+    expect(
+      screen.getByRole('slider', { name: '字体大小' })
+    ).toBeInTheDocument();
+    // Unmatched unitKey falls back to static unit 'px'
+    expect(screen.getByText('16px')).toBeInTheDocument();
   });
 });

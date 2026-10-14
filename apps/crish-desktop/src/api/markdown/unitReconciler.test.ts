@@ -87,9 +87,9 @@ describe('reconcileUnits', () => {
     expect(Array.from(container.querySelectorAll('th'))).toEqual(headerCells);
     expect(container.querySelector('tbody')).toBe(body);
     expect(container.querySelectorAll('tbody tr')[0]).toBe(firstRow);
-    expect(Array.from(container.querySelectorAll('tbody td')).slice(0, 2)).toEqual(
-      firstCells
-    );
+    expect(
+      Array.from(container.querySelectorAll('tbody td')).slice(0, 2)
+    ).toEqual(firstCells);
     expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
     expect(container.textContent).toContain('原型设计');
   });
@@ -141,5 +141,46 @@ describe('reconcileUnits', () => {
 
     expect(container.childNodes.length).toBeGreaterThan(0);
     expect(container.textContent).toBe('工作中');
+  });
+
+  describe('table layout isolation', () => {
+    it('applies contain: layout to elements matching data-md-table="true"', () => {
+      const container = document.createElement('div');
+      renderInto(
+        container,
+        '<div data-md-table="true"><table class="md-table"><tbody><tr><td>Data</td></tr></tbody></table></div>'
+      );
+      const wrapper = container.querySelector(
+        '[data-md-table="true"]'
+      ) as HTMLElement | null;
+      expect(wrapper).not.toBeNull();
+      expect(wrapper?.style.contain).toBe('layout');
+    });
+
+    it('applies contain: layout to elements matching .md-table-wrap', () => {
+      const container = document.createElement('div');
+      renderInto(
+        container,
+        '<div class="md-table-wrap"><table class="md-table"><tbody><tr><td>Data</td></tr></tbody></table></div>'
+      );
+      const wrapper = container.querySelector(
+        '.md-table-wrap'
+      ) as HTMLElement | null;
+      expect(wrapper).not.toBeNull();
+      expect(wrapper?.style.contain).toBe('layout');
+    });
+
+    it('applies contain: layout to legacy elements matching role="region" aria-label="表格"', () => {
+      const container = document.createElement('div');
+      renderInto(
+        container,
+        '<div role="region" aria-label="表格"><table class="md-table"><tbody><tr><td>Data</td></tr></tbody></table></div>'
+      );
+      const wrapper = container.querySelector(
+        '[role="region"][aria-label="表格"]'
+      ) as HTMLElement | null;
+      expect(wrapper).not.toBeNull();
+      expect(wrapper?.style.contain).toBe('layout');
+    });
   });
 });

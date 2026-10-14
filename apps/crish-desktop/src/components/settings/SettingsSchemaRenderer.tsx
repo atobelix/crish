@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button, Input, SegmentedControl, Select, Slider, Switch } from '../ui';
 import { SettingsSection, SettingsCard, SettingsRow } from './SettingsUI';
+import { useI18n } from '../../i18n';
 import uiStyles from './SettingsUI.module.css';
 
 export interface SchemaProperty {
@@ -16,20 +17,37 @@ export interface SchemaProperty {
     | 'font-selector'
     | 'toggle-group';
   title: string;
+  titleKey?: string;
   desc?: string;
-  options?: { value: string; label: string; hint?: string }[];
+  descKey?: string;
+  options?: {
+    value: string;
+    label: string;
+    labelKey?: string;
+    hint?: string;
+    hintKey?: string;
+  }[];
   placeholder?: string;
+  placeholderKey?: string;
   min?: number;
   max?: number;
   step?: number;
   unit?: string;
+  unitKey?: string;
   showValue?: boolean;
-  presets?: { id: string; name: string; preview: string }[];
+  presets?: {
+    id: string;
+    name: string;
+    nameKey?: string;
+    preview: string;
+  }[];
   category?: 'sans' | 'mono';
   previewText?: string;
+  previewTextKey?: string;
   toggleOptions?: {
     value: string;
     label: React.ReactNode;
+    labelKey?: string;
     icon?: React.ReactNode;
     badge?: React.ReactNode;
   }[];
@@ -37,6 +55,7 @@ export interface SchemaProperty {
 
 export interface SchemaSection {
   title: string;
+  titleKey?: string;
   properties: SchemaProperty[];
 }
 
@@ -49,6 +68,7 @@ export interface SettingsSchemaRendererProps {
 
 export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> =
   React.memo(({ schema, values, onSave, ready }) => {
+    const { t } = useI18n();
     const idsMap = React.useRef<Record<string, string>>({});
 
     const getElementId = (key: string) => {
@@ -64,7 +84,11 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> =
         <SettingsSection>
           <SettingsCard>
             <SettingsRow
-              title={<span className={uiStyles.listEmpty}>加载中…</span>}
+              title={
+                <span className={uiStyles.listEmpty}>
+                  {t('common.loading', '加载中…')}
+                </span>
+              }
             />
           </SettingsCard>
         </SettingsSection>
@@ -73,229 +97,284 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> =
 
     return (
       <>
-        {schema.map((section, sIdx) => (
-          <SettingsSection key={sIdx} title={section.title}>
-            <SettingsCard>
-              {section.properties.map((prop) => {
-                const domId = getElementId(prop.key);
-                const val = (values as Record<string, unknown>)[prop.key];
+        {schema.map((section, sIdx) => {
+          const sectionTitle = section.titleKey
+            ? t(section.titleKey, section.title)
+            : section.title;
 
-                let control: React.ReactNode = null;
+          return (
+            <SettingsSection key={sIdx} title={sectionTitle}>
+              <SettingsCard>
+                {section.properties.map((prop) => {
+                  const domId = getElementId(prop.key);
+                  const val = (values as Record<string, unknown>)[prop.key];
+                  const propTitle = prop.titleKey
+                    ? t(prop.titleKey, prop.title)
+                    : prop.title;
+                  const propDesc = prop.descKey
+                    ? t(prop.descKey, prop.desc)
+                    : prop.desc;
+                  const propUnit = prop.unitKey
+                    ? t(prop.unitKey, prop.unit)
+                    : prop.unit;
+                  const propPlaceholder = prop.placeholderKey
+                    ? t(
+                        prop.placeholderKey,
+                        prop.placeholder ||
+                          (prop.type === 'select' ||
+                          prop.type === 'font-selector'
+                            ? '请选择…'
+                            : '')
+                      )
+                    : prop.placeholder;
 
-                if (prop.type === 'boolean') {
-                  const checked = Boolean(val);
-                  control = (
-                    <Switch
-                      id={domId}
-                      checked={checked}
-                      disabled={!ready}
-                      onCheckedChange={(next) => {
-                        void onSave({ [prop.key]: next });
-                      }}
-                    />
-                  );
-                } else if (prop.type === 'select') {
-                  control = (
-                    <Select
-                      className={uiStyles.controlSelect}
-                      size="sm"
-                      value={String(val ?? '')}
-                      options={(prop.options || []).map((o) => ({
-                        id: o.value,
-                        label: o.label,
-                        ...(o.hint !== undefined ? { hint: o.hint } : {}),
-                      }))}
-                      onChange={(v) => {
-                        void onSave({ [prop.key]: v });
-                      }}
-                      disabled={!ready}
-                      placeholder={prop.placeholder || '请选择…'}
-                    />
-                  );
-                } else if (prop.type === 'string') {
-                  control = (
-                    <div className={uiStyles.controlInput}>
-                      <Input
+                  let control: React.ReactNode = null;
+
+                  if (prop.type === 'boolean') {
+                    const checked = Boolean(val);
+                    control = (
+                      <Switch
                         id={domId}
-                        size="sm"
-                        value={String(val || '')}
+                        checked={checked}
                         disabled={!ready}
-                        placeholder={prop.placeholder || ''}
-                        onChange={(e) => {
-                          void onSave({ [prop.key]: e.target.value });
-                        }}
-                      />
-                    </div>
-                  );
-                } else if (prop.type === 'number') {
-                  const numVal =
-                    typeof val === 'number'
-                      ? val
-                      : Number(val ?? prop.min ?? 10);
-                  control = (
-                    <div className={uiStyles.controlNumberWrapper}>
-                      <Input
-                        id={domId}
-                        type="number"
-                        size="sm"
-                        min={prop.min ?? 1}
-                        max={prop.max ?? 50}
-                        step={prop.step ?? 1}
-                        value={Number.isFinite(numVal) ? String(numVal) : ''}
-                        disabled={!ready}
-                        className={uiStyles.controlNumberInput}
-                        onChange={(e) => {
-                          const parsed = parseInt(e.target.value, 10);
-                          if (!Number.isNaN(parsed)) {
-                            const clamped = Math.max(
-                              prop.min ?? 1,
-                              Math.min(prop.max ?? 50, parsed)
-                            );
-                            void onSave({ [prop.key]: clamped });
-                          }
-                        }}
-                      />
-                      {prop.unit && (
-                        <span className={uiStyles.controlNumberUnit}>
-                          {prop.unit}
-                        </span>
-                      )}
-                    </div>
-                  );
-                } else if (prop.type === 'range') {
-                  const numVal = Number(val ?? prop.min ?? 0);
-                  control = (
-                    <div className={uiStyles.controlRange}>
-                      <Slider
-                        aria-label={prop.title}
-                        min={prop.min ?? 0}
-                        max={prop.max ?? 100}
-                        step={prop.step ?? 1}
-                        value={numVal}
-                        disabled={!ready}
-                        onChange={(next) => {
+                        onCheckedChange={(next) => {
                           void onSave({ [prop.key]: next });
                         }}
-                        className={uiStyles.controlRangeSlider}
                       />
-                      {prop.showValue && (
-                        <span className={uiStyles.controlRangeValue}>
-                          {numVal}
-                          {prop.unit ?? ''}
-                        </span>
-                      )}
-                    </div>
-                  );
-                } else if (prop.type === 'color') {
-                  control = (
-                    <Input
-                      bare
-                      id={domId}
-                      type="color"
-                      className={uiStyles.controlColor}
-                      value={String(val || '#000000')}
-                      disabled={!ready}
-                      onChange={(e) =>
-                        void onSave({ [prop.key]: e.target.value })
-                      }
-                    />
-                  );
-                } else if (prop.type === 'preset-grid') {
-                  control = (
-                    <div className={uiStyles.presetGrid}>
-                      {(prop.presets || []).map((preset) => {
-                        const isSelected = val === preset.id;
-                        return (
-                          <Button
-                            key={preset.id}
-                            type="button"
-                            variant={isSelected ? 'secondary' : 'ghost'}
-                            size="sm"
-                            disabled={!ready}
-                            aria-pressed={isSelected}
-                            className={uiStyles.presetItem}
-                            onClick={() =>
-                              void onSave({ [prop.key]: preset.id })
+                    );
+                  } else if (prop.type === 'select') {
+                    control = (
+                      <Select
+                        className={uiStyles.controlSelect}
+                        size="sm"
+                        value={String(val ?? '')}
+                        options={(prop.options || []).map((o) => {
+                          const optionLabel = o.labelKey
+                            ? t(o.labelKey, o.label)
+                            : o.label;
+                          const optionHint = o.hintKey
+                            ? t(o.hintKey, o.hint)
+                            : o.hint;
+                          return {
+                            id: o.value,
+                            label: optionLabel,
+                            ...(optionHint !== undefined
+                              ? { hint: optionHint }
+                              : {}),
+                          };
+                        })}
+                        onChange={(v) => {
+                          void onSave({ [prop.key]: v });
+                        }}
+                        disabled={!ready}
+                        placeholder={propPlaceholder || '请选择…'}
+                      />
+                    );
+                  } else if (prop.type === 'string') {
+                    control = (
+                      <div className={uiStyles.controlInput}>
+                        <Input
+                          id={domId}
+                          size="sm"
+                          value={String(val || '')}
+                          disabled={!ready}
+                          placeholder={propPlaceholder || ''}
+                          onChange={(e) => {
+                            void onSave({ [prop.key]: e.target.value });
+                          }}
+                        />
+                      </div>
+                    );
+                  } else if (prop.type === 'number') {
+                    const numVal =
+                      typeof val === 'number'
+                        ? val
+                        : Number(val ?? prop.min ?? 10);
+                    control = (
+                      <div className={uiStyles.controlNumberWrapper}>
+                        <Input
+                          id={domId}
+                          type="number"
+                          size="sm"
+                          min={prop.min ?? 1}
+                          max={prop.max ?? 50}
+                          step={prop.step ?? 1}
+                          value={Number.isFinite(numVal) ? String(numVal) : ''}
+                          disabled={!ready}
+                          className={uiStyles.controlNumberInput}
+                          onChange={(e) => {
+                            const parsed = parseInt(e.target.value, 10);
+                            if (!Number.isNaN(parsed)) {
+                              const clamped = Math.max(
+                                prop.min ?? 1,
+                                Math.min(prop.max ?? 50, parsed)
+                              );
+                              void onSave({ [prop.key]: clamped });
                             }
-                          >
-                            {preset.preview ? (
-                              <span
-                                className={uiStyles.presetSwatch}
-                                style={{ background: preset.preview }}
-                              />
-                            ) : null}
-                            <span className={uiStyles.presetName}>
-                              {preset.name}
-                            </span>
-                          </Button>
-                        );
-                      })}
-                    </div>
-                  );
-                } else if (prop.type === 'font-selector') {
-                  control = (
-                    <Select
-                      className={uiStyles.controlSelect}
-                      size="sm"
-                      value={String(val ?? '')}
-                      options={(prop.options || []).map((o) => ({
-                        id: o.value,
-                        label: o.label,
-                        ...(o.hint !== undefined ? { hint: o.hint } : {}),
-                      }))}
-                      onChange={(v) => void onSave({ [prop.key]: v })}
-                      disabled={!ready}
-                      placeholder={prop.placeholder || '请选择…'}
-                    />
-                  );
-                } else if (prop.type === 'toggle-group') {
-                  control = (
-                    <SegmentedControl
-                      aria-label={prop.title}
-                      size="panel"
-                      className={uiStyles.controlSegment}
-                      value={String(val ?? '')}
-                      disabled={!ready}
-                      options={(prop.toggleOptions || []).map((opt) => ({
-                        value: opt.value,
-                        label: opt.label,
-                        icon: opt.icon,
-                        badge: opt.badge,
-                      }))}
-                      onChange={(v) => {
-                        void onSave({ [prop.key]: v });
-                      }}
-                    />
-                  );
-                }
+                          }}
+                        />
+                        {propUnit && (
+                          <span className={uiStyles.controlNumberUnit}>
+                            {propUnit}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  } else if (prop.type === 'range') {
+                    const numVal = Number(val ?? prop.min ?? 0);
+                    control = (
+                      <div className={uiStyles.controlRange}>
+                        <Slider
+                          aria-label={propTitle}
+                          min={prop.min ?? 0}
+                          max={prop.max ?? 100}
+                          step={prop.step ?? 1}
+                          value={numVal}
+                          disabled={!ready}
+                          onChange={(next) => {
+                            void onSave({ [prop.key]: next });
+                          }}
+                          className={uiStyles.controlRangeSlider}
+                        />
+                        {prop.showValue && (
+                          <span className={uiStyles.controlRangeValue}>
+                            {numVal}
+                            {propUnit ?? ''}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  } else if (prop.type === 'color') {
+                    control = (
+                      <Input
+                        bare
+                        id={domId}
+                        type="color"
+                        className={uiStyles.controlColor}
+                        value={String(val || '#000000')}
+                        disabled={!ready}
+                        onChange={(e) =>
+                          void onSave({ [prop.key]: e.target.value })
+                        }
+                      />
+                    );
+                  } else if (prop.type === 'preset-grid') {
+                    control = (
+                      <div className={uiStyles.presetGrid}>
+                        {(prop.presets || []).map((preset) => {
+                          const isSelected = val === preset.id;
+                          const presetName = preset.nameKey
+                            ? t(preset.nameKey, preset.name)
+                            : preset.name;
+                          return (
+                            <Button
+                              key={preset.id}
+                              type="button"
+                              variant={isSelected ? 'secondary' : 'ghost'}
+                              size="sm"
+                              disabled={!ready}
+                              aria-pressed={isSelected}
+                              className={uiStyles.presetItem}
+                              onClick={() =>
+                                void onSave({ [prop.key]: preset.id })
+                              }
+                            >
+                              {preset.preview ? (
+                                <span
+                                  className={uiStyles.presetSwatch}
+                                  style={{ background: preset.preview }}
+                                />
+                              ) : null}
+                              <span className={uiStyles.presetName}>
+                                {presetName}
+                              </span>
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    );
+                  } else if (prop.type === 'font-selector') {
+                    control = (
+                      <Select
+                        className={uiStyles.controlSelect}
+                        size="sm"
+                        value={String(val ?? '')}
+                        options={(prop.options || []).map((o) => {
+                          const optionLabel = o.labelKey
+                            ? t(o.labelKey, o.label)
+                            : o.label;
+                          const optionHint = o.hintKey
+                            ? t(o.hintKey, o.hint)
+                            : o.hint;
+                          return {
+                            id: o.value,
+                            label: optionLabel,
+                            ...(optionHint !== undefined
+                              ? { hint: optionHint }
+                              : {}),
+                          };
+                        })}
+                        onChange={(v) => void onSave({ [prop.key]: v })}
+                        disabled={!ready}
+                        placeholder={propPlaceholder || '请选择…'}
+                      />
+                    );
+                  } else if (prop.type === 'toggle-group') {
+                    control = (
+                      <SegmentedControl
+                        aria-label={propTitle}
+                        size="panel"
+                        className={uiStyles.controlSegment}
+                        value={String(val ?? '')}
+                        disabled={!ready}
+                        options={(prop.toggleOptions || []).map((opt) => ({
+                          value: opt.value,
+                          label: opt.labelKey
+                            ? t(
+                                opt.labelKey,
+                                typeof opt.label === 'string'
+                                  ? opt.label
+                                  : undefined
+                              )
+                            : opt.label,
+                          icon: opt.icon,
+                          badge: opt.badge,
+                        }))}
+                        onChange={(v) => {
+                          void onSave({ [prop.key]: v });
+                        }}
+                      />
+                    );
+                  }
 
-                return (
-                  <SettingsRow
-                    key={prop.key}
-                    title={
-                      prop.type === 'boolean' ||
-                      prop.type === 'string' ||
-                      prop.type === 'range' ||
-                      prop.type === 'color' ? (
-                        <label
-                          htmlFor={domId}
-                          className={uiStyles.settingsUiRowLabel}
-                        >
-                          {prop.title}
-                        </label>
-                      ) : (
-                        <span id={domId}>{prop.title}</span>
-                      )
-                    }
-                    desc={prop.desc}
-                    control={control}
-                    vertical={prop.type === 'preset-grid'}
-                  />
-                );
-              })}
-            </SettingsCard>
-          </SettingsSection>
-        ))}
+                  return (
+                    <SettingsRow
+                      key={prop.key}
+                      title={
+                        prop.type === 'boolean' ||
+                        prop.type === 'string' ||
+                        prop.type === 'range' ||
+                        prop.type === 'color' ? (
+                          <label
+                            htmlFor={domId}
+                            className={uiStyles.settingsUiRowLabel}
+                          >
+                            {propTitle}
+                          </label>
+                        ) : (
+                          <span id={domId}>{propTitle}</span>
+                        )
+                      }
+                      desc={propDesc}
+                      control={control}
+                      vertical={prop.type === 'preset-grid'}
+                    />
+                  );
+                })}
+              </SettingsCard>
+            </SettingsSection>
+          );
+        })}
       </>
     );
   });

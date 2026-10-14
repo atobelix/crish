@@ -7,6 +7,7 @@ import type { SessionState } from '../../../store/types';
 import {
   SessionRow,
   SESSION_ACTIONS_BTN_PX,
+  getSessionCleanTitle,
   type SessionRowProps,
 } from './SessionRow';
 
@@ -121,7 +122,9 @@ describe('SessionRow 点击 / 更多钮', () => {
         titleHint: '登录接口超时',
       },
     });
-    expect(screen.getByTestId('session-title-hint')).toHaveTextContent('登录接口超时');
+    expect(screen.getByTestId('session-title-hint')).toHaveTextContent(
+      '登录接口超时'
+    );
     expect(screen.getByTestId('sidebar-session-item')).toHaveAttribute(
       'aria-label',
       '测试会话（登录接口超时）'
@@ -141,7 +144,9 @@ describe('SessionRow 点击 / 更多钮', () => {
     expect(times).toHaveLength(1);
     expect(container.querySelectorAll('[data-session-time]')).toHaveLength(1);
     const label = times[0]?.textContent ?? '';
-    expect(label).toMatch(/^(刚刚|\d+分|\d+时|\d+天|\d+\/\d+|\d{2}\/\d+\/\d+)$/);
+    expect(label).toMatch(
+      /^(刚刚|\d+分|\d+时|\d+天|\d+\/\d+|\d{2}\/\d+\/\d+)$/
+    );
     // 行内不应再出现第二个日期 / 时间文案
     const textCol = row.textContent ?? '';
     expect(textCol.split(label).length - 1).toBe(1);
@@ -215,6 +220,65 @@ describe('SessionRow 点击 / 更多钮', () => {
 
       expect(onContextMenuSession).toHaveBeenCalledTimes(1);
       expect(screen.queryByTestId('session-row-panel')).toBeNull();
+    });
+  });
+
+  describe('getSessionCleanTitle 纯逻辑中立分支后缀清洗', () => {
+    it('验证对中文分支 "我的会话 - 分支" 能够干净剥离得到 "我的会话"', () => {
+      expect(getSessionCleanTitle('我的会话 - 分支')).toBe('我的会话');
+      expect(getSessionCleanTitle('分析代码架构 - 分支')).toBe('分析代码架构');
+      expect(getSessionCleanTitle('临时探索 — 分支')).toBe('临时探索');
+      expect(getSessionCleanTitle('任务规划 – 分支')).toBe('任务规划');
+    });
+
+    it('验证对英文分支 "My Chat - branch" 能够干净剥离得到 "My Chat"', () => {
+      expect(getSessionCleanTitle('My Chat - branch')).toBe('My Chat');
+      expect(getSessionCleanTitle('My Chat - Branch')).toBe('My Chat');
+      expect(getSessionCleanTitle('Feature Branch - BRANCH')).toBe(
+        'Feature Branch'
+      );
+      expect(getSessionCleanTitle('Refactor – branch')).toBe('Refactor');
+      expect(getSessionCleanTitle('Security Fix — branch')).toBe(
+        'Security Fix'
+      );
+    });
+
+    it('验证对普通会话 "普通会话标题" 不受影响', () => {
+      expect(getSessionCleanTitle('普通会话标题')).toBe('普通会话标题');
+      expect(getSessionCleanTitle('Simple Chat Title')).toBe(
+        'Simple Chat Title'
+      );
+    });
+
+    it('验证直接传入 SessionState 对象亦能正确清洗', () => {
+      const zhSession = makeSession({ title: '项目调研 - 分支' });
+      const enSession = makeSession({ title: 'Architecture Review - branch' });
+      const normalSession = makeSession({ title: '常规日常会话' });
+
+      expect(getSessionCleanTitle(zhSession)).toBe('项目调研');
+      expect(getSessionCleanTitle(enSession)).toBe('Architecture Review');
+      expect(getSessionCleanTitle(normalSession)).toBe('常规日常会话');
+    });
+
+    it('英文分支会话在 SessionRow 中正常渲染纯净标题', () => {
+      const enBranchSession = makeSession({
+        id: 'sess-en-branch',
+        title: 'Security Audit - Branch',
+        branchParentId: 'sess-parent',
+      });
+      renderRow({
+        session: {
+          s: enBranchSession,
+          activeSessionId: 'other',
+          searchQuery: '',
+          isDraggingThis: false,
+          isRenaming: false,
+          isDraggable: true,
+        },
+      });
+      const row = screen.getByTestId('sidebar-session-item');
+      expect(row.textContent).toContain('Security Audit');
+      expect(row.textContent).not.toContain('Branch');
     });
   });
 });
