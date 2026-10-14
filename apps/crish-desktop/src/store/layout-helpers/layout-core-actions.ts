@@ -2,12 +2,8 @@ import {
   parseShellChromeMode,
   type ShellChromeMode,
 } from '../../api/shellChrome';
-import {
-  parseUiSize,
-} from './store-initializers';
-import {
-  type UiSize,
-} from './store-types';
+import { parseUiSize } from './store-initializers';
+import { type UiSize } from './store-types';
 
 /**
  * layout-core-actions 依赖的 state 面（AA-03 Q09 门禁：禁止 `: any`）。
@@ -16,7 +12,7 @@ import {
 export interface LayoutCoreState {
   uiSize: UiSize;
   shellChromeMode: ShellChromeMode;
-  chatMainSurface: 'chat' | 'scheduled';
+  chatMainSurface: 'chat' | 'scheduled' | 'extensions';
   sidebarCollapsed: boolean;
   tabModeEnabled: boolean;
 }
@@ -38,9 +34,14 @@ export function createLayoutCoreActions(
         state.shellChromeMode = next;
       });
     },
-    setChatMainSurface: (surface: 'chat' | 'scheduled') =>
+    setChatMainSurface: (surface: 'chat' | 'scheduled' | 'extensions') =>
       set((state) => {
-        state.chatMainSurface = surface === 'scheduled' ? 'scheduled' : 'chat';
+        state.chatMainSurface =
+          surface === 'scheduled'
+            ? 'scheduled'
+            : surface === 'extensions'
+              ? 'extensions'
+              : 'chat';
       }),
     setSidebarCollapsed: (collapsed: boolean) =>
       set((state) => {

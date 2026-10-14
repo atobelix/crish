@@ -8,44 +8,93 @@
  * 4. 若全系统无任何项目，兜底 GENERAL_FOLDER。
  */
 
-import { useSessionStore } from '../sessionStore';
 import { isPendingDraft } from '../draftSession';
-import { GENERAL_FOLDER, getActiveProjectId } from '../../api/projectStore';
+import type { SessionState } from '../types';
+import {
+  GENERAL_FOLDER,
+  getActiveProjectId,
+  listProjects,
+  resolveFolderToProjectId,
+} from '../../api/projectStore';
 
-export function resolveMostActiveProjectFolder(): string {
-  try {
-    const sessionState = useSessionStore.getState();
-    const activeId = sessionState.activeSessionId;
+export interface SessionStateResolverInput {
+  activeSessionId?: string | null;
+  sessions?: SessionState[];
+  sessionsById?: Record<string, SessionState>;
+}
 
-    // 1. 优先取当前活动真会话所属项目
-    if (activeId && !isPendingDraft(activeId)) {
-      const activeSession =
-        sessionState.sessionsById?.[activeId] ??
-        sessionState.sessions?.find((s) => s.id === activeId);
-      if (
-        activeSession?.folder &&
-        activeSession.folder !== GENERAL_FOLDER &&
-        activeSession.folder.trim() !== ''
-      ) {
-        return activeSession.folder;
-      }
+let sessionStateProvider: (() => SessionStateResolverInput | undefined) | null =
+  null;
+
+export function registerSessionStateProvider(
+  provider: () => SessionStateResolverInput | undefined
+): void {
+  sessionStateProvider = provider;
+}
+
+function isValidProjectFolder(folder: string | null | undefined): boolean {
+  const f = (folder || '').trim();
+  if (
+    !f ||
+    f === GENERAL_FOLDER ||
+    f === '会话' ||
+    f === '常规会话' ||
+    f === 'general'
+  ) {
+    return false;
+  }
+  // 若是内部 proj-* ID，必须在当前项目列表或别名中存在，否则为已删除项目的残留 ID
+  if (/^proj-[a-z0-9_-]+$/i.test(f)) {
+    const resolved = resolveFolderToProjectId(f);
+    if (!resolved) {
+      return false;
     }
+    const projects = listProjects();
+    if (projects.length > 0 && !projects.some((p) => p.id === resolved)) {
+      return false;
+    }
+  }
+  return true;
+}
 
-    // 2. 其次遍历全量会话列表，按时间降序查找最近活跃的项目
-    const sessions = sessionState.sessions || [];
-    const sorted = [...sessions].sort(
-      (a, b) => (Date.parse(b.timestamp) || 0) - (Date.parse(a.timestamp) || 0)
-    );
-    for (const s of sorted) {
-      if (s.folder && s.folder !== GENERAL_FOLDER && s.folder.trim() !== '') {
-        return s.folder;
+export function resolveMostActiveProjectFolder(
+  inputState?: SessionStateResolverInput
+): string {
+  try {
+    const sessionState = inputState ?? sessionStateProvider?.();
+    if (sessionState) {
+      const activeId = sessionState.activeSessionId;
+
+      // 1. 优先取当前活动真会话所属项目
+      if (activeId && !isPendingDraft(activeId)) {
+        const activeSession =
+          sessionState.sessionsById?.[activeId] ??
+          sessionState.sessions?.find((s) => s.id === activeId);
+        if (isValidProjectFolder(activeSession?.folder)) {
+          return (
+            resolveFolderToProjectId(activeSession!.folder!) ||
+            activeSession!.folder!
+          );
+        }
+      }
+
+      // 2. 其次遍历全量会话列表，按时间降序查找最近活跃的项目
+      const sessions = sessionState.sessions || [];
+      const sorted = [...sessions].sort(
+        (a, b) =>
+          (Date.parse(b.timestamp) || 0) - (Date.parse(a.timestamp) || 0)
+      );
+      for (const s of sorted) {
+        if (isValidProjectFolder(s.folder)) {
+          return resolveFolderToProjectId(s.folder!) || s.folder!;
+        }
       }
     }
 
     // 3. 再次尝试获取当前 LocalStorage 激活的项目
     const activeProj = getActiveProjectId();
-    if (activeProj && activeProj !== GENERAL_FOLDER) {
-      return activeProj;
+    if (isValidProjectFolder(activeProj)) {
+      return activeProj!;
     }
   } catch {
     /* ignore error */

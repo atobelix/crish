@@ -32,8 +32,16 @@ import {
   resolveChromeSessionTitle,
 } from '../../api/sessionTitle';
 import { listChatLeaves, useLayoutTreeStore } from '../layout-tree';
+import {
+  recordClosedSessionTab,
+  unrecordClosedSessionTab,
+} from './closedSessionTabs';
 import type { RightToolDockState, WorkspaceShellStore } from './types';
 import { registerShellStoreReadApi } from './shellRegistry';
+import {
+  setShellVisibilityProvider,
+  type OpenTabsInput,
+} from '../sessionEvictionProbes';
 import {
   ownedChatLeaves,
   pictureFromActiveLeaf,
@@ -148,6 +156,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>(
     openOrFocusSession: (sessionId, opts) => {
       const sid = (sessionId || '').trim();
       if (!sid || isPendingDraft(sid)) return;
+      unrecordClosedSessionTab(sid);
 
       const title = resolveSessionTabTitle(sid, opts?.title);
       const workspaceKey =
@@ -256,6 +265,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>(
         const closing = loc.tab;
         if (!isPendingDraft(closing.sessionId)) {
           killPty(closing.sessionId);
+          recordClosedSessionTab(closing.sessionId);
         }
       } else {
         const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
@@ -381,3 +391,18 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>(
 );
 
 registerShellStoreReadApi(useWorkspaceShellStore);
+
+// 依赖倒置注册：向会话软驱逐探针供应可见标签快照（探针不直连本 store，
+// 避免 eviction ↔ workspace-shell ↔ sessionStore 循环依赖）。
+setShellVisibilityProvider(() => {
+  const s = useWorkspaceShellStore.getState() as ReturnType<
+    typeof useWorkspaceShellStore.getState
+  > &
+    Partial<Record<'openTabs' | 'openTabIds' | 'tabs', OpenTabsInput>>;
+  return {
+    activeSessionId: s.getActiveTab?.()?.sessionId ?? null,
+    openTabs: s.openTabs,
+    openTabIds: s.openTabIds,
+    tabs: s.tabs,
+  };
+});

@@ -14,7 +14,13 @@ beforeEach(() => {
     providers: [],
     scheduledTasks: [],
     mcpServers: [],
-    tokenUsage: { input: 0, inputMax: 160000, output: 0, outputMax: 40000, cost: 0 },
+    tokenUsage: {
+      input: 0,
+      inputMax: 160000,
+      output: 0,
+      outputMax: 40000,
+      cost: 0,
+    },
   });
   useWorkerStore.setState({
     activeWorkers: [],
@@ -36,13 +42,48 @@ describe('settingsStore — app settings', () => {
     expect(useSettingsStore.getState().appSettings).toBeNull();
   });
 
+  it('projects mcpServers only when the settings payload includes the array', () => {
+    useSettingsStore.getState().setMcpServers([
+      {
+        id: 'keep',
+        name: 'keep',
+        type: 'stdio',
+        status: 'connected',
+        tools: [],
+      },
+    ]);
+    useSettingsStore.getState().setAppSettings({ theme: 'dark' });
+    expect(useSettingsStore.getState().mcpServers).toHaveLength(1);
+    useSettingsStore.getState().setAppSettings(null);
+    expect(useSettingsStore.getState().mcpServers).toHaveLength(1);
+    useSettingsStore.getState().setAppSettings({
+      theme: 'dark',
+      mcpServers: [
+        {
+          id: 'chrome',
+          name: 'chrome-devtools',
+          type: 'stdio',
+          status: 'connected',
+          tools: ['tabs'],
+        },
+      ],
+    });
+    expect(
+      useSettingsStore.getState().mcpServers.map((server) => server.name)
+    ).toEqual(['chrome-devtools']);
+    useSettingsStore.getState().setAppSettings({ mcpServers: [] });
+    expect(useSettingsStore.getState().mcpServers).toEqual([]);
+  });
+
   it('setProviders / setScheduledTasks / setMcpServers reject non-arrays safely', () => {
     const s = useSettingsStore.getState();
     s.setProviders([]);
     s.setProviders(null as unknown as never[]);
     expect(useSettingsStore.getState().providers).toEqual([]);
     s.setScheduledTasks(undefined as unknown as CronJob[]);
-    expect(Array.isArray(useSettingsStore.getState().scheduledTasks)).toBe(true);
+    expect(Array.isArray(useSettingsStore.getState().scheduledTasks)).toBe(
+      true
+    );
     s.setMcpServers('nope' as unknown as never[]);
     expect(useSettingsStore.getState().mcpServers).toEqual([]);
   });
@@ -53,9 +94,7 @@ describe('settingsStore — syncTelemetryData', () => {
     const s = useSettingsStore.getState();
     s.syncTelemetryData({
       tokenUsage: { input: -1, cost: NaN, output: 5 },
-      mcpServers: [
-        { id: 'm1', name: 'files', enabled: true },
-      ] as never,
+      mcpServers: [{ id: 'm1', name: 'files', enabled: true }] as never,
       cronJobs: [
         {
           id: 'c1',
@@ -139,11 +178,34 @@ describe('settingsStore — persistence (crish-settings-v1)', () => {
     ]);
     vi.resetModules();
     const { useSettingsStore: freshSettings } = await import('./settingsStore');
-    expect(
-      freshSettings.getState().scheduledTasks.map((t) => t.id)
-    ).toEqual(['c2']);
+    expect(freshSettings.getState().scheduledTasks.map((t) => t.id)).toEqual([
+      'c2',
+    ]);
     // 未持久化字段回落默认
     expect(freshSettings.getState().appSettings).toBeNull();
     expect(freshSettings.getState().providers).toEqual([]);
+  });
+
+  it('persists and rehydrates autoShowExternalSessionOnStartup', async () => {
+    expect(useSettingsStore.getState().autoShowExternalSessionOnStartup).toBe(
+      true
+    );
+    useSettingsStore.getState().setAutoShowExternalSessionOnStartup(false);
+    expect(useSettingsStore.getState().autoShowExternalSessionOnStartup).toBe(
+      false
+    );
+
+    const raw = localStorage.getItem('crish-settings-v1');
+    expect(raw).toBeTruthy();
+    const parsed = JSON.parse(raw!) as {
+      state: { autoShowExternalSessionOnStartup: boolean };
+    };
+    expect(parsed.state.autoShowExternalSessionOnStartup).toBe(false);
+
+    vi.resetModules();
+    const { useSettingsStore: freshSettings } = await import('./settingsStore');
+    expect(freshSettings.getState().autoShowExternalSessionOnStartup).toBe(
+      false
+    );
   });
 });

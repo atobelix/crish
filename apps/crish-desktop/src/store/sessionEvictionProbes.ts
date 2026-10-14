@@ -11,7 +11,36 @@ import type { LayoutNode } from './layout-tree/types';
 import { useStreamingStore } from './streamingStore';
 import type { SessionState } from './types';
 import { ownedChatLeaves } from './workspace-shell/treeSessionQuery';
-import { useWorkspaceShellStore } from './workspace-shell/workspaceShellStore';
+
+/**
+ * 可见标签快照供应器（依赖倒置）：由 workspace-shell 侧注册。
+ * 探针不直连 workspaceShellStore，避免 eviction ↔ shell ↔ sessionStore 循环依赖；
+ * 无注册（未初始化 / 纯逻辑单测路径）时快照为 null，仅退化为布局树口径。
+ */
+export interface ShellVisibilitySnapshot {
+  activeSessionId?: string | null;
+  openTabs?: OpenTabsInput;
+  openTabIds?: OpenTabsInput;
+  tabs?: OpenTabsInput;
+}
+type ShellVisibilityProvider = () => ShellVisibilitySnapshot | null;
+
+let shellVisibilityProvider: ShellVisibilityProvider | null = null;
+
+export function setShellVisibilityProvider(
+  fn: ShellVisibilityProvider | null
+): void {
+  shellVisibilityProvider = fn;
+}
+
+function readShellVisibilitySnapshot(): ShellVisibilitySnapshot | null {
+  try {
+    return shellVisibilityProvider?.() ?? null;
+  } catch {
+    /* provider 未就绪 / 存储异常时按无快照处理 */
+    return null;
+  }
+}
 
 /** 会话内存软驱逐三级保活状态机枚举（SSOT） */
 export type SessionEvictionTier =
@@ -179,13 +208,12 @@ export function getVisibleSplitSessionIds(
       }
     }
   }
-  try {
-    const activeSid = useWorkspaceShellStore
-      .getState()
-      ?.getActiveTab?.()?.sessionId;
+  // 可见标签快照经依赖倒置供应器获取（workspaceShellStore 侧注册）；
+  // 探针不直连 shell store——避免 eviction ↔ shell ↔ sessionStore 循环依赖。
+  const snapshot = readShellVisibilitySnapshot();
+  if (snapshot) {
+    const activeSid = snapshot.activeSessionId;
     if (isValidRealSessionId(activeSid)) visible.add(activeSid.trim());
-  } catch {
-    /* store 未初始化时忽略 */
   }
   return visible;
 }
@@ -210,18 +238,13 @@ export function getOpenTabSessionIds(options?: {
     for (const leaf of listChatLeaves(root))
       addOpenTabsInputToSet(leaf.tabs as OpenTabsInput, open);
   }
-  try {
-    const shell = useWorkspaceShellStore.getState() as
-      | (ReturnType<typeof useWorkspaceShellStore.getState> &
-          Partial<Record<'openTabs' | 'openTabIds' | 'tabs', OpenTabsInput>>)
-      | undefined;
-    if (shell) {
-      addOpenTabsInputToSet(shell.openTabs, open);
-      addOpenTabsInputToSet(shell.openTabIds, open);
-      addOpenTabsInputToSet(shell.tabs, open);
-    }
-  } catch {
-    /* store 未初始化时忽略 */
+  // shell 侧可能持有的打开标签形状经供应器读取（workspaceShellStore 不直连，
+  // 避免 eviction → shell → session 循环依赖）；无快照时仅退化为布局树口径。
+  const snapshot = readShellVisibilitySnapshot();
+  if (snapshot) {
+    addOpenTabsInputToSet(snapshot.openTabs, open);
+    addOpenTabsInputToSet(snapshot.openTabIds, open);
+    addOpenTabsInputToSet(snapshot.tabs, open);
   }
   return open;
 }

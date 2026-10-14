@@ -23,6 +23,7 @@ import { createSessionActions, type SessionActions } from './sessionActions';
 import { triggerSessionMessageHydrateIfNeeded as triggerSessionMessageHydrate } from './sessionActivateHydrate';
 import { getSessionById as getSessionByIdFromIndex } from './sessionIndex';
 import { sidebarSessionsEqual } from './sessionListEqual';
+import { registerSessionStateProvider } from './draft-routing/draftProjectResolver';
 import {
   bumpEpochScalar,
   createInitialSubtreeSlice,
@@ -272,6 +273,8 @@ useSessionStore.setState = ((updater, replace) => {
   );
   if (next !== prev) innerSetState(next, true);
 }) as typeof useSessionStore.setState;
+
+registerSessionStateProvider(() => useSessionStore.getState());
 
 // ── 不可变原子选择器契约 (Atomic Selectors) ──────────────────────────────────
 

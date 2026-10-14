@@ -12,24 +12,24 @@ import {
   commitRunCompletion,
   commitStreamWithDualLatch,
   type StreamRunCompletionStorePort,
-} from '../store/streamRunCompletion';
+} from './streamRunCompletion';
 import {
   finalizeStreamingTurnAction,
   type OrthogonalStreamingTurnSlice,
-} from '../store/sessionMessageActionsCore';
+} from './sessionMessageActionsCore';
 import {
   SubagentRuntimeBatcher,
   archiveFinalAgentsToSession,
   buildFinalSubagentSnapshots,
-} from '../store/sessionAgentActions';
+} from './sessionAgentActions';
 import {
   clearSessionStreams,
   clearStream,
   clearStreams,
   getStreamText,
   setStreamText,
-} from '../store/streamingStore';
-import type { SessionAgent, SessionState } from '../store/types';
+} from './streamingStore';
+import type { SessionAgent, SessionState } from './types';
 
 function createManualRafQueue() {
   let nextId = 1;

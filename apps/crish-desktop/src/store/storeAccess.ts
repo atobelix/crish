@@ -137,6 +137,8 @@ export function useSettingsField<T>(selector: (state: SettingsStore) => T): T {
   return useSettingsStore(selector);
 }
 
+export { useSettingsStore } from './settingsStore';
+
 export function useAuthField<T>(selector: (state: AuthState) => T): T {
   return useAuthStore(selector);
 }
@@ -251,6 +253,12 @@ export {
 
 export { useShallow } from './useShallowSelector';
 
+export {
+  useSessionMessages,
+  useSessionFolder,
+  useSessionAgents,
+} from './sessionSelectors';
+
 // ── 布局助手 / 草稿 / 设置 UI（读面消费方入口）───────────────────────────────
 
 export {
@@ -261,6 +269,7 @@ export {
 
 export {
   isPendingDraft,
+  isPendingDraftSessionId,
   PENDING_DRAFT_SESSION_ID,
   mintDraftSessionId,
 } from './draftSession';
@@ -307,7 +316,9 @@ export {
   openToolInSession,
   openToolInLeaf,
   openToolInActiveTab,
+  openNewTerminalInLeaf,
   openNewTerminalInActiveTab,
+  resolveLeafIdForSession,
   openFileViewerInSession,
   setFileViewerModeOverride,
   consumeFileViewerModeOverride,
@@ -317,6 +328,16 @@ export {
 } from './workspace-shell';
 
 export type { SessionTab, FileViewerInitialMode } from './workspace-shell';
+
+export { treeUpdateTabTitle } from './workspace-shell/treeSessionCommands';
+
+export {
+  syncFromWorkflows,
+  ensureScheduleBadgeStoreHydrated,
+  useSessionSchedules,
+  useSessionActiveScheduleCount,
+} from './sessionScheduleBadgeStore';
+export type { WorkflowDef } from './sessionScheduleBadgeStore';
 
 // ── streaming 热缓冲读面（view model 装配只经本读面；写仍走 streamingStore actions）─
 
@@ -374,6 +395,8 @@ export {
   renameSession,
   enterDraftMode,
 } from '../api/storeAccess';
+
+export { setDraftProjectFolder } from './sessionDraftActions';
 
 export { getCompositionRoot } from '../app/compositionRoot';
 

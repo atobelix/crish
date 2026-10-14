@@ -19,6 +19,8 @@ import {
 import type { WorkspaceLayoutSnapshot } from './store-types';
 import { STORAGE_PERSIST_DEBOUNCE_MS } from '../persistenceConstants';
 import { isSessionTombstoned } from '../sessionCascadeCancellation';
+import { collectExternallyDeletedSessionIds } from '../../api/import/externalSessionTombstone';
+import { isSessionTabClosed } from '../workspace-shell/closedSessionTabs';
 import {
   BootHoldBarrier,
   DeltaWriteBarrier,
@@ -115,10 +117,11 @@ function syncActiveSessionToEmptyLayoutLeaf(
   sessionId: string,
   sessionTitle?: string
 ): void {
-  if (!sessionId) return;
+  if (!sessionId || isSessionTabClosed(sessionId)) return;
   void import('../layout-tree')
     .then((mod) => {
       try {
+        if (isSessionTabClosed(sessionId)) return;
         const { useLayoutTreeStore, collectLeaves } = mod;
         if (typeof useLayoutTreeStore?.getState !== 'function') return;
         const treeState = useLayoutTreeStore.getState();
@@ -236,8 +239,15 @@ export function initStorePersistence<S extends PersistableStoreState>(
       if (abortController.signal.aborted) return;
 
       if (restored?.sessions?.length) {
+        const blockedExternalIds = collectExternallyDeletedSessionIds([
+          ...store.getState().sessions,
+          ...restored.sessions,
+        ]);
+        const tombstoneGuard = (id: string) =>
+          isSessionTombstoned(id) || blockedExternalIds.has(id);
+
         for (const rs of restored.sessions) {
-          if (rs?.id && !isSessionTombstoned(rs.id)) {
+          if (rs?.id && !tombstoneGuard(rs.id)) {
             knownPersistedIds.add(rs.id);
           }
         }
@@ -253,7 +263,7 @@ export function initStorePersistence<S extends PersistableStoreState>(
             baseSessionIds,
             state.sessions,
             restored.sessions,
-            isSessionTombstoned
+            tombstoneGuard
           );
 
           const hasMergeChanges =
@@ -315,15 +325,23 @@ export function initStorePersistence<S extends PersistableStoreState>(
             after.activeSessionId,
             after.folderOrder
           );
+          const isClosed = Boolean(
+            after.activeSessionId && isSessionTabClosed(after.activeSessionId)
+          );
           if (
             after.activeSessionId &&
-            after.sessionsById[after.activeSessionId]
+            after.sessionsById[after.activeSessionId] &&
+            !isClosed
           ) {
             setActiveSessionId(after.activeSessionId);
             syncActiveSessionToEmptyLayoutLeaf(
               after.activeSessionId,
               after.sessionsById[after.activeSessionId]?.title
             );
+          } else if (isClosed) {
+            store.setState((s: PersistableStoreState) => {
+              s.activeSessionId = '';
+            });
           }
           if (appliedOrMerged && after.sessions.length > 0) {
             void persistAllSessions(

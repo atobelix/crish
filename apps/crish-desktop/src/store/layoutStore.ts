@@ -89,17 +89,17 @@ export interface LayoutStore {
   /** 壳层形态：classic 扁平 / inset 嵌套圆角内容卡 */
   shellChromeMode: ShellChromeMode;
   /**
-   * 主对话列表面：chat | scheduled。
-   * scheduled 时隐藏会话面包屑，避免「对话标题 + 定时任务」叠两套壳。
+   * 主对话列表面：chat | scheduled | extensions。
+   * scheduled / extensions 时隐藏会话面包屑，避免「对话标题 + 子系统」叠两套壳。
    */
-  chatMainSurface: 'chat' | 'scheduled';
+  chatMainSurface: 'chat' | 'scheduled' | 'extensions';
   sidebarCollapsed: boolean;
   hydrationComplete: boolean;
 
   // Layout chrome UI
   setUiSize: (size: UiSize) => void;
   setShellChromeMode: (mode: ShellChromeMode) => void;
-  setChatMainSurface: (surface: 'chat' | 'scheduled') => void;
+  setChatMainSurface: (surface: 'chat' | 'scheduled' | 'extensions') => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setTabModeEnabled: (enabled: boolean) => void;
 }

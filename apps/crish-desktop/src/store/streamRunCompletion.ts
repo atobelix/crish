@@ -23,7 +23,7 @@ import {
   type DualLatchPhase,
   type LatchableMessageShape,
   type RafScheduler,
-} from '../api/dualLatchProtocol';
+} from './dualLatchProtocol';
 import {
   clearStream,
   clearStreams,

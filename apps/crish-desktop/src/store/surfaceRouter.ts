@@ -12,7 +12,7 @@ import { emitUiEvent } from '../api/uiEvents';
 import { getCompositionRoot } from '../app/compositionRoot';
 import { clearAgentPanelFocus } from '../api/openAgentPanel';
 
-export type MainSurfaceId = 'chat' | 'scheduled';
+export type MainSurfaceId = 'chat' | 'scheduled' | 'extensions';
 
 export interface MainSurfaceMeta {
   id: MainSurfaceId;
@@ -34,6 +34,12 @@ export const MAIN_SURFACES: Record<MainSurfaceId, MainSurfaceMeta> = {
     sidebarNavKey: 'scheduled',
     isSessionWorkspace: false,
   },
+  extensions: {
+    id: 'extensions',
+    title: '扩展',
+    sidebarNavKey: 'extensions',
+    isSessionWorkspace: false,
+  },
 };
 
 /**
@@ -46,6 +52,8 @@ export function navigateToSurface(surfaceId: MainSurfaceId): void {
   useLayoutStore.getState().setChatMainSurface(surfaceId);
   if (surfaceId === 'scheduled') {
     emitUiEvent('open-scheduled');
+  } else if (surfaceId === 'extensions') {
+    emitUiEvent('open-extensions');
   } else if (surfaceId === 'chat') {
     emitUiEvent('open-chat');
   }
@@ -87,10 +95,7 @@ import {
   navigateToNewDraft,
 } from './draft-routing';
 
-export {
-  resolveMostActiveProjectFolder,
-  navigateToNewDraft,
-};
+export { resolveMostActiveProjectFolder, navigateToNewDraft };
 
 /**
  * React Hook：响应式读取当前主功能表面
@@ -100,6 +105,7 @@ export function useMainSurface(): {
   meta: MainSurfaceMeta;
   isChat: boolean;
   isScheduled: boolean;
+  isExtensions: boolean;
   navigateToSurface: typeof navigateToSurface;
   toggleSurface: typeof toggleSurface;
   navigateToChatSession: typeof navigateToChatSession;
@@ -114,6 +120,7 @@ export function useMainSurface(): {
     meta,
     isChat: surfaceId === 'chat',
     isScheduled: surfaceId === 'scheduled',
+    isExtensions: surfaceId === 'extensions',
     navigateToSurface,
     toggleSurface,
     navigateToChatSession,

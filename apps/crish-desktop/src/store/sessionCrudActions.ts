@@ -4,6 +4,9 @@ import { GENERAL_FOLDER, getActiveProjectId } from '../api/projectStore';
 import { EMPTY_SESSION_TITLE, shellPruneKeepIds } from '../api/sessionTitle';
 import { nowIsoTimestamp } from '../api/sessionTime';
 import type { SessionImportMeta, SessionState } from './types';
+// 墓碑登记直连专用模块（避免经 importSessions 引入 store/index 反向环与启动期 TDZ）
+import { recordDeletedExternalSession } from '../api/import/externalSessionTombstone';
+import { persistAllSessionsSync } from '../api/session-persistence/sessionLocalStorage';
 import {
   deleteSessionFromIndexed,
   getSessionById,
@@ -35,12 +38,8 @@ import {
   applyDraftModeToState,
   createSessionDraftActions,
 } from './sessionDraftActions';
-import {
-  createSessionStateActions,
-  evictSessionMessagesInState,
-} from './sessionStateActions';
+import { createSessionStateActions } from './sessionStateActions';
 import { triggerSessionMessageHydrateIfNeeded } from './sessionActivateHydrate';
-import { SESSION_HYDRATE_KEEP_K } from '../api/perfBudgets';
 // 可见注入卡片挂载辅助纯函数（addContextInjection 复用，见 sessionInjectionMount.ts）
 import { createSessionInjectionActions } from './sessionInjectionActions';
 
@@ -162,67 +161,13 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         return;
       }
       // D5：切换成功后在 microtask 中重新读取状态并软驱逐非活跃已水合消息。
-      queueMicrotask(async () => {
-        const state = get();
-        const currentActiveId = (state.activeSessionId || nextId || '').trim();
-        // 收集受保护的会话 ID：实时 activeSessionId 及所有分屏叶当前激活或打开的 Tab
-        const protectedSessionIds = new Set<string>();
-        if (currentActiveId && !isPendingDraft(currentActiveId)) {
-          protectedSessionIds.add(currentActiveId);
-        }
-        try {
-          const { useLayoutTreeStore, listChatLeaves } =
-            await import('./layout-tree');
-          const { ownedChatLeaves } =
-            await import('./workspace-shell/treeSessionQuery');
-          const treeRoot = useLayoutTreeStore.getState()?.tree?.root;
-          if (treeRoot) {
-            for (const owned of ownedChatLeaves(treeRoot)) {
-              if (owned.tabs && Array.isArray(owned.tabs)) {
-                for (const t of owned.tabs) {
-                  if (t.sessionId && !isPendingDraft(t.sessionId)) {
-                    protectedSessionIds.add(t.sessionId);
-                  }
-                }
-              }
-            }
-            for (const leaf of listChatLeaves(treeRoot)) {
-              if (Array.isArray(leaf.tabs)) {
-                for (const t of leaf.tabs) {
-                  const sid = (t as { sessionId?: string })?.sessionId;
-                  if (sid && !isPendingDraft(sid)) {
-                    protectedSessionIds.add(sid);
-                  }
-                }
-              }
-            }
+      // 实现体位于 sessionEviction.scheduleSoftEvictionAfterActivation（懒加载，保持既有代码分割边界）。
+      queueMicrotask(() => {
+        void import('./sessionEviction').then(
+          ({ scheduleSoftEvictionAfterActivation }) => {
+            scheduleSoftEvictionAfterActivation(nextId, get, set);
           }
-        } catch {
-          // 容错守卫
-        }
-
-        try {
-          const { findInactiveHydratedSessionIdsToEvict } =
-            await import('./sessionEviction');
-          const evictedSessionIds = findInactiveHydratedSessionIdsToEvict(
-            currentActiveId,
-            new Set(),
-            state.sessions || [],
-            state.sessionsById || {},
-            SESSION_HYDRATE_KEEP_K,
-            {
-              openTabs: protectedSessionIds,
-              visibleSplitSessionIds: protectedSessionIds,
-            }
-          ).filter((id) => !protectedSessionIds.has(id));
-
-          if (evictedSessionIds.length === 0) return;
-          set((current) => {
-            evictSessionMessagesInState(current, evictedSessionIds);
-          });
-        } catch {
-          // 容错守卫
-        }
+        );
       });
       if (!isDemoMode()) {
         const sess = getSessionById(get(), nextId);
@@ -377,6 +322,20 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
 
       const id = typeof sessionId === 'string' ? sessionId.trim() : '';
       if (!id) return false;
+
+      // 若被删除会话为外部导入对话，永久登记墓碑黑名单，阻断重启自动复活
+      const existingTarget = get().sessions.find((s) => s.id === id);
+      if (
+        existingTarget?.importMeta?.source &&
+        existingTarget.importMeta.sourceSessionId
+      ) {
+        recordDeletedExternalSession(
+          existingTarget.importMeta.source,
+          existingTarget.importMeta.sourceSessionId,
+          existingTarget.importMeta.sourcePath
+        );
+      }
+
       let removed = false;
       let isDeletingActive = false;
       let nextActiveIdToSwitch: string | null = null;
@@ -437,6 +396,18 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
             delete state.composerDrafts[id];
           }
         });
+
+        // 外部对话删除后立刻改写会话索引。防抖写盘若被关闭窗口截断，重启仍会从旧索引灌回。
+        const afterDelete = get() as ReturnType<SessionStoreGet> & {
+          hydrationComplete?: boolean;
+        };
+        if (existingTarget?.importMeta && afterDelete.hydrationComplete) {
+          persistAllSessionsSync(
+            afterDelete.sessions,
+            afterDelete.activeSessionId,
+            afterDelete.folderOrder
+          );
+        }
 
         // 若当前活动会话发生了焦点转移且切入具体真实会话，触发必要的工作区激活与懒加载
         if (isDeletingActive && !isDemoMode()) {

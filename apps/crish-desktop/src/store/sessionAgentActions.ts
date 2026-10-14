@@ -25,7 +25,7 @@ import {
 import {
   dualLatchStateMachine,
   scheduleDualRafClearStreams,
-} from '../api/dualLatchProtocol';
+} from './dualLatchProtocol';
 import { StreamValueBatcher } from '../api/streamTextBatcher';
 import type { FinalSubagentSnapshot } from './sessionMessageActionsCore';
 

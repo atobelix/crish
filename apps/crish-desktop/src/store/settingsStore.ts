@@ -14,9 +14,10 @@
  *
  * ## 持久化
  *
- * 分片 key：`crish-settings-v1`，partialize 仅 `scheduledTasks`
- * （用户可配置、值得跨重启保留；appSettings/providers/mcp/tokenUsage
- * 由引擎事件权威回灌，不做本地持久化，避免陈旧数据覆盖）。
+ * 分片 key：`crish-settings-v1`，partialize 仅 `scheduledTasks`。
+ * 用户接入的 MCP 名单写在 `crish_settings.mcpServers`，由 setAppSettings 投影到
+ * `mcpServers`。这里不再另存一份，避免两份缓存互相覆盖。
+ * appSettings / providers / tokenUsage 仍由引擎或设置载荷回灌。
  *
  * @see docs/multi-agent-repair/reports/R3-T11-归类表.md §3
  */
@@ -26,7 +27,12 @@ import { immer } from 'zustand/middleware/immer';
 import { withDevtools } from './middleware/withDevtools';
 import { withLogger } from './middleware/withLogger';
 import { withPersist } from './middleware/withPersist';
-import type { CronJob, McpServer, ProviderInfo, Settings } from '../api/clientApi';
+import type {
+  CronJob,
+  McpServer,
+  ProviderInfo,
+  Settings,
+} from '../api/clientApi';
 import { isDemoMode } from '../api/appMode';
 import { sanitizeTokenUsage } from './layout-helpers/store-initializers';
 import {
@@ -43,11 +49,14 @@ export interface SettingsStore {
   scheduledTasks: CronJob[];
   mcpServers: McpServer[];
   tokenUsage: TokenUsageState;
+  /** 启动时是否自动探测并呈现外部活跃长对话预览（Claude Code / Codex） */
+  autoShowExternalSessionOnStartup: boolean;
   setProviders: (providers: ProviderInfo[]) => void;
   setAppSettings: (settings: Settings | null) => void;
   setScheduledTasks: (tasks: CronJob[]) => void;
   setMcpServers: (servers: McpServer[]) => void;
   syncTelemetryData: (data: TelemetrySyncPayload) => void;
+  setAutoShowExternalSessionOnStartup: (enabled: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -59,6 +68,7 @@ export const useSettingsStore = create<SettingsStore>()(
           providers: [],
           scheduledTasks: [],
           mcpServers: [],
+          autoShowExternalSessionOnStartup: true,
           tokenUsage: isDemoMode()
             ? { ...DEMO_TOKEN_USAGE }
             : { ...DEFAULT_TOKEN_USAGE },
@@ -71,6 +81,10 @@ export const useSettingsStore = create<SettingsStore>()(
           setAppSettings: (settings: Settings | null) =>
             set((state) => {
               state.appSettings = settings;
+              // 缺字段或空设置不得清掉已接入名单；显式空数组表示用户已全部移除。
+              if (settings && Array.isArray(settings.mcpServers)) {
+                state.mcpServers = settings.mcpServers;
+              }
             }),
 
           setScheduledTasks: (tasks: CronJob[]) =>
@@ -107,11 +121,18 @@ export const useSettingsStore = create<SettingsStore>()(
               activeWorkers: data.activeWorkers,
             });
           },
+
+          setAutoShowExternalSessionOnStartup: (enabled: boolean) =>
+            set((state) => {
+              state.autoShowExternalSessionOnStartup = Boolean(enabled);
+            }),
         })),
         {
           name: 'crish-settings-v1',
           partialize: (s) => ({
             scheduledTasks: s.scheduledTasks,
+            autoShowExternalSessionOnStartup:
+              s.autoShowExternalSessionOnStartup,
           }),
         }
       )
