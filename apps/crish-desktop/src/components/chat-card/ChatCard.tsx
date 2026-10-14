@@ -180,7 +180,8 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
     ) : null;
 
     // 空界面与已有对话切换时，输入框只做位移。占位高度冻结，消息视口不跟着 flex 伸缩。
-    const isLanding = state.emptyKind === 'session-empty';
+    const isLanding =
+      !previewExternalSession && state.emptyKind === 'session-empty';
     const prevEmptyKindRef = useRef(state.emptyKind);
     const [isLandingSettling, setIsLandingSettling] = useState(false);
 
@@ -213,8 +214,12 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
     const mainComposerElement = (
       <ChatComposer
         {...state.composerProps}
-        emptyKind={state.emptyKind}
-        layoutVariant={isLanding || activeSettling ? 'multiline' : 'adaptive'}
+        emptyKind={previewExternalSession ? null : state.emptyKind}
+        layoutVariant={
+          !previewExternalSession && (isLanding || activeSettling)
+            ? 'multiline'
+            : 'adaptive'
+        }
         onPasteImage={state.composerProps.handlePasteImage}
         onPasteFiles={state.composerProps.handlePasteFiles}
         onStop={state.composerProps.handleStopGeneration}
@@ -375,7 +380,9 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           aria-label={state.chatRegionAria}
           aria-busy={state.messagesLoading || undefined}
           data-main-surface={state.mainSurface}
-          data-empty-kind={state.emptyKind ?? undefined}
+          data-empty-kind={
+            previewExternalSession ? undefined : (state.emptyKind ?? undefined)
+          }
           data-settling={activeSettling ? 'true' : undefined}
           data-messages-loading={state.messagesLoading ? 'true' : undefined}
           data-engine-ok={
@@ -408,7 +415,11 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           <div
             className={styles.chatDocFlow}
             data-testid="chat-doc-flow"
-            data-empty={state.emptyKind != null ? 'true' : undefined}
+            data-empty={
+              !previewExternalSession && state.emptyKind != null
+                ? 'true'
+                : undefined
+            }
             aria-busy={state.messagesLoading || undefined}
           >
             {state.mainSurface === 'scheduled' ? (
@@ -459,7 +470,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
 
           <ChatComposerWrapper
             mainSurface={state.mainSurface}
-            emptyKind={state.emptyKind}
+            emptyKind={previewExternalSession ? null : state.emptyKind}
             isSettling={activeSettling}
             composerElement={mainComposerElement}
             ribbons={ribbons}

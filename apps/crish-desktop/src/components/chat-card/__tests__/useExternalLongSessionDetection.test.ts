@@ -4,7 +4,10 @@ import { renderHook, act } from '@testing-library/react';
 import { useExternalLongSessionDetection } from '../useExternalLongSessionDetection';
 import * as autoSync from '../../../api/import/autoSyncExternalSessions';
 import * as importSessions from '../../../api/import/importSessions';
-import { useSessionStore } from '../../../store/sessionStore';
+import {
+  useSessionStore,
+  useWorkspaceShellStore,
+} from '../../../store/storeAccess';
 import * as ToastContext from '../../../services/toast/ToastContext';
 
 vi.mock('../../../api/import/autoSyncExternalSessions');
@@ -13,10 +16,19 @@ vi.mock('../../../services/toast/ToastContext');
 
 describe('useExternalLongSessionDetection', () => {
   const showToastMock = vi.fn();
+  let openSessionMock = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
-    useSessionStore.setState({ sessions: [], activeSessionId: null });
+    useSessionStore.setState({
+      sessions: [],
+      activeSessionId: null,
+      sessionsById: {},
+    });
+    openSessionMock = vi.fn((sessionId: string) => {
+      useSessionStore.getState().setActiveSessionId(sessionId);
+    });
+    useWorkspaceShellStore.setState({ openSession: openSessionMock });
     vi.mocked(ToastContext.useToast).mockReturnValue({
       showToast: showToastMock,
       toast: null,
@@ -150,9 +162,85 @@ describe('useExternalLongSessionDetection', () => {
     expect(importSessions.importDetectedSessions).toHaveBeenCalledWith([
       mockResult.detected,
     ]);
+    expect(openSessionMock).toHaveBeenCalledWith('imported-crish-id-123', {
+      title: 'Codex 探索长对话',
+      workspaceKey: '对话',
+    });
     expect(useSessionStore.getState().activeSessionId).toBe(
       'imported-crish-id-123'
     );
+    expect(result.current.previewExternalSession).toBeNull();
+    expect(showToastMock).toHaveBeenCalledWith(
+      '已成功导入并接续该对话，您可以直接在此继续提问！'
+    );
+  });
+
+  it('retrieves existing session and continues conversation when already imported (soft dedup)', async () => {
+    const mockResult: autoSync.DetectedLongSessionResult = {
+      detected: {
+        id: 'session-abc-123',
+        source: 'claude-code',
+        title: '已存在的长对话',
+        messageCount: 20,
+      },
+      mapped: {
+        source: 'claude-code',
+        sourceId: 'session-abc-123',
+        title: '已存在的长对话',
+        folder: 'my-project',
+        messages: [
+          {
+            id: 'm1',
+            sender: 'user',
+            text: 'query',
+            timestamp: 2000,
+            status: 'completed',
+          },
+        ],
+      },
+    };
+
+    const expectedId = 'sess-import-claude-session-abc-123';
+    useSessionStore.setState({
+      sessionsById: {
+        [expectedId]: {
+          id: expectedId,
+          title: '已存在的长对话',
+        } as any,
+      },
+    });
+
+    vi.mocked(autoSync.detectLatestExternalLongSession).mockResolvedValue(
+      mockResult
+    );
+    // 模拟软去重，返回空 sessionIds
+    vi.mocked(importSessions.importDetectedSessions).mockResolvedValue({
+      imported: 0,
+      skipped: 1,
+      skippedDuplicates: 1,
+      errors: [],
+      sessionIds: [],
+    });
+
+    const { result } = renderHook(() =>
+      useExternalLongSessionDetection({
+        emptyKind: 'session-empty',
+        activeSessionId: null,
+      })
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await result.current.handleImportAndContinue();
+    });
+
+    expect(openSessionMock).toHaveBeenCalledWith(expectedId, {
+      title: '已存在的长对话',
+      workspaceKey: 'my-project',
+    });
     expect(result.current.previewExternalSession).toBeNull();
     expect(showToastMock).toHaveBeenCalledWith(
       '已成功导入并接续该对话，您可以直接在此继续提问！'

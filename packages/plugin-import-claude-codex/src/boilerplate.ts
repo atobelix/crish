@@ -132,7 +132,54 @@ export function stripBoilerplate(rawText: string): string {
   cleaned = stripAnsiEscape(cleaned);
   cleaned = cleaned.replace(/\[[0-9]{1,2}m/g, '');
 
-  // 4. 剥离 `# AGENTS.md instructions ...` / `# CLAUDE.md instructions ...`
+  // 4. 外部工具调用与工具执行结果转储块强力剥离（彻底清洗方括号工具调用、工具结果以及 XML 标签）
+  cleaned = cleaned.replace(
+    /\[?(?:external[-_]agent[-_])?tool[-_]call[^\]\n]*\]?[\s\S]*?\[\/(?:external[-_]agent[-_])?tool[-_]call[^\]\n]*\]/gi,
+    ''
+  );
+  cleaned = cleaned.replace(
+    /\[?(?:external[-_]agent[-_])?tool[-_]result[^\]\n]*\]?[\s\S]*?\[\/(?:external[-_]agent[-_])?tool[-_]result[^\]\n]*\]/gi,
+    ''
+  );
+  cleaned = cleaned.replace(
+    /\[?(?:external[-_]agent[-_])?tool[-_]output[^\]\n]*\]?[\s\S]*?\[\/(?:external[-_]agent[-_])?tool[-_]output[^\]\n]*\]/gi,
+    ''
+  );
+  cleaned = cleaned.replace(
+    /<(?:tool_call|tool-call)[^>]*>[\s\S]*?<\/(?:tool_call|tool-call)[^>]*>/gi,
+    ''
+  );
+  cleaned = cleaned.replace(
+    /<(?:tool_result|tool-result)[^>]*>[\s\S]*?<\/(?:tool_result|tool-result)[^>]*>/gi,
+    ''
+  );
+  cleaned = cleaned.replace(
+    /<(?:tool_output|tool-output)[^>]*>[\s\S]*?<\/(?:tool_output|tool-output)[^>]*>/gi,
+    ''
+  );
+
+  // 未闭合直接残留到末尾的工具调用/结果块剥离
+  cleaned = cleaned.replace(
+    /(?:\[|(?:\n|^)\s*\[?)(?:external[-_]agent[-_])?tool[-_]call[^\]\n]*\]?[\s\S]*$/gi,
+    ''
+  );
+  cleaned = cleaned.replace(
+    /(?:\[|(?:\n|^)\s*\[?)(?:external[-_]agent[-_])?tool[-_]result[^\]\n]*\]?[\s\S]*$/gi,
+    ''
+  );
+  cleaned = cleaned.replace(
+    /(?:\[|(?:\n|^)\s*\[?)(?:external[-_]agent[-_])?tool[-_]output[^\]\n]*\]?[\s\S]*$/gi,
+    ''
+  );
+  cleaned = cleaned.replace(/<(?:tool_call|tool-call)[^>]*>[\s\S]*$/gi, '');
+  cleaned = cleaned.replace(/<(?:tool_result|tool-result)[^>]*>[\s\S]*$/gi, '');
+  cleaned = cleaned.replace(/<(?:tool_output|tool-output)[^>]*>[\s\S]*$/gi, '');
+
+  // 剥离因工具调用被清除而残留的空代码块与多余空行
+  cleaned = cleaned.replace(/```[a-zA-Z0-9_-]*\s*```/g, '');
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+  // 5. 剥离 `# AGENTS.md instructions ...` / `# CLAUDE.md instructions ...`
   cleaned = cleaned.replace(
     /#\s*(?:AGENTS|CLAUDE)\.md instructions[\s\S]*?<\/(?:INSTRUCTIONS|instructions)>/gi,
     ''
@@ -195,7 +242,7 @@ export function stripBoilerplate(rawText: string): string {
 
   // 8. 去除可能残留的孤立未闭合样板标记
   if (
-    /^\s*<(?:environment_context|instructions|app-context|local-command)[^>]*>[\s\S]*$/i.test(
+    /^\s*<(?:environment_context|instructions|app-context|local-command|tool_call|tool_result|tool_output|tool-call|tool-result|tool-output)[^>]*>[\s\S]*$/i.test(
       cleaned
     ) &&
     !cleaned.includes('</')

@@ -123,6 +123,14 @@ export function parseCodexRolloutJsonl(
 
   const flushAssistant = () => {
     if (!currentAssistant) return;
+    if (currentAssistant.text && isPureBoilerplate(currentAssistant.text)) {
+      delete currentAssistant.text;
+      if (currentAssistant.segments) {
+        currentAssistant.segments = currentAssistant.segments.filter(
+          (s) => s.kind !== 'text'
+        );
+      }
+    }
     if (!turnHasContent(currentAssistant)) {
       currentAssistant = null;
       return;
@@ -205,7 +213,7 @@ export function parseCodexRolloutJsonl(
           typeof item.text === 'string'
         ) {
           const planText = stripBoilerplate(item.text);
-          if (planText) {
+          if (planText.trim() && !isPureBoilerplate(planText)) {
             pushText(ensureAssistant(ts, `codex-plan-${lineCount}`), planText);
             continue;
           }
@@ -334,12 +342,13 @@ export function parseCodexRolloutJsonl(
         ]);
         const text = stripBoilerplate(rawText);
         const images = collectCodexImages(payload.content, lineCount);
-        if (!text.trim() && images.length === 0) {
+        const hasValidText = Boolean(text.trim() && !isPureBoilerplate(text));
+        if (!hasValidText && images.length === 0) {
           skippedLineCount++;
           continue;
         }
         const a = ensureAssistant(ts, `codex-asst-${lineCount}`);
-        if (text.trim() && !isPureBoilerplate(text)) pushText(a, text);
+        if (hasValidText) pushText(a, text);
         for (const img of images) pushImage(a, img);
         continue;
       }
@@ -387,8 +396,16 @@ export function parseCodexRolloutJsonl(
 
   flushAssistant();
 
-  // 过滤空轮：纯保留有实质文本、思考或图片的轮次
-  const validTurns = turns.filter((t) => turnHasContent(t));
+  // 过滤空轮：纯保留有实质文本、思考或图片的轮次，彻底排除纯工具调用的无意义空白轮
+  const validTurns = turns.filter((t) => {
+    if (t.role === 'assistant' && t.text && isPureBoilerplate(t.text)) {
+      delete t.text;
+      if (t.segments) {
+        t.segments = t.segments.filter((s) => s.kind !== 'text');
+      }
+    }
+    return turnHasContent(t);
+  });
 
   // 标题提取：若既有标题属于系统样板，跳过并提取第一条真实人类提问
   if (

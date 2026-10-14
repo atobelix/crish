@@ -207,6 +207,10 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>(
       syncSessionFromActiveLeaf(result.leafId);
     },
 
+    openSession: (sessionId, opts) => {
+      get().openOrFocusSession(sessionId, opts);
+    },
+
     splitSessionFromSidebar: (sessionId, dstLeafId, region) => {
       const sid = (sessionId || '').trim();
       if (!sid || isPendingDraft(sid) || !dstLeafId) return;

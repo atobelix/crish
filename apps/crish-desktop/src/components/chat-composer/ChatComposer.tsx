@@ -184,7 +184,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     ]
   );
 
-  const multilineFromHook = useComposerMultiline({
+  const multilineDetected = useComposerMultiline({
     text: chatInput,
     hasAttachments: attachments.length > 0,
     layoutRef,
@@ -192,9 +192,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   });
 
   const isMultiline =
-    !isEditingMessage && layoutVariant === 'adaptive'
-      ? multilineFromHook
-      : true;
+    !externalSessionPreview &&
+    (layoutVariant === 'multiline' ||
+      (layoutVariant === 'adaptive' && multilineDetected));
 
   const { effectiveNotice, isClosing, handleDismissNotice } = useComposerNotice(
     {
@@ -341,15 +341,24 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             </div>
 
             {/* 中间输入区：富文本/单多行自适应输入框，外部会话预览时展示极简导入接续触发器 */}
-            <div className={styles.fieldSlot} data-composer-grid="text">
+            <div
+              className={styles.fieldSlot}
+              data-composer-grid="text"
+              onClick={
+                externalSessionPreview
+                  ? () => void externalSessionPreview.onImportAndContinue()
+                  : undefined
+              }
+            >
               {externalSessionPreview ? (
                 <Button
                   type="button"
                   variant="ghost"
                   className={styles.externalSessionImportBtn}
-                  onClick={() =>
-                    void externalSessionPreview.onImportAndContinue()
-                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void externalSessionPreview.onImportAndContinue();
+                  }}
                   disabled={externalSessionPreview.isImporting}
                   aria-label="点击以导入对话并继续输入"
                   data-testid="external-session-import-btn"

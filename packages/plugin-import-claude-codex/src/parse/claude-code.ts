@@ -78,7 +78,7 @@ function absorbAssistantContent(
       }
       return;
     }
-    if (type === 'tool_use') {
+    if (type === 'tool_use' || type === 'tool_result') {
       // 裁决：导入上下文时彻底不导入外部工具调用，杜绝外部软件的私有命令污染 Crish 内部 Agent 的上下文
       return;
     }
@@ -269,7 +269,8 @@ export function parseClaudeCodeJsonl(
       const isNoise =
         !cleaned.trim() ||
         isMeaninglessNoise(cleaned) ||
-        isSystemPromptOrAgentInstructions(cleaned);
+        isSystemPromptOrAgentInstructions(cleaned) ||
+        isPureBoilerplate(cleaned);
 
       const userTurn: NormalizedImportTurn = {
         id: uuid,
@@ -325,6 +326,13 @@ export function parseClaudeCodeJsonl(
 
     absorbAssistantContent(turn, contentField, lineCount);
 
+    if (turn.text && isPureBoilerplate(turn.text)) {
+      delete turn.text;
+      if (turn.segments) {
+        turn.segments = turn.segments.filter((s) => s.kind !== 'text');
+      }
+    }
+
     if (!turnHasContent(turn)) {
       skippedLineCount++;
       continue;
@@ -334,7 +342,16 @@ export function parseClaudeCodeJsonl(
     canMergeAssistant = true;
   }
 
-  const validTurns = turns.filter((t) => turnHasContent(t));
+  // 过滤空轮：纯保留有实质文本、思考或图片的轮次，彻底排除纯工具调用的无意义空白轮
+  const validTurns = turns.filter((t) => {
+    if (t.role === 'assistant' && t.text && isPureBoilerplate(t.text)) {
+      delete t.text;
+      if (t.segments) {
+        t.segments = t.segments.filter((s) => s.kind !== 'text');
+      }
+    }
+    return turnHasContent(t);
+  });
 
   // 标题提取：若既有标题属于系统样板，跳过并提取第一条真实人类提问
   let titleCandidate = customTitle || aiTitle || summary;

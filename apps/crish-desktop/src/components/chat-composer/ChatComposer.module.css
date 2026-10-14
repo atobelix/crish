@@ -1261,7 +1261,11 @@
   box-shadow:
     0 1px 3px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
     0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
-  transition: none;
+  transition:
+    border-radius var(--transition-normal, 160ms) var(--ease-out, ease-out),
+    border-color var(--transition-fast, 120ms) ease,
+    box-shadow var(--transition-fast, 120ms) ease,
+    min-height 160ms var(--ease-out, ease-out);
   container-type: inline-size;
 }
 
@@ -1941,29 +1945,55 @@
 
 /* field 模式 .sendBtn 保留一份；禁止再复制整块 */
 
-/* 外部会话预览导入触发器：置于输入框内，极简纯净 */
+/* 外部会话预览导入触发器：置于输入框内，单行胶囊确认入口 */
 .externalSessionImportBtn {
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 38px;
+  height: 28px;
+  min-height: 28px;
   padding: 0 var(--space-2, 8px);
   background: transparent;
   border: none;
+  border-radius: var(--radius-md, 6px);
   outline: none;
   cursor: pointer;
   text-align: left;
   user-select: none;
+  box-sizing: border-box;
+  transition:
+    background var(--transition-fast, 120ms ease),
+    box-shadow var(--transition-fast, 120ms ease),
+    transform var(--transition-fast, 120ms ease);
 }
 
 .externalSessionImportText {
   font-size: var(--font-size-sm, 13px);
+  line-height: 20px;
   color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition: color var(--transition-fast, 120ms ease);
+}
+
+.externalSessionImportBtn:hover:not(:disabled) {
+  background: linear-gradient(
+    90deg,
+    var(--tint-hover) 0%,
+    color-mix(in srgb, var(--brand) 6%, var(--tint-hover)) 50%,
+    var(--tint-hover) 100%
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 12%, transparent);
 }
 
 .externalSessionImportBtn:hover:not(:disabled) .externalSessionImportText {
   color: var(--text-primary);
+}
+
+.externalSessionImportBtn:active:not(:disabled) {
+  background: var(--tint-hover);
+  transform: scale(0.995);
 }
 
 .externalSessionImportBtn:disabled {

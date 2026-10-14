@@ -45,6 +45,17 @@ export interface WorkspaceShellActions {
       insertIdx?: number;
     }
   ) => void;
+  /** 打开或聚焦会话（别名：等同于 openOrFocusSession） */
+  openSession: (
+    sessionId: string,
+    opts?: {
+      title?: string;
+      workspaceKey?: string;
+      split?: 'right' | 'left' | 'top' | 'bottom';
+      activeLeafId?: string;
+      insertIdx?: number;
+    }
+  ) => void;
   splitSessionFromSidebar: (
     sessionId: string,
     dstLeafId: string,

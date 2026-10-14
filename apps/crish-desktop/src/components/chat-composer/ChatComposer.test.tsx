@@ -396,7 +396,7 @@ describe('ChatComposer 全链（T6 接线）', () => {
     expect(typeof mod.STOP_TOOLTIP).toBe('string');
   });
 
-  it('外部历史对话预览态：输入框呈现极简导入触发器并响应点击与发送', () => {
+  it('外部历史对话预览态：强制单行胶囊形态，无多行权限条，响应点击与发送', () => {
     const onImport = vi.fn();
     renderChatComposer({
       externalSessionPreview: {
@@ -406,11 +406,23 @@ describe('ChatComposer 全链（T6 接线）', () => {
       },
     });
 
+    const card = document.querySelector('[data-composer-card]');
+    expect(card?.getAttribute('data-multiline')).toBe('0');
+    expect(document.querySelector('[data-composer-grid="perm"]')).toBeNull();
+
     const trigger = screen.getByTestId('external-session-import-btn');
     expect(trigger).toBeInTheDocument();
     expect(screen.getByText('点击以导入对话并继续输入…')).toBeInTheDocument();
 
     fireEvent.click(trigger);
     expect(onImport).toHaveBeenCalledTimes(1);
+
+    const sendBtn = screen.getByRole('button', { name: /发送/ });
+    fireEvent.click(sendBtn);
+    expect(onImport).toHaveBeenCalledTimes(2);
+
+    const slot = document.querySelector('[data-composer-grid="text"]');
+    if (slot) fireEvent.click(slot);
+    expect(onImport).toHaveBeenCalledTimes(3);
   });
 });

@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseCodexRolloutJsonl } from '../parse/codex';
+import { isPureBoilerplate, stripBoilerplate } from '../boilerplate';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixture = readFileSync(
@@ -478,5 +479,220 @@ describe('parseCodexRolloutJsonl', () => {
     expect(parsed.turns[0]?.text).toBe('Explain binary search');
     expect(parsed.turns[1]?.text).toBe('Binary search works on sorted arrays.');
     expect(parsed.title).toBe('Explain binary search');
+  });
+
+  it('stripBoilerplate 与 isPureBoilerplate 正确处理外部工具调用与转储块', () => {
+    const toolCallAndResult = [
+      '[external_agent_tool_call: Bash]',
+      'description: Check files',
+      'command: ls -la',
+      '[/external_agent_tool_call]',
+      '[external_agent_tool_result]',
+      'total 48',
+      '-rw-r--r--  1 dev  staff  1024 Oct 14 00:00 package.json',
+      '[/external_agent_tool_result]',
+    ].join('\n');
+
+    expect(stripBoilerplate(toolCallAndResult)).toBe('');
+    expect(isPureBoilerplate(toolCallAndResult)).toBe(true);
+
+    const mixed = [
+      'Here are the files in current directory:',
+      toolCallAndResult,
+      'Everything looks normal.',
+    ].join('\n');
+
+    const cleaned = stripBoilerplate(mixed);
+    expect(cleaned).toContain('Here are the files in current directory:');
+    expect(cleaned).toContain('Everything looks normal.');
+    expect(cleaned).not.toContain('external_agent_tool_call');
+    expect(cleaned).not.toContain('package.json');
+    expect(isPureBoilerplate(mixed)).toBe(false);
+  });
+
+  it('彻底剥离包含 [external_agent_tool_call: Bash] 与 [external_agent_tool_result] 的复杂转储文本，只保留真实对话回复正文与思考', () => {
+    const lines = [
+      JSON.stringify({
+        timestamp: '2026-07-02T12:00:00.000Z',
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: 'Please run the test suite and summarize the git status.',
+            },
+          ],
+        },
+      }),
+      JSON.stringify({
+        timestamp: '2026-07-02T12:00:01.000Z',
+        type: 'response_item',
+        payload: {
+          type: 'reasoning',
+          summary: [{ text: 'Checking git status and running test commands' }],
+          content: [{ text: 'Need to make sure workspace is clean' }],
+        },
+      }),
+      JSON.stringify({
+        timestamp: '2026-07-02T12:00:02.000Z',
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: [
+                '[external_agent_tool_call: Bash]',
+                'description: Check git working tree',
+                'command: git status',
+                '[/external_agent_tool_call]',
+                '[external_agent_tool_result]',
+                'On branch main',
+                'Changes not staged for commit:',
+                '  modified: src/core.ts',
+                '  modified: src/parser.ts',
+                'Untracked files:',
+                '  coverage/lcov.info',
+                '[/external_agent_tool_result]',
+                '[external_agent_tool_call: Bash]',
+                'description: Execute vitest test suite',
+                'command: npx vitest run',
+                '[/external_agent_tool_call]',
+                '[external_agent_tool_result]',
+                'RUN v3.0.0 /workspace',
+                ' ✓ tests/core.test.ts (12 tests) 20ms',
+                ' ✓ tests/parser.test.ts (8 tests) 15ms',
+                'Test Files 2 passed (2)',
+                '     Tests 20 passed (20)',
+                '[/external_agent_tool_result]',
+                'I have inspected the git repository and executed the test suite.',
+                'All 20 tests in 2 test files passed successfully, and 2 files are modified in git status.',
+              ].join('\n'),
+            },
+          ],
+        },
+      }),
+      // 纯由外部工具调用和执行结果构成的独立 assistant 轮次，应被断定为 pure boilerplate 并彻底丢弃，不生成空白轮
+      JSON.stringify({
+        timestamp: '2026-07-02T12:00:03.000Z',
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: [
+                '[external_agent_tool_call: Bash]',
+                'description: Ping daemon',
+                'command: echo ping',
+                '[/external_agent_tool_call]',
+                '[external_agent_tool_result]',
+                'ping',
+                '[/external_agent_tool_result]',
+              ].join('\n'),
+            },
+          ],
+        },
+      }),
+    ].join('\n');
+
+    const parsed = parseCodexRolloutJsonl(lines);
+
+    // 仅保留 1 条用户轮与 1 条合并后的助手轮（纯工具调用的独立行被完全丢弃）
+    expect(parsed.turns).toHaveLength(2);
+    expect(parsed.turns[0]).toMatchObject({
+      role: 'user',
+      text: 'Please run the test suite and summarize the git status.',
+    });
+
+    const assistant = parsed.turns[1];
+    expect(assistant).toBeTruthy();
+    expect(assistant?.role).toBe('assistant');
+
+    // 思考内容被完整保留
+    expect(assistant?.thinking).toContain(
+      'Checking git status and running test commands'
+    );
+    expect(assistant?.thinking).toContain(
+      'Need to make sure workspace is clean'
+    );
+
+    // 助手回复正文保留人类可读部分
+    expect(assistant?.text).toContain(
+      'I have inspected the git repository and executed the test suite.'
+    );
+    expect(assistant?.text).toContain(
+      'All 20 tests in 2 test files passed successfully, and 2 files are modified in git status.'
+    );
+
+    // 彻底排除所有方括号工具调用及庞大的命令输出结果噪音
+    expect(assistant?.text).not.toContain('[external_agent_tool_call');
+    expect(assistant?.text).not.toContain('[/external_agent_tool_call]');
+    expect(assistant?.text).not.toContain('[external_agent_tool_result]');
+    expect(assistant?.text).not.toContain('[/external_agent_tool_result]');
+    expect(assistant?.text).not.toContain('command: git status');
+    expect(assistant?.text).not.toContain('On branch main');
+    expect(assistant?.text).not.toContain('command: npx vitest run');
+    expect(assistant?.text).not.toContain('coverage/lcov.info');
+    expect(assistant?.text).not.toContain('RUN v3.0.0');
+    expect(assistant?.text).not.toContain('ping');
+    expect(assistant?.toolCalls).toBeUndefined();
+  });
+
+  it('彻底剥离未闭合的 [external_agent_tool_call] 与 XML 工具标签', () => {
+    const lines = [
+      JSON.stringify({
+        timestamp: '2026-07-02T12:00:00.000Z',
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: 'Build project' }],
+        },
+      }),
+      JSON.stringify({
+        timestamp: '2026-07-02T12:00:01.000Z',
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: '<tool_call name="bash">\ncargo build\n</tool_call>\n<tool_result>\n   Compiling conex v0.1.0\n    Finished dev profile\n</tool_result>\nBuild finished.',
+            },
+          ],
+        },
+      }),
+      JSON.stringify({
+        timestamp: '2026-07-02T12:00:02.000Z',
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            {
+              type: 'output_text',
+              text: 'Project built successfully.\n[external_agent_tool_call: Bash]\ncommand: lingering unclosed call',
+            },
+          ],
+        },
+      }),
+    ].join('\n');
+
+    const parsed = parseCodexRolloutJsonl(lines);
+    expect(parsed.turns).toHaveLength(2);
+    const asst = parsed.turns[1];
+    expect(asst?.text).toContain('Build finished.');
+    expect(asst?.text).toContain('Project built successfully.');
+    expect(asst?.text).not.toContain('<tool_call');
+    expect(asst?.text).not.toContain('<tool_result');
+    expect(asst?.text).not.toContain('Compiling conex');
+    expect(asst?.text).not.toContain('lingering unclosed call');
+    expect(asst?.text).not.toContain('[external_agent_tool_call');
   });
 });

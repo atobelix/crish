@@ -34,8 +34,20 @@
   box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-color) 8%, transparent);
 }
 
+@keyframes messageRowFadeSlideIn {
+  from {
+    opacity: 0.6;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .rowUser {
   align-items: flex-end;
+  animation: messageRowFadeSlideIn 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .rowUser[data-editing='true'],
@@ -46,6 +58,14 @@
 .rowAssistant {
   align-items: flex-start;
   max-width: min(var(--chat-col-max, 760px), 100%);
+  animation: messageRowFadeSlideIn 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rowUser,
+  .rowAssistant {
+    animation: none;
+  }
 }
 
 .rowAssistant.isFollowup {

@@ -4,7 +4,10 @@ import {
   type DetectedLongSessionResult,
 } from '../../api/import/autoSyncExternalSessions';
 import { importDetectedSessions } from '../../api/import/importSessions';
-import { useSessionStore } from '../../store/storeAccess';
+import {
+  useSessionStore,
+  useWorkspaceShellStore,
+} from '../../store/storeAccess';
 import { useToast } from '../../services/toast/ToastContext';
 
 export interface UseExternalLongSessionDetectionOptions {
@@ -75,9 +78,26 @@ export function useExternalLongSessionDetection({
       const res = await importDetectedSessions([
         previewExternalSession.detected,
       ]);
-      const targetId = res.sessionIds?.[0];
+      let targetId = res.sessionIds?.[0];
+      if (!targetId) {
+        const cleanSource =
+          previewExternalSession.detected.source === 'claude-code'
+            ? 'claude'
+            : 'codex';
+        const cleanId = (previewExternalSession.detected.id || '')
+          .replace(/[^a-zA-Z0-9_-]/g, '')
+          .slice(0, 32);
+        const expectedId = `sess-import-${cleanSource}-${cleanId}`;
+        if (useSessionStore.getState().sessionsById[expectedId]) {
+          targetId = expectedId;
+        }
+      }
+
       if (targetId) {
-        useSessionStore.getState().setActiveSessionId(targetId);
+        useWorkspaceShellStore.getState().openSession(targetId, {
+          title: previewExternalSession.mapped.title,
+          workspaceKey: previewExternalSession.mapped.folder || '对话',
+        });
         setPreviewExternalSession(null);
 
         // 解锁并聚焦 Composer 输入框

@@ -25,6 +25,7 @@ vi.mock('../../../services/toast/ToastContext', () => ({
 // Mock 工作区打开器
 vi.mock('../../../api/filePanelOpener', () => ({
   openFileInPanel: vi.fn(),
+  registerFileViewerOpener: vi.fn(),
 }));
 
 // Mock 路径安全校验

@@ -277,4 +277,53 @@ describe('parseClaudeCodeJsonl', () => {
     expect(parsed.title).not.toContain('You are Claude');
     expect(parsed.title).not.toContain('CLAUDE.md');
   });
+
+  it('剥离正文中的 [external_agent_tool_call] 与 [external_agent_tool_result] 转储，过滤纯工具轮次', () => {
+    const lines = [
+      JSON.stringify({
+        type: 'user',
+        uuid: 'u-1',
+        timestamp: '2026-07-01T10:00:00.000Z',
+        message: {
+          role: 'user',
+          content: 'Run check',
+        },
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        uuid: 'a-tool-dump',
+        timestamp: '2026-07-01T10:00:01.000Z',
+        message: {
+          role: 'assistant',
+          content: [
+            {
+              type: 'text',
+              text: '[external_agent_tool_call: Bash]\ncommand: ls\n[/external_agent_tool_call]\n[external_agent_tool_result]\nfile.txt\n[/external_agent_tool_result]\nCheck completed.',
+            },
+          ],
+        },
+      }),
+      // 纯外部工具调用的无意义空白轮
+      JSON.stringify({
+        type: 'assistant',
+        uuid: 'a-pure-tool',
+        timestamp: '2026-07-01T10:00:02.000Z',
+        message: {
+          role: 'assistant',
+          content: [
+            {
+              type: 'text',
+              text: '[external_agent_tool_call: Bash]\ncommand: echo 1\n[/external_agent_tool_call]',
+            },
+          ],
+        },
+      }),
+    ].join('\n');
+
+    const parsed = parseClaudeCodeJsonl(lines);
+    expect(parsed.turns).toHaveLength(2);
+    expect(parsed.turns[1]?.text).toBe('Check completed.');
+    expect(parsed.turns[1]?.text).not.toContain('external_agent_tool_call');
+    expect(parsed.turns[1]?.text).not.toContain('file.txt');
+  });
 });

@@ -81,8 +81,7 @@ export function estimateTimelineMessageHeight(msg: SessionMessage): number {
         textHeight +
           attachHeight +
           ESTIMATE_USER_ATTACHMENT_GAP_PX +
-          META_SLOT_PX +
-          CHAT_ROW_GAP_PX,
+          (META_SLOT_PX + CHAT_ROW_GAP_PX),
         ESTIMATE_USER_MIN_ROW_PX
       ),
       ESTIMATE_USER_MAX_HEIGHT_PX

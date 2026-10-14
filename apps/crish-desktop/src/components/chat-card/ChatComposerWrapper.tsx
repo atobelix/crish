@@ -36,6 +36,7 @@ export interface RibbonsGroup {
 
 export interface ChatComposerWrapperProps {
   mainSurface: string;
+  /** 空态类型。外部会话预览时传入 null，视同已有消息的常规对话态 */
   emptyKind: string | null;
   composerElement: React.ReactNode;
   /** R2-5 B3：ribbons 专属字段分组（调用方构造稳定引用） */

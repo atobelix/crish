@@ -106,7 +106,7 @@
   background: var(--chat-footer-fade);
   pointer-events: auto;
   transform: none;
-  transition: transform var(--transition-landing-settle);
+  transition: transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .chatFooter .chatCol {
