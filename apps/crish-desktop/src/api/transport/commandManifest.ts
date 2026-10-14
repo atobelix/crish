@@ -63,6 +63,10 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('workbench_set_snap_overlay_rect', 'workbench', 'gui'),
     entry('workbench_run_shell', 'workbench', 'gui'),
     entry('workbench_abort_run', 'workbench', 'gui'),
+    entry('workbench_list_mcp_servers', 'workbench', 'gui'),
+    entry('workbench_start_mcp_server', 'workbench', 'gui'),
+    entry('workbench_stop_mcp_server', 'workbench', 'gui'),
+    entry('workbench_toggle_mcp_tool', 'workbench', 'gui'),
     // PE-07 T07.3（C-02/C-03）：git 参数数组执行 + 参数 schema 白名单
     entry('workbench_git_run', 'workbench', 'gui'),
     entry('workbench_pty_create', 'workbench', 'gui'),

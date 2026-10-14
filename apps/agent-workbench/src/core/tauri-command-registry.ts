@@ -83,6 +83,31 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     feature: 'host default app open',
   },
   {
+    command: 'workbench_abort_run',
+    status: 'implemented',
+    feature: 'session-scoped run abort (L3 force stop)',
+  },
+  {
+    command: 'workbench_list_mcp_servers',
+    status: 'implemented',
+    feature: 'mcp server inventory listing',
+  },
+  {
+    command: 'workbench_start_mcp_server',
+    status: 'implemented',
+    feature: 'mcp server start',
+  },
+  {
+    command: 'workbench_stop_mcp_server',
+    status: 'implemented',
+    feature: 'mcp server stop',
+  },
+  {
+    command: 'workbench_toggle_mcp_tool',
+    status: 'implemented',
+    feature: 'mcp tool enable toggle',
+  },
+  {
     command: 'workbench_list_file_openers',
     status: 'implemented',
     feature: 'file association discovery',
