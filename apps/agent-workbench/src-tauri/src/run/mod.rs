@@ -18,7 +18,7 @@
 //! 化，子模经 `use super::*` 可见）与顶层常量；9 模经 glob re-export 到
 //! 本层，门面 `pub(crate) use run::*` 保持既有 crate 内引用路径不 break。
 
-pub(crate) use std::collections::{HashMap, VecDeque};
+pub(crate) use std::collections::{HashMap, HashSet, VecDeque};
 pub(crate) use std::future::Future;
 pub(crate) use std::path::PathBuf;
 pub(crate) use std::pin::Pin;

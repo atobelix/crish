@@ -520,7 +520,7 @@ export const iconMap = {
   'wrap-text': h(TextWrapIcon),
   wrench: h(Wrench01Icon),
   x: h(Cancel01Icon),
-  'x-circle': h(CancelCircleIcon),
   'x-octagon': h(Cancel01Icon),
+  'x-circle': h(CancelCircleIcon),
   zap: h(ZapIcon),
 } satisfies Record<IconName, IconEntry>;

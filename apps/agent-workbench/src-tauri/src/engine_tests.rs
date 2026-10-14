@@ -2828,11 +2828,14 @@ mod store_assembly_tests {
                 .is_some(),
             "cron-0 声明应落库 session_meta（真适配装配）"
         );
+        // 索引真源为 SESSION_META_SCHED_INDEX_KEY（"sched_index"）；"sched_ids"
+        // 已降级为 legacy 键（BATCH-SCHED-W1 重命名，仅存量收敛合并时读取，
+        // 不再写入）。断言真源键，避免随重命名漂移。
         assert!(
-            db.get_session_meta("sched_ids")
+            db.get_session_meta(crate::sched::SESSION_META_SCHED_INDEX_KEY)
                 .expect("db 读应成功")
                 .is_some(),
-            "sched_ids 索引应已写入"
+            "sched_index 索引应已写入"
         );
         // None → 内存版回退：注册功能可用（数据不进 db，功能面同既有
         // MemorySchedStore 语义）

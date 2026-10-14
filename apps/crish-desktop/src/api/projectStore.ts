@@ -26,14 +26,17 @@ const WORKSPACE_KEY = 'crish_workspace';
  * 历史 projectId → 路径。删除/重建项目后仍能把旧会话挂回新 id。
  * 每次 open/add 都会写入当前 id→path。
  */
-const FOLDER_ALIASES_KEY = 'crish_project_folder_aliases_v1';
 
 /** 无项目时会话分组名 */
-export const GENERAL_FOLDER = '对话';
+import {
+  loadAliases,
+  normalizePath,
+  rememberProjectFolderAlias,
+} from './projectAliases';
 
-function normalizePath(path: string): string {
-  return path.replace(/\\/g, '/').replace(/\/+$/, '');
-}
+export { rememberProjectFolderAlias };
+
+export const GENERAL_FOLDER = '对话';
 
 /** 路径 → 稳定 projectId（同一路径永远同一 id） */
 export function stableProjectIdFromPath(path: string): string {
@@ -60,45 +63,6 @@ function loadRaw(): ProjectEntry[] {
 
 function saveRaw(list: ProjectEntry[]) {
   localStorage.setItem(PROJECTS_KEY, JSON.stringify(list));
-}
-
-type AliasMap = Record<string, string>; // folderIdOrLegacy → absolute path
-
-function loadAliases(): AliasMap {
-  try {
-    const raw = localStorage.getItem(FOLDER_ALIASES_KEY);
-    if (!raw) return {};
-    const obj = JSON.parse(raw);
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return {};
-    const out: AliasMap = {};
-    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
-      if (typeof k === 'string' && k && typeof v === 'string' && v.trim()) {
-        out[k] = normalizePath(v);
-      }
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
-
-function saveAliases(map: AliasMap) {
-  try {
-    localStorage.setItem(FOLDER_ALIASES_KEY, JSON.stringify(map));
-  } catch {
-    /* swallow-ok: 别名映射尽力写，quota/隐私模式失败时下次启动重试 */
-  }
-}
-
-/** 记录 id→path，供幽灵 proj-* 找回 */
-export function rememberProjectFolderAlias(
-  projectId: string,
-  path: string
-): void {
-  if (!projectId || !path) return;
-  const map = loadAliases();
-  map[projectId] = normalizePath(path);
-  saveAliases(map);
 }
 
 export function listProjects(): ProjectEntry[] {

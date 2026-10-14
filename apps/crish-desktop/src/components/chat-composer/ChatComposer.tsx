@@ -28,27 +28,19 @@ import { ComposerPermissionBar } from './ComposerPermissionBar';
 import { ComposerPlanProgressBar } from './ComposerPlanProgressBar';
 import { ComposerDropHost } from './ComposerDropHost';
 import { ComposerFusedTrigger } from './ComposerFusedTrigger';
-import { removePendingFileAnnotation } from '../../api/workspaceFsApi';
 import { ComposerSendControls } from './ComposerSendControls';
 import { useComposerMultiline } from './useComposerMultiline';
-import { useComposerHiddenFileInputProps } from '../../api/modelVisionSupport';
+import { useComposerFileHandlers } from './useComposerFileHandlers';
 import { ComposerNoticeBar } from './ComposerNoticeBar';
 import { useComposerNotice } from './useComposerNotice';
 import { useComposerEmptyKind } from './useComposerEmptyKind';
 import { useComposerProtectedSend } from './useComposerProtectedSend';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
-import { InputFieldErrorBoundary } from './InputFieldErrorBoundary';
+import { ComposerFieldSlot } from './ComposerFieldSlot';
 
 export type { ComposerFieldProps, ChatComposerProps, ComposerLayoutVariant };
 export { ComposerField, STOP_TOOLTIP };
 import { AppIcon } from '../ui/icons/index';
-
-/** 富文本输入（默认主路）：React.lazy 软接，装配失败回落 textarea（F1-γ） */
-const TiptapComposerFieldLazy = React.lazy(() =>
-  import('./TiptapComposerField').then((m) => ({
-    default: m.TiptapComposerField,
-  }))
-);
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
   chatInput,
@@ -119,62 +111,18 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   const [richTextFailed, setRichTextFailed] = React.useState(false);
   const emptyKind = useComposerEmptyKind(emptyKindProp, wrapperRef);
 
-  const focusComposerTextarea = useCallback(() => {
-    const root = fieldContainerRef.current;
-    // tiptap 编辑器为 contenteditable 根；textarea 分支兼容侧栏 ComposerField 复用
-    const el =
-      root?.querySelector?.('textarea.composer-textarea') ??
-      root?.querySelector?.('textarea') ??
-      root?.querySelector?.('[contenteditable="true"]');
-    if (el instanceof HTMLElement) el.focus();
-  }, []);
-
-  const hiddenFileInputProps = useComposerHiddenFileInputProps(
-    async (files) => {
-      await onFilesSelected(files);
-      requestAnimationFrame(focusComposerTextarea);
-    }
-  );
-
-  const handleRemoveAttachment = useCallback(
-    (identifier: string) => {
-      setAttachments((prev) => {
-        const targetIndex = prev.findIndex(
-          (x) => (x.id && x.id === identifier) || x.name === identifier
-        );
-        if (targetIndex === -1) return prev;
-        const target = prev[targetIndex];
-        if (target?.annotation?.id) {
-          removePendingFileAnnotation(target.annotation.id, scopedSessionId);
-        }
-        return prev.filter((_, idx) => idx !== targetIndex);
-      });
-    },
-    [setAttachments, scopedSessionId]
-  );
-
-  const handleFileOpenClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (!onOpenPath) return;
-      const t =
-        e.target instanceof Element
-          ? e.target
-          : e.target instanceof Node
-            ? e.target.parentElement
-            : null;
-      if (!t) return;
-      if (t.closest('.chat-attach-remove')) return;
-      const el = t.closest('[data-file-open-path]');
-      if (!(el instanceof HTMLElement)) return;
-      const path = (el.getAttribute('data-file-open-path') || '').trim();
-      if (!path || /^(note|notebook)(:|$)/i.test(path)) return;
-      if (!/[\\/]/.test(path) && !/\.[A-Za-z0-9]{1,12}$/.test(path)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      onOpenPath(path);
-    },
-    [onOpenPath]
-  );
+  const {
+    focusComposerTextarea,
+    hiddenFileInputProps,
+    handleRemoveAttachment,
+    handleFileOpenClick,
+  } = useComposerFileHandlers({
+    setAttachments,
+    scopedSessionId,
+    fieldContainerRef,
+    onOpenPath,
+    onFilesSelected,
+  });
 
   const handleProtectedSend = useComposerProtectedSend({
     chatInput,
@@ -247,28 +195,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     !isEditingMessage && layoutVariant === 'adaptive'
       ? multilineFromHook
       : true;
-
-  /**
-   * 统一输入区装配：默认主路 = TiptapComposerField（React.lazy 软接 + Suspense，
-   * 加载期以 textarea 同契约兜底渲染）；富文本装配失败（lazy 加载 / 渲染抛错，
-   * InputFieldErrorBoundary 捕获）→ 永久回落 ComposerField（textarea），纯文本可发送（F1-γ）。
-   */
-  const renderInputField = () => {
-    if (richTextFailed) return <ComposerField {...fieldContract} />;
-    return (
-      <InputFieldErrorBoundary onFail={() => setRichTextFailed(true)}>
-        <React.Suspense fallback={<ComposerField {...fieldContract} />}>
-          <TiptapComposerFieldLazy
-            {...fieldContract}
-            baseSlashCommands={filteredCommands}
-            emptyKind={emptyKind}
-            onFilesSelected={onFilesSelected}
-            onPasteFiles={onPasteFiles}
-          />
-        </React.Suspense>
-      </InputFieldErrorBoundary>
-    );
-  };
 
   const { effectiveNotice, isClosing, handleDismissNotice } = useComposerNotice(
     {
@@ -435,7 +361,15 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                   </span>
                 </Button>
               ) : (
-                renderInputField()
+                <ComposerFieldSlot
+                  fieldContract={fieldContract}
+                  filteredCommands={filteredCommands}
+                  emptyKind={emptyKind}
+                  onFilesSelected={onFilesSelected}
+                  onPasteFiles={onPasteFiles}
+                  richTextFailed={richTextFailed}
+                  onRichTextFail={() => setRichTextFailed(true)}
+                />
               )}
             </div>
 

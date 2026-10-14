@@ -233,6 +233,12 @@ pub struct CoreRunState {
     pub(crate) bridge: EventBridge,
     /// 活动 run 注册表（终态移出；会话内串行守卫依据）
     pub(crate) active_runs: Mutex<HashMap<String, Arc<ActiveRun>>>,
+    /// 装配中会话标记（run_launch.rs 串行守卫：检查通过即在本集合插入
+    /// 会话 id——检查与占用同一临界区，闭合「守卫检查锁内判定、真实
+    /// 条目数百行后才 insert」的 TOCTOU 窗口；[run_launch::
+    /// RunLaunchGuard] drop 无条件清理，防装配失败泄漏导致会话永久
+    /// 无法再启动 run）
+    pub(crate) assembling_sessions: Mutex<HashSet<String>>,
     /// 状态诊断（环形 20 条 + lastError AtomicSlot，PE-04 T04.5）
     pub(crate) diagnostics: Arc<StatusDiagnostics>,
     /// T08.8：会话级序列号预热缓存（base_sequence_for；恢复后 seed）
@@ -495,6 +501,7 @@ impl CoreRunState {
             engine,
             bridge,
             active_runs: Mutex::new(HashMap::new()),
+            assembling_sessions: Mutex::new(HashSet::new()),
             diagnostics,
             next_sequences: Mutex::new(HashMap::new()),
             restore_ready: AtomicBool::new(false),

@@ -126,3 +126,51 @@ export function computeVisibleRange(
     estimatedTotalHeight: provider.getTotalHeight(count),
   };
 }
+
+/** 高度条目形状（estimated 与可空 actual，与 VirtualScrollManager 内部一致） */
+export interface HeightEntryShape {
+  estimated: number;
+  actual: number | null;
+}
+
+/**
+ * 会话切换后恢复跨会话实测高度记忆：对每个命中且合法的 id 回写高度，
+ * 返回是否存在任一变化（原 VirtualScrollManager.restoreRememberedActuals 循环体）。
+ */
+export function restoreRememberedActualsInto(args: {
+  ids: readonly string[];
+  remembered: ReadonlyMap<string, number>;
+  write: (id: string, height: number) => boolean;
+  isValid: (id: string, height: number) => boolean;
+}): boolean {
+  const { ids, remembered, write, isValid } = args;
+  if (!Array.isArray(ids) || ids.length === 0 || remembered.size === 0)
+    return false;
+  let anyChanged = false;
+  for (let i = 0; i < ids.length; i++) {
+    const id = ids[i]!;
+    const height = remembered.get(id);
+    if (height !== undefined && isValid(id, height) && write(id, height)) {
+      anyChanged = true;
+    }
+  }
+  return anyChanged;
+}
+
+/**
+ * 记录跨会话实测高度 LRU（删除重插实现「最近使用」；超容量淘汰最旧一项）。
+ * 服务于 VirtualScrollManager.rememberedActuals 的语义单点。
+ */
+export function rememberActualHeight(
+  map: Map<string, number>,
+  id: string,
+  height: number,
+  capacity = 4096
+): void {
+  map.delete(id);
+  map.set(id, height);
+  if (map.size > capacity) {
+    const oldest = map.keys().next().value;
+    if (oldest !== undefined) map.delete(oldest);
+  }
+}

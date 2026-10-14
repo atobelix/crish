@@ -1,8 +1,8 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Input, Button } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button } from '../ui';
 import { useExtensionMarket } from '../settings-extensions/useExtensionMarket';
 import { ExternalImportWorkbench } from './ExternalImportWorkbench';
+import { ExtensionsHeaderActions } from './ExtensionsHeaderActions';
 import { ExtensionsInstalledWorkbench } from './ExtensionsInstalledWorkbench';
 import { ExtensionsModals } from './ExtensionsModals';
 import {
@@ -382,62 +382,15 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
         </div>
 
         <div className={styles.headerRight}>
-          {categoryFilter === 'plugins' && (
-            <>
-              <Button
-                variant="secondary"
-                size="sm"
-                className={styles.headerActionBtn}
-                onClick={handleCreatePlugin}
-              >
-                <AppIcon name="plus" size={13} />
-                <span>制作插件</span>
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                className={styles.headerActionBtn}
-                onClick={() => setShowPluginCreateModal(true)}
-              >
-                <AppIcon name="folder-input" size={13} />
-                <span>导入插件</span>
-              </Button>
-            </>
-          )}
-          {categoryFilter === 'skills' && (
-            <Button
-              variant="secondary"
-              size="sm"
-              className={styles.headerActionBtn}
-              onClick={() => setShowSkillCreateModal(true)}
-            >
-              <AppIcon name="plus" size={13} />
-              <span>添加技能</span>
-            </Button>
-          )}
-          {categoryFilter === 'mcp' && (
-            <Button
-              variant="secondary"
-              size="sm"
-              className={styles.headerActionBtn}
-              onClick={() => setShowMcpConnectModal(true)}
-            >
-              <AppIcon name="plus" size={13} />
-              <span>接入 MCP</span>
-            </Button>
-          )}
-
-          <div className={styles.searchBarWrapper}>
-            <AppIcon name="search" size={13} className={styles.searchIcon} />
-            <Input
-              bare
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索扩展、技能与工具…"
-              className={styles.searchInput}
-              aria-label="搜索扩展"
-            />
-          </div>
+          <ExtensionsHeaderActions
+            categoryFilter={categoryFilter}
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            onCreatePlugin={handleCreatePlugin}
+            onOpenPluginImport={() => setShowPluginCreateModal(true)}
+            onOpenSkillCreate={() => setShowSkillCreateModal(true)}
+            onOpenMcpConnect={() => setShowMcpConnectModal(true)}
+          />
         </div>
       </div>
 

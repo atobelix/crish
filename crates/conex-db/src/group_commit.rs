@@ -826,3 +826,184 @@ mod blocking_write_tests {
         assert_eq!(writer.stats().max_batch_size_seen, 1);
     }
 }
+
+#[cfg(test)]
+mod recovery_tests {
+    use super::*;
+    use std::sync::atomic::AtomicUsize;
+
+    fn failure(e: impl std::fmt::Display) -> DbFailure {
+        DbFailure {
+            message: e.to_string(),
+            kind: DbFailureKind::Other("test".to_string()),
+        }
+    }
+
+    /// 场景：写连接被外部直接 BEGIN 后遗留在事务中（模拟 ROLLBACK 失败后的
+    /// 残留状态）。Actor 的下一次提交必须在 BEGIN 前复位连接并成功写入，
+    /// 且后续写入持续正常（不会永久瘫痪）。
+    #[tokio::test(flavor = "current_thread")]
+    async fn begin_guard_remediates_residual_open_transaction() {
+        let conn = rusqlite::Connection::open_in_memory().expect("open in-memory db");
+        conn.execute_batch("CREATE TABLE t (v INTEGER);")
+            .expect("create table");
+        conn.execute_batch("BEGIN;").expect("制造残留打开事务");
+        assert!(!conn.is_autocommit(), "预置条件：连接处于打开事务中");
+
+        let writer = DbWriteHandle::spawn(conn, GroupCommitConfig::default());
+
+        let val = writer
+            .write(|conn| {
+                conn.execute("INSERT INTO t (v) VALUES (7)", [])
+                    .map_err(|e| failure(e))?;
+                Ok::<_, DbFailure>(7usize)
+            })
+            .await
+            .expect("Actor 应在 BEGIN 前复位残留事务并成功写入");
+        assert_eq!(val, 7);
+
+        // 再走一轮提交，确认连接状态已完全恢复正常
+        let _ = writer
+            .write(|conn| {
+                conn.execute("INSERT INTO t (v) VALUES (8)", [])
+                    .map_err(|e| failure(e))?;
+                Ok::<_, DbFailure>(8usize)
+            })
+            .await
+            .expect("后续写入应持续正常");
+        let count: usize = writer
+            .write(|conn| {
+                let n: i64 = conn
+                    .query_row("SELECT COUNT(*) FROM t", [], |r| r.get(0))
+                    .map_err(|e| failure(e))?;
+                Ok::<_, DbFailure>(n as usize)
+            })
+            .await
+            .expect("读取应成功");
+        assert_eq!(count, 2);
+    }
+
+    /// 场景：残留事务下直接驱动组提交（多任务批路径），守卫复位后
+    /// SAVEPOINT 隔离与外层 COMMIT 均正常，批次结束不残留事务。
+    #[test]
+    fn process_batch_recovers_from_residual_transaction_in_group_path() {
+        let conn = rusqlite::Connection::open_in_memory().expect("open in-memory db");
+        conn.execute_batch("CREATE TABLE t (v INTEGER);")
+            .expect("create table");
+        conn.execute_batch("BEGIN;").expect("制造残留打开事务");
+
+        let mut state = WriterState {
+            conn,
+            conn_factory: None,
+            consecutive_begin_failures: 0,
+        };
+        let stats = Arc::new(StatsInner::default());
+
+        let mut batch: Vec<WriteTask> = Vec::new();
+        let mut rxs = Vec::new();
+        for i in 0..3usize {
+            let (tx, rx) = oneshot::channel();
+            rxs.push(rx);
+            batch.push(WriteTask {
+                op: Box::new(move |conn: &mut rusqlite::Connection| {
+                    conn.execute("INSERT INTO t (v) VALUES (?1)", [i as i64])
+                        .map_err(|e| failure(e))?;
+                    Ok(Box::new(i) as Box<dyn Any + Send>)
+                }),
+                respond_to: tx,
+            });
+        }
+
+        process_batch(&mut state, &mut batch, &stats);
+
+        for (i, mut rx) in rxs.into_iter().enumerate() {
+            let res = rx
+                .try_recv()
+                .expect("每个任务都应收到响应（守卫复位后组提交应成功）");
+            let val = res
+                .as_ref()
+                .expect("任务不应失败")
+                .downcast_ref::<usize>()
+                .copied()
+                .expect("downcast");
+            assert_eq!(val, i);
+        }
+        let n: i64 = state
+            .conn
+            .query_row("SELECT COUNT(*) FROM t", [], |r| r.get(0))
+            .expect("count");
+        assert_eq!(n, 3);
+        assert!(state.conn.is_autocommit(), "批次结束后不应残留事务");
+    }
+
+    /// 场景：写连接进入"BEGIN IMMEDIATE 一律失败"的坏死状态（用
+    /// `PRAGMA query_only = ON` 模拟 SQLITE_READONLY 级持久故障，等价于
+    /// I/O 故障下连接不可用）。连续失败累计达到阈值后经工厂重建写连接，
+    /// 写入恢复成功；重建不重复触发。
+    #[tokio::test(flavor = "current_thread")]
+    async fn persistent_begin_failure_triggers_rebuild_via_factory() {
+        let broken = rusqlite::Connection::open_in_memory().expect("open in-memory db");
+        broken
+            .execute_batch("CREATE TABLE t (v INTEGER); PRAGMA query_only = ON;")
+            .expect("prepare broken (read-only) connection");
+        assert!(broken.is_autocommit(), "坏死连接应处于 autocommit（无残留事务）");
+
+        let rebuilds = Arc::new(AtomicUsize::new(0));
+        let rebuilds_clone = Arc::clone(&rebuilds);
+        let factory: WriterConnFactory = Arc::new(move || {
+            rebuilds_clone.fetch_add(1, Ordering::SeqCst);
+            let conn = rusqlite::Connection::open_in_memory().expect("factory open");
+            conn.execute_batch("CREATE TABLE t (v INTEGER);")
+                .expect("factory schema");
+            Ok(conn)
+        });
+
+        let writer = DbWriteHandle::spawn_with_rebuild(
+            broken,
+            GroupCommitConfig::default(),
+            Some(factory),
+        );
+
+        // 阈值之前：每次提交都失败（BEGIN IMMEDIATE 持续失败且未重建）
+        for attempt in 1..WRITER_REBUILD_FAILURE_THRESHOLD {
+            let err = writer
+                .write(|_| Ok::<_, DbFailure>(0usize))
+                .await
+                .expect_err("坏死连接未达阈值时应上报失败");
+            assert_eq!(
+                err.kind,
+                DbFailureKind::Other("begin_failed".to_string()),
+                "第 {attempt} 次失败应来自 begin_failed 路径"
+            );
+        }
+        assert_eq!(
+            rebuilds.load(Ordering::SeqCst),
+            0,
+            "未达阈值不应触发重建"
+        );
+
+        // 达到阈值：触发重建，写入恢复成功
+        let val = writer
+            .write(|conn| {
+                conn.execute("INSERT INTO t (v) VALUES (1)", [])
+                    .map_err(|e| failure(e))?;
+                Ok::<_, DbFailure>(1usize)
+            })
+            .await
+            .expect("达到阈值重建后写入应成功");
+        assert_eq!(val, 1);
+        assert_eq!(rebuilds.load(Ordering::SeqCst), 1, "应恰好重建一次");
+
+        // 重建后连接持续可用
+        let val = writer
+            .write(|conn| {
+                conn.execute("INSERT INTO t (v) VALUES (2)", [])
+                    .map_err(|e| failure(e))?;
+                Ok::<_, DbFailure>(2usize)
+            })
+            .await
+            .expect("重建后第二次写入应成功");
+        assert_eq!(val, 2);
+        assert_eq!(rebuilds.load(Ordering::SeqCst), 1, "不应重复重建");
+    }
+}

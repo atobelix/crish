@@ -19,7 +19,12 @@ export * from './virtualScrollScope';
 import { makeScopeKey, parseScopeKey } from './virtualScrollScope';
 
 export * from './virtualScrollRange';
-import { computeVisibleRange, type VisibleRange } from './virtualScrollRange';
+import {
+  computeVisibleRange,
+  rememberActualHeight,
+  restoreRememberedActualsInto,
+  type VisibleRange,
+} from './virtualScrollRange';
 
 export * from './virtualScrollAnchor';
 import {
@@ -255,12 +260,7 @@ export class VirtualScrollManager {
     if (callerGeneration !== undefined && callerGeneration !== this.generation)
       return false;
     this.lastMeasured.set(id, height);
-    this.rememberedActuals.delete(id);
-    this.rememberedActuals.set(id, height);
-    if (this.rememberedActuals.size > 4096) {
-      const oldest = this.rememberedActuals.keys().next().value;
-      if (oldest !== undefined) this.rememberedActuals.delete(oldest);
-    }
+    rememberActualHeight(this.rememberedActuals, id, height);
     const entry = this.heightsById.get(id);
     if (entry) {
       if (entry.actual === height && entry.estimated === height) return false;
@@ -328,23 +328,16 @@ export class VirtualScrollManager {
 
   /** 会话切换后同步恢复历史已实测高度，消除二次切回标签页时的估高跳动 */
   restoreRememberedActuals(ids: readonly string[]): boolean {
-    if (
-      !Array.isArray(ids) ||
-      ids.length === 0 ||
-      this.rememberedActuals.size === 0
-    )
-      return false;
-    let anyChanged = false;
-    for (let i = 0; i < ids.length; i++) {
-      const id = ids[i]!;
-      const remembered = this.rememberedActuals.get(id);
-      if (remembered !== undefined && isValidIdHeight(id, remembered)) {
-        this.lastMeasured.set(id, remembered);
-        this.heightsById.set(id, { estimated: remembered, actual: remembered });
-        if (this.applyBitHeight(id, remembered)) anyChanged = true;
-      }
-    }
-    return anyChanged;
+    return restoreRememberedActualsInto({
+      ids,
+      remembered: this.rememberedActuals,
+      isValid: isValidIdHeight,
+      write: (id, h) => {
+        this.lastMeasured.set(id, h);
+        this.heightsById.set(id, { estimated: h, actual: h });
+        return this.applyBitHeight(id, h);
+      },
+    });
   }
 
   /** 字号或全局布局尺度变更时清空跨会话实测高度记忆 */

@@ -434,6 +434,7 @@ fn read_utf8_windowed(
                 for &b in rest {
                     if b == b'\n' {
                         newlines += 1;
+                        total_chars += 1; // \n 本身计 1（对齐旧版逐行含 \n 语义）
                         if outside_pending_cr {
                             total_chars -= 1;
                             outside_pending_cr = false;

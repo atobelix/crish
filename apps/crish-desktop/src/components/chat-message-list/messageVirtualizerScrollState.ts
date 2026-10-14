@@ -17,6 +17,11 @@ import {
   SCROLL_TOP_EPSILON_PX,
 } from '../../hooks/virtualScrollConstants';
 import type { useFastScrollPurgeTracker } from './messageDomPurge';
+import type * as React from 'react';
+import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
+import type { SessionMessage } from '../../store/types';
+import { reseedAllMessageHeights } from './messageDomPurge';
+import { chatSpacerHeight } from './chatScrollGeometry';
 
 type VirtualScrollApi = ReturnType<typeof useVirtualScroll>;
 type FastScrollState = ReturnType<typeof useFastScrollPurgeTracker>;
@@ -294,4 +299,87 @@ export function useStickToBottomFollow({
     isSessionSwitch,
     initialScroll,
   ]);
+}
+
+export interface SessionSwitchGeometryResetParams {
+  activeSessionId: string | null;
+  prevSessionIdRef: React.RefObject<string | null>;
+  clearHeights: () => void;
+  manager: VirtualScrollManager;
+  msgIds: string[];
+  messages: SessionMessage[];
+  vs: VirtualScrollApi;
+  fastScroll: FastScrollState;
+  isAtBottomRef: React.RefObject<boolean>;
+  setIsAtBottom: React.Dispatch<React.SetStateAction<boolean>>;
+  setShowFloorButton: React.Dispatch<React.SetStateAction<boolean>>;
+  isAtTopRef: React.RefObject<boolean>;
+  setIsAtTop: React.Dispatch<React.SetStateAction<boolean>>;
+  observedTopRef: React.RefObject<number>;
+  sessionMeasurePassesRef: React.RefObject<number>;
+}
+
+/**
+ * VS-01：会话切换必须在同步 layout 阶段（且置于 preloadEstimates 与吸底滚动之前）重置几何状态；
+ * 使用 prevSessionIdRef 仅在 activeSessionId 真正发生切换时调用 clearHeights()。
+ * 实现从 MessageVirtualizer 内联 effect 抽出（行数门禁收口，行为不变）。
+ */
+export function useSessionSwitchGeometryReset(
+  params: SessionSwitchGeometryResetParams
+): void {
+  const {
+    activeSessionId,
+    prevSessionIdRef,
+    clearHeights,
+    manager,
+    msgIds,
+    messages,
+    vs,
+    fastScroll,
+    isAtBottomRef,
+    setIsAtBottom,
+    setShowFloorButton,
+    isAtTopRef,
+    setIsAtTop,
+    observedTopRef,
+    sessionMeasurePassesRef,
+  } = params;
+
+  useLayoutEffect(() => {
+    if (prevSessionIdRef.current === activeSessionId) {
+      return;
+    }
+    prevSessionIdRef.current = activeSessionId;
+    clearHeights();
+    isAtBottomRef.current = true;
+    setIsAtBottom(true);
+    setShowFloorButton(false);
+
+    // 会话切换：立刻回灌 order + 已测高度记忆 + 估高，杜绝 clear 后空 order 空屏
+    reseedAllMessageHeights(manager, msgIds, messages);
+
+    // 会话切换立即直达目标吸底位置，绝不向 0 归零引发顶底往复跳动
+    const estimatedContentHeight = manager.getTotalHeight(messages.length);
+    const estimatedTotalHeight = chatSpacerHeight(estimatedContentHeight);
+    const container = vs.containerRef.current;
+    const viewH =
+      container?.clientHeight ||
+      vs.viewportHeight ||
+      DEFAULT_VIEWPORT_HEIGHT_PX;
+    const targetBottomScrollTop = Math.max(0, estimatedTotalHeight - viewH);
+    fastScroll.reset(targetBottomScrollTop);
+
+    const isTop = targetBottomScrollTop <= SCROLL_TOP_EPSILON_PX;
+    isAtTopRef.current = isTop;
+    setIsAtTop(isTop);
+
+    if (container) {
+      vs.performProgrammaticScroll(container, targetBottomScrollTop);
+    } else {
+      vs.performProgrammaticScroll(targetBottomScrollTop);
+    }
+    observedTopRef.current = targetBottomScrollTop;
+    sessionMeasurePassesRef.current = 2;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId, clearHeights, manager]);
 }

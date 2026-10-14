@@ -311,7 +311,7 @@ pub(crate) fn parse_reasoning_effort(wire: &str) -> Option<session_loop::Reasoni
 
 #[cfg(test)]
 mod tests {
-    use super::parse_reasoning_effort;
+    use super::*;
     use session_loop::ReasoningEffort;
 
     /// I1-β：档位 wire 解析——全档位命中 + 大小写/空白宽容 + 未知值
@@ -357,6 +357,165 @@ mod tests {
         assert_eq!(parse_reasoning_effort("ultra"), None);
         assert_eq!(parse_reasoning_effort(""), None);
         assert_eq!(parse_reasoning_effort("  "), None);
+    }
+
+    // ── 会话串行守卫 TOCTOU 闭合（acquire_launch_slot / RunLaunchGuard
+    //    语义锚定）──────────────────────────────────────────────────
+
+    use orchestrator::persist::InMemoryStore;
+    use orchestrator::restore::SnapshotFileStore;
+
+    /// 记录型发射器（事件桥测试替身；对齐 run_commands tests）
+    #[derive(Default)]
+    struct RecordingEmitter(std::sync::Mutex<Vec<String>>);
+
+    impl crate::core_event_bridge::Emitter for RecordingEmitter {
+        fn emit(&self, _channel: &str, payload: &str) {
+            self.0.lock().unwrap().push(payload.to_string());
+        }
+    }
+
+    /// 测试用 CoreRunState（InMemoryStore + 独立快照文件 + 记录桥；
+    /// 对齐 run_commands tests::test_state）
+    fn launch_guard_test_state() -> Arc<CoreRunState> {
+        let emitter = Arc::new(RecordingEmitter::default());
+        let bridge = EventBridge::new(
+            "workbench-run-event",
+            Arc::clone(&emitter) as Arc<dyn crate::core_event_bridge::Emitter>,
+        );
+        let snapshots: Arc<dyn SnapshotStore> = Arc::new(SnapshotFileStore::new(
+            std::env::temp_dir().join(format!(
+                "conex_launch_guard_{}_{}_snapshot.json",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
+            )),
+        ));
+        Arc::new(CoreRunState::new(
+            Arc::new(InMemoryStore::new()),
+            snapshots,
+            bridge,
+            Arc::new(StatusDiagnostics::new()),
+            None,
+        ))
+    }
+
+    /// 占位存在期间（装配中）同会话第二次启动被拒——TOCTOU 闭合的同步
+    /// 语义锚点（检查与占用同临界区；并发 core_run_task 的第二次调用
+    /// 在此拒绝路径拦截）；其他会话不受影响
+    #[test]
+    fn launch_slot_rejects_second_acquire_while_assembling() {
+        let state = launch_guard_test_state();
+        let _guard = acquire_launch_slot(&state, "sess-a").expect("首次占用应通过");
+        let second = acquire_launch_slot(&state, "sess-a");
+        assert!(
+            second.is_err(),
+            "launching 占位存在期间同会话第二次启动必须被拒（TOCTOU 闭合语义）"
+        );
+        assert!(
+            state
+                .assembling_sessions
+                .lock()
+                .unwrap()
+                .contains("sess-a"),
+            "被拒请求不得清除既有占位"
+        );
+        let _other = acquire_launch_slot(&state, "sess-b").expect("其他会话不受占位影响");
+    }
+
+    /// 守卫 drop 无条件释放占位——覆盖全部早退 Err 分支 / panic 展开，
+    /// 防装配失败泄漏导致会话永久无法再启动 run
+    #[test]
+    fn launch_guard_drop_releases_session_slot() {
+        let state = launch_guard_test_state();
+        {
+            let _guard = acquire_launch_slot(&state, "sess-a").expect("首次占用应通过");
+            // 模拟早退路径：guard 在此 drop
+        }
+        assert!(
+            !state
+                .assembling_sessions
+                .lock()
+                .unwrap()
+                .contains("sess-a"),
+            "守卫 drop 必须无条件清理占位"
+        );
+        let again = acquire_launch_slot(&state, "sess-a");
+        assert!(again.is_ok(), "占位清理后同会话必须可再次启动");
+    }
+
+    /// 活动 run 已在 active_runs 时同会话启动被拒（既有串行守卫语义，
+    /// 重构不回归）；拒绝路径不残留装配期占位
+    #[tokio::test]
+    async fn launch_slot_rejects_when_active_run_present() {
+        let state = launch_guard_test_state();
+        let handle = Arc::new(tokio::sync::Mutex::new(
+            state
+                .run_manager
+                .start_run("sess-a", "run-1")
+                .await
+                .expect("start_run"),
+        ));
+        let queue = Arc::new(tokio::sync::Mutex::new(EventQueue::new(
+            state.store.clone(),
+            0,
+            None,
+        )));
+        let bridge = Arc::new(BufferedRunEventBridge::new(
+            state.bridge.clone(),
+            "run-1".to_string(),
+        ));
+        let broadcast_bridge = Arc::clone(&bridge);
+        let broadcast = Box::new(move |event: AgentEvent| {
+            let envelope = AgentEventEnvelope::new(event, Some("run-1".to_string()), None);
+            broadcast_bridge.emit(&envelope);
+            broadcast_bridge.flush();
+        });
+        let approval = Arc::new(ApprovalGateImpl::new(
+            "run-1".to_string(),
+            "sess-a".to_string(),
+            None,
+            broadcast,
+            Arc::clone(&handle),
+            state.store.clone(),
+            None,
+        ));
+        let active = Arc::new(ActiveRun {
+            session_id: "sess-a".to_string(),
+            run_id: "run-1".to_string(),
+            handle,
+            queue,
+            control_bus: Arc::new(Mutex::new(ControlBus::new())),
+            abort_signal: AbortSignal::new(),
+            approval,
+            bridge,
+            delta_sink_active: true,
+            driver: Mutex::new(None),
+            user_touched: AtomicBool::new(false),
+            subagent: None,
+            audit_persist: Mutex::new(None),
+        });
+        state
+            .active_runs
+            .lock()
+            .unwrap()
+            .insert("run-1".to_string(), Arc::clone(&active));
+
+        let attempt = acquire_launch_slot(&state, "sess-a");
+        assert!(
+            attempt.is_err(),
+            "active_runs 已有同会话活动 run 时启动必须被拒（既有守卫语义）"
+        );
+        assert!(
+            !state
+                .assembling_sessions
+                .lock()
+                .unwrap()
+                .contains("sess-a"),
+            "拒绝路径不得残留装配期占位"
+        );
     }
 }
 
@@ -429,6 +588,71 @@ pub struct RunTaskOptions {
     /// 避免纯文本 parts 重复载荷）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub has_images: Option<bool>,
+}
+
+// ── 会话串行守卫 TOCTOU 闭合（装配期会话占用，RAII）────────────────
+//
+// 此前守卫在 active_runs 锁内扫描后即释放锁，真实 active_runs.insert
+// 在数百行装配（start_run 落库 / spawn_blocking / 审批门装配等多个
+// await 点）之后——同会话并发 core_run_task（前端双击 / 重试风暴）
+// 可双双通过检查、各自 spawn drive_run_loop，违反会话内串行不变量。
+// 闭合方式：检查与占用插入同一临界区（[acquire_launch_slot] 占用
+// `assembling_sessions`），真实条目入 active_runs 前同会话第二次启动
+// 一律拒绝；占用凭证由 [RunLaunchGuard] 持有，drop 无条件清理。
+
+/// 启动装配期会话占用守卫（RAII）：
+///
+/// - 构造：[acquire_launch_slot] 在 `assembling_sessions` 临界区内
+///   完成占用插入后返回本守卫；
+/// - drop：无条件从 `assembling_sessions` 移除会话标记——覆盖
+///   run_task_impl 全部早退 Err 分支（provider 缺失 / 子代理工具集
+///   裁剪失败 / start_run 落库失败 / 写路径白名单解析失败）与 panic
+///   展开，防装配失败泄漏导致会话永久无法再启动 run；
+/// - 成功路径：真实 active_runs.insert 先于守卫释放，此后并发启动由
+///   active_runs 扫描拒绝（守卫移除不产生守卫空窗——注册表条目已
+///   承载串行语义）；占位非活动 run，不参与 reaper / 终态钩子扫描
+///   （reaper 只扫 active_runs 的 driver is_finished）。
+struct RunLaunchGuard {
+    state: Arc<CoreRunState>,
+    session_id: String,
+}
+
+impl Drop for RunLaunchGuard {
+    fn drop(&mut self) {
+        self.state
+            .assembling_sessions
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&self.session_id);
+    }
+}
+
+/// 会话串行守卫（同会话同时只允许一个活动 run）+ 装配期占用获取。
+///
+/// 单临界区完成「活动 run 扫描 + 占用插入」：持 `assembling_sessions`
+/// 锁期间嵌套读 `active_runs`（仅此一处双锁，无其他逆序获取点，无
+/// 死锁面）。占用插入失败（同会话已在装配中）或活动 run 已存在 →
+/// 拒绝（InvalidInput，文案与既有守卫一致）。
+fn acquire_launch_slot(
+    state: &Arc<CoreRunState>,
+    session_id: &str,
+) -> Result<RunLaunchGuard, CoreError> {
+    let mut assembling = state
+        .assembling_sessions
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let active = state.active_runs.lock().unwrap_or_else(|e| e.into_inner());
+    if active.values().any(|run| run.session_id == session_id)
+        || !assembling.insert(session_id.to_string())
+    {
+        return Err(CoreError::invalid_input(format!(
+            "会话 {session_id} 已有活动 run（串行守卫）"
+        )));
+    }
+    Ok(RunLaunchGuard {
+        state: Arc::clone(state),
+        session_id: session_id.to_string(),
+    })
 }
 
 #[tauri::command]
@@ -533,15 +757,10 @@ pub(crate) async fn run_task_impl(
             .unwrap_or_else(|| "engine not ready".to_string());
         return Err(CoreError::internal(reason));
     }
-    // 会话内串行守卫（同会话同时只允许一个活动 run）
-    {
-        let active = state.active_runs.lock().unwrap_or_else(|e| e.into_inner());
-        if active.values().any(|run| run.session_id == session_id) {
-            return Err(CoreError::invalid_input(format!(
-                "会话 {session_id} 已有活动 run（串行守卫）"
-            )));
-        }
-    }
+    // 会话内串行守卫（同会话同时只允许一个活动 run）+ 装配期占用
+    //（TOCTOU 闭合：检查与占用同一临界区；守卫 drop 无条件清理全部
+    // 早退路径，成功 insert 后显式释放——见下方 active_runs.insert）
+    let _launch_guard = acquire_launch_slot(&state, &session_id)?;
     // D6 §3.2 spawn 点 2：会话首次出现惰性 spawn watcher（幂等——已
     // 存在跳过；防重入靠本串行守卫兜底，验收 A5）。子代理 run 不
     // spawn：子代理会话无 watcher 拉起语义（收口即终态），且共享队列
@@ -1062,6 +1281,9 @@ pub(crate) async fn run_task_impl(
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .insert(run_id.clone(), Arc::clone(&active));
+    // 真实条目已入 active_runs（串行守卫自此由注册表扫描承载），装配期
+    // 占用即刻释放；此后无早退路径（? 分支已全部收口于 insert 之前）
+    drop(_launch_guard);
     // D5 §3.9：goal-round-started（mode=goal 装配轮 run 启动时发射；
     // round 从 1 计；载荷 goal/round/maxRounds 对齐 OrchestratorGoalRunState
     // 子集；envelope 通道，run 串行上下文）
@@ -1583,4 +1805,35 @@ pub(crate) async fn cancel_run_impl(
         ok: true,
         run_id: active.run_id.clone(),
     })
+}
+
+/// Tier-2 会话级中止（前端级联取消总线 VULN-05）：按 sessionId 定位活动 run，
+/// 触发 L3 强停（AbortSignal + 控制总线 force_cancel，与 [ActiveRunEngine::abort] 同语义）。
+/// 无匹配活动 run → Ok(false)（幂等，run 已收口场景静默成功）。
+#[tauri::command]
+pub(crate) async fn workbench_abort_run(
+    state: tauri::State<'_, Arc<CoreRunState>>,
+    session_id: String,
+) -> Result<bool, String> {
+    let sid = session_id.trim();
+    if sid.is_empty() {
+        return Ok(false);
+    }
+    let target = {
+        let active = state.active_runs.lock().unwrap_or_else(|e| e.into_inner());
+        active
+            .values()
+            .find(|run| run.session_id == sid)
+            .map(Arc::clone)
+    };
+    let Some(run) = target else {
+        return Ok(false);
+    };
+    run.abort_signal.abort();
+    {
+        let mut bus = run.control_bus.lock().unwrap_or_else(|e| e.into_inner());
+        bus.request_force_cancel(Some("ui abort".to_string()), Some("ui".to_string()));
+    }
+    tracing::info!(target: "run", session_id = %sid, "workbench_abort_run：已投递 L3 强停（Ui abort）");
+    Ok(true)
 }

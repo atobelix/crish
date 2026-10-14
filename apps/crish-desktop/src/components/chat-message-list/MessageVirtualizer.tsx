@@ -15,6 +15,7 @@ import { FlowScrubber } from './FlowScrubber';
 import { ChatScrollFloorSlot } from './ChatScrollFloorSlot';
 import { useStableRowMeasureRef } from './messageVirtualizerMeasure';
 import {
+  useSessionSwitchGeometryReset,
   useStickToBottomFollow,
   useVirtualizerScrollHandlers,
   useVirtualizerScrollRefs,
@@ -32,7 +33,6 @@ import {
 import {
   DEFAULT_VIEWPORT_HEIGHT_PX,
   MESSAGE_VIEWPORT_OVERSCAN,
-  SCROLL_TOP_EPSILON_PX,
   SIGNIFICANT_HEIGHT_DELTA_PX,
 } from '../../hooks/virtualScrollConstants';
 import { useScrollAnchoringOnToggle } from './useScrollAnchoringOnToggle';
@@ -165,45 +165,24 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   const fastScroll = useFastScrollPurgeTracker();
   const prevSessionIdRef = useRef<string | null>(activeSessionId);
 
-  // VS-01：会话切换必须在同步 layout 阶段（且置于 preloadEstimates 与吸底滚动之前！）重置几何状态；
-  // 使用 prevSessionIdRef 仅在 activeSessionId 真正发生切换时调用 clearHeights()
-  useLayoutEffect(() => {
-    if (prevSessionIdRef.current === activeSessionId) {
-      return;
-    }
-    prevSessionIdRef.current = activeSessionId;
-    clearHeights();
-    isAtBottomRef.current = true;
-    setIsAtBottom(true);
-    setShowFloorButton(false);
-
-    // 会话切换：立刻回灌 order + 已测高度记忆 + 估高，杜绝 clear 后空 order 空屏
-    reseedAllMessageHeights(manager, msgIds, messages);
-
-    // 会话切换立即直达目标吸底位置，绝不向 0 归零引发顶底往复跳动
-    const estimatedContentHeight = manager.getTotalHeight(messages.length);
-    const estimatedTotalHeight = chatSpacerHeight(estimatedContentHeight);
-    const container = containerRef.current;
-    const viewH =
-      container?.clientHeight ||
-      vs.viewportHeight ||
-      DEFAULT_VIEWPORT_HEIGHT_PX;
-    const targetBottomScrollTop = Math.max(0, estimatedTotalHeight - viewH);
-    fastScroll.reset(targetBottomScrollTop);
-
-    const isTop = targetBottomScrollTop <= SCROLL_TOP_EPSILON_PX;
-    isAtTopRef.current = isTop;
-    setIsAtTop(isTop);
-
-    if (container) {
-      performProgrammaticScroll(container, targetBottomScrollTop);
-    } else {
-      performProgrammaticScroll(targetBottomScrollTop);
-    }
-    observedTopRef.current = targetBottomScrollTop;
-    sessionMeasurePassesRef.current = 2;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSessionId, clearHeights, manager]);
+  // VS-01：会话切换在同步 layout 阶段重置几何状态（实现见 messageVirtualizerScrollState）
+  useSessionSwitchGeometryReset({
+    activeSessionId,
+    prevSessionIdRef,
+    clearHeights,
+    manager,
+    msgIds,
+    messages,
+    vs,
+    fastScroll,
+    isAtBottomRef,
+    setIsAtBottom,
+    setShowFloorButton,
+    isAtTopRef,
+    setIsAtTop,
+    observedTopRef,
+    sessionMeasurePassesRef,
+  });
 
   const uiSize = useLayoutStore((s) => s.uiSize);
   const uiSizeSeededRef = useRef(false);

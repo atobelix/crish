@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Button, SegmentedControl, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
 import { useToast } from '../../services/toast/ToastContext';
 import { useSettingsStore } from '../../store/storeAccess';
 import { clientApi, type Settings, type McpServer } from '../../api/clientApi';
@@ -31,26 +29,18 @@ import {
 } from './detectExternalSkills';
 import { resolveMcpTools } from './McpConnectModal';
 import { SkillDetailModal, type SkillDetailTarget } from './SkillDetailModal';
+import {
+  buildImportItems,
+  type ExternalImportItem,
+  type ImportCategory,
+} from './externalImportWorkbenchModel';
+import {
+  ExternalImportList,
+  ExternalImportTopBar,
+} from './ExternalImportWorkbench.sections';
 import styles from './ExternalImportWorkbench.module.css';
 
-export type ImportCategory = 'mcp' | 'skill';
-
-export interface ExternalImportItem {
-  id: string;
-  kind: 'mcp' | 'skill';
-  source:
-    | 'Claude Code'
-    | 'Codex'
-    | 'Antigravity'
-    | 'Claude Desktop'
-    | 'Cursor'
-    | '本地'
-    | 'Local';
-  name: string;
-  description: string;
-  rawMcp?: DetectedExternalMcpServer;
-  rawSkill?: DetectedExternalSkill;
-}
+export type { ImportCategory, ExternalImportItem };
 
 export interface ExternalImportWorkbenchProps {
   categoryFilter?: 'skill' | 'skills' | 'mcp';
@@ -361,26 +351,10 @@ export const ExternalImportWorkbench: React.FC<
     }
   };
 
-  const currentItems = useMemo<ExternalImportItem[]>(() => {
-    if (activeCategory === 'mcp') {
-      return mcpList.map((m) => ({
-        id: `mcp:${m.source}:${m.name}`,
-        kind: 'mcp' as const,
-        source: m.source,
-        name: m.name,
-        description: m.description || `${m.command || 'mcp'} 外部服务`,
-        rawMcp: m,
-      }));
-    }
-    return skillsList.map((s) => ({
-      id: `skill:${s.source}:${s.name}`,
-      kind: 'skill' as const,
-      source: s.source === 'Local' ? '本地' : s.source,
-      name: s.name,
-      description: s.description || '外部扩展技能',
-      rawSkill: s,
-    }));
-  }, [activeCategory, mcpList, skillsList]);
+  const currentItems = useMemo<ExternalImportItem[]>(
+    () => buildImportItems(activeCategory, mcpList, skillsList),
+    [activeCategory, mcpList, skillsList]
+  );
 
   const openSkillDetail = (item: ExternalImportItem) => {
     if (item.kind !== 'skill' || !item.rawSkill) return;
@@ -400,175 +374,25 @@ export const ExternalImportWorkbench: React.FC<
 
   return (
     <div className={styles.workbench}>
-      {/* 顶部 Header */}
-      <div className={styles.header}>
-        <div className={styles.headerLeft}>
-          <div className={styles.headerTitle}>
-            <AppIcon
-              name={activeCategory === 'skill' ? 'sparkles' : 'cpu'}
-              size={18}
-            />
-            <span>从其他应用导入</span>
-            <span style={{ marginLeft: 6, fontSize: '0.85em', opacity: 0.85 }}>
-              {activeCategory === 'skill'
-                ? '导入外部技能'
-                : '导入外部 MCP 服务'}
-            </span>
-          </div>
-          <div className={styles.headerSubtitle}>
-            {activeCategory === 'skill'
-              ? '从其他软件（Antigravity、Claude Code、Codex）一键导入技能'
-              : '从其他软件（Antigravity、Claude Code、Codex、Claude Desktop）一键接入 MCP 服务'}
-          </div>
-        </div>
-        <div className={styles.headerActions}>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => void handleScan(true)}
-            disabled={loading}
-          >
-            <AppIcon
-              name="rotate-cw"
-              size={13}
-              className={loading ? styles.spinning : ''}
-            />
-            <span>{loading ? '扫描中…' : '重新扫描'}</span>
-          </Button>
-          {activeCategory === 'skill' && (
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => void handlePickDirectory()}
-            >
-              <AppIcon name="folder-input" size={13} />
-              <span>从文件夹导入...</span>
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* 分类切换与计数栏 */}
-      <div className={styles.toolbar}>
-        {!categoryFilter ? (
-          <div className={styles.segmentedWrapper}>
-            <SegmentedControl
-              size="sm"
-              value={activeCategory}
-              onChange={(val) => setActiveCategory(val as ImportCategory)}
-              options={[
-                { value: 'mcp', label: `MCP 服务 (${mcpList.length})` },
-                { value: 'skill', label: `技能 (${skillsList.length})` },
-              ]}
-              aria-label="导入分类切换"
-            />
-          </div>
-        ) : null}
-        <div className={styles.countBadge}>
-          {activeCategory === 'mcp'
-            ? `已发现 ${mcpList.length} 项${categoryFilter ? '外部 ' : ''}MCP 服务`
-            : `已发现 ${skillsList.length} 项外部技能`}
-        </div>
-      </div>
-
-      {/* 主卡片列表 */}
-      <div className={styles.content}>
-        {currentItems.length === 0 ? (
-          <div className={styles.emptyState}>
-            <AppIcon name="archive" size={32} />
-            <div>
-              {activeCategory === 'mcp'
-                ? '未发现外部应用（Claude Code、Codex、Antigravity、Cursor）的 MCP 服务'
-                : '未发现外部应用的技能包，可点击右上角「从文件夹导入...」手动引入'}
-            </div>
-          </div>
-        ) : (
-          <div className={styles.grid}>
-            {currentItems.map((item) => {
-              const isImported =
-                item.kind === 'mcp'
-                  ? existingMcpNames.has(item.name.toLowerCase())
-                  : installedSkillNames.has(item.name.toLowerCase());
-
-              return (
-                <div
-                  key={item.id}
-                  className={`${styles.card} ${item.kind === 'skill' ? styles.clickableSkillCard : ''}`}
-                  role={item.kind === 'skill' ? 'button' : undefined}
-                  tabIndex={item.kind === 'skill' ? 0 : undefined}
-                  onClick={() => openSkillDetail(item)}
-                  onKeyDown={(e) => {
-                    if (
-                      item.kind === 'skill' &&
-                      (e.key === 'Enter' || e.key === ' ')
-                    ) {
-                      e.preventDefault();
-                      openSkillDetail(item);
-                    }
-                  }}
-                >
-                  <div className={styles.cardHeaderRow}>
-                    <div className={styles.cardHeaderLeft}>
-                      <div className={styles.cardIcon}>
-                        <AppIcon
-                          name={item.kind === 'mcp' ? 'cpu' : 'sparkles'}
-                          size={15}
-                        />
-                      </div>
-                      <div className={styles.cardTitleGroup}>
-                        <Tooltip content={item.name}>
-                          <span className={styles.cardName}>{item.name}</span>
-                        </Tooltip>
-                        <span
-                          className={styles.sourceBadge}
-                          data-source={item.source}
-                        >
-                          {item.source}
-                        </span>
-                      </div>
-                    </div>
-                    <div
-                      className={styles.cardHeaderRight}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {isImported ? (
-                        <Tooltip content="已导入">
-                          <span
-                            className={styles.importedSymbol}
-                            aria-label="已导入"
-                          >
-                            <AppIcon name="check" size={14} />
-                          </span>
-                        </Tooltip>
-                      ) : (
-                        <Tooltip content="导入">
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className={styles.importSymbolBtn}
-                            aria-label="导入"
-                            onClick={() => {
-                              if (item.kind === 'mcp' && item.rawMcp)
-                                void handleImportMcp(item.rawMcp);
-                              else if (item.kind === 'skill' && item.rawSkill)
-                                void handleImportSkill(item.rawSkill);
-                            }}
-                          >
-                            <AppIcon name="download" size={13} />
-                          </Button>
-                        </Tooltip>
-                      )}
-                    </div>
-                  </div>
-                  <Tooltip content={item.description}>
-                    <div className={styles.cardDesc}>{item.description}</div>
-                  </Tooltip>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <ExternalImportTopBar
+        activeCategory={activeCategory}
+        loading={loading}
+        mcpCount={mcpList.length}
+        skillCount={skillsList.length}
+        categoryFilter={categoryFilter}
+        onRescan={() => void handleScan(true)}
+        onPickDirectory={() => void handlePickDirectory()}
+        onCategoryChange={setActiveCategory}
+      />
+      <ExternalImportList
+        items={currentItems}
+        activeCategory={activeCategory}
+        existingMcpNames={existingMcpNames}
+        installedSkillNames={installedSkillNames}
+        onOpenDetail={openSkillDetail}
+        onImportMcp={handleImportMcp}
+        onImportSkill={handleImportSkill}
+      />
       <SkillDetailModal
         open={Boolean(selectedSkillForModal)}
         onClose={() => setSelectedSkillForModal(null)}
