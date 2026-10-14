@@ -110,7 +110,9 @@ describe('I18nContext 加固、Session Epoch 与四级平滑降级漏斗', () =>
 
       // 测试多段点分 key
       expect(prodT('settings.unknown.item')).toBe('Item');
-      expect(prodT('settings.appearance.themeTitle')).toBe('Theme Title');
+      expect(prodT('settings.appearance.unregisteredDemoTitle')).toBe(
+        'Unregistered Demo Title'
+      );
       expect(prodT('nav.user_profile')).toBe('User Profile');
       expect(prodT('action.retry-all-failed-tasks')).toBe(
         'Retry All Failed Tasks'

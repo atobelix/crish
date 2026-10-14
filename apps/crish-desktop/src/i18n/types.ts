@@ -35,6 +35,7 @@ export interface CommonTranslations {
   refresh: string;
   back: string;
   next: string;
+  [key: string]: string;
 }
 
 export interface NavTranslations {
@@ -48,6 +49,7 @@ export interface NavTranslations {
   security: string;
   about: string;
   diagnostics: string;
+  [key: string]: string;
 }
 
 export interface ChatTranslations {
@@ -65,6 +67,7 @@ export interface ChatTranslations {
   quickActions: string;
   importChat: string;
   newProject: string;
+  [key: string]: string;
 }
 
 export interface WorkspaceTranslations {
@@ -72,6 +75,7 @@ export interface WorkspaceTranslations {
   currentWorkspace: string;
   guestUser: string;
   settingsNav: string;
+  [key: string]: string;
 }
 
 export interface SettingsTranslations {
@@ -86,6 +90,7 @@ export interface SettingsTranslations {
   aboutTitle: string;
   license: string;
   version: string;
+  [key: string]: string;
 }
 
 export interface AboutTranslations {
@@ -97,6 +102,7 @@ export interface AboutTranslations {
   noticeTitle: string;
   copySysInfo: string;
   sysInfoCopied: string;
+  [key: string]: string;
 }
 
 export interface I18nDictionary {

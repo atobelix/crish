@@ -6,11 +6,16 @@ import {
   fromErrorPayload,
   resolveActionText,
   resolveTitleText,
+  isBareKey,
+  resolveActionKeyFallback,
+  interpolateParams,
+  registerErrorTranslateFn,
+  getErrorTranslateFn,
 } from './error-translation';
 
 /** 构造测试用 CrishErrorPayload 的辅助函数 */
 function makePayload(
-  overrides: Partial<CrishErrorPayload> = {},
+  overrides: Partial<CrishErrorPayload> = {}
 ): CrishErrorPayload {
   return {
     code: 'common.unknown',
@@ -165,7 +170,7 @@ describe('toUserVisibleError', () => {
     const visible = toUserVisibleError(payload);
     expect(visible.title).toBe('Network error');
     expect(visible.action).toBe(
-      'Service is temporarily unavailable. Please try again later.',
+      'Service is temporarily unavailable. Please try again later.'
     );
   });
 
@@ -181,10 +186,10 @@ describe('toUserVisibleError', () => {
       `[zh] ${key} :: ${fallback ?? ''}`;
     const visible = toUserVisibleError(payload, translate);
     expect(visible.title).toBe(
-      '[zh] error.provider.network.title :: Network error',
+      '[zh] error.provider.network.title :: Network error'
     );
     expect(visible.action).toBe(
-      '[zh] action.provider.check_network :: Service is temporarily unavailable. Please try again later.',
+      '[zh] action.provider.check_network :: Service is temporarily unavailable. Please try again later.'
     );
   });
 
@@ -195,7 +200,7 @@ describe('toUserVisibleError', () => {
       retryable: true,
     });
     expect(resolveActionText(payload)).toBe(
-      'The request timed out. Please retry.',
+      'The request timed out. Please retry.'
     );
   });
 
@@ -300,7 +305,7 @@ describe('error code mapping for store/event_store/common domains (T04.3)', () =
     const visible = toUserVisibleError(payload);
     expect(visible.title).toBe('Turn limit reached');
     expect(visible.action).toBe(
-      'Please start a new session or shorten the task.',
+      'Please start a new session or shorten the task.'
     );
   });
 
@@ -314,7 +319,7 @@ describe('error code mapping for store/event_store/common domains (T04.3)', () =
     const visible = toUserVisibleError(payload);
     expect(visible.title).toBe('Context length exceeded');
     expect(visible.action).toBe(
-      'Please shorten the task or start a new session.',
+      'Please shorten the task or start a new session.'
     );
   });
 
@@ -379,7 +384,7 @@ describe('normalizeCrishError', () => {
       'underlying',
       'provider.network',
       'transient',
-      true,
+      true
     );
     const err = new CrishError(
       'timeout',
@@ -387,7 +392,7 @@ describe('normalizeCrishError', () => {
       'transient',
       true,
       undefined,
-      { cause },
+      { cause }
     );
     const result = normalizeCrishError(err);
     expect(result.code).toBe('provider.timeout');
@@ -486,5 +491,297 @@ describe('fromErrorPayload', () => {
     });
     const err = fromErrorPayload(payload);
     expect(err.cause).toBeUndefined();
+  });
+});
+
+describe('polymorphic inputs to toUserVisibleError', () => {
+  it('directly handles CrishError instance', () => {
+    const err = new CrishError(
+      'Subagent nesting exceeded',
+      'subagent.depth_exceeded',
+      'transient',
+      true
+    );
+    const visible = toUserVisibleError(err);
+    expect(visible.code).toBe('subagent.depth_exceeded');
+    expect(visible.message).toBe('Subagent nesting exceeded');
+    expect(visible.title).toBe('Subagent depth exceeded');
+    expect(visible.retryable).toBe(true);
+    expect(visible.severity).toBe('warning');
+  });
+
+  it('directly handles standard Error instance', () => {
+    const err = new Error('Database locked');
+    const visible = toUserVisibleError(err);
+    expect(visible.code).toBe('common.unknown');
+    expect(visible.message).toBe('Database locked');
+    expect(visible.title).toBe('Unknown error');
+    expect(visible.severity).toBe('error');
+    expect(visible.retryable).toBe(false);
+  });
+
+  it('directly handles raw string error message', () => {
+    const visible = toUserVisibleError('Raw network timeout');
+    expect(visible.code).toBe('common.unknown');
+    expect(visible.message).toBe('Raw network timeout');
+    expect(visible.title).toBe('Unknown error');
+  });
+
+  it('directly handles null and undefined inputs', () => {
+    const visibleNull = toUserVisibleError(null);
+    expect(visibleNull.code).toBe('common.unknown');
+    expect(visibleNull.message).toBe('Unknown error');
+
+    const visibleUndefined = toUserVisibleError(undefined);
+    expect(visibleUndefined.code).toBe('common.unknown');
+    expect(visibleUndefined.message).toBe('Unknown error');
+  });
+
+  it('handles object with code but missing category for known code', () => {
+    const visible = toUserVisibleError({
+      code: 'provider.network',
+      message: 'Failed to reach host',
+    });
+    expect(visible.code).toBe('provider.network');
+    expect(visible.message).toBe('Failed to reach host');
+    expect(visible.severity).toBe('warning'); // transient mapped to warning
+    expect(visible.title).toBe('Network error');
+  });
+
+  it('handles object with code but missing category for unknown code', () => {
+    const visible = toUserVisibleError({
+      code: 'nonexistent.code.123',
+      message: 'Some failure',
+    });
+    expect(visible.code).toBe('common.unknown');
+    expect(visible.message).toBe('Some failure');
+    expect(visible.title).toBe('Unknown error');
+  });
+
+  it('handles arbitrary unknown object input', () => {
+    const visible = toUserVisibleError({ unexpectedField: 12345 });
+    expect(visible.code).toBe('common.unknown');
+    expect(visible.title).toBe('Unknown error');
+    expect(visible.severity).toBe('error');
+  });
+});
+
+describe('interpolateParams and parameter formatting', () => {
+  it('interpolates single and multiple matching variables', () => {
+    const res = interpolateParams('Tool {tool} failed with exit code {code}', {
+      tool: 'bash',
+      code: 127,
+    });
+    expect(res).toBe('Tool bash failed with exit code 127');
+  });
+
+  it('leaves unmatched variables intact', () => {
+    const res = interpolateParams('Hello {name}, your role is {role}', {
+      name: 'Alice',
+    });
+    expect(res).toBe('Hello Alice, your role is {role}');
+  });
+
+  it('converts null and undefined parameters to empty strings', () => {
+    const res = interpolateParams('User {name} id {id}', {
+      name: null,
+      id: undefined,
+    });
+    expect(res).toBe('User  id ');
+  });
+
+  it('defends against prototype pollution tokens', () => {
+    const maliciousParams = JSON.parse(
+      '{"__proto__": "polluted", "constructor": "bad", "prototype": "bad"}'
+    );
+    const res = interpolateParams(
+      'Safe {__proto__} {constructor} {prototype}',
+      maliciousParams
+    );
+    expect(res).toBe('Safe {__proto__} {constructor} {prototype}');
+  });
+
+  it('gracefully handles non-string templates and non-object params', () => {
+    expect(interpolateParams(null as unknown as string)).toBe('');
+    expect(interpolateParams(undefined as unknown as string)).toBe('');
+    expect(
+      interpolateParams(
+        'Static string',
+        null as unknown as Record<string, unknown>
+      )
+    ).toBe('Static string');
+    expect(interpolateParams('Static string', undefined)).toBe('Static string');
+  });
+
+  it('toUserVisibleError applies params to message and translate function', () => {
+    const payload = makePayload({
+      code: 'tool.exec_failed',
+      message: 'Command {cmd} failed with code {exitCode}',
+      category: 'permanent',
+    });
+    const visible = toUserVisibleError(payload, undefined, {
+      cmd: 'git fetch',
+      exitCode: 1,
+    });
+    expect(visible.message).toBe('Command git fetch failed with code 1');
+  });
+
+  it('toUserVisibleError automatically merges payload.metadata for interpolation', () => {
+    const payload = makePayload({
+      code: 'tool.exec_failed',
+      message: 'Execution of {toolName} timed out after {timeoutSec}s',
+      metadata: { toolName: 'ripgrep', timeoutSec: 30 },
+    });
+    const visible = toUserVisibleError(payload);
+    expect(visible.message).toBe('Execution of ripgrep timed out after 30s');
+  });
+});
+
+describe('bare key rigid defense and smart fallback', () => {
+  it('isBareKey accurately detects bare dot-separated keys', () => {
+    expect(isBareKey('action.tool.exec_failed')).toBe(true);
+    expect(isBareKey('error.provider.network.title')).toBe(true);
+    expect(isBareKey('common.unknown')).toBe(true);
+    expect(isBareKey('tool.write_path_conflict')).toBe(true);
+
+    expect(isBareKey('Network error')).toBe(false);
+    expect(isBareKey('Please try again or report the issue.')).toBe(false);
+    expect(isBareKey('网络错误')).toBe(false);
+    expect(isBareKey('')).toBe(false);
+    expect(isBareKey('   ')).toBe(false);
+    expect(isBareKey(12345)).toBe(false);
+    expect(isBareKey(null)).toBe(false);
+    expect(isBareKey(undefined)).toBe(false);
+  });
+
+  it('resolveActionKeyFallback resolves known action keys to English text', () => {
+    expect(resolveActionKeyFallback('action.common.report_bug')).toBe(
+      'Please try again or report the issue.'
+    );
+    expect(resolveActionKeyFallback('action.provider.check_api_key')).toBe(
+      'Please check the API key in Settings.'
+    );
+    expect(resolveActionKeyFallback('action.tool.retry')).toBe(
+      'Please retry the tool execution.'
+    );
+    expect(resolveActionKeyFallback('action.runtime.none')).toBe('');
+  });
+
+  it('resolveActionKeyFallback humanizes unknown action keys rather than exposing bare dotted keys', () => {
+    const humanized = resolveActionKeyFallback(
+      'action.tool.custom_sandbox_fail'
+    );
+    expect(humanized).toBe(
+      'Please check tool custom sandbox fail and try again.'
+    );
+    expect(isBareKey(humanized)).toBe(false);
+
+    const fallbackGeneric = resolveActionKeyFallback(
+      'unknown_bare_key.without_action_prefix'
+    );
+    expect(isBareKey(fallbackGeneric)).toBe(false);
+  });
+
+  it('resolveActionKeyFallback handles empty string and plain readable text', () => {
+    expect(resolveActionKeyFallback('')).toBe('');
+    expect(resolveActionKeyFallback('Already human readable text')).toBe(
+      'Already human readable text'
+    );
+  });
+
+  it('toUserVisibleError defends against translateFn returning bare key identical to queried key', () => {
+    const payload = makePayload({
+      code: 'provider.network',
+      action: 'action.provider.check_network',
+    });
+    // Mock translate function that returns the key itself on miss (common i18n miss behavior)
+    const mockReturningKeyTranslate = (key: string) => key;
+
+    const visible = toUserVisibleError(payload, mockReturningKeyTranslate);
+
+    // Title should fall back to built-in 'Network error', NOT 'error.provider.network.title'
+    expect(visible.title).toBe('Network error');
+    // Action should fall back to built-in human action, NOT 'action.provider.check_network'
+    expect(visible.action).toBe(
+      'Service is temporarily unavailable. Please try again later.'
+    );
+    expect(isBareKey(visible.title)).toBe(false);
+    expect(isBareKey(visible.action)).toBe(false);
+  });
+
+  it('toUserVisibleError defends against translateFn returning a different bare dotted key', () => {
+    const payload = makePayload({
+      code: 'common.unknown',
+      action: 'action.common.report_bug',
+    });
+    // Translate returning another dotted key
+    const mockDottedTranslate = () => 'action.tool.exec_failed';
+
+    const visible = toUserVisibleError(payload, mockDottedTranslate);
+
+    // Must be humanized or mapped, never bare dotted key
+    expect(isBareKey(visible.action)).toBe(false);
+    expect(visible.action).toBe('Please check tool parameters and try again.');
+  });
+
+  it('toUserVisibleError handles translateFn throwing exceptions gracefully', () => {
+    const payload = makePayload({
+      code: 'provider.timeout',
+      action: 'action.provider.retry',
+    });
+    const throwingTranslate = () => {
+      throw new Error('i18n engine failure');
+    };
+
+    const visible = toUserVisibleError(payload, throwingTranslate);
+    expect(visible.title).toBe('Request timeout');
+    expect(visible.action).toBe('The request timed out. Please retry.');
+  });
+});
+
+describe('global error translation registration and text resolvers', () => {
+  it('registers and retrieves global error translation function', () => {
+    const customTranslate = (key: string, fallback?: string) =>
+      `[GLOBAL] ${key} (${fallback ?? ''})`;
+    registerErrorTranslateFn(customTranslate);
+    expect(getErrorTranslateFn()).toBe(customTranslate);
+
+    const payload = makePayload({
+      code: 'provider.timeout',
+      action: 'action.provider.retry',
+    });
+    const visible = toUserVisibleError(payload);
+    expect(visible.title).toContain('[GLOBAL] error.provider.timeout.title');
+
+    // Clean up
+    registerErrorTranslateFn(null);
+    expect(getErrorTranslateFn()).toBeNull();
+  });
+
+  it('resolveActionText and resolveTitleText respect silent action codes', () => {
+    const abortedPayload = makePayload({
+      code: 'runtime.aborted',
+      action: 'action.runtime.none',
+    });
+    expect(resolveActionText(abortedPayload)).toBe('');
+    expect(resolveTitleText(abortedPayload)).toBe('Aborted');
+
+    const cancelledPayload = makePayload({
+      code: 'provider.cancelled',
+    });
+    expect(resolveActionText(cancelledPayload)).toBe('');
+  });
+
+  it('resolveActionText and resolveTitleText support parameter interpolation', () => {
+    const payload = makePayload({
+      code: 'tool.exec_failed',
+      action: 'action.tool.retry',
+      message: 'Failed to run {name}',
+    });
+    const title = resolveTitleText(payload);
+    expect(title).toBe('Tool execution failed');
+
+    const action = resolveActionText(payload);
+    expect(action).toBe('Please check tool parameters and try again.');
   });
 });

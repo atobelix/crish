@@ -1,4 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { CrishError } from '@crish/shared-types';
+import type { UserVisibleError } from '../../../utils/error-translation';
 import { ToastStore } from '../ToastStore';
 import { toast } from '../toast';
 
@@ -157,5 +159,189 @@ describe('ToastStore & toast 命令式门面单元测试', () => {
     unsubscribe();
     toast.error('另一条通知');
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  describe('结构化错误消费与多语言语义解析 (Round 11 / Wave 2 升级)', () => {
+    it('ToastStore.showError 原生消费 CrishError (permanent 严重错误)', () => {
+      const err = new CrishError(
+        'API key invalid',
+        'provider.auth',
+        'permanent',
+        false,
+        undefined,
+        { public: true, action: 'Please check the API key in Settings.' }
+      );
+
+      const id = ToastStore.showError(err);
+      const list = ToastStore.getToasts();
+
+      expect(list).toHaveLength(1);
+      expect(list[0]?.id).toBe(id);
+      expect(list[0]?.type).toBe('error');
+      expect(list[0]?.ariaLive).toBe('assertive');
+      expect(list[0]?.title).toBe('Authentication failed');
+      expect(list[0]?.message).toBe('API key invalid');
+      expect(list[0]?.description).toBe(
+        'Please check the API key in Settings.'
+      );
+    });
+
+    it('toast.error 重载消费 CrishError (transient 可重试错误，自动映射 warning)', () => {
+      const err = new CrishError(
+        'Service timeout',
+        'provider.network',
+        'transient',
+        true
+      );
+
+      const id = toast.error(err);
+      const list = ToastStore.getToasts();
+
+      expect(list).toHaveLength(1);
+      expect(list[0]?.id).toBe(id);
+      expect(list[0]?.type).toBe('warning');
+      expect(list[0]?.ariaLive).toBe('polite');
+      expect(list[0]?.title).toBe('Network error');
+      expect(list[0]?.message).toBe('Service timeout');
+      expect(list[0]?.description).toBe(
+        'Service is temporarily unavailable. Please try again later.'
+      );
+    });
+
+    it('静默错误与非 public 错误自动丢弃（不入队）', () => {
+      // 1. 用户主动取消 / 中断 (runtime.aborted -> severity: 'silent')
+      const abortErr = new CrishError(
+        'Session aborted',
+        'runtime.aborted',
+        'transient',
+        false
+      );
+      toast.error(abortErr);
+      expect(ToastStore.getToasts()).toHaveLength(0);
+
+      // 2. 供应商取消 (provider.cancelled -> severity: 'silent')
+      const cancelErr = new CrishError(
+        'Provider call cancelled',
+        'provider.cancelled',
+        'transient',
+        false
+      );
+      ToastStore.showError(cancelErr);
+      expect(ToastStore.getToasts()).toHaveLength(0);
+
+      // 3. 非 public 错误 (内部诊断异常 public: false)
+      const privateErr = new CrishError(
+        'Internal assertion failed',
+        'runtime.unexpected_state',
+        'permanent',
+        false,
+        undefined,
+        { public: false }
+      );
+      toast.error(privateErr);
+      expect(ToastStore.getToasts()).toHaveLength(0);
+    });
+
+    it('原生消费 UserVisibleError 对象', () => {
+      const visibleErr: UserVisibleError = {
+        visible: true,
+        title: '存储损坏',
+        message: '数据库索引校验失败',
+        action: '请恢复备份',
+        retryable: true,
+        code: 'store.corrupted',
+        severity: 'error',
+      };
+
+      toast.error(visibleErr);
+      const list = ToastStore.getToasts();
+
+      expect(list).toHaveLength(1);
+      expect(list[0]?.title).toBe('存储损坏');
+      expect(list[0]?.message).toBe('数据库索引校验失败');
+      expect(list[0]?.description).toBe('请恢复备份');
+      expect(list[0]?.type).toBe('error');
+      expect(list[0]?.ariaLive).toBe('assertive');
+    });
+
+    it('UserVisibleError 当 visible=false 或 severity=silent 时静默丢弃', () => {
+      const silentErr: UserVisibleError = {
+        visible: true,
+        title: '已取消',
+        message: '用户中断了任务',
+        action: '',
+        retryable: false,
+        code: 'runtime.aborted',
+        severity: 'silent',
+      };
+      toast.error(silentErr);
+      expect(ToastStore.getToasts()).toHaveLength(0);
+
+      const nonPublicErr: UserVisibleError = {
+        visible: false,
+        title: '内部错误',
+        message: '隐藏细节',
+        action: '',
+        retryable: false,
+        code: 'internal.debug',
+        severity: 'error',
+      };
+      toast.error(nonPublicErr);
+      expect(ToastStore.getToasts()).toHaveLength(0);
+    });
+
+    it('原生消费标准 Error 实例并生成通用兜底错误展示', () => {
+      toast.error(new Error('磁盘已满无法写入'));
+      const list = ToastStore.getToasts();
+
+      expect(list).toHaveLength(1);
+      expect(list[0]?.title).toBe('Unknown error');
+      expect(list[0]?.message).toBe('磁盘已满无法写入');
+      expect(list[0]?.type).toBe('error');
+      expect(list[0]?.ariaLive).toBe('assertive');
+    });
+
+    it('彻底拔除中文正则猜测：英文错误不受歧视，中立普通文本不被篡改', () => {
+      // 1. 纯英文错误文案正常赋予 error 与 assertive
+      toast.error('Network timeout occurred');
+      let list = ToastStore.getToasts();
+      expect(list[0]?.type).toBe('error');
+      expect(list[0]?.ariaLive).toBe('assertive');
+      expect(list[0]?.message).toBe('Network timeout occurred');
+
+      ToastStore.clear();
+
+      // 2. 普通通知包含“失败/错误”关键字，但通过 show() 传入时保持 info 与 polite
+      // 旧版正则 /失败|错误|无法|拒绝/ 会错误地将此类正常通知篡改为 error
+      toast.show('用户反馈中提到了某个错误排查指南');
+      list = ToastStore.getToasts();
+      expect(list).toHaveLength(1);
+      expect(list[0]?.type).toBe('info');
+      expect(list[0]?.ariaLive).toBe('polite');
+      expect(list[0]?.message).toBe('用户反馈中提到了某个错误排查指南');
+    });
+
+    it('显式 options 可正确覆写 title、description、type 与 ariaLive', () => {
+      const err = new CrishError(
+        'Raw error detail',
+        'store.write_failed',
+        'transient',
+        true
+      );
+
+      toast.error(err, {
+        title: '覆写自定义标题',
+        description: '覆写自定义描述',
+        type: 'warning',
+        ariaLive: 'polite',
+      });
+
+      const list = ToastStore.getToasts();
+      expect(list).toHaveLength(1);
+      expect(list[0]?.title).toBe('覆写自定义标题');
+      expect(list[0]?.description).toBe('覆写自定义描述');
+      expect(list[0]?.type).toBe('warning');
+      expect(list[0]?.ariaLive).toBe('polite');
+    });
   });
 });

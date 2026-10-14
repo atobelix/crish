@@ -1,4 +1,5 @@
 import type * as React from 'react';
+import type { CrishError } from '@crish/shared-types';
 import type {
   AppToast,
   ShowToastOptions,
@@ -13,8 +14,31 @@ import {
   TOAST_MAX_QUEUE,
   createToastId,
 } from '../../hooks/toastQueueLogic';
+import {
+  normalizeCrishError,
+  toUserVisibleError,
+  type UserVisibleError,
+} from '../../utils/error-translation';
 
 type Listener = () => void;
+
+function isUserVisibleError(error: unknown): error is UserVisibleError {
+  if (typeof error !== 'object' || error === null) return false;
+  const obj = error as Record<string, unknown>;
+  return (
+    typeof obj.visible === 'boolean' &&
+    typeof obj.title === 'string' &&
+    typeof obj.message === 'string' &&
+    typeof obj.severity === 'string' &&
+    typeof obj.code === 'string'
+  );
+}
+
+function isCrishErrorPayload(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const obj = error as Record<string, unknown>;
+  return typeof obj.code === 'string' && typeof obj.category === 'string';
+}
 
 export class ToastStoreImpl {
   private toasts: AppToast[] = [];
@@ -32,7 +56,7 @@ export class ToastStoreImpl {
   };
 
   show = (
-    message: React.ReactNode,
+    message: React.ReactNode | CrishError | UserVisibleError | unknown,
     arg2?: (() => void) | ShowToastOptions,
     arg3?: ShowToastOptions
   ): string => {
@@ -50,6 +74,14 @@ export class ToastStoreImpl {
       onUndo = options.onUndo;
     }
 
+    if (
+      isUserVisibleError(message) ||
+      message instanceof Error ||
+      isCrishErrorPayload(message)
+    ) {
+      return this.showError(message, { ...options, onUndo });
+    }
+
     const textMessage = typeof message === 'string' ? message : '';
     const id = options?.id ?? createToastId();
     const duration =
@@ -57,38 +89,15 @@ export class ToastStoreImpl {
       options?.ttlMs ??
       (options?.type === 'loading' ? Infinity : TOAST_TTL_MS);
 
-    // toastQueueLogic.enqueueToast 预期最旧在前、最新在后
-    const queueOldestFirst = this.toasts.slice().reverse();
-    const result = enqueueToast(
-      queueOldestFirst as any,
-      textMessage,
-      onUndo,
-      {
-        id,
-        ttlMs: duration,
-        maxQueue: options?.maxQueue,
-        type: options?.type as any,
-      }
-    );
-
-    if (result.kind === 'drop') {
-      return id;
-    }
-
-    const isErrorText = /失败|错误|无法|拒绝/.test(textMessage);
+    const resolvedType: ToastType = options?.type ?? 'info';
     const resolvedAriaLive: ToastPriority =
-      options?.ariaLive ??
-      (options?.type === 'error' || isErrorText ? 'assertive' : 'polite');
-
-    const resolvedType: ToastType =
-      options?.type ??
-      (onUndo ? 'info' : isErrorText ? 'error' : 'info');
+      options?.ariaLive ?? (resolvedType === 'error' ? 'assertive' : 'polite');
 
     const newToast: AppToast = {
       id,
       type: resolvedType,
       title: options?.title,
-      message,
+      message: message as React.ReactNode,
       description: options?.description,
       icon: options?.icon,
       duration,
@@ -100,28 +109,68 @@ export class ToastStoreImpl {
       updateKey: Date.now(),
     };
 
-    if (result.kind === 'dedupe') {
-      this.toasts = this.toasts.map((t) =>
-        t.id === result.existingId
-          ? {
-              ...t,
-              ...newToast,
-              id: t.id,
-              onUndo: onUndo ?? t.onUndo,
-              updateKey: Date.now(),
-            }
-          : t
-      );
+    return this.commitToast(newToast, textMessage, onUndo, options);
+  };
+
+  showError = (
+    error: CrishError | UserVisibleError | Error | string | unknown,
+    options?: ShowToastOptions
+  ): string => {
+    let visibleError: UserVisibleError;
+
+    if (isUserVisibleError(error)) {
+      visibleError = error;
     } else {
-      const maxQueue = options?.maxQueue ?? TOAST_MAX_QUEUE;
-      const filtered = this.toasts.filter(
-        (t) => t.id !== id && !result.evictedIds.includes(t.id)
-      );
-      this.toasts = [newToast, ...filtered].slice(0, maxQueue);
+      const payload = normalizeCrishError(error);
+      visibleError = toUserVisibleError(payload);
     }
 
-    this.notify();
-    return id;
+    const id = options?.id ?? createToastId();
+
+    if (!visibleError.visible || visibleError.severity === 'silent') {
+      return id;
+    }
+
+    const resolvedType: ToastType =
+      options?.type ??
+      (visibleError.severity === 'warning'
+        ? 'warning'
+        : visibleError.severity === 'info'
+          ? 'info'
+          : 'error');
+
+    const resolvedAriaLive: ToastPriority =
+      options?.ariaLive ?? (resolvedType === 'error' ? 'assertive' : 'polite');
+
+    const duration =
+      options?.duration ??
+      options?.ttlMs ??
+      (resolvedType === 'loading' ? Infinity : TOAST_TTL_MS);
+
+    const title = options?.title ?? (visibleError.title || undefined);
+    const message = visibleError.message;
+    const description =
+      options?.description ??
+      (visibleError.action ? visibleError.action : undefined);
+    const onUndo = options?.onUndo;
+
+    const newToast: AppToast = {
+      id,
+      type: resolvedType,
+      title,
+      message,
+      description,
+      icon: options?.icon,
+      duration,
+      ariaLive: resolvedAriaLive,
+      action: options?.action,
+      onUndo,
+      onDismiss: options?.onDismiss,
+      timestamp: Date.now(),
+      updateKey: Date.now(),
+    };
+
+    return this.commitToast(newToast, message, onUndo, options);
   };
 
   success = (
@@ -146,8 +195,18 @@ export class ToastStoreImpl {
     return this.show(message, onUndo, { ...options, type: 'success' });
   };
 
-  error = (
-    message: React.ReactNode,
+  error: {
+    (
+      errorOrMessage: CrishError | UserVisibleError | Error | React.ReactNode,
+      options?: Omit<ShowToastOptions, 'type'>
+    ): string;
+    (
+      errorOrMessage: CrishError | UserVisibleError | Error | React.ReactNode,
+      onUndo?: () => void,
+      options?: Omit<ShowToastOptions, 'type'>
+    ): string;
+  } = (
+    errorOrMessage: unknown,
     arg2?: (() => void) | Omit<ShowToastOptions, 'type'>,
     arg3?: Omit<ShowToastOptions, 'type'>
   ): string => {
@@ -165,7 +224,18 @@ export class ToastStoreImpl {
       onUndo = options.onUndo;
     }
 
-    return this.show(message, onUndo, { ...options, type: 'error' });
+    if (
+      isUserVisibleError(errorOrMessage) ||
+      errorOrMessage instanceof Error ||
+      isCrishErrorPayload(errorOrMessage)
+    ) {
+      return this.showError(errorOrMessage, { ...options, onUndo });
+    }
+
+    return this.show(errorOrMessage as React.ReactNode, onUndo, {
+      ...options,
+      type: 'error',
+    });
   };
 
   warning = (
@@ -283,6 +353,48 @@ export class ToastStoreImpl {
   clear = (): void => {
     this.dismiss();
   };
+
+  private commitToast(
+    toast: AppToast,
+    textMessage: string,
+    onUndo: (() => void) | undefined,
+    options?: ShowToastOptions
+  ): string {
+    const queueOldestFirst = this.toasts.slice().reverse();
+    const result = enqueueToast(queueOldestFirst as any, textMessage, onUndo, {
+      id: toast.id,
+      ttlMs: toast.duration,
+      maxQueue: options?.maxQueue,
+      type: options?.type as any,
+    });
+
+    if (result.kind === 'drop') {
+      return toast.id;
+    }
+
+    if (result.kind === 'dedupe') {
+      this.toasts = this.toasts.map((t) =>
+        t.id === result.existingId
+          ? {
+              ...t,
+              ...toast,
+              id: t.id,
+              onUndo: onUndo ?? t.onUndo,
+              updateKey: Date.now(),
+            }
+          : t
+      );
+    } else {
+      const maxQueue = options?.maxQueue ?? TOAST_MAX_QUEUE;
+      const filtered = this.toasts.filter(
+        (t) => t.id !== toast.id && !result.evictedIds.includes(t.id)
+      );
+      this.toasts = [toast, ...filtered].slice(0, maxQueue);
+    }
+
+    this.notify();
+    return toast.id;
+  }
 
   private notify(): void {
     for (const listener of this.listeners) {
