@@ -184,7 +184,8 @@
 .tabItemActive {
   background: var(--tab-active-bg, var(--bg-card));
   color: var(--text-primary);
-  font-weight: 500;
+  /* 与未选中同字重。切标签若改字重，字形宽度变化会让省略号和文字跳动。 */
+  font-weight: 400;
   border-color: var(
     --border-subtle,
     color-mix(in srgb, var(--border-color) 80%, transparent)

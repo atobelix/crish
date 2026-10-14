@@ -320,10 +320,14 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
     );
   }
 
+  const isPendingHtml =
+    Boolean(text.trim()) && !renderedHtml && !hasIncrementalHtml;
+
   return (
     <ReconciledMarkdownHtml
       {...dataAttributes}
       data-has-html={renderedHtml || hasIncrementalHtml ? 'true' : undefined}
+      data-md-pending={isPendingHtml ? 'true' : undefined}
       html={renderedHtml}
       incrementalUnits={effectiveIncrementalUnits}
       allowEmptyClear={!isContinuation}

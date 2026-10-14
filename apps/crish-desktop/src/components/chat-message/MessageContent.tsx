@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import React, {
+  useState,
+  useMemo,
+  useRef,
+  useCallback,
+  useEffect,
+} from 'react';
 import { useNarrativeRenderSlots } from './narrativeRenderSlots';
 import styles from './MessageContent.module.css';
 import type { SessionMessage } from '../../store/types';
@@ -24,7 +30,10 @@ import {
   subscribeMessageProcessExpansion,
   setMessageProcessExpanded,
 } from './searchExpandBridge';
-import { useSessionRuntimeStatus, useSessionStore } from '../../store/storeAccess';
+import {
+  useSessionRuntimeStatus,
+  useSessionStore,
+} from '../../store/storeAccess';
 
 import { ProcessItemRenderer } from './ProcessItemRenderer';
 import { logInternalError } from '../../api/userFacingErrors';
@@ -94,12 +103,14 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
 
     const hasThoughtContent = Boolean(
       (displayMsg.thinking && displayMsg.thinking.trim()) ||
-      (displayMsg.thinkingTurns && displayMsg.thinkingTurns.some((tt) => tt.content?.trim() || tt.isStreaming))
+      (displayMsg.thinkingTurns &&
+        displayMsg.thinkingTurns.some(
+          (tt) => tt.content?.trim() || tt.isStreaming
+        ))
     );
 
     const hasTextContent = Boolean(
-      displayMsg.text?.trim() ||
-      streamText?.trim()
+      displayMsg.text?.trim() || streamText?.trim()
     );
 
     const hasToolContent = Boolean(
@@ -107,10 +118,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     );
 
     const isInitialWaiting = Boolean(
-      isLiveTurn &&
-      !hasThoughtContent &&
-      !hasTextContent &&
-      !hasToolContent
+      isLiveTurn && !hasThoughtContent && !hasTextContent && !hasToolContent
     );
 
     // 单轨收敛 §2.2：瞬态状态行仅在「本轮活跃 + retrying 相位」出现
@@ -123,7 +131,10 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     //（无按钮、无详情；行动入口唯一在 ComposerErrorBar）。零正文失败已被 withdraw，不会到这里。
     const interruptedMark =
       msg.status === 'error' ? (
-        <div className={styles.interruptedMark} data-testid="turn-interrupted-mark">
+        <div
+          className={styles.interruptedMark}
+          data-testid="turn-interrupted-mark"
+        >
           回复中断
         </div>
       ) : null;
@@ -155,7 +166,9 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       timeline = r.timeline;
     } catch (err) {
       // 静默清空 timeline = 整条助手消息内容消失（最忌讳级）。必须可观测。
-      logInternalError('message-content-timeline-build', err, { severity: 'warning' });
+      logInternalError('message-content-timeline-build', err, {
+        severity: 'warning',
+      });
       timeline = [];
     }
 
@@ -177,11 +190,15 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       () =>
         collapseContextState(
           timeline,
-          (item) => item.kind === 'injection' && isContextStateInjection(item.injection),
+          (item) =>
+            item.kind === 'injection' &&
+            isContextStateInjection(item.injection),
           {
             keep: 'first-same-key',
             stateKey: (item) =>
-              item.kind === 'injection' ? formatContextStateDisplayText(item.injection) : '',
+              item.kind === 'injection'
+                ? formatContextStateDisplayText(item.injection)
+                : '',
           }
         ),
       [timeline]
@@ -191,43 +208,51 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     const hasStreamText = Boolean(streamText != null && streamText.length > 0);
     const segments: TimelineSegment[] = useMemo(
       () =>
-        partitionTimelineSegments(msg.id, linearItems, isLiveTurn, hasStreamText, {
-          msgTimestamp: msg.timestamp,
-          totalTurnDurationSec: msg.thinkingTime,
-        }),
-      [msg.id, linearItems, isLiveTurn, hasStreamText, msg.timestamp, msg.thinkingTime]
+        partitionTimelineSegments(
+          msg.id,
+          linearItems,
+          isLiveTurn,
+          hasStreamText,
+          {
+            msgTimestamp: msg.timestamp,
+            totalTurnDurationSec: msg.thinkingTime,
+          }
+        ),
+      [
+        msg.id,
+        linearItems,
+        isLiveTurn,
+        hasStreamText,
+        msg.timestamp,
+        msg.thinkingTime,
+      ]
     );
 
-    // ── 分段展开态字典（受控） ──
-    const [expandedMap, setExpandedMap] = useState<SectionExpandedMap>({});
+    // ── 分段展开态字典（受控，首帧直接对齐权威态以避免挂载后二次作废 VSM 实测高度） ──
+    const [expandedMap, setExpandedMap] = useState<SectionExpandedMap>(() => {
+      const initial: SectionExpandedMap = {};
+      for (const seg of segments) {
+        if (seg.kind === 'process_section') {
+          initial[seg.id] = seg.forceExpanded
+            ? true
+            : (seg.defaultExpanded ?? true);
+        }
+      }
+      return initial;
+    });
 
-    /**
-     * 用户手动裁决过的分段 ID 集合。
-     *
-     * 【存在意义】分段权威态（`defaultExpanded`）随流式推进而演化：
-     *   铁律二（尾部活跃）→ true；正文总结抵达后 → 铁律一（hasNextText）→ false。
-     * 若宿主无条件跟随权威态，用户手动展开的操作会在下一次权威态变化时
-     * 被无声冲掉。故显式用户交互即「钉住」该段，权威态收敛对其让位。
-     * 【铁律四】forceExpanded 段不受钉住影响——子代理可见性特权恒最高。
-     */
     const userInteractedKeysRef = useRef<Set<string>>(new Set());
 
-    /**
-     * 分段展开态对齐：
-     * 2026-09-19 用户裁决：「不要弄这个折叠了，就去掉这个工作完成后的整体内容折叠了。顺序做不对，弄这种折叠没有意义。」
-     * 过程段默认全部展开平铺直出，绝不在生成结束后强制折叠为单行遮掩真实过程。
-     */
     useEffect(() => {
       const patch: SectionExpandedMap = {};
       let mutated = false;
+      let effectiveChanged = false;
 
       for (const seg of segments) {
         if (seg.kind !== 'process_section') continue;
-        // ① 用户手动裁决优先：钉住的段不参与自动收敛
         if (userInteractedKeysRef.current.has(seg.id)) continue;
-        // ② 默认全展开平铺（2026-09-19 用户裁决）
         const target = seg.forceExpanded ? true : (seg.defaultExpanded ?? true);
-        // ③ 首次出现（无键）或有键但与权威态不符 → 对齐
+        const currentEffective = expandedMap[seg.id] ?? seg.defaultExpanded;
         if (
           Object.prototype.hasOwnProperty.call(expandedMap, seg.id) &&
           expandedMap[seg.id] === target
@@ -236,12 +261,16 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
         }
         patch[seg.id] = target;
         mutated = true;
+        if (currentEffective !== target) {
+          effectiveChanged = true;
+        }
       }
 
       if (!mutated) return;
       setExpandedMap((prev) => ({ ...prev, ...patch }));
-      // 高度变更必须经单轨通知宿主动态测高（VSM）
-      onInvalidateActual?.(msg.id);
+      if (effectiveChanged) {
+        onInvalidateActual?.(msg.id);
+      }
     }, [segments, expandedMap, onInvalidateActual, msg.id]);
 
     const handleToggleSection = useCallback(
@@ -349,7 +378,9 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     // 分段渲染项：由 `ProcessItemRenderer` 承载（唯一渲染路径）
     const renderSegmentItem = useCallback(
       (item: AssistantTimelineItem, _index: number) => {
-        const isThisStreaming = Boolean(streaming && item === streamingTextItem);
+        const isThisStreaming = Boolean(
+          streaming && item === streamingTextItem
+        );
         return (
           <ProcessItemRenderer
             item={item}
@@ -361,9 +392,13 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
             renderTools={renderTools}
             toolStackProps={toolStackProps}
             streamPhase={streamPhaseRef.current}
-            hasFinalAnswer={Boolean(displayMsg.text?.trim() || streamText?.trim())}
+            hasFinalAnswer={Boolean(
+              displayMsg.text?.trim() || streamText?.trim()
+            )}
             isStreamingText={isThisStreaming}
-            streamingTextContent={isThisStreaming ? activeStreamSlice : undefined}
+            streamingTextContent={
+              isThisStreaming ? activeStreamSlice : undefined
+            }
           />
         );
       },
@@ -385,7 +420,9 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
 
     // ── 渲染分支（全部位于 Hooks 之后，绝不影响 Hook 序列） ──
 
-    const fallbackText = stripThoughtPlaceholders(displayMsg.text || streamText || '');
+    const fallbackText = stripThoughtPlaceholders(
+      displayMsg.text || streamText || ''
+    );
     const hasSegments = segments.length > 0;
 
     // 分支 α：无任何可渲染内容
@@ -393,8 +430,14 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       if (isInitialWaiting || isLiveTurn) {
         return (
           <div className={`${styles.contentText} ${className || ''}`}>
-            <div className={styles.topProcessHeader} data-testid="top-live-header">
-              <WorkingStatusIndicator startTime={msg.timestamp} mode="initial" />
+            <div
+              className={styles.topProcessHeader}
+              data-testid="top-live-header"
+            >
+              <WorkingStatusIndicator
+                startTime={msg.timestamp}
+                mode="initial"
+              />
             </div>
             {inFlowRetry && <InFlowStatusLine retry={inFlowRetry} />}
           </div>
@@ -410,7 +453,9 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           <StreamingMarkdownView
             text={fallbackText}
             isStreaming={streaming}
-            priority={msg.status === 'processing' ? Priority.Normal : Priority.High}
+            priority={
+              msg.status === 'processing' ? Priority.Normal : Priority.High
+            }
             messageId={msg.id}
           />
           {inFlowRetry && <InFlowStatusLine retry={inFlowRetry} />}
@@ -425,7 +470,10 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       <div className={`${styles.assistantTimelineStream} ${className || ''}`}>
         {/* 顶层常驻态（生成中）：时间线内已有任何活跃过程节点时让位，杜绝双状态栏 */}
         {isLiveTurn && !hasLiveProcessIndicator && (
-          <div className={styles.topProcessHeader} data-testid="top-live-header">
+          <div
+            className={styles.topProcessHeader}
+            data-testid="top-live-header"
+          >
             <WorkingStatusIndicator startTime={msg.timestamp} mode="initial" />
           </div>
         )}
@@ -512,8 +560,8 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
             <StreamingMarkdownView
               text={stripThoughtPlaceholders(
                 msg.streamTextOffset &&
-                msg.streamTextOffset > 0 &&
-                streamText.length >= msg.streamTextOffset
+                  msg.streamTextOffset > 0 &&
+                  streamText.length >= msg.streamTextOffset
                   ? streamText.slice(msg.streamTextOffset)
                   : streamText
               )}

@@ -5,7 +5,7 @@
 import React, { useCallback, useDeferredValue, useMemo, useState } from 'react';
 import styles from './DiffCard.module.css';
 import { Button, Input, Tooltip } from '../ui';
-import { useSessionMessages } from '../../store';
+import { useSessionMessages } from '../../store/storeAccess';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 import type { FileDiff } from '../../store/types';
 import {

@@ -15,7 +15,7 @@ import {
  */
 export function resolveUnitChromeLabel(
   session: { folder?: string | null } | null | undefined,
-  projects: readonly ProjectEntry[] = listProjects(),
+  projects: readonly ProjectEntry[] = listProjects()
 ): string {
   if (!session) return GENERAL_FOLDER;
   const f = (session.folder || '').trim();
@@ -50,7 +50,10 @@ export function resolveUnitChromeLabel(
   if (f.includes('/') || f.includes('\\')) {
     return projectFolderLabel(f);
   }
-  // 幽灵 proj-* / 未知 project-like key：仍非「对话」桶
+
+  if (/^proj-[a-z0-9_-]+$/i.test(f)) {
+    return GENERAL_FOLDER;
+  }
   return f;
 }
 

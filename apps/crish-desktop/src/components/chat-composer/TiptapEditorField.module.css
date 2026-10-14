@@ -53,11 +53,6 @@
   box-shadow: none;
 }
 
-/*      accent 12%   token            */
-.proseMirrorField :global(::selection) {
-  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
-}
-
 /*           checkbox     accent       */
 .proseMirrorField :global(ul[data-type='taskList'] input[type='checkbox']) {
   accent-color: var(--accent-color);

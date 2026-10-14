@@ -93,6 +93,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   isEditingMessage = false,
   onCancelEdit,
   layoutVariant = 'adaptive',
+  disabled = false,
+  placeholder,
+  externalSessionPreview,
 }) => {
   const scopedSessionId = useScopedSessionId();
   const plusMenuId = useId();
@@ -200,11 +203,10 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       isProcessing,
       onStop,
       onForceStop,
-      onPaste: (e) => {
-        void onPasteImage(e);
-      },
-      placeholder: '输入消息，或键入 / 打开命令…（可粘贴截图）',
+      onPaste: (e) => void onPasteImage(e),
+      placeholder: placeholder || '输入消息，或键入 / 打开命令…（可粘贴截图）',
       processingPlaceholder: '输入排队消息…（当前回复结束后发送，可粘贴截图）',
+      disabled,
       ariaLabel: '主对话输入',
       containerRef: fieldContainerRef,
       hideSendControls: true,
@@ -229,6 +231,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       hasUndo,
       handleUndoDraft,
       draftInjectionTick,
+      placeholder,
+      disabled,
     ]
   );
 
@@ -327,10 +331,11 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
 
         {/* 主输入卡片（Layer 4: 输入网格） */}
         <div
-          className={`${styles.composerCard}${isMultiline ? ` ${styles.isMultiline}` : ''}`}
+          className={`${styles.composerCard}${isMultiline ? ` ${styles.isMultiline}` : ''}${disabled ? ` ${styles.disabled}` : ''}`}
           data-composer-card=""
           data-multiline={isMultiline ? '1' : '0'}
           data-empty-kind={emptyKind}
+          data-disabled={disabled ? 'true' : undefined}
         >
           {/* Layer 3: 附件与批注卡片区（内嵌于主输入卡片顶部，对齐图四） */}
           {attachments.length > 0 && (
@@ -352,12 +357,13 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             <div className={styles.actionLeft} data-composer-grid="left">
               <Tooltip
                 content="添加文件或附件、使用 skill…"
-                disabled={showPlusMenu}
+                disabled={disabled || showPlusMenu}
               >
                 <Button
                   ref={plusBtnRef}
                   type="button"
                   variant="ghost"
+                  disabled={disabled}
                   className={`${styles.plusBtn} ${showPlusMenu ? styles.isOpen : ''}`}
                   aria-label="打开添加菜单"
                   aria-haspopup="menu"
@@ -394,9 +400,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                   });
                 }}
                 onInsertSkillSlash={() => {
-                  if (!chatInput.startsWith('/')) {
+                  if (!chatInput.startsWith('/'))
                     setChatInput(chatInput ? `/${chatInput}` : '/');
-                  }
                   void loadSkillSlash();
                   requestAnimationFrame(focusComposerTextarea);
                 }}
@@ -409,9 +414,29 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               />
             </div>
 
-            {/* 中间输入区：富文本/单多行自适应输入框 */}
+            {/* 中间输入区：富文本/单多行自适应输入框，外部会话预览时展示极简导入接续触发器 */}
             <div className={styles.fieldSlot} data-composer-grid="text">
-              {renderInputField()}
+              {externalSessionPreview ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={styles.externalSessionImportBtn}
+                  onClick={() =>
+                    void externalSessionPreview.onImportAndContinue()
+                  }
+                  disabled={externalSessionPreview.isImporting}
+                  aria-label="点击以导入对话并继续输入"
+                  data-testid="external-session-import-btn"
+                >
+                  <span className={styles.externalSessionImportText}>
+                    {externalSessionPreview.isImporting
+                      ? '正在导入对话并接续…'
+                      : '点击以导入对话并继续输入…'}
+                  </span>
+                </Button>
+              ) : (
+                renderInputField()
+              )}
             </div>
 
             {/* 权限模式切换按钮：多行态常驻左下角；单行态并入右侧动作区融合胶囊 */}
@@ -477,14 +502,19 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               ) : null}
               <ComposerSendControls
                 appearance="circle"
-                canSend={canSend}
+                canSend={
+                  !disabled && (canSend || Boolean(externalSessionPreview))
+                }
+                disabled={disabled}
                 isProcessing={isProcessing}
                 onSend={() => {
-                  if (sendApiRef.current) {
-                    sendApiRef.current.flushAndSend();
+                  if (disabled) return;
+                  if (externalSessionPreview) {
+                    void externalSessionPreview.onImportAndContinue();
                     return;
                   }
-                  void handleProtectedSend();
+                  if (sendApiRef.current) sendApiRef.current.flushAndSend();
+                  else void handleProtectedSend();
                 }}
                 onStop={onStop}
                 onForceStop={onForceStop}

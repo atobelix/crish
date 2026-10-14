@@ -70,15 +70,16 @@ export function getXtermTheme() {
   const defaultBg = isDark ? '#0c0c0c' : '#ffffff';
   const defaultFg = isDark ? '#cccccc' : '#111111';
   const defaultCursor = isDark ? '#ffffff' : '#111111';
-  const defaultSelection = isDark
-    ? 'rgba(255, 255, 255, 0.25)'
-    : 'rgba(0, 0, 0, 0.15)';
+  const defaultSelection = '#0d9668';
+  const defaultSelectionFg = '#ffffff';
 
   const bg = readCssVar('--terminal-bg', defaultBg) || defaultBg;
   let fg = readCssVar('--terminal-fg', defaultFg) || defaultFg;
   const cursor = readCssVar('--terminal-cmd', defaultCursor) || defaultCursor;
   const selection =
     readCssVar('--xterm-selection', defaultSelection) || defaultSelection;
+  const selectionFg =
+    readCssVar('--selection-fg', defaultSelectionFg) || defaultSelectionFg;
 
   // 确保背景色与前景色具备足够对比度，防止在浅色/深色主题下前景色隐形
   try {
@@ -99,7 +100,7 @@ export function getXtermTheme() {
     cursor,
     cursorAccent: bg,
     selectionBackground: selection,
-    selectionForeground: fg,
+    selectionForeground: selectionFg,
     black: readCssVar('--xterm-black', '#0c0c0c') || '#0c0c0c',
     red: readCssVar('--xterm-red', '#c50f1f') || '#c50f1f',
     green:

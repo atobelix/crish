@@ -5,7 +5,8 @@
   flex-shrink: 0;
   min-height: var(--control-height-sm, 28px);
   padding: 2px var(--card-header-pad-x, 8px);
-  border-bottom: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle, var(--border-color)));
+  border-bottom: var(--hairline-width, 1px) solid
+    var(--hairline, var(--border-subtle, var(--border-color)));
   background: transparent;
   position: sticky;
   top: 0;
@@ -31,7 +32,9 @@
   font-size: var(--font-size-xs, 12px);
   line-height: var(--line-height-tight);
   outline: none;
-  transition: border-color var(--transition-micro), background var(--transition-micro);
+  transition:
+    border-color var(--transition-micro),
+    background var(--transition-micro);
   box-sizing: border-box;
 }
 
@@ -47,7 +50,11 @@
 }
 
 .input:focus {
-  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 96%,
+    var(--text-primary) 4%
+  );
   background: transparent;
   box-shadow: none;
 }

@@ -37,7 +37,7 @@ import {
   getCompositionRoot,
   isPendingDraft,
 } from '../../store/storeAccess';
-import { useLayoutTreeStore } from '../../store/layout-tree';
+import { useLayoutTreeStore } from '../../store/storeAccess';
 import { LeafScopeProvider } from '../../contexts/LeafScopeContext';
 import {
   COLLAPSED_DOCK,

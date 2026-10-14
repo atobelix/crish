@@ -25,8 +25,15 @@ const ScheduledTasksPanel = lazy(() =>
   }))
 );
 
+const ExtensionsMainSurface = lazy(() =>
+  import('../extensions-surface/ExtensionsMainSurface').then((m) => ({
+    default: m.ExtensionsMainSurface,
+  }))
+);
+
 import { useChatCardDragDrop } from './useChatCardDragDrop';
 import { AppIcon } from '../ui/icons/index';
+import { useExternalLongSessionDetection } from './useExternalLongSessionDetection';
 
 export interface ChatCardProps {
   handleGlobalTabClick: (cardId: string) => void;
@@ -41,6 +48,12 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       handleGlobalTabClick,
       sessionId,
     });
+
+    const { previewExternalSession, isImporting, handleImportAndContinue } =
+      useExternalLongSessionDetection({
+        emptyKind: state.emptyKind,
+        activeSessionId: state.activeSessionId,
+      });
 
     const { rootRef, isDragOver, dragHandlers } = useChatCardDragDrop({
       handlePathsSelected: state.composerProps.handlePathsSelected,
@@ -166,18 +179,20 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       />
     ) : null;
 
-    // 新对话空界面：输入框改多行落地态；仅在同一会话发送首条消息时启用落地过渡，切标签页立即切换
+    // 空界面与已有对话切换时，输入框只做位移。占位高度冻结，消息视口不跟着 flex 伸缩。
     const isLanding = state.emptyKind === 'session-empty';
     const prevEmptyKindRef = useRef(state.emptyKind);
-    const prevSessionIdForLandingRef = useRef(state.activeSessionId);
     const [isLandingSettling, setIsLandingSettling] = useState(false);
+
+    const isJustTriggeredSettling =
+      prevEmptyKindRef.current === 'session-empty' &&
+      state.emptyKind == null &&
+      !state.messagesLoading;
+    const activeSettling = isLandingSettling || isJustTriggeredSettling;
 
     useEffect(() => {
       let timer: number | undefined;
-      const isSameSession =
-        prevSessionIdForLandingRef.current === state.activeSessionId;
       if (
-        isSameSession &&
         prevEmptyKindRef.current === 'session-empty' &&
         state.emptyKind == null
       ) {
@@ -185,24 +200,21 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         timer = window.setTimeout(() => {
           setIsLandingSettling(false);
         }, DURATION_LANDING_SETTLE_MS);
-      } else if (!isSameSession) {
-        setIsLandingSettling(false);
       }
       prevEmptyKindRef.current = state.emptyKind;
-      prevSessionIdForLandingRef.current = state.activeSessionId;
       return () => {
         if (timer !== undefined) {
           window.clearTimeout(timer);
         }
       };
-    }, [state.emptyKind, state.activeSessionId]);
+    }, [state.emptyKind]);
 
     // 底部主输入框：持续常驻，草稿状态完全独立保全
     const mainComposerElement = (
       <ChatComposer
         {...state.composerProps}
         emptyKind={state.emptyKind}
-        layoutVariant={isLanding ? 'multiline' : 'adaptive'}
+        layoutVariant={isLanding || activeSettling ? 'multiline' : 'adaptive'}
         onPasteImage={state.composerProps.handlePasteImage}
         onPasteFiles={state.composerProps.handlePasteFiles}
         onStop={state.composerProps.handleStopGeneration}
@@ -211,6 +223,23 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         onPickFiles={state.composerProps.handlePickFiles}
         onOpenPath={state.openPathInFilesPanel}
         isProcessing={state.isProcessing}
+        disabled={isImporting}
+        placeholder={
+          previewExternalSession
+            ? isImporting
+              ? '正在导入对话并接续…'
+              : '点击以导入对话并继续输入…'
+            : undefined
+        }
+        externalSessionPreview={
+          previewExternalSession
+            ? {
+                source: previewExternalSession.detected.source,
+                isImporting,
+                onImportAndContinue: handleImportAndContinue,
+              }
+            : undefined
+        }
         permissionMode={state.permissionMode}
         onPermissionChange={(m) => {
           state.setPermissionMode(m);
@@ -347,7 +376,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           aria-busy={state.messagesLoading || undefined}
           data-main-surface={state.mainSurface}
           data-empty-kind={state.emptyKind ?? undefined}
-          data-settling={isLandingSettling ? 'true' : undefined}
+          data-settling={activeSettling ? 'true' : undefined}
           data-messages-loading={state.messagesLoading ? 'true' : undefined}
           data-engine-ok={
             state.engineOk === false
@@ -388,6 +417,23 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
                   onBackToChat={() => state.setMainSurface('chat')}
                 />
               </Suspense>
+            ) : state.mainSurface === 'extensions' ? (
+              <Suspense fallback={null}>
+                <ExtensionsMainSurface
+                  onBackToChat={() => state.setMainSurface('chat')}
+                />
+              </Suspense>
+            ) : previewExternalSession ? (
+              <ChatMessageList
+                {...chatStreamProps}
+                messages={{
+                  messages: previewExternalSession.mapped.messages,
+                  allMessages: previewExternalSession.mapped.messages,
+                  agents: [],
+                  activeSessionId: previewExternalSession.detected.id,
+                  showAllMessages: true,
+                }}
+              />
             ) : state.emptyKind != null ? (
               <div className={styles.chatCol} data-empty-col="true">
                 <ChatEmptyState
@@ -414,7 +460,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           <ChatComposerWrapper
             mainSurface={state.mainSurface}
             emptyKind={state.emptyKind}
-            isSettling={isLandingSettling}
+            isSettling={activeSettling}
             composerElement={mainComposerElement}
             ribbons={ribbons}
             pendingApprovalCount={state.approvalState.pendingApprovalCount}
@@ -433,7 +479,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
             isProcessing={state.isProcessing}
             onStopGeneration={state.composerProps.handleStopGeneration}
             composerLead={
-              isLanding || isLandingSettling ? (
+              previewExternalSession ? null : isLanding || activeSettling ? (
                 <>
                   <ChatLandingBrand />
                   <ComposerProjectPicker

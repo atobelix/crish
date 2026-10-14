@@ -126,11 +126,6 @@
   box-shadow: none;
 }
 
-.titleInput::selection {
-  background: color-mix(in srgb, var(--brand-primary) 18%, transparent);
-  color: inherit;
-}
-
 /* 独立 20x20px Chevron 下拉触点与浮层菜单 */
 .dropdownWrap {
   position: relative;

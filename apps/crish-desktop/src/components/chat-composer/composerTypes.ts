@@ -278,4 +278,14 @@ export type ChatComposerProps = {
    * 布局形态：'multiline'（默认折行两层卡片，单行消息保持折行卡片排版）| 'adaptive'（自适应胶囊/网格）
    */
   layoutVariant?: ComposerLayoutVariant;
+  /** 整体输入框禁用态 */
+  disabled?: boolean;
+  /** 自定义占位文案 */
+  placeholder?: string;
+  /** 外部历史对话预览态：在输入框内以极简模式提供一键导入并接续输入功能 */
+  externalSessionPreview?: {
+    source: 'claude-code' | 'codex';
+    isImporting?: boolean;
+    onImportAndContinue: () => void | Promise<void>;
+  };
 };

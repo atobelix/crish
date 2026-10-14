@@ -5,12 +5,8 @@
    ========================================================================== */
 
 :global(::highlight(file-annotation-active-selection)) {
-  background-color: color-mix(
-    in srgb,
-    var(--accent-color) 30%,
-    transparent
-  );
-  color: inherit;
+  background-color: var(--selection-bg);
+  color: var(--selection-fg);
 }
 
 .popover {
@@ -32,7 +28,9 @@
   box-shadow: var(--shadow-popover);
   animation: popoverFadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1);
   pointer-events: auto;
-  transition: border-color var(--transition-fast, 120ms ease), border-radius 120ms ease;
+  transition:
+    border-color var(--transition-fast, 120ms ease),
+    border-radius 120ms ease;
 }
 
 .popover:focus-within {
@@ -147,4 +145,3 @@
   color: var(--text-primary);
   background: var(--tint-hover);
 }
-

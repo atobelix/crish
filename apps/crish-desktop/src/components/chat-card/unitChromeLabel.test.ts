@@ -33,58 +33,55 @@ describe('resolveUnitChromeLabel', () => {
   it('empty / GENERAL_FOLDER / general aliases → 对话', () => {
     const projects = [demoProject];
     expect(resolveUnitChromeLabel({ folder: undefined }, projects)).toBe(
-      GENERAL_FOLDER,
+      GENERAL_FOLDER
     );
     expect(resolveUnitChromeLabel({ folder: null }, projects)).toBe(
-      GENERAL_FOLDER,
+      GENERAL_FOLDER
     );
     expect(resolveUnitChromeLabel({ folder: '' }, projects)).toBe(
-      GENERAL_FOLDER,
+      GENERAL_FOLDER
     );
     expect(resolveUnitChromeLabel({ folder: GENERAL_FOLDER }, projects)).toBe(
-      GENERAL_FOLDER,
+      GENERAL_FOLDER
     );
     expect(resolveUnitChromeLabel({ folder: '会话' }, projects)).toBe(
-      GENERAL_FOLDER,
+      GENERAL_FOLDER
     );
     expect(resolveUnitChromeLabel({ folder: '常规会话' }, projects)).toBe(
-      GENERAL_FOLDER,
+      GENERAL_FOLDER
     );
     expect(resolveUnitChromeLabel({ folder: 'general' }, projects)).toBe(
-      GENERAL_FOLDER,
+      GENERAL_FOLDER
     );
   });
 
   it('known project id → project display name', () => {
     expect(
-      resolveUnitChromeLabel({ folder: demoProject.id }, [demoProject]),
+      resolveUnitChromeLabel({ folder: demoProject.id }, [demoProject])
     ).toBe('conex');
   });
 
   it('known project name match → project name', () => {
-    expect(
-      resolveUnitChromeLabel({ folder: 'conex' }, [demoProject]),
-    ).toBe('conex');
+    expect(resolveUnitChromeLabel({ folder: 'conex' }, [demoProject])).toBe(
+      'conex'
+    );
   });
 
   it('project with empty name → path leaf', () => {
     expect(
-      resolveUnitChromeLabel({ folder: namelessProject.id }, [namelessProject]),
+      resolveUnitChromeLabel({ folder: namelessProject.id }, [namelessProject])
     ).toBe('my-app');
   });
 
   it('path-like folder without list hit → leaf name', () => {
-    expect(
-      resolveUnitChromeLabel({ folder: 'C:/repos/other' }, []),
-    ).toBe('other');
+    expect(resolveUnitChromeLabel({ folder: 'C:/repos/other' }, [])).toBe(
+      'other'
+    );
   });
 
-  it('unknown project-like key is not 对话', () => {
+  it('unknown project-like key falls back to 对话', () => {
     expect(resolveUnitChromeLabel({ folder: 'proj-ghost99' }, [])).toBe(
-      'proj-ghost99',
-    );
-    expect(resolveUnitChromeLabel({ folder: 'proj-ghost99' }, [])).not.toBe(
-      GENERAL_FOLDER,
+      GENERAL_FOLDER
     );
   });
 
@@ -92,8 +89,8 @@ describe('resolveUnitChromeLabel', () => {
     expect(
       resolveUnitChromeLabel(
         { folder: GENERAL_FOLDER } as { folder?: string | null },
-        [demoProject],
-      ),
+        [demoProject]
+      )
     ).toBe(GENERAL_FOLDER);
   });
 });
@@ -129,7 +126,7 @@ describe('countRunningSubagents', () => {
         { status: 'running' },
         { status: 'running' },
         { status: 'failed' },
-      ]),
+      ])
     ).toBe(2);
   });
 });
@@ -154,8 +151,6 @@ describe('unit chrome dock order (contract)', () => {
     expect(actionOrder).toContain('chat-open-overview');
     expect(actionOrder).toContain('chat-open-note');
     expect(actionOrder[actionOrder.length - 1]).toBe('right-dock-toggle');
-    expect(actionOrder.includes('chat-toggle-msg-filter' as never)).toBe(
-      false,
-    );
+    expect(actionOrder.includes('chat-toggle-msg-filter' as never)).toBe(false);
   });
 });

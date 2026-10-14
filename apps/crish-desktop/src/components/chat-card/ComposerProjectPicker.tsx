@@ -9,7 +9,6 @@ import styles from './ComposerProjectPicker.module.css';
 import { Button } from '../ui';
 import {
   getActiveProject,
-  getWorkspacePath,
   listProjects,
   resolveFolderToProjectId,
   projectFolderLabel,
@@ -71,15 +70,32 @@ export function resolveProjectForScope(
       k === '常规会话' ||
       k === 'general'
     ) {
-      return { project: null, displayName: '选择项目', isGeneral: true };
+      return { project: null, displayName: '通用项目', isGeneral: true };
     }
 
     const projectId = resolveFolderToProjectId(k);
     if (projectId) {
       const p = listProjects().find((proj) => proj.id === projectId);
       if (p) {
-        return { project: p, displayName: p.name, isGeneral: false };
+        return {
+          project: p,
+          displayName: p.name || projectFolderLabel(p.path),
+          isGeneral: false,
+        };
       }
+    }
+
+    // 无法解析到现存项目的内部 proj-* 幽灵 ID，归入通用项目
+    if (/^proj-[a-z0-9_-]+$/i.test(k)) {
+      const active = getActiveProject();
+      if (active) {
+        return {
+          project: active,
+          displayName: active.name || projectFolderLabel(active.path),
+          isGeneral: false,
+        };
+      }
+      return { project: null, displayName: '通用项目', isGeneral: true };
     }
 
     const label = projectFolderLabel(k);
@@ -88,11 +104,15 @@ export function resolveProjectForScope(
 
   const active = getActiveProject();
   if (active) {
-    return { project: active, displayName: active.name, isGeneral: false };
+    return {
+      project: active,
+      displayName: active.name || projectFolderLabel(active.path),
+      isGeneral: false,
+    };
   }
   return {
     project: null,
-    displayName: getWorkspacePath() ? '当前目录' : '选择项目',
+    displayName: '通用项目',
     isGeneral: true,
   };
 }
@@ -174,14 +194,8 @@ export const ComposerProjectPicker: React.FC<ComposerProjectPickerProps> = ({
     if (!active || active === document.body) trigger?.focus();
   }, []);
 
-  const { project, displayName } = resolveProjectForScope(
-    effectiveWorkspaceKey
-  );
-  const ariaLabel = project
-    ? `当前项目：${displayName}，点击切换`
-    : getWorkspacePath()
-      ? '当前目录，点击选择项目'
-      : '选择项目';
+  const { displayName } = resolveProjectForScope(effectiveWorkspaceKey);
+  const ariaLabel = `当前项目：${displayName}，点击切换`;
 
   return (
     <div ref={rootRef} className={styles.root}>

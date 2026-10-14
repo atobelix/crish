@@ -1,7 +1,7 @@
 /* 会话加载平滑过渡：轻柔淡入，零 Layout Reflow，GPU 合成一镜到底 */
 @keyframes streamHostEnter {
   from {
-    opacity: 0.92;
+    opacity: 0.94;
   }
   to {
     opacity: 1;
@@ -18,7 +18,7 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  animation: streamHostEnter var(--transition-fast) both;
+  animation: streamHostEnter var(--transition-fast) var(--ease-emphasized) both;
 }
 
 /* 顶部与底部平滑渐隐遮罩（双极过渡，文字进出视野不生硬，且右侧避让滚动条轨道） */

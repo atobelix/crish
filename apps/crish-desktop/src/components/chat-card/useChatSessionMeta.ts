@@ -14,7 +14,7 @@ import {
 } from './useScopedSessionField';
 import type { SessionState } from '../../store/types';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
-import { isPendingDraft } from '../../store/draftSession';
+import { isPendingDraft } from '../../store/storeAccess';
 
 import { GENERAL_FOLDER } from '../../api/projectStore';
 

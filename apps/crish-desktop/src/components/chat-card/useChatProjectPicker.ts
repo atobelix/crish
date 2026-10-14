@@ -4,7 +4,7 @@ import { onUiEvent } from '../../api/uiEvents';
 import { onScopedUiEvent } from '../../hooks/useLeafUiEvent';
 import { useLeafScope } from '../../contexts/LeafScopeContext';
 
-type ChatMainSurface = 'chat' | 'scheduled';
+type ChatMainSurface = 'chat' | 'scheduled' | 'extensions';
 
 export interface UseChatProjectPickerOptions {
   /** 活跃会话 ID，用于会话切换重置过滤 */

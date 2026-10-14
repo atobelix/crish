@@ -9,7 +9,7 @@ import styles from './TerminalCard.module.css';
 import {
   openNewTerminalInLeaf,
   openNewTerminalInActiveTab,
-} from '../../store/workspace-shell/openTool';
+} from '../../store/storeAccess';
 import {
   useLeafScope,
   useScopedSessionId,

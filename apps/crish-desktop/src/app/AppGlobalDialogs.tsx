@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { AppErrorBoundary } from '../components/AppErrorBoundary';
 import { TelemetryDialog } from '../components/overlay/TelemetryDialog';
 import { openSettings } from '../api/storeAccess';
@@ -7,6 +7,7 @@ import { getActiveModelId, getActiveProfileId } from '../api/providerProfiles';
 import type { SettingsTabType } from '../store/types';
 import type { WizardStep } from '../components/firstRunWizardLib';
 import { useAnimatedPresence } from '../components/ui/Dialog/useAnimatedPresence';
+import { checkAndAutoSyncExternalSessions } from '../api/import/autoSyncExternalSessions';
 
 /** 设置弹窗退场时长：与 Dialog 基座退场（--duration-exit 150ms）一致，动画播完才卸载 */
 const SETTINGS_EXIT_MS = 150;
@@ -24,6 +25,11 @@ const SettingsPanel = lazy(() =>
       console.error('[crish] SettingsPanel lazy load failed', err);
       throw err;
     })
+);
+const ExternalSessionImportModal = lazy(() =>
+  import('../components/plugins/ExternalSessionImportModal').then((m) => ({
+    default: m.ExternalSessionImportModal,
+  }))
 );
 
 export function SkeletonFallback({
@@ -75,6 +81,23 @@ export function AppGlobalDialogs({
     visible: showSettingsOverlay,
     exitDurationMs: SETTINGS_EXIT_MS,
   });
+
+  const [showExternalImport, setShowExternalImport] = useState(false);
+
+  useEffect(() => {
+    const onOpenImport = () => setShowExternalImport(true);
+    window.addEventListener('crish-open-external-import', onOpenImport);
+    return () =>
+      window.removeEventListener('crish-open-external-import', onOpenImport);
+  }, []);
+
+  useEffect(() => {
+    // 启动时在后台静默尝试同步当前项目的外部终端对话
+    const timer = setTimeout(() => {
+      void checkAndAutoSyncExternalSessions();
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [activeWorkspaceId]);
   return (
     <>
       {showFirstRun && (
@@ -145,6 +168,15 @@ export function AppGlobalDialogs({
             />
           </Suspense>
         </AppErrorBoundary>
+      )}
+
+      {showExternalImport && (
+        <Suspense fallback={null}>
+          <ExternalSessionImportModal
+            open={showExternalImport}
+            onClose={() => setShowExternalImport(false)}
+          />
+        </Suspense>
       )}
     </>
   );

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import styles from './OverviewCard.module.css';
 import { selectSessions, useSessionField } from '../../store/storeAccess';
-import { useSessionFolder, useSessionAgents } from '../../store';
+import { useSessionFolder, useSessionAgents } from '../../store/storeAccess';
 import {
   useLeafScope,
   useScopedSessionId,

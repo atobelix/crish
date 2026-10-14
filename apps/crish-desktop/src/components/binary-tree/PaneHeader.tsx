@@ -411,7 +411,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
       return null;
     }
 
-    if (chatMainSurface === 'scheduled') {
+    if (chatMainSurface === 'scheduled' || chatMainSurface === 'extensions') {
       return (
         <div
           className={styles.paneHeader}

@@ -18,6 +18,7 @@ import {
   DEFAULT_VIEWPORT_HEIGHT_PX,
   MESSAGE_VIEWPORT_OVERSCAN,
   NEAR_BOTTOM_EPSILON_PX,
+  SCROLL_TOP_EPSILON_PX,
 } from '../../hooks/virtualScrollConstants';
 
 /** 单帧跨屏滚动位移阈值（px）：仅单步跨屏跃迁（>450px）才进入快速滚动卸载窗口，杜绝常规滚轮/拖拽误触发 */
@@ -179,6 +180,8 @@ export interface ActiveRowWindowParams {
   isScrolling: boolean;
   isSessionSwitch?: boolean;
   stickToBottom?: boolean;
+  isInitialMount?: boolean;
+  initialScroll?: 'bottom' | 'top';
 }
 
 export interface MessageRowDomPurgeResult {
@@ -299,6 +302,8 @@ export function computeActiveRowWindow(
     isScrolling,
     isSessionSwitch = false,
     stickToBottom = false,
+    isInitialMount = false,
+    initialScroll,
   } = params;
 
   const itemCount = msgIds.length;
@@ -320,9 +325,15 @@ export function computeActiveRowWindow(
   const maxScroll = Math.max(0, totalHeight - viewportHeight);
   const isNearPhysicalBottom =
     maxScroll > 0 && maxScroll - scrollTop <= NEAR_BOTTOM_EPSILON_PX;
+  const isStaticTopMount =
+    initialScroll !== 'bottom' &&
+    !isSessionSwitch &&
+    scrollTop <= SCROLL_TOP_EPSILON_PX;
   const shouldProjectBottom =
     itemCount > 0 &&
-    (isSessionSwitch || (stickToBottom && isNearPhysicalBottom));
+    (isSessionSwitch ||
+      (isInitialMount && initialScroll === 'bottom') ||
+      (stickToBottom && isNearPhysicalBottom && !isStaticTopMount));
   const effectiveScrollTop = shouldProjectBottom ? maxScroll : scrollTop;
 
   const visibleRange =

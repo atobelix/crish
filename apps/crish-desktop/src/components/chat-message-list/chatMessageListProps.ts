@@ -156,6 +156,7 @@ export interface MessageVirtualizerInteractionProps {
 export interface MessageVirtualizerProps {
   messages: SessionMessage[];
   activeSessionId: string;
+  initialScroll?: 'bottom' | 'top';
   navigation?: ChatMessageListNavigationProps;
   approval?: ChatMessageListApprovalProps;
   composer?: ChatMessageListComposerProps;

@@ -107,6 +107,7 @@ function renderChatComposer(opts: {
   onPasteImage?: (e: React.ClipboardEvent) => void;
   isProcessing?: boolean;
   initialInput?: string;
+  externalSessionPreview?: ChatComposerProps['externalSessionPreview'];
 }) {
   const loadSkillSlash = vi.fn();
   const onSend = vi.fn(opts.onSend ?? (() => {}));
@@ -162,6 +163,7 @@ function renderChatComposer(opts: {
         setShowPlusMenu={() => {}}
         permissionMode={permission}
         onPermissionChange={setPermission}
+        externalSessionPreview={opts.externalSessionPreview}
       />
     );
   }
@@ -392,5 +394,23 @@ describe('ChatComposer 全链（T6 接线）', () => {
     const mod = await import('./ChatComposer');
     expect(typeof mod.ComposerField).toBe('object');
     expect(typeof mod.STOP_TOOLTIP).toBe('string');
+  });
+
+  it('外部历史对话预览态：输入框呈现极简导入触发器并响应点击与发送', () => {
+    const onImport = vi.fn();
+    renderChatComposer({
+      externalSessionPreview: {
+        source: 'claude-code',
+        isImporting: false,
+        onImportAndContinue: onImport,
+      },
+    });
+
+    const trigger = screen.getByTestId('external-session-import-btn');
+    expect(trigger).toBeInTheDocument();
+    expect(screen.getByText('点击以导入对话并继续输入…')).toBeInTheDocument();
+
+    fireEvent.click(trigger);
+    expect(onImport).toHaveBeenCalledTimes(1);
   });
 });

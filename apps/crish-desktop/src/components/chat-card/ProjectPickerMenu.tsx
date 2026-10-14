@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useRef } from 'react';
 
 import {
   addProjectFromPath,
@@ -22,7 +22,8 @@ import {
 import styles from './ProjectPickerMenu.module.css';
 import { AppIcon } from '../ui/icons/index';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
-import { setDraftProjectFolder } from '../../store/sessionDraftActions';
+import { ProjectManageModal } from '../sidebar/session-list/ProjectManageModal';
+import { setDraftProjectFolder } from '../../store/storeAccess';
 
 export interface ProjectPickerMenuProps {
   sessionId?: string | null;
@@ -56,6 +57,8 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
   const scopedSessionId = useScopedSessionId(sessionIdProp);
   const [projectListVersion, setProjectListVersion] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [createPopoverOpen, setCreatePopoverOpen] = useState(false);
+  const createAnchorRef = useRef<HTMLElement | null>(null);
   const activeId = getActiveProjectId();
   const [confirmGate, renderConfirmGate] = useConfirmGate();
 
@@ -77,12 +80,13 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
     return listProjects();
   }, [projectListVersion, open]);
 
-  const handlePickFolder = async () => {
+  const handlePickFolder = useCallback(async () => {
     setBusy(true);
     try {
       const path = await openDirectoryDialogSafe('选择现有项目文件夹');
       if (path) {
-        addProjectFromPath(path);
+        const entry = addProjectFromPath(path);
+        syncDraftFolderOnProjectChange(entry.id);
         onChanged?.();
         refresh();
         onOpenChange(false);
@@ -90,22 +94,19 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
     } finally {
       setBusy(false);
     }
-  };
+  }, [onChanged, onOpenChange, refresh, syncDraftFolderOnProjectChange]);
 
-  const handleCreateEmptyProject = async () => {
-    setBusy(true);
-    try {
-      const path = await openDirectoryDialogSafe('选择或创建空白文件夹');
-      if (path) {
-        addProjectFromPath(path);
-        onChanged?.();
-        refresh();
-        onOpenChange(false);
-      }
-    } finally {
-      setBusy(false);
+  const handleCreateEmptyProject = useCallback(() => {
+    if (typeof document !== 'undefined') {
+      createAnchorRef.current = document.querySelector<HTMLElement>(
+        '[data-composer-project-picker]'
+      );
     }
-  };
+    onOpenChange(false);
+    window.requestAnimationFrame(() => {
+      setCreatePopoverOpen(true);
+    });
+  }, [onOpenChange]);
 
   const handleRemoveProject = async (p: ProjectEntry) => {
     const ok = await confirmGate({
@@ -195,13 +196,15 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
             label: '打开本地项目...',
             icon: <AppIcon name="folder-open" size={14} />,
             disabled: busy,
-            onSelect: handlePickFolder,
+            closeOnSelect: false,
+            onSelect: () => void handlePickFolder(),
           },
           {
             id: 'action:create-empty',
             label: '新建空白项目...',
             icon: <AppIcon name="folder-plus" size={14} />,
             disabled: busy,
+            closeOnSelect: false,
             onSelect: handleCreateEmptyProject,
           },
         ],
@@ -215,6 +218,8 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
     onChanged,
     onOpenChange,
     syncDraftFolderOnProjectChange,
+    handlePickFolder,
+    handleCreateEmptyProject,
   ]);
 
   return (
@@ -234,6 +239,16 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
         className={styles.pickerPanel}
         onMouseEnter={onContentMouseEnter}
         onMouseLeave={onContentMouseLeave}
+      />
+      <ProjectManageModal
+        mode="create"
+        open={createPopoverOpen}
+        onClose={() => setCreatePopoverOpen(false)}
+        onProjectSaved={(entry) => {
+          syncDraftFolderOnProjectChange(entry.id);
+          onChanged?.();
+          refresh();
+        }}
       />
     </>
   );

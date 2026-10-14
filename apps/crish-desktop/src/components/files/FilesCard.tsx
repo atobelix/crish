@@ -6,6 +6,7 @@ import { Button, Tooltip, Input } from '../ui';
 import {
   countPendingFileAnnotations,
   openPathDefault,
+  resolveReadableFilePath,
   resolveWorkspacePath,
   takePendingOpenPath,
 } from '../../api/workspaceFsApi';
@@ -124,9 +125,16 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
     const handleOpenFile = useCallback(
       async (path: string) => {
         if (!(await nav.confirmNavigation())) return;
-        const resolved = resolveWorkspacePath(path);
-        await nav.revealPath(resolved);
-        await preview.openFile(path);
+        const resolved = resolveReadableFilePath(path);
+        const wsPath = resolveWorkspacePath(path);
+        if (wsPath) {
+          try {
+            await nav.revealPath(wsPath);
+          } catch {
+            /* 外部路径或定位失败时不阻断预览 */
+          }
+        }
+        await preview.openFile(resolved || path);
       },
       [nav, preview]
     );
@@ -230,8 +238,8 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
           return;
         }
         takePendingOpenPath();
-        const resolved = resolveWorkspacePath(detail.path);
-        void handleOpenFile(resolved);
+        const resolved = resolveReadableFilePath(detail.path);
+        void handleOpenFile(resolved || detail.path);
       };
       window.addEventListener('crish-open-file', onOpen);
       return () => window.removeEventListener('crish-open-file', onOpen);

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 
 import styles from './ComposePlusMenu.module.css';
 import { openSettings } from '../../api/storeAccess';
+import { navigateToSurface } from '../../store/storeAccess';
 import {
   SmartExpandablePanel,
   type MenuItem,
@@ -102,6 +103,7 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
         icon: <AppIcon name="settings" size={13} />,
         onSelect: () => {
           openSettings('skills');
+          navigateToSurface('extensions');
         },
       },
     ];

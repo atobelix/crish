@@ -39,8 +39,10 @@ export function createRowMeasureRef(
   const onEntry = (entry: ResizeObserverEntry) => {
     const el = entry.target;
     if (!(el instanceof HTMLElement)) return;
+    if (el.querySelector('[data-md-pending="true"]') !== null) return;
     const msgId = el.dataset.vindex ?? id;
-    const measuredHeight = extractEntryBlockSize(entry);
+    const measuredHeight =
+      el.offsetHeight || Math.ceil(entry.contentRect.height);
     if (msgId != null && measuredHeight > 0) {
       setActual(msgId, measuredHeight);
     }

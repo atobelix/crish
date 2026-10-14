@@ -1,4 +1,9 @@
-import React, { useMemo, useSyncExternalStore } from 'react';
+import React, {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from 'react';
 import styles from './ChatCard.module.css';
 import {
   ChatStatusRibbons,
@@ -12,6 +17,7 @@ import type { ChatComposerAboveProps } from './chatComposerAboveProps';
 import './workspaceChatComposerAbove.slot';
 import { ApprovalDock } from './ApprovalDock';
 import { useSessionStore } from '../../store/storeAccess';
+import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
 import { resolveSessionProgressItems } from '../../api/sessionProgressApi';
 import {
   ComposerPlanProgressBar,
@@ -59,6 +65,7 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> =
   React.memo(
     ({
       mainSurface,
+      emptyKind,
       composerElement,
       ribbons,
       pendingApprovalCount,
@@ -151,96 +158,137 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> =
         onApprovalAllow,
         onApprovalDeny,
       ]);
-
       const floatHasContent = pendingApprovalCount > 0 || showPlanBar;
+      const isLanding = emptyKind === 'session-empty';
+      const motionRef = useRef<HTMLDivElement>(null);
+
+      // 停靠高度只在对话态写回。空界面和落地过渡期间冻结，滚动视口不跟着输入框变形。
+      useLayoutEffect(() => {
+        const motion = motionRef.current;
+        if (!motion) return;
+        const publish = () => {
+          const body = motion.closest(
+            '[data-testid="chat-body"]'
+          ) as HTMLElement | null;
+          if (!body) return;
+          if (body.getAttribute('data-empty-kind') === 'session-empty') return;
+          if (body.getAttribute('data-settling') === 'true') return;
+          const height = motion.offsetHeight;
+          if (height > 0) {
+            body.style.setProperty(
+              '--composer-dock-block',
+              `${Math.round(height)}px`
+            );
+          }
+        };
+        publish();
+        const observer = ResizeObserverManager.getInstance();
+        observer.observe(motion, publish);
+        return () => observer.unobserve(motion, publish);
+      }, [isLanding, isSettling]);
+
+      const ribbonsNode = (
+        <ChatStatusRibbons
+          streaming={ribbons.streaming}
+          goal={ribbons.goal}
+          approval={approval}
+          omitPlanRibbons
+          omitApprovalDock
+        />
+      );
 
       return (
         <div
           className={styles.chatFooter}
           data-testid="chat-footer"
           style={{
-            display: mainSurface === 'scheduled' ? 'none' : undefined,
+            display:
+              mainSurface === 'scheduled' || mainSurface === 'extensions'
+                ? 'none'
+                : undefined,
           }}
         >
-          {/* chatCol 与消息 listInner 同 max-width / 水平 padding，对齐 stream + composer */}
-          <div className={styles.chatCol}>
-            <ChatStatusRibbons
-              streaming={ribbons.streaming}
-              goal={ribbons.goal}
-              approval={approval}
-              omitPlanRibbons
-              omitApprovalDock
-            />
+          <div ref={motionRef} className={styles.footerMotion}>
+            {/* chatCol 与消息 listInner 同 max-width / 水平 padding，对齐 stream + composer */}
+            <div className={styles.chatCol}>
+              {!isLanding ? ribbonsNode : null}
 
-            <div className={styles.composerDock} data-composer-wrapper="">
-              <div
-                className={styles.floatZone}
-                data-composer-float-zone=""
-                hidden={!floatHasContent && !liftApproval}
-              >
-                {composerAbove ? (
-                  <SlotOutlet
-                    slotKey="workspace.chat.composerAbove"
-                    context={composerAbove}
-                    fallback={null}
-                  />
-                ) : liftApproval && pendingApprovalCount > 0 ? (
+              <div className={styles.composerDock} data-composer-wrapper="">
+                <div
+                  className={styles.floatZone}
+                  data-composer-float-zone=""
+                  hidden={!floatHasContent && !liftApproval}
+                >
+                  {composerAbove ? (
+                    <SlotOutlet
+                      slotKey="workspace.chat.composerAbove"
+                      context={composerAbove}
+                      fallback={null}
+                    />
+                  ) : liftApproval && pendingApprovalCount > 0 ? (
+                    <div
+                      role="status"
+                      aria-live="polite"
+                      data-testid="composer-above-approval-unavailable"
+                      style={{
+                        padding: '6px 10px',
+                        fontSize: 'var(--font-size-xs)',
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
+                      审批操作不可用（未接入真实回调）
+                    </div>
+                  ) : null}
+                  {liftApproval ? null : (
+                    <ApprovalDock
+                      show={showApprovalDock}
+                      pendingCount={pendingApprovalCount}
+                      summary={pendingApprovalSummary}
+                      toolId={pendingApprovalToolId}
+                      msgId={pendingApprovalMsgId}
+                      activeSessionId={activeSessionId}
+                    />
+                  )}
+                  {showPlanBar ? (
+                    <ComposerPlanProgressBar
+                      active={true}
+                      mode={isGoalActive ? 'goal' : 'plan'}
+                      modeLabel={isGoalActive ? '目标模式' : '计划模式'}
+                      currentStep={activeStepIndex}
+                      totalSteps={planSteps.length}
+                      steps={planSteps}
+                      activeStepText={activeStepText}
+                      isRunning={isProcessing}
+                      onApprovePlan={
+                        ribbons.goal?.planApproved
+                          ? undefined
+                          : ribbons.goal?.onApprovePlan
+                      }
+                      onStop={
+                        isGoalActive
+                          ? ribbons.goal?.onStopGoal
+                          : onStopGeneration
+                      }
+                    />
+                  ) : null}
+                </div>
+
+                {/* composer 始终在 .chatFooter 渲染（不再注入到 ChatEmptyState 内）。 */}
+                {composerLead ? (
                   <div
-                    role="status"
-                    aria-live="polite"
-                    data-testid="composer-above-approval-unavailable"
-                    style={{
-                      padding: '6px 10px',
-                      fontSize: 'var(--font-size-xs)',
-                      color: 'var(--text-secondary)',
-                    }}
+                    className={styles.composerLead}
+                    data-composer-lead=""
+                    data-settling={isSettling ? 'true' : undefined}
                   >
-                    审批操作不可用（未接入真实回调）
+                    {composerLead}
                   </div>
                 ) : null}
-                {liftApproval ? null : (
-                  <ApprovalDock
-                    show={showApprovalDock}
-                    pendingCount={pendingApprovalCount}
-                    summary={pendingApprovalSummary}
-                    toolId={pendingApprovalToolId}
-                    msgId={pendingApprovalMsgId}
-                    activeSessionId={activeSessionId}
-                  />
-                )}
-                {showPlanBar ? (
-                  <ComposerPlanProgressBar
-                    active={true}
-                    mode={isGoalActive ? 'goal' : 'plan'}
-                    modeLabel={isGoalActive ? '目标模式' : '计划模式'}
-                    currentStep={activeStepIndex}
-                    totalSteps={planSteps.length}
-                    steps={planSteps}
-                    activeStepText={activeStepText}
-                    isRunning={isProcessing}
-                    onApprovePlan={
-                      ribbons.goal?.planApproved
-                        ? undefined
-                        : ribbons.goal?.onApprovePlan
-                    }
-                    onStop={
-                      isGoalActive ? ribbons.goal?.onStopGoal : onStopGeneration
-                    }
-                  />
-                ) : null}
+                {composerElement}
               </div>
 
-              {/* composer 始终在 .chatFooter 渲染（不再注入到 ChatEmptyState 内）。 */}
-              {composerLead ? (
-                <div
-                  className={styles.composerLead}
-                  data-composer-lead=""
-                  data-settling={isSettling ? 'true' : undefined}
-                >
-                  {composerLead}
-                </div>
+              {isLanding ? (
+                <div className={styles.landingRibbons}>{ribbonsNode}</div>
               ) : null}
-              {composerElement}
             </div>
           </div>
         </div>

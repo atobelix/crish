@@ -292,6 +292,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
         <MessageVirtualizer
           messages={messages}
           activeSessionId={activeSessionId}
+          initialScroll="bottom"
           navigation={navigation}
           approval={approval}
           composer={virtualizerComposer}

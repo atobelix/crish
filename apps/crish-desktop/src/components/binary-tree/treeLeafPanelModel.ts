@@ -2,7 +2,7 @@ import type { LayoutLeaf } from '../../store/types';
 import {
   isPendingDraftSessionId,
   mintDraftSessionId,
-} from '../../store/draftSession';
+} from '../../store/storeAccess';
 
 export { isPendingDraftSessionId as isDraftSessionId };
 

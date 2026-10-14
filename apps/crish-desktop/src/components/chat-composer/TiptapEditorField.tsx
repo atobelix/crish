@@ -364,6 +364,12 @@ export const TiptapEditorField = React.forwardRef<
       return () => cancelAnimationFrame(rafId);
     }, [editor, content, applyHydratedMarkdown]);
 
+    // 动态同步禁用态至 Tiptap 内部 ProseMirror 编辑器
+    useEffect(() => {
+      if (!editor || editor.isDestroyed) return;
+      editor.setEditable(!disabled);
+    }, [editor, disabled]);
+
     // Track composition & drag events directly on the editor DOM node for CJK + split-pane drag protection
     useEffect(() => {
       const dom = safeViewDom(editor);

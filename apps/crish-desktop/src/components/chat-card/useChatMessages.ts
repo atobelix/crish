@@ -58,10 +58,11 @@ export function useChatMessages({
     resolveSessionId,
     useCallback((session) => Boolean(session), [])
   );
-  const messagesHydrated = useScopedSessionField(
+  const messagesHydratedRaw = useScopedSessionField(
     resolveSessionId,
-    useCallback((session) => session?.messagesHydrated === true, [])
+    useCallback((session) => session?.messagesHydrated, [])
   );
+  const messagesHydrated = messagesHydratedRaw === true;
 
   useEffect(() => {
     if (!activeSessionId) return;
@@ -85,6 +86,7 @@ export function useChatMessages({
       displayCount: displayMessages.length,
       localMsgFilter,
       mainSurface,
+      messagesHydrated: messagesHydratedRaw,
       hydratedFromEngine,
       engineCursor,
       engineLastRunId,

@@ -38,37 +38,31 @@ export const ComposerInlineTag: React.FC<NodeViewProps> = ({
     if (kind === 'skill') {
       const isPath =
         id.includes('/') || id.includes('\\') || id.endsWith('.md');
-      if (isPath) {
-        const res = openFileInPanel(id);
-        if (!res) {
-          try {
-            const { revealSkillPath } = await import('../../api/skillsApi');
-            await revealSkillPath(id);
-          } catch {
-            /* swallow-ok */
+      try {
+        const { revealSkillPath, getSkillSlashCommandsCached } =
+          await import('../../api/skillsApi');
+        let targetPath = isPath ? id : '';
+        if (!targetPath) {
+          const { skills } = await getSkillSlashCommandsCached();
+          const target = skills.find(
+            (s) =>
+              s.id === id ||
+              s.name.toLowerCase() === id.toLowerCase() ||
+              s.filePath === id
+          );
+          if (target?.filePath) {
+            targetPath = target.filePath;
           }
         }
-        return;
-      }
-      try {
-        const { getSkillSlashCommandsCached, revealSkillPath } =
-          await import('../../api/skillsApi');
-        const { skills } = await getSkillSlashCommandsCached();
-        const target = skills.find(
-          (s) =>
-            s.id === id ||
-            s.name.toLowerCase() === id.toLowerCase() ||
-            s.filePath === id
-        );
-        if (target?.filePath) {
-          const res = openFileInPanel(target.filePath);
-          if (!res) {
-            await revealSkillPath(target.filePath);
-          }
+        if (targetPath) {
+          // 核心交互：转接到技能所在目录并定位
+          await revealSkillPath(targetPath);
+          openFileInPanel(targetPath);
         }
       } catch {
         /* swallow-ok */
       }
+      return;
     } else {
       openFileInPanel(id);
     }

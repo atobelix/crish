@@ -7,10 +7,13 @@
   min-width: 220px;
   max-width: 220px;
   background: var(--bg-card);
-  border-right: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
+  border-right: 1px solid
+    color-mix(in srgb, var(--border-subtle) 25%, transparent);
   box-sizing: border-box;
   overflow: hidden;
-  transition: width 200ms cubic-bezier(0.2, 0, 1, 1), opacity 200ms ease;
+  transition:
+    width 200ms cubic-bezier(0.2, 0, 1, 1),
+    opacity 200ms ease;
   z-index: 10;
 }
 
@@ -34,7 +37,8 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--border-subtle) 25%, transparent);
   background: var(--bg-card);
 }
 
@@ -74,7 +78,9 @@
   border-radius: var(--radius-xs);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background-color 150ms ease, color 150ms ease;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
 }
 
 .iconBtn:hover,
@@ -178,7 +184,9 @@
   border: none;
   font-weight: var(--font-weight-medium, 500);
   box-shadow: none;
-  transition: color var(--transition-press, 120ms ease), background-color var(--transition-press, 120ms ease);
+  transition:
+    color var(--transition-press, 120ms ease),
+    background-color var(--transition-press, 120ms ease);
   box-sizing: border-box;
   text-align: left;
   cursor: pointer;
@@ -214,7 +222,7 @@
 .sessionItem.active .itemTime,
 .item.active .sessionTime,
 .item.active .itemTime {
-  color: var(--text-secondary);
+  color: var(--text-faint);
 }
 
 .sessionItem:focus-visible,
@@ -254,8 +262,16 @@
   line-height: 28px;
   color: inherit;
   /* mask-image 只消费 alpha 通道，#000 此处无色彩语义，仅用于文字末端渐变淡出 */
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent 100%);
-  mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent 100%);
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - 14px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - 14px),
+    transparent 100%
+  );
 }
 
 .sessionRenameInput,
@@ -310,7 +326,7 @@
   font-weight: var(--font-weight-normal, 400);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
-  color: var(--text-tertiary);
+  color: var(--text-faint);
   flex-shrink: 0;
   white-space: nowrap;
   max-width: 68px;
@@ -357,7 +373,10 @@
   border: none;
   cursor: pointer;
   -webkit-app-region: no-drag;
-  transition: opacity var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease), background var(--transition-micro, 120ms ease);
+  transition:
+    opacity var(--transition-micro, 120ms ease),
+    color var(--transition-micro, 120ms ease),
+    background var(--transition-micro, 120ms ease);
 }
 
 .miniBtn:hover,

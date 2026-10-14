@@ -1,11 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import styles from './ChatMessageList.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { ChatUserMessageRow } from '../chat-message-row/ChatMessageRow';
@@ -22,6 +15,11 @@ import { FlowScrubber } from './FlowScrubber';
 import { ChatScrollFloorSlot } from './ChatScrollFloorSlot';
 import { useStableRowMeasureRef } from './messageVirtualizerMeasure';
 import {
+  useStickToBottomFollow,
+  useVirtualizerScrollHandlers,
+  useVirtualizerScrollRefs,
+} from './messageVirtualizerScrollState';
+import {
   messageVirtualizerPropsEqual,
   type MessageVirtualizerProps,
   type PinnedItem,
@@ -32,12 +30,10 @@ import {
   chatSpacerHeight,
 } from './chatScrollGeometry';
 import {
-  BOTTOM_STICK_EPSILON_PX,
   DEFAULT_VIEWPORT_HEIGHT_PX,
   MESSAGE_VIEWPORT_OVERSCAN,
-  NEAR_BOTTOM_EPSILON_PX,
-  SCROLL_BOTTOM_THRESHOLD_PX,
   SCROLL_TOP_EPSILON_PX,
+  SIGNIFICANT_HEIGHT_DELTA_PX,
 } from '../../hooks/virtualScrollConstants';
 import { useScrollAnchoringOnToggle } from './useScrollAnchoringOnToggle';
 import {
@@ -54,6 +50,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   const {
     messages,
     activeSessionId,
+    initialScroll = 'top',
     searchHighlightQuery,
     pins,
     flowControl,
@@ -64,26 +61,30 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   } = props;
 
   // 领域分组对象直接解构（切除双向兼容与扁平回退代码）
-  const pinnedItems = pins?.pinnedItems ?? [];
-  const pinnedColors = pins?.pinnedColors ?? {};
-  const togglePin = pins?.togglePin ?? (() => {});
+  const {
+    pinnedItems = [],
+    pinnedColors = {},
+    togglePin = () => {},
+  } = pins ?? {};
+  const {
+    hideThinkingBlock = false,
+    inPlanMode = false,
+    planApproved = false,
+    setPermissionMode = () => {},
+    setPlanApproved = () => {},
+    lastAssistantId = null,
+    lastUserId,
+    thinkingMsgId,
+    showAllMessages = true,
+  } = flowControl ?? {};
+  const {
+    expandedUserMsgs = {},
+    onToggleExpandUser = () => {},
+    dismissedFollowUps = {},
+    handleDismissFollowUp = () => {},
+    handleMarkdownClick = () => {},
+  } = interaction ?? {};
 
-  const hideThinkingBlock = flowControl?.hideThinkingBlock ?? false;
-  const inPlanMode = flowControl?.inPlanMode ?? false;
-  const planApproved = flowControl?.planApproved ?? false;
-  const setPermissionMode = flowControl?.setPermissionMode ?? (() => {});
-  const setPlanApproved = flowControl?.setPlanApproved ?? (() => {});
-  const lastAssistantId = flowControl?.lastAssistantId ?? null;
-  const lastUserId = flowControl?.lastUserId;
-  const thinkingMsgId = flowControl?.thinkingMsgId;
-  const showAllMessages = flowControl?.showAllMessages ?? true;
-
-  const expandedUserMsgs = interaction?.expandedUserMsgs ?? {};
-  const onToggleExpandUser = interaction?.onToggleExpandUser ?? (() => {});
-  const dismissedFollowUps = interaction?.dismissedFollowUps ?? {};
-  const handleDismissFollowUp =
-    interaction?.handleDismissFollowUp ?? (() => {});
-  const handleMarkdownClick = interaction?.handleMarkdownClick ?? (() => {});
   // 缺真实 toolStackProps 时不伪装审批可用：回调保持 undefined，由 CompactToolRow 显式不可用
   const fallbackToolStackProps = useMemo<
     import('../chat-tool-call/ChatToolCallBlock').ChatToolStackSharedProps
@@ -108,16 +109,13 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     ]
   );
   const toolStackProps = interaction?.toolStackProps ?? fallbackToolStackProps;
-
   const onOpenDiff = navigation?.onOpenDiff;
   const onOpenDiffPanel = navigation?.onOpenDiffPanel;
   const onOpenPath = navigation?.onOpenPath;
-
   const onBranch = generation?.onBranch;
   const onRetract = generation?.onRetract;
   const onEditMessageAndResend = generation?.onEditMessageAndResend;
   const handleRegenerateRow = generation?.handleRegenerateRow;
-
   const handleFillFollowUp = composer?.handleFillFollowUp;
   const onSendFollowUp = composer?.onSendFollowUp;
   const handleSendFollowUp = composer?.handleSendFollowUp;
@@ -137,15 +135,31 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     syncOrder,
     performProgrammaticScroll,
     cancelProgrammaticScroll,
+    flushPendingGeometry,
+    totalHeight: modelContentHeight,
   } = vs;
   const rowMeasureRef = useStableRowMeasureRef(setActual, msgIds);
 
-  const isAtBottomRef = useRef<boolean>(true);
-  const [isAtBottom, setIsAtBottom] = useState<boolean>(true);
-  const isAtTopRef = useRef<boolean>(true);
-  const [isAtTop, setIsAtTop] = useState<boolean>(true);
-  const observedTopRef = useRef<number>(0);
-  const [showFloorButton, setShowFloorButton] = useState<boolean>(false);
+  // 文档坐标系总高度（滚动回调运行时读取；赋值见 computeActiveRowWindow 之后）
+  const totalHeightRef = useRef(0);
+
+  // 滚动状态 refs/state（实现见 messageVirtualizerScrollState）
+  const {
+    isAtBottom,
+    isAtTop,
+    showFloorButton,
+    isAtBottomRef,
+    isAtTopRef,
+    observedTopRef,
+    setIsAtBottom,
+    setIsAtTop,
+    setShowFloorButton,
+    touchStartYRef,
+  } = useVirtualizerScrollRefs();
+
+  const isFirstMountRef = useRef(true);
+  // 切会话后最多再量两遍已挂载行，把估高纠正赶在首帧绘制之前。
+  const sessionMeasurePassesRef = useRef(0);
 
   // W3-3: 快速滚动状态与超视距 DOM 回收控制器
   const fastScroll = useFastScrollPurgeTracker();
@@ -187,6 +201,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
       performProgrammaticScroll(targetBottomScrollTop);
     }
     observedTopRef.current = targetBottomScrollTop;
+    sessionMeasurePassesRef.current = 2;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId, clearHeights, manager]);
 
@@ -238,6 +253,28 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
       messages,
     });
 
+  // 滚动事件处理器（实现见 messageVirtualizerScrollState）
+  const {
+    handleWheelCapture,
+    handleTouchStartCapture,
+    handleTouchMoveCapture,
+    handleScroll,
+    handleScrollToBottom,
+  } = useVirtualizerScrollHandlers({
+    containerRef: vs.containerRef,
+    vs,
+    totalHeightRef,
+    isAnchorLocked,
+    fastScroll,
+    isAtBottomRef,
+    isAtTopRef,
+    observedTopRef,
+    setIsAtBottom,
+    setIsAtTop,
+    setShowFloorButton,
+    touchStartYRef,
+  });
+
   const isSessionSwitch = prevSessionIdRef.current !== activeSessionId;
 
   // VS-04 & W3-3：计算活跃行裁剪窗口、文档坐标系总高度与每行超视距回收状态
@@ -257,158 +294,110 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
       !isSessionSwitch &&
       (fastScroll.isFastScrolling || fastScroll.isFastScrollingRef.current),
     isSessionSwitch,
+    isInitialMount: isFirstMountRef.current,
+    initialScroll,
     stickToBottom: isAtBottomRef.current && !isAnchorLocked(),
   });
 
-  const touchStartYRef = useRef(0);
+  // 总高度写回 ref（滚动回调运行时读取）
+  totalHeightRef.current = totalHeight;
 
-  const handleWheelCapture = useCallback<
-    React.WheelEventHandler<HTMLDivElement>
-  >(
-    (e) => {
-      cancelProgrammaticScroll();
-      if (e.deltaY < 0) {
-        isAtBottomRef.current = false;
-        setIsAtBottom(false);
-      }
-    },
-    [cancelProgrammaticScroll]
-  );
+  // 流式打字与动态测高自动跟随（实现见 messageVirtualizerScrollState.useStickToBottomFollow）
+  useStickToBottomFollow({
+    containerRef: vs.containerRef,
+    vs,
+    messages,
+    initialScroll,
+    isSessionSwitch,
+    totalHeight,
+    isAnchorLocked,
+    isAtBottomRef,
+    setIsAtBottom,
+    observedTopRef,
+  });
 
-  const handleTouchStartCapture = useCallback<
-    React.TouchEventHandler<HTMLDivElement>
-  >((e) => {
-    touchStartYRef.current = e.touches[0]?.clientY ?? 0;
-  }, []);
-
-  const handleTouchMoveCapture = useCallback<
-    React.TouchEventHandler<HTMLDivElement>
-  >(
-    (e) => {
-      cancelProgrammaticScroll();
-      const currentY = e.touches[0]?.clientY ?? 0;
-      if (currentY > touchStartYRef.current) {
-        isAtBottomRef.current = false;
-        setIsAtBottom(false);
-      }
-    },
-    [cancelProgrammaticScroll]
-  );
-
-  const handleScroll = useCallback<React.UIEventHandler<HTMLDivElement>>(
-    (e) => {
-      vs.onScroll(e);
-
-      const el = e.currentTarget;
-      const currentScrollTop = el.scrollTop;
-      const scrollH = el.scrollHeight || totalHeight;
-      const clientH =
-        el.clientHeight || vs.viewportHeight || DEFAULT_VIEWPORT_HEIGHT_PX;
-      const maxScrollTop = Math.max(0, scrollH - clientH);
-      const prevObservedTop = observedTopRef.current;
-      const isProgrammaticConfirm =
-        Math.abs(currentScrollTop - prevObservedTop) <= BOTTOM_STICK_EPSILON_PX;
-      const isUserScrolledUp =
-        currentScrollTop < prevObservedTop - BOTTOM_STICK_EPSILON_PX;
-
-      // 1. 评估与物理底部的亚像素距离
-      const distanceToBottom = maxScrollTop - currentScrollTop;
-      const isPhysicallyAtBottom =
-        maxScrollTop > 0 &&
-        Math.abs(distanceToBottom) <= BOTTOM_STICK_EPSILON_PX;
-
-      if (isPhysicallyAtBottom) {
-        if (!isAtBottomRef.current && !isAnchorLocked()) {
-          isAtBottomRef.current = true;
-          setIsAtBottom(true);
-        }
-        setShowFloorButton(false);
-      } else if (isUserScrolledUp || vs.isGestureActive() || isAnchorLocked()) {
-        if (isAtBottomRef.current) {
-          isAtBottomRef.current = false;
-          setIsAtBottom(false);
-        }
-        setShowFloorButton(distanceToBottom > SCROLL_BOTTOM_THRESHOLD_PX);
-      }
-
-      // 2. 评估与物理顶部的亚像素距离
-      const isPhysicallyAtTop = currentScrollTop <= SCROLL_TOP_EPSILON_PX;
-      if (isPhysicallyAtTop !== isAtTopRef.current) {
-        isAtTopRef.current = isPhysicallyAtTop;
-        setIsAtTop(isPhysicallyAtTop);
-      }
-
-      // 3. 更新真理账本
-      observedTopRef.current = currentScrollTop;
-
-      // 4. 快速滚动状态检测（排除程序化吸底确认事件，防止切会话吸底误触发 150ms 骨架屏闪烁）
-      if (!isProgrammaticConfirm) {
-        fastScroll.onScrollSample(currentScrollTop);
-      }
-    },
-    [vs, isAnchorLocked, fastScroll, totalHeight]
-  );
-
-  const handleScrollToBottom = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const scrollH = container.scrollHeight || totalHeight;
-    const clientH =
-      container.clientHeight || vs.viewportHeight || DEFAULT_VIEWPORT_HEIGHT_PX;
-    const maxScroll = Math.max(0, scrollH - clientH);
-    performProgrammaticScroll(container, maxScroll, () => {
-      if (typeof container.scrollTo === 'function') {
-        container.scrollTo({ top: maxScroll, behavior: 'smooth' });
-      } else {
-        container.scrollTop = maxScroll;
-      }
-    });
-    isAtBottomRef.current = true;
-    setIsAtBottom(true);
-    if (maxScroll > SCROLL_TOP_EPSILON_PX) {
-      isAtTopRef.current = false;
-      setIsAtTop(false);
-    }
-    setShowFloorButton(false);
-  }, [containerRef, performProgrammaticScroll, totalHeight, vs.viewportHeight]);
-
-  // 流式打字与动态测高自动跟随：处于底部时，随内容高度收敛无感平滑贴底
+  // 初次挂载若指定 initialScroll='bottom'（真实对话界面落地），同步吸底至最新消息
   useLayoutEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const scrollH = container.scrollHeight || totalHeight;
-    const clientH =
-      container.clientHeight || vs.viewportHeight || DEFAULT_VIEWPORT_HEIGHT_PX;
-    const maxScroll = Math.max(0, scrollH - clientH);
-
-    const isNearPhysicalBottom =
-      maxScroll <= NEAR_BOTTOM_EPSILON_PX ||
-      (maxScroll - container.scrollTop <= NEAR_BOTTOM_EPSILON_PX &&
-        maxScroll - vs.scrollTop <= NEAR_BOTTOM_EPSILON_PX);
-
-    if (!isAtBottomRef.current || isAnchorLocked() || !isNearPhysicalBottom) {
-      if (container.scrollTop > maxScroll) {
-        container.scrollTop = maxScroll;
-        observedTopRef.current = maxScroll;
+    if (!isFirstMountRef.current) return;
+    if (initialScroll === 'bottom' && messages.length > 0) {
+      isFirstMountRef.current = false;
+      const estimatedContentHeight = manager.getTotalHeight(messages.length);
+      const estimatedTotalHeight = chatSpacerHeight(estimatedContentHeight);
+      const container = containerRef.current;
+      const viewH =
+        container?.clientHeight ||
+        vs.viewportHeight ||
+        DEFAULT_VIEWPORT_HEIGHT_PX;
+      const targetBottomScrollTop = Math.max(0, estimatedTotalHeight - viewH);
+      isAtBottomRef.current = true;
+      setIsAtBottom(true);
+      setShowFloorButton(false);
+      if (container) {
+        performProgrammaticScroll(container, targetBottomScrollTop);
+      } else {
+        performProgrammaticScroll(targetBottomScrollTop);
       }
-      return;
-    }
-
-    if (
-      Math.abs(container.scrollTop - maxScroll) > BOTTOM_STICK_EPSILON_PX ||
-      Math.abs(vs.scrollTop - maxScroll) > BOTTOM_STICK_EPSILON_PX
-    ) {
-      performProgrammaticScroll(container, maxScroll);
-      observedTopRef.current = maxScroll;
+      observedTopRef.current = targetBottomScrollTop;
+      sessionMeasurePassesRef.current = 2;
     }
   }, [
-    messages,
-    totalHeight,
-    containerRef,
+    initialScroll,
+    manager,
+    messages.length,
     performProgrammaticScroll,
-    isAnchorLocked,
-    vs.scrollTop,
     vs.viewportHeight,
+  ]);
+
+  // 估高与实测差在绘制前写回。拖到下一帧再改高度，刚切过来的对话会跳一下。
+  useLayoutEffect(() => {
+    if (sessionMeasurePassesRef.current <= 0) return;
+    const container = containerRef.current;
+    if (!container) {
+      sessionMeasurePassesRef.current = 0;
+      return;
+    }
+    let queued = false;
+    const nodes = container.querySelectorAll<HTMLElement>('[data-vindex]');
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      if (!node) continue;
+      if (node.querySelector('[data-md-pending="true"]')) continue;
+      const id = node.dataset.vindex;
+      const measured = node.offsetHeight;
+      if (!id || measured <= 0) continue;
+      const committed = manager.getActualHeight(id);
+      if (
+        committed !== null &&
+        Math.abs(committed - measured) <= SIGNIFICANT_HEIGHT_DELTA_PX
+      ) {
+        continue;
+      }
+      setActual(id, measured);
+      queued = true;
+    }
+    sessionMeasurePassesRef.current -= 1;
+    if (!queued) {
+      sessionMeasurePassesRef.current = 0;
+      return;
+    }
+    flushPendingGeometry();
+    // 同一次布局里直接改占位和滚动。等下一帧再绘，第一眼就是错的高度。
+    const nextTotal = chatSpacerHeight(manager.getTotalHeight(messages.length));
+    const inner = container.querySelector<HTMLElement>(
+      '[data-chat-list-inner]'
+    );
+    if (inner) inner.style.height = `${nextTotal}px`;
+    const maxScroll = Math.max(0, nextTotal - container.clientHeight);
+    container.scrollTop = maxScroll;
+    observedTopRef.current = maxScroll;
+  }, [
+    activeSessionId,
+    modelContentHeight,
+    messages.length,
+    containerRef,
+    manager,
+    setActual,
+    flushPendingGeometry,
   ]);
 
   return (

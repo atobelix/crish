@@ -1270,6 +1270,17 @@
   border-radius: var(--composer-radius-multi, 24px);
 }
 
+.composerCard.disabled,
+.composerCard[data-disabled='true'] {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.composerCard.disabled *,
+.composerCard[data-disabled='true'] * {
+  cursor: not-allowed;
+}
+
 .composerCard:has(.attachStrip),
 .composerCard:has(.fileZone) {
   gap: 6px;
@@ -1873,6 +1884,7 @@
   overflow-y: auto;
   min-height: 24px;
   max-height: 220px;
+  transition: min-height var(--transition-landing-settle);
   line-height: var(--composer-line-height, 1.5);
   padding: 0;
   margin: 0;
@@ -1925,7 +1937,36 @@
 
 .dropMask svg {
   flex-shrink: 0;
-  color: var(--text-secondary);
 }
 
 /* field 模式 .sendBtn 保留一份；禁止再复制整块 */
+
+/* 外部会话预览导入触发器：置于输入框内，极简纯净 */
+.externalSessionImportBtn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 var(--space-2, 8px);
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  text-align: left;
+  user-select: none;
+}
+
+.externalSessionImportText {
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-tertiary);
+  transition: color var(--transition-fast, 120ms ease);
+}
+
+.externalSessionImportBtn:hover:not(:disabled) .externalSessionImportText {
+  color: var(--text-primary);
+}
+
+.externalSessionImportBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}

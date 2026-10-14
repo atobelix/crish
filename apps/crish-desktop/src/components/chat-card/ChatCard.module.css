@@ -1,16 +1,21 @@
 .chatBody {
   background: transparent;
   padding-bottom: 0;
-  display: flex;
-  flex-direction: column;
+  display: grid;
   min-height: 0;
   max-height: 100%;
   height: 100%;
   overflow: hidden;
   flex: 1 1 0%;
   position: relative;
-  container-type: inline-size;
+  /* 上：消息视口。下：停靠输入框占位。占位高度在切会话时冻结，滚动区尺寸不参与过渡。 */
+  grid-template-rows: minmax(0, 1fr) auto;
+  container-type: size;
   container-name: chatContainer;
+}
+
+.chatBody[data-main-surface='scheduled'] {
+  grid-template-rows: minmax(0, 1fr);
 }
 
 /* 纯净流容器：flex 纵向延伸，内部由虚拟列表滚动 */
@@ -26,9 +31,9 @@
   box-sizing: border-box;
   background: transparent;
   color: var(--text-primary);
-  min-height: 0;
   max-height: 100%;
-  flex: 1 1 0%;
+  grid-row: 1;
+  min-height: 0;
   overflow: hidden;
   line-height: 1.5;
 }
@@ -45,19 +50,21 @@
   --landing-inset-x: calc(var(--composer-pad-x-start, 10px) + 7px);
 }
 
-.chatBody[data-empty-kind='session-empty'] .chatDocFlow {
-  flex: 1 1 0%;
+@keyframes landingSurfaceEnter {
+  from {
+    opacity: 0.94;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
-.chatBody[data-empty-kind='session-empty'] .chatFooter {
-  flex: 3 1 auto;
+/* 落点是合成位移，不改占位高度。75cqh 把停靠块的顶边送到正文区大约四分之一处。 */
+.chatBody[data-empty-kind='session-empty'] .footerMotion {
   background: transparent;
-}
-
-/* 首次发送过渡状态：输入框从居中偏上平滑变形落底 */
-.chatBody[data-settling='true'] .chatFooter {
-  flex: 0 1 auto;
-  background: transparent;
+  transform: translateY(calc(var(--composer-dock-block, 104px) - 75cqh));
+  animation: landingSurfaceEnter var(--transition-fast) var(--ease-emphasized)
+    both;
 }
 
 /* 主列栅格对齐容器 */
@@ -71,19 +78,39 @@
   box-sizing: border-box;
 }
 
+/* 只保留停靠高度。视觉层绝对定位，落地/回落只做 transform，禁止 flex-grow。 */
 .chatFooter {
-  display: block;
+  grid-row: 2;
+  height: var(--composer-dock-block, 104px);
+  position: relative;
+  z-index: var(--z-card-footer);
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.footerMotion {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-card-footer);
+  box-sizing: border-box;
   padding: var(--space-2_5, 10px) 0 var(--space-1_5, 6px);
   border-top: none;
   background: var(--chat-footer-fade);
-  position: relative;
-  z-index: var(--z-card-footer);
-  flex-shrink: 0;
-  margin-top: 0;
-  transition: flex-grow var(--transition-landing-settle);
+  pointer-events: auto;
+  transform: none;
+  transition: transform var(--transition-landing-settle);
 }
 
 .chatFooter .chatCol {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -99,14 +126,21 @@
 }
 
 .landingRibbons {
+  position: absolute;
+  left: var(--space-5, 20px);
+  right: var(--space-5, 20px);
+  top: 100%;
   display: flex;
   flex-direction: column;
-  width: 100%;
   margin-top: var(--space-3, 12px);
 }
 
 /* 空界面品牌 + 项目选择：品牌居中，项目选择紧贴 composer 卡片上方，图标对齐 --landing-inset-x */
 .composerLead {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -132,16 +166,11 @@
 .composerLead[data-settling='true'] {
   animation: none;
   opacity: 0;
-  transform: translateY(-8px) scale(0.96);
-  max-height: 0;
-  margin-bottom: 0;
-  overflow: hidden;
+  transform: translateY(-8px);
   pointer-events: none;
   transition:
     opacity var(--transition-landing-fade),
-    transform var(--transition-landing-fade),
-    max-height var(--transition-landing-settle),
-    margin-bottom var(--transition-landing-settle);
+    transform var(--transition-landing-fade);
 }
 
 .floatZone {
