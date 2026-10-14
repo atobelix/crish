@@ -80,8 +80,7 @@ export class SubagentRuntimeBatcher {
   }
 
   push(delta: SubagentRuntimeDelta): void {
-    const key = subagentDeltaKey(delta.sessionId, delta.agentId);
-    this.inner.push(key, delta);
+    this.inner.push(subagentDeltaKey(delta.sessionId, delta.agentId), delta);
   }
 
   flushNow(): void {
