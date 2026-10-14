@@ -151,7 +151,7 @@ describe('buildUnifiedItems', () => {
     expect(mcpItem?.isEnabled).toBe(true);
   });
 
-  it('auto-injects known tools when tools array is empty', () => {
+  it('preserves empty tools array without injecting fake tools when empty (BC11-1 真实动态反射)', () => {
     const fetchMcp: McpServer = {
       id: 'mcp-fetch-1',
       name: 'fetch',
@@ -173,11 +173,11 @@ describe('buildUnifiedItems', () => {
     const mcpItem = items.find((i) => i.name === 'fetch');
     expect(mcpItem).toBeDefined();
     expect(mcpItem?.isEnabled).toBe(true);
-    expect(mcpItem?.rawMcp?.tools).toEqual(['fetch_url', 'download_content']);
-    expect(mcpItem?.description).toBe('2 个可用工具');
+    expect(mcpItem?.rawMcp?.tools).toEqual([]);
+    expect(mcpItem?.description).toBe('MCP 服务');
   });
 
-  it('upgrades chrome-devtools-mcp with historical 5 tools to full 30 tools', () => {
+  it('preserves exact reflected tools from server without arbitrary override (BC11-1 真实动态反射)', () => {
     const devtoolsLegacy: McpServer = {
       id: 'mcp-devtools',
       name: 'chrome-devtools-mcp',
@@ -204,8 +204,8 @@ describe('buildUnifiedItems', () => {
 
     const mcpItem = items.find((i) => i.name === 'chrome-devtools-mcp');
     expect(mcpItem).toBeDefined();
-    expect(mcpItem?.rawMcp?.tools).toHaveLength(30);
-    expect(mcpItem?.description).toBe('30 个可用工具');
+    expect(mcpItem?.rawMcp?.tools).toHaveLength(5);
+    expect(mcpItem?.description).toBe('5 个可用工具');
   });
 
   describe('external platform adaptation (Claude Code / Codex / Antigravity / Cursor)', () => {
