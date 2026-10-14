@@ -1,9 +1,9 @@
 /**
  * 外部会话文本清理与样板过滤工具函数。
  * 用于彻底剔除环境探测、项目指令、系统提示词及本地控制命令标签等注入文本，提取用户真实的提问。
-import { stripAnsiEscape } from './stripAnsi';
-
  */
+
+import { stripAnsiEscape } from './stripAnsi';
 
 /**
  * 判断文本是否纯属于系统提示词或 Agent 设定文件（例如 "You are Codex...", "You are Claude Code...", "AGENTS.md"）。
