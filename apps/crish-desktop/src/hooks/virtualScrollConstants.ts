@@ -18,7 +18,11 @@ export const GESTURE_FREEZE_MS = 100;
 /** 手势静默窗口兼容别名（ms） */
 export const GESTURE_IDLE_MS = GESTURE_FREEZE_MS;
 
-/** 显著高度差（px）：单行实测变化超过该阈值才触发 actualTick 重算 */
+/**
+ * 显著高度差（px）。
+ * 已有实测高度时，不超过该阈值的复测视为亚像素噪声：不写入模型。
+ * 否则模型先变、占位高度却留在上一帧，切标签时会按新模型重绘，文字上下跳几个像素。
+ */
 export const SIGNIFICANT_HEIGHT_DELTA_PX = 4;
 export const SIGNIFICANT_HEIGHT_DELTA = SIGNIFICANT_HEIGHT_DELTA_PX;
 

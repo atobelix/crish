@@ -143,7 +143,6 @@ export function useVirtualScroll(
 
   /** 把缓冲的估高/实测高度即时刷入 Fenwick 树（BIT），并做视口上方锚点补偿 */
   const flushActualMeasurements = useCallback(() => {
-    let significantChanged = false;
     let estimatesChanged = false;
     let deltaAbove = 0;
     const curStartIdx = renderedRangeRef.current.startIndex;
@@ -159,14 +158,13 @@ export function useVirtualScroll(
       }
     }
 
+    let anyChanged = false;
     for (const [msgId, h] of pendingActualRef.current) {
       const oldActual = manager.getActualHeight(msgId);
       const oldHeight = oldActual ?? manager.getHeight(msgId);
       const delta = h - oldHeight;
       const changed = manager.setActual(msgId, h);
-      if (changed && Math.abs(delta) > SIGNIFICANT_HEIGHT_DELTA_PX) {
-        significantChanged = true;
-      }
+      if (changed) anyChanged = true;
       const idx = manager.getIndex(msgId);
       if (idx !== undefined && idx < curStartIdx) {
         deltaAbove += delta;
@@ -185,7 +183,8 @@ export function useVirtualScroll(
       }
     }
 
-    if (significantChanged || estimatesChanged) {
+    // 只要模型变了就刷新占位。只改树、不改渲染高度，会在下一次切标签时跳几个像素。
+    if (anyChanged || estimatesChanged) {
       setActualTick((t) => t + 1);
     }
   }, [manager]);
@@ -322,6 +321,13 @@ export function useVirtualScroll(
     (id: string, height: number) => {
       const cur = manager.getActualHeight(id);
       if (cur !== null && cur === height) return;
+      // 已落地的实测值只接受超过阈值的变化。阈值内复测不入队，避免每帧空转。
+      if (
+        cur !== null &&
+        Math.abs(cur - height) <= SIGNIFICANT_HEIGHT_DELTA_PX
+      ) {
+        return;
+      }
       pendingActualRef.current.set(id, height);
       if (!gestureActiveRef.current) {
         scheduleActualFlush();

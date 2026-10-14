@@ -104,7 +104,9 @@ pub(crate) async fn http_stream_next(
         match state.frames.next().await {
             None => match state.parser.finish() {
                 Ok(events) => {
-                    state.pending.extend(events.into_iter().map(to_loop_event));
+                    state
+                        .pending
+                        .extend(events.into_iter().filter_map(to_loop_event));
                     state.finished = true;
                 }
                 Err(error) => {
@@ -114,7 +116,9 @@ pub(crate) async fn http_stream_next(
             },
             Some(Ok(StreamFrameEvent::Frame(frame))) => match state.parser.push_frame(&frame) {
                 Ok(events) => {
-                    state.pending.extend(events.into_iter().map(to_loop_event));
+                    state
+                        .pending
+                        .extend(events.into_iter().filter_map(to_loop_event));
                 }
                 Err(error) => {
                     state.finished = true;
@@ -161,40 +165,45 @@ pub(crate) fn classify_stream_parse(_error: &StreamParseError) -> ClassifiedStre
 /// agent-provider 低级事件 → session-loop 消费事件（形状一致，逐字段转换；
 /// session-loop 不直接依赖 agent-provider，B3.4 第 5 点）。
 ///
+/// 返回 `None` 表示该事件不进入会话循环（当前仅生命周期观测事件），
+/// 调用方以 `filter_map` 消费——严禁对未知变体 panic（历史教训：
+/// 此处曾对观测事件写 `unreachable!`，属跨任务 panic 地雷，已裁决拆除，
+/// 与 agent-provider `consume/mod.rs` 的静默跳过语义对齐）。
+///
 /// T3.3（G1-c）兼容注记：agent-provider `WireEvent::Stop` 当前无 `error_kind`
 /// 分类字段（events.rs 升级在波 1 并行契约侧排期）。若并行 Agent 已完成字段
 /// 升级，此处补 `error_kind` 透传；否则恒 None，只标 providerError 不伪造
 /// （与 session-loop stream.rs 向后兼容语义一致）。
-pub(crate) fn to_loop_event(event: WireEvent) -> ProviderStreamEvent {
+pub(crate) fn to_loop_event(event: WireEvent) -> Option<ProviderStreamEvent> {
     match event {
-        WireEvent::TextDelta { text } => ProviderStreamEvent::TextDelta { text },
+        WireEvent::TextDelta { text } => Some(ProviderStreamEvent::TextDelta { text }),
         WireEvent::ThoughtDelta { text, redacted } => {
-            ProviderStreamEvent::ThoughtDelta { text, redacted }
+            Some(ProviderStreamEvent::ThoughtDelta { text, redacted })
         }
         WireEvent::ToolCall {
             id,
             tool_name,
             input,
-        } => ProviderStreamEvent::ToolCall {
+        } => Some(ProviderStreamEvent::ToolCall {
             id,
             tool_name,
             input,
-        },
+        }),
         WireEvent::ProviderDiagnostic { diagnostic } => {
-            ProviderStreamEvent::ProviderDiagnostic { diagnostic }
+            Some(ProviderStreamEvent::ProviderDiagnostic { diagnostic })
         }
         // M14：model 请求生命周期观测事件（before-request / after-response）——
-        // 消费面在 agent-provider 请求层观测器，不进入会话循环事件流。
+        // 消费面在 agent-provider 请求层观测器，不进入会话循环事件流；静默跳过。
         WireEvent::BeforeRequest { .. } | WireEvent::AfterResponse { .. } => {
             tracing::debug!(target: "provider", "model 请求生命周期观测事件不进入会话循环");
-            unreachable!("HttpProviderCall 不产出 before/after-response 流内事件");
+            None
         }
         WireEvent::Stop {
             reason,
             error,
             error_kind,
             usage,
-        } => ProviderStreamEvent::Stop {
+        } => Some(ProviderStreamEvent::Stop {
             reason: match reason {
                 agent_provider::events::StopReason::Stop => LoopStopReason::Stop,
                 agent_provider::events::StopReason::ToolCall => LoopStopReason::ToolCall,
@@ -212,6 +221,6 @@ pub(crate) fn to_loop_event(event: WireEvent) -> ProviderStreamEvent {
                 cache_miss_tokens: usage.cache_miss_tokens,
                 reasoning_tokens: usage.reasoning_tokens,
             }),
-        },
+        }),
     }
 }

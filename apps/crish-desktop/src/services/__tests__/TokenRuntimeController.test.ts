@@ -325,7 +325,7 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       );
 
       expect(result.tokens['--text-primary']).toBe('#3c1642');
-      expect(result.tokens['--text-secondary']).toBe('#7a528a');
+      expect(result.tokens['--text-secondary']).toBe('#592b63');
       expect(result.tokens['--text-tertiary']).toContain('color-mix(');
       expect(result.tokens['--text-faint']).toContain('color-mix(');
       expect(result.tokens['--scrollbar-thumb-bg']).toContain('color-mix(');

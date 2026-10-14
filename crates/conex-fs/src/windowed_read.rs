@@ -87,7 +87,9 @@ pub struct WindowReadResult {
     pub text: String,
     /// 全文精确行数（`str::lines()` 语义）
     pub total_lines: usize,
-    /// 全文精确字符数（含换行符）
+    /// 全文精确字符数（char 数而非字节数；UTF-8 路径为逐行剥 `\r` 后含每行 `\n` 的
+    /// 全文 char 计数，UTF-16 路径为解码后全文 char 计数——均与旧版语义对齐。
+    /// 分段读取同一文件时恒定且等于全文字符数）
     pub total_chars: usize,
     /// 窗口后仍有内容（content_truncated 语义）
     pub content_truncated: bool,
@@ -380,7 +382,8 @@ fn append_utf8_chunk_with_tail(
     }
 }
 
-/// UTF-8 流式窗口读：仅物化窗口行并统计窗口字符；视口外行跳过冗余缓冲克隆与字符计数（KFS-05, KFS-10）。
+/// UTF-8 流式窗口读：仅物化窗口行；`total_lines` / `total_chars` 在流式扫描中全文精确
+/// 迭代计数（视口外只做 count 不做 collect，KFS-05, KFS-10 内存优化保留）。
 fn read_utf8_windowed(
     mut file: File,
     file_bytes: u64,
@@ -407,6 +410,8 @@ fn read_utf8_windowed(
     let mut utf8_tail_len = 0_usize;
     let mut in_window_line_started = false;
     let mut outside_line_non_empty = false;
+    // 窗口外行计数状态：行内最后一个已计数字节是否为 `\r`（供 `\n` 到达时撤回，对齐旧版剥 `\r` 语义）
+    let mut outside_pending_cr = false;
     let mut ends_with_newline_in_window = false;
     let mut lossy_replaced = false;
     let mut buffer = vec![0_u8; READ_CHUNK_BYTES];
@@ -420,10 +425,24 @@ fn read_utf8_windowed(
         let chunk = &buffer[..read];
         let mut start = 0_usize;
         while start < chunk.len() {
-            // KFS-10：一旦越过窗口末尾，剩余字节流直接按块统计换行符，跳过逐行切片
+            // KFS-10：一旦越过窗口末尾，剩余字节流直接按块统计换行符，跳过逐行切片。
+            // total_chars 仍须全文精确计数：顺带只做 count 不做 collect（KFS-10 内存优化保留），
+            // 非续字节即 1 个 char；遇 `\n` 撤回紧邻的 `\r`，对齐旧版逐行剥 `\r` 后 chars 计数语义。
             if line_idx >= window_end0_exclusive {
                 let rest = &chunk[start..];
-                let newlines = rest.iter().filter(|&&b| b == b'\n').count();
+                let mut newlines = 0_usize;
+                for &b in rest {
+                    if b == b'\n' {
+                        newlines += 1;
+                        if outside_pending_cr {
+                            total_chars -= 1;
+                            outside_pending_cr = false;
+                        }
+                    } else if (b & 0xC0) != 0x80 {
+                        total_chars += 1;
+                        outside_pending_cr = b == b'\r';
+                    }
+                }
                 total_lines += newlines;
                 line_idx += newlines;
                 if rest.last() == Some(&b'\n') {
@@ -470,6 +489,17 @@ fn read_utf8_windowed(
                         }
                         ends_with_newline_in_window = true;
                     } else {
+                        // 窗口前行：不物化，但 total_chars 须全文精确计数（KFS-10：只做 count）
+                        count_outside_utf8_chars(
+                            &chunk[start..end],
+                            &mut total_chars,
+                            &mut outside_pending_cr,
+                        );
+                        if outside_pending_cr {
+                            total_chars -= 1; // 剥紧邻 `\n` 的 `\r`（旧版语义）
+                        }
+                        total_chars += 1; // \n
+                        outside_pending_cr = false;
                         outside_line_non_empty = false;
                     }
                     total_lines += 1;
@@ -489,6 +519,11 @@ fn read_utf8_windowed(
                             &mut lossy_replaced,
                         );
                     } else {
+                        count_outside_utf8_chars(
+                            &chunk[start..],
+                            &mut total_chars,
+                            &mut outside_pending_cr,
+                        );
                         outside_line_non_empty = true;
                     }
                     file_ends_with_newline = false;
@@ -515,6 +550,9 @@ fn read_utf8_windowed(
             total_chars += current_line.chars().count();
             window_lines.push(current_line);
             ends_with_newline_in_window = false;
+        } else if outside_pending_cr {
+            // 窗口外尾行（无 `\n` 结束）：字符已随流计数，此处对齐旧版剥尾 `\r` 语义
+            total_chars -= 1;
         }
         total_lines += 1;
         file_ends_with_newline = false;
@@ -560,6 +598,19 @@ fn decode_line_utf8(line_bytes: &[u8]) -> (String, bool) {
     }
 }
 
+/// KFS-10：窗口外行不物化前提下的字符计数——非续字节（UTF-8 首字节）即 1 个 char，
+/// 只做 count 不做 collect；并维护「行内最后一个已计数字节是否为 `\r`」状态，
+/// 供 `\n` 到达时撤回（对齐旧版逐行剥 `\r` 后 `chars().count()` 的语义）。
+#[inline]
+fn count_outside_utf8_chars(bytes: &[u8], total_chars: &mut usize, pending_cr: &mut bool) {
+    for &b in bytes {
+        if (b & 0xC0) != 0x80 {
+            *total_chars += 1;
+            *pending_cr = b == b'\r';
+        }
+    }
+}
+
 /// KFS-11：UTF-16 流式块级解码与窗口读取（BOM 路径；调用方已确认 2 字节 BOM）。
 ///
 /// 采用固定 16KB 缓冲按块流式读取，携带跨块奇数字节与代理对（Surrogate Pair）状态，
@@ -599,11 +650,8 @@ fn read_utf16_window(
     let mut carry_byte: Option<u8> = None;
     let mut buffer = vec![0_u8; READ_CHUNK_BYTES * 2]; // 16KB 流式块缓冲
 
-    let flush_utf16_line = |units: &mut Vec<u16>,
-                            lossy_replaced: &mut bool,
-                            total_chars: &mut usize,
-                            with_newline: bool|
-     -> String {
+    // 全文字符计数已移至主循环逐 unit 统计（见下方 for 循环注释），此处仅负责物化窗口文本
+    let flush_utf16_line = |units: &mut Vec<u16>, lossy_replaced: &mut bool| -> String {
         if units.last() == Some(&0x000D) {
             units.pop();
         }
@@ -614,7 +662,6 @@ fn read_utf16_window(
                 String::from_utf16_lossy(units)
             }
         };
-        *total_chars += line.chars().count() + usize::from(with_newline);
         units.clear();
         line
     };
@@ -651,6 +698,13 @@ fn read_utf16_window(
         }));
 
         for u in iter {
+            // 全文精确字符计数（KFS-10 回归修复）：与旧版 UTF-16 路径 `text.chars().count()`
+            // 对齐——成对代理对计 1 个 char，孤立代理按 1 个 U+FFFD 计 1，`\r` 与 `\n` 均计入
+            // （旧版 UTF-16 路径不剥 `\r`）。仅做计数，不物化视口外内容。
+            if !(pending_high_surrogate && (0xDC00..=0xDFFF).contains(&u)) {
+                total_chars += 1;
+            }
+
             // 流式校验 UTF-16 代理对合法性（确保严格模式下视口外非法序列同样可检出）
             if pending_high_surrogate {
                 if (0xDC00..=0xDFFF).contains(&u) {
@@ -668,12 +722,7 @@ fn read_utf16_window(
             let in_window = line_idx >= window_start0 && line_idx < window_end0_exclusive;
             if u == 0x000A {
                 if in_window {
-                    let line = flush_utf16_line(
-                        &mut pending_units,
-                        &mut lossy_replaced,
-                        &mut total_chars,
-                        true,
-                    );
+                    let line = flush_utf16_line(&mut pending_units, &mut lossy_replaced);
                     window_lines.push(line);
                     in_window_line_started = false;
                     ends_with_newline_in_window = true;
@@ -701,12 +750,7 @@ fn read_utf16_window(
 
     if in_window_line_started || outside_line_non_empty {
         if in_window_line_started {
-            let line = flush_utf16_line(
-                &mut pending_units,
-                &mut lossy_replaced,
-                &mut total_chars,
-                false,
-            );
+            let line = flush_utf16_line(&mut pending_units, &mut lossy_replaced);
             window_lines.push(line);
             ends_with_newline_in_window = false;
         }
@@ -1144,6 +1188,114 @@ mod tests {
         assert!(r.content_truncated);
         assert!(!r.lossy_replaced);
         assert_eq!(r.text, lines_expected[149..152].join("\n"));
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn windowed_read_total_chars_is_full_file_across_segmented_reads() {
+        // 全文含 ASCII / 中文(3B) / Emoji(4B)，窗口前与窗口后均远超 8KB chunk
+        // （窗口后行进入 KFS-10 快速路径，验证该路径同样全文精确计数）
+        let mut content = String::new();
+        for i in 0..2000 {
+            content.push_str(&format!("L{i:04}-中文🚀-padding-padding\n"));
+        }
+        let expected = content.chars().count();
+        let path = write_temp("total_chars_seg", content.as_bytes());
+
+        // 首段：窗口前段（触发窗口前行流式计数）
+        let mut opts = default_opts();
+        opts.start_line = 1;
+        opts.max_lines = 800;
+        let r1 = windowed_read(&path, &opts).unwrap();
+        assert_eq!(r1.total_chars, expected, "首段 total_chars 应为全文字符数");
+
+        // 中段：content_offset 续读
+        let mut opts = default_opts();
+        opts.max_lines = 800;
+        opts.content_offset = 800;
+        let r2 = windowed_read(&path, &opts).unwrap();
+        assert_eq!(r2.total_chars, expected, "续读段 total_chars 应与首段一致");
+        assert_eq!(r2.total_chars, r1.total_chars);
+
+        // 末段：窗口后段（触发窗口后 KFS-10 快速路径计数）
+        let mut opts = default_opts();
+        opts.start_line = 1600;
+        let r3 = windowed_read(&path, &opts).unwrap();
+        assert_eq!(r3.total_chars, expected, "末段 total_chars 应与首段一致");
+        assert_eq!(r3.total_chars, r1.total_chars);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn windowed_read_total_chars_strips_crlf_and_matches_full_file() {
+        // 旧版 UTF-8 语义：逐行剥紧邻 \n 的 \r 后按 char 计数 + 每行 \n 计 1
+        // "αβγ\r\n中文\r\nend\r\n" → (3+1)+(2+1)+(3+1) = 11
+        let content = "αβγ\r\n中文\r\nend\r\n";
+        let expected: usize = content.replace("\r\n", "\n").chars().count();
+        assert_eq!(expected, 11);
+        let path = write_temp("total_chars_crlf", content.as_bytes());
+
+        // 窗口覆盖首行（\r 在窗口内，走物化行计数）
+        let mut opts = default_opts();
+        opts.end_line = Some(1);
+        let r1 = windowed_read(&path, &opts).unwrap();
+        assert_eq!(r1.total_chars, expected);
+
+        // 窗口覆盖中段（窗口前后均含 CRLF 行，走窗口外流式计数）
+        let mut opts = default_opts();
+        opts.start_line = 2;
+        opts.end_line = Some(2);
+        let r2 = windowed_read(&path, &opts).unwrap();
+        assert_eq!(r2.total_chars, expected);
+        assert_eq!(r2.total_chars, r1.total_chars);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn windowed_read_total_chars_crlf_across_chunk_boundary() {
+        // \r\n 恰好跨越 8KB chunk 边界（\r 在上一 chunk 末尾、\n 在下一 chunk 开头），
+        // 且窗口不含这两行 → 窗口外跨 chunk 计数路径须正确剥 \r
+        let mut content = "x".repeat(8191); // 尾字节即 \r 的位置：8191 字节后接 "\r\n..."
+        content.push_str("\r\n中文行\n");
+        let expected: usize = content.replace("\r\n", "\n").chars().count();
+        let path = write_temp("total_chars_crlf_chunk", content.as_bytes());
+
+        // 窗口只含第二行（"中文行"），第一行与 \r\n 均在窗口外
+        let mut opts = default_opts();
+        opts.start_line = 2;
+        let r = windowed_read(&path, &opts).unwrap();
+        assert_eq!(r.text, "中文行");
+        assert_eq!(r.total_chars, expected);
+        assert_eq!(r.total_chars, content.replace("\r\n", "\n").chars().count());
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn windowed_read_utf16_total_chars_is_full_file_across_segmented_reads() {
+        // 旧版 UTF-16 语义：整读解码后 text.chars().count()（\r\n 均计入，成对代理算 1 char）
+        let mut bytes = vec![0xFF, 0xFE]; // UTF-16LE BOM
+        let mut full_text = String::new();
+        for i in 1..=400 {
+            let line = format!("行{i:04}-🚀-utf16计数\n");
+            full_text.push_str(&line);
+            for u in line.encode_utf16() {
+                bytes.extend_from_slice(&u.to_le_bytes());
+            }
+        }
+        let expected = full_text.chars().count();
+        let path = write_temp("utf16_total_chars", &bytes);
+
+        let mut opts = default_opts();
+        opts.start_line = 1;
+        opts.max_lines = 100;
+        let r1 = windowed_read(&path, &opts).unwrap();
+        assert_eq!(r1.total_chars, expected);
+
+        let mut opts = default_opts();
+        opts.start_line = 300;
+        let r2 = windowed_read(&path, &opts).unwrap();
+        assert_eq!(r2.total_chars, expected);
+        assert_eq!(r2.total_chars, r1.total_chars);
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 }

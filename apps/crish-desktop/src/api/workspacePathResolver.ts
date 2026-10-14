@@ -10,7 +10,8 @@ export function getWorkspaceRoot(): string {
   return getWorkspacePath() || '';
 }
 
-const WINDOWS_RESERVED_NAME_RE = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i;
+const WINDOWS_RESERVED_NAME_RE =
+  /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i;
 const BIDI_OVERRIDE_RE = /[\u202A-\u202E\u2066-\u2069]/;
 const MAX_PATH_LENGTH = 4096;
 
@@ -33,18 +34,54 @@ export function resolveWorkspacePath(path: string): string {
   if (!p) return p;
   if (p.includes('\0') || p.length > MAX_PATH_LENGTH) return '';
   if (BIDI_OVERRIDE_RE.test(p)) return '';
-  const lastSegment = p.replace(/[\\/]$/, '').split(/[\\/]/).pop() || '';
+  const lastSegment =
+    p
+      .replace(/[\\/]$/, '')
+      .split(/[\\/]/)
+      .pop() || '';
   if (WINDOWS_RESERVED_NAME_RE.test(lastSegment)) return '';
   const norm = p.replace(/\\/g, '/');
   if (/(^|\/)\.\.($|\/)/.test(norm)) return '';
   if (isAbsoluteFsPath(p)) {
-    const root = getWorkspaceRoot().trim().replace(/\\/g, '/').replace(/\/+$/, '');
+    const root = getWorkspaceRoot()
+      .trim()
+      .replace(/\\/g, '/')
+      .replace(/\/+$/, '');
     if (!root) return '';
     const rootLower = root.toLowerCase();
     const pathLower = norm.toLowerCase();
     if (!(pathLower === rootLower || pathLower.startsWith(rootLower + '/'))) {
       return '';
     }
+    return p;
+  }
+  const root = getWorkspaceRoot().trim();
+  if (!root) return '';
+  const relativePath = p.replace(/^\.[\\/]/, '');
+  return joinWorkspacePath(root, relativePath);
+}
+
+/**
+ * 供用户界面只读查看/预览的文件路径解析。
+ *
+ * 用户在 UI 打开查看文件（如代码、文本、图片、Skill 等）不属于 Agent 工具调用，
+ * 不受工作区沙箱限制；相对路径拼到工作区下，绝对路径在安全校验后放行。
+ * 路径穿越（..）、保留设备名、危险控制字符、超长路径仍严格拦截。
+ */
+export function resolveReadableFilePath(path: string): string {
+  const p = (path || '').trim();
+  if (!p) return '';
+  if (p.includes('\0') || p.length > MAX_PATH_LENGTH) return '';
+  if (BIDI_OVERRIDE_RE.test(p)) return '';
+  const lastSegment =
+    p
+      .replace(/[\\/]$/, '')
+      .split(/[\\/]/)
+      .pop() || '';
+  if (WINDOWS_RESERVED_NAME_RE.test(lastSegment)) return '';
+  const norm = p.replace(/\\/g, '/');
+  if (/(^|\/)\.\.($|\/)/.test(norm)) return '';
+  if (isAbsoluteFsPath(p)) {
     return p;
   }
   const root = getWorkspaceRoot().trim();

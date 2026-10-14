@@ -4,10 +4,10 @@
 
 /*    S7-3         tokens.css    tokens.css    token       */
 
-/* Premium dynamic text selection matching skin-specific themes */
+/* 全局统一文字选中样式（方案 A 温润翡翠绿底 #0d9668 + 纯白文字 #ffffff SSOT） */
 ::selection {
-  background-color: var(--tint-focus-ring);
-  color: inherit;
+  background-color: var(--selection-bg);
+  color: var(--selection-fg);
 }
 
 /* Dynamic Spring Motion & Keyframe Animations */

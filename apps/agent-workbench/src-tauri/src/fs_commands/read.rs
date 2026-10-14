@@ -7,18 +7,57 @@ use std::path::Path;
 
 use crate::fs_commands::types::{
     file_too_large_error, FileCommandError, ReadFileContentResult, ReadPolicy, WorkspaceFsGuard,
-    BINARY_SCAN_BYTES, ERR_BINARY_FILE, ERR_NOT_FILE, ERR_READ_FILE, ERR_UNSUPPORTED_ENCODING,
+    BINARY_SCAN_BYTES, ERR_BINARY_FILE, ERR_NOT_FILE, ERR_NOT_FOUND, ERR_READ_FILE,
+    ERR_UNSUPPORTED_ENCODING,
 };
 use conex_fs::{windowed_read, WindowReadError, WindowReadOptions};
 
 /// 读取文件内容（PE-07 T07.2：无 workspace_root 参数，根由 WorkspaceRegistry 解析）。
+///
+/// 行为策略：
+/// 1. 若路径位于已授权工作区根内（或为工作区相对路径），经 WorkspaceFsGuard 安全校验；
+/// 2. 用户在 UI 前端打开查看文件（如代码、文本、图片、Skill 等）不属于 Agent 工具调用；
+///    若请求路径为已存在的物理绝对路径，放行安全只读预览，不卡工作区沙箱。
 pub(crate) fn read_file_content(
     app: &tauri::AppHandle,
     path: String,
     max_lines: Option<usize>,
 ) -> Result<ReadFileContentResult, FileCommandError> {
-    let guard = crate::workspace::resolve_guard(app, &path)?;
-    read_file_content_with_guard(&guard, &path, ReadPolicy::for_preview(max_lines))
+    let policy = ReadPolicy::for_preview(max_lines);
+    match crate::workspace::resolve_guard(app, &path) {
+        Ok(guard) => read_file_content_with_guard(&guard, &path, policy),
+        Err(err) => {
+            let p = Path::new(&path);
+            if p.is_absolute() {
+                let canonical = match p.canonicalize() {
+                    Ok(c) => c,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                        return Err(FileCommandError::new(ERR_NOT_FOUND, "Path does not exist."));
+                    }
+                    Err(e) => {
+                        return Err(FileCommandError::new(
+                            ERR_READ_FILE,
+                            format!("Failed to resolve path: {e}"),
+                        ));
+                    }
+                };
+                let metadata = std::fs::metadata(&canonical).map_err(|e| {
+                    FileCommandError::new(ERR_READ_FILE, format!("Failed to inspect file: {e}"))
+                })?;
+                if metadata.is_dir() {
+                    return Err(FileCommandError::new(
+                        ERR_NOT_FILE,
+                        "Path is a directory, not a file.",
+                    ));
+                }
+                if metadata.len() > policy.max_bytes as u64 {
+                    return Err(file_too_large_error(metadata.len(), policy.max_bytes));
+                }
+                return read_text_file_with_policy(&canonical, policy);
+            }
+            Err(err)
+        }
+    }
 }
 
 pub(crate) fn read_file_content_with_guard(

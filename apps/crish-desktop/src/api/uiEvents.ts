@@ -25,9 +25,11 @@ export type UiEventMap = {
    */
   'workspace-picker-unavailable': void;
   'open-scheduled': void | UiEventScopeTarget;
+  'open-extensions': void | UiEventScopeTarget;
   'open-chat': void | UiEventScopeTarget;
   'open-overview': void | UiEventScopeTarget;
   'open-tasks': void | UiEventScopeTarget;
+  'open-external-import': void;
   'pick-workspace': void;
   'open-agent-panel': { agentId?: string; sessionId?: string; leafId?: string };
   /** 通用工具抽屉面板定址开启 */
@@ -126,6 +128,7 @@ export const UI_EVENT_NAMES = [
   'open-project-picker',
   'workspace-picker-unavailable',
   'open-scheduled',
+  'open-extensions',
   'open-chat',
   'open-overview',
   'open-tasks',

@@ -70,6 +70,8 @@ export class VirtualScrollManager {
    * invalidateActual 之后 preloadEstimates 必须沿用它，不能写回启发式估高。
    */
   private lastMeasured = new Map<string, number>();
+  /** 跨标签页切换保留的实测高度 LRU 缓存（clear() 不清空，仅字号变更或显式 invalidate 时淘汰） */
+  private rememberedActuals = new Map<string, number>();
   /** 当前可见窗口的消息 ID 顺序 */
   private order: string[] = [];
   /** messageId -> order index 高速 O(1) 映射 */
@@ -144,9 +146,7 @@ export class VirtualScrollManager {
     return true;
   }
 
-  /**
-   * O(log N) 增量追加尾部项：流式新消息到达时避免全量重建
-   */
+  /** O(log N) 增量追加尾部项：流式新消息到达时避免全量重建 */
   appendItem(id: string, estimatedHeight: number): void {
     if (!isValidIdHeight(id, estimatedHeight)) return;
     if (this.idToIndexMap.has(id)) {
@@ -255,6 +255,12 @@ export class VirtualScrollManager {
     if (callerGeneration !== undefined && callerGeneration !== this.generation)
       return false;
     this.lastMeasured.set(id, height);
+    this.rememberedActuals.delete(id);
+    this.rememberedActuals.set(id, height);
+    if (this.rememberedActuals.size > 4096) {
+      const oldest = this.rememberedActuals.keys().next().value;
+      if (oldest !== undefined) this.rememberedActuals.delete(oldest);
+    }
     const entry = this.heightsById.get(id);
     if (entry) {
       if (entry.actual === height && entry.estimated === height) return false;
@@ -309,6 +315,7 @@ export class VirtualScrollManager {
 
   /** 作废 actual 时保持过渡估计，杜绝 120px 阶跃暴跌 */
   invalidateActual(id: string): void {
+    this.rememberedActuals.delete(id);
     const entry = this.heightsById.get(id);
     if (!entry) return;
     const lastKnown = entry.actual ?? entry.estimated;
@@ -317,6 +324,32 @@ export class VirtualScrollManager {
       Number.isFinite(lastKnown) && lastKnown > 0
         ? lastKnown
         : this.fallbackHeight;
+  }
+
+  /** 会话切换后同步恢复历史已实测高度，消除二次切回标签页时的估高跳动 */
+  restoreRememberedActuals(ids: readonly string[]): boolean {
+    if (
+      !Array.isArray(ids) ||
+      ids.length === 0 ||
+      this.rememberedActuals.size === 0
+    )
+      return false;
+    let anyChanged = false;
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i]!;
+      const remembered = this.rememberedActuals.get(id);
+      if (remembered !== undefined && isValidIdHeight(id, remembered)) {
+        this.lastMeasured.set(id, remembered);
+        this.heightsById.set(id, { estimated: remembered, actual: remembered });
+        if (this.applyBitHeight(id, remembered)) anyChanged = true;
+      }
+    }
+    return anyChanged;
+  }
+
+  /** 字号或全局布局尺度变更时清空跨会话实测高度记忆 */
+  clearRememberedHeights(): void {
+    this.rememberedActuals.clear();
   }
 
   /** 预置精确高度映射（批量回灌快照元数据） */

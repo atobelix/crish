@@ -97,7 +97,9 @@ describe('openFileInPanel', () => {
     const host = openFileInPanel('src/app.ts');
     expect(host).toBe('file-viewer');
     expect(opener).toHaveBeenCalledTimes(1);
-    expect(opener.mock.calls[0]?.[0].replace(/\\/g, '/')).toMatch(/src\/app\.ts$/);
+    expect(opener.mock.calls[0]?.[0].replace(/\\/g, '/')).toMatch(
+      /src\/app\.ts$/
+    );
     // CRIT-01：广播与 pendingOpenPath 无条件先行，绝不被宿主分流截断
     expect(ev).toHaveBeenCalledTimes(1);
     const dispatched = ev.mock.calls[0]?.[0] as CustomEvent<{ path: string }>;
@@ -126,7 +128,7 @@ describe('openFileInPanel', () => {
     window.removeEventListener('crish-open-file', ev);
   });
 
-  it('note / 空路径 / 越界路径不打开、不写 persist', () => {
+  it('note / 空路径 / 非法穿越路径不打开、不写 persist', () => {
     const opener = vi.fn();
     registerFileViewerOpener(opener);
     const ev = vi.fn();
@@ -135,10 +137,23 @@ describe('openFileInPanel', () => {
     expect(openFileInPanel('')).toBeNull();
     expect(openFileInPanel('note')).toBeNull();
     expect(openFileInPanel('notebook:abc')).toBeNull();
-    expect(openFileInPanel('c:/outside/x.ts')).toBeNull();
+    expect(openFileInPanel('../escape/x.ts')).toBeNull();
     expect(opener).not.toHaveBeenCalled();
     expect(ev).not.toHaveBeenCalled();
     expect(takePendingOpenPath()).toBeNull();
+
+    window.removeEventListener('crish-open-file', ev);
+  });
+
+  it('用户查看外部绝对路径（代码/文本/图片）放行打开进对应叶', () => {
+    const opener = vi.fn();
+    registerFileViewerOpener(opener);
+    const ev = vi.fn();
+    window.addEventListener('crish-open-file', ev);
+
+    expect(openFileInPanel('c:/outside/x.ts')).toBe('file-viewer');
+    expect(opener).toHaveBeenCalledWith('c:/outside/x.ts', undefined);
+    expect(openFileInPanel('c:/outside/photo.png')).toBe('files');
 
     window.removeEventListener('crish-open-file', ev);
   });
@@ -158,7 +173,9 @@ describe('extractFilePathFromToolArgs', () => {
     expect(extractFilePathFromToolArgs('{"file_path":"lib/b.rs"}')).toBe(
       'lib/b.rs'
     );
-    expect(extractFilePathFromToolArgs('foo/bar/baz.ts')).toBe('foo/bar/baz.ts');
+    expect(extractFilePathFromToolArgs('foo/bar/baz.ts')).toBe(
+      'foo/bar/baz.ts'
+    );
     expect(extractFilePathFromToolArgs('just text')).toBeNull();
     expect(
       extractFilePathFromToolArgs(

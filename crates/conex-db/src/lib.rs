@@ -45,8 +45,9 @@ pub use error::{DbFailure, DbFailureKind};
 pub use events::StoredEvent;
 pub use explore_docs_quota_store::SessionMetaExploreDocsQuotaStore;
 pub use group_commit::{
-    DbWriteHandle, GroupCommitConfig, GroupCommitStats, DEFAULT_GROUP_COMMIT_CHANNEL_CAPACITY,
-    DEFAULT_GROUP_COMMIT_MAX_BATCH, DEFAULT_GROUP_COMMIT_TIMEOUT_MS,
+    DbWriteHandle, GroupCommitConfig, GroupCommitStats, WriterConnFactory,
+    DEFAULT_GROUP_COMMIT_CHANNEL_CAPACITY, DEFAULT_GROUP_COMMIT_MAX_BATCH,
+    DEFAULT_GROUP_COMMIT_TIMEOUT_MS, WRITER_REBUILD_FAILURE_THRESHOLD,
 };
 pub use imported::{
     ImportedBookmarkRow, ImportedHistoryRow, ImportedWriteStats, IMPORT_BATCH_SIZE,
@@ -139,6 +140,28 @@ where
     }
 }
 
+/// 打开并初始化一个组提交写连接（唯一构造路径）。
+///
+/// `LocalDb::open` 与 Writer Actor 的故障自愈连接重建共用本函数，
+/// 保证 PRAGMA / 初始化语义完全一致：
+/// FK ON + WAL + synchronous NORMAL + busy_timeout 5000 + cache_size 8 MiB。
+fn open_writer_conn(path: &Path) -> Result<Connection, DbFailure> {
+    let write_conn = Connection::open(path).map_err(|e| DbFailure {
+        message: format!("failed to open writer database: {e}"),
+        kind: DbFailureKind::Open,
+    })?;
+    let _ = write_conn.busy_timeout(std::time::Duration::from_millis(5000));
+    // 写连接：spawn 前必须 FK ON（否则组提交 Actor 上 FK 级联失效，05-S2）
+    let _ = write_conn.execute_batch(&format!(
+        "PRAGMA foreign_keys = ON;
+         PRAGMA journal_mode = WAL;
+         PRAGMA synchronous = NORMAL;
+         PRAGMA busy_timeout = 5000;
+         PRAGMA cache_size = {WRITE_CONN_CACHE_SIZE_KIB};"
+    ));
+    Ok(write_conn)
+}
+
 impl LocalDb {
     /// Open (or create) a database at the given path.
     /// Use ":memory:" for an in-memory database (testing).
@@ -159,20 +182,18 @@ impl LocalDb {
              PRAGMA cache_size = {READER_CONN_CACHE_SIZE_KIB};"
         ));
 
-        let write_conn = Connection::open(path_ref).map_err(|e| DbFailure {
-            message: format!("failed to open writer database: {e}"),
-            kind: DbFailureKind::Open,
-        })?;
-        let _ = write_conn.busy_timeout(std::time::Duration::from_millis(5000));
-        // 写连接：spawn 前必须 FK ON（否则组提交 Actor 上 FK 级联失效，05-S2）
-        let _ = write_conn.execute_batch(&format!(
-            "PRAGMA foreign_keys = ON;
-             PRAGMA journal_mode = WAL;
-             PRAGMA synchronous = NORMAL;
-             PRAGMA busy_timeout = 5000;
-             PRAGMA cache_size = {WRITE_CONN_CACHE_SIZE_KIB};"
-        ));
-        let writer = DbWriteHandle::spawn(write_conn, GroupCommitConfig::default());
+        let write_conn = open_writer_conn(path_ref)?;
+        // 写连接重建工厂：ROLLBACK 补救失败 / BEGIN 连续失败达到阈值时，
+        // Actor 经由此工厂按同一构造路径重开连接自愈（不复制初始化逻辑）。
+        let writer_conn_factory: WriterConnFactory = {
+            let path = path_ref.to_path_buf();
+            Arc::new(move || open_writer_conn(&path))
+        };
+        let writer = DbWriteHandle::spawn_with_rebuild(
+            write_conn,
+            GroupCommitConfig::default(),
+            Some(writer_conn_factory),
+        );
 
         let reader_pool = match ReaderPool::open(path_ref, ReaderPoolConfig::default()) {
             Ok(pool) => Arc::new(pool),

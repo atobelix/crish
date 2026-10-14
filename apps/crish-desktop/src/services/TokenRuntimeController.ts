@@ -9,10 +9,8 @@ import type { PersonalizationSettings, UiTheme } from '../api/themeTypes';
 import { SKIN_PRESETS, type SkinPreset } from '../api/themePresets';
 import { shiftWarmLayers } from './warmLayerShift';
 import {
-  parseColorToOklch,
   computeContrastGuardedTokens,
   setTokenRuntimeSetter,
-  type ContrastGuardedTokens,
 } from '../api/oklchColorGuard';
 import type { UiSize } from '../store/layout-helpers/store-types';
 
@@ -34,12 +32,21 @@ export interface TokenApplyResult {
   tokens: Record<string, string>;
 }
 
-const SCROLLBAR_UP_PATH = "M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z";
-const SCROLLBAR_DOWN_PATH = "M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z";
-const SCROLLBAR_LEFT_PATH = "M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z";
-const SCROLLBAR_RIGHT_PATH = "M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z";
+const SCROLLBAR_UP_PATH =
+  'M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z';
+const SCROLLBAR_DOWN_PATH =
+  'M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z';
+const SCROLLBAR_LEFT_PATH =
+  'M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z';
+const SCROLLBAR_RIGHT_PATH =
+  'M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z';
 
-function makeScrollbarArrowSvg(pathD: string, viewBox: string, color: string, opacity: string): string {
+function makeScrollbarArrowSvg(
+  pathD: string,
+  viewBox: string,
+  color: string,
+  opacity: string
+): string {
   const safeColor = color.startsWith('#') ? `%23${color.slice(1)}` : color;
   const svg = `%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='${viewBox}' preserveAspectRatio='none'%3E%3Cpath d='${pathD}' fill='${safeColor}' fill-opacity='${opacity}'/%3E%3C/svg%3E`;
   return `url("data:image/svg+xml,${svg}")`;
@@ -54,9 +61,12 @@ export interface SolarAdjustmentResult {
 /**
  * 智能时光过渡参数计算纯函数
  */
-export function computeDynamicSolarAdjustments(mockHour?: number): SolarAdjustmentResult {
+export function computeDynamicSolarAdjustments(
+  mockHour?: number
+): SolarAdjustmentResult {
   const now = new Date();
-  const currentHour = mockHour !== undefined ? mockHour : (now.getHours() + now.getMinutes() / 60);
+  const currentHour =
+    mockHour !== undefined ? mockHour : now.getHours() + now.getMinutes() / 60;
 
   if (currentHour >= 6 && currentHour < 9) {
     const p = (currentHour - 6) / 3;
@@ -106,7 +116,6 @@ export function computeDynamicSolarAdjustments(mockHour?: number): SolarAdjustme
     periodLabel,
   };
 }
-
 
 export const DEFAULT_PERSONALIZATION: PersonalizationSettings = {
   skin: 'warm-gray',
@@ -173,7 +182,7 @@ export class TokenRuntimeController {
       ...(preferences || {}),
     };
 
-    let resolvedTheme: UiTheme = (theme === 'dark' ? 'dark' : 'default');
+    let resolvedTheme: UiTheme = theme === 'dark' ? 'dark' : 'default';
     let adjust = p.themeBrightnessAdjust || 0;
     let solarWarmthMix = 0;
 
@@ -183,7 +192,7 @@ export class TokenRuntimeController {
       solarWarmthMix = solar.solarWarmthMix;
       const now = new Date();
       const currentHour = now.getHours() + now.getMinutes() / 60;
-      resolvedTheme = (currentHour >= 19 || currentHour < 6) ? 'dark' : 'default';
+      resolvedTheme = currentHour >= 19 || currentHour < 6 ? 'dark' : 'default';
     }
 
     const isDark: boolean = resolvedTheme === 'dark';
@@ -211,7 +220,7 @@ export class TokenRuntimeController {
           ? `color-mix(in srgb, ${bg} 82%, hsl(0 0% 100%) 18%)`
           : `color-mix(in srgb, ${bg} 88%, hsl(38 8% 70%) 12%)`,
         textPrimary: fg,
-        textSecondary: `color-mix(in srgb, ${bg} 35%, ${fg} 65%)`,
+        textSecondary: `color-mix(in srgb, ${bg} 22%, ${fg} 78%)`,
         borderColor: `color-mix(in srgb, ${bg} 82%, ${fg} 18%)`,
         borderSubtle: `color-mix(in srgb, ${bg} 92%, ${fg} 8%)`,
       };
@@ -250,9 +259,9 @@ export class TokenRuntimeController {
       let borderColor = skinConfig.borderColor;
       let borderSubtle = skinConfig.borderSubtle;
 
-      const mixColor = skinConfig.mixColor || (isDark
-        ? 'var(--text-primary)'
-        : 'hsl(35, 50%, 20%)');
+      const mixColor =
+        skinConfig.mixColor ||
+        (isDark ? 'var(--text-primary)' : 'hsl(35, 50%, 20%)');
 
       let vibrantTint = mixColor;
       if (!isDark) {
@@ -291,7 +300,13 @@ export class TokenRuntimeController {
 
       const twilightTarget = `color-mix(in srgb, ${mixColor} 15%, hsl(34, 30%, 45%))`;
 
-      if (solarWarmthMix > 0 && !isDark && skinKey !== 'warm-gray' && skinKey !== 'paper' && skinKey !== 'classic-gray') {
+      if (
+        solarWarmthMix > 0 &&
+        !isDark &&
+        skinKey !== 'warm-gray' &&
+        skinKey !== 'paper' &&
+        skinKey !== 'classic-gray'
+      ) {
         const sunsetTone = 'hsl(30, 40%, 90%)';
         bgPrimary = `color-mix(in srgb, ${sunsetTone} ${solarWarmthMix * 100}%, ${bgPrimary})`;
         bgSecondary = `color-mix(in srgb, ${sunsetTone} ${solarWarmthMix * 100}%, ${bgSecondary})`;
@@ -309,7 +324,11 @@ export class TokenRuntimeController {
         //   亮度微调 ±5 档沿用原斜率；主界面封顶 99.5%，保证永远略暗于纯白输入框。
         // 2026-10-11 heson 实测定稿（同一暖色调 CMYK C0 M0.4 Y0.8）：外层 K5 #f2f1f0、主层 K2.8 #f8f7f6、输入框 #ffffff。
         // 亮度微调只平移 K（保持 M0.4/Y0.8），三层同步并夹紧，层级不反转、不贴合（review P1-3，见 warmLayerShift.ts）。
-        const layers = shiftWarmLayers({ outer: '#f2f1f0', main: '#f8f7f6', input: '#ffffff' }, adjust, false);
+        const layers = shiftWarmLayers(
+          { outer: '#f2f1f0', main: '#f8f7f6', input: '#ffffff' },
+          adjust,
+          false
+        );
         bgPrimary = layers.main;
         bgSecondary = layers.outer;
         bgTertiary = layers.outer;
@@ -322,9 +341,13 @@ export class TokenRuntimeController {
       } else if (isDark && skinKey === 'dark-cozy') {
         // 默认深色皮肤：三层（外层 / 主层 / 输入框）只平移 K、同步移动并夹紧，输入框参与平移，永远最亮（review P1-3）
         const layers = shiftWarmLayers(
-          { outer: skinConfig.bgSecondary, main: skinConfig.bgPrimary, input: skinConfig.bgCard },
+          {
+            outer: skinConfig.bgSecondary,
+            main: skinConfig.bgPrimary,
+            input: skinConfig.bgCard,
+          },
           adjust,
-          true,
+          true
         );
         bgPrimary = layers.main;
         bgSecondary = layers.outer;
@@ -416,7 +439,12 @@ export class TokenRuntimeController {
       const redLight = 'var(--danger-soft-bg)';
 
       if (!isDark) {
-        if (skinKey === 'warm-gray' || skinKey === 'paper' || skinKey === 'classic-gray' || skinKey === 'custom') {
+        if (
+          skinKey === 'warm-gray' ||
+          skinKey === 'paper' ||
+          skinKey === 'classic-gray' ||
+          skinKey === 'custom'
+        ) {
           bgCard = 'hsl(0 0% 100%)';
           bgElevated = 'hsl(0 0% 100%)';
         }
@@ -431,29 +459,37 @@ export class TokenRuntimeController {
 
       // 三档底色（2026-10-10）：control-soft-* 不再按皮肤单独注入，统一为 tokens.css 的 --tint-hover/--tint-active 叠加。
 
-      // 遵循显式灰阶契约：黑夜模式使用 45% 灰度（55% 亮度），浅色模式使用 55% 灰度（45% 亮度）
-      const defaultTertiary = isDark ? '#8c8c8c' : '#6b6b6b';
-      const defaultFaint = isDark ? '#737373' : '#9e9e9e';
+      // 遵循显式灰阶契约：黑夜模式与浅色模式四档拉开清晰梯度（与 tokens.css 静态定义严格同值）
+      const defaultTertiary = isDark ? '#8c8c8c' : '#666666';
+      const defaultFaint = isDark ? '#666666' : '#969696';
+      const isNeutralPreset =
+        skinKey === 'warm-gray' ||
+        skinKey === 'paper' ||
+        skinKey === 'classic-gray' ||
+        skinKey === 'dark-cozy';
 
       // 皮肤未显式指定时，根据皮肤色相与明暗基底动态调配层级字色，杜绝死灰断层
       const baseTertiary =
         skinConfig.textTertiary ||
-        (skinKey === 'warm-gray' || skinKey === 'paper' || skinKey === 'classic-gray'
+        (isNeutralPreset
           ? defaultTertiary
           : isDark
-            ? `color-mix(in srgb, ${textPrimary} 65%, ${bgPrimary})`
-            : `color-mix(in srgb, ${textPrimary} 60%, hsl(0 0% 100%))`);
+            ? `color-mix(in srgb, ${textPrimary} 58%, ${bgPrimary})`
+            : `color-mix(in srgb, ${textPrimary} 56%, hsl(0 0% 100%))`);
 
       const baseFaint =
         skinConfig.textFaint ||
-        (skinKey === 'warm-gray' || skinKey === 'paper' || skinKey === 'classic-gray'
+        (isNeutralPreset
           ? defaultFaint
           : isDark
-            ? `color-mix(in srgb, ${textPrimary} 45%, ${bgPrimary})`
-            : `color-mix(in srgb, ${textPrimary} 38%, hsl(0 0% 100%))`);
+            ? `color-mix(in srgb, ${textPrimary} 38%, ${bgPrimary})`
+            : `color-mix(in srgb, ${textPrimary} 35%, hsl(0 0% 100%))`);
 
       // 浅色暖灰：输入框必须是纯白（heson 定稿），不受皮肤 composerBg / 亮度微调影响
-      const composerBg = !isDark && skinKey === 'warm-gray' ? '#ffffff' : skinConfig.composerBg || bgCard;
+      const composerBg =
+        !isDark && skinKey === 'warm-gray'
+          ? '#ffffff'
+          : skinConfig.composerBg || bgCard;
 
       let finalFg = textPrimary;
       let finalSec = textSecondary;
@@ -470,8 +506,8 @@ export class TokenRuntimeController {
         finalSec = contrastGuard.textSecondary;
         finalTert = contrastGuard.textTertiary;
         finalFaint = isDark
-          ? `color-mix(in srgb, ${finalFg} 45%, ${bgPrimary})`
-          : `color-mix(in srgb, ${finalFg} 40%, hsl(0 0% 100%))`;
+          ? `color-mix(in srgb, ${finalFg} 38%, ${bgPrimary})`
+          : `color-mix(in srgb, ${finalFg} 36%, hsl(0 0% 100%))`;
       }
 
       // 三档底色 SSOT（2026-10-10）：运行时只写三个独立源 —— 外层（侧栏 + 标签栏）/ 主层（聊天区 + 右侧栏 +
@@ -504,11 +540,15 @@ export class TokenRuntimeController {
         // 暖灰皮肤（默认浅色纸温）走 tokens.css 静态权威 SSOT（降低灰度的 #dedddc 与深沉激活态 #6b6a69）
         // 按钮 SVG 同步继承 tokens.css 权威满宽平滑大圆角矢量，不向 root.style 写入内联覆盖
       } else if (isDark) {
-        tokens['--scrollbar-thumb-bg'] = `color-mix(in srgb, ${finalFg} 16%, transparent)`;
-        tokens['--scrollbar-thumb-active'] = `color-mix(in srgb, ${finalFg} 48%, transparent)`;
+        tokens['--scrollbar-thumb-bg'] =
+          `color-mix(in srgb, ${finalFg} 16%, transparent)`;
+        tokens['--scrollbar-thumb-active'] =
+          `color-mix(in srgb, ${finalFg} 48%, transparent)`;
       } else {
-        tokens['--scrollbar-thumb-bg'] = `color-mix(in srgb, ${finalFg} 13%, transparent)`;
-        tokens['--scrollbar-thumb-active'] = `color-mix(in srgb, ${finalFg} 58%, transparent)`;
+        tokens['--scrollbar-thumb-bg'] =
+          `color-mix(in srgb, ${finalFg} 13%, transparent)`;
+        tokens['--scrollbar-thumb-active'] =
+          `color-mix(in srgb, ${finalFg} 58%, transparent)`;
       }
 
       // 滚动条微调三角按钮动态 SVG Token 化：在非 warm-gray 自定义皮肤下与当前滑块颜色深度契合
@@ -516,14 +556,54 @@ export class TokenRuntimeController {
         const btnNormalOp = isDark ? '0.16' : '0.13';
         const btnActiveOp = isDark ? '0.48' : '0.58';
 
-        tokens['--scrollbar-button-up'] = makeScrollbarArrowSvg(SCROLLBAR_UP_PATH, '0 0 10 7', finalFg, btnNormalOp);
-        tokens['--scrollbar-button-down'] = makeScrollbarArrowSvg(SCROLLBAR_DOWN_PATH, '0 0 10 7', finalFg, btnNormalOp);
-        tokens['--scrollbar-button-left'] = makeScrollbarArrowSvg(SCROLLBAR_LEFT_PATH, '0 0 7 10', finalFg, btnNormalOp);
-        tokens['--scrollbar-button-right'] = makeScrollbarArrowSvg(SCROLLBAR_RIGHT_PATH, '0 0 7 10', finalFg, btnNormalOp);
-        tokens['--scrollbar-button-up-active'] = makeScrollbarArrowSvg(SCROLLBAR_UP_PATH, '0 0 10 7', finalFg, btnActiveOp);
-        tokens['--scrollbar-button-down-active'] = makeScrollbarArrowSvg(SCROLLBAR_DOWN_PATH, '0 0 10 7', finalFg, btnActiveOp);
-        tokens['--scrollbar-button-left-active'] = makeScrollbarArrowSvg(SCROLLBAR_LEFT_PATH, '0 0 7 10', finalFg, btnActiveOp);
-        tokens['--scrollbar-button-right-active'] = makeScrollbarArrowSvg(SCROLLBAR_RIGHT_PATH, '0 0 7 10', finalFg, btnActiveOp);
+        tokens['--scrollbar-button-up'] = makeScrollbarArrowSvg(
+          SCROLLBAR_UP_PATH,
+          '0 0 10 7',
+          finalFg,
+          btnNormalOp
+        );
+        tokens['--scrollbar-button-down'] = makeScrollbarArrowSvg(
+          SCROLLBAR_DOWN_PATH,
+          '0 0 10 7',
+          finalFg,
+          btnNormalOp
+        );
+        tokens['--scrollbar-button-left'] = makeScrollbarArrowSvg(
+          SCROLLBAR_LEFT_PATH,
+          '0 0 7 10',
+          finalFg,
+          btnNormalOp
+        );
+        tokens['--scrollbar-button-right'] = makeScrollbarArrowSvg(
+          SCROLLBAR_RIGHT_PATH,
+          '0 0 7 10',
+          finalFg,
+          btnNormalOp
+        );
+        tokens['--scrollbar-button-up-active'] = makeScrollbarArrowSvg(
+          SCROLLBAR_UP_PATH,
+          '0 0 10 7',
+          finalFg,
+          btnActiveOp
+        );
+        tokens['--scrollbar-button-down-active'] = makeScrollbarArrowSvg(
+          SCROLLBAR_DOWN_PATH,
+          '0 0 10 7',
+          finalFg,
+          btnActiveOp
+        );
+        tokens['--scrollbar-button-left-active'] = makeScrollbarArrowSvg(
+          SCROLLBAR_LEFT_PATH,
+          '0 0 7 10',
+          finalFg,
+          btnActiveOp
+        );
+        tokens['--scrollbar-button-right-active'] = makeScrollbarArrowSvg(
+          SCROLLBAR_RIGHT_PATH,
+          '0 0 7 10',
+          finalFg,
+          btnActiveOp
+        );
       }
     }
 
@@ -543,7 +623,10 @@ export class TokenRuntimeController {
       }
 
       for (const oldKey of this.currentInjectedKeys) {
-        if (!Object.prototype.hasOwnProperty.call(tokens, oldKey) && oldKey !== '--ui-scale') {
+        if (
+          !Object.prototype.hasOwnProperty.call(tokens, oldKey) &&
+          oldKey !== '--ui-scale'
+        ) {
           root.style.removeProperty(oldKey);
           this.currentInjectedKeys.delete(oldKey);
         }
@@ -554,30 +637,96 @@ export class TokenRuntimeController {
       //   accent-* / bg-tertiary / shell-chrome-bg / font-size-adjust；
       //   bg-primary/secondary/card/elevated/paper/workspace、shell-inset-bg、terminal-*
       //   由 tokens.css 静态链从 surface-* 派生，不再注入）
-      if (tokens['--font-size-adjust']) root.style.setProperty('--font-size-adjust', tokens['--font-size-adjust']);
-      if (tokens['--surface-outer']) root.style.setProperty('--surface-outer', tokens['--surface-outer']);
-      if (tokens['--surface-main']) root.style.setProperty('--surface-main', tokens['--surface-main']);
-      if (tokens['--surface-input']) root.style.setProperty('--surface-input', tokens['--surface-input']);
-      if (tokens['--text-primary']) root.style.setProperty('--text-primary', tokens['--text-primary']);
-      if (tokens['--text-secondary']) root.style.setProperty('--text-secondary', tokens['--text-secondary']);
-      if (tokens['--text-tertiary']) root.style.setProperty('--text-tertiary', tokens['--text-tertiary']);
-      if (tokens['--text-muted']) root.style.setProperty('--text-muted', tokens['--text-muted']);
-      if (tokens['--text-faint']) root.style.setProperty('--text-faint', tokens['--text-faint']);
-      if (tokens['--border-color']) root.style.setProperty('--border-color', tokens['--border-color']);
-      if (tokens['--border-subtle']) root.style.setProperty('--border-subtle', tokens['--border-subtle']);
-      if (tokens['--control-mix-color']) root.style.setProperty('--control-mix-color', tokens['--control-mix-color']);
-      if (tokens['--accent-green-light-adaptive']) root.style.setProperty('--accent-green-light-adaptive', tokens['--accent-green-light-adaptive']);
-      if (tokens['--accent-red-light-adaptive']) root.style.setProperty('--accent-red-light-adaptive', tokens['--accent-red-light-adaptive']);
-      if (tokens['--scrollbar-thumb-bg']) root.style.setProperty('--scrollbar-thumb-bg', tokens['--scrollbar-thumb-bg']);
-      if (tokens['--scrollbar-thumb-active']) root.style.setProperty('--scrollbar-thumb-active', tokens['--scrollbar-thumb-active']);
-      if (tokens['--scrollbar-button-up']) root.style.setProperty('--scrollbar-button-up', tokens['--scrollbar-button-up']);
-      if (tokens['--scrollbar-button-down']) root.style.setProperty('--scrollbar-button-down', tokens['--scrollbar-button-down']);
-      if (tokens['--scrollbar-button-left']) root.style.setProperty('--scrollbar-button-left', tokens['--scrollbar-button-left']);
-      if (tokens['--scrollbar-button-right']) root.style.setProperty('--scrollbar-button-right', tokens['--scrollbar-button-right']);
-      if (tokens['--scrollbar-button-up-active']) root.style.setProperty('--scrollbar-button-up-active', tokens['--scrollbar-button-up-active']);
-      if (tokens['--scrollbar-button-down-active']) root.style.setProperty('--scrollbar-button-down-active', tokens['--scrollbar-button-down-active']);
-      if (tokens['--scrollbar-button-left-active']) root.style.setProperty('--scrollbar-button-left-active', tokens['--scrollbar-button-left-active']);
-      if (tokens['--scrollbar-button-right-active']) root.style.setProperty('--scrollbar-button-right-active', tokens['--scrollbar-button-right-active']);
+      if (tokens['--font-size-adjust'])
+        root.style.setProperty(
+          '--font-size-adjust',
+          tokens['--font-size-adjust']
+        );
+      if (tokens['--surface-outer'])
+        root.style.setProperty('--surface-outer', tokens['--surface-outer']);
+      if (tokens['--surface-main'])
+        root.style.setProperty('--surface-main', tokens['--surface-main']);
+      if (tokens['--surface-input'])
+        root.style.setProperty('--surface-input', tokens['--surface-input']);
+      if (tokens['--text-primary'])
+        root.style.setProperty('--text-primary', tokens['--text-primary']);
+      if (tokens['--text-secondary'])
+        root.style.setProperty('--text-secondary', tokens['--text-secondary']);
+      if (tokens['--text-tertiary'])
+        root.style.setProperty('--text-tertiary', tokens['--text-tertiary']);
+      if (tokens['--text-muted'])
+        root.style.setProperty('--text-muted', tokens['--text-muted']);
+      if (tokens['--text-faint'])
+        root.style.setProperty('--text-faint', tokens['--text-faint']);
+      if (tokens['--border-color'])
+        root.style.setProperty('--border-color', tokens['--border-color']);
+      if (tokens['--border-subtle'])
+        root.style.setProperty('--border-subtle', tokens['--border-subtle']);
+      if (tokens['--control-mix-color'])
+        root.style.setProperty(
+          '--control-mix-color',
+          tokens['--control-mix-color']
+        );
+      if (tokens['--accent-green-light-adaptive'])
+        root.style.setProperty(
+          '--accent-green-light-adaptive',
+          tokens['--accent-green-light-adaptive']
+        );
+      if (tokens['--accent-red-light-adaptive'])
+        root.style.setProperty(
+          '--accent-red-light-adaptive',
+          tokens['--accent-red-light-adaptive']
+        );
+      if (tokens['--scrollbar-thumb-bg'])
+        root.style.setProperty(
+          '--scrollbar-thumb-bg',
+          tokens['--scrollbar-thumb-bg']
+        );
+      if (tokens['--scrollbar-thumb-active'])
+        root.style.setProperty(
+          '--scrollbar-thumb-active',
+          tokens['--scrollbar-thumb-active']
+        );
+      if (tokens['--scrollbar-button-up'])
+        root.style.setProperty(
+          '--scrollbar-button-up',
+          tokens['--scrollbar-button-up']
+        );
+      if (tokens['--scrollbar-button-down'])
+        root.style.setProperty(
+          '--scrollbar-button-down',
+          tokens['--scrollbar-button-down']
+        );
+      if (tokens['--scrollbar-button-left'])
+        root.style.setProperty(
+          '--scrollbar-button-left',
+          tokens['--scrollbar-button-left']
+        );
+      if (tokens['--scrollbar-button-right'])
+        root.style.setProperty(
+          '--scrollbar-button-right',
+          tokens['--scrollbar-button-right']
+        );
+      if (tokens['--scrollbar-button-up-active'])
+        root.style.setProperty(
+          '--scrollbar-button-up-active',
+          tokens['--scrollbar-button-up-active']
+        );
+      if (tokens['--scrollbar-button-down-active'])
+        root.style.setProperty(
+          '--scrollbar-button-down-active',
+          tokens['--scrollbar-button-down-active']
+        );
+      if (tokens['--scrollbar-button-left-active'])
+        root.style.setProperty(
+          '--scrollbar-button-left-active',
+          tokens['--scrollbar-button-left-active']
+        );
+      if (tokens['--scrollbar-button-right-active'])
+        root.style.setProperty(
+          '--scrollbar-button-right-active',
+          tokens['--scrollbar-button-right-active']
+        );
 
       for (const key of Object.keys(tokens)) {
         this.currentInjectedKeys.add(key);

@@ -14,7 +14,7 @@ import {
   isMarkdownFilename,
   pathBasename,
 } from './workspaceFileKinds';
-import { resolveWorkspacePath } from './workspacePathResolver';
+import { resolveReadableFilePath } from './workspacePathResolver';
 
 /** 面板尚未挂载时暂存待打开路径 */
 let pendingOpenPath: string | null = null;
@@ -25,8 +25,8 @@ export function takePendingOpenPath(): string | null {
   return p;
 }
 
-let fileViewerOpener: ((filePath: string, mode?: 'plain' | 'diff') => void) | null =
-  null;
+let fileViewerOpener:
+  ((filePath: string, mode?: 'plain' | 'diff') => void) | null = null;
 
 export function registerFileViewerOpener(
   opener: typeof fileViewerOpener
@@ -111,7 +111,7 @@ export function openFileInPanel(
   if (!filePath?.trim()) return null;
   const trimmed = filePath.trim();
   if (/^(note|notebook)(:|$)/i.test(trimmed)) return null;
-  const path = resolveWorkspacePath(trimmed);
+  const path = resolveReadableFilePath(trimmed);
   if (!path) return null;
 
   // 1. 无条件激活左侧主目录树的联动定位链路（SSOT 广播）

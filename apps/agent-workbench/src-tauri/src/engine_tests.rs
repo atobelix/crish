@@ -132,7 +132,7 @@ fn wire_event_converts_to_loop_event() {
             reasoning_tokens: None,
         }),
     };
-    match to_loop_event(wire) {
+    match to_loop_event(wire).expect("Stop 事件应转换为 Some") {
         ProviderStreamEvent::Stop {
             reason,
             usage,

@@ -273,10 +273,8 @@ pub(crate) fn workbench_discover_skills<R: tauri::Runtime>(
         if !ws.is_empty() {
             let ws_path = canonicalize_within_roots(ws, &roots).map_err(CoreError::InvalidInput)?;
             let roots = [
+                ws_path.join(".crish").join("skills"),
                 ws_path.join(".conex").join("skills"),
-                ws_path.join(".codex").join("skills"),
-                ws_path.join(".agents").join("skills"),
-                ws_path.join(".claude").join("skills"),
             ];
             for r in &roots {
                 if r.is_dir() {
@@ -286,15 +284,11 @@ pub(crate) fn workbench_discover_skills<R: tauri::Runtime>(
         }
     }
 
-    // 全局技能：用户主目录（只读发现，保持既有行为）
+    // 全局技能：用户主目录（规范原生技能目录，不强行扫描别家不兼容软件目录）
     if let Some(home) = get_home_dir() {
         let roots = [
-            home.join(".codex").join("skills"),
+            home.join(".crish").join("skills"),
             home.join(".conex").join("skills"),
-            home.join(".claude").join("skills"),
-            home.join(".agents").join("skills"),
-            home.join(".grok").join("skills"),
-            home.join(".grok").join("bundled").join("skills"),
         ];
         for r in &roots {
             if r.is_dir() {

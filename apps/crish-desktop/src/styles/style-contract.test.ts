@@ -680,3 +680,56 @@ describe('composer 水平内衬光学 token 对（2026-09-21 用户视觉裁决�
     }
   });
 });
+
+describe('全局文字选中色彩统一契约（方案 A #0d9668 绿底 + #ffffff 白字 SSOT）', () => {
+  it('tokens.css 在 light 与 dark 块中均定义 --selection-bg: #0d9668 与 --selection-fg: #ffffff，且 --xterm-selection 同源', () => {
+    const css = readFile('src/styles/tokens.css');
+    const lightBlock = css.match(LIGHT_BLOCK_RE)?.[0] ?? '';
+    const darkBlock = css.match(DARK_BLOCK_RE)?.[0] ?? '';
+    for (const [label, block] of [
+      ['light', lightBlock],
+      ['dark', darkBlock],
+    ] as const) {
+      expect(block, `${label} --selection-bg`).toMatch(
+        /--selection-bg:\s*#0d9668;/i
+      );
+      expect(block, `${label} --selection-fg`).toMatch(
+        /--selection-fg:\s*#ffffff;/i
+      );
+      expect(block, `${label} --xterm-selection`).toMatch(
+        /--xterm-selection:\s*var\(--selection-bg\);/
+      );
+    }
+  });
+
+  it('design-system.css 为全仓唯一 ::selection 规则入口，且绑定 var(--selection-bg) 与 var(--selection-fg)', () => {
+    const designCss = readFile('src/styles/design-system.css');
+    expect(designCss).toMatch(
+      /::selection\s*\{[^}]*background-color:\s*var\(--selection-bg\);[^}]*color:\s*var\(--selection-fg\);[^}]*\}/
+    );
+
+    const cssFiles = walkSrc().filter((p) => p.endsWith('.css'));
+    const privateSelections: string[] = [];
+    for (const p of cssFiles) {
+      const base = p.split(/[\\/]/).pop() ?? '';
+      if (base === 'design-system.css') continue;
+      const clean = readFileSync(p, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+      if (clean.includes('::selection')) {
+        privateSelections.push(p);
+      }
+    }
+    expect(
+      privateSelections,
+      `禁止组件级私有 ::selection 分叉：${privateSelections.join(', ')}`
+    ).toEqual([]);
+  });
+
+  it('FileAnnotationPopover 持久化选区高亮与全局选中绿底白字同源', () => {
+    const popoverCss = readFile(
+      'src/components/files/FileAnnotationPopover.module.css'
+    );
+    expect(popoverCss).toMatch(
+      /::highlight\(file-annotation-active-selection\)[^{]*\{[^}]*background-color:\s*var\(--selection-bg\);[^}]*color:\s*var\(--selection-fg\);[^}]*\}/
+    );
+  });
+});

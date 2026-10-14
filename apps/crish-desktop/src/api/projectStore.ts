@@ -13,6 +13,7 @@ export type ProjectEntry = {
   id: string;
   name: string;
   path: string;
+  paths?: string[];
   addedAt: number;
   lastOpenedAt: number;
 };
@@ -90,7 +91,10 @@ function saveAliases(map: AliasMap) {
 }
 
 /** 记录 id→path，供幽灵 proj-* 找回 */
-export function rememberProjectFolderAlias(projectId: string, path: string): void {
+export function rememberProjectFolderAlias(
+  projectId: string,
+  path: string
+): void {
   if (!projectId || !path) return;
   const map = loadAliases();
   map[projectId] = normalizePath(path);
@@ -177,7 +181,7 @@ export function openProject(projectId: string): ProjectEntry | null {
   window.dispatchEvent(
     new CustomEvent('crish-project-changed', {
       detail: { projectId: target.id, path: target.path, reason: 'open' },
-    }),
+    })
   );
   return updated;
 }
@@ -187,15 +191,17 @@ export function addProjectFromPath(path: string, name?: string): ProjectEntry {
   const list = loadRaw();
   const existing = list.find((p) => normalizePath(p.path) === normalized);
   if (existing) {
+    if (name && name.trim()) {
+      existing.name = name.trim();
+      saveRaw(list);
+    }
     // 补写别名：旧 timestamp id 也登记到路径
     rememberProjectFolderAlias(existing.id, existing.path);
     openProject(existing.id);
     return existing;
   }
   const base =
-    name ||
-    normalized.split('/').filter(Boolean).pop() ||
-    '项目';
+    name?.trim() || normalized.split('/').filter(Boolean).pop() || '项目';
   // 稳定 id：同一路径重加仍得到同一 id，旧会话可挂回
   const stableId = stableProjectIdFromPath(normalized);
   // 若列表里已有同 id（极少），直接复用
@@ -203,6 +209,7 @@ export function addProjectFromPath(path: string, name?: string): ProjectEntry {
   if (byId) {
     byId.path = normalized;
     byId.name = base;
+    byId.paths = [normalized];
     byId.lastOpenedAt = Date.now();
     saveRaw(list);
     rememberProjectFolderAlias(byId.id, byId.path);
@@ -213,6 +220,7 @@ export function addProjectFromPath(path: string, name?: string): ProjectEntry {
     id: stableId,
     name: base,
     path: normalized,
+    paths: [normalized],
     addedAt: Date.now(),
     lastOpenedAt: Date.now(),
   };
@@ -228,6 +236,69 @@ export function addProjectFromPath(path: string, name?: string): ProjectEntry {
   }
   openProject(entry.id);
   return entry;
+}
+
+export function addProjectFromPaths(
+  paths: string[],
+  name?: string
+): ProjectEntry {
+  const valid = paths.map((p) => normalizePath(p.trim())).filter(Boolean);
+  if (valid.length === 0) {
+    throw new Error('Project must contain at least one valid path');
+  }
+  const primary = valid[0]!;
+  const entry = addProjectFromPath(primary, name);
+  if (valid.length > 1) {
+    const list = loadRaw();
+    const idx = list.findIndex((p) => p.id === entry.id);
+    if (idx >= 0) {
+      list[idx]!.paths = valid;
+      saveRaw(list);
+      entry.paths = valid;
+    }
+  }
+  return entry;
+}
+
+export function updateProject(
+  projectId: string,
+  patch: { name?: string; path?: string; paths?: string[] }
+): ProjectEntry | null {
+  const list = loadRaw();
+  const idx = list.findIndex((p) => p.id === projectId);
+  if (idx < 0) return null;
+  const target = list[idx]!;
+  const nextPaths = patch.paths
+    ?.map((p) => normalizePath(p.trim()))
+    .filter(Boolean);
+  const nextPath =
+    patch.path !== undefined && patch.path.trim()
+      ? normalizePath(patch.path.trim())
+      : nextPaths && nextPaths.length > 0
+        ? nextPaths[0]!
+        : target.path;
+  const nextName =
+    patch.name !== undefined && patch.name.trim()
+      ? patch.name.trim()
+      : target.name || projectFolderLabel(nextPath);
+  const updated: ProjectEntry = {
+    ...target,
+    name: nextName,
+    path: nextPath,
+    ...(nextPaths ? { paths: nextPaths } : {}),
+  };
+  list[idx] = updated;
+  saveRaw(list);
+  rememberProjectFolderAlias(updated.id, updated.path);
+  if (getActiveProjectId() === projectId) {
+    localStorage.setItem(WORKSPACE_KEY, updated.path);
+  }
+  window.dispatchEvent(
+    new CustomEvent('crish-project-changed', {
+      detail: { projectId: updated.id, path: updated.path, reason: 'update' },
+    })
+  );
+  return updated;
 }
 
 export function removeProject(projectId: string) {
@@ -266,7 +337,9 @@ export function resolveFolderToProjectId(folder: string): string | null {
   const aliases = loadAliases();
   const aliasPath = aliases[f];
   if (aliasPath) {
-    const byAlias = projects.find((p) => normalizePath(p.path) === normalizePath(aliasPath));
+    const byAlias = projects.find(
+      (p) => normalizePath(p.path) === normalizePath(aliasPath)
+    );
     if (byAlias) return byAlias.id;
     // 路径稳定 id 也可能直接对上
     const stable = stableProjectIdFromPath(aliasPath);
@@ -279,7 +352,7 @@ export function resolveFolderToProjectId(folder: string): string | null {
       normalizePath(p.path) === normalizePath(f) ||
       p.name === f ||
       normalizePath(p.path).endsWith('/' + f) ||
-      normalizePath(p.path).endsWith(f),
+      normalizePath(p.path).endsWith(f)
   );
   if (byPath) return byPath.id;
 
@@ -298,7 +371,9 @@ export function projectIdForSessionFolder(folder: string): string | null {
  * 会话所属工作区 key（用于标签/过滤）：规范到现项目 id 或 GENERAL_FOLDER。
  * 无法解析的幽灵 id 仍返回原值，避免误丢到「对话」后找不到。
  */
-export function canonicalSessionFolder(folder: string | undefined | null): string {
+export function canonicalSessionFolder(
+  folder: string | undefined | null
+): string {
   const f = (folder || GENERAL_FOLDER).trim() || GENERAL_FOLDER;
   if (
     f === GENERAL_FOLDER ||
@@ -317,7 +392,7 @@ export function canonicalSessionFolder(folder: string | undefined | null): strin
  */
 export function rebindSessionFoldersToProjects<T extends { folder?: string }>(
   sessions: T[],
-  projects: readonly ProjectEntry[] = listProjects(),
+  projects: readonly ProjectEntry[] = listProjects()
 ): number {
   if (!sessions?.length || !projects.length) return 0;
   let n = 0;
@@ -341,7 +416,10 @@ export function rebindSessionFoldersToProjects<T extends { folder?: string }>(
     for (const s of sessions) {
       const cur = (s.folder || '').trim();
       if (!cur || cur === only.id) continue;
-      if (/^proj-[a-z0-9]+$/i.test(cur) && !projects.some((p) => p.id === cur)) {
+      if (
+        /^proj-[a-z0-9]+$/i.test(cur) &&
+        !projects.some((p) => p.id === cur)
+      ) {
         rememberProjectFolderAlias(cur, only.path);
         s.folder = only.id;
         n += 1;

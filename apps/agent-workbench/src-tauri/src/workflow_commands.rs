@@ -1728,7 +1728,16 @@ impl WorkflowBackend {
             return Err(CoreError::NotFound(format!("workflow {cron_id} 不存在")));
         }
         if let Some(registry) = self.registry() {
-            registry.cancel(cron_id).await.map_err(map_scheduler_err)?;
+            if let Err(e) = registry.cancel(cron_id).await {
+                // IdNotFound 视为幂等成功：manual 任务（创建时表达式为空，
+                // 从未注册进 registry）、已达 max_iterations 的任务（终态
+                // 清理时已 map.remove）、cron 转 manual 的任务（update 时
+                // 已 cancel）都不在 registry 内存表中，此时仍需继续走
+                // store.remove 完成删除；其他错误照常返回。
+                if !matches!(e, crate::sched::SchedulerError::IdNotFound) {
+                    return Err(map_scheduler_err(e));
+                }
+            }
         }
         self.store.remove(cron_id);
         tracing::info!(target: "workflow", cron_id, "workflow 已删除");
@@ -1807,7 +1816,12 @@ impl WorkflowBackend {
             resolved_target_session_id.as_deref(),
         );
 
-        let run_id = format!("{}-fire-{}", workflow.cron_id, workflow.fired_count);
+        // 前缀用 manual-fire- 与 cron 路径的 fire-（sched.rs 触发协程
+        // `<cron_id>-fire-<iteration>`）隔离：两套计数器（fired_count vs
+        // iteration）同起点，若共用 fire- 格式，"手动触发后紧跟 cron 触发"
+        // 会产出相同 run_id，register_scheduled_run_hook（HashMap::insert
+        // 按 run_id 覆盖）会顶掉在途钩子，终态回写永久丢失。
+        let run_id = format!("{}-manual-fire-{}", workflow.cron_id, workflow.fired_count);
         let launcher_opt = self.launcher();
         let session_id = resolved_target_session_id.clone().unwrap_or_else(|| {
             if launcher_opt.is_some() {
@@ -1977,13 +1991,18 @@ impl WorkflowBackend {
         })
     }
 
-    /// 运行历史（可按 workflowId 过滤；按开始时间倒序；支持上限数量限制；每次扫描先收割在途孤儿）
+    /// 运行历史（可按 workflowId 过滤；按开始时间倒序；支持上限数量限制）
+    ///
+    /// 注意：此处严禁调用 reap_orphan_running_runs()。reaper 只能在冷启动
+    /// （WorkflowBackend::new）执行：真实 Agent 执行链路先落 `status:"running"`
+    /// 记录再异步执行（可达数分钟），在途 run 的 running 记录是合法状态；
+    /// 若在 list_runs 热路径收割，前端任何一次历史查询都会把执行中的任务
+    /// 误标为 interrupted 并写入错误文案。
     pub(crate) fn list_runs(
         &self,
         workflow_id: Option<&str>,
         limit: Option<usize>,
     ) -> Vec<WorkflowRunView> {
-        self.reap_orphan_running_runs();
         let mut runs = self.store.load_runs();
         if let Some(id) = workflow_id {
             runs.retain(|r| r.workflow_id == id);
@@ -2369,7 +2388,7 @@ mod tests {
             .await
             .expect("创建应成功");
         let result = backend.trigger(&view.id).expect("触发应成功");
-        assert_eq!(result.run_id.as_deref(), Some("cron-0-fire-1"));
+        assert_eq!(result.run_id.as_deref(), Some("cron-0-manual-fire-1"));
         assert_eq!(result.session_id.as_deref(), Some("sched-cron-0-1"));
         // fired_count 计入
         let persisted = backend.store.load_all();
@@ -2392,6 +2411,45 @@ mod tests {
         assert_eq!(runs[0].status, "completed");
         assert_eq!(runs[0].trigger_kind, "manual");
         assert_eq!(runs[0].prompt, "巡检工作区");
+    }
+
+    /// manual 与 cron 触发的 run_id 不得冲突：manual 路径使用独立
+    /// `manual-fire-` 命名空间（<cron_id>-manual-fire-<fired_count>），
+    /// 与 sched.rs 触发协程的 `<cron_id>-fire-<iteration>` 格式隔离——
+    /// 两套计数器（fired_count vs iteration）同起点，若共用 fire- 格式，
+    /// "手动触发后紧跟 cron 触发"会产出相同 run_id，
+    /// register_scheduled_run_hook（run_launch.rs HashMap::insert 按 run_id
+    /// 覆盖）会顶掉在途钩子，终态回写永久丢失。
+    #[tokio::test]
+    async fn manual_and_cron_run_ids_do_not_collide() {
+        let (backend, _) = test_backend();
+        let view = backend
+            .create(
+                "命名空间".to_string(),
+                "命名空间提示".to_string(),
+                daily_schedule("08:00"),
+                None,
+                None,
+                true,
+            )
+            .await
+            .expect("创建应成功");
+
+        // manual 路径实际产出的 run_id（trigger 内 fired_count 从 1 起）
+        let result = backend.trigger(&view.id).expect("触发应成功");
+        let manual_run_id = result.run_id.expect("manual 触发应返回 run_id");
+
+        // sched.rs cron 路径对同一计数起点（iteration=1）会产出的 run_id 格式
+        let cron_run_id = format!("{}-fire-{}", view.id, 1);
+
+        assert!(
+            manual_run_id.starts_with(&format!("{}-manual-fire-", view.id)),
+            "manual run_id 应落在 manual-fire- 命名空间：{manual_run_id}"
+        );
+        assert_ne!(
+            manual_run_id, cron_run_id,
+            "同一计数起点下 manual 与 cron 的 run_id 不得相同（钩子覆盖风险）"
+        );
     }
 
     /// 非法调度拒绝（Rust 侧真实错误文案——parse_cron 中文错误，不落库）
@@ -2597,6 +2655,54 @@ mod tests {
         assert!(!persisted[0].enabled, "cancel 应 enabled=false 落库");
         assert!(registry.snapshot().iter().all(|t| !t.enabled));
         assert!(backend.list().is_empty(), "元数据列表应移除");
+    }
+
+    /// 委托模式下删除未注册进 registry 的 manual workflow 应成功：
+    /// manual 任务创建时表达式为空、从未 register，registry.cancel 返回
+    /// IdNotFound 属幂等成功，不得阻断 store.remove（否则任务永久删不掉）。
+    #[tokio::test]
+    async fn delegation_delete_unregistered_manual_workflow() {
+        use crate::sched::{MemorySchedStore, SchedEventSink, SchedStore};
+
+        let pending: Arc<dyn crate::sched::PendingSink> = Arc::new(SchedProbe::default());
+        let events: Arc<dyn crate::sched::EventSink> = Arc::new(SchedEventSink::new());
+        let sched_store: Arc<dyn SchedStore> = MemorySchedStore::shared();
+        let registry = Arc::new(SchedulerRegistry::new(pending, events, sched_store, None));
+
+        let sink = Arc::new(ProbeSink::default());
+        let backend = Arc::new(WorkflowBackend::new(
+            Arc::new(MemoryWorkflowStore::default()),
+            Arc::clone(&sink) as Arc<dyn SteeringSink>,
+        ));
+        backend.set_registry(Arc::clone(&registry));
+
+        // manual（表达式为空）不经注册表注册
+        let view = backend
+            .create(
+                "手动任务".to_string(),
+                "手动提示".to_string(),
+                WorkflowScheduleWire::Manual,
+                None,
+                None,
+                true,
+            )
+            .await
+            .expect("manual 创建应成功");
+        assert!(
+            !registry.snapshot().iter().any(|t| t.cron_id == view.id),
+            "manual 任务不应出现在注册表中"
+        );
+
+        // 删除应成功（cancel 的 IdNotFound 幂等放行，store.remove 照常执行）
+        backend
+            .delete(&view.id)
+            .await
+            .expect("删除未注册 manual workflow 应成功");
+        assert!(
+            backend.list().iter().all(|w| w.id != view.id),
+            "删除后列表不得含该条目"
+        );
+        assert_eq!(backend.store.load_all().len(), 0, "存储应移除 sched_* 键");
     }
 
     /// 验收（30 方案 P6）：trigger → steering 条目落入真实共享队列——
@@ -3104,6 +3210,54 @@ mod tests {
         assert_eq!(created_new.started_at_ms, 2500);
         assert_eq!(created_new.finished_at_ms, Some(3000));
         assert_eq!(created_new.error.as_deref(), Some("外部超时"));
+    }
+
+    /// list_runs 热路径不得改写在途 run：reaper 只能在冷启动
+    /// （WorkflowBackend::new）执行。真实 Agent 执行链路先落 `status:"running"`
+    /// 记录再异步执行（可达数分钟），在途 running 记录是合法状态；若
+    /// list_runs 收割，前端任何一次历史查询都会把执行中的任务误标为
+    /// interrupted 并写入"自愈收割"错误文案。
+    #[tokio::test]
+    async fn list_runs_preserves_in_flight_running_records() {
+        let (backend, _) = test_backend();
+        backend.store.append_or_update_run(WorkflowRunRecord {
+            workflow_id: "wf-hot".to_string(),
+            run_id: "wf-hot-manual-fire-1".to_string(),
+            session_id: Some("sess-1".to_string()),
+            trigger_kind: "manual".to_string(),
+            scheduled_for_ms: 1000,
+            started_at_ms: 1000,
+            finished_at_ms: None,
+            duration_ms: None,
+            status: "running".to_string(),
+            prompt: "在途任务".to_string(),
+            error: None,
+            output_summary: None,
+        });
+
+        // 连续多次 list_runs（模拟前端刷新）不得改写该记录
+        for _ in 0..3 {
+            let views = backend.list_runs(Some("wf-hot"), None);
+            assert_eq!(views.len(), 1);
+            assert_eq!(views[0].run_id, "wf-hot-manual-fire-1");
+            assert_eq!(views[0].status, "running", "在途 run 不得被 list_runs 改写");
+            assert!(
+                views[0].error.is_none(),
+                "在途 run 不得被写入收割错误文案：{:?}",
+                views[0].error
+            );
+        }
+
+        // 落盘记录同样保持 running（收割未发生、未持久化改写）
+        let persisted = backend
+            .store
+            .load_runs()
+            .into_iter()
+            .find(|r| r.run_id == "wf-hot-manual-fire-1")
+            .expect("记录应仍在");
+        assert_eq!(persisted.status, "running");
+        assert_eq!(persisted.finished_at_ms, None);
+        assert_eq!(persisted.duration_ms, None);
     }
 
     /// 6. list() 杜绝冲刷覆盖 DB 启用状态

@@ -91,8 +91,8 @@ export type ChatEmptyResolveInput = {
   displayCount: number;
   /** 本会话消息过滤关键词 */
   filterQuery?: string | null;
-  /** scheduled 主面不走对话空态 */
-  mainSurface?: 'chat' | 'scheduled';
+  /** scheduled / extensions 主面不走对话空态 */
+  mainSurface?: 'chat' | 'scheduled' | 'extensions';
   /**
    * 会话消息仍在从磁盘/引擎水合。
    * 不再灭 emptyKind（欢迎面必须可挂载）；组件可用轻量指示，快捷 prompt 可暂隐。
@@ -101,8 +101,8 @@ export type ChatEmptyResolveInput = {
 };
 
 /**
- * 解析主列空态 kind；null = 应渲染消息列表（非空）或 scheduled 主面。
- * 优先级：scheduled 跳过 → 无会话 → 过滤无命中 → 有会话无消息。
+ * 解析主列空态 kind；null = 应渲染消息列表（非空）或 scheduled / extensions 主面。
+ * 优先级：scheduled / extensions 跳过 → 无会话 → 过滤无命中 → 有会话无消息。
  *
  * 不变量：
  * - messageCount === 0 时永不返回 filter-empty（欢迎面优先，避免「无匹配」误导）
@@ -113,7 +113,8 @@ export type ChatEmptyResolveInput = {
 export function resolveChatEmptyKind(
   input: ChatEmptyResolveInput
 ): ChatEmptyKind | null {
-  if (input.mainSurface === 'scheduled') return null;
+  if (input.mainSurface === 'scheduled' || input.mainSurface === 'extensions')
+    return null;
   if (!input.hasActiveSession) return 'no-session';
 
   // 防御：负计数 / NaN 按 0 处理，避免异常输入落到「有消息列表」空壳

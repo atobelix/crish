@@ -22,7 +22,9 @@ let config: LightweightConfig = {
   disableTelemetry: false,
 };
 
-function computeLightweightConfig(platformLevel: PlatformLevel): LightweightConfig {
+function computeLightweightConfig(
+  platformLevel: PlatformLevel
+): LightweightConfig {
   if (platformLevel === 0) {
     config = {
       enabled: true,
@@ -31,7 +33,7 @@ function computeLightweightConfig(platformLevel: PlatformLevel): LightweightConf
       workerCount: 1,
       disableHighlight: true,
       disableMarkdownCache: true,
-      disableAnimations: true,
+      disableAnimations: false,
       disableTelemetry: true,
     };
   } else if (platformLevel === 1) {
@@ -42,7 +44,7 @@ function computeLightweightConfig(platformLevel: PlatformLevel): LightweightConf
       workerCount: 1,
       disableHighlight: false,
       disableMarkdownCache: true,
-      disableAnimations: true,
+      disableAnimations: false,
       disableTelemetry: false,
     };
   }
@@ -54,5 +56,7 @@ export function applyLightweightConfig(): void {
   computeLightweightConfig(platform.level);
   if (config.disableAnimations) {
     document.documentElement.setAttribute('data-reduced-motion', 'true');
+  } else {
+    document.documentElement.removeAttribute('data-reduced-motion');
   }
 }

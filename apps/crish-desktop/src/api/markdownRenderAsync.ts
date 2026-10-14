@@ -135,7 +135,9 @@ export function useAsyncMarkdownHtml(
   priority: Priority = Priority.High,
   sessionId?: string
 ): { html: string; loading: boolean; failed: boolean } {
-  const [html, setHtml] = useState('');
+  const [html, setHtml] = useState(() =>
+    markdown && markdown.trim() ? (getMarkdownHtmlCache(markdown) ?? '') : ''
+  );
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
 

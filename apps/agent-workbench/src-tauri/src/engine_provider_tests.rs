@@ -660,7 +660,7 @@ fn stop_error_kind_passes_through_to_loop_event() {
         error_kind: Some(ProviderErrorKind::RateLimit),
         usage: None,
     };
-    match to_loop_event(wire) {
+    match to_loop_event(wire).expect("Stop 事件应转换为 Some") {
         ProviderStreamEvent::Stop {
             reason,
             error_kind,
@@ -677,6 +677,39 @@ fn stop_error_kind_passes_through_to_loop_event() {
         }
         other => panic!("期望 Stop，得到 {other:?}"),
     }
+}
+
+/// 生命周期观测事件（BeforeRequest / AfterResponse）→ `to_loop_event` 必须返回
+/// `None`（静默跳过，与 agent-provider `consume/mod.rs` 消费语义对齐），严禁 panic。
+/// 历史教训：此处曾对观测事件写 `unreachable!`——观测事件与流事件同枚举且可 serde
+/// 往返，任何未来接线都会引爆整条流任务。此测试锁定拆雷语义，防回潮。
+#[test]
+fn lifecycle_observer_events_are_skipped_not_panic() {
+    let before = WireEvent::BeforeRequest {
+        info: agent_provider::events::ModelRequestInfo {
+            url: Some("https://api.example.com/v1/chat/completions".into()),
+            model: Some("deepseek-v4".into()),
+            max_tokens: Some(4096),
+            attempt: 1,
+        },
+    };
+    let after = WireEvent::AfterResponse {
+        info: agent_provider::events::ModelResponseInfo {
+            status: Some(200),
+            ok: true,
+            error: None,
+            duration_ms: 812,
+            usage: None,
+        },
+    };
+    assert!(
+        to_loop_event(before).is_none(),
+        "BeforeRequest 观测事件应被跳过而非 panic"
+    );
+    assert!(
+        to_loop_event(after).is_none(),
+        "AfterResponse 观测事件应被跳过而非 panic"
+    );
 }
 
 // ── 战役 I4 · R5 B-1：请求面思考档位拒绝接线（网络 I/O 前）──────────

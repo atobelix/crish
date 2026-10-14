@@ -9,6 +9,7 @@
 
 use crate::error::{DbFailure, DbFailureKind};
 use std::any::Any;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -86,12 +87,31 @@ impl StatsInner {
     }
 }
 
+/// 写连接连续 BEGIN 失败达到该阈值后触发写连接重建（自愈）。
+///
+/// 背景：若 ROLLBACK 本身失败（SQLITE_IOERR/FULL 等），写连接可能残留打开
+/// 的事务，此后每次 `BEGIN IMMEDIATE` 都报
+/// "cannot start a transaction within a transaction"，所有后续写入永久失败。
+/// 达到阈值即重建连接，避免 24h 不停机应用因单次 I/O 故障永久瘫痪。
+pub const WRITER_REBUILD_FAILURE_THRESHOLD: usize = 3;
+
+/// 写连接重建工厂：按既有初始化构造路径重新打开并初始化一个写连接。
+pub type WriterConnFactory =
+    Arc<dyn Fn() -> Result<rusqlite::Connection, DbFailure> + Send + Sync>;
+
 type AnySendResult = Result<Box<dyn Any + Send>, DbFailure>;
 type BoxedWriteFn = Box<dyn FnOnce(&mut rusqlite::Connection) -> AnySendResult + Send>;
 
 struct WriteTask {
     op: BoxedWriteFn,
     respond_to: oneshot::Sender<AnySendResult>,
+}
+
+/// Writer Actor 的可变状态：写连接 + 重建工厂 + 连续 BEGIN 失败计数。
+struct WriterState {
+    conn: rusqlite::Connection,
+    conn_factory: Option<WriterConnFactory>,
+    consecutive_begin_failures: usize,
 }
 
 /// SQLite 专用单写句柄 (Single Writer Handle)
@@ -113,11 +133,34 @@ impl DbWriteHandle {
         Self::spawn_dedicated_thread(conn, config, None)
     }
 
+    /// 同 [`DbWriteHandle::spawn`]，但附带写连接重建工厂用于故障自愈。
+    ///
+    /// 当 ROLLBACK 补救失败或 BEGIN 连续失败达到
+    /// [`WRITER_REBUILD_FAILURE_THRESHOLD`] 时，Actor 会调用该工厂按
+    /// 既有初始化路径重建写连接并继续服务（不退出循环、不 panic）。
+    pub fn spawn_with_rebuild(
+        conn: rusqlite::Connection,
+        config: GroupCommitConfig,
+        conn_factory: Option<WriterConnFactory>,
+    ) -> Self {
+        Self::spawn_dedicated_thread_with_rebuild(conn, config, None, conn_factory)
+    }
+
     /// 在专有的独立 OS 线程中启动 Single Writer Actor（隔绝通用异步运行时抖动）。
     pub fn spawn_dedicated_thread(
         conn: rusqlite::Connection,
         config: GroupCommitConfig,
         thread_name: Option<&str>,
+    ) -> Self {
+        Self::spawn_dedicated_thread_with_rebuild(conn, config, thread_name, None)
+    }
+
+    /// [`DbWriteHandle::spawn_dedicated_thread`] + 写连接重建工厂（自愈）。
+    pub fn spawn_dedicated_thread_with_rebuild(
+        conn: rusqlite::Connection,
+        config: GroupCommitConfig,
+        thread_name: Option<&str>,
+        conn_factory: Option<WriterConnFactory>,
     ) -> Self {
         let (sender, receiver) = mpsc::channel(config.channel_capacity);
         let stats = Arc::new(StatsInner::default());
@@ -131,7 +174,7 @@ impl DbWriteHandle {
                     .enable_all()
                     .build()
                     .expect("failed to create dedicated runtime for DbWriteActor");
-                rt.block_on(run_actor_loop(conn, receiver, config, stats_clone));
+                rt.block_on(run_actor_loop(conn, receiver, config, stats_clone, conn_factory));
             })
             .expect("failed to spawn dedicated OS thread for DbWriteActor");
 
@@ -253,11 +296,17 @@ impl DbWriteHandle {
 }
 
 async fn run_actor_loop(
-    mut conn: rusqlite::Connection,
+    conn: rusqlite::Connection,
     mut receiver: mpsc::Receiver<WriteTask>,
     config: GroupCommitConfig,
     stats: Arc<StatsInner>,
+    conn_factory: Option<WriterConnFactory>,
 ) {
+    let mut state = WriterState {
+        conn,
+        conn_factory,
+        consecutive_begin_failures: 0,
+    };
     let mut batch = Vec::with_capacity(config.max_batch_size);
 
     loop {
@@ -283,14 +332,168 @@ async fn run_actor_loop(
             }
         }
 
-        process_batch(&mut conn, &mut batch, &stats);
+        process_batch(&mut state, &mut batch, &stats);
         batch.clear();
     }
 }
 
-use std::panic::{catch_unwind, AssertUnwindSafe};
+/// 开启批次事务（BEGIN IMMEDIATE），带残留事务复位守卫与连接重建自愈。
+///
+/// 失败处理序：
+/// 1. BEGIN 前复位守卫：`is_autocommit()` 为 false（连接残留打开事务）→
+///    先执行补救性 `ROLLBACK`（带日志）再 BEGIN；
+/// 2. `BEGIN IMMEDIATE` 失败 → 若仍在事务内则补救性 `ROLLBACK` 后重试一次；
+/// 3. 补救 ROLLBACK 失败 → 累计连续失败计数并 `tracing::error` 留痕；
+/// 4. 连续失败达到 [`WRITER_REBUILD_FAILURE_THRESHOLD`] → 重建写连接
+///    （成功后清零计数并直接重试本次 BEGIN）。
+///
+/// 返回 `Err` 时按既有错误传播语义上报本次批次错误，Actor 存活等待下轮。
+fn begin_immediate_with_recovery(state: &mut WriterState) -> Result<(), String> {
+    // 守卫：BEGIN 前复位。连接若残留打开事务（autocommit 关闭，典型成因：
+    // 上一轮 COMMIT 失败后 ROLLBACK 也失败），先补救性 ROLLBACK，
+    // 避免 BEGIN IMMEDIATE 报 "cannot start a transaction within a transaction"
+    if !state.conn.is_autocommit() {
+        tracing::warn!(
+            target: "conex_db",
+            "检测到写连接残留打开事务，BEGIN IMMEDIATE 前执行补救性 ROLLBACK"
+        );
+        match state.conn.execute_batch("ROLLBACK;") {
+            Ok(()) => {
+                tracing::info!(target: "conex_db", "残留事务补救 ROLLBACK 成功，连接已复位");
+            }
+            Err(rb_err) => {
+                handle_rollback_failure(state, "BEGIN 前复位守卫", rb_err)?;
+            }
+        }
+    }
 
-fn process_batch(conn: &mut rusqlite::Connection, batch: &mut Vec<WriteTask>, stats: &StatsInner) {
+    if let Ok(()) = state.conn.execute_batch("BEGIN IMMEDIATE;") {
+        state.consecutive_begin_failures = 0;
+        return Ok(());
+    }
+
+    // BEGIN 失败：若连接仍处于事务内（守卫未覆盖的异常状态），补救 ROLLBACK
+    // 后重试。注意：无事务时跳过 ROLLBACK（此时 ROLLBACK 本身必然报
+    // "no transaction is active"，不应误判为连接不可用）
+    if !state.conn.is_autocommit() {
+        match state.conn.execute_batch("ROLLBACK;") {
+            Ok(()) => {
+                tracing::info!(target: "conex_db", "BEGIN 失败后补救 ROLLBACK 成功，重试 BEGIN");
+            }
+            Err(rb_err) => {
+                handle_rollback_failure(state, "BEGIN 失败补救", rb_err)?;
+            }
+        }
+    }
+
+    if let Ok(()) = state.conn.execute_batch("BEGIN IMMEDIATE;") {
+        state.consecutive_begin_failures = 0;
+        return Ok(());
+    }
+
+    state.consecutive_begin_failures += 1;
+    if state.consecutive_begin_failures >= WRITER_REBUILD_FAILURE_THRESHOLD {
+        tracing::warn!(
+            target: "conex_db",
+            "BEGIN IMMEDIATE 连续失败 {} 次（阈值 {}），重建写连接",
+            state.consecutive_begin_failures,
+            WRITER_REBUILD_FAILURE_THRESHOLD
+        );
+        if let Err(rebuild_err) = rebuild_write_connection(state) {
+            // 重建失败：上报本次批次错误，Actor 继续存活等待下轮重试
+            return Err(format!(
+                "begin immediate failed after rollback remediation; \
+                 writer connection rebuild failed: {rebuild_err}"
+            ));
+        }
+        // 重建成功：新连接无打开事务，直接重试本次 BEGIN
+        return match state.conn.execute_batch("BEGIN IMMEDIATE;") {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                state.consecutive_begin_failures = 1;
+                Err(format!("begin immediate failed after rebuild: {e}"))
+            }
+        };
+    }
+
+    Err("begin immediate failed after rollback remediation".to_string())
+}
+
+/// 补救 ROLLBACK 失败的统一处理：累计连续失败计数 + `tracing::error` 留痕；
+/// 达到 [`WRITER_REBUILD_FAILURE_THRESHOLD`] 时尝试重建写连接。
+///
+/// 返回 `Ok(())` 表示已通过重建恢复（新连接无打开事务，可继续 BEGIN）；
+/// 返回 `Err` 表示连接仍不可用，调用方应上报错误并等待下轮重试。
+fn handle_rollback_failure(
+    state: &mut WriterState,
+    context: &str,
+    rb_err: rusqlite::Error,
+) -> Result<(), String> {
+    state.consecutive_begin_failures += 1;
+    tracing::error!(
+        target: "conex_db",
+        "{context}: 补救 ROLLBACK 失败 ({rb_err})，连续失败 {}/{}",
+        state.consecutive_begin_failures,
+        WRITER_REBUILD_FAILURE_THRESHOLD
+    );
+    if state.consecutive_begin_failures >= WRITER_REBUILD_FAILURE_THRESHOLD {
+        tracing::warn!(
+            target: "conex_db",
+            "{context}: 连续失败达到阈值 {}，尝试重建写连接",
+            WRITER_REBUILD_FAILURE_THRESHOLD
+        );
+        rebuild_write_connection(state).map_err(|rebuild_err| {
+            tracing::error!(target: "conex_db", "{context}: 写连接重建失败: {rebuild_err}");
+            format!(
+                "{context}: remediation rollback failed ({rb_err}) and \
+                 writer connection rebuild failed: {rebuild_err}"
+            )
+        })
+    } else {
+        Err(format!(
+            "{context}: remediation rollback failed ({rb_err}); \
+             connection left with residual transaction"
+        ))
+    }
+}
+
+/// 事务收尾 ROLLBACK：失败时必须 `tracing::error` 留痕，禁止静默。
+/// 此处失败的残留事务由下一次 BEGIN 前的复位守卫
+/// （`begin_immediate_with_recovery`）补救。
+fn logged_cleanup_rollback(conn: &rusqlite::Connection, context: &str) {
+    if let Err(rb_err) = conn.execute_batch("ROLLBACK;") {
+        tracing::error!(
+            target: "conex_db",
+            "{context}: 清理 ROLLBACK 失败 ({rb_err})，残留事务将由下一次 BEGIN 前的复位守卫补救"
+        );
+    }
+}
+
+/// SAVEPOINT 清理（ROLLBACK TO + RELEASE）：失败时留痕（warn），禁止静默。
+fn logged_savepoint_cleanup(conn: &rusqlite::Connection, sp_rollback: &str, sp_release: &str) {
+    if let Err(e) = conn.execute_batch(sp_rollback) {
+        tracing::warn!(target: "conex_db", "SAVEPOINT ROLLBACK TO 失败 ({e})，批次事务将由外层 ROLLBACK/守卫兜底");
+    }
+    if let Err(e) = conn.execute_batch(sp_release) {
+        tracing::warn!(target: "conex_db", "SAVEPOINT RELEASE 失败 ({e})，批次事务将由外层 ROLLBACK/守卫兜底");
+    }
+}
+
+/// 重建写连接：通过工厂按既有初始化构造路径重开连接。
+/// 成功后清零连续失败计数；无工厂或工厂失败则返回错误。
+fn rebuild_write_connection(state: &mut WriterState) -> Result<(), DbFailure> {
+    let factory = state.conn_factory.as_ref().ok_or_else(|| DbFailure {
+        message: "no writer connection factory configured for rebuild".to_string(),
+        kind: DbFailureKind::Other("rebuild_unavailable".to_string()),
+    })?;
+    let new_conn = factory()?;
+    state.conn = new_conn;
+    state.consecutive_begin_failures = 0;
+    tracing::info!(target: "conex_db", "写连接重建成功，连续失败计数已清零");
+    Ok(())
+}
+
+fn process_batch(state: &mut WriterState, batch: &mut Vec<WriteTask>, stats: &StatsInner) {
     if batch.is_empty() {
         return;
     }
@@ -300,15 +503,16 @@ fn process_batch(conn: &mut rusqlite::Connection, batch: &mut Vec<WriteTask>, st
     if batch_len == 1 {
         // 单条快速路径（SEC-05 / SEC-06）：直接事务 BEGIN IMMEDIATE / COMMIT，免除内部单任务 SAVEPOINT / RELEASE 包装与解析开销
         let task = batch.remove(0);
-        let res = match conn.execute_batch("BEGIN IMMEDIATE;") {
+        let res = match begin_immediate_with_recovery(state) {
             Ok(()) => {
                 let op = task.op;
+                let conn = &mut state.conn;
                 let panic_res = catch_unwind(AssertUnwindSafe(|| op(conn)));
                 match panic_res {
                     Ok(Ok(val)) => match conn.execute_batch("COMMIT;") {
                         Ok(()) => Ok(val),
                         Err(e) => {
-                            let _ = conn.execute_batch("ROLLBACK;");
+                            logged_cleanup_rollback(conn, "单条路径 COMMIT 失败");
                             Err(DbFailure {
                                 message: format!("commit failed: {e}"),
                                 kind: DbFailureKind::Other("commit_failed".to_string()),
@@ -316,11 +520,11 @@ fn process_batch(conn: &mut rusqlite::Connection, batch: &mut Vec<WriteTask>, st
                         }
                     },
                     Ok(Err(err)) => {
-                        let _ = conn.execute_batch("ROLLBACK;");
+                        logged_cleanup_rollback(conn, "单条路径写闭包失败");
                         Err(err)
                     }
                     Err(panic_payload) => {
-                        let _ = conn.execute_batch("ROLLBACK;");
+                        logged_cleanup_rollback(conn, "单条路径写闭包 Panic");
                         let panic_msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
                             s.to_string()
                         } else if let Some(s) = panic_payload.downcast_ref::<String>() {
@@ -350,7 +554,7 @@ fn process_batch(conn: &mut rusqlite::Connection, batch: &mut Vec<WriteTask>, st
     }
 
     // 多条组提交路径：使用 SAVEPOINT 隔离每个任务，最外层统一 COMMIT
-    if let Err(e) = conn.execute_batch("BEGIN IMMEDIATE;") {
+    if let Err(e) = begin_immediate_with_recovery(state) {
         let err = DbFailure {
             message: format!("group commit begin immediate failed: {e}"),
             kind: DbFailureKind::Other("begin_failed".to_string()),
@@ -363,6 +567,7 @@ fn process_batch(conn: &mut rusqlite::Connection, batch: &mut Vec<WriteTask>, st
     }
 
     let mut pending_responses = Vec::with_capacity(batch_len);
+    let conn = &mut state.conn;
 
     for (idx, task) in batch.drain(..).enumerate() {
         let sp_name = format!("gc_sp_{idx}");
@@ -397,14 +602,12 @@ fn process_batch(conn: &mut rusqlite::Connection, batch: &mut Vec<WriteTask>, st
             }
             Ok(Err(err)) => {
                 stats.record_error();
-                let _ = conn.execute_batch(&sp_rollback);
-                let _ = conn.execute_batch(&sp_release);
+                logged_savepoint_cleanup(conn, &sp_rollback, &sp_release);
                 pending_responses.push((task.respond_to, Err(err)));
             }
             Err(panic_payload) => {
                 stats.record_error();
-                let _ = conn.execute_batch(&sp_rollback);
-                let _ = conn.execute_batch(&sp_release);
+                logged_savepoint_cleanup(conn, &sp_rollback, &sp_release);
                 let panic_msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
                     s.to_string()
                 } else if let Some(s) = panic_payload.downcast_ref::<String>() {
@@ -430,7 +633,7 @@ fn process_batch(conn: &mut rusqlite::Connection, batch: &mut Vec<WriteTask>, st
             }
         }
         Err(e) => {
-            let _ = conn.execute_batch("ROLLBACK;");
+            logged_cleanup_rollback(conn, "组提交批次 COMMIT 失败");
             stats.record_error();
             let err = DbFailure {
                 message: format!("group commit batch COMMIT failed: {e}"),

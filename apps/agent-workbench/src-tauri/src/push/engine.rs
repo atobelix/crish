@@ -64,6 +64,10 @@ pub const FLOOD_WINDOW_MS: u64 = 1_000;
 /// 单滑动窗口（1 秒）内允许进入去重/合并/持久化的最大推送意图数（ISSUE-12）：
 /// 超过该水位的瞬时洪峰在 $O(1)$ 时间内直接执行背压降级（`DecisionOutcome::Throttled`），
 /// 防止高频事件风暴触发同步 SQLite 去重写入或无界合并桶膨胀而阻塞 Tokio 异步运行时。
+/// 例外（推送丢失不可接受裁决）：P0 关键意图（`PushLevel::P0Critical`——审批
+/// 请求/run 失败/安全拦截等 9 场景，见 [SceneId::level]）旁路防洪丢弃——
+/// 防洪计数照常累加用于观测，但意图本身继续进入后续管线（审批是实时交互，
+/// 必须立即送达，绝不静默丢弃或延迟到夜间）。
 pub const FLOOD_MAX_INTENTS_PER_WINDOW: usize = 64;
 
 /// 决策引擎配置（R3-01；R3-02/03 接线时从设置面装配）
@@ -134,6 +138,9 @@ pub struct PushDecisionEngine {
     quiet_cfg: QuietHoursConfig,
     /// 1s 滑动窗口防洪水位追踪器（记录最近进入管线的意图时间戳，ISSUE-12）
     flood_window: std::collections::VecDeque<u64>,
+    /// 防洪背压累计丢弃计数（仅统计被纯丢弃的低优意图；P0 旁路不计入，
+    /// 供 tracing 观测与测试断言，ISSUE-12 可观测性补强）
+    flood_drop_total: u64,
     /// run-terminal(failed) 时刻表（runId → epoch ms；S10a 双推抑制）
     run_failed_at: std::collections::HashMap<String, u64>,
     /// S8e 事件流观察（R3-01a 补强）：task_id → 归属 run（task-started 登记，ISSUE-14 有界）
@@ -167,6 +174,7 @@ impl PushDecisionEngine {
             throttle: ThrottleTracker::new(cfg.limits),
             quiet_cfg: cfg.quiet,
             flood_window: std::collections::VecDeque::with_capacity(FLOOD_MAX_INTENTS_PER_WINDOW),
+            flood_drop_total: 0,
             run_failed_at: std::collections::HashMap::new(),
             task_owner_run: std::collections::HashMap::new(),
             task_owner_order: std::collections::VecDeque::new(),
@@ -243,7 +251,11 @@ impl PushDecisionEngine {
         // 0. 极端高频广播防洪背压护栏（ISSUE-12）：
         // 在进入同步去重（可能涉及 SQLite 锁/落盘）和合并桶分配前，执行 O(1) 滑动窗口限频，
         // 确保异常高频事件风暴下绝不阻塞 Tokio 异步运行时或撑爆合并桶。
-        if !self.check_flood_backpressure(now_ms) {
+        // P0 关键意图（审批请求/run 失败/安全拦截等）旁路防洪丢弃：计数照常
+        // 累加用于观测，但意图继续走管线——多 Agent 并发风暴下审批请求/run
+        // 失败绝不因防洪被静默丢弃（推送丢失不可接受裁决）。
+        let p0_critical = intent.level == PushLevel::P0Critical;
+        if !self.check_flood_backpressure(now_ms, p0_critical) {
             return vec![self.decision_from_intent(&intent, false, DecisionOutcome::Throttled)];
         }
 
@@ -503,13 +515,41 @@ impl PushDecisionEngine {
     /// $O(1)$ 滑动窗口防洪检查（ISSUE-12）：
     /// 清理超过 1s 窗口的时间戳；若当前 1s 窗口内意图数已达 `FLOOD_MAX_INTENTS_PER_WINDOW`，
     /// 返回 `false` 触发背压限频。
-    fn check_flood_backpressure(&mut self, now_ms: u64) -> bool {
+    ///
+    /// `bypass = true`（P0 关键意图）时永不返回 `false`：超限仍照常累加计数
+    /// （观测用）并放行。窗口由 [Self::prune_flood_window] 按 1s 时间剪枝
+    /// （decide/flush 均触发），内存上界受实际事件速率约束（每条 8 字节时间戳）。
+    fn check_flood_backpressure(&mut self, now_ms: u64, bypass: bool) -> bool {
         self.prune_flood_window(now_ms);
         if self.flood_window.len() >= FLOOD_MAX_INTENTS_PER_WINDOW {
+            if bypass {
+                // P0 旁路：计数照常累加（观测用），永不因防洪丢弃
+                self.flood_window.push_back(now_ms);
+                tracing::debug!(
+                    target: "push",
+                    window_len = self.flood_window.len(),
+                    limit = FLOOD_MAX_INTENTS_PER_WINDOW,
+                    "防洪背压：P0 关键意图旁路放行（计数观测，不丢弃）"
+                );
+                return true;
+            }
+            self.flood_drop_total += 1;
+            tracing::warn!(
+                target: "push",
+                window_len = self.flood_window.len(),
+                limit = FLOOD_MAX_INTENTS_PER_WINDOW,
+                drop_total = self.flood_drop_total,
+                "防洪背压：低优意图降级丢弃（1s 滑动窗口超水位）"
+            );
             return false;
         }
         self.flood_window.push_back(now_ms);
         true
+    }
+
+    /// 防洪背压累计丢弃条数（仅低优意图；诊断/测试用）
+    pub fn flood_drop_total(&self) -> u64 {
+        self.flood_drop_total
     }
 
     fn prune_flood_window(&mut self, now_ms: u64) {
@@ -627,8 +667,8 @@ impl Default for PushDecisionEngine {
 mod tests {
     use super::*;
     use conex_types::events::{
-        PermissionRequest, RunTerminalStatus, SecurityAuditDecision, SecurityAuditOperation,
-        SubagentEndStatus, ToolMetadata,
+        ApprovalDecision, PermissionRequest, RunTerminalStatus, SecurityAuditDecision,
+        SecurityAuditOperation, SubagentEndStatus, ToolMetadata,
     };
     use conex_types::impact::ImpactAssessment;
 
@@ -722,6 +762,17 @@ mod tests {
             batch_id: "b-1".to_string(),
             timestamp: "t".to_string(),
             calls: vec![],
+        }
+    }
+
+    /// P1 直发场景（timer-fired）：防洪测试的普通意图填充素材
+    /// （task-suspicious 属 P0，会旁路防洪，不能作防洪丢弃断言素材）
+    fn timer_fired(id: &str) -> AgentEvent {
+        AgentEvent::TimerFired {
+            session_id: "s-7".to_string(),
+            timer_id: id.to_string(),
+            prompt: "检查任务进度".to_string(),
+            fired_at_ms: T0,
         }
     }
 
@@ -1169,6 +1220,9 @@ mod tests {
         assert!(!replay[0].deliver);
     }
 
+    /// 防洪背压基线：普通（非 P0）意图洪峰超水位降级、窗口过后恢复
+    /// （P1 直发场景 timer-fired 作填充素材；P0 旁路行为见
+    /// [flood_backpressure_bypasses_p0_intents]）
     #[test]
     fn flood_backpressure_throttles_burst_and_recovers_after_window() {
         let mut cfg = EngineConfig::default();
@@ -1180,24 +1234,167 @@ mod tests {
         let mut engine = PushDecisionEngine::new(cfg);
 
         for i in 0..FLOOD_MAX_INTENTS_PER_WINDOW {
-            let out = engine.decide(&task_suspicious(&format!("t-{i}")), &ctx(), T0 + i as u64);
+            let out = engine.decide(&timer_fired(&format!("timer-{i}")), &ctx(), T0 + i as u64);
             assert_eq!(out[0].outcome, DecisionOutcome::Delivered);
             assert!(out[0].deliver);
         }
 
         // 第 65 条（同 1s 窗口内）触发防洪背压降级
-        let overflow = engine.decide(&task_suspicious("t-overflow"), &ctx(), T0 + 500);
+        let overflow = engine.decide(&timer_fired("timer-overflow"), &ctx(), T0 + 500);
         assert!(!overflow[0].deliver);
         assert_eq!(overflow[0].outcome, DecisionOutcome::Throttled);
+        // 可观测性：低优丢弃计数 +1（tracing warn 同步输出）
+        assert_eq!(engine.flood_drop_total(), 1);
 
         // 1s 滑动窗口过后自动恢复放行
         let recovered = engine.decide(
-            &task_suspicious("t-recovered"),
+            &timer_fired("timer-recovered"),
             &ctx(),
             T0 + FLOOD_WINDOW_MS + 100,
         );
         assert!(recovered[0].deliver);
         assert_eq!(recovered[0].outcome, DecisionOutcome::Delivered);
+    }
+
+    /// P0 关键意图旁路防洪（推送丢失不可接受裁决）：1s 洪峰超过水位后，
+    /// 普通意图照常背压降级，而全部 9 个 P0 场景（审批请求/审批过期/run 失败/
+    /// 子代理失败/任务卡死/任务失败/运行异常/需介入/安全拦截）永不因防洪被丢弃——
+    /// 直发族当场送达；审批/任务失败合并族照常入桶（批次关闭 / flush 兜底出桶，
+    /// 绝不延迟到夜间摘要）。
+    #[test]
+    fn flood_backpressure_bypasses_p0_intents() {
+        let mut cfg = EngineConfig::default();
+        cfg.limits = ThrottleLimits {
+            per_device_per_minute: 1000,
+            per_session_per_10min: 1000,
+            per_device_per_day: 1000,
+        };
+        let mut engine = PushDecisionEngine::new(cfg);
+
+        // P1 直发场景（timer-fired）灌满 1s 防洪水位
+        for i in 0..FLOOD_MAX_INTENTS_PER_WINDOW {
+            engine.decide(&timer_fired(&format!("timer-{i}")), &ctx(), T0 + i as u64);
+        }
+        // 第 65 条普通意图（同 1s 窗口）→ 防洪背压降级
+        let overflow = engine.decide(&timer_fired("timer-overflow"), &ctx(), T0 + 500);
+        assert!(!overflow[0].deliver);
+        assert_eq!(overflow[0].outcome, DecisionOutcome::Throttled);
+
+        // ── 同一洪峰窗口内，P0 意图逐一旁路防洪 ──
+
+        // S4 run 失败（P0 直发）
+        let failed = engine.decide(
+            &run_terminal("run-77", RunTerminalStatus::Failed),
+            &ctx(),
+            T0 + 510,
+        );
+        assert!(failed[0].deliver, "run-failed 永不因防洪丢弃");
+        assert_eq!(failed[0].outcome, DecisionOutcome::Delivered);
+
+        // S8c 任务卡死（P0 直发）
+        let suspicious = engine.decide(&task_suspicious("t-p0-1"), &ctx(), T0 + 520);
+        assert!(suspicious[0].deliver, "task-suspicious 永不因防洪丢弃");
+        assert_eq!(suspicious[0].outcome, DecisionOutcome::Delivered);
+
+        // S10a 运行异常（P0 直发；独立 runId 防与 run-77 的 S10a 双推抑制互相干扰）
+        let err = engine.decide(&runtime_error(), &ctx_run("run-88"), T0 + 530);
+        assert!(err[0].deliver, "runtime-error 永不因防洪丢弃");
+        assert_eq!(err[0].outcome, DecisionOutcome::Delivered);
+
+        // S10b 需人工介入（P0 直发）
+        let intervene = engine.decide(
+            &AgentEvent::RuntimeInterventionRequired {
+                session_id: "s-7".to_string(),
+                timestamp: "t".to_string(),
+                reason: "缺少 API 密钥".to_string(),
+                choices: vec![],
+                message: "请选择".to_string(),
+            },
+            &ctx_run("run-89"),
+            T0 + 540,
+        );
+        assert!(intervene[0].deliver, "intervention-required 永不因防洪丢弃");
+        assert_eq!(intervene[0].outcome, DecisionOutcome::Delivered);
+
+        // S11 安全拦截（P0 直发）
+        let audit = engine.decide(
+            &AgentEvent::SecurityAudit {
+                session_id: "s-7".to_string(),
+                timestamp: "t".to_string(),
+                operation: SecurityAuditOperation::Delete,
+                targets: vec!["C:\\a".to_string()],
+                impact: ImpactAssessment::default(),
+                decision: SecurityAuditDecision::Blocked,
+                permission_mode: None,
+                tool_call_id: Some("tc-p0".to_string()),
+            },
+            &ctx(),
+            T0 + 550,
+        );
+        assert!(audit[0].deliver, "security-blocked 永不因防洪丢弃");
+        assert_eq!(audit[0].outcome, DecisionOutcome::Delivered);
+
+        // S2 审批过期（P0 直发）
+        let expired = engine.decide(
+            &AgentEvent::ApprovalResolved {
+                session_id: "s-7".to_string(),
+                tool_call_id: "tc-p0-exp".to_string(),
+                request_id: None,
+                decision: ApprovalDecision::Expired,
+                timestamp: "t".to_string(),
+            },
+            &ctx(),
+            T0 + 560,
+        );
+        assert!(expired[0].deliver, "approval-expired 永不因防洪丢弃");
+        assert_eq!(expired[0].outcome, DecisionOutcome::Delivered);
+
+        // S7 子代理失败（P0 直发）
+        let sub_failed = engine.decide(
+            &AgentEvent::SubagentEnded {
+                session_id: "s-7".to_string(),
+                subagent_id: "sa-p0".to_string(),
+                subagent_run_id: "sa-p0-run".to_string(),
+                status: SubagentEndStatus::Failed,
+                summary: None,
+                ended_at: "t".to_string(),
+                subagent_session_id: None,
+            },
+            &ctx(),
+            T0 + 570,
+        );
+        assert!(sub_failed[0].deliver, "subagent-failed 永不因防洪丢弃");
+        assert_eq!(sub_failed[0].outcome, DecisionOutcome::Delivered);
+
+        // S1 审批请求（P0，审批合并族）：不被防洪丢弃 → 入桶，批次关闭即出
+        assert!(
+            engine
+                .decide(&approval("tc-p0-req"), &ctx(), T0 + 580)
+                .is_empty(),
+            "审批请求不被防洪丢弃（入审批桶等待批次关闭）"
+        );
+        let closed = engine.decide(&batch_end(), &ctx(), T0 + 590);
+        assert_eq!(closed.len(), 1);
+        assert!(closed[0].deliver, "审批经批次关闭立即送达（不入夜间摘要）");
+        assert_eq!(closed[0].scene, SceneId::ApprovalRequested);
+        assert_eq!(closed[0].outcome, DecisionOutcome::Coalesced);
+
+        // S8d 任务失败（P0，合并族）：不被防洪丢弃 → 入桶，flush 兜底出桶
+        assert!(
+            engine
+                .decide(&task_failed("t-p0-2"), &ctx(), T0 + 600)
+                .is_empty(),
+            "task-failed 不被防洪丢弃（入合并桶）"
+        );
+        let drained = engine.flush_all(T0 + 601);
+        assert!(
+            drained
+                .iter()
+                .any(|d| d.scene == SceneId::TaskFailed && d.deliver),
+            "task-failed 经 flush 兜底出桶"
+        );
+        // 可观测性：全程唯一被防洪丢弃的是第 65 条普通意图；9 个 P0 旁路不计数
+        assert_eq!(engine.flood_drop_total(), 1);
     }
 
     #[test]

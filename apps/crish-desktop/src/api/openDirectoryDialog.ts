@@ -25,7 +25,7 @@ export class DirectoryDialogUnavailableError extends Error {
  * @throws {DirectoryDialogUnavailableError} 插件不可用时抛出（不记录完整路径）
  */
 export async function openDirectoryDialog(
-  title?: string,
+  title?: string
 ): Promise<string | null> {
   let selected: string | string[] | null;
   try {
@@ -40,21 +40,62 @@ export async function openDirectoryDialog(
   }
 
   if (typeof selected === 'string' && selected.trim()) {
-    return selected;
+    return selected.trim();
   }
   // 用户取消 / 未选择
   return null;
 }
 
 /**
+ * 打开系统原生「多文件夹选择」对话框。
+ * @param title 对话框标题
+ * @returns 选中的绝对路径列表；用户取消返回空数组
+ */
+export async function openDirectoriesDialog(title?: string): Promise<string[]> {
+  let selected: unknown;
+  try {
+    selected = await open({
+      directory: true,
+      multiple: true,
+      title: title ?? '选择文件夹',
+    });
+  } catch {
+    throw new DirectoryDialogUnavailableError();
+  }
+
+  if (Array.isArray(selected)) {
+    return selected.filter(
+      (p): p is string => typeof p === 'string' && p.trim().length > 0
+    );
+  }
+  if (typeof selected === 'string' && selected.trim()) {
+    return [selected.trim()];
+  }
+  return [];
+}
+
+/**
  * 安全版：取消与不可用均返回 null（供按钮 onClick 直接 await）。
  */
 export async function openDirectoryDialogSafe(
-  title?: string,
+  title?: string
 ): Promise<string | null> {
   try {
     return await openDirectoryDialog(title);
   } catch {
     return null;
+  }
+}
+
+/**
+ * 安全版多目录选择：取消与不可用均返回空数组。
+ */
+export async function openDirectoriesDialogSafe(
+  title?: string
+): Promise<string[]> {
+  try {
+    return await openDirectoriesDialog(title);
+  } catch {
+    return [];
   }
 }

@@ -457,6 +457,34 @@ describe('T4.1（R-04）：setActual 同值跳过', () => {
     expect(vsm.setActual('a', 999, 0)).toBe(false);
     expect(vsm.getActualHeight('a')).toBe(null);
   });
+
+  it('跨会话切换保留实测高度并在 restoreRememberedActuals 时精确恢复', () => {
+    const vsm = new VirtualScrollManager(100);
+    vsm.syncOrder(['m1', 'm2']);
+    vsm.setActual('m1', 320);
+    vsm.setActual('m2', 450);
+
+    // 切换到另一个会话后 clear
+    vsm.clear();
+    expect(vsm.hasActualHeight('m1')).toBe(false);
+    expect(vsm.hasActualHeight('m2')).toBe(false);
+    expect(vsm.getHeight('m1')).toBe(100);
+
+    // 切回原会话恢复
+    vsm.syncOrder(['m1', 'm2']);
+    const restored = vsm.restoreRememberedActuals(['m1', 'm2']);
+    expect(restored).toBe(true);
+    expect(vsm.getActualHeight('m1')).toBe(320);
+    expect(vsm.getActualHeight('m2')).toBe(450);
+    expect(vsm.getTotalHeight()).toBe(770);
+
+    // clearRememberedHeights 在字号改变时彻底清空
+    vsm.clear();
+    vsm.clearRememberedHeights();
+    vsm.syncOrder(['m1', 'm2']);
+    expect(vsm.restoreRememberedActuals(['m1', 'm2'])).toBe(false);
+    expect(vsm.getActualHeight('m1')).toBe(null);
+  });
 });
 
 describe('Fenwick Tree (BIT) Dynamic Height & Binary Search Precision', () => {

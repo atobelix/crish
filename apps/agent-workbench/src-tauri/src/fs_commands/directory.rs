@@ -13,7 +13,18 @@ pub(crate) fn list_directory(
     app: &tauri::AppHandle,
     path: String,
 ) -> Result<ListDirectoryResult, FileCommandError> {
-    let guard = crate::workspace::resolve_guard(app, &path)?;
+    let guard = match crate::workspace::resolve_guard(app, &path) {
+        Ok(g) => g,
+        Err(err) => {
+            // 桌面端只读目录兜底：若目录不在当前工作区内，但为绝对路径且为目录，放行只读查看，
+            // 满足外部会话探测与通用文件系统只读浏览需求。
+            let path_obj = std::path::Path::new(&path);
+            if path_obj.is_absolute() && path_obj.is_dir() {
+                return list_directory_entries(path_obj);
+            }
+            return Err(err);
+        }
+    };
     list_directory_with_guard(&guard, &path)
 }
 
@@ -22,6 +33,10 @@ pub(crate) fn list_directory_with_guard(
     path: &str,
 ) -> Result<ListDirectoryResult, FileCommandError> {
     let dir_path = guard.resolve_existing(path)?;
+    list_directory_entries(&dir_path)
+}
+
+fn list_directory_entries(dir_path: &std::path::Path) -> Result<ListDirectoryResult, FileCommandError> {
     if !dir_path.is_dir() {
         return Err(FileCommandError::new(
             ERR_NOT_DIRECTORY,
@@ -29,7 +44,7 @@ pub(crate) fn list_directory_with_guard(
         ));
     }
 
-    let entries = std::fs::read_dir(&dir_path).map_err(|e| {
+    let entries = std::fs::read_dir(dir_path).map_err(|e| {
         FileCommandError::new(ERR_READ_DIRECTORY, format!("Failed to read directory: {e}"))
     })?;
 

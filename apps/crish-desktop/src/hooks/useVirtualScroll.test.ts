@@ -258,6 +258,45 @@ describe('T4.1（R-04）：setActual 同值跳过不触发 actualTick', () => {
     });
     expect(result.current.manager.getActualHeight('a')).toBe(200);
   });
+
+  it('已有实测时，阈值内复测不写模型，避免切标签回弹', () => {
+    const { result } = renderHook(() =>
+      useVirtualScroll({ ids: ['a'], itemCount: 1, fallbackHeight: 100 })
+    );
+    act(() => {
+      result.current.syncOrder(['a']);
+      result.current.manager.setActual('a', 100);
+    });
+    act(() => {
+      result.current.setActual('a', 103);
+      result.current.flushPendingGeometry();
+    });
+    expect(result.current.manager.getActualHeight('a')).toBe(100);
+
+    act(() => {
+      result.current.setActual('a', 106);
+      result.current.flushPendingGeometry();
+    });
+    expect(result.current.manager.getActualHeight('a')).toBe(106);
+    expect(result.current.totalHeight).toBe(106);
+  });
+
+  it('首次实测即使只差 2px 也写入，占位与模型一起更新', () => {
+    const { result } = renderHook(() =>
+      useVirtualScroll({ ids: ['a'], itemCount: 1, fallbackHeight: 100 })
+    );
+    act(() => {
+      result.current.syncOrder(['a']);
+      result.current.preloadEstimates([{ id: 'a', height: 100 }]);
+    });
+    expect(result.current.manager.getActualHeight('a')).toBeNull();
+    act(() => {
+      result.current.setActual('a', 102);
+      result.current.flushPendingGeometry();
+    });
+    expect(result.current.manager.getActualHeight('a')).toBe(102);
+    expect(result.current.totalHeight).toBe(102);
+  });
 });
 
 describe('W3-A：程序吸底令牌排他、C3 双帧兜底与流式即时测高契约', () => {
@@ -456,7 +495,7 @@ describe('W3-A：程序吸底令牌排他、C3 双帧兜底与流式即时测高
 
     // 提取 setActual 函数体，断言内部不含 bumpGestureEpoch
     const setActualMatch = vsSrc.match(
-      /const setActual = useCallback\([\s\S]*?\],\s*\);/
+      /const setActual = useCallback\([\s\S]*?\](?:,\s*)?\);/
     );
     expect(setActualMatch).not.toBeNull();
     expect(setActualMatch![0]).not.toContain('bumpGestureEpoch');

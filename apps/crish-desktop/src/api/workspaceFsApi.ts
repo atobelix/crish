@@ -11,15 +11,15 @@ import { countTextLines } from './countTextLines';
 import {
   assertWorkspacePath,
   getWorkspaceRoot,
-  isAbsoluteFsPath,
-  isInsideWorkspace,
   joinWorkspaceRootPath,
+  resolveReadableFilePath,
   resolveWorkspacePath,
 } from './workspacePathResolver';
 export {
   assertWorkspacePath,
   isAbsoluteFsPath,
   isInsideWorkspace,
+  resolveReadableFilePath,
   resolveWorkspacePath,
   type ResolvedPath,
 } from './workspacePathResolver';
@@ -83,7 +83,7 @@ export const FILE_PREVIEW_CODE_BUDGET = FILE_PREVIEW_MAX_LINES;
 export function nextFilePreviewLineBudget(
   currentBudget: number,
   chunk: number = FILE_PREVIEW_CHUNK_LINES,
-  max: number = FILE_PREVIEW_MAX_LINES,
+  max: number = FILE_PREVIEW_MAX_LINES
 ): number | null {
   const cur = Math.max(0, Math.floor(currentBudget));
   const step = Math.max(1, Math.floor(chunk));
@@ -94,10 +94,14 @@ export function nextFilePreviewLineBudget(
 
 export async function readTextFile(
   filePath: string,
-  maxLines = FILE_PREVIEW_CHUNK_LINES,
+  maxLines = FILE_PREVIEW_CHUNK_LINES
 ): Promise<FsReadResult> {
-  const path = assertWorkspacePath(filePath);
-  const lines = Math.max(1, Math.min(FILE_PREVIEW_MAX_LINES, Math.floor(maxLines)));
+  const path = resolveReadableFilePath(filePath);
+  if (!path) throw new Error(`无效或不合法的文件路径: ${filePath}`);
+  const lines = Math.max(
+    1,
+    Math.min(FILE_PREVIEW_MAX_LINES, Math.floor(maxLines))
+  );
 
   const res = await invokeResult<{
     content?: string;
@@ -134,7 +138,7 @@ export async function readTextFile(
 export async function writeTextFile(
   filePath: string,
   content: string,
-  overwrite = false,
+  overwrite = false
 ): Promise<void> {
   if (!filePath) throw new Error('路径为空');
   const path = assertWorkspacePath(filePath);
@@ -151,12 +155,20 @@ export async function writeTextFile(
 /** 资源 URL（图片 / PDF 内嵌预览） */
 export async function toAssetUrl(filePath: string): Promise<string | null> {
   if (!filePath) throw new Error('路径为空');
-  if (filePath.startsWith('http://') || filePath.startsWith('https://')) return filePath;
-  const path = assertWorkspacePath(filePath);
+  if (filePath.startsWith('http://') || filePath.startsWith('https://'))
+    return filePath;
+  const path = resolveReadableFilePath(filePath);
+  if (!path) throw new Error(`路径越界或不合法：${filePath}`);
   try {
     const mod = await import('@tauri-apps/api/core').catch(() => null);
-    if (mod && typeof (mod as { convertFileSrc?: (p: string) => string }).convertFileSrc === 'function') {
-      return (mod as { convertFileSrc: (p: string) => string }).convertFileSrc(path);
+    if (
+      mod &&
+      typeof (mod as { convertFileSrc?: (p: string) => string })
+        .convertFileSrc === 'function'
+    ) {
+      return (mod as { convertFileSrc: (p: string) => string }).convertFileSrc(
+        path
+      );
     }
   } catch {
     /* swallow-ok: 浏览器/dev 环境无 convertFileSrc 时回退 null（调用方走原始路径） */
@@ -166,7 +178,16 @@ export async function toAssetUrl(filePath: string): Promise<string | null> {
 
 /** 在系统资源管理器中显示 */
 export async function revealInOs(filePath: string): Promise<void> {
-  const path = assertWorkspacePath(filePath);
+  const path = resolveReadableFilePath(filePath);
+  if (!path) throw new Error('路径为空或不合法');
+  try {
+    const { openPathDefault } = await import('./hostOpenersApi');
+    const target = path.includes('.') ? pathDirname(path) : path;
+    await openPathDefault(target || path);
+    return;
+  } catch {
+    /* fallback to workbench_open_host_target */
+  }
   const res = await invokeResult('workbench_open_host_target', {
     openerId: 'system-file-manager',
     target: { type: 'path', path },
@@ -176,7 +197,11 @@ export async function revealInOs(filePath: string): Promise<void> {
   throw new Error('无法在系统资源管理器中打开（需桌面壳）');
 }
 
-export { pathBasename, detectFileKind, isMarkdownFilename } from './workspaceFileKinds';
+export {
+  pathBasename,
+  detectFileKind,
+  isMarkdownFilename,
+} from './workspaceFileKinds';
 
 export function pathDirname(p: string): string {
   return parentPath(p);
@@ -263,9 +288,12 @@ export function toCanonicalFsPath(path: string): string {
   norm = prefix ? prefix + stack.join('/') : stack.join('/');
 
   // 4. Windows 盘符小写标准化补强（若前面未走 isWindowsDrive 分支）
-  norm = norm.replace(/^([a-zA-Z]):(\/|$)/, (_, drive: string, rest: string) => {
-    return `${drive.toLowerCase()}:${rest || '/'}`;
-  });
+  norm = norm.replace(
+    /^([a-zA-Z]):(\/|$)/,
+    (_, drive: string, rest: string) => {
+      return `${drive.toLowerCase()}:${rest || '/'}`;
+    }
+  );
 
   // 5. 消除非根路径末尾多余斜杠（保留 'c:/'、'/'、'//'）
   const isRoot = norm === '/' || norm === '//' || /^[a-z]:\/$/i.test(norm);
@@ -279,9 +307,15 @@ export function toCanonicalFsPath(path: string): string {
 /**
  * 跨平台路径等值比对（考虑 Windows 文件系统大小写不敏感与斜杠异构）
  */
-export function isSameFsPath(pathA: string | null | undefined, pathB: string | null | undefined): boolean {
+export function isSameFsPath(
+  pathA: string | null | undefined,
+  pathB: string | null | undefined
+): boolean {
   if (!pathA || !pathB) return false;
-  return toCanonicalFsPath(pathA).toLowerCase() === toCanonicalFsPath(pathB).toLowerCase();
+  return (
+    toCanonicalFsPath(pathA).toLowerCase() ===
+    toCanonicalFsPath(pathB).toLowerCase()
+  );
 }
 
 /**
@@ -294,7 +328,10 @@ export function isSameFsPath(pathA: string | null | undefined, pathB: string | n
  * 4. 目标与工作区根相同、或目标是根的直属子文件时，返回空数组；
  * 5. 返回的祖先数组不包含根自身，不包含目标自身，严格按照自顶向下的物理层级排序。
  */
-export function getAncestorDirPaths(targetPath: string, rootPath: string): string[] {
+export function getAncestorDirPaths(
+  targetPath: string,
+  rootPath: string
+): string[] {
   const canonTarget = toCanonicalFsPath(targetPath);
   const canonRoot = toCanonicalFsPath(rootPath);
 
@@ -309,9 +346,14 @@ export function getAncestorDirPaths(targetPath: string, rootPath: string): strin
   const normTargetLower = canonTarget.toLowerCase();
 
   // 安全前缀：杜绝 c:/work 与 c:/work-extra 兄弟前缀假碰撞
-  const rootPrefix = normRootLower.endsWith('/') ? normRootLower : normRootLower + '/';
+  const rootPrefix = normRootLower.endsWith('/')
+    ? normRootLower
+    : normRootLower + '/';
 
-  if (!normTargetLower.startsWith(rootPrefix) || normTargetLower === normRootLower) {
+  if (
+    !normTargetLower.startsWith(rootPrefix) ||
+    normTargetLower === normRootLower
+  ) {
     return [];
   }
 
@@ -323,7 +365,11 @@ export function getAncestorDirPaths(targetPath: string, rootPath: string): strin
     const currLower = currCanon.toLowerCase();
 
     // 终止判定：抵达工作区根或已收敛至根以上
-    if (currLower === normRootLower || currLower === normRootLower.replace(/\/+$/, '') || currLower.length <= normRootLower.length) {
+    if (
+      currLower === normRootLower ||
+      currLower === normRootLower.replace(/\/+$/, '') ||
+      currLower.length <= normRootLower.length
+    ) {
       break;
     }
 
