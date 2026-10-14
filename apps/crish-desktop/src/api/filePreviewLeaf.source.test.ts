@@ -43,6 +43,10 @@ const FILE_PREVIEW = join(DIR, '../components/files/FilePreview.tsx');
 const FILE_VIEWER = join(DIR, '../components/files/FileViewerCard.tsx');
 const FILE_ACTIONS = join(DIR, '../components/files/FileActions.tsx');
 const COMPOSER = join(DIR, '../components/chat-composer/ChatComposer.tsx');
+const COMPOSER_FILE_HANDLERS = join(
+  DIR,
+  '../components/chat-composer/useComposerFileHandlers.ts'
+);
 const ATTACH_BAR = join(
   DIR,
   '../components/chat-composer/ComposerAttachmentBar.tsx'
@@ -80,8 +84,12 @@ describe('S6 · 预览进叶源码钉（≠ 真壳到达绿）', () => {
     expect(previewSrc).not.toMatch(/document\.body\.appendChild/);
     expect(previewSrc).not.toMatch(/createPortal\s*\(/);
     expect(previewSrc).not.toMatch(/position:\s*fixed[\s\S]{0,80}inset:\s*0/);
-    expect(readUtf8(FILE_PREVIEW)).toMatch(/禁止挂 document\.body 或整屏覆盖层/);
-    expect(readUtf8(FILE_VIEWER)).toMatch(/data-file-preview-host="file-viewer"/);
+    expect(readUtf8(FILE_PREVIEW)).toMatch(
+      /禁止挂 document\.body 或整屏覆盖层/
+    );
+    expect(readUtf8(FILE_VIEWER)).toMatch(
+      /data-file-preview-host="file-viewer"/
+    );
   });
 
   it('onOpenPath 只调 openFileInPanel，不叠开 files、不挂 note/Notebook', () => {
@@ -102,14 +110,18 @@ describe('S6 · 预览进叶源码钉（≠ 真壳到达绿）', () => {
     expect(openerSrc).toMatch(/FilePreviewLeafHost = 'files' \| 'file-viewer'/);
     expect(openerSrc).not.toMatch(/openToolInSession\([^)]*['"]note['"]/);
     expect(openerSrc).not.toMatch(/host === ['"]note['"]/);
-    expect(openerSrc).not.toMatch(/applyAndCommit|persistDocument|note_document/);
+    expect(openerSrc).not.toMatch(
+      /applyAndCommit|persistDocument|note_document/
+    );
   });
 
   it('file-viewer 打开器拒 note，URI 仍是 file-viewer:，不 persist', () => {
     const src = readUtf8(OPEN_TOOL);
     expect(src).toMatch(/file-viewer:\$\{trimmed\}/);
     expect(src).toMatch(/\/\^\(note\|notebook\)\(:\|\$\)\/i/);
-    expect(src).not.toMatch(/apply\+commit|applyAndCommit|persistDocument|note_document/);
+    expect(src).not.toMatch(
+      /apply\+commit|applyAndCommit|persistDocument|note_document/
+    );
     expect(src).not.toMatch(/openToolInSession\([^)]*['"]note['"]/);
   });
 
@@ -124,6 +136,7 @@ describe('S6 · 预览进叶源码钉（≠ 真壳到达绿）', () => {
 
   it('附件 / ChatCard 只接线 onOpenPath，不重做附件皮', () => {
     const composer = readUtf8(COMPOSER);
+    const composerFileHandlers = readUtf8(COMPOSER_FILE_HANDLERS);
     const bar = readUtf8(ATTACH_BAR);
     const types = readUtf8(COMPOSER_TYPES);
     const card = readUtf8(ATTACHMENT_CARD);
@@ -132,16 +145,19 @@ describe('S6 · 预览进叶源码钉（≠ 真壳到达绿）', () => {
     expect(types).toMatch(/onOpenPath\?: \(filePath: string\) => void/);
     expect(composer).toMatch(/onOpenPath/);
     // 宿主委托：closest('[data-file-open-path]') → getAttribute → onOpenPath(path)
-    expect(composer).toMatch(/closest\('\[data-file-open-path\]'\)/);
-    expect(composer).toMatch(/onOpenPath\(path\)/);
+    // 真源已拆分至 useComposerFileHandlers.ts（ChatComposer 保留消费委托）。
+    expect(composerFileHandlers).toMatch(
+      /closest\('\[data-file-open-path\]'\)/
+    );
+    expect(composerFileHandlers).toMatch(/onOpenPath\(path\)/);
     // 附件芯片写出点真源 = AttachmentCard（path 优先，name 兜底），
     // 非 ComposerAttachmentBar 内联皮；bar 只做编排并委托 AttachmentCard。
-    expect(card).toMatch(
-      /data-file-open-path=\{item\.path \|\| item\.name\}/
-    );
+    expect(card).toMatch(/data-file-open-path=\{item\.path \|\| item\.name\}/);
     expect(bar).toMatch(/AttachmentCard/);
     expect(bar).not.toMatch(/fp-root|createPortal|document\.body\.appendChild/);
-    expect(card).not.toMatch(/fp-root|createPortal|document\.body\.appendChild/);
+    expect(card).not.toMatch(
+      /fp-root|createPortal|document\.body\.appendChild/
+    );
   });
 
   it('无 docId 打开路径不创建 persist', () => {
@@ -153,7 +169,9 @@ describe('S6 · 预览进叶源码钉（≠ 真壳到达绿）', () => {
       readUtf8(SESSION),
     ].join('\n');
     expect(src).not.toMatch(/applyAndCommit|apply\+commit/);
-    expect(src).not.toMatch(/persistDocument|createNoteDocument|note_document_create/);
+    expect(src).not.toMatch(
+      /persistDocument|createNoteDocument|note_document_create/
+    );
     expect(src).not.toMatch(/DEFAULT_CHAT_NOTE_DOC_ID/);
   });
 });

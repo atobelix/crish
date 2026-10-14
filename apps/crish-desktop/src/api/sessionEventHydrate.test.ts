@@ -696,12 +696,14 @@ describe('projectEventsToMessages id 稳定 / 幂等', () => {
 
     const merged = mergeMessagesById(localFinal, fromEvents);
     expect(merged).toHaveLength(2);
+    // 四级因果序 SSOT（messageOrderKey）：hydrate 携带引擎 seq 的消息按物理序
+    // 优先于本地无 seq 条目落位（rekey 合并后顺序稳定且幂等）。
     expect(merged.map((m) => m.id)).toEqual([
-      'user-msg-m1abc-cafebabe-0000',
       localAsstId,
+      'user-msg-m1abc-cafebabe-0000',
     ]);
-    expect(merged[1]?.status).toBe('completed');
-    expect(merged[1]?.text).toBe('Hello from stream final');
+    expect(merged[0]?.status).toBe('completed');
+    expect(merged[0]?.text).toBe('Hello from stream final');
 
     // 再 project + merge 仍不增条（stream final + hydrate 幂等）
     const again = mergeMessagesById(

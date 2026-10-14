@@ -176,18 +176,10 @@ export async function toAssetUrl(filePath: string): Promise<string | null> {
   return null;
 }
 
-/** 在系统资源管理器中显示 */
+/** 在系统资源管理器中显示（直连 host opener，契约：system-file-manager + 原始路径） */
 export async function revealInOs(filePath: string): Promise<void> {
   const path = resolveReadableFilePath(filePath);
   if (!path) throw new Error('路径为空或不合法');
-  try {
-    const { openPathDefault } = await import('./hostOpenersApi');
-    const target = path.includes('.') ? pathDirname(path) : path;
-    await openPathDefault(target || path);
-    return;
-  } catch {
-    /* fallback to workbench_open_host_target */
-  }
   const res = await invokeResult('workbench_open_host_target', {
     openerId: 'system-file-manager',
     target: { type: 'path', path },

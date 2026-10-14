@@ -7,15 +7,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CHAT_ROW_GAP_COMPACT_PX, CHAT_ROW_GAP_PX } from './VirtualScrollManager';
+import {
+  CHAT_ROW_GAP_COMPACT_PX,
+  CHAT_ROW_GAP_PX,
+} from './VirtualScrollManager';
 
 const desktopSrc = path.resolve(__dirname, '..');
 const rowCss = fs.readFileSync(
-  path.join(desktopSrc, 'components/chat-message-row/ChatMessageRow.module.css'),
-  'utf8',
+  path.join(
+    desktopSrc,
+    'components/chat-message-row/ChatMessageRow.module.css'
+  ),
+  'utf8'
 );
-const tokensCss = fs.readFileSync(path.join(desktopSrc, 'styles/tokens.css'), 'utf8');
-const estimateSrc = fs.readFileSync(path.join(__dirname, 'virtualScrollEstimate.ts'), 'utf8');
+const tokensCss = fs.readFileSync(
+  path.join(desktopSrc, 'styles/tokens.css'),
+  'utf8'
+);
+const estimateSrc = fs.readFileSync(
+  path.join(__dirname, 'virtualScrollEstimate.ts'),
+  'utf8'
+);
 
 function cssBlock(css: string, selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -49,10 +61,15 @@ function firstDecl(css: string, name: string): string | null {
 
 function resolveLength(expr: string, tokens: string, depth = 0): number | null {
   if (depth > 8) return null;
-  const trimmed = expr.trim().replace(/!important/g, '').trim();
+  const trimmed = expr
+    .trim()
+    .replace(/!important/g, '')
+    .trim();
   const literal = trimmed.match(/^(\d+(?:\.\d+)?)px$/);
   if (literal?.[1]) return Number(literal[1]);
-  const variable = trimmed.match(/^var\(\s*(--[\w-]+)\s*(?:,\s*([\s\S]+))?\)\s*$/);
+  const variable = trimmed.match(
+    /^var\(\s*(--[\w-]+)\s*(?:,\s*([\s\S]+))?\)\s*$/
+  );
   if (!variable?.[1]) return null;
   const declared = firstDecl(tokens, variable[1]);
   if (declared) {
@@ -79,10 +96,13 @@ describe('estimate constants lock to chat row gap defaults', () => {
     expect(tokensCss.length).toBeGreaterThan(0);
     expect(rowCss.length).toBeGreaterThan(0);
 
-    const rowGap = resolveLength(paddingBottomExpr(cssBlock(rowCss, '.row')), tokensCss);
+    const rowGap = resolveLength(
+      paddingBottomExpr(cssBlock(rowCss, '.row')),
+      tokensCss
+    );
     const compactGap = resolveLength(
       paddingBottomExpr(cssBlock(rowCss, '.rowCarrier')),
-      tokensCss,
+      tokensCss
     );
     expect(rowGap).toBe(16);
     expect(compactGap).toBe(4);
@@ -91,8 +111,12 @@ describe('estimate constants lock to chat row gap defaults', () => {
   });
 
   it('keeps estimates as JS constants and does not read CSS variables at runtime', () => {
-    const code = estimateSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-    expect(code).toMatch(/20\s*\+\s*CHAT_ROW_GAP_COMPACT_PX/);
+    const code = estimateSrc
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '');
+    expect(code).toMatch(
+      /(?:ESTIMATE_CARRIER_CONTENT_PX|20)\s*\+\s*CHAT_ROW_GAP_COMPACT_PX/
+    );
     expect(code).toMatch(/CHAT_ROW_GAP_PX/);
     expect(code).not.toMatch(/getComputedStyle\s*\(/);
     expect(code).not.toMatch(/getPropertyValue\s*\(/);

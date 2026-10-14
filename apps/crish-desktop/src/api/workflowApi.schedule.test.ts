@@ -360,14 +360,15 @@ describe('validateWorkflowSchedule / normalizeWorkflowSchedule', () => {
 });
 
 describe('validateWorkflowDraft', () => {
-  it('requires name and prompt, and allows empty cwd for global workspace sandbox', () => {
+  it('requires name, prompt and workspace cwd (global sandbox requires explicit project)', () => {
     const base = emptyWorkflowDraft('/test/workspace');
     expect(validateWorkflowDraft(base)).toBe('请填写名称与提示词');
     expect(validateWorkflowDraft({ ...base, name: 'n' })).toBe('请填写提示词');
     expect(validateWorkflowDraft({ ...base, prompt: 'p' })).toBe('请填写名称');
+    // 契约对齐（workflowScheduler 新面）：cwd 必填——空 cwd 显式拦截
     expect(
       validateWorkflowDraft({ ...base, name: 'n', prompt: 'p', cwd: '' })
-    ).toBeNull();
+    ).toBe('请选择所属工作区项目');
     expect(
       validateWorkflowDraft({ ...base, name: 'n', prompt: 'p' })
     ).toBeNull();

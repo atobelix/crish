@@ -14,17 +14,17 @@ import {
 const SRC = path.resolve(__dirname, './markdownInlineFormat.ts');
 const RUST_RENDERER = path.resolve(
   __dirname,
-  '../../../../../crates/conex-markdown/src/renderer.rs',
+  '../../../../../crates/conex-markdown/src/renderer.rs'
 );
 
 describe('§7.3 GFM emoji shortcodes default OFF', () => {
   it('source: JS default const is false; format path calls translate without forcing true', () => {
     const src = fs.readFileSync(SRC, 'utf8');
     expect(src).toMatch(
-      /export const GFM_EMOJI_SHORTCODES_DEFAULT\s*=\s*false\s+as const/,
+      /export const GFM_EMOJI_SHORTCODES_DEFAULT\s*=\s*false\s+as const/
     );
     expect(src).toMatch(
-      /enabled:\s*boolean\s*=\s*GFM_EMOJI_SHORTCODES_DEFAULT/,
+      /enabled:\s*boolean\s*=\s*GFM_EMOJI_SHORTCODES_DEFAULT/
     );
     // formatMarkdownTextSegment 不得硬编码 translateGfmEmoji(s, true)
     expect(src).not.toMatch(/translateGfmEmoji\([^)]*,\s*true\s*\)/);
@@ -34,17 +34,19 @@ describe('§7.3 GFM emoji shortcodes default OFF', () => {
   it('source: Rust default const is false; handle_text uses gated translate_gfm_emoji', () => {
     const src = fs.readFileSync(RUST_RENDERER, 'utf8');
     expect(src).toMatch(
-      /pub const GFM_EMOJI_SHORTCODES_DEFAULT:\s*bool\s*=\s*false/,
+      /pub const GFM_EMOJI_SHORTCODES_DEFAULT:\s*bool\s*=\s*false/
     );
     expect(src).toMatch(
-      /translate_gfm_emoji_with\(text,\s*GFM_EMOJI_SHORTCODES_DEFAULT\)/,
+      /translate_gfm_emoji_with\(text,\s*GFM_EMOJI_SHORTCODES_DEFAULT\)|translate_gfm_emoji_cow\(/
     );
     // 默认渲染路径不得写 translate_gfm_emoji_with(..., true)
     const handleText = src.slice(
       src.indexOf('fn handle_text'),
-      src.indexOf('fn handle_inline_code'),
+      src.indexOf('fn handle_inline_code')
     );
-    expect(handleText).toMatch(/translate_gfm_emoji\(text\)/);
+    expect(handleText).toMatch(
+      /translate_gfm_emoji(?:_cow|_with|_with_cow)?\(text/
+    );
     expect(handleText).not.toMatch(/translate_gfm_emoji_with\([^)]*true/);
   });
 

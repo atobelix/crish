@@ -330,6 +330,17 @@ export async function persistAllSessionsRust(
         ? activeSessionId
         : '';
 
+    // 索引层：始终写一份到 localStorage（侧栏元数据真相源，过渡期设计）。
+    // N1-2 契约：空列表 → 索引清空（hydrate 不凭空恢复）；正文镜像/LS 不动。
+    // 索引写先于写屏障：屏障只拦"正文/全盘冲刷"，不阻断索引真相源收敛。
+    if (options?.sessionsToIndex) {
+      try {
+        lsSaveSessionIndex(options.sessionsToIndex(list));
+      } catch {
+        /* swallow-ok: 索引快照回调失败不阻断索引主流程 */
+      }
+    }
+
     // 写屏障保护：在初始空数据状态或降级期间，拦截对全盘持久化的盲目冲刷 (VULN-06)
     if (sessionDeltaWriteBarrier.shouldBlockWrite('full_session_index', list)) {
       logger.warn(
@@ -339,16 +350,6 @@ export async function persistAllSessionsRust(
         }
       );
       return;
-    }
-
-    // 索引层：始终写一份到 localStorage（侧栏元数据真相源，过渡期设计）。
-    // invoke 缺失时，这就是唯一的索引落盘点。
-    if (options?.sessionsToIndex) {
-      try {
-        lsSaveSessionIndex(options.sessionsToIndex(list));
-      } catch {
-        /* swallow-ok: 索引快照回调失败不阻断索引主流程 */
-      }
     }
 
     // 检测 invoke 可用性（用 list_sessions 作为探针）

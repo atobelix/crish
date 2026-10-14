@@ -314,6 +314,8 @@ command_registry![
         session_title_commands::core_generate_session_title
     ),
     ("core_cancel_run", core_run_commands::core_cancel_run),
+    // 会话级 Tier-2 中止（前端级联取消总线；desktopNativeFeatures 契约命名）
+    ("workbench_abort_run", core_run_commands::workbench_abort_run),
     ("core_approve_tool", core_run_commands::core_approve_tool),
     ("core_deny_tool", core_run_commands::core_deny_tool),
     // ── 多端互通配对面（R1-07：四件套）──

@@ -126,6 +126,7 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
             true,
         ),
         entry("workbench_cancel_background_task", "workbench", "gui", true),
+        entry("workbench_abort_run", "workbench", "gui", true),
         // F3（T-AB-19 顺手接线）：send_input 命令面补齐（前端
         // sendBackgroundTaskInput 已接线等待，T-AB-20 操作面）
         entry("workbench_send_input", "workbench", "gui", true),

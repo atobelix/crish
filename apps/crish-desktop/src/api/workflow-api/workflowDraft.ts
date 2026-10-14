@@ -221,6 +221,9 @@ export function validateWorkflowDraft(
   if (!name) return '请填写名称';
   if (!prompt) return '请填写提示词';
 
+  const cwd = String(draft.cwd ?? '').trim();
+  if (!cwd) return '请选择所属工作区项目';
+
   const st = draft.scheduleType;
   if (st === 'daily') {
     const t = String(draft.dailyTime ?? '').trim();
