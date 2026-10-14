@@ -427,42 +427,11 @@ export function initSessionStorePersistence(): () => void {
 
 // ── 会话索引与纯函数工具再导出 ────────────────────────────────────────────────
 
-export {
-  getSessionById as getSessionByIdFromState,
-  getSessionMetaById,
-  buildSessionsById,
-  reindexSessionsById,
-  reorderSessionOrderById,
-  reorderSessionOrderByIdList,
-  checkSessionsIndex,
-  isSessionsIndexConsistent,
-  assertSessionsIndexConsistent,
-  filterSidebarSessions,
-  partitionSidebarSessions,
-  groupUnpinnedByProject,
-  isPlaceholderEmptySession,
-  isSessionEmpty,
-} from './sessionIndex';
+// ── 会话索引与纯函数工具再导出（清单位于 ./sessionStoreReexports，面等价）──
 
-export type {
-  SessionsIndexIssue,
-  FilterSidebarSessionsOpts,
-  PartitionSidebarSessionsOpts,
-  PartitionedSidebarSessions,
-} from './sessionIndex';
-
-export {
-  sessionShellEqual,
-  sidebarSessionsEqual,
-  sessionsShellEqual,
-  sessionsSidebarEqual,
-  sessionShellFingerprint,
-} from './sessionListEqual';
+export * from './sessionStoreReexports';
 
 export { bumpEpochScalar };
-export type { SessionActions } from './sessionActions';
-export type { SessionMeta, SessionSubtreeSlice } from './sessionSubtreeModel';
-export type { SessionState, SessionAgent, SessionMessage } from './types';
 
 /** Store-backed public wrapper; the hydration helper itself remains store-agnostic. */
 export function triggerSessionMessageHydrateIfNeeded(sessionId: string): void {

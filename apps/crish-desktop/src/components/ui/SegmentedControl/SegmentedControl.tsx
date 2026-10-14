@@ -14,7 +14,6 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { ResizeObserverManager } from '../../../utils/ResizeObserverManager';
 import styles from './SegmentedControl.module.css';
-
 export type SegmentedControlSize = 'xs' | 'sm' | 'md' | 'lg' | 'panel';
 
 export interface SegmentedControlOption<T extends string = string> {
@@ -297,5 +296,4 @@ export const SegmentedControl = React.forwardRef<
     </div>
   );
 });
-
 SegmentedControl.displayName = 'SegmentedControl';

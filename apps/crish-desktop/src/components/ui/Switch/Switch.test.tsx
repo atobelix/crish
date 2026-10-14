@@ -17,7 +17,13 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import React, { useState } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  act,
+} from '@testing-library/react';
 import { Switch } from './Switch';
 import styles from './Switch.module.css';
 
@@ -117,7 +123,10 @@ describe('ui/Switch (v2.0.0 纯白流体胶囊与中轴对称版)', () => {
 
     it('非受控模式：defaultChecked=true 时初始状态为开启', () => {
       render(<Switch defaultChecked={true} />);
-      expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true');
+      expect(screen.getByRole('switch')).toHaveAttribute(
+        'aria-checked',
+        'true'
+      );
     });
   });
 
@@ -271,7 +280,9 @@ describe('ui/Switch (v2.0.0 纯白流体胶囊与中轴对称版)', () => {
       // 禁用乐观时，点击后 DOM 依然保持 false
       expect(sw).toHaveAttribute('aria-checked', 'false');
 
-      rerender(<Switch checked={true} optimistic={false} onCheckedChange={onChange} />);
+      rerender(
+        <Switch checked={true} optimistic={false} onCheckedChange={onChange} />
+      );
       expect(sw).toHaveAttribute('aria-checked', 'true');
     });
 
@@ -357,9 +368,7 @@ describe('ui/Switch (v2.0.0 纯白流体胶囊与中轴对称版)', () => {
     });
 
     it('disabled 态下带 label 容器具有 data-disabled 属性', () => {
-      const { container } = render(
-        <Switch disabled label="网络代理" />
-      );
+      const { container } = render(<Switch disabled label="网络代理" />);
       const wrap = container.querySelector(`.${styles.container}`);
       expect(wrap).toHaveAttribute('data-disabled', 'true');
     });
@@ -484,7 +493,7 @@ describe('ui/Switch (v2.0.0 纯白流体胶囊与中轴对称版)', () => {
 
     it('包含 0.5px 微发丝收边与漫反射阴影定义', () => {
       expect(css).toMatch(/0\s+0\s+0\s+0\.5px/);
-      expect(css).toMatch(/var\(--switch-thumb-shadow/);
+      expect(css).toMatch(/var\(\s*--switch-thumb-shadow/);
     });
 
     it('全尺寸规格（sm, md, lg）均具备严格 2px 对称留白（--thumb-pad: 2px）', () => {
@@ -509,8 +518,12 @@ describe('ui/Switch (v2.0.0 纯白流体胶囊与中轴对称版)', () => {
 
     it('严格遵守 AGENTS.md §13 软性焦点环规范（3%~10% 克制柔和灰色）', () => {
       expect(css).toMatch(/:focus-visible/);
-      expect(css).toMatch(/box-shadow:\s*0 0 0 1\.5px color-mix\(in srgb, var\(--border-color\) 94%, var\(--text-primary\) 6%\)/);
-      expect(css).toMatch(/border-color:\s*color-mix\(in srgb, var\(--border-color\) 90%, var\(--text-primary\) 10%\)/);
+      expect(css).toMatch(
+        /box-shadow:\s*0 0 0 1\.5px\s+color-mix\(\s*in srgb,\s*var\(--border-color\) 94%,\s*var\(--text-primary\) 6%\s*\)/
+      );
+      expect(css).toMatch(
+        /border-color:\s*color-mix\(\s*in srgb,\s*var\(--border-color\) 90%,\s*var\(--text-primary\) 10%\s*\)/
+      );
     });
 
     it('动效无 y>1 过冲贝塞尔，符合反过度设计规范', () => {
