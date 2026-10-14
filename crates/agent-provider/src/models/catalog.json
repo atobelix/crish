@@ -29,10 +29,7 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": [
-        "5m",
-        "1h"
-      ],
+      "cacheTtlOptions": ["5m", "1h"],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
@@ -75,10 +72,7 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": [
-        "5m",
-        "1h"
-      ],
+      "cacheTtlOptions": ["5m", "1h"],
       "supportsResponses": false,
       "supportsReasoning": false,
       "supportsReasoningEffort": false,
@@ -113,10 +107,7 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": [
-        "5m",
-        "1h"
-      ],
+      "cacheTtlOptions": ["5m", "1h"],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
@@ -159,10 +150,7 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": [
-        "5m",
-        "1h"
-      ],
+      "cacheTtlOptions": ["5m", "1h"],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
@@ -206,10 +194,7 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": [
-        "5m",
-        "1h"
-      ],
+      "cacheTtlOptions": ["5m", "1h"],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": false,
@@ -253,10 +238,7 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": [
-        "5m",
-        "1h"
-      ],
+      "cacheTtlOptions": ["5m", "1h"],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
@@ -299,10 +281,7 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": [
-        "5m",
-        "1h"
-      ],
+      "cacheTtlOptions": ["5m", "1h"],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
@@ -345,10 +324,7 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": [
-        "5m",
-        "1h"
-      ],
+      "cacheTtlOptions": ["5m", "1h"],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
@@ -391,10 +367,7 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": [
-        "5m",
-        "1h"
-      ],
+      "cacheTtlOptions": ["5m", "1h"],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": false,
@@ -438,10 +411,7 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": [
-        "5m",
-        "1h"
-      ],
+      "cacheTtlOptions": ["5m", "1h"],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": false,
@@ -484,10 +454,7 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": [
-        "5m",
-        "1h"
-      ],
+      "cacheTtlOptions": ["5m", "1h"],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": false,
@@ -562,10 +529,7 @@
       "priceStatus": "official",
       "peakPricing2x": true,
       "peakPricingSchedule": {
-        "windows": [
-          "09:00-12:00",
-          "14:00-18:00"
-        ],
+        "windows": ["09:00-12:00", "14:00-18:00"],
         "tz": "Asia/Shanghai",
         "effectiveFrom": null,
         "note": "生效日期待官方公告"
@@ -607,10 +571,7 @@
       "priceStatus": "official",
       "peakPricing2x": true,
       "peakPricingSchedule": {
-        "windows": [
-          "09:00-12:00",
-          "14:00-18:00"
-        ],
+        "windows": ["09:00-12:00", "14:00-18:00"],
         "tz": "Asia/Shanghai",
         "effectiveFrom": null,
         "note": "生效日期待官方公告"
@@ -1627,7 +1588,6 @@
     },
     "glm::glm-4-5-air-cny": {
       "model": "glm-4-5-air-cny",
-      "apiModel": "glm-4.5-air",
       "provider": "bigmodel",
       "vendor": "glm",
       "mode": "chat",
@@ -1769,7 +1729,6 @@
     },
     "glm::glm-4-5v-cny": {
       "model": "glm-4-5v-cny",
-      "apiModel": "glm-4.5v",
       "provider": "bigmodel",
       "vendor": "glm",
       "mode": "chat",
@@ -1878,7 +1837,6 @@
     },
     "glm::glm-4-6v-cny": {
       "model": "glm-4-6v-cny",
-      "apiModel": "glm-4.6v",
       "provider": "bigmodel",
       "vendor": "glm",
       "mode": "chat",
@@ -1953,7 +1911,6 @@
     },
     "glm::glm-4-6v-flash-cny": {
       "model": "glm-4-6v-flash-cny",
-      "apiModel": "glm-4.6v-flash",
       "provider": "bigmodel",
       "vendor": "glm",
       "mode": "chat",
@@ -2019,7 +1976,6 @@
     },
     "glm::glm-4-6v-flashx-cny": {
       "model": "glm-4-6v-flashx-cny",
-      "apiModel": "glm-4.6v-flashx",
       "provider": "bigmodel",
       "vendor": "glm",
       "mode": "chat",
@@ -2094,7 +2050,6 @@
     },
     "glm::glm-4-7-cny": {
       "model": "glm-4-7-cny",
-      "apiModel": "glm-4.7",
       "provider": "bigmodel",
       "vendor": "glm",
       "mode": "chat",
@@ -2177,7 +2132,6 @@
     },
     "glm::glm-4-7-flash-cny": {
       "model": "glm-4-7-flash-cny",
-      "apiModel": "glm-4.7-flash",
       "provider": "bigmodel",
       "vendor": "glm",
       "mode": "chat",
@@ -2242,7 +2196,6 @@
     },
     "glm::glm-4-7-flashx-cny": {
       "model": "glm-4-7-flashx-cny",
-      "apiModel": "glm-4.7-flashx",
       "provider": "bigmodel",
       "vendor": "glm",
       "mode": "chat",
@@ -2352,7 +2305,6 @@
     },
     "glm::glm-5-1-cny": {
       "model": "glm-5-1-cny",
-      "apiModel": "glm-5.1",
       "provider": "bigmodel",
       "vendor": "glm",
       "mode": "chat",
@@ -2438,7 +2390,6 @@
     },
     "glm::glm-5-2-cny": {
       "model": "glm-5-2-cny",
-      "apiModel": "glm-5.2",
       "provider": "bigmodel",
       "vendor": "glm",
       "mode": "chat",
@@ -2476,7 +2427,6 @@
     },
     "glm::glm-5-cny": {
       "model": "glm-5-cny",
-      "apiModel": "glm-5",
       "provider": "bigmodel",
       "vendor": "glm",
       "mode": "chat",
@@ -2562,7 +2512,6 @@
     },
     "glm::glm-5-turbo-cny": {
       "model": "glm-5-turbo-cny",
-      "apiModel": "glm-5-turbo",
       "provider": "bigmodel",
       "vendor": "glm",
       "mode": "chat",
@@ -2648,7 +2597,6 @@
     },
     "glm::glm-5v-turbo-cny": {
       "model": "glm-5v-turbo-cny",
-      "apiModel": "glm-5v-turbo",
       "provider": "bigmodel",
       "vendor": "glm",
       "mode": "chat",
@@ -3191,7 +3139,6 @@
     },
     "minimax::minimax-m2-1-highspeed-usd": {
       "model": "minimax-m2-1-highspeed-usd",
-      "apiModel": "MiniMax-M2.1-highspeed",
       "provider": "minimax-io",
       "vendor": "minimax",
       "mode": "chat",
@@ -3223,7 +3170,6 @@
     },
     "minimax::minimax-m2-1-usd": {
       "model": "minimax-m2-1-usd",
-      "apiModel": "MiniMax-M2.1",
       "provider": "minimax-io",
       "vendor": "minimax",
       "mode": "chat",
@@ -3319,7 +3265,6 @@
     },
     "minimax::minimax-m2-5-highspeed-usd": {
       "model": "minimax-m2-5-highspeed-usd",
-      "apiModel": "MiniMax-M2.5-highspeed",
       "provider": "minimax-io",
       "vendor": "minimax",
       "mode": "chat",
@@ -3351,7 +3296,6 @@
     },
     "minimax::minimax-m2-5-usd": {
       "model": "minimax-m2-5-usd",
-      "apiModel": "MiniMax-M2.5",
       "provider": "minimax-io",
       "vendor": "minimax",
       "mode": "chat",
@@ -3451,7 +3395,6 @@
     },
     "minimax::minimax-m2-7-highspeed-usd": {
       "model": "minimax-m2-7-highspeed-usd",
-      "apiModel": "MiniMax-M2.7-highspeed",
       "provider": "minimax-io",
       "vendor": "minimax",
       "mode": "chat",
@@ -3485,7 +3428,6 @@
     },
     "minimax::minimax-m2-7-usd": {
       "model": "minimax-m2-7-usd",
-      "apiModel": "MiniMax-M2.7",
       "provider": "minimax-io",
       "vendor": "minimax",
       "mode": "chat",
@@ -3519,7 +3461,6 @@
     },
     "minimax::minimax-m2-usd": {
       "model": "minimax-m2-usd",
-      "apiModel": "MiniMax-M2",
       "provider": "minimax-io",
       "vendor": "minimax",
       "mode": "chat",
@@ -3592,7 +3533,6 @@
     },
     "minimax::minimax-m3-usd": {
       "model": "minimax-m3-usd",
-      "apiModel": "MiniMax-M3",
       "provider": "minimax-io",
       "vendor": "minimax",
       "mode": "chat",
@@ -4236,9 +4176,7 @@
       "supportsPromptCacheKey": true,
       "supportsCacheControl": false,
       "cacheTtl": "24h",
-      "cacheTtlOptions": [
-        "24h"
-      ],
+      "cacheTtlOptions": ["24h"],
       "tieredPricing": [
         {
           "minTokens": 272000,
@@ -4408,9 +4346,7 @@
       "supportsPromptCacheKey": true,
       "supportsCacheControl": false,
       "cacheTtl": "24h",
-      "cacheTtlOptions": [
-        "24h"
-      ],
+      "cacheTtlOptions": ["24h"],
       "tieredPricing": [
         {
           "minTokens": 272000,
@@ -4534,9 +4470,7 @@
       "supportsPromptCacheKey": true,
       "supportsCacheControl": false,
       "cacheTtl": "30m",
-      "cacheTtlOptions": [
-        "30m"
-      ],
+      "cacheTtlOptions": ["30m"],
       "tieredPricing": [
         {
           "minTokens": 272000,
@@ -4585,9 +4519,7 @@
       "supportsPromptCacheKey": true,
       "supportsCacheControl": false,
       "cacheTtl": "30m",
-      "cacheTtlOptions": [
-        "30m"
-      ],
+      "cacheTtlOptions": ["30m"],
       "tieredPricing": [
         {
           "minTokens": 272000,
@@ -4636,9 +4568,7 @@
       "supportsPromptCacheKey": true,
       "supportsCacheControl": false,
       "cacheTtl": "30m",
-      "cacheTtlOptions": [
-        "30m"
-      ],
+      "cacheTtlOptions": ["30m"],
       "tieredPricing": [
         {
           "minTokens": 272000,
