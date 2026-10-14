@@ -214,6 +214,64 @@ fn function_call_id_present_is_used() {
 }
 
 #[test]
+fn function_call_alternate_id_fields_call_id_and_call_id_camel() {
+    let events = parse_all(vec![
+        &part_frame(
+            json!({ "functionCall": { "call_id": "call_snake_1", "name": "read_file", "args": {} } }),
+            Value::Null,
+        ),
+        &part_frame(
+            json!({ "functionCall": { "callId": "call_camel_2", "name": "write_file", "args": {} } }),
+            Value::Null,
+        ),
+    ]);
+    let ids: Vec<Option<&str>> = events
+        .iter()
+        .filter_map(|event| match event {
+            ProviderStreamEvent::ToolCall { id, .. } => Some(id.as_deref()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ids, vec![Some("call_snake_1"), Some("call_camel_2")]);
+}
+
+#[test]
+fn single_frame_array_of_candidate_objects_parsed() {
+    let array_payload = serde_json::to_string(&json!([
+        {
+            "candidates": [{
+                "content": { "parts": [{ "text": "第一段 " }] },
+            }]
+        },
+        {
+            "candidates": [{
+                "content": { "parts": [{ "text": "第二段" }] },
+                "finishReason": "STOP",
+            }]
+        }
+    ])).expect("序列化");
+
+    let events = parse_all(vec![&array_payload]);
+    let texts: Vec<&str> = events
+        .iter()
+        .filter_map(|event| match event {
+            ProviderStreamEvent::TextDelta { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(texts, vec!["第一段 ", "第二段"]);
+    assert_eq!(
+        stop_of(&events),
+        &ProviderStreamEvent::Stop {
+            reason: StopReason::Stop,
+            error: None,
+            error_kind: None,
+            usage: None,
+        }
+    );
+}
+
+#[test]
 fn function_call_ids_increment_without_explicit_id() {
     let events = parse_all(vec![
         &part_frame(

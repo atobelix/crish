@@ -428,11 +428,29 @@ pub(crate) fn provider_url(config: &EngineProviderConfig) -> String {
 ///
 /// 规范化拼装单一真源 = [build_endpoint_url]
 /// （Anthropic `/v1/messages`、Responses `/v1/responses`、Chat `/chat/completions`
-/// 的去重拼装）；Gemini 在其上补 `models/{model}:generateContent` 模型路径。
+/// 的去重拼装）；Gemini 在其上补模型路径：流式模式下严格拼装 `:streamGenerateContent?alt=sse`，
+/// 非流式模式下保持 `:generateContent`（BC08-1）。
 pub(crate) fn provider_url_for(config: &EngineProviderConfig, protocol: WireProtocol) -> String {
     let base = build_endpoint_url(protocol.protocol_kind(), &config.base_url);
     match protocol {
-        WireProtocol::Gemini => format!("{base}/models/{}:generateContent", config.model),
+        WireProtocol::Gemini => {
+            let action = if config.stream {
+                "streamGenerateContent"
+            } else {
+                "generateContent"
+            };
+            if let Some((path, query)) = base.split_once('?') {
+                if config.stream {
+                    format!("{path}/models/{}:{action}?{query}&alt=sse", config.model)
+                } else {
+                    format!("{path}/models/{}:{action}?{query}", config.model)
+                }
+            } else if config.stream {
+                format!("{base}/models/{}:{action}?alt=sse", config.model)
+            } else {
+                format!("{base}/models/{}:{action}", config.model)
+            }
+        }
         _ => base,
     }
 }

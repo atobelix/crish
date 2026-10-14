@@ -87,6 +87,39 @@ pub struct AnthropicRequestOptions {
 /// 默认 Anthropic 物理最大输出 Token 限制（64K）
 pub const DEFAULT_ANTHROPIC_MAX_OUTPUT: u64 = 64_000;
 
+/// 根据模型名称与思考预算动态解析默认 max_tokens（修正 BC08-11 长回答上限截断问题）
+pub fn default_anthropic_max_tokens(model: Option<&str>, budget: Option<u64>) -> u64 {
+    let min_budget_tokens = budget.map(|b| b.saturating_add(4096));
+
+    let base_default = if let Some(m) = model {
+        let m_lower = m.to_ascii_lowercase();
+        if m_lower.contains("3-7") || m_lower.contains("3.7") {
+            // Claude 3.7 Sonnet 官方原生支持 64K 最大输出
+            64_000
+        } else if m_lower.contains("3-5") || m_lower.contains("3.5") {
+            // Claude 3.5 Sonnet & Claude 3.5 Haiku 官方最大输出 8192
+            8_192
+        } else if m_lower.contains("opus") {
+            // Claude 3 Opus 官方最大输出 4096
+            4_096
+        } else if m_lower.contains("claude-3") {
+            // Claude 3 (legacy) 官方最大输出 4096
+            4_096
+        } else {
+            // 现代 Anthropic 默认合理输出上限
+            8_192
+        }
+    } else {
+        8_192
+    };
+
+    if let Some(min) = min_budget_tokens {
+        base_default.max(min)
+    } else {
+        base_default
+    }
+}
+
 /// 构建 Anthropic Messages API 请求体（compactObject 等价：None 字段一律省略）
 pub fn build_anthropic_request_body(
     opts: &AnthropicRequestOptions,
@@ -144,16 +177,16 @@ pub fn build_anthropic_request_body(
         }
     }
 
-    let min_max_tokens = budget.map(|b| b.saturating_add(4096)).unwrap_or(2048);
+    let default_tokens = default_anthropic_max_tokens(opts.model.as_deref(), budget);
     let final_max_tokens = match opts.max_tokens {
         Some(m) => {
-            if budget.is_some() {
-                m.max(min_max_tokens)
+            if let Some(b) = budget {
+                m.max(b.saturating_add(4096))
             } else {
                 m
             }
         }
-        None => min_max_tokens,
+        None => default_tokens,
     };
     let clamped_max_tokens = final_max_tokens.min(DEFAULT_ANTHROPIC_MAX_OUTPUT);
     body.insert("max_tokens".to_string(), json!(clamped_max_tokens));
@@ -504,9 +537,26 @@ fn to_anthropic_messages(context: &RequestBuildContext) -> Vec<Value> {
                 }
                 push_alternating(&mut result, &json!({ "role": "user", "content": content }));
             }
-            // system 消息走顶层 system 字段；消息域 system 不影响 wire 交替序列
-            // （anthropic.messages 无独立 system 角色消息）
-            AgentMessageRole::System => {}
+            // 【核心攻坚修复 BC08-5】：中途注入的运行时转向/系统纠偏绝不丢弃！
+            // 投射为带有严格上下文标识的 user 提示，经 push_alternating 严格满足 Anthropic 角色交替铁律
+            AgentMessageRole::System => {
+                let text = message.text();
+                let effective_text = if !text.trim().is_empty() {
+                    text
+                } else {
+                    message.content.clone().unwrap_or_default()
+                };
+                if !effective_text.trim().is_empty() {
+                    let wrapped_steering = json!({
+                        "type": "text",
+                        "text": format!("[System Directive / Runtime Steering]\n{}", effective_text.trim())
+                    });
+                    push_alternating(
+                        &mut result,
+                        &json!({ "role": "user", "content": [wrapped_steering] }),
+                    );
+                }
+            }
         }
     }
     result
@@ -515,18 +565,23 @@ fn to_anthropic_messages(context: &RequestBuildContext) -> Vec<Value> {
 /// 交替约束投影：向 result 追加一条 wire 消息，仅当该消息为 assistant 且会破坏
 /// Anthropic 交替铁律时前置 user 占位——(a) 首条即 assistant（空首条须为 user）；
 /// (b) 上一条已是 assistant。
-/// 当连续两条均为 user 消息时（如工具响应后紧跟新用户提问），将其 content 数组合并，
+/// 当连续两条均为 user 消息时（如工具响应后紧跟新用户提问或 Steering 纠偏），将其 content 数组合并，
 /// 满足 Anthropic wire user/assistant 严格交替铁律。
 fn push_alternating(result: &mut Vec<Value>, message: &Value) {
     let next_role = message["role"].as_str().unwrap_or_default();
     if next_role == "user" && result.last().is_some_and(|m| m["role"] == "user") {
         if let Some(last_msg) = result.last_mut() {
-            if let (Some(last_arr), Some(next_arr)) = (
-                last_msg.get_mut("content").and_then(|c| c.as_array_mut()),
-                message.get("content").and_then(|c| c.as_array()),
-            ) {
-                last_arr.extend(next_arr.iter().cloned());
-                return;
+            let next_blocks = message.get("content").and_then(|c| c.as_array()).cloned();
+            if let Some(next_arr) = next_blocks {
+                if let Some(last_arr) = last_msg.get_mut("content").and_then(|c| c.as_array_mut()) {
+                    last_arr.extend(next_arr);
+                    return;
+                } else if let Some(last_str) = last_msg.get("content").and_then(|c| c.as_str()) {
+                    let mut new_arr = vec![json!({ "type": "text", "text": last_str })];
+                    new_arr.extend(next_arr);
+                    last_msg["content"] = Value::Array(new_arr);
+                    return;
+                }
             }
         }
     }
@@ -633,15 +688,119 @@ fn tool_result_anthropic_content(message: &AgentMessage) -> Vec<Value> {
         .collect()
 }
 
-/// assistant 消息 content 块数组：text / thinking / tool_use 块，按原块顺序保留
+/// 从消息元数据中尽最大可能提取对应思考块的签名（signature），保障 Claude 3.7 / Extended Thinking 回放不崩溃
+fn extract_signature_for_thought(
+    message: &AgentMessage,
+    thought_index: usize,
+    thought_text: &str,
+) -> Option<String> {
+    let metadata = message.metadata.as_ref()?;
+
+    // 1. Array of signatures in metadata["signatures"] or metadata["thinkingSignatures"]
+    if let Some(arr) = metadata
+        .get("signatures")
+        .or_else(|| metadata.get("thinkingSignatures"))
+        .and_then(Value::as_array)
+    {
+        if let Some(sig) = arr.get(thought_index).and_then(Value::as_str) {
+            if !sig.trim().is_empty() {
+                return Some(sig.to_string());
+            }
+        }
+    }
+
+    // 2. Map of text/id to signature in metadata["signatures"] or metadata["thoughtSignatures"]
+    if let Some(map) = metadata
+        .get("signatures")
+        .or_else(|| metadata.get("thoughtSignatures"))
+        .and_then(Value::as_object)
+    {
+        if let Some(sig) = map.get(thought_text).and_then(Value::as_str) {
+            if !sig.trim().is_empty() {
+                return Some(sig.to_string());
+            }
+        }
+        if let Some(sig) = map.get(&thought_index.to_string()).and_then(Value::as_str) {
+            if !sig.trim().is_empty() {
+                return Some(sig.to_string());
+            }
+        }
+    }
+
+    // 3. Array of thought blocks in metadata["thinkingBlocks"]
+    if let Some(arr) = metadata.get("thinkingBlocks").and_then(Value::as_array) {
+        if let Some(obj) = arr.get(thought_index).and_then(Value::as_object) {
+            if let Some(sig) = obj.get("signature").and_then(Value::as_str) {
+                if !sig.trim().is_empty() {
+                    return Some(sig.to_string());
+                }
+            }
+        }
+    }
+
+    // 4. Raw blocks fallback in metadata["rawBlocks"] or metadata["blocks"] or metadata["content"]
+    if let Some(blocks) = metadata
+        .get("rawBlocks")
+        .or_else(|| metadata.get("blocks"))
+        .or_else(|| metadata.get("content"))
+        .and_then(Value::as_array)
+    {
+        let mut idx = 0;
+        for b in blocks {
+            if b.get("type").and_then(Value::as_str) == Some("thinking") {
+                if idx == thought_index {
+                    if let Some(sig) = b.get("signature").and_then(Value::as_str) {
+                        if !sig.trim().is_empty() {
+                            return Some(sig.to_string());
+                        }
+                    }
+                }
+                idx += 1;
+            }
+        }
+    }
+
+    // 5. Single signature in metadata["signature"] or metadata["thinkingSignature"] or metadata["thinking_signature"]
+    if let Some(sig) = metadata
+        .get("signature")
+        .or_else(|| metadata.get("thinkingSignature"))
+        .or_else(|| metadata.get("thinking_signature"))
+        .or_else(|| metadata.get("thoughtSignature"))
+        .and_then(Value::as_str)
+    {
+        if !sig.trim().is_empty() {
+            return Some(sig.to_string());
+        }
+    }
+
+    None
+}
+
+/// assistant 消息 content 块数组：text / thinking / tool_use 块，按原块顺序保留并保全思考签名
 fn assistant_anthropic_content(message: &AgentMessage) -> Vec<Value> {
+    let mut thought_idx = 0;
     message
         .blocks
         .iter()
         .filter_map(|block| match block {
             AgentMessageBlock::Text { text } => Some(json!({ "type": "text", "text": text })),
-            AgentMessageBlock::Thought { text, .. } => {
-                Some(json!({ "type": "thinking", "thinking": text }))
+            AgentMessageBlock::Thought { text, redacted } => {
+                let sig = extract_signature_for_thought(message, thought_idx, text);
+                thought_idx += 1;
+                if *redacted == Some(true) {
+                    Some(json!({
+                        "type": "redacted_thinking",
+                        "data": sig.unwrap_or_else(|| text.clone()),
+                    }))
+                } else if let Some(sig) = sig {
+                    Some(json!({
+                        "type": "thinking",
+                        "thinking": text,
+                        "signature": sig,
+                    }))
+                } else {
+                    Some(json!({ "type": "thinking", "thinking": text }))
+                }
             }
             AgentMessageBlock::ToolCall(call) => {
                 // tool_use 块：id/name/input（input 为结构化对象，直接透传）
@@ -652,7 +811,7 @@ fn assistant_anthropic_content(message: &AgentMessage) -> Vec<Value> {
                     "input": call.input,
                 }))
             }
-            AgentMessageBlock::ToolResult { .. } => None,
+            AgentMessageBlock::ToolResult { .. } | AgentMessageBlock::Image(_) => None,
         })
         .collect()
 }

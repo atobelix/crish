@@ -651,3 +651,117 @@ fn test_tool_batch_atomicity_closure() {
     assert_eq!(plan.dropped_ids, vec!["u1"]);
     assert_eq!(plan.first_kept_message_id.as_deref(), Some("a1"));
 }
+
+#[test]
+fn test_is_within_keep_budget() {
+    use conex_compaction::is_within_keep_budget;
+
+    let messages = vec![
+        amsg(
+            "u1",
+            AgentMessageRole::User,
+            "2026-08-03T10:00:00.000Z",
+            vec![text_block("short 1")],
+            None,
+        ),
+        amsg(
+            "a1",
+            AgentMessageRole::Assistant,
+            "2026-08-03T10:00:01.000Z",
+            vec![text_block("short 2")],
+            None,
+        ),
+    ];
+    let total = count_agent_message_tokens(&messages[0]) + count_agent_message_tokens(&messages[1]);
+    // 预算充足 -> true (平滑早退)
+    assert!(is_within_keep_budget(&messages, total + 100));
+    assert!(is_within_keep_budget(&messages, total));
+    // 预算不足 -> false (需要截断)
+    assert!(!is_within_keep_budget(&messages, total - 1));
+}
+
+#[test]
+fn test_turn_batch_no_orphan_calls_across_generations() {
+    let engine = CompactionEngine::new(0);
+    // 多个连续工具回合：验证不会在工具批中间切割，无论预算落在哪个具体回执
+    let messages = vec![
+        amsg(
+            "s1",
+            AgentMessageRole::System,
+            "2026-08-03T10:00:00.000Z",
+            vec![text_block("system")],
+            None,
+        ),
+        amsg(
+            "u1",
+            AgentMessageRole::User,
+            "2026-08-03T10:00:01.000Z",
+            vec![text_block(&"old context ".repeat(30))],
+            None,
+        ),
+        // TurnBatch 1: Assistant 发起两个调用
+        amsg(
+            "a1",
+            AgentMessageRole::Assistant,
+            "2026-08-03T10:00:02.000Z",
+            vec![
+                tool_call_block("c1", "search", serde_json::json!({"q": "rust"})),
+                tool_call_block("c2", "read", serde_json::json!({"path": "src/lib.rs"})),
+            ],
+            None,
+        ),
+        amsg(
+            "t1",
+            AgentMessageRole::Tool,
+            "2026-08-03T10:00:03.000Z",
+            vec![tool_result_block("c1", "search", "results...")],
+            None,
+        ),
+        amsg(
+            "t2",
+            AgentMessageRole::Tool,
+            "2026-08-03T10:00:04.000Z",
+            vec![tool_result_block("c2", "read", "code...")],
+            None,
+        ),
+        // TurnBatch 2: 用户新指令与回答
+        amsg(
+            "u2",
+            AgentMessageRole::User,
+            "2026-08-03T10:00:05.000Z",
+            vec![text_block("continue")],
+            None,
+        ),
+        amsg(
+            "a2",
+            AgentMessageRole::Assistant,
+            "2026-08-03T10:00:06.000Z",
+            vec![text_block("finished")],
+            None,
+        ),
+    ];
+
+    // 当保留预算只包含 t2, u2, a2 时，绝不能把 t1 切入丢弃区而把 t2 留在保留区！
+    // 必须原子闭包拉回 a1
+    let keep_partial = count_agent_message_tokens(&messages[4])
+        + count_agent_message_tokens(&messages[5])
+        + count_agent_message_tokens(&messages[6]);
+
+    let policy = CompactionPolicy {
+        keep_recent_tokens: keep_partial,
+        min_recent_turns: 1,
+        tool_pair_protection: true,
+        ..CompactionPolicy::default()
+    };
+
+    let plan = engine.compact_agent_messages(&messages, 100, &policy, None);
+    assert_eq!(plan.first_kept_message_id.as_deref(), Some("a1"));
+    assert_eq!(plan.dropped_ids, vec!["u1"]);
+    // 保留段必须完整包含 a1, t1, t2
+    let kept_ids: Vec<&str> = plan.messages.iter().map(|m| m.id.as_str()).collect();
+    assert!(kept_ids.contains(&"a1"));
+    assert!(kept_ids.contains(&"t1"));
+    assert!(kept_ids.contains(&"t2"));
+    assert!(kept_ids.contains(&"u2"));
+    assert!(kept_ids.contains(&"a2"));
+}

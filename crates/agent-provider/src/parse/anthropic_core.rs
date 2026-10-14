@@ -52,6 +52,10 @@ pub struct AnthropicParser {
     emitted_content: bool,
     /// 是否收到过 message_stop（空流保护判定）
     saw_message_stop: bool,
+    /// 捕获的最近一个 thinking signature（Extended Thinking）
+    last_thinking_signature: Option<String>,
+    /// 按 block index 收集的 thinking signatures
+    thinking_signatures: BTreeMap<usize, String>,
     /// 已终结（错误帧或 finish 后）
     terminated: bool,
 }
@@ -65,6 +69,8 @@ impl Default for AnthropicParser {
             usage: None,
             emitted_content: false,
             saw_message_stop: false,
+            last_thinking_signature: None,
+            thinking_signatures: BTreeMap::new(),
             terminated: false,
         }
     }
@@ -84,6 +90,16 @@ impl AnthropicParser {
     /// 当前合并到的 usage（stop 事件携带用）
     pub fn usage(&self) -> Option<&ProviderUsage> {
         self.usage.as_ref()
+    }
+
+    /// 最近一次捕获到的 thinking signature（Claude 3.7 Extended Thinking）
+    pub fn last_thinking_signature(&self) -> Option<&str> {
+        self.last_thinking_signature.as_deref()
+    }
+
+    /// 按 block index 收集的全部 thinking signatures
+    pub fn thinking_signatures(&self) -> &BTreeMap<usize, String> {
+        &self.thinking_signatures
     }
 
     /// 处理一帧，产出该帧触发的事件
@@ -137,15 +153,14 @@ impl AnthropicParser {
                     self.usage = Some(usage);
                 }
             }
-            // content_block_start：注册 tool_use pending（按 index）或跳过 thinking（76-94）
+            // content_block_start：注册 tool_use pending（按 index）或捕获 redacted_thinking（76-94）
             "content_block_start" => {
                 let index = number_field(payload.get("index")).unwrap_or(0);
                 let Some(block) = payload.get("content_block").and_then(Value::as_object) else {
                     return Ok(Vec::new());
                 };
-                // 仅 tool_use 块需要注册 pending；thinking 块内容经 thinking_delta 到达，
-                // 无需维护状态（90-92），其余块类型同样忽略
-                if string_field(block.get("type")) == Some("tool_use") {
+                let block_type = string_field(block.get("type")).unwrap_or("");
+                if block_type == "tool_use" {
                     let id = string_field(block.get("id"))
                         .map(str::to_owned)
                         .unwrap_or_else(|| format!("toolu_{index}"));
@@ -158,9 +173,17 @@ impl AnthropicParser {
                             arguments_text: String::new(),
                         },
                     );
+                } else if block_type == "redacted_thinking" {
+                    if let Some(data) = non_empty_string(block.get("data")) {
+                        self.emitted_content = true;
+                        events.push(ProviderStreamEvent::ThoughtDelta {
+                            text: data.to_owned(),
+                            redacted: Some(true),
+                        });
+                    }
                 }
             }
-            // content_block_delta：text / thinking / input_json（96-140）
+            // content_block_delta：text / thinking / signature / input_json（96-140）
             "content_block_delta" => {
                 let index = number_field(payload.get("index")).unwrap_or(0);
                 let Some(delta) = payload.get("delta").and_then(Value::as_object) else {
@@ -193,6 +216,13 @@ impl AnthropicParser {
                             text: text.to_owned(),
                             redacted: None,
                         });
+                    }
+                } else if delta_type == "signature_delta"
+                    || delta.get("signature").is_some_and(Value::is_string)
+                {
+                    if let Some(sig) = non_empty_string(delta.get("signature")) {
+                        self.last_thinking_signature = Some(sig.to_owned());
+                        self.thinking_signatures.insert(index, sig.to_owned());
                     }
                 } else if delta_type == "input_json_delta"
                     || delta.get("partial_json").is_some_and(Value::is_string)

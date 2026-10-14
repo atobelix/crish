@@ -40,8 +40,10 @@ pub mod compaction {
     pub use crate::thresholds::*;
 }
 
+pub use ai_summary::push_critical_context;
 pub use cut_point::{
-    enforce_tool_batch_closure, KEEP_RECENT_TOKENS_DEFAULT, MIN_RECENT_TURNS_DEFAULT,
+    enforce_tool_batch_closure, is_within_keep_budget, KEEP_RECENT_TOKENS_DEFAULT,
+    MIN_RECENT_TURNS_DEFAULT,
 };
 pub use engine::{CompactionEngine, CompactionPreview};
 pub use plan::{
@@ -55,5 +57,6 @@ pub use thresholds::{
     SESSION_META_KEY_COMPACT_THRESHOLD_RATIO,
 };
 pub use tokens::{
-    count_agent_message_tokens, count_tokens, count_tool_output_tokens, IMAGE_TOKEN_COST,
+    count_agent_message_tokens, count_tokens, count_tokens_fast, count_tool_output_tokens,
+    IMAGE_TOKEN_COST, MESSAGE_FRAMING_TOKENS, TOOL_CALL_FRAMING_TOKENS,
 };

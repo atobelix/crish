@@ -16,6 +16,8 @@ use crate::tokens::{count_agent_message_tokens, count_tokens};
 
 pub struct CompactionEngine {
     max_tokens: usize,
+    /// 压缩代数（None = 从上下文或既有链历史推导，BC05-3）
+    generation: Option<u32>,
 }
 
 /// 压缩预览（D10-A）：[CompactionEngine::preview_compaction] 的产出——
@@ -31,7 +33,29 @@ pub struct CompactionPreview {
 
 impl CompactionEngine {
     pub fn new(max_tokens: usize) -> Self {
-        Self { max_tokens }
+        Self {
+            max_tokens,
+            generation: None,
+        }
+    }
+
+    /// 显式接收外部 generation 构造（BC05-3 单源化，消除主键冲突）
+    pub fn new_with_generation(max_tokens: usize, generation: u32) -> Self {
+        Self {
+            max_tokens,
+            generation: Some(generation),
+        }
+    }
+
+    /// 链式注入 generation
+    pub fn with_generation(mut self, generation: u32) -> Self {
+        self.generation = Some(generation);
+        self
+    }
+
+    /// 变更当前代数
+    pub fn set_generation(&mut self, generation: u32) {
+        self.generation = Some(generation);
     }
 
     /// Compact messages to fit within max_tokens budget.
@@ -360,13 +384,29 @@ impl CompactionEngine {
 
         // T-09：折叠推导——fold_index = 链长 + 1（B3 只增）；块 id 与
         // 摘要消息 id 同名（R-B：`compacted-summary-{gen}-{fold}`）；
-        // generation 本轮以 1 占位（R-K：V2 由会话代数
-        // SessionContextMeta.last_compaction_generation 注入）
+        // 彻底根除 BC05-3：拔除硬编码 generation = 1；
+        // 优先使用 CompactionEngine 显式接收的 generation，
+        // 兜底从 messages 切割点前的既有摘要链中提取最大代数并 +1，确保严格单调自增
         let chain_count = messages[..cut]
             .iter()
             .filter(|m| m.id.starts_with("compacted-summary"))
             .count();
-        let generation: u32 = 1;
+        let generation: u32 = self.generation.unwrap_or_else(|| {
+            // 未显式注入时：沿用链中最新既有摘要块的 generation（同 generation 内只增 fold），或默认为 1
+            messages[..cut]
+                .iter()
+                .filter(|m| m.id.starts_with("compacted-summary"))
+                .filter_map(|m| {
+                    let parts: Vec<&str> = m.id.split('-').collect();
+                    if parts.len() >= 4 {
+                        parts[2].parse::<u32>().ok()
+                    } else {
+                        None
+                    }
+                })
+                .next_back()
+                .unwrap_or(1)
+        });
         let fold_index = chain_count + 1;
         let block_id = format!("compacted-summary-{generation}-{fold_index}");
 
@@ -444,6 +484,7 @@ impl CompactionEngine {
             // metadata 快照（机器可读优先；正文只放人读线索；R-C：
             // stub 永驻 awaiting——摘要就绪以块表为准，不误导模型）
             metadata: Some(serde_json::json!({
+                "isCompactedSummary": true,
                 "summary": {
                     "blockId": block_id,
                     "state": if summary_is_llm { "committed" } else { "awaiting" },
@@ -740,5 +781,90 @@ impl CompactionEngine {
     /// P4 §3.4.1 阈值 = window - reserve，budget_tokens 由调用方换算）
     pub fn should_compact(&self, estimate: u64, budget_tokens: u64) -> bool {
         estimate >= budget_tokens
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use conex_types::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+
+    #[test]
+    fn test_explicit_generation_generates_correct_block_id() {
+        let engine = CompactionEngine::new(0).with_generation(3);
+        let messages = vec![
+            Arc::new(AgentMessage {
+                id: "u1".to_string(),
+                role: AgentMessageRole::User,
+                created_at: String::new(),
+                blocks: vec![AgentMessageBlock::Text {
+                    text: "hello world 1".to_string(),
+                }],
+                metadata: None,
+                client_message_id: None,
+                content: Some("hello world 1".to_string()),
+            }),
+            Arc::new(AgentMessage {
+                id: "a1".to_string(),
+                role: AgentMessageRole::Assistant,
+                created_at: String::new(),
+                blocks: vec![AgentMessageBlock::Text {
+                    text: "answer 1".to_string(),
+                }],
+                metadata: None,
+                client_message_id: None,
+                content: Some("answer 1".to_string()),
+            }),
+            Arc::new(AgentMessage {
+                id: "u2".to_string(),
+                role: AgentMessageRole::User,
+                created_at: String::new(),
+                blocks: vec![AgentMessageBlock::Text {
+                    text: "hello world 2".to_string(),
+                }],
+                metadata: None,
+                client_message_id: None,
+                content: Some("hello world 2".to_string()),
+            }),
+            Arc::new(AgentMessage {
+                id: "a2".to_string(),
+                role: AgentMessageRole::Assistant,
+                created_at: String::new(),
+                blocks: vec![AgentMessageBlock::Text {
+                    text: "answer 2".to_string(),
+                }],
+                metadata: None,
+                client_message_id: None,
+                content: Some("answer 2".to_string()),
+            }),
+        ];
+        let policy = CompactionPolicy {
+            keep_recent_tokens: 5,
+            min_recent_turns: 1,
+            ..Default::default()
+        };
+        let plan = engine.compact_agent_messages_with_stub_policy(
+            &messages,
+            10,
+            &policy,
+            StubPolicy::StubAllowed,
+            None,
+        );
+        assert_eq!(plan.generation, 3);
+        assert_eq!(plan.fold_index, 1);
+        let summary_msg = plan
+            .messages
+            .iter()
+            .find(|m| m.id.starts_with("compacted-summary"))
+            .expect("should have summary message");
+        assert_eq!(summary_msg.id, "compacted-summary-3-1");
+        assert_eq!(
+            summary_msg.metadata.as_ref().unwrap()["isCompactedSummary"],
+            true
+        );
+        assert_eq!(
+            summary_msg.metadata.as_ref().unwrap()["summary"]["generation"],
+            3
+        );
     }
 }

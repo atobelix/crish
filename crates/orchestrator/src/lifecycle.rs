@@ -54,6 +54,11 @@ use crate::subagent_events::{build_subagent_ended, SubagentEmitContext, Subagent
 pub trait ForceCancelSink: Send + Sync {
     /// 向目标子代理 run 投递 L3 强停
     fn request_force_cancel(&self, subagent_run_id: &str, reason: &str) -> bool;
+
+    /// BC03-2：广播触发目标子代理的 abort_signal.abort()（秒级物理打断）
+    fn broadcast_abort(&self, _subagent_run_id: &str) -> bool {
+        false
+    }
 }
 
 /// 已终止子代理条目（L3 强停投递成功）
@@ -168,12 +173,47 @@ pub struct SubagentLifecycleService {
     db: Arc<LocalDb>,
     /// L3 强停投递通道（引擎侧接线）
     control: Arc<dyn ForceCancelSink>,
+    /// BC03-2：子代理 run 的 AbortSignal 广播注册表（秒级物理打断工具批）
+    signals: Arc<std::sync::RwLock<std::collections::HashMap<String, session_loop::safe_point::AbortSignal>>>,
 }
 
 impl SubagentLifecycleService {
     /// 新建服务
     pub fn new(db: Arc<LocalDb>, control: Arc<dyn ForceCancelSink>) -> Self {
-        Self { db, control }
+        Self {
+            db,
+            control,
+            signals: Arc::new(std::sync::RwLock::new(std::collections::HashMap::new())),
+        }
+    }
+
+    /// 注册子代理 run 的 AbortSignal 实例
+    pub fn register_signal(&self, subagent_run_id: impl Into<String>, signal: session_loop::safe_point::AbortSignal) {
+        if let Ok(mut map) = self.signals.write() {
+            map.insert(subagent_run_id.into(), signal);
+        }
+    }
+
+    /// 注销子代理 run 的 AbortSignal 实例
+    pub fn unregister_signal(&self, subagent_run_id: &str) {
+        if let Ok(mut map) = self.signals.write() {
+            map.remove(subagent_run_id);
+        }
+    }
+
+    /// 广播触发子代理 run 的 AbortSignal（秒级打断正在运行的工具批）
+    pub fn broadcast_abort(&self, subagent_run_id: &str) -> bool {
+        let mut triggered = false;
+        if let Ok(map) = self.signals.read() {
+            if let Some(sig) = map.get(subagent_run_id) {
+                sig.abort();
+                triggered = true;
+            }
+        }
+        if self.control.broadcast_abort(subagent_run_id) {
+            triggered = true;
+        }
+        triggered
     }
 
     /// 数据库句柄（调用方按需复用）
@@ -222,6 +262,7 @@ impl SubagentLifecycleService {
         let mut terminated = Vec::new();
         let mut non_terminal = Vec::new();
         for agent in &targets {
+            self.broadcast_abort(&agent.subagent_run_id);
             let delivered = self
                 .control
                 .request_force_cancel(&agent.subagent_run_id, reason);
@@ -311,6 +352,7 @@ impl SubagentLifecycleService {
             });
         }
         // ③ L3 强停投递（复用 ForceCancelSink；false = 引擎无运行实例）
+        self.broadcast_abort(&subagent_run_id);
         let delivered = self.control.request_force_cancel(&subagent_run_id, reason);
         // ④ 行归一 failed（复用 mark_row_failed，单行定点写）
         self.mark_row_failed(session_id, &subagent_run_id)?;
@@ -383,6 +425,7 @@ impl SubagentLifecycleService {
         // 目标 run 仍 running：先投递 L3 强停（kill-for-resume），终止存活
         // 循环，防其终态回写覆盖 fork 结果
         if current.status == "running" {
+            self.broadcast_abort(&current_run_id);
             self.control
                 .request_force_cancel(&current_run_id, "resume-subagent");
         }
@@ -642,5 +685,52 @@ pub fn subagent_history(row: &SessionAgent) -> Vec<HistoryMessage> {
 fn db_err(e: DbFailure) -> LifecycleError {
     LifecycleError::PersistFailed {
         message: e.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct MockSink {
+        aborted_runs: std::sync::Mutex<Vec<String>>,
+    }
+
+    impl ForceCancelSink for MockSink {
+        fn request_force_cancel(&self, _subagent_run_id: &str, _reason: &str) -> bool {
+            true
+        }
+        fn broadcast_abort(&self, subagent_run_id: &str) -> bool {
+            self.aborted_runs.lock().unwrap().push(subagent_run_id.to_string());
+            true
+        }
+    }
+
+    #[test]
+    fn test_broadcast_abort_triggers_signal_and_sink() {
+        let db = Arc::new(LocalDb::open_in_memory().unwrap());
+        let sink = Arc::new(MockSink {
+            aborted_runs: std::sync::Mutex::new(Vec::new()),
+        });
+        let service = SubagentLifecycleService::new(db, sink.clone());
+
+        let signal = session_loop::safe_point::AbortSignal::new();
+        assert!(!signal.is_aborted());
+
+        service.register_signal("sub-run-123", signal.clone());
+        let triggered = service.broadcast_abort("sub-run-123");
+        assert!(triggered);
+        assert!(signal.is_aborted(), "AbortSignal should be triggered");
+        assert_eq!(
+            sink.aborted_runs.lock().unwrap().as_slice(),
+            &["sub-run-123"]
+        );
+
+        // unregister
+        service.unregister_signal("sub-run-123");
+        let signal2 = session_loop::safe_point::AbortSignal::new();
+        service.register_signal("sub-run-456", signal2.clone());
+        service.broadcast_abort("sub-run-123");
+        assert!(!signal2.is_aborted());
     }
 }

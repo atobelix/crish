@@ -385,7 +385,39 @@ async fn retract_impl_stop_run_cascades_kill_all_cancelled_event_layer_rows_norm
         allowed_write_paths_json: None,
         sub_session_id: None,
     });
-    db.save_session_agents("s1", &rows).expect("子代理行落库");
+    // ②b 消息持久层：预置 2 条消息（msg-user-1, msg-assistant-1）
+    let initial_msgs = vec![
+        conex_types::SessionMessage {
+            id: "msg-user-1".into(),
+            sender: "user".into(),
+            text: Some("撤回我".into()),
+            thinking: None,
+            timestamp: 100,
+            status: Some("completed".into()),
+            stream_text_offset: None,
+            thinking_time: None,
+            tool_calls_json: None,
+            blocks_json: None,
+            tool_call_results_json: None,
+            usage: None,
+        },
+        conex_types::SessionMessage {
+            id: "msg-assistant-1".into(),
+            sender: "assistant".into(),
+            text: Some("收到".into()),
+            thinking: None,
+            timestamp: 200,
+            status: Some("completed".into()),
+            stream_text_offset: None,
+            thinking_time: None,
+            tool_calls_json: None,
+            blocks_json: None,
+            tool_call_results_json: None,
+            usage: None,
+        },
+    ];
+    db.save_session_body("s1", &initial_msgs).expect("保存初始消息");
+    assert_eq!(db.load_session_body("s1").unwrap().len(), 2);
 
     // ③ 活动 run（子代理 run 挂 active_runs——stop_run 投 L3 的目标）
     let active = build_cancelled_active_run(&state, "s1", sub_run_id).await;
@@ -399,21 +431,19 @@ async fn retract_impl_stop_run_cascades_kill_all_cancelled_event_layer_rows_norm
     let resp = retract_impl(&state, "s1", "msg-user-1")
         .await
         .expect("撤回命令成功");
-    // 冻结边界 = 收敛点 MAX(sequence)：message-start(1) + stop_run 期间
-    // kill_all 直发 subagent-ended(2) 均计入——撤离/收场事件在冻结读点前
-    // 落库，边界含收场事件；前端投影按 targetMessageId 截断不受影响。
+    // 真实截断边界 = 目标消息起始序号（message-start seq 1，严禁拿日志尾冒充）
     assert_eq!(
-        resp.boundary_seq, 2,
-        "冻结边界 = 收敛点 MAX（message-start 1 + kill_all 直发 subagent-ended 2）"
+        resp.boundary_seq, 1,
+        "截断边界 = 真实目标消息起始序号（message-start seq 1，严禁拿日志尾冒充）"
     );
     assert_eq!(
-        resp.truncate_sequence,
-        resp.boundary_seq + 1,
-        "TimelineTruncate 占 boundary+1（只追加不变量）"
+        resp.truncate_sequence, 3,
+        "TimelineTruncate 占 frozen_seq + 1 = 3（只追加不变量）"
     );
     assert_eq!(resp.run_id, sub_run_id, "被收场 run = 活动子代理 run");
     assert_eq!(resp.target_message_id, "msg-user-1");
     assert_eq!(resp.rollback.restored, 0, "无边界后写路径 → 回滚空跑");
+
 
     // ⑤ 事件层 cancelled 为准（K1 决策 7）：
     //    5a. stop_run 向控制总线投递 L3 强停（reason 携带撤回边界），
@@ -481,9 +511,17 @@ async fn retract_impl_stop_run_cascades_kill_all_cancelled_event_layer_rows_norm
     let truncate_v: serde_json::Value =
         serde_json::from_str(&truncate.payload).expect("truncate 载荷 JSON");
     assert_eq!(truncate_v["type"], "timeline-truncate");
-    assert_eq!(truncate_v["boundarySeq"], resp.boundary_seq as u64);
+    assert_eq!(truncate_v["boundarySeq"], 1);
     assert_eq!(truncate_v["targetMessageId"], "msg-user-1");
+
+    // ⑧ 物理下推：SQLite 消息持久层截断验证——msg-assistant-1 必须已被物理删除，仅保留 msg-user-1
+    let remaining_msgs = db.load_session_body("s1").expect("读取截断后消息");
+    assert_eq!(remaining_msgs.len(), 1, "只保留目标消息 msg-user-1");
+    assert_eq!(remaining_msgs[0].id, "msg-user-1");
+    let sessions_list = db.list_sessions().expect("列出会话");
+    assert_eq!(sessions_list[0].message_count, 1, "message_count 重算为 1");
 }
+
 
 /// K2 边界：撤回目标不可定位 → fail-closed 不冻结、不触发 kill_all、
 /// 不落 truncate（NotFound；行语义不动）
@@ -544,4 +582,81 @@ async fn retract_impl_missing_target_fails_closed_without_kill_all() {
         events.iter().all(|e| e.event_type != "timeline-truncate"),
         "无 truncate 落库（未进入冻结）"
     );
+}
+
+/// 全 Run 并行收敛网：会话下存在多个活动 Run（主 Run 与子代理 Run）时，
+/// 必须等待所有 Run 全部收敛至终态，消除单 Run 盲区。
+#[tokio::test]
+async fn retract_impl_waits_for_all_runs_and_subagents_to_converge() {
+    let (state, db) = test_state();
+    state.run_restore().await;
+
+    // 1. 定位面：落库一条 message-start
+    append_target_message_start(&db, 1, "msg-multi-target");
+
+    // 2. 装配主 Run 与 2 个子代理 Run
+    let main_run = build_cancelled_active_run(&state, "s1", "run-main-conv").await;
+    let sub1_run = build_cancelled_active_run(&state, "s1", "run-sub-conv-1").await;
+
+    // sub2_run 初始为运行中（Not terminal）
+    let sub2_handle = Arc::new(tokio::sync::Mutex::new(RunHandle::new(
+        "run-sub-conv-2",
+        "s1",
+        RunStatus::Running,
+    )));
+    let sub2_queue = Arc::new(tokio::sync::Mutex::new(EventQueue::new(
+        state.store.clone(),
+        0,
+        None,
+    )));
+    let sub2_bridge = Arc::new(BufferedRunEventBridge::new(
+        state.bridge.clone(),
+        "run-sub-conv-2".to_string(),
+    ));
+    let sub2_approval = Arc::new(ApprovalGateImpl::new(
+        "run-sub-conv-2".to_string(),
+        "s1".to_string(),
+        None,
+        Box::new(|_| {}),
+        Arc::clone(&sub2_handle),
+        state.store.clone(),
+        None,
+    ));
+    let sub2_run = Arc::new(ActiveRun {
+        session_id: "s1".to_string(),
+        run_id: "run-sub-conv-2".to_string(),
+        handle: Arc::clone(&sub2_handle),
+        queue: sub2_queue,
+        control_bus: Arc::new(Mutex::new(ControlBus::new())),
+        abort_signal: AbortSignal::new(),
+        approval: sub2_approval,
+        bridge: sub2_bridge,
+        delta_sink_active: true,
+        driver: Mutex::new(None),
+        user_touched: AtomicBool::new(false),
+        subagent: None,
+        audit_persist: Mutex::new(None),
+    });
+
+    {
+        let mut active = state.active_runs.lock().unwrap();
+        active.insert("run-main-conv".to_string(), Arc::clone(&main_run));
+        active.insert("run-sub-conv-1".to_string(), Arc::clone(&sub1_run));
+        active.insert("run-sub-conv-2".to_string(), Arc::clone(&sub2_run));
+    }
+
+    // 后台任务延迟 80ms 后将 sub2_run 置为终态 Cancelled（模拟子代理收口完成）
+    let sub2_handle_clone = Arc::clone(&sub2_handle);
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        let mut h = sub2_handle_clone.lock().await;
+        h.status = RunStatus::Cancelled;
+        h.end_reason = Some("cancelled".to_string());
+    });
+
+    let resp = retract_impl(&state, "s1", "msg-multi-target")
+        .await
+        .expect("撤回命令成功，全 Run 并行收敛成功");
+    assert_eq!(resp.boundary_seq, 1, "真实目标边界 seq=1");
+    assert_eq!(resp.target_message_id, "msg-multi-target");
 }

@@ -2466,7 +2466,8 @@ mod tests {
         assert!(seq.persisted, "timeline-truncate Critical 必达落库");
         assert_eq!(mem.events().len(), 2);
 
-        // run-terminal（run 收口终态事件）同为撤离面放行
+        // 核心能力整改（04A/04B 拔除白名单后门）：冻结生效后，RunTerminal 绝不再是撤离事件，
+        // 越界写入必须被刚性拦截（fail-closed）
         let terminal = AgentEvent::RunTerminal {
             session_id: "s1".to_string(),
             run_id: "run-1".to_string(),
@@ -2474,8 +2475,9 @@ mod tests {
             terminal: RunTerminalStatus::Cancelled,
             error: None,
         };
-        queue.push("s1", terminal).await.unwrap();
-        assert_eq!(mem.events().len(), 3);
+        let terminal_err = queue.push("s1", terminal).await.unwrap_err();
+        assert_eq!(terminal_err.event_type, "run-terminal");
+        assert_eq!(mem.events().len(), 2);
 
         // 冻结期内另一会话不受影响（会话级隔离）
         assert_eq!(queue.push("s2", agent_start()).await.unwrap().sequence, 1);
@@ -2486,7 +2488,7 @@ mod tests {
             .push("s1", agent_end(AgentEndReason::Stop))
             .await
             .unwrap();
-        assert_eq!(ok.sequence, 4, "释放后新写入放行（归新 run 语义）");
+        assert_eq!(ok.sequence, 3, "释放后新写入放行（归新 run 语义）");
     }
 
     /// FREEZE2（原子性）：冻结读点 == 事件流停止写入点——冻结登记后

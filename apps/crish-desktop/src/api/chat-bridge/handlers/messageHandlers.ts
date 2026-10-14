@@ -31,8 +31,7 @@ function attachCacheMetricsToStoreMessage(
   messageId: string,
   metrics: MessageCacheMetrics
 ): void {
-  getSessionStoreState()
-    .setMessageCacheMetrics(sessionId, messageId, metrics);
+  getSessionStoreState().setMessageCacheMetrics(sessionId, messageId, metrics);
 }
 
 /**
@@ -94,7 +93,20 @@ export function onMessageDelta(
     const cleanTurn = sanitizeTurnIndex(rawTurn);
     state.activeTurnIndex = Math.max(state.activeTurnIndex ?? 0, cleanTurn);
   }
-  const currentTurn = state.activeTurnIndex ?? 0;
+  let currentTurn = state.activeTurnIndex ?? 0;
+
+  // 严禁将新轮次的 delta 写入已收口的上一轮历史：
+  // 若当前轮次已存在权威终态文本，说明已进入新轮次，安全步进至新插槽
+  if (
+    state.turnAuthoritativeTexts &&
+    state.turnAuthoritativeTexts.has(currentTurn)
+  ) {
+    const maxCompletedTurn = Math.max(
+      ...Array.from(state.turnAuthoritativeTexts.keys())
+    );
+    currentTurn = Math.max(currentTurn, maxCompletedTurn + 1);
+    state.activeTurnIndex = currentTurn;
+  }
 
   if (block.type === 'thought') {
     if (!state.turnStreamedThoughts) {
@@ -113,24 +125,33 @@ export function onMessageDelta(
     state.turnStreamedTexts = new Map<number, string>();
   }
 
+  const prevStreamed = state.turnStreamedTexts.get(currentTurn) || '';
+
   let deltaToSend = t;
   if (raw.message && typeof raw.message === 'object') {
     const msg = raw.message as Record<string, unknown>;
     if (
       typeof msg.content === 'string' &&
-      msg.content.length >= state.assistantText.length
+      msg.content.length >= prevStreamed.length
     ) {
-      deltaToSend = msg.content.slice(state.assistantText.length);
-      state.assistantText = msg.content;
-    } else {
-      state.assistantText += t;
+      deltaToSend = msg.content.slice(prevStreamed.length);
     }
-  } else {
-    state.assistantText += t;
   }
 
-  const prevStreamed = state.turnStreamedTexts.get(currentTurn) || '';
   state.turnStreamedTexts.set(currentTurn, prevStreamed + deltaToSend);
+
+  // 多轮追加平滑衔接：若上一轮已权威收口且本轮尚无前置流式文本，以两换行平滑衔接，避免跳变
+  if (
+    state.turnAuthoritativeTexts &&
+    state.turnAuthoritativeTexts.size > 0 &&
+    prevStreamed === '' &&
+    state.assistantText &&
+    !state.assistantText.endsWith('\n\n')
+  ) {
+    state.assistantText += '\n\n' + deltaToSend;
+  } else {
+    state.assistantText += deltaToSend;
+  }
 
   if (deltaToSend) {
     callbacks.onChunk(deltaToSend);
@@ -151,52 +172,55 @@ export function onMessageEnd(
     ('turnIndex' in envelope.event
       ? (envelope.event as { turnIndex?: unknown }).turnIndex
       : undefined) ?? envelope.raw.turnIndex;
-  const turnIndex = sanitizeTurnIndex(rawTurn);
+  const targetTurn =
+    rawTurn !== undefined && rawTurn !== null
+      ? sanitizeTurnIndex(rawTurn)
+      : (state.activeTurnIndex ?? 0);
 
-  // 1. 思考链收口：权威覆盖，不追加
+  // 初始化 Map 双账本
+  if (!state.turnAuthoritativeTexts) {
+    state.turnAuthoritativeTexts = new Map<number, string>();
+  }
+  if (!state.turnStreamedTexts) {
+    state.turnStreamedTexts = new Map<number, string>();
+  }
+  if (!state.turnAuthoritativeThoughts) {
+    state.turnAuthoritativeThoughts = new Map<number, string>();
+  }
+
+  const piece = text.trim();
+
+  // 步进活跃轮次
+  state.activeTurnIndex = Math.max(state.activeTurnIndex ?? 0, targetTurn);
+
+  // 1. 思考链收口：权威覆盖对应轮次
   if (thought.trim()) {
-    if (!state.turnAuthoritativeThoughts) {
-      state.turnAuthoritativeThoughts = new Map<number, string>();
-    }
-    state.turnAuthoritativeThoughts.set(turnIndex, thought.trim());
+    state.turnAuthoritativeThoughts.set(targetTurn, thought.trim());
     state.assistantThought = thought.trim();
-    callbacks.onThought(thought.trim(), turnIndex);
+    callbacks.onThought(thought.trim(), targetTurn);
   }
 
   // 2. 正文收口：Map 双账本模型与多轮分段权威覆盖，单生产者铁律（绝对不调 onChunk 追加！）
-  if (text.trim()) {
-    const piece = text.trim();
-    const rawTurn =
-      ('turnIndex' in envelope.event
-        ? (envelope.event as { turnIndex?: unknown }).turnIndex
-        : undefined) ?? envelope.raw.turnIndex;
-    const turnIndex = sanitizeTurnIndex(rawTurn);
-
-    // 步进活跃轮次
-    state.activeTurnIndex = Math.max(state.activeTurnIndex ?? 0, turnIndex);
-
-    // 初始化 Map 双账本
-    if (!state.turnAuthoritativeTexts) {
-      state.turnAuthoritativeTexts = new Map<number, string>();
-    }
-    if (!state.turnStreamedTexts) {
-      state.turnStreamedTexts = new Map<number, string>();
-    }
-
+  if (piece) {
     // 记录本轮权威快照
-    state.turnAuthoritativeTexts.set(turnIndex, piece);
+    state.turnAuthoritativeTexts.set(targetTurn, piece);
+
+    // 权威收口后，清退当前轮次流式临时账本，消除重复拼接隐患
+    state.turnStreamedTexts.delete(targetTurn);
+    if (targetTurn === 1 && !state.turnAuthoritativeTexts.has(0)) {
+      state.turnStreamedTexts.delete(0);
+    }
 
     // 兼容维护 messageEndTurnSegments 数组
     if (!state.messageEndTurnSegments) state.messageEndTurnSegments = [];
     const segs = state.messageEndTurnSegments;
-    while (segs.length <= turnIndex) segs.push('');
-    segs[turnIndex] = piece;
+    while (segs.length <= targetTurn) segs.push('');
+    segs[targetTurn] = piece;
 
     // 按轮次升序聚合多轮权威快照（Map 双账本）
     const allTurns = new Set<number>([
       ...Array.from(state.turnAuthoritativeTexts.keys()),
-      ...Array.from(state.turnStreamedTexts.keys()),
-      ...segs.map((_, i) => i),
+      ...segs.map((_, i) => i).filter((i) => Boolean(segs[i]?.trim())),
     ]);
     const sortedTurns = Array.from(allTurns).sort((a, b) => a - b);
     const combinedPieces: string[] = [];
@@ -219,8 +243,9 @@ export function onMessageEnd(
 
     // 权威落盘账本：将本轮权威文本同步落盘至 sessionStore（对齐 03 详案与因果时序）
     if (env.sessionId) {
-      const sess = getSessionStoreState()
-        .sessions.find((s) => s.id === env.sessionId);
+      const sess = getSessionStoreState().sessions.find(
+        (s) => s.id === env.sessionId
+      );
       if (sess?.messages) {
         let target = msg.id
           ? sess.messages.find((m) => m.id === msg.id)
@@ -235,8 +260,11 @@ export function onMessageEnd(
           }
         }
         if (target) {
-          getSessionStoreState()
-            .updateMessageText(env.sessionId, target.id, state.assistantText);
+          getSessionStoreState().updateMessageText(
+            env.sessionId,
+            target.id,
+            state.assistantText
+          );
         }
       }
     }

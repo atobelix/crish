@@ -147,6 +147,7 @@ fn exec_ctx(
         note_backend: None,
         background: None,
         log_root: None,
+        ..Default::default()
     }
 }
 

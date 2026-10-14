@@ -290,3 +290,42 @@ fn threshold_defaults_matched() {
     assert_eq!(COMPACT_THRESHOLD_RATIO_DEFAULT, 0.85);
     assert_eq!(COMPACT_CRITICAL_RATIO_DEFAULT, 0.95);
 }
+
+#[test]
+fn test_dual_watermark_decision_helpers() {
+    let thresholds = CompactionThresholds::default();
+    let window = 100_000u64;
+
+    // < 85%: under budget
+    assert!(thresholds.is_under_budget(80_000, window));
+    assert!(!thresholds.should_preheat(80_000, window));
+    assert!(!thresholds.should_critical_defense(80_000, window));
+    assert!(!thresholds.classify(80_000, window).should_compact());
+
+    // 85% ~ 95%: regular preheat
+    assert!(!thresholds.is_under_budget(90_000, window));
+    assert!(thresholds.should_preheat(90_000, window));
+    assert!(!thresholds.should_critical_defense(90_000, window));
+    assert!(thresholds.classify(90_000, window).should_compact());
+
+    // >= 95%: critical defense
+    assert!(!thresholds.is_under_budget(96_000, window));
+    assert!(!thresholds.should_preheat(96_000, window));
+    assert!(thresholds.should_critical_defense(96_000, window));
+    assert!(thresholds.classify(96_000, window).should_compact());
+
+    // threshold_tokens
+    let (reg, crit) = thresholds.threshold_tokens(window);
+    assert_eq!(reg, 85_000);
+    assert_eq!(crit, 95_000);
+}
+
+#[test]
+fn test_adaptive_keep_recent_tokens() {
+    // 16k available: 16000 * 0.35 = 5600 -> in [4000, 40000]
+    assert_eq!(CompactionThresholds::adaptive_keep_recent_tokens(16_000), 5_600);
+    // tiny 8k available: 8000 * 0.35 = 2800 -> clamped to 4000
+    assert_eq!(CompactionThresholds::adaptive_keep_recent_tokens(8_000), 4_000);
+    // huge 200k available: 200000 * 0.35 = 70000 -> clamped to 40000
+    assert_eq!(CompactionThresholds::adaptive_keep_recent_tokens(200_000), 40_000);
+}

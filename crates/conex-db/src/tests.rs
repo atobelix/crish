@@ -1312,3 +1312,67 @@ fn import_agents_and_messages_upsert_with_removal_diff() {
     assert_eq!(agents_loaded[0].messages.len(), 1);
     assert_eq!(agents_loaded[0].messages[0].id, "am1x");
 }
+
+#[test]
+fn test_truncate_session_messages_after_physical_shrink_and_metadata() {
+    let (db, _guard) = open_temp_wal_db();
+    db.insert_session("s1", "retraction session").unwrap();
+
+    // 1. 插入 5 条消息 (seq 0..4)
+    let messages = vec![
+        sample_message("m0", "user", 1),
+        sample_message("m1", "assistant", 2),
+        sample_message("m2", "user", 3),
+        sample_message("m3", "assistant", 4),
+        sample_message("m4", "assistant", 5),
+    ];
+    db.save_session_body_versioned("s1", &messages, Some(1)).unwrap();
+
+    let initial = db.load_session_body("s1").unwrap();
+    assert_eq!(initial.len(), 5);
+
+    // 2. 截断 m2 之后的消息（删除 m3, m4）
+    let deleted = db.truncate_session_messages_after("s1", "m2").unwrap();
+    assert_eq!(deleted, 2, "物理删除 2 条被撤回消息");
+
+    // 3. 读回验证：仅剩 3 条消息，且顺序保持为 m0, m1, m2
+    let remaining = db.load_session_body("s1").unwrap();
+    assert_eq!(remaining.len(), 3);
+    assert_eq!(remaining[0].id, "m0");
+    assert_eq!(remaining[1].id, "m1");
+    assert_eq!(remaining[2].id, "m2");
+
+    // 4. sessions 表元数据断言：message_count == 3，body_version 自增为 2
+    let list = db.list_sessions().unwrap();
+    assert_eq!(list[0].message_count, 3);
+    db.read(|conn| {
+        let (count, version): (i64, i64) = conn
+            .query_row(
+                "SELECT message_count, body_version FROM sessions WHERE id = 's1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(count, 3);
+        assert_eq!(version, 2);
+        Ok(())
+    })
+    .unwrap();
+
+    // 5. 不存在的消息 ID 报错
+    let err = db.truncate_session_messages_after("s1", "m-nonexistent").unwrap_err();
+    assert_eq!(err.kind, DbFailureKind::Other("truncate_target_not_found".into()));
+
+    // 6. 空会话截断安全返回 Ok(0)
+    db.insert_session("s_empty", "empty").unwrap();
+    let zero = db.truncate_session_messages_after("s_empty", "any").unwrap();
+    assert_eq!(zero, 0);
+
+    // 7. 测试 truncate_session_messages_after_seq
+    let deleted_seq = db.truncate_session_messages_after_seq("s1", 1).unwrap();
+    assert_eq!(deleted_seq, 1, "删除 seq > 1（即 m2，seq=2）");
+    let after_seq = db.load_session_body("s1").unwrap();
+    assert_eq!(after_seq.len(), 2);
+    assert_eq!(after_seq[0].id, "m0");
+    assert_eq!(after_seq[1].id, "m1");
+}

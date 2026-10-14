@@ -146,6 +146,7 @@ fn exec_ctx_wired(
         note_backend: None,
         background: None,
         log_root: None,
+        ..Default::default()
     }
 }
 

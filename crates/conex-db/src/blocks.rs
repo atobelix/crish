@@ -345,6 +345,159 @@ impl LocalDb {
             .map_err(|e| self.latch_error("count_compression_events", e))?;
         Ok(count as u64)
     }
+
+    /// 在会话的已压缩块中模糊检索（BC11-4，02A 详案 §3.5）。
+    ///
+    /// 匹配 summary、summary_json 以及 block_id；query 为空时匹配全部块；
+    /// 排序：generation DESC, sequence DESC；limit 钳制条数。缺表降级返回空集。
+    pub fn search_compression_blocks(
+        &self,
+        session_id: &str,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<CompactionBlockRow>, DbFailure> {
+        if !self.compression_blocks_present()? {
+            self.warn_missing_blocks_table("search_compression_blocks");
+            return Ok(Vec::new());
+        }
+        let conn = self.conn.lock().map_err(|e| DbFailure {
+            message: format!("lock poisoned: {e}"),
+            kind: DbFailureKind::Lock,
+        })?;
+        let query_trimmed = query.trim();
+        let query_pattern = format!("%{query_trimmed}%");
+        let limit_val = limit.max(1) as i64;
+
+        let sql = format!(
+            "{BLOCK_SELECT_SQL}
+             AND (?2 = '' OR summary LIKE ?3 OR (summary_json IS NOT NULL AND summary_json LIKE ?3) OR block_id LIKE ?3)
+             ORDER BY generation DESC, sequence DESC
+             LIMIT ?4"
+        );
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|e| self.latch_error("search_compression_blocks_prepare", e))?;
+
+        let rows = stmt
+            .query_map(
+                rusqlite::params![session_id, query_trimmed, query_pattern, limit_val],
+                block_from_row,
+            )
+            .map_err(|e| self.latch_error("search_compression_blocks_query", e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| self.latch_error("search_compression_blocks_collect", e))?;
+        Ok(rows)
+    }
+
+    /// 从 events 表（及 session_messages 兜底）按因果顺序无损物理还原被压缩消息的原始文本（BC11-4，02A 详案 §3.5.2）。
+    ///
+    /// 从 event_type = 'message-end' 的 JSON payload 提取 [role] text，并保持 dropped_ids 的原初因果顺序。
+    pub fn reconstruct_dropped_messages_text(
+        &self,
+        session_id: &str,
+        dropped_ids: &[String],
+    ) -> Result<String, DbFailure> {
+        if dropped_ids.is_empty() {
+            return Ok(String::new());
+        }
+
+        let mut id_map: std::collections::HashMap<String, (String, String)> =
+            std::collections::HashMap::new();
+
+        // 1. 从 events 表中提取 message-end 的消息正文与角色
+        let events = self.read(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT payload FROM events
+                     WHERE session_id = ?1 AND event_type = 'message-end'
+                     ORDER BY sequence ASC",
+                )
+                .map_err(|e| self.latch_error("reconstruct_events_prepare", e))?;
+
+            let payloads = stmt
+                .query_map(rusqlite::params![session_id], |row| row.get::<_, String>(0))
+                .map_err(|e| self.latch_error("reconstruct_events_map", e))?
+                .collect::<Result<Vec<String>, _>>()
+                .map_err(|e| self.latch_error("reconstruct_events_collect", e))?;
+            Ok(payloads)
+        })?;
+
+        for payload in events {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&payload) {
+                let msg_obj = if val.get("message").and_then(|m| m.as_object()).is_some() {
+                    &val["message"]
+                } else {
+                    &val
+                };
+
+                let msg_id = msg_obj
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| msg_obj.get("clientMessageId").and_then(|v| v.as_str()))
+                    .or_else(|| val.get("messageId").and_then(|v| v.as_str()));
+
+                if let Some(id) = msg_id {
+                    let role = msg_obj
+                        .get("role")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("assistant")
+                        .to_string();
+
+                    let mut text = String::new();
+                    if let Some(blocks) = msg_obj.get("blocks").and_then(|b| b.as_array()) {
+                        for b in blocks {
+                            if b.get("type").and_then(|t| t.as_str()) == Some("text") {
+                                if let Some(t) = b.get("text").and_then(|s| s.as_str()) {
+                                    text.push_str(t);
+                                }
+                            }
+                        }
+                    }
+                    if text.is_empty() {
+                        if let Some(c) = msg_obj.get("content").and_then(|v| v.as_str()) {
+                            text.push_str(c);
+                        } else if let Some(t) = msg_obj.get("text").and_then(|v| v.as_str()) {
+                            text.push_str(t);
+                        }
+                    }
+
+                    id_map.insert(id.to_string(), (role, text));
+                }
+            }
+        }
+
+        // 2. 兜底回退：如果还有未命中的 dropped_id，尝试从 session_messages 补充
+        let missing_any = dropped_ids.iter().any(|id| !id_map.contains_key(id));
+        if missing_any {
+            if let Ok(session_msgs) = self.load_session_body(session_id) {
+                for sm in session_msgs {
+                    if !id_map.contains_key(&sm.id) {
+                        let sender = if sm.sender.is_empty() {
+                            "user".to_string()
+                        } else {
+                            sm.sender.clone()
+                        };
+                        let text = sm.text.unwrap_or_default();
+                        id_map.insert(sm.id, (sender, text));
+                    }
+                }
+            }
+        }
+
+        // 3. 按 dropped_ids 原始因果顺序拼接
+        let mut parts = Vec::new();
+        for id in dropped_ids {
+            if let Some((role, text)) = id_map.get(id) {
+                if !text.trim().is_empty() {
+                    parts.push(format!("[{role}] {text}"));
+                } else {
+                    parts.push(format!("[{role}] ({id})"));
+                }
+            }
+        }
+
+        Ok(parts.join("\n\n"))
+    }
 }
 
 /// 行读取 SQL 公共前缀（get_block / list_blocks 复用）。

@@ -232,6 +232,8 @@ pub struct ControlBus {
     /// check_control 安全点经 [Self::take_trace] 取走发射
     /// control-intent(enqueued)；continue 不入队不记录。
     trace: VecDeque<ControlIntent>,
+    /// BC03-1 / BC03-2：可选绑定的 Run 级 AbortSignal；在 L3 强停入队时立即广播触发
+    abort_signal: Option<crate::safe_point::AbortSignal>,
 }
 
 fn now_millis() -> u64 {
@@ -247,11 +249,26 @@ impl ControlBus {
         Self::default()
     }
 
+    /// 绑定 Run 级 AbortSignal：当总线接收到 L3 强停时，自动物理触发信号 abort()
+    pub fn attach_abort_signal(&mut self, signal: crate::safe_point::AbortSignal) {
+        self.abort_signal = Some(signal);
+    }
+
+    /// 获取绑定的 AbortSignal
+    pub fn abort_signal(&self) -> Option<&crate::safe_point::AbortSignal> {
+        self.abort_signal.as_ref()
+    }
+
     /// 入队一条控制意图；返回规范化后的 intent。
     ///
     /// continue 不入队（对齐 TS：`kind === 'continue'` 直接返回）。
     pub fn request(&mut self, input: ControlIntentInput) -> ControlIntent {
         let kind = input.kind;
+        if kind == ControlKind::ForceCancel {
+            if let Some(sig) = &self.abort_signal {
+                sig.abort();
+            }
+        }
         self.seq += 1;
         let intent = ControlIntent {
             id: input
@@ -810,5 +827,25 @@ mod tests {
             }
             other => panic!("L3 强停应聚合为 ForceCancel：{other:?}"),
         }
+    }
+
+    #[test]
+    fn force_cancel_triggers_attached_abort_signal() {
+        let mut bus = ControlBus::new();
+        let signal = crate::safe_point::AbortSignal::new();
+        bus.attach_abort_signal(signal.clone());
+        assert!(!signal.is_aborted());
+        bus.request_force_cancel(Some("test-stop".into()), None);
+        assert!(signal.is_aborted());
+    }
+
+    #[test]
+    fn subagent_force_cancel_triggers_attached_abort_signal() {
+        let mut bus = ControlBus::new();
+        let signal = crate::safe_point::AbortSignal::new();
+        bus.attach_abort_signal(signal.clone());
+        assert!(!signal.is_aborted());
+        bus.request_subagent_force_cancel("sub-1", Some("kill_all"));
+        assert!(signal.is_aborted());
     }
 }

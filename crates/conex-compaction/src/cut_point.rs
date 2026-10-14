@@ -193,3 +193,22 @@ pub(crate) fn find_cut_point_inner(
 
     Some(cut)
 }
+
+/// 判定当前会话消息是否已在保留预算内（平滑早退判定）
+///
+/// 当非链段业务消息的 Token 总和小于等于 `keep_recent_tokens` 时返回 true，
+/// 提示调用方当前无需执行任何截断与压缩，直接平滑原样早退。
+pub fn is_within_keep_budget(
+    messages: &[Arc<AgentMessage>],
+    keep_recent_tokens: usize,
+) -> bool {
+    if messages.is_empty() {
+        return true;
+    }
+    let fold_start = fold_start_of(messages);
+    let total_tokens: usize = messages[fold_start..]
+        .iter()
+        .map(|m| count_agent_message_tokens(m))
+        .sum();
+    total_tokens <= keep_recent_tokens
+}

@@ -40,7 +40,7 @@ use conex_types::tool::{
     ContextCompressionReason, ContextCompressionRecord, ContextCompressionTrigger,
 };
 
-use super::handlers::{compaction_shape_ok, new_message_id, streaming, LoopState};
+use super::handlers::{compaction_shape_ok, new_message_id, record_message, streaming, LoopState};
 use super::SessionLoopOptions;
 use crate::cache_tracker::CacheStatsTracker;
 use crate::r#loop::summary_coordinator::SessionSummaryCoordinator;
@@ -309,7 +309,8 @@ pub(crate) async fn compact_with_llm_guard(
     } else {
         StubPolicy::LlmRequired
     };
-    let engine = CompactionEngine::new(0);
+    let next_gen = state.compaction.next_generation(&state.conversation);
+    let engine = CompactionEngine::new(0).with_generation(next_gen);
     // D10-A / DEL-9：摘要经 spawn_blocking 预计算（summarize_via_blocking
     // 单源 helper），引擎只消费 precomputed——run loop 无同步 summarize 直调。
     // preview 与引擎 cut 同源；preview None = 无压缩动作（引擎将 noop）。
@@ -482,11 +483,43 @@ pub(crate) async fn apply_compaction(
         reason: compression_reason_str(info.reason).to_string(),
         tokens_before: plan.tokens_before,
     });
+    // T-31 块元数据推导（R-B：块 id = `compacted-summary-{gen}-{fold}`，
+    // 与链内摘要消息 id 同名；prevBlockId = 链尾块——fold_chain_prev 为
+    // 0（无既有链）时 None）
+    let block_id = if plan.fold_index > 0 {
+        format!("compacted-summary-{}-{}", plan.generation, plan.fold_index)
+    } else {
+        // 手动构造计划（测试/外围触发）无 fold 语义：回退取链内末条摘要
+        // 消息 id；仍无 → 空串（正常路径不可达）
+        plan.messages
+            .iter()
+            .rev()
+            .find(|m| m.id.starts_with("compacted-summary"))
+            .map(|m| m.id.clone())
+            .unwrap_or_default()
+    };
+
+    // 彻底根除 BC05-1：压缩完成后生成标准 AgentMessage 摘要记录，调用 record_message 发射 MessageStart 与 MessageEnd
+    let summary_msg_opt = plan
+        .messages
+        .iter()
+        .find(|m| m.id == block_id)
+        .or_else(|| {
+            plan.messages
+                .iter()
+                .find(|m| m.id.starts_with("compacted-summary"))
+        })
+        .cloned();
+    if let Some(summary_msg) = summary_msg_opt {
+        record_message(state, (*summary_msg).clone());
+    }
+
     // 对话替换（压缩是唯一前缀重写点；plan 已保留 system 消息；
     // SL-PERF-06：以 `mem::replace` 暂存旧对话，仅在同步摘要失败需后台重试时按需提取丢弃消息）
     let prev_conversation = std::mem::replace(&mut state.conversation, plan.messages.clone());
     // 护栏：单 run 压缩计数 + 时间戳护栏重置（§3.4.6）
     state.compaction.compactions_this_run += 1;
+    state.compaction.current_generation = plan.generation;
     state.compaction.last_compaction_at = Some(boundary_ms);
     let system_text = plan
         .messages
@@ -509,21 +542,6 @@ pub(crate) async fn apply_compaction(
             state.tools_snapshot.as_deref().unwrap_or_default();
         tracker.capture_post_compaction(system_text.as_deref(), tools, &plan.messages);
     }
-    // T-31 块元数据推导（R-B：块 id = `compacted-summary-{gen}-{fold}`，
-    // 与链内摘要消息 id 同名；prevBlockId = 链尾块——fold_chain_prev 为
-    // 0（无既有链）时 None）
-    let block_id = if plan.fold_index > 0 {
-        format!("compacted-summary-{}-{}", plan.generation, plan.fold_index)
-    } else {
-        // 手动构造计划（测试/外围触发）无 fold 语义：回退取链内末条摘要
-        // 消息 id；仍无 → 空串（正常路径不可达）
-        plan.messages
-            .iter()
-            .rev()
-            .find(|m| m.id.starts_with("compacted-summary"))
-            .map(|m| m.id.clone())
-            .unwrap_or_default()
-    };
     let prev_block_id = if plan.fold_chain_prev > 0 {
         Some(format!(
             "compacted-summary-{}-{}",
@@ -785,6 +803,8 @@ pub(crate) struct CompactionRuntime {
     /// SL-PERF-05：工具 schema 前缀 JSON 惰性单次缓存（`ensure_tools_snapshot`
     /// 锁定后首次 `tools_prefix_json` 计算并冻结，后续轮次 O(1) 借用 `&str`）。
     pub(crate) tools_prefix_json: std::sync::OnceLock<String>,
+    /// 会话权威压缩代数（BC05-3 单源化；单调递增，消除 SQLite 主键冲突）
+    pub(crate) current_generation: u32,
 }
 
 /// 预算/用量运行态子结构（C1c 收敛 · 07 §4.2-2 / §6.2）：P4 预算配置 +
@@ -832,7 +852,34 @@ impl CompactionRuntime {
             // E2 F3：无待重试摘要（fresh state）
             pending_summary_retry: None,
             tools_prefix_json: std::sync::OnceLock::new(),
+            current_generation: 0,
         }
+    }
+
+    /// 计算下一轮压缩代数：
+    /// 结合运行期已记录代数与对话中的既有摘要块代数，确保单调递增（>= 1）
+    pub(crate) fn next_generation(&self, conversation: &[Arc<AgentMessage>]) -> u32 {
+        let mut max_gen = self.current_generation;
+        for m in conversation {
+            if m.id.starts_with("compacted-summary") {
+                let parts: Vec<&str> = m.id.split('-').collect();
+                if parts.len() >= 4 {
+                    if let Ok(g) = parts[2].parse::<u32>() {
+                        max_gen = max_gen.max(g);
+                    }
+                }
+            }
+            if let Some(meta) = &m.metadata {
+                if let Some(g) = meta
+                    .get("summary")
+                    .and_then(|s| s.get("generation"))
+                    .and_then(|v| v.as_u64())
+                {
+                    max_gen = max_gen.max(g as u32);
+                }
+            }
+        }
+        max_gen + 1
     }
 }
 

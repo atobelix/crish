@@ -52,6 +52,7 @@ pub struct CompactionConfig {
     pub compact_require_llm: bool,
     pub compact_allow_stub_fallback: bool,
     pub compact_stage_ratios: Option<Vec<f64>>,
+    pub compression_store: Option<Arc<dyn agent_tools::compression_store::CompressionContextStore>>,
 }
 impl Default for CompactionConfig {
     fn default() -> Self {
@@ -66,6 +67,7 @@ impl Default for CompactionConfig {
             compact_stage_ratios: Some(
                 crate::r#loop::stage_summary::DEFAULT_COMPACT_STAGE_RATIOS.to_vec(),
             ),
+            compression_store: None,
         }
     }
 }
@@ -137,6 +139,7 @@ pub struct AssemblyConfig {
     pub parent_run_id: Option<String>,
     pub note_backend: Option<NoteBackendHandle>,
     pub pending_input_store: Option<Arc<dyn crate::input::PendingInputStore>>,
+    pub compression_store: Option<Arc<dyn agent_tools::compression_store::CompressionContextStore>>,
 }
 impl Default for AssemblyConfig {
     fn default() -> Self {
@@ -149,6 +152,7 @@ impl Default for AssemblyConfig {
             parent_run_id: None,
             note_backend: None,
             pending_input_store: None,
+            compression_store: None,
         }
     }
 }

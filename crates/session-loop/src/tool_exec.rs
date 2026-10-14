@@ -117,6 +117,8 @@ pub struct ToolExecCtx {
     pub background: Option<Arc<dyn agent_tools::background::BackgroundTaskManager>>,
     /// 会话日志与命令溢出落盘根目录（透传给 ToolContext.log_root）
     pub log_root: Option<PathBuf>,
+    /// 压缩块只读存储（BC11-4：search_context / decompress_context 真实读取）
+    pub compression_store: Option<Arc<dyn agent_tools::compression_store::CompressionContextStore>>,
 }
 
 /// 批处理产出：结果 + 事件序列 + 致命错误

@@ -369,3 +369,30 @@ fn test_ut_d01_09_toolexecctx_background_and_log_root_fields() {
     assert_eq!(ctx.log_root, Some(log_root));
     assert!(ctx.background.is_none());
 }
+
+#[test]
+fn test_toolexecctx_compression_store_field_and_propagation() {
+    use session_loop::ToolExecCtx;
+    use agent_tools::compression_store::{BlockContent, BlockHit, CompressionContextStore};
+    use std::sync::Arc;
+
+    #[derive(Debug)]
+    struct DummyStore;
+    impl CompressionContextStore for DummyStore {
+        fn search_blocks(&self, _s: &str, _q: &str, _l: usize) -> Result<Vec<BlockHit>, String> {
+            Ok(vec![])
+        }
+        fn decompress_block(&self, _s: &str, _b: &str) -> Result<Option<BlockContent>, String> {
+            Ok(None)
+        }
+    }
+
+    let store: Arc<dyn CompressionContextStore> = Arc::new(DummyStore);
+    let ctx = ToolExecCtx {
+        run_id: "r1".into(),
+        session_id: "s1".into(),
+        compression_store: Some(store),
+        ..Default::default()
+    };
+    assert!(ctx.compression_store.is_some());
+}

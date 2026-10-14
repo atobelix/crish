@@ -99,6 +99,7 @@ impl AgentSessionLoop {
                 note_backend: None,
                 background: None,
                 log_root: None,
+                compression_store: None,
             },
             tool_options: ToolBatchOptions::default(),
             approval: None,
@@ -164,6 +165,11 @@ impl AgentSessionLoop {
         // 后台任务管理器与日志落盘根透传工具执行面
         self.tool_ctx.background = options.hooks.background.clone();
         self.tool_ctx.log_root = options.hooks.log_root.clone();
+        self.tool_ctx.compression_store = options
+            .assembly
+            .compression_store
+            .clone()
+            .or_else(|| options.compaction.compression_store.clone());
         if self.delta_sink.is_none() {
             if let Some(live_sink) = &options.hooks.live_sink {
                 self.delta_sink = Some(Arc::new(live_sink.clone()) as Arc<dyn DeltaSink>);

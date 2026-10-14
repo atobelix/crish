@@ -60,7 +60,8 @@ pub use events::{
 pub use history::HistoryMessage;
 pub use impact::{ImpactAssessment, IMPACT_FLAG_FILE_THRESHOLD};
 pub use message::{
-    AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole, ToolCallBlock,
+    AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole, ImageContentBlock,
+    ToolCallBlock,
 };
 pub use response::{ClassifiedStreamError, ProviderOutput};
 pub use session::{AgentEndReason, AgentSessionContext, AgentSessionEvent, AgentSessionState};

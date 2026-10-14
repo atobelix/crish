@@ -295,6 +295,65 @@ fn tool_context_tool_call_id_none_on_unwired_paths() {
     assert!(fresh.tool_call_id.is_none(), "便捷构造未接线应为 None");
 }
 
+/// BC11-4 测钉：工具执行时 ToolContext.compression_store 真实注入
+#[tokio::test]
+async fn tool_context_compression_store_injected_from_exec_ctx() {
+    use agent_tools::compression_store::{BlockContent, BlockHit, CompressionContextStore};
+
+    #[derive(Debug)]
+    struct DummyStore;
+    impl CompressionContextStore for DummyStore {
+        fn search_blocks(&self, _s: &str, _q: &str, _l: usize) -> Result<Vec<BlockHit>, String> {
+            Ok(vec![])
+        }
+        fn decompress_block(&self, _s: &str, _b: &str) -> Result<Option<BlockContent>, String> {
+            Ok(None)
+        }
+    }
+
+    struct CheckStoreTool {
+        has_store: Arc<Mutex<bool>>,
+    }
+    #[async_trait::async_trait]
+    impl Tool for CheckStoreTool {
+        fn name(&self) -> &str {
+            "check-store"
+        }
+        fn definition(&self) -> &ToolDefinition {
+            static DEF: std::sync::OnceLock<ToolDefinition> = std::sync::OnceLock::new();
+            DEF.get_or_init(|| ToolDefinition {
+                name: "check-store".into(),
+                description: "checks compression_store presence".into(),
+                input_schema: serde_json::json!({"type": "object"}),
+                dangerous: false,
+                fatal_on_error: false,
+            })
+        }
+        async fn execute(&self, ctx: &ToolContext, _args: Value) -> Result<Value, ToolError> {
+            *self.has_store.lock().unwrap() = ctx.compression_store.is_some();
+            Ok(serde_json::json!({"ok": true}))
+        }
+    }
+
+    let has_store = Arc::new(Mutex::new(false));
+    let reg = registry_with(vec![Arc::new(CheckStoreTool {
+        has_store: Arc::clone(&has_store),
+    })]);
+    let exec = ToolExecutor::new(reg);
+    let mut ctx = exec_ctx();
+    ctx.compression_store = Some(Arc::new(DummyStore));
+
+    let calls = vec![call("call-store-1", "check-store", ToolConcurrency::Sequential)];
+    let _ = exec
+        .execute_batch(&calls, &ctx, None, &ToolBatchOptions::default(), None)
+        .await;
+    assert_eq!(
+        *has_store.lock().unwrap(),
+        true,
+        "compression_store 必须从 ToolExecCtx 真实注入到 ToolContext"
+    );
+}
+
 /// S1 流式执行契约（R1 tool-update 死契约删除后）：流式工具仍经
 /// execute_stream_with_output_policy 消费（Terminal 终值收口），但进度
 /// 不再入事件链——事件序列收缩为 BatchStart → ToolStart → ToolEnd →

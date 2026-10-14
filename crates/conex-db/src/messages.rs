@@ -9,6 +9,8 @@
 
 use super::{DbFailure, DbFailureKind, LocalDb};
 use conex_types::SessionMessage;
+use rusqlite::OptionalExtension;
+
 
 impl LocalDb {
     /// 加载会话正文消息（按 seq 升序）。
@@ -89,7 +91,37 @@ impl LocalDb {
             save_session_body_conn(conn, &session_id, &messages, batch_version)
         })
     }
+
+    /// 时间线撤回物理截断：
+    /// 1. 按 target_message_id 在 session_messages 表精确定位其行序号 seq；
+    /// 2. 物理删除 seq > target_seq 的所有后续消息行；
+    /// 3. 原子重算 message_count 并自增 body_version（更新 updated_at）；
+    /// 彻底根除应用重启或水合后被撤回消息死灰复燃。
+    pub fn truncate_session_messages_after(
+        &self,
+        session_id: &str,
+        target_message_id: &str,
+    ) -> Result<usize, DbFailure> {
+        let session_id = session_id.to_string();
+        let target_message_id = target_message_id.to_string();
+        self.write_blocking(move |conn| {
+            truncate_session_messages_after_conn(conn, &session_id, &target_message_id)
+        })
+    }
+
+    /// 按指定序号物理截断 target_seq 之后的所有消息行（若已知 target_seq）
+    pub fn truncate_session_messages_after_seq(
+        &self,
+        session_id: &str,
+        target_seq: i64,
+    ) -> Result<usize, DbFailure> {
+        let session_id = session_id.to_string();
+        self.write_blocking(move |conn| {
+            truncate_session_messages_after_seq_conn(conn, &session_id, target_seq)
+        })
+    }
 }
+
 
 /// 连接级纯函数：会话正文增量 Upsert + Diff Shrink + 元数据推进。
 ///
@@ -266,7 +298,93 @@ pub fn save_session_body_conn(
     Ok(())
 }
 
+/// 连接级纯函数：撤回物理截断——按 target_message_id 截断其后所有的 session_messages 行
+pub fn truncate_session_messages_after_conn(
+    conn: &mut rusqlite::Connection,
+    session_id: &str,
+    target_message_id: &str,
+) -> Result<usize, DbFailure> {
+    // 1. 获取目标消息在 session_messages 表中的行序号 seq
+    let target_seq: Option<i64> = conn
+        .query_row(
+            "SELECT seq FROM session_messages WHERE session_id = ?1 AND id = ?2 ORDER BY seq DESC LIMIT 1",
+            rusqlite::params![session_id, target_message_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| DbFailure {
+            message: format!("truncate_session_messages_after query seq: {e}"),
+            kind: DbFailureKind::Other("truncate_session_messages_after".to_string()),
+        })?;
+
+    let Some(target_seq) = target_seq else {
+        // 若该会话在 session_messages 表中没有任何消息（如空会话或尚未落库），直接安全返回 Ok(0)
+        let existing_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM session_messages WHERE session_id = ?1",
+                rusqlite::params![session_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        if existing_count == 0 {
+            return Ok(0);
+        }
+        return Err(DbFailure {
+            message: format!("目标消息 {target_message_id} 在会话 {session_id} 的 session_messages 中不存在"),
+            kind: DbFailureKind::Other("truncate_target_not_found".to_string()),
+        });
+    };
+
+    truncate_session_messages_after_seq_conn(conn, session_id, target_seq)
+}
+
+/// 连接级纯函数：物理删除 target_seq 之后的所有消息，原子重算 message_count 并自增 body_version
+pub fn truncate_session_messages_after_seq_conn(
+    conn: &mut rusqlite::Connection,
+    session_id: &str,
+    target_seq: i64,
+) -> Result<usize, DbFailure> {
+    // 自愈补建会话行（防 sessions 行缺失）
+    conn.execute(
+        "INSERT OR IGNORE INTO sessions (id, title, updated_at)
+         VALUES (?1, '', strftime('%s','now') * 1000)",
+        rusqlite::params![session_id],
+    )
+    .map_err(|e| DbFailure {
+        message: format!("truncate_session_messages self_heal: {e}"),
+        kind: DbFailureKind::Other("truncate_session_messages_after".to_string()),
+    })?;
+
+    // 1. 物理删除目标序号之后的所有消息行
+    let deleted = conn
+        .execute(
+            "DELETE FROM session_messages WHERE session_id = ?1 AND seq > ?2",
+            rusqlite::params![session_id, target_seq],
+        )
+        .map_err(|e| DbFailure {
+            message: format!("truncate_session_messages delete: {e}"),
+            kind: DbFailureKind::Other("truncate_session_messages_after".to_string()),
+        })?;
+
+    // 2. 原子重算 sessions 表的 message_count，自增 body_version，更新 updated_at
+    conn.execute(
+        "UPDATE sessions
+         SET message_count = (SELECT COUNT(*) FROM session_messages WHERE session_id = ?1),
+             body_version = COALESCE(body_version, 0) + 1,
+             updated_at = strftime('%s','now') * 1000
+         WHERE id = ?1",
+        rusqlite::params![session_id],
+    )
+    .map_err(|e| DbFailure {
+        message: format!("truncate_session_messages update meta: {e}"),
+        kind: DbFailureKind::Other("truncate_session_messages_after".to_string()),
+    })?;
+
+    Ok(deleted)
+}
+
 /// 灵活解析会话消息：先尝试 JSON 数组，失败再走 JSONL 行解析。
+
 /// 对齐 `sessionLocalStorage.loadSessionBody` 的兼容策略。
 pub(crate) fn parse_session_messages_flexible(raw: &str) -> Vec<SessionMessage> {
     let trimmed = raw.trim();

@@ -192,7 +192,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
 
     // 8. idle 输入：followUp 仅在此 promote（01 §2.9 步骤 6 / 01 §五.5）；
     //    promote 后或已有可运行输入 → INPUT_AVAILABLE（awaiting-input，
-    //    轮次计数归零）
+    //    turn_index 保持单调递增不归零）
     let promoted = state.input_queue.promote_follow_up();
     if promoted > 0 || state.input_queue.has_runnable_pending() {
         dispatch(state, E::InputAvailable)?;

@@ -208,6 +208,124 @@ describe('buildHistoryMessages（P4 T-31：store 消息 → history 载荷）', 
     expect(history?.[1]).not.toHaveProperty('blocks_json');
   });
 
+  it('真实工具输出保真：当 toolCalls 仅在自身携带真实 output 且 toolCallResults 缺省时，自动提取并生成配对 tool_call_results_json', () => {
+    const history = buildHistoryMessages([
+      makeMsg({
+        id: 'u1',
+        sender: 'user',
+        text: '读取文件',
+        status: 'completed',
+        timestamp: 100,
+      }),
+      makeMsg({
+        id: 'a1',
+        sender: 'assistant',
+        text: '读取完毕',
+        status: 'completed',
+        timestamp: 200,
+        toolCalls: [
+          {
+            id: 'call_read_1',
+            name: 'read_file',
+            arguments: '{"path":"main.rs"}',
+            status: 'success',
+            output: 'fn main() { println!("hello"); }',
+          },
+          {
+            id: 'call_cmd_2',
+            name: 'run_cmd',
+            arguments: '{"command":"cargo test"}',
+            status: 'error',
+            output: 'compilation failed',
+          },
+        ],
+      }),
+    ]);
+
+    expect(history).toBeDefined();
+    expect(history).toHaveLength(2);
+    const asst = history?.[1];
+    expect(asst?.tool_calls_json).toContain(
+      '"output":"fn main() { println!(\\"hello\\"); }"'
+    );
+    expect(asst?.tool_calls_json).toContain('"output":"compilation failed"');
+    expect(asst?.tool_call_results_json).toBe(
+      JSON.stringify([
+        {
+          id: 'call_read_1',
+          output: 'fn main() { println!("hello"); }',
+          isError: false,
+        },
+        {
+          id: 'call_cmd_2',
+          output: 'compilation failed',
+          isError: true,
+        },
+      ])
+    );
+  });
+
+  it('多轮对话历史全保真：包含多轮 User、Assistant 及其完整工具调用与真实输出，尾部排查当前消息', () => {
+    const history = buildHistoryMessages(
+      [
+        makeMsg({
+          id: 'u1',
+          sender: 'user',
+          text: '第1轮问题',
+          status: 'completed',
+        }),
+        makeMsg({
+          id: 'a1',
+          sender: 'assistant',
+          text: '第1轮回复',
+          status: 'completed',
+          toolCalls: [
+            {
+              id: 't1',
+              name: 'search',
+              arguments: '{"q":"rust"}',
+              status: 'success',
+              output: 'found 10 items',
+            },
+          ],
+        }),
+        makeMsg({
+          id: 'u2',
+          sender: 'user',
+          text: '第2轮问题',
+          status: 'completed',
+        }),
+        makeMsg({
+          id: 'a2',
+          sender: 'assistant',
+          text: '第2轮回复',
+          status: 'completed',
+          toolCalls: [
+            {
+              id: 't2',
+              name: 'fetch',
+              arguments: '{"url":"http://..."}',
+              status: 'success',
+              output: 'status 200 ok',
+            },
+          ],
+        }),
+        makeMsg({
+          id: 'u3',
+          sender: 'user',
+          text: '当前正在发送的第3轮新提问',
+          status: 'processing',
+        }),
+      ],
+      { excludeId: 'u3' }
+    );
+
+    expect(history).toHaveLength(4);
+    expect(history?.map((m) => m.id)).toEqual(['u1', 'a1', 'u2', 'a2']);
+    expect(history?.[1].tool_call_results_json).toContain('found 10 items');
+    expect(history?.[3].tool_call_results_json).toContain('status 200 ok');
+  });
+
   it('空会话 / 无任何合格消息 → undefined（不传 = 引擎现状单消息 run）', () => {
     expect(buildHistoryMessages([])).toBeUndefined();
     expect(buildHistoryMessages(undefined)).toBeUndefined();
@@ -986,7 +1104,9 @@ describe('取消与启动竞态（P1-F2：waitUntilConnected 挂起期间 stop�
     );
     const root = getCompositionRoot();
     const sid = `sess-gate-2-${Math.random().toString(36).slice(2, 8)}`;
-    root.session.getState().createSession({ title: 'busy', id: sid, activate: false });
+    root.session
+      .getState()
+      .createSession({ title: 'busy', id: sid, activate: false });
     root.session.getState().addMessage('ws', sid, {
       id: 'u-busy-1',
       sender: 'user',

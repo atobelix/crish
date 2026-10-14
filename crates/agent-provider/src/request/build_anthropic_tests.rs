@@ -657,3 +657,242 @@ fn build_anthropic_fail_closed_on_orphan_thinking_only_injects_continuation_note
     }
     assert!(found_assistant, "必须包含 assistant 消息");
 }
+
+// ── 验收 4：运行时转向保真与角色交替测试 (BC08-5) ──
+
+#[test]
+fn test_system_steering_message_preservation_and_alternation() {
+    let system_steering = AgentMessage {
+        id: "s1".to_string(),
+        role: AgentMessageRole::System,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        blocks: vec![AgentMessageBlock::Text {
+            text: "请停止遍历，直接输出当前已找到的文件列表".to_string(),
+        }],
+        metadata: None,
+        client_message_id: None,
+        content: None,
+    };
+
+    let messages = vec![
+        Arc::new(user_message("帮我搜索项目文件")),
+        Arc::new(assistant_with_text_and_thought("正在检索...", "需要先遍历目录")),
+        Arc::new(system_steering),
+    ];
+    let context = RequestBuildContext {
+        system_prompt: Some("全局系统提示词".to_string()),
+        messages: &messages,
+        tools: Vec::new(),
+        wire_mode: SystemPromptWireMode::NativeSystemRole,
+    };
+    let body = build_anthropic_request_body(&AnthropicRequestOptions::default(), &context);
+    let msgs = body["messages"].as_array().expect("messages 必须为数组");
+
+    // 严格交替：user -> assistant -> user (steering)
+    assert_eq!(msgs.len(), 3);
+    assert_eq!(msgs[0]["role"], "user");
+    assert_eq!(msgs[1]["role"], "assistant");
+    assert_eq!(msgs[2]["role"], "user");
+
+    let steering_content = msgs[2]["content"].as_array().expect("content 为数组");
+    assert_eq!(steering_content.len(), 1);
+    assert_eq!(steering_content[0]["type"], "text");
+    let steering_text = steering_content[0]["text"].as_str().expect("text 为字符串");
+    assert!(
+        steering_text.contains("[System Directive / Runtime Steering]"),
+        "必须带有 [System Directive / Runtime Steering] 标识：{steering_text}"
+    );
+    assert!(
+        steering_text.contains("请停止遍历，直接输出当前已找到的文件列表"),
+        "必须保全转向文本：{steering_text}"
+    );
+
+    // 顶层 system 保持全局提示词（含可能的缓存断点结构），不被中途转向污染
+    let sys_str = if let Some(arr) = body["system"].as_array() {
+        arr[0]["text"].as_str().unwrap()
+    } else {
+        body["system"].as_str().unwrap()
+    };
+    assert_eq!(sys_str, "全局系统提示词");
+}
+
+#[test]
+fn test_system_steering_after_tool_result_merges_into_user_message() {
+    let system_steering = AgentMessage {
+        id: "s2".to_string(),
+        role: AgentMessageRole::System,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        blocks: vec![AgentMessageBlock::Text {
+            text: "工具执行异常，请立即切换备用方案".to_string(),
+        }],
+        metadata: None,
+        client_message_id: None,
+        content: None,
+    };
+
+    let messages = vec![
+        Arc::new(user_message("执行命令")),
+        Arc::new(assistant_with_thought_and_tool("我来执行", "思考命令参数")),
+        Arc::new(tool_result_message("call_1", "error: command not found", true)),
+        Arc::new(system_steering),
+    ];
+    let context = RequestBuildContext {
+        system_prompt: None,
+        messages: &messages,
+        tools: vec![tool("read_file")],
+        wire_mode: SystemPromptWireMode::NativeSystemRole,
+    };
+    let body = build_anthropic_request_body(&AnthropicRequestOptions::default(), &context);
+    let msgs = body["messages"].as_array().expect("messages 必须为数组");
+
+    // user -> assistant -> user (tool_result + steering 融合)
+    assert_eq!(msgs.len(), 3);
+    assert_eq!(msgs[0]["role"], "user");
+    assert_eq!(msgs[1]["role"], "assistant");
+    assert_eq!(msgs[2]["role"], "user");
+
+    let merged_content = msgs[2]["content"].as_array().expect("content 为数组");
+    // tool_result 与 steering 应该被合并进同一个 user 消息的 content 数组
+    assert_eq!(merged_content.len(), 2);
+    assert_eq!(merged_content[0]["type"], "tool_result");
+    assert_eq!(merged_content[0]["tool_use_id"], "call_1");
+    assert_eq!(merged_content[1]["type"], "text");
+    assert!(merged_content[1]["text"]
+        .as_str()
+        .unwrap()
+        .contains("[System Directive / Runtime Steering]"));
+}
+
+// ── 验收 5：思考块与签名保真及脱敏思考测试 (BC08-4) ──
+
+#[test]
+fn test_thinking_signature_and_redacted_preservation() {
+    let assistant_with_sig = AgentMessage {
+        id: "a_sig".to_string(),
+        role: AgentMessageRole::Assistant,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        blocks: vec![
+            AgentMessageBlock::Thought {
+                text: "深度推理中...".to_string(),
+                redacted: None,
+            },
+            AgentMessageBlock::Text {
+                text: "回答完毕".to_string(),
+            },
+        ],
+        metadata: Some(json!({
+            "signature": "sig_claude_37_valid_signature_xyz"
+        })),
+        client_message_id: None,
+        content: None,
+    };
+
+    let assistant_redacted = AgentMessage {
+        id: "a_redacted".to_string(),
+        role: AgentMessageRole::Assistant,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        blocks: vec![
+            AgentMessageBlock::Thought {
+                text: "encrypted_redacted_data_blob".to_string(),
+                redacted: Some(true),
+            },
+            AgentMessageBlock::Text {
+                text: "脱敏回答".to_string(),
+            },
+        ],
+        metadata: None,
+        client_message_id: None,
+        content: None,
+    };
+
+    let messages = vec![
+        Arc::new(user_message("提问 1")),
+        Arc::new(assistant_with_sig),
+        Arc::new(user_message("提问 2")),
+        Arc::new(assistant_redacted),
+    ];
+    let context = RequestBuildContext {
+        system_prompt: None,
+        messages: &messages,
+        tools: Vec::new(),
+        wire_mode: SystemPromptWireMode::NativeSystemRole,
+    };
+    let body = build_anthropic_request_body(&AnthropicRequestOptions::default(), &context);
+    let msgs = body["messages"].as_array().expect("messages 必须为数组");
+
+    // 检查第 1 条 assistant 消息：thinking 块原样携带 signature
+    let a1_content = msgs[1]["content"].as_array().expect("a1 content");
+    assert_eq!(a1_content[0]["type"], "thinking");
+    assert_eq!(a1_content[0]["thinking"], "深度推理中...");
+    assert_eq!(
+        a1_content[0]["signature"],
+        "sig_claude_37_valid_signature_xyz",
+        "必须携带原版 signature"
+    );
+
+    // 检查第 2 条 assistant 消息：redacted_thinking 块
+    let a2_content = msgs[3]["content"].as_array().expect("a2 content");
+    assert_eq!(a2_content[0]["type"], "redacted_thinking");
+    assert_eq!(a2_content[0]["data"], "encrypted_redacted_data_blob");
+}
+
+// ── 验收 6：长回答上限与动态 max_tokens 测试 (BC08-11) ──
+
+#[test]
+fn test_default_max_tokens_dynamic_allocation() {
+    let dummy_messages = vec![Arc::new(user_message("hi"))];
+    let context = RequestBuildContext {
+        system_prompt: None,
+        messages: &dummy_messages,
+        tools: Vec::new(),
+        wire_mode: SystemPromptWireMode::NativeSystemRole,
+    };
+
+    // 1. Claude 3.7 默认 64000
+    let opts_37 = AnthropicRequestOptions {
+        model: Some("claude-3-7-sonnet-20250219".to_string()),
+        max_tokens: None,
+        ..AnthropicRequestOptions::default()
+    };
+    let body_37 = build_anthropic_request_body(&opts_37, &context);
+    assert_eq!(
+        body_37["max_tokens"], 64000,
+        "Claude 3.7 默认 max_tokens 必须为 64000，不再硬死锁 2048"
+    );
+
+    // 2. Claude 3.5 默认 8192
+    let opts_35 = AnthropicRequestOptions {
+        model: Some("claude-3-5-sonnet-20241022".to_string()),
+        max_tokens: None,
+        ..AnthropicRequestOptions::default()
+    };
+    let body_35 = build_anthropic_request_body(&opts_35, &context);
+    assert_eq!(
+        body_35["max_tokens"], 8192,
+        "Claude 3.5 默认 max_tokens 必须为 8192"
+    );
+
+    // 3. Claude 3 Opus 默认 4096
+    let opts_opus = AnthropicRequestOptions {
+        model: Some("claude-3-opus-20240229".to_string()),
+        max_tokens: None,
+        ..AnthropicRequestOptions::default()
+    };
+    let body_opus = build_anthropic_request_body(&opts_opus, &context);
+    assert_eq!(
+        body_opus["max_tokens"], 4096,
+        "Claude 3 Opus 默认 max_tokens 必须为 4096"
+    );
+
+    // 4. 未指定 model 时默认 8192
+    let opts_default = AnthropicRequestOptions {
+        model: None,
+        max_tokens: None,
+        ..AnthropicRequestOptions::default()
+    };
+    let body_default = build_anthropic_request_body(&opts_default, &context);
+    assert_eq!(
+        body_default["max_tokens"], 8192,
+        "未指定 model 时默认 max_tokens 必须为 8192"
+    );
+}

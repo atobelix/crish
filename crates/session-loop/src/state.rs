@@ -87,9 +87,8 @@ impl AgentSessionMachine {
         if let Some(count) = effect.set_tool_call_count {
             self.context.tool_call_count = count;
         }
-        // turn-complete INPUT_AVAILABLE：轮次计数全部归零（01 §1.4 表尾行）
+        // turn-complete INPUT_AVAILABLE：单 Run 内部 turn_index 单调自增不重置（01A/01B 核心重构）
         if effect.reset_all_counters {
-            self.context.turn_index = 0;
             self.context.tool_call_count = 0;
             self.context.steering_count = 0;
         }
@@ -374,7 +373,7 @@ mod tests {
             let mut m = machine();
             goto(&mut m, S::ExecutingTools);
             m.dispatch(E::InputAvailable).unwrap();
-            assert_eq!(m.state(), S::PreparingTurn);
+            assert_eq!(m.state(), S::TurnComplete);
         }
         {
             let mut m = machine();
@@ -550,9 +549,9 @@ mod tests {
         assert_eq!(m.context().tool_call_count, 5);
     }
 
-    /// effect 测试：turn-complete INPUT_AVAILABLE 归零全部轮次计数
+    /// effect 测试：turn-complete INPUT_AVAILABLE 保持 turn_index 单调自增，重置工具调用计数
     #[test]
-    fn effect_input_available_resets_all_counters() {
+    fn effect_input_available_preserves_turn_index() {
         let mut m = machine();
         goto(&mut m, S::TurnComplete);
         // 预置本轮积累的计数
@@ -560,9 +559,12 @@ mod tests {
         m.context.tool_call_count = 4;
         m.context.steering_count = 1;
         m.dispatch(E::InputAvailable).unwrap();
-        assert_eq!(m.context().turn_index, 0);
+        assert_eq!(
+            m.context().turn_index,
+            3,
+            "turn_index 在单 Run 内必须单调保持，不可归零导致前端覆写"
+        );
         assert_eq!(m.context().tool_call_count, 0);
-        assert_eq!(m.context().steering_count, 0);
         assert_eq!(m.state(), S::AwaitingInput);
     }
 

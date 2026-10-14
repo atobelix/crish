@@ -16,10 +16,11 @@
 //!    （本撤回事务内不会再被任何事件超过的边界）
 //! 5. [准备回滚计划] 冻结后以目标消息起始 seq 到 frozen_seq 收集回滚所需
 //!    事件数据；失败则释放冻结并中止。
-//! 6. [发 truncate] push AgentEvent::TimelineTruncate { boundary_seq: frozen_seq }
+//! 6. [发 truncate] push AgentEvent::TimelineTruncate { boundary_seq: boundary }
 //!    ——自身占 sequence = frozen_seq + 1（TimelineTruncate.sequence > boundary_seq，
 //!    T1 §1.2a 不变量）
 //! 7. [冻结完成] truncate 落库确认后释放冻结；此后新写入（若因并发残余
+
 //!    产生）由冻结护栏拒绝或归新 run（新 run 天然从 boundary 后开始）
 //! ```
 //!
@@ -127,7 +128,7 @@ impl std::error::Error for RetractionError {}
 /// 撤回事务结果
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RetractionOutcome {
-    /// 冻结边界 = 收敛后的事件流停止写入点（events MAX sequence）
+    /// 截断边界 = 真实目标消息起始序号（重放投影只保留 sequence <= boundary_seq）
     pub boundary_seq: u64,
     /// TimelineTruncate 自身落库 sequence（== frozen_seq + 1）
     pub truncate_sequence: u64,
@@ -229,9 +230,10 @@ impl RetractionProtocol {
         }
 
         // 7. 发 truncate（撤离事件放行；自身占 sequence = frozen_seq + 1）
+        // 纠正对内与对外边界序号：以真实目标消息序号 boundary 作为 boundary_seq（严禁拿日志尾冒充截断边界）
         let truncate_sequence = self
             .backend
-            .push_timeline_truncate(session_id, run_id.as_deref(), frozen_seq, target_message_id)
+            .push_timeline_truncate(session_id, run_id.as_deref(), boundary, target_message_id)
             .await
             .map_err(|err| {
                 // truncate 落库失败：释放冻结（不残留半冻结态），返回后端错误
@@ -245,11 +247,12 @@ impl RetractionProtocol {
             .map_err(|_| RetractionError::Backend("冻结释放失败（令牌不匹配）".into()))?;
 
         Ok(RetractionOutcome {
-            boundary_seq: frozen_seq,
+            boundary_seq: boundary,
             truncate_sequence,
             run_id,
             target_message_id: target_message_id.to_string(),
         })
+
     }
 
     /// 构造 TimelineTruncate 事件（协议与测试共用；`run_id` 与信封
@@ -373,25 +376,25 @@ mod tests {
                 .lock()
                 .unwrap()
                 .push(format!("truncate:{boundary_seq}:{run_id:?}"));
-            // TimelineTruncate 自身占 sequence = frozen_seq + 1
-            let seq = boundary_seq + 1;
+            // TimelineTruncate 自身占 sequence = frozen_seq + 1（即 max_seq + 1）
+            let seq = self.max_seq + 1;
             self.truncate_seq.store(seq, Ordering::SeqCst);
             Ok(seq)
         }
     }
 
-    /// FREEZE2：冻结原子性——boundary_seq == 事件流停止写入点（稳定点
-    /// MAX），TimelineTruncate.sequence == boundary_seq + 1；协议调用
+    /// FREEZE2：冻结原子性——boundary_seq == 真实目标消息起始序号，
+    /// TimelineTruncate.sequence == frozen_seq + 1；协议调用
     /// 顺序 = resolve → stop → converge → max → prepare rollback → truncate
     #[tokio::test]
     async fn protocol_freezes_at_max_and_truncates_at_boundary_plus_one() {
         let backend = Arc::new(FakeBackend::new(Some(40), 99));
         let protocol = RetractionProtocol::new(Box::new(backend.clone()));
         let outcome = protocol.prepare_retraction("s1", "msg-1").await.unwrap();
-        assert_eq!(outcome.boundary_seq, 99, "冻结边界 = 稳定点 MAX(sequence)");
+        assert_eq!(outcome.boundary_seq, 40, "真实截断边界 = 目标消息起始 sequence 40");
         assert_eq!(
             outcome.truncate_sequence, 100,
-            "TimelineTruncate.sequence == frozen_seq + 1（T1 §1.2a 不变量）"
+            "TimelineTruncate.sequence == frozen_seq + 1（99 + 1 = 100）"
         );
         assert_eq!(
             backend.calls(),
@@ -401,9 +404,9 @@ mod tests {
                 "converge:run-1",
                 "max",
                 "prepare_rollback:40:99",
-                "truncate:99:Some(\"run-1\")"
+                "truncate:40:Some(\"run-1\")"
             ],
-            "协议调用顺序 = 定位 → 停 run → 收敛 → 冻结读 → truncate"
+            "协议调用顺序 = 定位 → 停 run → 收敛 → 冻结读 → truncate(真实边界)"
         );
         // 冻结已释放（truncate 落库确认后）
         assert!(!protocol.freeze_registry().is_frozen("s1"));

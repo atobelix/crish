@@ -211,11 +211,11 @@ fn gemini_rail_three_piece_consistent() {
     let messages = vec![user_msg("你好")];
     let request = single_user_request(&messages, None);
 
-    // URL → generateContent 端点
+    // URL → streamGenerateContent?alt=sse 端点（流式请求，BC08-1）
     let url = provider_url_for(&call.config, protocol);
     assert!(
-        url.contains(":generateContent"),
-        "URL 落 generateContent 端点：{url}"
+        url.contains(":streamGenerateContent?alt=sse"),
+        "URL 落 streamGenerateContent?alt=sse 端点：{url}"
     );
 
     // body → gemini 形状（contents / systemInstruction）
@@ -232,6 +232,49 @@ fn gemini_rail_three_piece_consistent() {
         http_parser_for_protocol(protocol),
         HttpStreamParser::Gemini(_)
     ));
+}
+
+/// Gemini URL 在流式与非流式、带与不带 query 参数下的准确拼装测试（BC08-1）
+#[test]
+fn gemini_url_streaming_and_non_streaming() {
+    let mut stream_cfg = config(
+        "https://generativelanguage.googleapis.com",
+        "gemini-2.5-pro",
+        Endpoint::ChatCompletions,
+    );
+    stream_cfg.stream = true;
+    assert_eq!(
+        provider_url_for(&stream_cfg, WireProtocol::Gemini),
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse"
+    );
+
+    let mut non_stream_cfg = config(
+        "https://generativelanguage.googleapis.com",
+        "gemini-2.5-pro",
+        Endpoint::ChatCompletions,
+    );
+    non_stream_cfg.stream = false;
+    assert_eq!(
+        provider_url_for(&non_stream_cfg, WireProtocol::Gemini),
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent"
+    );
+
+    let mut query_cfg = config(
+        "https://generativelanguage.googleapis.com/v1beta?proxy=1",
+        "gemini-2.5-pro",
+        Endpoint::ChatCompletions,
+    );
+    query_cfg.stream = true;
+    assert_eq!(
+        provider_url_for(&query_cfg, WireProtocol::Gemini),
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:streamGenerateContent?proxy=1&alt=sse"
+    );
+
+    query_cfg.stream = false;
+    assert_eq!(
+        provider_url_for(&query_cfg, WireProtocol::Gemini),
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?proxy=1"
+    );
 }
 
 /// chat / responses 轨：各自的 URL / body / parser（显式协议驱动，回归既有字节语义）
@@ -322,7 +365,8 @@ fn effective_protocol_keeps_url_body_parser_in_rail() {
                 url.ends_with("/v1/messages") && matches!(parser, HttpStreamParser::Anthropic(_))
             }
             WireProtocol::Gemini => {
-                url.contains(":generateContent") && matches!(parser, HttpStreamParser::Gemini(_))
+                url.contains(":streamGenerateContent?alt=sse")
+                    && matches!(parser, HttpStreamParser::Gemini(_))
             }
             _ => false,
         };

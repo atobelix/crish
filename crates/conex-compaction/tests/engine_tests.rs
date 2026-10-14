@@ -335,7 +335,7 @@ fn compact_tool_pair_not_split() {
         min_recent_turns: 1,
         ..CompactionPolicy::default()
     };
-    let plan = engine.compact_agent_messages(&messages, 40, &policy, None);
+    let plan = engine.compact_agent_messages(&messages, 200, &policy, None);
     let ids: Vec<&str> = plan.messages.iter().map(|m| m.id.as_str()).collect();
     assert!(ids.contains(&"a1"), "tool-call 消息须保留");
     assert!(ids.contains(&"u2"), "tool-result 消息须保留");
@@ -450,7 +450,7 @@ fn compact_tool_pair_protection_can_be_disabled() {
         tool_pair_protection: false,
         ..CompactionPolicy::default()
     };
-    let plan = engine.compact_agent_messages(&messages, 40, &policy, None);
+    let plan = engine.compact_agent_messages(&messages, 200, &policy, None);
     assert_eq!(plan.dropped_ids, vec!["u1", "a1"]);
     assert!(plan.messages.iter().any(|m| m.id == "u2"));
 }

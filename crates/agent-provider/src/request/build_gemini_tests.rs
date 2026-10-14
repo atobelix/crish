@@ -152,12 +152,17 @@ fn function_call_and_function_response_pairing() {
     let body = build_gemini_request_body(&GeminiRequestOptions::default(), &context_for(&messages));
     let contents = body["contents"].as_array().expect("contents 数组");
 
-    // assistant tool-call → model content，part.functionCall
+    // assistant tool-call → model content，part.functionCall 保全真实 call.id（BC08-6）
     let fc = contents
         .iter()
         .position(|c| c["role"] == "model" && c["parts"][0].get("functionCall").is_some())
         .expect("应存在 model functionCall content");
     assert_eq!(contents[fc]["role"], "model");
+    assert_eq!(
+        contents[fc]["parts"][0]["functionCall"]["id"],
+        "call_1",
+        "functionCall 必须保全真实 call.id"
+    );
     assert_eq!(
         contents[fc]["parts"][0]["functionCall"]["name"],
         "get_weather"
@@ -167,12 +172,17 @@ fn function_call_and_function_response_pairing() {
         "上海"
     );
 
-    // tool-result → user content，part.functionResponse（函数调用紧随其后配对）
+    // tool-result → user content，part.functionResponse 回填真实 tool_call_id（函数调用紧随其后配对）
     let fr = contents
         .iter()
         .position(|c| c["role"] == "user" && c["parts"][0].get("functionResponse").is_some())
         .expect("应存在 user functionResponse content");
     assert_eq!(contents[fr]["role"], "user");
+    assert_eq!(
+        contents[fr]["parts"][0]["functionResponse"]["id"],
+        "call_1",
+        "functionResponse 必须回填真实 tool_call_id"
+    );
     assert_eq!(
         contents[fr]["parts"][0]["functionResponse"]["name"],
         "get_weather"
@@ -181,6 +191,61 @@ fn function_call_and_function_response_pairing() {
         contents[fr]["parts"][0]["functionResponse"]["response"]["result"],
         "晴 25 度"
     );
+}
+
+#[test]
+fn function_call_and_response_preserves_distinct_ids_for_same_tool_name() {
+    let call1 = message(
+        AgentMessageRole::Assistant,
+        "a1",
+        vec![AgentMessageBlock::ToolCall(ToolCallBlock {
+            id: "call_shanghai_99".to_string(),
+            tool_name: "get_weather".to_string(),
+            input: json!({ "city": "上海" }),
+        })],
+    );
+    let call2 = message(
+        AgentMessageRole::Assistant,
+        "a2",
+        vec![AgentMessageBlock::ToolCall(ToolCallBlock {
+            id: "call_beijing_100".to_string(),
+            tool_name: "get_weather".to_string(),
+            input: json!({ "city": "北京" }),
+        })],
+    );
+    let res1 = tool_result("get_weather", "call_shanghai_99", "晴 25 度");
+    let res2 = tool_result("get_weather", "call_beijing_100", "阴 18 度");
+    let messages: Vec<Arc<AgentMessage>> = vec![
+        Arc::new(user_msg("查两地天气")),
+        Arc::new(call1),
+        Arc::new(res1),
+        Arc::new(call2),
+        Arc::new(res2),
+    ];
+    let body = build_gemini_request_body(&GeminiRequestOptions::default(), &context_for(&messages));
+    let contents = body["contents"].as_array().expect("contents 数组");
+
+    // 检查两个 functionCall 均完整保留了其真实 call.id
+    let fc_parts: Vec<&Value> = contents
+        .iter()
+        .filter_map(|c| c.get("parts").and_then(Value::as_array))
+        .flatten()
+        .filter_map(|p| p.get("functionCall"))
+        .collect();
+    assert_eq!(fc_parts.len(), 2);
+    assert_eq!(fc_parts[0]["id"], "call_shanghai_99");
+    assert_eq!(fc_parts[1]["id"], "call_beijing_100");
+
+    // 检查两个 functionResponse 均完整回填了其真实 tool_call_id
+    let fr_parts: Vec<&Value> = contents
+        .iter()
+        .filter_map(|c| c.get("parts").and_then(Value::as_array))
+        .flatten()
+        .filter_map(|p| p.get("functionResponse"))
+        .collect();
+    assert_eq!(fr_parts.len(), 2);
+    assert_eq!(fr_parts[0]["id"], "call_shanghai_99");
+    assert_eq!(fr_parts[1]["id"], "call_beijing_100");
 }
 
 #[test]
@@ -376,15 +441,16 @@ fn tools_function_declarations_shape() {
 #[test]
 fn tool_config_choice_variants() {
     let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_msg("hi"))];
-    for (choice, expected_mode) in [
-        (ToolChoice::Auto, "AUTO"),
-        (ToolChoice::None, "NONE"),
-        (ToolChoice::Required, "ANY"),
+    for (choice, expected_mode, expected_allowed) in [
+        (ToolChoice::Auto, "AUTO", None),
+        (ToolChoice::None, "NONE", None),
+        (ToolChoice::Required, "ANY", None),
         (
             ToolChoice::Function {
                 name: "read_file".into(),
             },
             "ANY",
+            Some(vec!["read_file"]),
         ),
     ] {
         let description = format!("{choice:?}");
@@ -397,10 +463,25 @@ fn tool_config_choice_variants() {
             ..context_for(&messages)
         };
         let body = build_gemini_request_body(&opts, &context);
+        let fcc = &body["toolConfig"]["functionCallingConfig"];
         assert_eq!(
-            body["toolConfig"]["functionCallingConfig"]["mode"], expected_mode,
-            "ToolChoice {description}"
+            fcc["mode"], expected_mode,
+            "ToolChoice {description} 映射 mode"
         );
+        if let Some(expected_names) = expected_allowed {
+            let names: Vec<&str> = fcc["allowedFunctionNames"]
+                .as_array()
+                .expect("allowedFunctionNames 应为数组")
+                .iter()
+                .filter_map(Value::as_str)
+                .collect();
+            assert_eq!(names, expected_names, "ToolChoice {description} allowedFunctionNames");
+        } else {
+            assert!(
+                fcc.get("allowedFunctionNames").is_none(),
+                "ToolChoice {description} 不应含 allowedFunctionNames"
+            );
+        }
     }
 }
 

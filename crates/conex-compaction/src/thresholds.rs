@@ -20,24 +20,44 @@ pub const SESSION_META_KEY_COMPACT_SUMMARY_MAX_TOKENS: &str = "compact_summary_m
 
 /// 双阈值判定结果（M10/C9：85% 常规线 + 95% 临界线，02 Top 4）
 ///
-/// E2（上下文压缩增强）裁决 1 后：**Critical 语义废止**——临界线不再
-/// 「同步硬压缩不依赖 AI」，压缩路径与常规线完全同源（统一走
-/// [crate::plan::Summarizer]，无 Summarizer 时不压缩 / 溢出默认 fatal，见
-/// [crate::plan::StubPolicy]）；本枚举仅作水位判定（classify 消费方：
-/// tool_output.rs classify_after_truncation 与既有测试），**不驱动**
-/// 任何独立压缩动作。
+/// 实现双阈值水位调度：
+/// - `UnderBudget` (< 85%)：在预算内，平滑早退，不触发压缩，保护 KV Cache 命中；
+/// - `Regular` (85% ~ 95%)：常规水位线，非阻塞触发后台异步摘要预热；
+/// - `Critical` (>= 95%)：临界水位线，同步硬防御门禁，阻止 400 Context Overflow。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThresholdDecision {
-    /// 预算内（无需压缩）
+    /// 预算内（无需压缩，平滑早退）
     UnderBudget,
-    /// 常规线（默认 85% 预算水位线）：触发 AI 摘要（后台预压缩，
-    /// grok 两遍借鉴——常规线优先走 [crate::ai_summary] 通道生成
-    /// 结构化摘要，失败按 [crate::plan::StubPolicy] 处理，不再无条件降级占位符）
+    /// 常规线（默认 85% 预算水位线）：非阻塞异步预热 / 触发后台摘要任务
     Regular,
-    /// 临界线（默认 95%）：**语义废止（E2 裁决 1）**——保留变体
-    /// 供 classify 消费方与既有测试；不再意味着「不依赖 AI 的同步
-    /// 硬压缩」，临界线同样走 LLM 摘要（上层按 [crate::plan::StubPolicy] 决策）
+    /// 临界线（默认 95% 预算水位线）：同步硬防御门禁，阻止上下文击穿
     Critical,
+}
+
+impl ThresholdDecision {
+    /// 是否在预算内安全（低于常规线 85%，可平滑早退，无需压缩）
+    #[inline]
+    pub fn is_under_budget(&self) -> bool {
+        matches!(self, ThresholdDecision::UnderBudget)
+    }
+
+    /// 是否处于常规水位（85% ~ 95%）：触发异步预热摘要，不阻塞主流程
+    #[inline]
+    pub fn is_regular(&self) -> bool {
+        matches!(self, ThresholdDecision::Regular)
+    }
+
+    /// 是否处于临界水位（>= 95%）：触发同步硬防御门禁，阻止 400 Context Overflow
+    #[inline]
+    pub fn is_critical(&self) -> bool {
+        matches!(self, ThresholdDecision::Critical)
+    }
+
+    /// 是否需要触发压缩流程（常规预热或临界硬防御）
+    #[inline]
+    pub fn should_compact(&self) -> bool {
+        !self.is_under_budget()
+    }
 }
 
 /// 双阈值配置（可配；session_meta 键
@@ -47,8 +67,7 @@ pub enum ThresholdDecision {
 pub struct CompactionThresholds {
     /// 常规线水位（默认 0.85）
     pub regular_ratio: f64,
-    /// 临界线水位（默认 0.95；≥ 常规线；E2 裁决 1 后仅供水位判定，
-    /// 不再挂钩「同步硬压缩」语义）
+    /// 临界线水位（默认 0.95；≥ 常规线）
     pub critical_ratio: f64,
 }
 
@@ -72,8 +91,7 @@ impl CompactionThresholds {
         }
     }
 
-    /// 水位判定单点：`estimate / window` 与双阈值比较（window = 0 时
-    /// 保守判临界——无法估算即按最紧防线处理）
+    /// 水位判定单点：`estimate / window` 与双阈值比较（window = 0 时保守判临界）
     pub fn classify(&self, estimate: u64, window: u64) -> ThresholdDecision {
         if window == 0 {
             return ThresholdDecision::Critical;
@@ -87,6 +105,40 @@ impl CompactionThresholds {
         } else {
             ThresholdDecision::UnderBudget
         }
+    }
+
+    /// 动态自适应滑动窗口（Adaptive Keep Recent Budget）
+    ///
+    /// 淘汰死板的 20,000 Token 硬保留，根据模型可用窗口动态计算保留预算：
+    /// `keep_recent_tokens = clamp(W_avail * 0.35, 4_000, 40_000)`
+    /// - 小窗口模型（16k/32k）：自适应保留 4,000 ~ 9,000 Tokens；
+    /// - 大窗口模型（128k/200k/1M）：保留 30,000 ~ 40,000 Tokens。
+    pub fn adaptive_keep_recent_tokens(available_window: usize) -> usize {
+        let target = (available_window as f64 * 0.35).round() as usize;
+        target.clamp(4_000, 40_000)
+    }
+
+    /// 计算给定可用窗口下的常规线与临界线 Token 阈值点
+    pub fn threshold_tokens(&self, available_window: u64) -> (u64, u64) {
+        let norm = self.normalized();
+        let regular = (available_window as f64 * norm.regular_ratio).round() as u64;
+        let critical = (available_window as f64 * norm.critical_ratio).round() as u64;
+        (regular, critical)
+    }
+
+    /// 预算内平滑早退判定：若估算值处于 UnderBudget，无需执行破坏性截断
+    pub fn is_under_budget(&self, estimate: u64, available_window: u64) -> bool {
+        self.classify(estimate, available_window).is_under_budget()
+    }
+
+    /// 是否应拉起后台异步摘要预热（达到常规线 85%）
+    pub fn should_preheat(&self, estimate: u64, available_window: u64) -> bool {
+        self.classify(estimate, available_window).is_regular()
+    }
+
+    /// 是否应执行同步临界硬防御压缩（达到临界线 95%）
+    pub fn should_critical_defense(&self, estimate: u64, available_window: u64) -> bool {
+        self.classify(estimate, available_window).is_critical()
     }
 }
 

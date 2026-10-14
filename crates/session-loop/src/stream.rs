@@ -202,28 +202,41 @@ impl ProviderStreamEvent {
 }
 
 /// 消费终止原因（metadata.stopReason 取值域，对齐 agent-provider ConsumeStopReason）
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ConsumeStopReason {
     /// 正常结束
     Stop,
-    /// 工具调用收尾
+    /// 工具调用收尾（仅限成功完成且无未决错误的流）
     ToolCall,
     /// 长度截断（length 恢复阶梯输入，01 §2.6 步骤 1）
     Length,
     /// 流中途 abort（partial salvage，01 §2.4 步骤 5）
     Aborted,
+    /// 【第一公民 Error 终态变体（BC02-2）】：流中途发生服务端错误/异常截断
+    /// （内容部分留存，但绝非成功；严禁进入 HasToolCalls 派发真实工具执行）
+    Error {
+        kind: ProviderErrorKind,
+        message: String,
+        retryable: bool,
+    },
 }
 
 impl ConsumeStopReason {
     /// wire 取值（对齐 TS stopReason 字符串）
-    pub const fn as_str(self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
             ConsumeStopReason::Stop => "stop",
             ConsumeStopReason::ToolCall => "tool-call",
             ConsumeStopReason::Length => "length",
             ConsumeStopReason::Aborted => "aborted",
+            ConsumeStopReason::Error { .. } => "error",
         }
+    }
+
+    /// 是否为错误终态
+    pub const fn is_error(&self) -> bool {
+        matches!(self, ConsumeStopReason::Error { .. })
     }
 }
 
@@ -251,6 +264,29 @@ impl ConsumeResult {
             "tool-call" => Some(ConsumeStopReason::ToolCall),
             "length" => Some(ConsumeStopReason::Length),
             "aborted" => Some(ConsumeStopReason::Aborted),
+            "error" => {
+                let message = self
+                    .metadata
+                    .get("providerError")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("provider 流异常终止")
+                    .to_string();
+                let kind = self
+                    .metadata
+                    .get("providerErrorKind")
+                    .and_then(|v| serde_json::from_value(v.clone()).ok())
+                    .unwrap_or(ProviderErrorKind::Unknown);
+                let retryable = self
+                    .metadata
+                    .get("providerErrorRetryable")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or_else(|| kind.default_retryable());
+                Some(ConsumeStopReason::Error {
+                    kind,
+                    message,
+                    retryable,
+                })
+            }
             _ => None,
         }
     }
@@ -393,9 +429,20 @@ impl ConsumeBuilder {
         self.pushed += 1;
     }
 
-    /// 是否尚未聚合任何事件（流中错误时区分「已产出内容」与「纯错误」）
+    /// 是否存在可抢救的用户可见有效载荷（正文/思考/工具调用）
+    ///
+    /// 核心契约（BC02-3）：只有真实的 text、thought 或 tool-call 增量才算作有效正文载荷；
+    /// SseFirstByte 等网络诊断事件绝不能破坏空流判定。
+    pub fn has_salvageable_content(&self) -> bool {
+        !self.aggregate.text.is_empty()
+            || !self.aggregate.tool_calls.is_empty()
+            || !self.aggregate.thought.is_empty()
+            || !self.aggregate.thought_blocks.is_empty()
+    }
+
+    /// 是否尚未产生任何用户可见正文载荷（已升级为 !has_salvageable_content()）
     pub fn is_empty(&self) -> bool {
-        self.pushed == 0
+        !self.has_salvageable_content()
     }
 
     /// 流结束收口：产出与 [consume] 等价的 [ConsumeResult]
@@ -405,7 +452,7 @@ impl ConsumeBuilder {
     }
 }
 
-/// 终止聚合：按 01 D6 裁决生成 stopReason 并分类响应
+/// 终止聚合：按 BC02-2 / BC02-1 裁决生成 stopReason 并分类响应
 fn finish(aggregate: Aggregate, aborted: bool, accounting: CacheAccounting) -> ConsumeResult {
     if aborted {
         return finish_after_abort(aggregate, accounting);
@@ -414,27 +461,52 @@ fn finish(aggregate: Aggregate, aborted: bool, accounting: CacheAccounting) -> C
         || !aggregate.tool_calls.is_empty()
         || !aggregate.thought.is_empty()
         || !aggregate.thought_blocks.is_empty();
-    // 空响应：无 block 且无 error → Empty（02 §一.3；01 §五.3）
-    if !has_content && aggregate.error.is_none() {
+
+    // 1. 无任何实质正文内容（BC02-1：无正文的错误 Stop 无损透传原始 ClassifiedStreamError，
+    // 保留精确 error_kind，打通 429/超时退避阶梯，杜绝被无差别折叠为 Unknown fatal）
+    if !has_content {
+        let is_error = aggregate.finish_reason == Some(StopReason::Error) || aggregate.error.is_some();
+        if is_error {
+            let message = aggregate
+                .error
+                .unwrap_or_else(|| "provider 流异常终止".to_string());
+            let kind = aggregate.error_kind.unwrap_or(ProviderErrorKind::Unknown);
+            let retryable = kind.default_retryable();
+            return ConsumeResult {
+                response: ProviderOutput::stream_error(ClassifiedStreamError {
+                    kind,
+                    message,
+                    retryable,
+                    retry_after_ms: None,
+                }),
+                diagnostics: aggregate.diagnostics,
+                metadata: Value::Null,
+            };
+        }
         return ConsumeResult {
             response: ProviderOutput::Empty,
             diagnostics: aggregate.diagnostics,
             metadata: Value::Null,
         };
     }
-    // 无内容且 error → StreamError：仅「无文字且无 tool-call 且无思考且 stopReason=error」
-    // 归入错误路径（01 D6），进入分类重试阶梯
-    if !has_content {
-        let message = aggregate.error.unwrap_or_default();
-        return ConsumeResult {
-            response: ProviderOutput::stream_error(classify_stream_error(&message)),
-            diagnostics: aggregate.diagnostics,
-            metadata: Value::Null,
-        };
-    }
-    // 有文字或 tool-call 或思考 → Message：error 不作为 stopReason 一票否决，
-    // 降级为 metadata.providerError 标注（01 D6 裁决）
-    let stop_reason = if !aggregate.tool_calls.is_empty() {
+
+    // 2. 有正文内容（文本/思考/工具）
+    // 【BC02-2 核心攻坚铁律】：流以错误终止时，第一公民 Error 终态变体，
+    // 绝对严禁盖写为 Stop 或 ToolCall！
+    let is_error_finish = aggregate.finish_reason == Some(StopReason::Error) || aggregate.error.is_some();
+    let stop_reason = if is_error_finish {
+        let kind = aggregate.error_kind.unwrap_or(ProviderErrorKind::Unknown);
+        let retryable = kind.default_retryable();
+        let message = aggregate
+            .error
+            .clone()
+            .unwrap_or_else(|| "provider 流异常终止".to_string());
+        ConsumeStopReason::Error {
+            kind,
+            message,
+            retryable,
+        }
+    } else if !aggregate.tool_calls.is_empty() {
         ConsumeStopReason::ToolCall
     } else {
         match aggregate.finish_reason {
@@ -443,7 +515,7 @@ fn finish(aggregate: Aggregate, aborted: bool, accounting: CacheAccounting) -> C
             _ => ConsumeStopReason::Stop,
         }
     };
-    let metadata = build_message_metadata(&aggregate, stop_reason, false, accounting);
+    let metadata = build_message_metadata(&aggregate, &stop_reason, false, accounting);
     ConsumeResult {
         response: ProviderOutput::message(aggregate.text, aggregate.tool_calls),
         diagnostics: aggregate.diagnostics,
@@ -470,7 +542,7 @@ fn finish_after_abort(aggregate: Aggregate, accounting: CacheAccounting) -> Cons
             metadata: Value::Null,
         };
     }
-    let metadata = build_message_metadata(&aggregate, ConsumeStopReason::Aborted, true, accounting);
+    let metadata = build_message_metadata(&aggregate, &ConsumeStopReason::Aborted, true, accounting);
     ConsumeResult {
         response: ProviderOutput::message(aggregate.text, aggregate.tool_calls),
         diagnostics: aggregate.diagnostics,
@@ -484,7 +556,7 @@ fn finish_after_abort(aggregate: Aggregate, accounting: CacheAccounting) -> Cons
 /// 额外写入 `cacheBreakdown`（camelCase，C9 恒等式派生块）。
 fn build_message_metadata(
     aggregate: &Aggregate,
-    stop_reason: ConsumeStopReason,
+    stop_reason: &ConsumeStopReason,
     aborted: bool,
     accounting: CacheAccounting,
 ) -> Value {
@@ -600,23 +672,12 @@ fn finish_reason_str(reason: StopReason) -> &'static str {
     }
 }
 
-/// 流错误兜底分类：error stop 的原始文案按 Unknown（不可重试）兜底；
-/// abort 路径单独归 Aborted 类（对齐 agent-provider::consume 的兜底语义）。
-/// 传输/HTTP 层错误由 ProviderCall 实现方上抛（分类后经 retry 阶梯处理）。
-fn classify_stream_error(message: &str) -> ClassifiedStreamError {
-    ClassifiedStreamError {
-        kind: ProviderErrorKind::Unknown,
-        message: message.to_string(),
-        retryable: false,
-        retry_after_ms: None,
-    }
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// 文字 + error stop → Message（不失败）；错误降级为 metadata 标注（01 D6）。
+    /// 文字 + error stop → Message（内容部分保留）；stopReason=error 第一公民变体（BC02-2）。
     /// D7 §3.7（T9）：标注含结构化分类 providerErrorKind/providerErrorRetryable
     #[test]
     fn text_then_error_stop_yields_message() {
@@ -633,7 +694,15 @@ mod tests {
             false,
         );
         assert_eq!(result.response, ProviderOutput::message("你好", vec![]));
-        assert_eq!(result.stop_reason(), Some(ConsumeStopReason::Stop));
+        assert_eq!(
+            result.stop_reason(),
+            Some(ConsumeStopReason::Error {
+                kind: ProviderErrorKind::Timeout,
+                message: "上游超时".to_string(),
+                retryable: true,
+            })
+        );
+        assert_eq!(result.metadata["stopReason"], "error");
         // providerError 字符串保持 + 结构化字段（kebab-case kind / retryable）
         assert_eq!(result.metadata["providerError"], "上游超时");
         assert_eq!(result.metadata["providerErrorKind"], "timeout");
@@ -655,6 +724,15 @@ mod tests {
             ],
             false,
         );
+        assert_eq!(
+            result.stop_reason(),
+            Some(ConsumeStopReason::Error {
+                kind: ProviderErrorKind::Unknown,
+                message: "未知错误".to_string(),
+                retryable: false,
+            })
+        );
+        assert_eq!(result.metadata["stopReason"], "error");
         assert_eq!(result.metadata["providerErrorKind"], "unknown");
         assert_eq!(result.metadata["providerErrorRetryable"], false);
     }
@@ -670,6 +748,15 @@ mod tests {
             ],
             false,
         );
+        assert_eq!(
+            result.stop_reason(),
+            Some(ConsumeStopReason::Error {
+                kind: ProviderErrorKind::Unknown,
+                message: "provider 流异常终止".to_string(),
+                retryable: false,
+            })
+        );
+        assert_eq!(result.metadata["stopReason"], "error");
         assert_eq!(result.metadata["providerError"], "provider 流异常终止");
         assert!(result.metadata.get("providerErrorKind").is_none());
         assert!(result.metadata.get("providerErrorRetryable").is_none());
@@ -1107,7 +1194,7 @@ mod tests {
         assert_eq!(result.metadata["thought"], "流中被 abort 的思考片段");
     }
 
-    /// 纯思考流 + error stop → Message，错误降级为 metadata 标注，思考内容不丢
+    /// 纯思考流 + error stop → Message，思考内容不丢，stopReason 标记为 error（BC02-2）
     #[test]
     fn thought_with_error_stop_yields_message() {
         let result = consume(
@@ -1126,8 +1213,103 @@ mod tests {
             result.response.is_message(),
             "有思考内容且发生 error stop 时必须产出 Message"
         );
+        assert_eq!(
+            result.stop_reason(),
+            Some(ConsumeStopReason::Error {
+                kind: ProviderErrorKind::Timeout,
+                message: "网络连接重置".to_string(),
+                retryable: true,
+            })
+        );
+        assert_eq!(result.metadata["stopReason"], "error");
         assert_eq!(result.metadata["thought"], "思考到一半发生错误");
         assert_eq!(result.metadata["providerError"], "网络连接重置");
         assert_eq!(result.metadata["providerErrorKind"], "timeout");
+    }
+
+    /// BC02-2：tool-call + error stop → 严禁盖写为 ToolCall，必须为 Error 终态变体！
+    #[test]
+    fn tool_call_then_error_stop_yields_error_stop_reason_not_tool_call() {
+        let result = consume(
+            vec![
+                ProviderStreamEvent::tool_call(
+                    Some("call_1".into()),
+                    "execute_command",
+                    serde_json::json!({"cmd": "rm -rf /"}),
+                ),
+                ProviderStreamEvent::Stop {
+                    reason: StopReason::Error,
+                    error: Some("连接异常中断".to_string()),
+                    error_kind: Some(ProviderErrorKind::Network),
+                    usage: None,
+                },
+            ],
+            false,
+        );
+        assert_eq!(
+            result.stop_reason(),
+            Some(ConsumeStopReason::Error {
+                kind: ProviderErrorKind::Network,
+                message: "连接异常中断".to_string(),
+                retryable: true,
+            }),
+            "有 tool-call 时发生 error 严禁被盖写为 ToolCall！"
+        );
+        assert_eq!(result.metadata["stopReason"], "error");
+    }
+
+    /// BC02-1：纯 error stop 携带 RateLimit 时，无损透传原始分类（保留精确 kind 与 retryable），杜绝被折叠为 Unknown fatal
+    #[test]
+    fn pure_error_stop_with_rate_limit_preserves_error_kind() {
+        let result = consume(
+            vec![ProviderStreamEvent::Stop {
+                reason: StopReason::Error,
+                error: Some("429 Too Many Requests".to_string()),
+                error_kind: Some(ProviderErrorKind::RateLimit),
+                usage: None,
+            }],
+            false,
+        );
+        let ProviderOutput::StreamError { classified } = &result.response else {
+            panic!("应为 StreamError，得到 {:?}", result.response);
+        };
+        assert_eq!(
+            classified.kind,
+            ProviderErrorKind::RateLimit,
+            "429 RateLimit 错误必须保全精确分类"
+        );
+        assert!(classified.retryable, "RateLimit 必须可重试");
+        assert_eq!(classified.message, "429 Too Many Requests");
+    }
+
+    /// BC02-3：网络诊断事件（如 SseFirstByte）绝不能破坏空流有效载荷判定
+    #[test]
+    fn diagnostic_does_not_break_has_salvageable_content() {
+        let mut builder = ConsumeBuilder::new();
+        assert!(!builder.has_salvageable_content());
+        assert!(builder.is_empty());
+
+        // 推入网络诊断事件
+        builder.push(ProviderStreamEvent::ProviderDiagnostic {
+            diagnostic: ProviderDiagnostic {
+                reason: Some("首字节就绪".to_string()),
+                ..Default::default()
+            },
+        });
+
+        // 诊断事件绝不能破坏空流判定
+        assert!(
+            !builder.has_salvageable_content(),
+            "仅有诊断事件时不得视为有效正文载荷"
+        );
+        assert!(
+            builder.is_empty(),
+            "仅有诊断事件时 is_empty 必须返回 true"
+        );
+
+        // 推入正文增量后成为有效载荷
+        builder.push(ProviderStreamEvent::text("正文内容"));
+        assert!(builder.has_salvageable_content());
+        assert!(!builder.is_empty());
     }
 }

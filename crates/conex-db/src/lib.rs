@@ -22,6 +22,7 @@ mod agents;
 mod agents_ops;
 mod blocks;
 pub mod cas_gc;
+pub mod compression_store;
 mod error;
 mod events;
 mod explore_docs_quota_store;
@@ -41,6 +42,7 @@ pub mod usage_analytics;
 
 pub use blocks::{BlockState, CompactionBlockRow, BLOCK_SCHEMA_VERSION};
 pub use cas_gc::{compute_sha256_hex, spawn_cas_gc_loop, CasBlobRow, CasGcConfig, GcScanStats};
+pub use compression_store::DbCompressionContextStore;
 pub use error::{DbFailure, DbFailureKind};
 pub use events::StoredEvent;
 pub use explore_docs_quota_store::SessionMetaExploreDocsQuotaStore;

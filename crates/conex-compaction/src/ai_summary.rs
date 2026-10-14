@@ -63,6 +63,10 @@ fn render_message_text(message: &AgentMessage) -> String {
                     if *is_error { "（错误）" } else { "" }
                 ));
             }
+            AgentMessageBlock::Image(img) => {
+                let alt = img.alt.as_deref().unwrap_or("图片");
+                out.push_str(&format!("\n[图片] {alt}"));
+            }
         }
     }
     out
@@ -123,6 +127,90 @@ fn role_name(role: conex_types::AgentMessageRole) -> &'static str {
         conex_types::AgentMessageRole::User => "用户",
         conex_types::AgentMessageRole::Assistant => "助手",
         conex_types::AgentMessageRole::Tool => "工具",
+    }
+}
+
+/// Critical Context 多态渲染器（BC05-6：根除关键信息静默蒸发）
+///
+/// 全面支持数组（`- item`）、对象键值（`- key: value`）与多行字符串多态解析，
+/// 确保模型输出的结构化 criticalContext 100% 确定性保真投影到 Markdown，
+/// 杜绝出现空白标题。
+pub fn push_critical_context(out: &mut String, doc: &serde_json::Value) {
+    let Some(val) = doc.get("criticalContext") else {
+        return;
+    };
+    match val {
+        // 契约正规态：数组形式（逐条渲染为无序列表）
+        serde_json::Value::Array(items) => {
+            for item in items {
+                match item {
+                    serde_json::Value::String(s) => {
+                        let trimmed = s.trim();
+                        if !trimmed.is_empty() {
+                            out.push_str("- ");
+                            out.push_str(trimmed);
+                            out.push('\n');
+                        }
+                    }
+                    serde_json::Value::Object(map) => {
+                        // 兼容对象条目：{ "path": "...", "desc": "..." } 等键值对
+                        let mut parts = Vec::new();
+                        for (k, v) in map {
+                            if let Some(str_val) = v.as_str() {
+                                parts.push(format!("{k}: {str_val}"));
+                            } else {
+                                parts.push(format!("{k}: {v}"));
+                            }
+                        }
+                        if !parts.is_empty() {
+                            out.push_str("- ");
+                            out.push_str(&parts.join(", "));
+                            out.push('\n');
+                        }
+                    }
+                    other => {
+                        let s = other.to_string();
+                        let trimmed = s.trim();
+                        if !trimmed.is_empty() {
+                            out.push_str("- ");
+                            out.push_str(trimmed);
+                            out.push('\n');
+                        }
+                    }
+                }
+            }
+        }
+        // 兼容态：顶层对象键值直接作为 criticalContext
+        serde_json::Value::Object(map) => {
+            for (k, v) in map {
+                out.push_str("- ");
+                out.push_str(k);
+                out.push_str(": ");
+                if let Some(str_val) = v.as_str() {
+                    out.push_str(str_val);
+                } else {
+                    out.push_str(&v.to_string());
+                }
+                out.push('\n');
+            }
+        }
+        // 兼容态：纯文本多行字符串
+        serde_json::Value::String(s) => {
+            let trimmed = s.trim();
+            if !trimmed.is_empty() {
+                for line in trimmed.lines() {
+                    let l = line.trim();
+                    if !l.is_empty() {
+                        if !l.starts_with('-') && !l.starts_with('*') {
+                            out.push_str("- ");
+                        }
+                        out.push_str(l);
+                        out.push('\n');
+                    }
+                }
+            }
+        }
+        _ => {}
     }
 }
 
@@ -402,8 +490,8 @@ mod tests {
 
     use super::{
         build_summarize_prompt, compaction_event_details, covers_up_to_turn_for_dropped,
-        is_acceptable_summary, is_degenerate_summary, retry_allowed, summarize_with_guard,
-        RetryGuardSummarizer, SummaryOutcome, SummaryRetryPolicy,
+        is_acceptable_summary, is_degenerate_summary, push_critical_context, retry_allowed,
+        summarize_with_guard, RetryGuardSummarizer, SummaryOutcome, SummaryRetryPolicy,
     };
     use crate::compaction::{CompactionEngine, CompactionPolicy, Summarizer};
 
@@ -1001,5 +1089,78 @@ mod tests {
             last_error: Some("x".to_string()),
         };
         assert!(outcome.degraded);
+    }
+
+    #[test]
+    fn test_push_critical_context_array_strings() {
+        let doc = serde_json::json!({
+            "criticalContext": [
+                "crates/conex-compaction/src/tokens.rs",
+                "enforce_tool_batch_closure",
+                "ERR_CONTEXT_OVERFLOW"
+            ]
+        });
+        let mut out = String::new();
+        push_critical_context(&mut out, &doc);
+        assert_eq!(
+            out,
+            "- crates/conex-compaction/src/tokens.rs\n- enforce_tool_batch_closure\n- ERR_CONTEXT_OVERFLOW\n"
+        );
+    }
+
+    #[test]
+    fn test_push_critical_context_array_objects() {
+        let doc = serde_json::json!({
+            "criticalContext": [
+                { "path": "src/main.rs", "error": "timeout" },
+                { "command": "cargo test", "exitCode": "1" }
+            ]
+        });
+        let mut out = String::new();
+        push_critical_context(&mut out, &doc);
+        assert!(out.contains("- path: src/main.rs, error: timeout\n") || out.contains("- error: timeout, path: src/main.rs\n"));
+        assert!(out.contains("command: cargo test"));
+    }
+
+    #[test]
+    fn test_push_critical_context_top_level_object() {
+        let doc = serde_json::json!({
+            "criticalContext": {
+                "failedPath": "src/lib.rs:42",
+                "status": "failed"
+            }
+        });
+        let mut out = String::new();
+        push_critical_context(&mut out, &doc);
+        assert!(out.contains("- failedPath: src/lib.rs:42\n"));
+        assert!(out.contains("- status: failed\n"));
+    }
+
+    #[test]
+    fn test_push_critical_context_multiline_string() {
+        let doc = serde_json::json!({
+            "criticalContext": "src/lib.rs:100\n- error: already formatted\nsymbol: tokenize"
+        });
+        let mut out = String::new();
+        push_critical_context(&mut out, &doc);
+        assert_eq!(
+            out,
+            "- src/lib.rs:100\n- error: already formatted\n- symbol: tokenize\n"
+        );
+    }
+
+    #[test]
+    fn test_push_critical_context_empty_and_missing() {
+        let mut out = String::new();
+        push_critical_context(&mut out, &serde_json::json!({}));
+        assert!(out.is_empty());
+
+        let mut out = String::new();
+        push_critical_context(&mut out, &serde_json::json!({ "criticalContext": [] }));
+        assert!(out.is_empty());
+
+        let mut out = String::new();
+        push_critical_context(&mut out, &serde_json::json!({ "criticalContext": "" }));
+        assert!(out.is_empty());
     }
 }

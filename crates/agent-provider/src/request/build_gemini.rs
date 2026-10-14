@@ -372,18 +372,21 @@ fn to_gemini_contents<M: BorrowMessage>(messages: &[M]) -> Vec<Value> {
                         }
                         AgentMessageBlock::ToolCall(call) => {
                             // functionCall part：args 取结构化入参（null 兜底 `{}`——
-                            // Gemini 要求 args 为对象；对齐 parse 侧 functionCall.args 读取）
+                            // Gemini 要求 args 为对象；对齐 parse 侧 functionCall.args 读取）；
+                            // 保留真实 call.id（兼容 Gemini 2.0+ 官方 ID 追踪协议，杜绝同名调用错配）
                             let args = if call.input.is_object() {
                                 call.input.clone()
                             } else {
                                 json!({ "value": call.input })
                             };
-                            parts.push(json!({
-                                "functionCall": {
-                                    "name": call.tool_name,
-                                    "args": args,
-                                }
-                            }));
+                            let mut fc = json!({
+                                "name": call.tool_name,
+                                "args": args,
+                            });
+                            if !call.id.is_empty() {
+                                fc["id"] = json!(call.id);
+                            }
+                            parts.push(json!({ "functionCall": fc }));
                         }
                         _ => {}
                     }
@@ -410,18 +413,23 @@ fn tool_result_gemini_parts(msg: &AgentMessage) -> Vec<Value> {
     let mut parts: Vec<Value> = Vec::new();
     for block in &msg.blocks {
         if let AgentMessageBlock::ToolResult {
-            tool_name, output, ..
+            tool_call_id,
+            tool_name,
+            output,
+            ..
         } = block
         {
             // T-34（R-J）：wire 投影面统一清洗（与 chat 轨 tool 消息同口径，
-            // 确定性 + 幂等）
+            // 确定性 + 幂等）；保留并回填真实 tool_call_id（杜绝同名工具调用错配）
             let cleaned = clean_output(&stringify_tool_output(output), &CleanupOptions::default());
-            parts.push(json!({
-                "functionResponse": {
-                    "name": tool_name,
-                    "response": tool_response_value(&cleaned.cleaned),
-                }
-            }));
+            let mut fr = json!({
+                "name": tool_name,
+                "response": tool_response_value(&cleaned.cleaned),
+            });
+            if !tool_call_id.is_empty() {
+                fr["id"] = json!(tool_call_id);
+            }
+            parts.push(json!({ "functionResponse": fr }));
         }
     }
     parts
@@ -523,17 +531,31 @@ fn to_gemini_function_declaration(tool: &ToolDefinition) -> Value {
     })
 }
 
-/// ToolChoice → Gemini toolConfig `{functionCallingConfig:{mode}}`
+/// ToolChoice → Gemini toolConfig `{functionCallingConfig:{mode, allowedFunctionNames?}}`
 ///
-/// 对齐 Gemini generateContent tool_config 语义：auto → AUTO、none → NONE、
-/// required/指定函数 → ANY（指定函数在 functionDeclarations 已含，无需白名单托管）。
+/// 对齐 Gemini generateContent tool_config 语义（BC08-6）：
+/// - auto → AUTO
+/// - none → NONE
+/// - required → ANY
+/// - function(name) → ANY 且携带 allowedFunctionNames: [name]，刚性限制模型候选集只包含指定工具
 fn gemini_tool_config(choice: &ToolChoice) -> Value {
-    let mode = match choice {
-        ToolChoice::Auto => "AUTO",
-        ToolChoice::None => "NONE",
-        ToolChoice::Required | ToolChoice::Function { .. } => "ANY",
-    };
-    json!({ "functionCallingConfig": { "mode": mode } })
+    match choice {
+        ToolChoice::Auto => json!({
+            "functionCallingConfig": { "mode": "AUTO" }
+        }),
+        ToolChoice::None => json!({
+            "functionCallingConfig": { "mode": "NONE" }
+        }),
+        ToolChoice::Required => json!({
+            "functionCallingConfig": { "mode": "ANY" }
+        }),
+        ToolChoice::Function { name } => json!({
+            "functionCallingConfig": {
+                "mode": "ANY",
+                "allowedFunctionNames": [name]
+            }
+        }),
+    }
 }
 
 /// tool 输出 → Gemini functionResponse.response（须为对象/数组）：

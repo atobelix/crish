@@ -13,6 +13,8 @@
 
 use std::fmt;
 
+pub use crate::ai_summary::push_critical_context;
+
 /// Schema V1 版本号（required 骨架变更需升版本）
 pub const SUMMARY_SCHEMA_VERSION: u32 = 1;
 
@@ -239,7 +241,7 @@ pub fn summary_to_markdown(doc: &serde_json::Value) -> String {
     out.push_str("\n## Next Steps\n");
     push_string_list(&mut out, doc, "nextSteps");
     out.push_str("\n## Critical Context\n");
-    out.push_str(string_field(doc, "criticalContext"));
+    crate::ai_summary::push_critical_context(&mut out, doc);
     push_paths(&mut out, doc);
     push_signatures(&mut out, doc);
     push_counts(&mut out, doc);
@@ -472,5 +474,31 @@ mod tests {
     fn non_legacy_text_returns_none() {
         assert!(parse_legacy_summary("## Goal\n(none)").is_none());
         assert!(parse_legacy_summary("").is_none());
+    }
+
+    #[test]
+    fn test_critical_context_array_rendering() {
+        let doc = serde_json::json!({
+            "schemaVersion": 1,
+            "blockId": "summary-1",
+            "generation": 1,
+            "droppedIds": ["m1", "m2"],
+            "height": 1,
+            "tier": "chunk",
+            "goal": "重构关键上下文",
+            "constraints": ["零未捕获异常"],
+            "progress": ["完成分词器重构"],
+            "decisions": ["多态 Critical Context 渲染"],
+            "nextSteps": ["跑通完整测试"],
+            "criticalContext": [
+                "path/to/file.rs:42",
+                "Command failed: exit 1"
+            ]
+        });
+        let md = summary_to_markdown(&doc);
+        assert!(md.contains("## Critical Context\n- path/to/file.rs:42\n- Command failed: exit 1\n"));
+        // 杜绝空白标题
+        let crit_section = md.split("## Critical Context").nth(1).unwrap();
+        assert!(crit_section.trim().starts_with("- path/to/file.rs:42"));
     }
 }

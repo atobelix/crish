@@ -29,6 +29,7 @@ pub(crate) use stream::*;
 pub(crate) use timestamp::*;
 
 use std::collections::{BTreeMap, VecDeque};
+use std::pin::Pin;
 use std::time::Duration;
 
 use agent_provider::config::Endpoint;
@@ -45,12 +46,13 @@ use agent_provider::request::{
     CachePolicy, CacheRetention, ChatCompletionsRequestOptions, GeminiRequestOptions,
     RequestBuildContext, ToolDefinition as WireToolDefinition, TtlBucket, WireProtocol,
 };
-use agent_provider::sse::{AbortFlag, StreamDiagnosticContext, StreamReadOptions};
-use agent_provider::transport::stream_frames;
+use agent_provider::sse::{AbortFlag, SseFrame, StreamDiagnosticContext, StreamReadOptions};
+use agent_provider::transport::{stream_frames, StreamFrameEvent};
 use async_trait::async_trait;
 use conex_types::error::ProviderErrorKind;
 use conex_types::response::ClassifiedStreamError;
 use conex_types::tool::SystemPromptWireMode;
+use futures_util::Stream;
 use indexmap::IndexMap;
 use session_loop::provider::{ProviderCall, ProviderEventStream, ProviderRequest};
 
@@ -540,7 +542,11 @@ impl ProviderCall for HttpProviderCall {
             return Err(to_classified(classified));
         }
 
-        // 3. 增量帧流 → 逐帧解析 → 逐事件产出（T09.1.2 步骤 2：真实 AbortHandle）
+        // 3. 响应管道双模自适应（Dual-Mode Transport，BC08-1）：
+        //    - 若收到 HTTP 200 且 Content-Type 为 application/json（非 text/event-stream），
+        //      直接走单帧完整文档通道，包装为 SseFrame 交付底层解析器（如 GeminiParser），
+        //      直接解析完整 candidates 与 usage，杜绝无 data: 前缀导致的空流假错误；
+        //    - 否则：走标准增量 SSE 分帧读取流。
         let (abort_flag, abort_handle) = AbortFlag::new();
         if let Some(signal) = &abort_signal {
             if signal.is_aborted() {
@@ -554,17 +560,60 @@ impl ProviderCall for HttpProviderCall {
                 });
             }
         }
-        let read_options = StreamReadOptions {
-            first_byte_timeout: self.first_byte_timeout,
-            idle_timeout: self.idle_timeout,
-            diagnostics: Some(StreamDiagnosticContext {
-                provider_id: Some(protocol.as_str().to_string()),
-                endpoint: Some(self.config.endpoint.as_str().to_string()),
-                url: Some(url.clone()),
-                ..StreamDiagnosticContext::default()
-            }),
+
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|val| val.to_str().ok())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+
+        let is_json_response = content_type.contains("application/json")
+            || (!content_type.contains("text/event-stream") && content_type.contains("json"));
+
+        let frames: Pin<
+            Box<
+                dyn Stream<
+                        Item = Result<
+                            StreamFrameEvent,
+                            agent_provider::sse::SseReadError<reqwest::Error>,
+                        >,
+                    > + Send,
+            >,
+        > = if is_json_response {
+            let body_text = match response.text().await {
+                Ok(text) => text,
+                Err(error) => {
+                    let source = source_from_reqwest_error(&error);
+                    return Err(to_classified(classify_provider_error(
+                        None,
+                        None,
+                        Some(source),
+                        None,
+                    )));
+                }
+            };
+            let frame = StreamFrameEvent::Frame(SseFrame {
+                event: None,
+                data: Some(body_text),
+                id: None,
+                retry: None,
+            });
+            Box::pin(futures_util::stream::once(async move { Ok(frame) }))
+        } else {
+            let read_options = StreamReadOptions {
+                first_byte_timeout: self.first_byte_timeout,
+                idle_timeout: self.idle_timeout,
+                diagnostics: Some(StreamDiagnosticContext {
+                    provider_id: Some(protocol.as_str().to_string()),
+                    endpoint: Some(self.config.endpoint.as_str().to_string()),
+                    url: Some(url.clone()),
+                    ..StreamDiagnosticContext::default()
+                }),
+            };
+            stream_frames(response, read_options, abort_handle)
         };
-        let frames = stream_frames(response, read_options, abort_handle);
+
         let state = HttpStreamState {
             frames,
             // 解析器按已查好的 profile.protocol 选择（单次查询，禁止再走

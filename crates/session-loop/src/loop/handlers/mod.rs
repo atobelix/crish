@@ -473,7 +473,7 @@ pub(crate) fn emit_missing_turn_end(state: &mut LoopState) {
         turn_index,
         timestamp: conex_shared::time::now_iso_utc(),
         tool_call_count: state.machine.context().tool_call_count,
-        usage: None,
+        usage: state.budget_state.turn_usage.take(),
     };
     state.emit_event(end_event);
     tracing::info!(
@@ -534,21 +534,28 @@ pub(crate) fn check_control(state: &mut LoopState) -> Result<Option<EndDecision>
             state: "consumed".to_string(),
         });
     }
-    // EV-08：收敛分支统一兜底——check_control 收敛路径（含 turn-complete
-    // 起始，turn-end 尚未正常发射）不经 turn_complete，此处单点补发闭合
-    // 孤儿 turn-start（current_turn_index 为 None 时幂等无操作）
-    emit_missing_turn_end(state);
+    // 重构（BC01-2）：仅在真正终止（ForceCancel / CooperativeStop）时补发 TurnEnd；
+    // 软注入绝不触碰 TurnEnd，避免单回合双终态；强停时先将中断合成工具消息入树，再发射 TurnEnd。
     match action {
         crate::safe_point::ControlAction::ForceCancel { reason } => {
-            // L3 强停：可立即中断 → ABORT（endReason=aborted；取消原因经
-            // aborted_with_diagnostic 透出，T06.3 Q02：不再写 state.abort_reason）
+            // L3 强停：先将中断合成工具消息入树，再发射 TurnEnd 闭合当前回合
+            if let Some(assistant) = last_assistant_with_tool_calls(state).cloned() {
+                synthesize_and_record_interrupted_calls(
+                    state,
+                    &assistant,
+                    codes::TOOL_ABORTED_BEFORE_DISPATCH,
+                    "tool execution aborted before dispatch",
+                );
+            }
+            emit_missing_turn_end(state);
             dispatch(state, E::Abort)?;
             Ok(Some(EndDecision::aborted_with_diagnostic(state, reason)))
         }
         crate::safe_point::ControlAction::CooperativeStop {
             pending_messages, ..
         } => {
-            // L2 协作停止：不 abort，D1 驱动状态机到 done（stopped 收场）
+            // L2 协作停止：真正终止时发射 TurnEnd 闭合当前回合
+            emit_missing_turn_end(state);
             for message in pending_messages {
                 state.input_queue.enqueue_steer(message);
             }
@@ -559,7 +566,7 @@ pub(crate) fn check_control(state: &mut LoopState) -> Result<Option<EndDecision>
             steer_messages,
             follow_up_messages,
         } => {
-            // L1 软注入：只读消费，消息落环（不打断流）
+            // L1 软注入：只读消费，消息落环（不打断流）。绝不触碰 TurnEnd，由后续正常业务流程收口
             for message in steer_messages {
                 state.input_queue.enqueue_steer(message);
             }

@@ -676,8 +676,21 @@ fn block_hash(block: &AgentMessageBlock, out: &mut Fnv1aWriter) {
             // 输出内容投影 text 正文（剔除状态 / 元数据噪声）
             out.update(output.text.as_deref().unwrap_or("").as_bytes());
         }
+        AgentMessageBlock::Image(img) => {
+            out.update(b"image\0");
+            out.update(img.mime_type.as_bytes());
+            out.update_byte(0);
+            if let Some(alt) = &img.alt {
+                out.update(alt.as_bytes());
+            }
+            out.update_byte(0);
+            if let Some(url) = &img.url {
+                out.update(url.as_bytes());
+            }
+        }
     }
 }
+
 
 /// 工具集合哈希投影（{name, description, input_schema} 按序序列化；
 /// 与 P4 `tools_prefix_json` 同源投影，字段顺序按 `serde_json::Value` 的 BTreeMap

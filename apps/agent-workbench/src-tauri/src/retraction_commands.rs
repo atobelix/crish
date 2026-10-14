@@ -15,7 +15,7 @@
 //!    （护栏：冻结期内拒绝 `> frozen_seq` 非撤离写入）；
 //! 5. **收集回滚计划**：冻结后按目标消息起始 seq 到 frozen_seq 查询 ToolEnd，
 //!    精确关联写类快照 owner；查询失败释放冻结并中止 truncate；
-//! 6. **truncate**：push `timeline-truncate`（boundary_seq = frozen_seq，
+//! 6. **truncate**：push `timeline-truncate`（boundary_seq = 真实目标消息起始 seq，
 //!    自身占 frozen_seq + 1；Critical + Persist 必达落库）→ 释放冻结；
 //! 7. **回滚**：按缓存的 operation owner 逐一还原 trash 写前快照（S10b）。
 //!
@@ -43,10 +43,11 @@ use crate::core_run_commands::{resolve_run_workspace_root, CoreRunState};
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RetractResponse {
-    /// 冻结边界 = 收敛后的事件流停止写入点（events MAX sequence）
+    /// 截断边界 = 真实目标消息起始序号（重放投影只保留 sequence <= boundarySeq）
     pub boundary_seq: u64,
-    /// TimelineTruncate 自身落库 sequence（== boundary_seq + 1）
+    /// TimelineTruncate 自身落库 sequence（== frozen_seq + 1）
     pub truncate_sequence: u64,
+
     /// 被撤回收场的 run id（无运行中 run 时为空串）
     pub run_id: String,
     /// 撤回目标 user 消息稳定 id
@@ -127,6 +128,20 @@ pub(crate) async fn retract_impl(
         }
     }
 
+    // ⑦ 物理下推：SQLite 消息持久层截断 target_message_id 之后的消息
+    // 彻底根除应用重启或水合后被撤回消息死灰复燃
+    if let Some(db) = state.local_db() {
+        if let Err(e) = db.truncate_session_messages_after(session_id, target_message_id) {
+            tracing::warn!(
+                target: "retraction",
+                session_id = %session_id,
+                target_message_id = %target_message_id,
+                error = %e,
+                "撤回持久化物理下推警告（session_messages 截断未匹配或失败）"
+            );
+        }
+    }
+
     Ok(RetractResponse {
         boundary_seq: outcome.boundary_seq,
         truncate_sequence: outcome.truncate_sequence,
@@ -135,6 +150,7 @@ pub(crate) async fn retract_impl(
         rollback: summary,
     })
 }
+
 
 /// 撤回错误 → CoreError 映射（fail-closed 语义透传）
 fn map_retraction_err(err: RetractionError) -> CoreError {
@@ -187,6 +203,50 @@ impl ShellRetractionBackend {
         }
         Ok(found)
     }
+
+    /// 全 Run 并行收敛网：等待会话内所有活跃 Run（主 Run 与所有子代理 Run）全部进入终态，
+    /// 彻底消除 HashMap 随机单 Run 盲区。
+    async fn wait_all_converged(&self, session_id: &str) -> Result<(), RetractionError> {
+        let deadline = Instant::now() + Duration::from_millis(CONVERGE_TIMEOUT_MS);
+        loop {
+            // 收集该会话下所有活跃 run 的句柄（MutexGuard 不跨 await 持有）
+            let active_handles: Vec<(String, Arc<tokio::sync::Mutex<orchestrator::run::RunHandle>>)> = {
+                let active = self
+                    .state
+                    .active_runs
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                active
+                    .values()
+                    .filter(|a| a.session_id == session_id)
+                    .map(|a| (a.run_id.clone(), Arc::clone(&a.handle)))
+                    .collect()
+            };
+
+            if active_handles.is_empty() {
+                // 该会话下已无任何活跃 run，收敛完成
+                return Ok(());
+            }
+
+            let mut all_terminal = true;
+            for (_run_id, handle) in &active_handles {
+                if !handle.lock().await.is_terminal() {
+                    all_terminal = false;
+                    break;
+                }
+            }
+
+            if all_terminal {
+                return Ok(());
+            }
+
+            if Instant::now() > deadline {
+                return Err(RetractionError::ConvergeTimeout);
+            }
+
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -238,7 +298,7 @@ impl RetractionBackend for ShellRetractionBackend {
                 .unwrap_or_else(|e| e.into_inner())
                 .request_force_cancel(Some(reason.clone()), Some("retract".into()));
             active.abort_signal.abort();
-            if main_run_id.is_none() {
+            if main_run_id.is_none() || active.subagent.is_none() {
                 main_run_id = Some(run_id.clone());
             }
         }
@@ -251,37 +311,12 @@ impl RetractionBackend for ShellRetractionBackend {
 
     async fn wait_converged(
         &self,
-        _session_id: &str,
-        run_id: Option<&str>,
+        session_id: &str,
+        _run_id: Option<&str>,
     ) -> Result<(), RetractionError> {
-        let Some(run_id) = run_id else {
-            // 无运行中 run：无收敛等待（稳定点即当前事件流）
-            return Ok(());
-        };
-        let deadline = Instant::now() + Duration::from_millis(CONVERGE_TIMEOUT_MS);
-        loop {
-            // 锁纪律：std MutexGuard 不跨 await 持有（先取句柄再释放锁）
-            let handle = {
-                let active = self
-                    .state
-                    .active_runs
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner());
-                active.get(run_id).map(|a| Arc::clone(&a.handle))
-            };
-            let terminal = match handle {
-                Some(handle) => handle.lock().await.is_terminal(),
-                None => true, // 已移出活动注册表 = 已收口
-            };
-            if terminal {
-                return Ok(());
-            }
-            if Instant::now() > deadline {
-                return Err(RetractionError::ConvergeTimeout);
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
+        self.wait_all_converged(session_id).await
     }
+
 
     async fn prepare_rollback_plan(
         &self,

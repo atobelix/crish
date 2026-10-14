@@ -95,126 +95,133 @@ impl GeminiParser {
         let Ok(payload) = serde_json::from_str::<Value>(data) else {
             return Ok(Vec::new());
         };
-        let Some(payload) = payload.as_object() else {
-            return Ok(Vec::new());
+        let items: Vec<&serde_json::Map<String, Value>> = match &payload {
+            Value::Object(map) => vec![map],
+            Value::Array(arr) => arr.iter().filter_map(Value::as_object).collect(),
+            _ => return Ok(Vec::new()),
         };
         let mut events = Vec::new();
 
-        // 顶层 error 对象（部分代理 / API 错误帧，48-58）→ 立即终止
-        if let Some(error) = gemini_payload_error(payload) {
-            let kind = stream_error_kind(&error);
-            events.push(ProviderStreamEvent::Stop {
-                reason: StopReason::Error,
-                error: Some(error),
-                error_kind: Some(kind),
-                usage: self.usage.clone(),
-            });
-            self.stream.check_events(&events)?;
-            self.terminated = true;
-            return Ok(events);
-        }
-
-        // promptFeedback.blockReason 且无 candidates → blocked（60-71、398-414）
-        if let Some(block) = prompt_block_reason(payload) {
-            if !has_candidates(payload) {
-                let block_usage =
-                    parse_gemini_usage(payload.get("usageMetadata")).or_else(|| self.usage.clone());
-                let kind = stream_error_kind(&block);
+        for payload in items {
+            if self.terminated {
+                break;
+            }
+            // 顶层 error 对象（部分代理 / API 错误帧，48-58）→ 立即终止
+            if let Some(error) = gemini_payload_error(payload) {
+                let kind = stream_error_kind(&error);
                 events.push(ProviderStreamEvent::Stop {
                     reason: StopReason::Error,
-                    error: Some(block),
+                    error: Some(error),
                     error_kind: Some(kind),
-                    usage: block_usage,
+                    usage: self.usage.clone(),
                 });
-                self.stream.check_events(&events)?;
                 self.terminated = true;
-                return Ok(events);
+                break;
             }
-        }
 
-        // usageMetadata 每帧合并（73-76、456-479；02 §六.6：Gemini 逐帧合并）
-        if let Some(chunk) = parse_gemini_usage(payload.get("usageMetadata")) {
-            self.usage = Some(merge_gemini_usage(self.usage.as_ref(), &chunk));
-        }
+            // promptFeedback.blockReason 且无 candidates → blocked（60-71、398-414）
+            if let Some(block) = prompt_block_reason(payload) {
+                if !has_candidates(payload) {
+                    let block_usage =
+                        parse_gemini_usage(payload.get("usageMetadata")).or_else(|| self.usage.clone());
+                    let kind = stream_error_kind(&block);
+                    events.push(ProviderStreamEvent::Stop {
+                        reason: StopReason::Error,
+                        error: Some(block),
+                        error_kind: Some(kind),
+                        usage: block_usage,
+                    });
+                    self.terminated = true;
+                    break;
+                }
+            }
 
-        // candidates[].content.parts[]（78-139）；注意 Gemini 遍历全部 candidates（与 chat 仅取首个不同）
-        if let Some(candidates) = payload.get("candidates").and_then(Value::as_array) {
-            for raw in candidates {
-                let Some(candidate) = raw.as_object() else {
-                    continue;
-                };
-                let parts = candidate
-                    .get("content")
-                    .and_then(Value::as_object)
-                    .and_then(|content| content.get("parts"))
-                    .and_then(Value::as_array);
-                if let Some(parts) = parts {
-                    for raw_part in parts {
-                        let Some(part) = raw_part.as_object() else {
-                            continue;
-                        };
-                        // thought 部分（96-104）：thought===true 且带 text → thought-delta
-                        if part.get("thought").and_then(Value::as_bool) == Some(true) {
-                            if let Some(text) = non_empty_string(part.get("text")) {
-                                self.emitted_content = true;
-                                events.push(ProviderStreamEvent::ThoughtDelta {
-                                    text: text.to_owned(),
-                                    redacted: None,
-                                });
-                            }
-                            continue;
-                        }
-                        // 正文部分（106-110）
-                        if let Some(text) = non_empty_string(part.get("text")) {
-                            self.emitted_content = true;
-                            let extracted = self.tag_extractor.push_text(text);
-                            events.extend(extracted);
-                            continue;
-                        }
-                        // functionCall / function_call 完整调用一次性产出（112-138）
-                        let function_call = part
-                            .get("functionCall")
-                            .and_then(Value::as_object)
-                            .or_else(|| part.get("function_call").and_then(Value::as_object));
-                        if let Some(function_call) = function_call {
-                            // 缺 name 丢弃（对齐 TS `if (!name) continue`，120-123）
-                            let Some(name) = string_field(function_call.get("name")) else {
+            // usageMetadata 每帧合并（73-76、456-479；02 §六.6：Gemini 逐帧合并）
+            if let Some(chunk) = parse_gemini_usage(payload.get("usageMetadata")) {
+                self.usage = Some(merge_gemini_usage(self.usage.as_ref(), &chunk));
+            }
+
+            // candidates[].content.parts[]（78-139）；注意 Gemini 遍历全部 candidates（与 chat 仅取首个不同）
+            if let Some(candidates) = payload.get("candidates").and_then(Value::as_array) {
+                for raw in candidates {
+                    let Some(candidate) = raw.as_object() else {
+                        continue;
+                    };
+                    let parts = candidate
+                        .get("content")
+                        .and_then(Value::as_object)
+                        .and_then(|content| content.get("parts"))
+                        .and_then(Value::as_array);
+                    if let Some(parts) = parts {
+                        for raw_part in parts {
+                            let Some(part) = raw_part.as_object() else {
                                 continue;
                             };
-                            self.emitted_content = true;
-                            self.tool_call_count += 1;
-                            let args = normalize_function_args(
-                                function_call
-                                    .get("args")
-                                    .filter(|value| !value.is_null())
-                                    .or_else(|| {
-                                        function_call
-                                            .get("arguments")
-                                            .filter(|value| !value.is_null())
-                                    }),
-                            );
-                            let id = string_field(function_call.get("id"))
-                                .map(str::to_owned)
-                                .unwrap_or_else(|| format!("gemini_fc_{}", self.tool_call_count));
-                            events.push(ProviderStreamEvent::ToolCall {
-                                id: Some(id),
-                                tool_name: name.to_owned(),
-                                input: args,
-                            });
+                            // thought 部分（96-104）：thought===true 且带 text → thought-delta
+                            if part.get("thought").and_then(Value::as_bool) == Some(true) {
+                                if let Some(text) = non_empty_string(part.get("text")) {
+                                    self.emitted_content = true;
+                                    events.push(ProviderStreamEvent::ThoughtDelta {
+                                        text: text.to_owned(),
+                                        redacted: None,
+                                    });
+                                }
+                                continue;
+                            }
+                            // 正文部分（106-110）
+                            if let Some(text) = non_empty_string(part.get("text")) {
+                                self.emitted_content = true;
+                                let extracted = self.tag_extractor.push_text(text);
+                                events.extend(extracted);
+                                continue;
+                            }
+                            // functionCall / function_call 完整调用一次性产出（112-138）
+                            let function_call = part
+                                .get("functionCall")
+                                .and_then(Value::as_object)
+                                .or_else(|| part.get("function_call").and_then(Value::as_object));
+                            if let Some(function_call) = function_call {
+                                // 缺 name 丢弃（对齐 TS `if (!name) continue`，120-123）
+                                let Some(name) = string_field(function_call.get("name")) else {
+                                    continue;
+                                };
+                                self.emitted_content = true;
+                                self.tool_call_count += 1;
+                                let args = normalize_function_args(
+                                    function_call
+                                        .get("args")
+                                        .filter(|value| !value.is_null())
+                                        .or_else(|| {
+                                            function_call
+                                                .get("arguments")
+                                                .filter(|value| !value.is_null())
+                                        }),
+                                );
+                                let id = string_field(function_call.get("id"))
+                                    .or_else(|| string_field(function_call.get("call_id")))
+                                    .or_else(|| string_field(function_call.get("callId")))
+                                    .map(str::to_owned)
+                                    .unwrap_or_else(|| format!("gemini_fc_{}", self.tool_call_count));
+                                events.push(ProviderStreamEvent::ToolCall {
+                                    id: Some(id),
+                                    tool_name: name.to_owned(),
+                                    input: args,
+                                });
+                            }
                         }
                     }
-                }
-                // finishReason 映射（141-154、305-336；null/缺失不触发）
-                if let Some(finish_reason) = candidate.get("finishReason") {
-                    if !finish_reason.is_null() {
-                        self.saw_terminal = true;
-                        let mapped = gemini_finish_reason_to_stop(
-                            finish_reason.as_str(),
-                            self.tool_call_count > 0,
-                        );
-                        self.stop_reason = mapped.0;
-                        if let Some(error) = mapped.1 {
-                            self.stream_error = Some(error);
+                    // finishReason 映射（141-154、305-336；null/缺失不触发）
+                    if let Some(finish_reason) = candidate.get("finishReason") {
+                        if !finish_reason.is_null() {
+                            self.saw_terminal = true;
+                            let mapped = gemini_finish_reason_to_stop(
+                                finish_reason.as_str(),
+                                self.tool_call_count > 0,
+                            );
+                            self.stop_reason = mapped.0;
+                            if let Some(error) = mapped.1 {
+                                self.stream_error = Some(error);
+                            }
                         }
                     }
                 }

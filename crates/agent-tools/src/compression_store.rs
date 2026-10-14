@@ -70,3 +70,27 @@ pub trait CompressionContextStore: Send + Sync + Debug {
         block_id: &str,
     ) -> Result<Option<BlockContent>, String>;
 }
+
+use std::sync::{Arc, RwLock};
+
+static GLOBAL_COMPRESSION_STORE: RwLock<Option<Arc<dyn CompressionContextStore>>> =
+    RwLock::new(None);
+
+/// 注册全局压缩块只读存储实例（BC11-4：供未通过 ToolContext 直接注入的场景透明回退）
+pub fn register_global_compression_store(store: Arc<dyn CompressionContextStore>) {
+    if let Ok(mut lock) = GLOBAL_COMPRESSION_STORE.write() {
+        *lock = Some(store);
+    }
+}
+
+/// 清除全局压缩块只读存储实例（主要供测试使用）
+pub fn clear_global_compression_store() {
+    if let Ok(mut lock) = GLOBAL_COMPRESSION_STORE.write() {
+        *lock = None;
+    }
+}
+
+/// 获取全局压缩块只读存储实例
+pub fn global_compression_store() -> Option<Arc<dyn CompressionContextStore>> {
+    GLOBAL_COMPRESSION_STORE.read().ok().and_then(|g| g.clone())
+}

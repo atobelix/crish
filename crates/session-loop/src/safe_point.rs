@@ -38,6 +38,8 @@ pub struct AbortSignal {
     aborted: Arc<AtomicBool>,
     /// 触发通知（notify_waiters 广播；wait_aborted 竞速等待用）
     notify: Arc<Notify>,
+    /// 可选的中止原因（保全人类可读原因）
+    reason: Arc<std::sync::Mutex<Option<String>>>,
 }
 
 impl AbortSignal {
@@ -50,6 +52,21 @@ impl AbortSignal {
     pub fn abort(&self) {
         self.aborted.store(true, Ordering::SeqCst);
         self.notify.notify_waiters();
+    }
+
+    /// 携带原因触发中止
+    pub fn abort_with_reason(&self, reason: impl Into<String>) {
+        if let Ok(mut r) = self.reason.lock() {
+            if r.is_none() {
+                *r = Some(reason.into());
+            }
+        }
+        self.abort();
+    }
+
+    /// 读取中止原因（若有）
+    pub fn reason(&self) -> Option<String> {
+        self.reason.lock().ok().and_then(|r| r.clone())
     }
 
     /// 是否已触发
@@ -71,6 +88,20 @@ impl AbortSignal {
             return;
         }
         notified.await;
+    }
+
+    /// 将 Run 级信号绑定至工具级 Token，实现原子级联联动（04A §3.1.1 / 04B §2.1.4）
+    pub fn bind_tool_token(&self, token: &agent_tools::context::AbortToken) {
+        if self.is_aborted() {
+            token.abort();
+            return;
+        }
+        let token_clone = token.clone();
+        let signal_clone = self.clone();
+        tokio::spawn(async move {
+            signal_clone.wait_aborted().await;
+            token_clone.abort();
+        });
     }
 }
 
@@ -112,42 +143,90 @@ impl ControlAction {
 
 /// 安全点检查：drain 控制总线意图并映射为循环动作。
 ///
-/// 优先级：AbortSignal（已触发）> force_cancel > cooperative_stop > soft_inject
-/// （01 §2.10 L3 drain 优先级）。soft_inject 只读消费：只取出消息返回，
-/// 不写入输入队列、不改变收场（对齐 TS mapDrainAction 的注入侧语义，
-/// 但消息落环交给上层主循环，本函数保持无副作用于流本身）。
+/// 优先级与原因保全原则（04A §3.2.2 / 04B §2）：
+/// 1. 无论 AbortSignal 是否置位，【必须首先排空控制总线】（drain_as_action），
+///    确保所有控制意图（ControlIntent）与入队观测轨迹（Trace）被完整保全，
+///    绝对杜绝因短路判定导致用户或 UI 输入的中止原因与轨迹丢失；
+/// 2. 拒绝出现 `reason: None`：所有产生的 `ForceCancel` 必须携带明确的原因：
+///    - 若总线中存在显式 reason，保全该 reason；
+///    - 若总线无 reason 但 AbortSignal 携带了原因，使用该原因；
+///    - 若为 AbortSignal 触发但无显式原因，回退至明确标识（"aborted_by_signal" 等）；
+///    - 若为 force_cancel 动作但未传 reason，回退至 "force_cancel"；
+/// 3. 若总线为 CooperativeStop 但 AbortSignal 已置位，提升为 ForceCancel 并保全 stop reason；
+/// 4. 若总线为 SoftInject 但 AbortSignal 已置位，提升为 ForceCancel 并标记 "aborted_with_pending_inject"；
+/// 5. 若总线为空且 AbortSignal 已置位，返回 ForceCancel 并标记 "aborted_by_signal"（或信号所带原因）。
 pub fn apply_safe_point_control(
     bus: &mut ControlBus,
     abort_signal: Option<&AbortSignal>,
 ) -> Option<ControlAction> {
-    // AbortSignal 等价 L3 强停（对齐 core:index.ts:293-299 抢占检查）
-    if let Some(signal) = abort_signal {
-        if signal.is_aborted() {
-            return Some(ControlAction::ForceCancel { reason: None });
-        }
-    }
+    let is_aborted = abort_signal.map(|s| s.is_aborted()).unwrap_or(false);
+    let signal_reason = abort_signal.and_then(|s| s.reason());
 
-    match bus.drain_as_action() {
-        ControlDrainAction::None => None,
+    // 无论信号是否置位，首先排空总线聚合动作，确保 intent 和 trace 不丢失
+    let drain_action = bus.drain_as_action();
+
+    match drain_action {
         ControlDrainAction::ForceCancel { reason, .. } => {
-            Some(ControlAction::ForceCancel { reason })
+            let effective_reason = reason
+                .or(signal_reason)
+                .or_else(|| {
+                    if is_aborted {
+                        Some("aborted_by_signal".into())
+                    } else {
+                        Some("force_cancel".into())
+                    }
+                });
+            Some(ControlAction::ForceCancel {
+                reason: effective_reason,
+            })
         }
         ControlDrainAction::CooperativeStop {
             reason,
             pending_messages,
             ..
-        } => Some(ControlAction::CooperativeStop {
-            reason,
-            pending_messages,
-        }),
+        } => {
+            if is_aborted {
+                // 若信号已被置位，提升为 ForceCancel，但保留 reason
+                let effective_reason = reason
+                    .or(signal_reason)
+                    .or_else(|| Some("aborted_with_stop_intent".into()));
+                Some(ControlAction::ForceCancel {
+                    reason: effective_reason,
+                })
+            } else {
+                Some(ControlAction::CooperativeStop {
+                    reason,
+                    pending_messages,
+                })
+            }
+        }
         ControlDrainAction::SoftInject {
             steer_messages,
             follow_up_messages,
             ..
-        } => Some(ControlAction::SoftInject {
-            steer_messages,
-            follow_up_messages,
-        }),
+        } => {
+            if is_aborted {
+                let effective_reason = signal_reason.or_else(|| Some("aborted_with_pending_inject".into()));
+                Some(ControlAction::ForceCancel {
+                    reason: effective_reason,
+                })
+            } else {
+                Some(ControlAction::SoftInject {
+                    steer_messages,
+                    follow_up_messages,
+                })
+            }
+        }
+        ControlDrainAction::None => {
+            if is_aborted {
+                let effective_reason = signal_reason.or_else(|| Some("aborted_by_signal".into()));
+                Some(ControlAction::ForceCancel {
+                    reason: effective_reason,
+                })
+            } else {
+                None
+            }
+        }
     }
 }
 
@@ -381,11 +460,103 @@ mod tests {
         signal.abort();
         let action = apply_safe_point_control(&mut bus, Some(&signal)).expect("应有动作");
         assert_eq!(action.end_reason(), Some(AgentEndReason::Aborted));
+        assert_eq!(
+            action,
+            ControlAction::ForceCancel {
+                reason: Some("soft".into())
+            }
+        );
 
         // 未触发的信号不抢占
         let signal2 = AbortSignal::new();
+        bus.request_cooperative_stop(Some("soft2".to_string()), None);
         let action = apply_safe_point_control(&mut bus, Some(&signal2)).expect("应有动作");
         assert!(matches!(action, ControlAction::CooperativeStop { .. }));
+    }
+
+    /// 排空总线优先于短路判定：保全用户终止原因与 Trace 轨迹（U-02）
+    #[test]
+    fn drain_priority_over_short_circuit_preserves_reason_and_trace() {
+        let mut bus = ControlBus::new();
+        bus.request_force_cancel(Some("ui-force-cancel".into()), Some("ui".into()));
+        let signal = AbortSignal::new();
+        signal.abort();
+
+        let action = apply_safe_point_control(&mut bus, Some(&signal)).expect("应有动作");
+        assert_eq!(
+            action,
+            ControlAction::ForceCancel {
+                reason: Some("ui-force-cancel".into())
+            }
+        );
+        assert_ne!(
+            action,
+            ControlAction::ForceCancel { reason: None },
+            "绝不返回 reason: None"
+        );
+
+        // 验证 Trace 轨迹完整保全，没有因为 signal.is_aborted() 短路而被遗漏
+        let traces = bus.take_trace();
+        assert_eq!(traces.len(), 1);
+        assert_eq!(traces[0].reason.as_deref(), Some("ui-force-cancel"));
+        assert_eq!(traces[0].source.as_deref(), Some("ui"));
+    }
+
+    /// 拒绝出现 reason: None，空 reason 时有保底默认值
+    #[test]
+    fn force_cancel_without_reason_gets_fallback_never_none() {
+        let mut bus = ControlBus::new();
+        bus.request_force_cancel(None, None);
+        let action = apply_safe_point_control(&mut bus, None).expect("应有动作");
+        match action {
+            ControlAction::ForceCancel { reason } => {
+                assert_eq!(reason, Some("force_cancel".into()));
+            }
+            other => panic!("预期 ForceCancel，实际 {other:?}"),
+        }
+
+        // 空总线 + abort_signal
+        let signal = AbortSignal::new();
+        signal.abort();
+        let action = apply_safe_point_control(&mut bus, Some(&signal)).expect("应有动作");
+        match action {
+            ControlAction::ForceCancel { reason } => {
+                assert_eq!(reason, Some("aborted_by_signal".into()));
+            }
+            other => panic!("预期 ForceCancel，实际 {other:?}"),
+        }
+    }
+
+    /// 携带原因中止与工具令牌绑定
+    #[tokio::test]
+    async fn abort_with_reason_and_tool_token_binding() {
+        let signal = AbortSignal::new();
+        signal.abort_with_reason("custom abort reason");
+        assert!(signal.is_aborted());
+        assert_eq!(signal.reason().as_deref(), Some("custom abort reason"));
+
+        let mut bus = ControlBus::new();
+        let action = apply_safe_point_control(&mut bus, Some(&signal)).expect("应有动作");
+        assert_eq!(
+            action,
+            ControlAction::ForceCancel {
+                reason: Some("custom abort reason".into())
+            }
+        );
+
+        // 测试 bind_tool_token
+        let token = agent_tools::context::AbortToken::new();
+        signal.bind_tool_token(&token);
+        assert!(token.is_aborted(), "绑定后已触发的信号应立即让 token abort");
+
+        // 测试后触发的绑定
+        let signal2 = AbortSignal::new();
+        let token2 = agent_tools::context::AbortToken::new();
+        signal2.bind_tool_token(&token2);
+        assert!(!token2.is_aborted());
+        signal2.abort();
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        assert!(token2.is_aborted(), "signal2 abort 后 token2 应被级联置位");
     }
 
     /// 安全点优先级：force_cancel > cooperative_stop > soft_inject

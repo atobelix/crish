@@ -35,6 +35,24 @@ use super::super::LoopError;
 
 /// preparing-turn handler（01 §2.3）
 pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, LoopError> {
+    // 0. 自愈守卫（BC01-1）：若检测到 current_turn_index 尚未闭合（如因长度升级
+    //    NoProgressContinue、转向重新评估 SteeringComplete 重进准备回合），
+    //    先原地补发前序回合携带真实 turn_usage 的 TurnEnd，确保事件严格 1:1 成对发射，用量零丢失
+    if let Some(prev_turn) = state.current_turn_index.take() {
+        let end_event = AgentEvent::TurnEnd {
+            session_id: state.machine.context().session_id.clone(),
+            turn_index: prev_turn,
+            timestamp: conex_shared::time::now_iso_utc(),
+            tool_call_count: state.machine.context().tool_call_count,
+            usage: state.budget_state.turn_usage.take(),
+        };
+        state.emit_event(end_event);
+        tracing::info!(
+            turn_index = prev_turn,
+            "prepare_turn 入口自愈：补发前序未闭合回合的 TurnEnd（带真实 Usage）"
+        );
+    }
+
     // 1. abort / 控制意图检查
     if let Some(end) = check_control(state)? {
         return Ok(HandlerOutcome::end(end));

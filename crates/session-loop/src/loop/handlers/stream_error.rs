@@ -41,7 +41,7 @@ pub(crate) use recover::{MAX_LENGTH_UPGRADES, MAX_OVERFLOW_COMPRESSION_RETRIES};
 pub(crate) use retry::emit_length_escalation_diagnostic;
 
 // handle 分派消费的恢复阶梯入口（生产路径）
-use fatal::fatal_provider_error;
+pub(crate) use fatal::fatal_provider_error;
 use recover::{compression_ladder, length_ladder};
 use retry::transient_retry;
 

@@ -193,6 +193,91 @@ fn thinking_field_compat_variant() {
 }
 
 #[test]
+fn redacted_thinking_start_yields_thought_with_redacted_true() {
+    let events = parse_all(vec![
+        &event_frame(
+            "content_block_start",
+            json!({
+                "index": 0,
+                "content_block": {
+                    "type": "redacted_thinking",
+                    "data": "encrypted_blob_data"
+                },
+            }),
+        ),
+        &event_frame("message_stop", json!({})),
+    ]);
+    let thoughts: Vec<&ProviderStreamEvent> = events
+        .iter()
+        .filter(|event| matches!(event, ProviderStreamEvent::ThoughtDelta { .. }))
+        .collect();
+    assert_eq!(thoughts.len(), 1);
+    match thoughts[0] {
+        ProviderStreamEvent::ThoughtDelta { text, redacted } => {
+            assert_eq!(text, "encrypted_blob_data");
+            assert_eq!(redacted, &Some(true), "redacted_thinking 必须带有 redacted=true 标识");
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn signature_delta_is_captured_in_parser() {
+    let mut parser = AnthropicParser::new();
+    let f1 = SseFrame {
+        event: None,
+        data: Some(event_frame(
+            "content_block_start",
+            json!({
+                "index": 0,
+                "content_block": { "type": "thinking" },
+            }),
+        )),
+        id: None,
+        retry: None,
+    };
+    let f2 = SseFrame {
+        event: None,
+        data: Some(event_frame(
+            "content_block_delta",
+            json!({
+                "index": 0,
+                "delta": { "type": "thinking_delta", "thinking": "thinking text" },
+            }),
+        )),
+        id: None,
+        retry: None,
+    };
+    let f3 = SseFrame {
+        event: None,
+        data: Some(event_frame(
+            "content_block_delta",
+            json!({
+                "index": 0,
+                "delta": { "type": "signature_delta", "signature": "sig_xyz_987" },
+            }),
+        )),
+        id: None,
+        retry: None,
+    };
+    let f4 = SseFrame {
+        event: None,
+        data: Some(event_frame("message_stop", json!({}))),
+        id: None,
+        retry: None,
+    };
+
+    parser.push_frame(&f1).unwrap();
+    parser.push_frame(&f2).unwrap();
+    parser.push_frame(&f3).unwrap();
+    parser.push_frame(&f4).unwrap();
+    parser.finish().unwrap();
+
+    assert_eq!(parser.last_thinking_signature(), Some("sig_xyz_987"));
+    assert_eq!(parser.thinking_signatures().get(&0).map(String::as_str), Some("sig_xyz_987"));
+}
+
+#[test]
 fn empty_text_delta_is_ignored() {
     let events = parse_all(vec![
         &event_frame(

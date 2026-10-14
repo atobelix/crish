@@ -7,7 +7,7 @@
 import { getTransport, startRunTask } from '../transport';
 import type { StreamCallbacks, StreamRequestOptions } from '../chatApi';
 import { toEnginePermissionMode } from '../permissionModes';
-import { getPermissionMode } from '../storeAccess';
+import { getPermissionMode, getSessionById } from '../storeAccess';
 import {
   classifyErrorDomain,
   logInternalError,
@@ -35,9 +35,63 @@ import {
   getResponseStyleDescription,
   resolveResponseStyle,
 } from '../../prompts';
+import type { SessionMessage } from '../../store/types';
 
 function isRunDead(state: StreamState): boolean {
   return state.finished || state.cancelled;
+}
+
+/**
+ * 锚定历史消息到最新的压缩摘要块，防止跨轮全量正文复活。
+ * 保留系统消息、折叠链消息（compacted-summary-*）、最新的摘要块以及其后的所有保留消息；
+ * 过滤掉最新摘要块之前已被折叠的历史正文消息。
+ */
+export function anchorHistoryToLatestSummary(
+  messages: readonly SessionMessage[] | undefined | null
+): SessionMessage[] {
+  if (!messages || messages.length === 0) return [];
+
+  let lastSummaryIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (
+      msg &&
+      (msg.id.startsWith('compacted-summary') ||
+        Boolean(
+          (msg.metadata as Record<string, unknown> | undefined)
+            ?.isCompactedSummary
+        ))
+    ) {
+      lastSummaryIdx = i;
+      break;
+    }
+  }
+
+  if (lastSummaryIdx === -1) {
+    return [...messages];
+  }
+
+  const result: SessionMessage[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (!msg) continue;
+    if (i >= lastSummaryIdx) {
+      result.push(msg);
+    } else {
+      const isSystem = (msg.sender as string) === 'system';
+      const isCompacted =
+        msg.id.startsWith('compacted-summary') ||
+        Boolean(
+          (msg.metadata as Record<string, unknown> | undefined)
+            ?.isCompactedSummary
+        );
+      if (isSystem || isCompacted) {
+        result.push(msg);
+      }
+    }
+  }
+
+  return result;
 }
 
 export async function createStreamSession(
@@ -60,7 +114,9 @@ export async function createStreamSession(
       : undefined;
 
   try {
-    const ready = await transport.waitUntilConnected(ENGINE_SEND_GATE_TIMEOUT_MS);
+    const ready = await transport.waitUntilConnected(
+      ENGINE_SEND_GATE_TIMEOUT_MS
+    );
     if (isRunDead(state)) {
       cleanupStreamState(state);
       return;
@@ -95,7 +151,6 @@ export async function createStreamSession(
     );
 
     let mcpDisabledTools: Record<string, string[]> | undefined;
-    let reasoningEffort: string | undefined;
     let thinkingTitle: string | undefined;
     let thinkingWire: string | undefined;
     let responseStyleGuidance: string | undefined;
@@ -135,7 +190,7 @@ export async function createStreamSession(
       thinkingTitle = fields.thinkingTitle;
       thinkingWire = fields.thinkingWire;
     }
-    reasoningEffort = thinkingWire || thinkingTitle;
+    const reasoningEffort = thinkingWire || thinkingTitle;
 
     const goalMode =
       typeof options?.mode === 'string' ? options.mode.trim() : '';
@@ -171,10 +226,36 @@ export async function createStreamSession(
 
     let history: HistoryMessage[] | undefined;
     try {
-      const { loadSessionBody } =
-        await import('../session-persistence/sessionRustDb');
-      const body = await loadSessionBody(safeSessionId);
-      history = buildHistoryMessages(body, { excludeId: userClientMessageId });
+      let body: SessionMessage[] | undefined;
+      try {
+        const { loadSessionBody } =
+          await import('../session-persistence/sessionRustDb');
+        body = await loadSessionBody(safeSessionId);
+      } catch {
+        /* swallow-ok: 历史加载失败不阻塞 run */
+      }
+      // 若内存 store 中的消息更完整（例如尚未完成 SQLite 写防抖的上一轮最新助手回复），
+      // 或内存包含最新压缩折叠摘要（此时内存条数少于未清理的 SQLite 全量正文），
+      // 优先采用内存中的真实会话消息，防止上一轮助手回复在历史装配中湮灭或旧正文复活
+      const memSession = getSessionById(safeSessionId);
+      const memMsgs = memSession?.messages;
+      const memHasSummary = Boolean(
+        memMsgs?.some(
+          (m) =>
+            m.id.startsWith('compacted-summary') ||
+            Boolean(
+              (m.metadata as Record<string, unknown> | undefined)
+                ?.isCompactedSummary
+            )
+        )
+      );
+      if (memMsgs && (memHasSummary || memMsgs.length > (body?.length ?? 0))) {
+        body = memMsgs;
+      }
+      const anchoredBody = anchorHistoryToLatestSummary(body);
+      history = buildHistoryMessages(anchoredBody, {
+        excludeId: userClientMessageId,
+      });
     } catch {
       /* swallow-ok: 历史加载失败不阻塞 run */
     }
@@ -191,7 +272,8 @@ export async function createStreamSession(
         await import('../provider-profiles/contextStatePending')
       ).takePendingContextState(safeSessionId);
       if (pending) {
-        contextStateText = typeof pending === 'string' ? pending : pending?.text || '';
+        contextStateText =
+          typeof pending === 'string' ? pending : pending?.text || '';
       }
     }
 

@@ -25,6 +25,234 @@ use super::shell_output::{
 };
 use super::PreparedCommand;
 
+#[cfg(windows)]
+#[allow(unsafe_code, non_snake_case, non_camel_case_types, non_upper_case_globals)]
+mod win_job {
+    use std::ffi::c_void;
+
+    pub type HANDLE = *mut c_void;
+    pub type BOOL = i32;
+    pub type DWORD = u32;
+
+    pub const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: DWORD = 0x2000;
+    pub const JobObjectExtendedLimitInformation: i32 = 9;
+    pub const PROCESS_SET_QUOTA: DWORD = 0x0100;
+    pub const PROCESS_TERMINATE: DWORD = 0x0001;
+
+    #[repr(C)]
+    pub struct IO_COUNTERS {
+        pub ReadOperationCount: u64,
+        pub WriteOperationCount: u64,
+        pub OtherOperationCount: u64,
+        pub ReadTransferCount: u64,
+        pub WriteTransferCount: u64,
+        pub OtherTransferCount: u64,
+    }
+
+    #[repr(C)]
+    pub struct JOBOBJECT_BASIC_LIMIT_INFORMATION {
+        pub PerProcessUserTimeLimit: i64,
+        pub PerJobUserTimeLimit: i64,
+        pub LimitFlags: DWORD,
+        pub MinimumWorkingSetSize: usize,
+        pub MaximumWorkingSetSize: usize,
+        pub ActiveProcessLimit: DWORD,
+        pub Affinity: usize,
+        pub PriorityClass: DWORD,
+        pub SchedulingClass: DWORD,
+    }
+
+    #[repr(C)]
+    pub struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
+        pub BasicLimitInformation: JOBOBJECT_BASIC_LIMIT_INFORMATION,
+        pub IoInfo: IO_COUNTERS,
+        pub ProcessMemoryLimit: usize,
+        pub JobMemoryLimit: usize,
+        pub PeakProcessMemoryLimit: usize,
+        pub PeakJobMemoryLimit: usize,
+    }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        pub fn CreateJobObjectW(lpJobAttributes: *mut c_void, lpName: *const u16) -> HANDLE;
+        pub fn SetInformationJobObject(
+            hJob: HANDLE,
+            JobObjectInformationClass: i32,
+            lpJobInformation: *const c_void,
+            cbJobInformationLength: DWORD,
+        ) -> BOOL;
+        pub fn AssignProcessToJobObject(hJob: HANDLE, hProcess: HANDLE) -> BOOL;
+        pub fn TerminateJobObject(hJob: HANDLE, uExitCode: u32) -> BOOL;
+        pub fn OpenProcess(dwDesiredAccess: DWORD, bInheritHandle: BOOL, dwProcessId: DWORD) -> HANDLE;
+        pub fn CloseHandle(hObject: HANDLE) -> BOOL;
+    }
+}
+
+/// 跨平台进程树硬性收割守卫（RAII ProcessTreeGuard，BC03-1）
+///
+/// 核心契约：
+/// - Windows：匿名内核作业对象（Job Object）配置 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`，
+///   并在 Drop 或显式终止时通过 `TerminateJobObject` 达到 <1ms 级联强杀（含所有派生孙进程）；
+/// - Unix：通过 `setpgid(0, 0)` 将子进程设为进程组 Leader，并在 Drop 或显式终止时
+///   向 `-PGID` 投递 `SIGKILL`；
+/// - 后台转交：仅在显式调用 `disarm()` 时解除硬杀守卫，移交所有权给 BackgroundTaskManager。
+pub struct ProcessTreeGuard {
+    pid: Option<u32>,
+    #[cfg(windows)]
+    job: Option<win_job::HANDLE>,
+    disarmed: bool,
+}
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+unsafe impl Send for ProcessTreeGuard {}
+
+#[cfg(windows)]
+#[allow(unsafe_code)]
+unsafe impl Sync for ProcessTreeGuard {}
+
+impl ProcessTreeGuard {
+    #[allow(unsafe_code)]
+    pub fn new(pid: Option<u32>) -> Self {
+        #[cfg(windows)]
+        let job = if let Some(pid_val) = pid {
+            Self::create_and_assign_job(pid_val)
+        } else {
+            None
+        };
+
+        Self {
+            pid,
+            #[cfg(windows)]
+            job,
+            disarmed: false,
+        }
+    }
+
+    #[cfg(windows)]
+    #[allow(unsafe_code)]
+    fn create_and_assign_job(pid: u32) -> Option<win_job::HANDLE> {
+        // SAFETY: 创建匿名 Job Object 并配置 KILL_ON_JOB_CLOSE，失败时安全关闭句柄
+        unsafe {
+            let job = win_job::CreateJobObjectW(std::ptr::null_mut(), std::ptr::null());
+            if job.is_null() {
+                return None;
+            }
+
+            let mut info: win_job::JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+            info.BasicLimitInformation.LimitFlags = win_job::JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+            let ret = win_job::SetInformationJobObject(
+                job,
+                win_job::JobObjectExtendedLimitInformation,
+                &info as *const _ as *const std::ffi::c_void,
+                std::mem::size_of::<win_job::JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+            );
+            if ret == 0 {
+                let _ = win_job::CloseHandle(job);
+                return None;
+            }
+
+            let proc = win_job::OpenProcess(
+                win_job::PROCESS_SET_QUOTA | win_job::PROCESS_TERMINATE,
+                0,
+                pid,
+            );
+            if !proc.is_null() {
+                let _ = win_job::AssignProcessToJobObject(job, proc);
+                let _ = win_job::CloseHandle(proc);
+            }
+
+            Some(job)
+        }
+    }
+
+    /// 显式解除硬杀守卫（转后台 adopt_child 转移）
+    #[allow(unsafe_code)]
+    pub fn disarm(&mut self) {
+        self.disarmed = true;
+        #[cfg(windows)]
+        if let Some(job) = self.job.take() {
+            // SAFETY: 解除 KILL_ON_JOB_CLOSE 限制，防句柄关闭误伤已转后台进程
+            unsafe {
+                let mut info: win_job::JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+                info.BasicLimitInformation.LimitFlags = 0;
+                let _ = win_job::SetInformationJobObject(
+                    job,
+                    win_job::JobObjectExtendedLimitInformation,
+                    &info as *const _ as *const std::ffi::c_void,
+                    std::mem::size_of::<win_job::JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                );
+                let _ = win_job::CloseHandle(job);
+            }
+        }
+    }
+
+    /// 物理硬杀整棵进程树（<1ms 级联强杀）
+    #[allow(unsafe_code)]
+    pub fn terminate_now(&mut self) {
+        if self.disarmed {
+            return;
+        }
+
+        #[cfg(windows)]
+        {
+            if let Some(job) = self.job.take() {
+                // SAFETY: TerminateJobObject 强制将退出码 1 广播至该 Job 下的所有树形节点
+                unsafe {
+                    let _ = win_job::TerminateJobObject(job, 1);
+                    let _ = win_job::CloseHandle(job);
+                }
+            }
+            if let Some(pid) = self.pid.take() {
+                let _ = terminate_process_tree(pid);
+            }
+        }
+
+        #[cfg(unix)]
+        {
+            if let Some(pid) = self.pid.take() {
+                // SAFETY: 向 -PGID 发送 SIGKILL
+                unsafe {
+                    extern "C" {
+                        fn kill(pid: i32, sig: i32) -> i32;
+                    }
+                    let _ = kill(-(pid as i32), 9);
+                }
+                let _ = terminate_process_tree(pid);
+            }
+        }
+
+        #[cfg(not(any(windows, unix)))]
+        {
+            if let Some(pid) = self.pid.take() {
+                let _ = terminate_process_tree(pid);
+            }
+        }
+    }
+
+    /// 异步杀树并清理
+    pub async fn kill_tree(&mut self) {
+        self.terminate_now();
+    }
+}
+
+impl Drop for ProcessTreeGuard {
+    fn drop(&mut self) {
+        if !self.disarmed {
+            self.terminate_now();
+        } else {
+            #[cfg(windows)]
+            if let Some(job) = self.job.take() {
+                #[allow(unsafe_code)]
+                unsafe {
+                    let _ = win_job::CloseHandle(job);
+                }
+            }
+        }
+    }
+}
+
 /// 执行命令并收集输出（T-AB-01 流式化 + T-AB-02 三模式）
 // G2 允许理由（clippy::too_many_arguments）：参数为上下文聚合注入（命令/
 // cwd/超时/输出上限/模式/等待时长/后台收养/日志根/会话号等），各参数来源
@@ -55,10 +283,13 @@ pub(crate) async fn run_command_maybe_background(
         .current_dir(cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        // T-AB-02：kill_on_drop(false)——后台化后 drop 不得连杀子进程；
-        // 同步路径的超时树杀改为显式执行（见超时分支），两条路径不双杀
-        .kill_on_drop(false);
+        .stderr(Stdio::piped());
+    // BC03-1：废除普通分支的 kill_on_drop(false)，同步路径置为 true
+    if mode == ShellMode::Daemon || mode == ShellMode::AutoBackground {
+        child_cmd.kill_on_drop(false);
+    } else {
+        child_cmd.kill_on_drop(true);
+    }
     // Windows：隐藏控制台闪现（trait 方法已稳定，导入仅保编译兼容）
     #[cfg(windows)]
     {
@@ -66,6 +297,21 @@ pub(crate) async fn run_command_maybe_background(
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         child_cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    // Unix：创建进程组 Leader（setpgid(0, 0)）
+    #[cfg(unix)]
+    #[allow(unsafe_code)]
+    unsafe {
+        use std::os::unix::process::CommandExt;
+        child_cmd.pre_exec(|| {
+            extern "C" {
+                fn setpgid(pid: i32, pgid: i32) -> i32;
+            }
+            if setpgid(0, 0) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
     }
     // 子进程优先 UTF-8 输出（T-AB-03：PAGER=cat 防交互式分页器挂起）
     child_cmd.env("PYTHONUTF8", "1");
@@ -79,12 +325,14 @@ pub(crate) async fn run_command_maybe_background(
         )
     })?;
     let child_pid = child.id();
+    let mut guard = ProcessTreeGuard::new(child_pid);
     let started = std::time::Instant::now();
 
     // 模式 3（daemon）：spawn 后立即 adopt（is_daemon=true），管道原样留在
     // Child 内不取出；未接线（manager None）时回退同步语义（不报错）
     let effective_mode = if mode == ShellMode::Daemon {
         if let Some(mgr) = &manager {
+            guard.disarm();
             return adopt_child(
                 Arc::clone(mgr),
                 child,
@@ -141,6 +389,7 @@ pub(crate) async fn run_command_maybe_background(
         // 窗口内完成：同步路径自行回收（wait 后 drop，无泄漏；无 adopt 调用）
         StreamEnd::Completed => {
             let exit_code = child.wait().await.ok().and_then(|s| s.code());
+            guard.disarm();
             build_sync_result(
                 command,
                 cwd,
@@ -164,6 +413,7 @@ pub(crate) async fn run_command_maybe_background(
                 child.stderr = Some(err_reader.into_inner());
                 match manager {
                     Some(manager) => {
+                        guard.disarm();
                         adopt_child(
                             manager,
                             child,
@@ -178,9 +428,7 @@ pub(crate) async fn run_command_maybe_background(
                     // 未接线环境：保持现状（超时即杀 + 树杀），零回归——
                     // 管道已收回 child，reader 已被 into_inner 消费，无需再 drop
                     None => {
-                        if let Some(pid) = child_pid {
-                            let _ = terminate_process_tree(pid);
-                        }
+                        guard.kill_tree().await;
                         let _ = child.kill().await;
                         let _ = child.wait().await;
                         Ok(build_timeout_result(
@@ -197,9 +445,7 @@ pub(crate) async fn run_command_maybe_background(
                 // 避免句柄泄漏与子进程写端永久阻塞）
                 drop(out_reader);
                 drop(err_reader);
-                if let Some(pid) = child_pid {
-                    let _ = terminate_process_tree(pid);
-                }
+                guard.kill_tree().await;
                 let _ = child.kill().await;
                 let _ = child.wait().await;
                 Ok(build_timeout_result(
@@ -238,9 +484,8 @@ pub(crate) async fn run_command_streaming(ctx: &ToolContext, c: PreparedCommand)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        // T-AB-02：kill_on_drop(false)——abort / 超时收口由本路径显式杀
-        // （kill_child），drop 不连杀（与 execute 同步路径同构，不双杀）
-        .kill_on_drop(false);
+        // BC03-1：废除普通分支的 kill_on_drop(false)，置为 true
+        .kill_on_drop(true);
     // Windows：隐藏控制台闪现（与 execute 同步路径同构）
     #[cfg(windows)]
     {
@@ -248,6 +493,21 @@ pub(crate) async fn run_command_streaming(ctx: &ToolContext, c: PreparedCommand)
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         child_cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    // Unix：创建进程组 Leader（setpgid(0, 0)）
+    #[cfg(unix)]
+    #[allow(unsafe_code)]
+    unsafe {
+        use std::os::unix::process::CommandExt;
+        child_cmd.pre_exec(|| {
+            extern "C" {
+                fn setpgid(pid: i32, pgid: i32) -> i32;
+            }
+            if setpgid(0, 0) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
     }
     // 子进程优先 UTF-8 输出（T-AB-03：PAGER=cat 防交互式分页器挂起）
     child_cmd.env("PYTHONUTF8", "1");
@@ -264,6 +524,7 @@ pub(crate) async fn run_command_streaming(ctx: &ToolContext, c: PreparedCommand)
         }
     };
     let child_pid = child.id();
+    let guard = ProcessTreeGuard::new(child_pid);
     let out_pipe = match child.stdout.take() {
         Some(pipe) => pipe,
         None => {
@@ -285,6 +546,7 @@ pub(crate) async fn run_command_streaming(ctx: &ToolContext, c: PreparedCommand)
 
     let state = ShellStreamState::Running(RunningState {
         child,
+        guard,
         out_reader: BufReader::new(out_pipe),
         err_reader: BufReader::new(err_pipe),
         acc_out: OutputAccumulator::new(),
@@ -312,6 +574,7 @@ pub(crate) async fn run_command_streaming(ctx: &ToolContext, c: PreparedCommand)
 /// 流式运行期状态（ShellStreamState::Running 载荷，unfold 帧间持有）
 struct RunningState {
     child: tokio::process::Child,
+    guard: ProcessTreeGuard,
     out_reader: BufReader<tokio::process::ChildStdout>,
     err_reader: BufReader<tokio::process::ChildStderr>,
     acc_out: OutputAccumulator,
@@ -366,7 +629,7 @@ impl ShellStreamState {
 
         // 1. abort（每块读取前自查）：中止即停止推送、杀进程尽快收口
         if r.abort_token.is_aborted() {
-            kill_child(r.child, r.child_pid).await;
+            kill_child(r.child, &mut r.guard, r.child_pid).await;
             let duration_ms = r.started.elapsed().as_millis() as u64;
             let terminal = build_sync_result(
                 &r.command,
@@ -389,6 +652,7 @@ impl ShellStreamState {
             // 同步路径同构：退出码 + stdout/stderr 捕获 + 截断 / 落盘）
             if r.out_eof && r.err_eof {
                 let exit_code = r.child.wait().await.ok().and_then(|s| s.code());
+                r.guard.disarm();
                 let duration_ms = r.started.elapsed().as_millis() as u64;
                 let terminal = build_sync_result(
                     &r.command,
@@ -406,7 +670,7 @@ impl ShellStreamState {
             }
             // 超时：等待窗口（sync = timeoutMs）耗尽 → 树杀 + timedOut 收口
             if tokio::time::Instant::now() >= r.deadline {
-                kill_child(r.child, r.child_pid).await;
+                kill_child(r.child, &mut r.guard, r.child_pid).await;
                 let duration_ms = r.started.elapsed().as_millis() as u64;
                 let terminal = Ok(build_timeout_result(
                     &r.command,
@@ -423,7 +687,7 @@ impl ShellStreamState {
             tokio::select! {
                 // 等待窗口耗尽（与上方 now >= deadline 检查互补）
                 _ = tokio::time::sleep(remain) => {
-                    kill_child(r.child, r.child_pid).await;
+                    kill_child(r.child, &mut r.guard, r.child_pid).await;
                     let duration_ms = r.started.elapsed().as_millis() as u64;
                     let terminal = Ok(build_timeout_result(
                         &r.command,
@@ -511,10 +775,14 @@ async fn read_one_chunk<R: AsyncBufRead + Unpin>(
     Ok((chunk, false))
 }
 
-/// 收口杀进程（abort / 超时共用）：先树杀（Windows taskkill 树 / Unix
-/// kill -TERM），再 kill + wait 回收——与 execute 同步路径超时分支同构
-/// （kill_on_drop(false) 下必须显式杀，防孤儿进程）
-async fn kill_child(mut child: tokio::process::Child, child_pid: Option<u32>) {
+/// 收口杀进程（abort / 超时共用）：先树杀（Windows JobObject / taskkill 树 / Unix
+/// -PGID SIGKILL），再 kill + wait 回收
+async fn kill_child(
+    mut child: tokio::process::Child,
+    guard: &mut ProcessTreeGuard,
+    child_pid: Option<u32>,
+) {
+    guard.kill_tree().await;
     if let Some(pid) = child_pid {
         let _ = terminate_process_tree(pid);
     }
@@ -584,21 +852,27 @@ pub(crate) fn terminate_process_tree(pid: u32) -> Result<(), String> {
     }
 }
 
-/// 终止进程树（Unix 简化版：kill -TERM）
-// G2 禁令豁免（clippy.toml 豁免面「内部进程管理原语」）：kill -TERM 进程树
-// 终止（Unix 分支，同 Windows taskkill 语义）——固定系统工具 + PID 数字参数，
-// output() 同步等待型，子进程不脱离会话存活。
-#[allow(clippy::disallowed_methods)]
+/// 终止进程树（Unix：-PGID 投递 SIGKILL 级联强杀）
+// G2 禁令豁免（clippy.toml 豁免面「内部进程管理原语」）
+#[allow(clippy::disallowed_methods, unsafe_code)]
 #[cfg(not(target_os = "windows"))]
 pub(crate) fn terminate_process_tree(pid: u32) -> Result<(), String> {
-    let output = std::process::Command::new("kill")
-        .args(["-TERM", &pid.to_string()])
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|e| format!("failed to start kill: {e}"))?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    extern "C" {
+        fn kill(pid: i32, sig: i32) -> i32;
+    }
+    const SIGKILL: i32 = 9;
+    // SAFETY: -PGID 发送 SIGKILL，级联强杀所有派生孙进程
+    unsafe {
+        let ret = kill(-(pid as i32), SIGKILL);
+        if ret == 0 {
+            Ok(())
+        } else {
+            let ret_single = kill(pid as i32, SIGKILL);
+            if ret_single == 0 || std::io::Error::last_os_error().raw_os_error() == Some(3) {
+                Ok(())
+            } else {
+                Err(format!("kill(-{pid}, SIGKILL) failed: {}", std::io::Error::last_os_error()))
+            }
+        }
     }
 }

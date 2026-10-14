@@ -280,15 +280,18 @@ impl ToolExecutor {
             Some(t) => t,
             None => return (Self::not_found_result(call), Vec::new()),
         };
-        let (tool_ctx, approval_channel, mw_ctx, exec_ctx, _abort_token) =
+        let (tool_ctx, approval_channel, mw_ctx, exec_ctx, abort_token) =
             self.build_execution_contexts(call, ctx, options, abort, &approval);
         let pre = self
             .run_pre_checks(tool.as_ref(), call, ctx, &mw_ctx, abort)
             .await;
         let exec_input = match pre {
-            PreExecOutcome::Aborted => return (Self::cancelled_result(call, 0), Vec::new()),
+            PreExecOutcome::Aborted => {
+                abort_token.abort();
+                return (Self::cancelled_result(call, 0), Vec::new());
+            }
             PreExecOutcome::Blocked(reason) => {
-                return (Self::blocked_result(call, reason), Vec::new())
+                return (Self::blocked_result(call, reason), Vec::new());
             }
             PreExecOutcome::Proceed(v) => v,
         };
@@ -317,6 +320,7 @@ impl ToolExecutor {
             .map(|c| c.take_recorded())
             .unwrap_or_default();
         if abort.map(|s| s.is_aborted()).unwrap_or(false) {
+            tool_ctx.abort_token.abort();
             let mut r = Self::cancelled_result(call, duration_ms);
             r.attempt = attempt;
             r.executed_input = Some(exec_input);
@@ -389,6 +393,19 @@ impl ToolExecutor {
             cwd: ctx.cwd.clone(),
         };
         let abort_token = AbortToken::new();
+        // BC03-1 / 04A / 04B：将 Run 级 AbortSignal 与工具级 AbortToken 物理绑定
+        if let Some(signal) = abort {
+            if signal.is_aborted() {
+                abort_token.abort();
+            } else {
+                let sig_clone = signal.clone();
+                let tok_clone = abort_token.clone();
+                tokio::spawn(async move {
+                    sig_clone.wait_aborted().await;
+                    tok_clone.abort();
+                });
+            }
+        }
         let mut approval_channel: Option<Arc<ApprovalChannel>> = None;
         let requester = self.approval_requester_for(ctx, &call.input);
         let ask: Option<AskCallback> = match options.permission_mode {
@@ -421,7 +438,10 @@ impl ToolExecutor {
             output_dir: ctx.output_dir.clone(),
             background: ctx.background.clone(),
             log_root: ctx.log_root.clone(),
-            compression_store: None,
+            compression_store: ctx
+                .compression_store
+                .clone()
+                .or_else(agent_tools::compression_store::global_compression_store),
             note_backend: ctx.note_backend.clone(),
             tool_call_id: Some(call.id.clone()),
         };
@@ -572,10 +592,24 @@ impl ToolExecutor {
         match abort {
             Some(sig) => tokio::select! {
                 biased;
-                _ = sig.wait_aborted() => None,
-                result = tokio::time::timeout(timeout, execute) => Some(result),
+                _ = sig.wait_aborted() => {
+                    tool_ctx.abort_token.abort();
+                    None
+                }
+                result = tokio::time::timeout(timeout, execute) => {
+                    if result.is_err() {
+                        tool_ctx.abort_token.abort();
+                    }
+                    Some(result)
+                }
             },
-            None => Some(tokio::time::timeout(timeout, execute).await),
+            None => {
+                let result = tokio::time::timeout(timeout, execute).await;
+                if result.is_err() {
+                    tool_ctx.abort_token.abort();
+                }
+                Some(result)
+            }
         }
     }
 

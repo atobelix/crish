@@ -160,7 +160,8 @@ pub fn apply_transition(
         // ── executing-tools ──
         S::ExecutingTools => match event {
             E::ToolsComplete => Ok(AgentTransition::plain(S::TurnComplete)),
-            E::InputAvailable => Ok(AgentTransition::plain(S::PreparingTurn)),
+            // 切断直跳 PreparingTurn 的越级旁路：即使存在排队输入，也先进入 TurnComplete 闭合当前回合
+            E::InputAvailable => Ok(AgentTransition::plain(S::TurnComplete)),
             E::Abort => Ok(AgentTransition::with_end_reason(S::TurnComplete, Aborted)),
             // fatalOnError 等工具级致命错误：保留已产出内容进 turn-complete
             E::Error => Ok(AgentTransition::with_end_reason(S::TurnComplete, Error)),
@@ -168,12 +169,14 @@ pub fn apply_transition(
         },
         // ── turn-complete ──
         S::TurnComplete => match event {
-            // 输入可用：回到等待输入，全部轮次计数归零（01 §1.4 表）
+            // 输入可用：回到等待输入，单 Run 内 turn_index 保持单调递增，不重置（reset_all_counters: false）
             E::InputAvailable => Ok(AgentTransition::with_effect(
                 S::AwaitingInput,
                 AgentTransitionEffect {
-                    reset_all_counters: true,
-                    ..AgentTransitionEffect::none()
+                    turn_index_increment: false,
+                    reset_tool_call_count: true,
+                    set_tool_call_count: None,
+                    reset_all_counters: false,
                 },
             )),
             E::NextTurn => Ok(AgentTransition::plain(S::PreparingTurn)),
@@ -365,7 +368,7 @@ mod tests {
         );
         assert_eq!(
             apply(S::ExecutingTools, E::InputAvailable),
-            Ok(plain(S::PreparingTurn))
+            Ok(plain(S::TurnComplete))
         );
         assert_eq!(
             apply(S::ExecutingTools, E::Abort),
@@ -381,8 +384,10 @@ mod tests {
             Ok(effect(
                 S::AwaitingInput,
                 AgentTransitionEffect {
-                    reset_all_counters: true,
-                    ..AgentTransitionEffect::none()
+                    turn_index_increment: false,
+                    reset_tool_call_count: true,
+                    set_tool_call_count: None,
+                    reset_all_counters: false,
                 }
             ))
         );

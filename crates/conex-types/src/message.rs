@@ -127,32 +127,144 @@ pub struct ToolCallBlock {
     pub input: serde_json::Value,
 }
 
+/// 图片多模态内容块（一等公民支持）
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageContentBlock {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<String>,
+    #[serde(alias = "mime_type")]
+    pub mime_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alt: Option<String>,
+}
+
 /// 消息内容块（对齐 AgentMessageBlock）
 ///
-/// tagged enum：`type` ∈ text / thought / tool-call / tool-result。
+/// tagged enum：`type` ∈ text / thought / tool-call / tool-result / image。
 /// 前端以 `block.type === 'thought'` 判定思考块（03 §5.1-4）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum AgentMessageBlock {
     /// 正文增量/终态块
-    #[serde(rename = "text", rename_all = "camelCase")]
+    #[serde(rename = "text", alias = "Text", rename_all = "camelCase")]
     Text { text: String },
     /// 思考块（redacted 透传，02 §1.4：Responses 推理标 redacted=true）
-    #[serde(rename = "thought", rename_all = "camelCase")]
+    #[serde(
+        rename = "thought",
+        alias = "Thought",
+        alias = "thought_log",
+        rename_all = "camelCase"
+    )]
     Thought {
         text: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         redacted: Option<bool>,
     },
     /// 工具调用块
-    #[serde(rename = "tool-call", rename_all = "camelCase")]
+    #[serde(
+        rename = "tool-call",
+        alias = "tool_call",
+        alias = "ToolCall",
+        rename_all = "camelCase"
+    )]
     ToolCall(ToolCallBlock),
     /// 工具结果块
-    #[serde(rename = "tool-result", rename_all = "camelCase")]
+    #[serde(
+        rename = "tool-result",
+        alias = "tool_result",
+        alias = "ToolResult",
+        rename_all = "camelCase"
+    )]
     ToolResult {
         tool_call_id: String,
         tool_name: String,
         output: ToolOutput,
         is_error: bool,
     },
+    /// 图片多模态内容块
+    #[serde(rename = "image", alias = "Image", rename_all = "camelCase")]
+    Image(ImageContentBlock),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_image_content_block_roundtrip() {
+        let block = AgentMessageBlock::Image(ImageContentBlock {
+            url: Some("https://example.com/photo.png".into()),
+            data: None,
+            mime_type: "image/png".into(),
+            alt: Some("测试图片".into()),
+        });
+        let json = serde_json::to_string(&block).unwrap();
+        assert!(json.contains(r#""type":"image""#));
+        assert!(json.contains(r#""mimeType":"image/png""#));
+        assert!(json.contains(r#""url":"https://example.com/photo.png""#));
+
+        let back: AgentMessageBlock = serde_json::from_str(&json).unwrap();
+        assert_eq!(block, back);
+    }
+
+    #[test]
+    fn test_image_content_block_snake_case_alias() {
+        let raw = r#"{
+            "type": "Image",
+            "mime_type": "image/jpeg",
+            "data": "base64data=="
+        }"#;
+        let parsed: AgentMessageBlock = serde_json::from_str(raw).unwrap();
+        match parsed {
+            AgentMessageBlock::Image(img) => {
+                assert_eq!(img.mime_type, "image/jpeg");
+                assert_eq!(img.data.as_deref(), Some("base64data=="));
+                assert!(img.url.is_none());
+            }
+            _ => panic!("Expected Image block"),
+        }
+    }
+
+    #[test]
+    fn test_tool_call_and_result_aliases() {
+        let call_raw = r#"{
+            "type": "tool_call",
+            "id": "c1",
+            "toolName": "bash",
+            "input": {"cmd": "pwd"}
+        }"#;
+        let call_block: AgentMessageBlock = serde_json::from_str(call_raw).unwrap();
+        match call_block {
+            AgentMessageBlock::ToolCall(c) => {
+                assert_eq!(c.id, "c1");
+                assert_eq!(c.tool_name, "bash");
+            }
+            _ => panic!("Expected ToolCall"),
+        }
+
+        let res_raw = r#"{
+            "type": "tool_result",
+            "toolCallId": "c1",
+            "toolName": "bash",
+            "output": {"text": "/root"},
+            "isError": false
+        }"#;
+        let res_block: AgentMessageBlock = serde_json::from_str(res_raw).unwrap();
+        match res_block {
+            AgentMessageBlock::ToolResult {
+                tool_call_id,
+                output,
+                is_error,
+                ..
+            } => {
+                assert_eq!(tool_call_id, "c1");
+                assert_eq!(output.text.as_deref(), Some("/root"));
+                assert!(!is_error);
+            }
+            _ => panic!("Expected ToolResult"),
+        }
+    }
 }
