@@ -601,6 +601,9 @@ orchestrator-snapshot.json.prev
 !scripts/check-swallowed-errors.mjs
 !scripts/check-ui-layer.mjs
 !scripts/check-unwrap-baseline.mjs
+!scripts/check-i18n-hardcoded.mjs
+!scripts/check-i18n-symmetry.mjs
+!scripts/check-i18n-unused-keys.mjs
 # markdown-editor 表格不变量棘轮基线入库放行（2026-09-14）：
 # `/reference/**/*.json`（本文件第 441 行）会连带忽略该基线，而
 # `tests/gate/table-invariants.test.ts` 断言「基线必须存在」——
