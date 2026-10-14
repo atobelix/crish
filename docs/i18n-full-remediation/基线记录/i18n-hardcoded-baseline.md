@@ -2,6 +2,7 @@
 
 > 由 `node scripts/check-i18n-hardcoded.mjs --update-baseline` 自动生成/收紧。
 > 语义：实测 > 基线 → FAIL；实测 ≤ 基线 → PASS。存量按战役波次单调递减收敛。
+
 <!-- BASELINE_START -->
 apps/crish-desktop/src/App.tsx 8
 apps/crish-desktop/src/api/StreamRenderBuffer.ts 1
@@ -55,9 +56,9 @@ apps/crish-desktop/src/api/localFileReader.ts 6
 apps/crish-desktop/src/api/localStorageApi.ts 1
 apps/crish-desktop/src/api/markdown-render/markdownCodeFence.ts 1
 apps/crish-desktop/src/api/markdown-render/markdownTable.ts 1
-apps/crish-desktop/src/api/markdown/unitReconciler.ts 2
+apps/crish-desktop/src/api/markdown/unitReconciler.ts 1
 apps/crish-desktop/src/api/markdownRenderLite.ts 1
-apps/crish-desktop/src/api/mcpApi.ts 10
+apps/crish-desktop/src/api/mcpApi.ts 7
 apps/crish-desktop/src/api/mirrorDetectSchedule.ts 2
 apps/crish-desktop/src/api/modelCatalogIpc.ts 10
 apps/crish-desktop/src/api/modelCatalogPure.ts 7
@@ -228,19 +229,14 @@ apps/crish-desktop/src/components/chat-card/useSlashMenu.ts 11
 apps/crish-desktop/src/components/chat-composer/AiCommandSlashExtension.ts 31
 apps/crish-desktop/src/components/chat-composer/AnnotationChipItem.tsx 6
 apps/crish-desktop/src/components/chat-composer/ChatComposer.tsx 12
-apps/crish-desktop/src/components/chat-composer/ComposePlusMenu.tsx 6
-apps/crish-desktop/src/components/chat-composer/ComposerAttachmentBar.tsx 1
 apps/crish-desktop/src/components/chat-composer/ComposerDirTree.tsx 8
-apps/crish-desktop/src/components/chat-composer/ComposerDropHost.tsx 1
 apps/crish-desktop/src/components/chat-composer/ComposerField.tsx 2
 apps/crish-desktop/src/components/chat-composer/ComposerFusedTrigger.tsx 3
 apps/crish-desktop/src/components/chat-composer/ComposerInlineTag.tsx 2
-apps/crish-desktop/src/components/chat-composer/ComposerNoticeBar.tsx 7
 apps/crish-desktop/src/components/chat-composer/ComposerPermissionBar.tsx 15
 apps/crish-desktop/src/components/chat-composer/ComposerPlanProgressBar.tsx 12
-apps/crish-desktop/src/components/chat-composer/ComposerSendControls.tsx 10
-apps/crish-desktop/src/components/chat-composer/DraftUndoToast.tsx 3
-apps/crish-desktop/src/components/chat-composer/PermissionModeMenu.tsx 7
+apps/crish-desktop/src/components/chat-composer/ComposerSendControls.tsx 6
+apps/crish-desktop/src/components/chat-composer/PermissionModeMenu.tsx 4
 apps/crish-desktop/src/components/chat-composer/SlashExtension.ts 5
 apps/crish-desktop/src/components/chat-composer/TiptapComposerField.tsx 12
 apps/crish-desktop/src/components/chat-composer/TiptapEditorField.tsx 1
@@ -252,7 +248,7 @@ apps/crish-desktop/src/components/chat-message-list/MessageVirtualizer.tsx 3
 apps/crish-desktop/src/components/chat-message-list/PagingAnchor.ts 1
 apps/crish-desktop/src/components/chat-message-list/ScheduledTaskExecutionCard.tsx 16
 apps/crish-desktop/src/components/chat-message-list/flowScrubberModel.ts 2
-apps/crish-desktop/src/components/chat-message-list/useChatMessageState.ts 6
+apps/crish-desktop/src/components/chat-message-list/useChatMessageState.ts 3
 apps/crish-desktop/src/components/chat-message-list/useScrollAnchor.ts 5
 apps/crish-desktop/src/components/chat-message-row/ArtifactCapsuleSyncLine.tsx 5
 apps/crish-desktop/src/components/chat-message-row/AssistantMessageActionsBar.tsx 4
@@ -313,7 +309,7 @@ apps/crish-desktop/src/components/extensions-surface/ExternalImportWorkbench.tsx
 apps/crish-desktop/src/components/extensions-surface/ExternalSessionsWorkbench.tsx 26
 apps/crish-desktop/src/components/extensions-surface/ImportPluginSettingsModal.tsx 35
 apps/crish-desktop/src/components/extensions-surface/McpConnectModal.tsx 23
-apps/crish-desktop/src/components/extensions-surface/McpDetailWorkbench.tsx 36
+apps/crish-desktop/src/components/extensions-surface/McpDetailWorkbench.tsx 22
 apps/crish-desktop/src/components/extensions-surface/McpManualTab.tsx 13
 apps/crish-desktop/src/components/extensions-surface/McpQuickTab.tsx 7
 apps/crish-desktop/src/components/extensions-surface/McpSyntaxTab.tsx 4
@@ -349,7 +345,7 @@ apps/crish-desktop/src/components/files/hooks/usePlainCodeLoader.ts 1
 apps/crish-desktop/src/components/files/jsonFormatUtils.ts 1
 apps/crish-desktop/src/components/firstRunWizardLib.ts 24
 apps/crish-desktop/src/components/gallery/ComponentGallery.tsx 17
-apps/crish-desktop/src/components/markdown/MarkdownDocumentView.tsx 5
+apps/crish-desktop/src/components/markdown/MarkdownDocumentView.tsx 2
 apps/crish-desktop/src/components/note-paper/EditableTitle.tsx 3
 apps/crish-desktop/src/components/note-paper/MirrorDriftStatusBar.tsx 7
 apps/crish-desktop/src/components/note-paper/NotePaperStrictBody.tsx 3
@@ -447,25 +443,16 @@ apps/crish-desktop/src/components/settings/RulesEditorDialog.tsx 6
 apps/crish-desktop/src/components/settings/RunDetailDialog.tsx 39
 apps/crish-desktop/src/components/settings/RunHistoryList.tsx 12
 apps/crish-desktop/src/components/settings/ScheduledTasksPanel.tsx 12
-apps/crish-desktop/src/components/settings/SettingsAboutTab.tsx 40
-apps/crish-desktop/src/components/settings/SettingsAppearanceTab.tsx 7
-apps/crish-desktop/src/components/settings/SettingsArchiveTab.tsx 26
-apps/crish-desktop/src/components/settings/SettingsBrowserTab.tsx 1
+apps/crish-desktop/src/components/settings/SettingsAboutTab.tsx 7
+apps/crish-desktop/src/components/settings/SettingsAppearanceTab.tsx 1
 apps/crish-desktop/src/components/settings/SettingsDevicesList.tsx 9
 apps/crish-desktop/src/components/settings/SettingsDevicesNetworkEnv.tsx 14
-apps/crish-desktop/src/components/settings/SettingsDevicesTab.tsx 26
-apps/crish-desktop/src/components/settings/SettingsPanel.tsx 24
-apps/crish-desktop/src/components/settings/SettingsPersonalizeTab.tsx 49
-apps/crish-desktop/src/components/settings/SettingsProfileTab.tsx 36
 apps/crish-desktop/src/components/settings/SettingsQuickMenu.tsx 19
-apps/crish-desktop/src/components/settings/SettingsRulesTab.tsx 30
-apps/crish-desktop/src/components/settings/SettingsScheduleTab.tsx 18
-apps/crish-desktop/src/components/settings/SettingsSchemaRenderer.tsx 3
-apps/crish-desktop/src/components/settings/SettingsSecurityTab.tsx 43
+apps/crish-desktop/src/components/settings/SettingsScheduleTab.tsx 3
+apps/crish-desktop/src/components/settings/SettingsSchemaRenderer.tsx 2
+apps/crish-desktop/src/components/settings/SettingsSecurityTab.tsx 2
 apps/crish-desktop/src/components/settings/SettingsShortcutsHelpers.ts 48
-apps/crish-desktop/src/components/settings/SettingsShortcutsTab.tsx 22
-apps/crish-desktop/src/components/settings/SettingsSidebar.tsx 7
-apps/crish-desktop/src/components/settings/SettingsUsageTab.tsx 15
+apps/crish-desktop/src/components/settings/SettingsShortcutsTab.tsx 4
 apps/crish-desktop/src/components/settings/StatusDiagnosticsPanel.tsx 42
 apps/crish-desktop/src/components/settings/WorkflowForm.tsx 42
 apps/crish-desktop/src/components/settings/WorkflowList.tsx 29
@@ -492,16 +479,9 @@ apps/crish-desktop/src/components/shell/windowSnapOverlay.ts 5
 apps/crish-desktop/src/components/sidebar/ContextMenuFlyout.tsx 13
 apps/crish-desktop/src/components/sidebar/SessionContextMenu.tsx 12
 apps/crish-desktop/src/components/sidebar/Sidebar.tsx 8
-apps/crish-desktop/src/components/sidebar/SidebarContextMenus.tsx 3
-apps/crish-desktop/src/components/sidebar/SidebarFooter.tsx 9
-apps/crish-desktop/src/components/sidebar/SidebarHeader.tsx 5
-apps/crish-desktop/src/components/sidebar/SidebarNav.tsx 6
+apps/crish-desktop/src/components/sidebar/SidebarContextMenus.tsx 1
 apps/crish-desktop/src/components/sidebar/SidebarSessionList.tsx 4
-apps/crish-desktop/src/components/sidebar/UserProfileCard.tsx 1
-apps/crish-desktop/src/components/sidebar/session-list/GeneralSection.tsx 10
-apps/crish-desktop/src/components/sidebar/session-list/PinnedSection.tsx 6
 apps/crish-desktop/src/components/sidebar/session-list/ProjectManageModal.tsx 17
-apps/crish-desktop/src/components/sidebar/session-list/ProjectsSection.tsx 13
 apps/crish-desktop/src/components/sidebar/session-list/SessionRow.tsx 8
 apps/crish-desktop/src/components/sidebar/session-list/WindowedSessionUl.tsx 1
 apps/crish-desktop/src/components/sidebar/session-list/sessionListUtils.ts 3

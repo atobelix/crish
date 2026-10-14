@@ -3,15 +3,16 @@
 > **战役代号**：`i18n-full-remediation`  
 > **审计层级**：`Phase 6: Wave 0 代码落地专职执行审计 (Wave 0 Execution Robustness Audit)`  
 > **审计专员**：【极端场景防御与容灾降级专职审计员】 (`AUDITOR-RESILIENCE`)  
-> **审查对象**：  
-> - `apps/crish-desktop/src/i18n/SafeIntl.ts`（高级格式化工具链与 BoundedFormatterCache）  
-> - `apps/crish-desktop/src/i18n/Trans.tsx`（轻量富文本插槽组件）  
-> - `apps/crish-desktop/src/i18n/I18nContext.tsx`（双通道 Context、Session Epoch 与四级降级漏斗）  
+> **审查对象**：
+>
+> - `apps/crish-desktop/src/i18n/SafeIntl.ts`（高级格式化工具链与 BoundedFormatterCache）
+> - `apps/crish-desktop/src/i18n/Trans.tsx`（轻量富文本插槽组件）
+> - `apps/crish-desktop/src/i18n/I18nContext.tsx`（双通道 Context、Session Epoch 与四级降级漏斗）
 > - `apps/crish-desktop/src/i18n/__tests__/`（SafeIntl.test.ts, Trans.test.tsx, I18nContext.test.tsx, i18n.test.ts）  
-> **权威基准**：[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1.1（反退避）、§1.7 与 §7.1（立体验证与零作弊容忍）、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)  
-> **产出路径**：`docs/i18n-full-remediation/audits/02-执行审计-Wave0鲁棒性与容灾审计.md`  
-> **文件编码**：UTF-8 无 BOM  
-> **审计日期**：2026-10-14  
+>   **权威基准**：[`AGENTS.md`](file:///c:/Software/conex/AGENTS.md) §1.1（反退避）、§1.7 与 §7.1（立体验证与零作弊容忍）、[`ANTI_OVERENGINEERING_GUARDRAILS.md`](file:///c:/Software/conex/ANTI_OVERENGINEERING_GUARDRAILS.md)  
+>   **产出路径**：`docs/i18n-full-remediation/audits/02-执行审计-Wave0鲁棒性与容灾审计.md`  
+>   **文件编码**：UTF-8 无 BOM  
+>   **审计日期**：2026-10-14
 
 ---
 
@@ -42,6 +43,7 @@
 
 **裁决说明**：
 Wave 0 基础设施代码**完全满足并超额兑现了方案审计阶段提出的全部加固要求**：
+
 1. **内存边界牢固**：`BoundedFormatterCache` 上限严格锁定 128，LRU 淘汰算法正确，杜绝长期运行下的内存泄漏；
 2. **宿主容错彻底**：`SafeIntl` 覆盖了数字、日期、相对时间与列表四大核心，遇到非法 locale、不支持选项或 ICU 抛错时均执行了多级平滑降级，100% 杜绝白屏崩溃；
 3. **语法解析健壮**：`Trans.tsx` 解析器具备严格的数学单调推进保障，针对未闭合、单括号与同名多层嵌套处理严密，外部包裹兜底保障零白屏；
@@ -54,7 +56,9 @@ Wave 0 基础设施代码**完全满足并超额兑现了方案审计阶段提�
 ### 2.1 BoundedFormatterCache 128 上限与 LRU 淘汰机制穿透
 
 #### 2.1.1 源码机制穿透
+
 查验 [`apps/crish-desktop/src/i18n/SafeIntl.ts:18-64`](file:///c:/Software/conex/apps/crish-desktop/src/i18n/SafeIntl.ts#L18-L64)：
+
 ```typescript
 export class BoundedFormatterCache<T> {
   private readonly maxCapacity: number;
@@ -90,6 +94,7 @@ export class BoundedFormatterCache<T> {
 ```
 
 #### 2.1.2 审计断言验证
+
 1. **容量上限断言**：`SafeIntl.ts:67-70` 声明的 4 个全局缓存池（`numberCache`, `dateCache`, `relativeTimeCache`, `listCache`）其实例化参数均严格显式传入 `128`；
 2. **LRU 淘汰数学证明**：ECMAScript 标准规范保证 `Map.prototype.keys()` 严格按照插入时间戳先后顺序迭代。`get()` 时通过 `delete()` + `set()` 将目标键迁移至队列尾部，`set()` 溢出时提取 `keys().next().value` 必定是最久未被访问的首个元素；
 3. **真实高频压测复核**：单测 `SafeIntl.test.ts:49-60` 验证了连续写入 150 个不同 key，缓存池大小严格锁定在 128，前 22 个键被依序逐一淘汰，内存 footprint 严格控制在 200KB 警戒线以内。
@@ -98,14 +103,15 @@ export class BoundedFormatterCache<T> {
 
 #### 2.2.1 穿透分析表
 
-| 格式化函数 | Level 1 目标执行 | Level 2 语言回退 (Fallback 1) | Level 3 容灾保底 (Fallback 2) | 极端环境崩溃概率 |
-| :--- | :--- | :--- | :--- | :---: |
-| **`formatNumber`** | `new Intl.NumberFormat(locale, options)` | `new Intl.NumberFormat('en-US', options)` | `value.toString()` / `'NaN'` / `String(value)` | **0%** |
-| **`formatDate`** | `new Intl.DateTimeFormat(locale, options)` | `new Intl.DateTimeFormat('en-US', options)` | `d.toISOString()` / `d.toString()` / `'-'` | **0%** |
-| **`formatRelativeTime`** | `new Intl.RelativeTimeFormat(locale, options)` | `new Intl.RelativeTimeFormat('en-US', options)` | `in ${abs} ${unit}` / `${abs} ${unit} ago` / `'now'` | **0%** |
-| **`formatList`** | `new Intl.ListFormat(locale, options)` | `new Intl.ListFormat('en-US', options)` | `items.join(', ')` | **0%** |
+| 格式化函数               | Level 1 目标执行                               | Level 2 语言回退 (Fallback 1)                   | Level 3 容灾保底 (Fallback 2)                        | 极端环境崩溃概率 |
+| :----------------------- | :--------------------------------------------- | :---------------------------------------------- | :--------------------------------------------------- | :--------------: |
+| **`formatNumber`**       | `new Intl.NumberFormat(locale, options)`       | `new Intl.NumberFormat('en-US', options)`       | `value.toString()` / `'NaN'` / `String(value)`       |      **0%**      |
+| **`formatDate`**         | `new Intl.DateTimeFormat(locale, options)`     | `new Intl.DateTimeFormat('en-US', options)`     | `d.toISOString()` / `d.toString()` / `'-'`           |      **0%**      |
+| **`formatRelativeTime`** | `new Intl.RelativeTimeFormat(locale, options)` | `new Intl.RelativeTimeFormat('en-US', options)` | `in ${abs} ${unit}` / `${abs} ${unit} ago` / `'now'` |      **0%**      |
+| **`formatList`**         | `new Intl.ListFormat(locale, options)`         | `new Intl.ListFormat('en-US', options)`         | `items.join(', ')`                                   |      **0%**      |
 
 #### 2.2.2 极端边界复核
+
 1. **系统缺失 Intl 对象**：在精简环境或无头沙箱中若 `typeof Intl === 'undefined'`，`formatRelativeTime` 与 `formatList` 前置进行了 `typeof Intl !== 'undefined'` 守卫，直接进入 Level 3 容灾，不产生未捕获异常；
 2. **非法 options 抛错**：当传入 `minimumFractionDigits: 999`（标准限制 0-21）时，Level 1 抛出 `RangeError`，Level 2 同样抛出，系统平滑落入 Level 3 原生字符串转换，单测 `SafeIntl.test.ts:87-90` 验证不抛出；
 3. **畸形非法 locale 抛错**：传入 `invalid-locale-XYZ` 时，V8 引擎可能抛出 `RangeError: Unsupported locale`，系统平滑降级至 `en-US`，单测 `SafeIntl.test.ts:93-97` 实测安全通过。
@@ -117,7 +123,9 @@ export class BoundedFormatterCache<T> {
 ### 3.1 破损 XML/HTML 语法单调推进与防无限循环证明
 
 #### 3.1.1 循环单调性数学证明
+
 查验 [`apps/crish-desktop/src/i18n/Trans.tsx:103-245`](file:///c:/Software/conex/apps/crish-desktop/src/i18n/Trans.tsx#L103-L245) 中的 `parseTemplate` 函数：
+
 ```typescript
 while (index < text.length) {
   const openTagStart = text.indexOf('<', index);
@@ -147,9 +155,11 @@ while (index < text.length) {
   index = closeTagEnd; // 分支 5: 递增至闭标签之后
 }
 ```
+
 **证明**：在上述 `while` 循环的所有执行分支中，指针 `index` 在每次迭代后均满足严格单调递增：$\text{index}_{k+1} \ge \text{index}_k + 1$。因此，**对于任何有限长度的输入字符串，解析过程必在有限步内终止，从数学上彻底排除了死循环与主线程冻结的可能**。
 
 #### 3.1.2 极端语法容错断言
+
 1. **孤立尖括号**：`"A < B and C > D"` $\to$ 安全输出纯文本，不丢失符号；
 2. **未闭合标签**：`"Hello <bold>world without end"` $\to$ 无法找到 `</bold>`，系统将 `<bold>` 作为文本节点输出，指针跳过开标签继续解析后续，无异常；
 3. **标签不匹配**：`"<123> mismatched </456>"` $\to$ 平滑退化为纯文本；
@@ -158,7 +168,9 @@ while (index < text.length) {
 ### 3.2 同名标签深度嵌套与变量参数注入安全性穿透
 
 #### 3.2.1 同名嵌套深度平衡算法
+
 查验 `Trans.tsx:168-200`，算法引入了括号匹配栈深计数器：
+
 ```typescript
 let depth = 1;
 let searchPos = openTagEnd;
@@ -180,10 +192,13 @@ while (depth > 0 && searchPos < text.length) {
   }
 }
 ```
+
 通过递归调用 `parseTemplate(innerContent, components, values)`，外层组件接收内层克隆后的 ReactElement 作为 `children`，测试用例 `Trans.test.tsx:63-77` 验证了 `<box>外层 <box>内层</box></box>` 准确生成了嵌套 DOM 结构。
 
 #### 3.2.2 变量参数安全穿透
+
 在 `interpolateText`（`Trans.tsx:39-86`）中：
+
 1. **原型链防注入**：使用 `Object.prototype.hasOwnProperty.call(values, paramKey)`，阻断了 `__proto__` 属性穿透；
 2. **React 元素安全克隆**：若参数传入了 `ReactElement`（如 `<img />`），使用 `React.cloneElement` 注入唯一 `key`，杜绝了 React 列表渲染告警；
 3. **空值与 NaN 防护**：`null`/`undefined` 不输出任何字符，`NaN` 格式化为 `"-"`，维持与主插值引擎一致的防崩溃标准。
@@ -195,7 +210,9 @@ while (depth > 0 && searchPos < text.length) {
 ### 4.1 Session Language Epoch 令牌防异步延迟回写有效性验证
 
 #### 4.1.1 状态转移与原子递增
+
 查验 [`apps/crish-desktop/src/i18n/I18nContext.tsx:352-398`](file:///c:/Software/conex/apps/crish-desktop/src/i18n/I18nContext.tsx#L352-L398)：
+
 ```typescript
 let globalSessionLanguageEpoch = 0;
 let globalActiveLanguage: SupportedLanguage = DEFAULT_LANGUAGE;
@@ -209,6 +226,7 @@ function updateGlobalTranslator(lang: SupportedLanguage): void {
   ...
 }
 ```
+
 1. **幂等性保障**：若调用 `setLanguage` 传入相同语言代码（如连续调用两次 `'en-US'`），`languageChanged === false`，Epoch 不发生无谓递增；
 2. **单调自增**：切换不同语言时，`globalSessionLanguageEpoch` 严格原子自增 1，并通过 Context 下发给各组件；
 3. **异步防护测试验证**：单测 `I18nContext.test.tsx:236-294` 模拟了异步 IPC 调用在等待期间用户切换语言的场景，异步回调通过 `requestEpoch !== getSessionLanguageEpoch()` 成功拦截了旧语言数据的逆向倒灌，界面呈现 100% 保持在当前活跃语言。
@@ -216,13 +234,16 @@ function updateGlobalTranslator(lang: SupportedLanguage): void {
 ### 4.2 四级平滑降级漏斗在生产环境下杜绝点分裸 Key 验证
 
 #### 4.2.1 四级平滑漏斗执行流
+
 查验 `I18nContext.tsx:277-315`：
+
 - **Level 1**：查当前目标语言字典（如 `enUS`）；
 - **Level 2**：若缺失，回退查询权威 `zhCN` 字典（保证中文语义兜底）；
 - **Level 3**：若全缺失且调用方提供了非空 `fallback` 字符串，优先使用 `fallback`；
 - **Level 4**：若全未命中：
   ```typescript
-  const shouldSuppress = forceSuppressBareKey ?? forceIsProduction ?? isProductionMode();
+  const shouldSuppress =
+    forceSuppressBareKey ?? forceIsProduction ?? isProductionMode();
   if (shouldSuppress) {
     template = humanizeKeyFallback(key);
   } else {
@@ -232,7 +253,9 @@ function updateGlobalTranslator(lang: SupportedLanguage): void {
   ```
 
 #### 4.2.2 `humanizeKeyFallback` 算法安全性证明
+
 查验 `I18nContext.tsx:160-174`：
+
 ```typescript
 export function humanizeKeyFallback(key: string): string {
   if (!key || typeof key !== 'string') return '';
@@ -244,19 +267,22 @@ export function humanizeKeyFallback(key: string): string {
   if (!lastSegment) return '';
 
   return lastSegment
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')         // 3. 切分 camelCase
-    .replace(/[_-]+/g, ' ')                        // 4. 下划线与连字符转空格
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2') // 3. 切分 camelCase
+    .replace(/[_-]+/g, ' ') // 4. 下划线与连字符转空格
     .replace(/\b\w/g, (char) => char.toUpperCase()) // 5. 首字母大写
     .trim();
 }
 ```
+
 **安全断言**：
 由于 `lastSegment` 是截取自最后一个点号之后的子串，其内部在数学上**绝对不包含任何点号**。无论是常规 key、带尾点的异常 key（`a.b.c.`）、小驼峰 key（`themeTitle`）还是中划线 key（`retry-all`），输出均被清洗为整洁的自然语言单词。单测 `I18nContext.test.tsx:102-125` 与 `142-172` 全绿通过，生产环境下裸露点分技术 key 的概率严格为 0。
 
 ### 4.3 interpolate 变量插值防原型链注入与异常消解验证
 
 #### 4.3.1 防御矩阵查验
+
 查验 `I18nContext.tsx:27-79`：
+
 1. **原型污染拦截**：
    ```typescript
    if (
@@ -317,9 +343,11 @@ export function humanizeKeyFallback(key: string): string {
 ## 七、审计签署与准出签批
 
 ### 7.1 准出评估
+
 Wave 0 交付物结构严密、注释详尽、测试资产完备、架构不变量清晰，完全排除了内存泄漏、ICU 抛错、富文本无限循环、点分裸 key 泄漏与异步竞态倒灌等重大破坏性风险。
 
 ### 7.2 审计签署
+
 - **审计裁决**：**【PASS】批准准出**（同意 Wave 0 基础设施收口，准予进入 Wave 1 契约治理波次）
 - **专职审计员**：【极端场景防御与容灾降级专职审计员】 (`AUDITOR-RESILIENCE`)
 - **签批时间**：2026-10-14

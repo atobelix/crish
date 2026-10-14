@@ -45,6 +45,7 @@
 ### 1.1 渲染引擎层：`crates/conex-markdown` 与前端渲染镜像
 
 #### (1) 代码块 HTML 外壳与复制按钮写死中文
+
 - **文件路径**：[`crates/conex-markdown/src/renderer.rs:1312`](file:///c:/Software/conex/crates/conex-markdown/src/renderer.rs#L1312)
 - **代码片段**：
   ```rust
@@ -56,6 +57,7 @@
   - 标签子节点文本 `复制`：直接渲染至 DOM 树，完全不受前端 i18n 控制。
 
 #### (2) 表格区域无障碍属性写死中文
+
 - **文件路径**：[`crates/conex-markdown/src/renderer.rs:619`](file:///c:/Software/conex/crates/conex-markdown/src/renderer.rs#L619)
 - **代码片段**：
   ```rust
@@ -67,6 +69,7 @@
   - `aria-label="表格"` 硬编码。
 
 #### (3) 致命联动反噬：前端 DOM 调和器对中文属性的硬依赖
+
 - **文件路径**：[`apps/crish-desktop/src/api/markdown/unitReconciler.ts:44-48`](file:///c:/Software/conex/apps/crish-desktop/src/api/markdown/unitReconciler.ts#L44-L48)
 - **代码片段**：
   ```ts
@@ -81,7 +84,9 @@
   - **严重架构耦合警告**：若仅在 Rust 侧修改 `aria-label`，而未同步重构 `unitReconciler.ts`（改为仅依靠类名 `.md-table-wrap`），会导致表格单元排版隔离静默失效，引发严重的流式重排性能抖动。
 
 #### (4) 前端 Fallback 渲染器双轨镜像硬编码
+
 在前端的 JavaScript 纯前端回退 Markdown 解析器中，存在与 Rust 完全同构的双轨硬编码：
+
 - **文件路径**：[`apps/crish-desktop/src/api/markdown-render/markdownCodeFence.ts:79`](file:///c:/Software/conex/apps/crish-desktop/src/api/markdown-render/markdownCodeFence.ts#L79)
   ```ts
   const actions = `<div class="md-code-actions">${rightLang}<button type="button" class="md-code-copy" aria-label="复制代码" title="复制代码">复制</button></div>`;
@@ -92,7 +97,9 @@
   ```
 
 #### (5) 复制按钮运行时状态切换与 Toast 硬编码
+
 用户点击代码块复制后，DOM 操作与 Toast 反馈写死中文：
+
 - **文件路径**：[`apps/crish-desktop/src/components/markdown/MarkdownDocumentView.tsx:167-173`](file:///c:/Software/conex/apps/crish-desktop/src/components/markdown/MarkdownDocumentView.tsx#L167-L173)
   ```ts
   const originalText = copyBtn.textContent;
@@ -110,7 +117,7 @@
     copyBtn.textContent = originalText || '复制';
   }, 1500);
   // ...
-  () => toast.show('复制失败')
+  () => toast.show('复制失败');
   ```
 
 ---
@@ -118,6 +125,7 @@
 ### 1.2 核心会话循环与调度层：`session-loop` & `orchestrator`
 
 #### (1) Tool-Promise 意图自愈机制的单向中文偏向与硬编码 Nudge
+
 - **文件路径**：[`crates/session-loop/src/loop/handlers/no_tool_calls.rs:95-98`](file:///c:/Software/conex/crates/session-loop/src/loop/handlers/no_tool_calls.rs#L95-L98)
 - **代码片段**：
   ```rust
@@ -134,6 +142,7 @@
   - 行动承诺关键词：`"尝试单独调用"`、`"正在调用"`、`"现在开始执行"`、`"接下来使用"`、`"准备运行"`。
 
 #### (2) C1 检查点（Checkpoint）协议 System Prompt 强制中文
+
 - **文件路径**：[`crates/session-loop/src/checkpoint.rs:16-21`](file:///c:/Software/conex/crates/session-loop/src/checkpoint.rs#L16-L21)
 - **代码片段**：
   ```rust
@@ -147,6 +156,7 @@
 - **影响**：所有会话在装配 System Prompt 时，该检查点协议无条件以纯中文拼入，完全没有英文或中立版本。
 
 #### (3) 长期目标模式（`/goal`）续写与任务匹配的硬编码
+
 - **文件路径**：[`apps/agent-workbench/src-tauri/src/run/run_resume.rs:186-200`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/run/run_resume.rs#L186-L200)
 - **代码片段**：
   ```rust
@@ -192,6 +202,7 @@
   - 英文模型输出 `"Goal completed"` 无法被 `reply_looks_goal_done` 识别，必须写死包含 `"目标已完成"` 或包含 `DONE`。
 
 #### (4) 运行状态机收场错误文案
+
 - **文件路径**：[`crates/session-loop/src/loop/handlers/turn_complete.rs:70,135,147`](file:///c:/Software/conex/crates/session-loop/src/loop/handlers/turn_complete.rs#L70)
   ```rust
   format!("run 失败（状态={machine_state:?}，事件=Error 收场）")
@@ -203,6 +214,7 @@
 ### 1.3 工具体系与系统注入层：`agent-tools` & `engine_build`
 
 #### (1) 子代理体系角色与权限注入
+
 - **文件路径**：[`apps/agent-workbench/src-tauri/src/engine_build.rs:1311-1321`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/engine_build.rs#L1311-L1321)
   ```rust
   pub(crate) const SUBAGENT_ROLE_CONSTRAINT_TITLE: &str = "子代理角色约束";
@@ -218,6 +230,7 @@
   - `OUTPUT_DIR_SECTION_TITLE`: `"文档产出目录"`；正文：`"本次会话的文档产出目录为 `{path}`（首次写入时自动创建）..."`。
 
 #### (2) 探索类 Agent 配额错误与子代理守卫拦截
+
 - **文件路径**：[`crates/agent-tools/src/explore_quota.rs:226-234`](file:///c:/Software/conex/crates/agent-tools/src/explore_quota.rs#L226-L234)
   ```rust
   Self::NotGranted => "探索类 agent 未获主 agent 分配的文档配额凭证：如需产出文档，请把发现以消息形式回报主 agent，由主 agent 分配后重试".to_string(),
@@ -235,6 +248,7 @@
   ```
 
 #### (3) 内置工具 Schema 描述与入参报错
+
 - `conex-browser-tools`：
   - `helpers.rs:22-197`：入参校验报错全量写死中文：`"入参必须是 JSON 对象"`、`"缺少必填参数：{key}"`、`"参数 {key} 必须是字符串"`、`"URL 超长（> 4096 字符）"`、`"路径越出工作区：{input}"`；
   - `eval.rs:28-34`：工具 description 与入参说明写死中文：`"在页面隔离世界执行只读受限求值..."`；
@@ -248,6 +262,7 @@
 ### 1.4 跨端 IPC 通信与推送通知：`src-tauri`
 
 #### (1) 多端与移动端推送通知文案（Push Copy）全量硬编码中文
+
 - **文件路径**：[`apps/agent-workbench/src-tauri/src/push/copy.rs:61-197`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/push/copy.rs#L61-L197)
 - **代码实录**：
   ```rust
@@ -283,6 +298,7 @@
   - 夜间静默折叠摘要正文：`format!("夜间完成 {total} 项")`、`"任务完成 ×{n}"`、`"定时器到期 ×{n}"`。
 
 #### (2) 网络环境与防火墙引导文案（UI 直接渲染）
+
 - **文件路径**：[`apps/agent-workbench/src-tauri/src/multi_device_network.rs:107-119`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/multi_device_network.rs#L107-L119)
 - **代码实录**：
   ```rust
@@ -301,6 +317,7 @@
   该 `hint` 字段直接通过 IPC 传递给前端 React 组件渲染，导致网络引导界面强行展示中文。
 
 #### (3) 核心命令面与 Tauri 报错实录
+
 - [`core_error.rs:46, 48`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/core_error.rs#L46):
   `CoreError::InvalidInput(format!("run 状态机拒绝转移：{e}"))`
   `CoreError::InvalidInput("run 已到终态，拒绝再转移".to_string())`
@@ -324,6 +341,7 @@
 ### 1.5 错误注册表与数据契约断裂实录
 
 在 `crates/conex-types/src/error.rs` 中，`CRISH_ERROR_REGISTRY`（102 个码）中所有的 `title` 均为中文写死：
+
 - **文件路径**：[`crates/conex-types/src/error.rs:225-250`](file:///c:/Software/conex/crates/conex-types/src/error.rs#L225-L250)
   ```rust
   m.insert(codes::CONFIG_INVALID, CrishErrorInfo {
@@ -350,12 +368,14 @@
 ### 2.1 方案 A：Rust 内核感知 Locale 方案（Rust-Centric i18n）
 
 **设计思路**：
+
 1. 前端切换语言时，向 Rust 发送 IPC 命令 `set_locale("en-US")`；
 2. 每次发起 Markdown 渲染或启动 Agent Run 时，入参携带 `locale: "en-US"`；
 3. `conex-markdown` 的 `render(input, options)` 接收 `locale` 参数，在拼接 HTML 时分支判断 `if locale == "zh-CN" { "复制" } else { "Copy" }`；
 4. `conex-markdown` 的 LRU Cache 键改为 `(hash(input), locale)`。
 
 **缺陷与毁灭性代价**：
+
 1. **LRU 缓存命中率断崖式下跌与内存翻倍**：
    - `crates/conex-markdown/src/cache.rs` 维护了一个高效的渲染缓存。如果引入 `locale` 作为缓存分叉维度，缓存容量消耗翻倍；
    - 切换语言时，所有缓存瞬间失效，导致全部重新解析渲染。
@@ -372,23 +392,40 @@
 ### 2.2 方案 B：语言中立语义 DOM + 前端插槽替换/Data-属性挂载方案（Decoupled Semantic Tokens）
 
 **设计思路**：
+
 1. **Rust 内核保持 100% 语言中立（Language-Agnostic）**：
    - `conex-markdown` 坚决不感知任何 Locale；
    - 渲染出的 HTML 外壳只输出中立的属性与标记：
      ```html
-     <button type="button" class="md-code-copy" data-action="copy" aria-label="Copy code">
+     <button
+       type="button"
+       class="md-code-copy"
+       data-action="copy"
+       aria-label="Copy code"
+     >
        <span class="md-code-copy-icon" aria-hidden="true"></span>
      </button>
      ```
      或采用 `data-i18n-*` 插槽属性：
      ```html
-     <button type="button" class="md-code-copy" data-action="copy" data-i18n-title="markdown.copy" data-i18n-aria="markdown.copyCode">
+     <button
+       type="button"
+       class="md-code-copy"
+       data-action="copy"
+       data-i18n-title="markdown.copy"
+       data-i18n-aria="markdown.copyCode"
+     >
        <span class="md-code-copy-label" data-i18n="markdown.copy"></span>
      </button>
      ```
    - 表格区域移除非语义中文：
      ```html
-     <div class="md-table-wrap" role="region" data-role="table" data-i18n-aria="markdown.table">
+     <div
+       class="md-table-wrap"
+       role="region"
+       data-role="table"
+       data-i18n-aria="markdown.table"
+     ></div>
      ```
 2. **样式层与前端交互中心接管文案与图标展示**：
    - 现代代码编辑器（如 GitHub, VS Code, Notion）的代码块复制按钮**普遍仅显示图标**，不需要固定的“复制”汉字！
@@ -400,13 +437,13 @@
 
 ### 2.3 方案对比矩阵与架构裁决
 
-| 评估维度 | 方案 A：Rust 内核感知 Locale | 方案 B：语言中立语义 DOM + 前端解耦挂载 | 优胜方案 |
-| :--- | :--- | :--- | :---: |
-| **缓存复用效率** | 🔴 差（按 Locale 分叉，切换语言缓存全废） | 🟢 极佳（内容哈希唯一对应 HTML，全局 100% 复用） | **方案 B** |
-| **历史消息切换表现** | 🔴 灾难（需异步遍历重绘全部历史消息） | 🟢 瞬时（纯 CSS / 前端 DOM 属性响应，0 耗时） | **方案 B** |
-| **多端/多窗口协同** | 🔴 冲突（全局状态冲突，并发请求易串味） | 🟢 天然隔离（底层纯无状态，各端按本端渲染） | **方案 B** |
-| **字典维护成本** | 🔴 双倍（Rust + TS 维护两套字典与映射） | 🟢 单一真理源（所有文案 100% 收敛在前端字典） | **方案 B** |
-| **反过度设计红线** | 🔴 违规（在 Rust 塞入大量本地化框架） | 🟢 合规（Rust 仅做结构化解析，保持极致精简） | **方案 B** |
+| 评估维度             | 方案 A：Rust 内核感知 Locale              | 方案 B：语言中立语义 DOM + 前端解耦挂载          |  优胜方案  |
+| :------------------- | :---------------------------------------- | :----------------------------------------------- | :--------: |
+| **缓存复用效率**     | 🔴 差（按 Locale 分叉，切换语言缓存全废） | 🟢 极佳（内容哈希唯一对应 HTML，全局 100% 复用） | **方案 B** |
+| **历史消息切换表现** | 🔴 灾难（需异步遍历重绘全部历史消息）     | 🟢 瞬时（纯 CSS / 前端 DOM 属性响应，0 耗时）    | **方案 B** |
+| **多端/多窗口协同**  | 🔴 冲突（全局状态冲突，并发请求易串味）   | 🟢 天然隔离（底层纯无状态，各端按本端渲染）      | **方案 B** |
+| **字典维护成本**     | 🔴 双倍（Rust + TS 维护两套字典与映射）   | 🟢 单一真理源（所有文案 100% 收敛在前端字典）    | **方案 B** |
+| **反过度设计红线**   | 🔴 违规（在 Rust 塞入大量本地化框架）     | 🟢 合规（Rust 仅做结构化解析，保持极致精简）     | **方案 B** |
 
 > **权威裁决**：
 > 采用 **方案 B（语言中立语义 DOM + 前端解耦挂载）**。Rust 内核坚决不做多语言字符串拼接，彻底将本地化呈现权交由前端表现层。
@@ -418,6 +455,7 @@
 ### 3.1 Windows 原生层现状：无边框自定义渲染 vs 原生系统构件
 
 在 `apps/agent-workbench/src-tauri/tauri.conf.json` 中：
+
 ```json
 "app": {
   "windows": [
@@ -430,12 +468,14 @@
   ]
 }
 ```
+
 - **窗口装饰**：`"decorations": false` 表明客户端采用**全自定义无边框窗口（Frameless Window）**。窗口标题栏、最小化/最大化/关闭按钮均由前端 TSX 自绘，完全不存在 Windows 原生标题栏文字本地化问题；
 - **系统菜单与托盘**：当前代码库中**尚未启用原生系统菜单栏（Menu）与系统托盘（TrayIcon）**（`rg "tray" src-tauri` 为 0 结果）。上下文右键菜单均为前端 React 自研的 `SidebarContextMenus` 与 `LayerStack`，完全受前端 i18n 控制。
 
 ### 3.2 系统托盘与原生菜单的未来支持策略（前瞻防御）
 
 若后续功能迭代需要引入 Windows 原生托盘（TrayIcon）或原生应用菜单，必须遵循以下策略：
+
 1. **Windows 原生菜单的动态更新 API**：
    - Tauri v2 原生支持 `tray.set_tooltip(...)` 与 `menu_item.set_text(...)`；
    - **不能写死中文**：Rust 托盘模块应监听前端发出的 `i18n://language-changed` 事件，接收前端下发的轻量级系统级文案字典（如 `tray.tooltip`, `tray.quit`），调用 Win32 原生菜单 API 进行就地文本刷新。
@@ -443,6 +483,7 @@
 ### 3.3 原生文件选择对话框（IFileDialog）本地化勘察
 
 当前客户端文件选择统一走官方插件 `tauri-plugin-dialog`。
+
 - **Windows OS 底层行为**：
   - Windows 原生通用对话框（`IFileDialog`）的系统按钮（“打开”、“取消”、“查找范围”等）会**自动跟随 Windows 操作系统本身的显示语言**本地化，开发者无需干预；
 - **缺陷暴露点：标题与过滤器写死中文**：
@@ -491,7 +532,9 @@
 ### 4.1 错误协议标准化：统一错误码 + 结构化参数模型
 
 #### 现状断层修复
+
 将 `CoreError` 与 `CrishErrorPayload` 升级为具备**结构化参数**的标准协议：
+
 ```rust
 // 改造后的 CrishErrorPayload 契约
 pub struct CrishErrorPayload {
@@ -510,13 +553,16 @@ pub struct CrishErrorPayload {
 ```
 
 #### 前端 `error-translation.ts` 翻译收口
+
 前端根据 `code` 查字典，并将 `params` 传入模板插值：
+
 ```ts
 // 字典定义
 "error.session.not_found": "会话不存在或已被删除（ID: {sessionId}）",
 // en-US
 "error.session.not_found": "Session not found or has been deleted (ID: {sessionId})",
 ```
+
 当 `payload.params` 存在时，通过 `t('error.' + payload.code, payload.params)` 动态渲染本地化消息；仅当字典未命中时才回退至英文 `payload.message`。
 
 ---
@@ -528,7 +574,7 @@ pub struct CrishErrorPayload {
      ```rust
      // 改造前：
      out.push_str("<button type=\"button\" class=\"md-code-copy\" title=\"复制\" aria-label=\"复制代码\">复制</button>");
-     
+
      // 改造后（语言中立）：
      out.push_str("<button type=\"button\" class=\"md-code-copy\" data-action=\"copy\" aria-label=\"Copy code\"></button>");
      ```
@@ -536,7 +582,7 @@ pub struct CrishErrorPayload {
      ```rust
      // 改造前：
      "<div class=\"md-table-wrap\" role=\"region\" aria-label=\"表格\"><table class=\"md-table\">"
-     
+
      // 改造后（语言中立）：
      "<div class=\"md-table-wrap\" role=\"region\" aria-label=\"Data table\"><table class=\"md-table\">"
      ```
@@ -544,7 +590,7 @@ pub struct CrishErrorPayload {
    ```ts
    // 改造前：
    if (element.matches('.md-table-wrap, [role="region"][aria-label="表格"]'))
-   
+
    // 改造后：
    if (element.matches('.md-table-wrap'))
    ```
@@ -557,6 +603,7 @@ pub struct CrishErrorPayload {
 ### 4.3 多端推送系统（Push Notification）的多语言设计
 
 对于推送通知（`push/copy.rs`），必须支持用户设备当前语言：
+
 1. **方案一：推送载荷解耦（推荐）**：
    - WS 直推（到手机端 Web/App）时，`PushMessage` 携带结构化 `scene` 与 `payload`，由手机端客户端根据手机本地语言自行调用字典渲染文案；
 2. **方案二：服务侧双语字典**：
@@ -575,6 +622,7 @@ pub struct CrishErrorPayload {
 ### 4.4 系统提示词（Prompt）注入层的分级国际化策略
 
 Prompt 直接影响大模型的认知状态与输出语言：
+
 1. **L0/L1 协议性提示词（如检查点、角色约束、时间注入）**：
    - 协议行前缀（如 `CHECKPOINT: {...}`）必须使用 ASCII 英文，防止模型解析失败；
    - 约束说明文字：改造 `checkpoint_prompt_section` 与 `subagent_session_injections`，使其接收会话级 `locale`（通过 `options.assembly.locale` 从前端透传），根据语言分别注入对应的中/英文提示词模板（对齐 `SYSTEM_CORE_PROMPT` 的双语模式）；
@@ -591,26 +639,26 @@ Prompt 直接影响大模型的认知状态与输出语言：
 
 ## 五、勘察清单与受影响源码全景对照表
 
-| 序号 | 所属模块 / Crate | 文件路径与行号 | 现存硬编码内容 / 缺陷 | 危害级别 | 建议改造方案 |
-| :---: | :--- | :--- | :--- | :---: | :--- |
-| **1** | `conex-markdown` | [`renderer.rs:1312`](file:///c:/Software/conex/crates/conex-markdown/src/renderer.rs#L1312) | `<button ... title="复制" aria-label="复制代码">复制</button>` | 🔴 严重 | 改为语言中立结构，文案由前端接管 |
-| **2** | `conex-markdown` | [`renderer.rs:619`](file:///c:/Software/conex/crates/conex-markdown/src/renderer.rs#L619) | `aria-label="表格"` | 🔴 严重 | 改为 `aria-label="Data table"`，移除前端脏依赖 |
-| **3** | `crish-desktop` | [`unitReconciler.ts:45`](file:///c:/Software/conex/apps/crish-desktop/src/api/markdown/unitReconciler.ts#L45) | `element.matches('... [aria-label="表格"]')` | 🔴 致命 | 移除对中文属性的选择器依赖，仅保留 `.md-table-wrap` |
-| **4** | `crish-desktop` | [`MarkdownDocumentView.tsx:168`](file:///c:/Software/conex/apps/crish-desktop/src/components/markdown/MarkdownDocumentView.tsx#L168) | `copyBtn.textContent = '✓ 已复制'` | 🟠 中等 | 接入 `useI18n` 动态获取 `t('markdown.copied')` |
-| **5** | `crish-desktop` | [`useChatMessageState.ts:233,239`](file:///c:/Software/conex/apps/crish-desktop/src/components/chat-message-list/useChatMessageState.ts#L233) | `copyBtn.textContent = '已复制'`, `toast.show('复制失败')` | 🟠 中等 | 接入 `t('markdown.copied')`, `t('markdown.copyFailed')` |
-| **6** | `session-loop` | [`no_tool_calls.rs:95-98`](file:///c:/Software/conex/crates/session-loop/src/loop/handlers/no_tool_calls.rs#L95-L98) | `【系统自动推进】：你刚刚在回复中表达了执行动作的意图...` | 🔴 严重 | 针对会话 `locale` 提供中/英双语自愈 Nudge 模板 |
-| **7** | `session-loop` | [`checkpoint.rs:16-21`](file:///c:/Software/conex/crates/session-loop/src/checkpoint.rs#L16-L21) | `checkpoint_prompt_section` 纯中文注入 | 🟠 中等 | 提取中英双语模板，按需加载 |
-| **8** | `src-tauri` | [`run_resume.rs:191-200`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/run/run_resume.rs#L191-L200) | `[目标模式 · 系统指令]...` 全中文提示 | 🔴 严重 | 支持根据会话 `locale` 渲染英文续写 Prompt |
-| **9** | `orchestrator` | [`goal_state.rs:506-520`](file:///c:/Software/conex/crates/orchestrator/src/goal_state.rs#L506-L520) | `is_pseudo_task` 仅过滤中文，`reply_looks_goal_done` 仅判 `"目标已完成"` | 🔴 严重 | 扩充英文前缀识别（`Summary of this round` 等）与完成词 |
-| **10** | `src-tauri` | [`engine_build.rs:1311-1321`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/engine_build.rs#L1311-L1321) | `SUBAGENT_ROLE_CONSTRAINT_CONTENT` 写死中文 | 🟠 中等 | 改为中英双语常量，按子代理配置分流 |
-| **11** | `agent-tools` | [`subagent_inject.rs:106-234`](file:///c:/Software/conex/crates/agent-tools/src/subagent_inject.rs#L106-L234) | `started_at_section`, `revert_caution` 等全中文 Prompt | 🟠 中等 | 增加中英双语支持，消除英文模型下的上下文撕裂 |
-| **12** | `agent-tools` | [`explore_quota.rs:226-234`](file:///c:/Software/conex/crates/agent-tools/src/explore_quota.rs#L226-L234) | `探索类 agent 未获主 agent 分配的文档配额凭证...` | 🟠 中等 | 统一为标准结构化错误码与英文回退 |
-| **13** | `agent-tools` | [`guard.rs:81-100`](file:///c:/Software/conex/crates/agent-tools/src/tools/subagent/guard.rs#L81-L100) | `递归深度超限...`、`你没有创建子 Agent 的能力...` | 🟠 中等 | 统一为标准结构化错误码与英文回退 |
-| **14** | `src-tauri` | [`push/copy.rs:61-197`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/push/copy.rs#L61-L197) | 17 种场景推送标题与正文全写死中文 | 🔴 严重 | 设备注册支持 `locale`，推送文案增加英文模板支持 |
-| **15** | `src-tauri` | [`multi_device_network.rs:107-119`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/multi_device_network.rs#L107-L119) | 网络环境引导文案 `hint_for` 写死中文 | 🔴 严重 | 仅下发枚举/状态码，文案交由前端字典按 `kind` 渲染 |
-| **16** | `conex-types` | [`error.rs:225-250`](file:///c:/Software/conex/crates/conex-types/src/error.rs#L225-L250) | `CRISH_ERROR_REGISTRY` 102 码 title 全为中文 | 🔴 严重 | 统一改为 i18n 键（如 `error.config.invalid.title`）与英文回退 |
-| **17** | `crish-desktop` | [`error-translation.ts:30`](file:///c:/Software/conex/apps/crish-desktop/src/utils/error-translation.ts#L30) | `readonly message: string` 假定 Rust 已本地化 | 🔴 严重 | 接入 `params` 插值机制，优先通过 i18n 字典格式化 |
-| **18** | `crish-desktop` | [`openDirectoryDialog.ts:35`](file:///c:/Software/conex/apps/crish-desktop/src/api/openDirectoryDialog.ts#L35) | 默认标题 `'选择文件夹'` 与调用方硬编码中文 | 🟡 一般 | 改由调用方传入 `t('dialog.selectFolder')` 动态文案 |
+|  序号  | 所属模块 / Crate | 文件路径与行号                                                                                                                                | 现存硬编码内容 / 缺陷                                                    | 危害级别 | 建议改造方案                                                  |
+| :----: | :--------------- | :-------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------- | :------: | :------------------------------------------------------------ |
+| **1**  | `conex-markdown` | [`renderer.rs:1312`](file:///c:/Software/conex/crates/conex-markdown/src/renderer.rs#L1312)                                                   | `<button ... title="复制" aria-label="复制代码">复制</button>`           | 🔴 严重  | 改为语言中立结构，文案由前端接管                              |
+| **2**  | `conex-markdown` | [`renderer.rs:619`](file:///c:/Software/conex/crates/conex-markdown/src/renderer.rs#L619)                                                     | `aria-label="表格"`                                                      | 🔴 严重  | 改为 `aria-label="Data table"`，移除前端脏依赖                |
+| **3**  | `crish-desktop`  | [`unitReconciler.ts:45`](file:///c:/Software/conex/apps/crish-desktop/src/api/markdown/unitReconciler.ts#L45)                                 | `element.matches('... [aria-label="表格"]')`                             | 🔴 致命  | 移除对中文属性的选择器依赖，仅保留 `.md-table-wrap`           |
+| **4**  | `crish-desktop`  | [`MarkdownDocumentView.tsx:168`](file:///c:/Software/conex/apps/crish-desktop/src/components/markdown/MarkdownDocumentView.tsx#L168)          | `copyBtn.textContent = '✓ 已复制'`                                       | 🟠 中等  | 接入 `useI18n` 动态获取 `t('markdown.copied')`                |
+| **5**  | `crish-desktop`  | [`useChatMessageState.ts:233,239`](file:///c:/Software/conex/apps/crish-desktop/src/components/chat-message-list/useChatMessageState.ts#L233) | `copyBtn.textContent = '已复制'`, `toast.show('复制失败')`               | 🟠 中等  | 接入 `t('markdown.copied')`, `t('markdown.copyFailed')`       |
+| **6**  | `session-loop`   | [`no_tool_calls.rs:95-98`](file:///c:/Software/conex/crates/session-loop/src/loop/handlers/no_tool_calls.rs#L95-L98)                          | `【系统自动推进】：你刚刚在回复中表达了执行动作的意图...`                | 🔴 严重  | 针对会话 `locale` 提供中/英双语自愈 Nudge 模板                |
+| **7**  | `session-loop`   | [`checkpoint.rs:16-21`](file:///c:/Software/conex/crates/session-loop/src/checkpoint.rs#L16-L21)                                              | `checkpoint_prompt_section` 纯中文注入                                   | 🟠 中等  | 提取中英双语模板，按需加载                                    |
+| **8**  | `src-tauri`      | [`run_resume.rs:191-200`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/run/run_resume.rs#L191-L200)                           | `[目标模式 · 系统指令]...` 全中文提示                                    | 🔴 严重  | 支持根据会话 `locale` 渲染英文续写 Prompt                     |
+| **9**  | `orchestrator`   | [`goal_state.rs:506-520`](file:///c:/Software/conex/crates/orchestrator/src/goal_state.rs#L506-L520)                                          | `is_pseudo_task` 仅过滤中文，`reply_looks_goal_done` 仅判 `"目标已完成"` | 🔴 严重  | 扩充英文前缀识别（`Summary of this round` 等）与完成词        |
+| **10** | `src-tauri`      | [`engine_build.rs:1311-1321`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/engine_build.rs#L1311-L1321)                       | `SUBAGENT_ROLE_CONSTRAINT_CONTENT` 写死中文                              | 🟠 中等  | 改为中英双语常量，按子代理配置分流                            |
+| **11** | `agent-tools`    | [`subagent_inject.rs:106-234`](file:///c:/Software/conex/crates/agent-tools/src/subagent_inject.rs#L106-L234)                                 | `started_at_section`, `revert_caution` 等全中文 Prompt                   | 🟠 中等  | 增加中英双语支持，消除英文模型下的上下文撕裂                  |
+| **12** | `agent-tools`    | [`explore_quota.rs:226-234`](file:///c:/Software/conex/crates/agent-tools/src/explore_quota.rs#L226-L234)                                     | `探索类 agent 未获主 agent 分配的文档配额凭证...`                        | 🟠 中等  | 统一为标准结构化错误码与英文回退                              |
+| **13** | `agent-tools`    | [`guard.rs:81-100`](file:///c:/Software/conex/crates/agent-tools/src/tools/subagent/guard.rs#L81-L100)                                        | `递归深度超限...`、`你没有创建子 Agent 的能力...`                        | 🟠 中等  | 统一为标准结构化错误码与英文回退                              |
+| **14** | `src-tauri`      | [`push/copy.rs:61-197`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/push/copy.rs#L61-L197)                                   | 17 种场景推送标题与正文全写死中文                                        | 🔴 严重  | 设备注册支持 `locale`，推送文案增加英文模板支持               |
+| **15** | `src-tauri`      | [`multi_device_network.rs:107-119`](file:///c:/Software/conex/apps/agent-workbench/src-tauri/src/multi_device_network.rs#L107-L119)           | 网络环境引导文案 `hint_for` 写死中文                                     | 🔴 严重  | 仅下发枚举/状态码，文案交由前端字典按 `kind` 渲染             |
+| **16** | `conex-types`    | [`error.rs:225-250`](file:///c:/Software/conex/crates/conex-types/src/error.rs#L225-L250)                                                     | `CRISH_ERROR_REGISTRY` 102 码 title 全为中文                             | 🔴 严重  | 统一改为 i18n 键（如 `error.config.invalid.title`）与英文回退 |
+| **17** | `crish-desktop`  | [`error-translation.ts:30`](file:///c:/Software/conex/apps/crish-desktop/src/utils/error-translation.ts#L30)                                  | `readonly message: string` 假定 Rust 已本地化                            | 🔴 严重  | 接入 `params` 插值机制，优先通过 i18n 字典格式化              |
+| **18** | `crish-desktop`  | [`openDirectoryDialog.ts:35`](file:///c:/Software/conex/apps/crish-desktop/src/api/openDirectoryDialog.ts#L35)                                | 默认标题 `'选择文件夹'` 与调用方硬编码中文                               | 🟡 一般  | 改由调用方传入 `t('dialog.selectFolder')` 动态文案            |
 
 ---
 
@@ -619,6 +667,7 @@ Prompt 直接影响大模型的认知状态与输出语言：
 底层渲染引擎与 IPC 跨端通信是国际化最容易被忽视的“暗礁”。若不治理，即使前端 React 页面将文字替换得再彻底，用户在代码复制、报错弹窗、目标推进、子代理交互以及手机通知中依然会频繁看到写死的中文，造成极其低质的体验。
 
 **下一阶段（Phase 2: 分维方案设计）的关键行动项**：
+
 1. **渲染层解耦方案**：制定 `conex-markdown` 纯净语言中立输出标准，彻底剥离 HTML 中的中文字符，同步重构 `unitReconciler.ts` 清理历史包袱；
 2. **IPC 错误参数化改造案**：为 `CrishErrorPayload` 补充 `params` 字段，使 Rust 仅需输出结构化键值对，由前端字典负责最终多语言格式化；
 3. **提示词中立化与分流策略**：梳理内核中注入大模型的所有 System Prompt，确立按会话 `locale` 动态选择中/英模板的规范，防止英文会话被中文系统提示词污染；
