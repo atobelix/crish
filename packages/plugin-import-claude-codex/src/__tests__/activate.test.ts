@@ -2,7 +2,11 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import { activate, SESSION_START_USAGE_NOTE, type PluginActivateApi } from '../activate';
+import {
+  activate,
+  SESSION_START_USAGE_NOTE,
+  type PluginActivateApi,
+} from '../activate';
 import { manifest } from '../manifest';
 import { parseClaudeCodeTool } from '../tools';
 import type { SessionImportPayload } from '../types';
@@ -10,11 +14,18 @@ import type { SessionImportPayload } from '../types';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function makeFakeApi() {
-  const log = vi.fn<(level: string, message: string, metadata?: Record<string, unknown>) => void>();
+  const log =
+    vi.fn<
+      (
+        level: string,
+        message: string,
+        metadata?: Record<string, unknown>
+      ) => void
+    >();
   const observe = vi.fn<
     (
       event: 'session.start',
-      handler: (payload: { sessionId?: string }) => void | Promise<void>,
+      handler: (payload: { sessionId?: string }) => void | Promise<void>
     ) => unknown
   >(() => () => undefined);
   const api: PluginActivateApi = { observe, log };
@@ -49,7 +60,7 @@ describe('插件激活（激活 → 观察注册 → 工具调用 → 载荷返�
 
     const content = readFileSync(
       join(__dirname, '__fixtures__/claude-code-sample.jsonl'),
-      'utf8',
+      'utf8'
     );
     const payload: SessionImportPayload = parseClaudeCodeTool({
       content,
@@ -60,7 +71,9 @@ describe('插件激活（激活 → 观察注册 → 工具调用 → 载荷返�
     expect(payload.source).toBe('claude-code');
     expect(payload.sessionId).toBe('e2e-1');
     expect(payload.messages).toHaveLength(3);
-    expect(payload.messages[1]?.toolCalls?.[0]?.name).toBe('Bash');
+    // 彻底排除外部工具调用
+    expect(payload.messages[1]?.toolCalls).toBeUndefined();
+    expect(payload.messages[1]?.thinking).toBeTruthy();
     // 中立载荷：消息为 ImportMessageDraft（role 而非 sender）
     expect(payload.messages[0]?.role).toBe('user');
     expect('sender' in payload.messages[0]!).toBe(false);

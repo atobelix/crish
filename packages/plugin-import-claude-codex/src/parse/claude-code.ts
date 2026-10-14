@@ -1,30 +1,31 @@
 /**
  * 解析 Claude Code 会话 JSONL 为规范化 turns（纯函数，无 FS、不记录消息正文）。
- *
- * 格式参考：reference/claudeCode/utils/sessionStorage*.ts、types/logs.ts
- * 本文件由宿主 apps/crish-desktop/src/api/import/parseClaudeCodeJsonl.ts 迁入，
- * 输出与迁移前实现保持字节级一致（fixture 复用既有测试数据）。
+ * 严格过滤系统提示词、环境样板与本地 CLI 控制命令，彻底不导入外部工具调用，仅保留用户提问、AI 思考与回复正文。
  */
 
-import type { NormalizedImportTurn, ParsedExternalConversation } from '../types';
+import type {
+  NormalizedImportTurn,
+  ParsedExternalConversation,
+} from '../types';
+import {
+  isMeaninglessNoise,
+  isPureBoilerplate,
+  isSystemPromptOrAgentInstructions,
+  stripBoilerplate,
+} from '../boilerplate';
+import {
+  pushImage,
+  pushText,
+  pushThinking,
+  takeImage,
+  turnHasContent,
+} from './turnBuild';
 
 export type ParseClaudeCodeOptions = {
   /** 来源会话 id 兜底（文件名主干）。 */
   sourceSessionId?: string;
   /** 最大处理行数（默认不限）。 */
   maxLines?: number;
-};
-
-type ContentBlock = {
-  type?: string;
-  text?: string;
-  thinking?: string;
-  id?: string;
-  name?: string;
-  input?: unknown;
-  tool_use_id?: string;
-  content?: unknown;
-  is_error?: boolean;
 };
 
 function asRecord(v: unknown): Record<string, unknown> | null {
@@ -48,68 +49,62 @@ function contentToText(content: unknown): string {
   for (const b of content) {
     const block = asRecord(b);
     if (!block) continue;
-    if (block.type === 'text' && typeof block.text === 'string') parts.push(block.text);
+    if (block.type === 'text' && typeof block.text === 'string')
+      parts.push(block.text);
   }
   return parts.join('\n');
 }
 
-function contentToThinking(content: unknown): string | undefined {
-  if (!Array.isArray(content)) return undefined;
-  const parts: string[] = [];
-  for (const b of content) {
-    const block = asRecord(b);
-    if (!block) continue;
-    if (block.type === 'thinking' && typeof block.thinking === 'string') {
-      parts.push(block.thinking);
-    }
-  }
-  return parts.length ? parts.join('\n') : undefined;
-}
-
-function extractToolUses(content: unknown): NonNullable<NormalizedImportTurn['toolCalls']> {
-  if (!Array.isArray(content)) return [];
-  const out: NonNullable<NormalizedImportTurn['toolCalls']> = [];
-  for (const b of content) {
-    const block = b as ContentBlock;
-    if (block?.type !== 'tool_use') continue;
-    const id = typeof block.id === 'string' ? block.id : `tool-${out.length}`;
-    const name = typeof block.name === 'string' ? block.name : 'unknown';
-    let args: string | undefined;
-    if (block.input != null) {
-      try {
-        args = typeof block.input === 'string' ? block.input : JSON.stringify(block.input);
-      } catch {
-        args = String(block.input);
-      }
-    }
-    out.push({ id, name, arguments: args, status: 'running' });
-  }
-  return out;
-}
-
-function extractToolResults(
+/** 按内容块原文顺序写入同一条助手轮（思考 / 正文 / 图片；彻底跳过工具调用）。 */
+function absorbAssistantContent(
+  turn: NormalizedImportTurn,
   content: unknown,
-): Array<{ id: string; output: string; isError: boolean }> {
-  if (!Array.isArray(content)) return [];
-  const out: Array<{ id: string; output: string; isError: boolean }> = [];
-  for (const b of content) {
-    const block = b as ContentBlock;
-    if (block?.type !== 'tool_result') continue;
-    const id = typeof block.tool_use_id === 'string' ? block.tool_use_id : '';
-    if (!id) continue;
-    let output = '';
-    if (typeof block.content === 'string') output = block.content;
-    else if (Array.isArray(block.content)) output = contentToText(block.content);
-    else if (block.content != null) {
-      try {
-        output = JSON.stringify(block.content);
-      } catch {
-        output = String(block.content);
-      }
+  lineCount: number
+): void {
+  const visit = (block: Record<string, unknown>, index: number) => {
+    const type = typeof block.type === 'string' ? block.type : '';
+    if (type === 'thinking' && typeof block.thinking === 'string') {
+      pushThinking(turn, block.thinking);
+      return;
     }
-    out.push({ id, output, isError: Boolean(block.is_error) });
+    if (type === 'redacted_thinking') {
+      pushThinking(turn, '思考内容未保留');
+      return;
+    }
+    if (type === 'text' && typeof block.text === 'string') {
+      const cleaned = stripBoilerplate(block.text);
+      if (cleaned && !isPureBoilerplate(cleaned)) {
+        pushText(turn, cleaned);
+      }
+      return;
+    }
+    if (type === 'tool_use') {
+      // 裁决：导入上下文时彻底不导入外部工具调用，杜绝外部软件的私有命令污染 Crish 内部 Agent 的上下文
+      return;
+    }
+    if (
+      type === 'image' ||
+      block.source != null ||
+      typeof block.image_url === 'string'
+    ) {
+      const taken = takeImage(block, `cc-img-${lineCount}-${index}`);
+      if (taken && 'image' in taken) pushImage(turn, taken.image);
+      else if (taken && 'omitted' in taken)
+        pushText(turn, '图片过大，预览未嵌入');
+    }
+  };
+
+  if (typeof content === 'string') {
+    const cleaned = stripBoilerplate(content);
+    if (cleaned && !isPureBoilerplate(cleaned)) {
+      pushText(turn, cleaned);
+    }
+  } else if (Array.isArray(content)) {
+    content.forEach((b, index) => {
+      const block = asRecord(b);
+      if (block) visit(block, index);
+    });
   }
-  return out;
 }
 
 function isToolResultOnlyUser(content: unknown): boolean {
@@ -122,12 +117,10 @@ function isToolResultOnlyUser(content: unknown): boolean {
  */
 export function parseClaudeCodeJsonl(
   content: string,
-  options: ParseClaudeCodeOptions = {},
+  options: ParseClaudeCodeOptions = {}
 ): ParsedExternalConversation {
   const warnings: string[] = [];
   const turns: NormalizedImportTurn[] = [];
-  // 待挂载的工具输出（按 tool_use id 索引），就近挂到最近 assistant 或合成轮。
-  const pendingResults = new Map<string, { output: string; isError: boolean }>();
   let customTitle: string | undefined;
   let aiTitle: string | undefined;
   let summary: string | undefined;
@@ -139,8 +132,7 @@ export function parseClaudeCodeJsonl(
   let skippedLineCount = 0;
   const maxLines = options.maxLines ?? Number.POSITIVE_INFINITY;
 
-  // 仍有打开工具调用的 assistant 轮索引
-  const openToolAssistants: number[] = [];
+  let canMergeAssistant = false;
 
   const lines = content.split(/\r?\n/);
   for (const line of lines) {
@@ -163,23 +155,65 @@ export function parseClaudeCodeJsonl(
     const type = typeof row.type === 'string' ? row.type : '';
 
     if (type === 'custom-title' && typeof row.customTitle === 'string') {
-      customTitle = row.customTitle;
+      if (!isSystemPromptOrAgentInstructions(row.customTitle)) {
+        customTitle = row.customTitle;
+      }
       continue;
     }
     if (type === 'ai-title' && typeof row.aiTitle === 'string') {
-      aiTitle = row.aiTitle;
+      if (!isSystemPromptOrAgentInstructions(row.aiTitle)) {
+        aiTitle = row.aiTitle;
+      }
       continue;
     }
     if (type === 'summary' && typeof row.summary === 'string') {
-      summary = row.summary;
+      if (!isSystemPromptOrAgentInstructions(row.summary)) {
+        summary = row.summary;
+      }
       continue;
     }
     if (type === 'last-prompt' && typeof row.lastPrompt === 'string') {
-      lastPrompt = row.lastPrompt;
+      if (!isSystemPromptOrAgentInstructions(row.lastPrompt)) {
+        lastPrompt = row.lastPrompt;
+      }
       continue;
     }
 
-    // 仅元数据 / 非会话行
+    // 仅元数据 / 系统行处理
+    if (type === 'system') {
+      const subtype = typeof row.subtype === 'string' ? row.subtype : '';
+      if (subtype === 'local_command') {
+        // 彻底过滤本地控制命令（如 /model 等），避免残留空白气泡
+        skippedLineCount++;
+        continue;
+      }
+
+      const visible = subtype === 'api_error' || subtype === 'informational';
+      const sysText = typeof row.content === 'string' ? row.content.trim() : '';
+      const cleanedSys = sysText ? stripBoilerplate(sysText) : '';
+
+      if (visible && cleanedSys && !isPureBoilerplate(cleanedSys)) {
+        const ts = parseTs(row.timestamp);
+        const uuid =
+          typeof row.uuid === 'string' ? row.uuid : `cc-sys-${lineCount}`;
+        const prev = turns[turns.length - 1];
+        const target: NormalizedImportTurn =
+          prev && prev.role === 'assistant'
+            ? prev
+            : {
+                id: uuid,
+                role: 'assistant',
+                timestampMs: ts || Date.now(),
+              };
+        pushText(target, cleanedSys);
+        if (target !== prev) turns.push(target);
+        canMergeAssistant = false;
+        continue;
+      }
+      skippedLineCount++;
+      continue;
+    }
+
     if (
       type === 'file-history-snapshot' ||
       type === 'attachment' ||
@@ -191,8 +225,7 @@ export function parseClaudeCodeJsonl(
       type === 'mode' ||
       type === 'worktree-state' ||
       type === 'content-replacement' ||
-      type === 'queue-operation' ||
-      type === 'system'
+      type === 'queue-operation'
     ) {
       skippedLineCount++;
       continue;
@@ -209,7 +242,8 @@ export function parseClaudeCodeJsonl(
     }
 
     if (!cwd && typeof row.cwd === 'string') cwd = row.cwd;
-    if (!sessionId && typeof row.sessionId === 'string') sessionId = row.sessionId;
+    if (!sessionId && typeof row.sessionId === 'string')
+      sessionId = row.sessionId;
 
     const ts = parseTs(row.timestamp);
     if (createdAtMs == null && ts > 0) createdAtMs = ts;
@@ -223,96 +257,111 @@ export function parseClaudeCodeJsonl(
     const uuid = typeof row.uuid === 'string' ? row.uuid : `cc-${lineCount}`;
 
     if (type === 'user') {
-      // 工具结果 → 挂到先前 assistant 的 toolCalls
+      canMergeAssistant = false;
+      // 纯工具执行结果行不导入为用户提问
       if (isToolResultOnlyUser(contentField)) {
-        const results = extractToolResults(contentField);
-        for (const r of results) {
-          pendingResults.set(r.id, { output: r.output, isError: r.isError });
-          // 从最新开始尝试挂载
-          for (let i = openToolAssistants.length - 1; i >= 0; i--) {
-            const turn = turns[openToolAssistants[i]!];
-            if (!turn?.toolCalls) continue;
-            const tc = turn.toolCalls.find((t) => t.id === r.id);
-            if (tc) {
-              tc.output = r.output;
-              tc.isError = r.isError;
-              tc.status = r.isError ? 'error' : 'success';
-              break;
-            }
-          }
-        }
-        continue;
-      }
-
-      const text = contentToText(contentField);
-      // 纯字符串 content 已覆盖
-      if (!text.trim()) {
-        // 可能混合 tool_result + text —— 先挂结果再保留文本
-        const results = extractToolResults(contentField);
-        for (const r of results) {
-          pendingResults.set(r.id, { output: r.output, isError: r.isError });
-        }
-        if (!text.trim() && results.length) continue;
-      }
-      if (!text.trim()) {
         skippedLineCount++;
         continue;
       }
-      if (!lastPrompt) lastPrompt = text.trim().slice(0, 200);
-      turns.push({
+
+      const rawUserText = contentToText(contentField);
+      const cleaned = stripBoilerplate(rawUserText);
+      const isNoise =
+        !cleaned.trim() ||
+        isMeaninglessNoise(cleaned) ||
+        isSystemPromptOrAgentInstructions(cleaned);
+
+      const userTurn: NormalizedImportTurn = {
         id: uuid,
         role: 'user',
-        text,
         timestampMs: ts || Date.now(),
-      });
+      };
+      if (!isNoise) pushText(userTurn, cleaned);
+
+      if (Array.isArray(contentField)) {
+        contentField.forEach((b, index) => {
+          const block = asRecord(b);
+          if (
+            !block ||
+            block.type === 'tool_result' ||
+            block.type === 'tool_use'
+          )
+            return;
+          if (block.type === 'image' || block.source != null) {
+            const taken = takeImage(block, `cc-user-img-${lineCount}-${index}`);
+            if (taken && 'image' in taken) pushImage(userTurn, taken.image);
+            else if (taken && 'omitted' in taken)
+              pushText(userTurn, '图片过大，预览未嵌入');
+          }
+        });
+      }
+
+      if (!turnHasContent(userTurn)) {
+        skippedLineCount++;
+        continue;
+      }
+
+      if (
+        userTurn.text &&
+        !lastPrompt &&
+        !isSystemPromptOrAgentInstructions(userTurn.text)
+      ) {
+        lastPrompt = userTurn.text.trim().slice(0, 200);
+      }
+      turns.push(userTurn);
       continue;
     }
 
-    // assistant
-    const text = contentToText(contentField);
-    const thinking = contentToThinking(contentField);
-    const toolCalls = extractToolUses(contentField);
-    for (const tc of toolCalls) {
-      const pending = pendingResults.get(tc.id);
-      if (pending) {
-        tc.output = pending.output;
-        tc.isError = pending.isError;
-        tc.status = pending.isError ? 'error' : 'success';
-        pendingResults.delete(tc.id);
-      }
-    }
-    if (!text.trim() && !thinking && toolCalls.length === 0) {
+    // 同一用户回合内连续的助手行合并成一条，彻底排除外部工具调用
+    const prev = turns[turns.length - 1];
+    const canMerge = canMergeAssistant && prev?.role === 'assistant';
+    const turn: NormalizedImportTurn = canMerge
+      ? prev!
+      : {
+          id: uuid,
+          role: 'assistant',
+          timestampMs: ts || Date.now(),
+        };
+
+    absorbAssistantContent(turn, contentField, lineCount);
+
+    if (!turnHasContent(turn)) {
       skippedLineCount++;
       continue;
     }
-    const turn: NormalizedImportTurn = {
-      id: uuid,
-      role: 'assistant',
-      timestampMs: ts || Date.now(),
-      ...(text.trim() ? { text } : {}),
-      ...(thinking ? { thinking } : {}),
-      ...(toolCalls.length ? { toolCalls } : {}),
-    };
-    turns.push(turn);
-    if (toolCalls.some((t) => t.status === 'running')) {
-      openToolAssistants.push(turns.length - 1);
+
+    if (turn !== prev) turns.push(turn);
+    canMergeAssistant = true;
+  }
+
+  const validTurns = turns.filter((t) => turnHasContent(t));
+
+  // 标题提取：若既有标题属于系统样板，跳过并提取第一条真实人类提问
+  let titleCandidate = customTitle || aiTitle || summary;
+  if (
+    titleCandidate &&
+    (isSystemPromptOrAgentInstructions(titleCandidate) ||
+      isPureBoilerplate(titleCandidate))
+  ) {
+    titleCandidate = undefined;
+  }
+
+  if (!titleCandidate) {
+    const firstHumanTurn = validTurns.find(
+      (t) =>
+        t.role === 'user' &&
+        t.text &&
+        !isSystemPromptOrAgentInstructions(t.text) &&
+        !isPureBoilerplate(t.text)
+    );
+    if (firstHumanTurn?.text) {
+      titleCandidate = firstHumanTurn.text.trim().slice(0, 200);
+    } else if (lastPrompt && !isSystemPromptOrAgentInstructions(lastPrompt)) {
+      titleCandidate = lastPrompt.trim().slice(0, 200);
     }
   }
 
-  // 应用剩余待挂载结果
-  for (const [id, r] of pendingResults) {
-    for (let i = turns.length - 1; i >= 0; i--) {
-      const tc = turns[i]?.toolCalls?.find((t) => t.id === id);
-      if (tc) {
-        tc.output = r.output;
-        tc.isError = r.isError;
-        tc.status = r.isError ? 'error' : 'success';
-        break;
-      }
-    }
-  }
-
-  const title = customTitle || aiTitle || summary || lastPrompt;
+  const title = titleCandidate;
 
   return {
     source: 'claude-code' as const,
@@ -320,7 +369,7 @@ export function parseClaudeCodeJsonl(
     ...(title ? { title } : {}),
     ...(cwd ? { cwd } : {}),
     ...(createdAtMs != null ? { createdAtMs } : {}),
-    turns,
+    turns: validTurns,
     warnings,
     lineCount,
     skippedLineCount,

@@ -50,7 +50,9 @@ describe('resolveDefaultImportRoots', () => {
 
   it('mungeProjectPath 符合 Claude 非字母数字规则', () => {
     expect(mungeProjectPath('C:\\Software\\conex')).toBe('C--Software-conex');
-    expect(mungeProjectPath('/Users/foo/my-project')).toBe('-Users-foo-my-project');
+    expect(mungeProjectPath('/Users/foo/my-project')).toBe(
+      '-Users-foo-my-project'
+    );
   });
 });
 
@@ -59,13 +61,59 @@ describe('轻量提取器', () => {
     const head =
       '{"type":"user","timestamp":"2026-01-01T00:00:00.000Z","message":{"role":"user","content":"Hello path join"}}\n';
     const tail = '{"type":"custom-title","customTitle":"My Title"}\n';
-    expect(extractJsonStringField(head, 'timestamp')).toBe('2026-01-01T00:00:00.000Z');
-    expect(extractClaudeTitlePreview(head, tail)).toBe('My Title');
-    expect(extractCodexTitlePreview('{"payload":{"content":[{"type":"input_text","text":"Do X"}]}}')).toBe(
-      'Do X',
+    expect(extractJsonStringField(head, 'timestamp')).toBe(
+      '2026-01-01T00:00:00.000Z'
     );
+    expect(extractClaudeTitlePreview(head, tail)).toBe('My Title');
+    expect(
+      extractCodexTitlePreview(
+        '{"payload":{"content":[{"type":"input_text","text":"Do X"}]}}'
+      )
+    ).toBe('Do X');
     expect(truncatePreview('a'.repeat(300)).endsWith('…')).toBe(true);
     expect(estimateLineCount('a\nb\nc\n', false)).toBe(3);
+  });
+
+  it('extractCodexTitlePreview 跳过 session_meta 中的 base_instructions（避免 You are Codex 污染）', () => {
+    const rolloutWithSystem = [
+      '{"timestamp":"2026-07-02T12:00:00.000Z","type":"session_meta","payload":{"meta":{"id":"123","base_instructions":"You are Codex, an agent based on GPT-6 by OpenAI."}}}',
+      '{"timestamp":"2026-07-02T12:00:01.000Z","type":"response_item","payload":{"type":"message","role":"developer","content":[{"type":"input_text","text":"Developer system prompt"}]}}',
+      '{"timestamp":"2026-07-02T12:00:02.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Write a unit test for parser"}]}}',
+    ].join('\n');
+    expect(extractCodexTitlePreview(rolloutWithSystem)).toBe(
+      'Write a unit test for parser'
+    );
+  });
+
+  it('extractCodexTitlePreview 首个用户消息为 environment_context 时继续寻找真实提问', () => {
+    const rolloutWithEnvContext = [
+      '{"timestamp":"2026-07-02T12:00:00.000Z","type":"session_meta","payload":{"meta":{"id":"123"}}}',
+      '{"timestamp":"2026-07-02T12:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>\\nCWD: /app\\nOS: windows\\n</environment_context>"}]}}',
+      '{"timestamp":"2026-07-02T12:00:02.000Z","type":"event_msg","payload":{"type":"item_completed","item":{"type":"UserMessage","message":"Optimize database queries"}}}',
+    ].join('\n');
+    expect(extractCodexTitlePreview(rolloutWithEnvContext)).toBe(
+      'Optimize database queries'
+    );
+  });
+
+  it('extractCodexTitlePreview 剥离消息中的 AGENTS.md 样板保留末尾真实用户提问', () => {
+    const rolloutWithBoilerplate = [
+      '{"timestamp":"2026-07-02T12:00:00.000Z","type":"session_meta","payload":{"meta":{"id":"123"}}}',
+      '{"timestamp":"2026-07-02T12:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"# AGENTS.md instructions for /repo\\n<INSTRUCTIONS>\\nDo not break CI\\n</INSTRUCTIONS>\\n\\nRefactor the auth middleware"}]}}',
+    ].join('\n');
+    expect(extractCodexTitlePreview(rolloutWithBoilerplate)).toBe(
+      'Refactor the auth middleware'
+    );
+  });
+
+  it('extractCodexTitlePreview 纯样板会话回退到 Codex session', () => {
+    const rolloutOnlyBoilerplate = [
+      '{"timestamp":"2026-07-02T12:00:00.000Z","type":"session_meta","payload":{"meta":{"id":"123","base_instructions":"You are Codex, an agent based on GPT-6."}}}',
+      '{"timestamp":"2026-07-02T12:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>OS: windows</environment_context>"}]}}',
+    ].join('\n');
+    expect(extractCodexTitlePreview(rolloutOnlyBoilerplate)).toBe(
+      'Codex session'
+    );
   });
 });
 
@@ -116,10 +164,10 @@ describe('detectExternalSessions', () => {
 
   it('joinImportPath 感知分隔符', () => {
     expect(joinImportPath('\\', 'C:\\Users\\a', '.claude', 'projects')).toBe(
-      'C:\\Users\\a\\.claude\\projects',
+      'C:\\Users\\a\\.claude\\projects'
     );
     expect(joinImportPath('/', '/home/a', '.codex', 'sessions')).toBe(
-      '/home/a/.codex/sessions',
+      '/home/a/.codex/sessions'
     );
   });
 });

@@ -1,13 +1,28 @@
 /**
  * 解析 OpenAI Codex CLI rollout JSONL 为规范化 turns（纯函数，无 FS、不记录消息正文）。
- *
- * 格式参考：reference/codex-cli/codex-rs/app-server/tests/common/rollout.rs、
- *          protocol/src/models.rs（ResponseItem、ContentItem）
- * 本文件由宿主 apps/crish-desktop/src/api/import/parseCodexRolloutJsonl.ts 迁入，
- * 输出与迁移前实现保持字节级一致（fixture 复用既有测试数据）。
+ * 严格过滤系统提示词、环境样板与本地 CLI 控制命令，彻底不导入外部工具调用，仅保留用户提问、AI 思考与回复正文。
  */
 
-import type { NormalizedImportTurn, ParsedExternalConversation } from '../types';
+import type {
+  ImportImageDraft,
+  NormalizedImportTurn,
+  ParsedExternalConversation,
+} from '../types';
+import {
+  isMeaninglessNoise,
+  isPureBoilerplate,
+  isSystemPromptOrAgentInstructions,
+  stripBoilerplate,
+} from '../boilerplate';
+import {
+  pushImage,
+  pushText,
+  pushThinking,
+  stringsFrom,
+  takeImage,
+  turnHasContent,
+} from './turnBuild';
+import { contentItemsToText } from './toolOutput';
 
 export type ParseCodexRolloutOptions = {
   sourceSessionId?: string;
@@ -21,63 +36,69 @@ function asRecord(v: unknown): Record<string, unknown> | null {
 }
 
 function parseTs(iso: unknown): number {
-  if (typeof iso === 'string') {
-    const t = Date.parse(iso);
-    if (!Number.isNaN(t)) return t;
-  }
-  return 0;
+  if (typeof iso !== 'string') return 0;
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? 0 : t;
 }
 
-function contentItemsToText(content: unknown, kinds: string[]): string {
-  if (!Array.isArray(content)) return '';
-  const parts: string[] = [];
-  for (const item of content) {
-    const r = asRecord(item);
+function collectCodexImages(
+  content: unknown,
+  lineCount: number
+): ImportImageDraft[] {
+  if (!Array.isArray(content)) return [];
+  const images: ImportImageDraft[] = [];
+  for (let index = 0; index < content.length; index++) {
+    const r = asRecord(content[index]);
     if (!r) continue;
-    const t = typeof r.type === 'string' ? r.type : '';
-    if (!kinds.includes(t)) continue;
-    if (typeof r.text === 'string') parts.push(r.text);
+    const type = typeof r.type === 'string' ? r.type : '';
+    if (type === 'image' || type === 'input_image' || r.image_url || r.source) {
+      const taken = takeImage(r, `codex-img-${lineCount}-${index}`);
+      if (taken && 'image' in taken) images.push(taken.image);
+    }
   }
-  return parts.join('\n');
+  return images;
 }
 
 function reasoningToText(payload: Record<string, unknown>): string | undefined {
   const parts: string[] = [];
-  const summary = payload.summary;
-  if (Array.isArray(summary)) {
-    for (const s of summary) {
-      const r = asRecord(s);
-      if (r && typeof r.text === 'string') parts.push(r.text);
-      else if (typeof s === 'string') parts.push(s);
+  const seen = new Set<string>();
+
+  const add = (raw: unknown) => {
+    const s = stringsFrom(raw);
+    if (s && !seen.has(s)) {
+      seen.add(s);
+      parts.push(s);
     }
-  }
-  const content = payload.content;
-  if (Array.isArray(content)) {
-    for (const c of content) {
-      const r = asRecord(c);
-      if (r && typeof r.text === 'string') parts.push(r.text);
-    }
-  }
-  return parts.length ? parts.join('\n') : undefined;
+  };
+
+  add(payload.summary_text);
+  add(payload.summary);
+  add(payload.raw_content);
+  add(payload.content);
+
+  return parts.length ? parts.join('\n\n') : undefined;
 }
 
-function outputToString(output: unknown): string {
-  if (output == null) return '';
-  if (typeof output === 'string') return output;
-  // FunctionCallOutputPayload 可能为 { content: string } 或 content_items
-  const r = asRecord(output);
-  if (r) {
-    if (typeof r.content === 'string') return r.content;
-    if (typeof r.body === 'string') return r.body;
-    if (Array.isArray(r.content_items)) {
-      return contentItemsToText(r.content_items, ['input_text', 'output_text', 'text']);
+function isDuplicateUserTurn(
+  turns: NormalizedImportTurn[],
+  text: string
+): boolean {
+  if (turns.length === 0) return false;
+  const target = text.trim();
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const t = turns[i];
+    if (!t) continue;
+    if (t.role === 'assistant') {
+      if (t.text || t.thinking) {
+        return false;
+      }
+      continue;
+    }
+    if (t.role === 'user') {
+      return t.text?.trim() === target;
     }
   }
-  try {
-    return JSON.stringify(output);
-  } catch {
-    return String(output);
-  }
+  return false;
 }
 
 /**
@@ -85,7 +106,7 @@ function outputToString(output: unknown): string {
  */
 export function parseCodexRolloutJsonl(
   content: string,
-  options: ParseCodexRolloutOptions = {},
+  options: ParseCodexRolloutOptions = {}
 ): ParsedExternalConversation {
   const warnings: string[] = [];
   const turns: NormalizedImportTurn[] = [];
@@ -102,12 +123,7 @@ export function parseCodexRolloutJsonl(
 
   const flushAssistant = () => {
     if (!currentAssistant) return;
-    // 丢弃空轮
-    if (
-      !currentAssistant.text?.trim() &&
-      !currentAssistant.thinking &&
-      !(currentAssistant.toolCalls && currentAssistant.toolCalls.length)
-    ) {
+    if (!turnHasContent(currentAssistant)) {
       currentAssistant = null;
       return;
     }
@@ -115,7 +131,10 @@ export function parseCodexRolloutJsonl(
     currentAssistant = null;
   };
 
-  const ensureAssistant = (ts: number, idHint: string): NormalizedImportTurn => {
+  const ensureAssistant = (
+    ts: number,
+    idHint: string
+  ): NormalizedImportTurn => {
     if (!currentAssistant) {
       currentAssistant = {
         id: idHint,
@@ -150,9 +169,9 @@ export function parseCodexRolloutJsonl(
     const payload = asRecord(row.payload) ?? {};
 
     if (envType === 'session_meta') {
-      // payload 可能为 SessionMetaLine { meta, git } 或扁平 meta
       const meta = asRecord(payload.meta) ?? payload;
-      if (typeof meta.id === 'string' && !sourceSessionId) sourceSessionId = meta.id;
+      if (typeof meta.id === 'string' && !sourceSessionId)
+        sourceSessionId = meta.id;
       const cwdVal = meta.cwd;
       if (typeof cwdVal === 'string') cwd = cwdVal;
       skippedLineCount++; // meta 不是轮
@@ -160,11 +179,102 @@ export function parseCodexRolloutJsonl(
     }
 
     if (envType === 'event_msg') {
-      // 仅可选的首次用户消息预览；真实数据以 response_item 为准
       const et = typeof payload.type === 'string' ? payload.type : '';
-      if (et === 'user_message' && typeof payload.message === 'string' && !title) {
-        title = payload.message.slice(0, 200);
+      if (et === 'item_completed') {
+        const item = asRecord(payload.item);
+        const itemType = item && typeof item.type === 'string' ? item.type : '';
+        if (item && itemType === 'Reasoning') {
+          const parts: string[] = [];
+          const s = stringsFrom(item.summary_text);
+          if (s) parts.push(s);
+          const r = stringsFrom(item.raw_content);
+          if (r && r !== s) parts.push(r);
+          const c = stringsFrom(item.content);
+          if (c && c !== s && c !== r) parts.push(c);
+          const thought = parts.join('\n\n');
+          if (thought) {
+            pushThinking(
+              ensureAssistant(ts, `codex-reason-${lineCount}`),
+              thought
+            );
+            continue;
+          }
+        } else if (
+          item &&
+          itemType === 'Plan' &&
+          typeof item.text === 'string'
+        ) {
+          const planText = stripBoilerplate(item.text);
+          if (planText) {
+            pushText(ensureAssistant(ts, `codex-plan-${lineCount}`), planText);
+            continue;
+          }
+        } else if (item && itemType === 'AgentMessage') {
+          const rawAgentText = contentItemsToText(item.content, [
+            'text',
+            'output_text',
+            'input_text',
+          ]);
+          const agentText = stripBoilerplate(rawAgentText);
+          if (agentText.trim() && !isPureBoilerplate(agentText)) {
+            pushText(
+              ensureAssistant(ts, `codex-agent-${lineCount}`),
+              agentText
+            );
+            continue;
+          }
+        }
       }
+
+      let userMsgText: string | undefined;
+
+      if (et === 'user_message') {
+        if (typeof payload.message === 'string') userMsgText = payload.message;
+        else if (typeof payload.text === 'string') userMsgText = payload.text;
+      } else if (et === 'item_completed') {
+        const item = asRecord(payload.item);
+        if (item) {
+          const itemType = typeof item.type === 'string' ? item.type : '';
+          const itemRole = typeof item.role === 'string' ? item.role : '';
+          if (
+            itemType === 'UserMessage' ||
+            itemType === 'user_message' ||
+            itemRole === 'user'
+          ) {
+            if (typeof item.message === 'string') userMsgText = item.message;
+            else if (typeof item.text === 'string') userMsgText = item.text;
+            else if (Array.isArray(item.content)) {
+              userMsgText = contentItemsToText(item.content, [
+                'input_text',
+                'text',
+              ]);
+            }
+          }
+        }
+      }
+
+      if (userMsgText) {
+        const cleaned = stripBoilerplate(userMsgText);
+        if (
+          cleaned.trim() &&
+          !isMeaninglessNoise(cleaned) &&
+          !isSystemPromptOrAgentInstructions(cleaned) &&
+          !isPureBoilerplate(cleaned)
+        ) {
+          if (!title) title = cleaned.trim().slice(0, 200);
+          if (!isDuplicateUserTurn(turns, cleaned)) {
+            flushAssistant();
+            turns.push({
+              id: `codex-user-${lineCount}`,
+              role: 'user',
+              text: cleaned,
+              timestampMs: ts || Date.now(),
+            });
+            continue;
+          }
+        }
+      }
+
       skippedLineCount++;
       continue;
     }
@@ -179,32 +289,67 @@ export function parseCodexRolloutJsonl(
     if (itemType === 'message') {
       const role = typeof payload.role === 'string' ? payload.role : '';
       if (role === 'user') {
-        flushAssistant();
-        const text = contentItemsToText(payload.content, ['input_text', 'text']);
-        if (!text.trim()) {
+        const rawText = contentItemsToText(payload.content, [
+          'input_text',
+          'text',
+        ]);
+        const text = stripBoilerplate(rawText);
+        const images = collectCodexImages(payload.content, lineCount);
+        const isNoise =
+          !text.trim() ||
+          isMeaninglessNoise(text) ||
+          isSystemPromptOrAgentInstructions(text) ||
+          isPureBoilerplate(text);
+
+        if (isNoise && images.length === 0) {
           skippedLineCount++;
           continue;
         }
-        if (!title) title = text.trim().slice(0, 200);
-        turns.push({
+
+        if (!isNoise && !title) title = text.trim().slice(0, 200);
+        if (!isNoise && isDuplicateUserTurn(turns, text)) {
+          const last = turns[turns.length - 1];
+          if (last && last.role === 'user') {
+            for (const img of images) pushImage(last, img);
+          }
+          continue;
+        }
+
+        flushAssistant();
+        const userTurn: NormalizedImportTurn = {
           id: `codex-user-${lineCount}`,
           role: 'user',
-          text,
           timestampMs: ts || Date.now(),
-        });
+        };
+        if (!isNoise) pushText(userTurn, text);
+        for (const img of images) pushImage(userTurn, img);
+        turns.push(userTurn);
         continue;
       }
-      if (role === 'assistant' || role === 'system') {
-        // system 按 assistant 评述处理，便于导入后阅读
-        const text = contentItemsToText(payload.content, ['output_text', 'text']);
-        if (!text.trim()) {
+
+      if (role === 'assistant') {
+        const rawText = contentItemsToText(payload.content, [
+          'output_text',
+          'text',
+        ]);
+        const text = stripBoilerplate(rawText);
+        const images = collectCodexImages(payload.content, lineCount);
+        if (!text.trim() && images.length === 0) {
           skippedLineCount++;
           continue;
         }
         const a = ensureAssistant(ts, `codex-asst-${lineCount}`);
-        a.text = a.text ? `${a.text}\n${text}` : text;
+        if (text.trim() && !isPureBoilerplate(text)) pushText(a, text);
+        for (const img of images) pushImage(a, img);
         continue;
       }
+
+      if (role === 'system' || role === 'developer') {
+        // 系统指令与开发者提示词严禁混入对话流
+        skippedLineCount++;
+        continue;
+      }
+
       skippedLineCount++;
       continue;
     }
@@ -215,103 +360,25 @@ export function parseCodexRolloutJsonl(
         skippedLineCount++;
         continue;
       }
-      const a = ensureAssistant(ts, `codex-reason-${lineCount}`);
-      a.thinking = a.thinking ? `${a.thinking}\n${thinking}` : thinking;
+      pushThinking(ensureAssistant(ts, `codex-reason-${lineCount}`), thinking);
       continue;
     }
 
-    if (itemType === 'function_call' || itemType === 'custom_tool_call') {
-      const callId =
-        (typeof payload.call_id === 'string' && payload.call_id) ||
-        (typeof payload.id === 'string' && payload.id) ||
-        `call-${lineCount}`;
-      const name =
-        (typeof payload.name === 'string' && payload.name) ||
-        'tool';
-      let args: string | undefined;
-      if (typeof payload.arguments === 'string') args = payload.arguments;
-      else if (typeof payload.input === 'string') args = payload.input;
-      else if (payload.arguments != null) {
-        try {
-          args = JSON.stringify(payload.arguments);
-        } catch {
-          args = String(payload.arguments);
-        }
-      }
-      const a = ensureAssistant(ts, `codex-asst-${lineCount}`);
-      if (!a.toolCalls) a.toolCalls = [];
-      a.toolCalls.push({
-        id: callId,
-        name,
-        arguments: args,
-        status: 'running',
-      });
-      continue;
-    }
-
-    if (itemType === 'function_call_output' || itemType === 'custom_tool_call_output') {
-      const callId = typeof payload.call_id === 'string' ? payload.call_id : '';
-      const output = outputToString(payload.output);
-      const isError =
-        payload.success === false ||
-        (typeof payload.status === 'string' && payload.status === 'error');
-
-      // 优先挂当前 assistant 缓冲（本地别名避免 CF 收窄为 never）
-      const openTools =
-        currentAssistant == null
-          ? undefined
-          : (currentAssistant as NormalizedImportTurn).toolCalls;
-      if (openTools && openTools.length > 0) {
-        const tc = openTools.find((t) => t.id === callId);
-        if (tc) {
-          tc.output = output;
-          tc.isError = isError;
-          tc.status = isError ? 'error' : 'success';
-          continue;
-        }
-      }
-      // 搜索已 flush 的轮
-      for (let i = turns.length - 1; i >= 0; i--) {
-        const tc = turns[i]?.toolCalls?.find((t) => t.id === callId);
-        if (tc) {
-          tc.output = output;
-          tc.isError = isError;
-          tc.status = isError ? 'error' : 'success';
-          break;
-        }
-      }
-      continue;
-    }
-
-    // local_shell_call / web_search_call 等 —— 尽力作为工具
+    // 裁决：导入上下文时彻底不导入外部工具调用，杜绝外部软件的私有命令污染 Crish 内部 Agent 的上下文
     if (
+      itemType === 'function_call' ||
+      itemType === 'custom_tool_call' ||
+      itemType === 'tool_search_call' ||
+      itemType === 'function_call_output' ||
+      itemType === 'custom_tool_call_output' ||
+      itemType === 'tool_search_output' ||
       itemType === 'local_shell_call' ||
+      itemType === 'local_shell_call_output' ||
       itemType === 'web_search_call' ||
+      itemType === 'web_search_call_output' ||
       itemType === 'image_generation_call'
     ) {
-      const callId =
-        (typeof payload.call_id === 'string' && payload.call_id) ||
-        (typeof payload.id === 'string' && payload.id) ||
-        `shell-${lineCount}`;
-      const a = ensureAssistant(ts, `codex-asst-${lineCount}`);
-      if (!a.toolCalls) a.toolCalls = [];
-      let args: string | undefined;
-      if (payload.action != null) {
-        try {
-          args = JSON.stringify(payload.action);
-        } catch {
-          args = String(payload.action);
-        }
-      }
-      a.toolCalls.push({
-        id: callId,
-        name: itemType,
-        arguments: args,
-        status:
-          typeof payload.status === 'string' && payload.status === 'completed'
-            ? 'success'
-            : 'running',
-      });
+      skippedLineCount++;
       continue;
     }
 
@@ -320,13 +387,26 @@ export function parseCodexRolloutJsonl(
 
   flushAssistant();
 
-  // 仍未收口的工具保持 running；映射层会把无输出的 running 强制为 success（空输出）
-  for (const t of turns) {
-    if (!t.toolCalls) continue;
-    for (const tc of t.toolCalls) {
-      if (tc.status === 'running' && tc.output == null) {
-        // 保持 running → map 层处理
-      }
+  // 过滤空轮：纯保留有实质文本、思考或图片的轮次
+  const validTurns = turns.filter((t) => turnHasContent(t));
+
+  // 标题提取：若既有标题属于系统样板，跳过并提取第一条真实人类提问
+  if (
+    !title ||
+    isSystemPromptOrAgentInstructions(title) ||
+    isPureBoilerplate(title)
+  ) {
+    const firstHumanUser = validTurns.find(
+      (t) =>
+        t.role === 'user' &&
+        t.text &&
+        !isSystemPromptOrAgentInstructions(t.text) &&
+        !isPureBoilerplate(t.text)
+    );
+    if (firstHumanUser?.text) {
+      title = firstHumanUser.text.trim().slice(0, 200);
+    } else {
+      title = undefined;
     }
   }
 
@@ -336,7 +416,7 @@ export function parseCodexRolloutJsonl(
     ...(title ? { title } : {}),
     ...(cwd ? { cwd } : {}),
     ...(createdAtMs != null ? { createdAtMs } : {}),
-    turns,
+    turns: validTurns,
     warnings,
     lineCount,
     skippedLineCount,

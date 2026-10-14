@@ -6,8 +6,16 @@
  * 替代原 api/import 纯函数层；ImportFs 等宿主能力经注入面接入）。
  */
 
-export { manifest, PLUGIN_ID, TOOL_PARSE_CLAUDE_CODE, TOOL_PARSE_CODEX_ROLLOUT } from './manifest';
-export type { ImportPluginManifest, ImportPluginToolDeclaration } from './manifest';
+export {
+  manifest,
+  PLUGIN_ID,
+  TOOL_PARSE_CLAUDE_CODE,
+  TOOL_PARSE_CODEX_ROLLOUT,
+} from './manifest';
+export type {
+  ImportPluginManifest,
+  ImportPluginToolDeclaration,
+} from './manifest';
 export { activate, SESSION_START_USAGE_NOTE } from './activate';
 export type { PluginActivateApi } from './activate';
 export {
@@ -38,6 +46,7 @@ export {
   truncatePreview,
   estimateLineCount,
 } from './detect';
+export { stripBoilerplate, isPureBoilerplate } from './boilerplate';
 export { externalSourceLabel } from './types';
 export type {
   ExternalSessionSource,

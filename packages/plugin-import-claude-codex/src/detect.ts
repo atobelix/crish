@@ -15,6 +15,10 @@ import type {
   ImportFs,
   ImportPathEnv,
 } from './types';
+import {
+  isSystemPromptOrAgentInstructions,
+  stripBoilerplate,
+} from './boilerplate';
 
 const DEFAULT_LIMIT = 200;
 const DEFAULT_LITE_BYTES = 64_000;
@@ -42,7 +46,8 @@ export function joinImportPath(sep: string, ...parts: string[]): string {
 function inferSep(env: ImportPathEnv): '\\' | '/' {
   if (env.sep === '\\' || env.sep === '/') return env.sep;
   if (env.platform === 'win32') return '\\';
-  if (env.home && env.home.includes('\\') && !env.home.startsWith('/')) return '\\';
+  if (env.home && env.home.includes('\\') && !env.home.startsWith('/'))
+    return '\\';
   return '/';
 }
 
@@ -50,7 +55,9 @@ function inferSep(env: ImportPathEnv): '\\' | '/' {
  * 解析默认配置根目录（不触碰文件系统）。
  * 只构造已知路径，不递归扫描 home。
  */
-export function resolveDefaultImportRoots(env: ImportPathEnv = {}): ExternalImportRoots {
+export function resolveDefaultImportRoots(
+  env: ImportPathEnv = {}
+): ExternalImportRoots {
   const sep = inferSep(env);
   const home =
     (env.home && env.home.trim()) ||
@@ -62,19 +69,31 @@ export function resolveDefaultImportRoots(env: ImportPathEnv = {}): ExternalImpo
   const claudeConfig =
     (env.claudeConfigDir && env.claudeConfigDir.trim()) ||
     (typeof process !== 'undefined' && process.env?.CLAUDE_CONFIG_DIR) ||
-    (homeNorm ? joinImportPath(sep, homeNorm, '.claude') : joinImportPath(sep, '.claude'));
+    (homeNorm
+      ? joinImportPath(sep, homeNorm, '.claude')
+      : joinImportPath(sep, '.claude'));
 
   const codexHome =
     (env.codexHome && env.codexHome.trim()) ||
     (typeof process !== 'undefined' && process.env?.CODEX_HOME) ||
-    (homeNorm ? joinImportPath(sep, homeNorm, '.codex') : joinImportPath(sep, '.codex'));
+    (homeNorm
+      ? joinImportPath(sep, homeNorm, '.codex')
+      : joinImportPath(sep, '.codex'));
 
   return {
     home: homeNorm,
     claudeConfig: String(claudeConfig).replace(/[\\/]+$/, ''),
-    claudeProjects: joinImportPath(sep, String(claudeConfig).replace(/[\\/]+$/, ''), 'projects'),
+    claudeProjects: joinImportPath(
+      sep,
+      String(claudeConfig).replace(/[\\/]+$/, ''),
+      'projects'
+    ),
     codexHome: String(codexHome).replace(/[\\/]+$/, ''),
-    codexSessions: joinImportPath(sep, String(codexHome).replace(/[\\/]+$/, ''), 'sessions'),
+    codexSessions: joinImportPath(
+      sep,
+      String(codexHome).replace(/[\\/]+$/, ''),
+      'sessions'
+    ),
   };
 }
 
@@ -97,7 +116,10 @@ function unescapeJsonString(raw: string): string {
  * 从原始文本提取首个 JSON 字符串字段值（轻量 head/tail 读取）。
  * 对齐 Claude Code 便携式提取器——不需要完整解析。
  */
-export function extractJsonStringField(text: string, key: string): string | undefined {
+export function extractJsonStringField(
+  text: string,
+  key: string
+): string | undefined {
   const patterns = [`"${key}":"`, `"${key}": "`];
   for (const pattern of patterns) {
     const idx = text.indexOf(pattern);
@@ -118,7 +140,10 @@ export function extractJsonStringField(text: string, key: string): string | unde
   return undefined;
 }
 
-function extractLastJsonStringField(text: string, key: string): string | undefined {
+function extractLastJsonStringField(
+  text: string,
+  key: string
+): string | undefined {
   const patterns = [`"${key}":"`, `"${key}": "`];
   let last: string | undefined;
   for (const pattern of patterns) {
@@ -159,16 +184,20 @@ export function extractClaudeTitlePreview(head: string, tail: string): string {
     extractLastJsonStringField(head, 'aiTitle') ||
     extractLastJsonStringField(tail, 'lastPrompt') ||
     extractLastJsonStringField(tail, 'summary');
-  if (custom && custom.trim()) return truncatePreview(custom.trim());
+  if (custom && custom.trim() && !isSystemPromptOrAgentInstructions(custom)) {
+    return truncatePreview(custom.trim());
+  }
 
   let start = 0;
   while (start < head.length) {
     const nl = head.indexOf('\n', start);
     const line = nl >= 0 ? head.slice(start, nl) : head.slice(start);
     start = nl >= 0 ? nl + 1 : head.length;
-    if (!line.includes('"type":"user"') && !line.includes('"type": "user"')) continue;
+    if (!line.includes('"type":"user"') && !line.includes('"type": "user"'))
+      continue;
     if (line.includes('"tool_result"')) continue;
-    if (line.includes('"isMeta":true') || line.includes('"isMeta": true')) continue;
+    if (line.includes('"isMeta":true') || line.includes('"isMeta": true'))
+      continue;
     const text =
       extractJsonStringField(line, 'text') ||
       // message 上的纯字符串 content
@@ -176,23 +205,138 @@ export function extractClaudeTitlePreview(head: string, tail: string): string {
         const m = line.match(/"content"\s*:\s*"((?:\\.|[^"\\])*)"/);
         return m?.[1] != null ? unescapeJsonString(m[1]) : undefined;
       })();
-    if (!text || SKIP_FIRST_PROMPT.test(text)) continue;
-    return truncatePreview(text.trim());
+    if (!text) continue;
+    const cleaned = stripBoilerplate(text);
+    if (
+      !cleaned ||
+      isSystemPromptOrAgentInstructions(cleaned) ||
+      SKIP_FIRST_PROMPT.test(cleaned)
+    )
+      continue;
+    return truncatePreview(cleaned.trim());
   }
   return 'Claude Code session';
 }
 
-/** Codex rollout：首个用户 input_text 或 event_msg user_message。 */
-export function extractCodexTitlePreview(head: string): string {
-  const fromInput = extractJsonStringField(head, 'text');
-  if (fromInput && fromInput.trim()) return truncatePreview(fromInput.trim());
-  // event_msg payload.message
-  const lines = head.split('\n');
-  for (const line of lines) {
-    if (!line.includes('user_message') && !line.includes('input_text')) continue;
-    const msg = extractJsonStringField(line, 'message') || extractJsonStringField(line, 'text');
-    if (msg && msg.trim()) return truncatePreview(msg.trim());
+function asRecord(v: unknown): Record<string, unknown> | null {
+  return v != null && typeof v === 'object' && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : null;
+}
+
+function contentItemsToText(content: unknown, kinds: string[]): string {
+  if (!Array.isArray(content)) return '';
+  const parts: string[] = [];
+  for (const item of content) {
+    const r = asRecord(item);
+    if (!r) continue;
+    const t = typeof r.type === 'string' ? r.type : '';
+    if (!kinds.includes(t)) continue;
+    if (typeof r.text === 'string') parts.push(r.text);
   }
+  return parts.join('\n');
+}
+
+/**
+ * Codex rollout 标题预览提取：
+ * 绝不使用盲取第一个 text（避免误取 session_meta base_instructions 系统提示词）。
+ * 优先取 event_msg item_completed / user_message 或 response_item user 真实提问，
+ * 并过滤环境样板与项目规范指令。
+ */
+export function extractCodexTitlePreview(head: string): string {
+  const lines = head.split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // 必须跳过 session_meta 行（包含 base_instructions 系统提示词）
+    if (trimmed.includes('"session_meta"')) continue;
+
+    let row: Record<string, unknown>;
+    try {
+      row = JSON.parse(trimmed) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+
+    if (row.type === 'session_meta') continue;
+
+    const payload = asRecord(row.payload);
+    if (!payload) continue;
+
+    let candidateText: string | undefined;
+
+    // 1. 优先寻找 event_msg 且 payload.type === 'item_completed' 中的 UserMessage 或 user_message
+    if (row.type === 'event_msg') {
+      const et = typeof payload.type === 'string' ? payload.type : '';
+      if (et === 'user_message') {
+        if (typeof payload.message === 'string')
+          candidateText = payload.message;
+        else if (typeof payload.text === 'string') candidateText = payload.text;
+      } else if (et === 'item_completed') {
+        const item = asRecord(payload.item);
+        if (item) {
+          const itemType = typeof item.type === 'string' ? item.type : '';
+          const itemRole = typeof item.role === 'string' ? item.role : '';
+          if (
+            itemType === 'UserMessage' ||
+            itemType === 'user_message' ||
+            itemRole === 'user'
+          ) {
+            if (typeof item.message === 'string') candidateText = item.message;
+            else if (typeof item.text === 'string') candidateText = item.text;
+            else if (Array.isArray(item.content)) {
+              candidateText = contentItemsToText(item.content, [
+                'input_text',
+                'text',
+              ]);
+            }
+          }
+        }
+      }
+    }
+
+    // 2. 或寻找 response_item 且 payload.type === 'message' 且 payload.role === 'user'（或极简 mock 行）
+    if (row.type === 'response_item') {
+      const itemType = typeof payload.type === 'string' ? payload.type : '';
+      const role = typeof payload.role === 'string' ? payload.role : '';
+      if (role && role !== 'user') {
+        continue;
+      }
+      if (itemType === 'message' && role === 'user') {
+        if (Array.isArray(payload.content)) {
+          candidateText = contentItemsToText(payload.content, [
+            'input_text',
+            'text',
+          ]);
+        } else if (typeof payload.content === 'string') {
+          candidateText = payload.content;
+        } else if (typeof payload.text === 'string') {
+          candidateText = payload.text;
+        }
+      }
+    } else if (!row.type) {
+      // 极简 mock 行: { payload: { content: [...] } }
+      const role = typeof payload.role === 'string' ? payload.role : '';
+      if (role && role !== 'user') {
+        continue;
+      }
+      if (Array.isArray(payload.content)) {
+        candidateText = contentItemsToText(payload.content, [
+          'input_text',
+          'text',
+        ]);
+      }
+    }
+
+    if (candidateText) {
+      const cleaned = stripBoilerplate(candidateText);
+      if (cleaned && !isSystemPromptOrAgentInstructions(cleaned)) {
+        return truncatePreview(cleaned);
+      }
+    }
+  }
+
   return 'Codex session';
 }
 
@@ -203,7 +347,11 @@ export function truncatePreview(s: string, max = 200): string {
 }
 
 /** 以非空行数估算消息量（chunk 内）。 */
-export function estimateLineCount(content: string, truncated: boolean, fileSize?: number): number {
+export function estimateLineCount(
+  content: string,
+  truncated: boolean,
+  fileSize?: number
+): number {
   let n = 0;
   for (let i = 0; i < content.length; i++) {
     if (content[i] === '\n') n++;
@@ -236,8 +384,13 @@ async function liteRead(
   fs: ImportFs,
   path: string,
   allowRoot: string,
-  liteBytes: number,
-): Promise<{ head: string; tail: string; truncated: boolean; content: string }> {
+  liteBytes: number
+): Promise<{
+  head: string;
+  tail: string;
+  truncated: boolean;
+  content: string;
+}> {
   const { content, truncated } = await fs.readText(path, allowRoot, {
     maxBytes: liteBytes * 2,
   });
@@ -253,8 +406,10 @@ async function liteRead(
 async function detectClaude(
   fs: ImportFs,
   roots: ExternalImportRoots,
-  opts: Required<Pick<DetectExternalSessionsOptions, 'liteReadBytes' | 'maxFileSizeBytes'>>,
-  warnings: string[],
+  opts: Required<
+    Pick<DetectExternalSessionsOptions, 'liteReadBytes' | 'maxFileSizeBytes'>
+  >,
+  warnings: string[]
 ): Promise<ExternalSessionMeta[]> {
   const out: ExternalSessionMeta[] = [];
   const projectsRoot = roots.claudeProjects;
@@ -290,7 +445,11 @@ async function detectClaude(
       try {
         const lite = await liteRead(fs, f.path, allow, opts.liteReadBytes);
         titlePreview = extractClaudeTitlePreview(lite.head, lite.tail);
-        messageCountEstimate = estimateLineCount(lite.content, lite.truncated, f.size);
+        messageCountEstimate = estimateLineCount(
+          lite.content,
+          lite.truncated,
+          f.size
+        );
         const ts = extractJsonStringField(lite.head, 'timestamp');
         if (ts) {
           const p = Date.parse(ts);
@@ -323,8 +482,10 @@ async function detectClaude(
 async function detectCodex(
   fs: ImportFs,
   roots: ExternalImportRoots,
-  opts: Required<Pick<DetectExternalSessionsOptions, 'liteReadBytes' | 'maxFileSizeBytes'>>,
-  warnings: string[],
+  opts: Required<
+    Pick<DetectExternalSessionsOptions, 'liteReadBytes' | 'maxFileSizeBytes'>
+  >,
+  warnings: string[]
 ): Promise<ExternalSessionMeta[]> {
   const out: ExternalSessionMeta[] = [];
   const sessionsRoot = roots.codexSessions;
@@ -369,9 +530,10 @@ async function detectCodex(
           }
           // rollout-<ts>-<uuid>.jsonl
           const idMatch = f.name.match(
-            /rollout-.*?-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i,
+            /rollout-.*?-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i
           );
-          const sourceSessionId = idMatch?.[1] ?? f.name.replace(/\.jsonl$/i, '');
+          const sourceSessionId =
+            idMatch?.[1] ?? f.name.replace(/\.jsonl$/i, '');
           let titlePreview = 'Codex session';
           let messageCountEstimate = 0;
           let createdAtMs: number | undefined;
@@ -379,7 +541,11 @@ async function detectCodex(
           try {
             const lite = await liteRead(fs, f.path, allow, opts.liteReadBytes);
             titlePreview = extractCodexTitlePreview(lite.head);
-            messageCountEstimate = estimateLineCount(lite.content, lite.truncated, f.size);
+            messageCountEstimate = estimateLineCount(
+              lite.content,
+              lite.truncated,
+              f.size
+            );
             const ts = extractJsonStringField(lite.head, 'timestamp');
             if (ts) {
               const p = Date.parse(ts);
@@ -399,7 +565,12 @@ async function detectCodex(
             path: f.path,
             sourceSessionId,
             titlePreview,
-            projectLabel: cwd ? cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop() : undefined,
+            projectLabel: cwd
+              ? cwd
+                  .replace(/[\\/]+$/, '')
+                  .split(/[\\/]/)
+                  .pop()
+              : undefined,
             cwd,
             mtimeMs: parseModifiedMs(f.modified),
             createdAtMs,
@@ -417,7 +588,7 @@ async function detectCodex(
  * 发现外部会话（仅元数据）。仅从导入 UI 调用（opt-in）。
  */
 export async function detectExternalSessions(
-  options: DetectExternalSessionsOptions,
+  options: DetectExternalSessionsOptions
 ): Promise<DetectExternalSessionsResult> {
   const {
     fs,
@@ -433,7 +604,7 @@ export async function detectExternalSessions(
   const sessions: ExternalSessionMeta[] = [];
   const liteOpts = { liteReadBytes, maxFileSizeBytes };
   const want = new Set(
-    sources.map((s) => (s === 'claude-code' ? 'claude-code' : 'codex')),
+    sources.map((s) => (s === 'claude-code' ? 'claude-code' : 'codex'))
   );
 
   if (want.has('claude-code')) {
@@ -443,7 +614,10 @@ export async function detectExternalSessions(
     sessions.push(...(await detectCodex(fs, roots, liteOpts, warnings)));
   }
 
-  sessions.sort((a, b) => (b.mtimeMs ?? b.createdAtMs ?? 0) - (a.mtimeMs ?? a.createdAtMs ?? 0));
+  sessions.sort(
+    (a, b) =>
+      (b.mtimeMs ?? b.createdAtMs ?? 0) - (a.mtimeMs ?? a.createdAtMs ?? 0)
+  );
 
   return {
     roots,

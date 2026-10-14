@@ -20,7 +20,9 @@ function canonicalSource(source: ExternalSessionSource): ImportSource {
 
 /** 来源展示文案（宿主 UI 直接消费）。 */
 export function externalSourceLabel(source: ExternalSessionSource): string {
-  return canonicalSource(source) === 'claude-code' ? 'Claude Code' : 'Codex CLI';
+  return canonicalSource(source) === 'claude-code'
+    ? 'Claude Code'
+    : 'Codex CLI';
 }
 
 // ---------------------------------------------------------------------------
@@ -37,6 +39,19 @@ export type ImportToolCallDraft = {
   status?: 'success' | 'error' | 'running';
 };
 
+/** 可嵌入预览的图片（http(s) 或 data URL）。 */
+export type ImportImageDraft = {
+  id: string;
+  url: string;
+  mime?: string;
+};
+
+/** 原文顺序片段：思考 / 正文 / 工具锚点。 */
+export type ImportTurnSegment =
+  | { kind: 'text'; text: string }
+  | { kind: 'thinking'; text: string }
+  | { kind: 'tool'; id: string };
+
 /** 单轮消息草稿（角色 + 文本/思考/工具调用 + 时间线块）。 */
 export type ImportMessageDraft = {
   id: string;
@@ -45,8 +60,9 @@ export type ImportMessageDraft = {
   thinking?: string;
   timestampMs: number;
   toolCalls?: ImportToolCallDraft[];
+  images?: ImportImageDraft[];
   blocks?: Array<{
-    type: 'text' | 'tool_call';
+    type: 'text' | 'tool_call' | 'thought';
     id?: string;
     content?: string;
   }>;
@@ -59,6 +75,9 @@ export type NormalizedImportTurn = {
   text?: string;
   thinking?: string;
   timestampMs: number;
+  /** 思考、正文、工具的原文顺序。缺省时映射层仍按旧字段兜底。 */
+  segments?: ImportTurnSegment[];
+  images?: ImportImageDraft[];
   toolCalls?: Array<{
     id: string;
     name: string;
@@ -149,7 +168,7 @@ export type ImportFs = {
   readText: (
     filePath: string,
     allowRoot: string,
-    opts?: { maxBytes?: number; maxLines?: number },
+    opts?: { maxBytes?: number; maxLines?: number }
   ) => Promise<{ content: string; truncated: boolean; path: string }>;
   exists?: (path: string, allowRoot: string) => Promise<boolean>;
 };
