@@ -19,7 +19,6 @@ import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
   ArrowUp01Icon,
-  ArrowVerticalIcon,
   AtSignIcon,
   BarChartIcon,
   BlocksIcon,
@@ -103,7 +102,6 @@ import {
   PaletteIcon,
   PaperclipIcon,
   PauseIcon,
-  PencilEdit01Icon,
   PencilEdit02Icon,
   PinIcon,
   PinOffIcon,
@@ -114,7 +112,6 @@ import {
   PuzzleIcon,
   QrCode01Icon,
   Radio01Icon,
-  RefreshIcon,
   RotateCcwIcon,
   RotateCwIcon,
   SaveIcon,
@@ -123,7 +120,6 @@ import {
   SearchCheckIcon,
   SearchXIcon,
   SendIcon,
-  Settings01Icon,
   Shield01Icon,
   ShieldAlertIcon,
   ShieldCheckIcon,
@@ -171,6 +167,7 @@ import {
   IconSettings,
   IconSidebarLeft,
   IconSidebarRight,
+  IconCompass,
 } from './customIcons';
 
 export type HugeIconEntry = { kind: 'hugeicons'; icon: IconSvgElement };
@@ -186,7 +183,10 @@ export type CustomIconEntry = {
 
 export type IconEntry = HugeIconEntry | CustomIconEntry;
 
-const h = (icon: IconSvgElement): HugeIconEntry => ({ kind: 'hugeicons', icon });
+const h = (icon: IconSvgElement): HugeIconEntry => ({
+  kind: 'hugeicons',
+  icon,
+});
 const c = (Component: CustomIconEntry['Component']): CustomIconEntry => ({
   kind: 'custom',
   Component,
@@ -230,6 +230,7 @@ export const ICON_NAMES = [
   'cloud-upload',
   'code',
   'columns',
+  'compass',
   'copy',
   'corner-down-left',
   'corner-left-up',
@@ -396,6 +397,7 @@ export const iconMap = {
   'cloud-upload': h(CloudUploadIcon),
   code: h(CodeIcon),
   columns: h(ColumnsThreeCogIcon),
+  compass: c(IconCompass),
   copy: h(Copy01Icon),
   'corner-down-left': h(CornerDownLeftIcon),
   'corner-left-up': h(CornerLeftUpIcon),

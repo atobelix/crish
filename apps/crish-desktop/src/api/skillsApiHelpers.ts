@@ -52,7 +52,7 @@ export function normalizeSlashName(name: string): string {
   return name
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/[^\p{L}\p{N}._-]+/gu, '-')
     .replace(/^-+|-+$/g, '');
 }
 

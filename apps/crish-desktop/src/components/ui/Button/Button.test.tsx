@@ -392,7 +392,9 @@ describe('ui/Button 样式与物理动效契约 (Button.module.css)', () => {
     const tokensContent = fs.readFileSync(tokensPath, 'utf-8');
     expect(tokensContent).toContain('--radius-btn: 7px');
     expect(tokensContent).toContain('--button-radius: var(--radius-btn)');
-    expect(tokensContent).not.toMatch(/--button-radius:\s*(?:8px|var\(--radius-lg\))/);
+    expect(tokensContent).not.toMatch(
+      /--button-radius:\s*(?:8px|var\(--radius-lg\))/
+    );
   });
 
   it('彻底去除点击果冻弹性缩放 scale，保持平稳扎实交互', () => {
@@ -412,8 +414,12 @@ describe('ui/Button 样式与物理动效契约 (Button.module.css)', () => {
     expect(cssContent).toContain(
       '.button:has(> .buttonLabel):has(> :is(.buttonIcon, .spinner):last-child)'
     );
-    expect(cssContent).toContain('padding-inline-start: max(0px, calc(var(--btn-px) - 2px));');
-    expect(cssContent).toContain('padding-inline-end: max(0px, calc(var(--btn-px) - 2px));');
+    expect(cssContent).toContain(
+      'padding-inline-start: max(0px, calc(var(--btn-px) - 2px));'
+    );
+    expect(cssContent).toContain(
+      'padding-inline-end: max(0px, calc(var(--btn-px) - 2px));'
+    );
   });
 
   it("[data-align='start'] 靠左排版对齐规则", () => {
@@ -433,14 +439,22 @@ describe('ui/Button 样式与物理动效契约 (Button.module.css)', () => {
 
   it('按钮激活态清退硬编码黑框、深黑边与厚重阴影，统一接入 var(--tint-active) 微背景', () => {
     expect(cssContent).toContain('--btn-bg: var(--tint-active);');
-    expect(cssContent).toMatch(/\.buttonActive,\s*\.button\[data-active='true'\]\s*\{[^}]*--btn-bg:\s*var\(--tint-active\);/);
-    expect(cssContent).toMatch(/\.buttonActive,\s*\.button\[data-active='true'\]\s*\{[^}]*border-color:\s*transparent;/);
-    expect(cssContent).toMatch(/\.buttonActive,\s*\.button\[data-active='true'\]\s*\{[^}]*box-shadow:\s*none;/);
+    expect(cssContent).toMatch(
+      /\.buttonActive,\s*\.button\[data-active='true'\]\s*\{[^}]*--btn-bg:\s*var\(--tint-active\);/
+    );
+    expect(cssContent).toMatch(
+      /\.buttonActive,\s*\.button\[data-active='true'\]\s*\{[^}]*border-color:\s*transparent;/
+    );
+    expect(cssContent).toMatch(
+      /\.buttonActive,\s*\.button\[data-active='true'\]\s*\{[^}]*box-shadow:\s*none;/
+    );
   });
 
   it('S1.1 内容模型自适应：字符串/数字包裹 buttonLabel span；元素/数组直接渲染', () => {
     // 1. 纯文本子节点 → 包裹 buttonLabel span
-    const { rerender } = render(<Button data-testid="btn-text">点击保存</Button>);
+    const { rerender } = render(
+      <Button data-testid="btn-text">点击保存</Button>
+    );
     const textBtn = screen.getByTestId('btn-text');
     const labelSpan = textBtn.querySelector(`.${styles.buttonLabel}`);
     expect(labelSpan).not.toBeNull();
@@ -448,7 +462,9 @@ describe('ui/Button 样式与物理动效契约 (Button.module.css)', () => {
 
     // 2. 纯数字子节点 → 包裹 buttonLabel span
     rerender(<Button data-testid="btn-text">{42}</Button>);
-    expect(textBtn.querySelector(`.${styles.buttonLabel}`)?.textContent).toBe('42');
+    expect(textBtn.querySelector(`.${styles.buttonLabel}`)?.textContent).toBe(
+      '42'
+    );
 
     // 3. 元素子节点 → 直接渲染，不被 buttonLabel span 截断/包裹
     render(
@@ -462,5 +478,42 @@ describe('ui/Button 样式与物理动效契约 (Button.module.css)', () => {
     expect(elemBtn.querySelector(`.${styles.buttonLabel}`)).toBeNull();
     const customChild = screen.getByTestId('custom-child');
     expect(customChild.parentElement).toBe(elemBtn);
+  });
+
+  it('层叠顺序与悬停对比度：文本与内容节点 z-index: 1 始终高于 ::before 遮罩层 (z-index: 0)', () => {
+    // 1. ::before 必须显式声明 z-index: 0
+    expect(cssContent).toMatch(/\.button::before\s*\{[^}]*z-index:\s*0;/);
+
+    // 2. 文本与内容节点必须显式声明 z-index: 1
+    expect(cssContent).toMatch(
+      /(?:\.buttonLabel|\.buttonIcon|\.spinner|\.button\s*>\s*\*)[^{]*\{[^}]*z-index:\s*1;/
+    );
+  });
+
+  it('danger 危险按钮悬停对比度：--btn-hover-overlay 采用透明 color-mix，明暗主题均不遮挡文字', () => {
+    // 1. danger 变体必须采用透明度为 10% 的透明 color-mix 遮罩
+    expect(cssContent).toContain(
+      '--btn-hover-overlay: color-mix(in srgb, var(--danger-fg) 10%, transparent);'
+    );
+    expect(cssContent).toContain(
+      '--btn-active-overlay: color-mix(in srgb, var(--danger-fg) 18%, transparent);'
+    );
+    expect(cssContent).toContain('--btn-fg: var(--danger-fg);');
+
+    // 2. 验证渲染态下的类名与结构
+    const { rerender } = render(<Button variant="danger">删除会话</Button>);
+    const dangerBtn = screen.getByRole('button', { name: '删除会话' });
+    expect(dangerBtn).toHaveClass(styles.buttonDanger);
+    expect(
+      dangerBtn.querySelector(`.${styles.buttonLabel}`)
+    ).toBeInTheDocument();
+
+    // 3. 验证带有自定义子节点的 danger 按钮
+    rerender(
+      <Button variant="danger">
+        <span data-testid="danger-custom">确认清空</span>
+      </Button>
+    );
+    expect(screen.getByTestId('danger-custom')).toBeInTheDocument();
   });
 });

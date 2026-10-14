@@ -83,6 +83,23 @@ export function IconSidebarRight({
   );
 }
 
+export function IconCompass({
+  size = 16,
+  className,
+  strokeWidth = 1.75,
+  style,
+}: CustomIconProps) {
+  return (
+    <svg {...baseProps(size, className, style, '0 0 24 24')}>
+      <circle cx="12" cy="12" r="10" strokeWidth={strokeWidth} />
+      <polygon
+        points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"
+        strokeWidth={strokeWidth}
+      />
+    </svg>
+  );
+}
+
 /** 展开折叠：居中细折线（比通用 chevron 更干净） */
 export function IconChevronDown({
   size = 16,

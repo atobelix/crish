@@ -52,8 +52,8 @@
 .nativeTextarea:where(:hover:not(:focus):not(:focus-visible):not(:disabled)) {
   border-color: color-mix(
     in srgb,
-    var(--border-color) 92%,
-    var(--text-primary) 8%
+    var(--border-subtle) 98%,
+    var(--text-primary) 2%
   );
   /* hover = 输入档上的统一透明叠加 */
   background:
@@ -71,8 +71,8 @@
   box-shadow: none;
   border-color: color-mix(
     in srgb,
-    var(--border-color) 92%,
-    var(--text-primary) 8%
+    var(--border-subtle) 96%,
+    var(--text-primary) 4%
   );
 }
 

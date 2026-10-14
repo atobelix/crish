@@ -271,9 +271,13 @@
 
 .buttonLabel,
 .buttonIcon,
-.spinner {
+.spinner,
+.button > * {
   position: relative;
   z-index: 1;
+}
+
+.buttonLabel {
   overflow: hidden;
   text-overflow: ellipsis;
 }

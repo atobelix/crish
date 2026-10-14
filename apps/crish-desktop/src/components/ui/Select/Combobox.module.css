@@ -5,19 +5,30 @@
   align-items: center;
   gap: var(--space-2);
   width: 100%;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   color: var(--text-primary);
   border-radius: var(--radius-lg);
   box-sizing: border-box;
   padding: 0 10px;
   position: relative;
-  transition:
-    border-color var(--transition-micro);
+  transition: border-color var(--transition-micro);
+}
+
+.comboboxInputWrapper:hover:not(:focus-within) {
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 98%,
+    var(--text-primary) 2%
+  );
 }
 
 .comboboxInputWrapper:focus-within {
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 96%,
+    var(--text-primary) 4%
+  );
 }
 
 .comboboxInputWrapper.size-sm {
@@ -75,7 +86,9 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: background-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    background-color var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .clearBtn:hover {
@@ -99,17 +112,28 @@
   width: 100%;
   min-height: 32px;
   padding: 3px 8px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   border-radius: var(--radius-lg);
   box-sizing: border-box;
   cursor: text;
-  transition:
-    border-color var(--transition-micro);
+  transition: border-color var(--transition-micro);
+}
+
+.chipsWrapper:hover:not(:focus-within) {
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 98%,
+    var(--text-primary) 2%
+  );
 }
 
 .chipsWrapper:focus-within {
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 96%,
+    var(--text-primary) 4%
+  );
 }
 
 .chipsInput {
@@ -148,7 +172,11 @@
 }
 
 .chip.chipActive {
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 96%,
+    var(--text-primary) 4%
+  );
 }
 
 .chipLabel {

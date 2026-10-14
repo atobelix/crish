@@ -2,13 +2,19 @@ import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 扩展：插件、MCP、技能；列表内直接查看与配置。
  */
-import React, { lazy, Suspense } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { SettingsHeadTools, SettingsPage } from '../settings/SettingsUI';
 import uiStyles from '../settings/SettingsUI.module.css';
 
 import { useExtensionMarket } from './useExtensionMarket';
 import { ExtensionList } from './ExtensionList';
+import { ExtensionDetailModal } from './ExtensionDetailModal';
+import { emitUiEvent } from '../../api/uiEvents';
+import type {
+  CatalogEntry,
+  InstalledExtension,
+} from '../../api/extensionCatalog';
 import { Button, Input, SegmentedControl } from '../ui';
 import type { KindFilter, MainView } from './types';
 import styles from './SettingsExtensionsTab.module.css';
@@ -65,6 +71,10 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
     togglePlugin,
     setExpand,
   } = useExtensionMarket();
+
+  const [selectedDetailItem, setSelectedDetailItem] = useState<
+    InstalledExtension | CatalogEntry | null
+  >(null);
 
   const kindFilters: { id: KindFilter; label: string }[] = [
     { id: 'all', label: '全部' },
@@ -214,6 +224,58 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
           onSetView: setView,
           onSetExpand: setExpand,
           onTogglePlugin: togglePlugin,
+          onSelect: (item) => setSelectedDetailItem(item),
+          onManage: (item) => {
+            const isImport =
+              item.id === '@crish/plugin-import-claude-codex' ||
+              item.id === '@crish/import-claude-codex' ||
+              item.id.includes('import-claude-codex');
+            if (isImport) {
+              emitUiEvent('open-external-import');
+            } else if (item.kind === 'mcp') {
+              setManage('mcp');
+            } else if (item.kind === 'skill') {
+              setManage('skill');
+            } else {
+              setSelectedDetailItem(item);
+            }
+          },
+        }}
+      />
+
+      <ExtensionDetailModal
+        open={Boolean(selectedDetailItem)}
+        onClose={() => setSelectedDetailItem(null)}
+        scope={view === 'discover' ? 'catalog' : 'installed'}
+        item={selectedDetailItem}
+        canUninstall={
+          selectedDetailItem
+            ? selectedDetailItem.id.startsWith('local-plugin:') ||
+              !(
+                'fromSystem' in selectedDetailItem &&
+                selectedDetailItem.fromSystem
+              )
+            : false
+        }
+        busyId={busyId}
+        mcpState={{
+          expandedMcpTools,
+          toolTick,
+          mcpServerBusy,
+          mcpToolBusy,
+        }}
+        onInstallCatalog={handleInstallCatalog}
+        onRemovePackage={handleRemovePackage}
+        onTogglePlugin={togglePlugin}
+        onToggleMcpServer={toggleMcpServer}
+        onToggleMcpTool={toggleMcpTool}
+        onToggleExpandMcpTools={toggleExpandMcpTools}
+        onSetManage={(k) => {
+          setSelectedDetailItem(null);
+          setManage(k);
+        }}
+        onOpenExternalSync={() => {
+          emitUiEvent('open-external-import');
         }}
       />
     </SettingsPage>

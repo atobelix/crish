@@ -42,7 +42,7 @@ function saveEnabledIds(ids: Set<string>): void {
 }
 
 /** 插件当前是否启用（localStorage 启停状态；默认启用——官方内置）。 */
-function isPluginEnabled(id: string): boolean {
+export function isPluginEnabled(id: string): boolean {
   const s = loadEnabledIds();
   // 官方内置插件默认启用：不在停用清单即视为启用
   return !s.has(id);

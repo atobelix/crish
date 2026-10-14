@@ -6,7 +6,7 @@
   justify-content: space-between;
   gap: var(--space-2);
   width: 100%;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   color: var(--text-primary);
   font-family: inherit;
@@ -22,16 +22,28 @@
 
 .trigger:hover:not(:disabled) {
   background: var(--tint-hover);
-  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 98%,
+    var(--text-primary) 2%
+  );
 }
 
 .trigger:focus-visible {
   outline: none;
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 96%,
+    var(--text-primary) 4%
+  );
 }
 
 .trigger.open {
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 96%,
+    var(--text-primary) 4%
+  );
 }
 
 .trigger:disabled {
@@ -106,7 +118,9 @@
   flex-shrink: 0;
   color: var(--text-tertiary);
   margin-left: auto;
-  transition: transform var(--transition-micro), color var(--transition-micro);
+  transition:
+    transform var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .trigger:hover:not(:disabled) .chevron {
@@ -123,7 +137,9 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: background-color var(--transition-micro), color var(--transition-micro);
+  transition:
+    background-color var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .clearBtn:hover {

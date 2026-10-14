@@ -1,6 +1,11 @@
 import { toast } from '../../services/toast/ToastContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { clientApi, type PackageSource } from '../../api/clientApi';
+import {
+  clientApi,
+  type PackageSource,
+  type McpServer,
+  type Settings,
+} from '../../api/clientApi';
 import {
   markCatalogInstalled,
   unmarkCatalogInstalled,
@@ -10,15 +15,11 @@ import {
   type CatalogEntry,
   type InstalledExtension,
 } from '../../api/extensionCatalog';
-import {
-  listMcpServers,
-  startMcpServer,
-  stopMcpServer,
-  type McpServerInfo,
-} from '../../api/mcpApi';
+import { listMcpServers, type McpServerInfo } from '../../api/mcpApi';
 import { discoverSkills, type DesktopSkill } from '../../api/skillsApi';
 import { getWorkspacePath } from '../../api/projectStore';
 import { setAppSettings } from '../../api/storeAccess';
+import { useSettingsStore } from '../../store/storeAccess';
 import {
   listPluginCardStates,
   setPluginEnabled,
@@ -31,7 +32,10 @@ import type {
   ManageKind,
   PendingExpand,
 } from './types';
-import { buildInstalledExtensions, packageName } from './buildInstalledExtensions';
+import {
+  buildInstalledExtensions,
+  packageName,
+} from './buildInstalledExtensions';
 import { useMcpCache } from './useMcpCache';
 import { useMarketQuery } from './useMarketQuery';
 import { useSkillsCache } from './useSkillsCache';
@@ -40,8 +44,8 @@ import { errText, withTimeout } from './extensionMarketLogic';
 export function useExtensionMarket() {
   const [view, setView] = useState<MainView>('installed');
 
-  const { skills, setSkills, saveSkills } = useSkillsCache();
-  const { mcpServers, setMcpServers, saveMcpServers } = useMcpCache();
+  const { skills, saveSkills } = useSkillsCache();
+  const { mcpServers, saveMcpServers } = useMcpCache();
 
   const [loading, setLoading] = useState(
     () => skills.length === 0 && mcpServers.length === 0
@@ -88,8 +92,7 @@ export function useExtensionMarket() {
   const setPendingExpand = (val: React.SetStateAction<PendingExpand | null>) =>
     setExpandState((prev) => ({
       ...prev,
-      pendingExpand:
-        typeof val === 'function' ? val(prev.pendingExpand) : val,
+      pendingExpand: typeof val === 'function' ? val(prev.pendingExpand) : val,
     }));
 
   const [toolTick, setToolTick] = useState(0);
@@ -177,6 +180,9 @@ export function useExtensionMarket() {
       if (settings?.mcpDisabledTools) {
         cacheMcpToolDisabled(settings.mcpDisabledTools);
       }
+      if (Array.isArray(settings?.mcpServers)) {
+        useSettingsStore.getState().setMcpServers(settings.mcpServers);
+      }
       hydratedRef.current = true;
     } catch (e) {
       const msg = errText(e);
@@ -190,6 +196,15 @@ export function useExtensionMarket() {
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    const onSkillsChanged = () => {
+      void refresh();
+    };
+    window.addEventListener('crish-skills-changed', onSkillsChanged);
+    return () =>
+      window.removeEventListener('crish-skills-changed', onSkillsChanged);
   }, [refresh]);
 
   const installed: InstalledExtension[] = useMemo(
@@ -210,7 +225,6 @@ export function useExtensionMarket() {
     query,
     setQuery,
     highlightMatch,
-    matchQ,
     installedFiltered,
     catalogFiltered,
   } = useMarketQuery(installed);
@@ -378,12 +392,45 @@ export function useExtensionMarket() {
       if (mcpServerBusy || !serverId) return;
       setMcpServerBusy(true);
       try {
-        const r = start
-          ? await startMcpServer(serverId)
-          : await stopMcpServer(serverId);
-        if (!r.ok) {
-          toast.show(r.error || (start ? '启动失败' : '停止失败'));
+        const currentList = useSettingsStore.getState().mcpServers || [];
+        const matchIndex = currentList.findIndex(
+          (s) =>
+            s.id === serverId ||
+            s.name === serverId ||
+            `local-mcp:${s.id}` === serverId ||
+            `local-mcp:${s.name}` === serverId ||
+            `mcp:${s.id}` === serverId ||
+            `mcp:${s.name}` === serverId
+        );
+        const nextStatus = start ? 'connected' : 'disconnected';
+        let nextList: McpServer[];
+        let serverName = serverId;
+        if (matchIndex >= 0 && currentList[matchIndex]) {
+          const item = currentList[matchIndex]!;
+          serverName = item.name || item.id;
+          nextList = [...currentList];
+          nextList[matchIndex] = { ...item, status: nextStatus };
+        } else {
+          const rawId = serverId.replace(/^(local-mcp:|mcp:)/, '');
+          serverName = rawId;
+          const newServer: McpServer = {
+            id: rawId,
+            name: rawId,
+            type: 'stdio',
+            status: nextStatus,
+            tools: [],
+          };
+          nextList = [...currentList, newServer];
         }
+        useSettingsStore.getState().setMcpServers(nextList);
+        await clientApi.saveSettingsEx('__global__', 'global', {
+          mcpServers: nextList,
+        } as unknown as Partial<Settings>);
+        toast.show(
+          start
+            ? `已启用 MCP 服务 ${serverName}`
+            : `已停用 MCP 服务 ${serverName}`
+        );
         await refresh();
       } catch (e) {
         toast.show(errText(e));
@@ -395,16 +442,13 @@ export function useExtensionMarket() {
   );
 
   /** 插件启停：持久化 + 本地状态刷新（E3 UI 泛化；E2 运行时接入后同步注册表）。 */
-  const togglePlugin = useCallback(
-    (pluginId: string, enabled: boolean) => {
-      setPluginEnabled(pluginId, enabled);
-      setPlugins((prev) =>
-        prev.map((p) => (p.id === pluginId ? { ...p, enabled } : p))
-      );
-      toast.show(enabled ? '插件已启用' : '插件已停用');
-    },
-    []
-  );
+  const togglePlugin = useCallback((pluginId: string, enabled: boolean) => {
+    setPluginEnabled(pluginId, enabled);
+    setPlugins((prev) =>
+      prev.map((p) => (p.id === pluginId ? { ...p, enabled } : p))
+    );
+    toast.show(enabled ? '插件已启用' : '插件已停用');
+  }, []);
 
   return {
     view,

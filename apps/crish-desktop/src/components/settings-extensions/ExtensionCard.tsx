@@ -1,22 +1,12 @@
 import React from 'react';
 import {
-  kindLabel,
   type CatalogEntry,
-  type ExtensionKind,
   type InstalledExtension,
 } from '../../api/extensionCatalog';
 import type { ExpandMode, ManageKind } from './types';
-import { Badge, Button } from '../ui';
-import { McpToolsSection } from './McpToolsSection';
-import { ExtensionBody } from './ExtensionBody';
+import { Button } from '../ui';
 import { isPluginCardItem } from './ExtensionCardIdentity';
 import styles from './SettingsExtensionsTab.module.css';
-
-function sourceLabel(source: string): string {
-  if (source === 'official') return '官方';
-  if (source === 'community') return '三方';
-  return '本机';
-}
 
 /** 扩展卡身份与展示态（标识当前卡片属于哪一项、展开/配置/卸载可见性）。 */
 export interface ExtensionCardExtensionProps {
@@ -41,7 +31,11 @@ export interface ExtensionCardMcpProps {
 /** 扩展卡回调集合（高亮、展开切换、安装/卸载、MCP 启停、插件启停、管理跳转）。 */
 export interface ExtensionCardActionsProps {
   highlightMatch: (text: string) => React.ReactNode;
-  toggleExpand: (scope: 'installed' | 'catalog', id: string, mode: ExpandMode) => void;
+  toggleExpand: (
+    scope: 'installed' | 'catalog',
+    id: string,
+    mode: ExpandMode
+  ) => void;
   onInstallCatalog?: (entry: CatalogEntry) => void;
   onRemovePackage?: (item: InstalledExtension) => void;
   onToggleMcpServer?: (serverId: string, start: boolean) => void;
@@ -51,6 +45,10 @@ export interface ExtensionCardActionsProps {
   onGoToConfig?: (id: string) => void;
   /** 插件启停开关（E3 UI 泛化：kind: 'plugin' 分支）。 */
   onTogglePlugin?: (pluginId: string, enabled: boolean) => void;
+  /** 点击卡片弹窗详情 */
+  onSelect?: (item: InstalledExtension | CatalogEntry) => void;
+  /** 点击管理 */
+  onManage?: (item: InstalledExtension) => void;
 }
 
 /** Props 分组：extension（身份/展示态）+ mcp（MCP 工具态）+ actions（回调集合）。 */
@@ -60,64 +58,34 @@ export type ExtensionCardProps = {
   actions: ExtensionCardActionsProps;
 };
 
-/** 展开体分发：skill/plugin → ExtensionBody；mcp → McpToolsSection。 */
-function renderExpandBody(
-  kind: ExtensionKind,
-  targetItem: InstalledExtension | CatalogEntry,
-  mode: ExpandMode,
-  mcp: ExtensionCardMcpProps,
-  actions: ExtensionCardActionsProps,
-) {
-  if (kind === 'mcp') {
-    return (
-      <McpToolsSection
-        item={targetItem}
-        mode={mode}
-        state={mcp}
-        actions={{
-          onToggleMcpServer: actions.onToggleMcpServer,
-          onToggleMcpTool: actions.onToggleMcpTool,
-          onToggleExpandMcpTools: actions.onToggleExpandMcpTools,
-          onSetManage: actions.onSetManage,
-        }}
-      />
-    );
-  }
-  return (
-    <ExtensionBody
-      item={targetItem}
-      mode={mode}
-      kind={kind === 'skill' ? 'skill' : 'plugin'}
-      actions={{
-        onSetManage: actions.onSetManage,
-      }}
-    />
-  );
-}
+import { AppIcon } from '../ui/icons/index';
+import { getExtensionIcon } from './ExtensionDetailModal';
 
 export const ExtensionCard: React.FC<ExtensionCardProps> = ({
   extension,
-  mcp,
+  mcp: _mcp,
   actions,
 }) => {
-  const {
-    scope,
-    item,
-    installedMark,
-    canUninstall,
-    detailOpen,
-    configOpen = false,
-    busyId,
-  } = extension;
+  const { scope, item, installedMark, canUninstall, detailOpen, busyId } =
+    extension;
   const {
     highlightMatch,
     toggleExpand,
     onInstallCatalog,
     onRemovePackage,
-    onSetManage,
     onGoToConfig,
     onTogglePlugin,
+    onSelect,
+    onManage,
   } = actions;
+
+  const handleCardClick = () => {
+    if (onSelect) {
+      onSelect(item);
+    } else {
+      toggleExpand(scope, item.id, 'detail');
+    }
+  };
 
   if (scope === 'installed') {
     const installedItem = item as InstalledExtension;
@@ -125,41 +93,33 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
     return (
       <div
         className={`${styles.rowBlock}${
-          detailOpen || configOpen ? ` ${styles.rowBlockExpanded}` : ''
+          detailOpen ? ` ${styles.rowBlockExpanded}` : ''
         }`}
         role="listitem"
+        tabIndex={0}
+        onClick={handleCardClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleCardClick();
+          }
+        }}
       >
         <div className={styles.row}>
+          <div className={styles.cardIconBox} aria-hidden>
+            <AppIcon name={getExtensionIcon(installedItem)} size={18} />
+          </div>
           <div className={styles.rowMain}>
             <div className={styles.titleLine}>
-              <Badge size="xs" tone="neutral">
-                {kindLabel(installedItem.kind)}
-              </Badge>
               <span className={styles.name}>
                 {highlightMatch(installedItem.name)}
               </span>
-              <Badge
-                size="xs"
-                tone={installedItem.source === 'official' ? 'brand' : 'neutral'}
-              >
-                {sourceLabel(installedItem.source)}
-              </Badge>
             </div>
             <div className={styles.desc}>
               {highlightMatch(installedItem.description)}
             </div>
           </div>
-          <div className={styles.actions}>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              active={detailOpen}
-              aria-expanded={detailOpen}
-              onClick={() => toggleExpand('installed', installedItem.id, 'detail')}
-            >
-              {detailOpen ? '收起' : '详情'}
-            </Button>
+          <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
             {pluginCard ? (
               <Button
                 type="button"
@@ -174,20 +134,24 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
                   )
                 }
               >
-                {pluginCard.pluginEnabled ? '停用' : '启用'}
+                {pluginCard.pluginEnabled ? '已启用' : '已停用'}
               </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                active={configOpen}
-                aria-expanded={configOpen}
-                onClick={() => toggleExpand('installed', installedItem.id, 'config')}
-              >
-                {configOpen ? '收起' : '配置'}
-              </Button>
-            )}
+            ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              active={detailOpen}
+              onClick={() => {
+                if (onManage) {
+                  onManage(installedItem);
+                } else {
+                  handleCardClick();
+                }
+              }}
+            >
+              管理
+            </Button>
             {canUninstall ? (
               <Button
                 type="button"
@@ -200,8 +164,6 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
             ) : null}
           </div>
         </div>
-        {detailOpen ? renderExpandBody(installedItem.kind, installedItem, 'detail', mcp, actions) : null}
-        {configOpen ? renderExpandBody(installedItem.kind, installedItem, 'config', mcp, actions) : null}
       </div>
     );
   }
@@ -212,47 +174,35 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
     <div
       className={`${styles.rowBlock}${detailOpen ? ` ${styles.rowBlockExpanded}` : ''}`}
       role="listitem"
+      tabIndex={0}
+      onClick={handleCardClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleCardClick();
+        }
+      }}
     >
       <div className={styles.row}>
+        <div className={styles.cardIconBox} aria-hidden>
+          <AppIcon name={getExtensionIcon(entry)} size={18} />
+        </div>
         <div className={styles.rowMain}>
           <div className={styles.titleLine}>
-            <Badge size="xs" tone="neutral">{kindLabel(entry.kind)}</Badge>
-            <span className={styles.name}>
-              {highlightMatch(entry.name)}
-            </span>
-            <Badge
-              size="xs"
-              tone={entry.source === 'official' ? 'brand' : 'neutral'}
-            >
-              {entry.source === 'official' ? '官方' : '三方'}
-            </Badge>
-            {installedMark ? (
-              <Badge size="xs" tone="success">已装</Badge>
-            ) : null}
+            <span className={styles.name}>{highlightMatch(entry.name)}</span>
           </div>
-          <div className={styles.desc}>
-            {highlightMatch(entry.description)}
-          </div>
+          <div className={styles.desc}>{highlightMatch(entry.description)}</div>
         </div>
-        <div className={styles.actions}>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            active={detailOpen}
-            aria-expanded={detailOpen}
-            onClick={() => toggleExpand('catalog', entry.id, 'detail')}
-          >
-            {detailOpen ? '收起' : '详情'}
-          </Button>
+        <div className={styles.actions} onClick={(e) => e.stopPropagation()}>
           {installedMark ? (
             <Button
               type="button"
-              variant="secondary"
+              variant="ghost"
               size="sm"
+              active={detailOpen}
               onClick={() => onGoToConfig?.(entry.id)}
             >
-              去配置
+              已安装
             </Button>
           ) : (
             <Button
@@ -267,7 +217,6 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
           )}
         </div>
       </div>
-      {detailOpen ? renderExpandBody(entry.kind, entry, 'detail', mcp, actions) : null}
     </div>
   );
 };

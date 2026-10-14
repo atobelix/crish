@@ -1,8 +1,17 @@
 import React from 'react';
-import type { CatalogEntry, InstalledExtension } from '../../api/extensionCatalog';
+import type {
+  CatalogEntry,
+  InstalledExtension,
+} from '../../api/extensionCatalog';
 import { ExtensionCard } from './ExtensionCard';
 import { Button } from '../ui';
-import type { ExpandMode, ExpandTarget, KindFilter, MainView, ManageKind } from './types';
+import type {
+  ExpandMode,
+  ExpandTarget,
+  KindFilter,
+  MainView,
+  ManageKind,
+} from './types';
 import styles from './SettingsExtensionsTab.module.css';
 
 /** 扩展数据域 */
@@ -29,8 +38,16 @@ export interface FiltersGroup {
 /** 操作回调域 */
 export interface ActionsGroup {
   highlightMatch: (text: string) => React.ReactNode;
-  toggleExpand: (scope: 'installed' | 'catalog', id: string, mode: ExpandMode) => void;
-  isExpanded: (scope: 'installed' | 'catalog', id: string, mode?: ExpandMode) => boolean;
+  toggleExpand: (
+    scope: 'installed' | 'catalog',
+    id: string,
+    mode: ExpandMode
+  ) => void;
+  isExpanded: (
+    scope: 'installed' | 'catalog',
+    id: string,
+    mode?: ExpandMode
+  ) => boolean;
   onInstallCatalog: (entry: CatalogEntry) => void;
   onRemovePackage: (item: InstalledExtension) => void;
   onToggleMcpServer: (serverId: string, start: boolean) => void;
@@ -41,6 +58,8 @@ export interface ActionsGroup {
   onSetExpand: (expand: ExpandTarget | null) => void;
   /** 插件启停（E3 UI 泛化）。 */
   onTogglePlugin: (pluginId: string, enabled: boolean) => void;
+  onSelect?: (item: InstalledExtension | CatalogEntry) => void;
+  onManage?: (item: InstalledExtension) => void;
 }
 
 export type ExtensionListProps = {
@@ -81,14 +100,12 @@ export const ExtensionList: React.FC<ExtensionListProps> = ({
     onSetView,
     onSetExpand,
     onTogglePlugin,
+    onSelect,
+    onManage,
   } = ac;
   if (view === 'installed') {
     return (
-      <div
-        className={styles.list}
-        role="list"
-        aria-label="已安装"
-      >
+      <div className={styles.list} role="list" aria-label="已安装">
         {loading && installedFiltered.length === 0 ? (
           <div className={styles.empty} role="status">
             加载中…
@@ -141,6 +158,8 @@ export const ExtensionList: React.FC<ExtensionListProps> = ({
                   onToggleExpandMcpTools,
                   onSetManage,
                   onTogglePlugin,
+                  onSelect,
+                  onManage,
                 }}
               />
             );
@@ -194,6 +213,7 @@ export const ExtensionList: React.FC<ExtensionListProps> = ({
                     mode: 'config',
                   });
                 },
+                onSelect,
               }}
             />
           );

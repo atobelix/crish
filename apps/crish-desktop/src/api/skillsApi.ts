@@ -7,29 +7,23 @@
  *   daemon 同步显式本地-only，engineSynced 恒 false）
  * - 斜杠命令：/skill:name 与 enableSkillCommands
  *
- * 本文件为消费方入口，保留对外导出路径不变；FS 访问与发现逻辑已分别拆至
- * `./skillsApiFs` 与 `./skillsApiDiscovery`。
+ * 本文件为消费方入口，保留对外导出路径不变；FS 访问、发现、创建与斜杠缓存已分别
+ * 拆至 `./skillsApiFs`、`./skillsApiDiscovery`、`./skillsApiCreate`、`./skillsApiSlashCache`。
  *
  * @see docs/plans/2026-07-product-trust-topdown.md §1.2 / §2
  */
 
-import { getWorkspacePath } from './projectStore';
 import { openDirectoryDialogSafe } from './openDirectoryDialog';
 import {
   dirname,
-  joinPath,
   legacySkillIdFromPath,
   loadActivationMap,
   normalizeSlashName,
   saveActivationMap,
 } from './skillsApiHelpers';
-import { mkdirAny, readTextAny, writeTextAny } from './skillsApiFs';
 import { discoverSkills } from './skillsApiDiscovery';
-import type {
-  DesktopSkill,
-  SkillActivation,
-  SkillSlashCommand,
-} from './skillsApi.types';
+import { invalidateSkillSlashCache } from './skillsApiSlashCache';
+import type { DesktopSkill, SkillActivation } from './skillsApi.types';
 import { createPromptTemplate } from '../prompts';
 import type { PromptTemplate } from '../prompts';
 
@@ -47,7 +41,13 @@ export {
   getExtraSkillDirs,
   removeExtraSkillDir,
   skillsFsAvailable,
+  tryHomeDir,
+  readTextAny,
+  writeTextAny,
+  mkdirAny,
 } from './skillsApiFs';
+export { normalizeSlashName } from './skillsApiHelpers';
+export { skillStableId } from './skillId';
 
 // ── 发现（再导出；discoverSkills 同时为本模块内部使用） ────────────────
 export {
@@ -122,106 +122,36 @@ export async function revealSkillPath(filePath: string): Promise<boolean> {
   }
 }
 
-// ── 创建项目技能模板 ──────────────────────────────────────────────────
+// ── 创建技能模板（实现见 ./skillsApiCreate） ──────────────────────────
 
-export type CreateSkillResult =
-  | { ok: true; skillPath: string; skillDir: string }
-  | { ok: false; error: string };
+export {
+  createProjectSkill,
+  createGlobalSkill,
+  type CreateSkillResult,
+} from './skillsApiCreate';
 
-/** 在项目 .conex/skills 下创建技能模板 */
-export async function createProjectSkill(opts: {
-  name: string;
-  description?: string;
-  workspacePath?: string | null;
-  content?: string;
-}): Promise<CreateSkillResult> {
-  const workspace = (opts.workspacePath ?? getWorkspacePath() ?? '').trim();
-  if (!workspace) return { ok: false, error: '未打开工作区，无法创建项目技能' };
-  const slug = normalizeSlashName(opts.name);
-  if (!slug) return { ok: false, error: '技能名称无效' };
+// ── 斜杠命令（实现与缓存见 ./skillsApiSlashCache） ----------
 
-  const skillDir = joinPath(joinPath(workspace, '.conex/skills'), slug);
-  const skillPath = joinPath(skillDir, 'SKILL.md');
-  const existing = await readTextAny(skillPath);
-  if (existing != null) return { ok: false, error: `已存在：${skillPath}` };
+export {
+  skillsToSlashCommands,
+  getSkillSlashCommandsCached,
+  invalidateSkillSlashCache,
+} from './skillsApiSlashCache';
 
-  const desc = (opts.description || `${opts.name} 技能`).trim();
-  let body: string;
-  if (opts.content && opts.content.trim()) {
-    const rawContent = opts.content.trim();
-    if (rawContent.startsWith('---')) {
-      body = rawContent;
-    } else {
-      body = [
-        '---',
-        `name: ${slug}`,
-        `description: ${JSON.stringify(desc)}`,
-        'activation: recommended',
-        '---',
-        '',
-        rawContent,
-        '',
-      ].join('\n');
-    }
-  } else {
-    body = [
-      '---',
-      `name: ${slug}`,
-      `description: ${JSON.stringify(desc)}`,
-      'activation: recommended',
-      '---',
-      '',
-      `# ${opts.name.trim() || slug}`,
-      '',
-      '## 何时使用',
-      '',
-      `- ${desc}`,
-      '',
-      '## 步骤',
-      '',
-      '1. 阅读任务上下文',
-      '2. 按本技能约定执行',
-      '3. 完成后做简要校验',
-      '',
-    ].join('\n');
-  }
-
-  const mk = await mkdirAny(skillDir);
-  if (!mk) {
-    // 尝试直接写（部分 fs 会自动建父目录）
-  }
-  const wrote = await writeTextAny(skillPath, body);
-  if (!wrote) {
-    return {
-      ok: false,
-      error: '无法写入 SKILL.md（需要桌面壳 plugin-fs 权限）',
-    };
-  }
-  invalidateSkillSlashCache();
-  return { ok: true, skillPath, skillDir };
-}
-
-// ── 斜杠命令 ----------
-
-/** 启用且未禁用模型调用的技能 → 斜杠命令 */
-export function skillsToSlashCommands(
-  skills: DesktopSkill[]
-): SkillSlashCommand[] {
-  return skills
-    .filter(
-      (s) =>
-        (s.activation === 'enabled' || s.activation === 'recommended') &&
-        !s.disableModelInvocation
-    )
-    .map((s) => ({
-      cmd: `/skill:${normalizeSlashName(s.name)}`,
-      desc: s.description.slice(0, 120),
-      skillId: s.id,
-      skillName: s.name,
-      filePath: s.filePath,
-    }))
-    .sort((a, b) => a.cmd.localeCompare(b.cmd));
-}
+const COMMON_SKILL_ALIASES: Record<string, string> = {
+  代码检视: 'code-review',
+  代码审查: 'code-review',
+  智能代码检视: 'code-review',
+  简历大师: 'resume-master',
+  制作简历: 'resume-master',
+  项目简历: 'repo-to-resume-tailor',
+  仓库简历: 'repo-to-resume-tailor',
+  中文编码: 'chinese-encoding-guard',
+  防乱码: 'chinese-encoding-guard',
+  学术去ai: 'de-ai-academic-cn',
+  学术润色: 'de-ai-academic-cn',
+  去ai痕迹: 'de-ai-academic-cn',
+};
 
 /** 按 id、路径或名称查找技能 */
 export async function resolveSkillByIdOrName(
@@ -229,31 +159,54 @@ export async function resolveSkillByIdOrName(
   skills?: DesktopSkill[]
 ): Promise<DesktopSkill | null> {
   const list = skills ?? (await discoverSkills()).skills;
-  const key = idOrName.toLowerCase().trim();
+  const rawKey = idOrName.trim();
+  const key = rawKey.toLowerCase();
+  const normKey = normalizeSlashName(rawKey);
+  const alias = COMMON_SKILL_ALIASES[rawKey] || COMMON_SKILL_ALIASES[key];
   return (
     list.find(
       (s) =>
-        s.id === idOrName ||
-        s.filePath === idOrName ||
+        s.id === rawKey ||
+        s.filePath === rawKey ||
+        s.name === rawKey ||
+        s.name.toLowerCase() === key ||
+        normalizeSlashName(s.name) === normKey ||
         normalizeSlashName(s.name) === key ||
-        s.name.toLowerCase() === key
+        (alias &&
+          (s.name.toLowerCase() === alias ||
+            normalizeSlashName(s.name) === alias ||
+            s.id.toLowerCase().includes(alias)))
     ) ?? null
   );
 }
 
-/** 解析 /skill:name 并返回技能正文（用于注入用户消息） */
+/** 解析 /skill:name 或 /技能:name 并返回技能正文（用于注入用户消息） */
 export async function resolveSkillSlash(
   input: string,
   skills?: DesktopSkill[]
 ): Promise<{ skill: DesktopSkill; rest: string } | null> {
-  const m = /^\/skill:([a-z0-9._-]+)\s*([\s\S]*)$/i.exec(input.trim());
+  const trimmed = input.trim();
+  const m = /^\/(?:skill|技能)[:：]([^\s]+)\s*([\s\S]*)$/iu.exec(trimmed);
   if (!m) return null;
-  const key = m[1]!.toLowerCase();
+  const rawKey = m[1]!.trim();
+  const key = rawKey.toLowerCase();
+  const normKey = normalizeSlashName(rawKey);
+  const alias = COMMON_SKILL_ALIASES[rawKey] || COMMON_SKILL_ALIASES[key];
   const rest = (m[2] || '').trim();
   const list = skills ?? (await discoverSkills()).skills;
   const skill =
-    list.find((s) => normalizeSlashName(s.name) === key) ||
-    list.find((s) => s.name.toLowerCase() === key);
+    list.find(
+      (s) =>
+        s.id === rawKey ||
+        s.name === rawKey ||
+        s.name.toLowerCase() === key ||
+        normalizeSlashName(s.name) === normKey ||
+        normalizeSlashName(s.name) === key ||
+        (alias &&
+          (s.name.toLowerCase() === alias ||
+            normalizeSlashName(s.name) === alias ||
+            s.id.toLowerCase().includes(alias)))
+    ) ?? null;
   if (!skill) return null;
   return { skill, rest };
 }
@@ -264,10 +217,11 @@ export function formatSkillInjection(
 ): string {
   // 语义等价旧裸拼接：描述为空时整行省略；正文/兜底文案/userRest 原样透出
   const descriptionLine = skill.description ? `说明：${skill.description}` : '';
+  const body = (skill.content || skill.raw || '').trim();
   return SKILL_INJECTION_TEMPLATE.render({
     skillName: skill.name,
     descriptionLine,
-    skillBody: skill.content || '（技能正文为空）',
+    skillBody: body || '（技能正文为空）',
     userPrompt: userRest || '请按上述技能执行。',
   });
 }
@@ -297,15 +251,17 @@ export async function resolveSkillForPreflight(
   rawInput: string,
   slashRaw?: string
 ): Promise<{ modelText: string; displayText?: string } | null> {
-  if (slashRaw) {
-    const resolved = await resolveSkillSlash(slashRaw);
-    if (!resolved) return null;
-    return {
-      modelText: formatSkillInjection(resolved.skill, resolved.rest),
-      displayText: resolved.rest
-        ? `/skill:${resolved.skill.name} ${resolved.rest}`
-        : `使用技能：${resolved.skill.name}`,
-    };
+  const targetRaw = (slashRaw || rawInput || '').trim();
+  if (targetRaw) {
+    const resolved = await resolveSkillSlash(targetRaw);
+    if (resolved) {
+      return {
+        modelText: formatSkillInjection(resolved.skill, resolved.rest),
+        displayText: resolved.rest
+          ? `/skill:${resolved.skill.name} ${resolved.rest}`
+          : `使用技能：${resolved.skill.name}`,
+      };
+    }
   }
   const injected = await tryInjectSkillMention(rawInput);
   return injected ? { modelText: injected } : null;
@@ -342,33 +298,3 @@ const SKILL_INJECTION_TEMPLATE: PromptTemplate<SkillInjectionParams> =
         '【技能：{{skillName}}】\n{{descriptionLine}}\n\n{{skillBody}}\n\n---\n\n{{userPrompt}}',
     }
   );
-
-// ── 斜杠命令缓存（菜单用） ---------- */
-
-/** 缓存：斜杠菜单用，避免每次按键全量扫描 */
-let slashCache: {
-  at: number;
-  commands: SkillSlashCommand[];
-  skills: DesktopSkill[];
-} | null = null;
-const SLASH_CACHE_MS = 30_000;
-
-export async function getSkillSlashCommandsCached(force = false): Promise<{
-  commands: SkillSlashCommand[];
-  skills: DesktopSkill[];
-}> {
-  if (!force && slashCache && Date.now() - slashCache.at < SLASH_CACHE_MS) {
-    return { commands: slashCache.commands, skills: slashCache.skills };
-  }
-  const res = await discoverSkills({ workspacePath: getWorkspacePath() });
-  const commands = skillsToSlashCommands(res.skills);
-  slashCache = { at: Date.now(), commands, skills: res.skills };
-  return { commands, skills: res.skills };
-}
-
-export function invalidateSkillSlashCache() {
-  slashCache = null;
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('crish-skills-changed'));
-  }
-}

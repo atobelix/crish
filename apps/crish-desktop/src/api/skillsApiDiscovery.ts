@@ -12,9 +12,7 @@ import { getWorkspacePath } from './projectStore';
 import { invokeTyped } from './tauriInvoke';
 import { logInternalError } from './userFacingErrors';
 import { skillStableId } from './skillId';
-import {
-  isAbsoluteFsPath,
-} from './workspaceFsApi';
+import { isAbsoluteFsPath } from './workspaceFsApi';
 import {
   ALLOWED_DOT_DIRS,
   basename,
@@ -240,22 +238,16 @@ export async function discoverSkills(opts?: {
 
   if (workspace) {
     roots.push(
-      { path: joinPath(workspace, '.conex/skills'), scope: 'project' },
-      { path: joinPath(workspace, '.codex/skills'), scope: 'project' },
-      { path: joinPath(workspace, '.agents/skills'), scope: 'project' },
-      { path: joinPath(workspace, '.claude/skills'), scope: 'project' }
+      { path: joinPath(workspace, '.crish/skills'), scope: 'project' },
+      { path: joinPath(workspace, '.conex/skills'), scope: 'project' }
     );
   }
 
   const home = await tryHomeDir();
   if (home) {
     roots.push(
-      { path: joinPath(home, '.codex/skills'), scope: 'global' },
-      { path: joinPath(home, '.conex/skills'), scope: 'global' },
-      { path: joinPath(home, '.claude/skills'), scope: 'global' },
-      { path: joinPath(home, '.agents/skills'), scope: 'global' },
-      { path: joinPath(home, '.grok/skills'), scope: 'global' },
-      { path: joinPath(home, '.grok/bundled/skills'), scope: 'global' }
+      { path: joinPath(home, '.crish/skills'), scope: 'global' },
+      { path: joinPath(home, '.conex/skills'), scope: 'global' }
     );
   }
 

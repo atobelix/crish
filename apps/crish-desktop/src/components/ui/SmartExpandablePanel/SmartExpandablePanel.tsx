@@ -169,6 +169,20 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
     },
     isOpen
   );
+  useLayerRegistration(
+    {
+      id: `${panelId}-sub`,
+      parentId: panelId,
+      type: 'cascade-submenu',
+      dismissible: true,
+      onDismiss: () => {
+        setActiveSubmenu(null);
+        safeAim.clearSubmenu();
+      },
+      elementRef: cascadeSubmenuRef,
+    },
+    Boolean(isOpen && activeSubmenu?.children && submenuStyle)
+  );
 
   // 过滤项
   const filteredItems = useMemo(() => {
@@ -375,18 +389,20 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
           onPointerDownOutside={(e) => {
             const target = e.detail.originalEvent.target as Node | null;
             const triggerEl = anchor?.current ?? triggerRef.current;
-            if (triggerEl && target && triggerEl.contains(target)) {
+            if (
+              (triggerEl && target && triggerEl.contains(target)) ||
+              (cascadeSubmenuRef.current &&
+                target &&
+                cascadeSubmenuRef.current.contains(target))
+            ) {
               e.preventDefault();
-              return;
             }
           }}
           onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              if (activeSubmenu) {
-                e.stopPropagation();
-                setActiveSubmenu(null);
-                safeAim.clearSubmenu();
-              }
+            if (e.key === 'Escape' && activeSubmenu) {
+              e.stopPropagation();
+              setActiveSubmenu(null);
+              safeAim.clearSubmenu();
             }
           }}
         >
@@ -461,7 +477,9 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
                         subItem.onSelect?.(item, ev);
                         subItem.onClick?.();
                         onSelect?.(item);
-                        handleOpenChange(false);
+                        if (subItem.closeOnSelect !== false) {
+                          handleOpenChange(false);
+                        }
                       }}
                     />
                   ))}

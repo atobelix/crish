@@ -24,7 +24,7 @@ import { useAnimatedPresence } from './useAnimatedPresence';
 import { useRestoreFocus } from './useRestoreFocus';
 import { useLayerRegistration } from '../internal/layer-registration/useLayerRegistration';
 
-export type DialogSize = 'sm' | 'md' | 'lg';
+export type DialogSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'auto';
 export type DialogRole = 'dialog' | 'alertdialog';
 
 export interface DialogProps {
@@ -80,6 +80,9 @@ const SIZE_CLASS: Record<DialogSize, string | undefined> = {
   sm: styles.dialogSm,
   md: styles.dialogMd,
   lg: styles.dialogLg,
+  xl: styles.dialogXl,
+  '2xl': styles.dialog2xl,
+  auto: styles.dialogAuto,
 };
 
 export function Dialog({
