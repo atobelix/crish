@@ -14,7 +14,7 @@
 }
 
 .modalPanel button {
-  border-radius: 7px;
+  border-radius: var(--radius-md);
 }
 
 .modalBody {

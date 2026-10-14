@@ -72,6 +72,8 @@
     var(--border-subtle) 96%,
     var(--text-primary) 4%
   );
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
 }
 
 .dropzoneIcon {
@@ -257,7 +259,8 @@
     var(--text-primary) 4%
   );
   outline: none;
-  box-shadow: none;
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
   background: var(--surface-input, var(--bg-card));
 }
 

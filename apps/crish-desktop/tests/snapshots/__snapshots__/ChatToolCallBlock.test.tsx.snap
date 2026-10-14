@@ -45,12 +45,6 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
               构建项目
             </span>
             <span
-              aria-hidden="true"
-              class="_dotSeparator_d18ff4"
-            >
-              ·
-            </span>
-            <span
               aria-describedby="_r_1_"
               class="_toolErrorParamText_d18ff4"
             >
@@ -295,28 +289,10 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
               aria-describedby="_r_0_"
               class="_toolActionText_d18ff4"
             >
-              运行测试
-            </span>
-            <span
-              aria-hidden="true"
-              class="_dotSeparator_d18ff4"
-            >
-              ·
-            </span>
-            <span
-              aria-describedby="_r_1_"
-              class="_toolActionText_d18ff4"
-            >
               终端
             </span>
             <span
-              aria-hidden="true"
-              class="_dotSeparator_d18ff4"
-            >
-              ·
-            </span>
-            <span
-              aria-describedby="_r_2_"
+              aria-describedby="_r_1_"
               class="_toolParamText_d18ff4"
             >
               npm test
@@ -375,7 +351,7 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
                 class="_terminalLineEndSlot_d18ff4"
               >
                 <button
-                  aria-describedby="_r_3_"
+                  aria-describedby="_r_2_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
@@ -535,28 +511,10 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
               aria-describedby="_r_0_"
               class="_toolActionText_d18ff4"
             >
-              查看 main.ts
-            </span>
-            <span
-              aria-hidden="true"
-              class="_dotSeparator_d18ff4"
-            >
-              ·
-            </span>
-            <span
-              aria-describedby="_r_1_"
-              class="_toolActionText_d18ff4"
-            >
               读取
             </span>
-            <span
-              aria-hidden="true"
-              class="_dotSeparator_d18ff4"
-            >
-              ·
-            </span>
             <button
-              aria-describedby="_r_2_"
+              aria-describedby="_r_1_"
               class="_button_ae1db5 _buttonGhost_ae1db5 _buttonMd_ae1db5 _toolPathLink_d18ff4"
               data-size="md"
               data-variant="ghost"
@@ -644,28 +602,10 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
               aria-describedby="_r_0_"
               class="_toolActionText_d18ff4"
             >
-              修改 utils.ts
-            </span>
-            <span
-              aria-hidden="true"
-              class="_dotSeparator_d18ff4"
-            >
-              ·
-            </span>
-            <span
-              aria-describedby="_r_1_"
-              class="_toolActionText_d18ff4"
-            >
               修改
             </span>
-            <span
-              aria-hidden="true"
-              class="_dotSeparator_d18ff4"
-            >
-              ·
-            </span>
             <button
-              aria-describedby="_r_2_"
+              aria-describedby="_r_1_"
               class="_button_ae1db5 _buttonGhost_ae1db5 _buttonMd_ae1db5 _toolPathLink_d18ff4"
               data-size="md"
               data-variant="ghost"
@@ -700,217 +640,65 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
       >
         <div
           aria-label="完成的工具详情"
-          class="_toolResultBody_d18ff4"
+          class="_toolResultBody_d18ff4 _toolResultBodySingle_d18ff4"
           id="tool-result-tool_duration"
           role="region"
         >
-          <section
-            aria-label="工具输入参数"
-            class="_toolSection_d18ff4 _toolSectionInput_d18ff4"
-            data-tool-id="tool_duration"
-          >
-            <header
-              class="_toolSectionHeader_d18ff4"
-            >
-              <div
-                class="_toolSectionTitleGroup_d18ff4"
-              >
-                <span
-                  class="_toolSectionBadge_d18ff4"
-                >
-                  输入
-                </span>
-              </div>
-              <div
-                class="_toolSectionActions_d18ff4"
-              >
-                <button
-                  aria-describedby="_r_3_"
-                  class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
-                  data-size="sm"
-                  data-variant="ghost"
-                  type="button"
-                >
-                  <span
-                    aria-hidden="true"
-                    class="_buttonIcon_ae1db5"
-                  >
-                    <svg
-                      aria-hidden="true"
-                      class=""
-                      color="currentColor"
-                      data-icon="code"
-                      fill="none"
-                      height="14"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      viewBox="0 0 24 24"
-                      width="14"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M16 6.99998L19.0664 9.64296C20.3554 10.7541 21 11.3096 21 12C21 12.6903 20.3555 13.2459 19.0664 14.357L16 17"
-                        stroke="currentColor"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                      />
-                      <path
-                        d="M8 6.99998L4.93365 9.64296C3.64455 10.7541 3 11.3096 3 12C3 12.6903 3.64455 13.2459 4.93365 14.357L8 17"
-                        stroke="currentColor"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                      />
-                    </svg>
-                  </span>
-                </button>
-                <button
-                  aria-describedby="_r_4_"
-                  class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
-                  data-size="sm"
-                  data-variant="ghost"
-                  type="button"
-                >
-                  <span
-                    aria-hidden="true"
-                    class="_buttonIcon_ae1db5"
-                  >
-                    <svg
-                      aria-hidden="true"
-                      class=""
-                      color="currentColor"
-                      data-icon="copy"
-                      fill="none"
-                      height="14"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      viewBox="0 0 24 24"
-                      width="14"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M7.5 14.5C7.5 11.2002 7.5 9.55025 8.52513 8.52513C9.55025 7.5 11.2002 7.5 14.5 7.5C17.7998 7.5 19.4497 7.5 20.4749 8.52513C21.5 9.55025 21.5 11.2002 21.5 14.5C21.5 17.7998 21.5 19.4497 20.4749 20.4749C19.4497 21.5 17.7998 21.5 14.5 21.5C11.2002 21.5 9.55025 21.5 8.52513 20.4749C7.5 19.4497 7.5 17.7998 7.5 14.5Z"
-                        stroke="currentColor"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                      />
-                      <path
-                        d="M7.5 16.5C6.10355 16.5 5.40533 16.5 4.84402 16.3036C3.83866 15.9518 3.0482 15.1613 2.69641 14.156C2.5 13.5947 2.5 12.8964 2.5 11.5V9.5C2.5 6.20017 2.5 4.55025 3.52513 3.52513C4.55025 2.5 6.20017 2.5 9.5 2.5H11.5C12.8964 2.5 13.5947 2.5 14.156 2.69641C15.1613 3.0482 15.9518 3.83866 16.3036 4.84402C16.5 5.40533 16.5 6.10355 16.5 7.5"
-                        stroke="currentColor"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                      />
-                    </svg>
-                  </span>
-                  <span
-                    class="_buttonLabel_ae1db5"
-                  >
-                    复制
-                  </span>
-                </button>
-              </div>
-            </header>
-            <div
-              class="_toolSectionContent_d18ff4"
-            >
-              <div
-                class="_toolKeyValueTable_d18ff4"
-              >
-                <div
-                  class="_toolKeyValueRow_d18ff4"
-                >
-                  <span
-                    class="_toolKeyCell_d18ff4"
-                  >
-                    filePath
-                  </span>
-                  <div
-                    class="_toolValCell_d18ff4"
-                  >
-                    <span
-                      class="_toolValText_d18ff4"
-                    >
-                      /src/utils.ts
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
           <section
             aria-label="工具执行输出"
             class="_toolSection_d18ff4 _toolSectionOutput_d18ff4 "
             data-tool-id="tool_duration"
           >
-            <header
-              class="_toolSectionHeader_d18ff4"
+            <div
+              class="_toolFloatingActions_d18ff4"
             >
-              <div
-                class="_toolSectionTitleGroup_d18ff4"
+              <button
+                aria-describedby="_r_2_"
+                class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
+                data-size="sm"
+                data-variant="ghost"
+                type="button"
               >
                 <span
-                  class="_toolSectionBadge_d18ff4 _toolSectionBadgeOutput_d18ff4"
+                  aria-hidden="true"
+                  class="_buttonIcon_ae1db5"
                 >
-                  输出
+                  <svg
+                    aria-hidden="true"
+                    class=""
+                    color="currentColor"
+                    data-icon="copy"
+                    fill="none"
+                    height="14"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="14"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M7.5 14.5C7.5 11.2002 7.5 9.55025 8.52513 8.52513C9.55025 7.5 11.2002 7.5 14.5 7.5C17.7998 7.5 19.4497 7.5 20.4749 8.52513C21.5 9.55025 21.5 11.2002 21.5 14.5C21.5 17.7998 21.5 19.4497 20.4749 20.4749C19.4497 21.5 17.7998 21.5 14.5 21.5C11.2002 21.5 9.55025 21.5 8.52513 20.4749C7.5 19.4497 7.5 17.7998 7.5 14.5Z"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                    />
+                    <path
+                      d="M7.5 16.5C6.10355 16.5 5.40533 16.5 4.84402 16.3036C3.83866 15.9518 3.0482 15.1613 2.69641 14.156C2.5 13.5947 2.5 12.8964 2.5 11.5V9.5C2.5 6.20017 2.5 4.55025 3.52513 3.52513C4.55025 2.5 6.20017 2.5 9.5 2.5H11.5C12.8964 2.5 13.5947 2.5 14.156 2.69641C15.1613 3.0482 15.9518 3.83866 16.3036 4.84402C16.5 5.40533 16.5 6.10355 16.5 7.5"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                    />
+                  </svg>
                 </span>
                 <span
-                  class="_toolSectionMeta_d18ff4"
-                />
-              </div>
-              <div
-                class="_toolSectionActions_d18ff4"
-              >
-                <button
-                  aria-describedby="_r_5_"
-                  class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
-                  data-size="sm"
-                  data-variant="ghost"
-                  type="button"
+                  class="_buttonLabel_ae1db5"
                 >
-                  <span
-                    aria-hidden="true"
-                    class="_buttonIcon_ae1db5"
-                  >
-                    <svg
-                      aria-hidden="true"
-                      class=""
-                      color="currentColor"
-                      data-icon="copy"
-                      fill="none"
-                      height="14"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      viewBox="0 0 24 24"
-                      width="14"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M7.5 14.5C7.5 11.2002 7.5 9.55025 8.52513 8.52513C9.55025 7.5 11.2002 7.5 14.5 7.5C17.7998 7.5 19.4497 7.5 20.4749 8.52513C21.5 9.55025 21.5 11.2002 21.5 14.5C21.5 17.7998 21.5 19.4497 20.4749 20.4749C19.4497 21.5 17.7998 21.5 14.5 21.5C11.2002 21.5 9.55025 21.5 8.52513 20.4749C7.5 19.4497 7.5 17.7998 7.5 14.5Z"
-                        stroke="currentColor"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                      />
-                      <path
-                        d="M7.5 16.5C6.10355 16.5 5.40533 16.5 4.84402 16.3036C3.83866 15.9518 3.0482 15.1613 2.69641 14.156C2.5 13.5947 2.5 12.8964 2.5 11.5V9.5C2.5 6.20017 2.5 4.55025 3.52513 3.52513C4.55025 2.5 6.20017 2.5 9.5 2.5H11.5C12.8964 2.5 13.5947 2.5 14.156 2.69641C15.1613 3.0482 15.9518 3.83866 16.3036 4.84402C16.5 5.40533 16.5 6.10355 16.5 7.5"
-                        stroke="currentColor"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                      />
-                    </svg>
-                  </span>
-                  <span
-                    class="_buttonLabel_ae1db5"
-                  >
-                    复制
-                  </span>
-                </button>
-              </div>
-            </header>
+                  复制
+                </span>
+              </button>
+            </div>
             <div
               class="_toolSectionContent_d18ff4"
             >

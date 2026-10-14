@@ -438,7 +438,9 @@ describe('批次 2 · ⑥ 注入 token 名 ∈ 静态定义名（双层同源约
       '\n' +
       readFile('src/api/themePersonalization.ts') +
       '\n' +
-      readFile('src/services/TokenRuntimeController.ts');
+      readFile('src/services/TokenRuntimeController.ts') +
+      '\n' +
+      readFile('src/services/token-runtime/injectRootTokens.ts');
     const injected = [
       ...new Set(
         [...themeStore.matchAll(/setProperty\('(--[\w-]+)'/g)].map((m) => m[1])

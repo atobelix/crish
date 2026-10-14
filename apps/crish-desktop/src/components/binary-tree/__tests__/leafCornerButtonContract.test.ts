@@ -31,7 +31,8 @@ const DIR =
 const APP_ROOT = join(DIR, '../../../..');
 const read = (rel: string) => readFileSync(join(APP_ROOT, rel), 'utf8');
 
-const WORKSPACE_CSS = 'src/components/binary-tree/BinaryTreeWorkspace.module.css';
+const WORKSPACE_CSS =
+  'src/components/binary-tree/BinaryTreeWorkspace.module.css';
 const STRIP_CSS = 'src/components/binary-tree/LeafToolTabStrip.module.css';
 const TOKENS_CSS = 'src/styles/tokens.css';
 
@@ -49,7 +50,9 @@ function declarationsOf(css: string, selector: string): string | null {
 function tokenPx(css: string, name: string): number[] {
   const clean = css.replace(/\/\*[\s\S]*?\*\//g, '');
   const out: number[] = [];
-  for (const m of clean.matchAll(new RegExp(`${name}\\s*:\\s*(-?[\\d.]+)px`, 'g'))) {
+  for (const m of clean.matchAll(
+    new RegExp(`${name}\\s*:\\s*(-?[\\d.]+)px`, 'g')
+  )) {
     out.push(Number(m[1]));
   }
   return out;
@@ -61,11 +64,14 @@ describe('叶右上浮动坞开关 · 几何契约（防遮挡顶栏窗控与抽
     expect(decl, `${WORKSPACE_CSS} 缺少 .topSidePanelBtn 规则`).not.toBeNull();
 
     const top = /top:\s*([^;]+);/.exec(decl!)?.[1]?.trim() ?? '';
+    // prettier 会把 calc 重排为多行：先规范化空白再比较（几何语义不变）
     expect(
-      top,
-      '按钮必须越过第一行会话标签条 PaneHeader（--header-height），并在第二行抽屉头内垂直居中；'
-        + '若误写成第一行居中，按钮会跑到窗口右上角叉号处（遮盖窗控）'
-    ).toBe('calc(var(--header-height) + (var(--header-height) - var(--leaf-corner-btn-size)) / 2)');
+      top.replace(/\s+/g, ''),
+      '按钮必须越过第一行会话标签条 PaneHeader（--header-height），并在第二行抽屉头内垂直居中；' +
+        '若误写成第一行居中，按钮会跑到窗口右上角叉号处（遮盖窗控）'
+    ).toBe(
+      'calc(var(--header-height)+(var(--header-height)-var(--leaf-corner-btn-size))/2)'
+    );
     expect(
       top,
       '不得再引入独立间隙 token：位置由 header-height 与 size 纯函数推导'
@@ -74,8 +80,13 @@ describe('叶右上浮动坞开关 · 几何契约（防遮挡顶栏窗控与抽
     // 几何自洽：推导出的按钮必须完全落在第二行内 [h, 2*h]
     const heights = tokenPx(read(TOKENS_CSS), '--header-height');
     const size = tokenPx(read(TOKENS_CSS), '--leaf-corner-btn-size');
-    expect(heights.length, 'tokens.css 未定义 --header-height').toBeGreaterThan(0);
-    expect(size.length, 'tokens.css 未定义 --leaf-corner-btn-size').toBeGreaterThan(0);
+    expect(heights.length, 'tokens.css 未定义 --header-height').toBeGreaterThan(
+      0
+    );
+    expect(
+      size.length,
+      'tokens.css 未定义 --leaf-corner-btn-size'
+    ).toBeGreaterThan(0);
     for (const h of heights) {
       for (const s of size) {
         const derivedTop = h + (h - s) / 2;
@@ -96,17 +107,19 @@ describe('叶右上浮动坞开关 · 几何契约（防遮挡顶栏窗控与抽
     expect(decl, `${STRIP_CSS} 缺少 .fixedCluster 规则`).not.toBeNull();
     expect(
       decl!,
-      '标签条右簇必须为顶行的坞开关预留 (size + inset)：'
-        + '若改掉这处 calc，让位区与按钮所在行会再次错位'
-    ).toMatch(/padding-right:\s*calc\(var\(--leaf-corner-btn-size\)\s*\+\s*var\(--leaf-corner-btn-inset\)\)/);
+      '标签条右簇必须为顶行的坞开关预留 (size + inset)：' +
+        '若改掉这处 calc，让位区与按钮所在行会再次错位'
+    ).toMatch(
+      /padding-right:\s*calc\(\s*var\(--leaf-corner-btn-size\)\s*\+\s*var\(--leaf-corner-btn-inset\)\s*\)/
+    );
   });
 
   it('③ 间隙 token 不得复活（--leaf-corner-btn-* 只留尺寸与右边距）', () => {
     const tokens = read(TOKENS_CSS);
     expect(
       tokens,
-      '--leaf-corner-btn-gap 已随缺陷修复删除（纵向位置改为推导）；'
-        + '复活它等于把「按钮放到顶行下方」的写法请回来'
+      '--leaf-corner-btn-gap 已随缺陷修复删除（纵向位置改为推导）；' +
+        '复活它等于把「按钮放到顶行下方」的写法请回来'
     ).not.toMatch(/--leaf-corner-btn-gap\s*:/);
     expect(tokens).toMatch(/--leaf-corner-btn-size\s*:\s*\d+px/);
     expect(tokens).toMatch(/--leaf-corner-btn-inset\s*:\s*\d+px/);

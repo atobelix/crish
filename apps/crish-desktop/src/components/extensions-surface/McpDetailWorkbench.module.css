@@ -40,7 +40,7 @@
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm);
-  background-color: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  background-color: var(--tint-active);
   color: var(--text-primary);
   flex-shrink: 0;
 }
@@ -428,7 +428,7 @@
 .toolSchemaBox {
   margin-top: var(--space-2);
   padding: var(--space-2) var(--space-2_5);
-  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  background: var(--tint-hover);
   border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(--radius-sm);
   font-size: 11px;

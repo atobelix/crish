@@ -15,7 +15,7 @@
 }
 
 .modalPanel button {
-  border-radius: 7px;
+  border-radius: var(--radius-md);
 }
 
 .modalBody {
@@ -64,7 +64,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--accent-color) 12%, transparent);
   color: var(--accent-color);
   flex-shrink: 0;

@@ -135,7 +135,7 @@
 .cardIcon {
   width: 28px;
   height: 28px;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   background: var(--bg-card);
   display: flex;
   align-items: center;
@@ -229,7 +229,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   color: var(--color-success);
   background-color: color-mix(in srgb, var(--color-success) 12%, transparent);
   box-sizing: border-box;
@@ -242,7 +242,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   box-sizing: border-box;
 }
 

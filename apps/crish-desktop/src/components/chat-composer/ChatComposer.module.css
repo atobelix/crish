@@ -1264,8 +1264,8 @@
   transition:
     border-radius var(--transition-normal, 160ms)
       var(--ease-decelerate, ease-out),
-    border-color var(--transition-fast, 120ms) ease,
-    box-shadow var(--transition-fast, 120ms) ease,
+    border-color var(--transition-fast, 120ms) var(--ease-decelerate, ease-out),
+    box-shadow var(--transition-fast, 120ms) var(--ease-decelerate, ease-out),
     min-height 160ms var(--ease-decelerate, ease-out);
   container-type: inline-size;
 }

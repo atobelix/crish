@@ -559,31 +559,46 @@ describe('VS-01 ~ VS-05：虚拟滚动首帧测高保护、跨会话 scrollTop �
   });
 
   it('VS-01 静态源码锁：activeSessionId 切会话守卫与同步 useLayoutEffect 时序断言', () => {
+    // 真源迁移（行数门禁收口）：切会话重置 effect 收口至 useSessionSwitchGeometryReset
     const mvSrc = readFileSync(
       resolve(here, '../components/chat-message-list/MessageVirtualizer.tsx'),
       'utf8'
     ).replace(/\r\n/g, '\n');
+    const ssSrc = readFileSync(
+      resolve(
+        here,
+        '../components/chat-message-list/messageVirtualizerScrollState.ts'
+      ),
+      'utf8'
+    ).replace(/\r\n/g, '\n');
 
     // 1. activeSessionId 切会话重置必须使用 useLayoutEffect，绝不允许使用被动 useEffect
-    expect(mvSrc).toMatch(
+    expect(ssSrc).toMatch(
       /useLayoutEffect\(\(\)\s*=>\s*\{[\s\S]*?activeSessionId[\s\S]*?clearHeights\(\)[\s\S]*?\}\s*,\s*\[activeSessionId,\s*clearHeights,\s*manager\]\)/
     );
 
     // 2. 必须具备 prevSessionIdRef 守卫以跳过首次挂载
-    expect(mvSrc).toMatch(
+    expect(ssSrc).toMatch(
       /if\s*\(\s*prevSessionIdRef\.current\s*===\s*activeSessionId\s*\)\s*\{\s*return;\s*\}/
     );
 
-    // 3. 切会话 useLayoutEffect 必须置于 preloadEstimates 与吸底 performProgrammaticScroll 之前
-    const sessionClearIndex = mvSrc.indexOf(
+    // 3. 切会话 useLayoutEffect 内部时序：重置守卫 → 回灌测高 → 吸底滚动
+    const sessionClearIndex = ssSrc.indexOf(
       'prevSessionIdRef.current = activeSessionId'
     );
-    const preloadEstimatesIndex = mvSrc.indexOf('unmeasuredEstimates');
-    const bottomStickIndex = mvSrc.lastIndexOf('BOTTOM_STICK_EPSILON_PX');
-
+    const reseedIndex = ssSrc.indexOf('reseedAllMessageHeights(');
+    const programmaticScrollIndex = ssSrc.lastIndexOf(
+      'vs.performProgrammaticScroll(container, targetBottomScrollTop)'
+    );
     expect(sessionClearIndex).toBeGreaterThan(0);
-    expect(preloadEstimatesIndex).toBeGreaterThan(sessionClearIndex);
-    expect(bottomStickIndex).toBeGreaterThan(preloadEstimatesIndex);
+    expect(reseedIndex).toBeGreaterThan(sessionClearIndex);
+    expect(programmaticScrollIndex).toBeGreaterThan(reseedIndex);
+
+    // 4. MV 侧：hook 调用必须先于 preloadEstimates 派发（异步测高不得抢先重置）
+    const hookCallIndex = mvSrc.indexOf('useSessionSwitchGeometryReset({');
+    const preloadCallIndex = mvSrc.lastIndexOf('preloadEstimates');
+    expect(hookCallIndex).toBeGreaterThan(0);
+    expect(preloadCallIndex).toBeGreaterThan(hookCallIndex);
   });
 
   it('VS-05 静态源码锁：ChatMessageList 传入 leafRootRef 闭合多分屏滚动隔离', () => {
