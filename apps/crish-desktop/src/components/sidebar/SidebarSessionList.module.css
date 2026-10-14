@@ -107,6 +107,7 @@
 .sectionSortBtn,
 .sectionSort,
 .foldToggleBtn,
+.folderMoreBtn,
 .folderNewBtn,
 .folderNewSession {
   --btn-hover-overlay: transparent;
@@ -162,23 +163,29 @@
 
 .sectionLabelRow:hover .sectionNew,
 .sectionLabelRow:focus-within .sectionNew,
+.sectionNew[aria-expanded='true'],
 .sectionLabelRow:hover .sectionSortBtn,
 .sectionLabelRow:focus-within .sectionSortBtn,
 .sectionSortBtn[aria-expanded='true'],
-.sectionSortBtn[data-active='true'],
 .sectionLabelRow:hover .sectionSort,
 .sectionLabelRow:focus-within .sectionSort {
   opacity: 1;
 }
 
-.sectionSortBtn[aria-expanded='true'] {
-  color: var(--text-secondary);
+.sectionNew[aria-expanded='true'],
+.sectionNew[data-size][aria-expanded='true'],
+.sectionSortBtn[aria-expanded='true'],
+.sectionSortBtn[data-size][aria-expanded='true'] {
+  color: var(--text-primary);
 }
 
+.sectionNew[data-size]:hover,
+.sectionSortBtn[data-size]:hover,
+.sectionSort[data-size]:hover,
 .sectionNew:hover,
 .sectionSortBtn:hover,
 .sectionSort:hover {
-  color: var(--text-secondary);
+  color: var(--text-primary);
   background-color: transparent;
 }
 
@@ -282,13 +289,16 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: var(--space-1);
   height: 28px;
   margin-left: auto;
   flex-shrink: 0;
 }
 
+.folderMoreBtn[data-size],
 .folderNewBtn[data-size],
 .folderNewSession[data-size],
+.folderMoreBtn,
 .folderNewBtn,
 .folderNewSession {
   --btn-icon-size: 16px;
@@ -315,18 +325,29 @@
     background-color var(--transition-micro);
 }
 
+.folderHeaderRow:hover .folderMoreBtn,
+.folderHeaderRow:focus-within .folderMoreBtn,
+.folderMoreBtn[aria-expanded='true'],
 .folderHeaderRow:hover .folderNewBtn,
+.folderHeaderRow:focus-within .folderNewBtn,
 .folderHeaderRow:hover .folderNewSession,
 .folderHeaderRow .folderNewBtn:focus-visible {
   opacity: 1;
   pointer-events: auto;
 }
 
+.folderMoreBtn[aria-expanded='true'],
+.folderMoreBtn[data-size][aria-expanded='true'],
+.folderMoreBtn[data-size]:hover,
+.folderNewBtn[data-size]:hover,
+.folderNewSession[data-size]:hover,
+.folderMoreBtn:hover,
 .folderNewBtn:hover,
 .folderNewSession:hover,
+.folderMoreBtn:active,
 .folderNewBtn:active,
 .folderNewSession:active {
-  color: var(--text-secondary);
+  color: var(--text-primary);
   background-color: transparent;
 }
 
@@ -830,7 +851,7 @@ li.isDraggingSource > *,
   height: 26px;
   text-align: center;
   font-size: var(--font-size-xs, 12px);
-  color: var(--text-tertiary);
+  color: var(--text-faint);
   background: transparent;
   border: none;
   box-shadow: none;
@@ -846,7 +867,7 @@ li.isDraggingSource > *,
 }
 
 .foldToggleBtn:hover {
-  color: var(--text-primary);
+  color: var(--text-secondary);
   background: transparent;
 }
 

@@ -46,9 +46,6 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
     onMoveSessionRealtime,
   } = props;
 
-  const hasActiveSortFilter =
-    sortType !== 'active' || groupType !== 'folder' || filterType !== 'all';
-
   const fallbackScrollHostRef = React.useRef<HTMLElement | null>(null);
   const effectiveScrollHostRef = scrollHostRef ?? fallbackScrollHostRef;
 
@@ -154,7 +151,6 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
               filterType === 'pinned' ? sortTriggerRef : undefined
             }
             sortDropdownOpen={sortDropdownOpen}
-            hasActiveSortFilter={hasActiveSortFilter}
             onMoveSessionRealtime={onMoveSessionRealtime}
             renderSessionItem={renderSessionItem}
           />
@@ -172,6 +168,12 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
               onToggleProjectsSection,
               onToggleProjectCollapsed,
               onOpenProject,
+              onSortBtnClick,
+              sortTriggerRef:
+                groupType === 'folder' && filterType !== 'pinned'
+                  ? sortTriggerRef
+                  : undefined,
+              sortDropdownOpen,
               onMoveSessionRealtime,
               renderSessionItem,
             }}
@@ -185,11 +187,15 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
             generalWindowEnabled={generalWindowEnabled}
             generalRenderRange={generalRenderRange}
             generalListRef={generalListRef}
+            groupType={groupType}
             onToggleGeneral={onToggleGeneral}
             onSortBtnClick={onSortBtnClick}
-            sortTriggerRef={sortTriggerRef}
+            sortTriggerRef={
+              groupType === 'none' && filterType !== 'pinned'
+                ? sortTriggerRef
+                : undefined
+            }
             sortDropdownOpen={sortDropdownOpen}
-            hasActiveSortFilter={hasActiveSortFilter}
             onMoveSessionRealtime={onMoveSessionRealtime}
             renderSessionItem={renderSessionItem}
           />

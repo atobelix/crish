@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import styles from './Sidebar.module.css';
-import { useLayoutStore, useSessionStore } from '../../store/storeAccess';
-import { useSidebarSessions } from '../../store/storeAccess';
+import {
+  useLayoutStore,
+  useSessionStore,
+  useSidebarSessions,
+} from '../../store/storeAccess';
 import {
   getActiveProjectId,
   listProjects,
@@ -189,6 +192,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
       handleNewSession,
       handleCommitRename,
       handleOpenScheduled,
+      handleOpenExtensions,
       handleSelectSession,
       handleOpenProject,
       handleToggleProjectCollapsed,
@@ -229,6 +233,10 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
     useEffect(() => {
       if (filterType === 'pinned') setPinnedCollapsed(false);
     }, [filterType, setPinnedCollapsed]);
+
+    useEffect(() => {
+      if (groupType === 'none') setGeneralCollapsed(false);
+    }, [groupType, setGeneralCollapsed]);
 
     useEffect(() => {
       return onUiEvent('project-changed', () => {
@@ -296,6 +304,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
           onOverlayClose={handleOverlayClose}
           onNewSession={handleNewSession}
           onOpenScheduled={handleOpenScheduled}
+          onOpenExtensions={handleOpenExtensions}
           onSearchChange={onSearchChange}
         />
 

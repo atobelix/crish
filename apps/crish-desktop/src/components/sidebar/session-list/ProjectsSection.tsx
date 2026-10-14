@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import type { SessionState } from '../../../store/types';
 import type { ProjectEntry } from '../../../api/projectStore';
-import { emitUiEvent } from '../../../api/uiEvents';
 import { navigateToNewDraft } from '../../../store/storeAccess';
 import { Button, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
 import { AppIcon } from '../../ui/icons/index';
+import { ProjectManageModal } from './ProjectManageModal';
 
 const PROJECT_FOLD_LIMIT = 6;
 
@@ -20,6 +20,9 @@ export interface ProjectsSectionActions {
   onToggleProjectsSection: () => void;
   onToggleProjectCollapsed: (id: string) => void;
   onOpenProject: (id: string) => void;
+  onSortBtnClick?: (e: React.MouseEvent) => void;
+  sortTriggerRef?: React.RefObject<HTMLButtonElement | null>;
+  sortDropdownOpen?: boolean;
   /** Kept for SidebarSessionList API; reorder is pointer drop-only via SessionRow. */
   onMoveSessionRealtime: (
     sessionId: string,
@@ -44,7 +47,10 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
   const [expandedProjectFolders, setExpandedProjectFolders] = useState<
     Record<string, boolean>
   >({});
-  void setExpandedProjectFolders;
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [managingProjectId, setManagingProjectId] = useState<string | null>(
+    null
+  );
 
   const { projects, collapsedProjects, projectsSectionCollapsed, byProjectId } =
     data;
@@ -52,6 +58,9 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
     onToggleProjectsSection,
     onToggleProjectCollapsed,
     onOpenProject,
+    onSortBtnClick,
+    sortTriggerRef,
+    sortDropdownOpen = false,
     onMoveSessionRealtime: _onMoveSessionRealtime,
     renderSessionItem,
   } = actions;
@@ -64,38 +73,63 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
         onClick={onToggleProjectsSection}
         style={{ cursor: 'pointer' }}
       >
-        <Button
-          variant="ghost"
-          type="button"
-          className={styles.sectionLabel}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleProjectsSection();
-          }}
-          aria-expanded={!projectsSectionCollapsed}
-        >
-          <span>项目</span>
-          <AppIcon
-            name="chevron-down"
-            size={16}
-            className={projectsSectionCollapsed ? styles.chevCollapsed : ''}
-            aria-hidden
-          />
-        </Button>
-        <Tooltip content="管理与选择项目">
+        <div className={styles.sectionLabelLeft}>
           <Button
-            type="button"
             variant="ghost"
-            size="sm"
-            className={styles.sectionNew}
-            aria-label="管理与选择项目"
+            type="button"
+            className={styles.sectionLabel}
             onClick={(e) => {
               e.stopPropagation();
-              emitUiEvent('open-project-picker');
+              onToggleProjectsSection();
             }}
-            icon={<AppIcon name="folder-plus" size={16} aria-hidden />}
-          />
-        </Tooltip>
+            aria-expanded={!projectsSectionCollapsed}
+          >
+            <span>项目</span>
+            <AppIcon
+              name="chevron-down"
+              size={16}
+              className={projectsSectionCollapsed ? styles.chevCollapsed : ''}
+              aria-hidden
+            />
+          </Button>
+        </div>
+        <div
+          className={styles.sectionLabelRight}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {onSortBtnClick ? (
+            <Tooltip content="排序与过滤">
+              <Button
+                ref={sortTriggerRef}
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={styles.sectionSortBtn}
+                aria-label="排序与过滤"
+                aria-expanded={sortDropdownOpen}
+                aria-haspopup="menu"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSortBtnClick(e);
+                }}
+                icon={<AppIcon name="chevrons-up-down" size={16} aria-hidden />}
+              />
+            </Tooltip>
+          ) : null}
+          <Tooltip content="新建项目">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={styles.sectionNew}
+              aria-label="新建项目"
+              aria-expanded={createProjectOpen}
+              aria-haspopup="dialog"
+              onClick={() => setCreateProjectOpen(true)}
+              icon={<AppIcon name="folder-plus" size={16} aria-hidden />}
+            />
+          </Tooltip>
+        </div>
       </div>
       <div
         className={styles.accordionWrapper}
@@ -105,6 +139,7 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
           {projects.map((p) => {
             const open = !collapsedProjects[p.id];
             const sess = byProjectId[p.id] || [];
+            const isMoreOpen = managingProjectId === p.id;
 
             return (
               <div
@@ -137,7 +172,29 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
                       <span className={styles.folderName}>{p.name}</span>
                     </Tooltip>
                   </div>
-                  <div className={styles.folderActions}>
+                  <div
+                    className={styles.folderActions}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Tooltip content="项目设置与更多操作">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={styles.folderMoreBtn}
+                        aria-label={`项目 ${p.name} 更多操作`}
+                        aria-expanded={isMoreOpen}
+                        aria-haspopup="dialog"
+                        onClick={() => setManagingProjectId(p.id)}
+                        icon={
+                          <AppIcon
+                            name="more-horizontal"
+                            size={16}
+                            aria-hidden
+                          />
+                        }
+                      />
+                    </Tooltip>
                     <Tooltip content="在本项目新建对话">
                       <Button
                         type="button"
@@ -210,12 +267,30 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
             <div
               className={`${styles.emptyHint} ${styles.subtle}`}
               role="status"
+              style={{ cursor: 'pointer' }}
+              onClick={() => setCreateProjectOpen(true)}
             >
-              点击分区旁 + 添加本地项目
+              点击分区旁 + 新建项目
             </div>
           )}
         </div>
       </div>
+      <ProjectManageModal
+        mode="create"
+        open={createProjectOpen}
+        onClose={() => setCreateProjectOpen(false)}
+        onOpenProject={onOpenProject}
+      />
+      <ProjectManageModal
+        mode="manage"
+        project={projects.find((p) => p.id === managingProjectId)}
+        open={Boolean(managingProjectId)}
+        onClose={() => setManagingProjectId(null)}
+        onOpenProject={onOpenProject}
+        onProjectRemoved={(id) => {
+          if (managingProjectId === id) setManagingProjectId(null);
+        }}
+      />
     </section>
   );
 }

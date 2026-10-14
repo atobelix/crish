@@ -11,7 +11,7 @@ import {
 } from '../../api/mcpApi';
 import { isDemoMode } from '../../api/appMode';
 import type { McpServer } from '../../api/clientApi';
-import { useSettingsStore } from '../../store';
+import { useSettingsStore } from '../../store/storeAccess';
 import {
   copyText,
   errText,

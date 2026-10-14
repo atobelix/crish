@@ -15,11 +15,11 @@ export interface GeneralSectionProps {
   generalWindowEnabled: boolean;
   generalRenderRange: SessionListWindowRange;
   generalListRef: React.RefObject<HTMLUListElement | null>;
+  groupType?: 'folder' | 'none';
   onToggleGeneral: () => void;
   onSortBtnClick: (e: React.MouseEvent) => void;
   sortTriggerRef?: React.RefObject<HTMLButtonElement | null>;
   sortDropdownOpen?: boolean;
-  hasActiveSortFilter?: boolean;
   /** Kept for SidebarSessionList API; reorder is pointer drop-only via SessionRow. */
   onMoveSessionRealtime: (
     sessionId: string,
@@ -38,25 +38,27 @@ export function GeneralSection({
   generalWindowEnabled,
   generalRenderRange,
   generalListRef,
+  groupType = 'folder',
   onToggleGeneral,
   onSortBtnClick,
   sortTriggerRef,
   sortDropdownOpen = false,
-  hasActiveSortFilter = false,
   onMoveSessionRealtime: _onMoveSessionRealtime,
   renderSessionItem,
 }: GeneralSectionProps) {
   void _onMoveSessionRealtime;
   const [isExpanded, setIsExpanded] = React.useState(false);
+  const isFlatList = groupType === 'none';
 
   React.useEffect(() => {
     const listEl = generalListRef.current;
     if (!listEl) return;
     const host = resolveActualScrollHost(null, listEl);
     host?.dispatchEvent(new Event('scroll'));
-  }, [isExpanded, generalWindowEnabled, generalListRef]);
+  }, [isExpanded, isFlatList, generalWindowEnabled, generalListRef]);
 
-  const displayedSessions = isExpanded
+  const showAll = isFlatList || isExpanded;
+  const displayedSessions = showAll
     ? generalSessions
     : generalSessions.slice(0, GENERAL_FOLD_LIMIT);
 
@@ -88,24 +90,25 @@ export function GeneralSection({
           </Button>
         </div>
         <div className={styles.sectionLabelRight}>
-          <Tooltip content="排序与过滤">
-            <Button
-              ref={sortTriggerRef}
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={styles.sectionSortBtn}
-              aria-label="排序与过滤"
-              aria-expanded={sortDropdownOpen}
-              aria-haspopup="menu"
-              data-active={hasActiveSortFilter ? 'true' : undefined}
-              onClick={(e) => {
-                e.stopPropagation();
-                onSortBtnClick(e);
-              }}
-              icon={<AppIcon name="chevrons-up-down" size={16} aria-hidden />}
-            />
-          </Tooltip>
+          {isFlatList ? (
+            <Tooltip content="排序与过滤">
+              <Button
+                ref={sortTriggerRef}
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={styles.sectionSortBtn}
+                aria-label="排序与过滤"
+                aria-expanded={sortDropdownOpen}
+                aria-haspopup="menu"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSortBtnClick(e);
+                }}
+                icon={<AppIcon name="chevrons-up-down" size={16} aria-hidden />}
+              />
+            </Tooltip>
+          ) : null}
           <Tooltip content="新建常规对话">
             <Button
               type="button"
@@ -130,12 +133,12 @@ export function GeneralSection({
       >
         <div
           className={styles.accordionInner}
-          data-drop-zone="general"
-          data-folder-name={GENERAL_FOLDER}
+          data-drop-zone={isFlatList ? 'flat' : 'general'}
+          data-folder-name={isFlatList ? undefined : GENERAL_FOLDER}
         >
           {generalSessions.length > 0 ? (
             <>
-              {generalWindowEnabled && isExpanded ? (
+              {generalWindowEnabled && showAll ? (
                 <WindowedSessionUl
                   sessions={generalSessions}
                   range={generalRenderRange}
@@ -152,13 +155,13 @@ export function GeneralSection({
                   aria-label="对话列表"
                   data-windowed="0"
                   data-window-count={displayedSessions.length}
-                  data-drop-zone="general"
-                  data-folder-name={GENERAL_FOLDER}
+                  data-drop-zone={isFlatList ? 'flat' : 'general'}
+                  data-folder-name={isFlatList ? undefined : GENERAL_FOLDER}
                 >
                   {displayedSessions.map((s) => renderSessionItem(s))}
                 </ul>
               )}
-              {generalSessions.length > GENERAL_FOLD_LIMIT && (
+              {!isFlatList && generalSessions.length > GENERAL_FOLD_LIMIT && (
                 <div className={styles.foldToggleRow}>
                   <Button
                     variant="ghost"
@@ -179,7 +182,9 @@ export function GeneralSection({
               className={`${styles.emptyHint} ${styles.subtle}`}
               role="status"
             >
-              不在项目中的对话会出现在这里
+              {isFlatList
+                ? '暂无常规对话，点击右上角 + 新建对话'
+                : '不在项目中的对话会出现在这里'}
             </div>
           )}
         </div>

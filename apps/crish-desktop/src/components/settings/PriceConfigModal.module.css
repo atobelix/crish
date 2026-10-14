@@ -31,10 +31,8 @@
 .tableRow {
   display: grid;
   grid-template-columns:
-    minmax(96px, 1.5fr) minmax(80px, 1.2fr) minmax(66px, 1fr) minmax(
-      66px,
-      1fr
-    ) minmax(66px, 1fr)
+    minmax(96px, 1.5fr) minmax(80px, 1.2fr) minmax(66px, 1fr) minmax(66px, 1fr)
+    minmax(66px, 1fr)
     76px 92px;
   align-items: center;
   padding: var(--space-1_5) var(--space-3);
@@ -107,7 +105,11 @@
 }
 
 .cellInput:hover:not(:focus) {
-  border-color: var(--border-color);
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 98%,
+    var(--text-primary) 2%
+  );
 }
 
 /* 焦点激活态：锁定柔和浅灰微调（~8%），严禁黑色描边与粗阴影环 (AGENTS.md §13) */

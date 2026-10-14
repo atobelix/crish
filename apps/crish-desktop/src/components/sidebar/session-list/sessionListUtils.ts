@@ -49,7 +49,11 @@ export function sessionListProjectLabel(
       projects.find((p) => p.id === resolvedId) ||
       listProjects().find((p) => p.id === resolvedId);
     if (hit) {
-      return (hit.name || projectFolderLabel(hit.path) || SESSION_LIST_GENERAL_LABEL).trim();
+      return (
+        hit.name ||
+        projectFolderLabel(hit.path) ||
+        SESSION_LIST_GENERAL_LABEL
+      ).trim();
     }
   }
 
@@ -62,6 +66,9 @@ export function sessionListProjectLabel(
 
   if (f.includes('/') || f.includes('\\')) {
     return projectFolderLabel(f);
+  }
+  if (/^proj-[a-z0-9_-]+$/i.test(f)) {
+    return SESSION_LIST_GENERAL_LABEL;
   }
   return f;
 }

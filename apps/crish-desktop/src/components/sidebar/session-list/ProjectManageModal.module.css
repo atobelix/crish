@@ -1,0 +1,312 @@
+.modalPanel {
+  --dialog-width: 440px;
+  width: var(--dialog-width);
+  border-radius: var(--radius-2xl, 24px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  box-shadow:
+    0 24px 48px -12px color-mix(in srgb, var(--shadow-color) 16%, transparent),
+    0 8px 16px -4px color-mix(in srgb, var(--shadow-color) 6%, transparent);
+}
+
+.modalBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+  padding: var(--space-4, 16px) var(--space-5, 20px) var(--space-4, 16px);
+  box-sizing: border-box;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1_5, 6px);
+}
+
+.fieldLabel {
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+/* 文件夹选择区：纯净实线微卡片，克制柔和的边框与背景，同心圆角 12px */
+.folderPickerDropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2, 8px);
+  padding: var(--space-5, 20px) var(--space-4, 16px);
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-input, var(--bg-card));
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.folderPickerDropzone:hover {
+  background:
+    linear-gradient(var(--tint-hover), var(--tint-hover)),
+    var(--surface-input, var(--bg-card));
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 98%,
+    var(--text-primary) 2%
+  );
+  color: var(--text-primary);
+}
+
+.folderPickerDropzone:focus-visible {
+  outline: none;
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 96%,
+    var(--text-primary) 4%
+  );
+}
+
+.dropzoneIcon {
+  color: var(--text-tertiary);
+  transition: color var(--transition-fast);
+}
+
+.folderPickerDropzone:hover .dropzoneIcon {
+  color: var(--text-secondary);
+}
+
+.dropzoneText {
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.dropzoneSubtext {
+  font-size: var(--font-size-xs, 11px);
+  color: var(--text-tertiary);
+}
+
+/* 已选文件夹列表容器：同心圆角 12px */
+.folderListCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+  padding: var(--space-1_5, 6px);
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-hover);
+  max-height: 180px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+/* 文件夹单项：内层圆角 8px */
+.folderItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: 6px 10px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface-input, var(--bg-card));
+  border: 1px solid var(--border-subtle);
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+  min-width: 0;
+}
+
+.folderItem:hover {
+  background:
+    linear-gradient(var(--tint-hover), var(--tint-hover)),
+    var(--surface-input, var(--bg-card));
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 98%,
+    var(--text-primary) 2%
+  );
+}
+
+.folderItemIcon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.folderItemMeta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.folderItemName {
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folderItemPath {
+  font-size: var(--font-size-xs, 11px);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: text;
+}
+
+.folderRemoveBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  border-radius: var(--radius-xs, 4px);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background var(--transition-micro),
+    color var(--transition-micro);
+}
+
+.folderRemoveBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.addMoreBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1_5, 6px);
+  margin-top: var(--space-1, 4px);
+  padding: 6px 10px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-input, var(--bg-card));
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs, 12px);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.addMoreBtn:hover {
+  background:
+    linear-gradient(var(--tint-hover), var(--tint-hover)),
+    var(--surface-input, var(--bg-card));
+  color: var(--text-primary);
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 98%,
+    var(--text-primary) 2%
+  );
+}
+
+/* 项目名称输入框：适中高度 34px，小字号 13px，极度克制微弱边框 */
+.nameInput {
+  height: 34px;
+  min-height: 34px;
+  font-size: var(--font-size-sm, 13px);
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-input, var(--bg-card));
+  color: var(--text-primary);
+  padding: 0 var(--space-3, 12px);
+  box-shadow: none;
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.nameInput::placeholder {
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-tertiary);
+}
+
+.nameInput:hover:not(:focus):not(:focus-visible) {
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 98%,
+    var(--text-primary) 2%
+  );
+  background:
+    linear-gradient(var(--tint-hover), var(--tint-hover)),
+    var(--surface-input, var(--bg-card));
+}
+
+.nameInput:focus,
+.nameInput:focus-visible {
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 96%,
+    var(--text-primary) 4%
+  );
+  outline: none;
+  box-shadow: none;
+  background: var(--surface-input, var(--bg-card));
+}
+
+/* 扩展操作列表（管理模式） */
+.actionDivider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: var(--space-1, 4px) 0;
+}
+
+.actionList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.actionItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2_5, 10px);
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--radius-md, 8px);
+  background: transparent;
+  border: none;
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-micro);
+  box-sizing: border-box;
+}
+
+.actionItem:hover {
+  background: var(--tint-hover);
+}
+
+.actionItemDanger {
+  color: var(--danger-color);
+}
+
+.actionItemDanger:hover {
+  background: var(--danger-soft-bg);
+}
+
+.modalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2, 8px);
+}

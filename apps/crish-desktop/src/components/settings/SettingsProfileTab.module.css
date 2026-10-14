@@ -32,7 +32,3 @@
   color: var(--text-tertiary);
   white-space: nowrap;
 }
-
-.settingsImportBody {
-  padding: var(--space-4) var(--space-5);
-}

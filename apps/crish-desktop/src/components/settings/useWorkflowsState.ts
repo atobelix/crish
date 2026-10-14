@@ -28,10 +28,7 @@ import {
   type WorkflowRunEntry,
   type WorkflowScheduleDraft,
 } from '../../api/workflowApi';
-import {
-  syncFromWorkflows,
-  type WorkflowDef,
-} from '../../store/sessionScheduleBadgeStore';
+import { syncFromWorkflows, type WorkflowDef } from '../../store/storeAccess';
 import {
   ensureScheduledSession,
   loadWorkflowRunsCache,

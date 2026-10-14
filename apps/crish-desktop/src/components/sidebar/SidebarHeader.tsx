@@ -20,6 +20,7 @@ export interface SidebarHeaderProps {
   onOverlayClose: () => void;
   onNewSession: () => void;
   onOpenScheduled: () => void;
+  onOpenExtensions?: () => void;
   onSearchChange?: ((val: string) => void) | undefined;
 }
 
@@ -121,6 +122,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
     onOverlayClose,
     onNewSession,
     onOpenScheduled,
+    onOpenExtensions,
     onSearchChange,
   }) => {
     const toggleLabel = collapsed ? '展开侧栏' : '收起侧栏';
@@ -221,6 +223,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
             activeNav={activeNav}
             onNewSession={onNewSession}
             onOpenScheduled={onOpenScheduled}
+            onOpenExtensions={onOpenExtensions}
             searchInput={searchInput}
             onSearchChange={onSearchChange}
           />

@@ -3,23 +3,38 @@ import { Button, Input } from '../ui';
 import styles from './SidebarNav.module.css';
 import { AppIcon } from '../ui/icons/index';
 
+import { openSettings } from '../../api/storeAccess';
+
 export interface SidebarNavProps {
   activeNav: string;
   onNewSession: () => void;
   onOpenScheduled: () => void;
+  onOpenExtensions?: () => void;
   searchInput?: string | undefined;
   onSearchChange?: ((val: string) => void) | undefined;
 }
 
-/** 顶部「新对话 / 定时任务」：与会话行同一套 --sidebar-hover，不走 Button 罩 */
+/** 顶部「新对话 / 定时任务 / 扩展」：与会话行同一套 --sidebar-hover，不走 Button 罩 */
 export const SidebarNav: React.FC<SidebarNavProps> = ({
   activeNav,
   onNewSession,
   onOpenScheduled,
+  onOpenExtensions,
   searchInput = '',
   onSearchChange,
 }) => {
   const scheduledActive = activeNav === 'scheduled';
+  const extensionsActive =
+    activeNav === 'extensions' || activeNav === 'plugins';
+
+  const handleOpenExtensions = () => {
+    if (onOpenExtensions) {
+      onOpenExtensions();
+    } else {
+      openSettings('plugins');
+    }
+  };
+
   return (
     <div className={styles.topActions}>
       <Button
@@ -42,6 +57,17 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       >
         <AppIcon name="clock" size={16} aria-hidden />
         <span>定时任务</span>
+      </Button>
+      <Button
+        variant="ghost"
+        type="button"
+        className={`${styles.navItem}${extensionsActive ? ` ${styles.isActive}` : ''}`}
+        data-testid="sidebar-nav-extensions"
+        aria-pressed={extensionsActive}
+        onClick={handleOpenExtensions}
+      >
+        <AppIcon name="puzzle" size={16} aria-hidden />
+        <span>扩展</span>
       </Button>
       {onSearchChange && (
         <div

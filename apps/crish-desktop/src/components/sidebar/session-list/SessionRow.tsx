@@ -11,7 +11,7 @@ import {
   ensureScheduleBadgeStoreHydrated,
   useSessionActiveScheduleCount,
   useSessionSchedules,
-} from '../../../store/sessionScheduleBadgeStore';
+} from '../../../store/storeAccess';
 import {
   formatSessionListAbsoluteTime,
   formatSessionListCompactTime,

@@ -14,7 +14,6 @@ export interface PinnedSectionProps {
   onSortBtnClick?: (e: React.MouseEvent) => void;
   sortTriggerRef?: React.RefObject<HTMLButtonElement | null>;
   sortDropdownOpen?: boolean;
-  hasActiveSortFilter?: boolean;
   /** Kept for SidebarSessionList API; reorder is pointer drop-only via SessionRow. */
   onMoveSessionRealtime: (
     sessionId: string,
@@ -35,7 +34,6 @@ export function PinnedSection({
   onSortBtnClick,
   sortTriggerRef,
   sortDropdownOpen = false,
-  hasActiveSortFilter = false,
   onMoveSessionRealtime: _onMoveSessionRealtime,
   renderSessionItem,
 }: PinnedSectionProps) {
@@ -80,7 +78,6 @@ export function PinnedSection({
                 aria-label="排序与过滤"
                 aria-expanded={sortDropdownOpen}
                 aria-haspopup="menu"
-                data-active={hasActiveSortFilter ? 'true' : undefined}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSortBtnClick(e);

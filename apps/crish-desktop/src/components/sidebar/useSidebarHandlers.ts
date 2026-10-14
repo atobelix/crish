@@ -7,7 +7,7 @@ import { emitUiEvent } from '../../api/uiEvents';
 import type { FilterType } from './sidebarHelpers';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { currentWorkspaceFolderKey } from '../../api/workspaceChromeTabs';
-import { treeUpdateTabTitle } from '../../store/workspace-shell/treeSessionCommands';
+import { treeUpdateTabTitle } from '../../store/storeAccess';
 
 export interface UseSidebarHandlersOptions {
   filterType: FilterType;
@@ -91,6 +91,10 @@ export function useSidebarHandlers({
     toggleSurface('scheduled');
   }, [toggleSurface]);
 
+  const handleOpenExtensions = useCallback(() => {
+    toggleSurface('extensions');
+  }, [toggleSurface]);
+
   const handleSelectSession = useCallback(
     (id: string) => {
       const root = getCompositionRoot();
@@ -103,6 +107,7 @@ export function useSidebarHandlers({
       setRenamingSessionId(null);
       if (target && !target.isPinned) {
         setGeneralCollapsed(false);
+        setProjectsSectionCollapsed(false);
         if (target.folder) {
           setCollapsedProjects((prev) =>
             prev[target.folder!] ? { ...prev, [target.folder!]: false } : prev
@@ -113,6 +118,7 @@ export function useSidebarHandlers({
     [
       setRenamingSessionId,
       setGeneralCollapsed,
+      setProjectsSectionCollapsed,
       setCollapsedProjects,
       navigateToChatSession,
     ]
@@ -190,6 +196,7 @@ export function useSidebarHandlers({
     handleNewSession,
     handleCommitRename,
     handleOpenScheduled,
+    handleOpenExtensions,
     handleSelectSession,
     handleOpenProject,
     handleToggleProjectCollapsed,

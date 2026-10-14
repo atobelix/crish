@@ -1,9 +1,8 @@
 import { useToast } from '../../services/toast/ToastContext';
 /**
- * 设置 · 账户：本机环境、数据备份、导入外部对话；成功静默，仅错误提示。
+ * 设置 · 账户：本机环境、数据备份；成功静默，仅错误提示。
  *
  * Stream D 改造后：磁盘镜像已删除，存储位置统一显示「本机 SQLite 数据库」。
- * 外部对话：点击扫描 Claude Code / Codex → 勾选 → 导入所选（禁止自动导入）。
  */
 import React, { useId, useRef, useState } from 'react';
 
@@ -20,7 +19,6 @@ import {
   SettingsRow,
 } from './SettingsUI';
 import { Button, Input, Tooltip } from '../ui';
-import { ExternalSessionImport } from './ExternalSessionImport';
 import { AccountAuthCard } from './AccountAuthCard';
 import styles from './SettingsProfileTab.module.css';
 import { AppIcon } from '../ui/icons/index';
@@ -35,7 +33,9 @@ function pathLeaf(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-export const SettingsProfileTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
+export const SettingsProfileTab: React.FC<Props> = ({
+  _onBlockingOverlayChange,
+}) => {
   const { showToast } = useToast();
   const cwd = getWorkspacePath() || '__global__';
   const headMetaId = useId();
@@ -265,16 +265,6 @@ export const SettingsProfileTab: React.FC<Props> = ({ _onBlockingOverlayChange }
               </>
             }
           />
-        </SettingsCard>
-      </SettingsSection>
-
-      <SettingsSection title="导入外部对话">
-        <SettingsCard>
-          <div className={styles.settingsImportBody}>
-            <ExternalSessionImport
-              variant="settings"
-            />
-          </div>
         </SettingsCard>
       </SettingsSection>
 

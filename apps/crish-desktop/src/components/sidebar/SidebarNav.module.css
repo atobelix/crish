@@ -36,8 +36,7 @@
   -webkit-appearance: none;
   transition:
     background 80ms ease-out,
-    color 80ms ease-out,
-    transform 60ms ease-out;
+    color 80ms ease-out;
   box-sizing: border-box;
 }
 
@@ -75,7 +74,6 @@
 }
 
 .navItem:active {
-  transform: scale(0.985);
   background: var(--sidebar-active);
   color: var(--text-primary);
 }
@@ -99,7 +97,6 @@
   background: var(--sidebar-hover);
   border: none;
   box-shadow: none;
-  transform: none;
 }
 
 .navItem input[type='search'],

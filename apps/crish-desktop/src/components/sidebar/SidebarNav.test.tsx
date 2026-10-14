@@ -44,6 +44,36 @@ describe('SidebarNav 顶钮', () => {
     expect(active.className.split(/\s+/)).toContain(styles.navItem);
   });
 
+  it('扩展按钮渲染在定时任务下方且点击正确触发回调', () => {
+    const onOpenExtensions = vi.fn();
+    const { rerender } = render(
+      <SidebarNav
+        activeNav="chat"
+        onNewSession={() => {}}
+        onOpenScheduled={() => {}}
+        onOpenExtensions={onOpenExtensions}
+      />
+    );
+    const extBtn = screen.getByTestId('sidebar-nav-extensions');
+    expect(extBtn).toBeInTheDocument();
+    expect(extBtn.textContent).toContain('扩展');
+    expect(extBtn.className).not.toContain(styles.isActive);
+    fireEvent.click(extBtn);
+    expect(onOpenExtensions).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <SidebarNav
+        activeNav="plugins"
+        onNewSession={() => {}}
+        onOpenScheduled={() => {}}
+        onOpenExtensions={onOpenExtensions}
+      />
+    );
+    const active = screen.getByTestId('sidebar-nav-extensions');
+    expect(active.className).toContain(styles.isActive);
+    expect(active).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('navItem hover 只走 --sidebar-hover，圆角与会话行同 --radius-lg', () => {
     const css = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), 'SidebarNav.module.css'),
@@ -70,19 +100,17 @@ describe('SidebarNav 顶钮', () => {
     expect(navCss).toMatch(/border-radius:\s*var\(--radius-lg\)/);
   });
 
-  it('navItem :active 提供触控按压反馈并声明精准过渡', () => {
+  it('navItem :active 保持平稳扎实交互，彻底去除 scale 弹性缩放', () => {
     const navCss = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), 'SidebarNav.module.css'),
       'utf8'
     );
     expect(navCss).toMatch(
-      /transition:\s*[\s\S]*background\s+80ms\s+ease-out[\s\S]*color\s+80ms\s+ease-out[\s\S]*transform\s+60ms\s+ease-out/
+      /transition:\s*[\s\S]*background\s+80ms\s+ease-out[\s\S]*color\s+80ms\s+ease-out/
     );
+    expect(navCss).not.toContain('transform: scale(');
     expect(navCss).toMatch(
-      /\.navItem:active\s*\{[\s\S]*transform:\s*scale\(0\.985\);[\s\S]*background:\s*var\(--sidebar-active\);[\s\S]*color:\s*var\(--text-primary\);/
-    );
-    expect(navCss).toMatch(
-      /\.navItem\[role=['"]search['"]\]:active[\s\S]*transform:\s*none;/
+      /\.navItem:active\s*\{[\s\S]*background:\s*var\(--sidebar-active\);[\s\S]*color:\s*var\(--text-primary\);/
     );
   });
 });

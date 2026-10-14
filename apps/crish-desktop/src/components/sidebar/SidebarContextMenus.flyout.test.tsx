@@ -21,10 +21,13 @@ import {
   renderHook,
 } from '@testing-library/react';
 import { SidebarContextMenus } from './SidebarContextMenus';
+import { SessionContextMenu } from './SessionContextMenu';
+import { ProjectsSection } from './session-list/ProjectsSection';
 import { GeneralSection } from './session-list/GeneralSection';
 import { useSessionSearch } from './session-list/useSessionSearch';
 import { useSessionGrouping } from './session-list/useSessionGrouping';
-import type { Session, Project } from '../../types';
+import type { SessionState } from '../../store/types';
+import type { ProjectEntry } from '../../api/projectStore';
 
 function renderSortMenu() {
   const props = {
@@ -153,136 +156,246 @@ describe('SidebarContextMenus flyout 关闭语义（F7-F12）', () => {
     expect(props.onSetSortType).toHaveBeenCalledWith('name');
   });
 
-  it('GeneralSection 将 sectionSortBtn 置于 sectionNew 左侧', () => {
-    render(
-      <GeneralSection
-        generalOpen={true}
-        onToggleGeneral={vi.fn()}
-        generalSessions={[]}
-        activeSessionId={null}
-        selectedSessionIds={[]}
-        editingSessionId={null}
-        editTitle=""
-        onSelectSession={vi.fn()}
-        onContextMenu={vi.fn()}
-        onOpenMore={vi.fn()}
-        onChangeTitle={vi.fn()}
-        onSaveRename={vi.fn()}
-        onCancelRename={vi.fn()}
-        onNewChat={vi.fn()}
-        sortBtnRef={React.createRef<HTMLButtonElement>()}
-        onOpenSortDropdown={vi.fn()}
-        sortDropdownOpen={false}
-        hasActiveSortFilter={true}
+  it('ProjectsSection 将 sectionSortBtn 置于 sectionNew（新建项目）左侧，支持新建项目与已建项目 More 管理弹出面板；平铺模式下由 GeneralSection 承载', async () => {
+    const onOpenProject = vi.fn();
+    const { unmount } = render(
+      <ProjectsSection
+        data={{
+          projects: [
+            {
+              id: 'proj-demo',
+              name: 'DemoProj',
+              path: 'C:/workspace/DemoProj',
+              addedAt: 1,
+              lastOpenedAt: 2,
+            },
+          ],
+          collapsedProjects: {},
+          projectsSectionCollapsed: false,
+          byProjectId: {},
+        }}
+        actions={{
+          onToggleProjectsSection: vi.fn(),
+          onToggleProjectCollapsed: vi.fn(),
+          onOpenProject,
+          onSortBtnClick: vi.fn(),
+          sortTriggerRef: React.createRef<HTMLButtonElement>(),
+          sortDropdownOpen: false,
+          onMoveSessionRealtime: vi.fn(),
+          renderSessionItem: () => null,
+        }}
       />
     );
     const sortBtn = screen.getByRole('button', { name: '排序与过滤' });
-    const newBtn = screen.getByRole('button', { name: '新建常规对话' });
-    expect(sortBtn.parentElement).toBe(newBtn.parentElement);
+    const newProjBtn = screen.getByRole('button', { name: '新建项目' });
+    expect(sortBtn.parentElement).toBe(newProjBtn.parentElement);
     const siblings = Array.from(sortBtn.parentElement!.children);
-    expect(siblings.indexOf(sortBtn)).toBeLessThan(siblings.indexOf(newBtn));
-    expect(sortBtn).toHaveAttribute('data-active', 'true');
+    expect(siblings.indexOf(sortBtn)).toBeLessThan(
+      siblings.indexOf(newProjBtn)
+    );
+
+    // 已建立项目行：More 按钮在「在本项目新建对话」按钮左侧
+    const projMoreBtn = screen.getByRole('button', {
+      name: '项目 DemoProj 更多操作',
+    });
+    const projNewChatBtn = screen.getByRole('button', {
+      name: '在 DemoProj 新建对话',
+    });
+    expect(projMoreBtn.parentElement).toBe(projNewChatBtn.parentElement);
+    const projActionSiblings = Array.from(projMoreBtn.parentElement!.children);
+    expect(projActionSiblings.indexOf(projMoreBtn)).toBeLessThan(
+      projActionSiblings.indexOf(projNewChatBtn)
+    );
+
+    // 点击「新建项目」展开居中弹出面板，显示选择文件夹与项目名称
+    fireEvent.click(newProjBtn);
+    expect(
+      await screen.findByRole('dialog', { name: '新建项目' })
+    ).toBeInTheDocument();
+    expect(screen.getByText('点击选择项目文件夹')).toBeInTheDocument();
+    const nameInput = screen.getByLabelText('项目名称');
+    expect(nameInput).toBeInTheDocument();
+
+    // 点击已建立项目的 More 按钮，展开项目管理与扩展功能面板
+    fireEvent.click(projMoreBtn);
+    expect(
+      await screen.findByRole('dialog', { name: '项目管理' })
+    ).toBeInTheDocument();
+    const manageNameInput = screen.getByDisplayValue('DemoProj');
+    expect(manageNameInput).toBeInTheDocument();
+    expect(screen.getByText('C:/workspace/DemoProj')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '在本项目新建对话' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '设为当前工作区' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '复制文件夹路径' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '从列表移除项目' })
+    ).toBeInTheDocument();
+    unmount();
+
+    // 分组模式下 GeneralSection 不渲染重复的排序按钮
+    const { rerender } = render(
+      <GeneralSection
+        generalSessions={[]}
+        generalCollapsed={false}
+        generalWindowEnabled={false}
+        generalRenderRange={{
+          start: 0,
+          end: 0,
+          topPadPx: 0,
+          bottomPadPx: 0,
+          windowed: false,
+        }}
+        generalListRef={React.createRef<HTMLUListElement>()}
+        groupType="folder"
+        onToggleGeneral={vi.fn()}
+        onSortBtnClick={vi.fn()}
+        onMoveSessionRealtime={vi.fn()}
+        renderSessionItem={() => null}
+      />
+    );
+    expect(
+      screen.queryByRole('button', { name: '排序与过滤' })
+    ).not.toBeInTheDocument();
+
+    // 平铺模式（纯对话）下 GeneralSection 顶行右侧渲染「排序与过滤」于「新建常规对话」左侧
+    rerender(
+      <GeneralSection
+        generalSessions={[]}
+        generalCollapsed={false}
+        generalWindowEnabled={false}
+        generalRenderRange={{
+          start: 0,
+          end: 0,
+          topPadPx: 0,
+          bottomPadPx: 0,
+          windowed: false,
+        }}
+        generalListRef={React.createRef<HTMLUListElement>()}
+        groupType="none"
+        onToggleGeneral={vi.fn()}
+        onSortBtnClick={vi.fn()}
+        onMoveSessionRealtime={vi.fn()}
+        renderSessionItem={() => null}
+      />
+    );
+    const flatSortBtn = screen.getByRole('button', { name: '排序与过滤' });
+    const newChatBtn = screen.getByRole('button', { name: '新建常规对话' });
+    expect(flatSortBtn.parentElement).toBe(newChatBtn.parentElement);
+    const flatSiblings = Array.from(flatSortBtn.parentElement!.children);
+    expect(flatSiblings.indexOf(flatSortBtn)).toBeLessThan(
+      flatSiblings.indexOf(newChatBtn)
+    );
   });
 
   it('实装 sortType / groupType / filterType 的完整排序、分组与过滤语义', () => {
-    const projects: Project[] = [
-      { id: 'proj-1', name: 'Conex', path: '/conex' },
+    const projects: ProjectEntry[] = [
+      { id: 'proj-1', name: 'Conex', path: '/conex', addedAt: 1000 },
     ];
-    const sessions: Session[] = [
+    const sessions: SessionState[] = [
       {
         id: 's-b',
         title: 'Beta 会话',
-        updatedAt: 1000,
+        folder: 'proj-1',
+        isPinned: false,
+        timestamp: '2026-01-01T00:00:01.000Z',
         messages: [],
-        projectId: 'proj-1',
       },
-      { id: 's-a', title: 'Alpha 会话', updatedAt: 3000, messages: [] },
+      {
+        id: 's-a',
+        title: 'Alpha 会话',
+        folder: 'general',
+        isPinned: false,
+        timestamp: '2026-01-01T00:00:03.000Z',
+        messages: [],
+      },
       {
         id: 's-p',
         title: 'Pinned 会话',
-        updatedAt: 2000,
-        messages: [],
+        folder: 'general',
         isPinned: true,
+        timestamp: '2026-01-01T00:00:02.000Z',
+        messages: [],
       },
     ];
 
     // 1. sortType = 'active', groupType = 'folder', filterType = 'all'
     const { result: searchActive } = renderHook(() =>
-      useSessionSearch(sessions, projects, '', 'active')
+      useSessionSearch({
+        visibleSessions: sessions,
+        searchQuery: '',
+        sortType: 'active',
+      })
     );
+    expect(searchActive.current.sortedSessions.map((s) => s.id)).toEqual([
+      's-a',
+      's-p',
+      's-b',
+    ]);
+
     const { result: groupFolder } = renderHook(() =>
-      useSessionGrouping(
-        searchActive.current.sortedSessions,
+      useSessionGrouping({
+        sortedSessions: searchActive.current.sortedSessions,
         projects,
-        'all',
-        'folder',
-        false,
-        ''
-      )
+        groupType: 'folder',
+        filterType: 'all',
+        dragPreview: null,
+        dragSession: null,
+        isDragging: false,
+        pinnedCollapsed: false,
+        onTogglePinned: vi.fn(),
+      })
     );
     expect(groupFolder.current.pinnedSessions.map((s) => s.id)).toEqual([
       's-p',
     ]);
-    expect(
-      groupFolder.current.byProjectId.get('proj-1')?.map((s) => s.id)
-    ).toEqual(['s-b']);
+    expect(groupFolder.current.byProjectId['proj-1']?.map((s) => s.id)).toEqual(
+      ['s-b']
+    );
     expect(groupFolder.current.generalSessions.map((s) => s.id)).toEqual([
       's-a',
     ]);
 
-    // 2. sortType = 'name', groupType = 'none' (平铺列表)
+    // 2. sortType = 'name', groupType = 'none' (平铺列表：合并项目与常规会话并按名称排序)
     const { result: searchName } = renderHook(() =>
-      useSessionSearch(sessions, projects, '', 'name')
+      useSessionSearch({
+        visibleSessions: sessions,
+        searchQuery: '',
+        sortType: 'name',
+      })
     );
     const { result: groupNone } = renderHook(() =>
-      useSessionGrouping(
-        searchName.current.sortedSessions,
+      useSessionGrouping({
+        sortedSessions: searchName.current.sortedSessions,
         projects,
-        'all',
-        'none',
-        false,
-        ''
-      )
+        groupType: 'none',
+        filterType: 'all',
+        dragPreview: null,
+        dragSession: null,
+        isDragging: false,
+        pinnedCollapsed: false,
+        onTogglePinned: vi.fn(),
+      })
     );
-    expect(groupNone.current.byProjectId.size).toBe(0);
+    expect(groupNone.current.byProjectId['proj-1']).toEqual([]);
     expect(groupNone.current.generalSessions.map((s) => s.id)).toEqual([
       's-a',
       's-b',
     ]);
-
-    // 3. filterType = 'pinned' (仅置顶)
-    const { result: filterPinned } = renderHook(() =>
-      useSessionGrouping(
-        searchActive.current.sortedSessions,
-        projects,
-        'pinned',
-        'folder',
-        false,
-        ''
-      )
-    );
-    expect(filterPinned.current.pinnedSessions.map((s) => s.id)).toEqual([
-      's-p',
-    ]);
-    expect(filterPinned.current.byProjectId.size).toBe(0);
-    expect(filterPinned.current.generalSessions).toEqual([]);
   });
 
   it('SessionContextMenu (._sessionActionsBtn 弹出面板) 同步具备 data-state="open" 与 data-side 动画属性', () => {
     render(
-      <SidebarContextMenus
-        menuRef={React.createRef<HTMLDivElement>()}
-        sortMenuRef={React.createRef<HTMLDivElement>()}
+      <SessionContextMenu
         contextMenu={{ x: 120, y: 180, sessionId: 's-1' }}
+        menuRef={React.createRef<HTMLDivElement>()}
+        isPinned={false}
         onSessionAction={vi.fn()}
-        sortDropdownOpen={false}
-        sortDropdownCoords={{ x: 0, y: 0 }}
-        sortType="active"
-        groupType="folder"
-        filterType="all"
-        onSetSortType={vi.fn()}
-        onSetGroupType={vi.fn()}
-        onSetFilterType={vi.fn()}
       />
     );
     const menu = screen.getByTestId('session-context-menu');
