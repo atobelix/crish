@@ -8,7 +8,6 @@
  */
 
 import { invokeResult } from '../../api/tauriInvoke';
-import { resolveMcpTools } from './knownMcpTools';
 import { parseCodexToml } from './codexTomlParser';
 
 export { parseCodexToml };
@@ -222,7 +221,9 @@ function parseMcpJson(
         ? (val.env as Record<string, string>)
         : undefined;
 
-    const resolvedTools = resolveMcpTools(key, command, args);
+    const explicitTools = Array.isArray(val.tools)
+      ? val.tools.map(String)
+      : undefined;
     results.push({
       id: `detected-${source.toLowerCase().replace(/\s+/g, '-')}-${key}`,
       source,
@@ -234,8 +235,8 @@ function parseMcpJson(
       url,
       description:
         typeof val.description === 'string' ? val.description : undefined,
-      tools: resolvedTools.length > 0 ? resolvedTools : undefined,
-      toolsCount: resolvedTools.length > 0 ? resolvedTools.length : undefined,
+      tools: explicitTools,
+      toolsCount: explicitTools?.length,
     });
   }
 
@@ -327,11 +328,10 @@ async function scanAntigravityMcpDir(
             .map((f) => f.name.replace(/\.json$/i, ''));
         }
       } catch {
-        // 工具目录读取失败时回退预置映射
+        // 工具目录读取失败
       }
 
-      const tools =
-        jsonToolNames.length > 0 ? jsonToolNames : resolveMcpTools(item.name);
+      const tools = jsonToolNames.length > 0 ? jsonToolNames : undefined;
       const isNpx = item.name.includes('chrome') || item.name.includes('npx');
 
       return {
@@ -342,7 +342,7 @@ async function scanAntigravityMcpDir(
         command: isNpx ? 'npx' : 'node',
         args: isNpx ? [item.name] : [`${item.name}.js`],
         tools,
-        toolsCount: tools.length,
+        toolsCount: tools?.length,
         description:
           ANTIGRAVITY_MCP_DIR_DESCRIPTIONS[item.name] ||
           'Antigravity 本地 MCP 扩展服务',
@@ -387,8 +387,6 @@ export const DEFAULT_FALLBACK_MCP: DetectedExternalMcpServer[] = [
     type: 'stdio',
     command: 'npx',
     args: ['chrome-devtools-mcp'],
-    tools: resolveMcpTools('chrome-devtools-mcp'),
-    toolsCount: 30,
     description: '浏览器自动化、无头渲染与实时 DOM/网络调试',
   },
   {
@@ -398,8 +396,6 @@ export const DEFAULT_FALLBACK_MCP: DetectedExternalMcpServer[] = [
     type: 'stdio',
     command: 'node',
     args: ['cua-driver.js'],
-    tools: resolveMcpTools('cua-driver'),
-    toolsCount: 57,
     description: '操作系统全局鼠标、键盘与原生应用交互驱动',
   },
   {
@@ -409,8 +405,6 @@ export const DEFAULT_FALLBACK_MCP: DetectedExternalMcpServer[] = [
     type: 'stdio',
     command: 'cmd',
     args: ['/c', 'chrome-devtools-mcp.js'],
-    tools: resolveMcpTools('chrome-devtools'),
-    toolsCount: 30,
     description: 'Claude Code 浏览器自动化与 DOM/网络调试',
   },
   {
@@ -420,8 +414,6 @@ export const DEFAULT_FALLBACK_MCP: DetectedExternalMcpServer[] = [
     type: 'stdio',
     command: 'node_repl.exe',
     args: [],
-    tools: resolveMcpTools('node_repl'),
-    toolsCount: 4,
     description: 'Codex 本地 Node.js 交互式 REPL 与上下文执行沙箱',
   },
   {
@@ -431,8 +423,6 @@ export const DEFAULT_FALLBACK_MCP: DetectedExternalMcpServer[] = [
     type: 'stdio',
     command: 'npx',
     args: ['-y', '@modelcontextprotocol/server-github'],
-    tools: resolveMcpTools('github'),
-    toolsCount: 26,
     description: 'Claude Code 探测到的 GitHub 仓库、PR 与 Issue 协同管理工具',
   },
   {
@@ -442,8 +432,6 @@ export const DEFAULT_FALLBACK_MCP: DetectedExternalMcpServer[] = [
     type: 'stdio',
     command: 'uvx',
     args: ['mcp-server-fetch'],
-    tools: resolveMcpTools('fetch'),
-    toolsCount: 2,
     description: 'Codex 探测到的网页内容与网络资源获取服务',
   },
   {
@@ -453,8 +441,6 @@ export const DEFAULT_FALLBACK_MCP: DetectedExternalMcpServer[] = [
     type: 'stdio',
     command: 'uvx',
     args: ['mcp-server-sqlite', '--db-path', './data.db'],
-    tools: resolveMcpTools('sqlite'),
-    toolsCount: 4,
     description: '本地 SQLite 数据库查询、表结构读取与分析工具',
   },
   {
@@ -464,8 +450,6 @@ export const DEFAULT_FALLBACK_MCP: DetectedExternalMcpServer[] = [
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-filesystem', '.'],
-    tools: resolveMcpTools('filesystem'),
-    toolsCount: 8,
     description: '本地文件目录结构安全访问与读写控制',
   },
 ];

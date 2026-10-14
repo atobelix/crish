@@ -133,7 +133,15 @@ impl ToolExecutor {
         abort: Option<&crate::safe_point::AbortSignal>,
         events: &mut Vec<ToolEvent>,
     ) -> ClassifiedToolResult {
-        let verdict = self.call_verdict(call, options);
+        let mut opts_buf;
+        let effective_options = if options.task_type.is_none() && ctx.task_type.is_some() {
+            opts_buf = options.clone();
+            opts_buf.task_type = ctx.task_type.clone();
+            &opts_buf
+        } else {
+            options
+        };
+        let verdict = self.call_verdict(call, effective_options);
         match (&approval, options.approval_enabled) {
             (Some(gate), true) => {
                 self.handle_gated_verdict(call, ctx, gate, options, abort, events, verdict)
@@ -164,7 +172,7 @@ impl ToolExecutor {
                 events.extend(extra);
                 r
             }
-            PermissionVerdict::Deny => denied_result(call, options),
+            PermissionVerdict::Deny => denied_result(call, options, Some(&self.registry)),
             PermissionVerdict::NeedsApproval => {
                 self.handle_gated_needs_approval(call, ctx, gate, options, abort, events)
                     .await
@@ -249,7 +257,7 @@ impl ToolExecutor {
         verdict: PermissionVerdict,
     ) -> ClassifiedToolResult {
         match verdict {
-            PermissionVerdict::Deny => denied_result(call, options),
+            PermissionVerdict::Deny => denied_result(call, options, Some(&self.registry)),
             PermissionVerdict::NeedsApproval => ClassifiedToolResult::error(
                 &call.id,
                 &call.tool_name,
@@ -280,6 +288,18 @@ impl ToolExecutor {
             Some(t) => t,
             None => return (Self::not_found_result(call), Vec::new()),
         };
+        if !self.registry.is_tool_enabled(&call.tool_name) {
+            return (
+                ClassifiedToolResult::error(
+                    &call.id,
+                    &call.tool_name,
+                    ToolErrorKind::UserDenied,
+                    format!("tool disabled: {}", call.tool_name),
+                    0,
+                ),
+                Vec::new(),
+            );
+        }
         let (tool_ctx, approval_channel, mw_ctx, exec_ctx, abort_token) =
             self.build_execution_contexts(call, ctx, options, abort, &approval);
         let pre = self
@@ -444,6 +464,7 @@ impl ToolExecutor {
                 .or_else(agent_tools::compression_store::global_compression_store),
             note_backend: ctx.note_backend.clone(),
             tool_call_id: Some(call.id.clone()),
+            task_type: options.task_type.clone().or_else(|| ctx.task_type.clone()),
         };
         let mw_ctx = ToolExecutionContext {
             session_id: Some(ctx.session_id.clone()),
@@ -916,7 +937,7 @@ impl ToolExecutor {
             None => PermissionVerdict::NeedsApproval,
         };
         match verdict {
-            PermissionVerdict::Deny => (denied_result(call, options), extra),
+            PermissionVerdict::Deny => (denied_result(call, options, Some(&self.registry)), extra),
             PermissionVerdict::Allow => {
                 self.retry_after_allow(call, ctx, options, abort, approval, extra)
                     .await

@@ -37,9 +37,9 @@ mod bridge_registry;
 mod bridge_session;
 
 pub use bridge_protocol::{
-    adapt_call_result, adapt_tool_list, mcp_tool_name, sanitize_id_part, McpToolInfo,
-    DEFAULT_MCP_CALL_TIMEOUT, DEFAULT_MCP_INIT_TIMEOUT, DEFAULT_MCP_LIST_TIMEOUT,
+    adapt_call_result, adapt_tool_list, format_mcp_tool_name, mcp_tool_name, sanitize_id_part,
+    McpToolInfo, DEFAULT_MCP_CALL_TIMEOUT, DEFAULT_MCP_INIT_TIMEOUT, DEFAULT_MCP_LIST_TIMEOUT,
     MCP_PROTOCOL_VERSION,
 };
-pub use bridge_registry::{McpClientBridge, McpToolAdapter};
+pub use bridge_registry::{McpClientBridge, McpDynamicToolAdapter, McpToolAdapter};
 pub use bridge_session::{McpServerRuntimeState, McpServerSession};

@@ -55,6 +55,8 @@ pub struct SemanticAnalysis {
     /// 间接执行内层含删除形态（`bash -c 'rm x'` / `xargs rm` 等包裹，
     /// I2-S4：外层无法安全解析内层目标，命令面据此整链拦截 + 引导）
     pub has_indirect_delete: bool,
+    /// 解码后的明文（若命令中包含 Base64 编码命令载荷，则为还原出的明文，用于审批与日志展示）
+    pub decoded_payload: Option<String>,
 }
 
 /// 间接执行命令名（小写）
@@ -65,14 +67,24 @@ const INDIRECT_COMMANDS: &[&str] = &[
     ".",
     "bash",
     "sh",
+    "zsh",
     "cmd",
+    "cmd.exe",
     "pwsh",
     "powershell",
     "sudo",
     "xargs",
     "node",
+    "nodejs",
+    "bun",
+    "deno",
     "python",
     "python3",
+    "py",
+    "pythonw",
+    "ruby",
+    "perl",
+    "php",
     "find",
     "foreach-object",
     "iex",
@@ -86,10 +98,18 @@ const INDIRECT_COMMANDS: &[&str] = &[
 const DELETE_COMMANDS: &[&str] = &["rm", "rmdir", "del", "erase", "rd", "remove-item", "git"];
 
 /// cd 形态命令名（小写，T-AB-05 禁 cd 语义层）：
-/// Windows cmd 的 cd（含 cd /d、cd ..）、PowerShell 的 Set-Location 及其别名
-/// cd / sl，以及 pushd / popd（Push-Location / Pop-Location 别名——
-/// 壳层 workbench_run_shell 走 powershell -EncodedCommand，PowerShell 别名全量纳入）
-const CD_COMMANDS: &[&str] = &["cd", "set-location", "sl", "pushd", "popd"];
+/// Windows cmd 的 cd（含 cd /d、cd ..）、chdir、PowerShell 的 Set-Location 及其别名
+/// cd / sl，以及 pushd / popd、Push-Location / Pop-Location 原生 Cmdlet
+const CD_COMMANDS: &[&str] = &[
+    "cd",
+    "chdir",
+    "set-location",
+    "sl",
+    "pushd",
+    "popd",
+    "push-location",
+    "pop-location",
+];
 
 /// 危险形态命令名（小写，红线段对象）
 const DANGEROUS_COMMANDS: &[&str] = &[
@@ -142,6 +162,7 @@ fn redline_only_analysis() -> SemanticAnalysis {
         delete_targets: Vec::new(),
         git_revert_forms: Vec::new(),
         has_indirect_delete: false,
+        decoded_payload: None,
     }
 }
 
@@ -153,7 +174,24 @@ fn dangerous_fallback_analysis() -> SemanticAnalysis {
         delete_targets: Vec::new(),
         git_revert_forms: Vec::new(),
         has_indirect_delete: false,
+        decoded_payload: None,
     }
+}
+
+/// 工作目录篡改分析结果：整体 CdShape（BC10-3：拦截 -WorkingDirectory / -wd 逃逸）。
+fn cd_shape_analysis() -> SemanticAnalysis {
+    SemanticAnalysis {
+        segments: Vec::new(),
+        overall_class: CommandClass::CdShape,
+        delete_targets: Vec::new(),
+        git_revert_forms: Vec::new(),
+        has_indirect_delete: false,
+        decoded_payload: None,
+    }
+}
+
+pub(crate) fn analyze_depth_pub(command_line: &str, depth: usize) -> SemanticAnalysis {
+    analyze_depth(command_line, depth)
 }
 
 /// 带包裹深度的分析入口（PS-01 T1.2 / AST-04）：根调用 depth=0，
@@ -168,6 +206,7 @@ fn analyze_depth(command_line: &str, depth: usize) -> SemanticAnalysis {
     let mut delete_targets = Vec::new();
     let mut git_revert_forms = Vec::new();
     let mut has_indirect_delete = false;
+    let mut decoded_payload = None;
 
     for seg in raw_segments {
         let (command, args) = split_command_args(&seg);
@@ -185,6 +224,9 @@ fn analyze_depth(command_line: &str, depth: usize) -> SemanticAnalysis {
             || segment.class == CommandClass::Indirect
         {
             let inner = analyze_indirect_depth(&seg, depth + 1);
+            if inner.decoded_payload.is_some() && decoded_payload.is_none() {
+                decoded_payload = inner.decoded_payload.clone();
+            }
             if inner.overall_class == CommandClass::DeleteShape || inner.has_indirect_delete {
                 has_indirect_delete = true;
             }
@@ -195,6 +237,14 @@ fn analyze_depth(command_line: &str, depth: usize) -> SemanticAnalysis {
                 && segment.class != CommandClass::Redline
             {
                 segment.class = CommandClass::Dangerous;
+            }
+            // BC10-3：若内层分析结果包含 CdShape，整链分类必须判定为 CdShape 或向上传播
+            if (inner.overall_class == CommandClass::CdShape
+                || inner.segments.iter().any(|s| s.class == CommandClass::CdShape))
+                && segment.class != CommandClass::Redline
+                && segment.class != CommandClass::Dangerous
+            {
+                segment.class = CommandClass::CdShape;
             }
             for t in inner.delete_targets {
                 if !delete_targets.contains(&t) {
@@ -230,6 +280,7 @@ fn analyze_depth(command_line: &str, depth: usize) -> SemanticAnalysis {
         delete_targets,
         git_revert_forms,
         has_indirect_delete,
+        decoded_payload,
     }
 }
 
@@ -564,23 +615,162 @@ fn split_command_args(segment: &str) -> (String, Vec<String>) {
     split_command_args_normalized(segment)
 }
 
-/// 泛化匹配 PowerShell EncodedCommand 开关全变形（-enco, -e:, /e:, -EncodedCommand= 等）
+/// 语法完备的 PowerShell Base64 开关识别器
+/// 支持所有官方合法前缀与短名（-ec, -eco, -ecom, -en, -enc, -enco, /ec, -ec:, -EncodedCommand= 等），排除 -ex 开头
 pub fn is_ps_encoded_command_flag(arg: &str) -> bool {
     let lower = arg.to_lowercase();
-    let stripped = match lower.strip_prefix('-').or_else(|| lower.strip_prefix('/')) {
-        Some(s) => s,
-        None => return false,
+    let stripped = if let Some(s) = lower.strip_prefix("--") {
+        s
+    } else if let Some(s) = lower.strip_prefix('-').or_else(|| lower.strip_prefix('/')) {
+        s
+    } else {
+        return false;
     };
     let flag_name = stripped.split(['=', ':']).next().unwrap_or(stripped);
     if flag_name.is_empty() {
         return false;
     }
+    // 排除 -ex 开头（唯一指向 ExecutionPolicy，如 -executionpolicy, -ex, -exec 等）
+    if flag_name.starts_with("ex") {
+        return false;
+    }
+    // 1. 驼峰前缀缩写表（PowerShell 参数绑定 Acronym matching）：
+    // -ec, -eco, -ecom, -ecomm, -ecomma, -ecomman, -ecommand
+    if flag_name.starts_with("ec") {
+        return true;
+    }
+    // 2. 连续前缀唯一匹配（-e* 系列中唯一非 -ExecutionPolicy 的分支）：
+    // -e, -en, -enc, -enco, -encod, -encode, -encoded, -encodedc...
     if "encodedcommand".starts_with(flag_name) {
-        if flag_name == "e" || flag_name.starts_with("enc") || flag_name.starts_with("enco") {
-            return true;
-        }
+        return true;
     }
     false
+}
+
+/// 识别 PowerShell 的 -WorkingDirectory (-wd) 启动参数（BC10-3：拦截启动参数工作目录逃逸）
+pub fn is_ps_working_directory_flag(arg: &str) -> bool {
+    let lower = arg.to_lowercase();
+    let stripped = if let Some(s) = lower.strip_prefix("--") {
+        s
+    } else if let Some(s) = lower.strip_prefix('-').or_else(|| lower.strip_prefix('/')) {
+        s
+    } else {
+        return false;
+    };
+    let flag_name = stripped.split(['=', ':']).next().unwrap_or(stripped);
+    if flag_name.is_empty() {
+        return false;
+    }
+    if flag_name == "wd" {
+        return true;
+    }
+    if "workingdirectory".starts_with(flag_name) && flag_name.starts_with("work") {
+        return true;
+    }
+    false
+}
+
+/// 基础 Base64 解码器（支持标准模式与 URL-safe 模式，忽略空白字符）
+fn decode_base64_payload(input: &str) -> Option<Vec<u8>> {
+    let clean = input.trim().trim_matches(['"', '\'']);
+    let mut buf = Vec::new();
+    let mut accumulator: u32 = 0;
+    let mut bits: u32 = 0;
+
+    for byte in clean.bytes() {
+        if byte.is_ascii_whitespace() {
+            continue;
+        }
+        if byte == b'=' {
+            break;
+        }
+        let val: u32 = match byte {
+            b'A'..=b'Z' => (byte - b'A') as u32,
+            b'a'..=b'z' => (byte - b'a' + 26) as u32,
+            b'0'..=b'9' => (byte - b'0' + 52) as u32,
+            b'+' | b'-' => 62,
+            b'/' | b'_' => 63,
+            _ => return None,
+        };
+        accumulator = (accumulator << 6) | val;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            buf.push(((accumulator >> bits) & 0xFF) as u8);
+        }
+    }
+    if buf.is_empty() {
+        None
+    } else {
+        Some(buf)
+    }
+}
+
+/// 提取 PowerShell Base64 载荷并执行 UTF-16LE / UTF-8 双模安全解码
+pub fn extract_and_decode_ps_payload(args: &[String]) -> Option<String> {
+    for (idx, arg) in args.iter().enumerate() {
+        if is_ps_encoded_command_flag(arg) {
+            let lower = arg.to_lowercase();
+            let stripped = if let Some(s) = lower.strip_prefix("--") {
+                s
+            } else if let Some(s) = lower.strip_prefix('-').or_else(|| lower.strip_prefix('/')) {
+                s
+            } else {
+                continue;
+            };
+
+            let raw_payload = if let Some(pos) = stripped.find([':', '=']) {
+                let prefix_len = if arg.starts_with("--") {
+                    2
+                } else if arg.starts_with('-') || arg.starts_with('/') {
+                    1
+                } else {
+                    0
+                };
+                arg[prefix_len + pos + 1..].trim()
+            } else {
+                args.get(idx + 1).map(|s| s.as_str()).unwrap_or("").trim()
+            };
+
+            let clean_payload = raw_payload.trim_matches(['"', '\'']);
+            if clean_payload.is_empty() {
+                continue;
+            }
+
+            if let Some(bytes) = decode_base64_payload(clean_payload) {
+                // 1. 若含 null 字节且长度为偶数，优先按 PowerShell 原生 UTF-16LE 解码
+                let has_null = bytes.iter().any(|&b| b == 0);
+                if has_null && bytes.len() % 2 == 0 {
+                    let u16_chars: Vec<u16> = bytes
+                        .chunks_exact(2)
+                        .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+                        .collect();
+                    if let Ok(utf16_str) = String::from_utf16(&u16_chars) {
+                        return Some(utf16_str);
+                    }
+                }
+
+                // 2. 尝试 UTF-8 解码
+                if let Ok(utf8_str) = String::from_utf8(bytes.clone()) {
+                    if !utf8_str.is_empty() {
+                        return Some(utf8_str);
+                    }
+                }
+
+                // 3. 兜底尝试 UTF-16LE
+                if bytes.len() % 2 == 0 {
+                    let u16_chars: Vec<u16> = bytes
+                        .chunks_exact(2)
+                        .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+                        .collect();
+                    if let Ok(utf16_str) = String::from_utf16(&u16_chars) {
+                        return Some(utf16_str);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 /// 识别单 Token 的危险特征（.NET 动态反射、进程启动与环境变量求值）
@@ -640,12 +830,20 @@ pub fn analyze_segment_ast(command: &str, args: &[String], depth: usize) -> Comm
         return CommandClass::Dangerous;
     }
 
-    // 3. 检查 Base64 编码开关变形 (powershell / pwsh)
+    // 3. 检查 WorkingDirectory 启动参数与 Base64 编码开关变形 (powershell / pwsh)
     let lower_cmd = command.to_lowercase();
     if lower_cmd == "powershell" || lower_cmd == "pwsh" {
+        if args.iter().any(|a| is_ps_working_directory_flag(a)) {
+            return CommandClass::CdShape;
+        }
         for arg in args {
             if is_ps_encoded_command_flag(arg) {
-                return CommandClass::Redline;
+                if let Some(decoded) = extract_and_decode_ps_payload(args) {
+                    let inner = analyze_depth(&decoded, depth + 1);
+                    return inner.overall_class;
+                } else {
+                    return CommandClass::Redline;
+                }
             }
         }
     }
@@ -954,6 +1152,36 @@ pub fn analyze_indirect_depth(segment_raw: &str, depth: usize) -> SemanticAnalys
     // 提取 -c 之后的字符串参数作为内层命令
     let (command, args) = split_command_args(segment_raw);
     let normalized = normalize_command(&command);
+
+    // BC10-2: 多语言解释器内联脚本深度审计引擎优先审查
+    if let Some(kind) = crate::polyglot::PolyglotCodeInspector::detect_interpreter(&normalized) {
+        // PowerShell 专有 base64 编码隐藏形态与 WorkingDirectory 启动参数目录逃逸（BC10-1 & BC10-3）
+        if kind == crate::polyglot::InterpreterKind::PowerShell {
+            let has_wd = args.iter().any(|a| is_ps_working_directory_flag(a));
+            let has_enc = args.iter().any(|a| is_ps_encoded_command_flag(a));
+            if has_enc {
+                if let Some(decoded_str) = extract_and_decode_ps_payload(&args) {
+                    let mut decoded = analyze_depth(&decoded_str, depth + 1);
+                    decoded.decoded_payload = Some(decoded_str);
+                    if has_wd && decoded.overall_class == CommandClass::Normal {
+                        decoded.overall_class = CommandClass::CdShape;
+                    }
+                    return decoded;
+                } else {
+                    return redline_only_analysis();
+                }
+            }
+            if has_wd {
+                return cd_shape_analysis();
+            }
+        }
+        if let Some(script) =
+            crate::polyglot::PolyglotCodeInspector::extract_inline_script(kind, &args)
+        {
+            return crate::polyglot::PolyglotCodeInspector::inspect_script(kind, &script, depth);
+        }
+    }
+
     let inner = match normalized.as_str() {
         "&" => {
             if args.is_empty() {
@@ -986,13 +1214,24 @@ pub fn analyze_indirect_depth(segment_raw: &str, depth: usize) -> SemanticAnalys
             }
             inner
         }
-        "bash" | "sh" | "cmd" | "pwsh" | "powershell" | "node" | "python" | "python3" => {
-            // PS-01 T1.3（R1 ④ 盲区）/ Unit 5.1：-EncodedCommand / -enc / -e / -enco / /e: 等
-            // base64 编码隐藏形态全变形泛化拦截。
-            // 检测到即整体升级 Redline。
-            for a in &args {
-                if is_ps_encoded_command_flag(a) {
-                    return redline_only_analysis();
+        "bash" | "sh" | "zsh" | "cmd" | "cmd.exe" | "pwsh" | "powershell" | "node" | "nodejs" | "bun" | "deno" | "python" | "python3" | "py" | "pythonw" | "ruby" | "perl" | "php" => {
+            if normalized == "pwsh" || normalized == "powershell" {
+                let has_wd = args.iter().any(|a| is_ps_working_directory_flag(a));
+                let has_enc = args.iter().any(|a| is_ps_encoded_command_flag(a));
+                if has_enc {
+                    if let Some(decoded_str) = extract_and_decode_ps_payload(&args) {
+                        let mut decoded = analyze_depth(&decoded_str, depth + 1);
+                        decoded.decoded_payload = Some(decoded_str);
+                        if has_wd && decoded.overall_class == CommandClass::Normal {
+                            decoded.overall_class = CommandClass::CdShape;
+                        }
+                        return decoded;
+                    } else {
+                        return redline_only_analysis();
+                    }
+                }
+                if has_wd {
+                    return cd_shape_analysis();
                 }
             }
             // 找 -c / -Command / /c 后的所有剩余参数（join 保留空格，恢复内层命令全文）；
@@ -1000,7 +1239,7 @@ pub fn analyze_indirect_depth(segment_raw: &str, depth: usize) -> SemanticAnalys
             let mut inner: Option<String> = None;
             let mut iter = args.iter();
             while let Some(a) = iter.next() {
-                if a == "-c" || a == "-Command" || a == "/c" {
+                if a.eq_ignore_ascii_case("-c") || a.eq_ignore_ascii_case("-command") || a.eq_ignore_ascii_case("/c") {
                     let rest: Vec<&String> = iter.by_ref().collect();
                     if !rest.is_empty() {
                         inner = Some(
@@ -1012,11 +1251,11 @@ pub fn analyze_indirect_depth(segment_raw: &str, depth: usize) -> SemanticAnalys
                     }
                     break;
                 }
-                if a.starts_with("-Command") && a.len() > 8 {
-                    inner = Some(a[8..].trim_start_matches('=').to_string());
+                if a.to_lowercase().starts_with("-command") && a.len() > 8 {
+                    inner = Some(a[8..].trim_start_matches(['=', ':']).trim().to_string());
                     break;
                 }
-                if a.starts_with("/c") && a.len() > 2 {
+                if a.to_lowercase().starts_with("/c") && a.len() > 2 {
                     inner = Some(a[2..].trim_start().to_string());
                     break;
                 }
@@ -1142,6 +1381,7 @@ pub fn analyze_indirect_depth(segment_raw: &str, depth: usize) -> SemanticAnalys
             delete_targets: Vec::new(),
             git_revert_forms: Vec::new(),
             has_indirect_delete: false,
+            decoded_payload: None,
         },
     }
 }
@@ -1200,6 +1440,9 @@ fn classify_depth(command: &str, args: &[String], segment_raw: &str, depth: usiz
         if ast_class == CommandClass::Dangerous {
             return CommandClass::Dangerous;
         }
+        if ast_class == CommandClass::CdShape {
+            return CommandClass::CdShape;
+        }
     }
 
     // 1. 间接执行：先递归分析内层
@@ -1216,6 +1459,12 @@ fn classify_depth(command: &str, args: &[String], segment_raw: &str, depth: usiz
         }
         if inner.overall_class == CommandClass::DeleteShape || inner.has_indirect_delete {
             return CommandClass::Indirect;
+        }
+        // BC10-3：若内层分析结果包含 CdShape，整链分类必须判定为 CdShape 或向上传播
+        if inner.overall_class == CommandClass::CdShape
+            || inner.segments.iter().any(|s| s.class == CommandClass::CdShape)
+        {
+            return CommandClass::CdShape;
         }
         if !inner.segments.is_empty() {
             return CommandClass::Indirect;
@@ -2205,5 +2454,254 @@ mod tests {
             CommandClass::Dangerous,
             "6层嵌套间接调用必须触发深度熔断 Dangerous"
         );
+    }
+
+    fn b64_encode(bytes: &[u8]) -> String {
+        const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::new();
+        for chunk in bytes.chunks(3) {
+            let b0 = chunk[0];
+            let b1 = if chunk.len() > 1 { chunk[1] } else { 0 };
+            let b2 = if chunk.len() > 2 { chunk[2] } else { 0 };
+            out.push(TABLE[(b0 >> 2) as usize] as char);
+            out.push(TABLE[(((b0 & 3) << 4) | (b1 >> 4)) as usize] as char);
+            if chunk.len() > 1 {
+                out.push(TABLE[(((b1 & 0xf) << 2) | (b2 >> 6)) as usize] as char);
+            } else {
+                out.push('=');
+            }
+            if chunk.len() > 2 {
+                out.push(TABLE[(b2 & 0x3f) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+        out
+    }
+
+    fn to_ps_b64(cmd: &str) -> String {
+        let utf16: Vec<u8> = cmd.encode_utf16().flat_map(|c| c.to_le_bytes()).collect();
+        b64_encode(&utf16)
+    }
+
+    #[test]
+    fn test_is_ps_encoded_command_flag_all_variants() {
+        // 正向缩写与变体
+        let positive = [
+            "-e", "-E", "-ec", "-EC", "-eco", "-ecom", "-en", "-enc", "-enco",
+            "-encode", "-encoded", "-encodedcommand", "-EncodedCommand",
+            "/e", "/ec", "/enc", "/enco", "/encodedcommand",
+            "--ec", "--encodedcommand",
+            "-ec:", "/ec:", "-EncodedCommand=",
+            "-ec:cgBtACAALQByAGYAIAAvAA==",
+            "/encodedcommand:cgBtACAALQByAGYAIAAvAA==",
+            "--encodedcommand=cgBtACAALQByAGYAIAAvAA==",
+        ];
+        for flag in positive {
+            assert!(
+                is_ps_encoded_command_flag(flag),
+                "应识别为 PowerShell 编码命令参数: {flag}"
+            );
+        }
+
+        // 负向参数（绝不能误判）
+        let negative = [
+            "-ex", "-exec", "-executionpolicy", "-ExecutionPolicy",
+            "-ExecutionPolicy:Bypass", "/executionpolicy",
+            "-erroraction", "-entity", "-ea",
+            "-w", "-windowstyle", "-whatif",
+            "npm", "powershell", "pwsh", "-help",
+        ];
+        for flag in negative {
+            assert!(
+                !is_ps_encoded_command_flag(flag),
+                "不应误识别为 PowerShell 编码命令参数: {flag}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_is_ps_working_directory_flag_variants() {
+        // 正向缩写与变体
+        let positive = [
+            "-wd", "-WD", "/wd", "/WD", "--wd", "--WD",
+            "-work", "-working", "-workingdirectory", "-WorkingDirectory",
+            "/workingdirectory", "/WorkingDirectory",
+            "--workingdirectory", "--WorkingDirectory",
+            "-wd:D:\\test", "/wd:D:\\test", "--workingdirectory=D:\\test",
+        ];
+        for flag in positive {
+            assert!(
+                is_ps_working_directory_flag(flag),
+                "应识别为 PowerShell WorkingDirectory 参数: {flag}"
+            );
+        }
+
+        // 负向参数
+        let negative = [
+            "-w", "-windowstyle", "-WindowStyle", "-whatif",
+            "-wait", "-where", "npm", "pwsh", "cd",
+        ];
+        for flag in negative {
+            assert!(
+                !is_ps_working_directory_flag(flag),
+                "不应误识别为 PowerShell WorkingDirectory 参数: {flag}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_extract_and_decode_ps_payload() {
+        // 1. UTF-16LE 提取与解码
+        let b64_utf16 = to_ps_b64("Write-Host hello");
+        let args = vec!["powershell".to_string(), "-ec".to_string(), b64_utf16];
+        assert_eq!(
+            extract_and_decode_ps_payload(&args),
+            Some("Write-Host hello".to_string())
+        );
+
+        // 2. UTF-8 回退
+        let b64_utf8 = b64_encode(b"rm -rf /");
+        let args2 = vec!["powershell".to_string(), "-enc".to_string(), b64_utf8];
+        assert_eq!(
+            extract_and_decode_ps_payload(&args2),
+            Some("rm -rf /".to_string())
+        );
+
+        // 3. 冒号与等号内联参数
+        let inline_colon = format!("-ec:{}", to_ps_b64("Get-Process"));
+        assert_eq!(
+            extract_and_decode_ps_payload(&["pwsh".to_string(), inline_colon]),
+            Some("Get-Process".to_string())
+        );
+
+        let inline_eq = format!("--EncodedCommand={}", to_ps_b64("dir"));
+        assert_eq!(
+            extract_and_decode_ps_payload(&["powershell".to_string(), inline_eq]),
+            Some("dir".to_string())
+        );
+
+        // 4. 非法 base64 / 缺失 payload
+        assert_eq!(
+            extract_and_decode_ps_payload(&["powershell".to_string(), "-ec".to_string()]),
+            None
+        );
+        assert_eq!(
+            extract_and_decode_ps_payload(&[
+                "powershell".to_string(),
+                "-ec".to_string(),
+                "!!not_base64!!".to_string()
+            ]),
+            None
+        );
+    }
+
+    #[test]
+    fn test_encoded_command_decoding_semantics() {
+        // 1. 内层为 Normal 命令：间接执行判定为 Indirect（非红线/非删除/非CD），并保留 decoded_payload
+        let cmd_normal = format!("powershell -ec {}", to_ps_b64("Write-Host 'hello world'"));
+        let sem_normal = analyze(&cmd_normal);
+        assert_eq!(sem_normal.overall_class, CommandClass::Indirect);
+        assert!(!sem_normal.has_indirect_delete);
+        assert_eq!(
+            sem_normal.decoded_payload.as_deref(),
+            Some("Write-Host 'hello world'")
+        );
+
+        // 2. 内层为 Redline 命令：识别为 Redline
+        let cmd_redline = format!("powershell -enc {}", to_ps_b64("rm -rf /"));
+        let sem_redline = analyze(&cmd_redline);
+        assert_eq!(sem_redline.overall_class, CommandClass::Redline);
+        assert_eq!(
+            sem_redline.decoded_payload.as_deref(),
+            Some("rm -rf /")
+        );
+
+        // 3. 内层为 CdShape 命令：识别为 CdShape
+        let cmd_cd = format!("pwsh -EncodedCommand {}", to_ps_b64("cd D:\\data"));
+        let sem_cd = analyze(&cmd_cd);
+        assert_eq!(sem_cd.overall_class, CommandClass::CdShape);
+        assert_eq!(
+            sem_cd.decoded_payload.as_deref(),
+            Some("cd D:\\data")
+        );
+
+        // 4. 内层为 DeleteShape 命令：识别为删除形态/间接删除
+        let cmd_del = format!("powershell -ec {}", to_ps_b64("Remove-Item C:\\test -Force"));
+        let sem_del = analyze(&cmd_del);
+        assert!(
+            sem_del.has_indirect_delete || sem_del.overall_class == CommandClass::DeleteShape,
+            "Base64 内层删除形态必须识别: {sem_del:?}"
+        );
+        assert_eq!(
+            sem_del.decoded_payload.as_deref(),
+            Some("Remove-Item C:\\test -Force")
+        );
+    }
+
+    #[test]
+    fn test_cd_commands_expansion() {
+        // CD_COMMANDS 扩充覆盖 Push-Location, Pop-Location, chdir
+        let cd_cases = [
+            "Push-Location D:\\project",
+            "push-location D:\\project",
+            "Pop-Location",
+            "pop-location",
+            "chdir D:\\project",
+            "CHDIR /d D:\\project",
+            "pushd D:\\project",
+            "popd",
+            "Set-Location D:\\project",
+            "sl D:\\project",
+            "cd D:\\project",
+        ];
+        for cmd in cd_cases {
+            let res = analyze(cmd);
+            assert_eq!(
+                res.overall_class,
+                CommandClass::CdShape,
+                "CD 命令扩充必须命中 CdShape: {cmd}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_indirect_cd_shape_propagation() {
+        // 间接执行包裹内含 cd 必须透传为 CdShape（防 CD 逃逸）
+        let indirect_cd_cases = [
+            "cmd /c \"cd /d D:\\ && whoami\"",
+            "cmd.exe /c \"cd D:\\\"",
+            "powershell -Command \"cd D:\\; dir\"",
+            "pwsh -Command \"Push-Location D:\\; Get-ChildItem\"",
+            "cmd /c \"chdir /d D:\\code\"",
+        ];
+        for cmd in indirect_cd_cases {
+            let res = analyze(cmd);
+            assert_eq!(
+                res.overall_class,
+                CommandClass::CdShape,
+                "间接执行包裹内的 cd 必须判定为 CdShape: {cmd}, 实际: {res:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_powershell_working_directory_escape() {
+        // -WorkingDirectory / -wd 逃逸启动参数必须被判定为 CdShape
+        let wd_cases = [
+            "pwsh -wd D:\\",
+            "powershell -WorkingDirectory C:\\test -Command \"Get-Process\"",
+            "pwsh -wd:D:\\code -Command \"cargo build\"",
+            "powershell /wd D:\\",
+            "pwsh --workingdirectory=D:\\repo -c \"dir\"",
+        ];
+        for cmd in wd_cases {
+            let res = analyze(cmd);
+            assert_eq!(
+                res.overall_class,
+                CommandClass::CdShape,
+                "PowerShell -wd 目录逃逸必须判定为 CdShape: {cmd}, 实际: {res:?}"
+            );
+        }
     }
 }

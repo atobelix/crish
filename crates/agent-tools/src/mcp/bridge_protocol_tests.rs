@@ -11,10 +11,31 @@ use serde_json::json;
 
 #[test]
 fn mcp_tool_name_prefixes_and_sanitizes() {
-    assert_eq!(mcp_tool_name("files", "read"), "mcp_files__read");
-    assert_eq!(mcp_tool_name("my.server", "read"), "mcp_my_server__read");
-    assert_eq!(mcp_tool_name("a b.c!", "x-y"), "mcp_a_b_c___x-y");
+    let name_files = mcp_tool_name("files", "read");
+    assert!(name_files.starts_with("mcp_files_"));
+    assert!(name_files.ends_with("__read"));
+
+    let name_server = mcp_tool_name("my.server", "read");
+    assert!(name_server.starts_with("mcp_my_server_"));
+    assert!(name_server.ends_with("__read"));
+
     assert_eq!(sanitize_id_part("ok-name_1"), "ok-name_1");
+}
+
+/// 命名空间哈希防碰撞测试（对齐 06A §5.1.2）
+#[test]
+fn test_mcp_tool_name_hashing_collision_free() {
+    let name_dot = format_mcp_tool_name("my.server", "read");
+    let name_under = format_mcp_tool_name("my_server", "read");
+    assert_ne!(name_dot, name_under, "不同 server_id 绝对不能产生相同的名称");
+    assert!(name_dot.starts_with("mcp_my_server_"));
+    assert!(name_under.starts_with("mcp_my_server_"));
+    assert!(name_dot.ends_with("__read"));
+    assert!(name_under.ends_with("__read"));
+
+    let name_dash = format_mcp_tool_name("test-mcp", "calc");
+    let name_under2 = format_mcp_tool_name("test_mcp", "calc");
+    assert_ne!(name_dash, name_under2, "test-mcp 与 test_mcp 绝对不碰撞");
 }
 
 #[test]
@@ -33,14 +54,17 @@ fn adapt_tool_list_builds_prefixed_defs() {
         },
     ];
     let defs = adapt_tool_list("files", &tools);
+    let expected_read_name = format_mcp_tool_name("files", "read");
+    let expected_write_name = format_mcp_tool_name("files", "write");
+
     assert_eq!(defs.len(), 2);
-    assert_eq!(defs[0].name, "mcp_files__read");
+    assert_eq!(defs[0].name, expected_read_name);
     assert_eq!(defs[0].description, "读文件");
     assert_eq!(
         defs[0].input_schema,
         json!({ "type": "object", "properties": {} })
     );
-    assert_eq!(defs[1].name, "mcp_files__write");
+    assert_eq!(defs[1].name, expected_write_name);
     assert_eq!(
         defs[1].input_schema,
         json!({ "type": "object", "properties": {}, "additionalProperties": true })
@@ -48,7 +72,7 @@ fn adapt_tool_list_builds_prefixed_defs() {
     assert!(!defs[0].dangerous);
     // 序列化 camelCase，可作为注册表工具列表载荷
     let value = serde_json::to_value(&defs[0]).unwrap();
-    assert_eq!(value["name"], "mcp_files__read");
+    assert_eq!(value["name"], expected_read_name);
     assert_eq!(
         value["inputSchema"],
         json!({ "type": "object", "properties": {} })

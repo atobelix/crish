@@ -42,7 +42,7 @@ describe('detectExternalMcpServers', () => {
     expect(item?.args).toEqual(['mcp-server-sqlite', '--db-path', './test.db']);
     expect(item?.env).toEqual({ DEBUG: '1' });
     expect(item?.source).toBe('Claude Desktop');
-    expect(item?.toolsCount).toBe(4);
+    expect(item?.toolsCount).toBeUndefined();
   });
 
   it('handles empty or malformed files gracefully without crashing', async () => {
@@ -56,30 +56,30 @@ describe('detectExternalMcpServers', () => {
     expect(result).toEqual([]);
   });
 
-  it('provides DEFAULT_FALLBACK_MCP with full 30 tools for chrome-devtools-mcp and 57 for cua-driver', () => {
+  it('provides DEFAULT_FALLBACK_MCP without fake tools or static guesswork', () => {
     const devtools = DEFAULT_FALLBACK_MCP.find(
       (s) => s.name === 'chrome-devtools-mcp'
     );
     expect(devtools).toBeDefined();
-    expect(devtools?.toolsCount).toBe(30);
-    expect(devtools?.tools).toHaveLength(30);
+    expect(devtools?.toolsCount).toBeUndefined();
+    expect(devtools?.tools).toBeUndefined();
 
     const cua = DEFAULT_FALLBACK_MCP.find((s) => s.name === 'cua-driver');
     expect(cua).toBeDefined();
-    expect(cua?.toolsCount).toBe(57);
-    expect(cua?.tools).toHaveLength(57);
+    expect(cua?.toolsCount).toBeUndefined();
+    expect(cua?.tools).toBeUndefined();
 
     const claudecode = DEFAULT_FALLBACK_MCP.find(
       (s) => s.source === 'Claude Code' && s.name === 'chrome-devtools'
     );
     expect(claudecode).toBeDefined();
-    expect(claudecode?.toolsCount).toBe(30);
+    expect(claudecode?.toolsCount).toBeUndefined();
 
     const codexRepl = DEFAULT_FALLBACK_MCP.find(
       (s) => s.source === 'Codex' && s.name === 'node_repl'
     );
     expect(codexRepl).toBeDefined();
-    expect(codexRepl?.toolsCount).toBe(4);
+    expect(codexRepl?.toolsCount).toBeUndefined();
   });
 
   it('detects Claude Code MCP servers from ~/.claude.json', async () => {
@@ -111,8 +111,8 @@ describe('detectExternalMcpServers', () => {
     );
     expect(item).toBeDefined();
     expect(item?.command).toBe('cmd');
-    expect(item?.toolsCount).toBe(30);
-    expect(item?.tools).toHaveLength(30);
+    expect(item?.toolsCount).toBeUndefined();
+    expect(item?.tools).toBeUndefined();
   });
 
   it('detects Codex MCP servers from ~/.codex/config.toml', async () => {
@@ -153,7 +153,7 @@ enabled = false
       (s) => s.source === 'Codex' && s.name === 'chrome-devtools'
     );
     expect(devtools).toBeDefined();
-    expect(devtools?.toolsCount).toBe(30);
+    expect(devtools?.toolsCount).toBeUndefined();
     expect(devtools?.command).toBe('cmd');
 
     const repl = result.find(
@@ -162,7 +162,7 @@ enabled = false
     expect(repl).toBeDefined();
     expect(repl?.command).toBe('node_repl.exe');
     expect(repl?.env).toEqual({ NODE_ENV: 'production' });
-    expect(repl?.toolsCount).toBe(4);
+    expect(repl?.toolsCount).toBeUndefined();
 
     const disabled = result.find((s) => s.name === 'disabled_tool');
     expect(disabled).toBeUndefined();

@@ -60,6 +60,12 @@ pub(crate) fn redirect_or_intercept_delete(
     ctx: &ToolContext,
     audit_sink: Arc<dyn SecurityAuditSink>,
 ) -> Result<serde_json::Value, ToolError> {
+    let display_cmd = if let Some(decoded) = &analysis.decoded_payload {
+        format!("{command} [解码明文: {decoded}]")
+    } else {
+        command.to_string()
+    };
+
     // 1. 间接执行包裹（bash -c 'rm x' / xargs rm 等）：内层目标无法安全解析，
     //    整链拦截 + 引导，防包裹绕过统一删除门禁
     if analysis.has_indirect_delete {
@@ -67,12 +73,12 @@ pub(crate) fn redirect_or_intercept_delete(
             &audit_sink,
             ctx,
             SecurityAuditOperation::Delete,
-            vec![command.to_string()],
+            vec![display_cmd.clone()],
         );
         return Err(ToolError::new(
             TOOL_COMMAND_BLOCKED,
             format!(
-                "PermissionDenied: 检测到间接执行包裹的物理删除形态（eval / bash -c / xargs 等），已拦截；{DELETE_REDIRECT_GUIDANCE}。原始命令：{command}"
+                "PermissionDenied: 检测到间接执行包裹的物理删除形态（eval / bash -c / xargs 等），已拦截；{DELETE_REDIRECT_GUIDANCE}。原始命令：{display_cmd}"
             ),
         ));
     }
@@ -86,12 +92,12 @@ pub(crate) fn redirect_or_intercept_delete(
             &audit_sink,
             ctx,
             SecurityAuditOperation::Delete,
-            vec![command.to_string()],
+            vec![display_cmd.clone()],
         );
         return Err(ToolError::new(
             TOOL_COMMAND_BLOCKED,
             format!(
-                "PermissionDenied: 检测到复合命令链中的物理删除形态，整链已拦截（链内其他段副作用不可控）；{DELETE_REDIRECT_GUIDANCE}。原始命令：{command}"
+                "PermissionDenied: 检测到复合命令链中的物理删除形态，整链已拦截（链内其他段副作用不可控）；{DELETE_REDIRECT_GUIDANCE}。原始命令：{display_cmd}"
             ),
         ));
     }
@@ -101,12 +107,12 @@ pub(crate) fn redirect_or_intercept_delete(
             &audit_sink,
             ctx,
             SecurityAuditOperation::Delete,
-            vec![command.to_string()],
+            vec![display_cmd.clone()],
         );
         return Err(ToolError::new(
             TOOL_COMMAND_BLOCKED,
             format!(
-                "PermissionDenied: 检测到物理删除形态但无法解析删除目标；{DELETE_REDIRECT_GUIDANCE}。原始命令：{command}"
+                "PermissionDenied: 检测到物理删除形态但无法解析删除目标；{DELETE_REDIRECT_GUIDANCE}。原始命令：{display_cmd}"
             ),
         ));
     }
@@ -362,9 +368,14 @@ pub(crate) fn gate_path(p: &Path) -> String {
 /// 由调用方保证删除形态先行；本函数只处理残留 cd 形态）：
 /// - 纯 cd 命令（单段整体分类 == CdShape）→ 结构化错误 tool.cd_blocked，
 ///   文案引导使用 `Cwd` 参数；
-/// - 复合链含 cd 段（多段）→ 整链拦截 + 引导（链内其他段依赖目录状态，
-///   不代为执行）。
+/// - 复合链含 cd 段（多段）或间接执行内层含 cd → 整链拦截 + 引导（链内其他段依赖目录状态，
+///   不代为执行）；
+/// - PowerShell -WorkingDirectory (-wd) 启动参数目录篡改 → 拦截并引导使用 Cwd。
 pub(crate) fn intercept_cd_shape(analysis: &SemanticAnalysis, command: &str) -> Option<ToolError> {
+    // 1. 检查分析结果本身是否判定为 CdShape 或包含 CdShape 段
+    let is_cd = analysis.overall_class == CommandClass::CdShape
+        || analysis.segments.iter().any(|s| s.class == CommandClass::CdShape);
+
     // 复用分析结果的拆段（参照 :276-293 整链拦截模式）：命令 + 参数重建
     // 段字符串（引号内容已剥离，`echo "cd x"` 段首为 echo 不命中）
     let segments: Vec<String> = analysis
@@ -378,20 +389,46 @@ pub(crate) fn intercept_cd_shape(analysis: &SemanticAnalysis, command: &str) -> 
             }
         })
         .collect();
-    if segments.is_empty() {
+
+    let classified_cd = !segments.is_empty()
+        && conex_sandbox::semantics::classify_command_segments(&segments) == CommandClass::CdShape;
+
+    if !is_cd && !classified_cd {
         return None;
     }
-    if conex_sandbox::semantics::classify_command_segments(&segments) != CommandClass::CdShape {
-        return None;
-    }
-    let pure_cd = segments.len() == 1;
-    let message = if pure_cd {
-        "请使用 Cwd 参数指定工作目录，而非 cd 命令"
+
+    // 2. 检查是否为 PowerShell 启动参数 (-WorkingDirectory / -wd) 目录篡改逃逸
+    let is_wd_escape = analysis.segments.iter().any(|s| {
+        (s.command == "powershell" || s.command == "pwsh")
+            && s.args.iter().any(|a| conex_sandbox::is_ps_working_directory_flag(a))
+    });
+
+    let message = if is_wd_escape {
+        "检测到 PowerShell 启动参数 (-WorkingDirectory / -wd) 目录篡改，已拦截；请使用工具级 Cwd 参数指定工作目录，禁止在命令行中切换初始目录"
     } else {
-        "检测到复合命令链中的 cd 形态，整链已拦截（链内其他段依赖目录状态，不代为执行）；请使用 Cwd 参数指定工作目录"
+        let pure_cd = segments.len() == 1
+            && analysis.segments.len() == 1
+            && analysis.segments[0].class == CommandClass::CdShape
+            && !analysis.segments[0].command.eq_ignore_ascii_case("cmd")
+            && !analysis.segments[0].command.eq_ignore_ascii_case("cmd.exe")
+            && !analysis.segments[0].command.eq_ignore_ascii_case("powershell")
+            && !analysis.segments[0].command.eq_ignore_ascii_case("pwsh");
+
+        if pure_cd {
+            "请使用 Cwd 参数指定工作目录，而非 cd 命令"
+        } else {
+            "检测到复合命令链中的 cd 形态，整链已拦截（链内其他段依赖目录状态，不代为执行）；请使用 Cwd 参数指定工作目录"
+        }
     };
+
+    let display_cmd = if let Some(decoded) = &analysis.decoded_payload {
+        format!("{command} [解码明文: {decoded}]")
+    } else {
+        command.to_string()
+    };
+
     Some(ToolError::new(
         TOOL_CD_BLOCKED,
-        format!("{message}。原始命令：{command}"),
+        format!("{message}。原始命令：{display_cmd}"),
     ))
 }

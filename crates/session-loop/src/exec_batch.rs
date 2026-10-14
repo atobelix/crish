@@ -437,7 +437,9 @@ impl BatchRunner<'_> {
             };
             if !should_execute {
                 let r = match verdict {
-                    PermissionVerdict::Deny => denied_result(call, self.options),
+                    PermissionVerdict::Deny => {
+                        denied_result(call, self.options, Some(&self.executor.registry))
+                    }
                     // A3 fail-closed（P1 权限归一）：无审批基础设施 → 需审批
                     // 项拒绝（ApprovalRequired，不透传执行）
                     PermissionVerdict::NeedsApproval if !approval_active => {

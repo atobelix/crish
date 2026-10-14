@@ -119,6 +119,8 @@ pub struct ToolExecCtx {
     pub log_root: Option<PathBuf>,
     /// 压缩块只读存储（BC11-4：search_context / decompress_context 真实读取）
     pub compression_store: Option<Arc<dyn agent_tools::compression_store::CompressionContextStore>>,
+    /// 子代理任务类型（task_type：commit / implementation / analysis 等；None = 主 agent 或未指定，BC10-6）
+    pub task_type: Option<String>,
 }
 
 /// 批处理产出：结果 + 事件序列 + 致命错误

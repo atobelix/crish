@@ -147,21 +147,14 @@ pub fn filter_registry_for_task_type(
 }
 
 /// 命令级白名单判定（按任务类型派生命令策略；T-D-08，shell 命令执行门禁
-/// 兜底过滤——工具面已剔除 shell_command 的类型此处一并拒绝）
+/// 命令级白名单判定（按任务类型派生命令策略；BC10-6 执行链真实接线）
 ///
-/// **边界登记（P1 权限归一 D8）**：本函数是「spawn 时工具裁剪」独立层
-/// （子代理按任务类型装配工具集时的命令策略），**不参与每命令放行判定**——
-/// 每命令「是否放行/拒绝/需审批」的唯一判定链为
-/// `crate::permission::decide_command_with_revert`（执行器 `call_verdict`
-/// 与 shell 工具共用）；本层与单链互不调用、互不并链，语义不删不改。
-///
-/// - `commit` → 仅 `git` 命令（前缀过滤口径：命令首词必须为 git）；
+/// **刚性门禁（BC10-6）**：本函数正式接入调度层 `call_verdict` 与工具执行层
+/// `ShellCommandTool::prepare`，作为任务类型安全刚性防线：
+/// - `commit` → 仅 `git` 命令（严格前缀过滤：命令首词必须为 git/git.exe，除 git 外禁止执行任何 shell 命令，杜绝 commit 代理越权）；
 /// - `implementation` → 构建/测试类命令白名单：复用语义层
-///   `semantics::analyze` 的 CommandClass 分类（不维护命令前缀表），
-///   整体分类必须为 Normal，且不被既有门禁判定为需审批/拦截
-///   （网络发布 npm/cargo publish、提权 sudo 等形态经
-///   `CommandGatekeeper` 兜底拒绝）；
-/// - 其余 / 未知 → 一律拒绝（无命令）。
+///   `semantics::analyze` 的 CommandClass 分类，整体分类必须为 Normal，且不被既有门禁判定为需审批/拦截；
+/// - 其余 / 未知 → 一律拒绝（无命令执行权）。
 pub fn command_allowed_for_task_type(task_type: &str, command_line: &str) -> bool {
     let cmd = command_line.trim();
     if cmd.is_empty() {
@@ -189,9 +182,20 @@ pub fn command_allowed_for_task_type(task_type: &str, command_line: &str) -> boo
     }
 }
 
-/// 命令首词提取（按空白切分的第一段；空串返回空）
+/// 命令首词提取（按空白切分的第一段，支持引号剥离与 Windows .exe 后缀归一化；空串返回空）
 fn first_token(command_line: &str) -> &str {
-    command_line.split_whitespace().next().unwrap_or("")
+    let tok = command_line.split_whitespace().next().unwrap_or("");
+    let unquoted = tok.trim_matches(['"', '\'']);
+    let file_name = std::path::Path::new(unquoted)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(unquoted);
+    let lower = file_name.to_ascii_lowercase();
+    if lower == "git" || lower == "git.exe" {
+        "git"
+    } else {
+        tok
+    }
 }
 
 #[cfg(test)]

@@ -167,6 +167,8 @@ pub struct ToolContext {
     /// `exec_single.rs` 注入 `call.id`；工具侧审计/发射时填充；
     /// None = 非工具调用上下文（mock/测试/引擎命令直连））
     pub tool_call_id: Option<String>,
+    /// 子代理任务类型（task_type：commit / implementation / analysis 等；None = 主 agent 或未指定，BC10-6）
+    pub task_type: Option<String>,
 }
 
 /// 探索类文档配额检查上下文（C5，I6-M11）
@@ -207,6 +209,7 @@ impl ToolContext {
             compression_store: None,
             note_backend: None,
             tool_call_id: None,
+            task_type: None,
         }
     }
 }
@@ -234,6 +237,7 @@ pub fn create_mock_tool_context() -> ToolContext {
         compression_store: None,
         note_backend: None,
         tool_call_id: None,
+        task_type: None,
     }
 }
 

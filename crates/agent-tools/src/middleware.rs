@@ -283,6 +283,7 @@ mod tests {
             note_backend: None,
             // D-02 LK-01：中间件直连路径无工具调用上下文（None）
             tool_call_id: None,
+            task_type: None,
         };
         let mut current = input;
         for m in chain {

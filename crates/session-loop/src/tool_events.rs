@@ -354,6 +354,8 @@ pub struct ToolBatchOptions {
     /// 立即拒绝；与 abort/超时语义正交（取消仍逐点穿透，permit 随
     /// future drop 自动释放）。
     pub max_parallel: Option<usize>,
+    /// 子代理任务类型（task_type：commit / implementation / analysis 等；None = 主 agent 或未指定，BC10-6）
+    pub task_type: Option<String>,
 }
 
 impl Default for ToolBatchOptions {
@@ -368,6 +370,7 @@ impl Default for ToolBatchOptions {
             permission_mode: None,
             approval_timeout: None,
             max_parallel: None,
+            task_type: None,
         }
     }
 }

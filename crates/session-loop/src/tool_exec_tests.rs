@@ -3647,3 +3647,71 @@ async fn subagent_approval_expired_does_not_interrupt_run() {
         "approval_expired 非致命：子代理 run 不中断"
     );
 }
+
+/// 贯通验证：动态注册 MCP 工具在大模型发请求时的快照注入与执行转发（Task 4）
+#[tokio::test]
+async fn mcp_dynamic_tool_snapshot_injection_and_execution_forwarding() {
+    let reg = Arc::new(ToolRegistry::new());
+    let bridge = Arc::new(agent_tools::mcp::McpClientBridge::new());
+    let server_id = "srv_demo";
+    let tool_name = agent_tools::mcp::format_mcp_tool_name(server_id, "search");
+
+    let def = ToolDefinition {
+        name: tool_name.clone(),
+        description: "搜索工作区内容".to_string(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "query": { "type": "string" }
+            }
+        }),
+        dangerous: false,
+        fatal_on_error: false,
+    };
+
+    let adapter = Arc::new(agent_tools::mcp::McpDynamicToolAdapter::new(
+        bridge.clone(),
+        server_id,
+        "search",
+        def.clone(),
+    ));
+
+    // 动态注册到 ToolRegistry
+    reg.register_or_replace_runtime(adapter).expect("注册应成功");
+
+    // 1. 验证 LLM 发请求时可从 list_definitions 中真实拿到该 MCP 工具的定义（Prompt 注入）
+    let defs = reg.list_definitions();
+    assert!(defs.iter().any(|d| d.name == tool_name), "MCP 工具必须进入发往 LLM 的定义列表中");
+
+    // 2. 模拟 LLM 触发该 MCP 工具调用
+    let exec = ToolExecutor::new(reg.clone());
+    let calls = vec![ToolBatchCall {
+        id: "call_mcp_1".into(),
+        tool_name: tool_name.clone(),
+        summary: "调用动态 MCP 搜索".into(),
+        input: serde_json::json!({ "query": "hello" }),
+        category: conex_types::tool::ToolCategory::Internal,
+        concurrency: ToolConcurrency::Parallel,
+    }];
+    let opts = ToolBatchOptions::default();
+
+    // 此时服务尚未就绪，执行应返回 connection_failed 而非 panic
+    let out = exec.execute_batch(&calls, &exec_ctx(), None, &opts, None).await;
+    assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::ExecutionFailed));
+    assert!(out.results[0].error_message.as_ref().unwrap().contains("不可用"));
+
+    // 3. 验证 disabled_tools 运行时掩码：禁用后在 list_definitions 过滤，执行时拦截
+    reg.set_tool_enabled(&tool_name, false);
+    assert!(!reg.is_tool_enabled(&tool_name));
+    assert!(!reg.list_definitions().iter().any(|d| d.name == tool_name), "被禁用的 MCP 工具必须被快照过滤");
+
+    // 再次调用被禁用的工具：被 UserDenied 阻断
+    let out_disabled = exec.execute_batch(&calls, &exec_ctx(), None, &opts, None).await;
+    assert_eq!(out_disabled.results[0].error_kind, Some(ToolErrorKind::UserDenied));
+    assert!(out_disabled.results[0].error_message.as_ref().unwrap().contains("disabled"));
+
+    // 4. 重新启用
+    reg.set_tool_enabled(&tool_name, true);
+    assert!(reg.is_tool_enabled(&tool_name));
+    assert!(reg.list_definitions().iter().any(|d| d.name == tool_name));
+}

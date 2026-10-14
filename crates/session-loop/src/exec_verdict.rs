@@ -120,11 +120,21 @@ impl ToolExecutor {
         call: &ToolBatchCall,
         options: &ToolBatchOptions,
     ) -> PermissionVerdict {
+        if !self.registry.is_tool_enabled(&call.tool_name) {
+            return PermissionVerdict::Deny;
+        }
         if let Some(command) = call
             .input
             .get("command")
             .and_then(serde_json::Value::as_str)
         {
+            // BC10-6: 任务类型命令白名单刚性前置门禁
+            if let Some(task_type) = &options.task_type {
+                if !agent_tools::readonly::command_allowed_for_task_type(task_type, command) {
+                    return PermissionVerdict::Deny;
+                }
+            }
+
             // 未设置权限模式：沿用既有语义（approval 开启 → 全批审批），
             // 不进入单链（与 legacy 逐行等价：C3 大回退在此同样
             // NeedsApproval，其余一律按需审批收口）
@@ -213,16 +223,30 @@ pub(crate) fn classify_tool_error(err: &ToolError) -> (ToolErrorKind, String) {
 pub(crate) fn denied_result(
     call: &ToolBatchCall,
     options: &ToolBatchOptions,
+    registry: Option<&ToolRegistry>,
 ) -> ClassifiedToolResult {
-    let mode = options
-        .permission_mode
-        .unwrap_or(PermissionMode::Ask)
-        .as_engine_str();
+    let message = if let Some(reg) = registry {
+        if !reg.is_tool_enabled(&call.tool_name) {
+            format!("tool disabled: {}", call.tool_name)
+        } else {
+            let mode = options
+                .permission_mode
+                .unwrap_or(PermissionMode::Ask)
+                .as_engine_str();
+            format!("permission denied by {mode} mode: {}", call.tool_name)
+        }
+    } else {
+        let mode = options
+            .permission_mode
+            .unwrap_or(PermissionMode::Ask)
+            .as_engine_str();
+        format!("permission denied by {mode} mode: {}", call.tool_name)
+    };
     ClassifiedToolResult::error(
         &call.id,
         &call.tool_name,
         ToolErrorKind::UserDenied,
-        format!("permission denied by {mode} mode: {}", call.tool_name),
+        message,
         0,
     )
 }
@@ -278,5 +302,103 @@ pub(crate) fn mark_rest_cancelled(
             "cancelled: sibling failure",
             0,
         ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_tools::definition::{Tool, ToolDefinition};
+
+    struct DummyShellTool;
+    #[async_trait::async_trait]
+    impl Tool for DummyShellTool {
+        fn name(&self) -> &str {
+            "execute_command"
+        }
+        fn definition(&self) -> &ToolDefinition {
+            static DEF: std::sync::OnceLock<ToolDefinition> = std::sync::OnceLock::new();
+            DEF.get_or_init(|| ToolDefinition {
+                name: "execute_command".into(),
+                description: "shell command execution".into(),
+                input_schema: serde_json::json!({"type": "object"}),
+                dangerous: false,
+                fatal_on_error: false,
+            })
+        }
+        async fn execute(
+            &self,
+            _ctx: &ToolContext,
+            args: Value,
+        ) -> Result<Value, ToolError> {
+            Ok(args)
+        }
+    }
+
+    #[test]
+    fn test_call_verdict_task_type_commit_whitelist() {
+        let mut reg = ToolRegistry::new();
+        let _ = reg.register(Arc::new(DummyShellTool));
+        let exec = ToolExecutor::new(Arc::new(reg));
+
+        let commit_options = ToolBatchOptions {
+            task_type: Some("commit".to_string()),
+            permission_mode: Some(PermissionMode::FullAccess),
+            ..ToolBatchOptions::default()
+        };
+
+        // 允许的 git 命令
+        let git_call = ToolBatchCall {
+            id: "call-git".into(),
+            tool_name: "execute_command".into(),
+            input: serde_json::json!({ "command": "git status" }),
+            category: conex_types::tool::ToolCategory::Internal,
+            concurrency: ToolConcurrency::Sequential,
+            summary: String::new(),
+        };
+        let verdict = exec.call_verdict(&git_call, &commit_options);
+        assert_eq!(verdict, PermissionVerdict::Allow, "git 命令应通过白名单裁决");
+
+        // 禁止的非 git 命令 (例如 npm test)
+        let npm_call = ToolBatchCall {
+            id: "call-npm".into(),
+            tool_name: "execute_command".into(),
+            input: serde_json::json!({ "command": "npm test" }),
+            category: conex_types::tool::ToolCategory::Internal,
+            concurrency: ToolConcurrency::Sequential,
+            summary: String::new(),
+        };
+        let verdict = exec.call_verdict(&npm_call, &commit_options);
+        assert_eq!(verdict, PermissionVerdict::Deny, "非 git 命令必须被 task_type 白名单拒决 (Deny)");
+
+        // 其它非白名单命令
+        let rm_call = ToolBatchCall {
+            id: "call-rm".into(),
+            tool_name: "execute_command".into(),
+            input: serde_json::json!({ "command": "rm -rf file.txt" }),
+            category: conex_types::tool::ToolCategory::Internal,
+            concurrency: ToolConcurrency::Sequential,
+            summary: String::new(),
+        };
+        let verdict = exec.call_verdict(&rm_call, &commit_options);
+        assert_eq!(verdict, PermissionVerdict::Deny, "删除命令在 commit task_type 下必须被 Deny");
+
+        // implementation 任务类型放行构建/测试命令
+        let impl_options = ToolBatchOptions {
+            task_type: Some("implementation".to_string()),
+            permission_mode: Some(PermissionMode::FullAccess),
+            ..ToolBatchOptions::default()
+        };
+        let verdict = exec.call_verdict(&npm_call, &impl_options);
+        assert_eq!(verdict, PermissionVerdict::Allow, "implementation 任务类型应放行构建测试命令");
+
+        // 未指定 task_type (None) 正常放行
+        let unrestricted_options = ToolBatchOptions {
+            task_type: None,
+            permission_mode: Some(PermissionMode::FullAccess),
+            ..ToolBatchOptions::default()
+        };
+        let verdict = exec.call_verdict(&npm_call, &unrestricted_options);
+        assert_eq!(verdict, PermissionVerdict::Allow, "未指定 task_type 时按常规权限模式放行");
     }
 }

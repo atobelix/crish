@@ -140,6 +140,8 @@ pub struct AssemblyConfig {
     pub note_backend: Option<NoteBackendHandle>,
     pub pending_input_store: Option<Arc<dyn crate::input::PendingInputStore>>,
     pub compression_store: Option<Arc<dyn agent_tools::compression_store::CompressionContextStore>>,
+    /// 子代理任务类型（task_type：commit / implementation / analysis 等；None = 主 agent 或未指定，BC10-6）
+    pub task_type: Option<String>,
 }
 impl Default for AssemblyConfig {
     fn default() -> Self {
@@ -153,6 +155,7 @@ impl Default for AssemblyConfig {
             note_backend: None,
             pending_input_store: None,
             compression_store: None,
+            task_type: None,
         }
     }
 }
@@ -340,6 +343,9 @@ impl SessionLoopOptions {
     }
     pub fn reasoning_effort(&self) -> Option<crate::provider::ReasoningEffort> {
         self.hooks.reasoning_effort
+    }
+    pub fn task_type(&self) -> Option<String> {
+        self.assembly.task_type.clone()
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

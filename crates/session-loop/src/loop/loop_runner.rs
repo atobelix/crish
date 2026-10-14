@@ -100,6 +100,7 @@ impl AgentSessionLoop {
                 background: None,
                 log_root: None,
                 compression_store: None,
+                task_type: None,
             },
             tool_options: ToolBatchOptions::default(),
             approval: None,
@@ -170,6 +171,7 @@ impl AgentSessionLoop {
             .compression_store
             .clone()
             .or_else(|| options.compaction.compression_store.clone());
+        self.tool_ctx.task_type = options.assembly.task_type.clone();
         if self.delta_sink.is_none() {
             if let Some(live_sink) = &options.hooks.live_sink {
                 self.delta_sink = Some(Arc::new(live_sink.clone()) as Arc<dyn DeltaSink>);

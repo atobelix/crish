@@ -39,6 +39,8 @@ pub struct ToolRegistry {
     /// 定义改写链（E4：ToolMiddleware::on_definition，list_definitions
     /// 构建点时顺序改写；空链 = 无改写，行为与现状一致）
     definition_transformers: Mutex<Vec<Arc<dyn ToolMiddleware>>>,
+    /// 工具级禁用名单（黑名单掩码）：被禁用的工具在 list_definitions 中自动剔除
+    disabled_tools: Mutex<std::collections::HashSet<String>>,
 }
 
 impl ToolRegistry {
@@ -82,6 +84,82 @@ impl ToolRegistry {
             })
             .push(name);
         Ok(())
+    }
+
+    /// 共享面原子注册或替换（服务重启或工具 Schema 更新时覆盖，避免 tool.version_conflict）
+    pub fn register_or_replace_runtime(&self, tool: Arc<dyn Tool>) -> Result<(), ToolError> {
+        let name = tool.name().to_string();
+        let mut tools = self.tools.lock().unwrap_or_else(|e| {
+            tracing::error!("工具注册表 tools 锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        });
+        let exists = tools.contains_key(&name);
+        tools.insert(name.clone(), tool);
+        drop(tools);
+
+        if !exists {
+            self.order
+                .lock()
+                .unwrap_or_else(|e| {
+                    tracing::error!("工具注册表 order 锁中毒，按恢复模式继续：{e}");
+                    e.into_inner()
+                })
+                .push(name);
+        }
+        Ok(())
+    }
+
+    /// 共享面注销工具（服务停止或更新时清除）
+    pub fn unregister_runtime(&self, name: &str) -> bool {
+        let mut tools = self.tools.lock().unwrap_or_else(|e| {
+            tracing::error!("工具注册表 tools 锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        });
+        if tools.remove(name).is_none() {
+            return false;
+        }
+        drop(tools);
+        self.order
+            .lock()
+            .unwrap_or_else(|e| {
+                tracing::error!("工具注册表 order 锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            })
+            .retain(|n| n != name);
+        true
+    }
+
+    /// 设置工具启用/禁用状态
+    pub fn set_tool_enabled(&self, tool_name: &str, enabled: bool) {
+        let mut disabled = self.disabled_tools.lock().unwrap_or_else(|e| {
+            tracing::error!("工具注册表 disabled_tools 锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        });
+        if enabled {
+            disabled.remove(tool_name);
+        } else {
+            disabled.insert(tool_name.to_string());
+        }
+    }
+
+    /// 检查工具是否可用（未被禁用）
+    pub fn is_tool_enabled(&self, tool_name: &str) -> bool {
+        let disabled = self.disabled_tools.lock().unwrap_or_else(|e| {
+            tracing::error!("工具注册表 disabled_tools 锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        });
+        !disabled.contains(tool_name)
+    }
+
+    /// 获取全部禁用的工具名单
+    pub fn disabled_tools(&self) -> std::collections::HashSet<String> {
+        self.disabled_tools
+            .lock()
+            .unwrap_or_else(|e| {
+                tracing::error!("工具注册表 disabled_tools 锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            })
+            .clone()
     }
 
     /// 按名查找，未注册返回 None
@@ -173,8 +251,20 @@ impl ToolRegistry {
     /// E4：排序后依次经定义改写链（on_definition 按注册序同步改写，
     /// 可改 description 与 input_schema；空链 = 无改写，行为与现状一致）。
     pub fn list_definitions(&self) -> Vec<ToolDefinition> {
-        let mut defs: Vec<ToolDefinition> =
-            self.list().iter().map(|t| t.definition().clone()).collect();
+        let disabled = self
+            .disabled_tools
+            .lock()
+            .unwrap_or_else(|e| {
+                tracing::error!("工具注册表 disabled_tools 锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            })
+            .clone();
+        let mut defs: Vec<ToolDefinition> = self
+            .list()
+            .iter()
+            .filter(|t| !disabled.contains(t.name()))
+            .map(|t| t.definition().clone())
+            .collect();
         defs.sort_by(|a, b| a.name.cmp(&b.name));
         let transformers = self
             .definition_transformers
@@ -194,22 +284,7 @@ impl ToolRegistry {
 
     /// 注销工具，返回是否注销成功
     pub fn unregister(&mut self, name: &str) -> bool {
-        let mut tools = self.tools.lock().unwrap_or_else(|e| {
-            tracing::error!("工具注册表 tools 锁中毒，按恢复模式继续：{e}");
-            e.into_inner()
-        });
-        if tools.remove(name).is_none() {
-            return false;
-        }
-        drop(tools);
-        self.order
-            .lock()
-            .unwrap_or_else(|e| {
-                tracing::error!("工具注册表 order 锁中毒，按恢复模式继续：{e}");
-                e.into_inner()
-            })
-            .retain(|n| n != name);
-        true
+        self.unregister_runtime(name)
     }
 
     /// 已注册工具数量
@@ -450,5 +525,93 @@ mod tests {
         reg.register_runtime(echo("other")).unwrap();
         let names: Vec<String> = reg.list().iter().map(|t| t.name().to_string()).collect();
         assert_eq!(names, ["echo", "other"]);
+    }
+
+    /// register_or_replace_runtime 覆盖旧工具，不报 version_conflict，且 order 不重复
+    #[test]
+    fn register_or_replace_runtime_overwrites_existing_without_error() {
+        let reg = ToolRegistry::new();
+        reg.register_runtime(echo("tool_a")).unwrap();
+        assert_eq!(reg.len(), 1);
+
+        // 创建新版本的 tool_a（修改描述）
+        struct ToolV2;
+        #[async_trait::async_trait]
+        impl Tool for ToolV2 {
+            fn name(&self) -> &str {
+                "tool_a"
+            }
+            fn definition(&self) -> &ToolDefinition {
+                static DEF: std::sync::OnceLock<ToolDefinition> = std::sync::OnceLock::new();
+                DEF.get_or_init(|| ToolDefinition {
+                    name: "tool_a".into(),
+                    description: "version 2".into(),
+                    input_schema: serde_json::json!({"type": "object"}),
+                    dangerous: false,
+                    fatal_on_error: false,
+                })
+            }
+            async fn execute(&self, _ctx: &crate::context::ToolContext, args: serde_json::Value) -> Result<serde_json::Value, ToolError> {
+                Ok(args)
+            }
+        }
+
+        // 热替换：成功且不报错
+        reg.register_or_replace_runtime(Arc::new(ToolV2)).unwrap();
+        assert_eq!(reg.len(), 1);
+        let defs = reg.list_definitions();
+        assert_eq!(defs.len(), 1);
+        assert_eq!(defs[0].description, "version 2");
+        let list = reg.list();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].definition().description, "version 2");
+    }
+
+    /// unregister_runtime 正确从 tools 和 order 中清除
+    #[test]
+    fn unregister_runtime_clears_from_tools_and_order() {
+        let reg = ToolRegistry::new();
+        reg.register_runtime(echo("t1")).unwrap();
+        reg.register_runtime(echo("t2")).unwrap();
+        assert_eq!(reg.len(), 2);
+
+        assert!(reg.unregister_runtime("t1"));
+        assert_eq!(reg.len(), 1);
+        assert!(!reg.has("t1"));
+        assert!(reg.has("t2"));
+        let names: Vec<String> = reg.list().iter().map(|t| t.name().to_string()).collect();
+        assert_eq!(names, ["t2"]);
+
+        // 重复注销返回 false
+        assert!(!reg.unregister_runtime("t1"));
+    }
+
+    /// 注册表细粒度禁用掩码过滤测试（对齐 06A §5.1.3）
+    #[test]
+    fn test_tool_registry_disabled_mask_filtering() {
+        let reg = ToolRegistry::new();
+        reg.register_runtime(echo("tool_a")).unwrap();
+        reg.register_runtime(echo("tool_b")).unwrap();
+        reg.register_runtime(echo("tool_c")).unwrap();
+
+        assert_eq!(reg.list_definitions().len(), 3);
+        assert!(reg.is_tool_enabled("tool_b"));
+
+        // 禁用 tool_b
+        reg.set_tool_enabled("tool_b", false);
+        assert!(!reg.is_tool_enabled("tool_b"));
+        assert!(reg.disabled_tools().contains("tool_b"));
+
+        // list_definitions 过滤掉 tool_b
+        let defs = reg.list_definitions();
+        let names: Vec<String> = defs.iter().map(|d| d.name.clone()).collect();
+        assert_eq!(names, ["tool_a", "tool_c"]);
+
+        // 重新启用 tool_b
+        reg.set_tool_enabled("tool_b", true);
+        assert!(reg.is_tool_enabled("tool_b"));
+        let defs2 = reg.list_definitions();
+        let names2: Vec<String> = defs2.iter().map(|d| d.name.clone()).collect();
+        assert_eq!(names2, ["tool_a", "tool_b", "tool_c"]);
     }
 }

@@ -35,9 +35,10 @@ pub mod servers;
 pub mod shell;
 
 pub use bridge::{
-    adapt_call_result, adapt_tool_list, mcp_tool_name, sanitize_id_part, McpClientBridge,
-    McpServerRuntimeState, McpServerSession, McpToolAdapter, McpToolInfo, DEFAULT_MCP_CALL_TIMEOUT,
-    DEFAULT_MCP_INIT_TIMEOUT, DEFAULT_MCP_LIST_TIMEOUT,
+    adapt_call_result, adapt_tool_list, format_mcp_tool_name, mcp_tool_name, sanitize_id_part,
+    McpClientBridge, McpDynamicToolAdapter, McpServerRuntimeState, McpServerSession,
+    McpToolAdapter, McpToolInfo, DEFAULT_MCP_CALL_TIMEOUT, DEFAULT_MCP_INIT_TIMEOUT,
+    DEFAULT_MCP_LIST_TIMEOUT,
 };
 pub use servers::{McpConfigPersistence, McpServerConfig, McpServerStore, McpTransport};
 pub use shell::{McpRegistryShell, W4D_MCP_SHELL_PACKAGE_ID};
@@ -48,23 +49,22 @@ pub use shell::{McpRegistryShell, W4D_MCP_SHELL_PACKAGE_ID};
 /// ## E2 统一门面登记（统一输入流收敛 · 扩展门面详案 §1①）
 ///
 /// **已登记为 canonical 出口**：本函数是插件 MCP 接入引擎工具运行集的
-/// **唯一出口**（`McpClientBridge.start` → `McpToolAdapter` →
-/// `ToolRegistry::register_runtime` 并入统一注册表，供 `list_definitions`
+/// **唯一出口**（`McpClientBridge.start` → `McpDynamicToolAdapter` →
+/// `ToolRegistry::register_or_replace_runtime` 并入统一注册表，供 `list_definitions`
 /// 消费）。引擎侧生产装配入口方法 = `EngineHandle::register_plugin_mcp_server`
 /// （apps/agent-workbench/src-tauri/src/engine_build.rs，已登记统一门面，
 /// 生产装配链接线点 = run/ 装配区用户声明 mcpServers 注册处，E-4 收口项），
 /// 本函数为其底层代理。不改结构：注释级登记。
 ///
 /// 流程：配置校验 → `bridge.start`（spawn + initialize 握手 + tools/list
-/// 枚举）→ 每个工具经 `McpToolAdapter` 并入注册表（`register_runtime`，
-/// &self 共享面）→ 返回适配后的本地定义。
+/// 枚举）→ 每个工具经 `McpDynamicToolAdapter` 并入注册表（`register_or_replace_runtime`，
+/// &self 共享面热替换）→ 返回适配后的本地定义。
 ///
 /// 语义：
 /// - 启动失败 → mcp.* 错误上抛（调用方承接为插件级错误进 runtime-error，
 ///   不阻塞 run）；进程保留（Degraded）供 restart 重建重试；
-/// - 幂等：server 已 Ready 时 `bridge.start` 返回缓存定义；已并入注册表
-///   的同名工具跳过（重复注册不报错，重启重建安全）；
-/// - 工具命名 `mcp_<server>__<tool>`（kimi `mcp__plugin-*__*` 同规范）；
+/// - 热替换：重启 / 重载时使用 `register_or_replace_runtime` 更新适配器，不报 version_conflict；
+/// - 工具命名 `mcp_<clean_id>_<short_hash>__<tool>`（确定性防冲突）；
 /// - 服务器生命周期随 run 启停由调用方（engine 层）驱动（session.start
 ///   启动 / session.end 关闭）。
 pub async fn register_plugin_server(
@@ -74,10 +74,6 @@ pub async fn register_plugin_server(
 ) -> Result<Vec<ToolDefinition>, ToolError> {
     let defs = bridge.start(config).await?;
     for def in &defs {
-        if registry.has(&def.name) {
-            // 已并入（重启 / 重复注册）：跳过，保持幂等
-            continue;
-        }
         let adapter = bridge
             .get_adapter(&config.server_id, &def.name)
             .ok_or_else(|| {
@@ -89,7 +85,7 @@ pub async fn register_plugin_server(
                     ),
                 )
             })?;
-        registry.register_runtime(adapter).map_err(|e| {
+        registry.register_or_replace_runtime(adapter).map_err(|e| {
             ToolError::new(
                 codes::MCP_CONNECTION_FAILED,
                 format!(

@@ -1195,6 +1195,19 @@ fn classify_cd_shape_variants() {
         classify_command_segments(&["pushd x".to_string(), "popd".to_string()]),
         CommandClass::CdShape
     );
+    // CD_COMMANDS 扩充：Push-Location / Pop-Location / chdir
+    assert_eq!(
+        classify_command_segments(&["Push-Location sub".to_string()]),
+        CommandClass::CdShape
+    );
+    assert_eq!(
+        classify_command_segments(&["Pop-Location".to_string()]),
+        CommandClass::CdShape
+    );
+    assert_eq!(
+        classify_command_segments(&["chdir sub".to_string()]),
+        CommandClass::CdShape
+    );
     // 不命中：git -C 不依赖进程内目录状态；echo "cd x" 段首非 cd
     assert_eq!(
         classify_command_segments(&["git -C src status".to_string()]),
@@ -1208,6 +1221,64 @@ fn classify_cd_shape_variants() {
         classify_command_segments(&["git status".to_string()]),
         CommandClass::Normal
     );
+}
+
+/// 任务卡验收：Push-Location / Pop-Location / chdir / 间接执行 cd / pwsh -wd 及解码明文拦截
+#[tokio::test]
+async fn shell_cd_expansion_and_indirect_intercepted() {
+    let ws = TempWorkspace::new("shell_cd_exp");
+    let t = tool();
+
+    // 1. Push-Location / Pop-Location / chdir 单段拦截
+    for cmd in ["Push-Location sub", "Pop-Location", "chdir sub"] {
+        let err = t
+            .execute(&ctx(&ws), json!({ "command": cmd }))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), TOOL_CD_BLOCKED);
+        assert!(err.to_string().contains("Cwd 参数"));
+    }
+
+    // 2. 间接执行包裹内的 cd 形态（如 cmd /c "cd /d sub && whoami"）
+    let err_indirect = t
+        .execute(
+            &ctx(&ws),
+            json!({ "command": "cmd /c \"cd /d sub && whoami\"" }),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err_indirect.code(), TOOL_CD_BLOCKED);
+    assert!(err_indirect.to_string().contains("Cwd 参数"));
+
+    // 3. PowerShell -WorkingDirectory / -wd 启动参数目录逃逸拦截
+    let err_wd = t
+        .execute(&ctx(&ws), json!({ "command": "pwsh -wd sub" }))
+        .await
+        .unwrap_err();
+    assert_eq!(err_wd.code(), TOOL_CD_BLOCKED);
+    assert!(
+        err_wd
+            .to_string()
+            .contains("PowerShell 启动参数 (-WorkingDirectory / -wd) 目录篡改")
+    );
+
+    // 4. Base64 编码命令拦截并展示解码明文
+    let b64_cd = {
+        let utf16: Vec<u8> = "cd sub"
+            .encode_utf16()
+            .flat_map(|c| c.to_le_bytes())
+            .collect();
+        base64_encode(&utf16)
+    };
+    let err_ec_cd = t
+        .execute(
+            &ctx(&ws),
+            json!({ "command": format!("powershell -ec {b64_cd}") }),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(err_ec_cd.code(), TOOL_CD_BLOCKED);
+    assert!(err_ec_cd.to_string().contains("[解码明文: cd sub]"));
 }
 
 /// mode 入参解析：未知值结构化报错，缺省 sync
@@ -1546,9 +1617,9 @@ async fn plan_mode_blocks_shell_execution() {
     assert!(err.to_string().contains("Plan (Read-Only)"));
 }
 
-/// DIM-04: FullAccess 模式直接放行复合删除与间接删除
+/// BC10-7: 彻底拔除 FullAccess 特权后，间接删除在 FullAccess 模式下必须被拦截（严禁物理抹除）
 #[tokio::test]
-async fn full_access_mode_allows_compound_and_indirect_delete() {
+async fn full_access_mode_blocks_compound_and_indirect_delete() {
     let ws = TempWorkspace::new("shell_full_access");
     ws.write_file("temp.txt", "will delete");
     let t = tool();
@@ -1559,11 +1630,12 @@ async fn full_access_mode_allows_compound_and_indirect_delete() {
     let cmd = if cfg!(windows) {
         "cmd /c del temp.txt"
     } else {
-        "rm temp.txt"
+        "bash -c 'rm temp.txt'"
     };
     let res = t.execute(&ctx, json!({ "command": cmd })).await;
-    assert!(res.is_ok(), "FullAccess 模式下应直接放行删除命令");
-    assert!(!ws.path().join("temp.txt").exists());
+    let err = res.expect_err("BC10-7: FullAccess 模式下间接删除必须被拦截，不可逃逸");
+    assert_eq!(err.code(), TOOL_COMMAND_BLOCKED);
+    assert!(ws.path().join("temp.txt").exists(), "被拦截命令不应在原工作区产生物理抹除");
 }
 
 /// DIM-04: 输出超限溢出落盘测试
@@ -1626,4 +1698,156 @@ fn output_accumulator_under_hard_cap_no_overflow() {
     let (text, truncated) = acc.preview_text(SHELL_MAX_OUTPUT_BYTES_DEFAULT);
     assert!(!truncated, "限内输出不得截断");
     assert_eq!(text, "hello world");
+}
+
+// ===== BC10-6: 任务类型命令白名单拦截测试 =====
+
+#[tokio::test]
+async fn task_type_commit_strictly_enforces_git_only() {
+    let ws = TempWorkspace::new("shell_task_type_commit");
+    let t = tool();
+    let ctx = ToolContext {
+        task_type: Some("commit".to_string()),
+        permission_mode: crate::permission::PermissionMode::FullAccess,
+        ..ctx(&ws)
+    };
+
+    // 允许的 git 命令通过 prepare 前置门禁
+    let allowed = ["git status", "git diff", "git add .", "git commit -m 'test'"];
+    for cmd in allowed {
+        let res = t.prepare(&ctx, &json!({ "command": cmd })).await;
+        match res {
+            Prepared::Done(Err(e)) => panic!("git 命令 [{}] 必须通过 task_type 门禁，但被拦截: {:?}", cmd, e),
+            _ => {}
+        }
+    }
+
+    // 阻断的非 git 命令必须直接在 prepare 阶段被拦截
+    let blocked = ["npm test", "cargo test", "echo hello", "del file.txt", "rm file.txt"];
+    for cmd in blocked {
+        let res = t.prepare(&ctx, &json!({ "command": cmd })).await;
+        match res {
+            Prepared::Done(Err(e)) => {
+                assert_eq!(e.code(), TOOL_COMMAND_BLOCKED, "非 git 命令 [{}] 必须被 task_type 门禁拦截", cmd);
+                assert!(e.to_string().contains("commit"), "错误信息须包含 commit 任务类型");
+            }
+            _ => panic!("非 git 命令 [{}] 必须被拦截，却通过了 prepare", cmd),
+        }
+    }
+}
+
+// ===== BC10-7: FullAccess 模式删除形态重定向与间接删除拦截测试 =====
+
+#[tokio::test]
+async fn full_access_mode_redirects_delete_to_trash_wal() {
+    let ws = TempWorkspace::new("shell_full_access_trash");
+    ws.write_file("data_to_trash.txt", "critical data");
+    let trash_ws = TempWorkspace::new("shell_trash_store");
+    let t = ShellCommandTool::new(30_000, 200_000, Some(trash_ws.path().clone()));
+    let ctx = ToolContext {
+        permission_mode: crate::permission::PermissionMode::FullAccess,
+        ..ctx(&ws)
+    };
+
+    let cmd = if cfg!(windows) {
+        "del data_to_trash.txt"
+    } else {
+        "rm data_to_trash.txt"
+    };
+
+    let res = t.execute(&ctx, json!({ "command": cmd })).await;
+    assert!(res.is_ok(), "FullAccess 模式下删除命令应重定向成功返回: {:?}", res);
+
+    assert!(!ws.path().join("data_to_trash.txt").exists(), "原文件应已不在工作区");
+
+    // 检查回收站存储目录非空（已记录 WAL 与快照）
+    let entries = std::fs::read_dir(trash_ws.path()).unwrap().collect::<Vec<_>>();
+    assert!(!entries.is_empty(), "回收站根目录应包含删除重定向写入的 WAL/数据条目");
+}
+
+#[tokio::test]
+async fn full_access_mode_blocks_indirect_delete() {
+    let ws = TempWorkspace::new("shell_full_access_indirect");
+    ws.write_file("data.txt", "content");
+    let t = tool();
+    let ctx = ToolContext {
+        permission_mode: crate::permission::PermissionMode::FullAccess,
+        ..ctx(&ws)
+    };
+
+    // 间接删除（bash -c "rm ..."）在 FullAccess 模式下严禁被直接放行物理抹除
+    let cmd = "bash -c 'rm data.txt'";
+    let res = t.execute(&ctx, json!({ "command": cmd })).await;
+    let err = res.expect_err("间接删除在 FullAccess 模式下必须被拦截，严禁特权逃逸");
+    assert_eq!(err.code(), TOOL_COMMAND_BLOCKED);
+    assert!(err.to_string().contains("间接执行包裹"));
+}
+
+/// BC10-4: 命令行正文绝对路径系统核心关键目录物理红线刚性拦截
+#[tokio::test]
+async fn command_path_inspector_blocks_system_critical_paths() {
+    let ws = TempWorkspace::new("shell_path_critical");
+    let t = tool();
+    let ctx = ctx(&ws);
+
+    let critical_cmds = [
+        "cat C:\\Windows\\System32\\drivers\\etc\\hosts",
+        "type \"C:/Program Files/app/config.ini\"",
+        "cat /etc/passwd",
+        "ls /usr/bin/python3",
+        "cat ~/.ssh/id_rsa",
+        "echo test > C:\\Windows\\temp.txt",
+    ];
+
+    for cmd in critical_cmds {
+        let res = t.execute(&ctx, json!({ "command": cmd })).await;
+        let err = res.expect_err(&format!("命令包含系统关键目录必须被硬性拦截: {cmd}"));
+        assert_eq!(err.code(), TOOL_COMMAND_BLOCKED, "命令: {cmd}");
+        assert!(
+            err.to_string().contains("系统核心关键目录"),
+            "错误信息必须明确提示包含系统关键目录敏感路径，实际: {err}，命令: {cmd}"
+        );
+    }
+}
+
+/// BC10-4: 命令行绝对路径写操作（重定向、Out-File、mkdir 等）越出工作区刚性阻断
+#[tokio::test]
+async fn command_path_inspector_blocks_out_of_workspace_write() {
+    let ws = TempWorkspace::new("shell_path_write_outside");
+    let t = tool();
+    let ctx = ctx(&ws);
+
+    let outside_write_cmds = [
+        "echo hacked > C:\\outside_test_ws_999\\evil.txt",
+        "echo hacked >> C:\\outside_test_ws_999\\evil.txt",
+        "mkdir C:\\outside_test_ws_999\\new_dir",
+        "Get-Process | Out-File C:\\outside_test_ws_999\\proc.txt",
+        "touch /tmp/outside_test_ws_999.txt",
+    ];
+
+    for cmd in outside_write_cmds {
+        let res = t.execute(&ctx, json!({ "command": cmd })).await;
+        let err = res.expect_err(&format!("向工作区外写操作必须被拦截: {cmd}"));
+        assert_eq!(err.code(), TOOL_COMMAND_BLOCKED, "命令: {cmd}");
+        assert!(
+            err.to_string().contains("工作区外写入或删除"),
+            "错误信息必须明确提示禁止越界写，实际: {err}，命令: {cmd}"
+        );
+    }
+}
+
+/// BC10-4: 工作区内绝对路径合法写操作正常放行
+#[tokio::test]
+async fn command_path_inspector_allows_in_workspace_write() {
+    let ws = TempWorkspace::new("shell_path_write_inside");
+    let t = tool();
+    let ctx = ctx(&ws);
+
+    let target_file = ws.path().join("in_workspace_test.txt");
+    let target_str = target_file.to_string_lossy();
+
+    let cmd = format!("echo hello > \"{target_str}\"");
+    let res = t.execute(&ctx, json!({ "command": cmd })).await;
+    assert!(res.is_ok(), "工作区内绝对路径写操作应正常执行，实际错误: {:?}", res);
+    assert!(target_file.exists(), "文件应已成功在工作区写入");
 }

@@ -88,26 +88,26 @@ pub(crate) struct McpToolHandle {
 ///
 /// 会话可被桥与工具适配器共享（Arc）；最后一个引用释放时 Drop 兜底杀进程。
 pub struct McpServerSession {
-    server_id: String,
-    state: AtomicU8,
+    pub(crate) server_id: String,
+    pub(crate) state: AtomicU8,
     /// 子进程句柄（stop / 崩溃监测取走，取走后进程已回收）
-    child: Mutex<Option<Child>>,
+    pub(crate) child: Mutex<Option<Child>>,
     /// 写端（请求与通知经此下发）
-    stdin: Mutex<Option<ChildStdin>>,
+    pub(crate) stdin: Mutex<Option<ChildStdin>>,
     /// 请求 id 自增
-    next_id: AtomicU64,
+    pub(crate) next_id: AtomicU64,
     /// 挂起请求表：id → 响应投递通道
-    pending: std::sync::Mutex<HashMap<u64, oneshot::Sender<Value>>>,
+    pub(crate) pending: std::sync::Mutex<HashMap<u64, oneshot::Sender<Value>>>,
     /// 已枚举工具定义（Ready 后非空）
-    tools: RwLock<Option<Vec<ToolDefinition>>>,
+    pub(crate) tools: RwLock<Option<Vec<ToolDefinition>>>,
     /// 前缀名 → 远端工具句柄（get_adapter 查表）
     pub(crate) tool_index: RwLock<HashMap<String, McpToolHandle>>,
     /// 退出原因（崩溃 / 被停止；首个写入者生效）
-    exit_reason: std::sync::Mutex<Option<String>>,
+    pub(crate) exit_reason: std::sync::Mutex<Option<String>>,
     /// stderr 尾部（诊断）
-    stderr_tail: std::sync::Mutex<Vec<String>>,
+    pub(crate) stderr_tail: std::sync::Mutex<Vec<String>>,
     /// tools/call 超时（可经桥配置覆盖）
-    call_timeout: Duration,
+    pub(crate) call_timeout: Duration,
 }
 
 impl McpServerSession {
@@ -150,26 +150,104 @@ impl McpServerSession {
         self.stderr_tail.lock().unwrap_or_else(recover_lock).clone()
     }
 
-    /// 设置运行状态（原子写）
-    pub(crate) fn set_state(&self, state: McpServerRuntimeState) {
+    /// 安全原子状态迁移（CAS 保护）：严禁从 Exited 终态逆向转为 Ready 或 Degraded
+    pub fn transition_state(
+        &self,
+        expected: McpServerRuntimeState,
+        new_state: McpServerRuntimeState,
+    ) -> bool {
+        let curr = self.state.load(Ordering::SeqCst);
+        if curr == STATE_EXITED && new_state != McpServerRuntimeState::Exited {
+            tracing::warn!(server_id = %self.server_id, "拒绝将已退出终态 Exited 逆转为 {:?}", new_state);
+            return false;
+        }
         self.state
-            .store(runtime_state_code(state), Ordering::SeqCst);
+            .compare_exchange(
+                runtime_state_code(expected),
+                runtime_state_code(new_state),
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            )
+            .is_ok()
     }
 
-    /// 标记会话已退出（崩溃 / 被停止；幂等）
+    /// 设置运行状态（原子写，含不可逆终态保护）
+    ///
+    /// 严禁从 Exited 终态被错误覆盖为 Degraded 或 Ready！
+    pub(crate) fn set_state(&self, state: McpServerRuntimeState) {
+        let new_code = runtime_state_code(state);
+        let mut curr = self.state.load(Ordering::SeqCst);
+        loop {
+            if curr == STATE_EXITED && new_code != STATE_EXITED {
+                tracing::warn!(server_id = %self.server_id, "拒绝将已退出终态 Exited 覆盖为 {:?}", state);
+                return;
+            }
+            match self.state.compare_exchange_weak(
+                curr,
+                new_code,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
+                Ok(_) => break,
+                Err(actual) => curr = actual,
+            }
+        }
+    }
+
+    /// 标记会话已退出（崩溃 / 被停止；幂等不可逆终态）
     ///
     /// 首个退出原因生效；同时释放挂起请求（投递端 drop → 接收端
     /// 收到 RecvError，由 request 映射为 connection_failed）。
     pub(crate) fn mark_exited(&self, reason: impl Into<String>) {
+        let r = reason.into();
         {
             let mut exit_reason = self.exit_reason.lock().unwrap_or_else(recover_lock);
             if exit_reason.is_none() {
-                *exit_reason = Some(reason.into());
+                *exit_reason = Some(r.clone());
             }
         }
         self.state.store(STATE_EXITED, Ordering::SeqCst);
         let pending = std::mem::take(&mut *self.pending.lock().unwrap_or_else(recover_lock));
         drop(pending);
+        tracing::info!(server_id = %self.server_id, reason = %r, "MCP 会话已彻底进入 Exited 终态");
+    }
+
+    /// 真实进程探活：对于 Ready 状态，检查底层句柄存活并执行快速 ping
+    pub async fn probe_alive(&self) -> bool {
+        if self.state() != McpServerRuntimeState::Ready {
+            return false;
+        }
+        // 1. 物理检查子进程状态
+        {
+            let mut guard = self.child.lock().await;
+            if let Some(child) = guard.as_mut() {
+                if let Ok(Some(status)) = child.try_wait() {
+                    guard.take();
+                    self.mark_exited(format!("进程已退出 ({status})"));
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+        // 2. 超时 2 秒的轻量 ping 探活
+        match tokio::time::timeout(
+            Duration::from_secs(2),
+            self.request("ping", json!({}), Duration::from_secs(2)),
+        )
+        .await
+        {
+            Ok(Ok(_)) => true,
+            Ok(Err(_)) => {
+                // 部分 MCP server 不实现 ping 方法（返回 JSON-RPC Method not found 错误），
+                // 此时通信链路通畅且管道未断，若仍为 running 则判定为存活
+                self.is_running()
+            }
+            Err(_) => {
+                // 超时或通信破裂
+                false
+            }
+        }
     }
 
     /// 记录一行 stderr（环形尾部）
@@ -237,6 +315,58 @@ impl McpServerSession {
         spawn_stderr_drainer(&session, stderr);
         spawn_crash_monitor(&session);
         Ok(session)
+    }
+
+    /// 带指数退避的自愈拉起（最多重试 max_retries 次，500ms -> 1000ms -> 2000ms -> 4000ms）
+    pub async fn spawn_with_backoff(
+        config: &McpServerConfig,
+        call_timeout: Duration,
+        max_retries: usize,
+    ) -> Result<Arc<Self>, ToolError> {
+        let mut delay = Duration::from_millis(500);
+        let max_delay = Duration::from_millis(4000);
+        let mut last_err = None;
+
+        for attempt in 0..=max_retries {
+            if attempt > 0 {
+                tracing::info!(
+                    server_id = %config.server_id,
+                    attempt,
+                    delay_ms = delay.as_millis(),
+                    "MCP server 启动失败，执行指数退避重试拉起"
+                );
+                tokio::time::sleep(delay).await;
+                delay = (delay * 2).min(max_delay);
+            }
+            match Self::spawn(config, call_timeout).await {
+                Ok(session) => return Ok(session),
+                Err(e) => {
+                    tracing::warn!(
+                        server_id = %config.server_id,
+                        attempt,
+                        error = %e,
+                        "MCP server 尝试拉起失败"
+                    );
+                    last_err = Some(e);
+                }
+            }
+        }
+        Err(last_err.unwrap_or_else(|| {
+            ToolError::new(
+                codes::MCP_CONNECTION_FAILED,
+                format!("MCP server {} 重启重试次数超限", config.server_id),
+            )
+        }))
+    }
+
+    /// 重启会话并执行指数退避自愈
+    pub async fn restart_with_backoff(
+        &self,
+        config: &McpServerConfig,
+        max_retries: usize,
+    ) -> Result<Arc<Self>, ToolError> {
+        self.stop().await;
+        Self::spawn_with_backoff(config, self.call_timeout, max_retries).await
     }
 
     /// 停止会话：标记退出 + 杀子进程 + 回收 + 关闭写端（幂等）
@@ -423,7 +553,7 @@ impl McpServerSession {
     }
 
     /// 会话不可用时的错误（含退出原因，便于诊断崩溃）
-    fn unavailable_error(&self) -> ToolError {
+    pub(crate) fn unavailable_error(&self) -> ToolError {
         let reason = self
             .exit_reason()
             .map(|r| format!("（{r}）"))
@@ -610,8 +740,8 @@ fn spawn_crash_monitor(session: &Arc<McpServerSession>) {
                             Some(format!("进程状态查询失败：{e}"))
                         }
                     },
-                    // stop() 已取走句柄并完成清理
-                    None => None,
+                    // stop() 已取走句柄并完成清理，直接退出监控循环
+                    None => return,
                 }
             };
             if let Some(reason) = exited {

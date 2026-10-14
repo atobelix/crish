@@ -297,6 +297,11 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("prefs_get", "preferences", "engine", true),
         entry("prefs_set", "preferences", "engine", true),
         entry("prefs_delete", "preferences", "engine", true),
+        // ── MCP 管理面（BC11-1 真实控制面与动态反射）──
+        entry("workbench_list_mcp_servers", "workbench", "gui", true),
+        entry("workbench_start_mcp_server", "workbench", "gui", true),
+        entry("workbench_stop_mcp_server", "workbench", "gui", true),
+        entry("workbench_toggle_mcp_tool", "workbench", "gui", true),
     ],
 };
 
@@ -355,12 +360,12 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 137,
-            "总数 137（单轨收敛后 135；b6 core_generate_session_title +1 → 136；workbench_set_snap_overlay_rect +1 → 137；与前端 commandMap 同步）"
+            total, 142,
+            "总数 142（单轨收敛后 135；b6 +1；snap +1；prefs +1；BC11 MCP 4命令 +4；与前端 commandMap 同步）"
         );
         assert_eq!(
-            registered, 137,
-            "注册面 137（全部为 registered=true 实装命令）"
+            registered, 142,
+            "注册面 142（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");
     }
@@ -396,16 +401,13 @@ mod tests {
         }
     }
 
-    /// 幽灵命令排除（AA-02 W-5，9 条）：不得登记 manifest（真源侧拦截，
+    /// 幽灵命令排除：不得登记 manifest（真源侧拦截，
     /// 与前端 commandMap.test.ts 的映射 null 断言构成双重守门）。
     #[test]
     fn manifest_excludes_ghost_commands() {
         let ghosts = [
             "workbench_git_status",
             "workbench_git_diff",
-            "workbench_list_mcp_servers",
-            "workbench_start_mcp_server",
-            "workbench_stop_mcp_server",
             "workbench_preview_conversation_rewind",
             "workbench_apply_conversation_rewind",
             "workbench_send_to_subagent",

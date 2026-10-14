@@ -20,6 +20,7 @@ use crate::context::ToolContext;
 use crate::definition::ToolError;
 use crate::tools::epoch_millis;
 use serde::{Deserialize, Serialize};
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
@@ -47,11 +48,161 @@ impl std::fmt::Display for ClaimMode {
     }
 }
 
+/// 锁定持有者身份（三元组：session_id, run_id, tool_call_id，BC10-5）
+#[derive(Debug, Clone, Eq, Hash, Serialize, Deserialize)]
+pub struct HolderId {
+    /// 会话标识
+    pub session_id: String,
+    /// Run 标识（子代理 run id 或主 agent run id）
+    pub run_id: String,
+    /// 工具调用标识（tool_call_id，单次工具调用精确隔离）
+    pub tool_call_id: String,
+    #[serde(default)]
+    formatted: String,
+}
+
+impl HolderId {
+    pub fn new(
+        session_id: impl Into<String>,
+        run_id: impl Into<String>,
+        tool_call_id: impl Into<String>,
+    ) -> Self {
+        let session_id = session_id.into();
+        let run_id = run_id.into();
+        let tool_call_id = tool_call_id.into();
+        let formatted = if session_id.is_empty() && tool_call_id.is_empty() {
+            run_id.clone()
+        } else {
+            format!("{session_id}:{run_id}:{tool_call_id}")
+        };
+        Self {
+            session_id,
+            run_id,
+            tool_call_id,
+            formatted,
+        }
+    }
+
+    /// 检查两个 holder 是否互斥兼容
+    ///
+    /// - 完全相同 holder：兼容（同一工具调用自身的幂等刷新与续期）；
+    /// - 同一 session、同一 run 内：
+    ///   - 若其中一方为 run 级预留（tool_call_id 为空）：兼容（允许子代理在自身的预留路径范围内执行写工具）；
+    ///   - 若双方均为具体工具调用（tool_call_id 均非空）且 tool_call_id 不同：不兼容（同 run 内并行工具调用竞争同一路径，必须互斥阻断）；
+    /// - 不同 run 或不同 session：不兼容（严格互斥）。
+    pub fn is_compatible_with(&self, other: &HolderId) -> bool {
+        if self == other {
+            return true;
+        }
+        if !self.run_id.is_empty()
+            && (self.session_id.is_empty()
+                || other.session_id.is_empty()
+                || self.session_id == other.session_id)
+            && self.run_id == other.run_id
+        {
+            if self.tool_call_id.is_empty() || other.tool_call_id.is_empty() {
+                return true;
+            }
+        }
+        false
+    }
+}
+
+impl std::ops::Deref for HolderId {
+    type Target = str;
+    fn deref(&self) -> &str {
+        if self.formatted.is_empty() {
+            if self.session_id.is_empty() && self.tool_call_id.is_empty() {
+                &self.run_id
+            } else {
+                &self.run_id
+            }
+        } else {
+            &self.formatted
+        }
+    }
+}
+
+impl std::fmt::Display for HolderId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.deref())
+    }
+}
+
+impl<S: Into<String>, R: Into<String>, T: Into<String>> From<(S, R, T)> for HolderId {
+    fn from((s, r, t): (S, R, T)) -> Self {
+        Self::new(s, r, t)
+    }
+}
+
+impl From<&str> for HolderId {
+    fn from(s: &str) -> Self {
+        let parts: Vec<&str> = s.split(':').collect();
+        if parts.len() == 3 {
+            Self::new(parts[0], parts[1], parts[2])
+        } else {
+            Self::new("", s, "")
+        }
+    }
+}
+
+impl From<String> for HolderId {
+    fn from(s: String) -> Self {
+        HolderId::from(s.as_str())
+    }
+}
+
+impl From<&String> for HolderId {
+    fn from(s: &String) -> Self {
+        HolderId::from(s.as_str())
+    }
+}
+
+impl From<HolderId> for String {
+    fn from(h: HolderId) -> Self {
+        h.to_string()
+    }
+}
+
+impl From<&HolderId> for String {
+    fn from(h: &HolderId) -> Self {
+        h.to_string()
+    }
+}
+
+impl PartialEq for HolderId {
+    fn eq(&self, other: &Self) -> bool {
+        (self.session_id.is_empty()
+            || other.session_id.is_empty()
+            || self.session_id == other.session_id)
+            && self.run_id == other.run_id
+            && self.tool_call_id == other.tool_call_id
+    }
+}
+
+impl PartialEq<str> for HolderId {
+    fn eq(&self, other: &str) -> bool {
+        self.deref() == other || self.run_id == other
+    }
+}
+
+impl PartialEq<&str> for HolderId {
+    fn eq(&self, other: &&str) -> bool {
+        self == *other
+    }
+}
+
+impl PartialEq<String> for HolderId {
+    fn eq(&self, other: &String) -> bool {
+        self == other.as_str()
+    }
+}
+
 /// 单条写路径声明（会话级记账条目）
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WritePathClaim {
-    /// 占用者标识（子代理 run id / 工具执行 holder / 主 agent）
-    pub holder: String,
+    /// 占用者标识（升级为三元组 HolderId，消除同 run 内并行写文件的互斥穿透）
+    pub holder: HolderId,
     /// 会话标识（注册表按会话隔离，跨会话声明不互相占用）
     pub session_id: String,
     /// 规范化绝对路径（symlink 已解析、工作区内、`\\?\` 前缀已剥离）
@@ -96,21 +247,42 @@ impl WritePathConflict {
     }
 }
 
-/// 写路径声明守卫（RAII）：Drop 时释放本持有者的全部声明
+/// 写路径声明守卫（RAII）：Drop 时仅精准释放当前 guard 登记的特定路径
 ///
 /// - 工具执行期：守卫随 execute 作用域结束（成功 / 错误 / panic / 取消）
-///   自动释放，无泄漏；
-/// - 子代理 run 期：M2/M6 持有守卫到 run 结束，中途异常即自动释放（防悬挂
-///   的第二道保险，第一道是 TTL 超时）。
+///   自动释放当前路径，严禁全量清除；
+/// - 动态心跳：持有期间每 15 秒后台任务心跳续期，防长任务 TTL 提前过期。
 #[derive(Debug)]
 pub struct WriteClaimGuard {
     registry: Arc<WritePathRegistry>,
-    holder: String,
+    holder: HolderId,
+    claimed_paths: Vec<PathBuf>,
+    _heartbeat: Option<tokio::task::JoinHandle<()>>,
+}
+
+impl WriteClaimGuard {
+    pub fn holder(&self) -> &HolderId {
+        &self.holder
+    }
+
+    pub fn claimed_paths(&self) -> &[PathBuf] {
+        &self.claimed_paths
+    }
+
+    /// 手动刷新续期
+    pub fn renew(&self) {
+        self.registry
+            .renew_lease(&self.holder, &self.claimed_paths, self.registry.default_ttl_ms);
+    }
 }
 
 impl Drop for WriteClaimGuard {
     fn drop(&mut self) {
-        self.registry.release_holder(&self.holder);
+        if let Some(ref handle) = self._heartbeat {
+            handle.abort();
+        }
+        self.registry
+            .release_exact_paths(&self.holder, &self.claimed_paths);
     }
 }
 
@@ -164,6 +336,11 @@ impl WritePathRegistry {
         self.write_policy.as_ref()
     }
 
+    /// 会话标识
+    pub fn session_id(&self) -> &str {
+        &self.session_id
+    }
+
     /// 声明写路径（多路径原子化：任一校验失败或冲突即整体拒绝，不产生部分声明）
     ///
     /// 接收者要求 `Arc<Self>`：守卫须持有与注册表同一实例的 Arc，Drop 时
@@ -174,17 +351,20 @@ impl WritePathRegistry {
     /// - 冲突检测排除同持有者（子代理可写自己声明的路径，扩展不冲突）；
     /// - 成功返回守卫，Drop 释放本持有者全部声明；失败返回
     ///   `tool.write_path_conflict`（含占用者与时间信息）。
-    pub fn claim<I, S>(
+    pub fn claim<H, S>(
         self: &Arc<Self>,
-        holder: I,
+        holder: H,
         paths: &[S],
         mode: ClaimMode,
     ) -> Result<WriteClaimGuard, ToolError>
     where
-        I: Into<String>,
+        H: Into<HolderId>,
         S: AsRef<str>,
     {
-        let holder = holder.into();
+        let mut holder = holder.into();
+        if holder.session_id.is_empty() {
+            holder.session_id = self.session_id.clone();
+        }
         let resolved: Vec<PathBuf> = paths
             .iter()
             .map(|p| validate_write_path(&self.workspace_root, p.as_ref()))
@@ -199,7 +379,7 @@ impl WritePathRegistry {
             for path in &resolved {
                 if let Some(conflicting) = inner
                     .iter()
-                    .find(|c| c.holder != holder && paths_overlap_normalized(path, &c.path))
+                    .find(|c| !c.holder.is_compatible_with(&holder) && paths_overlap_normalized(path, &c.path))
                 {
                     return Err(WritePathConflict {
                         requested_path: path.clone(),
@@ -208,29 +388,54 @@ impl WritePathRegistry {
                     .into_tool_error());
                 }
             }
-            for path in resolved {
+            for path in &resolved {
                 // 同持有者同路径：去重并续期（重复声明视为刷新活动时间）
-                inner.retain(|c| !(c.holder == holder && c.path == path));
+                inner.retain(|c| !(c.holder == holder && &c.path == path));
                 inner.push(WritePathClaim {
                     holder: holder.clone(),
                     session_id: self.session_id.clone(),
-                    path,
+                    path: path.clone(),
                     mode,
                     claimed_at_ms: now,
                     expires_at_ms: expires_at,
                 });
             }
         }
+
+        // 15 秒动态租约心跳续期机制（BC10-5）
+        let heartbeat = if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            let reg = Arc::downgrade(self);
+            let h = holder.clone();
+            let p = resolved.clone();
+            let ttl = self.default_ttl_ms;
+            Some(handle.spawn(async move {
+                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(15));
+                interval.tick().await;
+                loop {
+                    interval.tick().await;
+                    if let Some(r) = reg.upgrade() {
+                        r.renew_lease(&h, &p, ttl);
+                    } else {
+                        break;
+                    }
+                }
+            }))
+        } else {
+            None
+        };
+
         Ok(WriteClaimGuard {
             registry: Arc::clone(self),
             holder,
+            claimed_paths: resolved,
+            _heartbeat: heartbeat,
         })
     }
 
     /// 声明单条写路径（[claim] 的便捷形态）
     pub fn claim_one(
         self: &Arc<Self>,
-        holder: impl Into<String>,
+        holder: impl Into<HolderId>,
         path: &str,
         mode: ClaimMode,
     ) -> Result<WriteClaimGuard, ToolError> {
@@ -242,13 +447,14 @@ impl WritePathRegistry {
     ///
     /// 排除同持有者；过期声明先清扫。命中返回 [WritePathConflict]（谁占用/何时），
     /// 未命中返回 None。
-    pub fn check_conflict(&self, holder: &str, path: &Path) -> Option<WritePathConflict> {
+    pub fn check_conflict(&self, holder: impl Into<HolderId>, path: &Path) -> Option<WritePathConflict> {
         self.expire_stale();
+        let holder = holder.into();
         let path = strip_prefix_normalized(path);
         let inner = lock_inner(&self.inner);
         inner
             .iter()
-            .find(|c| c.holder != holder && paths_overlap_normalized(&path, &c.path))
+            .find(|c| !c.holder.is_compatible_with(&holder) && paths_overlap_normalized(&path, &c.path))
             .cloned()
             .map(|conflicting| WritePathConflict {
                 requested_path: path,
@@ -256,9 +462,36 @@ impl WritePathRegistry {
             })
     }
 
-    /// 释放本持有者的全部声明（幂等；守卫 Drop 也会调用）
-    pub fn release_holder(&self, holder: &str) {
-        lock_inner(&self.inner).retain(|c| c.holder != holder);
+    /// 精准释放指定持有者名下的特定路径（严禁清空其他路径）
+    pub fn release_exact_paths(&self, holder: &HolderId, paths: &[PathBuf]) {
+        let mut inner = lock_inner(&self.inner);
+        inner.retain(|c| !(c.holder == *holder && paths.iter().any(|p| p == &c.path)));
+    }
+
+    /// 动态心跳租约续期（每 15 秒续期一次，将到期时刻刷新为当前时刻 + ttl_ms）
+    pub fn renew_lease(&self, holder: &HolderId, paths: &[PathBuf], ttl_ms: u64) {
+        let now = epoch_millis(Some(SystemTime::now()));
+        let expires_at = now + ttl_ms as i64;
+        let mut inner = lock_inner(&self.inner);
+        for claim in inner.iter_mut() {
+            if &claim.holder == holder && paths.iter().any(|p| p == &claim.path) {
+                claim.expires_at_ms = expires_at;
+            }
+        }
+    }
+
+    /// 释放本持有者的全部声明（幂等；可供显式全量清理使用）
+    pub fn release_holder(&self, holder: impl Into<HolderId>) {
+        let h = holder.into();
+        lock_inner(&self.inner).retain(|c| {
+            if c.holder == h {
+                return false;
+            }
+            if !h.run_id.is_empty() && c.holder.run_id == h.run_id && h.tool_call_id.is_empty() {
+                return false;
+            }
+            true
+        });
     }
 
     /// 当前活跃声明快照（测试与 M6 调度器消费）
@@ -279,17 +512,40 @@ impl WritePathRegistry {
         before - inner.len()
     }
 
-    /// 注册表所属会话标识（调试与审计用）
-    pub fn session_id(&self) -> &str {
-        &self.session_id
-    }
+}
+
+static GLOBAL_WRITE_REGISTRIES: std::sync::OnceLock<
+    Mutex<std::collections::HashMap<String, Arc<WritePathRegistry>>>,
+> = std::sync::OnceLock::new();
+
+fn global_write_registries() -> &'static Mutex<std::collections::HashMap<String, Arc<WritePathRegistry>>> {
+    GLOBAL_WRITE_REGISTRIES.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
+
+/// 获取或创建会话级写路径互斥单例
+pub fn get_or_create_registry(
+    session_id: impl Into<String>,
+    workspace_root: impl AsRef<Path>,
+) -> Arc<WritePathRegistry> {
+    let session_id = session_id.into();
+    let root = workspace_root.as_ref().to_path_buf();
+    let mut map = global_write_registries().lock().unwrap_or_else(|e| e.into_inner());
+    map.entry(session_id.clone())
+        .or_insert_with(|| Arc::new(WritePathRegistry::new(session_id, root)))
+        .clone()
+}
+
+/// 清除会话级写路径互斥单例
+pub fn remove_registry(session_id: &str) -> Option<Arc<WritePathRegistry>> {
+    let mut map = global_write_registries().lock().unwrap_or_else(|e| e.into_inner());
+    map.remove(session_id)
 }
 
 /// 工具执行期写路径互斥声明助手（写类工具接线入口）
 ///
 /// - `ToolContext.write_claims` 未接线（None）→ 返回 Ok(None)，不强制互斥；
-/// - 已接线 → 以 `write_claim_holder`（子代理 run id）或回退 `session_id`
-///   为持有者声明；冲突返回 `tool.write_path_conflict`（谁占用/何时）。
+/// - 已接线 → 升级以 `(session_id, run_id, tool_call_id)` 三元组为持有者声明；
+///   冲突返回 `tool.write_path_conflict`（谁占用/何时）。
 pub(crate) fn claim_write_guard(
     ctx: &ToolContext,
     path_str: &str,
@@ -298,10 +554,17 @@ pub(crate) fn claim_write_guard(
     let Some(registry) = ctx.write_claims.as_ref() else {
         return Ok(None);
     };
-    let holder = ctx
+    let run_id = ctx
         .write_claim_holder
         .clone()
         .unwrap_or_else(|| ctx.session_id.clone());
+    let tool_call_id = ctx.tool_call_id.clone().unwrap_or_default();
+    let session_id = if !registry.session_id().is_empty() {
+        registry.session_id().to_string()
+    } else {
+        ctx.session_id.clone()
+    };
+    let holder = HolderId::new(session_id, run_id, tool_call_id);
     registry
         .claim(holder, std::slice::from_ref(&path_str), mode)
         .map(Some)

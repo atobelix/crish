@@ -370,7 +370,7 @@ async fn g02_wrong_file_write_conflict() {
     );
     // A 的 spawn 级声明仍在册；B 的执行期声明随执行结束释放（不残留记账）
     let claims = registry.active_claims();
-    let holders: Vec<String> = claims.iter().map(|c| c.holder.clone()).collect();
+    let holders: Vec<String> = claims.iter().map(|c| c.holder.to_string()).collect();
     assert_eq!(holders, ["runA".to_string()], "仅 A 的 spawn 级声明存活");
 
     // A 释放后 B 显式 overwrite 重试成功（覆盖放行，REQ-E02 语义）

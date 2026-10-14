@@ -14,9 +14,14 @@ use async_trait::async_trait;
 use conex_types::error::codes;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-/// MCP 传输方式（当前仅 stdio）
+fn default_true() -> bool {
+    true
+}
+
+/// MCP 传输方式（stdio / sse）
 ///
 /// 序列化为小写字符串，缺省时回退 stdio（MCP 官方默认传输）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -25,15 +30,19 @@ pub enum McpTransport {
     #[serde(rename = "stdio")]
     #[default]
     Stdio,
+    /// SSE HTTP/SSE 传输：网络端点传输
+    #[serde(rename = "sse")]
+    Sse,
 }
 
-/// MCP server 启动配置（对齐 TS StdioServerParameters）
+/// MCP server 启动配置（对齐 TS StdioServerParameters 与 SSE 配置）
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpServerConfig {
     /// 配置唯一键（list-mcp-servers 返回的 id；工具名前缀来源）
     pub server_id: String,
-    /// 启动命令（可执行文件路径或 PATH 内命令名）
+    /// 启动命令（可执行文件路径或 PATH 内命令名，stdio 传输有效）
+    #[serde(default)]
     pub command: String,
     /// 命令参数
     #[serde(default)]
@@ -41,9 +50,18 @@ pub struct McpServerConfig {
     /// 附加环境变量（与子进程继承的环境合并）
     #[serde(default)]
     pub env: HashMap<String, String>,
-    /// 传输方式（当前仅 stdio）
+    /// 传输方式（stdio 或 sse）
     #[serde(default)]
     pub transport: McpTransport,
+    /// SSE 传输端点 URL（如 http://localhost:8080/sse）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// 是否在引擎启动时自动拉起
+    #[serde(default = "default_true")]
+    pub auto_start: bool,
+    /// 禁用的工具名列表
+    #[serde(default)]
+    pub disabled_tools: Vec<String>,
 }
 
 impl McpServerConfig {
@@ -55,6 +73,23 @@ impl McpServerConfig {
             args: Vec::new(),
             env: HashMap::new(),
             transport: McpTransport::Stdio,
+            url: None,
+            auto_start: true,
+            disabled_tools: Vec::new(),
+        }
+    }
+
+    /// 构造 SSE 传输配置
+    pub fn new_sse(server_id: impl Into<String>, url: impl Into<String>) -> Self {
+        Self {
+            server_id: server_id.into(),
+            command: String::new(),
+            args: Vec::new(),
+            env: HashMap::new(),
+            transport: McpTransport::Sse,
+            url: Some(url.into()),
+            auto_start: true,
+            disabled_tools: Vec::new(),
         }
     }
 
@@ -70,18 +105,51 @@ impl McpServerConfig {
         self
     }
 
+    /// 链式设置 auto_start
+    pub fn with_auto_start(mut self, auto_start: bool) -> Self {
+        self.auto_start = auto_start;
+        self
+    }
+
+    /// 链式设置 disabled_tools
+    pub fn with_disabled_tools(mut self, disabled_tools: Vec<String>) -> Self {
+        self.disabled_tools = disabled_tools;
+        self
+    }
+
     /// 配置合法性校验（config.invalid）
     ///
-    /// 规则：server_id 与 command 非空；env 键非空且不含 `=`（避免伪造环境赋值）。
+    /// 规则：server_id 非空；
+    /// 若 stdio 传输：command 非空；
+    /// 若 sse 传输：url 非空；
+    /// env 键非空且不含 `=`（避免伪造环境赋值）。
     pub fn validate(&self) -> Result<(), ToolError> {
         if self.server_id.trim().is_empty() {
             return Err(ToolError::new(codes::CONFIG_INVALID, "server_id 不能为空"));
         }
-        if self.command.trim().is_empty() {
-            return Err(ToolError::new(
-                codes::CONFIG_INVALID,
-                format!("MCP server {} 的 command 不能为空", self.server_id),
-            ));
+        match self.transport {
+            McpTransport::Stdio => {
+                if self.command.trim().is_empty() {
+                    return Err(ToolError::new(
+                        codes::CONFIG_INVALID,
+                        format!("MCP server {} 的 command 不能为空", self.server_id),
+                    ));
+                }
+            }
+            McpTransport::Sse => {
+                let Some(url) = &self.url else {
+                    return Err(ToolError::new(
+                        codes::CONFIG_INVALID,
+                        format!("MCP server {} 的 url 不能为空", self.server_id),
+                    ));
+                };
+                if url.trim().is_empty() {
+                    return Err(ToolError::new(
+                        codes::CONFIG_INVALID,
+                        format!("MCP server {} 的 url 不能为空", self.server_id),
+                    ));
+                }
+            }
         }
         for key in self.env.keys() {
             if key.is_empty() {
@@ -109,6 +177,89 @@ pub trait McpConfigPersistence: Send + Sync {
 
     /// 全量写回（保存当前内存表快照）
     async fn save(&self, configs: &[McpServerConfig]) -> Result<(), ToolError>;
+}
+
+/// 本地文件 MCP 配置持久化实现（生产级）
+///
+/// 将配置全量原子写入 `<app_dir>/mcp_servers.json`。
+/// 写入策略：先写临时文件并 flush，再原子 rename 覆盖目标文件，
+/// 防止断电或进程强杀产生截断的破损 JSON 配置文件。
+pub struct LocalFileMcpPersistence {
+    file_path: PathBuf,
+}
+
+impl LocalFileMcpPersistence {
+    /// 传入应用数据目录（自动拼接 mcp_servers.json）或具体文件路径
+    pub fn new(app_dir_or_file: impl Into<PathBuf>) -> Self {
+        let mut path = app_dir_or_file.into();
+        if path.is_dir() || path.extension().is_none() {
+            path = path.join("mcp_servers.json");
+        }
+        Self { file_path: path }
+    }
+
+    /// 显式指定具体配置文件路径
+    pub fn with_file_path(file_path: impl Into<PathBuf>) -> Self {
+        Self {
+            file_path: file_path.into(),
+        }
+    }
+
+    /// 配置文件路径
+    pub fn file_path(&self) -> &Path {
+        &self.file_path
+    }
+}
+
+#[async_trait]
+impl McpConfigPersistence for LocalFileMcpPersistence {
+    async fn load(&self) -> Result<Vec<McpServerConfig>, ToolError> {
+        if !self.file_path.exists() {
+            return Ok(Vec::new());
+        }
+        let content = std::fs::read_to_string(&self.file_path).map_err(|e| {
+            ToolError::new(codes::CONFIG_INVALID, format!("读取 MCP 配置文件失败: {e}"))
+        })?;
+        if content.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let configs: Vec<McpServerConfig> = serde_json::from_str(&content).map_err(|e| {
+            ToolError::new(codes::CONFIG_INVALID, format!("解析 MCP 配置文件失败: {e}"))
+        })?;
+        Ok(configs)
+    }
+
+    async fn save(&self, configs: &[McpServerConfig]) -> Result<(), ToolError> {
+        if let Some(parent) = self.file_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                ToolError::new(codes::CONFIG_INVALID, format!("创建配置目录失败: {e}"))
+            })?;
+        }
+        let json_str = serde_json::to_string_pretty(configs).map_err(|e| {
+            ToolError::new(codes::CONFIG_INVALID, format!("序列化 MCP 配置失败: {e}"))
+        })?;
+        let tmp_path = self.file_path.with_extension(format!(
+            "tmp.{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        ));
+        std::fs::write(&tmp_path, json_str).map_err(|e| {
+            ToolError::new(codes::CONFIG_INVALID, format!("写入 MCP 临时文件失败: {e}"))
+        })?;
+        if let Err(e) = std::fs::rename(&tmp_path, &self.file_path) {
+            let _ = std::fs::remove_file(&self.file_path);
+            std::fs::rename(&tmp_path, &self.file_path).map_err(|e2| {
+                let _ = std::fs::remove_file(&tmp_path);
+                ToolError::new(
+                    codes::CONFIG_INVALID,
+                    format!("原子替换 MCP 配置文件失败: {e} / {e2}"),
+                )
+            })?;
+        }
+        Ok(())
+    }
 }
 
 /// MCP server 配置表（内存 + 可选持久化钩子）
@@ -450,5 +601,77 @@ mod tests {
         store.add(sample("a", "cmd")).await.unwrap();
         store.persist().await.unwrap(); // 无钩子：no-op 不报错
         assert_eq!(store.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn local_file_mcp_persistence_atomic_roundtrip() {
+        let dir = std::env::temp_dir().join(format!(
+            "test_mcp_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        let persistence = Arc::new(LocalFileMcpPersistence::new(&dir));
+
+        let mut store = McpServerStore::with_persistence(persistence.clone());
+        let stdio_cfg = sample("local_stdio", "my-cmd")
+            .with_args(vec!["--verbose".to_string()])
+            .with_auto_start(true)
+            .with_disabled_tools(vec!["dangerous_eval".to_string()]);
+        let sse_cfg = McpServerConfig::new_sse("remote_sse", "http://127.0.0.1:8080/sse")
+            .with_auto_start(false);
+
+        store.add(stdio_cfg.clone()).await.unwrap();
+        store.add(sse_cfg.clone()).await.unwrap();
+        assert_eq!(store.len(), 2);
+
+        // 新建 store 从相同 persistence 加载
+        let mut loaded_store = McpServerStore::with_persistence(persistence.clone());
+        let count = loaded_store.load_from_persistence().await.unwrap();
+        assert_eq!(count, 2);
+
+        let s1 = loaded_store.get("local_stdio").unwrap();
+        assert_eq!(s1.command, "my-cmd");
+        assert_eq!(s1.transport, McpTransport::Stdio);
+        assert!(s1.auto_start);
+        assert_eq!(s1.disabled_tools, vec!["dangerous_eval"]);
+
+        let s2 = loaded_store.get("remote_sse").unwrap();
+        assert_eq!(s2.transport, McpTransport::Sse);
+        assert_eq!(s2.url.as_deref(), Some("http://127.0.0.1:8080/sse"));
+        assert!(!s2.auto_start);
+
+        // 再次保存更新以验证覆盖写入
+        loaded_store.remove("local_stdio").await.unwrap();
+        assert_eq!(loaded_store.len(), 1);
+
+        let mut reloaded = McpServerStore::with_persistence(persistence);
+        reloaded.load_from_persistence().await.unwrap();
+        assert_eq!(reloaded.len(), 1);
+        assert!(reloaded.get("local_stdio").is_none());
+        assert!(reloaded.get("remote_sse").is_some());
+    }
+
+    #[test]
+    fn sse_validation() {
+        let valid_sse = McpServerConfig::new_sse("srv", "http://localhost:3000/sse");
+        assert!(valid_sse.validate().is_ok());
+
+        let invalid_sse = McpServerConfig {
+            server_id: "srv".to_string(),
+            command: String::new(),
+            args: Vec::new(),
+            env: HashMap::new(),
+            transport: McpTransport::Sse,
+            url: None,
+            auto_start: true,
+            disabled_tools: Vec::new(),
+        };
+        assert_eq!(invalid_sse.validate().unwrap_err().code(), "config.invalid");
+
+        let empty_url_sse = McpServerConfig::new_sse("srv", "   ");
+        assert_eq!(empty_url_sse.validate().unwrap_err().code(), "config.invalid");
     }
 }

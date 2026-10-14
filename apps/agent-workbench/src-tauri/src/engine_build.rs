@@ -19,6 +19,7 @@ use agent_provider::models::{cache_ttl_for_declared_model, CacheTtl};
 use agent_tools::audit::AuditSink;
 use agent_tools::background::BackgroundTaskManager;
 use agent_tools::definition::{ToolDefinition, ToolError};
+use agent_tools::mcp::servers::{LocalFileMcpPersistence, McpConfigPersistence};
 use agent_tools::mcp::{register_plugin_server, McpClientBridge, McpServerConfig};
 use agent_tools::registry::ToolRegistry;
 use agent_tools::tools::kill_subagent::SubagentKillChannel;
@@ -404,6 +405,37 @@ impl EngineHandle {
         // mcpServers 经 register_plugin_mcp_server 注册为受管服务器）
         let mcp_bridge = Arc::new(McpClientBridge::new());
 
+        // BC11-1 生产环境拉起：从 LocalFileMcpPersistence 加载配置，自动拉起标记为 auto_start 的 MCP 服务
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            let bridge_for_mcp = Arc::clone(&mcp_bridge);
+            let registry_for_mcp = Arc::clone(&tool_registry);
+            runtime.spawn(async move {
+                let app_dir = match crate::host_paths::app_dir() {
+                    Ok(dir) => dir,
+                    Err(e) => {
+                        tracing::warn!(target: "engine", "MCP 启动配置读取失败（app_dir 不可用）: {e}");
+                        return;
+                    }
+                };
+                let persistence = LocalFileMcpPersistence::new(app_dir);
+                let configs = match persistence.load().await {
+                    Ok(configs) => configs,
+                    Err(e) => {
+                        tracing::warn!(target: "engine", "加载 MCP 配置文件失败: {e}");
+                        return;
+                    }
+                };
+                for config in configs {
+                    if config.auto_start {
+                        tracing::info!(target: "engine", server_id = %config.server_id, "自动拉起 auto_start MCP 服务");
+                        if let Err(e) = register_plugin_server(&bridge_for_mcp, &registry_for_mcp, &config).await {
+                            tracing::warn!(target: "engine", server_id = %config.server_id, error = %e, "自动拉起 MCP 服务失败");
+                        }
+                    }
+                }
+            });
+        }
+
         // provider 生效配置加载（三件套齐备才就绪）
         let (provider, ready, ready_reason, provider_config) = match load_provider_endpoint() {
             Some(config) => {
@@ -565,7 +597,6 @@ impl EngineHandle {
 
     /// MCP 客户端桥（E5；上层 run 启停驱动用——session.start 启动 /
     /// session.end `stop_all` 关闭）
-    #[allow(dead_code)] // E5 接线：core_run_commands 装配 run 启停时消费
     pub(crate) fn mcp_bridge(&self) -> Arc<McpClientBridge> {
         Arc::clone(&self.mcp_bridge)
     }
@@ -700,7 +731,6 @@ impl EngineHandle {
     /// 启动失败 → mcp.* 错误上抛（调用方承接为插件级错误进
     /// runtime-error，不阻塞 run）；服务器生命周期随 run 启停由上层
     /// 驱动（本方法只注册并入，启停经 [Self::mcp_bridge]）。
-    #[cfg_attr(not(test), allow(dead_code))] // E2 已登记：canonical 出口（见上），生产装配链接线点 = run/ 装配区（E-4 收口项，T5 独占域接线后移除）
     pub(crate) async fn register_plugin_mcp_server(
         &self,
         config: McpServerConfig,

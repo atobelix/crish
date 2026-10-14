@@ -23,8 +23,9 @@ use crate::tools::{
     resolve_workspace_path,
 };
 use async_trait::async_trait;
-use std::path::PathBuf;
-use std::sync::Arc;
+use regex::Regex;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, LazyLock};
 
 /// 越界命令：需上层审批（error.code 供执行器路由到审批流）
 pub(crate) const TOOL_REQUIRES_APPROVAL: &str = "tool.requires_approval";
@@ -234,6 +235,26 @@ impl ShellCommandTool {
         // U-GATE / 14-SB2：analyze 恰 1 次 → 沿链传递门禁 + decide + 工具形态
         let analysis = conex_sandbox::semantics::analyze(&command);
         let full_line = command.clone();
+
+        // 0. TaskType 白名单刚性检查（BC10-6）：
+        // 对 commit 等任务类型代理，严格调用 command_allowed_for_task_type 门禁，除 git 外禁止执行任何 shell 命令
+        if let Some(task_type) = &ctx.task_type {
+            if !crate::readonly::command_allowed_for_task_type(task_type, &command) {
+                emit_blocked_audit(
+                    &self.audit_sink,
+                    ctx,
+                    conex_types::events::SecurityAuditOperation::CommandExec,
+                    vec![command.clone()],
+                );
+                return Prepared::Done(Err(ToolError::new(
+                    TOOL_COMMAND_BLOCKED,
+                    format!(
+                        "PermissionDenied: 任务类型 [{task_type}] 严格禁止执行非白名单命令：{command}"
+                    ),
+                )));
+            }
+        }
+
         let gate_result = conex_sandbox::gatekeeper::SHARED_GATEKEEPER
             .check_command_with_context_and_analysis(
                 &analysis,
@@ -272,28 +293,38 @@ impl ShellCommandTool {
             )));
         }
 
-        // 3. 删除形态重定向（I2-S4）：FullAccess 信任放行；非 FullAccess 走
-        //    回收站接管——先于审批判定（既有语义：删除形态不弹审批，直接
-        //    重定向/拦截引导）
-        if ctx.permission_mode != PermissionMode::FullAccess {
-            if analysis.overall_class == conex_sandbox::semantics::CommandClass::DeleteShape
-                || analysis.has_indirect_delete
-            {
-                return Prepared::Done(redirect_or_intercept_delete(
-                    &analysis,
-                    &command,
-                    workspace_root,
-                    &cwd,
-                    self.trash_root.clone(),
-                    ctx,
-                    Arc::clone(&self.audit_sink),
-                ));
-            }
+        // 3. 删除形态重定向（I2-S4 / BC10-7）：彻底拔除 FullAccess 特权分支！
+        //    无论是 Ask 还是 FullAccess 模式，只要判定为 DeleteShape 或间接删除，
+        //    一律强制走回收站 WAL 事务体系，计算 SHA-256 校验和并创建快照备份，
+        //    彻底杜绝物理抹除！
+        if analysis.overall_class == conex_sandbox::semantics::CommandClass::DeleteShape
+            || analysis.has_indirect_delete
+        {
+            return Prepared::Done(redirect_or_intercept_delete(
+                &analysis,
+                &command,
+                workspace_root,
+                &cwd,
+                self.trash_root.clone(),
+                ctx,
+                Arc::clone(&self.audit_sink),
+            ));
         }
 
         // 4. CD 形态拦截（T-AB-04：引导使用 cwd 参数）
         if let Some(err) = intercept_cd_shape(&analysis, &command) {
             return Prepared::Done(Err(ToolError::new(TOOL_CD_BLOCKED, err.to_string())));
+        }
+
+        // 4.1 绝对路径安全围栏（BC10-4：正文绝对路径系统关键目录物理红线与工作区越界写/删阻断）
+        if let Err(e) = CommandPathInspector::inspect(&command, workspace_root) {
+            emit_blocked_audit(
+                &self.audit_sink,
+                ctx,
+                conex_types::events::SecurityAuditOperation::CommandExec,
+                vec![command.clone()],
+            );
+            return Prepared::Done(Err(e));
         }
 
         // 5. 单一判定链（红线先行 → C3 回退护栏 → 三态矩阵）：越界/危险形态
@@ -428,6 +459,386 @@ impl Tool for ShellCommandTool {
         }
     }
 }
+
+/// 命令行绝对路径安全围栏（BC10-4）
+pub struct CommandPathInspector;
+
+impl CommandPathInspector {
+    /// 检查命令中的绝对路径安全围栏（系统关键目录红线 + 写/删目标越界阻断）
+    pub fn inspect(command_line: &str, workspace_root: &Path) -> Result<(), ToolError> {
+        let extracted_paths = Self::extract_absolute_paths(command_line);
+
+        for path in &extracted_paths {
+            // 1. 系统核心关键目录物理红线（命中则刚性 Deny 阻断）
+            if Self::is_critical_path(path) {
+                return Err(ToolError::new(
+                    TOOL_COMMAND_BLOCKED,
+                    format!(
+                        "PermissionDenied: 命令包含指向系统核心关键目录的敏感路径：{}，硬性阻断！",
+                        path.display()
+                    ),
+                ));
+            }
+
+            // 2. 校验写/删目标路径是否越出 workspace_root
+            if Self::is_write_or_delete_target(command_line, path) {
+                if !conex_fs::ConexPathNormalizer::is_subpath(path, workspace_root) {
+                    return Err(ToolError::new(
+                        TOOL_COMMAND_BLOCKED,
+                        format!(
+                            "PermissionDenied: 命令试图向工作区外写入或删除绝对路径：{}，严禁越界！",
+                            path.display()
+                        ),
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 从命令行中提取所有绝对路径候选
+    pub fn extract_absolute_paths(command_line: &str) -> Vec<PathBuf> {
+        static WIN_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r#"(?i)(?:\A|[^a-zA-Z0-9_./\\-])([a-zA-Z]:(?:[\\/][^\s"'`=,;()<>{}\r\n*?|]*)?)"#)
+                .expect("valid regex")
+        });
+
+        static QUOTED_WIN_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r#"(?i)["']([a-zA-Z]:[\\/][^"'\r\n*?|]+)["']"#).expect("valid regex")
+        });
+
+        static UNIX_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r#"(?:\A|[^a-zA-Z0-9_./\\-])(/[\w.\-]+(?:/[\w.\-]+)*)"#)
+                .expect("valid regex")
+        });
+
+        static QUOTED_UNIX_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r#"["'](/[^"'\r\n*?|]+)["']"#).expect("valid regex")
+        });
+
+        static STANDALONE_ROOT_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r#"(?:\A|[^a-zA-Z0-9_./\\-])/(?:\z|[^a-zA-Z0-9_./\\-])"#)
+                .expect("valid regex")
+        });
+
+        static UNC_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r#"(?:\A|[^a-zA-Z0-9_./\\-])((?:\\\\|//)[^\s"'`=,;()<>{}\r\n*?|]+)"#)
+                .expect("valid regex")
+        });
+
+        static QUOTED_UNC_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r#"["']((?:\\\\|//)[^"'\r\n*?|]+)["']"#).expect("valid regex")
+        });
+
+        static HOME_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r#"(?:\A|[^a-zA-Z0-9_./\\-])(~[\\/][^\s"'`=,;()<>{}\r\n*?|]*)"#)
+                .expect("valid regex")
+        });
+
+        static QUOTED_HOME_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r#"["'](~[\\/][^"'\r\n*?|]*)["']"#).expect("valid regex")
+        });
+
+        let mut paths = Vec::new();
+
+        // 0. 引号包裹路径（支持空格，如 "C:/Program Files/..."）
+        for cap in QUOTED_WIN_PATH_REGEX.captures_iter(command_line) {
+            if let Some(m) = cap.get(1) {
+                let s = clean_path_candidate(m.as_str());
+                if !s.is_empty() {
+                    let pb = PathBuf::from(s);
+                    if !paths.contains(&pb) {
+                        paths.push(pb);
+                    }
+                }
+            }
+        }
+        for cap in QUOTED_UNIX_PATH_REGEX.captures_iter(command_line) {
+            if let Some(m) = cap.get(1) {
+                let s = clean_path_candidate(m.as_str());
+                if is_valid_unix_path(&s) {
+                    let pb = PathBuf::from(s);
+                    if !paths.contains(&pb) {
+                        paths.push(pb);
+                    }
+                }
+            }
+        }
+        for cap in QUOTED_UNC_PATH_REGEX.captures_iter(command_line) {
+            if let Some(m) = cap.get(1) {
+                let s = clean_path_candidate(m.as_str());
+                if !s.is_empty() {
+                    let pb = PathBuf::from(s);
+                    if !paths.contains(&pb) {
+                        paths.push(pb);
+                    }
+                }
+            }
+        }
+        for cap in QUOTED_HOME_PATH_REGEX.captures_iter(command_line) {
+            if let Some(m) = cap.get(1) {
+                let s = clean_path_candidate(m.as_str());
+                if !s.is_empty() {
+                    let pb = PathBuf::from(s);
+                    if !paths.contains(&pb) {
+                        paths.push(pb);
+                    }
+                }
+            }
+        }
+
+        // 1. Windows 盘符路径
+        for cap in WIN_PATH_REGEX.captures_iter(command_line) {
+            if let Some(m) = cap.get(1) {
+                let s = clean_path_candidate(m.as_str());
+                if !s.is_empty() {
+                    let pb = PathBuf::from(s);
+                    if !paths.contains(&pb) {
+                        paths.push(pb);
+                    }
+                }
+            }
+        }
+
+        // 2. Unix 绝对路径
+        for cap in UNIX_PATH_REGEX.captures_iter(command_line) {
+            if let Some(m) = cap.get(1) {
+                let s = clean_path_candidate(m.as_str());
+                if is_valid_unix_path(&s) {
+                    let pb = PathBuf::from(s);
+                    if !paths.contains(&pb) {
+                        paths.push(pb);
+                    }
+                }
+            }
+        }
+
+        // 3. 独立根路径 /
+        if STANDALONE_ROOT_REGEX.is_match(command_line) {
+            let root = PathBuf::from("/");
+            if !paths.contains(&root) {
+                paths.push(root);
+            }
+        }
+
+        // 4. UNC 路径
+        for cap in UNC_PATH_REGEX.captures_iter(command_line) {
+            if let Some(m) = cap.get(1) {
+                let s = clean_path_candidate(m.as_str());
+                if !s.is_empty() {
+                    let pb = PathBuf::from(s);
+                    if !paths.contains(&pb) {
+                        paths.push(pb);
+                    }
+                }
+            }
+        }
+
+        // 5. 家目录路径 (~/...)
+        for cap in HOME_PATH_REGEX.captures_iter(command_line) {
+            if let Some(m) = cap.get(1) {
+                let s = clean_path_candidate(m.as_str());
+                if !s.is_empty() {
+                    let pb = PathBuf::from(s);
+                    if !paths.contains(&pb) {
+                        paths.push(pb);
+                    }
+                }
+            }
+        }
+
+        paths
+    }
+
+    /// 判定路径是否为系统核心关键目录或敏感文件（物理红线）
+    pub fn is_critical_path(path: &Path) -> bool {
+        if conex_fs::ConexPathNormalizer::is_system_critical_path(path) {
+            return true;
+        }
+
+        let norm = conex_fs::ConexPathNormalizer::normalize(path);
+        let s = norm.to_string_lossy().replace('\\', "/");
+        let upper = s.to_ascii_uppercase();
+
+        if s == "/" || upper == "/" || upper == "/*" || upper == "/." {
+            return true;
+        }
+
+        if upper.len() >= 2
+            && upper
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_alphabetic())
+                .unwrap_or(false)
+        {
+            if &upper[1..2] == ":" {
+                if upper.len() == 2
+                    || (upper.len() == 3 && &upper[2..3] == "/")
+                    || (upper.len() >= 4 && (&upper[2..4] == "/*" || &upper[2..4] == "/."))
+                {
+                    return true;
+                }
+            }
+        }
+
+        const POSIX_CRITICAL: &[&str] = &[
+            "/BIN", "/SBIN", "/USR/BIN", "/USR/SBIN", "/ETC",
+            "/BOOT", "/DEV", "/PROC", "/SYS", "/LIB", "/LIB64", "/VAR/RUN",
+        ];
+        for crit in POSIX_CRITICAL {
+            if upper == *crit || upper.starts_with(&format!("{crit}/")) {
+                return true;
+            }
+        }
+
+        const WIN_CRITICAL: &[&str] = &[
+            "WINDOWS",
+            "PROGRAM FILES",
+            "PROGRAM FILES (X86)",
+            "PROGRAMDATA/MICROSOFT",
+            "SYSTEM VOLUME INFORMATION",
+            "RECOVERY",
+            "BOOT",
+            "$RECYCLE.BIN",
+        ];
+        if upper.len() >= 3 && &upper[1..3] == ":/" {
+            let after_drive = &upper[3..];
+            for win_pat in WIN_CRITICAL {
+                if after_drive == *win_pat || after_drive.starts_with(&format!("{win_pat}/")) {
+                    return true;
+                }
+            }
+        }
+
+        if upper.contains("/.SSH")
+            || upper.contains("/.GNUPG")
+            || upper.contains("/.AWS")
+            || upper.contains("/.KUBE")
+            || upper.contains("/.GITCONFIG")
+            || upper.starts_with("~/.SSH")
+            || upper.starts_with("~/.GNUPG")
+            || upper.starts_with("~/.AWS")
+        {
+            return true;
+        }
+
+        false
+    }
+
+    /// 判定路径是否作为写入或删除目标出现在命令中
+    pub fn is_write_or_delete_target(command_line: &str, path: &Path) -> bool {
+        let p_str = path.to_string_lossy();
+        let p_clean = p_str.trim();
+        if p_clean.is_empty() {
+            return false;
+        }
+
+        let p_escaped = regex::escape(p_clean);
+        let p_alt = regex::escape(&p_clean.replace('/', "\\"));
+        let p_fwd = regex::escape(&p_clean.replace('\\', "/"));
+        let p_pattern = format!("(?:{p_escaped}|{p_alt}|{p_fwd})");
+
+        // 1. 重定向写入目标: > path, >> path, 1> path, 2> path, | Out-File path, | Set-Content path, | Add-Content path, | tee path
+        let redir_pat = format!(
+            r#"(?i)(?:>>?|[12]>>?|\bOut-File\s+(?:-FilePath\s+)?|\bSet-Content\s+(?:-Path\s+)?|\bAdd-Content\s+(?:-Path\s+)?|\btee\s+(?:-a\s+)?)\s*['"]?{p_pattern}(?:\s|$|['"\r\n;|&,)])"#
+        );
+        if let Ok(re) = Regex::new(&redir_pat) {
+            if re.is_match(command_line) {
+                return true;
+            }
+        }
+
+        // 2. 删除命令参数: rm path, del path, Remove-Item path, rmdir path, git rm path, unlink path
+        let del_pat = format!(
+            r#"(?i)\b(?:rm|del|erase|rmdir|rd|Remove-Item|ri|unlink|git\s+rm)\b[^\r\n;|&]*?['"]?{p_pattern}(?:\s|$|['"\r\n;|&,)])"#
+        );
+        if let Ok(re) = Regex::new(&del_pat) {
+            if re.is_match(command_line) {
+                return true;
+            }
+        }
+
+        // 3. 文件修改/创建命令目标: touch path, mkdir path, New-Item path, truncate path, cp/mv destination
+        let create_pat = format!(
+            r#"(?i)\b(?:touch|mkdir|New-Item|truncate|sed\s+-i)\b[^\r\n;|&]*?['"]?{p_pattern}(?:\s|$|['"\r\n;|&,)])"#
+        );
+        if let Ok(re) = Regex::new(&create_pat) {
+            if re.is_match(command_line) {
+                return true;
+            }
+        }
+
+        let copy_move_pat = format!(
+            r#"(?i)\b(?:cp|mv|copy|move|Move-Item|Copy-Item)\b[^\r\n;|&]*\s+['"]?{p_pattern}(?:\s|$|['"\r\n;|&,)])"#
+        );
+        if let Ok(re) = Regex::new(&copy_move_pat) {
+            if re.is_match(command_line) {
+                return true;
+            }
+        }
+
+        // 4. 多语言解释器删除 API 内部目标
+        let poly_del_pat = format!(
+            r#"(?i)\b(?:shutil\.rmtree|os\.(?:remove|unlink|rmdir)|fs\.(?:promises\.)?(?:rmSync|rmdirSync|unlinkSync|rm|rmdir|unlink)|FileUtils\.(?:rm_rf|rm_r|rm)|File\.(?:delete|unlink)|Dir\.(?:delete|rmdir))\s*\(\s*['"]?{p_pattern}['"]?"#
+        );
+        if let Ok(re) = Regex::new(&poly_del_pat) {
+            if re.is_match(command_line) {
+                return true;
+            }
+        }
+
+        false
+    }
+}
+
+fn clean_path_candidate(raw: &str) -> String {
+    let mut s = raw
+        .trim()
+        .trim_matches(['"', '\'', '`', ',', ';', '(', ')', '[', ']', '{', '}'])
+        .to_string();
+    while s.ends_with(')') && !s.contains('(') {
+        s.pop();
+    }
+    while s.ends_with(']') && !s.contains('[') {
+        s.pop();
+    }
+    while s.ends_with('}') && !s.contains('{') {
+        s.pop();
+    }
+    s
+}
+
+fn is_valid_unix_path(s: &str) -> bool {
+    if !s.starts_with('/') {
+        return false;
+    }
+    if s[1..].contains('/') {
+        return true;
+    }
+    let rest = &s[1..];
+    if rest.len() == 1 {
+        let ch = rest.chars().next().unwrap();
+        if ch.is_ascii_alphabetic() {
+            return false;
+        }
+    }
+    const WIN_FLAGS: &[&str] = &[
+        "quiet", "norestart", "passive", "wait", "min", "max", "help",
+    ];
+    if WIN_FLAGS.contains(&rest.to_ascii_lowercase().as_str()) {
+        return false;
+    }
+    const KNOWN_UNIX_DIRS: &[&str] = &[
+        "etc", "bin", "sbin", "usr", "var", "tmp", "dev", "proc", "sys",
+        "boot", "lib", "lib64", "root", "home", "opt", "mnt", "media", "srv",
+    ];
+    if KNOWN_UNIX_DIRS.contains(&rest.to_ascii_lowercase().as_str()) {
+        return true;
+    }
+    rest.contains('.') || rest.len() > 2
+}
+
 // ==================== 拆分接线（SR-06a-2 · 结构拆分 · ≠ EL）====================
 //
 // 本文件为薄门面：ShellCommandTool（工具定义 / 预检 prepare / 执行入口）与

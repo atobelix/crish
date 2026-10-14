@@ -62,6 +62,7 @@ mod git;
 mod host_openers;
 mod host_paths;
 mod markdown_commands;
+mod mcp_commands;
 mod models_yaml;
 mod retraction_commands;
 mod task_event_consumer;
@@ -514,6 +515,23 @@ command_registry![
     ("prefs_get", preferences_commands::prefs_get),
     ("prefs_set", preferences_commands::prefs_set),
     ("prefs_delete", preferences_commands::prefs_delete),
+    // ── MCP 管理面（BC11-1 生产真实接入）──
+    (
+        "workbench_list_mcp_servers",
+        mcp_commands::workbench_list_mcp_servers
+    ),
+    (
+        "workbench_start_mcp_server",
+        mcp_commands::workbench_start_mcp_server
+    ),
+    (
+        "workbench_stop_mcp_server",
+        mcp_commands::workbench_stop_mcp_server
+    ),
+    (
+        "workbench_toggle_mcp_tool",
+        mcp_commands::workbench_toggle_mcp_tool
+    ),
 ];
 
 // ── D4a：子代理显式恢复与关闭命令壳（D4 §3.1 双端登记第 ① 步）──────

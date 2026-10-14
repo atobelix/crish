@@ -63,7 +63,7 @@ fn release_holder_idempotent() {
     let holders: Vec<String> = reg
         .active_claims()
         .iter()
-        .map(|c| c.holder.clone())
+        .map(|c| c.holder.to_string())
         .collect();
     assert_eq!(holders, ["runA".to_string()]);
 }
@@ -537,4 +537,82 @@ async fn unwired_policy_context_no_enforcement() {
         .await
         .unwrap();
     assert_eq!(ws.read_file("out.txt"), "hi");
+}
+
+// ===== BC10-5 验证：HolderId、锁互斥与 RAII Drop 释放 =====
+
+#[test]
+fn intra_run_parallel_tool_write_conflicts() {
+    let ws = TempWorkspace::new("wp_intra_run_parallel");
+    let reg = Arc::new(WritePathRegistry::new("s1", ws.path()));
+
+    // 同 session 同 run，但两个不同 tool_call_id 的并行工具调用
+    let holder1 = HolderId::new("s1", "run1", "call_1");
+    let holder2 = HolderId::new("s1", "run1", "call_2");
+
+    let _g1 = reg.claim_one(holder1, "shared.txt", ClaimMode::Write).unwrap();
+    let err = reg.claim_one(holder2, "shared.txt", ClaimMode::Write).unwrap_err();
+    assert_eq!(err.code(), TOOL_WRITE_PATH_CONFLICT, "同 run 内不同 tool_call_id 声明同路径必须冲突");
+}
+
+#[test]
+fn intra_run_subagent_reservation_allows_child_tool_call() {
+    let ws = TempWorkspace::new("wp_reservation_child");
+    let reg = Arc::new(WritePathRegistry::new("s1", ws.path()));
+
+    // 子代理 run-level 提前声明（tool_call_id 为空）
+    let run_holder = HolderId::new("s1", "run_child", "");
+    let _g_run = reg.claim_one(run_holder, "docs", ClaimMode::Write).unwrap();
+
+    // 子代理内部的工具调用（持有具体 tool_call_id）在其声明范围内写
+    let call_holder = HolderId::new("s1", "run_child", "call_write_doc");
+    reg.claim_one(call_holder, "docs/summary.md", ClaimMode::Write)
+        .expect("子代理工具调用在其 run 级保留路径内写入应被允许");
+}
+
+#[test]
+fn write_claim_guard_drop_releases_exact_paths_only() {
+    let ws = TempWorkspace::new("wp_exact_path_drop");
+    let reg = Arc::new(WritePathRegistry::new("s1", ws.path()));
+    let holder = HolderId::new("s1", "run1", "call1");
+
+    let g1 = reg.claim_one(holder.clone(), "file1.txt", ClaimMode::Write).unwrap();
+    let g2 = reg.claim_one(holder.clone(), "file2.txt", ClaimMode::Write).unwrap();
+
+    assert_eq!(reg.active_claims().len(), 2);
+
+    // 仅 drop g1，只释放 file1.txt，file2.txt 必须仍然被持有
+    drop(g1);
+
+    let active = reg.active_claims();
+    assert_eq!(active.len(), 1, "应只剩一个声明");
+    assert_eq!(active[0].path, ws.path().join("file2.txt"));
+
+    // 此时其他人可以声明 file1.txt，但 file2.txt 仍冲突
+    let other = HolderId::new("s1", "run2", "call2");
+    let _g_other = reg.claim_one(other.clone(), "file1.txt", ClaimMode::Write)
+        .expect("file1.txt 已被释放，应允许声明");
+    let err = reg.claim_one(other, "file2.txt", ClaimMode::Write).unwrap_err();
+    assert_eq!(err.code(), TOOL_WRITE_PATH_CONFLICT, "file2.txt 仍被持有，必须冲突");
+
+    drop(g2);
+    assert_eq!(reg.active_claims().len(), 1); // 仅剩 other 声明的 file1.txt
+    drop(_g_other);
+    assert_eq!(reg.active_claims().len(), 0);
+}
+
+#[tokio::test]
+async fn dynamic_heartbeat_renewal_updates_lease() {
+    let ws = TempWorkspace::new("wp_heartbeat");
+    // 设置初始 TTL 为 200ms
+    let reg = Arc::new(WritePathRegistry::with_ttl("s1", ws.path(), 200));
+    let holder = HolderId::new("s1", "run1", "call1");
+
+    let _g = reg.claim_one(holder.clone(), "a.txt", ClaimMode::Write).unwrap();
+    let initial_expires = reg.active_claims()[0].expires_at_ms;
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    reg.renew_lease(&holder, &[ws.path().join("a.txt")], 500);
+    let renewed_expires = reg.active_claims()[0].expires_at_ms;
+    assert!(renewed_expires > initial_expires, "续期后 expires_at_ms 必须增大");
 }

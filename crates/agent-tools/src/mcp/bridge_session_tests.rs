@@ -152,3 +152,54 @@ async fn read_line_bounded_over_limit_errors() {
         "超 MCP_STDOUT_MAX_LINE_BYTES 单行必须 Err（connection_failed，非静默）"
     );
 }
+
+#[tokio::test]
+async fn irreversible_exited_terminal_state() {
+    let session = ready_session();
+    assert_eq!(session.state(), McpServerRuntimeState::Ready);
+
+    // 正常变迁到 Degraded
+    assert!(session.transition_state(McpServerRuntimeState::Ready, McpServerRuntimeState::Degraded));
+    assert_eq!(session.state(), McpServerRuntimeState::Degraded);
+
+    // 标记 Exited 终态
+    session.mark_exited("子进程退出");
+    assert_eq!(session.state(), McpServerRuntimeState::Exited);
+
+    // 严禁逆向跃迁到 Ready 或 Degraded
+    assert!(!session.transition_state(McpServerRuntimeState::Exited, McpServerRuntimeState::Ready));
+    assert_eq!(session.state(), McpServerRuntimeState::Exited);
+
+    assert!(!session.transition_state(McpServerRuntimeState::Exited, McpServerRuntimeState::Degraded));
+    assert_eq!(session.state(), McpServerRuntimeState::Exited);
+
+    // set_state 也被锁死，不可覆盖 Exited
+    session.set_state(McpServerRuntimeState::Degraded);
+    assert_eq!(session.state(), McpServerRuntimeState::Exited);
+
+    session.set_state(McpServerRuntimeState::Ready);
+    assert_eq!(session.state(), McpServerRuntimeState::Exited);
+}
+
+#[tokio::test]
+async fn probe_alive_on_non_ready_or_exited_session() {
+    let session = Arc::new(McpServerSession {
+        server_id: "s1".to_string(),
+        state: AtomicU8::new(STATE_STOPPED),
+        child: Mutex::new(None),
+        stdin: Mutex::new(None),
+        next_id: AtomicU64::new(0),
+        pending: std::sync::Mutex::new(HashMap::new()),
+        tools: RwLock::new(None),
+        tool_index: RwLock::new(HashMap::new()),
+        exit_reason: std::sync::Mutex::new(None),
+        stderr_tail: std::sync::Mutex::new(Vec::new()),
+        call_timeout: DEFAULT_MCP_CALL_TIMEOUT,
+    });
+    // Stopped 状态探活返回 false
+    assert!(!session.probe_alive().await);
+
+    // Exited 状态探活返回 false
+    session.mark_exited("exit");
+    assert!(!session.probe_alive().await);
+}

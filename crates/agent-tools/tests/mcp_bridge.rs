@@ -6,7 +6,7 @@
 //! 均可靠，无需 cfg 条件裁剪；若个别用例在 CI 偶发超时，可单独重跑。
 
 use agent_tools::context::{create_mock_tool_context, ToolContext};
-use agent_tools::mcp::{McpClientBridge, McpServerConfig, McpServerRuntimeState, McpTransport};
+use agent_tools::mcp::{mcp_tool_name, McpClientBridge, McpServerConfig, McpServerRuntimeState};
 use serde_json::json;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -24,13 +24,7 @@ fn fake_server_config(extra_env: &[(&str, &str)]) -> McpServerConfig {
     for (key, value) in extra_env {
         env.insert((*key).to_string(), (*value).to_string());
     }
-    McpServerConfig {
-        server_id: "fake".to_string(),
-        command: FAKE_SERVER.to_string(),
-        args: Vec::new(),
-        env,
-        transport: McpTransport::Stdio,
-    }
+    McpServerConfig::new("fake", FAKE_SERVER).with_env(env)
 }
 
 /// 轮询等待条件成立（崩溃检测等异步事件用）
@@ -56,17 +50,17 @@ async fn start_handshake_and_list_tools() {
     assert_eq!(
         names,
         [
-            "mcp_fake__echo",
-            "mcp_fake__add",
-            "mcp_fake__boom",
-            "mcp_fake__env"
+            mcp_tool_name("fake", "echo"),
+            mcp_tool_name("fake", "add"),
+            mcp_tool_name("fake", "boom"),
+            mcp_tool_name("fake", "env"),
         ]
     );
     assert_eq!(bridge.state("fake"), McpServerRuntimeState::Ready);
     assert!(bridge.is_running("fake"));
     // 定义可序列化（注册表载荷形状）
     let value = serde_json::to_value(&defs[0]).unwrap();
-    assert_eq!(value["name"], "mcp_fake__echo");
+    assert_eq!(value["name"], mcp_tool_name("fake", "echo"));
     assert_eq!(value["description"], "回显入参");
     bridge.stop("fake").await.unwrap();
 }
@@ -79,7 +73,7 @@ async fn start_is_idempotent_when_ready() {
     let second = bridge.start(&config).await.unwrap();
     assert_eq!(first, second);
     // 仍可正常调用（同一会话）
-    let adapter = bridge.get_adapter("fake", "mcp_fake__echo").unwrap();
+    let adapter = bridge.get_adapter("fake", &mcp_tool_name("fake", "echo")).unwrap();
     let out = adapter
         .execute(&tool_ctx(), json!({ "msg": "重复" }))
         .await
@@ -94,7 +88,7 @@ async fn execute_echo_and_add_roundtrip() {
     bridge.start(&fake_server_config(&[])).await.unwrap();
 
     // echo：text 段拼接
-    let echo = bridge.get_adapter("fake", "mcp_fake__echo").unwrap();
+    let echo = bridge.get_adapter("fake", &mcp_tool_name("fake", "echo")).unwrap();
     let out = echo
         .execute(&tool_ctx(), json!({ "msg": "你好，MCP" }))
         .await
@@ -102,7 +96,7 @@ async fn execute_echo_and_add_roundtrip() {
     assert!(out["text"].as_str().unwrap().contains("你好，MCP"));
 
     // add：structuredContent 进 json 字段，text 兜底
-    let add = bridge.get_adapter("fake", "mcp_fake__add").unwrap();
+    let add = bridge.get_adapter("fake", &mcp_tool_name("fake", "add")).unwrap();
     let out = add
         .execute(&tool_ctx(), json!({ "a": 1, "b": 2 }))
         .await
@@ -111,8 +105,8 @@ async fn execute_echo_and_add_roundtrip() {
     assert_eq!(out["text"], "3");
 
     // Tool trait 元信息
-    assert_eq!(add.name(), "mcp_fake__add");
-    assert_eq!(add.definition().name, "mcp_fake__add");
+    assert_eq!(add.name(), mcp_tool_name("fake", "add"));
+    assert_eq!(add.definition().name, mcp_tool_name("fake", "add"));
     bridge.stop("fake").await.unwrap();
 }
 
@@ -120,7 +114,7 @@ async fn execute_echo_and_add_roundtrip() {
 async fn execute_boom_returns_execution_failed() {
     let bridge = McpClientBridge::new();
     bridge.start(&fake_server_config(&[])).await.unwrap();
-    let boom = bridge.get_adapter("fake", "mcp_fake__boom").unwrap();
+    let boom = bridge.get_adapter("fake", &mcp_tool_name("fake", "boom")).unwrap();
     let err = boom.execute(&tool_ctx(), json!({})).await.unwrap_err();
     assert_eq!(err.code(), "tool.execution_failed");
     assert!(err.to_string().contains("boom 失败"));
@@ -134,7 +128,7 @@ async fn env_vars_are_passed_to_child() {
         .start(&fake_server_config(&[("FAKE_MCP_ENV_VALUE", "hello-env")]))
         .await
         .unwrap();
-    let env_tool = bridge.get_adapter("fake", "mcp_fake__env").unwrap();
+    let env_tool = bridge.get_adapter("fake", &mcp_tool_name("fake", "env")).unwrap();
     let out = env_tool.execute(&tool_ctx(), json!({})).await.unwrap();
     assert_eq!(out["text"], "hello-env");
     bridge.stop("fake").await.unwrap();
@@ -165,7 +159,7 @@ async fn stop_then_restart_works() {
     // 重启：全新会话可正常往返
     let defs = bridge.start(&config).await.unwrap();
     assert!(!defs.is_empty());
-    let echo = bridge.get_adapter("fake", "mcp_fake__echo").unwrap();
+    let echo = bridge.get_adapter("fake", &mcp_tool_name("fake", "echo")).unwrap();
     let out = echo
         .execute(&tool_ctx(), json!({ "msg": "重启后" }))
         .await
@@ -202,7 +196,7 @@ async fn crash_detection_marks_exited_and_fails_calls() {
     assert!(!bridge.is_running("fake"));
 
     // 崩溃后的调用报 connection_failed 且带退出原因
-    let echo = bridge.get_adapter("fake", "mcp_fake__echo").unwrap();
+    let echo = bridge.get_adapter("fake", &mcp_tool_name("fake", "echo")).unwrap();
     let err = echo
         .execute(&tool_ctx(), json!({ "msg": "x" }))
         .await
@@ -220,7 +214,7 @@ async fn call_timeout_applies() {
     let bridge = McpClientBridge::new().with_call_timeout(Duration::from_millis(300));
     let config = fake_server_config(&[("FAKE_MCP_SLOW_MS", "1500")]);
     bridge.start(&config).await.unwrap();
-    let echo = bridge.get_adapter("fake", "mcp_fake__echo").unwrap();
+    let echo = bridge.get_adapter("fake", &mcp_tool_name("fake", "echo")).unwrap();
     let err = echo
         .execute(&tool_ctx(), json!({ "msg": "慢" }))
         .await
@@ -265,10 +259,10 @@ async fn register_plugin_server_merges_tools_into_registry() {
     assert_eq!(
         names,
         [
-            "mcp_fake__echo",
-            "mcp_fake__add",
-            "mcp_fake__boom",
-            "mcp_fake__env"
+            mcp_tool_name("fake", "echo"),
+            mcp_tool_name("fake", "add"),
+            mcp_tool_name("fake", "boom"),
+            mcp_tool_name("fake", "env"),
         ]
     );
     // 工具可见（list_definitions 消费面；输出按 name 升序）
@@ -285,7 +279,7 @@ async fn register_plugin_server_merges_tools_into_registry() {
         "并入后 list_definitions 应可见全部 MCP 工具"
     );
     // 注册表执行往返（适配器生效）
-    let echo = registry.get("mcp_fake__echo").unwrap();
+    let echo = registry.get(&mcp_tool_name("fake", "echo")).unwrap();
     let out = echo
         .execute(&tool_ctx(), json!({ "msg": "插件注册" }))
         .await

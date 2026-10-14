@@ -25,15 +25,43 @@ use super::bridge_protocol::{
 };
 use super::bridge_session::{recover_lock, McpServerRuntimeState, McpServerSession};
 
-/// MCP 工具适配器：把远端 tools/call 包装成本地 Tool trait 实现
-pub struct McpToolAdapter {
-    session: Arc<McpServerSession>,
+/// MCP 动态工具适配器：把远端 tools/call 包装成本地 Tool trait 实现
+///
+/// 废除静态持有 Arc<McpServerSession> 的悬挂死指针模式，采用弱引用网桥 + 动态寻址
+/// （Arc<McpClientBridge> + server_id），子进程重启后自动路由到最新健康会话（BC11-2）
+pub struct McpDynamicToolAdapter {
+    bridge: Arc<McpClientBridge>,
+    server_id: String,
     server_tool_name: String,
     def: ToolDefinition,
 }
 
+impl McpDynamicToolAdapter {
+    pub fn new(
+        bridge: Arc<McpClientBridge>,
+        server_id: impl Into<String>,
+        server_tool_name: impl Into<String>,
+        def: ToolDefinition,
+    ) -> Self {
+        Self {
+            bridge,
+            server_id: server_id.into(),
+            server_tool_name: server_tool_name.into(),
+            def,
+        }
+    }
+
+    pub fn server_id(&self) -> &str {
+        &self.server_id
+    }
+
+    pub fn server_tool_name(&self) -> &str {
+        &self.server_tool_name
+    }
+}
+
 #[async_trait]
-impl Tool for McpToolAdapter {
+impl Tool for McpDynamicToolAdapter {
     fn name(&self) -> &str {
         &self.def.name
     }
@@ -47,16 +75,32 @@ impl Tool for McpToolAdapter {
         _ctx: &crate::context::ToolContext,
         args: Value,
     ) -> Result<Value, ToolError> {
-        self.session
+        let session = {
+            let sessions = self.bridge.sessions.lock().unwrap_or_else(recover_lock);
+            sessions.get(&self.server_id).cloned()
+        };
+        let Some(session) = session else {
+            return Err(ToolError::new(
+                codes::MCP_CONNECTION_FAILED,
+                format!("MCP server {} 不可用（未注册会话）", self.server_id),
+            ));
+        };
+        if !session.is_running() {
+            return Err(session.unavailable_error());
+        }
+        session
             .call_tool(&self.server_tool_name, &self.def.name, args)
             .await
     }
 }
 
+/// 兼容别名：McpToolAdapter 指向 McpDynamicToolAdapter
+pub type McpToolAdapter = McpDynamicToolAdapter;
+
 /// MCP 客户端桥：server 运行生命周期 + 工具注册桥接
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct McpClientBridge {
-    sessions: std::sync::Mutex<HashMap<String, Arc<McpServerSession>>>,
+    pub(crate) sessions: Arc<std::sync::Mutex<HashMap<String, Arc<McpServerSession>>>>,
     /// tools/call 超时（默认 30 秒）
     call_timeout: Duration,
 }
@@ -65,7 +109,7 @@ impl McpClientBridge {
     /// 空桥（默认超时：tools/call 30 秒）
     pub fn new() -> Self {
         Self {
-            sessions: std::sync::Mutex::new(HashMap::new()),
+            sessions: Arc::new(std::sync::Mutex::new(HashMap::new())),
             call_timeout: DEFAULT_MCP_CALL_TIMEOUT,
         }
     }
@@ -141,8 +185,8 @@ impl McpClientBridge {
 
         // PE-07 T07.6 C 模式（Q17 样板简化）：538/541 的 match + expect/expect_err
         // 样板对整体简化为直接返回 result（result 本身即 Result<Vec<ToolDefinition>, ToolError>）
-        if result.is_err() {
-            // 握手 / 工具枚举失败：进程保留（Degraded），供 restart 重建重试
+        if result.is_err() && session.state() != McpServerRuntimeState::Exited {
+            // 握手 / 工具枚举失败：进程保留（Degraded），供 restart 重建重试（不覆盖已 Exited 终态）
             session.set_state(McpServerRuntimeState::Degraded);
         }
         result
@@ -165,6 +209,57 @@ impl McpClientBridge {
                 format!("MCP server 未运行：{server_id}"),
             )),
         }
+    }
+
+    /// 重启 server（先 stop 再 start）
+    pub async fn restart(
+        &self,
+        config: &crate::mcp::servers::McpServerConfig,
+    ) -> Result<Vec<ToolDefinition>, ToolError> {
+        let _ = self.stop(&config.server_id).await;
+        self.start(config).await
+    }
+
+    /// 指数退避自愈重启 server（最多重试 max_retries 次，500ms -> 1000ms -> 2000ms -> 4000ms）
+    pub async fn restart_with_backoff(
+        &self,
+        config: &crate::mcp::servers::McpServerConfig,
+        max_retries: usize,
+    ) -> Result<Vec<ToolDefinition>, ToolError> {
+        let mut delay = std::time::Duration::from_millis(500);
+        let max_delay = std::time::Duration::from_millis(4000);
+        let mut last_err = None;
+
+        for attempt in 0..=max_retries {
+            if attempt > 0 {
+                tracing::info!(
+                    server_id = %config.server_id,
+                    attempt,
+                    delay_ms = delay.as_millis(),
+                    "MCP server 崩溃/启动失败，执行指数退避重试拉起"
+                );
+                tokio::time::sleep(delay).await;
+                delay = (delay * 2).min(max_delay);
+            }
+            match self.restart(config).await {
+                Ok(defs) => return Ok(defs),
+                Err(e) => {
+                    tracing::warn!(
+                        server_id = %config.server_id,
+                        attempt,
+                        error = %e,
+                        "MCP server 重启尝试失败"
+                    );
+                    last_err = Some(e);
+                }
+            }
+        }
+        Err(last_err.unwrap_or_else(|| {
+            ToolError::new(
+                codes::MCP_CONNECTION_FAILED,
+                format!("MCP server {} 重启重试次数超限", config.server_id),
+            )
+        }))
     }
 
     /// 停止全部 server，返回停止数量
@@ -197,6 +292,17 @@ impl McpClientBridge {
             .unwrap_or(false)
     }
 
+    /// 获取当前健康且运行中的会话（is_running 为真且未进入 Exited 终态）
+    pub fn get_active_session(&self, server_id: &str) -> Option<Arc<McpServerSession>> {
+        let sessions = self.sessions.lock().unwrap_or_else(recover_lock);
+        let session = sessions.get(server_id)?;
+        if session.is_running() {
+            Some(session.clone())
+        } else {
+            None
+        }
+    }
+
     /// 已枚举工具定义（未启动 / 未就绪为 None）
     pub fn tools(&self, server_id: &str) -> Option<Vec<ToolDefinition>> {
         self.sessions
@@ -221,8 +327,35 @@ impl McpClientBridge {
             .unwrap_or_else(recover_lock)
             .get(tool_name)?
             .clone();
-        Some(Arc::new(McpToolAdapter {
-            session,
+        Some(Arc::new(McpDynamicToolAdapter {
+            bridge: Arc::new(self.clone()),
+            server_id: server_id.to_string(),
+            server_tool_name: handle.server_tool_name,
+            def: handle.def,
+        }))
+    }
+
+    /// 显式传入 Arc<McpClientBridge> 构造动态适配器
+    pub fn get_dynamic_adapter(
+        bridge: Arc<McpClientBridge>,
+        server_id: &str,
+        tool_name: &str,
+    ) -> Option<Arc<dyn Tool>> {
+        let session = bridge
+            .sessions
+            .lock()
+            .unwrap_or_else(recover_lock)
+            .get(server_id)?
+            .clone();
+        let handle = session
+            .tool_index
+            .read()
+            .unwrap_or_else(recover_lock)
+            .get(tool_name)?
+            .clone();
+        Some(Arc::new(McpDynamicToolAdapter {
+            bridge,
+            server_id: server_id.to_string(),
             server_tool_name: handle.server_tool_name,
             def: handle.def,
         }))

@@ -43,9 +43,37 @@ pub struct McpToolInfo {
     pub input_schema: Value,
 }
 
-/// 工具名前缀：`mcp_<sanitize(server_id)>__<tool_name>`（防跨 server 冲突）
+/// 确定性防冲突前缀命名规范：`mcp_<clean_id>_<short_hash>__<tool>`
+///
+/// 解决 `my.server` 与 `my_server` 冲突，采用名称主干（字母数字与短横线转小写，其余转下划线，最多20字符）+ 6位哈希后缀，
+/// 杜绝跨 server 命名碰撞与同名静默覆盖（BC11-2，对齐 06A §2.3.2 / 06B §2.3.1）。
+pub fn format_mcp_tool_name(server_id: &str, tool_name: &str) -> String {
+    let clean_id: String = server_id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' {
+                c.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect();
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    std::hash::Hash::hash(server_id, &mut hasher);
+    let hash_suffix = format!("{:06x}", (std::hash::Hasher::finish(&hasher) & 0xFFFFFF) as u32);
+
+    format!(
+        "mcp_{}_{}__{}",
+        clean_id.chars().take(20).collect::<String>(),
+        hash_suffix,
+        tool_name
+    )
+}
+
+/// 兼容别名：调用 [format_mcp_tool_name]
 pub fn mcp_tool_name(server_id: &str, tool_name: &str) -> String {
-    format!("mcp_{}__{}", sanitize_id_part(server_id), tool_name)
+    format_mcp_tool_name(server_id, tool_name)
 }
 
 /// 前缀段净化：保留字母数字与 `_` `-`，其余替换为 `_`
@@ -67,13 +95,13 @@ pub fn sanitize_id_part(server_id: &str) -> String {
 
 /// 工具列表适配：MCP tools/list 结果 → 本地 ToolDefinition 列表
 ///
-/// 名称加 `mcp_<server>__` 前缀；缺 description 用空串；缺 inputSchema
+/// 名称加确定性 `mcp_<clean_id>_<short_hash>__` 前缀；缺 description 用空串；缺 inputSchema
 /// 回退兜底形状（02 §二.6：{type:'object',properties:{},additionalProperties:true}）。
 pub fn adapt_tool_list(server_id: &str, tools: &[McpToolInfo]) -> Vec<ToolDefinition> {
     tools
         .iter()
         .map(|tool| ToolDefinition {
-            name: mcp_tool_name(server_id, &tool.name),
+            name: format_mcp_tool_name(server_id, &tool.name),
             description: tool.description.clone(),
             input_schema: if tool.input_schema.is_null() {
                 default_input_schema()
