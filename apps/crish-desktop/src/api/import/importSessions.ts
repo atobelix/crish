@@ -8,17 +8,31 @@
  */
 
 import { getSessionStoreState } from '../../store';
-import type { SessionImportMeta, SessionMessage, SessionState } from '../../store/types';
+import type {
+  SessionImportMeta,
+  SessionMessage,
+  SessionState,
+} from '../../store/types';
 import { mapExternalSessions, type MapExternalOptions } from './map';
-import {
-  makeExternalImportKey,
-  type DetectedExternalSession,
-  type ImportDuplicatePolicy,
-  type ImportFs,
-  type ImportPathEnv,
-  type ImportSessionsResult,
-  type MappedImportSession,
+import type {
+  DetectedExternalSession,
+  ImportDuplicatePolicy,
+  ImportFs,
+  ImportPathEnv,
+  ImportSessionsResult,
+  MappedImportSession,
 } from './types';
+import {
+  clearDeletedExternalSession,
+  externalImportKeyAliases,
+  recordDeletedExternalSession,
+} from './externalSessionTombstone';
+
+export {
+  clearDeletedExternalSession,
+  getDeletedExternalSessionKeys,
+  recordDeletedExternalSession,
+} from './externalSessionTombstone';
 
 export type ImportSessionsDeps = {
   createSession?: (opts?: {
@@ -31,7 +45,7 @@ export type ImportSessionsDeps = {
   addMessage?: (
     wsId: string,
     sessionId: string,
-    message: SessionMessage,
+    message: SessionMessage
   ) => void;
   /** 固定 wsId（默认 __global__） */
   wsId?: string;
@@ -78,7 +92,9 @@ function resolveDeps(deps?: ImportSessionsDeps) {
   };
 }
 
-function mapOptsFromDeps(deps?: ImportSessionsDeps): MapExternalOptions | undefined {
+function mapOptsFromDeps(
+  deps?: ImportSessionsDeps
+): MapExternalOptions | undefined {
   if (!deps) return undefined;
   const out: MapExternalOptions = {};
   if (deps.fs) out.fs = deps.fs;
@@ -92,13 +108,19 @@ function mapOptsFromDeps(deps?: ImportSessionsDeps): MapExternalOptions | undefi
  * 纯函数，便于单测。
  */
 export function collectExistingImportKeys(
-  sessions: Array<Pick<SessionState, 'importMeta'>>,
+  sessions: Array<Pick<SessionState, 'importMeta'>>
 ): Set<string> {
   const keys = new Set<string>();
   for (const s of sessions) {
     const meta = s.importMeta;
     if (!meta?.source || !meta.sourceSessionId) continue;
-    keys.add(makeExternalImportKey(meta.source, meta.sourceSessionId));
+    for (const key of externalImportKeyAliases(
+      meta.source,
+      meta.sourceSessionId,
+      meta.sourcePath
+    )) {
+      keys.add(key);
+    }
   }
   return keys;
 }
@@ -106,7 +128,7 @@ export function collectExistingImportKeys(
 /** 构建写入 createSession 的 importMeta */
 export function buildImportMeta(
   mapped: MappedImportSession,
-  importedAt: string,
+  importedAt: string
 ): SessionImportMeta {
   const meta: SessionImportMeta = {
     source: mapped.source,
@@ -120,13 +142,20 @@ export function buildImportMeta(
 /** 写入单条已 map 会话；后台创建（activate:false）避免抢焦点；打 importMeta 标签 */
 export function writeMappedSession(
   mapped: MappedImportSession,
-  deps?: ImportSessionsDeps,
+  deps?: ImportSessionsDeps
 ): string {
   const { createSession, addMessage, wsId, nowIso } = resolveDeps(deps);
   const importMeta = buildImportMeta(mapped, nowIso());
+  const cleanSource = mapped.source === 'claude-code' ? 'claude' : 'codex';
+  const cleanId = (mapped.sourceId || `${Date.now()}`)
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .slice(0, 32);
+  const explicitSessionId = `sess-import-${cleanSource}-${cleanId}`;
+
   const sessionId = createSession({
+    id: explicitSessionId,
     title: mapped.title,
-    ...(mapped.folder !== undefined ? { folder: mapped.folder } : {}),
+    folder: mapped.folder || '对话',
     activate: false,
     importMeta,
   });
@@ -142,7 +171,7 @@ export function writeMappedSession(
  */
 export async function importDetectedSessions(
   selected: DetectedExternalSession[],
-  deps?: ImportSessionsDeps,
+  deps?: ImportSessionsDeps
 ): Promise<ImportSessionsResult> {
   if (!selected.length) {
     return {
@@ -157,7 +186,7 @@ export async function importDetectedSessions(
   const resolved = resolveDeps(deps);
   const { mapped, errors } = await mapExternalSessions(
     selected,
-    mapOptsFromDeps(deps),
+    mapOptsFromDeps(deps)
   );
   const sessionIds: string[] = [];
   let imported = 0;
@@ -172,9 +201,12 @@ export async function importDetectedSessions(
   const batchKeys = new Set<string>();
 
   for (const m of mapped) {
-    const key = makeExternalImportKey(m.source, m.sourceId);
+    const aliases = externalImportKeyAliases(m.source, m.sourceId, m.path);
     if (resolved.duplicatePolicy === 'skip') {
-      if (existingKeys.has(key) || batchKeys.has(key)) {
+      const duplicated = aliases.some(
+        (key) => existingKeys.has(key) || batchKeys.has(key)
+      );
+      if (duplicated) {
         skippedDuplicates += 1;
         continue;
       }
@@ -183,8 +215,12 @@ export async function importDetectedSessions(
       const id = writeMappedSession(m, deps);
       sessionIds.push(id);
       imported += 1;
-      batchKeys.add(key);
-      existingKeys.add(key);
+      for (const key of aliases) {
+        batchKeys.add(key);
+        existingKeys.add(key);
+      }
+      // 手动导入是用户明确要接续，撤掉此前的删除墓碑
+      clearDeletedExternalSession(m.source, m.sourceId, m.path);
     } catch (err) {
       writeFailed += 1;
       errors.push(`${m.title}：${String(err)}`);
@@ -195,4 +231,48 @@ export async function importDetectedSessions(
   const skipped = mapFailed + writeFailed + skippedDuplicates;
 
   return { imported, skipped, skippedDuplicates, errors, sessionIds };
+}
+
+/**
+ * 物理清理并删除 sessionStore 中所有标记为外部导入的会话。
+ * 对每个外部会话在删除前写入墓碑黑名单，杜绝任何静默自动复活。
+ * 返回成功清理的会话数量。
+ */
+export async function cleanAllImportedExternalSessions(): Promise<number> {
+  const store = getSessionStoreState();
+  const sessions = store.sessions || [];
+  const targetSessions = sessions.filter((s) => Boolean(s.importMeta?.source));
+  if (!targetSessions.length) return 0;
+
+  let cleaned = 0;
+  for (const s of targetSessions) {
+    if (s.importMeta?.source && s.importMeta?.sourceSessionId) {
+      recordDeletedExternalSession(
+        s.importMeta.source,
+        s.importMeta.sourceSessionId,
+        s.importMeta.sourcePath
+      );
+    }
+    const ok = store.deleteSession(s.id);
+    if (ok !== false) {
+      cleaned += 1;
+    }
+  }
+  return cleaned;
+}
+
+/**
+ * 物理删除单条外部导入的会话，同时写入墓碑防静默复活。
+ */
+export function deleteImportedSession(sessionId: string): boolean {
+  const store = getSessionStoreState();
+  const session = store.sessions?.find((s) => s.id === sessionId);
+  if (session?.importMeta?.source && session?.importMeta?.sourceSessionId) {
+    recordDeletedExternalSession(
+      session.importMeta.source,
+      session.importMeta.sourceSessionId,
+      session.importMeta.sourcePath
+    );
+  }
+  return store.deleteSession(sessionId);
 }

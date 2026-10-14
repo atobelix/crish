@@ -11,6 +11,9 @@ export const IMPORT_CLAUDE_ROOT_KEY = 'crish_import_claude_root';
 /** 外部会话导入：自定义 Codex 配置根目录（非默认 ~/.codex） */
 export const IMPORT_CODEX_ROOT_KEY = 'crish_import_codex_root';
 
+/** 检测到外部长对话后自动接续开关（读取/写入统一经 api/import/importRootSettings） */
+export const IMPORT_AUTO_SYNC_ENABLED_KEY = 'crish_auto_sync_external_sessions';
+
 // ── 运行期临时缓存与非偏好状态 keys ──────────────────────────────────────────
 
 /** 首次运行向导完成标志 */

@@ -124,6 +124,11 @@ export interface Settings {
    * 写入本机设置；run-task 时下发给引擎，过滤不注入的 MCP 工具。
    */
   mcpDisabledTools?: Record<string, string[]>;
+  /**
+   * 用户接入的 MCP 服务登记。
+   * 引擎运行时列表是另一份缓存；这里才是「已导入」在刷新后仍成立的名单。
+   */
+  mcpServers?: McpServer[];
 }
 
 /** 回答风格四档（设置 · 个性化） */

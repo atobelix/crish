@@ -5,6 +5,7 @@
  */
 
 import {
+  IMPORT_AUTO_SYNC_ENABLED_KEY,
   IMPORT_CLAUDE_ROOT_KEY,
   IMPORT_CODEX_ROOT_KEY,
 } from '../../utils/storageKeys';
@@ -19,7 +20,9 @@ export type PersistedImportRoots = {
 
 function normalizeRoot(path: string | null | undefined): string | undefined {
   if (path == null) return undefined;
-  const t = String(path).trim().replace(/[\\/]+$/, '');
+  const t = String(path)
+    .trim()
+    .replace(/[\\/]+$/, '');
   return t || undefined;
 }
 
@@ -72,11 +75,13 @@ export function setPersistedCodexImportRoot(path: string | null): void {
  */
 export function mergeImportPathEnv(
   base: ImportPathEnv = {},
-  persisted: PersistedImportRoots = getPersistedImportRoots(),
+  persisted: PersistedImportRoots = getPersistedImportRoots()
 ): ImportPathEnv {
   const claude =
-    normalizeRoot(base.claudeConfigDir) ?? normalizeRoot(persisted.claudeConfigDir);
-  const codex = normalizeRoot(base.codexHome) ?? normalizeRoot(persisted.codexHome);
+    normalizeRoot(base.claudeConfigDir) ??
+    normalizeRoot(persisted.claudeConfigDir);
+  const codex =
+    normalizeRoot(base.codexHome) ?? normalizeRoot(persisted.codexHome);
   return {
     ...base,
     ...(claude ? { claudeConfigDir: claude } : {}),
@@ -87,8 +92,19 @@ export function mergeImportPathEnv(
 /** Whether a root field is a user override (vs default home-relative). */
 export function hasCustomImportRoot(
   which: 'claude' | 'codex',
-  persisted: PersistedImportRoots = getPersistedImportRoots(),
+  persisted: PersistedImportRoots = getPersistedImportRoots()
 ): boolean {
-  if (which === 'claude') return Boolean(normalizeRoot(persisted.claudeConfigDir));
+  if (which === 'claude')
+    return Boolean(normalizeRoot(persisted.claudeConfigDir));
   return Boolean(normalizeRoot(persisted.codexHome));
+}
+
+/** Whether auto-continue after detecting external sessions is enabled (default off). */
+export function getImportAutoSyncEnabled(): boolean {
+  return readLs(IMPORT_AUTO_SYNC_ENABLED_KEY) === 'true';
+}
+
+/** Persist the auto-sync switch (explicit opt-in only). */
+export function setImportAutoSyncEnabled(enabled: boolean): void {
+  writeLs(IMPORT_AUTO_SYNC_ENABLED_KEY, enabled ? 'true' : 'false');
 }

@@ -45,7 +45,7 @@ export const registeredKeys: Readonly<Record<string, RegisteredKey>> = {
     owner: 'layoutStore',
     type: 'persist',
   },
-  'crish_session_store_v1': {
+  crish_session_store_v1: {
     owner: 'sessionStore',
     type: 'persist',
   },
@@ -107,6 +107,18 @@ export const registeredKeys: Readonly<Record<string, RegisteredKey>> = {
   },
   crish_sidebar_list_prefs: {
     owner: 'runtimeCache/sidebarListPrefs',
+    type: 'state',
+  },
+  crish_custom_plugins_v1: {
+    owner: 'extensions-surface/customPluginStorage',
+    type: 'state',
+  },
+  crish_auto_sync_external_sessions: {
+    owner: 'api/import/importRootSettings',
+    type: 'state',
+  },
+  crish_closed_session_tabs_v1: {
+    owner: 'workspace-shell/closedSessionTabs',
     type: 'state',
   },
 };

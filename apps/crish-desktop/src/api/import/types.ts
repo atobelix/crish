@@ -9,7 +9,11 @@
  */
 
 import type { SessionMessage } from '../../store/types';
-import type { ExternalSessionMeta, SessionImportPayload } from '@crish/plugin-import-claude-codex';
+import type {
+  ExternalSessionMeta,
+  ExternalSessionSource,
+  SessionImportPayload,
+} from '@crish/plugin-import-claude-codex';
 
 export type {
   ExternalSessionSource,
@@ -67,14 +71,16 @@ export type ImportDuplicatePolicy = 'skip' | 'reimport';
 
 /** 稳定去重键：source + sourceSessionId */
 export function makeExternalImportKey(
-  source: 'claude-code' | 'codex',
-  sourceSessionId: string,
+  source: ExternalSessionSource | string,
+  sourceSessionId: string
 ): string {
   return `${source}::${sourceSessionId}`;
 }
 
 /** Convert detect meta → UI DetectedExternalSession. */
-export function metaToDetected(meta: ExternalSessionMeta): DetectedExternalSession {
+export function metaToDetected(
+  meta: ExternalSessionMeta
+): DetectedExternalSession {
   return {
     id: meta.sourceSessionId,
     source: meta.source,
@@ -95,7 +101,7 @@ export function metaToDetected(meta: ExternalSessionMeta): DetectedExternalSessi
 /** Convert SessionImportPayload + 适配后的消息 → MappedImportSession for store write. */
 export function toMappedImportSession(
   imported: SessionImportPayload,
-  messages: SessionMessage[],
+  messages: SessionMessage[]
 ): MappedImportSession {
   return {
     source: imported.source,

@@ -1,4 +1,9 @@
-import type { ResponseStyle, Settings, ThinkingLevel } from './clientApi.types';
+import type {
+  McpServer,
+  ResponseStyle,
+  Settings,
+  ThinkingLevel,
+} from './clientApi.types';
 import { normalizeThinkingKey } from './modelsNormalize';
 
 export const RESPONSE_STYLE_IDS: readonly ResponseStyle[] = [
@@ -157,6 +162,60 @@ export function parseSettingsJson(raw: unknown): Partial<Settings> | null {
 }
 
 /**
+ * 只保留能标识的 MCP 登记。
+ * 非数组返回 null，调用方不得据此清空已有名单。
+ */
+export function normalizeMcpServerList(raw: unknown): McpServer[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: McpServer[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    const id = typeof row.id === 'string' ? row.id.trim() : '';
+    const name = typeof row.name === 'string' ? row.name.trim() : '';
+    if (!id || !name) continue;
+    const type = row.type === 'sse' ? 'sse' : 'stdio';
+    const status =
+      row.status === 'disconnected' || row.status === 'connecting'
+        ? row.status
+        : 'connected';
+    const tools = Array.isArray(row.tools)
+      ? row.tools
+          .map(String)
+          .map((tool) => tool.trim())
+          .filter(Boolean)
+      : [];
+    const server: McpServer = { id, name, type, status, tools };
+    if (typeof row.command === 'string' && row.command.trim()) {
+      server.command = row.command.trim();
+    }
+    if (Array.isArray(row.args)) {
+      server.args = row.args.map(String);
+    }
+    if (row.env && typeof row.env === 'object' && !Array.isArray(row.env)) {
+      const env: Record<string, string> = {};
+      for (const [key, value] of Object.entries(
+        row.env as Record<string, unknown>
+      )) {
+        if (typeof value === 'string') env[key] = value;
+      }
+      if (Object.keys(env).length) server.env = env;
+    }
+    if (typeof row.url === 'string' && row.url.trim())
+      server.url = row.url.trim();
+    if (Array.isArray(row.disabledTools)) {
+      const disabled = row.disabledTools
+        .map(String)
+        .map((tool) => tool.trim())
+        .filter(Boolean);
+      if (disabled.length) server.disabledTools = disabled;
+    }
+    out.push(server);
+  }
+  return out;
+}
+
+/**
  * 仅规范化 partial patch 中出现的字段（项目 scope 覆写用，不补默认）。
  */
 export function normalizeSettingsPartial(raw: unknown): Partial<Settings> {
@@ -221,6 +280,11 @@ export function normalizeSettingsPartial(raw: unknown): Partial<Settings> {
       if (tools.length) map[k] = tools;
     }
     out.mcpDisabledTools = map;
+  }
+  if ('mcpServers' in o) {
+    const servers = normalizeMcpServerList(o.mcpServers);
+    if (servers) out.mcpServers = servers;
+    else delete out.mcpServers;
   }
   if ('sendShortcut' in o) {
     const v = normalizeSettingsText(o.sendShortcut);

@@ -22,7 +22,8 @@ function joinPath(base: string, name: string): string {
 }
 
 function inferPlatform(home?: string): string | undefined {
-  if (typeof process !== 'undefined' && process.platform) return process.platform;
+  if (typeof process !== 'undefined' && process.platform)
+    return process.platform;
   if (home && home.includes('\\') && !home.startsWith('/')) return 'win32';
   if (home && home.startsWith('/')) return 'linux';
   return undefined;
@@ -42,7 +43,7 @@ function inferSep(home?: string, platform?: string): '\\' | '/' | undefined {
  * (see {@link mergeImportPathEnv}) so non-default installs are scanned when set.
  */
 export async function resolveHostImportEnv(
-  overrides: ImportPathEnv = {},
+  overrides: ImportPathEnv = {}
 ): Promise<ImportPathEnv> {
   let home = overrides.home?.trim() || undefined;
 
@@ -89,14 +90,14 @@ export async function resolveHostImportEnv(
  */
 export function allowRootFromSessionPath(
   filePath: string,
-  source: 'claude-code' | 'codex',
+  source: 'claude-code' | 'codex'
 ): string | undefined {
   if (!filePath || !filePath.trim()) return undefined;
   const marker = source === 'claude-code' ? '.claude' : '.codex';
   // Preserve original separators; match either / or \
   const re = new RegExp(
     `^(.*[${'\\\\'}/]${marker.replace('.', '\\.')})(?:[${'\\\\'}/]|$)`,
-    'i',
+    'i'
   );
   const m = filePath.match(re);
   if (m?.[1]) return m[1];
@@ -112,14 +113,15 @@ export function allowRootFromSessionPath(
  */
 export function createTauriImportFs(): ImportFs {
   return {
-    async listDir(dirPath: string, allowRoot: string): Promise<ImportDirEntry[]> {
-      const res = await invokeResult<{ items?: Array<Record<string, unknown>> }>(
-        'workbench_list_directory',
-        {
-          path: dirPath,
-          workspaceRoot: allowRoot,
-        },
-      );
+    async listDir(
+      dirPath: string,
+      _allowRoot: string
+    ): Promise<ImportDirEntry[]> {
+      const res = await invokeResult<{
+        items?: Array<Record<string, unknown>>;
+      }>('workbench_list_directory', {
+        path: dirPath,
+      });
       if (res.status === 'ok' && res.data?.items) {
         return res.data.items.map((it) => ({
           name: String(it.name ?? ''),
@@ -133,7 +135,7 @@ export function createTauriImportFs(): ImportFs {
       throw new Error('当前环境无法浏览本地目录（需桌面壳）');
     },
 
-    async readText(filePath, allowRoot, opts) {
+    async readText(filePath, _allowRoot, opts) {
       // maxLines high enough for JSONL; byte cap enforced by backend policy.
       const maxLines = opts?.maxLines ?? 1_000_000;
       const res = await invokeResult<{
@@ -142,13 +144,16 @@ export function createTauriImportFs(): ImportFs {
       }>('workbench_read_file_content', {
         path: filePath,
         maxLines,
-        workspaceRoot: allowRoot,
       });
       if (res.status === 'ok' && typeof res.data?.content === 'string') {
         let content = res.data.content;
         let truncated = Boolean(res.data.truncated);
         const maxBytes = opts?.maxBytes;
-        if (typeof maxBytes === 'number' && maxBytes > 0 && content.length > maxBytes) {
+        if (
+          typeof maxBytes === 'number' &&
+          maxBytes > 0 &&
+          content.length > maxBytes
+        ) {
           content = content.slice(0, maxBytes);
           truncated = true;
         }
@@ -161,8 +166,13 @@ export function createTauriImportFs(): ImportFs {
     async exists(path: string, allowRoot: string): Promise<boolean> {
       try {
         // Prefer list parent for dirs; for files, try a tiny read via list of parent.
-        const parent = path.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]+$/, '') || path;
-        const name = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || '';
+        const parent =
+          path.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]+$/, '') || path;
+        const name =
+          path
+            .replace(/[\\/]+$/, '')
+            .split(/[\\/]/)
+            .pop() || '';
         if (!name) return false;
         const entries = await this.listDir(parent, allowRoot);
         return entries.some((e) => e.name === name);

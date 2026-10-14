@@ -273,6 +273,26 @@ describe('clientApi settings hydrate / save', () => {
     expect(s.defaultModel).toBe('模型-甲');
   });
 
+  it('saveSettingsEx round-trips user MCP servers and drops invalid rows', async () => {
+    const merged = await clientApi.saveSettingsEx('__global__', 'global', {
+      mcpServers: [
+        {
+          id: 'm1',
+          name: 'chrome-devtools',
+          type: 'stdio',
+          status: 'connected',
+          tools: ['tabs'],
+        },
+        { id: '', name: 'bad', type: 'stdio', status: 'connected', tools: [] },
+      ],
+    });
+    expect(merged.mcpServers?.map((server) => server.name)).toEqual([
+      'chrome-devtools',
+    ]);
+    const again = await clientApi.getSettingsEx('__global__');
+    expect(again.mcpServers?.map((server) => server.id)).toEqual(['m1']);
+  });
+
   it('saveSettingsEx persists responseStyle and re-hydrates', async () => {
     const merged = await clientApi.saveSettingsEx('__global__', 'global', {
       responseStyle: 'high',

@@ -46,6 +46,7 @@ import {
   SessionDeltaWriteBarrier,
   DeltaWriteBarrier,
 } from './sessionDeltaWriteBarrier';
+import { omitExternallyDeletedSessions } from '../import/externalSessionTombstone';
 
 export {
   reconcileLateArrivalSnapshot,
@@ -115,6 +116,26 @@ function hasDegradedMarker(sessionId: string): boolean {
  *
  * 时间戳：一律经 coerceSessionTimestamp 归一为合法 ISO 串（CON-02）。
  */
+/** 已删除的外部对话不随索引或迟到快照复活。 */
+function withoutDeletedExternalSessions(
+  sessions: SessionState[],
+  activeSessionId: string | null
+): { sessions: SessionState[]; activeSessionId: string | null } {
+  const next = omitExternallyDeletedSessions(sessions);
+  if (next.length === sessions.length) {
+    return { sessions, activeSessionId };
+  }
+  const activeStillPresent =
+    activeSessionId != null &&
+    next.some((session) => session.id === activeSessionId);
+  return {
+    sessions: next,
+    activeSessionId: activeStillPresent
+      ? activeSessionId
+      : (next[0]?.id ?? null),
+  };
+}
+
 export async function hydrateSessionsFromRust(
   optionsOrLive?:
     | {
@@ -150,9 +171,13 @@ export async function hydrateSessionsFromRust(
         },
         liveSessions
       );
+      const dropped = withoutDeletedExternalSessions(
+        rec.sessions,
+        rec.activeSessionId
+      );
       return {
-        sessions: rec.sessions,
-        activeSessionId: rec.activeSessionId,
+        sessions: dropped.sessions,
+        activeSessionId: dropped.activeSessionId,
         folderOrder: rec.folderOrder,
       };
     }
@@ -221,6 +246,13 @@ export async function hydrateSessionsFromRust(
     if (rec.activeSessionId) activeSessionId = rec.activeSessionId;
     if (rec.folderOrder?.length) folderOrder = rec.folderOrder;
   }
+
+  const dropped = withoutDeletedExternalSessions(
+    finalSessions,
+    activeSessionId
+  );
+  finalSessions = dropped.sessions;
+  activeSessionId = dropped.activeSessionId;
 
   // 水合已完成，解除写屏障降级状态
   sessionDeltaWriteBarrier.setHydrated(true);

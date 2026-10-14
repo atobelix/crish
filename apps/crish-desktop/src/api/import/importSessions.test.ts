@@ -90,14 +90,14 @@ describe('host path env + allowRoot', () => {
     expect(
       allowRootFromSessionPath(
         'C:\\Users\\dev\\.claude\\projects\\x\\a.jsonl',
-        'claude-code',
-      ),
+        'claude-code'
+      )
     ).toBe('C:\\Users\\dev\\.claude');
     expect(
       allowRootFromSessionPath(
         '/home/u/.codex/sessions/2026/07/02/rollout-x.jsonl',
-        'codex',
-      ),
+        'codex'
+      )
     ).toBe('/home/u/.codex');
   });
 
@@ -110,7 +110,7 @@ describe('host path env + allowRoot', () => {
         messageCount: 1,
         path: '/home/u/.claude/projects/p/s.jsonl',
       },
-      { home: '/other' },
+      { home: '/other' }
     );
     expect(root).toBe('/home/u/.claude');
   });
@@ -148,16 +148,18 @@ describe('draftToSessionMessage（E3 宿主适配回归：插件中立载荷 →
       id: 'm2',
       role: 'assistant',
       timestampMs: 2,
-      toolCalls: [
-        { id: 't1', name: 'Bash', status: 'running', output: 'out' },
-      ],
+      toolCalls: [{ id: 't1', name: 'Bash', status: 'running', output: 'out' }],
       blocks: [
         { type: 'text', content: 'x' },
         { type: 'tool_call', id: 't1' },
       ],
     });
     expect(msg.sender).toBe('assistant');
-    expect(msg.toolCalls?.[0]).toMatchObject({ id: 't1', name: 'Bash', status: 'success' });
+    expect(msg.toolCalls?.[0]).toMatchObject({
+      id: 't1',
+      name: 'Bash',
+      status: 'success',
+    });
     expect(msg.toolCalls?.[0]?.output).toBe('out');
     expect(msg.blocks).toHaveLength(2);
   });
@@ -194,8 +196,12 @@ describe('map + write', () => {
     const { fileURLToPath } = await import('node:url');
     const { createMemoryImportFs } = await import('./importFsHost');
     const dir = dirname(fileURLToPath(import.meta.url));
-    const content = readFileSync(join(dir, '__fixtures__/claude-code-sample.jsonl'), 'utf8');
-    const path = '/home/u/.claude/projects/x/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jsonl';
+    const content = readFileSync(
+      join(dir, '__fixtures__/claude-code-sample.jsonl'),
+      'utf8'
+    );
+    const path =
+      '/home/u/.claude/projects/x/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jsonl';
     const fs = createMemoryImportFs({ [path]: content });
     const mapped = await mapExternalSession(
       {
@@ -206,7 +212,7 @@ describe('map + write', () => {
         messageCount: 4,
         path,
       },
-      { fs },
+      { fs }
     );
     expect(mapped.messages.length).toBeGreaterThan(0);
     expect(mapped.messages[0]?.sender).toBe('user');
@@ -239,6 +245,7 @@ describe('map + write', () => {
     });
     expect(id).toBe('sess-new');
     expect(createSession).toHaveBeenCalledWith({
+      id: 'sess-import-claude-c1',
       title: '导入标题',
       folder: 'proj',
       activate: false,
@@ -249,7 +256,11 @@ describe('map + write', () => {
         importedAt: '2026-07-29T00:00:00.000Z',
       },
     });
-    expect(addMessage).toHaveBeenCalledWith('ws', 'sess-new', mapped.messages[0]);
+    expect(addMessage).toHaveBeenCalledWith(
+      'ws',
+      'sess-new',
+      mapped.messages[0]
+    );
   });
 
   it('importDetectedSessions maps then writes', async () => {
@@ -296,12 +307,16 @@ describe('map + write', () => {
     const dir = dirname(fileURLToPath(import.meta.url));
     const content = readFileSync(
       join(dir, '__fixtures__/claude-code-sample.jsonl'),
-      'utf8',
+      'utf8'
     );
     const sessionUuid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
     const path = `/home/u/.claude/projects/demo/${sessionUuid}.jsonl`;
     const fs = createMemoryImportFs({ [path]: content });
-    const env = { home: '/home/u', platform: 'linux' as const, sep: '/' as const };
+    const env = {
+      home: '/home/u',
+      platform: 'linux' as const,
+      sep: '/' as const,
+    };
 
     const detected = await scanClaudeCodeSessions({ fs, env });
     expect(detected.length).toBeGreaterThan(0);
@@ -324,7 +339,9 @@ describe('map + write', () => {
 
 describe('soft-dedup (source + sourceSessionId)', () => {
   it('makeExternalImportKey / collectExistingImportKeys / buildImportMeta', () => {
-    expect(makeExternalImportKey('claude-code', 'abc')).toBe('claude-code::abc');
+    expect(makeExternalImportKey('claude-code', 'abc')).toBe(
+      'claude-code::abc'
+    );
     expect(makeExternalImportKey('codex', 'x')).toBe('codex::x');
 
     const keys = collectExistingImportKeys([
@@ -345,7 +362,7 @@ describe('soft-dedup (source + sourceSessionId)', () => {
         messages: [],
         path: '/p/roll.jsonl',
       },
-      '2026-01-01T00:00:00.000Z',
+      '2026-01-01T00:00:00.000Z'
     );
     expect(meta).toEqual({
       source: 'codex',
@@ -391,7 +408,7 @@ describe('soft-dedup (source + sourceSessionId)', () => {
     expect(result.sessionIds).toEqual(['sess-new']);
     expect(createSession).toHaveBeenCalledOnce();
     expect(createSession.mock.calls[0]?.[0]?.importMeta?.sourceSessionId).toBe(
-      'fresh-one',
+      'fresh-one'
     );
   });
 
@@ -415,7 +432,7 @@ describe('soft-dedup (source + sourceSessionId)', () => {
             importMeta: { source: 'codex', sourceSessionId: 'dup-1' },
           },
         ],
-      },
+      }
     );
     expect(result.imported).toBe(0);
     expect(result.skippedDuplicates).toBe(1);
@@ -489,7 +506,7 @@ describe('soft-dedup (source + sourceSessionId)', () => {
             },
           },
         ],
-      },
+      }
     );
     expect(result.imported).toBe(1);
     expect(result.skippedDuplicates).toBe(0);
