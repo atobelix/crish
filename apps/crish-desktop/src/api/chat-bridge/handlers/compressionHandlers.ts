@@ -7,8 +7,7 @@
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
 import { addContextInjection } from '../../storeAccess';
-import { useSessionStore } from '../../../store/sessionStore';
-import { getSessionForWrite } from '../../../store/sessionIndex';
+import { applyCompressionSummaryToStore } from '../../storeAccess';
 import type { SessionMessage } from '../../../store/types';
 
 export function onContextCompressionStart(
@@ -91,7 +90,6 @@ export function onContextCompressionEnd(
     const summaryText = rawResult.summary || '';
     const droppedIds =
       rawResult.compressedMessageIds || rawResult.compressed_message_ids || [];
-    const droppedSet = new Set(droppedIds);
 
     const summaryMessage: SessionMessage = {
       id: blockId,
@@ -116,40 +114,13 @@ export function onContextCompressionEnd(
       ],
     };
 
-    useSessionStore.setState((state) => {
-      const sess = getSessionForWrite(state, sessionId);
-      if (!sess) return;
-      if (!sess.messages) sess.messages = [];
-
-      const existingIdx = sess.messages.findIndex((m) => m.id === blockId);
-      if (existingIdx >= 0) {
-        sess.messages[existingIdx] = {
-          ...sess.messages[existingIdx],
-          ...summaryMessage,
-          text: summaryMessage.text,
-          metadata: summaryMessage.metadata,
-          blocks: summaryMessage.blocks,
-        };
-      } else {
-        // 过滤已被压缩丢弃的消息，并在首条普通消息前安全插入摘要块
-        const filtered = sess.messages.filter((m) => !droppedSet.has(m.id));
-        const firstKeptIdx = filtered.findIndex(
-          (m) =>
-            !m.id?.startsWith('compacted-summary') &&
-            !(
-              m.metadata &&
-              typeof m.metadata === 'object' &&
-              (m.metadata as any).isCompactedSummary
-            )
-        );
-        if (firstKeptIdx >= 0) {
-          filtered.splice(firstKeptIdx, 0, summaryMessage);
-        } else {
-          filtered.push(summaryMessage);
-        }
-        sess.messages = filtered;
-      }
-    });
+    // 投影写体已收口为 store 域 action（no-api-store-internal：经 storeAccess 公共面）
+    applyCompressionSummaryToStore(
+      sessionId,
+      blockId,
+      summaryMessage,
+      droppedIds
+    );
   }
 }
 

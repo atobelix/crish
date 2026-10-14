@@ -98,10 +98,28 @@ export type {
 };
 
 export { getLayoutState } from './store-access/storeAccessCore';
-export { unarchiveSession, setActiveAgentId, addMessageToolCall, updateMessageToolCall, updateMessageThinking, createSession, archiveSession } from './store-access/sessionAccess';
-export { setAppSettings, getAppSettings, getCommandPermissions, addCommandPermission } from './store-access/settingsAccess';
+export {
+  unarchiveSession,
+  setActiveAgentId,
+  addMessageToolCall,
+  updateMessageToolCall,
+  updateMessageThinking,
+  createSession,
+  archiveSession,
+} from './store-access/sessionAccess';
+export { applyCompressionSummaryToStore } from '../store/sessionCompressionApply';
+export {
+  setAppSettings,
+  getAppSettings,
+  getCommandPermissions,
+  addCommandPermission,
+} from './store-access/settingsAccess';
 export { reportRuntimeStatus } from '../store/sessionRuntimeStatusStore';
-export { setScheduledTasks, syncTelemetryData, pushDiffFile } from './store-access/telemetryAccess';
+export {
+  setScheduledTasks,
+  syncTelemetryData,
+  pushDiffFile,
+} from './store-access/telemetryAccess';
 export { openFileViewerInSession } from '../store/workspace-shell';
 
 export * from './store-access/storeAccessCore';
