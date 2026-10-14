@@ -2,14 +2,9 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Input, Button } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 import { useExtensionMarket } from '../settings-extensions/useExtensionMarket';
-import { ExtensionDetailModal } from '../settings-extensions/ExtensionDetailModal';
 import { ExternalImportWorkbench } from './ExternalImportWorkbench';
-import { McpDetailWorkbench } from './McpDetailWorkbench';
-import { SkillDetailWorkbench } from './SkillDetailWorkbench';
-import {
-  ExtensionGeneralWorkbench,
-  type GeneralExtensionItem,
-} from './ExtensionGeneralWorkbench';
+import { ExtensionsInstalledWorkbench } from './ExtensionsInstalledWorkbench';
+import { ExtensionsModals } from './ExtensionsModals';
 import {
   CANONICAL_IMPORT_PLUGIN_ID,
   isImportClaudeCodexPlugin,
@@ -25,16 +20,15 @@ import {
   type DesktopSkill,
 } from '../../api/skillsApi';
 import type { McpServerInfo } from '../../api/mcpApi';
-import {
-  isPluginEnabled,
-  setPluginEnabled,
-} from '../settings-extensions/pluginRegistryAdapter';
+import { setPluginEnabled } from '../settings-extensions/pluginRegistryAdapter';
 import {
   buildUnifiedItems,
   type UnifiedExtensionItem,
 } from './buildUnifiedItems';
 export type { UnifiedExtensionItem };
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettingsStore } from '../../store/storeAccess';
+import { useSessionStore } from '../../store/storeAccess';
+import { navigateToChatSession } from '../../store/storeAccess';
 import { useToast } from '../../services/toast/ToastContext';
 import { clientApi, type Settings, type McpServer } from '../../api/clientApi';
 import {
@@ -42,10 +36,6 @@ import {
   removeCustomPlugin,
   type CustomPluginItem,
 } from './customPluginStorage';
-import { McpConnectModal } from './McpConnectModal';
-import { SkillCreateModal } from './SkillCreateModal';
-import { PluginCreateModal } from './PluginCreateModal';
-import { PluginShareModal } from './PluginShareModal';
 import { ExtensionsSidebar } from './ExtensionsSidebar';
 import { ExtensionsCatalogGrid } from './ExtensionsCatalogGrid';
 import styles from './ExtensionsMainSurface.module.css';
@@ -72,7 +62,6 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
     mcpServers,
     installed,
     refresh,
-    toggleMcpServer,
     toggleMcpTool,
     toggleExpandMcpTools,
     expandedMcpTools,
@@ -97,6 +86,7 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
 
   // 模态弹窗状态
   const [showPluginCreateModal, setShowPluginCreateModal] = useState(false);
+  const [pluginCreateTab] = useState<'create' | 'manual'>('create');
   const [showPluginShareModal, setShowPluginShareModal] = useState(false);
   const [sharePluginTarget, setSharePluginTarget] = useState<
     | CustomPluginItem
@@ -109,7 +99,7 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
     InstalledExtension | CatalogEntry | null
   >(null);
 
-  // 自定义插件与 MCP 动态监听
+  // 自定义插件动态监听
   const [customPlugins, setCustomPlugins] = useState<CustomPluginItem[]>(() =>
     loadCustomPlugins()
   );
@@ -124,44 +114,14 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
 
   // 构建统一去重生态列表（接入 settingsMcpServers 与 customPlugins）
   const unifiedItems = useMemo<UnifiedExtensionItem[]>(() => {
-    const baseList = buildUnifiedItems({
+    return buildUnifiedItems({
       skills,
       mcpServers,
       settingsMcpServers,
       installed,
       catalogInstalled,
+      customPlugins,
     });
-    const ids = new Set(baseList.map((it) => it.id));
-    const merged = [...baseList];
-
-    for (const cp of customPlugins) {
-      const id = `custom-plugin:${cp.id}`;
-      if (!ids.has(id) && !ids.has(cp.id)) {
-        const inst: InstalledExtension = {
-          id,
-          kind: 'plugin',
-          source: 'local',
-          name: cp.name,
-          description: cp.description || '自定义扩展插件',
-          fromSystem: false,
-          detail: cp.version ? `v${cp.version}` : undefined,
-        };
-        merged.push({
-          id,
-          kind: 'plugin',
-          scope: 'installed',
-          name: cp.name,
-          description: cp.description || '自定义扩展插件',
-          icon: 'puzzle',
-          isOfficial: false,
-          isEnabled: isPluginEnabled(id),
-          installedItem: inst,
-          nativeItem: inst,
-        });
-        ids.add(id);
-      }
-    }
-    return merged;
   }, [
     skills,
     mcpServers,
@@ -181,21 +141,30 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
 
   const installedItems = useMemo(() => {
     return unifiedItems.filter(
-      (item) => item.scope === 'installed' && item.kind === currentKind
+      (item) =>
+        item.kind === currentKind &&
+        (item.isInstalled ??
+          (item.scope === 'installed' || item.scope === 'both'))
     );
   }, [unifiedItems, currentKind]);
 
   const catalogItems = useMemo(() => {
-    let items = unifiedItems.filter(
-      (item) => item.scope === 'catalog' && item.kind === currentKind
-    );
+    let items = unifiedItems.filter((item) => {
+      if (item.kind !== currentKind) return false;
+      return (
+        item.scope === 'catalog' ||
+        item.scope === 'both' ||
+        Boolean(item.catalogEntry)
+      );
+    });
     if (sidebarNav === 'featured') {
       items = items.filter(
         (item) =>
           item.isOfficial ||
           item.catalogEntry?.source === 'official' ||
           item.id.includes('import') ||
-          item.id.includes('audit')
+          item.id.includes('audit') ||
+          (item.catalogEntry?.tags && item.catalogEntry.tags.includes('官方'))
       );
     }
     if (searchQuery.trim()) {
@@ -241,29 +210,39 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
           s.id === serverId ||
           s.name === serverId ||
           `local-mcp:${s.id}` === serverId ||
-          `local-mcp:${s.name}` === serverId
+          `local-mcp:${s.name}` === serverId ||
+          `mcp:${s.id}` === serverId ||
+          `mcp:${s.name}` === serverId
       );
       const item = matchIndex >= 0 ? currentList[matchIndex] : undefined;
+      const nextStatus = start ? 'connected' : 'disconnected';
+      let nextList: McpServer[];
+      let name = serverId;
       if (item) {
-        const nextStatus = start ? 'connected' : 'disconnected';
+        name = item.name || item.id;
         const updatedItem: McpServer = { ...item, status: nextStatus };
-        const nextList = [...currentList];
+        nextList = [...currentList];
         nextList[matchIndex] = updatedItem;
-        useSettingsStore.getState().setMcpServers(nextList);
-        void clientApi.saveSettingsEx('__global__', 'global', {
-          mcpServers: nextList,
-        } as unknown as Partial<Settings>);
-        showToast(
-          start
-            ? `已启用 MCP 服务 ${item.name}`
-            : `已停用 MCP 服务 ${item.name}`
-        );
-        void refresh();
-        return;
+      } else {
+        const cleanId = serverId.replace(/^(local-mcp:|mcp:)/, '');
+        name = cleanId;
+        const newItem: McpServer = {
+          id: cleanId,
+          name: cleanId,
+          type: 'stdio',
+          status: nextStatus,
+          tools: [],
+        };
+        nextList = [...currentList, newItem];
       }
-      void toggleMcpServer(serverId, start);
+      useSettingsStore.getState().setMcpServers(nextList);
+      void clientApi.saveSettingsEx('__global__', 'global', {
+        mcpServers: nextList,
+      } as unknown as Partial<Settings>);
+      showToast(start ? `已启用 MCP 服务 ${name}` : `已停用 MCP 服务 ${name}`);
+      void refresh();
     },
-    [refresh, showToast, toggleMcpServer]
+    [refresh, showToast]
   );
 
   const handleToggleMcp = useCallback(
@@ -277,7 +256,7 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
   );
 
   const handleToggleGeneral = useCallback(
-    (item: GeneralExtensionItem) => {
+    (item: { id: string; isEnabled: boolean }) => {
       if (item.id === CANONICAL_IMPORT_PLUGIN_ID) {
         setPluginEnabled(CANONICAL_IMPORT_PLUGIN_ID, !item.isEnabled);
         void refresh();
@@ -306,23 +285,54 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
 
   const handleUninstallItem = useCallback(
     (item: UnifiedExtensionItem) => {
-      if (isImportClaudeCodexPlugin(item)) {
-        setOfficialPluginUninstalled(CANONICAL_IMPORT_PLUGIN_ID, true);
-        setPluginEnabled(CANONICAL_IMPORT_PLUGIN_ID, false);
-        void refresh();
-      } else if (item.id.startsWith('custom-plugin:')) {
-        const realId = item.id.replace('custom-plugin:', '');
-        removeCustomPlugin(realId);
-        setCustomPlugins(loadCustomPlugins());
-      } else if (item.installedItem) {
-        void handleRemovePackage(item.installedItem);
-      }
-      if (selectedInstalledId === item.id) {
-        setSidebarNav('explore');
-        setSelectedInstalledId(null);
-      }
+      void (async () => {
+        if (item.kind === 'mcp') {
+          const current = useSettingsStore.getState().mcpServers || [];
+          const next = current.filter((server) => {
+            const aliases = [
+              server.id,
+              server.name,
+              `local-mcp:${server.id}`,
+              `local-mcp:${server.name}`,
+              `mcp:${server.id}`,
+              `mcp:${server.name}`,
+            ];
+            if (aliases.includes(item.id)) return false;
+            if (
+              server.name &&
+              item.name &&
+              server.name.toLowerCase() === item.name.toLowerCase()
+            ) {
+              return false;
+            }
+            return true;
+          });
+          if (next.length !== current.length) {
+            useSettingsStore.getState().setMcpServers(next);
+            await clientApi.saveSettingsEx('__global__', 'global', {
+              mcpServers: next,
+            } as unknown as Partial<Settings>);
+            showToast(`已移除 MCP 服务 ${item.name}`);
+          }
+        }
+        if (isImportClaudeCodexPlugin(item)) {
+          setOfficialPluginUninstalled(CANONICAL_IMPORT_PLUGIN_ID, true);
+          setPluginEnabled(CANONICAL_IMPORT_PLUGIN_ID, false);
+          void refresh();
+        } else if (item.id.startsWith('custom-plugin:')) {
+          const realId = item.id.replace('custom-plugin:', '');
+          removeCustomPlugin(realId);
+          setCustomPlugins(loadCustomPlugins());
+        } else if (item.installedItem) {
+          void handleRemovePackage(item.installedItem);
+        }
+        if (selectedInstalledId === item.id) {
+          setSidebarNav('explore');
+          setSelectedInstalledId(null);
+        }
+      })();
     },
-    [refresh, handleRemovePackage, selectedInstalledId]
+    [refresh, handleRemovePackage, selectedInstalledId, showToast]
   );
 
   const handleInstallCatalogItem = useCallback(
@@ -338,9 +348,24 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
     [handleInstallCatalog, refresh]
   );
 
+  const handleCreatePlugin = useCallback(() => {
+    const sessionId = useSessionStore
+      .getState()
+      .createSession({ title: '制作新插件' });
+    useSessionStore
+      .getState()
+      .setComposerDraft(
+        sessionId,
+        '/skill:plugin 我想制作一个新的 Crish 插件，请引导我选择插件的方向与功能'
+      );
+    navigateToChatSession(sessionId);
+    onBackToChat?.();
+    showToast('已开启插件制作对话，正在由插件制作助手引导您设计与构建插件');
+  }, [onBackToChat, showToast]);
+
   return (
     <div className={styles.surfaceRoot} data-testid="extensions-main-surface">
-      {/* 顶部导航栏：纯净文字大字号下划线高亮导航，无胶囊容器背景 */}
+      {/* 顶部导航栏 */}
       <div className={styles.surfaceHeader}>
         <div className={styles.topNavTabs} role="tablist">
           {CATEGORY_TABS.map((tab) => (
@@ -363,7 +388,7 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
                 variant="secondary"
                 size="sm"
                 className={styles.headerActionBtn}
-                onClick={() => setShowPluginCreateModal(true)}
+                onClick={handleCreatePlugin}
               >
                 <AppIcon name="plus" size={13} />
                 <span>制作插件</span>
@@ -374,8 +399,8 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
                 className={styles.headerActionBtn}
                 onClick={() => setShowPluginCreateModal(true)}
               >
-                <AppIcon name="download" size={13} />
-                <span>安装插件</span>
+                <AppIcon name="folder-input" size={13} />
+                <span>导入插件</span>
               </Button>
             </>
           )}
@@ -387,7 +412,7 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
               onClick={() => setShowSkillCreateModal(true)}
             >
               <AppIcon name="plus" size={13} />
-              <span>+ 添加技能</span>
+              <span>添加技能</span>
             </Button>
           )}
           {categoryFilter === 'mcp' && (
@@ -398,17 +423,19 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
               onClick={() => setShowMcpConnectModal(true)}
             >
               <AppIcon name="plus" size={13} />
-              <span>+ 接入 MCP</span>
+              <span>接入 MCP</span>
             </Button>
           )}
 
           <div className={styles.searchBarWrapper}>
             <AppIcon name="search" size={13} className={styles.searchIcon} />
             <Input
+              bare
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="搜索扩展、技能与工具…"
               className={styles.searchInput}
+              aria-label="搜索扩展"
             />
           </div>
         </div>
@@ -418,6 +445,7 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
       <div className={styles.mainLayout}>
         <ExtensionsSidebar
           sidebarNav={sidebarNav}
+          categoryFilter={categoryFilter}
           onSelectNav={(nav) => {
             setSidebarNav(nav);
             setSelectedInstalledId(null);
@@ -440,6 +468,7 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
           {sidebarNav === 'import' ? (
             <div className={styles.workbenchContainer}>
               <ExternalImportWorkbench
+                categoryFilter={categoryFilter === 'skills' ? 'skill' : 'mcp'}
                 onBackToChat={onBackToChat}
                 onRefresh={refresh}
                 onImportSuccess={refresh}
@@ -447,74 +476,18 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
             </div>
           ) : sidebarNav === 'installed' && selectedInstalledItem ? (
             <div className={styles.workbenchContainer}>
-              {isImportClaudeCodexPlugin(selectedInstalledItem) ? (
-                <ExternalImportWorkbench
-                  onBackToChat={onBackToChat}
-                  onRefresh={refresh}
-                  onImportSuccess={refresh}
-                />
-              ) : selectedInstalledItem.kind === 'mcp' &&
-                selectedInstalledItem.rawMcp ? (
-                <McpDetailWorkbench
-                  server={selectedInstalledItem.rawMcp}
-                  onToggleServer={handleToggleMcp}
-                />
-              ) : selectedInstalledItem.kind === 'skill' &&
-                selectedInstalledItem.rawSkill ? (
-                <SkillDetailWorkbench
-                  skill={selectedInstalledItem.rawSkill}
-                  onToggleActivation={handleToggleSkill}
-                />
-              ) : (
-                <>
-                  <div className={styles.workbenchTopBar}>
-                    <span className={styles.workbenchTopBarTitle}>
-                      <AppIcon name={selectedInstalledItem.icon} size={14} />
-                      <span>{selectedInstalledItem.name} 专属工作台</span>
-                    </span>
-                    <div className={styles.workbenchTopBarActions}>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className={styles.headerActionBtn}
-                        onClick={() => {
-                          setSharePluginTarget({
-                            id: selectedInstalledItem.id.replace(
-                              'custom-plugin:',
-                              ''
-                            ),
-                            name: selectedInstalledItem.name,
-                            description: selectedInstalledItem.description,
-                            version:
-                              (selectedInstalledItem.installedItem as any)
-                                ?.version || '1.0.0',
-                          });
-                          setShowPluginShareModal(true);
-                        }}
-                      >
-                        <AppIcon name="upload" size={13} />
-                        <span>分享插件</span>
-                      </Button>
-                    </div>
-                  </div>
-                  <ExtensionGeneralWorkbench
-                    item={{
-                      id: selectedInstalledItem.id,
-                      kind: selectedInstalledItem.kind,
-                      name: selectedInstalledItem.name,
-                      description: selectedInstalledItem.description,
-                      icon: selectedInstalledItem.icon,
-                      isOfficial: selectedInstalledItem.isOfficial,
-                      isEnabled: selectedInstalledItem.isEnabled,
-                      installRef: selectedInstalledItem.installRef,
-                      version:
-                        (selectedInstalledItem.installedItem as any)?.version ||
-                        '1.0.0',
-                    }}
-                    onToggleEnabled={handleToggleGeneral}
-                  />
-                </>
-              )}
+              <ExtensionsInstalledWorkbench
+                item={selectedInstalledItem}
+                onBackToChat={onBackToChat}
+                refresh={refresh}
+                onToggleMcp={handleToggleMcp}
+                onToggleSkill={handleToggleSkill}
+                onToggleGeneral={handleToggleGeneral}
+                onSharePlugin={(target) => {
+                  setSharePluginTarget(target);
+                  setShowPluginShareModal(true);
+                }}
+              />
             </div>
           ) : (
             <ExtensionsCatalogGrid
@@ -530,52 +503,37 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
         </div>
       </div>
 
-      {/* 目录项详情弹窗 */}
-      <ExtensionDetailModal
-        open={Boolean(selectedDetailItem)}
-        onClose={() => setSelectedDetailItem(null)}
-        scope={
-          selectedDetailItem &&
-          'installRef' in selectedDetailItem &&
-          !catalogInstalled.has(selectedDetailItem.id)
-            ? 'catalog'
-            : 'installed'
-        }
-        item={selectedDetailItem}
-        canUninstall={false}
+      {/* 弹窗管理器 */}
+      <ExtensionsModals
+        selectedDetailItem={selectedDetailItem}
+        onCloseDetail={() => setSelectedDetailItem(null)}
+        catalogInstalled={catalogInstalled}
         busyId={busyId}
+        skills={skills}
+        onToggleSkill={handleToggleSkill}
+        onBackToChat={onBackToChat}
         mcpState={{ expandedMcpTools, toolTick, mcpServerBusy, mcpToolBusy }}
         onInstallCatalog={handleInstallCatalog}
         onRemovePackage={handleRemovePackage}
-        onTogglePlugin={togglePlugin}
+        togglePlugin={togglePlugin}
         onToggleMcpServer={handleToggleMcpServerId}
         onToggleMcpTool={toggleMcpTool}
         onToggleExpandMcpTools={toggleExpandMcpTools}
-      />
-
-      {/* 扩展/技能/MCP 弹窗 */}
-      <SkillCreateModal
-        open={showSkillCreateModal}
-        onClose={() => setShowSkillCreateModal(false)}
-        onSuccess={() => void refresh()}
-      />
-      <McpConnectModal
-        open={showMcpConnectModal}
-        onClose={() => setShowMcpConnectModal(false)}
-        onSuccess={() => void refresh()}
-      />
-      <PluginCreateModal
-        open={showPluginCreateModal}
-        onClose={() => setShowPluginCreateModal(false)}
-        onSuccess={() => {
+        showSkillCreateModal={showSkillCreateModal}
+        onCloseSkillCreate={() => setShowSkillCreateModal(false)}
+        showMcpConnectModal={showMcpConnectModal}
+        onCloseMcpConnect={() => setShowMcpConnectModal(false)}
+        showPluginCreateModal={showPluginCreateModal}
+        pluginCreateTab={pluginCreateTab}
+        onClosePluginCreate={() => setShowPluginCreateModal(false)}
+        showPluginShareModal={showPluginShareModal}
+        onClosePluginShare={() => setShowPluginShareModal(false)}
+        sharePluginTarget={sharePluginTarget}
+        onRefresh={() => void refresh()}
+        onPluginCreated={() => {
           setCustomPlugins(loadCustomPlugins());
           void refresh();
         }}
-      />
-      <PluginShareModal
-        open={showPluginShareModal}
-        onClose={() => setShowPluginShareModal(false)}
-        plugin={sharePluginTarget}
       />
     </div>
   );

@@ -2,18 +2,25 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 import { useToast } from '../../services/toast/ToastContext';
-import { useSessionStore } from '../../store/sessionStore';
-import { importDetectedSessions } from '../../api/import/importSessions';
-import { type DetectedExternalSession } from '../../api/import/types';
+import { useSessionStore } from '../../store/storeAccess';
+import {
+  importDetectedSessions,
+  deleteImportedSession,
+} from '../../api/import/importSessions';
+import {
+  type DetectedExternalSession,
+  type ExternalSessionSource,
+} from '../../api/import/types';
+import { externalImportKeyAliases } from '../../api/import/externalSessionTombstone';
 import { getWorkspacePath } from '../../api/workspaceFsApi';
-import { navigateToChatSession } from '../../store/surfaceRouter';
+import { navigateToChatSession } from '../../store/storeAccess';
 import {
   loadExternalSessionsFromCache,
   getOrScanExternalSessions,
 } from '../../api/import/externalSessionCache';
 import { ImportPluginSettingsModal } from './ImportPluginSettingsModal';
 import { SessionPreviewPane } from './SessionPreviewPane';
-import styles from './ExtensionsMainSurface.module.css';
+import styles from './ExternalSessionsWorkbench.module.css';
 
 type FilterSource = 'workspace' | 'all' | 'claude' | 'codex';
 
@@ -35,6 +42,7 @@ export const ExternalSessionsWorkbench: React.FC<
   const [loading, setLoading] = useState(false);
   const [importingId, setImportingId] = useState<string | null>(null);
   const [filterSource, setFilterSource] = useState<FilterSource>('workspace');
+  const [onlyWithContent, setOnlyWithContent] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null
@@ -44,16 +52,77 @@ export const ExternalSessionsWorkbench: React.FC<
     return (getWorkspacePath() || '').replace(/\\/g, '/').toLowerCase();
   }, []);
 
+  const sessionById = useMemo(() => {
+    return new Map(sessions.map((s) => [s.id, s]));
+  }, [sessions]);
+
   // 建立 source:sourceSessionId -> Conex sessionId 的映射，支持一键直达历史对话
   const existingSessionMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const s of sessions) {
       if (s.importMeta?.source && s.importMeta.sourceSessionId) {
-        map.set(`${s.importMeta.source}:${s.importMeta.sourceSessionId}`, s.id);
+        const source = s.importMeta.source;
+        if (source === 'claude-code' || source === 'codex') {
+          for (const key of externalImportKeyAliases(
+            source,
+            s.importMeta.sourceSessionId,
+            s.importMeta.sourcePath
+          )) {
+            map.set(key.toLowerCase(), s.id);
+          }
+        }
       }
     }
     return map;
   }, [sessions]);
+
+  // 精准双向校验判断是否已导入：不仅在 key 映射中命中，且二次校验来源一致性与标识匹配
+  const getExistingSessionId = useCallback(
+    (item: DetectedExternalSession): string | undefined => {
+      if (!item.source || !item.id) return undefined;
+      const itemAliases = externalImportKeyAliases(
+        item.source,
+        item.id,
+        item.path
+      );
+      const itemKeySet = new Set(itemAliases.map((k) => k.toLowerCase()));
+
+      for (const key of itemAliases) {
+        const sid = existingSessionMap.get(key.toLowerCase());
+        if (!sid) continue;
+        const matched = sessionById.get(sid);
+        if (
+          !matched?.importMeta?.source ||
+          !matched.importMeta.sourceSessionId
+        ) {
+          continue;
+        }
+        // 双向强校验 1：来源系统必须完全一致（claude-code 与 codex 严防交叉误判）
+        if (matched.importMeta.source !== item.source) {
+          continue;
+        }
+        // 双向强校验 2：原始 sourceSessionId 精确相等
+        const targetId = matched.importMeta.sourceSessionId
+          .trim()
+          .toLowerCase();
+        const itemId = item.id.trim().toLowerCase();
+        if (targetId === itemId) {
+          return sid;
+        }
+        // 双向强校验 3：若不是直接字面相等，必须在其严格受控的 canonical key 集合中双向命中
+        const targetKeys = externalImportKeyAliases(
+          matched.importMeta.source as ExternalSessionSource,
+          matched.importMeta.sourceSessionId,
+          matched.importMeta.sourcePath
+        );
+        if (targetKeys.some((tk) => itemKeySet.has(tk.toLowerCase()))) {
+          return sid;
+        }
+      }
+      return undefined;
+    },
+    [existingSessionMap, sessionById]
+  );
 
   // 扫描逻辑
   const handleScan = useCallback(
@@ -99,9 +168,11 @@ export const ExternalSessionsWorkbench: React.FC<
       if (filterSource === 'workspace' && !isMatchingWorkspace(s)) return false;
       if (filterSource === 'claude' && s.source !== 'claude-code') return false;
       if (filterSource === 'codex' && s.source !== 'codex') return false;
+      if (onlyWithContent && (!s.messageCount || s.messageCount <= 0))
+        return false;
       return true;
     });
-  }, [detected, filterSource, isMatchingWorkspace]);
+  }, [detected, filterSource, isMatchingWorkspace, onlyWithContent]);
 
   // 自动选中有且仅有的首项，或者如果选中项不在当前过滤集中时保持同步
   const activeSession = useMemo(() => {
@@ -130,6 +201,20 @@ export const ExternalSessionsWorkbench: React.FC<
       setImportingId(null);
     }
   };
+
+  // 单个删除已接续的会话
+  const handleDeleteExisting = useCallback(
+    (existingId: string) => {
+      const success = deleteImportedSession(existingId);
+      if (success) {
+        showToast('已删除该接续对话并记录防静默标记');
+        onRefresh?.();
+      } else {
+        showToast('删除会话失败');
+      }
+    },
+    [showToast, onRefresh]
+  );
 
   const formatTime = (ts?: number) => {
     if (!ts) return '';
@@ -223,9 +308,25 @@ export const ExternalSessionsWorkbench: React.FC<
               </Button>
             </div>
 
-            <span className={styles.sessionCountText}>
-              共 {filteredSessions.length} 条
-            </span>
+            <div className={styles.filterRightSlot}>
+              <Button
+                size="xs"
+                variant={onlyWithContent ? 'secondary' : 'ghost'}
+                className={`${styles.filterTabBtn} ${onlyWithContent ? styles.activeTab : ''}`}
+                onClick={() => setOnlyWithContent((v) => !v)}
+                title={
+                  onlyWithContent
+                    ? '当前仅显示有真实内容的对话，点击显示全部'
+                    : '过滤隐藏空对话'
+                }
+              >
+                <AppIcon name="sliders" size={11} />
+                <span>{onlyWithContent ? '仅有内容' : '全部会话'}</span>
+              </Button>
+              <span className={styles.sessionCountText}>
+                共 {filteredSessions.length} 条
+              </span>
+            </div>
           </div>
 
           <div className={styles.sessionCardsList}>
@@ -246,16 +347,16 @@ export const ExternalSessionsWorkbench: React.FC<
               </div>
             ) : (
               filteredSessions.map((item) => {
-                const key = `${item.source}:${item.id}`;
-                const existingId = existingSessionMap.get(key);
+                const existingId = getExistingSessionId(item);
                 const isImported = Boolean(existingId);
+                const isEmpty = !item.messageCount || item.messageCount <= 0;
                 const isSelected = activeSession?.id === item.id;
                 const isMatch = isMatchingWorkspace(item);
 
                 return (
                   <div
                     key={item.id}
-                    className={`${styles.sessionCard} ${isSelected ? styles.selectedCard : ''} ${isImported ? styles.cardImported : ''}`}
+                    className={`${styles.sessionCard} ${isSelected ? styles.selectedCard : ''} ${isImported ? styles.cardImported : ''} ${isEmpty ? styles.cardEmpty : ''}`}
                     onClick={() => setSelectedSessionId(item.id)}
                     role="button"
                     tabIndex={0}
@@ -266,36 +367,48 @@ export const ExternalSessionsWorkbench: React.FC<
                       }
                     }}
                   >
-                    <div className={styles.sessionCardTop}>
-                      <div className={styles.sessionMetaGroup}>
-                        <span className={styles.sourceText}>
-                          {item.source === 'claude-code' ? 'Claude' : 'Codex'}
-                        </span>
-                        <span className={styles.metaDot}>·</span>
-                        <span className={styles.sessionTime}>
-                          {formatTime(item.updatedAt)}
-                        </span>
-                        {filterSource === 'all' && !isMatch && item.project && (
-                          <>
-                            <span className={styles.metaDot}>·</span>
-                            <span className={styles.foreignProject}>
-                              {item.project}
-                            </span>
-                          </>
-                        )}
-                      </div>
-
-                      <div className={styles.cardStatusSlot}>
-                        {isImported ? (
+                    <div className={styles.sessionCardHeader}>
+                      <div className={styles.sessionTitle}>{item.title}</div>
+                      {isImported ? (
+                        <div className={styles.cardStatusSlot}>
                           <span className={styles.statusImported}>
                             <AppIcon name="check" size={11} />
                             <span>已接续</span>
                           </span>
-                        ) : null}
-                      </div>
+                        </div>
+                      ) : null}
                     </div>
 
-                    <div className={styles.sessionTitle}>{item.title}</div>
+                    <div className={styles.sessionMetaGroup}>
+                      <span className={styles.sourceText}>
+                        {item.source === 'claude-code' ? 'Claude' : 'Codex'}
+                      </span>
+                      <span className={styles.metaDot}>·</span>
+                      <span className={styles.sessionTime}>
+                        {formatTime(item.updatedAt)}
+                      </span>
+                      {isEmpty ? (
+                        <>
+                          <span className={styles.metaDot}>·</span>
+                          <span className={styles.emptySessionLabel}>
+                            （空）
+                          </span>
+                        </>
+                      ) : item.messageCount ? (
+                        <>
+                          <span className={styles.metaDot}>·</span>
+                          <span>{item.messageCount} 条消息</span>
+                        </>
+                      ) : null}
+                      {filterSource === 'all' && !isMatch && item.project && (
+                        <>
+                          <span className={styles.metaDot}>·</span>
+                          <span className={styles.foreignProject}>
+                            {item.project}
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 );
               })
@@ -312,12 +425,9 @@ export const ExternalSessionsWorkbench: React.FC<
               navigateToChatSession(sid);
               showToast('已打开历史对话');
             }}
+            onDeleteExisting={handleDeleteExisting}
             existingSessionId={
-              activeSession
-                ? existingSessionMap.get(
-                    `${activeSession.source}:${activeSession.id}`
-                  )
-                : undefined
+              activeSession ? getExistingSessionId(activeSession) : undefined
             }
             isBusy={activeSession ? importingId === activeSession.id : false}
           />

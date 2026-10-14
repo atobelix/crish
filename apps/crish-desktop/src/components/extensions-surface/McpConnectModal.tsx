@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Dialog, Button } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 import { clientApi, type McpServer, type Settings } from '../../api/clientApi';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettingsStore } from '../../store/storeAccess';
 import { useToast } from '../../services/toast/ToastContext';
 import {
   detectExternalMcpServers,

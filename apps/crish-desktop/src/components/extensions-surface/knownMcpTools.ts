@@ -149,6 +149,7 @@ export const KNOWN_MCP_TOOL_MAP: Record<string, string[]> = {
   fetch: ['fetch_url', 'download_content'],
   sqlite: ['read_query', 'write_query', 'list_tables', 'describe_table'],
   git: ['git_status', 'git_diff', 'git_commit', 'git_log'],
+  node_repl: ['eval_js', 'exec_script', 'inspect_scope', 'reset_runtime'],
 };
 
 export function resolveMcpTools(
@@ -162,6 +163,14 @@ export function resolveMcpTools(
   }
   const needle =
     `${name} ${command || ''} ${(args || []).join(' ')}`.toLowerCase();
+
+  if (
+    needle.includes('node_repl') ||
+    needle.includes('node-repl') ||
+    needle.includes('node repl')
+  ) {
+    return [...(KNOWN_MCP_TOOL_MAP['node_repl'] || [])];
+  }
 
   if (
     needle.includes('chrome-devtools') ||

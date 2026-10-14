@@ -56,59 +56,76 @@ export const ExtensionsCatalogGrid: React.FC<ExtensionsCatalogGridProps> = ({
         </div>
       ) : (
         <div className={styles.cardsGrid}>
-          {catalogItems.map((item) => (
-            <div
-              key={item.id}
-              className={styles.compactExtCard}
-              onClick={() => onSelectDetail(item.nativeItem)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onSelectDetail(item.nativeItem);
-                }
-              }}
-            >
-              <div className={styles.cardHeaderRow}>
-                <div className={styles.cardHeaderLeft}>
-                  <div className={styles.compactCardIcon}>
-                    <AppIcon name={item.icon} size={15} />
+          {catalogItems.map((item) => {
+            const isInstalled = Boolean(item.isInstalled || item.isEnabled);
+            return (
+              <div
+                key={item.id}
+                className={styles.compactExtCard}
+                onClick={() => onSelectDetail(item.nativeItem)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectDetail(item.nativeItem);
+                  }
+                }}
+              >
+                <div className={styles.cardHeaderRow}>
+                  <div className={styles.cardHeaderLeft}>
+                    <div className={styles.compactCardIcon}>
+                      <AppIcon name={item.icon} size={15} />
+                    </div>
+                    <span className={styles.compactCardName}>{item.name}</span>
                   </div>
-                  <span className={styles.compactCardName}>{item.name}</span>
+                  <div
+                    className={styles.cardHeaderRight}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {isInstalled ? (
+                      <span
+                        className={styles.installedTag}
+                        role="status"
+                        aria-label={`${item.name} 已安装`}
+                        onClick={() => onSelectDetail(item.nativeItem)}
+                      >
+                        <AppIcon name="check" size={12} />
+                        <span>已安装</span>
+                      </span>
+                    ) : (
+                      <Tooltip content="安装">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className={styles.iconActionBtn}
+                          disabled={busyId === item.id}
+                          onClick={() => onInstall(item)}
+                          aria-label={`安装 ${item.name}`}
+                        >
+                          <AppIcon
+                            name={busyId === item.id ? 'refresh' : 'download'}
+                            size={14}
+                            className={
+                              busyId === item.id ? styles.spinning : ''
+                            }
+                          />
+                        </Button>
+                      </Tooltip>
+                    )}
+                  </div>
                 </div>
-                <div
-                  className={styles.cardHeaderRight}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Tooltip content="安装">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={styles.iconActionBtn}
-                      disabled={busyId === item.id}
-                      onClick={() => onInstall(item)}
-                      aria-label={`安装 ${item.name}`}
-                    >
-                      <AppIcon
-                        name={busyId === item.id ? 'refresh' : 'download'}
-                        size={14}
-                        className={busyId === item.id ? styles.spinning : ''}
-                      />
-                    </Button>
-                  </Tooltip>
+                <Tooltip content={item.description}>
+                  <div className={styles.cardDescRow}>{item.description}</div>
+                </Tooltip>
+                <div className={styles.cardFooterRow}>
+                  <span className={styles.cardBadge}>
+                    {item.isOfficial ? '官方' : '精选'}
+                  </span>
                 </div>
               </div>
-              <Tooltip content={item.description}>
-                <div className={styles.cardDescRow}>{item.description}</div>
-              </Tooltip>
-              <div className={styles.cardFooterRow}>
-                <span className={styles.cardBadge}>
-                  {item.isOfficial ? '官方' : '精选'}
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

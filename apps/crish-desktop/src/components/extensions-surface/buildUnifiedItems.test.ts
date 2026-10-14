@@ -207,4 +207,233 @@ describe('buildUnifiedItems', () => {
     expect(mcpItem?.rawMcp?.tools).toHaveLength(30);
     expect(mcpItem?.description).toBe('30 个可用工具');
   });
+
+  describe('external platform adaptation (Claude Code / Codex / Antigravity / Cursor)', () => {
+    it('adapts Antigravity skill and MCP with sparkles icon and Antigravity source', () => {
+      const antigravitySkill: DesktopSkill = {
+        id: 'agy-cleanup',
+        name: 'disk-cleanup',
+        description: '',
+        filePath: '/home/user/.gemini/antigravity/skills/disk-cleanup/SKILL.md',
+        activation: 'enabled',
+        system: false,
+      };
+      const antigravityMcp: McpServer = {
+        id: 'agy-mcp',
+        name: 'antigravity-crawler',
+        type: 'stdio',
+        status: 'connected',
+        tools: [],
+      };
+
+      const items = buildUnifiedItems({
+        skills: [antigravitySkill],
+        mcpServers: [],
+        settingsMcpServers: [antigravityMcp],
+        installed: [],
+        catalogInstalled: new Set(),
+      });
+
+      const skillItem = items.find((i) => i.name === 'disk-cleanup');
+      expect(skillItem).toBeDefined();
+      expect(skillItem?.source).toBe('Antigravity');
+      expect(skillItem?.icon).toBe('sparkles');
+      expect(skillItem?.description).toContain('来自 Antigravity 的');
+
+      const mcpItem = items.find((i) => i.name === 'antigravity-crawler');
+      expect(mcpItem).toBeDefined();
+      expect(mcpItem?.source).toBe('Antigravity');
+      expect(mcpItem?.icon).toBe('sparkles');
+      expect(mcpItem?.description).toBe('来自 Antigravity 的 MCP 服务');
+    });
+
+    it('adapts Claude Code skill and MCP with bot icon and Claude Code source', () => {
+      const claudeSkill: DesktopSkill = {
+        id: 'claude-skill',
+        name: 'claude-analyzer',
+        description: '',
+        filePath: '/home/user/.claude/skills/analyzer.md',
+        activation: 'enabled',
+        system: false,
+      };
+      const claudeMcp: McpServer = {
+        id: 'claude-mcp',
+        name: 'claude-code-helper',
+        type: 'stdio',
+        source: 'Claude Code',
+        status: 'connected',
+        tools: ['search_docs'],
+      };
+
+      const items = buildUnifiedItems({
+        skills: [claudeSkill],
+        mcpServers: [],
+        settingsMcpServers: [claudeMcp],
+        installed: [],
+        catalogInstalled: new Set(),
+      });
+
+      const skillItem = items.find((i) => i.name === 'claude-analyzer');
+      expect(skillItem).toBeDefined();
+      expect(skillItem?.source).toBe('Claude Code');
+      expect(skillItem?.icon).toBe('bot');
+      expect(skillItem?.description).toContain('来自 Claude Code 的');
+
+      const mcpItem = items.find((i) => i.name === 'claude-code-helper');
+      expect(mcpItem).toBeDefined();
+      expect(mcpItem?.source).toBe('Claude Code');
+      expect(mcpItem?.icon).toBe('bot');
+      expect(mcpItem?.description).toBe('1 个可用工具');
+    });
+
+    it('adapts Codex skill and MCP with terminal icon and Codex source', () => {
+      const codexSkill: DesktopSkill = {
+        id: 'codex-skill',
+        name: 'codex-test-runner',
+        description: '',
+        filePath: '/home/user/.codex/skills/runner.md',
+        activation: 'enabled',
+        system: false,
+      };
+      const codexMcp: McpServerInfo = {
+        id: 'mcp-codex',
+        name: 'codex-eval',
+        source: 'Codex',
+        state: 'ready',
+        status: 'connected',
+        tools: [],
+      };
+
+      const items = buildUnifiedItems({
+        skills: [codexSkill],
+        mcpServers: [codexMcp],
+        installed: [],
+        catalogInstalled: new Set(),
+      });
+
+      const skillItem = items.find((i) => i.name === 'codex-test-runner');
+      expect(skillItem).toBeDefined();
+      expect(skillItem?.source).toBe('Codex');
+      expect(skillItem?.icon).toBe('terminal');
+      expect(skillItem?.description).toContain('来自 Codex 的');
+
+      const mcpItem = items.find((i) => i.name === 'codex-eval');
+      expect(mcpItem).toBeDefined();
+      expect(mcpItem?.source).toBe('Codex');
+      expect(mcpItem?.icon).toBe('terminal');
+      expect(mcpItem?.description).toBe('来自 Codex 的 MCP 服务');
+    });
+
+    it('adapts Cursor skill and MCP with code icon and Cursor source', () => {
+      const cursorSkill: DesktopSkill = {
+        id: 'cursor-skill',
+        name: 'cursor-navigation',
+        description: '精准跳转源码定义',
+        filePath: '/home/user/.cursor/skills/nav.md',
+        activation: 'enabled',
+        system: false,
+      };
+      const cursorMcp: McpServer = {
+        id: 'cursor-mcp',
+        name: 'cursor-lens',
+        type: 'stdio',
+        source: 'Cursor',
+        status: 'connected',
+        tools: ['lens_symbol'],
+      };
+
+      const items = buildUnifiedItems({
+        skills: [cursorSkill],
+        mcpServers: [],
+        settingsMcpServers: [cursorMcp],
+        installed: [],
+        catalogInstalled: new Set(),
+      });
+
+      const skillItem = items.find((i) => i.name === 'cursor-navigation');
+      expect(skillItem).toBeDefined();
+      expect(skillItem?.source).toBe('Cursor');
+      expect(skillItem?.icon).toBe('code');
+      // Preserves existing explicit description
+      expect(skillItem?.description).toBe('精准跳转源码定义');
+
+      const mcpItem = items.find((i) => i.name === 'cursor-lens');
+      expect(mcpItem).toBeDefined();
+      expect(mcpItem?.source).toBe('Cursor');
+      expect(mcpItem?.icon).toBe('code');
+      expect(mcpItem?.description).toBe('1 个可用工具');
+    });
+
+    it('supports customPlugins parameter with platform adaptation and deduplication', () => {
+      const items = buildUnifiedItems({
+        skills: [],
+        mcpServers: [],
+        installed: [],
+        catalogInstalled: new Set(),
+        customPlugins: [
+          {
+            id: 'cursor-plugin-1',
+            name: 'Cursor Quick Fix',
+            version: '1.2.0',
+            description: '快速自动修复代码问题',
+            type: 'custom',
+            createdAt: Date.now(),
+          },
+        ],
+      });
+
+      const pluginItem = items.find(
+        (i) => i.id === 'custom-plugin:cursor-plugin-1'
+      );
+      expect(pluginItem).toBeDefined();
+      expect(pluginItem?.source).toBe('Cursor');
+      expect(pluginItem?.icon).toBe('code');
+      expect(pluginItem?.description).toBe('快速自动修复代码问题');
+    });
+  });
+
+  describe('catalog and market shelf integration', () => {
+    it('always provides catalogEntry and scope for canonical import plugin when installed', () => {
+      const items = buildUnifiedItems({
+        skills: [],
+        mcpServers: [],
+        installed: [],
+        catalogInstalled: new Set(),
+      });
+
+      const importItem = items.find(
+        (i) => i.id === '@crish/plugin-import-claude-codex'
+      );
+      expect(importItem).toBeDefined();
+      expect(importItem?.scope).toBe('both');
+      expect(importItem?.isInstalled).toBe(true);
+      expect(importItem?.catalogEntry).toBeDefined();
+      expect(importItem?.catalogEntry?.name).toBe('外部历史对话接续与导入');
+    });
+
+    it('marks canonical import plugin as catalog with isInstalled: false when uninstalled', () => {
+      localStorage.setItem(
+        'crish_official_plugins_uninstalled_v1',
+        JSON.stringify(['@crish/plugin-import-claude-codex'])
+      );
+
+      const items = buildUnifiedItems({
+        skills: [],
+        mcpServers: [],
+        installed: [],
+        catalogInstalled: new Set(),
+      });
+
+      const importItem = items.find(
+        (i) => i.id === '@crish/plugin-import-claude-codex'
+      );
+      expect(importItem).toBeDefined();
+      expect(importItem?.scope).toBe('catalog');
+      expect(importItem?.isInstalled).toBe(false);
+      expect(importItem?.isEnabled).toBe(false);
+      expect(importItem?.catalogEntry).toBeDefined();
+
+      localStorage.removeItem('crish_official_plugins_uninstalled_v1');
+    });
+  });
 });

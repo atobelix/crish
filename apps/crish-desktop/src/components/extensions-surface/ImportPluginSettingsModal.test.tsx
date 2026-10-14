@@ -128,4 +128,57 @@ describe('ImportPluginSettingsModal', () => {
 
     expect(saveCodexSpy).toHaveBeenCalledWith(null);
   });
+
+  it('renders imported sessions management card and handles clean all flow', async () => {
+    // Import dynamically or spy on cleanAllImportedExternalSessions
+    const importSessionsModule =
+      await import('../../api/import/importSessions');
+    const cleanSpy = vi
+      .spyOn(importSessionsModule, 'cleanAllImportedExternalSessions')
+      .mockResolvedValue(5);
+
+    const sessionStoreModule = await import('../../store/sessionStore');
+    vi.spyOn(sessionStoreModule, 'useSessionStore').mockImplementation(((
+      selector: any
+    ) => {
+      const state = {
+        sessions: [
+          {
+            id: '1',
+            importMeta: { source: 'claude-code', sourceSessionId: 'c1' },
+          },
+          { id: '2', importMeta: { source: 'codex', sourceSessionId: 'x1' } },
+        ],
+      };
+      return selector ? selector(state) : state;
+    }) as any);
+
+    render(
+      <ToastProvider>
+        <ImportPluginSettingsModal
+          open={true}
+          onClose={onClose}
+          onScanNeeded={onScanNeeded}
+        />
+      </ToastProvider>
+    );
+
+    expect(screen.getByText('已导入外部对话管理')).toBeDefined();
+    expect(
+      screen.getByText(/当前系统内共有 2 个已导入的外部对话/)
+    ).toBeDefined();
+
+    const cleanBtn = screen.getByRole('button', { name: /清空所有已导入对话/ });
+    expect(cleanBtn).toBeDefined();
+
+    // Click to open confirmation
+    fireEvent.click(cleanBtn);
+    expect(screen.getByText(/确定清空全部 2 个已导入外部对话？/)).toBeDefined();
+
+    // Click confirm
+    const confirmBtn = screen.getByRole('button', { name: '确认清空' });
+    fireEvent.click(confirmBtn);
+
+    expect(cleanSpy).toHaveBeenCalled();
+  });
 });

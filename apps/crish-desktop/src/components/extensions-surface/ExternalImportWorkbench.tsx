@@ -1,15 +1,23 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Button, SegmentedControl } from '../ui';
+import { Button, SegmentedControl, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 import { useToast } from '../../services/toast/ToastContext';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettingsStore } from '../../store/storeAccess';
 import { clientApi, type Settings, type McpServer } from '../../api/clientApi';
 import {
   pickSkillDirectory,
   addExtraSkillDir,
   createProjectSkill,
+  createGlobalSkill,
+  setSkillActivation,
   discoverSkills,
+  tryHomeDir,
+  readTextAny,
+  normalizeSlashName,
+  skillStableId,
+  type DesktopSkill,
 } from '../../api/skillsApi';
+
 import {
   detectExternalMcpServers,
   DEFAULT_FALLBACK_MCP,
@@ -17,9 +25,12 @@ import {
 } from './detectExternalMcpServers';
 import {
   detectExternalSkills,
+  isDisallowedSkillName,
+  isQualifiedSkill,
   type DetectedExternalSkill,
 } from './detectExternalSkills';
 import { resolveMcpTools } from './McpConnectModal';
+import { SkillDetailModal, type SkillDetailTarget } from './SkillDetailModal';
 import styles from './ExternalImportWorkbench.module.css';
 
 export type ImportCategory = 'mcp' | 'skill';
@@ -27,7 +38,14 @@ export type ImportCategory = 'mcp' | 'skill';
 export interface ExternalImportItem {
   id: string;
   kind: 'mcp' | 'skill';
-  source: 'Antigravity' | 'Claude Desktop' | 'Cursor' | '本地' | 'Local';
+  source:
+    | 'Claude Code'
+    | 'Codex'
+    | 'Antigravity'
+    | 'Claude Desktop'
+    | 'Cursor'
+    | '本地'
+    | 'Local';
   name: string;
   description: string;
   rawMcp?: DetectedExternalMcpServer;
@@ -35,6 +53,7 @@ export interface ExternalImportItem {
 }
 
 export interface ExternalImportWorkbenchProps {
+  categoryFilter?: 'skill' | 'skills' | 'mcp';
   onImportSuccess?: () => void;
   onRefresh?: () => void;
   onBackToChat?: () => void;
@@ -42,12 +61,27 @@ export interface ExternalImportWorkbenchProps {
 
 export const ExternalImportWorkbench: React.FC<
   ExternalImportWorkbenchProps
-> = ({ onImportSuccess, onRefresh }) => {
+> = ({ categoryFilter, onImportSuccess, onRefresh, onBackToChat }) => {
   const { showToast } = useToast();
   const settingsMcpServers = useSettingsStore((s) => s.mcpServers || []);
 
   const [loading, setLoading] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<ImportCategory>('mcp');
+  const [selectedSkillForModal, setSelectedSkillForModal] =
+    useState<SkillDetailTarget | null>(null);
+  const initialCategory: ImportCategory =
+    categoryFilter === 'skills' || categoryFilter === 'skill' ? 'skill' : 'mcp';
+  const [activeCategory, setActiveCategory] =
+    useState<ImportCategory>(initialCategory);
+
+  useEffect(() => {
+    if (categoryFilter) {
+      setActiveCategory(
+        categoryFilter === 'skills' || categoryFilter === 'skill'
+          ? 'skill'
+          : 'mcp'
+      );
+    }
+  }, [categoryFilter]);
   const [mcpList, setMcpList] = useState<DetectedExternalMcpServer[]>([]);
   const [skillsList, setSkillsList] = useState<DetectedExternalSkill[]>([]);
   const [installedSkillNames, setInstalledSkillNames] = useState<Set<string>>(
@@ -67,7 +101,7 @@ export const ExternalImportWorkbench: React.FC<
         new Set(list.map((s: { name: string }) => s.name.toLowerCase()))
       );
     } catch {
-      // ignore
+      /* ignore */
     }
   }, []);
 
@@ -80,13 +114,9 @@ export const ExternalImportWorkbench: React.FC<
           detectExternalSkills().catch(() => []),
           loadSkillsState(),
         ]);
-
         setMcpList(detectedMcp.length > 0 ? detectedMcp : DEFAULT_FALLBACK_MCP);
         setSkillsList(detectedSkills);
-
-        if (isManual) {
-          showToast('已完成外部应用 MCP 服务与技能探测扫描');
-        }
+        if (isManual) showToast('已完成外部应用 MCP 服务与技能探测扫描');
       } catch (err) {
         showToast(
           `扫描外部配置失败：${err instanceof Error ? err.message : String(err)}`
@@ -121,8 +151,23 @@ export const ExternalImportWorkbench: React.FC<
     try {
       const selectedDir = await pickSkillDirectory();
       if (!selectedDir) return;
-      addExtraSkillDir(selectedDir);
-      showToast(`已成功导入技能目录：${selectedDir}`);
+      const rawHome = await tryHomeDir();
+      const envHome =
+        typeof process !== 'undefined'
+          ? process.env?.USERPROFILE || process.env?.HOME
+          : '';
+      const homeDir = (rawHome?.trim() || envHome || '')
+        .replace(/\\/g, '/')
+        .replace(/\/+$/, '');
+      const norm = selectedDir.replace(/\\/g, '/');
+      const expandedDir =
+        homeDir && (norm === '~' || norm.startsWith('~/'))
+          ? norm === '~'
+            ? homeDir
+            : `${homeDir}/${norm.slice(2)}`
+          : selectedDir;
+      addExtraSkillDir(expandedDir);
+      showToast(`已成功导入技能目录：${expandedDir}`);
       window.dispatchEvent(new CustomEvent('crish-skills-changed'));
       void loadSkillsState();
       notifyChange();
@@ -159,7 +204,6 @@ export const ExternalImportWorkbench: React.FC<
       await clientApi.saveSettingsEx('__global__', 'global', {
         mcpServers: updated,
       } as unknown as Partial<Settings>);
-
       showToast(`已成功导入 MCP 服务「${newServer.name}」`);
       notifyChange();
     } catch (err) {
@@ -172,28 +216,144 @@ export const ExternalImportWorkbench: React.FC<
   // 导入单项技能
   const handleImportSkill = async (skill: DetectedExternalSkill) => {
     try {
-      if (skill.skillDir) {
-        addExtraSkillDir(skill.skillDir);
-        showToast(`已成功引入技能目录「${skill.name}」`);
+      if (isDisallowedSkillName(skill.name) || !isQualifiedSkill(skill)) {
+        showToast(`技能「${skill.name}」属于不合规或未适配脚本，已禁止导入`);
+        return;
+      }
+
+      const rawHome = await tryHomeDir();
+      const envHome =
+        typeof process !== 'undefined'
+          ? process.env?.USERPROFILE || process.env?.HOME
+          : '';
+      const homeDir = (rawHome?.trim() || envHome || '')
+        .replace(/\\/g, '/')
+        .replace(/\/+$/, '');
+      const expandTilde = (p?: string): string => {
+        if (!p) return '';
+        const n = p.replace(/\\/g, '/');
+        if (
+          homeDir &&
+          (n === '~' || n.startsWith('~/') || n.startsWith('~\\'))
+        ) {
+          return n === '~'
+            ? homeDir
+            : `${homeDir}/${n.slice(2).replace(/^[\\/]+/, '')}`;
+        }
+        return n;
+      };
+      const expandedFilePath = expandTilde(skill.filePath);
+      const expandedSkillDir = expandTilde(
+        skill.skillDir ||
+          (skill.filePath ? skill.filePath.replace(/[\\/][^\\/]+$/, '') : '')
+      );
+
+      let contentToSave = skill.content?.trim();
+      if (!contentToSave && expandedFilePath) {
+        try {
+          const text = await readTextAny(expandedFilePath);
+          if (text !== null && text !== undefined && !text.trim()) {
+            showToast(`技能「${skill.name}」正文为空，无法导入`);
+            return;
+          }
+          if (text?.trim()) contentToSave = text.trim();
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const slug =
+        normalizeSlashName(skill.name) ||
+        skill.name.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+      const desc = (skill.description || `${skill.name} 技能`).trim();
+      if (!contentToSave) {
+        contentToSave = [
+          '---',
+          `name: ${slug}`,
+          `description: ${JSON.stringify(desc)}`,
+          'activation: recommended',
+          '---',
+          '',
+          `# ${skill.name}`,
+          '',
+          '## 何时使用',
+          `- ${desc}`,
+          '',
+          '## 步骤',
+          '1. 阅读任务上下文',
+          '2. 按本技能约定执行',
+          '3. 完成后做简要校验',
+          '',
+        ].join('\n');
+      }
+
+      let savedSkillPath = '';
+      let savedSkillDir = '';
+      let saveScope: 'project' | 'global' = 'project';
+
+      const projRes = await createProjectSkill({
+        name: skill.name,
+        description: skill.description,
+        content: contentToSave,
+        overwrite: true,
+      });
+
+      if (projRes.ok) {
+        savedSkillPath = projRes.skillPath;
+        savedSkillDir = projRes.skillDir;
+        saveScope = 'project';
       } else {
-        const res = await createProjectSkill({
+        const globalRes = await createGlobalSkill({
           name: skill.name,
           description: skill.description,
+          homeDir,
+          content: contentToSave,
+          overwrite: true,
         });
-        if (res.ok) {
-          showToast(`已成功将技能「${skill.name}」导入当前工作区`);
-        } else if (skill.filePath) {
-          const dir = skill.filePath.replace(/[\\/][^\\/]+$/, '');
-          addExtraSkillDir(dir);
-          showToast(`已通过附加目录引入技能「${skill.name}」`);
+        if (globalRes.ok) {
+          savedSkillPath = globalRes.skillPath;
+          savedSkillDir = globalRes.skillDir;
+          saveScope = 'global';
+        } else if (expandedSkillDir) {
+          addExtraSkillDir(expandedSkillDir);
+          savedSkillDir = expandedSkillDir;
+          savedSkillPath = expandedFilePath || `${expandedSkillDir}/SKILL.md`;
+          saveScope = 'global';
         } else {
-          showToast(`导入技能失败：${res.error}`);
+          showToast(`导入技能失败：${projRes.error || globalRes.error}`);
           return;
         }
       }
+
+      const finalId = skillStableId(skill.name, savedSkillPath);
+      const importedSkill: DesktopSkill = {
+        id: finalId,
+        name: skill.name,
+        description: desc,
+        filePath: savedSkillPath,
+        baseDir: savedSkillDir,
+        content: contentToSave,
+        raw: contentToSave,
+        scope: saveScope,
+        activation: 'enabled',
+        tags: [],
+        appliesTo: [],
+        disableModelInvocation: false,
+        system: false,
+      };
+
+      await setSkillActivation(importedSkill, 'enabled');
       window.dispatchEvent(new CustomEvent('crish-skills-changed'));
-      void loadSkillsState();
+      await loadSkillsState();
       notifyChange();
+
+      if (saveScope === 'project' && projRes.ok) {
+        showToast(`已成功将技能「${skill.name}」导入当前工作区并启用`);
+      } else if (saveScope === 'global' && !expandedSkillDir) {
+        showToast(`已成功将技能「${skill.name}」导入全局技能库并启用`);
+      } else {
+        showToast(`已成功导入技能「${skill.name}」并启用`);
+      }
     } catch (err) {
       showToast(
         `导入技能失败：${err instanceof Error ? err.message : String(err)}`
@@ -222,18 +382,43 @@ export const ExternalImportWorkbench: React.FC<
     }));
   }, [activeCategory, mcpList, skillsList]);
 
+  const openSkillDetail = (item: ExternalImportItem) => {
+    if (item.kind !== 'skill' || !item.rawSkill) return;
+    const isImported = installedSkillNames.has(item.name.toLowerCase());
+    setSelectedSkillForModal({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      source: item.source,
+      filePath: item.rawSkill.filePath,
+      content: item.rawSkill.content,
+      raw: item.rawSkill.content,
+      isInstalled: isImported,
+      rawExternal: item.rawSkill,
+    });
+  };
+
   return (
     <div className={styles.workbench}>
       {/* 顶部 Header */}
       <div className={styles.header}>
         <div className={styles.headerLeft}>
           <div className={styles.headerTitle}>
-            <AppIcon name="folder-input" size={18} />
+            <AppIcon
+              name={activeCategory === 'skill' ? 'sparkles' : 'cpu'}
+              size={18}
+            />
             <span>从其他应用导入</span>
+            <span style={{ marginLeft: 6, fontSize: '0.85em', opacity: 0.85 }}>
+              {activeCategory === 'skill'
+                ? '导入外部技能'
+                : '导入外部 MCP 服务'}
+            </span>
           </div>
           <div className={styles.headerSubtitle}>
-            一键导入 Antigravity、Claude Desktop、Cursor 探测到的 MCP 服务与
-            Skill
+            {activeCategory === 'skill'
+              ? '从其他软件（Antigravity、Claude Code、Codex）一键导入技能'
+              : '从其他软件（Antigravity、Claude Code、Codex、Claude Desktop）一键接入 MCP 服务'}
           </div>
         </div>
         <div className={styles.headerActions}>
@@ -265,21 +450,23 @@ export const ExternalImportWorkbench: React.FC<
 
       {/* 分类切换与计数栏 */}
       <div className={styles.toolbar}>
-        <div className={styles.segmentedWrapper}>
-          <SegmentedControl
-            size="sm"
-            value={activeCategory}
-            onChange={(val) => setActiveCategory(val as ImportCategory)}
-            options={[
-              { value: 'mcp', label: `MCP 服务 (${mcpList.length})` },
-              { value: 'skill', label: `技能 (${skillsList.length})` },
-            ]}
-            aria-label="导入分类切换"
-          />
-        </div>
+        {!categoryFilter ? (
+          <div className={styles.segmentedWrapper}>
+            <SegmentedControl
+              size="sm"
+              value={activeCategory}
+              onChange={(val) => setActiveCategory(val as ImportCategory)}
+              options={[
+                { value: 'mcp', label: `MCP 服务 (${mcpList.length})` },
+                { value: 'skill', label: `技能 (${skillsList.length})` },
+              ]}
+              aria-label="导入分类切换"
+            />
+          </div>
+        ) : null}
         <div className={styles.countBadge}>
           {activeCategory === 'mcp'
-            ? `已发现 ${mcpList.length} 项 MCP 服务`
+            ? `已发现 ${mcpList.length} 项${categoryFilter ? '外部 ' : ''}MCP 服务`
             : `已发现 ${skillsList.length} 项外部技能`}
         </div>
       </div>
@@ -291,7 +478,7 @@ export const ExternalImportWorkbench: React.FC<
             <AppIcon name="archive" size={32} />
             <div>
               {activeCategory === 'mcp'
-                ? '未发现外部应用（Antigravity、Claude Desktop、Cursor）的 MCP 服务'
+                ? '未发现外部应用（Claude Code、Codex、Antigravity、Cursor）的 MCP 服务'
                 : '未发现外部应用的技能包，可点击右上角「从文件夹导入...」手动引入'}
             </div>
           </div>
@@ -304,7 +491,22 @@ export const ExternalImportWorkbench: React.FC<
                   : installedSkillNames.has(item.name.toLowerCase());
 
               return (
-                <div key={item.id} className={styles.card}>
+                <div
+                  key={item.id}
+                  className={`${styles.card} ${item.kind === 'skill' ? styles.clickableSkillCard : ''}`}
+                  role={item.kind === 'skill' ? 'button' : undefined}
+                  tabIndex={item.kind === 'skill' ? 0 : undefined}
+                  onClick={() => openSkillDetail(item)}
+                  onKeyDown={(e) => {
+                    if (
+                      item.kind === 'skill' &&
+                      (e.key === 'Enter' || e.key === ' ')
+                    ) {
+                      e.preventDefault();
+                      openSkillDetail(item);
+                    }
+                  }}
+                >
                   <div className={styles.cardHeaderRow}>
                     <div className={styles.cardHeaderLeft}>
                       <div className={styles.cardIcon}>
@@ -314,43 +516,71 @@ export const ExternalImportWorkbench: React.FC<
                         />
                       </div>
                       <div className={styles.cardTitleGroup}>
-                        <span className={styles.cardName}>{item.name}</span>
-                        <span className={styles.sourceBadge}>
+                        <Tooltip content={item.name}>
+                          <span className={styles.cardName}>{item.name}</span>
+                        </Tooltip>
+                        <span
+                          className={styles.sourceBadge}
+                          data-source={item.source}
+                        >
                           {item.source}
                         </span>
                       </div>
                     </div>
-                    <div className={styles.cardHeaderRight}>
+                    <div
+                      className={styles.cardHeaderRight}
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {isImported ? (
-                        <span className={styles.importedBadge}>
-                          <AppIcon name="check" size={12} />
-                          <span>已导入</span>
-                        </span>
+                        <Tooltip content="已导入">
+                          <span
+                            className={styles.importedSymbol}
+                            aria-label="已导入"
+                          >
+                            <AppIcon name="check" size={14} />
+                          </span>
+                        </Tooltip>
                       ) : (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => {
-                            if (item.kind === 'mcp' && item.rawMcp) {
-                              void handleImportMcp(item.rawMcp);
-                            } else if (item.kind === 'skill' && item.rawSkill) {
-                              void handleImportSkill(item.rawSkill);
-                            }
-                          }}
-                        >
-                          导入
-                        </Button>
+                        <Tooltip content="导入">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className={styles.importSymbolBtn}
+                            aria-label="导入"
+                            onClick={() => {
+                              if (item.kind === 'mcp' && item.rawMcp)
+                                void handleImportMcp(item.rawMcp);
+                              else if (item.kind === 'skill' && item.rawSkill)
+                                void handleImportSkill(item.rawSkill);
+                            }}
+                          >
+                            <AppIcon name="download" size={13} />
+                          </Button>
+                        </Tooltip>
                       )}
                     </div>
                   </div>
-
-                  <div className={styles.cardDesc}>{item.description}</div>
+                  <Tooltip content={item.description}>
+                    <div className={styles.cardDesc}>{item.description}</div>
+                  </Tooltip>
                 </div>
               );
             })}
           </div>
         )}
       </div>
+      <SkillDetailModal
+        open={Boolean(selectedSkillForModal)}
+        onClose={() => setSelectedSkillForModal(null)}
+        skill={selectedSkillForModal}
+        onImport={async (target) => {
+          if (target.rawExternal) {
+            await handleImportSkill(target.rawExternal);
+            setSelectedSkillForModal(null);
+          }
+        }}
+        onBackToChat={onBackToChat}
+      />
     </div>
   );
 };

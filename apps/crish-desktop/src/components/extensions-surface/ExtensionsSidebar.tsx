@@ -6,6 +6,7 @@ import styles from './ExtensionsMainSurface.module.css';
 
 export interface ExtensionsSidebarProps {
   sidebarNav: 'explore' | 'featured' | 'import' | 'installed';
+  categoryFilter?: 'plugins' | 'skills' | 'mcp';
   onSelectNav: (nav: 'explore' | 'featured' | 'import') => void;
   installedItems: UnifiedExtensionItem[];
   selectedInstalledId: string | null;

@@ -1,16 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { Dialog, Button, Input, Textarea, SegmentedControl } from '../ui';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Dialog, Button, Input } from '../ui';
 import { AppIcon } from '../ui/icons';
 import { useToast } from '../../services/toast/ToastContext';
 import {
   saveCustomPlugin,
-  parseManualPluginInput,
+  parsePluginFromFileContent,
+  parsePluginFromZipFile,
+  parsePluginFromDirectoryFiles,
   type CustomPluginItem,
 } from './customPluginStorage';
 import styles from './PluginCreateModal.module.css';
 
 export interface PluginCreateModalProps {
   open: boolean;
+  initialTab?: 'create' | 'manual';
   onClose: () => void;
   onSuccess?: (plugin: CustomPluginItem) => void;
 }
@@ -22,84 +25,163 @@ export const PluginCreateModal: React.FC<PluginCreateModalProps> = ({
 }) => {
   const { showToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'create' | 'manual'>('create');
-  const [name, setName] = useState('');
-  const [pluginId, setPluginId] = useState('');
-  const [version, setVersion] = useState('1.0.0');
-  const [description, setDescription] = useState('');
-  const [idManuallyEdited, setIdManuallyEdited] = useState(false);
-  const [manualInput, setManualInput] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const dirInputRef = useRef<HTMLInputElement>(null);
+
+  const [loading, setLoading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [parsedPlugin, setParsedPlugin] = useState<CustomPluginItem | null>(
+    null
+  );
+  const [sourceName, setSourceName] = useState('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
-      setActiveTab('create');
-      setName('');
-      setPluginId('');
-      setVersion('1.0.0');
-      setDescription('');
-      setIdManuallyEdited(false);
-      setManualInput('');
+      setLoading(false);
+      setDragOver(false);
+      setParsedPlugin(null);
+      setSourceName('');
+      setErrorMsg(null);
     }
   }, [open]);
 
-  const handleNameChange = (val: string) => {
-    setName(val);
-    if (!idManuallyEdited) {
-      const slug = val
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9_-]/g, '-')
-        .replace(/-+/g, '-');
-      setPluginId(slug);
+  const processFile = useCallback(
+    async (file: File) => {
+      setLoading(true);
+      setErrorMsg(null);
+      try {
+        const isZip =
+          file.name.toLowerCase().endsWith('.zip') ||
+          file.type === 'application/zip' ||
+          file.type === 'application/x-zip-compressed';
+
+        let parsed: CustomPluginItem | null = null;
+        if (isZip) {
+          parsed = await parsePluginFromZipFile(file);
+        } else {
+          const text =
+            typeof file.text === 'function'
+              ? await file.text()
+              : await new Promise<string>((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onload = () => resolve(reader.result as string);
+                  reader.onerror = reject;
+                  reader.readAsText(file);
+                });
+          parsed = parsePluginFromFileContent(text, file.name);
+        }
+
+        if (parsed) {
+          setParsedPlugin(parsed);
+          setSourceName(file.name);
+        } else {
+          setErrorMsg(
+            `无法从文件「${file.name}」解析出有效插件配置，请检查 JSON 结构`
+          );
+          showToast('无法解析插件配置，请确保文件包含有效插件元数据');
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setErrorMsg(`解析文件失败：${msg}`);
+        showToast(`解析失败：${msg}`);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [showToast]
+  );
+
+  const processDirectoryFiles = useCallback(
+    async (files: File[]) => {
+      if (!files || files.length === 0) return;
+      setLoading(true);
+      setErrorMsg(null);
+      try {
+        const parsed = await parsePluginFromDirectoryFiles(files);
+        if (parsed) {
+          setParsedPlugin(parsed);
+          const first = files[0];
+          const relativePath = (first as any)?.webkitRelativePath || '';
+          const dirName =
+            (relativePath ? relativePath.split('/')[0] : '') ||
+            (first ? first.name : '') ||
+            '插件目录';
+          setSourceName(`${dirName}/ (${files.length} 个文件)`);
+        } else {
+          setErrorMsg(
+            '未能在所选目录中找到 manifest.json 或 package.json 配置文件'
+          );
+          showToast('未找到有效插件配置文件');
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setErrorMsg(`扫描目录失败：${msg}`);
+        showToast(`扫描失败：${msg}`);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [showToast]
+  );
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      void processFile(file);
+    }
+    e.target.value = '';
+  };
+
+  const handleDirInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      void processDirectoryFiles(Array.from(files));
+    }
+    e.target.value = '';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+
+    const singleFile = files[0];
+    if (files.length === 1 && singleFile) {
+      void processFile(singleFile);
+    } else {
+      void processDirectoryFiles(Array.from(files));
     }
   };
 
-  const handleSaveCreate = () => {
-    const trimmedName = name.trim();
-    const trimmedId = pluginId.trim();
+  const handleConfirmImport = () => {
+    if (!parsedPlugin) return;
 
-    if (!trimmedName) {
-      showToast('请输入插件名称');
-      return;
-    }
-    if (!trimmedId) {
-      showToast('请输入插件 ID（唯一标识符）');
-      return;
-    }
-
-    const item: CustomPluginItem = {
-      id: trimmedId,
-      name: trimmedName,
-      version: version.trim() || '1.0.0',
-      description: description.trim(),
-      type: 'custom',
-      tags: ['custom'],
-      createdAt: Date.now(),
-    };
-
-    saveCustomPlugin(item);
-    showToast(`自定义插件「${item.name}」已成功保存！`);
-    onSuccess?.(item);
+    saveCustomPlugin(parsedPlugin);
+    showToast(`已成功导入插件「${parsedPlugin.name}」`);
+    onSuccess?.(parsedPlugin);
     onClose();
   };
 
-  const handleInstallManual = () => {
-    const raw = manualInput.trim();
-    if (!raw) {
-      showToast('请输入插件 JSON 规格或本地路径 / npm 包名');
-      return;
-    }
-
-    const item = parseManualPluginInput(raw);
-    if (!item) {
-      showToast('无法解析插件规格或路径，请检查输入格式');
-      return;
-    }
-
-    saveCustomPlugin(item);
-    showToast(`成功安装插件「${item.name}」！`);
-    onSuccess?.(item);
-    onClose();
+  const handleReselect = () => {
+    setParsedPlugin(null);
+    setSourceName('');
+    setErrorMsg(null);
   };
 
   return (
@@ -107,8 +189,8 @@ export const PluginCreateModal: React.FC<PluginCreateModalProps> = ({
       size="lg"
       open={open}
       onClose={onClose}
-      title="添加与制作插件"
-      description="自主制作或手动导入自定义插件规格，扩展智能工作台能力"
+      title="导入插件"
+      description="选择插件压缩包 (.zip)、配置文件 (manifest.json / package.json) 或插件目录，智能自动解析元数据"
       classNames={{
         panel: styles.modalPanel,
         body: styles.modalBody,
@@ -118,120 +200,145 @@ export const PluginCreateModal: React.FC<PluginCreateModalProps> = ({
           <Button variant="ghost" size="sm" onClick={onClose}>
             取消
           </Button>
-          {activeTab === 'create' ? (
-            <Button
-              variant="primary"
-              size="sm"
-              icon={<AppIcon name="save" size={14} />}
-              onClick={handleSaveCreate}
-            >
-              保存自定义插件
-            </Button>
-          ) : (
-            <Button
-              variant="primary"
-              size="sm"
-              icon={<AppIcon name="download" size={14} />}
-              onClick={handleInstallManual}
-            >
-              解析并安装
-            </Button>
-          )}
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<AppIcon name="folder-input" size={14} />}
+            disabled={!parsedPlugin || loading}
+            loading={loading}
+            onClick={handleConfirmImport}
+          >
+            确认导入
+          </Button>
         </div>
       }
     >
-      <div className={styles.tabWrapper}>
-        <SegmentedControl
-          size="sm"
-          block
-          value={activeTab}
-          onChange={(v) => setActiveTab(v as 'create' | 'manual')}
-          options={[
-            {
-              value: 'create',
-              label: '制作自定义插件',
-              icon: <AppIcon name="puzzle" size={14} />,
-            },
-            {
-              value: 'manual',
-              label: '手动导入 / 规格安装',
-              icon: <AppIcon name="code" size={14} />,
-            },
-          ]}
-        />
-      </div>
+      {/* 隐藏的文件输入组件 */}
+      <Input
+        bare
+        ref={fileInputRef}
+        type="file"
+        accept=".zip,.json,application/json,application/zip,application/x-zip-compressed"
+        className={styles.hiddenInput}
+        data-testid="plugin-file-input"
+        onChange={handleFileInputChange}
+      />
+      <Input
+        bare
+        ref={dirInputRef}
+        type="file"
+        multiple
+        {...({ webkitdirectory: '', directory: '' } as any)}
+        className={styles.hiddenInput}
+        data-testid="plugin-dir-input"
+        onChange={handleDirInputChange}
+      />
 
-      {activeTab === 'create' ? (
-        <div className={styles.formGrid}>
-          <div className={styles.guideCard}>
-            <div className={styles.guideTitle}>
-              <AppIcon name="puzzle" size={16} />
-              <span>制作新的自定义插件</span>
-            </div>
-            <div className={styles.guideDesc}>
-              定义插件的基本信息与元数据，保存后可随时在扩展工作台中启用、配置或分享给其他协作者。
-            </div>
+      {errorMsg && <div className={styles.errorHint}>{errorMsg}</div>}
+
+      {!parsedPlugin ? (
+        <div
+          className={`${styles.dropZone} ${dragOver ? styles.dropZoneDragging : ''}`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+          role="region"
+          aria-label="插件文件上传区域"
+        >
+          <div className={styles.dropZoneIcon}>
+            <AppIcon name="folder-input" size={32} />
           </div>
-
-          <div className={styles.rowInputs}>
-            <Input
-              label="插件名称 (Name)"
-              placeholder="例如：My Awesome Tool"
-              value={name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              autoFocus
-            />
-            <Input
-              label="插件 ID (Identifier)"
-              placeholder="例如：my-awesome-tool"
-              value={pluginId}
-              onChange={(e) => {
-                setIdManuallyEdited(true);
-                setPluginId(e.target.value);
-              }}
-              hint="英文、数字与短横线，全局唯一标识"
-            />
+          <div className={styles.dropZoneTitle}>
+            {loading
+              ? '正在解析插件信息…'
+              : '点击选择文件，或将插件文件拖拽至此处'}
           </div>
-
-          <Input
-            label="版本号 (Version)"
-            placeholder="1.0.0"
-            value={version}
-            onChange={(e) => setVersion(e.target.value)}
-          />
-
-          <Textarea
-            label="功能描述 (Description)"
-            placeholder="描述此插件的主要功能、适用场景及执行参数…"
-            rows={4}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
+          <div className={styles.dropZoneDesc}>
+            支持插件压缩包 (.zip)、manifest.json、package.json
+            或选择整个插件目录，无需手动编写配置
+          </div>
+          <div
+            className={styles.dropZoneActions}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<AppIcon name="folder-input" size={14} />}
+              loading={loading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              选择文件
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<AppIcon name="folder" size={14} />}
+              loading={loading}
+              onClick={() => dirInputRef.current?.click()}
+            >
+              选择插件目录
+            </Button>
+          </div>
         </div>
       ) : (
-        <div className={styles.formGrid}>
-          <div className={styles.guideCard}>
-            <div className={styles.guideTitle}>
-              <AppIcon name="code" size={16} />
-              <span>导入 JSON 配置或安装外部包</span>
+        <div className={styles.previewCard} data-testid="plugin-preview-card">
+          <div className={styles.previewHeader}>
+            <div className={styles.previewTitle}>
+              <AppIcon name="puzzle" size={16} />
+              <span>已识别插件信息</span>
             </div>
-            <div className={styles.guideDesc}>
-              粘贴他人分享的插件 JSON 规格，或者输入本地文件路径（如
-              ./extensions/my-tool）与 npm 包名。
+            {sourceName && (
+              <span className={styles.fileBadge}>{sourceName}</span>
+            )}
+          </div>
+
+          <div className={styles.previewGrid}>
+            <div className={styles.previewField}>
+              <span className={styles.previewLabel}>插件名称</span>
+              <span className={styles.previewValue}>{parsedPlugin.name}</span>
+            </div>
+            <div className={styles.previewField}>
+              <span className={styles.previewLabel}>插件 ID</span>
+              <span className={styles.previewValue}>{parsedPlugin.id}</span>
+            </div>
+            <div className={styles.previewField}>
+              <span className={styles.previewLabel}>版本号</span>
+              <span className={styles.previewValue}>
+                {parsedPlugin.version}
+              </span>
+            </div>
+            <div className={styles.previewField}>
+              <span className={styles.previewLabel}>插件类型</span>
+              <span className={styles.previewValue}>
+                {parsedPlugin.type === 'tool' ? '工具插件' : '自定义插件'}
+              </span>
+            </div>
+            <div
+              className={`${styles.previewField} ${styles.previewDescField}`}
+            >
+              <span className={styles.previewLabel}>功能描述</span>
+              <span className={styles.previewDesc}>
+                {parsedPlugin.description}
+              </span>
             </div>
           </div>
 
-          <Textarea
-            label="插件 JSON 规格 / 本地路径 / npm 包名"
-            placeholder={`{\n  "id": "my-shared-tool",\n  "name": "协作工具",\n  "version": "1.0.0",\n  "description": "..."\n}\n\n或输入：@scope/plugin-name 或 ./plugins/custom-tool`}
-            rows={8}
-            className={styles.codeArea}
-            value={manualInput}
-            onChange={(e) => setManualInput(e.target.value)}
-            hint="系统将自动识别 JSON 结构并解析元数据，非 JSON 输入将作为扩展路径解析。"
-          />
+          <div className={styles.reselectRow}>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<AppIcon name="rotate-cw" size={12} />}
+              onClick={handleReselect}
+            >
+              重新选择
+            </Button>
+          </div>
         </div>
       )}
     </Dialog>
   );
 };
+
+export const PluginImportModal = PluginCreateModal;

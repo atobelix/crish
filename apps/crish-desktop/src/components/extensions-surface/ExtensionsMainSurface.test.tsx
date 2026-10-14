@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ExtensionsMainSurface } from './ExtensionsMainSurface';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useSessionStore } from '../../store/sessionStore';
 import * as customPluginStorage from './customPluginStorage';
 
 import { clientApi } from '../../api/clientApi';
@@ -80,7 +81,7 @@ describe('ExtensionsMainSurface', () => {
     expect(screen.getByRole('button', { name: /发现/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /精选/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^导入$/ })).toBeInTheDocument();
-    expect(screen.getByText(/已安装/)).toBeInTheDocument();
+    expect(screen.getAllByText(/已安装/).length).toBeGreaterThanOrEqual(1);
   });
 
   it('switches to 导入 nav and renders ExternalImportWorkbench and calls refresh', () => {
@@ -103,7 +104,7 @@ describe('ExtensionsMainSurface', () => {
     fireEvent.click(skillTab);
 
     expect(
-      screen.getByRole('button', { name: /\+ 添加技能/ })
+      screen.getByRole('button', { name: /添加技能/ })
     ).toBeInTheDocument();
     expect(screen.getByText('智能代码审计')).toBeInTheDocument();
   });
@@ -114,7 +115,7 @@ describe('ExtensionsMainSurface', () => {
     fireEvent.click(mcpTab);
 
     expect(
-      screen.getByRole('button', { name: /\+ 接入 MCP/ })
+      screen.getByRole('button', { name: /接入 MCP/ })
     ).toBeInTheDocument();
     expect(screen.getByText('PostgreSQL MCP')).toBeInTheDocument();
   });
@@ -143,13 +144,7 @@ describe('ExtensionsMainSurface', () => {
     const mcpRow = screen.getByText('PostgreSQL MCP');
     fireEvent.click(mcpRow);
 
-    expect(screen.getByText('运行就绪')).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /复制服务名称/ })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /测试连通性/ })
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText('已连接')).toBeInTheDocument();
 
     const switchBtn = screen.getByRole('switch', { name: /切换服务状态/ });
     fireEvent.click(switchBtn);
@@ -165,5 +160,89 @@ describe('ExtensionsMainSurface', () => {
         mcpServers: expect.any(Array),
       })
     );
+  });
+
+  it('displays canonical import plugin in 发现 market with 已安装 label when installed', () => {
+    localStorage.removeItem('crish_official_plugins_uninstalled_v1');
+    render(<ExtensionsMainSurface />);
+    expect(screen.getByText('发现生态')).toBeInTheDocument();
+    expect(
+      screen.getAllByText('外部历史对话接续与导入').length
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getByLabelText('外部历史对话接续与导入 已安装')
+    ).toBeInTheDocument();
+  });
+
+  it('displays canonical import plugin in 精选 market as well', () => {
+    localStorage.removeItem('crish_official_plugins_uninstalled_v1');
+    render(<ExtensionsMainSurface />);
+    const featuredNav = screen.getByRole('button', { name: /精选/ });
+    fireEvent.click(featuredNav);
+    expect(screen.getByText('精选推荐')).toBeInTheDocument();
+    expect(
+      screen.getAllByText('外部历史对话接续与导入').length
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getByLabelText('外部历史对话接续与导入 已安装')
+    ).toBeInTheDocument();
+  });
+
+  it('displays 安装 button in 发现 market when official plugin is uninstalled and allows reinstalling', () => {
+    localStorage.setItem(
+      'crish_official_plugins_uninstalled_v1',
+      JSON.stringify(['@crish/plugin-import-claude-codex'])
+    );
+    render(<ExtensionsMainSurface />);
+    expect(screen.getByText('发现生态')).toBeInTheDocument();
+    const installBtn = screen.getByRole('button', {
+      name: '安装 外部历史对话接续与导入',
+    });
+    expect(installBtn).toBeInTheDocument();
+
+    fireEvent.click(installBtn);
+    expect(mockRefresh).toHaveBeenCalled();
+    const uninstalledList = JSON.parse(
+      localStorage.getItem('crish_official_plugins_uninstalled_v1') || '[]'
+    );
+    expect(uninstalledList).not.toContain('@crish/plugin-import-claude-codex');
+    localStorage.removeItem('crish_official_plugins_uninstalled_v1');
+  });
+
+  it('handles 制作插件 by creating session, setting draft, and navigating to chat', () => {
+    const createSessionSpy = vi
+      .spyOn(useSessionStore.getState(), 'createSession')
+      .mockReturnValue('sess-new-plugin');
+    const setDraftSpy = vi.spyOn(
+      useSessionStore.getState(),
+      'setComposerDraft'
+    );
+    const onBackToChat = vi.fn();
+
+    render(<ExtensionsMainSurface onBackToChat={onBackToChat} />);
+
+    const makePluginBtn = screen.getByRole('button', { name: '制作插件' });
+    expect(makePluginBtn).toBeInTheDocument();
+    fireEvent.click(makePluginBtn);
+
+    expect(createSessionSpy).toHaveBeenCalledWith({ title: '制作新插件' });
+    expect(setDraftSpy).toHaveBeenCalledWith(
+      'sess-new-plugin',
+      '/skill:plugin 我想制作一个新的 Crish 插件，请引导我选择插件的方向与功能'
+    );
+    expect(onBackToChat).toHaveBeenCalled();
+  });
+
+  it('renders 导入插件 button and opens import modal when clicked', () => {
+    render(<ExtensionsMainSurface />);
+
+    const importBtn = screen.getByRole('button', { name: '导入插件' });
+    expect(importBtn).toBeInTheDocument();
+    fireEvent.click(importBtn);
+
+    expect(screen.getAllByText('导入插件').length).toBeGreaterThanOrEqual(1);
+    expect(
+      screen.getByText(/点击选择文件，或将插件文件拖拽至此处/)
+    ).toBeInTheDocument();
   });
 });

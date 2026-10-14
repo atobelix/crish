@@ -79,7 +79,7 @@
   flex-shrink: 0;
 }
 
-/* 极简扁平搜索框：无深黑边框与重阴影 */
+/* 顶栏搜索：侧栏同款透明输入，不用主输入框的胶囊圆角 */
 .searchBarWrapper {
   display: flex;
   align-items: center;
@@ -87,17 +87,19 @@
   width: 220px;
   min-width: 160px;
   max-width: 280px;
-  background: var(--bg-secondary);
-  border: var(--hairline-width, 1px) solid var(--border-subtle);
-  border-radius: var(--radius-input, 20px);
-  padding: 0 var(--space-2_5, 10px);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-m);
+  padding: 0 var(--space-2, 8px);
   height: 32px;
   box-sizing: border-box;
-  transition: border-color var(--duration-fast, 150ms) ease;
+  box-shadow: none;
 }
 
+.searchBarWrapper:hover,
 .searchBarWrapper:focus-within {
-  border-color: var(--border-color);
+  background: var(--tint-hover);
+  border: none;
   box-shadow: none;
 }
 
@@ -135,7 +137,7 @@
 }
 
 .headerActionBtn {
-  border-radius: 7px;
+  border-radius: var(--radius-btn);
   font-size: var(--font-size-xs, 12px);
   height: 32px;
   padding: 0 var(--space-3, 12px);
@@ -504,6 +506,29 @@
 .iconActionBtn:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
+}
+
+.installedTag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--text-tertiary);
+  background: var(--bg-card);
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  padding: 2px 7px;
+  border-radius: var(--radius-m, 6px);
+  font-weight: var(--font-weight-medium, 500);
+  user-select: none;
+  cursor: pointer;
+  transition:
+    color var(--duration-fast, 150ms) ease,
+    border-color var(--duration-fast, 150ms) ease;
+}
+
+.installedTag:hover {
+  color: var(--text-secondary);
+  border-color: var(--border-color);
 }
 
 /* --------------------------------------------------------------------------

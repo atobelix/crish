@@ -312,7 +312,7 @@
 
 .sourceAntigravity {
   background: var(--tint-hover, var(--bg-secondary));
-  color: var(--color-primary);
+  color: var(--accent-color);
 }
 .sourceClaude {
   background: var(--tint-hover, var(--bg-secondary));

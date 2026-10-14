@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from '../ui';
+import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 import type {
   DetectedExternalSession,
   MappedImportSession,
 } from '../../api/import/types';
 import { mapExternalSession } from '../../api/import/map';
-import styles from './ExtensionsMainSurface.module.css';
+import { MessageContent } from '../chat-message/MessageContent';
+import chatStyles from '../chat-message-row/ChatMessageRow.module.css';
+import styles from './ExternalSessionsWorkbench.module.css';
 
 export interface SessionPreviewPaneProps {
   session: DetectedExternalSession | null;
   onImportAndResume: (session: DetectedExternalSession) => Promise<void>;
   onOpenExisting: (sessionId: string) => void;
+  onDeleteExisting?: (sessionId: string) => void;
   existingSessionId?: string;
   isBusy: boolean;
 }
@@ -20,6 +23,7 @@ export const SessionPreviewPane: React.FC<SessionPreviewPaneProps> = ({
   session,
   onImportAndResume,
   onOpenExisting,
+  onDeleteExisting,
   existingSessionId,
   isBusy,
 }) => {
@@ -74,7 +78,17 @@ export const SessionPreviewPane: React.FC<SessionPreviewPaneProps> = ({
 
   const sourceName =
     session.source === 'claude-code' ? 'Claude Code' : 'Codex CLI';
-  const count = mapped ? mapped.messages.length : session.messageCount;
+  // 预览界面默认且恒定纯净：过滤无实际文本和思考的空工具调用步骤，仅展示人机核心对话
+  const displayMessages = (mapped?.messages || []).filter((msg) => {
+    if (msg.sender === 'user') {
+      return Boolean(msg.text && msg.text.trim());
+    }
+    return Boolean(
+      (msg.text && msg.text.trim()) || (msg.thinking && msg.thinking.trim())
+    );
+  });
+
+  const count = mapped ? displayMessages.length : session.messageCount;
   const countText = count !== undefined ? ` · ${count} 条消息` : '';
 
   return (
@@ -93,13 +107,28 @@ export const SessionPreviewPane: React.FC<SessionPreviewPaneProps> = ({
 
         <div className={styles.previewHeaderActions}>
           {existingSessionId ? (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => onOpenExisting(existingSessionId)}
-            >
-              打开已接续对话
-            </Button>
+            <div className={styles.existingActionGroup}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => onOpenExisting(existingSessionId)}
+              >
+                <AppIcon name="external-link" size={13} />
+                <span>打开已接续对话</span>
+              </Button>
+              {onDeleteExisting && (
+                <Tooltip content="从本机移除此接续对话，重启后不再自动出现">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => onDeleteExisting(existingSessionId)}
+                  >
+                    <AppIcon name="trash" size={13} />
+                    <span>删除该接续对话</span>
+                  </Button>
+                </Tooltip>
+              )}
+            </div>
           ) : (
             <Button
               variant="primary"
@@ -125,73 +154,48 @@ export const SessionPreviewPane: React.FC<SessionPreviewPaneProps> = ({
             <AppIcon name="alert-circle" size={18} />
             <span>解析出错：{error}</span>
           </div>
-        ) : !mapped || mapped.messages.length === 0 ? (
+        ) : !mapped || displayMessages.length === 0 ? (
           <div className={styles.previewEmptyMessagesBox}>
             <span>该记录未检测到可解析的有效对话内容</span>
           </div>
         ) : (
           <div className={styles.previewMessagesList}>
-            {mapped.messages.map((msg, idx) => {
+            {displayMessages.map((msg, idx) => {
               const isUser = msg.sender === 'user';
               const key = msg.id || idx;
 
               if (isUser) {
                 return (
-                  <div key={key} className={styles.previewUserRow}>
-                    <div className={styles.previewUserBubble}>{msg.text}</div>
+                  <div
+                    key={key}
+                    className={`${chatStyles.row} ${chatStyles.rowUser}`}
+                  >
+                    <div className={chatStyles.userStack}>
+                      <div className={chatStyles.userBubble}>
+                        <div className={chatStyles.userBubbleContent}>
+                          {msg.text}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 );
               }
 
+              // 外部命令本身不重要，在预览中直接不展示冗余的外部工具卡片，仅展示思考折叠链（如果有）与 AI 回复正文
+              const cleanMsg = {
+                ...msg,
+                toolCalls: undefined,
+                blocks: undefined,
+              };
+
               return (
-                <div key={key} className={styles.previewAssistantRow}>
-                  {/* 可折叠思考过程 */}
-                  {msg.thinking && (
-                    <details className={styles.previewThinkingDetails}>
-                      <summary className={styles.previewThinkingSummary}>
-                        <AppIcon name="cpu" size={12} />
-                        <span>思考过程</span>
-                      </summary>
-                      <div className={styles.previewThinkingContent}>
-                        {msg.thinking}
-                      </div>
-                    </details>
-                  )}
-
-                  {/* 助手正文排版 */}
-                  {msg.text && (
-                    <div className={styles.previewAssistantText}>
-                      {msg.text}
-                    </div>
-                  )}
-
-                  {/* 紧凑轻量工具芯片 */}
-                  {msg.toolCalls && msg.toolCalls.length > 0 && (
-                    <div className={styles.previewToolList}>
-                      {msg.toolCalls.map((t, tidx) => (
-                        <span
-                          key={t.id || tidx}
-                          className={styles.previewToolChip}
-                        >
-                          <AppIcon name="terminal" size={11} />
-                          <span className={styles.previewToolName}>
-                            {t.name}
-                          </span>
-                          {t.status && (
-                            <span
-                              className={
-                                t.status === 'success'
-                                  ? styles.previewToolSuccess
-                                  : styles.previewToolError
-                              }
-                            >
-                              {t.status === 'success' ? '调用成功' : '失败'}
-                            </span>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                <div
+                  key={key}
+                  className={`${chatStyles.row} ${chatStyles.rowAssistant}`}
+                >
+                  <div className={chatStyles.messageContentWrapper}>
+                    <MessageContent msg={cleanMsg} hideThinkingBlock={false} />
+                  </div>
                 </div>
               );
             })}

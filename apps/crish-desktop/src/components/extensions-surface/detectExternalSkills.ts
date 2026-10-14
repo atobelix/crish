@@ -1,14 +1,20 @@
 /**
- * 探测系统及外部软件（Antigravity、Local 规则库等）中的已安装技能 (Skills)
+ * 探测系统及外部软件（Antigravity、Claude Code、Codex、Cursor、Local 规则库等）中的用户已安装技能 (Skills)
+ * 严格过滤软件系统内置自带技能，仅向用户呈现通用的、用户制作或外部安装的技能。
  */
 
 import { invokeResult } from '../../api/tauriInvoke';
+
+export type DetectedExternalSkillSource =
+  'Claude Code' | 'Codex' | 'Antigravity' | 'Cursor' | 'Local';
+
+export type ExternalSkillSource = DetectedExternalSkillSource;
 
 export interface DetectedExternalSkill {
   id: string;
   name: string;
   description: string;
-  source: 'Antigravity' | 'Local';
+  source: DetectedExternalSkillSource;
   filePath: string;
   skillDir: string;
   dirPath?: string;
@@ -16,23 +22,35 @@ export interface DetectedExternalSkill {
   isBuiltin?: boolean;
 }
 
-interface ScanTarget {
-  source: 'Antigravity' | 'Local';
+export interface ScanTarget {
+  source: DetectedExternalSkillSource;
   isBuiltin: boolean;
   getDir: (home: string) => string;
 }
 
-const SCAN_TARGETS: ScanTarget[] = [
+/**
+ * 外部技能扫描目录配置（仅扫描用户制作/用户安装的技能目录，严禁收录系统内置目录）
+ */
+export const SCAN_TARGETS: ScanTarget[] = [
   {
     source: 'Antigravity',
     isBuiltin: false,
     getDir: (home) => `${home}/.gemini/antigravity/skills`.replace(/\\/g, '/'),
   },
   {
-    source: 'Antigravity',
-    isBuiltin: true,
-    getDir: (home) =>
-      `${home}/.gemini/antigravity/builtin/skills`.replace(/\\/g, '/'),
+    source: 'Claude Code',
+    isBuiltin: false,
+    getDir: (home) => `${home}/.claude/skills`.replace(/\\/g, '/'),
+  },
+  {
+    source: 'Codex',
+    isBuiltin: false,
+    getDir: (home) => `${home}/.codex/skills`.replace(/\\/g, '/'),
+  },
+  {
+    source: 'Cursor',
+    isBuiltin: false,
+    getDir: (home) => `${home}/.cursor/skills`.replace(/\\/g, '/'),
   },
   {
     source: 'Local',
@@ -41,63 +59,148 @@ const SCAN_TARGETS: ScanTarget[] = [
   },
 ];
 
-export const DEFAULT_PRESET_EXTERNAL_SKILLS: DetectedExternalSkill[] = [
-  {
-    id: 'ext-skill-antigravity-disk-cleanup',
-    name: 'disk-cleanup',
-    description:
-      'Comprehensive rules, safety boundaries, and procedures for inspecting and cleaning disk space.',
-    source: 'Antigravity',
-    filePath: '~/.gemini/antigravity/skills/disk-cleanup/SKILL.md',
-    skillDir: '~/.gemini/antigravity/skills/disk-cleanup',
-    dirPath: '~/.gemini/antigravity/skills/disk-cleanup',
-    isBuiltin: false,
+const BUILTIN_PATH_REGEX = /(?:^|[/\\])(?:builtin|\.system)(?:[/\\]|$)/i;
+
+/**
+ * 判断技能路径是否属于系统内置或专有宿主绑定目录
+ * 若包含 /builtin/、\builtin\、/.system/、\.system\，或对应目录名，一律判定为内置技能
+ */
+export function isBuiltinSkillPath(pathStr?: string): boolean {
+  if (!pathStr) return false;
+  if (BUILTIN_PATH_REGEX.test(pathStr)) return true;
+  const lower = pathStr.toLowerCase();
+  if (
+    lower.includes('/builtin/') ||
+    lower.includes('\\builtin\\') ||
+    lower.includes('/.system/') ||
+    lower.includes('\\.system\\')
+  ) {
+    return true;
+  }
+  const normalized = lower.replace(/\\/g, '/');
+  return (
+    normalized.includes('/builtin/') ||
+    normalized.includes('/.system/') ||
+    normalized.endsWith('/builtin') ||
+    normalized.endsWith('/.system') ||
+    normalized.startsWith('builtin/') ||
+    normalized.startsWith('.system/') ||
+    normalized === 'builtin' ||
+    normalized === '.system'
+  );
+}
+
+/**
+ * 判断技能是否属于系统内置或专有宿主绑定的技能
+ */
+export function isBuiltinSkill(skill: {
+  filePath?: string;
+  skillDir?: string;
+  dirPath?: string;
+  isBuiltin?: boolean;
+}): boolean {
+  if (skill.isBuiltin === true) return true;
+  if (isBuiltinSkillPath(skill.filePath)) return true;
+  if (isBuiltinSkillPath(skill.skillDir)) return true;
+  if (isBuiltinSkillPath(skill.dirPath)) return true;
+  return false;
+}
+
+/**
+ * 过滤丢弃所有系统内置技能，确保绝不向用户呈现
+ */
+export function filterOutBuiltinSkills<
+  T extends {
+    filePath?: string;
+    skillDir?: string;
+    dirPath?: string;
+    isBuiltin?: boolean;
   },
-  {
-    id: 'ext-skill-antigravity-repo-to-resume-tailor',
-    name: 'repo-to-resume-tailor',
-    description:
-      'Analyze a full code repository and generate one resume-ready project description grounded in repository evidence.',
-    source: 'Antigravity',
-    filePath: '~/.gemini/antigravity/skills/repo-to-resume-tailor/SKILL.md',
-    skillDir: '~/.gemini/antigravity/skills/repo-to-resume-tailor',
-    dirPath: '~/.gemini/antigravity/skills/repo-to-resume-tailor',
-    isBuiltin: false,
-  },
-  {
-    id: 'ext-skill-antigravity-resume-master',
-    name: 'resume-master',
-    description:
-      '通过直接编写可编辑的 HTML 源文件，来创建新简历或根据职位描述（JD）量身定制现有简历，最终交付可打印 PDF。',
-    source: 'Antigravity',
-    filePath: '~/.gemini/antigravity/skills/resume-master/SKILL.md',
-    skillDir: '~/.gemini/antigravity/skills/resume-master',
-    dirPath: '~/.gemini/antigravity/skills/resume-master',
-    isBuiltin: false,
-  },
-  {
-    id: 'ext-skill-antigravity-automation',
-    name: 'automation',
-    description:
-      'Interactive guide to design and create a scheduled background automation.',
-    source: 'Antigravity',
-    filePath: '~/.gemini/antigravity/builtin/skills/automation/SKILL.md',
-    skillDir: '~/.gemini/antigravity/builtin/skills/automation',
-    dirPath: '~/.gemini/antigravity/builtin/skills/automation',
-    isBuiltin: true,
-  },
-  {
-    id: 'ext-skill-antigravity-generative-ui',
-    name: 'generative_ui',
-    description:
-      'How to render rich interactive HTML widgets inline in the chat or as standalone artifacts.',
-    source: 'Antigravity',
-    filePath: '~/.gemini/antigravity/builtin/skills/generative_ui/SKILL.md',
-    skillDir: '~/.gemini/antigravity/builtin/skills/generative_ui',
-    dirPath: '~/.gemini/antigravity/builtin/skills/generative_ui',
-    isBuiltin: true,
-  },
-];
+>(skills: T[]): T[] {
+  return skills.filter((skill) => !isBuiltinSkill(skill));
+}
+
+/**
+ * 杂质与不适配技能黑名单：
+ * 严禁收录宿主专有环境脚本、运维循环、损坏工具或缺少通用 AI 提示词指令的非标准技能
+ */
+export const DISALLOWED_SKILL_NAMES = new Set<string>([
+  'disk-cleanup',
+  'babysit',
+  'loop',
+  'statusline',
+  'update-cli-config',
+  'update-cursor-settings',
+  'automate',
+  'canvas',
+  'create-hook',
+  'create-rule',
+  'create-skill',
+  'create-subagent',
+  'env-setup',
+  'migrate-to-skills',
+  'onboard',
+  'review',
+  'review-bugbot',
+  'review-security',
+  'sdk',
+  'shell',
+  'split-to-prs',
+  'automation',
+  'generative_ui',
+  'generative-ui',
+  'agy-customizations',
+  'antigravity-guide',
+  'ui-extension',
+  'ui-plugin-navigation',
+  'plugin',
+  'migrate-workflows',
+]);
+
+/**
+ * 判断技能名称是否属于杂质、宿主私有工具或被禁止的非通用脚本
+ */
+export function isDisallowedSkillName(name?: string): boolean {
+  if (!name) return true;
+  const lower = name.toLowerCase().trim();
+  if (DISALLOWED_SKILL_NAMES.has(lower)) return true;
+  if (lower.startsWith('firecrawl')) return true;
+  return false;
+}
+
+/**
+ * 校验技能是否属于格式合规、正文有效、可供模型调用的高质量标准技能
+ */
+export function isQualifiedSkill(skill: {
+  name: string;
+  filePath?: string;
+  skillDir?: string;
+  dirPath?: string;
+  content?: string | null;
+  isBuiltin?: boolean;
+}): boolean {
+  if (!skill.name || isDisallowedSkillName(skill.name)) return false;
+  if (isBuiltinSkill(skill)) return false;
+  if (
+    isBuiltinSkillPath(skill.filePath) ||
+    isBuiltinSkillPath(skill.skillDir)
+  ) {
+    return false;
+  }
+
+  // 杜绝空技能或缺乏有效正文的损坏脚本（正文非空时至少须包含 30 字符实质指令）
+  if (typeof skill.content === 'string') {
+    const trimmed = skill.content.trim();
+    if (trimmed.length < 30) return false;
+    // 排除显式禁用模型调用的技能
+    if (/disable-model-invocation:\s*true/i.test(trimmed)) return false;
+  }
+  return true;
+}
+
+import { DEFAULT_PRESET_EXTERNAL_SKILLS } from './detectExternalSkillsPresets';
+
+export { DEFAULT_PRESET_EXTERNAL_SKILLS };
 
 export function parseSkillMarkdown(
   content: string,
@@ -194,16 +297,23 @@ async function resolveHomeDir(): Promise<string | undefined> {
   return home ? home.replace(/\\/g, '/') : undefined;
 }
 
-async function listSubDirs(dirPath: string): Promise<string[]> {
+interface DirEntry {
+  name: string;
+  isDir: boolean;
+}
+
+async function listDirItems(dirPath: string): Promise<DirEntry[]> {
   try {
     const res = await invokeResult<{
       items?: Array<{ name: string; is_dir?: boolean; isDir?: boolean }>;
     }>('workbench_list_directory', { path: dirPath });
     if (res.status === 'ok' && Array.isArray(res.data?.items)) {
       return res.data.items
-        .filter((i) => Boolean(i.is_dir ?? i.isDir))
-        .map((i) => i.name)
-        .filter(Boolean);
+        .map((i) => ({
+          name: i.name,
+          isDir: Boolean(i.is_dir ?? i.isDir),
+        }))
+        .filter((i) => Boolean(i.name));
     }
   } catch {
     // ignore
@@ -230,7 +340,8 @@ async function readSkillFile(filePath: string): Promise<string | null> {
 }
 
 /**
- * 探测系统及外部软件的技能目录
+ * 探测系统及外部软件的用户技能目录
+ * 严格过滤所有系统内置自带技能，仅返回用户制作或下载的通用技能
  */
 export async function detectExternalSkills(options?: {
   fallback?: boolean;
@@ -242,33 +353,92 @@ export async function detectExternalSkills(options?: {
 
   if (home) {
     for (const target of SCAN_TARGETS) {
+      if (target.isBuiltin) continue;
       const rootDir = target.getDir(home);
+      if (isBuiltinSkillPath(rootDir)) continue;
+
       try {
-        const subDirs = await listSubDirs(rootDir);
-        for (const sub of subDirs) {
-          const skillDir = `${rootDir}/${sub}`;
-          const filePath = `${skillDir}/SKILL.md`;
-          if (seenPaths.has(filePath)) continue;
+        const items = await listDirItems(rootDir);
+        for (const item of items) {
+          const sub = item.name;
+          if (sub.startsWith('.') || sub === '__pycache__') continue;
+          if (isDisallowedSkillName(sub)) continue;
 
-          const content = await readSkillFile(filePath);
-          if (content) {
-            const { name, description } = parseSkillMarkdown(content, sub);
-            const safeName = name.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
-            const id = `ext-skill-${target.source.toLowerCase()}-${safeName}`;
+          let name = sub;
+          let description = `${target.source} 外部技能：${sub}`;
+          let skillDir = `${rootDir}/${sub}`;
+          let filePath = `${skillDir}/SKILL.md`;
+          let content: string | null = null;
 
-            seenPaths.add(filePath);
-            results.push({
-              id,
-              name,
-              description,
-              source: target.source,
-              filePath,
-              skillDir,
-              dirPath: skillDir,
-              content,
-              isBuiltin: target.isBuiltin,
-            });
+          if (isBuiltinSkillPath(skillDir) || isBuiltinSkillPath(filePath)) {
+            continue;
           }
+
+          if (item.isDir) {
+            if (seenPaths.has(filePath) || seenPaths.has(skillDir)) continue;
+            content = await readSkillFile(filePath);
+            if (!content || !content.trim() || content.trim().length < 30) {
+              // 杜绝空技能或缺乏有效正文的空目录
+              continue;
+            }
+            if (/disable-model-invocation:\s*true/i.test(content)) {
+              continue;
+            }
+            const parsed = parseSkillMarkdown(content, sub);
+            name = parsed.name || sub;
+            if (isDisallowedSkillName(name)) continue;
+            description = parsed.description || description;
+          } else {
+            // 单文件技能或指令（仅保留 .md 标准说明）
+            if (seenPaths.has(`${rootDir}/${sub}`)) continue;
+            const ext = sub.split('.').pop()?.toLowerCase();
+            const baseName = sub.replace(/\.[^.]+$/, '');
+            if (ext !== 'md') continue;
+            if (isDisallowedSkillName(baseName)) continue;
+
+            name = baseName;
+            skillDir = rootDir;
+            filePath = `${rootDir}/${sub}`;
+
+            if (isBuiltinSkillPath(filePath)) continue;
+
+            content = await readSkillFile(filePath);
+            if (!content || !content.trim() || content.trim().length < 30)
+              continue;
+            if (/disable-model-invocation:\s*true/i.test(content)) continue;
+
+            const parsed = parseSkillMarkdown(content, baseName);
+            name = parsed.name || baseName;
+            if (isDisallowedSkillName(name)) continue;
+            description =
+              parsed.description || `${target.source} 外部技能：${baseName}`;
+          }
+
+          const safeSource = target.source.toLowerCase().replace(/\s+/g, '-');
+          const safeName = name.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+          const id = safeName.startsWith(`${safeSource}-`)
+            ? `ext-skill-${safeName}`
+            : `ext-skill-${safeSource}-${safeName}`;
+
+          const skillObj: DetectedExternalSkill = {
+            id,
+            name,
+            description,
+            source: target.source,
+            filePath,
+            skillDir,
+            dirPath: skillDir,
+            content: content || undefined,
+            isBuiltin: false,
+          };
+
+          if (!isQualifiedSkill(skillObj)) {
+            continue;
+          }
+
+          seenPaths.add(filePath);
+          seenPaths.add(skillDir);
+          results.push(skillObj);
         }
       } catch {
         // 继续下一个探测目标
@@ -276,9 +446,27 @@ export async function detectExternalSkills(options?: {
     }
   }
 
-  if (results.length === 0 && allowFallback) {
-    return [...DEFAULT_PRESET_EXTERNAL_SKILLS];
+  const cleanPresets = DEFAULT_PRESET_EXTERNAL_SKILLS.filter(
+    (p) => isQualifiedSkill(p) && !isBuiltinSkill(p)
+  );
+
+  if (allowFallback) {
+    if (results.length === 0) {
+      return [...cleanPresets];
+    }
+    // 对尚未探测到的官方通用标准技能进行补充，确保开箱即用
+    for (const preset of cleanPresets) {
+      if (
+        !results.some(
+          (r) =>
+            r.name.toLowerCase() === preset.name.toLowerCase() ||
+            r.id.toLowerCase() === preset.id.toLowerCase()
+        )
+      ) {
+        results.push(preset);
+      }
+    }
   }
 
-  return results;
+  return results.filter((s) => isQualifiedSkill(s) && !isBuiltinSkill(s));
 }

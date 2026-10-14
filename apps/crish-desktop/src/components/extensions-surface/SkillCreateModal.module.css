@@ -65,8 +65,8 @@
   width: 28px;
   height: 28px;
   border-radius: 7px;
-  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-  color: var(--color-primary);
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  color: var(--accent-color);
   flex-shrink: 0;
 }
 

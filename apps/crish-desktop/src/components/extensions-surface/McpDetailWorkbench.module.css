@@ -8,101 +8,144 @@
   gap: var(--space-6);
   padding: var(--space-6);
   width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
   box-sizing: border-box;
 }
 
 .detailHeader {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding-bottom: var(--space-5);
-  border-bottom: var(--hairline-width) solid var(--border-subtle);
-}
-
-.detailTitleRow {
-  display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--bg-card);
+  border: var(--hairline-width) solid var(--border-subtle);
+  border-radius: var(--button-radius);
+  flex-shrink: 0;
 }
 
-.detailTitleInfo {
+.detailHeaderLeft {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  align-items: center;
+  gap: var(--space-2_5);
+  min-width: 0;
+}
+
+.serverIconBox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background-color: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.serverIcon {
+  color: var(--text-primary);
 }
 
 .detailTitle {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-md, 15px);
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.detailSubtitle {
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-}
-
-.headerActions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.statusBadge {
+.statusIndicatorGroup {
   display: inline-flex;
   align-items: center;
-  padding: 2px var(--space-2_5);
-  font-size: var(--font-size-xs);
-  border-radius: var(--button-radius);
-  border: var(--hairline-width) solid var(--border-subtle);
-  color: var(--text-tertiary);
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+  transition: background-color var(--duration-fast, 150ms) ease;
 }
 
 .statusOnline {
-  color: var(--color-success, var(--success-fg, #10b981));
-  border-color: var(--color-success, var(--success-fg, #10b981));
-  background-color: var(--success-soft-bg, hsl(150 80% 95% / 0.8));
-  font-weight: var(--font-weight-medium);
+  background-color: var(--color-success);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-success) 60%, transparent);
 }
 
 .statusOffline {
+  background-color: var(--text-tertiary);
+}
+
+.probeLatency {
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-success);
+  background-color: color-mix(in srgb, var(--color-success) 12%, transparent);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  line-height: 1.4;
+  user-select: none;
+  animation: fadeIn 150ms ease forwards;
+}
+
+.probeFailedDot {
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--danger-fg);
+  background-color: color-mix(in srgb, var(--danger-fg) 12%, transparent);
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  line-height: 1.4;
+}
+
+.probeOfflineText {
+  font-size: 11px;
   color: var(--text-tertiary);
-  border-color: var(--border-subtle);
+  user-select: none;
 }
 
-.pluginSettingsRow {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  background-color: var(--bg-surface);
-  border: var(--hairline-width) solid var(--border-subtle);
-  border-radius: var(--button-radius);
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
-.settingItem {
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.detailHeaderRight {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
+  gap: var(--space-2_5);
+  flex-shrink: 0;
 }
 
-.settingLabelGroup {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.settingTitle {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-primary);
-}
-
-.settingDesc {
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
+.switchWrapper {
+  display: inline-flex;
+  align-items: center;
 }
 
 .detailBodySection {
@@ -141,7 +184,7 @@
   padding: 1px var(--space-2);
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
-  background-color: var(--bg-surface);
+  background-color: var(--bg-card);
   border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(--radius-sm);
 }
@@ -178,7 +221,7 @@
 
 .toolItemCardDisabled {
   opacity: 0.7;
-  background-color: var(--bg-surface);
+  background-color: var(--bg-card);
 }
 
 .toolCardTop {
@@ -218,7 +261,7 @@
 .toolDesc {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  line-height: var(--line-height-relaxed);
+  line-height: var(--line-height-body);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -240,11 +283,11 @@
 }
 
 .toolStateEnabled {
-  color: var(--color-success, var(--success-fg, #10b981));
+  color: var(--color-success);
 }
 
 .toolStateDisabled {
-  color: var(--text-muted, var(--text-tertiary, #94a3b8));
+  color: var(--text-muted);
 }
 
 .emptyWorkbenchState {
@@ -267,4 +310,117 @@
 .emptyDesc {
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
+}
+
+.connProbeBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5);
+}
+
+.probeBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.probeSuccess {
+  background-color: color-mix(in srgb, var(--color-success) 12%, transparent);
+  color: var(--color-success);
+}
+
+.probeOffline {
+  background-color: var(--bg-card);
+  color: var(--text-tertiary);
+  border: var(--hairline-width) solid var(--border-subtle);
+}
+
+.probeFailed {
+  background-color: color-mix(in srgb, var(--danger-color) 12%, transparent);
+  color: var(--danger-color);
+}
+
+.toolSearchBar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 260px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  box-sizing: border-box;
+  transition: background-color var(--transition-micro);
+}
+
+.toolSearchBar:hover,
+.toolSearchBar:focus-within {
+  background: var(--tint-hover);
+}
+
+.toolSearchIcon {
+  position: absolute;
+  left: var(--space-2_5);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+
+.toolSearchInput {
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-1_5) var(--space-7) var(--space-1_5) var(--space-7);
+  font-size: var(--font-size-xs);
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+
+.toolSearchInput::placeholder {
+  color: var(--text-tertiary);
+}
+
+.toolSearchInput:focus,
+.toolSearchInput:focus-visible {
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+.toolSearchClearBtn {
+  position: absolute;
+  right: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 2px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+}
+
+.toolSearchClearBtn:hover {
+  color: var(--text-primary);
+}
+
+.emptySearchState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--text-tertiary);
+  gap: var(--space-3);
 }

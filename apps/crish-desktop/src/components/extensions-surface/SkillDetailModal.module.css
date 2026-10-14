@@ -1,0 +1,199 @@
+/* apps/crish-desktop/src/components/extensions-surface/SkillDetailModal.module.css
+ * 统一的高清 Skill SKILL.md 文档 Pop 详情面板样式
+ * 严格遵循系统 Design Tokens 规范，抗模糊（Flex 居中，无亚像素偏移）
+ */
+
+.modalPanel {
+  --dialog-width: 760px;
+  width: min(var(--dialog-width), calc(100vw - var(--space-8, 32px)));
+  max-height: calc(100vh - var(--space-8, 32px));
+  border-radius: var(--radius-xl, 12px);
+  background: var(--bg-card);
+  border: var(--hairline-width, 1px) solid var(--border-color);
+  box-shadow:
+    0 24px 48px -12px color-mix(in srgb, var(--shadow-color) 18%, transparent),
+    0 8px 16px -4px color-mix(in srgb, var(--shadow-color) 8%, transparent);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4, 16px) var(--space-5, 20px);
+  border-bottom: var(--hairline-width, 1px) solid var(--border-subtle);
+  background: var(--bg-card);
+  gap: var(--space-3, 12px);
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2_5, 10px);
+  min-width: 0;
+  flex: 1;
+}
+
+.skillIconBox {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-color, var(--text-primary));
+  flex-shrink: 0;
+}
+
+.skillTitleGroup {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.skillNameRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  min-width: 0;
+}
+
+.skillName {
+  font-size: var(--font-size-md, 15px);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.metaBadge {
+  font-size: var(--font-size-xxs, 11px);
+  padding: 1px 6px;
+  border-radius: var(--radius-s, 4px);
+  background: var(--bg-secondary);
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium, 500);
+  flex-shrink: 0;
+}
+
+.sourceBadgeOfficial {
+  composes: metaBadge;
+  color: var(--accent-color);
+  border-color: color-mix(in srgb, var(--accent-color) 24%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 8%, transparent);
+}
+
+.sourceBadgeCommunity {
+  composes: metaBadge;
+  color: var(--text-tertiary);
+}
+
+.skillSubtitle {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modalBody {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-card);
+  min-height: 280px;
+  max-height: 60vh;
+}
+
+.yamlMetaBar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px);
+  padding: var(--space-2, 8px) var(--space-5, 20px);
+  background: var(--bg-secondary);
+  border-bottom: var(--hairline-width, 1px) solid var(--border-subtle);
+}
+
+.yamlPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  padding: 2px 7px;
+  border-radius: var(--radius-s, 4px);
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+}
+
+.yamlPillKey {
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.markdownContainer {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4, 16px) var(--space-5, 20px);
+  color: var(--text-primary);
+}
+
+.emptyDocHint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2, 8px);
+  padding: var(--space-8, 32px);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm, 13px);
+}
+
+.modalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3, 12px) var(--space-5, 20px);
+  border-top: var(--hairline-width, 1px) solid var(--border-subtle);
+  background: var(--bg-card);
+  gap: var(--space-3, 12px);
+}
+
+.footerLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+}
+
+.toggleWrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.toggleLabel {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.footerRight {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.commandCopyBtn {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-xs, 12px);
+}

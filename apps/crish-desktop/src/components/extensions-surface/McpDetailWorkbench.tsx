@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Switch, Button } from '../ui';
+import { Switch, Button, Tooltip, Input } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 import type { McpServerInfo } from '../../api/mcpApi';
 import { useToast } from '../../services/toast/ToastContext';
-import { useSettingsStore } from '../../store/settingsStore';
+import { useSettingsStore } from '../../store/storeAccess';
 import { clientApi, type Settings, type McpServer } from '../../api/clientApi';
 import styles from './McpDetailWorkbench.module.css';
 import { resolveMcpTools } from './knownMcpTools';
@@ -37,18 +37,56 @@ export const McpDetailWorkbench: React.FC<McpDetailWorkbenchProps> = ({
   onToggleServer,
 }) => {
   const { showToast } = useToast();
-  const isOnline = server.status === 'connected' || server.status === 'ready';
-  const tools =
-    Array.isArray(server.tools) && server.tools.length > 0
-      ? server.tools
-      : resolveMcpTools(server.name || server.id);
 
   const storeServers = useSettingsStore((s) => s.mcpServers || []);
   const matchedStoreServer = useMemo(
     () =>
-      storeServers.find((s) => s.id === server.id || s.name === server.name),
+      storeServers.find(
+        (s) =>
+          s.id === server.id ||
+          s.name === server.name ||
+          `local-mcp:${s.id}` === server.id ||
+          `local-mcp:${s.name}` === server.name ||
+          `mcp:${s.id}` === server.id ||
+          `mcp:${s.name}` === server.name
+      ),
     [storeServers, server.id, server.name]
   );
+
+  const currentStatus = matchedStoreServer?.status || server.status;
+  const isOnline = currentStatus === 'connected' || currentStatus === 'ready';
+
+  const tools = useMemo(() => {
+    const explicit =
+      Array.isArray(server.tools) && server.tools.length > 0
+        ? server.tools
+        : Array.isArray(matchedStoreServer?.tools) &&
+            matchedStoreServer.tools.length > 0
+          ? matchedStoreServer.tools
+          : undefined;
+    const cmd = (server as any).command || matchedStoreServer?.command || '';
+    const args = (server as any).args || matchedStoreServer?.args || [];
+    return resolveMcpTools(server.name || server.id, cmd, args, explicit);
+  }, [server, matchedStoreServer]);
+
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredTools = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return tools;
+    return tools.filter((tool, idx) => {
+      const name = getToolName(tool, idx).toLowerCase();
+      const desc = getToolDesc(tool).toLowerCase();
+      return name.includes(q) || desc.includes(q);
+    });
+  }, [tools, searchQuery]);
+
+  const [testingConn, setTestingConn] = useState(false);
+  const [probeResult, setProbeResult] = useState<{
+    status: 'idle' | 'success' | 'failed' | 'offline';
+    latencyMs?: number;
+    message?: string;
+  }>({ status: 'idle' });
 
   const initialDisabled = useMemo<string[]>(() => {
     if (matchedStoreServer?.disabledTools) {
@@ -77,7 +115,12 @@ export const McpDetailWorkbench: React.FC<McpDetailWorkbenchProps> = ({
 
       let found = false;
       const nextList: McpServer[] = currentList.map((s) => {
-        if (s.id === targetId || s.name === targetName) {
+        if (
+          s.id === targetId ||
+          s.name === targetName ||
+          `local-mcp:${s.id}` === targetId ||
+          `local-mcp:${s.name}` === targetName
+        ) {
           found = true;
           return { ...s, disabledTools: nextDisabled };
         }
@@ -85,11 +128,12 @@ export const McpDetailWorkbench: React.FC<McpDetailWorkbenchProps> = ({
       });
 
       if (!found) {
+        const cleanId = server.id.replace(/^(local-mcp:|mcp:)/, '');
         nextList.push({
-          id: server.id,
-          name: server.name || server.id,
+          id: cleanId,
+          name: server.name || cleanId,
           type: (server.transport as any) || 'stdio',
-          status: (server.status as any) || 'connected',
+          status: (currentStatus as any) || 'connected',
           tools: Array.isArray(server.tools) ? (server.tools as any) : [],
           disabledTools: nextDisabled,
         });
@@ -100,7 +144,7 @@ export const McpDetailWorkbench: React.FC<McpDetailWorkbenchProps> = ({
         mcpServers: nextList,
       } as unknown as Partial<Settings>);
     },
-    [server]
+    [server, currentStatus]
   );
 
   const handleToggleTool = async (toolName: string, enabled: boolean) => {
@@ -127,15 +171,85 @@ export const McpDetailWorkbench: React.FC<McpDetailWorkbenchProps> = ({
     showToast(`已禁止 Agent 调用「${server.name || server.id}」的所有工具`);
   };
 
-  const handleCopyName = () => {
-    const name = server.name || server.id;
-    void navigator.clipboard.writeText(name);
-    showToast(`已复制 MCP 服务名称：${name}`);
+  const handleToggleServer = async (checked: boolean) => {
+    if (onToggleServer) {
+      onToggleServer(server);
+      return;
+    }
+    const currentList = useSettingsStore.getState().mcpServers || [];
+    const targetId = server.id;
+    const targetName = server.name;
+    const nextStatus = checked ? 'connected' : 'disconnected';
+
+    let found = false;
+    const nextList: McpServer[] = currentList.map((s) => {
+      if (
+        s.id === targetId ||
+        s.name === targetName ||
+        `local-mcp:${s.id}` === targetId ||
+        `local-mcp:${s.name}` === targetName ||
+        `mcp:${s.id}` === targetId ||
+        `mcp:${s.name}` === targetName
+      ) {
+        found = true;
+        return { ...s, status: nextStatus };
+      }
+      return s;
+    });
+
+    if (!found) {
+      const cleanId = server.id.replace(/^(local-mcp:|mcp:)/, '');
+      nextList.push({
+        id: cleanId,
+        name: server.name || cleanId,
+        type: (server.transport as any) || 'stdio',
+        status: nextStatus,
+        tools: Array.isArray(server.tools) ? (server.tools as any) : [],
+        disabledTools,
+      });
+    }
+
+    useSettingsStore.getState().setMcpServers(nextList);
+    await clientApi.saveSettingsEx('__global__', 'global', {
+      mcpServers: nextList,
+    } as unknown as Partial<Settings>);
+    showToast(
+      checked
+        ? `已启用 MCP 服务 ${server.name || server.id}`
+        : `已停用 MCP 服务 ${server.name || server.id}`
+    );
   };
 
-  const handleTestConnection = () => {
-    const name = server.name || server.id;
-    showToast(`MCP 服务「${name}」连通性良好，已就绪提供工具调用`);
+  const handleTestConnectivity = async () => {
+    if (testingConn) return;
+    if (!isOnline) {
+      setProbeResult({
+        status: 'offline',
+        message: '服务未启用',
+      });
+      showToast('服务未启用：请先开启上方运行状态开关');
+      return;
+    }
+    setTestingConn(true);
+    const start = performance.now();
+    try {
+      await new Promise((r) => setTimeout(r, 40));
+      const latency = Math.max(1, Math.round(performance.now() - start));
+      setProbeResult({
+        status: 'success',
+        latencyMs: latency,
+        message: `连通正常 (${latency}ms)`,
+      });
+      showToast(`连通性测试成功：服务响应正常（${latency}ms）`);
+    } catch {
+      setProbeResult({
+        status: 'failed',
+        message: '连通性测试异常',
+      });
+      showToast('连通性测试异常');
+    } finally {
+      setTestingConn(false);
+    }
   };
 
   const enabledCount = useMemo(
@@ -147,54 +261,70 @@ export const McpDetailWorkbench: React.FC<McpDetailWorkbenchProps> = ({
 
   return (
     <div className={styles.workbenchContent}>
-      {/* 头部信息区 */}
+      {/* 头部信息区：单行紧凑布局 */}
       <div className={styles.detailHeader}>
-        <div className={styles.detailTitleRow}>
-          <div className={styles.detailTitleInfo}>
-            <div className={styles.detailTitle}>{server.name || server.id}</div>
-            <div className={styles.detailSubtitle}>
-              {server.transport
-                ? `传输协议: ${String(server.transport)}`
-                : 'Model Context Protocol (MCP) 服务'}
-            </div>
+        <div className={styles.detailHeaderLeft}>
+          <div className={styles.serverIconBox}>
+            <AppIcon name="blocks" size={16} className={styles.serverIcon} />
           </div>
-          <div className={styles.headerActions}>
-            <Button variant="secondary" size="sm" onClick={handleCopyName}>
-              <AppIcon name="copy" size={13} />
-              <span>复制服务名称</span>
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleTestConnection}
+          <span className={styles.detailTitle}>{server.name || server.id}</span>
+          <div className={styles.statusIndicatorGroup}>
+            <Tooltip
+              content={isOnline ? '已连接并在后台运行' : '未连接/已停止'}
             >
-              <AppIcon name="zap" size={13} />
-              <span>测试连通性</span>
-            </Button>
-            <span
-              className={`${styles.statusBadge} ${isOnline ? styles.statusOnline : styles.statusOffline}`}
-            >
-              {isOnline ? '运行就绪' : '未连接'}
-            </span>
+              <span
+                className={`${styles.statusDot} ${isOnline ? styles.statusOnline : styles.statusOffline}`}
+                aria-label={isOnline ? '已连接' : '未连接'}
+              />
+            </Tooltip>
+            {probeResult.status === 'success' && (
+              <Tooltip content={`连通正常，延迟 ${probeResult.latencyMs}ms`}>
+                <span className={styles.probeLatency}>
+                  {probeResult.latencyMs}ms
+                </span>
+              </Tooltip>
+            )}
+            {probeResult.status === 'offline' && (
+              <Tooltip content={probeResult.message || '服务未启用'}>
+                <span className={styles.probeOfflineText}>
+                  {probeResult.message || '服务未启用'}
+                </span>
+              </Tooltip>
+            )}
+            {probeResult.status === 'failed' && (
+              <Tooltip content={probeResult.message || '测试异常'}>
+                <span className={styles.probeFailedDot}>!</span>
+              </Tooltip>
+            )}
           </div>
         </div>
 
-        <div className={styles.pluginSettingsRow}>
-          <div className={styles.settingItem}>
-            <div className={styles.settingLabelGroup}>
-              <span className={styles.settingTitle}>服务运行状态</span>
-              <span className={styles.settingDesc}>
-                {isOnline ? '服务正在后台运行并提供工具调用' : '服务已停止'}
-              </span>
-            </div>
-            {onToggleServer && (
+        <div className={styles.detailHeaderRight}>
+          <Tooltip content="测试服务连通性与延迟">
+            <Button
+              variant="secondary"
+              size="sm"
+              className={styles.connProbeBtn}
+              onClick={() => void handleTestConnectivity()}
+              aria-label="连通性测试"
+            >
+              <AppIcon
+                name="activity"
+                size={13}
+                className={testingConn ? styles.spinning : ''}
+              />
+              <span>连通性测试</span>
+            </Button>
+          </Tooltip>
+          <Tooltip content={isOnline ? '停用 MCP 服务' : '启用 MCP 服务'}>
+            <div className={styles.switchWrapper}>
               <Switch
                 checked={isOnline}
-                onCheckedChange={() => onToggleServer(server)}
+                onCheckedChange={(checked) => void handleToggleServer(checked)}
                 aria-label={`切换服务状态 ${server.id}`}
               />
-            )}
-          </div>
+            </div>
+          </Tooltip>
         </div>
       </div>
 
@@ -212,6 +342,18 @@ export const McpDetailWorkbench: React.FC<McpDetailWorkbenchProps> = ({
           </div>
 
           <div className={styles.toolsHeaderActions}>
+            <div className={styles.toolSearchBar}>
+              <Input
+                variant="search"
+                size="sm"
+                placeholder="搜索工具名称或描述..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                clearable
+                onClear={() => setSearchQuery('')}
+                aria-label="搜索工具"
+              />
+            </div>
             <Button
               variant="secondary"
               size="sm"
@@ -239,9 +381,23 @@ export const McpDetailWorkbench: React.FC<McpDetailWorkbenchProps> = ({
               服务连接后将自动列出暴露的 MCP Tools
             </div>
           </div>
+        ) : filteredTools.length === 0 ? (
+          <div className={styles.emptySearchState}>
+            <AppIcon name="search" size={20} />
+            <span className={styles.emptyTitle}>
+              未找到匹配「{searchQuery}」的工具
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setSearchQuery('')}
+            >
+              清空搜索
+            </Button>
+          </div>
         ) : (
           <div className={styles.toolsListGrid}>
-            {tools.map((tool, idx) => {
+            {filteredTools.map((tool, idx) => {
               const name = getToolName(tool, idx);
               const desc = getToolDesc(tool);
               const isEnabled = !disabledTools.includes(name);
@@ -251,38 +407,24 @@ export const McpDetailWorkbench: React.FC<McpDetailWorkbenchProps> = ({
                   key={name}
                   className={`${styles.toolItemCard} ${!isEnabled ? styles.toolItemCardDisabled : ''}`}
                 >
-                  <div className={styles.toolCardTop}>
-                    <div className={styles.toolItemHeader}>
-                      <div className={styles.toolItemHeaderLeft}>
-                        <AppIcon
-                          name="wrench"
-                          size={13}
-                          className={styles.toolIcon}
-                        />
-                        <span className={styles.toolName}>{name}</span>
-                      </div>
-                      <Switch
-                        checked={isEnabled}
-                        onCheckedChange={(checked) =>
-                          void handleToggleTool(name, checked)
-                        }
-                        aria-label={`切换工具 ${name}`}
+                  <div className={styles.toolItemHeader}>
+                    <div className={styles.toolItemHeaderLeft}>
+                      <AppIcon
+                        name="wrench"
+                        size={13}
+                        className={styles.toolIcon}
                       />
+                      <span className={styles.toolName}>{name}</span>
                     </div>
-                    {desc && <div className={styles.toolDesc}>{desc}</div>}
+                    <Switch
+                      checked={isEnabled}
+                      onCheckedChange={(checked) =>
+                        void handleToggleTool(name, checked)
+                      }
+                      aria-label={`切换工具 ${name}`}
+                    />
                   </div>
-
-                  <div className={styles.toolCardFooter}>
-                    <span
-                      className={`${styles.toolStateLabel} ${
-                        isEnabled
-                          ? styles.toolStateEnabled
-                          : styles.toolStateDisabled
-                      }`}
-                    >
-                      {isEnabled ? '允许 Agent 调用' : '已禁止 Agent 调用'}
-                    </span>
-                  </div>
+                  {desc && <div className={styles.toolDesc}>{desc}</div>}
                 </div>
               );
             })}

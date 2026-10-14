@@ -15,6 +15,16 @@ import type {
   MappedImportSession,
 } from '../../api/import/types';
 
+vi.mock('../../api/markdownRenderAsync', () => ({
+  useAsyncMarkdownHtml: (markdown: string) => ({
+    html: markdown ? `<p>${markdown}</p>` : '',
+    loading: false,
+  }),
+  useStreamingMarkdownHtml: (markdown: string) =>
+    markdown ? `<p>${markdown}</p>` : '',
+  parseMarkdownToHtmlAsync: vi.fn(async (m: string) => `<p>${m}</p>`),
+}));
+
 describe('SessionPreviewPane', () => {
   const mockSession: DetectedExternalSession = {
     id: 'test-session-1',
@@ -157,22 +167,83 @@ describe('SessionPreviewPane', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Hello assistant! How are you?')).toBeDefined();
+      expect(screen.getByText(/I am doing well, thank you!/)).toBeDefined();
     });
 
     // User message
     expect(screen.getByText('Hello assistant! How are you?')).toBeDefined();
 
-    // Assistant message text
-    expect(screen.getByText('I am doing well, thank you!')).toBeDefined();
-
     // Thinking process in details
-    expect(screen.getByText('思考过程')).toBeDefined();
+    expect(screen.getByLabelText('思考过程')).toBeDefined();
     expect(
       screen.getByText('I will respond politely to the greeting.')
     ).toBeDefined();
 
-    // Tool chip
-    expect(screen.getByText('view_file')).toBeDefined();
-    expect(screen.getByText('调用成功')).toBeDefined();
+    // Redundant external tool cards must NOT be displayed in clean preview
+    expect(screen.queryByText('已读取 1 个文件')).toBeNull();
+    expect(screen.queryByText(/已运行.*条命令/)).toBeNull();
+    expect(screen.queryByText(/已完成.*秒/)).toBeNull();
+  });
+
+  it('filters out empty tool-only intermediate steps without text or thinking', async () => {
+    const mockWithEmptySteps: MappedImportSession = {
+      source: 'claude-code',
+      sourceId: 'test-session-2',
+      title: 'Session With Empty Steps',
+      messages: [
+        {
+          id: 'msg-1',
+          sender: 'user',
+          timestamp: 1700000001000,
+          status: 'completed',
+          text: 'Run the tool',
+        },
+        {
+          id: 'msg-tool-only',
+          sender: 'assistant',
+          timestamp: 1700000002000,
+          status: 'completed',
+          toolCalls: [
+            {
+              id: 'call-bash',
+              name: 'bash',
+              status: 'success',
+            },
+          ],
+        },
+        {
+          id: 'msg-2',
+          sender: 'assistant',
+          timestamp: 1700000003000,
+          status: 'completed',
+          text: 'Finished running tool successfully!',
+        },
+      ],
+    };
+
+    vi.spyOn(mapModule, 'mapExternalSession').mockResolvedValue(
+      mockWithEmptySteps
+    );
+
+    render(
+      <SessionPreviewPane
+        session={{ ...mockSession, id: 'test-session-2' }}
+        onImportAndResume={vi.fn()}
+        onOpenExisting={vi.fn()}
+        isBusy={false}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Run the tool')).toBeDefined();
+      expect(
+        screen.getByText(/Finished running tool successfully!/)
+      ).toBeDefined();
+    });
+
+    // Subtitle shows 2 messages (empty step excluded)
+    expect(screen.getByText('Claude Code · 2 条消息')).toBeDefined();
+    // Pure tool calls are not rendered
+    expect(screen.queryByText(/已运行.*条命令/)).toBeNull();
   });
 });

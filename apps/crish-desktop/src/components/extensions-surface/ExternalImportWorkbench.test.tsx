@@ -60,6 +60,15 @@ describe('ExternalImportWorkbench', () => {
       '/custom/local/skill-dir'
     );
     vi.spyOn(skillsApi, 'addExtraSkillDir').mockImplementation(() => []);
+    vi.spyOn(skillsApi, 'setSkillActivation').mockResolvedValue({
+      ok: true,
+      engineSynced: false,
+    });
+    vi.spyOn(skillsApi, 'createGlobalSkill').mockResolvedValue({
+      ok: true,
+      skillPath: '/home/.crish/skills/cursor-rules-sync/SKILL.md',
+      skillDir: '/home/.crish/skills/cursor-rules-sync',
+    });
     vi.spyOn(clientApi, 'saveSettingsEx').mockResolvedValue({} as any);
   });
 
@@ -78,6 +87,7 @@ describe('ExternalImportWorkbench', () => {
     );
 
     expect(screen.getByText('从其他应用导入')).toBeInTheDocument();
+    expect(screen.getByText(/一键接入 MCP 服务/)).toBeInTheDocument();
 
     // 默认在 MCP 服务分类，尚未显示技能相关的文件夹导入按钮
     expect(
@@ -92,8 +102,13 @@ describe('ExternalImportWorkbench', () => {
       expect(
         screen.getByRole('button', { name: /重新扫描/ })
       ).toBeInTheDocument();
-      expect(screen.getByText('chrome-devtools-mcp')).toBeInTheDocument();
-      expect(screen.getByText('Antigravity')).toBeInTheDocument();
+      const nameEl = screen.getByText('chrome-devtools-mcp');
+      expect(nameEl).toBeInTheDocument();
+      expect(nameEl).not.toHaveAttribute('title');
+
+      const badgeEl = screen.getByText('Antigravity');
+      expect(badgeEl).toBeInTheDocument();
+      expect(badgeEl).toHaveAttribute('data-source', 'Antigravity');
     });
 
     // 技能项不应混杂在 MCP 服务列表中
@@ -204,11 +219,67 @@ describe('ExternalImportWorkbench', () => {
           description: '同步 Cursor 项目规则配置',
         })
       );
+      expect(skillsApi.setSkillActivation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'cursor-rules-sync',
+          activation: 'enabled',
+        }),
+        'enabled'
+      );
     });
 
     expect(dispatchSpy).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'crish-skills-changed' })
     );
+    expect(onImportSuccess).toHaveBeenCalled();
+  });
+
+  it('imports skill with tilde path expanding real home directory, creating skill and enabling it', async () => {
+    vi.spyOn(detectSkillsApi, 'detectExternalSkills').mockResolvedValue([
+      {
+        id: 'mock-skill-resume',
+        source: 'Antigravity',
+        name: 'resume-master',
+        description: '简历生成技能',
+        filePath: '~/.gemini/antigravity/skills/resume-master/SKILL.md',
+        skillDir: '~/.gemini/antigravity/skills/resume-master',
+      },
+    ]);
+
+    render(
+      <ToastProvider>
+        <ExternalImportWorkbench
+          onImportSuccess={onImportSuccess}
+          onRefresh={onRefresh}
+        />
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByText(/技能 \(/));
+
+    await waitFor(() => {
+      expect(screen.getByText('resume-master')).toBeInTheDocument();
+    });
+
+    const importBtn = screen.getByRole('button', { name: '导入' });
+    fireEvent.click(importBtn);
+
+    await waitFor(() => {
+      expect(skillsApi.createProjectSkill).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'resume-master',
+          description: '简历生成技能',
+        })
+      );
+      expect(skillsApi.setSkillActivation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'resume-master',
+          activation: 'enabled',
+        }),
+        'enabled'
+      );
+    });
+
     expect(onImportSuccess).toHaveBeenCalled();
   });
 
@@ -272,9 +343,9 @@ describe('ExternalImportWorkbench', () => {
       </ToastProvider>
     );
 
-    // MCP 列表中显示已导入
+    // MCP 列表中显示已导入纯符号
     await waitFor(() => {
-      expect(screen.getByText('已导入')).toBeInTheDocument();
+      expect(screen.getByLabelText('已导入')).toBeInTheDocument();
     });
     expect(
       screen.queryByRole('button', { name: '导入' })
@@ -283,12 +354,63 @@ describe('ExternalImportWorkbench', () => {
     // 切换至 技能 列表
     fireEvent.click(screen.getByText(/技能 \(/));
 
-    // 技能列表中也显示已导入
+    // 技能列表中也显示已导入纯符号
     await waitFor(() => {
-      expect(screen.getByText('已导入')).toBeInTheDocument();
+      expect(screen.getByLabelText('已导入')).toBeInTheDocument();
     });
     expect(
       screen.queryByRole('button', { name: '导入' })
     ).not.toBeInTheDocument();
+  });
+
+  it('renders Claude Code and Codex badges with data-source and imports correctly', async () => {
+    vi.spyOn(detectMcpApi, 'detectExternalMcpServers').mockResolvedValue([
+      {
+        id: 'mock-mcp-claudecode',
+        source: 'Claude Code',
+        name: 'github',
+        type: 'stdio',
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-github'],
+        description: 'GitHub MCP 服务',
+      },
+      {
+        id: 'mock-mcp-codex',
+        source: 'Codex',
+        name: 'fetch',
+        type: 'stdio',
+        command: 'uvx',
+        args: ['mcp-server-fetch'],
+        description: '网络获取 MCP 服务',
+      },
+    ]);
+
+    render(
+      <ToastProvider>
+        <ExternalImportWorkbench
+          onImportSuccess={onImportSuccess}
+          onRefresh={onRefresh}
+        />
+      </ToastProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('github')).toBeInTheDocument();
+      expect(screen.getByText('fetch')).toBeInTheDocument();
+    });
+
+    const claudeBadge = screen.getByText('Claude Code');
+    expect(claudeBadge).toHaveAttribute('data-source', 'Claude Code');
+
+    const codexBadge = screen.getByText('Codex');
+    expect(codexBadge).toHaveAttribute('data-source', 'Codex');
+
+    const importButtons = screen.getAllByRole('button', { name: '导入' });
+    fireEvent.click(importButtons[0]);
+
+    await waitFor(() => {
+      const servers = useSettingsStore.getState().mcpServers || [];
+      expect(servers.some((s) => s.name === 'github')).toBe(true);
+    });
   });
 });

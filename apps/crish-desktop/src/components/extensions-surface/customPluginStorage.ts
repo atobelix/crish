@@ -2,8 +2,10 @@
  * apps/crish-desktop/src/components/extensions-surface/customPluginStorage.ts
  *
  * 用户自定义插件持久化存储与分享 Payload 规范解析器
- * 基于 localStorage `crish_custom_plugins_v1` 进行容错读写与跨组件广播
+ * 读写统一经 api/localStorageApi 安全访问层（key: `crish_custom_plugins_v1`），并做跨组件广播
  */
+
+import { safeGetJson, safeSetJson } from '../../api/localStorageApi';
 
 export interface CustomPluginItem {
   id: string;
@@ -23,29 +25,19 @@ export const CUSTOM_PLUGINS_STORAGE_KEY = 'crish_custom_plugins_v1';
  * 从 localStorage 读取所有自定义插件并进行容错解析
  */
 export function loadCustomPlugins(): CustomPluginItem[] {
-  try {
-    const raw = localStorage.getItem(CUSTOM_PLUGINS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
+  const parsed = safeGetJson<unknown>(CUSTOM_PLUGINS_STORAGE_KEY, []);
+  if (!Array.isArray(parsed)) return [];
 
-    return parsed.filter((item): item is CustomPluginItem =>
-      Boolean(
-        item &&
-        typeof item === 'object' &&
-        typeof item.id === 'string' &&
-        item.id.trim() !== '' &&
-        typeof item.name === 'string' &&
-        item.name.trim() !== ''
-      )
-    );
-  } catch (err) {
-    console.warn(
-      '[customPluginStorage] 无法解析自定义插件缓存，已回退为空列表:',
-      err
-    );
-    return [];
-  }
+  return parsed.filter((item): item is CustomPluginItem =>
+    Boolean(
+      item &&
+      typeof item === 'object' &&
+      typeof item.id === 'string' &&
+      item.id.trim() !== '' &&
+      typeof item.name === 'string' &&
+      item.name.trim() !== ''
+    )
+  );
 }
 
 /**
@@ -64,7 +56,7 @@ export function saveCustomPlugin(item: CustomPluginItem): void {
       updated = [item, ...current];
     }
 
-    localStorage.setItem(CUSTOM_PLUGINS_STORAGE_KEY, JSON.stringify(updated));
+    safeSetJson(CUSTOM_PLUGINS_STORAGE_KEY, updated);
     if (
       typeof window !== 'undefined' &&
       typeof window.dispatchEvent === 'function'
@@ -87,7 +79,7 @@ export function removeCustomPlugin(id: string): void {
   try {
     const current = loadCustomPlugins();
     const updated = current.filter((p) => p.id !== id);
-    localStorage.setItem(CUSTOM_PLUGINS_STORAGE_KEY, JSON.stringify(updated));
+    safeSetJson(CUSTOM_PLUGINS_STORAGE_KEY, updated);
     if (
       typeof window !== 'undefined' &&
       typeof window.dispatchEvent === 'function'
@@ -216,6 +208,227 @@ export function parseManualPluginInput(raw: string): CustomPluginItem | null {
     type: 'custom',
     tags: ['manual-installed'],
     config: { installRef: trimmed },
+    createdAt: Date.now(),
+  };
+}
+
+/**
+ * 从文件文本（manifest.json、package.json 等）解析插件元数据
+ */
+export function parsePluginFromFileContent(
+  text: string,
+  fileName?: string
+): CustomPluginItem | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  try {
+    const data = JSON.parse(trimmed);
+    if (!data || typeof data !== 'object') return null;
+
+    const rawName = String(
+      data.name || data.title || data.displayName || ''
+    ).trim();
+    const fallbackName = fileName
+      ? fileName.replace(/\.(json|zip)$/i, '').replace(/[_-]+/g, ' ')
+      : '已导入插件';
+    const name = rawName || fallbackName;
+
+    let rawId = String(data.id || '').trim();
+    if (!rawId && rawName) {
+      const unscoped = rawName.includes('/')
+        ? rawName.split('/').pop()!
+        : rawName;
+      rawId = unscoped.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase();
+    }
+    if (!rawId) {
+      rawId = (
+        fileName ? fileName.replace(/\.(json|zip)$/i, '') : 'custom-plugin'
+      )
+        .replace(/[^a-zA-Z0-9_-]/g, '-')
+        .toLowerCase();
+    }
+    const id = rawId.replace(/^-+|-+$/g, '') || `plugin-${Date.now()}`;
+
+    const version = String(data.version || '1.0.0').trim();
+    const description = String(
+      data.description ||
+        data.desc ||
+        `从 ${fileName || '外部文件'} 导入的扩展插件`
+    ).trim();
+
+    const author =
+      typeof data.author === 'string'
+        ? data.author.trim()
+        : data.author &&
+            typeof data.author === 'object' &&
+            'name' in data.author
+          ? String((data.author as { name?: string }).name || '').trim()
+          : undefined;
+
+    const type =
+      data.type === 'tool' || data.type === 'view' ? data.type : 'custom';
+    const tags = Array.isArray(data.tags)
+      ? data.tags.map(String)
+      : Array.isArray(data.keywords)
+        ? data.keywords.map(String)
+        : ['imported'];
+
+    return {
+      id,
+      name,
+      version: version || '1.0.0',
+      description,
+      author: author || undefined,
+      type,
+      tags,
+      config:
+        data.config && typeof data.config === 'object'
+          ? data.config
+          : undefined,
+      createdAt: Date.now(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 从 ZIP 压缩包解析插件元数据（优先读取 zip 内的 manifest.json / package.json，失败时回退从文件名提取）
+ */
+export async function parsePluginFromZipFile(
+  file: File
+): Promise<CustomPluginItem | null> {
+  const fileName = file.name;
+  const baseName = fileName.replace(/\.zip$/i, '');
+  const cleanId =
+    baseName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase() ||
+    `plugin-${Date.now()}`;
+
+  try {
+    const buffer = await file.arrayBuffer();
+    if (buffer.byteLength === 0) return null;
+    const view = new DataView(buffer);
+    const bytes = new Uint8Array(buffer);
+
+    let pos = 0;
+    while (pos + 30 < view.byteLength) {
+      if (view.getUint32(pos, true) !== 0x04034b50) {
+        break;
+      }
+
+      const method = view.getUint16(pos + 8, true);
+      const compressedSize = view.getUint32(pos + 18, true);
+      const nameLen = view.getUint16(pos + 26, true);
+      const extraLen = view.getUint16(pos + 28, true);
+
+      const nameBytes = bytes.slice(pos + 30, pos + 30 + nameLen);
+      const entryName = new TextDecoder('utf-8').decode(nameBytes);
+      const dataStart = pos + 30 + nameLen + extraLen;
+      const dataEnd = dataStart + compressedSize;
+
+      const baseEntryName = entryName.split('/').pop() || entryName;
+      if (
+        (baseEntryName === 'manifest.json' ||
+          baseEntryName === 'package.json') &&
+        dataEnd <= bytes.length
+      ) {
+        if (method === 0) {
+          const jsonText = new TextDecoder('utf-8').decode(
+            bytes.slice(dataStart, dataEnd)
+          );
+          const parsed = parsePluginFromFileContent(jsonText, baseEntryName);
+          if (parsed) return parsed;
+        } else if (method === 8 && typeof DecompressionStream !== 'undefined') {
+          try {
+            const ds = new DecompressionStream('deflate-raw');
+            const writer = ds.writable.getWriter();
+            writer.write(buffer.slice(dataStart, dataEnd));
+            writer.close();
+            const decompressedBuf = await new Response(
+              ds.readable
+            ).arrayBuffer();
+            const decompressedText = new TextDecoder('utf-8').decode(
+              decompressedBuf
+            );
+            const parsed = parsePluginFromFileContent(
+              decompressedText,
+              baseEntryName
+            );
+            if (parsed) return parsed;
+          } catch {
+            // fallback
+          }
+        }
+      }
+
+      pos = dataEnd;
+      if (compressedSize === 0) break;
+    }
+  } catch {
+    // ignore
+  }
+
+  return {
+    id: cleanId,
+    name: baseName,
+    version: '1.0.0',
+    description: `从压缩包「${fileName}」导入的插件`,
+    type: 'custom',
+    tags: ['imported', 'zip'],
+    createdAt: Date.now(),
+  };
+}
+
+/**
+ * 从文件夹所包含的文件列表中检索 manifest.json / package.json 进行解析
+ */
+export async function parsePluginFromDirectoryFiles(
+  files: File[]
+): Promise<CustomPluginItem | null> {
+  if (!files || files.length === 0) return null;
+
+  const manifestFile =
+    files.find((f) => f.name.toLowerCase() === 'manifest.json') ||
+    files.find((f) => f.name.toLowerCase() === 'package.json') ||
+    files.find((f) => f.name.toLowerCase().endsWith('.json'));
+
+  if (manifestFile) {
+    try {
+      const text =
+        typeof manifestFile.text === 'function'
+          ? await manifestFile.text()
+          : await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsText(manifestFile);
+            });
+      const parsed = parsePluginFromFileContent(text, manifestFile.name);
+      if (parsed) return parsed;
+    } catch {
+      // fallback to folder name
+    }
+  }
+
+  const first = files[0];
+  if (!first) return null;
+  const relativePath = (first as any).webkitRelativePath || '';
+  const dirName =
+    (relativePath ? relativePath.split('/')[0] : '') ||
+    first.name ||
+    'plugin-dir';
+  const cleanId =
+    dirName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase() ||
+    `plugin-${Date.now()}`;
+
+  return {
+    id: cleanId,
+    name: dirName,
+    version: '1.0.0',
+    description: `从插件目录「${dirName}」导入的插件`,
+    type: 'custom',
+    tags: ['imported', 'directory'],
     createdAt: Date.now(),
   };
 }
