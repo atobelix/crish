@@ -14,10 +14,15 @@ import type {
   EngineDiagnosticEntry,
   EngineEndpointKind,
   EngineLastErrorEntry,
+  LastCrashInfo,
   EngineStatus,
   NormalizedEngineConfig,
 } from './engineConfigTypes';
-import { modelRefKey, parseModelRefKey, type ModelRef } from './modelsCatalogTypes';
+import {
+  modelRefKey,
+  parseModelRefKey,
+  type ModelRef,
+} from './modelsCatalogTypes';
 
 // ─── Pure helpers (no LS / no network) ───────────────────────────────────────
 
@@ -27,7 +32,11 @@ import { modelRefKey, parseModelRefKey, type ModelRef } from './modelsCatalogTyp
  */
 export function normalizeEngineConfigText(raw: unknown): string {
   if (raw == null) return '';
-  if (typeof raw !== 'string' && typeof raw !== 'number' && typeof raw !== 'boolean') {
+  if (
+    typeof raw !== 'string' &&
+    typeof raw !== 'number' &&
+    typeof raw !== 'boolean'
+  ) {
     return '';
   }
   let s = String(raw);
@@ -102,12 +111,18 @@ export function isValidEngineBaseUrl(raw: unknown): boolean {
  * auto | responses | chat-completions；chat → chat-completions；response → responses。
  * 未知 / 空 → undefined（不发明默认）。
  */
-export function normalizeEngineEndpointKind(raw: unknown): EngineEndpointKind | undefined {
-  const n = normalizeEngineConfigText(raw).toLowerCase().replace(/_/g, '-').replace(/\//g, '-');
+export function normalizeEngineEndpointKind(
+  raw: unknown
+): EngineEndpointKind | undefined {
+  const n = normalizeEngineConfigText(raw)
+    .toLowerCase()
+    .replace(/_/g, '-')
+    .replace(/\//g, '-');
   if (!n) return undefined;
   if (n === 'auto') return 'auto';
   if (n === 'responses' || n === 'response') return 'responses';
-  if (n === 'chat-completions' || n === 'chat' || n === 'chat-completion') return 'chat-completions';
+  if (n === 'chat-completions' || n === 'chat' || n === 'chat-completion')
+    return 'chat-completions';
   return undefined;
 }
 
@@ -116,12 +131,18 @@ export function normalizeEngineEndpointKind(raw: unknown): EngineEndpointKind | 
  * 别名：account_center / accountcenter → account-center。
  * 未知 / 空 → undefined。
  */
-export function normalizeEngineCredentialMode(raw: unknown): EngineCredentialMode | undefined {
-  const n = normalizeEngineConfigText(raw).toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-');
+export function normalizeEngineCredentialMode(
+  raw: unknown
+): EngineCredentialMode | undefined {
+  const n = normalizeEngineConfigText(raw)
+    .toLowerCase()
+    .replace(/_/g, '-')
+    .replace(/\s+/g, '-');
   if (!n) return undefined;
   if (n === 'direct') return 'direct';
   if (n === 'auto') return 'auto';
-  if (n === 'account-center' || n === 'accountcenter' || n === 'account') return 'account-center';
+  if (n === 'account-center' || n === 'accountcenter' || n === 'account')
+    return 'account-center';
   return undefined;
 }
 
@@ -172,7 +193,7 @@ export function defaultEngineConfigShell(): NormalizedEngineConfig {
  * - 非法入参 → {}
  */
 export function normalizeEngineConfigUpdate(
-  update: Partial<EngineConfigUpdate> | null | undefined,
+  update: Partial<EngineConfigUpdate> | null | undefined
 ): EngineConfigUpdate {
   if (!update || typeof update !== 'object') return {};
   const out: EngineConfigUpdate = {};
@@ -210,7 +231,7 @@ export function normalizeEngineConfigUpdate(
 
 /** 更新体是否无可下发字段（纯） */
 export function isEmptyEngineConfigUpdate(
-  update: Partial<EngineConfigUpdate> | null | undefined,
+  update: Partial<EngineConfigUpdate> | null | undefined
 ): boolean {
   const n = normalizeEngineConfigUpdate(update);
   return (
@@ -249,18 +270,21 @@ export function mergeEngineConfigPartial(
  * 调用方原始配置对象中的 apiKey 字段做就绪度分类（legacy 只读兼容）。
  */
 export function engineConfigReadiness(
-  config: Partial<EngineConfigUpdate> | null | undefined,
+  config: Partial<EngineConfigUpdate> | null | undefined
 ): EngineConfigReadiness {
   const n = normalizeEngineConfigUpdate(config);
   const hasModel = Boolean(n.model);
   const hasBaseUrl = Boolean(n.baseUrl);
   const baseUrlValid = hasBaseUrl ? isValidEngineBaseUrl(n.baseUrl) : false;
   const rawKey = (config as { apiKey?: unknown } | null | undefined)?.apiKey;
-  const hasApiKey = Boolean(
-    typeof rawKey === 'string' && rawKey.trim()
-  );
+  const hasApiKey = Boolean(typeof rawKey === 'string' && rawKey.trim());
   const mode = normalizeEngineCredentialMode(n.credentialMode);
-  const empty = !hasModel && !hasBaseUrl && !hasApiKey && mode === undefined && n.endpoint === undefined;
+  const empty =
+    !hasModel &&
+    !hasBaseUrl &&
+    !hasApiKey &&
+    mode === undefined &&
+    n.endpoint === undefined;
   // baseUrl 可选：有则必须合法；无 baseUrl 仍可 usable（本机已配引擎默认地址时）
   const usable = hasModel && (!hasBaseUrl || baseUrlValid);
   const credentialMaySupplyKey = mode === 'account-center' || mode === 'auto';
@@ -280,14 +304,14 @@ export function engineConfigReadiness(
 
 /** 空配置（纯） */
 export function isEmptyEngineConfig(
-  config: Partial<EngineConfigUpdate> | null | undefined,
+  config: Partial<EngineConfigUpdate> | null | undefined
 ): boolean {
   return engineConfigReadiness(config).empty;
 }
 
 /** 部分配置：有字段但尚不可用（纯） */
 export function isPartialEngineConfig(
-  config: Partial<EngineConfigUpdate> | null | undefined,
+  config: Partial<EngineConfigUpdate> | null | undefined
 ): boolean {
   return engineConfigReadiness(config).partial;
 }
@@ -297,7 +321,7 @@ export function isPartialEngineConfig(
  * 仅包含已规范化、非空字段；始终带 type。
  */
 export function buildUpdateConfigPayload(
-  update: Partial<EngineConfigUpdate> | null | undefined,
+  update: Partial<EngineConfigUpdate> | null | undefined
 ): Record<string, unknown> {
   const n = normalizeEngineConfigUpdate(update);
   const payload: Record<string, unknown> = { type: 'update-config' };
@@ -349,7 +373,7 @@ export function normalizeRecentModels(list: unknown): string[] {
  */
 export function mergeModelsForPicker(
   recent: unknown,
-  current?: string | null,
+  current?: string | null
 ): string[] {
   const list = normalizeRecentModels(recent);
   const cur = normalizeEngineModelId(current);
@@ -365,7 +389,9 @@ export function mergeModelsForPicker(
  * 从 get-status 原始 JSON 抽取引擎状态字段（纯，无副作用）。
  * 兼容 provider / config / providerStatus 嵌套；不写 recent、不发明 model。
  */
-export function parseEngineStatusFromRaw(res: unknown): Omit<EngineStatus, 'raw'> {
+export function parseEngineStatusFromRaw(
+  res: unknown
+): Omit<EngineStatus, 'raw'> {
   if (!res || typeof res !== 'object' || Array.isArray(res)) {
     return { ok: false, error: 'invalid_status' };
   }
@@ -377,13 +403,16 @@ export function parseEngineStatusFromRaw(res: unknown): Omit<EngineStatus, 'raw'
     {};
 
   const nestedProvider =
-    (pickNested(root, ['providerStatus']) as Record<string, unknown> | undefined) ||
-    (pickNested(root, ['lifecycle', 'providerStatus']) as Record<string, unknown> | undefined);
+    (pickNested(root, ['providerStatus']) as
+      Record<string, unknown> | undefined) ||
+    (pickNested(root, ['lifecycle', 'providerStatus']) as
+      Record<string, unknown> | undefined);
 
   const src = { ...provider, ...(nestedProvider || {}) };
 
   const apiKeyInfo =
-    (pickNested(root, ['provider', 'apiKey']) as Record<string, unknown> | undefined) ||
+    (pickNested(root, ['provider', 'apiKey']) as
+      Record<string, unknown> | undefined) ||
     (pickNested(src, ['apiKey']) as Record<string, unknown> | undefined) ||
     (pickNested(root, ['apiKey']) as Record<string, unknown> | undefined);
 
@@ -405,7 +434,9 @@ export function parseEngineStatusFromRaw(res: unknown): Omit<EngineStatus, 'raw'
     (typeof provider.baseUrl === 'string' && provider.baseUrl) ||
     (typeof root.baseUrl === 'string' && root.baseUrl) ||
     undefined;
-  const baseUrl = baseUrlRaw ? normalizeEngineBaseUrl(baseUrlRaw) || undefined : undefined;
+  const baseUrl = baseUrlRaw
+    ? normalizeEngineBaseUrl(baseUrlRaw) || undefined
+    : undefined;
 
   const credentialMode =
     normalizeEngineCredentialMode(src.credentialMode) ||
@@ -418,27 +449,36 @@ export function parseEngineStatusFromRaw(res: unknown): Omit<EngineStatus, 'raw'
   const asStr = (v: unknown): string | undefined =>
     typeof v === 'string' && v ? v : undefined;
   const lastErrorRaw = pickNested(root, ['lastError']) as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const lastError: EngineLastErrorEntry | undefined =
     lastErrorRaw && typeof lastErrorRaw.kind === 'string'
       ? {
           kind: lastErrorRaw.kind,
           detail:
-            typeof lastErrorRaw.detail === 'string'
-              ? lastErrorRaw.detail
-              : '',
+            typeof lastErrorRaw.detail === 'string' ? lastErrorRaw.detail : '',
           ts: typeof lastErrorRaw.ts === 'number' ? lastErrorRaw.ts : 0,
+        }
+      : undefined;
+  const lastCrashRaw = pickNested(root, ['lastCrash']) as
+    Record<string, unknown> | undefined;
+  const lastCrash: LastCrashInfo | undefined =
+    lastCrashRaw && typeof lastCrashRaw.fileName === 'string'
+      ? {
+          fileName: lastCrashRaw.fileName,
+          timestampMs:
+            typeof lastCrashRaw.timestampMs === 'number'
+              ? lastCrashRaw.timestampMs
+              : 0,
         }
       : undefined;
   const diagnosticsRaw = root.diagnostics;
   const diagnostics: EngineDiagnosticEntry[] | undefined = Array.isArray(
-    diagnosticsRaw,
+    diagnosticsRaw
   )
     ? diagnosticsRaw
         .filter(
           (d): d is Record<string, unknown> =>
-            Boolean(d) && typeof d === 'object',
+            Boolean(d) && typeof d === 'object'
         )
         .map((d) => ({
           ts: typeof d.ts === 'number' ? d.ts : 0,
@@ -456,14 +496,24 @@ export function parseEngineStatusFromRaw(res: unknown): Omit<EngineStatus, 'raw'
     ...(asBool(root.engineReady) !== undefined && {
       engineReady: asBool(root.engineReady) as boolean,
     }),
-    ...(asBool(root.dbReady) !== undefined && { dbReady: asBool(root.dbReady) as boolean }),
+    ...(asBool(root.dbReady) !== undefined && {
+      dbReady: asBool(root.dbReady) as boolean,
+    }),
     ...(asBool(root.searchIndexReady) !== undefined && {
       searchIndexReady: asBool(root.searchIndexReady) as boolean,
     }),
-    ...(asStr(root.logLevel) !== undefined && { logLevel: asStr(root.logLevel) as string }),
-    ...(asStr(root.logDir) !== undefined && { logDir: asStr(root.logDir) as string }),
+    ...(asStr(root.logLevel) !== undefined && {
+      logLevel: asStr(root.logLevel) as string,
+    }),
+    ...(asStr(root.logDir) !== undefined && {
+      logDir: asStr(root.logDir) as string,
+    }),
     ...(lastError !== undefined && { lastError }),
     ...(diagnostics !== undefined && { diagnostics }),
+    ...(asBool(root.initialized) !== undefined && {
+      initialized: asBool(root.initialized) as boolean,
+    }),
+    ...(lastCrash !== undefined && { lastCrash }),
   };
 }
 

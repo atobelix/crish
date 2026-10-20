@@ -4,6 +4,11 @@
  * 保留与原 engineConfig.ts 完全一致的类型导出面，消费方经 hub re-export 消费。
  */
 
+export type LastCrashInfo = {
+  fileName: string;
+  timestampMs: number;
+};
+
 export type EngineLastErrorEntry = {
   kind: string;
   detail: string;
@@ -34,6 +39,8 @@ export type EngineStatus = {
   raw?: Record<string, unknown>;
   error?: string;
   // ── T04.5-2 诊断段（core_get_status wire 形状，缺省 undefined）──
+  /** 微内核初始化标记 */
+  initialized?: boolean;
   /** 引擎（session-loop）就绪 */
   engineReady?: boolean;
   /** 会话数据库就绪 */
@@ -48,6 +55,8 @@ export type EngineStatus = {
   lastError?: EngineLastErrorEntry;
   /** 最近诊断（环形 20，最旧在前；展示层自行 reverse） */
   diagnostics?: EngineDiagnosticEntry[];
+  /** 最近微内核崩溃标记（None = 进程内无 panic） */
+  lastCrash?: LastCrashInfo;
 };
 
 export type EngineConfigUpdate = {
@@ -86,8 +95,7 @@ export type NormalizedEngineConfig = {
 };
 
 export type EngineBaseUrlValidation =
-  | { ok: true; url: string }
-  | { ok: false; error: string };
+  { ok: true; url: string } | { ok: false; error: string };
 
 export type EngineConfigReadiness = {
   hasModel: boolean;

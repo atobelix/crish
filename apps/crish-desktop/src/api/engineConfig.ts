@@ -14,6 +14,7 @@
 
 export {
   type EngineLastErrorEntry,
+  type LastCrashInfo,
   type EngineDiagnosticEntry,
   type EngineStatus,
   type EngineConfigUpdate,

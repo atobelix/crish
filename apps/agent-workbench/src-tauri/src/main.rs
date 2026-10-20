@@ -1230,6 +1230,34 @@ fn main() {
                 }
             }
 
+            // 启动期后台搜索索引自动预热：若有已授权活动工作区根，异步预热构建目录索引
+            {
+                let search_state = Arc::clone(&search_state);
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Some(reg) = app_handle.try_state::<crate::workspace::WorkspaceRegistry>() {
+                        if let Some(first_root) = reg.roots().first().cloned() {
+                            let root_str = first_root.to_string_lossy().into_owned();
+                            let built = tokio::task::spawn_blocking(move || {
+                                conex_search::walker::build_directory_index(&root_str)
+                            })
+                            .await;
+                            if let Ok(built_files) = built {
+                                let count = built_files.len();
+                                if let Ok(mut lock) = search_state.files.write() {
+                                    *lock = Arc::new(built_files);
+                                    tracing::info!(
+                                        target: "search",
+                                        file_count = count,
+                                        "启动期后台搜索索引自动预热构建完成"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
             tracing::info!(
                 target: "setup",
                 level = %level,

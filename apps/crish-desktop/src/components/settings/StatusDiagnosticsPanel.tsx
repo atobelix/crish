@@ -21,7 +21,12 @@ import {
   type EngineStatus,
 } from '../../api/engineConfig';
 import { rebuildSearchIndex } from '../../api/rustCore';
-import { SettingsCard, SettingsPage, SettingsRow, SettingsSection } from './SettingsUI';
+import {
+  SettingsCard,
+  SettingsPage,
+  SettingsRow,
+  SettingsSection,
+} from './SettingsUI';
 import { Button, Tooltip } from '../ui';
 import styles from './StatusDiagnosticsPanel.module.css';
 import { AppIcon } from '../ui/icons/index';
@@ -101,7 +106,7 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
       const next = await fetchEngineStatus();
       if (!mountedRef.current) return;
       setStatus(next);
-      setFetchError(next.ok ? null : next.error ?? '核心状态获取失败');
+      setFetchError(next.ok ? null : (next.error ?? '核心状态获取失败'));
     } catch (e) {
       if (!mountedRef.current) return;
       setFetchError(e instanceof Error ? e.message : String(e));
@@ -129,7 +134,7 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
       if (ok) showToast('已复制错误信息');
       else showToast('复制失败');
     },
-    [showToast],
+    [showToast]
   );
 
   const handleCopyPath = useCallback(
@@ -138,7 +143,7 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
       if (ok) showToast('已复制路径');
       else showToast('复制失败');
     },
-    [showToast],
+    [showToast]
   );
 
   /**
@@ -166,6 +171,18 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
     }
   }, [rebuilding, showToast, load]);
 
+  // 微内核健康态判定：仅针对微内核崩溃（lastCrash）、致命运行异常（FatalPanic）、初始化失败或断连
+  // 模型供应商未配置在对话主界面已有提示，此处仅反映微内核 session-loop 真实运行时健康态
+  const isEngineHealthy =
+    status && status.ok
+      ? Boolean(
+          status.connected !== false &&
+          (status.initialized ?? true) &&
+          !status.lastCrash &&
+          status.lastError?.kind !== 'FatalPanic'
+        )
+      : undefined;
+
   const lastError = status?.lastError ?? null;
   const diagnostics: EngineDiagnosticEntry[] = status?.diagnostics ?? [];
   // 最新在前（Rust 侧缓冲最旧在前）
@@ -191,7 +208,13 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
               disabled={refreshing}
               onClick={() => void load()}
               aria-label="刷新状态诊断"
-              icon={<AppIcon name="refresh" size={14} className={refreshing ? styles.spin : undefined} />}
+              icon={
+                <AppIcon
+                  name="refresh"
+                  size={14}
+                  className={refreshing ? styles.spin : undefined}
+                />
+              }
             >
               刷新
             </Button>
@@ -200,7 +223,11 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
       }
     >
       {fetchError ? (
-        <div className={styles.errorBanner} role="alert" data-testid="diag-error-banner">
+        <div
+          className={styles.errorBanner}
+          role="alert"
+          data-testid="diag-error-banner"
+        >
           <AppIcon name="alert-triangle" size={16} aria-hidden />
           <div className={styles.errorBannerBody}>
             <strong>无法获取核心状态</strong>
@@ -219,8 +246,16 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
 
       <SettingsSection title="子系统就绪">
         <SettingsCard>
-          <SubsystemRow label="引擎（session-loop）" ready={status?.engineReady} readyLabel="engineReady" />
-          <SubsystemRow label="会话数据库" ready={status?.dbReady} readyLabel="dbReady" />
+          <SubsystemRow
+            label="引擎（session-loop）"
+            ready={isEngineHealthy}
+            readyLabel="engineReady"
+          />
+          <SubsystemRow
+            label="会话数据库"
+            ready={status?.dbReady}
+            readyLabel="dbReady"
+          />
           <SettingsRow
             title="搜索索引"
             desc={
@@ -232,11 +267,17 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
             }
             control={
               <span
-                className={status?.searchIndexReady ? styles.badgeOk : styles.badgeBad}
+                className={
+                  status?.searchIndexReady ? styles.badgeOk : styles.badgeBad
+                }
                 role="status"
                 data-testid="diag-searchIndexReady"
               >
-                {status?.searchIndexReady ? 'OK' : typeof status?.searchIndexReady === 'boolean' ? '异常' : '未知'}
+                {status?.searchIndexReady
+                  ? 'OK'
+                  : typeof status?.searchIndexReady === 'boolean'
+                    ? '异常'
+                    : '未知'}
               </span>
             }
           />
@@ -269,7 +310,11 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
             title="当前日志级别"
             desc="日志文件与状态面板共用的过滤级别"
             control={
-              <span className={styles.monoBadge} role="status" data-testid="diag-log-level">
+              <span
+                className={styles.monoBadge}
+                role="status"
+                data-testid="diag-log-level"
+              >
                 {status?.logLevel ?? '—'}
               </span>
             }
@@ -280,7 +325,10 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
             control={
               <div className={styles.logDirControl}>
                 <Tooltip content={status?.logDir ?? '未知'}>
-                  <span className={styles.monoEllipsis} data-testid="diag-log-dir">
+                  <span
+                    className={styles.monoEllipsis}
+                    data-testid="diag-log-dir"
+                  >
                     {status?.logDir ?? '—'}
                   </span>
                 </Tooltip>
@@ -305,10 +353,16 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
       <SettingsSection title="最近错误">
         <SettingsCard>
           {lastError ? (
-            <div className={styles.lastError} role="alert" data-testid="diag-last-error">
+            <div
+              className={styles.lastError}
+              role="alert"
+              data-testid="diag-last-error"
+            >
               <div className={styles.lastErrorHead}>
                 <span className={styles.lastErrorKind}>{lastError.kind}</span>
-                <span className={styles.lastErrorTs}>{formatTs(lastError.ts)}</span>
+                <span className={styles.lastErrorTs}>
+                  {formatTs(lastError.ts)}
+                </span>
                 <Tooltip content="复制错误信息">
                   <Button
                     type="button"
@@ -325,7 +379,11 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
               <pre className={styles.lastErrorDetail}>{lastError.detail}</pre>
             </div>
           ) : (
-            <div className={styles.noError} role="status" data-testid="diag-no-error">
+            <div
+              className={styles.noError}
+              role="status"
+              data-testid="diag-no-error"
+            >
               <AppIcon name="check-circle" size={16} aria-hidden />
               无错误记录
             </div>
@@ -336,11 +394,19 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
       <SettingsSection title="最近诊断">
         <SettingsCard>
           {recentDiags.length === 0 ? (
-            <div className={styles.noError} role="status" data-testid="diag-no-diagnostics">
+            <div
+              className={styles.noError}
+              role="status"
+              data-testid="diag-no-diagnostics"
+            >
               暂无诊断记录
             </div>
           ) : (
-            <ul className={styles.diagList} aria-label="最近诊断条目" data-testid="diag-list">
+            <ul
+              className={styles.diagList}
+              aria-label="最近诊断条目"
+              data-testid="diag-list"
+            >
               {recentDiags.map((d, i) => (
                 <li key={`${d.ts}-${i}`} className={styles.diagItem}>
                   <span

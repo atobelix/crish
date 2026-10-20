@@ -34,7 +34,11 @@ const OK_STATUS = {
     { ts: 1700000000000, level: 'info', message: 'engine init complete' },
     { ts: 1700000000100, level: 'error', message: 'run 失败: 引擎失败' },
   ],
-  lastError: { kind: 'RunFailed', detail: '引擎失败（未就绪占位生产者）', ts: 1700000000100 },
+  lastError: {
+    kind: 'RunFailed',
+    detail: '引擎失败（未就绪占位生产者）',
+    ts: 1700000000100,
+  },
 };
 
 beforeEach(() => {
@@ -58,7 +62,9 @@ describe('StatusDiagnosticsPanel', () => {
     const logLevel = screen.getByTestId('diag-log-level');
     expect(logLevel).toHaveTextContent('info');
     expect(logLevel).toHaveClass(styles.monoBadge);
-    expect(screen.getByTestId('diag-log-dir')).toHaveTextContent('C:\\logs\\crish');
+    expect(screen.getByTestId('diag-log-dir')).toHaveTextContent(
+      'C:\\logs\\crish'
+    );
 
     // 最近错误（醒目错误块：kind + detail）
     const lastError = screen.getByTestId('diag-last-error');
@@ -92,22 +98,34 @@ describe('StatusDiagnosticsPanel', () => {
     render(<StatusDiagnosticsPanel pollIntervalMs={60_000} />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('diag-no-error')).toHaveTextContent('无错误记录');
+      expect(screen.getByTestId('diag-no-error')).toHaveTextContent(
+        '无错误记录'
+      );
     });
-    expect(screen.getByTestId('diag-no-diagnostics')).toHaveTextContent('暂无诊断记录');
+    expect(screen.getByTestId('diag-no-diagnostics')).toHaveTextContent(
+      '暂无诊断记录'
+    );
     expect(screen.queryByTestId('diag-last-error')).toBeNull();
     expect(screen.getByTestId('diag-log-level')).toHaveTextContent('debug');
   });
 
   it('获取失败时醒目提示（错误横幅 + 连接异常），仍保留面板骨架', async () => {
-    fetchEngineStatus.mockResolvedValue({ ok: false, connected: false, error: 'not_connected' });
+    fetchEngineStatus.mockResolvedValue({
+      ok: false,
+      connected: false,
+      error: 'not_connected',
+    });
     render(<StatusDiagnosticsPanel pollIntervalMs={60_000} />);
 
     await waitFor(() => {
       expect(screen.getByTestId('diag-error-banner')).toBeTruthy();
     });
-    expect(screen.getByTestId('diag-error-banner')).toHaveTextContent('无法获取核心状态');
-    expect(screen.getByTestId('diag-error-banner')).toHaveTextContent('not_connected');
+    expect(screen.getByTestId('diag-error-banner')).toHaveTextContent(
+      '无法获取核心状态'
+    );
+    expect(screen.getByTestId('diag-error-banner')).toHaveTextContent(
+      'not_connected'
+    );
     expect(screen.getByTestId('diag-connection')).toHaveTextContent('连接异常');
     // 骨架仍在（未就绪徽标按未知渲染）
     expect(screen.getByTestId('diag-engineReady')).toHaveTextContent('未知');
@@ -118,7 +136,9 @@ describe('StatusDiagnosticsPanel', () => {
     render(<StatusDiagnosticsPanel pollIntervalMs={60_000} />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('diag-error-banner')).toHaveTextContent('invoke failed');
+      expect(screen.getByTestId('diag-error-banner')).toHaveTextContent(
+        'invoke failed'
+      );
     });
   });
 
@@ -134,7 +154,9 @@ describe('StatusDiagnosticsPanel', () => {
     render(<StatusDiagnosticsPanel pollIntervalMs={60_000} />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('diag-searchIndexReady')).toHaveTextContent('异常');
+      expect(screen.getByTestId('diag-searchIndexReady')).toHaveTextContent(
+        '异常'
+      );
     });
     const rebuildBtn = screen.getByTestId('diag-rebuild-search-index');
     expect(rebuildBtn).toBeTruthy();
@@ -151,6 +173,46 @@ describe('StatusDiagnosticsPanel', () => {
     });
   });
 
+  it('微内核健康且在线（即使模型未配置 engineReady=false），引擎行展示 OK', async () => {
+    fetchEngineStatus.mockResolvedValue({
+      ok: true,
+      connected: true,
+      initialized: true,
+      engineReady: false,
+      dbReady: true,
+      searchIndexReady: true,
+      logLevel: 'info',
+      logDir: 'C:\\logs\\crish',
+    });
+    render(<StatusDiagnosticsPanel pollIntervalMs={60_000} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('diag-engineReady')).toHaveTextContent('OK');
+    });
+  });
+
+  it('微内核发生崩溃（lastCrash 存在）时，引擎行展示异常', async () => {
+    fetchEngineStatus.mockResolvedValue({
+      ok: true,
+      connected: true,
+      initialized: true,
+      engineReady: true,
+      dbReady: true,
+      searchIndexReady: true,
+      lastCrash: {
+        fileName: 'crash-20261020-070000-main.log',
+        timestampMs: 1700000000000,
+      },
+      logLevel: 'info',
+      logDir: 'C:\\logs\\crish',
+    });
+    render(<StatusDiagnosticsPanel pollIntervalMs={60_000} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('diag-engineReady')).toHaveTextContent('异常');
+    });
+  });
+
   it('T2.5：searchIndexReady=true / 状态未知时不渲染重建按钮', async () => {
     fetchEngineStatus.mockResolvedValue({
       ok: true,
@@ -162,7 +224,9 @@ describe('StatusDiagnosticsPanel', () => {
     render(<StatusDiagnosticsPanel pollIntervalMs={60_000} />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('diag-searchIndexReady')).toHaveTextContent('OK');
+      expect(screen.getByTestId('diag-searchIndexReady')).toHaveTextContent(
+        'OK'
+      );
     });
     expect(screen.queryByTestId('diag-rebuild-search-index')).toBeNull();
   });

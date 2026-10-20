@@ -78,7 +78,9 @@ describe('normalizeEngineModelId', () => {
 
 describe('normalizeEngineBaseUrl + validateEngineBaseUrl', () => {
   it('strips trailing slashes without inventing /v1', () => {
-    expect(normalizeEngineBaseUrl('https://api.example.com/v1/')).toBe('https://api.example.com/v1');
+    expect(normalizeEngineBaseUrl('https://api.example.com/v1/')).toBe(
+      'https://api.example.com/v1'
+    );
     expect(normalizeEngineBaseUrl('  https://x.test  ')).toBe('https://x.test');
     expect(normalizeEngineBaseUrl('')).toBe('');
     expect(normalizeEngineBaseUrl(null)).toBe('');
@@ -89,11 +91,19 @@ describe('normalizeEngineBaseUrl + validateEngineBaseUrl', () => {
       ok: true,
       url: 'https://api.openai.com/v1',
     });
-    expect(validateEngineBaseUrl('http://127.0.0.1:8080')).toMatchObject({ ok: true });
+    expect(validateEngineBaseUrl('http://127.0.0.1:8080')).toMatchObject({
+      ok: true,
+    });
     expect(validateEngineBaseUrl('')).toEqual({ ok: false, error: 'empty' });
     expect(validateEngineBaseUrl('   ')).toEqual({ ok: false, error: 'empty' });
-    expect(validateEngineBaseUrl('not a url')).toEqual({ ok: false, error: 'whitespace' });
-    expect(validateEngineBaseUrl('notaurl')).toEqual({ ok: false, error: 'invalid_url' });
+    expect(validateEngineBaseUrl('not a url')).toEqual({
+      ok: false,
+      error: 'whitespace',
+    });
+    expect(validateEngineBaseUrl('notaurl')).toEqual({
+      ok: false,
+      error: 'invalid_url',
+    });
     expect(validateEngineBaseUrl('ftp://files.example')).toEqual({
       ok: false,
       error: 'unsupported_protocol',
@@ -120,8 +130,12 @@ describe('normalizeEngineEndpointKind', () => {
     expect(normalizeEngineEndpointKind('RESPONSES')).toBe('responses');
     expect(normalizeEngineEndpointKind('response')).toBe('responses');
     expect(normalizeEngineEndpointKind('chat')).toBe('chat-completions');
-    expect(normalizeEngineEndpointKind('chat_completions')).toBe('chat-completions');
-    expect(normalizeEngineEndpointKind('chat/completions')).toBe('chat-completions');
+    expect(normalizeEngineEndpointKind('chat_completions')).toBe(
+      'chat-completions'
+    );
+    expect(normalizeEngineEndpointKind('chat/completions')).toBe(
+      'chat-completions'
+    );
     expect(normalizeEngineEndpointKind('')).toBeUndefined();
     expect(normalizeEngineEndpointKind('websocket')).toBeUndefined();
     expect(normalizeEngineEndpointKind(null)).toBeUndefined();
@@ -132,8 +146,12 @@ describe('normalizeEngineCredentialMode', () => {
   it('accepts direct / auto / account-center aliases', () => {
     expect(normalizeEngineCredentialMode('direct')).toBe('direct');
     expect(normalizeEngineCredentialMode('AUTO')).toBe('auto');
-    expect(normalizeEngineCredentialMode('account_center')).toBe('account-center');
-    expect(normalizeEngineCredentialMode('accountcenter')).toBe('account-center');
+    expect(normalizeEngineCredentialMode('account_center')).toBe(
+      'account-center'
+    );
+    expect(normalizeEngineCredentialMode('accountcenter')).toBe(
+      'account-center'
+    );
     expect(normalizeEngineCredentialMode('account')).toBe('account-center');
     expect(normalizeEngineCredentialMode('')).toBeUndefined();
     expect(normalizeEngineCredentialMode('oauth-magic')).toBeUndefined();
@@ -185,7 +203,7 @@ describe('normalizeEngineConfigUpdate', () => {
         credentialMode: 'account_center',
         endpoint: 'chat',
         stream: 'on' as unknown as boolean,
-      }),
+      })
     ).toEqual({
       model: 'deepseek-chat',
       baseUrl: 'https://api.deepseek.com',
@@ -233,7 +251,7 @@ describe('isEmpty / partial / readiness', () => {
       isPartialEngineConfig({
         model: 'x',
         baseUrl: 'ftp://bad',
-      }),
+      })
     ).toBe(true);
 
     const bad = engineConfigReadiness({ model: 'x', baseUrl: 'not-url' });
@@ -274,7 +292,7 @@ describe('mergeEngineConfigPartial + buildUpdateConfigPayload', () => {
     const merged = mergeEngineConfigPartial(
       { model: 'a', baseUrl: 'https://a.test' },
       { model: '  b  ', apiKey: 'k' },
-      { model: '   ' }, // empty dropped → keeps b
+      { model: '   ' } // empty dropped → keeps b
     );
     expect(merged.model).toBe('b');
     expect(merged.baseUrl).toBe('https://a.test');
@@ -290,7 +308,7 @@ describe('mergeEngineConfigPartial + buildUpdateConfigPayload', () => {
         baseUrl: 'https://x.test/',
         endpoint: 'response',
         apiKey: 'sk-never-sent',
-      }),
+      })
     ).toEqual({
       type: 'update-config',
       model: 'm',
@@ -308,12 +326,19 @@ describe('normalizeRecentModels + mergeModelsForPicker', () => {
   it('dedupes and never injects demo models into empty lists', () => {
     expect(normalizeRecentModels(null)).toEqual([]);
     expect(normalizeRecentModels('x')).toEqual([]);
-    expect(normalizeRecentModels([' a ', 'a', '', 'b', null, 1])).toEqual(['a', 'b', '1']);
+    expect(normalizeRecentModels([' a ', 'a', '', 'b', null, 1])).toEqual([
+      'a',
+      'b',
+      '1',
+    ]);
 
     expect(mergeModelsForPicker([], null)).toEqual([]);
     expect(mergeModelsForPicker([], undefined)).toEqual([]);
     expect(mergeModelsForPicker(['r1'], 'current')).toEqual(['current', 'r1']);
-    expect(mergeModelsForPicker(['current', 'r1'], 'current')).toEqual(['current', 'r1']);
+    expect(mergeModelsForPicker(['current', 'r1'], 'current')).toEqual([
+      'current',
+      'r1',
+    ]);
     // 空 recent + 无 current → 空（非 mimo）
     expect(mergeModelsForPicker([], '')).toEqual([]);
     expect(mergeModelsForPicker([], '')).not.toContain('mimo-v2.5');
@@ -322,8 +347,14 @@ describe('normalizeRecentModels + mergeModelsForPicker', () => {
 
 describe('parseEngineStatusFromRaw', () => {
   it('parses nested provider shapes without inventing model', () => {
-    expect(parseEngineStatusFromRaw(null)).toEqual({ ok: false, error: 'invalid_status' });
-    expect(parseEngineStatusFromRaw('x')).toEqual({ ok: false, error: 'invalid_status' });
+    expect(parseEngineStatusFromRaw(null)).toEqual({
+      ok: false,
+      error: 'invalid_status',
+    });
+    expect(parseEngineStatusFromRaw('x')).toEqual({
+      ok: false,
+      error: 'invalid_status',
+    });
 
     const nested = parseEngineStatusFromRaw({
       provider: {
@@ -346,6 +377,21 @@ describe('parseEngineStatusFromRaw', () => {
     expect(empty.ok).toBe(true);
     expect(empty.model).toBeUndefined();
     expect(empty.baseUrl).toBeUndefined();
+  });
+
+  it('parses initialized and lastCrash diagnostic fields', () => {
+    const s = parseEngineStatusFromRaw({
+      initialized: true,
+      lastCrash: {
+        fileName: 'crash-20261020-070000-worker.log',
+        timestampMs: 1700000000000,
+      },
+    });
+    expect(s.initialized).toBe(true);
+    expect(s.lastCrash).toEqual({
+      fileName: 'crash-20261020-070000-worker.log',
+      timestampMs: 1700000000000,
+    });
   });
 
   it('reads providerStatus / lifecycle nesting and root hasApiKey', () => {
@@ -388,7 +434,7 @@ function installTree(providers: Record<string, string[]>): void {
       Object.entries(providers).map(([providerId, models]) => [
         providerId,
         provider(models),
-      ]),
+      ])
     ),
   };
   modelsCatalogStore.acceptSnapshot({
@@ -433,7 +479,10 @@ describe('loadRecentModels / pushRecentModel / modelsForPicker (LS)', () => {
     expect(loadRecentModels()).toEqual([key2, key1]);
     // 落库形状即身份键（非裸 id），且可被 parseRecentModelKey 反解
     expect(storedRecent()).toEqual([key2, key1]);
-    expect(parseRecentModelKey(key1)).toEqual({ providerId: 'p1', modelId: 'm1' });
+    expect(parseRecentModelKey(key1)).toEqual({
+      providerId: 'p1',
+      modelId: 'm1',
+    });
   });
 
   it('显式 providerId 优先于树解析结果', () => {
@@ -441,7 +490,10 @@ describe('loadRecentModels / pushRecentModel / modelsForPicker (LS)', () => {
     const out = pushRecentModel('m1', 'p2');
     expect(out).toHaveLength(1);
     // 用分量断言而非字符串比较（比 toBe 更稳）
-    expect(parseRecentModelKey(out[0])).toEqual({ providerId: 'p2', modelId: 'm1' });
+    expect(parseRecentModelKey(out[0])).toEqual({
+      providerId: 'p2',
+      modelId: 'm1',
+    });
     expect(out[0]).not.toBe(recentModelKey('p1', 'm1'));
     // providerId 两侧空白被规范化
     const trimmed = pushRecentModel('m1', '  p3  ');
@@ -525,9 +577,9 @@ describe('loadRecentModels / pushRecentModel / modelsForPicker (LS)', () => {
     expect(modelsForPicker('m3')).toEqual(['m3', 'm2', 'm1']);
     expect(modelsForPicker('m1')).toEqual(['m1', 'm2']);
     // 展示面是裸 modelId，绝不是身份键字符串
-    expect(modelsForPicker('m3').every((x) => parseRecentModelKey(x) === null)).toBe(
-      true,
-    );
+    expect(
+      modelsForPicker('m3').every((x) => parseRecentModelKey(x) === null)
+    ).toBe(true);
     expect(modelsForPicker('m3')).not.toContain(recentModelKey('p1', 'm1'));
     // 不因空 picker 注入演示 id
     localStorage.clear();
