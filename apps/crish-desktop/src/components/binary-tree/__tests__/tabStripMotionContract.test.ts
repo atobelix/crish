@@ -24,7 +24,9 @@ function readRepoFile(relativePath: string): string {
   return readFileSync(join(CRISH_DESKTOP_ROOT, relativePath), 'utf-8');
 }
 
-const paneCss = readRepoFile('src/components/binary-tree/PaneHeader.module.css');
+const paneCss = readRepoFile(
+  'src/components/binary-tree/PaneHeader.module.css'
+);
 const toolCss = readRepoFile(
   'src/components/binary-tree/LeafToolTabStrip.module.css'
 );
@@ -33,9 +35,7 @@ const paneTabItemTsx = readRepoFile(
   'src/components/binary-tree/PaneTabItem.tsx'
 );
 const toolTsx = readRepoFile('src/components/binary-tree/LeafToolTabStrip.tsx');
-const dragFeelTs = readRepoFile(
-  'src/components/shell/sessionTabDragFeel.ts'
-);
+const dragFeelTs = readRepoFile('src/components/shell/sessionTabDragFeel.ts');
 const tokensCss = readRepoFile('src/styles/tokens.css');
 const motionTs = readRepoFile('src/utils/motionTokens.ts');
 
@@ -58,8 +58,8 @@ describe('标签条动效单一真理路径契约', () => {
   });
 
   it('两条条带离场均以负 margin 精确抵消右侧 gap', () => {
-    expect(paneCss).toContain('calc(-1 * var(--tab-gap))');
-    expect(toolCss).toContain('calc(-1 * var(--tab-gap))');
+    expect(paneCss).toContain('calc(-1 * var(--pane-tab-gap))');
+    expect(toolCss).toContain('calc(-1 * var(--pane-tab-gap))');
   });
 
   it('条带生命周期由 transitionend 驱动，禁止字面量毫秒定时器', () => {
@@ -87,7 +87,9 @@ describe('标签条动效单一真理路径契约', () => {
   });
 
   it('TS 侧动效镜像与 tokens.css 正典缓动同步', () => {
-    expect(tokensCss).toContain('--ease-standard: cubic-bezier(0.4, 0, 0.2, 1)');
+    expect(tokensCss).toContain(
+      '--ease-standard: cubic-bezier(0.4, 0, 0.2, 1)'
+    );
     expect(tokensCss).toContain(
       '--ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1)'
     );
@@ -109,7 +111,9 @@ describe('标签条动效单一真理路径契约', () => {
     // 罩住顶行标签条带；条带必须显式 no-drag 才能挡住原生标题栏双击最大化。
     // 2026-09-06 事故：误判 app-region 为死代码删除后，双击标签即被原生 caption 最大化。
     expect(paneCss).toMatch(/-webkit-app-region:\s*no-drag/);
-    expect(paneCss).toMatch(/\.tabsContainer[\s\S]{0,400}?app-region:\s*no-drag/);
+    expect(paneCss).toMatch(
+      /\.tabsContainer[\s\S]{0,400}?app-region:\s*no-drag/
+    );
     expect(paneCss).toMatch(/\.tabItem[\s\S]{0,1200}?app-region:\s*no-drag/);
     expect(toolCss).toMatch(/-webkit-app-region:\s*no-drag/);
   });

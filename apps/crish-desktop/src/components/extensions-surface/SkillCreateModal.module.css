@@ -1,11 +1,11 @@
 /* apps/crish-desktop/src/components/extensions-surface/SkillCreateModal.module.css
  * 技能创建与导入模态框样式（SkillCreateModal）
- * 彻底遵循系统 Design Token，禁止硬编码色值，按钮圆角严格锁定 7px
+ * 彻底遵循系统 Design Token，禁止硬编码色值；按钮圆角由全局 --button-radius（7px 用户锁）提供，
+ * 本文件不得二次声明同名 token（真源唯一化：tokens.css）
  */
 
 .modalPanel {
   --dialog-width: 680px;
-  --button-radius: 7px;
   width: var(--dialog-width);
   border-radius: var(--radius-xl, 12px);
   background: var(--bg-card);
