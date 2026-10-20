@@ -1258,8 +1258,9 @@ mod tests {
         assert_eq!(r1, r2);
         assert!(cache.hit_ratio() > 0.0, "同键重复判定应命中缓存");
         let hits_before = cache.hit_ratio();
-        // 不同会话（跨域 id 复用防护）不命中
-        let _ = cache.get_or_else("s2", 42, || Decision::NotInteractive);
+        // 不同会话（跨域 id 复用防护）不命中：结果应为本次闭包计算结果
+        let other = cache.get_or_else("s2", 42, || Decision::NotInteractive);
+        assert_eq!(other, Decision::NotInteractive, "跨会话应各自计算（不命中缓存）");
         assert!(
             cache.hit_ratio() < hits_before || cache.hit_ratio() < 1.0,
             "跨会话不命中缓存"

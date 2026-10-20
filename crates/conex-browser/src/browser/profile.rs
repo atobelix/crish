@@ -265,10 +265,13 @@ pub async fn import_copy(
             }
             LockState::Stale { .. } => {
                 // stale 锁自愈：删除后继续（§4.5；豁免删除禁令：stale 锁为
-                // 崩溃残留的自家运行期标记文件，直删语义与 R-2 一致）
+                // 崩溃残留的自家运行期标记文件，直删语义与 R-2 一致）。
+                // 删除失败不阻断导入（后续 copy_tree 会跳过瞬态文件），但必须留痕。
                 #[allow(clippy::disallowed_methods)]
                 {
-                    let _ = std::fs::remove_file(source_user_data.join("SingletonLock"));
+                    if let Err(e) = std::fs::remove_file(source_user_data.join("SingletonLock")) {
+                        tracing::warn!("来源 stale SingletonLock 清理失败（继续导入）：{e}");
+                    }
                 }
             }
             LockState::Absent => {}
@@ -277,8 +280,11 @@ pub async fn import_copy(
     let report = match copy_profile(source_user_data, &src_profile_dir, dest) {
         Ok(r) => r,
         Err(e) => {
-            // 目录级失败 → 清理半成品（§4.3 失败语义）
-            let _ = remove_dir_retry(dest, 2, Duration::from_millis(20)).await;
+            // 目录级失败 → 清理半成品（§4.3 失败语义）；清理失败不得掩盖
+            // 主错误（返回 ImportFailed），但须留痕说明残留目录。
+            if let Err(clean_err) = remove_dir_retry(dest, 2, Duration::from_millis(20)).await {
+                tracing::warn!("导入失败后清理半成品目录失败（残留需手工清理）：{clean_err}");
+            }
             return Err(ProcessError::ImportFailed(e));
         }
     };
@@ -296,13 +302,14 @@ fn copy_profile(
     // Local State（复制表第 1 项；symlink_metadata 不跟随链接——H5：符号链接跳过）
     let local_state = source_user_data.join("Local State");
     match std::fs::symlink_metadata(&local_state) {
-        Ok(meta) if meta.is_file() => match std::fs::copy(&local_state, dest.join("Local State")) {
-            Ok(_) => report.copied += 1,
-            Err(e) => {
+        Ok(meta) if meta.is_file() => {
+            if let Err(e) = std::fs::copy(&local_state, dest.join("Local State")) {
                 tracing::warn!("复制 Local State 失败（跳过）：{e}");
                 report.skipped += 1;
+            } else {
+                report.copied += 1;
             }
-        },
+        }
         Ok(meta) if meta.is_symlink() => {
             tracing::warn!("复制跳过符号链接：{}", local_state.display());
             report.skipped += 1;
@@ -375,13 +382,12 @@ fn copy_tree(
                 report.skipped += 1;
                 continue;
             }
-            match std::fs::copy(&src_path, dest.join(&name)) {
-                Ok(_) => report.copied += 1,
-                Err(e) => {
-                    // best-effort：单文件失败跳过记 warning（chrome.rs:1271-1326 同款）
-                    tracing::warn!("复制文件失败（跳过）：{}：{e}", src_path.display());
-                    report.skipped += 1;
-                }
+            if let Err(e) = std::fs::copy(&src_path, dest.join(&name)) {
+                // best-effort：单文件失败跳过记 warning（chrome.rs:1271-1326 同款）
+                tracing::warn!("复制文件失败（跳过）：{}：{e}", src_path.display());
+                report.skipped += 1;
+            } else {
+                report.copied += 1;
             }
         }
     }
@@ -953,7 +959,12 @@ mod unix_pid_alive_tests {
         assert!(child >= 0, "fork 失败");
         if child == 0 {
             // 子进程：写就绪字节后挂起等待信号（失败直接退出，父进程读到 EOF 即暴露）
-            let _ = unsafe { libc::write(fds[1], b"x".as_ptr() as *const libc::c_void, 1) };
+            let written =
+                unsafe { libc::write(fds[1], b"x".as_ptr() as *const libc::c_void, 1) };
+            if written != 1 {
+                // 写就绪字节失败：直接退出，父进程读到 EOF 即断言失败（不静默通过）
+                unsafe { libc::_exit(4) };
+            }
             unsafe { libc::pause() };
             unsafe { libc::_exit(3) };
         }

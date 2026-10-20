@@ -120,12 +120,17 @@ pub(crate) async fn static_poll_loop(ctx: StaticPollCtx) {
             // 背压丢帧（满时丢队首保新帧，语义同帧泵 §2.4）
             if let Some(replaced) = ctx.sink.push(frame) {
                 ctx.stats.add_dropped();
-                let _ = ctx.events.send(ScreencastEvent::FrameDropped {
+                // 事件面按需订阅：无订阅者不改变丢帧事实（统计已计数），仅 debug
+                if let Err(err) = ctx.events.send(ScreencastEvent::FrameDropped {
                     seq: replaced.seq,
                     queued: ctx.sink.len(),
-                });
+                }) {
+                    tracing::debug!("降级帧事件无订阅者（丢弃 FrameDropped）：{err}");
+                }
             }
-            let _ = ctx.events.send(ScreencastEvent::FrameSent { seq, bytes });
+            if let Err(err) = ctx.events.send(ScreencastEvent::FrameSent { seq, bytes }) {
+                tracing::debug!("降级帧事件无订阅者（丢弃 FrameSent）：{err}");
+            }
         }
         tokio::time::sleep(ctx.interval).await;
     }

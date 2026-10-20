@@ -171,9 +171,12 @@ pub trait SessionOps: Send + Sync {
             self.send_page(&session, method, params).await?;
         }
         // attach 后恢复（Chrome 144+ 目标暂停时恢复；no-op 兜底，与恢复路径同语义）
-        let _ = self
+        if let Err(e) = self
             .send_page(&session, RUNTIME_RUN_IF_WAITING_FOR_DEBUGGER, json!({}))
-            .await;
+            .await
+        {
+            tracing::debug!("runIfWaitingForDebugger 兜底失败（no-op 语义，不阻断 attach）：{e}");
+        }
         Ok(SessionRef {
             target_id: target_id.to_string(),
             session,
@@ -364,7 +367,9 @@ async fn executor_cleaner_loop(
         match rx.recv().await {
             Ok(BrowserEvent::ConnectionLost { .. })
             | Ok(BrowserEvent::ConnectionRestored { .. }) => clear(),
-            Ok(_) => {}
+            Ok(other) => {
+                tracing::trace!(event = ?other, "executor_cleaner_loop 忽略非连接事件");
+            }
             Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
             Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
         }
@@ -677,7 +682,9 @@ impl ConsoleBuffer {
                     Ok(BrowserEvent::PageError { text, .. }) => {
                         buffer.push("error", &text);
                     }
-                    Ok(_) => {}
+                    Ok(other) => {
+                        tracing::trace!(event = ?other, "ConsoleBuffer 忽略非控制台事件");
+                    }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 }
@@ -746,7 +753,9 @@ impl NetworkBuffer {
                     Ok(BrowserEvent::NetworkDone { request_id, ok, .. }) => {
                         buffer.mark_done(&request_id, ok)
                     }
-                    Ok(_) => {}
+                    Ok(other) => {
+                        tracing::trace!(event = ?other, "NetworkBuffer 忽略非网络事件");
+                    }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 }

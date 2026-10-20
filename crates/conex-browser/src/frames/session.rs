@@ -240,9 +240,12 @@ impl StaticController {
         };
         let task = tokio::spawn(static_poll_loop(ctx));
         *self.task.lock().unwrap_or_else(|p| p.into_inner()) = Some(task);
-        let _ = self.events.send(ScreencastEvent::Degraded {
+        // 事件面按需订阅：无订阅者不改变降级本身（降级已生效），仅 debug 留痕
+        if let Err(err) = self.events.send(ScreencastEvent::Degraded {
             reason: reason.to_string(),
-        });
+        }) {
+            tracing::debug!("帧流事件无订阅者（丢弃 Degraded）：{err}");
+        }
         tracing::warn!("帧流进入静态降级模式（1fps captureScreenshot 轮询）：{reason}");
     }
 
@@ -477,9 +480,11 @@ impl ScreencastSession {
                     return Ok(());
                 }
                 self.set_status(ScreencastStatus::Idle);
-                let _ = self.events.send(ScreencastEvent::StartFailed {
+                if let Err(send_err) = self.events.send(ScreencastEvent::StartFailed {
                     message: e.to_string(),
-                });
+                }) {
+                    tracing::debug!("帧流事件无订阅者（丢弃 StartFailed）：{send_err}");
+                }
                 Err(e)
             }
         }
@@ -505,7 +510,9 @@ impl ScreencastSession {
         self.static_ctrl.exit(); // 降级轮询先停（防 stop 期间续推帧）
         self.pump.lock().unwrap_or_else(|p| p.into_inner()).running = false;
         self.set_status(ScreencastStatus::Idle);
-        let _ = self.events.send(ScreencastEvent::Stopped);
+        if let Err(err) = self.events.send(ScreencastEvent::Stopped) {
+            tracing::debug!("帧流事件无订阅者（丢弃 Stopped）：{err}");
+        }
     }
 
     /// 收尾（面板关闭路径）：停止 + 终止泵/监督任务 + 关闭输出槽。
@@ -599,8 +606,14 @@ impl ScreencastSession {
     }
 
     fn set_status(&self, status: ScreencastStatus) {
-        let _ = self.status_tx.send(status);
-        let _ = self.events.send(ScreencastEvent::StatusChanged { status });
+        // 状态为唯一真源（读侧经 status()/borrow()）：投递失败只说明无观察者，
+        // 状态本身已落库，故不上抛；debug 留痕便于排查面板不同步。
+        if let Err(err) = self.status_tx.send(status) {
+            tracing::debug!("帧流状态无订阅者（丢弃 Status）：{err}");
+        }
+        if let Err(err) = self.events.send(ScreencastEvent::StatusChanged { status }) {
+            tracing::debug!("帧流事件无订阅者（丢弃 StatusChanged）：{err}");
+        }
     }
 }
 
@@ -657,7 +670,9 @@ async fn pump_one(ctx: &mut PumpContext, chunk: FrameChunk) {
             .any(|(s, f)| s == &chunk.session && *f == chunk.frame)
         {
             ctx.stats.duplicates_skipped.fetch_add(1, Ordering::Relaxed);
-            let _ = ctx.events.send(ScreencastEvent::DuplicateSkipped { seq });
+            if let Err(err) = ctx.events.send(ScreencastEvent::DuplicateSkipped { seq }) {
+                tracing::debug!("帧流事件无订阅者（丢弃 DuplicateSkipped）：{err}");
+            }
             return;
         }
     }
@@ -671,16 +686,20 @@ async fn pump_one(ctx: &mut PumpContext, chunk: FrameChunk) {
     };
     if let Some(replaced) = ctx.sink.push(frame) {
         ctx.stats.frames_dropped.fetch_add(1, Ordering::Relaxed);
-        let _ = ctx.events.send(ScreencastEvent::FrameDropped {
+        if let Err(err) = ctx.events.send(ScreencastEvent::FrameDropped {
             seq: replaced.seq,
             queued: ctx.sink.len(),
-        });
+        }) {
+            tracing::debug!("帧流事件无订阅者（丢弃 FrameDropped）：{err}");
+        }
     }
     ctx.stats.frames_sent.fetch_add(1, Ordering::Relaxed);
-    let _ = ctx.events.send(ScreencastEvent::FrameSent {
+    if let Err(err) = ctx.events.send(ScreencastEvent::FrameSent {
         seq,
         bytes: chunk.data.len(),
-    });
+    }) {
+        tracing::debug!("帧流事件无订阅者（丢弃 FrameSent）：{err}");
+    }
 
     // ack pacing：持住当前档位换算时长（§2.1：Chrome 收到 ack 后才产生下一帧）
     tokio::time::sleep(ctx.fps.hold()).await;
@@ -695,7 +714,9 @@ async fn pump_one(ctx: &mut PumpContext, chunk: FrameChunk) {
         .with_session(&chunk.session)
         .with_timeout(ctx.config.ack_timeout);
     match ctx.session.send::<serde_json::Value>(ack).await {
-        Ok(_) => {
+        Ok(ack_reply) => {
+            // ack 响应体（通常空对象）仅证明命令成功，不入统计；trace 留痕
+            tracing::trace!("screencastFrameAck 响应：{ack_reply}");
             ctx.stats.acks_sent.fetch_add(1, Ordering::Relaxed);
             let mut shared = ctx.shared.lock().unwrap_or_else(|p| p.into_inner());
             shared.acked.push_back((chunk.session, chunk.frame));
@@ -705,10 +726,12 @@ async fn pump_one(ctx: &mut PumpContext, chunk: FrameChunk) {
         }
         Err(e) => {
             ctx.stats.ack_failures.fetch_add(1, Ordering::Relaxed);
-            let _ = ctx.events.send(ScreencastEvent::AckFailed {
+            if let Err(err) = ctx.events.send(ScreencastEvent::AckFailed {
                 seq,
                 message: e.to_string(),
-            });
+            }) {
+                tracing::debug!("帧流事件无订阅者（丢弃 AckFailed）：{err}");
+            }
         }
     }
 }
@@ -757,7 +780,11 @@ async fn restart_screencast(
     static_ctrl: &Arc<StaticController>,
     epoch: u64,
 ) {
-    let _ = status_tx.send(ScreencastStatus::Starting);
+    // 重启期状态/事件投递：无观察者不改变重启主流程（状态已由 status_tx 持有），
+    // 故仅 debug 留痕，不上抛（重启结果由 result 分支决定）。
+    if let Err(err) = status_tx.send(ScreencastStatus::Starting) {
+        tracing::debug!("帧流状态无订阅者（丢弃 Starting）：{err}");
+    }
     let mut result = Err(ScreencastError::NoActiveSession);
     for attempt in 1..=config.start_max_attempts {
         // 用户 stop 抢断 → 放弃重启（状态已被停止路径改写）
@@ -790,8 +817,12 @@ async fn restart_screencast(
             shared.gen += 1; // 泵代数重置：旧 sessionId 序列作废
             drop(shared);
             stats.restarts.fetch_add(1, Ordering::Relaxed);
-            let _ = status_tx.send(ScreencastStatus::Active);
-            let _ = events.send(ScreencastEvent::Restarted { epoch });
+            if let Err(err) = status_tx.send(ScreencastStatus::Active) {
+                tracing::debug!("帧流状态无订阅者（丢弃 Active）：{err}");
+            }
+            if let Err(err) = events.send(ScreencastEvent::Restarted { epoch }) {
+                tracing::debug!("帧流事件无订阅者（丢弃 Restarted）：{err}");
+            }
             tracing::info!("帧流已按原配置重启（epoch={epoch}）");
         }
         Err(e) => {
@@ -801,12 +832,18 @@ async fn restart_screencast(
             // 重连重启成功时切回；不自动反复探测 screencast 可用性）
             if config.static_fallback_enabled && *status_tx.borrow() == ScreencastStatus::Starting {
                 static_ctrl.enter(&format!("startScreencast 重启失败：{e}"));
-                let _ = status_tx.send(ScreencastStatus::Active);
+                if let Err(err) = status_tx.send(ScreencastStatus::Active) {
+                    tracing::debug!("帧流状态无订阅者（丢弃 Active）：{err}");
+                }
             } else {
-                let _ = status_tx.send(ScreencastStatus::Idle);
-                let _ = events.send(ScreencastEvent::StartFailed {
+                if let Err(err) = status_tx.send(ScreencastStatus::Idle) {
+                    tracing::debug!("帧流状态无订阅者（丢弃 Idle）：{err}");
+                }
+                if let Err(err) = events.send(ScreencastEvent::StartFailed {
                     message: e.to_string(),
-                });
+                }) {
+                    tracing::debug!("帧流事件无订阅者（丢弃 StartFailed）：{err}");
+                }
             }
             tracing::warn!("帧流重启失败（重试耗尽），转入降级/Idle：{e}");
         }
@@ -843,14 +880,19 @@ async fn send_start_screencast(
 /// 发送 stopScreencast（best-effort：无会话/失败均不阻断清理）。
 async fn send_stop_screencast(session: &BrowserSession, config: &ScreencastConfig) {
     if let Ok(sref) = session.current_session() {
-        let _ = session
+        // best-effort 停止（不阻断清理）：命令失败仅告警留痕，否则「帧流已停」
+        // 与「浏览器侧仍在推帧」无从区分。
+        if let Err(e) = session
             .send::<serde_json::Value>(
                 Command::new(PAGE_STOP_SCREENCAST)
                     .params(json!({}))
                     .with_session(&sref.session)
                     .with_timeout(config.command_timeout),
             )
-            .await;
+            .await
+        {
+            tracing::warn!("stopScreencast 发送失败（best-effort，忽略）：{e}");
+        }
     }
 }
 

@@ -420,9 +420,12 @@ impl BrowserManager {
         self.events.subscribe()
     }
 
-    /// 事件广播（send 失败即无订阅者，忽略）。
+    /// 事件广播：`send` 仅在无订阅者时失败——事件面是 best-effort 观测通道，
+    /// 无人订阅不代表本次操作失败，故只记 debug 不向上传播（上抛会污染所有调用点）。
     fn emit(&self, event: ProcessEvent) {
-        let _ = self.events.send(event);
+        if let Err(err) = self.events.send(event) {
+            tracing::debug!("进程事件无订阅者，丢弃：{err}");
+        }
     }
 
     /// 启动（§2/§5/§6.2）：幂等——非 Stopped 直接返回当前快照报告（§4.5）。
@@ -442,9 +445,14 @@ impl BrowserManager {
         if already_running {
             return Ok(self.current_report());
         }
-        // 孤儿清扫（§4.4：启动时 best-effort）
+        // 孤儿清扫（§4.4：启动时 best-effort，清扫结果只作诊断）
+        // sweep_orphans 内部对每个目录失败已逐项容错，返回值为「已删除目录」；
+        // 此处不能上抛（清扫失败不得阻断启动），故仅记录数量。
         let sessions = sessions_root(&self.data_root);
-        let _ = sweep_orphans(&sessions, ORPHAN_AGE);
+        let swept = sweep_orphans(&sessions, ORPHAN_AGE);
+        if !swept.is_empty() {
+            tracing::debug!("启动前清扫孤儿会话目录：{} 个", swept.len());
+        }
         // 1. 解析二进制（§2.1 回退链）
         let backend = resolve_backend(
             &self.data_root,
@@ -541,7 +549,11 @@ impl BrowserManager {
                 g.intentional = true;
                 g.pending_stop = Some(matches!(reason, StopReason::Graceful));
                 if let Some(tx) = &g.stop_tx {
-                    let _ = tx.send(true);
+                    // 接收端已释放 = 驱动任务已退出，停止意图由 pending_stop 兜住；
+                    // 该失败不构成停止失败（下方仍会 await 驱动句柄收敛）。
+                    if let Err(err) = tx.send(true) {
+                        tracing::debug!("停止信号无接收者（驱动已退出），由 pending_stop 兜底：{err}");
+                    }
                 }
                 StopStep::WaitDriver(g.driver.take())
             }
@@ -549,7 +561,10 @@ impl BrowserManager {
         match step {
             StopStep::NoDriver { leftover } => {
                 if let Some(dir) = leftover {
-                    let _ = remove_ephemeral(&dir).await;
+                    // 清理失败不影响停止收敛：目录由下次启动的孤儿清扫接管
+                    if let Err(e) = remove_ephemeral(&dir).await {
+                        tracing::warn!("停止时清理临时 profile 失败（登记孤儿，下次启动清扫）：{e}");
+                    }
                 }
                 Ok(StopReport {
                     state: BrowserState::Stopped,
@@ -560,7 +575,11 @@ impl BrowserManager {
             }
             StopStep::WaitDriver(driver) => {
                 if let Some(task) = driver {
-                    let _ = task.await;
+                    // JoinError 只可能是驱动任务 panic/取消；此后必须继续收敛状态，
+                    // 故不能上抛，但必须留痕（否则「停止成功」而驱动实际崩了）。
+                    if let Err(e) = task.await {
+                        tracing::warn!("等待驱动任务收敛失败（继续按当前状态返回）：{e}");
+                    }
                 }
                 let g = self.lock();
                 Ok(StopReport {
@@ -711,7 +730,13 @@ impl BrowserManager {
                             // stale 锁自愈（§4.5）：崩溃残留的自家运行期标记直删
                             #[allow(clippy::disallowed_methods)]
                             {
-                                let _ = std::fs::remove_file(dest.join("SingletonLock"));
+                                // stale 锁自愈为 best-effort：删不掉时浏览器启动会
+                                // 自行报 ProfileLocked，故不上抛，但必须留痕。
+                                if let Err(e) = std::fs::remove_file(dest.join("SingletonLock")) {
+                                    tracing::warn!(
+                                        "stale SingletonLock 清理失败（启动可能报占用）：{e}"
+                                    );
+                                }
                             }
                         }
                         LockState::Absent => {}
@@ -790,7 +815,11 @@ impl BrowserManager {
                 error: None,
             });
             if let Some(tx) = first_tx.take() {
-                let _ = tx.send(Ok(self.current_report()));
+                // 等待方可能已超时放弃（start 的 first_timeout）：会话仍继续运行，
+                // 丢弃首启报告不影响浏览器；留痕便于诊断「start 报超时但实际已就绪」。
+                if tx.send(Ok(self.current_report())).is_err() {
+                    tracing::warn!("首启结果无人接收（等待方已放弃，会话继续运行）");
+                }
             }
             // —— 运行期：等退出或停止意图 ——
             let (mut wait_task, mut process) = process.wait_task();
@@ -990,8 +1019,11 @@ impl BrowserManager {
             stderr: format!("spawn 失败：{e}"),
         })?;
         let mut killer = new_killer();
-        // attach 失败已内部降级 taskkill（不阻断启动）
-        let _ = killer.attach(&mut child);
+        // attach 失败已内部降级 taskkill（不阻断启动）；此处仅留痕，便于诊断
+        // 「杀树走 taskkill 而非 Job Object」的现场（Windows /unix 语义见 platform）。
+        if let Err(e) = killer.attach(&mut child) {
+            tracing::warn!("进程树终结器挂接失败（杀树降级 taskkill）：{e}");
+        }
         let pid = child.id().unwrap_or(0);
         tracing::debug!(
             "浏览器进程已派生（backend={} pid={pid}）",
@@ -1007,14 +1039,22 @@ impl BrowserManager {
                 let mut line = String::new();
                 loop {
                     line.clear();
-                    match reader.read_line(&mut line).await {
-                        Ok(0) | Err(_) => break,
-                        Ok(_) => {
-                            let line = line.trim_end().to_string();
-                            if !line.is_empty() {
-                                ring.lock().await.push(line);
-                            }
+                    // 读取字节数：0 = EOF；>0 = 已读入一行（含换行，供环形缓冲诊断）；
+                    // 错误 = 管道异常（仅诊断价值，记 debug 后终止读取，不影响浏览器）。
+                    let read = reader.read_line(&mut line).await;
+                    let bytes = match read {
+                        Ok(n) => n,
+                        Err(err) => {
+                            tracing::debug!("浏览器 stderr 读取中断（诊断面降级）：{err}");
+                            break;
                         }
+                    };
+                    if bytes == 0 {
+                        break;
+                    }
+                    let line = line.trim_end().to_string();
+                    if !line.is_empty() {
+                        ring.lock().await.push(line);
                     }
                 }
             });
@@ -1035,13 +1075,11 @@ impl BrowserManager {
                 Ok((process, ep))
             }
             crate::browser::active_port::WaitOutcome::EarlyExit { exit_code, stderr } => {
-                let _ = killer.kill_tree();
-                let _ = tokio::time::timeout(Duration::from_secs(2), child.wait()).await;
+                kill_tree_and_reap(&mut killer, &mut child, "启动早期退出").await;
                 Err(ProcessError::LaunchEarlyExit { exit_code, stderr })
             }
             crate::browser::active_port::WaitOutcome::Timeout { stderr } => {
-                let _ = killer.kill_tree();
-                let _ = tokio::time::timeout(Duration::from_secs(2), child.wait()).await;
+                kill_tree_and_reap(&mut killer, &mut child, "启动超时").await;
                 Err(ProcessError::LaunchTimeout(stderr))
             }
         }
@@ -1060,7 +1098,11 @@ impl BrowserManager {
             g.last_error = Some(err_text.clone());
         }
         if let Some(tx) = first_tx.take() {
-            let _ = tx.send(Err(err));
+            // 等待方已放弃时 send 失败：放弃本身即「启动失败」，无需再传播，
+            // 但留痕以免与「未收到任何结果」混淆。
+            if tx.send(Err(err)).is_err() {
+                tracing::warn!("首启失败结果无人接收（等待方已放弃）");
+            }
         }
         let (restarts, backend) = self.emit_snapshot();
         self.emit(ProcessEvent::StateChanged {
@@ -1134,12 +1176,12 @@ impl BrowserManager {
                         _ = tokio::time::sleep(self.tuning.wait_or_kill) => false,
                     };
                     if !exited {
-                        let _ = process.killer.kill_tree();
+                        kill_tree_logged(process.killer.as_mut(), "优雅停止超时");
                         force_killed = true;
                     }
                 } else {
                     // 强制路径：直接杀树（§6.2 第 7 行）
-                    let _ = process.killer.kill_tree();
+                    kill_tree_logged(process.killer.as_mut(), "强制停止");
                     force_killed = true;
                 }
                 // 收尸（杀树后进程必然退出；wait_task 分支已取走输出时**禁止重复 poll**
@@ -1147,7 +1189,11 @@ impl BrowserManager {
                 // 联调 E5 根因：真实浏览器 Browser.close 自然退出走 wait_task 分支，
                 // 再次 poll 已完成的句柄导致驱动任务崩溃、状态卡在 Stopping）
                 if !exited {
-                    let _ = tokio::time::timeout(Duration::from_secs(2), &mut *wait_task).await;
+                    match tokio::time::timeout(Duration::from_secs(2), &mut *wait_task).await {
+                        Ok(Ok(_status)) => {} // 已被杀树回收：退出码不影响停止收敛
+                        Ok(Err(e)) => tracing::warn!("停止收尸：驱动任务异常：{e}"),
+                        Err(_) => tracing::warn!("停止收尸超时：2s 内进程未退出（已杀树）"),
+                    }
                 }
             }
             Transition::StoppedClean => {
@@ -1375,6 +1421,30 @@ fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
         s.clone()
     } else {
         "未知 panic 载荷".to_string()
+    }
+}
+
+/// 杀进程树（失败仅告警）：杀树是停止/启动失败路径的最后兜底，失败不能改变
+/// 停止语义（状态机仍须收敛），但必须留痕——否则「停止成功」而进程仍存活将
+/// 无从诊断（platform::ProcessTreeKiller::kill_tree 契约要求调用方记 warning）。
+fn kill_tree_logged(killer: &mut dyn crate::browser::platform::ProcessTreeKiller, scene: &str) {
+    if let Err(e) = killer.kill_tree() {
+        tracing::warn!("杀进程树失败（{scene}）：{e}");
+    }
+}
+
+/// 启动失败路径收尸：杀树 + 有界等待进程退出（2s，超时仅告警——调用方已
+/// 决定返回启动错误，收尸结果不改变结论，但超时说明进程可能残留）。
+async fn kill_tree_and_reap(
+    killer: &mut Box<dyn crate::browser::platform::ProcessTreeKiller>,
+    child: &mut tokio::process::Child,
+    scene: &str,
+) {
+    kill_tree_logged(killer.as_mut(), scene);
+    match tokio::time::timeout(Duration::from_secs(2), child.wait()).await {
+        Ok(Ok(_status)) => {}
+        Ok(Err(e)) => tracing::warn!("收尸读取退出状态失败（{scene}）：{e}"),
+        Err(_) => tracing::warn!("收尸超时（{scene}）：2s 内进程未退出，可能残留"),
     }
 }
 

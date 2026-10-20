@@ -33,6 +33,18 @@ pub const MAX_EXTRACT_ENTRIES: usize = 100_000;
 /// 解压总字节数上限（评审 29 §M7：zip 炸弹防护）。
 pub const MAX_EXTRACT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
+/// 残留清理结果记录（best-effort）：上述删除对象均为本模块自管的
+/// 下载缓存半成品/临时 zip（clippy 删除禁令的既有豁免面），删除失败不改写
+/// 主流程结论（下载/解压本已失败或缓存本就损坏），但必须留痕——
+/// 否则「清理成功」与「磁盘残留」无从区分。NotFound 视为已完成（幂等）。
+fn log_cleanup_result(scene: &str, path: &Path, result: std::io::Result<()>) {
+    match result {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => tracing::warn!("CfT {scene}失败（忽略）：{}：{e}", path.display()),
+    }
+}
+
 /// 下载/解压资源上限（测试可注入缩小值做确定性覆盖，生产恒用默认）。
 #[derive(Debug, Clone, Copy)]
 pub struct CftLimits {
@@ -328,7 +340,11 @@ async fn download_zip(
                     _ => true,
                 };
                 if attempt >= opts.retries || !retryable {
-                    let _ = std::fs::remove_file(dest);
+                    log_cleanup_result(
+                        "下载失败残留清理",
+                        dest,
+                        std::fs::remove_file(dest),
+                    );
                     return Err(CftError::DownloadFailed {
                         retries: attempt,
                         last: e.to_string(),
@@ -549,22 +565,42 @@ pub(crate) async fn ensure_downloaded_from(
         });
     }
     if dest_dir.exists() {
-        // 半成品清理（上次失败残留）
-        let _ = std::fs::remove_dir_all(&dest_dir);
+        // 半成品清理（上次失败残留）：失败不阻断本次重下，但必须留痕
+        log_cleanup_result(
+            "半成品目录清理",
+            &dest_dir,
+            std::fs::remove_dir_all(&dest_dir),
+        );
     }
     std::fs::create_dir_all(&dest_dir)?;
     let zip_path = dest_dir.join("chrome.zip");
     if let Err(e) = download_zip(client, url, &zip_path, opts, limits.max_download_bytes).await {
-        let _ = std::fs::remove_dir_all(&dest_dir);
+        log_cleanup_result(
+            "下载失败目录清理",
+            &dest_dir,
+            std::fs::remove_dir_all(&dest_dir),
+        );
         return Err(e);
     }
     if let Err(e) = extract_zip_limited(&zip_path, &dest_dir, limits) {
-        let _ = std::fs::remove_dir_all(&dest_dir);
+        log_cleanup_result(
+            "解压失败目录清理",
+            &dest_dir,
+            std::fs::remove_dir_all(&dest_dir),
+        );
         return Err(e);
     }
-    let _ = std::fs::remove_file(&zip_path);
+    log_cleanup_result(
+        "临时 zip 清理",
+        &zip_path,
+        std::fs::remove_file(&zip_path),
+    );
     let Some(binary) = find_binary(&dest_dir) else {
-        let _ = std::fs::remove_dir_all(&dest_dir);
+        log_cleanup_result(
+            "缺少二进制后的目录清理",
+            &dest_dir,
+            std::fs::remove_dir_all(&dest_dir),
+        );
         return Err(CftError::Extract(format!(
             "解压后缺少预期二进制：{}",
             dest_dir.display()

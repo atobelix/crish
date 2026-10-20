@@ -78,9 +78,12 @@ async fn verify_after_navigation(
     if let (Some(after_url), Some(before_url)) = (after, before) {
         if after_url != before_url {
             if let Err(denial) = ctx.gate.check(after_url) {
-                let _ = ops
+                if let Err(e) = ops
                     .send_page(&tab.session, CDP_PAGE_GO_BACK, json!({}))
-                    .await;
+                    .await
+                {
+                    tracing::warn!("门禁拒绝后 GoBack 回退失败（页面停留在违规 URL）：{e}");
+                }
                 return Err(error::gate_blocked(
                     after_url,
                     &format!("{}（已回退到上一页面）", denial.reason),
@@ -127,13 +130,18 @@ async fn verify_navigate_after(
         if let Err(denial) = ctx.gate.check(after_url) {
             let rollback_note = match rollback {
                 AfterRollback::GoBack { session } => {
-                    let _ = ops.send_page(session, CDP_PAGE_GO_BACK, json!({})).await;
+                    if let Err(e) = ops.send_page(session, CDP_PAGE_GO_BACK, json!({})).await {
+                        tracing::warn!("门禁拒绝后 GoBack 回退失败（页面停留在违规 URL）：{e}");
+                    }
                     "已回退到上一页面"
                 }
                 AfterRollback::CloseTab { target_id } => {
-                    let _ = ops
+                    if let Err(e) = ops
                         .send_browser(CDP_TARGET_CLOSE_TARGET, json!({ "targetId": target_id }))
-                        .await;
+                        .await
+                    {
+                        tracing::warn!("门禁拒绝后关闭新标签页失败（标签遗留）：{e}");
+                    }
                     "已关闭新标签页"
                 }
             };
@@ -288,9 +296,14 @@ pub(crate) async fn open_new_tab(
     // 无需 switch 即可直接操作。attach 失败（目标已关闭等）→ 关闭已创建
     // 标签回滚（不遗留无会话标签）并返回错误。
     if let Err(e) = ops.attach_tab(tab_id).await {
-        let _ = ops
+        if let Err(rb) = ops
             .send_browser(CDP_TARGET_CLOSE_TARGET, json!({ "targetId": tab_id }))
-            .await;
+            .await
+        {
+            tracing::warn!(
+                "attach 失败回滚：关闭新标签页失败（可能遗留无会话标签）：{rb}（attach 错误：{e}）"
+            );
+        }
         return Err(e);
     }
     // H4 动作后门禁复核：createTarget 返回时新页导航仍在途，302 重定向

@@ -285,12 +285,19 @@ impl BusHandle {
 
     /// 发布 typed 事件（broadcast 发送永不阻塞：慢消费者 Lagged 自愈）。
     pub fn publish(&self, event: BrowserEvent) {
-        let _ = self.event_tx.send(event);
+        // 无订阅者 = 无消费方（观测面空窗），不构成发布失败，仅 debug 留痕
+        if let Err(err) = self.event_tx.send(event) {
+            tracing::debug!("事件总线无订阅者（丢弃）：{err}");
+        }
     }
 
     /// 发送帧块（满时丢弃，维度 12 环形覆盖策略兜底）。
     pub fn send_frame(&self, chunk: FrameChunk) {
-        let _ = self.frame_tx.try_send(chunk);
+        // 满/接收端关闭 → 丢帧。丢帧意味着画面降级（用户可见），必须留痕，
+        // 但不能阻塞帧管线，故不上抛：维度 12 有 FrameDropped 事件面兜底。
+        if let Err(err) = self.frame_tx.try_send(chunk) {
+            tracing::debug!("帧块入队失败（丢帧，接收端满或已关闭）：{err}");
+        }
     }
 
     /// typed 发送端（VersionTracker 广播 VersionAdvanced 用）。

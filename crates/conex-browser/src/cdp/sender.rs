@@ -165,7 +165,11 @@ impl CancellationToken {
 
     /// 触发取消（幂等）。
     pub fn cancel(&self) {
-        let _ = self.tx.send(true);
+        // 令牌自身持有接收端（`_rx`），send 正常不可能失败；若失败说明
+        // 不变量被破坏，必须留痕（否则取消静默失效 → 在途命令永不返回）。
+        if let Err(err) = self.tx.send(true) {
+            tracing::warn!("取消信号发送失败（令牌接收端缺失，取消可能失效）：{err}");
+        }
     }
 
     pub fn is_cancelled(&self) -> bool {
@@ -179,7 +183,11 @@ impl CancellationToken {
         if *rx.borrow() {
             return;
         }
-        let _ = rx.changed().await;
+        // 发送端已释放（令牌被 Drop）→ 不会再有取消信号；按「已取消」返回是
+        // 既有语义，但必须留痕，避免与「真的收到取消」混淆。
+        if let Err(err) = rx.changed().await {
+            tracing::debug!("取消等待：令牌已释放（按已取消返回）：{err}");
+        }
     }
 }
 
@@ -301,7 +309,11 @@ struct InFlightGuard {
 
 impl InFlightGuard {
     fn publish(&mut self, result: Result<Value, CdpError>) {
-        let _ = self.tx.send(result);
+        // 合并等待方可能已全部放弃（超时/取消），无订阅者即无人接收——
+        // 不构成命令失败（真实结果已由本次调用返回给主调用方），仅 debug。
+        if let Err(err) = self.tx.send(result) {
+            tracing::debug!("在途结果无等待方（丢弃）：{err}");
+        }
         self.armed = false;
     }
 }
@@ -310,9 +322,11 @@ impl Drop for InFlightGuard {
     fn drop(&mut self) {
         // 中途退出（急停/审批拒绝/取消）：合并等待方收到取消错误
         if self.armed {
-            let _ = self.tx.send(Err(CdpError::Cancelled {
+            if let Err(err) = self.tx.send(Err(CdpError::Cancelled {
                 reason: CancelReason::Aborted,
-            }));
+            })) {
+                tracing::debug!("取消结果无等待方（丢弃）：{err}");
+            }
         }
         if let Ok(mut map) = self.map.lock() {
             map.remove(&self.key);

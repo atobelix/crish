@@ -696,7 +696,11 @@ mod tests {
             .mouse_move(PhysicalPoint { x: 5, y: 6 })
             .await
             .expect("移动失败");
-        let _ = next_mouse(&mut mock).await;
+        // 首个事件即本次移动：断言类型，避免「丢弃事件」掩盖错序派发
+        let moved = next_mouse(&mut mock).await;
+        assert_eq!(moved["type"], "mouseMoved");
+        assert_eq!(moved["x"], 5.0);
+        assert_eq!(moved["y"], 6.0);
         backend
             .button(MouseButton::Left, true)
             .await
@@ -905,7 +909,8 @@ mod tests {
             .await
             .expect_err("多主键应失败");
         assert!(matches!(err, InputBackendError::Failed(_)));
-        let _ = mock;
+        // 断言完毕后先释放 mock 服务端（保持原「立即丢弃」语义），再关闭会话
+        drop(mock);
         session.shutdown().await;
     }
 
@@ -919,7 +924,8 @@ mod tests {
             PhysicalPoint { x: 0, y: 0 },
             "默认原点是最后已知坐标（浏览器线无 OS 光标）"
         );
-        let _ = mock;
+        // 先释放 mock 服务端（保持原「立即丢弃」语义），再关闭会话
+        drop(mock);
         session.shutdown().await;
     }
 }

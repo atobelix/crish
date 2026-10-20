@@ -179,8 +179,9 @@ impl DialogRegistry {
             if !still_open {
                 return;
             }
-            let _ = gen; // 代数由状态存在性隐含（handle/on_event 已收敛则状态非 Open）
-            tracing::info!("对话框超时自动 dismiss：session={session}");
+            // 是否自愈由状态存在性判定（handle/on_event 已收敛则状态非 Open）；
+            // 代数不做比较，仅随日志输出，便于对齐「同一会话多次弹窗」的时序。
+            tracing::info!("对话框超时自动 dismiss：session={session} gen={gen}");
             auto_dismiss(&session);
             let mut guard = states.lock().unwrap_or_else(|p| p.into_inner());
             guard.insert(session, DialogState::None);

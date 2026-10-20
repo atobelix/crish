@@ -156,10 +156,17 @@ impl VersionTracker {
             *v += VERSION_RESET_DELTA;
         }
         let epoch = self.epoch.fetch_add(1, Ordering::Relaxed) + 1;
-        let _ = self.watch_tx.send(inner.tabs.clone());
-        let _ = self
+        // 广播面（watch 快照 / 事件总线）：无订阅者即无人消费，属正常观测空窗，
+        // 不构成版本推进失败（版本号已落库），仅 debug 留痕。
+        if let Err(err) = self.watch_tx.send(inner.tabs.clone()) {
+            tracing::debug!("版本快照无订阅者（丢弃）：{err}");
+        }
+        if let Err(err) = self
             .bus_tx
-            .send(BrowserEvent::VersionReset { epoch, reason });
+            .send(BrowserEvent::VersionReset { epoch, reason })
+        {
+            tracing::debug!("事件总线无订阅者（丢弃 VersionReset）：{err}");
+        }
     }
 
     /// 版本跟踪器自身 Lagged 的重对齐（U-2）：全量失效 + epoch 跳变。
@@ -282,13 +289,18 @@ fn commit_bump_locked(
     let current = inner.tabs.get(tab_id).copied().unwrap_or(0);
     let to = current + 1;
     inner.tabs.insert(tab_id.to_string(), to);
-    let _ = watch_tx.send(inner.tabs.clone());
-    let _ = bus_tx.send(BrowserEvent::VersionAdvanced {
+    // 同上：广播面无人订阅不构成提交失败（版本号已推进），仅 debug 留痕。
+    if let Err(err) = watch_tx.send(inner.tabs.clone()) {
+        tracing::debug!("版本快照无订阅者（丢弃）：{err}");
+    }
+    if let Err(err) = bus_tx.send(BrowserEvent::VersionAdvanced {
         tab_id: tab_id.to_string(),
         from: current,
         to,
         reason,
-    });
+    }) {
+        tracing::debug!("事件总线无订阅者（丢弃 VersionAdvanced）：{err}");
+    }
 }
 
 /// 推进判定清单（§5.4 全表；分类 router 之后、跟踪器之前的一道纯函数）。

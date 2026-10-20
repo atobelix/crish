@@ -197,7 +197,11 @@ async fn consumer_loop(
                 stats.failed.fetch_add(1, Ordering::Relaxed);
             }
         }
-        let _ = env.done.send(result.map(|_| ()));
+        // 结果回投（调用方按 seq 等待）：接收端可能已取消等待，此处不能上抛
+        // （泵任务必须继续处理后续命令），但必须留痕，避免「命令已执行但无人知道」。
+        if env.done.send(result.map(|_| ())).is_err() {
+            tracing::debug!("输入命令结果无人接收（等待方已放弃）：seq={}", env.seq);
+        }
     }
 }
 

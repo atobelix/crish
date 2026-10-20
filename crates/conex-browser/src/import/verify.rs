@@ -88,11 +88,12 @@ pub fn run_db_verify(profile_dir: &Path, app_bound: AppBoundStatus) -> VerifyRep
             n,
             "DB 侧数据完整；CDP 实读确认待进程管理接线（TODO）".to_string(),
         ),
-        Ok(_) => report(
+        // n == 0：无持久 cookie。行数（0）写进备注，保留实际读数而非硬编码文案。
+        Ok(n) => report(
             app_bound,
             VerifyConclusion::Unreadable,
             0,
-            "无持久 cookie（expires_utc > 0 行数为 0）".to_string(),
+            format!("无持久 cookie（expires_utc > 0 行数为 {n}）"),
         ),
         Err(e) => report(
             app_bound,

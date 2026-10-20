@@ -218,18 +218,27 @@ async fn restore_session(
         enable_domains(client, &attach.session_id)
             .await
             .map_err(|e| BrowserError::Restore(format!("enable 序列失败：{e}")))?;
-        // 5. 拦截恢复：window.open 收口重挂（best-effort）
-        let _ = client
+        // 5. 拦截恢复：window.open 收口重挂（best-effort；但失败意味着
+        //    新窗口收口策略在恢复后失效，属安全面降级，必须告警）
+        if let Err(e) = client
             .send_command(
                 PAGE_SET_WINDOW_OPEN_HANDLER,
                 Some(json!({})),
                 Some(&attach.session_id),
             )
-            .await;
+            .await
+        {
+            tracing::warn!(
+                "恢复 window.open 收口失败（会话 {} 新窗口策略可能未生效）：{e}",
+                attach.session_id
+            );
+        }
     }
 
     // 7. 事件补发：TargetsReconciled（维度 10 导航栈与面板对齐）
-    let _ = bus_tx.send(BrowserEvent::TargetsReconciled { tabs });
+    if let Err(err) = bus_tx.send(BrowserEvent::TargetsReconciled { tabs }) {
+        tracing::debug!("事件总线无订阅者（丢弃 TargetsReconciled）：{err}");
+    }
     Ok(())
 }
 
@@ -253,20 +262,27 @@ async fn enable_domains(channel: &dyn CommandChannel, session: &str) -> Result<(
             .await?;
     }
     // 传输层 SSRF 防护：挂载 Network.setBlockedURLs 物理阻断 169.254.169.254 与私网探测
+    // （安全面：挂载失败必须告警，否则「已阻断」与「未阻断」无从区分）
     let blocked_patterns = crate::gate::blocked_urls();
-    let _ = channel
+    if let Err(e) = channel
         .send_command(
             NETWORK_SET_BLOCKED_URLS,
             Some(json!({ "urls": blocked_patterns })),
             Some(session),
             ENABLE_TIMEOUT,
         )
-        .await;
+        .await
+    {
+        tracing::warn!("挂载 setBlockedURLs 失败（会话 {session} SSRF 阻断面缺失）：{e}");
+    }
 
     // attach 后恢复（Chrome 144+ 目标暂停，runIfWaitingForDebugger 恢复；no-op 兜底）
-    let _ = channel
+    if let Err(e) = channel
         .send_command_no_wait(RUNTIME_RUN_IF_WAITING_FOR_DEBUGGER, None, Some(session))
-        .await;
+        .await
+    {
+        tracing::warn!("runIfWaitingForDebugger 发送失败（会话 {session} 可能保持暂停）：{e}");
+    }
     Ok(())
 }
 
@@ -337,14 +353,19 @@ impl BrowserSession {
             let transport = transport_dismiss.clone();
             let session = session.to_string();
             tokio::spawn(async move {
-                let _ = transport
+                // 自动 dismiss 是超时兜底：失败不重试（浏览器侧对话框仍可被用户
+                // 关闭/后续 handle 收敛），但必须留痕，否则「已自动关闭」为假象。
+                if let Err(e) = transport
                     .send_command(
                         PAGE_HANDLE_JAVASCRIPT_DIALOG,
                         Some(json!({ "accept": false })),
                         Some(&session),
                         ENABLE_TIMEOUT,
                     )
-                    .await;
+                    .await
+                {
+                    tracing::warn!("对话框超时自动 dismiss 失败（会话 {session}）：{e}");
+                }
             });
         });
         let dialogs = Arc::new(DialogRegistry::new(
@@ -400,7 +421,10 @@ impl BrowserSession {
                         Ok(BrowserEvent::ConnectionLost { .. }) => {
                             tabs.lock().unwrap_or_else(|p| p.into_inner()).clear();
                         }
-                        Ok(_) => {}
+                        // 其余事件与该订阅面（活动标签/会话路由）无关：显式忽略
+                        // （事件体本身不需要，此分支不是错误路径）
+                        Ok(_other_event) => {}
+                        // 总线关闭 = 生产端已销毁（进程收尾）：订阅任务自然结束
                         Err(_) => break,
                     }
                 }
@@ -415,14 +439,20 @@ impl BrowserSession {
                 while let Ok(ev) = rx.recv().await {
                     if let BrowserEvent::NavigationStarted { session, .. } = ev {
                         let blocked = crate::gate::blocked_urls();
-                        let _ = transport_gate
+                        // 幂等重挂（导航期 SSRF 阻断面）：失败属安全面降级，必须告警
+                        if let Err(e) = transport_gate
                             .send_command(
                                 NETWORK_SET_BLOCKED_URLS,
                                 Some(json!({ "urls": blocked })),
                                 Some(&session),
                                 ENABLE_TIMEOUT,
                             )
-                            .await;
+                            .await
+                        {
+                            tracing::warn!(
+                                "导航期重挂 setBlockedURLs 失败（会话 {session} SSRF 阻断面缺失）：{e}"
+                            );
+                        }
                     }
                 }
             });
@@ -683,7 +713,11 @@ impl BrowserSession {
             return report.clone();
         }
         let report = crate::cdp::probe::run(&self.sender).await;
-        let _ = self.probe.set(report.clone());
+        // OnceLock 语义：首写胜。并发 probe_now 时后者写失败属预期（前者结果
+        // 已缓存），但仍需留痕，避免误以为「本次探测结果已生效」。
+        if self.probe.set(report.clone()).is_err() {
+            tracing::debug!("能力报告已被并发探测写入（保留首写结果）");
+        }
         report
     }
 

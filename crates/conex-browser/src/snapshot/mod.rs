@@ -455,7 +455,9 @@ impl SnapshotManager {
                 blind_zone: out.blind_zone,
             },
         };
-        let _ = build_ms;
+        // 序列化耗时为纯诊断指标（不入 SnapshotMeta，避免契约面扩容）：
+        // 记录到日志，供现场排查「快照构建变慢」时定位到本阶段。
+        tracing::debug!("快照序列化耗时 {build_ms}ms（{tab_id}）");
         let doc = Arc::new(doc);
 
         // —— 提交（防回退断言 + LRU + 跳变清出）——

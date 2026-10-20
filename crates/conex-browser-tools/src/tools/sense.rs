@@ -290,11 +290,18 @@ impl Tool for WaitForTool {
             opts
         };
         match ops.wait_for(cond, opts).await {
-            Ok(_) => Ok(json!({
-                "ok": true,
-                "matched": true,
-                "snapshotVersion": ops.snapshot_version(&tab.target_id),
-            })),
+            Ok(success) => {
+                tracing::debug!(
+                    navigated = success.navigated,
+                    page_changed = success.page_changed,
+                    "browser_wait_for 条件满足"
+                );
+                Ok(json!({
+                    "ok": true,
+                    "matched": true,
+                    "snapshotVersion": ops.snapshot_version(&tab.target_id),
+                }))
+            }
             // 14 §6.2：等待超时非致命，作为结果喂回模型（matched=false）
             Err(e) if e.kind == ActionErrorKind::Timeout => Ok(json!({
                 "ok": true,

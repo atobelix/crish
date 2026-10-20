@@ -268,7 +268,7 @@ mod tests {
     async fn url_condition_hit_and_timeout() {
         let ops = MockOps::new();
         ops.state.lock().unwrap().url = "https://example.com/login?next=/home".to_string();
-        let (exec, ops, _delay) = exec_with(ops, MockSnapshotStore::new(1));
+        let (exec, _ops, _delay) = exec_with(ops, MockSnapshotStore::new(1));
         exec.wait_for(
             WaitCondition::Url {
                 contains: "/home".to_string(),
@@ -287,7 +287,6 @@ mod tests {
         options = options.with_timeout_ms(10).with_poll_ms(5);
         let err = exec.wait_for(cond, options).await.expect_err("应超时");
         assert_eq!(err.kind, ActionErrorKind::Timeout);
-        let _ = ops;
     }
 
     /// 网络空闲：在途归零并持续静默窗口（确定性轮询计数）。

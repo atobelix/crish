@@ -601,8 +601,9 @@ impl MockSnapshotStore {
 #[allow(clippy::unused_async)]
 #[async_trait]
 impl SnapshotStore for MockSnapshotStore {
-    fn snapshot_version(&self, tab_id: &TabId) -> u64 {
-        let _ = tab_id;
+    /// mock 为全局单版本存储（不区分标签）：入参按 trait 契约保留，
+    /// 以 `_tab_id` 显式标注「本实现不使用」，而非用 `let _ =` 掩盖。
+    fn snapshot_version(&self, _tab_id: &TabId) -> u64 {
         self.state.lock().unwrap_or_else(|p| p.into_inner()).version
     }
 
@@ -619,20 +620,23 @@ impl SnapshotStore for MockSnapshotStore {
         Ok(())
     }
 
-    async fn take_snapshot(&self, tab_id: &TabId) -> Result<u64, ActionError> {
+    async fn take_snapshot(&self, _tab_id: &TabId) -> Result<u64, ActionError> {
         self.record_take();
         let mut s = self.state.lock().unwrap_or_else(|p| p.into_inner());
         if let Some(err) = s.take_errors.pop_front() {
             return Err(err);
         }
         s.version += 1;
-        let _ = tab_id;
         Ok(s.version)
     }
 
-    fn element_by_index(&self, tab_id: &TabId, version: u64, index: usize) -> Option<ElementMeta> {
+    fn element_by_index(
+        &self,
+        _tab_id: &TabId,
+        version: u64,
+        index: usize,
+    ) -> Option<ElementMeta> {
         let s = self.state.lock().unwrap_or_else(|p| p.into_inner());
-        let _ = tab_id;
         s.elements
             .get(&version)
             .or_else(|| s.elements.get(&u64::MAX))

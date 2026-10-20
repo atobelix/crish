@@ -338,10 +338,15 @@ pub async fn dispatch_key(exec: &ActionExecutor, keys: &str) -> Result<(), Actio
     // try/finally：修饰键逆序释放（无论主键成败）
     for modifier in sequence.modifiers.iter().rev() {
         mask &= !modifier.modifier_mask;
-        let _ = exec
+        // 释放失败 = 修饰键可能卡在按下态（后续输入会被污染），必须告警；
+        // 但主键结果已定，不能因释放失败改写返回值（finally 语义）。
+        if let Err(e) = exec
             .ops
             .key_event(key_up(&modifier.name, &modifier.code, mask, modifier.vk))
-            .await;
+            .await
+        {
+            tracing::warn!("修饰键释放失败（{} 可能保持按下态）：{e}", modifier.name);
+        }
     }
     press_result
 }

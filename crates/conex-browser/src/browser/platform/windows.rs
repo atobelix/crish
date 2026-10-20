@@ -75,8 +75,11 @@ impl ProcessTreeKiller for JobTreeKiller {
         self.job = Some(job);
         // 3. 恢复主线程（挂接完成前的冻结窗口保证整棵子树被 Job 捕获）
         if let Err(e) = resume_main_thread(child) {
-            // 恢复失败 → 进程卡死：先杀掉再报错
-            let _ = self.kill_tree();
+            // 恢复失败 → 进程卡死：先杀掉再报错（杀树失败不改变这里的主错误，
+            // 但必须留痕，否则「恢复失败 + 未杀掉」的残留进程无从诊断）
+            if let Err(kill_err) = self.kill_tree() {
+                tracing::warn!("恢复主线程失败后杀树失败（进程可能残留）：{kill_err}");
+            }
             return Err(format!("恢复主线程失败：{e}"));
         }
         self.mode = KillMode::Job;

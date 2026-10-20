@@ -125,8 +125,15 @@ impl MockServer {
                                                 if let Some(s) = v["sessionId"].as_str() {
                                                     msg["sessionId"] = Value::String(s.to_string());
                                                 }
-                                                let _ = outgoing_tx_conn
-                                                    .send(Message::Text(msg.to_string().into()));
+                                                // 测试替身面：连接已关闭（用例收尾）时发送
+                                                // 失败属正常，仅 trace 留痕（不污染测试输出）
+                                                if let Err(err) = outgoing_tx_conn
+                                                    .send(Message::Text(msg.to_string().into()))
+                                                {
+                                                    tracing::trace!(
+                                                        "mock 自动应答发送失败（连接已关闭）：{err}"
+                                                    );
+                                                }
                                             }
                                         }
                                         MockReply::Error { code, message } => {
@@ -138,8 +145,15 @@ impl MockServer {
                                                 if let Some(s) = v["sessionId"].as_str() {
                                                     msg["sessionId"] = Value::String(s.to_string());
                                                 }
-                                                let _ = outgoing_tx_conn
-                                                    .send(Message::Text(msg.to_string().into()));
+                                                // 测试替身面：连接已关闭（用例收尾）时发送
+                                                // 失败属正常，仅 trace 留痕（不污染测试输出）
+                                                if let Err(err) = outgoing_tx_conn
+                                                    .send(Message::Text(msg.to_string().into()))
+                                                {
+                                                    tracing::trace!(
+                                                        "mock 自动应答发送失败（连接已关闭）：{err}"
+                                                    );
+                                                }
                                             }
                                         }
                                         MockReply::Silent => {}
@@ -229,23 +243,38 @@ impl MockServer {
         if let Some(s) = session {
             msg["sessionId"] = Value::String(s.to_string());
         }
-        let _ = self.outgoing.send(Message::Text(msg.to_string().into()));
+        // 测试替身面：连接已关闭（用例收尾/主动断线）时发送失败属正常，
+        // 仅 trace 留痕；调用方断言失败会以等待超时形式显式暴露。
+        if let Err(err) = self.outgoing.send(Message::Text(msg.to_string().into())) {
+            tracing::trace!("mock 帧发送失败（连接已关闭）：{err}");
+        }
     }
 
     /// 向当前连接回响应（result）。
     pub fn reply(&self, id: u64, result: Value) {
         let msg = json!({ "id": id, "result": result });
-        let _ = self.outgoing.send(Message::Text(msg.to_string().into()));
+        // 测试替身面：连接已关闭（用例收尾/主动断线）时发送失败属正常，
+        // 仅 trace 留痕；调用方断言失败会以等待超时形式显式暴露。
+        if let Err(err) = self.outgoing.send(Message::Text(msg.to_string().into())) {
+            tracing::trace!("mock 帧发送失败（连接已关闭）：{err}");
+        }
     }
 
     /// 向当前连接回错误响应。
     pub fn reply_error(&self, id: u64, code: i64, message: &str) {
         let msg = json!({ "id": id, "error": { "code": code, "message": message } });
-        let _ = self.outgoing.send(Message::Text(msg.to_string().into()));
+        // 测试替身面：连接已关闭（用例收尾/主动断线）时发送失败属正常，
+        // 仅 trace 留痕；调用方断言失败会以等待超时形式显式暴露。
+        if let Err(err) = self.outgoing.send(Message::Text(msg.to_string().into())) {
+            tracing::trace!("mock 帧发送失败（连接已关闭）：{err}");
+        }
     }
 
     /// 关闭当前连接（触发客户端断线路径）。
     pub fn close_connection(&self) {
-        let _ = self.outgoing.send(Message::Close(None));
+        // 触发断线路径：连接可能已关闭，失败仅 trace（断线已发生，无补救语义）
+        if let Err(err) = self.outgoing.send(Message::Close(None)) {
+            tracing::trace!("mock Close 帧发送失败（连接已关闭）：{err}");
+        }
     }
 }

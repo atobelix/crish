@@ -120,7 +120,11 @@ impl Drop for Transport {
     /// 调用方遗漏 `shutdown` 时不留常驻重连任务；连接按 Drop 自然收敛
     /// （supervisor 释放 Arc<Shared> → 客户端 Drop → 任务/流句柄收尾）。
     fn drop(&mut self) {
-        let _ = self.stop_tx.send(true);
+        // 停止信号：supervisor 可能已自行退出（无接收者），此处仅示意；
+        // abort 是真正的收尾保证，故失败只记 debug（Drop 内不得 panic）。
+        if let Err(err) = self.stop_tx.send(true) {
+            tracing::debug!("停止信号无接收者（supervisor 已退出）：{err}");
+        }
         self._supervisor.abort();
     }
 }
@@ -180,9 +184,17 @@ impl Transport {
                 }
                 // —— 断线处理（§2.4 1-2 步；pending 清空已由 reader 完成）——
                 *shared_sup.lock() = None;
-                let _ = shared_sup.conn_state.send(ConnectionState::Lost);
-                let _ = shared_sup.ready.send(false);
-                let _ = bus_tx_sup.send(BrowserEvent::ConnectionLost { attempt: 0 });
+                // 断线通知三连：观察面（状态/就绪/总线）按需订阅，无订阅者即无人
+                // 关心，不构成连接层失败——仅 debug 留痕，不阻断重连主流程。
+                if let Err(err) = shared_sup.conn_state.send(ConnectionState::Lost) {
+                    tracing::debug!("连接状态无订阅者（丢弃 Lost）：{err}");
+                }
+                if let Err(err) = shared_sup.ready.send(false) {
+                    tracing::debug!("就绪信号无订阅者（丢弃 false）：{err}");
+                }
+                if let Err(err) = bus_tx_sup.send(BrowserEvent::ConnectionLost { attempt: 0 }) {
+                    tracing::debug!("事件总线无订阅者（丢弃 ConnectionLost）：{err}");
+                }
 
                 // —— 指数退避重连（§2.4 3-5 步）——
                 let mut attempt: u32 = 0;
@@ -203,12 +215,22 @@ impl Transport {
                                 Ok(()) => {
                                     spawn_forward(forward_rx, &event_tx_sup);
                                     *shared_sup.lock() = Some(new_client);
-                                    let _ = shared_sup.conn_state.send(ConnectionState::Connected);
-                                    let _ = shared_sup.ready.send(true);
-                                    let _ = bus_tx_sup.send(BrowserEvent::ConnectionRestored {
-                                        elapsed_ms: start.elapsed().as_millis() as u64,
-                                        epoch: epoch_sup.load(Ordering::Relaxed),
-                                    });
+                                    if let Err(err) =
+                                        shared_sup.conn_state.send(ConnectionState::Connected)
+                                    {
+                                        tracing::debug!("连接状态无订阅者（丢弃 Connected）：{err}");
+                                    }
+                                    if let Err(err) = shared_sup.ready.send(true) {
+                                        tracing::debug!("就绪信号无订阅者（丢弃 true）：{err}");
+                                    }
+                                    if let Err(err) =
+                                        bus_tx_sup.send(BrowserEvent::ConnectionRestored {
+                                            elapsed_ms: start.elapsed().as_millis() as u64,
+                                            epoch: epoch_sup.load(Ordering::Relaxed),
+                                        })
+                                    {
+                                        tracing::debug!("事件总线无订阅者（丢弃 Restored）：{err}");
+                                    }
                                     break;
                                 }
                                 Err(e) => {
@@ -225,10 +247,14 @@ impl Transport {
                     if consecutive_failures >= RECONNECT_REPORT_FAILURES {
                         // CdpDisconnected 次级信号（维度 10 崩溃重启，§2.4 第 5 步）；
                         // 进程存活前提下持续重试，周期上报
-                        let _ = shared_sup.disconnected.send(true);
-                        let _ = bus_tx_sup.send(BrowserEvent::ConnectionLost {
+                        if let Err(err) = shared_sup.disconnected.send(true) {
+                            tracing::debug!("断线次级信号无订阅者（丢弃）：{err}");
+                        }
+                        if let Err(err) = bus_tx_sup.send(BrowserEvent::ConnectionLost {
                             attempt: consecutive_failures,
-                        });
+                        }) {
+                            tracing::debug!("事件总线无订阅者（丢弃 ConnectionLost）：{err}");
+                        }
                         consecutive_failures = 0;
                     }
                 }
@@ -339,7 +365,11 @@ impl Transport {
 
     /// 关闭：停止 supervisor + 发送 Close 帧（急停/会话结束路径）。
     pub async fn shutdown(&self) {
-        let _ = self.stop_tx.send(true);
+        // 停止信号：supervisor 可能已自行退出（无接收者），此处仅示意；
+        // abort 是真正的收尾保证，故失败只记 debug（Drop 内不得 panic）。
+        if let Err(err) = self.stop_tx.send(true) {
+            tracing::debug!("停止信号无接收者（supervisor 已退出）：{err}");
+        }
         // 先取出客户端再 await（std MutexGuard 不得跨 await 存活）
         let client = self.shared.lock().as_ref().cloned();
         if let Some(client) = client {
@@ -402,7 +432,11 @@ fn spawn_forward(mut rx: broadcast::Receiver<CdpEvent>, event_tx: &broadcast::Se
         loop {
             match rx.recv().await {
                 Ok(ev) => {
-                    let _ = tx.send(ev);
+                    // 下游订阅者全部释放 = 事件无人消费，属正常收尾阶段，
+                    // 不构成转发失败（rx 侧 Closed 分支才是真正的终点）。
+                    if let Err(err) = tx.send(ev) {
+                        tracing::debug!("事件转发无下游订阅者（丢弃）：{err}");
+                    }
                 }
                 Err(broadcast::error::RecvError::Lagged(_)) => continue,
                 Err(broadcast::error::RecvError::Closed) => break,

@@ -447,7 +447,8 @@ mod tests {
         assert_eq!(source.session().fps_level(), FpsLevel::Base, "Low → Base");
 
         source.session().shutdown().await;
-        let _ = mock;
+        // 先释放 mock 服务端（保持原「立即丢弃」语义），再关闭会话
+        drop(mock);
         session.shutdown().await;
     }
 

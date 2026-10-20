@@ -281,7 +281,11 @@ async fn probe_domain(sender: &CommandSender, domain: Domain, major: u64) -> Dom
                 .await
             {
                 Ok(v) => match serde_json::from_value::<GetFullAXTreeResult>(v) {
-                    Ok(_) => Ok(Value::Null),
+                    Ok(tree) => {
+                        // 冒烟语义：可反序列化即域可用（空树合法）；节点数仅作诊断
+                        tracing::debug!("Accessibility 冒烟成功：ax_nodes={}", tree.nodes.len());
+                        Ok(Value::Null)
+                    }
                     Err(e) => Err(CdpError::Internal {
                         method: Some(ACCESSIBILITY_GET_FULL_AX_TREE.to_string()),
                         message: e.to_string(),
@@ -322,7 +326,11 @@ async fn probe_domain(sender: &CommandSender, domain: Domain, major: u64) -> Dom
 /// 失败分类（§6.1 第 3 步）。
 fn map_result(method: &str, result: Result<Value, CdpError>) -> DomainStatus {
     match result {
-        Ok(_) => DomainStatus::Supported,
+        Ok(probe) => {
+            // 探测返回值仅作诊断（Null/enable 结果/空树），不入 DomainStatus 状态面
+            tracing::debug!("{method} 探测成功：{probe}");
+            DomainStatus::Supported
+        }
         Err(CdpError::DomainUnavailable { .. }) => DomainStatus::Unsupported {
             reason: format!("{method} 不支持"),
         },

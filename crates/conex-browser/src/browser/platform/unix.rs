@@ -46,7 +46,11 @@ impl ProcessTreeKiller for PgidTreeKiller {
     }
 
     fn kill_sync(&self, pid: u32) {
-        let _ = kill_pgid(pid);
+        // Drop 路径不得 panic、不得改变控制流；失败仅告警（可能是 EPERM 或进程组
+        // 已随父进程消亡，后者由 killpg_result 幂等吞为 Ok）
+        if let Err(e) = kill_pgid(pid) {
+            tracing::warn!("同步兜底杀进程组失败（Drop 路径，进程可能残留）：{e}");
+        }
     }
 }
 
@@ -158,7 +162,12 @@ mod tests {
             if ret != 0 {
                 unsafe { libc::_exit(2) };
             }
-            let _ = unsafe { libc::write(fds[1], b"x".as_ptr() as *const libc::c_void, 1) };
+            let written =
+                unsafe { libc::write(fds[1], b"x".as_ptr() as *const libc::c_void, 1) };
+            if written != 1 {
+                // 写就绪字节失败：直接退出，父进程读到 EOF 即断言失败（不静默通过）
+                unsafe { libc::_exit(4) };
+            }
             unsafe { libc::pause() };
             unsafe { libc::_exit(3) };
         }

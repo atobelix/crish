@@ -156,6 +156,14 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// 前进一个字符（扫描器语义：仅推进游标）。
+    ///
+    /// `Iterator::next` 没有错误面，返回的 `Option` 只表示「是否到末尾」；
+    /// 调用点均以 `peek()` 确认过当前字符存在，故此处无需处理末尾情况。
+    fn bump(&mut self) {
+        self.chars.next();
+    }
+
     fn scan(&mut self) {
         while let Some(&c) = self.chars.peek() {
             match c {
@@ -163,22 +171,22 @@ impl<'a> Lexer<'a> {
                 '`' => self.skip_template(),
                 '/' => {
                     // 注释/正则/`/=` 赋值：`/` 后非 `/`/`*`/`=` 视作正则字面量起点
+                    // （克隆迭代器后 nth(1) = 跳过当前 '/' 再取下一个字符）
                     let mut it = self.chars.clone();
-                    let _ = it.next();
-                    match it.peek() {
+                    match it.nth(1) {
                         Some('/') => {
-                            let _ = self.chars.next();
-                            let _ = self.chars.next();
+                            self.bump();
+                            self.bump();
                             self.skip_line_comment();
                         }
                         Some('*') => {
-                            let _ = self.chars.next();
-                            let _ = self.chars.next();
+                            self.bump();
+                            self.bump();
                             self.skip_block_comment();
                         }
                         Some('=') => {
-                            let _ = self.chars.next();
-                            let _ = self.chars.next();
+                            self.bump();
+                            self.bump();
                             self.push_op("/=".to_string());
                         }
                         _ => self.skip_regex(),
@@ -187,13 +195,13 @@ impl<'a> Lexer<'a> {
                 '(' | '[' | '{' => {
                     self.depth += 1;
                     let tok = c.to_string();
-                    let _ = self.chars.next();
+                    self.bump();
                     self.push_op(tok);
                 }
                 ')' | ']' | '}' => {
                     self.depth = self.depth.saturating_sub(1);
                     let tok = c.to_string();
-                    let _ = self.chars.next();
+                    self.bump();
                     self.push_op(tok);
                 }
                 ';' => {
@@ -202,14 +210,14 @@ impl<'a> Lexer<'a> {
                     } else {
                         self.last_pushed = None;
                     }
-                    let _ = self.chars.next();
+                    self.bump();
                 }
                 c if c.is_ascii_alphabetic() || c == '_' || c == '$' => self.scan_ident(),
                 c if c.is_ascii_digit() => {
-                    let _ = self.chars.next();
+                    self.bump();
                 }
                 c if c.is_ascii_whitespace() => {
-                    let _ = self.chars.next();
+                    self.bump();
                 }
                 _ => self.scan_op(),
             }
@@ -223,11 +231,11 @@ impl<'a> Lexer<'a> {
 
     /// 字符串字面量：内容若为「紧邻方括号的构造面成员」（`x['constructor']`）→ 记为黑名单标识符。
     fn scan_string(&mut self, quote: char) {
-        let _ = self.chars.next(); // 开引号
+        self.bump(); // 开引号
         let mut content = String::new();
         while let Some(c) = self.chars.next() {
             if c == '\\' {
-                let _ = self.chars.next();
+                self.bump();
             } else if c == quote {
                 break;
             } else {
@@ -242,15 +250,15 @@ impl<'a> Lexer<'a> {
     }
 
     fn skip_template(&mut self) {
-        let _ = self.chars.next(); // `
+        self.bump(); // `
         while let Some(c) = self.chars.next() {
             if c == '\\' {
-                let _ = self.chars.next();
+                self.bump();
             } else if c == '`' {
                 break;
             } else if c == '$' && self.chars.peek() == Some(&'{') {
                 // ${expr} 内嵌表达式：继续扫描（简化：按模板内容跳过至 `}`——保留扫描一致性）
-                let _ = self.chars.next();
+                self.bump();
             }
         }
     }
@@ -277,7 +285,7 @@ impl<'a> Lexer<'a> {
         let mut in_class = false;
         while let Some(c) = self.chars.next() {
             if c == '\\' {
-                let _ = self.chars.next();
+                self.bump();
                 continue;
             }
             if c == '[' {
@@ -302,7 +310,7 @@ impl<'a> Lexer<'a> {
         while let Some(&c) = self.chars.peek() {
             if c.is_ascii_alphanumeric() || c == '_' || c == '$' {
                 s.push(c);
-                let _ = self.chars.next();
+                self.bump();
             } else {
                 break;
             }
@@ -329,7 +337,7 @@ impl<'a> Lexer<'a> {
                 break;
             }
             s.push(c);
-            let _ = self.chars.next();
+            self.bump();
             if s.len() >= 3 {
                 break;
             }

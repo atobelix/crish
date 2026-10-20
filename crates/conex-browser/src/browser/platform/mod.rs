@@ -88,12 +88,12 @@ mod tests {
     /// 终结器创建不失败。
     #[test]
     fn killer_constructs() {
-        let _ = new_killer();
+        drop(new_killer());
     }
 
     /// spawn_command 可构造（不 spawn）。
     #[test]
     fn spawn_command_constructs() {
-        let _ = spawn_command(Path::new("not-a-real-binary"));
+        drop(spawn_command(Path::new("not-a-real-binary")));
     }
 }

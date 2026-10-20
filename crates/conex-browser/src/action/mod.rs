@@ -144,6 +144,16 @@ impl ActionError {
     }
 }
 
+impl std::fmt::Display for ActionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?} (attempt {}): {}", self.kind, self.attempt, self.message)?;
+        if let Some(raw) = &self.cdp_raw {
+            write!(f, " [cdp: {raw}]")?;
+        }
+        Ok(())
+    }
+}
+
 /// 动作成功载荷（§2.1）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct ActionSuccess {
@@ -454,8 +464,16 @@ impl ActionExecutor {
                 }
                 Some(after)
             }
-            Ok(_) => None,
-            Err(_) => None, // 动作后 URL 读取失败不阻断成功（页面可能正导航中）
+            Ok(after) => {
+                // URL 未变化 = 本动作未触发导航（after 与动作前一致，无门禁复核必要）
+                tracing::trace!("动作后 URL 未变化（无导航）：{after}");
+                None
+            }
+            Err(e) => {
+                // 动作后 URL 读取失败不阻断成功（页面可能正导航中），但必须留痕
+                tracing::debug!("动作后读取 URL 失败（不阻断动作成功）：{e}");
+                None
+            }
         };
         let version_changed = self.snapshot.snapshot_version(&req.tab_id) != req.snapshot_version;
         let was_navigated = navigated.is_some();
@@ -663,17 +681,15 @@ impl ActionExecutor {
                             .with_timeout_ms(self.opts.not_interactive_wait_ms),
                         )
                         .await;
-                    match wait {
-                        Ok(_) => return RetryFlow::Continue,
-                        Err(wait_err) => {
-                            // 等待可见超时仍归类 NotInteractive（元素持续不可见，§5.1）
-                            err = ActionError::new(
-                                ActionErrorKind::NotInteractive,
-                                format!("元素等待可见超时：{}", wait_err.message),
-                            );
-                            continue;
-                        }
+                    if let Err(wait_err) = wait {
+                        // 等待可见超时仍归类 NotInteractive（元素持续不可见，§5.1）
+                        err = ActionError::new(
+                            ActionErrorKind::NotInteractive,
+                            format!("元素等待可见超时：{}", wait_err.message),
+                        );
+                        continue;
                     }
+                    return RetryFlow::Continue;
                 }
                 RetryDecision::WaitThenRetry => {
                     // Timeout 首轮：等待元素可见/网络空闲 → 重试 1 次（§5.1）

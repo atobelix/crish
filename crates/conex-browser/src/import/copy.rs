@@ -186,7 +186,14 @@ where
         Ok(report)
     })();
     if result.is_err() {
-        let _ = cleanup_staging_dir(&staging);
+        // 失败回滚清理（best-effort）：清理失败不掩盖主错误（原错误已装入
+        // result），但残留 staging 会占用磁盘且阻断同目录后续 rename，必须留痕。
+        if let Err(clean_err) = cleanup_staging_dir(&staging) {
+            tracing::warn!(
+                "导入失败后清理 staging 目录失败（残留需下次清理）：{}：{clean_err}",
+                staging.display()
+            );
+        }
     }
     result
 }
@@ -213,22 +220,23 @@ where
         std::fs::create_dir_all(parent)
             .map_err(|e| CopyError::Io(format!("创建目标父目录失败 {}：{e}", parent.display())))?;
     }
-    match copier(src, dest) {
-        Ok(_) => {
-            report.copied += 1;
-            report.copied_files.push(rel.to_string());
-            Ok(())
+    // 三态：成功计数 / 锁冲突中止 / 其他错误跳过（best-effort，结构校验兜底）。
+    // 写成 if-let 而非 match 的 `Ok(_)` 臂：成功分支不需要复制字节数，错误分支
+    // 必须逐类处理，避免「成功与失败共用一条静默路径」。
+    if let Err(e) = copier(src, dest) {
+        if is_lock_conflict(&e) {
+            return Err(CopyError::LockConflict {
+                file: src.display().to_string(),
+                error: e.to_string(),
+            });
         }
-        Err(e) if is_lock_conflict(&e) => Err(CopyError::LockConflict {
-            file: src.display().to_string(),
-            error: e.to_string(),
-        }),
-        Err(e) => {
-            tracing::warn!("复制文件失败（跳过）：{}：{e}", src.display());
-            report.skipped += 1;
-            Ok(())
-        }
+        tracing::warn!("复制文件失败（跳过）：{}：{e}", src.display());
+        report.skipped += 1;
+        return Ok(());
     }
+    report.copied += 1;
+    report.copied_files.push(rel.to_string());
+    Ok(())
 }
 
 /// 复制中止判定（§3.2 补充规则）：PermissionError（含 Windows WinError 32

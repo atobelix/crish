@@ -209,7 +209,11 @@ impl CdpClient {
                         // tungstenite 协议层自动回 Pong，这里仅继续
                         continue;
                     }
-                    Ok(_) => continue, // Close/Pong/Frame 等
+                    // Close/Pong/Frame 等控制帧：数据面不消费，仅留 trace 便于排查
+                    Ok(other) => {
+                        tracing::trace!("忽略非数据帧：{other:?}");
+                        continue;
+                    }
                     Err(e) => {
                         tracing::debug!("CDP 连接读取错误：{e}");
                         break;
@@ -230,7 +234,11 @@ impl CdpClient {
                         p.into_inner()
                     });
                     if let Some(tx) = pending.remove(&id) {
-                        let _ = tx.send(parsed);
+                        // 等待方可能已超时放弃（命令超时先于响应到达）：响应无人
+                        // 接收不代表连接异常，但需留痕以区分「丢响应」与「晚响应」。
+                        if tx.send(parsed).is_err() {
+                            tracing::debug!("命令响应无等待方（等待方已超时/取消），响应已丢弃");
+                        }
                     }
                 } else if let Some(ref method) = parsed.method {
                     // 事件：broadcast 扇出
@@ -239,7 +247,10 @@ impl CdpClient {
                         params: parsed.params.clone().unwrap_or(Value::Null),
                         session_id: parsed.session_id.clone(),
                     };
-                    let _ = event_tx_clone.send(event);
+                    // 广播扇出：无订阅者即无人消费（正常观测面空窗），仅 debug
+                    if let Err(err) = event_tx_clone.send(event) {
+                        tracing::debug!("CDP 事件无订阅者（丢弃）：{err}");
+                    }
                 }
             }
             // reader 退出 = 连接丢失：清空全部 pending（await 方立即 channel-closed，
@@ -251,8 +262,12 @@ impl CdpClient {
                     p.into_inner()
                 })
                 .clear();
-            let _ = cancel_tx.send(true);
-            let _ = lost_tx_clone.send(true);
+            if let Err(err) = cancel_tx.send(true) {
+                tracing::debug!("心跳停止信号无接收者（keepalive 已退出）：{err}");
+            }
+            if let Err(err) = lost_tx_clone.send(true) {
+                tracing::debug!("断线信号无订阅者（上层已释放）：{err}");
+            }
         });
 
         // —— keepalive 任务（WS Ping；发送失败即退出）——
@@ -403,10 +418,12 @@ impl CdpClient {
         self.lost_tx.subscribe()
     }
 
-    /// 发送 Close 帧（优雅关闭，best-effort）。
+    /// 发送 Close 帧（优雅关闭，best-effort：连接可能已断，失败仅告警不 panic）。
     pub async fn close(&self) {
         let mut ws_tx = self.ws_tx.lock().await;
-        let _ = ws_tx.send(Message::Close(None)).await;
+        if let Err(e) = ws_tx.send(Message::Close(None)).await {
+            tracing::debug!("Close 帧发送失败（连接可能已断，忽略）：{e}");
+        }
     }
 
     /// 测试专用：在途命令数（取消/超时清理断言，#1528 回归）。
@@ -429,7 +446,11 @@ fn enable_tcp_keepalive(stream: &tokio_tungstenite::MaybeTlsStream<tokio::net::T
     let keepalive = socket2::TcpKeepalive::new().with_time(Duration::from_secs(30));
     #[cfg(not(any(target_os = "openbsd", target_os = "haiku")))]
     let keepalive = keepalive.with_interval(Duration::from_secs(10));
-    let _ = sock.set_tcp_keepalive(&keepalive);
+    // best-effort：部分平台/受限环境不支持 keepalive 参数，失败不阻断建连，
+    // 但必须留痕（否则「已启用保活」与「静默未启用」无从区分）。
+    if let Err(e) = sock.set_tcp_keepalive(&keepalive) {
+        tracing::warn!("启用 TCP keepalive 失败（保活降级，连接仍可用）：{e}");
+    }
 }
 
 #[cfg(test)]

@@ -478,9 +478,14 @@ impl SessionLocalStorageChannel {
         if self.enabled.load(Ordering::Relaxed) {
             return Ok(());
         }
-        let _: serde_json::Value = self
-            .session
-            .send_page(&self.session_id, DOM_STORAGE_ENABLE, serde_json::json!({}))
+        // 响应体无意义（enable 回执），但类型参数必须显式给出——用 turbofish
+        // 而非 `let _: T = ...`，避免「丢弃赋值」形态掩盖真实错误面（错误经 ? 上抛）。
+        self.session
+            .send_page::<serde_json::Value>(
+                &self.session_id,
+                DOM_STORAGE_ENABLE,
+                serde_json::json!({}),
+            )
             .await
             .map_err(|e| map_inject_error("DOMStorage.enable", e))?;
         self.enabled.store(true, Ordering::Relaxed);
@@ -491,9 +496,8 @@ impl SessionLocalStorageChannel {
 #[async_trait]
 impl LocalStorageChannel for SessionLocalStorageChannel {
     async fn add_init_script(&self, source: &str) -> Result<(), StorageStateError> {
-        let _: serde_json::Value = self
-            .session
-            .send_page(
+        self.session
+            .send_page::<serde_json::Value>(
                 &self.session_id,
                 PAGE_ADD_SCRIPT_TO_EVALUATE_ON_NEW_DOCUMENT,
                 AddScriptToEvaluateOnNewDocumentParams {
@@ -513,9 +517,8 @@ impl LocalStorageChannel for SessionLocalStorageChannel {
         value: &str,
     ) -> Result<(), StorageStateError> {
         self.ensure_enabled().await?;
-        let _: serde_json::Value = self
-            .session
-            .send_page(
+        self.session
+            .send_page::<serde_json::Value>(
                 &self.session_id,
                 DOM_STORAGE_SET_DOM_STORAGE_ITEM,
                 SetDOMStorageItemParams {

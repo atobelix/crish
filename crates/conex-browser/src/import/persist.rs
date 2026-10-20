@@ -157,7 +157,10 @@ pub fn cleanup_staging(managed_root: &Path) -> Vec<PathBuf> {
     for entry in entries.flatten() {
         let path = entry.path();
         if !path.is_dir() {
-            let _ = std::fs::remove_file(&path);
+            // 残留清理（best-effort）：单个文件删不掉不阻断其余清理，但留痕
+            if let Err(e) = std::fs::remove_file(&path) {
+                tracing::warn!("清理 staging 残留文件失败：{}：{e}", path.display());
+            }
             continue;
         }
         match std::fs::remove_dir_all(&path) {

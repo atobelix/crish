@@ -264,7 +264,8 @@ impl NetworkCounter {
                             })
                             .ok();
                     }
-                    Ok(_) => {}
+                    // 其余事件与本计数面（网络在途数）无关：显式忽略事件体
+                    Ok(_other_event) => {}
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 }
