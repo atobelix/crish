@@ -24,12 +24,32 @@ const SunIcon: React.FC = () =>
     React.createElement('circle', { cx: '12', cy: '12', r: '5' }),
     React.createElement('line', { x1: '12', y1: '1', x2: '12', y2: '3' }),
     React.createElement('line', { x1: '12', y1: '21', x2: '12', y2: '23' }),
-    React.createElement('line', { x1: '4.22', y1: '4.22', x2: '5.64', y2: '5.64' }),
-    React.createElement('line', { x1: '18.36', y1: '18.36', x2: '19.78', y2: '19.78' }),
+    React.createElement('line', {
+      x1: '4.22',
+      y1: '4.22',
+      x2: '5.64',
+      y2: '5.64',
+    }),
+    React.createElement('line', {
+      x1: '18.36',
+      y1: '18.36',
+      x2: '19.78',
+      y2: '19.78',
+    }),
     React.createElement('line', { x1: '1', y1: '12', x2: '3', y2: '12' }),
     React.createElement('line', { x1: '21', y1: '12', x2: '23', y2: '12' }),
-    React.createElement('line', { x1: '4.22', y1: '19.78', x2: '5.64', y2: '18.36' }),
-    React.createElement('line', { x1: '18.36', y1: '5.64', x2: '19.78', y2: '4.22' })
+    React.createElement('line', {
+      x1: '4.22',
+      y1: '19.78',
+      x2: '5.64',
+      y2: '18.36',
+    }),
+    React.createElement('line', {
+      x1: '18.36',
+      y1: '5.64',
+      x2: '19.78',
+      y2: '4.22',
+    })
   );
 
 const MoonIcon: React.FC = () =>
@@ -46,19 +66,23 @@ const MoonIcon: React.FC = () =>
       strokeLinejoin: 'round',
       'aria-hidden': 'true',
     },
-    React.createElement('path', { d: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z' })
+    React.createElement('path', {
+      d: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',
+    })
   );
 
 export interface UseAppearanceSchemaArgs {
   activeTheme: ThemeId;
   skinOptions: { value: string; label: string }[];
   skinPreset: string;
+  isWin11?: boolean;
 }
 
 export function useAppearanceSchema({
   activeTheme,
   skinOptions,
   skinPreset,
+  isWin11 = false,
 }: UseAppearanceSchemaArgs): SchemaSection[] {
   return useMemo<SchemaSection[]>(
     () => [
@@ -71,10 +95,30 @@ export function useAppearanceSchema({
             title: '主题模式',
             desc: '切换浅色/深色主题',
             toggleOptions: [
-              { value: 'default', label: '浅色', icon: React.createElement(SunIcon) },
-              { value: 'dark', label: '深色', icon: React.createElement(MoonIcon) },
+              {
+                value: 'default',
+                label: '浅色',
+                icon: React.createElement(SunIcon),
+              },
+              {
+                value: 'dark',
+                label: '深色',
+                icon: React.createElement(MoonIcon),
+              },
             ],
           },
+          ...(isWin11
+            ? [
+                {
+                  key: 'enableMicaEffect',
+                  type: 'boolean' as const,
+                  title: 'Mica Effect (Windows 11)',
+                  titleKey: 'appearance.micaTitle',
+                  desc: 'Enable Windows 11 system Mica backdrop translucency effect (default off)',
+                  descKey: 'appearance.micaDesc',
+                },
+              ]
+            : []),
           {
             key: 'uiSize',
             type: 'toggle-group' as const,
@@ -185,6 +229,6 @@ export function useAppearanceSchema({
         ],
       },
     ],
-    [activeTheme, skinOptions, skinPreset]
+    [activeTheme, skinOptions, skinPreset, isWin11]
   );
 }

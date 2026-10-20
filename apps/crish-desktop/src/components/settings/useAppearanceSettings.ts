@@ -18,7 +18,6 @@ import {
   readStoredTheme,
   readStoredPersonalization,
   writeStoredPersonalization,
-  applyPersonalization,
   type PersonalizationSettings,
 } from '../../api/themeStore';
 import { useIsVisible } from '../../hooks/useIsVisible';
@@ -30,6 +29,10 @@ import type { SchemaSection } from './SettingsSchemaRenderer';
 import { toast } from '../../services/toast/ToastContext';
 import { useSkinSettings } from './useSkinSettings';
 import { useAppearanceSchema } from './useAppearanceSchema';
+import {
+  isWindows11Device,
+  syncMicaBackdrop,
+} from '../../bootstrap/backdropThemeSync';
 
 export type UiSize = 'small' | 'medium' | 'large';
 export type ThemeId = 'default' | 'dark';
@@ -101,9 +104,7 @@ export interface AppearanceSettingsResult {
   save: (updates: Partial<Settings>) => Promise<boolean>;
   applyDensity: (size: UiSize) => void;
   applyChrome: (mode: ShellChromeMode) => void;
-  updatePersonalization: (
-    updates: Partial<PersonalizationSettings>
-  ) => void;
+  updatePersonalization: (updates: Partial<PersonalizationSettings>) => void;
   handleSave: (updates: Record<string, unknown>) => void;
   resetAppearance: () => Promise<void>;
 }
@@ -153,7 +154,9 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
 
   const uiSize = useLayoutStore((s) => s.uiSize) as UiSize;
   const setUiSize = useLayoutStore((s) => s.setUiSize);
-  const shellChromeMode = useLayoutStore((s) => s.shellChromeMode) as ShellChromeMode;
+  const shellChromeMode = useLayoutStore(
+    (s) => s.shellChromeMode
+  ) as ShellChromeMode;
   const setShellChromeMode = useLayoutStore((s) => s.setShellChromeMode);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -162,6 +165,45 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
   const [restoreLastWorkspace, setRestoreLastWorkspaceState] = useState(() =>
     readRestoreLastWorkspace()
   );
+  const [isWin11, setIsWin11] = useState<boolean>(() => isWindows11Device());
+
+  useEffect(() => {
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.__CRISH_MICA_SUPPORTED__ === 'boolean'
+    ) {
+      setIsWin11(window.__CRISH_MICA_SUPPORTED__);
+      return;
+    }
+    const nav =
+      typeof navigator !== 'undefined'
+        ? (navigator as unknown as {
+            userAgentData?: {
+              getHighEntropyValues?: (
+                hints: string[]
+              ) => Promise<{ platformVersion?: string }>;
+            };
+          })
+        : null;
+    if (nav?.userAgentData?.getHighEntropyValues) {
+      nav.userAgentData
+        .getHighEntropyValues(['platformVersion'])
+        .then((data) => {
+          if (data.platformVersion) {
+            const majorStr = data.platformVersion.split('.')[0];
+            if (majorStr) {
+              const major = parseInt(majorStr, 10);
+              if (major >= 13) {
+                setIsWin11(true);
+              }
+            }
+          }
+        })
+        .catch(() => {
+          /* swallow-ok: optional UA platformVersion query fallback */
+        });
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -293,13 +335,22 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
       transitionEnabled: personalization.themeAutoTimeTransition ?? false,
       vibrantMode: personalization.themeBrightnessVibrant ?? false,
       restoreLastWorkspace,
+      enableMicaEffect: Boolean(settings.enableMicaEffect),
     };
-  }, [settings, uiSize, shellChromeMode, personalization, restoreLastWorkspace, activeTheme]);
+  }, [
+    settings,
+    uiSize,
+    shellChromeMode,
+    personalization,
+    restoreLastWorkspace,
+    activeTheme,
+  ]);
 
   const appearanceSchema = useAppearanceSchema({
     activeTheme,
     skinOptions,
     skinPreset: allValues.skinPreset as string,
+    isWin11,
   });
 
   const handleSave = useCallback(
@@ -348,6 +399,11 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
         setRestoreLastWorkspaceState(next);
         setRestoreLastWorkspace(next);
       }
+      if ('enableMicaEffect' in updates) {
+        const nextVal = Boolean(updates.enableMicaEffect);
+        void save({ enableMicaEffect: nextVal });
+        void syncMicaBackdrop(nextVal, activeTheme === 'dark');
+      }
     },
     [
       save,
@@ -356,6 +412,7 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
       settings,
       updatePersonalization,
       personalization.themeAutoTimeTransition,
+      activeTheme,
     ]
   );
 

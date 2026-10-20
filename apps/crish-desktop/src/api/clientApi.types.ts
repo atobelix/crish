@@ -74,6 +74,8 @@ export interface Settings {
    */
   defaultThinkingLevel?: string;
   theme?: string;
+  /** 是否开启 Windows 11 原生 Mica 云母背景透光效果（默认 false 关闭） */
+  enableMicaEffect?: boolean;
   /** UI / mono font preferences (mirrored in crish_fonts) */
   fonts?: {
     uiFont?: string;

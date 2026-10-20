@@ -98,7 +98,7 @@ html[data-theme='light'] {
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
   /* ── 文字灰度阶（light：0% = 黑，100% = 白；四档均为显式灰值，禁止透明度/mix 向背景收敛）──
      正文/常看到的字 = 10%（近黑，最高对比）→ 次级/会话列表 = 22%（#383838）→ 小字/工具调用/思考 = 40%（#666666）→ 极弱/折叠控制行/时间戳 = 59%（#969696） */
-  --text-primary: #1a1a1a;
+  --text-primary: #121212;
   --text-secondary: #383838;
   /* 文本三级色（小字 / 工具调用 / 思考内容 / 路径等）：40% 灰度（#666666），WCAG AA 达标。
      对 tokens.css 主背景 5.50:1、对侧栏背景 5.10:1（均 ≥ 4.5:1，a11y-contrast.test.ts 验证）。 */
@@ -553,10 +553,10 @@ html[data-theme='light'] {
 
   /*             /     CJK     fontStore        */
   --font-sans:
-    'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB',
-    'Noto Sans SC', 'Noto Sans CJK SC', system-ui, -apple-system,
-    BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Variable Text', 'Helvetica Neue',
-    Arial, sans-serif;
+    'HarmonyOS Sans SC', 'HarmonyOS Sans', 'PingFang SC', 'Noto Sans SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', 'Hiragino Sans GB',
+    'Noto Sans CJK SC', system-ui, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', 'Segoe UI Variable Text', 'Helvetica Neue', Arial, sans-serif;
   --font-mono:
     'Cascadia Mono', 'Cascadia Code', 'JetBrains Mono', 'Segoe UI Mono',
     'SF Mono', Consolas, 'Liberation Mono', ui-monospace, monospace;
@@ -650,7 +650,7 @@ html[data-theme='light'] {
   --md-text-font: var(--md-font-family);
   --md-text-size: var(--font-size-base, 14px);
   --md-text-line-height: 1.68;
-  --md-text-color: var(--text-primary, hsl(0 0% 7%));
+  --md-text-color: var(--text-primary, #121212);
   --md-text-paragraph-gap: 0.88em;
 
   /* --- 2. 标题体系变量 (Markdown Headings - Light) --- */
@@ -671,7 +671,7 @@ html[data-theme='light'] {
 
   --md-heading-font-weight: 600;
   --md-heading-line-height: 1.35;
-  --md-heading-color: var(--text-primary, hsl(0 0% 7%));
+  --md-heading-color: var(--text-primary, #121212);
   --md-heading-margin-top: 0.65em;
   --md-heading-margin-bottom: 0.28em;
 
@@ -1060,7 +1060,7 @@ html[data-theme='dark'] {
   --shell-chrome-bg: var(--surface-chrome);
   /* ── 文字灰度阶（dark：与 light 镜像，0% = 黑，100% = 白；四档均为显式灰值）──
      正文/常看到的字 = 90%（近白，10% 灰度）→ 次级/会话列表 = 80%（#cccccc）→ 小字 55%（#8c8c8c）→ 极弱/折叠控制行/时间戳 = 40%（#666666） */
-  --text-primary: #e6e6e6;
+  --text-primary: #f5f5f5;
   --text-secondary: #cccccc;
   /* 文本三级色（小字 / 工具调用 / 路径等）：45% 灰度（55% 亮度），显式灰值零透明度，达标 WCAG AA */
   --text-tertiary: #8c8c8c;
@@ -1385,7 +1385,7 @@ html[data-theme='dark'] {
   --md-text-font: var(--md-font-family);
   --md-text-size: var(--font-size-base, 14px);
   --md-text-line-height: 1.68;
-  --md-text-color: var(--text-primary, hsl(0 0% 94%));
+  --md-text-color: var(--text-primary, #f5f5f5);
   --md-text-paragraph-gap: 0.88em;
 
   /* --- 2. 标题体系变量 (Markdown Headings - Dark) --- */
@@ -1406,7 +1406,7 @@ html[data-theme='dark'] {
 
   --md-heading-font-weight: 600;
   --md-heading-line-height: 1.35;
-  --md-heading-color: var(--text-primary, hsl(0 0% 94%));
+  --md-heading-color: var(--text-primary, #f5f5f5);
   --md-heading-margin-top: 0.65em;
   --md-heading-margin-bottom: 0.28em;
 

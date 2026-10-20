@@ -12,7 +12,9 @@ export function parseColorToOklch(colorStr: string, isDark?: boolean): OKLCH {
   const str = colorStr.trim().toLowerCase();
 
   // Handlers for common raw formats in Conex (hex, HSL, color-mix)
-  let r = 0.9, g = 0.9, b = 0.9; // Default to light grey fallback
+  let r = 0.9,
+    g = 0.9,
+    b = 0.9; // Default to light grey fallback
 
   if (str.startsWith('#')) {
     const rawHex = str.slice(1);
@@ -22,14 +24,20 @@ export function parseColorToOklch(colorStr: string, isDark?: boolean): OKLCH {
     if (rawHex.length !== 3 && rawHex.length !== 6 && rawHex.length !== 8) {
       return { l: NaN, c: NaN, h: NaN };
     }
-    const parsedHex = rawHex.length === 3
-      ? rawHex.split('').map(char => char + char).join('')
-      : rawHex.slice(0, 6);
+    const parsedHex =
+      rawHex.length === 3
+        ? rawHex
+            .split('')
+            .map((char) => char + char)
+            .join('')
+        : rawHex.slice(0, 6);
     r = parseInt(parsedHex.slice(0, 2), 16) / 255;
     g = parseInt(parsedHex.slice(2, 4), 16) / 255;
     b = parseInt(parsedHex.slice(4, 6), 16) / 255;
   } else if (str.startsWith('hsl')) {
-    const match = str.match(/hsla?\(\s*([\d.]+)(?:deg)?(?:\s*,\s*|\s+)([\d.]+)%(?:\s*,\s*|\s+)([\d.]+)%/);
+    const match = str.match(
+      /hsla?\(\s*([\d.]+)(?:deg)?(?:\s*,\s*|\s+)([\d.]+)%(?:\s*,\s*|\s+)([\d.]+)%/
+    );
     if (match) {
       const h = parseFloat(match[1]!) / 360;
       const s = parseFloat(match[2]!) / 100;
@@ -41,21 +49,26 @@ export function parseColorToOklch(colorStr: string, isDark?: boolean): OKLCH {
       const hue2rgb = (t: number) => {
         if (t < 0) t += 1;
         if (t > 1) t -= 1;
-        if (t < 1/6) return p + (q - p) * 6 * t;
-        if (t < 1/2) return q;
-        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        if (t < 1 / 6) return p + (q - p) * 6 * t;
+        if (t < 1 / 2) return q;
+        if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
         return p;
       };
-      r = hue2rgb(h + 1/3);
+      r = hue2rgb(h + 1 / 3);
       g = hue2rgb(h);
-      b = hue2rgb(h - 1/3);
+      b = hue2rgb(h - 1 / 3);
     }
   } else if (str.includes('color-mix')) {
     // If it's a dynamic color mix, we approximate lightness based on whether it is light-mode or dark-mode oriented
     if (typeof isDark === 'boolean') {
       return { l: isDark ? 0.1 : 0.9, c: 0.05, h: 35 };
     }
-    if (str.includes('#ffffff') || str.includes('transparent') || str.includes('hsl(35, 10%') || str.includes('hsl(34, 30%, 45%')) {
+    if (
+      str.includes('#ffffff') ||
+      str.includes('transparent') ||
+      str.includes('hsl(35, 10%') ||
+      str.includes('hsl(34, 30%, 45%')
+    ) {
       return { l: 0.9, c: 0.05, h: 35 };
     } else {
       return { l: 0.1, c: 0.05, h: 35 };
@@ -75,7 +88,10 @@ export function parseColorToOklch(colorStr: string, isDark?: boolean): OKLCH {
   return { l, c, h: h < 0 ? h + 360 : h };
 }
 
-export function getContrastGuardedText(bgPrimaryColor: string, isDark?: boolean): string {
+export function getContrastGuardedText(
+  bgPrimaryColor: string,
+  isDark?: boolean
+): string {
   try {
     const oklch = parseColorToOklch(bgPrimaryColor, isDark);
     if (oklch.l > 0.52) {
@@ -133,7 +149,7 @@ export function computeContrastGuardedTokens(
 
   return {
     isDarkBg,
-    textPrimary: isLightBg ? 'hsl(35, 12%, 11%)' : 'hsl(0, 0%, 94%)',
+    textPrimary: isLightBg ? 'hsl(35, 12%, 7%)' : 'hsl(0, 0%, 96%)',
     textSecondary: isDarkBg ? 'hsl(0, 0%, 72%)' : 'hsl(35, 8%, 34%)',
     textTertiary: isDarkBg ? 'hsl(0, 0%, 50%)' : 'hsl(35, 6%, 52%)',
   };

@@ -21,21 +21,29 @@
   position: relative;
 }
 
-/* ── 2. 左侧服务商导轨（同构系统主侧边栏 SettingsSidebar） ── */
+/* ── 2. 左侧服务商导轨（纯净无底色，仅保留右侧分隔细线） ── */
 .modelsRail {
   width: 210px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  /* 导轨同构主侧栏 → 外层档（原 primary/card 混色在三档后塌成主层色，review P1-4） */
-  background: var(--surface-outer);
+  background: transparent;
   border-right: var(--hairline-width) solid var(--border-subtle);
   overflow: hidden;
 }
 
-/* 深色模式导轨底色校准：直接回归底板真源，激活项卡片反差立即可辨 */
-:global(html[data-theme='dark']) .modelsRail {
-  background: var(--bg-primary);
+.modelsProvidersSection {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.modelsProvidersSection > :global(.settings-ui-section-content) {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .mrlHeader {
@@ -92,6 +100,10 @@
   background: var(--sidebar-active);
   border-color: transparent;
   box-shadow: none;
+}
+
+.mrlItem.isActive .mrlItemName {
+  font-weight: var(--font-weight-medium);
 }
 
 .mrlItemRowTop {

@@ -40,6 +40,7 @@ import { ModelConfigEditor } from './ModelConfigEditor';
 import { YamlConfigEditorModal } from './YamlConfigEditorModal';
 import { getOpenerIcon } from '../files/FileActions';
 import { AppIcon } from '../ui/icons/index';
+import { useI18n } from '../../i18n';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
@@ -117,6 +118,7 @@ export const AddProviderButton: React.FC<{
 export const ModelsSettingsTab: React.FC<Props> = ({
   _onBlockingOverlayChange,
 }) => {
+  const { t } = useI18n();
   const { showToast: _showToast } = useToast();
   const {
     profiles,
@@ -510,7 +512,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({
     <SettingsPage title="模型" meta={headerMeta} fillViewport>
       {/* Default model */}
       <div className={styles.mrdDefaultSection}>
-        <SettingsSection title="默认模型">
+        <SettingsSection title={t('settings.models.defaultModel')}>
           <SettingsCard>
             <SettingsRow
               title="全局默认模型"
@@ -531,66 +533,71 @@ export const ModelsSettingsTab: React.FC<Props> = ({
       </div>
 
       {/* Provider split layout */}
-      <div className={`${styles.modelsSplit} models-split`}>
-        <ModelProfileList
-          selectedId={selectedId}
-          onSelectProfile={setSelectedId}
-        />
+      <SettingsSection
+        title={t('settings.models.sectionProviders')}
+        className={styles.modelsProvidersSection}
+      >
+        <div className={`${styles.modelsSplit} models-split`}>
+          <ModelProfileList
+            selectedId={selectedId}
+            onSelectProfile={setSelectedId}
+          />
 
-        <ModelConfigEditor
-          providerConfig={{
-            selected,
-            profiles,
-            selectedLabel,
-            hasKeySelected,
-            editingName,
-            nameDraft,
-            setNameDraft,
-            setEditingName,
-            confirmDeleteId,
-            setConfirmDeleteId,
-            keyDraft,
-            setKeyDraft,
-            saveKey,
-            refresh,
-            notify,
-            runAsLocalMutation,
-            setSelectedId,
-          }}
-          modelConfig={{
-            runCheck,
-            runScan,
-            checkBusy,
-            scanBusy,
-            modelFilter,
-            setModelFilter,
-            manualOpen,
-            setManualOpen,
-            addDraft,
-            setAddDraft,
-            handleManualAdd,
-            emptyAddDraft,
-            modelsList,
-            modelsCount,
-            scanModalOpen,
-            setScanModalOpen,
-            scannedModelsList,
-            confirmScannedModels,
-          }}
-          capConfig={{
-            configOpenId,
-            cfgDraft,
-            setCfgDraft,
-            openConfigFor,
-            closeConfig,
-            saveConfig,
-            runTest,
-            testBusy,
-            notify,
-            runAsLocalMutation,
-          }}
-        />
-      </div>
+          <ModelConfigEditor
+            providerConfig={{
+              selected,
+              profiles,
+              selectedLabel,
+              hasKeySelected,
+              editingName,
+              nameDraft,
+              setNameDraft,
+              setEditingName,
+              confirmDeleteId,
+              setConfirmDeleteId,
+              keyDraft,
+              setKeyDraft,
+              saveKey,
+              refresh,
+              notify,
+              runAsLocalMutation,
+              setSelectedId,
+            }}
+            modelConfig={{
+              runCheck,
+              runScan,
+              checkBusy,
+              scanBusy,
+              modelFilter,
+              setModelFilter,
+              manualOpen,
+              setManualOpen,
+              addDraft,
+              setAddDraft,
+              handleManualAdd,
+              emptyAddDraft,
+              modelsList,
+              modelsCount,
+              scanModalOpen,
+              setScanModalOpen,
+              scannedModelsList,
+              confirmScannedModels,
+            }}
+            capConfig={{
+              configOpenId,
+              cfgDraft,
+              setCfgDraft,
+              openConfigFor,
+              closeConfig,
+              saveConfig,
+              runTest,
+              testBusy,
+              notify,
+              runAsLocalMutation,
+            }}
+          />
+        </div>
+      </SettingsSection>
 
       {/* 内置轻量 YAML 编辑器弹窗 */}
       <YamlConfigEditorModal

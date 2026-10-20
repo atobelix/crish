@@ -121,20 +121,62 @@ export function curatedLocalFonts(platform: PlatformId = detectPlatform()): {
   ];
   if (platform === 'windows') {
     return {
-      ui: ['Segoe UI', 'Segoe UI Variable Text', 'Microsoft YaHei UI', 'Microsoft YaHei', 'SimHei', 'SimSun', 'Arial', 'Tahoma', 'Verdana', 'Calibri'],
-      mono: ['Cascadia Mono', 'Cascadia Code', 'Consolas', 'Courier New', 'Lucida Console'],
+      ui: [
+        'HarmonyOS Sans SC',
+        'HarmonyOS Sans',
+        'Noto Sans SC',
+        'Segoe UI',
+        'Segoe UI Variable Text',
+        'Microsoft YaHei UI',
+        'Microsoft YaHei',
+        'SimHei',
+        'SimSun',
+        'Arial',
+        'Tahoma',
+        'Verdana',
+        'Calibri',
+      ],
+      mono: [
+        'Cascadia Mono',
+        'Cascadia Code',
+        'Consolas',
+        'Courier New',
+        'Lucida Console',
+      ],
     };
   }
   if (platform === 'macos' || platform === 'ios') {
     return {
-      ui: ['-apple-system 不可选，用系统自动', 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', 'Arial', 'Songti SC', 'Heiti SC'].filter((x) => !x.includes('不可选')),
+      ui: [
+        '-apple-system 不可选，用系统自动',
+        'PingFang SC',
+        'Hiragino Sans GB',
+        'Helvetica Neue',
+        'Arial',
+        'Songti SC',
+        'Heiti SC',
+      ].filter((x) => !x.includes('不可选')),
       mono: ['SF Mono', 'Menlo', 'Monaco', 'Courier New'],
     };
   }
   if (platform === 'linux') {
     return {
-      ui: ['Noto Sans', 'Noto Sans CJK SC', 'Ubuntu', 'DejaVu Sans', 'WenQuanYi Micro Hei', 'Source Han Sans SC', 'Arial'],
-      mono: ['DejaVu Sans Mono', 'Noto Sans Mono', 'Liberation Mono', 'Ubuntu Mono', 'Courier New'],
+      ui: [
+        'Noto Sans',
+        'Noto Sans CJK SC',
+        'Ubuntu',
+        'DejaVu Sans',
+        'WenQuanYi Micro Hei',
+        'Source Han Sans SC',
+        'Arial',
+      ],
+      mono: [
+        'DejaVu Sans Mono',
+        'Noto Sans Mono',
+        'Liberation Mono',
+        'Ubuntu Mono',
+        'Courier New',
+      ],
     };
   }
   return { ui: uiCommon, mono: monoCommon };
@@ -190,9 +232,10 @@ async function ensureEmbeddedUi(id: EmbeddedUiFontId): Promise<void> {
   } catch (e) {
     logger.warn(`[fontStore] load ui font failed (fontId=${id})`, {
       module: 'fontStore',
-      err: e instanceof Error
-        ? { message: e.message, stack: e.stack, name: e.name }
-        : { message: String(e) },
+      err:
+        e instanceof Error
+          ? { message: e.message, stack: e.stack, name: e.name }
+          : { message: String(e) },
     });
   }
 }
@@ -211,21 +254,25 @@ async function ensureEmbeddedMono(id: EmbeddedMonoFontId): Promise<void> {
   } catch (e) {
     logger.warn(`[fontStore] load mono font failed (fontId=${id})`, {
       module: 'fontStore',
-      err: e instanceof Error
-        ? { message: e.message, stack: e.stack, name: e.name }
-        : { message: String(e) },
+      err:
+        e instanceof Error
+          ? { message: e.message, stack: e.stack, name: e.name }
+          : { message: String(e) },
     });
   }
 }
 
 export async function ensureFontsLoaded(
-  prefs: import('./fontStore').FontPreferences,
+  prefs: import('./fontStore').FontPreferences
 ): Promise<void> {
   const jobs: Promise<void>[] = [];
   if (prefs.uiFont === 'inter' || prefs.uiFont === 'ibm-plex-sans') {
     jobs.push(ensureEmbeddedUi(prefs.uiFont));
   }
-  if (prefs.monoFont === 'jetbrains-mono' || prefs.monoFont === 'ibm-plex-mono') {
+  if (
+    prefs.monoFont === 'jetbrains-mono' ||
+    prefs.monoFont === 'ibm-plex-mono'
+  ) {
     jobs.push(ensureEmbeddedMono(prefs.monoFont));
   }
   await Promise.all(jobs);

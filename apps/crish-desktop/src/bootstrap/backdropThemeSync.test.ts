@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isDarkTheme, startBackdropThemeSync } from './backdropThemeSync';
+import {
+  isDarkTheme,
+  startBackdropThemeSync,
+  isWindows11Device,
+  syncMicaBackdrop,
+} from './backdropThemeSync';
 
 describe('backdropThemeSync：材质跟随应用主题', () => {
   const el = document.documentElement;
@@ -31,5 +36,17 @@ describe('backdropThemeSync：材质跟随应用主题', () => {
     expect(isDarkTheme(el)).toBe(false);
     el.classList.add('theme-dark');
     expect(isDarkTheme(el)).toBe(true);
+  });
+
+  it('isWindows11Device 能够正确根据能力标记或系统环境判断', () => {
+    (window as any).__CRISH_MICA_SUPPORTED__ = true;
+    expect(isWindows11Device()).toBe(true);
+    (window as any).__CRISH_MICA_SUPPORTED__ = false;
+    expect(isWindows11Device()).toBe(false);
+    delete (window as any).__CRISH_MICA_SUPPORTED__;
+  });
+
+  it('syncMicaBackdrop 非 Tauri 容器安全无崩溃执行', async () => {
+    await expect(syncMicaBackdrop(true, false)).resolves.not.toThrow();
   });
 });

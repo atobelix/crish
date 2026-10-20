@@ -94,6 +94,9 @@ export const settings: SettingsTranslations = {
   'appearance.nativeWindowFrameDesc': '使用操作系统原生最小化/最大化/关闭按钮',
   'appearance.glowEffectsTitle': '微光辉光特效',
   'appearance.glowEffectsDesc': '在卡片边缘与焦点激活态启用现代氛围微光',
+  'appearance.micaTitle': '云母背景效果 (Windows 11)',
+  'appearance.micaDesc':
+    '开启系统级 Mica 云母材质微透光效果（默认关闭，保持主题色调纯正）',
 
   // ── 3. 快捷键设置 (shortcuts.*) ──
   'shortcuts.title': '快捷键设置',
@@ -123,6 +126,7 @@ export const settings: SettingsTranslations = {
   'models.title': '模型与提供商',
   'models.desc': '配置大语言模型、API 密钥与默认推理参数',
   'models.defaultModel': '默认模型',
+  'models.sectionProviders': 'AI 服务商',
   'models.defaultModelDesc': '新建会话时默认选用的基础对话模型',
   'models.fastModel': '快速小模型',
   'models.fastModelDesc': '用于任务总结、分类与轻量代码检索的轻量模型',

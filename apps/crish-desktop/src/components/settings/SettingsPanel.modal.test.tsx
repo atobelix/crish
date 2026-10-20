@@ -334,7 +334,7 @@ describe('设置弹窗：两层底色 / 无边框开关 / 遮罩 token 契约', 
     );
   };
 
-  it('面板 / 左导航 / 顶部标题行 / 内容区 = 主层 --surface-main（统一底板，稍微浅一点，不与滑块底轨混淆）', () => {
+  it('面板 / 左导航 / 顶部标题行 / 内容区 = 外层 --surface-outer（与内容卡片 --surface-input 形成底卡分离）', () => {
     for (const sel of [
       "[role='dialog'].settingsModal",
       '.settingsNav',
@@ -343,19 +343,19 @@ describe('设置弹窗：两层底色 / 无边框开关 / 遮罩 token 契约', 
     ]) {
       const r = rule(sel);
       expect(r, sel).not.toBe('');
-      expect(r, sel).toMatch(/background:\s*var\(--surface-main\);/);
+      expect(r, sel).toMatch(/background:\s*var\(--surface-outer\);/);
     }
   });
 
-  it('内容区与左栏/顶栏统一为 --surface-main；卡片（--bg-card）在内容区作用域改指 --surface-input', () => {
+  it('内容区与左栏/顶栏统一为 --surface-outer；卡片（--bg-card）在内容区作用域改指 --surface-input', () => {
     const r = rule('.coverContent');
-    expect(r).toMatch(/background:\s*var\(--surface-main\);/);
+    expect(r).toMatch(/background:\s*var\(--surface-outer\);/);
     expect(r).toMatch(/--bg-card:\s*var\(--surface-input\);/);
   });
 
-  it('无边框总开关：面板上 --settings-card-border: transparent，子级壳把 --border-subtle 改接到它', () => {
+  it('卡片边框与投影：面板上默认开启 --settings-card-border: var(--border-subtle)，子级壳把 --border-subtle 改接到它', () => {
     expect(rule("[role='dialog'].settingsModal")).toMatch(
-      /--settings-card-border:\s*transparent;/
+      /--settings-card-border:\s*var\(--border-subtle\);/
     );
     const shell = rule('.settingsShell');
     expect(shell).toMatch(/--border-subtle:\s*var\(--settings-card-border\);/);

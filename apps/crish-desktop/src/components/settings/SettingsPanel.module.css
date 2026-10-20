@@ -12,8 +12,8 @@
   /* 无边框总开关：弹窗内卡片 / 分组 / 分隔线的边框与卡片投影。
    * 想加回边框：把 --settings-card-border 改为 var(--border-subtle)；
    * 想加回卡片投影：把 --settings-card-shadow 改为 var(--shadow-sm)。只改这两行。 */
-  --settings-card-border: transparent;
-  --settings-card-shadow: none;
+  --settings-card-border: var(--border-subtle);
+  --settings-card-shadow: var(--shadow-sm);
   /* 表单控件静止描边取真实发丝线（此处 --border-subtle 尚未被下面的壳层覆盖） */
   --settings-control-border: var(--border-subtle);
   --settings-modal-max-width: 1040px; /* 组件尺寸语义：本地自包含 */
@@ -29,7 +29,7 @@
   );
   max-width: none;
   max-height: none;
-  background: var(--surface-main);
+  background: var(--surface-outer);
   border: none;
   box-shadow: var(--shadow-2xl);
   overflow: hidden;
@@ -71,7 +71,7 @@
   flex-direction: column;
   min-height: 0;
   padding: var(--space-3) var(--space-2) var(--space-3) var(--space-2_5);
-  background: var(--surface-main);
+  background: var(--surface-outer);
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -92,7 +92,7 @@
   height: var(--header-height);
   min-height: var(--header-height);
   padding: 0 var(--space-2) 0 var(--space-3);
-  background: var(--surface-main);
+  background: var(--surface-outer);
   flex-shrink: 0;
   box-sizing: border-box;
 }
@@ -303,7 +303,7 @@
   flex-direction: column;
   gap: var(--space-3_5);
   position: relative;
-  background: var(--surface-main);
+  background: var(--surface-outer);
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;

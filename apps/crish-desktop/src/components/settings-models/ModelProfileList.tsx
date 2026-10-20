@@ -143,9 +143,9 @@ const CascadeSubmenuFlyout: React.FC<CascadeSubmenuFlyoutProps> = ({
   return createPortal(
     <div
       ref={flyoutRef}
-      data-floating-layer="true"          // 核心防线 2：FocusTrap 白名单，免疫 inert 物理冻结
+      data-floating-layer="true" // 核心防线 2：FocusTrap 白名单，免疫 inert 物理冻结
       data-slot="cascade-submenu-content" // 语义槽位契约
-      role="listbox"                      // 核心防线 3：免疫 Tab 键暴力拉回弹窗起点
+      role="listbox" // 核心防线 3：免疫 Tab 键暴力拉回弹窗起点
       aria-label={`${cleanProfileName} 模型列表`}
       className={styles.cascadeFlyoutPortal || styles.cascadeFlyout}
       style={{
@@ -207,7 +207,8 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [flyProfileId, setFlyProfileId] = useState<string | null>(null);
-  const [flyoutPlacement, setFlyoutPlacement] = useState<SubmenuPlacementResult | null>(null);
+  const [flyoutPlacement, setFlyoutPlacement] =
+    useState<SubmenuPlacementResult | null>(null);
 
   const safeTrackerRef = useRef(new SafeTriangleTracker(300));
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -226,9 +227,9 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
     : undefined;
   const isCurrentModelValid = Boolean(
     liveProvider &&
-      liveProvider.enabled !== false &&
-      liveActiveModel &&
-      liveActiveModel.enabled !== false
+    liveProvider.enabled !== false &&
+    liveActiveModel &&
+    liveActiveModel.enabled !== false
   );
 
   const activeLabel = isCurrentModelValid
@@ -283,8 +284,11 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
           aria-expanded={open}
         >
           <span className={styles.cascadeSelectValue}>{activeLabel}</span>
-          <AppIcon name="chevron-down" size={14}
-            className={styles.cascadeChev} />
+          <AppIcon
+            name="chevron-down"
+            size={14}
+            className={styles.cascadeChev}
+          />
         </Button>
       }
     >
@@ -392,9 +396,17 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
                 </span>
 
                 {isFlippedLeft ? (
-                  <AppIcon name="chevron-left" size={14} className={styles.cascadeChev} />
+                  <AppIcon
+                    name="chevron-left"
+                    size={14}
+                    className={styles.cascadeChev}
+                  />
                 ) : (
-                  <AppIcon name="chevron-right" size={14} className={styles.cascadeChev} />
+                  <AppIcon
+                    name="chevron-right"
+                    size={14}
+                    className={styles.cascadeChev}
+                  />
                 )}
               </div>
             );
@@ -452,10 +464,6 @@ export const ModelProfileList: React.FC<ModelProfileListProps> = ({
       className={`${styles.modelsRail} models-rail`}
       aria-label="服务商列表"
     >
-      <div className={`${styles.mrlHeader} mrl-header`}>
-        <h3 className="settings-ui-section-title">AI 服务商</h3>
-      </div>
-
       <div className={`${styles.mrlList} mrl-list`} role="list">
         {providers.length === 0 ? (
           <div className={`${styles.mrlEmpty} mrl-empty`}>还没有服务商</div>

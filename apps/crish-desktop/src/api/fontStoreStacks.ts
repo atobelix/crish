@@ -46,13 +46,13 @@ export function platformLabel(p: PlatformId = detectPlatform()): string {
  * 西文回退仅作该平台缺字时的兜底。
  */
 const CJK_UI =
-  "'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Noto Sans CJK SC', 'Source Han Sans SC', 'HarmonyOS Sans SC'";
+  "'HarmonyOS Sans SC', 'HarmonyOS Sans', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Noto Sans CJK SC', 'Source Han Sans SC', 'Microsoft YaHei UI', 'Microsoft YaHei'";
 
 function platformUiStack(platform: PlatformId): string {
   switch (platform) {
     case 'windows':
-      // 微软雅黑 UI 同时承担中/英文，避免 Segoe + YaHei 混排字重不一致
-      return `'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, 'Segoe UI', 'Segoe UI Variable Text', ${CJK_UI}, sans-serif`;
+      // 优先支持全梯度的现代无衬线中文字体（如 HarmonyOS / Noto），再平滑回退微软系字体
+      return `'HarmonyOS Sans SC', 'HarmonyOS Sans', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, 'Segoe UI', 'Segoe UI Variable Text', ${CJK_UI}, sans-serif`;
     case 'macos':
       return `'PingFang SC', 'Hiragino Sans GB', -apple-system, BlinkMacSystemFont, 'SF Pro Text', ${CJK_UI}, sans-serif`;
     case 'ios':
@@ -105,32 +105,42 @@ export function toLocalChoice(family: string): `local:${string}` {
   return `local:${family.trim()}`;
 }
 
-export function resolveUiStack(choice: UiFontChoice, platform: PlatformId = detectPlatform()): string {
+export function resolveUiStack(
+  choice: UiFontChoice,
+  platform: PlatformId = detectPlatform()
+): string {
   if (choice === 'auto') return platformUiStack(platform);
   if (choice === 'system-ui') {
     // 仍以 CJK UI 为主，system-ui 仅作回退
     return `${CJK_UI}, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
   }
   if (choice === 'inter') return `'Inter', ${platformUiStack(platform)}`;
-  if (choice === 'ibm-plex-sans') return `'IBM Plex Sans', ${platformUiStack(platform)}`;
+  if (choice === 'ibm-plex-sans')
+    return `'IBM Plex Sans', ${platformUiStack(platform)}`;
   if (isLocalFontChoice(choice)) {
     const fam = quoteFamily(localFontFamily(choice));
-    return fam ? `${fam}, ${platformUiStack(platform)}` : platformUiStack(platform);
+    return fam
+      ? `${fam}, ${platformUiStack(platform)}`
+      : platformUiStack(platform);
   }
   return platformUiStack(platform);
 }
 
 export function resolveMonoStack(
   choice: MonoFontChoice,
-  platform: PlatformId = detectPlatform(),
+  platform: PlatformId = detectPlatform()
 ): string {
   if (choice === 'auto') return platformMonoStack(platform);
   if (choice === 'system-mono') return platformMonoStack(platform);
-  if (choice === 'jetbrains-mono') return `'JetBrains Mono', ${platformMonoStack(platform)}`;
-  if (choice === 'ibm-plex-mono') return `'IBM Plex Mono', ${platformMonoStack(platform)}`;
+  if (choice === 'jetbrains-mono')
+    return `'JetBrains Mono', ${platformMonoStack(platform)}`;
+  if (choice === 'ibm-plex-mono')
+    return `'IBM Plex Mono', ${platformMonoStack(platform)}`;
   if (isLocalFontChoice(choice)) {
     const fam = quoteFamily(localFontFamily(choice));
-    return fam ? `${fam}, ${platformMonoStack(platform)}` : platformMonoStack(platform);
+    return fam
+      ? `${fam}, ${platformMonoStack(platform)}`
+      : platformMonoStack(platform);
   }
   return platformMonoStack(platform);
 }

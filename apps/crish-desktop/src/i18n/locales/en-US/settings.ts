@@ -115,6 +115,9 @@ export const settings: SettingsTranslations = {
   'appearance.glowEffectsTitle': 'Glow & Ambient Effects',
   'appearance.glowEffectsDesc':
     'Enable subtle ambient glow on card borders and active focus states',
+  'appearance.micaTitle': 'Mica Backdrop Effect (Windows 11)',
+  'appearance.micaDesc':
+    'Enable system-level Mica backdrop translucency effect (disabled by default to preserve pure theme palette)',
 
   // ── 3. Keyboard Shortcuts (shortcuts.*) ──
   'shortcuts.title': 'Keyboard Shortcuts',
@@ -146,6 +149,7 @@ export const settings: SettingsTranslations = {
   'models.desc':
     'Configure large language models, API credentials, and default inference parameters',
   'models.defaultModel': 'Default Model',
+  'models.sectionProviders': 'AI Providers',
   'models.defaultModelDesc':
     'Default base model selected when creating new sessions',
   'models.fastModel': 'Fast Small Model',
