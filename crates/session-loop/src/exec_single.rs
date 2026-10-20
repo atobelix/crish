@@ -734,7 +734,8 @@ impl ToolExecutor {
         recorded: Vec<ToolEvent>,
     ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
         if let Some(hooks) = &self.hooks {
-            let _ = hooks
+            // 观察面分派：失败只记日志，不阻断工具结果（BLK-05：不得丢弃赋值吞错）
+            if let Err(err) = hooks
                 .dispatch(&HookEvent::ToolPost {
                     session_id: ctx.session_id.clone(),
                     tool_name: call.tool_name.clone(),
@@ -742,7 +743,14 @@ impl ToolExecutor {
                     duration_ms: 0,
                     is_error: false,
                 })
-                .await;
+                .await
+            {
+                tracing::warn!(
+                    tool_name = %call.tool_name,
+                    error = %err,
+                    "tool.post hook 分派失败（去重命中路径，观察面不阻断工具结果）"
+                );
+            }
         }
         // U-OUT-RS：ok() 内部包 Arc——出口共享边界自此建立
         let mut r = ClassifiedToolResult::ok(&call.id, &call.tool_name, tool_result.output, 0);
@@ -776,7 +784,8 @@ impl ToolExecutor {
                 .await
         };
         if let Some(hooks) = &self.hooks {
-            let _ = hooks
+            // 观察面分派：失败只记日志，不阻断工具结果（BLK-05）
+            if let Err(err) = hooks
                 .dispatch(&HookEvent::ToolPost {
                     session_id: ctx.session_id.clone(),
                     tool_name: call.tool_name.clone(),
@@ -784,7 +793,14 @@ impl ToolExecutor {
                     duration_ms,
                     is_error: false,
                 })
-                .await;
+                .await
+            {
+                tracing::warn!(
+                    tool_name = %call.tool_name,
+                    error = %err,
+                    "tool.post hook 分派失败（成功路径，观察面不阻断工具结果）"
+                );
+            }
         }
         let mut r = ClassifiedToolResult::ok(&call.id, &call.tool_name, final_output, duration_ms);
         r.attempt = attempt;
@@ -846,7 +862,9 @@ impl ToolExecutor {
                 .await;
         }
         if let Some(hooks) = &self.hooks {
-            let _ = hooks
+            // 观察面分派（失败路径两条事件）：失败只记日志，不覆盖工具错误本身
+            // （BLK-05：不得丢弃赋值吞错）
+            if let Err(hook_err) = hooks
                 .dispatch(&HookEvent::ToolPost {
                     session_id: ctx.session_id.clone(),
                     tool_name: call.tool_name.clone(),
@@ -854,14 +872,28 @@ impl ToolExecutor {
                     duration_ms,
                     is_error: true,
                 })
-                .await;
-            let _ = hooks
+                .await
+            {
+                tracing::warn!(
+                    tool_name = %call.tool_name,
+                    error = %hook_err,
+                    "tool.post hook 分派失败（失败路径，观察面不阻断）"
+                );
+            }
+            if let Err(hook_err) = hooks
                 .dispatch(&HookEvent::ToolError {
                     session_id: ctx.session_id.clone(),
                     tool_name: call.tool_name.clone(),
                     error: err.to_string(),
                 })
-                .await;
+                .await
+            {
+                tracing::warn!(
+                    tool_name = %call.tool_name,
+                    error = %hook_err,
+                    "tool.error hook 分派失败（失败路径，观察面不阻断）"
+                );
+            }
         }
         let (kind, msg) = classify_tool_error(&err);
         let mut r = ClassifiedToolResult::error(&call.id, &call.tool_name, kind, msg, duration_ms);

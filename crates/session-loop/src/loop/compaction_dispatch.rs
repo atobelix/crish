@@ -457,15 +457,23 @@ pub(crate) async fn apply_compaction(
 ) {
     let session_id = state.machine.context().session_id.clone();
     // I8-E1：context.compact.start 钩子广播（压缩域处理起点；trigger ←
-    // reason、tokens_before ← tokensBefore；observe 默认，失败吞掉 + 计数）
+    // reason、tokens_before ← tokensBefore；observe 默认——失败不阻断压缩，
+    // 但必须留日志，BLK-05：不得静默丢弃 Result）
     if let Some(hooks) = &state.options.tool_exec.hooks {
-        let _ = hooks
+        if let Err(err) = hooks
             .dispatch(&crate::hooks::HookEvent::ContextCompactStart {
                 session_id: session_id.clone(),
                 trigger: compression_reason_str(info.reason).to_string(),
                 tokens_before: plan.tokens_before,
             })
-            .await;
+            .await
+        {
+            tracing::warn!(
+                session_id = %session_id,
+                error = %err,
+                "context.compact.start hook 分派失败（观察面不阻断压缩）"
+            );
+        }
     }
     // 时间戳护栏边界（epoch ms；与 usage 源消息时间戳同精度）
     let boundary_ms = conex_shared::time::unix_millis() as i64;
@@ -705,16 +713,24 @@ pub(crate) async fn apply_compaction(
         error: None,
     });
     // I8-E1：context.compact.end 钩子广播（压缩域收场；诊断字段全保留——
-    // aborted / keptMessageCount / compactionId；observe 默认，失败吞掉）
+    // aborted / keptMessageCount / compactionId；observe 默认——失败不阻断
+    // 压缩收场，但必须留日志，BLK-05）
     if let Some(hooks) = &state.options.tool_exec.hooks {
-        let _ = hooks
+        if let Err(err) = hooks
             .dispatch(&crate::hooks::HookEvent::ContextCompactEnd {
-                session_id,
+                session_id: session_id.clone(),
                 aborted: false,
                 kept_message_count: plan.kept_ids.len() as u32,
                 compaction_id,
             })
-            .await;
+            .await
+        {
+            tracing::warn!(
+                session_id = %session_id,
+                error = %err,
+                "context.compact.end hook 分派失败（观察面不阻断压缩收场）"
+            );
+        }
     }
 }
 

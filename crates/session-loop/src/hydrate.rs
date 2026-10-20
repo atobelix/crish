@@ -157,10 +157,19 @@ fn resolve_user_blocks(entry: &HistoryMessage) -> Vec<AgentMessageBlock> {
     if let Some(json) = entry.blocks_json.as_deref() {
         match serde_json::from_str::<Vec<AgentMessageBlock>>(json) {
             Ok(blocks) if !blocks.is_empty() => return blocks,
-            Ok(_) => {}
-            Err(_) => {
+            Ok(empty) => {
+                // 解析成功但块序列为空：无任何可还原内容，走与解析失败相同的
+                // 合成兜底；显式记录（BLK-05：不得静默丢弃空结果）
                 tracing::warn!(
                     message_id = %entry.id,
+                    empty_blocks = empty.len(),
+                    "hydrate: blocks_json 解析结果为空块序列，回退合成兜底"
+                );
+            }
+            Err(err) => {
+                tracing::warn!(
+                    message_id = %entry.id,
+                    error = %err,
                     "hydrate: blocks_json 无法解析为 AgentMessageBlock，回退合成兜底"
                 );
             }
@@ -282,10 +291,18 @@ fn resolve_assistant_blocks(
 
                 return (blocks, companion_tools);
             }
-            Ok(_) => {}
-            Err(_) => {
+            Ok(empty) => {
+                // 同上：解析成功但为空块序列 → 记录后回落合成兜底（BLK-05）
                 tracing::warn!(
                     message_id = %entry.id,
+                    empty_blocks = empty.len(),
+                    "hydrate: blocks_json 解析结果为空块序列，回退合成兜底"
+                );
+            }
+            Err(err) => {
+                tracing::warn!(
+                    message_id = %entry.id,
+                    error = %err,
                     "hydrate: blocks_json 无法解析为 AgentMessageBlock，回退合成兜底"
                 );
             }

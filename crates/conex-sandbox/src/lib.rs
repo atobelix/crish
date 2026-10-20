@@ -1,7 +1,7 @@
 pub mod semantics;
 pub mod polyglot;
 // T-AB-05 / Unit 5.1 新增公开导出：禁 cd 语义层与反混淆/AST 门禁接口
-pub use polyglot::{InterpreterKind, PolyglotCodeInspector};
+pub use polyglot::{InterpreterKind, PolyglotCodeInspector, PolyglotRulesError};
 pub use semantics::{
     analyze_segment_ast, analyze_token_danger, classify_command_segments,
     extract_and_decode_ps_payload, is_ps_encoded_command_flag,

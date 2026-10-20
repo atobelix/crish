@@ -57,13 +57,21 @@ impl AgentSessionLoop {
                 retryable: Some(false),
             });
             if let Some(hooks) = &self.state.options.tool_exec.hooks {
-                let _ = hooks
+                // 观察面分派：失败只记日志，不阻断收场（BLK-05）
+                if let Err(err) = hooks
                     .dispatch(&crate::hooks::HookEvent::ErrorOccurred {
                         session_id: self.session_id.clone(),
                         error: "maxTurns 预算用尽（turnIndex=0，maxTurns=0）".to_string(),
                         retryable: false,
                     })
-                    .await;
+                    .await
+                {
+                    tracing::warn!(
+                        session_id = %self.session_id,
+                        error = %err,
+                        "max-turns error.occurred hook 分派失败（观察面不阻断收场）"
+                    );
+                }
             }
             return self.converge(EndDecision::max_turns(&self.state)).await;
         }
@@ -122,14 +130,20 @@ impl AgentSessionLoop {
         };
         self.state.emit_event(start_event);
         // I8-E1 第一批：session.start 钩子广播（run 启动处；载荷最小子集
-        // sessionId；observe 观察者失败不阻塞 run 启动——dispatch 内部
-        // 已按 failStrategy 处置 + 错误事件化）
+        // sessionId；observe 观察者失败不阻塞 run 启动——失败留日志，BLK-05）
         if let Some(hooks) = &self.state.options.tool_exec.hooks {
-            let _ = hooks
+            if let Err(err) = hooks
                 .dispatch(&crate::hooks::HookEvent::SessionStart {
                     session_id: self.session_id.clone(),
                 })
-                .await;
+                .await
+            {
+                tracing::warn!(
+                    session_id = %self.session_id,
+                    error = %err,
+                    "session.start hook 分派失败（观察面不阻塞 run 启动）"
+                );
+            }
         }
 
         // while(!done) 按当前状态分派 handler（01 §2.1）
@@ -237,15 +251,22 @@ impl AgentSessionLoop {
             retryable: Some(decision == RecoveryDecision::Retry),
         });
         // I8-E1 第二批：error.occurred 钩子广播（引擎错误分类处——runtime-error
-        // 事件同点位；observe 默认，失败吞掉 + 计数，收场流程继续）
+        // 事件同点位；observe 默认——失败留日志，收场流程继续，BLK-05）
         if let Some(hooks) = &self.state.options.tool_exec.hooks {
-            let _ = hooks
+            if let Err(hook_err) = hooks
                 .dispatch(&crate::hooks::HookEvent::ErrorOccurred {
                     session_id: self.session_id.clone(),
                     error: err.message().to_string(),
                     retryable: decision == RecoveryDecision::Retry,
                 })
-                .await;
+                .await
+            {
+                tracing::warn!(
+                    session_id = %self.session_id,
+                    error = %hook_err,
+                    "引擎错误 error.occurred hook 分派失败（观察面不阻断收场）"
+                );
+            }
         }
         match decision {
             RecoveryDecision::Retry => {
@@ -321,14 +342,21 @@ impl AgentSessionLoop {
             error: error.clone(),
         };
         self.state.emit_event(end_event);
-        // I8-E1 第一批：session.end 钩子广播（run 收场终态；observe 默认，
-        // 失败吞掉 + 计数，收场流程继续——03 §2.4 表）
+        // I8-E1 第一批：session.end 钩子广播（run 收场终态；observe 默认——
+        // 失败留日志，收场流程继续——03 §2.4 表 / BLK-05）
         if let Some(hooks) = &self.state.options.tool_exec.hooks {
-            let _ = hooks
+            if let Err(err) = hooks
                 .dispatch(&crate::hooks::HookEvent::SessionEnd {
                     session_id: self.session_id.clone(),
                 })
-                .await;
+                .await
+            {
+                tracing::warn!(
+                    session_id = %self.session_id,
+                    error = %err,
+                    "session.end hook 分派失败（观察面不阻断收场）"
+                );
+            }
         }
         tracing::info!(end_reason = ?reason, has_error = error.is_some(), "run 收场");
         RunOutcome {

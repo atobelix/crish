@@ -225,7 +225,15 @@ impl RetractionProtocol {
             .prepare_rollback_plan(session_id, target_message_id, boundary, frozen_seq)
             .await
         {
-            let _ = self.freeze.release(session_id, &token);
+            // 释放冻结失败不得静默丢弃（BLK-05）：失败意味着冻结态可能残留，
+            // 后续同会话撤回会被 AlreadyFrozen 挡住，必须留日志供排查
+            if let Err(release_err) = self.freeze.release(session_id, &token) {
+                tracing::warn!(
+                    session_id = %session_id,
+                    error = %release_err,
+                    "撤回失败后释放冻结失败（冻结态可能残留）"
+                );
+            }
             return Err(err);
         }
 
@@ -236,8 +244,15 @@ impl RetractionProtocol {
             .push_timeline_truncate(session_id, run_id.as_deref(), boundary, target_message_id)
             .await
             .map_err(|err| {
-                // truncate 落库失败：释放冻结（不残留半冻结态），返回后端错误
-                let _ = self.freeze.release(session_id, &token);
+                // truncate 落库失败：释放冻结（不残留半冻结态），返回后端错误；
+                // 释放失败同样留日志（BLK-05：不得静默丢弃 release 结果）
+                if let Err(release_err) = self.freeze.release(session_id, &token) {
+                    tracing::warn!(
+                        session_id = %session_id,
+                        error = %release_err,
+                        "truncate 失败后释放冻结失败（冻结态可能残留）"
+                    );
+                }
                 err
             })?;
 

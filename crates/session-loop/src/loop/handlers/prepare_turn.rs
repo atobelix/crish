@@ -97,14 +97,22 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     // turn_complete 正常发射后清 None）
     state.current_turn_index = Some(turn_index);
     // I8-E1 第一批：turn.start 钩子广播（turn 编排起点；observe 默认，
-    // 失败吞掉 + 计数，编排继续——03 §2.4 表）
+    // 失败不阻断编排但必须留日志——03 §2.4 表 / BLK-05）
     if let Some(hooks) = &state.options.tool_exec.hooks {
-        let _ = hooks
+        if let Err(err) = hooks
             .dispatch(&crate::hooks::HookEvent::TurnStart {
-                session_id,
+                session_id: session_id.clone(),
                 turn_index,
             })
-            .await;
+            .await
+        {
+            tracing::warn!(
+                session_id = %session_id,
+                turn_index,
+                error = %err,
+                "turn.start hook 分派失败（观察面不阻断编排）"
+            );
+        }
     }
 
     // 4. steering 评估（D3 预注入短路：有可运行输入即跳过策略评估，

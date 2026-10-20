@@ -8,7 +8,8 @@
 //! 3. 彻底切断 Indirect 门禁直接放行漏洞，内联脚本高危操作升级审批或阻断。
 
 use regex::Regex;
-use std::sync::LazyLock;
+use std::fmt;
+use std::sync::OnceLock;
 
 use crate::semantics::{CommandClass, SemanticAnalysis};
 
@@ -26,157 +27,210 @@ pub enum InterpreterKind {
 
 pub struct PolyglotCodeInspector;
 
-static PY_SYSTEM_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\bos\.(?:system|popen)\s*\(\s*(?:r|f|b)?(?:"(?P<cmd_d>(?:\\.|[^"\\])*)"|'(?P<cmd_s>(?:\\.|[^'\\])*)')\s*\)"#)
-        .expect("valid regex")
-});
+/// 内联脚本审查规则编译失败。
+///
+/// 全部模式都是本文件内的字面量，正常构建产物不会走到这个分支；一旦出现说明
+/// 构建产物被篡改或依赖的 regex crate 语义发生破坏。此时**绝不放行**：调用方
+/// 必须按 fail-closed 阻断（见 `semantics::analyze_indirect_depth`）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PolyglotRulesError {
+    /// 失败的规则名（稳定标识，便于定位）
+    pub rule: &'static str,
+    /// 底层正则编译错误信息
+    pub message: String,
+}
 
-static PY_SUBPROCESS_STR_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\bsubprocess\.(?:run|Popen|call|check_call|check_output)\s*\(\s*(?:r|f|b)?(?:"(?P<cmd_d>(?:\\.|[^"\\])*)"|'(?P<cmd_s>(?:\\.|[^'\\])*)')"#)
-        .expect("valid regex")
-});
+impl fmt::Display for PolyglotRulesError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "内联脚本审查规则 `{}` 编译失败：{}",
+            self.rule, self.message
+        )
+    }
+}
 
-static PY_SUBPROCESS_LIST_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\bsubprocess\.(?:run|Popen|call|check_call|check_output)\s*\(\s*\[(?P<list>[^\]]+)\]"#)
-        .expect("valid regex")
-});
+impl std::error::Error for PolyglotRulesError {}
 
-static PY_STRING_LITERAL_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?:r|f|b)?(?:"(?P<item_d>(?:\\.|[^"\\])*)"|'(?P<item_s>(?:\\.|[^'\\])*)')"#).expect("valid regex")
-});
+/// 唯一编译入口：失败即 `Err`，绝不 panic。
+fn compile_rule(rule: &'static str, pattern: &str) -> Result<Regex, PolyglotRulesError> {
+    Regex::new(pattern).map_err(|e| PolyglotRulesError {
+        rule,
+        message: e.to_string(),
+    })
+}
 
-static PY_GENERAL_PROC_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\b(?:os\.system|os\.popen|subprocess\.(?:run|Popen|call|check_call|check_output))\b"#)
-        .expect("valid regex")
-});
+/// 多语言内联脚本审查所需的全部正则（进程级单例，见 [`rules`]）。
+struct PolyglotRules {
+    py_system: Regex,
+    py_subprocess_str: Regex,
+    py_subprocess_list: Regex,
+    py_string_literal: Regex,
+    py_general_proc: Regex,
+    node_exec: Regex,
+    node_spawn: Regex,
+    node_general_proc: Regex,
+    ruby_system: Regex,
+    backtick: Regex,
+    ruby_percent_x: Regex,
+    perl_system: Regex,
+    perl_qx: Regex,
+    php_system: Regex,
+    py_destructive_literal: Regex,
+    py_pathlib_destructive: Regex,
+    py_destructive_general: Regex,
+    node_destructive_literal: Regex,
+    node_destructive_general: Regex,
+    ruby_destructive_literal: Regex,
+    ruby_destructive_general: Regex,
+    perl_destructive_literal: Regex,
+    perl_destructive_general: Regex,
+    php_destructive_literal: Regex,
+    php_destructive_general: Regex,
+    py_reflection_danger: Regex,
+    node_reflection_danger: Regex,
+    general_script_reflection: Regex,
+    py_pure_print: Regex,
+    node_pure_print: Regex,
+    ruby_pure_print: Regex,
+    php_pure_print: Regex,
+    perl_pure_print: Regex,
+}
 
-static NODE_EXEC_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)(?:\bchild_process\.)?(?:exec|execSync)\s*\(\s*(?:"(?P<cmd_d>(?:\\.|[^"\\])*)"|'(?P<cmd_s>(?:\\.|[^'\\])*)'|`(?P<cmd_b>(?:\\.|[^`\\])*)`)"#)
-        .expect("valid regex")
-});
+impl PolyglotRules {
+    fn compile() -> Result<Self, PolyglotRulesError> {
+        Ok(Self {
+            py_system: compile_rule(
+                "py_system",
+                r#"(?i)\bos\.(?:system|popen)\s*\(\s*(?:r|f|b)?(?:"(?P<cmd_d>(?:\\.|[^"\\])*)"|'(?P<cmd_s>(?:\\.|[^'\\])*)')\s*\)"#,
+            )?,
+            py_subprocess_str: compile_rule(
+                "py_subprocess_str",
+                r#"(?i)\bsubprocess\.(?:run|Popen|call|check_call|check_output)\s*\(\s*(?:r|f|b)?(?:"(?P<cmd_d>(?:\\.|[^"\\])*)"|'(?P<cmd_s>(?:\\.|[^'\\])*)')"#,
+            )?,
+            py_subprocess_list: compile_rule(
+                "py_subprocess_list",
+                r#"(?i)\bsubprocess\.(?:run|Popen|call|check_call|check_output)\s*\(\s*\[(?P<list>[^\]]+)\]"#,
+            )?,
+            py_string_literal: compile_rule(
+                "py_string_literal",
+                r#"(?:r|f|b)?(?:"(?P<item_d>(?:\\.|[^"\\])*)"|'(?P<item_s>(?:\\.|[^'\\])*)')"#,
+            )?,
+            py_general_proc: compile_rule(
+                "py_general_proc",
+                r#"(?i)\b(?:os\.system|os\.popen|subprocess\.(?:run|Popen|call|check_call|check_output))\b"#,
+            )?,
+            node_exec: compile_rule(
+                "node_exec",
+                r#"(?i)(?:\bchild_process\.)?(?:exec|execSync)\s*\(\s*(?:"(?P<cmd_d>(?:\\.|[^"\\])*)"|'(?P<cmd_s>(?:\\.|[^'\\])*)'|`(?P<cmd_b>(?:\\.|[^`\\])*)`)"#,
+            )?,
+            node_spawn: compile_rule(
+                "node_spawn",
+                r#"(?i)(?:\bchild_process\.)?(?:spawn|spawnSync|execFile|execFileSync)\s*\(\s*(?:"(?P<cmd_d>(?:\\.|[^"\\])*)"|'(?P<cmd_s>(?:\\.|[^'\\])*)'|`(?P<cmd_b>(?:\\.|[^`\\])*)`)(?:\s*,\s*\[(?P<args>[^\]]*)\])?"#,
+            )?,
+            node_general_proc: compile_rule(
+                "node_general_proc",
+                r#"(?i)\b(?:child_process\b|execSync|spawnSync)\b"#,
+            )?,
+            ruby_system: compile_rule(
+                "ruby_system",
+                r#"(?i)\b(?:system|exec)\s*(?:\(\s*)?(?:"(?P<cmd_d>(?:\\.|[^"\\])*)"|'(?P<cmd_s>(?:\\.|[^'\\])*)')"#,
+            )?,
+            backtick: compile_rule("backtick", r#"`(?P<cmd>[^`]+)`"#)?,
+            ruby_percent_x: compile_rule(
+                "ruby_percent_x",
+                r#"%x(?:\((?P<cmd1>[^\)]*)\)|\[(?P<cmd2>[^\]]*)\]|\{(?P<cmd3>[^\}]*)\})"#,
+            )?,
+            perl_system: compile_rule(
+                "perl_system",
+                r#"(?i)\b(?:system|exec)\s*(?:\(\s*)?(?:"(?P<cmd_d>(?:\\.|[^"\\])*)"|'(?P<cmd_s>(?:\\.|[^'\\])*)')"#,
+            )?,
+            perl_qx: compile_rule(
+                "perl_qx",
+                r#"(?i)\bqx(?:\((?P<cmd1>[^\)]*)\)|\[(?P<cmd2>[^\]]*)\]|\{(?P<cmd3>[^\}]*)\})"#,
+            )?,
+            php_system: compile_rule(
+                "php_system",
+                r#"(?i)\b(?:system|exec|passthru|shell_exec|popen|proc_open)\s*(?:\(\s*)?(?:"(?P<cmd_d>(?:\\.|[^"\\])*)"|'(?P<cmd_s>(?:\\.|[^'\\])*)')"#,
+            )?,
+            py_destructive_literal: compile_rule(
+                "py_destructive_literal",
+                r#"(?i)\b(?:shutil\.rmtree|os\.(?:remove|unlink|rmdir))\s*\(\s*(?:r|f|b)?(?:"(?P<path_d>(?:\\.|[^"\\])*)"|'(?P<path_s>(?:\\.|[^'\\])*)')"#,
+            )?,
+            py_pathlib_destructive: compile_rule(
+                "py_pathlib_destructive",
+                r#"(?i)\b(?:pathlib\.)?Path\s*\(\s*(?:r|f|b)?(?:"(?P<path_d>(?:\\.|[^"\\])*)"|'(?P<path_s>(?:\\.|[^'\\])*)')\s*\)\.(?:unlink|rmdir)"#,
+            )?,
+            py_destructive_general: compile_rule(
+                "py_destructive_general",
+                r#"(?i)\b(?:shutil\.rmtree|os\.remove|os\.unlink|os\.rmdir)\b"#,
+            )?,
+            node_destructive_literal: compile_rule(
+                "node_destructive_literal",
+                r#"(?i)(?:\bfs\.)?(?:promises\.)?(?:rmSync|rmdirSync|unlinkSync|rm|rmdir|unlink)\s*\(\s*(?:"(?P<path_d>(?:\\.|[^"\\])*)"|'(?P<path_s>(?:\\.|[^'\\])*)'|`(?P<path_b>(?:\\.|[^`\\])*)`)"#,
+            )?,
+            node_destructive_general: compile_rule(
+                "node_destructive_general",
+                r#"(?i)(?:\bfs\.)?(?:promises\.)?(?:rmSync|rmdirSync|unlinkSync|rm|rmdir|unlink)\b"#,
+            )?,
+            ruby_destructive_literal: compile_rule(
+                "ruby_destructive_literal",
+                r#"(?i)(?:\bFileUtils\.(?:rm_rf|rm_r|rm)|\bFile\.(?:delete|unlink)|\bDir\.(?:delete|rmdir))\s*(?:\(\s*)?(?:"(?P<path_d>(?:\\.|[^"\\])*)"|'(?P<path_s>(?:\\.|[^'\\])*)')"#,
+            )?,
+            ruby_destructive_general: compile_rule(
+                "ruby_destructive_general",
+                r#"(?i)(?:\bFileUtils\.(?:rm_rf|rm_r|rm)|\bFile\.(?:delete|unlink)|\bDir\.(?:delete|rmdir))\b"#,
+            )?,
+            perl_destructive_literal: compile_rule(
+                "perl_destructive_literal",
+                r#"(?i)(?:\b(?:File::Path::)?(?:rmtree|remove_tree)|\b(?:unlink|rmdir))\s*(?:\(\s*)?(?:"(?P<path_d>(?:\\.|[^"\\])*)"|'(?P<path_s>(?:\\.|[^'\\])*)')"#,
+            )?,
+            perl_destructive_general: compile_rule(
+                "perl_destructive_general",
+                r#"(?i)\b(?:rmtree|remove_tree|unlink|rmdir)\b"#,
+            )?,
+            php_destructive_literal: compile_rule(
+                "php_destructive_literal",
+                r#"(?i)\b(?:unlink|rmdir)\s*\(\s*(?:"(?P<path_d>(?:\\.|[^"\\])*)"|'(?P<path_s>(?:\\.|[^'\\])*)')"#,
+            )?,
+            php_destructive_general: compile_rule(
+                "php_destructive_general",
+                r#"(?i)\b(?:unlink|rmdir)\b"#,
+            )?,
+            py_reflection_danger: compile_rule(
+                "py_reflection_danger",
+                r#"(?i)\b(?:ctypes\b|__import__|importlib\b|eval\s*\(|exec\s*\(|compile\s*\()"#,
+            )?,
+            node_reflection_danger: compile_rule(
+                "node_reflection_danger",
+                r#"(?i)\b(?:eval\s*\(|Function\s*\(|vm\.runIn|process\.exit\s*\()"#,
+            )?,
+            general_script_reflection: compile_rule(
+                "general_script_reflection",
+                r#"(?i)\b(?:eval\s*[\(\{]|eval\b|passthru\b|proc_open\b)"#,
+            )?,
+            py_pure_print: compile_rule("py_pure_print", r#"^\s*print\s*\([^)]*\)\s*$"#)?,
+            node_pure_print: compile_rule(
+                "node_pure_print",
+                r#"^\s*console\.(?:log|info|warn|error)\s*\([^)]*\)\s*;?\s*$"#,
+            )?,
+            ruby_pure_print: compile_rule("ruby_pure_print", r#"^\s*(?:puts|print|p)\s+.*$"#)?,
+            php_pure_print: compile_rule("php_pure_print", r#"^\s*(?:echo|print)\s+.*;?\s*$"#)?,
+            perl_pure_print: compile_rule("perl_pure_print", r#"^\s*print\s+.*;?\s*$"#)?,
+        })
+    }
+}
 
-static NODE_SPAWN_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)(?:\bchild_process\.)?(?:spawn|spawnSync|execFile|execFileSync)\s*\(\s*(?:"(?P<cmd_d>(?:\\.|[^"\\])*)"|'(?P<cmd_s>(?:\\.|[^'\\])*)'|`(?P<cmd_b>(?:\\.|[^`\\])*)`)(?:\s*,\s*\[(?P<args>[^\]]*)\])?"#)
-        .expect("valid regex")
-});
+/// 进程级规则单例：只编译一次（失败结果同样缓存，不重试、不放行）。
+static RULES: OnceLock<Result<PolyglotRules, PolyglotRulesError>> = OnceLock::new();
 
-static NODE_GENERAL_PROC_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\b(?:child_process\b|execSync|spawnSync)\b"#).expect("valid regex")
-});
-
-static RUBY_SYSTEM_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\b(?:system|exec)\s*(?:\(\s*)?(?:"(?P<cmd_d>(?:\\.|[^"\\])*)"|'(?P<cmd_s>(?:\\.|[^'\\])*)')"#)
-        .expect("valid regex")
-});
-
-static BACKTICK_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"`(?P<cmd>[^`]+)`"#).expect("valid regex"));
-
-static RUBY_PERCENT_X_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"%x(?:\((?P<cmd1>[^\)]*)\)|\[(?P<cmd2>[^\]]*)\]|\{(?P<cmd3>[^\}]*)\})"#)
-        .expect("valid regex")
-});
-
-static PERL_SYSTEM_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\b(?:system|exec)\s*(?:\(\s*)?(?:"(?P<cmd_d>(?:\\.|[^"\\])*)"|'(?P<cmd_s>(?:\\.|[^'\\])*)')"#)
-        .expect("valid regex")
-});
-
-static PERL_QX_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\bqx(?:\((?P<cmd1>[^\)]*)\)|\[(?P<cmd2>[^\]]*)\]|\{(?P<cmd3>[^\}]*)\})"#)
-        .expect("valid regex")
-});
-
-static PHP_SYSTEM_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\b(?:system|exec|passthru|shell_exec|popen|proc_open)\s*(?:\(\s*)?(?:"(?P<cmd_d>(?:\\.|[^"\\])*)"|'(?P<cmd_s>(?:\\.|[^'\\])*)')"#)
-        .expect("valid regex")
-});
-
-static PY_DESTRUCTIVE_LITERAL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\b(?:shutil\.rmtree|os\.(?:remove|unlink|rmdir))\s*\(\s*(?:r|f|b)?(?:"(?P<path_d>(?:\\.|[^"\\])*)"|'(?P<path_s>(?:\\.|[^'\\])*)')"#)
-        .expect("valid regex")
-});
-
-static PY_PATHLIB_DESTRUCTIVE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\b(?:pathlib\.)?Path\s*\(\s*(?:r|f|b)?(?:"(?P<path_d>(?:\\.|[^"\\])*)"|'(?P<path_s>(?:\\.|[^'\\])*)')\s*\)\.(?:unlink|rmdir)"#)
-        .expect("valid regex")
-});
-
-static PY_DESTRUCTIVE_GENERAL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\b(?:shutil\.rmtree|os\.remove|os\.unlink|os\.rmdir)\b"#).expect("valid regex")
-});
-
-static NODE_DESTRUCTIVE_LITERAL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)(?:\bfs\.)?(?:promises\.)?(?:rmSync|rmdirSync|unlinkSync|rm|rmdir|unlink)\s*\(\s*(?:"(?P<path_d>(?:\\.|[^"\\])*)"|'(?P<path_s>(?:\\.|[^'\\])*)'|`(?P<path_b>(?:\\.|[^`\\])*)`)"#)
-        .expect("valid regex")
-});
-
-static NODE_DESTRUCTIVE_GENERAL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)(?:\bfs\.)?(?:promises\.)?(?:rmSync|rmdirSync|unlinkSync|rm|rmdir|unlink)\b"#)
-        .expect("valid regex")
-});
-
-static RUBY_DESTRUCTIVE_LITERAL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)(?:\bFileUtils\.(?:rm_rf|rm_r|rm)|\bFile\.(?:delete|unlink)|\bDir\.(?:delete|rmdir))\s*(?:\(\s*)?(?:"(?P<path_d>(?:\\.|[^"\\])*)"|'(?P<path_s>(?:\\.|[^'\\])*)')"#)
-        .expect("valid regex")
-});
-
-static RUBY_DESTRUCTIVE_GENERAL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)(?:\bFileUtils\.(?:rm_rf|rm_r|rm)|\bFile\.(?:delete|unlink)|\bDir\.(?:delete|rmdir))\b"#)
-        .expect("valid regex")
-});
-
-static PERL_DESTRUCTIVE_LITERAL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)(?:\b(?:File::Path::)?(?:rmtree|remove_tree)|\b(?:unlink|rmdir))\s*(?:\(\s*)?(?:"(?P<path_d>(?:\\.|[^"\\])*)"|'(?P<path_s>(?:\\.|[^'\\])*)')"#)
-        .expect("valid regex")
-});
-
-static PERL_DESTRUCTIVE_GENERAL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\b(?:rmtree|remove_tree|unlink|rmdir)\b"#).expect("valid regex")
-});
-
-static PHP_DESTRUCTIVE_LITERAL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\b(?:unlink|rmdir)\s*\(\s*(?:"(?P<path_d>(?:\\.|[^"\\])*)"|'(?P<path_s>(?:\\.|[^'\\])*)')"#)
-        .expect("valid regex")
-});
-
-static PHP_DESTRUCTIVE_GENERAL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\b(?:unlink|rmdir)\b"#).expect("valid regex")
-});
-
-static PY_REFLECTION_DANGER: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\b(?:ctypes\b|__import__|importlib\b|eval\s*\(|exec\s*\(|compile\s*\()"#)
-        .expect("valid regex")
-});
-
-static NODE_REFLECTION_DANGER: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\b(?:eval\s*\(|Function\s*\(|vm\.runIn|process\.exit\s*\()"#)
-        .expect("valid regex")
-});
-
-static GENERAL_SCRIPT_REFLECTION: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?i)\b(?:eval\s*[\(\{]|eval\b|passthru\b|proc_open\b)"#).expect("valid regex")
-});
-
-static PY_PURE_PRINT: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"^\s*print\s*\([^)]*\)\s*$"#).expect("valid regex")
-});
-
-static NODE_PURE_PRINT: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"^\s*console\.(?:log|info|warn|error)\s*\([^)]*\)\s*;?\s*$"#).expect("valid regex")
-});
-
-static RUBY_PURE_PRINT: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"^\s*(?:puts|print|p)\s+.*$"#).expect("valid regex")
-});
-
-static PHP_PURE_PRINT: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"^\s*(?:echo|print)\s+.*;?\s*$"#).expect("valid regex")
-});
-
-static PERL_PURE_PRINT: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"^\s*print\s+.*;?\s*$"#).expect("valid regex")
-});
+/// 取规则单例：编译失败 → `Err`，调用方必须按 fail-closed 阻断。
+fn rules() -> Result<&'static PolyglotRules, PolyglotRulesError> {
+    RULES
+        .get_or_init(PolyglotRules::compile)
+        .as_ref()
+        .map_err(Clone::clone)
+}
 
 impl PolyglotCodeInspector {
     /// 识别解释器类型
@@ -358,14 +412,21 @@ impl PolyglotCodeInspector {
         }
     }
 
-    /// 深度审查多语言内联脚本
-    pub fn inspect_script(kind: InterpreterKind, script: &str, depth: usize) -> SemanticAnalysis {
+    /// 深度审查多语言内联脚本。
+    ///
+    /// 返回 `Err` 表示审查规则不可用（模式均为字面量，正常构建不会发生）；
+    /// 调用方**必须**按 fail-closed 阻断，不得把 `Err` 当作「无风险」放行。
+    pub fn inspect_script(
+        kind: InterpreterKind,
+        script: &str,
+        depth: usize,
+    ) -> Result<SemanticAnalysis, PolyglotRulesError> {
         // 0. Shell/PowerShell/Cmd 脚本直接走 Shell AST / 分词语义层
         if matches!(
             kind,
             InterpreterKind::Bash | InterpreterKind::PowerShell | InterpreterKind::Cmd
         ) {
-            return crate::semantics::analyze_depth_pub(script, depth + 1);
+            return Ok(crate::semantics::analyze_depth_pub(script, depth + 1));
         }
 
         let mut delete_targets = Vec::new();
@@ -374,13 +435,13 @@ impl PolyglotCodeInspector {
         let mut has_dangerous = false;
 
         // 1. 递归提取并审查嵌套的 Shell 子命令
-        let nested_cmds = Self::extract_nested_shell_commands(kind, script);
+        let nested_cmds = Self::extract_nested_shell_commands(kind, script)?;
         for nested in nested_cmds {
             let res = crate::semantics::analyze_depth_pub(&nested, depth + 1);
             if res.overall_class == CommandClass::Redline
                 || res.segments.iter().any(|s| s.class == CommandClass::Redline)
             {
-                return redline_only_analysis();
+                return Ok(redline_only_analysis());
             }
 
             if res.overall_class == CommandClass::DeleteShape || res.has_indirect_delete {
@@ -404,7 +465,7 @@ impl PolyglotCodeInspector {
 
         // 2. 原生文件破坏性 API 提取与物理红线审查
         let (extracted_paths, found_destructive_general) =
-            Self::extract_destructive_file_ops(kind, script);
+            Self::extract_destructive_file_ops(kind, script)?;
         if found_destructive_general {
             has_indirect_delete = true;
         }
@@ -412,7 +473,7 @@ impl PolyglotCodeInspector {
         for path in extracted_paths {
             if is_critical_path_str(&path) {
                 // 试图通过解释器删除根目录或系统核心关键目录 -> 物理红线立即拦截！
-                return redline_only_analysis();
+                return Ok(redline_only_analysis());
             }
             has_indirect_delete = true;
             if !delete_targets.contains(&path) {
@@ -421,7 +482,7 @@ impl PolyglotCodeInspector {
         }
 
         // 3. 动态代码执行、反射与底层 API
-        if Self::has_dynamic_or_reflection_execution(kind, script) {
+        if Self::has_dynamic_or_reflection_execution(kind, script)? {
             has_dangerous = true;
         }
 
@@ -429,16 +490,16 @@ impl PolyglotCodeInspector {
         if !has_indirect_delete
             && !has_dangerous
             && delete_targets.is_empty()
-            && Self::is_pure_read_only_print(kind, script)
+            && Self::is_pure_read_only_print(kind, script)?
         {
-            return SemanticAnalysis {
+            return Ok(SemanticAnalysis {
                 segments: Vec::new(),
                 overall_class: CommandClass::Normal,
                 delete_targets: Vec::new(),
                 git_revert_forms: Vec::new(),
                 has_indirect_delete: false,
                 decoded_payload: None,
-            };
+            });
         }
 
         // 5. 确定最终分类与保底原则：
@@ -452,36 +513,40 @@ impl PolyglotCodeInspector {
             CommandClass::Dangerous
         };
 
-        SemanticAnalysis {
+        Ok(SemanticAnalysis {
             segments: Vec::new(),
             overall_class,
             delete_targets,
             git_revert_forms,
             has_indirect_delete,
             decoded_payload: None,
-        }
+        })
     }
 
     /// 提取内联脚本中调用的系统 Shell 子命令
-    pub fn extract_nested_shell_commands(kind: InterpreterKind, script: &str) -> Vec<String> {
+    pub fn extract_nested_shell_commands(
+        kind: InterpreterKind,
+        script: &str,
+    ) -> Result<Vec<String>, PolyglotRulesError> {
+        let rules = rules()?;
         let mut commands = Vec::new();
         match kind {
             InterpreterKind::Python => {
-                for cap in PY_SYSTEM_REGEX.captures_iter(script) {
+                for cap in rules.py_system.captures_iter(script) {
                     if let Some(s) = get_captured_str(&cap, &["cmd_d", "cmd_s"]) {
                         commands.push(clean_escaped_string(s));
                     }
                 }
-                for cap in PY_SUBPROCESS_STR_REGEX.captures_iter(script) {
+                for cap in rules.py_subprocess_str.captures_iter(script) {
                     if let Some(s) = get_captured_str(&cap, &["cmd_d", "cmd_s"]) {
                         commands.push(clean_escaped_string(s));
                     }
                 }
-                for cap in PY_SUBPROCESS_LIST_REGEX.captures_iter(script) {
+                for cap in rules.py_subprocess_list.captures_iter(script) {
                     if let Some(list_match) = cap.name("list") {
                         let list_content = list_match.as_str();
                         let mut items = Vec::new();
-                        for item_cap in PY_STRING_LITERAL_REGEX.captures_iter(list_content) {
+                        for item_cap in rules.py_string_literal.captures_iter(list_content) {
                             if let Some(item_s) = get_captured_str(&item_cap, &["item_d", "item_s"]) {
                                 items.push(clean_escaped_string(item_s));
                             }
@@ -493,17 +558,17 @@ impl PolyglotCodeInspector {
                 }
             }
             InterpreterKind::Node => {
-                for cap in NODE_EXEC_REGEX.captures_iter(script) {
+                for cap in rules.node_exec.captures_iter(script) {
                     if let Some(s) = get_captured_str(&cap, &["cmd_d", "cmd_s", "cmd_b"]) {
                         commands.push(clean_escaped_string(s));
                     }
                 }
-                for cap in NODE_SPAWN_REGEX.captures_iter(script) {
+                for cap in rules.node_spawn.captures_iter(script) {
                     if let Some(s) = get_captured_str(&cap, &["cmd_d", "cmd_s", "cmd_b"]) {
                         let cmd_str = clean_escaped_string(s);
                         if let Some(args_m) = cap.name("args") {
                             let mut items = vec![cmd_str];
-                            for item_cap in PY_STRING_LITERAL_REGEX.captures_iter(args_m.as_str()) {
+                            for item_cap in rules.py_string_literal.captures_iter(args_m.as_str()) {
                                 if let Some(item_val) = get_captured_str(&item_cap, &["item_d", "item_s"]) {
                                     items.push(clean_escaped_string(item_val));
                                 }
@@ -516,17 +581,17 @@ impl PolyglotCodeInspector {
                 }
             }
             InterpreterKind::Ruby => {
-                for cap in RUBY_SYSTEM_REGEX.captures_iter(script) {
+                for cap in rules.ruby_system.captures_iter(script) {
                     if let Some(s) = get_captured_str(&cap, &["cmd_d", "cmd_s"]) {
                         commands.push(clean_escaped_string(s));
                     }
                 }
-                for cap in BACKTICK_REGEX.captures_iter(script) {
+                for cap in rules.backtick.captures_iter(script) {
                     if let Some(m) = cap.name("cmd") {
                         commands.push(clean_escaped_string(m.as_str()));
                     }
                 }
-                for cap in RUBY_PERCENT_X_REGEX.captures_iter(script) {
+                for cap in rules.ruby_percent_x.captures_iter(script) {
                     for key in ["cmd1", "cmd2", "cmd3"] {
                         if let Some(m) = cap.name(key) {
                             commands.push(clean_escaped_string(m.as_str()));
@@ -535,17 +600,17 @@ impl PolyglotCodeInspector {
                 }
             }
             InterpreterKind::Perl => {
-                for cap in PERL_SYSTEM_REGEX.captures_iter(script) {
+                for cap in rules.perl_system.captures_iter(script) {
                     if let Some(s) = get_captured_str(&cap, &["cmd_d", "cmd_s"]) {
                         commands.push(clean_escaped_string(s));
                     }
                 }
-                for cap in BACKTICK_REGEX.captures_iter(script) {
+                for cap in rules.backtick.captures_iter(script) {
                     if let Some(m) = cap.name("cmd") {
                         commands.push(clean_escaped_string(m.as_str()));
                     }
                 }
-                for cap in PERL_QX_REGEX.captures_iter(script) {
+                for cap in rules.perl_qx.captures_iter(script) {
                     for key in ["cmd1", "cmd2", "cmd3"] {
                         if let Some(m) = cap.name(key) {
                             commands.push(clean_escaped_string(m.as_str()));
@@ -554,12 +619,12 @@ impl PolyglotCodeInspector {
                 }
             }
             InterpreterKind::Php => {
-                for cap in PHP_SYSTEM_REGEX.captures_iter(script) {
+                for cap in rules.php_system.captures_iter(script) {
                     if let Some(s) = get_captured_str(&cap, &["cmd_d", "cmd_s"]) {
                         commands.push(clean_escaped_string(s));
                     }
                 }
-                for cap in BACKTICK_REGEX.captures_iter(script) {
+                for cap in rules.backtick.captures_iter(script) {
                     if let Some(m) = cap.name("cmd") {
                         commands.push(clean_escaped_string(m.as_str()));
                     }
@@ -568,102 +633,112 @@ impl PolyglotCodeInspector {
             _ => {}
         }
 
-        commands
+        Ok(commands)
     }
 
     /// 提取文件系统破坏性操作目标与泛化特征
     pub fn extract_destructive_file_ops(
         kind: InterpreterKind,
         script: &str,
-    ) -> (Vec<String>, bool) {
+    ) -> Result<(Vec<String>, bool), PolyglotRulesError> {
+        let rules = rules()?;
         let mut paths = Vec::new();
         let mut found_general = false;
 
         match kind {
             InterpreterKind::Python => {
-                for cap in PY_DESTRUCTIVE_LITERAL.captures_iter(script) {
+                for cap in rules.py_destructive_literal.captures_iter(script) {
                     if let Some(s) = get_captured_str(&cap, &["path_d", "path_s"]) {
                         paths.push(clean_escaped_string(s));
                     }
                 }
-                for cap in PY_PATHLIB_DESTRUCTIVE.captures_iter(script) {
+                for cap in rules.py_pathlib_destructive.captures_iter(script) {
                     if let Some(s) = get_captured_str(&cap, &["path_d", "path_s"]) {
                         paths.push(clean_escaped_string(s));
                     }
                 }
-                if PY_DESTRUCTIVE_GENERAL.is_match(script) {
+                if rules.py_destructive_general.is_match(script) {
                     found_general = true;
                 }
             }
             InterpreterKind::Node => {
-                for cap in NODE_DESTRUCTIVE_LITERAL.captures_iter(script) {
+                for cap in rules.node_destructive_literal.captures_iter(script) {
                     if let Some(s) = get_captured_str(&cap, &["path_d", "path_s", "path_b"]) {
                         paths.push(clean_escaped_string(s));
                     }
                 }
-                if NODE_DESTRUCTIVE_GENERAL.is_match(script) {
+                if rules.node_destructive_general.is_match(script) {
                     found_general = true;
                 }
             }
             InterpreterKind::Ruby => {
-                for cap in RUBY_DESTRUCTIVE_LITERAL.captures_iter(script) {
+                for cap in rules.ruby_destructive_literal.captures_iter(script) {
                     if let Some(s) = get_captured_str(&cap, &["path_d", "path_s"]) {
                         paths.push(clean_escaped_string(s));
                     }
                 }
-                if RUBY_DESTRUCTIVE_GENERAL.is_match(script) {
+                if rules.ruby_destructive_general.is_match(script) {
                     found_general = true;
                 }
             }
             InterpreterKind::Perl => {
-                for cap in PERL_DESTRUCTIVE_LITERAL.captures_iter(script) {
+                for cap in rules.perl_destructive_literal.captures_iter(script) {
                     if let Some(s) = get_captured_str(&cap, &["path_d", "path_s"]) {
                         paths.push(clean_escaped_string(s));
                     }
                 }
-                if PERL_DESTRUCTIVE_GENERAL.is_match(script) {
+                if rules.perl_destructive_general.is_match(script) {
                     found_general = true;
                 }
             }
             InterpreterKind::Php => {
-                for cap in PHP_DESTRUCTIVE_LITERAL.captures_iter(script) {
+                for cap in rules.php_destructive_literal.captures_iter(script) {
                     if let Some(s) = get_captured_str(&cap, &["path_d", "path_s"]) {
                         paths.push(clean_escaped_string(s));
                     }
                 }
-                if PHP_DESTRUCTIVE_GENERAL.is_match(script) {
+                if rules.php_destructive_general.is_match(script) {
                     found_general = true;
                 }
             }
             _ => {}
         }
 
-        (paths, found_general)
+        Ok((paths, found_general))
     }
 
     /// 检测动态求值与底层反射
-    pub fn has_dynamic_or_reflection_execution(kind: InterpreterKind, script: &str) -> bool {
-        match kind {
+    pub fn has_dynamic_or_reflection_execution(
+        kind: InterpreterKind,
+        script: &str,
+    ) -> Result<bool, PolyglotRulesError> {
+        let rules = rules()?;
+        Ok(match kind {
             InterpreterKind::Python => {
-                PY_REFLECTION_DANGER.is_match(script) || PY_GENERAL_PROC_REGEX.is_match(script)
+                rules.py_reflection_danger.is_match(script) || rules.py_general_proc.is_match(script)
             }
             InterpreterKind::Node => {
-                NODE_REFLECTION_DANGER.is_match(script) || NODE_GENERAL_PROC_REGEX.is_match(script)
+                rules.node_reflection_danger.is_match(script)
+                    || rules.node_general_proc.is_match(script)
             }
-            _ => GENERAL_SCRIPT_REFLECTION.is_match(script),
-        }
+            _ => rules.general_script_reflection.is_match(script),
+        })
     }
 
     /// 判定是否属于纯只读标准输出打印白名单
-    pub fn is_pure_read_only_print(kind: InterpreterKind, script: &str) -> bool {
-        match kind {
-            InterpreterKind::Python => PY_PURE_PRINT.is_match(script),
-            InterpreterKind::Node => NODE_PURE_PRINT.is_match(script),
-            InterpreterKind::Ruby => RUBY_PURE_PRINT.is_match(script),
-            InterpreterKind::Php => PHP_PURE_PRINT.is_match(script),
-            InterpreterKind::Perl => PERL_PURE_PRINT.is_match(script),
+    pub fn is_pure_read_only_print(
+        kind: InterpreterKind,
+        script: &str,
+    ) -> Result<bool, PolyglotRulesError> {
+        let rules = rules()?;
+        Ok(match kind {
+            InterpreterKind::Python => rules.py_pure_print.is_match(script),
+            InterpreterKind::Node => rules.node_pure_print.is_match(script),
+            InterpreterKind::Ruby => rules.ruby_pure_print.is_match(script),
+            InterpreterKind::Php => rules.php_pure_print.is_match(script),
+            InterpreterKind::Perl => rules.perl_pure_print.is_match(script),
             _ => false,
-        }
+        })
     }
 }
 
@@ -956,5 +1031,33 @@ mod tests {
             let gk = SHARED_GATEKEEPER.check_command(cmd, &[]);
             assert_eq!(gk, GatekeeperResult::RequiresApproval, "gk failed: {cmd}");
         }
+    }
+
+    /// 规则引擎不变量：全部字面量模式必须可编译。
+    /// 这是原 `.expect("valid regex")` 的自动化替代——不变量由测试守门，运行时不再 panic。
+    #[test]
+    fn test_rules_literal_patterns_compile() {
+        let rules = PolyglotRules::compile().expect("规则字面量必须全部可编译（不变量）");
+        assert!(rules.py_system.is_match("os.system('ls')"));
+        assert!(rules.py_pure_print.is_match("print('hi')"));
+        assert!(rules.node_pure_print.is_match("console.log(1)"));
+    }
+
+    /// 编译失败路径真实存在：非法模式返回 `Err`（不 panic），调用方据此 fail-closed 阻断。
+    #[test]
+    fn test_invalid_pattern_returns_err_not_panic() {
+        let err = compile_rule("invalid_probe", r#"([a-"#).expect_err("非法正则必须返回 Err");
+        assert_eq!(err.rule, "invalid_probe");
+        assert!(!err.message.is_empty());
+        assert!(format!("{err}").contains("invalid_probe"));
+    }
+
+    /// 审查入口正常路径仍返回 `Ok`（规则可用时不引入行为变化）。
+    #[test]
+    fn test_inspect_script_returns_ok_on_valid_rules() {
+        let script = "import os; os.system('rm -rf /')";
+        let analysis = PolyglotCodeInspector::inspect_script(InterpreterKind::Python, script, 0)
+            .expect("规则可用时审查必须返回 Ok");
+        assert_eq!(analysis.overall_class, CommandClass::Redline);
     }
 }

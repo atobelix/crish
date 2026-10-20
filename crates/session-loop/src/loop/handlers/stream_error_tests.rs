@@ -42,9 +42,10 @@ use conex_types::events::AgentEvent;
 
     /// 带预算/压缩策略的溢出恢复状态（窗口 1 万、阈值 = window - reserve
     /// = 8000；压缩策略 keep_recent_tokens 20000 / min_recent_turns 1——
-    /// 对话 10 条 × 5000 字 ≈ 5 万 token：第一次压缩保留段 4 条
-    /// （cut=6），第二次压缩（上限 2）仍有可丢内容（cut=3），供新语义
-    /// 测试驱动两轮压缩；E2 F2 层 2 上限 2 需要保留段足够长才能二次压缩）。
+    /// 对话 10 条 × 5000 token（= [FIXTURE_MESSAGE_CHARS] 字，见该常量）
+    /// ≈ 5 万 token：第一次压缩保留段 4 条（cut=6），第二次压缩（上限 2）
+    /// 仍有可丢内容（keep 阶梯 12K → cut=3），供新语义测试驱动两轮压缩；
+    /// E2 F2 层 2 上限 2 需要保留段足够长才能二次压缩）。
     ///
     /// E2 F1（LLM 摘要强制）：默认注入成功 Summarizer（模拟生产已接线
     /// ProviderSummarizer，COMPACTION-01 P0-3 闭环）——既有「压缩成功重试」
@@ -106,25 +107,59 @@ use conex_types::events::AgentEvent;
         }
     }
 
-    /// 超阈值对话：10 条消息 × 5000 字（CJK 逐字符 ≈ 5000 token）≈ 5 万 token
+    /// fixture 单条正文 CJK 字数——按**生产 token 计数的真实权重反推**：
+    /// `count_tokens` 对 CJK 统一表意字符按 1.45 权重计费
+    /// （`crates/conex-compaction/src/tokens.rs:184-186` 计费点、
+    /// `:298-303` 单测锁定），故「5000 token」≈ 5000 ÷ 1.45 = 3448 字
+    /// （3448 × 1.45 = 4999.6 → 5000）；再加单条 Wire framing 4 token
+    /// = 5004 token/条。
+    ///
+    /// 历史坑（BLK-09，测试基线错误而非产品缺陷）：fixture 曾按「1 汉字
+    /// ≈ 1 token」写 5000 字，真实口径是 7254 token/条——首轮 20K 保留预算
+    /// 只能留 3 条，且 T-36 形状护栏（cut 落在 assistant → 按首条非摘要
+    /// 消息 token 收紧）再砍一条，实际只剩 2 条（1 个完整回合）；第二次
+    /// 压缩 keep 阶梯降到 12K 时切割点只能落 `fold_start` →
+    /// `find_cut_point_inner` 返回 None → `dropped_ids` 为空 → 直接 fatal，
+    /// 于是「第二次压缩必须发生」的契约在测试构造的对话上不可达。
+    const FIXTURE_MESSAGE_CHARS: usize = 3_448;
+
+    /// fixture 单条消息：偶数下标 = user、奇数 = assistant（回合成对，
+    /// 供 min_recent_turns / 形状护栏判定）；正文为
+    /// [FIXTURE_MESSAGE_CHARS] 个汉字（≈5000 token）
+    fn fixture_message(i: usize) -> Arc<AgentMessage> {
+        Arc::new(AgentMessage {
+            id: format!("m{i}"),
+            role: if i % 2 == 0 {
+                AgentMessageRole::User
+            } else {
+                AgentMessageRole::Assistant
+            },
+            created_at: "2026-08-03T10:00:00.000Z".to_string(),
+            blocks: vec![AgentMessageBlock::Text {
+                text: "字".repeat(FIXTURE_MESSAGE_CHARS),
+            }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        })
+    }
+
+    /// 超阈值对话：10 条消息 × 5004 token（CJK 1.45 权重口径）≈ 5 万 token
     fn big_conversation() -> Vec<Arc<AgentMessage>> {
-        (0..10)
-            .map(|i| {
-                Arc::new(AgentMessage {
-                    id: format!("m{i}"),
-                    role: if i % 2 == 0 {
-                        AgentMessageRole::User
-                    } else {
-                        AgentMessageRole::Assistant
-                    },
-                    created_at: "2026-08-03T10:00:00.000Z".to_string(),
-                    blocks: vec![AgentMessageBlock::Text { text: "字".repeat(5_000) }],
-                    metadata: None,
-                    client_message_id: None,
-                    content: None,
-                })
-            })
-            .collect()
+        (0..10).map(fixture_message).collect()
+    }
+
+    /// BLK-09 基线口径回归：fixture 单条消息必须 ≈5000 token（3448 字 ×
+    /// 1.45 + 4 framing = 5004）——锁定「字数 × 真实 CJK 权重」这一口径，
+    /// 防止 token 权重或 fixture 字数再次漂移，令三档压缩阶梯测试重新失去
+    /// 可判定性（历史漂移值 7254 会立刻跌破此区间）
+    #[test]
+    fn fixture_message_tokens_match_5000_token_caliber() {
+        let tokens = conex_compaction::count_agent_message_tokens(&fixture_message(0));
+        assert!(
+            (4_990..=5_010).contains(&tokens),
+            "fixture 单条消息口径漂移：实际 {tokens} token（期望 5000 正文 + 4 framing = 5004）"
+        );
     }
 
     fn transient_error(kind: ProviderErrorKind) -> ClassifiedStreamError {

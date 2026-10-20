@@ -455,7 +455,9 @@ impl HookRegistry {
         strategy: HookFailStrategy,
         handler: Arc<dyn HookHandler>,
     ) {
-        let _ = self.register_with(
+        // 默认选项（matcher 缺省）下 register_with 不会失败；仍显式处置错误面
+        // （BLK-05：不得丢弃注册结果），保证异常注册可见
+        if let Err(err) = self.register_with(
             kind,
             strategy,
             handler,
@@ -463,7 +465,9 @@ impl HookRegistry {
                 mode: HookMode::On,
                 ..Default::default()
             },
-        );
+        ) {
+            tracing::error!(hook_kind = ?kind, error = %err, "hook 注册失败（register 默认选项）");
+        }
     }
 
     /// 注册 observe 模式 handler（广播观察：Block 忽略、失败按策略处置）
@@ -473,7 +477,8 @@ impl HookRegistry {
         strategy: HookFailStrategy,
         handler: Arc<dyn HookHandler>,
     ) {
-        let _ = self.register_with(
+        // 同 [Self::register]：显式处置注册错误面（BLK-05）
+        if let Err(err) = self.register_with(
             kind,
             strategy,
             handler,
@@ -481,7 +486,13 @@ impl HookRegistry {
                 mode: HookMode::Observe,
                 ..Default::default()
             },
-        );
+        ) {
+            tracing::error!(
+                hook_kind = ?kind,
+                error = %err,
+                "hook 注册失败（register_observe 默认选项）"
+            );
+        }
     }
 
     /// 注册 handler（完整选项：mode / matcher / timeout）。
@@ -846,10 +857,17 @@ impl HookRegistry {
             error: format!("hook 失败（{}）：{message}", event.kind()),
             retryable: false,
         };
-        // error.occurred 自身分派：错误事件化关闭、失败全吞（诊断不阻断）。
+        // error.occurred 自身分派：错误事件化关闭、失败不阻断（诊断面），
+        // 但失败必须留日志（BLK-05：不得静默丢弃 dispatch 的 Result）。
         // 间接递归（dispatch_inner → handle_failure → emit_error_event →
         // dispatch_inner）须 Box::pin 打破 async 递归（E0733）
-        let _ = Box::pin(self.dispatch_inner(&error_event, false)).await;
+        if let Err(err) = Box::pin(self.dispatch_inner(&error_event, false)).await {
+            tracing::warn!(
+                hook_event = %error_event.kind(),
+                error = %err,
+                "error.occurred 诊断事件分派失败（不阻断主流程）"
+            );
+        }
         outcome.error_events += 1;
     }
 }

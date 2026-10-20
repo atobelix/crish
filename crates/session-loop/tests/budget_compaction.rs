@@ -38,12 +38,16 @@ fn user(text: &str) -> AgentMessage {
     }
 }
 
-/// 长用户消息（5000 字 ≈ 5000 token）：把估算推到窗口边缘，钳制必生效
+/// 长用户消息（3418 字 ≈ 4961 token）：把估算推到窗口边缘，钳制必生效
+///
+/// 口径（conex-compaction tokens.rs，BLK-09 对齐）：CJK 逐字符 1.45 权重
+/// （3418 × 1.45 = 4956.1 → ceil 4957）+ 单条 Wire framing 4 = 4961 token
 fn user_long() -> AgentMessage {
-    user(&"字".repeat(5_000))
+    user(&"字".repeat(3_418))
 }
 
-/// 超阈值历史对话：10 条 × 5000 字（CJK 逐字符 ≈ 5000 token）≈ 5 万 token；
+/// 超阈值历史对话：10 条 × 3448 字（CJK 1.45 权重口径：3448 × 1.45 =
+/// 4999.6 → 5000，+4 framing = 5004 token/条）≈ 5 万 token；
 /// 角色交替（user/assistant），末条为 assistant 前的 user/assistant 对
 /// 满足 min_recent_turns 完整回合要求
 fn big_conversation() -> Vec<Arc<AgentMessage>> {
@@ -58,7 +62,7 @@ fn big_conversation() -> Vec<Arc<AgentMessage>> {
                 },
                 created_at: "2026-08-03T10:00:00.000Z".to_string(),
                 blocks: vec![AgentMessageBlock::Text {
-                    text: "字".repeat(5_000),
+                    text: "字".repeat(3_448),
                 }],
                 metadata: None,
                 client_message_id: None,
@@ -103,8 +107,9 @@ fn find_compression_record(events: &[AgentEvent]) -> Option<ContextCompressionRe
     })
 }
 
-/// 预检触发 + 事件广播 + 对话替换：大对话超阈值（估算 ≈ 5.5 万 ≥
-/// window - reserve = 47616）→ prepare_turn 内同步压缩一次
+/// 预检触发 + 事件广播 + 对话替换：大对话超阈值（估算 = 10×5004 + 7 +
+/// 1 ≈ 50048 ≥ window - reserve = 47616，CJK 1.45 权重口径）→
+/// prepare_turn 内同步压缩一次
 #[tokio::test]
 async fn preflight_compaction_triggers_and_broadcasts_events() {
     let provider = Arc::new(TestProvider::text_reply("收尾回复"));
@@ -179,7 +184,8 @@ async fn preflight_compaction_triggers_and_broadcasts_events() {
 }
 
 /// 预算钳制：只配预算不配压缩策略（预检不触发）→ 请求 max_tokens 被钳到
-/// window - estimate - safety = 64000 - 55000 - 4096 = 4904
+/// window - estimate - safety = 64000 - 55002 - 4096 = 4902（CJK 1.45
+/// 权重口径：估算 = 10×5004 + 4961 + 1）
 #[tokio::test]
 async fn max_tokens_clamped_by_estimate_without_compaction() {
     let provider = Arc::new(TestProvider::text_reply("好"));
@@ -210,8 +216,8 @@ async fn max_tokens_clamped_by_estimate_without_compaction() {
         "未配置压缩策略不得触发压缩"
     );
 
-    // 钳制断言：估算 = 10×5000 + 新用户 5000 + tools 前缀 "[]" 2 = 55002
-    // （C9 口径启发式；空注册表也折算 tools 前缀 JSON 体积）
+    // 钳制断言：估算 = 10×5004 + 新用户 4961 + tools 前缀 "[]" 1 = 55002
+    // （C9 口径启发式，CJK 1.45 权重；空注册表也折算 tools 前缀 JSON 体积）
     // → 可用 = 64000 - 55002 - 4096 = 4902 → min(8192, 4902) = 4902
     let requests = provider.requests();
     assert_eq!(requests.len(), 1);
@@ -249,7 +255,7 @@ async fn max_tokens_not_clamped_below_floor() {
     let outcome = loop_.run(user("继续")).await;
     assert_eq!(outcome.reason, AgentEndReason::Stop);
 
-    // 估算 55000 ≥ 窗口 10000 → 可用预算 = 0 低于下限 → 不钳制
+    // 估算 50048 ≥ 窗口 10000 → 可用预算 = 0 低于下限 → 不钳制
     let requests = provider.requests();
     assert_eq!(
         requests[0].max_tokens,

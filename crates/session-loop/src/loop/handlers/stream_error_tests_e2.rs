@@ -170,33 +170,19 @@
 
     /// E2 F2 层 2 阶梯下调（D1 §3.5.1 / DEEPCHECK-11 §8 机制化）：
     /// 第二次压缩前 keep_recent_tokens 从 20000 下调到 12000（min 配置值）
-    /// ——构造 12 条 × 5000 token 对话 + keep=20000：
-    /// 第一次 cut=8（dropped 8 条）；第二次（对话 = 链 + m8..m11）若阶梯
-    /// 生效 keep=12000 → cut=3（dropped = m8,m9 共 2 条）；若阶梯未生效
-    /// keep=20000 → cut=2（dropped = m8 仅 1 条）——断言 dropped = [m8, m9]
-    /// 即锁定阶梯下调语义
+    /// ——构造 12 条 × 5004 token 对话（[FIXTURE_MESSAGE_CHARS] 字，
+    /// 按生产 CJK 1.45 权重计费）+ keep=20000：
+    /// 第一次 cut=8（dropped 8 条，保留 m8..m11 = 2 个完整回合）；
+    /// 第二次（对话 = 链 + m8..m11）若阶梯生效 keep=12000 → 预算扫描
+    /// cut=2（保留 m9..m11），但保留段首条 m9 是 assistant → T-36 形状
+    /// 护栏按守卫收紧 keep=12000-5004=6996 → cut=3（dropped = m8,m9 共 2 条）；
+    /// 若阶梯未生效 keep=20000 → 保留段总 token（4 条 = 20016）已超预算，
+    /// 切割点只能落 `fold_start` → 无合法切割点 → noop fatal（第二次压缩
+    /// 不可达）——断言 dropped = [m8, m9] 即锁定阶梯下调语义
     #[tokio::test]
     async fn overflow_retry_uses_smaller_keep_recent_staircase() {
-        // 12 条 × 5000 字（CJK 逐字符 ≈ 5000 token/条）≈ 6 万 token
-        let conversation: Vec<Arc<AgentMessage>> = (0..12)
-            .map(|i| {
-                Arc::new(AgentMessage {
-                    id: format!("m{i}"),
-                    role: if i % 2 == 0 {
-                        AgentMessageRole::User
-                    } else {
-                        AgentMessageRole::Assistant
-                    },
-                    created_at: "2026-08-03T10:00:00.000Z".to_string(),
-                    blocks: vec![AgentMessageBlock::Text {
-                        text: "字".repeat(5_000),
-                    }],
-                    metadata: None,
-                    client_message_id: None,
-                    content: None,
-                })
-            })
-            .collect();
+        // 12 条 × 5004 token（CJK 1.45 权重口径）≈ 6 万 token
+        let conversation: Vec<Arc<AgentMessage>> = (0..12).map(fixture_message).collect();
         let mut state = streaming_state();
         let options = { let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.assembly.context_budget = Some(ContextBudget {
                 context_window: 100_000,
@@ -212,7 +198,7 @@
         state.compaction.compaction_policy = options.compaction.compaction_policy.clone();
         state.compaction.summarizer = options.compaction.summarizer.clone();
         state.conversation = conversation;
-        // 第一次压缩（keep=20000 → cut=8）
+        // 第一次压缩（keep=20000 → 预算扫描 cut=8，保留 m8..m11 = 2 个完整回合）
         let o1 = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
@@ -221,7 +207,9 @@
         // 压缩后对话 = 链 + m8..m11（5 条）
         assert_eq!(state.conversation.len(), 5);
         re_enter_streaming(&mut state);
-        // 第二次压缩：阶梯下调 keep=min(20000, 12000)=12000 → cut=3 → dropped=[m8, m9]
+        // 第二次压缩：阶梯下调 keep=min(20000, 12000)=12000 → 预算扫描 cut=2，
+        // 保留段首条 m9 为 assistant → T-36 形状护栏收紧 keep=6996 → cut=3
+        // → dropped=[m8, m9]
         let o2 = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
@@ -231,7 +219,9 @@
         assert_eq!(
             record.compressed_message_ids,
             vec!["m8".to_string(), "m9".to_string()],
-            "keep 阶梯 12000 生效：cut=3（dropped m8,m9；若未下调则 cut=2 仅 dropped m8）"
+            "keep 阶梯 12000 生效：cut=3（dropped m8,m9）；若阶梯未生效 keep 仍为 20000，\
+             保留段总量 20016 token 已超预算、切割点只能落 fold_start → 无合法切割点 → \
+             第二次压缩不可达（fatal）"
         );
         // 阶梯常量语义：默认 20K→12K→8K（下调方向，min 配置值逻辑在实现内）
         assert_eq!(OVERFLOW_KEEP_RECENT_STAIRCASE, [20_000, 12_000, 8_000]);

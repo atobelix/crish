@@ -398,8 +398,7 @@ impl CacheStatsTracker {
     /// 缓存温暖截止时刻（毫秒时间戳）：**最后一次完成时刻 + ttl × 1000**；
     /// 无基线或 TTL 未知（0）→ None（与 [Self::finish] 的 warm_until_ms 口径一致，
     /// 截止锚定基线而非查询时刻，避免同一缓存条目到期时间随询问时间漂移）。
-    pub fn warm_until_ms(&self, now_ms: u64) -> Option<i64> {
-        let _ = now_ms; // 兼容参数：截止与查询时刻无关
+    pub fn warm_until_ms(&self, _now_ms: u64) -> Option<i64> {
         self.baseline.as_ref().and_then(|b| {
             (self.ttl_seconds > 0).then(|| warm_until(b.completed_at_ms, self.ttl_seconds))
         })
@@ -659,7 +658,17 @@ fn block_hash(block: &AgentMessageBlock, out: &mut Fnv1aWriter) {
             out.update(call.tool_name.as_bytes());
             out.update_byte(0);
             // 入参 JSON（serde_json::Value 为 BTreeMap 键序 → 流式 to_writer 字节序列与 to_string 完全一致）
-            let _ = serde_json::to_writer(&mut *out, &call.input);
+            // 错误面显式处置（BLK-05）：Fnv1aWriter 常驻内存、且 Value 键恒为字符串，
+            // 序列化不应失败；真失败时记日志并写入稳定占位标记，避免静默把该段
+            // 从视图里抹掉（占位也保证同输入恒得同签名）
+            if let Err(err) = serde_json::to_writer(&mut *out, &call.input) {
+                tracing::warn!(
+                    tool_call_id = %call.id,
+                    error = %err,
+                    "缓存签名：工具入参 JSON 序列化失败，写入占位标记（签名不完整）"
+                );
+                out.update(b"\0<json-error>");
+            }
         }
         AgentMessageBlock::ToolResult {
             tool_call_id,
@@ -715,7 +724,16 @@ fn tools_hash(tools: &[ToolSchema]) -> u64 {
             input_schema: &t.input_schema,
             name: &t.name,
         };
-        let _ = serde_json::to_writer(&mut hasher, &proj);
+        // 错误面显式处置（BLK-05）：同 block_hash——内存 writer 不应失败，
+        // 真失败时记日志并写入占位标记，使工具表签名仍可复现（不静默丢弃该工具）
+        if let Err(err) = serde_json::to_writer(&mut hasher, &proj) {
+            tracing::warn!(
+                tool_name = %proj.name,
+                error = %err,
+                "缓存签名：工具 schema 序列化失败，写入占位标记（签名不完整）"
+            );
+            hasher.update(b"\0<json-error>");
+        }
     }
     hasher.update_byte(b']');
     hasher.finish()

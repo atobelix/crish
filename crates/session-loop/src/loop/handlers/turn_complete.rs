@@ -138,9 +138,9 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
             retryable: Some(false),
         });
         // I8-E1 第二批：error.occurred 钩子广播（runtime-error 事件同点位；
-        // observe 默认，失败吞掉 + 计数，收场流程继续）
+        // observe 默认——失败不阻断收场但必须留日志，BLK-05）
         if let Some(hooks) = &state.options.tool_exec.hooks {
-            let _ = hooks
+            if let Err(err) = hooks
                 .dispatch(&crate::hooks::HookEvent::ErrorOccurred {
                     session_id: ctx.session_id.clone(),
                     error: format!(
@@ -149,7 +149,14 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
                     ),
                     retryable: false,
                 })
-                .await;
+                .await
+            {
+                tracing::warn!(
+                    session_id = %ctx.session_id,
+                    error = %err,
+                    "max-turns error.occurred hook 分派失败（观察面不阻断收场）"
+                );
+            }
         }
         // 错误日志（T04.3-3，点位同 T04.2-2）：max-turns 边界按类型化错误码
         // 记录（retryable=false 与注册表 AGENT_MAX_TURNS_REACHED 对齐，

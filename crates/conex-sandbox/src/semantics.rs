@@ -1178,7 +1178,18 @@ pub fn analyze_indirect_depth(segment_raw: &str, depth: usize) -> SemanticAnalys
         if let Some(script) =
             crate::polyglot::PolyglotCodeInspector::extract_inline_script(kind, &args)
         {
-            return crate::polyglot::PolyglotCodeInspector::inspect_script(kind, &script, depth);
+            return match crate::polyglot::PolyglotCodeInspector::inspect_script(
+                kind, &script, depth,
+            ) {
+                Ok(analysis) => analysis,
+                Err(err) => {
+                    // 规则引擎不可用属安全边界故障：fail-closed 阻断（物理红线），绝不放行内联脚本
+                    eprintln!(
+                        "[conex-sandbox] 内联脚本审查规则不可用，按物理红线阻断（fail-closed）：{err}"
+                    );
+                    redline_only_analysis()
+                }
+            };
         }
     }
 

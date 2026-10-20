@@ -189,7 +189,9 @@ async fn consume_stream(
                         // 仅做非阻塞一次性探查以捕获流收口边界立即可用的信号（零挂起等待），随后立即终结。
                         if is_stop {
                             use futures::FutureExt;
-                            let _ = stream.next().now_or_never();
+                            // BC02-6：显式丢弃非阻塞探查结果（stop 后的缓冲尾帧，
+                            // 消费循环随即终结，尾帧内容不再有意义）
+                            drop(stream.next().now_or_never());
                             break;
                         }
                     }

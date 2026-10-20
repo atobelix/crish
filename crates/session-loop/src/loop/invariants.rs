@@ -266,11 +266,7 @@ fn i4_summarizer_trait_carries_no_session_affinity() {
     // trait 签名即隔离：summarize(dropped, existing) 无任何会话/缓存参数。
     // 编译期由 trait 定义保证；此处断言实际收到的载荷只有消息正文。
     fn assert_signature(_f: fn(&[AgentMessage], Option<&str>) -> Result<String, String>) {}
-    assert_signature(|dropped, existing| {
-        let _ = dropped;
-        let _ = existing;
-        Ok("## Goal\n(none)".to_string())
-    });
+    assert_signature(|_dropped, _existing| Ok("## Goal\n(none)".to_string()));
 }
 
 /// I5：压缩后基线重建（缓存读回从压缩后状态开始）——真实压缩路径

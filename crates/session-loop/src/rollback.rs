@@ -121,7 +121,7 @@ impl<'a> RollbackExecutor<'a> {
     /// tool-end 输出收集；路径去重后传入）。
     pub fn rollback_before(
         &self,
-        boundary: u64,
+        _boundary: u64,
         category_paths: &[(ToolCategory, Vec<String>)],
     ) -> Vec<PathRollbackResult> {
         let mut results = Vec::new();
@@ -146,7 +146,9 @@ impl<'a> RollbackExecutor<'a> {
                         }
                         continue;
                     };
-                    let _ = boundary;
+                    // path-only 旧 API 不消费撤回边界（`_boundary`）：Filesystem
+                    // 非空路径无法与 ToolEnd owner 精确关联，故一律显式 Failed
+                    // （见下），生产回滚须走 owner-aware rollback_operations
                     for p in paths {
                         results.push(PathRollbackResult::Failed {
                             path: p.clone(),
