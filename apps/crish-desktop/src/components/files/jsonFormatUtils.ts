@@ -187,11 +187,7 @@ export function formatJsonSafe(
         : raw;
 
     // 无扩展名但多行「每行一个 JSON」：尝试 jsonl
-    if (
-      !filePath &&
-      source.includes('\n') &&
-      !/^\s*[\[{]/.test(source.trim())
-    ) {
+    if (!filePath && source.includes('\n') && !/^\s*[[{]/.test(source.trim())) {
       const probe = formatJsonl(source, indent);
       if (probe.success) return probe;
     }

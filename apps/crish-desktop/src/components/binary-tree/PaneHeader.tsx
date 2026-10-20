@@ -13,7 +13,7 @@
  * - 入场 = @starting-style + transition，零 JS 状态，首轮挂载经 data-booted 门控；
  * - 离场 = [data-leaving] 目标态 + transitionend(flex-basis) 驱动 removeTab，
  *   保险丝按真实 computed 时长 ×3 兜底；
- * - 等宽锁定仅经 --tab-item-width 单变量通道；
+ * - 等宽锁定仅经 --pane-tab-item-width 单变量通道；
  * - 窗口拖拽 = 阈值门控 startDragging 单通道；标签拖拽换位走 SessionTabDragContext；
  * - 关闭量测在事件派发期内同步完成，几何数学在 paneHeaderGeometry（可穷举测试）。
  */

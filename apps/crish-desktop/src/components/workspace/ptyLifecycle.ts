@@ -28,7 +28,10 @@ export interface StartPtySessionDeps {
   restartToken: number;
   localRestart: number;
   cwdRef: { current: string | undefined };
-  onStatus: (status: 'connecting' | 'ready' | 'missing' | 'error' | 'exited', detail?: string) => void;
+  onStatus: (
+    status: 'connecting' | 'ready' | 'missing' | 'error' | 'exited',
+    detail?: string
+  ) => void;
   onMissing: () => void;
   prevLifecycle: {
     current: { sessionKey: string; restartToken: number; localRestart: number };
@@ -58,7 +61,9 @@ export interface StartPtySessionDeps {
  * 6. 订阅 output/exit
  * 7. 尺寸同步 + 聚焦
  */
-export async function startPtySession(deps: StartPtySessionDeps): Promise<void> {
+export async function startPtySession(
+  deps: StartPtySessionDeps
+): Promise<void> {
   const {
     term,
     fitAddon,
@@ -129,8 +134,7 @@ export async function startPtySession(deps: StartPtySessionDeps): Promise<void> 
       cwdOpt,
       cancellation,
       onStatus,
-      onMissing,
-      reg
+      onMissing
     );
     if (outcome === 'abort') return;
     if (outcome.ptyId) {
@@ -227,10 +231,13 @@ async function ensureOrAbort(
   reg: typeof import('../../api/ptyRegistry'),
   key: string,
   cancellation: CancellationSlot,
-  onStatus: (status: 'connecting' | 'ready' | 'missing' | 'error' | 'exited', detail?: string) => void,
+  onStatus: (
+    status: 'connecting' | 'ready' | 'missing' | 'error' | 'exited',
+    detail?: string
+  ) => void,
   cwd?: string,
   cols?: number,
-  rows?: number,
+  rows?: number
 ): Promise<string | null> {
   // ensure：走 spawn handler（bootstrap 注入）；失败再直连 ptyCreate
   const ptyId = await reg.ensurePtyForSession(key, cwd, cols, rows);
@@ -247,9 +254,7 @@ async function ensureOrAbort(
 
 // ── 子步骤：直连 ptyCreate 降级 ───────────────────────────────────
 
-type CreateOutcome =
-  | { ptyId: string }
-  | 'abort';
+type CreateOutcome = { ptyId: string } | 'abort';
 
 async function tryDirectCreate(
   term: Terminal,
@@ -258,9 +263,11 @@ async function tryDirectCreate(
   rows: number,
   cwdOpt: string | undefined,
   cancellation: CancellationSlot,
-  onStatus: (status: 'connecting' | 'ready' | 'missing' | 'error' | 'exited', detail?: string) => void,
-  onMissing: () => void,
-  reg: typeof import('../../api/ptyRegistry')
+  onStatus: (
+    status: 'connecting' | 'ready' | 'missing' | 'error' | 'exited',
+    detail?: string
+  ) => void,
+  onMissing: () => void
 ): Promise<CreateOutcome> {
   const res = await ptyCreate({
     sessionKey: key,
@@ -303,7 +310,10 @@ function subscribePtyStreams(params: {
   cancellation: CancellationSlot;
   ptyId: string | null;
   ptyIdRef: { current: string | null };
-  onStatus: (status: 'connecting' | 'ready' | 'missing' | 'error' | 'exited', detail?: string) => void;
+  onStatus: (
+    status: 'connecting' | 'ready' | 'missing' | 'error' | 'exited',
+    detail?: string
+  ) => void;
   addDisposable: (fn: () => void) => void;
   writeOutput?: (data: string) => void;
 }): void {

@@ -19,7 +19,9 @@ export interface ComposerPlanProgressBarProps {
   active?: boolean;
   mode?: 'plan' | 'goal';
   modeLabel?: string;
+  /** 兼容既有调用方/用例保留：进度条按 steps 渲染，本组件不再单独消费序号。 */
   currentStep?: number;
+  /** 同 currentStep：总数由 steps.length 决定，保留入参以便调用方逐步收敛。 */
   totalSteps?: number;
   steps?: PlanStepItem[];
   activeStepText?: string;
@@ -32,6 +34,10 @@ export interface ComposerPlanProgressBarProps {
   onTogglePause?: () => void;
   isPaused?: boolean;
   onStop?: () => void;
+  /**
+   * 未消费：计划审批入口由 ApprovalDock 承担（见 ChatComposerWrapper 的 liftApproval 分支）。
+   * 保留入参仅为不打断既有调用方接线；是否下线需 UI 侧裁决。
+   */
   onApprovePlan?: () => void;
   className?: string;
 }
@@ -42,12 +48,12 @@ function formatDuration(sec: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export const ComposerPlanProgressBar: React.FC<ComposerPlanProgressBarProps> = ({
+export const ComposerPlanProgressBar: React.FC<
+  ComposerPlanProgressBarProps
+> = ({
   active = true,
   mode = 'plan',
   modeLabel = '计划模式',
-  currentStep = 1,
-  totalSteps,
   steps = [],
   activeStepText,
   durationText,
@@ -59,7 +65,6 @@ export const ComposerPlanProgressBar: React.FC<ComposerPlanProgressBarProps> = (
   onTogglePause,
   isPaused = false,
   onStop,
-  onApprovePlan,
   className = '',
 }) => {
   const [internalExpanded, setInternalExpanded] = useState(false);
@@ -154,7 +159,12 @@ export const ComposerPlanProgressBar: React.FC<ComposerPlanProgressBarProps> = (
           aria-expanded={isExpanded}
           aria-label={`切换${modeLabel}详情展开`}
         >
-          <AppIcon name="target" size={13} className={`${styles.modeIcon} mode-icon`} aria-hidden />
+          <AppIcon
+            name="target"
+            size={13}
+            className={`${styles.modeIcon} mode-icon`}
+            aria-hidden
+          />
           <span className="mode-text">{modeLabel}</span>
         </Button>
 
@@ -175,7 +185,9 @@ export const ComposerPlanProgressBar: React.FC<ComposerPlanProgressBarProps> = (
         >
           <div className={`${styles.planRoller} plan-roller`}>
             <div className={`${styles.planRollerTrack} plan-roller-track`}>
-              <div className={`${styles.planStep} plan-step`}>{currentActiveText}</div>
+              <div className={`${styles.planStep} plan-step`}>
+                {currentActiveText}
+              </div>
             </div>
           </div>
         </div>
@@ -183,7 +195,9 @@ export const ComposerPlanProgressBar: React.FC<ComposerPlanProgressBarProps> = (
         <div className={`${styles.planSpacer} plan-spacer`} />
 
         <div className={`${styles.planRightControls} plan-right-controls`}>
-          <span className={`${styles.planDuration} plan-duration`}>{displayDuration}</span>
+          <span className={`${styles.planDuration} plan-duration`}>
+            {displayDuration}
+          </span>
 
           <div className={`${styles.planQuickActions} plan-quick-actions`}>
             {onEditGoal ? (

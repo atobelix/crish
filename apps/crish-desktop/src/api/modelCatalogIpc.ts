@@ -11,9 +11,7 @@ import {
   providerProbeScanModels,
   type ScannedModel as WireScannedModel,
 } from './provider-profiles/rustProfileStore';
-import {
-  applyCatalogCacheSnapshot,
-} from './pricingResolver';
+import { applyCatalogCacheSnapshot } from './pricingResolver';
 import type {
   CatalogCacheSnapshot,
   CatalogSnapshotPrice,
@@ -22,13 +20,11 @@ import type {
 import { logger } from '../services/LoggerService';
 import { errorStore } from '../services/ErrorStore';
 import { normalizeModelIdText } from './modelCatalogPure';
-import { modelRefKey } from './modelsCatalogTypes';
 import { upsertModelMetaExport, getModelMeta } from './modelCatalogMeta';
 import type {
   CatalogModelEntry,
   CatalogSnapshotEntryWire,
   CatalogSnapshotWire,
-  ScannedModel,
   ScannedModelCapabilities,
 } from './modelCatalogTypes';
 import {
@@ -264,9 +260,10 @@ export async function fetchCatalogSnapshot(): Promise<boolean> {
   } catch (e) {
     logger.error('出厂能力字典读取抛异常，定价与能力面按「未收录」呈现：', {
       module: 'modelCatalog',
-      err: e instanceof Error
-        ? { message: e.message, stack: e.stack, name: e.name }
-        : { message: String(e) },
+      err:
+        e instanceof Error
+          ? { message: e.message, stack: e.stack, name: e.name }
+          : { message: String(e) },
     });
     try {
       errorStore.push({

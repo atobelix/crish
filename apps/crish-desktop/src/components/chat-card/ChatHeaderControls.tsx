@@ -159,7 +159,6 @@ export function useModelSelection(
 interface ModelBadgePickerProps {
   engineModel: string;
   needsModelSetup: boolean;
-  activeProfileId?: string | null;
   showModelDropdown?: boolean;
   setShowModelDropdown?: React.Dispatch<React.SetStateAction<boolean>>;
 }
@@ -167,7 +166,6 @@ interface ModelBadgePickerProps {
 export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
   engineModel,
   needsModelSetup,
-  activeProfileId,
   showModelDropdown: showModelDropdownProp,
   setShowModelDropdown: setShowModelDropdownProp,
 }) => {

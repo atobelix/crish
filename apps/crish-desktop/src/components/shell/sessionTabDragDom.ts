@@ -1,7 +1,6 @@
 import {
   SESSION_TAB_STRIP_SHIFT_EASE,
   SESSION_TAB_STRIP_SHIFT_MS,
-  SESSION_TAB_STRIP_SHIFT_PX,
 } from './sessionTabDragFeel';
 import styles from './sessionTabDrag.module.css';
 

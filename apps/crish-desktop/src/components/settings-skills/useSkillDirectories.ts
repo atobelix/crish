@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { toast } from '../../services/toast/ToastContext';
 import {
   addExtraSkillDir,
@@ -16,7 +16,10 @@ export interface UseSkillDirectoriesApi {
   setDiscoverPick: Setter<Record<string, boolean>>;
   setCreateMode: Setter<'none' | 'paths' | 'manual'>;
   setExtraOpen: Setter<boolean>;
-  refresh: (opts?: { promptNew?: boolean; scope?: ScopeFilter }) => Promise<void>;
+  refresh: (opts?: {
+    promptNew?: boolean;
+    scope?: ScopeFilter;
+  }) => Promise<void>;
 }
 
 export function useSkillDirectories(api: UseSkillDirectoriesApi) {
@@ -28,8 +31,9 @@ export function useSkillDirectories(api: UseSkillDirectoriesApi) {
       return [];
     }
   });
-  const [discoverCandidates, setDiscoverCandidatesInternal] =
-    useState<DesktopSkill[] | null>(null);
+  const [discoverCandidates, setDiscoverCandidatesInternal] = useState<
+    DesktopSkill[] | null
+  >(null);
   const [discoverPick, setDiscoverPickInternal] = useState<
     Record<string, boolean>
   >({});
@@ -74,9 +78,7 @@ export function useSkillDirectories(api: UseSkillDirectoriesApi) {
     }
   };
 
-  const applyDiscoverImport = async (
-    mode: 'selected' | 'all' | 'skip'
-  ) => {
+  const applyDiscoverImport = async (mode: 'selected' | 'all' | 'skip') => {
     if (!discoverCandidates) {
       setDiscoverCandidatesInternal(null);
       return;

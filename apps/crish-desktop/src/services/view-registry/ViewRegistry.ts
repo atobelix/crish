@@ -1,4 +1,3 @@
-import type React from 'react';
 import type { IconName } from '../../components/ui/icons';
 import type {
   ViewDefinition,
@@ -38,7 +37,8 @@ class ViewRegistryImpl {
             filePath = rawPath;
           }
           const searchParams = new URLSearchParams(queryStr);
-          const modeParam = searchParams.get('mode') || searchParams.get('initialMode');
+          const modeParam =
+            searchParams.get('mode') || searchParams.get('initialMode');
           const initialMode = modeParam === 'diff' ? 'diff' : 'plain';
           let line: number | undefined;
           const lineStr = searchParams.get('line');

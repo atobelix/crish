@@ -168,7 +168,13 @@ export type NotePaperStrictPanelProps = {
   /** 切换侧栏抽屉展开/收起回调 */
   onToggleSidebar?: () => void;
   /** 多文档元信息列表（供轻量下拉切换触点使用） */
-  documents?: readonly { id?: string; docId?: string; title: string; updatedAt?: number; blockCount?: number }[];
+  documents?: readonly {
+    id?: string;
+    docId?: string;
+    title: string;
+    updatedAt?: number;
+    blockCount?: number;
+  }[];
   /** 选择切换文档回调 */
   onSelectDoc?: (docId: string) => void;
   /** 新建文档回调 */
@@ -182,7 +188,7 @@ export type NotePaperStrictPanelProps = {
   /**
    * A-INV-02 镜像漂移报告（CONN-E2 opt-in 装配面）。
    * 有值 → Strict 面板挂 StatusBar 并展示漂移分类。
-   * 历史：986043bfc 曾误删挂载点并在此加 @deprecated，已随挂载点一并恢复。
+   * 历史：986043bfc 曾误删挂载点并在此加 deprecated 注解，已随挂载点一并恢复。
    */
   mirrorDriftReport?: MirrorDriftReportView | null;
   /** A-INV-02 数据来源标注（poll / os / injected / unknown），透传 StatusBar */

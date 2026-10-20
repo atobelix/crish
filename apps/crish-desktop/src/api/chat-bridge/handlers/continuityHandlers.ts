@@ -106,7 +106,7 @@ export function onRecoveryEscalated(
 ): void {
   const sid = String(envelope.event.sessionId ?? '').trim();
   if (!sid) return;
-  const { detail, subagentRunId } = envelope.event;
+  const { subagentRunId } = envelope.event;
   if (subagentRunId === undefined || subagentRunId === null || !subagentRunId) {
     // 熔断侧：无子代理归属，已废弃全局断路器状态
     return;

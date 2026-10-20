@@ -26,10 +26,7 @@ export interface ModernToolCallProps {
 /**
  * 从入参中提取适合展示在头部胶囊中的高频关键参数（如 query, path, pattern 等）
  */
-function extractParamPill(
-  rawArgs: string | undefined,
-  name: string
-): string | undefined {
+function extractParamPill(rawArgs: string | undefined): string | undefined {
   if (!rawArgs) return undefined;
   const parsed = parseToolArgsSafe(rawArgs);
   const obj = parsed.rawObject;
@@ -38,12 +35,16 @@ function extractParamPill(
   }
 
   // 优先级检索：query > pattern > path > file > target
-  if (typeof obj.query === 'string' && obj.query.trim()) return obj.query.trim();
-  if (typeof obj.pattern === 'string' && obj.pattern.trim()) return obj.pattern.trim();
+  if (typeof obj.query === 'string' && obj.query.trim())
+    return obj.query.trim();
+  if (typeof obj.pattern === 'string' && obj.pattern.trim())
+    return obj.pattern.trim();
   if (typeof obj.path === 'string' && obj.path.trim()) return obj.path.trim();
-  if (typeof obj.filePath === 'string' && obj.filePath.trim()) return obj.filePath.trim();
+  if (typeof obj.filePath === 'string' && obj.filePath.trim())
+    return obj.filePath.trim();
   if (typeof obj.file === 'string' && obj.file.trim()) return obj.file.trim();
-  if (typeof obj.targetFile === 'string' && obj.targetFile.trim()) return obj.targetFile.trim();
+  if (typeof obj.targetFile === 'string' && obj.targetFile.trim())
+    return obj.targetFile.trim();
 
   // 若无上述标准字段，取第一个字符串类型的属性值
   for (const [_, val] of Object.entries(obj)) {
@@ -91,7 +92,7 @@ export const ModernToolCall: React.FC<ModernToolCallProps> = ({
 
   // 3. 结构化 JSON 工具：提取胶囊关键参数与动作文本
   const actionText = toolHumanLabel(tool as MessageToolCall) || name;
-  const paramPill = extractParamPill(argsStr, name);
+  const paramPill = extractParamPill(argsStr);
 
   return (
     <ModernJsonToolCall

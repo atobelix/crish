@@ -10,7 +10,6 @@ import { emitUiEvent } from '../uiEvents';
 import { configProfileApply } from './rustProfileStore';
 import {
   type FlatModelChoice,
-  type ProviderProfile,
   type ResolvedModelSelection,
 } from './profileCatalog';
 import {

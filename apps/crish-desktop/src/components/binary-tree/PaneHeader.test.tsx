@@ -308,9 +308,11 @@ describe('PaneHeader 叶子拥有会话标签', () => {
 
     fireEvent.click(getByLabelText('关闭 会话一'));
 
-    // 锁宽仅经 --tab-item-width 单变量通道（无 --tab-locked-width 第二变量、无 !important 覆盖）
+    // 锁宽仅经 --pane-tab-item-width 单变量通道（无 --tab-locked-width 第二变量、无 !important 覆盖）
     expect(tablist.getAttribute('data-locked')).toBe('true');
-    expect(tablist.style.getPropertyValue('--tab-item-width')).toBe('120px');
+    expect(tablist.style.getPropertyValue('--pane-tab-item-width')).toBe(
+      '120px'
+    );
 
     // 场景 A：伪离开事件（如指针仍处于顶部条带矩形内部或子节点卸载）不解锁
     const header = container.querySelector(
@@ -330,12 +332,16 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     // 指针仍在顶栏范围 (y=18, x=200) 内时触发的 mouseleave 绝不误清
     fireEvent.mouseLeave(tablist, { clientX: 200, clientY: 18 });
     expect(tablist.getAttribute('data-locked')).toBe('true');
-    expect(tablist.style.getPropertyValue('--tab-item-width')).toBe('120px');
+    expect(tablist.style.getPropertyValue('--pane-tab-item-width')).toBe(
+      '120px'
+    );
 
     // 场景 B：指针真正离开顶部条带（如向下移入聊天区 y=50 或无坐标移出）才触发平缓解锁
     fireEvent.mouseLeave(tablist, { clientX: 200, clientY: 50 });
     expect(tablist.getAttribute('data-locked')).toBe('false');
-    expect(tablist.style.getPropertyValue('--tab-item-width')).toBe('240px');
+    expect(tablist.style.getPropertyValue('--pane-tab-item-width')).toBe(
+      '240px'
+    );
   });
 
   it('连续快速关闭多个标签时锁定态持续保持且各自摘除互不取消', () => {
@@ -363,13 +369,17 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     // 第一次点击关闭 ta1
     fireEvent.click(getByLabelText('关闭 会话一'));
     expect(tablist.getAttribute('data-locked')).toBe('true');
-    expect(tablist.style.getPropertyValue('--tab-item-width')).toBe('95px');
+    expect(tablist.style.getPropertyValue('--pane-tab-item-width')).toBe(
+      '95px'
+    );
 
     // ta1 离场到位摘除；连击节奏下锁定态绝不意外改变大小
     fireEvent.transitionEnd(tab1, { propertyName: 'flex-basis' });
     expect(shellMocks.removeTab).toHaveBeenCalledWith('leaf-a', 'ta1');
     expect(tablist.getAttribute('data-locked')).toBe('true');
-    expect(tablist.style.getPropertyValue('--tab-item-width')).toBe('95px');
+    expect(tablist.style.getPropertyValue('--pane-tab-item-width')).toBe(
+      '95px'
+    );
 
     // 快速连续点击关闭 ta2：与 ta1 的摘除互不取消
     fireEvent.click(getByLabelText('关闭 会话二'));
@@ -416,7 +426,9 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     // 会主动计算并拉伸至 121px 将 ta2 的叉号精准对齐到光标
     fireEvent.click(getByLabelText('关闭 会话三'), { clientX: 230 });
     expect(tablist.getAttribute('data-locked')).toBe('true');
-    expect(tablist.style.getPropertyValue('--tab-item-width')).toBe('121px');
+    expect(tablist.style.getPropertyValue('--pane-tab-item-width')).toBe(
+      '121px'
+    );
 
     const tab3 = tablist.querySelector('[data-tab-id="ta3"]') as HTMLElement;
     fireEvent.transitionEnd(tab3, { propertyName: 'flex-basis' });
@@ -439,7 +451,9 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     // 用户铁律：已超出正常标准标签宽度（240px），不强行放大，严格锁定在 240px 上限
     fireEvent.click(getByLabelText('关闭 会话二'), { clientX: 450 });
     expect(tablist.getAttribute('data-locked')).toBe('true');
-    expect(tablist.style.getPropertyValue('--tab-item-width')).toBe('240px');
+    expect(tablist.style.getPropertyValue('--pane-tab-item-width')).toBe(
+      '240px'
+    );
   });
 
   it('标签始终具备严格等宽的 CSS 变量契约，绝不因文字字数长短而不同', () => {
@@ -454,7 +468,9 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     const { container } = render(<PaneHeader leaf={leaf} isActive isChat />);
     const tablist = container.querySelector('[role="tablist"]') as HTMLElement;
     // 默认空闲态下均分使用标准 240px 宽度
-    expect(tablist.style.getPropertyValue('--tab-item-width')).toBe('240px');
+    expect(tablist.style.getPropertyValue('--pane-tab-item-width')).toBe(
+      '240px'
+    );
   });
 
   it('当标签总宽度超出容器时全员等宽均分压缩，严禁溢出屏幕', () => {
@@ -486,7 +502,9 @@ describe('PaneHeader 叶子拥有会话标签', () => {
 
     // 容器 500px，非标签占用 36px，可用 464px
     // 4 标签 3 间隙 (12px)，(464 - 12) / 4 = 113px
-    expect(tablist.style.getPropertyValue('--tab-item-width')).toBe('113px');
+    expect(tablist.style.getPropertyValue('--pane-tab-item-width')).toBe(
+      '113px'
+    );
   });
 
   it('入场为 @starting-style 揭幕单轨：挂载后 data-booted 置位，无入场类状态机', () => {

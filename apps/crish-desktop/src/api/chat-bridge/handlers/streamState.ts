@@ -26,7 +26,7 @@ export {
  *
  * 传输层生命周期解耦（评审 03/04）：
  * 纯净网络生命周期（unsub, endTimer, cancelled, finished）继承自 `StreamRunLifecycle`。
- * 原有的文本增量账本字段标记为 @deprecated 过渡层，保持既有引用者（如 dataPlaneRouter、测试套件）
+ * 原有的文本增量账本字段标记为 deprecated 过渡层，保持既有引用者（如 dataPlaneRouter、测试套件）
  * 100% 向后兼容，杜绝编译与类型断裂。
  */
 export interface StreamState extends StreamRunLifecycle {
@@ -45,6 +45,8 @@ export interface StreamState extends StreamRunLifecycle {
   /**
    * 每轮流式增量文本账本（按 turnIndex 索引）。
    * @deprecated 线性流重构中逐步废弃，单轨化流式推进，由单增量账本替代。
+   * @see assistantText（当前单增量账本）
+   * @removeWhen messageHandlers/dataPlaneRouter 与测试套件全部改读单增量账本后删除
    */
   turnStreamedTexts?: Map<number, string>;
   /**
@@ -54,6 +56,8 @@ export interface StreamState extends StreamRunLifecycle {
   /**
    * 每轮 message-end 权威终态文本快照账本（按 turnIndex 索引）。
    * @deprecated 线性流重构中逐步废弃，单轨化流式推进，由单增量账本替代。
+   * @see messageEndTurnSegments（当前权威终态账本）
+   * @removeWhen messageHandlers 各分支不再读写该账本后删除
    */
   turnAuthoritativeTexts?: Map<number, string>;
   /**
@@ -69,6 +73,8 @@ export interface StreamState extends StreamRunLifecycle {
   /**
    * 纯净运行期生命周期引用句柄（过渡可选兼容属性，未传时 StreamState 自身即 StreamRunLifecycle）。
    * @deprecated 推荐直接使用 StreamRunLifecycle 纯函数或 StreamState 自身字段
+   * @see StreamRunLifecycle
+   * @removeWhen handlerEnv 等取用点全部直接读 StreamState 字段后删除
    */
   lifecycle?: StreamRunLifecycle;
 }
@@ -76,9 +82,7 @@ export interface StreamState extends StreamRunLifecycle {
 /**
  * 创建包含默认生命周期与文本状态的 StreamState 实例。
  */
-export function createStreamState(
-  initial?: Partial<StreamState>
-): StreamState {
+export function createStreamState(initial?: Partial<StreamState>): StreamState {
   return {
     ...createStreamRunLifecycle(initial),
     assistantText: initial?.assistantText ?? '',

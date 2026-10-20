@@ -1,9 +1,5 @@
-import type {
-  AvatarDefinition,
-  AvatarEntityPreset,
-} from '@oneworks/avatar';
+import type { AvatarDefinition, AvatarEntityPreset } from '@oneworks/avatar';
 import {
-  AVATAR_BUILT_IN_ENTITY_PRESETS,
   createAvatarEntityParts,
   getAvatarEntityPresetFaceStyle,
   getAvatarEntityPresetScene,
@@ -17,7 +13,8 @@ import {
   isCustomCreation,
 } from './creationModels';
 
-export type AvatarEntityOrCreationPreset = AvatarEntityPreset | CustomCreationId;
+export type AvatarEntityOrCreationPreset =
+  AvatarEntityPreset | CustomCreationId;
 
 export interface AnimalPresetInfo {
   id: AvatarEntityOrCreationPreset;
@@ -36,7 +33,8 @@ export const ALL_3D_ANIMALS: AnimalPresetInfo[] = [
     emoji: '🎹',
     category: 'creations',
     badge: '3D 升盖/黑白键/支架',
-    description: '严格按照图2圈红纯白三角钢琴1:1建模，开启升起琴盖、黄铜支架、黑白琴键与三支立式琴腿',
+    description:
+      '严格按照图2圈红纯白三角钢琴1:1建模，开启升起琴盖、黄铜支架、黑白琴键与三支立式琴腿',
   },
   {
     id: 'retro-walkman',
@@ -44,7 +42,8 @@ export const ALL_3D_ANIMALS: AnimalPresetInfo[] = [
     emoji: '📻',
     category: 'creations',
     badge: '3D 视窗/双滚轮/耳罩',
-    description: '严格按照图2圈红金色磁带随身听1:1建模，双转动带轮、透明视窗、机械按键与钢带红海绵立体耳机',
+    description:
+      '严格按照图2圈红金色磁带随身听1:1建模，双转动带轮、透明视窗、机械按键与钢带红海绵立体耳机',
   },
   {
     id: 'milk-bottle',
@@ -52,7 +51,8 @@ export const ALL_3D_ANIMALS: AnimalPresetInfo[] = [
     emoji: '🥛',
     category: 'creations',
     badge: '3D 皇冠盖/曲奇饼/托盘',
-    description: '严格按照图3圈红纯白牛奶瓶与巧克力曲奇1:1建模，复古玻璃牛奶瓶、压花瓶标、牛奶杯与木纹底托',
+    description:
+      '严格按照图3圈红纯白牛奶瓶与巧克力曲奇1:1建模，复古玻璃牛奶瓶、压花瓶标、牛奶杯与木纹底托',
   },
   {
     id: 'kitchen-mixer',
@@ -60,7 +60,8 @@ export const ALL_3D_ANIMALS: AnimalPresetInfo[] = [
     emoji: '🥣',
     category: 'creations',
     badge: '3D 悬臂/搅打头/奶油盆',
-    description: '严格按照图3圈红宝蓝+红黄复古厨师机1:1建模，流线型机头、电镀旋钮、搅拌盆与雪白打发奶油',
+    description:
+      '严格按照图3圈红宝蓝+红黄复古厨师机1:1建模，流线型机头、电镀旋钮、搅拌盆与雪白打发奶油',
   },
   {
     id: 'sandcastle',
@@ -68,7 +69,8 @@ export const ALL_3D_ANIMALS: AnimalPresetInfo[] = [
     emoji: '🏰',
     category: 'creations',
     badge: '3D 城堡尖顶/拱门/红旗',
-    description: '严格按照图1圈红海边沙堡1:1建模，双侧圆柱塔楼、锥形堡顶、垛口拱形城门与飘扬的小旗帜',
+    description:
+      '严格按照图1圈红海边沙堡1:1建模，双侧圆柱塔楼、锥形堡顶、垛口拱形城门与飘扬的小旗帜',
   },
   {
     id: 'acoustic-guitar',
@@ -76,7 +78,8 @@ export const ALL_3D_ANIMALS: AnimalPresetInfo[] = [
     emoji: '🎸',
     category: 'creations',
     badge: '3D 葫芦箱体/音孔/旋钮',
-    description: '严格按照图2圈红原声吉他1:1建模，双弧度共鸣箱体、深邃黑音孔、修长乌木琴颈与金属弦钮',
+    description:
+      '严格按照图2圈红原声吉他1:1建模，双弧度共鸣箱体、深邃黑音孔、修长乌木琴颈与金属弦钮',
   },
   {
     id: 'blue-mosque',
@@ -84,7 +87,8 @@ export const ALL_3D_ANIMALS: AnimalPresetInfo[] = [
     emoji: '🕌',
     category: 'creations',
     badge: '3D 蓝穹顶/四宣礼塔/拱门',
-    description: '严格按照图3圈红伊斯坦布尔蓝色清真寺1:1建模，经典中央蔚蓝大穹顶、金色新月、四座对称修长宣礼尖塔与拱门阶梯',
+    description:
+      '严格按照图3圈红伊斯坦布尔蓝色清真寺1:1建模，经典中央蔚蓝大穹顶、金色新月、四座对称修长宣礼尖塔与拱门阶梯',
   },
   {
     id: 'tropical-flower',
@@ -92,7 +96,8 @@ export const ALL_3D_ANIMALS: AnimalPresetInfo[] = [
     emoji: '🌺',
     category: 'creations',
     badge: '3D 五瓣扶桑/金蕊/热带阔叶',
-    description: '严格按照图3圈红热带洋红扶桑花1:1建模，五瓣交叠娇艳洋红花瓣、深绯红喉部、突出金色雄蕊花丝管与墨绿阔叶',
+    description:
+      '严格按照图3圈红热带洋红扶桑花1:1建模，五瓣交叠娇艳洋红花瓣、深绯红喉部、突出金色雄蕊花丝管与墨绿阔叶',
   },
   {
     id: 'flamingo',
@@ -100,7 +105,8 @@ export const ALL_3D_ANIMALS: AnimalPresetInfo[] = [
     emoji: '🦩',
     category: 'creations',
     badge: '3D 优雅S弯颈/下弯黑喙/立足',
-    description: '严格按照图1圈红海滩火烈鸟1:1建模，优雅S形弯颈、标志性向下弯折黑尖粉喙、饱满粉色羽翼与单腿微曲涉水造型',
+    description:
+      '严格按照图1圈红海滩火烈鸟1:1建模，优雅S形弯颈、标志性向下弯折黑尖粉喙、饱满粉色羽翼与单腿微曲涉水造型',
   },
   {
     id: 'jazz-clarinet',
@@ -108,7 +114,8 @@ export const ALL_3D_ANIMALS: AnimalPresetInfo[] = [
     emoji: '🎷',
     category: 'creations',
     badge: '3D 乌木管体/金键/喇叭口',
-    description: '严格按照图2圈红斜置爵士单簧管1:1建模，深邃靛蓝管身、微翘喇叭口、金边号圈、金光闪烁音孔机械键位与飘动音符',
+    description:
+      '严格按照图2圈红斜置爵士单簧管1:1建模，深邃靛蓝管身、微翘喇叭口、金边号圈、金光闪烁音孔机械键位与飘动音符',
   },
   {
     id: 'rock-drums',
@@ -116,7 +123,8 @@ export const ALL_3D_ANIMALS: AnimalPresetInfo[] = [
     emoji: '🥁',
     category: 'creations',
     badge: '3D 纯白大底鼓/红军鼓/吊镲',
-    description: '严格按照图2圈红摇滚架子鼓1:1建模，电镀圈纯白大底鼓、底鼓踏板、珊瑚红小军鼓、天蓝通通鼓、金属支架与金铜吊镲',
+    description:
+      '严格按照图2圈红摇滚架子鼓1:1建模，电镀圈纯白大底鼓、底鼓踏板、珊瑚红小军鼓、天蓝通通鼓、金属支架与金铜吊镲',
   },
   {
     id: 'emerald-crab',
@@ -124,50 +132,275 @@ export const ALL_3D_ANIMALS: AnimalPresetInfo[] = [
     emoji: '🦀',
     category: 'creations',
     badge: '3D 翠绿蟹甲/大螯/金海星',
-    description: '严格按照图3圈红碧水礁石青蟹1:1建模，饱满翠绿蟹壳、威武大螯臂、珊瑚礁石底座、黑曜石眼珠与伴生金色小海星',
+    description:
+      '严格按照图3圈红碧水礁石青蟹1:1建模，饱满翠绿蟹壳、威武大螯臂、珊瑚礁石底座、黑曜石眼珠与伴生金色小海星',
   },
 
   // 萌趣伴侣
-  { id: 'cat', name: '英短猫咪', emoji: '🐱', category: 'pets', badge: '3D 尖锥立耳', description: '灵动猫耳与圆润面颊，自带傲娇萌感' },
-  { id: 'dog', name: '阳光小狗', emoji: '🐕', category: 'pets', badge: '3D 微折耳朵与吻部', description: '垂耳或立耳柴犬犬系造型，元气满满' },
-  { id: 'rabbit', name: '垂耳白兔', emoji: '🐰', category: 'pets', badge: '3D 立体长耳与粉鼻', description: '修长梯形 3D 兔耳，温顺乖巧' },
-  { id: 'hamster', name: '金丝仓鼠', emoji: '🐹', category: 'pets', badge: '3D 双侧饱满鼓腮', description: '鼓囊囊的仓鼠脸蛋与灵动小圆耳' },
-  { id: 'guinea-pig', name: '荷兰猪', emoji: '🐹', category: 'pets', badge: '3D 憨厚头身', description: '圆滚滚无尾豚鼠造型，呆萌治愈' },
-  { id: 'chinchilla', name: '龙猫', emoji: '🐭', category: 'pets', badge: '3D 招风大圆耳', description: '毛茸茸的龙猫大耳朵与软萌身躯' },
-  { id: 'ferret', name: '雪原白貂', emoji: '🦡', category: 'pets', badge: '3D 灵动面具', description: '流线型小巧面庞与标志性面具斑纹' },
+  {
+    id: 'cat',
+    name: '英短猫咪',
+    emoji: '🐱',
+    category: 'pets',
+    badge: '3D 尖锥立耳',
+    description: '灵动猫耳与圆润面颊，自带傲娇萌感',
+  },
+  {
+    id: 'dog',
+    name: '阳光小狗',
+    emoji: '🐕',
+    category: 'pets',
+    badge: '3D 微折耳朵与吻部',
+    description: '垂耳或立耳柴犬犬系造型，元气满满',
+  },
+  {
+    id: 'rabbit',
+    name: '垂耳白兔',
+    emoji: '🐰',
+    category: 'pets',
+    badge: '3D 立体长耳与粉鼻',
+    description: '修长梯形 3D 兔耳，温顺乖巧',
+  },
+  {
+    id: 'hamster',
+    name: '金丝仓鼠',
+    emoji: '🐹',
+    category: 'pets',
+    badge: '3D 双侧饱满鼓腮',
+    description: '鼓囊囊的仓鼠脸蛋与灵动小圆耳',
+  },
+  {
+    id: 'guinea-pig',
+    name: '荷兰猪',
+    emoji: '🐹',
+    category: 'pets',
+    badge: '3D 憨厚头身',
+    description: '圆滚滚无尾豚鼠造型，呆萌治愈',
+  },
+  {
+    id: 'chinchilla',
+    name: '龙猫',
+    emoji: '🐭',
+    category: 'pets',
+    badge: '3D 招风大圆耳',
+    description: '毛茸茸的龙猫大耳朵与软萌身躯',
+  },
+  {
+    id: 'ferret',
+    name: '雪原白貂',
+    emoji: '🦡',
+    category: 'pets',
+    badge: '3D 灵动面具',
+    description: '流线型小巧面庞与标志性面具斑纹',
+  },
 
   // 旷野森林
-  { id: 'fox', name: '雪原灵狐', emoji: '🦊', category: 'wild', badge: '3D 挺拔大锥耳', description: '修长尖吻与英气尖耳，仙气十足' },
-  { id: 'bear', name: '北极白熊', emoji: '🐻', category: 'wild', badge: '3D 球形熊耳与突吻', description: '圆润厚实的熊耳与标志性大鼻吻' },
-  { id: 'capybara', name: '卡皮巴拉', emoji: '🛁', category: 'wild', badge: '3D 标志方块大脸', description: '情绪极其稳定的水豚，佛系淡定' },
-  { id: 'deer', name: '梅花鹿', emoji: '🦌', category: 'wild', badge: '3D 枝桠鹿角与白斑', description: '三维分叉鹿角与曲面投影梅花斑点' },
-  { id: 'otter', name: '俏皮水獭', emoji: '🦦', category: 'wild', badge: '3D 流线耳部', description: '水生灵动小耳与呆萌扁平吻部' },
-  { id: 'squirrel', name: '蓬蓬松鼠', emoji: '🐿️', category: 'wild', badge: '3D 尖尖立耳与腮', description: '贪吃小松鼠，机敏活泼' },
-  { id: 'tiger', name: '威风小虎', emoji: '🐯', category: 'wild', badge: '3D 虎耳与额纹', description: '王者额纹与圆虎耳，奶凶可爱' },
-  { id: 'lion', name: '草原小狮', emoji: '🦁', category: 'wild', badge: '3D 蓬松鬃毛体积', description: '一圈三维环抱鬃毛，威风凛凛' },
-  { id: 'hedgehog', name: '小刺猬', emoji: '🦔', category: 'wild', badge: '3D 细密背刺体元', description: '立体背刺几何簇与翘起小尖嘴' },
-  { id: 'beaver', name: '工匠海狸', emoji: '🦫', category: 'wild', badge: '3D 立体海狸门牙', description: '敦厚海狸面部与标志性门齿' },
-  { id: 'monkey', name: '机灵小猴', emoji: '🐒', category: 'wild', badge: '3D 大招风圆耳', description: '双侧突出大耳朵与调皮面纹' },
+  {
+    id: 'fox',
+    name: '雪原灵狐',
+    emoji: '🦊',
+    category: 'wild',
+    badge: '3D 挺拔大锥耳',
+    description: '修长尖吻与英气尖耳，仙气十足',
+  },
+  {
+    id: 'bear',
+    name: '北极白熊',
+    emoji: '🐻',
+    category: 'wild',
+    badge: '3D 球形熊耳与突吻',
+    description: '圆润厚实的熊耳与标志性大鼻吻',
+  },
+  {
+    id: 'capybara',
+    name: '卡皮巴拉',
+    emoji: '🛁',
+    category: 'wild',
+    badge: '3D 标志方块大脸',
+    description: '情绪极其稳定的水豚，佛系淡定',
+  },
+  {
+    id: 'deer',
+    name: '梅花鹿',
+    emoji: '🦌',
+    category: 'wild',
+    badge: '3D 枝桠鹿角与白斑',
+    description: '三维分叉鹿角与曲面投影梅花斑点',
+  },
+  {
+    id: 'otter',
+    name: '俏皮水獭',
+    emoji: '🦦',
+    category: 'wild',
+    badge: '3D 流线耳部',
+    description: '水生灵动小耳与呆萌扁平吻部',
+  },
+  {
+    id: 'squirrel',
+    name: '蓬蓬松鼠',
+    emoji: '🐿️',
+    category: 'wild',
+    badge: '3D 尖尖立耳与腮',
+    description: '贪吃小松鼠，机敏活泼',
+  },
+  {
+    id: 'tiger',
+    name: '威风小虎',
+    emoji: '🐯',
+    category: 'wild',
+    badge: '3D 虎耳与额纹',
+    description: '王者额纹与圆虎耳，奶凶可爱',
+  },
+  {
+    id: 'lion',
+    name: '草原小狮',
+    emoji: '🦁',
+    category: 'wild',
+    badge: '3D 蓬松鬃毛体积',
+    description: '一圈三维环抱鬃毛，威风凛凛',
+  },
+  {
+    id: 'hedgehog',
+    name: '小刺猬',
+    emoji: '🦔',
+    category: 'wild',
+    badge: '3D 细密背刺体元',
+    description: '立体背刺几何簇与翘起小尖嘴',
+  },
+  {
+    id: 'beaver',
+    name: '工匠海狸',
+    emoji: '🦫',
+    category: 'wild',
+    badge: '3D 立体海狸门牙',
+    description: '敦厚海狸面部与标志性门齿',
+  },
+  {
+    id: 'monkey',
+    name: '机灵小猴',
+    emoji: '🐒',
+    category: 'wild',
+    badge: '3D 大招风圆耳',
+    description: '双侧突出大耳朵与调皮面纹',
+  },
 
   // 田园牧场
-  { id: 'alpaca', name: '软萌羊驼', emoji: '🦙', category: 'pasture', badge: '3D 绒毛额发与长耳', description: '蓬松额头刘海与微斜羊驼长耳' },
-  { id: 'sheep', name: '卷毛绵羊', emoji: '🐑', category: 'pasture', badge: '3D 盘旋羊角/软毛', description: '螺旋盘羊角或软绵绵毛球包裹' },
-  { id: 'cow', name: '荷斯坦奶牛', emoji: '🐮', category: 'pasture', badge: '3D 双角与宽鼻垫', description: '立体牛角与外凸粉色大鼻吻' },
-  { id: 'pig', name: '粉嫩小猪', emoji: '🐷', category: 'pasture', badge: '3D 双孔圆筒猪鼻', description: '标志性突出的双孔小猪鼻子与大耷耳' },
+  {
+    id: 'alpaca',
+    name: '软萌羊驼',
+    emoji: '🦙',
+    category: 'pasture',
+    badge: '3D 绒毛额发与长耳',
+    description: '蓬松额头刘海与微斜羊驼长耳',
+  },
+  {
+    id: 'sheep',
+    name: '卷毛绵羊',
+    emoji: '🐑',
+    category: 'pasture',
+    badge: '3D 盘旋羊角/软毛',
+    description: '螺旋盘羊角或软绵绵毛球包裹',
+  },
+  {
+    id: 'cow',
+    name: '荷斯坦奶牛',
+    emoji: '🐮',
+    category: 'pasture',
+    badge: '3D 双角与宽鼻垫',
+    description: '立体牛角与外凸粉色大鼻吻',
+  },
+  {
+    id: 'pig',
+    name: '粉嫩小猪',
+    emoji: '🐷',
+    category: 'pasture',
+    badge: '3D 双孔圆筒猪鼻',
+    description: '标志性突出的双孔小猪鼻子与大耷耳',
+  },
 
   // 飞羽天空
-  { id: 'penguin', name: '冰川企鹅', emoji: '🐧', category: 'birds', badge: '3D 锥形硬喙', description: '立体黄色小鸟喙与黑白面具分界' },
-  { id: 'duck', name: '夏日小黄鸭', emoji: '🦆', category: 'birds', badge: '3D 宽扁鸭嘴', description: '经典扁平黄色鸭嘴巴，呆呆惹人爱' },
-  { id: 'chick', name: '元气小鸡', emoji: '🐤', category: 'birds', badge: '3D 红色小鸡冠', description: '头顶红色立体鸡冠与嫩黄小尖嘴' },
-  { id: 'owl', name: '智慧猫头鹰', emoji: '🦉', category: 'birds', badge: '3D 双侧羽耳簇', description: '神秘双耳羽毛簇与锐利勾喙' },
-  { id: 'parrot', name: '热带鹦鹉', emoji: '🦜', category: 'birds', badge: '3D 弧形弯大喙', description: '色彩斑斓的热带大弯喙与颊纹' },
-  { id: 'goose', name: '优雅白鹅', emoji: '🪿', category: 'birds', badge: '3D 鹅颈与宽喙', description: '昂首挺立的鹅嘴与洁白头部' },
+  {
+    id: 'penguin',
+    name: '冰川企鹅',
+    emoji: '🐧',
+    category: 'birds',
+    badge: '3D 锥形硬喙',
+    description: '立体黄色小鸟喙与黑白面具分界',
+  },
+  {
+    id: 'duck',
+    name: '夏日小黄鸭',
+    emoji: '🦆',
+    category: 'birds',
+    badge: '3D 宽扁鸭嘴',
+    description: '经典扁平黄色鸭嘴巴，呆呆惹人爱',
+  },
+  {
+    id: 'chick',
+    name: '元气小鸡',
+    emoji: '🐤',
+    category: 'birds',
+    badge: '3D 红色小鸡冠',
+    description: '头顶红色立体鸡冠与嫩黄小尖嘴',
+  },
+  {
+    id: 'owl',
+    name: '智慧猫头鹰',
+    emoji: '🦉',
+    category: 'birds',
+    badge: '3D 双侧羽耳簇',
+    description: '神秘双耳羽毛簇与锐利勾喙',
+  },
+  {
+    id: 'parrot',
+    name: '热带鹦鹉',
+    emoji: '🦜',
+    category: 'birds',
+    badge: '3D 弧形弯大喙',
+    description: '色彩斑斓的热带大弯喙与颊纹',
+  },
+  {
+    id: 'goose',
+    name: '优雅白鹅',
+    emoji: '🪿',
+    category: 'birds',
+    badge: '3D 鹅颈与宽喙',
+    description: '昂首挺立的鹅嘴与洁白头部',
+  },
 
   // 自然与趣味
-  { id: 'seal', name: '浅滩小海豹', emoji: '🦭', category: 'nature', badge: '3D 双侧胡须球垫', description: '嘴吻两侧立体胡须球囊，憨态可掬' },
-  { id: 'cloud', name: '晴空白云', emoji: '☁️', category: 'nature', badge: '3D 多重膨胀云团', description: '四瓣纯白膨胀球体，纯净空灵' },
-  { id: 'sun', name: '明媚暖阳', emoji: '☀️', category: 'nature', badge: '3D 放射状太阳光辉', description: '太阳金黄多角光晕，温暖灿烂' },
-  { id: 'bun', name: '白胖包子', emoji: '🥟', category: 'nature', badge: '3D 顶部捏褶', description: '白白胖胖的美味包子团子造型' },
+  {
+    id: 'seal',
+    name: '浅滩小海豹',
+    emoji: '🦭',
+    category: 'nature',
+    badge: '3D 双侧胡须球垫',
+    description: '嘴吻两侧立体胡须球囊，憨态可掬',
+  },
+  {
+    id: 'cloud',
+    name: '晴空白云',
+    emoji: '☁️',
+    category: 'nature',
+    badge: '3D 多重膨胀云团',
+    description: '四瓣纯白膨胀球体，纯净空灵',
+  },
+  {
+    id: 'sun',
+    name: '明媚暖阳',
+    emoji: '☀️',
+    category: 'nature',
+    badge: '3D 放射状太阳光辉',
+    description: '太阳金黄多角光晕，温暖灿烂',
+  },
+  {
+    id: 'bun',
+    name: '白胖包子',
+    emoji: '🥟',
+    category: 'nature',
+    badge: '3D 顶部捏褶',
+    description: '白白胖胖的美味包子团子造型',
+  },
 ];
 
 export const CATEGORIES = [
@@ -358,7 +591,7 @@ export const CURATED_SUNLIT_PALETTES: readonly SunlitPaletteConfig[] = [
 
 export function getCuratedPalette(id: string): SunlitPaletteConfig {
   return (
-    CURATED_SUNLIT_PALETTES.find(p => p.id === id) ||
+    CURATED_SUNLIT_PALETTES.find((p) => p.id === id) ||
     CURATED_SUNLIT_PALETTES[0]
   );
 }
@@ -371,7 +604,7 @@ export function applyCuratedPaletteToParts(
   parts: readonly AvatarEntityPart[],
   palette: SunlitPaletteConfig
 ): AvatarEntityPart[] {
-  return parts.map(part => {
+  return parts.map((part) => {
     const id = part.id.toLowerCase();
 
     // 1. 腮红、内耳、面颊可爱点缀、鸡冠、羽簇
@@ -429,7 +662,8 @@ export function applyCuratedPaletteToParts(
     if (id.includes('mane') || id.includes('spine')) {
       return {
         ...part,
-        baseColor: palette.id === 'tropical-hibiscus' ? '#14532D' : palette.bodyShadow,
+        baseColor:
+          palette.id === 'tropical-hibiscus' ? '#14532D' : palette.bodyShadow,
         highlightColor: palette.bodyHighlight,
         shadowColor: palette.bodyShadow,
         foregroundColor: palette.eyeOutline,
@@ -467,8 +701,8 @@ export function enrichAnimalParts(
           face: false,
           shape: 'cone',
           scaleX: 0.13,
-          scaleY: 0.20,
-          scaleZ: 0.10,
+          scaleY: 0.2,
+          scaleZ: 0.1,
           rotationX: -7,
           rotationY: -13,
           rotationZ: -9,
@@ -488,8 +722,8 @@ export function enrichAnimalParts(
           face: false,
           shape: 'cone',
           scaleX: 0.13,
-          scaleY: 0.20,
-          scaleZ: 0.10,
+          scaleY: 0.2,
+          scaleZ: 0.1,
           rotationX: -6,
           rotationY: 13,
           rotationZ: 9,
@@ -509,7 +743,7 @@ export function enrichAnimalParts(
           face: false,
           shape: 'sphere',
           scaleX: 0.22,
-          scaleY: 0.20,
+          scaleY: 0.2,
           scaleZ: 0.18,
           x: -34,
           y: 26,
@@ -526,7 +760,7 @@ export function enrichAnimalParts(
           face: false,
           shape: 'sphere',
           scaleX: 0.22,
-          scaleY: 0.20,
+          scaleY: 0.2,
           scaleZ: 0.18,
           x: 34,
           y: 26,
@@ -562,7 +796,7 @@ export function enrichAnimalParts(
           shape: 'sphere',
           scaleX: 0.09,
           scaleY: 0.08,
-          scaleZ: 0.10,
+          scaleZ: 0.1,
           x: 0,
           y: 18,
           z: 28,
@@ -661,7 +895,7 @@ export function enrichAnimalParts(
           face: false,
           shape: 'sphere',
           scaleX: 0.22,
-          scaleY: 0.20,
+          scaleY: 0.2,
           scaleZ: 0.18,
           x: -36,
           y: 30,
@@ -678,7 +912,7 @@ export function enrichAnimalParts(
           face: false,
           shape: 'sphere',
           scaleX: 0.22,
-          scaleY: 0.20,
+          scaleY: 0.2,
           scaleZ: 0.18,
           x: 36,
           y: 30,
@@ -701,7 +935,7 @@ export function enrichAnimalParts(
           face: false,
           shape: 'trapezoid',
           scaleX: 0.11,
-          scaleY: 0.50,
+          scaleY: 0.5,
           scaleZ: 0.08,
           rotationX: -3,
           rotationY: -5,
@@ -746,7 +980,7 @@ export function enrichAnimalParts(
           shape: 'ellipse',
           scaleX: 0.26,
           scaleY: 0.18,
-          scaleZ: 0.20,
+          scaleZ: 0.2,
           x: 0,
           y: 28,
           z: 18,
@@ -764,7 +998,7 @@ export function enrichAnimalParts(
           shape: 'sphere',
           scaleX: 0.09,
           scaleY: 0.08,
-          scaleZ: 0.10,
+          scaleZ: 0.1,
           x: 0,
           y: 22,
           z: 28,
@@ -780,7 +1014,7 @@ export function enrichAnimalParts(
           face: false,
           shape: 'sphere',
           scaleX: 0.22,
-          scaleY: 0.20,
+          scaleY: 0.2,
           scaleZ: 0.18,
           x: -32,
           y: 28,
@@ -797,7 +1031,7 @@ export function enrichAnimalParts(
           face: false,
           shape: 'sphere',
           scaleX: 0.22,
-          scaleY: 0.20,
+          scaleY: 0.2,
           scaleZ: 0.18,
           x: 32,
           y: 28,
@@ -820,7 +1054,7 @@ export function enrichAnimalParts(
           face: false,
           shape: 'ellipse',
           scaleX: 0.12,
-          scaleY: 0.20,
+          scaleY: 0.2,
           scaleZ: 0.08,
           rotationX: -4,
           rotationY: -7,
@@ -841,7 +1075,7 @@ export function enrichAnimalParts(
           face: false,
           shape: 'ellipse',
           scaleX: 0.12,
-          scaleY: 0.20,
+          scaleY: 0.2,
           scaleZ: 0.08,
           rotationX: -3,
           rotationY: 8,
@@ -862,7 +1096,7 @@ export function enrichAnimalParts(
           face: false,
           shape: 'capsule',
           scaleX: 0.38,
-          scaleY: 0.30,
+          scaleY: 0.3,
           scaleZ: 0.32,
           x: 0,
           y: 30,
@@ -880,7 +1114,7 @@ export function enrichAnimalParts(
           face: false,
           shape: 'sphere',
           scaleX: 0.14,
-          scaleY: 0.10,
+          scaleY: 0.1,
           scaleZ: 0.12,
           x: 0,
           y: 22,
@@ -902,7 +1136,7 @@ export function enrichAnimalParts(
           label: 'Fox Inner Ear Left',
           face: false,
           shape: 'cone',
-          scaleX: 0.20,
+          scaleX: 0.2,
           scaleY: 0.34,
           scaleZ: 0.16,
           rotationX: -5,
@@ -923,7 +1157,7 @@ export function enrichAnimalParts(
           label: 'Fox Inner Ear Right',
           face: false,
           shape: 'cone',
-          scaleX: 0.20,
+          scaleX: 0.2,
           scaleY: 0.34,
           scaleZ: 0.16,
           rotationX: -5,
@@ -965,7 +1199,7 @@ export function enrichAnimalParts(
           shape: 'sphere',
           scaleX: 0.09,
           scaleY: 0.08,
-          scaleZ: 0.10,
+          scaleZ: 0.1,
           x: 0,
           y: 24,
           z: 42,
@@ -1024,7 +1258,7 @@ export function enrichAnimalParts(
           shape: 'ellipse',
           scaleX: 0.24,
           scaleY: 0.18,
-          scaleZ: 0.20,
+          scaleZ: 0.2,
           x: 0,
           y: 26,
           z: 24,
@@ -1078,21 +1312,29 @@ export function buildComplete3DAnimalDefinition(
   if (isCustomCreation(preset)) {
     const parts = createCustomCreationParts(preset, paletteConfig);
 
-    const viewAngles: Record<CustomCreationId, { pitch: number; yaw: number; scale: number; positionY: number }> = {
-      'grand-piano': { pitch: -0.20, yaw: 0.35, scale: 1.15, positionY: -2 },
+    const viewAngles: Record<
+      CustomCreationId,
+      { pitch: number; yaw: number; scale: number; positionY: number }
+    > = {
+      'grand-piano': { pitch: -0.2, yaw: 0.35, scale: 1.15, positionY: -2 },
       'retro-walkman': { pitch: -0.12, yaw: 0.28, scale: 1.15, positionY: 0 },
-      'milk-bottle': { pitch: -0.10, yaw: 0.30, scale: 1.18, positionY: 0 },
+      'milk-bottle': { pitch: -0.1, yaw: 0.3, scale: 1.18, positionY: 0 },
       'kitchen-mixer': { pitch: -0.18, yaw: 0.38, scale: 1.12, positionY: 0 },
-      'sandcastle': { pitch: -0.22, yaw: 0.32, scale: 1.16, positionY: 6 },
-      'acoustic-guitar': { pitch: -0.12, yaw: 0.30, scale: 1.12, positionY: 0 },
+      sandcastle: { pitch: -0.22, yaw: 0.32, scale: 1.16, positionY: 6 },
+      'acoustic-guitar': { pitch: -0.12, yaw: 0.3, scale: 1.12, positionY: 0 },
       'blue-mosque': { pitch: -0.18, yaw: 0.32, scale: 1.12, positionY: 2 },
       'tropical-flower': { pitch: -0.14, yaw: 0.22, scale: 1.16, positionY: 0 },
-      'flamingo': { pitch: -0.10, yaw: 0.25, scale: 1.12, positionY: 4 },
+      flamingo: { pitch: -0.1, yaw: 0.25, scale: 1.12, positionY: 4 },
       'jazz-clarinet': { pitch: -0.12, yaw: 0.28, scale: 1.14, positionY: 0 },
       'rock-drums': { pitch: -0.18, yaw: 0.32, scale: 1.12, positionY: 2 },
-      'emerald-crab': { pitch: -0.20, yaw: 0.26, scale: 1.15, positionY: 4 },
+      'emerald-crab': { pitch: -0.2, yaw: 0.26, scale: 1.15, positionY: 4 },
     };
-    const va = viewAngles[preset] || { pitch: -0.15, yaw: 0.25, scale: 1.15, positionY: 0 };
+    const va = viewAngles[preset] || {
+      pitch: -0.15,
+      yaw: 0.25,
+      scale: 1.15,
+      positionY: 0,
+    };
 
     return {
       schema: 'oneworks.avatar' as const,
@@ -1204,7 +1446,9 @@ export function buildComplete3DAnimalDefinition(
 
   // 2. 否则是 32 款内置小动物
   const scene = getAvatarEntityPresetScene(preset as AvatarEntityPreset);
-  const baseFaceStyle = getAvatarEntityPresetFaceStyle(preset as AvatarEntityPreset);
+  const baseFaceStyle = getAvatarEntityPresetFaceStyle(
+    preset as AvatarEntityPreset
+  );
   const rawParts = createAvatarEntityParts(preset as AvatarEntityPreset);
 
   // 3D 丰富解剖学增强：注入立体内耳、鼓腮脸颊、立体吻部与鼻头，彻底告别单调“小圆人”
@@ -1214,15 +1458,25 @@ export function buildComplete3DAnimalDefinition(
   const coloredParts = applyCuratedPaletteToParts(enrichedParts, paletteConfig);
 
   // 贴花色彩适配：斑点、腮红、胡须等告别黑土
-  const adjustedDecals = (scene?.surfaceDecals || []).map(decal => {
+  const adjustedDecals = (scene?.surfaceDecals || []).map((decal) => {
     const id = decal.id.toLowerCase();
     if (id.includes('cheek') || id.includes('blush')) {
       return { ...decal, color: paletteConfig.accent };
     }
-    if (id.includes('whisker') || id.includes('outline') || id.includes('seam') || id.includes('nostril')) {
+    if (
+      id.includes('whisker') ||
+      id.includes('outline') ||
+      id.includes('seam') ||
+      id.includes('nostril')
+    ) {
       return { ...decal, color: paletteConfig.eyeOutline };
     }
-    if (id.includes('spot') || id.includes('patch') || id.includes('stripe') || id.includes('mask')) {
+    if (
+      id.includes('spot') ||
+      id.includes('patch') ||
+      id.includes('stripe') ||
+      id.includes('mask')
+    ) {
       return { ...decal, color: paletteConfig.accent };
     }
     return decal;
@@ -1314,21 +1568,23 @@ export function buildComplete3DAnimalDefinition(
         enabled: true,
         gridDensity: 28,
       },
-      view: scene?.viewState ? {
-        pitch: scene.viewState.pitch,
-        positionX: scene.viewState.positionX,
-        positionY: scene.viewState.positionY,
-        roll: scene.viewState.roll,
-        scale: scene.viewState.scale,
-        yaw: scene.viewState.yaw,
-      } : {
-        pitch: -0.06,
-        positionX: 0,
-        positionY: 0,
-        roll: 0,
-        scale: 1.15,
-        yaw: 0.08,
-      },
+      view: scene?.viewState
+        ? {
+            pitch: scene.viewState.pitch,
+            positionX: scene.viewState.positionX,
+            positionY: scene.viewState.positionY,
+            roll: scene.viewState.roll,
+            scale: scene.viewState.scale,
+            yaw: scene.viewState.yaw,
+          }
+        : {
+            pitch: -0.06,
+            positionX: 0,
+            positionY: 0,
+            roll: 0,
+            scale: 1.15,
+            yaw: 0.08,
+          },
     },
   };
 }

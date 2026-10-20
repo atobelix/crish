@@ -25,10 +25,7 @@
  */
 
 import { recordHydratePrune } from './controlMetrics';
-import {
-  pickAutoTitle,
-  type SessionTitleSource,
-} from './sessionTitleSource';
+import { pickAutoTitle, type SessionTitleSource } from './sessionTitleSource';
 
 /**
  * 仅依赖消息形状，避免与 layoutStore 循环引用。
@@ -157,7 +154,9 @@ export function isDefaultSessionTitle(
  * L/N/P/S 类可见字符。旧实现仅 trim()，纯组合标记 / 纯 Bidi 控制符的文本
  * trim 后非空会被误判为有实质内容。
  */
-export function messageHasSubstance(m: TitleMessage & { blocks?: unknown[] }): boolean {
+export function messageHasSubstance(
+  m: TitleMessage & { blocks?: unknown[] }
+): boolean {
   if (hasVisibleContent(m.text)) return true;
   if (m.toolCalls && m.toolCalls.length > 0) return true;
   if (hasVisibleContent(m.thinking)) return true;
@@ -414,9 +413,17 @@ export function firstUserMessageText(
 }
 
 export type MaybeAutoTitleOpts = {
-  /** @deprecated 同名编号只在侧栏展示，落盘路径忽略 */
+  /**
+   * @deprecated 同名编号只在侧栏展示，落盘路径忽略。
+   * @see autoTitleAssignment（落盘编号已下线，标题由 deriveSessionTitle 生成）
+   * @removeWhen 调用方不再传 existingTitles 后删除该字段
+   */
   existingTitles?: Iterable<string | null | undefined> | null;
-  /** @deprecated 落盘路径忽略 */
+  /**
+   * @deprecated 落盘路径忽略。
+   * @see autoTitleAssignment（落盘编号已下线，标题由 deriveSessionTitle 生成）
+   * @removeWhen 调用方不再传 excludeTitle 后删除该字段
+   */
   excludeTitle?: string | null;
   /** user 时任何自动路径都不改标题 */
   titleSource?: SessionTitleSource | null;
@@ -454,7 +461,11 @@ export function maybeAutoTitleFromMessages(
 }
 
 export type FillDefaultTitlesOpts = {
-  /** @deprecated 同名不再落盘编号，侧栏用展示后缀 */
+  /**
+   * @deprecated 同名不再落盘编号，侧栏用展示后缀。
+   * @see fillDefaultSessionTitles（批量补全不再写编号后缀）
+   * @removeWhen 调用方不再传 resolveCollisions 后删除该字段
+   */
   resolveCollisions?: boolean;
 };
 

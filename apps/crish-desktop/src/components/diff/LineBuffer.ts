@@ -1,10 +1,21 @@
 /**
  * apps/crish-desktop/src/components/diff/LineBuffer.ts
- * 
+ *
  * 零对象分配紧凑二进制行索引（LineBuffer SSOT）
  * 彻底消灭 content.split('\n').map(...) 产生的数万个 JS 包装对象
  * 行边界与 split('\n') 完全对齐，内存占用压缩 200 倍以上。
  */
+
+/**
+ * 是否所有 UTF-16 码元都落在 Latin-1（<= 0xFF）。
+ * 等价于原 `/[^\x00-\xff]/.test(text) === false`，用码点比较替代带控制字符的正则。
+ */
+function isLatin1Only(text: string): boolean {
+  for (let i = 0; i < text.length; i += 1) {
+    if (text.charCodeAt(i) > 0xff) return false;
+  }
+  return true;
+}
 
 export class LineBuffer {
   public readonly text: string;
@@ -28,7 +39,7 @@ export class LineBuffer {
       return;
     }
 
-    if (!/[^\x00-\xff]/.test(this.text)) {
+    if (isLatin1Only(this.text)) {
       let totalLines = 1;
       for (
         let newline = this.text.indexOf('\n');
@@ -60,7 +71,10 @@ export class LineBuffer {
 
       offsets[lineIndex] = lineStart;
       let lastLineEnd = len;
-      if (lastLineEnd > lineStart && this.text.charCodeAt(lastLineEnd - 1) === 13) {
+      if (
+        lastLineEnd > lineStart &&
+        this.text.charCodeAt(lastLineEnd - 1) === 13
+      ) {
         lastLineEnd -= 1;
       }
       const lastLineLength = lastLineEnd - lineStart;
@@ -99,7 +113,10 @@ export class LineBuffer {
       const code = this.text.charCodeAt(i);
       if (code === 10 /* '\n' */) {
         let lineEnd = i;
-        if (lineEnd > lineStart && this.text.charCodeAt(lineEnd - 1) === 13 /* '\r' */) {
+        if (
+          lineEnd > lineStart &&
+          this.text.charCodeAt(lineEnd - 1) === 13 /* '\r' */
+        ) {
           lineEnd -= 1;
           lineDisplayWidth -= 1;
         }
@@ -120,7 +137,10 @@ export class LineBuffer {
     }
 
     let lineEnd = len;
-    if (lineEnd > lineStart && this.text.charCodeAt(lineEnd - 1) === 13 /* '\r' */) {
+    if (
+      lineEnd > lineStart &&
+      this.text.charCodeAt(lineEnd - 1) === 13 /* '\r' */
+    ) {
       lineEnd -= 1;
       lineDisplayWidth -= 1;
     }
@@ -148,8 +168,10 @@ export class LineBuffer {
     const end = this.lineOffsets[lineIndex + 1]!;
 
     let realEnd = end;
-    if (realEnd > start && this.text.charCodeAt(realEnd - 1) === 10 /* '\n' */) realEnd--;
-    if (realEnd > start && this.text.charCodeAt(realEnd - 1) === 13 /* '\r' */) realEnd--;
+    if (realEnd > start && this.text.charCodeAt(realEnd - 1) === 10 /* '\n' */)
+      realEnd--;
+    if (realEnd > start && this.text.charCodeAt(realEnd - 1) === 13 /* '\r' */)
+      realEnd--;
 
     return this.text.substring(start, realEnd);
   }
@@ -163,7 +185,8 @@ export class LineBuffer {
     const end = this.lineOffsets[lineIndex + 1]!;
     let len = end - start;
     if (len > 0 && this.text.charCodeAt(end - 1) === 10 /* '\n' */) len--;
-    if (len > 0 && this.text.charCodeAt(start + len - 1) === 13 /* '\r' */) len--;
+    if (len > 0 && this.text.charCodeAt(start + len - 1) === 13 /* '\r' */)
+      len--;
     return Math.max(0, len);
   }
 

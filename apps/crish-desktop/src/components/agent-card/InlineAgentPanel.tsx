@@ -32,9 +32,7 @@ import {
 import { Priority } from '../../workers';
 import { MarkdownBlockItem } from '../chat-message-row/MarkdownBlockItem';
 import {
-  isAnyRecoveryCommandReady,
   isRecoveryCommandReady,
-  killAllSubagents,
   killSubagent,
   resumeSubagent,
 } from '../../api/subagentRecoveryApi';
@@ -54,9 +52,8 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
   parentSessionId,
   defaultOpen,
 }) => {
-  const [open, setOpen] = useState(
-    Boolean(defaultOpen)
-  );
+  // 折叠态只由 props 决定（面板内没有展开/折叠交互），无需 state
+  const open = Boolean(defaultOpen);
   const [liveSec, setLiveSec] = useState(0);
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -191,7 +188,10 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
         onClick={openInSideOnly}
         aria-label={`${displayTitle}，${statusText}`}
       >
-        <span className={`${styles.flowSubagentIcon} flow-subagent__icon`} aria-hidden>
+        <span
+          className={`${styles.flowSubagentIcon} flow-subagent__icon`}
+          aria-hidden
+        >
           <AppIcon name="zap" size={13} aria-hidden />
         </span>
         <span className={`${styles.flowSubagentTitle} flow-subagent__title`}>
@@ -199,7 +199,10 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
         </span>
         <span className={`${styles.flowSubagentStatus} flow-subagent__status`}>
           {running ? (
-            <span className={`${styles.flowSubagentDot} flow-subagent__dot`} aria-hidden />
+            <span
+              className={`${styles.flowSubagentDot} flow-subagent__dot`}
+              aria-hidden
+            />
           ) : null}
           <span>{statusText}</span>
         </span>
@@ -210,8 +213,14 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
         <div className={`${styles.flowSubagentLine2} flow-subagent__line2`}>
           <div className={`${styles.flowSubagentTraces} flow-subagent__traces`}>
             <span className={`${styles.flowSubagentCol} flow-subagent__col`}>
-              <span className={`${styles.flowSubagentTraceLead} flow-subagent__trace-lead`}>›</span>
-              <span className={`${styles.flowSubagentTrace} flow-subagent__trace is-live`}>
+              <span
+                className={`${styles.flowSubagentTraceLead} flow-subagent__trace-lead`}
+              >
+                ›
+              </span>
+              <span
+                className={`${styles.flowSubagentTrace} flow-subagent__trace is-live`}
+              >
                 {traceText}
               </span>
             </span>

@@ -6,7 +6,6 @@
  * - cleanupLegacyLocalStorageSessionsGuarded：30 天 LS 清理前逐 key 校验 SQLite 存在性
  */
 
-import { isPendingDraftSessionId as isPendingDraft } from '@crish/shared-types';
 import {
   type RustSessionIndexEntry,
   type RustSessionMessage,
@@ -186,10 +185,8 @@ export async function cleanupLegacyLocalStorageSessionsGuarded(): Promise<Legacy
       bodyRes.status === 'ok' && (bodyRes.data || []).length > 0;
     const sqliteAgentsOk =
       agentsRes.status === 'ok' && (agentsRes.data || []).length > 0;
-    const bodyRisk =
-      hasNonEmptyLegacySessionBody(id) && !sqliteBodyOk;
-    const agentsRisk =
-      hasNonEmptyLegacySessionAgents(id) && !sqliteAgentsOk;
+    const bodyRisk = hasNonEmptyLegacySessionBody(id) && !sqliteBodyOk;
+    const agentsRisk = hasNonEmptyLegacySessionAgents(id) && !sqliteAgentsOk;
     if (bodyRisk || agentsRisk) {
       preserved.push(id);
       continue;

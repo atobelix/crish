@@ -13,8 +13,7 @@ import type {
   MessageToolApprovalMeta,
   MessageToolCall,
 } from '../../store/types';
-import { getStreamTool, getStreamThinking } from '../../store/streamingStore';
-import { getCompositionRoot } from '../../app/compositionRoot';
+import { getStreamTool } from '../../store/streamingStore';
 import { buildGoalRunTaskFields } from '../../api/goalModeController';
 import {
   streamToolBatchKey,

@@ -163,7 +163,6 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
     onSlashOpenResult,
   });
 
-
   const hydrateReady = status === 'ready' || status === 'empty';
 
   const {
@@ -325,7 +324,7 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
           恢复说明：本装配于 986043bfc（BATCH-06 顶栏重构）被误删——该提交
           信息自称「严格保护 MirrorDriftStatusBar 资产」，diff 却连其唯一
           DOM 挂载点一并移除，致组件成为全仓零渲染点孤儿；随后 b1901c472
-          以 @deprecated 标记平事。此处按原契约回补（写入侧
+          以 deprecated 注解标记平事。此处按原契约回补（写入侧
           diagnosticHandlers/mirrorDetectSchedule → report 从未中断，只是
           显示面被切断）。 */}
       {showMirrorDriftBar === true || mirrorDriftReport != null ? (

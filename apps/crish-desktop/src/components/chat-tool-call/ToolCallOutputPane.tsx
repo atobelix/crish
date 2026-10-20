@@ -25,7 +25,9 @@ export interface ToolCallOutputPaneProps {
   diffs?: FileDiff[];
   images?: string[];
   isTruncated?: boolean;
+  /** 未消费：调用方已计算总行数，但本组件尚未渲染该统计（避免与本文件 readFile.totalLines 混淆）。 */
   totalLines?: number;
+  /** 未消费：同上，总字节数统计未渲染。 */
   totalBytes?: number;
   isSingleCard?: boolean;
   onOpenDiff?: (diff: FileDiff) => void;
@@ -42,8 +44,6 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
   diffs,
   images = [],
   isTruncated = false,
-  totalLines = 0,
-  totalBytes = 0,
   isSingleCard = false,
   onOpenDiff,
   onOpenTerminal,
@@ -175,7 +175,10 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
                 </Button>
               </Tooltip>
             ) : null}
-            {!emptyBody && formattedOutput && !hasDiffs && (!fileStat || !isSingleCard) ? (
+            {!emptyBody &&
+            formattedOutput &&
+            !hasDiffs &&
+            (!fileStat || !isSingleCard) ? (
               <Tooltip content={copied ? '已复制！' : '复制完整输出'}>
                 <Button
                   type="button"
@@ -185,7 +188,11 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
                   onClick={handleCopy}
                   icon={
                     copied ? (
-                      <AppIcon name="check" size={12} className={styles.copiedIcon} />
+                      <AppIcon
+                        name="check"
+                        size={12}
+                        className={styles.copiedIcon}
+                      />
                     ) : (
                       <AppIcon name="copy" size={12} />
                     )
@@ -197,7 +204,11 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
             ) : null}
           </div>
         </header>
-      ) : isSingleCard && !fileStat && !emptyBody && formattedOutput && !hasDiffs ? (
+      ) : isSingleCard &&
+        !fileStat &&
+        !emptyBody &&
+        formattedOutput &&
+        !hasDiffs ? (
         <div className={styles.toolFloatingActions}>
           {isTruncated ? (
             <Tooltip content="下载完整日志文件 (.log)">
@@ -222,7 +233,11 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
               onClick={handleCopy}
               icon={
                 copied ? (
-                  <AppIcon name="check" size={12} className={styles.copiedIcon} />
+                  <AppIcon
+                    name="check"
+                    size={12}
+                    className={styles.copiedIcon}
+                  />
                 ) : (
                   <AppIcon name="copy" size={12} />
                 )
@@ -261,7 +276,9 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
           </div>
         ) : null}
 
-        {emptyBody || (grepSearch && grepSearch.isEmpty) || (listDir && listDir.isEmpty) ? (
+        {emptyBody ||
+        (grepSearch && grepSearch.isEmpty) ||
+        (listDir && listDir.isEmpty) ? (
           <div className={styles.emptyOutputBlock}>
             <span>
               {grepSearch && grepSearch.isEmpty
@@ -288,7 +305,11 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
                       onClick={handleCopy}
                       icon={
                         copied ? (
-                          <AppIcon name="check" size={12} className={styles.copiedIcon} />
+                          <AppIcon
+                            name="check"
+                            size={12}
+                            className={styles.copiedIcon}
+                          />
                         ) : (
                           <AppIcon name="copy" size={12} />
                         )
@@ -322,7 +343,15 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
             <div className={styles.grepMatchList}>
               {grepSearch.matches.map((m, idx) => (
                 <div key={idx} className={styles.grepMatchRow}>
-                  <span className={styles.grepLineFull}>{m.filePath ? <span className={styles.grepMatchLoc}>{m.filePath}{m.line ? `:${m.line}:` : ':'}</span> : null}<span className={styles.grepMatchText}>{m.text}</span></span>
+                  <span className={styles.grepLineFull}>
+                    {m.filePath ? (
+                      <span className={styles.grepMatchLoc}>
+                        {m.filePath}
+                        {m.line ? `:${m.line}:` : ':'}
+                      </span>
+                    ) : null}
+                    <span className={styles.grepMatchText}>{m.text}</span>
+                  </span>
                 </div>
               ))}
             </div>
@@ -330,7 +359,9 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
             <div className={styles.dirList}>
               {listDir.items.map((item, idx) => (
                 <div key={idx} className={styles.dirListItem}>
-                  <span className={item.isDir ? styles.dirListIsDir : undefined}>
+                  <span
+                    className={item.isDir ? styles.dirListIsDir : undefined}
+                  >
                     {item.isDir ? `/${item.name}` : item.name}
                   </span>
                 </div>

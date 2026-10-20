@@ -6,7 +6,7 @@
  * 2. 入场 = @starting-style + transition，零 JS 状态；首轮挂载经容器 data-booted 门控关闭；
  * 3. 离场 = [data-leaving] 目标态 + transitionend 驱动摘除；负 margin-right 精确抵消
  * 4. 尺寸动画由 flex-basis / width / max-width 同步平滑驱动，根除内部元素跳变与截断；
- * 5. 等宽锁定仅经 --tab-item-width 单变量通道，禁止 !important 覆盖块。
+ * 5. 等宽锁定仅经 --pane-tab-item-width 单变量通道，禁止 !important 覆盖块。
  * 几何数值来自 utils/tabStripGeometry，由组件根节点注入 custom properties。
  *
  * 边缘避让：
@@ -74,7 +74,7 @@
   overflow-x: hidden;
   overflow-y: hidden;
   scrollbar-width: none;
-  gap: var(--tab-gap);
+  gap: var(--pane-tab-gap);
   padding-left: 2px;
   contain: layout;
 }
@@ -82,7 +82,7 @@
 .tabsList {
   display: flex;
   align-items: center;
-  gap: var(--tab-gap);
+  gap: var(--pane-tab-gap);
   height: 100%;
   flex: 0 0 auto;
   min-width: 0;
@@ -92,13 +92,13 @@
 
 /* 单个会话标签项：28px 高、8px 圆角、绝对等宽严格锁定 */
 .tabItem {
-  height: var(--tab-height);
-  min-height: var(--tab-height);
-  max-height: var(--tab-height);
-  width: var(--tab-item-width, var(--tab-width-max));
-  max-width: var(--tab-item-width, var(--tab-width-max));
+  height: var(--pane-tab-height);
+  min-height: var(--pane-tab-height);
+  max-height: var(--pane-tab-height);
+  width: var(--pane-tab-item-width, var(--pane-tab-width-max));
+  max-width: var(--pane-tab-item-width, var(--pane-tab-width-max));
   min-width: 0;
-  flex: 0 0 var(--tab-item-width, var(--tab-width-max));
+  flex: 0 0 var(--pane-tab-item-width, var(--pane-tab-width-max));
   display: inline-flex;
   align-items: center;
   padding: 0;
@@ -134,7 +134,7 @@
 .tabItem::after {
   content: '';
   position: absolute;
-  right: calc(-1 * (var(--tab-gap) / 2) - 0.5px);
+  right: calc(-1 * (var(--pane-tab-gap) / 2) - 0.5px);
   top: 50%;
   transform: translateY(-50%);
   width: 1px;
@@ -207,7 +207,7 @@
     width: 0;
     max-width: 0;
     opacity: 0;
-    margin-right: calc(-1 * var(--tab-gap));
+    margin-right: calc(-1 * var(--pane-tab-gap));
   }
 }
 
@@ -224,7 +224,7 @@
   width: 0;
   max-width: 0;
   opacity: 0;
-  margin-right: calc(-1 * var(--tab-gap));
+  margin-right: calc(-1 * var(--pane-tab-gap));
   pointer-events: none;
   overflow: hidden;
 }
@@ -274,10 +274,10 @@
 .tabCloseBtn::before {
   content: '';
   position: absolute;
-  top: calc(-1 * var(--tab-close-hit-pad));
-  bottom: calc(-1 * var(--tab-close-hit-pad));
-  left: calc(-1 * var(--tab-close-hit-pad));
-  right: calc(-1 * var(--tab-close-hit-pad));
+  top: calc(-1 * var(--pane-tab-close-hit-pad));
+  bottom: calc(-1 * var(--pane-tab-close-hit-pad));
+  left: calc(-1 * var(--pane-tab-close-hit-pad));
+  right: calc(-1 * var(--pane-tab-close-hit-pad));
   background: transparent;
 }
 
@@ -311,11 +311,11 @@
 /* 新建标签按钮（加号）：28px 与标签同高、8px 圆角，纯流式紧贴末尾标签 */
 .newTabBtn,
 .newTabBtn {
-  width: var(--tab-height);
-  height: var(--tab-height);
-  min-width: var(--tab-height);
+  width: var(--pane-tab-height);
+  height: var(--pane-tab-height);
+  min-width: var(--pane-tab-height);
   min-height: unset;
-  flex: 0 0 var(--tab-height);
+  flex: 0 0 var(--pane-tab-height);
   padding: 0;
   border-radius: var(--radius-lg);
   border: 1px solid transparent;

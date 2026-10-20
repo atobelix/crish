@@ -1,12 +1,5 @@
 import { useRef } from 'react';
-import type {
-  SharedSkillApi,
-  ScopeFilter,
-  SkillScope,
-  CreateMode,
-  BatchConfirm,
-  DiscoverPick,
-} from './skillsSettingsTypes';
+import type { SharedSkillApi } from './skillsSettingsTypes';
 
 // 类型与常量、纯函数 re-export（消费方 import 路径不变）
 export {
@@ -35,7 +28,9 @@ import { useSkillEditor } from './useSkillEditor';
 // 跨子 hook 共享 API：用 ref 容器在 render 阶段由各子 hook 写入最新 setter，
 // 斩断 list ↔ directories ↔ editor 的循环依赖。
 type SkillApiRef = SharedSkillApi & {
-  setBusyId: (val: string | null | ((prev: string | null) => string | null)) => void;
+  setBusyId: (
+    val: string | null | ((prev: string | null) => string | null)
+  ) => void;
 };
 
 function useSkillApiRef(): SkillApiRef {

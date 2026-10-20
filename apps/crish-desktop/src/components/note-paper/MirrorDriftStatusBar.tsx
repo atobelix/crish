@@ -4,7 +4,7 @@
  * 装配点：`NotePaperStrictPanel` 底部（CONN-E2 opt-in：`showMirrorDriftBar` /
  * `mirrorDriftReport`，默认关以避免空态噪声），由 `WorkspaceEmptyState` →
  * mirrorSlot → paper entry → `NoteLeafHost` 逐级透传。
- * 历史：986043bfc 误删该挂载点致本组件成为孤儿，随后被标 @deprecated；
+ * 历史：986043bfc 误删该挂载点致本组件成为孤儿，随后被标 deprecated 注解；
  * 现按原契约恢复挂载，标记一并撤销。
  *
  * ## 完成定义（本包方向子集）

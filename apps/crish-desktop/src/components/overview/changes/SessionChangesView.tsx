@@ -17,22 +17,20 @@ import styles from '../OverviewCard.module.css';
 export interface SessionChangesViewProps {
   files: UnifiedFileChange[];
   openingPath: string | null;
+  /** 未消费：底部「查看会话变更」按钮已移除（见文件头第 2 条），入参保留兼容调用方。 */
   gitCount: number;
   onOpenFile: (file: UnifiedFileChange) => void;
+  /** 未消费：同上，切换 git 视图改由 ChangesSection 的 scope 切换承担。 */
   onSwitchToGit: () => void;
 }
 
 export const SessionChangesView: React.FC<SessionChangesViewProps> = ({
   files,
   openingPath,
-  gitCount,
   onOpenFile,
-  onSwitchToGit,
 }) => {
   if (files.length === 0) {
-    return (
-      <ChangesEmptyState message="当前对话暂无文件改动" />
-    );
+    return <ChangesEmptyState message="当前对话暂无文件改动" />;
   }
 
   const gitStatusFiles: GitStatusFile[] = files.map((f) => ({

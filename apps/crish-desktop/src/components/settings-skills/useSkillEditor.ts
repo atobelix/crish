@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { toast } from '../../services/toast/ToastContext';
 import { createProjectSkill, type DesktopSkill } from '../../api/skillsApi';
 import { skillStableId } from '../../api/skillId';
@@ -94,10 +94,7 @@ export function useSkillEditor(deps: UseSkillEditorDeps, api: SharedSkillApi) {
     }
   };
 
-
-  const selectedSlash = deps.selected
-    ? skillSlashCmd(deps.selected.name)
-    : '';
+  const selectedSlash = deps.selected ? skillSlashCmd(deps.selected.name) : '';
 
   return {
     createMode,

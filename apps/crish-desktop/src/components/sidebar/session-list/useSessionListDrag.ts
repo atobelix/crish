@@ -1,6 +1,6 @@
 /**
  * useSessionListDrag.ts — 侧栏会话拖拽重排序与跨域分屏引擎
- * 
+ *
  * 架构规范（对齐 02a3e75d 纯 React 状态驱动模型 + 跨域分屏）：
  * 1. 彻底清退 DOM 级 style.transform 强行突变，所有会话行保持自然文档流；
  * 2. 拖拽过程中仅通过 dragPreview 触发 React 乐观重排，零物理震荡、零多区域抽搐；
@@ -11,7 +11,6 @@
 
 import React, { useCallback, useRef, useState } from 'react';
 import { GENERAL_FOLDER } from '../../../api/projectStore';
-import type { SessionState } from '../../../store/types';
 import { useLayoutTreeStore } from '../../../store/storeAccess';
 import styles from '../SidebarSessionList.module.css';
 import type { SidebarDragItem } from './sessionListTypes';
@@ -120,7 +119,9 @@ function resolveDropTarget(
   const stack =
     typeof document.elementsFromPoint === 'function'
       ? (document.elementsFromPoint(clientX, clientY) as Element[])
-      : ([document.elementFromPoint(clientX, clientY)].filter(Boolean) as Element[]);
+      : ([document.elementFromPoint(clientX, clientY)].filter(
+          Boolean
+        ) as Element[]);
 
   let hovered: Element | null = null;
   const ghostClass = styles.sidebarDragGhost || 'sidebar-drag-ghost';
@@ -154,12 +155,17 @@ function resolveDropTarget(
 
   const overPinned = Boolean(
     hovered.closest('[data-drop-zone="pinned"]') ||
-      (styles.pinnedDropZone && hovered.closest(`.${styles.pinnedDropZone}`)) ||
-      (styles.pinnedList && hovered.closest(`.${styles.pinnedList}`) && pinnedZone?.contains(hovered)) ||
-      (pinnedZone && (hovered === pinnedZone || pinnedZone.contains(hovered as Node)))
+    (styles.pinnedDropZone && hovered.closest(`.${styles.pinnedDropZone}`)) ||
+    (styles.pinnedList &&
+      hovered.closest(`.${styles.pinnedList}`) &&
+      pinnedZone?.contains(hovered)) ||
+    (pinnedZone &&
+      (hovered === pinnedZone || pinnedZone.contains(hovered as Node)))
   );
 
-  const sessionWrap = hovered.closest('[data-session-id]') as HTMLElement | null;
+  const sessionWrap = hovered.closest(
+    '[data-session-id]'
+  ) as HTMLElement | null;
   let targetSessionId: string | null =
     sessionWrap?.getAttribute('data-session-id') || null;
   if (targetSessionId === selfSessionId) {
@@ -193,13 +199,18 @@ function resolveDropTarget(
   }
 
   const folderEl = hovered.closest('[data-folder-name]') as HTMLElement | null;
-  const generalZone = hovered.closest('[data-drop-zone="general"]') as HTMLElement | null;
+  const generalZone = hovered.closest(
+    '[data-drop-zone="general"]'
+  ) as HTMLElement | null;
   let folder = fallbackFolder;
 
   if (overPinned) {
     folder = fallbackFolder || GENERAL_FOLDER;
   } else if (folderEl) {
-    folder = folderEl.getAttribute('data-folder-name') || fallbackFolder || GENERAL_FOLDER;
+    folder =
+      folderEl.getAttribute('data-folder-name') ||
+      fallbackFolder ||
+      GENERAL_FOLDER;
   } else if (generalZone) {
     folder = GENERAL_FOLDER;
   } else if (isGeneralFolderName(fallbackFolder)) {
@@ -210,7 +221,10 @@ function resolveDropTarget(
   if (!targetSessionId) {
     const activeZone = overPinned
       ? pinnedZone
-      : (folderEl?.querySelector('ul') || generalZone?.querySelector('ul') || folderEl || generalZone);
+      : folderEl?.querySelector('ul') ||
+        generalZone?.querySelector('ul') ||
+        folderEl ||
+        generalZone;
 
     if (activeZone) {
       const candidateRows = Array.from(
@@ -261,10 +275,16 @@ export function useSessionListDrag(
 ): UseSessionListDragResult {
   const { pinnedZoneRef, renamingSessionId, onMoveSessionRealtime } = opts;
 
-  const [activeDragItem, setActiveDragItem] = useState<SidebarDragItem | null>(null);
+  const [activeDragItem, setActiveDragItem] = useState<SidebarDragItem | null>(
+    null
+  );
   const [dragOverPinned, setDragOverPinned] = useState(false);
-  const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(null);
-  const [dragPreview, setDragPreview] = useState<SessionDragPreview | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(
+    null
+  );
+  const [dragPreview, setDragPreview] = useState<SessionDragPreview | null>(
+    null
+  );
 
   const onMoveRef = useRef(onMoveSessionRealtime);
   onMoveRef.current = onMoveSessionRealtime;
@@ -291,7 +311,12 @@ export function useSessionListDrag(
       let ghostEl: HTMLDivElement | null = null;
       let indicatorEl: HTMLDivElement | null = null;
       let raf = 0;
-      let pendingPointer: { x: number; y: number; dx: number; dy: number } | null = null;
+      let pendingPointer: {
+        x: number;
+        y: number;
+        dx: number;
+        dy: number;
+      } | null = null;
       let lastCommit: LastCommit | null = null;
       let lastPreviewKey = '';
       let lastAppliedTarget: CrossDomainTarget | null = null;
@@ -300,7 +325,9 @@ export function useSessionListDrag(
       let lastClientY = startY;
       let shiftedElements: HTMLElement[] = [];
 
-      const rowLi = (e.currentTarget as HTMLElement).closest('li') as HTMLElement | null;
+      const rowLi = (e.currentTarget as HTMLElement).closest(
+        'li'
+      ) as HTMLElement | null;
       const sourceContainer =
         rowLi?.closest('[data-drop-zone="pinned"]') ||
         rowLi?.closest('[data-folder-name]') ||
@@ -314,12 +341,14 @@ export function useSessionListDrag(
         }
         shiftedElements = [];
       };
-      const rowRect = rowLi?.getBoundingClientRect() ?? ({
-        left: startX,
-        top: startY,
-        width: 240,
-        height: 28,
-      } as DOMRect);
+      const rowRect =
+        rowLi?.getBoundingClientRect() ??
+        ({
+          left: startX,
+          top: startY,
+          width: 240,
+          height: 28,
+        } as DOMRect);
 
       const grabOffsetX = startX - rowRect.left;
       const grabOffsetY = startY - rowRect.top;
@@ -345,7 +374,12 @@ export function useSessionListDrag(
         indicatorEl.style.height = `${indRect.height}px`;
       };
 
-      const applyPointer = (clientX: number, clientY: number, dx: number, dy: number) => {
+      const applyPointer = (
+        clientX: number,
+        clientY: number,
+        dx: number,
+        dy: number
+      ) => {
         if (!dragging) return;
 
         // 1. 同步 Ghost 物理位置（GPU translate3d）
@@ -355,7 +389,14 @@ export function useSessionListDrag(
 
         // 2. 空间跨域落点探测（分屏优先）
         const tree = useLayoutTreeStore.getState().tree;
-        const target = resolveCrossDomainTarget(clientX, clientY, dx, dy, sessionId, tree);
+        const target = resolveCrossDomainTarget(
+          clientX,
+          clientY,
+          dx,
+          dy,
+          sessionId,
+          tree
+        );
         lastAppliedTarget = target;
 
         if (target.domain === 'pane-split') {
@@ -453,15 +494,13 @@ export function useSessionListDrag(
         };
 
         // 4. 在当前活动容器内驱动平滑 1D 滑动让位动效 (140ms cubic-bezier)
-        const activeContainer = (
-          isPinned
-            ? pinnedZoneRefStable.current.current
-            : (document.querySelector(
-                isGeneralFolderName(folder)
-                  ? '[data-drop-zone="general"]'
-                  : `[data-folder-name="${CSS.escape ? CSS.escape(folder) : folder.replace(/"/g, '\\"')}"]`
-              ) as HTMLElement | null)
-        );
+        const activeContainer = isPinned
+          ? pinnedZoneRefStable.current.current
+          : (document.querySelector(
+              isGeneralFolderName(folder)
+                ? '[data-drop-zone="general"]'
+                : `[data-folder-name="${CSS.escape ? CSS.escape(folder) : folder.replace(/"/g, '\\"')}"]`
+            ) as HTMLElement | null);
 
         if (activeContainer) {
           const nextShifted = shiftRowsForDrag({
@@ -484,7 +523,12 @@ export function useSessionListDrag(
         }
       };
 
-      const scheduleApply = (clientX: number, clientY: number, dx: number, dy: number) => {
+      const scheduleApply = (
+        clientX: number,
+        clientY: number,
+        dx: number,
+        dy: number
+      ) => {
         pendingPointer = { x: clientX, y: clientY, dx, dy };
         if (raf) return;
         raf = requestAnimationFrame(() => {
@@ -578,7 +622,12 @@ export function useSessionListDrag(
 
         if (dragging) {
           swallowNextClick();
-          applyPointer(ue.clientX, ue.clientY, ue.clientX - startX, ue.clientY - startY);
+          applyPointer(
+            ue.clientX,
+            ue.clientY,
+            ue.clientX - startX,
+            ue.clientY - startY
+          );
 
           if (lastAppliedTarget) {
             if (lastAppliedTarget.domain === 'pane-split') {

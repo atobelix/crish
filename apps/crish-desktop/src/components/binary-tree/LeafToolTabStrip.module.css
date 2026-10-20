@@ -64,7 +64,7 @@
 .tabsTrack {
   display: flex;
   align-items: center;
-  gap: var(--tab-gap);
+  gap: var(--pane-tab-gap);
   min-width: 0;
   flex: 1 1 auto;
   height: 100%;
@@ -78,7 +78,7 @@
 .tabsList {
   display: flex;
   align-items: center;
-  gap: var(--tab-gap);
+  gap: var(--pane-tab-gap);
   height: 100%;
   flex-shrink: 0;
 }
@@ -89,9 +89,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  height: var(--tab-height);
-  min-height: var(--tab-height);
-  max-height: var(--tab-height);
+  height: var(--pane-tab-height);
+  min-height: var(--pane-tab-height);
+  max-height: var(--pane-tab-height);
   max-width: var(--tool-tab-width-max);
   min-width: 0;
   flex: 0 0 auto;
@@ -150,7 +150,7 @@
     margin-right var(--duration-normal) var(--ease-standard);
   max-width: 0;
   opacity: 0;
-  margin-right: calc(-1 * var(--tab-gap));
+  margin-right: calc(-1 * var(--pane-tab-gap));
   border-color: transparent;
   box-shadow: none;
   pointer-events: none;
@@ -235,11 +235,11 @@
 /* Add Buttons: in-flow and pinned（双态加号：随流位 + 溢出固定位，尺寸同标签高） */
 .addBtn,
 .addBtn {
-  width: var(--tab-height);
-  height: var(--tab-height);
-  min-width: var(--tab-height);
+  width: var(--pane-tab-height);
+  height: var(--pane-tab-height);
+  min-width: var(--pane-tab-height);
   min-height: unset;
-  flex: 0 0 var(--tab-height);
+  flex: 0 0 var(--pane-tab-height);
   padding: 0;
   border-radius: var(--radius-lg);
   border: 1px solid transparent;
@@ -283,9 +283,9 @@
 .hasOverflow .addBtn.pinned,
 .hasOverflow .addBtn.pinned {
   opacity: 1;
-  width: var(--tab-height);
-  min-width: var(--tab-height);
-  flex: 0 0 var(--tab-height);
+  width: var(--pane-tab-height);
+  min-width: var(--pane-tab-height);
+  flex: 0 0 var(--pane-tab-height);
   pointer-events: auto;
   margin-right: 2px;
 }
@@ -308,7 +308,7 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  padding-left: var(--tab-gap);
+  padding-left: var(--pane-tab-gap);
   /* 叶上坞开关钉在抽屉右上（--leaf-corner-btn-* 三元组），本簇把加号/最大化让到它左边 */
   padding-right: calc(
     var(--leaf-corner-btn-size) + var(--leaf-corner-btn-inset)
@@ -320,9 +320,9 @@
 
 .sideBtn,
 .sideBtn {
-  width: var(--tab-height);
-  height: var(--tab-height);
-  min-width: var(--tab-height);
+  width: var(--pane-tab-height);
+  height: var(--pane-tab-height);
+  min-width: var(--pane-tab-height);
   min-height: unset;
   padding: 0;
   border-radius: var(--radius-lg);

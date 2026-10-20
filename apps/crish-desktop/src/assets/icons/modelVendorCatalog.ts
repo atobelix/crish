@@ -36,7 +36,20 @@ export const MODEL_VENDOR_CATALOG: Record<string, ModelVendorMeta> = {
     brandColor: '#000000',
     textColor: '#FFFFFF',
     category: 'foundation',
-    matchers: ['openai', 'chatgpt', 'gpt', 'gpt-4', 'gpt-4o', 'o1', 'o1-preview', 'o1-mini', 'o3', 'o3-mini', 'dall-e', 'text-embedding-3'],
+    matchers: [
+      'openai',
+      'chatgpt',
+      'gpt',
+      'gpt-4',
+      'gpt-4o',
+      'o1',
+      'o1-preview',
+      'o1-mini',
+      'o3',
+      'o3-mini',
+      'dall-e',
+      'text-embedding-3',
+    ],
   },
   anthropic: {
     id: 'anthropic',
@@ -44,7 +57,14 @@ export const MODEL_VENDOR_CATALOG: Record<string, ModelVendorMeta> = {
     brandColor: '#D97757',
     textColor: '#FFFFFF',
     category: 'foundation',
-    matchers: ['anthropic', 'claude', 'claude-3', 'claude-3-5-sonnet', 'claude-3-5-haiku', 'claude-3-opus'],
+    matchers: [
+      'anthropic',
+      'claude',
+      'claude-3',
+      'claude-3-5-sonnet',
+      'claude-3-5-haiku',
+      'claude-3-opus',
+    ],
   },
   google: {
     id: 'google',
@@ -52,7 +72,16 @@ export const MODEL_VENDOR_CATALOG: Record<string, ModelVendorMeta> = {
     brandColor: '#1A73E8',
     textColor: '#FFFFFF',
     category: 'foundation',
-    matchers: ['google', 'gemini', 'gemma', 'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash', 'palm', 'deepmind'],
+    matchers: [
+      'google',
+      'gemini',
+      'gemma',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash',
+      'gemini-2.0-flash',
+      'palm',
+      'deepmind',
+    ],
   },
   meta: {
     id: 'meta',
@@ -60,7 +89,15 @@ export const MODEL_VENDOR_CATALOG: Record<string, ModelVendorMeta> = {
     brandColor: '#0668E1',
     textColor: '#FFFFFF',
     category: 'foundation',
-    matchers: ['meta', 'llama', 'meta-llama', 'llama-3', 'llama-3.1', 'llama-3.2', 'llama-3.3'],
+    matchers: [
+      'meta',
+      'llama',
+      'meta-llama',
+      'llama-3',
+      'llama-3.1',
+      'llama-3.2',
+      'llama-3.3',
+    ],
   },
   mistral: {
     id: 'mistral',
@@ -68,7 +105,15 @@ export const MODEL_VENDOR_CATALOG: Record<string, ModelVendorMeta> = {
     brandColor: '#FA520F',
     textColor: '#FFFFFF',
     category: 'foundation',
-    matchers: ['mistral', 'mistralai', 'codestral', 'mixtral', 'pixtral', 'mistral-large', 'mistral-small'],
+    matchers: [
+      'mistral',
+      'mistralai',
+      'codestral',
+      'mixtral',
+      'pixtral',
+      'mistral-large',
+      'mistral-small',
+    ],
   },
   xai: {
     id: 'xai',
@@ -84,7 +129,13 @@ export const MODEL_VENDOR_CATALOG: Record<string, ModelVendorMeta> = {
     brandColor: '#39594D',
     textColor: '#FFFFFF',
     category: 'foundation',
-    matchers: ['cohere', 'command-r', 'command-r-plus', 'embed-multilingual', 'rerank'],
+    matchers: [
+      'cohere',
+      'command-r',
+      'command-r-plus',
+      'embed-multilingual',
+      'rerank',
+    ],
   },
   perplexity: {
     id: 'perplexity',
@@ -102,7 +153,15 @@ export const MODEL_VENDOR_CATALOG: Record<string, ModelVendorMeta> = {
     brandColor: '#4D6BFE',
     textColor: '#FFFFFF',
     category: 'domestic',
-    matchers: ['deepseek', 'deepseek-ai', 'deepseek-chat', 'deepseek-reasoner', 'deepseek-coder', 'deepseek-v3', 'deepseek-r1'],
+    matchers: [
+      'deepseek',
+      'deepseek-ai',
+      'deepseek-chat',
+      'deepseek-reasoner',
+      'deepseek-coder',
+      'deepseek-v3',
+      'deepseek-r1',
+    ],
   },
   qwen: {
     id: 'qwen',
@@ -110,7 +169,17 @@ export const MODEL_VENDOR_CATALOG: Record<string, ModelVendorMeta> = {
     brandColor: '#615CED',
     textColor: '#FFFFFF',
     category: 'domestic',
-    matchers: ['qwen', 'tongyi', 'aliyun', 'alibaba', 'qwen2.5', 'qwen-max', 'qwen-plus', 'qwen-turbo', 'qwq'],
+    matchers: [
+      'qwen',
+      'tongyi',
+      'aliyun',
+      'alibaba',
+      'qwen2.5',
+      'qwen-max',
+      'qwen-plus',
+      'qwen-turbo',
+      'qwq',
+    ],
   },
   moonshot: {
     id: 'moonshot',
@@ -126,7 +195,17 @@ export const MODEL_VENDOR_CATALOG: Record<string, ModelVendorMeta> = {
     brandColor: '#3859FF',
     textColor: '#FFFFFF',
     category: 'domestic',
-    matchers: ['zhipu', 'zhipuai', 'glm', 'chatglm', 'glm-4', 'glm-4-plus', 'glm-zero', 'codegeex', 'cogview'],
+    matchers: [
+      'zhipu',
+      'zhipuai',
+      'glm',
+      'chatglm',
+      'glm-4',
+      'glm-4-plus',
+      'glm-zero',
+      'codegeex',
+      'cogview',
+    ],
   },
   minimax: {
     id: 'minimax',
@@ -142,7 +221,14 @@ export const MODEL_VENDOR_CATALOG: Record<string, ModelVendorMeta> = {
     brandColor: '#325AB4',
     textColor: '#FFFFFF',
     category: 'domestic',
-    matchers: ['bytedance', 'doubao', 'volcengine', 'volces', 'skylark', 'jimeng'],
+    matchers: [
+      'bytedance',
+      'doubao',
+      'volcengine',
+      'volces',
+      'skylark',
+      'jimeng',
+    ],
   },
   stepfun: {
     id: 'stepfun',
@@ -166,7 +252,15 @@ export const MODEL_VENDOR_CATALOG: Record<string, ModelVendorMeta> = {
     brandColor: '#003425',
     textColor: '#FFFFFF',
     category: 'domestic',
-    matchers: ['zeroone', '01.ai', '01-ai', 'yi', 'yi-34b', 'yi-large', 'yi-lightning'],
+    matchers: [
+      'zeroone',
+      '01.ai',
+      '01-ai',
+      'yi',
+      'yi-34b',
+      'yi-large',
+      'yi-lightning',
+    ],
   },
   baidu: {
     id: 'baidu',
@@ -208,7 +302,13 @@ export const MODEL_VENDOR_CATALOG: Record<string, ModelVendorMeta> = {
     brandColor: '#111827',
     textColor: '#FFFFFF',
     category: 'multimodal',
-    matchers: ['blackforest', 'black-forest-labs', 'flux', 'flux.1-schnell', 'flux.1-dev'],
+    matchers: [
+      'blackforest',
+      'black-forest-labs',
+      'flux',
+      'flux.1-schnell',
+      'flux.1-dev',
+    ],
   },
   stability: {
     id: 'stability',
@@ -266,7 +366,13 @@ export const MODEL_VENDOR_CATALOG: Record<string, ModelVendorMeta> = {
     brandColor: '#000000',
     textColor: '#FFFFFF',
     category: 'infra',
-    matchers: ['jina', 'jinaai', 'jina-embeddings', 'jina-reranker', 'reader.jina.ai'],
+    matchers: [
+      'jina',
+      'jinaai',
+      'jina-embeddings',
+      'jina-reranker',
+      'reader.jina.ai',
+    ],
   },
 
   // === 5. 核心聚合与推理部署平台 ===
@@ -380,7 +486,9 @@ for (const vendor of Object.values(MODEL_VENDOR_CATALOG)) {
  *              或带聚合前缀的路径（如 'openrouter/anthropic/claude-3-5-sonnet'）
  * @returns 匹配到的厂商元数据，若无法识别则返回 null（由调用方触发兜底组件）
  */
-export function resolveModelVendor(input?: string | null): ModelVendorMeta | null {
+export function resolveModelVendor(
+  input?: string | null
+): ModelVendorMeta | null {
   if (!input) return null;
 
   const raw = input.trim().toLowerCase();
@@ -391,7 +499,7 @@ export function resolveModelVendor(input?: string | null): ModelVendorMeta | nul
   if (directHit) return directHit;
 
   // 2. 剥离可能存在的聚合平台/组织层级前缀（如 openrouter/anthropic/claude -> 拆分探测）
-  const segments = raw.split(/[\/\\]+/).filter(Boolean);
+  const segments = raw.split(/[\\/]+/).filter(Boolean);
 
   // 倒序检查每一段（例如 deepseek-ai/DeepSeek-V3 中优先检查 DeepSeek-V3，再检查 deepseek-ai）
   for (let i = segments.length - 1; i >= 0; i--) {

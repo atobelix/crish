@@ -25,7 +25,6 @@ import {
   loadModelThinkingPref,
   getLastSentContextSignature,
 } from '../SessionRuntimeRegistry';
-import { contextInjectionDispatcher } from '../contextInjectionDispatcher';
 import { getSessionStoreState, isPendingDraft } from '../../store/storeAccess';
 
 /** 暂存键（取走即清空；载荷为 { sessionId, text } 会话寻址 JSON） */
@@ -53,7 +52,11 @@ function readActiveProfileId(): string {
 /** 读本会话思考档位 Title（yaml 字典 key）。优先会话显式设定，回退模型持久偏好。无则空串。 */
 function readThinkingLevel(targetSessionId?: string): string {
   try {
-    const sid = (targetSessionId || getSessionStoreState().activeSessionId || '').trim();
+    const sid = (
+      targetSessionId ||
+      getSessionStoreState().activeSessionId ||
+      ''
+    ).trim();
     const title =
       (sid ? getSessionThinkingTitle(sid) : null) ??
       loadModelThinkingPref(readActiveProfileId(), readActiveModelId());
@@ -193,6 +196,8 @@ function clearStash(sessionId?: string): void {
 
 /**
  * @deprecated 切换时不再即时派发提示卡片。居中提示必须在用户点击发送后才带上，且位于用户消息上方。
+ * @see recordPendingContextState / takePendingContextState（切换只落 pending 快照，发送时才带上）
+ * @removeWhen 该导出调用点为 0 且外部 import 清零后删除（当前保留仅为兼容既有导入）
  */
 export function dispatchInstantContextStateNotification(
   _targetSessionId?: string | null

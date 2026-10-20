@@ -25,8 +25,6 @@
 import type {
   AssistantTimelineItem,
   ProcessTimelineSegment,
-  StateNoticeTimelineSegment,
-  TextTimelineSegment,
   TimelineSegment,
   TimelineTextItem,
 } from './toolPresentationTypes';
@@ -42,7 +40,6 @@ import { aggregateProcessMetrics } from './processMetricsEngine';
 function isProcessItem(item: AssistantTimelineItem): boolean {
   return item.kind === 'thought' || item.kind === 'tools';
 }
-
 
 /**
  * 判断正文项是否具备实际内容（空正文不作为有效界标）。
@@ -258,7 +255,10 @@ export function partitionTimelineSegments(
 /**
  * 判断给定索引之后是否还存在非空正文项。
  */
-function hasLaterText(items: readonly AssistantTimelineItem[], fromIndex: number): boolean {
+function hasLaterText(
+  items: readonly AssistantTimelineItem[],
+  fromIndex: number
+): boolean {
   for (let j = fromIndex + 1; j < items.length; j++) {
     const it = items[j]!;
     if (it.kind === 'text' && hasTextContent(it)) return true;

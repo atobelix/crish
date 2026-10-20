@@ -149,21 +149,29 @@ export function parseReadFileOutput(
     const pathMatch = header.match(/^path:\s*(.*)$/im);
     const encMatch = header.match(/^encoding:\s*(.*)$/im);
     const linesMatch = header.match(/^lines:\s*(\d+)$/im);
-    const rangeMatch = header.match(/^startLine:\s*(\d+),\s*endLine:\s*(\d+)$/im);
+    const rangeMatch = header.match(
+      /^startLine:\s*(\d+),\s*endLine:\s*(\d+)$/im
+    );
     const remainingMatch = header.match(/(\d+)\s*lines remaining/i);
     const charTruncMatch = header.match(/truncated:\s*true/i);
 
-    let remainingLines = remainingMatch?.[1] ? parseInt(remainingMatch[1], 10) : undefined;
+    let remainingLines = remainingMatch?.[1]
+      ? parseInt(remainingMatch[1], 10)
+      : undefined;
 
     // 清洗 code 末尾的引擎截断提示（如 "\n... 93 lines remaining, use contentOffset to continue ..." 或中文提示）
-    const trailingNoticeMatch = code.match(/\n\s*(\.\.\.|\…)\s*(\d+)\s*lines remaining[^\n]*$/i);
+    const trailingNoticeMatch = code.match(
+      /\n\s*(\.\.\.|…)\s*(\d+)\s*lines remaining[^\n]*$/i
+    );
     if (trailingNoticeMatch) {
       if (!remainingLines && trailingNoticeMatch[2]) {
         remainingLines = parseInt(trailingNoticeMatch[2], 10);
       }
       code = code.slice(0, trailingNoticeMatch.index).trimEnd();
     } else {
-      const trailingZhMatch = code.match(/\n\s*(\.\.\.|\…)\s*剩余\s*(\d+)\s*行[^\n]*$/i);
+      const trailingZhMatch = code.match(
+        /\n\s*(\.\.\.|…)\s*剩余\s*(\d+)\s*行[^\n]*$/i
+      );
       if (trailingZhMatch) {
         if (!remainingLines && trailingZhMatch[2]) {
           remainingLines = parseInt(trailingZhMatch[2], 10);
@@ -188,7 +196,9 @@ export function parseReadFileOutput(
   if (isReadTool) {
     let code = raw;
     let remainingLines: number | undefined;
-    const trailingNoticeMatch = code.match(/\n\s*(\.\.\.|\…)\s*(\d+)\s*lines remaining[^\n]*$/i);
+    const trailingNoticeMatch = code.match(
+      /\n\s*(\.\.\.|…)\s*(\d+)\s*lines remaining[^\n]*$/i
+    );
     if (trailingNoticeMatch) {
       if (trailingNoticeMatch[2]) {
         remainingLines = parseInt(trailingNoticeMatch[2], 10);
@@ -207,14 +217,15 @@ export function parseReadFileOutput(
 /**
  * 解析 grep_search 工具输出：
  * query: ...\nroot: ...\nmatches: ...\nvisitedFiles: ...\n---\npath:line:col: content
+ *
+ * 注：`_toolName` 保留在签名里（既有调用方按位置传第二参，含用例），
+ * 但本函数只按输出内容判定，不依赖工具名。
  */
 export function parseGrepSearchOutput(
   raw: string,
-  toolName?: string
+  _toolName?: string
 ): GrepSearchData | null {
   if (!raw) return null;
-  const isGrepTool =
-    Boolean(toolName) && /grep|search|ripgrep/i.test(toolName!);
 
   if (raw.trim() === '(no matches)') {
     return {
@@ -286,7 +297,12 @@ export function parseGrepSearchOutput(
 
     // 匹配 path:line: text
     const matchLine = line.match(/^([^:]+):(\d+):\s?(.*)$/);
-    if (matchLine && matchLine[1] && matchLine[2] && matchLine[3] !== undefined) {
+    if (
+      matchLine &&
+      matchLine[1] &&
+      matchLine[2] &&
+      matchLine[3] !== undefined
+    ) {
       matches.push({
         filePath: matchLine[1],
         line: parseInt(matchLine[2], 10),
@@ -384,4 +400,3 @@ export function formatJsonIfApplicable(text: string): string {
 
   return text;
 }
-

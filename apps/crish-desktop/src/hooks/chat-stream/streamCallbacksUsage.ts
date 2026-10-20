@@ -9,7 +9,6 @@
  * 失败静默；不改变流式语义与回调时序。
  */
 import { getSessionById } from '../../store/sessionStore';
-import { getActiveModelId } from '../../api/providerProfiles';
 import { getSettingsState } from '../../store/storeAccess';
 import {
   applyUsageDelta,
@@ -55,7 +54,11 @@ export async function applyRunUsageSnapshot(opts: {
         );
         // 费用三态：引擎 cost（next - cur 差值语义在 applyUsageDelta 内完成；
         // 这里只带引擎三态增量，微元/currency/formatted 由 merge 层同币种累计）
-        const costStatus = usage.cost ? (usage.cost.isFree ? 'free' : 'priced') : undefined;
+        const costStatus = usage.cost
+          ? usage.cost.isFree
+            ? 'free'
+            : 'priced'
+          : undefined;
         accumulateTokenUsage({
           input: dIn,
           output: dOut,

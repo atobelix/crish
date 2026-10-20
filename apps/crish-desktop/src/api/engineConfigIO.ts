@@ -15,7 +15,6 @@ import {
   normalizeEngineConfigText,
   normalizeEngineConfigUpdate,
   normalizeEngineModelId,
-  normalizeRecentModels,
   parseEngineStatusFromRaw,
   parseRecentModelKey,
   recentModelKey,
@@ -108,7 +107,7 @@ export function loadRecentModels(): string[] {
  */
 export function pushRecentModel(
   model: string,
-  providerId?: string | null,
+  providerId?: string | null
 ): string[] {
   const m = normalizeEngineModelId(model);
   if (!m) return loadRecentModels();
@@ -116,10 +115,10 @@ export function pushRecentModel(
     normalizeEngineConfigText(providerId ?? '') || resolveUniqueProviderId(m);
   if (!pid) return loadRecentModels();
   const key = recentModelKey(pid, m);
-  const next = [
-    key,
-    ...loadRecentModels().filter((x) => x !== key),
-  ].slice(0, MAX_RECENT);
+  const next = [key, ...loadRecentModels().filter((x) => x !== key)].slice(
+    0,
+    MAX_RECENT
+  );
   writeStoredRecent(next);
   return next;
 }
@@ -169,7 +168,10 @@ export async function fetchEngineStatus(): Promise<EngineStatus> {
  * P2-8 补读面）。经 transport.request('config_get') 同一通道（与 config_update
  * 对称）；命令缺失 / 报错 → logInternalError + null（不抛，只补读不重建状态流）。
  */
-export async function loadEngineConfig(): Promise<Record<string, unknown> | null> {
+export async function loadEngineConfig(): Promise<Record<
+  string,
+  unknown
+> | null> {
   const transport = getTransport();
   try {
     const ready = await transport.waitUntilConnected(12_000);
@@ -180,7 +182,7 @@ export async function loadEngineConfig(): Promise<Record<string, unknown> | null
     const res = (await transport.request<Record<string, unknown>>(
       'config_get',
       {},
-      { timeoutMs: 8_000 },
+      { timeoutMs: 8_000 }
     )) as Record<string, unknown>;
     return res && typeof res === 'object' ? res : null;
   } catch (e) {
@@ -190,7 +192,7 @@ export async function loadEngineConfig(): Promise<Record<string, unknown> | null
 }
 
 export async function updateEngineConfig(
-  update: EngineConfigUpdate,
+  update: EngineConfigUpdate
 ): Promise<{ ok: boolean; error?: string }> {
   const transport = getTransport();
   try {
@@ -220,7 +222,7 @@ export async function updateEngineConfig(
 export function modelsForPicker(current?: string): string[] {
   // 最近使用为二元组键；picker 展示面只取 modelId 分量
   const recentIds = loadRecentModels().map(
-    (key) => parseRecentModelKey(key)?.modelId ?? key,
+    (key) => parseRecentModelKey(key)?.modelId ?? key
   );
   return mergeModelsForPicker(recentIds, current);
 }

@@ -1,12 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { Button, Tooltip } from '../ui';
 import type { GitStatusFile } from '../../api/gitTreeHelpers';
-import { GitStatusBadge, DiffStatBar } from './GitStatusBadge';
+import { DiffStatBar } from './GitStatusBadge';
 import { FileFormatIcon } from '../../assets/icons';
 import styles from './OverviewChangesList.module.css';
 
 function FileIcon({ name }: { name: string }) {
-  return <FileFormatIcon fileName={name} size={14} className={styles.fileTypeIcon} />;
+  return (
+    <FileFormatIcon fileName={name} size={14} className={styles.fileTypeIcon} />
+  );
 }
 
 export interface OverviewChangesListProps {
@@ -17,8 +19,8 @@ export interface OverviewChangesListProps {
   className?: string;
 }
 
-export const OverviewChangesList: React.FC<OverviewChangesListProps> = React.memo(
-  function OverviewChangesList({
+export const OverviewChangesList: React.FC<OverviewChangesListProps> =
+  React.memo(function OverviewChangesList({
     files,
     openingPath,
     onOpenFile,
@@ -33,7 +35,9 @@ export const OverviewChangesList: React.FC<OverviewChangesListProps> = React.mem
         const normalized = file.path.replace(/\\/g, '/');
         const lastSlashIndex = normalized.lastIndexOf('/');
         const fileName =
-          lastSlashIndex >= 0 ? normalized.slice(lastSlashIndex + 1) : normalized;
+          lastSlashIndex >= 0
+            ? normalized.slice(lastSlashIndex + 1)
+            : normalized;
         const dirPath =
           lastSlashIndex >= 0 ? normalized.slice(0, lastSlashIndex) : '';
         return {
@@ -59,7 +63,8 @@ export const OverviewChangesList: React.FC<OverviewChangesListProps> = React.mem
           {displayedFiles.map(({ file, fileName, dirPath }) => {
             const isOpening = openingPath === file.path;
             const statusText = file.status;
-            const diffAria = `${file.additions ? `+${file.additions}` : ''} ${file.deletions ? `-${file.deletions}` : ''}`.trim();
+            const diffAria =
+              `${file.additions ? `+${file.additions}` : ''} ${file.deletions ? `-${file.deletions}` : ''}`.trim();
             const fullAriaLabel = `${fileName}, ${statusText}${diffAria ? `, ${diffAria}` : ''}`;
 
             const statusClass =
@@ -93,12 +98,12 @@ export const OverviewChangesList: React.FC<OverviewChangesListProps> = React.mem
                 >
                   <FileIcon name={fileName} />
                   <Tooltip content={`${statusLabel} · ${file.path}`}>
-                    <span className={`${styles.fileName} ${statusClass}`}>{fileName}</span>
+                    <span className={`${styles.fileName} ${statusClass}`}>
+                      {fileName}
+                    </span>
                   </Tooltip>
                   {dirPath ? (
-                    <span className={styles.dirBreadcrumb}>
-                      {dirPath}
-                    </span>
+                    <span className={styles.dirBreadcrumb}>{dirPath}</span>
                   ) : null}
                   <div className={styles.fileMetrics}>
                     <DiffStatBar
@@ -127,5 +132,4 @@ export const OverviewChangesList: React.FC<OverviewChangesListProps> = React.mem
         ) : null}
       </div>
     );
-  }
-);
+  });

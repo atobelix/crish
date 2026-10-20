@@ -183,7 +183,7 @@ export function normalizeAssistantTimeline(
 ): SessionMessage {
   if (msg.sender !== 'assistant') return msg;
   const tools = [...(msg.toolCalls || [])];
-  let blocks = msg.blocks ? [...msg.blocks] : [];
+  const blocks = msg.blocks ? [...msg.blocks] : [];
 
   // 双向重水合思考链（Hydration Reconciliation）
   if (msg.thinkingTurns && msg.thinkingTurns.length > 0) {
@@ -256,4 +256,3 @@ export function normalizeAssistantTimeline(
     blocks: finalBlocks,
   };
 }
-

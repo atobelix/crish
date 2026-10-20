@@ -14,14 +14,11 @@ import type React from 'react';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
 import {
   type PagingAnchor,
-  type PagingAnchorState,
-  type ScrollDeltaAssertion,
   type PreActionAnchor,
   type PreActionAnchorHookResult,
   type UndoWithScrollAnchorResult,
   SUBPIXEL_TOLERANCE_PX,
   DEFAULT_ITEM_SELECTOR,
-  createScrollDeltaAssertion,
 } from './pagingAnchorTypes';
 
 export * from './pagingAnchorTypes';
@@ -45,7 +42,11 @@ export function computePagingAnchor(
     typeof htmlScroller.querySelector === 'function';
 
   // 1. 防遮挡快路径（Fast Path）：避让置顶栏（PinnedBar），通过真实 DOM 探针测量
-  if (isHtmlElement && typeof document !== 'undefined' && typeof document.elementsFromPoint === 'function') {
+  if (
+    isHtmlElement &&
+    typeof document !== 'undefined' &&
+    typeof document.elementsFromPoint === 'function'
+  ) {
     const scrollerRect = htmlScroller.getBoundingClientRect();
     if (scrollerRect.width > 0 && scrollerRect.height > 0) {
       const centerX = scrollerRect.left + scrollerRect.width / 2;
@@ -54,7 +55,9 @@ export function computePagingAnchor(
       const pinnedBar = htmlScroller.querySelector(
         '[data-pinned-bar="true"], [role="region"][aria-label="已固定消息"]'
       );
-      const pinnedBarHeight = pinnedBar ? pinnedBar.getBoundingClientRect().height : 0;
+      const pinnedBarHeight = pinnedBar
+        ? pinnedBar.getBoundingClientRect().height
+        : 0;
       // 探测线置于置顶栏下沿 2px 处，杜绝被置顶浮层截获
       const probeY = scrollerRect.top + pinnedBarHeight + 2;
 
@@ -97,14 +100,12 @@ export function computePagingAnchor(
  * @param scroller 滚动容器
  * @param anchor 捕获到的稳定语义锚点
  * @param vsm 虚拟滚动管理器
- * @param itemSelector 节点选择器
  * @param subpixelTolerance 亚像素容差门槛（默认 0.5px）
  */
 export function restorePagingAnchor(
   scroller: HTMLElement | { scrollTop: number; [key: string]: unknown },
   anchor: PagingAnchor,
   vsm: VirtualScrollManager,
-  itemSelector: string = DEFAULT_ITEM_SELECTOR,
   subpixelTolerance: number = SUBPIXEL_TOLERANCE_PX
 ): void {
   if (!scroller || !anchor) return;
@@ -149,7 +150,7 @@ function escapeSelector(value: string): string {
   if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
     return CSS.escape(value);
   }
-  return value.replace(/([!"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~])/g, '\\$1');
+  return value.replace(/([!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, '\\$1');
 }
 
 /**
@@ -236,7 +237,7 @@ export function usePreActionAnchor(
     const scroller = scrollerRef.current;
     const snapshot = pendingAnchorRef.current;
     if (scroller && snapshot?.anchor) {
-      restorePagingAnchor(scroller, snapshot.anchor, vsm, itemSelector);
+      restorePagingAnchor(scroller, snapshot.anchor, vsm);
       pendingAnchorRef.current = null;
     }
   }, [scrollerRef, vsm, itemSelector]);

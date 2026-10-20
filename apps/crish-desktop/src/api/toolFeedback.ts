@@ -9,7 +9,6 @@ import type { FileDiff } from '../store/layoutStore';
 import type {
   ClassifyToolOutcomeInput,
   ToolFeedback,
-  ToolFeedbackKind,
 } from './toolFeedbackTypes';
 import {
   buildToolDiffHint,
@@ -22,7 +21,11 @@ import {
 } from './toolFeedbackLogic';
 
 // ─── re-export：保持消费方 import 路径不变 ────────────────────────────────
-export type { ToolFeedbackKind, ClassifyToolOutcomeInput, ToolFeedback } from './toolFeedbackTypes';
+export type {
+  ToolFeedbackKind,
+  ClassifyToolOutcomeInput,
+  ToolFeedback,
+} from './toolFeedbackTypes';
 export { CANCEL_SIGNAL_RE, PARTIAL_SIGNAL_RE } from './toolFeedbackTypes';
 // diff 解析域（工具名识别 / 目录列表拦截 / unified diff / 编辑参数合成 / resolveToolDiffs / 输出清洗）
 export {
@@ -57,7 +60,7 @@ export function buildToolFeedback(
   input: ClassifyToolOutcomeInput & {
     maxDetailChars?: number;
     maxDetailLines?: number;
-  },
+  }
 ): ToolFeedback {
   const kind = classifyToolOutcome(input);
   // detail 优先 stdout；stderr 非空时附在后（空 stderr 不拼接）
@@ -67,14 +70,23 @@ export function buildToolFeedback(
       ? `${rawDetail}\n${String(input.stderr).trim()}`
       : String(input.stderr).trim();
   }
-  const { text, truncated: detailTrunc } = truncateToolFeedbackOutput(rawDetail, {
-    ...(input.maxDetailChars !== undefined && { maxChars: input.maxDetailChars }),
-    ...(input.maxDetailLines !== undefined && { maxLines: input.maxDetailLines }),
-  });
+  const { text, truncated: detailTrunc } = truncateToolFeedbackOutput(
+    rawDetail,
+    {
+      ...(input.maxDetailChars !== undefined && {
+        maxChars: input.maxDetailChars,
+      }),
+      ...(input.maxDetailLines !== undefined && {
+        maxLines: input.maxDetailLines,
+      }),
+    }
+  );
   const truncated = Boolean(input.truncated) || detailTrunc;
   // 若仅因 detail 截断且原 kind 为 success，与 classify 的 truncated 标志对齐
   const effectiveKind =
-    kind === 'success' && truncated && !isCancelledToolSignal(input) ? 'partial' : kind;
+    kind === 'success' && truncated && !isCancelledToolSignal(input)
+      ? 'partial'
+      : kind;
 
   const diffs = input.diffs;
   const diffHint = buildToolDiffHint(diffs);

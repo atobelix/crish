@@ -15,9 +15,11 @@ export interface MessageActionsState {
   isLastAssistant: boolean;
   isPinned: boolean;
   pinnedColor?: string;
+  /** 未消费：追问建议 UI 未接入本组件（提示态判定在 api/followUpSuggestions）。 */
   isThinkingMsg?: boolean | undefined;
   inPlanMode: boolean;
   planApproved: boolean;
+  /** 未消费：同上，追问建议气泡未在本组件渲染。 */
   followUpDismissed?: boolean | undefined;
 }
 
@@ -27,8 +29,11 @@ export interface MessageActionsActions {
   onTogglePin: (msgId: string, color?: string) => void;
   setPermissionMode: (mode: PermissionMode) => void;
   setPlanApproved: (v: boolean) => void;
+  /** 未消费：追问建议回调由上层编排，本组件不渲染追问入口。 */
   onFillFollowUp?: ((prompt: string) => void) | undefined;
+  /** 未消费：同上。 */
   onSendFollowUp?: ((prompt: string) => void) | undefined;
+  /** 未消费：同上。 */
   onDismissFollowUp?: ((msgId: string) => void) | undefined;
   onOpenDiff?: ((diff: FileDiff) => void) | undefined;
   onOpenDiffPanel?: (() => void) | undefined;
@@ -51,10 +56,8 @@ export const MessageActions: React.FC<MessageActionsProps> = React.memo(
       isLastAssistant = false,
       isPinned = false,
       pinnedColor,
-      isThinkingMsg = false,
       inPlanMode = false,
       planApproved = false,
-      followUpDismissed = false,
     } = state ?? {};
     const {
       onCopy,
@@ -62,9 +65,6 @@ export const MessageActions: React.FC<MessageActionsProps> = React.memo(
       onTogglePin,
       setPermissionMode,
       setPlanApproved,
-      onFillFollowUp,
-      onSendFollowUp,
-      onDismissFollowUp,
       onOpenDiff: _onOpenDiff,
       onOpenDiffPanel: _onOpenDiffPanel,
       onRetract,
