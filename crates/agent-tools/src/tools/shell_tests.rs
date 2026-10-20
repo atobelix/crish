@@ -1851,3 +1851,14 @@ async fn command_path_inspector_allows_in_workspace_write() {
     assert!(res.is_ok(), "工作区内绝对路径写操作应正常执行，实际错误: {:?}", res);
     assert!(target_file.exists(), "文件应已成功在工作区写入");
 }
+
+/// R3（BLK-04）：`/c`、`/Z` 这类单字母路径按 Windows 盘符别名处理，不当成 Unix
+/// 绝对路径。该分支原为 `.chars().next().unwrap()`（单字母不变量），改为 match
+/// 后行为必须与旧实现逐值一致（回归锁）。
+#[test]
+fn single_letter_slash_path_is_not_unix_path() {
+    assert!(!is_valid_unix_path("/c"));
+    assert!(!is_valid_unix_path("/Z"));
+    assert!(is_valid_unix_path("/tmp"));
+    assert!(is_valid_unix_path("/usr"));
+}

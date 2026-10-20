@@ -216,7 +216,16 @@ impl McpClientBridge {
         &self,
         config: &crate::mcp::servers::McpServerConfig,
     ) -> Result<Vec<ToolDefinition>, ToolError> {
-        let _ = self.stop(&config.server_id).await;
+        // 重启语义：旧实例可能已不存在（stop 报 not_found）——不阻断重启，
+        // 但必须留痕，避免把「停不掉」伪装成干净重启。
+        if let Err(error) = self.stop(&config.server_id).await {
+            tracing::warn!(
+                server_id = %config.server_id,
+                code = error.code(),
+                "重启前停止 MCP server 失败，继续尝试启动：{}",
+                error
+            );
+        }
         self.start(config).await
     }
 

@@ -52,7 +52,11 @@ impl AbortFlag {
 
     /// 触发 abort（幂等；多次调用无副作用）
     pub fn abort(&self) {
-        let _ = self.tx.send(true);
+        // 观察柄全部释放后 send 必然失败：abort 已无消费者，属生命周期正常收口，
+        // 但保留 debug 证据（禁止静默吞错）。
+        if self.tx.send(true).is_err() {
+            tracing::debug!("abort 触发时无观察者：AbortHandle 已全部释放");
+        }
     }
 
     /// 是否已触发

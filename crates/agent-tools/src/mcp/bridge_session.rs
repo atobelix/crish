@@ -182,15 +182,16 @@ impl McpServerSession {
                 tracing::warn!(server_id = %self.server_id, "拒绝将已退出终态 Exited 覆盖为 {:?}", state);
                 return;
             }
-            match self.state.compare_exchange_weak(
+            // CAS 成功即退出；失败由 Err(actual) 回填现状后重试（下轮重查终态）
+            let Err(actual) = self.state.compare_exchange_weak(
                 curr,
                 new_code,
                 Ordering::SeqCst,
                 Ordering::SeqCst,
-            ) {
-                Ok(_) => break,
-                Err(actual) => curr = actual,
-            }
+            ) else {
+                break;
+            };
+            curr = actual;
         }
     }
 
@@ -374,8 +375,22 @@ impl McpServerSession {
         self.mark_exited("已停止");
         let child = self.child.lock().await.take();
         if let Some(mut child) = child {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
+            // 停止路径为尽力而为：子进程可能已自行退出（kill/wait 报错属预期），
+            // 但失败必须留痕，不静默吞掉。
+            if let Err(error) = child.kill().await {
+                tracing::debug!(
+                    server_id = %self.server_id,
+                    "停止 MCP server 时 kill 子进程失败（可能已退出）：{}",
+                    error
+                );
+            }
+            if let Err(error) = child.wait().await {
+                tracing::debug!(
+                    server_id = %self.server_id,
+                    "停止 MCP server 时回收子进程失败：{}",
+                    error
+                );
+            }
         }
         self.stdin.lock().await.take();
     }
@@ -571,7 +586,14 @@ impl Drop for McpServerSession {
         // 释放关闭，子进程读到 EOF 自行退出）
         if let Ok(mut guard) = self.child.try_lock() {
             if let Some(child) = guard.as_mut() {
-                let _ = child.start_kill();
+                // Drop 内无 async 且无法回传错误：start_kill 失败只留痕
+                if let Err(error) = child.start_kill() {
+                    tracing::warn!(
+                        server_id = %self.server_id,
+                        "Drop 兜底强杀 MCP 子进程失败（可能已退出）：{}",
+                        error
+                    );
+                }
             }
         }
     }
@@ -699,7 +721,15 @@ fn handle_response_line(session: &McpServerSession, line: &str) {
         .unwrap_or_else(recover_lock)
         .remove(&id)
     {
-        let _ = tx.send(message);
+        // 请求方可能已因超时/中止取消（接收端 drop）——投递失败属正常收口，
+        // 但保留 debug 证据，便于排查「响应到了却报超时」类问题。
+        if tx.send(message).is_err() {
+            tracing::debug!(
+                server_id = %session.server_id,
+                request_id = id,
+                "MCP 响应投递失败：请求方已取消或断开"
+            );
+        }
     }
 }
 

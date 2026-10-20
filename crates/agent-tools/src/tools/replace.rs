@@ -567,7 +567,13 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), ToolError> {
             Ok(mut f) => {
                 use std::io::Write;
                 if let Err(e) = f.write_all(bytes) {
-                    let _ = std::fs::remove_file(&candidate);
+                    if let Err(cleanup_err) = std::fs::remove_file(&candidate) {
+                        tracing::warn!(
+                            path = %candidate.display(),
+                            "清理写入失败的临时文件失败（残留需人工确认）：{}",
+                            cleanup_err
+                        );
+                    }
                     return Err(ToolError::execution_failed(
                         MULTI_REPLACE_TOOL_NAME,
                         format!("{}: 写入临时文件失败: {e}", target.display()),
@@ -606,7 +612,13 @@ fn atomic_write(target: &Path, bytes: &[u8]) -> Result<(), ToolError> {
     }
 
     if let Err(e) = std::fs::rename(&tmp, target) {
-        let _ = std::fs::remove_file(&tmp);
+        if let Err(cleanup_err) = std::fs::remove_file(&tmp) {
+            tracing::warn!(
+                path = %tmp.display(),
+                "原子替换失败后清理临时文件失败（残留需人工确认）：{}",
+                cleanup_err
+            );
+        }
         return Err(ToolError::execution_failed(
             MULTI_REPLACE_TOOL_NAME,
             format!("{}: 原子替换失败: {e}", target.display()),

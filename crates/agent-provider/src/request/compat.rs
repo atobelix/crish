@@ -198,8 +198,7 @@ pub fn resolve_developer_role_with_compat(
 /// 契约登记（供 R2 T2.2 消费）：空 assistant/system 文本 content 序列化 →
 /// `""`（非 `null`）。
 #[allow(clippy::needless_lifetimes)]
-pub fn empty_content_wire_value(role: &str) -> &'static str {
-    let _ = role;
+pub fn empty_content_wire_value(_role: &str) -> &'static str {
     ""
 }
 

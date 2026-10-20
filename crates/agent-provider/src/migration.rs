@@ -165,7 +165,14 @@ impl ConfigMigrationManager {
         // 严格验证备份文件体积
         let backup_size = fs::metadata(&backup_path)?.len();
         if backup_size != original_size {
-            let _ = fs::remove_file(&backup_path);
+            // 备份校验失败：尽力清理坏备份，清理失败不影响主错误返回
+            if let Err(cleanup_err) = fs::remove_file(&backup_path) {
+                tracing::warn!(
+                    path = %backup_path.display(),
+                    "清理校验失败的备份文件失败：{}",
+                    cleanup_err
+                );
+            }
             return Err(MigrationError::BackupVerificationFailed {
                 expected: original_size,
                 actual: backup_size,
@@ -196,7 +203,14 @@ impl ConfigMigrationManager {
         let roll_bak_path = target.with_file_name(format!("{}.{}.roll.bak", target_name, pid));
 
         if roll_bak_path.exists() {
-            let _ = fs::remove_file(&roll_bak_path);
+            // 上一次异常中断残留：清理属尽力而为，失败不阻断本次替换
+            if let Err(cleanup_err) = fs::remove_file(&roll_bak_path) {
+                tracing::warn!(
+                    path = %roll_bak_path.display(),
+                    "清理历史 .roll.bak 残留失败：{}",
+                    cleanup_err
+                );
+            }
         }
 
         fs::rename(target, &roll_bak_path)?;
@@ -204,13 +218,32 @@ impl ConfigMigrationManager {
         // 阶段 2：将新文件重命名为目标路径
         if let Err(rename_err) = fs::rename(tmp_path, target) {
             // 提交失败时执行原子回滚，将 .roll.bak 恢复至目标路径
-            let _ = fs::rename(&roll_bak_path, target);
-            let _ = fs::remove_file(tmp_path);
+            if let Err(rollback_err) = fs::rename(&roll_bak_path, target) {
+                tracing::warn!(
+                    from = %roll_bak_path.display(),
+                    to = %target.display(),
+                    "回滚 .roll.bak 到目标路径失败（需人工恢复）：{}",
+                    rollback_err
+                );
+            }
+            if let Err(cleanup_err) = fs::remove_file(tmp_path) {
+                tracing::warn!(
+                    path = %tmp_path.display(),
+                    "清理替换失败的临时文件失败：{}",
+                    cleanup_err
+                );
+            }
             return Err(MigrationError::Io(rename_err));
         }
 
         // 阶段 3：成功提交后清理临时暂存文件
-        let _ = fs::remove_file(&roll_bak_path);
+        if let Err(cleanup_err) = fs::remove_file(&roll_bak_path) {
+            tracing::warn!(
+                path = %roll_bak_path.display(),
+                "提交成功后清理 .roll.bak 失败（残留需人工确认）：{}",
+                cleanup_err
+            );
+        }
         Ok(())
     }
 

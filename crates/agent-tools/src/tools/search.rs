@@ -145,8 +145,6 @@ impl Tool for GrepSearchTool {
             let exclude_globs = exclude_globs.clone();
             let matcher = matcher.clone();
             tokio::task::spawn_blocking(move || {
-                let root_display = display_path(&root, &root);
-                let _ = root_display;
                 let mut matches: Vec<GrepMatch> = Vec::new();
                 let mut files: Vec<FileMatch> = Vec::new();
                 let mut visited_files: u64 = 0;

@@ -102,7 +102,13 @@ impl CredentialStore {
         }
         #[cfg(not(windows))]
         {
-            let _ = encrypted;
+            // 非 Windows 无 DPAPI：读取语义（NotFound → Ok(None)）已在前置分支完成，
+            // 此处明确返回「不支持」而不是伪造成功；密文长度仅用于日志上下文。
+            tracing::warn!(
+                path = %path.display(),
+                ciphertext_len = encrypted.len(),
+                "当前平台缺少 DPAPI 支持，凭据读取返回不支持"
+            );
             Err(CredentialError::Unsupported)
         }
     }
@@ -120,7 +126,12 @@ impl CredentialStore {
         }
         #[cfg(not(windows))]
         {
-            let _ = (path, value);
+            // 非 Windows 无 DPAPI：拒绝落盘明文凭据（secret_len 仅用于日志上下文）
+            tracing::warn!(
+                path = %path.display(),
+                secret_len = value.len(),
+                "当前平台缺少 DPAPI 保护，凭据写入返回不支持"
+            );
             Err(CredentialError::Unsupported)
         }
     }

@@ -69,10 +69,9 @@ pub trait NoteBackend: Send + Sync + Debug {
     /// 对指定文档中的目标块执行 CRDT 文本因果撤销
     async fn undo_text(
         &self,
-        doc_id: &str,
-        block_id: &str,
+        _doc_id: &str,
+        _block_id: &str,
     ) -> Result<NoteUndoResult, NoteBackendError> {
-        let _ = (doc_id, block_id);
         Err(NoteBackendError::Invalid(
             "undo_text not supported by this backend".into(),
         ))
@@ -81,10 +80,9 @@ pub trait NoteBackend: Send + Sync + Debug {
     /// 对指定文档中的目标块执行 CRDT 文本因果重做
     async fn redo_text(
         &self,
-        doc_id: &str,
-        block_id: &str,
+        _doc_id: &str,
+        _block_id: &str,
     ) -> Result<NoteRedoResult, NoteBackendError> {
-        let _ = (doc_id, block_id);
         Err(NoteBackendError::Invalid(
             "redo_text not supported by this backend".into(),
         ))

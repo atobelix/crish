@@ -344,7 +344,15 @@ pub fn consume_explore_docs_quota(ctx: &ToolContext) {
         return;
     };
     if let Some(store) = &quota.store {
-        let _ = store.consume(&quota.session_id, &quota.run_id);
+        if let Err(error) = store.consume(&quota.session_id, &quota.run_id) {
+            // 遗留 fail-open 入口：写盘已成功，配额计数失败不阻断，但必须留痕
+            tracing::warn!(
+                session_id = %quota.session_id,
+                run_id = %quota.run_id,
+                %error,
+                "探索文档配额消耗失败（fail-open：本次写盘已成功，已消耗计数可能偏少）"
+            );
+        }
     }
 }
 

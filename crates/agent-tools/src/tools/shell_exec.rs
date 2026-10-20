@@ -88,6 +88,39 @@ mod win_job {
     }
 }
 
+/// 关闭 Win32 句柄（清理路径：调用点均无法回传错误，失败只留痕）。
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn close_job_handle(handle: win_job::HANDLE, context: &'static str) {
+    // SAFETY: handle 来自本模块 CreateJobObjectW / OpenProcess，且调用点均已放弃其所有权
+    unsafe {
+        if win_job::CloseHandle(handle) == 0 {
+            tracing::warn!(
+                context,
+                error = %std::io::Error::last_os_error(),
+                "关闭进程/Job 句柄失败（清理路径继续）"
+            );
+        }
+    }
+}
+
+/// 尽力强杀进程树（清理路径：失败只留痕，不阻断上层结果构造）。
+fn terminate_tree_best_effort(pid: u32, context: &'static str) {
+    if let Err(error) = terminate_process_tree(pid) {
+        tracing::warn!(pid, context, "强杀进程树失败：{}", error);
+    }
+}
+
+/// 尽力杀并回收子进程（超时 / abort 收口路径：失败只留痕）。
+async fn kill_and_reap_best_effort(child: &mut tokio::process::Child, context: &'static str) {
+    if let Err(error) = child.kill().await {
+        tracing::debug!(context, "杀子进程失败（可能已自行退出）：{}", error);
+    }
+    if let Err(error) = child.wait().await {
+        tracing::warn!(context, "回收子进程失败（可能残留僵尸进程）：{}", error);
+    }
+}
+
 /// 跨平台进程树硬性收割守卫（RAII ProcessTreeGuard，BC03-1）
 ///
 /// 核心契约：
@@ -149,7 +182,7 @@ impl ProcessTreeGuard {
                 std::mem::size_of::<win_job::JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
             );
             if ret == 0 {
-                let _ = win_job::CloseHandle(job);
+                close_job_handle(job, "create_and_assign_job:配置 KILL_ON_JOB_CLOSE 失败");
                 return None;
             }
 
@@ -159,8 +192,14 @@ impl ProcessTreeGuard {
                 pid,
             );
             if !proc.is_null() {
-                let _ = win_job::AssignProcessToJobObject(job, proc);
-                let _ = win_job::CloseHandle(proc);
+                if win_job::AssignProcessToJobObject(job, proc) == 0 {
+                    tracing::warn!(
+                        pid,
+                        error = %std::io::Error::last_os_error(),
+                        "将子进程加入 Job Object 失败（树杀兜底退化为 pid 单杀）"
+                    );
+                }
+                close_job_handle(proc, "create_and_assign_job:子进程句柄");
             }
 
             Some(job)
@@ -177,13 +216,19 @@ impl ProcessTreeGuard {
             unsafe {
                 let mut info: win_job::JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
                 info.BasicLimitInformation.LimitFlags = 0;
-                let _ = win_job::SetInformationJobObject(
+                if win_job::SetInformationJobObject(
                     job,
                     win_job::JobObjectExtendedLimitInformation,
                     &info as *const _ as *const std::ffi::c_void,
                     std::mem::size_of::<win_job::JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
-                );
-                let _ = win_job::CloseHandle(job);
+                ) == 0
+                {
+                    tracing::warn!(
+                        error = %std::io::Error::last_os_error(),
+                        "解除 Job KILL_ON_JOB_CLOSE 失败：句柄关闭时可能误伤已转后台进程"
+                    );
+                }
+                close_job_handle(job, "disarm:解除硬杀守卫");
             }
         }
     }
@@ -200,12 +245,17 @@ impl ProcessTreeGuard {
             if let Some(job) = self.job.take() {
                 // SAFETY: TerminateJobObject 强制将退出码 1 广播至该 Job 下的所有树形节点
                 unsafe {
-                    let _ = win_job::TerminateJobObject(job, 1);
-                    let _ = win_job::CloseHandle(job);
+                    if win_job::TerminateJobObject(job, 1) == 0 {
+                        tracing::warn!(
+                            error = %std::io::Error::last_os_error(),
+                            "TerminateJobObject 失败（进程树可能残留）"
+                        );
+                    }
+                    close_job_handle(job, "terminate_now:强杀进程树");
                 }
             }
             if let Some(pid) = self.pid.take() {
-                let _ = terminate_process_tree(pid);
+                terminate_tree_best_effort(pid, "terminate_now:Job 之外的进程树");
             }
         }
 
@@ -217,16 +267,22 @@ impl ProcessTreeGuard {
                     extern "C" {
                         fn kill(pid: i32, sig: i32) -> i32;
                     }
-                    let _ = kill(-(pid as i32), 9);
+                    if kill(-(pid as i32), 9) != 0 {
+                        tracing::warn!(
+                            pid,
+                            error = %std::io::Error::last_os_error(),
+                            "向进程组投递 SIGKILL 失败（进程树可能残留）"
+                        );
+                    }
                 }
-                let _ = terminate_process_tree(pid);
+                terminate_tree_best_effort(pid, "terminate_now:进程组之外的进程树");
             }
         }
 
         #[cfg(not(any(windows, unix)))]
         {
             if let Some(pid) = self.pid.take() {
-                let _ = terminate_process_tree(pid);
+                terminate_tree_best_effort(pid, "terminate_now:跨平台兜底");
             }
         }
     }
@@ -244,10 +300,7 @@ impl Drop for ProcessTreeGuard {
         } else {
             #[cfg(windows)]
             if let Some(job) = self.job.take() {
-                #[allow(unsafe_code)]
-                unsafe {
-                    let _ = win_job::CloseHandle(job);
-                }
+                close_job_handle(job, "drop:已 disarm 的 Job 句柄");
             }
         }
     }
@@ -388,7 +441,13 @@ pub(crate) async fn run_command_maybe_background(
     match streamed {
         // 窗口内完成：同步路径自行回收（wait 后 drop，无泄漏；无 adopt 调用）
         StreamEnd::Completed => {
-            let exit_code = child.wait().await.ok().and_then(|s| s.code());
+            let exit_code = match child.wait().await {
+                Ok(status) => status.code(),
+                Err(error) => {
+                    tracing::warn!("回收子进程退出状态失败（exitCode 记为 null）：{}", error);
+                    None
+                }
+            };
             guard.disarm();
             build_sync_result(
                 command,
@@ -429,8 +488,7 @@ pub(crate) async fn run_command_maybe_background(
                     // 管道已收回 child，reader 已被 into_inner 消费，无需再 drop
                     None => {
                         guard.kill_tree().await;
-                        let _ = child.kill().await;
-                        let _ = child.wait().await;
+                        kill_and_reap_best_effort(&mut child, "timeout:未接线 manager").await;
                         Ok(build_timeout_result(
                             command,
                             cwd,
@@ -446,8 +504,7 @@ pub(crate) async fn run_command_maybe_background(
                 drop(out_reader);
                 drop(err_reader);
                 guard.kill_tree().await;
-                let _ = child.kill().await;
-                let _ = child.wait().await;
+                kill_and_reap_best_effort(&mut child, "timeout:sync 模式").await;
                 Ok(build_timeout_result(
                     command,
                     cwd,
@@ -784,10 +841,9 @@ async fn kill_child(
 ) {
     guard.kill_tree().await;
     if let Some(pid) = child_pid {
-        let _ = terminate_process_tree(pid);
+        terminate_tree_best_effort(pid, "kill_child:回收子进程树");
     }
-    let _ = child.kill().await;
-    let _ = child.wait().await;
+    kill_and_reap_best_effort(&mut child, "kill_child").await;
 }
 
 /// adopt 转移（T-AB-02）：Child 所有权交 registry；返回 background 结果信封

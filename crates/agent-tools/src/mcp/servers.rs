@@ -249,9 +249,25 @@ impl McpConfigPersistence for LocalFileMcpPersistence {
             ToolError::new(codes::CONFIG_INVALID, format!("写入 MCP 临时文件失败: {e}"))
         })?;
         if let Err(e) = std::fs::rename(&tmp_path, &self.file_path) {
-            let _ = std::fs::remove_file(&self.file_path);
+            // 覆盖式重试前的清理：目标可能不存在（首次写入）——失败不影响重试，
+            // 但若不是 NotFound 说明存在残留，必须留痕。
+            if let Err(remove_err) = std::fs::remove_file(&self.file_path) {
+                if remove_err.kind() != std::io::ErrorKind::NotFound {
+                    tracing::warn!(
+                        path = %self.file_path.display(),
+                        "清理 MCP 配置文件失败（将继续尝试覆盖写入）：{}",
+                        remove_err
+                    );
+                }
+            }
             std::fs::rename(&tmp_path, &self.file_path).map_err(|e2| {
-                let _ = std::fs::remove_file(&tmp_path);
+                if let Err(cleanup_err) = std::fs::remove_file(&tmp_path) {
+                    tracing::warn!(
+                        path = %tmp_path.display(),
+                        "清理 MCP 临时文件失败：{}",
+                        cleanup_err
+                    );
+                }
                 ToolError::new(
                     codes::CONFIG_INVALID,
                     format!("原子替换 MCP 配置文件失败: {e} / {e2}"),

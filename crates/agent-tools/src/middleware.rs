@@ -103,18 +103,15 @@ pub trait ToolMiddleware: Send + Sync {
     /// 按 (provider, model) 动态裁剪的未来点位与此共享）。可改写
     /// `description` 与 `input_schema`；实现必须幂等（同一工具定义可被
     /// 多次构建改写，重入结果一致）。
-    fn on_definition(&self, def: &mut ToolDefinition) {
-        let _ = def;
-    }
+    fn on_definition(&self, _def: &mut ToolDefinition) {}
 
     /// 执行前钩子
     async fn before_execute(
         &self,
-        tool: &dyn Tool,
-        input: Value,
-        ctx: &ToolExecutionContext,
+        _tool: &dyn Tool,
+        _input: Value,
+        _ctx: &ToolExecutionContext,
     ) -> Result<BeforeExecuteResult, ToolError> {
-        let _ = (tool, input, ctx);
         Ok(BeforeExecuteResult::Proceed {
             modified_input: None,
         })
@@ -123,24 +120,22 @@ pub trait ToolMiddleware: Send + Sync {
     /// 执行成功后置钩子（可改写输出）
     async fn on_result(
         &self,
-        tool: &dyn Tool,
-        input: &Value,
-        output: Value,
-        ctx: &ToolExecutionContext,
+        _tool: &dyn Tool,
+        _input: &Value,
+        _output: Value,
+        _ctx: &ToolExecutionContext,
     ) -> Result<AfterExecuteResult, ToolError> {
-        let _ = (tool, input, output, ctx);
         Ok(AfterExecuteResult::Passthrough)
     }
 
     /// 执行失败后置钩子（仅观察）
     async fn on_error(
         &self,
-        tool: &dyn Tool,
-        input: &Value,
-        error: &ToolError,
-        ctx: &ToolExecutionContext,
+        _tool: &dyn Tool,
+        _input: &Value,
+        _error: &ToolError,
+        _ctx: &ToolExecutionContext,
     ) -> Result<(), ToolError> {
-        let _ = (tool, input, error, ctx);
         Ok(())
     }
 }

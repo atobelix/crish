@@ -460,13 +460,32 @@ impl Tool for ShellCommandTool {
     }
 }
 
+/// 编译期常量正则的惰性缓存（结果含错误：编译失败不得 panic）
+type CompiledRegex = LazyLock<Result<Regex, regex::Error>>;
+
+/// 取用编译期常量正则。
+///
+/// 模式串是固定字面量，编译失败属程序缺陷；但安全围栏必须 fail-closed
+/// 且不能以 panic 打死整轮执行，故统一转成工具错误上抛。
+fn compiled_regex(
+    cell: &'static CompiledRegex,
+    name: &'static str,
+) -> Result<&'static Regex, ToolError> {
+    cell.as_ref().map_err(|e| {
+        ToolError::execution_failed(
+            "shell_command",
+            format!("命令路径围栏正则 {name} 编译失败（内部缺陷）：{e}"),
+        )
+    })
+}
+
 /// 命令行绝对路径安全围栏（BC10-4）
 pub struct CommandPathInspector;
 
 impl CommandPathInspector {
     /// 检查命令中的绝对路径安全围栏（系统关键目录红线 + 写/删目标越界阻断）
     pub fn inspect(command_line: &str, workspace_root: &Path) -> Result<(), ToolError> {
-        let extracted_paths = Self::extract_absolute_paths(command_line);
+        let extracted_paths = Self::extract_absolute_paths(command_line)?;
 
         for path in &extracted_paths {
             // 1. 系统核心关键目录物理红线（命中则刚性 Deny 阻断）
@@ -498,52 +517,52 @@ impl CommandPathInspector {
     }
 
     /// 从命令行中提取所有绝对路径候选
-    pub fn extract_absolute_paths(command_line: &str) -> Vec<PathBuf> {
-        static WIN_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    ///
+    /// 返回值改为 `Result`：正则编译失败（内部缺陷）以工具错误上抛，
+    /// 绝不 panic；调用方 `inspect` 直接 `?` 传播。
+    pub fn extract_absolute_paths(command_line: &str) -> Result<Vec<PathBuf>, ToolError> {
+        static WIN_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
             Regex::new(r#"(?i)(?:\A|[^a-zA-Z0-9_./\\-])([a-zA-Z]:(?:[\\/][^\s"'`=,;()<>{}\r\n*?|]*)?)"#)
-                .expect("valid regex")
         });
 
-        static QUOTED_WIN_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-            Regex::new(r#"(?i)["']([a-zA-Z]:[\\/][^"'\r\n*?|]+)["']"#).expect("valid regex")
+        static QUOTED_WIN_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
+            Regex::new(r#"(?i)["']([a-zA-Z]:[\\/][^"'\r\n*?|]+)["']"#)
         });
 
-        static UNIX_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+        static UNIX_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
             Regex::new(r#"(?:\A|[^a-zA-Z0-9_./\\-])(/[\w.\-]+(?:/[\w.\-]+)*)"#)
-                .expect("valid regex")
         });
 
-        static QUOTED_UNIX_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-            Regex::new(r#"["'](/[^"'\r\n*?|]+)["']"#).expect("valid regex")
+        static QUOTED_UNIX_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
+            Regex::new(r#"["'](/[^"'\r\n*?|]+)["']"#)
         });
 
-        static STANDALONE_ROOT_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+        static STANDALONE_ROOT_REGEX: CompiledRegex = LazyLock::new(|| {
             Regex::new(r#"(?:\A|[^a-zA-Z0-9_./\\-])/(?:\z|[^a-zA-Z0-9_./\\-])"#)
-                .expect("valid regex")
         });
 
-        static UNC_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+        static UNC_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
             Regex::new(r#"(?:\A|[^a-zA-Z0-9_./\\-])((?:\\\\|//)[^\s"'`=,;()<>{}\r\n*?|]+)"#)
-                .expect("valid regex")
         });
 
-        static QUOTED_UNC_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-            Regex::new(r#"["']((?:\\\\|//)[^"'\r\n*?|]+)["']"#).expect("valid regex")
+        static QUOTED_UNC_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
+            Regex::new(r#"["']((?:\\\\|//)[^"'\r\n*?|]+)["']"#)
         });
 
-        static HOME_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+        static HOME_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
             Regex::new(r#"(?:\A|[^a-zA-Z0-9_./\\-])(~[\\/][^\s"'`=,;()<>{}\r\n*?|]*)"#)
-                .expect("valid regex")
         });
 
-        static QUOTED_HOME_PATH_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-            Regex::new(r#"["'](~[\\/][^"'\r\n*?|]*)["']"#).expect("valid regex")
+        static QUOTED_HOME_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
+            Regex::new(r#"["'](~[\\/][^"'\r\n*?|]*)["']"#)
         });
 
         let mut paths = Vec::new();
 
         // 0. 引号包裹路径（支持空格，如 "C:/Program Files/..."）
-        for cap in QUOTED_WIN_PATH_REGEX.captures_iter(command_line) {
+        for cap in compiled_regex(&QUOTED_WIN_PATH_REGEX, "QUOTED_WIN_PATH")?
+            .captures_iter(command_line)
+        {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
                 if !s.is_empty() {
@@ -554,7 +573,9 @@ impl CommandPathInspector {
                 }
             }
         }
-        for cap in QUOTED_UNIX_PATH_REGEX.captures_iter(command_line) {
+        for cap in compiled_regex(&QUOTED_UNIX_PATH_REGEX, "QUOTED_UNIX_PATH")?
+            .captures_iter(command_line)
+        {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
                 if is_valid_unix_path(&s) {
@@ -565,7 +586,9 @@ impl CommandPathInspector {
                 }
             }
         }
-        for cap in QUOTED_UNC_PATH_REGEX.captures_iter(command_line) {
+        for cap in compiled_regex(&QUOTED_UNC_PATH_REGEX, "QUOTED_UNC_PATH")?
+            .captures_iter(command_line)
+        {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
                 if !s.is_empty() {
@@ -576,7 +599,9 @@ impl CommandPathInspector {
                 }
             }
         }
-        for cap in QUOTED_HOME_PATH_REGEX.captures_iter(command_line) {
+        for cap in compiled_regex(&QUOTED_HOME_PATH_REGEX, "QUOTED_HOME_PATH")?
+            .captures_iter(command_line)
+        {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
                 if !s.is_empty() {
@@ -589,7 +614,7 @@ impl CommandPathInspector {
         }
 
         // 1. Windows 盘符路径
-        for cap in WIN_PATH_REGEX.captures_iter(command_line) {
+        for cap in compiled_regex(&WIN_PATH_REGEX, "WIN_PATH")?.captures_iter(command_line) {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
                 if !s.is_empty() {
@@ -602,7 +627,7 @@ impl CommandPathInspector {
         }
 
         // 2. Unix 绝对路径
-        for cap in UNIX_PATH_REGEX.captures_iter(command_line) {
+        for cap in compiled_regex(&UNIX_PATH_REGEX, "UNIX_PATH")?.captures_iter(command_line) {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
                 if is_valid_unix_path(&s) {
@@ -615,7 +640,7 @@ impl CommandPathInspector {
         }
 
         // 3. 独立根路径 /
-        if STANDALONE_ROOT_REGEX.is_match(command_line) {
+        if compiled_regex(&STANDALONE_ROOT_REGEX, "STANDALONE_ROOT")?.is_match(command_line) {
             let root = PathBuf::from("/");
             if !paths.contains(&root) {
                 paths.push(root);
@@ -623,7 +648,7 @@ impl CommandPathInspector {
         }
 
         // 4. UNC 路径
-        for cap in UNC_PATH_REGEX.captures_iter(command_line) {
+        for cap in compiled_regex(&UNC_PATH_REGEX, "UNC_PATH")?.captures_iter(command_line) {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
                 if !s.is_empty() {
@@ -636,7 +661,7 @@ impl CommandPathInspector {
         }
 
         // 5. 家目录路径 (~/...)
-        for cap in HOME_PATH_REGEX.captures_iter(command_line) {
+        for cap in compiled_regex(&HOME_PATH_REGEX, "HOME_PATH")?.captures_iter(command_line) {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
                 if !s.is_empty() {
@@ -648,7 +673,7 @@ impl CommandPathInspector {
             }
         }
 
-        paths
+        Ok(paths)
     }
 
     /// 判定路径是否为系统核心关键目录或敏感文件（物理红线）
@@ -817,11 +842,9 @@ fn is_valid_unix_path(s: &str) -> bool {
         return true;
     }
     let rest = &s[1..];
-    if rest.len() == 1 {
-        let ch = rest.chars().next().unwrap();
-        if ch.is_ascii_alphabetic() {
-            return false;
-        }
+    // 单字符且为 ASCII 字母视作 Windows 盘符（如 /c），不是 Unix 路径
+    if rest.len() == 1 && matches!(rest.chars().next(), Some(ch) if ch.is_ascii_alphabetic()) {
+        return false;
     }
     const WIN_FLAGS: &[&str] = &[
         "quiet", "norestart", "passive", "wait", "min", "max", "help",

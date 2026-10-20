@@ -78,20 +78,18 @@ impl ModelCatalog {
                 .filter(|v| !v.is_empty())
                 .unwrap_or(provider);
             let key = ModelCatalogEntry::key(vendor, model);
-            // 未收录模型按猜测新建（身份字段来自扫描；其余字段保守默认）
-            if !self.entries.contains_key(&key) {
-                self.entries.insert(
-                    key.clone(),
-                    ModelCatalogEntry {
-                        model: model.to_string(),
-                        provider: provider.to_string(),
-                        vendor: vendor.to_string(),
-                        ..Default::default()
-                    },
-                );
+            // 未收录模型按猜测新建（身份字段来自扫描；其余字段保守默认）。
+            // 用 entry API 一次定位：避免 contains_key → insert → get_mut 的
+            // 二次查找，也不需要「刚插入必存在」式 expect。
+            let entry = self.entries.entry(key).or_insert_with(|| {
                 changed = true;
-            }
-            let entry = self.entries.get_mut(&key).expect("刚插入 / 已存在");
+                ModelCatalogEntry {
+                    model: model.to_string(),
+                    provider: provider.to_string(),
+                    vendor: vendor.to_string(),
+                    ..Default::default()
+                }
+            });
             // 只合并窗口 / 输出上限 / 能力位，不触碰价格与缓存语义
             if let Some(window) = item.context_window.filter(|v| *v > 0) {
                 if entry.context_window != Some(window) {
@@ -322,15 +320,14 @@ impl ModelCatalog {
             ));
         }
         let key = ModelCatalogEntry::key(&patch.vendor, &patch.model);
-        let Some(existing) = self.entries.get(&key) else {
-            // 目标条目不存在：不能借覆盖新增 / 改名条目（model/vendor 键禁覆盖，防键冲突）
+        // 目标条目不存在：不能借覆盖新增 / 改名条目（model/vendor 键禁覆盖，防键冲突）
+        let Some(entry) = self.entries.get_mut(&key) else {
             return Err(CatalogError::ForbiddenField("model".to_string()));
         };
-        if !patch.provider.trim().is_empty() && patch.provider != existing.provider {
+        if !patch.provider.trim().is_empty() && patch.provider != entry.provider {
             return Err(CatalogError::ForbiddenField("provider".to_string()));
         }
         // 字段合并（白名单已校验；Option 字段仅显式提供时生效）
-        let entry = self.entries.get_mut(&key).expect("身份键已存在");
         if let Some(value) = patch.context_window {
             entry.context_window = Some(value);
         }
