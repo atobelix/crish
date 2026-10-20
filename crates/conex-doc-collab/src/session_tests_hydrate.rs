@@ -1,7 +1,6 @@
 //! G-HYD + 远端文本合入 + P-H2 回滚测试（SR-06g · 拆分 · 测外置 · ≠ EL）。
 use super::super::*;
 use super::*;
-use crate::persistence::MemoryPersistence;
 
 // ─── G-HYD / W1-H：结构可逆 encode + hydrate ───────────────────
 
@@ -70,7 +69,6 @@ fn g_hyd_01_structure_encode_not_rev_placeholder() {
 #[test]
 fn g_hyd_02_apply_persist_hydrate_tree_isomorphic() {
     use crate::structure_codec::structure_eq;
-    let mem = MemoryPersistence::default();
     // 用 Arc 共享同一 MemoryPersistence 状态：Box 会移走所有权，故直接用闭包插件
     let blob_slot = std::sync::Arc::new(std::sync::Mutex::new(
         crate::persistence::HydrateBlob::default(),
@@ -154,8 +152,6 @@ fn g_hyd_02_apply_persist_hydrate_tree_isomorphic() {
     assert_eq!(restored.tree().get(&a).unwrap().parent, None);
     assert_eq!(restored.tree().get(&b).unwrap().parent, Some(a));
     assert_eq!(restored.tree().get(&a).unwrap().kind, BlockKind::Paragraph);
-    // 避免 unused 告警
-    let _ = mem;
 }
 
 /// G-HYD-3 / A-MEM-02 方向：hydrate 后冷 `text_snapshot` 可读。
@@ -241,7 +237,7 @@ fn g_hyd_empty_and_corrupt_blob() {
         pending: vec![],
     };
     match DocSession::hydrate("bad", bad) {
-        Ok(_) => panic!("rev LE 占位不得 hydrate 成功"),
+        Ok(ok) => panic!("rev LE 占位不得 hydrate 成功，却得到 rev={}", ok.rev()),
         Err(err) => assert!(matches!(err, HydrateError::Corrupt(_))),
     }
 }
@@ -320,11 +316,8 @@ fn apply_remote_text_update_emits_on_committed() {
 /// 断言内存权威未前进（方案 A 快照回滚，非逆 op）。
 #[test]
 fn p_h2_persist_fail_rolls_back_tree_and_text() {
-    use crate::a_inv_09::A_INV_09A;
     use crate::persistence::PersistError;
     use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
-
-    let _ = A_INV_09A; // 验收锚：A-INV-09a + 18 补丁 P-H2
 
     /// MockPersistence：第 N 次 `on_committed` 起失败（计数从 1；P-H2 第二次失败）。
     struct FailAfterN {

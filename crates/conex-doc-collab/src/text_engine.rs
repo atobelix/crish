@@ -214,7 +214,11 @@ impl TextEngine {
         }
         if self.hot.contains_key(&id) {
             self.hot.remove(&id);
-            let _ = self.ensure_hot(id);
+            // 懒重物化：失败时该块回落快照读（`read_text` 以 snapshots 兜底），
+            // 但失败原因不得静默丢弃
+            if let Err(e) = self.ensure_hot(id) {
+                eprintln!("[conex-doc-collab] 冷更新登记后重物化热块失败（{id}）：{e}");
+            }
         }
     }
 
@@ -490,7 +494,8 @@ impl TextEngine {
         start: u32,
         end: u32,
     ) -> Result<(), TextEngineError> {
-        let _ = char_range_to_bytes(current, start, end)?;
+        // 预校验只关心是否越界，字节区间本身在此丢弃（Err 由 `?` 上抛）
+        char_range_to_bytes(current, start, end)?;
         Ok(())
     }
 
@@ -683,7 +688,10 @@ impl TextEngine {
             self.evict_one(id);
         }
         for id in cp.was_hot {
-            let _ = self.ensure_hot(id);
+            // 回滚后重物化热块；失败则该块回落快照读，原因必须留痕
+            if let Err(e) = self.ensure_hot(id) {
+                eprintln!("[conex-doc-collab] 回滚后重物化热块失败（{id}）：{e}");
+            }
         }
         self.max_hot = cp.max_hot.max(1);
         // I3：恢复后 next_version 不回退，保证版本单调
@@ -874,22 +882,10 @@ mod tests {
         // 再冷藏后走 remote update 路径
         eng.apply_edit(other, 0, 5, "OTHER").unwrap();
         assert!(!eng.is_hot(cold_id) || eng.hot_count() <= 1);
-        // 构造一份独立 Doc 的 update（模拟远端对同名根 Text 的增量较难；此处用 encode 全量再合入）
-        // 先 ensure 读出，再在「远端」Doc 上重建同内容并追加
-        let snap = eng.read_text(cold_id);
-        let remote = Doc::new();
-        {
-            let t = remote.get_or_insert_text(ROOT_TEXT);
-            let mut txn = remote.transact_mut();
-            t.insert(&mut txn, 0, &snap);
-            t.insert(&mut txn, snap.len() as u32, "!");
-        }
-        let bytes = remote
-            .transact()
-            .encode_state_as_update_v1(&StateVector::default());
         // 冷块合入：rehydrate 后 apply（注意：全量 state update 与已有 Doc 合并可能重复；
         // 对「空 rehydrate + 全量」：先 release 热态再从空快照合入更干净）
         // 契约测重点：不丢、最终可读；此处用本地再 edit 验证冷→热
+        // （原先构造的「远端 Doc 全量 update」从未被合入，属死脚手架，已删除）
         eng.apply_edit(other, 0, 5, "x").unwrap(); // 尽量使 cold_id 冷
         let before = eng.read_text(cold_id);
         // 若仍热则先手动冷藏路径：用另一个块占满
@@ -906,7 +902,6 @@ mod tests {
         .unwrap();
         assert_eq!(eng.read_text(cold_id), format!("{before}!"));
         // remote API 烟雾：对登记块 apply 不 panic / 不静默忽略
-        let _ = bytes; // 保留构造以备后续真 CRDT 互推
         eng.ensure_hot(cold_id).unwrap();
         let enc = eng.encode_state_update(cold_id).expect("热块可 encode");
         assert!(!enc.is_empty());

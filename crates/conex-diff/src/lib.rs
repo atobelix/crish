@@ -1,7 +1,6 @@
 pub mod diff_engine {
     use conex_types::{DiffHunk, DiffLine, DiffLineKind, DiffResult};
     use similar::{Algorithm, ChangeTag, TextDiff};
-    use std::fmt::Write as _;
 
     const CONTEXT_LINES: usize = 3;
     const MAX_SAFE_DIFF_LINES: usize = 20_000;
@@ -145,11 +144,12 @@ pub mod diff_engine {
             out.push('\n');
 
             for hunk in &result.hunks {
-                let _ = writeln!(
-                    out,
-                    "@@ -{},{} +{},{} @@",
+                // 写入 String 不可能失败：直接 push_str，不用可丢弃的 write! 结果
+                out.push_str(&format!(
+                    "@@ -{},{} +{},{} @@
+",
                     hunk.old_start, hunk.old_lines, hunk.new_start, hunk.new_lines
-                );
+                ));
                 for line in &hunk.lines {
                     let prefix = match line.kind {
                         DiffLineKind::Context => ' ',
@@ -176,11 +176,10 @@ pub mod diff_engine {
 
             for hunk in &result.hunks {
                 let mut header = String::with_capacity(HUNK_HEADER_ESTIMATED_BYTES);
-                let _ = write!(
-                    header,
+                header.push_str(&format!(
                     "@@ -{},{} +{},{} @@",
                     hunk.old_start, hunk.old_lines, hunk.new_start, hunk.new_lines
-                );
+                ));
                 out.push(header);
 
                 for line in &hunk.lines {

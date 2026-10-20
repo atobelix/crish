@@ -99,7 +99,9 @@ impl SessionRegistry {
             // 若 client 已在，通知 client
             if let Some(client) = &room.client {
                 let notice = RelayFrame::new(FrameType::PeerJoined, session_token, Vec::new());
-                let _ = client.tx.try_send(notice);
+                if let Err(e) = client.tx.try_send(notice) {
+                    warn!("向 client 推送 PeerJoined 失败（可能通道已满/已关闭）: {:?}", e);
+                }
             }
         } else {
             room.client = Some(peer_handle);
@@ -107,7 +109,9 @@ impl SessionRegistry {
             // 若 host 已在，通知 host
             if let Some(host) = &room.host {
                 let notice = RelayFrame::new(FrameType::PeerJoined, session_token, Vec::new());
-                let _ = host.tx.try_send(notice);
+                if let Err(e) = host.tx.try_send(notice) {
+                    warn!("向 host 推送 PeerJoined 失败（可能通道已满/已关闭）: {:?}", e);
+                }
             }
         }
 
@@ -125,14 +129,18 @@ impl SessionRegistry {
                 debug!("Host left room: {}", room_id);
                 if let Some(client) = &room.client {
                     let notice = RelayFrame::new(FrameType::PeerLeft, session_token, Vec::new());
-                    let _ = client.tx.try_send(notice);
+                    if let Err(e) = client.tx.try_send(notice) {
+                        warn!("向 client 推送 PeerLeft 失败（可能通道已满/已关闭）: {:?}", e);
+                    }
                 }
             } else {
                 room.client = None;
                 debug!("Client left room: {}", room_id);
                 if let Some(host) = &room.host {
                     let notice = RelayFrame::new(FrameType::PeerLeft, session_token, Vec::new());
-                    let _ = host.tx.try_send(notice);
+                    if let Err(e) = host.tx.try_send(notice) {
+                        warn!("向 host 推送 PeerLeft 失败（可能通道已满/已关闭）: {:?}", e);
+                    }
                 }
             }
 

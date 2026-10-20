@@ -96,7 +96,6 @@ mod tests {
         assert!(W6_A_S_NOT_CLOSING.iter().any(|s| s.contains("EL-01")));
         assert!(W6_A_S_NOT_CLOSING.iter().any(|s| s.contains("W6-A Strict")));
         assert!(W6_A_S_NOT_CLOSING.iter().any(|s| s.contains("A-BLK-01…14")));
-        let _ = "W6-A-S ≠ W6-A / ≠ EL-01 满关";
     }
 
     /// 子集契约：W6-A-S 轨绑定 A-BLK 族抽样（非 01…14 满表关账）。

@@ -99,7 +99,6 @@ mod tests {
         assert!(W6_D_S_NOT_CLOSING.iter().any(|s| s.contains("EL-04")));
         assert!(W6_D_S_NOT_CLOSING.iter().any(|s| s.contains("W6-D Strict")));
         assert!(W6_D_S_NOT_CLOSING.iter().any(|s| s.contains("A-COL-01…08")));
-        let _ = "W6-D-S ≠ W6-D / ≠ EL-04 满关";
     }
 
     /// 子集契约：W6-D-S 轨绑定 A-COL-01（单 ID 子集，非 01…08 满表）。

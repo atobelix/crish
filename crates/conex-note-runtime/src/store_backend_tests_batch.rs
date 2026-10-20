@@ -3,7 +3,7 @@
 //! 由 [`super`]（`store_backend_tests`）经 `#[path]` 接入。
 //! **≠ EL-05**；**≠ W6-E**；**≠ A-AGT 全表**；测绿不抬关。
 
-use super::temp_db;
+use super::{cleanup, temp_db};
 use crate::StoreNoteBackend;
 use agent_tools::note_backend::{
     NoteBackend, NoteBackendError, NoteBlockBatchRequest, NoteBlockInsertRequest, NoteBlockOp,
@@ -56,7 +56,7 @@ async fn w4f_store_apply_block_ops_insert_writes_and_query_hits() {
         q
     );
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// Store block_insert 经 apply_block_ops 默认委托真写入。
@@ -87,7 +87,7 @@ async fn w4f_store_block_insert_true_path() {
     );
     assert!(md.contains("<!--c:"), "须含块 ID 注释");
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// dryRun=true：零写 + preview（Store 路径）。
@@ -143,7 +143,7 @@ async fn w4f_store_apply_block_ops_dry_run_zero_write() {
     assert_eq!(q.blocks.len(), 1, "dryRun 不得写第二块");
     assert_eq!(q.blocks[0].id, base.block_id);
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// force_execution_unknown：中断码 + 零半写（Store）。
@@ -183,7 +183,7 @@ async fn w4f_store_apply_block_ops_execution_unknown_no_half_write() {
         .unwrap();
     assert!(q.blocks.is_empty(), "中断不得半写");
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// move 经 Store apply_block_ops / block_move 真路径（W4-F 余量）。
@@ -251,7 +251,7 @@ async fn w4f_store_block_move_true_path() {
         assert!(ids.contains(&b.block_id.as_str()));
     }
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// update / delete 经 Store apply_block_ops 真路径。
@@ -334,5 +334,5 @@ async fn w4f_store_apply_block_ops_update_and_delete() {
         .unwrap();
     assert!(q2.blocks.is_empty(), "delete 后投影应无块");
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }

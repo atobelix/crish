@@ -5,7 +5,7 @@
 //! 与 query_blocks 派生分轨：`hydrate_path=doc-session`。
 //! **≠ EL-05**；**≠ A-AGT 满表**；**≠ W6-E**。
 
-use super::temp_db;
+use super::{cleanup, temp_db};
 use crate::StoreNoteBackend;
 use agent_tools::note_backend::{NoteApplyMdRequest, NoteApplyMode, NoteBackend, NoteBackendError};
 
@@ -57,7 +57,7 @@ async fn hydrate_document_from_session_hot_path() {
     assert_eq!(j["hydrate_path"], HYDRATE_PATH_DOC_SESSION);
     assert_eq!(j["source"], "tauri-ipc");
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// 冷开：新 backend 打开同一 db → load_doc → DocSession::hydrate → 投影非空。
@@ -112,7 +112,7 @@ async fn hydrate_document_cold_reopen_from_store_blob() {
     assert_eq!(proj2.blocks.len(), proj.blocks.len());
     assert_eq!(proj2.hydrate_path, HYDRATE_PATH_DOC_SESSION);
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// 空文档 / 失败：未写 doc → 空投影；空 doc_id → Invalid。
@@ -141,7 +141,7 @@ async fn hydrate_document_empty_and_invalid() {
         .expect_err("空串");
     assert!(matches!(err2, NoteBackendError::Invalid(_)));
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// C2：并发首次打开**同一** doc → per-doc hydrate 许可串行化，
@@ -198,7 +198,7 @@ fn concurrent_first_open_same_doc_dedups_to_single_hydrate() {
         p0.blocks
     );
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// C2 负例：并发首开**不同** doc → 两 doc 各自许可、互不串行，
@@ -240,7 +240,7 @@ fn concurrent_first_open_distinct_docs_dedups_independently() {
         "两 doc 各自 per-doc 许可 → hydrating 恰 2 条目"
     );
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// C2：冷开摘除后 hydrating 许可条目回落（无泄漏）。
@@ -269,5 +269,5 @@ fn cold_open_cleans_up_hydrating_permit() {
         1,
         "冷开清理后重插 hydrating 许可仍 1 条目（无泄漏）"
     );
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }

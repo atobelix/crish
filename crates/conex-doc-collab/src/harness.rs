@@ -247,8 +247,9 @@ impl DualSessionHarness {
     ) -> Result<(DocEvent, DocEvent), ApplyError> {
         let (local_ev, encoded) = self.apply(from, origin, ops)?;
         let remote_ev = self.push(from.other(), &encoded)?;
-        // 文本：用 yrs bytes 再合入（若对端已由 TextEdit op 写过，全量 state 合入仍应收敛）
-        let _ = self.push_last_text_updates(from, from.other());
+        // 文本：用 yrs bytes 再合入（若对端已由 TextEdit op 写过，全量 state 合入仍应收敛）；
+        // 文本推送失败必须上抛——静默忽略会让对端停在旧文本
+        self.push_last_text_updates(from, from.other())?;
         Ok((local_ev, remote_ev))
     }
 

@@ -1,13 +1,10 @@
 //! A-INV-09a/c + A-MEM-01/02 + CommitBatch 同源测试（SR-06g · 拆分 · 测外置 · ≠ EL）。
 use super::super::*;
 use super::*;
-use crate::a_inv_09::{A_INV_09A, A_INV_09C};
-use crate::persistence::MemoryPersistence;
 
 /// A-INV-09a：同批 TextEdit + 故意失败 Op → 树与文本均不变。
 #[test]
 fn a_inv_09a_text_edit_plus_failing_op_atomic() {
-    let _ = A_INV_09A;
     let mut s = DocSession::new("d1");
     let id = BlockId::new();
     insert_root(&mut s, id, "a0");
@@ -94,7 +91,6 @@ fn a_inv_09a_bad_text_offset_rejects_whole_batch() {
 /// A-INV-09c：Delete 后 TextEngine 无该 id；热计数下降。
 #[test]
 fn a_inv_09c_delete_releases_text_engine() {
-    let _ = A_INV_09C;
     let mut s = DocSession::new("d1");
     let id = BlockId::new();
     insert_root(&mut s, id, "a0");
@@ -276,14 +272,11 @@ fn commit_batch_includes_text_update_bytes() {
     assert_eq!(s.last_commit_text_updates().len(), 1);
     assert_eq!(s.last_commit_text_updates()[0].block_id, id);
     assert!(!s.last_commit_text_updates()[0].bytes.is_empty());
-    let _ = MemoryPersistence::default();
 }
 
 /// A-INV-09b：一次 apply 的 CommitBatch 中 structure 与 text updates 共享同一 `tx_id`。
 #[test]
 fn a_inv_09b_structure_and_text_share_tx_id() {
-    use crate::a_inv_09::A_INV_09B;
-    let _ = A_INV_09B;
     struct Cap(std::sync::Arc<std::sync::Mutex<Option<CommitBatch>>>);
     impl PersistencePlugin for Cap {
         fn load_doc(

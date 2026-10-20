@@ -76,8 +76,8 @@ pub fn parse_md(md: &str, opts: ParseOpts) -> Result<ParseOutput, MdError> {
             let mut items = strip_report.items;
             items.append(&mut out.lossy.items);
             out.lossy.items = items;
-            // strict_ids 预留：PureGfm 下天然缺 ID，不因本旗标失败
-            let _ = opts.strict_ids;
+            // strict_ids 预留：PureGfm 下天然缺 ID，本分支不因该旗标失败
+            // （旗标当前仅在 ParseOpts 中声明，未参与 PureGfm 判定，故无需读取）
             Ok(out)
         }
     }

@@ -164,7 +164,10 @@ async fn handle_connection(
                         // 处理心跳 PING
                         if frame.frame_type == FrameType::Ping {
                             let pong = RelayFrame::new(FrameType::Pong, session_token, Vec::new());
-                            let _ = registry.forward_frame(&room_id, &role, pong).await;
+                            if let Err(e) = registry.forward_frame(&room_id, &role, pong).await {
+                                // PONG 丢弃会让对端误判心跳超时，必须留痕
+                                warn!("转发 PONG 失败（对端可能判定心跳超时）: {:?}", e);
+                            }
                             continue;
                         }
                         // 盲转发给房间对端

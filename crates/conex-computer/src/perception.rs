@@ -359,8 +359,14 @@ impl UiaPerception {
         };
         use windows::Win32::UI::Accessibility::{CUIAutomation, IUIAutomation};
         unsafe {
-            // COM 线程模型:MTA(与主线程共容;失败如已初始化/模式冲突 → 继续)
-            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+            // COM 线程模型:MTA(与主线程共容;失败如已初始化/模式冲突 → 告警后继续)
+            let hr = CoInitializeEx(None, COINIT_MULTITHREADED);
+            if hr.is_err() {
+                tracing::warn!(
+                    hresult = ?hr,
+                    "CoInitializeEx(MTA) 返回失败（预计为已初始化/模式冲突），继续创建 UIAutomation"
+                );
+            }
             let automation: IUIAutomation =
                 CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).map_err(|e| {
                     PerceptionError::Init(format!("CoCreateInstance CUIAutomation: {e}"))

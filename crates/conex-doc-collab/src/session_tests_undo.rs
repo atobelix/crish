@@ -216,8 +216,6 @@ fn a_mem_04_undo_across_cold_restores_structure_and_plain_text() {
 /// A-INV-09c 后半：Insert+TextEdit → Delete → undo → 块与文本恢复。
 #[test]
 fn a_inv_09c_undo_restores_deleted_block_and_text() {
-    use crate::a_inv_09::A_INV_09C;
-    let _ = A_INV_09C;
 
     let mut s = DocSession::new("a-inv-09c-undo");
     let id = BlockId::new();

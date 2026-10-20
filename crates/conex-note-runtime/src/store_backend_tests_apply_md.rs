@@ -3,7 +3,7 @@
 //! 由 [`super`]（`store_backend_tests`）经 `#[path]` 接入。
 //! **≠ EL-05**；**≠ A-AGT 满表**；测绿不抬关。
 
-use super::temp_db;
+use super::{cleanup, temp_db};
 use crate::StoreNoteBackend;
 use agent_tools::note_backend::{
     NoteApplyMdRequest, NoteApplyMode, NoteBackend, NoteBackendError, NoteQueryBlocksParams,
@@ -52,7 +52,7 @@ async fn apply_md_then_query_blocks_hits_text() {
         q.blocks
     );
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 #[tokio::test]
@@ -100,7 +100,7 @@ async fn send_intent_idempotent_no_double_insert() {
     let n2 = backend.store().count_blocks("doc-idem").unwrap();
     assert_eq!(n1, n2, "block count must not double on same intent_id");
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 #[tokio::test]
@@ -145,7 +145,7 @@ async fn outline_contains_heading() {
         outline
     );
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 #[tokio::test]
@@ -185,7 +185,7 @@ async fn batch_token_required_when_provided() {
         .unwrap();
     assert_eq!(r.inserted, 1);
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 #[tokio::test]
@@ -207,7 +207,7 @@ async fn note_runtime_factory_open() {
         .await
         .unwrap();
     assert_eq!(r.inserted, 1);
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 #[tokio::test]
@@ -244,7 +244,7 @@ async fn apply_md_then_get_md_contains_content_and_c_comment() {
     let err = backend.get_md("").await.unwrap_err();
     assert!(matches!(err, NoteBackendError::Invalid(_)));
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// W4-A：Store 路径 `ApplyReport.lossy` 进入 `NoteApplyMdResult` 且
@@ -302,7 +302,7 @@ async fn w4a_store_apply_md_exposes_lossy_on_result_and_tool_json() {
         "tool JSON 须可观测 missing_block_id，got {items:?}"
     );
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// W4-A：带合法 `<!--c:UUID-->` 且无有损时，lossy.items 为空数组但仍出现。
@@ -334,5 +334,5 @@ async fn w4a_store_apply_md_empty_lossy_when_ids_present() {
     assert!(j.get("lossy").is_some());
     assert!(j["lossy"]["items"].as_array().is_some());
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }

@@ -7,7 +7,6 @@ use super::*;
 /// A-HUGE-01：亚阈文本保持单叶，无 `split_of` 子段。
 #[test]
 fn a_huge_01_below_threshold_stays_single_leaf() {
-    let _ = crate::a_huge::A_HUGE_01;
     let mut s = DocSession::new("d1");
     assert_eq!(s.huge_threshold(), DEFAULT_T_HUGE);
     let id = BlockId::new();
@@ -63,7 +62,6 @@ fn a_huge_01_just_below_threshold_single() {
 /// A-HUGE-02：一次插入超大字符串 → 同事务自动分段，拼接 equals 原文。
 #[test]
 fn a_huge_02_auto_split_on_huge_insert() {
-    let _ = crate::a_huge::A_HUGE_02;
     let thr = MIN_T_HUGE; // 64 KiB，便于测试
     let mut s = DocSession::new("d1").with_huge_threshold(thr);
     let id = BlockId::new();

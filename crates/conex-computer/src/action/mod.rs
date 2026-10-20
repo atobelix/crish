@@ -178,7 +178,6 @@ impl Action {
                 validate_coord(*coordinate, scale)
             }
             Action::Scroll {
-                amount,
                 coordinate,
                 modifiers,
                 ..
@@ -188,7 +187,6 @@ impl Action {
                     validate_coord(*c, scale)?;
                 }
                 // amount 为非负整数(u32 保证),0 表示无效滚动量:按 04「非负整数」语义放行
-                let _ = amount;
                 Ok(())
             }
             Action::HoldKey { key, duration_secs } => {

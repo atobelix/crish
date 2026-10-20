@@ -37,11 +37,17 @@ pub fn release_all_keys_and_buttons(enigo: &mut Enigo) {
         enigo::Key::Meta,
     ];
     for k in keys {
-        let _ = enigo.key(k, Direction::Release);
+        if let Err(e) = enigo.key(k, Direction::Release) {
+            // 清理路径无法把错误回传调用方（此时多半已在中断/异常分支），但绝不能静默：
+            // 释放失败意味着可能残留按下状态，必须留痕便于事后排查
+            tracing::error!(error = %e, "释放按键失败（可能残留按下状态）");
+        }
     }
     let buttons = [enigo::Button::Left, enigo::Button::Middle, enigo::Button::Right];
     for b in buttons {
-        let _ = enigo.button(b, Direction::Release);
+        if let Err(e) = enigo.button(b, Direction::Release) {
+            tracing::error!(error = %e, "释放鼠标按键失败（可能残留按下状态）");
+        }
     }
 }
 

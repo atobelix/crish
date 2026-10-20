@@ -489,8 +489,9 @@ impl Renderer {
         self.output.push_str(class);
         self.output.push('"');
         if matches!(kind, ListKind::Ordered) && start_val > 1 {
-            use std::fmt::Write;
-            let _ = write!(self.output, " start=\"{}\"", start_val);
+            // 写入 String 不可能失败：直接 push_str
+            self.output
+                .push_str(&format!(" start=\"{}\"", start_val));
         }
         self.output.push('>');
     }

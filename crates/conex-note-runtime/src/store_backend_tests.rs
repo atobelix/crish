@@ -28,9 +28,33 @@ fn temp_db() -> (std::path::PathBuf, std::path::PathBuf) {
             .unwrap_or(0),
         n
     ));
-    let _ = std::fs::create_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("创建测试临时目录失败");
     let db = dir.join("workspace.db");
     (dir, db)
+}
+
+/// 测试临时目录清理：目录可能已被被测逻辑删除（`NotFound` 属预期）；
+/// Windows 上 SQLite 句柄释放晚于 Drop 存在毫秒级延迟，`remove_dir_all` 可能报
+/// os error 32（占用中）——重试三轮递增退避后仍失败则告警并放行：泄漏一个
+/// %TEMP% 目录属环境噪声，不应升级为断言失败（不静默：eprintln 可见）。
+fn cleanup(dir: std::path::PathBuf) {
+    let mut last_err: Option<std::io::Error> = None;
+    for attempt in 0..3u32 {
+        match std::fs::remove_dir_all(&dir) {
+            Ok(()) => return,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
+            Err(e) => {
+                last_err = Some(e);
+                std::thread::sleep(std::time::Duration::from_millis(50u64 * (attempt as u64 + 1)));
+            }
+        }
+    }
+    if let Some(e) = last_err {
+        eprintln!(
+            "[store_backend_tests::cleanup] 测试临时目录重试后仍被占用，跳过删除（{}）：{e}",
+            dir.display()
+        );
+    }
 }
 
 #[path = "store_backend_tests_apply_md.rs"]
@@ -125,7 +149,7 @@ fn block_on<F: std::future::Future>(f: F) -> F::Output {
 /// 毒化 std `Mutex`（B1-1 测试注入，对齐 agent-tools `test_support::poison_std_lock`）：
 /// 在持锁线程内 panic，使锁进入中毒状态（PoisonError），验证恢复式处理不 panic。
 fn poison_std_lock<T: std::marker::Send>(lock: &std::sync::Mutex<T>) {
-    let _ = std::panic::catch_unwind(|| {
+    let panicked = std::panic::catch_unwind(|| {
         std::thread::scope(|scope| {
             scope.spawn(|| {
                 let _guard = lock.lock().unwrap();
@@ -133,6 +157,10 @@ fn poison_std_lock<T: std::marker::Send>(lock: &std::sync::Mutex<T>) {
             });
         });
     });
+    assert!(
+        panicked.is_err(),
+        "毒化注入必须真的 panic；否则锁未被毒化，恢复路径用例失去意义"
+    );
 }
 
 use crate::StoreNoteBackend;
@@ -187,7 +215,7 @@ fn poisoned_sessions_map_outline_recovers_with_log_and_count() {
         before + 1,
         "sessions 索引锁恢复必须计数 +1"
     );
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// store_backend_apply.rs（:61 写路径）：per-doc 锁毒化 →
@@ -229,7 +257,7 @@ fn poisoned_per_doc_lock_apply_collab_recovers_with_log_and_count() {
     }))
     .expect("query");
     assert!(!q.blocks.is_empty(), "毒化后写仍应落投影");
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// store_backend_query.rs（:36/:37 读路径）：per-doc 锁毒化 →
@@ -262,7 +290,7 @@ fn poisoned_doc_lock_document_to_md_recovers_with_log_and_count() {
         before + 1,
         "per-doc 锁恢复必须计数 +1"
     );
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// store_hydrate.rs（session_handle 索引锁）：map 锁毒化 →
@@ -288,7 +316,7 @@ fn poisoned_sessions_map_hydrate_recovers_with_log_and_count() {
         before + 1,
         "sessions 索引锁恢复必须计数 +1"
     );
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// store_apply_md.rs（:112 写路径）：per-doc 锁毒化 →
@@ -333,7 +361,7 @@ fn poisoned_doc_lock_apply_md_recovers_with_log_and_count() {
         before + 1,
         "per-doc 锁恢复必须计数 +1"
     );
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// store_apply_md.rs（intents :99 幂等检查 + :232 结果回写）：intents 锁毒化 →
@@ -389,7 +417,7 @@ fn poisoned_intents_lock_apply_md_recovers_with_log_and_count() {
     }))
     .expect("幂等二次调用");
     assert!(second.idempotent && second.inserted == 0);
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 // ── B3 per-doc 分片锁断言（内存面重叠为准；conn 单连接串行为诚实边界）─
@@ -441,7 +469,7 @@ fn per_doc_lock_allows_concurrent_writes_to_different_docs() {
         md.contains("concurrent body") || md.contains("B Concurrent"),
         "doc-b 写已落 session 树: {md:?}"
     );
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// 同 doc 写仍串行（单写者不变）：持锁期间同 doc 写被阻塞，释放后完成。
@@ -490,7 +518,7 @@ fn same_doc_writes_stay_serialized_under_per_doc_lock() {
         .expect("释放 per-doc 锁后同 doc 写完成");
     r.expect("同 doc 写成功");
     writer.join().expect("写线程不应 panic");
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// 锁表有界：per-doc 锁条目数 == sessions 索引条目数，不随调用次数增长；
@@ -523,7 +551,7 @@ fn per_doc_lock_table_bounded_by_open_docs() {
         1,
         "冷开重开后同 doc 无重复条目（无泄漏）"
     );
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 /// 双 OS 线程并发首开**不同** doc（barrier 式同时启动）：双写均成功、
@@ -565,7 +593,7 @@ fn concurrent_first_open_distinct_docs_lands_two_sessions() {
         let md = block_on(backend.get_md(doc)).expect("读");
         assert!(md.contains(doc), "{doc} 内容可读（双写无丢失）: {md:?}");
     }
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup(dir);
 }
 
 // ── B3 · CAS 冲突类型化（消费侧：store_backend.rs map_commit_err）────────
@@ -711,7 +739,7 @@ mod s3_slow_path_tests {
         let (tx, rx) = mpsc::channel();
         let holder = std::thread::spawn(move || {
             let _guard = arc.lock().unwrap();
-            let _ = tx.send(());
+            tx.send(()).expect("持锁线程向同步 channel 发送失败");
             std::thread::sleep(std::time::Duration::from_millis(30));
         });
         rx.recv().expect("持锁线程已拿到锁（channel 同步）");
@@ -724,7 +752,7 @@ mod s3_slow_path_tests {
             lines.join("\n")
         );
         holder.join().expect("持锁线程不应 panic");
-        let _ = std::fs::remove_dir_all(dir);
+        cleanup(dir);
     }
 
     /// ② 长锁等待负例：无争抢常态调用 → 零告警（条件告警门控可证伪）。
@@ -740,7 +768,7 @@ mod s3_slow_path_tests {
             "常态零告警，捕获：\n{}",
             lines.join("\n")
         );
-        let _ = std::fs::remove_dir_all(dir);
+        cleanup(dir);
     }
 
     /// ①-全文 序列化（探针级阈值门控正例）：直驱 SlowPathProbe 注入

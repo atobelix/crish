@@ -60,14 +60,14 @@ pub trait PersistencePlugin: Send + Sync {
 
     /// CT-01 CAS 版 `on_committed`：`expect_rev = Some(期望)` 时按期望版本条件更新，
     /// 版本不符 → [`PersistError::Conflict`]。**CAS = 检测并报错，不自动合并**。
-    /// 默认实现忽略期望值（委托 `on_committed`，旧 LWW 行为），既有实现者零改动。
+    /// 默认实现忽略期望值（委托 `on_committed`，旧 LWW 行为），既有实现者零改动；
+    /// 参数以 `_` 前缀显式表达「按契约不使用」，而非吞掉一个可能的错误。
     fn on_committed_expect(
         &self,
         doc_id: &str,
         commit: &CommitBatch,
-        expect_rev: Option<u64>,
+        _expect_rev: Option<u64>,
     ) -> Result<(), PersistError> {
-        let _ = expect_rev;
         self.on_committed(doc_id, commit)
     }
 }

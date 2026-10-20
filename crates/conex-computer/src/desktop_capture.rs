@@ -126,8 +126,10 @@ impl Inner {
     /// 推帧入槽(覆盖旧帧,丢旧保新)
     fn push_frame(&self, frame: &Frame) {
         if let Some(tx) = self.tx.lock().expect("帧槽锁损坏").as_ref() {
-            // watch send 恒成功(单槽覆盖);无接收端时忽略
-            let _ = tx.send(frame.clone());
+            // watch send 恒成功(单槽覆盖)；仅当无订阅端时返回 Err，属预期丢帧，记 debug 留痕
+            if tx.send(frame.clone()).is_err() {
+                tracing::debug!("桌面帧槽无订阅端，丢弃本帧");
+            }
         }
     }
 
@@ -236,7 +238,10 @@ impl FrameSource for DesktopCaptureSource {
         self.inner.stop.store(true, Ordering::SeqCst);
         // 等待捕获线程退出(最长一个轮询间隔 + 单次捕获耗时,见 capture_loop)
         if let Some(handle) = self.inner.thread.lock().expect("线程槽锁损坏").take() {
-            let _ = handle.join();
+            if handle.join().is_err() {
+                // 捕获线程以 panic 退出：必须留痕（否则采集链路的异常终止不可见）
+                tracing::error!("桌面捕获线程 panic 退出（join 返回 Err）");
+            }
         }
         // 取走发送端关闭通道 → 订阅流排空后返回 Closed
         self.inner.tx.lock().expect("帧槽锁损坏").take();
@@ -301,7 +306,8 @@ impl FrameStream for DesktopFrameStream {
                 return Ok(current);
             }
             match self.rx.changed().await {
-                Ok(_) => continue,
+                // changed() 的 Ok 载荷就是 ()，此处不丢弃任何 payload
+                Ok(()) => continue,
                 Err(_) => {
                     // 源已停止(发送端关闭):排空最后一帧后返回 Closed
                     let last = self.rx.borrow_and_update().clone();
