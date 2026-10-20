@@ -17,10 +17,14 @@ import { extractItemsFromChildren } from './internal/extractChildrenItems';
 
 export const ComboboxContext = createContext<ComboboxContextValue | null>(null);
 
-export function useComboboxContext(componentName = 'Combobox compound component'): ComboboxContextValue {
+export function useComboboxContext(
+  componentName = 'Combobox compound component'
+): ComboboxContextValue {
   const ctx = useContext(ComboboxContext);
   if (!ctx) {
-    throw new Error(`${componentName} must be used within a <Combobox> root component.`);
+    throw new Error(
+      `${componentName} must be used within a <Combobox> root component.`
+    );
   }
   return ctx;
 }
@@ -35,7 +39,6 @@ export function ComboboxRoot<T = any>({
   onQueryChange,
   filter,
   itemToString,
-  itemToValue,
   open: controlledOpen,
   defaultOpen = false,
   onOpenChange,
@@ -48,9 +51,9 @@ export function ComboboxRoot<T = any>({
   disabled = false,
   children,
 }: ComboboxRootProps<T>) {
-  const [uncontrolledValue, setUncontrolledValue] = useState<string | string[] | null>(
-    defaultValue ?? (multiple ? [] : null)
-  );
+  const [uncontrolledValue, setUncontrolledValue] = useState<
+    string | string[] | null
+  >(defaultValue ?? (multiple ? [] : null));
   const isValControlled = controlledValue !== undefined;
   const value = isValControlled ? controlledValue : uncontrolledValue;
 
@@ -64,7 +67,9 @@ export function ComboboxRoot<T = any>({
 
   const [uncontrolledQuery, setUncontrolledQuery] = useState(defaultQuery);
   const isQueryControlled = controlledQuery !== undefined;
-  const query = isQueryControlled ? (controlledQuery as string) : uncontrolledQuery;
+  const query = isQueryControlled
+    ? (controlledQuery as string)
+    : uncontrolledQuery;
 
   const handleQueryChange = useCallback(
     (nextQuery: string) => {
@@ -120,7 +125,12 @@ export function ComboboxRoot<T = any>({
   }, [children]);
 
   const registerItem = useCallback(
-    (itemId: string, itemValue: string, itemDisabled = false, itemLabel = '') => {
+    (
+      itemId: string,
+      itemValue: string,
+      itemDisabled = false,
+      itemLabel = ''
+    ) => {
       const newItem: RegisteredItemData = {
         id: itemId,
         value: itemValue,
@@ -155,7 +165,9 @@ export function ComboboxRoot<T = any>({
     if (!query) return rawItems;
     return rawItems.filter((item) => {
       if (filter) return filter(item, query);
-      const str = itemToString ? itemToString(item) : String((item as any)?.label ?? item);
+      const str = itemToString
+        ? itemToString(item)
+        : String((item as any)?.label ?? item);
       return str.toLowerCase().includes(query.toLowerCase());
     });
   }, [rawItems, items, query, filter, itemToString]);
@@ -176,7 +188,14 @@ export function ComboboxRoot<T = any>({
         handleOpenChange(false);
       }
     },
-    [multiple, value, handleValueChange, handleQueryChange, handleOpenChange, mergedItemMap]
+    [
+      multiple,
+      value,
+      handleValueChange,
+      handleQueryChange,
+      handleOpenChange,
+      mergedItemMap,
+    ]
   );
 
   const removeChip = useCallback(
@@ -284,5 +303,9 @@ export function ComboboxRoot<T = any>({
     ]
   );
 
-  return <ComboboxContext.Provider value={contextValue}>{children}</ComboboxContext.Provider>;
+  return (
+    <ComboboxContext.Provider value={contextValue}>
+      {children}
+    </ComboboxContext.Provider>
+  );
 }

@@ -66,20 +66,22 @@ export function useAnimatedPresence({
 
         setState('entering');
 
-        let handle1: number | undefined;
         let handle2: number | undefined;
 
-        handle1 = requestAnimationFrame(() => {
-          if (handle1 !== undefined) {
-            rafHandlesRef.current = rafHandlesRef.current.filter((h) => h !== handle1);
-          }
+        // rAF 恒返回 number，句柄直接绑定（无需 undefined 兜底）
+        const handle1 = requestAnimationFrame(() => {
+          rafHandlesRef.current = rafHandlesRef.current.filter(
+            (h) => h !== handle1
+          );
           if (isCancelled || !visible || !visibleRef.current) {
             return;
           }
 
           handle2 = requestAnimationFrame(() => {
             if (handle2 !== undefined) {
-              rafHandlesRef.current = rafHandlesRef.current.filter((h) => h !== handle2);
+              rafHandlesRef.current = rafHandlesRef.current.filter(
+                (h) => h !== handle2
+              );
             }
             if (isCancelled || !visible || !visibleRef.current) {
               return;
@@ -103,9 +105,7 @@ export function useAnimatedPresence({
           }
         });
 
-        if (handle1 !== undefined) {
-          rafHandlesRef.current.push(handle1);
-        }
+        rafHandlesRef.current.push(handle1);
       }
     } else {
       // 当 visible 变为 false 时，无条件同步取消所有正在等待的 rAF 句柄
@@ -121,7 +121,10 @@ export function useAnimatedPresence({
           setState('closed');
           timeoutRef.current = undefined;
         }, exitDurationMs);
-      } else if (stateRef.current !== 'closed' && stateRef.current !== 'exiting') {
+      } else if (
+        stateRef.current !== 'closed' &&
+        stateRef.current !== 'exiting'
+      ) {
         setState('closed');
       }
     }

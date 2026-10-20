@@ -31,10 +31,10 @@ export const FONT_ALIASES: Record<string, string[]> = {
   'source han sans': ['思源黑体', 'siyuan', 'syht'],
   'harmonyos sans sc': ['鸿蒙黑体', 'hongmeng', 'hmht'],
   'harmonyos sans': ['鸿蒙黑体', 'hongmeng', 'hmht'],
-  'simsun': ['宋体', 'songti', 'st'],
-  'simhei': ['黑体', 'heiti', 'ht'],
-  'kaiti': ['楷体', 'kaiti', 'kt'],
-  'fangsong': ['仿宋', 'fangsong', 'fs'],
+  simsun: ['宋体', 'songti', 'st'],
+  simhei: ['黑体', 'heiti', 'ht'],
+  kaiti: ['楷体', 'kaiti', 'kt'],
+  fangsong: ['仿宋', 'fangsong', 'fs'],
   'jetbrains mono': ['jb', 'jetbrains', 'jetbrainsmono'],
   'cascadia code': ['cascadia', 'cc', 'cascadiacode'],
   'cascadia mono': ['cascadia', 'cm', 'cascadiamono'],
@@ -44,7 +44,10 @@ export const FONT_ALIASES: Record<string, string[]> = {
 };
 
 /** 全局单例 ICU Collator，避免在排序中重复实例化 */
-const zhCollator = new Intl.Collator('zh-Hans-CN', { sensitivity: 'accent', numeric: true });
+const zhCollator = new Intl.Collator('zh-Hans-CN', {
+  sensitivity: 'accent',
+  numeric: true,
+});
 
 /** 将汉字转换为首字母缩写字符串与全拼字符串 */
 export function extractPinyin(text: string): { acronym: string; full: string } {
@@ -68,10 +71,14 @@ export function extractPinyin(text: string): { acronym: string; full: string } {
 }
 
 /** 为字体选项构建预计算索引，避免高频按键重复计算拼音 */
-export function indexFontOptions(options: FontSelectOption[]): IndexedFontOption[] {
+export function indexFontOptions(
+  options: FontSelectOption[]
+): IndexedFontOption[] {
   return options.map((opt) => {
     const { acronym, full } = extractPinyin(opt.label);
-    const aliases = (FONT_ALIASES[opt.label.toLowerCase()] || []).map((a) => a.toLowerCase());
+    const aliases = (FONT_ALIASES[opt.label.toLowerCase()] || []).map((a) =>
+      a.toLowerCase()
+    );
     return {
       ...opt,
       labelLower: opt.label.toLowerCase(),
@@ -84,7 +91,10 @@ export function indexFontOptions(options: FontSelectOption[]): IndexedFontOption
 }
 
 /** 计算预索引条目的加权匹配分值 */
-export function calculateIndexedScore(item: IndexedFontOption, query: string): number {
+export function calculateIndexedScore(
+  item: IndexedFontOption,
+  query: string
+): number {
   if (!query) return 100;
 
   // 1. 完全相等 (Exact Match: 100)
@@ -166,11 +176,24 @@ export function filterAndSortFontOptions(
 const SAFE_FONT_NAME_REGEX = /^[\p{L}\p{N}\s\-_.]+$/u;
 const FONT_NAME_MAX = 48;
 
+/**
+ * 剥除 C0/C1 控制字符（U+0000–U+001F、U+007F–U+009F）。
+ * 与原 `/[\u0000-\u001f\u007f-\u009f]/g` 全局替换语义一致，用码点判断避免把控制字符写进正则。
+ */
+function stripControlChars(text: string): string {
+  let out = '';
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) continue;
+    out += text.charAt(i);
+  }
+  return out;
+}
+
 /** 安全清洗字体族名（CSS 安全净化） */
 export function sanitizeFontFamily(raw: string): string {
   if (!raw) return '';
-  return raw
-    .replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
+  return stripControlChars(raw)
     .replace(/[;{}<>"'()\\]/g, '')
     .trim();
 }
@@ -181,7 +204,7 @@ export function sanitizeFontFamilyNameStrict(
 ): { ok: true; name: string } | { ok: false; reason: string } {
   if (!raw) return { ok: false, reason: '请输入字体名称' };
 
-  const clean = raw.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim();
+  const clean = stripControlChars(raw).trim();
   if (!clean) return { ok: false, reason: '请输入字体名称' };
 
   if (clean.length > FONT_NAME_MAX) {
@@ -189,7 +212,10 @@ export function sanitizeFontFamilyNameStrict(
   }
 
   if (!SAFE_FONT_NAME_REGEX.test(clean)) {
-    return { ok: false, reason: '字体名称仅支持中英文字母、数字、空格、连字符与下划线' };
+    return {
+      ok: false,
+      reason: '字体名称仅支持中英文字母、数字、空格、连字符与下划线',
+    };
   }
 
   return { ok: true, name: clean };

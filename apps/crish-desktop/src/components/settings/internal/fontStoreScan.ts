@@ -38,15 +38,6 @@ interface WindowWithLocalFonts extends Window {
   >;
 }
 
-interface CompressedFontCache {
-  v: 1;
-  t: number;
-  f: string[];
-}
-
-const CACHE_KEY = 'crish_local_fonts_cache_v1';
-const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 天缓存
-
 let memoryCache: LocalFontEntry[] | null = null;
 
 /** 各平台精选扩展字体候选库（Canvas 降级引擎使用） */
@@ -145,7 +136,10 @@ export async function canQueryLocalFonts(): Promise<boolean> {
   if (typeof win.queryLocalFonts !== 'function') return false;
 
   try {
-    if (navigator.permissions && typeof navigator.permissions.query === 'function') {
+    if (
+      navigator.permissions &&
+      typeof navigator.permissions.query === 'function'
+    ) {
       const status = await navigator.permissions.query({
         name: 'local-fonts' as PermissionName,
       });
@@ -159,7 +153,9 @@ export async function canQueryLocalFonts(): Promise<boolean> {
 }
 
 /** 引擎 A: 安全调用 Chromium / Tauri window.queryLocalFonts */
-export async function scanViaQueryLocalFontsSafe(timeoutMs = 3000): Promise<LocalFontEntry[]> {
+export async function scanViaQueryLocalFontsSafe(
+  timeoutMs = 3000
+): Promise<LocalFontEntry[]> {
   const supported = await canQueryLocalFonts();
   if (!supported) {
     throw new Error('Local fonts permission denied or unsupported');
@@ -168,7 +164,10 @@ export async function scanViaQueryLocalFontsSafe(timeoutMs = 3000): Promise<Loca
   const win = window as WindowWithLocalFonts;
   let timerId: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
-    timerId = setTimeout(() => reject(new Error('queryLocalFonts timeout')), timeoutMs);
+    timerId = setTimeout(
+      () => reject(new Error('queryLocalFonts timeout')),
+      timeoutMs
+    );
   });
 
   let rawFonts: LocalFontEntry[];
@@ -204,7 +203,10 @@ export async function scanViaQueryLocalFontsSafe(timeoutMs = 3000): Promise<Loca
 }
 
 /** 双基准 Canvas 差分测宽判定 */
-export function isFontInstalledMultiBase(family: string, ctx: CanvasRenderingContext2D): boolean {
+export function isFontInstalledMultiBase(
+  family: string,
+  ctx: CanvasRenderingContext2D
+): boolean {
   const testStr = 'mmmmmmmmmmlli@Ww10';
   const testSize = '72px';
   const cleanFam = `'${family.replace(/'/g, '')}'`;
@@ -222,7 +224,10 @@ export function isFontInstalledMultiBase(family: string, ctx: CanvasRenderingCon
   const sansTarget = ctx.measureText(testStr).width;
 
   // 任意基准偏离超过 0.2px 即判定安装
-  return Math.abs(monoTarget - monoBase) > 0.2 || Math.abs(sansTarget - sansBase) > 0.2;
+  return (
+    Math.abs(monoTarget - monoBase) > 0.2 ||
+    Math.abs(sansTarget - sansBase) > 0.2
+  );
 }
 
 /** 引擎 B: 分片调度 Canvas 2D 差分测宽 */
@@ -235,7 +240,12 @@ export async function scanViaCanvasChunked(
   const platform = detectPlatform();
   let candidateList = candidates;
   if (!candidateList || candidateList.length === 0) {
-    const pKey = platform === 'macos' || platform === 'ios' ? 'macos' : platform === 'linux' ? 'linux' : 'windows';
+    const pKey =
+      platform === 'macos' || platform === 'ios'
+        ? 'macos'
+        : platform === 'linux'
+          ? 'linux'
+          : 'windows';
     const cfg = EXTENDED_CURATED_FONTS[pKey] || EXTENDED_CURATED_FONTS.windows;
     candidateList = [...new Set([...cfg.ui, ...cfg.mono])];
   }
@@ -280,8 +290,11 @@ export function clearMemoryFontCache(): void {
 }
 
 /** 双引擎统一扫描入口（带双级缓存与自适应降级） */
-export async function scanSystemFonts(forceRefresh = false): Promise<LocalFontScanResult> {
-  const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
+export async function scanSystemFonts(
+  forceRefresh = false
+): Promise<LocalFontScanResult> {
+  const startTime =
+    typeof performance !== 'undefined' ? performance.now() : Date.now();
 
   if (!forceRefresh) {
     if (memoryCache && memoryCache.length > 0) {
@@ -310,11 +323,16 @@ export async function scanSystemFonts(forceRefresh = false): Promise<LocalFontSc
 
   try {
     fonts = await scanViaQueryLocalFontsSafe();
-    logger.info(`[fontStoreScan] scanned ${fonts.length} fonts via queryLocalFonts`);
+    logger.info(
+      `[fontStoreScan] scanned ${fonts.length} fonts via queryLocalFonts`
+    );
   } catch (err) {
-    logger.warn('[fontStoreScan] queryLocalFonts unavailable or failed, falling back to Canvas', {
-      err: { message: String(err) },
-    });
+    logger.warn(
+      '[fontStoreScan] queryLocalFonts unavailable or failed, falling back to Canvas',
+      {
+        err: { message: String(err) },
+      }
+    );
     engine = 'canvas';
     fonts = await scanViaCanvasChunked();
   }
@@ -323,7 +341,8 @@ export async function scanSystemFonts(forceRefresh = false): Promise<LocalFontSc
   writeStorageCacheLean(fonts);
 
   const durationMs = Math.round(
-    (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startTime
+    (typeof performance !== 'undefined' ? performance.now() : Date.now()) -
+      startTime
   );
 
   return {

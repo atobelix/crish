@@ -47,7 +47,10 @@ export function computeFloatingPosition(
   const minX = offsetLeft + edgePadding;
   const maxX = Math.max(minX, offsetLeft + vp.width - popupWidth - edgePadding);
   const minY = offsetTop + edgePadding;
-  const maxY = Math.max(minY, offsetTop + vp.height - popupHeight - edgePadding);
+  const maxY = Math.max(
+    minY,
+    offsetTop + vp.height - popupHeight - edgePadding
+  );
 
   // 1. 原位对齐模式（Appica / Base UI 规范：选中项精确覆盖触发器）
   if (alignItemWithTrigger) {
@@ -70,7 +73,8 @@ export function computeFloatingPosition(
   }
 
   // 2. 传统脱离浮层模式（垂直方向可用空间评估与翻折）
-  const spaceBelow = vp.height - (triggerRect.bottom - offsetTop) - sideOffset - edgePadding;
+  const spaceBelow =
+    vp.height - (triggerRect.bottom - offsetTop) - sideOffset - edgePadding;
   const spaceAbove = triggerRect.top - offsetTop - sideOffset - edgePadding;
 
   let actualSide: 'bottom' | 'top' = side;
@@ -94,7 +98,7 @@ export function computeFloatingPosition(
 
   // 水平对齐与避让决策
   let targetX = triggerRect.left;
-  let actualAlign = align;
+  const actualAlign = align;
 
   if (actualAlign === 'end') {
     targetX = triggerRect.right - popupWidth;
@@ -108,7 +112,12 @@ export function computeFloatingPosition(
   const clampedY = Math.min(Math.max(minY, targetY), maxY);
 
   const originY = actualSide === 'top' ? 'bottom' : 'top';
-  const originX = actualAlign === 'end' ? 'right' : actualAlign === 'center' ? 'center' : 'left';
+  const originX =
+    actualAlign === 'end'
+      ? 'right'
+      : actualAlign === 'center'
+        ? 'center'
+        : 'left';
 
   return {
     x: clampedX,

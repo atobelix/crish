@@ -13,7 +13,6 @@ export function ComboboxChips({
   className,
   children,
   onClick,
-  onKeyDown,
   ...restProps
 }: ComboboxChipsProps) {
   const ctx = useComboboxContext('ComboboxChips');
@@ -48,7 +47,10 @@ export function ComboboxChips({
       if (e.defaultPrevented || ctx.disabled) return;
 
       if (e.key === 'Backspace' && !ctx.query && valuesArray.length > 0) {
-        if (ctx.activeChipIndex >= 0 && ctx.activeChipIndex < valuesArray.length) {
+        if (
+          ctx.activeChipIndex >= 0 &&
+          ctx.activeChipIndex < valuesArray.length
+        ) {
           const valToRemove = valuesArray[ctx.activeChipIndex];
           if (valToRemove !== undefined) {
             ctx.removeChip(valToRemove);
@@ -57,10 +59,22 @@ export function ComboboxChips({
         } else {
           ctx.setActiveChipIndex(valuesArray.length - 1);
         }
-      } else if (e.key === 'ArrowLeft' && !ctx.query && valuesArray.length > 0) {
-        ctx.setActiveChipIndex((prev) => (prev > 0 ? prev - 1 : valuesArray.length - 1));
-      } else if (e.key === 'ArrowRight' && !ctx.query && ctx.activeChipIndex >= 0) {
-        ctx.setActiveChipIndex((prev) => (prev < valuesArray.length - 1 ? prev + 1 : -1));
+      } else if (
+        e.key === 'ArrowLeft' &&
+        !ctx.query &&
+        valuesArray.length > 0
+      ) {
+        ctx.setActiveChipIndex((prev) =>
+          prev > 0 ? prev - 1 : valuesArray.length - 1
+        );
+      } else if (
+        e.key === 'ArrowRight' &&
+        !ctx.query &&
+        ctx.activeChipIndex >= 0
+      ) {
+        ctx.setActiveChipIndex((prev) =>
+          prev < valuesArray.length - 1 ? prev + 1 : -1
+        );
       } else if (ctx.activeChipIndex >= 0 && e.key !== 'Backspace') {
         ctx.setActiveChipIndex(-1);
       }
@@ -83,7 +97,8 @@ export function ComboboxChips({
   return (
     <div
       ref={(el) => {
-        (ctx.triggerRef as React.MutableRefObject<HTMLElement | null>).current = el;
+        (ctx.triggerRef as React.MutableRefObject<HTMLElement | null>).current =
+          el;
       }}
       className={`${styles.chipsWrapper} ${className ?? ''}`}
       onClick={handleWrapperClick}
@@ -97,12 +112,16 @@ export function ComboboxChips({
             <ComboboxChip
               key={val}
               value={val}
-              className={ctx.activeChipIndex === idx ? styles.chipActive : undefined}
+              className={
+                ctx.activeChipIndex === idx ? styles.chipActive : undefined
+              }
             />
           ))}
       <input
         ref={(el) => {
-          (ctx.inputRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
+          (
+            ctx.inputRef as React.MutableRefObject<HTMLInputElement | null>
+          ).current = el;
         }}
         id={ctx.triggerId}
         type="text"
