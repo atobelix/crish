@@ -35,12 +35,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
-      - run: npm install -g npm@11.6.2 && (npm ci || npm install)
+      - run: npm install -g npm@11.6.2 && npm ci
       # G7 统一：typecheck 走根脚本（npm run typecheck = 7 段 tsc 直跑；
       # 与 npx turbo run typecheck 覆盖等价，口径对齐 G7 盘点）
       - run: npm run typecheck
@@ -49,12 +49,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
-      - run: npm install -g npm@11.6.2 && (npm ci || npm install)
+      - run: npm install -g npm@11.6.2 && npm ci
       - run: npx eslint .
       # depcruise 无 --ignore 参数（dependency-cruiser 16.x 仅 -x/--exclude 与
       # --ignore-known）；dist 排除已由 .dependency-cruiser.cjs options.exclude
@@ -105,12 +105,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
-      - run: npm install -g npm@11.6.2 && (npm ci || npm install)
+      - run: npm install -g npm@11.6.2 && npm ci
       # 前端快集：仅 unit 项目（F1 纯逻辑 + F2 组件，用例基线主体）
       # --coverage：强制执行 vitest.config.ts 根 coverage 块的阈值门禁。
       #（2026-08-03 审计：此前未带 --coverage，且项目级阈值被根配置整体覆盖，
@@ -132,12 +132,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
-      - run: npm install -g npm@11.6.2 && (npm ci || npm install)
+      - run: npm install -g npm@11.6.2 && npm ci
       - run: npm run build:shared-types
       - run: npm run build:desktop
       - run: node scripts/check-dist.mjs --max-app-kb 500 --csp-enforce
@@ -157,12 +157,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
-      - run: npm install -g npm@11.6.2 && (npm ci || npm install)
+      - run: npm install -g npm@11.6.2 && npm ci
       - run: npm run typecheck -w @crish/crish-mobile
       - run: npm test -w @crish/crish-mobile -- --ci
 
@@ -170,12 +170,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
-      - run: npm install -g npm@11.6.2 && (npm ci || npm install)
+      - run: npm install -g npm@11.6.2 && npm ci
       - run: npm audit --omit=dev --audit-level=moderate -w @crish/crish-desktop -w @crish/agent-workbench -w @crish/editor-kit -w @crish/block-paper -w @crish/shared-utils -w @crish/shared-types
 
   # 生成物漂移门禁（2026-08-03 审计：gen:engine-bindings 是手动脚本，CI 未跑；
@@ -186,12 +186,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
-      - run: npm install -g npm@11.6.2 && (npm ci || npm install)
+      - run: npm install -g npm@11.6.2 && npm ci
       - run: node scripts/generate-engine-bindings.mjs
       - run: git diff --exit-code -- packages/shared-types/src/generated
 
@@ -199,16 +199,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
 
   secret-scan:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
 
   rust-check:
     strategy:
@@ -218,8 +218,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
       - name: Install Linux build dependencies
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -233,8 +233,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
       # 关键单元测试快速套件（T11.7 快层）：conex-types（类型/契约域）+
       # session-loop（主循环核心，含流式契约锚点）
       - run: cargo test -p conex-types -p session-loop --locked

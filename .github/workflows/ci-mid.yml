@@ -39,8 +39,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
       # 全量测试：L1 单测 + L2 集成 + L3 契约（含流式契约锚点）+ L4 e2e faux
       # --locked（T10.1）：Cargo.lock 已入库，锁漂移在漂移状态下结果不可复现
       - run: cargo test --workspace --locked
@@ -49,15 +49,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
         with:
           components: clippy
       # 口径统一（G7）：--all-targets warn 级 + 基线 ratchet 脚本（G1）。
       # -D warnings 为存量清零后终态（G12 切换）
       # 头部注释旧口径已由 G7 更新。
       - run: cargo clippy --workspace --all-targets --locked
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
       # 新增告警 > 0 即失败（基线真源：基线记录/clippy-workspace-T13.md 标记区）
@@ -67,12 +67,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
-      - run: npm install -g npm@11.6.2 && (npm ci || npm install)
+      - run: npm install -g npm@11.6.2 && npm ci
       # 前端 vitest 全量（vitest.config.ts 项目：unit + integration + native-smoke）
       # 覆盖率门禁在快层 ci.yml 强制执行（unit 项目 --coverage，阈值 45/70/65/45）。
       # 中层不加 --coverage 的理由（2026-08-03 实测基线）：
@@ -88,12 +88,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
-      - run: npm install -g npm@11.6.2 && (npm ci || npm install)
+      - run: npm install -g npm@11.6.2 && npm ci
       # F3 层：integration / fuzz / race / recovery 四目录
       # （vitest.integration.config.ts，PS-02 T2.1 起 test.projects 单项目）
       - run: npx vitest run --config vitest.integration.config.ts --reporter=verbose
@@ -102,8 +102,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
       # machete 例外论证（PS-02 T2.5）：不编译、不解析依赖树，锁漂移不影响
       # 其结果；实跑 `cargo machete --locked` → Unrecognized argument EXIT=1
       # （透传不可用），故不加 --locked
@@ -123,12 +123,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
-      - run: npm install -g npm@11.6.2 && (npm ci || npm install)
+      - run: npm install -g npm@11.6.2 && npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e:smoke
 
@@ -141,12 +141,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
-      - run: npm install -g npm@11.6.2 && (npm ci || npm install)
+      - run: npm install -g npm@11.6.2 && npm ci
       - run: npm run knip
 
   # I8 治理收口（G3/G4/G6）：unwrap / 吞错 / 行数 三基线 ratchet。
@@ -156,8 +156,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
       - run: node scripts/check-unwrap-baseline.mjs
@@ -177,11 +177,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
-      - run: npm install -g npm@11.6.2 && (npm ci || npm install)
+      - run: npm install -g npm@11.6.2 && npm ci
       # 静态/契约类守卫（按域分组，便于定位失败）
       - run: node scripts/check-async-commands.mjs
       - run: node scripts/check-blocked-executable-ssot.mjs
@@ -204,3 +204,12 @@ jobs:
       - run: node scripts/check-provider-single-track.mjs
       - run: node scripts/check-thinking-vocabulary-ssot.mjs
       - run: node scripts/check-source-assets-tracked.mjs
+      # 会话/协作不变量门禁（GAP-08 收口，2026-10-20）：
+      # 这 4 条此前只在 .husky/pre-commit 跑，使用 --no-verify、GitHub Web 编辑、
+      # merge commit 或其他 agent 直推时可绕过，冲突标记可能进主分支。
+      # 均为只读源码树扫描、不依赖构建产物，实测 exit 0，故接入中层作为兜底
+      # （pre-commit 仍保留，作为快速反馈的第一道）。
+      - run: node scripts/check-conflict-markers.mjs
+      - run: node scripts/check-session-message-upsert.mjs
+      - run: node scripts/check-tool-pairing-invariants.mjs
+      - run: node scripts/check-db-write-bypass.mjs

@@ -32,8 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
       # 压力场景全部 #[ignore]（T11.6）：release 下运行，不进常规 CI
       - run: cargo test --workspace --release --locked -- --ignored
 
@@ -41,12 +41,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
-      - run: npm install -g npm@11.6.2 && (npm ci || npm install)
+      - run: npm install -g npm@11.6.2 && npm ci
       # TS 压力轨（stress-runner：AI 流 / diff 加载 / 会话切换）
       - run: npm run stress
 
@@ -54,12 +54,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
-      - run: npm install -g npm@11.6.2 && (npm ci || npm install)
+      - run: npm install -g npm@11.6.2 && npm ci
       - run: npx playwright install --with-deps chromium
       # L2 mock-IPC e2e（根 config：tests/e2e，webServer 自动拉起 dev server）
       # G7 统一：走根脚本 npm run test:e2e（等价 npx playwright test tests/e2e）
@@ -69,8 +69,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
       # 基准场景（Criterion，PE-09 T09.7 新建 crates/*/benches）：
       # 落地前跳过并提示，落地后自动生效
       - name: 基准（存在基准场景时运行）
