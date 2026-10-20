@@ -298,7 +298,16 @@ impl SnapshotStore for SnapshotFileStore {
         std::fs::write(&tmp_path, body).map_err(|e| io_err("snapshot_write_tmp", e))?;
         // 轮转：当前主快照 → 备份（Windows rename 不覆盖，先删旧备份）
         if self.path.exists() {
-            let _ = std::fs::remove_file(&self.backup_path);
+            if let Err(e) = std::fs::remove_file(&self.backup_path) {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    // 旧备份清不掉会让紧随其后的 rename 失败（Windows 不覆盖），必须留痕
+                    tracing::warn!(
+                        path = %self.backup_path.display(),
+                        error = %e,
+                        "清理旧快照备份失败（后续轮转可能受阻）"
+                    );
+                }
+            }
             std::fs::rename(&self.path, &self.backup_path)
                 .map_err(|e| io_err("snapshot_rotate", e))?;
         }

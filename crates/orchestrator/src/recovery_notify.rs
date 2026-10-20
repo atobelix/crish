@@ -122,16 +122,16 @@ impl ForkContextMode {
 /// - 注入内容为空（0 字节）→ [ForkContextMode::New]（全新）；
 /// - 其余（同窗口/超窗、≤80%/超占比）→ [ForkContextMode::Verbatim]（字节级继承，单路径）。
 pub fn decide_fork_context(
-    started_at_ms: i64,
-    now_ms: i64,
+    _started_at_ms: i64,
+    _now_ms: i64,
     inject_bytes: u64,
-    window_bytes: u64,
+    _window_bytes: u64,
 ) -> ForkContextMode {
     if inject_bytes == 0 {
         return ForkContextMode::New;
     }
     // B6 收敛：`Summarized` 已删除，历史超窗/超占比路径统一收敛为 `Verbatim`（`alias` 保证旧库 `summarized` 反序列化兼容）。
-    let _ = (started_at_ms, now_ms, window_bytes);
+    // 时间窗与窗口字节数保留在签名（wire 兼容），当前判定不使用，故以 `_` 前缀显式表达。
     ForkContextMode::Verbatim
 }
 

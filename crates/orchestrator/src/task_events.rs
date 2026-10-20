@@ -544,17 +544,17 @@ impl TaskAuditAccumulator {
         if self.records.is_empty() {
             return Vec::new();
         }
-        let mut batch_timestamp = Some(now_iso_utc());
+        // 单批共用一个时间戳；批内每条各自 clone 一份（ISO 串极短，开销可忽略），
+        // 避免用 Option::take 表达「最后一条移动」而引入 expect
+        let batch_timestamp = now_iso_utc();
         let records = std::mem::take(&mut self.records);
-        let total = records.len();
-        let mut events = Vec::with_capacity(total);
-        for (idx, record) in records.into_iter().enumerate() {
-            let ts = if idx + 1 < total {
-                batch_timestamp.as_ref().expect("timestamp present").clone()
-            } else {
-                batch_timestamp.take().expect("timestamp present")
-            };
-            events.push(into_task_audit_event_with_timestamp(session_id, record, ts));
+        let mut events = Vec::with_capacity(records.len());
+        for record in records {
+            events.push(into_task_audit_event_with_timestamp(
+                session_id,
+                record,
+                batch_timestamp.clone(),
+            ));
         }
         events
     }
@@ -573,19 +573,18 @@ impl TaskAuditAccumulator {
         }
         // D-01 DM-04：任务域审计事件无 run 归属（队列绑 None = 会话域）
         let mut queue = EventQueue::new(store, 1, None);
-        let mut batch_timestamp = Some(now_iso_utc());
-        let total = self.records.len();
+        // 同 drain_audit_events：单批共用一个时间戳，逐条 clone，不用 Option::take + expect
+        let batch_timestamp = now_iso_utc();
         let mut count = 0;
-        for (idx, record) in self.records.iter().enumerate() {
-            let ts = if idx + 1 < total {
-                batch_timestamp.as_ref().expect("timestamp present").clone()
-            } else {
-                batch_timestamp.take().expect("timestamp present")
-            };
+        for record in self.records.iter() {
             queue
                 .push(
                     session_id,
-                    build_task_audit_event_with_timestamp(session_id, record, ts),
+                    build_task_audit_event_with_timestamp(
+                        session_id,
+                        record,
+                        batch_timestamp.clone(),
+                    ),
                 )
                 .await?;
             count += 1;

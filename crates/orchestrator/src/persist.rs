@@ -270,8 +270,8 @@ pub trait Store: Send + Sync {
     /// 默认 no-op（对齐 [Self::as_local_db] 的「可选能力默认空实现」
     /// 模式）：[InMemoryStore] 等测试替身无 sessions 表，无需刷新；
     /// [LocalDbStore] 覆写为真实单语句 UPDATE（sessions.rs touch_session）。
-    async fn touch_session(&self, session_id: &str) -> StoreResult<()> {
-        let _ = session_id;
+    async fn touch_session(&self, _session_id: &str) -> StoreResult<()> {
+        // 默认 no-op：按契约不使用会话 id（参数以 `_` 前缀显式表达）
         Ok(())
     }
 }

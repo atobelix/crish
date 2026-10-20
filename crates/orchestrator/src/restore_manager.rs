@@ -339,17 +339,30 @@ impl RestoreManager {
             for event in &events {
                 last_sequence = last_sequence.max(event.sequence);
                 if event.event_type == SESSION_LEAF_MOVED_EVENT {
-                    // 叶子移动重放（载荷损坏时跳过，不中断恢复）
-                    let _ = session.apply_leaf_move_event(&event.payload);
+                    // 叶子移动重放（载荷损坏时跳过，不中断恢复；失败必须留痕）
+                    if let Err(e) = session.apply_leaf_move_event(&event.payload) {
+                        tracing::warn!(
+                            sequence = event.sequence,
+                            error = ?e,
+                            "叶子移动事件重放失败（载荷损坏，跳过该事件）"
+                        );
+                    }
                 } else if event.event_type == CONTEXT_COMPRESSION_END_EVENT {
                     // 压缩护栏重放（P4 阶段 5-1）：context-compression-end
                     // 事件折叠进会话上下文元数据——快照会话增量续接、
                     // 派生会话全量重建（事件时间戳不可解析时保持既有状态）
-                    let _ = serde_json::from_str::<AgentEvent>(&event.payload).map(|e| {
-                        if let AgentEvent::ContextCompressionEnd { timestamp, .. } = e {
-                            session.apply_compression_end(event.sequence, &timestamp);
+                    match serde_json::from_str::<AgentEvent>(&event.payload) {
+                        Ok(parsed) => {
+                            if let AgentEvent::ContextCompressionEnd { timestamp, .. } = parsed {
+                                session.apply_compression_end(event.sequence, &timestamp);
+                            }
                         }
-                    });
+                        Err(e) => tracing::warn!(
+                            sequence = event.sequence,
+                            error = ?e,
+                            "context-compression-end 载荷解析失败（保持既有状态）"
+                        ),
+                    }
                 }
             }
         }

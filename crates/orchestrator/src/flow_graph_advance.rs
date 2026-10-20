@@ -98,10 +98,12 @@ impl FlowScheduler {
             let mut budget_blocked: Vec<FlowNodeId> = Vec::new();
             for (idx, node_id) in ready_ids.iter().enumerate() {
                 let node_id = node_id.clone();
-                let node_idx = order_index
-                    .get(node_id.as_str())
-                    .copied()
-                    .expect("就绪集合来自图节点");
+                let Some(node_idx) = order_index.get(node_id.as_str()).copied() else {
+                    // 就绪集合由上面的 order_index 生成；缺失说明图与索引不同步。
+                    // 不 panic（安全边界不得靠 expect），跳过该节点并留痕。
+                    tracing::error!(node = %node_id, "就绪节点缺少顺序索引，跳过本轮调度");
+                    continue;
+                };
                 let node = &graph.nodes()[node_idx];
                 // 合成唤醒：综合节点就绪即产事件（不轮询；同节点只唤醒一次）
                 if node.is_composite {
