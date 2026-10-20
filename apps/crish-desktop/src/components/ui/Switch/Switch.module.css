@@ -111,8 +111,16 @@
 
 /* 选中态 Hover：微光高亮，杜绝变暗塌陷 */
 .track[data-state='checked']:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bg-card) 8%, var(--brand));
-  border-color: color-mix(in srgb, var(--bg-card) 8%, var(--brand));
+  background: color-mix(
+    in srgb,
+    var(--cover-card-bg, var(--bg-card)) 8%,
+    var(--brand)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--cover-card-bg, var(--bg-card)) 8%,
+    var(--brand)
+  );
 }
 
 /* 焦点环：严格遵守 AGENTS.md §13 (3%~6% 克制软灰 / 品牌柔和光晕) */

@@ -99,7 +99,9 @@
   --seg-h: 36px;
   --seg-pad: 3px;
   --seg-outer-radius: var(--sep-radius-outer);
-  --seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad)); /* 11px 完美同心 */
+  --seg-inner-radius: calc(
+    var(--seg-outer-radius) - var(--seg-pad)
+  ); /* 11px 完美同心 */
   --seg-fs: 13.5px;
   --seg-item-px: 14px;
   --seg-icon-size: 15px;
@@ -114,7 +116,7 @@
   border-radius: var(--seg-inner-radius);
 
   /* 浅色纯白 / 深色提亮实体卡底 (Elevated Card Base) */
-  background-color: var(--seg-slider-bg, var(--bg-card));
+  background-color: var(--seg-slider-bg, var(--cover-card-bg, var(--bg-card)));
 
   /* 彻底消除双重描边：滑块不加边框，仅保留纯净立体微投影 */
   border: none;
@@ -180,7 +182,9 @@
 }
 
 /* 严格互斥选择器：仅未激活项在 Hover 时激活动画遮罩 */
-.item:hover:not(:disabled):not([data-active='true']):not([aria-checked='true']):not(.itemActive)::before {
+.item:hover:not(:disabled):not([data-active='true']):not(
+    [aria-checked='true']
+  ):not(.itemActive)::before {
   opacity: 1;
 }
 
@@ -203,8 +207,9 @@
 .item:focus-visible {
   outline: none;
   box-shadow:
-    0 0 0 1px var(--bg-card),
-    0 0 0 2px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+    0 0 0 1px var(--cover-card-bg, var(--bg-card)),
+    0 0 0 2px
+      color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .itemDisabled {

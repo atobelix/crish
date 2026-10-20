@@ -9,12 +9,15 @@
 /* 1. 面板：尺寸自适应（最小窗口 1040×720 下 976×656），圆角 + 轻阴影，无外框线。
  * [role] 抬高特异性，稳定压过 Dialog 基座的 .dialog / 尺寸档（与 CSS 加载顺序无关） */
 [role='dialog'].settingsModal {
-  /* 无边框总开关：弹窗内卡片 / 分组 / 分隔线的边框与卡片投影。
-   * 想加回边框：把 --settings-card-border 改为 var(--border-subtle)；
-   * 想加回卡片投影：把 --settings-card-shadow 改为 var(--shadow-sm)。只改这两行。 */
-  --settings-card-border: var(--border-subtle);
-  --settings-card-shadow: var(--shadow-sm);
-  /* 表单控件静止描边取真实发丝线（此处 --border-subtle 尚未被下面的壳层覆盖） */
+  /* 2026-10-20 真源唯一化：原「卡片边框/投影总开关」（--settings-card-border /
+   * --settings-card-shadow 在面板上取值 var(--border-subtle) / var(--shadow-sm)，
+   * 再由 .settingsShell 把 --border-subtle / --shadow-sm 改写回旋钮）经核算为
+   * **恒等重定义**——子级壳拿到的计算值与全局值完全相同，视觉零差异；但它使 A 类
+   * token 出现第二个定义文件（multi_file_defs 违规）。故删除该恒等链路，卡片边框/
+   * 投影直接继承 tokens.css 的全局发丝线。若将来需要「弹窗内无边框」模式，
+   * 应新增组件私有 token（--settings-* 前缀）并登记 componentIslands，
+   * 不得再二次定义 --border-subtle / --shadow-sm。 */
+  /* 表单控件静止描边取真实发丝线 */
   --settings-control-border: var(--border-subtle);
   --settings-modal-max-width: 1040px; /* 组件尺寸语义：本地自包含 */
   --settings-modal-max-height: 760px; /* 组件尺寸语义：本地自包含 */
@@ -46,10 +49,9 @@
 }
 
 /* 2. 两栏壳：左导航贯通 + 右侧（标题行 + 内容区），与主界面「左栏贯通 + 右侧顶行」同拓扑。
- * 在这里把边框 / 卡片投影改接到上面的总开关（子元素上覆盖，避免与开关自引用成环） */
+ * 边框 / 卡片投影不再在此二次定义（见面板段注释）：--border-subtle / --shadow-sm 保持
+ * tokens.css 单一真源，子元素直接继承全局值。 */
 .settingsShell {
-  --border-subtle: var(--settings-card-border);
-  --shadow-sm: var(--settings-card-shadow);
   display: flex;
   flex: 1 1 auto;
   width: 100%;
@@ -288,9 +290,11 @@
 
 /* 4. 内容区（滚动容器；类名 coverContent 是 overlay-scrollbar 细条出口的命中钩子，勿改名）
  * 底色 = 主层 --surface-main（稍微浅一点的底色，不与滑块底轨混淆）。
- * --bg-card 在此作用域改指输入层：各设置项卡片 / 分组块（消费 --bg-card）= 白 */
+ * --cover-card-bg 在此作用域定义（T-BLK-07c SSOT 收口）：输入层卡片底色，各设置项卡片 / 分组块 = 白。
+ * 消费点统一写 var(--cover-card-bg, var(--bg-card))：作用域内取输入层，作用域外回落全局 --bg-card。
+ * 注意：本文件不得再定义 --bg-card（--bg-card 唯一真源在 styles/tokens.css）。 */
 .coverContent {
-  --bg-card: var(--surface-input);
+  --cover-card-bg: var(--surface-input);
   flex: 1;
   min-width: 0;
   min-height: 0;

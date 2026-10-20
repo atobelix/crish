@@ -8,7 +8,7 @@ import {
   computeSeriesGeometry,
 } from './usageChartModel';
 import { clampViewportX, computeDecimatedTicks } from './usageSpline';
-import { Button, SegmentedControl } from '../../ui';
+import { SegmentedControl } from '../../ui';
 import styles from './UsageTrendChart.module.css';
 
 /**
@@ -33,17 +33,27 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
   models,
   range = '24h',
 }) => {
-  const [dimension, setDimension] = useState<'overview' | 'models' | 'cost'>('overview');
+  const [dimension, setDimension] = useState<'overview' | 'models' | 'cost'>(
+    'overview'
+  );
   const [disabledSeries, setDisabledSeries] = useState<Set<string>>(new Set());
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
-  const [hoverHighlightSeries, setHoverHighlightSeries] = useState<string | null>(null);
+  const [hoverHighlightSeries, setHoverHighlightSeries] = useState<
+    string | null
+  >(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
   // 1. 构建图表配置模型
   const chartModel = useMemo(() => {
-    return buildChartSeriesConfig(dimension, points, maxTokens, maxCost, models);
+    return buildChartSeriesConfig(
+      dimension,
+      points,
+      maxTokens,
+      maxCost,
+      models
+    );
   }, [dimension, points, maxTokens, maxCost, models]);
 
   const { seriesList, yTicks, yMax, formatVal } = chartModel;
@@ -55,7 +65,15 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
   const yBottom = 140;
 
   const computedSeries = useMemo(() => {
-    return computeSeriesGeometry(seriesList, points.length, yMax, xStart, xEnd, yTop, yBottom);
+    return computeSeriesGeometry(
+      seriesList,
+      points.length,
+      yMax,
+      xStart,
+      xEnd,
+      yTop,
+      yBottom
+    );
   }, [seriesList, points.length, yMax]);
 
   // 3. X 轴刻度抽稀计算（显式使用 range，杜绝根据数据点数盲猜）
@@ -65,7 +83,12 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
 
   // 鼠标交互
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!containerRef.current || points.length === 0 || computedSeries.length === 0) return;
+    if (
+      !containerRef.current ||
+      points.length === 0 ||
+      computedSeries.length === 0
+    )
+      return;
     const rect = containerRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const numPoints = points.length;
@@ -73,7 +96,8 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
     let closest = 0;
     let minDiff = Number.POSITIVE_INFINITY;
     for (let i = 0; i < numPoints; i++) {
-      const ptX = (computedSeries[0]?.points[i]?.x ?? xStart) / 760 * rect.width;
+      const ptX =
+        ((computedSeries[0]?.points[i]?.x ?? xStart) / 760) * rect.width;
       const diff = Math.abs(ptX - mouseX);
       if (diff < minDiff) {
         minDiff = diff;
@@ -100,11 +124,16 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
 
   // 卡片钳位位置计算
   const tooltipStyle = useMemo(() => {
-    if (hoverIdx === null || !containerRef.current || computedSeries.length === 0) {
+    if (
+      hoverIdx === null ||
+      !containerRef.current ||
+      computedSeries.length === 0
+    ) {
       return { display: 'none' };
     }
     const containerW = containerRef.current.clientWidth || 760;
-    const idealX = (computedSeries[0]?.points[hoverIdx]?.x ?? xStart) / 760 * containerW;
+    const idealX =
+      ((computedSeries[0]?.points[hoverIdx]?.x ?? xStart) / 760) * containerW;
     const cardW = tooltipRef.current?.offsetWidth || 160;
     const clampedX = clampViewportX(idealX, cardW, containerW, 6);
 
@@ -116,9 +145,16 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
   }, [hoverIdx, computedSeries]);
 
   const crosshairLeft = useMemo(() => {
-    if (hoverIdx === null || !containerRef.current || computedSeries.length === 0) return 0;
+    if (
+      hoverIdx === null ||
+      !containerRef.current ||
+      computedSeries.length === 0
+    )
+      return 0;
     const containerW = containerRef.current.clientWidth || 760;
-    return (computedSeries[0]?.points[hoverIdx]?.x ?? xStart) / 760 * containerW;
+    return (
+      ((computedSeries[0]?.points[hoverIdx]?.x ?? xStart) / 760) * containerW
+    );
   }, [hoverIdx, computedSeries]);
 
   return (
@@ -129,7 +165,9 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
         <SegmentedControl
           size="xs"
           value={dimension}
-          onChange={(val) => setDimension(val as 'overview' | 'models' | 'cost')}
+          onChange={(val) =>
+            setDimension(val as 'overview' | 'models' | 'cost')
+          }
           options={[
             { value: 'overview', label: '吞吐总览' },
             { value: 'models', label: '模型对比' },
@@ -138,7 +176,8 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
         />
       </div>
 
-      {points.length <= 1 || (maxTokens === 0 && maxCost === 0 && models.length === 0) ? (
+      {points.length <= 1 ||
+      (maxTokens === 0 && maxCost === 0 && models.length === 0) ? (
         <div className={styles.emptyChart}>暂无充足时序采样数据</div>
       ) : (
         <>
@@ -150,16 +189,28 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
           >
             {/* HTML 纯净 Y 轴刻度 */}
             <div className={styles.chartYAxisHtml}>
-              <span className={styles.yTick} style={{ top: 'calc(20 / 170 * 100%)' }}>
+              <span
+                className={styles.yTick}
+                style={{ top: 'calc(20 / 170 * 100%)' }}
+              >
                 {yTicks[0]}
               </span>
-              <span className={styles.yTick} style={{ top: 'calc(60 / 170 * 100%)' }}>
+              <span
+                className={styles.yTick}
+                style={{ top: 'calc(60 / 170 * 100%)' }}
+              >
                 {yTicks[1]}
               </span>
-              <span className={styles.yTick} style={{ top: 'calc(100 / 170 * 100%)' }}>
+              <span
+                className={styles.yTick}
+                style={{ top: 'calc(100 / 170 * 100%)' }}
+              >
                 {yTicks[2]}
               </span>
-              <span className={styles.yTick} style={{ top: 'calc(140 / 170 * 100%)' }}>
+              <span
+                className={styles.yTick}
+                style={{ top: 'calc(140 / 170 * 100%)' }}
+              >
                 {yTicks[3]}
               </span>
             </div>
@@ -185,10 +236,34 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
               </defs>
 
               {/* 辅助网格线 */}
-              <line x1="40" y1="20" x2="750" y2="20" className={styles.gridLine} />
-              <line x1="40" y1="60" x2="750" y2="60" className={styles.gridLine} />
-              <line x1="40" y1="100" x2="750" y2="100" className={styles.gridLine} />
-              <line x1="40" y1="140" x2="750" y2="140" className={styles.axisLine} />
+              <line
+                x1="40"
+                y1="20"
+                x2="750"
+                y2="20"
+                className={styles.gridLine}
+              />
+              <line
+                x1="40"
+                y1="60"
+                x2="750"
+                y2="60"
+                className={styles.gridLine}
+              />
+              <line
+                x1="40"
+                y1="100"
+                x2="750"
+                y2="100"
+                className={styles.gridLine}
+              />
+              <line
+                x1="40"
+                y1="140"
+                x2="750"
+                y2="140"
+                className={styles.axisLine}
+              />
 
               {/* 面积底色填充 */}
               {computedSeries.map((ser) => {
@@ -218,7 +293,9 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
                     className={styles.pathLineSmooth}
                     stroke={ser.color}
                     strokeWidth={strokeWidth}
-                    strokeDasharray={ser.style === 'dashed' ? ser.dasharray : undefined}
+                    strokeDasharray={
+                      ser.style === 'dashed' ? ser.dasharray : undefined
+                    }
                     d={ser.lineD}
                     style={{
                       opacity: isDisabled ? 0 : 1,
@@ -241,7 +318,7 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
                         cx={pt.x.toFixed(1)}
                         cy={pt.y.toFixed(1)}
                         r="3.5"
-                        fill="var(--bg-card)"
+                        fill="var(--cover-card-bg, var(--bg-card))"
                         stroke={ser.color}
                         strokeWidth={CHART_POINT_STROKE}
                       />
@@ -282,13 +359,18 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
                       <div
                         key={`tt_${ser.id}`}
                         className={styles.tooltipRow}
-                        style={ser.isTotal ? { marginBottom: '2px' } : undefined}
+                        style={
+                          ser.isTotal ? { marginBottom: '2px' } : undefined
+                        }
                       >
                         <span
                           className={styles.tooltipRowLeft}
                           style={
                             ser.isTotal
-                              ? { fontWeight: 600, color: 'var(--text-primary)' }
+                              ? {
+                                  fontWeight: 600,
+                                  color: 'var(--text-primary)',
+                                }
                               : undefined
                           }
                         >
@@ -362,7 +444,8 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') toggleSeries(ser.id);
+                    if (e.key === 'Enter' || e.key === ' ')
+                      toggleSeries(ser.id);
                   }}
                   aria-pressed={!isDisabled}
                 >

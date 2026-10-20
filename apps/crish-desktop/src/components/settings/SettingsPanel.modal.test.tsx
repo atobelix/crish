@@ -347,21 +347,34 @@ describe('设置弹窗：两层底色 / 无边框开关 / 遮罩 token 契约', 
     }
   });
 
-  it('内容区与左栏/顶栏统一为 --surface-outer；卡片（--bg-card）在内容区作用域改指 --surface-input', () => {
+  it('内容区与左栏/顶栏统一为 --surface-outer；卡片底色经 --cover-card-bg 在内容区作用域定义（T-BLK-07c 改名后）', () => {
     const r = rule('.coverContent');
     expect(r).toMatch(/background:\s*var\(--surface-outer\);/);
-    expect(r).toMatch(/--bg-card:\s*var\(--surface-input\);/);
+    expect(r).toMatch(/--cover-card-bg:\s*var\(--surface-input\);/);
+    // 负向守护：本文件不得再定义 --bg-card（唯一真源在 styles/tokens.css）
+    expect(r).not.toMatch(/--bg-card\s*:/);
   });
 
-  it('卡片边框与投影：面板上默认开启 --settings-card-border: var(--border-subtle)，子级壳把 --border-subtle 改接到它', () => {
-    expect(rule("[role='dialog'].settingsModal")).toMatch(
-      /--settings-card-border:\s*var\(--border-subtle\);/
-    );
+  it('卡片边框与投影：设置面板不得二次定义 A 类 token（--border-subtle / --shadow-sm 直连 tokens.css 单一真源）', () => {
+    // 2026-10-20 真源唯一化：原「--settings-card-border/-shadow 旋钮 + 子级壳改接」链路经核算为
+    // 恒等重定义（子级壳拿到的计算值与全局值相同），却让 --border-subtle / --shadow-sm 出现
+    // 第二个定义文件（token SSOT 门禁 multi_file_defs 违规）。链路已删除，此处改为负向断言守护。
+    const modal = rule("[role='dialog'].settingsModal");
     const shell = rule('.settingsShell');
-    expect(shell).toMatch(/--border-subtle:\s*var\(--settings-card-border\);/);
-    // 开关与覆盖不在同一元素上，避免改回 var(--border-subtle) 时自引用成环
-    expect(rule("[role='dialog'].settingsModal")).not.toMatch(
-      /--border-subtle:/
+    expect(modal, 'settingsModal').not.toBe('');
+    expect(shell, 'settingsShell').not.toBe('');
+    for (const [sel, r] of [
+      ["[role='dialog'].settingsModal", modal],
+      ['.settingsShell', shell],
+    ] as const) {
+      expect(r, sel).not.toMatch(/--border-subtle\s*:/);
+      expect(r, sel).not.toMatch(/--shadow-sm\s*:/);
+      expect(r, sel).not.toMatch(/--settings-card-border\s*:/);
+      expect(r, sel).not.toMatch(/--settings-card-shadow\s*:/);
+    }
+    // 表单控件静止描边仍取真实发丝线（组件私有 token，引用全局值，属合法通道）
+    expect(modal).toMatch(
+      /--settings-control-border:\s*var\(--border-subtle\);/
     );
   });
 

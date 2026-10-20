@@ -33,7 +33,7 @@
   font-weight: var(--font-weight-medium);
   letter-spacing: 0.02em;
   border-radius: var(--button-radius);
-  background-color: var(--bg-card);
+  background-color: var(--cover-card-bg, var(--bg-card));
   color: var(--text-primary);
   border: var(--hairline-width) solid var(--border-subtle);
   cursor: pointer;
@@ -62,11 +62,19 @@
   outline: none;
   border-color: var(--brand);
   box-shadow: 0 0 0 var(--hairline-width) var(--brand);
-  background-color: color-mix(in srgb, var(--brand) 4%, var(--bg-card));
+  background-color: color-mix(
+    in srgb,
+    var(--brand) 4%,
+    var(--cover-card-bg, var(--bg-card))
+  );
   color: var(--brand-deep);
 }
 
 :global(html[data-theme='dark']) .shortcutKeyBtn.recording {
-  background-color: color-mix(in srgb, var(--brand) 12%, var(--bg-card));
+  background-color: color-mix(
+    in srgb,
+    var(--brand) 12%,
+    var(--cover-card-bg, var(--bg-card))
+  );
   color: var(--brand);
 }

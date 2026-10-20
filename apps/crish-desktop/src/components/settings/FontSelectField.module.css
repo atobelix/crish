@@ -30,7 +30,7 @@
   padding: 0 var(--space-2_5);
   border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
   color: var(--text-primary);
   font-family: inherit;
   font-size: var(--font-size-sm);
@@ -39,7 +39,9 @@
   outline: none;
   box-shadow: none;
   box-sizing: border-box;
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
 }
 
 .settingsSelectTrigger:hover:not(:disabled) {
@@ -178,7 +180,9 @@
   color: var(--text-tertiary);
   cursor: pointer;
   flex-shrink: 0;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .actionBtn:hover:not(:disabled) {

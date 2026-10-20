@@ -18,10 +18,10 @@
 :root {
   /* 响应式断点权威单一真源 (SSOT) */
 
-  /* 几何尺寸与圆角契约 (锁定 7px 按钮圆角与 9999px 胶囊圆角；U1 用户锁) */
+  /* 几何尺寸与圆角契约 (锁定 7px 按钮圆角与 9999px 胶囊圆角；U1 用户锁)
+   * --seg-outer-radius / --seg-inner-radius 已归位组件孤岛（ui/SegmentedControl 的 xs/sm/md/lg/panel
+   * 五档各自声明，见组件 CSS）；此前的全局默认值从未被任何组件外消费者读取，属重复定义，2026-10-20 清退。 */
   --radius-full: var(--radius-pill);
-  --seg-outer-radius: var(--button-radius, 7px);
-  --seg-inner-radius: var(--button-radius, 7px);
 
   /* 悬空兼容易错别名兜底安全网 */
   --color-text-dim: var(--text-tertiary);
@@ -1864,6 +1864,7 @@ html[data-ui-size='large'] {
   --flow-output-max: 600px; /* 消费点历史兜底 600px，行为等价 */
   --anchor-width: auto; /* 未注入时等价于历史 invalid→auto */
   --transform-origin: center; /* 未注入时等价于历史 invalid→initial(50% 50%) */
+  --composer-dock-block: 104px; /* 值与 ChatCard.module.css 历史兜底 104px 一致；写者为 ChatComposerWrapper 的 ResizeObserver（写在 body 上） */
 }
 
 @supports (color: oklch(0 0 0)) {

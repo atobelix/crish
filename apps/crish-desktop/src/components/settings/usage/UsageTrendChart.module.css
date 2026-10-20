@@ -4,7 +4,7 @@
   flex-direction: column;
   gap: var(--space-3);
   border-bottom: var(--hairline-width) solid var(--border-subtle);
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
 }
 
 .blockHeader {
@@ -101,7 +101,7 @@
 .chartTooltipCard {
   position: absolute;
   top: var(--space-2_5);
-  background: var(--bg-elevated, var(--bg-card));
+  background: var(--bg-elevated, var(--cover-card-bg, var(--bg-card)));
   border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-popover, var(--shadow-md));

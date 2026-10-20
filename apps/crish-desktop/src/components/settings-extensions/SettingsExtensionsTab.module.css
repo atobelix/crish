@@ -48,7 +48,7 @@
   border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(--radius-xl);
   overflow: hidden;
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
   cursor: pointer;
   transition:
     background 0.12s ease,

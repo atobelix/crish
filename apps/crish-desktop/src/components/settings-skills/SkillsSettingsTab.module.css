@@ -329,7 +329,7 @@
   border: none;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
 }
 
 .skillsRail {
@@ -434,7 +434,7 @@
 }
 
 .skillsRailItem.isActive {
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
   border-color: var(--border-subtle);
   box-shadow: var(--shadow-sm);
   color: var(--text-primary);

@@ -7,7 +7,7 @@
   gap: var(--space-2);
   width: 100%;
   border: 1px solid var(--border-subtle);
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
   color: var(--text-primary);
   font-family: inherit;
   cursor: pointer;
@@ -95,7 +95,7 @@
 
 .triggerOutline,
 .variant-outline {
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
   border-color: var(--border-color);
 }
 

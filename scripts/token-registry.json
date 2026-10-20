@@ -12,9 +12,7 @@
     "authorizedExtraSources": ["apps/crish-desktop/src/styles/z-index.css"],
     "forbidJsWrite": true
   },
-  "authorizedExtraSources": [
-    "apps/crish-desktop/src/styles/z-index.css"
-  ],
+  "authorizedExtraSources": ["apps/crish-desktop/src/styles/z-index.css"],
   "bClass": [
     {
       "name": "--sidebar-width",
@@ -63,37 +61,53 @@
       "note": "字体连字/字距特性开关，属运行期偏好而非设计刻度。"
     },
     {
-      "name": "--tab-item-width",
-      "writer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.tsx",
+      "name": "--font-size-adjust",
+      "writer": "apps/crish-desktop/src/services/token-runtime/injectRootTokens.ts",
+      "consumer": "apps/crish-desktop/src/styles/tokens.css（--font-size-* 全部 calc 派生）",
+      "staticDefault": "0px",
+      "note": "2026-10-20 补登：T07 补充任务书 §三 第 28 行明确「--font-size-adjust 保留为参数（B 类，登记；tokens.css 补 0px 静态默认）」——它是字号缩放档位的数值参数（用户偏好 0/±px），字号语义层（--font-size-xxs..xl）由 tokens.css calc 派生，JS 不再写字号 token 本身；tokens.css:594 已有静态默认。"
+    },
+    {
+      "name": "--pane-tab-item-width",
+      "writer": "apps/crish-desktop/src/components/binary-tree/tabStripVars.ts",
       "consumer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.module.css",
       "staticDefault": null,
-      "note": " PaneHeader 启动即注入（effectiveTabWidth），无安全静态默认。"
+      "note": "2026-10-20 由 --tab-item-width 改名为 --pane-tab-*（namespace_overlap 清零：与 ui/Tabs 孤岛 --tab-* 隔离）。启动即注入（effectiveTabWidth），无安全静态默认。"
     },
     {
-      "name": "--tab-width-max",
-      "writer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.tsx",
+      "name": "--pane-tab-width-max",
+      "writer": "apps/crish-desktop/src/components/binary-tree/tabStripVars.ts",
       "consumer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.module.css",
       "staticDefault": null,
-      "note": "PaneHeader 启动即注入（TAB_WIDTH_MAX_PX），无安全静态默认。"
+      "note": "2026-10-20 改名（同上）。启动即注入（TAB_WIDTH_MAX_PX），无安全静态默认。"
     },
     {
-      "name": "--tab-width-min",
-      "writer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.tsx",
+      "name": "--pane-tab-width-min",
+      "writer": "apps/crish-desktop/src/components/binary-tree/tabStripVars.ts",
       "consumer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.module.css",
       "staticDefault": null,
-      "note": "staticDefault 待 T6 核定（当前 tokens.css 无静态声明）。"
+      "note": "2026-10-20 改名（同上）。当前无 CSS 消费点，仅作几何参数随条注入。"
     },
     {
-      "name": "--tab-close-hit-pad",
-      "writer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.tsx",
+      "name": "--pane-tab-close-hit-pad",
+      "writer": "apps/crish-desktop/src/components/binary-tree/tabStripVars.ts",
       "consumer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.module.css",
-      "staticDefault": null
+      "staticDefault": null,
+      "note": "2026-10-20 改名（同上）。关闭按钮命中区外扩量。"
     },
     {
-      "name": "--tab-height",
-      "writer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.tsx",
-      "consumer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.module.css",
-      "staticDefault": null
+      "name": "--pane-tab-height",
+      "writer": "apps/crish-desktop/src/components/binary-tree/tabStripVars.ts",
+      "consumer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.module.css + LeafToolTabStrip.module.css",
+      "staticDefault": null,
+      "note": "2026-10-20 由 --tab-height 改名（同上）：改名后不再与 ui/Tabs 的尺寸分级 --tab-height 撞名，页签条高度只由 binary-tree 几何常量决定。"
+    },
+    {
+      "name": "--pane-tab-gap",
+      "writer": "apps/crish-desktop/src/components/binary-tree/tabStripVars.ts",
+      "consumer": "apps/crish-desktop/src/components/binary-tree/PaneHeader.module.css + LeafToolTabStrip.module.css",
+      "staticDefault": null,
+      "note": "2026-10-20 新增登记：原 binary-tree 直接覆写全局密度档 A 类 token --tab-gap（js_inject_a_class 违规），改名后退回组件私有命名空间，值仍取 TAB_GAP_PX 常量（行为不变）；全局 --tab-gap 仍由 tokens.css 密度档提供，TerminalCard 等继续消费。"
     },
     {
       "name": "--tool-tab-width-max",
@@ -197,10 +211,19 @@
     {
       "name": "--composer-line-height",
       "writer": "apps/crish-desktop/src/components/chat-composer/ComposerField.tsx",
-      "writerExtra": ["apps/crish-desktop/src/components/chat-composer/TiptapComposerField.tsx"],
+      "writerExtra": [
+        "apps/crish-desktop/src/components/chat-composer/TiptapComposerField.tsx"
+      ],
       "consumer": "apps/crish-desktop/src/components/chat-composer/ChatComposer.module.css",
       "staticDefault": null,
       "note": "2026-09-11 补登（b_class_drift 清零）；ComposerField 与 TiptapComposerField 为互斥实现，各自注入。"
+    },
+    {
+      "name": "--composer-dock-block",
+      "writer": "apps/crish-desktop/src/components/chat-card/ChatComposerWrapper.tsx",
+      "consumer": "apps/crish-desktop/src/components/chat-card/ChatCard.module.css",
+      "staticDefault": "104px",
+      "note": "2026-10-20 补登（b_class_drift 清零）：停靠区实测高度，ResizeObserver 写在被测量体的父容器（body[data-testid=chat-body]）上，非根元素；静态默认 104px 与消费点历史兜底同值，未挂载时行为不变。"
     },
     {
       "name": "--toast-frontmost-height",
@@ -232,20 +255,64 @@
     }
   ],
   "componentIslands": [
-    { "prefix": "--badge-", "owner": "apps/crish-desktop/src/components/ui/Badge/Badge.module.css" },
-    { "prefix": "--tab-", "owner": "apps/crish-desktop/src/components/ui/Tabs/Tabs.module.css", "note": "与 B 类 --tab-item-width/--tab-width-max 前缀冲突，需 T9 改名为 --tabs-* 或 --pane-tab-*。" },
-    { "prefix": "--seg-", "owner": "apps/crish-desktop/src/components/ui/SegmentedControl/SegmentedControl.module.css" },
-    { "prefix": "--track-", "owner": "apps/crish-desktop/src/components/ui/Switch/Switch.module.css" },
-    { "prefix": "--thumb-", "owner": "apps/crish-desktop/src/components/ui/Switch/Switch.module.css" },
-    { "prefix": "--stretch-", "owner": "apps/crish-desktop/src/components/ui/Switch/Switch.module.css" },
-    { "prefix": "--spinner-", "owner": "apps/crish-desktop/src/components/ui/Switch/Switch.module.css" },
-    { "prefix": "--ann-", "owner": "apps/crish-desktop/src/components/chat-composer/ChatComposer.module.css" },
-    { "prefix": "--np-", "owner": "apps/crish-desktop/src/components/note-paper/NotePaperPanel.module.css" },
-    { "prefix": "--empty-", "owner": "apps/crish-desktop/src/components/workspace/WorkspaceEmptyState.module.css" },
-    { "prefix": "--plan-", "owner": "apps/crish-desktop/src/components/chat-message-row/FlowPlanMilestone.module.css" },
-    { "prefix": "--scrubber-", "owner": "apps/crish-desktop/src/components/chat-message-list/FlowScrubber.module.css" }
+    {
+      "prefix": "--badge-",
+      "owner": "apps/crish-desktop/src/components/ui/Badge/Badge.module.css"
+    },
+    {
+      "prefix": "--tab-",
+      "owner": "apps/crish-desktop/src/components/ui/Tabs/Tabs.module.css",
+      "note": "2026-10-20 已消解命名空间撞车：binary-tree 的页签条变量改名为 --pane-tab-*（见 bClass），本前缀现仅属 ui/Tabs 的尺寸分级与动效变量。"
+    },
+    {
+      "prefix": "--seg-",
+      "owner": "apps/crish-desktop/src/components/ui/SegmentedControl/SegmentedControl.module.css",
+      "note": "2026-10-20 起 --seg-outer-radius / --seg-inner-radius 也归本孤岛（xs/sm/md/lg/panel 五档各自声明），tokens.css 的重复全局默认值已清退。"
+    },
+    {
+      "prefix": "--track-",
+      "owner": "apps/crish-desktop/src/components/ui/Switch/Switch.module.css"
+    },
+    {
+      "prefix": "--thumb-",
+      "owner": "apps/crish-desktop/src/components/ui/Switch/Switch.module.css"
+    },
+    {
+      "prefix": "--stretch-",
+      "owner": "apps/crish-desktop/src/components/ui/Switch/Switch.module.css"
+    },
+    {
+      "prefix": "--spinner-",
+      "owner": "apps/crish-desktop/src/components/ui/Switch/Switch.module.css"
+    },
+    {
+      "prefix": "--ann-",
+      "owner": "apps/crish-desktop/src/components/chat-composer/ChatComposer.module.css"
+    },
+    {
+      "prefix": "--np-",
+      "owner": "apps/crish-desktop/src/components/note-paper/NotePaperPanel.module.css"
+    },
+    {
+      "prefix": "--empty-",
+      "owner": "apps/crish-desktop/src/components/workspace/WorkspaceEmptyState.module.css"
+    },
+    {
+      "prefix": "--plan-",
+      "owner": "apps/crish-desktop/src/components/chat-message-row/FlowPlanMilestone.module.css"
+    },
+    {
+      "prefix": "--scrubber-",
+      "owner": "apps/crish-desktop/src/components/chat-message-list/FlowScrubber.module.css"
+    }
   ],
   "themingApis": [
+    {
+      "family": "--cover-card-bg",
+      "owner": "apps/crish-desktop/src/components/settings/SettingsPanel.module.css",
+      "documentedOverrides": [],
+      "note": "T-BLK-07c（2026-10-20）：设置内容区两层底色的作用域主题化通道。.coverContent 定义 --cover-card-bg: var(--surface-input)；消费点统一写 var(--cover-card-bg, var(--bg-card))（作用域内取输入层，作用域外回落全局 --bg-card）。原 .coverContent { --bg-card: var(--surface-input) } 作用域改指经此改名清退，--bg-card 回归 styles/tokens.css 唯一真源（multi_file_defs 1→0）。注：本条改登 themingApis 而非 componentIslands——孤岛前缀会计入 whitelist_size 棘轮（15→16），且本 token 是单文件定义的容器作用域 API，无孤岛命名空间语义。"
+    },
     {
       "family": "--btn-*",
       "owner": "apps/crish-desktop/src/components/ui/Button/Button.module.css",
@@ -278,18 +345,6 @@
       "defaultOwner": "apps/crish-desktop/src/styles/tokens.css",
       "tierOwner": "apps/crish-desktop/src/components/chat-message-row/ChatMessageRow.module.css + apps/crish-desktop/src/styles/markdown-typography.css",
       "note": "代码块滚动条细条 4px 域覆盖（overlay-scrollbar.css 出口的 --scrollbar-thumb-width 通道）。"
-    },
-    {
-      "name": "--seg-outer-radius",
-      "defaultOwner": "apps/crish-desktop/src/styles/tokens.css",
-      "tierOwner": "apps/crish-desktop/src/components/ui/SegmentedControl/SegmentedControl.module.css",
-      "note": "SegmentedControl 尺寸分级外半径（含 --radius-btn 默认档）。"
-    },
-    {
-      "name": "--seg-inner-radius",
-      "defaultOwner": "apps/crish-desktop/src/styles/tokens.css",
-      "tierOwner": "apps/crish-desktop/src/components/ui/SegmentedControl/SegmentedControl.module.css",
-      "note": "SegmentedControl 尺寸分级内半径（由外半径派生 calc）。"
     }
   ],
   "variantScopes": [

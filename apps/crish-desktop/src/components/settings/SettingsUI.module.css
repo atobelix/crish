@@ -76,7 +76,7 @@
 }
 
 .settingsUiCard {
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
   /* 原为 0.1px —— 在 1x/1.5x 屏上会被舍入为 0，边框等于消失；且裸 hex 偏离主题体系。
      改为契约发丝线，随主题翻转且在任何 DPR 下都真实可见。 */
   border: var(--hairline-width) solid var(--border-subtle);

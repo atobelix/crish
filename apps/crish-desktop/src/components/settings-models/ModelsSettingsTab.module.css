@@ -13,7 +13,7 @@
   height: 100%;
   width: 100%;
   box-sizing: border-box;
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
   border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
@@ -144,7 +144,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
   overflow: hidden; /* 外滚由 .mrdModelListScroll 承担，外层 scrollport 物理抹除（DEF-GEO） */
   overscroll-behavior: contain;
   padding: var(--space-5) var(--space-6);
@@ -359,7 +359,7 @@
   padding: var(--space-3) var(--space-3_5);
   border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -440,7 +440,7 @@
   position: fixed;
   /* top / left / width 由运行时 dropdownRect 动态写入 style */
   z-index: var(--z-tooltip);
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
   border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-dropdown);
@@ -600,7 +600,7 @@
 .cascadeFlyout,
 .cascadeFlyoutPortal {
   min-width: 200px;
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
   border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-dropdown);
@@ -666,7 +666,7 @@
   gap: var(--space-2);
   min-width: 220px; /* 布局约束，不入刻度 */
   border: var(--hairline-width) solid var(--border-subtle);
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
   border-radius: var(--button-radius);
   padding: 0 var(--space-2_5);
   height: var(--control-height-sm);
@@ -735,7 +735,7 @@
 .credentialsContainer {
   display: flex;
   flex-direction: column;
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
   border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(--button-radius);
   overflow: hidden;
@@ -838,7 +838,7 @@
   gap: var(--space-3);
   padding: var(--space-3);
   border-top: var(--hairline-width) solid var(--border-subtle);
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
 }
 
 .mrdRequiredStar {
@@ -970,7 +970,7 @@
   border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(--radius-sm);
   overflow: hidden;
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
 }
 
 .mrdCurrencyBtn,

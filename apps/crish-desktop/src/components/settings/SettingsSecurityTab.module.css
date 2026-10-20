@@ -63,13 +63,16 @@
   padding: 0 var(--space-2_5);
   border-radius: var(--radius-md);
   border: var(--hairline-width) solid var(--border-subtle);
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
   font-family: inherit;
   cursor: pointer;
   box-sizing: border-box;
-  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .presetChip:hover:not(:disabled) {

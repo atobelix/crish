@@ -9,7 +9,8 @@
  * 2. 设置页两层底色（SettingsPanel.module.css）：
  *    [role='dialog'].settingsModal, .settingsNav, .settingsHeader, .coverContent
  *    必须统一使用通底背景色（var(--surface-outer) 或 var(--surface-main)），
- *    同时 .coverContent 作用域覆盖 --bg-card: var(--surface-input);
+ *    同时 .coverContent 作用域定义 --cover-card-bg: var(--surface-input);（T-BLK-07c：
+ *    --bg-card 定义收敛至 tokens.css 唯一真源；--cover-card-bg 唯一定义点 = SettingsPanel.module.css）；
  *    且在所有设置页模块样式中，var(--color-error-border)、var(--color-warning-border)、
  *    var(--color-success-border) 发生计数为 0（严禁子 Tab 绕过 --settings-card-border: transparent 绘制 1px 有色边框）。
  * 3. 标签指示滑块无双重边框、Badge 无有色描边（Tabs.module.css / Badge.module.css）：
@@ -25,6 +26,38 @@ const srcRoot = resolve(__dirname, '../..');
 
 function readSrcFile(relPath: string): string {
   return readFileSync(resolve(srcRoot, relPath), 'utf8');
+}
+
+/**
+ * 全 src 扫描某个 CSS 自定义属性的「定义点」（形如 `--name:` 或 JS 内联 `'--name':`）。
+ * onlyAllowedFiles：允许持有定义的文件（相对 srcRoot）。其余文件出现定义即计入违规。
+ * 说明：`--name-subtle:` 等派生名不会误报（冒号紧跟校验）；*.test.* 文件跳过（避免正则字面量误报）。
+ */
+function scanCustomPropertyDefinitions(
+  propName: string,
+  onlyAllowedFiles: readonly string[]
+): string[] {
+  const escaped = propName.replace(/[-]/g, '\\$&');
+  const defRe = new RegExp(`${escaped}\\s*:`);
+  const allowed = new Set(onlyAllowedFiles);
+  const violations: string[] = [];
+
+  const walk = (dir: string, rel: string): void => {
+    for (const item of readdirSync(dir, { withFileTypes: true })) {
+      const relPath = `${rel}${rel ? '/' : ''}${item.name}`;
+      if (item.isDirectory()) {
+        walk(resolve(dir, item.name), relPath);
+        continue;
+      }
+      if (item.name.includes('.test.')) continue;
+      if (!/\.(css|scss|ts|tsx)$/.test(item.name)) continue;
+      if (allowed.has(relPath)) continue;
+      const content = readFileSync(resolve(dir, item.name), 'utf8');
+      if (defRe.test(content)) violations.push(relPath);
+    }
+  };
+  walk(srcRoot, '');
+  return violations;
 }
 
 /** 剥离 CSS 块注释与行注释 */
@@ -101,12 +134,35 @@ describe('防回潮门禁：禁止平直容器圆角、设置页越权描边与�
       }
     });
 
-    it('.coverContent 必须设置 --bg-card: var(--surface-input); 形成两层底色', () => {
+    it('.coverContent 必须设置 --cover-card-bg: var(--surface-input); 形成两层底色（T-BLK-07c 改名后）', () => {
       const block = extractRuleBlock(settingsPanelCss, '.coverContent');
       expect(
         block,
-        '.coverContent 必须覆盖 --bg-card 为 var(--surface-input)'
-      ).toMatch(/--bg-card:\s*var\(--surface-input\);/);
+        '.coverContent 必须定义 --cover-card-bg 为 var(--surface-input)'
+      ).toMatch(/--cover-card-bg:\s*var\(--surface-input\);/);
+    });
+
+    it('负向：--bg-card 定义（--bg-card:）不得出现在 styles/tokens.css 之外（T-BLK-07c SSOT 收口）', () => {
+      const violations = scanCustomPropertyDefinitions('--bg-card', [
+        'styles/tokens.css',
+      ]);
+      expect(
+        violations,
+        `--bg-card 的唯一真源是 styles/tokens.css，以下文件出现定义（覆写/重定义均禁止）:\n${violations.join('\n')}`
+      ).toEqual([]);
+    });
+
+    it('负向：--cover-card-bg 只允许在 SettingsPanel.module.css 定义（T-BLK-07c SSOT 收口）', () => {
+      const violations = scanCustomPropertyDefinitions('--cover-card-bg', [
+        'components/settings/SettingsPanel.module.css',
+      ]);
+      expect(
+        violations,
+        `--cover-card-bg 唯一定义点必须是 SettingsPanel.module.css 的 .coverContent，以下文件出现定义:\n${violations.join('\n')}`
+      ).toEqual([]);
+      // 正向兜底：唯一定义点必须真实存在（防扫描失效导致负向断言恒真）
+      const block = extractRuleBlock(settingsPanelCss, '.coverContent');
+      expect(block).toMatch(/--cover-card-bg:\s*var\(--surface-input\);/);
     });
 
     it('所有设置模块样式中，颜色边框逃逸 token 发生计数为 0（严禁子 Tab 绕过 --settings-card-border 逃逸）', () => {

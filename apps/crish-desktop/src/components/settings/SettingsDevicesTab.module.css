@@ -236,7 +236,7 @@
   align-items: center;
   gap: var(--space-1_5);
   padding: var(--space-0_5) var(--space-2);
-  background: var(--bg-card);
+  background: var(--cover-card-bg, var(--bg-card));
   border: none;
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
