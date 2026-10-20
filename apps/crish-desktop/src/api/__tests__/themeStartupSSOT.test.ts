@@ -80,10 +80,10 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
     // 2026-10-10 三档底色：运行时只写 outer / main / input 三个独立源
     expect(
       document.documentElement.style.getPropertyValue('--surface-main')
-    ).toBe('#1e1e1e');
+    ).toBe('#141414');
     expect(
       document.documentElement.style.getPropertyValue('--surface-outer')
-    ).toBe('#1a1919');
+    ).toBe('#1e1e1e');
     expect(
       document.documentElement.style.getPropertyValue('--surface-input')
     ).toBe('#232323');
@@ -95,15 +95,15 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
   it('SSOT-04: dark-cozy 与 warm-gray 官方预设满足 WCAG 单真源契约', () => {
     const darkCozy = SKIN_PRESETS['dark-cozy'];
     expect(darkCozy).toBeDefined();
-    expect(darkCozy.bgPrimary).toBe('#1e1e1e');
-    expect(darkCozy.bgSecondary).toBe('#1a1919');
+    expect(darkCozy.bgPrimary).toBe('#141414');
+    expect(darkCozy.bgSecondary).toBe('#1e1e1e');
     expect(darkCozy.bgCard).toBe('#232323');
     expect(darkCozy.textPrimary).toBe('#e6e6e6');
 
     const warmGray = SKIN_PRESETS['warm-gray'];
     expect(warmGray).toBeDefined();
-    // 2026-10-11 定稿：同一暖色调 CMYK C0 M0.4 Y0.8 —— 主层 #fbfaf9、外层 K5 #f2f1f0
-    expect(warmGray.bgPrimary).toBe('#fbfaf9');
+    // 2026-10-15 实测：同一暖色调 CMYK C0 M0.4 Y0.8 —— 主层纯白 #ffffff、外层 K5 #f2f1f0
+    expect(warmGray.bgPrimary).toBe('#ffffff');
     expect(warmGray.bgSecondary).toBe('#f2f1f0');
     expect(warmGray.bgTertiary).toBe('hsl(30 8.33% 92.29%)');
     expect(warmGray.textPrimary).toBe('#1a1a1a');

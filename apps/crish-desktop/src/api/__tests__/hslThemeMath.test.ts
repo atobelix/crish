@@ -21,7 +21,7 @@ describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
     // 2026-10-10 三档底色：外层灰度 3.5（L 96.5%），主层 2.0（L 98%），输入框纯白
     expect(warmGray.bgSecondary).toBe('#f2f1f0');
     expect(warmGray.shellChromeBg).toBe('#f2f1f0');
-    expect(warmGray.bgPrimary).toBe('#fbfaf9');
+    expect(warmGray.bgPrimary).toBe('#ffffff');
     expect(warmGray.bgCard).toBe('#ffffff');
   });
 
@@ -43,7 +43,7 @@ describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
 
       // review P1-3：亮度微调只平移 K（保持 M0.4/Y0.8），三层夹紧不反转
       const exp = shiftWarmLayers(
-        { outer: '#f2f1f0', main: '#f8f7f6', input: '#ffffff' },
+        { outer: '#f2f1f0', main: '#ffffff', input: '#ffffff' },
         adjust,
         false
       );

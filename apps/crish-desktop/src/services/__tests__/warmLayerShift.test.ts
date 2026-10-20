@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { kOf, shiftWarmLayers } from '../warmLayerShift';
 
-const LIGHT = { outer: '#f2f1f0', main: '#fbfaf9', input: '#ffffff' };
-const DARK = { outer: '#1a1919', main: '#1e1e1e', input: '#232323' };
+const LIGHT = { outer: '#f2f1f0', main: '#fcfbfa', input: '#ffffff' };
+const DARK = { outer: '#1e1e1e', main: '#141414', input: '#232323' };
 const rgb = (h: string) =>
   [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const lum = (h: string) => Math.max(...rgb(h));
@@ -32,11 +32,12 @@ describe('亮度微调只平移 K（review P1-3）', () => {
         expect(Y).toBeLessThan(1.25);
       }
     });
-    it(`深色 adjust=${a}：外层 < 主层 < 输入框（输入框最亮），不反转不贴合`, () => {
+    it(`深色 adjust=${a}：主层最黑 < 外层微亮 < 输入框浮层，不反转不贴合`, () => {
       const l = shiftWarmLayers(DARK, a, true);
-      expect(lum(l.main) - lum(l.outer)).toBeGreaterThanOrEqual(2);
-      expect(lum(l.input) - lum(l.main)).toBeGreaterThanOrEqual(2);
-      expect(kOf(l.outer)).toBeGreaterThan(kOf(l.main));
+      expect(lum(l.outer) - lum(l.main)).toBeGreaterThanOrEqual(2);
+      expect(lum(l.input) - lum(l.outer)).toBeGreaterThanOrEqual(2);
+      expect(kOf(l.main)).toBeGreaterThan(kOf(l.outer));
+      expect(kOf(l.outer)).toBeGreaterThan(kOf(l.input));
     });
   }
 

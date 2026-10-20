@@ -40,11 +40,9 @@ html[data-theme='light'] {
    * 其它 surface-* / bg-* 只能引用这三档；hover/active/选中 = 所在层上的统一叠加（--tint-hover / --tint-active）。
    * 运行时皮肤（TokenRuntimeController）只写 --surface-outer / --surface-main / --surface-input 三个独立源。
    */
-  /* heson 实测定稿（2026-10-11）：所有层同一暖色调 CMYK C0 M0.4 Y0.8，只改 K：
-     外层 K5 → RGB 242.25/241.28/240.32 #f2f1f0（2026-10-11 由 K4 #f4f3f2 加深：侧栏/顶栏不够深）；
-     主层（由 #f8f7f6 降低一个灰度点更亮一档）→ 251/250/249 #fbfaf9（K≈1.6%）；输入框纯白。 */
+  /* 纯白主层实测模式：主层纯白 #ffffff；输入框纯白。 */
   --surface-outer: #f2f1f0;
-  --surface-main: #fbfaf9;
+  --surface-main: #ffffff;
   --surface-input: #ffffff;
   /* 内容矩形 .leafBody 的框线（只画左边 + 顶边 1px）：外层 K5 再加 3 → K8 → RGB 234.6/233.7/232.7 #ebeae9
      （10-11 heson 由 K11 #e3e2e1 改浅）。线色，不是第四档底色。 */
@@ -178,7 +176,7 @@ html[data-theme='light'] {
   --switch-thumb-shadow: 0 1px 2px
     color-mix(in srgb, var(--shadow-color) 8%, transparent);
   --seg-track-bg: var(--surface-outer);
-  /* 分段控件激活滑块（heson 2026-10-11）：主层 #f8f7f6 → 纯白输入档，和外层轨道 #f2f1f0 拉开 */
+  /* 分段控件激活滑块（heson 2026-10-11）：主层 #fcfbfa → 纯白输入档，和外层轨道 #f2f1f0 拉开 */
   --seg-slider-bg: var(--surface-input);
 
   /* 描边降调（2026-09-11 用户裁决：弱化描边存在感，按钮尤其）
@@ -978,16 +976,14 @@ html[data-theme='light'] {
  *   --hairline-strong =
  *          color-mix     ?*/
 html[data-theme='dark'] {
-  /* 三档底色（SSOT，2026-10-10 定稿；灰度 = 100 − 亮度）：
-     outer 外层（侧栏 + 标签栏/标题栏）#1a1a1a 灰度 89.8（原 #262626 = 85.1），唯一透出云母
-     → main 主层（聊天区 + 右侧栏 + 卡片/弹层/代码块等）#1e1e1e 88.2，实色
-     → input 输入框 #232323 86.3（深色下输入框最亮，沿用既有方向）。与运行时 dark-cozy 皮肤一致 */
-  /* 深色同一暖色调 CMYK C0 M0.4 Y0.8：K 90 / 88.2 / 86.3 → 换算后 R−B 差 < 0.3，取整基本落回中性灰 */
-  --surface-outer: #1a1919;
-  --surface-main: #1e1e1e;
+  /* 三档底色（SSOT，深色层级校正：主层沉底偏黑，外层侧栏深灰浮层）：
+     outer 外层（侧栏 + 标签栏/标题栏）#1e1e1e，透出云母外壳
+     → main 主层（聊天区 + 右侧栏 + 卡片等）#141414，沉底偏黑实色
+     → input 输入框 #232323，微亮卡片浮层。与运行时 dark-cozy 皮肤一致 */
+  --surface-outer: #1e1e1e;
+  --surface-main: #141414;
   --surface-input: #232323;
-  /* 内容矩形框线：与浅色同幅减弱为 +3 个点 —— 外层 L≈10.2% 提亮到 L≈13.2% → #222121（保留外层 R+1 暖偏）。
-     深色下往亮走：内容矩形 #1e1e1e 本身比外层亮，往暗走的线会和外层糊在一起，看不出边。 */
+  /* 内容矩形框线：发丝细线区分外层 #1e1e1e 与沉底主层 #141414 */
   --content-frame-border: #222121;
   --surface-chrome: var(--surface-outer);
   --surface-paper: var(--surface-main);

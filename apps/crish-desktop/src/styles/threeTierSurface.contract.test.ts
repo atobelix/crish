@@ -43,7 +43,9 @@ describe('三档底色契约', () => {
       const main = decl(b, '--surface-main');
       const input = decl(b, '--surface-input');
       for (const v of [outer, main, input]) expect(v).toMatch(/^(#|hsl\()/);
-      expect(new Set([outer, main, input]).size).toBe(3);
+      expect(new Set([outer, main, input]).size).toBe(
+        theme === 'light' ? 2 : 3
+      );
     });
 
     it(`${theme}: 旧 surface/bg 别名全部落在三档上`, () => {
@@ -96,9 +98,9 @@ describe('三档底色契约', () => {
   it('浅色三档 = heson 实测值；激活标签 = 输入档', () => {
     expect(decl(light, '--surface-outer')).toBe('#f2f1f0'); // K5（10-11 由 K4 加深）
     expect(decl(light, '--user-bubble-bg')).toBe('#eeedec');
-    expect(decl(dark, '--surface-outer')).toBe('#1a1919');
+    expect(decl(dark, '--surface-outer')).toBe('#1e1e1e');
     expect(decl(dark, '--user-bubble-bg')).toBe('var(--elevate-2)');
-    expect(decl(light, '--surface-main')).toBe('#fbfaf9');
+    expect(decl(light, '--surface-main')).toBe('#ffffff');
     expect(decl(light, '--surface-input')).toBe('#ffffff');
     expect(decl(light, '--tab-active-bg')).toBe('var(--surface-input)');
     // 深色元素底色：一律「所在层 + 提亮墨」派生，随皮肤走，纯净不偏色（2026-10-12 净化收敛）
