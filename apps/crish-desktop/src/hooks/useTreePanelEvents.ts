@@ -97,7 +97,9 @@ export function useTreePanelEvents(): void {
           if (tabId) {
             useLayoutTreeStore.getState().activateTab(detail.leafId, tabId);
           } else {
-            useLayoutTreeStore.setState({ activeLeafId: detail.leafId });
+            // 空标签叶（新对话界面）无 tab 可激活，只切焦点叶；
+            // 必须经 store action 单一通道，禁止裸 setState（BLK-01 / check:store-writes）。
+            useLayoutTreeStore.getState().setActiveLeaf(detail.leafId);
           }
         }
       }
