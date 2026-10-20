@@ -110,7 +110,7 @@ describe('useAnimatedPresence', () => {
 
   it('核心竞态消除：鼠标极快划过（打开后立即关闭），排队的双重 rAF 必须被 cancelAnimationFrame 取消', () => {
     const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame');
-    let rafCallbacks: Array<{ id: number; cb: FrameRequestCallback }> = [];
+    const rafCallbacks: Array<{ id: number; cb: FrameRequestCallback }> = [];
     let nextRafId = 1;
 
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
@@ -151,7 +151,7 @@ describe('useAnimatedPresence', () => {
 
   it('二级 rAF 竞态消除：第 1 帧已触发但第 2 帧排队时关闭，第 2 帧句柄被取消且守卫阻断', () => {
     const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame');
-    let rafCallbacks: Array<{ id: number; cb: FrameRequestCallback }> = [];
+    const rafCallbacks: Array<{ id: number; cb: FrameRequestCallback }> = [];
     let nextRafId = 100;
 
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {

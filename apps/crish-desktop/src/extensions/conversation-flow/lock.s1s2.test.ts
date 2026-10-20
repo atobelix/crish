@@ -102,8 +102,7 @@ vi.mock('../../components/chat-card/ChatEmptyState', async () => {
 vi.mock('../../components/settings/ScheduledTasksPanel', async () => {
   const { createElement: h } = await import('react');
   return {
-    ScheduledTasksPanel: () =>
-      h('div', { 'data-testid': 'mock-scheduled' }),
+    ScheduledTasksPanel: () => h('div', { 'data-testid': 'mock-scheduled' }),
   };
 });
 
@@ -191,13 +190,15 @@ function factoryKeys(mainSrc: string): string[] {
   );
   return [
     ...(block?.[1] ?? '').matchAll(
-      /^  (?:'([^']+)'|([A-Za-z_][\w-]*))\s*:/gm
+      /^ {2}(?:'([^']+)'|([A-Za-z_][\w-]*))\s*:/gm
     ),
   ].map((m) => m[1] ?? m[2] ?? '');
 }
 
 function registrarIds(src: string): string[] {
-  return [...src.matchAll(/^\s*id:\s*['"]([^'"]+)['"]/gm)].map((m) => m[1] ?? '');
+  return [...src.matchAll(/^\s*id:\s*['"]([^'"]+)['"]/gm)].map(
+    (m) => m[1] ?? ''
+  );
 }
 
 function assertNoNarrativeDom(container: HTMLElement): void {
@@ -299,7 +300,9 @@ describe('S1/S2 契约锁', () => {
       join(DESKTOP_SRC, 'components/chat-card/ChatComposerWrapper.tsx'),
       'utf8'
     );
-    expect(wrapperSrc).toMatch(/slotKey=["']workspace\.chat\.composerAbove["']/);
+    expect(wrapperSrc).toMatch(
+      /slotKey=["']workspace\.chat\.composerAbove["']/
+    );
     expect(wrapperSrc).toMatch(/fallback=\{null\}/);
 
     const { container } = render(

@@ -63,7 +63,7 @@ describe('ACT-301: 启动流编排扁平化静态检查', () => {
     expect(entryContent).not.toContain('@xterm');
     // 兜底零 Emoji
     const emojiRe =
-      /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{2764}]/u;
+      /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2764}]|[\u{FE0F}]/u;
     expect(emojiRe.test(entryContent)).toBe(false);
     // 兜底禁止裸 hex 与旧式 rgba（源码级；var(--token) + hsl 回退）
     // 允许 hsl 内的数值，禁止 #RRGGBB 与 rgba(

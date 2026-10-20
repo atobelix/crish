@@ -22,8 +22,7 @@ const CATALOG_PATH = 'C:\\Users\\tester\\.conex\\models.yaml';
 
 function lastSavedYaml(saveImpl: ReturnType<typeof vi.fn>): string {
   const last = saveImpl.mock.calls[saveImpl.mock.calls.length - 1]?.[0] as
-    | { tree?: unknown }
-    | undefined;
+    { tree?: unknown } | undefined;
   return JSON.stringify(last?.tree ?? null);
 }
 
@@ -48,19 +47,19 @@ describe('ModelList 启用开关写 yaml', () => {
         version: 2,
         activeModel: null,
         providers: {
-        acme: {
-          displayName: 'Acme',
-          baseUrl: 'https://example.invalid/v1',
-          protocol: 'openai/chat',
-          models: [
-            {
-              id: 'acme-think',
-              displayName: 'Acme Think',
-              enabled: true,
-              thinking: { Low: 'low' },
-            },
-          ],
-        },
+          acme: {
+            displayName: 'Acme',
+            baseUrl: 'https://example.invalid/v1',
+            protocol: 'openai/chat',
+            models: [
+              {
+                id: 'acme-think',
+                displayName: 'Acme Think',
+                enabled: true,
+                thinking: { Low: 'low' },
+              },
+            ],
+          },
         },
       },
     }));
@@ -106,13 +105,15 @@ describe('ModelList 启用开关写 yaml', () => {
     fireEvent.click(screen.getByRole('switch', { name: '停用模型' }));
 
     await waitFor(() => {
-      expect(lastSavedYaml(saveImpl)).toMatch(/enabled\":\s*false/);
+      expect(lastSavedYaml(saveImpl)).toMatch(/enabled":\s*false/);
     });
 
     const doc = parseYaml(lastSavedYaml(saveImpl)) as {
       providers?: Record<string, { models?: Array<Record<string, unknown>> }>;
     };
-    const node = doc.providers?.acme?.models?.find((m) => m.id === 'acme-think');
+    const node = doc.providers?.acme?.models?.find(
+      (m) => m.id === 'acme-think'
+    );
     expect(node?.enabled).toBe(false);
     expect(node?.thinking).toEqual({ Low: 'low' });
   });
@@ -122,7 +123,9 @@ describe('ModelList 启用开关写 yaml', () => {
     expect(LIST_SRC).toMatch(/model\?\.displayName/);
     expect(LIST_SRC).toMatch(/model\?\.enabled/);
     expect(LIST_SRC).toMatch(/model\?\.contextWindow/);
-    expect(LIST_SRC).not.toMatch(/getModelMeta\([^)]+\)\.(enabled|displayName|contextWindow|contextLength)/);
+    expect(LIST_SRC).not.toMatch(
+      /getModelMeta\([^)]+\)\.(enabled|displayName|contextWindow|contextLength)/
+    );
     expect(LIST_SRC).toMatch(/getModelMeta\([^)]+\)\.lastTest/);
   });
 });

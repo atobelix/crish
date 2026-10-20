@@ -66,7 +66,9 @@ async function loadProviders(
   mockTauriCommand('workbench_read_models_yaml', () =>
     workbenchReadOk(providers)
   );
-  mockTauriCommand('workbench_save_models_yaml', () => ({ path: CATALOG_PATH }));
+  mockTauriCommand('workbench_save_models_yaml', () => ({
+    path: CATALOG_PATH,
+  }));
   const res = await ensureModelsCatalogLoaded(true);
   expect(res.ok).toBe(true);
 }
@@ -122,7 +124,7 @@ describe('useChatModelPicker catalogVersion → needsModelSetup', () => {
   });
 
   it('首次渲染和订阅安装之间目录更新时仍能刷新模型可用状态', async () => {
-    const wrapper = ({ children }: { children: ReactNode }) => {
+    const Wrapper = ({ children }: { children: ReactNode }) => {
       useLayoutEffect(() => {
         modelsCatalogStore.acceptSnapshot(
           workbenchReadOk({ acme: spec([{ id: 'old-id' }]) })
@@ -133,7 +135,7 @@ describe('useChatModelPicker catalogVersion → needsModelSetup', () => {
 
     const { result } = renderHook(
       () => useChatModelPicker({ projectTick: 0 }),
-      { wrapper }
+      { wrapper: Wrapper }
     );
 
     await waitFor(() => {

@@ -214,7 +214,7 @@ describe('08 包边界（绿 ≠ 打开完成 ≠ 关 EL ≠ 独立软件已拆�
     expect(block).not.toBeNull();
     const keys = [
       ...(block?.[1] ?? '').matchAll(
-        /^  (?:'([^']+)'|([A-Za-z_][\w-]*))\s*:/gm
+        /^ {2}(?:'([^']+)'|([A-Za-z_][\w-]*))\s*:/gm
       ),
     ].map((m) => m[1] ?? m[2]);
     expect(keys).toEqual([...BUILTIN_IDS]);
@@ -270,17 +270,11 @@ describe('08 包边界（绿 ≠ 打开完成 ≠ 关 EL ≠ 独立软件已拆�
     expect(names).not.toContain('Workspace');
     expect(names).not.toContain('Host');
     const froms = [
-      ...src.matchAll(
-        /^export\s+(?:\{[^}]+\}|\*)\s+from\s+['"]([^'"]+)['"]/gm
-      ),
+      ...src.matchAll(/^export\s+(?:\{[^}]+\}|\*)\s+from\s+['"]([^'"]+)['"]/gm),
     ].map((m) => m[1].replace(/\\/g, '/'));
-    expect(froms.some((s) => s.includes('components/workspace'))).toBe(
-      false
-    );
+    expect(froms.some((s) => s.includes('components/workspace'))).toBe(false);
     expect(
-      froms.some((s) =>
-        /WorkspaceEmptyState|WorkspaceProductEmptyHost/.test(s)
-      )
+      froms.some((s) => /WorkspaceEmptyState|WorkspaceProductEmptyHost/.test(s))
     ).toBe(false);
   });
 
