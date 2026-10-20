@@ -155,12 +155,12 @@
   overflow: hidden;
 }
 
-/* 左侧边栏（固定宽约 260px） */
+/* 左侧边栏（固定宽约 260px）：清退深灰色背景，与主工作区纯净融合 */
 .leftSidebar {
   width: 260px;
   flex: 0 0 260px;
   border-right: var(--hairline-width, 1px) solid var(--border-subtle);
-  background: var(--bg-secondary);
+  background: transparent;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -400,7 +400,7 @@
 }
 
 .compactExtCard {
-  background: var(--bg-secondary);
+  background: var(--surface-input, var(--bg-card));
   border: var(--hairline-width, 1px) solid var(--border-subtle);
   border-radius: var(--radius-l, 10px);
   padding: var(--space-3_5, 14px);

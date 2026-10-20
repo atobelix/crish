@@ -173,20 +173,11 @@ pub async fn core_search_files(
 #[tauri::command]
 pub async fn core_rebuild_search_index<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
-    root: String,
+    root: Option<String>,
     state: State<'_, Arc<SharedSearchState>>,
 ) -> Result<RebuildSearchIndexResponse, CoreError> {
-    let root = root.trim().to_string();
-    if root.is_empty() {
-        return Err(CoreError::InvalidInput("root path is empty".to_string()));
-    }
-    if root.len() > SEARCH_ROOT_MAX_LEN {
-        return Err(CoreError::InvalidInput(format!(
-            "root path too long (max {SEARCH_ROOT_MAX_LEN})"
-        )));
-    }
-    // 沙箱校验（仿 git.rs resolve_git_cwd 模式）：canonicalize + is_dir + 已授权根子树
-    let canonical_root = resolve_index_root(&app, &root)?;
+    // 沙箱校验（仿 git.rs resolve_git_cwd 模式）：canonicalize + is_dir + 已授权根子树；缺省自动回退授权根
+    let canonical_root = resolve_index_root(&app, root.as_deref())?;
     let built = tokio::task::spawn_blocking(move || build_directory_index(&canonical_root))
         .await
         .map_err(|e| CoreError::Internal(format!("rebuild task failed: {e}")))?;
@@ -200,27 +191,12 @@ pub async fn core_rebuild_search_index<R: tauri::Runtime>(
 }
 
 /// 索引 root 沙箱校验：canonicalize 后必须 ∈ WorkspaceRegistry 已授权根子树。
-///
-/// 为什么这样修（根因）：F5-03 旧实现只做 trim/空/长度校验，root 任意值直接
-/// 进 `build_directory_index` 全盘遍历；本校验把 root 收窄到活动工作区根或其
-/// 子树（与 `list_directory` 沙箱一致），失败返回 `workspace_not_granted` 文案。
-/// 注册表未托管（mock app 未 manage）→ Internal 明确错误，不静默放行。
+/// 缺省或空值时回退至首个已授权活动工作区根。
 fn resolve_index_root<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-    root: &str,
+    root: Option<&str>,
 ) -> Result<String, CoreError> {
     use tauri::Manager as _;
-    let path = Path::new(root);
-    let canonical = path.canonicalize().map_err(|e| {
-        CoreError::InvalidInput(format!(
-            "workspace_not_granted: cannot resolve root `{root}`: {e}"
-        ))
-    })?;
-    if !canonical.is_dir() {
-        return Err(CoreError::InvalidInput(format!(
-            "workspace_not_granted: root is not a directory: `{root}`"
-        )));
-    }
     let reg = app.try_state::<WorkspaceRegistry>().ok_or_else(|| {
         CoreError::Internal(
             "WorkspaceRegistry is not managed; main.rs setup must call app.manage(WorkspaceRegistry::init()...)"
@@ -228,7 +204,49 @@ fn resolve_index_root<R: tauri::Runtime>(
         )
     })?;
     let roots = reg.roots();
-    // path_is_same_or_child 已内置 `\\?\` 剥离与 Windows 大小写归一化
+
+    let target_root = match root {
+        Some(r) => {
+            let trimmed = r.trim();
+            if trimmed.is_empty() {
+                if let Some(first) = roots.first() {
+                    first.to_string_lossy().into_owned()
+                } else {
+                    return Err(CoreError::InvalidInput(
+                        "root path is empty and no workspace roots registered".to_string(),
+                    ));
+                }
+            } else {
+                if trimmed.len() > SEARCH_ROOT_MAX_LEN {
+                    return Err(CoreError::InvalidInput(format!(
+                        "root path too long (max {SEARCH_ROOT_MAX_LEN})"
+                    )));
+                }
+                trimmed.to_string()
+            }
+        }
+        None => {
+            if let Some(first) = roots.first() {
+                first.to_string_lossy().into_owned()
+            } else {
+                return Err(CoreError::InvalidInput(
+                    "root path is empty and no workspace roots registered".to_string(),
+                ));
+            }
+        }
+    };
+
+    let path = Path::new(&target_root);
+    let canonical = path.canonicalize().map_err(|e| {
+        CoreError::InvalidInput(format!(
+            "workspace_not_granted: cannot resolve root `{target_root}`: {e}"
+        ))
+    })?;
+    if !canonical.is_dir() {
+        return Err(CoreError::InvalidInput(format!(
+            "workspace_not_granted: root is not a directory: `{target_root}`"
+        )));
+    }
     if roots
         .iter()
         .any(|authorized| path_is_same_or_child(&canonical, authorized))
@@ -236,7 +254,7 @@ fn resolve_index_root<R: tauri::Runtime>(
         return Ok(canonical.to_string_lossy().into_owned());
     }
     Err(CoreError::InvalidInput(format!(
-        "workspace_not_granted: root is outside the authorized workspace root: `{root}`"
+        "workspace_not_granted: root is outside the authorized workspace root: `{target_root}`"
     )))
 }
 
@@ -642,7 +660,7 @@ mod tests {
         runtime.block_on(async {
             let result = core_rebuild_search_index(
                 app.handle().clone(),
-                outside_root.to_string_lossy().into_owned(),
+                Some(outside_root.to_string_lossy().into_owned()),
                 state.clone(),
             )
             .await;
@@ -684,7 +702,7 @@ mod tests {
         runtime.block_on(async {
             let result = core_rebuild_search_index(
                 app.handle().clone(),
-                auth_root.to_string_lossy().into_owned(),
+                Some(auth_root.to_string_lossy().into_owned()),
                 state,
             )
             .await;
@@ -693,7 +711,30 @@ mod tests {
         });
     }
 
-    /// T4.4-R3（回归契约）：空串 / 超长 root 仍拒绝（既有 trim/长度校验保持）。
+    /// T4.4-R2b（默认回退）：root = None 时自动回退至已授权工作区根构建索引。
+    #[test]
+    fn rebuild_search_index_defaults_to_registered_workspace_root() {
+        use tauri::Manager as _;
+        let temp = TestDir::new();
+        let auth_root = temp.path().join("auth");
+        fs::create_dir_all(&auth_root).expect("create auth root");
+        fs::write(auth_root.join("file.txt"), "hello").expect("write file");
+
+        let state = Arc::new(SharedSearchState::new());
+        let app = mock_app_with_registry(state, registry_authorizing(&temp, &auth_root));
+        let state = app.state::<Arc<SharedSearchState>>();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let result = core_rebuild_search_index(app.handle().clone(), None, state).await;
+            let resp = result.expect("缺省 root 时应自动回退到已授权根");
+            assert_eq!(resp.file_count, 1);
+        });
+    }
+
+    /// T4.4-R3（回归契约）：超长 root 仍拒绝（既有长度校验保持）。
     #[test]
     fn rebuild_search_index_rejects_empty_or_oversized_root() {
         use tauri::Manager as _;
@@ -709,13 +750,8 @@ mod tests {
             .build()
             .unwrap();
         runtime.block_on(async {
-            let result =
-                core_rebuild_search_index(app.handle().clone(), "   ".to_string(), state.clone())
-                    .await;
-            assert!(matches!(result, Err(CoreError::InvalidInput(_))));
-
             let oversized = "x".repeat(SEARCH_ROOT_MAX_LEN + 1);
-            let result = core_rebuild_search_index(app.handle().clone(), oversized, state).await;
+            let result = core_rebuild_search_index(app.handle().clone(), Some(oversized), state).await;
             assert!(matches!(result, Err(CoreError::InvalidInput(_))));
         });
     }
