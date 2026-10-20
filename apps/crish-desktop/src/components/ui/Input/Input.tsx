@@ -122,6 +122,18 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
       }
     };
 
+    // 受控/非受控值形态与 password 明文切换状态：必须声明在任何 early return 之前，
+    // 保证同一实例的 bare 由 false→true→false 切换时 Hook 调用数量与顺序恒定（RUN-01）。
+    const [uncontrolledHasValue, setUncontrolledHasValue] = useState<boolean>(
+      () => {
+        if (defaultValue !== undefined && defaultValue !== null) {
+          return String(defaultValue).length > 0;
+        }
+        return false;
+      }
+    );
+    const [showPassword, setShowPassword] = useState(false);
+
     if (bare) {
       return (
         <input
@@ -143,14 +155,6 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     }
 
     const isControlled = value !== undefined;
-    const [uncontrolledHasValue, setUncontrolledHasValue] = useState<boolean>(
-      () => {
-        if (defaultValue !== undefined && defaultValue !== null) {
-          return String(defaultValue).length > 0;
-        }
-        return false;
-      }
-    );
 
     const hasValue = isControlled
       ? value !== null && String(value).length > 0
@@ -185,8 +189,6 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
       }
     };
 
-    // password 型别的明文切换状态
-    const [showPassword, setShowPassword] = useState(false);
     // search 不用 type=search：WebView2 会画 Windows 原生白框/清除钮。
     // 语义改走 role=searchbox；外观由 Input.module.css appearance:none 接管。
     const inputType =

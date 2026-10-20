@@ -285,7 +285,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
 export const PreviewCardTrigger = forwardRef<
   HTMLElement,
   PreviewCardTriggerProps
->(({ children, asChild = false, ...restProps }, forwardedRef) => {
+>(({ children, asChild: _asChild = false, ...restProps }, forwardedRef) => {
   const {
     isOpen,
     setIsOpen,
@@ -422,15 +422,20 @@ export const PreviewCardTrigger = forwardRef<
     }, delayHide);
   };
 
-  if (!React.isValidElement(children)) {
+  // 元素合法性判定与 ref 合并必须放在 early return 之前：
+  // 保证同一实例 children 在「合法元素 ↔ 非元素」之间切换时 Hook 数量与顺序恒定（RUN-02）。
+  const child = React.isValidElement(children)
+    ? (children as React.ReactElement<Record<string, unknown>>)
+    : null;
+  const childRef = child
+    ? ((child.props as { ref?: React.Ref<HTMLElement> })?.ref ??
+      (child as { ref?: React.Ref<HTMLElement> })?.ref)
+    : undefined;
+  const mergedRef = useMergeRefs(forwardedRef, childRef, triggerRef);
+
+  if (child === null) {
     return <>{children}</>;
   }
-
-  const child = children as React.ReactElement<Record<string, unknown>>;
-  const childRef =
-    (child.props as { ref?: React.Ref<HTMLElement> })?.ref ??
-    (child as { ref?: React.Ref<HTMLElement> })?.ref;
-  const mergedRef = useMergeRefs(forwardedRef, childRef, triggerRef);
 
   const childProps = child.props as Record<string, unknown>;
 
@@ -442,52 +447,44 @@ export const PreviewCardTrigger = forwardRef<
     onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
       (
         childProps.onMouseEnter as
-          | ((e: React.MouseEvent<HTMLElement>) => void)
-          | undefined
+          ((e: React.MouseEvent<HTMLElement>) => void) | undefined
       )?.(e);
       (
         restProps.onMouseEnter as
-          | ((e: React.MouseEvent<HTMLElement>) => void)
-          | undefined
+          ((e: React.MouseEvent<HTMLElement>) => void) | undefined
       )?.(e);
       handleMouseEnter(e);
     },
     onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
       (
         childProps.onMouseLeave as
-          | ((e: React.MouseEvent<HTMLElement>) => void)
-          | undefined
+          ((e: React.MouseEvent<HTMLElement>) => void) | undefined
       )?.(e);
       (
         restProps.onMouseLeave as
-          | ((e: React.MouseEvent<HTMLElement>) => void)
-          | undefined
+          ((e: React.MouseEvent<HTMLElement>) => void) | undefined
       )?.(e);
       handleMouseLeave(e);
     },
     onFocus: (e: React.FocusEvent<HTMLElement>) => {
       (
         childProps.onFocus as
-          | ((e: React.FocusEvent<HTMLElement>) => void)
-          | undefined
+          ((e: React.FocusEvent<HTMLElement>) => void) | undefined
       )?.(e);
       (
         restProps.onFocus as
-          | ((e: React.FocusEvent<HTMLElement>) => void)
-          | undefined
+          ((e: React.FocusEvent<HTMLElement>) => void) | undefined
       )?.(e);
       handleFocus(e);
     },
     onBlur: (e: React.FocusEvent<HTMLElement>) => {
       (
         childProps.onBlur as
-          | ((e: React.FocusEvent<HTMLElement>) => void)
-          | undefined
+          ((e: React.FocusEvent<HTMLElement>) => void) | undefined
       )?.(e);
       (
         restProps.onBlur as
-          | ((e: React.FocusEvent<HTMLElement>) => void)
-          | undefined
+          ((e: React.FocusEvent<HTMLElement>) => void) | undefined
       )?.(e);
       handleBlur();
     },
@@ -752,9 +749,11 @@ export const PreviewCardTitle: React.FC<PreviewCardTitleProps> = ({
 );
 PreviewCardTitle.displayName = 'PreviewCardTitle';
 
-export const PreviewCardDescription: React.FC<
-  PreviewCardDescriptionProps
-> = ({ children, className, ...props }) => (
+export const PreviewCardDescription: React.FC<PreviewCardDescriptionProps> = ({
+  children,
+  className,
+  ...props
+}) => (
   <p
     data-slot="preview-card-description"
     className={`${styles.description} ${className || ''}`}

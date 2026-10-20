@@ -70,9 +70,7 @@ describe('ui/Input', () => {
   });
 
   it('search 型：传入 type=search 仍被压成 text（防 WebView2 原生白框）', () => {
-    render(
-      <Input variant="search" type="search" aria-label="防原生搜索" />
-    );
+    render(<Input variant="search" type="search" aria-label="防原生搜索" />);
     const input = screen.getByRole('searchbox', { name: '防原生搜索' });
     expect(input).toHaveAttribute('type', 'text');
   });
@@ -186,6 +184,48 @@ describe('ui/Input', () => {
     fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
     expect(onEnter).toHaveBeenCalledTimes(1);
     expect(onEnter).toHaveBeenCalledWith('nihao');
+  });
+});
+
+describe('ui/Input · 条件 Hook 回归（RUN-01）', () => {
+  it('同一实例 bare=false→true→false 重渲染：Hook 调用数量稳定，不抛错', () => {
+    const { rerender } = render(<Input bare={false} aria-label="裸模式切换" />);
+    expect(
+      screen.getByLabelText('裸模式切换').closest('[data-size]')
+    ).not.toBeNull();
+
+    // false → true：bare 分支只改变渲染输出，不得改变 Hook 调用顺序
+    expect(() =>
+      rerender(<Input bare aria-label="裸模式切换" />)
+    ).not.toThrow();
+    const bareInput = screen.getByLabelText('裸模式切换');
+    expect(bareInput.tagName).toBe('INPUT');
+    expect(bareInput.closest('[data-size]')).toBeNull();
+
+    // true → false：切回包装结构同样不得抛错
+    expect(() =>
+      rerender(<Input bare={false} aria-label="裸模式切换" />)
+    ).not.toThrow();
+    expect(
+      screen.getByLabelText('裸模式切换').closest('[data-size]')
+    ).not.toBeNull();
+  });
+
+  it('同一实例 bare=true→false 后 useState 取值仍对位（密码明文切换可用）', () => {
+    const { rerender } = render(
+      <Input bare variant="password" aria-label="裸起始密码" />
+    );
+
+    expect(() =>
+      rerender(<Input variant="password" aria-label="裸起始密码" />)
+    ).not.toThrow();
+    expect(screen.getByLabelText('裸起始密码')).toHaveAttribute(
+      'type',
+      'password'
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '显示密码' }));
+    expect(screen.getByLabelText('裸起始密码')).toHaveAttribute('type', 'text');
   });
 });
 

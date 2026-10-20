@@ -3,7 +3,7 @@
  * PreviewCard 单元测试矩阵
  * 覆盖：双层贝塞尔小三角渲染、Safe-Aim 向量几何算法、视口碰撞翻折与边缘钳位、意图停留定时器、无障碍与生命周期
  */
-/* eslint-disable max-lines-per-function, react/no-multi-comp */
+/* eslint-disable max-lines-per-function */
 import React from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import {
@@ -41,11 +41,11 @@ afterEach(() => {
 
 describe('PreviewCardArrow (双层贝塞尔平滑小三角)', () => {
   it('渲染具有 viewBox="0 0 26 18" 的双层 SVG 结构（边框描边层 + 底色填充层）', () => {
-    const { container } = render(
-      <PreviewCardArrow side="bottom" offset={0} />
-    );
+    const { container } = render(<PreviewCardArrow side="bottom" offset={0} />);
 
-    const arrowContainer = container.querySelector('[data-slot="preview-card-arrow"]');
+    const arrowContainer = container.querySelector(
+      '[data-slot="preview-card-arrow"]'
+    );
     expect(arrowContainer).toBeInTheDocument();
     expect(arrowContainer).toHaveAttribute('data-side', 'bottom');
 
@@ -76,19 +76,27 @@ describe('PreviewCardArrow (双层贝塞尔平滑小三角)', () => {
     const { rerender, container } = render(
       <PreviewCardArrow side="bottom" offset={10} />
     );
-    let arrowContainer = container.querySelector('[data-slot="preview-card-arrow"]') as HTMLElement;
+    let arrowContainer = container.querySelector(
+      '[data-slot="preview-card-arrow"]'
+    ) as HTMLElement;
     expect(arrowContainer.style.left).toBe('calc(50% - 3px)');
 
     rerender(<PreviewCardArrow side="top" offset={-5} />);
-    arrowContainer = container.querySelector('[data-slot="preview-card-arrow"]') as HTMLElement;
+    arrowContainer = container.querySelector(
+      '[data-slot="preview-card-arrow"]'
+    ) as HTMLElement;
     expect(arrowContainer.style.left).toBe('calc(50% - 18px)');
 
     rerender(<PreviewCardArrow side="left" offset={15} />);
-    arrowContainer = container.querySelector('[data-slot="preview-card-arrow"]') as HTMLElement;
+    arrowContainer = container.querySelector(
+      '[data-slot="preview-card-arrow"]'
+    ) as HTMLElement;
     expect(arrowContainer.style.top).toBe('calc(50% + 6px)');
 
     rerender(<PreviewCardArrow side="right" offset={0} />);
-    arrowContainer = container.querySelector('[data-slot="preview-card-arrow"]') as HTMLElement;
+    arrowContainer = container.querySelector(
+      '[data-slot="preview-card-arrow"]'
+    ) as HTMLElement;
     expect(arrowContainer.style.top).toBe('calc(50% - 9px)');
   });
 });
@@ -164,7 +172,12 @@ describe('Safe-Aim 2D 向量几何与 SafeTriangleTracker', () => {
 });
 
 describe('computePreviewCardPosition (视口碰撞翻折与边缘钳位)', () => {
-  const mockTriggerRect = (top: number, left: number, width = 80, height = 32): DOMRect =>
+  const mockTriggerRect = (
+    top: number,
+    left: number,
+    width = 80,
+    height = 32
+  ): DOMRect =>
     ({
       top,
       left,
@@ -175,16 +188,30 @@ describe('computePreviewCardPosition (视口碰撞翻折与边缘钳位)', () =>
       x: left,
       y: top,
       toJSON: () => {},
-    } as DOMRect);
+    }) as DOMRect;
 
   beforeEach(() => {
-    Object.defineProperty(window, 'innerWidth', { value: 1000, writable: true });
-    Object.defineProperty(window, 'innerHeight', { value: 800, writable: true });
+    Object.defineProperty(window, 'innerWidth', {
+      value: 1000,
+      writable: true,
+    });
+    Object.defineProperty(window, 'innerHeight', {
+      value: 800,
+      writable: true,
+    });
   });
 
   it('空间充足时保持默认 bottom 方位', () => {
     const trigger = mockTriggerRect(100, 300);
-    const result = computePreviewCardPosition('bottom', 'center', 10, 0, trigger, 300, 150);
+    const result = computePreviewCardPosition(
+      'bottom',
+      'center',
+      10,
+      0,
+      trigger,
+      300,
+      150
+    );
 
     expect(result.effectiveSide).toBe('bottom');
     expect(result.top).toBe(100 + 32 + 10); // rect.bottom + sideOffset = 142
@@ -196,7 +223,15 @@ describe('computePreviewCardPosition (视口碰撞翻折与边缘钳位)', () =>
     // 触发器靠近视口底部 (top: 720, height: 32 -> bottom: 752)
     // 视口高 800，下方剩余 800 - 12 - 752 = 36 < 150 + 10
     const trigger = mockTriggerRect(720, 300);
-    const result = computePreviewCardPosition('bottom', 'center', 10, 0, trigger, 300, 150);
+    const result = computePreviewCardPosition(
+      'bottom',
+      'center',
+      10,
+      0,
+      trigger,
+      300,
+      150
+    );
 
     expect(result.effectiveSide).toBe('top');
     expect(result.top).toBe(720 - 10 - 150); // rect.top - sideOffset - cardHeight = 560
@@ -205,7 +240,15 @@ describe('computePreviewCardPosition (视口碰撞翻折与边缘钳位)', () =>
   it('上方空间不足时自动翻折至 bottom', () => {
     // 触发器靠近视口顶部 (top: 20)
     const trigger = mockTriggerRect(20, 300);
-    const result = computePreviewCardPosition('top', 'center', 10, 0, trigger, 300, 150);
+    const result = computePreviewCardPosition(
+      'top',
+      'center',
+      10,
+      0,
+      trigger,
+      300,
+      150
+    );
 
     expect(result.effectiveSide).toBe('bottom');
     expect(result.top).toBe(20 + 32 + 10); // 62
@@ -215,7 +258,15 @@ describe('computePreviewCardPosition (视口碰撞翻折与边缘钳位)', () =>
     // 触发器靠近视口右侧 (left: 850, width: 80 -> right: 930)
     // 视口宽 1000，右侧剩余 1000 - 12 - 930 = 58 < 300 + 10
     const trigger = mockTriggerRect(300, 850);
-    const result = computePreviewCardPosition('right', 'center', 10, 0, trigger, 300, 150);
+    const result = computePreviewCardPosition(
+      'right',
+      'center',
+      10,
+      0,
+      trigger,
+      300,
+      150
+    );
 
     expect(result.effectiveSide).toBe('left');
     expect(result.left).toBe(850 - 10 - 300); // 540
@@ -223,7 +274,15 @@ describe('computePreviewCardPosition (视口碰撞翻折与边缘钳位)', () =>
 
   it('左侧空间不足时自动翻折至 right', () => {
     const trigger = mockTriggerRect(300, 20);
-    const result = computePreviewCardPosition('left', 'center', 10, 0, trigger, 300, 150);
+    const result = computePreviewCardPosition(
+      'left',
+      'center',
+      10,
+      0,
+      trigger,
+      300,
+      150
+    );
 
     expect(result.effectiveSide).toBe('right');
     expect(result.left).toBe(20 + 80 + 10); // 110
@@ -232,7 +291,15 @@ describe('computePreviewCardPosition (视口碰撞翻折与边缘钳位)', () =>
   it('超出视口横向边缘时进行安全钳位 (Clamping)', () => {
     // 触发器靠非常左 (left: 0)，居中对齐会产生负坐标
     const trigger = mockTriggerRect(200, 0);
-    const result = computePreviewCardPosition('bottom', 'center', 10, 0, trigger, 300, 150);
+    const result = computePreviewCardPosition(
+      'bottom',
+      'center',
+      10,
+      0,
+      trigger,
+      300,
+      150
+    );
 
     // 应该钳位至 PREVIEW_CARD_EDGE_PAD (12)
     expect(result.left).toBe(PREVIEW_CARD_EDGE_PAD);
@@ -242,10 +309,26 @@ describe('computePreviewCardPosition (视口碰撞翻折与边缘钳位)', () =>
 
   it('对齐方式支持 start / end / center 与 alignOffset', () => {
     const trigger = mockTriggerRect(200, 400, 100, 30);
-    const startResult = computePreviewCardPosition('bottom', 'start', 10, 5, trigger, 200, 100);
+    const startResult = computePreviewCardPosition(
+      'bottom',
+      'start',
+      10,
+      5,
+      trigger,
+      200,
+      100
+    );
     expect(startResult.left).toBe(400 + 5);
 
-    const endResult = computePreviewCardPosition('bottom', 'end', 10, -5, trigger, 200, 100);
+    const endResult = computePreviewCardPosition(
+      'bottom',
+      'end',
+      10,
+      -5,
+      trigger,
+      200,
+      100
+    );
     expect(endResult.left).toBe(400 + 100 - 200 - 5); // 295
   });
 });
@@ -456,7 +539,9 @@ describe('PreviewCard 交互与意图停留定时器', () => {
 
     // 触发全局 Esc 按键
     act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+      );
     });
 
     // 经过 exit 动画时长 (100ms)
@@ -464,5 +549,94 @@ describe('PreviewCard 交互与意图停留定时器', () => {
       vi.advanceTimersByTime(110);
     });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+});
+
+describe('PreviewCardTrigger · 条件 Hook 回归（RUN-02）', () => {
+  it('同一实例 children 合法元素→非元素→合法元素 重渲染：Hook 数量稳定，不抛错', () => {
+    const { rerender } = render(
+      <PreviewCard delayShow={0}>
+        <PreviewCardTrigger>
+          <button type="button">合法触发器</button>
+        </PreviewCardTrigger>
+      </PreviewCard>
+    );
+
+    expect(screen.getByRole('button', { name: '合法触发器' })).toHaveAttribute(
+      'aria-haspopup',
+      'dialog'
+    );
+
+    // 合法元素 → 纯文本（非合法元素）：早退分支不得改变 Hook 调用顺序
+    expect(() =>
+      rerender(
+        <PreviewCard delayShow={0}>
+          <PreviewCardTrigger>纯文本子节点</PreviewCardTrigger>
+        </PreviewCard>
+      )
+    ).not.toThrow();
+    expect(screen.getByText('纯文本子节点')).toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+
+    // 非合法元素 → 合法元素：cloneElement 与 ARIA 注入仍然生效
+    expect(() =>
+      rerender(
+        <PreviewCard delayShow={0}>
+          <PreviewCardTrigger>
+            <button type="button">合法触发器</button>
+          </PreviewCardTrigger>
+        </PreviewCard>
+      )
+    ).not.toThrow();
+    expect(screen.getByRole('button', { name: '合法触发器' })).toHaveAttribute(
+      'aria-haspopup',
+      'dialog'
+    );
+    expect(screen.getByRole('button', { name: '合法触发器' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
+  });
+
+  it('同一实例 children 元素→null→元素 重渲染：不抛错且触发器事件仍被接管', () => {
+    const { rerender } = render(
+      <PreviewCard delayShow={0}>
+        <PreviewCardTrigger>
+          <button type="button">空值触发器</button>
+        </PreviewCardTrigger>
+        <PreviewCardContent>
+          <div>空值卡片内容</div>
+        </PreviewCardContent>
+      </PreviewCard>
+    );
+
+    expect(() =>
+      rerender(
+        <PreviewCard delayShow={0}>
+          <PreviewCardTrigger>{null}</PreviewCardTrigger>
+          <PreviewCardContent>
+            <div>空值卡片内容</div>
+          </PreviewCardContent>
+        </PreviewCard>
+      )
+    ).not.toThrow();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+
+    expect(() =>
+      rerender(
+        <PreviewCard delayShow={0}>
+          <PreviewCardTrigger>
+            <button type="button">空值触发器</button>
+          </PreviewCardTrigger>
+          <PreviewCardContent>
+            <div>空值卡片内容</div>
+          </PreviewCardContent>
+        </PreviewCard>
+      )
+    ).not.toThrow();
+
+    const triggerBtn = screen.getByRole('button', { name: '空值触发器' });
+    fireEvent.mouseEnter(triggerBtn);
+    expect(screen.getByRole('dialog')).toHaveTextContent('空值卡片内容');
   });
 });
