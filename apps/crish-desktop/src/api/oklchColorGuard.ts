@@ -149,7 +149,7 @@ export function computeContrastGuardedTokens(
 
   return {
     isDarkBg,
-    textPrimary: isLightBg ? 'hsl(35, 12%, 7%)' : 'hsl(0, 0%, 96%)',
+    textPrimary: isLightBg ? 'hsl(35, 12%, 11%)' : 'hsl(0, 0%, 96%)',
     textSecondary: isDarkBg ? 'hsl(0, 0%, 72%)' : 'hsl(35, 8%, 34%)',
     textTertiary: isDarkBg ? 'hsl(0, 0%, 50%)' : 'hsl(35, 6%, 52%)',
   };

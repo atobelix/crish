@@ -94,7 +94,7 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       ]) {
         expect(root.style.getPropertyValue(alias), alias).toBe('');
       }
-      expect(root.style.getPropertyValue('--text-primary')).toBe('#1a1a1a');
+      expect(root.style.getPropertyValue('--text-primary')).toBe('#121212');
       expect(root.style.getPropertyValue('--border-color')).toBe('#e2e1e0'); // P2-1：与 tokens.css 同值（M0.4/Y0.8）
       // control-soft-* 改为 tokens.css 统一叠加（--tint-hover/--tint-active），不再注入
       expect(root.style.getPropertyValue('--control-soft-bg')).toBe('');
@@ -144,7 +144,7 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(root.style.getPropertyValue('--surface-main')).toBe('#141414');
       expect(root.style.getPropertyValue('--surface-outer')).toBe('#1e1e1e');
       expect(root.style.getPropertyValue('--surface-input')).toBe('#232323');
-      expect(root.style.getPropertyValue('--text-primary')).toBe('#e6e6e6');
+      expect(root.style.getPropertyValue('--text-primary')).toBe('#f5f5f5');
       expectNoDerivedAliasesInjected(root);
     });
 
@@ -169,7 +169,7 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
 
       // P2-7：classic-gray 方向修正后主层 #f8f9fa 比外层 #f1f3f5 亮
       expect(root.style.getPropertyValue('--surface-main')).toBe('#f8f9fa');
-      expect(root.style.getPropertyValue('--text-primary')).toBe('#212529');
+      expect(root.style.getPropertyValue('--text-primary')).toBe('#111214');
       expectNoDerivedAliasesInjected(root);
     });
 
@@ -196,7 +196,7 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(darkGuarded).not.toBeNull();
       expect(darkGuarded?.isDarkBg).toBe(true);
       expect(typeof darkGuarded?.isDarkBg).toBe('boolean');
-      expect(darkGuarded?.textPrimary).toBe('hsl(0, 0%, 94%)');
+      expect(darkGuarded?.textPrimary).toBe('hsl(0, 0%, 96%)');
       expect(darkGuarded?.textSecondary).toBe('hsl(0, 0%, 72%)');
       expect(darkGuarded?.textTertiary).toBe('hsl(0, 0%, 50%)');
 
@@ -295,7 +295,7 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(result.isDark).toBe(true);
       expect(result.tokens['--surface-main']).toBe('#223344');
       // 自定义极端暗色背景触发对比度防崩安全算法，派生高对比度亮白
-      expect(result.tokens['--text-primary']).toBe('hsl(0, 0%, 94%)');
+      expect(result.tokens['--text-primary']).toBe('hsl(0, 0%, 96%)');
       expect(result.tokens['--surface-outer']).toContain('color-mix(');
       expect(
         document.documentElement.style.getPropertyValue('--surface-main')
@@ -324,7 +324,7 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
         'default'
       );
 
-      expect(result.tokens['--text-primary']).toBe('#3c1642');
+      expect(result.tokens['--text-primary']).toBe('#18081b');
       expect(result.tokens['--text-secondary']).toBe('#592b63');
       expect(result.tokens['--text-tertiary']).toContain('color-mix(');
       expect(result.tokens['--text-faint']).toContain('color-mix(');

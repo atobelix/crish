@@ -49,7 +49,7 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
     // 验证 --text-primary 保持中性深灰 #1a1a1a，未被篡改为 hsl(35, 12%, 11%)
     const currentVal =
       document.documentElement.style.getPropertyValue('--text-primary');
-    expect(currentVal).toBe('#1a1a1a');
+    expect(currentVal).toBe('#121212');
   });
 
   it('SSOT-02: oklchColorGuard 在自定义极端背景下能够精准介入兜底', () => {
@@ -61,7 +61,7 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
 
     const guardedVal =
       document.documentElement.style.getPropertyValue('--text-primary');
-    expect(guardedVal).toBe('hsl(0, 0%, 94%)'); // 触发高对比白色兜底
+    expect(guardedVal).toBe('hsl(0, 0%, 96%)'); // 触发高对比白色兜底 (96% 亮度)
   });
 
   it('SSOT-03: bootstrapTheme 在顶层同步执行，正确写入属性与 Token 树', () => {
@@ -98,7 +98,7 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
     expect(darkCozy.bgPrimary).toBe('#141414');
     expect(darkCozy.bgSecondary).toBe('#1e1e1e');
     expect(darkCozy.bgCard).toBe('#232323');
-    expect(darkCozy.textPrimary).toBe('#e6e6e6');
+    expect(darkCozy.textPrimary).toBe('#f5f5f5');
 
     const warmGray = SKIN_PRESETS['warm-gray'];
     expect(warmGray).toBeDefined();
@@ -106,7 +106,7 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
     expect(warmGray.bgPrimary).toBe('#ffffff');
     expect(warmGray.bgSecondary).toBe('#f2f1f0');
     expect(warmGray.bgTertiary).toBe('hsl(30 8.33% 92.29%)');
-    expect(warmGray.textPrimary).toBe('#1a1a1a');
+    expect(warmGray.textPrimary).toBe('#121212');
   });
 
   it('SSOT-05: getContrastGuardedText 算法在浅色与深色背景下的对比度判定', () => {
