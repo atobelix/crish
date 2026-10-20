@@ -63,7 +63,7 @@ fn g_hyd_02_workspace_store_apply_persist_hydrate_isomorphic() {
     assert_eq!(restored.read_text(&id_a), "store-hydrate-alpha");
     assert_eq!(restored.tree().get(&id_b).unwrap().parent, Some(id_a));
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup_dir(&dir);
 }
 
 /// A-INV-04 方向 / 落盘完成链（02 §0）：
@@ -282,5 +282,5 @@ fn a_inv_04_kill_process_reload_hydrate_isomorphic() {
         );
     }
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup_dir(&dir);
 }

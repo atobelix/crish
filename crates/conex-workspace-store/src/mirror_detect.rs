@@ -229,7 +229,7 @@ mod tests {
                 .unwrap_or(0),
             n
         ));
-        let _ = std::fs::create_dir_all(&p);
+        std::fs::create_dir_all(&p).expect("创建测试临时目录失败");
         p
     }
 

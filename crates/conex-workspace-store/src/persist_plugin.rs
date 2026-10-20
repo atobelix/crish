@@ -166,8 +166,10 @@ impl PersistencePlugin for WorkspaceStore {
             .conn
             .lock()
             .map_err(|e| PersistError::Io(e.to_string()))?;
-        // checkpoint 失败不视为致命（磁盘满等由上层感知）
-        let _ = conn.execute_batch("PRAGMA wal_checkpoint(PASSIVE);");
+        // checkpoint 失败不视为致命（磁盘满等由上层感知），但不得静默：留痕后继续
+        if let Err(e) = conn.execute_batch("PRAGMA wal_checkpoint(PASSIVE);") {
+            eprintln!("[conex-workspace-store] WAL checkpoint(PASSIVE) 失败（不阻塞写）：{e}");
+        }
         Ok(())
     }
 }

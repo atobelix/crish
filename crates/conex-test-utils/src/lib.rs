@@ -29,7 +29,8 @@ static COUNTER: AtomicU32 = AtomicU32::new(0);
 /// 初始化测试环境（幂等）。
 /// 为测试输出装配 tracing subscriber（未初始化时）。
 pub fn setup_test_env() {
-    let _ = tracing_subscriber::fmt()
+    // 幂等：try_init 失败 = 既有 subscriber 已生效，显式放弃冲突错误。
+    let _first_init_won = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::WARN)
         .with_test_writer()
         .try_init();
@@ -117,7 +118,15 @@ impl Drop for TempWorkspace {
             );
             return;
         }
-        let _ = std::fs::remove_dir_all(&self.path);
+        // 清理失败不 panic（Drop 语义）：记录到 stderr 后忽略，保留
+        // 现场的排查途径走 CONEX_TEST_KEEP=1。
+        if let Err(e) = std::fs::remove_dir_all(&self.path) {
+            eprintln!(
+                "[conex-test-utils] 临时工作区清理失败（忽略）: {}: {}",
+                self.path.display(),
+                e
+            );
+        }
     }
 }
 

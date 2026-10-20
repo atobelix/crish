@@ -64,12 +64,15 @@ fn record_crash_marker(file_name: String) {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
-    let _ = CRASH_MARKER.lock().map(|mut slot| {
-        *slot = Some(CrashMarker {
-            file_name,
-            timestamp_ms,
-        });
-    });
+    match CRASH_MARKER.lock() {
+        Ok(mut slot) => {
+            *slot = Some(CrashMarker {
+                file_name,
+                timestamp_ms,
+            });
+        }
+        Err(_) => {} // 锁中毒：崩溃处理路径不允许二次 panic，显式放弃写入
+    }
 }
 
 /// 读取最近崩溃标记（壳层 `core_get_status.lastCrash` 读出面；进程内
@@ -80,9 +83,10 @@ pub fn last_crash_marker() -> Option<CrashMarker> {
 
 /// 清空崩溃标记（测试隔离用；生产路径不调用——崩溃台账是累积事实源）。
 pub fn reset_crash_marker() {
-    let _ = CRASH_MARKER.lock().map(|mut slot| {
-        *slot = None;
-    });
+    match CRASH_MARKER.lock() {
+        Ok(mut slot) => *slot = None,
+        Err(_) => {} // 锁中毒：显式放弃清空（测试隔离路径，标记保持原值）
+    }
 }
 
 /// 安装 telemetry panic hook（不带崩溃文件）。

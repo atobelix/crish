@@ -45,12 +45,14 @@ pub(super) fn append_ref_filters(
 }
 
 /// `col_prefix`：FTS JOIN 时用 `"b."` 限定 `blocks` 别名；纯 SQL 路径用 `""`。
+///
+/// 占位符序号**唯一来源**是 `bind.len() + 1`（与 [`append_ref_filters`] 同口径），
+/// 不再由调用方传入起始序号——避免序号与绑定参数数量漂移。
 pub(super) fn append_kind_attrs_filters(
     sql: &mut String,
     bind: &mut Vec<rusqlite::types::Value>,
     kinds: Option<&[String]>,
     attrs: &[(&str, &JsonValue)],
-    mut next_idx: usize,
     col_prefix: &str,
 ) -> Result<(), StoreError> {
     if let Some(ks) = kinds {
@@ -62,23 +64,22 @@ pub(super) fn append_kind_attrs_filters(
             if i > 0 {
                 sql.push_str(", ");
             }
+            let idx = bind.len() + 1;
             sql.push('?');
-            sql.push_str(&next_idx.to_string());
+            sql.push_str(&idx.to_string());
             bind.push(rusqlite::types::Value::Text(k.clone()));
-            next_idx += 1;
         }
         sql.push(')');
     }
 
     for (key, val) in attrs {
         // 键已白名单，可拼入 json path；值绑定防注入
+        let idx = bind.len() + 1;
         sql.push_str(&format!(
-            " AND json_extract({col_prefix}props_json, '$.{key}') = ?{next_idx}"
+            " AND json_extract({col_prefix}props_json, '$.{key}') = ?{idx}"
         ));
         bind.push(json_to_sql_value(val)?);
-        next_idx += 1;
     }
-    let _ = next_idx;
     Ok(())
 }
 

@@ -38,7 +38,6 @@ pub(super) fn propose_block_level_ops(
                 });
             }
             // kind 变化：本波次仅文本 + 结构 Insert/Delete（kind 迁移属后续加厚）
-            let _ = (&anode.kind, &mnode.kind);
         }
     }
 

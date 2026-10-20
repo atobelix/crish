@@ -58,7 +58,8 @@ fn build_and_install(level: &str, file: Option<FileConfig>) -> bool {
     let directive = level_parsed.as_str().to_lowercase();
     // 记录生效级别（供 core_get_status.logLevel 读取——与过滤指令同源，
     // 避免「报告值」与「实际过滤值」漂移）。
-    let _ = CURRENT_LEVEL.set(directive.clone());
+    // 幂等：set 冲突仅发生在重复初始化，保留首次记录值（显式放弃冲突值）。
+    let _first_set_won = CURRENT_LEVEL.set(directive.clone()).err();
     let filter = EnvFilter::try_new(directive).unwrap_or_else(|_| EnvFilter::new("info"));
 
     // 文件层：先建目录，失败则降级为仅 stderr（返回 false 记录降级）。
@@ -76,7 +77,7 @@ fn build_and_install(level: &str, file: Option<FileConfig>) -> bool {
         None => None,
     };
     if file.is_some() && file_writer.is_none() {
-        let _ = install_stderr_only(filter);
+        install_stderr_only(filter);
         return false;
     }
 

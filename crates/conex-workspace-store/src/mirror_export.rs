@@ -76,7 +76,8 @@ impl WorkspaceStore {
         })();
 
         if let Err(e) = write_res {
-            let _ = std::fs::remove_file(&tmp_path);
+            // 主错误优先返回；临时文件清理属次生动作，失败也必须留痕（不静默丢）
+            report_secondary("清理临时文件", &tmp_path, std::fs::remove_file(&tmp_path).err());
             return Err(StoreError::Io(e));
         }
 
@@ -88,12 +89,17 @@ impl WorkspaceStore {
                 let mut perms = meta.permissions();
                 if perms.readonly() {
                     perms.set_readonly(false);
-                    let _ = std::fs::set_permissions(&final_path, perms);
+                    // 清不掉只读位 → 后续 rename 必失败；提前以真实原因上报
+                    std::fs::set_permissions(&final_path, perms)?;
                 }
             }
 
             if let Err(e) = std::fs::rename(&final_path, &bak_path) {
-                let _ = std::fs::remove_file(&tmp_path);
+                report_secondary(
+                    "清理临时文件",
+                    &tmp_path,
+                    std::fs::remove_file(&tmp_path).err(),
+                );
                 return Err(StoreError::Io(e));
             }
             has_backup = true;
@@ -101,16 +107,33 @@ impl WorkspaceStore {
 
         // Phase 3: 重命名临时文件至 final_path（提交），失败则触发原子回滚
         if let Err(e) = std::fs::rename(&tmp_path, &final_path) {
-            let _ = std::fs::remove_file(&tmp_path);
-            if has_backup && bak_path.exists() {
-                let _ = std::fs::rename(&bak_path, &final_path);
+            report_secondary(
+                "清理临时文件",
+                &tmp_path,
+                std::fs::remove_file(&tmp_path).err(),
+            );
+            let rollback_err = if has_backup && bak_path.exists() {
+                std::fs::rename(&bak_path, &final_path).err()
+            } else {
+                None
+            };
+            if let Some(rb) = rollback_err {
+                // 回滚失败：原 mirror 文件仍在 .bak，必须把备份路径告知调用方，避免误判为数据丢失
+                return Err(StoreError::Persist(format!(
+                    "mirror 提交失败（{e}），且回滚失败（{rb}）；原文件保留在 {}",
+                    bak_path.display()
+                )));
             }
             return Err(StoreError::Io(e));
         }
 
-        // 提交成功：尽力清理备份文件
+        // 提交成功：尽力清理备份文件（失败留痕，不影响提交结果）
         if has_backup {
-            let _ = std::fs::remove_file(&bak_path);
+            report_secondary(
+                "清理备份文件",
+                &bak_path,
+                std::fs::remove_file(&bak_path).err(),
+            );
         }
 
         let mtime = file_mtime_ms(&final_path);
@@ -173,6 +196,18 @@ impl WorkspaceStore {
             )
             .optional()?;
         Ok(lag)
+    }
+}
+
+/// 原子写过程中的次生动作（清理临时/备份文件）失败上报。
+///
+/// 主错误照常返回；次生错误只影响清理，不得静默吞掉（否则残留 .tmp/.bak 无人知晓）。
+fn report_secondary(action: &str, path: &Path, err: Option<std::io::Error>) {
+    if let Some(err) = err {
+        eprintln!(
+            "[conex-workspace-store] mirror 原子写：{action}失败（{}）：{err}",
+            path.display()
+        );
     }
 }
 

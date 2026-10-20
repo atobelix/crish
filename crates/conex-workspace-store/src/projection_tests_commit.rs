@@ -74,7 +74,7 @@ fn apply_projection_diff_upsert_search_and_remove() {
     assert_eq!(store.count_blocks("doc-p").unwrap(), 1);
     assert_eq!(store.mirror_lag("doc-p").unwrap(), Some(2));
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup_dir(&dir);
 }
 
 #[test]
@@ -166,7 +166,7 @@ fn commit_ops_session_shared_store_end_to_end() {
         .unwrap();
     assert_eq!(store.mirror_lag("doc-e2e").unwrap(), Some(0));
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup_dir(&dir);
 }
 
 #[test]
@@ -201,7 +201,7 @@ fn commit_ops_with_mirror_auto_export_clears_lag() {
     let content = std::fs::read_to_string(&md).unwrap();
     assert!(content.contains("auto mirror body") || content.contains("<!--c:"));
 
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup_dir(&dir);
 }
 
 #[test]
@@ -214,5 +214,5 @@ fn index_after_apply_reject_is_noop() {
     };
     index_after_apply(&store, &ev).unwrap();
     assert_eq!(store.count_blocks("any").unwrap(), 0);
-    let _ = std::fs::remove_dir_all(dir);
+    cleanup_dir(&dir);
 }

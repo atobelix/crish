@@ -35,6 +35,14 @@ pub fn temp_db() -> (PathBuf, PathBuf) {
     (dir, db)
 }
 
+/// 测试尾临时目录清理（尽力而为）：失败记录到 stderr 后忽略——Windows
+/// 下 db / 锁文件句柄可能尚未释放，清理失败不影响断言结论。
+pub fn cleanup_dir(dir: &PathBuf) {
+    if let Err(e) = std::fs::remove_dir_all(dir) {
+        eprintln!("[workspace-store-tests] 临时目录清理失败（忽略）: {}: {}", dir.display(), e);
+    }
+}
+
 #[path = "projection_tests_hydrate.rs"]
 mod hydrate;
 

@@ -50,9 +50,7 @@ pub(super) fn query_with_fts(
         rusqlite::types::Value::Text(doc_id.to_string()),
         rusqlite::types::Value::Text(fts_q.to_string()),
     ];
-    append_kind_attrs_filters(
-        &mut sql, &mut bind, kinds, attrs, /*next_idx=*/ 3, /*col_prefix=*/ "b.",
-    )?;
+    append_kind_attrs_filters(&mut sql, &mut bind, kinds, attrs, /*col_prefix=*/ "b.")?;
     append_ref_filters(
         &mut sql,
         &mut bind,
@@ -104,10 +102,7 @@ pub(super) fn query_with_cjk_instr(
         sql.push_str(&format!(" AND instr(plain_text, ?{idx}) > 0"));
         bind.push(rusqlite::types::Value::Text((*t).to_string()));
     }
-    let next_idx = bind.len() + 1;
-    append_kind_attrs_filters(
-        &mut sql, &mut bind, kinds, attrs, /*next_idx=*/ next_idx, /*col_prefix=*/ "",
-    )?;
+    append_kind_attrs_filters(&mut sql, &mut bind, kinds, attrs, /*col_prefix=*/ "")?;
     append_ref_filters(
         &mut sql, &mut bind, doc_id, ref_to, ref_from, /*block_id_col=*/ "block_id",
     );
@@ -160,9 +155,7 @@ pub(super) fn query_sql_only(
     );
     let mut bind: Vec<rusqlite::types::Value> =
         vec![rusqlite::types::Value::Text(doc_id.to_string())];
-    append_kind_attrs_filters(
-        &mut sql, &mut bind, kinds, attrs, /*next_idx=*/ 2, /*col_prefix=*/ "",
-    )?;
+    append_kind_attrs_filters(&mut sql, &mut bind, kinds, attrs, /*col_prefix=*/ "")?;
     append_ref_filters(
         &mut sql, &mut bind, doc_id, ref_to, ref_from, /*block_id_col=*/ "block_id",
     );

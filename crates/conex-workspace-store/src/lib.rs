@@ -177,7 +177,7 @@ impl WorkspaceStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let path = path.as_ref().to_path_buf();
         if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
+            std::fs::create_dir_all(parent)?;
         }
         let conn = Connection::open(&path)?;
         migrate(&conn)?;
