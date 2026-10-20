@@ -533,5 +533,5 @@ fn test_purge_physically_removes_external_file() {
 
     // 3. 验证物理文件被真正 unlink
     assert!(!temp_file.exists(), "物理清除后外置文件必须被真正删除");
-    let _ = std::fs::remove_dir_all(&temp_dir);
+    crate::tests::cleanup_temp_path(&temp_dir);
 }

@@ -107,14 +107,22 @@ impl ExploreDocsQuotaStore for SessionMetaExploreDocsQuotaStore {
 
     fn release(&self, session_id: &str, _run_id: &str) {
         let key = session_meta_key_of(session_id, SESSION_META_KEY_EXPLORE_DOCS_CONSUMED);
-        // 补偿：reserve 后写盘失败回滚占用（下限 0，不产生负计数）
-        let _ = self.db.update_session_meta(&key, move |current| {
+        // 补偿：reserve 后写盘失败回滚占用（下限 0，不产生负计数）。
+        // 契约方法签名为 `()`（无法上抛）：补偿失败会让该会话配额永久多计 1，
+        // 故必须显式告警留痕，供上层/日志侧发现「配额只增不减」的漂移。
+        if let Err(err) = self.db.update_session_meta(&key, move |current| {
             let cur = parse_explore_docs_consumed(current);
             Some(explore_docs_consumed_value(&ExploreDocsQuotaSnapshot {
                 consumed: cur.consumed.saturating_sub(1),
                 last_consumer_run_id: cur.last_consumer_run_id,
             }))
-        });
+        }) {
+            tracing::warn!(
+                error = %err,
+                session_id,
+                "探索类文档配额补偿回滚失败：该会话已消耗计数未能减 1（配额漂移）"
+            );
+        }
     }
 }
 

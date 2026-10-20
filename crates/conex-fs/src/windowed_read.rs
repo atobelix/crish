@@ -233,7 +233,8 @@ pub fn floor_utf8_char_boundary(bytes: &[u8], max_bytes: usize) -> usize {
     }
     if limit == bytes.len() {
         return match std::str::from_utf8(bytes) {
-            Ok(_) => bytes.len(),
+            // 全量合法 UTF-8：解码长度即字节长度（使用 payload 而非丢弃）
+            Ok(valid) => valid.len(),
             Err(err) if err.error_len().is_none() => err.valid_up_to(),
             Err(_) => bytes.len(),
         };
@@ -816,7 +817,15 @@ fn empty_binary_result(file_bytes: u64) -> WindowReadResult {
 
 fn utf8_has_invalid_sequence(bytes: &[u8]) -> bool {
     match std::str::from_utf8(bytes) {
-        Ok(_) => false,
+        // 全量解码成功即无非法序列：payload 长度必等于输入字节数（用其校验不变式）
+        Ok(valid) => {
+            debug_assert_eq!(
+                valid.len(),
+                bytes.len(),
+                "合法 UTF-8 解码后长度必须等于输入字节长度"
+            );
+            false
+        }
         // 截断的合法前缀（chunk 边界）不算非法序列
         Err(err) => err.error_len().is_some(),
     }

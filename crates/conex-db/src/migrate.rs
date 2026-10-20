@@ -65,7 +65,17 @@ impl LocalDb {
         backups.sort();
         while backups.len() > BACKUP_KEEP {
             if let Some(oldest) = backups.first() {
-                let _ = std::fs::remove_file(oldest);
+                // 旧备份清理属 best-effort 收尾：残留仅多占一份磁盘副本，
+                // 不影响本次备份与迁移，故记录告警而不上抛（否则会误报迁移失败）
+                if let Err(err) = std::fs::remove_file(oldest) {
+                    if err.kind() != std::io::ErrorKind::NotFound {
+                        tracing::warn!(
+                            error = %err,
+                            path = %oldest.display(),
+                            "清理超出保留份数的旧迁移备份失败，已保留残留"
+                        );
+                    }
+                }
                 backups.remove(0);
             }
         }
@@ -87,10 +97,18 @@ impl LocalDb {
             "[conex-db] 迁移备份失败 v{version}: {detail}（备份路径 {}）—— 按裁定案告警不阻断迁移，版本升级继续",
             path.display()
         );
-        let _ = conn.execute(
+        // 可观测键写入失败不影响迁移（顺带增强，不强制）——但必须留痕，
+        // 否则「备份失败」这一事实在 UI/日志侧完全不可见
+        if let Err(err) = conn.execute(
             "INSERT OR REPLACE INTO session_meta (key, value) VALUES ('migration_backup_failed', ?1)",
             rusqlite::params![format!("v{version}: {detail}")],
-        );
+        ) {
+            tracing::warn!(
+                error = %err,
+                version,
+                "写入迁移备份失败可观测键 session_meta.migration_backup_failed 失败"
+            );
+        }
     }
 
     /// Run schema migrations.
@@ -108,8 +126,11 @@ impl LocalDb {
 
         conn.execute_batch("PRAGMA foreign_keys = ON;")
             .map_err(|e| self.latch_error("pragma_foreign_keys", e))?;
-        // WAL 模式 + busy_timeout（PE-08 T08.7：并发写友好）
-        let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
+        // WAL 模式 + busy_timeout（PE-08 T08.7：并发写友好）：与上面 FK pragma
+        // 同为迁移前置不变量（写入并发能力依赖它），失败必须 fail-fast 上抛，
+        // 否则会以「偶发 SQLITE_BUSY」的形式在后续写路径隐式暴露
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;")
+            .map_err(|e| self.latch_error("pragma_wal_busy_timeout", e))?;
 
         let current: u32 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))

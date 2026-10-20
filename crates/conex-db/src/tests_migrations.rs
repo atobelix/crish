@@ -199,20 +199,26 @@ impl TempV5Db {
                 .map(|d| d.as_nanos())
                 .unwrap_or_default()
         ));
-        let _ = std::fs::create_dir_all(&dir);
+        if let Err(err) = std::fs::create_dir_all(&dir) {
+            // 创建失败会让后续 open 以真实错误暴露；此处留痕以区分「目录建不出来」
+            eprintln!(
+                "[conex-db test] 创建临时目录失败 {}: {err}",
+                dir.display()
+            );
+        }
         let path = dir.join("sessions.db");
-        let _ = std::fs::remove_file(&path);
+        crate::tests::cleanup_temp_path(&path);
         Self { path }
     }
 }
 
 impl Drop for TempV5Db {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-        let _ = std::fs::remove_file(format!("{}-wal", self.path.display()));
-        let _ = std::fs::remove_file(format!("{}-shm", self.path.display()));
+        crate::tests::cleanup_temp_path(&self.path);
+        crate::tests::cleanup_temp_path(format!("{}-wal", self.path.display()));
+        crate::tests::cleanup_temp_path(format!("{}-shm", self.path.display()));
         if let Some(parent) = self.path.parent() {
-            let _ = std::fs::remove_dir_all(parent);
+            crate::tests::cleanup_temp_path(parent);
         }
     }
 }

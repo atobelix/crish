@@ -128,7 +128,15 @@ impl<'a> Drop for PooledReader<'a> {
             // 防护：若借用方开启了显式只读事务但未提交/回滚，归还前主动回滚，
             // 避免残留事务长持 WAL read-mark 阻塞 checkpoint
             if !guard.is_autocommit() {
-                let _ = guard.execute_batch("ROLLBACK;");
+                // Drop 中无法上抛：回滚失败会让该连接长持 read-mark，
+                // 进而阻塞 WAL checkpoint，必须 error 级留痕
+                if let Err(err) = guard.execute_batch("ROLLBACK;") {
+                    tracing::error!(
+                        target: "conex_db",
+                        error = %err,
+                        "归还只读连接前回滚残留事务失败：该连接可能持续阻塞 WAL checkpoint"
+                    );
+                }
             }
             // 先释放底层连接 MutexGuard，确保被唤醒的等待者调用 try_acquire 时立即可见空闲槽位
             drop(guard);
@@ -277,14 +285,32 @@ impl ReaderPool {
             let guard = match slot.conn.try_lock() {
                 Ok(g) => {
                     if !g.is_autocommit() {
-                        let _ = g.execute_batch("ROLLBACK;");
+                        // 残留事务回滚失败 → 该连接会读到旧快照，禁止借出；
+                        // 记告警并跳过该槽位（下一轮轮询会再尝试，不污染读者）
+                        if let Err(err) = g.execute_batch("ROLLBACK;") {
+                            tracing::warn!(
+                                target: "conex_db",
+                                error = %err,
+                                slot = idx,
+                                "只读连接残留未决事务回滚失败，跳过该槽位避免借出脏快照连接"
+                            );
+                            continue;
+                        }
                     }
                     g
                 }
                 Err(std::sync::TryLockError::Poisoned(poisoned)) => {
                     let g = poisoned.into_inner();
                     if !g.is_autocommit() {
-                        let _ = g.execute_batch("ROLLBACK;");
+                        if let Err(err) = g.execute_batch("ROLLBACK;") {
+                            tracing::warn!(
+                                target: "conex_db",
+                                error = %err,
+                                slot = idx,
+                                "中毒槽位残留未决事务回滚失败，跳过该槽位"
+                            );
+                            continue;
+                        }
                     }
                     if g.execute_batch("SELECT 1;").is_err() {
                         continue;
@@ -380,7 +406,13 @@ impl ReaderPool {
                 let remaining = timeout.saturating_sub(start_time.elapsed());
                 if !remaining.is_zero() {
                     let wait_slice = remaining.min(Duration::from_millis(2));
-                    let _ = self.inner.slot_cvar.wait_timeout(wait_guard, wait_slice);
+                    // 等待本身即目的：超时或被归还唤醒都进入下一轮探测。
+                    // wait_lock 中毒（曾有等待线程 panic）不改变轮询语义，取回内部值继续。
+                    if let Err(poisoned) =
+                        self.inner.slot_cvar.wait_timeout(wait_guard, wait_slice)
+                    {
+                        drop(poisoned.into_inner());
+                    }
                 } else {
                     drop(wait_guard);
                 }
@@ -425,7 +457,14 @@ impl ReaderPool {
                 let remaining = timeout.saturating_sub(start_time.elapsed());
                 if !remaining.is_zero() {
                     let wait_slice = remaining.min(Duration::from_millis(2));
-                    let _ = tokio::time::timeout(wait_slice, notified).await;
+                    // 等待切片到期或收到归还通知都立即进入下一轮探测：
+                    // 到期属正常轮询节奏（不是错误），故不上抛，仅按需留痕
+                    if tokio::time::timeout(wait_slice, notified).await.is_err() {
+                        tracing::trace!(
+                            target: "conex_db",
+                            "ReaderPool 等待切片到期，进入下一轮探测"
+                        );
+                    }
                 }
             }
         }
@@ -477,7 +516,14 @@ impl ReaderPool {
                 let remaining = timeout.saturating_sub(start_time.elapsed());
                 if !remaining.is_zero() {
                     let wait_slice = remaining.min(Duration::from_millis(2));
-                    let _ = tokio::time::timeout(wait_slice, notified).await;
+                    // 等待切片到期或收到归还通知都立即进入下一轮探测：
+                    // 到期属正常轮询节奏（不是错误），故不上抛，仅按需留痕
+                    if tokio::time::timeout(wait_slice, notified).await.is_err() {
+                        tracing::trace!(
+                            target: "conex_db",
+                            "ReaderPool 等待切片到期，进入下一轮探测"
+                        );
+                    }
                 }
             }
         }
@@ -570,7 +616,12 @@ impl ReaderPool {
                         let remaining = deadline.saturating_duration_since(Instant::now());
                         if !remaining.is_zero() {
                             let wait_slice = remaining.min(Duration::from_millis(2));
-                            let _ = self.inner.slot_cvar.wait_timeout(wait_guard, wait_slice);
+                            // 同上：等待结果只影响唤醒时机，超时/中毒都继续轮询
+                            if let Err(poisoned) =
+                                self.inner.slot_cvar.wait_timeout(wait_guard, wait_slice)
+                            {
+                                drop(poisoned.into_inner());
+                            }
                         } else {
                             drop(wait_guard);
                         }
@@ -578,7 +629,15 @@ impl ReaderPool {
                 }
             };
             if !guard.is_autocommit() {
-                let _ = guard.execute_batch("ROLLBACK;");
+                // 健康检查必须 fail-fast：残留事务回滚失败即视为该连接不健康
+                // （继续 SELECT 1 会给出「健康」的假结论）
+                guard.execute_batch("ROLLBACK;").map_err(|e| DbFailure {
+                    message: format!(
+                        "reader slot #{} health check rollback residual tx failed: {e}",
+                        slot.id
+                    ),
+                    kind: DbFailureKind::Other("health_check_failed".to_string()),
+                })?;
             }
             guard.execute_batch("SELECT 1;").map_err(|e| DbFailure {
                 message: format!("reader slot #{} health check failed: {e}", slot.id),

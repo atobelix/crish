@@ -33,9 +33,9 @@ struct TempDbGuard {
 
 impl Drop for TempDbGuard {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
-        let _ = std::fs::remove_file(format!("{}-wal", self.path.display()));
-        let _ = std::fs::remove_file(format!("{}-shm", self.path.display()));
+        crate::tests::cleanup_temp_path(&self.path);
+        crate::tests::cleanup_temp_path(format!("{}-wal", self.path.display()));
+        crate::tests::cleanup_temp_path(format!("{}-shm", self.path.display()));
     }
 }
 
@@ -71,7 +71,8 @@ fn create_temp_file_db() -> (TempDbGuard, std::path::PathBuf) {
 #[tokio::test]
 async fn test_group_commit_basic_write() {
     let conn = create_in_memory_db();
-    let handle = DbWriteHandle::spawn(conn, GroupCommitConfig::default());
+    let handle = DbWriteHandle::spawn(conn, GroupCommitConfig::default())
+        .expect("writer actor should start");
 
     let res: i64 = handle
         .write(|c| {
@@ -101,7 +102,7 @@ async fn test_group_commit_high_concurrency_batching() {
         max_batch_size: 50,
         channel_capacity: 1024,
     };
-    let handle = DbWriteHandle::spawn(conn, config);
+    let handle = DbWriteHandle::spawn(conn, config).expect("writer actor should start");
 
     let total_tasks = 100;
     let mut join_set = tokio::task::JoinSet::new();
@@ -154,7 +155,7 @@ async fn test_group_commit_timeout_flush() {
         max_batch_size: 50,
         channel_capacity: 1024,
     };
-    let handle = DbWriteHandle::spawn(conn, config);
+    let handle = DbWriteHandle::spawn(conn, config).expect("writer actor should start");
 
     let start = std::time::Instant::now();
     let res = handle
@@ -182,7 +183,7 @@ async fn test_group_commit_error_isolation_savepoint() {
         max_batch_size: 10,
         channel_capacity: 64,
     };
-    let handle = DbWriteHandle::spawn(conn, config);
+    let handle = DbWriteHandle::spawn(conn, config).expect("writer actor should start");
 
     // 提交 3 个请求：前两个正确，中间一个故意触发 SQL 语法错误，第四个正确
     let h1 = handle.clone();
@@ -257,7 +258,8 @@ async fn test_group_commit_dedicated_os_thread() {
         conn,
         GroupCommitConfig::default(),
         Some("test-dedicated-writer"),
-    );
+    )
+    .expect("dedicated-thread writer actor should start");
 
     let res = handle
         .execute(
@@ -407,7 +409,8 @@ async fn test_high_concurrency_reader_writer_wal_stress() {
             max_batch_size: 50,
             channel_capacity: 1024,
         },
-    );
+    )
+    .expect("writer actor should start on the temp file db");
 
     // 2. 初始化 ReaderPool
     let pool = ReaderPool::open(
@@ -511,7 +514,7 @@ async fn test_group_commit_panic_isolation_and_recovery() {
         max_batch_size: 50,
         channel_capacity: 1024,
     };
-    let handle = DbWriteHandle::spawn(conn, config);
+    let handle = DbWriteHandle::spawn(conn, config).expect("writer actor should start");
 
     // 1. 发起一个会 panic 的任务
     let panic_res = handle

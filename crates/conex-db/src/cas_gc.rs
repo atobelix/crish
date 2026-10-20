@@ -394,13 +394,17 @@ impl LocalDb {
 
         if candidate_hashes.is_empty() {
             if has_expired_leases {
-                let _ = self.write_blocking(|conn| {
-                    let _ = conn.execute(
+                self.write_blocking(|conn| {
+                    conn.execute(
                         "DELETE FROM active_blob_leases WHERE expires_at <= datetime('now')",
                         [],
-                    );
+                    )
+                    .map_err(|e| DbFailure {
+                        message: format!("purge_expired_quarantined_cleanup_leases: {e}"),
+                        kind: DbFailureKind::Other("purge_expired_quarantined".to_string()),
+                    })?;
                     Ok(())
-                });
+                })?;
             }
             return Ok(Vec::new());
         }
@@ -423,10 +427,14 @@ impl LocalDb {
                         kind: DbFailureKind::Other("purge_expired_quarantined".to_string()),
                     })?;
                 if clean_leases {
-                    let _ = conn.execute(
+                    conn.execute(
                         "DELETE FROM active_blob_leases WHERE expires_at <= datetime('now')",
                         [],
-                    );
+                    )
+                    .map_err(|e| DbFailure {
+                        message: format!("purge_expired_quarantined_cleanup_leases: {e}"),
+                        kind: DbFailureKind::Other("purge_expired_quarantined".to_string()),
+                    })?;
                 }
                 Ok(res)
             })?;
@@ -625,7 +633,15 @@ pub fn link_block_attachment_conn(
         "#,
         params![doc_id, block_id, hash],
     )?;
-    let _ = unquarantine_blob_conn(conn, hash);
+    // 反隔离失败必须上抛：引用已登记但 blob 仍处于隔离期，若继续静默会
+    // 在隔离期满后被 GC 物理清除，造成「有引用却被删」的数据丢失
+    if !unquarantine_blob_conn(conn, hash)? {
+        tracing::warn!(
+            target: "conex_db",
+            hash,
+            "块附件引用登记后反隔离未命中任何 blob_cas 行（悬空引用：blob 缺失）"
+        );
+    }
     Ok(())
 }
 
@@ -672,7 +688,14 @@ pub fn link_snapshot_attachment_conn(
         "#,
         params![doc_id, snapshot_id, blob_hash],
     )?;
-    let _ = unquarantine_blob_conn(conn, blob_hash);
+    // 同 link_block_attachment_conn：反隔离失败上抛，避免引用中的 blob 被 GC 清除
+    if !unquarantine_blob_conn(conn, blob_hash)? {
+        tracing::warn!(
+            target: "conex_db",
+            blob_hash,
+            "快照附件引用登记后反隔离未命中任何 blob_cas 行（悬空引用：blob 缺失）"
+        );
+    }
     Ok(())
 }
 
@@ -690,7 +713,14 @@ pub fn link_undo_blob_conn(
         "#,
         params![session_id, undo_step_id, blob_hash],
     )?;
-    let _ = unquarantine_blob_conn(conn, blob_hash);
+    // 同 link_block_attachment_conn：反隔离失败上抛，避免引用中的 blob 被 GC 清除
+    if !unquarantine_blob_conn(conn, blob_hash)? {
+        tracing::warn!(
+            target: "conex_db",
+            blob_hash,
+            "Undo blob 引用登记后反隔离未命中任何 blob_cas 行（悬空引用：blob 缺失）"
+        );
+    }
     Ok(())
 }
 
@@ -926,10 +956,10 @@ pub fn purge_expired_quarantined_conn(
     }
 
     // 05-G6：顺带清除过期租约行（与 purge 同一短写事务）
-    let _ = conn.execute(
+    conn.execute(
         "DELETE FROM active_blob_leases WHERE expires_at <= datetime('now')",
         [],
-    );
+    )?;
 
     Ok((purged, files_to_delete))
 }

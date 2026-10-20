@@ -247,11 +247,31 @@ impl TrashService {
         };
         if let Err(e) = write_meta(&entry_dir, &entry, backup, snapshot, true) {
             // 登记失败：尽力把已移动内容移回原路径，避免孤儿条目（不吞原始错误）
-            let moved_back = atomic_move(&payload_dst, path, is_dir).is_ok();
-            if moved_back {
-                let _ = force_remove_dir_all(&entry_dir);
+            match atomic_move(&payload_dst, path, is_dir) {
+                Ok(()) => {
+                    // 已在返回主错误路径上：清理失败只留下空壳条目目录，
+                    // 不得覆盖登记错误本身，故记录后继续返回原始错误
+                    if let Err(cleanup_err) = force_remove_dir_all(&entry_dir) {
+                        tracing::warn!(
+                            error = %cleanup_err,
+                            entry_dir = %entry_dir.display(),
+                            "登记失败回滚后清理空壳条目目录失败，已保留残留目录"
+                        );
+                    }
+                    return Err(e)
+                        .with_context(|| format!("登记回收站条目失败：{}", path.display()));
+                }
+                Err(move_back_err) => {
+                    // 回滚移动也失败：内容仍在回收站内，必须把两条错误一并上报
+                    return Err(e).with_context(|| {
+                        format!(
+                            "登记回收站条目失败且回滚移动回原路径失败：{}（内容仍在 {}；回滚错误：{move_back_err}）",
+                            path.display(),
+                            entry_dir.display()
+                        )
+                    });
+                }
             }
-            return Err(e).with_context(|| format!("登记回收站条目失败：{}", path.display()));
         }
         Ok(entry)
     }
@@ -341,7 +361,14 @@ impl TrashService {
         if let Err(e) =
             write_meta_with_operation(&entry_dir, &entry, true, Some(snapshot), true, operation)
         {
-            let _ = force_remove_dir_all(&entry_dir);
+            // 已在返回主错误路径上：清理失败只留空壳目录，不得覆盖登记错误
+            if let Err(cleanup_err) = force_remove_dir_all(&entry_dir) {
+                tracing::warn!(
+                    error = %cleanup_err,
+                    entry_dir = %entry_dir.display(),
+                    "快照登记失败后清理条目目录失败，已保留残留目录"
+                );
+            }
             return Err(e).with_context(|| format!("登记快照条目失败：{}", path.display()));
         }
         Ok(entry)
@@ -384,7 +411,13 @@ impl TrashService {
         crate::path_utils::ensure_parent_dir(original)?;
         atomic_move(&payload, original, is_dir)?;
         // 恢复成功后清理条目目录（移除登记与空壳）；清理失败不阻塞恢复结果
-        let _ = force_remove_dir_all(&entry_dir);
+        if let Err(cleanup_err) = force_remove_dir_all(&entry_dir) {
+            tracing::warn!(
+                error = %cleanup_err,
+                entry_dir = %entry_dir.display(),
+                "恢复成功后清理条目目录失败，已保留残留目录（恢复本身已成功）"
+            );
+        }
         Ok(original.clone())
     }
 
@@ -412,7 +445,14 @@ impl TrashService {
             if original.exists() {
                 force_remove_all(original, false)?;
             }
-            let _ = force_remove_dir_all(&entry_dir);
+            // nil-content 恢复语义已完成（原路径已删除）：清理失败只留空壳目录
+            if let Err(cleanup_err) = force_remove_dir_all(&entry_dir) {
+                tracing::warn!(
+                    error = %cleanup_err,
+                    entry_dir = %entry_dir.display(),
+                    "nil-content 恢复后清理条目目录失败，已保留残留目录"
+                );
+            }
             return Ok(original.clone());
         }
         let payload = entry_dir.join(PAYLOAD_DIR).join(relative_path_of(original));
@@ -428,7 +468,14 @@ impl TrashService {
         crate::path_utils::ensure_parent_dir(original)?;
         fs::copy(&payload, original)
             .with_context(|| format!("恢复写回失败：{}", original.display()))?;
-        let _ = force_remove_dir_all(&entry_dir);
+        // 内容已写回原路径（恢复成功）：清理失败只留空壳目录，不改变恢复语义
+        if let Err(cleanup_err) = force_remove_dir_all(&entry_dir) {
+            tracing::warn!(
+                error = %cleanup_err,
+                entry_dir = %entry_dir.display(),
+                "覆盖恢复后清理条目目录失败，已保留残留目录"
+            );
+        }
         Ok(original.clone())
     }
 
@@ -491,10 +538,6 @@ impl TrashService {
                 self.restore_force(&meta.entry.id)?;
                 let restored_entry_dir = self.entry_dir(&meta.entry.id)?;
                 match fs::symlink_metadata(&restored_entry_dir) {
-                    Ok(_) => bail!(
-                        "已恢复快照但回收站条目清理失败：{}",
-                        restored_entry_dir.display()
-                    ),
                     Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
                     Err(error) => {
                         return Err(error).with_context(|| {
@@ -504,6 +547,11 @@ impl TrashService {
                             )
                         })
                     }
+                    Ok(meta) => bail!(
+                        "已恢复快照但回收站条目清理失败（残留类型 {}）：{}",
+                        if meta.is_dir() { "目录" } else { "文件" },
+                        restored_entry_dir.display()
+                    ),
                 }
                 if restored_paths.insert(original.clone()) {
                     results.push(RollbackOutcome::Restored(original));
@@ -550,7 +598,6 @@ impl TrashService {
         let payload_dir = entry_dir.join(PAYLOAD_DIR);
         if !meta.original_existed {
             match fs::symlink_metadata(&payload_dir) {
-                Ok(_) => bail!("nil-content 快照意外包含 payload：{}", meta.entry.id),
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
                 Err(error) => {
                     return Err(error).with_context(|| {
@@ -560,6 +607,11 @@ impl TrashService {
                         )
                     })
                 }
+                Ok(payload_meta) => bail!(
+                    "nil-content 快照意外包含 payload（{}）：{}",
+                    if payload_meta.is_dir() { "目录" } else { "文件" },
+                    meta.entry.id
+                ),
             }
             return Ok(());
         }
@@ -662,8 +714,14 @@ fn write_meta_with_operation(
     let target = entry_dir.join(META_FILE);
     let tmp = entry_dir.join(format!("{META_FILE}.agent-tmp"));
     if let Err(e) = fs::write(&tmp, json) {
-        // 写临时文件失败：清理残骸后透传错误
-        let _ = force_remove_file(&tmp);
+        // 写临时文件失败：清理残骸后透传错误（清理失败不得覆盖真实写入错误）
+        if let Err(cleanup_err) = force_remove_file(&tmp) {
+            tracing::warn!(
+                error = %cleanup_err,
+                path = %tmp.display(),
+                "写登记临时文件失败后清理残骸失败，已保留残留"
+            );
+        }
         return Err(e).with_context(|| format!("写登记临时文件失败：{}", tmp.display()));
     }
     // Windows 上 rename 不覆盖既有目标：先 remove 再 rename（同目录无跨卷
@@ -673,8 +731,14 @@ fn write_meta_with_operation(
         force_remove_file(&target)?;
     }
     if let Err(e) = fs::rename(&tmp, &target) {
-        // rename 失败：清理临时文件，不留残骸
-        let _ = force_remove_file(&tmp);
+        // rename 失败：清理临时文件，不留残骸（清理失败不得覆盖真实 rename 错误）
+        if let Err(cleanup_err) = force_remove_file(&tmp) {
+            tracing::warn!(
+                error = %cleanup_err,
+                path = %tmp.display(),
+                "原子替换登记文件失败后清理临时文件失败，已保留残留"
+            );
+        }
         return Err(e).with_context(|| format!("原子替换登记文件失败：{}", target.display()));
     }
     Ok(())
@@ -728,10 +792,14 @@ fn atomic_move(src: &Path, dst: &Path, is_dir: bool) -> Result<()> {
             }
             if let Err(e) = force_remove_all(src, is_dir) {
                 // 事务补偿回滚：源文件/目录删除失败时，必须自动删除 dst 已经写入的 Payload，绝不残留幽灵孤儿数据！
-                let _ = force_remove_all(dst, is_dir);
+                // 补偿本身失败必须并入上报，否则「幽灵孤儿数据」无从发现
+                let compensation = match force_remove_all(dst, is_dir) {
+                    Ok(()) => "已清理".to_string(),
+                    Err(compensation_err) => format!("清理失败（{compensation_err}）"),
+                };
                 return Err(e).with_context(|| {
                     format!(
-                        "跨卷移动删除源失败，已触发事务补偿清理删除目标：src={}, dst={}",
+                        "跨卷移动删除源失败，目标补偿清理{compensation}：src={}, dst={}",
                         src.display(),
                         dst.display()
                     )
@@ -767,7 +835,8 @@ pub fn force_remove_file(path: &Path) -> Result<()> {
                 let mut perms = meta.permissions();
                 if perms.readonly() {
                     perms.set_readonly(false);
-                    let _ = fs::set_permissions(path, perms);
+                    fs::set_permissions(path, perms)
+                        .with_context(|| format!("清除只读属性失败：{}", path.display()))?;
                     return fs::remove_file(path).with_context(|| {
                         format!("清除只读属性后删除文件仍失败：{}", path.display())
                     });
@@ -784,7 +853,15 @@ fn clear_readonly_recursive(path: &Path) {
         let mut perms = meta.permissions();
         if perms.readonly() {
             perms.set_readonly(false);
-            let _ = fs::set_permissions(path, perms);
+            // 递归清属性是 bulk 删除的前置：失败只影响后续删除（会以真实错误暴露），
+            // 此处是辅助函数（返回 ()），按上下文告警留痕
+            if let Err(err) = fs::set_permissions(path, perms) {
+                tracing::warn!(
+                    error = %err,
+                    path = %path.display(),
+                    "递归清除只读属性失败，后续删除可能被拒绝"
+                );
+            }
         }
         if meta.is_dir() && !meta.is_symlink() {
             if let Ok(entries) = fs::read_dir(path) {

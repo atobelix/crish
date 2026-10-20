@@ -129,7 +129,7 @@ impl DbWriteHandle {
     /// 接收一个专有的 SQLite 写连接所有权，并在**独立 OS 线程**中循环批处理
     /// （禁止挂在调用方 tokio runtime 上：否则 async 上下文 `write_blocking`
     /// 与 actor 同 runtime 会在 current_thread 下死锁/panic）。
-    pub fn spawn(conn: rusqlite::Connection, config: GroupCommitConfig) -> Self {
+    pub fn spawn(conn: rusqlite::Connection, config: GroupCommitConfig) -> Result<Self, DbFailure> {
         Self::spawn_dedicated_thread(conn, config, None)
     }
 
@@ -142,7 +142,7 @@ impl DbWriteHandle {
         conn: rusqlite::Connection,
         config: GroupCommitConfig,
         conn_factory: Option<WriterConnFactory>,
-    ) -> Self {
+    ) -> Result<Self, DbFailure> {
         Self::spawn_dedicated_thread_with_rebuild(conn, config, None, conn_factory)
     }
 
@@ -151,7 +151,7 @@ impl DbWriteHandle {
         conn: rusqlite::Connection,
         config: GroupCommitConfig,
         thread_name: Option<&str>,
-    ) -> Self {
+    ) -> Result<Self, DbFailure> {
         Self::spawn_dedicated_thread_with_rebuild(conn, config, thread_name, None)
     }
 
@@ -161,24 +161,40 @@ impl DbWriteHandle {
         config: GroupCommitConfig,
         thread_name: Option<&str>,
         conn_factory: Option<WriterConnFactory>,
-    ) -> Self {
+    ) -> Result<Self, DbFailure> {
         let (sender, receiver) = mpsc::channel(config.channel_capacity);
         let stats = Arc::new(StatsInner::default());
         let stats_clone = Arc::clone(&stats);
         let name = thread_name.unwrap_or("conex-sqlite-writer").to_string();
 
+        // 专用 runtime 在调用线程构建：构建失败必须作为 DbFailure 回传调用方。
+        // 既不 panic（生产路径禁止 panic），也不返回一个永远无法写入的句柄
+        // （那会把初始化失败伪装成后续「channel closed」的假故障）。
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| DbFailure {
+                message: format!("failed to create dedicated runtime for DbWriteActor: {e}"),
+                kind: DbFailureKind::Other("writer_runtime_init_failed".to_string()),
+            })?;
+
         std::thread::Builder::new()
             .name(name)
             .spawn(move || {
-                let rt = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .expect("failed to create dedicated runtime for DbWriteActor");
-                rt.block_on(run_actor_loop(conn, receiver, config, stats_clone, conn_factory));
+                rt.block_on(run_actor_loop(
+                    conn,
+                    receiver,
+                    config,
+                    stats_clone,
+                    conn_factory,
+                ));
             })
-            .expect("failed to spawn dedicated OS thread for DbWriteActor");
+            .map_err(|e| DbFailure {
+                message: format!("failed to spawn dedicated OS thread for DbWriteActor: {e}"),
+                kind: DbFailureKind::Other("writer_thread_spawn_failed".to_string()),
+            })?;
 
-        Self { sender, stats }
+        Ok(Self { sender, stats })
     }
 
     /// 异步提交写操作闭包并等待批提交结果。
@@ -549,7 +565,11 @@ fn process_batch(state: &mut WriterState, batch: &mut Vec<WriteTask>, stats: &St
         if res.is_err() {
             stats.record_error();
         }
-        let _ = task.respond_to.send(res);
+        // 调用方已 drop 等待端（取消/超时）时回执无处投递：属正常取消语义，
+        // 无法上抛（Actor 循环必须继续服务其它任务），但要可观测
+        if task.respond_to.send(res).is_err() {
+            tracing::debug!(target: "conex_db", "单条写回执无人接收（等待端已释放），回执丢弃");
+        }
         return;
     }
 
@@ -561,7 +581,12 @@ fn process_batch(state: &mut WriterState, batch: &mut Vec<WriteTask>, stats: &St
         };
         stats.record_error();
         for task in batch.drain(..) {
-            let _ = task.respond_to.send(Err(err.clone()));
+            if task.respond_to.send(Err(err.clone())).is_err() {
+                tracing::debug!(
+                    target: "conex_db",
+                    "BEGIN 失败回执无人接收（等待端已释放），回执丢弃"
+                );
+            }
         }
         return;
     }
@@ -629,7 +654,12 @@ fn process_batch(state: &mut WriterState, batch: &mut Vec<WriteTask>, stats: &St
     match conn.execute_batch("COMMIT;") {
         Ok(()) => {
             for (resp, res) in pending_responses {
-                let _ = resp.send(res);
+                if resp.send(res).is_err() {
+                    tracing::debug!(
+                        target: "conex_db",
+                        "组提交批次成功回执无人接收（等待端已释放），回执丢弃"
+                    );
+                }
             }
         }
         Err(e) => {
@@ -640,7 +670,12 @@ fn process_batch(state: &mut WriterState, batch: &mut Vec<WriteTask>, stats: &St
                 kind: DbFailureKind::Other("batch_commit_failed".to_string()),
             };
             for (resp, _) in pending_responses {
-                let _ = resp.send(Err(err.clone()));
+                if resp.send(Err(err.clone())).is_err() {
+                    tracing::debug!(
+                        target: "conex_db",
+                        "组提交批次失败回执无人接收（等待端已释放），回执丢弃"
+                    );
+                }
             }
         }
     }
@@ -656,6 +691,7 @@ mod blocking_write_tests {
             rusqlite::Connection::open_in_memory().expect("open in-memory database"),
             config,
         )
+        .expect("writer actor should start on a fresh in-memory connection")
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -850,7 +886,8 @@ mod recovery_tests {
         conn.execute_batch("BEGIN;").expect("制造残留打开事务");
         assert!(!conn.is_autocommit(), "预置条件：连接处于打开事务中");
 
-        let writer = DbWriteHandle::spawn(conn, GroupCommitConfig::default());
+        let writer = DbWriteHandle::spawn(conn, GroupCommitConfig::default())
+            .expect("writer actor should start on an in-memory connection");
 
         let val = writer
             .write(|conn| {
@@ -962,7 +999,8 @@ mod recovery_tests {
             broken,
             GroupCommitConfig::default(),
             Some(factory),
-        );
+        )
+        .expect("writer actor with rebuild factory should start");
 
         // 阈值之前：每次提交都失败（BEGIN IMMEDIATE 持续失败且未重建）
         for attempt in 1..WRITER_REBUILD_FAILURE_THRESHOLD {

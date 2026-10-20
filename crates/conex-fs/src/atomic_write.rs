@@ -142,20 +142,42 @@ impl AtomicWriteTx {
             .open(&self.tmp_path)?;
 
         if let Err(e) = file.write_all(data) {
-            let _ = fs::remove_file(&self.tmp_path);
+            // 清理失败不覆盖主错误：临时文件残留仅是空间问题，真实失败原因必须原样上抛
+            if let Err(cleanup_err) = fs::remove_file(&self.tmp_path) {
+                tracing::warn!(
+                    error = %cleanup_err,
+                    path = %self.tmp_path.display(),
+                    stage = "write_temp/write_all",
+                    "写入失败后清理临时文件失败（保留原错误上抛）"
+                );
+            }
             return Err(e);
         }
 
         match self.sync_policy {
             SyncPolicy::Full => {
                 if let Err(e) = file.sync_all() {
-                    let _ = fs::remove_file(&self.tmp_path);
+                    if let Err(cleanup_err) = fs::remove_file(&self.tmp_path) {
+                        tracing::warn!(
+                            error = %cleanup_err,
+                            path = %self.tmp_path.display(),
+                            stage = "write_temp/sync_all",
+                            "刷盘失败后清理临时文件失败（保留原错误上抛）"
+                        );
+                    }
                     return Err(e);
                 }
             }
             SyncPolicy::DataOnly => {
                 if let Err(e) = file.sync_data() {
-                    let _ = fs::remove_file(&self.tmp_path);
+                    if let Err(cleanup_err) = fs::remove_file(&self.tmp_path) {
+                        tracing::warn!(
+                            error = %cleanup_err,
+                            path = %self.tmp_path.display(),
+                            stage = "write_temp/sync_data",
+                            "刷盘失败后清理临时文件失败（保留原错误上抛）"
+                        );
+                    }
                     return Err(e);
                 }
             }
@@ -182,7 +204,15 @@ impl AtomicWriteTx {
                 if perms.readonly() {
                     self.was_readonly = true;
                     perms.set_readonly(false);
-                    let _ = fs::set_permissions(&self.target, perms);
+                    // 剥离失败不立即致命：随后 ReplaceFileW 会以真实错误失败；
+                    // 但必须留下上下文，否则「只读属性导致替换被拒」无从定位（KFS-02）
+                    if let Err(err) = fs::set_permissions(&self.target, perms) {
+                        tracing::warn!(
+                            error = %err,
+                            path = %self.target.display(),
+                            "剥离只读属性失败：后续原子替换可能被拒绝（KFS-02）"
+                        );
+                    }
                 }
             }
             self.has_backup = true;
@@ -200,9 +230,15 @@ impl AtomicWriteTx {
             return Err(e);
         }
 
-        // 提交成功：尽力清理备份文件
+        // 提交成功：尽力清理备份文件（残留备份不影响已提交内容，仅占空间）
         if self.has_backup && self.bak_path.exists() {
-            let _ = fs::remove_file(&self.bak_path);
+            if let Err(err) = fs::remove_file(&self.bak_path) {
+                tracing::warn!(
+                    error = %err,
+                    path = %self.bak_path.display(),
+                    "提交成功后清理备份文件失败，已保留残留备份"
+                );
+            }
         }
 
         // KFS-02: 还原被修改的只读属性，确保系统/受保护文件属性不被意外篡改
@@ -211,7 +247,14 @@ impl AtomicWriteTx {
             if let Ok(meta) = fs::metadata(&self.target) {
                 let mut perms = meta.permissions();
                 perms.set_readonly(true);
-                let _ = fs::set_permissions(&self.target, perms);
+                // 内容已提交、无法回滚：属性还原失败必须显式告警，不能静默留下可写文件
+                if let Err(err) = fs::set_permissions(&self.target, perms) {
+                    tracing::error!(
+                        error = %err,
+                        path = %self.target.display(),
+                        "提交后还原只读属性失败：目标文件仍可写（KFS-02 不变量被打破）"
+                    );
+                }
             }
         }
 
@@ -275,8 +318,20 @@ impl AtomicWriteTx {
             };
 
             if let Some(bak) = backup_arg {
-                // POSIX: 使用 hardlink 或 copy 建立安全备份，不移走原文件
-                let _ = fs::hard_link(&self.target, bak).or_else(|_| fs::copy(&self.target, bak).map(|_| ()));
+                // POSIX: 使用 hardlink 或 copy 建立安全备份，不移走原文件。
+                // 备份是替换前的必要前置（KFS-01 崩溃可恢复性），两条路径都失败
+                // 必须中止替换而不是继续 —— 否则失败后原内容不可恢复。
+                if let Err(link_err) = fs::hard_link(&self.target, bak) {
+                    fs::copy(&self.target, bak).map(|_| ()).map_err(|copy_err| {
+                        io::Error::new(
+                            copy_err.kind(),
+                            format!(
+                                "POSIX 备份失败：hard_link 失败（{link_err}），copy 回退亦失败（{copy_err}）：{}",
+                                bak.display()
+                            ),
+                        )
+                    })?;
+                }
             }
 
             match fs::rename(&self.tmp_path, &self.target) {
@@ -293,16 +348,34 @@ impl AtomicWriteTx {
     /// 异常原子回滚状态机
     #[allow(clippy::disallowed_methods)]
     pub fn rollback(&mut self) {
-        // 清理未提交的临时文件
+        // 清理未提交的临时文件（残留仅占空间，不改变回滚语义）
         if self.tmp_path.exists() {
-            let _ = fs::remove_file(&self.tmp_path);
+            if let Err(err) = fs::remove_file(&self.tmp_path) {
+                tracing::warn!(
+                    error = %err,
+                    path = %self.tmp_path.display(),
+                    "回滚清理未提交临时文件失败，已保留残留"
+                );
+            }
         }
         // 若存在原文件备份且目标丢失，将备份恢复为原目标文件
         if self.bak_path.exists() {
             if !self.target.exists() {
-                let _ = fs::rename(&self.bak_path, &self.target);
-            } else {
-                let _ = fs::remove_file(&self.bak_path);
+                // 这是唯一的内容恢复机会：失败意味着原内容仅存于备份路径，必须 error 级留痕
+                if let Err(err) = fs::rename(&self.bak_path, &self.target) {
+                    tracing::error!(
+                        error = %err,
+                        target = %self.target.display(),
+                        bak = %self.bak_path.display(),
+                        "回滚重命名备份回原路径失败：原内容仅存于备份路径，需人工恢复"
+                    );
+                }
+            } else if let Err(err) = fs::remove_file(&self.bak_path) {
+                tracing::warn!(
+                    error = %err,
+                    path = %self.bak_path.display(),
+                    "回滚清理多余备份失败，已保留残留"
+                );
             }
         }
         // KFS-02: 回滚时同样恢复只读属性
@@ -311,7 +384,14 @@ impl AtomicWriteTx {
             if let Ok(meta) = fs::metadata(&self.target) {
                 let mut perms = meta.permissions();
                 perms.set_readonly(true);
-                let _ = fs::set_permissions(&self.target, perms);
+                // 回滚路径无法再上抛（Drop 兜底调用），属性未还原须显式告警
+                if let Err(err) = fs::set_permissions(&self.target, perms) {
+                    tracing::error!(
+                        error = %err,
+                        path = %self.target.display(),
+                        "回滚后还原只读属性失败：目标文件仍可写（KFS-02 不变量被打破）"
+                    );
+                }
             }
         }
         self.state = AtomicWriteState::RolledBack;
@@ -332,11 +412,19 @@ impl Drop for AtomicWriteTx {
 fn cross_volume_replace(tmp: &Path, target: &Path, backup: Option<&Path>) -> io::Result<()> {
     if let Some(bak) = backup {
         if target.exists() {
-            let _ = fs::copy(target, bak);
+            // 备份是覆盖写前的最后保障：失败必须中止，否则跨卷回退会直接覆盖旧内容
+            fs::copy(target, bak)?;
         }
     }
     fs::copy(tmp, target)?;
-    let _ = fs::remove_file(tmp);
+    // 临时文件残留仅占空间，不影响已完成的替换结果
+    if let Err(err) = fs::remove_file(tmp) {
+        tracing::warn!(
+            error = %err,
+            path = %tmp.display(),
+            "跨卷回退完成后清理临时文件失败，已保留残留"
+        );
+    }
     Ok(())
 }
 
@@ -353,7 +441,8 @@ fn is_cross_device_error(err: &io::Error) -> bool {
     }
     #[cfg(not(any(windows, unix)))]
     {
-        let _ = err;
+        // 该平台不提供跨设备错误码语义：按非跨设备处理，并记录被判定错误以留痕
+        tracing::debug!(error = %err, "目标平台无跨设备错误码语义，按非跨设备处理");
         false
     }
 }
@@ -374,7 +463,15 @@ fn sync_parent_dir(path: &Path) {
             #[cfg(unix)]
             {
                 if let Ok(dir) = fs::File::open(parent) {
-                    let _ = dir.sync_all();
+                    // 目录项同步是 KFS-03 持久化闭环的一环：失败会让断电后目录项
+                    // 可能回滚，且此处无法上抛（commit 已成功），必须显式告警留痕
+                    if let Err(err) = dir.sync_all() {
+                        tracing::warn!(
+                            error = %err,
+                            dir = %parent.display(),
+                            "父目录项同步失败：断电后目录元数据可能回滚（KFS-03）"
+                        );
+                    }
                 }
             }
             #[cfg(windows)]
@@ -386,7 +483,13 @@ fn sync_parent_dir(path: &Path) {
                     .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
                     .open(parent)
                 {
-                    let _ = dir.sync_all();
+                    if let Err(err) = dir.sync_all() {
+                        tracing::warn!(
+                            error = %err,
+                            dir = %parent.display(),
+                            "父目录项同步失败：断电后目录元数据可能回滚（KFS-03）"
+                        );
+                    }
                 }
             }
         }

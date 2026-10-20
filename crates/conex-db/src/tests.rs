@@ -10,6 +10,27 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// 测试临时路径清理（best-effort，跨测试模块共享）。
+///
+/// 清理失败只影响本机磁盘残留、不影响用例断言，故不 panic；但也**禁止**
+/// 静默丢弃（`let _ =`）—— 临时库残留无从定位，且会掩盖真实删除失败。
+pub(crate) fn cleanup_temp_path(path: impl AsRef<std::path::Path>) {
+    let path = path.as_ref();
+    let result = if path.is_dir() {
+        std::fs::remove_dir_all(path)
+    } else {
+        std::fs::remove_file(path)
+    };
+    if let Err(err) = result {
+        if err.kind() != std::io::ErrorKind::NotFound {
+            eprintln!(
+                "[conex-db test] 清理临时路径失败 {}: {err}",
+                path.display()
+            );
+        }
+    }
+}
+
 /// 真实临时 WAL 文件库守卫（open_temp_wal_for_test 尚未落地，先用
 /// 与 tests_concurrency 同源的 tempfile 真库模式；禁止用纯内存库冒充
 /// 持久化 Upsert / Diff Shrink 验收）。

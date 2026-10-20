@@ -298,19 +298,32 @@ impl WorkspaceWatcher {
     /// receiver drop 丢弃（停止后无新事件语义）；句柄随 Drop 销毁，
     /// 通知线程自然停止，flush 线程经 WeakSender 失效自动退出。
     pub fn stop(&mut self) {
-        let _ = self._watcher.unwatch(&self.root);
+        // 解除监视失败不阻断收口：句柄随 Drop 销毁，但必须留痕以便定位监视泄漏
+        if let Err(err) = self._watcher.unwatch(&self.root) {
+            tracing::warn!(
+                error = %err,
+                root = %self.root.display(),
+                "注销监视根失败，句柄将随 Drop 销毁"
+            );
+        }
         let now = epoch_millis_now();
         let leftover: Vec<PendingRemove> = {
             let mut inner = lock_pending(&self.pending_removes);
             std::mem::take(&mut *inner)
         };
         for pr in leftover {
-            let _ = self.tx.try_send(FileChangeEvent {
+            // 收口路径：调用方已不再消费，通道关闭/已满即视为该事件诚实丢失
+            if let Err(err) = self.tx.try_send(FileChangeEvent {
                 path: pr.path,
                 kind: ChangeKind::Removed,
                 from: None,
                 occurred_at_ms: now,
-            });
+            }) {
+                tracing::debug!(
+                    error = %err,
+                    "停止监视时 flush 待配对删除事件失败（通道已满或已关闭），该事件丢弃"
+                );
+            }
         }
     }
 
@@ -542,9 +555,16 @@ impl WatcherState {
         });
     }
 
-    /// 发射单条事件（通道满/已关闭时静默丢弃）
+    /// 发射单条事件（通道满/已关闭时丢弃并留痕，不阻塞回调线程）
     fn emit(&mut self, ev: FileChangeEvent) {
-        let _ = self.tx.try_send(ev);
+        // 事件流按「尽力投递」设计：回调线程不能阻塞，丢事件属已知语义，
+        // 但必须可观测（debug 级，高频路径不刷屏）
+        if let Err(err) = self.tx.try_send(ev) {
+            tracing::debug!(
+                error = %err,
+                "watcher 事件投递失败（通道满或已关闭），事件丢弃"
+            );
+        }
     }
 
     /// 排除判定（KFS-12）：内部瞬态文件过滤、绝对路径命中预归一化排除根或排除 glob 即排除
@@ -610,12 +630,18 @@ fn spawn_flush_loop(
             expired
         };
         for pr in expired {
-            let _ = tx.try_send(FileChangeEvent {
+            // flush 线程按「尽力投递」设计：通道满/已关闭即丢弃，但需可观测
+            if let Err(err) = tx.try_send(FileChangeEvent {
                 path: pr.path,
                 kind: ChangeKind::Removed,
                 from: None,
                 occurred_at_ms: now,
-            });
+            }) {
+                tracing::debug!(
+                    error = %err,
+                    "flush 线程投递待配对删除事件失败（通道满或已关闭），事件丢弃"
+                );
+            }
         }
     });
 }
@@ -649,7 +675,14 @@ fn lexical_clean_path(p: &Path) -> PathBuf {
         match comp {
             std::path::Component::CurDir => {}
             std::path::Component::ParentDir => {
-                let _ = out.pop();
+                // 纯词法清理：已位于根时无可弹出组件（pop 返回 false），按根保持不变；
+                // 该结果不是错误，但记录以区分「路径回退到根之上」的异常输入
+                if !out.pop() {
+                    tracing::debug!(
+                        path = %p.display(),
+                        "词法清理遇到根之上的 `..`，已按根路径保持"
+                    );
+                }
             }
             other => out.push(other.as_os_str()),
         }

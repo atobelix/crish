@@ -152,15 +152,27 @@ fn open_writer_conn(path: &Path) -> Result<Connection, DbFailure> {
         message: format!("failed to open writer database: {e}"),
         kind: DbFailureKind::Open,
     })?;
-    let _ = write_conn.busy_timeout(std::time::Duration::from_millis(5000));
+    // 写连接不变量（busy_timeout / FK / WAL）：失败必须 fail-fast 上抛——
+    // 静默通过会让并发写在后续以偶发 SQLITE_BUSY / FK 级联失效的形式暴露
+    write_conn
+        .busy_timeout(std::time::Duration::from_millis(5000))
+        .map_err(|e| DbFailure {
+            message: format!("failed to configure writer busy_timeout: {e}"),
+            kind: DbFailureKind::Open,
+        })?;
     // 写连接：spawn 前必须 FK ON（否则组提交 Actor 上 FK 级联失效，05-S2）
-    let _ = write_conn.execute_batch(&format!(
-        "PRAGMA foreign_keys = ON;
+    write_conn
+        .execute_batch(&format!(
+            "PRAGMA foreign_keys = ON;
          PRAGMA journal_mode = WAL;
          PRAGMA synchronous = NORMAL;
          PRAGMA busy_timeout = 5000;
          PRAGMA cache_size = {WRITE_CONN_CACHE_SIZE_KIB};"
-    ));
+        ))
+        .map_err(|e| DbFailure {
+            message: format!("failed to initialize writer connection pragmas: {e}"),
+            kind: DbFailureKind::Open,
+        })?;
     Ok(write_conn)
 }
 
@@ -173,16 +185,24 @@ impl LocalDb {
             message: format!("failed to open database: {e}"),
             kind: DbFailureKind::Open,
         })?;
-        let _ = conn.busy_timeout(std::time::Duration::from_millis(5000));
-
-        // 主连接：FK ON + WAL + NORMAL + busy_timeout + cache_size（读者侧）
-        let _ = conn.execute_batch(&format!(
+        // 主连接：FK ON + WAL + NORMAL + busy_timeout + cache_size（读者侧）。
+        // 与写连接同一不变量口径：初始化失败 fail-fast，不静默降级为无保护连接。
+        conn.busy_timeout(std::time::Duration::from_millis(5000))
+            .map_err(|e| DbFailure {
+                message: format!("failed to configure busy_timeout: {e}"),
+                kind: DbFailureKind::Open,
+            })?;
+        conn.execute_batch(&format!(
             "PRAGMA foreign_keys = ON;
              PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;
              PRAGMA busy_timeout = 5000;
              PRAGMA cache_size = {READER_CONN_CACHE_SIZE_KIB};"
-        ));
+        ))
+        .map_err(|e| DbFailure {
+            message: format!("failed to initialize connection pragmas: {e}"),
+            kind: DbFailureKind::Open,
+        })?;
 
         let write_conn = open_writer_conn(path_ref)?;
         // 写连接重建工厂：ROLLBACK 补救失败 / BEGIN 连续失败达到阈值时，
@@ -195,7 +215,7 @@ impl LocalDb {
             write_conn,
             GroupCommitConfig::default(),
             Some(writer_conn_factory),
-        );
+        )?;
 
         let reader_pool = match ReaderPool::open(path_ref, ReaderPoolConfig::default()) {
             Ok(pool) => Arc::new(pool),
