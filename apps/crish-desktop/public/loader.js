@@ -11,7 +11,10 @@
     var t = null;
     try {
       t = localStorage.getItem('crish_theme');
-    } catch (_) {}
+    } catch (themeReadErr) {
+      // 镜像读取失败（隐私模式/存储被禁用）：回落 default，但必须留痕，禁止静默吞错
+      console.warn('[loader] 读取主题镜像失败，回落 default', themeReadErr);
+    }
 
     if (t !== 'dark' && t !== 'default') {
       t = 'default';
@@ -35,7 +38,10 @@
                 /* swallow-ok: 握手失败不中断前端渲染，由原生看门狗兜底 */
               });
           }
-        } catch (_) {}
+        } catch (handshakeErr) {
+          // 同步调用失败（非 Promise 拒绝）：不中断首绘，但留痕
+          console.warn('[loader] 首绘握手同步调用失败', handshakeErr);
+        }
       });
     }
   } catch (err) {
@@ -46,6 +52,9 @@
       r.classList.add('theme-light');
       r.classList.add('skeleton-latched');
       r.classList.add('preload');
-    } catch (_) {}
+    } catch (fallbackErr) {
+      // 连降级写入都失败：前端已无可控手段，交原生侧兜底，但必须双错留痕
+      console.error('[loader] 主题初始化与降级写入均失败', err, fallbackErr);
+    }
   }
 })();

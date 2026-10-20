@@ -260,6 +260,29 @@ export default tseslint.config(
       },
     },
   },
+  // 浏览器上下文的预启动脚本：apps/crish-desktop/public/** 由 index.html 直接加载
+  // （经 vite 内联为经典脚本），运行在浏览器里用 document/window/localStorage/
+  // requestAnimationFrame，不是 Node 模块。按路径声明 browser globals 是语义正确的
+  // 最小修复，不放大到其它目录的 JS。
+  {
+    files: ['apps/crish-desktop/public/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+      },
+    },
+  },
+  // apps/crish-desktop/scripts/qa/**：脚本本体跑在 Node（CommonJS 由 .cjs 决定），
+  // 但 page.evaluate 的回调体在浏览器上下文执行；只补该回调体实际用到的两个全局。
+  {
+    files: ['apps/crish-desktop/scripts/qa/**/*.cjs'],
+    languageOptions: {
+      globals: {
+        document: 'readonly',
+        getComputedStyle: 'readonly',
+      },
+    },
+  },
   // Restrict Object.assign in Immer-based store files
   {
     files: [
