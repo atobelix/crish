@@ -612,3 +612,12 @@ orchestrator-snapshot.json.prev
 # 不放行则全新 clone / CI checkout 上该契约测试必然失败（门禁形同虚设）。
 # 权威：reference/markdown-editor/docs/table-systemic-remediation/08-分维-验收矩阵与防回归门禁.md §8.1
 !reference/markdown-editor/tests/gate/table-invariants-baseline.json
+
+# Archive campaign personal binary assets
+docs/archive/campaigns/soe-campus-campaign/**/*.pdf
+
+# User research GIS dataset and scripts (external to Conex)
+heritage-gis-data/
+scripts/download_heritage_data.py
+scripts/process_heritage_data.py
+scripts/generate_routes.py
