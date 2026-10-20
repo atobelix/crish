@@ -273,8 +273,6 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
               ))
           )
             return;
-          if (container.offsetWidth === 0 && container.offsetHeight === 0)
-            return;
         }
         e.preventDefault();
         e.stopPropagation();

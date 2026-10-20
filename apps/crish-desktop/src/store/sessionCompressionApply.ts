@@ -9,9 +9,13 @@
  * api 层不得直引 store 内部实现，统一经 storeAccess 公共面暴露）。
  */
 
-import { getSessionForWrite } from './sessionIndex';
+import { getSessionForWrite, rebindSessionById } from './sessionIndex';
 import { useSessionStore } from './sessionStore';
 import type { SessionMessage } from './types';
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
 
 export function applyCompressionSummaryToStore(
   sessionId: string,
@@ -35,17 +39,14 @@ export function applyCompressionSummaryToStore(
         metadata: summaryMessage.metadata,
         blocks: summaryMessage.blocks,
       };
+      rebindSessionById(state, sessionId, sess);
     } else {
       // 过滤已被压缩丢弃的消息，并在首条普通消息前安全插入摘要块
       const filtered = sess.messages.filter((m) => !droppedSet.has(m.id));
       const firstKeptIdx = filtered.findIndex(
         (m) =>
           !m.id?.startsWith('compacted-summary') &&
-          !(
-            m.metadata &&
-            typeof m.metadata === 'object' &&
-            (m.metadata as any).isCompactedSummary
-          )
+          !(isRecord(m.metadata) && Boolean(m.metadata.isCompactedSummary))
       );
       if (firstKeptIdx >= 0) {
         filtered.splice(firstKeptIdx, 0, summaryMessage);
@@ -53,6 +54,7 @@ export function applyCompressionSummaryToStore(
         filtered.push(summaryMessage);
       }
       sess.messages = filtered;
+      rebindSessionById(state, sessionId, sess);
     }
   });
 }
