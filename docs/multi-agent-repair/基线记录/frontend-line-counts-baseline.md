@@ -118,7 +118,7 @@ apps/crish-desktop/src/api/draft/sessionDraftManager.ts 372
 apps/crish-desktop/src/api/dualLatchProtocol.ts 448
 apps/crish-desktop/src/api/engineConfigHelpers.ts 373
 apps/crish-desktop/src/api/markdown-render/streamingDfaLexer.ts 419
-apps/crish-desktop/src/api/markdown/IncrementalMarkdownSession.ts 533
+apps/crish-desktop/src/api/markdown/IncrementalMarkdownSession.ts 399
 apps/crish-desktop/src/api/modelsCatalogActions.ts 378
 apps/crish-desktop/src/api/modelsCatalogStore.ts 375
 apps/crish-desktop/src/api/ptySessionApi.ts 396
