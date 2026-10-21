@@ -878,7 +878,22 @@ export default defineConfig({
             return 'chat-bridge-common';
           }
 
-          // 2.3 聊天运行时核心（统一收归 transport 与 stream 处理核心）
+          // 2.3 核心会话状态切块（解耦会话状态与运行时流传输）
+          if (
+            n.includes('/src/store/sessionStore') ||
+            n.includes('/src/store/sessionSubtreeModel') ||
+            n.includes('/src/store/sessionActions') ||
+            n.includes('/src/store/sessionIndex') ||
+            n.includes('/src/store/sessionListEqual') ||
+            n.includes('/src/store/sessionMessage') ||
+            n.includes('/src/store/sessionCrud') ||
+            n.includes('/src/store/layout-helpers/') ||
+            n.includes('/src/store/middleware/')
+          ) {
+            return 'store-session-core';
+          }
+
+          // 2.4 聊天运行时核心（统一收归 transport 与 stream 处理核心）
           if (
             n.includes('/src/api/StreamRenderBuffer') ||
             n.includes('/src/services/StreamRecovery') ||

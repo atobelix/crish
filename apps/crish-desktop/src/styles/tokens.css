@@ -361,7 +361,6 @@ html[data-theme='light'] {
   --color-error-border: oklch(0.61 0.19 31.8 / 0.25);
   --color-info: var(--accent-blue);
   --color-info-bg: var(--info-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
-  --color-info-border: oklch(0.65 0.18 245 / 0.25);
 
   /* ==========================================================================
    * 通知与灵动胶囊专用 Design Token 体系 (Notification & Capsule Tokens)
@@ -562,8 +561,6 @@ html[data-theme='light'] {
   --transition-fast: 150ms var(--ease-standard);
   --transition-normal: var(--duration-normal) var(--ease-standard);
   --transition-smooth: 300ms var(--ease-standard);
-  /* Toast 入场：无过冲（y≤1）；旧值 y2=1.275 会越过停点再回 */
-  --transition-exit: 250ms var(--ease-standard);
   --transition-popover-enter: 180ms var(--ease-decelerate);
   --transition-popover-exit: 120ms var(--ease-accelerate);
   --transition-modal-enter: 220ms var(--ease-decelerate);
@@ -1377,7 +1374,6 @@ html[data-theme='dark'] {
   --color-error-border: color-mix(in srgb, var(--accent-red) 25%, transparent);
   --color-info: var(--accent-blue);
   --color-info-bg: var(--info-soft-bg); /* 固定纯色 soft 底（旧为半透明） */
-  --color-info-border: color-mix(in srgb, var(--accent-blue) 25%, transparent);
 
   /* 通知与灵动胶囊专用 Design Token 体系 (Dark 模式) */
   --notice-bg-stop: #241517;
@@ -2041,7 +2037,6 @@ html[data-perf-tier='eco'] {
   --transition-fast: 0ms;
   --transition-normal: 0ms;
   --transition-smooth: 0ms;
-  --transition-exit: 0ms;
   --transition-popover-enter: 0ms;
   --transition-popover-exit: 0ms;
   --transition-modal-enter: 0ms;
@@ -2084,7 +2079,6 @@ html[data-perf-tier='eco'] {
     --transition-fast: 0ms;
     --transition-normal: 0ms;
     --transition-smooth: 0ms;
-    --transition-exit: 0ms;
     --transition-popover-enter: 0ms;
     --transition-popover-exit: 0ms;
     --transition-modal-enter: 0ms;

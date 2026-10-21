@@ -4,9 +4,8 @@
 import type { StreamCallbacks } from '../chatApi';
 import type { ApprovalFlowMachine } from '../approvalFlowMachine';
 import { type StreamState } from './handlers/streamState';
-import { getCompositionRoot } from '../../app/compositionRoot';
 import { RUN_CONTROL_LEVEL } from '@crish/shared-types';
-import type { StreamCancelMode } from '../runControlClient';
+import { dispatchRunControl, type StreamCancelMode } from '../runControlClient';
 
 export type StreamCancelFn = (opts?: { mode?: StreamCancelMode }) => void;
 
@@ -82,7 +81,7 @@ export function createStreamCancel(
     approvalFlow.dispatch({ type: 'force_finish' });
     cleanup();
 
-    void getCompositionRoot().runControl.dispatch({
+    void dispatchRunControl({
       level:
         mode === 'cooperative' ? RUN_CONTROL_LEVEL.L2 : RUN_CONTROL_LEVEL.L3,
       runId,

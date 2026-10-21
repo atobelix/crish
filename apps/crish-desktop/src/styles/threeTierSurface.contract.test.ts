@@ -53,7 +53,7 @@ describe('三档底色契约', () => {
       // 兜底承载亮暗 distinct（无 JS/首帧兜底正确性）；字面值仍唯一钉在
       // --user-surface-* 参数声明上，fallback 与其同值。
       const fallback = (name: string, hex: string) =>
-        `var(--user-${name.slice(2)}, ${hex})`;
+        'var(' + '--user-' + name.slice(2) + ', ' + hex + ')';
       const fb =
         theme === 'light'
           ? { outer: '#f7f6f5', main: '#ffffff', input: '#ffffff' }

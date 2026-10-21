@@ -19,16 +19,23 @@
  * 「编辑 profile 列表也注入」噪音）+ 引擎侧 group_id 去重。
  */
 
-import { getPermissionMode } from '../storeAccess';
+import { loadStoredPermissionMode } from '../permissionModes';
 import {
   getSessionThinkingTitle,
   loadModelThinkingPref,
   getLastSentContextSignature,
 } from '../SessionRuntimeRegistry';
-import { getSessionStoreState, isPendingDraft } from '../../store/storeAccess';
+import { sessionRuntimeRegistry } from '../SessionRuntimeRegistry';
 
 /** 暂存键（取走即清空；载荷为 { sessionId, text } 会话寻址 JSON） */
 export const PENDING_CONTEXT_STATE_KEY = 'crish_pending_context_state_v1';
+function isPendingDraft(id: string): boolean {
+  return id === '__pending_draft__' || id.startsWith('draft-');
+}
+
+function getPermissionMode(): string {
+  return loadStoredPermissionMode();
+}
 
 /** 读活动模型 id（直读 localStorage，与 profileStore 同键；不反向
  * import profileStore——避免产生器 ↔ profileStore 循环依赖） */
@@ -54,7 +61,7 @@ function readThinkingLevel(targetSessionId?: string): string {
   try {
     const sid = (
       targetSessionId ||
-      getSessionStoreState().activeSessionId ||
+      sessionRuntimeRegistry.getActiveSessionId() ||
       ''
     ).trim();
     const title =
@@ -213,8 +220,11 @@ export function dispatchInstantContextStateNotification(
  */
 export function recordPendingContextState(targetSessionId?: string): void {
   try {
-    const store = getSessionStoreState();
-    const sid = (targetSessionId || store.activeSessionId || '').trim();
+    const sid = (
+      targetSessionId ||
+      sessionRuntimeRegistry.getActiveSessionId() ||
+      ''
+    ).trim();
     if (!sid) {
       // 无活跃会话时不记录无主暂存，防止污染后续会话
       return;

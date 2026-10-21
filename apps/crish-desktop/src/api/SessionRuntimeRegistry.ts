@@ -67,6 +67,10 @@ class SessionRuntimeRegistry {
     this.activeIdResolver = undefined;
   }
 
+  getActiveSessionId(): string {
+    return this.activeIdResolver ? this.activeIdResolver() : '';
+  }
+
   private states = new Map<string, SessionRuntimeState>();
   private refCounts = new Map<string, number>();
   private retainTimestamps = new Map<string, number>();
@@ -145,7 +149,10 @@ class SessionRuntimeRegistry {
 
   startGC(): void {
     this.stopGC();
-    this.gcTimer = setInterval(() => this._collectGarbage(), this.GC_INTERVAL_MS);
+    this.gcTimer = setInterval(
+      () => this._collectGarbage(),
+      this.GC_INTERVAL_MS
+    );
     if (typeof this.gcTimer?.unref === 'function') this.gcTimer.unref();
   }
 
@@ -209,7 +216,7 @@ export const sessionRuntimeRegistry = new SessionRuntimeRegistry();
  */
 export function setSessionThinkingTitle(
   sessionId: string,
-  title: string | null,
+  title: string | null
 ): void {
   if (!sessionId) return;
   sessionRuntimeRegistry.save(sessionId, { thinkingTitle: title });
@@ -231,10 +238,12 @@ export function getSessionThinkingTitle(sessionId: string): string | null {
  */
 export function setLastSentContextSignature(
   sessionId: string,
-  signature: string | null,
+  signature: string | null
 ): void {
   if (!sessionId) return;
-  sessionRuntimeRegistry.save(sessionId, { lastSentContextSignature: signature });
+  sessionRuntimeRegistry.save(sessionId, {
+    lastSentContextSignature: signature,
+  });
 }
 
 /**
@@ -251,7 +260,7 @@ export function getLastSentContextSignature(sessionId: string): string | null {
  */
 export function setLastSentContextSnapshot(
   sessionId: string,
-  snapshot: ContextStateFieldSnapshot | null,
+  snapshot: ContextStateFieldSnapshot | null
 ): void {
   if (!sessionId) return;
   sessionRuntimeRegistry.save(sessionId, { lastSentContextSnapshot: snapshot });
@@ -262,7 +271,7 @@ export function setLastSentContextSnapshot(
  * 只读已有槽，不因查询新建会话。
  */
 export function getLastSentContextSnapshot(
-  sessionId: string,
+  sessionId: string
 ): ContextStateFieldSnapshot | null {
   if (!sessionId) return null;
   if (!sessionRuntimeRegistry.exists(sessionId)) return null;
@@ -286,7 +295,7 @@ const GLOBAL_THINKING_PREF_KEY = 'conex:global-thinking-pref';
 export function saveModelThinkingPref(
   providerId: string,
   modelId: string,
-  title: string | null,
+  title: string | null
 ): void {
   if (!providerId || !modelId) return;
   try {
@@ -307,7 +316,7 @@ export function saveModelThinkingPref(
  */
 export function loadModelThinkingPref(
   providerId: string,
-  modelId: string,
+  modelId: string
 ): string | null {
   if (!providerId || !modelId) return null;
   try {
@@ -349,7 +358,7 @@ export function loadGlobalThinkingPref(): string | null {
 export function resolveEffectiveThinkingTitle(
   sessionId?: string | null,
   providerId?: string | null,
-  modelId?: string | null,
+  modelId?: string | null
 ): string | null {
   const p = (providerId || '').trim();
   const m = (modelId || '').trim();
@@ -388,7 +397,7 @@ export function persistThinkingSelection(
   sessionId: string | null | undefined,
   providerId: string | null | undefined,
   modelId: string | null | undefined,
-  title: string | null,
+  title: string | null
 ): void {
   const p = (providerId || '').trim();
   const m = (modelId || '').trim();

@@ -17,7 +17,7 @@ import { ApprovalFlowMachine } from '../approvalFlowMachine';
 import { normalizeStreamSessionId } from './handlers/eventUtils';
 import { type StreamState, cleanupStreamState } from './handlers/streamState';
 import { EventRouter } from './EventRouter';
-import { getCompositionRoot } from '../../app/compositionRoot';
+import { getSessionStoreState } from '../storeAccess';
 import {
   composeSystemPrompt,
   createFinishController,
@@ -327,24 +327,24 @@ export async function createStreamSession(
       // 用尽后 queued → error + ComposerErrorBar）。不再 followUp：runId 为空
       // 的 core_run_control 到不了后端 follow_up 环（静默空调用）。
       try {
-        const root = getCompositionRoot();
+        const sessionStore = getSessionStoreState();
         if (userClientMessageId) {
           noteBusy(safeSessionId, userClientMessageId);
           // processing → queued 需 force（StatusTransitionGuard）
-          root.session
-            .getState()
-            .setSessionMessageStatus(
-              safeSessionId,
-              userClientMessageId,
-              'queued',
-              undefined,
-              { force: true }
-            );
+          sessionStore.setSessionMessageStatus(
+            safeSessionId,
+            userClientMessageId,
+            'queued',
+            undefined,
+            { force: true }
+          );
         }
         if (assistantClientMessageId) {
-          root.session
-            .getState()
-            .withdrawMessage('', safeSessionId, assistantClientMessageId);
+          sessionStore.withdrawMessage(
+            '',
+            safeSessionId,
+            assistantClientMessageId
+          );
         }
       } catch (err) {
         logInternalError('stream-start-busy-queue-state', err);
