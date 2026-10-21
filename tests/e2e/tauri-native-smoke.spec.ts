@@ -26,24 +26,36 @@ const WORKSPACE_ROOT = resolve(__dirname, '../..');
 
 /** 引擎初始化标记（main.rs「setup 完成（IPC 模式）」） */
 const ENGINE_INIT_MARKER = 'setup 完成（IPC 模式）';
+const BINARY_NAME =
+  process.platform === 'win32'
+    ? 'crish-agent-workbench.exe'
+    : 'crish-agent-workbench';
+
+/**
+ * CARGO_TARGET_DIR（cargo 官方环境变量）设置时，cargo build 产物落在该目录
+ * 而非 <workspace>/target——不纳入候选会把「已构建」误判为「二进制缺失」
+ * 并整组跳过。相对路径按 cargo 语义相对当前工作目录解析。
+ */
+const CARGO_TARGET_DIR = process.env.CARGO_TARGET_DIR?.trim();
+
+/**
+ * 发布门禁模式：ci-slow.yml native-smoke-windows 设置
+ * CRISH_NATIVE_SMOKE_REQUIRE_BINARY=1，此时二进制缺失必须判红而非跳过
+ * （否则构建产物路径漂移时 job 照样绿，门禁形同虚设）。本地/快层
+ * `npm test` 不设该变量，保持「无二进制显式报 SKIP 数」的行为。
+ */
+const REQUIRE_BINARY = process.env.CRISH_NATIVE_SMOKE_REQUIRE_BINARY === '1';
+
 /** 二进制路径候选（按优先级） */
 const BINARY_CANDIDATES = [
-  join(
-    WORKSPACE_ROOT,
-    'target',
-    'debug',
-    process.platform === 'win32'
-      ? 'crish-agent-workbench.exe'
-      : 'crish-agent-workbench'
-  ),
-  join(
-    WORKSPACE_ROOT,
-    'target',
-    'release',
-    process.platform === 'win32'
-      ? 'crish-agent-workbench.exe'
-      : 'crish-agent-workbench'
-  ),
+  ...(CARGO_TARGET_DIR
+    ? [
+        join(resolve(CARGO_TARGET_DIR), 'debug', BINARY_NAME),
+        join(resolve(CARGO_TARGET_DIR), 'release', BINARY_NAME),
+      ]
+    : []),
+  join(WORKSPACE_ROOT, 'target', 'debug', BINARY_NAME),
+  join(WORKSPACE_ROOT, 'target', 'release', BINARY_NAME),
   join(
     WORKSPACE_ROOT,
     'apps',
@@ -51,9 +63,7 @@ const BINARY_CANDIDATES = [
     'src-tauri',
     'target',
     'debug',
-    process.platform === 'win32'
-      ? 'crish-agent-workbench.exe'
-      : 'crish-agent-workbench'
+    BINARY_NAME
   ),
   join(
     WORKSPACE_ROOT,
@@ -62,9 +72,7 @@ const BINARY_CANDIDATES = [
     'src-tauri',
     'target',
     'release',
-    process.platform === 'win32'
-      ? 'crish-agent-workbench.exe'
-      : 'crish-agent-workbench'
+    BINARY_NAME
   ),
 ];
 
@@ -130,6 +138,13 @@ describe('native-smoke 前置探针（跳过必须显式报数）', () => {
       );
     }
     expect(BINARY_CANDIDATES.length).toBeGreaterThan(0);
+    if (REQUIRE_BINARY) {
+      expect(
+        binary,
+        'CRISH_NATIVE_SMOKE_REQUIRE_BINARY=1（发布门禁）下二进制必须存在，候选路径:\n' +
+          BINARY_CANDIDATES.join('\n')
+      ).not.toBeNull();
+    }
   });
 });
 
