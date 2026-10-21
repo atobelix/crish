@@ -416,7 +416,8 @@ async fn retract_impl_stop_run_cascades_kill_all_cancelled_event_layer_rows_norm
             usage: None,
         },
     ];
-    db.save_session_body("s1", &initial_msgs).expect("保存初始消息");
+    db.save_session_body("s1", &initial_msgs)
+        .expect("保存初始消息");
     assert_eq!(db.load_session_body("s1").unwrap().len(), 2);
 
     // ③ 活动 run（子代理 run 挂 active_runs——stop_run 投 L3 的目标）
@@ -443,7 +444,6 @@ async fn retract_impl_stop_run_cascades_kill_all_cancelled_event_layer_rows_norm
     assert_eq!(resp.run_id, sub_run_id, "被收场 run = 活动子代理 run");
     assert_eq!(resp.target_message_id, "msg-user-1");
     assert_eq!(resp.rollback.restored, 0, "无边界后写路径 → 回滚空跑");
-
 
     // ⑤ 事件层 cancelled 为准（K1 决策 7）：
     //    5a. stop_run 向控制总线投递 L3 强停（reason 携带撤回边界），
@@ -521,7 +521,6 @@ async fn retract_impl_stop_run_cascades_kill_all_cancelled_event_layer_rows_norm
     let sessions_list = db.list_sessions().expect("列出会话");
     assert_eq!(sessions_list[0].message_count, 1, "message_count 重算为 1");
 }
-
 
 /// K2 边界：撤回目标不可定位 → fail-closed 不冻结、不触发 kill_all、
 /// 不落 truncate（NotFound；行语义不动）

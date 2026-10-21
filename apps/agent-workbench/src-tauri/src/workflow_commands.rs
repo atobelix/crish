@@ -639,7 +639,12 @@ impl WorkflowStore for SessionMetaWorkflowStore {
 
         let mut results = Vec::new();
         for cron_id in index {
-            if let Some(raw) = self.db.get_session_meta(&store_key(&cron_id)).ok().flatten() {
+            if let Some(raw) = self
+                .db
+                .get_session_meta(&store_key(&cron_id))
+                .ok()
+                .flatten()
+            {
                 if let Ok(mut wf) = serde_json::from_str::<StoredWorkflow>(&raw) {
                     if heuristic_rehydrate_workflow(&mut wf) {
                         // 自愈后立即持久化回写，杜绝未来降级丢失
@@ -665,7 +670,8 @@ impl WorkflowStore for SessionMetaWorkflowStore {
             .unwrap_or_else(|| serde_json::json!({}));
 
         if let Ok(new_val) = serde_json::to_value(workflow) {
-            if let (Some(base_map), Some(new_map)) = (base_val.as_object_mut(), new_val.as_object()) {
+            if let (Some(base_map), Some(new_map)) = (base_val.as_object_mut(), new_val.as_object())
+            {
                 for (k, v) in new_map {
                     base_map.insert(k.clone(), v.clone());
                 }
@@ -755,7 +761,8 @@ impl MemoryWorkflowStore {
 
 impl WorkflowStore for MemoryWorkflowStore {
     fn load_all(&self) -> Vec<StoredWorkflow> {
-        let mut list: Vec<StoredWorkflow> = self.map
+        let mut list: Vec<StoredWorkflow> = self
+            .map
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .iter()
@@ -783,15 +790,18 @@ impl WorkflowStore for MemoryWorkflowStore {
         match map.iter_mut().find(|(id, _)| id == &workflow.cron_id) {
             Some((_, slot)) => {
                 // 内存版 Safe Field Merge：以 JSON Value 合并模拟无损覆盖
-                if let (Ok(old_val), Ok(new_val)) = (
-                    serde_json::to_value(&*slot),
-                    serde_json::to_value(workflow),
-                ) {
-                    if let (Some(mut base_map), Some(new_map)) = (old_val.as_object().cloned(), new_val.as_object()) {
+                if let (Ok(old_val), Ok(new_val)) =
+                    (serde_json::to_value(&*slot), serde_json::to_value(workflow))
+                {
+                    if let (Some(mut base_map), Some(new_map)) =
+                        (old_val.as_object().cloned(), new_val.as_object())
+                    {
                         for (k, v) in new_map {
                             base_map.insert(k.clone(), v.clone());
                         }
-                        if let Ok(merged) = serde_json::from_value::<StoredWorkflow>(serde_json::Value::Object(base_map)) {
+                        if let Ok(merged) = serde_json::from_value::<StoredWorkflow>(
+                            serde_json::Value::Object(base_map),
+                        ) {
                             *slot = merged;
                             return;
                         }
@@ -1170,7 +1180,8 @@ impl crate::sched::ScheduledTaskLauncher for ProductionScheduledLauncher {
                         deleted_session_id = %sid,
                         "绑定的目标会话已不存在，自动抹除 target_session_id 并自愈降级为独立后台会话"
                     );
-                    self.workflow_backend.clear_invalid_target_session(&ctx.cron_id);
+                    self.workflow_backend
+                        .clear_invalid_target_session(&ctx.cron_id);
                     format!("sched-run-{}-{}", ctx.cron_id, started_at_ms)
                 }
             }
@@ -1184,7 +1195,9 @@ impl crate::sched::ScheduledTaskLauncher for ProductionScheduledLauncher {
                 .active_runs
                 .lock()
                 .unwrap_or_else(|e| e.into_inner());
-            active.values().any(|r| r.session_id == effective_session_id)
+            active
+                .values()
+                .any(|r| r.session_id == effective_session_id)
         };
         if session_busy {
             let entry = SteeringInputEntry {
@@ -1791,10 +1804,8 @@ impl WorkflowBackend {
         };
 
         // INT-02：空 cwd 或不存在路径兜底至 <app_data_dir>/scheduled-tasks-sandbox
-        let effective_cwd = resolve_effective_workflow_cwd(
-            workflow.cwd.as_deref(),
-            self.app_data_dir().as_deref(),
-        );
+        let effective_cwd =
+            resolve_effective_workflow_cwd(workflow.cwd.as_deref(), self.app_data_dir().as_deref());
 
         workflow.fired_count += 1;
         workflow.last_run_at_ms = Some(now);
@@ -1974,7 +1985,10 @@ impl WorkflowBackend {
                 status: "completed".to_string(),
                 prompt: workflow.prompt.clone(),
                 error: None,
-                output_summary: Some(format!("手动立即触发成功（第 {} 次）", workflow.fired_count)),
+                output_summary: Some(format!(
+                    "手动立即触发成功（第 {} 次）",
+                    workflow.fired_count
+                )),
             };
             self.store.append_or_update_run(record);
         }
@@ -2958,7 +2972,10 @@ mod tests {
             .expect("更新应成功");
 
         // 核心断言：ID 与创建时间绝对恒定
-        assert_eq!(updated.id, original_id, "cron_id 必须绝对恒定，严禁因更新表达式重分 ID");
+        assert_eq!(
+            updated.id, original_id,
+            "cron_id 必须绝对恒定，严禁因更新表达式重分 ID"
+        );
         assert_eq!(
             updated.created_at, original_created_at,
             "created_at 必须绝对恒定，严禁被重置"
@@ -3017,8 +3034,14 @@ mod tests {
             .expect("暂停应成功");
 
         assert!(!paused.enabled);
-        assert!(paused.next_run_at.is_none(), "暂停态 next_run_at 必须为 None");
-        assert!(!registry.snapshot()[0].enabled, "注册表中任务必须同步置为 paused");
+        assert!(
+            paused.next_run_at.is_none(),
+            "暂停态 next_run_at 必须为 None"
+        );
+        assert!(
+            !registry.snapshot()[0].enabled,
+            "注册表中任务必须同步置为 paused"
+        );
 
         // 恢复任务
         let resumed = backend
@@ -3034,7 +3057,10 @@ mod tests {
 
         assert!(resumed.enabled);
         assert!(resumed.next_run_at.is_some(), "恢复后应有 next_run_at");
-        assert!(registry.snapshot()[0].enabled, "注册表中任务必须同步置为 active");
+        assert!(
+            registry.snapshot()[0].enabled,
+            "注册表中任务必须同步置为 active"
+        );
     }
 
     /// 3. Safe Field Merge 治理：save 不会冲刷业务或底座自定义 JSON 字段，实现双向安全无损
@@ -3190,7 +3216,11 @@ mod tests {
             None,
             Some("完成摘要".to_string()),
         );
-        let updated_r1 = store.load_runs().into_iter().find(|r| r.run_id == "r1").unwrap();
+        let updated_r1 = store
+            .load_runs()
+            .into_iter()
+            .find(|r| r.run_id == "r1")
+            .unwrap();
         assert_eq!(updated_r1.status, "success");
         assert_eq!(updated_r1.duration_ms, Some(1000));
         assert_eq!(updated_r1.output_summary.as_deref(), Some("完成摘要"));
@@ -3205,7 +3235,11 @@ mod tests {
             Some("外部超时".to_string()),
             None,
         );
-        let created_new = store.load_runs().into_iter().find(|r| r.run_id == "r-brand-new").unwrap();
+        let created_new = store
+            .load_runs()
+            .into_iter()
+            .find(|r| r.run_id == "r-brand-new")
+            .unwrap();
         assert_eq!(created_new.status, "failed");
         assert_eq!(created_new.started_at_ms, 2500);
         assert_eq!(created_new.finished_at_ms, Some(3000));
@@ -3444,10 +3478,8 @@ mod tests {
     /// 9. INT-02 全局默认沙箱目录兜底：cwd 为 None 或空串时自动解析并创建 <app_data_dir>/scheduled-tasks-sandbox
     #[test]
     fn resolve_effective_workflow_cwd_creates_default_sandbox_int02() {
-        let unique_dir = std::env::temp_dir().join(format!(
-            "crish-int02-sandbox-test-{}",
-            now_ms()
-        ));
+        let unique_dir =
+            std::env::temp_dir().join(format!("crish-int02-sandbox-test-{}", now_ms()));
         let _ = std::fs::remove_dir_all(&unique_dir);
 
         // 1. cwd = None -> 自动创建 <unique_dir>/scheduled-tasks-sandbox
@@ -3616,7 +3648,9 @@ mod tests {
             .await
             .expect("创建未绑定任务应成功");
 
-        backend.trigger(&unbound_wf.id).expect("触发未绑定任务应成功");
+        backend
+            .trigger(&unbound_wf.id)
+            .expect("触发未绑定任务应成功");
 
         let unbound_entries = queue
             .lock()

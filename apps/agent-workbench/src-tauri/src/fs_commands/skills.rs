@@ -7,7 +7,7 @@ use crate::core_error::CoreError;
 ///
 /// - `workspace_path`：改为经 WorkspaceRegistry 解析——必须位于已授权根内
 ///   （canonicalize + 前缀包含校验），否则 `workspace_not_granted`；
-/// - `extra_dirs`：每个目录必须 ⊆ 已授权根，否则整体拒绝；
+/// - `extra_dirs`：越界目录或外部软件技能目录跳过，不拖垮本次发现；
 /// - 用户主目录全局技能（只读发现）保持既有行为。
 
 #[derive(Debug, Serialize, Clone)]
@@ -236,7 +236,7 @@ fn discover_in_dir_rust(
     }
 }
 
-fn get_home_dir() -> Option<PathBuf> {
+pub(crate) fn home_dir() -> Option<PathBuf> {
     std::env::var("USERPROFILE")
         .ok()
         .map(PathBuf::from)
@@ -285,7 +285,7 @@ pub(crate) fn workbench_discover_skills<R: tauri::Runtime>(
     }
 
     // 全局技能：用户主目录（规范原生技能目录，不强行扫描别家不兼容软件目录）
-    if let Some(home) = get_home_dir() {
+    if let Some(home) = home_dir() {
         let roots = [
             home.join(".crish").join("skills"),
             home.join(".conex").join("skills"),
@@ -297,9 +297,18 @@ pub(crate) fn workbench_discover_skills<R: tauri::Runtime>(
         }
     }
 
-    // 附加目录：每个必须 ⊆ 已授权根，否则整体拒绝
+    // 附加目录越界时跳过。一次失败的外部导入不应当让技能库整体消失。
     for dir in extra_dirs {
-        let path = canonicalize_within_roots(&dir, &roots).map_err(CoreError::InvalidInput)?;
+        if is_foreign_skill_tree(Path::new(&dir)) {
+            continue;
+        }
+        let path = match canonicalize_within_roots(&dir, &roots) {
+            Ok(path) => path,
+            Err(_) => continue,
+        };
+        if is_foreign_skill_tree(&path) {
+            continue;
+        }
         let scope = if path.is_absolute() {
             "global"
         } else {
@@ -311,8 +320,28 @@ pub(crate) fn workbench_discover_skills<R: tauri::Runtime>(
     Ok(skills)
 }
 
-/// canonicalize 后校验 ∈ 已授权根（任一即可）；失败 → `workspace_not_granted`。
-fn canonicalize_within_roots(path: &str, roots: &[PathBuf]) -> Result<PathBuf, String> {
+fn is_foreign_skill_tree(path: &Path) -> bool {
+    let components: Vec<String> = path
+        .components()
+        .filter_map(|component| match component {
+            std::path::Component::Normal(value) => Some(value.to_string_lossy().to_lowercase()),
+            _ => None,
+        })
+        .collect();
+    let owned_at = components
+        .windows(2)
+        .position(|pair| (pair[0] == ".conex" || pair[0] == ".crish") && pair[1] == "skills");
+    const FOREIGN_APP_DIRS: [&str; 5] = [".codex", ".claude", ".cursor", ".agents", ".gemini"];
+    components.iter().enumerate().any(|(index, name)| {
+        let marked = FOREIGN_APP_DIRS
+            .iter()
+            .any(|marker| name.as_str() == *marker);
+        marked && owned_at.map(|at| index < at).unwrap_or(true)
+    })
+}
+
+/// canonicalize 后校验属于任一已授权根；失败时返回未授权文案。
+pub(crate) fn canonicalize_within_roots(path: &str, roots: &[PathBuf]) -> Result<PathBuf, String> {
     if path.contains('\0') {
         return Err(format!(
             "{ERR_WORKSPACE_NOT_GRANTED}: path contains NUL byte"
@@ -331,4 +360,179 @@ fn canonicalize_within_roots(path: &str, roots: &[PathBuf]) -> Result<PathBuf, S
     Err(format!(
         "{ERR_WORKSPACE_NOT_GRANTED}: path is outside the authorized workspace root: `{path}`"
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::disallowed_methods)]
+
+    use std::{
+        env, fs,
+        path::{Path, PathBuf},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    struct TempRoot {
+        path: PathBuf,
+    }
+
+    impl TempRoot {
+        fn new() -> Self {
+            let nanos = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos();
+            let path = env::temp_dir().join(format!(
+                "conex-skill-discover-{}-{nanos}",
+                std::process::id()
+            ));
+            fs::create_dir_all(&path).expect("create temp");
+            Self { path }
+        }
+    }
+
+    impl Drop for TempRoot {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    /// 越界附加目录和外部软件技能目录必须跳过，工作区内的技能副本仍然返回。
+    #[test]
+    fn skips_foreign_and_outside_extra_dirs() {
+        use crate::workspace::{RegisterSource, WorkspaceRegistry};
+
+        let temp = TempRoot::new();
+        let auth_root = temp.path.join("auth");
+        let skill_dir = auth_root.join(".conex").join("skills").join("demo-skill");
+        let outside = temp.path.join("outside-skill");
+        let foreign = auth_root
+            .join(".codex")
+            .join("skills")
+            .join("poison-inside");
+        let tool_root = auth_root.join(".codex");
+        let gemini_root = auth_root.join(".gemini");
+        let bypass = auth_root
+            .join(".codex")
+            .join("skills")
+            .join("wrap")
+            .join(".conex")
+            .join("skills")
+            .join("poison-bypass");
+        fs::create_dir_all(&skill_dir).expect("create owned skill dir");
+        fs::create_dir_all(&outside).expect("create outside skill dir");
+        fs::create_dir_all(&foreign).expect("create foreign skill dir");
+        fs::create_dir_all(tool_root.join("skills").join("poison-root"))
+            .expect("create tool root skill dir");
+        fs::create_dir_all(
+            gemini_root
+                .join("antigravity")
+                .join("skills")
+                .join("poison-gemini"),
+        )
+        .expect("create gemini skill dir");
+        fs::create_dir_all(&bypass).expect("create bypass skill dir");
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: demo-skill\ndescription: owned\n---\nbody\n",
+        )
+        .expect("write owned skill");
+        fs::write(
+            outside.join("SKILL.md"),
+            "---\nname: poison-outside\ndescription: no\n---\nbody\n",
+        )
+        .expect("write outside skill");
+        fs::write(
+            foreign.join("SKILL.md"),
+            "---\nname: poison-inside\ndescription: no\n---\nbody\n",
+        )
+        .expect("write foreign skill");
+        fs::write(
+            tool_root
+                .join("skills")
+                .join("poison-root")
+                .join("SKILL.md"),
+            "---\nname: poison-root\ndescription: no\n---\nbody\n",
+        )
+        .expect("write tool root skill");
+        fs::write(
+            gemini_root
+                .join("antigravity")
+                .join("skills")
+                .join("poison-gemini")
+                .join("SKILL.md"),
+            "---\nname: poison-gemini\ndescription: no\n---\nbody\n",
+        )
+        .expect("write gemini skill");
+        fs::write(
+            bypass.join("SKILL.md"),
+            "---\nname: poison-bypass\ndescription: no\n---\nbody\n",
+        )
+        .expect("write bypass skill");
+        let config_dir = temp.path.join("config");
+        fs::create_dir_all(&config_dir).expect("create config dir");
+        let reg = WorkspaceRegistry::init_with_config_dir(&config_dir).expect("init registry");
+        reg.register(&auth_root, RegisterSource::Dialog)
+            .expect("register auth root");
+        let app = tauri::test::mock_builder()
+            .manage(reg)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+
+        let result = super::workbench_discover_skills(
+            app.handle(),
+            Some(auth_root.to_string_lossy().into_owned()),
+            vec![
+                outside.to_string_lossy().into_owned(),
+                foreign.to_string_lossy().into_owned(),
+                tool_root.to_string_lossy().into_owned(),
+                gemini_root.to_string_lossy().into_owned(),
+                bypass.to_string_lossy().into_owned(),
+            ],
+        )
+        .expect("越界附加目录不应让发现整体失败");
+        let names: Vec<_> = result.into_iter().map(|skill| skill.name).collect();
+        assert!(
+            names.iter().any(|name| name == "demo-skill"),
+            "应返回工作区技能副本，实际 {names:?}"
+        );
+        assert!(
+            !names.iter().any(|name| name.contains("poison")),
+            "外部技能目录不应被当成已安装，实际 {names:?}"
+        );
+    }
+
+    #[test]
+    fn foreign_app_roots_are_not_skill_libraries() {
+        assert!(super::is_foreign_skill_tree(Path::new(
+            "C:/Users/orange/.codex"
+        )));
+        assert!(super::is_foreign_skill_tree(Path::new(
+            "C:/Users/orange/.codex/skills/pkg"
+        )));
+        assert!(super::is_foreign_skill_tree(Path::new(
+            "C:/Users/orange/.gemini"
+        )));
+        assert!(super::is_foreign_skill_tree(Path::new(
+            "C:/Users/orange/.claude"
+        )));
+        assert!(super::is_foreign_skill_tree(Path::new(
+            "C:/Users/orange/.cursor"
+        )));
+        assert!(super::is_foreign_skill_tree(Path::new(
+            "C:/Users/orange/.agents"
+        )));
+        assert!(super::is_foreign_skill_tree(Path::new(
+            "C:/proj/.codex/skills/pkg/.conex/skills/nested"
+        )));
+        assert!(!super::is_foreign_skill_tree(Path::new(
+            "C:/Software/conex/.conex/skills/demo"
+        )));
+        assert!(!super::is_foreign_skill_tree(Path::new(
+            "C:/Users/orange/.crish/skills/demo"
+        )));
+        assert!(!super::is_foreign_skill_tree(Path::new(
+            "C:/Software/conex/.conex/skills/demo/.gemini/notes"
+        )));
+    }
 }

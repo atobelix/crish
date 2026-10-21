@@ -751,7 +751,8 @@ mod tests {
             .unwrap();
         runtime.block_on(async {
             let oversized = "x".repeat(SEARCH_ROOT_MAX_LEN + 1);
-            let result = core_rebuild_search_index(app.handle().clone(), Some(oversized), state).await;
+            let result =
+                core_rebuild_search_index(app.handle().clone(), Some(oversized), state).await;
             assert!(matches!(result, Err(CoreError::InvalidInput(_))));
         });
     }

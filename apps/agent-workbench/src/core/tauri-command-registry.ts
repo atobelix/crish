@@ -153,6 +153,11 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     feature: 'skill discovery',
   },
   {
+    command: 'workbench_mutate_owned_skill',
+    status: 'implemented',
+    feature: 'owned skill copy install and uninstall',
+  },
+  {
     command: 'workbench_apply_update',
     status: 'implemented',
     feature: 'app update application',

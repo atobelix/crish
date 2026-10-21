@@ -368,7 +368,10 @@ mod tests {
                 buf.push_into(chunk, &mut actual);
             }
             actual.push_str(&buf.flush_lossy());
-            assert_eq!(actual, expected, "chunk 步长 {step} 解码结果必须与全量 lossy 完全一致");
+            assert_eq!(
+                actual, expected,
+                "chunk 步长 {step} 解码结果必须与全量 lossy 完全一致"
+            );
         }
     }
 }

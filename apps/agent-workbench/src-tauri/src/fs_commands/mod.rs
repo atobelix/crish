@@ -1,6 +1,7 @@
 pub(crate) mod directory;
 pub(crate) mod read;
 pub(crate) mod skills;
+pub(crate) mod skills_owned;
 pub(crate) mod types;
 pub(crate) mod write;
 
@@ -89,6 +90,35 @@ pub(crate) fn workbench_discover_skills<R: tauri::Runtime>(
     extra_dirs: Vec<String>,
 ) -> Result<Vec<skills::RustSkill>, CoreError> {
     skills::workbench_discover_skills(&app, workspace_path, extra_dirs)
+}
+
+/// 写入或卸载本应用技能副本（项目 `.conex/skills` 或全局 `.crish/skills`）。
+///
+/// 与其他文件命令一样把磁盘操作放到阻塞线程，避免占住界面运行时。
+#[tauri::command(rename = "workbench_mutate_owned_skill")]
+pub(crate) async fn workbench_mutate_owned_skill(
+    app: tauri::AppHandle,
+    action: String,
+    scope: String,
+    workspace_path: Option<String>,
+    slug: String,
+    content: Option<String>,
+    overwrite: Option<bool>,
+) -> Result<skills_owned::OwnedSkillWrite, CoreError> {
+    let overwrite = overwrite.unwrap_or(false);
+    tokio::task::spawn_blocking(move || {
+        skills_owned::mutate_owned_skill(
+            &app,
+            &action,
+            &scope,
+            workspace_path.as_deref(),
+            &slug,
+            content.as_deref(),
+            overwrite,
+        )
+    })
+    .await
+    .map_err(|err| CoreError::internal(format!("技能副本写入任务中断：{err}")))?
 }
 
 #[cfg(test)]

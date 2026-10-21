@@ -235,7 +235,10 @@ impl TaskEventConsumer {
         }
 
         const MAX_TERMINAL_OWNERS: usize = 256;
-        let mut order = self.terminal_order.lock().unwrap_or_else(|e| e.into_inner());
+        let mut order = self
+            .terminal_order
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let mut owners = self.owners.lock().unwrap_or_else(|e| e.into_inner());
 
         if !order.iter().any(|id| id == task_id) {

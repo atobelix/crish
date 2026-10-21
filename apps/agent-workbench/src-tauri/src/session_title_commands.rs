@@ -95,13 +95,10 @@ pub(crate) async fn generate_session_title_impl(
         return Err(CoreError::Io(format!("会话标题 HTTP {status}：{excerpt}")));
     }
     let content = summary_content_from_response(&text).ok_or_else(|| {
-        CoreError::Internal(
-            "会话标题响应缺少 choices[0].message.content（非空文本）".to_string(),
-        )
+        CoreError::Internal("会话标题响应缺少 choices[0].message.content（非空文本）".to_string())
     })?;
-    let title = sanitize_generated_session_title(&content).ok_or_else(|| {
-        CoreError::Internal("会话标题清洗后为空".to_string())
-    })?;
+    let title = sanitize_generated_session_title(&content)
+        .ok_or_else(|| CoreError::Internal("会话标题清洗后为空".to_string()))?;
     Ok(GenerateSessionTitleResult { title })
 }
 
@@ -167,10 +164,7 @@ pub(crate) fn sanitize_generated_session_title(raw: &str) -> Option<String> {
 }
 
 fn capped_side(text: &str) -> String {
-    text.trim()
-        .chars()
-        .take(SESSION_TITLE_INPUT_CAP)
-        .collect()
+    text.trim().chars().take(SESSION_TITLE_INPUT_CAP).collect()
 }
 
 /// 引号、换行和 Unicode 标点。与前端 `sanitizeAiSessionTitle` 的 `\p{P}` 对齐到

@@ -96,7 +96,6 @@ impl CronTaskStatus {
     }
 }
 
-
 fn default_cron_status() -> CronTaskStatus {
     CronTaskStatus::Active
 }
@@ -148,7 +147,6 @@ impl CronTask {
     }
 }
 
-
 /// 注册入参（命令面 T-CF-14 委托的输入形状；next_fire_at_ms 等运行态
 /// 字段由注册表计算，不入参）
 #[derive(Debug, Clone)]
@@ -199,7 +197,6 @@ impl SchedulerError {
         }
     }
 }
-
 
 // ── 适配器契约（对齐 timers.rs 范式）──────────────────────────────
 
@@ -463,10 +460,19 @@ fn safe_merge_task_json(existing_json: Option<&str>, task: &CronTask) -> Option<
     map.insert("cronId".to_string(), serde_json::json!(task.cron_id));
     map.insert("expression".to_string(), serde_json::json!(task.expression));
     map.insert("prompt".to_string(), serde_json::json!(task.prompt));
-    map.insert("maxIterations".to_string(), serde_json::json!(task.max_iterations));
+    map.insert(
+        "maxIterations".to_string(),
+        serde_json::json!(task.max_iterations),
+    );
     map.insert("isDaemon".to_string(), serde_json::json!(task.is_daemon));
-    map.insert("nextFireAtMs".to_string(), serde_json::json!(task.next_fire_at_ms));
-    map.insert("firedCount".to_string(), serde_json::json!(task.fired_count));
+    map.insert(
+        "nextFireAtMs".to_string(),
+        serde_json::json!(task.next_fire_at_ms),
+    );
+    map.insert(
+        "firedCount".to_string(),
+        serde_json::json!(task.fired_count),
+    );
     map.insert("status".to_string(), serde_json::json!(task.status));
     map.insert("enabled".to_string(), serde_json::json!(task.enabled));
 
@@ -474,9 +480,15 @@ fn safe_merge_task_json(existing_json: Option<&str>, task: &CronTask) -> Option<
         map.insert("targetSessionId".to_string(), serde_json::json!(target_sid));
     }
     if !map.contains_key("createdAtMs") {
-        map.insert("createdAtMs".to_string(), serde_json::json!(task.created_at_ms));
+        map.insert(
+            "createdAtMs".to_string(),
+            serde_json::json!(task.created_at_ms),
+        );
     }
-    map.insert("updatedAtMs".to_string(), serde_json::json!(task.updated_at_ms));
+    map.insert(
+        "updatedAtMs".to_string(),
+        serde_json::json!(task.updated_at_ms),
+    );
 
     serde_json::to_string(&map).ok()
 }
@@ -650,7 +662,9 @@ impl SchedStore for MemorySchedStore {
         let mut map = self.map.lock().unwrap_or_else(|e| e.into_inner());
         let key = store_key(cron_id);
         if let Some(raw) = map.get(&key) {
-            if let Ok(mut obj) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(raw) {
+            if let Ok(mut obj) =
+                serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(raw)
+            {
                 obj.remove("targetSessionId");
                 obj.remove("target_session_id");
                 if let Ok(updated) = serde_json::to_string(&obj) {
@@ -730,21 +744,25 @@ impl SchedStore for LocalDbSchedStore {
     fn save(&self, task: &CronTask) {
         // 落实 Safe Field Merge：在 save 时使用 LocalDb::update_session_meta 保留非调度业务字段
         let task_clone = task.clone();
-        let _ = self.db.update_session_meta(&store_key(&task.cron_id), move |curr| {
-            safe_merge_task_json(curr, &task_clone)
-        });
+        let _ = self
+            .db
+            .update_session_meta(&store_key(&task.cron_id), move |curr| {
+                safe_merge_task_json(curr, &task_clone)
+            });
 
         // 索引幂等原子追加
         let cron_id = task.cron_id.clone();
-        let _ = self.db.update_session_meta(SESSION_META_SCHED_INDEX_KEY, move |curr| {
-            let mut index: Vec<String> = curr
-                .and_then(|raw| serde_json::from_str(raw).ok())
-                .unwrap_or_default();
-            if !index.contains(&cron_id) {
-                index.push(cron_id);
-            }
-            serde_json::to_string(&index).ok()
-        });
+        let _ = self
+            .db
+            .update_session_meta(SESSION_META_SCHED_INDEX_KEY, move |curr| {
+                let mut index: Vec<String> = curr
+                    .and_then(|raw| serde_json::from_str(raw).ok())
+                    .unwrap_or_default();
+                if !index.contains(&cron_id) {
+                    index.push(cron_id);
+                }
+                serde_json::to_string(&index).ok()
+            });
     }
 
     fn remove(&self, cron_id: &str) {
@@ -758,13 +776,15 @@ impl SchedStore for LocalDbSchedStore {
         });
 
         let cron_id_str = cron_id.to_string();
-        let _ = self.db.update_session_meta(SESSION_META_SCHED_INDEX_KEY, move |curr| {
-            let mut index: Vec<String> = curr
-                .and_then(|raw| serde_json::from_str(raw).ok())
-                .unwrap_or_default();
-            index.retain(|id| id != &cron_id_str);
-            serde_json::to_string(&index).ok()
-        });
+        let _ = self
+            .db
+            .update_session_meta(SESSION_META_SCHED_INDEX_KEY, move |curr| {
+                let mut index: Vec<String> = curr
+                    .and_then(|raw| serde_json::from_str(raw).ok())
+                    .unwrap_or_default();
+                index.retain(|id| id != &cron_id_str);
+                serde_json::to_string(&index).ok()
+            });
     }
 
     fn append_run(&self, record: &crate::workflow_commands::WorkflowRunRecord) {
@@ -982,15 +1002,24 @@ impl SchedulerRegistry {
         let task_to_save: CronTask;
 
         {
-            let mut tasks = self.components.tasks.lock().unwrap_or_else(|e| e.into_inner());
-            let entry = tasks.get_mut(cron_id).ok_or_else(|| {
-                CoreError::NotFound(format!("cron 任务 {cron_id} 不存在"))
-            })?;
+            let mut tasks = self
+                .components
+                .tasks
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let entry = tasks
+                .get_mut(cron_id)
+                .ok_or_else(|| CoreError::NotFound(format!("cron 任务 {cron_id} 不存在")))?;
 
             if entry.status == CronTaskStatus::Paused {
-                return Err(CoreError::invalid_input(format!("cron 任务 {cron_id} 已处于暂停态")));
+                return Err(CoreError::invalid_input(format!(
+                    "cron 任务 {cron_id} 已处于暂停态"
+                )));
             }
-            if matches!(entry.status, CronTaskStatus::Completed | CronTaskStatus::Cancelled) {
+            if matches!(
+                entry.status,
+                CronTaskStatus::Completed | CronTaskStatus::Cancelled
+            ) {
                 return Err(CoreError::invalid_input(format!(
                     "cron 任务 {cron_id} 已处于终态 ({:?})",
                     entry.status
@@ -1025,15 +1054,24 @@ impl SchedulerRegistry {
         let delay_ms: u64;
 
         {
-            let mut tasks = self.components.tasks.lock().unwrap_or_else(|e| e.into_inner());
-            let entry = tasks.get_mut(cron_id).ok_or_else(|| {
-                CoreError::NotFound(format!("cron 任务 {cron_id} 不存在"))
-            })?;
+            let mut tasks = self
+                .components
+                .tasks
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let entry = tasks
+                .get_mut(cron_id)
+                .ok_or_else(|| CoreError::NotFound(format!("cron 任务 {cron_id} 不存在")))?;
 
             if entry.status == CronTaskStatus::Active {
-                return Err(CoreError::invalid_input(format!("cron 任务 {cron_id} 已处于活跃态")));
+                return Err(CoreError::invalid_input(format!(
+                    "cron 任务 {cron_id} 已处于活跃态"
+                )));
             }
-            if matches!(entry.status, CronTaskStatus::Completed | CronTaskStatus::Cancelled) {
+            if matches!(
+                entry.status,
+                CronTaskStatus::Completed | CronTaskStatus::Cancelled
+            ) {
                 return Err(CoreError::invalid_input(format!(
                     "cron 任务 {cron_id} 已处于终态 ({:?})",
                     entry.status
@@ -1043,9 +1081,12 @@ impl SchedulerRegistry {
             // 重算 next_fire_after
             let schedule = parse_cron(&entry.task.expression)
                 .map_err(|e| CoreError::invalid_input(format!("cron 表达式非法：{e:?}")))?;
-            let next = schedule
-                .next_fire_after(now)
-                .ok_or_else(|| CoreError::invalid_input(format!("cron 表达式 {} 无未来触发时刻", entry.task.expression)))?;
+            let next = schedule.next_fire_after(now).ok_or_else(|| {
+                CoreError::invalid_input(format!(
+                    "cron 表达式 {} 无未来触发时刻",
+                    entry.task.expression
+                ))
+            })?;
 
             entry.task.next_fire_at_ms = next;
             entry.status = CronTaskStatus::Active;
@@ -1058,7 +1099,12 @@ impl SchedulerRegistry {
             task_to_save = entry.task.clone();
 
             // spawn 新 sleep 协程
-            let handle = spawn_fire_task(self.components.clone(), entry.task.clone(), delay_ms, entry.generation);
+            let handle = spawn_fire_task(
+                self.components.clone(),
+                entry.task.clone(),
+                delay_ms,
+                entry.generation,
+            );
             if let Some(old_h) = entry.sleep_task.replace(handle) {
                 old_h.abort();
             }
@@ -1086,12 +1132,19 @@ impl SchedulerRegistry {
         let task_to_save: CronTask;
 
         {
-            let mut tasks = self.components.tasks.lock().unwrap_or_else(|e| e.into_inner());
-            let entry = tasks.get_mut(cron_id).ok_or_else(|| {
-                CoreError::NotFound(format!("cron 任务 {cron_id} 不存在"))
-            })?;
+            let mut tasks = self
+                .components
+                .tasks
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let entry = tasks
+                .get_mut(cron_id)
+                .ok_or_else(|| CoreError::NotFound(format!("cron 任务 {cron_id} 不存在")))?;
 
-            if matches!(entry.status, CronTaskStatus::Completed | CronTaskStatus::Cancelled) {
+            if matches!(
+                entry.status,
+                CronTaskStatus::Completed | CronTaskStatus::Cancelled
+            ) {
                 return Err(CoreError::invalid_input(format!(
                     "cron 任务 {cron_id} 已处于终态 ({:?})，不可修改",
                     entry.status
@@ -1106,9 +1159,9 @@ impl SchedulerRegistry {
                 if trimmed != entry.task.expression {
                     let schedule = parse_cron(&trimmed)
                         .map_err(|e| CoreError::invalid_input(format!("cron 表达式非法：{e:?}")))?;
-                    let next = schedule
-                        .next_fire_after(now)
-                        .ok_or_else(|| CoreError::invalid_input(format!("cron 表达式 {trimmed} 无未来触发时刻")))?;
+                    let next = schedule.next_fire_after(now).ok_or_else(|| {
+                        CoreError::invalid_input(format!("cron 表达式 {trimmed} 无未来触发时刻"))
+                    })?;
 
                     entry.task.expression = trimmed;
                     entry.task.next_fire_at_ms = next;
@@ -1217,7 +1270,10 @@ impl SchedulerRegistry {
                 self.seq.fetch_max(seq + 1, Ordering::SeqCst);
             }
             // 终态跳过：已完成或已取消
-            if matches!(task.status, CronTaskStatus::Completed | CronTaskStatus::Cancelled) {
+            if matches!(
+                task.status,
+                CronTaskStatus::Completed | CronTaskStatus::Cancelled
+            ) {
                 continue;
             }
             if let Some(max) = task.max_iterations {
@@ -1423,7 +1479,10 @@ async fn fire_cron(
             let handle = spawn_fire_task(components.clone(), task.clone(), delay, expected_gen);
             let mut map = components.tasks.lock().unwrap_or_else(|e| e.into_inner());
             match map.get_mut(&task.cron_id) {
-                Some(entry) if entry.status == CronTaskStatus::Active && entry.generation == expected_gen => {
+                Some(entry)
+                    if entry.status == CronTaskStatus::Active
+                        && entry.generation == expected_gen =>
+                {
                     entry.sleep_task = Some(handle);
                 }
                 None if allow_rebuild_without_entry => {
@@ -1467,7 +1526,9 @@ async fn fire_cron(
     };
 
     // 段 1：同步触发核心（幂等守卫 / 事件 / 计数 / 落库）
-    let outcome = match std::panic::catch_unwind(AssertUnwindSafe(|| fire_once(&components, &task_to_fire))) {
+    let outcome = match std::panic::catch_unwind(AssertUnwindSafe(|| {
+        fire_once(&components, &task_to_fire)
+    })) {
         Ok(Some(outcome)) => outcome,
         Ok(None) => return,
         Err(panic) => {
@@ -1632,19 +1693,28 @@ async fn fire_cron(
             let delay = fire_delay_ms(&components, outcome.task.next_fire_at_ms);
             let mut map = components.tasks.lock().unwrap_or_else(|e| e.into_inner());
             match map.get_mut(&outcome.task.cron_id) {
-                Some(entry) if entry.status == CronTaskStatus::Active && entry.generation == expected_gen => {
+                Some(entry)
+                    if entry.status == CronTaskStatus::Active
+                        && entry.generation == expected_gen =>
+                {
                     entry.task.fired_count = outcome.task.fired_count;
                     entry.task.next_fire_at_ms = outcome.task.next_fire_at_ms;
                     entry.task.updated_at_ms = outcome.task.updated_at_ms;
 
                     let next_task = entry.task.clone();
-                    let handle = spawn_fire_task(components.clone(), next_task, delay, expected_gen);
+                    let handle =
+                        spawn_fire_task(components.clone(), next_task, delay, expected_gen);
                     if let Some(old_h) = entry.sleep_task.replace(handle) {
                         old_h.abort();
                     }
                 }
                 None if allow_rebuild_without_entry => {
-                    let handle = spawn_fire_task(components.clone(), outcome.task.clone(), delay, expected_gen);
+                    let handle = spawn_fire_task(
+                        components.clone(),
+                        outcome.task.clone(),
+                        delay,
+                        expected_gen,
+                    );
                     map.insert(
                         outcome.task.cron_id.clone(),
                         CronEntry {
@@ -2694,7 +2764,10 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(200)).await;
 
         // 触发被代际防线与状态守卫彻底拦截，绝不复活！
-        assert!(events.emitted.lock().unwrap().is_empty(), "暂停后绝不得触发");
+        assert!(
+            events.emitted.lock().unwrap().is_empty(),
+            "暂停后绝不得触发"
+        );
         assert!(snapshot_queue(&pending).is_empty());
         assert!(!registry.has_active());
     }
@@ -2784,11 +2857,23 @@ mod tests {
             .unwrap()
             .expect("key 必须存在");
         let merged_val: serde_json::Value = serde_json::from_str(&raw_json_str).unwrap();
-        assert_eq!(merged_val["name"], "每日自动化审查", "业务字段 name 严禁被抹除！");
-        assert_eq!(merged_val["cwd"], "C:/Software/conex", "业务字段 cwd 严禁被抹除！");
-        assert_eq!(merged_val["schedule"]["type"], "cron", "业务字段 schedule 严禁被抹除！");
+        assert_eq!(
+            merged_val["name"], "每日自动化审查",
+            "业务字段 name 严禁被抹除！"
+        );
+        assert_eq!(
+            merged_val["cwd"], "C:/Software/conex",
+            "业务字段 cwd 严禁被抹除！"
+        );
+        assert_eq!(
+            merged_val["schedule"]["type"], "cron",
+            "业务字段 schedule 严禁被抹除！"
+        );
         assert_eq!(merged_val["createdAtMs"], 1000, "原创建时间必须被保留！");
-        assert_eq!(merged_val["firedCount"], 3, "运行态 firedCount 必须被更新！");
+        assert_eq!(
+            merged_val["firedCount"], 3,
+            "运行态 firedCount 必须被更新！"
+        );
     }
 
     #[test]
@@ -2797,8 +2882,11 @@ mod tests {
         let store = LocalDbSchedStore::new(db.clone());
 
         // 存量历史写入 sched_ids
-        db.set_session_meta(LEGACY_SESSION_META_SCHED_INDEX_KEY, r#"["cron-old-1", "cron-old-2"]"#)
-            .unwrap();
+        db.set_session_meta(
+            LEGACY_SESSION_META_SCHED_INDEX_KEY,
+            r#"["cron-old-1", "cron-old-2"]"#,
+        )
+        .unwrap();
         // 新系统写入 sched_index
         db.set_session_meta(SESSION_META_SCHED_INDEX_KEY, r#"["cron-new-1"]"#)
             .unwrap();
@@ -2809,7 +2897,11 @@ mod tests {
 
         // load_all 触发自动合并
         let all = store.load_all();
-        assert_eq!(all.len(), 3, "存量 sched_ids 与新 sched_index 必须无缝聚合！");
+        assert_eq!(
+            all.len(),
+            3,
+            "存量 sched_ids 与新 sched_index 必须无缝聚合！"
+        );
 
         // 校验 sched_index 已经自愈包含全部 3 个 ID
         let converged_index: Vec<String> = serde_json::from_str(
@@ -3040,7 +3132,11 @@ mod tests {
         .await;
 
         let emitted = events.emitted.lock().unwrap();
-        assert_eq!(emitted.len(), 1, "离线过期任务恰好补发一次，幂等守卫防重复生效！");
+        assert_eq!(
+            emitted.len(),
+            1,
+            "离线过期任务恰好补发一次，幂等守卫防重复生效！"
+        );
         let persisted = store.load_all();
         assert_eq!(persisted[0].fired_count, 1);
         assert_eq!(persisted[0].status, CronTaskStatus::Completed);
@@ -3076,9 +3172,9 @@ mod tests {
             } else {
                 Ok(ScheduledRunHandle {
                     run_id: ctx.run_id,
-                    session_id: ctx
-                        .target_session_id
-                        .unwrap_or_else(|| format!("sched-run-{}-{}", ctx.cron_id, ctx.fired_at_ms)),
+                    session_id: ctx.target_session_id.unwrap_or_else(|| {
+                        format!("sched-run-{}-{}", ctx.cron_id, ctx.fired_at_ms)
+                    }),
                     async_terminal_managed: false,
                     immediate_output_summary: Some("自动调度执行完成".to_string()),
                 })
@@ -3246,15 +3342,18 @@ mod tests {
 
         let events_cond2 = Arc::clone(&events);
         let pending_cond2 = Arc::clone(&pending);
-        wait_until("未绑定任务触发并写入 steering 队列", move || {
-            events_cond2
-                .emitted
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .len()
-                == 2
-                && queue_len(&pending_cond2) == 1
-        })
+        wait_until(
+            "未绑定任务触发并写入 steering 队列",
+            move || {
+                events_cond2
+                    .emitted
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .len()
+                    == 2
+                    && queue_len(&pending_cond2) == 1
+            },
+        )
         .await;
 
         let unbound_entries = snapshot_queue(&pending);

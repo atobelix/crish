@@ -6,12 +6,12 @@
 //! - `workbench_stop_mcp_server`：停止 MCP 服务子进程并清理会话
 //! - `workbench_toggle_mcp_tool`：细粒度开关工具，同步持久化配置
 
-use std::collections::HashMap;
-use std::sync::Arc;
 use agent_tools::mcp::servers::{LocalFileMcpPersistence, McpConfigPersistence, McpTransport};
 use agent_tools::mcp::McpServerRuntimeState;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::Arc;
 use tauri::State;
 
 use crate::core_run_commands::CoreRunState;
@@ -280,17 +280,26 @@ pub async fn workbench_toggle_mcp_tool(
         .find(|c| c.server_id == server_id)
         .ok_or_else(|| format!("未找到 MCP 服务配置: {}", server_id))?;
 
-    let short_name = tool_name.split("__").last().unwrap_or(&tool_name).to_string();
+    let short_name = tool_name
+        .split("__")
+        .last()
+        .unwrap_or(&tool_name)
+        .to_string();
 
     if enabled {
-        config.disabled_tools.retain(|t| t != &tool_name && t != &short_name);
+        config
+            .disabled_tools
+            .retain(|t| t != &tool_name && t != &short_name);
     } else {
         if !config.disabled_tools.contains(&short_name) {
             config.disabled_tools.push(short_name);
         }
     }
 
-    persistence.save(&configs).await.map_err(|e| e.to_string())?;
+    persistence
+        .save(&configs)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(true)
 }
 

@@ -151,7 +151,6 @@ pub(crate) async fn retract_impl(
     })
 }
 
-
 /// 撤回错误 → CoreError 映射（fail-closed 语义透传）
 fn map_retraction_err(err: RetractionError) -> CoreError {
     match err {
@@ -210,7 +209,10 @@ impl ShellRetractionBackend {
         let deadline = Instant::now() + Duration::from_millis(CONVERGE_TIMEOUT_MS);
         loop {
             // 收集该会话下所有活跃 run 的句柄（MutexGuard 不跨 await 持有）
-            let active_handles: Vec<(String, Arc<tokio::sync::Mutex<orchestrator::run::RunHandle>>)> = {
+            let active_handles: Vec<(
+                String,
+                Arc<tokio::sync::Mutex<orchestrator::run::RunHandle>>,
+            )> = {
                 let active = self
                     .state
                     .active_runs
@@ -316,7 +318,6 @@ impl RetractionBackend for ShellRetractionBackend {
     ) -> Result<(), RetractionError> {
         self.wait_all_converged(session_id).await
     }
-
 
     async fn prepare_rollback_plan(
         &self,

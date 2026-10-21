@@ -620,7 +620,12 @@ impl PushDecisionEngine {
         }
     }
 
-    fn record_run_term_source(&mut self, run_id: String, source: RunTerminationSource, now_ms: u64) {
+    fn record_run_term_source(
+        &mut self,
+        run_id: String,
+        source: RunTerminationSource,
+        now_ms: u64,
+    ) {
         self.prune_run_term_sources(now_ms);
         if !self.run_term_source.contains_key(&run_id) {
             while self.run_term_source.len() >= MAX_TRACKED_RUN_SOURCES {

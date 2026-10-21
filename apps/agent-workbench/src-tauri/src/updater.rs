@@ -75,7 +75,10 @@ pub(crate) async fn workbench_check_update<R: Runtime>(
                 "notes": update.body,
                 "target": update.target,
             });
-            *session.pending.lock().expect("updater session pending lock") = Some(update);
+            *session
+                .pending
+                .lock()
+                .expect("updater session pending lock") = Some(update);
             Ok(out)
         }
         None => {
@@ -115,7 +118,10 @@ pub(crate) async fn workbench_download_update<R: Runtime>(
         .await
         .map_err(map_updater_err)?;
     let out = json!({ "ok": true, "version": update.version, "size": bytes.len() });
-    *session.downloaded.lock().expect("updater session downloaded lock") = Some((update, bytes));
+    *session
+        .downloaded
+        .lock()
+        .expect("updater session downloaded lock") = Some((update, bytes));
     Ok(out)
 }
 
@@ -146,7 +152,9 @@ pub(crate) async fn workbench_install_update<R: Runtime>(
 
 /// 重启应用（新版本安装后；Windows 安装器路径通常无需显式调用）。
 #[tauri::command]
-pub(crate) async fn workbench_restart_app<R: Runtime>(app: AppHandle<R>) -> Result<Value, CoreError> {
+pub(crate) async fn workbench_restart_app<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<Value, CoreError> {
     // `AppHandle::restart()` 发散（进程退出），`!` 协变为 Result；
     // 正常情况下此调用不返回。
     Ok(app.restart())
@@ -156,7 +164,9 @@ pub(crate) async fn workbench_restart_app<R: Runtime>(app: AppHandle<R>) -> Resu
 /// 任一步失败即 `Err`（前端可见，不再恒 `{ok:true}`）；通道无新版本时返回
 /// `{ok:false, available:false}`。成功路径进程随安装/重启退出，应答不再送达。
 #[tauri::command]
-pub(crate) async fn workbench_apply_update<R: Runtime>(app: AppHandle<R>) -> Result<Value, CoreError> {
+pub(crate) async fn workbench_apply_update<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<Value, CoreError> {
     let updater = app.updater().map_err(map_updater_err)?;
     let update = match updater.check().await.map_err(map_updater_err)? {
         Some(update) => update,
@@ -222,14 +232,8 @@ mod tests {
     /// 返回 (pubkey_b64[tauri conf 口径], signature_b64[latest.json 口径])。
     fn sign_payload_with(sk: &minisign::SecretKey, pk: Option<&minisign::PublicKey>) -> String {
         let trusted = format!("signature file:crish-{MOCK_VERSION}.zip");
-        let sig_box = minisign::sign(
-            pk,
-            sk,
-            MOCK_PAYLOAD,
-            Some(trusted.as_str()),
-            None,
-        )
-        .expect("minisign sign mock payload");
+        let sig_box = minisign::sign(pk, sk, MOCK_PAYLOAD, Some(trusted.as_str()), None)
+            .expect("minisign sign mock payload");
         base64::engine::general_purpose::STANDARD.encode(String::from(sig_box).as_bytes())
     }
 
@@ -451,9 +455,13 @@ mod tests {
         assert_eq!(with_update["available"], true);
         assert!(with_update.get("version").is_some());
 
-        let without_update = json!({ "status": "upToDate", "available": false, "currentVersion": "0.1.0" });
+        let without_update =
+            json!({ "status": "upToDate", "available": false, "currentVersion": "0.1.0" });
         assert_eq!(without_update["status"], "upToDate");
         assert_eq!(without_update["available"], false);
-        assert!(without_update.get("version").is_none(), "无更新时严禁带 version 字段（防前端误判）");
+        assert!(
+            without_update.get("version").is_none(),
+            "无更新时严禁带 version 字段（防前端误判）"
+        );
     }
 }

@@ -106,7 +106,6 @@ pub(crate) fn perf_encoding_decode(
     decode_to_utf8(&data, encoding.as_deref())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -135,6 +135,7 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("workbench_read_file_content", "workbench", "gui", true),
         entry("workbench_write_file_content", "workbench", "gui", true),
         entry("workbench_discover_skills", "workbench", "gui", true),
+        entry("workbench_mutate_owned_skill", "workbench", "gui", true),
         // workbench_http_request 已退役（唯一调用点在 Rust `#[cfg(test)]` 内）
         // 自动更新链路（RUN-03/SEC-02/GAP-01：apply 一次编排 + 检查/下载/安装/重启
         // 四段命令；实现面 src/updater.rs，与前端 commandManifest.ts 镜像同步）
@@ -366,12 +367,12 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 146,
-            "总数 142（单轨收敛后 135；b6 +1；snap +1；prefs +1；BC11 MCP 4命令 +4；与前端 commandMap 同步）"
+            total, 147,
+            "总数 146；技能副本写入 workbench_mutate_owned_skill 追加后 147"
         );
         assert_eq!(
-            registered, 146,
-            "注册面 142（全部为 registered=true 实装命令）"
+            registered, 147,
+            "注册面 147（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");
     }
@@ -645,9 +646,9 @@ mod tests {
             compact.registered,
             "core_compact_now 已接线应 registered=true"
         );
-        let title = by_name.get("core_generate_session_title").unwrap_or_else(|| {
-            panic!("core_generate_session_title 必须登记 manifest（b6）")
-        });
+        let title = by_name
+            .get("core_generate_session_title")
+            .unwrap_or_else(|| panic!("core_generate_session_title 必须登记 manifest（b6）"));
         assert_eq!(title.family, "core");
         assert_eq!(title.surface, "engine");
         assert!(

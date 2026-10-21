@@ -228,7 +228,9 @@ fn copy_dir_recursive(
         let entry = entry.map_err(|e| format!("遍历 {rel_prefix} 失败: {e}"))?;
         let name = entry.file_name().to_string_lossy().into_owned();
         let rel = format!("{rel_prefix}/{name}");
-        let ty = entry.file_type().map_err(|e| format!("stat {rel} 失败: {e}"))?;
+        let ty = entry
+            .file_type()
+            .map_err(|e| format!("stat {rel} 失败: {e}"))?;
         if ty.is_dir() {
             copy_dir_recursive(&entry.path(), &dst.join(&name), &rel, copied)?;
         } else {
@@ -277,7 +279,10 @@ mod tests {
 
         match &result {
             LegacyMigration::Migrated { files } => {
-                assert!(files.contains(&"sessions.db".to_string()), "files={files:?}");
+                assert!(
+                    files.contains(&"sessions.db".to_string()),
+                    "files={files:?}"
+                );
                 assert!(
                     files.contains(&"sessions.db-wal".to_string()),
                     "WAL 应一并迁移（否则库可能损坏），files={files:?}"
@@ -285,12 +290,18 @@ mod tests {
             }
             other => panic!("应迁移成功，实际 {other:?}"),
         }
-        assert_eq!(std::fs::read(current.join("sessions.db")).unwrap(), b"old-db");
+        assert_eq!(
+            std::fs::read(current.join("sessions.db")).unwrap(),
+            b"old-db"
+        );
         assert_eq!(
             std::fs::read(current.join(".agent-outputs/s1/out.txt")).unwrap(),
             b"data"
         );
-        assert_eq!(std::fs::read(current.join("auth/token.json")).unwrap(), b"t");
+        assert_eq!(
+            std::fs::read(current.join("auth/token.json")).unwrap(),
+            b"t"
+        );
         assert!(
             current.join(LEGACY_MIGRATION_MARKER).exists(),
             "迁移标记应落盘"
@@ -347,12 +358,18 @@ mod tests {
             LegacyMigration::Failed { reason } => reason.clone(),
             other => panic!("应迁移失败，实际 {other:?}"),
         };
-        assert!(reason.contains("orchestrator-snapshot.json"), "reason={reason}");
+        assert!(
+            reason.contains("orchestrator-snapshot.json"),
+            "reason={reason}"
+        );
         // 半成品清理：目标库文件不留残骸（防下次误判已迁移打开坏库）
         assert!(!current.join("sessions.db").exists());
         assert!(!current.join(LEGACY_MIGRATION_MARKER).exists());
         // 原数据完好
-        assert_eq!(std::fs::read(legacy.join("sessions.db")).unwrap(), b"old-db");
+        assert_eq!(
+            std::fs::read(legacy.join("sessions.db")).unwrap(),
+            b"old-db"
+        );
 
         // 修复源（移除冲突制造物）后重试成功
         std::fs::remove_dir_all(current.join("orchestrator-snapshot.json")).unwrap();
@@ -360,7 +377,10 @@ mod tests {
             migrate_legacy_data(&legacy, &current),
             LegacyMigration::Migrated { .. }
         ));
-        assert_eq!(std::fs::read(current.join("sessions.db")).unwrap(), b"old-db");
+        assert_eq!(
+            std::fs::read(current.join("sessions.db")).unwrap(),
+            b"old-db"
+        );
     }
 
     /// 无旧库 / 同目录 / 空旧目录：Skipped，不产生副作用

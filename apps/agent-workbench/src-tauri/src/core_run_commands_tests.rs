@@ -4292,7 +4292,6 @@ fn drain_timer_steering_carries_trigger_source() {
     );
 }
 
-
 /// 测试 1：验证 run_task 传入 context_state 时，用户消息正文正确格式化为 [用户输入]\n...\n\n[系统环境上下文]\n...
 #[tokio::test]
 async fn run_task_with_context_state_formats_envelope_prompt() {
@@ -4304,7 +4303,10 @@ async fn run_task_with_context_state_formats_envelope_prompt() {
     state.run_restore().await;
 
     let mut options = test_options("run-cs-1", "s1", "分析这个报错");
-    options.context_state = Some("当前已切换到模型 ornith:latest（服务商 ollama）。权限模式：full。思考档位：Max。".to_string());
+    options.context_state = Some(
+        "当前已切换到模型 ornith:latest（服务商 ollama）。权限模式：full。思考档位：Max。"
+            .to_string(),
+    );
 
     run_task_impl(Arc::clone(&state), options)
         .await
@@ -4322,7 +4324,11 @@ async fn run_task_with_context_state_formats_envelope_prompt() {
         .expect("必须包含 User 消息");
 
     let expected = "[用户输入]\n分析这个报错\n\n[系统环境上下文]\n当前已切换到模型 ornith:latest（服务商 ollama）。权限模式：full。思考档位：Max。";
-    assert_eq!(user_msg.text(), expected, "用户消息正文必须包含标准信封合体格式");
+    assert_eq!(
+        user_msg.text(),
+        expected,
+        "用户消息正文必须包含标准信封合体格式"
+    );
 }
 
 /// 测试 2：验证 run_task 完成后，state.pending_queue 保持为空，不会触发 decide_idle_resume 生成新的 Run
@@ -4336,7 +4342,10 @@ async fn run_task_with_context_state_leaves_pending_queue_empty_and_no_idle_resu
     state.run_restore().await;
 
     let mut options = test_options("run-cs-2", "s1", "帮我查一下文件");
-    options.context_state = Some("当前已切换到模型 ornith:latest（服务商 ollama）。权限模式：full。思考档位：Max。".to_string());
+    options.context_state = Some(
+        "当前已切换到模型 ornith:latest（服务商 ollama）。权限模式：full。思考档位：Max。"
+            .to_string(),
+    );
 
     run_task_impl(Arc::clone(&state), options)
         .await
@@ -4350,7 +4359,10 @@ async fn run_task_with_context_state_leaves_pending_queue_empty_and_no_idle_resu
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .len();
-    assert_eq!(queue_len, 0, "run_task 完成后 pending_queue 必须保持为空，严禁排队 context_state");
+    assert_eq!(
+        queue_len, 0,
+        "run_task 完成后 pending_queue 必须保持为空，严禁排队 context_state"
+    );
 
     // 2. 断言 decide_idle_resume 返回 None，绝不因 context_state 触发二次唤醒
     let active = build_active_run(&state, "s1", "run-cs-2").await;
@@ -9136,12 +9148,8 @@ async fn watcher_concurrent_double_launch_only_one_run_e2e() {
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .enqueue(
-            SteeringInputEntry::steering(
-                "timer-e2e",
-                "提醒喝水（定时器 t-e2e 已到期）",
-                1_000_000,
-            )
-            .with_session("s1"),
+            SteeringInputEntry::steering("timer-e2e", "提醒喝水（定时器 t-e2e 已到期）", 1_000_000)
+                .with_session("s1"),
         );
     // 并发双拉：watcher tick（真实实例，has_active_run 短路）+ 收口
     // 判定同款 spawn_idle_resume_run（run_task_impl 串行守卫拒绝后发者）
@@ -9262,12 +9270,8 @@ async fn watcher_min_launch_interval_blocks_retick_e2e() {
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .enqueue(
-            SteeringInputEntry::steering(
-                "timer-min",
-                "提醒喝水（定时器 t-min 已到期）",
-                1_000_000,
-            )
-            .with_session("s1"),
+            SteeringInputEntry::steering("timer-min", "提醒喝水（定时器 t-min 已到期）", 1_000_000)
+                .with_session("s1"),
         );
     watcher.tick().await;
     // 拉起轮收口 → 收口判定 drain → 注入轮（条目消费）→ AI 休眠
@@ -9454,12 +9458,8 @@ async fn watcher_user_stopped_blocks_then_user_run_resumes_e2e() {
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .enqueue(
-            SteeringInputEntry::steering(
-                "timer-resume",
-                "恢复后的到期提醒",
-                1_000_002,
-            )
-            .with_session("s1"),
+            SteeringInputEntry::steering("timer-resume", "恢复后的到期提醒", 1_000_002)
+                .with_session("s1"),
         );
     let before = provider.call_count();
     watcher.tick().await;

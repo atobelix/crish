@@ -360,10 +360,7 @@ pub fn render_night_summary_copy(summary: &NightSummary) -> CopyText {
 }
 
 /// 针对夜间折叠摘要渲染多语言标题与正文
-pub fn render_night_summary_with_locale(
-    summary: &NightSummary,
-    locale: Option<&str>,
-) -> CopyText {
+pub fn render_night_summary_with_locale(summary: &NightSummary, locale: Option<&str>) -> CopyText {
     let is_en = is_english(locale);
     let title = if is_en {
         "Nighttime Summary".to_string()
@@ -373,11 +370,7 @@ pub fn render_night_summary_with_locale(
 
     let body = if is_en {
         let total = summary.total;
-        let clauses: Vec<String> = summary
-            .groups
-            .iter()
-            .map(night_group_clause_en)
-            .collect();
+        let clauses: Vec<String> = summary.groups.iter().map(night_group_clause_en).collect();
         let mut text = if total == 1 {
             "1 item completed during quiet hours".to_string()
         } else {
@@ -392,11 +385,7 @@ pub fn render_night_summary_with_locale(
         summary.body.clone()
     } else {
         let total = summary.total;
-        let clauses: Vec<String> = summary
-            .groups
-            .iter()
-            .map(night_group_clause_zh)
-            .collect();
+        let clauses: Vec<String> = summary.groups.iter().map(night_group_clause_zh).collect();
         let mut text = format!("夜间完成 {total} 项");
         if !clauses.is_empty() {
             text.push('：');
@@ -409,61 +398,76 @@ pub fn render_night_summary_with_locale(
 }
 
 /// 为特定目标设备渲染夜间折叠摘要
-pub fn render_night_summary_for_device(
-    summary: &NightSummary,
-    device: &VendorDevice,
-) -> CopyText {
+pub fn render_night_summary_for_device(summary: &NightSummary, device: &VendorDevice) -> CopyText {
     render_night_summary_with_locale(summary, device.preferred_language.as_deref())
 }
 
 fn night_group_clause_en(group: &NightSummaryGroup) -> String {
     let n = group.count;
     match group.scene {
-        SceneId::RunCompleted => if n == 1 {
-            format!("Run {} completed", group.first_biz_key)
-        } else {
-            format!("{n} runs completed")
-        },
-        SceneId::RunCancelled => if n == 1 {
-            format!("Run {} cancelled", group.first_biz_key)
-        } else {
-            format!("{n} runs cancelled")
-        },
-        SceneId::SubagentCompleted => if n == 1 {
-            format!("Subagent {} completed", group.first_biz_key)
-        } else {
-            format!("{n} subagents completed")
-        },
-        SceneId::TaskCompleted => if n == 1 {
-            format!("Task {} completed", group.first_biz_key)
-        } else {
-            format!("{n} tasks completed")
-        },
-        SceneId::TaskKilled => if n == 1 {
-            format!("Task {} terminated", group.first_biz_key)
-        } else {
-            format!("{n} tasks terminated")
-        },
-        SceneId::TaskFailed => if n == 1 {
-            format!("Task {} failed", group.first_biz_key)
-        } else {
-            format!("{n} tasks failed")
-        },
-        SceneId::TaskSuspicious => if n == 1 {
-            format!("Task {} suspected stalled", group.first_biz_key)
-        } else {
-            format!("{n} tasks suspected stalled")
-        },
-        SceneId::TimerFired => if n == 1 {
-            format!("Timer {} expired", group.first_biz_key)
-        } else {
-            format!("{n} timers expired")
-        },
-        SceneId::CronFired => if n == 1 {
-            format!("{} triggered 1 time", group.first_biz_key)
-        } else {
-            format!("{} triggered {n} times", group.first_biz_key)
-        },
+        SceneId::RunCompleted => {
+            if n == 1 {
+                format!("Run {} completed", group.first_biz_key)
+            } else {
+                format!("{n} runs completed")
+            }
+        }
+        SceneId::RunCancelled => {
+            if n == 1 {
+                format!("Run {} cancelled", group.first_biz_key)
+            } else {
+                format!("{n} runs cancelled")
+            }
+        }
+        SceneId::SubagentCompleted => {
+            if n == 1 {
+                format!("Subagent {} completed", group.first_biz_key)
+            } else {
+                format!("{n} subagents completed")
+            }
+        }
+        SceneId::TaskCompleted => {
+            if n == 1 {
+                format!("Task {} completed", group.first_biz_key)
+            } else {
+                format!("{n} tasks completed")
+            }
+        }
+        SceneId::TaskKilled => {
+            if n == 1 {
+                format!("Task {} terminated", group.first_biz_key)
+            } else {
+                format!("{n} tasks terminated")
+            }
+        }
+        SceneId::TaskFailed => {
+            if n == 1 {
+                format!("Task {} failed", group.first_biz_key)
+            } else {
+                format!("{n} tasks failed")
+            }
+        }
+        SceneId::TaskSuspicious => {
+            if n == 1 {
+                format!("Task {} suspected stalled", group.first_biz_key)
+            } else {
+                format!("{n} tasks suspected stalled")
+            }
+        }
+        SceneId::TimerFired => {
+            if n == 1 {
+                format!("Timer {} expired", group.first_biz_key)
+            } else {
+                format!("{n} timers expired")
+            }
+        }
+        SceneId::CronFired => {
+            if n == 1 {
+                format!("{} triggered 1 time", group.first_biz_key)
+            } else {
+                format!("{} triggered {n} times", group.first_biz_key)
+            }
+        }
         _ => format!("{} ×{n}", group.scene.as_str()),
     }
 }
@@ -471,46 +475,62 @@ fn night_group_clause_en(group: &NightSummaryGroup) -> String {
 fn night_group_clause_zh(group: &NightSummaryGroup) -> String {
     let n = group.count;
     match group.scene {
-        SceneId::RunCompleted => if n == 1 {
-            format!("任务 {} 已完成", group.first_biz_key)
-        } else {
-            format!("任务完成 ×{n}")
-        },
-        SceneId::RunCancelled => if n == 1 {
-            format!("任务 {} 已取消", group.first_biz_key)
-        } else {
-            format!("任务取消 ×{n}")
-        },
-        SceneId::SubagentCompleted => if n == 1 {
-            format!("子代理 {} 完成", group.first_biz_key)
-        } else {
-            format!("子代理完成 ×{n}")
-        },
-        SceneId::TaskCompleted => if n == 1 {
-            format!("任务 {} 已完成", group.first_biz_key)
-        } else {
-            format!("任务完成 ×{n}")
-        },
-        SceneId::TaskKilled => if n == 1 {
-            format!("任务 {} 已被终止", group.first_biz_key)
-        } else {
-            format!("任务终止 ×{n}")
-        },
-        SceneId::TaskFailed => if n == 1 {
-            format!("任务 {} 失败", group.first_biz_key)
-        } else {
-            format!("任务失败 ×{n}")
-        },
-        SceneId::TaskSuspicious => if n == 1 {
-            format!("任务 {} 疑似卡死", group.first_biz_key)
-        } else {
-            format!("任务疑似卡死 ×{n}")
-        },
-        SceneId::TimerFired => if n == 1 {
-            format!("定时器 {} 已到期", group.first_biz_key)
-        } else {
-            format!("定时器到期 ×{n}")
-        },
+        SceneId::RunCompleted => {
+            if n == 1 {
+                format!("任务 {} 已完成", group.first_biz_key)
+            } else {
+                format!("任务完成 ×{n}")
+            }
+        }
+        SceneId::RunCancelled => {
+            if n == 1 {
+                format!("任务 {} 已取消", group.first_biz_key)
+            } else {
+                format!("任务取消 ×{n}")
+            }
+        }
+        SceneId::SubagentCompleted => {
+            if n == 1 {
+                format!("子代理 {} 完成", group.first_biz_key)
+            } else {
+                format!("子代理完成 ×{n}")
+            }
+        }
+        SceneId::TaskCompleted => {
+            if n == 1 {
+                format!("任务 {} 已完成", group.first_biz_key)
+            } else {
+                format!("任务完成 ×{n}")
+            }
+        }
+        SceneId::TaskKilled => {
+            if n == 1 {
+                format!("任务 {} 已被终止", group.first_biz_key)
+            } else {
+                format!("任务终止 ×{n}")
+            }
+        }
+        SceneId::TaskFailed => {
+            if n == 1 {
+                format!("任务 {} 失败", group.first_biz_key)
+            } else {
+                format!("任务失败 ×{n}")
+            }
+        }
+        SceneId::TaskSuspicious => {
+            if n == 1 {
+                format!("任务 {} 疑似卡死", group.first_biz_key)
+            } else {
+                format!("任务疑似卡死 ×{n}")
+            }
+        }
+        SceneId::TimerFired => {
+            if n == 1 {
+                format!("定时器 {} 已到期", group.first_biz_key)
+            } else {
+                format!("定时器到期 ×{n}")
+            }
+        }
         SceneId::CronFired => format!("{} 触发 {n} 次", group.first_biz_key),
         _ => format!("{} ×{n}", group.scene.as_str()),
     }
@@ -546,7 +566,13 @@ pub fn message_with_copy_for_device(
     now_ms: u64,
     device: &VendorDevice,
 ) -> PushMessage {
-    message_with_copy_locale(decision, id, seq, now_ms, device.preferred_language.as_deref())
+    message_with_copy_locale(
+        decision,
+        id,
+        seq,
+        now_ms,
+        device.preferred_language.as_deref(),
+    )
 }
 
 #[cfg(test)]
@@ -850,7 +876,8 @@ mod tests {
         title: &str,
         body: &str,
     ) {
-        let copy = render_copy_with_locale(scene, &payload("run-42", digest, detail), Some("en-US"));
+        let copy =
+            render_copy_with_locale(scene, &payload("run-42", digest, detail), Some("en-US"));
         assert_eq!(copy.title, title, "场景 {scene:?} 英文标题");
         assert_eq!(copy.body, body, "场景 {scene:?} 英文正文");
     }
@@ -928,7 +955,10 @@ mod tests {
             Some("en-US"),
         );
         assert_eq!(copy.title, "Subagent Failed");
-        assert_eq!(copy.body, "Subagent (sa-4) failed - Tool execution timed out");
+        assert_eq!(
+            copy.body,
+            "Subagent (sa-4) failed - Tool execution timed out"
+        );
 
         // summary 缺失
         let copy = render_copy_with_locale(
@@ -962,7 +992,10 @@ mod tests {
             Some("en-US"),
         );
         assert_eq!(copy.title, "Task Suspected Stalled");
-        assert_eq!(copy.body, "Task t-12 suspected stalled (no output for 120s)");
+        assert_eq!(
+            copy.body,
+            "Task t-12 suspected stalled (no output for 120s)"
+        );
 
         assert_copy_en(
             SceneId::TaskFailed,
@@ -1052,7 +1085,11 @@ mod tests {
                 &payload("tc-1", Some(wire), None),
                 Some("en-US"),
             );
-            assert_eq!(copy.body, format!("Blocked {expected} operation"), "操作 {wire}");
+            assert_eq!(
+                copy.body,
+                format!("Blocked {expected} operation"),
+                "操作 {wire}"
+            );
         }
         // 未知操作：保留原串
         let copy = render_copy_with_locale(
@@ -1106,10 +1143,18 @@ mod tests {
             (SceneId::TaskStarted, Some("npm run build"), None),
             (SceneId::TaskCompleted, None, Some("exit code 0")),
             (SceneId::TaskSuspicious, Some("120"), None),
-            (SceneId::TaskFailed, Some("build error"), Some("exit code 1")),
+            (
+                SceneId::TaskFailed,
+                Some("build error"),
+                Some("exit code 1"),
+            ),
             (SceneId::TaskKilled, None, None),
             (SceneId::TimerFired, Some("Review PR"), None),
-            (SceneId::CronFired, Some("Daily digest"), Some("iteration 3")),
+            (
+                SceneId::CronFired,
+                Some("Daily digest"),
+                Some("iteration 3"),
+            ),
             (SceneId::RuntimeError, Some("provider 5xx"), None),
             (SceneId::InterventionRequired, Some("Missing API key"), None),
             (SceneId::SecurityBlocked, Some("Delete"), None),
@@ -1117,11 +1162,8 @@ mod tests {
         ];
         assert_eq!(cases.len(), 18, "18 个场景登记");
         for (scene, digest, detail) in cases {
-            let copy = render_copy_with_locale(
-                scene,
-                &payload("run-42", digest, detail),
-                Some("en-US"),
-            );
+            let copy =
+                render_copy_with_locale(scene, &payload("run-42", digest, detail), Some("en-US"));
             assert!(!copy.title.is_empty(), "场景 {scene:?} 英文标题非空");
             assert!(
                 !copy.title.contains('<') && !copy.body.contains('<'),
@@ -1137,10 +1179,10 @@ mod tests {
     fn render_copy_for_device_respects_device_preferred_language() {
         use crate::push::vendor::VendorPlatform;
 
-        let en_device = VendorDevice::new("dev-en", "tok-1", VendorPlatform::Ios)
-            .with_language("en-US");
-        let zh_device = VendorDevice::new("dev-zh", "tok-2", VendorPlatform::Android)
-            .with_language("zh-CN");
+        let en_device =
+            VendorDevice::new("dev-en", "tok-1", VendorPlatform::Ios).with_language("en-US");
+        let zh_device =
+            VendorDevice::new("dev-zh", "tok-2", VendorPlatform::Android).with_language("zh-CN");
         let def_device = VendorDevice::new("dev-def", "tok-3", VendorPlatform::Ios);
 
         let p = payload("run-42", None, None);
@@ -1225,8 +1267,8 @@ mod tests {
         );
 
         // 设备渲染
-        let en_device = VendorDevice::new("dev-en", "tok-1", VendorPlatform::Ios)
-            .with_language("en-GB");
+        let en_device =
+            VendorDevice::new("dev-en", "tok-1", VendorPlatform::Ios).with_language("en-GB");
         let copy_dev = render_night_summary_for_device(&single_summary, &en_device);
         assert_eq!(copy_dev.title, "Nighttime Summary");
         assert_eq!(
@@ -1251,14 +1293,16 @@ mod tests {
         };
 
         // 英文 locale
-        let msg_en = message_with_copy_locale(&decision, "push-000002".to_string(), 2, T0, Some("en-US"));
+        let msg_en =
+            message_with_copy_locale(&decision, "push-000002".to_string(), 2, T0, Some("en-US"));
         assert_eq!(msg_en.title.as_deref(), Some("Run Failed"));
         assert_eq!(msg_en.body.as_deref(), Some("run-42: provider 401"));
 
         // 英文 device
-        let en_device = VendorDevice::new("dev-en", "tok-1", VendorPlatform::Ios)
-            .with_language("en-US");
-        let msg_dev = message_with_copy_for_device(&decision, "push-000003".to_string(), 3, T0, &en_device);
+        let en_device =
+            VendorDevice::new("dev-en", "tok-1", VendorPlatform::Ios).with_language("en-US");
+        let msg_dev =
+            message_with_copy_for_device(&decision, "push-000003".to_string(), 3, T0, &en_device);
         assert_eq!(msg_dev.title.as_deref(), Some("Run Failed"));
         assert_eq!(msg_dev.body.as_deref(), Some("run-42: provider 401"));
     }

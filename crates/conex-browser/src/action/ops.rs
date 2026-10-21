@@ -257,12 +257,21 @@ impl NetworkCounter {
                         task_in_flight.fetch_add(1, Ordering::Relaxed);
                     }
                     Ok(BrowserEvent::NetworkDone { .. }) => {
-                        #[allow(deprecated)]
-                        task_in_flight
-                            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
-                                Some(n.saturating_sub(1))
-                            })
-                            .ok();
+                        // fetch_update 在较新 stable 上被 -D warnings 拒绝；
+                        // try_update 在当前 stable 仍未稳定。用比较交换保持同一语义。
+                        let mut current = task_in_flight.load(Ordering::Relaxed);
+                        loop {
+                            let next = current.saturating_sub(1);
+                            match task_in_flight.compare_exchange_weak(
+                                current,
+                                next,
+                                Ordering::Relaxed,
+                                Ordering::Relaxed,
+                            ) {
+                                Ok(_) => break,
+                                Err(observed) => current = observed,
+                            }
+                        }
                     }
                     // 其余事件与本计数面（网络在途数）无关：显式忽略事件体
                     Ok(_other_event) => {}

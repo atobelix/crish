@@ -275,8 +275,9 @@ describe('Tauri command registry', () => {
     // b6：core_generate_session_title 追加后 135 → 136。
     // Win11 贴靠布局热区 workbench_set_snap_overlay_rect 追加后 136 → 137。
     // 2026-10-14 命令面补链：workbench_abort_run + 4 条 MCP 服务管理命令 → 142。
+    // 技能副本写入 workbench_mutate_owned_skill 追加后 142 → 143。
     // 条数与四方集合一致性由 scripts/check-provider-single-track.mjs 的 D11 守护。
-    expect(productCommands).toHaveLength(142);
+    expect(productCommands).toHaveLength(143);
     expect(
       productCommands.every(
         (entry) => commandCapabilityStatus(entry) !== UNSUPPORTED_CODE

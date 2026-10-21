@@ -77,7 +77,12 @@ pub fn is_windows_11() -> bool {
     #[cfg(target_os = "windows")]
     {
         if let Ok(output) = std::process::Command::new("reg")
-            .args(["query", "HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion", "/v", "CurrentBuildNumber"])
+            .args([
+                "query",
+                "HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion",
+                "/v",
+                "CurrentBuildNumber",
+            ])
             .output()
         {
             if output.status.success() {
@@ -157,7 +162,11 @@ pub fn reapply_for_app_theme(window: &WebviewWindow, kind: WindowBackdropKind, i
             }
         }
         WindowBackdropKind::Acrylic => {
-            let tint = if is_dark { ACRYLIC_TINT_DARK } else { ACRYLIC_TINT_LIGHT };
+            let tint = if is_dark {
+                ACRYLIC_TINT_DARK
+            } else {
+                ACRYLIC_TINT_LIGHT
+            };
             let _ = window_vibrancy::apply_acrylic(window, Some(tint));
         }
         WindowBackdropKind::None => {
@@ -231,8 +240,6 @@ pub fn setup_window_backdrop(
         }
     });
 }
-
-
 
 #[cfg(test)]
 mod tests {

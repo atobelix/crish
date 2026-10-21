@@ -202,7 +202,10 @@ pub fn compose_night_summary_with_locale(
         .unwrap_or_default();
 
     // 正文：D7 §3.4.3 样例同构（类型/数量；单条形态带业务键样本）
-    let clauses: Vec<String> = groups.iter().map(|g| summary_group_clause_localized(g, is_en)).collect();
+    let clauses: Vec<String> = groups
+        .iter()
+        .map(|g| summary_group_clause_localized(g, is_en))
+        .collect();
     let mut body = if is_en {
         if total == 1 {
             format!("{total} item completed during quiet hours")
@@ -282,11 +285,13 @@ fn summary_group_clause_localized(group: &NightSummaryGroup, is_en: bool) -> Str
                 &format!("Timer {} expired", group.first_biz_key),
                 &format!("{n} timers expired"),
             ),
-            SceneId::CronFired => if n == 1 {
-                format!("{} triggered 1 time", group.first_biz_key)
-            } else {
-                format!("{} triggered {n} times", group.first_biz_key)
-            },
+            SceneId::CronFired => {
+                if n == 1 {
+                    format!("{} triggered 1 time", group.first_biz_key)
+                } else {
+                    format!("{} triggered {n} times", group.first_biz_key)
+                }
+            }
             _ => format!("{} ×{n}", group.scene.as_str()),
         }
     } else {

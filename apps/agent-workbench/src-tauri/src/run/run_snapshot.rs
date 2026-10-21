@@ -44,8 +44,7 @@ impl CoreRunState {
             let now = now_ms_internal();
             // 目标会话强隔离：子代理 interrupted 通知父会话；
             // 用户显式铁律：主 run 在重启时不隐蔽自动续跑（防止启动时无差别并发拉起数十个历史会话）
-            let (target_session, text) = if record.session_id.starts_with(SUBAGENT_SESSION_PREFIX)
-            {
+            let (target_session, text) = if record.session_id.starts_with(SUBAGENT_SESSION_PREFIX) {
                 match parents.get(&record.run_id) {
                     Some(parent) => (
                         parent.clone(),
@@ -247,10 +246,7 @@ impl CoreRunState {
                 for record in &outcome.sessions {
                     if !record.session_id.starts_with(SUBAGENT_SESSION_PREFIX) {
                         let has_pending = {
-                            let q = self
-                                .pending_queue
-                                .lock()
-                                .unwrap_or_else(|e| e.into_inner());
+                            let q = self.pending_queue.lock().unwrap_or_else(|e| e.into_inner());
                             q.has_pending_for(&record.session_id)
                         };
                         if has_pending {

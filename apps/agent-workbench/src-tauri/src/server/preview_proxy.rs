@@ -290,9 +290,8 @@ fn validate_ipv6(ip: Ipv6Addr, allow_loopback: bool) -> Result<(), &'static str>
     // 检查是否为 IPv4 映射或 IPv4 兼容地址
     let segments = ip.segments();
     let is_ipv4_mapped = matches!(segments, [0, 0, 0, 0, 0, 0xffff, _, _]);
-    let is_ipv4_compat = matches!(segments, [0, 0, 0, 0, 0, 0, _, _])
-        && !ip.is_unspecified()
-        && !ip.is_loopback();
+    let is_ipv4_compat =
+        matches!(segments, [0, 0, 0, 0, 0, 0, _, _]) && !ip.is_unspecified() && !ip.is_loopback();
     if is_ipv4_mapped || is_ipv4_compat {
         let oct = ip.octets();
         let v4 = Ipv4Addr::new(oct[12], oct[13], oct[14], oct[15]);
@@ -331,10 +330,7 @@ fn validate_ipv6(ip: Ipv6Addr, allow_loopback: bool) -> Result<(), &'static str>
 fn validate_host_and_ip(parsed: &url::Url, allow_loopback: bool) -> Result<(), ServerError> {
     let host = parsed.host().ok_or_else(|| {
         tracing::warn!(target: "preview_proxy", "SSRF 保护拦截：目标 URL 缺少主机名");
-        ServerError::protocol(
-            DeviceErrorCode::CmdInvalid,
-            "目标 URL 缺少有效的主机名",
-        )
+        ServerError::protocol(DeviceErrorCode::CmdInvalid, "目标 URL 缺少有效的主机名")
     })?;
 
     let host_str = parsed.host_str().unwrap_or_default();

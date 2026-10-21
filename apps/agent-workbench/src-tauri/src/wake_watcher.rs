@@ -393,13 +393,10 @@ mod tests {
 
     /// 测试条目入队（steering 条目，对齐唤醒源条目形态）
     fn enqueue_entry(queue: &Arc<Mutex<PendingMessageQueue>>) {
-        queue
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .enqueue(
-                SteeringInputEntry::steering("wake-1", "定时器 <t-1> 已到期", 1_000_000)
-                    .with_session("sess-1"),
-            );
+        queue.lock().unwrap_or_else(|e| e.into_inner()).enqueue(
+            SteeringInputEntry::steering("wake-1", "定时器 <t-1> 已到期", 1_000_000)
+                .with_session("sess-1"),
+        );
     }
 
     // ── tick 判定 ────────────────────────────────────────────────
@@ -567,13 +564,10 @@ mod tests {
     async fn watcher_does_not_launch_for_other_session_queue_entry() {
         let (watcher, queue, _, launches, _, _) = test_watcher();
         // 入队 sess-OTHER 的条目
-        queue
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .enqueue(
-                SteeringInputEntry::steering("wake-other", "其他会话通知", 1_000_000)
-                    .with_session("sess-OTHER"),
-            );
+        queue.lock().unwrap_or_else(|e| e.into_inner()).enqueue(
+            SteeringInputEntry::steering("wake-other", "其他会话通知", 1_000_000)
+                .with_session("sess-OTHER"),
+        );
         watcher.tick().await;
         assert_eq!(
             launches.load(Ordering::SeqCst),
@@ -599,10 +593,6 @@ mod tests {
         ));
         enqueue_entry(&queue);
         watcher.tick().await;
-        assert_eq!(
-            launches.load(Ordering::SeqCst),
-            0,
-            "熔断时绝不拉起任何 run"
-        );
+        assert_eq!(launches.load(Ordering::SeqCst), 0, "熔断时绝不拉起任何 run");
     }
 }

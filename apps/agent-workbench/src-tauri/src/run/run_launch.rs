@@ -203,10 +203,7 @@ fn notify_scheduled_run_failed(state: &Arc<CoreRunState>, active: &ActiveRun, me
 }
 
 /// drive_run_loop 正常收口后触发定时任务终态回写（若已由 finalize_failed 消费则自动跳过）
-async fn notify_scheduled_run_terminal_after_drive(
-    state: &Arc<CoreRunState>,
-    active: &ActiveRun,
-) {
+async fn notify_scheduled_run_terminal_after_drive(state: &Arc<CoreRunState>, active: &ActiveRun) {
     let Some((workflow_id, started_at_ms, hook)) = take_scheduled_run_hook(&active.run_id) else {
         return;
     };
@@ -383,16 +380,15 @@ mod tests {
             "workbench-run-event",
             Arc::clone(&emitter) as Arc<dyn crate::core_event_bridge::Emitter>,
         );
-        let snapshots: Arc<dyn SnapshotStore> = Arc::new(SnapshotFileStore::new(
-            std::env::temp_dir().join(format!(
+        let snapshots: Arc<dyn SnapshotStore> =
+            Arc::new(SnapshotFileStore::new(std::env::temp_dir().join(format!(
                 "conex_launch_guard_{}_{}_snapshot.json",
                 std::process::id(),
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_nanos()
-            )),
-        ));
+            ))));
         Arc::new(CoreRunState::new(
             Arc::new(InMemoryStore::new()),
             snapshots,
@@ -415,11 +411,7 @@ mod tests {
             "launching 占位存在期间同会话第二次启动必须被拒（TOCTOU 闭合语义）"
         );
         assert!(
-            state
-                .assembling_sessions
-                .lock()
-                .unwrap()
-                .contains("sess-a"),
+            state.assembling_sessions.lock().unwrap().contains("sess-a"),
             "被拒请求不得清除既有占位"
         );
         let _other = acquire_launch_slot(&state, "sess-b").expect("其他会话不受占位影响");
@@ -435,11 +427,7 @@ mod tests {
             // 模拟早退路径：guard 在此 drop
         }
         assert!(
-            !state
-                .assembling_sessions
-                .lock()
-                .unwrap()
-                .contains("sess-a"),
+            !state.assembling_sessions.lock().unwrap().contains("sess-a"),
             "守卫 drop 必须无条件清理占位"
         );
         let again = acquire_launch_slot(&state, "sess-a");
@@ -509,11 +497,7 @@ mod tests {
             "active_runs 已有同会话活动 run 时启动必须被拒（既有守卫语义）"
         );
         assert!(
-            !state
-                .assembling_sessions
-                .lock()
-                .unwrap()
-                .contains("sess-a"),
+            !state.assembling_sessions.lock().unwrap().contains("sess-a"),
             "拒绝路径不得残留装配期占位"
         );
     }
@@ -683,13 +667,7 @@ pub(crate) fn assemble_browser_estop(
 pub(crate) fn is_user_initiated_mode(mode: Option<&str>) -> bool {
     !matches!(
         mode,
-        Some(
-            "idle-resume"
-                | "recovery-retry"
-                | "content-resume"
-                | "goal-continue"
-                | "scheduled"
-        )
+        Some("idle-resume" | "recovery-retry" | "content-resume" | "goal-continue" | "scheduled")
     )
 }
 
@@ -1169,7 +1147,10 @@ pub(crate) async fn run_task_impl(
     // 上下文信封融合：当 context_state 存在时，与 prompt 合体，当次生效，0 额外 Turn，严禁入 pending_queue！
     let effective_prompt = match (
         prompt.as_deref().map(str::trim).filter(|s| !s.is_empty()),
-        context_state.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+        context_state
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty()),
     ) {
         (Some(p), Some(cs)) => {
             if p.contains("[用户输入]") && p.contains("[系统环境上下文]") {

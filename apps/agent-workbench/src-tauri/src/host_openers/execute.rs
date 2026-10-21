@@ -195,8 +195,9 @@ fn open_with_shortcut(
 
     #[cfg(windows)]
     {
-        let lnk = crate::host_openers::discovery::trusted_start_menu_shortcut_path(Path::new(lnk_path))
-            .ok_or_else(|| {
+        let lnk =
+            crate::host_openers::discovery::trusted_start_menu_shortcut_path(Path::new(lnk_path))
+                .ok_or_else(|| {
                 to_core_error(host_opener_error(
                     "PermissionDenied",
                     "Shortcut must resolve to a .lnk inside a Start Menu Programs folder.",

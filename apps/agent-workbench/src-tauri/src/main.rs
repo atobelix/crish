@@ -95,8 +95,8 @@ mod session_title_commands;
 mod single_instance;
 mod status_diagnostics;
 // ACT-101 / CON-01：原生窗口隐式创建 + 首绘握手唤醒（Stage 1）
-mod window_handshake;
 mod window_backdrop;
+mod window_handshake;
 // Win11 贴靠布局（Snap Layouts）：最大化按钮上的原生 HTMAXBUTTON 热区
 mod window_snap_overlay;
 // ACT-102：双 SQLite 并发装配（spawn_blocking + async 汇聚）
@@ -257,11 +257,21 @@ command_registry![
         "workbench_discover_skills",
         fs_commands::workbench_discover_skills
     ),
+    (
+        "workbench_mutate_owned_skill",
+        fs_commands::workbench_mutate_owned_skill
+    ),
     // ── 自动更新链路（RUN-03/SEC-02/GAP-01：真实 updater，替代恒 {ok:true} stub）──
     ("workbench_apply_update", updater::workbench_apply_update),
     ("workbench_check_update", updater::workbench_check_update),
-    ("workbench_download_update", updater::workbench_download_update),
-    ("workbench_install_update", updater::workbench_install_update),
+    (
+        "workbench_download_update",
+        updater::workbench_download_update
+    ),
+    (
+        "workbench_install_update",
+        updater::workbench_install_update
+    ),
     ("workbench_restart_app", updater::workbench_restart_app),
     // ── 凭据事务：模型配置与活动选择只由 models 命令提交 ──
     ("config_secret_set", config::config_secret_set),
@@ -323,7 +333,10 @@ command_registry![
     ),
     ("core_cancel_run", core_run_commands::core_cancel_run),
     // 会话级 Tier-2 中止（前端级联取消总线；desktopNativeFeatures 契约命名）
-    ("workbench_abort_run", core_run_commands::workbench_abort_run),
+    (
+        "workbench_abort_run",
+        core_run_commands::workbench_abort_run
+    ),
     ("core_approve_tool", core_run_commands::core_approve_tool),
     ("core_deny_tool", core_run_commands::core_deny_tool),
     // ── 多端互通配对面（R1-07：四件套）──

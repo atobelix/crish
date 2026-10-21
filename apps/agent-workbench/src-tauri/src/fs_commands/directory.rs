@@ -36,7 +36,9 @@ pub(crate) fn list_directory_with_guard(
     list_directory_entries(&dir_path)
 }
 
-fn list_directory_entries(dir_path: &std::path::Path) -> Result<ListDirectoryResult, FileCommandError> {
+fn list_directory_entries(
+    dir_path: &std::path::Path,
+) -> Result<ListDirectoryResult, FileCommandError> {
     if !dir_path.is_dir() {
         return Err(FileCommandError::new(
             ERR_NOT_DIRECTORY,
