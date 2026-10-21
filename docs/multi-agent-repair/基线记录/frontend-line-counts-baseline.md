@@ -172,7 +172,7 @@ apps/crish-desktop/src/components/sidebar/ContextMenuFlyout.tsx 446
 apps/crish-desktop/src/components/sidebar/session-list/useSessionListDrag.ts 601
 apps/crish-desktop/src/components/ui/PreviewCard/PreviewCard.tsx 680
 apps/crish-desktop/src/components/ui/ScrollArea/ScrollArea.tsx 478
-apps/crish-desktop/src/components/ui/SmartExpandablePanel/SmartExpandablePanel.tsx 460
+apps/crish-desktop/src/components/ui/SmartExpandablePanel/SmartExpandablePanel.tsx 456
 apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx 427
 apps/crish-desktop/src/components/ui/internal/layer-stack/LayerStackManager.ts 635
 apps/crish-desktop/src/components/workspace/PreviewCard.tsx 475

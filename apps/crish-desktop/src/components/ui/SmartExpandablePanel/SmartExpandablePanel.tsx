@@ -1,16 +1,16 @@
 import React, { useCallback, useId, useMemo, useRef, useState } from 'react';
-import ReactDOM from 'react-dom';
 import * as Popover from '@radix-ui/react-popover';
-import type { MenuItem, MenuGroup, SmartPanelProps } from './types';
+import type { MenuItem, SmartPanelProps } from './types';
 import { SmartPanelHeader } from './SmartPanelHeader';
 import { SmartPanelList } from './SmartPanelList';
-import { SmartPanelItem } from './SmartPanelItem';
+import { SmartPanelCascadeSubmenu } from './SmartPanelCascadeSubmenu';
+import { filterSmartPanelItems } from './smartPanelFilter';
+import { renderSmartPanelTrigger } from './smartPanelTrigger';
 import { SafeAimEngine } from '../internal/SafeAimEngine';
 import { useLayerRegistration } from '../internal/layer-registration/useLayerRegistration';
 import { layerStackService } from '../internal/layer-stack/LayerStackManager';
 import { shouldSuppressMenuReopen } from '../Menu/menuOpenGuard';
 import { DialogOverlayContext } from '../Dialog/dialogOverlayContext';
-import { Tooltip } from '../Tooltip/Tooltip';
 import menuStyles from '../Menu/Menu.module.css';
 import styles from './SmartExpandablePanel.module.css';
 import {
@@ -191,27 +191,10 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   );
 
   // 过滤项
-  const filteredItems = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return items;
-
-    const matchNode = (item: MenuItem): boolean => {
-      const target = `${item.label || ''} ${item.sublabel || ''} ${
-        item.searchKeywords || ''
-      }`.toLowerCase();
-      return target.includes(q);
-    };
-
-    return items
-      .map((entry) => {
-        if ('items' in entry && Array.isArray((entry as MenuGroup).items)) {
-          const matched = (entry as MenuGroup).items.filter(matchNode);
-          return matched.length > 0 ? { ...entry, items: matched } : null;
-        }
-        return matchNode(entry as MenuItem) ? entry : null;
-      })
-      .filter(Boolean) as Array<MenuItem | MenuGroup>;
-  }, [items, query]);
+  const filteredItems = useMemo(
+    () => filterSmartPanelItems(items, query),
+    [items, query]
+  );
 
   // Safe-Aim hover 处理
   const handleHoverSubmenu = useCallback(
@@ -275,90 +258,23 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
     [activeSubmenu, safeAim]
   );
 
+  const cancelSafeAimClose = useCallback(() => {
+    if (safeAimTimeoutRef.current) {
+      clearTimeout(safeAimTimeoutRef.current);
+      safeAimTimeoutRef.current = null;
+    }
+  }, []);
+
   // Trigger 渲染
-  let renderedTrigger: React.ReactNode = null;
-  if (anchor) {
-    renderedTrigger = <Popover.Anchor virtualRef={anchor} />;
-  } else if (trigger) {
-    let actualTrigger: React.ReactNode = trigger;
-    let tipContent: React.ReactNode = null;
-    let tipSide: 'top' | 'bottom' | 'left' | 'right' = 'bottom';
-
-    if (
-      React.isValidElement(trigger) &&
-      typeof trigger.type !== 'string' &&
-      'content' in (trigger.props as Record<string, unknown>) &&
-      'children' in (trigger.props as Record<string, unknown>)
-    ) {
-      const p = trigger.props as {
-        content?: React.ReactNode;
-        side?: 'top' | 'bottom' | 'left' | 'right';
-        children?: React.ReactNode;
-      };
-      tipContent = p.content ?? null;
-      tipSide = p.side || 'bottom';
-      actualTrigger = p.children ?? trigger;
-    }
-
-    if (React.isValidElement(actualTrigger)) {
-      const actualTriggerElement = actualTrigger as React.ReactElement<{
-        ref?: unknown;
-        onMouseEnter?: (e: React.MouseEvent<HTMLElement>) => void;
-        onMouseLeave?: (e: React.MouseEvent<HTMLElement>) => void;
-        onClick?: (e: React.MouseEvent<HTMLElement>) => void;
-      }>;
-      const originalProps = actualTriggerElement.props;
-
-      const clonedElement = React.cloneElement(actualTriggerElement, {
-        ref: (node: HTMLElement | null) => {
-          triggerRef.current = node;
-          const origRef = (
-            actualTriggerElement as unknown as { ref?: React.Ref<HTMLElement> }
-          ).ref;
-          if (typeof origRef === 'function') {
-            origRef(node);
-          } else if (
-            origRef &&
-            typeof origRef === 'object' &&
-            'current' in origRef
-          ) {
-            (origRef as React.MutableRefObject<HTMLElement | null>).current =
-              node;
-          }
-        },
-        onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
-          originalProps?.onMouseEnter?.(e);
-          handleTriggerMouseEnter(e);
-        },
-        onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
-          originalProps?.onMouseLeave?.(e);
-          handleTriggerMouseLeave(e);
-        },
-        onClick: (e: React.MouseEvent<HTMLElement>) => {
-          clearHoverTimers();
-          originalProps?.onClick?.(e);
-        },
-      } as React.Attributes & {
-        ref: (node: HTMLElement | null) => void;
-        onMouseEnter: (e: React.MouseEvent<HTMLElement>) => void;
-        onMouseLeave: (e: React.MouseEvent<HTMLElement>) => void;
-        onClick: (e: React.MouseEvent<HTMLElement>) => void;
-      });
-
-      const triggerElem = (
-        <Popover.Trigger asChild>{clonedElement}</Popover.Trigger>
-      );
-
-      renderedTrigger =
-        tipContent != null ? (
-          <Tooltip content={tipContent} side={tipSide} disabled={isOpen}>
-            {triggerElem}
-          </Tooltip>
-        ) : (
-          triggerElem
-        );
-    }
-  }
+  const renderedTrigger = renderSmartPanelTrigger({
+    trigger,
+    anchor,
+    triggerRef,
+    isOpen,
+    onMouseEnter: handleTriggerMouseEnter,
+    onMouseLeave: handleTriggerMouseLeave,
+    onClickCapture: clearHoverTimers,
+  });
 
   const align = position?.align ?? 'end';
   const side = position?.side ?? 'bottom';
@@ -451,41 +367,21 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
             )}
 
             {/* 二级级联子菜单 (8px 同心圆角 / 4px 内衬 / 4px-6px 条目) */}
-            {activeSubmenu &&
-              activeSubmenu.children &&
-              submenuStyle &&
-              ReactDOM.createPortal(
-                <div
-                  ref={cascadeSubmenuRef}
-                  className={`${menuStyles.menuContent} ${styles.cascadeSubmenu}`}
-                  role="menu"
-                  aria-label={activeSubmenu.label || '子菜单'}
-                  style={submenuStyle}
-                  onMouseEnter={() => {
-                    if (safeAimTimeoutRef.current) {
-                      clearTimeout(safeAimTimeoutRef.current);
-                      safeAimTimeoutRef.current = null;
-                    }
-                  }}
-                >
-                  {activeSubmenu.children.map((subItem) => (
-                    <SmartPanelItem
-                      key={subItem.id}
-                      item={subItem}
-                      onSelect={(item, ev) => {
-                        subItem.onSelect?.(item, ev);
-                        subItem.onClick?.();
-                        onSelect?.(item);
-                        if (subItem.closeOnSelect !== false) {
-                          handleOpenChange(false);
-                        }
-                      }}
-                    />
-                  ))}
-                </div>,
-                dialogOverlay ??
+            {activeSubmenu?.children && submenuStyle && (
+              <SmartPanelCascadeSubmenu
+                parent={{ ...activeSubmenu, children: activeSubmenu.children }}
+                ariaLabel={activeSubmenu.label || '子菜单'}
+                style={submenuStyle}
+                submenuRef={cascadeSubmenuRef}
+                container={
+                  dialogOverlay ??
                   (typeof document !== 'undefined' ? document.body : null)!
-              )}
+                }
+                onPointerEnter={cancelSafeAimClose}
+                onSelect={(item) => onSelect?.(item)}
+                onRequestClose={() => handleOpenChange(false)}
+              />
+            )}
           </div>
         </Popover.Content>
       </Popover.Portal>
