@@ -244,7 +244,6 @@ temp_jcode/
 perf-report/
 debug_investigation/
 apps/crish-desktop/scripts/
-.dependency-cruiser.cjs
 .mcp.json
 .workbuddy/
 .workbuddy-ai/
