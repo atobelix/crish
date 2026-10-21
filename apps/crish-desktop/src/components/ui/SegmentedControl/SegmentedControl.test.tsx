@@ -17,6 +17,17 @@ const DIR = dirname(fileURLToPath(import.meta.url));
 const CSS_SRC = readFileSync(join(DIR, 'SegmentedControl.module.css'), 'utf8');
 const TSX_SRC = readFileSync(join(DIR, 'SegmentedControl.tsx'), 'utf8');
 
+/**
+ * 选择器断言用的「排版无关」视图：去掉注释，删除紧贴括号内侧的空白，其余连续空白折叠为单空格。
+ * 括号内侧空白在 CSS 选择器语义中无意义（`:not( [x] )` ≡ `:not([x])`），而后代组合符等
+ * 有意义的空白只被折叠、不被删除。这样 prettier 对长选择器折行（d6e2ac8fd）不会让断言假红，
+ * 真正改动选择器语义时仍会失败。
+ */
+const CSS_SELECTOR_VIEW = CSS_SRC.replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/\(\s+/g, '(')
+  .replace(/\s+\)/g, ')')
+  .replace(/\s+/g, ' ');
+
 describe('ui/SegmentedControl 现代化测试套件', () => {
   const defaultOptions = [
     { value: 'default', label: '浅色' },
@@ -63,16 +74,14 @@ describe('ui/SegmentedControl 现代化测试套件', () => {
 
   it('[SC-03] 灰度防穿透：CSS 具有严格互斥选择器与 !important 门锁', () => {
     // 1. 验证仅未激活项在 Hover 时激活动画遮罩
-    expect(CSS_SRC).toContain(
-      ":hover:not(:disabled):not([data-active='true']):not([aria-checked='true']):not(.itemActive)::before"
+    expect(CSS_SELECTOR_VIEW).toContain(
+      ".item:hover:not(:disabled):not([data-active='true']):not([aria-checked='true']):not(.itemActive)::before { opacity: 1;"
     );
 
     // 2. 验证已激活项绝对强制关闭伪元素遮罩，杜绝 Double Alpha Stacking
-    expect(CSS_SRC).toContain(
-      ".item[data-active='true']::before"
+    expect(CSS_SELECTOR_VIEW).toContain(
+      ".item[data-active='true']::before, .item[aria-checked='true']::before, .item.itemActive::before { opacity: 0; display: none;"
     );
-    expect(CSS_SRC).toContain('opacity: 0;');
-    expect(CSS_SRC).toContain('display: none;');
 
     // 3. 验证容器声明 isolation: isolate 建立局部独立层叠上下文
     expect(CSS_SRC).toContain('isolation: isolate;');
@@ -128,10 +137,7 @@ describe('ui/SegmentedControl 现代化测试套件', () => {
     ];
 
     render(
-      <SegmentedControl
-        options={optionsWithExtra}
-        defaultValue="enter"
-      />
+      <SegmentedControl options={optionsWithExtra} defaultValue="enter" />
     );
 
     expect(screen.getByTestId('enter-icon')).toBeInTheDocument();
@@ -292,7 +298,9 @@ describe('ui/SegmentedControl 现代化测试套件', () => {
   describe('CI 门禁与反过度设计静态守卫断言', () => {
     it('[SC-11] CSS 文件不得包含裸写硬编码 HEX 颜色或 rgba', () => {
       // 允许 var() 内的 HSL fallback，严禁裸写 HEX
-      const rawHexMatches = CSS_SRC.match(/(?<!var\([^)]*)#[0-9a-fA-F]{3,8}\b/g);
+      const rawHexMatches = CSS_SRC.match(
+        /(?<!var\([^)]*)#[0-9a-fA-F]{3,8}\b/g
+      );
       expect(rawHexMatches).toBeNull();
 
       // 严禁旧式 rgba()
