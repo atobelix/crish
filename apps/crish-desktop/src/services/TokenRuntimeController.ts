@@ -181,22 +181,21 @@ export class TokenRuntimeController {
       // 三档底色 SSOT（2026-10-10）：运行时只写三个独立源 —— 外层（侧栏 + 标签栏）/ 主层（聊天区 +
       // 卡片/弹层…）/ 输入框，其余别名链（--surface-chrome/paper/card/elevated/sunken、--bg-tertiary、
       // --shell-chrome-bg、--composer-bg 等）由 tokens.css 静态派生。
-      tokens['--surface-outer'] = paint.bgSecondary;
-      tokens['--surface-main'] = paint.bgPrimary;
-      tokens['--surface-input'] = paint.composerBg;
+      // T-BLK-07b 参数化：独立侧也改为 --user-* 参数名（B 类登记），A 类
+      // --surface-*/--text-*/--border-*/--control-mix-color 由 tokens.css
+      // var(--user-*, 静态兜底) 派生，JS 不再直写 A 类设计 token。
+      tokens['--user-surface-outer'] = paint.bgSecondary;
+      tokens['--user-surface-main'] = paint.bgPrimary;
+      tokens['--user-surface-input'] = paint.composerBg;
       // T7 别名收敛（2026-09-12）：--bg-primary/--bg-secondary/--bg-card/--bg-elevated/
       // --bg-paper/--bg-workspace/--shell-inset-bg/--terminal-* 不再由 JS 写入，只写独立侧。
-      tokens['--text-primary'] = paint.finalFg;
-      tokens['--text-secondary'] = paint.finalSec;
-      tokens['--text-tertiary'] = paint.finalTert;
-      tokens['--text-muted'] = paint.finalTert;
-      tokens['--text-faint'] = paint.finalFaint;
-      tokens['--border-color'] = paint.borderColor;
-      tokens['--border-subtle'] = paint.borderSubtle;
-      tokens['--control-mix-color'] = paint.mixColor;
-      // 语义 soft 底：一律引用 tokens.css 固定纯色（heson 2026-10-11：混色发脏）
-      tokens['--accent-green-light-adaptive'] = 'var(--success-soft-bg)';
-      tokens['--accent-red-light-adaptive'] = 'var(--danger-soft-bg)';
+      tokens['--user-text-primary'] = paint.finalFg;
+      tokens['--user-text-secondary'] = paint.finalSec;
+      tokens['--user-text-tertiary'] = paint.finalTert;
+      tokens['--user-text-faint'] = paint.finalFaint;
+      tokens['--user-border-color'] = paint.borderColor;
+      tokens['--user-border-subtle'] = paint.borderSubtle;
+      tokens['--user-control-mix-color'] = paint.mixColor;
 
       // 滚动条主题色与微调按钮 SVG（warm-gray 皮肤走 tokens.css 静态 SSOT，不注入）
       Object.assign(

@@ -40,10 +40,15 @@ html[data-theme='light'] {
    * 其它 surface-* / bg-* 只能引用这三档；hover/active/选中 = 所在层上的统一叠加（--tint-hover / --tint-active）。
    * 运行时皮肤（TokenRuntimeController）只写 --surface-outer / --surface-main / --surface-input 三个独立源。
    */
-  /* 纯白主层实测模式：主层纯白 #ffffff；输入框纯白。 */
-  --surface-outer: #f2f1f0;
-  --surface-main: #ffffff;
-  --surface-input: #ffffff;
+  /* 纯白主层实测模式：主层纯白 #ffffff；输入框纯白。
+   * T-BLK-07b：运行时只写 --user-surface-* 参数（B 类登记），A 类三档在此由 CSS 派生，
+   * fallback = 原静态 SSOT 同值。 */
+  --user-surface-outer: #f2f1f0;
+  --user-surface-main: #ffffff;
+  --user-surface-input: #ffffff;
+  --surface-outer: var(--user-surface-outer);
+  --surface-main: var(--user-surface-main);
+  --surface-input: var(--user-surface-input);
   /* 内容矩形 .leafBody 的框线（只画左边 + 顶边 1px）：外层 K5 再加 3 → K8 → RGB 234.6/233.7/232.7 #ebeae9
      （10-11 heson 由 K11 #e3e2e1 改浅）。线色，不是第四档底色。 */
   --content-frame-border: #ebeae9;
@@ -98,14 +103,19 @@ html[data-theme='light'] {
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
   /* ── 文字灰度阶（light：0% = 黑，100% = 白；四档均为显式灰值，禁止透明度/mix 向背景收敛）──
      正文/常看到的字 = 10%（近黑，最高对比）→ 次级/会话列表 = 22%（#383838）→ 小字/工具调用/思考 = 40%（#666666）→ 极弱/折叠控制行/时间戳 = 59%（#969696） */
-  --text-primary: #121212;
-  --text-secondary: #383838;
+  --user-text-primary: #121212;
+  --user-text-secondary: #383838;
+  --text-primary: var(--user-text-primary);
+  --text-secondary: var(--user-text-secondary);
   /* 文本三级色（小字 / 工具调用 / 思考内容 / 路径等）：40% 灰度（#666666），WCAG AA 达标。
-     对 tokens.css 主背景 5.50:1、对侧栏背景 5.10:1（均 ≥ 4.5:1，a11y-contrast.test.ts 验证）。 */
-  --text-tertiary: #666666;
+     对 tokens.css 主背景 5.50:1、对侧栏背景 5.10:1（均 ≥ 4.5:1，a11y-contrast.test.ts 验证）。
+     T-BLK-07b：--user-text-* 运行时参数化，fallback = 原静态灰阶同值。 */
+  --user-text-tertiary: #666666;
+  --text-tertiary: var(--user-text-tertiary);
   --text-muted: var(--text-tertiary);
   /* 第四级弱化文字（侧栏分组折叠控制行 / 时间戳 / 计数等）：显式灰值，不再向背景 mix */
-  --text-faint: #969696;
+  --user-text-faint: #969696;
+  --text-faint: var(--user-text-faint);
   /* 反色前景（与 --text-on-accent 同源，随主题翻转） */
   --text-inverse: var(--text-on-accent);
   /* 浮层/遮罩之上的前景 */
@@ -135,14 +145,38 @@ html[data-theme='light'] {
 
   /* 激活态滑块：加深至沉着明确的 #6b6a69，触感坚实笃定，交互反馈清晰区分 */
   --scrollbar-thumb-active: #6b6a69;
-  --scrollbar-button-up: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%23dedddc'/%3E%3C/svg%3E");
-  --scrollbar-button-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%23dedddc'/%3E%3C/svg%3E");
-  --scrollbar-button-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%23dedddc'/%3E%3C/svg%3E");
-  --scrollbar-button-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%23dedddc'/%3E%3C/svg%3E");
-  --scrollbar-button-up-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%236b6a69'/%3E%3C/svg%3E");
-  --scrollbar-button-down-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%236b6a69'/%3E%3C/svg%3E");
-  --scrollbar-button-left-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%236b6a69'/%3E%3C/svg%3E");
-  --scrollbar-button-right-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%236b6a69'/%3E%3C/svg%3E");
+  --scrollbar-button-up: var(
+    --user-scrollbar-button-up,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%23dedddc'/%3E%3C/svg%3E")
+  );
+  --scrollbar-button-down: var(
+    --user-scrollbar-button-down,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%23dedddc'/%3E%3C/svg%3E")
+  );
+  --scrollbar-button-left: var(
+    --user-scrollbar-button-left,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%23dedddc'/%3E%3C/svg%3E")
+  );
+  --scrollbar-button-right: var(
+    --user-scrollbar-button-right,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%23dedddc'/%3E%3C/svg%3E")
+  );
+  --scrollbar-button-up-active: var(
+    --user-scrollbar-button-up-active,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%236b6a69'/%3E%3C/svg%3E")
+  );
+  --scrollbar-button-down-active: var(
+    --user-scrollbar-button-down-active,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%236b6a69'/%3E%3C/svg%3E")
+  );
+  --scrollbar-button-left-active: var(
+    --user-scrollbar-button-left-active,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%236b6a69'/%3E%3C/svg%3E")
+  );
+  --scrollbar-button-right-active: var(
+    --user-scrollbar-button-right-active,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%236b6a69'/%3E%3C/svg%3E")
+  );
 
   /* 轨道背景：完全透明，消除轨道占位边缘对内容的侵入感 */
   --scrollbar-track-bg: transparent;
@@ -184,8 +218,10 @@ html[data-theme='light'] {
    * 与暗色侧同档（≈1.5:1）保持量级一致，同时保留"可辨识但不抢戏"的边界感。 */
   /* 线色两档（review P2-1：与运行时 warm-gray 注入同值，同一暖色调 M0.4/Y0.8）：
      强 K≈11.4 → #e2e1e0；弱 K≈5.9 → #f0efee */
-  --border-color: #e2e1e0;
-  --border-subtle: #f0efee;
+  --user-border-color: #e2e1e0;
+  --user-border-subtle: #f0efee;
+  --border-color: var(--user-border-color);
+  --border-subtle: var(--user-border-subtle);
   --composer-bg: var(--surface-input);
   /* 输入框底部操作区按钮统一底色（默认透明，hover/click/active 均为同一 3% 灰度 #F7F7F7，单一灰度无级差） */
   --composer-control-hover-bg: color-mix(
@@ -219,8 +255,11 @@ html[data-theme='light'] {
   --md-code-bg: var(--md-code-block-bg);
   --md-code-border: var(--md-code-block-border);
   --md-code-fg: var(--text-primary);
-  --md-code-tab-size: 2;
-  --control-mix-color: var(--text-primary);
+  /* T-BLK-07b：JS 只写 --user-md-code-tab-size（codeBlockIndent.ts，B 类登记，
+   * 不在 CSS 声明），A 类值在此由 CSS 派生，fallback = 原静态默认 2 */
+  --md-code-tab-size: var(--user-md-code-tab-size, 2);
+  --user-control-mix-color: var(--text-primary);
+  --control-mix-color: var(--user-control-mix-color);
   --focus-ring-color: color-mix(
     in srgb,
     var(--control-mix-color) 6%,
@@ -298,9 +337,6 @@ html[data-theme='light'] {
   ); /* 纯净温暖朱红，基准 #de4931，鲜艳不刺眼 */
   --accent-blue: oklch(0.5 0.18 250); /* 纯净天蓝，满足 WCAG AA 文字 ≥ 4.5:1 */
   --accent-primary: #10b981;
-  --accent-green-light-adaptive: var(
-    --success-soft-bg
-  ); /* 固定纯色（旧为与白/底色混色） */
   --accent-red-light-adaptive: var(--danger-soft-bg); /* 固定纯色 */
   /* primary     FirstRunWizard        light = text-primary   dark = text-secondary    */
   --text-on-accent: #ffffff;
@@ -508,8 +544,9 @@ html[data-theme='light'] {
 
   /* Materials & Animations */
   /*
-   * 缓动正典二元组：standard 服务色彩/透明度常规过渡，emphasized 服务几何位移（快出型）。
-   * 全仓 transition/animation 的曲线只允许引用这两个名字（或下方别名）；组件文件禁止内联 cubic-bezier。
+   * 缓动：standard 服务色彩与透明度；emphasized 服务跟手的快出位移；
+   * decelerate 服务有距离的到达（菜单、对话框、折叠高度），停在终点不再抢停。
+   * 组件文件禁止内联 cubic-bezier。
    */
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
@@ -523,20 +560,21 @@ html[data-theme='light'] {
   --transition-smooth: 300ms var(--ease-standard);
   /* Toast 入场：无过冲（y≤1）；旧值 y2=1.275 会越过停点再回 */
   --transition-exit: 250ms var(--ease-standard);
-  --transition-popover-enter: 180ms var(--ease-emphasized);
-  --transition-popover-exit: 120ms cubic-bezier(0.4, 0, 1, 1);
-  --transition-modal-enter: 220ms var(--ease-emphasized);
+  --transition-popover-enter: 180ms var(--ease-decelerate);
+  --transition-popover-exit: 120ms var(--ease-accelerate);
+  --transition-modal-enter: 220ms var(--ease-decelerate);
   --duration-accordion: 220ms;
-  --transition-accordion: var(--duration-accordion) var(--ease-emphasized);
+  --transition-accordion: var(--duration-accordion) var(--ease-decelerate);
   --duration-accordion-fade: 180ms;
   --transition-accordion-fade: var(--duration-accordion-fade)
-    var(--ease-emphasized);
+    var(--ease-decelerate);
   --duration-landing-settle: 360ms;
   --transition-landing-settle: var(--duration-landing-settle)
     var(--ease-emphasized);
   --duration-landing-fade: 240ms;
   --transition-landing-fade: var(--duration-landing-fade) var(--ease-emphasized);
-  --transition-chevron: 150ms var(--ease-emphasized);
+  /* 折角是状态切换后的短程旋转，落到终点，不跟手抢停 */
+  --transition-chevron: 150ms var(--ease-decelerate);
   --transition-press: 80ms ease-out;
   --transition-skeleton: 1.5s ease-in-out;
   --transition-spin: 0.8s linear;
@@ -552,14 +590,41 @@ html[data-theme='light'] {
   --duration-exit: 150ms;
 
   /*             /     CJK     fontStore        */
-  --font-sans:
-    'HarmonyOS Sans SC', 'HarmonyOS Sans', 'PingFang SC', 'Noto Sans SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', 'Hiragino Sans GB',
-    'Noto Sans CJK SC', system-ui, -apple-system, BlinkMacSystemFont,
-    'Segoe UI', 'Segoe UI Variable Text', 'Helvetica Neue', Arial, sans-serif;
-  --font-mono:
-    'Cascadia Mono', 'Cascadia Code', 'JetBrains Mono', 'Segoe UI Mono',
-    'SF Mono', Consolas, 'Liberation Mono', ui-monospace, monospace;
+  /* T-BLK-07b 参数化：--user-font-sans/--user-font-mono 为 fontStore.ts 写入的
+   * 运行期参数（B 类登记，不在 CSS 声明——凡 tokens.css 声明即 A 类）；
+   * A 类 --font-sans/--font-mono 在此由 CSS 派生，fallback = 平台兜底栈
+   * （与原静态 SSOT 同值），JS 不再直写 A 类名。 */
+  --font-sans: var(
+    --user-font-sans,
+    'HarmonyOS Sans SC',
+    'HarmonyOS Sans',
+    'PingFang SC',
+    'Noto Sans SC',
+    'Microsoft YaHei UI',
+    'Microsoft YaHei',
+    'Hiragino Sans GB',
+    'Noto Sans CJK SC',
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'Segoe UI Variable Text',
+    'Helvetica Neue',
+    Arial,
+    sans-serif
+  );
+  --font-mono: var(
+    --user-font-mono,
+    'Cascadia Mono',
+    'Cascadia Code',
+    'JetBrains Mono',
+    'Segoe UI Mono',
+    'SF Mono',
+    Consolas,
+    'Liberation Mono',
+    ui-monospace,
+    monospace
+  );
 
   /* 响应式断点单一真源 (SSOT) */
   --breakpoint-sm: 640px;
@@ -688,7 +753,7 @@ html[data-theme='light'] {
   --md-code-block-padding: var(--space-2, 8px) var(--space-3, 12px);
   --md-code-font: var(--font-mono);
   --md-code-font-size: var(--font-size-xs, 12px);
-  --md-code-tab-size: 2;
+  --md-code-tab-size: var(--user-md-code-tab-size, 2);
   --md-code-header-bg: transparent;
   --md-code-header-border: transparent;
   --md-code-header-fg: var(--text-tertiary);
@@ -980,9 +1045,12 @@ html[data-theme='dark'] {
      outer 外层（侧栏 + 标签栏/标题栏）#1e1e1e，透出云母外壳
      → main 主层（聊天区 + 右侧栏 + 卡片等）#141414，沉底偏黑实色
      → input 输入框 #232323，微亮卡片浮层。与运行时 dark-cozy 皮肤一致 */
-  --surface-outer: #1e1e1e;
-  --surface-main: #141414;
-  --surface-input: #232323;
+  --user-surface-outer: #1e1e1e;
+  --user-surface-main: #141414;
+  --user-surface-input: #232323;
+  --surface-outer: var(--user-surface-outer);
+  --surface-main: var(--user-surface-main);
+  --surface-input: var(--user-surface-input);
   /* 内容矩形框线：发丝细线区分外层 #1e1e1e 与沉底主层 #141414 */
   --content-frame-border: #222121;
   --surface-chrome: var(--surface-outer);
@@ -1060,13 +1128,17 @@ html[data-theme='dark'] {
   --shell-chrome-bg: var(--surface-chrome);
   /* ── 文字灰度阶（dark：与 light 镜像，0% = 黑，100% = 白；四档均为显式灰值）──
      正文/常看到的字 = 90%（近白，10% 灰度）→ 次级/会话列表 = 80%（#cccccc）→ 小字 55%（#8c8c8c）→ 极弱/折叠控制行/时间戳 = 40%（#666666） */
-  --text-primary: #f5f5f5;
-  --text-secondary: #cccccc;
+  --user-text-primary: #f5f5f5;
+  --user-text-secondary: #cccccc;
+  --text-primary: var(--user-text-primary);
+  --text-secondary: var(--user-text-secondary);
   /* 文本三级色（小字 / 工具调用 / 路径等）：45% 灰度（55% 亮度），显式灰值零透明度，达标 WCAG AA */
-  --text-tertiary: #8c8c8c;
+  --user-text-tertiary: #8c8c8c;
+  --text-tertiary: var(--user-text-tertiary);
   --text-muted: var(--text-tertiary);
   /* 第四级弱化文字（侧栏分组折叠控制行 / 时间戳 / 计数等） */
-  --text-faint: #666666;
+  --user-text-faint: #666666;
+  --text-faint: var(--user-text-faint);
   /* 反色前景（与 --text-on-accent 同源，随主题翻转） */
   --text-inverse: var(--text-on-accent);
   /* 浮层/遮罩之上的前景 */
@@ -1100,14 +1172,38 @@ html[data-theme='dark'] {
     var(--text-primary, #cccccc) 48%,
     transparent
   );
-  --scrollbar-button-up: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%23cccccc' fill-opacity='0.16'/%3E%3C/svg%3E");
-  --scrollbar-button-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%23cccccc' fill-opacity='0.16'/%3E%3C/svg%3E");
-  --scrollbar-button-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%23cccccc' fill-opacity='0.16'/%3E%3C/svg%3E");
-  --scrollbar-button-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%23cccccc' fill-opacity='0.16'/%3E%3C/svg%3E");
-  --scrollbar-button-up-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%23cccccc' fill-opacity='0.48'/%3E%3C/svg%3E");
-  --scrollbar-button-down-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%23cccccc' fill-opacity='0.48'/%3E%3C/svg%3E");
-  --scrollbar-button-left-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%23cccccc' fill-opacity='0.48'/%3E%3C/svg%3E");
-  --scrollbar-button-right-active: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%23cccccc' fill-opacity='0.48'/%3E%3C/svg%3E");
+  --scrollbar-button-up: var(
+    --user-scrollbar-button-up,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%23cccccc' fill-opacity='0.16'/%3E%3C/svg%3E")
+  );
+  --scrollbar-button-down: var(
+    --user-scrollbar-button-down,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%23cccccc' fill-opacity='0.16'/%3E%3C/svg%3E")
+  );
+  --scrollbar-button-left: var(
+    --user-scrollbar-button-left,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%23cccccc' fill-opacity='0.16'/%3E%3C/svg%3E")
+  );
+  --scrollbar-button-right: var(
+    --user-scrollbar-button-right,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%23cccccc' fill-opacity='0.16'/%3E%3C/svg%3E")
+  );
+  --scrollbar-button-up-active: var(
+    --user-scrollbar-button-up-active,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%23cccccc' fill-opacity='0.48'/%3E%3C/svg%3E")
+  );
+  --scrollbar-button-down-active: var(
+    --user-scrollbar-button-down-active,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%23cccccc' fill-opacity='0.48'/%3E%3C/svg%3E")
+  );
+  --scrollbar-button-left-active: var(
+    --user-scrollbar-button-left-active,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%23cccccc' fill-opacity='0.48'/%3E%3C/svg%3E")
+  );
+  --scrollbar-button-right-active: var(
+    --user-scrollbar-button-right-active,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%23cccccc' fill-opacity='0.48'/%3E%3C/svg%3E")
+  );
 
   /* 暗色轨道背景：保持完全透明 */
   --scrollbar-track-bg: transparent;
@@ -1131,8 +1227,10 @@ html[data-theme='dark'] {
   /* 暗色描边：温和克制微调（提升质感同时避免刺眼） */
   /* 随 card/paper 抬亮约 +5% 同步上移 3%，保持描边对卡片/主界面的可辨识度 */
   /* 线色两档（review P2-1：与运行时 dark-cozy 预设同值，消除双源） */
-  --border-color: #3a3a3a;
-  --border-subtle: #2e2e2e;
+  --user-border-color: #3a3a3a;
+  --user-border-subtle: #2e2e2e;
+  --border-color: var(--user-border-color);
+  --border-subtle: var(--user-border-subtle);
   /* 线宽契约（dark 分支显式声明，语义与 light 一致；style-contract 要求色系前缀 token 双主题全定义） */
   --border-width-emphasis: 2px;
   --composer-bg: var(--surface-input);
@@ -1155,7 +1253,8 @@ html[data-theme='dark'] {
    *     light           tint          */
   --sidebar-hover: var(--tint-hover);
   --sidebar-active: var(--elevate-3); /* 选中 = elevate-3（旧 = tint-active） */
-  --control-mix-color: var(--text-primary);
+  --user-control-mix-color: var(--text-primary);
+  --control-mix-color: var(--user-control-mix-color);
   --focus-ring-color: color-mix(
     in srgb,
     var(--border-color) 92%,
@@ -1207,9 +1306,6 @@ html[data-theme='dark'] {
   --accent-green-muted: oklch(0.76 0.16 152 / 0.26);
   --accent-red: oklch(0.72 0.19 27.5);
   /* themeStore applyTheme dark */
-  --accent-green-light-adaptive: var(
-    --success-soft-bg
-  ); /* 固定纯色（旧为与白/底色混色） */
   --accent-red-light-adaptive: var(--danger-soft-bg); /* 固定纯色 */
   --accent-blue: oklch(0.74 0.16 250);
   --accent-primary: #10b981;
@@ -1423,7 +1519,7 @@ html[data-theme='dark'] {
   --md-code-block-padding: var(--space-2, 8px) var(--space-3, 12px);
   --md-code-font: var(--font-mono);
   --md-code-font-size: var(--font-size-xs, 12px);
-  --md-code-tab-size: 2;
+  --md-code-tab-size: var(--user-md-code-tab-size, 2);
   --md-code-header-bg: transparent;
   --md-code-header-border: transparent;
   --md-code-header-fg: var(--text-tertiary);
@@ -2060,4 +2156,34 @@ html[data-backdrop='mica'] {
 html[data-backdrop='acrylic'] {
   --outer-layer-bg: color-mix(in srgb, var(--surface-outer) 75%, transparent);
   --outer-layer-child-bg: transparent;
+}
+
+/* --- T-BLK-07b：非 warm-gray 皮肤滚动条 CSS 派生（tinted 门控）---
+ * JS（injectRootTokens）只写 --user-scrollbar-fg（B 类参数）并置 data-scrollbar-tint；
+ * 滑块颜色在此由 CSS color-mix 派生（替代旧 JS 拼 color-mix 字符串注入）。
+ * 特异性：:root[data-scrollbar-tint] (0,2,0) > :root/.theme-dark (0,1,0)；
+ * 暗色 tinted 规则与之同特异性且靠后，压住浅色 13%/58% 百分比（暗 16%/48%）。 */
+:root[data-scrollbar-tint] {
+  --scrollbar-thumb-bg: color-mix(
+    in srgb,
+    var(--user-scrollbar-fg, #6b6a69) 13%,
+    transparent
+  );
+  --scrollbar-thumb-active: color-mix(
+    in srgb,
+    var(--user-scrollbar-fg, #6b6a69) 58%,
+    transparent
+  );
+}
+.theme-dark[data-scrollbar-tint] {
+  --scrollbar-thumb-bg: color-mix(
+    in srgb,
+    var(--user-scrollbar-fg, #cccccc) 16%,
+    transparent
+  );
+  --scrollbar-thumb-active: color-mix(
+    in srgb,
+    var(--user-scrollbar-fg, #cccccc) 48%,
+    transparent
+  );
 }

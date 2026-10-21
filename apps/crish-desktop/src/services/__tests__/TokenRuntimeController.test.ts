@@ -80,9 +80,15 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       // 故此处断言**独立侧取值**，并由 expectNoDerivedAliasesInjected 钉死
       // 「派生别名零注入」——比断言旧别名更强（旧写法对收敛回归无感知）。
       // 2026-10-10 三档底色：运行时只写 --surface-outer / --surface-main / --surface-input
-      expect(root.style.getPropertyValue('--surface-main')).toBe('#ffffff');
-      expect(root.style.getPropertyValue('--surface-outer')).toBe('#f2f1f0');
-      expect(root.style.getPropertyValue('--surface-input')).toBe('#ffffff');
+      expect(root.style.getPropertyValue('--user-surface-main')).toBe(
+        '#ffffff'
+      );
+      expect(root.style.getPropertyValue('--user-surface-outer')).toBe(
+        '#f2f1f0'
+      );
+      expect(root.style.getPropertyValue('--user-surface-input')).toBe(
+        '#ffffff'
+      );
       for (const alias of [
         '--surface-paper',
         '--surface-chrome',
@@ -94,8 +100,12 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       ]) {
         expect(root.style.getPropertyValue(alias), alias).toBe('');
       }
-      expect(root.style.getPropertyValue('--text-primary')).toBe('#121212');
-      expect(root.style.getPropertyValue('--border-color')).toBe('#e2e1e0'); // P2-1：与 tokens.css 同值（M0.4/Y0.8）
+      expect(root.style.getPropertyValue('--user-text-primary')).toBe(
+        '#121212'
+      );
+      expect(root.style.getPropertyValue('--user-border-color')).toBe(
+        '#e2e1e0'
+      ); // P2-1：与 tokens.css 同值（M0.4/Y0.8）
       // control-soft-* 改为 tokens.css 统一叠加（--tint-hover/--tint-active），不再注入
       expect(root.style.getPropertyValue('--control-soft-bg')).toBe('');
       expectNoDerivedAliasesInjected(root);
@@ -141,10 +151,18 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(root.classList.contains('theme-dark')).toBe(true);
       expect(root.classList.contains('theme-light')).toBe(false);
 
-      expect(root.style.getPropertyValue('--surface-main')).toBe('#141414');
-      expect(root.style.getPropertyValue('--surface-outer')).toBe('#1e1e1e');
-      expect(root.style.getPropertyValue('--surface-input')).toBe('#232323');
-      expect(root.style.getPropertyValue('--text-primary')).toBe('#f5f5f5');
+      expect(root.style.getPropertyValue('--user-surface-main')).toBe(
+        '#141414'
+      );
+      expect(root.style.getPropertyValue('--user-surface-outer')).toBe(
+        '#1e1e1e'
+      );
+      expect(root.style.getPropertyValue('--user-surface-input')).toBe(
+        '#232323'
+      );
+      expect(root.style.getPropertyValue('--user-text-primary')).toBe(
+        '#f5f5f5'
+      );
       expectNoDerivedAliasesInjected(root);
     });
 
@@ -168,8 +186,12 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(root.classList.contains('theme-dark')).toBe(false);
 
       // P2-7：classic-gray 方向修正后主层 #f8f9fa 比外层 #f1f3f5 亮
-      expect(root.style.getPropertyValue('--surface-main')).toBe('#f8f9fa');
-      expect(root.style.getPropertyValue('--text-primary')).toBe('#111214');
+      expect(root.style.getPropertyValue('--user-surface-main')).toBe(
+        '#f8f9fa'
+      );
+      expect(root.style.getPropertyValue('--user-text-primary')).toBe(
+        '#111214'
+      );
       expectNoDerivedAliasesInjected(root);
     });
 
@@ -248,7 +270,7 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(updateEvent.detail.isDark).toBe(false);
       expect(updateEvent.detail.theme).toBe('default');
       // 事件载荷同样遵循 T7 单写者契约：只携带独立侧，派生别名不出现在载荷中
-      expect(updateEvent.detail.tokens['--surface-main']).toBeDefined();
+      expect(updateEvent.detail.tokens['--user-surface-main']).toBeDefined();
       expect(updateEvent.detail.tokens['--bg-primary']).toBeUndefined();
 
       const canvasEvent = canvasRecolorSpy.mock.calls[0][0] as CustomEvent;
@@ -293,12 +315,12 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       );
 
       expect(result.isDark).toBe(true);
-      expect(result.tokens['--surface-main']).toBe('#223344');
+      expect(result.tokens['--user-surface-main']).toBe('#223344');
       // 自定义极端暗色背景触发对比度防崩安全算法，派生高对比度亮白
-      expect(result.tokens['--text-primary']).toBe('hsl(0, 0%, 96%)');
-      expect(result.tokens['--surface-outer']).toContain('color-mix(');
+      expect(result.tokens['--user-text-primary']).toBe('hsl(0, 0%, 96%)');
+      expect(result.tokens['--user-surface-outer']).toContain('color-mix(');
       expect(
-        document.documentElement.style.getPropertyValue('--surface-main')
+        document.documentElement.style.getPropertyValue('--user-surface-main')
       ).toBe('#223344');
       expectNoDerivedAliasesInjected(document.documentElement);
     });
@@ -324,26 +346,30 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
         'default'
       );
 
-      expect(result.tokens['--text-primary']).toBe('#18081b');
-      expect(result.tokens['--text-secondary']).toBe('#592b63');
-      expect(result.tokens['--text-tertiary']).toContain('color-mix(');
-      expect(result.tokens['--text-faint']).toContain('color-mix(');
-      expect(result.tokens['--scrollbar-thumb-bg']).toContain('color-mix(');
-      expect(result.tokens['--scrollbar-thumb-active']).toContain('color-mix(');
+      expect(result.tokens['--user-text-primary']).toBe('#18081b');
+      expect(result.tokens['--user-text-secondary']).toBe('#592b63');
+      expect(result.tokens['--user-text-tertiary']).toContain('color-mix(');
+      expect(result.tokens['--user-text-faint']).toContain('color-mix(');
+      // T-BLK-07b：滑块色改 CSS tinted 派生，JS 只写 fg 参数 + 按钮 SVG 参数
+      expect(result.tokens['--user-scrollbar-fg']).toBe('#18081b');
+      expect(result.tokens['--user-scrollbar-button-up']).toContain(
+        'data:image/svg+xml'
+      );
 
       const root = document.documentElement;
-      expect(root.style.getPropertyValue('--text-faint')).toContain(
+      expect(root.style.getPropertyValue('--user-text-faint')).toContain(
         'color-mix('
       );
-      expect(root.style.getPropertyValue('--scrollbar-thumb-bg')).toContain(
-        'color-mix('
+      expect(root.getAttribute('data-scrollbar-tint')).toBe('');
+      expect(root.style.getPropertyValue('--user-scrollbar-fg')).toBe(
+        '#18081b'
       );
-      expect(root.style.getPropertyValue('--scrollbar-button-up')).toContain(
-        'data:image/svg+xml'
-      );
-      expect(root.style.getPropertyValue('--scrollbar-button-down')).toContain(
-        'data:image/svg+xml'
-      );
+      expect(
+        root.style.getPropertyValue('--user-scrollbar-button-up')
+      ).toContain('data:image/svg+xml');
+      expect(
+        root.style.getPropertyValue('--user-scrollbar-button-down')
+      ).toContain('data:image/svg+xml');
     });
 
     it('在冰川薄荷 (glacier) 皮肤下应用 #e9fcf9 柔和主题底色并动态生成滚动条微调按钮', () => {
@@ -356,12 +382,12 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
         'default'
       );
 
-      expect(result.tokens['--surface-outer']).toBe('#e9fcf9');
+      expect(result.tokens['--user-surface-outer']).toBe('#e9fcf9');
       expect(result.tokens['--shell-chrome-bg']).toBeUndefined();
-      expect(result.tokens['--scrollbar-button-up']).toContain(
+      expect(result.tokens['--user-scrollbar-button-up']).toContain(
         'data:image/svg+xml'
       );
-      expect(result.tokens['--scrollbar-button-down-active']).toContain(
+      expect(result.tokens['--user-scrollbar-button-down-active']).toContain(
         'data:image/svg+xml'
       );
     });
