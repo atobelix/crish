@@ -29,7 +29,7 @@
     "build:workbench": "npm run check:workbench && npm --workspace @crish/agent-workbench run build",
     "build:shared-types": "npm --workspace @crish/shared-types run build",
     "gen:engine-bindings": "node scripts/generate-engine-bindings.mjs",
-    "build:packages": "turbo run build --filter='./packages/*'",
+    "build:packages": "turbo run build --filter=\"./packages/*\"",
     "bench": "npx tsx packages/shared-utils/src/bench/run-benchmarks.ts",
     "bench:mem": "node --expose-gc --import tsx packages/shared-utils/src/bench/run-mem-benchmarks.ts",
     "bench:ab": "npx tsx scripts/perf-ab.ts",
