@@ -55,6 +55,9 @@ pub struct AtomicWriteTx {
     tmp_path: PathBuf,
     bak_path: PathBuf,
     has_backup: bool,
+    /// 仅 Windows：目标文件原本带只读属性，提交/回滚后需还原（KFS-02）。
+    /// POSIX 上 rename 替换只受父目录权限约束、与文件只读位无关，故无此状态。
+    #[cfg(windows)]
     was_readonly: bool,
     sync_policy: SyncPolicy,
     state: AtomicWriteState,
@@ -91,6 +94,7 @@ impl AtomicWriteTx {
             tmp_path,
             bak_path,
             has_backup: false,
+            #[cfg(windows)]
             was_readonly: false,
             sync_policy: SyncPolicy::Full,
             state: AtomicWriteState::Initial,
