@@ -47,7 +47,7 @@ Extensions (plugins, skills, MCP servers):
 
 ## Build from source
 
-You need Node.js 20 or newer, npm, Rust stable (edition 2021), and the Tauri 2 system packages.
+You need Node.js 24 (matching `.nvmrc`; `package.json` engines is `^24.3.0`), npm 11.6.2+, Rust 1.99.1 (edition 2021; pinned by the root `rust-toolchain.toml`, rustup installs it automatically), and the Tauri 2 system packages.
 
 Linux (Ubuntu / Debian):
 

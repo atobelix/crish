@@ -47,7 +47,7 @@ Linux 和 macOS 的安装包由同一条发布流水线上传。以 Release 页�
 
 ## 从源码构建
 
-需要 Node.js 20 或更高、npm、Rust stable（edition 2021），以及 Tauri 2 的系统依赖。
+需要 Node.js 24（与 `.nvmrc` 一致，`package.json` engines 为 `^24.3.0`）、npm 11.6.2+、Rust 1.99.1（edition 2021；版本由根目录 `rust-toolchain.toml` 固定，rustup 会自动安装），以及 Tauri 2 的系统依赖。
 
 Linux（Ubuntu / Debian）：
 
