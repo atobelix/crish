@@ -108,7 +108,8 @@
 
 /* 严禁任何 translateY 位移漂浮！严禁任何花哨扩大的 box-shadow！稳重克制 */
 .card:hover {
-  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-card));
+  background:
+    linear-gradient(var(--tint-hover), var(--tint-hover)), var(--bg-card);
   border-color: var(--border-subtle);
 }
 
@@ -136,7 +137,8 @@
   width: 28px;
   height: 28px;
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
+  background:
+    linear-gradient(var(--tint-active), var(--tint-active)), var(--bg-card);
   display: flex;
   align-items: center;
   justify-content: center;
