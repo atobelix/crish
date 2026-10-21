@@ -383,7 +383,7 @@ pub fn cleanup_logs(dir: &Path, retention: &LogRetention) -> Vec<String> {
         .collect();
 
     // 删除并记账（RUN-06）：成功记入 deleted，失败 warn 落 tracing（失败原因可见）
-    let mut remove_logged = |p: &Path, deleted: &mut Vec<String>| {
+    let remove_logged = |p: &Path, deleted: &mut Vec<String>| {
         let name = file_name(p);
         if let Err(e) = fs::remove_file(p) {
             tracing::warn!(target: "telemetry", file = %name, error = %e, "日志清理删除失败");
