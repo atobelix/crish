@@ -72,6 +72,10 @@ describe('FoldableToolGroup 独立工具折叠组', () => {
         kind: 'single',
         tc: tc('t1', 'find_by_name', 'success'),
       },
+      {
+        kind: 'single',
+        tc: tc('t2', 'grep_search', 'success'),
+      },
     ];
 
     const { getByTestId } = render(
@@ -112,6 +116,10 @@ describe('FoldableToolGroup 独立工具折叠组', () => {
         kind: 'single',
         tc: tc('t1', 'view_file', 'success'),
       },
+      {
+        kind: 'single',
+        tc: tc('t2', 'view_file', 'success'),
+      },
     ];
 
     const { getByTestId } = render(
@@ -136,13 +144,21 @@ describe('FoldableToolGroup 独立工具折叠组', () => {
     const runningItems: ToolRenderItem[] = [
       {
         kind: 'single',
-        tc: tc('t1', 'run_command', 'running'),
+        tc: tc('t1', 'run_command', 'success'),
+      },
+      {
+        kind: 'single',
+        tc: tc('t2', 'run_command', 'running'),
       },
     ];
     const completedItems: ToolRenderItem[] = [
       {
         kind: 'single',
         tc: tc('t1', 'run_command', 'success'),
+      },
+      {
+        kind: 'single',
+        tc: tc('t2', 'run_command', 'success'),
       },
     ];
 
@@ -172,7 +188,11 @@ describe('FoldableToolGroup 独立工具折叠组', () => {
     const items: ToolRenderItem[] = [
       {
         kind: 'single',
-        tc: tc('t1', 'run_command', 'error'),
+        tc: tc('t1', 'run_command', 'success'),
+      },
+      {
+        kind: 'single',
+        tc: tc('t2', 'run_command', 'error'),
       },
     ];
 
@@ -189,5 +209,85 @@ describe('FoldableToolGroup 独立工具折叠组', () => {
     expect(
       errorBadge.querySelector('[data-icon="alert-triangle"]')
     ).toBeTruthy();
+  });
+
+  it('单工具不做组级折叠：直出工具行，意图说明与命令可见，详情仍默认折叠', () => {
+    const items: ToolRenderItem[] = [
+      {
+        kind: 'single',
+        tc: tc('t1', 'bash', 'success', {
+          arguments: '{"command":"pwd"}',
+          explanation: '查看当前目录',
+          output: '/workspace/crish',
+        }),
+      },
+    ];
+
+    const { getByTestId } = render(
+      <FoldableToolGroup
+        items={items}
+        msgId="m1"
+        hostProps={{ ...baseHostProps(), items }}
+      />
+    );
+
+    const root = getByTestId('foldable-tool-group');
+    expect(root.getAttribute('data-single-tool')).toBe('true');
+    // 无组级摘要栏、无 hidden 槽位
+    expect(root.querySelector('[class*="groupHeader"]')).toBeNull();
+    expect(root.querySelector('[hidden]')).toBeNull();
+    const row = root.querySelector(
+      '.tool-row[data-tool-id="t1"]'
+    ) as HTMLElement;
+    expect(row).toBeTruthy();
+    expect(row.getAttribute('data-expanded')).toBe('false');
+    const head = row.querySelector('.tool-row-head') as HTMLElement;
+    expect(head.textContent).toContain('查看当前目录');
+    expect(head.textContent).toContain('Bash');
+    expect(head.textContent).toContain('pwd');
+  });
+
+  it('单工具 → 多工具（流式追加）后切换为组级折叠，完成后自动收敛', () => {
+    const one: ToolRenderItem[] = [
+      { kind: 'single', tc: tc('t1', 'run_command', 'running') },
+    ];
+    const two: ToolRenderItem[] = [
+      { kind: 'single', tc: tc('t1', 'run_command', 'success') },
+      { kind: 'single', tc: tc('t2', 'run_command', 'running') },
+    ];
+    const twoDone: ToolRenderItem[] = [
+      { kind: 'single', tc: tc('t1', 'run_command', 'success') },
+      { kind: 'single', tc: tc('t2', 'run_command', 'success') },
+    ];
+    const { getByTestId, rerender } = render(
+      <FoldableToolGroup
+        items={one}
+        msgId="m1"
+        hostProps={{ ...baseHostProps(), items: one }}
+      />
+    );
+    expect(
+      getByTestId('foldable-tool-group').getAttribute('data-single-tool')
+    ).toBe('true');
+
+    rerender(
+      <FoldableToolGroup
+        items={two}
+        msgId="m1"
+        hostProps={{ ...baseHostProps(), items: two }}
+      />
+    );
+    const root = getByTestId('foldable-tool-group');
+    expect(root.getAttribute('data-single-tool')).toBeNull();
+    expect(root.getAttribute('data-expanded')).toBe('true');
+
+    rerender(
+      <FoldableToolGroup
+        items={twoDone}
+        msgId="m1"
+        hostProps={{ ...baseHostProps(), items: twoDone }}
+      />
+    );
+    expect(root.getAttribute('data-expanded')).toBe('false');
   });
 });
