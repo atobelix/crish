@@ -101,10 +101,12 @@ pub struct LocalDb {
 /// v10：新增 usage_records 时序流水表及 4 组复合时序索引（用量监控系统全链路移植）；
 /// v11：新增 app_preferences 偏好存储表（设计Token与偏好SSOT端到端重构 B1）；
 /// v12：DROP session_messages 双触发器 + sessions.body_version CAS 列 +
-/// idx_events_session_type / idx_sessions_updated（D3 写单轨：批末重算 message_count）。
-pub const LATEST_VERSION: u32 = 12;
+/// idx_events_session_type / idx_sessions_updated（D3 写单轨：批末重算 message_count）；
+/// v13：存量孤儿 session_meta 键一次性 GC（RUN-15：会话段不在 sessions 表
+/// 且命中已知会话作用域后缀才删，防误删 sched:/workflow: 等含冒号全局键）。
+pub const LATEST_VERSION: u32 = 13;
 /// session_meta 中登记的 schema 版本字符串（与 PRAGMA user_version 保持一致）。
-pub const SCHEMA_VERSION_STRING: &str = "12";
+pub const SCHEMA_VERSION_STRING: &str = "13";
 /// 写连接 PRAGMA cache_size（负值 = KiB；写侧 8 MiB，D0 预算源命名常量）。
 pub const WRITE_CONN_CACHE_SIZE_KIB: i64 = -8000;
 /// 读连接 PRAGMA cache_size（负值 = KiB；读侧 4 MiB）。

@@ -382,6 +382,16 @@ pub fn cleanup_logs(dir: &Path, retention: &LogRetention) -> Vec<String> {
         .filter(|p| p.extension().is_some_and(|ext| ext == "log"))
         .collect();
 
+    // 删除并记账（RUN-06）：成功记入 deleted，失败 warn 落 tracing（失败原因可见）
+    let mut remove_logged = |p: &Path, deleted: &mut Vec<String>| {
+        let name = file_name(p);
+        if let Err(e) = fs::remove_file(p) {
+            tracing::warn!(target: "telemetry", file = %name, error = %e, "日志清理删除失败");
+        } else {
+            deleted.push(name);
+        }
+    };
+
     // 1. crash 文件：文件名 `crash-YYYYMMDD-HHMMSS-<thread>.log`，
     //    字典序 = 时间序（固定宽度时间戳），保留最近 N 个
     let mut crashes: Vec<PathBuf> = logs
@@ -391,9 +401,7 @@ pub fn cleanup_logs(dir: &Path, retention: &LogRetention) -> Vec<String> {
         .collect();
     crashes.sort_by(|a, b| b.file_name().cmp(&a.file_name()));
     for old in crashes.iter().skip(retention.crash_keep_count) {
-        if fs::remove_file(old).is_ok() {
-            deleted.push(file_name(old));
-        }
+        remove_logged(old, &mut deleted);
     }
     logs.retain(|p| !file_name(p).starts_with("crash-"));
 
@@ -402,9 +410,7 @@ pub fn cleanup_logs(dir: &Path, retention: &LogRetention) -> Vec<String> {
     logs.retain(|p| {
         let age_days = file_age_days(p, today);
         if age_days > i64::from(retention.max_age_days) {
-            if fs::remove_file(p).is_ok() {
-                deleted.push(file_name(p));
-            }
+            remove_logged(p, &mut deleted);
             false
         } else {
             true
@@ -427,10 +433,12 @@ pub fn cleanup_logs(dir: &Path, retention: &LogRetention) -> Vec<String> {
             if let Ok(m) = fs::metadata(p) {
                 remaining = remaining.saturating_sub(m.len());
             }
-            if fs::remove_file(p).is_ok() {
-                deleted.push(file_name(p));
-            }
+            remove_logged(p, &mut deleted);
         }
+    }
+    // RUN-06：清理数量落 tracing（生产接线证据；无清理不打扰日志）
+    if !deleted.is_empty() {
+        tracing::info!(target: "telemetry", count = deleted.len(), files = ?deleted, "日志保留策略清理完成");
     }
     deleted
 }

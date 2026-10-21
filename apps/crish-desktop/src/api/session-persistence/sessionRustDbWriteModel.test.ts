@@ -52,7 +52,9 @@ import {
   persistAllSessionsSyncViaLocalStorage,
 } from './sessionRustDb';
 import { loadSessionAgents, saveSessionAgents } from './sessionRustDbSql';
+import { cleanupOrphanSessions } from './sessionRustDbLegacyCleanup';
 import { invokeResult } from '../tauriInvoke';
+import { sessionDeltaWriteBarrier } from './sessionDeltaWriteBarrier';
 import { prepareSessionsForUi } from '../sessionTitle';
 
 // ── 内存假库（模拟 Rust 侧 SQLite 行为） ────────────────────────────────────
@@ -712,6 +714,41 @@ describe('P0-2 boot 窗口清理防护（N0-2 回归）', () => {
       JSON.stringify([msg('m1', 'user')])
     );
 
+    // RUN-08 契约：boot 未水合空列表 = 屏障拦截提前 return，孤儿清理跳过。
+    // 本用例固化 boot 窗口语义，显式回到未水合态（前序 hydrate 用例会置位）。
+    const wasHydrated = sessionDeltaWriteBarrier.getIsHydrated();
+    sessionDeltaWriteBarrier.reset();
+    try {
+      await persistAllSessionsRust([], '', [DEFAULT_SESSION_FOLDER], {
+        sessionsToIndex,
+      });
+
+      const cleanups = call.mock.calls.filter(
+        (c) => c[0] === 'cleanup_orphan_sessions'
+      );
+      expect(cleanups).toHaveLength(0);
+      expect(
+        localStorage.getItem(SESSION_BODY_PREFIX + 'ghost')
+      ).not.toBeNull();
+    } finally {
+      sessionDeltaWriteBarrier.setHydrated(wasHydrated);
+    }
+  });
+
+  it('RUN-08：已水合 + 空列表（用户全删）→ cleanup confirm_empty 传真实意图，全库清空', async () => {
+    const { db, call } = makeFakeDb();
+    installFakeTransport(call);
+    sessionDeltaWriteBarrier.setHydrated(true);
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 'old1',
+      JSON.stringify([msg('m1', 'user')])
+    );
+    // 预置 fake 假库一行历史会话，验证全删后行清零
+    await call('save_session_body', {
+      sessionId: 'old1',
+      messages: [msg('m1', 'user')],
+    });
+
     await persistAllSessionsRust([], '', [DEFAULT_SESSION_FOLDER], {
       sessionsToIndex,
     });
@@ -719,8 +756,41 @@ describe('P0-2 boot 窗口清理防护（N0-2 回归）', () => {
     const cleanups = call.mock.calls.filter(
       (c) => c[0] === 'cleanup_orphan_sessions'
     );
-    expect(cleanups).toHaveLength(0);
-    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'ghost')).not.toBeNull();
+    expect(cleanups).toHaveLength(1);
+    expect(cleanups[0]?.[1]).toMatchObject({
+      activeIds: [],
+      confirmEmpty: true,
+    });
+    // sessions.db 行清零（fake 假库清空）；LS 镜像经回退语义不残留由
+    // cleanupOrphanSessions 直接单测覆盖（见下）
+    expect(db.sessions.size).toBe(0);
+  });
+
+  it('RUN-08：cleanupOrphanSessions([], false) 空列表守卫拒绝（N1-2 语义保持）', async () => {
+    const { call } = makeFakeDb();
+    installFakeTransport(call);
+    const deleted = await cleanupOrphanSessions([], false);
+    expect(deleted).toBe(0);
+    expect(
+      call.mock.calls.filter((c) => c[0] === 'cleanup_orphan_sessions')
+    ).toHaveLength(0);
+  });
+
+  it('RUN-08：cleanupOrphanSessions([], true) invoke 失败落 LS 回退 → 镜像键全清', async () => {
+    mockTauriError('cleanup_orphan_sessions', new Error('boom'));
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 'a',
+      JSON.stringify([msg('m1', 'user')])
+    );
+    localStorage.setItem(SESSION_AGENTS_PREFIX + 'a', '[]');
+    localStorage.setItem(SESSION_BODY_PREFIX + 'b', '[]');
+
+    const deleted = await cleanupOrphanSessions([], true);
+
+    expect(deleted).toBe(3);
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'a')).toBeNull();
+    expect(localStorage.getItem(SESSION_AGENTS_PREFIX + 'a')).toBeNull();
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'b')).toBeNull();
   });
 
   it('localStorage 回退路径空 keep 不清除 LS（N1-2 与 Rust 空 keep 守卫对齐）', async () => {
@@ -1015,7 +1085,10 @@ describe('D-F06 偏离 #2 收尾：agents LS 镜像双轨剥离（SQLite 唯一�
   it('loadSessionAgents invoke missing → 返回空 + persist-degraded-ls（不再回退 LS agents）', async () => {
     // 不安装 transport → invoke missing；历史 LS agents 键仍在，但权威在 SQLite，
     // load 失败仅 errorStore 留痕，不把 LS 当 agents 源静默回灌。
-    localStorage.setItem(SESSION_AGENTS_PREFIX + 's-fallback-cut', JSON.stringify([agent]));
+    localStorage.setItem(
+      SESSION_AGENTS_PREFIX + 's-fallback-cut',
+      JSON.stringify([agent])
+    );
     const logSpy = vi.spyOn(userFacingErrors, 'logInternalError');
 
     const agents = await loadSessionAgents('s-fallback-cut');
@@ -1152,9 +1225,14 @@ describe('清空消息持久化与防僵尸复活事务（DEF-03 / DEF-SESS-12�
 
     // 活跃状态下消息为 0（如直接在界面清空）
     const emptyActive = sess('s1', []);
-    await persistAllSessionsRust([emptyActive], 's1', [DEFAULT_SESSION_FOLDER], {
-      sessionsToIndex,
-    });
+    await persistAllSessionsRust(
+      [emptyActive],
+      's1',
+      [DEFAULT_SESSION_FOLDER],
+      {
+        sessionsToIndex,
+      }
+    );
 
     const saveCalls = call.mock.calls.filter(
       (c) => c[0] === 'save_session_body' && c[1]?.sessionId === 's1'
@@ -1169,9 +1247,14 @@ describe('清空消息持久化与防僵尸复活事务（DEF-03 / DEF-SESS-12�
     installFakeTransport(call);
 
     const s = sess('s1', [], { hydratedFromEngine: true });
-    await persistAllSessionsRust([s], 'other-active', [DEFAULT_SESSION_FOLDER], {
-      sessionsToIndex,
-    });
+    await persistAllSessionsRust(
+      [s],
+      'other-active',
+      [DEFAULT_SESSION_FOLDER],
+      {
+        sessionsToIndex,
+      }
+    );
 
     const saveCalls = call.mock.calls.filter(
       (c) => c[0] === 'save_session_body' && c[1]?.sessionId === 's1'
@@ -1194,9 +1277,14 @@ describe('清空消息持久化与防僵尸复活事务（DEF-03 / DEF-SESS-12�
     const lazyShell = sess('remote-lazy', []);
     const activeSess = sess('active-1', [msg('m1', 'user')]);
 
-    await persistAllSessionsRust([lazyShell, activeSess], 'active-1', [DEFAULT_SESSION_FOLDER], {
-      sessionsToIndex,
-    });
+    await persistAllSessionsRust(
+      [lazyShell, activeSess],
+      'active-1',
+      [DEFAULT_SESSION_FOLDER],
+      {
+        sessionsToIndex,
+      }
+    );
 
     // 核心断言：remote-lazy 绝不可调用 save_session_body 擦除远端历史
     const lazySaves = call.mock.calls.filter(
@@ -1216,9 +1304,14 @@ describe('清空消息持久化与防僵尸复活事务（DEF-03 / DEF-SESS-12�
       hydratedFromEngine: true,
       hydrateTruncated: true,
     });
-    await persistAllSessionsRust([truncSess], 's-trunc', [DEFAULT_SESSION_FOLDER], {
-      sessionsToIndex,
-    });
+    await persistAllSessionsRust(
+      [truncSess],
+      's-trunc',
+      [DEFAULT_SESSION_FOLDER],
+      {
+        sessionsToIndex,
+      }
+    );
 
     const saves = call.mock.calls.filter(
       (c) => c[0] === 'save_session_body' && c[1]?.sessionId === 's-trunc'
@@ -1235,9 +1328,14 @@ describe('清空消息持久化与防僵尸复活事务（DEF-03 / DEF-SESS-12�
     );
 
     const clearedSess = sess('s-cleared', [], { messagesHydrated: true });
-    await persistAllSessionsRust([clearedSess], 's-cleared', [DEFAULT_SESSION_FOLDER], {
-      sessionsToIndex,
-    });
+    await persistAllSessionsRust(
+      [clearedSess],
+      's-cleared',
+      [DEFAULT_SESSION_FOLDER],
+      {
+        sessionsToIndex,
+      }
+    );
 
     // D-F06 剥双轨：降级回退不再把 LS 当正文写口——残存历史键原样保留
     // （不写 []、不擦除）；「僵尸复活」经 loadSessionBody 不再回退 LS 结构性消除。
@@ -1268,18 +1366,32 @@ describe('清空消息持久化与防僵尸复活事务（DEF-03 / DEF-SESS-12�
 
     // 正文/agents 键均不得被创建（D-F06 + 偏离 #2：降级时仅内存 store + errorStore 留痕）
     expect(localStorage.getItem(SESSION_BODY_PREFIX + 's-degraded')).toBeNull();
-    expect(localStorage.getItem(SESSION_AGENTS_PREFIX + 's-degraded')).toBeNull();
+    expect(
+      localStorage.getItem(SESSION_AGENTS_PREFIX + 's-degraded')
+    ).toBeNull();
     // 索引壳仍写（侧栏元数据过渡期契约不变）
     expect(localStorage.getItem(SESSION_INDEX_KEY)).not.toBeNull();
   });
 
   it('isLazySessionShell 判定准则边界穷举测试', () => {
     // 1. 有消息：绝不是懒壳
-    expect(isLazySessionShell({ id: 's', messages: [msg('m', 'user')] }, 'other')).toBe(false);
+    expect(
+      isLazySessionShell({ id: 's', messages: [msg('m', 'user')] }, 'other')
+    ).toBe(false);
     // 2. 显式清空/已水合：绝不是懒壳
-    expect(isLazySessionShell({ id: 's', messages: [], messagesHydrated: true }, 'other')).toBe(false);
+    expect(
+      isLazySessionShell(
+        { id: 's', messages: [], messagesHydrated: true },
+        'other'
+      )
+    ).toBe(false);
     // 3. 引擎已水合：绝不是懒壳
-    expect(isLazySessionShell({ id: 's', messages: [], hydratedFromEngine: true }, 'other')).toBe(false);
+    expect(
+      isLazySessionShell(
+        { id: 's', messages: [], hydratedFromEngine: true },
+        'other'
+      )
+    ).toBe(false);
     // 4. 当前活跃会话：绝不是懒壳
     expect(isLazySessionShell({ id: 's', messages: [] }, 's')).toBe(false);
     // 5. 真实未水合非活跃空壳：是懒壳

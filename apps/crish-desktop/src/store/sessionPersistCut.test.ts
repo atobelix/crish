@@ -12,12 +12,11 @@ import {
   SESSION_STORE_PERSIST_KEY,
   migrateSessionStoreShellKey,
 } from '../api/session-persistence/sessionShellKeyMigration';
-import {
-  persistAllSessionsSyncViaLocalStorage,
-} from '../api/session-persistence/sessionRustDbHydrate';
+import { persistAllSessionsSyncViaLocalStorage } from '../api/session-persistence/sessionRustDbHydrate';
 import {
   DEFAULT_SESSION_FOLDER,
   SESSION_ACTIVE_KEY,
+  SESSION_AGENTS_PREFIX,
   SESSION_BODY_PREFIX,
 } from '../api/session-persistence/sessionPersistenceTypes';
 import type { SessionMessage, SessionState } from './layoutStore';
@@ -174,7 +173,9 @@ describe('U-PERSIST-A · NA-A5 deleteSession 清 composerDrafts', () => {
   it('成功删除后 composerDrafts 不再含该 id', () => {
     const h = makeHarness();
     // 通过 actions 造一个会话 + draft
-    const id = h.actions.createSession!({ title: 'draft-victim' } as never) as string;
+    const id = h.actions.createSession!({
+      title: 'draft-victim',
+    } as never) as string;
     h.actions.setComposerDraft!(id, 'unsent text');
     expect((h.state.composerDrafts as Record<string, string>)[id]).toBe(
       'unsent text'
@@ -194,6 +195,26 @@ describe('U-PERSIST-A · NA-A5 deleteSession 清 composerDrafts', () => {
     expect((h.state.composerDrafts as Record<string, string>).other).toBe(
       'keep'
     );
+  });
+
+  it('RUN-09：删除后 localStorage 历史镜像键（body/agents）对称清除', () => {
+    const h = makeHarness();
+    const id = h.actions.createSession!({
+      title: 'mirror-victim',
+    } as never) as string;
+    // 预置旧版本残留的 LS 镜像键（D-F06 后无写口，仅可能为历史残留）
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + id,
+      JSON.stringify([msg('legacy')])
+    );
+    localStorage.setItem(SESSION_AGENTS_PREFIX + id, '[]');
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + id)).not.toBeNull();
+
+    const ok = h.actions.deleteSession!(id);
+    expect(ok).toBe(true);
+    // localStorage 回退场景：删除后旧键不存在（RUN-09 DoD）
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + id)).toBeNull();
+    expect(localStorage.getItem(SESSION_AGENTS_PREFIX + id)).toBeNull();
   });
 });
 
@@ -239,10 +260,7 @@ describe('U-PERSIST-A · 真实 store partialize 探针（NA-A1）', () => {
       },
       version: 1,
     };
-    localStorage.setItem(
-      SESSION_STORE_PERSIST_KEY,
-      JSON.stringify(legacy)
-    );
+    localStorage.setItem(SESSION_STORE_PERSIST_KEY, JSON.stringify(legacy));
     vi.resetModules();
     await import('./sessionStore');
     const raw = localStorage.getItem(SESSION_STORE_PERSIST_KEY);

@@ -99,7 +99,7 @@ fn orphan_within_grace_period_is_preserved() {
 
     let deleted = db.cleanup_orphan_sessions(&["keep".to_string()]).unwrap();
 
-    assert_eq!(deleted, 1, "仅超宽限期的孤儿被删除");
+    assert_eq!(deleted.len(), 1, "仅超宽限期的孤儿被删除");
     assert_remaining_ids(&db, &["keep", "recent"]);
 }
 
@@ -112,7 +112,7 @@ fn orphan_beyond_grace_period_is_deleted() {
 
     let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
 
-    assert_eq!(deleted, 1);
+    assert_eq!(deleted.len(), 1);
     assert_remaining_ids(&db, &[]);
 }
 
@@ -128,7 +128,7 @@ fn grace_period_configurable_via_session_meta() {
 
     let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
 
-    assert_eq!(deleted, 1, "orphan_grace_ms=0 时近期孤儿也删除");
+    assert_eq!(deleted.len(), 1, "orphan_grace_ms=0 时近期孤儿也删除");
     assert_remaining_ids(&db, &[]);
 }
 
@@ -142,7 +142,7 @@ fn keep_ids_preserved_beyond_grace_period() {
 
     let deleted = db.cleanup_orphan_sessions(&["kept".to_string()]).unwrap();
 
-    assert_eq!(deleted, 1);
+    assert_eq!(deleted.len(), 1);
     assert_remaining_ids(&db, &["kept"]);
 }
 
@@ -158,7 +158,7 @@ fn empty_keep_still_applies_grace() {
 
     let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
 
-    assert_eq!(deleted, 1, "空 keepIds 下宽限期保护仍然生效");
+    assert_eq!(deleted.len(), 1, "空 keepIds 下宽限期保护仍然生效");
     assert_remaining_ids(&db, &["recent"]);
 }
 
@@ -184,7 +184,7 @@ fn engine_subagent_session_never_deleted_by_cleanup() {
     // 空 keepIds（壳层 confirm 后仍会到达库层）
     let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
 
-    assert_eq!(deleted, 1, "仅普通孤儿被清理，引擎子代理会话豁免");
+    assert_eq!(deleted.len(), 1, "仅普通孤儿被清理，引擎子代理会话豁免");
     assert_remaining_ids(&db, &["sub-sess-1-0"]);
 }
 
@@ -208,7 +208,7 @@ fn engine_subagent_session_preserved_with_partial_keep() {
         .cleanup_orphan_sessions(&["new-user".to_string()])
         .unwrap();
 
-    assert_eq!(deleted, 1, "仅超宽限期的普通孤儿被删");
+    assert_eq!(deleted.len(), 1, "仅超宽限期的普通孤儿被删");
     assert_remaining_ids(&db, &["sub-sess-2-0", "new-user"]);
 }
 
@@ -231,7 +231,7 @@ fn session_with_active_run_preserved() {
 
     let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
 
-    assert_eq!(deleted, 2, "run-done / idle 被清理，run-active 豁免");
+    assert_eq!(deleted.len(), 2, "run-done / idle 被清理，run-active 豁免");
     assert_remaining_ids(&db, &["run-active"]);
 }
 
@@ -250,7 +250,7 @@ fn session_with_queued_run_preserved() {
         .cleanup_orphan_sessions(&["run-queued".to_string()])
         .unwrap();
 
-    assert_eq!(deleted, 1, "仅 stale 被清理");
+    assert_eq!(deleted.len(), 1, "仅 stale 被清理");
     assert_remaining_ids(&db, &["run-queued"]);
 }
 
@@ -267,7 +267,7 @@ fn self_heal_row_within_grace_preserved() {
 
     let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
 
-    assert_eq!(deleted, 1, "仅超宽限期孤儿被删，自愈行保留");
+    assert_eq!(deleted.len(), 1, "仅超宽限期孤儿被删，自愈行保留");
     assert_remaining_ids(&db, &["self-heal"]);
 }
 
@@ -291,7 +291,7 @@ fn cleanup_preserves_session_with_unconsumed_pending() {
     let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
 
     assert_eq!(
-        deleted, 1,
+        deleted.len(), 1,
         "仅无 pending 的陈旧会话被清理，pending 未决会话豁免"
     );
     assert_remaining_ids(&db, &["pending-s1"]);
@@ -316,7 +316,7 @@ fn cleanup_preserves_session_with_inflight_run() {
 
     let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
 
-    assert_eq!(deleted, 0, "最严路径下 running run 会话保留");
+    assert_eq!(deleted.len(), 0, "最严路径下 running run 会话保留");
     assert_remaining_ids(&db, &["s1"]);
     assert!(db.get_run("r1").unwrap().is_some(), "run 行未被级联删除");
     assert_eq!(
@@ -339,7 +339,7 @@ fn cleanup_preserves_inflight_run_within_grace() {
 
     let deleted = db.cleanup_orphan_sessions(&["other".to_string()]).unwrap();
 
-    assert_eq!(deleted, 0, "宽限期内的 running run 会话保留");
+    assert_eq!(deleted.len(), 0, "宽限期内的 running run 会话保留");
     assert_remaining_ids(&db, &["recent-run"]);
 }
 
@@ -356,7 +356,7 @@ fn cleanup_preserves_session_with_intermediate_run_statuses() {
 
         let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
 
-        assert_eq!(deleted, 0, "{status:?} 中间态 run 的会话必须保留");
+        assert_eq!(deleted.len(), 0, "{status:?} 中间态 run 的会话必须保留");
         assert_remaining_ids(&db, &["mid-run"]);
     }
 }
@@ -372,6 +372,6 @@ fn cleanup_still_removes_stale_session_without_run() {
 
     let deleted = db.cleanup_orphan_sessions(&["fresh".to_string()]).unwrap();
 
-    assert_eq!(deleted, 1);
+    assert_eq!(deleted.len(), 1);
     assert_remaining_ids(&db, &["fresh"]);
 }

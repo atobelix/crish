@@ -522,3 +522,60 @@ pub(crate) fn step_11_to_12(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqli
 pub(crate) fn migrate_v11_to_v12(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
     step_11_to_12(tx)
 }
+
+/// v12 → v13：存量孤儿 session_meta 键一次性 GC（RUN-15）。
+///
+/// 背景：`session_meta` 为独立 KV 表（无外键级联），历史上删除会话后
+/// `{session_id}:*` 会话作用域键残留（output_dir / output_root /
+/// explore_docs_consumed / revert_streak_count / revert_last_at /
+/// compact_stage_triggered / compact_stage_summaries 等已知后缀）。
+/// v13 起删除路径（delete_session / cleanup_orphan_sessions）已在删除
+/// 事务内按前缀清理键；本迁移负责**清掉升级前已残留的孤儿键**。
+///
+/// 删除条件（双条件锚定，防止误删全局键）：
+/// 1. 键的会话段（首个 `:` 之前）**不在** `sessions` 表（孤儿判定）；
+/// 2. 键以**已知会话作用域后缀**之一结尾——全局键可能含冒号（如
+///    `sched:{workflow_id}` / `workflow:{workflow_id}` 定时/工作流定义、
+///    `goal_state` / `recover_notifications` 等），仅凭条件 1 会把
+///    「会话段碰巧不命中会话表」的全局键误删，故用后缀白名单收窄。
+///
+/// 幂等可重入：DELETE 语义天然幂等——重跑时孤儿键已清空即空操作；
+/// 崩溃中间态重跑（结构无 DDL，仅 DML）由「每版本独立事务」保证原子。
+pub(crate) fn step_12_to_13(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
+    // 已知会话作用域后缀（与生产写入方逐一对应）：
+    // - output_dir / output_root：outputs_config.rs（G01 产出目录落键 / G03 会话级覆盖）
+    // - explore_docs_consumed：agent-tools explore_quota.rs
+    // - revert_streak_count / revert_last_at：agent-tools revert_guard.rs
+    // - compact_stage_triggered / compact_stage_summaries：run_idle.rs F5
+    const SESSION_SCOPED_SUFFIXES: [&str; 7] = [
+        ":output_dir",
+        ":output_root",
+        ":explore_docs_consumed",
+        ":revert_streak_count",
+        ":revert_last_at",
+        ":compact_stage_triggered",
+        ":compact_stage_summaries",
+    ];
+    let suffix_pred = SESSION_SCOPED_SUFFIXES
+        .iter()
+        .map(|s| format!("key LIKE '%{s}'"))
+        .collect::<Vec<_>>()
+        .join(" OR ");
+    let deleted = tx.execute(
+        &format!(
+            "DELETE FROM session_meta
+             WHERE instr(key, ':') > 1
+               AND substr(key, 1, instr(key, ':') - 1) NOT IN (SELECT id FROM sessions)
+               AND ({suffix_pred})"
+        ),
+        [],
+    )?;
+    if deleted > 0 {
+        tracing::info!(
+            target: "db",
+            keys = deleted,
+            "迁移 v13：孤儿 session_meta 键已清理（会话不存在 + 已知作用域后缀）"
+        );
+    }
+    Ok(())
+}

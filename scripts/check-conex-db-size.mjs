@@ -11,6 +11,23 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-conex-db-size.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：crates/conex-db/src/lib.rs 超 800 行，或 src/*.rs 任一 mod 文件超 600 行（tests.rs 计入）。",
+    "文件:行号 / 当前值：FAIL 输出超限文件与实测行数。",
+    "阈值：lib.rs ≤ 800；mod 文件 ≤ 600（R4-T15 拆分验收定额）。",
+    "正确做法：按职责拆出新的 mod 文件（拆出真实逻辑，禁止切空壳/纯 re-import 凑数）；拆分后同步更新文档行数口径。",
+    "复核：node scripts/check-conex-db-size.mjs  # 期望 OK",
+  ];
+  console.log('[check-conex-db-size] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 const srcDir = resolve(root, 'crates/conex-db/src');

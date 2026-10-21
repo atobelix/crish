@@ -443,7 +443,7 @@ fn upgrade_e2e_v3_to_v4_all_apis_usable_after_upgrade() {
     // ── 孤儿清理（宽限期显式归零保证确定性）──
     db.set_session_meta("orphan_grace_ms", "0").unwrap();
     let deleted = db.cleanup_orphan_sessions(&["s1".to_string()]).unwrap();
-    assert_eq!(deleted, 2, "s2/s3 被清理，s1 保留");
+    assert_eq!(deleted.len(), 2, "s2/s3 被清理，s1 保留");
     assert_eq!(db.list_sessions().unwrap().len(), 1);
 
     // ── 级联删除 ──

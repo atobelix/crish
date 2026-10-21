@@ -24,25 +24,88 @@ import {
 } from './sessionPersistenceTypes';
 import { invokeResult } from '../tauriInvoke';
 import { parseSessionIndexList, safeParseJson } from './sessionHydration';
+import { toast } from '../../services/toast';
+
+/**
+ * RUN-07：孤儿清理产出回收结果事件（Rust session-outputs-cleanup 载荷，
+ * camelCase 对齐 SessionOutputsCleanupEvent）。
+ */
+interface SessionOutputsCleanupEventPayload {
+  sessionId: string;
+  cleaned: boolean;
+  skippedOutside: boolean;
+  trashRoot: string;
+  notice: string;
+}
+
+/** 事件名（与 session_commands.rs emit 侧一致） */
+const SESSION_OUTPUTS_CLEANUP_EVENT = 'session-outputs-cleanup';
+
+let cleanupToastListenerBound = false;
+
+/**
+ * RUN-07：订阅 Rust 侧产出目录清理结果事件 → 可见 toast。
+ *
+ * 通知由真实清理结果驱动（notice 文案来自 Rust 清理链，不硬编码成功）；
+ * 非 Tauri 环境（纯浏览器 / 测试未 mock）静默降级不订阅。
+ * 幂等：首次 cleanupOrphanSessions 调用时懒订阅，进程内仅一次。
+ */
+function ensureCleanupToastListener(): void {
+  if (cleanupToastListenerBound) return;
+  cleanupToastListenerBound = true;
+  void (async () => {
+    try {
+      const mod = await import('@tauri-apps/api/event');
+      if (typeof mod?.listen !== 'function') return;
+      await mod.listen<{ payload?: SessionOutputsCleanupEventPayload[] }>(
+        SESSION_OUTPUTS_CLEANUP_EVENT,
+        (e) => {
+          for (const r of e?.payload ?? []) {
+            if (!r?.notice) continue;
+            if (r.cleaned) toast.info(r.notice);
+            else toast.warning(r.notice);
+          }
+        }
+      );
+    } catch {
+      cleanupToastListenerBound = false;
+      /* swallow-ok: 非 Tauri 环境 toast 事件桥不可用，静默降级 */
+    }
+  })();
+}
 
 /**
  * 清理不在 activeIds 中的会话（孤儿清理）。
  *
- * N1-2 守卫：空 keepIds 一律拒绝清理，与 Rust 侧 guard_cleanup_keep
- * 语义对齐（session_commands.rs:94-101 默认拒绝空 keepIds）。JS 回退分支
+ * N1-2 守卫：空 keepIds 默认拒绝清理，与 Rust 侧 guard_cleanup_keep
+ * 语义对齐（session_commands.rs:93-101 默认拒绝空 keepIds）。JS 回退分支
  * 此前无守卫——Rust 拒绝后错误码落入此分支，等于「守卫被绕过」，boot
  * 窗口一次 persist 即清空全部 LS 会话镜像；keep 为空时直接返回 0 不删。
+ *
+ * RUN-08：confirmEmpty 传真实意图（显式参数，对齐 Rust 命令的
+ * confirm_empty: Option<bool>）——已水合 + 用户「删除全部会话」场景由
+ * 调用方（persistAllSessionsRust）显式传 true，Rust 守卫放行后执行全库
+ * 清空；boot 未水合空列表仍由调用方跳过，永不带 confirmEmpty。
  */
 export async function cleanupOrphanSessions(
-  activeIds: string[]
+  activeIds: string[],
+  confirmEmpty = false
 ): Promise<number> {
-  if (!activeIds || activeIds.length === 0) return 0;
+  if (!activeIds || activeIds.length === 0) {
+    if (!confirmEmpty) return 0;
+    // 显式清空：交由 Rust guard_cleanup_keep(active_ids, confirm_empty)
+    // 放行；invoke 缺失（missing）时落 LS 回退分支，同样清空镜像键。
+  }
+  // RUN-07：懒订阅产出清理结果事件（删除数 > 0 时 Rust 会清理产出目录
+  // 并推送 session-outputs-cleanup，toast 由真实结果驱动）
+  ensureCleanupToastListener();
   const res = await invokeResult<number>('cleanup_orphan_sessions', {
     activeIds: activeIds || [],
+    confirmEmpty,
   });
   if (res.status === 'ok') return res.data || 0;
   // localStorage 回退：扫描 body/agents key，删除不在 keep 集合中的
-  // （keep 非空已由上方守卫保证——空 keep 不清除任何数据）
+  // （keep 为空时仅 confirmEmpty=true 才会到达此处，清空全部镜像键）
   try {
     const keep = new Set(activeIds || []);
     let deleted = 0;

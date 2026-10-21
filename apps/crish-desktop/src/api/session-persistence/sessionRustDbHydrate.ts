@@ -421,7 +421,7 @@ export async function persistAllSessionsRust(
     await Promise.allSettled(metaJobs);
 
     // 3. 孤儿清理
-    // P0-2 防护：空会话列表（boot 窗口 hydrate 未完成 / 全删场景）跳过清理——
+    // P0-2 防护：空会话列表（boot 窗口 hydrate 未完成）跳过清理——
     // 写屏障保护：在降级/未水合期间拦截清理，杜绝将磁盘历史全量抹杀
     if (keepIds.size > 0) {
       if (
@@ -436,6 +436,16 @@ export async function persistAllSessionsRust(
       } else {
         await cleanupOrphanSessions(Array.from(keepIds));
       }
+    } else if (
+      sessionDeltaWriteBarrier.getIsHydrated() &&
+      !sessionDeltaWriteBarrier.getIsFallbackMode()
+    ) {
+      // RUN-08：已水合 + 空列表 = 用户显式「删除全部会话」。空列表在未
+      // 水合/降级期已被上方 full_session_index 屏障拦截（提前 return），
+      // 能到达此处即真实全删意图——confirm_empty 传真实意图，Rust 侧
+      // guard_cleanup_keep 放行后清空 sessions.db；boot 未水合空列表
+      // 仍保持跳过，不得清理。
+      await cleanupOrphanSessions([], true);
     }
 
     // D-05 S1：probe 成功且批收口 → 持久化降级状态回落健康（恢复点）

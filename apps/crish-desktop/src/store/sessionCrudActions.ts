@@ -6,7 +6,12 @@ import { nowIsoTimestamp } from '../api/sessionTime';
 import type { SessionImportMeta, SessionState } from './types';
 // 墓碑登记直连专用模块（避免经 importSessions 引入 store/index 反向环与启动期 TDZ）
 import { recordDeletedExternalSession } from '../api/import/externalSessionTombstone';
-import { persistAllSessionsSync } from '../api/session-persistence/sessionLocalStorage';
+// RUN-09：删除 cascade 对称清理 LS 历史镜像键（SESSION_BODY_/SESSION_AGENTS_），
+// persistAllSessionsSync / deleteSessionBody 直连专用模块（避免反向环）
+import {
+  deleteSessionBody,
+  persistAllSessionsSync,
+} from '../api/session-persistence/sessionLocalStorage';
 import {
   deleteSessionFromIndexed,
   getSessionById,
@@ -389,6 +394,12 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         sessionRuntimeRegistry.remove(id);
         clearMessageSnapshots(id);
         useStreamingStore.getState().clearSession(id);
+
+        // RUN-09：删除 cascade 对称清理 localStorage 历史镜像
+        // （SESSION_BODY_PREFIX / SESSION_AGENTS_PREFIX 键）。D-F06 后 LS
+        // 已非正文/agents 写口，此处只可能清除旧版本残留镜像键（生产权威
+        // =SQLite），尽力而为，防重启后幽灵键残留。
+        deleteSessionBody(id);
 
         // U-PERSIST-A A-5：删除会话成功路径必须对称清 draft（08-M5）
         set((state) => {
