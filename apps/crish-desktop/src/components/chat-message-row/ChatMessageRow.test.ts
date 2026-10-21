@@ -23,7 +23,7 @@ import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlo
 import type { ToolRenderItem } from '../../api/toolPresentation';
 
 function baseToolStack(
-  over: Partial<ChatToolStackSharedProps> = {},
+  over: Partial<ChatToolStackSharedProps> = {}
 ): ChatToolStackSharedProps {
   return {
     agents: [],
@@ -46,13 +46,14 @@ describe('copyTextBestEffort', () => {
 
   beforeEach(() => {
     writeText.mockReset();
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText },
-    });
+    // 用 vi.stubGlobal 注入 navigator，而不是对全局 navigator defineProperty：
+    // 全局 navigator 仅 Node >= 21 提供，CI 的 Node 20 下直接 ReferenceError；
+    // stubGlobal 在两种运行时都成立，且 afterEach 可完整还原，不向同 worker 其他用例泄漏。
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -86,19 +87,22 @@ describe('toolStackSharedPropsEqual', () => {
   it('differs when expandedTools / session / approval change', () => {
     const base = baseToolStack();
     expect(
-      toolStackSharedPropsEqual(base, baseToolStack({ expandedTools: { a: true } })),
+      toolStackSharedPropsEqual(
+        base,
+        baseToolStack({ expandedTools: { a: true } })
+      )
     ).toBe(false);
     expect(
-      toolStackSharedPropsEqual(base, baseToolStack({ activeSessionId: 's2' })),
+      toolStackSharedPropsEqual(base, baseToolStack({ activeSessionId: 's2' }))
     ).toBe(false);
     expect(
-      toolStackSharedPropsEqual(base, baseToolStack({ approvalBusy: true })),
+      toolStackSharedPropsEqual(base, baseToolStack({ approvalBusy: true }))
     ).toBe(false);
     expect(
       toolStackSharedPropsEqual(
         base,
-        baseToolStack({ pendingApprovalMsgId: 'm1' }),
-      ),
+        baseToolStack({ pendingApprovalMsgId: 'm1' })
+      )
     ).toBe(false);
   });
 
@@ -117,21 +121,21 @@ describe('Chinese role labels', () => {
   it('messageRowAriaLabel composes role · pin · status', () => {
     expect(messageRowAriaLabel({ role: 'user' })).toBe('你');
     expect(messageRowAriaLabel({ role: 'assistant', isPinned: true })).toBe(
-      '助手 · 已固定',
+      '助手 · 已固定'
     );
     expect(
-      messageRowAriaLabel({ role: 'user', status: 'queued', isPinned: true }),
+      messageRowAriaLabel({ role: 'user', status: 'queued', isPinned: true })
     ).toBe('你 · 已固定 · 排队中');
     expect(
       messageRowAriaLabel({
         role: 'assistant',
         isThinking: true,
         status: 'processing',
-      }),
+      })
     ).toBe('助手 · 生成中');
     // queued 优先于 processing 语义（用户排队不会同时思考）
     expect(
-      messageRowAriaLabel({ role: 'user', status: 'queued', isThinking: true }),
+      messageRowAriaLabel({ role: 'user', status: 'queued', isThinking: true })
     ).toBe('你 · 排队中');
   });
 });
@@ -204,7 +208,10 @@ describe('tool row hosting handoff only', () => {
   });
 
   it('buildToolStackHostProps merges shared + msg-local without extra keys', () => {
-    const shared = baseToolStack({ activeSessionId: 'sess-9', approvalBusy: true });
+    const shared = baseToolStack({
+      activeSessionId: 'sess-9',
+      approvalBusy: true,
+    });
     const items: ToolRenderItem[] = [
       {
         kind: 'single',
@@ -234,7 +241,7 @@ describe('tool row hosting handoff only', () => {
         'onOpenTerminal',
         'onToggleTool',
         'pendingApprovalMsgId',
-      ].sort(),
+      ].sort()
     );
   });
 });
