@@ -13,6 +13,16 @@ import { PluginShareModal } from './PluginShareModal';
 import { SkillDetailModal, type SkillDetailTarget } from './SkillDetailModal';
 import type { DesktopSkill } from '../../api/skillsApi';
 
+function isCatalogDetail(
+  item: InstalledExtension | CatalogEntry | null,
+  catalogInstalled: Set<string>
+): boolean {
+  if (!item) return false;
+  if ('fromSystem' in item && item.fromSystem) return false;
+  if (!('installRef' in item) || !item.installRef) return false;
+  return !catalogInstalled.has(item.id);
+}
+
 export interface ExtensionsModalsProps {
   selectedDetailItem: InstalledExtension | CatalogEntry | null;
   onCloseDetail: () => void;
@@ -141,14 +151,15 @@ export const ExtensionsModals: React.FC<ExtensionsModalsProps> = ({
           open={Boolean(selectedDetailItem)}
           onClose={onCloseDetail}
           scope={
-            selectedDetailItem &&
-            'installRef' in selectedDetailItem &&
-            !catalogInstalled.has(selectedDetailItem.id)
+            isCatalogDetail(selectedDetailItem, catalogInstalled)
               ? 'catalog'
               : 'installed'
           }
           item={selectedDetailItem}
-          canUninstall={false}
+          canUninstall={
+            Boolean(selectedDetailItem) &&
+            !isCatalogDetail(selectedDetailItem, catalogInstalled)
+          }
           busyId={busyId}
           mcpState={mcpState}
           onInstallCatalog={onInstallCatalog}

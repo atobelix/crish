@@ -8,6 +8,7 @@
  */
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
+import { bindComposerHeightSettle } from './composerHeightSettle';
 
 export const GRID_GUTTER_PX = 18;
 export const MIN_CAPACITY_PX = 200;
@@ -197,6 +198,12 @@ export function useComposerMultiline(opts: {
       roManager.unobserve(el, handleResize);
     };
   }, [enabled, layoutRef, measure]);
+
+  useLayoutEffect(() => {
+    const card = layoutRef.current?.closest('[data-composer-card]');
+    if (!(card instanceof HTMLElement)) return;
+    return bindComposerHeightSettle(card);
+  }, [layoutRef]);
 
   return enabled ? multiline : true;
 }

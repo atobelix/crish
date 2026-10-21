@@ -30,7 +30,7 @@
     background-color var(--transition-fast),
     border-color var(--transition-fast),
     box-shadow var(--transition-fast);
-  animation: noticeIn 160ms var(--ease-emphasized) forwards;
+  animation: noticeIn var(--duration-fast) var(--ease-decelerate) forwards;
 }
 
 @keyframes noticeIn {

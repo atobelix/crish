@@ -104,13 +104,17 @@ export const ExtensionsSidebar: React.FC<ExtensionsSidebarProps> = ({
                     onCheckedChange={(checked) => onToggleItem(item, checked)}
                     aria-label={`切换 ${item.name}`}
                   />
-                  <Tooltip content="卸载">
+                  <Tooltip
+                    content={
+                      item.id.startsWith('custom-plugin:') ? '删除' : '卸载'
+                    }
+                  >
                     <Button
                       variant="ghost"
                       size="sm"
                       className={styles.iconActionBtn}
                       onClick={() => onUninstallItem(item)}
-                      aria-label={`卸载 ${item.name}`}
+                      aria-label={`${item.id.startsWith('custom-plugin:') ? '删除' : '卸载'} ${item.name}`}
                     >
                       <AppIcon name="trash" size={12} />
                     </Button>

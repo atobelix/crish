@@ -316,10 +316,10 @@ describe('ChatComposer 全链（T6 接线）', () => {
   it('斜杠全链：/ 触发 tiptap 菜单，宿主命令可点选注入并回流 chatInput', async () => {
     const { onSend } = renderChatComposer({});
     await typeText('/go');
-    const goalItem = await screen.findByRole('option', { name: /\/goal/ });
+    const goalItem = await screen.findByRole('option', { name: /目标/ });
     fireEvent.click(goalItem);
     await waitFor(() => {
-      expect(getEditorDom().textContent).toContain('/goal');
+      expect(getEditorDom().textContent).toContain('目标');
     });
     // 防抖回流 → 宿主 chatInput 更新 → 可发送
     await waitFor(() => {
@@ -375,7 +375,7 @@ describe('ChatComposer 全链（T6 接线）', () => {
   it('焦点回迁：斜杠点选后编辑器获得焦点（菜单关闭 → 编辑器）', async () => {
     renderChatComposer({});
     await typeText('/go');
-    const goalItem = await screen.findByRole('option', { name: /\/goal/ });
+    const goalItem = await screen.findByRole('option', { name: /目标/ });
     fireEvent.click(goalItem);
     await waitFor(() => {
       expect(document.activeElement).toBe(getEditorDom());

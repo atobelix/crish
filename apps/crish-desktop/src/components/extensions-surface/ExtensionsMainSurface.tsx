@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Button } from '../ui';
+import { t } from '../../i18n';
 import { useExtensionMarket } from '../settings-extensions/useExtensionMarket';
 import { ExternalImportWorkbench } from './ExternalImportWorkbench';
 import { ExtensionsHeaderActions } from './ExtensionsHeaderActions';
@@ -26,18 +27,22 @@ import {
   type UnifiedExtensionItem,
 } from './buildUnifiedItems';
 export type { UnifiedExtensionItem };
-import { useSettingsStore } from '../../store/storeAccess';
+import { commitUserMcpRoster, useSettingsStore } from '../../store/storeAccess';
 import { useSessionStore } from '../../store/storeAccess';
 import { navigateToChatSession } from '../../store/storeAccess';
 import { useToast } from '../../services/toast/ToastContext';
 import { clientApi, type Settings, type McpServer } from '../../api/clientApi';
 import {
   loadCustomPlugins,
-  removeCustomPlugin,
   type CustomPluginItem,
 } from './customPluginStorage';
 import { ExtensionsSidebar } from './ExtensionsSidebar';
 import { ExtensionsCatalogGrid } from './ExtensionsCatalogGrid';
+import {
+  uninstallInstalledRecord,
+  uninstallUnifiedExtension,
+} from './externalImportActions';
+import { notifyExtensionLifecycle } from './skillDismissState';
 import styles from './ExtensionsMainSurface.module.css';
 
 export interface ExtensionsMainSurfaceProps {
@@ -47,10 +52,10 @@ export interface ExtensionsMainSurfaceProps {
 type CategoryFilter = 'plugins' | 'skills' | 'mcp';
 type SidebarNav = 'explore' | 'featured' | 'import' | 'installed';
 
-const CATEGORY_TABS: { id: CategoryFilter; label: string }[] = [
-  { id: 'plugins', label: '插件' },
-  { id: 'skills', label: '技能' },
-  { id: 'mcp', label: 'MCP 服务' },
+const CATEGORY_TABS: { id: CategoryFilter; labelKey: string }[] = [
+  { id: 'plugins', labelKey: 'extensions.tab.plugins' },
+  { id: 'skills', labelKey: 'extensions.tab.skills' },
+  { id: 'mcp', labelKey: 'extensions.tab.mcp' },
 ];
 
 export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
@@ -83,6 +88,7 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
     null
   );
   const [searchQuery, setSearchQuery] = useState('');
+  const [lifecycleTick, setLifecycleTick] = useState(0);
 
   // 模态弹窗状态
   const [showPluginCreateModal, setShowPluginCreateModal] = useState(false);
@@ -99,15 +105,18 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
     InstalledExtension | CatalogEntry | null
   >(null);
 
-  // 自定义插件动态监听
   const [customPlugins, setCustomPlugins] = useState<CustomPluginItem[]>(() =>
     loadCustomPlugins()
   );
   useEffect(() => {
-    const handler = () => setCustomPlugins(loadCustomPlugins());
-    window.addEventListener('crish:custom-plugins-changed', handler);
-    return () =>
-      window.removeEventListener('crish:custom-plugins-changed', handler);
+    const onPlugins = () => setCustomPlugins(loadCustomPlugins());
+    const onLifecycle = () => setLifecycleTick((value) => value + 1);
+    window.addEventListener('crish:custom-plugins-changed', onPlugins);
+    window.addEventListener('crish:extensions-lifecycle', onLifecycle);
+    return () => {
+      window.removeEventListener('crish:custom-plugins-changed', onPlugins);
+      window.removeEventListener('crish:extensions-lifecycle', onLifecycle);
+    };
   }, []);
 
   const settingsMcpServers = useSettingsStore((s) => s.mcpServers || []);
@@ -129,6 +138,7 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
     installed,
     catalogInstalled,
     customPlugins,
+    lifecycleTick,
   ]);
 
   // 当前分类过滤（插件 / 技能 / MCP）
@@ -163,8 +173,7 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
           item.isOfficial ||
           item.catalogEntry?.source === 'official' ||
           item.id.includes('import') ||
-          item.id.includes('audit') ||
-          (item.catalogEntry?.tags && item.catalogEntry.tags.includes('官方'))
+          item.id.includes('audit')
       );
     }
     if (searchQuery.trim()) {
@@ -235,11 +244,15 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
         };
         nextList = [...currentList, newItem];
       }
-      useSettingsStore.getState().setMcpServers(nextList);
+      commitUserMcpRoster(nextList);
       void clientApi.saveSettingsEx('__global__', 'global', {
         mcpServers: nextList,
       } as unknown as Partial<Settings>);
-      showToast(start ? `已启用 MCP 服务 ${name}` : `已停用 MCP 服务 ${name}`);
+      showToast(
+        start
+          ? t('extensions.toast.mcpEnabled', { name })
+          : t('extensions.toast.mcpDisabled', { name })
+      );
       void refresh();
     },
     [refresh, showToast]
@@ -286,53 +299,38 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
   const handleUninstallItem = useCallback(
     (item: UnifiedExtensionItem) => {
       void (async () => {
-        if (item.kind === 'mcp') {
-          const current = useSettingsStore.getState().mcpServers || [];
-          const next = current.filter((server) => {
-            const aliases = [
-              server.id,
-              server.name,
-              `local-mcp:${server.id}`,
-              `local-mcp:${server.name}`,
-              `mcp:${server.id}`,
-              `mcp:${server.name}`,
-            ];
-            if (aliases.includes(item.id)) return false;
-            if (
-              server.name &&
-              item.name &&
-              server.name.toLowerCase() === item.name.toLowerCase()
-            ) {
-              return false;
-            }
-            return true;
-          });
-          if (next.length !== current.length) {
-            useSettingsStore.getState().setMcpServers(next);
-            await clientApi.saveSettingsEx('__global__', 'global', {
-              mcpServers: next,
-            } as unknown as Partial<Settings>);
-            showToast(`已移除 MCP 服务 ${item.name}`);
-          }
-        }
-        if (isImportClaudeCodexPlugin(item)) {
-          setOfficialPluginUninstalled(CANONICAL_IMPORT_PLUGIN_ID, true);
-          setPluginEnabled(CANONICAL_IMPORT_PLUGIN_ID, false);
-          void refresh();
-        } else if (item.id.startsWith('custom-plugin:')) {
-          const realId = item.id.replace('custom-plugin:', '');
-          removeCustomPlugin(realId);
+        const result = await uninstallUnifiedExtension(
+          item,
+          handleRemovePackage
+        );
+        if (result.message) showToast(result.message);
+        if (item.id.startsWith('custom-plugin:')) {
           setCustomPlugins(loadCustomPlugins());
-        } else if (item.installedItem) {
-          void handleRemovePackage(item.installedItem);
         }
+        setLifecycleTick((value) => value + 1);
         if (selectedInstalledId === item.id) {
           setSidebarNav('explore');
           setSelectedInstalledId(null);
         }
+        void refresh();
       })();
     },
     [refresh, handleRemovePackage, selectedInstalledId, showToast]
+  );
+
+  const handleRemoveFromDetail = useCallback(
+    (item: InstalledExtension) => {
+      void (async () => {
+        const result = await uninstallInstalledRecord(
+          item,
+          handleRemovePackage
+        );
+        if (result.message) showToast(result.message);
+        setLifecycleTick((value) => value + 1);
+        void refresh();
+      })();
+    },
+    [handleRemovePackage, refresh, showToast]
   );
 
   const handleInstallCatalogItem = useCallback(
@@ -340,27 +338,28 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
       if (isImportClaudeCodexPlugin(item)) {
         setOfficialPluginUninstalled(CANONICAL_IMPORT_PLUGIN_ID, false);
         setPluginEnabled(CANONICAL_IMPORT_PLUGIN_ID, true);
+        notifyExtensionLifecycle();
+        showToast(t('extensions.toast.pluginInstalled', { name: item.name }));
         void refresh();
       } else if (item.catalogEntry) {
         void handleInstallCatalog(item.catalogEntry);
+      } else {
+        showToast(t('extensions.toast.gotoImport', { name: item.name }));
       }
     },
-    [handleInstallCatalog, refresh]
+    [handleInstallCatalog, refresh, showToast]
   );
 
   const handleCreatePlugin = useCallback(() => {
     const sessionId = useSessionStore
       .getState()
-      .createSession({ title: '制作新插件' });
+      .createSession({ title: t('extensions.session.pluginMakerTitle') });
     useSessionStore
       .getState()
-      .setComposerDraft(
-        sessionId,
-        '/skill:plugin 我想制作一个新的 Crish 插件，请引导我选择插件的方向与功能'
-      );
+      .setComposerDraft(sessionId, t('extensions.session.pluginMakerPrompt'));
     navigateToChatSession(sessionId);
     onBackToChat?.();
-    showToast('已开启插件制作对话，正在由插件制作助手引导您设计与构建插件');
+    showToast(t('extensions.toast.pluginMakerStarted'));
   }, [onBackToChat, showToast]);
 
   return (
@@ -376,7 +375,7 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
               className={`${styles.topNavTab} ${categoryFilter === tab.id ? styles.activeTopNavTab : ''}`}
               onClick={() => handleCategoryChange(tab.id)}
             >
-              {tab.label}
+              {t(tab.labelKey)}
             </Button>
           ))}
         </div>
@@ -421,10 +420,17 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
           {sidebarNav === 'import' ? (
             <div className={styles.workbenchContainer}>
               <ExternalImportWorkbench
-                categoryFilter={categoryFilter === 'skills' ? 'skill' : 'mcp'}
+                categoryFilter={
+                  categoryFilter === 'skills'
+                    ? 'skill'
+                    : categoryFilter === 'plugins'
+                      ? 'plugin'
+                      : 'mcp'
+                }
                 onBackToChat={onBackToChat}
                 onRefresh={refresh}
                 onImportSuccess={refresh}
+                onRequestPluginImport={() => setShowPluginCreateModal(true)}
               />
             </div>
           ) : sidebarNav === 'installed' && selectedInstalledItem ? (
@@ -451,6 +457,7 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
               busyId={busyId}
               onSelectDetail={setSelectedDetailItem}
               onInstall={handleInstallCatalogItem}
+              onUninstall={handleUninstallItem}
             />
           )}
         </div>
@@ -467,7 +474,7 @@ export const ExtensionsMainSurface: React.FC<ExtensionsMainSurfaceProps> = ({
         onBackToChat={onBackToChat}
         mcpState={{ expandedMcpTools, toolTick, mcpServerBusy, mcpToolBusy }}
         onInstallCatalog={handleInstallCatalog}
-        onRemovePackage={handleRemovePackage}
+        onRemovePackage={handleRemoveFromDetail}
         togglePlugin={togglePlugin}
         onToggleMcpServer={handleToggleMcpServerId}
         onToggleMcpTool={toggleMcpTool}

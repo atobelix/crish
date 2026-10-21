@@ -226,6 +226,58 @@
   color: var(--skill-tag-color);
 }
 
+/* 目标胶囊：与技能纯文本芯片分开。叉号只在悬停或焦点时出现。 */
+.proseMirrorField :global(.mention-chip-goal) {
+  gap: 4px;
+  height: 22px;
+  padding: 0 6px 0 5px;
+  margin: 0 2px;
+  border-radius: var(--radius-sm);
+  border: 1px solid
+    color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
+  background: color-mix(in srgb, var(--skill-tag-color) 10%, var(--bg-primary));
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  cursor: default;
+  opacity: 1;
+}
+
+.proseMirrorField :global(.mention-chip-goal:hover) {
+  opacity: 1;
+  background: color-mix(in srgb, var(--skill-tag-color) 16%, var(--bg-primary));
+}
+
+.proseMirrorField :global(.mention-chip-goal .mention-remove) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0;
+  overflow: hidden;
+  cursor: pointer;
+  pointer-events: none;
+}
+
+.proseMirrorField :global(.mention-chip-goal:hover .mention-remove),
+.proseMirrorField :global(.mention-chip-goal:focus-within .mention-remove) {
+  width: 14px;
+  margin-left: 2px;
+  opacity: 0.72;
+  pointer-events: auto;
+}
+
+.proseMirrorField :global(.mention-chip-goal .mention-remove:hover) {
+  opacity: 1;
+}
+
 .proseMirrorField :global(.mention-chip .mention-icon-box) {
   display: inline-flex;
   align-items: center;

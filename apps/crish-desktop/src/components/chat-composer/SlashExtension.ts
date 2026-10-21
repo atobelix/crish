@@ -23,6 +23,7 @@ import {
   measureCursorLineBox,
 } from './safeCursorAnchor';
 import { AI_SYSTEM_COMMANDS } from './AiCommandSlashExtension';
+import { findSlashOrEnumerationMatch } from './slashTriggerAlias';
 
 export { AI_SYSTEM_COMMANDS } from './AiCommandSlashExtension';
 
@@ -108,11 +109,6 @@ export interface MentionSuggestionOptions {
 /** 斜杠 suggestion 独立 keyed plugin */
 export const slashSuggestionKey = new PluginKey('crishSlashSuggestion');
 
-/** 中文顿号 suggestion 独立 keyed plugin */
-export const slashChineseSuggestionKey = new PluginKey(
-  'crishSlashChineseSuggestion'
-);
-
 /** 提及 suggestion 独立 keyed plugin */
 export const mentionSuggestionKey = new PluginKey('crishMentionSuggestion');
 
@@ -168,10 +164,9 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
         const view = props.editor?.view;
         if (!view || !props.range) return lastCachedBox;
 
-        // CJK 合成态下坐标保持静止，返回稳定缓存
-        if (view.composing || (view as any).input?.composing) {
+        // 组字期间已有锚点则保持静止。没有锚点时继续测量输入卡片，避免菜单退成 2px 看不见。
+        if ((view.composing || (view as any).input?.composing) && lastCachedBox)
           return lastCachedBox;
-        }
 
         try {
           // 斜杠指令优先以主输入卡片（Composer Card）为锚定目标（对齐 ChatGPT Work 浮动卡片）
@@ -354,18 +349,8 @@ export const SlashExtension = Extension.create<SlashExtensionOptions>({
         command: ({ editor, range, props }: any) => {
           props.command({ editor, range });
         },
+        findSuggestionMatch: findSlashOrEnumerationMatch,
         render: makeRenderer(slashSuggestionKey),
-      }),
-      Suggestion({
-        editor: this.editor,
-        char: '、',
-        pluginKey: slashChineseSuggestionKey,
-        items: ({ query }: { query: string }) =>
-          getSuggestionItems(query, this.options.extraItemsRef?.current ?? []),
-        command: ({ editor, range, props }: any) => {
-          props.command({ editor, range });
-        },
-        render: makeRenderer(slashChineseSuggestionKey),
       }),
     ];
   },

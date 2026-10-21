@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from '../../services/toast/ToastContext';
 import { useSettingsStore } from '../../store/storeAccess';
-import { clientApi, type Settings, type McpServer } from '../../api/clientApi';
 import {
   pickSkillDirectory,
   addExtraSkillDir,
@@ -15,6 +14,14 @@ import {
   skillStableId,
   type DesktopSkill,
 } from '../../api/skillsApi';
+import { PluginImportPanel } from './PluginImportPanel';
+import {
+  importDetectedMcpServer,
+  removeImportedMcpByName,
+  skillMatchesInstalledSet,
+  uninstallDesktopSkill,
+} from './externalImportActions';
+import { setSkillDismissed } from './skillDismissState';
 
 import {
   detectExternalMcpServers,
@@ -27,7 +34,6 @@ import {
   isQualifiedSkill,
   type DetectedExternalSkill,
 } from './detectExternalSkills';
-import { resolveMcpTools } from './McpConnectModal';
 import { SkillDetailModal, type SkillDetailTarget } from './SkillDetailModal';
 import {
   buildImportItems,
@@ -43,15 +49,22 @@ import styles from './ExternalImportWorkbench.module.css';
 export type { ImportCategory, ExternalImportItem };
 
 export interface ExternalImportWorkbenchProps {
-  categoryFilter?: 'skill' | 'skills' | 'mcp';
+  categoryFilter?: 'skill' | 'skills' | 'mcp' | 'plugin' | 'plugins';
   onImportSuccess?: () => void;
   onRefresh?: () => void;
   onBackToChat?: () => void;
+  onRequestPluginImport?: () => void;
 }
 
 export const ExternalImportWorkbench: React.FC<
   ExternalImportWorkbenchProps
-> = ({ categoryFilter, onImportSuccess, onRefresh, onBackToChat }) => {
+> = ({
+  categoryFilter,
+  onImportSuccess,
+  onRefresh,
+  onBackToChat,
+  onRequestPluginImport,
+}) => {
   const { showToast } = useToast();
   const settingsMcpServers = useSettingsStore((s) => s.mcpServers || []);
 
@@ -77,19 +90,42 @@ export const ExternalImportWorkbench: React.FC<
   const [installedSkillNames, setInstalledSkillNames] = useState<Set<string>>(
     () => new Set()
   );
+  const [optimisticSkillNames, setOptimisticSkillNames] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [skillEpoch, setSkillEpoch] = useState(0);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const isPluginCategory =
+    categoryFilter === 'plugin' || categoryFilter === 'plugins';
 
   const existingMcpNames = useMemo(
     () => new Set(settingsMcpServers.map((s) => s.name.toLowerCase())),
     [settingsMcpServers]
   );
 
+  const visibleSkillNames = useMemo(() => {
+    const next = new Set(installedSkillNames);
+    for (const name of optimisticSkillNames) {
+      next.add(name.toLowerCase());
+      const slug = normalizeSlashName(name);
+      if (slug) next.add(slug);
+    }
+    return next;
+  }, [installedSkillNames, optimisticSkillNames, skillEpoch]);
+
   const loadSkillsState = useCallback(async () => {
     try {
       const current = await discoverSkills();
       const list = Array.isArray(current) ? current : current?.skills || [];
-      setInstalledSkillNames(
-        new Set(list.map((s: { name: string }) => s.name.toLowerCase()))
-      );
+      const next = new Set<string>();
+      for (const skill of list as { name?: string }[]) {
+        const name = String(skill.name || '').trim();
+        if (!name) continue;
+        next.add(name.toLowerCase());
+        const slug = normalizeSlashName(name);
+        if (slug) next.add(slug);
+      }
+      setInstalledSkillNames(next);
     } catch {
       /* ignore */
     }
@@ -168,38 +204,72 @@ export const ExternalImportWorkbench: React.FC<
     }
   };
 
+  const mcpItemId = (mcp: DetectedExternalMcpServer) =>
+    `mcp:${mcp.source}:${mcp.name}`;
+  const skillItemId = (skill: DetectedExternalSkill) =>
+    `skill:${skill.source}:${skill.name}`;
+
+  const rememberImportedSkill = (name: string) => {
+    setSkillDismissed(name, false);
+    setOptimisticSkillNames((prev) => {
+      const next = new Set(prev);
+      next.add(name.toLowerCase());
+      return next;
+    });
+    setSkillEpoch((value) => value + 1);
+  };
+
+  const forgetImportedSkill = (name: string) => {
+    setOptimisticSkillNames((prev) => {
+      const next = new Set(prev);
+      next.delete(name.toLowerCase());
+      const slug = normalizeSlashName(name);
+      if (slug) next.delete(slug);
+      return next;
+    });
+    setSkillEpoch((value) => value + 1);
+  };
+
   // 导入单项 MCP 服务
   const handleImportMcp = async (mcp: DetectedExternalMcpServer) => {
+    setBusyId(mcpItemId(mcp));
     try {
-      const current = useSettingsStore.getState().mcpServers || [];
-      const resolvedTools = resolveMcpTools(mcp.name, mcp.command, mcp.args);
-      const newServer: McpServer = {
-        id: `mcp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        name: mcp.name,
-        type: mcp.type || 'stdio',
-        ...(mcp.command ? { command: mcp.command, args: mcp.args } : {}),
-        ...(mcp.url ? { url: mcp.url } : {}),
-        ...(mcp.env ? { env: mcp.env } : {}),
-        status: 'connected',
-        tools: resolvedTools.length > 0 ? resolvedTools : ['default_tool'],
-      };
+      const result = await importDetectedMcpServer(mcp);
+      showToast(result.message);
+      if (result.ok) notifyChange();
+    } finally {
+      setBusyId(null);
+    }
+  };
 
-      const updated = [
-        ...current.filter(
-          (s) => s.name !== newServer.name && s.id !== newServer.id
-        ),
-        newServer,
-      ];
-      useSettingsStore.getState().setMcpServers(updated);
-      await clientApi.saveSettingsEx('__global__', 'global', {
-        mcpServers: updated,
-      } as unknown as Partial<Settings>);
-      showToast(`已成功导入 MCP 服务「${newServer.name}」`);
-      notifyChange();
-    } catch (err) {
-      showToast(
-        `导入 MCP 失败：${err instanceof Error ? err.message : String(err)}`
-      );
+  const handleRemoveMcp = async (mcp: DetectedExternalMcpServer) => {
+    setBusyId(mcpItemId(mcp));
+    try {
+      const result = await removeImportedMcpByName(mcp.name);
+      showToast(result.message);
+      if (result.ok) notifyChange();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleRemoveSkill = async (skill: DetectedExternalSkill) => {
+    setBusyId(skillItemId(skill));
+    try {
+      const result = await uninstallDesktopSkill({
+        name: skill.name,
+        filePath: skill.filePath,
+        baseDir: skill.skillDir,
+        description: skill.description,
+      });
+      showToast(result.message);
+      if (result.ok) {
+        forgetImportedSkill(skill.name);
+        await loadSkillsState();
+        notifyChange();
+      }
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -333,6 +403,7 @@ export const ExternalImportWorkbench: React.FC<
       };
 
       await setSkillActivation(importedSkill, 'enabled');
+      rememberImportedSkill(skill.name);
       window.dispatchEvent(new CustomEvent('crish-skills-changed'));
       await loadSkillsState();
       notifyChange();
@@ -358,7 +429,7 @@ export const ExternalImportWorkbench: React.FC<
 
   const openSkillDetail = (item: ExternalImportItem) => {
     if (item.kind !== 'skill' || !item.rawSkill) return;
-    const isImported = installedSkillNames.has(item.name.toLowerCase());
+    const isImported = skillMatchesInstalledSet(item.name, visibleSkillNames);
     setSelectedSkillForModal({
       id: item.id,
       name: item.name,
@@ -371,6 +442,14 @@ export const ExternalImportWorkbench: React.FC<
       rawExternal: item.rawSkill,
     });
   };
+
+  if (isPluginCategory) {
+    return (
+      <div className={styles.workbench}>
+        <PluginImportPanel onRequestFileImport={onRequestPluginImport} />
+      </div>
+    );
+  }
 
   return (
     <div className={styles.workbench}>
@@ -388,10 +467,13 @@ export const ExternalImportWorkbench: React.FC<
         items={currentItems}
         activeCategory={activeCategory}
         existingMcpNames={existingMcpNames}
-        installedSkillNames={installedSkillNames}
+        installedSkillNames={visibleSkillNames}
+        busyId={busyId}
         onOpenDetail={openSkillDetail}
         onImportMcp={handleImportMcp}
         onImportSkill={handleImportSkill}
+        onRemoveMcp={handleRemoveMcp}
+        onRemoveSkill={handleRemoveSkill}
       />
       <SkillDetailModal
         open={Boolean(selectedSkillForModal)}

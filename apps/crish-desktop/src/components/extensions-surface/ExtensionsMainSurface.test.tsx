@@ -44,6 +44,8 @@ vi.mock('../settings-extensions/useExtensionMarket', () => ({
 describe('ExtensionsMainSurface', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.removeItem('crish_official_plugins_uninstalled_v1');
+    localStorage.removeItem('crish_skills_uninstalled_v1');
     useSettingsStore.setState({
       mcpServers: [
         {
@@ -90,7 +92,11 @@ describe('ExtensionsMainSurface', () => {
     expect(importNav).toBeInTheDocument();
     fireEvent.click(importNav);
     expect(mockRefresh).toHaveBeenCalled();
-    expect(screen.getByText('从其他应用导入')).toBeInTheDocument();
+    expect(screen.getByText('插件安装与卸载')).toBeInTheDocument();
+    expect(
+      screen.getAllByRole('button', { name: '卸载 外部历史对话接续与导入' })
+        .length
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it('displays custom plugins in the installed list under 插件 category', () => {
@@ -162,16 +168,24 @@ describe('ExtensionsMainSurface', () => {
     );
   });
 
-  it('displays canonical import plugin in 发现 market with 已安装 label when installed', () => {
+  it('displays canonical import plugin in 发现 market with 卸载 when installed', () => {
     localStorage.removeItem('crish_official_plugins_uninstalled_v1');
     render(<ExtensionsMainSurface />);
     expect(screen.getByText('发现生态')).toBeInTheDocument();
     expect(
       screen.getAllByText('外部历史对话接续与导入').length
     ).toBeGreaterThanOrEqual(1);
+    const uninstallButtons = screen.getAllByRole('button', {
+      name: '卸载 外部历史对话接续与导入',
+    });
+    expect(uninstallButtons.length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(uninstallButtons[0]!);
     expect(
-      screen.getByLabelText('外部历史对话接续与导入 已安装')
-    ).toBeInTheDocument();
+      JSON.parse(
+        localStorage.getItem('crish_official_plugins_uninstalled_v1') || '[]'
+      )
+    ).toContain('@crish/plugin-import-claude-codex');
+    localStorage.removeItem('crish_official_plugins_uninstalled_v1');
   });
 
   it('displays canonical import plugin in 精选 market as well', () => {
@@ -184,8 +198,10 @@ describe('ExtensionsMainSurface', () => {
       screen.getAllByText('外部历史对话接续与导入').length
     ).toBeGreaterThanOrEqual(1);
     expect(
-      screen.getByLabelText('外部历史对话接续与导入 已安装')
-    ).toBeInTheDocument();
+      screen.getAllByRole('button', {
+        name: '卸载 外部历史对话接续与导入',
+      }).length
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it('displays 安装 button in 发现 market when official plugin is uninstalled and allows reinstalling', () => {

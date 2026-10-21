@@ -5,7 +5,7 @@ import {
   type McpToolDefinitionDto,
 } from '../../api/mcpApi';
 import { useToast } from '../../services/toast/ToastContext';
-import { useSettingsStore } from '../../store/storeAccess';
+import { commitUserMcpRoster, useSettingsStore } from '../../store/storeAccess';
 import { clientApi, type Settings, type McpServer } from '../../api/clientApi';
 import { useI18n } from '../../i18n';
 import {
@@ -106,7 +106,7 @@ export const McpDetailWorkbench: React.FC<McpDetailWorkbenchProps> = ({
         return s;
       });
       if (!found) nextList.push(fallback());
-      useSettingsStore.getState().setMcpServers(nextList);
+      commitUserMcpRoster(nextList);
       await clientApi.saveSettingsEx('__global__', 'global', {
         mcpServers: nextList,
       } as unknown as Partial<Settings>);

@@ -228,6 +228,8 @@ export const chat: ChatTranslations = {
     'Select a model or enter a message to begin',
   'emptyState.createSessionBtn': 'New Session',
   'emptyState.clearFilterBtn': 'Clear Filter',
+  goalChipLabel: 'goal',
+  inlineTagRemove: 'Remove {name}',
 };
 
 export default chat;

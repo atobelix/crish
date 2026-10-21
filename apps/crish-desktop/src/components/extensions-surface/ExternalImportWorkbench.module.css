@@ -93,7 +93,7 @@
 
 /* 卡片视觉对齐 ExtensionsCatalogGrid 中的成熟卡片视觉（.compactExtCard） */
 .card {
-  background: var(--bg-secondary);
+  background: var(--surface-main);
   border: var(--hairline-width, 1px) solid var(--border-subtle);
   border-radius: var(--radius-lg, 7px);
   padding: var(--space-3_5, 14px);
@@ -108,7 +108,7 @@
 
 /* 严禁任何 translateY 位移漂浮！严禁任何花哨扩大的 box-shadow！稳重克制 */
 .card:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-card));
   border-color: var(--border-subtle);
 }
 
@@ -136,7 +136,7 @@
   width: 28px;
   height: 28px;
   border-radius: var(--radius-md);
-  background: var(--bg-card);
+  background: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
   display: flex;
   align-items: center;
   justify-content: center;

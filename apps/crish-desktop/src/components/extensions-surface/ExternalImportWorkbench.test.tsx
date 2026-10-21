@@ -167,12 +167,17 @@ describe('ExternalImportWorkbench', () => {
       expect(screen.getByText('chrome-devtools-mcp')).toBeInTheDocument();
     });
 
-    const importBtn = screen.getByRole('button', { name: '导入' });
+    const importBtn = screen.getByRole('button', {
+      name: '导入 chrome-devtools-mcp',
+    });
     fireEvent.click(importBtn);
 
     await waitFor(() => {
       const servers = useSettingsStore.getState().mcpServers || [];
       expect(servers.some((s) => s.name === 'chrome-devtools-mcp')).toBe(true);
+      expect(
+        screen.getByRole('button', { name: '卸载 chrome-devtools-mcp' })
+      ).toBeInTheDocument();
     });
 
     expect(clientApi.saveSettingsEx).toHaveBeenCalledWith(
@@ -209,7 +214,9 @@ describe('ExternalImportWorkbench', () => {
       expect(screen.getByText('cursor-rules-sync')).toBeInTheDocument();
     });
 
-    const importBtn = screen.getByRole('button', { name: '导入' });
+    const importBtn = screen.getByRole('button', {
+      name: '导入 cursor-rules-sync',
+    });
     fireEvent.click(importBtn);
 
     await waitFor(() => {
@@ -261,7 +268,9 @@ describe('ExternalImportWorkbench', () => {
       expect(screen.getByText('resume-master')).toBeInTheDocument();
     });
 
-    const importBtn = screen.getByRole('button', { name: '导入' });
+    const importBtn = screen.getByRole('button', {
+      name: '导入 resume-master',
+    });
     fireEvent.click(importBtn);
 
     await waitFor(() => {
@@ -343,23 +352,24 @@ describe('ExternalImportWorkbench', () => {
       </ToastProvider>
     );
 
-    // MCP 列表中显示已导入纯符号
     await waitFor(() => {
-      expect(screen.getByLabelText('已导入')).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: '卸载 chrome-devtools-mcp' })
+      ).toBeInTheDocument();
     });
     expect(
-      screen.queryByRole('button', { name: '导入' })
+      screen.queryByRole('button', { name: '导入 chrome-devtools-mcp' })
     ).not.toBeInTheDocument();
 
-    // 切换至 技能 列表
     fireEvent.click(screen.getByText(/技能 \(/));
 
-    // 技能列表中也显示已导入纯符号
     await waitFor(() => {
-      expect(screen.getByLabelText('已导入')).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: '卸载 cursor-rules-sync' })
+      ).toBeInTheDocument();
     });
     expect(
-      screen.queryByRole('button', { name: '导入' })
+      screen.queryByRole('button', { name: '导入 cursor-rules-sync' })
     ).not.toBeInTheDocument();
   });
 
@@ -405,7 +415,7 @@ describe('ExternalImportWorkbench', () => {
     const codexBadge = screen.getByText('Codex');
     expect(codexBadge).toHaveAttribute('data-source', 'Codex');
 
-    const importButtons = screen.getAllByRole('button', { name: '导入' });
+    const importButtons = screen.getAllByRole('button', { name: /^导入 / });
     fireEvent.click(importButtons[0]);
 
     await waitFor(() => {

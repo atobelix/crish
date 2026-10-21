@@ -27,6 +27,7 @@ import {
   isSettingsMcpDuplicate,
   mergeCatalogEntryIntoExisting,
 } from './buildUnifiedItems.merge';
+import { isSkillDismissed } from './skillDismissState';
 
 // 公开面保持稳定：平台探测能力已迁至 buildUnifiedItems.sources，
 // 消费方仍从本模块取用（import 路径不变）。
@@ -120,6 +121,7 @@ export function buildUnifiedItems({
 
   // 2. 本机原生技能
   for (const s of skills) {
+    if (isSkillDismissed(s.name)) continue;
     const item = buildLocalSkillItem(s);
     list.push(item);
     addedIds.add(item.id);

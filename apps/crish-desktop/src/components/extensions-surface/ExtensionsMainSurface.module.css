@@ -400,7 +400,7 @@
 }
 
 .compactExtCard {
-  background: var(--surface-input, var(--bg-card));
+  background: var(--surface-main);
   border: var(--hairline-width, 1px) solid var(--border-subtle);
   border-radius: var(--radius-l, 10px);
   padding: var(--space-3_5, 14px);
@@ -415,7 +415,7 @@
 }
 
 .compactExtCard:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--surface-main));
   border-color: var(--border-subtle);
 }
 

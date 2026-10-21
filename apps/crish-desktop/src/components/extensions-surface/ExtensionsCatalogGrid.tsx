@@ -1,11 +1,11 @@
 import React from 'react';
-import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons';
 import type {
   CatalogEntry,
   InstalledExtension,
 } from '../../api/extensionCatalog';
 import type { UnifiedExtensionItem } from './buildUnifiedItems';
+import { ExtensionActionCard } from './ExtensionActionCard';
 import styles from './ExtensionsMainSurface.module.css';
 
 export interface ExtensionsCatalogGridProps {
@@ -16,6 +16,7 @@ export interface ExtensionsCatalogGridProps {
   busyId: string | null;
   onSelectDetail: (item: CatalogEntry | InstalledExtension) => void;
   onInstall: (item: UnifiedExtensionItem) => void;
+  onUninstall: (item: UnifiedExtensionItem) => void;
 }
 
 export const ExtensionsCatalogGrid: React.FC<ExtensionsCatalogGridProps> = ({
@@ -26,6 +27,7 @@ export const ExtensionsCatalogGrid: React.FC<ExtensionsCatalogGridProps> = ({
   busyId,
   onSelectDetail,
   onInstall,
+  onUninstall,
 }) => {
   return (
     <div className={styles.catalogGridContainer}>
@@ -57,73 +59,23 @@ export const ExtensionsCatalogGrid: React.FC<ExtensionsCatalogGridProps> = ({
       ) : (
         <div className={styles.cardsGrid}>
           {catalogItems.map((item) => {
-            const isInstalled = Boolean(item.isInstalled || item.isEnabled);
+            const isInstalled = Boolean(item.isInstalled);
             return (
-              <div
+              <ExtensionActionCard
                 key={item.id}
-                className={styles.compactExtCard}
-                onClick={() => onSelectDetail(item.nativeItem)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onSelectDetail(item.nativeItem);
-                  }
+                name={item.name}
+                description={item.description}
+                badge={item.isOfficial ? '官方' : '精选'}
+                icon={item.icon}
+                placement="catalog"
+                installed={isInstalled}
+                busy={busyId === item.id}
+                onOpen={() => onSelectDetail(item.nativeItem)}
+                onAction={() => {
+                  if (isInstalled) onUninstall(item);
+                  else onInstall(item);
                 }}
-              >
-                <div className={styles.cardHeaderRow}>
-                  <div className={styles.cardHeaderLeft}>
-                    <div className={styles.compactCardIcon}>
-                      <AppIcon name={item.icon} size={15} />
-                    </div>
-                    <span className={styles.compactCardName}>{item.name}</span>
-                  </div>
-                  <div
-                    className={styles.cardHeaderRight}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {isInstalled ? (
-                      <span
-                        className={styles.installedTag}
-                        role="status"
-                        aria-label={`${item.name} 已安装`}
-                        onClick={() => onSelectDetail(item.nativeItem)}
-                      >
-                        <AppIcon name="check" size={12} />
-                        <span>已安装</span>
-                      </span>
-                    ) : (
-                      <Tooltip content="安装">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className={styles.iconActionBtn}
-                          disabled={busyId === item.id}
-                          onClick={() => onInstall(item)}
-                          aria-label={`安装 ${item.name}`}
-                        >
-                          <AppIcon
-                            name={busyId === item.id ? 'refresh' : 'download'}
-                            size={14}
-                            className={
-                              busyId === item.id ? styles.spinning : ''
-                            }
-                          />
-                        </Button>
-                      </Tooltip>
-                    )}
-                  </div>
-                </div>
-                <Tooltip content={item.description}>
-                  <div className={styles.cardDescRow}>{item.description}</div>
-                </Tooltip>
-                <div className={styles.cardFooterRow}>
-                  <span className={styles.cardBadge}>
-                    {item.isOfficial ? '官方' : '精选'}
-                  </span>
-                </div>
-              </div>
+              />
             );
           })}
         </div>

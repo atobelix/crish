@@ -369,9 +369,9 @@ activation: enabled
       const cardName = await screen.findByText('cursor-rules-sync');
       expect(cardName).toBeInTheDocument();
 
-      // 点击该卡片
-      const card = screen.getByRole('button', { name: /cursor-rules-sync/i });
-      fireEvent.click(card);
+      // 点击该卡片（卡片名文本，点击冒泡至卡片包装层触发 onOpenDetail；
+      // 卡内另有「导入 …」动作按钮与卡片同名，getByRole 会歧义）
+      fireEvent.click(screen.getByText('cursor-rules-sync'));
 
       // 验证弹出 SkillDetailModal
       expect(

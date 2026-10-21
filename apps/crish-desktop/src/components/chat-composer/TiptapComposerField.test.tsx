@@ -72,6 +72,35 @@ async function typeText(text: string): Promise<void> {
 }
 
 /**
+ * 模拟中文输入法：先 compositionstart，再把字符写进文档，且先不 compositionend。
+ * 调用方负责在断言后派发 compositionend。
+ */
+async function typeTextDuringComposition(text: string): Promise<HTMLElement> {
+  await new Promise((r) => setTimeout(r, 60));
+  const dom = getEditorDom();
+  dom.setAttribute('data-composer-card', '');
+  dom.setAttribute('data-mock-rect', '32,640,680,88');
+  dom.dispatchEvent(
+    new CompositionEvent('compositionstart', { bubbles: true, data: '' })
+  );
+  const textNode = document.createTextNode(text);
+  const lastP = dom.querySelector('p:last-of-type');
+  const target = lastP ?? dom;
+  target.appendChild(textNode);
+  const sel = document.getSelection();
+  if (sel) {
+    const range = document.createRange();
+    range.setStart(textNode, textNode.length);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+  dom.dispatchEvent(new Event('input', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 50));
+  return dom;
+}
+
+/**
  * 宿主语义 Harness：value 状态真相源；onSend 记录发送时的 chatInput 并清空
  * （对齐宿主 handleSendChat 发送后 setChatInput('') 行为）。
  */
@@ -228,14 +257,20 @@ describe('TiptapComposerField 适配层契约（T2）', () => {
   it('斜杠系统命令：/goal 在菜单中可选，点选后文本注入编辑器并回流宿主', async () => {
     const { onChangeLog } = renderAdapter({});
     await typeText('/');
-    const goalItem = await screen.findByRole('option', { name: /\/goal/ });
+    const goalItem = await screen.findByRole('option', { name: /目标/ });
     fireEvent.click(goalItem);
-    // 编辑器内容注入 '/goal '（尾空格供续写）；序列化回流尾随空格被 trim（宿主发送同样 trim，语义一致）
+    // 胶囊展示「目标」；序列化回流仍是 /goal，供目标模式识别
     await waitFor(() => {
-      expect(getEditorDom().textContent).toContain('/goal');
+      expect(getEditorDom().textContent).toContain('目标');
+      expect(getEditorDom().textContent ?? '').not.toContain('/goal');
+      expect(document.querySelector('.mention-chip-goal')).toBeTruthy();
     });
     await waitFor(() => {
       expect(onChangeLog).toContain('/goal');
+    });
+    fireEvent.click(screen.getByRole('button', { name: '移除目标' }));
+    await waitFor(() => {
+      expect(getEditorDom().textContent ?? '').not.toContain('目标');
     });
   });
 
@@ -266,25 +301,71 @@ describe('TiptapComposerField 适配层契约（T2）', () => {
     fireEvent.click(skillItem);
     await waitFor(() => {
       expect(getEditorDom().textContent).toContain('/skill:检视');
+      expect(document.querySelector('.mention-chip-skill')).toBeTruthy();
+      expect(document.querySelector('.mention-chip-goal')).toBeNull();
     });
     await waitFor(() => {
       expect(onChangeLog.some((val) => val.includes('/skill:检视'))).toBe(true);
     });
   });
 
-  it('中文顿号（、）同样触发斜杠指令菜单并在选定后注入', async () => {
+  it('中文顿号上屏后仍是顿号，并打开同一套命令菜单', async () => {
     const { onChangeLog } = renderAdapter({});
-    await typeText('、');
-    const goalItem = await screen.findByRole('option', {
-      name: /\/goal/,
+    const dom = await typeTextDuringComposition('、');
+    dom.dispatchEvent(
+      new CompositionEvent('compositionend', { bubbles: true, data: '、' })
+    );
+    await waitFor(() => {
+      expect(getEditorDom().textContent).toContain('、');
+      expect(getEditorDom().textContent ?? '').not.toContain('/');
     });
+    const goalItem = await screen.findByRole('option', { name: /目标/ });
     fireEvent.click(goalItem);
     await waitFor(() => {
-      expect(getEditorDom().textContent).toContain('/goal');
+      expect(getEditorDom().textContent).toContain('目标');
     });
     await waitFor(() => {
       expect(onChangeLog).toContain('/goal');
     });
+  });
+
+  it('直接输入顿号会打开同一套命令菜单，顿号留在正文', async () => {
+    const { onChangeLog } = renderAdapter({});
+    await typeText('、');
+    await waitFor(() => {
+      expect(getEditorDom().textContent).toContain('、');
+      expect(getEditorDom().textContent ?? '').not.toContain('/');
+    });
+    const goalItem = await screen.findByRole('option', {
+      name: /目标/,
+    });
+    fireEvent.click(goalItem);
+    await waitFor(() => {
+      expect(getEditorDom().textContent).toContain('目标');
+    });
+    await waitFor(() => {
+      expect(onChangeLog).toContain('/goal');
+    });
+  });
+
+  it('顿号后继续写中文时，顿号留在正文且菜单关闭', async () => {
+    renderAdapter({});
+    await typeText('、');
+    await screen.findByRole('option', { name: /目标/ });
+    await typeText('香蕉');
+    await waitFor(() => {
+      expect(getEditorDom().textContent).toContain('、香蕉');
+    });
+    expect(screen.queryByRole('option', { name: /目标/ })).toBeNull();
+  });
+
+  it('句中顿号保持正文，不打开斜杠菜单', async () => {
+    renderAdapter({});
+    await typeText('你好、世界');
+    await waitFor(() => {
+      expect(getEditorDom().textContent).toContain('你好、世界');
+    });
+    expect(screen.queryByRole('option', { name: /目标/ })).toBeNull();
   });
 
   it('Stop L2：处理中显示停止钮，单击触发 onStop（不触发 force）', async () => {

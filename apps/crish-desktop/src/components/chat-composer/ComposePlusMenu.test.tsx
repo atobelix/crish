@@ -91,6 +91,8 @@ describe('ComposePlusMenu（ui/Menu 基座交互与渲染）', () => {
     );
     expect(await screen.findByText('添加文件或附件')).toBeInTheDocument();
     expect(screen.getByText('使用 skill')).toBeInTheDocument();
+    expect(screen.queryByText('图片、代码或文档')).toBeNull();
+    expect(screen.queryByText('选择或键入技能指令')).toBeNull();
     expect(screen.queryByText('定时任务')).toBeNull();
     expect(screen.queryByText('插件')).toBeNull();
     expect(screen.queryByText('MCP 工具')).toBeNull();

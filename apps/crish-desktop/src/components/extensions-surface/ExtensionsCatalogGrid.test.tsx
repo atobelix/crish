@@ -55,6 +55,7 @@ describe('ExtensionsCatalogGrid', () => {
         busyId={null}
         onSelectDetail={vi.fn()}
         onInstall={vi.fn()}
+        onUninstall={vi.fn()}
       />
     );
 
@@ -73,6 +74,7 @@ describe('ExtensionsCatalogGrid', () => {
         busyId={null}
         onSelectDetail={vi.fn()}
         onInstall={vi.fn()}
+        onUninstall={vi.fn()}
       />
     );
 
@@ -83,9 +85,10 @@ describe('ExtensionsCatalogGrid', () => {
     expect(screen.getByText('未找到匹配搜索条件的扩展')).toBeInTheDocument();
   });
 
-  it('renders calm 已安装 tag for installed plugins and invokes onSelectDetail when clicked', () => {
+  it('renders 卸载 for installed plugins and does not open detail from that button', () => {
     const onSelectDetail = vi.fn();
     const onInstall = vi.fn();
+    const onUninstall = vi.fn();
 
     render(
       <ExtensionsCatalogGrid
@@ -96,6 +99,7 @@ describe('ExtensionsCatalogGrid', () => {
         busyId={null}
         onSelectDetail={onSelectDetail}
         onInstall={onInstall}
+        onUninstall={onUninstall}
       />
     );
 
@@ -103,17 +107,17 @@ describe('ExtensionsCatalogGrid', () => {
     expect(screen.getByText('自动化审查代码健康度')).toBeInTheDocument();
     expect(screen.getByText('官方')).toBeInTheDocument();
 
-    const installedTag = screen.getByLabelText('代码审计助手 已安装');
-    expect(installedTag).toBeInTheDocument();
-    expect(installedTag).toHaveTextContent('已安装');
-
-    // Does not render install button
+    const uninstallBtn = screen.getByRole('button', {
+      name: '卸载 代码审计助手',
+    });
+    expect(uninstallBtn).toHaveTextContent('卸载');
     expect(
-      screen.queryByRole('button', { name: /安装 代码审计助手/ })
+      screen.queryByRole('button', { name: '安装 代码审计助手' })
     ).not.toBeInTheDocument();
 
-    fireEvent.click(installedTag);
-    expect(onSelectDetail).toHaveBeenCalledWith(dummyInstalledItem.nativeItem);
+    fireEvent.click(uninstallBtn);
+    expect(onUninstall).toHaveBeenCalledWith(dummyInstalledItem);
+    expect(onSelectDetail).not.toHaveBeenCalled();
     expect(onInstall).not.toHaveBeenCalled();
   });
 
@@ -130,6 +134,7 @@ describe('ExtensionsCatalogGrid', () => {
         busyId={null}
         onSelectDetail={onSelectDetail}
         onInstall={onInstall}
+        onUninstall={vi.fn()}
       />
     );
 
@@ -137,7 +142,9 @@ describe('ExtensionsCatalogGrid', () => {
     expect(screen.getByText('精选')).toBeInTheDocument();
 
     // Does not render installed label
-    expect(screen.queryByLabelText(/已安装/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '卸载 文档生成插件' })
+    ).not.toBeInTheDocument();
 
     const installBtn = screen.getByRole('button', {
       name: '安装 文档生成插件',
@@ -160,6 +167,7 @@ describe('ExtensionsCatalogGrid', () => {
         busyId={dummyUninstalledItem.id}
         onSelectDetail={vi.fn()}
         onInstall={vi.fn()}
+        onUninstall={vi.fn()}
       />
     );
 
@@ -181,6 +189,7 @@ describe('ExtensionsCatalogGrid', () => {
         busyId={null}
         onSelectDetail={onSelectDetail}
         onInstall={vi.fn()}
+        onUninstall={vi.fn()}
       />
     );
 

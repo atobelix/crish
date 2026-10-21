@@ -19,6 +19,7 @@ import React, {
 import * as Popover from '@radix-ui/react-popover';
 
 import type { SlashMenuProps, SlashCommandItem } from './composerTypes';
+import { goalCommandDisplayLabel, isGoalCommand } from './goalChipLabel';
 import styles from './TiptapSlashMenu.module.css';
 import {
   isPhysicallyVisibleNonZeroRect,
@@ -280,7 +281,11 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
             <AppIcon name={iconName} size={15} aria-hidden />
           </div>
           <div className={styles.itemText}>
-            <span className={styles.itemTitle}>{item.title}</span>
+            <span className={styles.itemTitle}>
+              {isGoalCommand(item.id) || isGoalCommand(item.title)
+                ? goalCommandDisplayLabel()
+                : item.title}
+            </span>
             {item.description && (
               <span className={styles.itemDescription}>{item.description}</span>
             )}
@@ -299,9 +304,10 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
           <Popover.Content
             className={styles.popoverContent}
             style={{
-              width: anchor?.width
-                ? `${Math.round(anchor.width)}px`
-                : undefined,
+              width:
+                anchor && anchor.width >= 48
+                  ? `${Math.round(anchor.width)}px`
+                  : undefined,
             }}
             side={side}
             align="start"

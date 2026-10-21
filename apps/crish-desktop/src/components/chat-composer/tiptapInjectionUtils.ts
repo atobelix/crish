@@ -13,13 +13,36 @@ import type { Editor } from '@tiptap/core';
 import { TextSelection } from '@tiptap/pm/state';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { exitSuggestion } from '@tiptap/suggestion';
-import {
-  slashSuggestionKey,
-  mentionSuggestionKey,
-} from './SlashExtension';
+import { slashSuggestionKey, mentionSuggestionKey } from './SlashExtension';
+import { findSlashOrEnumerationMatch } from './slashTriggerAlias';
 
 /** 注入事务 Meta 标记：SlashExtension 与 MentionSuggestionExtension 识别后跳过本次弹窗 */
 export const INJECTION_TRANSACTION_META = 'CRISH_PROMPT_INJECTION_META';
+
+/**
+ * 组字上屏后让斜杠建议再判一次。
+ * 不改文档，顿号和半角斜杠都留在正文里。
+ */
+export function resyncSlashTriggerAfterComposition(editor: Editor): void {
+  try {
+    if (!editor || editor.isDestroyed) return;
+    const view = editor.view;
+    if (!view || view.composing || !view.state.selection.empty) return;
+    if (slashSuggestionKey.getState(view.state)?.active) return;
+    const match = findSlashOrEnumerationMatch({
+      char: '/',
+      allowSpaces: false,
+      allowToIncludeChar: false,
+      allowedPrefixes: [' '],
+      startOfLine: false,
+      $position: view.state.selection.$from,
+    });
+    if (!match) return;
+    view.dispatch(view.state.tr.setMeta('addToHistory', false));
+  } catch {
+    /* 视图未挂载时忽略 */
+  }
+}
 
 /** 占位符匹配正则：匹配 {{...}}、<...> 或形如 [描述...] 的中文占位（2~30 字） */
 const PLACEHOLDER_REGEX = /\{\{([^}]+)\}\}|<([^>]+)>|\[([^[\]]{2,30})\]/;

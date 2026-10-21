@@ -45,6 +45,9 @@ export function resolveTiptapKeydown(
   // CodeBlock Enter 保护（SRS 3.7.1）：代码块内 Enter 只换行，绝不触发发送
   if (event.key === 'Enter' && ctx.inCodeBlock) return 'pass';
 
+  // 斜杠 / 顿号 / 提及菜单打开时，回车交给建议层选中，不发送正文
+  if (event.key === 'Enter' && ctx.suggestionActive) return 'pass';
+
   if (event.key === 'Enter') {
     if (ctx.sendShortcut === 'enter' && !isShift && !isCtrlOrCmd) {
       return 'send';

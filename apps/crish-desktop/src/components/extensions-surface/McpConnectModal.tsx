@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Dialog, Button } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 import { clientApi, type McpServer, type Settings } from '../../api/clientApi';
-import { useSettingsStore } from '../../store/storeAccess';
+import { commitUserMcpRoster, useSettingsStore } from '../../store/storeAccess';
 import { useToast } from '../../services/toast/ToastContext';
 import {
   detectExternalMcpServers,
@@ -72,7 +72,7 @@ export const McpConnectModal: React.FC<McpConnectModalProps> = ({
         ...current.filter((s) => s.id !== server.id && s.name !== server.name),
         server,
       ];
-      useSettingsStore.getState().setMcpServers(list);
+      commitUserMcpRoster(list);
       void clientApi.saveSettingsEx('__global__', 'global', {
         mcpServers: list,
       } as unknown as Partial<Settings>);

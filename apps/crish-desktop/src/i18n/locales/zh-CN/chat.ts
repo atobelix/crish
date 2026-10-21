@@ -209,6 +209,8 @@ export const chat: ChatTranslations = {
   'emptyState.sessionEmptySubtitle': '选择模型或直接输入消息开始',
   'emptyState.createSessionBtn': '新建对话',
   'emptyState.clearFilterBtn': '清除过滤',
+  goalChipLabel: '目标',
+  inlineTagRemove: '移除{name}',
 };
 
 export default chat;

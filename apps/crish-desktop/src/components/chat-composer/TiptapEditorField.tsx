@@ -27,7 +27,10 @@ import { slashSuggestionKey, mentionSuggestionKey } from './SlashExtension';
 import { dirTreeSuggestionKey } from './DirTreeExtension';
 import type { SlashCommandItem, MentionCandidate } from './composerTypes';
 import { parseFromMarkdown } from './serialization/markdownDeserializer';
-import { focusAndSelectFirstPlaceholder } from './tiptapInjectionUtils';
+import {
+  focusAndSelectFirstPlaceholder,
+  resyncSlashTriggerAfterComposition,
+} from './tiptapInjectionUtils';
 import type {
   TiptapEditorFieldProps,
   TiptapEditorFieldHandle,
@@ -394,6 +397,10 @@ export const TiptapEditorField = React.forwardRef<
               deferred,
               imeDragGuardRef.current.getSelectionSnapshot()
             );
+          });
+        } else {
+          requestAnimationFrame(() => {
+            resyncSlashTriggerAfterComposition(editor);
           });
         }
       };

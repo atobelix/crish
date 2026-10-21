@@ -7,7 +7,10 @@ import React from 'react';
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 
 import { openFileInPanel } from '../../api/filePanelOpener';
+import { useI18n } from '../../i18n';
 import { AppIcon, type IconName } from '../ui/icons';
+import { IconButton } from '../ui/Button/IconButton';
+import { goalCommandDisplayLabel, isGoalCommand } from './goalChipLabel';
 
 function iconForKind(kind: string, customIcon?: string): IconName {
   if (customIcon) return customIcon as IconName;
@@ -21,15 +24,22 @@ export const ComposerInlineTag: React.FC<NodeViewProps> = ({
   node,
   deleteNode,
 }) => {
+  const { t } = useI18n();
   const kind = String(node.attrs.kind || 'file');
   const label = String(node.attrs.label || node.attrs.id || '');
   const id = String(node.attrs.id || '');
+  const isGoal = kind === 'command' && isGoalCommand(id || label);
   const customIcon = node.attrs.iconName
     ? String(node.attrs.iconName)
     : undefined;
-  const iconName = iconForKind(kind, customIcon);
-  const text = kind === 'skill' || kind === 'command' ? label : `@${label}`;
+  const iconName: IconName = isGoal ? 'target' : iconForKind(kind, customIcon);
+  const text = isGoal
+    ? goalCommandDisplayLabel()
+    : kind === 'skill' || kind === 'command'
+      ? label
+      : `@${label}`;
   const canOpen = (kind === 'file' || kind === 'skill') && id.length > 0;
+  const removeLabel = t('chat.inlineTagRemove', { name: text });
 
   const handleOpen = async (e: React.SyntheticEvent) => {
     if (!canOpen) return;
@@ -71,7 +81,7 @@ export const ComposerInlineTag: React.FC<NodeViewProps> = ({
   return (
     <NodeViewWrapper
       as="span"
-      className={`mention-chip mention-chip-${kind}`}
+      className={`mention-chip mention-chip-${kind}${isGoal ? ' mention-chip-goal' : ''}`}
       data-type="mention"
       data-kind={kind}
       data-id={id}
@@ -102,9 +112,26 @@ export const ComposerInlineTag: React.FC<NodeViewProps> = ({
       }}
     >
       <span className="mention-icon-box" aria-hidden="true">
-        <AppIcon name={iconName} size={15} stroke={1.75} />
+        <AppIcon name={iconName} size={isGoal ? 14 : 15} stroke={1.75} />
       </span>
       <span className="mention-label">{text}</span>
+      {isGoal ? (
+        <IconButton
+          type="button"
+          className="mention-remove"
+          aria-label={removeLabel}
+          icon={<AppIcon name="x" size={12} stroke={1.75} aria-hidden />}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            deleteNode?.();
+          }}
+        />
+      ) : null}
     </NodeViewWrapper>
   );
 };

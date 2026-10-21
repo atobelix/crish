@@ -10,6 +10,7 @@ import action from './action';
 import sidebar from './sidebar';
 import tools from './tools';
 import units from './units';
+import extensions from './extensions';
 
 export const enUS: I18nDictionary = {
   common,
@@ -23,6 +24,7 @@ export const enUS: I18nDictionary = {
   sidebar,
   tools,
   units,
+  extensions,
 };
 
 export default enUS;

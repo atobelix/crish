@@ -32,7 +32,7 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
 }) => {
   const { t } = useI18n();
   const [skills, setSkills] = useState<
-    Array<{ id: string; name: string; desc?: string; cmd?: string }>
+    Array<{ id: string; name: string; cmd?: string }>
   >([]);
 
   useEffect(() => {
@@ -47,7 +47,6 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
         const list = (res.commands || []).map((c) => ({
           id: c.skillId || c.cmd,
           name: c.skillName || c.cmd.replace(/^\/skill:/, ''),
-          desc: c.desc,
           cmd: c.cmd,
         }));
         setSkills(list);
@@ -84,7 +83,6 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
         ? skills.map((s) => ({
             id: `skill:${s.id}`,
             label: s.name,
-            sublabel: s.desc,
             icon: <AppIcon name="sparkles" size={14} />,
             onSelect: () => handleSkillItemClick(s.cmd),
           }))
@@ -114,7 +112,6 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
       {
         id: 'file',
         label: t('chat.plusMenu.addFiles', '添加文件或附件'),
-        sublabel: t('chat.plusMenu.addFilesDesc', '图片、代码或文档'),
         icon: <AppIcon name="paperclip" size={14} />,
         onSelect: () => {
           onAddFiles();
@@ -125,7 +122,6 @@ export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
         type: 'submenu',
         closeOnSelect: true,
         label: t('chat.plusMenu.useSkill'),
-        sublabel: t('chat.plusMenu.useSkillDesc', '选择或键入技能指令'),
         icon: <AppIcon name="sparkles" size={14} />,
         children: skillChildren,
         onSelect: () => {

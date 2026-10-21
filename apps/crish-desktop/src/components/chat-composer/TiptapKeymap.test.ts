@@ -71,6 +71,16 @@ describe('resolveTiptapKeydown', () => {
     ).toBe('pass');
   });
 
+  it('建议弹层打开时 Enter 交给建议层，不发送', () => {
+    expect(
+      resolveTiptapKeydown(enter, {
+        sendShortcut: 'enter',
+        inCodeBlock: false,
+        suggestionActive: true,
+      })
+    ).toBe('pass');
+  });
+
   it('普通段落 Enter 发送', () => {
     expect(
       resolveTiptapKeydown(enter, {

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { buildUnifiedItems } from './buildUnifiedItems';
+import { setSkillDismissed } from './skillDismissState';
 import { useSettingsStore } from '../../store/settingsStore';
 import type { DesktopSkill } from '../../api/skillsApi';
 import type { McpServerInfo } from '../../api/mcpApi';
@@ -26,6 +27,7 @@ describe('buildUnifiedItems', () => {
 
   beforeEach(() => {
     useSettingsStore.getState().setMcpServers([]);
+    localStorage.removeItem('crish_skills_uninstalled_v1');
   });
 
   it('correctly maps engine MCP servers into UnifiedExtensionItem', () => {
@@ -434,6 +436,17 @@ describe('buildUnifiedItems', () => {
       expect(importItem?.catalogEntry).toBeDefined();
 
       localStorage.removeItem('crish_official_plugins_uninstalled_v1');
+    });
+
+    it('hides a skill after it is marked uninstalled', () => {
+      setSkillDismissed('Git Helper', true);
+      const items = buildUnifiedItems({
+        skills: [dummySkill],
+        mcpServers: [],
+        installed: [],
+        catalogInstalled: new Set(),
+      });
+      expect(items.find((item) => item.name === 'Git Helper')).toBeUndefined();
     });
   });
 });

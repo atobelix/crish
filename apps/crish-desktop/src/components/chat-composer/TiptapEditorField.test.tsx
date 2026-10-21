@@ -182,7 +182,9 @@ describe('TiptapEditorField T3 补全', () => {
     expect(onSendMarkdown).not.toHaveBeenCalled();
     await waitFor(() => {
       const last =
-        onMarkdownChange.mock.calls[onMarkdownChange.mock.calls.length - 1]?.[0];
+        onMarkdownChange.mock.calls[
+          onMarkdownChange.mock.calls.length - 1
+        ]?.[0];
       expect(last).toContain('const a = 1;  ');
     });
   });
@@ -206,7 +208,9 @@ describe('TiptapEditorField T3 补全', () => {
       fireEvent.keyDown(dom, { key: 'Tab' });
       await waitFor(() => {
         const last =
-          onMarkdownChange.mock.calls[onMarkdownChange.mock.calls.length - 1]?.[0];
+          onMarkdownChange.mock.calls[
+            onMarkdownChange.mock.calls.length - 1
+          ]?.[0];
         expect(last).toContain('const a = 1;    ');
       });
     } finally {
@@ -322,8 +326,12 @@ describe('TiptapEditorField T3 补全', () => {
     const onPasteFiles = vi.fn();
     render(<TiptapEditorField onPasteFiles={onPasteFiles} />);
     const dom = getEditorDom();
-    const fakeFile1 = new File(['fn main() {}'], 'main.rs', { type: 'text/rust' });
-    const fakeFile2 = new File(['# Title'], 'doc.md', { type: 'text/markdown' });
+    const fakeFile1 = new File(['fn main() {}'], 'main.rs', {
+      type: 'text/rust',
+    });
+    const fakeFile2 = new File(['# Title'], 'doc.md', {
+      type: 'text/markdown',
+    });
 
     let prevented = false;
     const pasteEvent = new Event('paste', { bubbles: true, cancelable: true });
@@ -350,7 +358,9 @@ describe('TiptapEditorField T3 补全', () => {
     const onPasteFiles = vi.fn();
     render(<TiptapEditorField onPasteFiles={onPasteFiles} />);
     const dom = getEditorDom();
-    const fakeFile = new File(['print("hi")'], 'script.py', { type: 'text/x-python' });
+    const fakeFile = new File(['print("hi")'], 'script.py', {
+      type: 'text/x-python',
+    });
     const html = '<p>should not be pasted as html</p>';
 
     const pasteEvent = new Event('paste', { bubbles: true, cancelable: true });
@@ -520,9 +530,7 @@ describe('TiptapEditorField T8 提及与 aria 全链', () => {
     const listboxId = dom.getAttribute('aria-controls') ?? '';
     expect(listboxId.endsWith('-slash')).toBe(true);
     await waitFor(() => {
-      expect(document.getElementById(listboxId)?.textContent).toContain(
-        '/goal'
-      );
+      expect(document.getElementById(listboxId)?.textContent).toContain('目标');
     });
     // 初始高亮首项，activedescendant 指向 listbox 内 option
     expect(dom.getAttribute('aria-activedescendant')).toBe(

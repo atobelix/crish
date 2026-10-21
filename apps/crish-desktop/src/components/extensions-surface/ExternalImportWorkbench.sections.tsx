@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, SegmentedControl, Tooltip } from '../ui';
+import { Button, SegmentedControl } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 import type { DetectedExternalMcpServer } from './detectExternalMcpServers';
 import type { DetectedExternalSkill } from './detectExternalSkills';
@@ -7,6 +7,8 @@ import type {
   ExternalImportItem,
   ImportCategory,
 } from './externalImportWorkbenchModel';
+import { skillMatchesInstalledSet } from './externalImportActions';
+import { ExtensionActionCard } from './ExtensionActionCard';
 import styles from './ExternalImportWorkbench.module.css';
 
 /** 顶部标题区 + 分类切换/计数栏的展示属性 */
@@ -106,9 +108,12 @@ export interface ExternalImportListProps {
   activeCategory: ImportCategory;
   existingMcpNames: Set<string>;
   installedSkillNames: Set<string>;
+  busyId?: string | null;
   onOpenDetail: (item: ExternalImportItem) => void;
   onImportMcp: (mcp: DetectedExternalMcpServer) => Promise<void>;
   onImportSkill: (skill: DetectedExternalSkill) => Promise<void>;
+  onRemoveMcp: (mcp: DetectedExternalMcpServer) => Promise<void>;
+  onRemoveSkill: (skill: DetectedExternalSkill) => Promise<void>;
 }
 
 /** 主卡片列表：空态提示与 MCP/技能卡片网格 */
@@ -117,9 +122,12 @@ export const ExternalImportList: React.FC<ExternalImportListProps> = ({
   activeCategory,
   existingMcpNames,
   installedSkillNames,
+  busyId,
   onOpenDetail,
   onImportMcp,
   onImportSkill,
+  onRemoveMcp,
+  onRemoveSkill,
 }) => (
   <div className={styles.content}>
     {items.length === 0 ? (
@@ -137,82 +145,37 @@ export const ExternalImportList: React.FC<ExternalImportListProps> = ({
           const isImported =
             item.kind === 'mcp'
               ? existingMcpNames.has(item.name.toLowerCase())
-              : installedSkillNames.has(item.name.toLowerCase());
+              : skillMatchesInstalledSet(item.name, installedSkillNames);
 
           return (
-            <div
+            <ExtensionActionCard
               key={item.id}
-              className={`${styles.card} ${item.kind === 'skill' ? styles.clickableSkillCard : ''}`}
-              role={item.kind === 'skill' ? 'button' : undefined}
-              tabIndex={item.kind === 'skill' ? 0 : undefined}
-              onClick={() => onOpenDetail(item)}
-              onKeyDown={(e) => {
-                if (
-                  item.kind === 'skill' &&
-                  (e.key === 'Enter' || e.key === ' ')
-                ) {
-                  e.preventDefault();
-                  onOpenDetail(item);
+              name={item.name}
+              description={item.description}
+              badge={item.source}
+              icon={item.kind === 'mcp' ? 'cpu' : 'sparkles'}
+              placement="import"
+              installed={isImported}
+              busy={busyId === item.id}
+              onOpen={
+                item.kind === 'skill' ? () => onOpenDetail(item) : undefined
+              }
+              onAction={() => {
+                if (isImported) {
+                  if (item.kind === 'mcp' && item.rawMcp) {
+                    void onRemoveMcp(item.rawMcp);
+                  } else if (item.rawSkill) {
+                    void onRemoveSkill(item.rawSkill);
+                  }
+                  return;
+                }
+                if (item.kind === 'mcp' && item.rawMcp) {
+                  void onImportMcp(item.rawMcp);
+                } else if (item.rawSkill) {
+                  void onImportSkill(item.rawSkill);
                 }
               }}
-            >
-              <div className={styles.cardHeaderRow}>
-                <div className={styles.cardHeaderLeft}>
-                  <div className={styles.cardIcon}>
-                    <AppIcon
-                      name={item.kind === 'mcp' ? 'cpu' : 'sparkles'}
-                      size={15}
-                    />
-                  </div>
-                  <div className={styles.cardTitleGroup}>
-                    <Tooltip content={item.name}>
-                      <span className={styles.cardName}>{item.name}</span>
-                    </Tooltip>
-                    <span
-                      className={styles.sourceBadge}
-                      data-source={item.source}
-                    >
-                      {item.source}
-                    </span>
-                  </div>
-                </div>
-                <div
-                  className={styles.cardHeaderRight}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {isImported ? (
-                    <Tooltip content="已导入">
-                      <span
-                        className={styles.importedSymbol}
-                        aria-label="已导入"
-                      >
-                        <AppIcon name="check" size={14} />
-                      </span>
-                    </Tooltip>
-                  ) : (
-                    <Tooltip content="导入">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className={styles.importSymbolBtn}
-                        aria-label="导入"
-                        onClick={() => {
-                          if (item.kind === 'mcp' && item.rawMcp)
-                            void onImportMcp(item.rawMcp);
-                          else if (item.kind === 'skill' && item.rawSkill)
-                            void onImportSkill(item.rawSkill);
-                        }}
-                      >
-                        <AppIcon name="download" size={13} />
-                      </Button>
-                    </Tooltip>
-                  )}
-                </div>
-              </div>
-              <Tooltip content={item.description}>
-                <div className={styles.cardDesc}>{item.description}</div>
-              </Tooltip>
-            </div>
+            />
           );
         })}
       </div>
