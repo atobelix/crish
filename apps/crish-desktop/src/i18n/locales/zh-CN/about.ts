@@ -123,7 +123,17 @@ export const about: AboutTranslations = {
   // 历史基础词条保持兼容
   noticeTitle: '声明',
   checkUpdates: '检查更新',
+  checkUpdatesDesc:
+    '通过 Minisign 签名验证的更新通道检查新版本，发现后可在侧栏一键安装',
   checkingUpdates: '正在检查更新...',
+  // 更新链路 (updateStore · RUN-03/GAP-01)
+  noUpdateAvailable: '当前没有可用更新',
+  tasksRunningBlockUpdate: '仍有任务在运行，请结束后再更新',
+  applyUpdateFailed: '更新失败',
+  applyUpdateFailedDetail: '更新失败：{error}',
+  updateChannelUnavailable: '更新通道不可用',
+  updateInstalledRestart: '更新包已安装，请重启应用完成更新',
+  checkUpdateFailedDetail: '检查更新失败：{error}',
   upToDate: '已是最新版本',
   updateAvailable: '发现新版本',
   newVersionAvailable: '发现新版本：{version}',

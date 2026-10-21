@@ -191,6 +191,32 @@ export const SettingsAboutTab: React.FC<Props> = ({
   const [copied, setCopied] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+
+  // 检查更新（RUN-03/GAP-01 真实入口）：调用后端 workbench_check_update，
+  // 按结构化 outcome 分支（available / upToDate / failed），结果文案全走 t()，
+  // 严禁对消息文本做字符串匹配（后端文案语言与前端 locale 解耦）。不误报成功。
+  const handleCheckUpdate = useCallback(async () => {
+    if (isCheckingUpdate) return;
+    setIsCheckingUpdate(true);
+    try {
+      const { checkForUpdate } = await import('../../api/updateStore');
+      const result = await checkForUpdate();
+      if (result.outcome === 'available') {
+        showToast(
+          t('about.newVersionAvailable', '发现新版本：{version}', {
+            version: result.version ?? '',
+          })
+        );
+      } else if (result.outcome === 'upToDate') {
+        showToast(t('about.upToDate', '已是最新版本'));
+      } else {
+        showToast(result.message || t('about.updateFailed', '检查更新失败'));
+      }
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  }, [isCheckingUpdate, showToast, t]);
 
   const systemInfo = useMemo(() => getSystemInfo(), []);
 
@@ -278,6 +304,39 @@ export const SettingsAboutTab: React.FC<Props> = ({
                   </span>
                 </Button>
               </Tooltip>
+            }
+          />
+
+          {/* 检查更新（RUN-03：真实 updater 链路的用户入口；结果如实透出） */}
+          <SettingsRow
+            title={t('about.checkUpdates', '检查更新')}
+            desc={t(
+              'about.checkUpdatesDesc',
+              '通过 Minisign 签名验证的更新通道检查新版本，发现后可在侧栏一键安装'
+            )}
+            control={
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  void handleCheckUpdate();
+                }}
+                disabled={isCheckingUpdate}
+                data-testid="check-updates-btn"
+                aria-label={
+                  isCheckingUpdate
+                    ? t('about.checkingUpdates', '正在检查更新...')
+                    : t('about.checkUpdates', '检查更新')
+                }
+              >
+                <AppIcon name="refresh" size={14} aria-hidden />
+                <span>
+                  {isCheckingUpdate
+                    ? t('about.checkingUpdates', '正在检查更新...')
+                    : t('about.checkUpdates', '检查更新')}
+                </span>
+              </Button>
             }
           />
         </SettingsCard>

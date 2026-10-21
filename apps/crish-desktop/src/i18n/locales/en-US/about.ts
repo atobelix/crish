@@ -130,7 +130,19 @@ export const about: AboutTranslations = {
   // Historical Keys
   noticeTitle: 'Notices',
   checkUpdates: 'Check for Updates',
+  checkUpdatesDesc:
+    'Check the Minisign-signed update channel for new versions; install from the sidebar when found',
   checkingUpdates: 'Checking for updates...',
+  // Update pipeline (updateStore · RUN-03/GAP-01)
+  noUpdateAvailable: 'No update available',
+  tasksRunningBlockUpdate:
+    'Tasks are still running. Please wait for them to finish before updating',
+  applyUpdateFailed: 'Update failed',
+  applyUpdateFailedDetail: 'Update failed: {error}',
+  updateChannelUnavailable: 'Update channel unavailable',
+  updateInstalledRestart:
+    'Update installed. Please restart the app to complete the update',
+  checkUpdateFailedDetail: 'Failed to check for updates: {error}',
   upToDate: 'Up to Date',
   updateAvailable: 'Update Available',
   newVersionAvailable: 'New version available: {version}',
