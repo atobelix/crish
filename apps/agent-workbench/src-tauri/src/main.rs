@@ -1219,28 +1219,60 @@ fn main() {
                 }
             }
 
-            // 启动期后台搜索索引自动预热：若有已授权活动工作区根，异步预热构建目录索引
+            // 启动期后台搜索索引自动预热（RUN-04/GAP-09 收口）：多根全量、
+            // 失败可见（根级/条目级 warn 记录，不静默）、边界受 WarmupLimits
+            // 约束（默认 100_000 文件 / 30s 全根合计，超限如实标记）。
             {
                 let search_state = Arc::clone(&search_state);
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     if let Some(reg) = app_handle.try_state::<crate::workspace::WorkspaceRegistry>() {
-                        if let Some(first_root) = reg.roots().first().cloned() {
-                            let root_str = first_root.to_string_lossy().into_owned();
-                            let built = tokio::task::spawn_blocking(move || {
-                                conex_search::walker::build_directory_index(&root_str)
-                            })
-                            .await;
-                            if let Ok(built_files) = built {
-                                let count = built_files.len();
+                        let roots: Vec<String> = reg
+                            .roots()
+                            .iter()
+                            .map(|p| p.to_string_lossy().into_owned())
+                            .collect();
+                        if roots.is_empty() {
+                            tracing::debug!(target: "search", "无已授权工作区根，跳过索引预热");
+                            return;
+                        }
+                        let built = tokio::task::spawn_blocking(move || {
+                            conex_search::warmup::warm_index(
+                                &roots,
+                                &conex_search::warmup::WarmupLimits::default(),
+                            )
+                        })
+                        .await;
+                        match built {
+                            Ok(report) => {
+                                if !report.is_clean() {
+                                    tracing::warn!(
+                                        target: "search",
+                                        root_count = report.root_count,
+                                        root_errors = report.root_errors.len(),
+                                        entry_errors = report.entry_error_count,
+                                        truncated = report.truncated,
+                                        timed_out = report.timed_out,
+                                        "搜索索引预热不干净（存在失败或被边界截断，详见预热日志）"
+                                    );
+                                }
+                                let count = report.files.len();
                                 if let Ok(mut lock) = search_state.files.write() {
-                                    *lock = Arc::new(built_files);
+                                    *lock = Arc::new(report.files);
                                     tracing::info!(
                                         target: "search",
                                         file_count = count,
+                                        root_count = report.root_count,
                                         "启动期后台搜索索引自动预热构建完成"
                                     );
                                 }
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    target: "search",
+                                    error = %e,
+                                    "搜索索引预热任务失败（spawn_blocking join error）"
+                                );
                             }
                         }
                     }

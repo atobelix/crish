@@ -329,6 +329,7 @@ pub mod search {
 
 pub mod walker {
     use ignore::WalkBuilder;
+    use std::time::Instant;
 
     const SKIP_DIRS: &[&str] = &[
         ".git",
@@ -343,7 +344,32 @@ pub mod walker {
 
     /// Build a directory index of file paths, respecting .gitignore and skipping common non-source dirs.
     pub fn build_directory_index(dir: &str) -> Vec<String> {
-        let mut files = Vec::new();
+        build_directory_index_limited(dir, None, None).files
+    }
+
+    /// 受限遍历结果（RUN-04 预热护栏）。
+    #[derive(Debug, Default)]
+    pub struct WalkOutcome {
+        /// 收集到的文件路径（未排序；调用方排序）。
+        pub files: Vec<String>,
+        /// 是否因达到 `max_files` 上限提前截断。
+        pub truncated: bool,
+        /// 是否因 `deadline` 超时提前停止。
+        pub timed_out: bool,
+        /// 条目级失败（路径, 错误信息）——不再静默吞掉（R-13）。
+        pub entry_errors: Vec<(String, String)>,
+    }
+
+    /// 受限遍历：可选文件数上限 + 可选超时期限 + 条目级错误收集。
+    ///
+    /// 语义与 [`build_directory_index`] 一致（.gitignore / SKIP_DIRS /
+    /// max_depth=12），额外提供预热护栏；`None` 时退化为既有无限遍历。
+    pub fn build_directory_index_limited(
+        dir: &str,
+        max_files: Option<usize>,
+        deadline: Option<Instant>,
+    ) -> WalkOutcome {
+        let mut outcome = WalkOutcome::default();
 
         // Prune ignored directories directly at entry level via filter_entry (KS-04)
         let walker = WalkBuilder::new(dir)
@@ -365,9 +391,26 @@ pub mod walker {
             .build();
 
         for entry in walker {
+            // 超时护栏：逐条目检查 deadline，超限提前停止
+            if deadline.is_some_and(|dl| Instant::now() >= dl) {
+                outcome.timed_out = true;
+                break;
+            }
+            // 文件数护栏：达到上限即截断
+            if max_files.is_some_and(|cap| outcome.files.len() >= cap) {
+                outcome.truncated = true;
+                break;
+            }
             let entry = match entry {
                 Ok(e) => e,
-                Err(_) => continue,
+                Err(err) => {
+                    // 失败可观测：记录路径与错误信息，不再静默 continue
+                    let path = walk_error_path(&err)
+                        .map(|p| p.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    outcome.entry_errors.push((path, err.to_string()));
+                    continue;
+                }
             };
 
             if !entry.file_type().is_some_and(|ft| ft.is_file()) {
@@ -375,14 +418,27 @@ pub mod walker {
             }
 
             if let Some(path_str) = entry.path().to_str() {
-                files.push(path_str.to_string());
+                outcome.files.push(path_str.to_string());
             }
         }
 
-        files.sort();
-        files
+        outcome.files.sort();
+        outcome
+    }
+
+    /// 从 `ignore::Error` 提取关联路径（该版本未提供 `path()` 方法；
+    /// 无路径变体返回 `None`）。
+    fn walk_error_path(err: &ignore::Error) -> Option<std::path::PathBuf> {
+        match err {
+            ignore::Error::WithPath { path, .. } => Some(path.clone()),
+            ignore::Error::Loop { child, .. } => Some(child.clone()),
+            ignore::Error::Partial(errs) => errs.iter().find_map(walk_error_path),
+            _ => None,
+        }
     }
 }
+
+pub mod warmup;
 
 #[cfg(test)]
 mod tests {
