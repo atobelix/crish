@@ -2,6 +2,7 @@
 
 > **核心指令**：重大重构 / 迭代轮次收口前，必须跑通本清单中的全部门禁。本文件只收录仓库**现行真实存在的命令**，新增门禁时同步追加，命令退役时同步移除——不收录臆造命令。
 > **对齐口径**：本清单与 `.github/workflows/ci.yml`（快层）、`ci-mid.yml`（中层）、`ci-slow.yml`（慢层）的实际 job/step 逐条对齐（2026-10-20 统一修复战役 T-DOC-02/07/08 复核；CI 阻断命令缺项 0）。
+> **`-j 1` 口径**：表中全量 cargo 命令（`--workspace` / `--manifest-path`）是**本地收口**写法，一律钉 `-j 1`（理由见「Rust 全量」节前置 3，`check-provider-single-track.mjs` D2 强制）；CI runner 内存充足，workflow 步骤本身不带 `-j`，除此之外命令与 CI 逐字一致。
 > **分层归属**：每条命令标注其 CI 层级；本地收口时按「快层 → 中层 →（发布/压力相关）慢层」顺序执行。
 
 ---
@@ -33,14 +34,14 @@
 | `npm audit --omit=dev --audit-level=moderate -w @crish/crish-desktop -w @crish/agent-workbench -w @crish/editor-kit -w @crish/block-paper -w @crish/shared-utils -w @crish/shared-types` | `audit` | 6 个桌面/工具链工作区依赖审计（移动端不在范围：T-SEC-03-a 用户裁决暂缓） |
 | `node scripts/generate-engine-bindings.mjs` + `git diff --exit-code -- packages/shared-types/src/generated` | `engine-bindings-drift` | 生成物漂移门禁（events.rs / engine-events.json 更新未跑生成器即失败） |
 | cargo-deny / secret-scan                  | `cargo-deny` / `secret-scan` | 依赖许可/漏洞与密钥泄漏扫描（action 载体：cargo-deny-action、gitleaks） |
-| `cargo check --workspace --locked`        | `rust-check`       | 跨平台编译门禁（ubuntu / windows / macos 三 OS 矩阵；`--locked` 锁依赖）  |
+| `cargo check --workspace --locked -j 1`   | `rust-check`       | 跨平台编译门禁（ubuntu / windows / macos 三 OS 矩阵；`--locked` 锁依赖）  |
 | `cargo test -p conex-types -p session-loop --locked` | `rust-unit-fast` | 关键单元测试快速套件                                            |
 
 ## 中层（CI：`ci-mid.yml` · 合并前全量）
 
 | 命令                                                   | CI job                | 内容                               |
 | :----------------------------------------------------- | :-------------------- | :--------------------------------- |
-| `cargo test --workspace --locked`                      | `rust-test`           | Rust 全量测试（L1 单测 + L2 集成 + L3 契约 + L4 e2e faux）；**本地执行前置见「Rust 全量」节** |
+| `cargo test --workspace --locked -j 1`                 | `rust-test`           | Rust 全量测试（L1 单测 + L2 集成 + L3 契约 + L4 e2e faux）；**本地执行前置见「Rust 全量」节** |
 | `cargo clippy --workspace --all-targets --locked`      | `clippy`              | Clippy 全量（warn 级 + 基线 ratchet） |
 | `node scripts/check-clippy-baseline.mjs`               | `clippy`              | clippy 新增告警 > 0 即失败         |
 | `npm run test`                                         | `test`                | vitest 全量（desktop + workbench） |
@@ -64,7 +65,7 @@
 
 | 命令                                      | CI job        | 内容                                        |
 | :---------------------------------------- | :------------ | :------------------------------------------ |
-| `cargo test --workspace --release --locked -- --ignored` | `rust-stress` | 压力场景（全部 `#[ignore]` 登记，release 下运行） |
+| `cargo test --workspace --release --locked -j 1 -- --ignored` | `rust-stress` | 压力场景（全部 `#[ignore]` 登记，release 下运行） |
 | `npm run stress`                          | `stress-ts`   | TS 压力轨（stress-runner：AI 流 / diff 加载 / 会话切换） |
 | `npm run test:e2e`                        | `e2e`         | Playwright 全量 E2E（L2 mock 引擎，根 config tests/e2e） |
 | `cargo bench --workspace --locked`        | `bench`       | 基准（`crates/*/benches` 存在时自动生效）    |
@@ -94,7 +95,7 @@
 
 | 命令                                                                         | 内容                                                                                                                             |
 | :--------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------- |
-| `cargo test --workspace -j 1`                                                | 全部 Rust crate + workbench 二进制测试（CI 等价：`ci-mid.yml` `rust-test` 的 `cargo test --workspace --locked`）                |
+| `cargo test --workspace -j 1`                                                | 全部 Rust crate + workbench 二进制测试（CI 等价：`ci-mid.yml` 的 `rust-test` job，见上文中层表）                |
 | `cargo check --manifest-path apps/agent-workbench/src-tauri/Cargo.toml -j 1` | workbench 壳静态检查                                                                                                             |
 
 **降级命令（二进制锁无法解除时）**：`cargo test --workspace --exclude crish-agent-workbench -j 1`，或为本次运行指定独立产物目录 `CARGO_TARGET_DIR=<临时目录> cargo test --workspace -j 1`。禁止把「杀进程」写成默认步骤。
