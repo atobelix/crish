@@ -80,6 +80,7 @@ export async function installOwnedSkillPreferringProject(
   }
   return {
     ok: false,
-    error: project.error || global.error || t('skill.import.writeFailed'),
+    error:
+      project.error || global.error || t('extensions.skill.import.writeFailed'),
   };
 }

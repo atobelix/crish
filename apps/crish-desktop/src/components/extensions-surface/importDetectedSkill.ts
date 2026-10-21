@@ -31,7 +31,7 @@ export async function importDetectedSkill(
   if (isDisallowedSkillName(skill.name) || !isQualifiedSkill(skill)) {
     return {
       ok: false,
-      message: t('skill.import.disallowed', { name: skill.name }),
+      message: t('extensions.skill.import.disallowed', { name: skill.name }),
     };
   }
 
@@ -49,7 +49,7 @@ export async function importDetectedSkill(
   if (!wrote.ok) {
     return {
       ok: false,
-      message: t('skill.import.failed', { detail: wrote.error }),
+      message: t('extensions.skill.import.failed', { detail: wrote.error }),
     };
   }
 
@@ -65,7 +65,7 @@ export async function importDetectedSkill(
     ok: true,
     message:
       wrote.scope === 'project'
-        ? t('skill.import.projectEnabled', { name: skill.name })
-        : t('skill.import.globalEnabled', { name: skill.name }),
+        ? t('extensions.skill.import.projectEnabled', { name: skill.name })
+        : t('extensions.skill.import.globalEnabled', { name: skill.name }),
   };
 }

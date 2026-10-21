@@ -62,9 +62,15 @@ export async function installOwnedSkillCopy(opts: {
     }
   }
   if (res.status === 'missing') {
-    return { ok: false, error: t('skill.import.globalWriteUnavailable') };
+    return {
+      ok: false,
+      error: t('extensions.skill.import.globalWriteUnavailable'),
+    };
   }
-  return { ok: false, error: res.message || t('skill.import.writeFailed') };
+  return {
+    ok: false,
+    error: res.message || t('extensions.skill.import.writeFailed'),
+  };
 }
 
 /** 按技能标识卸载项目副本和全局副本。目录不存在时视为已经卸掉。 */
