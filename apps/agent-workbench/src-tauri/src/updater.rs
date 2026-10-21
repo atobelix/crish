@@ -155,9 +155,9 @@ pub(crate) async fn workbench_install_update<R: Runtime>(
 pub(crate) async fn workbench_restart_app<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<Value, CoreError> {
-    // `AppHandle::restart()` 发散（进程退出），`!` 协变为 Result；
-    // 正常情况下此调用不返回。
-    Ok(app.restart())
+    // `AppHandle::restart()` 返回 `!`（进程退出、永不返回），作为尾表达式
+    // 直接强转为 `Result`；不能包成 `Ok(..)`——那是一个不可达的构造调用。
+    app.restart()
 }
 
 /// 一次性编排（SidebarFooter 更新按钮入口）：检查 → 下载（验签）→ 安装 → 重启。
@@ -186,15 +186,14 @@ pub(crate) async fn workbench_apply_update<R: Runtime>(
         .map_err(map_updater_err)?;
     update.install(bytes.as_slice()).map_err(map_updater_err)?;
     // Windows：install 内部启动安装器并退出进程，通常到不了这里；
-    // macOS/Linux：显式重启新版本。
-    Ok(app.restart())
+    // macOS/Linux：显式重启新版本（`restart()` 返回 `!`，直接作尾表达式）。
+    app.restart()
 }
 
 #[cfg(test)]
 mod tests {
     use base64::Engine as _;
     use tauri::Manager;
-    use tauri_plugin_updater::UpdaterExt as _;
 
     use super::*;
 
