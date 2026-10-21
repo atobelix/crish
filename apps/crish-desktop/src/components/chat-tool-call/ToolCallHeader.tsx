@@ -65,6 +65,11 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
   const kind = useMemo(() => toolCommandType(tc), [tc]);
   const kindIconName = useMemo(() => toolCommandIcon(kind), [kind]);
   const fullTooltip = filePath || tc.arguments || human || '';
+  // 意图说明（toolHumanLabel：AI explanation 优先）与动作/参数并列常驻外露；
+  // 与动作词或参数完全重复时不再重复渲染。工具默认折叠只折叠详情，不折叠意图。
+  const showHumanLabel = Boolean(
+    human && human !== actionText && human !== paramText
+  );
 
   const targetDiff = tc.diffs?.[0];
 
@@ -109,6 +114,16 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
         </span>
         <span className={styles.toolRowText}>
           <span className={styles.toolRowSummary}>
+            {showHumanLabel ? (
+              <Tooltip content={human}>
+                <span
+                  className={`${styles.toolActionText} ${styles.toolHumanText}`}
+                  data-testid={`tool-human-label-${tc.id}`}
+                >
+                  {human}
+                </span>
+              </Tooltip>
+            ) : null}
             <Tooltip content={fullTooltip}>
               <span className={styles.toolActionText}>{actionText}</span>
             </Tooltip>

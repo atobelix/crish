@@ -287,12 +287,19 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
           >
             <span
               aria-describedby="_r_0_"
+              class="_toolActionText_d18ff4 _toolHumanText_d18ff4"
+              data-testid="tool-human-label-tool_running"
+            >
+              运行测试
+            </span>
+            <span
+              aria-describedby="_r_1_"
               class="_toolActionText_d18ff4"
             >
               终端
             </span>
             <span
-              aria-describedby="_r_1_"
+              aria-describedby="_r_2_"
               class="_toolParamText_d18ff4"
             >
               npm test
@@ -351,7 +358,7 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
                 class="_terminalLineEndSlot_d18ff4"
               >
                 <button
-                  aria-describedby="_r_2_"
+                  aria-describedby="_r_3_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                   data-size="sm"
                   data-variant="ghost"
@@ -509,12 +516,19 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
           >
             <span
               aria-describedby="_r_0_"
+              class="_toolActionText_d18ff4 _toolHumanText_d18ff4"
+              data-testid="tool-human-label-tool_success"
+            >
+              查看 main.ts
+            </span>
+            <span
+              aria-describedby="_r_1_"
               class="_toolActionText_d18ff4"
             >
               读取
             </span>
             <button
-              aria-describedby="_r_1_"
+              aria-describedby="_r_2_"
               class="_button_ae1db5 _buttonGhost_ae1db5 _buttonMd_ae1db5 _toolPathLink_d18ff4"
               data-size="md"
               data-variant="ghost"
@@ -600,12 +614,19 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
           >
             <span
               aria-describedby="_r_0_"
+              class="_toolActionText_d18ff4 _toolHumanText_d18ff4"
+              data-testid="tool-human-label-tool_duration"
+            >
+              修改 utils.ts
+            </span>
+            <span
+              aria-describedby="_r_1_"
               class="_toolActionText_d18ff4"
             >
               修改
             </span>
             <button
-              aria-describedby="_r_1_"
+              aria-describedby="_r_2_"
               class="_button_ae1db5 _buttonGhost_ae1db5 _buttonMd_ae1db5 _toolPathLink_d18ff4"
               data-size="md"
               data-variant="ghost"
@@ -653,7 +674,7 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
               class="_toolFloatingActions_d18ff4"
             >
               <button
-                aria-describedby="_r_2_"
+                aria-describedby="_r_3_"
                 class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
                 data-size="sm"
                 data-variant="ghost"
