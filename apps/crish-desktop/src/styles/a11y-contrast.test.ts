@@ -101,15 +101,18 @@ function oklchToRgb(value: string, bg: Rgb): Rgb | null {
 
   const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
   const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
-  const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+  const s_ = L - 0.0894841775 * a - 1.291485548 * b;
 
   const l_cube = l_ * l_ * l_;
   const m_cube = m_ * m_ * m_;
   const s_cube = s_ * s_ * s_;
 
-  const r_lin = +4.0767416621 * l_cube - 3.3077115913 * m_cube + 0.2309699292 * s_cube;
-  const g_lin = -1.2684380046 * l_cube + 2.6097574011 * m_cube - 0.3413193965 * s_cube;
-  const b_lin = -0.0041960863 * l_cube - 0.7034186147 * m_cube + 1.7076147010 * s_cube;
+  const r_lin =
+    +4.0767416621 * l_cube - 3.3077115913 * m_cube + 0.2309699292 * s_cube;
+  const g_lin =
+    -1.2684380046 * l_cube + 2.6097574011 * m_cube - 0.3413193965 * s_cube;
+  const b_lin =
+    -0.0041960863 * l_cube - 0.7034186147 * m_cube + 1.707614701 * s_cube;
 
   const toSrgb = (c: number) => {
     const clamped = Math.max(0, Math.min(1, c));
@@ -161,16 +164,18 @@ function resolveColor(
     return null;
   }
   const mix = v.match(
-    /^color-mix\(in srgb,\s*(.+?)\s*([\d.]+)%\s*,\s*transparent\)$/
+    /^color-mix\(in srgb,\s*(.*)\s+([\d.]+)%\s*,\s*(transparent|black|#000|#000000)\)$/i
   );
   if (mix) {
     const base = resolveColor(mix[1], table, bg, depth + 1);
     if (!base) return null;
     const pct = parseFloat(mix[2]) / 100;
+    const towardBlack = mix[3].toLowerCase() !== 'transparent';
+    const dest = towardBlack ? { r: 0, g: 0, b: 0 } : bg;
     return {
-      r: base.r * pct + bg.r * (1 - pct),
-      g: base.g * pct + bg.g * (1 - pct),
-      b: base.b * pct + bg.b * (1 - pct),
+      r: base.r * pct + dest.r * (1 - pct),
+      g: base.g * pct + dest.g * (1 - pct),
+      b: base.b * pct + dest.b * (1 - pct),
     };
   }
   return null;
@@ -264,12 +269,29 @@ describe('对比度验收（04-detail ③表 8 行，WCAG 2.1 AA）', () => {
     assertMin('--ui-text-warning', LIGHT_BG_PRIMARY, 4.5, LIGHT_TOKENS, '行 6');
   });
 
-  it('行 7：dark text-tertiary vs 主背景 ≥ 4.5:1（dark 元信息）', () => {
-    assertMin('--text-tertiary', DARK_BG_PRIMARY, 4.5, DARK_TOKENS, '行 7');
+  it('行 7：dark text-tertiary vs 主背景（灰度 60%，用户锁定，约 3.0:1）', () => {
+    assertMin('--text-tertiary', DARK_BG_PRIMARY, 2.9, DARK_TOKENS, '行 7');
   });
 
-  it('行 8：dark text-secondary vs 主背景 ≥ 7:1（达标项锁定防回退，现值 7.7:1）', () => {
-    assertMin('--text-secondary', DARK_BG_PRIMARY, 7.0, DARK_TOKENS, '行 8');
+  it('行 8：dark text-secondary vs 主背景（灰度 40%，用户锁定，约 6.0:1）', () => {
+    assertMin('--text-secondary', DARK_BG_PRIMARY, 5.8, DARK_TOKENS, '行 8');
+  });
+
+  it('深色正文四档：灰度 20 / 40 / 60 / 70，向黑混合未压灰前景', () => {
+    expect(DARK_TOKENS.get('--text-primary')).toBe(
+      'color-mix(in srgb, var(--user-text-primary) 80%, black)'
+    );
+    expect(DARK_TOKENS.get('--text-secondary')).toBe(
+      'color-mix(in srgb, var(--user-text-primary) 60%, black)'
+    );
+    expect(DARK_TOKENS.get('--text-tertiary')).toBe(
+      'color-mix(in srgb, var(--user-text-primary) 40%, black)'
+    );
+    expect(DARK_TOKENS.get('--text-faint')).toBe(
+      'color-mix(in srgb, var(--user-text-primary) 30%, black)'
+    );
+    expect(DARK_TOKENS.get('--text-quiet')).toBe('var(--text-tertiary)');
+    expect(DARK_TOKENS.get('--user-text-primary')).toBe('#f5f5f5');
   });
 });
 
@@ -314,10 +336,18 @@ describe('对比度验收（全部语义文字/状态 token × 主题主背景�
     }
   );
 
-  it.each(TEXT_TOKENS.map((t) => [t]))(
-    'dark 文字 token %s ≥ 4.5:1',
+  it.each(
+    TEXT_TOKENS.filter(
+      (t) => t !== '--text-tertiary' && t !== '--text-muted'
+    ).map((t) => [t])
+  )('dark 文字 token %s ≥ 4.5:1', (token) => {
+    assertMin(token, DARK_BG_PRIMARY, 4.5, DARK_TOKENS, 'dark 文字');
+  });
+
+  it.each(['--text-tertiary', '--text-muted'].map((t) => [t]))(
+    'dark 弱文字 token %s ≥ 2.9:1（灰度 60%）',
     (token) => {
-      assertMin(token, DARK_BG_PRIMARY, 4.5, DARK_TOKENS, 'dark 文字');
+      assertMin(token, DARK_BG_PRIMARY, 2.9, DARK_TOKENS, 'dark 弱文字');
     }
   );
 

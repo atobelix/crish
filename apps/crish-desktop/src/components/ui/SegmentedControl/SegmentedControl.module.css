@@ -92,18 +92,18 @@
   --seg-icon-size: 18px;
 }
 
-/* panel: 36px 高度, 14px 外壳, 11px 滑块 (设置面板专属 SmartPanel 同心大圆角) */
+/* panel: 28px 高度, 8px 外壳, 6px 滑块 (设置面板专属 SmartPanel 同心大圆角) */
 .containerPanel,
 .container[data-size='panel'] {
-  --seg-h: 36px;
-  --seg-pad: 3px;
-  --seg-outer-radius: var(--sep-radius-outer);
+  --seg-h: 28px;
+  --seg-pad: 2px;
+  --seg-outer-radius: var(--button-radius);
   --seg-inner-radius: calc(
     var(--seg-outer-radius) - var(--seg-pad)
-  ); /* 11px 完美同心 */
-  --seg-fs: 13.5px;
-  --seg-item-px: 14px;
-  --seg-icon-size: 15px;
+  ); /* 6px 完美同心 */
+  --seg-fs: var(--font-size-sm);
+  --seg-item-px: var(--space-2_5);
+  --seg-icon-size: 14px;
 }
 
 /* ── 固体纯白滑块 (Solid Pure-White Card Base Latch) ── */

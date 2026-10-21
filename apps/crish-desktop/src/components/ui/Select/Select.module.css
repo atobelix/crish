@@ -54,8 +54,8 @@
 .size-sm {
   height: 28px;
   min-height: 28px;
-  padding: 0 8px;
-  font-size: var(--font-size-xs);
+  padding: 0 var(--space-2_5);
+  font-size: var(--font-size-sm);
   border-radius: var(--radius-md);
 }
 
@@ -93,6 +93,11 @@
 .triggerOutline,
 .variant-outline {
   background: var(--cover-card-bg, var(--bg-card));
+  border-color: var(--border-subtle);
+}
+
+.triggerOutline:hover:not(:disabled),
+.variant-outline:hover:not(:disabled) {
   border-color: var(--border-color);
 }
 

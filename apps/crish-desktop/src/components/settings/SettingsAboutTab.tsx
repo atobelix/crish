@@ -3,8 +3,8 @@
  *
  * 落实 P1-LIC-02：应用版本、Conex 内核、开源许可证与第三方版权披露。
  * 包含：
- * - 应用品牌与版本展示 (Crish Desktop v0.1.0, Conex Kernel v0.1.0)
- * - 主许可证 (MIT License, Copyright (c) 2026 Conex Community)
+ * - 应用品牌与版本展示 (Crish Desktop 与引擎共用产品版本)
+ * - 主许可证 (MIT License, Copyright (c) 2026 张浩健)
  * - 第三方许可证披露 (可折叠 / 模态框)：
  *   - 宽松开源协议：MIT, Apache-2.0, BSD-2/3, ISC, Unicode
  *   - MPL-2.0 Section 3.1/3.2 弱互惠组件披露 (bitmaps, cssparser, cssparser-macros, im, sized-chunks, lightningcss, @parcel/watcher)
@@ -31,6 +31,8 @@ import {
   BUNDLED_FONTS,
   MPL_DEPENDENCIES,
   PERMISSIVE_LICENSES,
+  REPOSITORY_URL,
+  SECURITY_ADVISORY_URL,
   formatSystemInfo,
   getSystemInfo,
 } from './aboutTabData';
@@ -354,7 +356,7 @@ export const SettingsAboutTab: React.FC<Props> = ({
             className={styles.copyrightNotice}
             data-testid="copyright-notice"
           >
-            Copyright (c) 2026 Conex Community
+            {t('about.copyrightHolder', 'Copyright (c) 2026 张浩健')}
           </div>
           <div className={styles.licenseText}>
             {t(
@@ -422,14 +424,14 @@ export const SettingsAboutTab: React.FC<Props> = ({
       </SettingsSection>
 
       {/* 社区与支持 */}
-      <SettingsSection title={t('about.communityTitle', '社区与支持')}>
+      <SettingsSection title={t('about.communityTitle', '源码与安全')}>
         <SettingsCard>
           <SettingsRow
             title={t('about.githubRepo', 'GitHub 源码仓库')}
-            desc="https://github.com/conex-community/crish"
+            desc={REPOSITORY_URL}
             control={
               <a
-                href="https://github.com/conex-community/crish"
+                href={REPOSITORY_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={styles.externalLink}
@@ -445,11 +447,11 @@ export const SettingsAboutTab: React.FC<Props> = ({
             title={t('about.securityReport', '安全漏洞报告')}
             desc={t(
               'about.securityReportDesc',
-              '如发现安全隐患或漏洞，请通过 GitHub Security Advisory 或 security@conex.dev 报告'
+              '如发现安全隐患或漏洞，请通过 GitHub Security Advisory 报告'
             )}
             control={
               <a
-                href="https://github.com/conex-community/crish/security/advisories"
+                href={SECURITY_ADVISORY_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={styles.externalLink}

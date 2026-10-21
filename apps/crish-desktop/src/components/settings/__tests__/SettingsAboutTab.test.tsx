@@ -3,7 +3,7 @@
  * SettingsAboutTab 单元测试 (P1-LIC-02)
  *
  * 覆盖验证：
- * 1. 渲染应用品牌、版本号（Crish Desktop v0.1.0, Conex Kernel v0.1.0）及主许可证版权信息（MIT, Copyright (c) 2026 Conex Community）
+ * 1. 渲染应用品牌、版本号（Crish Desktop v0.1.1, Conex Kernel v0.1.1）及主许可证版权信息（MIT, Copyright (c) 2026 张浩健）
  * 2. 第三方开源协议披露区渲染 MPL-2.0 弱互惠组件披露（bitmaps, cssparser, cssparser-macros, im, sized-chunks, lightningcss, @parcel/watcher）与 SIL OFL-1.1 字体归属（Inter, JetBrains Mono, IBM Plex）
  * 3. 复制系统信息按钮调用剪贴板写入并复制包含 OS、版本与架构的文本
  * 4. 弹窗模态查看完整协议与外部社区/安全链接
@@ -38,17 +38,17 @@ describe('SettingsAboutTab', () => {
   it('渲染应用品牌、版本信息与主许可证版权信息', () => {
     render(<SettingsAboutTab />);
 
-    // 1. 验证 App Brand: Crish Desktop v0.1.0, Conex Kernel v0.1.0
+    // 1. 验证 App Brand: Crish Desktop v0.1.1, Conex Kernel v0.1.1
     expect(screen.getByText('Crish Desktop')).toBeInTheDocument();
-    expect(screen.getByTestId('app-version')).toHaveTextContent('v0.1.0');
+    expect(screen.getByTestId('app-version')).toHaveTextContent('v0.1.1');
     expect(screen.getByTestId('kernel-version')).toHaveTextContent(
-      'Conex Kernel v0.1.0'
+      'Conex Kernel v0.1.1'
     );
 
-    // 2. 验证主许可证 MIT License 与 Copyright (c) 2026 Conex Community
+    // 2. 验证主许可证 MIT License 与 Copyright (c) 2026 张浩健
     expect(screen.getAllByText(/MIT/).length).toBeGreaterThan(0);
     expect(screen.getByTestId('copyright-notice')).toHaveTextContent(
-      'Copyright (c) 2026 Conex Community'
+      'Copyright (c) 2026 张浩健'
     );
   });
 
@@ -110,8 +110,8 @@ describe('SettingsAboutTab', () => {
     const copiedText = copySpy.mock.calls[0][0];
 
     // 断言拷贝内容包含 OS, App 版本, Kernel 版本, Electron/Tauri 架构
-    expect(copiedText).toContain('Crish Desktop: v0.1.0');
-    expect(copiedText).toContain('Conex Kernel: v0.1.0');
+    expect(copiedText).toContain('Crish Desktop: v0.1.1');
+    expect(copiedText).toContain('Conex Kernel: v0.1.1');
     expect(copiedText).toContain('OS:');
     expect(copiedText).toContain('Architecture:');
     expect(copiedText).toContain('Runtime:');
@@ -154,22 +154,22 @@ describe('SettingsAboutTab', () => {
     const githubLink = screen.getByTestId('github-link');
     expect(githubLink).toHaveAttribute(
       'href',
-      'https://github.com/conex-community/crish'
+      'https://github.com/atobelix/crish'
     );
     expect(githubLink).toHaveAttribute('target', '_blank');
 
     const securityLink = screen.getByTestId('security-report-link');
     expect(securityLink).toHaveAttribute(
       'href',
-      'https://github.com/conex-community/crish/security/advisories'
+      'https://github.com/atobelix/crish/security/advisories'
     );
     expect(securityLink).toHaveAttribute('target', '_blank');
   });
 
   it('getSystemInfo 与 formatSystemInfo 纯函数逻辑一致保真', () => {
     const info = getSystemInfo();
-    expect(info.appVersion).toBe('v0.1.0');
-    expect(info.kernelVersion).toBe('v0.1.0');
+    expect(info.appVersion).toBe('v0.1.1');
+    expect(info.kernelVersion).toBe('v0.1.1');
     expect(typeof info.os).toBe('string');
     expect(typeof info.architecture).toBe('string');
     expect(typeof info.runtime).toBe('string');

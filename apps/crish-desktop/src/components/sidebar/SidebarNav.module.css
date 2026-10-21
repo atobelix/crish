@@ -122,6 +122,10 @@
   color: var(--text-secondary);
 }
 
+:global(html[data-theme='dark']) .navItem input[type='search']::placeholder {
+  color: var(--text-primary);
+}
+
 .navItem input[type='search']::-webkit-search-cancel-button,
 .navItem input[type='search']::-webkit-search-results-button,
 .navItem input[type='search']::-webkit-search-results-decoration {

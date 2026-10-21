@@ -680,8 +680,8 @@
   padding: 0 var(--space-2, 8px);
   font-size: var(--font-size-micro, 11px);
   font-family: var(--font-sans);
-  /* 静置弱化态走 --text-faint 层级（tertiary 向底色混合 ~70%），hover/is-copied 提级。 */
-  color: var(--text-faint);
+  /* 静置走常看弱字，悬停或已复制再提亮。 */
+  color: var(--text-quiet);
   background: transparent;
   box-shadow: none;
   border: 1px solid transparent;

@@ -93,6 +93,15 @@
   color: var(--text-primary);
 }
 
+/* 深色里项目名再亮一档，避免和后面的会话标题拉开太多。 */
+:global(html[data-theme='dark']) .bcProjectBtn {
+  color: var(--text-primary);
+}
+
+:global(html[data-theme='dark']) .bcSep {
+  color: var(--text-secondary);
+}
+
 .bcProjectBtn:active {
   background: var(--tint-active);
 }

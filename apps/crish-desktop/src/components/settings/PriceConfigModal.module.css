@@ -123,7 +123,7 @@
 
 /* 生图模型的 Token 单价列：不适用占位（非输入框，不承载任何提示语义） */
 .notApplicable {
-  color: var(--text-faint);
+  color: var(--text-quiet);
   font-size: var(--font-size-xs);
   user-select: none;
 }

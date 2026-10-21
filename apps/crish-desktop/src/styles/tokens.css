@@ -34,7 +34,7 @@ html[data-theme='default'],
 html[data-theme='light'] {
   /*
    * Premium Light Theme · 三档底色（SSOT，2026-10-10 定稿）——灰度 = 100 − 亮度
-   * 1) outer 外层：左侧边栏 + 顶部标签栏/标题栏（含窗口按钮）灰度 3.5（L 96.5%）；唯一透出云母的一层
+   * 1) outer 外层：左侧边栏 + 顶部标签栏/标题栏（含窗口按钮）+ 设置壳 灰度 3（L 97%）；唯一透出云母的一层
    * 2) main  主层：聊天区 + 右侧栏（差异/文件）+ 卡片/弹层/Tooltip/代码块/空状态/面包屑 灰度 2.0（L 98%），实色
    * 3) input 输入框：灰度 0（纯白）
    * 其它 surface-* / bg-* 只能引用这三档；hover/active/选中 = 所在层上的统一叠加（--tint-hover / --tint-active）。
@@ -43,10 +43,10 @@ html[data-theme='light'] {
   /* 纯白主层实测模式：主层纯白 #ffffff；输入框纯白。
    * T-BLK-07b：运行时只写 --user-surface-* 参数（B 类登记），A 类三档在此由 CSS 派生，
    * fallback = 原静态 SSOT 同值。 */
-  --user-surface-outer: #f2f1f0;
+  --user-surface-outer: #f7f6f5;
   --user-surface-main: #ffffff;
   --user-surface-input: #ffffff;
-  --surface-outer: var(--user-surface-outer, #f2f1f0);
+  --surface-outer: var(--user-surface-outer, #f7f6f5);
   --surface-main: var(--user-surface-main, #ffffff);
   --surface-input: var(--user-surface-input, #ffffff);
   /* 内容矩形 .leafBody 的框线（只画左边 + 顶边 1px）：外层 K5 再加 3 → K8 → RGB 234.6/233.7/232.7 #ebeae9
@@ -74,9 +74,8 @@ html[data-theme='light'] {
   --bg-card-hover: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
   --bg-card-active: color-mix(in srgb, var(--text-primary) 6%, transparent);
   --bg-card-subtle: var(--surface-outer);
-  /* 用户消息气泡（heson 定稿 2026-10-11）：所在层（主层 K2.8）再加 K4 → CMYK C0 M0.4 Y0.8 K6.8
-     → RGB 237.7/236.7/235.8 ≈ #eeedec。三档之外唯一的有意例外（气泡是内容，不是面板）。 */
-  --user-bubble-bg: #eeedec;
+  /* 用户消息气泡：主题文字色 3% 透明叠底。浅色是淡暖灰，深色与换肤后的文字色自动跟着走。 */
+  --user-bubble-bg: color-mix(in srgb, var(--text-primary) 3%, transparent);
   /* 激活标签页 = 输入框档（纯白，比外层/主层都亮一档）；未激活标签透明，透出外层 */
   --tab-active-bg: var(--surface-input);
   /* 次级按钮底色（元素底色 token；浅色 = 所在层卡片色，不变） */
@@ -115,20 +114,24 @@ html[data-theme='light'] {
   --user-text-tertiary: #666666;
   --text-tertiary: var(--user-text-tertiary, #666666);
   --text-muted: var(--text-tertiary);
-  /* 第四级弱化文字（侧栏分组折叠控制行 / 时间戳 / 计数等）：显式灰值，不再向背景 mix */
+  /* 第四级弱化文字：显式灰值，不再向背景 mix。深色里这一档是灰度 70%，少用于常看的字。 */
   --user-text-faint: #969696;
   --text-faint: var(--user-text-faint, #969696);
+  /* 常看的弱字。浅色仍用极弱档；深色改走三级，避开灰度 70%。 */
+  --text-quiet: var(--text-faint);
   /* 反色前景（与 --text-on-accent 同源，随主题翻转） */
   --text-inverse: var(--text-on-accent);
   /* 浮层/遮罩之上的前景 */
   --text-on-overlay: var(--text-on-accent);
 
-  /* 叠加增量恢复为补丁前原值（refs/backup/ui-polish-pre-20261010-214735）：hover 2.5% / active 5% */
+  /* 叠加：hover 2.5%。按下从 5% 收到 3%，避免发黑。 */
   --tint-hover: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
-  --tint-active: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --tint-active: color-mix(in srgb, var(--text-primary) 3%, transparent);
   --tint-strong: color-mix(in srgb, var(--text-primary) 8%, transparent);
   /* 族内最轻一档：极弱底/分隔 */
   --tint-subtle: color-mix(in srgb, var(--text-primary) 1.5%, transparent);
+  /* 安静底：浅色与深色同一 3% 墨，不随悬停再加深。皮肤改文字色后自动跟着走。 */
+  --tint-quiet: color-mix(in srgb, var(--text-primary) 3%, transparent);
   --tint-focus-ring: color-mix(in srgb, var(--text-primary) 8%, transparent);
   --tint-divider: var(
     --border-color
@@ -212,7 +215,7 @@ html[data-theme='light'] {
   --switch-thumb-shadow: 0 1px 2px
     color-mix(in srgb, var(--shadow-color) 8%, transparent);
   --seg-track-bg: var(--surface-outer);
-  /* 分段控件激活滑块（heson 2026-10-11）：主层 #fcfbfa → 纯白输入档，和外层轨道 #f2f1f0 拉开 */
+  /* 分段控件激活滑块：主层走到纯白输入档，和外层轨道拉开 */
   --seg-slider-bg: var(--surface-input);
 
   /* 描边降调（2026-09-11 用户裁决：弱化描边存在感，按钮尤其）
@@ -246,11 +249,7 @@ html[data-theme='light'] {
 
   --control-soft-bg: var(--tint-hover);
   --control-soft-bg-hover: var(--tint-hover);
-  --control-soft-bg-active: color-mix(
-    in srgb,
-    var(--text-primary) 8%,
-    transparent
-  );
+  --control-soft-bg-active: var(--tint-hover);
   --sidebar-hover: var(--tint-hover);
   --sidebar-active: var(--tint-active);
 
@@ -1082,14 +1081,14 @@ html[data-theme='dark'] {
   /* 深色「元素底色」派生体系（heson 2026-10-11 00:54 / 01:01；2026-10-12 净化收敛）：
      不写死灰值，一律 = 所在层 token + 一份「提亮墨」，色相严格随当前皮肤的主文字色走，
      严禁混入与界面基调冲突的翡翠绿 accent。
-     --element-ink = 主文字色（皮肤切换 / 明暗切换自动跟随，纯净不偏色）。 */
-  --element-ink: var(--text-primary);
+     --element-ink = 皮肤完整前景（未压灰）。正文灰度另算，按钮、悬停和选中行不跟着变暗。 */
+  --element-ink: var(--user-text-primary);
   /* ── 深色「元素提亮阶梯」（heson 2026-10-11 01:05）──
      全部是 element-ink 的透明叠加：叠在哪一层就在哪一层上提亮，外层/主层/输入框上的相对增量一致（ΔL ≈ α ×（墨 L − 层 L））。
      ★ 调亮度只改下面 4 个 --elevate-step-*（墨的叠加百分比；每 1.33% ≈ +1 亮度点）★
      elevate-1        hover                       ≈ +8 亮度点
      elevate-1-active 按下（hover 再 +2）         ≈ +10
-     elevate-2        按钮底色、用户气泡          ≈ +12
+     elevate-2        按钮底色                    ≈ +12
      elevate-3        激活标签 / 分段滑块 / 侧栏选中行 ≈ +14（heson 2026-10-11 02:14 整体再 +2） */
   --elevate-step-1: 10.6%;
   --elevate-step-1-active: 13.3%;
@@ -1115,8 +1114,12 @@ html[data-theme='dark'] {
     var(--element-ink) var(--elevate-step-3),
     transparent
   );
-  /* 用户气泡 = elevate-2（旧 #141414，比主层还暗） */
-  --user-bubble-bg: var(--elevate-2);
+  /* 深色用户气泡：未压灰的主题前景 5%。比浅色的 3% 再亮 2 个点，暗底上才看得出。 */
+  --user-bubble-bg: color-mix(
+    in srgb,
+    var(--user-text-primary) 5%,
+    transparent
+  );
   /* 激活标签页 = 输入框档（深色最亮一层 #232323；旧值 hsl(0 0% 25%) 是第四种灰）；未激活透明 */
   /* 激活标签 = elevate-3（旧 = 输入档 #232323） */
   --tab-active-bg: var(--elevate-3);
@@ -1131,20 +1134,21 @@ html[data-theme='dark'] {
   --bg-page: var(--surface-paper);
   --bg-canvas: var(--surface-paper);
   --shell-chrome-bg: var(--surface-chrome);
-  /* ── 文字灰度阶（dark：与 light 镜像，0% = 黑，100% = 白；四档均为显式灰值）──
-     正文/常看到的字 = 90%（近白，10% 灰度）→ 次级/会话列表 = 80%（#cccccc）→ 小字 55%（#8c8c8c）→ 极弱/折叠控制行/时间戳 = 40%（#666666） */
+  /* 深色文字灰度（2026-10-21）：最亮正文 20%，次级 40%，三级 60%，极弱 70%。
+     向黑混合皮肤完整前景，色相跟着当前主题走。
+     --user-text-primary 保持未压灰，元素提亮和运行时注入读它。
+     次级参数仍留给运行时写入；可见四档不读它们，避免旧灰值盖住这套阶梯。 */
   --user-text-primary: #f5f5f5;
   --user-text-secondary: #cccccc;
-  /* G-CASCADE 结构契约：亮暗块声明值必须源码级 distinct，fallback = 本块原静态值 */
-  --text-primary: var(--user-text-primary, #f5f5f5);
-  --text-secondary: var(--user-text-secondary, #cccccc);
-  /* 文本三级色（小字 / 工具调用 / 路径等）：45% 灰度（55% 亮度），显式灰值零透明度，达标 WCAG AA */
   --user-text-tertiary: #8c8c8c;
-  --text-tertiary: var(--user-text-tertiary, #8c8c8c);
-  --text-muted: var(--text-tertiary);
-  /* 第四级弱化文字（侧栏分组折叠控制行 / 时间戳 / 计数等） */
   --user-text-faint: #666666;
-  --text-faint: var(--user-text-faint, #666666);
+  --text-primary: color-mix(in srgb, var(--user-text-primary) 80%, black);
+  --text-secondary: color-mix(in srgb, var(--user-text-primary) 60%, black);
+  --text-tertiary: color-mix(in srgb, var(--user-text-primary) 40%, black);
+  --text-muted: var(--text-tertiary);
+  --text-faint: color-mix(in srgb, var(--user-text-primary) 30%, black);
+  /* 常看的弱字走三级（灰度 60%）。灰度 70% 只留给分隔点、折叠箭头和悬停才出现的图标。 */
+  --text-quiet: var(--text-tertiary);
   /* 反色前景（与 --text-on-accent 同源，随主题翻转） */
   --text-inverse: var(--text-on-accent);
   /* 浮层/遮罩之上的前景 */
@@ -1154,10 +1158,16 @@ html[data-theme='dark'] {
   /* hover / 按下并入阶梯（旧 text-primary 3.5% / 6.5%） */
   --tint-hover: var(--elevate-1);
   --tint-active: var(--elevate-1-active);
-  --tint-strong: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --tint-strong: color-mix(in srgb, var(--user-text-primary) 10%, transparent);
   /* 族内最轻一档：极弱底/分隔 */
-  --tint-subtle: color-mix(in srgb, var(--text-primary) 2%, transparent);
-  --tint-focus-ring: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --tint-subtle: color-mix(in srgb, var(--user-text-primary) 2%, transparent);
+  /* 安静底：与浅色同一 3% 墨，用未压灰前景。深色叠在暗底上是轻提亮，悬停不再改这一档。 */
+  --tint-quiet: color-mix(in srgb, var(--user-text-primary) 3%, transparent);
+  --tint-focus-ring: color-mix(
+    in srgb,
+    var(--user-text-primary) 10%,
+    transparent
+  );
   --tint-divider: var(
     --border-color
   ); /* 线色统一：border-color（强）/ border-subtle（弱）两档 */
@@ -1168,14 +1178,14 @@ html[data-theme='dark'] {
   /* 暗色未激活态：微弱透光冷灰，融入暗色底板 (--bg-primary: #1e1e1e) */
   --scrollbar-thumb-bg: color-mix(
     in srgb,
-    var(--text-primary, #cccccc) 16%,
+    var(--user-text-primary, #f5f5f5) 16%,
     transparent
   );
 
   /* 暗色激活态：Hover 与 Active 严格同色，坚挺沉着，透光率提升至 48%，杜绝高对比刺眼 */
   --scrollbar-thumb-active: color-mix(
     in srgb,
-    var(--text-primary, #cccccc) 48%,
+    var(--user-text-primary, #f5f5f5) 48%,
     transparent
   );
   --scrollbar-button-up: var(
@@ -1217,12 +1227,20 @@ html[data-theme='dark'] {
   /* 向后兼容别名安全网 */
   --tint-scrollbar-thumb: var(--scrollbar-thumb-bg);
   --tint-scrollbar-track: transparent;
-  --tint-overlay: color-mix(in srgb, var(--text-primary) 25%, transparent);
-  --tint-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
+  --tint-overlay: color-mix(in srgb, var(--user-text-primary) 25%, transparent);
+  --tint-highlight: color-mix(
+    in srgb,
+    var(--user-text-primary) 28%,
+    transparent
+  );
 
   /* T-C    5.2   T11 ui/Switch         dark       theme-dark.css     */
   /* 开关轨道 = 层上透明叠加（深色保持原 14% 增量） */
-  --switch-track-bg: color-mix(in srgb, var(--text-primary) 14%, transparent);
+  --switch-track-bg: color-mix(
+    in srgb,
+    var(--user-text-primary) 14%,
+    transparent
+  );
   --switch-thumb-bg: var(--surface-overlay-fg);
   --switch-thumb-shadow: 0 1px 3px
     color-mix(in srgb, var(--shadow-color) 40%, transparent);
@@ -1254,17 +1272,17 @@ html[data-theme='dark'] {
 
   --control-soft-bg: var(--tint-hover);
   --control-soft-bg-hover: var(--tint-hover);
-  --control-soft-bg-active: var(--tint-active);
+  --control-soft-bg-active: var(--tint-hover);
   /* dark        01    P2-01  light    hover/active   control-mix-color   dark
    *     light           tint          */
   --sidebar-hover: var(--tint-hover);
   --sidebar-active: var(--elevate-3); /* 选中 = elevate-3（旧 = tint-active） */
-  --user-control-mix-color: var(--text-primary);
+  --user-control-mix-color: var(--user-text-primary);
   --control-mix-color: var(--user-control-mix-color, #f5f5f5);
   --focus-ring-color: color-mix(
     in srgb,
     var(--border-color) 92%,
-    var(--text-primary) 8%
+    var(--user-text-primary) 8%
   );
   --focus-ring: 0 0 0 1.5px var(--focus-ring-color);
 
@@ -1553,7 +1571,7 @@ html[data-theme='dark'] {
   --md-quote-border: 3px solid var(--border-color);
   --md-quote-border-color: color-mix(
     in srgb,
-    var(--text-primary) 8%,
+    var(--user-text-primary) 8%,
     var(--border-color)
   );
   --md-quote-border-width: 3px;
@@ -1604,7 +1622,7 @@ html[data-theme='dark'] {
   --artifact-card-border-hover: color-mix(
     in srgb,
     var(--border-subtle) 94%,
-    var(--text-primary) 6%
+    var(--user-text-primary) 6%
   );
   --artifact-card-radius: var(--radius-l);
   --artifact-header-bg: var(--surface-outer);
@@ -1613,7 +1631,7 @@ html[data-theme='dark'] {
   --artifact-btn-hover-border: color-mix(
     in srgb,
     var(--border-subtle) 90%,
-    var(--text-primary) 10%
+    var(--user-text-primary) 10%
   );
   --artifact-btn-active-bg: var(--tint-active);
 
@@ -1685,7 +1703,11 @@ html[data-theme='dark'] {
   --aicard-status-success: var(--text-secondary, #a3a3a3);
   --aicard-status-warning: var(--accent-orange, hsl(38 92% 50%));
   --aicard-status-error: var(--accent-red, hsl(0 55% 55%));
-  --aicard-badge-bg: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  --aicard-badge-bg: color-mix(
+    in srgb,
+    var(--user-text-primary) 7%,
+    transparent
+  );
   --aicard-badge-fg: var(--text-tertiary);
 
   /* --- 5. 流式动效与打字机光标体系 (Dark) --- */

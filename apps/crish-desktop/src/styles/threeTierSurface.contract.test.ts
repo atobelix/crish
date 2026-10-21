@@ -56,7 +56,7 @@ describe('三档底色契约', () => {
         `var(--user-${name.slice(2)}, ${hex})`;
       const fb =
         theme === 'light'
-          ? { outer: '#f2f1f0', main: '#ffffff', input: '#ffffff' }
+          ? { outer: '#f7f6f5', main: '#ffffff', input: '#ffffff' }
           : { outer: '#1e1e1e', main: '#141414', input: '#232323' };
       expect(decl(b, '--surface-outer')).toBe(
         fallback('--surface-outer', fb.outer)
@@ -118,15 +118,19 @@ describe('三档底色契约', () => {
 
   it('浅色三档 = heson 实测值；激活标签 = 输入档', () => {
     // T-BLK-07b：字面实测值现在钉在 --user-surface-* 参数声明上
-    expect(decl(light, '--user-surface-outer')).toBe('#f2f1f0'); // K5（10-11 由 K4 加深）
-    expect(decl(light, '--user-bubble-bg')).toBe('#eeedec');
+    expect(decl(light, '--user-surface-outer')).toBe('#f7f6f5');
+    expect(decl(light, '--user-bubble-bg')).toBe(
+      'color-mix(in srgb, var(--text-primary) 3%, transparent)'
+    );
     expect(decl(dark, '--user-surface-outer')).toBe('#1e1e1e');
-    expect(decl(dark, '--user-bubble-bg')).toBe('var(--elevate-2)');
+    expect(decl(dark, '--user-bubble-bg')).toBe(
+      'color-mix(in srgb, var(--user-text-primary) 5%, transparent)'
+    );
     expect(decl(light, '--user-surface-main')).toBe('#ffffff');
     expect(decl(light, '--user-surface-input')).toBe('#ffffff');
     expect(decl(light, '--tab-active-bg')).toBe('var(--surface-input)');
     // 深色元素底色：一律「所在层 + 提亮墨」派生，随皮肤走，纯净不偏色（2026-10-12 净化收敛）
-    expect(decl(dark, '--element-ink')).toBe('var(--text-primary)');
+    expect(decl(dark, '--element-ink')).toBe('var(--user-text-primary)');
     // 深色元素提亮阶梯：全部是 element-ink 透明叠加（任何层上相对增量一致）
     // 阶梯值集中在 --elevate-step-*：只断言结构与单调递增，不钉死百分比（heson 会逐步微调）
     for (const s of ['1', '1-active', '2', '3']) {
@@ -148,7 +152,6 @@ describe('三档底色契约', () => {
       ['--tint-active', '1-active'],
       ['--bg-card-active', '1-active'],
       ['--button-secondary-bg', 2],
-      ['--user-bubble-bg', 2],
       ['--tab-active-bg', 3],
       ['--seg-slider-bg', 3],
       ['--sidebar-active', 3],

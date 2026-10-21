@@ -8,6 +8,13 @@
  * - 宽松开源协议清单 (PERMISSIVE_LICENSES)
  */
 
+/** 产品版本。跟整段开发走，不随单次提交递增。 */
+export const PRODUCT_VERSION = '0.1.1';
+
+export const REPOSITORY_URL = 'https://github.com/atobelix/crish';
+
+export const SECURITY_ADVISORY_URL = `${REPOSITORY_URL}/security/advisories`;
+
 export interface SystemInfo {
   appVersion: string;
   kernelVersion: string;
@@ -61,8 +68,8 @@ export function getSystemInfo(): SystemInfo {
   }
 
   return {
-    appVersion: 'v0.1.0',
-    kernelVersion: 'v0.1.0',
+    appVersion: `v${PRODUCT_VERSION}`,
+    kernelVersion: `v${PRODUCT_VERSION}`,
     os,
     architecture,
     runtime,

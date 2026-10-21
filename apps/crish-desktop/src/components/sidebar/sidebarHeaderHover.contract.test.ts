@@ -84,7 +84,7 @@ describe('侧栏分组头 hover 无底色', () => {
     );
   });
 
-  it('侧栏灰度显示层级：会话项/项目行突出（--text-secondary），折叠控制行/时间戳/展开按钮弱化（--text-faint）', () => {
+  it('侧栏灰度显示层级：会话项/项目行突出（--text-secondary），折叠控制行/时间戳/展开按钮用常看弱字（--text-quiet）', () => {
     // 突出层级：会话列表项与项目文件夹行使用 --text-secondary
     expect(blocksFor(/^\.sessionItem$/).join('\n')).toMatch(
       /color:\s*var\(--text-secondary\)/
@@ -96,25 +96,25 @@ describe('侧栏分组头 hover 无底色', () => {
       /color:\s*var\(--text-secondary\)/
     );
 
-    // 次要信息层级：置顶/项目/对话折叠控制行（.sectionLabel）使用 --text-faint 且字重为 400（禁止 500 抢戏）
+    // 次要信息层级：置顶/项目/对话折叠控制行（.sectionLabel）使用 --text-quiet 且字重为 400（禁止 500 抢戏）
     const sectionLabelBlock = blocksFor(/^\.sectionLabel$/).join('\n');
-    expect(sectionLabelBlock).toMatch(/color:\s*var\(--text-faint\)/);
+    expect(sectionLabelBlock).toMatch(/color:\s*var\(--text-quiet\)/);
     expect(sectionLabelBlock).toMatch(
       /font-weight:\s*var\(--font-weight-normal,\s*400\)/
     );
     expect(blocksFor(/^\.sectionLabel svg$/).join('\n')).toMatch(
-      /color:\s*var\(--text-faint\)/
+      /color:\s*var\(--text-quiet\)/
     );
 
-    // 次要信息层级：会话时间戳（含选中态）与折叠展开按钮使用 --text-faint
+    // 次要信息层级：会话时间戳（含选中态）与折叠展开按钮使用 --text-quiet
     expect(blocksFor(/^\.sessionTime$/).join('\n')).toMatch(
-      /color:\s*var\(--text-faint\)/
+      /color:\s*var\(--text-quiet\)/
     );
     expect(
       blocksFor(/^\.sessionItem\.active \.sessionTime$/).join('\n')
-    ).toMatch(/color:\s*var\(--text-faint\)/);
+    ).toMatch(/color:\s*var\(--text-quiet\)/);
     expect(blocksFor(/^\.foldToggleBtn$/).join('\n')).toMatch(
-      /color:\s*var\(--text-faint\)/
+      /color:\s*var\(--text-quiet\)/
     );
   });
 });

@@ -84,7 +84,7 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
         '#ffffff'
       );
       expect(root.style.getPropertyValue('--user-surface-outer')).toBe(
-        '#f2f1f0'
+        '#f7f6f5'
       );
       expect(root.style.getPropertyValue('--user-surface-input')).toBe(
         '#ffffff'

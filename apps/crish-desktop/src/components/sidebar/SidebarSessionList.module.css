@@ -10,13 +10,13 @@
 
 .emptyHint {
   font-size: var(--font-size-sm);
-  color: var(--text-faint);
+  color: var(--text-quiet);
   padding: 12px 10px;
   text-align: center;
 }
 
 .subtle {
-  color: var(--text-faint);
+  color: var(--text-quiet);
 }
 
 .accordionWrapper {
@@ -77,8 +77,8 @@
 .sectionLabel {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-normal, 400);
-  /* 分组折叠控制行（置顶 / 项目 / 对话）作为次要导航结构信息，退居第四级弱化灰阶（--text-faint）并使用常规 400 字重，让位于会话列表与顶部快捷入口 */
-  color: var(--text-faint);
+  /* 分组折叠控制行（置顶 / 项目 / 对话）是常看的结构字，用弱字档，字重保持 400，让位于会话列表 */
+  color: var(--text-quiet);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -111,7 +111,7 @@
 }
 
 .sectionLabel svg {
-  color: var(--text-faint);
+  color: var(--text-quiet);
   transition: transform var(--transition-fast);
 }
 
@@ -407,6 +407,11 @@
   color: var(--text-primary);
 }
 
+/* 深色会话名再亮一档。悬停和选中仍只靠底色区分。 */
+:global(html[data-theme='dark']) .sessionItem {
+  color: var(--text-primary);
+}
+
 .sessionItem.active {
   background: var(--sidebar-active);
   color: var(--text-primary);
@@ -425,7 +430,13 @@
 }
 
 .sessionItem.active .sessionTime {
-  color: var(--text-faint);
+  color: var(--text-quiet);
+}
+
+:global(html[data-theme='dark']) .sessionTime,
+:global(html[data-theme='dark']) .sessionItem.active .sessionTime,
+:global(html[data-theme='dark']) .sessionTitleHint {
+  color: var(--text-secondary);
 }
 
 .sessionItem:focus-visible {
@@ -503,7 +514,7 @@
   font-size: var(--font-size-xs, 12px);
   font-weight: var(--font-weight-normal, 400);
   line-height: 28px;
-  color: var(--text-faint);
+  color: var(--text-quiet);
 }
 
 .sessionText {
@@ -565,7 +576,7 @@
   font-weight: var(--font-weight-normal, 400);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
-  color: var(--text-faint);
+  color: var(--text-quiet);
   flex-shrink: 0;
   white-space: nowrap;
   max-width: 60px;
@@ -580,7 +591,7 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  color: var(--text-faint);
+  color: var(--text-quiet);
   padding: 1px 4px;
   border-radius: var(--radius-sm);
   font-size: 11px;
@@ -847,7 +858,7 @@ li.isDraggingSource > *,
   height: 26px;
   text-align: center;
   font-size: var(--font-size-xs, 12px);
-  color: var(--text-faint);
+  color: var(--text-quiet);
   background: transparent;
   border: none;
   box-shadow: none;

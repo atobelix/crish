@@ -110,10 +110,10 @@ export function deriveSkinPaintPlan(input: SkinPaintInput): SkinPaintPlan {
     //   外层/侧栏 3.5（L 96.5%）→ 主界面 2.0（L 98%）→ 输入框/卡片 0（纯白）。
     //   旧值 95% / 95.2%（实测灰度 ≈5.1 / 4.7，两层几乎同色）。
     //   亮度微调 ±5 档沿用原斜率；主界面封顶 99.5%，保证永远略暗于纯白输入框。
-    // 2026-10-15 实测：外层 K5 #f2f1f0、主层纯白 #ffffff、输入框 #ffffff。
+    // 外层 K3 #f7f6f5（侧栏 / 设置壳），主层与输入框纯白。
     // 亮度微调只平移 K（保持 M0.4/Y0.8），三层同步并夹紧，层级不反转、不贴合（review P1-3，见 warmLayerShift.ts）。
     const layers = shiftWarmLayers(
-      { outer: '#f2f1f0', main: '#ffffff', input: '#ffffff' },
+      { outer: '#f7f6f5', main: '#ffffff', input: '#ffffff' },
       adjust,
       false
     );

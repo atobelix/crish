@@ -317,7 +317,7 @@ describe('批次 2 · ④ scrollbar 块 ratchet', () => {
 
     // dark 模式必须显式重定义且非透明
     expect(darkBlock).toMatch(
-      /--scrollbar-thumb-bg:\s*(?:#[0-9a-fA-F]+|color-mix\([^;]+var\(--text-primary[^;]+\))/
+      /--scrollbar-thumb-bg:\s*(?:#[0-9a-fA-F]+|color-mix\([^;]+var\(--(?:user-)?text-primary[^;]+\))/
     );
     expect(darkBlock).toMatch(
       /--tint-scrollbar-thumb:\s*var\(--scrollbar-thumb-bg\)/
@@ -488,8 +488,8 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
       expect(block).toContain('--control-soft-bg: var(--tint-hover)');
       expect(block).toContain('--control-soft-bg-hover: var(--tint-hover)');
     }
-    expect(lightBlock).toContain('--control-soft-bg-active: color-mix(');
-    expect(darkBlock).toContain('--control-soft-bg-active: var(--tint-active)');
+    expect(lightBlock).toContain('--control-soft-bg-active: var(--tint-hover)');
+    expect(darkBlock).toContain('--control-soft-bg-active: var(--tint-hover)');
   });
 
   it('--bg-hover/--bg-active 语义别名接线到 tint 档位且两主题对齐', () => {
@@ -500,12 +500,18 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
       expect(block).toContain('--bg-hover: var(--tint-hover)');
       expect(block).toContain('--bg-active: var(--tint-active)');
     }
-    // 2026-10-11：叠加增量恢复为补丁前原值（light 2.5/5，dark 3.5/6.5）
+    // 浅色按下收到 3%。深色悬停仍走提亮阶梯。
     expect(lightBlock).toContain(
       '--tint-hover: color-mix(in srgb, var(--text-primary) 2.5%, transparent)'
     );
     expect(lightBlock).toContain(
-      '--tint-active: color-mix(in srgb, var(--text-primary) 5%, transparent)'
+      '--tint-active: color-mix(in srgb, var(--text-primary) 3%, transparent)'
+    );
+    expect(lightBlock).toContain(
+      '--tint-quiet: color-mix(in srgb, var(--text-primary) 3%, transparent)'
+    );
+    expect(darkBlock).toContain(
+      '--tint-quiet: color-mix(in srgb, var(--user-text-primary) 3%, transparent)'
     );
     expect(darkBlock).toContain(
       '--tint-hover: var(--elevate-1)' // 深色并入元素提亮阶梯（heson 2026-10-11 01:05）

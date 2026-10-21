@@ -186,6 +186,12 @@
   max-width: 100%;
 }
 
+:global(html[data-theme='dark'])
+  .proseMirrorField
+  :global(p.is-editor-empty:first-child::before) {
+  color: var(--text-secondary);
+}
+
 .proseMirrorField :global(p.is-editor-empty:first-child) {
   position: relative;
 }
@@ -226,18 +232,19 @@
   color: var(--skill-tag-color);
 }
 
-/* 目标胶囊：软底、药丸圆角，尺寸走徽章档。叉号盖住图标，不把胶囊撑宽。 */
+/* 目标胶囊：字号、行高、图标与旁边的提及芯片同一档。药丸只包住内容，不另起一档高度。 */
 .proseMirrorField :global(.mention-chip-goal) {
-  gap: var(--space-1);
+  box-sizing: border-box;
+  gap: 4px;
   padding: 0 var(--space-1);
-  margin: 0;
+  margin: 0 1px;
   border: none;
   border-radius: var(--radius-sm);
-  background: var(--control-soft-bg);
+  background: var(--tint-quiet);
   color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-normal);
-  line-height: 1;
+  font-size: inherit;
+  font-weight: 500;
+  line-height: inherit;
   cursor: default;
   opacity: 1;
 }
@@ -245,27 +252,33 @@
 .proseMirrorField :global(.mention-chip-goal:hover),
 .proseMirrorField :global(.mention-chip-goal:focus-within) {
   opacity: 1;
-  background: var(--control-soft-bg-active);
-}
-
-.proseMirrorField :global(.mention-chip-goal .mention-icon-box) {
-  position: relative;
+  background: var(--tint-quiet);
 }
 
 .proseMirrorField :global(.mention-chip-goal .mention-remove) {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   margin: 0;
   padding: 0;
   border: none;
+  border-radius: 0;
   background: transparent;
+  box-shadow: none;
   color: inherit;
   opacity: 0;
   cursor: pointer;
   pointer-events: none;
+}
+
+.proseMirrorField :global(.mention-chip-goal .mention-remove::before) {
+  display: none;
 }
 
 .proseMirrorField :global(.mention-chip-goal:hover .mention-icon-box > svg),
@@ -296,6 +309,13 @@
   height: 15px;
   display: block;
   stroke: currentColor;
+}
+
+.proseMirrorField :global(.mention-chip-goal .mention-icon-box) {
+  position: relative;
+  width: 15px;
+  height: 15px;
+  flex: none;
 }
 
 .proseMirrorField :global(.mention-chip .mention-label) {

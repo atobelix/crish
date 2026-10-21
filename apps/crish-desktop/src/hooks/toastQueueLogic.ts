@@ -6,7 +6,7 @@
 
 /**
  * Toast 展示类型。源自已删除的旧 ToastBus.ts 死通道（发射即不可见）；
- * ToastBus 移除后 useToastQueue.ts 成为 AppToast 类型的唯一所有者（ToastStack / App 层复用）。
+ * ToastBus 移除后，队列类型只由本文件持有，呈现只走顶部 ToastViewport。
  */
 export type ToastType = 'info' | 'success' | 'warning' | 'error' | 'recovery';
 export type ToastPriority = 'polite' | 'assertive';
@@ -213,7 +213,7 @@ export function isAllowedToast(message: string): boolean {
  */
 export function shouldDropSuccessToast(
   message: string,
-  onUndo?: () => void,
+  onUndo?: () => void
 ): boolean {
   const m = normalizeToastMessage(message);
   if (!m) return true;
@@ -223,7 +223,7 @@ export function shouldDropSuccessToast(
 /** 可观测策略结果：空 / 成功静默 / 放行展示。 */
 export function classifyToastPolicy(
   message: string,
-  onUndo?: () => void,
+  onUndo?: () => void
 ): ToastPolicyDecision {
   const m = normalizeToastMessage(message);
   if (!m) return 'drop-empty';
@@ -273,7 +273,7 @@ export function toastDedupeKey(message: string, hasUndo: boolean): string {
 /** 可注入 now/rand 的 id 工厂（测试稳定）。 */
 export function createToastId(
   now: number = Date.now(),
-  rand: string = Math.random().toString(36).slice(2, 8),
+  rand: string = Math.random().toString(36).slice(2, 8)
 ): string {
   return `toast-${now}-${rand}`;
 }
@@ -283,7 +283,7 @@ export function createToastItem(
   message: string,
   onUndo?: () => void,
   id?: string,
-  type?: ToastType,
+  type?: ToastType
 ): AppToast {
   const normalized = normalizeToastMessage(message);
   const isError = /失败|错误|无法|拒绝/.test(normalized);
@@ -292,7 +292,7 @@ export function createToastItem(
     message: normalized,
     ...(onUndo !== undefined ? { onUndo } : {}),
     ariaLive: isError || type === 'error' ? 'assertive' : 'polite',
-    type: type ?? (onUndo ? 'info' : (isError ? 'error' : 'warning')),
+    type: type ?? (onUndo ? 'info' : isError ? 'error' : 'warning'),
     duration: TOAST_TTL_MS,
     timestamp: Date.now(),
   };
@@ -326,7 +326,7 @@ export function isUndoToastShape(message: string): boolean {
 export function buildUndoToastItem(
   message: string,
   onUndo: () => void,
-  id?: string,
+  id?: string
 ): AppToast {
   return createToastItem(message, onUndo, id);
 }
@@ -344,7 +344,7 @@ export function isErrorToastCandidate(message: string): boolean {
  * 不处理 onUndo 路径（可撤销由调用方单独构造）。
  */
 export function filterErrorOnlyToastMessages(
-  messages: readonly string[],
+  messages: readonly string[]
 ): string[] {
   return messages
     .map((m) => normalizeToastMessage(m))
@@ -355,11 +355,11 @@ export function filterErrorOnlyToastMessages(
 export function findDuplicateToastIndex(
   queue: readonly AppToast[],
   message: string,
-  hasUndo: boolean,
+  hasUndo: boolean
 ): number {
   const key = toastDedupeKey(message, hasUndo);
   return queue.findIndex(
-    (t) => toastDedupeKey(t.message, t.onUndo != null) === key,
+    (t) => toastDedupeKey(t.message, t.onUndo != null) === key
   );
 }
 
@@ -368,7 +368,7 @@ export function findDuplicateToastIndex(
  */
 export function trimToastQueue(
   queue: readonly AppToast[],
-  maxQueue: number = TOAST_MAX_QUEUE,
+  maxQueue: number = TOAST_MAX_QUEUE
 ): { next: AppToast[]; evictedIds: string[] } {
   let max = Math.floor(Number(maxQueue));
   if (!Number.isFinite(max)) max = TOAST_MAX_QUEUE;
@@ -384,7 +384,7 @@ export function trimToastQueue(
 /** 按 id 移除一条（dismiss / TTL 到期）。 */
 export function removeToastById(
   queue: readonly AppToast[],
-  id: string,
+  id: string
 ): AppToast[] {
   return queue.filter((t) => t.id !== id);
 }
@@ -406,10 +406,12 @@ export function enqueueToast(
   queue: readonly AppToast[],
   message: string,
   onUndo?: () => void,
-  options?: EnqueueToastOptions & { type?: ToastType },
+  options?: EnqueueToastOptions & { type?: ToastType }
 ): ToastEnqueueResult {
   const policy = options?.type
-    ? (normalizeToastMessage(message) ? 'show' : 'drop-empty')
+    ? normalizeToastMessage(message)
+      ? 'show'
+      : 'drop-empty'
     : classifyToastPolicy(message, onUndo);
   if (policy !== 'show') {
     return { kind: 'drop', reason: policy };

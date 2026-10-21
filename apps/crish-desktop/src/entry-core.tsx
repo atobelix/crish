@@ -14,7 +14,6 @@ import React, { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
-import { GlobalErrorBanner } from './components/GlobalErrorBanner';
 import { ToastProvider } from './services/toast/ToastContext';
 import { I18nProvider } from './i18n';
 import { initSsrGlobals } from './createSsrGlobals';
@@ -206,7 +205,6 @@ export class StartupCoordinator {
               </AppErrorBoundary>
             </ToastProvider>
           </I18nProvider>
-          <GlobalErrorBanner />
         </StrictMode>
       );
 

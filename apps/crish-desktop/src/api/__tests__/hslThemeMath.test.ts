@@ -4,7 +4,7 @@ import { SKIN_PRESETS } from '../themePresets';
 import { applyPersonalization } from '../themePersonalization';
 import { shiftWarmLayers } from '../../services/warmLayerShift';
 
-describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
+describe('warm-gray 三级表面（侧栏约 3% 灰）', () => {
   beforeEach(() => {
     localStorage.clear();
     document.documentElement.removeAttribute('data-theme');
@@ -16,11 +16,10 @@ describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
     document.documentElement.style.cssText = '';
   });
 
-  it('预设：secondary/shell 约 95%L（≈5% 灰）', () => {
+  it('预设：secondary/shell 约 97%L（≈3% 灰）', () => {
     const warmGray = SKIN_PRESETS['warm-gray'];
-    // 2026-10-10 三档底色：外层灰度 3.5（L 96.5%），主层 2.0（L 98%），输入框纯白
-    expect(warmGray.bgSecondary).toBe('#f2f1f0');
-    expect(warmGray.shellChromeBg).toBe('#f2f1f0');
+    expect(warmGray.bgSecondary).toBe('#f7f6f5');
+    expect(warmGray.shellChromeBg).toBe('#f7f6f5');
     expect(warmGray.bgPrimary).toBe('#ffffff');
     expect(warmGray.bgCard).toBe('#ffffff');
   });
@@ -43,7 +42,7 @@ describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
 
       // review P1-3：亮度微调只平移 K（保持 M0.4/Y0.8），三层夹紧不反转
       const exp = shiftWarmLayers(
-        { outer: '#f2f1f0', main: '#ffffff', input: '#ffffff' },
+        { outer: '#f7f6f5', main: '#ffffff', input: '#ffffff' },
         adjust,
         false
       );
@@ -76,7 +75,7 @@ describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
     }
   });
 
-  it('adjust=0：secondary L=95（约 5% 灰）', () => {
+  it('adjust=0：secondary 为 K3 外层', () => {
     const root = document.documentElement;
     applyPersonalization(
       {
@@ -92,7 +91,7 @@ describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
     );
     // T7 别名收敛 + T-BLK-07b 参数化：注入面真源为 --user-surface-outer
     // （tokens.css 由 var(--user-surface-outer, 静态兜底) 派生 --surface-outer → --bg-secondary）
-    expect(root.style.getPropertyValue('--user-surface-outer')).toBe('#f2f1f0');
+    expect(root.style.getPropertyValue('--user-surface-outer')).toBe('#f7f6f5');
     expect(root.style.getPropertyValue('--surface-outer')).toBe('');
     expect(root.style.getPropertyValue('--shell-chrome-bg')).toBe('');
     expect(root.style.getPropertyValue('--bg-secondary')).toBe('');

@@ -57,16 +57,19 @@ function ensureCleanupToastListener(): void {
     try {
       const mod = await import('@tauri-apps/api/event');
       if (typeof mod?.listen !== 'function') return;
-      await mod.listen<{ payload?: SessionOutputsCleanupEventPayload[] }>(
-        SESSION_OUTPUTS_CLEANUP_EVENT,
-        (e) => {
-          for (const r of e?.payload ?? []) {
-            if (!r?.notice) continue;
-            if (r.cleaned) toast.info(r.notice);
-            else toast.warning(r.notice);
-          }
+      await mod.listen<
+        | SessionOutputsCleanupEventPayload[]
+        | { payload?: SessionOutputsCleanupEventPayload[] }
+      >(SESSION_OUTPUTS_CLEANUP_EVENT, (e) => {
+        const list = Array.isArray(e?.payload)
+          ? e.payload
+          : (e?.payload?.payload ?? []);
+        for (const r of list) {
+          if (!r?.notice) continue;
+          if (r.cleaned) toast.info(r.notice);
+          else toast.warning(r.notice);
         }
-      );
+      });
     } catch {
       cleanupToastListenerBound = false;
       /* swallow-ok: 非 Tauri 环境 toast 事件桥不可用，静默降级 */

@@ -27,14 +27,14 @@ export interface SkinPreset {
 export const SKIN_PRESETS: Record<string, SkinPreset> = {
   'warm-gray': {
     name: '护眼暖灰',
-    // 浅色模式：外层 K5 #f2f1f0 → 主界面纯白 #ffffff → 输入框纯白 #ffffff
+    // 浅色模式：外层 K3 #f7f6f5 → 主界面纯白 #ffffff → 输入框纯白 #ffffff
     //（运行时 TokenRuntimeController 的 warm-gray 分支按同一组数值计算）
     bgPrimary: '#ffffff',
-    bgSecondary: '#f2f1f0',
+    bgSecondary: '#f7f6f5',
     bgTertiary: 'hsl(30 8.33% 92.29%)',
     bgCard: '#ffffff',
     bgElevated: '#ffffff',
-    shellChromeBg: '#f2f1f0',
+    shellChromeBg: '#f7f6f5',
     textPrimary: '#121212',
     textSecondary: '#383838',
     textTertiary: '#666666',

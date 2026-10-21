@@ -13,7 +13,7 @@ export type LayerType =
   | 'cascade-submenu' // 级联二级子菜单（ContextMenuFlyout, Submenu）
   | 'popover' // 普通气泡（TiptapSlashMenu, Popover）
   | 'tooltip' // 悬浮提示（Tooltip）
-  | 'toast' // 全局通知（ToastStack）
+  | 'toast' // 全局通知（ToastViewport，顶部）
   | 'virtual-interceptor'; // 虚拟拦截器（快捷键录制态、分屏拖拽态）
 
 export type DismissReason =

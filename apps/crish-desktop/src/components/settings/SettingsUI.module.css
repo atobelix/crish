@@ -225,7 +225,7 @@
 
 .controlNumberUnit {
   font-size: var(--font-size-sm);
-  color: var(--text-faint);
+  color: var(--text-quiet);
 }
 
 .presetGrid {
@@ -291,7 +291,7 @@
 
 .settingsUiRowDesc {
   font-size: var(--font-size-sm);
-  color: var(--text-faint);
+  color: var(--text-quiet);
   line-height: var(--line-height-body);
 }
 
