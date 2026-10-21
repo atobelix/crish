@@ -1280,11 +1280,10 @@
     0 1px 3px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
     0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
   transition:
-    border-radius var(--transition-normal, 160ms)
-      var(--ease-decelerate, ease-out),
-    border-color var(--transition-fast, 120ms) var(--ease-decelerate, ease-out),
-    box-shadow var(--transition-fast, 120ms) var(--ease-decelerate, ease-out),
-    min-height 160ms var(--ease-decelerate, ease-out),
+    border-radius var(--duration-normal) var(--ease-decelerate),
+    border-color var(--duration-fast) var(--ease-decelerate),
+    box-shadow var(--duration-fast) var(--ease-decelerate),
+    min-height var(--duration-fast) var(--ease-decelerate),
     height var(--transition-accordion);
   container-type: inline-size;
 }

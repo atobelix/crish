@@ -111,27 +111,30 @@ export const ComposerInlineTag: React.FC<NodeViewProps> = ({
         void handleOpen(e);
       }}
     >
-      <span className="mention-icon-box" aria-hidden="true">
-        <AppIcon name={iconName} size={isGoal ? 14 : 15} stroke={1.75} />
+      <span
+        className="mention-icon-box"
+        aria-hidden={isGoal ? undefined : true}
+      >
+        <AppIcon name={iconName} size={15} stroke={1.75} />
+        {isGoal ? (
+          <IconButton
+            type="button"
+            className="mention-remove"
+            aria-label={removeLabel}
+            icon={<AppIcon name="x" size={15} stroke={1.75} aria-hidden />}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              deleteNode?.();
+            }}
+          />
+        ) : null}
       </span>
       <span className="mention-label">{text}</span>
-      {isGoal ? (
-        <IconButton
-          type="button"
-          className="mention-remove"
-          aria-label={removeLabel}
-          icon={<AppIcon name="x" size={12} stroke={1.75} aria-hidden />}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            deleteNode?.();
-          }}
-        />
-      ) : null}
     </NodeViewWrapper>
   );
 };

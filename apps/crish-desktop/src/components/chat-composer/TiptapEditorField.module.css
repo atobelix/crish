@@ -226,56 +226,58 @@
   color: var(--skill-tag-color);
 }
 
-/* 目标胶囊：与技能纯文本芯片分开。叉号只在悬停或焦点时出现。 */
+/* 目标胶囊：软底、药丸圆角，尺寸走徽章档。叉号盖住图标，不把胶囊撑宽。 */
 .proseMirrorField :global(.mention-chip-goal) {
-  gap: 4px;
-  height: 22px;
-  padding: 0 6px 0 5px;
-  margin: 0 2px;
+  gap: var(--space-1);
+  padding: 0 var(--space-1);
+  margin: 0;
+  border: none;
   border-radius: var(--radius-sm);
-  border: 1px solid
-    color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
-  background: color-mix(in srgb, var(--skill-tag-color) 10%, var(--bg-primary));
-  color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 20px;
+  background: var(--control-soft-bg);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  line-height: 1;
   cursor: default;
   opacity: 1;
 }
 
-.proseMirrorField :global(.mention-chip-goal:hover) {
+.proseMirrorField :global(.mention-chip-goal:hover),
+.proseMirrorField :global(.mention-chip-goal:focus-within) {
   opacity: 1;
-  background: color-mix(in srgb, var(--skill-tag-color) 16%, var(--bg-primary));
+  background: var(--control-soft-bg-active);
+}
+
+.proseMirrorField :global(.mention-chip-goal .mention-icon-box) {
+  position: relative;
 }
 
 .proseMirrorField :global(.mention-chip-goal .mention-remove) {
+  position: absolute;
+  inset: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 0;
-  height: 14px;
   margin: 0;
   padding: 0;
   border: none;
   background: transparent;
   color: inherit;
   opacity: 0;
-  overflow: hidden;
   cursor: pointer;
   pointer-events: none;
 }
 
-.proseMirrorField :global(.mention-chip-goal:hover .mention-remove),
-.proseMirrorField :global(.mention-chip-goal:focus-within .mention-remove) {
-  width: 14px;
-  margin-left: 2px;
-  opacity: 0.72;
-  pointer-events: auto;
+.proseMirrorField :global(.mention-chip-goal:hover .mention-icon-box > svg),
+.proseMirrorField
+  :global(.mention-chip-goal:focus-within .mention-icon-box > svg) {
+  opacity: 0;
 }
 
-.proseMirrorField :global(.mention-chip-goal .mention-remove:hover) {
+.proseMirrorField :global(.mention-chip-goal:hover .mention-remove),
+.proseMirrorField :global(.mention-chip-goal:focus-within .mention-remove) {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .proseMirrorField :global(.mention-chip .mention-icon-box) {
