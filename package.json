@@ -82,6 +82,7 @@
     "check:no-pseudo-dispatch": "node scripts/check-no-pseudo-dispatch.mjs",
     "check:blocked-executable-ssot": "node scripts/check-blocked-executable-ssot.mjs",
     "check:no-nonvision-dataurl": "node scripts/check-no-nonvision-dataurl.mjs",
+    "check:referenced-files-tracked": "node scripts/check-referenced-files-tracked.mjs",
     "check:conflict-markers": "node scripts/check-conflict-markers.mjs",
     "check:swallowed-errors-frontend": "node scripts/check-swallowed-errors-frontend.mjs --report",
     "check:css-encoding": "node scripts/check-css-encoding.mjs --whitelist-dirty-check",

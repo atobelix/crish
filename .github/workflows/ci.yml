@@ -23,22 +23,23 @@ on:
       - '*.md'
       - 'assets/**'
 
+# 同一分支/PR 的新提交取消旧运行；main 上每个提交都要有完整结论（便于定位哪次提交引入红），不取消。
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
 
 jobs:
   typecheck:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
       - run: npm install -g npm@11.6.2 && npm ci
       # G7 统一：typecheck 走根脚本（npm run typecheck = 7 段 tsc 直跑；
@@ -46,13 +47,13 @@ jobs:
       - run: npm run typecheck
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
       - run: npm install -g npm@11.6.2 && npm ci
       - run: npx eslint .
@@ -89,6 +90,9 @@ jobs:
       - run: npm run check:token-consistency
       # 收敛硬闸（X1/R9）：被跟踪运行时产物与波次命名文件必须归零
       - run: node scripts/check-convergence-metrics.mjs
+      # 引用即入库（A11）：workflow / action / husky / package.json 引用的文件必须被 git 跟踪，
+      # 防止 .gitignore 白名单模式把配置吞掉（.dependency-cruiser.cjs 曾因此从未入库）
+      - run: node scripts/check-referenced-files-tracked.mjs
       # U-GATE 防御探针（detail-D2 §6.3）：生产 .rs 禁止 per-call
       # CommandGatekeeper::new()（测试/`conex-sandbox` 单测白名单）；
       # 与 new() 清零同票落地，防回潮。
@@ -102,13 +106,13 @@ jobs:
       - run: node scripts/check-npm-licenses.mjs
 
   vitest-fast:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
       - run: npm install -g npm@11.6.2 && npm ci
       # 前端快集：仅 unit 项目（F1 纯逻辑 + F2 组件，用例基线主体）
@@ -122,7 +126,7 @@ jobs:
       # per-package 阈值门禁（GAP-07 / T-DEBT-13 接线）：读 json-summary 产物
       # coverage/coverage-summary.json（reporter 已在 vitest.config.ts 根 coverage
       # 块补齐），对 shared-types ≥80 / shared-utils ≥70 / crish-desktop ≥45 逐包
-      # 判定。数据缺失时 WARN 跳过（不阻断未生成场景）。
+      # 判定。summary 缺失或某包无数据一律 FAIL（缺报告 = 门禁未执行，不得静默放行）。
       # 当前 warn-only：2026-10-21 实测 unit 口径 statements —— shared-types
       # 24.14% / shared-utils 24.54% / crish-desktop 33.39%，与目标阈值缺口大
       # （禁止下调阈值还债，见账本 T-GAP-07 验收）。blocking 接线会让快层全红；
@@ -140,13 +144,13 @@ jobs:
   # 06-步骤2 onwarn 草案在 vite 7 无 CHUNK_SIZE_WARN 管道，实读 vite 7.3.5 调整）。
   # 与 typecheck job 的 tsc -b 职责重叠：口径统一优先（06 风险 R6），独立 job 并行。
   frontend-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
       - run: npm install -g npm@11.6.2 && npm ci
       - run: npm run build:shared-types
@@ -161,17 +165,18 @@ jobs:
       - run: npm run check:chunk-cycles
 
   # 移动端快层门禁（R2-01，D8 §5.2/§5.5）：Expo 工程 typecheck + jest-expo 单测。
-  # Node 22：Expo SDK 57 要求 Node ≥ 22.13.x（D4 §2.3），与桌面端 node 20 不同。
+  # Node 版本与全仓一致取 .nvmrc（24）：Expo SDK 57 要求 Node ≥ 22.13.x（D4 §2.3），
+  # react-native 0.86 要求 ^24.3.0（Node 24 线）；lint-staged 17 要求 ≥22.22.1，统一后桌面端与移动端不再分裂。
   # jest 独立于根 vitest（jsdom/RN 双环境互不污染，D8 §5.2）；覆盖率阈值
   # 60/75/70/60 在 apps/crish-mobile/jest.config.js 内（D8 第 9 章）。
   mobile-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
       - run: npm install -g npm@11.6.2 && npm ci
       - run: npm run typecheck -w @crish/crish-mobile
@@ -184,28 +189,28 @@ jobs:
   # 逻辑改动）——该步未执行前 blocking 接线会让快层全红。存量清零提交落地后，
   # 删除两处 continue-on-error 即转 blocking（两条命令必须 exit 0）。
   format-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     continue-on-error: true # TODO(T-DEBT-05)：存量格式化清零单独提交后移除，转 blocking
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
       - run: npm install -g npm@11.6.2 && npm ci
       - run: npx prettier --check .
-      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
       - run: cargo fmt --all -- --check
 
   audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
       - run: npm install -g npm@11.6.2 && npm ci
       # 依赖审计（SEC-03 / T-SEC-03 扩面）：原仅 6 个桌面工作区，遗漏
@@ -223,58 +228,72 @@ jobs:
   # 生成物提交在仓库内（packages/shared-types/src/generated/engine），
   # 此处重新生成后 diff：events.rs / engine-events.json 更新但未跑生成器即失败。
   engine-bindings-drift:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
       - run: npm install -g npm@11.6.2 && npm ci
       - run: node scripts/generate-engine-bindings.mjs
       - run: git diff --exit-code -- packages/shared-types/src/generated
 
   cargo-deny:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
-      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+      # cargo-deny 以锁定版本安装在宿主 runner 上、用 rust-toolchain.toml 的同一 cargo 解析
+      # metadata（原 docker 版 cargo-deny-action 自带镜像内 Rust 与浮动的 cargo-deny 版本，
+      # 与本地复现口径不一致）。本地复现：cargo install cargo-deny --version 0.20.2 --locked
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: cargo-deny@0.20.2
+      # 与原 action 默认参数等价：check 全部检查项（advisories/bans/licenses/sources），--all-features
+      - run: cargo deny --locked --all-features check
 
   secret-scan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+      # 全量历史：gitleaks-action 按事件计算提交范围（push: before..after / PR: base..head），
+      # 浅克隆（默认 fetch-depth: 1）下范围端点不存在 → git log 报 unknown revision →
+      # 「failed to scan Git repository / scanned ~0 bytes」即整步失败（2026-10 实测）。
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          # PR 事件下 action 需调用 GitHub API 取 PR 提交列表；个人账号仓库无需 GITLEAKS_LICENSE
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   rust-check:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
-      - name: Install Linux build dependencies
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev libpipewire-0.3-dev libspa-0.2-dev
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+      - uses: ./.github/actions/linux-tauri-deps
+        if: runner.os == 'Linux'
       # 跨平台编译门禁（Linux / Windows / macOS 原生契约验证）：
       # --locked 锁定依赖版本
       - run: cargo check --workspace --locked
 
   rust-unit-fast:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+      # session-loop 依赖链经 conex-* 拉入 glib/webkit 系 sys crate，Linux 需系统开发包
+      - uses: ./.github/actions/linux-tauri-deps
       # 关键单元测试快速套件（T11.7 快层）：conex-types（类型/契约域）+
       # session-loop（主循环核心，含流式契约锚点）
       - run: cargo test -p conex-types -p session-loop --locked

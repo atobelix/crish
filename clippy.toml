@@ -8,7 +8,8 @@
 #
 # 生效说明：disallowed-methods 在 clippy.toml 中列出即被激活为 warn
 # （实测确认，不受 workspace.lints 中 `restriction = allow` 影响），
-# CI 侧由 ci-mid.yml clippy job（--all-targets + check-clippy-baseline.mjs）守门。
+# CI 侧由 ci-mid.yml clippy job（--all-targets -- -D warnings）守门：warn 级禁令在 CI 即为错误，
+# 无基线豁免（原 check-clippy-baseline.mjs ratchet 已于 2026-10 退役）。
 
 # 禁裸删除 API：删除必须走删除接管接口（conex-fs::trash::TrashService），
 # 可恢复删除的前提是删除前有快照/回收站登记（01 方案 S3）；
