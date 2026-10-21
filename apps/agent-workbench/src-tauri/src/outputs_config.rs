@@ -1,36 +1,31 @@
 //! G03 产出根两级配置与清理（T-EG-12）：路径隔离 + 校验
 //!
 //! 两级配置（REQ-EG-现状分析.md 6.4-6.5 草案）：
-//! - **全局**：[OutputsRootConfig] 托管状态（main.rs 装配注入，默认
-//!   `.agent-outputs`，对齐 `TrashRootConfig` 注入形态，
-//!   core_run_commands.rs:2814）——满足 REQ-G03「用户可自定义默认根」；
 //! - **会话级**：session_meta `"{session_id}:output_root"`（可覆盖，
-//!   resolve_output_dir 下次调用生效，G01 工具侧消费）。
-//! 优先级：会话级 > 全局级 > 默认值（REQ-EG-现状分析.md:704）。
+//!   resolve_output_dir 下次调用生效，G01 工具侧消费）；
+//! - **默认值**：`<workspace_root>/.agent-outputs`。
+//! 优先级：会话级 > 默认值。
+//!
+//! RUN-10 退役登记（2026-10-21 死代码清零）：全局级 OutputsRootConfig
+//! 托管状态**物理切除**——其配置命令（`config_get/set_outputs_root` 等）
+//! 已于 2026-09-15 退役且前端 `agentOutputsRoot` 设置面不存在，托管态
+//! 永不可写（`try_state` 恒 None 兜底），属「已实现但永远不调用」的死代码。
+//! 产出根**解析能力**（[resolve_outputs_root]）保留：清理链与工具侧消费。
 //!
 //! 校验红线：产出根必须仍在 workspace_root 内（`path_is_same_or_child`
 //! 语义，fs_commands/types.rs:252；对齐 agent-tools tools/mod.rs:392
 //! `path_within_root`），`allowOutputsOutsideWorkspace=false` 为不可覆盖的
 //! 安全默认（REQ-EG-现状分析.md:701）。
 //!
-//! 会话删除清理（任务书 T-EG-12 第 3 项）：删除会话 → 读取 session_meta
-//! 产出目录 → `.agent-outputs/<session_id>` 走 conex-fs trash 删除接管
-//! （trash.rs:26-29 铁律，不直接 remove）→ 通知用户（清理结果 + 回收站
-//! 位置）。链路入口 [cleanup_session_outputs]（delete_session 调用）。
-//!
-//! 命令面退役登记（2026-09-15 真漂移债务清零）：`config_get_outputs_root` /
-//! `config_set_outputs_root` / `set_session_output_root` 三条命令（含
-//! `OutputsRootConfigResponse` / `OutputsRootConfig::set` / `effective_outputs_root`
-//! / `set_outputs_config` 辅助项）已**物理切除**——前端 `agentOutputsRoot`
-//! 设置面不存在，生产代码零消费。产出根**解析能力**
-//! （[resolve_outputs_root] + [OutputsRootConfig] 托管状态）保留，供工具侧
-//! 默认根与清理链消费。
+//! 会话删除清理（任务书 T-EG-12 第 3 项 + RUN-07 生产接线）：删除会话 →
+//! 读取 session_meta 产出目录 → `.agent-outputs/<session_id>` 走 conex-fs
+//! trash 删除接管（trash.rs:26-29 铁律，不直接 remove）→ 通知用户（清理
+//! 结果 + 回收站位置）。链路入口 [cleanup_session_outputs]
+//! （session_commands::cleanup_orphan_sessions 生产调用）。
 
 use std::path::{Component, Path, PathBuf};
-use std::sync::Mutex;
 
 use conex_types::CoreError;
-use tauri::Manager;
 
 /// 默认产出根目录名（对齐 REQ-G03：`<workspace_root>/.agent-outputs/`）
 pub(crate) const DEFAULT_OUTPUTS_DIR_NAME: &str = ".agent-outputs";
@@ -50,45 +45,6 @@ pub(crate) fn session_meta_key_of(session_id: &str, key: &str) -> String {
         key.to_string()
     } else {
         format!("{session_id}:{key}")
-    }
-}
-
-/// 全局产出根配置（G03：agentOutputsRoot）。
-///
-/// 托管形态对齐 `TrashRootConfig`（core_run_commands.rs:2814）：
-/// main.rs `app.manage(OutputsRootConfig::default())` 注入，命令侧经
-/// `try_state` 读取；未注入（测试/降级）→ 兜底默认（`.agent-outputs` +
-/// 工作区内限制），不 panic。
-#[derive(Debug, Default)]
-pub(crate) struct OutputsRootConfig {
-    inner: Mutex<OutputsRootInner>,
-}
-
-/// 配置内部状态（Mutex 保护，命令面可运行期修改）
-#[derive(Debug, Clone)]
-struct OutputsRootInner {
-    /// 全局默认产出根（相对 workspace_root 或绝对路径；None = 未设置 →
-    /// 兜底 `<workspace_root>/.agent-outputs`）
-    root: Option<PathBuf>,
-    /// 是否允许产出根位于工作区外（安全红线，默认 false；REQ-EG-现状
-    /// 分析.md:701 明确「安全红线，不放开」，仅显式传入 true 才放行）
-    allow_outputs_outside_workspace: bool,
-}
-
-impl Default for OutputsRootInner {
-    fn default() -> Self {
-        Self {
-            root: None,
-            allow_outputs_outside_workspace: false,
-        }
-    }
-}
-
-impl OutputsRootConfig {
-    /// 读取当前配置（(全局根, 是否允许工作区外)）
-    pub(crate) fn get(&self) -> (Option<PathBuf>, bool) {
-        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        (inner.root.clone(), inner.allow_outputs_outside_workspace)
     }
 }
 
@@ -143,15 +99,13 @@ pub(crate) struct SessionOutputsCleanup {
     pub notice: String,
 }
 
-/// 会话删除清理入口（delete_session 调用；AppHandle 依赖面）
+/// 会话删除清理入口（RUN-07 生产接线：session_commands::cleanup_orphan_sessions
+/// 调用；AppHandle 依赖面）
 ///
 /// 链路（任务书 T-EG-12 第 3 项）：
-/// 删除会话 → 读取 session_meta 产出目录 → `.agent-outputs/<session_id>`
-/// 走 conex-fs trash 删除接管（trash.rs:26-29 铁律，不直接 remove）→
-/// 通知用户（清理结果 + 回收站位置）。
-///
-/// T-F 06 退役登记：仅随 delete_session 使用（测试直调 cleanup_session_outputs_at
-/// 保留），与命令一同保留待存储架构裁决后恢复。
+/// 删除会话 → 库层删除事务捕获 session_meta 产出目录 →
+/// `.agent-outputs/<session_id>` 走 conex-fs trash 删除接管（trash.rs:26-29
+/// 铁律，不直接 remove）→ 通知用户（清理结果 + 回收站位置）。
 pub(crate) fn cleanup_session_outputs(
     app: &tauri::AppHandle,
     session_id: &str,
@@ -165,15 +119,16 @@ pub(crate) fn cleanup_session_outputs(
             e.code, e.message
         ))
     })?;
-    let (global_root, allow_outside) = outputs_config(app);
+    // RUN-10：全局产出根托管态已切除（配置命令退役、前端设置面不存在），
+    // 清理链恒用默认解析（会话级 meta 覆盖仍生效）+ 工作区内安全限制。
     Ok(cleanup_session_outputs_at(
         &trash_root,
         guard.root(),
         session_id,
         output_dir_meta,
         output_root_meta,
-        global_root.as_deref(),
-        allow_outside,
+        None,
+        false,
     ))
 }
 
@@ -308,15 +263,6 @@ pub(crate) fn cleanup_session_outputs_at(
         skipped_outside: !skipped_targets.is_empty(),
         trash_root: trash_root_str,
         notice,
-    }
-}
-
-/// 全局产出根托管状态读取（try_state 防未托管 panic，兜底默认：
-/// 未注入 = 未设置 + 工作区内限制）
-fn outputs_config(app: &tauri::AppHandle) -> (Option<PathBuf>, bool) {
-    match app.try_state::<OutputsRootConfig>() {
-        Some(state) => state.get(),
-        None => (None, false),
     }
 }
 

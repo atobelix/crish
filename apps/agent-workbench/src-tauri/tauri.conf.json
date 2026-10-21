@@ -35,10 +35,12 @@
   },
   "plugins": {
     "updater": {
-      "active": false,
-      "endpoints": [],
+      "active": true,
       "dialog": false,
-      "pubkey": ""
+      "endpoints": [
+        "https://github.com/conex-community/crish/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ4QzFDQzRDMzg1RjAwNjgKUldSb0FGODRUTXpCU0VnODIxajNiN3R2MzgxbkdCdnRPWENPWWxEUjF3eUZMbWF0YzZxT2NkdTEK"
     }
   },
   "bundle": {

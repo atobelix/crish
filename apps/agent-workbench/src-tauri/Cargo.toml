@@ -32,6 +32,10 @@ tauri-plugin-persisted-scope = { version = "2", features = ["protocol-asset"] }
 # ERROR_ALREADY_EXISTS，互斥名 `{identifier}-sim`），第二实例经 WM_COPYDATA
 # 唤醒首实例后自行退出；注册/回调接线见 src/single_instance.rs
 tauri-plugin-single-instance = "2"
+# 自动更新（RUN-03/SEC-02/GAP-01，用户裁决 §3.4-3：Tauri v2 Minisign 本地
+# 密钥免费路径）。默认 features：rustls-tls（与壳内 rustls 0.23 ring 同栈）
+# + system-proxy + zip。命令面接线见 src/updater.rs
+tauri-plugin-updater = "2"
 # Dev MCP bridge (Grok/Cursor 调试 live workbench)。仅 debug 注册；插件自身 release 默认不启 socket。
 tauri-plugin-mcp = { git = "https://github.com/P3GLEG/tauri-plugin-mcp" }
 window-vibrancy = "0.6.0"
@@ -146,6 +150,11 @@ tower = { version = "0.5", features = ["util"] }
 # WS 集成测试客户端（R1-05）：版本与 axum 0.8 的 ws feature 内置
 # tokio-tungstenite 0.29 对齐（锁文件已有条目，零新增锁版本）
 tokio-tungstenite = "0.29"
+# 更新器 mock 测试（GAP-01）：本地 minisign 密钥对生成 + 更新包签名
+# （标准 minisign 格式，与 tauri-plugin-updater 内置 minisign-verify 校验兼容）
+minisign = "0.7"
+# 错误映射单测：直接构造签名失败变体（版本与 tauri-plugin-updater 传递依赖对齐）
+minisign-verify = "0.2"
 
 [target.'cfg(windows)'.dev-dependencies]
 junction = "2"

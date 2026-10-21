@@ -136,7 +136,13 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("workbench_write_file_content", "workbench", "gui", true),
         entry("workbench_discover_skills", "workbench", "gui", true),
         // workbench_http_request 已退役（唯一调用点在 Rust `#[cfg(test)]` 内）
+        // 自动更新链路（RUN-03/SEC-02/GAP-01：apply 一次编排 + 检查/下载/安装/重启
+        // 四段命令；实现面 src/updater.rs，与前端 commandManifest.ts 镜像同步）
         entry("workbench_apply_update", "workbench", "gui", true),
+        entry("workbench_check_update", "workbench", "gui", true),
+        entry("workbench_download_update", "workbench", "gui", true),
+        entry("workbench_install_update", "workbench", "gui", true),
+        entry("workbench_restart_app", "workbench", "gui", true),
         // ── 多端互通配对面（R1-07 四件套 + R1-08 撤销/改名，registered=true，与前端同步）──
         entry("multi_device_pair_start", "multi_device", "engine", true),
         entry("multi_device_pair_status", "multi_device", "engine", true),
@@ -360,11 +366,11 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 142,
+            total, 146,
             "总数 142（单轨收敛后 135；b6 +1；snap +1；prefs +1；BC11 MCP 4命令 +4；与前端 commandMap 同步）"
         );
         assert_eq!(
-            registered, 142,
+            registered, 146,
             "注册面 142（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");

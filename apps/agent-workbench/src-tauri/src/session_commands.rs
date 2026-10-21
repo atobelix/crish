@@ -255,19 +255,92 @@ pub async fn set_session_meta(
 ///
 /// 宽限期（`ORPHAN_GRACE_MS`，session_meta `orphan_grace_ms` 可配）与
 /// `confirm_empty` 的库层实现由 conex-db 侧承接（PE-08 T08.2 产出）。
+///
+/// RUN-07（产出清理链接线）：delete_session 命令已 T-F 06 退役，本命令即
+/// 生产删除路径——库层删除事务返回被删会话的产出 meta 捕获值
+/// ([conex_db::OrphanCleanupOutcome]) 后，逐会话调用
+/// `outputs_config::cleanup_session_outputs`（`.agent-outputs/<id>` 进
+/// 回收站，不直接 remove），结果经 `session-outputs-cleanup` 事件推给
+/// 前端 toast（真实结果驱动，不硬编码成功）并落 tracing。返回值仍为
+/// 删除会话数（F4 签名保持）。
 #[tauri::command]
 pub async fn cleanup_orphan_sessions(
     active_ids: Vec<String>,
     confirm_empty: Option<bool>,
+    app: tauri::AppHandle,
     db_state: State<'_, SharedDb>,
 ) -> Result<usize, CoreError> {
     guard_cleanup_keep(&active_ids, confirm_empty.unwrap_or(false))?;
     let db = db_state.inner().local_db();
-    let deleted = tokio::task::spawn_blocking(move || db.cleanup_orphan_sessions(&active_ids))
+    let outcomes = tokio::task::spawn_blocking(move || db.cleanup_orphan_sessions(&active_ids))
         .await
         .map_err(|e| CoreError::Internal(format!("cleanup_orphan_sessions join: {e}")))?
         .map_err(map_db_err)?;
+    let deleted = outcomes.len();
+    if deleted == 0 {
+        return Ok(0);
+    }
+
+    // RUN-07：逐会话产出目录清理（回收站接管）+ 结果事件
+    use tauri::Emitter;
+    let mut events: Vec<SessionOutputsCleanupEvent> = Vec::with_capacity(deleted);
+    for outcome in &outcomes {
+        let result = crate::outputs_config::cleanup_session_outputs(
+            &app,
+            &outcome.session_id,
+            outcome.output_dir.as_deref(),
+            outcome.output_root.as_deref(),
+        );
+        match result {
+            Ok(cleanup) => {
+                tracing::info!(
+                    target: "outputs",
+                    session_id = %outcome.session_id,
+                    cleaned = cleanup.cleaned,
+                    trashed = ?cleanup.trashed_dirs,
+                    "孤儿会话产出目录清理完成"
+                );
+                events.push(SessionOutputsCleanupEvent {
+                    session_id: outcome.session_id.clone(),
+                    cleaned: cleanup.cleaned,
+                    skipped_outside: cleanup.skipped_outside,
+                    trash_root: cleanup.trash_root,
+                    notice: cleanup.notice,
+                });
+            }
+            Err(e) => {
+                tracing::warn!(
+                    target: "outputs",
+                    session_id = %outcome.session_id,
+                    error = %e,
+                    "孤儿会话产出目录清理失败（不阻断删除）"
+                );
+                events.push(SessionOutputsCleanupEvent {
+                    session_id: outcome.session_id.clone(),
+                    cleaned: false,
+                    skipped_outside: false,
+                    trash_root: String::new(),
+                    notice: format!("会话产出目录清理失败：{e}"),
+                });
+            }
+        }
+    }
+    if let Err(e) = app.emit("session-outputs-cleanup", &events) {
+        tracing::warn!(target: "outputs", error = %e, "清理结果事件发送失败（清理本身已完成）");
+    }
     Ok(deleted)
+}
+
+/// RUN-07：孤儿清理产出回收结果事件载荷（camelCase 序列化，前端
+/// `session-outputs-cleanup` 监听端消费弹 toast）。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionOutputsCleanupEvent {
+    session_id: String,
+    cleaned: bool,
+    skipped_outside: bool,
+    trash_root: String,
+    notice: String,
 }
 
 #[tauri::command]
@@ -727,12 +800,15 @@ mod tests {
         assert_eq!(dir.as_deref(), Some("/tmp/conex/x/2026-08-05-s1"));
         assert_eq!(root.as_deref(), Some(".agent-outputs"));
         assert!(db.list_sessions().unwrap().is_empty(), "会话行应已删除");
-        // 库层现状：session_meta 为独立 KV 表（schema.rs:250 无 FK 级联），
-        // 会话删除后键残留——清理链已消费键值，首次 resolve 覆盖写，无害；
-        // 补 delete_session_meta / 级联清理列为遗留（conex-db 域）。
+        // RUN-15：session_meta 无 FK 级联，库层 delete_session 已在删除事务内
+        // 按前缀清理 `{session_id}:*` 键——删除后按前缀查询应返回 0 行。
         assert!(
-            db.get_session_meta(&out_dir_key).unwrap().is_some(),
-            "当前库层保留 session_meta 键（见注释说明）"
+            db.get_session_meta(&out_dir_key).unwrap().is_none(),
+            "删除会话后 session_meta 前缀键应已级联清理（RUN-15）"
+        );
+        assert!(
+            db.get_session_meta(&out_root_key).unwrap().is_none(),
+            "output_root 键同事务清理（RUN-15）"
         );
     }
 

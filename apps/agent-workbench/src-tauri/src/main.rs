@@ -42,7 +42,6 @@ mod browser_import_sinks;
 mod command_manifest;
 // 电脑操作会话槽（06 遗留⑨：ComputerSlot 命令面托管 + 工具装配接线面，
 // 接线点登记见 computer/mod.rs 模块头）
-mod commands;
 mod computer;
 mod config;
 mod core_commands;
@@ -108,6 +107,9 @@ mod sched;
 mod subagent_spawner;
 mod system_power;
 mod timers;
+// 自动更新命令面（RUN-03/SEC-02/GAP-01：检查/下载/安装/重启四段命令 +
+// workbench_apply_update 一次编排；模块头登记链路与用户裁决 §3.4-3 出处）
+mod updater;
 mod usage_commands;
 mod wakeup_summary;
 mod workflow_commands;
@@ -255,7 +257,12 @@ command_registry![
         "workbench_discover_skills",
         fs_commands::workbench_discover_skills
     ),
-    ("workbench_apply_update", commands::workbench_apply_update),
+    // ── 自动更新链路（RUN-03/SEC-02/GAP-01：真实 updater，替代恒 {ok:true} stub）──
+    ("workbench_apply_update", updater::workbench_apply_update),
+    ("workbench_check_update", updater::workbench_check_update),
+    ("workbench_download_update", updater::workbench_download_update),
+    ("workbench_install_update", updater::workbench_install_update),
+    ("workbench_restart_app", updater::workbench_restart_app),
     // ── 凭据事务：模型配置与活动选择只由 models 命令提交 ──
     ("config_secret_set", config::config_secret_set),
     ("config_secret_get", config::config_secret_get),
@@ -689,6 +696,37 @@ fn main() {
     // 前端心跳轮询一并读取，把「死文件」变成前端可读的崩溃台账。
     conex_telemetry::install_panic_hook_with_crash_dir(Some(log_dir.clone()));
 
+    // RUN-06：日志保留策略生产接线（启动时执行一次）——crash 保留最近 N 个、
+    // 按日轮转日志超龄删除、目录总量超限旧 → 新清理；清理数量与失败原因
+    // 由 cleanup_logs 内部 tracing 记录（target=telemetry）。当日活跃日志
+    // 文件不在清理面（按日龄/总量旧→新顺序），tracing 文件层句柄不受影响。
+    let _retention_deleted =
+        conex_telemetry::cleanup_logs(&log_dir, &conex_telemetry::LogRetention::default());
+
+    // RUN-05：release 形态旧数据一次性迁移（exe 目录 → app data dir；dev no-op）。
+    // 复制语义：旧目录（可能为只读安装位）原数据永不动 = 失败可回滚不丢数据；
+    // 迁移标记 + 目标已有 sessions.db 双短路保证重复启动不重复迁移。
+    let legacy_migration = crate::host_paths::migrate_legacy_release_data(&app_dir);
+
+    // RUN-05 验收证据：启动日志打印三处真实路径（应用数据根 / DB / 日志）
+    // + 工作区根，与迁移结果一并落日志（排障时可直接核对实际落盘位置）。
+    tracing::info!(
+        target: "host_paths",
+        app_dir = %app_dir.display(),
+        db_path = %app_dir.join("sessions.db").display(),
+        log_dir = %log_dir.display(),
+        workspace_root = %crate::host_paths::workspace_root(&app_dir).display(),
+        legacy_migration = ?legacy_migration,
+        "宿主路径与旧数据迁移结果"
+    );
+    if let crate::host_paths::LegacyMigration::Failed { reason } = &legacy_migration {
+        tracing::warn!(
+            target: "host_paths",
+            reason = %reason,
+            "旧数据迁移失败：原数据完好保留在旧目录，本次以空库自愈启动（下次启动自动重试）"
+        );
+    }
+
     // 共享诊断（PE-04 T04.5）：CoreRunState 与 core_get_status 共用同一实例，
     // main.rs 先构造再注入，避免「写入侧与读取侧实例漂移」。
     let diagnostics = Arc::new(status_diagnostics::StatusDiagnostics::new());
@@ -714,7 +752,11 @@ fn main() {
         .plugin(single_instance::register())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_persisted_scope::init());
+        .plugin(tauri_plugin_persisted_scope::init())
+        // 自动更新（RUN-03/SEC-02/GAP-01）：官方 updater 插件；通道配置读
+        // tauri.conf.json `plugins.updater`（endpoints/pubkey），Minisign 验签
+        // 在插件内完成；命令面接线见 src/updater.rs
+        .plugin(tauri_plugin_updater::Builder::new().build());
 
     // setup 序列 ⑩：MCP 调试插件（debug 默认开启，CRISH_MCP_SOCKET=0 显式关闭；
     // release 由插件自身拒绝兜底，注册点本身亦被 cfg 隔离。2026-08-21 用户裁决）。
@@ -740,6 +782,8 @@ fn main() {
             let handshake = Arc::new(window_handshake::WindowHandshakeState::new());
             app.manage(Arc::clone(&handshake));
             app.manage(Arc::clone(diagnostics));
+            // 自动更新三段式会话槽（check→download→install 交接面，updater.rs）
+            app.manage(updater::UpdaterSession::default());
             window_handshake::spawn_window_guard_dog(
                 app_handle.clone(),
                 window_handshake::DEFAULT_WATCHDOG_TIMEOUT,

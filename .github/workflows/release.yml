@@ -91,6 +91,12 @@ jobs:
         id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # SEC-02/RUN-03（用户裁决 §3.4-3 Minisign 免费路径）：updater 产物签名。
+          # 注入后 tauri-action 自动对更新包签名（产出 *.sig）并生成/上传
+          # latest.json 到 Draft Release；私钥不入库，经 CI secrets 注入
+          # （公钥已落 tauri.conf.json plugins.updater.pubkey）。
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           # SEC-06：tagName/releaseName 只取上方校验通过的 RELEASE_VERSION
           #（tag 触发 = github.ref_name；手动触发 = 必填 inputs.version），
