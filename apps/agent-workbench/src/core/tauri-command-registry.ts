@@ -35,6 +35,8 @@ export interface RegisteredTauriCommand {
 //  computer_session_disable / computer_status）→ **135**。
 // b6：`core_generate_session_title` 追加后 135 → **136**。
 // Win11 贴靠布局热区 `workbench_set_snap_overlay_rect` 追加后 136 → **137**。
+// 此后 manifest 增至 147 条；本表漏登更新器分段 4 条（workbench_check_update /
+// download_update / install_update / restart_app），D11 命中后补齐。
 export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   // ── GUI 专属面（workbench_*，§2.3）──
   {
@@ -161,6 +163,29 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     command: 'workbench_apply_update',
     status: 'implemented',
     feature: 'app update application',
+  },
+  // 自动更新分段链路（RUN-03/SEC-02/GAP-01，实现面 src-tauri/src/updater.rs）：
+  // 检查 → 下载（Minisign 验签）→ 安装 → 显式重启。command_manifest.rs 与
+  // main.rs command_registry! 早已登记，本表漏登 4 条——D11 命中后补齐。
+  {
+    command: 'workbench_check_update',
+    status: 'implemented',
+    feature: 'app update availability check',
+  },
+  {
+    command: 'workbench_download_update',
+    status: 'implemented',
+    feature: 'app update package download with signature verification',
+  },
+  {
+    command: 'workbench_install_update',
+    status: 'implemented',
+    feature: 'verified app update package installation',
+  },
+  {
+    command: 'workbench_restart_app',
+    status: 'implemented',
+    feature: 'app restart after update install',
   },
   // ── 浏览器面板（S6 接线 + browser 域追加：frame stream / input 管线）──
   {
