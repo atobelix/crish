@@ -115,19 +115,19 @@ pub(crate) enum LegacyMigration {
 /// dev（debug_assertions）恒 no-op——dev 仍用 monorepo 路径，无迁移语义。
 /// 复制语义（非移动）：旧目录可能是只读安装位（`Program Files`），删源会失败；
 /// 原数据永不动 = 天然满足「迁移失败可回滚且不丢原数据」。
-#[allow(unused_variables)]
+///
+/// 用运行期 cfg!(debug_assertions) 而非条件编译切分：迁移路径在 dev 构建中
+/// 同样参与类型检查与死代码分析，避免「只在 release 才编译」的代码在 CI
+/// （dev profile 的 cargo check）里失去编译器覆盖；release 下分支被常量折叠，
+/// 无运行期开销。
 pub(crate) fn migrate_legacy_release_data(current_app_dir: &Path) -> LegacyMigration {
-    #[cfg(debug_assertions)]
-    {
+    if cfg!(debug_assertions) {
         return LegacyMigration::Skipped("dev 形态不迁移");
     }
-    #[cfg(not(debug_assertions))]
-    {
-        let Some(legacy) = legacy_exe_dir() else {
-            return LegacyMigration::Skipped("无法定位 exe 目录");
-        };
-        migrate_legacy_data(&legacy, current_app_dir)
-    }
+    let Some(legacy) = legacy_exe_dir() else {
+        return LegacyMigration::Skipped("无法定位 exe 目录");
+    };
+    migrate_legacy_data(&legacy, current_app_dir)
 }
 
 /// 迁移核心（legacy → current；平台无关，测试直调）。
@@ -141,7 +141,6 @@ pub(crate) fn migrate_legacy_release_data(current_app_dir: &Path) -> LegacyMigra
 /// `auth/`、`.agent-outputs/`。`logs/` 不迁（历史日志留在旧位，新日志写新区）。
 /// 失败时清理 current 下的半成品 `sessions.db*`（防止下次启动误判已迁移后
 /// 打开损坏库），并返回 [LegacyMigration::Failed]。
-#[cfg(any(test, not(debug_assertions)))]
 pub(crate) fn migrate_legacy_data(legacy: &Path, current: &Path) -> LegacyMigration {
     if legacy == current {
         return LegacyMigration::Skipped("迁移源与目标相同");
@@ -215,7 +214,6 @@ pub(crate) fn migrate_legacy_data(legacy: &Path, current: &Path) -> LegacyMigrat
 }
 
 /// 递归复制目录，`rel_prefix` 用于失败定位与相对路径记账。
-#[cfg(any(test, not(debug_assertions)))]
 fn copy_dir_recursive(
     src: &Path,
     dst: &Path,
