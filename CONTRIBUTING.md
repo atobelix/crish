@@ -112,4 +112,4 @@ Provider（模型服务商）接入请走 [`docs/opensource/CONTRIBUTING-PROVIDE
 
 - 问题与改动讨论写在 [Issues](https://github.com/atobelix/crish/issues)
 - 仓库：[atobelix/crish](https://github.com/atobelix/crish)
-- 维护者：张浩健。没有单独的联系邮箱
+- 维护者：atobelix

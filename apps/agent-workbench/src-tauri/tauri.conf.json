@@ -46,8 +46,8 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "publisher": "张浩健",
-    "copyright": "Copyright (c) 2026 张浩健",
+    "publisher": "atobelix",
+    "copyright": "Copyright (c) 2026 atobelix",
     "category": "DeveloperTool",
     "shortDescription": "Crish — Tauri desktop AI agent workbench",
     "icon": [
@@ -60,7 +60,10 @@
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": null
+      "timestampUrl": null,
+      "wix": {
+        "language": ["zh-CN"]
+      }
     },
     "macOS": {
       "signingIdentity": null,

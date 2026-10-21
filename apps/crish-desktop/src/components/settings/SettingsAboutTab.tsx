@@ -4,7 +4,7 @@
  * 落实 P1-LIC-02：应用版本、Conex 内核、开源许可证与第三方版权披露。
  * 包含：
  * - 应用品牌与版本展示 (Crish Desktop 与引擎共用产品版本)
- * - 主许可证 (MIT License, Copyright (c) 2026 张浩健)
+ * - 主许可证 (MIT License, Copyright (c) 2026 atobelix)
  * - 第三方许可证披露 (可折叠 / 模态框)：
  *   - 宽松开源协议：MIT, Apache-2.0, BSD-2/3, ISC, Unicode
  *   - MPL-2.0 Section 3.1/3.2 弱互惠组件披露 (bitmaps, cssparser, cssparser-macros, im, sized-chunks, lightningcss, @parcel/watcher)
@@ -356,7 +356,7 @@ export const SettingsAboutTab: React.FC<Props> = ({
             className={styles.copyrightNotice}
             data-testid="copyright-notice"
           >
-            {t('about.copyrightHolder', 'Copyright (c) 2026 张浩健')}
+            {t('about.copyrightHolder', 'Copyright (c) 2026 atobelix')}
           </div>
           <div className={styles.licenseText}>
             {t(

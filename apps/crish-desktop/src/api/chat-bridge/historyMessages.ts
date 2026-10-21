@@ -223,3 +223,56 @@ export function buildHistoryMessages(
     ? truncateHistoryWithAnchor(history, budget)
     : undefined;
 }
+
+/**
+ * 锚定历史消息到最新的压缩摘要块，防止跨轮全量正文复活。
+ * 保留系统消息、折叠链消息（compacted-summary-*）、最新的摘要块以及其后的所有保留消息；
+ * 过滤掉最新摘要块之前已被折叠的历史正文消息。
+ */
+export function anchorHistoryToLatestSummary(
+  messages: readonly SessionMessage[] | undefined | null
+): SessionMessage[] {
+  if (!messages || messages.length === 0) return [];
+
+  let lastSummaryIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (
+      msg &&
+      (msg.id.startsWith('compacted-summary') ||
+        Boolean(
+          (msg.metadata as Record<string, unknown> | undefined)
+            ?.isCompactedSummary
+        ))
+    ) {
+      lastSummaryIdx = i;
+      break;
+    }
+  }
+
+  if (lastSummaryIdx === -1) {
+    return [...messages];
+  }
+
+  const result: SessionMessage[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (!msg) continue;
+    if (i >= lastSummaryIdx) {
+      result.push(msg);
+    } else {
+      const isSystem = (msg.sender as string) === 'system';
+      const isCompacted =
+        msg.id.startsWith('compacted-summary') ||
+        Boolean(
+          (msg.metadata as Record<string, unknown> | undefined)
+            ?.isCompactedSummary
+        );
+      if (isSystem || isCompacted) {
+        result.push(msg);
+      }
+    }
+  }
+
+  return result;
+}

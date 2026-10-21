@@ -3,7 +3,7 @@
  * SettingsAboutTab 单元测试 (P1-LIC-02)
  *
  * 覆盖验证：
- * 1. 渲染应用品牌、版本号（Crish Desktop v0.1.1, Conex Kernel v0.1.1）及主许可证版权信息（MIT, Copyright (c) 2026 张浩健）
+ * 1. 渲染应用品牌、版本号（Crish Desktop v0.1.1, Conex Kernel v0.1.1）及主许可证版权信息（MIT, Copyright (c) 2026 atobelix）
  * 2. 第三方开源协议披露区渲染 MPL-2.0 弱互惠组件披露（bitmaps, cssparser, cssparser-macros, im, sized-chunks, lightningcss, @parcel/watcher）与 SIL OFL-1.1 字体归属（Inter, JetBrains Mono, IBM Plex）
  * 3. 复制系统信息按钮调用剪贴板写入并复制包含 OS、版本与架构的文本
  * 4. 弹窗模态查看完整协议与外部社区/安全链接
@@ -45,10 +45,10 @@ describe('SettingsAboutTab', () => {
       'Conex Kernel v0.1.1'
     );
 
-    // 2. 验证主许可证 MIT License 与 Copyright (c) 2026 张浩健
+    // 2. 验证主许可证 MIT License 与 Copyright (c) 2026 atobelix
     expect(screen.getAllByText(/MIT/).length).toBeGreaterThan(0);
     expect(screen.getByTestId('copyright-notice')).toHaveTextContent(
-      'Copyright (c) 2026 张浩健'
+      'Copyright (c) 2026 atobelix'
     );
   });
 

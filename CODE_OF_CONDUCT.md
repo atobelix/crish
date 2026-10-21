@@ -58,6 +58,6 @@ representative at an online or offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the maintainer, 张浩健, through [GitHub Issues](https://github.com/atobelix/crish/issues). There is no project mailbox. Complaints will be reviewed.
+reported to the project maintainers through [GitHub Issues](https://github.com/atobelix/crish/issues). Complaints will be reviewed.
 
 The maintainer will respect the privacy and security of the reporter of any incident.

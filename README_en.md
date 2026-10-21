@@ -5,30 +5,25 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.1.1-blue.svg)](https://github.com/atobelix/crish/releases)
 
-Maintainer: [张浩健](https://github.com/atobelix). The repository directory is `conex`. The product name is **Crish**. This is a one-person project. There is no community organization and no public contact mailbox.
+Crish is a local-first AI agent desktop workbench built with Tauri 2, React 19, and a high-performance Rust engine kernel (`crates/`), communicating efficiently via in-process Tauri IPC.
 
-Source: <https://github.com/atobelix/crish>
+## Download & Install
 
-Crish is a local-first AI agent desktop workbench: a Tauri 2 shell, a React 19 UI, and a Rust engine (`crates/`). The engine and the UI share one process and talk over Tauri IPC. A TUI and a web UI are not built yet. The diagram below marks them as planned.
+Head over to the [Releases page](https://github.com/atobelix/crish/releases) to download the package for your operating system:
 
-## Install
+- **Windows**:
+  - `Crish_0.1.1_x64-setup.exe`: Setup wizard
+  - `Crish_0.1.1_x64_en-US.msi`: Windows Installer (MSI)
+- **macOS**: `.dmg` disk images for Apple Silicon and Intel Macs
+- **Linux**: `.AppImage` or `.deb` packages
 
-You do not have to compile it. Download an installer from [Releases](https://github.com/atobelix/crish/releases). The public version is **0.1.1**.
-
-Windows:
-
-- `Crish_0.1.1_x64-setup.exe` — setup wizard
-- `Crish_0.1.1_x64_en-US.msi` — MSI
-
-Linux and macOS installers are uploaded by the same release workflow. Use the files that are actually attached to the release. The `v0.1.0` tag is older. Do not treat it as the current version.
-
-On first launch, open Settings and add a model provider key, or point Crish at local [Ollama](https://ollama.com/). Then start a conversation.
+On first launch, open Settings to configure your model API keys or connect to local [Ollama](https://ollama.com/), and you're ready to start a session.
 
 ## Screenshots
 
 Appearance settings:
 
-![Settings, appearance](docs/screenshots/settings-appearance.jpg)
+![Settings · Appearance](docs/screenshots/settings-appearance.jpg)
 
 Extensions (plugins, skills, MCP servers):
 
@@ -36,28 +31,32 @@ Extensions (plugins, skills, MCP servers):
 
 ## Features
 
-- Models: OpenAI-compatible, Anthropic, Gemini, Ollama (`crates/agent-provider`)
-- Session loop: run, stop, approve (`crates/session-loop`, `crates/orchestrator`)
-- Tools: files, shell, search, with approval (`crates/agent-tools`)
-- Command policy: `crates/conex-sandbox`
-- Markdown rendering: `crates/conex-markdown`
-- Session storage and search: `crates/conex-db`, `crates/conex-search`, `crates/conex-diff`
-- Built-in terminal: `apps/crish-desktop`
-- Plugins, skills, and MCP servers
+- **Multi-Model Support**: OpenAI-compatible, Anthropic, Gemini, and local Ollama (`crates/agent-provider`)
+- **Session Loop & Scheduling**: Lifecycle execution, user interruption, and interactive human-in-the-loop approvals (`crates/session-loop`, `crates/orchestrator`)
+- **Autonomous Toolset**: File system operations, terminal shell execution, live search, and permission gating (`crates/agent-tools`)
+- **Command Policy & Sandboxing**: Fine-grained command syntax analysis and rule-based safety gating (`crates/conex-sandbox`)
+- **Streaming Markdown**: Fast AST rendering with smooth incremental UI patching (`crates/conex-markdown`)
+- **Storage & Search**: Local SQLite persistence, full-text search, and multi-version diff views (`crates/conex-db`, `crates/conex-search`, `crates/conex-diff`)
+- **Integrated Terminal**: Seamless xterm.js terminal panel within the workspace (`apps/crish-desktop`)
+- **Extensible Ecosystem**: Community plugins, curated skills, and Model Context Protocol (MCP) server integration
 
-## Build from source
+## Build from Source
 
-You need Node.js 20 or newer, npm, Rust stable (edition 2021), and the Tauri 2 system packages.
+Building from source requires Node.js 20+, npm, Rust stable (edition 2021), and platform-specific Tauri 2 dependencies.
 
-Linux (Ubuntu / Debian):
+### Platform Dependencies
 
-```bash
-sudo apt update && sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
-```
+- **Linux (Ubuntu / Debian)**:
+  ```bash
+  sudo apt update && sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+  ```
+- **Windows**: Requires [Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with "Desktop development with C++" workload, plus the WebView2 runtime.
+- **macOS**: Requires Xcode Command Line Tools:
+  ```bash
+  xcode-select --install
+  ```
 
-Windows needs the [Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) workload “Desktop development with C++”, plus WebView2. Windows 10 and 11 usually already include WebView2.
-
-macOS: `xcode-select --install`
+### Quick Start
 
 ```bash
 git clone https://github.com/atobelix/crish.git
@@ -66,45 +65,45 @@ npm install
 npm run dev:workbench
 ```
 
-`npm run dev:desktop` starts only the React UI (Vite, port 5174). It is not the desktop app.
+### Common Commands
 
-| Command | What it does |
+| Command | Description |
 | --- | --- |
-| `npm run dev:workbench` | Start the desktop app |
-| `npm run dev:desktop` | Start the UI only |
-| `npm run build:desktop` | Build the UI |
-| `npm run check:desktop` | Typecheck and UI gates |
-| `cargo build --workspace` | Build the Rust workspace |
-| `cargo test --workspace` | Rust tests |
-| `cargo clippy --workspace -- -D warnings` | Clippy |
+| `npm run dev:workbench` | Start full desktop app in development mode (Tauri + React UI) |
+| `npm run dev:desktop` | Start React UI dev server only (Vite, port 5174) |
+| `npm run build:desktop` | Build React UI for production |
+| `npm run check:desktop` | Run frontend typecheck and architecture lint gates |
+| `cargo build --workspace` | Build Rust workspace engine |
+| `cargo test --workspace` | Run Rust workspace unit and integration tests |
+| `cargo clippy --workspace -- -D warnings` | Run Clippy static analysis on Rust code |
 
 ## Architecture
 
 ```text
-Engine (Rust, in process)
+Engine (Rust, in-process)
   core_* commands, workbench-run-event, CoreError
         |
-        +-- GUI (React, shipped) workbench_* desktop APIs
-        +-- TUI (planned)
-        +-- Web (planned)
+        +-- GUI (React 19) workbench_* desktop interaction UI
+        +-- TUI (Planned)
+        +-- Web (Planned)
 ```
 
-See [`ARCHITECTURE.md`](ARCHITECTURE.md).
+For design details, see [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-## Docs
+## Documentation
 
-| Doc | What it is |
+| Document | Description |
 | --- | --- |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Architecture |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to change the code |
-| [`CHANGELOG.md`](CHANGELOG.md) | Changelog |
-| [`SECURITY.md`](SECURITY.md) | Private vulnerability reports |
-| [`LICENSE`](LICENSE) | MIT |
-| [`NOTICE`](NOTICE) | Third-party notices |
-| [`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md) | Dependency licenses |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | System architecture and core contracts |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution guidelines and coding standards |
+| [`CHANGELOG.md`](CHANGELOG.md) | Version changelog and release history |
+| [`SECURITY.md`](SECURITY.md) | Security policy and vulnerability reporting |
+| [`LICENSE`](LICENSE) | Open source license (MIT) |
+| [`NOTICE`](NOTICE) | Third-party notices and attributions |
+| [`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md) | Complete list of dependency licenses |
 
-Use [Issues](https://github.com/atobelix/crish/issues) for bugs and questions. Do not post vulnerability details there. Follow [`SECURITY.md`](SECURITY.md) and use GitHub private vulnerability reporting.
+For questions and issues, open a ticket on [GitHub Issues](https://github.com/atobelix/crish/issues). To report security vulnerabilities, please refer to [`SECURITY.md`](SECURITY.md) to submit a private security advisory.
 
 ## License
 
-MIT. Copyright (c) 2026 张浩健. See [`LICENSE`](LICENSE).
+[MIT License](LICENSE) © 2026 atobelix

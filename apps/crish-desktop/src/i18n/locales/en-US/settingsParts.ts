@@ -32,7 +32,7 @@ export const settingsPartRest = {
   'about.licenseName': 'The MIT License',
   'about.licenseNotice':
     'Distributed under permissive open source terms with commercial and academic freedom',
-  'about.copyrightHolder': 'Copyright (c) 2026 Zhang Haojian',
+  'about.copyrightHolder': 'Copyright (c) 2026 atobelix',
   'about.thirdPartyNotices':
     'Third-Party Open Source Notices & Legal Compliance',
   'about.viewFullLicense': 'View Full License',

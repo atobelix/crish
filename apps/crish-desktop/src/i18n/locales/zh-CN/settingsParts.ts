@@ -29,7 +29,7 @@ export const settingsPartRest = {
   'about.osArch': '系统架构',
   'about.licenseName': 'MIT 开源许可证',
   'about.licenseNotice': '遵循宽松开源协议分发，享有充分的商业与学术自由',
-  'about.copyrightHolder': 'Copyright (c) 2026 张浩健',
+  'about.copyrightHolder': 'Copyright (c) 2026 atobelix',
   'about.thirdPartyNotices': '第三方开源依赖与法律合规披露',
   'about.viewFullLicense': '查看完整开源许可证',
   'about.copySysInfo': '复制系统诊断信息',

@@ -5,24 +5,19 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.1.1-blue.svg)](https://github.com/atobelix/crish/releases)
 
-维护者：[张浩健](https://github.com/atobelix)。仓库目录名是 `conex`，产品名是 **Crish**。这是个人项目，没有社区组织，也没有对外邮箱。
+Crish 是本地优先的 AI Agent 桌面工作台，基于 Tauri 2、React 19 桌面界面与 Rust 高性能引擎内核（`crates/`）构建，通过进程内 Tauri IPC 进行高效通信。
 
-源码：<https://github.com/atobelix/crish>
+## 下载安装
 
-Crish 是本地优先的 AI Agent 桌面工作台：Tauri 2 壳、React 19 桌面界面、Rust 引擎（`crates/`）。引擎和界面在同一个进程里，通过 Tauri IPC 通信。TUI 和 Web 还没有做，下面架构图里标成规划。
+前往 [Releases 页面](https://github.com/atobelix/crish/releases) 下载适合您操作系统的安装包：
 
-## 安装
+- **Windows**：
+  - `Crish_0.1.1_x64-setup.exe`：图形化安装向导
+  - `Crish_0.1.1_x64_en-US.msi`：MSI 安装程序
+- **macOS**：下载对应架构的 `.dmg` 镜像安装包
+- **Linux**：下载 `.AppImage` 或 `.deb` 软件包
 
-不需要从源码编译也能用。到 [Releases](https://github.com/atobelix/crish/releases) 下载安装包。对外版本是 **0.1.1**。
-
-Windows 安装包：
-
-- `Crish_0.1.1_x64-setup.exe`：安装向导
-- `Crish_0.1.1_x64_en-US.msi`：msi
-
-Linux 和 macOS 的安装包由同一条发布流水线上传。以 Release 页面上实际挂出的文件为准。`v0.1.0` 是更早的标签，不要把它当成当前版本。
-
-第一次打开后，到设置里填写模型服务的密钥，或接本地 [Ollama](https://ollama.com/)。然后新建对话。
+首次打开应用后，前往设置页填写模型服务 API 密钥，或连接本地 [Ollama](https://ollama.com/)，即可开始新建对话。
 
 ## 截图
 
@@ -34,30 +29,34 @@ Linux 和 macOS 的安装包由同一条发布流水线上传。以 Release 页�
 
 ![扩展](docs/screenshots/extensions.jpg)
 
-## 功能
+## 功能特性
 
-- 多模型：OpenAI 兼容、Anthropic、Gemini、Ollama（`crates/agent-provider`）
-- 会话循环：运行、停止、审批（`crates/session-loop`、`crates/orchestrator`）
-- 工具：文件、shell、搜索，以及审批（`crates/agent-tools`）
-- 命令策略：`crates/conex-sandbox`
-- Markdown 渲染：`crates/conex-markdown`
-- 会话存储和搜索：`crates/conex-db`、`crates/conex-search`、`crates/conex-diff`
-- 内置终端：`apps/crish-desktop`
-- 插件、技能、MCP 服务
+- **多模型支持**：OpenAI 兼容、Anthropic、Gemini、本地 Ollama（`crates/agent-provider`）
+- **会话循环与调度**：执行流转、主动中断、人机确认审批（`crates/session-loop`、`crates/orchestrator`）
+- **自主工具集**：文件系统操作、终端 Shell 执行、实时搜索及权限审批拦截（`crates/agent-tools`）
+- **命令沙箱与门禁**：细粒度命令语法分析与安全策略匹配（`crates/conex-sandbox`）
+- **流式 Markdown 渲染**：高性能 AST 解析与平滑增量挂载（`crates/conex-markdown`）
+- **会话存储与检索**：本地 SQLite 持久化、全文检索与多版本差异对比（`crates/conex-db`、`crates/conex-search`、`crates/conex-diff`）
+- **内置终端集成**：无缝交互的高性能终端面板（`apps/crish-desktop`）
+- **生态扩展能力**：支持社区插件、技能集与 Model Context Protocol (MCP) 服务
 
 ## 从源码构建
 
-需要 Node.js 20 或更高、npm、Rust stable（edition 2021），以及 Tauri 2 的系统依赖。
+开发与构建需要 Node.js 20+、npm、Rust stable（edition 2021）以及对应平台的 Tauri 2 系统依赖。
 
-Linux（Ubuntu / Debian）：
+### 平台依赖
 
-```bash
-sudo apt update && sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
-```
+- **Linux（Ubuntu / Debian）**：
+  ```bash
+  sudo apt update && sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+  ```
+- **Windows**：需要安装 [Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)（勾选“使用 C++ 的桌面开发”）与 WebView2 运行时。
+- **macOS**：需要安装 Xcode Command Line Tools：
+  ```bash
+  xcode-select --install
+  ```
 
-Windows 需要 [Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)（勾选“使用 C++ 的桌面开发”）和 WebView2。Windows 10/11 通常已经带了 WebView2。
-
-macOS：`xcode-select --install`
+### 快速开始
 
 ```bash
 git clone https://github.com/atobelix/crish.git
@@ -66,45 +65,45 @@ npm install
 npm run dev:workbench
 ```
 
-`npm run dev:desktop` 只起 React 界面（Vite，端口 5174），没有 Tauri 壳，不能当成完整应用。
+### 常用命令
 
 | 命令 | 作用 |
 | --- | --- |
-| `npm run dev:workbench` | 启动桌面应用 |
-| `npm run dev:desktop` | 只启动界面 |
-| `npm run build:desktop` | 构建界面 |
-| `npm run check:desktop` | 类型检查和界面门禁 |
-| `cargo build --workspace` | 构建 Rust 工作区 |
-| `cargo test --workspace` | Rust 测试 |
-| `cargo clippy --workspace -- -D warnings` | Clippy |
+| `npm run dev:workbench` | 启动完整的桌面应用开发环境（Tauri + 前端） |
+| `npm run dev:desktop` | 仅启动 React 前端界面（Vite，端口 5174） |
+| `npm run build:desktop` | 生产构建前端产物 |
+| `npm run check:desktop` | 前端类型检查与架构规范门禁 |
+| `cargo build --workspace` | 构建 Rust 工作区引擎 |
+| `cargo test --workspace` | 运行 Rust 工作区单元测试 |
+| `cargo clippy --workspace -- -D warnings` | Rust 代码规范静态检查 |
 
-## 架构
+## 架构简述
 
 ```text
 引擎（Rust，进程内）
   core_* 命令、workbench-run-event、CoreError
         |
-        +-- GUI（React，已有）workbench_* 桌面能力
+        +-- GUI（React 19）workbench_* 桌面交互界面
         +-- TUI（规划中）
         +-- Web（规划中）
 ```
 
-细节见 [`ARCHITECTURE.md`](ARCHITECTURE.md)。
+详细设计请参阅 [`ARCHITECTURE.md`](ARCHITECTURE.md)。
 
-## 文档
+## 项目文档
 
 | 文档 | 说明 |
 | --- | --- |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | 架构 |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | 如果要改代码 |
-| [`CHANGELOG.md`](CHANGELOG.md) | 变更记录 |
-| [`SECURITY.md`](SECURITY.md) | 漏洞私下报告 |
-| [`LICENSE`](LICENSE) | MIT |
-| [`NOTICE`](NOTICE) | 第三方声明 |
-| [`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md) | 依赖许可证 |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | 总体架构设计与核心契约 |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | 代码贡献指南与规范 |
+| [`CHANGELOG.md`](CHANGELOG.md) | 版本更新与发布日志 |
+| [`SECURITY.md`](SECURITY.md) | 安全策略与漏洞通报指引 |
+| [`LICENSE`](LICENSE) | 开源许可协议 (MIT) |
+| [`NOTICE`](NOTICE) | 第三方依赖与资产归属声明 |
+| [`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md) | 依赖开源许可证完整列表 |
 
-问题写在 [Issues](https://github.com/atobelix/crish/issues)。漏洞不要发到公开 Issue，按 [`SECURITY.md`](SECURITY.md) 走 GitHub 私人报告。
+问题反馈请提交至 [Issues](https://github.com/atobelix/crish/issues)。如发现安全漏洞，请勿直接公开提 Issue，建议根据 [`SECURITY.md`](SECURITY.md) 提交 GitHub 私密报告。
 
 ## License
 
-MIT，Copyright (c) 2026 张浩健。见 [`LICENSE`](LICENSE)。
+[MIT License](LICENSE) © 2026 atobelix
