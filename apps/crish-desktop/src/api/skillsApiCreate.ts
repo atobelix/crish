@@ -7,7 +7,8 @@
 
 import { getWorkspacePath } from './projectStore';
 import { joinPath, normalizeSlashName } from './skillsApiHelpers';
-import { mkdirAny, readTextAny, writeTextAny, tryHomeDir } from './skillsApiFs';
+import { readTextAny, tryHomeDir } from './skillsApiFs';
+import { installOwnedSkillCopy } from './skillsApiOwned';
 import { invalidateSkillSlashCache } from './skillsApiSlashCache';
 
 export type CreateSkillResult =
@@ -57,25 +58,28 @@ function buildSkillMarkdown(opts: {
   ].join('\n');
 }
 
-/** 写入 SKILL.md 并失效斜杠缓存 */
-async function writeSkillTemplate(
-  skillDir: string,
-  skillPath: string,
-  body: string
-): Promise<CreateSkillResult> {
-  const mk = await mkdirAny(skillDir);
-  if (!mk) {
-    // 尝试直接写（部分 fs 会自动建父目录）
-  }
-  const wrote = await writeTextAny(skillPath, body);
-  if (!wrote) {
-    return {
-      ok: false,
-      error: '无法写入 SKILL.md（需要桌面壳 plugin-fs 权限）',
-    };
-  }
+/** 写入技能副本并失效斜杠缓存 */
+async function writeSkillTemplate(opts: {
+  scope: 'project' | 'global';
+  slug: string;
+  skillDir: string;
+  skillPath: string;
+  body: string;
+  overwrite: boolean;
+  workspacePath?: string;
+}): Promise<CreateSkillResult> {
+  const wrote = await installOwnedSkillCopy({
+    scope: opts.scope,
+    slug: opts.slug,
+    content: opts.body,
+    overwrite: opts.overwrite,
+    workspacePath: opts.workspacePath,
+    skillDir: opts.skillDir,
+    skillPath: opts.skillPath,
+  });
+  if (!wrote.ok) return wrote;
   invalidateSkillSlashCache();
-  return { ok: true, skillPath, skillDir };
+  return wrote;
 }
 
 /** 在项目 .conex/skills 下创建技能模板 */
@@ -104,7 +108,15 @@ export async function createProjectSkill(opts: {
     desc,
     content: opts.content,
   });
-  return writeSkillTemplate(skillDir, skillPath, body);
+  return writeSkillTemplate({
+    scope: 'project',
+    slug,
+    skillDir,
+    skillPath,
+    body,
+    overwrite: Boolean(opts.overwrite),
+    workspacePath: workspace,
+  });
 }
 
 /** 在用户主目录全局 skills 下创建技能模板 */
@@ -123,13 +135,11 @@ export async function createGlobalSkill(opts: {
     }
   }
   home = home.replace(/\\/g, '/').replace(/\/+$/, '');
-  if (!home)
-    return { ok: false, error: '未获取到用户主目录，无法创建全局技能' };
   const slug = normalizeSlashName(opts.name);
   if (!slug) return { ok: false, error: '技能名称无效' };
 
-  const skillDir = joinPath(joinPath(home, '.crish/skills'), slug);
-  const skillPath = joinPath(skillDir, 'SKILL.md');
+  const skillDir = home ? joinPath(joinPath(home, '.crish/skills'), slug) : '';
+  const skillPath = skillDir ? joinPath(skillDir, 'SKILL.md') : '';
   const existing = await readTextAny(skillPath);
   if (existing != null && !opts.overwrite)
     return { ok: false, error: `已存在：${skillPath}` };
@@ -141,5 +151,12 @@ export async function createGlobalSkill(opts: {
     desc,
     content: opts.content,
   });
-  return writeSkillTemplate(skillDir, skillPath, body);
+  return writeSkillTemplate({
+    scope: 'global',
+    slug,
+    skillDir,
+    skillPath,
+    body,
+    overwrite: Boolean(opts.overwrite),
+  });
 }

@@ -36,6 +36,7 @@ import {
   readTextAny,
   tryHomeDir,
   getExtraSkillDirs,
+  pruneForeignExtraSkillDirs,
 } from './skillsApiFs';
 
 /* ---------- 单文件解析 ---------- */
@@ -152,6 +153,7 @@ export async function discoverSkills(opts?: {
   workspacePath?: string | null;
 }): Promise<DiscoverSkillsResult> {
   const workspace = (opts?.workspacePath ?? getWorkspacePath() ?? '').trim();
+  pruneForeignExtraSkillDirs();
   const extraDirs = getExtraSkillDirs();
 
   type RustSkillRow = {

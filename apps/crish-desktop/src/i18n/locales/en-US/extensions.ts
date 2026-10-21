@@ -51,8 +51,37 @@ const extensions = {
   'panel.description':
     'Install or uninstall local plugins. Plugins imported from files can be deleted anytime.',
   'panel.fromFileLabel': 'From file...',
+  'dialog.closeAriaLabel': 'Close dialog',
   'badge.official': 'Official',
   'badge.local': 'Local',
+  'badge.machine': 'This computer',
+  'badge.thirdParty': 'Third-party',
+
+  'skill.import.truncatedBody':
+    'Skill "{name}" is longer than the read limit, so an incomplete copy was not written',
+  'skill.import.emptyBody': 'Skill "{name}" is empty and cannot be imported',
+  'skill.import.writeFailed': 'Failed to write the skill copy',
+  'skill.import.globalWriteUnavailable':
+    'This desktop shell cannot write the global skill library yet',
+  'skill.import.noDirectory': 'No directory was selected',
+  'skill.import.directoryUnreadable':
+    'The selected directory could not be read, so it was not registered as an installed skill',
+  'skill.import.directoryEmpty':
+    'The selected directory has no skill to import',
+  'skill.import.allTruncated':
+    'The skill text exceeds the read limit, so no incomplete copy was written',
+  'skill.import.noneWritten': 'No skill copy was written',
+  'skill.import.partial':
+    'Imported {imported} skills. {truncated} were skipped because they exceed the read limit',
+  'skill.import.importedCount': 'Imported {imported} skills',
+  'skill.import.disallowed':
+    'Skill "{name}" is disallowed or not adapted, so it was not imported',
+  'skill.import.failed': 'Failed to import the skill: {detail}',
+  'skill.import.projectEnabled':
+    'Imported skill "{name}" into the current workspace and enabled it',
+  'skill.import.globalEnabled':
+    'Imported skill "{name}" into the global skill library and enabled it',
+  'skill.defaultDescription': '{name} skill',
 };
 
 export default extensions;

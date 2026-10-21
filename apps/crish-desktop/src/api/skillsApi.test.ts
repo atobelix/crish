@@ -26,6 +26,7 @@ vi.mock('./projectStore', () => ({
 import {
   getExtraSkillDirs,
   addExtraSkillDir,
+  pruneForeignExtraSkillDirs,
   removeExtraSkillDir,
   setSkillActivation,
   skillsToSlashCommands,
@@ -55,6 +56,21 @@ describe('skillsApi', () => {
 
       removeExtraSkillDir('/custom/skills/dir');
       expect(getExtraSkillDirs()).toEqual([]);
+    });
+
+    it('drops foreign app skill directories and keeps owned copies', () => {
+      addExtraSkillDir('C:/Users/orange/.codex/skills/chinese-encoding-guard');
+      addExtraSkillDir('C:/Software/conex/.conex/skills/demo');
+      addExtraSkillDir('/custom/local/skill-dir');
+
+      expect(pruneForeignExtraSkillDirs()).toEqual([
+        'C:/Software/conex/.conex/skills/demo',
+        '/custom/local/skill-dir',
+      ]);
+      expect(getExtraSkillDirs()).toEqual([
+        'C:/Software/conex/.conex/skills/demo',
+        '/custom/local/skill-dir',
+      ]);
     });
   });
 

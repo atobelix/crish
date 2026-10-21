@@ -49,8 +49,31 @@ const extensions = {
   'panel.title': '插件安装与卸载',
   'panel.description': '安装或卸载本机插件。从文件导入的插件可以随时删除。',
   'panel.fromFileLabel': '从文件导入...',
+  'dialog.closeAriaLabel': '关闭弹窗',
   'badge.official': '官方',
   'badge.local': '本地',
+  'badge.machine': '本机',
+  'badge.thirdParty': '三方',
+
+  'skill.import.truncatedBody':
+    '技能「{name}」正文超过读取上限，未写入不完整副本',
+  'skill.import.emptyBody': '技能「{name}」正文为空，无法导入',
+  'skill.import.writeFailed': '写入技能副本失败',
+  'skill.import.globalWriteUnavailable': '桌面壳还不能写入全局技能库',
+  'skill.import.noDirectory': '未选择目录',
+  'skill.import.directoryUnreadable':
+    '无法读取所选目录，未把它登记为已安装技能',
+  'skill.import.directoryEmpty': '所选目录里没有可导入的技能',
+  'skill.import.allTruncated': '技能正文超过读取上限，没有写入不完整副本',
+  'skill.import.noneWritten': '没有写入任何技能副本',
+  'skill.import.partial':
+    '已导入 {imported} 个技能，另有 {truncated} 个因正文超过读取上限未写入',
+  'skill.import.importedCount': '已导入 {imported} 个技能',
+  'skill.import.disallowed': '技能「{name}」属于不合规或未适配脚本，已禁止导入',
+  'skill.import.failed': '导入技能失败：{detail}',
+  'skill.import.projectEnabled': '已成功将技能「{name}」导入当前工作区并启用',
+  'skill.import.globalEnabled': '已成功将技能「{name}」导入全局技能库并启用',
+  'skill.defaultDescription': '{name} 技能',
 };
 
 export default extensions;

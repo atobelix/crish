@@ -8,7 +8,6 @@ import { t } from '../../i18n';
 import {
   getExtraSkillDirs,
   removeExtraSkillDir,
-  removePathAny,
   setSkillActivation,
 } from '../../api/skillsApi';
 import type { DesktopSkill } from '../../api/skillsApi';
@@ -30,6 +29,7 @@ import {
   setSkillDismissed,
 } from './skillDismissState';
 import { normalizeSlashName } from '../../api/skillsApiHelpers';
+import { removeOwnedSkillCopies } from '../../api/skillsApiOwned';
 
 export interface ExtensionActionResult {
   ok: boolean;
@@ -126,17 +126,6 @@ export async function removeImportedMcpByName(
   }
 }
 
-/** 只允许删除本应用复制进 .conex/skills 或 .crish/skills 的副本。 */
-export function isOwnedSkillCopyPath(path: string): boolean {
-  const normalized = path.replace(/\\/g, '/').toLowerCase();
-  return (
-    normalized.includes('/.conex/skills/') ||
-    normalized.includes('/.crish/skills/') ||
-    normalized.endsWith('/.conex/skills') ||
-    normalized.endsWith('/.crish/skills')
-  );
-}
-
 export function skillMatchesInstalledSet(
   name: string,
   installed: Set<string>
@@ -160,16 +149,8 @@ export async function uninstallDesktopSkill(skill: {
 
   const dir = (skill.baseDir || '').trim();
   const file = (skill.filePath || '').trim();
-  let removedCopy = false;
-  if (dir && isOwnedSkillCopyPath(dir)) {
-    removedCopy = await removePathAny(dir, true);
-  } else if (file && isOwnedSkillCopyPath(file)) {
-    const parent = file.replace(/[\\/][^\\/]+$/, '');
-    removedCopy =
-      parent && isOwnedSkillCopyPath(parent)
-        ? await removePathAny(parent, true)
-        : await removePathAny(file, false);
-  }
+  const slug = normalizeSlashName(name);
+  const removedCopy = Boolean(slug) && (await removeOwnedSkillCopies(slug));
 
   if (dir) {
     const norm = dir.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();

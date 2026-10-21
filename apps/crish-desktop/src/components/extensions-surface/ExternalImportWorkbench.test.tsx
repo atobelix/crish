@@ -13,6 +13,7 @@ import { ToastProvider } from '../../services/toast/ToastContext';
 import { useSettingsStore } from '../../store/settingsStore';
 import { clientApi } from '../../api/clientApi';
 import * as skillsApi from '../../api/skillsApi';
+import { skillCopyWriters } from '../../api/skillOwnedInstall';
 import * as detectMcpApi from './detectExternalMcpServers';
 import * as detectSkillsApi from './detectExternalSkills';
 
@@ -51,7 +52,7 @@ describe('ExternalImportWorkbench', () => {
       skills: [],
       errors: [],
     } as any);
-    vi.spyOn(skillsApi, 'createProjectSkill').mockResolvedValue({
+    vi.spyOn(skillCopyWriters, 'createProjectSkill').mockResolvedValue({
       ok: true,
       skillPath: '/workspace/.conex/skills/cursor-rules-sync/SKILL.md',
       skillDir: '/workspace/.conex/skills/cursor-rules-sync',
@@ -64,7 +65,7 @@ describe('ExternalImportWorkbench', () => {
       ok: true,
       engineSynced: false,
     });
-    vi.spyOn(skillsApi, 'createGlobalSkill').mockResolvedValue({
+    vi.spyOn(skillCopyWriters, 'createGlobalSkill').mockResolvedValue({
       ok: true,
       skillPath: '/home/.crish/skills/cursor-rules-sync/SKILL.md',
       skillDir: '/home/.crish/skills/cursor-rules-sync',
@@ -193,6 +194,30 @@ describe('ExternalImportWorkbench', () => {
 
   it('imports detected Skill with one-click, invoking createProjectSkill and dispatching crish-skills-changed', async () => {
     const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+    vi.spyOn(skillCopyWriters, 'createProjectSkill').mockImplementation(
+      async () => ({
+        ok: true,
+        skillPath: '/workspace/.conex/skills/cursor-rules-sync/SKILL.md',
+        skillDir: '/workspace/.conex/skills/cursor-rules-sync',
+      })
+    );
+    vi.spyOn(skillsApi, 'discoverSkills').mockImplementation(async () => {
+      const wrote = vi.mocked(skillCopyWriters.createProjectSkill).mock.calls
+        .length;
+      return {
+        skills: wrote
+          ? [
+              {
+                name: 'cursor-rules-sync',
+                description: '同步 Cursor 项目规则配置',
+                activation: 'enabled',
+                system: false,
+              },
+            ]
+          : [],
+        errors: [],
+      } as any;
+    });
 
     render(
       <ToastProvider>
@@ -220,7 +245,7 @@ describe('ExternalImportWorkbench', () => {
     fireEvent.click(importBtn);
 
     await waitFor(() => {
-      expect(skillsApi.createProjectSkill).toHaveBeenCalledWith(
+      expect(skillCopyWriters.createProjectSkill).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'cursor-rules-sync',
           description: '同步 Cursor 项目规则配置',
@@ -233,15 +258,19 @@ describe('ExternalImportWorkbench', () => {
         }),
         'enabled'
       );
+      expect(
+        screen.getByRole('button', { name: '卸载 cursor-rules-sync' })
+      ).toBeInTheDocument();
     });
 
     expect(dispatchSpy).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'crish-skills-changed' })
     );
     expect(onImportSuccess).toHaveBeenCalled();
+    expect(skillsApi.addExtraSkillDir).not.toHaveBeenCalled();
   });
 
-  it('imports skill with tilde path expanding real home directory, creating skill and enabling it', async () => {
+  it('imports a tilde-path skill by writing an owned copy and enabling it', async () => {
     vi.spyOn(detectSkillsApi, 'detectExternalSkills').mockResolvedValue([
       {
         id: 'mock-skill-resume',
@@ -252,6 +281,23 @@ describe('ExternalImportWorkbench', () => {
         skillDir: '~/.gemini/antigravity/skills/resume-master',
       },
     ]);
+    vi.spyOn(skillsApi, 'discoverSkills').mockImplementation(async () => {
+      const wrote = vi.mocked(skillCopyWriters.createProjectSkill).mock.calls
+        .length;
+      return {
+        skills: wrote
+          ? [
+              {
+                name: 'resume-master',
+                description: '简历生成技能',
+                activation: 'enabled',
+                system: false,
+              },
+            ]
+          : [],
+        errors: [],
+      } as any;
+    });
 
     render(
       <ToastProvider>
@@ -274,7 +320,7 @@ describe('ExternalImportWorkbench', () => {
     fireEvent.click(importBtn);
 
     await waitFor(() => {
-      expect(skillsApi.createProjectSkill).toHaveBeenCalledWith(
+      expect(skillCopyWriters.createProjectSkill).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'resume-master',
           description: '简历生成技能',
@@ -290,9 +336,10 @@ describe('ExternalImportWorkbench', () => {
     });
 
     expect(onImportSuccess).toHaveBeenCalled();
+    expect(skillsApi.addExtraSkillDir).not.toHaveBeenCalled();
   });
 
-  it('imports skill directory from local file picker when in 技能 tab', async () => {
+  it('does not register an outside folder as an installed skill directory', async () => {
     render(
       <ToastProvider>
         <ExternalImportWorkbench
@@ -312,11 +359,75 @@ describe('ExternalImportWorkbench', () => {
 
     await waitFor(() => {
       expect(skillsApi.pickSkillDirectory).toHaveBeenCalled();
-      expect(skillsApi.addExtraSkillDir).toHaveBeenCalledWith(
-        '/custom/local/skill-dir'
-      );
+      expect(
+        screen.getByText('无法读取所选目录，未把它登记为已安装技能')
+      ).toBeInTheDocument();
     });
-    expect(onImportSuccess).toHaveBeenCalled();
+    expect(skillsApi.addExtraSkillDir).not.toHaveBeenCalled();
+    expect(onImportSuccess).not.toHaveBeenCalled();
+  });
+
+  it('keeps the skill on 导入 when neither project nor global copy can be written', async () => {
+    vi.spyOn(skillCopyWriters, 'createProjectSkill').mockResolvedValue({
+      ok: false,
+      error: '无法写入项目技能',
+    });
+    vi.spyOn(skillCopyWriters, 'createGlobalSkill').mockResolvedValue({
+      ok: false,
+      error: '无法写入全局技能',
+    });
+
+    render(
+      <ToastProvider>
+        <ExternalImportWorkbench
+          onImportSuccess={onImportSuccess}
+          onRefresh={onRefresh}
+        />
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByText(/技能 \(/));
+    const importBtn = await screen.findByRole('button', {
+      name: '导入 cursor-rules-sync',
+    });
+    fireEvent.click(importBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/导入技能失败/)).toBeInTheDocument();
+    });
+    expect(skillsApi.addExtraSkillDir).not.toHaveBeenCalled();
+    expect(skillsApi.setSkillActivation).not.toHaveBeenCalled();
+    expect(skillCopyWriters.createGlobalSkill).toHaveBeenCalled();
+    expect(
+      screen.getByRole('button', { name: '导入 cursor-rules-sync' })
+    ).toBeInTheDocument();
+    expect(onImportSuccess).not.toHaveBeenCalled();
+  });
+
+  it('returns the skill to 导入 when the library does not list the new copy', async () => {
+    render(
+      <ToastProvider>
+        <ExternalImportWorkbench
+          onImportSuccess={onImportSuccess}
+          onRefresh={onRefresh}
+        />
+      </ToastProvider>
+    );
+
+    fireEvent.click(screen.getByText(/技能 \(/));
+    fireEvent.click(
+      await screen.findByRole('button', { name: '导入 cursor-rules-sync' })
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/已写入副本，但技能库没有刷新到它/)
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.getByRole('button', { name: '导入 cursor-rules-sync' })
+    ).toBeInTheDocument();
+    expect(onImportSuccess).not.toHaveBeenCalled();
   });
 
   it('shows 已导入 status for already existing resources', async () => {

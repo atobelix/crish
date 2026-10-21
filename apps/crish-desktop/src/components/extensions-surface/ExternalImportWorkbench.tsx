@@ -3,16 +3,8 @@ import { useToast } from '../../services/toast/ToastContext';
 import { useSettingsStore } from '../../store/storeAccess';
 import {
   pickSkillDirectory,
-  addExtraSkillDir,
-  createProjectSkill,
-  createGlobalSkill,
-  setSkillActivation,
   discoverSkills,
-  tryHomeDir,
-  readTextAny,
   normalizeSlashName,
-  skillStableId,
-  type DesktopSkill,
 } from '../../api/skillsApi';
 import { PluginImportPanel } from './PluginImportPanel';
 import {
@@ -21,8 +13,6 @@ import {
   skillMatchesInstalledSet,
   uninstallDesktopSkill,
 } from './externalImportActions';
-import { setSkillDismissed } from './skillDismissState';
-
 import {
   detectExternalMcpServers,
   DEFAULT_FALLBACK_MCP,
@@ -30,10 +20,10 @@ import {
 } from './detectExternalMcpServers';
 import {
   detectExternalSkills,
-  isDisallowedSkillName,
-  isQualifiedSkill,
   type DetectedExternalSkill,
 } from './detectExternalSkills';
+import { importDetectedSkill } from './importDetectedSkill';
+import { importPickedSkillDirectory } from './importPickedSkillDirectory';
 import { SkillDetailModal, type SkillDetailTarget } from './SkillDetailModal';
 import {
   buildImportItems,
@@ -126,8 +116,9 @@ export const ExternalImportWorkbench: React.FC<
         if (slug) next.add(slug);
       }
       setInstalledSkillNames(next);
+      return next;
     } catch {
-      /* ignore */
+      return new Set<string>();
     }
   }, []);
 
@@ -172,30 +163,16 @@ export const ExternalImportWorkbench: React.FC<
     onRefresh?.();
   };
 
-  // 从文件夹导入技能
+  // 选中的目录一律复制进本应用技能库，不把原目录登记成扫描根。
   const handlePickDirectory = async () => {
     try {
       const selectedDir = await pickSkillDirectory();
       if (!selectedDir) return;
-      const rawHome = await tryHomeDir();
-      const envHome =
-        typeof process !== 'undefined'
-          ? process.env?.USERPROFILE || process.env?.HOME
-          : '';
-      const homeDir = (rawHome?.trim() || envHome || '')
-        .replace(/\\/g, '/')
-        .replace(/\/+$/, '');
-      const norm = selectedDir.replace(/\\/g, '/');
-      const expandedDir =
-        homeDir && (norm === '~' || norm.startsWith('~/'))
-          ? norm === '~'
-            ? homeDir
-            : `${homeDir}/${norm.slice(2)}`
-          : selectedDir;
-      addExtraSkillDir(expandedDir);
-      showToast(`已成功导入技能目录：${expandedDir}`);
+      const copied = await importPickedSkillDirectory(selectedDir);
+      showToast(copied.message);
+      if (!copied.ok) return;
       window.dispatchEvent(new CustomEvent('crish-skills-changed'));
-      void loadSkillsState();
+      await loadSkillsState();
       notifyChange();
     } catch (err) {
       showToast(
@@ -210,7 +187,6 @@ export const ExternalImportWorkbench: React.FC<
     `skill:${skill.source}:${skill.name}`;
 
   const rememberImportedSkill = (name: string) => {
-    setSkillDismissed(name, false);
     setOptimisticSkillNames((prev) => {
       const next = new Set(prev);
       next.add(name.toLowerCase());
@@ -273,152 +249,31 @@ export const ExternalImportWorkbench: React.FC<
     }
   };
 
-  // 导入单项技能
+  // 导入单项技能。写入副本之后再刷新技能库，刷新不到就不把按钮留在卸载。
   const handleImportSkill = async (skill: DetectedExternalSkill) => {
+    setBusyId(skillItemId(skill));
     try {
-      if (isDisallowedSkillName(skill.name) || !isQualifiedSkill(skill)) {
-        showToast(`技能「${skill.name}」属于不合规或未适配脚本，已禁止导入`);
+      const result = await importDetectedSkill(skill);
+      if (!result.ok) {
+        showToast(result.message);
         return;
       }
-
-      const rawHome = await tryHomeDir();
-      const envHome =
-        typeof process !== 'undefined'
-          ? process.env?.USERPROFILE || process.env?.HOME
-          : '';
-      const homeDir = (rawHome?.trim() || envHome || '')
-        .replace(/\\/g, '/')
-        .replace(/\/+$/, '');
-      const expandTilde = (p?: string): string => {
-        if (!p) return '';
-        const n = p.replace(/\\/g, '/');
-        if (
-          homeDir &&
-          (n === '~' || n.startsWith('~/') || n.startsWith('~\\'))
-        ) {
-          return n === '~'
-            ? homeDir
-            : `${homeDir}/${n.slice(2).replace(/^[\\/]+/, '')}`;
-        }
-        return n;
-      };
-      const expandedFilePath = expandTilde(skill.filePath);
-      const expandedSkillDir = expandTilde(
-        skill.skillDir ||
-          (skill.filePath ? skill.filePath.replace(/[\\/][^\\/]+$/, '') : '')
-      );
-
-      let contentToSave = skill.content?.trim();
-      if (!contentToSave && expandedFilePath) {
-        try {
-          const text = await readTextAny(expandedFilePath);
-          if (text !== null && text !== undefined && !text.trim()) {
-            showToast(`技能「${skill.name}」正文为空，无法导入`);
-            return;
-          }
-          if (text?.trim()) contentToSave = text.trim();
-        } catch {
-          /* ignore */
-        }
-      }
-
-      const slug =
-        normalizeSlashName(skill.name) ||
-        skill.name.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
-      const desc = (skill.description || `${skill.name} 技能`).trim();
-      if (!contentToSave) {
-        contentToSave = [
-          '---',
-          `name: ${slug}`,
-          `description: ${JSON.stringify(desc)}`,
-          'activation: recommended',
-          '---',
-          '',
-          `# ${skill.name}`,
-          '',
-          '## 何时使用',
-          `- ${desc}`,
-          '',
-          '## 步骤',
-          '1. 阅读任务上下文',
-          '2. 按本技能约定执行',
-          '3. 完成后做简要校验',
-          '',
-        ].join('\n');
-      }
-
-      let savedSkillPath = '';
-      let savedSkillDir = '';
-      let saveScope: 'project' | 'global' = 'project';
-
-      const projRes = await createProjectSkill({
-        name: skill.name,
-        description: skill.description,
-        content: contentToSave,
-        overwrite: true,
-      });
-
-      if (projRes.ok) {
-        savedSkillPath = projRes.skillPath;
-        savedSkillDir = projRes.skillDir;
-        saveScope = 'project';
-      } else {
-        const globalRes = await createGlobalSkill({
-          name: skill.name,
-          description: skill.description,
-          homeDir,
-          content: contentToSave,
-          overwrite: true,
-        });
-        if (globalRes.ok) {
-          savedSkillPath = globalRes.skillPath;
-          savedSkillDir = globalRes.skillDir;
-          saveScope = 'global';
-        } else if (expandedSkillDir) {
-          addExtraSkillDir(expandedSkillDir);
-          savedSkillDir = expandedSkillDir;
-          savedSkillPath = expandedFilePath || `${expandedSkillDir}/SKILL.md`;
-          saveScope = 'global';
-        } else {
-          showToast(`导入技能失败：${projRes.error || globalRes.error}`);
-          return;
-        }
-      }
-
-      const finalId = skillStableId(skill.name, savedSkillPath);
-      const importedSkill: DesktopSkill = {
-        id: finalId,
-        name: skill.name,
-        description: desc,
-        filePath: savedSkillPath,
-        baseDir: savedSkillDir,
-        content: contentToSave,
-        raw: contentToSave,
-        scope: saveScope,
-        activation: 'enabled',
-        tags: [],
-        appliesTo: [],
-        disableModelInvocation: false,
-        system: false,
-      };
-
-      await setSkillActivation(importedSkill, 'enabled');
       rememberImportedSkill(skill.name);
       window.dispatchEvent(new CustomEvent('crish-skills-changed'));
-      await loadSkillsState();
-      notifyChange();
-
-      if (saveScope === 'project' && projRes.ok) {
-        showToast(`已成功将技能「${skill.name}」导入当前工作区并启用`);
-      } else if (saveScope === 'global' && !expandedSkillDir) {
-        showToast(`已成功将技能「${skill.name}」导入全局技能库并启用`);
+      const found = await loadSkillsState();
+      if (skillMatchesInstalledSet(skill.name, found)) {
+        showToast(result.message);
+        notifyChange();
       } else {
-        showToast(`已成功导入技能「${skill.name}」并启用`);
+        forgetImportedSkill(skill.name);
+        showToast(`技能「${skill.name}」已写入副本，但技能库没有刷新到它`);
       }
     } catch (err) {
       showToast(
         `导入技能失败：${err instanceof Error ? err.message : String(err)}`
       );
+    } finally {
+      setBusyId(null);
     }
   };
 

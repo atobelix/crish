@@ -3,6 +3,7 @@
  * 严格过滤软件系统内置自带技能，仅向用户呈现通用的、用户制作或外部安装的技能。
  */
 
+import { readSkillText } from '../../api/skillFileRead';
 import { invokeResult } from '../../api/tauriInvoke';
 
 export type DetectedExternalSkillSource =
@@ -323,20 +324,11 @@ async function listDirItems(dirPath: string): Promise<DirEntry[]> {
 
 async function readSkillFile(filePath: string): Promise<string | null> {
   try {
-    const res = await invokeResult<{ content?: string }>(
-      'workbench_read_file_content',
-      {
-        path: filePath,
-        maxLines: 5000,
-      }
-    );
-    if (res.status === 'ok' && typeof res.data?.content === 'string') {
-      return res.data.content;
-    }
+    const loaded = await readSkillText(filePath);
+    return loaded.ok ? loaded.content : null;
   } catch {
-    // ignore
+    return null;
   }
-  return null;
 }
 
 /**

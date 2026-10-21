@@ -39,6 +39,7 @@ export type {
 export {
   addExtraSkillDir,
   getExtraSkillDirs,
+  pruneForeignExtraSkillDirs,
   removeExtraSkillDir,
   removePathAny,
   skillsFsAvailable,

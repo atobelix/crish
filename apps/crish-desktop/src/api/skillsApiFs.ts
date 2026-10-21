@@ -46,6 +46,43 @@ export function removeExtraSkillDir(dir: string) {
   return list;
 }
 
+const FOREIGN_APP_DIRS = new Set([
+  '.codex',
+  '.claude',
+  '.cursor',
+  '.agents',
+  '.gemini',
+]);
+
+/**
+ * 外部软件自己的目录。登记进附加目录后会污染已安装列表。
+ * 按路径分量判断，工具根目录（没有 skills 子路径）也算。
+ * 本应用技能库里若再出现同名子目录，不把它当成外部软件。
+ */
+export function isForeignExtraSkillDir(dir: string): boolean {
+  const parts = dir
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter(Boolean)
+    .map((part) => part.toLowerCase());
+  const ownedAt = parts.findIndex(
+    (part, index) =>
+      (part === '.conex' || part === '.crish') && parts[index + 1] === 'skills'
+  );
+  return parts.some(
+    (part, index) =>
+      FOREIGN_APP_DIRS.has(part) && (ownedAt === -1 || index < ownedAt)
+  );
+}
+
+/** 清掉已经登记的外部软件技能目录，避免下一次发现被它们拖垮。 */
+export function pruneForeignExtraSkillDirs(): string[] {
+  const current = getExtraSkillDirs();
+  const kept = current.filter((dir) => !isForeignExtraSkillDir(dir));
+  if (kept.length !== current.length) setExtraSkillDirs(kept);
+  return kept;
+}
+
 /* ---------- plugin-fs 探测（私有） ---------- */
 
 type PluginFsApi = {
@@ -71,12 +108,31 @@ export async function tryPluginFs(): Promise<PluginFsApi | null> {
   return (fs as NonNullable<Awaited<ReturnType<typeof tryPluginFs>>>) || null;
 }
 
+/** 读取插件方法。缺导出时返回空，避免探测本身把导入流程打断。 */
+function pluginMethod<T>(
+  fs: PluginFsApi | null,
+  name: keyof PluginFsApi
+): T | null {
+  if (!fs) return null;
+  try {
+    const method = fs[name];
+    return typeof method === 'function' ? (method as T) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function tryHomeDir(): Promise<string | null> {
-  const pathApi = (await (
-    import(/* @vite-ignore */ TAURI_PATH_PKG) as Promise<unknown>
-  ).catch(() => null)) as { homeDir?: () => Promise<string> } | null;
-  const h = pathApi?.homeDir ? await pathApi.homeDir().catch(() => null) : null;
-  return h ? String(h) : null;
+  try {
+    const pathApi = (await (
+      import(/* @vite-ignore */ TAURI_PATH_PKG) as Promise<unknown>
+    ).catch(() => null)) as { homeDir?: () => Promise<string> } | null;
+    if (!pathApi || typeof pathApi.homeDir !== 'function') return null;
+    const home = await pathApi.homeDir().catch(() => null);
+    return home ? String(home) : null;
+  } catch {
+    return null;
+  }
 }
 
 /* ---------- 列目录：plugin-fs 优先，回退 listDirectory ---------- */
@@ -85,9 +141,10 @@ export async function listDirAny(dirPath: string): Promise<FsDirEntry[]> {
   const path = dirPath.trim();
   if (!path) return [];
   const fs = await tryPluginFs();
-  if (fs?.readDir) {
+  const readDir = pluginMethod<PluginFsApi['readDir']>(fs, 'readDir');
+  if (readDir) {
     try {
-      const entries = await fs.readDir(path);
+      const entries = await readDir(path);
       return (entries || []).map((e) => {
         const name = String(e.name ?? e);
         const isDir = Boolean(e.isDirectory ?? e.isDir ?? e.children);
@@ -113,9 +170,13 @@ export async function readTextAny(
   const path = filePath.trim();
   if (!path) return null;
   const fs = await tryPluginFs();
-  if (fs?.readTextFile) {
+  const readPlugin = pluginMethod<PluginFsApi['readTextFile']>(
+    fs,
+    'readTextFile'
+  );
+  if (readPlugin) {
     try {
-      return await fs.readTextFile(path);
+      return await readPlugin(path);
     } catch {
       /* swallow-ok: 插件 fs 读取失败时回退底层 readTextFile */
     }
@@ -135,28 +196,29 @@ export async function writeTextAny(
   content: string
 ): Promise<boolean> {
   const fs = await tryPluginFs();
-  if (fs?.writeTextFile) {
-    try {
-      await fs.writeTextFile(filePath, content);
-      return true;
-    } catch {
-      return false;
-    }
+  const writePlugin = pluginMethod<PluginFsApi['writeTextFile']>(
+    fs,
+    'writeTextFile'
+  );
+  if (!writePlugin) return false;
+  try {
+    await writePlugin(filePath, content);
+    return true;
+  } catch {
+    return false;
   }
-  return false;
 }
 
 export async function mkdirAny(dirPath: string): Promise<boolean> {
   const fs = await tryPluginFs();
-  if (fs?.mkdir) {
-    try {
-      await fs.mkdir(dirPath, { recursive: true });
-      return true;
-    } catch {
-      return false;
-    }
+  const mkdir = pluginMethod<PluginFsApi['mkdir']>(fs, 'mkdir');
+  if (!mkdir) return false;
+  try {
+    await mkdir(dirPath, { recursive: true });
+    return true;
+  } catch {
+    return false;
   }
-  return false;
 }
 
 /** 删除技能副本。仅 plugin-fs 提供删除；失败时返回 false，不抛给界面。 */
@@ -167,9 +229,10 @@ export async function removePathAny(
   const target = targetPath.trim();
   if (!target) return false;
   const fs = await tryPluginFs();
-  if (!fs?.remove) return false;
+  const remove = pluginMethod<PluginFsApi['remove']>(fs, 'remove');
+  if (!remove) return false;
   try {
-    await fs.remove(target, recursive ? { recursive: true } : undefined);
+    await remove(target, recursive ? { recursive: true } : undefined);
     return true;
   } catch {
     return false;
@@ -181,6 +244,7 @@ export async function removePathAny(
 /** 开发时探测：是否具备本机文件读取能力 */
 export async function skillsFsAvailable(): Promise<boolean> {
   const fs = await tryPluginFs();
-  if (fs?.readDir && fs?.readTextFile) return true;
+  if (pluginMethod(fs, 'readDir') && pluginMethod(fs, 'readTextFile'))
+    return true;
   return Boolean(getWorkspacePath());
 }

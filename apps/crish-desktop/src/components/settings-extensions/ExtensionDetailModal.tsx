@@ -1,4 +1,5 @@
 import React from 'react';
+import { t } from '../../i18n/useI18n';
 import {
   type CatalogEntry,
   type InstalledExtension,
@@ -54,9 +55,9 @@ export function getExtensionIcon(
 }
 
 function sourceLabel(source: string): string {
-  if (source === 'official') return '官方';
-  if (source === 'community') return '三方';
-  return '本机';
+  if (source === 'official') return t('badge.official');
+  if (source === 'community') return t('badge.thirdParty');
+  return t('badge.machine');
 }
 
 export const ExtensionDetailModal: React.FC<ExtensionDetailModalProps> = ({
@@ -191,11 +192,15 @@ export const ExtensionDetailModal: React.FC<ExtensionDetailModalProps> = ({
         <div className={`${styles.bodyCoverContent} coverContent`}>
           {isImportPlugin ? (
             <div className={styles.featureCard}>
-              <div className={styles.featureCardHeader}>
-                <div className={styles.featureCardTitle}>
-                  <AppIcon name="refresh" size={16} />
-                  <span>外部对话无损导入与同步</span>
-                </div>
+              <div className={styles.featureCardTitle}>
+                <AppIcon name="refresh" size={16} />
+                <span>外部对话无损导入与同步</span>
+              </div>
+              <div className={styles.featureCardDesc}>
+                自动检测 Claude Code 与 OpenAI Codex
+                的本地对话记录，一键无损同步至 Crish，无需繁琐导出或格式迁移。
+              </div>
+              <div>
                 <Button
                   type="button"
                   variant="secondary"
@@ -207,10 +212,6 @@ export const ExtensionDetailModal: React.FC<ExtensionDetailModalProps> = ({
                 >
                   进入导入与管理
                 </Button>
-              </div>
-              <div className={styles.featureCardDesc}>
-                自动检测 Claude Code 与 OpenAI Codex
-                的本地对话记录，一键无损同步至 Crish，无需繁琐导出或格式迁移。
               </div>
             </div>
           ) : null}
