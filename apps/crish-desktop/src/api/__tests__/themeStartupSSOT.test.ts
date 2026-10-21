@@ -78,15 +78,19 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
     // T7 别名收敛后：--bg-primary 由 tokens.css 静态派生自 --surface-paper；
     // applyTokens 只写独立 surface 侧（TokenRuntimeController 合流）
     // 2026-10-10 三档底色：运行时只写 outer / main / input 三个独立源
+    // T-BLK-07b 参数化：注入名为 --user-surface-*，A 类 --surface-* 由 tokens.css 派生
     expect(
-      document.documentElement.style.getPropertyValue('--surface-main')
+      document.documentElement.style.getPropertyValue('--user-surface-main')
     ).toBe('#141414');
     expect(
-      document.documentElement.style.getPropertyValue('--surface-outer')
+      document.documentElement.style.getPropertyValue('--user-surface-outer')
     ).toBe('#1e1e1e');
     expect(
-      document.documentElement.style.getPropertyValue('--surface-input')
+      document.documentElement.style.getPropertyValue('--user-surface-input')
     ).toBe('#232323');
+    expect(
+      document.documentElement.style.getPropertyValue('--surface-main')
+    ).toBe('');
     expect(
       document.documentElement.style.getPropertyValue('--bg-tertiary')
     ).toBe('');

@@ -25,7 +25,8 @@ function readFile(relPath: string): string {
 }
 
 const TOKENS_CSS = 'src/styles/tokens.css';
-const CHAT_LIST_CSS = 'src/components/chat-message-list/ChatMessageList.module.css';
+const CHAT_LIST_CSS =
+  'src/components/chat-message-list/ChatMessageList.module.css';
 const BUTTON_CSS = 'src/components/ui/Button/Button.module.css';
 
 /* ── 顶层块扫描器（跳过 @media / @supports 等 at-rule 块） ──────────────── */
@@ -38,7 +39,8 @@ interface CssBlock {
 
 /** 只扫描顶层规则；`@` 开头的 at-rule（@media/@supports）整体跳过。 */
 function scanTopLevelBlocks(css: string): CssBlock[] {
-  const isWs = (ch: string) => ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t' || ch === '\f';
+  const isWs = (ch: string) =>
+    ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t' || ch === '\f';
   const blocks: CssBlock[] = [];
   let i = 0;
   let order = 0;
@@ -129,17 +131,31 @@ function resolveWinner(
   // 匹配前必须剥离注释：否则「; 与 token 之间隔着注释」会匹配失败
   // （实测踩坑：--border-color 前有多行注释，被误判为未定义）。
   // (?<![\w-]) 防止把 --border-color 误匹配进 --xxx-border-color 之类的更长名字。
-  const tokenRe = new RegExp(`(?<![\\w-])${token.replace(/[-]/g, '\\$&')}\\s*:\\s*([^;]+);`);
-  let best: { value: string; selector: string; order: number; spec: number } | null = null;
+  const tokenRe = new RegExp(
+    `(?<![\\w-])${token.replace(/[-]/g, '\\$&')}\\s*:\\s*([^;]+);`
+  );
+  let best: {
+    value: string;
+    selector: string;
+    order: number;
+    spec: number;
+  } | null = null;
   for (const b of blocks) {
-    const matching = b.selector.split(',').filter((s) => selectorApplies(s, ctx));
+    const matching = b.selector
+      .split(',')
+      .filter((s) => selectorApplies(s, ctx));
     if (matching.length === 0) continue;
     const decl = stripCssComments(b.body).match(tokenRe);
     if (!decl) continue;
     const spec = Math.max(...matching.map((s) => selectorSpecificity(s)));
     // `>=`：同特异性时，源码序靠后者胜（与 CSS 一致）
     if (!best || spec >= best.spec) {
-      best = { value: decl[1].trim(), selector: b.selector, order: b.order, spec };
+      best = {
+        value: decl[1].trim(),
+        selector: b.selector,
+        order: b.order,
+        spec,
+      };
     }
   }
   return best;
@@ -153,7 +169,9 @@ function stripCssComments(text: string): string {
 
 function declaresToken(body: string, token: string): boolean {
   // (?<![\w-]) 防止把 --border-color 误匹配进 --xxx-border-color 之类的更长名字
-  return new RegExp(`(?<![\\w-])${token.replace(/[-]/g, '\\$&')}\\s*:`).test(stripCssComments(body));
+  return new RegExp(`(?<![\\w-])${token.replace(/[-]/g, '\\$&')}\\s*:`).test(
+    stripCssComments(body)
+  );
 }
 
 /** 从块 body 中读取 --space-* 定义表 */
@@ -185,7 +203,13 @@ const SPACE_ORDER = [
 ];
 
 /** 密度档采样 token（覆盖 space / font-size / control 三族） */
-const DENSITY_SAMPLE_TOKENS = ['--space-1', '--space-2', '--space-3', '--font-size-xs', '--control-height'];
+const DENSITY_SAMPLE_TOKENS = [
+  '--space-1',
+  '--space-2',
+  '--space-3',
+  '--font-size-xs',
+  '--control-height',
+];
 
 const THEMES: ThemeName[] = ['light', 'dark'];
 const SIZES: UiSizeName[] = ['small', 'medium', 'large'];
@@ -196,10 +220,16 @@ describe('密度矩阵 space token 契约（BATCH-01 §4.5）', () => {
 
   // 基础/亮色块 = 声明了 --space-1 的 :root 引导块
   const baseBlock = allBlocks.find(
-    (b) => /(^|,)\s*:root\s*(,|$)/.test(b.selector) && declaresToken(b.body, '--space-1')
+    (b) =>
+      /(^|,)\s*:root\s*(,|$)/.test(b.selector) &&
+      declaresToken(b.body, '--space-1')
   );
-  const smallBlock = allBlocks.find((b) => /\[data-ui-size=['"]small['"]\]/.test(b.selector));
-  const largeBlock = allBlocks.find((b) => /\[data-ui-size=['"]large['"]\]/.test(b.selector));
+  const smallBlock = allBlocks.find((b) =>
+    /\[data-ui-size=['"]small['"]\]/.test(b.selector)
+  );
+  const largeBlock = allBlocks.find((b) =>
+    /\[data-ui-size=['"]large['"]\]/.test(b.selector)
+  );
 
   it('基础块存在且包含全部关键 --space-* token', () => {
     expect(baseBlock, '未找到声明 --space-1 的 :root 基础块').toBeDefined();
@@ -230,7 +260,9 @@ describe('密度矩阵 space token 契约（BATCH-01 §4.5）', () => {
       const px = map.get(name)!;
       expect(Number.isInteger(px), `small ${name}=${px} 非整数`).toBe(true);
       expect(px % 2, `small ${name}=${px} 为奇数`).toBe(0);
-      expect(px, `small ${name}=${px} 非单调（prev=${prev}）`).toBeGreaterThan(prev);
+      expect(px, `small ${name}=${px} 非单调（prev=${prev}）`).toBeGreaterThan(
+        prev
+      );
       prev = px;
     }
   });
@@ -246,7 +278,9 @@ describe('密度矩阵 space token 契约（BATCH-01 §4.5）', () => {
       const px = map.get(name)!;
       expect(Number.isInteger(px), `large ${name}=${px} 非整数`).toBe(true);
       expect(px % 2, `large ${name}=${px} 为奇数`).toBe(0);
-      expect(px, `large ${name}=${px} 非单调（prev=${prev}）`).toBeGreaterThan(prev);
+      expect(px, `large ${name}=${px} 非单调（prev=${prev}）`).toBeGreaterThan(
+        prev
+      );
       prev = px;
     }
   });
@@ -264,14 +298,20 @@ describe('G-CASCADE · 密度档层叠生效契约（防「定义正确却被压
     const offenders = allBlocks
       .filter((b) => /(^|\s)\[data-ui-size=/.test(b.selector))
       .map((b) => b.selector);
-    expect(offenders, `密度档选择器特异性不足：${offenders.join(' | ')}`).toEqual([]);
+    expect(
+      offenders,
+      `密度档选择器特异性不足：${offenders.join(' | ')}`
+    ).toEqual([]);
   });
 
   it('密度采样 token 在亮/暗 × 中/小/大 全组合下，级联胜出方均正确', () => {
     for (const token of DENSITY_SAMPLE_TOKENS) {
       for (const theme of THEMES) {
         // medium（html 上无 small/large 属性）→ 基础块
-        const mid = resolveWinner(allBlocks, token, { theme, uiSize: 'medium' });
+        const mid = resolveWinner(allBlocks, token, {
+          theme,
+          uiSize: 'medium',
+        });
         expect(mid, `${token} @ ${theme}/medium 应有胜出方`).not.toBeNull();
         expect(
           /(^|,)\s*:root\s*(,|$)/.test(mid!.selector),
@@ -292,15 +332,24 @@ describe('G-CASCADE · 密度档层叠生效契约（防「定义正确却被压
   });
 
   it('large 档级联计算值必须等于 large 档声明值（F5 回归锚点：--space-1 曾为 4px≠6px）', () => {
-    const largeBlock = allBlocks.find((b) => /data-ui-size=['"]large['"]/.test(b.selector));
+    const largeBlock = allBlocks.find((b) =>
+      /data-ui-size=['"]large['"]/.test(b.selector)
+    );
     expect(largeBlock).toBeDefined();
     for (const token of DENSITY_SAMPLE_TOKENS) {
-      expect(declaresToken(largeBlock!.body, token), `large 档缺少 ${token}`).toBe(true);
+      expect(
+        declaresToken(largeBlock!.body, token),
+        `large 档缺少 ${token}`
+      ).toBe(true);
       for (const theme of THEMES) {
         const w = resolveWinner(allBlocks, token, { theme, uiSize: 'large' });
-        const declared = largeBlock!.body.match(
-          new RegExp(`(?:^|;)\\s*${token.replace(/[-]/g, '\\$&')}\\s*:\\s*([^;]+);`)
-        )![1].trim();
+        const declared = largeBlock!.body
+          .match(
+            new RegExp(
+              `(?:^|;)\\s*${token.replace(/[-]/g, '\\$&')}\\s*:\\s*([^;]+);`
+            )
+          )![1]
+          .trim();
         expect(
           w!.value.replace(/\s+/g, ' '),
           `${token} @ ${theme}/large 级联值应等于 large 声明值`
@@ -310,7 +359,9 @@ describe('G-CASCADE · 密度档层叠生效契约（防「定义正确却被压
   });
 
   it('密度采样 token 不得被暗色主题块重复定义（否则主题会压制密度档）', () => {
-    const darkBlock = allBlocks.find((b) => /^html\[data-theme=['"]dark['"]\]$/.test(b.selector.trim()));
+    const darkBlock = allBlocks.find((b) =>
+      /^html\[data-theme=['"]dark['"]\]$/.test(b.selector.trim())
+    );
     expect(darkBlock, '未找到暗色主题块').toBeDefined();
     for (const token of DENSITY_SAMPLE_TOKENS) {
       expect(
@@ -333,14 +384,35 @@ describe('G-CASCADE · 密度档层叠生效契约（防「定义正确却被压
   });
 
   it('主题色级联：light 取基础块值、dark 取暗色块值（medium 档，二者必须不同）', () => {
-    for (const token of ['--text-primary', '--surface-main', '--border-color']) {
-      const light = resolveWinner(allBlocks, token, { theme: 'light', uiSize: 'medium' });
-      const dark = resolveWinner(allBlocks, token, { theme: 'dark', uiSize: 'medium' });
+    // G-CASCADE 结构契约：级联主题 token 的亮块/暗块必须在 CSS 源码级给出
+    // 不同声明值（无 JS/首帧兜底正确性）；T-BLK-07b 参数化后以
+    // var(--user-*, 本块原静态值) 字面量兜底承载 distinct。
+    for (const token of [
+      '--text-primary',
+      '--surface-main',
+      '--border-color',
+    ]) {
+      const light = resolveWinner(allBlocks, token, {
+        theme: 'light',
+        uiSize: 'medium',
+      });
+      const dark = resolveWinner(allBlocks, token, {
+        theme: 'dark',
+        uiSize: 'medium',
+      });
       expect(light, `${token} light 应有胜出方`).not.toBeNull();
       expect(dark, `${token} dark 应有胜出方`).not.toBeNull();
-      expect(/(^|,)\s*:root\s*(,|$)/.test(light!.selector), `${token} 亮色应由基础块胜出`).toBe(true);
-      expect(/data-theme=['"]dark['"]/.test(dark!.selector), `${token} 暗色应由暗色块胜出`).toBe(true);
-      expect(light!.value, `${token} 亮暗值不应相同（否则主题失效）`).not.toBe(dark!.value);
+      expect(
+        /(^|,)\s*:root\s*(,|$)/.test(light!.selector),
+        `${token} 亮色应由基础块胜出`
+      ).toBe(true);
+      expect(
+        /data-theme=['"]dark['"]/.test(dark!.selector),
+        `${token} 暗色应由暗色块胜出`
+      ).toBe(true);
+      expect(light!.value, `${token} 亮暗值不应相同（否则主题失效）`).not.toBe(
+        dark!.value
+      );
     }
   });
 });
@@ -374,7 +446,11 @@ describe('Button 圆角 7px 用户锁契约（U1 · 2026-09-11 起经 --radius-b
     const offenders = scanTopLevelBlocks(tokensCss)
       .filter((b) => !/(^|,)\s*:root\s*(,|$)/.test(b.selector))
       .filter((b) => /data-ui-size|data-theme|data-perf-tier/.test(b.selector))
-      .filter((b) => /(?<![\w-])--(button-radius|radius-btn)\s*:/.test(stripCssComments(b.body)))
+      .filter((b) =>
+        /(?<![\w-])--(button-radius|radius-btn)\s*:/.test(
+          stripCssComments(b.body)
+        )
+      )
       .map((b) => b.selector);
     expect(offenders, `U1 用户锁被覆写：${offenders.join(' | ')}`).toEqual([]);
   });

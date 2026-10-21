@@ -32,17 +32,15 @@ export {
   ensureFontsLoaded,
 } from './fontStoreCatalog';
 export { scanSystemFonts } from './fontStoreScan';
-import { ensureFontsLoaded, uiFontOptions, monoFontOptions } from './fontStoreCatalog';
+import {
+  ensureFontsLoaded,
+  uiFontOptions,
+  monoFontOptions,
+} from './fontStoreCatalog';
 import { preferencesClient } from './preferences/preferencesClient';
 
 export type PlatformId =
-  | 'windows'
-  | 'macos'
-  | 'linux'
-  | 'ios'
-  | 'android'
-  | 'harmony'
-  | 'unknown';
+  'windows' | 'macos' | 'linux' | 'ios' | 'android' | 'harmony' | 'unknown';
 
 /** 内嵌 UI 字体 id（免费 OFL） */
 export type EmbeddedUiFontId = 'inter' | 'ibm-plex-sans';
@@ -56,16 +54,14 @@ export type EmbeddedMonoFontId = 'jetbrains-mono' | 'ibm-plex-mono';
  * - inter / ibm-plex-sans: 内嵌
  * - local:Family: 本机字体族名
  */
-export type UiFontChoice = 'auto' | 'system-ui' | EmbeddedUiFontId | `local:${string}`;
+export type UiFontChoice =
+  'auto' | 'system-ui' | EmbeddedUiFontId | `local:${string}`;
 
 /**
  * 代码字体选择
  */
 export type MonoFontChoice =
-  | 'auto'
-  | 'system-mono'
-  | EmbeddedMonoFontId
-  | `local:${string}`;
+  'auto' | 'system-mono' | EmbeddedMonoFontId | `local:${string}`;
 
 export interface FontPreferences {
   uiFont: UiFontChoice;
@@ -91,7 +87,11 @@ export interface FontOptionMeta {
   desc?: string;
 }
 
-export type LocalFontEntry = { family: string; fullName?: string; style?: string };
+export type LocalFontEntry = {
+  family: string;
+  fullName?: string;
+  style?: string;
+};
 
 /* ---------- prefs IO ---------- */
 
@@ -139,23 +139,34 @@ export function persistFonts(prefs: FontPreferences): void {
 
 /* ---------- apply ---------- */
 
-export function applyFontStacks(prefs: FontPreferences, platform: PlatformId = detectPlatform()): void {
+export function applyFontStacks(
+  prefs: FontPreferences,
+  platform: PlatformId = detectPlatform()
+): void {
   const p = normalizeFontPrefs(prefs);
   const html = document.documentElement;
   const uiStack = resolveUiStack(p.uiFont, platform);
   const monoStack = resolveMonoStack(p.monoFont, platform);
   const lig = p.monoLigatures ? '"calt" 1, "liga" 1' : '"calt" 0, "liga" 0';
 
-  html.style.setProperty('--font-sans', uiStack);
-  html.style.setProperty('--font-mono', monoStack);
+  // T-BLK-07b 参数化：--font-sans/--font-mono 是 A 类设计 token，JS 不再直写；
+  // 只写 --user-* 运行期参数（B 类登记），tokens.css 以 var(--user-font-*) 派生。
+  html.style.setProperty('--user-font-sans', uiStack);
+  html.style.setProperty('--user-font-mono', monoStack);
   html.style.setProperty('--font-mono-features', lig);
   // T7 别名收敛（2026-09-12）：--md-font-family/--md-font-sans/--md-text-font/
   // --md-font-mono/--md-code-font/--sep-font-sans/--sep-font-mono 不再由 JS 写入——
   // tokens.css 静态已改为 var(--font-sans/--font-mono, 兜底栈) 派生，用户字体偏好
   // 经 --font-sans/--font-mono 单点流入全部字体消费族。
 
-  html.setAttribute('data-ui-font', p.uiFont.startsWith('local:') ? 'local' : p.uiFont);
-  html.setAttribute('data-mono-font', p.monoFont.startsWith('local:') ? 'local' : p.monoFont);
+  html.setAttribute(
+    'data-ui-font',
+    p.uiFont.startsWith('local:') ? 'local' : p.uiFont
+  );
+  html.setAttribute(
+    'data-mono-font',
+    p.monoFont.startsWith('local:') ? 'local' : p.monoFont
+  );
   html.setAttribute('data-platform', platform);
   if (isLocalFontChoice(p.uiFont)) {
     html.setAttribute('data-ui-font-local', localFontFamily(p.uiFont));
@@ -186,34 +197,42 @@ export function bootstrapFonts(): FontPreferences {
 
 /** 设置页：应用 + 持久化 + 事件 */
 export async function setFontPreferences(
-  partial: Partial<FontPreferences>,
+  partial: Partial<FontPreferences>
 ): Promise<FontPreferences> {
   const next = normalizeFontPrefs({ ...readStoredFonts(), ...partial });
   await ensureFontsLoaded(next);
   applyFontStacks(next);
   persistFonts(next);
   try {
-    window.dispatchEvent(new CustomEvent('crish-fonts-changed', { detail: next }));
+    window.dispatchEvent(
+      new CustomEvent('crish-fonts-changed', { detail: next })
+    );
   } catch {
     /* swallow-ok: 字体变更事件分发失败不影响已应用样式 */
   }
   return next;
 }
 
-export function describeActiveUi(prefs: FontPreferences = readStoredFonts()): string {
+export function describeActiveUi(
+  prefs: FontPreferences = readStoredFonts()
+): string {
   const plat = platformLabel();
   if (prefs.uiFont === 'auto') return `${plat} · 系统界面字体`;
   if (prefs.uiFont === 'system-ui') return 'system-ui';
-  if (isLocalFontChoice(prefs.uiFont)) return `本机 · ${localFontFamily(prefs.uiFont)}`;
+  if (isLocalFontChoice(prefs.uiFont))
+    return `本机 · ${localFontFamily(prefs.uiFont)}`;
   const opt = uiFontOptions().find((o) => o.id === prefs.uiFont);
   return opt?.label || prefs.uiFont;
 }
 
-export function describeActiveMono(prefs: FontPreferences = readStoredFonts()): string {
+export function describeActiveMono(
+  prefs: FontPreferences = readStoredFonts()
+): string {
   const plat = platformLabel();
   if (prefs.monoFont === 'auto') return `${plat} · 系统等宽字体`;
   if (prefs.monoFont === 'system-mono') return '系统等宽';
-  if (isLocalFontChoice(prefs.monoFont)) return `本机 · ${localFontFamily(prefs.monoFont)}`;
+  if (isLocalFontChoice(prefs.monoFont))
+    return `本机 · ${localFontFamily(prefs.monoFont)}`;
   const opt = monoFontOptions().find((o) => o.id === prefs.monoFont);
   return opt?.label || prefs.monoFont;
 }

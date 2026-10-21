@@ -196,6 +196,11 @@ export class TokenRuntimeController {
       tokens['--user-border-color'] = paint.borderColor;
       tokens['--user-border-subtle'] = paint.borderSubtle;
       tokens['--user-control-mix-color'] = paint.mixColor;
+      // 语义 soft 底：一律引用 tokens.css 固定纯色（heson 2026-10-11：混色发脏）。
+      // G-CASCADE 引用面契约：adaptive soft 底只引用固定语义 token，不得指向 --user-*。
+      // 值为常量引用（非 A 类字面量），tokens.css 静态声明同名同值，双源同值。
+      tokens['--accent-green-light-adaptive'] = 'var(--success-soft-bg)';
+      tokens['--accent-red-light-adaptive'] = 'var(--danger-soft-bg)';
 
       // 滚动条主题色与微调按钮 SVG（warm-gray 皮肤走 tokens.css 静态 SSOT，不注入）
       Object.assign(

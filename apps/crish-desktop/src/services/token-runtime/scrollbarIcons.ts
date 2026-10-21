@@ -25,8 +25,11 @@ function makeScrollbarArrowSvg(
 }
 
 /**
- * 派生滚动条 Token（滑块融合色 + 微调三角按钮动态 SVG）。
- * warm-gray 皮肤走 tokens.css 静态权威 SSOT，不注入任何滚动条 Token。
+ * 派生滚动条运行期参数（滑块融合 fg + 微调三角按钮动态 SVG）。
+ * T-BLK-07b 参数化：返回值全部是 --user-* 参数（B 类登记），A 类
+ * --scrollbar-thumb-bg/active 与 --scrollbar-button-* 由 tokens.css 静态兜底 +
+ * data-scrollbar-tint 门控的 CSS color-mix 派生。
+ * warm-gray 皮肤走 tokens.css 静态权威 SSOT，不写任何参数（并清除 tinted 门控）。
  */
 export function buildScrollbarTokens(params: {
   skinKey: string;
@@ -36,70 +39,64 @@ export function buildScrollbarTokens(params: {
   const { skinKey, isDark, finalFg } = params;
   const tokens: Record<string, string> = {};
 
-  // 滚动条主题色融合：在各类皮肤下自然融入当前主题色相，杜绝孤立突兀的灰白硬块
+  // 滚动条主题色融合：在各类皮肤下自然融入当前主题色相，杜绝孤立突兀的灰白硬块。
+  // 滑块色由 CSS 以 var(--user-scrollbar-fg) 派生（明 13%/58%、暗 16%/48%），
+  // JS 不再拼 color-mix 字符串。
   if (skinKey === 'warm-gray') {
     // 暖灰皮肤（默认浅色纸温）走 tokens.css 静态权威 SSOT（降低灰度的 #dedddc 与深沉激活态 #6b6a69）
-    // 按钮 SVG 同步继承 tokens.css 权威满宽平滑大圆角矢量，不向 root.style 写入内联覆盖
-  } else if (isDark) {
-    tokens['--scrollbar-thumb-bg'] =
-      `color-mix(in srgb, ${finalFg} 16%, transparent)`;
-    tokens['--scrollbar-thumb-active'] =
-      `color-mix(in srgb, ${finalFg} 48%, transparent)`;
+    // 按钮 SVG 同步继承 tokens.css 权威满宽平滑大圆角矢量，不向 root.style 写入参数
   } else {
-    tokens['--scrollbar-thumb-bg'] =
-      `color-mix(in srgb, ${finalFg} 13%, transparent)`;
-    tokens['--scrollbar-thumb-active'] =
-      `color-mix(in srgb, ${finalFg} 58%, transparent)`;
-  }
+    tokens['--user-scrollbar-fg'] = finalFg;
 
-  // 滚动条微调三角按钮动态 SVG Token 化：在非 warm-gray 自定义皮肤下与当前滑块颜色深度契合
-  if (skinKey !== 'warm-gray') {
+    // 滚动条微调三角按钮：::-webkit-scrollbar-button 伪元素仅支持 background
+    // 白名单属性（不支持 mask/calc 换色），SVG 序列化保留在 JS——finalFg 纯透传
+    // + 固定 opacity，与旧实现逐字节同串；A 类 token 由 tokens.css var(--user-*, 静态) 派生。
     const btnNormalOp = isDark ? '0.16' : '0.13';
     const btnActiveOp = isDark ? '0.48' : '0.58';
 
-    tokens['--scrollbar-button-up'] = makeScrollbarArrowSvg(
+    tokens['--user-scrollbar-button-up'] = makeScrollbarArrowSvg(
       SCROLLBAR_UP_PATH,
       '0 0 10 7',
       finalFg,
       btnNormalOp
     );
-    tokens['--scrollbar-button-down'] = makeScrollbarArrowSvg(
+    tokens['--user-scrollbar-button-down'] = makeScrollbarArrowSvg(
       SCROLLBAR_DOWN_PATH,
       '0 0 10 7',
       finalFg,
       btnNormalOp
     );
-    tokens['--scrollbar-button-left'] = makeScrollbarArrowSvg(
+    tokens['--user-scrollbar-button-left'] = makeScrollbarArrowSvg(
       SCROLLBAR_LEFT_PATH,
       '0 0 7 10',
       finalFg,
       btnNormalOp
     );
-    tokens['--scrollbar-button-right'] = makeScrollbarArrowSvg(
+    tokens['--user-scrollbar-button-right'] = makeScrollbarArrowSvg(
       SCROLLBAR_RIGHT_PATH,
       '0 0 7 10',
       finalFg,
       btnNormalOp
     );
-    tokens['--scrollbar-button-up-active'] = makeScrollbarArrowSvg(
+    tokens['--user-scrollbar-button-up-active'] = makeScrollbarArrowSvg(
       SCROLLBAR_UP_PATH,
       '0 0 10 7',
       finalFg,
       btnActiveOp
     );
-    tokens['--scrollbar-button-down-active'] = makeScrollbarArrowSvg(
+    tokens['--user-scrollbar-button-down-active'] = makeScrollbarArrowSvg(
       SCROLLBAR_DOWN_PATH,
       '0 0 10 7',
       finalFg,
       btnActiveOp
     );
-    tokens['--scrollbar-button-left-active'] = makeScrollbarArrowSvg(
+    tokens['--user-scrollbar-button-left-active'] = makeScrollbarArrowSvg(
       SCROLLBAR_LEFT_PATH,
       '0 0 7 10',
       finalFg,
       btnActiveOp
     );
-    tokens['--scrollbar-button-right-active'] = makeScrollbarArrowSvg(
+    tokens['--user-scrollbar-button-right-active'] = makeScrollbarArrowSvg(
       SCROLLBAR_RIGHT_PATH,
       '0 0 7 10',
       finalFg,

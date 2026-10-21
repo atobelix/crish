@@ -97,6 +97,17 @@ export function injectRootTokens(args: {
       '--user-control-mix-color',
       tokens['--user-control-mix-color']
     );
+  // 语义 soft 底接线：固定语义色引用（常量，非 A 类字面量；registry B 类登记）
+  if (tokens['--accent-green-light-adaptive'])
+    root.style.setProperty(
+      '--accent-green-light-adaptive',
+      tokens['--accent-green-light-adaptive']
+    );
+  if (tokens['--accent-red-light-adaptive'])
+    root.style.setProperty(
+      '--accent-red-light-adaptive',
+      tokens['--accent-red-light-adaptive']
+    );
   // T-BLK-07b：--accent-green/red-light-adaptive 不再注入 —— JS 写的是常量
   // var(--success-soft-bg)/var(--danger-soft-bg)，与 tokens.css 静态声明完全
   // 同值（明/暗两块），JS 再写即同值多写。

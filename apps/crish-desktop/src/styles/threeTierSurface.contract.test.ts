@@ -39,12 +39,33 @@ describe('三档底色契约', () => {
     ['dark', dark],
   ] as const) {
     it(`${theme}: 只有三个字面底色，且由外到内各不相同`, () => {
-      const outer = decl(b, '--surface-outer');
-      const main = decl(b, '--surface-main');
-      const input = decl(b, '--surface-input');
+      // T-BLK-07b：三档字面值移入 --user-surface-* 参数声明（B 类，JS 运行时覆盖），
+      // A 类三档声明为 var(--user-*, 本块原静态值) 字面量兜底派生；
+      // 本断言钉死参数声明字面值与派生形态（含 fallback 同值）
+      const outer = decl(b, '--user-surface-outer');
+      const main = decl(b, '--user-surface-main');
+      const input = decl(b, '--user-surface-input');
       for (const v of [outer, main, input]) expect(v).toMatch(/^(#|hsl\()/);
       expect(new Set([outer, main, input]).size).toBe(
         theme === 'light' ? 2 : 3
+      );
+      // G-CASCADE 结构契约：A 类三档声明以 var(--user-*, 本块原静态值) 字面量
+      // 兜底承载亮暗 distinct（无 JS/首帧兜底正确性）；字面值仍唯一钉在
+      // --user-surface-* 参数声明上，fallback 与其同值。
+      const fallback = (name: string, hex: string) =>
+        `var(--user-${name.slice(2)}, ${hex})`;
+      const fb =
+        theme === 'light'
+          ? { outer: '#f2f1f0', main: '#ffffff', input: '#ffffff' }
+          : { outer: '#1e1e1e', main: '#141414', input: '#232323' };
+      expect(decl(b, '--surface-outer')).toBe(
+        fallback('--surface-outer', fb.outer)
+      );
+      expect(decl(b, '--surface-main')).toBe(
+        fallback('--surface-main', fb.main)
+      );
+      expect(decl(b, '--surface-input')).toBe(
+        fallback('--surface-input', fb.input)
       );
     });
 
@@ -96,12 +117,13 @@ describe('三档底色契约', () => {
   }
 
   it('浅色三档 = heson 实测值；激活标签 = 输入档', () => {
-    expect(decl(light, '--surface-outer')).toBe('#f2f1f0'); // K5（10-11 由 K4 加深）
+    // T-BLK-07b：字面实测值现在钉在 --user-surface-* 参数声明上
+    expect(decl(light, '--user-surface-outer')).toBe('#f2f1f0'); // K5（10-11 由 K4 加深）
     expect(decl(light, '--user-bubble-bg')).toBe('#eeedec');
-    expect(decl(dark, '--surface-outer')).toBe('#1e1e1e');
+    expect(decl(dark, '--user-surface-outer')).toBe('#1e1e1e');
     expect(decl(dark, '--user-bubble-bg')).toBe('var(--elevate-2)');
-    expect(decl(light, '--surface-main')).toBe('#ffffff');
-    expect(decl(light, '--surface-input')).toBe('#ffffff');
+    expect(decl(light, '--user-surface-main')).toBe('#ffffff');
+    expect(decl(light, '--user-surface-input')).toBe('#ffffff');
     expect(decl(light, '--tab-active-bg')).toBe('var(--surface-input)');
     // 深色元素底色：一律「所在层 + 提亮墨」派生，随皮肤走，纯净不偏色（2026-10-12 净化收敛）
     expect(decl(dark, '--element-ink')).toBe('var(--text-primary)');

@@ -51,16 +51,21 @@ describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
       const expOuter = exp.outer;
 
       // T7 别名收敛（2026-09-12）：`--bg-*` 不再由 JS 注入，改由 tokens.css
-      // 从 `--surface-*` 派生（tokens.css:51-56）。故注入面断言必须落在
-      // 真源变量名上——TokenRuntimeController.ts:437-439 的
-      // bgPrimary→--surface-paper / bgSecondary→--surface-chrome /
-      // bgCard→--surface-card 是一一对应，语义未变，仅注入名变更。
-      // `--shell-chrome-bg` 仍是 JS 直注（同文件 :446），保持原名。
-      // 2026-10-10 三档底色：运行时只注入 --surface-outer / --surface-main / --surface-input，
+      // 从 `--surface-*` 派生（tokens.css:51-56）。
+      // 2026-10-10 三档底色：运行时只注入 outer / main / input 三个独立源。
+      // T-BLK-07b 参数化：A 类值不再由 JS 直写，注入名改为 --user-surface-*（B 类登记），
+      // --surface-main/outer/input 由 tokens.css var(--user-surface-*, 静态兜底) 派生；
       // surface-chrome/paper/card、shell-chrome-bg 均为 tokens.css 别名，不得再被 JS 注入。
-      expect(root.style.getPropertyValue('--surface-main')).toBe(expMain);
-      expect(root.style.getPropertyValue('--surface-outer')).toBe(expOuter);
-      expect(root.style.getPropertyValue('--surface-input')).toBe('#ffffff');
+      expect(root.style.getPropertyValue('--user-surface-main')).toBe(expMain);
+      expect(root.style.getPropertyValue('--user-surface-outer')).toBe(
+        expOuter
+      );
+      expect(root.style.getPropertyValue('--user-surface-input')).toBe(
+        '#ffffff'
+      );
+      expect(root.style.getPropertyValue('--surface-main')).toBe('');
+      expect(root.style.getPropertyValue('--surface-outer')).toBe('');
+      expect(root.style.getPropertyValue('--surface-input')).toBe('');
       expect(root.style.getPropertyValue('--shell-chrome-bg')).toBe('');
       expect(root.style.getPropertyValue('--surface-chrome')).toBe('');
       expect(root.style.getPropertyValue('--surface-card')).toBe('');
@@ -85,8 +90,10 @@ describe('warm-gray 三级表面（侧栏约 5% 灰）', () => {
       },
       'default'
     );
-    // T7 别名收敛：注入面真源为 `--surface-chrome`（tokens.css:52 派生 --bg-secondary）
-    expect(root.style.getPropertyValue('--surface-outer')).toBe('#f2f1f0');
+    // T7 别名收敛 + T-BLK-07b 参数化：注入面真源为 --user-surface-outer
+    // （tokens.css 由 var(--user-surface-outer, 静态兜底) 派生 --surface-outer → --bg-secondary）
+    expect(root.style.getPropertyValue('--user-surface-outer')).toBe('#f2f1f0');
+    expect(root.style.getPropertyValue('--surface-outer')).toBe('');
     expect(root.style.getPropertyValue('--shell-chrome-bg')).toBe('');
     expect(root.style.getPropertyValue('--bg-secondary')).toBe('');
   });

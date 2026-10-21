@@ -102,6 +102,8 @@ describe('固定语义色契约', () => {
     expect(runtime).not.toMatch(
       /color-mix\(in srgb, var\(--accent-(green|red)\)/
     );
+    // G-CASCADE 引用面契约：adaptive soft 底值恒为常量引用，指向固定语义
+    // token，严禁改指 --user-*；tokens.css 明/暗两块静态声明同名同值兜底。
     expect(runtime).toContain("'var(--success-soft-bg)'");
     expect(runtime).toContain("'var(--danger-soft-bg)'");
   });

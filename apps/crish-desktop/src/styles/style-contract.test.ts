@@ -432,7 +432,11 @@ describe('批次 2 · ⑤ !important ratchet', () => {
 });
 
 describe('批次 2 · ⑥ 注入 token 名 ∈ 静态定义名（双层同源约束 1）', () => {
-  it('themeStore setProperty 注入的每个 token 在 tokens.css 有静态定义', () => {
+  it('themeStore setProperty 注入的每个 token 在 tokens.css 有静态定义或静态消费', () => {
+    // T-BLK-07b 参数化：JS 只允许写两类名字——
+    //   ① tokens.css 有静态声明的（B 类运行期量，如 --font-size-adjust）；
+    //   ② 被 tokens.css 静态消费的 --user-* 参数（A 类值由 var(--user-*, 兜底) 派生）。
+    // 孤儿注入（写而无声明、无消费）仍然被本断言拦截。
     const themeStore =
       readFile('src/api/themeStore.ts') +
       '\n' +
@@ -443,13 +447,21 @@ describe('批次 2 · ⑥ 注入 token 名 ∈ 静态定义名（双层同源约
       readFile('src/services/token-runtime/injectRootTokens.ts');
     const injected = [
       ...new Set(
-        [...themeStore.matchAll(/setProperty\('(--[\w-]+)'/g)].map((m) => m[1])
+        // \s*：注入名换行书写（injectRootTokens 多行 setProperty）也计入
+        [...themeStore.matchAll(/setProperty\(\s*'(--[\w-]+)'/g)].map(
+          (m) => m[1]
+        )
       ),
     ];
     expect(injected.length).toBeGreaterThan(10);
-    const staticCss = readFile('src/styles/tokens.css');
-    const missing = injected.filter((name) => !staticCss.includes(`${name}:`));
-    expect(missing, `注入但无静态定义：${missing.join(', ')}`).toEqual([]);
+    // 去空白后匹配：tokens.css 的声明与消费存在多行形态
+    // （`var(\n  --user-scrollbar-button-up,` / `--user-xxx:\n  值`）。
+    const staticCss = readFile('src/styles/tokens.css').replace(/\s+/g, '');
+    const missing = injected.filter(
+      (name) =>
+        !staticCss.includes(`${name}:`) && !staticCss.includes(`var(${name}`)
+    );
+    expect(missing, `注入但无静态定义/消费：${missing.join(', ')}`).toEqual([]);
   });
 });
 
