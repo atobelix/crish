@@ -74,7 +74,7 @@
   align-items: center;
   pointer-events: auto;
   opacity: 0;
-  transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity var(--duration-fast) var(--ease-standard);
   z-index: 2;
   user-select: none;
 }
@@ -93,7 +93,7 @@
   align-items: center;
   pointer-events: auto;
   opacity: 0;
-  transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity var(--duration-fast) var(--ease-standard);
   z-index: 2;
   user-select: none;
 }
@@ -111,14 +111,18 @@
   margin: 0;
   border: none;
   background: transparent; /* 绝无方块底色！ */
-  color: var(--scrollbar-thumb-bg); /* 静止态继承未激活滑块色 #eae8e6 (或 tokens 变量) */
+  color: var(
+    --scrollbar-thumb-bg
+  ); /* 静止态继承未激活滑块色 #eae8e6 (或 tokens 变量) */
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   outline: none;
   border-radius: var(--radius-xs);
-  transition: color 120ms ease, opacity 120ms ease;
+  transition:
+    color 120ms ease,
+    opacity 120ms ease;
   user-select: none;
   touch-action: none;
 }

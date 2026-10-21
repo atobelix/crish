@@ -1,8 +1,19 @@
+import { TAB_HEIGHT_PX, TAB_WIDTH_MAX_PX } from '../../utils/tabStripGeometry';
 import {
+  SESSION_TAB_INDICATOR_W,
   SESSION_TAB_STRIP_SHIFT_EASE,
   SESSION_TAB_STRIP_SHIFT_MS,
 } from './sessionTabDragFeel';
 import styles from './sessionTabDrag.module.css';
+
+const GHOST_MIN_W = 60;
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof matchMedia === 'function' &&
+    matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
 
 export function readTranslateX(el: HTMLElement): number {
   const tr = getComputedStyle(el).transform;
@@ -77,9 +88,10 @@ export function shiftStripTabs(
   tabs: CollectedStripData['tabs'],
   offsets: readonly number[]
 ) {
+  const ms = prefersReducedMotion() ? 0 : SESSION_TAB_STRIP_SHIFT_MS;
   tabs.forEach((r, i) => {
     const offset = offsets[i] ?? 0;
-    r.el.style.transition = `transform ${SESSION_TAB_STRIP_SHIFT_MS}ms ${SESSION_TAB_STRIP_SHIFT_EASE}`;
+    r.el.style.transition = `transform ${ms}ms ${SESSION_TAB_STRIP_SHIFT_EASE}`;
     r.el.style.transform = offset !== 0 ? `translateX(${offset}px)` : '';
   });
 }
@@ -88,10 +100,43 @@ export function posIndicator(
   el: HTMLDivElement,
   box: { left: number; top: number; width: number; height: number }
 ) {
-  el.style.left = `${box.left}px`;
-  el.style.top = `${box.top}px`;
-  el.style.width = `${box.width}px`;
-  el.style.height = `${box.height}px`;
+  const hidden = el.style.display === 'none' || el.style.display === '';
+  const left = `${box.left}px`;
+  const top = `${box.top}px`;
+  const width = `${box.width}px`;
+  const height = `${box.height}px`;
+  if (
+    !hidden &&
+    el.style.left === left &&
+    el.style.top === top &&
+    el.style.width === width &&
+    el.style.height === height
+  ) {
+    return;
+  }
+  el.style.display = 'flex';
+  el.style.left = left;
+  el.style.top = top;
+  el.style.width = width;
+  el.style.height = height;
+  if (!hidden) return;
+  el.style.transition = 'none';
+  el.style.opacity = '0';
+  // 双帧：先提交透明帧，再交还样式表过渡，避免同帧清掉透明度导致淡入被吃掉。
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (!el.isConnected || el.style.display === 'none') return;
+      el.style.transition = '';
+      el.style.opacity = '';
+    });
+  });
+}
+
+export function concealIndicator(el: HTMLDivElement | null): void {
+  if (!el) return;
+  el.style.display = 'none';
+  el.style.opacity = '';
+  el.style.transition = '';
 }
 
 export function createIndicator(title: string): HTMLDivElement {
@@ -116,10 +161,11 @@ export const ghostClasses = {
   detached: styles.detached || '',
 };
 
-/** ghost 宽度跟源 tab；class 用 tree-drag-card，配合 is-detached。 */
+/** 浮卡尺寸跟源标签；外观走样式表。class 保留 tree-drag-card，配合 is-detached。 */
 export function createGhostPill(
   title: string,
-  sourceWidth?: number
+  sourceWidth?: number,
+  sourceHeight?: number
 ): HTMLDivElement {
   const ghost = document.createElement('div');
   const moduleClass = styles.card || '';
@@ -127,33 +173,20 @@ export function createGhostPill(
   ghost.setAttribute('aria-hidden', 'true');
   const computedWidth =
     sourceWidth && sourceWidth > 0
-      ? Math.min(Math.max(sourceWidth, 60), 180)
-      : 150;
+      ? Math.min(Math.max(sourceWidth, GHOST_MIN_W), TAB_WIDTH_MAX_PX)
+      : SESSION_TAB_INDICATOR_W;
+  const computedHeight =
+    sourceHeight && sourceHeight > 0 ? Math.round(sourceHeight) : TAB_HEIGHT_PX;
   ghost.style.cssText = [
     'position: fixed',
     'left: 0',
     'top: 0',
     'pointer-events: none',
-    'z-index: 100000',
     'box-sizing: border-box',
-    'height: 26px',
     `width: ${Math.round(computedWidth)}px`,
-    'max-width: 180px',
-    'min-width: 60px',
-    'padding: 0 8px',
-    'display: flex',
-    'align-items: center',
-    'background: var(--bg-card)',
-    'color: var(--text-primary)',
-    'border: 1px solid var(--border-subtle)',
-    'border-radius: 6px',
-    'box-shadow: 0 8px 24px hsl(0 0% 0% / 0.14), 0 2px 6px hsl(0 0% 0% / 0.08)',
-    'font-size: 12px',
-    'font-weight: 500',
-    'font-family: inherit',
-    'overflow: hidden',
-    'will-change: transform, opacity',
+    `height: ${computedHeight}px`,
     'transform: translate3d(-9999px, -9999px, 0)',
+    'opacity: 0',
   ].join(';');
 
   const titleSpan = document.createElement('span');
@@ -168,6 +201,12 @@ export function createGhostPill(
   ghost.appendChild(titleSpan);
 
   document.body.appendChild(ghost);
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (!ghost.isConnected) return;
+      ghost.style.opacity = '';
+    });
+  });
   return ghost;
 }
 

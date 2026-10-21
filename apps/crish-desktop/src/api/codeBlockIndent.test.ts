@@ -87,14 +87,12 @@ describe('applyCodeBlockIndentToDocument', () => {
   it('写入 CSS 变量与 data-code-indent', () => {
     applyCodeBlockIndentToDocument('    ');
     expect(
-      document.documentElement.style.getPropertyValue('--md-code-tab-size')
+      document.documentElement.style.getPropertyValue('--user-md-code-tab-size')
     ).toBe('4');
-    expect(document.documentElement.getAttribute('data-code-indent')).toBe(
-      '4'
-    );
+    expect(document.documentElement.getAttribute('data-code-indent')).toBe('4');
     applyCodeBlockIndentToDocument('\t');
     expect(
-      document.documentElement.style.getPropertyValue('--md-code-tab-size')
+      document.documentElement.style.getPropertyValue('--user-md-code-tab-size')
     ).toBe('4');
     expect(document.documentElement.getAttribute('data-code-indent')).toBe(
       'tab'

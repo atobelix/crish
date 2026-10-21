@@ -1,9 +1,16 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   SESSION_PANE_EDGE,
   SESSION_TAB_DRAG_THRESHOLD_L1,
+  SESSION_TAB_INDICATOR_EASE,
+  SESSION_TAB_INDICATOR_GEOM_MS,
   SESSION_TAB_INDICATOR_H,
   SESSION_TAB_INDICATOR_W,
+  SESSION_TAB_STRIP_SHIFT_EASE,
+  SESSION_TAB_STRIP_SHIFT_MS,
   SESSION_TAB_STRIP_SHIFT_PX,
   computeSessionTabInsertIndex,
   computeStripTabOffsets,
@@ -177,3 +184,27 @@ describe('computeStripTabOffsets 让位位移数学模型', () => {
   });
 });
 
+describe('拖拽落区颜色与减速动效', () => {
+  const css = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), 'sessionTabDrag.module.css'),
+    'utf8'
+  );
+
+  it('让位与落区形变使用常规时长和减速曲线', () => {
+    expect(SESSION_TAB_STRIP_SHIFT_MS).toBe(200);
+    expect(SESSION_TAB_INDICATOR_GEOM_MS).toBe(200);
+    expect(SESSION_TAB_STRIP_SHIFT_EASE).toBe('cubic-bezier(0.2, 0, 0, 1)');
+    expect(SESSION_TAB_INDICATOR_EASE).toBe(SESSION_TAB_STRIP_SHIFT_EASE);
+  });
+
+  it('落区是品牌绿实色且无虚线边框', () => {
+    expect(css).toContain(
+      'color-mix(in srgb, var(--brand-primary) 18%, transparent)'
+    );
+    expect(css).toContain('border: none');
+    expect(css).not.toContain('dashed');
+    expect(css).toContain('var(--ease-decelerate)');
+    expect(css).toContain('var(--duration-normal)');
+    expect(css).not.toMatch(/cubic-bezier\s*\(/);
+  });
+});

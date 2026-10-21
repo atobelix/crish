@@ -103,6 +103,6 @@
   box-shadow: var(--sep-shadow);
   padding: 4px;
   transform-origin: left top;
-  animation: crish-popover-enter 120ms var(--ease-emphasized) forwards;
+  animation: crish-popover-enter var(--transition-popover-enter) forwards;
   will-change: transform, opacity;
 }

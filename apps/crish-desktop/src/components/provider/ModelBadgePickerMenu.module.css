@@ -92,7 +92,9 @@
   border-radius: var(--radius-s);
   cursor: pointer;
   padding: 0;
-  transition: background var(--transition-micro, 100ms ease), color var(--transition-micro, 100ms ease);
+  transition:
+    background var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease);
 }
 
 .settingsBtn:hover,
@@ -137,7 +139,9 @@
   cursor: pointer;
   font-family: inherit;
   text-align: left;
-  transition: background-color var(--transition-micro, 100ms ease), color var(--transition-micro, 100ms ease);
+  transition:
+    background-color var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease);
   color: var(--text-primary);
   box-sizing: border-box;
 }
@@ -282,7 +286,9 @@
   font-family: inherit;
   font-size: 12px;
   color: var(--text-secondary);
-  transition: background var(--transition-micro, 100ms ease), color var(--transition-micro, 100ms ease);
+  transition:
+    background var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease);
 }
 
 .advancedTrigger:hover,
@@ -293,7 +299,7 @@
 
 .advancedChevron {
   color: var(--text-tertiary);
-  transition: transform var(--transition-micro, 150ms ease);
+  transition: transform var(--transition-chevron);
 }
 
 .advancedChevron.rotated {
@@ -305,7 +311,7 @@
   flex-direction: column;
   gap: 2px;
   padding: 4px 2px 2px;
-  animation: crish-popover-enter var(--transition-micro, 150ms ease) forwards;
+  animation: crish-popover-enter var(--transition-popover-enter) forwards;
 }
 
 .advancedItem,
@@ -324,7 +330,9 @@
   color: var(--text-secondary);
   cursor: pointer;
   text-align: left;
-  transition: background var(--transition-micro, 100ms ease), color var(--transition-micro, 100ms ease);
+  transition:
+    background var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease);
 }
 
 .advancedItem:hover,

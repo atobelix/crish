@@ -55,6 +55,9 @@ export interface SettingsStore {
   setAppSettings: (settings: Settings | null) => void;
   setScheduledTasks: (tasks: CronJob[]) => void;
   setMcpServers: (servers: McpServer[]) => void;
+  /** 用户改过名单之后，刷新和遥测不能再用另一份数组把刚导入的服务冲掉。 */
+  mcpRosterEpoch: number;
+  lockMcpRoster: () => void;
   syncTelemetryData: (data: TelemetrySyncPayload) => void;
   setAutoShowExternalSessionOnStartup: (enabled: boolean) => void;
 }
@@ -68,6 +71,7 @@ export const useSettingsStore = create<SettingsStore>()(
           providers: [],
           scheduledTasks: [],
           mcpServers: [],
+          mcpRosterEpoch: 0,
           autoShowExternalSessionOnStartup: true,
           tokenUsage: isDemoMode()
             ? { ...DEMO_TOKEN_USAGE }
@@ -82,7 +86,11 @@ export const useSettingsStore = create<SettingsStore>()(
             set((state) => {
               state.appSettings = settings;
               // 缺字段或空设置不得清掉已接入名单；显式空数组表示用户已全部移除。
-              if (settings && Array.isArray(settings.mcpServers)) {
+              if (
+                settings &&
+                Array.isArray(settings.mcpServers) &&
+                state.mcpRosterEpoch === 0
+              ) {
                 state.mcpServers = settings.mcpServers;
               }
             }),
@@ -97,6 +105,11 @@ export const useSettingsStore = create<SettingsStore>()(
               state.mcpServers = Array.isArray(servers) ? servers : [];
             }),
 
+          lockMcpRoster: () =>
+            set((state) => {
+              state.mcpRosterEpoch += 1;
+            }),
+
           syncTelemetryData: (data: TelemetrySyncPayload) => {
             set((state) => {
               if (data.tokenUsage) {
@@ -105,7 +118,7 @@ export const useSettingsStore = create<SettingsStore>()(
                   state.tokenUsage
                 );
               }
-              if (data.mcpServers) {
+              if (data.mcpServers && state.mcpRosterEpoch === 0) {
                 state.mcpServers = Array.isArray(data.mcpServers)
                   ? data.mcpServers
                   : state.mcpServers;
@@ -140,3 +153,10 @@ export const useSettingsStore = create<SettingsStore>()(
     'SettingsStore'
   )
 );
+
+/** 扩展页、设置页对 MCP 名单的用户写入。锁定后不被刷新或遥测覆盖。 */
+export function commitUserMcpRoster(servers: McpServer[]): void {
+  const store = useSettingsStore.getState();
+  store.lockMcpRoster();
+  store.setMcpServers(servers);
+}

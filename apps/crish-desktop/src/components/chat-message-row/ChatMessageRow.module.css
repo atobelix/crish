@@ -47,7 +47,8 @@
 
 .rowUser {
   align-items: flex-end;
-  animation: messageRowFadeSlideIn 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: messageRowFadeSlideIn var(--duration-fast) var(--ease-decelerate)
+    both;
 }
 
 .rowUser[data-editing='true'],
@@ -58,7 +59,8 @@
 .rowAssistant {
   align-items: flex-start;
   max-width: min(var(--chat-col-max, 760px), 100%);
-  animation: messageRowFadeSlideIn 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: messageRowFadeSlideIn var(--duration-fast) var(--ease-decelerate)
+    both;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -162,16 +164,14 @@
 
 .userBubble.userBubbleEntering,
 .userBubble[data-entering='true'] {
-  animation: userBubbleGlideUp 0.22s
-    var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1)) both;
+  animation: userBubbleGlideUp 0.22s var(--ease-decelerate) both;
   will-change: transform, opacity;
 }
 
 /* 首条消息入场：从输入框原高度平滑上浮升入会话流 */
 .userBubble.userBubbleEntering[data-first-message='true'],
 .userBubble[data-entering='true'][data-first-message='true'] {
-  animation: userBubbleFirstMessageFloatUp 0.3s
-    var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1)) both;
+  animation: userBubbleFirstMessageFloatUp 0.3s var(--ease-decelerate) both;
   will-change: transform, opacity;
 }
 
@@ -265,7 +265,7 @@
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
-  animation: editComposerFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: editComposerFadeIn var(--duration-fast) var(--ease-decelerate);
 }
 
 @keyframes editComposerFadeIn {
@@ -1254,7 +1254,7 @@ button.iconBtn,
     0 8px 24px -4px color-mix(in srgb, var(--shadow-color) 12%, transparent),
     0 2px 6px -1px color-mix(in srgb, var(--shadow-color) 6%, transparent);
   z-index: var(--z-dropdown, 1000);
-  animation: pinPickerFadeIn 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: pinPickerFadeIn var(--transition-popover-enter);
   white-space: nowrap;
 }
 
@@ -1373,7 +1373,7 @@ button.iconBtn,
   flex-direction: column;
   gap: var(--space-1_5, 6px);
   width: 100%;
-  animation: pinPickerFadeIn 120ms ease;
+  animation: pinPickerFadeIn var(--duration-fast) var(--ease-decelerate);
 }
 
 .pinCustomPanel .pinColorsRow {

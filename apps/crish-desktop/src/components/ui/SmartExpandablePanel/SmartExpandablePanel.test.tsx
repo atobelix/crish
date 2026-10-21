@@ -11,6 +11,7 @@ import {
   type MenuItem,
   type MenuGroup,
 } from './index';
+import { placeCascadeSubmenu } from './PositionEngine';
 
 describe('SmartExpandablePanel Foundation & Core Engines', () => {
   beforeEach(() => {
@@ -186,6 +187,47 @@ describe('SmartExpandablePanel Foundation & Core Engines', () => {
       expect(res2.directionY).toBe('down');
     });
 
+    it('短级联贴着触发行向面板外侧展开，不再预留 200px', () => {
+      const placed = placeCascadeSubmenu(
+        { left: 180, right: 400 },
+        640,
+        180,
+        80,
+        1200,
+        760
+      );
+      expect(placed.side).toBe('right');
+      expect(placed.left).toBe(406);
+      expect(placed.top).toBe(640);
+    });
+
+    it('底部放不下时只上移超出的高度', () => {
+      const placed = placeCascadeSubmenu(
+        { left: 180, right: 400 },
+        700,
+        180,
+        120,
+        1200,
+        760
+      );
+      expect(placed.top).toBe(760 - 8 - 120);
+      expect(placed.left).toBe(406);
+    });
+
+    it('右侧空间不够时翻到主面板左侧', () => {
+      const placed = placeCascadeSubmenu(
+        { left: 900, right: 1120 },
+        200,
+        200,
+        80,
+        1200,
+        800
+      );
+      expect(placed.side).toBe('left');
+      expect(placed.left).toBe(900 - 6 - 200);
+      expect(placed.top).toBe(200);
+    });
+
     it('calculates submenu position and flips horizontally when right boundary is exceeded', () => {
       const engine = new PositionEngine();
       const triggerItemEl = document.createElement('div');
@@ -206,7 +248,11 @@ describe('SmartExpandablePanel Foundation & Core Engines', () => {
       Object.defineProperty(submenuEl, 'offsetHeight', { value: 150 });
 
       const bounds = { left: 10, top: 10, right: 1000, bottom: 800 };
-      const res = engine.calculateSubmenuPosition({ triggerItemEl, submenuEl, bounds });
+      const res = engine.calculateSubmenuPosition({
+        triggerItemEl,
+        submenuEl,
+        bounds,
+      });
 
       expect(res.isFlipLeft).toBe(true);
       expect(res.x).toBe(900 - 200 - 4);
@@ -257,8 +303,12 @@ describe('SmartExpandablePanel Foundation & Core Engines', () => {
       engine.setSubmenu(triggerEl, submenuEl);
 
       // Simulate moving towards submenu: previous at (100, 200), current at (150, 200)
-      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 200 }));
-      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 150, clientY: 200 }));
+      window.dispatchEvent(
+        new MouseEvent('mousemove', { clientX: 100, clientY: 200 })
+      );
+      window.dispatchEvent(
+        new MouseEvent('mousemove', { clientX: 150, clientY: 200 })
+      );
 
       // Point inside triangle (e.g. 200, 200)
       expect(engine.isPointerInSafeZone({ x: 200, y: 200 })).toBe(true);
@@ -289,8 +339,12 @@ describe('SmartExpandablePanel Foundation & Core Engines', () => {
       engine.setSubmenu(triggerEl, submenuEl);
 
       // Move leftwards away from submenu: (200, 200) -> (150, 200)
-      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 200, clientY: 200 }));
-      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 150, clientY: 200 }));
+      window.dispatchEvent(
+        new MouseEvent('mousemove', { clientX: 200, clientY: 200 })
+      );
+      window.dispatchEvent(
+        new MouseEvent('mousemove', { clientX: 150, clientY: 200 })
+      );
 
       // Reverse motion should instantly release protection
       expect(engine.isPointerInSafeZone({ x: 200, y: 200 })).toBe(false);
@@ -317,8 +371,12 @@ describe('SmartExpandablePanel Foundation & Core Engines', () => {
 
       engine.setSubmenu(triggerEl, submenuEl);
 
-      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 200 }));
-      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 150, clientY: 200 }));
+      window.dispatchEvent(
+        new MouseEvent('mousemove', { clientX: 100, clientY: 200 })
+      );
+      window.dispatchEvent(
+        new MouseEvent('mousemove', { clientX: 150, clientY: 200 })
+      );
 
       // First check: in safe zone
       expect(engine.isPointerInSafeZone({ x: 200, y: 200 })).toBe(true);
@@ -362,7 +420,13 @@ describe('SmartExpandablePanel Foundation & Core Engines', () => {
       const TestComponent = () => {
         const ref = useRef<HTMLDivElement>(null);
         useWheelIsolation(ref, true);
-        return <div ref={ref} data-testid="wheel-box" style={{ height: 100, overflow: 'auto' }} />;
+        return (
+          <div
+            ref={ref}
+            data-testid="wheel-box"
+            style={{ height: 100, overflow: 'auto' }}
+          />
+        );
       };
 
       render(<TestComponent />);
@@ -373,14 +437,20 @@ describe('SmartExpandablePanel Foundation & Core Engines', () => {
       Object.defineProperty(el, 'clientHeight', { value: 100 });
 
       // Wheel up at top: should preventDefault
-      const wheelUpEvent = new WheelEvent('wheel', { deltaY: -20, cancelable: true });
+      const wheelUpEvent = new WheelEvent('wheel', {
+        deltaY: -20,
+        cancelable: true,
+      });
       const preventDefaultSpy = vi.spyOn(wheelUpEvent, 'preventDefault');
       el.dispatchEvent(wheelUpEvent);
       expect(preventDefaultSpy).toHaveBeenCalled();
 
       // Wheel down at bottom: should preventDefault
       Object.defineProperty(el, 'scrollTop', { value: 200, writable: true });
-      const wheelDownEvent = new WheelEvent('wheel', { deltaY: 20, cancelable: true });
+      const wheelDownEvent = new WheelEvent('wheel', {
+        deltaY: 20,
+        cancelable: true,
+      });
       const preventDownSpy = vi.spyOn(wheelDownEvent, 'preventDefault');
       el.dispatchEvent(wheelDownEvent);
       expect(preventDownSpy).toHaveBeenCalled();
@@ -416,7 +486,12 @@ describe('SmartExpandablePanel Foundation & Core Engines', () => {
   describe('SmartExpandablePanel Component Interactions', () => {
     const mockItems: MenuItem[] = [
       { id: 'item-1', label: '新建会话', shortcut: '⌘N', badge: 'New' },
-      { id: 'item-2', label: '项目设置', sublabel: '配置当前项目规则', tooltip: '打开项目设置' },
+      {
+        id: 'item-2',
+        label: '项目设置',
+        sublabel: '配置当前项目规则',
+        tooltip: '打开项目设置',
+      },
       { id: 'item-3', label: '禁用项', disabled: true },
       { id: 'item-4', label: '危险操作', danger: true },
       {
@@ -539,11 +614,21 @@ describe('SmartExpandablePanel Foundation & Core Engines', () => {
 
     it('renders group headers and dividers in grouped mode', () => {
       const groups: MenuGroup[] = [
-        { id: 'g1', title: '常用功能', items: [{ id: 'g1-1', label: '功能 1' }] },
-        { id: 'g2', title: '系统设置', items: [{ id: 'g2-1', label: '功能 2' }] },
+        {
+          id: 'g1',
+          title: '常用功能',
+          items: [{ id: 'g1-1', label: '功能 1' }],
+        },
+        {
+          id: 'g2',
+          title: '系统设置',
+          items: [{ id: 'g2-1', label: '功能 2' }],
+        },
       ];
 
-      render(<SmartExpandablePanel items={groups} open={true} enableDivider={true} />);
+      render(
+        <SmartExpandablePanel items={groups} open={true} enableDivider={true} />
+      );
       expect(screen.getByText('常用功能')).toBeInTheDocument();
       expect(screen.getByText('系统设置')).toBeInTheDocument();
       expect(screen.getByText('功能 1')).toBeInTheDocument();

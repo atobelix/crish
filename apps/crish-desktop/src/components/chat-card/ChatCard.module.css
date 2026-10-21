@@ -59,10 +59,10 @@
   }
 }
 
-/* 落点是合成位移，不改占位高度。75cqh 把停靠块的顶边送到正文区大约四分之一处。 */
+/* 落点只做位移，不改占位高度。输入框自身中心落在正文区上黄金分割处。 */
 .chatBody[data-empty-kind='session-empty'] .footerMotion {
   background: transparent;
-  transform: translateY(calc(var(--composer-dock-block, 104px) - 75cqh));
+  transform: translateY(calc(50% - 61.8cqh));
   animation: landingSurfaceEnter var(--transition-fast) var(--ease-emphasized)
     both;
 }
@@ -106,7 +106,7 @@
   background: var(--chat-footer-fade);
   pointer-events: auto;
   transform: none;
-  transition: transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform var(--duration-landing-fade) var(--ease-decelerate);
 }
 
 .chatFooter .chatCol {
@@ -149,7 +149,8 @@
   padding-left: var(--landing-inset-x, 20px);
   max-height: 180px;
   overflow: visible;
-  animation: composerLeadFadeIn 180ms var(--ease-emphasized) forwards;
+  animation: composerLeadFadeIn var(--duration-accordion-fade)
+    var(--ease-decelerate) forwards;
 }
 
 @keyframes composerLeadFadeIn {

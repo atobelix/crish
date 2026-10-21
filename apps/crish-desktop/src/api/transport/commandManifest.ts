@@ -100,7 +100,12 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('workbench_write_file_content', 'workbench', 'gui'),
     entry('workbench_discover_skills', 'workbench', 'gui'),
     // workbench_http_request 已退役（四方同步移除；唯一调用点在 Rust 测试内）
+    // 自动更新链路（RUN-03/SEC-02/GAP-01：apply 一次编排 + 四段命令，与 Rust 真源同步）
     entry('workbench_apply_update', 'workbench', 'gui'),
+    entry('workbench_check_update', 'workbench', 'gui'),
+    entry('workbench_download_update', 'workbench', 'gui'),
+    entry('workbench_install_update', 'workbench', 'gui'),
+    entry('workbench_restart_app', 'workbench', 'gui'),
     // ── 多端互通配对面（R1-07：四件套，registered=true，与 Rust 同步）──
     entry('multi_device_pair_start', 'multi_device', 'engine'),
     entry('multi_device_pair_status', 'multi_device', 'engine'),

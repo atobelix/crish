@@ -164,7 +164,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
     const mainModelBadgeNode = state.showModelPicker ? (
       <ModelBadgePicker
         engineModel={state.engineModel}
-        activeProfileId={state.activeProfileId}
         needsModelSetup={state.needsModelSetup}
         showModelDropdown={state.showModelDropdown}
         setShowModelDropdown={state.setShowModelDropdown}
@@ -174,7 +173,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
     const editModelBadgeNode = state.showModelPicker ? (
       <ModelBadgePicker
         engineModel={state.engineModel}
-        activeProfileId={state.activeProfileId}
         needsModelSetup={state.needsModelSetup}
       />
     ) : null;

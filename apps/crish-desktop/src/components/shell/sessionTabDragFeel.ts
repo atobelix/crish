@@ -11,7 +11,7 @@ import {
   INDICATOR_W_PX,
   TAB_GAP_PX,
 } from '../../utils/tabStripGeometry';
-import { DURATION_FAST_MS, DURATION_MICRO_MS, EASE_EMPHASIZED } from '../../utils/motionTokens';
+import { DURATION_NORMAL_MS, EASE_DECELERATE } from '../../utils/motionTokens';
 
 export const SESSION_TAB_DRAG_THRESHOLD_L1 = DRAG_THRESHOLD_PX;
 export const SESSION_TAB_INDICATOR_W = INDICATOR_W_PX;
@@ -20,9 +20,11 @@ export const SESSION_TAB_SHIFT_GAP = TAB_GAP_PX;
 export const SESSION_TAB_INSERT_HYSTERESIS = 1 / 3;
 /** 叶面边缘占比。与 Demo DragController `_handleWorkspaceMove`（rx<0.22 />0.78）同一数值。 */
 export const SESSION_PANE_EDGE = 0.22;
-export const SESSION_TAB_STRIP_SHIFT_MS = DURATION_FAST_MS;
-export const SESSION_TAB_STRIP_SHIFT_EASE = EASE_EMPHASIZED;
-export const SESSION_TAB_INDICATOR_GEOM_MS = DURATION_MICRO_MS;
+/** 条内让位与落区形变：常规时长 + 减速曲线，滑入槽位，不在终点前抢停。 */
+export const SESSION_TAB_STRIP_SHIFT_MS = DURATION_NORMAL_MS;
+export const SESSION_TAB_STRIP_SHIFT_EASE = EASE_DECELERATE;
+export const SESSION_TAB_INDICATOR_GEOM_MS = DURATION_NORMAL_MS;
+export const SESSION_TAB_INDICATOR_EASE = EASE_DECELERATE;
 
 export type PaneDropRegion = 'left' | 'right' | 'top' | 'bottom' | 'center';
 
@@ -196,7 +198,10 @@ export function computeStripTabOffsets(input: StripTabOffsetInput): number[] {
   const offsets = new Array<number>(tabCount).fill(0);
   if (tabCount <= 0) return offsets;
 
-  const validShift = Number.isFinite(shiftPx) && shiftPx > 0 ? shiftPx : SESSION_TAB_STRIP_SHIFT_PX;
+  const validShift =
+    Number.isFinite(shiftPx) && shiftPx > 0
+      ? shiftPx
+      : SESSION_TAB_STRIP_SHIFT_PX;
 
   if (sourceIndex !== null) {
     // ── 情况 A：同条内拖拽（源标签在 DOM 中占位）──

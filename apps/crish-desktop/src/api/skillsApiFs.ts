@@ -9,11 +9,7 @@
 
 import { joinPath, EXTRA_DIRS_KEY } from './skillsApiHelpers';
 import { getWorkspacePath } from './projectStore';
-import {
-  listDirectory,
-  readTextFile,
-  type FsDirEntry,
-} from './workspaceFsApi';
+import { listDirectory, readTextFile, type FsDirEntry } from './workspaceFsApi';
 
 const PLUGIN_FS_PKG = '@tauri-apps/plugin-fs';
 const TAURI_PATH_PKG = '@tauri-apps/api/path';
@@ -64,6 +60,7 @@ type PluginFsApi = {
   readTextFile?: (p: string) => Promise<string>;
   writeTextFile?: (p: string, content: string) => Promise<void>;
   mkdir?: (p: string, opts?: { recursive?: boolean }) => Promise<void>;
+  remove?: (p: string, opts?: { recursive?: boolean }) => Promise<void>;
   exists?: (p: string) => Promise<boolean>;
 };
 
@@ -160,6 +157,23 @@ export async function mkdirAny(dirPath: string): Promise<boolean> {
     }
   }
   return false;
+}
+
+/** 删除技能副本。仅 plugin-fs 提供删除；失败时返回 false，不抛给界面。 */
+export async function removePathAny(
+  targetPath: string,
+  recursive = false
+): Promise<boolean> {
+  const target = targetPath.trim();
+  if (!target) return false;
+  const fs = await tryPluginFs();
+  if (!fs?.remove) return false;
+  try {
+    await fs.remove(target, recursive ? { recursive: true } : undefined);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /* ---------- FS 能力探测 ---------- */

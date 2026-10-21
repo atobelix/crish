@@ -1,6 +1,6 @@
 /* ==========================================================================
-   Switch.module.css (v2.0.0 纯粹流体果冻与中轴几何对称版)
-   流体果冻拉伸（Pill Stretch）动画、GPU 中轴居中、Zero-FOUC 门闩与 Design Tokens 消费
+   Switch.module.css
+   滑块只在交互之后沿轨道平移并减速落定。挂载时瞬时到位，不做挤压形变。
    ========================================================================== */
 
 .container {
@@ -180,41 +180,9 @@
   transform: translateY(-50%) translateX(var(--thumb-travel));
 }
 
-/* 动态果冻拉伸动画（仅在发生交互后激活） */
-.hasInteracted[data-state='checked'] .thumb {
-  animation: thumb-stretch-on 160ms var(--ease-emphasized) forwards;
-}
-
-.hasInteracted[data-state='unchecked'] .thumb {
-  animation: thumb-stretch-off 160ms var(--ease-emphasized) forwards;
-}
-
-/* 果冻拉伸关键帧：ON (微缩放 GPU Transform) */
-@keyframes thumb-stretch-on {
-  0% {
-    transform: translateY(-50%) translateX(0) scale(1);
-  }
-  40% {
-    transform: translateY(-50%) translateX(calc(var(--thumb-travel) * 0.4))
-      scaleX(1.08) scaleY(0.95);
-  }
-  100% {
-    transform: translateY(-50%) translateX(var(--thumb-travel)) scale(1);
-  }
-}
-
-/* 果冻拉伸关键帧：OFF (微缩放 GPU Transform) */
-@keyframes thumb-stretch-off {
-  0% {
-    transform: translateY(-50%) translateX(var(--thumb-travel)) scale(1);
-  }
-  40% {
-    transform: translateY(-50%) translateX(calc(var(--thumb-travel) * 0.6))
-      scaleX(1.08) scaleY(0.95);
-  }
-  100% {
-    transform: translateY(-50%) translateX(0) scale(1);
-  }
+/* 仅交互之后才过渡。挂载与注水保持瞬时到位，避免首屏滑块自己跑一段。 */
+.hasInteracted .thumb {
+  transition: transform var(--duration-fast) var(--ease-decelerate);
 }
 
 /* --- 加载指示器：Spinner (高对比度符合 WCAG AA 4.5:1) --- */

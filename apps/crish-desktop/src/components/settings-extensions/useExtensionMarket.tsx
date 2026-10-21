@@ -19,7 +19,7 @@ import { listMcpServers, type McpServerInfo } from '../../api/mcpApi';
 import { discoverSkills, type DesktopSkill } from '../../api/skillsApi';
 import { getWorkspacePath } from '../../api/projectStore';
 import { setAppSettings } from '../../api/storeAccess';
-import { useSettingsStore } from '../../store/storeAccess';
+import { commitUserMcpRoster, useSettingsStore } from '../../store/storeAccess';
 import {
   listPluginCardStates,
   setPluginEnabled,
@@ -153,7 +153,7 @@ export function useExtensionMarket() {
     }
 
     try {
-      const [skillRes, mcpRes, settings] = await Promise.all([
+      const [skillRes, mcpRes, settings, globalSettings] = await Promise.all([
         withTimeout(
           discoverSkills({ workspacePath: cwd }).catch(() => ({
             skills: [] as DesktopSkill[],
@@ -171,6 +171,13 @@ export function useExtensionMarket() {
           4000,
           null
         ),
+        cwd && cwd !== '__global__'
+          ? withTimeout(
+              clientApi.getSettingsEx('__global__').catch(() => null),
+              4000,
+              null
+            )
+          : Promise.resolve(null),
       ]);
       saveSkills(skillRes.skills || []);
       saveMcpServers(mcpRes.servers || []);
@@ -180,8 +187,11 @@ export function useExtensionMarket() {
       if (settings?.mcpDisabledTools) {
         cacheMcpToolDisabled(settings.mcpDisabledTools);
       }
-      if (Array.isArray(settings?.mcpServers)) {
-        useSettingsStore.getState().setMcpServers(settings.mcpServers);
+      // MCP 名单以全局设置为准。工作区覆写里的旧数组会把刚导入的服务冲掉。
+      const roster = useSettingsStore.getState();
+      const mcpSource = globalSettings ?? settings;
+      if (roster.mcpRosterEpoch === 0 && Array.isArray(mcpSource?.mcpServers)) {
+        roster.setMcpServers(mcpSource.mcpServers);
       }
       hydratedRef.current = true;
     } catch (e) {
@@ -422,7 +432,7 @@ export function useExtensionMarket() {
           };
           nextList = [...currentList, newServer];
         }
-        useSettingsStore.getState().setMcpServers(nextList);
+        commitUserMcpRoster(nextList);
         await clientApi.saveSettingsEx('__global__', 'global', {
           mcpServers: nextList,
         } as unknown as Partial<Settings>);

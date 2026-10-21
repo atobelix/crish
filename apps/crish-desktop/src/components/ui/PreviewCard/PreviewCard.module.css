@@ -25,13 +25,13 @@
   box-sizing: border-box;
 }
 
-/* 物理弹性微动效 */
+/* 预览卡入场：短距上浮后落定；退场加速离开 */
 .enter {
-  animation: previewCardEnter 200ms var(--ease-emphasized) forwards;
+  animation: previewCardEnter var(--transition-popover-enter) forwards;
 }
 
 .exit {
-  animation: previewCardExit 100ms ease-out forwards;
+  animation: previewCardExit var(--transition-popover-exit) forwards;
 }
 
 .measuring {
@@ -42,11 +42,11 @@
 @keyframes previewCardEnter {
   from {
     opacity: 0;
-    transform: scale(0.9);
+    transform: translateY(4px) scale(0.97);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: translateY(0) scale(1);
   }
 }
 

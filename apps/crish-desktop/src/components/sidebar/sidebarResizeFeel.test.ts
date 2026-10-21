@@ -104,9 +104,9 @@ describe('侧栏折叠动效与拖拽解耦 CSS 契约', () => {
   const cssPath = path.resolve(__dirname, 'Sidebar.module.css');
   const css = readFileSync(cssPath, 'utf8').replace(/\r\n/g, '\n');
 
-  it('.sidebar 声明离散折叠/展开过渡：transition: width 200ms var(--ease-standard)', () => {
+  it('.sidebar 声明离散折叠/展开过渡：宽度到位后减速停住', () => {
     expect(css).toMatch(
-      /\.sidebar\s*\{[^}]*transition:\s*width\s+200ms\s+var\(--ease-standard\);/
+      /\.sidebar\s*\{[^}]*transition:\s*width\s+200ms\s+var\(--ease-decelerate\);/
     );
   });
 

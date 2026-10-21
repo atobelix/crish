@@ -40,6 +40,7 @@ export {
   addExtraSkillDir,
   getExtraSkillDirs,
   removeExtraSkillDir,
+  removePathAny,
   skillsFsAvailable,
   tryHomeDir,
   readTextAny,

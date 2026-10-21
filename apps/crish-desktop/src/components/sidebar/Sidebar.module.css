@@ -6,7 +6,7 @@
   flex-direction: column;
   justify-content: space-between;
   flex-shrink: 0;
-  transition: width 200ms var(--ease-standard);
+  transition: width 200ms var(--ease-decelerate);
   z-index: var(--z-sidebar);
   position: relative;
   overflow: hidden;
@@ -96,8 +96,8 @@
   opacity: 1;
   transform: translate3d(0, 0, 0) scale(1);
   transition:
-    opacity 160ms var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1)),
-    transform 220ms var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1));
+    opacity var(--duration-fast) var(--ease-standard),
+    transform var(--duration-normal) var(--ease-decelerate);
   will-change: transform, opacity;
 }
 
@@ -110,8 +110,8 @@
   opacity: 0;
   transform: translate3d(3px, 0, 0) scale(0.72);
   transition:
-    opacity 160ms var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1)),
-    transform 220ms var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1));
+    opacity var(--duration-fast) var(--ease-standard),
+    transform var(--duration-normal) var(--ease-decelerate);
   pointer-events: none;
   color: var(--text-primary);
   will-change: transform, opacity;
@@ -123,8 +123,8 @@
   opacity: 0;
   transform: translate3d(-3px, 0, 0) scale(0.72);
   transition:
-    opacity 130ms var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1)),
-    transform 190ms var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1));
+    opacity var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-decelerate);
 }
 
 :global(.sidebar-toggle-btn):hover .toggleActionIcon,
@@ -132,8 +132,8 @@
   opacity: 1;
   transform: translate3d(0, 0, 0) scale(1);
   transition:
-    opacity 170ms var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1)),
-    transform 220ms var(--ease-emphasized, cubic-bezier(0.16, 1, 0.3, 1));
+    opacity var(--duration-fast) var(--ease-standard),
+    transform var(--duration-normal) var(--ease-decelerate);
 }
 
 @media (prefers-reduced-motion: reduce) {

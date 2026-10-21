@@ -106,7 +106,7 @@
   flex-shrink: 0;
   min-width: 0;
   background: var(--bg-card);
-  animation: searchRowSlideDown 140ms var(--ease-emphasized);
+  animation: searchRowSlideDown var(--duration-fast) var(--ease-decelerate);
 }
 
 @keyframes searchRowSlideDown {
@@ -288,7 +288,7 @@
   pointer-events: none;
   transition:
     opacity var(--transition-micro),
-    transform var(--duration-snappy) var(--ease-emphasized),
+    transform var(--transition-chevron),
     color var(--transition-fast);
 }
 
@@ -332,7 +332,7 @@
   height: 14px;
   color: var(--text-tertiary);
   transition:
-    transform var(--duration-snappy) var(--ease-emphasized),
+    transform var(--transition-chevron),
     color var(--transition-fast);
 }
 
@@ -588,7 +588,7 @@
   background: var(--bg-card);
   box-sizing: border-box;
   overflow: hidden;
-  animation: diffPaneSlideIn 150ms var(--ease-emphasized);
+  animation: diffPaneSlideIn var(--duration-fast) var(--ease-decelerate);
 }
 
 @keyframes diffPaneSlideIn {

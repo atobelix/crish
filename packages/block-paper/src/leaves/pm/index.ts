@@ -29,8 +29,6 @@ export {
   type PmTextLeafSnapshot,
   type PmTextLeafOptions,
 } from './PmTextLeaf';
-export { type DiffReplaceResult } from './diffToReplace';
-
 export {
   PmTextLeafHost,
   createPmLeafEditorState,

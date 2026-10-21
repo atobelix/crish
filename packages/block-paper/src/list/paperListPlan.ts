@@ -49,7 +49,7 @@ function bindOrderIds(hm: HeightMap, order: readonly BlockId[]): void {
  * 按 scroll / 长度对齐 HeightMap。
  * 行为与切开前 `PaperList.computePlan` 一致（scroll 且 count 已对齐时不重绑）。
  */
-export function alignPaperListHeightMap(input: {
+function alignPaperListHeightMap(input: {
   order: readonly BlockId[];
   heightMap: HeightMap | null;
   scrollState: PaperListScrollState | null;
@@ -83,7 +83,7 @@ export function alignPaperListHeightMap(input: {
   return hm;
 }
 
-export function defaultPaperListWindow(
+function defaultPaperListWindow(
   totalCount: number,
   defaultVisibleCount: number
 ): PaperListWindowState {

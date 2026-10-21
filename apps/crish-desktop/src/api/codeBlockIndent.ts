@@ -11,7 +11,11 @@ export const CODE_INDENT_TAB = '\t';
 
 /** 仅 2 空格 / 4 空格 / Tab；非法值回落 2 空格（与外观写面白名单一致） */
 export function normalizeCodeBlockIndent(raw: unknown): string {
-  if (raw === CODE_INDENT_TWO || raw === CODE_INDENT_FOUR || raw === CODE_INDENT_TAB) {
+  if (
+    raw === CODE_INDENT_TWO ||
+    raw === CODE_INDENT_FOUR ||
+    raw === CODE_INDENT_TAB
+  ) {
     return raw;
   }
   return CODE_INDENT_TWO;
@@ -32,8 +36,7 @@ export function codeIndentAttr(raw: unknown): '2' | '4' | 'tab' {
 /** store 优先，未水合或未就绪时回退默认 2 空格 */
 export function readCodeBlockIndent(): string {
   try {
-    const fromStore =
-      getAppSettings()?.markdown?.codeBlockIndent;
+    const fromStore = getAppSettings()?.markdown?.codeBlockIndent;
     if (fromStore !== undefined) return normalizeCodeBlockIndent(fromStore);
   } catch {
     /* store 未就绪 */
@@ -41,14 +44,16 @@ export function readCodeBlockIndent(): string {
   return CODE_INDENT_TWO;
 }
 
-/** 投影到 html：--md-code-tab-size + data-code-indent（tab-size 可继承） */
+/** 投影到 html：--user-md-code-tab-size + data-code-indent（tab-size 可继承）。
+ * T-BLK-07b：A 类 token --md-code-tab-size 由 tokens.css 静态声明
+ * var(--user-md-code-tab-size, 2) 派生，JS 只写 --user-* 运行期参数（B 类登记）。 */
 export function applyCodeBlockIndentToDocument(raw?: unknown): void {
   if (typeof document === 'undefined') return;
   const indent =
     raw === undefined ? readCodeBlockIndent() : normalizeCodeBlockIndent(raw);
   const tabSize = tabSizeFromCodeIndent(indent);
   const html = document.documentElement;
-  html.style.setProperty('--md-code-tab-size', String(tabSize));
+  html.style.setProperty('--user-md-code-tab-size', String(tabSize));
   html.setAttribute('data-code-indent', codeIndentAttr(indent));
 }
 
@@ -146,7 +151,8 @@ function applyAbsRepl(nodes: Text[], repl: AbsRepl): void {
   if (!first) return;
   for (let i = slices.length - 1; i >= 0; i--) {
     const s = slices[i]!;
-    s.node.data = s.node.data.slice(0, s.localStart) + s.node.data.slice(s.localEnd);
+    s.node.data =
+      s.node.data.slice(0, s.localStart) + s.node.data.slice(s.localEnd);
   }
   const n = first.node;
   n.data =

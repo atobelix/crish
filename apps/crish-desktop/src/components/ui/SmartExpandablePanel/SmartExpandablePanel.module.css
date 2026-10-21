@@ -322,10 +322,13 @@
 
 /* 二级子菜单卡片（14px 外圆角 / 6px 内衬 / 8px 条目，与一级面板 100% 几何对齐） */
 .cascadeSubmenu {
-  position: absolute;
-  left: calc(100% + 4px);
-  top: 0;
+  position: fixed;
+  margin: 0;
+  width: max-content;
   min-width: 160px;
+  max-width: min(280px, calc(100vw - 16px));
+  height: auto;
+  max-height: min(360px, calc(100vh - 16px));
   border-radius: var(--sep-radius-outer, 14px);
   border: 1px solid var(--border-color);
   background: var(--sep-bg-panel-solid, var(--bg-elevated));
@@ -337,11 +340,14 @@
   z-index: var(--z-dropdown-menu, 310);
   outline: none;
   transform-origin: left top;
-  animation: crish-popover-enter 120ms var(--ease-emphasized) forwards;
+  animation: crish-popover-enter var(--transition-popover-enter) forwards;
   will-change: transform, opacity;
 }
 
-.cascadeSubmenu .item {
+.cascadeSubmenu .item,
+.cascadeSubmenu [role='menuitem'] {
+  width: auto;
+  min-width: 100%;
   border-radius: var(--sep-item-radius, 8px);
   min-height: var(--sep-item-height, 32px);
   padding: 5px 10px;

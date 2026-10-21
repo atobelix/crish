@@ -87,12 +87,7 @@
   outline: none;
   transition:
     background-color var(--transition-micro),
-    color var(--transition-micro),
-    transform 60ms ease-out;
-}
-
-.item:active:not(.itemDisabled) {
-  transform: scale(0.985);
+    color var(--transition-micro);
 }
 
 .itemSm {

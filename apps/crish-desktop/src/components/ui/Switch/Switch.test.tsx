@@ -454,7 +454,7 @@ describe('ui/Switch (v2.0.0 纯白流体胶囊与中轴对称版)', () => {
       expect(sw.className).not.toContain(styles.hasInteracted);
     });
 
-    it('用户交互点击后立即注入 hasInteracted 激活动态拉伸动画', () => {
+    it('用户交互点击后立即注入 hasInteracted，滑块才开始位移过渡', () => {
       render(<Switch defaultChecked={false} />);
       const sw = screen.getByRole('switch');
       expect(sw.className).not.toContain(styles.hasInteracted);
@@ -476,9 +476,12 @@ describe('ui/Switch (v2.0.0 纯白流体胶囊与中轴对称版)', () => {
   describe('8. CSS Modules 物理动效与 Design Tokens 规范静态断言', () => {
     const css = readFileSync(join(DIR, 'Switch.module.css'), 'utf8');
 
-    it('包含流体果冻拉伸关键帧：thumb-stretch-on 与 thumb-stretch-off', () => {
-      expect(css).toMatch(/@keyframes thumb-stretch-on/);
-      expect(css).toMatch(/@keyframes thumb-stretch-off/);
+    it('滑块只做平移，交互后用减速曲线到位，不做拉伸形变', () => {
+      expect(css).toMatch(
+        /\.hasInteracted \.thumb\s*\{[^}]*transition:\s*transform var\(--duration-fast\) var\(--ease-decelerate\)/
+      );
+      expect(css).not.toMatch(/@keyframes thumb-stretch/);
+      expect(css).not.toMatch(/scaleX\(/);
     });
 
     it('彻底移除对勾图标以保证视觉纯净度（无 checkmark-draw 与 checkIcon）', () => {

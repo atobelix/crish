@@ -44,11 +44,9 @@ describe('codeIndentProjection', () => {
       markdown: { codeBlockIndent: '    ' },
     } as never);
     expect(
-      document.documentElement.style.getPropertyValue('--md-code-tab-size')
+      document.documentElement.style.getPropertyValue('--user-md-code-tab-size')
     ).toBe('4');
-    expect(document.documentElement.getAttribute('data-code-indent')).toBe(
-      '4'
-    );
+    expect(document.documentElement.getAttribute('data-code-indent')).toBe('4');
   });
 
   it('同值重复触发幂等（属性保持）', () => {
@@ -72,16 +70,16 @@ describe('codeIndentProjection', () => {
     useSettingsStore.getState().setAppSettings({
       markdown: { codeBlockIndent: '    ' },
     } as never);
-    expect(document.documentElement.getAttribute('data-code-indent')).toBeNull();
+    expect(
+      document.documentElement.getAttribute('data-code-indent')
+    ).toBeNull();
   });
 
   it('appSettings 为 null 时播种默认 2 空格', () => {
     unsub = initCodeIndentProjection();
     expect(
-      document.documentElement.style.getPropertyValue('--md-code-tab-size')
+      document.documentElement.style.getPropertyValue('--user-md-code-tab-size')
     ).toBe('2');
-    expect(document.documentElement.getAttribute('data-code-indent')).toBe(
-      '2'
-    );
+    expect(document.documentElement.getAttribute('data-code-indent')).toBe('2');
   });
 });

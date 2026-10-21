@@ -11,7 +11,7 @@ import {
 } from '../../api/mcpApi';
 import { isDemoMode } from '../../api/appMode';
 import type { McpServer } from '../../api/clientApi';
-import { useSettingsStore } from '../../store/storeAccess';
+import { commitUserMcpRoster, useSettingsStore } from '../../store/storeAccess';
 import {
   copyText,
   errText,
@@ -315,7 +315,7 @@ export function useMcpSettings({
       };
       const current = useSettingsStore.getState().mcpServers;
       const list = [...current.filter((s) => s.id !== server.id), server];
-      useSettingsStore.getState().setMcpServers(list);
+      commitUserMcpRoster(list);
       setDemoServers(list);
       setDemoEnabled((p) => ({ ...p, [server.id]: true }));
       onAvailabilityChange?.(list.length > 0);
@@ -333,7 +333,7 @@ export function useMcpSettings({
     try {
       const current = useSettingsStore.getState().mcpServers;
       const list = current.filter((s) => s.id !== id);
-      useSettingsStore.getState().setMcpServers(list);
+      commitUserMcpRoster(list);
       setDemoServers(list);
       setDemoEnabled((p) => {
         const next = { ...p };

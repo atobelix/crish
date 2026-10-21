@@ -98,12 +98,12 @@
   /* 物理阴影：对齐改浅一半的 Token 规范 */
   box-shadow: var(--notice-shadow-deck-1);
 
-  /* 3D 堆叠阻尼升格物理动画 (320ms Apple Spring Damping) */
+  /* 堆叠展开是一段真实位移，减速落到展开位 */
   transition:
-    transform 0.32s var(--ease-emphasized),
-    opacity 0.28s var(--ease-emphasized),
-    box-shadow 0.28s ease,
-    border-color 0.2s ease;
+    transform var(--duration-normal) var(--ease-decelerate),
+    opacity var(--duration-fast) var(--ease-decelerate),
+    box-shadow var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
   will-change: transform, opacity;
   touch-action: none;
 }
@@ -216,7 +216,7 @@
 }
 
 .toastCard[data-state='entering'] {
-  animation: toastEnterBottom 0.36s var(--ease-emphasized) both;
+  animation: toastEnterBottom var(--duration-normal) var(--ease-decelerate) both;
 }
 
 .viewport[data-expanded] .toastCard[data-state='exiting'],
@@ -226,8 +226,8 @@
   transform: translateX(calc(100% + 40px)) scale(0.96);
   pointer-events: none;
   transition:
-    transform 0.26s var(--ease-emphasized),
-    opacity 0.22s ease-out;
+    transform var(--duration-normal) var(--ease-accelerate),
+    opacity var(--duration-fast) var(--ease-accelerate);
 }
 
 .viewport[data-expanded] .toastCard[data-state='swiping'],
@@ -244,8 +244,8 @@
     translateY(var(--swipe-y));
   pointer-events: none;
   transition:
-    transform 0.26s var(--ease-emphasized),
-    opacity 0.22s ease-out;
+    transform var(--duration-normal) var(--ease-accelerate),
+    opacity var(--duration-fast) var(--ease-accelerate);
 }
 
 /* ==========================================================================

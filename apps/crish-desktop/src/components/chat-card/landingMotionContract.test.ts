@@ -19,7 +19,7 @@ describe('会话切换动效契约', () => {
     expect(cardCss).not.toMatch(/transition:\s*flex-grow/);
     expect(cardCss).toMatch(/\.footerMotion\s*\{[^}]*transition:\s*transform/);
     expect(cardCss).toMatch(
-      /data-empty-kind='session-empty'\] \.footerMotion[\s\S]*translateY\(calc\(var\(--composer-dock-block/
+      /data-empty-kind='session-empty'\] \.footerMotion[\s\S]*translateY\(calc\(50% - 61\.8cqh\)\)/
     );
     expect(cardCss).not.toMatch(/flex:\s*3\s+1\s+auto/);
   });

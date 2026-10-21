@@ -137,7 +137,7 @@ export function useSettingsField<T>(selector: (state: SettingsStore) => T): T {
   return useSettingsStore(selector);
 }
 
-export { useSettingsStore } from './settingsStore';
+export { commitUserMcpRoster, useSettingsStore } from './settingsStore';
 
 export function useAuthField<T>(selector: (state: AuthState) => T): T {
   return useAuthStore(selector);

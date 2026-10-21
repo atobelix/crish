@@ -6,7 +6,6 @@
 .root {
   --tab-spring-bezier: cubic-bezier(0.2, 0, 0, 1);
   --tab-duration: 250ms;
-  --tab-press-duration: 100ms;
 
   display: flex;
   position: relative;
@@ -221,9 +220,6 @@
   gap: var(--space-1_5);
   width: 100%;
   height: 100%;
-  transform: scale(1) translateY(0);
-  transform-origin: center center;
-  transition: transform var(--tab-duration) var(--tab-spring-bezier);
 }
 
 /* 悬停背板微光 */
@@ -236,12 +232,6 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease;
-}
-
-/* 按压弹性微压缩 (Scale 0.97 + 下沉 1px) */
-.trigger:active:not(:disabled) .triggerInner {
-  transform: scale(0.97) translateY(1px);
-  transition: transform var(--tab-press-duration) ease-in-out;
 }
 
 .triggerIcon {
@@ -275,8 +265,8 @@
 .content {
   outline: none;
   transition:
-    opacity 200ms var(--ease-emphasized),
-    transform 200ms var(--ease-emphasized);
+    opacity var(--duration-normal) var(--ease-decelerate),
+    transform var(--duration-normal) var(--ease-decelerate);
 }
 
 .content[hidden] {

@@ -10,7 +10,6 @@
 .container {
   --seg-spring-bezier: cubic-bezier(0.2, 0, 0, 1);
   --seg-duration: 200ms;
-  --seg-press-duration: 100ms;
 
   position: relative;
   display: inline-flex;
@@ -218,7 +217,7 @@
   pointer-events: none;
 }
 
-/* ── itemInner 微观物理按压交互 ── */
+/* 分段项本身不位移。滑块已经承担选中态的移动，原位按压不再额外缩放。 */
 .itemInner {
   position: relative;
   display: inline-flex;
@@ -227,15 +226,6 @@
   gap: var(--space-1_5);
   width: 100%;
   height: 100%;
-  transform: scale(1) translateY(0);
-  transform-origin: center center;
-  transition: transform var(--seg-duration) var(--seg-spring-bezier);
-}
-
-/* 按压弹性微压缩 (Scale 0.97 + 下沉 1px) */
-.item:active:not(:disabled) .itemInner {
-  transform: scale(0.97) translateY(1px);
-  transition: transform var(--seg-press-duration) ease-in-out;
 }
 
 .itemIcon {

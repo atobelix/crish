@@ -14,6 +14,7 @@ beforeEach(() => {
     providers: [],
     scheduledTasks: [],
     mcpServers: [],
+    mcpRosterEpoch: 0,
     tokenUsage: {
       input: 0,
       inputMax: 160000,
@@ -73,6 +74,40 @@ describe('settingsStore — app settings', () => {
     ).toEqual(['chrome-devtools']);
     useSettingsStore.getState().setAppSettings({ mcpServers: [] });
     expect(useSettingsStore.getState().mcpServers).toEqual([]);
+  });
+
+  it('keeps a user-edited MCP roster when a later settings or telemetry payload differs', () => {
+    const store = useSettingsStore.getState();
+    store.lockMcpRoster();
+    store.setMcpServers([
+      {
+        id: 'node-repl',
+        name: 'node_repl',
+        type: 'stdio',
+        status: 'connected',
+        tools: [],
+      },
+    ]);
+    store.setAppSettings({
+      mcpServers: [],
+    });
+    expect(
+      useSettingsStore.getState().mcpServers.map((server) => server.name)
+    ).toEqual(['node_repl']);
+    store.syncTelemetryData({
+      mcpServers: [
+        {
+          id: 'other',
+          name: 'other',
+          type: 'stdio',
+          status: 'connected',
+          tools: [],
+        },
+      ],
+    });
+    expect(
+      useSettingsStore.getState().mcpServers.map((server) => server.name)
+    ).toEqual(['node_repl']);
   });
 
   it('setProviders / setScheduledTasks / setMcpServers reject non-arrays safely', () => {

@@ -251,6 +251,17 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
       });
     }, []);
 
+    // 启动自动检查更新（RUN-03：入口可达性——此前 updateAvailable 只有读面
+    // 没有真实写入点，按钮永远不可达）。检查结果经 updateStore
+    // setUpdateAvailable 写入并广播 crish-update-changed，上方监听同步状态。
+    // 卸载后事件派发无副作用（监听已清理），无需取消令牌。
+    useEffect(() => {
+      void (async () => {
+        const { checkForUpdate } = await import('../../api/updateStore');
+        await checkForUpdate();
+      })();
+    }, []);
+
     const chromeHidden = Boolean(sidebarCollapsed && !hoverExpanded);
 
     const searchStatusText = useMemo(() => {

@@ -253,7 +253,11 @@ describe('ui/Tabs', () => {
   it('垂直模式键盘漫游：ArrowDown / ArrowUp', () => {
     const onValueChange = vi.fn();
     render(
-      <Tabs defaultValue="tab1" orientation="vertical" onValueChange={onValueChange}>
+      <Tabs
+        defaultValue="tab1"
+        orientation="vertical"
+        onValueChange={onValueChange}
+      >
         <TabsList>
           <TabsTrigger value="tab1">选项1</TabsTrigger>
           <TabsTrigger value="tab2">选项2</TabsTrigger>
@@ -313,27 +317,33 @@ describe('ui/Tabs', () => {
     // 1. Appica 物理微回弹动效参数
     expect(CSS_SRC).toContain('cubic-bezier(0.2, 0, 0, 1)');
     expect(CSS_SRC).toContain('--tab-duration: 250ms');
-    expect(CSS_SRC).toContain('--tab-press-duration: 100ms');
+    expect(CSS_SRC).not.toContain('--tab-press-duration');
 
     // 2. 3.5% 暖灰底板与纯白卡底
     expect(CSS_SRC).toContain('background-color: var(--bg-secondary)');
     expect(CSS_SRC).toContain('background-color: var(--bg-card)');
 
-    // 3. 微观按压缩放与位移交互 (Scale 0.97 + 1px)
-    expect(CSS_SRC).toContain('transform: scale(0.97) translateY(1px)');
+    // 3. 原位点按不缩放。滑块位移才是分段切换的衔接。
+    expect(CSS_SRC).not.toContain('scale(0.97)');
 
     // 4. 同心圆角几何体系 R_inner = R_outer - Padding
     //    兜底清零（B6-T18 / 提交 45a9dce56）后：四档消费面一律零字面量兜底，
     //    真值唯一定义在 tokens.css（--radius-md 6px / --button-radius 7px / --radius-lg 8px / --radius-xl 12px）
-    expect(CSS_SRC).toContain('--tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad))');
+    expect(CSS_SRC).toContain(
+      '--tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad))'
+    );
     expect(CSS_SRC).toContain('--tab-outer-radius: var(--radius-md)');
     expect(CSS_SRC).toContain('--tab-outer-radius: var(--button-radius)');
     expect(CSS_SRC).toContain('--tab-outer-radius: var(--radius-lg)');
     expect(CSS_SRC).toContain('--tab-outer-radius: var(--radius-xl)');
-    expect(CSS_SRC).not.toMatch(/--tab-outer-radius:\s*var\(--(?:radius-md|radius-lg|radius-xl|button-radius)\s*,/);
+    expect(CSS_SRC).not.toMatch(
+      /--tab-outer-radius:\s*var\(--(?:radius-md|radius-lg|radius-xl|button-radius)\s*,/
+    );
 
     // 5. 焦点环与减弱动画兜底
-    expect(CSS_SRC).toContain('color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)');
+    expect(CSS_SRC).toContain(
+      'color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)'
+    );
     expect(CSS_SRC).toContain('@media (prefers-reduced-motion: reduce)');
     expect(CSS_SRC).toContain("html[data-perf-tier='eco']");
   });

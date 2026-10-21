@@ -15,7 +15,7 @@
   color: var(--text-primary);
   font-size: var(--font-size-sm, 13px);
   line-height: var(--line-height-base, 1.4);
-  animation: errorBarIn 160ms var(--ease-emphasized) forwards;
+  animation: errorBarIn var(--duration-fast) var(--ease-decelerate) forwards;
   will-change: transform, opacity;
 }
 

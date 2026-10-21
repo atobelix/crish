@@ -307,7 +307,7 @@
   color: var(--sep-text-muted);
 }
 .chevronIcon {
-  transition: transform var(--duration-normal) var(--ease-emphasized);
+  transition: transform var(--transition-chevron);
   color: var(--sep-text-muted);
 }
 .chevronRotated {

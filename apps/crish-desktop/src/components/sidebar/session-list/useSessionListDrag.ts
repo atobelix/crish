@@ -20,7 +20,12 @@ import {
 } from '../../shell/drag-engine/crossDomainDropRouter';
 import { commitSidebarSessionDrop } from '../../shell/sidebarSessionDropCommit';
 import { paneDropIndicatorRect } from '../../shell/sessionTabDragFeel';
-import { createIndicator } from '../../shell/sessionTabDragDom';
+import {
+  concealIndicator,
+  createIndicator,
+  indicatorClasses,
+  posIndicator,
+} from '../../shell/sessionTabDragDom';
 import {
   type DropPlace,
   type DropIndicator,
@@ -354,9 +359,7 @@ export function useSessionListDrag(
       const grabOffsetY = startY - rowRect.top;
 
       const hideIndicator = () => {
-        if (indicatorEl) {
-          indicatorEl.style.display = 'none';
-        }
+        concealIndicator(indicatorEl);
       };
 
       const showPaneIndicator = (
@@ -365,13 +368,11 @@ export function useSessionListDrag(
       ) => {
         if (!indicatorEl) {
           indicatorEl = createIndicator('分屏');
+          if (indicatorClasses.pane) {
+            indicatorEl.classList.add(indicatorClasses.pane);
+          }
         }
-        const indRect = paneDropIndicatorRect(region, rect);
-        indicatorEl.style.display = 'block';
-        indicatorEl.style.left = `${indRect.left}px`;
-        indicatorEl.style.top = `${indRect.top}px`;
-        indicatorEl.style.width = `${indRect.width}px`;
-        indicatorEl.style.height = `${indRect.height}px`;
+        posIndicator(indicatorEl, paneDropIndicatorRect(region, rect));
       };
 
       const applyPointer = (

@@ -26,7 +26,7 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-l);
   box-shadow: var(--shadow-popover);
-  animation: popoverFadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: popoverFadeIn var(--transition-popover-enter);
   pointer-events: auto;
   transition:
     border-color var(--transition-fast, 120ms ease),

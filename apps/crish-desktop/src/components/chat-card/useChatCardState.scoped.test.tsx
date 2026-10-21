@@ -9,7 +9,7 @@ import { renderHook, act } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { useSessionStore } from '../../store/sessionStore';
 import { useScopedSessionField } from './useScopedSessionField';
-import type { SessionState } from '../store/types';
+import type { SessionState } from '../../store/types';
 
 function seedStore(): void {
   useSessionStore.setState((st) => {
@@ -48,8 +48,7 @@ describe('useScopedSessionField 会话级订阅短路（T4.2）', () => {
     const selectorSpy = vi.fn(
       (s: SessionState | undefined) => s?.messages?.length ?? 0
     );
-    const resolveA = (s: { activeSessionId: string }) =>
-      'sess-a' as string;
+    const resolveA = (s: { activeSessionId: string }) => 'sess-a' as string;
 
     let renderCount = 0;
     const { result } = renderHook(() => {
@@ -81,8 +80,7 @@ describe('useScopedSessionField 会话级订阅短路（T4.2）', () => {
     const selectorSpy = vi.fn(
       (s: SessionState | undefined) => s?.messages?.length ?? 0
     );
-    const resolveA = (s: { activeSessionId: string }) =>
-      'sess-a' as string;
+    const resolveA = (s: { activeSessionId: string }) => 'sess-a' as string;
 
     let renderCount = 0;
     const { result } = renderHook(() => {
@@ -108,9 +106,7 @@ describe('useScopedSessionField 会话级订阅短路（T4.2）', () => {
   });
 
   it('activeSessionId 变更（prop 缺省）→ 重求值（sid 解析随 active 切换）', () => {
-    const selectorSpy = vi.fn(
-      (s: SessionState | undefined) => s?.title ?? ''
-    );
+    const selectorSpy = vi.fn((s: SessionState | undefined) => s?.title ?? '');
     // 无 prop：sid = activeSessionId
     const resolveActive = (s: { activeSessionId: string }) => s.activeSessionId;
 
@@ -131,9 +127,7 @@ describe('useScopedSessionField 会话级订阅短路（T4.2）', () => {
 
   it('消息正文变更但引用未变（不可能发生）与同值场景不重复求值', () => {
     // 同引用 patch（immer 不可能产生，防御断言）：selector 缓存命中
-    const selectorSpy = vi.fn(
-      (s: SessionState | undefined) => s?.title ?? ''
-    );
+    const selectorSpy = vi.fn((s: SessionState | undefined) => s?.title ?? '');
     const { result } = renderHook(() =>
       useScopedSessionField(
         (s: { activeSessionId: string }) => 'sess-a',

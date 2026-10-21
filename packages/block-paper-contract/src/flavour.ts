@@ -11,8 +11,6 @@
 
 import type { FlavourId } from './block-id';
 
-export type { FlavourId };
-
 /**
  * Flavour 属性 schema 草稿。
  * W0 不锁校验引擎（zod / JSON Schema / RS 校验二选一在 F1 落地）；

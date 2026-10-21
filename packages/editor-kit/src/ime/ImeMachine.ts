@@ -28,7 +28,6 @@ import {
   planScrollUnmount,
   type PinInput,
   type PinResult,
-  type PinViolationCode,
 } from '../viewport/pin';
 import {
   decideRemotePatch as decideRemotePatchPure,
@@ -485,7 +484,7 @@ export class ImeMachine {
   }
 }
 
-export type { PinViolationCode, GuardableIntent, StructureGuardResult };
+export type { GuardableIntent, StructureGuardResult };
 export type {
   ImeRemotePatch,
   ImeRemotePatchDecision,

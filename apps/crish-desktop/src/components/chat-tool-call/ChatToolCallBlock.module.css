@@ -395,8 +395,8 @@
   line-height: 1;
   color: var(--text-tertiary);
   transition:
-    transform var(--transition-fast, 150ms ease),
-    color var(--transition-fast, 150ms ease);
+    transform var(--duration-fast) var(--ease-decelerate),
+    color var(--transition-micro);
   flex-shrink: 0;
   user-select: none;
 }
@@ -413,7 +413,7 @@
   padding: 0;
   border: none;
   overflow: hidden;
-  transition: grid-template-rows 160ms var(--ease-emphasized);
+  transition: grid-template-rows var(--transition-accordion);
 }
 
 .toolBody.expanded,
@@ -426,16 +426,12 @@
   min-height: 0;
   contain: content;
   opacity: 0;
-  transform: translateY(-2px);
-  transition:
-    opacity 120ms ease-out,
-    transform 120ms var(--ease-emphasized);
+  transition: opacity var(--transition-accordion-fade);
 }
 
 .toolBody.expanded .toolBodyInner,
 .toolBody[data-expanded='true'] .toolBodyInner {
   opacity: 1;
-  transform: translateY(0);
 }
 
 /* Duration display */

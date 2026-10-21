@@ -105,16 +105,21 @@ describe('fontStore - preferencesClient 集成与偏好读写', () => {
 
     expect(result.uiFont).toBe('system-ui');
     expect(result.monoLigatures).toBe(true);
-    expect(setPrefSpy).toHaveBeenCalledWith('fonts', expect.objectContaining({
-      uiFont: 'system-ui',
-      monoLigatures: true,
-    }));
+    expect(setPrefSpy).toHaveBeenCalledWith(
+      'fonts',
+      expect.objectContaining({
+        uiFont: 'system-ui',
+        monoLigatures: true,
+      })
+    );
   });
 
   it('bootstrapFonts 同步应用当前偏好并启动异步补载', () => {
     const loaded = bootstrapFonts();
     expect(loaded).toBeDefined();
-    expect(document.documentElement.style.getPropertyValue('--font-sans')).toBeTruthy();
+    expect(
+      document.documentElement.style.getPropertyValue('--user-font-sans')
+    ).toBeTruthy();
   });
 
   it('describeActiveUi 与 describeActiveMono 返回描述文案', () => {
@@ -211,11 +216,13 @@ describe('productMode - preferencesClient 集成与产品壳层判定', () => {
   });
 
   it('loadProductModePreferences 从 preferencesClient 加载偏好', async () => {
-    vi.spyOn(preferencesClient, 'getPreference').mockImplementation(async (key: string) => {
-      if (key === 'product_shell') return true as any;
-      if (key === 'show_engine_settings') return true as any;
-      return false as any;
-    });
+    vi.spyOn(preferencesClient, 'getPreference').mockImplementation(
+      async (key: string) => {
+        if (key === 'product_shell') return true as any;
+        if (key === 'show_engine_settings') return true as any;
+        return false as any;
+      }
+    );
 
     await loadProductModePreferences();
     expect(isProductShell()).toBe(true);

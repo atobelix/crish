@@ -1,45 +1,50 @@
 /**
- * 会话 Tab 拖指示皮（参考 .tree-drop-indicator / .tree-drag-card）。
- * 不改 PaneHeader 胶囊密度；源 Tab 隐身用 :global(.is-dragging)。
+ * 会话标签拖拽指示皮。
+ * 落区对齐参考树落区：品牌绿 18% 实色、无边框；浮卡对齐参考拖拽卡的投影。
+ * 几何过渡走减速曲线，避免快出过冲。源标签隐身仍用 :global(.is-dragging)。
  */
 
 .indicator {
   position: fixed;
-  background: var(--tint-hover);
-  border: 1px dashed var(--border-subtle);
+  background: color-mix(in srgb, var(--brand-primary) 18%, transparent);
+  border: none;
   border-radius: var(--radius-m);
   box-sizing: border-box;
-  z-index: var(--z-tooltip, 9000);
+  z-index: var(--z-modal);
   pointer-events: none;
   display: none;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  opacity: 1;
   font-family: inherit;
+  transition:
+    left var(--duration-normal) var(--ease-decelerate),
+    top var(--duration-normal) var(--ease-decelerate),
+    width var(--duration-normal) var(--ease-decelerate),
+    height var(--duration-normal) var(--ease-decelerate),
+    border-radius var(--duration-fast) var(--ease-standard),
+    opacity var(--duration-fast) var(--ease-decelerate);
 }
 
 .strip {
   justify-content: flex-start;
   border-radius: var(--radius-m);
-  background: var(--tint-hover);
-  border: 1px dashed var(--border-subtle);
+  background: color-mix(in srgb, var(--brand-primary) 18%, transparent);
+  border: none;
 }
 
 .pane {
   justify-content: center;
-  border-radius: var(--radius-m);
-  background: color-mix(
-    in srgb,
-    var(--tint-hover) 80%,
-    transparent
-  );
-  border: var(--border-width-emphasis, 2px) dashed var(--border-subtle);
+  border-radius: var(--radius-l);
+  background: color-mix(in srgb, var(--brand-primary) 18%, transparent);
+  border: none;
 }
 
 .title {
   font-size: 12px;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--brand-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -50,14 +55,13 @@
 
 .pane .title {
   font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  padding: 4px 12px;
-  border-radius: var(--radius-m);
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-md);
+  font-weight: 500;
+  color: var(--brand-primary);
+  padding: 0 12px;
   max-width: 80%;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .card {
@@ -67,25 +71,29 @@
   pointer-events: none;
   z-index: var(--z-drag-overlay);
   box-sizing: border-box;
-  height: 26px;
-  max-width: 180px;
-  min-width: 60px;
-  padding: 0 8px;
+  padding: 0 10px;
   display: flex;
   align-items: center;
-  background: var(--bg-card);
+  opacity: 1;
+  background: var(--tab-active-bg, var(--surface-input));
   color: var(--text-primary);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid
+    color-mix(in srgb, var(--brand-primary) 42%, var(--border-color));
   border-radius: var(--radius-m);
-  box-shadow: var(--shadow-2xl);
-  font-size: 12px;
+  box-shadow:
+    0 8px 24px color-mix(in srgb, var(--shadow-color) 16%, transparent),
+    0 2px 6px color-mix(in srgb, var(--shadow-color) 8%, transparent);
+  font-size: var(--font-size-xs-plus, 12.5px);
   font-weight: 500;
   font-family: inherit;
   white-space: nowrap;
   overflow: hidden;
   will-change: transform, opacity;
   transform: translate3d(-9999px, -9999px, 0);
-  transition: opacity 120ms ease;
+  transition:
+    opacity var(--duration-fast) var(--ease-decelerate),
+    box-shadow var(--duration-fast) var(--ease-decelerate),
+    border-color var(--duration-fast) var(--ease-standard);
 }
 
 .card.detached,
@@ -95,14 +103,15 @@
   border-color: transparent;
 }
 
-/* 源 Tab 隐身；条内让位 transform 由 JS 写 inline */
+/* 源标签隐身；条内让位的 transform 由脚本写入行内样式 */
 :global([data-pane-header='true']) :global([role='tab'].is-dragging) {
   opacity: 0;
   pointer-events: none;
   border-color: transparent;
+  box-shadow: none;
 }
 
-/* 拖拽期隔离：不要给 * 设 pointer-events:none，条带与叶框仍需命中 */
+/* 拖拽期隔离：不要给通配选择器设 pointer-events:none，条带与叶框仍需命中 */
 :global(body.is-tab-dragging),
 :global(body.is-tab-dragging) *,
 :global(body.is-tab-dragging) [class] {
@@ -111,16 +120,25 @@
 
 :global(body.is-tab-dragging) [data-tree-canvas] [data-leaf-body],
 :global(body.is-tab-dragging) [data-tree-canvas] [data-leaf-body] [class],
-:global(body.is-tab-dragging) [data-tree-canvas] [data-leaf-id] > :not([data-pane-header]),
-:global(body.is-tab-dragging) [data-tree-canvas] [data-leaf-id] > :not([data-pane-header]) [class],
+:global(body.is-tab-dragging)
+  [data-tree-canvas]
+  [data-leaf-id]
+  > :not([data-pane-header]),
+:global(body.is-tab-dragging)
+  [data-tree-canvas]
+  [data-leaf-id]
+  > :not([data-pane-header])
+  [class],
 :global(body.is-tab-dragging) iframe,
 :global(body.is-tab-dragging) :global(.xterm),
 :global(body.is-tab-dragging) [data-markdown-editor] {
   pointer-events: none;
 }
 
-:global(body.is-tab-dragging) [data-pane-header="true"],
-:global(body.is-tab-dragging) [data-pane-header="true"] [role="tablist"],
-:global(body.is-tab-dragging) [data-pane-header="true"] [role="tab"]:not(.is-dragging) {
+:global(body.is-tab-dragging) [data-pane-header='true'],
+:global(body.is-tab-dragging) [data-pane-header='true'] [role='tablist'],
+:global(body.is-tab-dragging)
+  [data-pane-header='true']
+  [role='tab']:not(.is-dragging) {
   pointer-events: auto;
 }

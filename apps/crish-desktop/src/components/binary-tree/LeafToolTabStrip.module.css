@@ -434,7 +434,7 @@
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
-  animation: launcherHubFadeIn var(--duration-normal) var(--ease-emphasized)
+  animation: launcherHubFadeIn var(--duration-normal) var(--ease-decelerate)
     forwards;
 }
 

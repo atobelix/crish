@@ -82,7 +82,7 @@
   color: var(--text-tertiary);
   flex-shrink: 0;
   margin-left: 2px;
-  transition: transform var(--duration-fast) var(--ease-emphasized);
+  transition: transform var(--transition-chevron);
 }
 
 .agentTrigger:hover .bcChevron,

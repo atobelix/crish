@@ -13,6 +13,12 @@ import { DialogOverlayContext } from '../Dialog/dialogOverlayContext';
 import { Tooltip } from '../Tooltip/Tooltip';
 import menuStyles from '../Menu/Menu.module.css';
 import styles from './SmartExpandablePanel.module.css';
+import {
+  cascadeStyle,
+  estimateCascadeHeight,
+  placeCascadeSubmenu,
+  readCascadeSize,
+} from './PositionEngine';
 
 export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   items = [],
@@ -216,39 +222,32 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
       }
       const itemRect = el.getBoundingClientRect();
       const panelRect = contentRef.current?.getBoundingClientRect() ?? itemRect;
-      const vpWidth = typeof window !== 'undefined' ? window.innerWidth : 1280;
-      const vpHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
-
-      // 判断右侧空间是否足够 (至少 160px)
-      const spaceRight = vpWidth - panelRect.right - 12;
-      const fitsRight = spaceRight >= 160;
-
-      const stylePos: React.CSSProperties = {
-        position: 'fixed',
-        top: `${Math.max(12, Math.min(itemRect.top - 4, vpHeight - 200))}px`,
-        zIndex: 'var(--z-popover)' as unknown as number,
-      };
-
-      if (fitsRight) {
-        stylePos.left = `${panelRect.right + 4}px`;
-        stylePos.transformOrigin = 'top left';
-      } else {
-        stylePos.right = `${vpWidth - panelRect.left + 4}px`;
-        stylePos.transformOrigin = 'top right';
-      }
-
       setActiveSubmenu(item);
-      setSubmenuStyle(stylePos);
+      setSubmenuStyle(
+        cascadeStyle(
+          placeCascadeSubmenu(
+            panelRect,
+            itemRect.top,
+            200,
+            estimateCascadeHeight(item.children)
+          )
+        )
+      );
 
-      // 注册安全三角保护区
+      // 按真实宽高再放一次，短菜单贴着触发行，不再预留 200px
       requestAnimationFrame(() => {
-        if (cascadeSubmenuRef.current) {
-          safeAim.setSubmenu(
-            el,
-            cascadeSubmenuRef.current,
-            fitsRight ? 'right' : 'left'
-          );
-        }
+        const sub = cascadeSubmenuRef.current;
+        const panel = contentRef.current;
+        if (!sub || !panel) return;
+        const box = readCascadeSize(sub, estimateCascadeHeight(item.children));
+        const next = placeCascadeSubmenu(
+          panel.getBoundingClientRect(),
+          itemRect.top,
+          box.width,
+          box.height
+        );
+        setSubmenuStyle(cascadeStyle(next));
+        safeAim.setSubmenu(el, sub, next.side);
       });
     },
     [safeAim]

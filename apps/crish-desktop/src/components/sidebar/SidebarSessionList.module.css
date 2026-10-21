@@ -22,7 +22,7 @@
 .accordionWrapper {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 160ms var(--ease-emphasized);
+  transition: grid-template-rows var(--transition-accordion);
   overflow: hidden;
   margin: 0;
   padding: 0;
@@ -37,15 +37,11 @@
   min-height: 0;
   overflow: hidden;
   opacity: 0;
-  transform: translateY(-2px);
-  transition:
-    opacity 120ms ease-out,
-    transform 120ms var(--ease-emphasized);
+  transition: opacity var(--transition-accordion-fade);
 }
 
 .accordionWrapper[data-expanded='true'] .accordionInner {
   opacity: 1;
-  transform: translateY(0);
 }
 
 .section {

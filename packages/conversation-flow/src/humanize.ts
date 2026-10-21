@@ -47,10 +47,7 @@ export function parseArgs(raw: string | undefined): Record<string, unknown> {
   return { _raw: s };
 }
 
-function pickString(
-  props: Record<string, unknown>,
-  keys: string[],
-): string {
+function pickString(props: Record<string, unknown>, keys: string[]): string {
   for (const key of keys) {
     const v = props[key];
     if (typeof v === 'string' && v.trim()) return v.trim();
@@ -88,7 +85,7 @@ export function isShellName(name: string): boolean {
   );
 }
 
-export function isEditName(name: string): boolean {
+function isEditName(name: string): boolean {
   const n = (name || '').toLowerCase();
   return (
     n.includes('edit') ||
@@ -98,7 +95,7 @@ export function isEditName(name: string): boolean {
   );
 }
 
-export function isReadName(name: string): boolean {
+function isReadName(name: string): boolean {
   const n = (name || '').toLowerCase();
   return n.includes('read') || n.includes('view') || n === 'open_file';
 }
@@ -109,12 +106,12 @@ export function isSearchName(name: string): boolean {
   return n.includes('grep') || n.includes('search') || n === 'rg';
 }
 
-export function isListName(name: string): boolean {
+function isListName(name: string): boolean {
   const n = (name || '').toLowerCase();
   return n.includes('list') || n.includes('glob') || n.includes('dir');
 }
 
-export function inferVerbFromName(name: string): string {
+function inferVerbFromName(name: string): string {
   const n = (name || '').toLowerCase();
   if (isEditName(n)) {
     if (/\bwrite\b/.test(n) || n.includes('create') || n === 'write_file') {
@@ -176,7 +173,7 @@ function pastVerb(base: string): string {
 
 export function tensedVerb(
   baseVerb: string,
-  status: ProjectToolCallInput['status'],
+  status: ProjectToolCallInput['status']
 ): string {
   const base = baseVerb || '处理';
   if (status === 'running') {
@@ -186,12 +183,12 @@ export function tensedVerb(
 }
 
 /** 模板噪声：归一时丢掉，避免「查看文件」各自成 Purpose */
-export function isGenericExplanationSpam(text: string): boolean {
+function isGenericExplanationSpam(text: string): boolean {
   const t = String(text || '').trim();
   if (!t) return true;
   if (
     /^(正在)?(查看|浏览|修改|搜索|访问|读取|写入|列出|创建|运行)(文件|目录|代码|网络|内容|命令|工具)?$/.test(
-      t,
+      t
     )
   ) {
     return true;
@@ -201,7 +198,7 @@ export function isGenericExplanationSpam(text: string): boolean {
   }
   if (
     /^(创建目录|列出目录|列出目录内容|运行命令|运行终端命令|查看文件内容|查看文件|修改文件|写入文件|切换工作目录)(\s+\S+)?$/.test(
-      t,
+      t
     )
   ) {
     return true;
@@ -225,7 +222,7 @@ export function normalizePurpose(raw: string | undefined): string {
 
 export function toolVerbBase(
   tc: ProjectToolCallInput,
-  hooks?: HumanizeHooks,
+  hooks?: HumanizeHooks
 ): string {
   const injected = hooks?.verb?.(tc.name);
   if (injected) return injected;
@@ -234,7 +231,7 @@ export function toolVerbBase(
 
 export function fallbackLabel(
   tc: ProjectToolCallInput,
-  hooks?: HumanizeHooks,
+  hooks?: HumanizeHooks
 ): string {
   const injected = hooks?.label?.(tc);
   if (injected && injected.trim()) return injected.trim();
