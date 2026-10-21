@@ -396,15 +396,15 @@ cargo check --manifest-path apps/agent-workbench/src-tauri/Cargo.toml
 cargo test --workspace
 ```
 
-### 6.2 CDP Browser Protocol Debugging Protocol
+### 6.2 UI Debugging Protocol (Tauri MCP 4000)
 
-UI verification MUST be conducted directly against the running WebView2 instance via Chrome DevTools Protocol (CDP) on port 9222 (`.agents/AGENTS.md:36-47`):
+UI verification MUST be conducted directly against the running WebView2 instance via the Tauri MCP Socket (`127.0.0.1:4000`; 唯一合法通道见 AGENTS.md §15.2/§16)（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）:
 
 1. **Start Dev Workbench**: `npm run dev:workbench`
-2. **Connect to CDP Target**: `ws://127.0.0.1:9222/devtools/page/...`
+2. **Connect to Tauri MCP Debug Channel**: `127.0.0.1:4000` Tauri MCP Socket（连接与鉴权见 AGENTS.md §16）（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）
 3. **Verify Global Store Facades**:
    ```javascript
-   // Evaluate via CDP Console
+   // Evaluate via the Tauri MCP debug channel
    console.assert(window.__CRISH_SESSION_STORE__ !== undefined, "Session store facade missing");
    console.assert(window.__CRISH_LAYOUT_STORE__ !== undefined, "Layout store facade missing");
    console.assert(window.__CRISH_TREE_STORE__ !== undefined, "Tree store facade missing");

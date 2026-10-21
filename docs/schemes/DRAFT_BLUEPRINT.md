@@ -31,7 +31,7 @@ This blueprint establishes a multi-agent, 6-stage repair and migration lifecycle
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                           STAGE 2: TASK DECOMPOSITION                                   │
 │  Subtask A: UI Container Shell   │ Subtask B: Editor Field   │ Subtask C: Slash & Mention │
-│  Subtask D: Custom State Hook    │ Subtask E: IPC Bridge     │ Subtask F: QA & CDP Suite  │
+│  Subtask D: Custom State Hook    │ Subtask E: IPC Bridge     │ Subtask F: QA & MCP Suite  │
 └───────────────────────────────────────────┬─────────────────────────────────────────────┘
                                             │
                                             ▼
@@ -56,7 +56,7 @@ This blueprint establishes a multi-agent, 6-stage repair and migration lifecycle
                                             ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │                           STAGE 6: VERIFICATION MATRIX                                  │
-│  5-Level CLI Check Suite + CDP 9222 WebView2 Runtime Inspection & Screenshot Validation  │
+│  5-Level CLI Check Suite + Tauri MCP 4000 WebView2 Runtime Inspection & Screenshot Validation  │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -117,7 +117,7 @@ apps/crish-desktop/src/components/chat-composer/
   - Integrate frontend Markdown serializer output directly into `daemonClient.ts` calling `core_run_task` on `apps/agent-workbench/src-tauri/src/core_run_commands.rs`.
 
 * **Subtask E: Verification & Quality Assurance**
-  - Execute 5-level check suite (`check:desktop`, `check:ui-layer`, `lint:depcruise`, `cargo check`, `cargo test`) and conduct CDP 9222 runtime inspection against running WebView2 process.
+  - Execute 5-level check suite (`check:desktop`, `check:ui-layer`, `lint:depcruise`, `cargo check`, `cargo test`) and conduct Tauri MCP 4000 runtime inspection against running WebView2 process.
 
 ---
 
@@ -137,7 +137,7 @@ apps/crish-desktop/src/components/chat-composer/
 | **Agent 3 (Extensions)** | `TiptapSlashMenu.tsx`, `SlashExtension.ts` | `composerTypes.ts` | Medium (200 lines) |
 | **Agent 4 (Data & Hook)** | `useTiptapComposerState.ts`, `composerTypes.ts` | `src/store/sessionStore.ts` | High (300 lines) |
 | **Agent 5 (IPC Bridge)** | `src/api/daemonClient.ts` | `apps/agent-workbench/src-tauri/src/core_run_commands.rs` | Low (100 lines) |
-| **Agent 6 (QA & CDP)** | Verification Reports & Check Commands | Entire Monorepo | Verification & Audit |
+| **Agent 6 (QA & MCP)** | Verification Reports & Check Commands | Entire Monorepo | Verification & Audit |
 
 ---
 
@@ -158,7 +158,7 @@ Agent 1 (Shell) Agent 2 (Field) Agent 3 (Menu)  Agent 4 (Hook)  Agent 5 (IPC)
 Phase T2: Single Source of Truth Aggregation & Wiring Reconciliation
                                    │
                                    ▼
-Phase T3: 5-Level Verification Suite & CDP 9222 Inspection (Agent 6)
+Phase T3: 5-Level Verification Suite & Tauri MCP 4000 Inspection (Agent 6)
 ```
 
 #### Phase T0 Anti-Collision File Access Matrix
@@ -209,8 +209,8 @@ desktop            ui-layer               depcruise           cargo test
                                          │
                                          ▼
                   ┌──────────────────────────────────────────────┐
-                  │    5. CDP 9222 RUNTIME WEBVIEW2 INSPECTION   │
-                  │ - Connect to ws://127.0.0.1:9222             │
+                  │    5. Tauri MCP 4000 RUNTIME WEBVIEW2 INSPECTION   │
+                  │ - Connect via Tauri MCP (port 4000)          │
                   │ - Validate window.__CRISH_SESSION_STORE__    │
                   │ - Capture screenshot of focused Tiptap field │
                   └──────────────────────────────────────────────┘
@@ -234,15 +234,15 @@ cargo check --manifest-path apps/agent-workbench/src-tauri/Cargo.toml
 cargo test --workspace
 ```
 
-#### 2. CDP 9222 Runtime Protocol
+#### 2. Tauri MCP 4000 Runtime Protocol
 - **Launch Command**: `npm run dev:workbench`
-- **CDP Session URL**: `http://127.0.0.1:9222/json/list` → `ws://127.0.0.1:9222/devtools/page/...`
+- **CDP Session URL**: `127.0.0.1:4000` Tauri MCP Socket（连接与鉴权见 AGENTS.md §16；authToken 取自 `%TEMP%\tauri-mcp-4000.token`）（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）
 - **Automated Console Assertion Script**:
   ```javascript
-  // Evaluated directly via CDP Console
-  console.assert(window.__CRISH_SESSION_STORE__ !== undefined, "[CDP Audit] Session Store Facade Missing!");
-  console.assert(window.__CRISH_LAYOUT_STORE__ !== undefined, "[CDP Audit] Layout Store Facade Missing!");
-  console.assert(window.__CRISH_TREE_STORE__ !== undefined, "[CDP Audit] Layout Tree Store Facade Missing!");
+  // Evaluated directly via the Tauri MCP debug channel
+  console.assert(window.__CRISH_SESSION_STORE__ !== undefined, "[MCP Audit] Session Store Facade Missing!");
+  console.assert(window.__CRISH_LAYOUT_STORE__ !== undefined, "[MCP Audit] Layout Store Facade Missing!");
+  console.assert(window.__CRISH_TREE_STORE__ !== undefined, "[MCP Audit] Layout Tree Store Facade Missing!");
   ```
 - **Prohibited Mock Environment Testing**: Testing against standalone browser `http://localhost:5174` is strictly forbidden because browser mode lacks Tauri IPC host bindings.
 

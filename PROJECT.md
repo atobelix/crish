@@ -17,13 +17,15 @@
 | 7 | Round 4 Subagent Task Guide | Decoupled pure subagent task guidance, prompt templates, operational rules, role constraints, and task cards for max 6 parallel subagents | M4 | `SUBAGENT_TASK_GUIDE.md` | Round 3 Schemes |
 
 ## Milestones
-| # | Name | Scope | Dependencies | Status |
-|---|------|-------|-------------|--------|
-| M0 | Baseline Requirements Documentation | Generate SRS requirements in `docs/schemes/SRS_REQUIREMENTS.md` | Survey | PLANNED |
-| M1 | Round 1 — Initial Draft Blueprint | Draft initial blueprint in `docs/schemes/DRAFT_BLUEPRINT.md` | M0 | PLANNED |
-| M2 | Round 2 — Master Plan Synthesis | Produce conflict-prevention review & `docs/schemes/MASTER_PLAN.md` | M1 | PLANNED |
-| M3 | Round 3 — Dimension Detailing | Output `SCHEME_FRONTEND.md`, `SCHEME_IPC.md`, `SCHEME_DATA.md` | M2 | PLANNED |
-| M4 | Round 4 — Final Audit & Task Guide | Output `SUBAGENT_TASK_GUIDE.md` & execute final audit | M3 | PLANNED |
+> 状态更新于 2026-10-20（统一修复战役 T-DOC-01 / GAP-06：M0–M4 按仓库现状核实，取代原五个里程碑全部「未开始」的旧口径）。三列口径：**方案已产出** = 交付文件在 `docs/schemes/` 实际存在（`ls` + `wc -l` 实测）；**代码已接入** = 方案对应的迁移代码在仓库可验证；**验收已通过** = 门禁/审计证据现状。证据命令见各格括号。
+
+| # | Name | Scope | Dependencies | Status | 方案已产出 | 代码已接入 | 验收已通过 |
+|---|------|-------|-------------|--------|-----------|-----------|-----------|
+| M0 | Baseline Requirements Documentation | Generate SRS requirements in `docs/schemes/SRS_REQUIREMENTS.md` | Survey | COMPLETED | ✅ `SRS_REQUIREMENTS.md`（425 行，`wc -l` 实测） | —（需求文档轮，无直接代码面） | ⚠️ 部分：M0 门禁第 1 轮 FAIL → 修复迭代已执行（`.agents/orchestrator/GATE_STATUS.md`、`progress.md` Phase 4–5） |
+| M1 | Round 1 — Initial Draft Blueprint | Draft initial blueprint in `docs/schemes/DRAFT_BLUEPRINT.md` | M0 | COMPLETED | ✅ `DRAFT_BLUEPRINT.md`（836 行） | —（蓝图轮） | ⚠️ 部分：同上，审计驱动迭代（Phase 4–5） |
+| M2 | Round 2 — Master Plan Synthesis | Produce conflict-prevention review & `docs/schemes/MASTER_PLAN.md` | M1 | COMPLETED | ✅ `MASTER_PLAN.md`（783 行） | —（总案轮） | ⚠️ 部分：同上 |
+| M3 | Round 3 — Dimension Detailing | Output `SCHEME_FRONTEND.md`, `SCHEME_IPC.md`, `SCHEME_DATA.md` | M2 | COMPLETED | ✅ 三文件（836 / 778 / 788 行） | ✅ Tiptap 迁移代码已落地：`@tiptap/* ^3.31.4` 在 `apps/crish-desktop/package.json`；`apps/crish-desktop/src/components/chat-composer/TiptapEditorField.tsx` 等组件存在（`rg -l TiptapEditorField` 实测）；`progress.md` Phase T0–T3 completed | ⚠️ 部分：Phase 4 三审计 REJECTED → Phase 5 修复执行完毕；Phase 6 复审记录截至 2026-08-04（`progress.md` last visited） |
+| M4 | Round 4 — Final Audit & Task Guide | Output `SUBAGENT_TASK_GUIDE.md` & execute final audit | M3 | COMPLETED | ✅ `SUBAGENT_TASK_GUIDE.md`（555 行）；另有合并终案 `FINAL_REPAIR_SCHEME.md`（3782 行） | ✅ 按任务指南实际派工执行：`progress.md` 15 个子 Agent 派工记录（T0–T5 worker + 修复轮） | ⚠️ 部分：终审「全绿」记录缺失——Phase 6 复审 in-progress 后未留终态门禁记录；终态验收须按当前 HEAD 复跑 `FULL_CHECK_COMMANDS.md` 门禁 |
 
 ## Interface Contracts & Governance Rules
 - All output blueprint files must be placed directly in `C:\Software\conex\docs\schemes/`.

@@ -69,11 +69,11 @@ The following matrix provides the binding technical resolutions for all identifi
 
 | Conflict ID | Domain | Identified Vulnerability / Risk | Master Plan Resolved Technical Specification | Verification & Enforcement |
 |---|---|---|---|---|
-| **CRM-01** | Popover UI | Prototype used `tippy.js` DOM injection. In Tauri WebView2, appending nodes to `document.body` leaves detached DOM nodes and trapped event listeners on unmount. Container `overflow-y: auto` also clips popover menus. | Replace Tippy.js with `@radix-ui/react-popover` utilizing `<Popover.Portal>`. Calculate absolute menu positioning from ProseMirror editor coordinates (`view.coordsAtPos(range.from)`). Implement explicit unmount cleanup hooks destroying active portals. | `npm run check:desktop` + CDP Port 9222 DOM tree inspection. |
-| **CRM-02** | SSOT State | `useTiptapComposerState` held local state buffers for `prompt` and `attachments`. Switching active sessions in `window.__CRISH_SESSION_STORE__` caused stale prompt text to spill into the newly selected session. | Session ID changes trigger an automatic bi-directional draft synchronization: 1. Auto-save current text to `sessionStore.setDraft(oldSessionId, draft)`. 2. Hydrate Tiptap content and attachments from `sessionStore.getDraft(newSessionId)`. | CDP Port 9222 evaluation of `window.__CRISH_SESSION_STORE__.getState().drafts`. |
+| **CRM-01** | Popover UI | Prototype used `tippy.js` DOM injection. In Tauri WebView2, appending nodes to `document.body` leaves detached DOM nodes and trapped event listeners on unmount. Container `overflow-y: auto` also clips popover menus. | Replace Tippy.js with `@radix-ui/react-popover` utilizing `<Popover.Portal>`. Calculate absolute menu positioning from ProseMirror editor coordinates (`view.coordsAtPos(range.from)`). Implement explicit unmount cleanup hooks destroying active portals. | `npm run check:desktop` + Tauri MCP 4000 DOM tree inspection. |
+| **CRM-02** | SSOT State | `useTiptapComposerState` held local state buffers for `prompt` and `attachments`. Switching active sessions in `window.__CRISH_SESSION_STORE__` caused stale prompt text to spill into the newly selected session. | Session ID changes trigger an automatic bi-directional draft synchronization: 1. Auto-save current text to `sessionStore.setDraft(oldSessionId, draft)`. 2. Hydrate Tiptap content and attachments from `sessionStore.getDraft(newSessionId)`. | Tauri MCP 4000 evaluation of `window.__CRISH_SESSION_STORE__.getState().drafts`. |
 | **CRM-03** | Keymaps & IME | Pressing `Enter` during CJK (Chinese/Japanese/Korean) Input Method Editor (IME) composition confirmed character candidates but accidentally triggered message submission. | Add a high-priority ProseMirror `handleKeyDown` plugin hook inside `TiptapEditorField.tsx`. Check `if (view.composing \|\| event.isComposing) return false;`. Passing `false` instructs ProseMirror to yield execution to native browser IME handling. | Manual CJK text input test + Vitest unit test in `TiptapEditorField.test.tsx`. |
 | **CRM-04** | Markdown Serialization | Native Tiptap HTML output strips interactive TaskList checkbox states (`[ ]` / `[x]`) and entity Mention pill metadata (`@file`, `@agent`) when converted to Markdown strings for `core_run_task`. | Implement custom GFM Markdown Serializer rules inside `useTiptapComposerState.ts`. Task items map strictly to `- [ ] text` or `- [x] text`. Mention nodes serialize to GFM entity references `@[label](id)`. | Unit test verifying AST ↔ Markdown bidirectional round-trip conversion. |
-| **CRM-05** | Image Memory Leak | High-resolution image clipboard pastes generate massive Base64 `dataUrl` strings, leading to memory bloat in Zustand store and IPC payload latency. | Image attachments convert to temporary object URLs (`URL.createObjectURL(blob)`) for UI preview rendering. Base64 encoding is deferred until IPC payload assembly. Attachment deletion invokes `URL.revokeObjectURL(url)` immediately. | Memory heap profiling via CDP Port 9222 `take_heapsnapshot`. |
+| **CRM-05** | Image Memory Leak | High-resolution image clipboard pastes generate massive Base64 `dataUrl` strings, leading to memory bloat in Zustand store and IPC payload latency. | Image attachments convert to temporary object URLs (`URL.createObjectURL(blob)`) for UI preview rendering. Base64 encoding is deferred until IPC payload assembly. Attachment deletion invokes `URL.revokeObjectURL(url)` immediately. | Memory heap profiling via Tauri MCP 4000 `take_heapsnapshot`. |
 | **CRM-06** | Visual Softness | Hardcoded focus border styles (`border: 1px solid #111`) and box shadows violate host visual softness rules (`.agents/AGENTS.md:21-35`). | Enforce CSS `color-mix()` rules on all input container borders: standard focus uses `color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)`; empty landing state (`data-empty-kind="session-empty"`) uses `color-mix(in srgb, var(--border-color) 95%, var(--text-primary) 5%)`. Specify `box-shadow: none !important;`. | Visual inspection + CSS linting in `TiptapEditorField.module.css`. |
 | **CRM-07** | File Overlap | Parallel subagent execution risks multiple agents modifying `TiptapComposerContainer.tsx` or `composerTypes.ts` simultaneously, causing git merge conflicts. | Enforce strict **Phase T0 Stub Gate**. Types and stub signatures are locked in Phase T0. Each parallel subagent in Phase T1–T3 is assigned an exclusive target file domain (Read-Any, Write-Own). | Monorepo file ownership lock check script. |
 
@@ -115,7 +115,7 @@ To guarantee zero file modification collisions during parallel execution, the mi
                                              ▼
 ┌──────────────────────────────────────────────────────────────────────────────────────────┐
 │                     PHASE T4: INTEGRATION & 5-LEVEL VERIFICATION                         │
-│   Agent 6 executes 5 CLI check commands + CDP Port 9222 WebView2 runtime inspection      │
+│   Agent 6 executes 5 CLI check commands + Tauri MCP 4000 WebView2 runtime inspection      │
 └──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -492,7 +492,7 @@ export async function cancelRunCommand(sessionId: string): Promise<void> {
 
 ### 2.5 Phase T4: Integration & 5-Level Verification Suite
 
-During Phase T4, **Agent 6** runs the complete verification suite combining CLI checks with CDP 9222 runtime WebView2 inspection.
+During Phase T4, **Agent 6** runs the complete verification suite combining CLI checks with Tauri MCP 4000 runtime WebView2 inspection.
 
 ```powershell
 # 1. Frontend Workspace TypeScript Compilation Check
@@ -511,16 +511,16 @@ cargo check --manifest-path apps/agent-workbench/src-tauri/Cargo.toml
 cargo test --workspace
 ```
 
-#### CDP 9222 WebView2 Runtime Inspection Protocol:
+#### Tauri MCP 4000 WebView2 Runtime Inspection Protocol:
 1. Launch Dev Workbench: `npm run dev:workbench`
-2. Connect to CDP websocket: `ws://127.0.0.1:9222/devtools/page/...`
+2. Connect to CDP websocket: `127.0.0.1:4000` Tauri MCP Socket（连接与鉴权见 AGENTS.md §16）（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）
 3. Evaluate console store facade assertions:
    ```javascript
-   console.assert(window.__CRISH_SESSION_STORE__ !== undefined, "[CDP Audit] Session Store Facade Missing!");
-   console.assert(window.__CRISH_LAYOUT_STORE__ !== undefined, "[CDP Audit] Layout Store Facade Missing!");
-   console.assert(window.__CRISH_TREE_STORE__ !== undefined, "[CDP Audit] Layout Tree Store Facade Missing!");
+   console.assert(window.__CRISH_SESSION_STORE__ !== undefined, "[MCP Audit] Session Store Facade Missing!");
+   console.assert(window.__CRISH_LAYOUT_STORE__ !== undefined, "[MCP Audit] Layout Store Facade Missing!");
+   console.assert(window.__CRISH_TREE_STORE__ !== undefined, "[MCP Audit] Layout Tree Store Facade Missing!");
    ```
-4. Verify visual contrast using CDP screenshot evaluation: focus state border mix must be soft gray, zero box shadow.
+4. Verify visual contrast using Tauri MCP screenshot evaluation: focus state border mix must be soft gray, zero box shadow.
 
 ---
 

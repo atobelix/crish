@@ -145,7 +145,7 @@ export interface LayoutTreeStoreState {
 
 ### 1.3 Window Store Facade Bindings [REF:DATA-003]
 
-For CDP protocol inspection, runtime debugging, and external automation scripts, core Zustand stores are bound to the `window` object during application bootstrap (`apps/crish-desktop/src/main.tsx:30-36`).
+For Tauri MCP (port 4000) inspection, runtime debugging, and external automation scripts, core Zustand stores are bound to the `window` object during application bootstrap (`apps/crish-desktop/src/main.tsx:30-36`).
 
 #### Window Augmentation Interface (`apps/crish-desktop/src/types/global.d.ts`)
 ```typescript
@@ -161,7 +161,7 @@ declare global {
 
 #### Bootstrap Exposure Binding (`apps/crish-desktop/src/main.tsx:30-36`)
 ```typescript
-// Expose core store facades to window for CDP debugging and test inspection
+// Expose core store facades to window for Tauri MCP debugging and test inspection
 try {
   const { useLayoutStore } = await import('./store/layoutStore');
   const { useSessionStore } = await import('./store/sessionStore');
@@ -177,18 +177,18 @@ try {
 }
 ```
 
-#### CDP Inspection Protocol & Console Assertions [REF:DATA-004]
-When running CDP automation scripts over `ws://127.0.0.1:9222`, tests verify store facade hydration using explicit JS evaluations:
+#### Tauri MCP Inspection Protocol & Console Assertions [REF:DATA-004]
+When running UI automation scripts (via Tauri MCP) over `127.0.0.1:4000` Tauri MCP Socket（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）, tests verify store facade hydration using explicit JS evaluations:
 
 ```javascript
-// CDP Console Verification Assertions
-console.assert(window.__CRISH_SESSION_STORE__ !== undefined, "[CDP Audit] Session store facade missing!");
-console.assert(window.__CRISH_LAYOUT_STORE__ !== undefined, "[CDP Audit] Layout store facade missing!");
-console.assert(window.__CRISH_TREE_STORE__ !== undefined, "[CDP Audit] Tree store facade missing!");
+// Tauri MCP debug channel verification assertions
+console.assert(window.__CRISH_SESSION_STORE__ !== undefined, "[MCP Audit] Session store facade missing!");
+console.assert(window.__CRISH_LAYOUT_STORE__ !== undefined, "[MCP Audit] Layout store facade missing!");
+console.assert(window.__CRISH_TREE_STORE__ !== undefined, "[MCP Audit] Tree store facade missing!");
 
 // Read active session ID via store facade
 const activeId = window.__CRISH_SESSION_STORE__.getState().activeSessionId;
-console.log("[CDP Audit] Active Session ID:", activeId);
+console.log("[MCP Audit] Active Session ID:", activeId);
 ```
 
 ---
@@ -732,12 +732,12 @@ useEffect(() => {
 }, []);
 ```
 
-#### 3. CDP 9222 Memory Profiling & Verification Command
-Memory leak prevention is verified using CDP protocol heap snapshots:
+#### 3. Tauri MCP 4000 Memory Profiling & Verification Command
+Memory leak prevention is verified using Tauri MCP runtime memory inspection（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）:
 
 ```javascript
-// CDP Heap Snapshot Inspection Command
-await cdp.send('HeapProfiler.takeHeapSnapshot');
+// Memory inspection via Tauri MCP
+// （原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）；改经 Tauri MCP 执行等效内存检查
 // Assert zero lingering Blob URLs or detached DOM nodes
 ```
 
@@ -754,7 +754,7 @@ All requirements specified in `SRS_REQUIREMENTS.md` and `MASTER_PLAN.md` map to 
 | `[REF:DATA-001]` | Data Model Architecture & Store Facades | `src/store/sessionStore.ts` | SRS FR-104 / Master Plan Section 3 |
 | `[REF:DATA-002]` | Zustand Stores & Slice Definitions | `src/store/layoutStore.ts` | SRS Section 4.3 |
 | `[REF:DATA-003]` | Window Store Facade Bindings | `src/main.tsx:30-36` | SRS Section 4.3 / Master Plan Section 3.1 |
-| `[REF:DATA-004]` | CDP Inspection Protocol & Assertions | `src/test-setup.ts` | SRS Section 6.2 / Master Plan CRM-02 |
+| `[REF:DATA-004]` | Tauri MCP Inspection Protocol & Assertions | `src/test-setup.ts` | SRS Section 6.2 / Master Plan CRM-02 |
 | `[REF:DATA-005]` | Rust Engine SQLite Write Model | `src/api/session-persistence/sessionRustDb.ts` | SRS Section 1.1 / Master Plan CRM-02 |
 | `[REF:DATA-006]` | Full-Replacement Write Semantics | `src/api/session-persistence/sessionRustDbWriteModel.test.ts` | Master Plan CRM-02 / Stream D |
 | `[REF:DATA-007]` | Draft Persistence & Session Switching | `src/components/chat-composer/useTiptapComposerState.ts` | SRS FR-104 / Master Plan CRM-02 |

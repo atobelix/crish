@@ -40,7 +40,7 @@ Decoupling operational guidance into this dedicated manual achieves:
 │ ├──────────────────────────────────────────────────────────────────────────────────────┤ │
 │ │ 3. Standalone Task Prompt Cards 1–6 (Phases T0–T3 Detailed Work Instructions)        │ │
 │ ├──────────────────────────────────────────────────────────────────────────────────────┤ │
-│ │ 4. Operational Protocols & Verification Checklist (CLI Suite & CDP 9222 Inspection)  │ │
+│ │ 4. Operational Protocols & Verification Checklist (CLI Suite & Tauri MCP 4000 Inspection)  │ │
 │ └──────────────────────────────────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -465,7 +465,7 @@ Implement direct Tauri IPC command invocation wrappers (`daemonClient.ts`) calli
 
 ## Operational Protocols & Verification Checklist
 
-To verify that all subagent code modifications pass host quality standards, execute the complete 5-level command verification suite and CDP 9222 runtime inspection protocol.
+To verify that all subagent code modifications pass host quality standards, execute the complete 5-level command verification suite and Tauri MCP 4000 runtime inspection protocol.
 
 ```
                   ┌──────────────────────────────────────────────┐
@@ -482,8 +482,8 @@ desktop            ui-layer               depcruise           cargo test
                                          │
                                          ▼
                   ┌──────────────────────────────────────────────┐
-                  │    5. CDP 9222 RUNTIME WEBVIEW2 INSPECTION   │
-                  │ - Connect to ws://127.0.0.1:9222             │
+                  │    5. Tauri MCP 4000 RUNTIME WEBVIEW2 INSPECTION   │
+                  │ - Connect via Tauri MCP (port 4000)          │
                   │ - Validate window.__CRISH_SESSION_STORE__    │
                   │ - Capture screenshot of focused Tiptap field │
                   └──────────────────────────────────────────────┘
@@ -512,24 +512,24 @@ cargo test --workspace
 
 ---
 
-### 2. CDP 9222 Runtime WebView2 Inspection Protocol
+### 2. Tauri MCP 4000 Runtime WebView2 Inspection Protocol
 
-UI verification MUST be conducted directly against the running WebView2 instance via Chrome DevTools Protocol (CDP) on port 9222 (`.agents/AGENTS.md:36-47`):
+UI verification MUST be conducted directly against the running WebView2 instance via the Tauri MCP Socket (`127.0.0.1:4000`; 唯一合法通道见 AGENTS.md §15.2/§16)（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）:
 
 1. **Launch Workbench**:
    ```powershell
    npm run dev:workbench
    ```
-2. **Connect to CDP Target**:
-   Fetch target list from `http://127.0.0.1:9222/json/list` and connect via WebSocket:
-   `ws://127.0.0.1:9222/devtools/page/...`
+2. **Connect to Tauri MCP Debug Channel**:
+   Load the Tauri MCP connection info (port `4000`, authToken from `%TEMP%\tauri-mcp-4000.token`) per AGENTS.md §16:（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）
+   `127.0.0.1:4000` Tauri MCP Socket（连接与鉴权见 AGENTS.md §16）（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）
 
 3. **Evaluate Store Facade Console Assertions**:
    ```javascript
-   // Evaluated directly via CDP Console
-   console.assert(window.__CRISH_SESSION_STORE__ !== undefined, "[CDP Audit] Session store facade missing!");
-   console.assert(window.__CRISH_LAYOUT_STORE__ !== undefined, "[CDP Audit] Layout store facade missing!");
-   console.assert(window.__CRISH_TREE_STORE__ !== undefined, "[CDP Audit] Layout tree store facade missing!");
+   // Evaluated directly via the Tauri MCP debug channel
+   console.assert(window.__CRISH_SESSION_STORE__ !== undefined, "[MCP Audit] Session store facade missing!");
+   console.assert(window.__CRISH_LAYOUT_STORE__ !== undefined, "[MCP Audit] Layout store facade missing!");
+   console.assert(window.__CRISH_TREE_STORE__ !== undefined, "[MCP Audit] Layout tree store facade missing!");
    ```
 
 4. **Visual Contrast & Shadow Inspection**:
@@ -549,7 +549,7 @@ Before submitting handoff, the subagent team lead MUST verify:
 - [x] Integrity mandate and red lines enforced (contrast mix 3%–10%, max 5% landing, zero box shadows, custom Tooltip, line-count caps).
 - [x] File ownership boundaries and T0 stub locking rules enforced.
 - [x] All 5 CLI check commands passed without errors.
-- [x] CDP Port 9222 WebView2 inspection verified against live store facades.
+- [x] Tauri MCP 4000 WebView2 inspection verified against live store facades.
 
 ---
 *End of Subagent Execution Manual & Task Guide (`SUBAGENT_TASK_GUIDE.md`)*

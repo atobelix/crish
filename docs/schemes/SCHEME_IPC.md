@@ -761,15 +761,15 @@ cargo check --manifest-path apps/agent-workbench/src-tauri/Cargo.toml
 # 4. Run Rust Backend Engine Workspace Unit Test Suite
 cargo test --workspace
 
-# 5. Conduct Live CDP 9222 Runtime Event Stream Audit
+# 5. Conduct Live Tauri MCP 4000 Runtime Event Stream Audit
 npm run dev:workbench
 ```
 
-#### CDP 9222 WebView2 Runtime Event Stream Verification:
-1. Connect Chrome DevTools CDP protocol to target: `ws://127.0.0.1:9222/devtools/page/...`
+#### Tauri MCP 4000 WebView2 Runtime Event Stream Verification:
+1. Connect to the Tauri MCP debug channel (AGENTS.md §16)（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）: `127.0.0.1:4000` Tauri MCP Socket（连接与鉴权见 AGENTS.md §16）（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）
 2. Evaluate event listener registration:
    ```javascript
-   // Verify event stream binding via CDP Console
+   // Verify event stream binding via the Tauri MCP debug channel
    console.assert(window.__CRISH_SESSION_STORE__ !== undefined, "Session store facade active");
    ```
 3. Trigger `core_run_task` from UI and confirm SSE events (`MessageDelta`, `AgentEventEnvelope`) stream back without latency or detached DOM memory leaks.

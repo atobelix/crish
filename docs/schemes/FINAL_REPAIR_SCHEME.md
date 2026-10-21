@@ -75,11 +75,11 @@ The following matrix provides the binding technical resolutions for all identifi
 
 | Conflict ID | Domain | Identified Vulnerability / Risk | Master Plan Resolved Technical Specification | Verification & Enforcement |
 |---|---|---|---|---|
-| **CRM-01** | Popover UI | Prototype used `tippy.js` DOM injection. In Tauri WebView2, appending nodes to `document.body` leaves detached DOM nodes and trapped event listeners on unmount. Container `overflow-y: auto` also clips popover menus. | Replace Tippy.js with `@radix-ui/react-popover` utilizing `<Popover.Portal>`. Calculate absolute menu positioning from ProseMirror editor coordinates (`view.coordsAtPos(range.from)`). Implement explicit unmount cleanup hooks destroying active portals. | `npm run check:desktop` + CDP Port 9222 DOM tree inspection. |
-| **CRM-02** | SSOT State | `useTiptapComposerState` held local state buffers for `prompt` and `attachments`. Switching active sessions in `window.__CRISH_SESSION_STORE__` caused stale prompt text to spill into the newly selected session. | Session ID changes trigger an automatic bi-directional draft synchronization: 1. Auto-save current text to `sessionStore.setDraft(oldSessionId, draft)`. 2. Hydrate Tiptap content and attachments from `sessionStore.getDraft(newSessionId)`. | CDP Port 9222 evaluation of `window.__CRISH_SESSION_STORE__.getState().drafts`. |
+| **CRM-01** | Popover UI | Prototype used `tippy.js` DOM injection. In Tauri WebView2, appending nodes to `document.body` leaves detached DOM nodes and trapped event listeners on unmount. Container `overflow-y: auto` also clips popover menus. | Replace Tippy.js with `@radix-ui/react-popover` utilizing `<Popover.Portal>`. Calculate absolute menu positioning from ProseMirror editor coordinates (`view.coordsAtPos(range.from)`). Implement explicit unmount cleanup hooks destroying active portals. | `npm run check:desktop` + Tauri MCP 4000 DOM tree inspection. |
+| **CRM-02** | SSOT State | `useTiptapComposerState` held local state buffers for `prompt` and `attachments`. Switching active sessions in `window.__CRISH_SESSION_STORE__` caused stale prompt text to spill into the newly selected session. | Session ID changes trigger an automatic bi-directional draft synchronization: 1. Auto-save current text to `sessionStore.setDraft(oldSessionId, draft)`. 2. Hydrate Tiptap content and attachments from `sessionStore.getDraft(newSessionId)`. | Tauri MCP 4000 evaluation of `window.__CRISH_SESSION_STORE__.getState().drafts`. |
 | **CRM-03** | Keymaps & IME | Pressing `Enter` during CJK (Chinese/Japanese/Korean) Input Method Editor (IME) composition confirmed character candidates but accidentally triggered message submission. | Add a high-priority ProseMirror `handleKeyDown` plugin hook inside `TiptapEditorField.tsx`. Check `if (view.composing \|\| event.isComposing) return false;`. Passing `false` instructs ProseMirror to yield execution to native browser IME handling. | Manual CJK text input test + Vitest unit test in `TiptapEditorField.test.tsx`. |
 | **CRM-04** | Markdown Serialization | Native Tiptap HTML output strips interactive TaskList checkbox states (`[ ]` / `[x]`) and entity Mention pill metadata (`@file`, `@agent`) when converted to Markdown strings for `core_run_task`. | Implement custom GFM Markdown Serializer rules inside `useTiptapComposerState.ts`. Task items map strictly to `- [ ] text` or `- [x] text`. Mention nodes serialize to GFM entity references `@[label](id)`. | Unit test verifying AST ↔ Markdown bidirectional round-trip conversion. |
-| **CRM-05** | Image Memory Leak | High-resolution image clipboard pastes generate massive Base64 `dataUrl` strings, leading to memory bloat in Zustand store and IPC payload latency. | Image attachments convert to temporary object URLs (`URL.createObjectURL(blob)`) for UI preview rendering. Base64 encoding is deferred until IPC payload assembly. Attachment deletion invokes `URL.revokeObjectURL(url)` immediately. | Memory heap profiling via CDP Port 9222 `take_heapsnapshot`. |
+| **CRM-05** | Image Memory Leak | High-resolution image clipboard pastes generate massive Base64 `dataUrl` strings, leading to memory bloat in Zustand store and IPC payload latency. | Image attachments convert to temporary object URLs (`URL.createObjectURL(blob)`) for UI preview rendering. Base64 encoding is deferred until IPC payload assembly. Attachment deletion invokes `URL.revokeObjectURL(url)` immediately. | Memory heap profiling via Tauri MCP 4000 `take_heapsnapshot`. |
 | **CRM-06** | Visual Softness | Hardcoded focus border styles (`border: 1px solid #111`) and box shadows violate host visual softness rules (`.agents/AGENTS.md:21-35`). | Enforce CSS `color-mix()` rules on all input container borders: standard focus uses `color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)`; empty landing state (`data-empty-kind="session-empty"`) uses `color-mix(in srgb, var(--border-color) 95%, var(--text-primary) 5%)`. Specify `box-shadow: none !important;`. | Visual inspection + CSS linting in `TiptapEditorField.module.css`. |
 | **CRM-07** | File Overlap | Parallel subagent execution risks multiple agents modifying `TiptapComposerContainer.tsx` or `composerTypes.ts` simultaneously, causing git merge conflicts. | Enforce strict **Phase T0 Stub Gate**. Types and stub signatures are locked in Phase T0. Each parallel subagent in Phase T1–T3 is assigned an exclusive target file domain (Read-Any, Write-Own). | Monorepo file ownership lock check script. |
 
@@ -121,7 +121,7 @@ To guarantee zero file modification collisions during parallel execution, the mi
                                              ▼
 ┌──────────────────────────────────────────────────────────────────────────────────────────┐
 │                     PHASE T4: INTEGRATION & 5-LEVEL VERIFICATION                         │
-│   Agent 6 executes 5 CLI check commands + CDP Port 9222 WebView2 runtime inspection      │
+│   Agent 6 executes 5 CLI check commands + Tauri MCP 4000 WebView2 runtime inspection      │
 └──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -498,7 +498,7 @@ export async function cancelRunCommand(sessionId: string): Promise<void> {
 
 ### 2.5 Phase T4: Integration & 5-Level Verification Suite
 
-During Phase T4, **Agent 6** runs the complete verification suite combining CLI checks with CDP 9222 runtime WebView2 inspection.
+During Phase T4, **Agent 6** runs the complete verification suite combining CLI checks with Tauri MCP 4000 runtime WebView2 inspection.
 
 ```powershell
 # 1. Frontend Workspace TypeScript Compilation Check
@@ -517,16 +517,16 @@ cargo check --manifest-path apps/agent-workbench/src-tauri/Cargo.toml
 cargo test --workspace
 ```
 
-#### CDP 9222 WebView2 Runtime Inspection Protocol:
+#### Tauri MCP 4000 WebView2 Runtime Inspection Protocol:
 1. Launch Dev Workbench: `npm run dev:workbench`
-2. Connect to CDP websocket: `ws://127.0.0.1:9222/devtools/page/...`
+2. Connect to CDP websocket: `127.0.0.1:4000` Tauri MCP Socket（连接与鉴权见 AGENTS.md §16）（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）
 3. Evaluate console store facade assertions:
    ```javascript
-   console.assert(window.__CRISH_SESSION_STORE__ !== undefined, "[CDP Audit] Session Store Facade Missing!");
-   console.assert(window.__CRISH_LAYOUT_STORE__ !== undefined, "[CDP Audit] Layout Store Facade Missing!");
-   console.assert(window.__CRISH_TREE_STORE__ !== undefined, "[CDP Audit] Layout Tree Store Facade Missing!");
+   console.assert(window.__CRISH_SESSION_STORE__ !== undefined, "[MCP Audit] Session Store Facade Missing!");
+   console.assert(window.__CRISH_LAYOUT_STORE__ !== undefined, "[MCP Audit] Layout Store Facade Missing!");
+   console.assert(window.__CRISH_TREE_STORE__ !== undefined, "[MCP Audit] Layout Tree Store Facade Missing!");
    ```
-4. Verify visual contrast using CDP screenshot evaluation: focus state border mix must be soft gray, zero box shadow.
+4. Verify visual contrast using Tauri MCP screenshot evaluation: focus state border mix must be soft gray, zero box shadow.
 
 ---
 
@@ -2402,15 +2402,15 @@ cargo check --manifest-path apps/agent-workbench/src-tauri/Cargo.toml
 # 4. Run Rust Backend Engine Workspace Unit Test Suite
 cargo test --workspace
 
-# 5. Conduct Live CDP 9222 Runtime Event Stream Audit
+# 5. Conduct Live Tauri MCP 4000 Runtime Event Stream Audit
 npm run dev:workbench
 ```
 
-#### CDP 9222 WebView2 Runtime Event Stream Verification:
-1. Connect Chrome DevTools CDP protocol to target: `ws://127.0.0.1:9222/devtools/page/...`
+#### Tauri MCP 4000 WebView2 Runtime Event Stream Verification:
+1. Connect to the Tauri MCP debug channel (AGENTS.md §16)（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）: `127.0.0.1:4000` Tauri MCP Socket（连接与鉴权见 AGENTS.md §16）（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）
 2. Evaluate event listener registration:
    ```javascript
-   // Verify event stream binding via CDP Console
+   // Verify event stream binding via the Tauri MCP debug channel
    console.assert(window.__CRISH_SESSION_STORE__ !== undefined, "Session store facade active");
    ```
 3. Trigger `core_run_task` from UI and confirm SSE events (`MessageDelta`, `AgentEventEnvelope`) stream back without latency or detached DOM memory leaks.
@@ -2572,7 +2572,7 @@ export interface LayoutTreeStoreState {
 
 ### 1.3 Window Store Facade Bindings [REF:DATA-003]
 
-For CDP protocol inspection, runtime debugging, and external automation scripts, core Zustand stores are bound to the `window` object during application bootstrap (`apps/crish-desktop/src/main.tsx:30-36`).
+For Tauri MCP (port 4000) inspection, runtime debugging, and external automation scripts, core Zustand stores are bound to the `window` object during application bootstrap (`apps/crish-desktop/src/main.tsx:30-36`).
 
 #### Window Augmentation Interface (`apps/crish-desktop/src/types/global.d.ts`)
 ```typescript
@@ -2588,7 +2588,7 @@ declare global {
 
 #### Bootstrap Exposure Binding (`apps/crish-desktop/src/main.tsx:30-36`)
 ```typescript
-// Expose core store facades to window for CDP debugging and test inspection
+// Expose core store facades to window for Tauri MCP debugging and test inspection
 try {
   const { useLayoutStore } = await import('./store/layoutStore');
   const { useSessionStore } = await import('./store/sessionStore');
@@ -2604,18 +2604,18 @@ try {
 }
 ```
 
-#### CDP Inspection Protocol & Console Assertions [REF:DATA-004]
-When running CDP automation scripts over `ws://127.0.0.1:9222`, tests verify store facade hydration using explicit JS evaluations:
+#### Tauri MCP Inspection Protocol & Console Assertions [REF:DATA-004]
+When running UI automation scripts (via Tauri MCP) over `127.0.0.1:4000` Tauri MCP Socket（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）, tests verify store facade hydration using explicit JS evaluations:
 
 ```javascript
-// CDP Console Verification Assertions
-console.assert(window.__CRISH_SESSION_STORE__ !== undefined, "[CDP Audit] Session store facade missing!");
-console.assert(window.__CRISH_LAYOUT_STORE__ !== undefined, "[CDP Audit] Layout store facade missing!");
-console.assert(window.__CRISH_TREE_STORE__ !== undefined, "[CDP Audit] Tree store facade missing!");
+// Tauri MCP debug channel verification assertions
+console.assert(window.__CRISH_SESSION_STORE__ !== undefined, "[MCP Audit] Session store facade missing!");
+console.assert(window.__CRISH_LAYOUT_STORE__ !== undefined, "[MCP Audit] Layout store facade missing!");
+console.assert(window.__CRISH_TREE_STORE__ !== undefined, "[MCP Audit] Tree store facade missing!");
 
 // Read active session ID via store facade
 const activeId = window.__CRISH_SESSION_STORE__.getState().activeSessionId;
-console.log("[CDP Audit] Active Session ID:", activeId);
+console.log("[MCP Audit] Active Session ID:", activeId);
 ```
 
 ---
@@ -3159,12 +3159,12 @@ useEffect(() => {
 }, []);
 ```
 
-#### 3. CDP 9222 Memory Profiling & Verification Command
-Memory leak prevention is verified using CDP protocol heap snapshots:
+#### 3. Tauri MCP 4000 Memory Profiling & Verification Command
+Memory leak prevention is verified using Tauri MCP runtime memory inspection（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）:
 
 ```javascript
-// CDP Heap Snapshot Inspection Command
-await cdp.send('HeapProfiler.takeHeapSnapshot');
+// Memory inspection via Tauri MCP
+// （原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）；改经 Tauri MCP 执行等效内存检查
 // Assert zero lingering Blob URLs or detached DOM nodes
 ```
 
@@ -3181,7 +3181,7 @@ All requirements specified in `SRS_REQUIREMENTS.md` and `MASTER_PLAN.md` map to 
 | `[REF:DATA-001]` | Data Model Architecture & Store Facades | `src/store/sessionStore.ts` | SRS FR-104 / Master Plan Section 3 |
 | `[REF:DATA-002]` | Zustand Stores & Slice Definitions | `src/store/layoutStore.ts` | SRS Section 4.3 |
 | `[REF:DATA-003]` | Window Store Facade Bindings | `src/main.tsx:30-36` | SRS Section 4.3 / Master Plan Section 3.1 |
-| `[REF:DATA-004]` | CDP Inspection Protocol & Assertions | `src/test-setup.ts` | SRS Section 6.2 / Master Plan CRM-02 |
+| `[REF:DATA-004]` | Tauri MCP Inspection Protocol & Assertions | `src/test-setup.ts` | SRS Section 6.2 / Master Plan CRM-02 |
 | `[REF:DATA-005]` | Rust Engine SQLite Write Model | `src/api/session-persistence/sessionRustDb.ts` | SRS Section 1.1 / Master Plan CRM-02 |
 | `[REF:DATA-006]` | Full-Replacement Write Semantics | `src/api/session-persistence/sessionRustDbWriteModel.test.ts` | Master Plan CRM-02 / Stream D |
 | `[REF:DATA-007]` | Draft Persistence & Session Switching | `src/components/chat-composer/useTiptapComposerState.ts` | SRS FR-104 / Master Plan CRM-02 |
@@ -3263,7 +3263,7 @@ Decoupling operational guidance into this dedicated manual achieves:
 │ ├──────────────────────────────────────────────────────────────────────────────────────┤ │
 │ │ 3. Standalone Task Prompt Cards 1–6 (Phases T0–T3 Detailed Work Instructions)        │ │
 │ ├──────────────────────────────────────────────────────────────────────────────────────┤ │
-│ │ 4. Operational Protocols & Verification Checklist (CLI Suite & CDP 9222 Inspection)  │ │
+│ │ 4. Operational Protocols & Verification Checklist (CLI Suite & Tauri MCP 4000 Inspection)  │ │
 │ └──────────────────────────────────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -3688,7 +3688,7 @@ Implement direct Tauri IPC command invocation wrappers (`daemonClient.ts`) calli
 
 ## Operational Protocols & Verification Checklist
 
-To verify that all subagent code modifications pass host quality standards, execute the complete 5-level command verification suite and CDP 9222 runtime inspection protocol.
+To verify that all subagent code modifications pass host quality standards, execute the complete 5-level command verification suite and Tauri MCP 4000 runtime inspection protocol.
 
 ```
                   ┌──────────────────────────────────────────────┐
@@ -3705,8 +3705,8 @@ desktop            ui-layer               depcruise           cargo test
                                          │
                                          ▼
                   ┌──────────────────────────────────────────────┐
-                  │    5. CDP 9222 RUNTIME WEBVIEW2 INSPECTION   │
-                  │ - Connect to ws://127.0.0.1:9222             │
+                  │    5. Tauri MCP 4000 RUNTIME WEBVIEW2 INSPECTION   │
+                  │ - Connect via Tauri MCP (port 4000)          │
                   │ - Validate window.__CRISH_SESSION_STORE__    │
                   │ - Capture screenshot of focused Tiptap field │
                   └──────────────────────────────────────────────┘
@@ -3735,24 +3735,24 @@ cargo test --workspace
 
 ---
 
-### 2. CDP 9222 Runtime WebView2 Inspection Protocol
+### 2. Tauri MCP 4000 Runtime WebView2 Inspection Protocol
 
-UI verification MUST be conducted directly against the running WebView2 instance via Chrome DevTools Protocol (CDP) on port 9222 (`.agents/AGENTS.md:36-47`):
+UI verification MUST be conducted directly against the running WebView2 instance via the Tauri MCP Socket (`127.0.0.1:4000`; 唯一合法通道见 AGENTS.md §15.2/§16)（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）:
 
 1. **Launch Workbench**:
    ```powershell
    npm run dev:workbench
    ```
-2. **Connect to CDP Target**:
-   Fetch target list from `http://127.0.0.1:9222/json/list` and connect via WebSocket:
-   `ws://127.0.0.1:9222/devtools/page/...`
+2. **Connect to Tauri MCP Debug Channel**:
+   Load the Tauri MCP connection info (port `4000`, authToken from `%TEMP%\tauri-mcp-4000.token`) per AGENTS.md §16:（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）
+   `127.0.0.1:4000` Tauri MCP Socket（连接与鉴权见 AGENTS.md §16）（原 CDP 调试通道已被 2026-08-21 用户裁决列为**禁止项**，见 AGENTS.md §15.2；唯一合法 UI 调试通道 = 4000 Tauri MCP）
 
 3. **Evaluate Store Facade Console Assertions**:
    ```javascript
-   // Evaluated directly via CDP Console
-   console.assert(window.__CRISH_SESSION_STORE__ !== undefined, "[CDP Audit] Session store facade missing!");
-   console.assert(window.__CRISH_LAYOUT_STORE__ !== undefined, "[CDP Audit] Layout store facade missing!");
-   console.assert(window.__CRISH_TREE_STORE__ !== undefined, "[CDP Audit] Layout tree store facade missing!");
+   // Evaluated directly via the Tauri MCP debug channel
+   console.assert(window.__CRISH_SESSION_STORE__ !== undefined, "[MCP Audit] Session store facade missing!");
+   console.assert(window.__CRISH_LAYOUT_STORE__ !== undefined, "[MCP Audit] Layout store facade missing!");
+   console.assert(window.__CRISH_TREE_STORE__ !== undefined, "[MCP Audit] Layout tree store facade missing!");
    ```
 
 4. **Visual Contrast & Shadow Inspection**:
@@ -3772,7 +3772,7 @@ Before submitting handoff, the subagent team lead MUST verify:
 - [x] Integrity mandate and red lines enforced (contrast mix 3%–10%, max 5% landing, zero box shadows, custom Tooltip, line-count caps).
 - [x] File ownership boundaries and T0 stub locking rules enforced.
 - [x] All 5 CLI check commands passed without errors.
-- [x] CDP Port 9222 WebView2 inspection verified against live store facades.
+- [x] Tauri MCP 4000 WebView2 inspection verified against live store facades.
 
 ---
 *End of Subagent Execution Manual & Task Guide (`SUBAGENT_TASK_GUIDE.md`)*

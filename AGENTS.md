@@ -305,6 +305,10 @@ _2026-08-13 主调度订正 · 附录 B 取代附录 A §3 的旧口径（16 上
 3. **系统状态切换微提示单一真理源**：统一收敛为 20px 极简发丝分割线 `ContextStateNotice`。
 4. **全系统杜绝 Emoji 表情与资产保护铁律**：严禁任何 Emoji 字符出现在界面中；强制保护 `apps/crish-desktop/src/assets/` 下全部图标资产。详见正文 §21 与专项记录。
 
+### 2026-10-20 · §4 输出目录清理约定接线状态勘误（T-DOC-03 · 统一修复战役）
+
+**§4 第 6 条「输出目录清理约定」现状勘误（追加说明，不改动原条款）**：原条款称「完整链路由 T-EG-12 扩展落地」——实测现状为：清理链**已实现**（`cleanup_session_outputs` / `cleanup_session_outputs_at`，`apps/agent-workbench/src-tauri/src/outputs_config.rs:155/190`；conex-fs trash 接管，回收站登记 + 用户通知，三分支测试 `apps/agent-workbench/src-tauri/src/session_commands.rs:710/742/800`），但**生产接线未完成**——当前生产删除路径不存在任何 `cleanup_session_outputs` 调用点（`db.delete_session` 仅出现在测试 helper `session_commands.rs:168-182`），删除会话暂不触发产出目录清理。生产接线任务 = **T-RUN-07**（`docs/fix-campaign-20261020/02-统一修复任务账本.md`）；接线完成后本勘误自动失效，以代码实际调用点为准。
+
 ---
 
 ## 19. UI：输入框四态体系与全生命周期防倒退铁律（2026-09-05 用户裁决）

@@ -169,10 +169,11 @@ jobs:
   # 被 check-guard-system 判定为 unwired_guard 并阻塞全仓 pre-commit。
   # 已实测：这 19 条在本仓当前状态全部 exit 0，且**不依赖构建产物**（只读源码树），
   # 故安全接入中层（合并前全量验证）。
-  # 仍未接入的 6 条（color-ssot / conex-db-size / convergence / line-width-ssot /
-  # token-ssot / tokens-all）当前**实测失败**，属存量债务；已登记在
-  # scripts/check-guard-system.mjs 的 UNWIRED_ALLOWLIST（含具体违规位置），
+  # 仍未接入的 3 条（conex-db-size / token-ssot / tokens-all）当前**实测失败**，属存量债务；已登记在
+  # scripts/check-guard-system.mjs 的 UNWIRED_ALLOWLIST（含具体违规位置与 owner 任务），
   # 修复后必须移出豁免并接入本 job。
+  # （DEBT-09 收口 2026-10-20：原 6 条中的 color-ssot / line-width-ssot /
+  # frontend-convergence 已实测 PASS，移出豁免并接入本 job。）
   desktop-guards:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -199,6 +200,11 @@ jobs:
       - run: node scripts/check-preferences-ssot.mjs
       - run: node scripts/check-text-color-tokens.mjs
       - run: node scripts/check-tooltip-hygiene.mjs
+      # Token SSOT / 样式收敛类（DEBT-09 收口 2026-10-20：三条已实测 PASS，
+      # 从 check-guard-system UNWIRED_ALLOWLIST 移除并接入本 job）
+      - run: node scripts/check-color-ssot.mjs
+      - run: node scripts/check-line-width-ssot.mjs
+      - run: node scripts/check-frontend-convergence.mjs
       # 架构 / SSOT 类
       - run: node scripts/check-store-islands.mjs
       - run: node scripts/check-provider-single-track.mjs
