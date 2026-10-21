@@ -12,6 +12,23 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-sec6-note-drain-entropy.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：① flushPendingDraft 固定两轮伪排空（必须循环至空或显式失败）；② newNoteBlockId 生产路径出现 Math.random（必须 crypto）。",
+    "文件:行号 / 当前值：FAIL 输出命中文件:行号。",
+    "阈值：两类各 0。",
+    "正确做法：排空改 while 循环直至队空或返回显式失败；块 ID 用 crypto.randomUUID 等加密源。",
+    "复核：node scripts/check-sec6-note-drain-entropy.mjs  # 期望 OK",
+  ];
+  console.log('[check-sec6-note-drain-entropy] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 const errors = [];

@@ -4,6 +4,22 @@
  */
 import { spawn } from 'node:child_process';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-chat-state.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "性质：诊断工具（检查聊天状态与 daemon 日志），非 ratchet 门禁。",
+    "退出码：仅反映诊断过程中命令是否可执行，不做违规拦截。",
+    "正确做法：按输出定位 daemon / MCP（TCP 4000）连接问题；若作为 CI 步骤使用，须自行判断输出语义。",
+    "复核：node scripts/check-chat-state.mjs",
+  ];
+  console.log('[check-chat-state] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const MCP_SERVER_CMD = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const MCP_SERVER_ARGS = ['-y', 'tauri-plugin-mcp-server'];
 const MCP_ENV = {

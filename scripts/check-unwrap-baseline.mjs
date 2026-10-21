@@ -23,6 +23,23 @@ import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from '
 import { resolve, dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-unwrap-baseline.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：crates/** 生产代码 unwrap/expect 计数超基线（tests/、benches/、tests.rs、cfg(test) 块计入测试侧不拦）。",
+    "文件:行号 / 当前值：FAIL 按 crate 列出超基线项；当前值 = 生产计数 vs 基线。",
+    "阈值：任一 crate 生产计数 > 基线即 fail（ratchet 只许降）。",
+    "正确做法：`?` 传播、expect 带真实信息或显式错误处理；存量下降后 --update 刷新 基线记录/unwrap-baseline.md。",
+    "复核：node scripts/check-unwrap-baseline.mjs  # 期望 exit 0",
+  ];
+  console.log('[check-unwrap-baseline] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 

@@ -108,6 +108,31 @@ function killProcessTree(pid: number | undefined): void {
   }
 }
 
+/**
+ * GAP-03 / T-GAP-03 验收 2：二进制不存在时的跳过必须显式报数，不得静默。
+ * describe.skipIf 是静默跳过——本探针始终执行，把「跳过了几例、为什么跳过」
+ * 打进测试输出（CI 日志可审计）；CI 侧（ci-slow.yml native-smoke-windows）
+ * 会先构建 debug 二进制，正常路径下 SKIP=0。
+ */
+describe('native-smoke 前置探针（跳过必须显式报数）', () => {
+  it('报告二进制解析结果与跳过决策', () => {
+    const binary = resolveBinaryPath();
+    if (binary) {
+      console.log(
+        `[tauri-native-smoke] SKIP=0：二进制已解析 ${binary}，完整冒烟 2 例执行`
+      );
+    } else {
+      console.warn(
+        '[tauri-native-smoke] SKIP=2：未找到 crish-agent-workbench 二进制（候选路径均不存在），' +
+          '完整冒烟 2 例全部跳过。先 cargo build -p crish-agent-workbench 再运行 ' +
+          'npm run test:e2e:native 可完整执行。候选路径:\n' +
+          BINARY_CANDIDATES.map((p) => `  - ${p}`).join('\n')
+      );
+    }
+    expect(BINARY_CANDIDATES.length).toBeGreaterThan(0);
+  });
+});
+
 describe.skipIf(!resolveBinaryPath())(
   'L3 进程级原生冒烟（tauri-native-smoke 重写版）',
   () => {

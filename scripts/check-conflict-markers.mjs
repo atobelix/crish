@@ -11,6 +11,23 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-conflict-markers.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：文件中存在未解析 Git 冲突标记（<<<<<<< / ======= / >>>>>>>）。",
+    "文件:行号 / 当前值：FAIL 逐条给出文件:行号。",
+    "阈值：0。",
+    "正确做法：完成 merge 后逐处解决冲突再提交；误报（如文档示例）需调整扫描白名单并登记理由。",
+    "复核：node scripts/check-conflict-markers.mjs --all  # 期望 OK（--all 扫全量跟踪文件）",
+  ];
+  console.log('[check-conflict-markers] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const isAllMode = process.argv.includes('--all');
 
 function getFilesToScan() {

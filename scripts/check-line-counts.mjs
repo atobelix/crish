@@ -33,6 +33,23 @@ import { readdirSync, statSync, readFileSync, writeFileSync, existsSync } from '
 import { join, dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-line-counts.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：前端文件行数达三级阈值——≥85% 上限（警告）、≥100% 上限（fail）、>650 行硬阻断；或基线文件行数增长。",
+    "文件:行号 / 当前值：FAIL 输出文件、类别、上限、实测行数、占比。",
+    "阈值：上限见 RL-03 类别表；>650 硬阻断（类型契约类 800）；基线条目 = 冻结上限（只许降）。",
+    "正确做法：拆文件或登记 基线记录/frontend-line-counts-baseline.md（冻结上限，拆分按期执行）；禁止为过门禁切割空壳。",
+    "复核：node scripts/check-line-counts.mjs  # 期望 OK",
+  ];
+  console.log('[check-line-counts] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_TARGET_DIR = join(REPO_ROOT, 'apps', 'crish-desktop', 'src', 'components', 'chat-composer');
 const FULL_SRC_DIR = join(REPO_ROOT, 'apps', 'crish-desktop', 'src');

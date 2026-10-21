@@ -12,6 +12,25 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-chunk-cycles.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：构建产物存在 chunk 级循环引用（manualChunks 手写分组引入）。",
+    "文件:行号 / 当前值：FAIL 输出环路径（chunk A → B → … → A）；当前值 = 环数量。",
+    "阈值：0 环。",
+    "正确做法：调整 vite.config manualChunks 分组打破环（把相互初始化依赖的模块并入同一 chunk）；",
+    "  禁止用动态 import 回避静态检测——运行期初始化顺序问题不会因此消失。",
+    "前提：先 npm run build 产出 dist（默认 apps/crish-desktop/dist，可传参覆盖）。",
+    "复核：npm run build && node scripts/check-chunk-cycles.mjs  # 期望 exit 0",
+  ];
+  console.log('[check-chunk-cycles] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const distDir = process.argv[2] ?? resolve(new URL('../apps/crish-desktop/dist', import.meta.url).pathname.replace(/^\/[A-Za-z]:/, ''));
 if (!existsSync(distDir)) {
   console.error(`check-chunk-cycles: dist 目录不存在（${distDir}）——先运行 build:desktop`);

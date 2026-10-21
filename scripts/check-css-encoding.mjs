@@ -23,6 +23,24 @@ import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, extname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-css-encoding.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：① UTF-8 BOM；② A 类真 GBK 字节（严格解码失败）；③ U+FFFD 替换符；",
+    "  层1 PUA 区字符（U+E000–U+F8FF）；层2 GBK 逆变换命中；层3 高频 mojibake 词表命中。",
+    "文件:行号 / 当前值：FAIL 逐条给出文件:行号与命中字节/字符。",
+    "阈值：全部为 0（层1/层2 全仓强制零豁免）。",
+    "正确做法：文件统一以 UTF-8（无 BOM）保存；乱码字符溯源恢复原文（查历史版本），禁止「清洗成 ?/删除」糊弄。",
+    "复核：node scripts/check-css-encoding.mjs  # 期望 OK",
+  ];
+  console.log('[check-css-encoding] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const SRC_ROOT = fileURLToPath(new URL('../apps/crish-desktop/src', import.meta.url));
 const WHITELIST_PATH = fileURLToPath(new URL('./css-encoding-whitelist.json', import.meta.url));
 const EXTS = new Set(['.css', '.ts', '.tsx']);

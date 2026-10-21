@@ -15,6 +15,23 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-legacy-shim.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：packages/ 与 apps/ 下 .ts/.tsx 出现 v0.3.0 迁移后应删除的 deprecated/legacy 模式（guardrail 24/25）。",
+    "文件:行号 / 当前值：FAIL 逐条给出文件:行号与命中模式；当前值 = 违规数。",
+    "阈值：0。",
+    "正确做法：迁移到新 API 后物理删除 shim；确需保留的写明理由并登记，禁止静默续期。",
+    "复核：node scripts/check-legacy-shim.mjs  # 期望 exit 0",
+  ];
+  console.log('[check-legacy-shim] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 

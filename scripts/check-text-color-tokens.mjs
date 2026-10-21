@@ -17,6 +17,25 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-text-color-tokens.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：① color: #hex / hsl(...) 硬编码文字色（白名单除外）；② color-mix(in srgb, var(--text-*) …) 自造中间灰；",
+    "  ③ 同一规则内 var(--text-*) + 静态 opacity 压暗正文。",
+    "文件:行号 / 当前值：FAIL 逐条给出文件:行号。",
+    "阈值：0；正文灰度只允许 --text-primary/secondary/tertiary/faint/muted 及语义 token（danger/success/on-accent/on-danger/on-overlay）。",
+    "放行：hover 显隐 0 / :disabled / ::placeholder。",
+    "正确做法：消费 tokens.css 文字 token；需要新灰阶先入 token。",
+    "复核：node scripts/check-text-color-tokens.mjs  # 期望 OK",
+  ];
+  console.log('[check-text-color-tokens] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, '..');

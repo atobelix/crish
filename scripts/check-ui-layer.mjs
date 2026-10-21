@@ -18,6 +18,23 @@ import { readdirSync, statSync, readFileSync } from 'node:fs';
 import { join, dirname, resolve, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-ui-layer.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：components/ui/ 下 ts/tsx import 业务路径——components/ 非 ui 目录、src/store/、src/hooks/、src/api/、src/services/。",
+    "文件:行号 / 当前值：FAIL 逐条给出文件:行号与 import 说明符。",
+    "阈值：0（react / react-dom / @radix-ui/* 等裸依赖放行，详见 components/ui/README.md）。",
+    "正确做法：业务依赖经 props 注入，或把逻辑上移到业务层；ui 原子层保持零业务依赖。",
+    "复核：npm run check:ui-layer  # 期望 OK",
+  ];
+  console.log('[check-ui-layer] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const UI_DIR = join(REPO_ROOT, 'apps', 'crish-desktop', 'src', 'components', 'ui');
 const SRC_DIR = join(REPO_ROOT, 'apps', 'crish-desktop', 'src');

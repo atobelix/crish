@@ -41,6 +41,23 @@ import { join, dirname, resolve, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-frontend-convergence.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：G-01~G-12 任一刚性规则命中（前端收敛防回潮：未接线标记回潮、波次命名、死代码回潮等）。",
+    "文件:行号 / 当前值：FAIL 按规则分组逐条给出文件:行号；当前值 = 违规数。",
+    "阈值：全部 0。",
+    "正确做法：按 docs/red-team-plans/ 对应详案整改对应规则项；新豁免必须登记理由与期限，禁止加白名单了事。",
+    "复核：node scripts/check-frontend-convergence.mjs  # 期望 OK",
+  ];
+  console.log('[check-frontend-convergence] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
 

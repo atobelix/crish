@@ -7,6 +7,23 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-icon-ssot.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：业务代码直连 lucide-react / @hugeicons/*，未经 AppIcon 入口。",
+    "文件:行号 / 当前值：FAIL 逐条给出文件:行号与 import 语句。",
+    "阈值：0（AppIcon 内部实现除外）。",
+    "正确做法：改为 import { AppIcon } 消费；新增图标能力扩展 AppIcon 而非旁路直连。",
+    "复核：node scripts/check-icon-ssot.mjs  # 期望 OK",
+  ];
+  console.log('[check-icon-ssot] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 const SRC = path.resolve(REPO_ROOT, 'apps/crish-desktop/src');

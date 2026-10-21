@@ -27,6 +27,23 @@ import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ESLint } from 'eslint';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-swallowed-errors-frontend.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：TS/TSX 生产代码出现未注解空 catch 或 Promise 链静默（.catch(() => {}) 空体）——口径与 eslint local/no-silent-catch 一致。",
+    "文件:行号 / 当前值：FAIL 输出文件:行号；当前值 = 计数 vs 基线。",
+    "阈值：新增 0（基线 ratchet，只许降）。",
+    "正确做法：catch 内真实处理（log/上抛/降级）或加注解注释说明为何静默（阶段 A 豁免）；存量下降后 --update 显式刷新基线。",
+    "复核：node scripts/check-swallowed-errors-frontend.mjs  # 期望 OK",
+  ];
+  console.log('[check-swallowed-errors-frontend] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_BASELINE = join(
   ROOT,

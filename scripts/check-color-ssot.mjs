@@ -9,6 +9,24 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-color-ssot.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：全属性硬编码颜色（裸 Hex / RGB / RGBA / HSL / HSLA / OKLCH / LCH / HWB）或假 token fallback（var(--x, #hex|rgba)）。",
+    "覆盖属性：color, background, border, outline, fill, stroke, box-shadow。",
+    "文件:行号 / 当前值：FAIL 逐条给出文件:行号与命中文本；当前值 = 命中数。",
+    "阈值：0（脚本内白名单路径除外）。",
+    "正确做法：改消费 tokens.css 的 --color-* var()；新色先登记 token 再使用，禁止 fallback 塞裸值。",
+    "复核：node scripts/check-color-ssot.mjs  # 期望 OK",
+  ];
+  console.log('[check-color-ssot] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 const SRC = path.resolve(REPO_ROOT, 'apps/crish-desktop/src');

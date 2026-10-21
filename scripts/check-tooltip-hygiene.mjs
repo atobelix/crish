@@ -18,6 +18,23 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { resolve, dirname, relative, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-tooltip-hygiene.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：① 原生 HTML title=\"...\" 属性回潮（SVG <title> 标签除外）；② Tooltip 组件/样式内裸 Hex / RGB；③ 复读机式 Tooltip（同名文本包裹）。",
+    "文件:行号 / 当前值：FAIL 逐条给出文件:行号。",
+    "阈值：全部 0。",
+    "正确做法：改用 Tooltip 组件 + design tokens；文案保持提示语义不与触发文本重复。",
+    "复核：node scripts/check-tooltip-hygiene.mjs  # 期望 OK",
+  ];
+  console.log('[check-tooltip-hygiene] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const REPO_ROOT = resolve(__dirname, '..');

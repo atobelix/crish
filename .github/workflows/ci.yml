@@ -119,6 +119,17 @@ jobs:
       # G7 统一：vitest 调用走根脚本（npm run test:coverage = vitest run --coverage，
       # 追加 --project=unit 透传快层专项口径）
       - run: npm run test:coverage -- --project=unit --reporter=verbose
+      # per-package 阈值门禁（GAP-07 / T-DEBT-13 接线）：读 json-summary 产物
+      # coverage/coverage-summary.json（reporter 已在 vitest.config.ts 根 coverage
+      # 块补齐），对 shared-types ≥80 / shared-utils ≥70 / crish-desktop ≥45 逐包
+      # 判定。数据缺失时 WARN 跳过（不阻断未生成场景）。
+      # 当前 warn-only：2026-10-21 实测 unit 口径 statements —— shared-types
+      # 24.14% / shared-utils 24.54% / crish-desktop 33.39%，与目标阈值缺口大
+      # （禁止下调阈值还债，见账本 T-GAP-07 验收）。blocking 接线会让快层全红；
+      # 先显式报数建立下降型 ratchet，补真实测试达标后删除 continue-on-error 转
+      # blocking（详见 .agent-outputs/2026-10-20-ci-quality/gap07-coverage-gate.md）。
+      - continue-on-error: true # TODO(T-GAP-07)：三包实测达标后移除，转 blocking
+        run: node scripts/check-coverage-threshold.mjs
 
   # 生产构建门禁（06-步骤1，P1-1）：产物从未被机器验证 → 首次在 CI 构建并断言。
   # N2 前置：@crish/shared-types 的 exports.default 指向 dist/index.js（CI 无 dist
@@ -166,6 +177,27 @@ jobs:
       - run: npm run typecheck -w @crish/crish-mobile
       - run: npm test -w @crish/crish-mobile -- --ci
 
+  # 格式化漂移门禁（DEBT-05 / T-DEBT-05 接线）：prettier --check + cargo fmt --check。
+  # 当前为 warn-only（continue-on-error）：存量漂移面大（prettier 数十文件 warn +
+  # 4 个解析错误；cargo fmt 见 apps/agent-workbench/src-tauri/src/push/copy.rs 等），
+  # 按 T-DEBT-05 验收步骤 2 需先一次性 `--write` / `cargo fmt` 单独提交（不夹带
+  # 逻辑改动）——该步未执行前 blocking 接线会让快层全红。存量清零提交落地后，
+  # 删除两处 continue-on-error 即转 blocking（两条命令必须 exit 0）。
+  format-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true # TODO(T-DEBT-05)：存量格式化清零单独提交后移除，转 blocking
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm install -g npm@11.6.2 && npm ci
+      - run: npx prettier --check .
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+      - run: cargo fmt --all -- --check
+
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -176,7 +208,15 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm install -g npm@11.6.2 && npm ci
-      - run: npm audit --omit=dev --audit-level=moderate -w @crish/crish-desktop -w @crish/agent-workbench -w @crish/editor-kit -w @crish/block-paper -w @crish/shared-utils -w @crish/shared-types
+      # 依赖审计（SEC-03 / T-SEC-03 扩面）：原仅 6 个桌面工作区，遗漏
+      # plugin-import-claude-codex / test-utils / block-paper-contract /
+      # conversation-flow。除移动端（apps/crish-mobile，T-SEC-03-a 用户裁决
+      # §3.4-2 暂缓）外的全部 workspace 纳入。扩面后生产依赖实测 0 漏洞。
+      # dev 工具链：tinypool 双 critical（GHSA-5gmw-xhrv-c9v3 / GHSA-85c8-ppgw-ccpr）
+      # 已由根 package.json overrides 强制 ^2.2.0 修复（vitest 3.2 兼容实测通过）；
+      # @vitest/mocker 路径穿越（GHSA-82fw-gwwq-j7x9，moderate）修复需 vitest 5
+      # major 迁移，登记隔离中（dev-only 不进产物，见 SEC-03 证据包）。
+      - run: npm audit --omit=dev --audit-level=moderate -w @crish/crish-desktop -w @crish/agent-workbench -w @crish/editor-kit -w @crish/block-paper -w @crish/shared-utils -w @crish/shared-types -w @crish/plugin-import-claude-codex -w @crish/test-utils -w @crish/block-paper-contract -w @crish/conversation-flow
 
   # 生成物漂移门禁（2026-08-03 审计：gen:engine-bindings 是手动脚本，CI 未跑；
   # registry_drift 只锁 JSON↔Rust，不锁 JSON↔TS）。

@@ -23,6 +23,24 @@ import { readdirSync, statSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname, resolve, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-store-facade.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：components 下 ts/tsx 直引 src/store/（import 解析后命中 store/ 前缀）。",
+    "允许入口：src/store/index.ts（barrel）、src/store/storeAccess.ts（T11 域读面）、src/store/types.ts（类型-only）；components/ 下私有 store 天然豁免。",
+    "文件:行号 / 当前值：FAIL 输出文件与 import 行清单；普通模式报当前违规数 vs 基线。",
+    "阈值：向 0 违规收敛（02-A2 迁移完成后以 0 为 CI 门槛）。",
+    "正确做法：组件改经 facade hook / storeAccess 消费；新增直引先问接口归属，不进白名单。",
+    "复核：npm run check:store-facade  # 期望 OK",
+  ];
+  console.log('[check-store-facade] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const COMPONENTS_DIR = join(REPO_ROOT, 'apps', 'crish-desktop', 'src', 'components');
 const SRC_DIR = join(REPO_ROOT, 'apps', 'crish-desktop', 'src');

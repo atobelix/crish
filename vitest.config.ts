@@ -29,7 +29,10 @@ export default defineConfig({
     coverage: {
       enabled: false,
       provider: 'v8',
-      reporter: ['text', 'json', 'html'],
+      // json-summary（T-GAP-07）：产出 coverage/coverage-summary.json，
+      // 供 scripts/check-coverage-threshold.mjs 做 per-package 阈值门禁；
+      // 缺该 reporter 时脚本永远走「文件缺失 → WARN → exit 0」，门禁失效。
+      reporter: ['text', 'json', 'html', 'json-summary'],
       include: [
         'apps/crish-desktop/src/**/*.{ts,tsx}',
         'packages/*/src/**/*.{ts,tsx}',

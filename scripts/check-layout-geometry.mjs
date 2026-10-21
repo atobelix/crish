@@ -22,6 +22,24 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-layout-geometry.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：顶栏布局几何/Token 契约破坏——.topBar 高度不等于 var(--header-height, 36px) 口径、",
+    "  多层顶栏/双重高度、.topBar 回潮为挤占文档流的常规块（应为 position: absolute 浮层）等。",
+    "文件:行号 / 当前值：FAIL 逐条给出 CSS 文件:行号与实际值。",
+    "阈值：契约值唯一（--header-height, 36px）。",
+    "正确做法：按 docs/desktop-ui-systemic-repair/ 分维详案 04 恢复契约值；禁止引入第二套高度变量。",
+    "复核：node scripts/check-layout-geometry.mjs  # 期望 OK",
+  ];
+  console.log('[check-layout-geometry] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const REPO_ROOT = resolve(__dirname, '..');

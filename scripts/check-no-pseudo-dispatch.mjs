@@ -6,6 +6,23 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-no-pseudo-dispatch.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：空 dispatch* stub（有签名无实现体的伪分发）或 chat 注入路径（§2.1 / §9）。",
+    "文件:行号 / 当前值：FAIL 输出命中文件:行号。",
+    "阈值：0。",
+    "正确做法：实现真实 dispatch 逻辑或物理删除死 stub 与调用面；禁止留壳伪装已实现。",
+    "复核：node scripts/check-no-pseudo-dispatch.mjs  # 期望 OK",
+  ];
+  console.log('[check-no-pseudo-dispatch] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SCAN_ROOTS = [
   path.join(ROOT, 'apps/crish-desktop/src'),

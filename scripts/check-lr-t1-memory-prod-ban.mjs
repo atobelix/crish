@@ -13,6 +13,24 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-lr-t1-memory-prod-ban.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：workbench 生产装配源码直引 MemoryNoteBackend（注入只允许 Store 或 unwired）。",
+    "文件:行号 / 当前值：FAIL 输出命中文件:行号。",
+    "阈值：生产装配面 0 直引。",
+    "正确做法：Memory 后端经 store 注入装配；Memory 集成测头必须钉住不得关（EL-05）——本脚本绿 ≠ 可关 EL-05。",
+    "孪生 cargo 测：apps/agent-workbench/src-tauri/tests/lr_t1_memory_prod_ban.rs。",
+    "复核：node scripts/check-lr-t1-memory-prod-ban.mjs  # 期望 OK",
+  ];
+  console.log('[check-lr-t1-memory-prod-ban] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 const workbenchSrc = resolve(root, 'apps/agent-workbench/src-tauri/src');

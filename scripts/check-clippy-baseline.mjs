@@ -18,6 +18,24 @@ import { spawnSync } from 'node:child_process';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-clippy-baseline.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：cargo clippy 出现基线外新增告警（归一键 = 消息文本 + 文件，行号变动不算新增）。",
+    "文件:行号 / 当前值：FAIL 按文件域分组列出新增告警；当前值 = 新增条数。",
+    "阈值：新增 0（存量只许降不许升，ratchet）。",
+    "正确做法：修掉告警本体；确属误报可用 #[allow] 并附理由注释；存量下降后运行 --update 显式刷新",
+    "  基线记录/clippy-workspace-T13.md；禁止无清理的 --update 抬基线。",
+    "复核：node scripts/check-clippy-baseline.mjs  # 期望 exit 0",
+  ];
+  console.log('[check-clippy-baseline] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 

@@ -21,6 +21,23 @@ import { resolve, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-repo-integrity.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：.git 关键资产（HEAD / config / index / packed-refs）缺失，或 git 命令不可用。",
+    "文件:行号 / 当前值：FAIL 输出缺失资产清单。",
+    "阈值：全部资产存在且 git rev-parse 可用。",
+    "正确做法：从远端重新 clone 或按备份复原 .git；仓库不可用期间产出的 diff 统计一律视为虚构，不得引用。",
+    "复核：node scripts/check-repo-integrity.mjs  # 期望 OK",
+  ];
+  console.log('[check-repo-integrity] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 const GIT_DIR = join(REPO_ROOT, '.git');

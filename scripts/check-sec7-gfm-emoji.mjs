@@ -12,6 +12,23 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-sec7-gfm-emoji.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：Rust `GFM_EMOJI_SHORTCODES_DEFAULT` 或 JS 同名常量非 false，或默认渲染路径强制开启 GFM emoji 短码。",
+    "文件:行号 / 当前值：FAIL 输出命中文件:行号与当前值。",
+    "阈值：两侧常量同 false（AGENTS §21 / SYSTEMATIC-FIX-PLAN §7.3）。",
+    "正确做法：保持默认关闭；用户显式 opt-in 才在会话层开启，禁止改默认值。",
+    "复核：node scripts/check-sec7-gfm-emoji.mjs  # 期望 OK",
+  ];
+  console.log('[check-sec7-gfm-emoji] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 const errors = [];

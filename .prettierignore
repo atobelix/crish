@@ -1,3 +1,10 @@
 # 生成物不参与格式化：生成器输出字节与 CI engine-bindings-drift 门禁
 # （git diff --exit-code）严格对齐，prettier 改写会造成漂移假红（T3.7 D7 修复期发现）
 packages/shared-types/src/generated/
+
+# 第三方 UI 参考素材（reference/）：仅作对照参考，非仓库代码，
+# prettier 解析直接报错（composer.css / image.css / style.css）
+reference/
+
+# 测试 fixture 数据：内容被测试断言引用，不做格式化改写
+apps/crish-desktop/src/store/test_hydrated_sessions.json

@@ -32,6 +32,23 @@ import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from '
 import { resolve, dirname, join, basename, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-crate-size.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：crate 入口（lib.rs / main.rs）超 800 行，或其余 mod 文件超 600 行且未登记基线。",
+    "文件:行号 / 当前值：FAIL 输出超限文件与实测/登记行数。",
+    "阈值：入口 ≤ 800；mod ≤ 600；基线条目 = 冻结上限（实测 ≤ 登记值放行，增长即 fail）。",
+    "正确做法：拆分超限文件；确需限速的登记 基线记录/crate-size-baseline.md 标记区（登记行数 = 拆分期限上限，非永久豁免）。",
+    "复核：node scripts/check-crate-size.mjs  # 期望 OK",
+  ];
+  console.log('[check-crate-size] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 

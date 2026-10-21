@@ -24,6 +24,23 @@ import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from '
 import { resolve, dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-swallowed-errors.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：crates/** 生产代码新增 `let _ = ...` 丢弃赋值或 `if let Ok(_)` / `Ok(_) =>` 静默模式（测试文件与 cfg(test) 块不计）。",
+    "文件:行号 / 当前值：FAIL 按 crate 列出新增项与基线对比；当前值 = 生产计数。",
+    "阈值：任一 crate 生产计数 > 基线即 fail（ratchet 只许降）。",
+    "正确做法：用 ? 传播、日志记录或显式处理消除；确属有意的清理下降后 --update 刷新 基线记录/swallowed-errors-baseline.md。",
+    "复核：node scripts/check-swallowed-errors.mjs  # 期望 exit 0",
+  ];
+  console.log('[check-swallowed-errors] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 
@@ -52,12 +69,21 @@ const baselinePath = argVal('--baseline')
   ? resolve(root, argVal('--baseline'))
   : join(root, 'docs/multi-agent-repair/基线记录/swallowed-errors-baseline.md');
 
-/** 测试文件判定（与 check-unwrap-baseline.mjs 同规则） */
+/** 测试文件判定（对齐 check-unwrap-baseline.mjs 口径并补 `*_tests_*.rs` 中缀，
+ *  T-GAP-11：`projection_tests_commit.rs` / `anthropic_tests_usage.rs` /
+ *  `tests_cas_gc.rs` 等旁挂测试模块（经 #[cfg(test)] #[path] 接线）此前被误计生产口径） */
 function isTestFile(file) {
   const p = file.replace(/\\/g, '/');
   if (/\/tests\//.test(p) || /\/benches\//.test(p)) return true;
   const base = basename(p);
-  return base === 'tests.rs' || base.startsWith('test_') || base.endsWith('_tests.rs');
+  return (
+    base === 'tests.rs' ||
+    base.startsWith('test_') ||
+    base.startsWith('tests_') ||
+    base.includes('_tests_') ||
+    base.endsWith('_tests.rs') ||
+    base.endsWith('_test.rs')
+  );
 }
 
 /** 吞错模式正则（行注释剔除后匹配） */

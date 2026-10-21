@@ -65,6 +65,39 @@ jobs:
       # G7 统一：走根脚本 npm run test:e2e（等价 npx playwright test tests/e2e）
       - run: npm run test:e2e
 
+  # Windows 原生 E2E 冒烟（GAP-03 / T-GAP-03）：此前 CI 只有 ubuntu Chromium
+  # 的 mock-IPC e2e，进程级真二进制冒烟（tauri-native-smoke.spec.ts）在无
+  # 二进制环境永远 describe.skipIf 静默跳过——「二进制可拉起」发布门禁形同虚设。
+  # 本 job：windows-latest 构建 debug 二进制 → npm run test:e2e:native 完整执行
+  # （WebView2 启动 / 引擎初始化标记 / 干净退出 / 无残存进程）→ 日志留档。
+  # 二进制仍缺失时测试内前置探针显式报 SKIP 数（不得静默，见 spec 内探针块）。
+  native-smoke-windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+      - run: npm install -g npm@11.6.2 && npm ci
+      # 构建 debug 二进制（crish-agent-workbench，工作区 target/debug/），
+      # 使 spec 的 resolveBinaryPath 命中候选 1，describe.skipIf 不触发
+      - run: cargo build -p crish-agent-workbench --locked
+      # Tee 留档运行日志（acceptance：job 真实执行并留日志）；exit 透传 vitest 退出码
+      - name: Run native smoke（日志留档）
+        shell: pwsh
+        run: |
+          npm run test:e2e:native 2>&1 | Tee-Object -FilePath native-smoke-output.log
+          exit $LASTEXITCODE
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-smoke-windows-logs
+          path: native-smoke-output.log
+          if-no-files-found: error
+
   bench:
     runs-on: ubuntu-latest
     timeout-minutes: 60

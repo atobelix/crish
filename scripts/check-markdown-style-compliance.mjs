@@ -18,6 +18,23 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-markdown-style-compliance.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：① Markdown 内裸 Hex / 裸 RGB（注释除外）；② 引用未在 tokens.css 声明的 --md-* 变量；③ msg-assistant-text 幽灵类选择器。",
+    "文件:行号 / 当前值：FAIL 逐条给出文件:行号。",
+    "阈值：全部 0；颜色 100% 消费 var() / color-mix / hsl 契约写法。",
+    "正确做法：改引 tokens.css 已声明 token；新变量先声明后引用；删除幽灵选择器或恢复真实类名。",
+    "复核：node scripts/check-markdown-style-compliance.mjs  # 期望 OK",
+  ];
+  console.log('[check-markdown-style-compliance] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const ROOT_DIR = fileURLToPath(new URL('../', import.meta.url));
 const MARKDOWN_CSS_PATH = resolve(
   ROOT_DIR,

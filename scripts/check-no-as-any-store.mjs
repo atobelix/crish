@@ -11,6 +11,23 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { resolve, dirname, join, relative, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-no-as-any-store.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：layout 与 domain action 重新引入 `as any`；或 sessionsById / facade / storeAccess / 反环约定被破坏。",
+    "文件:行号 / 当前值：FAIL 逐条给出文件:行号与命中代码。",
+    "阈值：0。",
+    "正确做法：补真实类型、类型守卫或显式 narrow；禁止 any 断言掩盖类型缺口。",
+    "复核：npm run check:store-types  # 期望 OK",
+  ];
+  console.log('[check-no-as-any-store] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 const storeDir = resolve(root, 'apps/crish-desktop/src/store');

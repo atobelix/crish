@@ -13,6 +13,23 @@ import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-layoutstore-actions.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：layoutStore action 未按域标注 / 布局域 action 超 8 个 / 4 个新域 store（terminal/worker/permission/settings）缺失或缺独立 .test.ts。",
+    "文件:行号 / 当前值：FAIL 输出具体缺失/超限项与当前计数。",
+    "阈值：布局域 action ≤ 8（T11 验收门禁）；4 新域 store 必须存在且各有测试。",
+    "正确做法：把越域 action 迁到对应域 store；新域 store 补齐 .test.ts。",
+    "复核：node scripts/check-layoutstore-actions.mjs  # 期望 OK",
+  ];
+  console.log('[check-layoutstore-actions] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 const storeDir = resolve(root, 'apps/crish-desktop/src/store');

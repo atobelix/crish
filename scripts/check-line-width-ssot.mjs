@@ -19,6 +19,23 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-line-width-ssot.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：① 图标 strokeWidth 不在 ICON_STROKE 契约值（chrome/ui/fine/heavy）内；② CSS 出现非契约描边宽度（0.1px/0.5px/1.5px 等散落值）。",
+    "文件:行号 / 当前值：FAIL 逐条给出文件:行号与实际值。",
+    "阈值：只允许契约值集合。",
+    "正确做法：图标消费 AppIcon 的 stroke 契约档位；CSS 描边改用契约 token；新档位先入契约再用。",
+    "复核：node scripts/check-line-width-ssot.mjs  # 期望 OK",
+  ];
+  console.log('[check-line-width-ssot] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 const SRC = path.resolve(REPO_ROOT, 'apps/crish-desktop/src');

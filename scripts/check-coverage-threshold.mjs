@@ -16,6 +16,24 @@ import { readFileSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-coverage-threshold.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：per-package 语句覆盖率低于阈值，或 coverage-summary.json 解析失败。",
+    "文件:行号 / 当前值：输出 [FAIL] <包片段>: <实测>%（threshold <阈值>%）；当前值 = 聚合语句覆盖率。",
+    "阈值：packages/shared-types ≥ 80%；packages/shared-utils ≥ 70%；apps/crish-desktop ≥ 45%（脚本 THRESHOLDS 常量）。",
+    "数据源：coverage/coverage-summary.json，由 npm run test:coverage（vitest run --coverage + json-summary reporter）产出。",
+    "正确做法：为低于阈值的包补真实测试抬覆盖率；禁止下调阈值还债；coverage 文件缺失时 WARN 跳过（不阻断未生成场景）。",
+    "复核：npm run test:coverage && node scripts/check-coverage-threshold.mjs  # 期望 PASS",
+  ];
+  console.log('[check-coverage-threshold] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 

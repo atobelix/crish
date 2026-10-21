@@ -22,6 +22,23 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-ui-negative-churn.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "违反项：Rule 1 物理真实重构文件行数未真实下沉 / 虚假路径免测送分；--sep-* 与 --artifact-* 活变量被收窄保护外使用。",
+    "文件:行号 / 当前值：FAIL 输出文件与实测行数对比物理基线字典（02-review §6.2）。",
+    "阈值：全仓 Net-Negative LOC ≥ 650 行终审定额（00-总方案 §四）。",
+    "正确做法：真实删除/下沉代码达成负产出；按 §6.2 物理基线字典核对，禁止注释搬家、拆文件凑负数。",
+    "复核：node scripts/check-ui-negative-churn.mjs  # 期望 OK",
+  ];
+  console.log('[check-ui-negative-churn] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const REPO_ROOT = resolve(__dirname, '..');

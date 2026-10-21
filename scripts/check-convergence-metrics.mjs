@@ -24,6 +24,22 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
+// 用法：node scripts/check-convergence-metrics.mjs --guide → 打印违反项/定位/阈值/正确做法。
+// 仅在直接运行且带 --guide 时早退；不带 flag 时既有行为零变化。
+const __debt08GuideFlag = process.argv.includes('--guide');
+if (__debt08GuideFlag) {
+  const __debt08Guide = [
+    "性质：收敛度量工具（review.md §22 收敛度量表的可重复测量），非阻断门禁。",
+    "产出：未接线/临时标记数、波次命名文件数、运行时产物、巨型源文件、陪葬测试候选等基线数字。",
+    "正确做法：每轮修复前/后各跑一次，把 Δ 填入收敛度量表；与 check-frontend-convergence.mjs（阻断门禁）职责不同，不合并。",
+    "复核：node scripts/check-convergence-metrics.mjs",
+  ];
+  console.log('[check-convergence-metrics] 正确做法 · 五元规约\n');
+  for (const l of __debt08Guide) console.log('  ' + l);
+  process.exit(0);
+}
+
 const root = process.argv.includes('--root')
   ? path.resolve(process.argv[process.argv.indexOf('--root') + 1])
   : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
