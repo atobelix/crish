@@ -91,98 +91,104 @@ export const ExtensionDetailModal: React.FC<ExtensionDetailModalProps> = ({
     scope === 'installed' ? (item as InstalledExtension) : null;
   const catalogEntry = scope === 'catalog' ? (item as CatalogEntry) : null;
 
+  const dialogSize = item.kind === 'mcp' || item.kind === 'skill' ? 'xl' : 'lg';
+
   return (
     <Dialog
-      size="xl"
+      size={dialogSize}
       open={open}
       onClose={onClose}
       ariaLabel={`${item.name} 详情`}
       role="dialog"
-      showCloseButton={true}
+      showCloseButton={false}
     >
       <div className={styles.modalOverlay}>
         <div className={styles.header}>
-          <div className={styles.headerLeft}>
-            <div className={styles.iconBox}>
-              <AppIcon name={getExtensionIcon(item)} size={24} />
-            </div>
-            <div className={styles.headerMeta}>
-              <div className={styles.titleLine}>
-                <h3 className={styles.title}>{item.name}</h3>
-                <Badge size="xs" tone="neutral">
-                  {kindLabel(item.kind)}
-                </Badge>
-                <Badge
-                  size="xs"
-                  tone={item.source === 'official' ? 'brand' : 'neutral'}
-                >
-                  {sourceLabel(item.source)}
-                </Badge>
-              </div>
-              <div className={styles.subMeta}>
-                <span>ID: {item.id}</span>
-                {pluginCard?.pluginVersion ? (
-                  <span>· v{pluginCard.pluginVersion}</span>
+          <div className={styles.iconBox}>
+            <AppIcon name={getExtensionIcon(item)} size={18} />
+          </div>
+          <div className={styles.headerMeta}>
+            <div className={styles.titleLine}>
+              <h3 className={styles.title}>{item.name}</h3>
+              <Badge size="xs" tone="neutral">
+                {kindLabel(item.kind)}
+              </Badge>
+              <Badge
+                size="xs"
+                tone={item.source === 'official' ? 'brand' : 'neutral'}
+              >
+                {sourceLabel(item.source)}
+              </Badge>
+              <div className={styles.headerActions}>
+                {scope === 'installed' && pluginCard ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    active={pluginCard.pluginEnabled}
+                    aria-pressed={pluginCard.pluginEnabled}
+                    onClick={() =>
+                      onTogglePlugin?.(
+                        pluginCard.pluginId!,
+                        !pluginCard.pluginEnabled
+                      )
+                    }
+                  >
+                    {pluginCard.pluginEnabled ? '已启用' : '已停用'}
+                  </Button>
+                ) : null}
+
+                {scope === 'catalog' && catalogEntry ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={busyId === catalogEntry.id}
+                    onClick={() => void onInstallCatalog?.(catalogEntry)}
+                  >
+                    {busyId === catalogEntry.id ? '安装中…' : '安装'}
+                  </Button>
+                ) : null}
+
+                {canUninstall && installedItem ? (
+                  <Button
+                    type="button"
+                    variant="danger"
+                    size="sm"
+                    onClick={() => {
+                      void onRemovePackage?.(installedItem);
+                      onClose();
+                    }}
+                  >
+                    卸载
+                  </Button>
                 ) : null}
               </div>
             </div>
-          </div>
-
-          <div className={styles.headerActions}>
-            {scope === 'installed' && pluginCard ? (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                active={pluginCard.pluginEnabled}
-                aria-pressed={pluginCard.pluginEnabled}
-                onClick={() =>
-                  onTogglePlugin?.(
-                    pluginCard.pluginId!,
-                    !pluginCard.pluginEnabled
-                  )
-                }
-              >
-                {pluginCard.pluginEnabled ? '已启用' : '已停用'}
-              </Button>
-            ) : null}
-
-            {scope === 'catalog' && catalogEntry ? (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={busyId === catalogEntry.id}
-                onClick={() => void onInstallCatalog?.(catalogEntry)}
-              >
-                {busyId === catalogEntry.id ? '安装中…' : '安装'}
-              </Button>
-            ) : null}
-
-            {canUninstall && installedItem ? (
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                onClick={() => {
-                  void onRemovePackage?.(installedItem);
-                  onClose();
-                }}
-              >
-                卸载
-              </Button>
-            ) : null}
-          </div>
-        </div>
-
-        <div className={`${styles.bodyCoverContent} coverContent`}>
-          <div className={styles.descriptionSection}>
-            <span className={styles.sectionTitle}>简介</span>
+            <div className={styles.subMeta}>
+              <span>ID: {item.id}</span>
+              {pluginCard?.pluginVersion ? (
+                <span>· v{pluginCard.pluginVersion}</span>
+              ) : null}
+            </div>
             <p className={styles.description}>
               {item.description || '暂无描述信息'}
             </p>
           </div>
+          <Tooltip content="关闭">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              aria-label="关闭弹窗"
+            >
+              <AppIcon name="x" size={14} />
+            </Button>
+          </Tooltip>
+        </div>
 
+        <div className={`${styles.bodyCoverContent} coverContent`}>
           {isImportPlugin ? (
             <div className={styles.featureCard}>
               <div className={styles.featureCardHeader}>

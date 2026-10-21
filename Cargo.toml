@@ -29,12 +29,12 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT"
-authors = ["Conex Community"]
+authors = ["张浩健"]
 description = "Crish — Tauri desktop AI agent workbench (Rust engine, React UI)"
-repository = "https://github.com/conex-community/crish"
+repository = "https://github.com/atobelix/crish"
 publish = false
 
 # workspace 级 lint 基线：子 crate 通过 [lints] workspace = true 继承。

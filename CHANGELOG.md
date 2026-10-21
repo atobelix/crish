@@ -49,5 +49,5 @@ Comprehensive release notes are available in [RELEASE_NOTES_v0.1.0.md](RELEASE_N
 
 - Deprecated legacy TypeScript backend packages (`agent-daemon`, `agent-orchestrator`, `agent-runtime`, `agent-core`, `agent-model`) in favor of the Rust kernel.
 
-[Unreleased]: https://github.com/conex-community/crish/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/conex-community/crish/releases/tag/v0.1.0
+[Unreleased]: https://github.com/atobelix/crish/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/atobelix/crish/releases/tag/v0.1.0

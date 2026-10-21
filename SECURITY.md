@@ -4,10 +4,10 @@
 
 We actively support and patch security issues in the latest release of Crish.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
-| < 0.1.0 | :x:                |
+| Version | Supported |
+| ------- | --------- |
+| 0.1.x   | yes       |
+| < 0.1.0 | no        |
 
 ## Reporting a Vulnerability
 
@@ -15,10 +15,7 @@ We take the security of Crish seriously. If you find a security vulnerability, p
 
 Please report vulnerabilities privately through one of the following channels:
 
-1. **GitHub Private Vulnerability Reporting (Preferred)**:
-   👉 [Open a Private Security Advisory](https://github.com/conex-community/crish/security/advisories/new)
-2. **Security Team Email**:
-   Send your report to **`security@conex-community.org`**.
+Report it through [GitHub private vulnerability reporting](https://github.com/atobelix/crish/security/advisories/new). There is no separate security mailbox.
 
 ### What to Include in Your Report
 

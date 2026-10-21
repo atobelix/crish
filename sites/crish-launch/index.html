@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" data-top="true">
+<head>
+  <meta charset="utf-8" />
+  <script>document.documentElement.classList.add("js")</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Crish — 本地优先的 AI Agent 工作台</title>
+  <meta name="description" content="Crish 是本地优先的桌面 AI Agent 工作台。Tauri 壳与 Rust 引擎同进程，会话、工具、审批和终端在同一个窗口里。" />
+  <meta name="theme-color" content="#f2f1f0" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='12 9.5 176 176'%3E%3Cellipse cx='100' cy='34' rx='16' ry='16' fill='%2310b981'/%3E%3Cg fill='none' stroke='%23121212' stroke-width='26' stroke-linecap='round'%3E%3Cpath d='M 100 116 L 30 116'/%3E%3Cpath d='M 100 116 L 170 116'/%3E%3Cpath d='M 100 116 L 60 44'/%3E%3Cpath d='M 100 116 L 140 44'/%3E%3Cpath d='M 100 116 L 82 164'/%3E%3Cpath d='M 100 116 L 118 164'/%3E%3C/g%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles.css?v=31" />
+</head>
+<body>
+  <a class="skip" href="#tour">跳到内容</a>
+  <nav class="nav" aria-label="页内">
+    <a class="logo" href="#tour">
+      <svg class="mark" viewBox="12 9.5 176 176" aria-hidden="true">
+        <ellipse cx="100" cy="34" rx="16" ry="16"></ellipse>
+        <g>
+          <path d="M 100 116 L 30 116"></path>
+          <path d="M 100 116 L 170 116"></path>
+          <path d="M 100 116 L 60 44"></path>
+          <path d="M 100 116 L 140 44"></path>
+          <path d="M 100 116 L 82 164"></path>
+          <path d="M 100 116 L 118 164"></path>
+        </g>
+      </svg>
+      <span>Crish</span>
+    </a>
+    <div class="nav-links">
+      <a href="#tour">工作台</a>
+      <a href="#surface">界面</a>
+      <a href="#specs">规格</a>
+      <a href="#start">开始使用</a>
+    </div>
+    <a class="nav-cta" href="#start">从源码运行</a>
+  </nav>
+
+  <main>
+    <section class="tour" id="tour" data-pin data-steps="6">
+      <div class="pin-sticky">
+        <div class="stage3d" data-stage>
+          <div class="desk" data-desk>
+            <div class="app" data-focus="0">
+              <aside class="side">
+                <div class="side-head">
+                  <svg class="mark" viewBox="12 9.5 176 176" aria-hidden="true">
+                    <ellipse cx="100" cy="34" rx="16" ry="16"></ellipse>
+                    <g>
+                      <path d="M 100 116 L 30 116"></path>
+                      <path d="M 100 116 L 170 116"></path>
+                      <path d="M 100 116 L 60 44"></path>
+                      <path d="M 100 116 L 140 44"></path>
+                      <path d="M 100 116 L 82 164"></path>
+                      <path d="M 100 116 L 118 164"></path>
+                    </g>
+                  </svg>
+                  <span class="brand-name">Crish</span>
+                </div>
+                <div class="side-nav">
+                  <div class="nav-item"><svg class="ico pen" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3H7.5A4.5 4.5 0 0 0 3 7.5v9A4.5 4.5 0 0 0 7.5 21h9a4.5 4.5 0 0 0 4.5-4.5v-6"></path><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"></path></svg><span>新对话</span></div>
+                  <div class="nav-item"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 8V12L14 14"></path></svg><span>定时任务</span></div>
+                  <div class="nav-item"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.828 6.00096C12.9388 5.68791 12.999 5.35099 12.999 5C12.999 3.34315 11.6559 2 9.99904 2C8.34219 2 6.99904 3.34315 6.99904 5C6.99904 5.35099 7.05932 5.68791 7.17008 6.00096C4.88532 6.0093 3.66601 6.09039 2.87772 6.87868C2.08951 7.66689 2.00836 8.88603 2 11.1704C2.31251 11.06 2.64876 11 2.99904 11C4.6559 11 5.99904 12.3431 5.99904 14C5.99904 15.6569 4.6559 17 2.99904 17C2.64876 17 2.31251 16.94 2 16.8296C2.00836 19.114 2.08951 20.3331 2.87772 21.1213C3.66593 21.9095 4.88508 21.9907 7.16941 21.999C7.05908 21.6865 6.99904 21.3503 6.99904 21C6.99904 19.3431 8.34219 18 9.99904 18C11.6559 18 12.999 19.3431 12.999 21C12.999 21.3503 12.939 21.6865 12.8287 21.999C15.113 21.9907 16.3322 21.9095 17.1204 21.1213C17.9086 20.333 17.9897 19.1137 17.9981 16.829C18.3111 16.9397 18.648 17 18.999 17C20.6559 17 21.999 15.6569 21.999 14C21.999 12.3431 20.6559 11 18.999 11C18.648 11 18.3111 11.0603 17.9981 11.171C17.9897 8.88627 17.9086 7.66697 17.1204 6.87868C16.3321 6.09039 15.1128 6.0093 12.828 6.00096Z"></path></svg><span>扩展</span></div>
+                  <div class="nav-item seek"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 17L21 21"></path><path d="M19 11C19 6.58172 15.4183 3 11 3C6.58172 3 3 6.58172 3 11C3 15.4183 6.58172 19 11 19C15.4183 19 19 15.4183 19 11Z"></path></svg><span>搜索会话与消息…</span></div>
+                </div>
+                <div class="side-body">
+                  <div class="side-track" data-list>
+                    <p class="side-label"><i></i><span>对话</span></p>
+                    <div class="side-item" data-for="0"><span>模型与会话</span><em>14:02</em></div>
+                    <div class="side-item" data-for="1"><span>发布前检查</span><em>11:20</em></div>
+                    <div class="side-item" data-for="2"><span>方案起草</span><em>昨天</em></div>
+                    <div class="side-item" data-for="3"><span>命令审批</span><em>昨天</em></div>
+                    <div class="side-item"><span>架构笔记</span><em>周一</em></div>
+                    <div class="side-item"><span>渲染增量</span><em>周一</em></div>
+                    <div class="side-item"><span>全文检索</span><em>09-12</em></div>
+                    <div class="side-item"><span>差异对照</span><em>09-02</em></div>
+                  </div>
+                </div>
+                <div class="side-foot">
+                  <span class="avatar" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M20 21.0001C19.713 17.269 16.7289 14.3151 12.995 14.0662L12 13.9999C11.6446 14.0096 11.3134 14.0225 11.0008 14.0378C7.3 14.2192 4.28417 17.3057 4 21.0001"></path><circle cx="12" cy="6.99988" r="4"></circle></svg></span>
+                  <span class="who">Developer</span>
+                  <svg class="ico gear" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </div>
+              </aside>
+              <div class="work">
+                <span class="wins" aria-hidden="true"><i class="wmin"></i><i class="wmax"></i><i class="wclose"></i></span>
+                <div class="panes" data-panes>
+                  <section class="pane pane-main">
+                    <div class="pane-head">
+                      <span class="tab" data-for="0"><span>模型与会话</span><i class="tx"></i></span>
+                      <span class="tab" data-for="1"><span>发布前检查</span><i class="tx"></i></span>
+                      <span class="tab" data-for="2"><span>方案起草</span><i class="tx"></i></span>
+                      <span class="tab" data-for="3"><span>命令审批</span><i class="tx"></i></span>
+                    </div>
+                    <div class="leaf">
+                      <div class="col">
+                      <div class="stack">
+                        <div class="plane" data-plane="talk">
+                          <div class="msg user"><p>换成这台机器上的模型，会话还在吗？</p></div>
+                          <div class="msg ai"><p>还在。供应商可以换，这一轮会话留在原处。</p><p>搜索、审批和终端也在这个窗口里。</p></div>
+                        </div>
+                        <div class="plane" data-plane="ask">
+                          <div class="msg user"><p>跑完这一轮再告诉我结果。</p></div>
+                          <div class="ask">
+                            <div class="ask-top">
+                              <span class="badge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 9C9.5 7.61929 10.6193 6.5 12 6.5C13.3807 6.5 14.5 7.61929 14.5 9C14.5 9.85691 14.0689 10.6131 13.4117 11.0636C12.7283 11.5319 12 12.1716 12 13"></path><path d="M12.125 16.25H12"></path><path d="M18.7088 3.49534C16.8165 2.55382 14.5009 2 12 2C9.4991 2 7.1835 2.55382 5.29116 3.49534C4.36318 3.95706 3.89919 4.18792 3.4496 4.91378C3 5.63965 3 6.34248 3 7.74814V11.2371C3 16.9205 7.54236 20.0804 10.173 21.4338C10.9067 21.8113 11.2735 22 12 22C12.7265 22 13.0933 21.8113 13.8269 21.4338C16.4576 20.0804 21 16.9205 21 11.2371L21 7.74814C21 6.34249 21 5.63966 20.5504 4.91378C20.1008 4.18791 19.6368 3.95706 18.7088 3.49534Z"></path></svg>需要你的确认</span>
+                              <span class="st">等待中</span>
+                            </div>
+                            <p class="ask-title">是否允许运行下面这条命令？</p>
+                            <div class="ask-cmdwrap">
+                              <span>将执行</span>
+                              <code>npm test</code>
+                            </div>
+                            <div class="ask-note">
+                              <span>补充说明（可选，也可直接写你的要求）</span>
+                              <div class="ask-input">例如：只允许这一次 / 不要改测试文件…</div>
+                              <em>0/500</em>
+                            </div>
+                            <div class="ask-actions"><span class="b ghost">允许并记住</span><span class="b deny">拒绝</span><span class="b yes">允许</span></div>
+                          </div>
+                        </div>
+                        <div class="plane" data-plane="doc">
+                          <div class="prose">
+                            <h3>今天改了什么</h3>
+                            <p>渲染改到 Rust 侧整篇处理，界面按帧把增量接上。</p>
+                            <ul>
+                              <li>长文不必整段重绘</li>
+                              <li>代码块在流里成形</li>
+                            </ul>
+                            <pre>conex-markdown<span class="caret"></span></pre>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="picker" data-menu>
+                        <div class="hot">OpenAI 兼容</div>
+                        <div>Anthropic</div>
+                        <div>Gemini</div>
+                        <div>Ollama · 本机</div>
+                      </div>
+                      <div class="composer">
+                        <span class="plus" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12.001 5.00003V19.002"></path><path d="M19.002 12.002L4.99998 12.002"></path></svg></span>
+                        <span class="ph">输入消息，或键入 / 打开命令…（可粘贴截图）</span>
+                        <span class="fused"><span>需确认</span><i class="hair"></i><b>OpenAI 兼容</b></span>
+                        <i class="send" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M17.9998 15C17.9998 15 13.5809 9.00001 11.9998 9C10.4187 8.99999 5.99985 15 5.99985 15"></path></svg></i>
+                      </div>
+                      </div>
+                    </div>
+                  </section>
+                  <section class="pane pane-split" data-split>
+                    <div class="pane-head">
+                      <span class="tab on">终端</span>
+                    </div>
+                    <div class="leaf leaf-term">
+                      <div class="termbar">
+                        <span class="pwsh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.00004 17C4.00004 17 9.99999 12.5811 10 11C10 9.41884 4 5 4 5"></path><path d="M12 19H20"></path></svg>pwsh</span>
+                        <span class="termacts" aria-hidden="true">
+                          <svg viewBox="0 0 24 24"><path d="M12.001 5.00003V19.002"></path><path d="M19.002 12.002L4.99998 12.002"></path></svg>
+                          <svg viewBox="0 0 24 24"><path d="M20 17.5C20 18.8807 18.8807 20 17.5 20M20 17.5C20 16.1193 18.8807 15 17.5 15M20 17.5H21.5M17.5 20C16.1193 20 15 18.8807 15 17.5M17.5 20V21.5M15 17.5C15 16.1193 16.1193 15 17.5 15M15 17.5H13.5M17.5 15V13.5"></path><path d="M8.5 3V20"></path><path d="M3 4.5h9.5M3 19.5h7"></path></svg>
+                          <svg viewBox="0 0 24 24"><path d="M2 4H22"></path><path d="M19.5 4L22 20M4.5 4L2 20"></path><path d="M4 9H20"></path></svg>
+                          <svg viewBox="0 0 24 24"><path d="M8.73792 7.78021L4.84693 11.7574C3.67722 12.953 3.09236 13.5508 3.01263 14.2802C2.99579 14.4343 2.99579 14.5899 3.01263 14.744C3.09236 15.4733 3.67722 16.0711 4.84693 17.2668L4.99601 17.4191C5.62049 18.0575 5.93274 18.3766 6.30638 18.5911C6.5236 18.7157 6.75482 18.8134 6.99505 18.882C7.40827 19 7.85149 19 8.73792 19C9.62436 19 10.0676 19 10.4808 18.882C10.721 18.8134 10.9522 18.7157 11.1695 18.5911C11.5431 18.3766 11.8554 18.0575 12.4798 17.4191L15.3239 14.5121M8.73792 7.78021L12.3199 4.12313C13.7065 2.70754 14.3997 1.99974 15.2627 2C16.1256 2.00026 16.8185 2.70846 18.2042 4.12487L18.9473 4.8845C20.3159 6.28342 21.0002 6.98288 21 7.85008C20.9997 8.71728 20.315 9.41633 18.9456 10.8144L15.3239 14.5121"></path><path d="M10 22L21 22"></path></svg>
+                        </span>
+                      </div>
+                      <div class="term" data-term>
+                        <div data-line><span class="ps">PS C:\Software\conex&gt;</span> npm run dev:workbench</div>
+                        <div data-line>Crish · AI 工作台</div>
+                        <div data-line>引擎已在本进程就绪</div>
+                        <div class="psline" data-line><span class="ps">PS C:\Software\conex&gt;</span><i class="caret"></i></div>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="note">
+          <p class="kicker">工作台</p>
+          <div class="slides">
+            <article>
+              <h1>同一个窗口。</h1>
+              <p>会话、审批和终端不拆开。壳与引擎待在一个进程里。</p>
+            </article>
+            <article>
+              <h2>侧栏里找得回。</h2>
+              <p>会话留在这台机器上。搜索沿着 SQLite 里的事件走。</p>
+            </article>
+            <article>
+              <h2>换模型，不换会话。</h2>
+              <p>OpenAI 兼容、Anthropic、Gemini，或本机 Ollama。</p>
+            </article>
+            <article>
+              <h2>先看清，再执行。</h2>
+              <p>语句切开，变成记号，再对照策略。越界的升到审批。</p>
+            </article>
+            <article>
+              <h2>旁边还能再开一栏。</h2>
+              <p>长文由 Rust 整篇渲染。终端嵌在工作台里，不另开一个壳。</p>
+            </article>
+            <article>
+              <h2>拉远，还是这一套。</h2>
+              <p>图形界面已经在用。字符界面和网页沿同一组命令生长。</p>
+            </article>
+          </div>
+        </div>
+        <div class="scrub" aria-hidden="true"><i data-scrub></i></div>
+      </div>
+    </section>
+
+    <section class="surface" id="surface" data-surface>
+      <div class="surface-sticky">
+        <div class="pass-stage" data-pass-stage>
+          <div class="pass-rig" data-pass-rig>
+            <div class="plate">
+              <div class="diff-head"><span>差异</span><span class="diff-meta"><em>render.rs</em><i class="add">+6</i><i class="minus">−4</i></span></div>
+              <div class="diff-body">
+                <div class="dl"><i>1</i><span>use std::fmt::Write;</span></div>
+                <div class="dl"><i>2</i><span>pub struct Frame {</span></div>
+                <div class="dl"><i>3</i><span>    buf: String,</span></div>
+                <div class="dl"><i>4</i><span>}</span></div>
+                <div class="dl"><i>5</i><span>impl Frame {</span></div>
+                <div class="dl del"><i>−</i><span>    fn render(src: &amp;str) -&gt; String {</span></div>
+                <div class="dl del"><i>−</i><span>        replace_all(src)</span></div>
+                <div class="dl add"><i>+</i><span>    fn render(&amp;mut self, src: &amp;str) -&gt; &amp;str {</span></div>
+                <div class="dl add"><i>+</i><span>        push_incremental(src, &amp;mut self.buf);</span></div>
+                <div class="dl add"><i>+</i><span>        self.flush_frame();</span></div>
+                <div class="dl add"><i>+</i><span>        &amp;self.buf</span></div>
+                <div class="dl"><i>12</i><span>    }</span></div>
+                <div class="dl ctx"><i>13</i><span>    // 长文按帧接上，不必整段重绘</span></div>
+                <div class="dl del"><i>−</i><span>    fn emit(src: &amp;str) -&gt; String {</span></div>
+                <div class="dl del"><i>−</i><span>        src.to_string()</span></div>
+                <div class="dl add"><i>+</i><span>    fn emit(frame: &amp;Frame) -&gt; &amp;str {</span></div>
+                <div class="dl add"><i>+</i><span>        frame.buf.as_str()</span></div>
+                <div class="dl"><i>18</i><span>    }</span></div>
+                <div class="dl"><i>19</i><span>}</span></div>
+                <div class="dl"><i>20</i><span>fn ready(frame: &amp;Frame) -&gt; bool {</span></div>
+                <div class="dl"><i>21</i><span>    !frame.buf.is_empty()</span></div>
+                <div class="dl"><i>22</i><span>}</span></div>
+              </div>
+            </div>
+            <div class="plate">
+              <div class="find-head"><span>搜索</span><b>增量</b><em>2 处</em></div>
+              <div class="find-list">
+                <div class="find-row on"><p>长文按<mark>增量</mark>接上，不必整段重绘。</p><em>渲染增量 · 周一</em></div>
+                <div class="find-row on"><p>这一帧的<mark>增量</mark>已经落下来了。</p><em>架构笔记 · 周一</em></div>
+                <div class="find-row"><p>今天先把渲染从整段重绘里拆开。</p><em>方案起草 · 昨天</em></div>
+                <div class="find-row"><p>测试还是原来那一组。</p><em>发布前检查 · 11:20</em></div>
+                <div class="find-row"><p>记录按事件写下，留在这台机器上。</p><em>全文检索 · 09-12</em></div>
+                <div class="find-row"><p>对照只看改过的行。</p><em>差异对照 · 09-02</em></div>
+                <div class="find-row"><p>改过的行单独着色，原文留在原处。</p><em>差异视图 · 09-08</em></div>
+                <div class="find-row"><p>搜的是这一句，不是整页重排。</p><em>搜索结果 · 09-06</em></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="note">
+          <p class="kicker">界面</p>
+          <div class="slides surface-slides">
+            <article>
+              <h2>差异留在旁边。</h2>
+              <p>改过的文件按行对照。<br>加进来的和拿掉的分开着色。</p>
+            </article>
+            <article>
+              <h2>这句话还在。</h2>
+              <p>搜到的一句停在原文上。<br>不用把整段会话再翻一遍。</p>
+            </article>
+          </div>
+        </div>
+        <div class="scrub surface-scrub" aria-hidden="true"><i data-surface-scrub></i></div>
+      </div>
+    </section>
+
+    <section class="specs" id="specs">
+      <header class="sec-head">
+        <h2>规格</h2>
+        <p>已经在桌面上的部分。没有公开安装包，从源码构建。</p>
+      </header>
+      <div class="spec-list">
+        <div class="spec-row" data-reveal><strong>界面</strong><span>React · Tauri 2</span></div>
+        <div class="spec-row" data-reveal><strong>工作区</strong><span>会话侧栏 · 多分栏 · 会话标签</span></div>
+        <div class="spec-row" data-reveal><strong>引擎</strong><span>Rust，与壳同进程</span></div>
+        <div class="spec-row" data-reveal><strong>模型</strong><span>OpenAI 兼容 · Anthropic · Gemini · Ollama</span></div>
+        <div class="spec-row" data-reveal><strong>工具</strong><span>文件 · Shell · 搜索 · 审批</span></div>
+        <div class="spec-row" data-reveal><strong>命令门禁</strong><span>语句切分，记号化，策略匹配。动态内容升级审批</span></div>
+        <div class="spec-row" data-reveal><strong>渲染</strong><span>Rust Markdown 整篇渲染，前端增量接上</span></div>
+        <div class="spec-row" data-reveal><strong>存储</strong><span>SQLite 会话与事件 · 全文搜索 · 差异视图</span></div>
+        <div class="spec-row" data-reveal><strong>终端</strong><span>xterm.js，嵌在工作台里</span></div>
+        <div class="spec-row" data-reveal><strong>系统</strong><span>Windows · macOS · Linux</span></div>
+        <div class="spec-row" data-reveal><strong>许可</strong><span>MIT · 张浩健</span></div>
+      </div>
+    </section>
+
+    <section class="start" id="start">
+      <div class="start-copy">
+        <h2>在你的机器上跑起来。</h2>
+        <p>直接下载安装包，不必从源码编译。从源码跑需要 Node.js 20 或更新，以及 Rust stable。</p>
+        <div class="cta-row">
+          <a class="btn" href="https://github.com/atobelix/crish/releases">下载安装包</a>
+          <a class="btn ghost" href="https://github.com/atobelix/crish/blob/main/README.md">阅读 README</a>
+        </div>
+      </div>
+      <div class="code">
+        <button class="copy" type="button" data-copy>复制</button>
+        <pre data-code>git clone https://github.com/atobelix/crish.git
+cd crish
+npm install
+npm run dev:workbench</pre>
+      </div>
+      <p class="fine">各平台的 Tauri 依赖写在仓库 README 里。页面上的窗口、差异和终端都是示意，不是你的会话。</p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Crish · 张浩健</span>
+    <span>界面为示意，随版本变化。</span>
+  </footer>
+  <script src="main.js?v=33"></script>
+</body>
+</html>

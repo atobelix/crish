@@ -621,3 +621,5 @@ heritage-gis-data/
 scripts/download_heritage_data.py
 scripts/process_heritage_data.py
 scripts/generate_routes.py
+
+.conex/

@@ -58,7 +58,6 @@ representative at an online or offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the project maintainers via email at **`contact@conex-community.org`**. All complaints will be reviewed and investigated promptly and fairly.
+reported to the maintainer, 张浩健, through [GitHub Issues](https://github.com/atobelix/crish/issues). There is no project mailbox. Complaints will be reviewed.
 
-All community leaders are obligated to respect the privacy and security of the
-reporter of any incident.
+The maintainer will respect the privacy and security of the reporter of any incident.

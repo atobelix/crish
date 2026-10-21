@@ -86,7 +86,7 @@ jobs:
           npm run build:shared-types
           npm run build:desktop
 
-      - name: Build Tauri Desktop & Draft Release
+      - name: Build Tauri Desktop & Release
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         id: tauri
         env:
@@ -103,7 +103,7 @@ jobs:
           # 不再回退硬编码 v0.1.0
           tagName: ${{ env.RELEASE_VERSION }}
           releaseName: 'Crish ${{ env.RELEASE_VERSION }}'
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           projectPath: apps/agent-workbench
 

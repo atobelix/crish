@@ -10,7 +10,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-provider"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "conex-compaction",
@@ -36,7 +36,7 @@ dependencies = [
 
 [[package]]
 name = "agent-tools"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "conex-db",
@@ -1076,7 +1076,7 @@ dependencies = [
 
 [[package]]
 name = "conex-browser"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1103,7 +1103,7 @@ dependencies = [
 
 [[package]]
 name = "conex-browser-tools"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "agent-tools",
  "async-trait",
@@ -1119,7 +1119,7 @@ dependencies = [
 
 [[package]]
 name = "conex-compaction"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "conex-shared",
  "conex-types",
@@ -1129,7 +1129,7 @@ dependencies = [
 
 [[package]]
 name = "conex-computer"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "conex-shared",
@@ -1148,7 +1148,7 @@ dependencies = [
 
 [[package]]
 name = "conex-computer-tools"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "agent-tools",
  "async-trait",
@@ -1164,7 +1164,7 @@ dependencies = [
 
 [[package]]
 name = "conex-db"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "agent-tools",
  "conex-types",
@@ -1180,7 +1180,7 @@ dependencies = [
 
 [[package]]
 name = "conex-diff"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "conex-types",
  "serde_json",
@@ -1189,7 +1189,7 @@ dependencies = [
 
 [[package]]
 name = "conex-doc-collab"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "loro",
  "serde",
@@ -1201,7 +1201,7 @@ dependencies = [
 
 [[package]]
 name = "conex-fs"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "conex-test-utils",
@@ -1218,7 +1218,7 @@ dependencies = [
 
 [[package]]
 name = "conex-markdown"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ammonia",
  "conex-shared",
@@ -1232,7 +1232,7 @@ dependencies = [
 
 [[package]]
 name = "conex-md-ast"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "conex-doc-collab",
  "markdown",
@@ -1242,7 +1242,7 @@ dependencies = [
 
 [[package]]
 name = "conex-note-runtime"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "agent-tools",
  "async-trait",
@@ -1259,7 +1259,7 @@ dependencies = [
 
 [[package]]
 name = "conex-relay"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -1276,7 +1276,7 @@ dependencies = [
 
 [[package]]
 name = "conex-sandbox"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "regex",
  "serde",
@@ -1284,7 +1284,7 @@ dependencies = [
 
 [[package]]
 name = "conex-search"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "conex-types",
  "ignore",
@@ -1292,7 +1292,7 @@ dependencies = [
 
 [[package]]
 name = "conex-shared"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "serde",
@@ -1302,7 +1302,7 @@ dependencies = [
 
 [[package]]
 name = "conex-telemetry"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "conex-types",
  "hex",
@@ -1314,7 +1314,7 @@ dependencies = [
 
 [[package]]
 name = "conex-test-utils"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "conex-types",
  "serde",
@@ -1326,7 +1326,7 @@ dependencies = [
 
 [[package]]
 name = "conex-types"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "once_cell",
  "serde",
@@ -1336,7 +1336,7 @@ dependencies = [
 
 [[package]]
 name = "conex-workspace-store"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "conex-doc-collab",
  "conex-md-ast",
@@ -1474,7 +1474,7 @@ dependencies = [
 
 [[package]]
 name = "crish-agent-workbench"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "agent-provider",
  "agent-tools",
@@ -5128,7 +5128,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "orchestrator"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "agent-tools",
  "async-trait",
@@ -6734,7 +6734,7 @@ dependencies = [
 
 [[package]]
 name = "session-loop"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "agent-tools",
  "async-trait",

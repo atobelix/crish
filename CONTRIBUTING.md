@@ -33,7 +33,7 @@ Crish 是 Rust + TypeScript 的 npm/Cargo 混合 monorepo：
 ## 快速开始
 
 ```bash
-git clone https://github.com/conex-community/crish.git
+git clone https://github.com/atobelix/crish.git
 cd crish
 npm install          # 安装依赖；prepare 钩子自动配置 husky
 ```
@@ -106,10 +106,10 @@ Provider（模型服务商）接入请走 [`docs/opensource/CONTRIBUTING-PROVIDE
 
 ## 安全漏洞
 
-请勿在 Issue 中公开漏洞细节；按 [`SECURITY.md`](SECURITY.md) 流程私密报告（首选 [GitHub Private Vulnerability Reporting](https://github.com/conex-community/crish/security/advisories/new)，或发送邮件至 `security@conex-community.org`）。
+请勿在 Issue 中公开漏洞细节；按 [`SECURITY.md`](SECURITY.md) 通过 [GitHub 私人漏洞报告](https://github.com/atobelix/crish/security/advisories/new) 提交。
 
-## 社区
+## 反馈
 
-- GitHub Issues / Discussions：功能讨论、设计变更建议（[`conex-community/crish`](https://github.com/conex-community/crish)）
-- 社区邮箱：`contact@conex-community.org`
-- 安全漏洞：`security@conex-community.org`
+- 问题与改动讨论写在 [Issues](https://github.com/atobelix/crish/issues)
+- 仓库：[atobelix/crish](https://github.com/atobelix/crish)
+- 维护者：张浩健。没有单独的联系邮箱

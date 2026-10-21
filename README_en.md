@@ -3,167 +3,108 @@
 [English](README_en.md) | [简体中文](README.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Platforms](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](#prerequisites)
-[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A520-green.svg)](https://nodejs.org/)
-[![Rust](https://img.shields.io/badge/Rust-2021%20stable-orange.svg)](https://www.rust-lang.org/)
-[![CI](https://img.shields.io/badge/CI-Three--Tier-blueviolet.svg)](.github/workflows/)
+[![Version](https://img.shields.io/badge/version-0.1.1-blue.svg)](https://github.com/atobelix/crish/releases)
 
-> **License** MIT · **Platforms** Windows · macOS · Linux · **Node** ≥ 20 · **Rust** stable (edition 2021) · **CI** Three-Tier (Fast / Mid / Slow)
->
-> Repository directory `conex`, product name **Crish**, maintained by **Conex Community** (`https://github.com/conex-community/crish`).
+Maintainer: [张浩健](https://github.com/atobelix). The repository directory is `conex`. The product name is **Crish**. This is a one-person project. There is no community organization and no public contact mailbox.
 
-Crish is a local-first AI Agent desktop workbench: **Tauri 2 shell + React 19 desktop UI + Rust engine** (`crates/`).
-The engine and UI run within the same process, communicating through Tauri IPC commands and event contracts. The architectural vision is a **unified engine contract surface** serving GUI, TUI, and Web interfaces concurrently.
+Source: <https://github.com/atobelix/crish>
 
-> **Transition Note**: The engine has fully transitioned to Rust (see [`docs/rust-rewrite/`](docs/rust-rewrite/00-master-plan.md) for phase progress).
-> Legacy TypeScript backend packages (`agent-daemon` / `agent-orchestrator` / `agent-runtime`, etc.) have been removed.
-> References in legacy documentation and tests have been cleaned up (historical entries preserved only with migration notes).
+Crish is a local-first AI agent desktop workbench: a Tauri 2 shell, a React 19 UI, and a Rust engine (`crates/`). The engine and the UI share one process and talk over Tauri IPC. A TUI and a web UI are not built yet. The diagram below marks them as planned.
 
----
+## Install
 
-## ✨ Features
+You do not have to compile it. Download an installer from [Releases](https://github.com/atobelix/crish/releases). The public version is **0.1.1**.
 
-- **Multi-Model Provider Engine**: OpenAI Compatible / Anthropic / Gemini / Ollama (`crates/agent-provider`, reqwest + SSE streaming).
-- **Session Loop & Execution Control**: `session-loop` state machine, steering queues, run / stop / approve control plane (`crates/session-loop`, `crates/orchestrator`).
-- **Tools & Approval Workflows**: File system (fs), shell, search tools with granular user approval gates (`crates/agent-tools`, `crates/orchestrator`).
-- **Sandbox Command Guardrails**: Three-stage `CommandPolicy` pipeline (statement splitting → tokenization → policy evaluation) with dynamic escalation approval (`crates/conex-sandbox`).
-- **Streaming Markdown Rendering**: Rust-authoritative full rendering (`crates/conex-markdown`) combined with frontend incremental rendering for smooth frame rates on long outputs.
-- **Session Persistence & Search**: SQLite session and event store (`crates/conex-db`), full-text search (`crates/conex-search`), and diff view (`crates/conex-diff`).
-- **Integrated Terminal**: Built-in xterm.js terminal integration (`apps/crish-desktop`).
-- **Cross-Interface Architecture**: Shared engine contract surface for GUI (React), TUI (planned), and Web (subsequent; see Architecture section below).
+Windows:
 
----
+- `Crish_0.1.1_x64-setup.exe` — setup wizard
+- `Crish_0.1.1_x64_en-US.msi` — MSI
 
-## 📸 Screenshots
+Linux and macOS installers are uploaded by the same release workflow. Use the files that are actually attached to the release. The `v0.1.0` tag is older. Do not treat it as the current version.
 
-_(To be added upon release)_
+On first launch, open Settings and add a model provider key, or point Crish at local [Ollama](https://ollama.com/). Then start a conversation.
 
----
+## Screenshots
 
-<a id="prerequisites"></a>
+Appearance settings:
 
-## ⚙️ Environment Prerequisites
+![Settings, appearance](docs/screenshots/settings-appearance.jpg)
 
-Before building from source, please ensure the following dependencies are installed on your system:
+Extensions (plugins, skills, MCP servers):
 
-- **Node.js**: ≥ 20.0.0 (LTS recommended) and npm
-- **Rust**: Stable toolchain (edition 2021), installed via [rustup.rs](https://rustup.rs/)
-- **Tauri v2 Native Platform Dependencies**:
-  - **Linux (Ubuntu / Debian)**:
-    ```bash
-    sudo apt update && sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libappindicator3-dev librsvg2-dev patchelf
-    ```
-  - **Windows**:
-    - Install [Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (select "Desktop development with C++");
-    - Ensure Microsoft Edge WebView2 Runtime is installed (built into Windows 10/11).
-  - **macOS**:
-    - Install Xcode Command Line Tools: `xcode-select --install`
+![Extensions](docs/screenshots/extensions.jpg)
 
----
+## Features
 
-## 🚀 Quick Start (Build from Source)
+- Models: OpenAI-compatible, Anthropic, Gemini, Ollama (`crates/agent-provider`)
+- Session loop: run, stop, approve (`crates/session-loop`, `crates/orchestrator`)
+- Tools: files, shell, search, with approval (`crates/agent-tools`)
+- Command policy: `crates/conex-sandbox`
+- Markdown rendering: `crates/conex-markdown`
+- Session storage and search: `crates/conex-db`, `crates/conex-search`, `crates/conex-diff`
+- Built-in terminal: `apps/crish-desktop`
+- Plugins, skills, and MCP servers
+
+## Build from source
+
+You need Node.js 20 or newer, npm, Rust stable (edition 2021), and the Tauri 2 system packages.
+
+Linux (Ubuntu / Debian):
 
 ```bash
-git clone https://github.com/conex-community/crish.git
-cd crish
-
-npm install
-
-npm run dev:desktop     # React UI only (Vite, dev port 5174)
-npm run dev:workbench   # Tauri shell + desktop co-debugging (loads crish-desktop)
+sudo apt update && sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 ```
 
-After launching for the first time:
+Windows needs the [Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) workload “Desktop development with C++”, plus WebView2. Windows 10 and 11 usually already include WebView2.
 
-1. Open the **Settings** page and configure a model Provider (cloud API keys or local [Ollama](https://ollama.com/));
-2. Create a new session and start chatting; tool execution, approval gates, and streaming rendering work out of the box.
+macOS: `xcode-select --install`
 
-> Binary distribution channels (Releases / Official site) and auto-updates (Tauri updater) will be finalized and documented in `docs/INSTALL.md` upon the first public release. Please build from source currently.
+```bash
+git clone https://github.com/atobelix/crish.git
+cd crish
+npm install
+npm run dev:workbench
+```
 
----
+`npm run dev:desktop` starts only the React UI (Vite, port 5174). It is not the desktop app.
 
-## 🛠️ Development Commands
+| Command | What it does |
+| --- | --- |
+| `npm run dev:workbench` | Start the desktop app |
+| `npm run dev:desktop` | Start the UI only |
+| `npm run build:desktop` | Build the UI |
+| `npm run check:desktop` | Typecheck and UI gates |
+| `cargo build --workspace` | Build the Rust workspace |
+| `cargo test --workspace` | Rust tests |
+| `cargo clippy --workspace -- -D warnings` | Clippy |
 
-### Frontend & Shell
-
-| Command                 | Description                                 |
-| ----------------------- | ------------------------------------------- |
-| `npm run dev:desktop`   | Start React UI dev server (Vite)            |
-| `npm run dev:workbench` | Start Tauri desktop application             |
-| `npm run build:desktop` | Production build for crish-desktop          |
-| `npm run check:desktop` | Desktop typecheck + UI layering gate checks |
-
-### Rust Engine
-
-| Command                                   | Description                                           |
-| ----------------------------------------- | ----------------------------------------------------- |
-| `cargo build --workspace`                 | Build all crates and Tauri shell                      |
-| `cargo test --workspace`                  | Run full workspace test suite (CI mid-tier gate)      |
-| `cargo clippy --workspace -- -D warnings` | Workspace linter gate (CI mid-tier gate)              |
-| `cargo check --workspace --locked`        | Fast check against locked `Cargo.lock` (CI fast-tier) |
-
-### Testing
-
-- `npm run test:desktop-helpers` — Desktop API & Store unit tests (Vitest)
-- `cargo test` — Engine Rust unit & integration tests
-- End-to-end: `npx playwright test` (`tests/e2e`, includes mock engine suites)
-
-> Migration completed: Code and scripts no longer reference deleted packages (historical paths only retained in a few test comments for context); CI fast-tier gate (`cargo check --workspace --locked` + vitest fast suite) serves as the baseline.
-
----
-
-## 🏗️ Architecture Overview
+## Architecture
 
 ```text
-┌───────────────────────────────────────────────────────────────┐
-│ Engine Contract Surface (Backend, in-process Rust)            │
-│   core_* commands (run/control/approve/session/event/status/  │
-│   config)                                                     │
-│   workbench-run-event channel (sequence + runId injection)    │
-│   CoreError unified error protocol + conex-telemetry          │
-└───────────────┬────────────────────────────┬───────────────────┘
-        ┌───────▼────────┐           ┌───────▼────────┐
-        │ GUI (React)    │           │ TUI (Planned)  │
-        │ Adaptation     │           │ Adaptation     │
-        │ workbench_*    │           │ Contract-only  │
-        │ Desktop-only   │           │                │
-        └────────────────┘           └────────────────┘
+Engine (Rust, in process)
+  core_* commands, workbench-run-event, CoreError
+        |
+        +-- GUI (React, shipped) workbench_* desktop APIs
+        +-- TUI (planned)
+        +-- Web (planned)
 ```
 
-- **Engine Contract Surface**: `core_*` + `config_*` + `session_*` + `workbench-run-event` + `CoreError`, shared across all frontends;
-- **GUI Exclusive**: `workbench_*` (fs / pty / process / power / host desktop capabilities);
-- **Web Interface**: HTTP adaptation of the same contract surface (exposed via gateway);
-- **TUI Interface**: Direct consumer of the contract surface (commands + event channel) with independent rendering.
+See [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-See [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`docs/rust-rewrite/23-architecture-hardening-plan.md`](docs/rust-rewrite/23-architecture-hardening-plan.md) for details.
+## Docs
 
----
+| Doc | What it is |
+| --- | --- |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Architecture |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to change the code |
+| [`CHANGELOG.md`](CHANGELOG.md) | Changelog |
+| [`SECURITY.md`](SECURITY.md) | Private vulnerability reports |
+| [`LICENSE`](LICENSE) | MIT |
+| [`NOTICE`](NOTICE) | Third-party notices |
+| [`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md) | Dependency licenses |
 
-## 📚 Documentation
+Use [Issues](https://github.com/atobelix/crish/issues) for bugs and questions. Do not post vulnerability details there. Follow [`SECURITY.md`](SECURITY.md) and use GitHub private vulnerability reporting.
 
-| Document                                                                                 | Description                                                          |
-| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md)                                                     | Architectural ground truth: Rust kernel, contract surface, crate map |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md)                                                     | Contribution guide: environment, building, code style, PR flow       |
-| [`docs/opensource/CONTRIBUTING-PROVIDERS.md`](docs/opensource/CONTRIBUTING-PROVIDERS.md) | Provider integration guide (Schema, auth, testing, PR checklist)     |
-| [`CHANGELOG.md`](CHANGELOG.md)                                                           | Release changelog (Keep a Changelog)                                 |
-| [`SECURITY.md`](SECURITY.md)                                                             | Security vulnerability disclosure process and PVR support            |
-| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)                                               | Contributor Covenant Code of Conduct                                 |
-| [`NOTICE`](NOTICE)                                                                       | Copyright and attribution notices                                    |
-| [`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md)                                     | Third-party dependency licenses                                      |
-| [`docs/rust-rewrite/`](docs/rust-rewrite/00-master-plan.md)                              | Rust rewrite plans and audits (internal transition record)           |
+## License
 
----
-
-## 🤝 Community
-
-- GitHub Issues & Discussions: [`conex-community/crish`](https://github.com/conex-community/crish)
-- Community contact: `contact@conex-community.org`
-- Security reports: `security@conex-community.org` or via [GitHub PVR](https://github.com/conex-community/crish/security/advisories/new)
-- Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) before submitting pull requests.
-
----
-
-## 📄 License
-
-Licensed under the **MIT License**. Copyright (c) 2026 Conex Community. See [`LICENSE`](LICENSE) for details.
+MIT. Copyright (c) 2026 张浩健. See [`LICENSE`](LICENSE).
