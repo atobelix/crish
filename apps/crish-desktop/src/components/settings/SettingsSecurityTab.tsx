@@ -305,7 +305,8 @@ export const SettingsSecurityTab: React.FC = () => {
                 autoCapitalize="off"
                 aria-label={t('settings.security.cmdInputAria', '要信任的命令')}
                 className={styles.inputGrow}
-                onEnter={addWhitelist}
+                // onEnter 回传输入值；必须走无参分支，否则会被当成「预设」而不清空输入框
+                onEnter={() => addWhitelist()}
                 onKeyDown={(e) => {
                   if (e.key === 'Escape' && newWhitelistCmd) {
                     e.preventDefault();
