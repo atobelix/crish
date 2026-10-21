@@ -1,5 +1,6 @@
 import type { SettingsTranslations } from '../../types';
 import { settingsPartRest } from './settingsParts';
+import { settingsPartModels } from './settingsModels';
 
 export const settings: SettingsTranslations = {
   // ── 基础既有 11 键（严格保持向后兼容）──
@@ -297,6 +298,7 @@ export const settings: SettingsTranslations = {
   'devtools.probeStatus': '执行全量自检探测',
 
   ...settingsPartRest,
+  ...settingsPartModels,
 };
 
 export default settings;

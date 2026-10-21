@@ -132,7 +132,7 @@ apps/crish-desktop/src/api/virtualScrollGestureGuard.ts 365
 apps/crish-desktop/src/api/workflow-api/workflowScheduler.ts 448
 apps/crish-desktop/src/api/workspaceFsApi.ts 342
 apps/crish-desktop/src/app/UnifiedAppHydrationCoordinator.ts 477
-apps/crish-desktop/src/assets/icons/modelVendorCatalog.ts 474
+apps/crish-desktop/src/assets/icons/modelVendorCatalog.ts 366
 apps/crish-desktop/src/components/binary-tree/TreeLeafPanel.tsx 476
 apps/crish-desktop/src/components/chat-card/ChatCard.tsx 476
 apps/crish-desktop/src/components/chat-card/useChatAttachments.ts 472
