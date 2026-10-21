@@ -9,6 +9,8 @@ import {
 import { SessionStreamManager } from '../../api/sessionStreamManager';
 import { StreamTextBatcher } from '../../api/streamTextBatcher';
 import * as helpers from './helpers';
+import { useSessionStore } from '../../store/sessionStore';
+import type { Session, SessionMessage } from '../../store/sessionStore';
 
 describe('streamExecutionHelper', () => {
   beforeEach(() => {
@@ -45,6 +47,53 @@ describe('streamExecutionHelper', () => {
         ),
         'sess-1',
         'msg-2'
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('活动流冲突时把 processing 的 user 消息转为 queued（串行守卫自动排队）', () => {
+      const userMsg = {
+        id: 'msg-2',
+        sender: 'user',
+        text: '第二条',
+        timestamp: 1,
+        status: 'processing',
+      } as SessionMessage;
+      const session = {
+        id: 'sess-1',
+        title: 't',
+        folder: 'general',
+        isPinned: false,
+        isArchived: false,
+        timestamp: new Date(0).toISOString(),
+        messages: [userMsg],
+        createdAt: 0,
+        updatedAt: 0,
+      } as Session;
+      useSessionStore.setState({
+        sessionsById: { 'sess-1': session },
+        sessions: [session],
+        activeSessionId: 'sess-1',
+      });
+      const manager = new SessionStreamManager();
+      manager.set('sess-1', {
+        cancel: vi.fn(),
+        userMsgId: 'prev-user-msg',
+        assistantMsgId: 'prev-asst-msg',
+        runId: 'run-1',
+      });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      expect(handleStreamConflict('sess-1', 'msg-2', manager)).toBe(true);
+
+      const after = useSessionStore
+        .getState()
+        .sessionsById['sess-1']?.messages.find((m) => m.id === 'msg-2');
+      expect(after?.status).toBe('queued');
+      // 合法排队不应触发状态守卫的非法转换告警
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        '[StatusTransition] 消息状态非法转换:',
+        expect.anything()
       );
       warnSpy.mockRestore();
     });
