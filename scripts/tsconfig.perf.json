@@ -1,0 +1,20 @@
+{
+  "//": "perf-test.yml 调用的 TS 脚本此前不在任何 tsc 工程中，d82f74686 删除 loadMemResults 后残留的 memResults 引用直到 CI 运行时才以 ReferenceError 暴露。此工程让它们在 typecheck:perf 中被静态检查。",
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "lib": ["ES2023"],
+    "types": ["node"]
+  },
+  "include": [
+    "perf-ab.ts",
+    "compare-benchmarks.ts",
+    "acceptance-criteria.ts",
+    "generate-perf-report.ts",
+    "../packages/shared-utils/src/bench/**/*.ts"
+  ],
+  "exclude": ["../packages/shared-utils/src/bench/**/*.test.ts"]
+}
