@@ -11,10 +11,11 @@
 //
 // 本测试两件事：
 // 1. 断言 tool.write_path_conflict 已注册（元信息不回退 common.unknown）；
-// 2. 断言 TS CRISH_ERROR_REGISTRY 与 Rust error.rs codes 模块码集合双向相等
+// 2. 断言 TS CRISH_ERROR_REGISTRY 与 Rust error 模块（crates/conex-types/src/error/，
+//    codes 常量集在 error/codes.rs）码集合双向相等
 //    ——改任一侧不同步（新增码 / 改名 / 删码）立即红。
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { CrishError } from './classes';
@@ -25,14 +26,33 @@ import { CRISH_ERROR_REGISTRY, getErrorInfo } from './info';
 /// 仓库根（本文件位于 packages/shared-types/src/errors/，上溯四层）
 const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 
-/// 解析 Rust 侧 error.rs codes 模块的全部码常量
+/// Rust 侧 error 模块目录（原单文件 error.rs 已按职责拆为 error/ 目录，
+/// codes 常量集位于 error/codes.rs）
+const RUST_ERROR_MODULE_DIR = REPO_ROOT + 'crates/conex-types/src/error/';
+
+/// 递归列出 error 模块目录下全部 .rs 文件（按路径排序，结果稳定）。
+/// 扫描整个目录而非只读 codes.rs：与拆分前「整份 error.rs 全文扫描」的
+/// 覆盖面等价，码常量即使落在 error/ 下其他文件也不会漏提。
+function rustErrorModuleFiles(dir: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = dir + entry.name;
+    if (entry.isDirectory()) {
+      files.push(...rustErrorModuleFiles(full + '/'));
+    } else if (entry.isFile() && entry.name.endsWith('.rs')) {
+      files.push(full);
+    }
+  }
+  return files.sort();
+}
+
+/// 解析 Rust 侧 error 模块（error/ 目录全部 .rs）的全部码常量
 /// （模式：`pub const NAME: &str = "域名.段名";`，码表常量全符合；
 ///  支持三段码：R13/B3 起 tool.browser.* 为三段点分码——两段正则曾静默漏提）
 function rustCodesFromErrorRs(): string[] {
-  const src = readFileSync(
-    REPO_ROOT + 'crates/conex-types/src/error.rs',
-    'utf8'
-  );
+  const src = rustErrorModuleFiles(RUST_ERROR_MODULE_DIR)
+    .map((file) => readFileSync(file, 'utf8'))
+    .join('\n');
   const re =
     /pub const [A-Z][A-Z0-9_]*: &str = "([a-z][a-z0-9_]*(\.[a-z_]+)+)";/g;
   const codes: string[] = [];
