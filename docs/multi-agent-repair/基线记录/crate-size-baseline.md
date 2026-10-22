@@ -363,7 +363,6 @@ crates/conex-browser/src/browser/profile.rs 971
 crates/conex-browser/src/browser/state.rs 702
 crates/conex-browser/src/cdp/bus.rs 1346
 crates/conex-browser/src/cdp/client.rs 689
-crates/conex-browser/src/cdp/sender.rs 1806
 crates/conex-browser/src/cdp/transport.rs 951
 crates/conex-browser/src/cdp/version.rs 852
 crates/conex-browser/src/frames/session.rs 1400
