@@ -12,12 +12,13 @@ import type { ProviderSpec } from '../../api/modelsCatalogTypes';
 import {
   isLiveModelEnabled,
   resolveActiveModelAfterMetaChange,
-} from './ModelsSettingsTab';
+} from './useActiveModelSelfHeal';
 
 const CATALOG_PATH = 'C:\\Users\\tester\\.conex\\models.yaml';
 
 const SRC = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), 'ModelsSettingsTab.tsx'),
+  // 自愈逻辑已从 ModelsSettingsTab 拆到 useActiveModelSelfHeal（读源约束随实现迁移）
+  join(dirname(fileURLToPath(import.meta.url)), 'useActiveModelSelfHeal.ts'),
   'utf8'
 );
 
@@ -49,9 +50,15 @@ describe('ModelsSettingsTab live 自愈读源', () => {
       revision: 'revision-0',
       credentialStates: {},
       parseError: null,
-      tree: { version: 2, activeModel: null, providers: structuredClone(LIVE_PROVIDERS) },
+      tree: {
+        version: 2,
+        activeModel: null,
+        providers: structuredClone(LIVE_PROVIDERS),
+      },
     }));
-    mockTauriCommand('workbench_save_models_yaml', () => ({ path: CATALOG_PATH }));
+    mockTauriCommand('workbench_save_models_yaml', () => ({
+      path: CATALOG_PATH,
+    }));
     await modelsCatalogStore.ensureLoaded(true);
   });
 

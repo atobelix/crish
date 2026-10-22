@@ -159,8 +159,8 @@ apps/crish-desktop/src/components/markdown/MarkdownDocumentView.tsx 428
 apps/crish-desktop/src/components/note-paper/useNoteTextPersistence.ts 454
 apps/crish-desktop/src/components/plugins/ExternalSessionImportModal.tsx 480
 apps/crish-desktop/src/components/settings-extensions/useExtensionMarket.tsx 470
-apps/crish-desktop/src/components/settings-models/ModelProfileList.tsx 449
-apps/crish-desktop/src/components/settings-models/ModelsSettingsTab.tsx 533
+apps/crish-desktop/src/components/settings-models/ModelProfileList.tsx 440
+apps/crish-desktop/src/components/settings-models/ModelsSettingsTab.tsx 526
 apps/crish-desktop/src/components/settings/SettingsAboutTab.tsx 440
 apps/crish-desktop/src/components/settings/SettingsSecurityTab.tsx 481
 apps/crish-desktop/src/components/settings/SettingsShortcutsTab.tsx 476
@@ -169,7 +169,7 @@ apps/crish-desktop/src/components/settings/usage/UsageTrendChart.tsx 440
 apps/crish-desktop/src/components/settings/useAppearanceSettings.ts 429
 apps/crish-desktop/src/components/settings/useWorkflowsState.ts 576
 apps/crish-desktop/src/components/sidebar/ContextMenuFlyout.tsx 446
-apps/crish-desktop/src/components/sidebar/session-list/useSessionListDrag.ts 601
+apps/crish-desktop/src/components/sidebar/session-list/useSessionListDrag.ts 551
 apps/crish-desktop/src/components/ui/PreviewCard/PreviewCard.tsx 680
 apps/crish-desktop/src/components/ui/ScrollArea/ScrollArea.tsx 478
 apps/crish-desktop/src/components/ui/SmartExpandablePanel/SmartExpandablePanel.tsx 456

@@ -7,7 +7,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { mockTauriCommand } from '../../test-setup';
 import { modelsCatalogStore } from '../../api/modelsCatalogStore';
 import type { ProviderProfile } from '../../api/providerProfiles';
@@ -15,12 +22,13 @@ import type { ProviderSpec } from '../../api/modelsCatalogTypes';
 import {
   FALLBACK_EMPTY_SELECTION,
   ModelsCascadeSelect,
-} from './ModelProfileList';
+} from './ModelsCascadeSelect';
 
 const CATALOG_PATH = 'C:\\Users\\tester\\.conex\\models.yaml';
 
 const SRC = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), 'ModelProfileList.tsx'),
+  // 级联选择器已从 ModelProfileList 拆到 ModelsCascadeSelect（读源约束随实现迁移）
+  join(dirname(fileURLToPath(import.meta.url)), 'ModelsCascadeSelect.tsx'),
   'utf8'
 );
 
@@ -65,7 +73,11 @@ async function seedCatalog(
     revision: 'revision-0',
     credentialStates: {},
     parseError: null,
-    tree: { version: 2, activeModel: null, providers: structuredClone(providers) },
+    tree: {
+      version: 2,
+      activeModel: null,
+      providers: structuredClone(providers),
+    },
   }));
   mockTauriCommand('workbench_apply_models_config', (args) => {
     const { tree } = args as { tree: unknown };
@@ -139,7 +151,9 @@ describe('ModelsCascadeSelect live 启用过滤', () => {
     fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Acme Live' }), {
       key: 'ArrowRight',
     });
-    expect(await screen.findByRole('option', { name: /Live On/ })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('option', { name: /Live On/ })
+    ).toBeInTheDocument();
     expect(screen.queryByText('Live Off')).not.toBeInTheDocument();
     expect(screen.queryByText('ghost-from-ls')).not.toBeInTheDocument();
     expect(screen.queryByText('Other Model')).not.toBeInTheDocument();
@@ -157,7 +171,9 @@ describe('ModelsCascadeSelect live 启用过滤', () => {
     expect(screen.getByText('Acme Live · Live On')).toBeInTheDocument();
 
     await act(async () => {
-      await modelsCatalogStore.updateModel('acme', 'acme-on', { enabled: false });
+      await modelsCatalogStore.updateModel('acme', 'acme-on', {
+        enabled: false,
+      });
     });
 
     await waitFor(() => {
