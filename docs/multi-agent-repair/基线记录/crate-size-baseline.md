@@ -38,7 +38,7 @@
 | src/outputs_config.rs       | 800  | mod  | SR-06 对应批次拆分对象（G-02 批③ 登记）                         | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行）              |
 | src/process.rs              | 976  | mod  | SR-06 对应批次拆分对象（G-02 批③ 登记）                         | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行）              |
 | src/resource.rs             | 935  | mod  | SR-06 对应批次拆分对象（G-02 批③ 登记）                         | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行）              |
-| src/sched.rs                | 1803 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
+| src/sched.rs                | 1803 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（已拆分为 sched/ 目录，全部子文件 ≤600 行）    |
 | src/scripted_mock_server.rs | 1008 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
 | src/server/auth.rs          | 622  | mod  | SR-06 server 拆分对象（G-02 批③ 登记）                          | SR-06 server 拆分完成（触发事实=该文件 ≤600 行）               |
 | src/server/core_backend.rs  | 1611 | mod  | SR-06 server 拆分对象（G-02 批③ 登记）                          | SR-06 server 拆分完成（触发事实=该文件 ≤600 行）               |
@@ -316,7 +316,6 @@ apps/agent-workbench/src-tauri/src/note_commands.rs 1010
 apps/agent-workbench/src-tauri/src/outputs_config.rs 800
 apps/agent-workbench/src-tauri/src/process.rs 976
 apps/agent-workbench/src-tauri/src/resource.rs 935
-apps/agent-workbench/src-tauri/src/sched.rs 1803
 apps/agent-workbench/src-tauri/src/scripted_mock_server.rs 1008
 apps/agent-workbench/src-tauri/src/server/auth.rs 622
 apps/agent-workbench/src-tauri/src/server/core_backend.rs 1611
