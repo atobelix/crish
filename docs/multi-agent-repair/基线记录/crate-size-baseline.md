@@ -148,7 +148,6 @@
 | crates/orchestrator/src/run.rs                   | 886  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/orchestrator/src/session.rs               | 1850 | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/orchestrator/src/steering_queue.rs        | 636  | mod   | 存量登记                                         | 后续轮次评估                                      |
-| crates/session-loop/src/cache_tracker.rs         | 766  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/session-loop/src/control.rs               | 697  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/session-loop/src/escape_watch.rs          | 870  | mod   | SR-06 批③ 覆盖只登记（E2 批）                    | SR-06 批③ session-loop 域拆分完成后 ≤600 移除登记 |
 | crates/session-loop/src/hooks.rs                 | 1248 | mod   | 存量登记（并行域在途，--update 登记）            | 后续轮次评估                                      |
@@ -416,7 +415,6 @@ crates/orchestrator/src/run.rs 944
 crates/orchestrator/src/session.rs 1856
 crates/orchestrator/src/steering_queue.rs 636
 crates/orchestrator/src/task_events.rs 838
-crates/session-loop/src/cache_tracker.rs 1087
 crates/session-loop/src/control.rs 736
 crates/session-loop/src/escape_watch.rs 870
 crates/session-loop/src/exec_single.rs 751
