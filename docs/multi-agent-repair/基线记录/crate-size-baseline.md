@@ -127,7 +127,7 @@
 | crates/orchestrator/src/goal_state.rs      | 1135 | mod  | SR-06 批④（orchestrator 域，D-03 SR-06d 收录）拆分对象（G-02 批③ 登记） | SR-06 批④ 拆分完成（触发事实=该文件 ≤600 行）   |
 | crates/orchestrator/src/task_events.rs     | 838  | mod  | 不在 SR-06 批④ 清单内（G-02 批③ 登记）                                  | 结构轮批表补录后拆分（触发事实=该文件 ≤600 行） |
 
-### 其余 crates（28）
+### 其余 crates（27）
 
 | 文件                                             | 行数 | 类型  | 登记理由                                         | 拆分时限                                          |
 | ------------------------------------------------ | ---- | ----- | ------------------------------------------------ | ------------------------------------------------- |
@@ -151,7 +151,6 @@
 | crates/session-loop/src/cache_tracker.rs         | 766  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/session-loop/src/control.rs               | 697  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/session-loop/src/escape_watch.rs          | 870  | mod   | SR-06 批③ 覆盖只登记（E2 批）                    | SR-06 批③ session-loop 域拆分完成后 ≤600 移除登记 |
-| crates/session-loop/src/hooks.rs                 | 1248 | mod   | 存量登记（并行域在途，--update 登记）            | 后续轮次评估                                      |
 | crates/session-loop/src/hydrate.rs               | 678  | mod   | SR-06 批③ 覆盖只登记（E2 批）                    | SR-06 批③ session-loop 域拆分完成后 ≤600 移除登记 |
 | crates/session-loop/src/loop/handlers/mod.rs     | 949  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/session-loop/src/loop/summary_dispatch.rs | 1146 | mod   | SR-06 批③ 占位（02 方案批③清单内）               | SR-06 批③ 完成 ≤600 移除登记                      |
@@ -421,7 +420,6 @@ crates/session-loop/src/cache_tracker.rs 1087
 crates/session-loop/src/control.rs 736
 crates/session-loop/src/escape_watch.rs 870
 crates/session-loop/src/exec_single.rs 751
-crates/session-loop/src/hooks.rs 1242
 crates/session-loop/src/hydrate.rs 678
 crates/session-loop/src/loop/compaction_dispatch.rs 647
 crates/session-loop/src/loop/handlers/mod.rs 1765
