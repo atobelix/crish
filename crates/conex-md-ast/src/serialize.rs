@@ -67,8 +67,7 @@ fn format_block_content(kind: &BlockKind, text: Option<&str>) -> String {
     match kind {
         BlockKind::Heading { level } => {
             let n = (*level).clamp(1, 6) as usize;
-            // 兼容性：不用 repeat_n（部分工具链/clippy 路径更稳）
-            let hashes: String = std::iter::repeat('#').take(n).collect();
+            let hashes: String = std::iter::repeat_n('#', n).collect();
             if text.is_empty() {
                 hashes
             } else {

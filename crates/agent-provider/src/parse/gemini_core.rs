@@ -122,8 +122,8 @@ impl GeminiParser {
             // promptFeedback.blockReason 且无 candidates → blocked（60-71、398-414）
             if let Some(block) = prompt_block_reason(payload) {
                 if !has_candidates(payload) {
-                    let block_usage =
-                        parse_gemini_usage(payload.get("usageMetadata")).or_else(|| self.usage.clone());
+                    let block_usage = parse_gemini_usage(payload.get("usageMetadata"))
+                        .or_else(|| self.usage.clone());
                     let kind = stream_error_kind(&block);
                     events.push(ProviderStreamEvent::Stop {
                         reason: StopReason::Error,
@@ -201,7 +201,9 @@ impl GeminiParser {
                                     .or_else(|| string_field(function_call.get("call_id")))
                                     .or_else(|| string_field(function_call.get("callId")))
                                     .map(str::to_owned)
-                                    .unwrap_or_else(|| format!("gemini_fc_{}", self.tool_call_count));
+                                    .unwrap_or_else(|| {
+                                        format!("gemini_fc_{}", self.tool_call_count)
+                                    });
                                 events.push(ProviderStreamEvent::ToolCall {
                                     id: Some(id),
                                     tool_name: name.to_owned(),
@@ -272,11 +274,7 @@ impl GeminiParser {
             events.push(ProviderStreamEvent::Stop {
                 reason: self.stop_reason,
                 error,
-                error_kind: match self.stream_error.as_deref() {
-                    Some(err) => Some(stream_error_kind(err)),
-                    // 正常终态（stop/tool-call/length）无错误分类
-                    None => None,
-                },
+                error_kind: self.stream_error.as_deref().map(stream_error_kind),
                 usage: self.usage.clone(),
             });
         }

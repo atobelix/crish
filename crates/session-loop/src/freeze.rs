@@ -18,10 +18,7 @@ use std::sync::Mutex;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionFreezeState {
     /// 第一阶段：收敛拦截态（正在停 run，阻断除收口终态事件之外的所有新用户请求与普通事件）
-    Freezing {
-        token: String,
-        deadline_ms: u64,
-    },
+    Freezing { token: String, deadline_ms: u64 },
     /// 第二阶段：物理上界锁死态（已确立严格单调上界 frozen_seq，除携带合法 Token 的 TimelineTruncate 写入 frozen_seq + 1 外，阻断任何其它事件越界写入）
     Frozen {
         token: String,
@@ -128,9 +125,7 @@ impl SessionFreezeRegistry {
             }
             Some(SessionFreezeState::Freezing { token: cur, .. })
             | Some(SessionFreezeState::Frozen { token: cur, .. }) => {
-                Err(FreezeError::AlreadyFrozen {
-                    token: cur.clone(),
-                })
+                Err(FreezeError::AlreadyFrozen { token: cur.clone() })
             }
         }
     }
@@ -154,9 +149,7 @@ impl SessionFreezeRegistry {
                 };
                 Ok(truncate_seq)
             }
-            SessionFreezeState::Frozen { token: cur, .. } if cur == token => {
-                Ok(frozen_seq + 1)
-            }
+            SessionFreezeState::Frozen { token: cur, .. } if cur == token => Ok(frozen_seq + 1),
             _ => Err(FreezeError::TokenMismatch),
         }
     }
@@ -196,9 +189,7 @@ impl SessionFreezeRegistry {
             }
             Some(SessionFreezeState::Freezing { token: cur, .. })
             | Some(SessionFreezeState::Frozen { token: cur, .. }) => {
-                Err(FreezeError::AlreadyFrozen {
-                    token: cur.clone(),
-                })
+                Err(FreezeError::AlreadyFrozen { token: cur.clone() })
             }
         }
     }
@@ -240,9 +231,10 @@ impl SessionFreezeRegistry {
     /// 获取为 TimelineTruncate 预留的合法序列号（None = 未进入第二阶段锁定）
     pub fn truncate_reserved_seq(&self, session_id: &str) -> Option<u64> {
         match self.lock().get(session_id) {
-            Some(SessionFreezeState::Frozen { truncate_reserved_seq, .. }) => {
-                Some(*truncate_reserved_seq)
-            }
+            Some(SessionFreezeState::Frozen {
+                truncate_reserved_seq,
+                ..
+            }) => Some(*truncate_reserved_seq),
             _ => None,
         }
     }
@@ -272,9 +264,7 @@ impl SessionFreezeRegistry {
                     frozen_seq: *frozen_seq,
                 }
             }
-            Some(SessionFreezeState::Freezing { .. }) => {
-                WriteVerdict::Reject { frozen_seq: 0 }
-            }
+            Some(SessionFreezeState::Freezing { .. }) => WriteVerdict::Reject { frozen_seq: 0 },
             _ => WriteVerdict::Allow,
         }
     }
@@ -317,10 +307,13 @@ impl SessionFreezeRegistry {
             } => {
                 // 物理上界铁律：
                 // 1. 唯一允许 sequence > frozen_seq 的事件，必须且只能是携带正确 token 的 TimelineTruncate 本身！
-                if matches!(event, conex_types::events::AgentEvent::TimelineTruncate { .. }) {
-                    if token == Some(valid_token.as_str()) && proposed_seq == *truncate_reserved_seq {
-                        return WriteVerdict::Allow;
-                    }
+                if matches!(
+                    event,
+                    conex_types::events::AgentEvent::TimelineTruncate { .. }
+                ) && token == Some(valid_token.as_str())
+                    && proposed_seq == *truncate_reserved_seq
+                {
+                    return WriteVerdict::Allow;
                 }
                 // 2. 其它任何事件，如果序号大于 frozen_seq，无论是否叫 RunTerminal / AgentEnd，统统无条件硬性阻断！
                 if proposed_seq > *frozen_seq {
@@ -454,7 +447,9 @@ mod tests {
         );
 
         // 步骤 2：收敛完成，确立物理序号上界
-        let reserved = reg.lock_frozen_sequence("s1", "tok-two-phase", 100).unwrap();
+        let reserved = reg
+            .lock_frozen_sequence("s1", "tok-two-phase", 100)
+            .unwrap();
         assert_eq!(reserved, 101);
         assert!(reg.is_strictly_frozen("s1"));
         assert_eq!(reg.frozen_seq("s1"), Some(100));
@@ -512,7 +507,12 @@ mod tests {
 
         // 6. TimelineTruncate 携带错误 Token 或错误序列号均被拒绝
         assert_eq!(
-            reg.check_event_write("s1", &truncate_event(frozen_seq), truncate_seq, Some("wrong-token")),
+            reg.check_event_write(
+                "s1",
+                &truncate_event(frozen_seq),
+                truncate_seq,
+                Some("wrong-token")
+            ),
             WriteVerdict::Reject { frozen_seq },
             "错误 Token 的 TimelineTruncate 必须被拒绝"
         );

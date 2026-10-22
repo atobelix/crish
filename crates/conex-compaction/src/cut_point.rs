@@ -56,10 +56,10 @@ pub fn enforce_tool_batch_closure(
                     AgentMessageBlock::ToolCall(call) => {
                         declared_call_ids.insert(call.id.clone());
                     }
-                    AgentMessageBlock::ToolResult { tool_call_id, .. } => {
-                        if !declared_call_ids.contains(tool_call_id) {
-                            orphan_result_call_ids.insert(tool_call_id.clone());
-                        }
+                    AgentMessageBlock::ToolResult { tool_call_id, .. }
+                        if !declared_call_ids.contains(tool_call_id) =>
+                    {
+                        orphan_result_call_ids.insert(tool_call_id.clone());
                     }
                     _ => {}
                 }
@@ -198,10 +198,7 @@ pub(crate) fn find_cut_point_inner(
 ///
 /// 当非链段业务消息的 Token 总和小于等于 `keep_recent_tokens` 时返回 true，
 /// 提示调用方当前无需执行任何截断与压缩，直接平滑原样早退。
-pub fn is_within_keep_budget(
-    messages: &[Arc<AgentMessage>],
-    keep_recent_tokens: usize,
-) -> bool {
+pub fn is_within_keep_budget(messages: &[Arc<AgentMessage>], keep_recent_tokens: usize) -> bool {
     if messages.is_empty() {
         return true;
     }

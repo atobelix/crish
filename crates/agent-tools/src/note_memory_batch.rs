@@ -53,7 +53,7 @@ impl MemoryNoteBackend {
             plan_block_ops(existing, &req.ops, || self.next_id())?
         };
 
-        let preview: Vec<NoteBlockOpPreview> = plan.previews.iter().cloned().collect();
+        let preview: Vec<NoteBlockOpPreview> = plan.previews.to_vec();
         let block_ids = plan.block_ids.clone();
         let applied = plan.previews.len() as u32;
 

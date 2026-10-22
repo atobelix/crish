@@ -104,13 +104,15 @@ pub mod path_utils {
 
         // 拦截驱动器相对路径（如 "C:file.txt", "d:sub\foo"）
         let bytes = path_str.as_bytes();
-        if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
-            if bytes.len() == 2 || (bytes[2] != b'/' && bytes[2] != b'\\') {
-                bail!(
-                    "drive-relative path not allowed: '{}' (must be absolute with root slash)",
-                    path_str
-                );
-            }
+        if bytes.len() >= 2
+            && bytes[0].is_ascii_alphabetic()
+            && bytes[1] == b':'
+            && (bytes.len() == 2 || (bytes[2] != b'/' && bytes[2] != b'\\'))
+        {
+            bail!(
+                "drive-relative path not allowed: '{}' (must be absolute with root slash)",
+                path_str
+            );
         }
 
         // 拦截 Windows DOS 保留设备名称（按路径分隔符切分检查）

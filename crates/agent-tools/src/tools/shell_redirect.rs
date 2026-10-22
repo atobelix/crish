@@ -274,13 +274,17 @@ fn resolve_delete_target(
     if trimmed.is_empty() || matches!(trimmed, "." | ".." | "~") || trimmed.starts_with('~') {
         return Err(ToolError::new(
             TOOL_COMMAND_BLOCKED,
-            format!("删除目标为特殊路径，已拒绝：{target:?}；请改用 delete_file / delete_dir 指定明确路径"),
+            format!(
+                "删除目标为特殊路径，已拒绝：{target:?}；请改用 delete_file / delete_dir 指定明确路径"
+            ),
         ));
     }
     if trimmed.contains(['*', '?', '[']) {
         return Err(ToolError::new(
             TOOL_COMMAND_BLOCKED,
-            format!("删除目标含通配符，已拒绝：{target:?}；请改用 delete_file / delete_dir 指定明确路径"),
+            format!(
+                "删除目标含通配符，已拒绝：{target:?}；请改用 delete_file / delete_dir 指定明确路径"
+            ),
         ));
     }
     let raw = Path::new(trimmed);
@@ -374,7 +378,10 @@ pub(crate) fn gate_path(p: &Path) -> String {
 pub(crate) fn intercept_cd_shape(analysis: &SemanticAnalysis, command: &str) -> Option<ToolError> {
     // 1. 检查分析结果本身是否判定为 CdShape 或包含 CdShape 段
     let is_cd = analysis.overall_class == CommandClass::CdShape
-        || analysis.segments.iter().any(|s| s.class == CommandClass::CdShape);
+        || analysis
+            .segments
+            .iter()
+            .any(|s| s.class == CommandClass::CdShape);
 
     // 复用分析结果的拆段（参照 :276-293 整链拦截模式）：命令 + 参数重建
     // 段字符串（引号内容已剥离，`echo "cd x"` 段首为 echo 不命中）
@@ -400,7 +407,9 @@ pub(crate) fn intercept_cd_shape(analysis: &SemanticAnalysis, command: &str) -> 
     // 2. 检查是否为 PowerShell 启动参数 (-WorkingDirectory / -wd) 目录篡改逃逸
     let is_wd_escape = analysis.segments.iter().any(|s| {
         (s.command == "powershell" || s.command == "pwsh")
-            && s.args.iter().any(|a| conex_sandbox::is_ps_working_directory_flag(a))
+            && s.args
+                .iter()
+                .any(|a| conex_sandbox::is_ps_working_directory_flag(a))
     });
 
     let message = if is_wd_escape {
@@ -411,7 +420,9 @@ pub(crate) fn intercept_cd_shape(analysis: &SemanticAnalysis, command: &str) -> 
             && analysis.segments[0].class == CommandClass::CdShape
             && !analysis.segments[0].command.eq_ignore_ascii_case("cmd")
             && !analysis.segments[0].command.eq_ignore_ascii_case("cmd.exe")
-            && !analysis.segments[0].command.eq_ignore_ascii_case("powershell")
+            && !analysis.segments[0]
+                .command
+                .eq_ignore_ascii_case("powershell")
             && !analysis.segments[0].command.eq_ignore_ascii_case("pwsh");
 
         if pure_cd {

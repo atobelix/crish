@@ -100,7 +100,10 @@ impl SessionRegistry {
             if let Some(client) = &room.client {
                 let notice = RelayFrame::new(FrameType::PeerJoined, session_token, Vec::new());
                 if let Err(e) = client.tx.try_send(notice) {
-                    warn!("向 client 推送 PeerJoined 失败（可能通道已满/已关闭）: {:?}", e);
+                    warn!(
+                        "向 client 推送 PeerJoined 失败（可能通道已满/已关闭）: {:?}",
+                        e
+                    );
                 }
             }
         } else {
@@ -110,7 +113,10 @@ impl SessionRegistry {
             if let Some(host) = &room.host {
                 let notice = RelayFrame::new(FrameType::PeerJoined, session_token, Vec::new());
                 if let Err(e) = host.tx.try_send(notice) {
-                    warn!("向 host 推送 PeerJoined 失败（可能通道已满/已关闭）: {:?}", e);
+                    warn!(
+                        "向 host 推送 PeerJoined 失败（可能通道已满/已关闭）: {:?}",
+                        e
+                    );
                 }
             }
         }
@@ -130,7 +136,10 @@ impl SessionRegistry {
                 if let Some(client) = &room.client {
                     let notice = RelayFrame::new(FrameType::PeerLeft, session_token, Vec::new());
                     if let Err(e) = client.tx.try_send(notice) {
-                        warn!("向 client 推送 PeerLeft 失败（可能通道已满/已关闭）: {:?}", e);
+                        warn!(
+                            "向 client 推送 PeerLeft 失败（可能通道已满/已关闭）: {:?}",
+                            e
+                        );
                     }
                 }
             } else {
@@ -192,12 +201,14 @@ impl SessionRegistry {
         let mut empty_rooms = Vec::new();
 
         for (id, room) in rooms.iter_mut() {
-            let host_stale = room.host.as_ref().map_or(false, |h| {
-                now.duration_since(h.last_active) > HEARTBEAT_TIMEOUT
-            });
-            let client_stale = room.client.as_ref().map_or(false, |c| {
-                now.duration_since(c.last_active) > HEARTBEAT_TIMEOUT
-            });
+            let host_stale = room
+                .host
+                .as_ref()
+                .is_some_and(|h| now.duration_since(h.last_active) > HEARTBEAT_TIMEOUT);
+            let client_stale = room
+                .client
+                .as_ref()
+                .is_some_and(|c| now.duration_since(c.last_active) > HEARTBEAT_TIMEOUT);
 
             if host_stale {
                 room.host = None;
@@ -224,6 +235,12 @@ impl SessionRegistry {
             rooms.len(),
             self.total_forwarded_frames.load(Ordering::Relaxed),
         )
+    }
+}
+
+impl Default for SessionRegistry {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

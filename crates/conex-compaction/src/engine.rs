@@ -659,7 +659,7 @@ impl CompactionEngine {
                 if changed {
                     *msg = Arc::new(AgentMessage {
                         id: msg.id.clone(),
-                        role: msg.role.clone(),
+                        role: msg.role,
                         created_at: msg.created_at.clone(),
                         blocks: modified_blocks,
                         metadata: msg.metadata.clone(),

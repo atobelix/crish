@@ -3,20 +3,15 @@
 use serde::{Deserialize, Serialize};
 
 /// 结算货币种类强类型定义
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub enum CurrencyKind {
     /// 人民币结算 (¥)
     #[serde(rename = "CNY")]
     Cny,
     /// 美元结算 ($)
     #[serde(rename = "USD")]
+    #[default]
     Usd,
-}
-
-impl Default for CurrencyKind {
-    fn default() -> Self {
-        Self::Usd
-    }
 }
 
 impl CurrencyKind {

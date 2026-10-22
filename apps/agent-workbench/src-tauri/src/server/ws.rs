@@ -49,19 +49,19 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use axum::{
+    Json,
     body::Bytes,
     extract::{FromRequestParts, Request, State, WebSocketUpgrade},
-    http::{header, HeaderMap, StatusCode, Uri},
+    http::{HeaderMap, StatusCode, Uri, header},
     response::{IntoResponse, Response},
-    Json,
 };
 use conex_types::device::version::{
     EVENT_WINDOW, MAX_SUBSCRIPTIONS, PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX,
 };
 use conex_types::device::{
     DeviceEndpoint, DeviceEnvelope, DeviceErrorCode, ErrorBody, EventAck, EventsPush, MessageKind,
-    Resume, ResumeDone, ResumePage, SessionCursor, Subscribe, SubscribeAll, SubscribeOk,
-    PROTOCOL_VERSION,
+    PROTOCOL_VERSION, Resume, ResumeDone, ResumePage, SessionCursor, Subscribe, SubscribeAll,
+    SubscribeOk,
 };
 use conex_types::events::BackpressureLevel;
 use futures_util::{SinkExt, StreamExt};
@@ -71,7 +71,7 @@ use sha2::{Digest, Sha256};
 use tokio::sync::{mpsc, watch};
 
 use crate::server::fanout::{FanoutError, FanoutReceiver, SubscriptionFilter};
-use crate::server::{auth, gateway, now_ms, ServerError, ServerState};
+use crate::server::{ServerError, ServerState, auth, gateway, now_ms};
 
 /// WS 事件端点路径（R1-02 占位登记；R1-05 注册路由）
 pub const WS_EVENTS_PATH: &str = "/v1/events";
@@ -792,9 +792,7 @@ async fn handle_socket(
                 // 客户端主动 Ping → 回 Pong
                 registry.touch(conn_id, virtual_now_ms());
                 let _ = out_tx
-                    .send(Outbound::Frame(axum::extract::ws::Message::Pong(
-                        payload.into(),
-                    )))
+                    .send(Outbound::Frame(axum::extract::ws::Message::Pong(payload)))
                     .await;
             }
             Ok(axum::extract::ws::Message::Binary(_)) => {
@@ -969,7 +967,7 @@ async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
         let frame = error_frame(
             ctx.conn_id,
             DeviceErrorCode::FrameTooLarge,
-            format!("帧超 1 MiB 上限（frame_too_large）"),
+            "帧超 1 MiB 上限（frame_too_large）".to_string(),
             None,
         );
         return send_then_close(ctx, frame).await;
@@ -1722,7 +1720,7 @@ fn next_msg_id(conn_id: u64) -> String {
 /// 虚拟时钟毫秒（tokio Instant 基准；跟随测试 pause/advance。仅用于
 /// 心跳超时判定，协议 ts / serverTime 仍走真实时钟 [now_ms]）
 fn virtual_now_ms() -> u64 {
-    let epoch = VIRTUAL_EPOCH.get_or_init(|| tokio::time::Instant::now());
+    let epoch = VIRTUAL_EPOCH.get_or_init(tokio::time::Instant::now);
     epoch.elapsed().as_millis() as u64
 }
 
@@ -1783,10 +1781,10 @@ mod tests {
 
     use super::*;
     use crate::core_event_bridge::Emitter;
-    use crate::server::auth::{sha256_hex, TokenStore};
+    use crate::server::auth::{TokenStore, sha256_hex};
     use crate::server::backend::ApiBackend;
     use crate::server::fanout::FanOutEmitter;
-    use crate::server::{router, ServerConfig, ServerHandle, ServerInstance, ServerState};
+    use crate::server::{ServerConfig, ServerHandle, ServerInstance, ServerState, router};
     use conex_types::device::version::MAX_FRAME_BYTES;
     use conex_types::device::{
         ApproveParams, ApproveResult, CancelRunParams, CancelRunResult, DenyParams,

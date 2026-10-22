@@ -443,7 +443,7 @@ async fn invalid_inputs_are_structured() {
         json!({ "ref": 1 }),
         json!({ "text": "x" }),
         json!({ "ref": 1, "text": "" }),
-        json!({ "ref": 1, "text": format!("{}", "a".repeat(65_537)) }),
+        json!({ "ref": 1, "text": "a".repeat(65_537) }),
         json!({ "ref": 1, "text": "x", "submit_key": "En\u{0}ter" }),
         json!({ "ref": 1, "text": "x", "delay_ms": 20_000 }),
     ] {
@@ -496,7 +496,7 @@ async fn invalid_inputs_are_structured() {
     for args in [
         json!({ "ref": 1 }),
         json!({ "ref": 1, "value": "a", "label": "b" }),
-        json!({ "ref": 1, "value": format!("{}", "v".repeat(1025)) }),
+        json!({ "ref": 1, "value": "v".repeat(1025) }),
         json!({ "ref": 1, "value": "a\u{0}b" }),
     ] {
         let err = h.run_err("browser_select_option", args).await;

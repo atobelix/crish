@@ -100,13 +100,13 @@ fn compute_hmac(key: &[u8], data: &[u8]) -> [u8; 32] {
     }
 
     let mut inner = Sha256::new();
-    inner.update(&k_ipad);
+    inner.update(k_ipad);
     inner.update(data);
     let inner_hash = inner.finalize();
 
     let mut outer = Sha256::new();
-    outer.update(&k_opad);
-    outer.update(&inner_hash);
+    outer.update(k_opad);
+    outer.update(inner_hash);
     outer.finalize().into()
 }
 

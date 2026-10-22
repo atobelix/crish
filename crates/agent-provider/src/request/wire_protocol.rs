@@ -17,10 +17,11 @@ use std::fmt;
 ///
 /// URL / 请求体 builder / 解析器三处统一据此选择，禁止散落硬编码判据。
 /// 保持与 [ProtocolKind] 的双向无缝转换。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum WireProtocol {
     /// OpenAI 兼容 chat-completions (POST /chat/completions)
+    #[default]
     Chat,
     /// OpenAI Responses API (POST /responses)
     Responses,
@@ -88,12 +89,6 @@ impl WireProtocol {
 impl fmt::Display for WireProtocol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_str())
-    }
-}
-
-impl Default for WireProtocol {
-    fn default() -> Self {
-        Self::Chat
     }
 }
 

@@ -172,19 +172,16 @@ fn row8_invalid_request() {
     let error = classify(None, Some("model version 4130"), None);
     assert_eq!(error.kind(), Kind::Unknown);
     // 整词 413：命中；"4130" / "1413" 等子串不误伤
-    assert_eq!(
+    assert!(
         looks_like_payload_too_large_message("error code 413 found"),
-        true,
         "整词 413 应命中"
     );
-    assert_eq!(
-        looks_like_payload_too_large_message("model version 4130"),
-        false,
+    assert!(
+        !looks_like_payload_too_large_message("model version 4130"),
         "4130 不得命中裸 413"
     );
-    assert_eq!(
-        looks_like_payload_too_large_message("ticket 1413"),
-        false,
+    assert!(
+        !looks_like_payload_too_large_message("ticket 1413"),
         "1413 中的 413 不得命中"
     );
 }

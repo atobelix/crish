@@ -205,10 +205,7 @@ mod tests {
     #[test]
     fn semantic_layers_stay_split() {
         // G8 字节阈值 ≠ store hardCap（分列语义，禁止错误合并）
-        assert_ne!(
-            G8_TOOL_OUTPUT_MAX_BYTES_DEFAULT as usize,
-            TOOL_OUTPUT_STORE_HARD_CAP
-        );
+        assert_ne!(G8_TOOL_OUTPUT_MAX_BYTES_DEFAULT, TOOL_OUTPUT_STORE_HARD_CAP);
         // 事件载荷预算 ≠ G8 字节阈值（第二层语义分列）
         assert_ne!(
             TOOL_OUTPUT_BUDGET_BYTES_DEFAULT,

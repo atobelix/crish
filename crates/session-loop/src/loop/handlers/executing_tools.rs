@@ -374,7 +374,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                     },
                     // EV-09（D-03）：timestamp 优先执行器打点时刻
                     timestamp: occurred_at_ms
-                        .map(|ms| crate::steering::iso_from_epoch_ms(ms))
+                        .map(crate::steering::iso_from_epoch_ms)
                         .unwrap_or_else(conex_shared::time::now_iso_utc),
                     // EV-09（D-03）：轮次关联键真值（与 turn-start /
                     // message-end.turnIndex 同值口径）
@@ -466,7 +466,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                     },
                     // EV-09（D-03）：timestamp 优先执行器打点时刻
                     timestamp: occurred_at_ms
-                        .map(|ms| crate::steering::iso_from_epoch_ms(ms))
+                        .map(crate::steering::iso_from_epoch_ms)
                         .unwrap_or_else(conex_shared::time::now_iso_utc),
                     // EV-09（D-03）：工具原子要素真值（审批重试 attempt 链 /
                     // 幂等去重 / 中间件改写后实际入参）

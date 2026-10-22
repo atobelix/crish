@@ -198,7 +198,7 @@ fn serialize_mem_doc_to_md(doc: &MemDoc) -> String {
         match b.kind.as_str() {
             "heading" => {
                 let level = b.level.clamp(1, 6) as usize;
-                let hashes: String = std::iter::repeat('#').take(level.max(1)).collect();
+                let hashes: String = std::iter::repeat_n('#', level.max(1)).collect();
                 if b.text.is_empty() {
                     out.push_str(&hashes);
                 } else {

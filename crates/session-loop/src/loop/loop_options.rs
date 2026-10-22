@@ -117,19 +117,12 @@ impl Default for ToolExecConfig {
     }
 }
 /// 缓存测量配置（Cache 域，1 字段）
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct CacheConfig {
     pub cache_tracking: Option<CacheTrackingConfig>,
 }
-impl Default for CacheConfig {
-    fn default() -> Self {
-        Self {
-            cache_tracking: None,
-        }
-    }
-}
 /// 装配面配置（Assembly 域，8 字段）
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct AssemblyConfig {
     pub system_prompt: Option<String>,
     pub context_budget: Option<ContextBudget>,
@@ -142,22 +135,6 @@ pub struct AssemblyConfig {
     pub compression_store: Option<Arc<dyn agent_tools::compression_store::CompressionContextStore>>,
     /// 子代理任务类型（task_type：commit / implementation / analysis 等；None = 主 agent 或未指定，BC10-6）
     pub task_type: Option<String>,
-}
-impl Default for AssemblyConfig {
-    fn default() -> Self {
-        Self {
-            system_prompt: None,
-            context_budget: None,
-            write_claims: None,
-            explore_docs_quota: None,
-            output_dir: None,
-            parent_run_id: None,
-            note_backend: None,
-            pending_input_store: None,
-            compression_store: None,
-            task_type: None,
-        }
-    }
 }
 /// 钩子/运行时配置（Hooks 域，8 字段）
 #[derive(Clone)]
@@ -186,7 +163,7 @@ impl Default for HooksConfig {
     }
 }
 /// 循环配置（恢复阶梯上限 / 钩子；缺省值对齐 01 §2.5-2.6 与 §3.3）
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct SessionLoopOptions {
     pub retry: RetryConfig,
     pub compaction: CompactionConfig,
@@ -195,19 +172,6 @@ pub struct SessionLoopOptions {
     pub cache: CacheConfig,
     pub assembly: AssemblyConfig,
     pub hooks: HooksConfig,
-}
-impl Default for SessionLoopOptions {
-    fn default() -> Self {
-        Self {
-            retry: RetryConfig::default(),
-            compaction: CompactionConfig::default(),
-            summary: SummaryConfig::default(),
-            tool_exec: ToolExecConfig::default(),
-            cache: CacheConfig::default(),
-            assembly: AssemblyConfig::default(),
-            hooks: HooksConfig::default(),
-        }
-    }
 }
 impl SessionLoopOptions {
     pub fn with_tool_middleware(mut self, middleware: Vec<Arc<dyn ToolMiddleware>>) -> Self {
