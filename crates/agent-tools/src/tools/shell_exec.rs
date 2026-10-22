@@ -26,7 +26,12 @@ use super::shell_output::{
 use super::PreparedCommand;
 
 #[cfg(windows)]
-#[allow(unsafe_code, non_snake_case, non_camel_case_types, non_upper_case_globals)]
+#[allow(
+    unsafe_code,
+    non_snake_case,
+    non_camel_case_types,
+    non_upper_case_globals
+)]
 mod win_job {
     use std::ffi::c_void;
 
@@ -83,7 +88,11 @@ mod win_job {
         ) -> BOOL;
         pub fn AssignProcessToJobObject(hJob: HANDLE, hProcess: HANDLE) -> BOOL;
         pub fn TerminateJobObject(hJob: HANDLE, uExitCode: u32) -> BOOL;
-        pub fn OpenProcess(dwDesiredAccess: DWORD, bInheritHandle: BOOL, dwProcessId: DWORD) -> HANDLE;
+        pub fn OpenProcess(
+            dwDesiredAccess: DWORD,
+            bInheritHandle: BOOL,
+            dwProcessId: DWORD,
+        ) -> HANDLE;
         pub fn CloseHandle(hObject: HANDLE) -> BOOL;
     }
 }
@@ -577,7 +586,7 @@ pub(crate) async fn run_command_streaming(ctx: &ToolContext, c: PreparedCommand)
             return terminal_only(Err(ToolError::execution_failed(
                 "shell_command",
                 format!("failed to spawn {shell_label}: {e}"),
-            )))
+            )));
         }
     };
     let child_pid = child.id();
@@ -588,7 +597,7 @@ pub(crate) async fn run_command_streaming(ctx: &ToolContext, c: PreparedCommand)
             return terminal_only(Err(ToolError::execution_failed(
                 "shell_command",
                 "stdout pipe missing",
-            )))
+            )));
         }
     };
     let err_pipe = match child.stderr.take() {
@@ -597,7 +606,7 @@ pub(crate) async fn run_command_streaming(ctx: &ToolContext, c: PreparedCommand)
             return terminal_only(Err(ToolError::execution_failed(
                 "shell_command",
                 "stderr pipe missing",
-            )))
+            )));
         }
     };
 
@@ -927,7 +936,10 @@ pub(crate) fn terminate_process_tree(pid: u32) -> Result<(), String> {
             if ret_single == 0 || std::io::Error::last_os_error().raw_os_error() == Some(3) {
                 Ok(())
             } else {
-                Err(format!("kill(-{pid}, SIGKILL) failed: {}", std::io::Error::last_os_error()))
+                Err(format!(
+                    "kill(-{pid}, SIGKILL) failed: {}",
+                    std::io::Error::last_os_error()
+                ))
             }
         }
     }

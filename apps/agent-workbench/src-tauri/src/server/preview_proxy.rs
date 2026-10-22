@@ -24,9 +24,9 @@ use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use conex_types::device::DeviceErrorCode;
 
+use crate::server::ServerError;
 use crate::server::preview_headers::{cors_response_headers, sanitize_response_headers};
 use crate::server::preview_injector::inject_html_preview_bridge;
-use crate::server::ServerError;
 
 /// 全局复用的 HTTP 客户端实例
 static HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
@@ -405,20 +405,19 @@ fn validate_host_and_ip(parsed: &url::Url, allow_loopback: bool) -> Result<(), S
             }
 
             // 2. 本地回环域名 (localhost)
-            if normalized == "localhost" || normalized.ends_with(".localhost") {
-                if !allow_loopback {
-                    let reason = "非开发模式下禁止访问本地回环域名 (localhost)";
-                    tracing::warn!(
-                        target: "preview_proxy",
-                        host = %host_str,
-                        reason = %reason,
-                        "SSRF 保护拦截：不允许访问本地回环域名"
-                    );
-                    return Err(ServerError::protocol(
-                        DeviceErrorCode::CmdInvalid,
-                        format!("SSRF 保护拦截：不允许访问受限域名 '{host_str}': {reason}"),
-                    ));
-                }
+            if (normalized == "localhost" || normalized.ends_with(".localhost")) && !allow_loopback
+            {
+                let reason = "非开发模式下禁止访问本地回环域名 (localhost)";
+                tracing::warn!(
+                    target: "preview_proxy",
+                    host = %host_str,
+                    reason = %reason,
+                    "SSRF 保护拦截：不允许访问本地回环域名"
+                );
+                return Err(ServerError::protocol(
+                    DeviceErrorCode::CmdInvalid,
+                    format!("SSRF 保护拦截：不允许访问受限域名 '{host_str}': {reason}"),
+                ));
             }
         }
     }

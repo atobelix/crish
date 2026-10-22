@@ -316,7 +316,7 @@ impl TrashService {
         let metadata = match metadata_res {
             Ok(m) => m,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                crate::path_utils::ensure_parent_dir(&entry_dir.join(META_FILE))?;
+                crate::path_utils::ensure_parent_dir(entry_dir.join(META_FILE))?;
                 let entry = TrashEntry {
                     id: id.clone(),
                     original_path: original.clone(),
@@ -545,7 +545,7 @@ impl TrashService {
                                 "检查回滚后快照清理状态失败：{}",
                                 restored_entry_dir.display()
                             )
-                        })
+                        });
                     }
                     Ok(meta) => bail!(
                         "已恢复快照但回收站条目清理失败（残留类型 {}）：{}",
@@ -569,7 +569,7 @@ impl TrashService {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
             Err(error) => {
                 return Err(error)
-                    .with_context(|| format!("扫描回收站根目录失败：{}", self.root.display()))
+                    .with_context(|| format!("扫描回收站根目录失败：{}", self.root.display()));
             }
         };
         let mut metas = Vec::new();
@@ -605,11 +605,15 @@ impl TrashService {
                             "读取 nil-content payload 元数据失败：{}",
                             payload_dir.display()
                         )
-                    })
+                    });
                 }
                 Ok(payload_meta) => bail!(
                     "nil-content 快照意外包含 payload（{}）：{}",
-                    if payload_meta.is_dir() { "目录" } else { "文件" },
+                    if payload_meta.is_dir() {
+                        "目录"
+                    } else {
+                        "文件"
+                    },
                     meta.entry.id
                 ),
             }

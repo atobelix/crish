@@ -32,8 +32,8 @@ use super::coalesce::{CoalesceState, CoalesceWindows, MergedPush, PendingPush};
 use super::dedupe::DedupeState;
 use super::intent::{PushIntent, PushIntentCtx, RunTerminationSource};
 use super::quiet::{
-    compose_night_summary, night_summary_date, quiet_hours_policy, NightSummary, NightSummaryItem,
-    QuietHoursConfig, QuietPolicy,
+    NightSummary, NightSummaryItem, QuietHoursConfig, QuietPolicy, compose_night_summary,
+    night_summary_date, quiet_hours_policy,
 };
 use super::scenes::SceneId;
 use super::throttle::{ThrottleDecision, ThrottleLimits, ThrottleTracker};
@@ -306,14 +306,14 @@ impl PushDecisionEngine {
 
         // 3. 去重（RunCompleted 例外：单条形态的去重键即原事件键，由
         //    close_run 产物统一处理，避免「先记录后复查」自抑制）
-        if intent.scene != SceneId::RunCompleted {
-            if !self.dedupe.check_and_record(&intent.dedupe_key, now_ms) {
-                return vec![self.decision_from_intent(
-                    &intent,
-                    false,
-                    DecisionOutcome::DedupeSuppressed,
-                )];
-            }
+        if intent.scene != SceneId::RunCompleted
+            && !self.dedupe.check_and_record(&intent.dedupe_key, now_ms)
+        {
+            return vec![self.decision_from_intent(
+                &intent,
+                false,
+                DecisionOutcome::DedupeSuppressed,
+            )];
         }
 
         // 4. 合并路由（累积族入桶 / 关闭信号当场产出 / 其余直发）
@@ -786,9 +786,11 @@ mod tests {
         let mut engine = PushDecisionEngine::default();
         // 审批入桶（累积族）
         assert!(engine.decide(&approval("tc-1"), &ctx(), T0).is_empty());
-        assert!(engine
-            .decide(&approval("tc-2"), &ctx(), T0 + 100)
-            .is_empty());
+        assert!(
+            engine
+                .decide(&approval("tc-2"), &ctx(), T0 + 100)
+                .is_empty()
+        );
         // tool-batch-end 关闭信号 → 合并出桶
         let out = engine.decide(&batch_end(), &ctx(), T0 + 200);
         assert_eq!(out.len(), 1);
@@ -798,9 +800,11 @@ mod tests {
         assert_eq!(decision.level, PushLevel::P0Critical);
         assert_eq!(decision.severity, PushSeverity::Critical);
         assert_eq!(decision.outcome, DecisionOutcome::Coalesced);
-        assert!(decision
-            .dedupe_key
-            .starts_with("merged:approval-requested:s-7:"));
+        assert!(
+            decision
+                .dedupe_key
+                .starts_with("merged:approval-requested:s-7:")
+        );
     }
 
     #[test]
@@ -910,9 +914,11 @@ mod tests {
         assert!(decision.deliver);
         assert_eq!(decision.scene, SceneId::RunCompleted);
         assert_eq!(decision.outcome, DecisionOutcome::Coalesced);
-        assert!(decision
-            .dedupe_key
-            .starts_with("merged:run-completed:run-42:"));
+        assert!(
+            decision
+                .dedupe_key
+                .starts_with("merged:run-completed:run-42:")
+        );
     }
 
     #[test]
@@ -1204,9 +1210,11 @@ mod tests {
     #[test]
     fn night_summary_empty_take_returns_none() {
         let mut engine = PushDecisionEngine::default();
-        assert!(engine
-            .take_night_summary(T0 + 19 * 3_600_000 + 30 * 60_000)
-            .is_none());
+        assert!(
+            engine
+                .take_night_summary(T0 + 19 * 3_600_000 + 30 * 60_000)
+                .is_none()
+        );
         assert_eq!(engine.folded_len(), 0);
     }
 

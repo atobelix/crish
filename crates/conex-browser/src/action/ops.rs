@@ -259,18 +259,16 @@ impl NetworkCounter {
                     Ok(BrowserEvent::NetworkDone { .. }) => {
                         // fetch_update 在较新 stable 上被 -D warnings 拒绝；
                         // try_update 在当前 stable 仍未稳定。用比较交换保持同一语义。
+                        // CAS 成功即退出；失败返回最新观测值后重试（饱和减，
+                        // 防止 Done 先于 Request 到达时下溢）。
                         let mut current = task_in_flight.load(Ordering::Relaxed);
-                        loop {
-                            let next = current.saturating_sub(1);
-                            match task_in_flight.compare_exchange_weak(
-                                current,
-                                next,
-                                Ordering::Relaxed,
-                                Ordering::Relaxed,
-                            ) {
-                                Ok(_) => break,
-                                Err(observed) => current = observed,
-                            }
+                        while let Err(observed) = task_in_flight.compare_exchange_weak(
+                            current,
+                            current.saturating_sub(1),
+                            Ordering::Relaxed,
+                            Ordering::Relaxed,
+                        ) {
+                            current = observed;
                         }
                     }
                     // 其余事件与本计数面（网络在途数）无关：显式忽略事件体
@@ -766,7 +764,7 @@ impl PageOps for BrowserPageOps {
                     return Err(ActionError::new(
                         ActionErrorKind::TargetClosed,
                         "事件总线关闭（目标已销毁）",
-                    ))
+                    ));
                 }
                 Err(_) => {
                     return Err(ActionError::new(
@@ -775,7 +773,7 @@ impl PageOps for BrowserPageOps {
                             "等待 Page.fileChooserOpened 超时（{}ms）",
                             timeout.as_millis()
                         ),
-                    ))
+                    ));
                 }
             }
         }
@@ -802,7 +800,7 @@ impl PageOps for BrowserPageOps {
                     return Err(ActionError::new(
                         ActionErrorKind::TargetClosed,
                         "事件总线关闭（目标已销毁）",
-                    ))
+                    ));
                 }
                 Err(_) => {
                     return Err(ActionError::new(
@@ -811,7 +809,7 @@ impl PageOps for BrowserPageOps {
                             "等待 ConnectionRestored 超时（{}s，恢复窗口 R-9）",
                             timeout.as_secs()
                         ),
-                    ))
+                    ));
                 }
             }
         }

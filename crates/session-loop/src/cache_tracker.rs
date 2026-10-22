@@ -304,7 +304,7 @@ impl CacheStatsTracker {
                         idle_ms,
                         attribution: self.classify_miss(&breakdown, completed_at_ms),
                         model_changed: self.model_switch_pending
-                            || baseline.as_ref().map_or(false, |b| b.model != self.model),
+                            || baseline.as_ref().is_some_and(|b| b.model != self.model),
                     }
                 },
             )
@@ -407,7 +407,7 @@ impl CacheStatsTracker {
     /// 当前是否已冷（`now` 超过温暖截止；无基线 / TTL 未知 → false）
     pub fn is_cold(&self, now_ms: u64) -> bool {
         self.warm_until_ms(now_ms)
-            .map_or(false, |warm| is_cold(now_ms, warm))
+            .is_some_and(|warm| is_cold(now_ms, warm))
     }
 
     /// 当前基线（只读；run 收口后 engine 层据此持久化跨 run 基线，T-40）
@@ -473,8 +473,8 @@ impl CacheStatsTracker {
             }
         }
         let model_changed =
-            self.model_switch_pending || baseline.map_or(false, |b| b.model != self.model);
-        let provider_changed = baseline.map_or(false, |b| b.provider != self.provider);
+            self.model_switch_pending || baseline.is_some_and(|b| b.model != self.model);
+        let provider_changed = baseline.is_some_and(|b| b.provider != self.provider);
         let idle_ms = baseline.map_or(0, |b| completed_at_ms.saturating_sub(b.completed_at_ms));
         // 模型切换待归因 / 无捕获签名时跳过前缀类判定（宁缺勿误报）
         let prev_signature = if self.model_switch_pending {
@@ -506,7 +506,7 @@ impl CacheStatsTracker {
                 if breakdown.read == 0 {
                     MissAttribution::ZeroRead
                 } else if self.is_break_signal(baseline, breakdown)
-                    || breakdown.hit_ratio.map_or(true, |r| r < LOW_HIT_RATIO_PCT)
+                    || breakdown.hit_ratio.is_none_or(|r| r < LOW_HIT_RATIO_PCT)
                 {
                     MissAttribution::LowRead
                 } else {
@@ -699,7 +699,6 @@ fn block_hash(block: &AgentMessageBlock, out: &mut Fnv1aWriter) {
         }
     }
 }
-
 
 /// 工具集合哈希投影（{name, description, input_schema} 按序序列化；
 /// 与 P4 `tools_prefix_json` 同源投影，字段顺序按 `serde_json::Value` 的 BTreeMap

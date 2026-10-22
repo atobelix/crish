@@ -273,8 +273,7 @@ fn resolve_session_binding(
 
     // 1. 显式声明 execution_mode / targetMode 为 isolated
     if let Some(m) = mode_norm {
-        if m.eq_ignore_ascii_case(EXECUTION_MODE_ISOLATED)
-            || m.eq_ignore_ascii_case("independent")
+        if m.eq_ignore_ascii_case(EXECUTION_MODE_ISOLATED) || m.eq_ignore_ascii_case("independent")
         {
             return (
                 None,
@@ -460,11 +459,10 @@ impl Tool for CreateWorkflowTool {
         // 引擎侧既有 create-workflow 校验链，本工具不平行校验
         let name = super::require_string(&args, "name")?;
         let prompt = super::require_string(&args, "prompt")?;
-        let schedule_type =
-            optional_string_with_aliases(&args, &["scheduleType", "schedule_type"])
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| SCHEDULE_TYPE_MANUAL.to_string());
+        let schedule_type = optional_string_with_aliases(&args, &["scheduleType", "schedule_type"])
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| SCHEDULE_TYPE_MANUAL.to_string());
         let daily_time = optional_string_with_aliases(&args, &["dailyTime", "daily_time"]);
         let interval_minutes = super::optional_u64(&args, "intervalMinutes")
             .or_else(|| super::optional_u64(&args, "interval_minutes"));
@@ -489,15 +487,17 @@ impl Tool for CreateWorkflowTool {
         // 会话绑定与执行模式智能感知（单轨无冗余垫片）
         let raw_exec_mode = optional_string_with_aliases(
             &args,
-            &["execution_mode", "executionMode", "targetMode", "target_mode"],
+            &[
+                "execution_mode",
+                "executionMode",
+                "targetMode",
+                "target_mode",
+            ],
         );
         let raw_target_sid =
             optional_string_with_aliases(&args, &["target_session_id", "targetSessionId"]);
-        let (target_session_id, execution_mode, target_mode) = resolve_session_binding(
-            ctx,
-            raw_exec_mode.as_deref(),
-            raw_target_sid.as_deref(),
-        );
+        let (target_session_id, execution_mode, target_mode) =
+            resolve_session_binding(ctx, raw_exec_mode.as_deref(), raw_target_sid.as_deref());
 
         // 工作流创建通道未接线 → 结构化不可用错误（引擎集成前零副作用，
         // 对齐 set_timer.rs 先例）

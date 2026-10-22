@@ -500,16 +500,16 @@ impl CommandPathInspector {
             }
 
             // 2. 校验写/删目标路径是否越出 workspace_root
-            if Self::is_write_or_delete_target(command_line, path) {
-                if !conex_fs::ConexPathNormalizer::is_subpath(path, workspace_root) {
-                    return Err(ToolError::new(
-                        TOOL_COMMAND_BLOCKED,
-                        format!(
-                            "PermissionDenied: 命令试图向工作区外写入或删除绝对路径：{}，严禁越界！",
-                            path.display()
-                        ),
-                    ));
-                }
+            if Self::is_write_or_delete_target(command_line, path)
+                && !conex_fs::ConexPathNormalizer::is_subpath(path, workspace_root)
+            {
+                return Err(ToolError::new(
+                    TOOL_COMMAND_BLOCKED,
+                    format!(
+                        "PermissionDenied: 命令试图向工作区外写入或删除绝对路径：{}，严禁越界！",
+                        path.display()
+                    ),
+                ));
             }
         }
 
@@ -522,46 +522,42 @@ impl CommandPathInspector {
     /// 绝不 panic；调用方 `inspect` 直接 `?` 传播。
     pub fn extract_absolute_paths(command_line: &str) -> Result<Vec<PathBuf>, ToolError> {
         static WIN_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
-            Regex::new(r#"(?i)(?:\A|[^a-zA-Z0-9_./\\-])([a-zA-Z]:(?:[\\/][^\s"'`=,;()<>{}\r\n*?|]*)?)"#)
+            Regex::new(
+                r#"(?i)(?:\A|[^a-zA-Z0-9_./\\-])([a-zA-Z]:(?:[\\/][^\s"'`=,;()<>{}\r\n*?|]*)?)"#,
+            )
         });
 
-        static QUOTED_WIN_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
-            Regex::new(r#"(?i)["']([a-zA-Z]:[\\/][^"'\r\n*?|]+)["']"#)
-        });
+        static QUOTED_WIN_PATH_REGEX: CompiledRegex =
+            LazyLock::new(|| Regex::new(r#"(?i)["']([a-zA-Z]:[\\/][^"'\r\n*?|]+)["']"#));
 
-        static UNIX_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
-            Regex::new(r#"(?:\A|[^a-zA-Z0-9_./\\-])(/[\w.\-]+(?:/[\w.\-]+)*)"#)
-        });
+        static UNIX_PATH_REGEX: CompiledRegex =
+            LazyLock::new(|| Regex::new(r#"(?:\A|[^a-zA-Z0-9_./\\-])(/[\w.\-]+(?:/[\w.\-]+)*)"#));
 
-        static QUOTED_UNIX_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
-            Regex::new(r#"["'](/[^"'\r\n*?|]+)["']"#)
-        });
+        static QUOTED_UNIX_PATH_REGEX: CompiledRegex =
+            LazyLock::new(|| Regex::new(r#"["'](/[^"'\r\n*?|]+)["']"#));
 
-        static STANDALONE_ROOT_REGEX: CompiledRegex = LazyLock::new(|| {
-            Regex::new(r#"(?:\A|[^a-zA-Z0-9_./\\-])/(?:\z|[^a-zA-Z0-9_./\\-])"#)
-        });
+        static STANDALONE_ROOT_REGEX: CompiledRegex =
+            LazyLock::new(|| Regex::new(r#"(?:\A|[^a-zA-Z0-9_./\\-])/(?:\z|[^a-zA-Z0-9_./\\-])"#));
 
         static UNC_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
             Regex::new(r#"(?:\A|[^a-zA-Z0-9_./\\-])((?:\\\\|//)[^\s"'`=,;()<>{}\r\n*?|]+)"#)
         });
 
-        static QUOTED_UNC_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
-            Regex::new(r#"["']((?:\\\\|//)[^"'\r\n*?|]+)["']"#)
-        });
+        static QUOTED_UNC_PATH_REGEX: CompiledRegex =
+            LazyLock::new(|| Regex::new(r#"["']((?:\\\\|//)[^"'\r\n*?|]+)["']"#));
 
         static HOME_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
             Regex::new(r#"(?:\A|[^a-zA-Z0-9_./\\-])(~[\\/][^\s"'`=,;()<>{}\r\n*?|]*)"#)
         });
 
-        static QUOTED_HOME_PATH_REGEX: CompiledRegex = LazyLock::new(|| {
-            Regex::new(r#"["'](~[\\/][^"'\r\n*?|]*)["']"#)
-        });
+        static QUOTED_HOME_PATH_REGEX: CompiledRegex =
+            LazyLock::new(|| Regex::new(r#"["'](~[\\/][^"'\r\n*?|]*)["']"#));
 
         let mut paths = Vec::new();
 
         // 0. 引号包裹路径（支持空格，如 "C:/Program Files/..."）
-        for cap in compiled_regex(&QUOTED_WIN_PATH_REGEX, "QUOTED_WIN_PATH")?
-            .captures_iter(command_line)
+        for cap in
+            compiled_regex(&QUOTED_WIN_PATH_REGEX, "QUOTED_WIN_PATH")?.captures_iter(command_line)
         {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
@@ -573,8 +569,8 @@ impl CommandPathInspector {
                 }
             }
         }
-        for cap in compiled_regex(&QUOTED_UNIX_PATH_REGEX, "QUOTED_UNIX_PATH")?
-            .captures_iter(command_line)
+        for cap in
+            compiled_regex(&QUOTED_UNIX_PATH_REGEX, "QUOTED_UNIX_PATH")?.captures_iter(command_line)
         {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
@@ -586,8 +582,8 @@ impl CommandPathInspector {
                 }
             }
         }
-        for cap in compiled_regex(&QUOTED_UNC_PATH_REGEX, "QUOTED_UNC_PATH")?
-            .captures_iter(command_line)
+        for cap in
+            compiled_regex(&QUOTED_UNC_PATH_REGEX, "QUOTED_UNC_PATH")?.captures_iter(command_line)
         {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
@@ -599,8 +595,8 @@ impl CommandPathInspector {
                 }
             }
         }
-        for cap in compiled_regex(&QUOTED_HOME_PATH_REGEX, "QUOTED_HOME_PATH")?
-            .captures_iter(command_line)
+        for cap in
+            compiled_regex(&QUOTED_HOME_PATH_REGEX, "QUOTED_HOME_PATH")?.captures_iter(command_line)
         {
             if let Some(m) = cap.get(1) {
                 let s = clean_path_candidate(m.as_str());
@@ -696,20 +692,27 @@ impl CommandPathInspector {
                 .next()
                 .map(|c| c.is_ascii_alphabetic())
                 .unwrap_or(false)
+            && &upper[1..2] == ":"
+            && (upper.len() == 2
+                || (upper.len() == 3 && &upper[2..3] == "/")
+                || (upper.len() >= 4 && (&upper[2..4] == "/*" || &upper[2..4] == "/.")))
         {
-            if &upper[1..2] == ":" {
-                if upper.len() == 2
-                    || (upper.len() == 3 && &upper[2..3] == "/")
-                    || (upper.len() >= 4 && (&upper[2..4] == "/*" || &upper[2..4] == "/."))
-                {
-                    return true;
-                }
-            }
+            return true;
         }
 
         const POSIX_CRITICAL: &[&str] = &[
-            "/BIN", "/SBIN", "/USR/BIN", "/USR/SBIN", "/ETC",
-            "/BOOT", "/DEV", "/PROC", "/SYS", "/LIB", "/LIB64", "/VAR/RUN",
+            "/BIN",
+            "/SBIN",
+            "/USR/BIN",
+            "/USR/SBIN",
+            "/ETC",
+            "/BOOT",
+            "/DEV",
+            "/PROC",
+            "/SYS",
+            "/LIB",
+            "/LIB64",
+            "/VAR/RUN",
         ];
         for crit in POSIX_CRITICAL {
             if upper == *crit || upper.starts_with(&format!("{crit}/")) {
@@ -847,14 +850,20 @@ fn is_valid_unix_path(s: &str) -> bool {
         return false;
     }
     const WIN_FLAGS: &[&str] = &[
-        "quiet", "norestart", "passive", "wait", "min", "max", "help",
+        "quiet",
+        "norestart",
+        "passive",
+        "wait",
+        "min",
+        "max",
+        "help",
     ];
     if WIN_FLAGS.contains(&rest.to_ascii_lowercase().as_str()) {
         return false;
     }
     const KNOWN_UNIX_DIRS: &[&str] = &[
-        "etc", "bin", "sbin", "usr", "var", "tmp", "dev", "proc", "sys",
-        "boot", "lib", "lib64", "root", "home", "opt", "mnt", "media", "srv",
+        "etc", "bin", "sbin", "usr", "var", "tmp", "dev", "proc", "sys", "boot", "lib", "lib64",
+        "root", "home", "opt", "mnt", "media", "srv",
     ];
     if KNOWN_UNIX_DIRS.contains(&rest.to_ascii_lowercase().as_str()) {
         return true;

@@ -28,7 +28,18 @@ allow = [
 confidence-threshold = 0.8
 exceptions = [
     # Explicitly permitted crates with dual or custom permissive licenses
+    # 0BSD（OSI 认可，比 MIT 更宽松、无署名义务）只对实际用到它的 crate 放行，不进全局 allow：
+    # 二者都是 interprocess 2.4（经 tauri-plugin-mcp）引入的传递依赖。新出现 0BSD crate 时须在此逐个登记。
+    { crate = "doctest-file", allow = ["0BSD"] },
+    { crate = "recvmsg", allow = ["0BSD"] },
 ]
+
+# tauri-plugin-mcp 为 git 依赖，其 npm 声明 package.json 为 MIT，但 Cargo.toml 遗漏 license 字段。
+# 依据 cargo-deny 官方规范通过 clarify 精确补充真实许可证（MIT），不放宽 unlicensed 安全检查。
+[[licenses.clarify]]
+name = "tauri-plugin-mcp"
+expression = "MIT"
+license-files = []
 
 [licenses.private]
 ignore = true
@@ -47,9 +58,10 @@ allow-git = [
 ]
 
 [advisories]
+# cargo-deny 0.18+ 的 v2 格式：vulnerability / unsound 恒为 error，`notice` 已移除，
+# `unmaintained` 取作用域（all/workspace/transitive/none）。取最严格的 "all"：
+# 无维护依赖逐条处理（升级/替换），确实无法替换的才在 ignore 中带理由与复查日期登记。
 version = 2
-vulnerability = "deny"
-unmaintained = "warn"
-yanked = "warn"
-notice = "warn"
+unmaintained = "all"
+yanked = "deny"
 ignore = []

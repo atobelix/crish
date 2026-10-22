@@ -33,23 +33,18 @@ use crate::request::vendor::{ReasoningEffort as LegacyReasoningEffort, ThinkingI
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 
 /// 2026 标准化思考强度等级（纯英文白名单，无中文污染）
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ReasoningEffort {
     Off,
     Minimal,
     Low,
+    #[default]
     Medium,
     High,
     #[serde(rename = "xhigh")]
     XHigh,
     Max,
-}
-
-impl Default for ReasoningEffort {
-    fn default() -> Self {
-        Self::Medium
-    }
 }
 
 impl std::fmt::Display for ReasoningEffort {

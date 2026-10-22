@@ -471,14 +471,14 @@ impl LocalDb {
         if missing_any {
             if let Ok(session_msgs) = self.load_session_body(session_id) {
                 for sm in session_msgs {
-                    if !id_map.contains_key(&sm.id) {
+                    if let std::collections::hash_map::Entry::Vacant(e) = id_map.entry(sm.id) {
                         let sender = if sm.sender.is_empty() {
                             "user".to_string()
                         } else {
                             sm.sender.clone()
                         };
                         let text = sm.text.unwrap_or_default();
-                        id_map.insert(sm.id, (sender, text));
+                        e.insert((sender, text));
                     }
                 }
             }

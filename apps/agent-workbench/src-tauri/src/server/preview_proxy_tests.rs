@@ -24,12 +24,12 @@ use super::{
     extract_target_url, handle_preview_proxy, is_html_content_type, percent_decode_lenient,
     validate_target_url_security,
 };
+use crate::server::ServerState;
 use crate::server::preview_headers::{
     cors_response_headers, sanitize_response_headers, should_strip_response_header,
 };
 use crate::server::preview_injector::inject_html_preview_bridge;
-use crate::server::router::{build_router, PREVIEW_PROXY_PATH};
-use crate::server::ServerState;
+use crate::server::router::{PREVIEW_PROXY_PATH, build_router};
 
 // ── Header 清洗引擎测试（preview_headers）──
 
@@ -444,12 +444,14 @@ async fn test_handle_preview_proxy_html_end_to_end() {
 
     // 断言 CORS 头部已注入
     assert_eq!(headers.get("access-control-allow-origin").unwrap(), "*");
-    assert!(headers
-        .get("access-control-allow-methods")
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .contains("GET"));
+    assert!(
+        headers
+            .get("access-control-allow-methods")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("GET")
+    );
 
     // 断言原站非冲突响应头保留
     assert_eq!(headers.get("custom-target-header").unwrap(), "target-value");

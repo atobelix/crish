@@ -613,34 +613,36 @@ fn spawn_flush_loop(
     pending_removes: PendingRemoves,
     rename_window_ms: i64,
 ) {
-    std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_millis(FLUSH_POLL_MS));
-        let Some(tx) = weak_tx.upgrade() else {
-            break;
-        };
-        let now = epoch_millis_now();
-        let expired: Vec<PendingRemove> = {
-            let mut inner = lock_pending(&pending_removes);
-            let expired: Vec<PendingRemove> = inner
-                .iter()
-                .filter(|pr| now - pr.occurred_at_ms > rename_window_ms)
-                .cloned()
-                .collect();
-            inner.retain(|pr| now - pr.occurred_at_ms <= rename_window_ms);
-            expired
-        };
-        for pr in expired {
-            // flush 线程按「尽力投递」设计：通道满/已关闭即丢弃，但需可观测
-            if let Err(err) = tx.try_send(FileChangeEvent {
-                path: pr.path,
-                kind: ChangeKind::Removed,
-                from: None,
-                occurred_at_ms: now,
-            }) {
-                tracing::debug!(
-                    error = %err,
-                    "flush 线程投递待配对删除事件失败（通道满或已关闭），事件丢弃"
-                );
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(FLUSH_POLL_MS));
+            let Some(tx) = weak_tx.upgrade() else {
+                break;
+            };
+            let now = epoch_millis_now();
+            let expired: Vec<PendingRemove> = {
+                let mut inner = lock_pending(&pending_removes);
+                let expired: Vec<PendingRemove> = inner
+                    .iter()
+                    .filter(|pr| now - pr.occurred_at_ms > rename_window_ms)
+                    .cloned()
+                    .collect();
+                inner.retain(|pr| now - pr.occurred_at_ms <= rename_window_ms);
+                expired
+            };
+            for pr in expired {
+                // flush 线程按「尽力投递」设计：通道满/已关闭即丢弃，但需可观测
+                if let Err(err) = tx.try_send(FileChangeEvent {
+                    path: pr.path,
+                    kind: ChangeKind::Removed,
+                    from: None,
+                    occurred_at_ms: now,
+                }) {
+                    tracing::debug!(
+                        error = %err,
+                        "flush 线程投递待配对删除事件失败（通道满或已关闭），事件丢弃"
+                    );
+                }
             }
         }
     });

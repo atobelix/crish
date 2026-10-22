@@ -212,10 +212,7 @@ impl ResponsesParser {
                 error: self.final_error.clone(),
                 // error_kind 跟随 error 文案存在与否：有错误按统一管线分类，
                 // 无错误（stop/tool-call/length）为 None（G1-c）
-                error_kind: match &self.final_error {
-                    Some(err) => Some(stream_error_kind(err)),
-                    None => None,
-                },
+                error_kind: self.final_error.as_deref().map(stream_error_kind),
                 usage: self.usage.clone(),
             });
         }

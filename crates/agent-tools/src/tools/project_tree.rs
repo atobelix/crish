@@ -297,7 +297,9 @@ fn build_tree(params: &ProjectTreeParams) -> TreeEntry {
             }
             // 栈对齐到当前深度（前序：深度先升后降），出栈缓冲挂回父节点
             while stack.len() > depth_rel {
-                let Some(done) = stack.pop() else { break; };
+                let Some(done) = stack.pop() else {
+                    break;
+                };
                 if let Some(parent) = stack.last_mut().and_then(|lv| lv.last_mut()) {
                     parent.children.extend(done);
                     sort_and_finalize(&mut parent.children);
@@ -348,7 +350,9 @@ fn build_tree(params: &ProjectTreeParams) -> TreeEntry {
     }
     // 收尾：逐层出栈挂载（自底向上完成排序与 size）
     while stack.len() > 1 {
-        let Some(done) = stack.pop() else { break; };
+        let Some(done) = stack.pop() else {
+            break;
+        };
         if let Some(parent) = stack.last_mut().and_then(|lv| lv.last_mut()) {
             parent.children.extend(done);
             sort_and_finalize(&mut parent.children);

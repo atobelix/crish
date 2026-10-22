@@ -174,7 +174,9 @@ pub struct SubagentLifecycleService {
     /// L3 强停投递通道（引擎侧接线）
     control: Arc<dyn ForceCancelSink>,
     /// BC03-2：子代理 run 的 AbortSignal 广播注册表（秒级物理打断工具批）
-    signals: Arc<std::sync::RwLock<std::collections::HashMap<String, session_loop::safe_point::AbortSignal>>>,
+    signals: Arc<
+        std::sync::RwLock<std::collections::HashMap<String, session_loop::safe_point::AbortSignal>>,
+    >,
 }
 
 impl SubagentLifecycleService {
@@ -188,7 +190,11 @@ impl SubagentLifecycleService {
     }
 
     /// 注册子代理 run 的 AbortSignal 实例
-    pub fn register_signal(&self, subagent_run_id: impl Into<String>, signal: session_loop::safe_point::AbortSignal) {
+    pub fn register_signal(
+        &self,
+        subagent_run_id: impl Into<String>,
+        signal: session_loop::safe_point::AbortSignal,
+    ) {
         if let Ok(mut map) = self.signals.write() {
             map.insert(subagent_run_id.into(), signal);
         }
@@ -358,7 +364,7 @@ impl SubagentLifecycleService {
         self.mark_row_failed(session_id, &subagent_run_id)?;
         // LK-07 R-14：kill 直发 subagent-ended(status=cancelled)（同
         // kill_all；Cancelled 成生产真值，收口兜底双发幂等由 spawner 防护）
-        self.emit_killed_ended(session_id, &row);
+        self.emit_killed_ended(session_id, row);
         Ok(KillSubagentResult {
             subagent_id: subagent_id.to_string(),
             subagent_run_id,
@@ -701,7 +707,10 @@ mod tests {
             true
         }
         fn broadcast_abort(&self, subagent_run_id: &str) -> bool {
-            self.aborted_runs.lock().unwrap().push(subagent_run_id.to_string());
+            self.aborted_runs
+                .lock()
+                .unwrap()
+                .push(subagent_run_id.to_string());
             true
         }
     }

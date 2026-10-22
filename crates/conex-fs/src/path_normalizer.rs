@@ -303,7 +303,7 @@ impl ConexPathNormalizer {
             Ok(norm.exists())
         })
         .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?
+        .map_err(|e| std::io::Error::other(e.to_string()))?
     }
 }
 

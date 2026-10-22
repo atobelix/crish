@@ -400,7 +400,7 @@ impl ToolPromiseDetector {
                     .char_indices()
                     .map(|(idx, _)| idx)
                     .filter(|&idx| idx <= pos)
-                    .last()
+                    .next_back()
                     .unwrap_or(pos);
                 let snippet = &tail[char_boundary_pos..];
                 let end_pos = snippet

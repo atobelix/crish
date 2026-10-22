@@ -578,7 +578,7 @@ impl LocalDb {
             "—".to_string()
         };
 
-        let daily_average_tokens = (grand_total_tokens / days_count).max(0);
+        let daily_average_tokens = grand_total_tokens / days_count;
         let daily_average_cost = total_cost / (days_count as f64).max(1.0);
 
         let hero = UsageHeroStats {
@@ -726,7 +726,7 @@ impl LocalDb {
                     let diff_days = today_days - record_days;
                     if diff_days == 0 && h < 24 {
                         // 今日
-                        let idx = 0 * 24 + h;
+                        let idx = h;
                         if let Some(cell) = cells.get_mut(idx) {
                             cell.tokens += tokens;
                             cell.cost += cost;
@@ -734,7 +734,7 @@ impl LocalDb {
                         }
                     } else if diff_days == 1 && h < 24 {
                         // 昨日
-                        let idx = 1 * 24 + h;
+                        let idx = 24 + h;
                         if let Some(cell) = cells.get_mut(idx) {
                             cell.tokens += tokens;
                             cell.cost += cost;

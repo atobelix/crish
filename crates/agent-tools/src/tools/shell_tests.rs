@@ -1256,11 +1256,9 @@ async fn shell_cd_expansion_and_indirect_intercepted() {
         .await
         .unwrap_err();
     assert_eq!(err_wd.code(), TOOL_CD_BLOCKED);
-    assert!(
-        err_wd
-            .to_string()
-            .contains("PowerShell 启动参数 (-WorkingDirectory / -wd) 目录篡改")
-    );
+    assert!(err_wd
+        .to_string()
+        .contains("PowerShell 启动参数 (-WorkingDirectory / -wd) 目录篡改"));
 
     // 4. Base64 编码命令拦截并展示解码明文
     let b64_cd = {
@@ -1635,7 +1633,10 @@ async fn full_access_mode_blocks_compound_and_indirect_delete() {
     let res = t.execute(&ctx, json!({ "command": cmd })).await;
     let err = res.expect_err("BC10-7: FullAccess 模式下间接删除必须被拦截，不可逃逸");
     assert_eq!(err.code(), TOOL_COMMAND_BLOCKED);
-    assert!(ws.path().join("temp.txt").exists(), "被拦截命令不应在原工作区产生物理抹除");
+    assert!(
+        ws.path().join("temp.txt").exists(),
+        "被拦截命令不应在原工作区产生物理抹除"
+    );
 }
 
 /// DIM-04: 输出超限溢出落盘测试
@@ -1713,23 +1714,45 @@ async fn task_type_commit_strictly_enforces_git_only() {
     };
 
     // 允许的 git 命令通过 prepare 前置门禁
-    let allowed = ["git status", "git diff", "git add .", "git commit -m 'test'"];
+    let allowed = [
+        "git status",
+        "git diff",
+        "git add .",
+        "git commit -m 'test'",
+    ];
     for cmd in allowed {
         let res = t.prepare(&ctx, &json!({ "command": cmd })).await;
         match res {
-            Prepared::Done(Err(e)) => panic!("git 命令 [{}] 必须通过 task_type 门禁，但被拦截: {:?}", cmd, e),
+            Prepared::Done(Err(e)) => panic!(
+                "git 命令 [{}] 必须通过 task_type 门禁，但被拦截: {:?}",
+                cmd, e
+            ),
             _ => {}
         }
     }
 
     // 阻断的非 git 命令必须直接在 prepare 阶段被拦截
-    let blocked = ["npm test", "cargo test", "echo hello", "del file.txt", "rm file.txt"];
+    let blocked = [
+        "npm test",
+        "cargo test",
+        "echo hello",
+        "del file.txt",
+        "rm file.txt",
+    ];
     for cmd in blocked {
         let res = t.prepare(&ctx, &json!({ "command": cmd })).await;
         match res {
             Prepared::Done(Err(e)) => {
-                assert_eq!(e.code(), TOOL_COMMAND_BLOCKED, "非 git 命令 [{}] 必须被 task_type 门禁拦截", cmd);
-                assert!(e.to_string().contains("commit"), "错误信息须包含 commit 任务类型");
+                assert_eq!(
+                    e.code(),
+                    TOOL_COMMAND_BLOCKED,
+                    "非 git 命令 [{}] 必须被 task_type 门禁拦截",
+                    cmd
+                );
+                assert!(
+                    e.to_string().contains("commit"),
+                    "错误信息须包含 commit 任务类型"
+                );
             }
             _ => panic!("非 git 命令 [{}] 必须被拦截，却通过了 prepare", cmd),
         }
@@ -1756,13 +1779,25 @@ async fn full_access_mode_redirects_delete_to_trash_wal() {
     };
 
     let res = t.execute(&ctx, json!({ "command": cmd })).await;
-    assert!(res.is_ok(), "FullAccess 模式下删除命令应重定向成功返回: {:?}", res);
+    assert!(
+        res.is_ok(),
+        "FullAccess 模式下删除命令应重定向成功返回: {:?}",
+        res
+    );
 
-    assert!(!ws.path().join("data_to_trash.txt").exists(), "原文件应已不在工作区");
+    assert!(
+        !ws.path().join("data_to_trash.txt").exists(),
+        "原文件应已不在工作区"
+    );
 
     // 检查回收站存储目录非空（已记录 WAL 与快照）
-    let entries = std::fs::read_dir(trash_ws.path()).unwrap().collect::<Vec<_>>();
-    assert!(!entries.is_empty(), "回收站根目录应包含删除重定向写入的 WAL/数据条目");
+    let entries = std::fs::read_dir(trash_ws.path())
+        .unwrap()
+        .collect::<Vec<_>>();
+    assert!(
+        !entries.is_empty(),
+        "回收站根目录应包含删除重定向写入的 WAL/数据条目"
+    );
 }
 
 #[tokio::test]
@@ -1848,7 +1883,11 @@ async fn command_path_inspector_allows_in_workspace_write() {
 
     let cmd = format!("echo hello > \"{target_str}\"");
     let res = t.execute(&ctx, json!({ "command": cmd })).await;
-    assert!(res.is_ok(), "工作区内绝对路径写操作应正常执行，实际错误: {:?}", res);
+    assert!(
+        res.is_ok(),
+        "工作区内绝对路径写操作应正常执行，实际错误: {:?}",
+        res
+    );
     assert!(target_file.exists(), "文件应已成功在工作区写入");
 }
 

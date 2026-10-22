@@ -110,7 +110,7 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
 /// 挂载方经 `ContextInjection::new(kind, STARTED_AT_SECTION_TITLE, content)`
 /// 挂载，标题由 M1 render 渲染为 `## {title}`。
 pub fn started_at_section_with_locale(started_at_ms: i64, locale: Option<&str>) -> String {
-    let is_en = locale.map_or(false, |l| l.to_ascii_lowercase().starts_with("en"));
+    let is_en = locale.is_some_and(|l| l.to_ascii_lowercase().starts_with("en"));
     let iso = iso8601_from_epoch_ms(started_at_ms);
     if is_en {
         format!(
@@ -153,8 +153,11 @@ pub fn resolve_started_at(existing: Option<i64>, fallback_now_ms: i64) -> i64 {
 /// 整体回退仅在单文件修复失败后发起并走 C3 审批门禁。
 /// 挂载方经 `ContextInjection::new(kind, REVERT_CAUTION_TITLE, content)`
 /// 挂载。
-pub fn git_revert_caution_section_with_locale(threshold_hours: u64, locale: Option<&str>) -> String {
-    let is_en = locale.map_or(false, |l| l.to_ascii_lowercase().starts_with("en"));
+pub fn git_revert_caution_section_with_locale(
+    threshold_hours: u64,
+    locale: Option<&str>,
+) -> String {
+    let is_en = locale.is_some_and(|l| l.to_ascii_lowercase().starts_with("en"));
     if is_en {
         format!(
             "- You are a subagent created at started_at (see above; this timestamp is part of the isolation boundary);\n\
@@ -308,7 +311,7 @@ pub fn subagent_session_injections_with_locale(
     let Some(started_at_ms) = started_at_ms else {
         return Vec::new();
     };
-    let is_en = locale.map_or(false, |l| l.to_ascii_lowercase().starts_with("en"));
+    let is_en = locale.is_some_and(|l| l.to_ascii_lowercase().starts_with("en"));
     let title_started = if is_en {
         STARTED_AT_SECTION_TITLE_EN
     } else {
@@ -387,14 +390,21 @@ mod tests {
 
     #[test]
     fn injected_system_prompt_english_locale() {
-        let sections =
-            subagent_session_injections_with_locale(Some(ANCHOR_MS), DEFAULT_REF_AGE_THRESHOLD_HOURS, Some("en"));
+        let sections = subagent_session_injections_with_locale(
+            Some(ANCHOR_MS),
+            DEFAULT_REF_AGE_THRESHOLD_HOURS,
+            Some("en"),
+        );
         assert_eq!(sections.len(), 2);
         assert_eq!(sections[0].0, STARTED_AT_SECTION_TITLE_EN);
         assert!(sections[0].1.contains("ISO8601 creation time"));
-        assert!(sections[0].1.contains("This timestamp is part of the isolation boundary"));
+        assert!(sections[0]
+            .1
+            .contains("This timestamp is part of the isolation boundary"));
         assert_eq!(sections[1].0, REVERT_CAUTION_TITLE_EN);
-        assert!(sections[1].1.contains("You are a subagent created at started_at"));
+        assert!(sections[1]
+            .1
+            .contains("You are a subagent created at started_at"));
         assert!(sections[1].1.contains("git checkout -- <file>"));
     }
 

@@ -293,7 +293,10 @@ async fn spawn_and_write_collab(
 
 /// 从产出文件名推导标题（`NN-<标题>.md` → 标题；对齐 §4.5 命名约定）
 fn title_of(file_name: &str) -> String {
-    let after_prefix = file_name.splitn(2, '-').nth(1).unwrap_or(file_name);
+    let after_prefix = file_name
+        .split_once('-')
+        .map(|(_, rest)| rest)
+        .unwrap_or(file_name);
     after_prefix.trim_end_matches(".md").to_string()
 }
 
@@ -415,14 +418,8 @@ async fn g02_summary_index_via_list_and_write() {
         .as_array()
         .expect("list_dir 必须返回 items 数组");
     let names: Vec<&str> = items.iter().filter_map(|it| it["name"].as_str()).collect();
-    assert!(
-        names.iter().any(|n| *n == SUBFILE_A),
-        "清单必须含 A 产出：{names:?}"
-    );
-    assert!(
-        names.iter().any(|n| *n == SUBFILE_B),
-        "清单必须含 B 产出：{names:?}"
-    );
+    assert!(names.contains(&SUBFILE_A), "清单必须含 A 产出：{names:?}");
+    assert!(names.contains(&SUBFILE_B), "清单必须含 B 产出：{names:?}");
     let size_a = items
         .iter()
         .find(|it| it["name"] == SUBFILE_A)
@@ -490,7 +487,7 @@ async fn g02_summary_index_via_list_and_write() {
         .filter_map(|it| it["name"].as_str())
         .collect();
     assert!(
-        names2.iter().any(|n| *n == SUMMARY_FILE),
+        names2.contains(&SUMMARY_FILE),
         "汇总索引必须出现在产出目录：{names2:?}"
     );
 }

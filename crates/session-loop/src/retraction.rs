@@ -243,7 +243,7 @@ impl RetractionProtocol {
             .backend
             .push_timeline_truncate(session_id, run_id.as_deref(), boundary, target_message_id)
             .await
-            .map_err(|err| {
+            .inspect_err(|_err| {
                 // truncate 落库失败：释放冻结（不残留半冻结态），返回后端错误；
                 // 释放失败同样留日志（BLK-05：不得静默丢弃 release 结果）
                 if let Err(release_err) = self.freeze.release(session_id, &token) {
@@ -253,7 +253,6 @@ impl RetractionProtocol {
                         "truncate 失败后释放冻结失败（冻结态可能残留）"
                     );
                 }
-                err
             })?;
 
         // 8. 冻结完成：truncate 落库确认后释放
@@ -267,7 +266,6 @@ impl RetractionProtocol {
             run_id,
             target_message_id: target_message_id.to_string(),
         })
-
     }
 
     /// 构造 TimelineTruncate 事件（协议与测试共用；`run_id` 与信封
@@ -406,7 +404,10 @@ mod tests {
         let backend = Arc::new(FakeBackend::new(Some(40), 99));
         let protocol = RetractionProtocol::new(Box::new(backend.clone()));
         let outcome = protocol.prepare_retraction("s1", "msg-1").await.unwrap();
-        assert_eq!(outcome.boundary_seq, 40, "真实截断边界 = 目标消息起始 sequence 40");
+        assert_eq!(
+            outcome.boundary_seq, 40,
+            "真实截断边界 = 目标消息起始 sequence 40"
+        );
         assert_eq!(
             outcome.truncate_sequence, 100,
             "TimelineTruncate.sequence == frozen_seq + 1（99 + 1 = 100）"

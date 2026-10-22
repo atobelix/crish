@@ -775,7 +775,9 @@ mod tests {
 
         // DataOnly 策略
         let target1 = dir.join("data_only.txt");
-        let mut tx1 = AtomicWriteTx::new(&target1).unwrap().with_sync_policy(SyncPolicy::DataOnly);
+        let mut tx1 = AtomicWriteTx::new(&target1)
+            .unwrap()
+            .with_sync_policy(SyncPolicy::DataOnly);
         assert_eq!(tx1.sync_policy(), SyncPolicy::DataOnly);
         tx1.write_temp(b"data only sync").unwrap();
         tx1.backup_existing().unwrap();
@@ -784,7 +786,9 @@ mod tests {
 
         // None 策略（批处理/非致命写入）
         let target2 = dir.join("no_sync.txt");
-        let mut tx2 = AtomicWriteTx::new(&target2).unwrap().with_sync_policy(SyncPolicy::None);
+        let mut tx2 = AtomicWriteTx::new(&target2)
+            .unwrap()
+            .with_sync_policy(SyncPolicy::None);
         assert_eq!(tx2.sync_policy(), SyncPolicy::None);
         tx2.write_temp(b"no sync batch").unwrap();
         tx2.backup_existing().unwrap();

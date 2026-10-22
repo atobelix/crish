@@ -50,12 +50,12 @@ pub const NOTE_WRITE_TOOLS: &[&str] = &[
 
 /// 是否为笔记只读工具名
 pub fn is_note_safe_tool(name: &str) -> bool {
-    NOTE_SAFE_TOOLS.iter().any(|&n| n == name)
+    NOTE_SAFE_TOOLS.contains(&name)
 }
 
 /// 是否为笔记写工具名
 pub fn is_note_write_tool(name: &str) -> bool {
-    NOTE_WRITE_TOOLS.iter().any(|&n| n == name)
+    NOTE_WRITE_TOOLS.contains(&name)
 }
 
 /// 是否为已知笔记域工具（safe ∪ write）
