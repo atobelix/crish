@@ -11,7 +11,7 @@
 //!
 //! 全部为纯数据结构/纯函数（无 HTTP、无 IO），单测驱动。
 //!
-//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 cache_tests.rs）：
+//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 cache_tests/）：
 //! - [cache_policy]：断点预算分配（allocate_breakpoints）、缓存策略组装
 //!   （build_cache_policy）与厂商能力兜底表（infer_cache_capability / CACHE_CAPABILITY_TABLE）
 //! - [cache_wire]：wire 施加面（apply_cache_controls / cache_control_for_ttl /
@@ -174,5 +174,5 @@ pub struct BreakpointReport {
 }
 
 #[cfg(test)]
-#[path = "cache_tests.rs"]
+#[path = "cache_tests/mod.rs"]
 mod tests;
