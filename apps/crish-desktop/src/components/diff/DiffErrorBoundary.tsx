@@ -25,7 +25,7 @@ export class DiffErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: '16px', color: 'var(--text-secondary, #888)' }}>
+        <div style={{ padding: '16px', color: 'var(--text-secondary)' }}>
           <div>{this.props.title || 'Diff Error'}</div>
           <Button
             size="sm"
