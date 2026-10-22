@@ -403,7 +403,6 @@ crates/conex-markdown/src/renderer.rs 1107
 crates/conex-sandbox/src/semantics.rs 1725
 crates/conex-telemetry/src/file.rs 801
 crates/conex-types/src/cron.rs 831
-crates/conex-types/src/device/commands.rs 1601
 crates/conex-types/src/device/events.rs 631
 crates/conex-types/src/error.rs 1561
 crates/conex-types/src/events.rs 1200
