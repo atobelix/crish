@@ -15,6 +15,11 @@ target-test/
 # Tauri
 **/target/
 apps/agent-workbench/src-tauri/target/
+# tauri-build 每次构建都会重写 gen/schemas（压缩 JSON），属构建产物；与 Tauri 2 官方
+# 模板（src-tauri/.gitignore: /gen/schemas）一致不入库，避免构建后工作区永远脏、
+# 与 prettier 格式化版本来回打架。capabilities/default.json 的 $schema 指向它，
+# 仅用于编辑器补全，首次 cargo build / tauri dev 后自动生成。
+apps/agent-workbench/src-tauri/gen/
 
 # Logs
 *.log
@@ -166,10 +171,6 @@ packages/agent-provider-http/target/
 target-tauri-dev/
 target-tauri-smoke/
 
-# Tauri generated schemas（schemas/*.json 白名单需逐级放行父目录，不能用目录整体忽略——否则 !schemas/*.json 不生效）
-apps/agent-workbench/src-tauri/gen/*
-!apps/agent-workbench/src-tauri/gen/schemas/
-
 # local junk
 *.orig
 *.orig_utf8
@@ -218,7 +219,6 @@ apps/agent-workbench/src-tauri/gen/*
 !docs/**/*.txt
 !analysis/**/*.md
 !analysis/**/*.txt
-!apps/agent-workbench/src-tauri/gen/schemas/*.json
 !apps/agent-workbench/src-tauri/capabilities/*.json
 !package.json
 !package-lock.json
@@ -244,7 +244,6 @@ temp_jcode/
 perf-report/
 debug_investigation/
 apps/crish-desktop/scripts/
-.dependency-cruiser.cjs
 .mcp.json
 .workbuddy/
 .workbuddy-ai/
@@ -402,10 +401,6 @@ packages/agent-provider-http/target/
 # Tauri dev artifacts
 target-tauri-dev/
 target-tauri-smoke/
-
-# Tauri generated schemas（schemas/*.json 白名单需逐级放行父目录，不能用目录整体忽略——否则 !schemas/*.json 不生效）
-apps/agent-workbench/src-tauri/gen/*
-!apps/agent-workbench/src-tauri/gen/schemas/
 
 # local junk
 *.orig
