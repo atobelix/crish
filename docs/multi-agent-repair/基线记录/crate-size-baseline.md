@@ -99,7 +99,6 @@
 | crates/conex-browser/src/browser/mod.rs                | 2369 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 | crates/conex-browser/src/browser/profile.rs            | 971  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 | crates/conex-browser/src/browser/state.rs              | 702  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
-| crates/conex-browser/src/cdp/bus.rs                    | 1346 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 | crates/conex-browser/src/cdp/client.rs                 | 689  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 | crates/conex-browser/src/cdp/sender.rs                 | 1806 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 | crates/conex-browser/src/cdp/transport.rs              | 951  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
@@ -372,7 +371,6 @@ crates/conex-browser/src/browser/discover.rs 725
 crates/conex-browser/src/browser/mod.rs 2369
 crates/conex-browser/src/browser/profile.rs 971
 crates/conex-browser/src/browser/state.rs 702
-crates/conex-browser/src/cdp/bus.rs 1346
 crates/conex-browser/src/cdp/client.rs 689
 crates/conex-browser/src/cdp/sender.rs 1806
 crates/conex-browser/src/cdp/transport.rs 951
