@@ -21,7 +21,10 @@
     },
     "tests.rs": { "reason": "单元测试", "category": "test" },
     "tests_concurrency.rs": { "reason": "并发测试", "category": "test" },
-    "tests_migrations.rs": { "reason": "迁移测试", "category": "test" },
+    "tests_migrations/usage_and_fresh.rs": {
+      "reason": "迁移测试",
+      "category": "test"
+    },
     "tests_usage.rs": { "reason": "用量测试", "category": "test" },
     "tests_cas_gc.rs": { "reason": "CAS GC 测试", "category": "test" }
   },
