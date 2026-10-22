@@ -869,6 +869,68 @@ export default defineConfig({
             return 'data-models-autofill';
           }
 
+          // 2.1 模型目录元数据独立切块（惰性加载，严禁渗入传输协议）
+          if (
+            (n.includes('/src/api/providerProfiles') &&
+              !n.includes('providerProfilesLight')) ||
+            n.includes('/src/api/provider-profiles') ||
+            n.includes('/src/api/modelCatalog') ||
+            n.includes('/src/api/modelCatalogTypes') ||
+            n.includes('/src/api/modelCatalogPure') ||
+            n.includes('/src/api/modelCatalogMeta') ||
+            n.includes('/src/api/modelCatalogIpc') ||
+            n.includes('catalog.json')
+          ) {
+            return 'chat-provider-catalog';
+          }
+
+          // 2.2 跨层共享工具与纯函数（切断 catalog/store 与 runtime 核心的双向 chunk 依赖环）
+          if (
+            n.includes('/src/services/LoggerService') ||
+            n.includes('/src/api/modelsNormalize') ||
+            n.includes('/src/api/providerProfilesLight') ||
+            n.includes('/src/api/chat-bridge/handlers/cacheMetricsCompute') ||
+            n.includes('/src/api/chat-bridge/handlers/eventUtils') ||
+            n.includes('/src/api/chat-bridge/handlers/eventParser') ||
+            n.includes('/src/api/chat-bridge/handlers/eventEnvelope') ||
+            n.includes('/src/api/chat-bridge/handlers/eventType') ||
+            n.includes('/src/api/chat-bridge/handlers/toolUtils') ||
+            n.includes('/src/api/chat-bridge/editSessionConsumer') ||
+            n.includes('/src/api/userFacingErrors') ||
+            n.includes('/src/services/ErrorStore') ||
+            n.includes('/src/api/uiEvents') ||
+            n.includes('/src/api/toolPresentation') ||
+            n.includes('/src/api/tool-presentation/') ||
+            n.includes('/src/api/toolFeedback')
+          ) {
+            return 'chat-bridge-common';
+          }
+
+          // 2.3 核心会话状态切块（解耦会话状态与运行时流传输）
+          if (
+            n.includes('/src/store/sessionStore') ||
+            n.includes('/src/store/sessionSubtreeModel') ||
+            n.includes('/src/store/sessionActions') ||
+            n.includes('/src/store/sessionIndex') ||
+            n.includes('/src/store/sessionListEqual') ||
+            n.includes('/src/store/sessionMessage') ||
+            n.includes('/src/store/sessionCrud') ||
+            n.includes('/src/store/layout-helpers/') ||
+            n.includes('/src/store/middleware/') ||
+            n.includes('/src/api/storeAccess')
+          ) {
+            return 'store-session-core';
+          }
+
+          // 2.4 聊天运行时核心（统一收归 transport 与 stream 处理核心）
+          if (
+            n.includes('/src/api/StreamRenderBuffer') ||
+            n.includes('/src/services/StreamRecovery') ||
+            n.includes('/src/api/chatBridge') ||
+            n.includes('/src/api/chat-bridge/')
+          ) {
+            return 'chat-runtime-core';
+          }
           if (n.includes('/src/workers/')) return 'vendor-workers';
         },
       },

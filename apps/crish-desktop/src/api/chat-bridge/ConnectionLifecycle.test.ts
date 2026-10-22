@@ -36,6 +36,7 @@ import {
   ensureModelsCatalogLoaded,
   resetModelsCatalogMirror,
 } from '../modelsCatalogStore';
+import '../modelsCatalogLive';
 import {
   sessionRuntimeRegistry,
   setSessionThinkingTitle,

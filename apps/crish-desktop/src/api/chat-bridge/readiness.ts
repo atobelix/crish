@@ -18,7 +18,10 @@ import {
   getActiveModelId,
   getActiveProfileId,
 } from '../provider-profiles/profileActiveSelection';
-import { getLiveModel, resolveThinkingHandoffSafe } from '../modelsCatalogLive';
+import {
+  getLiveModelFromRegistry,
+  resolveThinkingHandoffFromRegistry,
+} from '../providerProfilesLight';
 import { resolveEffectiveThinkingTitle } from '../SessionRuntimeRegistry';
 
 export type ReadinessState = 'ok' | 'blocked_with_action' | 'retryable_wait';
@@ -96,7 +99,7 @@ export function resolveContextWindow(
     const profileId = getActiveProfileId();
     const model = getActiveModelId();
     if (!profileId || !model) return undefined;
-    const window = getLiveModel(profileId, model)?.contextWindow;
+    const window = getLiveModelFromRegistry(profileId, model)?.contextWindow;
     if (typeof window === 'number' && Number.isFinite(window) && window > 0) {
       return Math.floor(window);
     }
@@ -132,12 +135,12 @@ export function resolveSendThinkingFields(
       typeof selectedTitleOverride === 'string' && selectedTitleOverride.trim()
         ? selectedTitleOverride.trim()
         : resolveEffectiveThinkingTitle(sessionId, providerId, modelId);
-    const handoff = resolveThinkingHandoffSafe(
+    const handoff = resolveThinkingHandoffFromRegistry(
       providerId,
       modelId,
       selectedTitle
     );
-    if (!handoff.supported) return {};
+    if (!handoff?.supported) return {};
     if (handoff.selectedTitle == null || handoff.selectedWire == null)
       return {};
     return {

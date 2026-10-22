@@ -8,10 +8,10 @@
 import {
   normalizeModelIds,
   anyProfileHasKey,
-  type ProviderProfile,
-} from '../api/providerProfiles';
+  DEFAULT_PROTOCOL,
+} from '../api/providerProfilesLight';
+import type { ProviderProfile } from '../api/provider-profiles/profileCatalog';
 import { networkUserMessage } from '../api/userFacingErrors';
-import { DEFAULT_PROTOCOL } from '../api/modelsNormalize';
 
 import {
   clearFirstRunWizardDone,
