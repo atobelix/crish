@@ -82,7 +82,7 @@
 | src/tools/search.rs          | 844  | mod  | SR-06 批① 覆盖只登记（刚过线但 >700 不拆）       | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
 | src/tools/shell_tests.rs     | 1462 | mod  | 测试旁挂（SR-06a-2 shell.rs 拆分产物，测试外置） | SR-06 批① shell 域收尾：测试再外置拆分 ≤600 移除登记 |
 
-### crates/conex-browser（23 · 2026-08-13 G-02 批② 新增登记）
+### crates/conex-browser（22 · 2026-08-13 G-02 批② 新增登记）
 
 | 文件                                                   | 行数 | 类型 | 登记理由                            | 拆分时限                                             |
 | ------------------------------------------------------ | ---- | ---- | ----------------------------------- | ---------------------------------------------------- |
@@ -107,7 +107,6 @@
 | crates/conex-browser/src/snapshot/collect.rs           | 2721 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 | crates/conex-browser/src/snapshot/interactive.rs       | 888  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 | crates/conex-browser/src/snapshot/mod.rs               | 977  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
-| crates/conex-browser/src/snapshot/serialize.rs         | 1823 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 
 ### crates 其它域（10 · 2026-08-13 G-02 批③ 新增登记）
 
