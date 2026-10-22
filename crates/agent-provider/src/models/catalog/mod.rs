@@ -47,5 +47,5 @@ use super::catalog_types::{ModelRef, ModelSpec, ProviderSpec, UnifiedModelsConfi
 use std::collections::BTreeMap;
 
 #[cfg(test)]
-#[path = "../catalog_tests.rs"]
+#[path = "../catalog_tests/mod.rs"]
 mod tests;
