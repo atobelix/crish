@@ -24,7 +24,7 @@
 | src/git.rs                 | 658  | mod  | 存量登记               | 后续轮次评估 |
 | src/workspace.rs           | 717  | mod  | 存量登记               | 后续轮次评估 |
 
-### apps/agent-workbench/src-tauri 新增登记（25 · 2026-08-13 G-02 批③）
+### apps/agent-workbench/src-tauri 新增登记（24 · 2026-08-13 G-02 批③）
 
 | 文件                        | 行数 | 类型 | 登记理由                                                        | 拆分时限                                                       |
 | --------------------------- | ---- | ---- | --------------------------------------------------------------- | -------------------------------------------------------------- |
@@ -50,7 +50,6 @@
 | src/server/router.rs        | 3686 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
 | src/server/ws.rs            | 2845 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
 | src/session_commands.rs     | 1314 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
-| src/timers.rs               | 1511 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
 | src/wait_channel.rs         | 1008 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
 | src/workflow_commands.rs    | 1708 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
 
@@ -328,7 +327,6 @@ apps/agent-workbench/src-tauri/src/server/pairing.rs 883
 apps/agent-workbench/src-tauri/src/server/router.rs 3686
 apps/agent-workbench/src-tauri/src/server/ws.rs 2845
 apps/agent-workbench/src-tauri/src/session_commands.rs 1314
-apps/agent-workbench/src-tauri/src/timers.rs 1511
 apps/agent-workbench/src-tauri/src/wait_channel.rs 1008
 apps/agent-workbench/src-tauri/src/workflow_commands.rs 1708
 apps/agent-workbench/src-tauri/src/workspace.rs 718
