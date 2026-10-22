@@ -66,7 +66,7 @@
 | src/request/schema.rs  | 685  | mod  | 存量登记 | 后续轮次评估 |
 | src/sse/reader.rs      | 768  | mod  | 存量登记 | 后续轮次评估 |
 
-### crates/agent-tools（13）
+### crates/agent-tools（11）
 
 | 文件                         | 行数 | 类型 | 登记理由                                         | 拆分时限                                             |
 | ---------------------------- | ---- | ---- | ------------------------------------------------ | ---------------------------------------------------- |
@@ -78,8 +78,6 @@
 | src/tools/background_task.rs | 851  | mod  | SR-06 批① 覆盖只登记                             | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
 | src/tools/fs.rs              | 673  | mod  | 存量登记                                         | 后续轮次评估                                         |
 | src/tools/mod.rs             | 1025 | mod  | SR-06 批① 覆盖只登记                             | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
-| src/tools/output_dir.rs      | 976  | mod  | SR-06 批① 覆盖只登记                             | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
-| src/tools/project_tree.rs    | 967  | mod  | SR-06 批① 覆盖只登记                             | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
 | src/tools/replace.rs         | 1196 | mod  | SR-06 批① 覆盖只登记                             | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
 | src/tools/search.rs          | 844  | mod  | SR-06 批① 覆盖只登记（刚过线但 >700 不拆）       | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
 | src/tools/shell_tests.rs     | 1462 | mod  | 测试旁挂（SR-06a-2 shell.rs 拆分产物，测试外置） | SR-06 批① shell 域收尾：测试再外置拆分 ≤600 移除登记 |
@@ -353,8 +351,6 @@ crates/agent-tools/src/revert_guard.rs 661
 crates/agent-tools/src/tools/background_task.rs 851
 crates/agent-tools/src/tools/fs.rs 1193
 crates/agent-tools/src/tools/mod.rs 1025
-crates/agent-tools/src/tools/output_dir.rs 976
-crates/agent-tools/src/tools/project_tree.rs 967
 crates/agent-tools/src/tools/replace.rs 1196
 crates/agent-tools/src/tools/search.rs 844
 crates/agent-tools/src/tools/shell_tests.rs 1462
