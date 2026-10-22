@@ -3,6 +3,7 @@ import { Tooltip } from '../../components/ui';
 import { resolveModelVendor } from './modelVendorCatalog';
 import { MODEL_VENDOR_ICONS } from './modelVendorIcons';
 import { ModelVendorFallback } from './ModelVendorFallback';
+import { useI18n } from '../../i18n';
 
 export interface ModelVendorIconProps {
   /** 模型标识、厂商 ID 或带组织前缀的模型路径（如 'deepseek-ai/DeepSeek-V3', 'claude-3-5-sonnet', 'openai'） */
@@ -35,12 +36,18 @@ export const ModelVendorIcon: React.FC<ModelVendorIconProps> = ({
   className = '',
   style = {},
 }) => {
+  const { t } = useI18n();
   const vendorMeta = resolveModelVendor(modelOrVendor);
   const iconEntry = vendorMeta ? MODEL_VENDOR_ICONS[vendorMeta.id] : undefined;
 
   // 圆角自适应（默认 25% 视觉比例）
-  const computedRadius = radius !== undefined ? radius : Math.max(3, Math.round(size * 0.25));
-  const finalTitle = title || vendorMeta?.name || modelOrVendor || '本地 / 自定义模型';
+  const computedRadius =
+    radius !== undefined ? radius : Math.max(3, Math.round(size * 0.25));
+  const vendorName = vendorMeta?.nameKey
+    ? t(vendorMeta.nameKey, vendorMeta.name)
+    : vendorMeta?.name;
+  const finalTitle =
+    title || vendorName || modelOrVendor || '本地 / 自定义模型';
 
   // 1. 若未能识别厂商，或无对应矢量数据，自动平稳降级为桌面软件官方 App 图标
   if (!vendorMeta || !iconEntry) {

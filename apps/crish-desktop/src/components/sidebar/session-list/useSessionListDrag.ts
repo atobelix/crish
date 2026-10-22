@@ -38,6 +38,12 @@ import {
   createSidebarSessionGhost,
   swallowNextClick,
 } from './useSessionListDragHelpers';
+import {
+  folderContainerSelector,
+  isGeneralFolderName,
+  resolveDropTarget,
+  resolveInsertBeforeIdAfter,
+} from './sessionListDropTarget';
 import { shiftRowsForDrag } from './sessionListDragShift';
 
 export {
@@ -83,196 +89,33 @@ type LastCommit = {
   isPinned: boolean;
 };
 
-function previewToInsertBeforeId(
-  sectionIds: string[],
-  overSessionId: string | null,
-  place: DropPlace
-): string | null {
-  if (!overSessionId) return null;
-  const idx = sectionIds.indexOf(overSessionId);
-  if (idx === -1) return overSessionId;
-  if (place === 'before') return overSessionId;
-  const next = sectionIds[idx + 1];
-  return next ?? null;
-}
-
-function isGeneralFolderName(folder: string | null | undefined): boolean {
-  const f = (folder || '').trim();
-  return (
-    !f ||
-    f === GENERAL_FOLDER ||
-    f === '会话' ||
-    f === '常规会话' ||
-    f === 'general'
-  );
-}
-
-function resolveDropTarget(
-  clientX: number,
-  clientY: number,
-  selfSessionId: string,
-  pinnedZone: HTMLElement | null,
-  fallbackFolder: string,
-  lastPlace: DropPlace,
-  instantDy: number
-): {
-  overPinned: boolean;
-  targetSessionId: string | null;
-  place: DropPlace;
-  folder: string;
-} {
-  const stack =
-    typeof document.elementsFromPoint === 'function'
-      ? (document.elementsFromPoint(clientX, clientY) as Element[])
-      : ([document.elementFromPoint(clientX, clientY)].filter(
-          Boolean
-        ) as Element[]);
-
-  let hovered: Element | null = null;
-  const ghostClass = styles.sidebarDragGhost || 'sidebar-drag-ghost';
-  for (const node of stack) {
-    if (!(node instanceof HTMLElement)) continue;
-    if (
-      node.classList.contains(ghostClass) ||
-      node.classList.contains('sidebar-drag-ghost') ||
-      node.closest(`.${ghostClass}`) ||
-      node.closest('.sidebar-drag-ghost')
-    ) {
-      continue;
-    }
-    // 关键防抖：穿透正在被拖拽的源项自身（杜绝将自身识别为落点而引发跳跃到末尾）
-    const row = node.closest('[data-session-id]') as HTMLElement | null;
-    if (row?.getAttribute('data-session-id') === selfSessionId) {
-      continue;
-    }
-    hovered = node;
-    break;
+/** 分屏 / 标签条落点的跨域提交（侧栏内部落点由调用方走乐观重排提交）。 */
+function commitCrossDomainDrop(
+  sessionId: string,
+  target: CrossDomainTarget,
+  stripInsertIdx: number
+): void {
+  if (target.domain === 'pane-split') {
+    commitSidebarSessionDrop({
+      sessionId,
+      target: {
+        kind: 'pane',
+        targetLeafId: target.targetLeafId,
+        region: target.region,
+      },
+    });
+    return;
   }
-
-  if (!hovered) {
-    return {
-      overPinned: false,
-      targetSessionId: null,
-      place: lastPlace,
-      folder: fallbackFolder,
-    };
+  if (target.domain === 'tab-strip') {
+    commitSidebarSessionDrop({
+      sessionId,
+      target: {
+        kind: 'strip',
+        targetLeafId: target.targetLeafId,
+        insertIdx: stripInsertIdx,
+      },
+    });
   }
-
-  const overPinned = Boolean(
-    hovered.closest('[data-drop-zone="pinned"]') ||
-    (styles.pinnedDropZone && hovered.closest(`.${styles.pinnedDropZone}`)) ||
-    (styles.pinnedList &&
-      hovered.closest(`.${styles.pinnedList}`) &&
-      pinnedZone?.contains(hovered)) ||
-    (pinnedZone &&
-      (hovered === pinnedZone || pinnedZone.contains(hovered as Node)))
-  );
-
-  const sessionWrap = hovered.closest(
-    '[data-session-id]'
-  ) as HTMLElement | null;
-  let targetSessionId: string | null =
-    sessionWrap?.getAttribute('data-session-id') || null;
-  if (targetSessionId === selfSessionId) {
-    targetSessionId = null;
-  }
-
-  let place: DropPlace = lastPlace;
-
-  // 1. 命中具体会话行时的滞后死区防抖（Hysteresis Deadband 35% ~ 65%）
-  if (sessionWrap && targetSessionId) {
-    const rect = sessionWrap.getBoundingClientRect();
-    if (rect.height > 0) {
-      const relY = clientY - rect.top;
-      const ratio = relY / rect.height;
-
-      if (ratio < 0.35) {
-        place = 'before';
-      } else if (ratio > 0.65) {
-        place = 'after';
-      } else {
-        // 处于 35% ~ 65% 的黄金死区：根据明确运动趋势切换；微动或静止时绝对保持上一帧状态，消除震荡
-        if (instantDy > 1.5) {
-          place = 'after';
-        } else if (instantDy < -1.5) {
-          place = 'before';
-        } else {
-          place = lastPlace;
-        }
-      }
-    }
-  }
-
-  const folderEl = hovered.closest('[data-folder-name]') as HTMLElement | null;
-  const generalZone = hovered.closest(
-    '[data-drop-zone="general"]'
-  ) as HTMLElement | null;
-  let folder = fallbackFolder;
-
-  if (overPinned) {
-    folder = fallbackFolder || GENERAL_FOLDER;
-  } else if (folderEl) {
-    folder =
-      folderEl.getAttribute('data-folder-name') ||
-      fallbackFolder ||
-      GENERAL_FOLDER;
-  } else if (generalZone) {
-    folder = GENERAL_FOLDER;
-  } else if (isGeneralFolderName(fallbackFolder)) {
-    folder = GENERAL_FOLDER;
-  }
-
-  // 2. 容器边缘与间隙投影兜底：当未精准命中具体 li 时，吸附到该容器的最近项或首尾
-  if (!targetSessionId) {
-    const activeZone = overPinned
-      ? pinnedZone
-      : folderEl?.querySelector('ul') ||
-        generalZone?.querySelector('ul') ||
-        folderEl ||
-        generalZone;
-
-    if (activeZone) {
-      const candidateRows = Array.from(
-        activeZone.querySelectorAll<HTMLElement>('li[data-session-id]')
-      ).filter(
-        (r) =>
-          r.getAttribute('data-session-id') !== selfSessionId &&
-          r.offsetParent !== null &&
-          r.getBoundingClientRect().height > 0
-      );
-
-      if (candidateRows.length > 0) {
-        const first = candidateRows[0]!;
-        const last = candidateRows[candidateRows.length - 1]!;
-        const firstRect = first.getBoundingClientRect();
-        const lastRect = last.getBoundingClientRect();
-
-        if (clientY < firstRect.top + firstRect.height * 0.5) {
-          targetSessionId = first.getAttribute('data-session-id');
-          place = 'before';
-        } else if (clientY > lastRect.bottom - lastRect.height * 0.5) {
-          targetSessionId = last.getAttribute('data-session-id');
-          place = 'after';
-        } else {
-          let closest = candidateRows[0]!;
-          let minDist = Infinity;
-          for (const r of candidateRows) {
-            const b = r.getBoundingClientRect();
-            const dist = Math.abs(clientY - (b.top + b.height / 2));
-            if (dist < minDist) {
-              minDist = dist;
-              closest = r;
-            }
-          }
-          targetSessionId = closest.getAttribute('data-session-id');
-          const cRect = closest.getBoundingClientRect();
-          place = clientY < cRect.top + cRect.height / 2 ? 'before' : 'after';
-        }
-      }
-    }
-  }
-
-  return { overPinned, targetSessionId, place, folder };
 }
 
 export function useSessionListDrag(
@@ -468,25 +311,10 @@ export function useSessionListDrag(
           );
         }
 
-        let insertBeforeId: string | null = overId;
-        if (overId && hit.place === 'after') {
-          const listRoot =
-            (document.querySelector(
-              isPinned
-                ? '[data-drop-zone="pinned"]'
-                : isGeneralFolderName(folder)
-                  ? '[data-drop-zone="general"]'
-                  : `[data-folder-name="${CSS.escape ? CSS.escape(folder) : folder.replace(/"/g, '\\"')}"]`
-            ) as HTMLElement | null) || null;
-          const ids = listRoot
-            ? Array.from(
-                listRoot.querySelectorAll<HTMLElement>('[data-session-id]')
-              )
-                .map((n) => n.getAttribute('data-session-id') || '')
-                .filter((id) => id && id !== sessionId)
-            : [];
-          insertBeforeId = previewToInsertBeforeId(ids, overId, 'after');
-        }
+        const insertBeforeId =
+          overId && hit.place === 'after'
+            ? resolveInsertBeforeIdAfter(sessionId, overId, isPinned, folder)
+            : overId;
 
         lastCommit = {
           targetSessionId: insertBeforeId,
@@ -498,9 +326,7 @@ export function useSessionListDrag(
         const activeContainer = isPinned
           ? pinnedZoneRefStable.current.current
           : (document.querySelector(
-              isGeneralFolderName(folder)
-                ? '[data-drop-zone="general"]'
-                : `[data-folder-name="${CSS.escape ? CSS.escape(folder) : folder.replace(/"/g, '\\"')}"]`
+              folderContainerSelector(folder)
             ) as HTMLElement | null);
 
         if (activeContainer) {
@@ -630,45 +456,32 @@ export function useSessionListDrag(
             ue.clientY - startY
           );
 
-          if (lastAppliedTarget) {
-            if (lastAppliedTarget.domain === 'pane-split') {
-              commitSidebarSessionDrop({
+          if (lastAppliedTarget?.domain === 'sidebar') {
+            if (lastCommit) {
+              onMoveRef.current(
                 sessionId,
-                target: {
-                  kind: 'pane',
-                  targetLeafId: lastAppliedTarget.targetLeafId,
-                  region: lastAppliedTarget.region,
-                },
-              });
-            } else if (lastAppliedTarget.domain === 'tab-strip') {
-              commitSidebarSessionDrop({
-                sessionId,
-                target: {
-                  kind: 'strip',
-                  targetLeafId: lastAppliedTarget.targetLeafId,
-                  insertIdx: currentStripInsertIdx,
-                },
-              });
-            } else if (lastAppliedTarget.domain === 'sidebar') {
-              if (lastCommit) {
-                onMoveRef.current(
-                  sessionId,
-                  lastCommit.targetSessionId,
-                  lastCommit.folder,
-                  lastCommit.isPinned
-                );
-              }
-
-              if (ghostEl) {
-                ghostEl.style.transition = 'opacity 80ms ease-out';
-                ghostEl.style.opacity = '0';
-              }
-
-              requestAnimationFrame(() => {
-                cleanup();
-              });
-              return;
+                lastCommit.targetSessionId,
+                lastCommit.folder,
+                lastCommit.isPinned
+              );
             }
+
+            if (ghostEl) {
+              ghostEl.style.transition = 'opacity 80ms ease-out';
+              ghostEl.style.opacity = '0';
+            }
+
+            requestAnimationFrame(() => {
+              cleanup();
+            });
+            return;
+          }
+          if (lastAppliedTarget) {
+            commitCrossDomainDrop(
+              sessionId,
+              lastAppliedTarget,
+              currentStripInsertIdx
+            );
           }
         }
 

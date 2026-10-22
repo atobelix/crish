@@ -22,6 +22,8 @@ export type SessionDragPreview = {
 export const DRAG_THRESHOLD_PX = 4;
 export const DEFAULT_ROW_STEP_PX = 31; // 28px height + 3px gap
 export const DEFAULT_TAB_STEP_PX = 154; // 150px tab max-width + 4px gap
+export const FOLDER_SESSION_CN = '会话';
+export const FOLDER_GENERAL_SESSION_CN = '常规会话';
 
 export function applyDragPreview(
   list: SessionState[],
@@ -67,8 +69,8 @@ export function isPreviewTargetSection(
   if (kind === 'general') {
     return (
       preview.folder === GENERAL_FOLDER ||
-      preview.folder === '会话' ||
-      preview.folder === '常规会话' ||
+      preview.folder === FOLDER_SESSION_CN ||
+      preview.folder === FOLDER_GENERAL_SESSION_CN ||
       preview.folder === 'general' ||
       !preview.folder
     );

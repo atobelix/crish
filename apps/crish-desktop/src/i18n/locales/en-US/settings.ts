@@ -1,5 +1,6 @@
 import type { SettingsTranslations } from '../../types';
 import { settingsPartRest } from './settingsParts';
+import { settingsPartModels } from './settingsModels';
 
 export const settings: SettingsTranslations = {
   // ── Existing 11 keys (Strict backwards compatibility) ──
@@ -348,6 +349,7 @@ export const settings: SettingsTranslations = {
   'devtools.probeStatus': 'Run Full Health Probe',
 
   ...settingsPartRest,
+  ...settingsPartModels,
 };
 
 export default settings;
