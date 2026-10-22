@@ -190,7 +190,13 @@ fn dictionary_model_ids_are_unique_keys() {
 /// - `ttl.rs` 的 `vendor_default_ttl`（厂商默认 TTL 兜底表）。
 #[test]
 fn runtime_snapshot_has_no_independent_disk_read_path() {
-    let catalog_src = include_str!("catalog.rs");
+    let catalog_src = concat!(
+        include_str!("catalog/mod.rs"),
+        include_str!("catalog/store.rs"),
+        include_str!("catalog/live.rs"),
+        include_str!("catalog/queries.rs"),
+        include_str!("catalog/entry.rs"),
+    );
     for forbidden in [
         "fn load_user",
         "load_user_catalog",
