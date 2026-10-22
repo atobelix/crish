@@ -118,7 +118,7 @@ apps/crish-desktop/src/api/draft/sessionDraftManager.ts 372
 apps/crish-desktop/src/api/dualLatchProtocol.ts 448
 apps/crish-desktop/src/api/engineConfigHelpers.ts 373
 apps/crish-desktop/src/api/markdown-render/streamingDfaLexer.ts 419
-apps/crish-desktop/src/api/markdown/IncrementalMarkdownSession.ts 533
+apps/crish-desktop/src/api/markdown/IncrementalMarkdownSession.ts 399
 apps/crish-desktop/src/api/modelsCatalogActions.ts 378
 apps/crish-desktop/src/api/modelsCatalogStore.ts 375
 apps/crish-desktop/src/api/ptySessionApi.ts 396
@@ -172,7 +172,7 @@ apps/crish-desktop/src/components/sidebar/ContextMenuFlyout.tsx 446
 apps/crish-desktop/src/components/sidebar/session-list/useSessionListDrag.ts 601
 apps/crish-desktop/src/components/ui/PreviewCard/PreviewCard.tsx 680
 apps/crish-desktop/src/components/ui/ScrollArea/ScrollArea.tsx 478
-apps/crish-desktop/src/components/ui/SmartExpandablePanel/SmartExpandablePanel.tsx 460
+apps/crish-desktop/src/components/ui/SmartExpandablePanel/SmartExpandablePanel.tsx 456
 apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx 427
 apps/crish-desktop/src/components/ui/internal/layer-stack/LayerStackManager.ts 635
 apps/crish-desktop/src/components/workspace/PreviewCard.tsx 475
