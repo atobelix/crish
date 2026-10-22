@@ -405,7 +405,6 @@ crates/conex-telemetry/src/file.rs 801
 crates/conex-types/src/cron.rs 831
 crates/conex-types/src/device/commands.rs 1601
 crates/conex-types/src/device/events.rs 631
-crates/conex-types/src/error.rs 1561
 crates/conex-types/src/events.rs 1200
 crates/orchestrator/src/events.rs 1355
 crates/orchestrator/src/flow_graph.rs 2031

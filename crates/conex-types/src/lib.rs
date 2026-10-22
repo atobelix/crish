@@ -35,7 +35,7 @@ pub use injection_card::{
     ContextInjectionCardKind, ContextInjectionCardPayload, ContextInjectionStatus,
 };
 
-// codes 常量集在 error.rs 内（`pub mod codes`），根级重导出供
+// codes 常量集在 error/codes.rs（`pub mod codes`），根级重导出供
 // orchestrator / 壳命令面以 `conex_types::codes` 引用（R6 接线点）。
 pub use checkpoint::{
     CheckpointError, CheckpointPayload, LeafCheckpointState, CHECKPOINT_CORRUPT_SIGNAL,

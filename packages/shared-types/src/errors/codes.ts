@@ -67,7 +67,7 @@ export type CrishErrorCode =
   | 'tool.write_path_conflict'
   // session-integrity-repair 02 §4.1 F01：中断/取消/未知三码。
   // Rust 侧早已在 codes 模块与 CRISH_ERROR_REGISTRY 注册
-  // （crates/conex-types/src/error.rs:115-119 与 :721-747），并在
+  // （crates/conex-types/src/error/codes.rs:67-71 与 error/registry/tool.rs:92-118），并在
   // session-loop 真实抛出（executing_tools.rs:58 aborted_before_dispatch /
   // exec_single.rs:98 + exec_verdict.rs:266 cancelled / hydrate.rs:378
   // outcome_unknown），但 TS 侧长期漏注册 ⇒ getErrorInfo 回退
