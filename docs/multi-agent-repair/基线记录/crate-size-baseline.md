@@ -66,7 +66,6 @@
 | src/request/schema.rs  | 685  | mod  | 存量登记 | 后续轮次评估 |
 | src/sse/reader.rs      | 768  | mod  | 存量登记 | 后续轮次评估 |
 
-### crates/agent-tools（11）
 
 | 文件                         | 行数 | 类型 | 登记理由                                         | 拆分时限                                             |
 | ---------------------------- | ---- | ---- | ------------------------------------------------ | ---------------------------------------------------- |
@@ -80,7 +79,6 @@
 | src/tools/mod.rs             | 1025 | mod  | SR-06 批① 覆盖只登记                             | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
 | src/tools/replace.rs         | 1196 | mod  | SR-06 批① 覆盖只登记                             | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
 | src/tools/search.rs          | 844  | mod  | SR-06 批① 覆盖只登记（刚过线但 >700 不拆）       | SR-06 批① agent-tools 域拆分完成后 ≤600 移除登记     |
-| src/tools/shell_tests.rs     | 1462 | mod  | 测试旁挂（SR-06a-2 shell.rs 拆分产物，测试外置） | SR-06 批① shell 域收尾：测试再外置拆分 ≤600 移除登记 |
 
 ### crates/conex-browser（22 · 2026-08-13 G-02 批② 新增登记）
 
@@ -344,7 +342,6 @@ crates/agent-tools/src/tools/fs.rs 1193
 crates/agent-tools/src/tools/mod.rs 1025
 crates/agent-tools/src/tools/replace.rs 1196
 crates/agent-tools/src/tools/search.rs 844
-crates/agent-tools/src/tools/shell_tests.rs 1462
 crates/agent-tools/src/tools/wait_subagents_tests.rs 1098
 crates/conex-compaction/src/ai_summary.rs 1055
 crates/conex-compaction/src/lib.rs 2647

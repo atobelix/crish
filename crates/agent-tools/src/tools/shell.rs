@@ -888,5 +888,5 @@ pub(crate) use shell_redirect::{
 };
 
 #[cfg(test)]
-#[path = "shell_tests.rs"]
+#[path = "shell_tests/mod.rs"]
 mod tests;
