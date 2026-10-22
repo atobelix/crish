@@ -127,7 +127,7 @@
 | crates/orchestrator/src/goal_state.rs      | 1135 | mod  | SR-06 批④（orchestrator 域，D-03 SR-06d 收录）拆分对象（G-02 批③ 登记） | SR-06 批④ 拆分完成（触发事实=该文件 ≤600 行）   |
 | crates/orchestrator/src/task_events.rs     | 838  | mod  | 不在 SR-06 批④ 清单内（G-02 批③ 登记）                                  | 结构轮批表补录后拆分（触发事实=该文件 ≤600 行） |
 
-### 其余 crates（28）
+### 其余 crates（27）
 
 | 文件                                             | 行数 | 类型  | 登记理由                                         | 拆分时限                                          |
 | ------------------------------------------------ | ---- | ----- | ------------------------------------------------ | ------------------------------------------------- |
@@ -146,7 +146,6 @@
 | crates/orchestrator/src/persist.rs               | 1038 | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/orchestrator/src/recovery.rs              | 687  | mod   | 存量登记（I8 G10 统计点接线位）                  | 后续轮次评估                                      |
 | crates/orchestrator/src/run.rs                   | 886  | mod   | 存量登记                                         | 后续轮次评估                                      |
-| crates/orchestrator/src/session.rs               | 1850 | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/orchestrator/src/steering_queue.rs        | 636  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/session-loop/src/cache_tracker.rs         | 766  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/session-loop/src/control.rs               | 697  | mod   | 存量登记                                         | 后续轮次评估                                      |
@@ -414,7 +413,6 @@ crates/orchestrator/src/normalize.rs 677
 crates/orchestrator/src/persist.rs 1091
 crates/orchestrator/src/recovery.rs 687
 crates/orchestrator/src/run.rs 944
-crates/orchestrator/src/session.rs 1856
 crates/orchestrator/src/steering_queue.rs 636
 crates/orchestrator/src/task_events.rs 838
 crates/session-loop/src/cache_tracker.rs 1087
