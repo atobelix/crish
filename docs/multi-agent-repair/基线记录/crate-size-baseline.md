@@ -91,7 +91,6 @@
 | crates/conex-browser/src/action/keyboard.rs            | 1006 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 | crates/conex-browser/src/action/mocks.rs               | 695  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 | crates/conex-browser/src/action/mod.rs                 | 1621 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
-| crates/conex-browser/src/action/ops.rs                 | 1482 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 | crates/conex-browser/src/action/wait.rs                | 667  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 | crates/conex-browser/src/adapters/cdp_input_backend.rs | 935  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 | crates/conex-browser/src/browser/cft.rs                | 1238 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
@@ -364,7 +363,6 @@ crates/conex-compaction/src/lib.rs 2647
 crates/conex-browser/src/action/keyboard.rs 1006
 crates/conex-browser/src/action/mocks.rs 695
 crates/conex-browser/src/action/mod.rs 1621
-crates/conex-browser/src/action/ops.rs 1482
 crates/conex-browser/src/action/wait.rs 667
 crates/conex-browser/src/adapters/cdp_input_backend.rs 935
 crates/conex-browser/src/browser/cft.rs 1238
