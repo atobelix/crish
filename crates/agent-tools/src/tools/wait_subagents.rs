@@ -65,5 +65,5 @@ pub(crate) use wait_tool::WaitSubagentsTool;
 // ── 测试（SR-06a-3 外置；`#[path]` 旁挂，无孤儿）───────────────────
 
 #[cfg(test)]
-#[path = "wait_subagents_tests.rs"]
+#[path = "wait_subagents_tests/mod.rs"]
 mod tests;
