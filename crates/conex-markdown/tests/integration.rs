@@ -1160,7 +1160,10 @@ fn italic_does_not_eat_list_markers() {
 #[test]
 fn default_render_preserves_gfm_emoji_shortcodes() {
     setup();
-    assert!(!conex_markdown::GFM_EMOJI_SHORTCODES_DEFAULT);
+    // 公开常量默认关闭：编译期校验，默认值被翻成 true 时测试目标直接编译失败
+    const {
+        assert!(!conex_markdown::GFM_EMOJI_SHORTCODES_DEFAULT);
+    }
 
     let html = render_markdown("Status: :white_check_mark: and :x: and :rocket:");
     assert!(html.contains("Status: :white_check_mark: and :x: and :rocket:"));

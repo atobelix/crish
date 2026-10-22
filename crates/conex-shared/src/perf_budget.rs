@@ -177,25 +177,29 @@ mod tests {
 
     #[test]
     fn budgets_are_positive() {
-        assert!(SHELL_PREVIEW_HEAD_BYTES > 0);
-        assert!(SHELL_PREVIEW_TAIL_BYTES > 0);
-        assert!(TOOL_INLINE_BYTES_DEFAULT > 0);
-        assert!(SHELL_MAX_OUTPUT_BYTES_DEFAULT > 0);
-        assert!(READ_FILE_MAX_BYTES_DEFAULT > 0);
-        assert!(SEARCH_MAX_FILE_BYTES_DEFAULT > 0);
-        assert!(G8_TOOL_OUTPUT_MAX_LINES_DEFAULT > 0);
-        assert!(G8_TOOL_OUTPUT_MAX_BYTES_DEFAULT > 0);
-        assert!(TOOL_OUTPUT_BUDGET_BYTES_DEFAULT > 0);
-        assert!(TOOL_OUTPUT_LINE_CAP > 0);
-        assert!(TOOL_OUTPUT_BYTE_CAP > 0);
-        assert!(TOOL_OUTPUT_STORE_HARD_CAP > 0);
-        assert!(PTY_HISTORY_MAX_BYTES > 0);
-        assert!(SESSION_HYDRATE_KEEP_K > 0);
-        assert!(RUST_MARKDOWN_CACHE_BUDGET_BYTES > 0);
-        assert!(RUST_MARKDOWN_CACHE_ENTRY_MAX_BYTES > 0);
-        assert!(STARTUP_ENTRY_BUDGET_KB > 0);
-        assert!(EVENT_BUFFER_SOFT_WATERMARK > 0);
-        assert!(EVENT_BUFFER_HARD_CAP >= EVENT_BUFFER_SOFT_WATERMARK);
+        // 全部是编译期常量：用 const 块在编译期求值，任一预算被改成 0
+        // （或水位倒挂）时测试目标直接编译失败，而不是运行期才报。
+        const {
+            assert!(SHELL_PREVIEW_HEAD_BYTES > 0);
+            assert!(SHELL_PREVIEW_TAIL_BYTES > 0);
+            assert!(TOOL_INLINE_BYTES_DEFAULT > 0);
+            assert!(SHELL_MAX_OUTPUT_BYTES_DEFAULT > 0);
+            assert!(READ_FILE_MAX_BYTES_DEFAULT > 0);
+            assert!(SEARCH_MAX_FILE_BYTES_DEFAULT > 0);
+            assert!(G8_TOOL_OUTPUT_MAX_LINES_DEFAULT > 0);
+            assert!(G8_TOOL_OUTPUT_MAX_BYTES_DEFAULT > 0);
+            assert!(TOOL_OUTPUT_BUDGET_BYTES_DEFAULT > 0);
+            assert!(TOOL_OUTPUT_LINE_CAP > 0);
+            assert!(TOOL_OUTPUT_BYTE_CAP > 0);
+            assert!(TOOL_OUTPUT_STORE_HARD_CAP > 0);
+            assert!(PTY_HISTORY_MAX_BYTES > 0);
+            assert!(SESSION_HYDRATE_KEEP_K > 0);
+            assert!(RUST_MARKDOWN_CACHE_BUDGET_BYTES > 0);
+            assert!(RUST_MARKDOWN_CACHE_ENTRY_MAX_BYTES > 0);
+            assert!(STARTUP_ENTRY_BUDGET_KB > 0);
+            assert!(EVENT_BUFFER_SOFT_WATERMARK > 0);
+            assert!(EVENT_BUFFER_HARD_CAP >= EVENT_BUFFER_SOFT_WATERMARK);
+        }
     }
 
     #[test]

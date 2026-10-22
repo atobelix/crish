@@ -1601,7 +1601,7 @@ fn legacy_payload_reads_new_optional_fields_as_none() {
 /// 子代理请求载荷：wire 字段 camelCase + 往返一致
 #[test]
 fn subagent_payload_roundtrips_with_camel_case_wire() {
-    let json = serde_json::to_value(&subagent_permission_request()).unwrap();
+    let json = serde_json::to_value(subagent_permission_request()).unwrap();
     assert_eq!(json["requesterRunId"], "run-sub-1");
     assert_eq!(json["reason"], "需要写入默认范围外的报告目录");
     let back: PermissionRequest = serde_json::from_value(json).unwrap();

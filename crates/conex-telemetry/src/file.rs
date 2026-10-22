@@ -50,7 +50,7 @@ static SYSCALL_OPEN_COUNT: AtomicU64 = AtomicU64::new(0);
 #[cfg(test)]
 std::thread_local! {
     /// 仅供当前测试线程读取的 open 尝试计数。
-    static TEST_SYSCALL_OPEN_COUNT: std::cell::Cell<u64> = std::cell::Cell::new(0);
+    static TEST_SYSCALL_OPEN_COUNT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
 /// 单测读取当前线程的 open 尝试计数；进程级生产观测仍由 [SYSCALL_OPEN_COUNT] 提供。
