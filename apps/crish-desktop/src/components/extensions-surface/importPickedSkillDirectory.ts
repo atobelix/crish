@@ -68,19 +68,20 @@ export async function importPickedSkillDirectory(
   dir: string
 ): Promise<{ ok: boolean; message: string }> {
   const root = dir.trim();
-  if (!root) return { ok: false, message: t('skill.import.noDirectory') };
+  if (!root)
+    return { ok: false, message: t('extensions.skill.import.noDirectory') };
 
   const items = await listSkillDirectory(root);
   if (!items) {
     return {
       ok: false,
-      message: t('skill.import.directoryUnreadable'),
+      message: t('extensions.skill.import.directoryUnreadable'),
     };
   }
 
   const targets = collectSkillFileTargets(root, items);
   if (targets.length === 0) {
-    return { ok: false, message: t('skill.import.directoryEmpty') };
+    return { ok: false, message: t('extensions.skill.import.directoryEmpty') };
   }
 
   let imported = 0;
@@ -110,17 +111,20 @@ export async function importPickedSkillDirectory(
   if (imported === 0 && truncated > 0) {
     return {
       ok: false,
-      message: t('skill.import.allTruncated'),
+      message: t('extensions.skill.import.allTruncated'),
     };
   }
   if (imported === 0) {
-    return { ok: false, message: t('skill.import.noneWritten') };
+    return { ok: false, message: t('extensions.skill.import.noneWritten') };
   }
   if (truncated > 0) {
     return {
       ok: true,
-      message: t('skill.import.partial', { imported, truncated }),
+      message: t('extensions.skill.import.partial', { imported, truncated }),
     };
   }
-  return { ok: true, message: t('skill.import.importedCount', { imported }) };
+  return {
+    ok: true,
+    message: t('extensions.skill.import.importedCount', { imported }),
+  };
 }

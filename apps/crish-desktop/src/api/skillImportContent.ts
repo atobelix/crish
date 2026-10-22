@@ -87,13 +87,13 @@ export async function resolveDetectedSkillContent(
   if (!loaded.ok && loaded.reason === 'truncated') {
     return {
       ok: false,
-      message: t('skill.import.truncatedBody', { name: skill.name }),
+      message: t('extensions.skill.import.truncatedBody', { name: skill.name }),
     };
   }
   if (!loaded.ok && loaded.reason === 'empty') {
     return {
       ok: false,
-      message: t('skill.import.emptyBody', { name: skill.name }),
+      message: t('extensions.skill.import.emptyBody', { name: skill.name }),
     };
   }
   if (!loaded.ok) return { ok: true };

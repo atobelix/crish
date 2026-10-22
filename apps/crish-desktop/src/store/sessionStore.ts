@@ -262,17 +262,8 @@ export const useSessionStore = create<SessionStore>()(
   )
 );
 
-const innerSetState = useSessionStore.setState;
-useSessionStore.setState = ((updater, replace) => {
-  const prev = useSessionStore.getState();
-  const next = applyUpdaterWithSubtreeSync(
-    prev,
-    updater as Parameters<typeof applyUpdaterWithSubtreeSync>[1],
-    replace
-  );
-  if (next !== prev) innerSetState(next, true);
-}) as typeof useSessionStore.setState;
-
+// 物理独立 SessionStore 实例已在 immer 内置 set 中通过 applyUpdaterWithSubtreeSync
+// 统一维持正交三子树同步，不需要在外部二次包装 setState（避免每次 set 执行双倍 O(N) 遍历）。
 registerSessionStateProvider(() => useSessionStore.getState());
 
 // ── 不可变原子选择器契约 (Atomic Selectors) ──────────────────────────────────

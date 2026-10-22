@@ -14,7 +14,6 @@ import {
   EMPTY_MESSAGES,
   extractSessionMeta,
   type SessionMeta,
-  type SessionMetaExtensions,
 } from './persistenceConstants';
 import type { SessionAgent, SessionMessage, SessionState } from './types';
 
@@ -86,49 +85,8 @@ export function shallowRecordEqual<T extends object>(
   return true;
 }
 
-const SCALAR_META_KEYS: ReadonlyArray<keyof SessionMeta> = [
-  'id',
-  'title',
-  'titleSource',
-  'folder',
-  'isPinned',
-  'isArchived',
-  'branchParentId',
-  'timestamp',
-  'timestampSource',
-  'engineCursor',
-  'engineLastRunId',
-  'hydratedFromEngine',
-  'messagesHydrated',
-  'messageCount',
-  'hasOlderMessages',
-  'oldestLoadedSeq',
-  'hydrateTruncated',
-  'goalMode',
-  'unreadCount',
-  'createdAt',
-  'updatedAt',
-  'activeAgentId',
-];
-
-/** 零反射固定字段比对：判断 SessionMeta 与目标会话状态元数据是否一致（首行 Object.is 短路） */
-export function isSessionMetaEqual(
-  prev: SessionMeta | undefined,
-  sess: (SessionState & SessionMetaExtensions) | SessionMeta | undefined
-): boolean {
-  if (Object.is(prev, sess)) return Boolean(prev);
-  if (!prev || !sess) return false;
-  for (let i = 0; i < SCALAR_META_KEYS.length; i++) {
-    const k = SCALAR_META_KEYS[i]!;
-    if (prev[k] !== sess[k]) return false;
-  }
-  return (
-    shallowArrayEqual(prev.pinnedMessageIds, sess.pinnedMessageIds) &&
-    shallowArrayEqual(prev.truncatedToolChainIds, sess.truncatedToolChainIds) &&
-    shallowRecordEqual(prev.pinnedMessageColors, sess.pinnedMessageColors) &&
-    shallowRecordEqual(prev.importMeta, sess.importMeta)
-  );
-}
+import { isSessionMetaEqual } from './sessionMetaEqual';
+export { isSessionMetaEqual };
 
 function updateMessageBlocksForText(
   prev: SessionMessage,
@@ -352,11 +310,11 @@ export function syncSubtreeFromIndexedState<
 
   for (const sess of entities) {
     const { id } = sess;
+    const prevMeta = prev.metaById[id];
     const existed =
-      id in prev.metaById ||
+      prevMeta !== undefined ||
       id in prev.messagesBySessionId ||
       id in prev.sessionsById;
-    const prevMeta = prev.metaById[id];
     if (prevMeta && isSessionMetaEqual(prevMeta, sess)) {
       nextMetaById[id] = prevMeta;
     } else {
@@ -391,7 +349,10 @@ export function syncSubtreeFromIndexedState<
         ? sess.agents
         : EMPTY_AGENTS;
     const prevAgents = prev.agentsBySessionId[id];
-    if (prevAgents !== undefined && shallowArrayEqual(prevAgents, currAgents)) {
+    if (
+      prevAgents === currAgents ||
+      (prevAgents !== undefined && shallowArrayEqual(prevAgents, currAgents))
+    ) {
       nextAgentsById[id] = prevAgents;
     } else {
       nextAgentsById[id] = currAgents;

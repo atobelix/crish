@@ -22,7 +22,7 @@ export async function enableInstalledSkillCopy(opts: {
   setSkillDismissed(name, false);
   const content = opts.content ?? '';
   const description = (
-    opts.description || t('skill.defaultDescription', { name })
+    opts.description || t('extensions.skill.defaultDescription', { name })
   ).trim();
   await skillsApi.setSkillActivation(
     {

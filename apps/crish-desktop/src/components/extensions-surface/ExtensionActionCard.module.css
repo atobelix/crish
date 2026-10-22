@@ -19,7 +19,8 @@
 }
 
 .card:hover {
-  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--surface-main));
+  background:
+    linear-gradient(var(--tint-hover), var(--tint-hover)), var(--surface-main);
 }
 
 .header {
