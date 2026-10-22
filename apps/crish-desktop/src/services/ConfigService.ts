@@ -19,7 +19,12 @@ class ConfigService {
     // no-op for now
   }
 
-  define<T>(key: string, schema: z.ZodType<T>, defaultValue: T, storage: StorageBackend = 'localStorage'): void {
+  define<T>(
+    key: string,
+    schema: z.ZodType<T>,
+    defaultValue: T,
+    storage: StorageBackend = 'localStorage'
+  ): void {
     this.schemas.set(key, { schema, default: defaultValue, storage });
   }
 
@@ -49,7 +54,8 @@ class ConfigService {
   watch<T>(key: string, cb: (value: T) => void): () => void {
     if (!this.listeners.has(key)) this.listeners.set(key, new Set());
     this.listeners.get(key)!.add(cb as (value: unknown) => void);
-    return () => this.listeners.get(key)?.delete(cb as (value: unknown) => void);
+    return () =>
+      this.listeners.get(key)?.delete(cb as (value: unknown) => void);
   }
 
   reset(key?: string): void {
@@ -67,19 +73,54 @@ class ConfigService {
     try {
       const raw = window[storage].getItem(`${CONFIG_PREFIX}:${key}`);
       return raw ? JSON.parse(raw) : null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
 
-  private writeToStorage(key: string, value: unknown, storage: StorageBackend): void {
-    if (storage === 'memory') { this.memoryStore.set(key, value); return; }
+  private writeToStorage(
+    key: string,
+    value: unknown,
+    storage: StorageBackend
+  ): void {
+    if (storage === 'memory') {
+      this.memoryStore.set(key, value);
+      return;
+    }
     try {
       window[storage].setItem(`${CONFIG_PREFIX}:${key}`, JSON.stringify(value));
-    } catch { /* quota exceeded */ }
+    } catch {
+      /* quota exceeded */
+    }
   }
 
   private notify(key: string, value: unknown): void {
-    this.listeners.get(key)?.forEach(cb => { try { cb(value); } catch { /* */ } });
+    this.listeners.get(key)?.forEach((cb) => {
+      try {
+        cb(value);
+      } catch {
+        /* */
+      }
+    });
   }
 }
 
 export const configService = new ConfigService();
+
+// 内置配置键注册（随模块加载即生效，消费方无需关心初始化顺序）。
+// 根因：d00fbaaf1 删除了 registerConfigSchemas()，但 SettingsShortcutsTab /
+// ShortcutService / useSidebarResize 仍在 get/set 这两个键，未注册键一律抛
+// InvariantViolation → 快捷键改键永远「保存失败」、自定义键位与侧栏宽度从不恢复。
+configService.define(
+  'shortcuts.overrides',
+  z.record(z.string(), z.string()),
+  {},
+  'localStorage'
+);
+// 侧栏宽度合法区间由 useSidebarResize（SIDEBAR_WIDTH_MIN/MAX）校验，这里只约束形状。
+configService.define(
+  'workspace.layout',
+  z.object({ sidebarWidth: z.number().optional() }).passthrough(),
+  {},
+  'localStorage'
+);
