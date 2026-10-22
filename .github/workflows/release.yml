@@ -7,16 +7,17 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '发布版本号（v 前缀，须与 apps/agent-workbench/src-tauri/tauri.conf.json 的 version 一致，如 v0.1.0）'
+        description: '发布版本号（v 前缀，须与 tauri.conf.json / Cargo.toml / package.json 的产品版本一致，如 v0.1.1）'
         required: true
         type: string
 
 permissions:
   contents: write
 
-# 同一版本只允许一条发布流水线；不取消进行中的发布（半途取消会留下残缺 Release）
+# 同一版本只允许一个发布流水线在跑：重复推 tag / 重复手动触发时排队而不是并发
+# 写同一个 GitHub Release（并发会互相覆盖 latest.json 与 checksum 资产）。
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: release-${{ inputs.version || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -29,15 +30,28 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # ubuntu 锁 24.04（与 CI 其他 Linux job 一致，ROOT-CAUSES A3）：ubuntu-latest
+        # 自 2026-10-19 起迁往 Ubuntu 26，系统 webkit2gtk/glibc 漂移会让发布产物的
+        # 最低系统要求在无代码改动时悄然变化。
         platform: [ubuntu-24.04, windows-latest, macos-latest]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # SEC-06：发布版本号校验（job 早期）。tag 触发取 github.ref_name；
-      # 手动触发取必填 inputs.version。禁止回退到硬编码 v0.1.0；
-      # 与 tauri.conf.json 的 version 不一致时直接失败并打印两者。
+      # 版本校验脚本与后续构建共用同一 Node（.nvmrc），不依赖 runner 预装 Node 的版本。
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # SEC-06：发布版本号校验（job 早期，先于依赖安装与 Rust 构建）。tag 触发取
+      # github.ref_name；手动触发取必填 inputs.version。禁止回退到硬编码 v0.1.0。
+      # 一致性校验由 scripts/check-release-version.mjs 统一完成：tag 必须等于
+      # v<tauri.conf.json version>，且 tauri.conf.json / Cargo.toml workspace 版本 /
+      # Cargo.lock / 三个产品 package.json / package-lock.json 全部一致；任一处漂移
+      # 直接失败并逐条打印来源与取值。脚本自测先跑，证明门禁本身可信。
       - name: Validate release version (SEC-06)
         shell: bash
         env:
@@ -55,39 +69,51 @@ jobs:
             echo "::error::SEC-06 未取得发布版本号：tag 触发应取 github.ref_name，手动触发必须提供必填 inputs.version（禁止默认回退 v0.1.0）"
             exit 1
           fi
-          conf=$(node -p "require('./apps/agent-workbench/src-tauri/tauri.conf.json').version")
-          echo "tauri.conf.json version: $conf"
-          if [ "v$conf" != "$version" ]; then
-            echo "::error::SEC-06 发布版本号不一致：tag/inputs = $version vs tauri.conf.json = v$conf"
-            exit 1
-          fi
+          node --test scripts/check-release-version.test.mjs
+          node scripts/check-release-version.mjs "$version"
           echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
           echo "版本校验通过：$version"
 
+      # SEC-02/RUN-03：tauri.conf.json 开启了 bundle.createUpdaterArtifacts，
+      # 没有 Minisign 私钥时 tauri build 会在约 15 分钟编译 + 打包之后才报错。
+      # 这里在任何构建开始前显式检查并给出可操作的错误；不提供"无签名"降级路径
+      # （无签名的更新包会被已安装客户端的 updater 拒绝，发出去就是坏版本）。
+      # 私钥未加密时 PASSWORD 允许为空，因此只强制私钥本身。
+      - name: Require updater signing key (SEC-02)
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::SEC-02 缺少仓库 secret TAURI_SIGNING_PRIVATE_KEY：updater 产物（*.sig / latest.json）无法签名。请用与 tauri.conf.json plugins.updater.pubkey 配对的 Minisign 私钥（npx tauri signer generate 生成）在仓库 Settings → Secrets and variables → Actions 中配置；私钥加密时同时配置 TAURI_SIGNING_PRIVATE_KEY_PASSWORD。"
+            exit 1
+          fi
+          echo "updater 签名私钥已配置"
+
+      # Linux 系统依赖由共用 composite action 统一维护（ROOT-CAUSES A3，ci-infra 实现），
+      # 与 CI 各 Linux job 同源，避免 release 与 CI 的 apt 包清单各自漂移。
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         uses: ./.github/actions/linux-tauri-deps
 
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-
+      # rustflags 显式写出 -D warnings（该 action 的默认值即如此，此前是隐式生效）：
+      # 发布构建与 CI 门禁同口径，任何 rustc 警告都会让发布失败，而不是带警告出包。
+      # 工具链版本由 rust-toolchain.toml 锁定（ROOT-CAUSES A1）。
       - name: Setup Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           cache: true
+          rustflags: -D warnings
 
       - name: Install npm dependencies
         run: |
           npm install -g npm@11.6.2
           npm ci
 
+      # crish-desktop 本身由 tauri.conf.json build.beforeBuildCommand（npm run build）
+      # 在 tauri build 内构建；这里只预构建它依赖的 shared-types，避免前端被构建两遍。
       - name: Build frontend dependencies
-        run: |
-          npm run build:shared-types
-          npm run build:desktop
+        run: npm run build:shared-types
 
       - name: Build Tauri Desktop & Release
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
@@ -120,16 +146,19 @@ jobs:
         run: |
           # SEC-07：产物清单 = 固定 bundle 目录扫描 + tauri-action artifactPaths 输出；
           # 找不到任何产物时立即失败，禁止静默跳过。
+          # bundle.targets = "all" 在 Linux 产出 deb / rpm / AppImage，三者都要有 checksum。
+          # 目录扫描得到相对路径、artifactPaths 是绝对路径：统一 realpath 后再去重，
+          # 避免同一产物被计算并上传两次。
           collect() {
             for dir in target/release/bundle apps/agent-workbench/src-tauri/target/release/bundle apps/agent-workbench/target/release/bundle; do
               if [ -d "$dir" ]; then
-                find "$dir" -type f \( -name "*.deb" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.tar.gz" \)
+                find "$dir" -type f \( -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage" -o -name "*.dmg" -o -name "*.app.tar.gz" -o -name "*.tar.gz" \) -exec realpath {} \;
               fi
             done
             if [ -n "$TAURI_ARTIFACT_PATHS" ]; then
               printf '%s' "$TAURI_ARTIFACT_PATHS" | jq -r '.[]' | while IFS= read -r f; do
                 case "$f" in
-                  *.deb|*.AppImage|*.dmg|*.app.tar.gz|*.tar.gz) [ -f "$f" ] && echo "$f" ;;
+                  *.deb|*.rpm|*.AppImage|*.dmg|*.app.tar.gz|*.tar.gz) if [ -f "$f" ]; then realpath "$f"; fi ;;
                 esac
               done
             fi
