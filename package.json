@@ -3,6 +3,10 @@
   "version": "0.1.1",
   "private": true,
   "packageManager": "npm@11.6.2",
+  "engines": {
+    "node": "^24.3.0",
+    "npm": "^11.6.2"
+  },
   "license": "MIT",
   "description": "Crish — Tauri desktop AI agent workbench (Rust engine, React UI)",
   "workspaces": [
@@ -78,6 +82,7 @@
     "check:no-pseudo-dispatch": "node scripts/check-no-pseudo-dispatch.mjs",
     "check:blocked-executable-ssot": "node scripts/check-blocked-executable-ssot.mjs",
     "check:no-nonvision-dataurl": "node scripts/check-no-nonvision-dataurl.mjs",
+    "check:referenced-files-tracked": "node scripts/check-referenced-files-tracked.mjs",
     "check:conflict-markers": "node scripts/check-conflict-markers.mjs",
     "check:swallowed-errors-frontend": "node scripts/check-swallowed-errors-frontend.mjs --report",
     "check:css-encoding": "node scripts/check-css-encoding.mjs --whitelist-dirty-check",

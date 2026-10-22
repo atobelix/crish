@@ -1,0 +1,36 @@
+# Linux 下编译整个 Cargo workspace（含 Tauri 2 / wry / webkit2gtk / pipewire 依赖链）
+# 所需的系统包——唯一真源。凡在 Linux runner 上编译 workspace 的 job（cargo check /
+# test / clippy / bench / tauri build）都必须调用本 action，避免各 job 各写一份清单、
+# 漏装后 glib-sys / webkit2gtk-sys 的 build script 在 pkg-config 阶段失败
+# （2026-10 实测：rust-test / clippy / rust-unit-fast / rust-stress / bench 均因未装而挂）。
+# 清单变更只改这里；ci.yml / ci-mid.yml / ci-slow.yml / release.yml 共用。
+name: Linux Tauri 系统依赖
+description: 在 Ubuntu runner 上安装编译 Tauri 2 workspace 所需的系统开发包（webkit2gtk-4.1 等）
+runs:
+  using: composite
+  steps:
+    - name: 校验运行平台
+      if: runner.os != 'Linux'
+      shell: bash
+      run: |
+        echo "::error::linux-tauri-deps 只能在 Linux runner 上使用（当前 ${RUNNER_OS}）；调用方应加 if: runner.os == 'Linux'"
+        exit 1
+    - name: 安装 Tauri 2 / webkit2gtk-4.1 / pipewire 开发包
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          build-essential \
+          curl \
+          wget \
+          file \
+          pkg-config \
+          libwebkit2gtk-4.1-dev \
+          libxdo-dev \
+          libssl-dev \
+          libayatana-appindicator3-dev \
+          librsvg2-dev \
+          libpipewire-0.3-dev \
+          libspa-0.2-dev

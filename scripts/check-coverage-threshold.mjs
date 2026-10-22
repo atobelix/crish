@@ -6,8 +6,10 @@
  * and checks statement coverage for key packages against per-package
  * thresholds. Exits 1 if any package is below its threshold.
  *
- * If the coverage file is missing, prints a warning and exits 0 — this
- * script must not fail CI when coverage was not generated.
+ * If the coverage file is missing, or a gated package has no coverage data,
+ * the gate FAILS (exit 1): a missing report means the coverage run did not
+ * happen or the json-summary reporter / include globs regressed, and silently
+ * passing would turn the gate into a no-op.
  *
  * Run: node scripts/check-coverage-threshold.mjs
  */
@@ -22,12 +24,12 @@ import { fileURLToPath } from 'node:url';
 const __debt08GuideFlag = process.argv.includes('--guide');
 if (__debt08GuideFlag) {
   const __debt08Guide = [
-    "违反项：per-package 语句覆盖率低于阈值，或 coverage-summary.json 解析失败。",
-    "文件:行号 / 当前值：输出 [FAIL] <包片段>: <实测>%（threshold <阈值>%）；当前值 = 聚合语句覆盖率。",
-    "阈值：packages/shared-types ≥ 80%；packages/shared-utils ≥ 70%；apps/crish-desktop ≥ 45%（脚本 THRESHOLDS 常量）。",
-    "数据源：coverage/coverage-summary.json，由 npm run test:coverage（vitest run --coverage + json-summary reporter）产出。",
-    "正确做法：为低于阈值的包补真实测试抬覆盖率；禁止下调阈值还债；coverage 文件缺失时 WARN 跳过（不阻断未生成场景）。",
-    "复核：npm run test:coverage && node scripts/check-coverage-threshold.mjs  # 期望 PASS",
+    '违反项：per-package 语句覆盖率低于阈值，或 coverage-summary.json 解析失败。',
+    '文件:行号 / 当前值：输出 [FAIL] <包片段>: <实测>%（threshold <阈值>%）；当前值 = 聚合语句覆盖率。',
+    '阈值：packages/shared-types ≥ 80%；packages/shared-utils ≥ 70%；apps/crish-desktop ≥ 45%（脚本 THRESHOLDS 常量）。',
+    '数据源：coverage/coverage-summary.json，由 npm run test:coverage（vitest run --coverage + json-summary reporter）产出。',
+    '正确做法：为低于阈值的包补真实测试抬覆盖率；禁止下调阈值还债；coverage 文件缺失或某包无数据一律 FAIL（先跑 npm run test:coverage，并确认 json-summary reporter 与 coverage.include 覆盖该包）。',
+    '复核：npm run test:coverage && node scripts/check-coverage-threshold.mjs  # 期望 PASS',
   ];
   console.log('[check-coverage-threshold] 正确做法 · 五元规约\n');
   for (const l of __debt08Guide) console.log('  ' + l);
@@ -48,10 +50,10 @@ const THRESHOLDS = {
 };
 
 if (!existsSync(COVERAGE_SUMMARY)) {
-  console.warn(
-    'check-coverage-threshold: WARN — coverage/coverage-summary.json not found; skipping (run `npm run test:coverage` to generate)'
+  console.error(
+    'check-coverage-threshold: FAIL — coverage/coverage-summary.json not found (run `npm run test:coverage` first; the json-summary reporter must stay enabled in vitest.config.ts)'
   );
-  process.exit(0);
+  process.exit(1);
 }
 
 let summary;
@@ -91,9 +93,10 @@ console.log('check-coverage-threshold: per-package statement coverage');
 for (const [fragment, threshold] of Object.entries(THRESHOLDS)) {
   const stats = perPackageStats[fragment];
   if (!stats || stats.total === 0) {
-    console.warn(
-      `  [WARN] ${fragment}: no coverage data found, skipping`
+    console.error(
+      `  [FAIL] ${fragment}: no coverage data found (package missing from coverage.include or not exercised by this run)`
     );
+    failed = true;
     continue;
   }
   const pct = (stats.covered / stats.total) * 100;

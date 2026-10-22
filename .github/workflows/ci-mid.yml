@@ -3,7 +3,7 @@
 # 门禁内容（PE-11 T11.7，中层）：
 # - cargo test --workspace 全量（L1 单测 + L2 集成 + L3 契约 + L4 e2e faux；
 #   --ignored 压力场景除外，归慢层）
-# - cargo clippy --workspace -- -D warnings
+# - cargo clippy --workspace --all-targets --locked -- -D warnings（终态，无基线豁免）
 # - 前端 vitest 全量（vitest.config.ts：unit + integration + native-smoke 项目；
 #   e2e 项目已于 PS-02 T2.1 删除，Playwright spec 归 Playwright 轨道）
 # - F3 专项：integration / fuzz / race / recovery（vitest.integration.config.ts）
@@ -27,50 +27,49 @@ on:
       - '*.md'
       - 'assets/**'
 
+# 同一分支/PR 的新提交取消旧运行；main 上每个提交都要有完整结论（便于定位哪次提交引入红），不取消。
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
 
 jobs:
   rust-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+      - uses: ./.github/actions/linux-tauri-deps
       # 全量测试：L1 单测 + L2 集成 + L3 契约（含流式契约锚点）+ L4 e2e faux
       # --locked（T10.1）：Cargo.lock 已入库，锁漂移在漂移状态下结果不可复现
       - run: cargo test --workspace --locked
 
   clippy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           components: clippy
-      # 口径统一（G7）：--all-targets warn 级 + 基线 ratchet 脚本（G1）。
-      # -D warnings 为存量清零后终态（G12 切换）
-      # 头部注释旧口径已由 G7 更新。
-      - run: cargo clippy --workspace --all-targets --locked
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 20
-      # 新增告警 > 0 即失败（基线真源：基线记录/clippy-workspace-T13.md 标记区）
-      - run: node scripts/check-clippy-baseline.mjs
+      - uses: ./.github/actions/linux-tauri-deps
+      # 终态口径（G12）：--all-targets + -D warnings，任何 clippy 告警即失败。
+      # 原「warn 级 + check-clippy-baseline.mjs 基线 ratchet」已退役：setup-rust-toolchain
+      # 默认注入 RUSTFLAGS=-D warnings，第一条告警即编译失败，ratchet 脚本永远跑不到，
+      # 基线形同虚设；存量告警由代码修复清零，不再登记基线。
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
       - run: npm install -g npm@11.6.2 && npm ci
       # 前端 vitest 全量（vitest.config.ts 项目：unit + integration + native-smoke）
@@ -85,13 +84,13 @@ jobs:
       - run: npm run test -- --reporter=verbose
 
   test-integration:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
       - run: npm install -g npm@11.6.2 && npm ci
       # F3 层：integration / fuzz / race / recovery 四目录
@@ -99,11 +98,16 @@ jobs:
       - run: npx vitest run --config vitest.integration.config.ts --reporter=verbose
 
   machete:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+      # cargo-machete 不随 Rust 工具链提供，必须显式安装（此前未安装 → no such command: machete）；
+      # 锁定版本保证本地与 CI 判定一致。本地复现：cargo install cargo-machete --version 0.9.2 --locked
+      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
+        with:
+          tool: cargo-machete@0.9.2
       # machete 例外论证（PS-02 T2.5）：不编译、不解析依赖树，锁漂移不影响
       # 其结果；实跑 `cargo machete --locked` → Unrecognized argument EXIT=1
       # （透传不可用），故不加 --locked
@@ -120,13 +124,13 @@ jobs:
   # 不入冒烟子集；cursor-debug / editor-fuzz-thrash 亦为既存失败（非保护名单）。
   # vitest 面已不收集 tests/e2e（T2.1），Playwright 唯一拥有者，无重复冲突。
   e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
       - run: npm install -g npm@11.6.2 && npm ci
       - run: npx playwright install --with-deps chromium
@@ -138,13 +142,13 @@ jobs:
   # AgentToolRowRenderer.tsx 删除（全仓零引用，含字符串/动态引用 + git log 核实）；
   # rimraf/tasklist 登记 ignoreBinaries（真实消费，见 knip.config.ts 注释）。
   knip:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
       - run: npm install -g npm@11.6.2 && npm ci
       - run: npm run knip
@@ -153,13 +157,13 @@ jobs:
   # 基线真源：docs/multi-agent-repair/基线记录/{unwrap,swallowed-errors,crate-size}-baseline.md
   # 语义：新增计数/超限文件未登记 → exit 1；提升基线必须显式 --update。
   governance-baselines:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
       - run: node scripts/check-unwrap-baseline.mjs
       - run: node scripts/check-swallowed-errors.mjs
       - run: node scripts/check-crate-size.mjs
@@ -175,13 +179,13 @@ jobs:
   # （DEBT-09 收口 2026-10-20：原 6 条中的 color-ssot / line-width-ssot /
   # frontend-convergence 已实测 PASS，移出豁免并接入本 job。）
   desktop-guards:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version-file: .nvmrc
       - run: npm install -g npm@11.6.2 && npm ci
       # 静态/契约类守卫（按域分组，便于定位失败）
       - run: node scripts/check-async-commands.mjs

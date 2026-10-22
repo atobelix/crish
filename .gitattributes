@@ -1,2 +1,48 @@
-# Markdown files use two trailing spaces for hard line breaks in CommonMark
-*.md -whitespace
+# 换行规范（与 .editorconfig end_of_line = lf 一致）
+# 仓库内文本文件一律以 LF 入库与检出，不依赖各开发者的 core.autocrlf 设置：
+# Windows 上 autocrlf=true 的克隆会把文件检出为 CRLF，导致 prettier（endOfLine: lf 默认）、
+# cargo fmt、git diff --check、行数/编码类门禁在本地与 Linux CI 结论不一致。
+* text=auto eol=lf
+
+# cmd.exe 批处理必须 CRLF（LF 下 goto/label 解析会错位）；.ps1 PowerShell 对 LF 无问题，按默认 LF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Markdown 用行尾两个空格表达 CommonMark 硬换行，git diff --check 不得报尾随空白
+*.md text eol=lf -whitespace
+
+# 锁文件：标记为生成物（GitHub PR 默认折叠 diff）；仍保留文本 diff 便于审查依赖变化
+Cargo.lock text eol=lf linguist-generated
+package-lock.json text eol=lf linguist-generated
+
+# 二进制资产：禁止换行转换与文本 diff
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.bmp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tgz binary
+*.7z binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.wasm binary
+*.node binary
+*.db binary
+*.sqlite binary
+*.mp3 binary
+*.mp4 binary
+*.wav binary
+*.webm binary

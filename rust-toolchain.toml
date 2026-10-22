@@ -1,3 +1,9 @@
+# 工具链唯一真源：本地 rustup、CI（actions-rust-lang/setup-rust-toolchain 未显式传
+# toolchain 时读取本文件）与所有 workflow 共用同一版本。
+# 不得写 "stable"：stable 随上游发布自动漂移，会让 CI 与本地的 rustc / clippy /
+# rustfmt 诊断结果不一致（2026-10 实测：本地 1.94.0 vs CI 1.99.1，新 lint 只在 CI 出现）。
+# 升级流程：改此处版本号 → 本地全量 cargo check / clippy / fmt / test 清零 → 单独提交。
 [toolchain]
-channel = "stable"
+channel = "1.99.1"
 components = ["rustfmt", "clippy"]
+profile = "minimal"

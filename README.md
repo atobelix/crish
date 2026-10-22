@@ -42,7 +42,7 @@ Crish 是本地优先的 AI Agent 桌面工作台，基于 Tauri 2、React 19 �
 
 ## 从源码构建
 
-开发与构建需要 Node.js 20+、npm、Rust stable（edition 2021）以及对应平台的 Tauri 2 系统依赖。
+需要 Node.js 24（与 `.nvmrc` 一致，`package.json` engines 为 `^24.3.0`）、npm 11.6.2+、Rust 1.99.1（edition 2021；版本由根目录 `rust-toolchain.toml` 固定，rustup 会自动安装），以及 Tauri 2 的系统依赖。
 
 ### 平台依赖
 

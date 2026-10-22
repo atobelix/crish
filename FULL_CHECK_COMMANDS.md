@@ -41,8 +41,7 @@
 | 命令                                                   | CI job                | 内容                               |
 | :----------------------------------------------------- | :-------------------- | :--------------------------------- |
 | `cargo test --workspace --locked`                      | `rust-test`           | Rust 全量测试（L1 单测 + L2 集成 + L3 契约 + L4 e2e faux）；**本地执行前置见「Rust 全量」节** |
-| `cargo clippy --workspace --all-targets --locked`      | `clippy`              | Clippy 全量（warn 级 + 基线 ratchet） |
-| `node scripts/check-clippy-baseline.mjs`               | `clippy`              | clippy 新增告警 > 0 即失败         |
+| `cargo clippy --workspace --all-targets --locked -- -D warnings` | `clippy`    | Clippy 全量（-D warnings 终态：任何告警即失败，无基线豁免） |
 | `npm run test`                                         | `test`                | vitest 全量（desktop + workbench） |
 | `npx vitest run --config vitest.integration.config.ts` | `test-integration`    | 集成项目（F3 四目录：integration / fuzz / race / recovery） |
 | `cargo machete`                                        | `machete`             | 未用依赖扫描                       |
@@ -71,7 +70,7 @@
 
 ## 移动端与孤岛应用（T-DOC-07）
 
-### 移动端（`apps/crish-mobile`，CI job `mobile-check`，Node 22）
+### 移动端（`apps/crish-mobile`，CI job `mobile-check`，Node 24，与 `.nvmrc` 一致）
 
 | 命令                                       | 内容                                        |
 | :----------------------------------------- | :------------------------------------------ |
