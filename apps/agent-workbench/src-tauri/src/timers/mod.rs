@@ -39,8 +39,8 @@ pub(crate) mod types;
 #[cfg(test)]
 mod tests;
 
-pub use registry::TimerRegistry;
-pub use store::{LocalDbTimerStore, MemoryTimerStore, TimerStore};
-pub use types::{
+pub(crate) use registry::TimerRegistry;
+pub(crate) use store::{LocalDbTimerStore, MemoryTimerStore, TimerStore};
+pub(crate) use types::{
     AgentEventSink, EventSink, QueuePendingSink, TimerCancelReason, TimerEvent, steering_group_id,
 };
