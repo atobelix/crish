@@ -13,7 +13,7 @@
 //! 本模块不依赖 request/parse 层；行为矩阵（T-19）、TTL 表（T-21）等上层只通过
 //! [ModelCatalog] 查询接口消费，禁止散落硬编码判定。
 //!
-//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 catalog_tests.rs）：
+//! SR-06e · 拆分 · ≠ EL：门面文件。实现域拆分如下（测试旁挂 catalog_tests/）：
 //! - [catalog_price]：长度分档/峰谷定价类型与纯函数（TieredPriceTier /
 //!   PriceDerivation / PeakPricingSchedule + tier_for_tokens / peak_pricing_2x_at）
 //! - [catalog_override]：扫描合并与覆盖变更面（ScannedCapabilities / ScannedModel /
@@ -799,5 +799,5 @@ fn project_model_entry(
 }
 
 #[cfg(test)]
-#[path = "catalog_tests.rs"]
+#[path = "catalog_tests/mod.rs"]
 mod tests;
