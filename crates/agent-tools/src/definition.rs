@@ -70,14 +70,22 @@ impl ToolDefinition {
 /// 包一层 CrishError 以承载 tool.* 域错误码（tool.not_found /
 /// tool.invalid_input / tool.execution_failed），序列化透明透传
 /// CrishError 的 camelCase 结构，可经 `to_error_payload` 出站。
+///
+/// 内部以 `Box<CrishError>` 持有：CrishError 内联约 152 字节，而 ToolError 是
+/// 全部工具 `Result<_, ToolError>` 的错误类型，内联会让每个返回值都背上这块
+/// 体积（clippy::result_large_err）。装箱后 ToolError 只占一个指针；字段私有，
+/// 对外构造/访问/Display/Debug/serde 形状均不变（Box 的 Debug 与 serde 透传内层）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct ToolError(CrishError);
+pub struct ToolError(Box<CrishError>);
+
+// 体积守卫：ToolError 必须保持指针大小，防止日后改回内联把大 Err 带回所有工具返回值。
+const _: () = assert!(std::mem::size_of::<ToolError>() == std::mem::size_of::<usize>());
 
 impl ToolError {
     /// 用错误码构造（category/retryable 由码表决定）
     pub fn new(code: &str, message: impl Into<String>) -> Self {
-        Self(CrishError::new(code, message))
+        Self::from(CrishError::new(code, message))
     }
 
     /// 工具未找到（tool.not_found）
@@ -114,13 +122,13 @@ impl ToolError {
 
 impl From<CrishError> for ToolError {
     fn from(e: CrishError) -> Self {
-        Self(e)
+        Self(Box::new(e))
     }
 }
 
 impl From<ToolError> for CrishError {
     fn from(e: ToolError) -> Self {
-        e.0
+        *e.0
     }
 }
 
@@ -241,6 +249,48 @@ mod tests {
         assert_eq!(inner.code, "tool.not_found");
         let back: ToolError = inner.into();
         assert_eq!(back, err);
+    }
+
+    /// 装箱不改变对外形状：serde 仍透明透传 CrishError 的 camelCase 结构
+    /// （含 params/metadata/cause），Debug 仍是 `ToolError(CrishError { .. })`。
+    #[test]
+    fn tool_error_boxing_keeps_serde_and_debug_shape() {
+        let crish = CrishError::new(codes::TOOL_EXECUTION_FAILED, "执行失败")
+            .with_param("tool", "shell")
+            .with_metadata(json!({ "exitCode": 2 }))
+            .with_cause(CrishError::new(codes::TOOL_INVALID_INPUT, "参数缺失"));
+        let err = ToolError::from(crish.clone());
+
+        let v = serde_json::to_value(&err).unwrap();
+        assert_eq!(v, serde_json::to_value(&crish).unwrap());
+        assert_eq!(v["code"], "tool.execution_failed");
+        assert_eq!(v["params"]["tool"], "shell");
+        assert_eq!(v["metadata"]["exitCode"], 2);
+        assert_eq!(v["cause"]["code"], "tool.invalid_input");
+        assert_eq!(
+            serde_json::to_string(&err).unwrap(),
+            serde_json::to_string(&crish).unwrap()
+        );
+
+        let back: ToolError = serde_json::from_value(v).unwrap();
+        assert_eq!(back, err);
+        assert_eq!(CrishError::from(back), crish);
+
+        assert_eq!(format!("{err:?}"), format!("ToolError({crish:?})"));
+        assert_eq!(
+            format!("{err:#?}"),
+            format!("{:#?}", ToolErrorShape(&crish))
+        );
+        assert_eq!(err.to_string(), "[tool.execution_failed] 执行失败");
+    }
+
+    /// 旧定义 `struct ToolError(CrishError)` 的 derive(Debug) 等价物，用于逐字比对 pretty Debug
+    struct ToolErrorShape<'a>(&'a CrishError);
+
+    impl std::fmt::Debug for ToolErrorShape<'_> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_tuple("ToolError").field(self.0).finish()
+        }
     }
 
     #[tokio::test]
