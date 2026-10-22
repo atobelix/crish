@@ -1,5 +1,5 @@
 import type { CardState, CardGroupState } from '../types';
-import { viewRegistry } from '../../services/view-registry';
+import { viewRegistry } from '../../services/view-registry/ViewRegistry';
 
 export function getPanelTitle(cardId: string): string {
   return viewRegistry.getTitle(cardId);
@@ -16,7 +16,9 @@ export function getPanelTitle(cardId: string): string {
  * 本函数是别名归一化的**单一真源**；storeAccess.resolvePanelCardId 委托于此，
  * 禁止另建别名表（历史上两份已漂移：storeAccess 侧漏了 runtime 守卫）。
  */
-export function resolveWorkspacePanelKey(key: string | null | undefined): string | null {
+export function resolveWorkspacePanelKey(
+  key: string | null | undefined
+): string | null {
   if (key == null) return null;
   const id = String(key).trim();
   if (!id) return null;
@@ -30,10 +32,15 @@ export function makePanelCard(cardId: string): CardState {
   return { id: cardId, title: getPanelTitle(cardId) };
 }
 
-export function makePanelGroup(cardId: string, wsId: string, opts?: { groupId?: string; heightRatio?: number }): CardGroupState {
+export function makePanelGroup(
+  cardId: string,
+  wsId: string,
+  opts?: { groupId?: string; heightRatio?: number }
+): CardGroupState {
   return {
     id: opts?.groupId ?? `group-${cardId}-${wsId}`,
-    activeCardId: cardId, cards: [makePanelCard(cardId)],
+    activeCardId: cardId,
+    cards: [makePanelCard(cardId)],
     heightRatio: opts?.heightRatio ?? 1,
   };
 }

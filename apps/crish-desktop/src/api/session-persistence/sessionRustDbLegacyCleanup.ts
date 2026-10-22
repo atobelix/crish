@@ -24,7 +24,7 @@ import {
 } from './sessionPersistenceTypes';
 import { invokeResult } from '../tauriInvoke';
 import { parseSessionIndexList, safeParseJson } from './sessionHydration';
-import { toast } from '../../services/toast';
+import { toast } from '../../services/toast/toast';
 
 /**
  * RUN-07：孤儿清理产出回收结果事件（Rust session-outputs-cleanup 载荷，

@@ -111,7 +111,7 @@
 | e2e L2 | `npx playwright test tests/e2e` | 慢（分钟级） | CI PR 层 + 每切换轮 |
 | visual | `npm --workspace @crish/crish-desktop run test:visual` | 慢 | PE-05 每迁移单元 + CI 慢层 |
 | stress TS | `npm run stress` | 慢（~60s+） | 前端压力轮 |
-| stress Rust | `cargo test --workspace --release -- --ignored`（T11.6 新增，`#[ignore]` 场景） | 很慢 | nightly / 发布前 |
+| stress Rust | `cargo test --workspace --release --locked --test 'stress_*' -- --ignored`（T11.6 新增，`#[ignore]` 场景，清单见 `PE-11-ignored-tests-inventory.md`） | 很慢 | nightly / 发布前 |
 | 基准 | `cargo bench`（T09.7 落地后） | 很慢 | PE-09 轮 + 发布前 |
 | live 冒烟 | 手工（00 §1.3 切换轮；tauri-mcp 或 UI 全旅程） | — | 切换轮必做 |
 
@@ -242,7 +242,7 @@
   3. **事件桥吞吐**：`apps/agent-workbench/src-tauri/tests/stress_event_bridge.rs`——高密度 delta（1000 条/秒级 mock 流）下断言 buffer 丢帧策略（Delta→Soft 优先丢、Critical 永不丢，buffer.rs:41-58 语义）不丢 terminal。
   4. **DB 写并发**：`crates/conex-db/tests/stress_write.rs`——多线程 append + upsert 混合（WAL 模式），断言无锁冲突崩溃、行数准确（配合 PE-09 T09.4 写放大基准）。
 - **运行与注册**：
-  - 命令：`cargo test --workspace --release -- --ignored`（压力场景均 `#[ignore]` 标记）；单场景 `cargo test -p orchestrator --release --test stress_long_session -- --ignored --nocapture`；
+  - 命令：`cargo test --workspace --release --locked --test 'stress_*' -- --ignored` + `cargo test -p crish-agent-workbench --release --locked --lib -- --ignored stress_`（压力场景均 `#[ignore]` 标记，清单与选择规则见 `PE-11-ignored-tests-inventory.md`）；单场景 `cargo test -p session-loop --release --test stress_long_session -- --ignored --nocapture`；
   - `tests/stress/README.md` 更新为「TS 压力（前端 UI） + Rust 压力（引擎）」双轨注册表：场景名/文件/命令/时长/通过阈值；
   - `npm run stress` 保持 TS 轨；新增脚本 `npm run stress:rust` 串接 release ignored（时长预算 ≤10 分钟）。
 - **阈值（首个版本，允许后续按数据修正）**：长会话 500 消息 run 驱动 ≤60s（release）；并发 16 run 无序列冲突；桥压力 terminal 零丢失；DB 混合写 10k 行无崩溃。

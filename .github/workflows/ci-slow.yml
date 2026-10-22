@@ -1,10 +1,10 @@
 # CI · 慢层（T11.7.4：nightly + 发布前，预算 ≤40 min）
 #
 # 门禁内容（PE-11 T11.7 / §1.3，慢层）：
-# - Rust 压力测试：cargo test --workspace --release -- --ignored（T11.6 场景）
+# - Rust 压力测试：cargo test --workspace --release --test 'stress_*' -- --ignored（T11.6 场景）
 # - TS 压力轨：npm run stress（stress-runner，~60s+）
 # - e2e（Playwright，L2 mock 引擎，根 config tests/e2e）
-# - 基准：cargo bench（PE-09 T09.7 落地 crates/*/benches 后自动生效）
+# - 基准：cargo bench（PE-09 T09.7 crates/*/benches，基准目标缺失即失败）
 #
 # 触发：每日定时 + 手动 dispatch + 版本 tag（发布前必跑）。
 # 快层/中层见 ci.yml / ci-mid.yml。
@@ -35,8 +35,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
       - uses: ./.github/actions/linux-tauri-deps
-      # 压力场景全部 #[ignore]（T11.6）：release 下运行，不进常规 CI
-      - run: cargo test --workspace --release --locked -- --ignored
+      # 压力场景（T11.6）以 #[ignore] 标注、统一放在 tests/stress_*.rs
+      # （conex-db/stress_write、session-loop/stress_long_session 等）：release 下运行，不进常规 CI。
+      # --test 'stress_*' 只选压力测试目标：工作区里 #[ignore] 还标注了大量
+      # 「真实环境探针，非 CI 门禁」（conex-browser e2e_browser/cdp 需本机 Chrome、
+      # conex-browser-tools mcp_attach 需 npx+网络、conex-computer(-tools) 需真实
+      # 桌面/记事本、conex-doc-collab perf_open_nk_blocks 明确 CI 不跑），
+      # 原 `--workspace -- --ignored` 会把它们一并拉起，在 ubuntu runner 上必然失败，
+      # 且与本 job「压力层」语义不符。压力目标被误删/改名时 cargo 报
+      # no test target matches pattern 直接判红，不会静默空跑。
+      # 完整 32 个 #[ignore] 清单与分类详见 docs/rust-rewrite/plans/PE-11-ignored-tests-inventory.md
+      - run: cargo test --workspace --release --locked --test 'stress_*' -- --ignored
+      # 事件桥吞吐压力（PE-11 T11.6.3，buffer.rs 丢帧语义不丢终态）实现为
+      # crish-agent-workbench lib 内的 buffer::stress_tests，不是 tests/stress_*.rs
+      # 目标，上一条 --test 'stress_*' 选不到，单独以 lib + 名称过滤运行。
+      - run: cargo test -p crish-agent-workbench --release --locked --lib -- --ignored stress_
 
   stress-ts:
     runs-on: ubuntu-24.04
@@ -71,7 +84,7 @@ jobs:
   # 二进制环境永远 describe.skipIf 静默跳过——「二进制可拉起」发布门禁形同虚设。
   # 本 job：windows-latest 构建 debug 二进制 → npm run test:e2e:native 完整执行
   # （WebView2 启动 / 引擎初始化标记 / 干净退出 / 无残存进程）→ 日志留档。
-  # 二进制仍缺失时测试内前置探针显式报 SKIP 数（不得静默，见 spec 内探针块）。
+  # 二进制缺失时 spec 前置探针在 CRISH_NATIVE_SMOKE_REQUIRE_BINARY=1 下直接判红。
   native-smoke-windows:
     runs-on: windows-latest
     timeout-minutes: 60
@@ -89,6 +102,9 @@ jobs:
       # Tee 留档运行日志（acceptance：job 真实执行并留日志）；exit 透传 vitest 退出码
       - name: Run native smoke（日志留档）
         shell: pwsh
+        # 发布门禁：二进制缺失必须判红（spec 前置探针断言），不得退化为 SKIP=2 静默绿
+        env:
+          CRISH_NATIVE_SMOKE_REQUIRE_BINARY: '1'
         run: |
           npm run test:e2e:native 2>&1 | Tee-Object -FilePath native-smoke-output.log
           exit $LASTEXITCODE
@@ -106,12 +122,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
       - uses: ./.github/actions/linux-tauri-deps
-      # 基准场景（Criterion，PE-09 T09.7 新建 crates/*/benches）：
-      # 落地前跳过并提示，落地后自动生效
-      - name: 基准（存在基准场景时运行）
-        run: |
-          if ls crates/*/benches >/dev/null 2>&1; then
-            cargo bench --workspace --locked
-          else
-            echo "暂无基准场景（crates/*/benches 不存在，PE-09 T09.7 落地后生效）"
-          fi
+      # 基准场景（Criterion，PE-09 T09.7 已落地：agent-provider/sse_parse、
+      # conex-db/db_write、orchestrator/event_chain、session-loop/request_build
+      # + tool_batch）。
+      # - 原「ls crates/*/benches 不存在就 echo 跳过」分支已过时且会静默放行：
+      #   基准目录被误删/改名时 job 仍绿。现无条件执行，--bench '*' 匹配不到
+      #   任何 [[bench]] 目标时 cargo 直接报错，基准丢失即红。
+      # - --bench '*' 只构建并运行 [[bench]] 目标（及其依赖）：--workspace 单独用
+      #   会把全部 lib/bin（含 Tauri 壳）按 bench profile 编一遍再跑空的 libtest
+      #   --bench，耗时翻倍却不产出任何基准数据。
+      - name: 基准（Criterion，crates/*/benches）
+        run: cargo bench --workspace --locked --bench '*'

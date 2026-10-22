@@ -65,12 +65,15 @@ import {
   type ControlMetricKey,
 } from '../api/controlMetrics';
 import { useWorkspaceShellStore } from '../store/workspace-shell/workspaceShellStore';
-import { useLayoutTreeStore, setPrimaryPanelChecker } from '../store/layout-tree';
+import {
+  useLayoutTreeStore,
+  setPrimaryPanelChecker,
+} from '../store/layout-tree';
 import type { SessionState } from '../store/types';
 import type { Settings } from '../api/clientApi';
 import { usePermissionStore } from '../store/permissionStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { viewRegistry } from '../services/view-registry';
+import { viewRegistry } from '../services/view-registry/ViewRegistry';
 
 export type PtyFacade = {
   getHandlers: () => { spawn: PtySpawnFn | null; kill: PtyKillFn | null };
@@ -137,7 +140,9 @@ export type ShellFacade = {
   ) => void;
   updateTabDock: (
     tabId: string,
-    patch: import('../store/workspace-shell/types').RightToolDockState | Partial<import('../store/workspace-shell/types').RightToolDockState>
+    patch:
+      | import('../store/workspace-shell/types').RightToolDockState
+      | Partial<import('../store/workspace-shell/types').RightToolDockState>
   ) => void;
 };
 

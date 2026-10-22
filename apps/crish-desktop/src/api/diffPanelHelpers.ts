@@ -3,7 +3,7 @@
  */
 import type { FileDiff, SessionMessage } from '../store/layoutStore';
 import { resolveToolDiffs } from './toolFeedback';
-import { filterPublishableDiffs } from './publishToolDiffs';
+import { filterPublishableDiffs } from './publishableDiffs';
 
 export type DiffSourceMode = 'session' | 'git' | 'list';
 
@@ -15,7 +15,7 @@ export function isDiffSourceMode(v: string): v is DiffSourceMode {
 export function assistantTurnLabel(
   msg: Pick<SessionMessage, 'timestamp'>,
   index: number,
-  fileCount: number,
+  fileCount: number
 ): string {
   const n = Math.max(0, fileCount);
   const t = new Date(msg.timestamp || Date.now());
@@ -63,7 +63,9 @@ export function collectMessageDiffs(message: SessionMessage): FileDiff[] {
 }
 
 /** 多回合 AI 改动按路径合并（后写优先内容，计数相加） */
-export function mergeSessionDiffFiles(turns: ReadonlyArray<{ files: FileDiff[] }>): FileDiff[] {
+export function mergeSessionDiffFiles(
+  turns: ReadonlyArray<{ files: FileDiff[] }>
+): FileDiff[] {
   const map = new Map<string, FileDiff>();
   for (const t of turns) {
     for (const f of t.files) {
@@ -72,4 +74,3 @@ export function mergeSessionDiffFiles(turns: ReadonlyArray<{ files: FileDiff[] }
   }
   return [...map.values()];
 }
-

@@ -6,7 +6,21 @@
  */
 
 /** 解析器占位路径：不可自动落盘 */
-const UNSAFE_PLACEHOLDER_PATHS = new Set(['变更', '文件', 'unknown', 'untitled']);
+const UNSAFE_PLACEHOLDER_PATHS = new Set([
+  '变更',
+  '文件',
+  'unknown',
+  'untitled',
+]);
+
+/**
+ * 是否为解析器占位路径（对已做 \\→/ 规范化的整串精确匹配）。
+ * 占位名集合只在本文件维护一份：发布侧（publishableDiffs）复用此判定，
+ * 避免多处副本漂移。占位名是解析器产出的内部标识，不是 UI 文案。
+ */
+export function isParserPlaceholderPath(path: string): boolean {
+  return UNSAFE_PLACEHOLDER_PATHS.has(path);
+}
 
 /** Windows 保留设备名（basename，忽略扩展名，大小写不敏感） */
 const WINDOWS_RESERVED_BASENAME =
@@ -20,7 +34,9 @@ const PATH_CONTROL_OR_BAD = /[\x00-\x1f\x7f<>"|?*]/;
  * 规范化 apply 路径：trim、引号剥离、`\`→`/`、折叠重复斜杠、去尾斜杠、去前导 `./`。
  * 不做 symlink / 大小写折叠；保留盘符形式 `C:/...`。
  */
-export function normalizeApplyPath(filePath: string | null | undefined): string {
+export function normalizeApplyPath(
+  filePath: string | null | undefined
+): string {
   let p = (filePath ?? '').trim();
   if (!p) return '';
   // 外壳偶发带引号
@@ -69,7 +85,7 @@ function isReservedWindowsSegment(seg: string): boolean {
  * 成功时返回 **规范化** 路径。
  */
 export function isSafeApplyPath(
-  filePath: string | null | undefined,
+  filePath: string | null | undefined
 ): { ok: true; path: string } | { ok: false; reason: string } {
   const path = normalizeApplyPath(filePath);
   if (!path) return { ok: false, reason: '缺少文件路径' };
