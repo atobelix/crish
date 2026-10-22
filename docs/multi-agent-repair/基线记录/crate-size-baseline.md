@@ -384,10 +384,8 @@ crates/conex-browser/src/snapshot/collect.rs 2721
 crates/conex-browser/src/snapshot/interactive.rs 888
 crates/conex-browser/src/snapshot/mod.rs 977
 crates/conex-browser/src/snapshot/serialize.rs 1823
-crates/conex-browser-tools/src/gate.rs 672
 crates/conex-browser-tools/src/session.rs 963
 crates/conex-browser-tools/src/tools/interact.rs 684
-crates/conex-browser-tools/src/tools/navigate.rs 1199
 crates/conex-computer/src/action.rs 1434
 crates/conex-computer/src/perception.rs 759
 crates/conex-computer/src/security.rs 705
