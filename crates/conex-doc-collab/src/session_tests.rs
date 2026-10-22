@@ -4,7 +4,8 @@
 //! - [`apply`]：apply 主路径 / MV-01…04 / 原子性
 //! - [`atomic`]：A-INV-09a/c + A-MEM-01/02 + CommitBatch 同源 tx
 //! - [`huge`]：A-HUGE / M2 分段
-//! - [`hydrate`]：G-HYD + 远端文本合入 + P-H2 回滚
+//! - [`hydrate`]：G-HYD + 远端文本合入
+//! - [`hydrate_incremental`]：P-H2 回滚与增量 checkpoint
 //! - [`undo`]：W1-U undo 域（A-COL-04 / A-MEM-04 / A-INV-09c 后半）
 //!
 //! 既有测试**零删除零改写**：逐块随行搬入（形状不变，测名不变）。
@@ -23,6 +24,9 @@ mod huge;
 
 #[path = "session_tests_hydrate.rs"]
 mod hydrate;
+
+#[path = "session_tests_hydrate_incremental.rs"]
+mod hydrate_incremental;
 
 #[path = "session_tests_undo.rs"]
 mod undo;
