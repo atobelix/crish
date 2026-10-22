@@ -135,7 +135,10 @@ module.exports = {
         '豁免：测试文件与 generated/engine/**（from 侧 pathNot）。',
       from: {
         path: '^apps/crish-desktop/src/store/',
-        pathNot: ['\\.(test|spec)\\.(ts|tsx)$', 'generated/engine'],
+        pathNot: [
+          '\\.(test|spec)\\.(ts|tsx)$',
+          'generated/engine',
+        ],
       },
       to: {
         path: '^apps/crish-desktop/src/components/',
@@ -150,7 +153,10 @@ module.exports = {
         '懒加载同样制造 store → UI 反向依赖，语义同主规则（明细规则）。',
       from: {
         path: '^apps/crish-desktop/src/store/',
-        pathNot: ['\\.(test|spec)\\.(ts|tsx)$', 'generated/engine'],
+        pathNot: [
+          '\\.(test|spec)\\.(ts|tsx)$',
+          'generated/engine',
+        ],
       },
       to: {
         path: '^apps/crish-desktop/src/components/',
@@ -178,7 +184,9 @@ module.exports = {
       },
       to: {
         path: '^apps/crish-desktop/src/store/',
-        pathNot: ['(storeAccess|index|sessionRuntimeStatusStore)\\.(ts|tsx)$'],
+        pathNot: [
+          '(storeAccess|index|sessionRuntimeStatusStore)\\.(ts|tsx)$',
+        ],
         dependencyTypesNot: ['dynamic-import'],
       },
     },
@@ -199,7 +207,9 @@ module.exports = {
       },
       to: {
         path: '^apps/crish-desktop/src/store/',
-        pathNot: ['(storeAccess|index|sessionRuntimeStatusStore)\\.(ts|tsx)$'],
+        pathNot: [
+          '(storeAccess|index|sessionRuntimeStatusStore)\\.(ts|tsx)$',
+        ],
         dependencyTypes: ['dynamic-import'],
       },
     },
@@ -215,11 +225,16 @@ module.exports = {
         ' layoutStore/sessionStore/types 等内部文件，也不得经公共 index 绕行。',
       from: {
         path: '^apps/crish-desktop/src/components/',
-        pathNot: ['\\.(test|spec)\\.(ts|tsx)$', 'generated/engine'],
+        pathNot: [
+          '\\.(test|spec)\\.(ts|tsx)$',
+          'generated/engine',
+        ],
       },
       to: {
         path: '^apps/crish-desktop/src/store/',
-        pathNot: ['storeAccess\\.(ts|tsx)$'],
+        pathNot: [
+          'storeAccess\\.(ts|tsx)$',
+        ],
         dependencyTypesNot: ['dynamic-import'],
       },
     },
@@ -231,11 +246,16 @@ module.exports = {
         '同样只允许经 store/storeAccess.ts（明细规则，与静态规则同约束）。',
       from: {
         path: '^apps/crish-desktop/src/components/',
-        pathNot: ['\\.(test|spec)\\.(ts|tsx)$', 'generated/engine'],
+        pathNot: [
+          '\\.(test|spec)\\.(ts|tsx)$',
+          'generated/engine',
+        ],
       },
       to: {
         path: '^apps/crish-desktop/src/store/',
-        pathNot: ['storeAccess\\.(ts|tsx)$'],
+        pathNot: [
+          'storeAccess\\.(ts|tsx)$',
+        ],
         dependencyTypes: ['dynamic-import'],
       },
     },

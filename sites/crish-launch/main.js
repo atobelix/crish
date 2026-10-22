@@ -323,7 +323,8 @@
       try {
         await navigator.clipboard.writeText(text);
         ok = true;
-      } catch (err) {
+      } catch {
+        // Clipboard API 不可用（非安全上下文 / 权限拒绝）时退回 execCommand 复制。
         var area = document.createElement("textarea");
         area.value = text;
         area.setAttribute("readonly", "");
@@ -333,7 +334,8 @@
         area.select();
         try {
           ok = document.execCommand("copy");
-        } catch (err2) {
+        } catch {
+          // execCommand 抛错同样视为复制失败，按钮提示用户手动选择。
           ok = false;
         }
         area.remove();
