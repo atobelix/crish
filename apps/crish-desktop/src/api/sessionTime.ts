@@ -45,14 +45,16 @@ export const SESSION_LIST_CLOCK_SKEW_MS = 5 * 60_000;
  */
 export function isRemoteSessionTimestamp(
   stored: string | undefined | null,
-  source?: 'local' | 'remote' | null,
+  source?: 'local' | 'remote' | null
 ): boolean {
   if (source === 'remote') return true;
   return (stored || '').trim() === REMOTE_TIMESTAMP_LITERAL;
 }
 
 /** 是否为历史坏字面量（禁止当永久展示） */
-export function isBadTimestampLiteral(stored: string | undefined | null): boolean {
+export function isBadTimestampLiteral(
+  stored: string | undefined | null
+): boolean {
   const t = (stored || '').trim();
   return t.length > 0 && BAD_LITERAL_TIMESTAMPS.has(t);
 }
@@ -75,7 +77,9 @@ export function msFromSessionId(id: string | undefined): number {
 }
 
 /** 解析已存时间戳字符串 → 毫秒；坏字面量 / 无效值返回 0 */
-export function parseStoredTimestampMs(stored: string | undefined | null): number {
+export function parseStoredTimestampMs(
+  stored: string | undefined | null
+): number {
   const t = (stored || '').trim();
   if (!t || isBadTimestampLiteral(t)) return 0;
   // 老数据 '远程' 字面量视为无效时间
@@ -103,11 +107,19 @@ export function parseStoredTimestampMs(stored: string | undefined | null): numbe
       // V8：日期串带 Z / 时区偏移 / 纯日期（无时间）→ UTC；带时间无 Z → 本地时区
       const isUtc = rest === '' || /Z$|[+-]\d{2}:?\d{2}$/.test(rest);
       if (isUtc) {
-        if (d.getUTCFullYear() !== y || d.getUTCMonth() + 1 !== mo || d.getUTCDate() !== day) {
+        if (
+          d.getUTCFullYear() !== y ||
+          d.getUTCMonth() + 1 !== mo ||
+          d.getUTCDate() !== day
+        ) {
           return 0;
         }
       } else {
-        if (d.getFullYear() !== y || d.getMonth() + 1 !== mo || d.getDate() !== day) {
+        if (
+          d.getFullYear() !== y ||
+          d.getMonth() + 1 !== mo ||
+          d.getDate() !== day
+        ) {
           return 0;
         }
       }
@@ -119,16 +131,23 @@ export function parseStoredTimestampMs(stored: string | undefined | null): numbe
 
 /**
  * 恢复 / 存盘时纠正历史字面量「刚刚」「恢复」「刚才」。
- * 优先消息时间，其次 id 内嵌时间戳，再否则保留可解析原值或当前 ISO。
+ * 推导顺序：可解析原值 → 消息最大时间 → 调用方已知活动时间（索引 updatedAt）
+ * → id 内嵌时间戳 → 当前 ISO。
+ *
+ * `knownActivityMs`：会话索引条目自带的 updatedAt（毫秒）。历史懒壳（messages 为空、
+ * timestamp 缺失或为坏字面量、id 无内嵌时间）若直接落到「当前时间」，每次启动都会被
+ * 抬成「刚刚」并按水合循环内的毫秒先后乱序置顶——侧栏顺序随真实时钟漂移，与索引
+ * 已按 updatedAt 排好的顺序相悖（e2e session-restore CI 失败根因）。
  *
  * 治理防线 #6：返回值始终为合法 ISO 串，禁止 `'远程'` 字面量；
  * 远程来源由调用方通过 `timestampSource='remote'` 标记。
- * 老持久化数据中 `'远程'` 字面量会被规范化为当前 ISO（保留远程标记的职责在调用方）。
+ * 老持久化数据中 `'远程'` 字面量会被规范化（保留远程标记的职责在调用方）。
  */
 export function coerceSessionTimestamp(
   id: string,
   stored: string | undefined | null,
   messages?: Array<{ timestamp?: number }>,
+  knownActivityMs?: number
 ): string {
   const t = (stored || '').trim();
   // 老数据兼容：识别字面量后回落到正常时间推导路径
@@ -151,6 +170,9 @@ export function coerceSessionTimestamp(
     if (max > 0) return new Date(max).toISOString();
   }
 
+  const known = finitePositiveMs(knownActivityMs);
+  if (known > 0) return new Date(known).toISOString();
+
   const fromId = msFromSessionId(id);
   if (fromId > 0) return new Date(fromId).toISOString();
 
@@ -163,7 +185,10 @@ export function nowIsoTimestamp(): string {
 }
 
 /** 绝对日历文案（同年 M/D，跨年 Y/M/D）；供相对桶末档与远未来损坏时间戳共用 */
-export function formatAbsoluteCalendarDate(ms: number, now = Date.now()): string {
+export function formatAbsoluteCalendarDate(
+  ms: number,
+  now = Date.now()
+): string {
   if (!ms || ms <= 0 || !Number.isFinite(ms)) return '';
   const date = new Date(ms);
   const y = date.getFullYear();
@@ -215,7 +240,7 @@ export function sessionLastActivityMs(s: SessionState): number {
  * agent 末条用于与 formatSessionListTime（全量）在「刚刚」老化边界对齐。
  */
 export function sessionActivityShellMs(
-  s: Pick<SessionState, 'id' | 'timestamp' | 'messages' | 'agents'>,
+  s: Pick<SessionState, 'id' | 'timestamp' | 'messages' | 'agents'>
 ): number {
   let max = 0;
   const msgs = s.messages;
@@ -251,7 +276,7 @@ export function sessionActivityShellMs(
  */
 export function compareSessionsByActivity(
   a: SessionState,
-  b: SessionState,
+  b: SessionState
 ): number {
   const d = sessionLastActivityMs(b) - sessionLastActivityMs(a);
   if (d !== 0) return d;
@@ -270,8 +295,10 @@ export function formatRelativeActivity(ms: number, now = Date.now()): string {
   if (d < SESSION_LIST_JUST_NOW_MS) return '刚刚';
   if (d < 3_600_000) return `${Math.max(1, Math.floor(d / 60_000))}分钟前`;
   if (d < 86_400_000) return `${Math.max(1, Math.floor(d / 3_600_000))}小时前`;
-  if (d < 7 * 86_400_000) return `${Math.max(1, Math.floor(d / 86_400_000))}天前`;
-  if (d < 30 * 86_400_000) return `${Math.max(1, Math.floor(d / (7 * 86_400_000)))}周前`;
+  if (d < 7 * 86_400_000)
+    return `${Math.max(1, Math.floor(d / 86_400_000))}天前`;
+  if (d < 30 * 86_400_000)
+    return `${Math.max(1, Math.floor(d / (7 * 86_400_000)))}周前`;
   return formatAbsoluteCalendarDate(ms, now);
 }
 
@@ -281,8 +308,12 @@ export function formatRelativeActivity(ms: number, now = Date.now()): string {
  * 近未来（时钟漂移）先等到真实越过活动点再加 JUST_NOW。
  * 远未来 / 无法再变（绝对日期）返回 null。
  */
-export function msUntilRelativeLabelChange(activityMs: number, now = Date.now()): number | null {
-  if (!activityMs || activityMs <= 0 || !Number.isFinite(activityMs)) return null;
+export function msUntilRelativeLabelChange(
+  activityMs: number,
+  now = Date.now()
+): number | null {
+  if (!activityMs || activityMs <= 0 || !Number.isFinite(activityMs))
+    return null;
   if (activityMs > now + SESSION_LIST_CLOCK_SKEW_MS) return null;
   // 近未来：等到 activity 成为「过去」后再计 JUST_NOW 窗
   if (activityMs > now) {
@@ -315,13 +346,17 @@ export function msUntilRelativeLabelChange(activityMs: number, now = Date.now())
 }
 
 /** 侧栏紧凑日期（本地日历）：同年 M/D，跨年 YY/M/D（两位年份，比 Y/M/D 更省宽）。 */
-export function formatCompactCalendarDate(ms: number, now = Date.now()): string {
+export function formatCompactCalendarDate(
+  ms: number,
+  now = Date.now()
+): string {
   if (!ms || ms <= 0 || !Number.isFinite(ms)) return '';
   const date = new Date(ms);
   const m = date.getMonth() + 1;
   const day = date.getDate();
   const safeNow = Number.isFinite(now) ? now : Date.now();
-  if (date.getFullYear() === new Date(safeNow).getFullYear()) return `${m}/${day}`;
+  if (date.getFullYear() === new Date(safeNow).getFullYear())
+    return `${m}/${day}`;
   const yy = String(date.getFullYear() % 100).padStart(2, '0');
   return `${yy}/${m}/${day}`;
 }
@@ -348,8 +383,14 @@ export function formatCompactActivity(ms: number, now = Date.now()): string {
  * 侧栏展示用：统一走 sessionLastActivityMs，绝不把存盘「刚刚」当静态文案。
  * 「刚刚」仅当 now - activity < 45s（或近未来时钟漂移）时瞬时出现，随后由 tick 刷新为「N分钟前」。
  */
-export function formatSessionListTime(s: SessionState, now = Date.now()): string {
-  if (isRemoteSessionTimestamp(s.timestamp, s.timestampSource) && sessionLastActivityMs(s) <= 0) {
+export function formatSessionListTime(
+  s: SessionState,
+  now = Date.now()
+): string {
+  if (
+    isRemoteSessionTimestamp(s.timestamp, s.timestampSource) &&
+    sessionLastActivityMs(s) <= 0
+  ) {
     return '远程';
   }
   const ms = sessionLastActivityMs(s);
@@ -360,8 +401,14 @@ export function formatSessionListTime(s: SessionState, now = Date.now()): string
 /**
  * 侧栏展示用紧凑时间：刚刚 / N分 / N时 / N天 / M/D / YY/M/D（规则见 formatCompactActivity）。
  */
-export function formatSessionListCompactTime(s: SessionState, now = Date.now()): string {
-  if (isRemoteSessionTimestamp(s.timestamp, s.timestampSource) && sessionLastActivityMs(s) <= 0) {
+export function formatSessionListCompactTime(
+  s: SessionState,
+  now = Date.now()
+): string {
+  if (
+    isRemoteSessionTimestamp(s.timestamp, s.timestampSource) &&
+    sessionLastActivityMs(s) <= 0
+  ) {
     return '远程';
   }
   const ms = sessionLastActivityMs(s);
@@ -373,8 +420,14 @@ export function formatSessionListCompactTime(s: SessionState, now = Date.now()):
  * 悬停 / title / aria 用绝对时间（本地可读），避免只显示相对文案时无法核对真实时刻。
  * 无效活动时间返回空串。
  */
-export function formatSessionListAbsoluteTime(s: SessionState, _now = Date.now()): string {
-  if (isRemoteSessionTimestamp(s.timestamp, s.timestampSource) && sessionLastActivityMs(s) <= 0) {
+export function formatSessionListAbsoluteTime(
+  s: SessionState,
+  _now = Date.now()
+): string {
+  if (
+    isRemoteSessionTimestamp(s.timestamp, s.timestampSource) &&
+    sessionLastActivityMs(s) <= 0
+  ) {
     return '远程';
   }
   const ms = sessionLastActivityMs(s);
@@ -397,9 +450,11 @@ export function formatSessionListAbsoluteTime(s: SessionState, _now = Date.now()
  * 远未来损坏时间戳不计为近期，避免永久快 tick。
  */
 export function hasRecentSessionActivity(
-  sessions: Array<Pick<SessionState, 'id' | 'timestamp' | 'messages' | 'agents'>>,
+  sessions: Array<
+    Pick<SessionState, 'id' | 'timestamp' | 'messages' | 'agents'>
+  >,
   now = Date.now(),
-  windowMs = SESSION_LIST_RECENT_ACTIVITY_MS,
+  windowMs = SESSION_LIST_RECENT_ACTIVITY_MS
 ): boolean {
   for (const s of sessions) {
     if (!s) continue; // null / undefined 条目跳过
@@ -420,8 +475,10 @@ export function hasRecentSessionActivity(
  * - document.hidden 时由调用方改用 SESSION_LIST_TICK_HIDDEN_MS。
  */
 export function sessionListTimeTickMs(
-  sessions: Array<Pick<SessionState, 'id' | 'timestamp' | 'messages' | 'agents'>>,
-  now = Date.now(),
+  sessions: Array<
+    Pick<SessionState, 'id' | 'timestamp' | 'messages' | 'agents'>
+  >,
+  now = Date.now()
 ): number {
   let tick = hasRecentSessionActivity(sessions, now)
     ? SESSION_LIST_TICK_FAST_MS

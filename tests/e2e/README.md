@@ -40,7 +40,14 @@ npx playwright test tests/e2e/full-journey.spec.ts
 npm run test:e2e:native
 ```
 
-前置：`npm install`（Playwright 浏览器已随 devDependencies 安装）；dev server 由 config `webServer` 自动管理（`reuseExistingServer: true`）。
+前置：`npm install`（Playwright 浏览器已随 devDependencies 安装）；dev server 由 config `webServer` 自动管理（本地 `reuseExistingServer: true`；CI 环境（`CI` 已设置）下为 `false`，必须本次运行自起服务）。
+
+端口隔离：默认端口 5174。本机多个工作区 / agent 并行跑 e2e 时，用 `CRISH_E2E_PORT` 指定独占端口，
+避免复用到别人在 5174 上的 dev server（独占端口模式直接以 `--port` 拉起 vite，不经 predev 的 5174/4000 清理）：
+
+```powershell
+$env:CRISH_E2E_PORT = '5274'; npx playwright test tests/e2e
+```
 
 ---
 

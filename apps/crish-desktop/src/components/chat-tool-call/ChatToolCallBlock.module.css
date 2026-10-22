@@ -255,6 +255,16 @@
   line-height: 24px;
 }
 
+/*
+ * 意图说明（toolHumanLabel）：继承 .toolActionText 的字号/字重/色与悬停加深，
+ * 仅额外允许单行省略收缩——长意图不挤掉右侧的动作词与命令参数。
+ */
+.toolHumanText {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .dotSeparator {
   margin: 0 4px;
   color: var(--text-tertiary);

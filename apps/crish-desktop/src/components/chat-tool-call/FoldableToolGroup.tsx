@@ -8,7 +8,8 @@
  * ② 24px 高度、400 字重、14px 字号，与 ReasoningRow 严格对齐同构；
  * ③ 整行 Hover 统一变黑（var(--text-primary)），展开后详细结果内容 Hover 不变色；
  * ④ 原生 hidden="until-found" 支持 Ctrl+F 页面穿透搜索并自动唤醒展开；
- * ⑤ 运行中流式态直出展开，收口后自收敛折叠。
+ * ⑤ 运行中流式态直出展开，收口后自收敛折叠；
+ * ⑥ 仅 ≥2 个工具才做组级折叠；单工具直出工具行（意图说明与命令常驻可见，详情默认折叠）。
  */
 
 import React, {
@@ -65,6 +66,11 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
     }, [items]);
 
     const prevHasRunningRef = useRef(metrics.hasRunning);
+
+    // 组级折叠门槛：仅 ≥2 个工具才聚合为单行摘要（总方案 §终态收敛「单工具则直出展开」、
+    // 分段详案 S08）。单工具的摘要（「已运行 1 条命令」）与工具行同为 24px 单行，
+    // 却会抹掉意图说明与真实命令——单工具直接渲染工具行，详情仍由工具行自身默认折叠。
+    const isGroupFolding = metrics.toolCount >= 2;
 
     // 默认折叠；若当前正在运行或包含子代理（铁律四）则直出展开
     const [isExpanded, setIsExpanded] = useState<boolean>(
@@ -132,7 +138,8 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
         }
       }
       isInitialMount.current = false;
-    }, [isExpanded]);
+      // isGroupFolding：单工具→多工具时槽位首次挂载，需按当前折叠态补挂 hidden
+    }, [isExpanded, isGroupFolding]);
 
     // CSS Grid 过渡结束时立即附加 hidden="until-found" 支持 Ctrl+F 页面穿透
     const handleTransitionEnd = useCallback(
@@ -168,7 +175,7 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
       return () => {
         el.removeEventListener('beforematch', handleBeforeMatch);
       };
-    }, [onInvalidate]);
+    }, [onInvalidate, isGroupFolding]);
 
     const summaryText = useMemo(() => {
       return formatProcessActionsSummary(metrics);
@@ -177,6 +184,18 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
     const iconName = useMemo(() => {
       return (DOMINANT_ICON_MAP[metrics.leadAction] || 'terminal') as IconName;
     }, [metrics.leadAction]);
+
+    if (!isGroupFolding) {
+      return (
+        <div
+          className={styles.groupContainer}
+          data-testid="foldable-tool-group"
+          data-single-tool="true"
+        >
+          <ChatToolStack {...hostProps} />
+        </div>
+      );
+    }
 
     return (
       <div
