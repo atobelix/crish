@@ -44,7 +44,20 @@ describe('Adversarial Stress Test: FileBreadcrumb Escape Dismissal Across Focus 
     fireEvent.click(chip);
     const flyout = await findByRole('listbox');
     expect(flyout).toBeTruthy();
+    // listbox 在 loading 态就已挂载；目录加载完成后组件会在下一帧
+    // (requestAnimationFrame) 把焦点送进筛选框。必须等这次自动聚焦落地，
+    // 否则后续用例改焦点与这一帧赛跑：rAF 晚到会把焦点抢回筛选框（容器内），
+    // 让「焦点在容器外」的前提失效（#2/#7 全量负载下偶发失败的根因）。
+    await waitFor(() =>
+      expect(document.activeElement).toBe(getByRole('searchbox'))
+    );
     return chip;
+  }
+
+  /** 把焦点移出浮层回到 document.body（jsdom 中 body.focus() 对已聚焦元素无效，需 blur） */
+  function moveFocusToBody() {
+    (document.activeElement as HTMLElement | null)?.blur();
+    expect(document.activeElement).toBe(document.body);
   }
 
   it('1. Focus inside container: Escape closes flyout and restores trigger focus', async () => {
@@ -86,8 +99,7 @@ describe('Adversarial Stress Test: FileBreadcrumb Escape Dismissal Across Focus 
     await openBreadcrumbFlyout(getByRole, findByRole);
 
     // Explicitly focus document.body
-    (document.body as HTMLElement).focus();
-    expect(document.activeElement).toBe(document.body);
+    moveFocusToBody();
 
     fireEvent.keyDown(window, { key: 'Escape' });
 
@@ -238,7 +250,7 @@ describe('Adversarial Stress Test: FileBreadcrumb Escape Dismissal Across Focus 
     await openBreadcrumbFlyout(getByRole, findByRole);
 
     // Focus is outside the container in an inactive leaf pane
-    (document.body as HTMLElement).focus();
+    moveFocusToBody();
 
     fireEvent.keyDown(window, { key: 'Escape' });
 

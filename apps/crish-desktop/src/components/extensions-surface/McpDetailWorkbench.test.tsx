@@ -7,9 +7,11 @@ import {
   fireEvent,
   cleanup,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { McpDetailWorkbench } from './McpDetailWorkbench';
 import { ToastProvider } from '../../services/toast/ToastContext';
+import { ToastStore } from '../../services/toast/ToastStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { clientApi } from '../../api/clientApi';
 import type { McpServerInfo } from '../../api/mcpApi';
@@ -41,6 +43,8 @@ describe('McpDetailWorkbench - Tool Granularity Control', () => {
 
   afterEach(() => {
     cleanup();
+    // ToastStore 是模块级单例：不清空则上一用例（或重试）的 toast 会带进下一用例
+    ToastStore.clear();
   });
 
   it('renders tools list, initial enabled count and independent switches', () => {
@@ -295,9 +299,19 @@ describe('McpDetailWorkbench - Tool Granularity Control', () => {
 
     fireEvent.click(testBtn);
 
-    await waitFor(() => {
-      expect(screen.getByText(/\d+ms/)).toBeInTheDocument();
-    });
+    // 成功后同时出现两处延迟文案：头部延迟徽标「Nms」与 toast「…（Nms）」。
+    // 两者分别经 ToastStore 外部订阅与组件 state 提交，旧断言 getByText(/\d+ms/)
+    // 只有在恰好仅一处已渲染时才唯一命中（实测稳定后恒为 2 处），
+    // 负载下两者同时可见即报 multiple elements。这里分别精确断言两处并核对数值一致。
+    const badge = await screen.findByText(/^\d+ms$/);
+    const latency = Number(badge.textContent!.replace('ms', ''));
+    expect(latency).toBeGreaterThanOrEqual(1);
+    const toastRegion = await screen.findByRole('region', { name: '通知中心' });
+    expect(
+      within(toastRegion).getByText(
+        `连通性测试成功：服务响应正常（${latency}ms）`
+      )
+    ).toBeInTheDocument();
   });
 
   it('handles connectivity test when offline by indicating server is not running', async () => {
