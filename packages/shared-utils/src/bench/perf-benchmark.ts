@@ -1,5 +1,5 @@
-import { performance } from "node:perf_hooks";
-import { totalmem } from "node:os";
+import { performance } from 'node:perf_hooks';
+import { cpus, totalmem } from 'node:os';
 
 export interface BenchmarkTarget {
   maxMs: number;
@@ -54,11 +54,16 @@ export interface BenchmarkSuiteResult {
   };
 }
 
-async function runBenchmark(benchmark: PerfBenchmark): Promise<BenchmarkResult> {
+async function runBenchmark(
+  benchmark: PerfBenchmark
+): Promise<BenchmarkResult> {
   const warmupSamples: BenchmarkSample[] = [];
   const samples: BenchmarkSample[] = [];
 
-  const runWithLifecycle = async (_index: number, _isWarmup: boolean): Promise<number> => {
+  const runWithLifecycle = async (
+    _index: number,
+    _isWarmup: boolean
+  ): Promise<number> => {
     if (benchmark.setup) {
       await benchmark.setup();
     }
@@ -109,7 +114,8 @@ async function runBenchmark(benchmark: PerfBenchmark): Promise<BenchmarkResult> 
   const p95Ms = percentile(elapsedValues, 0.95);
   const p99Ms = percentile(elapsedValues, 0.99);
   const ops = avgMs > 0 ? Math.round(1000 / avgMs) : 0;
-  const passed = avgMs <= benchmark.target.maxMs && ops >= benchmark.target.minOps;
+  const passed =
+    avgMs <= benchmark.target.maxMs && ops >= benchmark.target.minOps;
 
   return {
     name: benchmark.name,
@@ -127,14 +133,18 @@ async function runBenchmark(benchmark: PerfBenchmark): Promise<BenchmarkResult> 
   };
 }
 
-export async function runAllBenchmarks(benchmarks: PerfBenchmark[]): Promise<BenchmarkSuiteResult> {
+export async function runAllBenchmarks(
+  benchmarks: PerfBenchmark[]
+): Promise<BenchmarkSuiteResult> {
   const results: BenchmarkResult[] = [];
 
   for (const benchmark of benchmarks) {
     const result = await runBenchmark(benchmark);
     results.push(result);
-    const status = result.passed ? "PASS" : "FAIL";
-    console.log(`[${status}] ${result.name}: avg=${result.avgMs}ms ops=${result.ops} target=${result.target.maxMs}ms`);
+    const status = result.passed ? 'PASS' : 'FAIL';
+    console.log(
+      `[${status}] ${result.name}: avg=${result.avgMs}ms ops=${result.ops} target=${result.target.maxMs}ms`
+    );
     if (result.error) {
       console.error(`  error: ${result.error}`);
     }
@@ -154,14 +164,17 @@ export async function runAllBenchmarks(benchmarks: PerfBenchmark[]): Promise<Ben
 function collectEnvironment() {
   return {
     os: `${process.platform} ${process.arch}`,
-    cpu: process.env.CPU_MODEL || "unknown",
+    cpu: process.env.CPU_MODEL || cpus()[0]?.model?.trim() || 'unknown',
     memory: `${Math.round(totalmem() / (1024 * 1024))}MB`,
     nodeVersion: process.version,
   };
 }
 
 function percentile(sortedValues: number[], rank: number): number {
-  const index = Math.min(sortedValues.length - 1, Math.max(0, Math.ceil(sortedValues.length * rank) - 1));
+  const index = Math.min(
+    sortedValues.length - 1,
+    Math.max(0, Math.ceil(sortedValues.length * rank) - 1)
+  );
   return round2(sortedValues[index]!);
 }
 

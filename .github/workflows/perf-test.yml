@@ -16,10 +16,14 @@ concurrency:
 
 jobs:
   benchmark:
+    # 锁定镜像：ubuntu-latest 正在迁移到 Ubuntu 26，避免运行环境在两次运行之间漂移
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # 需要 HEAD^1 作为 A/B 对比基准的兜底（PR 的 merge commit 第一父即目标分支）
+          fetch-depth: 2
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -31,28 +35,64 @@ jobs:
           npm install -g npm@11.6.2
           npm ci
 
+      - name: Typecheck perf scripts
+        run: npm run typecheck:perf
+
       - name: Build packages
         run: npm run build:packages
 
+      # 绝对预算门禁（bench-definitions.ts 中每项 target.maxMs / minOps）
       - name: Run benchmarks
         run: npx tsx packages/shared-utils/src/bench/run-benchmarks.ts
 
       - name: Run memory benchmarks
         run: node --expose-gc --import tsx packages/shared-utils/src/bench/run-mem-benchmarks.ts
 
+      # 退化检测基准 = 同一台 runner 上的 base 提交，而不是跨机器的固定数字
+      - name: Resolve A/B base commit
+        id: ab-base
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          base=""
+          if [ "$EVENT_NAME" = "push" ] && [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            if git fetch --no-tags --depth=1 origin "$PUSH_BEFORE"; then
+              base="$PUSH_BEFORE"
+            else
+              echo "::notice::push 前的提交 $PUSH_BEFORE 已不可获取（force push？），改用 HEAD^1 作为对比基准"
+            fi
+          fi
+          if [ -z "$base" ]; then
+            base="$(git rev-parse HEAD^1)"
+          fi
+          echo "A/B base: $base"
+          echo "sha=$base" >> "$GITHUB_OUTPUT"
+
+      - name: Run same-runner A/B benchmarks
+        run: npx tsx scripts/perf-ab.ts --base-ref "${{ steps.ab-base.outputs.sha }}" --rounds 10
+
       - name: Compare with baselines
         run: npx tsx scripts/compare-benchmarks.ts --threshold 0.2
 
+      # 以下步骤在前面失败时仍执行，以便一次暴露全部问题并留存报告；不影响 job 的失败结论
       - name: Check acceptance criteria
+        if: ${{ !cancelled() }}
         run: npx tsx scripts/acceptance-criteria.ts
 
       - name: Generate performance report
+        if: ${{ !cancelled() }}
         run: npx tsx scripts/generate-perf-report.ts
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
         with:
           name: perf-report
-          path: perf-report/
+          path: |
+            perf-report/
+            !perf-report/ab-runs/
+            !perf-report/.ab-base/
 
   stress-test:
     runs-on: ubuntu-24.04
@@ -74,7 +114,8 @@ jobs:
   comment:
     runs-on: ubuntu-24.04
     needs: benchmark
-    if: github.event_name == 'pull_request'
+    # benchmark 失败时也评论（报告正是此时最需要）；被取消时不评论
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
     permissions:
       pull-requests: write
     steps:
@@ -130,7 +171,16 @@ jobs:
               comment += `### 性能退化\n`;
               for (const r of regressions) {
                 const flag = r.changePercent > 50 ? ' :rotating_light:' : ' :warning:';
-                comment += `- ${r.name}: ${r.previousAvgMs}ms → ${r.currentAvgMs}ms (${r.changePercent}%)${flag}\n`;
+                comment += `- ${r.name}: ${r.previousMs}ms → ${r.currentMs}ms (+${r.changePercent}%，95%CI [${r.ciLow}, ${r.ciHigh}])${flag}\n`;
+              }
+              comment += `\n`;
+            }
+
+            const suspects = report.summary.suspects || [];
+            if (suspects.length > 0) {
+              comment += `### 疑似退化（未达统计显著，仅提示）\n`;
+              for (const r of suspects) {
+                comment += `- ${r.name}: ${r.previousMs}ms → ${r.currentMs}ms (+${r.changePercent}%，95%CI [${r.ciLow}, ${r.ciHigh}])\n`;
               }
               comment += `\n`;
             }
@@ -141,7 +191,7 @@ jobs:
               comment += `**结论: 通过**\n`;
             }
 
-            github.rest.issues.createComment({
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,

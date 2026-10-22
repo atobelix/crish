@@ -1,5 +1,5 @@
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 
 interface EnvInfo {
   os: string;
@@ -26,11 +26,14 @@ interface MemTestResult {
   passed: boolean;
 }
 
+/** 来自 scripts/compare-benchmarks.ts：同机 A/B 中 base/head 每轮中位数的中位数 */
 interface Regression {
   name: string;
-  previousAvgMs: number;
-  currentAvgMs: number;
+  previousMs: number;
+  currentMs: number;
   changePercent: number;
+  ciLow: number;
+  ciHigh: number;
 }
 
 interface PerfReport {
@@ -44,46 +47,62 @@ interface PerfReport {
     passed: number;
     failed: number;
     regressions: Regression[];
+    suspects: Regression[];
   };
 }
 
 function getCommitHash(): string {
   try {
-    return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim();
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
   } catch {
-    return "unknown";
+    return 'unknown';
   }
 }
 
 function loadJson(path: string): unknown {
   if (!existsSync(path)) return null;
   try {
-    return JSON.parse(readFileSync(path, "utf8"));
+    return JSON.parse(readFileSync(path, 'utf8'));
   } catch {
     return null;
   }
 }
 
 function main() {
-  const benchmarkResult = loadJson("perf-report/benchmark-result.json") as Record<string, unknown> | null;
-  const memResult = loadJson("perf-report/mem-benchmark-result.json") as Record<string, unknown> | null;
-  const comparisonResult = loadJson("perf-report/comparison-result.json") as Record<string, unknown> | null;
+  const benchmarkResult = loadJson(
+    'perf-report/benchmark-result.json'
+  ) as Record<string, unknown> | null;
+  const memResult = loadJson('perf-report/mem-benchmark-result.json') as Record<
+    string,
+    unknown
+  > | null;
+  const comparisonResult = loadJson(
+    'perf-report/comparison-result.json'
+  ) as Record<string, unknown> | null;
 
   const environment: EnvInfo = benchmarkResult
     ? (benchmarkResult.environment as EnvInfo)
-    : { os: process.platform, cpu: "unknown", memory: "unknown", nodeVersion: process.version };
+    : {
+        os: process.platform,
+        cpu: 'unknown',
+        memory: 'unknown',
+        nodeVersion: process.version,
+      };
 
   const benchmarks: BenchResult[] = benchmarkResult
-    ? (benchmarkResult.benchmarks as Array<Record<string, unknown>>).map((b) => ({
-        name: b.name as string,
-        avgMs: b.avgMs as number,
-        p50Ms: b.p50Ms as number,
-        p95Ms: b.p95Ms as number,
-        p99Ms: b.p99Ms as number,
-        ops: b.ops as number,
-        targetMs: ((b.target as Record<string, unknown>)?.maxMs as number) ?? 0,
-        passed: b.passed as boolean,
-      }))
+    ? (benchmarkResult.benchmarks as Array<Record<string, unknown>>).map(
+        (b) => ({
+          name: b.name as string,
+          avgMs: b.avgMs as number,
+          p50Ms: b.p50Ms as number,
+          p95Ms: b.p95Ms as number,
+          p99Ms: b.p99Ms as number,
+          ops: b.ops as number,
+          targetMs:
+            ((b.target as Record<string, unknown>)?.maxMs as number) ?? 0,
+          passed: b.passed as boolean,
+        })
+      )
     : [];
 
   const memTests: MemTestResult[] = memResult
@@ -96,7 +115,10 @@ function main() {
     : [];
 
   const regressions: Regression[] = comparisonResult
-    ? (comparisonResult.regressions as Regression[])
+    ? ((comparisonResult.regressions as Regression[] | undefined) ?? [])
+    : [];
+  const suspects: Regression[] = comparisonResult
+    ? ((comparisonResult.suspects as Regression[] | undefined) ?? [])
     : [];
 
   const passedBenchmarks = benchmarks.filter((b) => b.passed).length;
@@ -113,36 +135,47 @@ function main() {
       passed: passedBenchmarks + memTests.filter((t) => t.passed).length,
       failed: failedBenchmarks + memTests.filter((t) => !t.passed).length,
       regressions,
+      suspects,
     },
   };
 
   const html = generateHtml(report);
 
-  mkdirSync("perf-report", { recursive: true });
-  writeFileSync("perf-report/report.json", JSON.stringify(report, null, 2), "utf8");
-  writeFileSync("perf-report/report.html", html, "utf8");
+  mkdirSync('perf-report', { recursive: true });
+  writeFileSync(
+    'perf-report/report.json',
+    JSON.stringify(report, null, 2),
+    'utf8'
+  );
+  writeFileSync('perf-report/report.html', html, 'utf8');
 
-  console.log("=".repeat(60));
-  console.log("性能报告");
-  console.log("=".repeat(60));
+  console.log('='.repeat(60));
+  console.log('性能报告');
+  console.log('='.repeat(60));
   console.log(`Commit: ${report.commit}`);
   console.log(`时间: ${report.timestamp}`);
   console.log(`环境: ${environment.os} / ${environment.nodeVersion}`);
-  console.log(`\n基准测试: ${benchmarks.length} (通过: ${passedBenchmarks}, 失败: ${failedBenchmarks})`);
-  console.log(`内存测试: ${memTests.length} (通过: ${memTests.filter((t) => t.passed).length}, 失败: ${memTests.filter((t) => !t.passed).length})`);
+  console.log(
+    `\n基准测试: ${benchmarks.length} (通过: ${passedBenchmarks}, 失败: ${failedBenchmarks})`
+  );
+  console.log(
+    `内存测试: ${memTests.length} (通过: ${memTests.filter((t) => t.passed).length}, 失败: ${memTests.filter((t) => !t.passed).length})`
+  );
   if (regressions.length > 0) {
     console.log(`\n退化: ${regressions.length}`);
     for (const r of regressions) {
-      console.log(`  ${r.name}: ${r.previousAvgMs}ms -> ${r.currentAvgMs}ms (+${r.changePercent}%)`);
+      console.log(
+        `  ${r.name}: ${r.previousMs}ms -> ${r.currentMs}ms (+${r.changePercent}%, 95%CI [${r.ciLow}, ${r.ciHigh}])`
+      );
     }
   }
-  console.log("\n报告已保存到 perf-report/report.html");
+  console.log('\n报告已保存到 perf-report/report.html');
 }
 
 function generateHtml(report: PerfReport): string {
   const benchRows = report.benchmarks
     .map(
-      (b) => `<tr class="${b.passed ? "pass" : "fail"}">
+      (b) => `<tr class="${b.passed ? 'pass' : 'fail'}">
       <td>${b.name}</td>
       <td>${b.avgMs}ms</td>
       <td>${b.p50Ms}ms</td>
@@ -150,32 +183,33 @@ function generateHtml(report: PerfReport): string {
       <td>${b.p99Ms}ms</td>
       <td>${b.ops}/s</td>
       <td>${b.targetMs}ms</td>
-      <td>${b.passed ? "PASS" : "FAIL"}</td>
-    </tr>`,
+      <td>${b.passed ? 'PASS' : 'FAIL'}</td>
+    </tr>`
     )
-    .join("\n");
+    .join('\n');
 
   const memRows = report.memTests
     .map(
-      (t) => `<tr class="${t.passed ? "pass" : "fail"}">
+      (t) => `<tr class="${t.passed ? 'pass' : 'fail'}">
       <td>${t.name}</td>
       <td>${(t.heapDelta / 1024).toFixed(1)}KB</td>
       <td>${t.leakedListeners}</td>
-      <td>${t.passed ? "PASS" : "FAIL"}</td>
-    </tr>`,
+      <td>${t.passed ? 'PASS' : 'FAIL'}</td>
+    </tr>`
     )
-    .join("\n");
+    .join('\n');
 
   const regRows = report.summary.regressions
     .map(
       (r) => `<tr class="regression">
       <td>${r.name}</td>
-      <td>${r.previousAvgMs}ms</td>
-      <td>${r.currentAvgMs}ms</td>
+      <td>${r.previousMs}ms</td>
+      <td>${r.currentMs}ms</td>
       <td class="bad">+${r.changePercent}%</td>
-    </tr>`,
+      <td>[${r.ciLow}, ${r.ciHigh}]</td>
+    </tr>`
     )
-    .join("\n");
+    .join('\n');
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -212,12 +246,12 @@ tr.regression { background: #fff7ed; }
   <div class="card">
     <h3>基准测试</h3>
     <div class="value">${report.benchmarks.length}</div>
-    <div>通过: ${report.benchmarks.filter(b => b.passed).length} / 失败: ${report.benchmarks.filter(b => !b.passed).length}</div>
+    <div>通过: ${report.benchmarks.filter((b) => b.passed).length} / 失败: ${report.benchmarks.filter((b) => !b.passed).length}</div>
   </div>
   <div class="card">
     <h3>内存测试</h3>
     <div class="value">${report.memTests.length}</div>
-    <div>通过: ${report.memTests.filter(t => t.passed).length} / 失败: ${report.memTests.filter(t => !t.passed).length}</div>
+    <div>通过: ${report.memTests.filter((t) => t.passed).length} / 失败: ${report.memTests.filter((t) => !t.passed).length}</div>
   </div>
   <div class="card">
     <h3>退化</h3>
@@ -226,23 +260,35 @@ tr.regression { background: #fff7ed; }
   </div>
 </div>
 
-${benchRows ? `<h2>基准测试结果</h2>
+${
+  benchRows
+    ? `<h2>基准测试结果</h2>
 <table>
 <thead><tr><th>名称</th><th>平均</th><th>P50</th><th>P95</th><th>P99</th><th>吞吐量</th><th>目标</th><th>状态</th></tr></thead>
 <tbody>${benchRows}</tbody>
-</table>` : ""}
+</table>`
+    : ''
+}
 
-${memRows ? `<h2>内存测试结果</h2>
+${
+  memRows
+    ? `<h2>内存测试结果</h2>
 <table>
 <thead><tr><th>名称</th><th>堆增长</th><th>泄漏监听器</th><th>状态</th></tr></thead>
 <tbody>${memRows}</tbody>
-</table>` : ""}
+</table>`
+    : ''
+}
 
-${regRows ? `<h2>性能退化</h2>
+${
+  regRows
+    ? `<h2>性能退化</h2>
 <table>
-<thead><tr><th>名称</th><th>之前</th><th>当前</th><th>变化</th></tr></thead>
+<thead><tr><th>名称</th><th>base 中位数</th><th>head 中位数</th><th>变化</th><th>比值 95%CI</th></tr></thead>
 <tbody>${regRows}</tbody>
-</table>` : ""}
+</table>`
+    : ''
+}
 
 </body>
 </html>`;
