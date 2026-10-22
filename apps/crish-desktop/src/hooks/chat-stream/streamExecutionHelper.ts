@@ -41,7 +41,11 @@ export function handleStreamConflict(
       (m: SessionMessage) => m.id === userMsgId
     );
     if (userMsg?.sender === 'user' && userMsg.status === 'processing') {
-      st.setSessionMessageStatus(sid, userMsgId, 'queued');
+      // processing → queued 属于守卫表中的 force 转换（串行守卫 S7 自动排队）；
+      // 不带 force 会被 validateStatusTransition 拒绝，消息卡在 processing。
+      st.setSessionMessageStatus(sid, userMsgId, 'queued', undefined, {
+        force: true,
+      });
     }
   } catch {
     /* ignore */
