@@ -2064,10 +2064,11 @@ fn device_sample_override(owner: &str, field: &str) -> Option<Value> {
     }
 }
 
-/// 按注册表类型引用构造最小样本 JSON（只填必填字段；owner 为上级类型名）
-fn device_sample_value(reg: &DeviceRegistry, ty: &str, owner: &str) -> Value {
+/// 按注册表类型引用构造最小样本 JSON（只填必填字段；结构体字段先以当前类型名
+/// 为上级查 [`device_sample_override`]，未命中再递归构造）
+fn device_sample_value(reg: &DeviceRegistry, ty: &str) -> Value {
     if let Some(inner) = ty.strip_suffix("[]") {
-        return Value::Array(vec![device_sample_value(reg, inner, owner)]);
+        return Value::Array(vec![device_sample_value(reg, inner)]);
     }
     match ty {
         "string" => Value::String("x".into()),
@@ -2089,7 +2090,7 @@ fn device_sample_value(reg: &DeviceRegistry, ty: &str, owner: &str) -> Value {
                         obj.insert(
                             f.name.clone(),
                             device_sample_override(ty, &f.name)
-                                .unwrap_or_else(|| device_sample_value(reg, &f.ts_type, ty)),
+                                .unwrap_or_else(|| device_sample_value(reg, &f.ts_type)),
                         );
                     }
                     Value::Object(obj)
@@ -2101,7 +2102,7 @@ fn device_sample_value(reg: &DeviceRegistry, ty: &str, owner: &str) -> Value {
                     let mut obj = Map::new();
                     obj.insert(tag.clone(), Value::String(v.name.clone()));
                     for f in v.fields.iter().filter(|f| f.required) {
-                        obj.insert(f.name.clone(), device_sample_value(reg, &f.ts_type, ty));
+                        obj.insert(f.name.clone(), device_sample_value(reg, &f.ts_type));
                     }
                     Value::Object(obj)
                 }
@@ -2560,7 +2561,7 @@ fn device_registry_static_message_bodies_match_serde_wire() {
             obj.insert(
                 f.name.clone(),
                 device_sample_override(&msg.rust_variant, &f.name)
-                    .unwrap_or_else(|| device_sample_value(&reg, &f.ts_type, &msg.rust_variant)),
+                    .unwrap_or_else(|| device_sample_value(&reg, &f.ts_type)),
             );
         }
         check_device_body_roundtrip(&msg.rust_variant, fields, Value::Object(obj));
@@ -2580,9 +2581,9 @@ fn device_registry_static_message_bodies_match_serde_wire() {
         Some(TypeSpec::Struct { fields }) => fields,
         _ => panic!("types 表必须登记 CommandResult"),
     };
-    let request_sample = device_sample_value(&reg, "CommandRequest", "CommandRequest");
+    let request_sample = device_sample_value(&reg, "CommandRequest");
     check_device_body_roundtrip("CommandRequest", request_fields, request_sample);
-    let result_sample = device_sample_value(&reg, "CommandResult", "CommandResult");
+    let result_sample = device_sample_value(&reg, "CommandResult");
     check_device_body_roundtrip("CommandResult", result_fields, result_sample);
 }
 

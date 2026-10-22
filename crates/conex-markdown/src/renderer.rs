@@ -1480,7 +1480,10 @@ mod tests {
 
     #[test]
     fn gfm_emoji_shortcodes_default_is_off() {
-        assert!(!GFM_EMOJI_SHORTCODES_DEFAULT);
+        // 常量开关在编译期校验：默认值被翻成 true 时测试目标直接编译失败
+        const {
+            assert!(!GFM_EMOJI_SHORTCODES_DEFAULT);
+        }
         // 默认 API / 渲染路径保留短码文本，不插入 Unicode Emoji
         assert_eq!(
             translate_gfm_emoji("hello :white_check_mark: world"),
