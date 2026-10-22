@@ -38,7 +38,7 @@
 | src/outputs_config.rs       | 800  | mod  | SR-06 对应批次拆分对象（G-02 批③ 登记）                         | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行）              |
 | src/process.rs              | 976  | mod  | SR-06 对应批次拆分对象（G-02 批③ 登记）                         | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行）              |
 | src/resource.rs             | 935  | mod  | SR-06 对应批次拆分对象（G-02 批③ 登记）                         | SR-06 对应批次拆分完成（触发事实=该文件 ≤600 行）              |
-| src/sched.rs                | 1803 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
+| src/sched.rs                | 1803 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（已拆分为 sched/ 目录，全部子文件 ≤600 行）    |
 | src/scripted_mock_server.rs | 1008 | mod  | SR-06f 拆分对象（G-02 批③ 登记）                                | SR-06f 拆分完成（触发事实=该文件 ≤600 行）                     |
 | src/server/auth.rs          | 622  | mod  | SR-06 server 拆分对象（G-02 批③ 登记）                          | SR-06 server 拆分完成（触发事实=该文件 ≤600 行）               |
 | src/server/core_backend.rs  | 1611 | mod  | SR-06 server 拆分对象（G-02 批③ 登记）                          | SR-06 server 拆分完成（触发事实=该文件 ≤600 行）               |
@@ -91,7 +91,6 @@
 | crates/conex-browser/src/action/keyboard.rs            | 1006 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 | crates/conex-browser/src/action/mocks.rs               | 695  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 | crates/conex-browser/src/action/mod.rs                 | 1621 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
-| crates/conex-browser/src/action/ops.rs                 | 1482 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 | crates/conex-browser/src/action/wait.rs                | 667  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 | crates/conex-browser/src/adapters/cdp_input_backend.rs | 935  | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
 | crates/conex-browser/src/browser/cft.rs                | 1238 | mod  | SR-06 批② 拆分对象（G-02 批② 登记） | SR-06 批② 拆分完成后移除（触发事实=该文件 ≤ 600 行） |
@@ -148,7 +147,6 @@
 | crates/orchestrator/src/run.rs                   | 886  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/orchestrator/src/session.rs               | 1850 | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/orchestrator/src/steering_queue.rs        | 636  | mod   | 存量登记                                         | 后续轮次评估                                      |
-| crates/session-loop/src/cache_tracker.rs         | 766  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/session-loop/src/control.rs               | 697  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/session-loop/src/escape_watch.rs          | 870  | mod   | SR-06 批③ 覆盖只登记（E2 批）                    | SR-06 批③ session-loop 域拆分完成后 ≤600 移除登记 |
 | crates/session-loop/src/hooks.rs                 | 1248 | mod   | 存量登记（并行域在途，--update 登记）            | 后续轮次评估                                      |
@@ -316,7 +314,6 @@ apps/agent-workbench/src-tauri/src/note_commands.rs 1010
 apps/agent-workbench/src-tauri/src/outputs_config.rs 800
 apps/agent-workbench/src-tauri/src/process.rs 976
 apps/agent-workbench/src-tauri/src/resource.rs 935
-apps/agent-workbench/src-tauri/src/sched.rs 1803
 apps/agent-workbench/src-tauri/src/scripted_mock_server.rs 1008
 apps/agent-workbench/src-tauri/src/server/auth.rs 622
 apps/agent-workbench/src-tauri/src/server/core_backend.rs 1611
@@ -364,7 +361,6 @@ crates/conex-compaction/src/lib.rs 2647
 crates/conex-browser/src/action/keyboard.rs 1006
 crates/conex-browser/src/action/mocks.rs 695
 crates/conex-browser/src/action/mod.rs 1621
-crates/conex-browser/src/action/ops.rs 1482
 crates/conex-browser/src/action/wait.rs 667
 crates/conex-browser/src/adapters/cdp_input_backend.rs 935
 crates/conex-browser/src/browser/cft.rs 1238
@@ -417,7 +413,6 @@ crates/orchestrator/src/run.rs 944
 crates/orchestrator/src/session.rs 1856
 crates/orchestrator/src/steering_queue.rs 636
 crates/orchestrator/src/task_events.rs 838
-crates/session-loop/src/cache_tracker.rs 1087
 crates/session-loop/src/control.rs 736
 crates/session-loop/src/escape_watch.rs 870
 crates/session-loop/src/exec_single.rs 751

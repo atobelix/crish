@@ -197,7 +197,7 @@ impl ParallelExecObs {
 mod exec_batch;
 #[path = "exec_middleware.rs"]
 mod exec_middleware;
-#[path = "exec_single.rs"]
+#[path = "exec_single/mod.rs"]
 mod exec_single;
 #[path = "exec_verdict.rs"]
 mod exec_verdict;
