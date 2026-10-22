@@ -9,8 +9,12 @@ import { getTransport } from '../transport';
 import { classifyErrorDomain, domainUserMessage, logInternalError, networkUserMessage } from '../userFacingErrors';
 import type { ErrorDomain } from '../userFacingErrors';
 import type { Settings } from '../clientApi';
-import { getActiveModelId, getActiveProfileId } from '../providerProfiles';
-import { getLiveModel, resolveThinkingHandoffSafe } from '../modelsCatalogLive';
+import {
+  getActiveModelId,
+  getActiveProfileId,
+  getLiveModelFromRegistry,
+  resolveThinkingHandoffFromRegistry,
+} from '../providerProfilesLight';
 import { resolveEffectiveThinkingTitle } from '../SessionRuntimeRegistry';
 
 export type ReadinessState = 'ok' | 'blocked_with_action' | 'retryable_wait';
@@ -88,7 +92,7 @@ export function resolveContextWindow(
     const profileId = getActiveProfileId();
     const model = getActiveModelId();
     if (!profileId || !model) return undefined;
-    const window = getLiveModel(profileId, model)?.contextWindow;
+    const window = getLiveModelFromRegistry(profileId, model)?.contextWindow;
     if (typeof window === 'number' && Number.isFinite(window) && window > 0) {
       return Math.floor(window);
     }
@@ -124,8 +128,12 @@ export function resolveSendThinkingFields(
       typeof selectedTitleOverride === 'string' && selectedTitleOverride.trim()
         ? selectedTitleOverride.trim()
         : resolveEffectiveThinkingTitle(sessionId, providerId, modelId);
-    const handoff = resolveThinkingHandoffSafe(providerId, modelId, selectedTitle);
-    if (!handoff.supported) return {};
+    const handoff = resolveThinkingHandoffFromRegistry(
+      providerId,
+      modelId,
+      selectedTitle
+    );
+    if (!handoff?.supported) return {};
     if (handoff.selectedTitle == null || handoff.selectedWire == null) return {};
     return {
       thinkingTitle: handoff.selectedTitle,

@@ -202,3 +202,8 @@ export function resolveThinkingHandoffSafe(
     };
   }
 }
+
+// 自动向轻量探测层注入 live catalog 解析器（D9-B：断开 transport ↔ catalog 静态边）
+import { registerLiveCatalogResolvers } from './providerProfilesLight';
+registerLiveCatalogResolvers({ getLiveModel, resolveThinkingHandoffSafe });
+

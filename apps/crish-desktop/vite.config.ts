@@ -857,7 +857,8 @@ export default defineConfig({
 
           // 2.1 模型目录元数据独立切块（惰性加载，严禁渗入传输协议）
           if (
-            n.includes('/src/api/providerProfiles') ||
+            (n.includes('/src/api/providerProfiles') &&
+              !n.includes('providerProfilesLight')) ||
             n.includes('/src/api/provider-profiles') ||
             n.includes('/src/api/modelCatalog') ||
             n.includes('/src/api/modelCatalogTypes') ||
@@ -871,9 +872,22 @@ export default defineConfig({
 
           // 2.2 跨层共享工具与纯函数（切断 catalog/store 与 runtime 核心的双向 chunk 依赖环）
           if (
+            n.includes('/src/services/LoggerService') ||
+            n.includes('/src/api/modelsNormalize') ||
+            n.includes('/src/api/providerProfilesLight') ||
             n.includes('/src/api/chat-bridge/handlers/cacheMetricsCompute') ||
             n.includes('/src/api/chat-bridge/handlers/eventUtils') ||
-            n.includes('/src/api/chat-bridge/editSessionConsumer')
+            n.includes('/src/api/chat-bridge/handlers/eventParser') ||
+            n.includes('/src/api/chat-bridge/handlers/eventEnvelope') ||
+            n.includes('/src/api/chat-bridge/handlers/eventType') ||
+            n.includes('/src/api/chat-bridge/handlers/toolUtils') ||
+            n.includes('/src/api/chat-bridge/editSessionConsumer') ||
+            n.includes('/src/api/userFacingErrors') ||
+            n.includes('/src/services/ErrorStore') ||
+            n.includes('/src/api/uiEvents') ||
+            n.includes('/src/api/toolPresentation') ||
+            n.includes('/src/api/tool-presentation/') ||
+            n.includes('/src/api/toolFeedback')
           ) {
             return 'chat-bridge-common';
           }
@@ -888,7 +902,8 @@ export default defineConfig({
             n.includes('/src/store/sessionMessage') ||
             n.includes('/src/store/sessionCrud') ||
             n.includes('/src/store/layout-helpers/') ||
-            n.includes('/src/store/middleware/')
+            n.includes('/src/store/middleware/') ||
+            n.includes('/src/api/storeAccess')
           ) {
             return 'store-session-core';
           }
@@ -902,10 +917,6 @@ export default defineConfig({
           ) {
             return 'chat-runtime-core';
           }
-
-          // 2.4 次级重型视图异步切块（Diff / Terminal 脱离首屏同步评估）
-          if (n.includes('/src/components/diff/')) return 'view-diff';
-          if (n.includes('/src/components/terminal/')) return 'view-terminal';
 
           if (n.includes('/src/workers/')) return 'vendor-workers';
         },

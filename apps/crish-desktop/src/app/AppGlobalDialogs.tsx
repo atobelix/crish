@@ -1,9 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { AppErrorBoundary } from '../components/AppErrorBoundary';
-import { TelemetryDialog } from '../components/overlay/TelemetryDialog';
 import { openSettings } from '../api/storeAccess';
 import { emitUiEvent } from '../api/uiEvents';
-import { getActiveModelId, getActiveProfileId } from '../api/providerProfiles';
 import type { SettingsTabType } from '../store/types';
 import type { WizardStep } from '../components/firstRunWizardLib';
 import { useAnimatedPresence } from '../components/ui/Dialog/useAnimatedPresence';
@@ -13,6 +11,11 @@ import { checkAndAutoSyncExternalSessions } from '../api/import/autoSyncExternal
 const SETTINGS_EXIT_MS = 150;
 
 // Lazy loaded components
+const TelemetryDialog = lazy(() =>
+  import('../components/overlay/TelemetryDialog').then((m) => ({
+    default: m.TelemetryDialog,
+  }))
+);
 const FirstRunWizard = lazy(() =>
   import('../components/overlay/FirstRunWizard').then((m) => ({
     default: m.FirstRunWizard,
@@ -107,8 +110,11 @@ export function AppGlobalDialogs({
               {...(firstRunInitialStep !== undefined
                 ? { initialStep: firstRunInitialStep }
                 : {})}
-              onDone={() => {
+              onDone={async () => {
                 setShowFirstRun(false);
+                const { getActiveModelId, getActiveProfileId } = await import(
+                  '../api/providerProfiles'
+                );
                 const model = getActiveModelId();
                 const profileId = getActiveProfileId();
                 if (model && profileId) {
@@ -125,7 +131,9 @@ export function AppGlobalDialogs({
       )}
 
       {showTelemetry && (
-        <TelemetryDialog onClose={() => setShowTelemetry(false)} />
+        <Suspense fallback={null}>
+          <TelemetryDialog onClose={() => setShowTelemetry(false)} />
+        </Suspense>
       )}
 
       {/* 设置弹窗：role/aria-modal/层级/遮罩由 SettingsPanel 内的 ui/Dialog 基座提供 */}
