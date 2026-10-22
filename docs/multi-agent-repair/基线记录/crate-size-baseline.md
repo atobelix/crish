@@ -126,13 +126,12 @@
 | crates/orchestrator/src/goal_state.rs      | 1135 | mod  | SR-06 批④（orchestrator 域，D-03 SR-06d 收录）拆分对象（G-02 批③ 登记） | SR-06 批④ 拆分完成（触发事实=该文件 ≤600 行）   |
 | crates/orchestrator/src/task_events.rs     | 838  | mod  | 不在 SR-06 批④ 清单内（G-02 批③ 登记）                                  | 结构轮批表补录后拆分（触发事实=该文件 ≤600 行） |
 
-### 其余 crates（28）
+### 其余 crates（27）
 
 | 文件                                             | 行数 | 类型  | 登记理由                                         | 拆分时限                                          |
 | ------------------------------------------------ | ---- | ----- | ------------------------------------------------ | ------------------------------------------------- |
 | crates/conex-compaction/src/ai_summary.rs        | 962  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/conex-compaction/src/lib.rs               | 2058 | entry | 存量登记（lib.rs 大文件，AI 摘要域）             | 后续轮次评估                                      |
-| crates/conex-db/src/tests.rs                     | 850  | mod   | 存量登记（测试文件行数超限，测试规模计数观察项） | 后续轮次评估                                      |
 | crates/conex-fs/src/trash.rs                     | 965  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/conex-markdown/src/renderer.rs            | 1107 | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/conex-sandbox/src/semantics.rs            | 804  | mod   | 存量登记                                         | 后续轮次评估                                      |
@@ -391,7 +390,6 @@ crates/conex-computer-tools/src/tests.rs 1035
 crates/conex-computer-tools/src/tools.rs 1382
 crates/conex-db/src/agents.rs 846
 crates/conex-db/src/migrate.rs 607
-crates/conex-db/src/tests.rs 965
 crates/conex-doc-collab/src/text_engine.rs 616
 crates/conex-fs/src/trash.rs 1292
 crates/conex-fs/src/watch.rs 806
