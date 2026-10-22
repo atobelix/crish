@@ -232,5 +232,5 @@ pub struct ToolExecutor {
 }
 
 #[cfg(test)]
-#[path = "tool_exec_tests.rs"]
+#[path = "tool_exec_tests/mod.rs"]
 mod tests;
