@@ -26,9 +26,7 @@ import { isPendingDraftSessionId as isPendingDraft } from '@crish/shared-types';
 import { coerceSessionTimestamp } from '../sessionTime';
 import { prepareSessionsForUi } from '../sessionTitle';
 
-import {
-  asNonEmptyString,
-} from './sessionQuota';
+import { asNonEmptyString } from './sessionQuota';
 
 import {
   SESSION_ACTIVE_KEY,
@@ -290,7 +288,12 @@ export function hydrateSessionsFromDisk(): {
         ...(e.branchParentId !== undefined
           ? { branchParentId: e.branchParentId }
           : {}),
-        timestamp: coerceSessionTimestamp(e.id, e.timestamp, messages),
+        timestamp: coerceSessionTimestamp(
+          e.id,
+          e.timestamp,
+          messages,
+          e.updatedAt
+        ),
         messages,
         ...(e.pinnedMessageIds?.length
           ? { pinnedMessageIds: e.pinnedMessageIds }

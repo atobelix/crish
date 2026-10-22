@@ -243,7 +243,8 @@ export function assembleWindowedHydratedSessions(
     const safeTimestamp = coerceSessionTimestamp(
       e.id,
       e.timestamp,
-      isActive ? activeMessages : []
+      isActive ? activeMessages : [],
+      e.updatedAt
     );
     return {
       id: e.id,
