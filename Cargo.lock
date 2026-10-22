@@ -1236,7 +1236,6 @@ version = "0.1.1"
 dependencies = [
  "conex-doc-collab",
  "markdown",
- "serde",
  "thiserror 2.0.20",
 ]
 
@@ -1249,9 +1248,7 @@ dependencies = [
  "conex-doc-collab",
  "conex-md-ast",
  "conex-workspace-store",
- "serde",
  "serde_json",
- "thiserror 2.0.20",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -1522,7 +1519,6 @@ dependencies = [
  "rustls-pemfile",
  "serde",
  "serde_json",
- "serde_yaml",
  "session-loop",
  "sha2",
  "tauri",
