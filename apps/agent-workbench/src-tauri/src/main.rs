@@ -86,7 +86,7 @@ mod resource;
 // 见 push_wiring.rs 模块头注记）
 mod push_wiring;
 
-#[path = "server/core_backend.rs"]
+#[path = "server/core_backend/mod.rs"]
 pub(crate) mod core_backend;
 mod server;
 mod session_commands;
