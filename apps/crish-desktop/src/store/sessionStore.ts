@@ -7,7 +7,6 @@ import { produce } from 'immer';
 import { useCallback, useRef, useSyncExternalStore } from 'react';
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
 import { ensureSessionStoreShellKeyMigrated } from '../api/session-persistence/sessionShellKeyMigration';
 import { useShallow } from '../store/useShallowSelector';
 import {
@@ -441,12 +440,6 @@ export function triggerSessionMessageHydrateIfNeeded(sessionId: string): void {
     (recipe) => useSessionStore.setState(recipe)
   );
 }
-
-// ── 运行时动态注册 ──────────────────────────────────────────────────────────
-
-sessionRuntimeRegistry.registerActiveIdResolver(
-  () => useSessionStore.getState().activeSessionId
-);
 
 if (typeof window !== 'undefined') {
   window.useSessionStore = useSessionStore;

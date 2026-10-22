@@ -1,10 +1,14 @@
 import React, { useMemo } from 'react';
 import styles from './DiffCard.module.css';
-import { AppErrorBoundary } from '../AppErrorBoundary';
+import { DiffErrorBoundary } from './DiffErrorBoundary';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import type { FileDiff } from '../../store/types';
 import type { ChangeRenderItem, PlaceholderRenderItem } from './diffCardTypes';
-import { escapeHtml, highlightCode, langFromFilename } from '../../api/codeHighlight';
+import {
+  escapeHtml,
+  highlightCode,
+  langFromFilename,
+} from '../../api/codeHighlight';
 import {
   useDiffHighlightMap,
   type DiffHighlightItem,
@@ -13,7 +17,10 @@ import {
   computeIntralinePair,
   type DiffWordToken,
 } from '../../api/intralineDiff';
-import { computeFixedRowViewport, DIFF_FIXED_ROW_HEIGHT } from './fixedRowViewport';
+import {
+  computeFixedRowViewport,
+  DIFF_FIXED_ROW_HEIGHT,
+} from './fixedRowViewport';
 import { AppIcon } from '../ui/icons/index';
 
 type UnifiedRenderItem = PlaceholderRenderItem | ChangeRenderItem;
@@ -27,7 +34,7 @@ function renderTokens(
   targetType: 'added' | 'removed',
   fallbackText: string,
   lang: string,
-  hlHtml: string | undefined,
+  hlHtml: string | undefined
 ) {
   const html = hlHtml ?? highlightCode(fallbackText, lang);
   if (!tokens || tokens.length === 0) {
@@ -75,7 +82,9 @@ function renderTokens(
               <span
                 key={i}
                 className={
-                  targetType === 'added' ? styles.diffWordAdd : styles.diffWordDel
+                  targetType === 'added'
+                    ? styles.diffWordAdd
+                    : styles.diffWordDel
                 }
               >
                 {tok.text}
@@ -109,7 +118,7 @@ function unifiedRowKey(
   f: FileDiff,
   oldLine: number | undefined,
   newLine: number | undefined,
-  globalIdx: number,
+  globalIdx: number
 ): string {
   const oldLineNum = oldLine !== undefined ? String(oldLine) : '';
   const newLineNum = newLine !== undefined ? String(newLine) : '';
@@ -121,7 +130,7 @@ function collectUnifiedHighlightItems(
   renderItems: UnifiedRenderItem[],
   startIndex: number,
   endIndex: number,
-  codeLang: string,
+  codeLang: string
 ): DiffHighlightItem[] {
   const items: DiffHighlightItem[] = [];
   for (let globalIdx = startIndex; globalIdx < endIndex; globalIdx++) {
@@ -150,13 +159,14 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
       heightOnly: true,
     });
   const rowHeight = DIFF_FIXED_ROW_HEIGHT;
-  const { startIndex, endIndex, offsetTop, totalHeight } = computeFixedRowViewport(
-    scrollTop,
-    containerHeight,
-    totalItems,
-    rowHeight,
-    15,
-  );
+  const { startIndex, endIndex, offsetTop, totalHeight } =
+    computeFixedRowViewport(
+      scrollTop,
+      containerHeight,
+      totalItems,
+      rowHeight,
+      15
+    );
 
   const visibleItems = renderItems.slice(startIndex, endIndex);
 
@@ -171,14 +181,14 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
         renderItems,
         startIndex,
         endIndex,
-        codeLang,
+        codeLang
       ),
-    [f, renderItems, startIndex, endIndex, codeLang],
+    [f, renderItems, startIndex, endIndex, codeLang]
   );
   const hlMap = useDiffHighlightMap(hlItems);
 
   return (
-    <AppErrorBoundary variant="compact" title="变更对比出错">
+    <DiffErrorBoundary title="变更对比出错">
       <div
         ref={containerRef}
         className={styles.scrollParent}
@@ -220,8 +230,11 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
                     className={styles.collapseBar}
                     onClick={() => onExpandBlock(f.filePath, item.startIndex)}
                   >
-                    <AppIcon name="maximize" size={12}
-                      className={styles.collapseIcon} />
+                    <AppIcon
+                      name="maximize"
+                      size={12}
+                      className={styles.collapseIcon}
+                    />
                     <span>展开其余 {item.count} 行代码...</span>
                   </div>
                 );
@@ -298,7 +311,13 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
                   <div className={styles.gutterMarker}>{marker}</div>
                   <div className={styles.lineText}>
                     {tokens ? (
-                      renderTokens(tokens, targetType, change.content, codeLang, hlHtml)
+                      renderTokens(
+                        tokens,
+                        targetType,
+                        change.content,
+                        codeLang,
+                        hlHtml
+                      )
                     ) : (
                       <span
                         style={{
@@ -317,6 +336,6 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
           </div>
         </div>
       </div>
-    </AppErrorBoundary>
+    </DiffErrorBoundary>
   );
 };

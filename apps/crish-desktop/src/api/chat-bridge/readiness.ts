@@ -6,10 +6,18 @@
  * - 核心未就绪（waitUntilConnected 超时）→ 拒绝启动（C3.4：无 directFetch 降级）。
  */
 import { getTransport } from '../transport';
-import { classifyErrorDomain, domainUserMessage, logInternalError, networkUserMessage } from '../userFacingErrors';
+import {
+  classifyErrorDomain,
+  domainUserMessage,
+  logInternalError,
+  networkUserMessage,
+} from '../userFacingErrors';
 import type { ErrorDomain } from '../userFacingErrors';
 import type { Settings } from '../clientApi';
-import { getActiveModelId, getActiveProfileId } from '../providerProfiles';
+import {
+  getActiveModelId,
+  getActiveProfileId,
+} from '../provider-profiles/profileActiveSelection';
 import { getLiveModel, resolveThinkingHandoffSafe } from '../modelsCatalogLive';
 import { resolveEffectiveThinkingTitle } from '../SessionRuntimeRegistry';
 
@@ -124,9 +132,14 @@ export function resolveSendThinkingFields(
       typeof selectedTitleOverride === 'string' && selectedTitleOverride.trim()
         ? selectedTitleOverride.trim()
         : resolveEffectiveThinkingTitle(sessionId, providerId, modelId);
-    const handoff = resolveThinkingHandoffSafe(providerId, modelId, selectedTitle);
+    const handoff = resolveThinkingHandoffSafe(
+      providerId,
+      modelId,
+      selectedTitle
+    );
     if (!handoff.supported) return {};
-    if (handoff.selectedTitle == null || handoff.selectedWire == null) return {};
+    if (handoff.selectedTitle == null || handoff.selectedWire == null)
+      return {};
     return {
       thinkingTitle: handoff.selectedTitle,
       thinkingWire: handoff.selectedWire,

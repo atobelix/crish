@@ -847,65 +847,27 @@ export default defineConfig({
             // App chunk 残留的 dompurify 与 @chenglou/pretext 独立切块
             if (n.includes('dompurify')) return 'vendor-dompurify';
             if (n.includes('@chenglou')) return 'vendor-pretext';
+            if (n.includes('node_modules/motion')) return 'vendor-motion';
+            if (n.includes('node_modules/marked')) return 'vendor-marked';
+            if (n.includes('@radix-ui')) return 'vendor-radix';
+            if (n.includes('@tauri-apps/api')) return 'vendor-tauri';
           }
           if (
             n.includes('/packages/shared-utils/') ||
-            n.includes('/packages/shared-types/')
+            n.includes('/packages/shared-types/') ||
+            n.includes('/packages/plugin-import-claude-codex/') ||
+            n.includes('/src/utils/lifecycle/')
           ) {
             return 'vendor-shared-utils';
           }
 
-          // 2.1 模型目录元数据独立切块（惰性加载，严禁渗入传输协议）
-          if (
-            n.includes('/src/api/providerProfiles') ||
-            n.includes('/src/api/provider-profiles') ||
-            n.includes('/src/api/modelCatalog') ||
-            n.includes('/src/api/modelCatalogTypes') ||
-            n.includes('/src/api/modelCatalogPure') ||
-            n.includes('/src/api/modelCatalogMeta') ||
-            n.includes('/src/api/modelCatalogIpc') ||
-            n.includes('catalog.json')
-          ) {
-            return 'chat-provider-catalog';
+          if (n.includes('/src/i18n/locales/')) {
+            return 'i18n-locales';
           }
 
-          // 2.2 跨层共享工具与纯函数（切断 catalog/store 与 runtime 核心的双向 chunk 依赖环）
-          if (
-            n.includes('/src/api/chat-bridge/handlers/cacheMetricsCompute') ||
-            n.includes('/src/api/chat-bridge/handlers/eventUtils') ||
-            n.includes('/src/api/chat-bridge/editSessionConsumer')
-          ) {
-            return 'chat-bridge-common';
+          if (n.includes('modelsAutofillBaselineData.json')) {
+            return 'data-models-autofill';
           }
-
-          // 2.3 核心会话状态切块（解耦会话状态与运行时流传输）
-          if (
-            n.includes('/src/store/sessionStore') ||
-            n.includes('/src/store/sessionSubtreeModel') ||
-            n.includes('/src/store/sessionActions') ||
-            n.includes('/src/store/sessionIndex') ||
-            n.includes('/src/store/sessionListEqual') ||
-            n.includes('/src/store/sessionMessage') ||
-            n.includes('/src/store/sessionCrud') ||
-            n.includes('/src/store/layout-helpers/') ||
-            n.includes('/src/store/middleware/')
-          ) {
-            return 'store-session-core';
-          }
-
-          // 2.4 聊天运行时核心（统一收归 transport 与 stream 处理核心）
-          if (
-            n.includes('/src/api/StreamRenderBuffer') ||
-            n.includes('/src/services/StreamRecovery') ||
-            n.includes('/src/api/chatBridge') ||
-            n.includes('/src/api/chat-bridge/')
-          ) {
-            return 'chat-runtime-core';
-          }
-
-          // 2.4 次级重型视图异步切块（Diff / Terminal 脱离首屏同步评估）
-          if (n.includes('/src/components/diff/')) return 'view-diff';
-          if (n.includes('/src/components/terminal/')) return 'view-terminal';
 
           if (n.includes('/src/workers/')) return 'vendor-workers';
         },

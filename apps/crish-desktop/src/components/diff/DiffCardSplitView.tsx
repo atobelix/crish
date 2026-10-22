@@ -1,13 +1,17 @@
 import React, { useMemo } from 'react';
 import styles from './DiffCard.module.css';
-import { AppErrorBoundary } from '../AppErrorBoundary';
+import { DiffErrorBoundary } from './DiffErrorBoundary';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import type { FileDiff } from '../../store/types';
 import type {
   SplitChangeRenderItem,
   PlaceholderRenderItem,
 } from './diffCardTypes';
-import { escapeHtml, highlightCode, langFromFilename } from '../../api/codeHighlight';
+import {
+  escapeHtml,
+  highlightCode,
+  langFromFilename,
+} from '../../api/codeHighlight';
 import {
   useDiffHighlightMap,
   type DiffHighlightItem,
@@ -16,7 +20,10 @@ import {
   computeIntralinePair,
   type DiffWordToken,
 } from '../../api/intralineDiff';
-import { computeFixedRowViewport, DIFF_FIXED_ROW_HEIGHT } from './fixedRowViewport';
+import {
+  computeFixedRowViewport,
+  DIFF_FIXED_ROW_HEIGHT,
+} from './fixedRowViewport';
 import { AppIcon } from '../ui/icons/index';
 
 type SplitRenderItem = PlaceholderRenderItem | SplitChangeRenderItem;
@@ -30,7 +37,7 @@ function renderTokens(
   targetType: 'added' | 'removed',
   fallbackText: string,
   lang: string,
-  hlHtml: string | undefined,
+  hlHtml: string | undefined
 ) {
   const html = hlHtml ?? highlightCode(fallbackText, lang);
   if (!tokens || tokens.length === 0) {
@@ -79,7 +86,9 @@ function renderTokens(
               <span
                 key={i}
                 className={
-                  targetType === 'added' ? styles.diffWordAdd : styles.diffWordDel
+                  targetType === 'added'
+                    ? styles.diffWordAdd
+                    : styles.diffWordDel
                 }
               >
                 {tok.text}
@@ -113,7 +122,7 @@ function splitRowKeys(
   f: FileDiff,
   oldLine: number | undefined,
   newLine: number | undefined,
-  idx: number,
+  idx: number
 ): { stableKey: string; leftId: string; rightId: string } {
   const oldLineNum = oldLine !== undefined ? String(oldLine) : '';
   const newLineNum = newLine !== undefined ? String(newLine) : '';
@@ -130,7 +139,7 @@ function collectSplitHighlightItems(
   renderItems: SplitRenderItem[],
   startIndex: number,
   endIndex: number,
-  codeLang: string,
+  codeLang: string
 ): DiffHighlightItem[] {
   const items: DiffHighlightItem[] = [];
   for (let idx = startIndex; idx < endIndex; idx++) {
@@ -141,13 +150,17 @@ function collectSplitHighlightItems(
       f,
       left?.oldLine,
       right?.newLine,
-      idx,
+      idx
     );
     if (left) {
       items.push({ id: leftId, code: left.change.content, language: codeLang });
     }
     if (right) {
-      items.push({ id: rightId, code: right.change.content, language: codeLang });
+      items.push({
+        id: rightId,
+        code: right.change.content,
+        language: codeLang,
+      });
     }
   }
   return items;
@@ -166,13 +179,14 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
     });
   // Mode-FIXED：行高与 CSS 契约锁定 22px；禁用折行保证 scrollHeight ≡ n×22
   const rowHeight = DIFF_FIXED_ROW_HEIGHT;
-  const { startIndex, endIndex, offsetTop, totalHeight } = computeFixedRowViewport(
-    scrollTop,
-    containerHeight,
-    totalItems,
-    rowHeight,
-    15,
-  );
+  const { startIndex, endIndex, offsetTop, totalHeight } =
+    computeFixedRowViewport(
+      scrollTop,
+      containerHeight,
+      totalItems,
+      rowHeight,
+      15
+    );
 
   const visibleItems = renderItems.slice(startIndex, endIndex);
 
@@ -180,19 +194,31 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
 
   const hlItems = useMemo(
     () =>
-      collectSplitHighlightItems(f, renderItems, startIndex, endIndex, codeLang),
-    [f, renderItems, startIndex, endIndex, codeLang],
+      collectSplitHighlightItems(
+        f,
+        renderItems,
+        startIndex,
+        endIndex,
+        codeLang
+      ),
+    [f, renderItems, startIndex, endIndex, codeLang]
   );
   const hlMap = useDiffHighlightMap(hlItems);
 
   return (
-    <AppErrorBoundary variant="compact" title="变更对比出错">
+    <DiffErrorBoundary title="变更对比出错">
       <div
         ref={containerRef}
         className={styles.scrollParent}
         onScroll={onScroll}
         tabIndex={0}
-        style={{ position: 'relative', overflowY: 'auto', overflowX: 'auto', outline: 'none', overflowAnchor: 'none' }}
+        style={{
+          position: 'relative',
+          overflowY: 'auto',
+          overflowX: 'auto',
+          outline: 'none',
+          overflowAnchor: 'none',
+        }}
       >
         <div
           style={{
@@ -223,8 +249,11 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
                     className={styles.collapseBar}
                     onClick={() => onExpandBlock(f.filePath, item.startIndex)}
                   >
-                    <AppIcon name="maximize" size={12}
-                      className={styles.collapseIcon} />
+                    <AppIcon
+                      name="maximize"
+                      size={12}
+                      className={styles.collapseIcon}
+                    />
                     <span>展开其余 {item.count} 行代码...</span>
                   </div>
                 );
@@ -274,7 +303,7 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
                 f,
                 left?.oldLine,
                 right?.newLine,
-                idx,
+                idx
               );
               const leftHl = hlMap.get(leftId);
               const rightHl = hlMap.get(rightId);
@@ -283,7 +312,11 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
                 <div
                   key={stableKey}
                   className={styles.splitLine}
-                  style={{ height: `${rowHeight}px`, minHeight: `${rowHeight}px`, overflow: 'hidden' }}
+                  style={{
+                    height: `${rowHeight}px`,
+                    minHeight: `${rowHeight}px`,
+                    overflow: 'hidden',
+                  }}
                 >
                   {/* 左栏 */}
                   <div
@@ -297,7 +330,13 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
                     <div className={styles.lineText}>
                       {left ? (
                         leftTokens ? (
-                          renderTokens(leftTokens, 'removed', leftText, codeLang, leftHl)
+                          renderTokens(
+                            leftTokens,
+                            'removed',
+                            leftText,
+                            codeLang,
+                            leftHl
+                          )
                         ) : (
                           <span
                             style={{
@@ -325,7 +364,13 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
                     <div className={styles.lineText}>
                       {right ? (
                         rightTokens ? (
-                          renderTokens(rightTokens, 'added', rightText, codeLang, rightHl)
+                          renderTokens(
+                            rightTokens,
+                            'added',
+                            rightText,
+                            codeLang,
+                            rightHl
+                          )
                         ) : (
                           <span
                             style={{
@@ -346,6 +391,6 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
           </div>
         </div>
       </div>
-    </AppErrorBoundary>
+    </DiffErrorBoundary>
   );
 };
