@@ -8,3 +8,6 @@ reference/
 
 # 测试 fixture 数据：内容被测试断言引用，不做格式化改写
 apps/crish-desktop/src/store/test_hydrated_sessions.json
+
+# Tauri 构建产物与 schema JSON
+apps/agent-workbench/src-tauri/gen/
