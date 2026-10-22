@@ -43,7 +43,12 @@ jobs:
       # 原 `--workspace -- --ignored` 会把它们一并拉起，在 ubuntu runner 上必然失败，
       # 且与本 job「压力层」语义不符。压力目标被误删/改名时 cargo 报
       # no test target matches pattern 直接判红，不会静默空跑。
+      # 完整 32 个 #[ignore] 清单与分类详见 docs/rust-rewrite/plans/PE-11-ignored-tests-inventory.md
       - run: cargo test --workspace --release --locked --test 'stress_*' -- --ignored
+      # 事件桥吞吐压力（PE-11 T11.6.3，buffer.rs 丢帧语义不丢终态）实现为
+      # crish-agent-workbench lib 内的 buffer::stress_tests，不是 tests/stress_*.rs
+      # 目标，上一条 --test 'stress_*' 选不到，单独以 lib + 名称过滤运行。
+      - run: cargo test -p crish-agent-workbench --release --locked --lib -- --ignored stress_
 
   stress-ts:
     runs-on: ubuntu-latest
