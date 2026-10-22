@@ -157,7 +157,6 @@
 | crates/session-loop/src/loop/summary_dispatch.rs | 1146 | mod   | SR-06 批③ 占位（02 方案批③清单内）               | SR-06 批③ 完成 ≤600 移除登记                      |
 | crates/session-loop/src/safe_point.rs            | 698  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/session-loop/src/state.rs                 | 617  | mod   | 存量登记                                         | 后续轮次评估                                      |
-| crates/session-loop/src/steering/mod.rs          | 886  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/session-loop/src/steering/strategy.rs     | 632  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/session-loop/src/stream.rs                | 787  | mod   | 存量登记                                         | 后续轮次评估                                      |
 
@@ -428,7 +427,6 @@ crates/session-loop/src/loop/handlers/mod.rs 1765
 crates/session-loop/src/loop/summary_dispatch.rs 1146
 crates/session-loop/src/safe_point.rs 698
 crates/session-loop/src/state.rs 645
-crates/session-loop/src/steering/mod.rs 884
 crates/session-loop/src/steering/strategy.rs 665
 crates/session-loop/src/stream.rs 860
 crates/session-loop/src/tool_exec_tests.rs 3233
