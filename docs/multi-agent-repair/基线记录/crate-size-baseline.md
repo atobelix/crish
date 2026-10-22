@@ -144,7 +144,6 @@
 | crates/orchestrator/src/persist.rs               | 1038 | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/orchestrator/src/recovery.rs              | 687  | mod   | 存量登记（I8 G10 统计点接线位）                  | 后续轮次评估                                      |
 | crates/orchestrator/src/run.rs                   | 886  | mod   | 存量登记                                         | 后续轮次评估                                      |
-| crates/orchestrator/src/session.rs               | 1850 | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/orchestrator/src/steering_queue.rs        | 636  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/session-loop/src/control.rs               | 697  | mod   | 存量登记                                         | 后续轮次评估                                      |
 | crates/session-loop/src/escape_watch.rs          | 870  | mod   | SR-06 批③ 覆盖只登记（E2 批）                    | SR-06 批③ session-loop 域拆分完成后 ≤600 移除登记 |
@@ -405,7 +404,6 @@ crates/orchestrator/src/normalize.rs 677
 crates/orchestrator/src/persist.rs 1091
 crates/orchestrator/src/recovery.rs 687
 crates/orchestrator/src/run.rs 944
-crates/orchestrator/src/session.rs 1856
 crates/orchestrator/src/steering_queue.rs 636
 crates/orchestrator/src/task_events.rs 838
 crates/session-loop/src/control.rs 736
