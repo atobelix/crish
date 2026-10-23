@@ -1081,7 +1081,7 @@ pub(crate) fn waste_alert_event(
         Some(input_micros.saturating_sub(read_micros) as f64 / 1_000_000.0)
     });
     let over_token_threshold = stats.missed_tokens >= WARN_MISSED_TOKENS;
-    let over_cost_threshold = missed_cost_usd.map_or(false, |c| c >= WARN_MISSED_COST_USD);
+    let over_cost_threshold = missed_cost_usd.is_some_and(|c| c >= WARN_MISSED_COST_USD);
     if !over_token_threshold && !over_cost_threshold {
         return None;
     }
@@ -1363,7 +1363,7 @@ pub(crate) fn push_subagent_role_constraint_with_locale(
     injector: &mut ContextInjector,
     locale: Option<&str>,
 ) {
-    let is_en = locale.map_or(false, |l| l.to_ascii_lowercase().starts_with("en"));
+    let is_en = locale.is_some_and(|l| l.to_ascii_lowercase().starts_with("en"));
     let (title, content) = if is_en {
         (
             SUBAGENT_ROLE_CONSTRAINT_TITLE_EN,

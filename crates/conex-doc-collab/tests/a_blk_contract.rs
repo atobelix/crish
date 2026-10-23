@@ -308,6 +308,7 @@ fn a_blk_01_same_batch_insert_then_move_keeps_id() {
 /// 钉：delete 后 undo → 被删 id 回树且与预分配 id 同一值；未删块 id 全程不变。
 /// **≠** 产品 undo 快捷键 / redo / 跨文档撤销 UI（W6-A e2e 余量）。
 #[test]
+#[allow(deprecated)] // 测试存量全树 undo API 对 block_id 的恢复
 fn a_blk_01_undo_restores_block_id_after_delete() {
     let mut s = DocSession::new("a-blk-01-undo");
     let keep = BlockId::new();

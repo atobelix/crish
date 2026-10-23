@@ -278,7 +278,7 @@ pub const FLOW_AUTO_COMPOSITE_KEY: &str = "flow_auto_composite";
 /// E2 收敛（保守路线）：本 trait 即 `MetaStore`（同步 get_meta/set_meta 最小公共面）。
 /// - `Store`（persist.rs）为 async event/run trait，不含此同步 meta 方法；
 /// - `RecoveryStore`（recovery_store.rs）的 `get_meta`/`set_meta` 与本 trait 同步签名形状一致
-///  （`&str` key/value、`Option<String>`），错误类型 domain-specific（`FlowError` vs `RecoveryError`）
+///   （`&str` key/value、`Option<String>`），错误类型 domain-specific（`FlowError` vs `RecoveryError`）
 ///   故不强制 supertrait 合并（async/sync 差异 + 循环依赖风险）；
 /// - 历史名 `FlowMetaStore` 保留，新代码可使用 `MetaStore` 别名，re-export 路径不 break。
 pub trait FlowMetaStore: Send + Sync {

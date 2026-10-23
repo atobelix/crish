@@ -58,6 +58,7 @@
 //! - OS watcher **产品**接线（桌面 timer/IPC/三路 UI）
 
 #![allow(missing_docs)]
+#![cfg_attr(test, allow(clippy::disallowed_methods))] // 测试临时目录清理，非产品物理删除路径
 
 mod cas;
 mod fts;

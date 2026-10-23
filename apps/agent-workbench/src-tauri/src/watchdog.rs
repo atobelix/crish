@@ -434,6 +434,7 @@ mod tests {
     }
 
     /// 构造测试 watchdog（内存 store + 无活跃定时器 + 独立队列）
+    #[allow(clippy::type_complexity)]
     fn test_watchdog() -> (
         Arc<Watchdog>,
         Arc<Mutex<PendingMessageQueue>>,

@@ -155,6 +155,13 @@ struct SubscriberEntry {
     dropped: AtomicU64,
 }
 
+#[cfg(test)]
+impl Default for WsBroadcast {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WsBroadcast {
     /// 新建广播器（默认连接缓冲容量 [CONN_QUEUE_CAPACITY]）
     #[cfg(test)]

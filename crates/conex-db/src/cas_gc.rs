@@ -923,6 +923,8 @@ pub(crate) fn purge_expired_quarantined_chunk_conn(
     Ok((purged, files_to_delete))
 }
 
+// 豁免理由：CAS GC 物理清理已过期的外置隔离 Blob 文件（由 GC 状态机驱动，不进回收站）
+#[allow(clippy::disallowed_methods)]
 fn remove_purged_external_files(files_to_delete: &[String]) {
     for file_path in files_to_delete {
         let p = std::path::Path::new(file_path);

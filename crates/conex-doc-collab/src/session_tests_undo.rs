@@ -1,4 +1,5 @@
 //! W1-U undo 域测试（SR-06g · 拆分 · 测外置 · ≠ EL）。
+#![allow(deprecated)] // 测试存量全树 undo API 的正确性与向下兼容
 //!
 //! A-COL-04（origin 过滤）/ A-MEM-04（跨冷 undo）/ A-INV-09c 后半（删块 undo 恢复）。
 use super::super::*;

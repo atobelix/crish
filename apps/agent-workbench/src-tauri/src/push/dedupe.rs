@@ -47,6 +47,10 @@ pub trait DedupeBackend: Send + Sync {
     fn prune_older_than(&mut self, cutoff_ms: u64);
     /// 当前条目数（诊断/测试用）
     fn len(&self) -> usize;
+    /// 当前条目是否为空
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 /// 纯内存去重后端（HashMap<key, 记录时刻>）

@@ -219,7 +219,7 @@ pub(crate) fn catalog_request_profile(config: &EngineProviderConfig) -> CatalogR
     // OpenAi；anthropic/gemini 无声明 → None = fail-closed 不注入思考键，§2.3）
     let thinking_format = compat
         .and_then(|c| c.thinking_format)
-        .or_else(|| match protocol {
+        .or(match protocol {
             WireProtocol::Chat | WireProtocol::Responses => Some(ThinkingFormat::OpenAi),
             _ => None,
         });

@@ -4,6 +4,9 @@
 //! mod tests;`（非直接 `mod`，无孤儿）。用例形状与拆分前完全一致（零删除、
 //! 零合并）；诚实边界句全保留。
 
+#![allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
+#![allow(clippy::await_holding_lock)] // note_runtime 测试全局互斥锁在单测执行期间串行持有
+
 use super::note_commands_apply::{
     NoteApplyOpsArgs, NoteRedoTextArgs, NoteSendToNoteArgs, NoteUndoTextArgs,
 };

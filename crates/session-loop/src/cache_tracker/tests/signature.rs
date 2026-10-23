@@ -19,8 +19,8 @@ fn signature_capture_ignores_timestamps_and_metadata() {
 #[test]
 fn signature_capture_detects_system_and_message_changes() {
     let m = msg("m1", AgentMessageRole::User, "你好", "2026-01-01T00:00:00Z");
-    let base = build_request_signature(Some("sys"), &tools(), &[m.clone()]);
-    let other_system = build_request_signature(Some("sys2"), &tools(), &[m.clone()]);
+    let base = build_request_signature(Some("sys"), &tools(), std::slice::from_ref(&m));
+    let other_system = build_request_signature(Some("sys2"), &tools(), std::slice::from_ref(&m));
     assert_ne!(base.system_hash, other_system.system_hash);
     let other_text = build_request_signature(
         Some("sys"),
@@ -62,7 +62,7 @@ fn signature_capture_detects_system_and_message_changes() {
 #[test]
 fn signature_capture_is_deterministic() {
     let m = msg("m1", AgentMessageRole::User, "你好", "2026-01-01T00:00:00Z");
-    let a = build_request_signature(Some("sys"), &tools(), &[m.clone()]);
+    let a = build_request_signature(Some("sys"), &tools(), std::slice::from_ref(&m));
     let b = build_request_signature(Some("sys"), &tools(), &[m]);
     assert_eq!(a, b);
 }
@@ -72,7 +72,7 @@ fn signature_capture_is_deterministic() {
 #[test]
 fn signature_capture_hashes_tool_set() {
     let m = msg("m1", AgentMessageRole::User, "你好", "2026-01-01T00:00:00Z");
-    let base = build_request_signature(Some("sys"), &tools(), &[m.clone()]);
+    let base = build_request_signature(Some("sys"), &tools(), std::slice::from_ref(&m));
     let other_tool = build_request_signature(
         Some("sys"),
         &[ToolSchema {
@@ -98,7 +98,7 @@ fn incremental_signature_matches_full_on_append() {
     );
     // 首轮（全量）
     let mut t = tracker(0);
-    t.capture_signature(Some("sys"), &tools(), &[m1.clone()]);
+    t.capture_signature(Some("sys"), &tools(), std::slice::from_ref(&m1));
     let sig_after_first = t.pending_signature.clone().unwrap();
     // 第二轮（追加 m2）走增量
     t.capture_signature(Some("sys"), &tools(), &[m1.clone(), m2.clone()]);
@@ -116,7 +116,7 @@ fn incremental_signature_falls_back_when_system_changes() {
     let m1 = msg("m1", AgentMessageRole::User, "你好", "2026-01-01T00:00:00Z");
     let m2 = msg("m2", AgentMessageRole::User, "追加", "2026-01-01T00:00:00Z");
     let mut t = tracker(0);
-    t.capture_signature(Some("sys"), &tools(), &[m1.clone()]);
+    t.capture_signature(Some("sys"), &tools(), std::slice::from_ref(&m1));
     t.capture_signature(Some("sys2"), &tools(), &[m1.clone(), m2.clone()]);
     let sig = t.pending_signature.clone().unwrap();
     let full = build_request_signature(Some("sys2"), &tools(), &[m1, m2]);
@@ -129,10 +129,10 @@ fn incremental_signature_falls_back_when_messages_shrink() {
     let m1 = msg("m1", AgentMessageRole::User, "你好", "2026-01-01T00:00:00Z");
     let m2 = msg("m2", AgentMessageRole::User, "追加", "2026-01-01T00:00:00Z");
     let mut t = tracker(0);
-    t.capture_signature(Some("sys"), &tools(), &[m1.clone()]);
+    t.capture_signature(Some("sys"), &tools(), std::slice::from_ref(&m1));
     t.capture_signature(Some("sys"), &tools(), &[m1.clone(), m2.clone()]);
     // 第二轮消息比首轮少 → prev_count(2) > len(1) → 回退全量
-    t.capture_signature(Some("sys"), &tools(), &[m1.clone()]);
+    t.capture_signature(Some("sys"), &tools(), std::slice::from_ref(&m1));
     let sig = t.pending_signature.clone().unwrap();
     let full = build_request_signature(Some("sys"), &tools(), &[m1]);
     assert_eq!(sig, full, "消息缩减应回退全量重算");

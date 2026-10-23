@@ -140,7 +140,7 @@ impl WorkflowScheduleWire {
                     .or_else(|| obj.get("minutes"))
                     .and_then(|v| v.as_u64());
                 match raw {
-                    Some(n) if n >= 1 && n <= INTERVAL_MINUTES_MAX => Ok(Self::IntervalMinutes {
+                    Some(n) if (1..=INTERVAL_MINUTES_MAX).contains(&n) => Ok(Self::IntervalMinutes {
                         interval_minutes: n,
                     }),
                     _ => Err(format!("间隔分钟须为 1–{} 的整数", INTERVAL_MINUTES_MAX)),
@@ -502,6 +502,7 @@ pub(crate) trait WorkflowStore: Send + Sync {
     }
 
     /// 标记单条运行记录完成/终态（Upsert 语义：未找到已有记录时原地创建终态记录，杜绝静默丢失）
+    #[allow(clippy::too_many_arguments)]
     fn update_run_finish(
         &self,
         workflow_id: &str,
@@ -1402,6 +1403,7 @@ impl WorkflowBackend {
     }
 
     /// 回写运行记录终态（供 ProductionScheduledLauncher 终态钩子与测试直接调用）
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn finish_run(
         &self,
         workflow_id: &str,
@@ -2085,6 +2087,7 @@ fn parse_schedule_input(
 
 /// `create-workflow`：创建 workflow（名称/提示词必填；调度按 §4.4 转 cron）
 #[tauri::command(rename = "create-workflow")]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn create_workflow(
     name: String,
     prompt: String,
@@ -2140,6 +2143,7 @@ pub(crate) async fn list_workflows(
 
 /// `update-workflow`：更新 workflow（部分字段补丁）
 #[tauri::command(rename = "update-workflow")]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn update_workflow(
     workflow_id: String,
     name: Option<String>,
@@ -2576,7 +2580,7 @@ mod tests {
             )
             .await
             .expect("暂停应成功");
-        assert_eq!(paused.enabled, false);
+        assert!(!paused.enabled);
         // 更新不存在的 id → NotFound
         let missing = backend.update("cron-999", WorkflowPatch::default()).await;
         assert!(
@@ -2876,7 +2880,7 @@ mod tests {
         let iso = epoch_ms_to_iso(1_752_000_000_000);
         assert!(iso.ends_with('Z'), "应为 UTC Z 后缀：{iso}");
         assert!(iso.contains('T'), "应为 ISO 格式：{iso}");
-        let secs = iso[..iso.len() - 5].replace('T', "-").replace(':', "-");
+        let secs = iso[..iso.len() - 5].replace(['T', ':'], "-");
         let parts: Vec<&str> = secs.split('-').collect();
         assert_eq!(parts.len(), 6, "ISO 应含完整日期时间字段：{iso}");
     }
@@ -3477,6 +3481,7 @@ mod tests {
 
     /// 9. INT-02 全局默认沙箱目录兜底：cwd 为 None 或空串时自动解析并创建 <app_data_dir>/scheduled-tasks-sandbox
     #[test]
+    #[allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
     fn resolve_effective_workflow_cwd_creates_default_sandbox_int02() {
         let unique_dir =
             std::env::temp_dir().join(format!("crish-int02-sandbox-test-{}", now_ms()));

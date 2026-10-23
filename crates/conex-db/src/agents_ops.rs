@@ -414,7 +414,7 @@ mod tests {
             vec![msg("m1", "user", 1)],
         );
         // 首写经 save（消息随行）；后续引擎写一律走 upsert
-        db.save_session_agents("s1", &[row.clone()]).unwrap();
+        db.save_session_agents("s1", std::slice::from_ref(&row)).unwrap();
 
         // 同 PK 二次 upsert：列值更新（status → completed、路径写入），
         // 行数不变、messages 保留（ON CONFLICT DO UPDATE 不触发级联）
@@ -470,7 +470,7 @@ mod tests {
             None,
             vec![msg("m1", "user", 1), msg("m2", "assistant", 2)],
         );
-        db.save_session_agents("s1", &[row.clone()]).unwrap();
+        db.save_session_agents("s1", std::slice::from_ref(&row)).unwrap();
 
         // 同 PK upsert（等价 INSERT OR REPLACE 的触发面：PK 冲突）
         let mut updated = row.clone();
@@ -573,7 +573,7 @@ mod tests {
         // save 面：带子会话 id 的行随行落库、读回一致
         let mut row = agent("a1", "run-1", "running", "s1", None, None, Vec::new());
         row.sub_session_id = Some("sub-sess-1-1".to_string());
-        db.save_session_agents("s1", &[row.clone()]).unwrap();
+        db.save_session_agents("s1", std::slice::from_ref(&row)).unwrap();
         let loaded = db.load_session_agents("s1").unwrap();
         assert_eq!(
             loaded[0].sub_session_id.as_deref(),

@@ -739,11 +739,13 @@ pub fn extract_and_decode_ps_payload(args: &[String]) -> Option<String> {
 
             if let Some(bytes) = decode_base64_payload(clean_payload) {
                 // 1. 若含 null 字节且长度为偶数，优先按 PowerShell 原生 UTF-16LE 解码
-                let has_null = bytes.iter().any(|&b| b == 0);
+                let has_null = bytes.contains(&0);
                 if has_null && bytes.len() % 2 == 0 {
                     let u16_chars: Vec<u16> = bytes
-                        .chunks_exact(2)
-                        .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
+                        .map(|chunk| u16::from_le_bytes(*chunk))
                         .collect();
                     if let Ok(utf16_str) = String::from_utf16(&u16_chars) {
                         return Some(utf16_str);
@@ -760,8 +762,10 @@ pub fn extract_and_decode_ps_payload(args: &[String]) -> Option<String> {
                 // 3. 兜底尝试 UTF-16LE
                 if bytes.len() % 2 == 0 {
                     let u16_chars: Vec<u16> = bytes
-                        .chunks_exact(2)
-                        .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
+                        .map(|chunk| u16::from_le_bytes(*chunk))
                         .collect();
                     if let Ok(utf16_str) = String::from_utf16(&u16_chars) {
                         return Some(utf16_str);

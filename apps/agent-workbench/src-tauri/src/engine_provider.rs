@@ -9,6 +9,7 @@
 //! - [protocol]：协议路由单一真源消费 + 四态解析器选择 + 目录查询
 //!   + maxTokensField 决议（T3.6/C5）；[headers]：请求头组装
 //!   + 会话亲和头族 seam（T3.5/G1-e）；[thinking]：思考档位映射；[stream]：流状态机。
+//!
 //! 头钉：SR-04 · 拆分 · ≠ EL（结构拆分；四协议路由/思考档位为 R3 T3.2 新增，
 //! URL/body/parser 收敛于同一 [protocol::effective_protocol]）。
 

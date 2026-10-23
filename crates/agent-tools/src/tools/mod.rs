@@ -576,12 +576,14 @@ pub(crate) fn decode_text(bytes: &[u8]) -> DecodedText {
 /// 按 UTF-16 字节序解码（BOM 已剥除）；返回 (文本, 是否发生 lossy 替换)
 fn decode_utf16(bytes: &[u8], little_endian: bool) -> (String, bool) {
     let units: Vec<u16> = bytes
-        .chunks_exact(2)
-        .map(|c| {
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&c| {
             if little_endian {
-                u16::from_le_bytes([c[0], c[1]])
+                u16::from_le_bytes(c)
             } else {
-                u16::from_be_bytes([c[0], c[1]])
+                u16::from_be_bytes(c)
             }
         })
         .collect();

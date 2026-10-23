@@ -218,9 +218,9 @@ pub fn validate_preference_value(key: &str, value: &Value) -> Result<(), CoreErr
                     return Ok(());
                 }
             }
-            return Err(CoreError::invalid_input(
+            Err(CoreError::invalid_input(
                 "theme must be a non-empty string (default|dark|light|oled|sepia|cyberpunk|nord)",
-            ));
+            ))
         }
         "theme_skin" | "theme_custom_bg" | "theme_custom_fg" => {
             if value.is_string() {
@@ -344,7 +344,7 @@ pub async fn prefs_get(
             match row {
                 Some(r) => {
                     let val = serde_json::from_str::<Value>(&r.value)
-                        .unwrap_or_else(|_| Value::String(r.value));
+                        .unwrap_or(Value::String(r.value));
                     Ok(val)
                 }
                 None => Ok(Value::Null),
@@ -361,7 +361,7 @@ pub async fn prefs_get(
             let mut map = serde_json::Map::new();
             for r in rows {
                 let val = serde_json::from_str::<Value>(&r.value)
-                    .unwrap_or_else(|_| Value::String(r.value));
+                    .unwrap_or(Value::String(r.value));
                 map.insert(r.key, val);
             }
             Ok(Value::Object(map))

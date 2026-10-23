@@ -1,5 +1,6 @@
 //! executor 测试（SR-06a-4 拆分 · executor.rs `#[path]` 接线；测试资产保护
 //! 铁律：全部既有测试原样迁入，零删除；测试名与断言形状不变）。
+#![allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
 
 use super::*;
 use crate::definition::{Tool, ToolDefinition};

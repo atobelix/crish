@@ -2,7 +2,7 @@
 //!
 //! 承载（D-03 SR-04 四面之 audit 审计）：路由型审计 sink
 //! （[RoutingAuditSink]，15-T-6 裁决 D9：run 级桥注册表 + G10 denied 计数）
-//! + wait 通道 dispatch 声明存储双 trait 桥（[WaitDispatchStore] ↔
+//! 以及 wait 通道 dispatch 声明存储双 trait 桥（[WaitDispatchStore] ↔
 //! [crate::watchdog::DispatchStore]，T-CF-10/13 共享适配桥）。
 //! 头钉：SR-04 · 拆分 · ≠ EL（结构拆分，不关任何 EL；仅搬移不改语义）。
 

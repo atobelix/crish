@@ -1,4 +1,5 @@
 //! 历史迁移测试资产：无损转换、显式声明、备份与失败保护。
+#![allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
 
 use super::*;
 use std::fs;

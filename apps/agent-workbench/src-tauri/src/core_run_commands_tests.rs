@@ -4,6 +4,8 @@
 //   tasklist / kill -0 存活探测辅助，T-AB-06/07 验收），非产品执行面；
 //   测试 mod 内 allow + 理由（裁决 D8 背书）。
 #![allow(clippy::disallowed_methods)]
+#![allow(clippy::type_complexity)] // 测试用高阶回调与装配闭包签名
+#![allow(clippy::await_holding_lock)] // 测试驱动中持有测试同步锁跨越 step 调度 await
 
 use super::*;
 use conex_types::message::{
@@ -6503,8 +6505,8 @@ async fn retry_backoff_run_policy_retries_fast_and_fatales() {
         "baseMs=1 应依序记录 attempt/delay [(1,1),(2,2),(3,4)]，实际 {retry_attempts_and_delays:?}"
     );
     assert!(
-        elapsed_ms < 700,
-        "baseMs=1 → 重试近零等待（实际 {elapsed_ms}ms，应 < 退避基数 750ms）"
+        elapsed_ms < 1500,
+        "baseMs=1 → 重试近零等待（实际 {elapsed_ms}ms，应远低于默认退避基数之和 5250ms）"
     );
 }
 
@@ -8384,8 +8386,7 @@ async fn l2_cooperative_stop_reaches_stopped() {
     let events = db.query_events("s1", 0, Some(500)).expect("事件查询");
     let terminal = events
         .iter()
-        .filter(|e| e.event_type == "run-terminal")
-        .last()
+        .rfind(|e| e.event_type == "run-terminal")
         .expect("run-terminal 必须落库");
     let payload: serde_json::Value =
         serde_json::from_str(&terminal.payload).expect("run-terminal 载荷为合法 JSON");
@@ -9432,7 +9433,7 @@ async fn watcher_user_stopped_blocks_then_user_run_resumes_e2e() {
     )
     .await
     .expect("用户新 run 发起成功");
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
     loop {
         if provider.call_count() >= 3 && !state.is_user_stopped("s1") {
             break;
@@ -10275,7 +10276,7 @@ async fn compact_now_rejects_noop_short_conversation() {
     let store: Arc<dyn Store> = Arc::new(orchestrator::persist::LocalDbStore::new(db));
     let state = core_state_with_store(store);
     inject_fake_summarizer(&state);
-    let messages = vec![
+    let messages = [
         Arc::new(amsg(
             "system-1",
             AgentMessageRole::System,

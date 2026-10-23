@@ -75,7 +75,7 @@ pub const DEFAULT_MAX_TOKENS: u32 = 8192;
 #[derive(Debug, Clone)]
 pub(crate) struct LoopError {
     /// 结构化错误（码 / category / retryable / message）
-    crish: CrishError,
+    crish: Box<CrishError>,
 }
 
 impl LoopError {
@@ -87,7 +87,7 @@ impl LoopError {
     /// 显式码构造（T06.5.1：错误码显式选择，不再裸 String 兜底）
     pub(crate) fn with_code(code: &'static str, message: impl Into<String>) -> Self {
         Self {
-            crish: CrishError::new(code, message),
+            crish: Box::new(CrishError::new(code, message)),
         }
     }
 

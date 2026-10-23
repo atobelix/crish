@@ -268,7 +268,7 @@ async fn rollback_plan_query_error_is_not_treated_as_an_empty_plan() {
 }
 
 /// 最小活动 run（对齐 build_active_run 形状；句柄以 **Cancelled 终态起态**
-/// + end_reason=cancelled——固定「事件层 cancelled 为准」的生产真值面：
+/// 与 end_reason=cancelled——固定「事件层 cancelled 为准」的生产真值面：
 /// 撤回协议 wait_converged 立即成立，收敛语义在取消终态上闭合）
 async fn build_cancelled_active_run(
     state: &Arc<CoreRunState>,
@@ -385,6 +385,7 @@ async fn retract_impl_stop_run_cascades_kill_all_cancelled_event_layer_rows_norm
         allowed_write_paths_json: None,
         sub_session_id: None,
     });
+    db.save_session_agents("s1", &rows).expect("保存子代理行");
     // ②b 消息持久层：预置 2 条消息（msg-user-1, msg-assistant-1）
     let initial_msgs = vec![
         conex_types::SessionMessage {
@@ -649,7 +650,7 @@ async fn retract_impl_waits_for_all_runs_and_subagents_to_converge() {
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(80)).await;
         let mut h = sub2_handle_clone.lock().await;
-        h.status = RunStatus::Cancelled;
+        *h = RunHandle::new("run-sub-conv-2", "s1", RunStatus::Cancelled);
         h.end_reason = Some("cancelled".to_string());
     });
 

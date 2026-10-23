@@ -193,7 +193,9 @@ pub(crate) fn migrate_legacy_data(legacy: &Path, current: &Path) -> LegacyMigrat
 
     // WAL 残留一致性：若主库与 -wal/-shm 部分复制失败，整体作废回滚
     if let Err(reason) = run(&mut copied) {
+        #[allow(clippy::disallowed_methods)]
         for rel in ["sessions.db", "sessions.db-wal", "sessions.db-shm"] {
+            // 迁移中断回滚清理自创的半残临时文件，不走 trash
             let _ = std::fs::remove_file(current.join(rel));
         }
         return LegacyMigration::Failed { reason };
@@ -241,6 +243,7 @@ fn copy_dir_recursive(
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
 mod tests {
     use super::*;
 

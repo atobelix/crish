@@ -134,6 +134,7 @@ pub(crate) fn emit_remote_mode_downgrade_audit(
 ///   桌面端无人察觉地批准）；
 /// - 桌面不在场（无人值守）→ 移动端单一确认（[RemoteApprovalRoute::RemoteOnly]），
 ///   审计标记 remote-only（事后追责可区分单方批准与双轨批准）。
+///
 /// 「桌面在场」判定由引擎侧装配注入，缺省 false = 保守模式（D5 §4.4）。
 #[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

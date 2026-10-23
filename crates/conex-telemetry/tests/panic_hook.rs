@@ -1,4 +1,5 @@
 //! 集成测试：panic hook 崩溃文件（PE-04 T04.1-3）。
+#![allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
 //!
 //! 独立测试进程（integration test 二进制）：hook 为进程级全局状态，
 //! 与其他测试文件（panic_hook_none.rs）分离进程，保证安装配置互不干扰。

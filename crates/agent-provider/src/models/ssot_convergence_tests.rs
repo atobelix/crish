@@ -151,7 +151,8 @@ fn model_identity_is_provider_and_model_pair() {
 #[test]
 fn dictionary_model_ids_are_unique_keys() {
     let bundled = ModelCatalog::bundled();
-    let mut by_id: std::collections::BTreeMap<String, Vec<(String, Option<f64>, Option<f64>)>> =
+    type VendorPriceEntry = (String, Option<f64>, Option<f64>);
+    let mut by_id: std::collections::BTreeMap<String, Vec<VendorPriceEntry>> =
         std::collections::BTreeMap::new();
     for (_, entry) in bundled.iter_entries() {
         by_id.entry(entry.model.clone()).or_default().push((

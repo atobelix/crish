@@ -307,6 +307,11 @@ impl PendingApprovalStore {
         })
         .unwrap_or(0) as usize
     }
+
+    /// 当前待发队列是否为空
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 #[cfg(test)]

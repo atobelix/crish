@@ -314,6 +314,14 @@ struct UiaInner {
     walker: windows::Win32::UI::Accessibility::IUIAutomationTreeWalker,
 }
 
+// SAFETY: 在 MTA（COINIT_MULTITHREADED）模型下，IUIAutomation 与 IUIAutomationTreeWalker 为自由线程 COM 接口
+#[cfg(windows)]
+#[allow(unsafe_code)]
+unsafe impl Send for UiaInner {}
+#[cfg(windows)]
+#[allow(unsafe_code)]
+unsafe impl Sync for UiaInner {}
+
 /// UIA 结构化感知设备面(windows 0.61.3 `IUIAutomation` COM 直调)。
 ///
 /// 初始化:CoInitializeEx → CoCreateInstance(CUIAutomation) →

@@ -1,4 +1,5 @@
 //! 16 子 Agent 并发压力与零死锁拓扑实证（Unit 7.2 / PE-11 T11.6.2）
+#![allow(clippy::disallowed_methods)] // 测试临时数据库文件清理，非产品物理删除路径
 //!
 //! 验证场景与铁律断言：
 //! 1. 10 路同会话 / 20 跨会话并发 run：SessionSequencer 会话级原子取号连续且唯一；
@@ -460,6 +461,7 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
     let test_start = Instant::now();
 
     // 启动 16 个写 Worker：严格按 L0 -> L1 -> L2 -> L3 偏序申请资源并执行
+    #[allow(clippy::needless_range_loop)]
     for worker_id in 0..total_workers {
         let l0 = l0_mem_guard.clone();
         let l1 = l1_session_tree.clone();
@@ -491,7 +493,7 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
                 {
                     let mut tree = l1.lock().expect("L1 锁中毒");
                     let _ = tree.append(
-                        &format!("node-{worker_id}-{iter}"),
+                        format!("node-{worker_id}-{iter}"),
                         serde_json::json!({ "worker": worker_id, "iter": iter }),
                     );
                     lock_order.push(LockOrderStage::L1Acquired);

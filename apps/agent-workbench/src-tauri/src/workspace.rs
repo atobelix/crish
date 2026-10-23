@@ -258,6 +258,12 @@ impl WorkspaceRegistry {
             .map(|inner| inner.roots.iter().map(|root| root.path.clone()).collect())
             .unwrap_or_default()
     }
+
+    /// 获取当前活动工作区根（无显式活动根时回退到首个已授权根）
+    pub(crate) fn active_root(&self) -> Option<PathBuf> {
+        let inner = self.inner.lock().ok()?;
+        active_root_path(&inner).ok()
+    }
 }
 
 /// 活动根路径（无活动根时退回第一个已授权根）。

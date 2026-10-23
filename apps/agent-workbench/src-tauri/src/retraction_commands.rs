@@ -191,13 +191,10 @@ impl ShellRetractionBackend {
             let Ok(envelope) = serde_json::from_str::<AgentEventEnvelope>(&row.payload) else {
                 continue;
             };
-            match &envelope.event {
-                AgentEvent::MessageStart { message, .. } => {
-                    if message.id == target_message_id {
-                        found = Some(row.sequence as u64);
-                    }
+            if let AgentEvent::MessageStart { message, .. } = &envelope.event {
+                if message.id == target_message_id {
+                    found = Some(row.sequence);
                 }
-                _ => {}
             }
         }
         Ok(found)
@@ -269,7 +266,7 @@ impl RetractionBackend for ShellRetractionBackend {
             .query_events(session_id, 0, None)
             .await
             .map_err(|e| RetractionError::Backend(e.message))?;
-        Ok(rows.last().map(|r| r.sequence as u64).unwrap_or(0))
+        Ok(rows.last().map(|r| r.sequence).unwrap_or(0))
     }
 
     async fn stop_run(

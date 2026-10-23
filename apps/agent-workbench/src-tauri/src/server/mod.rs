@@ -387,17 +387,17 @@ impl axum::serve::Listener for TlsListener {
     }
 }
 
-/// 客户端地址注入（R1 收口 /v1/pair 每源 IP 限速）说明：axum 0.8 的
-/// `into_make_service_with_connect_info::<SocketAddr>` 要求
-/// `SocketAddr: Connected<IncomingStream<'_, L>>`，但只对
-/// `tokio::net::TcpListener` 预置该实现——自定义 [TlsListener] 无法直接
-/// 满足（孤儿规则：本地类型被外部 `IncomingStream` 覆盖即不构成本地
-/// 实现）。axum 官方接线路 = 经 [axum::serve::ListenerExt::tap_io] 包装
-/// 为 `TapIo`（connect_info.rs 的 blanket impl
-/// `Connected<IncomingStream<TapIo<L, F>>> for L::Addr`）；serve 的 TLS
-/// 分支以 no-op tap 包装（见 [ServerInstance::serve]），源地址 = TLS
-/// accept 时从底层 `TcpListener::accept` 取得的客户端 SocketAddr
-/// （TLS 握手前后远端不变）。
+// 客户端地址注入（R1 收口 /v1/pair 每源 IP 限速）说明：axum 0.8 的
+// `into_make_service_with_connect_info::<SocketAddr>` 要求
+// `SocketAddr: Connected<IncomingStream<'_, L>>`，但只对
+// `tokio::net::TcpListener` 预置该实现——自定义 [TlsListener] 无法直接
+// 满足（孤儿规则：本地类型被外部 `IncomingStream` 覆盖即不构成本地
+// 实现）。axum 官方接线路 = 经 [axum::serve::ListenerExt::tap_io] 包装
+// 为 `TapIo`（connect_info.rs 的 blanket impl
+// `Connected<IncomingStream<TapIo<L, F>>> for L::Addr`）；serve 的 TLS
+// 分支以 no-op tap 包装（见 [ServerInstance::serve]），源地址 = TLS
+// accept 时从底层 `TcpListener::accept` 取得的客户端 SocketAddr
+// （TLS 握手前后远端不变）。
 
 /// axum 路由共享状态（D2 §4.2「ServerState」：端口 / 绑定 / 令牌表 /
 /// 后端句柄 / WS 连接注册表 / 事件流源；服务状态自持，不进 app.manage——

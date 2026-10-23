@@ -1,4 +1,5 @@
 //! Round7 · 中文 FTS 召回基准（A-FTS-ZH-01）
+#![allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
 //!
 //! - unicode61 对无空格连续汉字：整段成 token，子串 MATCH = known gap
 //! - 产品路径 `search_fulltext` / `query_blocks`：含 CJK 时 `instr` 子串回退须命中

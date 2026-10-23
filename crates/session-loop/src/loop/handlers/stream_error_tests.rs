@@ -129,7 +129,7 @@ use conex_types::events::AgentEvent;
     fn fixture_message(i: usize) -> Arc<AgentMessage> {
         Arc::new(AgentMessage {
             id: format!("m{i}"),
-            role: if i % 2 == 0 {
+            role: if i.is_multiple_of(2) {
                 AgentMessageRole::User
             } else {
                 AgentMessageRole::Assistant

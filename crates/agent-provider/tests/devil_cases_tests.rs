@@ -1,4 +1,5 @@
 //! Conex 魔鬼自动化测试用例集 (Rust 内核全集)
+#![allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
 //!
 //! 权威参考依据：docs/provider-model-unification/plans/05-全量立体验证、存量自动迁移与防回潮门禁计划.md §4.1 ~ §4.2
 //! 覆盖计费微元、协议单向继承、思考白名单、防溢出、时间戳备份与容灾快照。

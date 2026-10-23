@@ -74,7 +74,7 @@ fn w6_d_s_track_binds_a_col_01_subset() {
         "delete_vs_remote_text_delete_wins",
     ] {
         assert!(
-            W6_D_S_A_COL_01_SCENARIOS.iter().any(|s| *s == needle),
+            W6_D_S_A_COL_01_SCENARIOS.contains(&needle),
             "场景表缺 {needle}（与 a_col_dual_peer 对账失败）"
         );
     }

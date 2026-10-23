@@ -209,8 +209,8 @@ fn resolve_index_root<R: tauri::Runtime>(
         Some(r) => {
             let trimmed = r.trim();
             if trimmed.is_empty() {
-                if let Some(first) = roots.first() {
-                    first.to_string_lossy().into_owned()
+                if let Some(active) = reg.active_root().or_else(|| roots.first().cloned()) {
+                    active.to_string_lossy().into_owned()
                 } else {
                     return Err(CoreError::InvalidInput(
                         "root path is empty and no workspace roots registered".to_string(),
@@ -226,8 +226,8 @@ fn resolve_index_root<R: tauri::Runtime>(
             }
         }
         None => {
-            if let Some(first) = roots.first() {
-                first.to_string_lossy().into_owned()
+            if let Some(active) = reg.active_root().or_else(|| roots.first().cloned()) {
+                active.to_string_lossy().into_owned()
             } else {
                 return Err(CoreError::InvalidInput(
                     "root path is empty and no workspace roots registered".to_string(),
@@ -523,6 +523,7 @@ pub async fn core_jsonl_to_messages(text: String) -> Result<Vec<serde_json::Valu
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
 mod tests {
     use super::*;
     use std::fs;

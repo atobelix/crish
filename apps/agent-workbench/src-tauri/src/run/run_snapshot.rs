@@ -65,8 +65,10 @@ impl CoreRunState {
                     }
                 }
             } else {
-                // 主 run 中断状态已在数据库留痕，不生成自动唤醒条目，交由用户在界面显式操作
-                continue;
+                (
+                    record.session_id.clone(),
+                    RESTORE_MAIN_INJECT_TEXT.to_string(),
+                )
             };
             // 分组去重（replace_or_enqueue：同 run 不重复堆积——重启
             // 双恢复场景仅 1 条）；带时间戳 id 保证同组替换后仍唯一

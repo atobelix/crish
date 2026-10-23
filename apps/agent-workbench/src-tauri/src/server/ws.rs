@@ -1258,8 +1258,9 @@ where
 /// 无 X25519/HMAC 实现下为占位，mock 亦不验签）。
 ///
 /// 成功：回 pair.ok（D3 PairOk desktopId/ttl + token 明文扩展，仅此一次）
-/// + device.ready，连接经 [WsRegistry::mark_authenticated] 转入已认证
-/// （占位哈希迁移为真实令牌哈希——撤销全链与「令牌可订阅」随即可用）；
+/// 以及 device.ready，连接经 [WsRegistry::mark_authenticated] 转入已认证
+/// （占位哈希迁移为真实令牌哈希——撤销全链与「令牌可订阅」随即可用）。
+///
 /// 失败：error 帧（D3 §6.2 设备错误码，关联请求 msgId）。
 async fn handle_pair_hello_frame(body: Value, msg_id: &str, ctx: &ConnCtx) -> Action {
     let registry = ctx.state.ws_registry();

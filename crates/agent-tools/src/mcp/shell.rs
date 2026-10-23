@@ -178,7 +178,7 @@ mod tests {
     fn echo_reg(names: &[&str]) -> Arc<ToolRegistry> {
         let mut reg = ToolRegistry::new();
         for n in names {
-            reg.register(Arc::new(EchoTool::new(*n))).unwrap();
+            reg.register(Arc::new(EchoTool::new(n))).unwrap();
         }
         Arc::new(reg)
     }

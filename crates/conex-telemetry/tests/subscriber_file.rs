@@ -1,4 +1,5 @@
 //! 集成测试：双通道文件层（PE-04 T04.1-1）。
+#![allow(clippy::disallowed_methods)] // 测试临时文件清理，非产品物理删除路径
 //!
 //! 独立测试进程（integration test 二进制），保证全局 subscriber 状态
 //! 不被其他测试文件污染——本文件内的初始化就是本进程的首次安装。

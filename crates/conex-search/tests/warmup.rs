@@ -8,13 +8,15 @@
 //! 4. **代数守卫**：预热期间发生手动重建（`rebuild` 推进代数）后，
 //!    晚到的旧预热提交被 `commit_if_current` 拒绝，不覆盖新索引。
 
+#![allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
+
 use conex_search::fuzzy::FuzzyMatcher;
 use conex_search::search::search_files;
 use conex_search::warmup::{
     warm_index, IndexCell, WarmupLimits, DEFAULT_TIMEOUT, ENTRY_ERROR_SAMPLES,
 };
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 /// 建立独立临时根（进程号 + 用例标签隔离，测后清理）。
@@ -29,13 +31,13 @@ fn temp_root(tag: &str) -> PathBuf {
 }
 
 /// 在根下写一个文件（父目录自动创建）。
-fn write_file(root: &PathBuf, rel: &str) {
+fn write_file(root: &Path, rel: &str) {
     let path = root.join(rel);
     fs::create_dir_all(path.parent().expect("rel has parent")).expect("create parent");
     fs::write(path, "x").expect("write file");
 }
 
-fn path_str(root: &PathBuf) -> String {
+fn path_str(root: &Path) -> String {
     root.to_string_lossy().into_owned()
 }
 

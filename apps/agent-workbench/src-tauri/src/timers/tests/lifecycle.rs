@@ -84,13 +84,15 @@ async fn timer_registry_cancel_stops_fire() {
     clock.store(clock.load(Ordering::Relaxed) + 2_000, Ordering::Relaxed);
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert!(queue_snapshot(&queue).is_empty(), "取消后不得有到期条目");
-    let emitted = events.emitted.lock().unwrap_or_else(|e| e.into_inner());
-    assert_eq!(emitted.len(), 1);
-    assert!(matches!(
-        emitted[0],
-        TimerEvent::Cancelled { ref timer_id, reason: TimerCancelReason::Cancelled, .. }
-            if timer_id == &handle.timer_id
-    ));
+    {
+        let emitted = events.emitted.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(emitted.len(), 1);
+        assert!(matches!(
+            emitted[0],
+            TimerEvent::Cancelled { ref timer_id, reason: TimerCancelReason::Cancelled, .. }
+                if timer_id == &handle.timer_id
+        ));
+    }
     let persisted = store.load_all();
     assert_eq!(persisted.len(), 1);
     assert!(persisted[0].cancelled, "取消声明应标 cancelled=true");

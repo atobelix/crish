@@ -229,6 +229,8 @@ impl McpConfigPersistence for LocalFileMcpPersistence {
         Ok(configs)
     }
 
+    // 豁免理由：原子替换 MCP 配置文件，失败清理自家创建的临时文件与旧文件覆盖清理（非产品数据，不进回收站）
+    #[allow(clippy::disallowed_methods)]
     async fn save(&self, configs: &[McpServerConfig]) -> Result<(), ToolError> {
         if let Some(parent) = self.file_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {

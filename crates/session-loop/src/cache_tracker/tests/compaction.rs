@@ -179,10 +179,10 @@ fn on_compaction_invalidates_incremental_anchor() {
         "2026-01-01T00:00:00Z",
     );
     let mut t = tracker(0);
-    t.capture_signature(Some("sys"), &tools(), &[m1.clone()]);
+    t.capture_signature(Some("sys"), &tools(), std::slice::from_ref(&m1));
     // 压缩后对话被替换
     t.on_compaction();
-    t.capture_signature(Some("sys"), &tools(), &[m2.clone()]);
+    t.capture_signature(Some("sys"), &tools(), std::slice::from_ref(&m2));
     let sig = t.pending_signature.clone().unwrap();
     let full = build_request_signature(Some("sys"), &tools(), &[m2]);
     assert_eq!(sig, full, "压缩后应全量重算（增量锚点已失效）");

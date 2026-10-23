@@ -892,7 +892,7 @@ mod recovery_tests {
         let val = writer
             .write(|conn| {
                 conn.execute("INSERT INTO t (v) VALUES (7)", [])
-                    .map_err(|e| failure(e))?;
+                    .map_err(failure)?;
                 Ok::<_, DbFailure>(7usize)
             })
             .await
@@ -903,7 +903,7 @@ mod recovery_tests {
         let _ = writer
             .write(|conn| {
                 conn.execute("INSERT INTO t (v) VALUES (8)", [])
-                    .map_err(|e| failure(e))?;
+                    .map_err(failure)?;
                 Ok::<_, DbFailure>(8usize)
             })
             .await
@@ -912,7 +912,7 @@ mod recovery_tests {
             .write(|conn| {
                 let n: i64 = conn
                     .query_row("SELECT COUNT(*) FROM t", [], |r| r.get(0))
-                    .map_err(|e| failure(e))?;
+                    .map_err(failure)?;
                 Ok::<_, DbFailure>(n as usize)
             })
             .await
@@ -944,7 +944,7 @@ mod recovery_tests {
             batch.push(WriteTask {
                 op: Box::new(move |conn: &mut rusqlite::Connection| {
                     conn.execute("INSERT INTO t (v) VALUES (?1)", [i as i64])
-                        .map_err(|e| failure(e))?;
+                        .map_err(failure)?;
                     Ok(Box::new(i) as Box<dyn Any + Send>)
                 }),
                 respond_to: tx,
@@ -1024,7 +1024,7 @@ mod recovery_tests {
         let val = writer
             .write(|conn| {
                 conn.execute("INSERT INTO t (v) VALUES (1)", [])
-                    .map_err(|e| failure(e))?;
+                    .map_err(failure)?;
                 Ok::<_, DbFailure>(1usize)
             })
             .await
@@ -1036,7 +1036,7 @@ mod recovery_tests {
         let val = writer
             .write(|conn| {
                 conn.execute("INSERT INTO t (v) VALUES (2)", [])
-                    .map_err(|e| failure(e))?;
+                    .map_err(failure)?;
                 Ok::<_, DbFailure>(2usize)
             })
             .await

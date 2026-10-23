@@ -1,4 +1,5 @@
 //! # W5-D-S · X-01 跨层联测骨架（Skeleton · 单场景）
+#![allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
 //!
 //! | 元数据 | 值 |
 //! | ------ | -- |

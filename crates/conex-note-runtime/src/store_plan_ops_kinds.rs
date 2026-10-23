@@ -171,8 +171,9 @@ pub(super) fn plan_update(state: &mut PlanState, op: &NoteBlockOp) -> Result<(),
         insert: content.clone(),
     });
     if let Some(ref attrs) = op.attrs {
-        let mut props = BlockProps::default();
-        props.attrs = attrs.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        let props = BlockProps {
+            attrs: attrs.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+        };
         state.collab_ops.push(Op::UpdateProps { id, props });
     }
     if let Some(m) = state.known.get_mut(&id) {
@@ -320,8 +321,9 @@ pub(super) fn plan_set_attr(
         .ok_or_else(|| NoteBackendError::NotFound(format!("block not found: {id}")))?;
     let kind_label = kind_label(&meta.kind);
     let attrs = op.attrs.clone().unwrap_or_default();
-    let mut props = BlockProps::default();
-    props.attrs = attrs.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    let props = BlockProps {
+        attrs: attrs.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+    };
     state.collab_ops.push(Op::UpdateProps { id, props });
     state.previews.push(NoteBlockOpPreview {
         op: "set_attr".into(),

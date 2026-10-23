@@ -11,7 +11,7 @@
 //! - **resume_subagent**：显式恢复命令——目标 run 置 failed、经
 //!   [RecoveryCoordinator::fork_and_reassign]（recovery.rs:1026）fork 新
 //!   run 承接同一目标；上下文继承走 decide_fork_context 三态（≤24h 窗口
-//!   + ≤80% 字节占比 → Verbatim；超限 Summarized；空内容 New）；消费
+//!   以及 ≤80% 字节占比 → Verbatim；超限 Summarized；空内容 New）；消费
 //!   Episode 预算（recovery.rs:259-329，与恢复阶梯共用预算池，防无限
 //!   fork）。**resume 是恢复阶梯的显式命令面，不是新恢复机制**——阶梯 1
 //!   自动重试仍优先（recovery.rs:198-236），resume 供主 Agent/用户手动兜底；
@@ -358,7 +358,7 @@ impl SubagentLifecycleService {
         self.mark_row_failed(session_id, &subagent_run_id)?;
         // LK-07 R-14：kill 直发 subagent-ended(status=cancelled)（同
         // kill_all；Cancelled 成生产真值，收口兜底双发幂等由 spawner 防护）
-        self.emit_killed_ended(session_id, &row);
+        self.emit_killed_ended(session_id, row);
         Ok(KillSubagentResult {
             subagent_id: subagent_id.to_string(),
             subagent_run_id,

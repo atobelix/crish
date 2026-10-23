@@ -672,15 +672,12 @@ mod tests {
             tls.flush().await?;
             Ok::<(), std::io::Error>(())
         };
-        match tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
             let (r1, r2) = tokio::join!(server, client);
             r1.is_ok() && r2.is_ok()
         })
         .await
-        {
-            Ok(ok) => ok,
-            Err(_) => false,
-        }
+        .unwrap_or_default()
     }
 
     #[test]
@@ -830,6 +827,7 @@ mod tests {
         let lock_path = dir.path().join(LOCK_FILE);
         let lock_file = fs::OpenOptions::new()
             .create(true)
+            .truncate(true)
             .read(true)
             .write(true)
             .open(&lock_path)
@@ -865,7 +863,7 @@ mod tests {
             0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06,
             0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00,
         ];
-        assert!(spki_raw(leaf_der.as_ref()).starts_with(&P256_SPKI_PREFIX[..]));
+        assert!(spki_raw(leaf_der.as_ref()).starts_with(P256_SPKI_PREFIX));
     }
 
     #[test]

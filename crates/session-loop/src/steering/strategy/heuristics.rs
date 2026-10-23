@@ -273,8 +273,7 @@ impl ToolPromiseDetector {
                 let char_boundary_pos = tail
                     .char_indices()
                     .map(|(idx, _)| idx)
-                    .filter(|&idx| idx <= pos)
-                    .next_back()
+                    .rfind(|&idx| idx <= pos)
                     .unwrap_or(pos);
                 let snippet = &tail[char_boundary_pos..];
                 let end_pos = snippet

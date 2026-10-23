@@ -937,9 +937,7 @@ impl CoreRunState {
             }
         }
         // 2. local_db() 为 None（测试替身 store）→ None 降级
-        let Some(db) = self.local_db() else {
-            return None;
-        };
+        let db = self.local_db()?;
         // 3. 五件套装配（tree 与 coordinator 同批装配）
         let tree = {
             let mut trees = self.session_trees.lock().unwrap_or_else(|e| e.into_inner());

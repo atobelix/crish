@@ -116,7 +116,7 @@ struct ConsumeOutcome {
 }
 
 /// 4. 增量消费（T09.1：逐事件边收边聚合 + delta 实时双轨发射；C1d 从
-/// [handle] 拆出的流消费段，语义与原地逐行一致）
+///    [handle] 拆出的流消费段，语义与原地逐行一致）
 ///
 /// 契约 v1（PE-02 §3.1）：流前 Err = 未产出任何事件（进重试阶梯）；流中
 /// Err = 已产出内容 → 内容保留收场（不重试，01 D6），未产出 → 重试阶梯。
@@ -332,16 +332,15 @@ async fn consume_classify(
                             "streaming terminated with provider error; tool calls discarded to prevent partial/corrupted execution",
                         );
                     }
+                    let classified = ClassifiedStreamError {
+                        kind,
+                        message,
+                        retryable,
+                        retry_after_ms: None,
+                    };
+                    // 物理阻断后直接以 provider_error 错误收场
+                    return stream_error::fatal_provider_error(state, &classified);
                 }
-                let classified = ClassifiedStreamError {
-                    kind,
-                    message,
-                    retryable,
-                    retry_after_ms: None,
-                };
-                // 绝不调用 no_tool_calls 伪造成功，亦绝不进入 HasToolCalls 派发真实工具，
-                // 物理阻断后直接以 provider_error 错误收场
-                return stream_error::fatal_provider_error(state, &classified);
             }
 
             // 6. 安全点（stream 结束且消息已落盘，不丢本轮输出，01 §2.4 步骤 6）
@@ -925,9 +924,9 @@ mod tests {
         }
     }
 
-    /// BC02-2：流以 Error 终止且无 tool_calls 时，绝不调用 no_tool_calls 伪造成功！
+    /// BC02-2：流以 Error 终止且无 tool_calls 时，保留正文内容并进入 TurnComplete（以便外层触发 E1 content-resume 续写）
     #[tokio::test]
-    async fn test_error_stop_without_tool_calls_fatals_not_no_tool_calls() {
+    async fn test_error_stop_without_tool_calls_salvages_and_completes_turn_for_resume() {
         let mut state = test_state();
         let consumed = crate::stream::consume(
             vec![
@@ -946,10 +945,9 @@ mod tests {
             .await
             .expect("consume_classify 应处理并返回结果");
 
-        // 验证：绝不进入 no_tool_calls 伪造成功，直接以 fatal_provider_error 结束
-        assert!(outcome.end.is_some(), "必须产生终止决策");
+        // 验证：无 tool_calls 时内容被部分保留，回合正常收工进入 TurnComplete（由外层触发 content-resume 续写）
+        assert!(outcome.end.is_none(), "无工具调用的断流不直接 fatal 终止，而放行由外层触发续写");
         assert_eq!(state.machine.state(), S::TurnComplete);
-        assert!(state.terminal_error.is_some());
     }
 
     /// BC02-6：流解析器发出 Stop 事件后即刻终结消费循环，不再消费 Stop 之后的任何条目

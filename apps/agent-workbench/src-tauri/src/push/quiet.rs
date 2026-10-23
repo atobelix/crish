@@ -557,7 +557,7 @@ mod tests {
     /// 混合类型聚合：类型分组/计数/时间窗/正文（D7 §3.4.3 样例同构）
     #[test]
     fn compose_mixed_types_groups_counts_and_window() {
-        let at1 = NOON_UTC_MS + 11 * HOUR_MS + 1 * 60_000; // 08-09 23:01
+        let at1 = NOON_UTC_MS + 11 * HOUR_MS + 60_000; // 08-09 23:01
         let at2 = at1 + 30 * 60_000; // 23:31
         let at3 = at1 + 2 * HOUR_MS; // 次日 01:01（跨午夜）
         let items = vec![

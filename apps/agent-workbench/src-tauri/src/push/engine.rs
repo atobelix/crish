@@ -306,14 +306,14 @@ impl PushDecisionEngine {
 
         // 3. 去重（RunCompleted 例外：单条形态的去重键即原事件键，由
         //    close_run 产物统一处理，避免「先记录后复查」自抑制）
-        if intent.scene != SceneId::RunCompleted {
-            if !self.dedupe.check_and_record(&intent.dedupe_key, now_ms) {
-                return vec![self.decision_from_intent(
-                    &intent,
-                    false,
-                    DecisionOutcome::DedupeSuppressed,
-                )];
-            }
+        if intent.scene != SceneId::RunCompleted
+            && !self.dedupe.check_and_record(&intent.dedupe_key, now_ms)
+        {
+            return vec![self.decision_from_intent(
+                &intent,
+                false,
+                DecisionOutcome::DedupeSuppressed,
+            )];
         }
 
         // 4. 合并路由（累积族入桶 / 关闭信号当场产出 / 其余直发）
@@ -1230,11 +1230,13 @@ mod tests {
     /// [flood_backpressure_bypasses_p0_intents]）
     #[test]
     fn flood_backpressure_throttles_burst_and_recovers_after_window() {
-        let mut cfg = EngineConfig::default();
-        cfg.limits = ThrottleLimits {
-            per_device_per_minute: 1000,
-            per_session_per_10min: 1000,
-            per_device_per_day: 1000,
+        let cfg = EngineConfig {
+            limits: ThrottleLimits {
+                per_device_per_minute: 1000,
+                per_session_per_10min: 1000,
+                per_device_per_day: 1000,
+            },
+            ..Default::default()
         };
         let mut engine = PushDecisionEngine::new(cfg);
 
@@ -1268,11 +1270,13 @@ mod tests {
     /// 绝不延迟到夜间摘要）。
     #[test]
     fn flood_backpressure_bypasses_p0_intents() {
-        let mut cfg = EngineConfig::default();
-        cfg.limits = ThrottleLimits {
-            per_device_per_minute: 1000,
-            per_session_per_10min: 1000,
-            per_device_per_day: 1000,
+        let cfg = EngineConfig {
+            limits: ThrottleLimits {
+                per_device_per_minute: 1000,
+                per_session_per_10min: 1000,
+                per_device_per_day: 1000,
+            },
+            ..Default::default()
         };
         let mut engine = PushDecisionEngine::new(cfg);
 

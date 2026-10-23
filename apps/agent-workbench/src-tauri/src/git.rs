@@ -570,6 +570,7 @@ fn is_same_or_child(path: &Path, root: &Path) -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
 mod tests {
     use super::*;
 

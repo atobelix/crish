@@ -26,7 +26,13 @@ use super::shell_output::{
 use super::PreparedCommand;
 
 #[cfg(windows)]
-#[allow(unsafe_code, non_snake_case, non_camel_case_types, non_upper_case_globals)]
+#[allow(
+    unsafe_code,
+    non_snake_case,
+    non_camel_case_types,
+    non_upper_case_globals,
+    clippy::upper_case_acronyms
+)]
 mod win_job {
     use std::ffi::c_void;
 

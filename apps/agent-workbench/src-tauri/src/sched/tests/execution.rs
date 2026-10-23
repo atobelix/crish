@@ -3,7 +3,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::super::types::*;
 use super::*;
 
 #[tokio::test]
@@ -246,7 +245,7 @@ async fn scheduler_registry_daemon_launch_failure_falls_back_to_steering() {
     wait_until(
         "launch 失败降级条目出现（CronFired ≥1 + 队列非空）",
         move || {
-            events_cond.emitted.lock().unwrap_or_else(|e| e.into_inner()).len() >= 1
+            !events_cond.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty()
                 && queue_len(&queue_cond) == 1
         },
     )
@@ -351,14 +350,15 @@ async fn test_update_task_crit_01_generation_binding() {
     })
     .await;
 
-    let emitted = events.emitted.lock().unwrap();
-    assert_eq!(emitted.len(), 1);
-    match &emitted[0] {
-        CronEvent::Fired { prompt, .. } => {
-            assert_eq!(prompt, "全新任务提示词", "触发必须执行最新提示词！");
+    {
+        let emitted = events.emitted.lock().unwrap();
+        assert_eq!(emitted.len(), 1);
+        match &emitted[0] {
+            CronEvent::Fired { prompt, .. } => {
+                assert_eq!(prompt, "全新任务提示词", "触发必须执行最新提示词！");
+            }
         }
     }
-    drop(emitted);
 
     // 【CRIT-01 核心断言 2】：当表达式变动时，必须推进代际并重启协程
     registry

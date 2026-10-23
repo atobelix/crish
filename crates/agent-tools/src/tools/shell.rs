@@ -500,16 +500,16 @@ impl CommandPathInspector {
             }
 
             // 2. 校验写/删目标路径是否越出 workspace_root
-            if Self::is_write_or_delete_target(command_line, path) {
-                if !conex_fs::ConexPathNormalizer::is_subpath(path, workspace_root) {
-                    return Err(ToolError::new(
-                        TOOL_COMMAND_BLOCKED,
-                        format!(
-                            "PermissionDenied: 命令试图向工作区外写入或删除绝对路径：{}，严禁越界！",
-                            path.display()
-                        ),
-                    ));
-                }
+            if Self::is_write_or_delete_target(command_line, path)
+                && !conex_fs::ConexPathNormalizer::is_subpath(path, workspace_root)
+            {
+                return Err(ToolError::new(
+                    TOOL_COMMAND_BLOCKED,
+                    format!(
+                        "PermissionDenied: 命令试图向工作区外写入或删除绝对路径：{}，严禁越界！",
+                        path.display()
+                    ),
+                ));
             }
         }
 
@@ -696,15 +696,12 @@ impl CommandPathInspector {
                 .next()
                 .map(|c| c.is_ascii_alphabetic())
                 .unwrap_or(false)
+            && &upper[1..2] == ":"
+            && (upper.len() == 2
+                || (upper.len() == 3 && &upper[2..3] == "/")
+                || (upper.len() >= 4 && (&upper[2..4] == "/*" || &upper[2..4] == "/.")))
         {
-            if &upper[1..2] == ":" {
-                if upper.len() == 2
-                    || (upper.len() == 3 && &upper[2..3] == "/")
-                    || (upper.len() >= 4 && (&upper[2..4] == "/*" || &upper[2..4] == "/."))
-                {
-                    return true;
-                }
-            }
+            return true;
         }
 
         const POSIX_CRITICAL: &[&str] = &[

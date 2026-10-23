@@ -52,8 +52,10 @@ impl TextHost {
     pub fn new() -> Self {
         let doc = Doc::new();
         let text = doc.get_or_insert_text(ROOT_TEXT);
-        let mut options = UndoOptions::default();
-        options.capture_timeout_millis = 0;
+        let options = UndoOptions {
+            capture_timeout_millis: 0,
+            ..Default::default()
+        };
         let undo_mgr = UndoManager::<()>::with_scope_and_options(&doc, &text, options);
         Self { undo_mgr, doc }
     }
@@ -68,8 +70,10 @@ impl TextHost {
                 .map_err(|e| TextEngineError::UpdateApply(e.to_string()))?;
         }
         let text = doc.get_or_insert_text(ROOT_TEXT);
-        let mut options = UndoOptions::default();
-        options.capture_timeout_millis = 0;
+        let options = UndoOptions {
+            capture_timeout_millis: 0,
+            ..Default::default()
+        };
         let undo_mgr = UndoManager::<()>::with_scope_and_options(&doc, &text, options);
         Ok(Self { undo_mgr, doc })
     }
@@ -722,6 +726,7 @@ struct BlockCheckpoint {
 /// - `registered_involved` 仅记录 `involved ∩ old_registered`（O(involved)），
 ///   供 `contains_registered` 判断涉及块是否在旧表中；未涉及块的 old 判定
 ///   通过 `version` 推断（旧块版本 < version，新块版本 >= version）。
+///
 /// 数据只含本次涉及块；`was_hot` / `pinned` 是 id 集合（无字节，pinned/was_hot 上界 512）。
 #[derive(Debug, Clone)]
 pub(crate) struct TextEngineCheckpoint {

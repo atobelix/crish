@@ -29,7 +29,7 @@ fn schema_v5_has_block_refs() {
     let dir = TempDir::new();
     let store = WorkspaceStore::open(dir.db()).unwrap();
     assert_eq!(store.schema_version().unwrap(), SCHEMA_VERSION);
-    assert!(SCHEMA_VERSION >= 5);
+    const { assert!(SCHEMA_VERSION >= 5) };
 
     let conn = rusqlite::Connection::open(dir.db()).unwrap();
     let n: i64 = conn

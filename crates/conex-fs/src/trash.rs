@@ -316,7 +316,7 @@ impl TrashService {
         let metadata = match metadata_res {
             Ok(m) => m,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                crate::path_utils::ensure_parent_dir(&entry_dir.join(META_FILE))?;
+                crate::path_utils::ensure_parent_dir(entry_dir.join(META_FILE))?;
                 let entry = TrashEntry {
                     id: id.clone(),
                     original_path: original.clone(),
@@ -826,6 +826,7 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
 }
 
 /// 强制删除文件（遇到 Windows 只读属性 FILE_ATTRIBUTE_READONLY 时自动清除只读属性并重试）
+#[allow(clippy::permissions_set_readonly_false)]
 pub fn force_remove_file(path: &Path) -> Result<()> {
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
@@ -848,6 +849,7 @@ pub fn force_remove_file(path: &Path) -> Result<()> {
 }
 
 /// 递归清除目录树内所有条目（文件与子目录）的只读属性
+#[allow(clippy::permissions_set_readonly_false)]
 fn clear_readonly_recursive(path: &Path) {
     if let Ok(meta) = fs::symlink_metadata(path) {
         let mut perms = meta.permissions();

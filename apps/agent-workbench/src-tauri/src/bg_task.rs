@@ -207,7 +207,7 @@ impl BackgroundTaskManager for BackgroundTaskRegistry {
             out.push(info);
         }
         // 稳定序：started_at 降序（新在前，前端 sortBackgroundTasksByStartedAt 同口径）
-        out.sort_by(|a, b| b.started_at_ms.cmp(&a.started_at_ms));
+        out.sort_by_key(|a| std::cmp::Reverse(a.started_at_ms));
         Ok(out)
     }
 

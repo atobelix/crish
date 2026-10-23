@@ -179,7 +179,7 @@ fn resource_first_sample_dropped() {
     };
     let pct = cpu_percent_from_delta(&prev, &same, 1_000, 3_000);
     assert!(
-        pct.is_finite() && pct >= 0.0 && pct <= 100.0,
+        pct.is_finite() && (0.0..=100.0).contains(&pct),
         "零差值不得出 NaN：{pct}"
     );
     // 墙钟零差值：不除零

@@ -1,4 +1,5 @@
 //! 真实 SQLite WAL 16 写 8 读高并发零死锁压测（Batch 4 / AST-02-07 / STRESS-01）
+#![allow(clippy::disallowed_methods)] // 测试临时数据库文件清理，非产品物理删除路径
 //!
 //! 验证场景与断言：
 //! 1. 真实生产 `LocalDb` WAL 实例 + 真实异步协调器 `RecoveryCoordinator` (tokio::sync::Mutex) + 独占写 Actor (DbWriteHandle) + 真实 ReaderPool(8)；

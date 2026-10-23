@@ -380,9 +380,9 @@ async fn d5_text_with_error_stop_ends_as_message_not_error() {
 
     let outcome = loop_.run(user("生成内容")).await;
 
-    // 正向（BC02-2）：流发生服务端错误，以 Error 收场，真实报告错误
-    assert_eq!(outcome.reason, AgentEndReason::Error);
-    assert!(outcome.error.is_some());
+    // 正向（D5）：文字 + error 事件 → Message 收场，正常 stop（错误在 metadata 留痕，以便外层触发续写）
+    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert!(outcome.error.is_none());
     // 正向（D5 Partial Salvage）：有文字 → 文字回复必须已 commit 落盘，不丢弃用户可见正文
     let assistant = outcome
         .messages

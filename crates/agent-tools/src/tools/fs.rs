@@ -762,6 +762,7 @@ impl Tool for FileStatTool {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // 测试临时目录清理与 Windows 软链接测试辅助
 mod tests {
     use super::*;
     use crate::context::{create_mock_tool_context, ToolContext};

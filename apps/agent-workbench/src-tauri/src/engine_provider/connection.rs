@@ -8,7 +8,7 @@ use std::time::Duration;
 /// 连接配置覆盖面（D1 §3.3 连接配置表）：None 字段 = 默认值
 /// （connect_timeout 10s / tcp_keepalive 30s / h2 ping 30s+5s）；
 /// 测试装配可传参覆盖（短超时 / 关 keepalive——04 §2.3 可传参面）。
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) struct ClientConnectionConfig {
     /// 建连超时（默认 10s；reqwest 默认 30s 过长）
     pub connect_timeout: Option<Duration>,
@@ -20,16 +20,6 @@ pub(crate) struct ClientConnectionConfig {
     pub http2_keep_alive_timeout: Option<Duration>,
 }
 
-impl Default for ClientConnectionConfig {
-    fn default() -> Self {
-        Self {
-            connect_timeout: None,
-            tcp_keepalive: None,
-            http2_keep_alive_interval: None,
-            http2_keep_alive_timeout: None,
-        }
-    }
-}
 
 impl ClientConnectionConfig {
     /// 默认连接配置（D1 §3.3 / 04 §2.3 连接配置表）

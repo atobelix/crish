@@ -134,6 +134,8 @@ impl ConfigMigrationManager {
     }
 
     /// 修改前保留原始字节；时间戳冲突使用独立备份名。
+    // 豁免理由：模型/配置迁移创建灾备时校验失败清理损坏备份文件（自管文件轮转）
+    #[allow(clippy::disallowed_methods)]
     pub fn create_disaster_backup(source: &Path) -> Result<PathBuf, MigrationError> {
         let metadata = fs::metadata(source)?;
         let original_size = metadata.len();
@@ -187,6 +189,8 @@ impl ConfigMigrationManager {
     /// 通用原子替换原语（**无 `models.yaml` 生产调用方**：真源写入已收敛到
     /// `ModelsStore::write_if_current`）。保留为公共 API，仅由本模块的
     /// 硬化测试覆盖其回滚语义。
+    // 豁免理由：Windows 3 阶段原子替换清理临时暂存文件 .roll.bak 与失败临时文件（自管文件轮转）
+    #[allow(clippy::disallowed_methods)]
     pub fn atomic_replace(tmp_path: &Path, target: &Path) -> Result<(), MigrationError> {
         // 先尝试直接原子重命名（Unix 或目标不存在时直接成功）
         if fs::rename(tmp_path, target).is_ok() {
@@ -280,6 +284,7 @@ impl ConfigMigrationManager {
 mod migration_tests;
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
 mod migration_hardening_tests {
     use super::*;
 

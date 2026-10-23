@@ -6,8 +6,6 @@ use std::time::Duration;
 use conex_db::LocalDb;
 use orchestrator::PendingMessageQueue;
 
-use super::super::store::*;
-use super::super::types::*;
 use super::*;
 
 #[tokio::test]

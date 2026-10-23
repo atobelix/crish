@@ -31,9 +31,9 @@
 //! # 诚实边界
 //! - **已交付方向**：读/写工具 + lossy（W4-A）+ batch token/审批方向（W4-B）
 //!   + **W4-F**：`block_batch`+dryRun、细粒度 insert/update/delete/move、表驱动
-//!   矩阵、`execution_unknown`（见 `note_action_matrix` / 工具）
+//!     矩阵、`execution_unknown`（见 `note_action_matrix` / 工具）
 //!   + **W4-R**：独立 `block_set_attr`（Memory 默认路径；**禁**把 Memory 绿写成生产满表）；
-//!   Store 真路径见 `conex-note-runtime::StoreNoteBackend`
+//!     Store 真路径见 `conex-note-runtime::StoreNoteBackend`
 //! - **≠ EL-05**；**≠ A-AGT-01…08 满表关闭**（须 Store 持久 + **W6-E** 等）
 //! - **≠ W6-E**：无千次批 + 恶意扩展闭环
 //! - **≠ A-AGT 全表关闭**；Memory 测绿 **禁关**生产 A-AGT / EL-05

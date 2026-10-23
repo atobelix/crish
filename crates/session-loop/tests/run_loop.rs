@@ -1888,7 +1888,7 @@ async fn turn_end_carries_turn_usage_from_provider() {
         .events
         .iter()
         .find_map(|e| match e {
-            AgentEvent::TurnEnd { usage, .. } => usage.clone(),
+            AgentEvent::TurnEnd { usage, .. } => *usage,
             _ => None,
         })
         .expect("run 必须发射 turn-end 且带 usage 真值（find_map 已展平 Option）");
@@ -1913,7 +1913,7 @@ async fn turn_end_carries_turn_usage_from_provider() {
     let mut loop2 = loop_with(provider2, vec![]);
     let outcome2 = loop2.run(user("验证")).await;
     let usage2 = outcome2.events.iter().find_map(|e| match e {
-        AgentEvent::TurnEnd { usage, .. } => usage.clone(),
+        AgentEvent::TurnEnd { usage, .. } => *usage,
         _ => None,
     });
     assert!(
@@ -1933,7 +1933,7 @@ async fn turn_end_carries_turn_usage_from_provider() {
 /// （测试内轻量解析，无 chrono 依赖；civil-from-days 逆运算）
 fn iso_to_epoch_ms(iso: &str) -> u64 {
     let parts: Vec<u64> = iso
-        .split(|c: char| c == '-' || c == 'T' || c == ':' || c == '.' || c == 'Z')
+        .split(['-', 'T', ':', '.', 'Z'])
         .filter(|s| !s.is_empty())
         .map(|s| s.parse().expect("ISO 字段必须可解析"))
         .collect();
@@ -2337,7 +2337,8 @@ async fn control_intent_emits_enqueued_and_consumed() {
     assert_eq!(outcome.reason, AgentEndReason::Stopped);
 
     // S5 测钉：control-intent 两态配对断言
-    let intents: Vec<(String, String, Option<String>, Option<String>, String)> = outcome
+    type IntentTuple = (String, String, Option<String>, Option<String>, String);
+    let intents: Vec<IntentTuple> = outcome
         .events
         .iter()
         .filter_map(|e| match e {

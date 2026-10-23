@@ -73,6 +73,7 @@ pub const MICA_EVENT: &str = "crish://backdrop-mica";
 
 /// 判断当前操作系统是否为 Windows 11（Build >= 22000）。
 /// 通过 Win32 注册表 CurrentBuildNumber 判断，不受应用程序兼容性垫片影响。
+#[allow(clippy::disallowed_methods)] // 查询系统注册表版本号，走系统 reg 工具查询
 pub fn is_windows_11() -> bool {
     #[cfg(target_os = "windows")]
     {

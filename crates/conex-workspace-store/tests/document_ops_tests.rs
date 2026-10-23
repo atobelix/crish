@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
+
 use conex_doc_collab::{
     ApplyError, BlockId, BlockKind, BlockProps, DocSession, HydrateBlob, Op, Origin,
     PersistencePlugin,

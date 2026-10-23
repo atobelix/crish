@@ -161,8 +161,12 @@ pub fn resolve_effective_protocol_from_context(
 /// 4. 若为 `OpenAiChat`：如果 `base_url` 已经以 `/chat/completions` 结尾，直接返回；无论是否已带 `/v1` 或兼容网关路径，规范化拼装追加 `/chat/completions`，避免 `//` 或 `/v1/v1`；
 /// 5. 若为 `GoogleGenerateContent`：若以 `/v1beta` 结尾则直接返回，否则追加 `/v1beta`。
 pub fn build_endpoint_url(protocol: ProtocolKind, base_url: &str) -> String {
-    let trimmed_base = base_url.trim().trim_end_matches('/');
-    match protocol {
+    let (trimmed_base, query) = if let Some((p, q)) = base_url.trim().split_once('?') {
+        (p.trim_end_matches('/'), Some(q.trim()))
+    } else {
+        (base_url.trim().trim_end_matches('/'), None)
+    };
+    let path = match protocol {
         ProtocolKind::AnthropicMessages => {
             if trimmed_base.ends_with("/v1/messages") || trimmed_base.ends_with("/messages") {
                 trimmed_base.to_string()
@@ -200,7 +204,13 @@ pub fn build_endpoint_url(protocol: ProtocolKind, base_url: &str) -> String {
                 format!("{trimmed_base}/v1beta")
             }
         }
+    };
+    if let Some(q) = query {
+        if !q.is_empty() {
+            return format!("{path}?{q}");
+        }
     }
+    path
 }
 
 /// 模型级协议路由单一真源纯函数（向后兼容桥接函数）

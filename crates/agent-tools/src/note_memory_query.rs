@@ -224,6 +224,21 @@ fn insert_outline_node(roots: &mut Vec<NoteOutlineNode>, node: NoteOutlineNode) 
     }
 }
 
+fn try_insert_child(nodes: &mut [NoteOutlineNode], node: &NoteOutlineNode) -> bool {
+    // 从后往前找可挂父
+    for i in (0..nodes.len()).rev() {
+        if nodes[i].level < node.level {
+            // 先尝试挂到该节点的子树
+            if try_insert_child(&mut nodes[i].children, node) {
+                return true;
+            }
+            nodes[i].children.push(node.clone());
+            return true;
+        }
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::capture::with_capture;
@@ -257,19 +272,4 @@ mod tests {
             "docs 锁中毒恢复必须计数 +1"
         );
     }
-}
-
-fn try_insert_child(nodes: &mut [NoteOutlineNode], node: &NoteOutlineNode) -> bool {
-    // 从后往前找可挂父
-    for i in (0..nodes.len()).rev() {
-        if nodes[i].level < node.level {
-            // 先尝试挂到该节点的子树
-            if try_insert_child(&mut nodes[i].children, node) {
-                return true;
-            }
-            nodes[i].children.push(node.clone());
-            return true;
-        }
-    }
-    false
 }

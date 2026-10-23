@@ -1097,13 +1097,11 @@ pub(crate) async fn run_task_impl(
         o.assembly.system_prompt =
             assemble_system_prompt_with_stages(&state, &session_id, system_prompt);
         o.assembly.context_budget = context_budget;
-        o.retry.retry_backoff = retry_backoff.or_else(|| {
-            Some(session_loop::r#loop::RetryBackoffConfig {
-                base_ms: None,
-                max_ms: None,
-                total_budget_ms: Some(180_000),
-            })
-        });
+        o.retry.retry_backoff = retry_backoff.or(Some(session_loop::r#loop::RetryBackoffConfig {
+            base_ms: None,
+            max_ms: None,
+            total_budget_ms: Some(180_000),
+        }));
         o.retry.transient_retry_limit = run_policy
             .as_ref()
             .and_then(|policy| policy.transient_retry_limit)
@@ -1699,7 +1697,7 @@ pub(crate) async fn compact_now_impl(
 }
 
 /// F4：空闲态事件发射（无活动 run 上下文——会话级 EventQueue 入队持久化
-/// + 全局事件桥信封广播；run_id 缺省 None，前端按会话域消费）。返回事件
+/// 与全局事件桥信封广播；run_id 缺省 None，前端按会话域消费）。返回事件
 /// 序列号（块表落库锚点）；失败 → None（事件仅尽力而为，不阻断命令）
 pub(crate) async fn push_emit_idle_event(
     queue: &Arc<tokio::sync::Mutex<EventQueue>>,

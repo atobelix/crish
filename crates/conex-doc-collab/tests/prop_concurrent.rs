@@ -99,7 +99,7 @@ fn assert_tree_invariants(tree: &BlockTree) {
 }
 
 fn assert_session_invariants(s: &DocSession) {
-    assert_tree_invariants(&s.tree());
+    assert_tree_invariants(s.tree());
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +366,7 @@ fn a_col_06_random_50_seeds_no_cycle_no_dangling() {
     const STEPS: usize = 12;
 
     for seed in 0..SEEDS {
-        let mut rng = Lcg::new(0xA_C01_06_00 + seed * 9973);
+        let mut rng = Lcg::new(0xAC01_0600 + seed * 9973);
         let mut h = DualSessionHarness::new(format!("prop-{seed}"));
 
         for step in 0..STEPS {

@@ -197,14 +197,26 @@ impl PendingMessageQueue {
         self.entries.drain(..).collect()
     }
 
+    /// 判定条目是否归属于目标会话：
+    /// 1. 显式归属：条目 session_id 与 target_session_id 严格一致；
+    /// 2. 系统广播/未绑定：条目 session_id 为空或具有系统通知前缀（timer- / sched- / cron-）。
+    #[inline]
+    pub fn matches_session(entry_session_id: &str, target_session_id: &str) -> bool {
+        entry_session_id == target_session_id
+            || entry_session_id.is_empty()
+            || entry_session_id.starts_with("timer-")
+            || entry_session_id.starts_with("sched-")
+            || entry_session_id.starts_with("cron-")
+    }
+
     /// FIFO 取出指定会话的全部条目，保持其余会话条目顺序（跨会话强隔离核心消费路径）
     pub fn dequeue_all_for(&mut self, session_id: &str) -> Vec<SteeringInputEntry> {
-        self.withdraw(|e| e.session_id == session_id)
+        self.withdraw(|e| Self::matches_session(&e.session_id, session_id))
     }
 
     /// 清空指定会话的全部条目
     pub fn clear_for(&mut self, session_id: &str) {
-        self.withdraw(|e| e.session_id == session_id);
+        self.withdraw(|e| Self::matches_session(&e.session_id, session_id));
     }
 
     /// 跨 run 转移：全部条目迁入目标队列并清空本队列。
@@ -246,7 +258,7 @@ impl PendingMessageQueue {
 
     /// 指定会话是否有待处理条目（防跨会话无差别拉起核心守护）
     pub fn has_pending_for(&self, session_id: &str) -> bool {
-        self.entries.iter().any(|e| e.session_id == session_id)
+        self.entries.iter().any(|e| Self::matches_session(&e.session_id, session_id))
     }
 
     /// 是否含 steering 条目（对齐 TS hasPendingSteering）
@@ -258,7 +270,7 @@ impl PendingMessageQueue {
     pub fn has_pending_steering_for(&self, session_id: &str) -> bool {
         self.entries
             .iter()
-            .any(|e| e.session_id == session_id && e.is_steering)
+            .any(|e| Self::matches_session(&e.session_id, session_id) && e.is_steering)
     }
 
     /// 预览队首（不移除）
@@ -268,7 +280,7 @@ impl PendingMessageQueue {
 
     /// 预览指定会话的队首条目（不移除）
     pub fn peek_for(&self, session_id: &str) -> Option<&SteeringInputEntry> {
-        self.entries.iter().find(|e| e.session_id == session_id)
+        self.entries.iter().find(|e| Self::matches_session(&e.session_id, session_id))
     }
 
     /// 清空队列

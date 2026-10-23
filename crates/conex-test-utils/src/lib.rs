@@ -11,6 +11,9 @@
 //! 依赖边界（T11.7.1）：只依赖 conex-types（域类型叶子 crate），
 //! 不依赖 session-loop/orchestrator 等业务 crate，杜绝循环依赖。
 
+// 豁免理由：纯测试基础设施 crate，TempWorkspace RAII 析构时清理临时工作区目录（见 clippy.toml 豁免约定）
+#![allow(clippy::disallowed_methods)]
+
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 

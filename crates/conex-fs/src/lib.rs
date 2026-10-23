@@ -381,7 +381,7 @@ mod tests {
         if create_dir_symlink(&outside, &link).is_err() {
             return; // 无符号链接权限环境跳过（Windows 开发者模式）
         }
-        let p = safe_canonicalize(&root.join("link/new.txt"), 10).unwrap();
+        let p = safe_canonicalize(root.join("link/new.txt"), 10).unwrap();
         // 最深已存在祖先（root/link → outside）canonicalize + 剩余成分拼接
         let expected = outside.canonicalize().unwrap().join("new.txt");
         assert_eq!(p, expected);
@@ -400,7 +400,7 @@ mod tests {
         if create_dir_symlink(&temp.join("outside-ghost"), &link).is_err() {
             return; // 无符号链接权限环境跳过（Windows 开发者模式）
         }
-        let p = safe_canonicalize(&root.join("link/new.txt"), 10).unwrap();
+        let p = safe_canonicalize(root.join("link/new.txt"), 10).unwrap();
         // 最深已存在祖先（根）canonicalize + 组件级词法拼接（Windows 下
         // canonicalize 产物带 \\?\ 前缀与反斜杠分隔符，按组件拼接保持形态一致）
         let expected = root.canonicalize().unwrap().join("link").join("new.txt");

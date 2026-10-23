@@ -105,7 +105,7 @@ impl WorkspaceStore {
         if q.is_empty() {
             return Ok(Vec::new());
         }
-        let limit = limit.max(1).min(500) as i64;
+        let limit = limit.clamp(1, 500) as i64;
         let conn = self
             .conn
             .lock()
@@ -168,7 +168,7 @@ impl WorkspaceStore {
         if fts_q.is_empty() {
             return Ok(Vec::new());
         }
-        let limit = limit.max(1).min(500) as i64;
+        let limit = limit.clamp(1, 500) as i64;
         let conn = self
             .conn
             .lock()
@@ -238,7 +238,7 @@ impl WorkspaceStore {
         if attrs_eq.is_empty() {
             return Ok(Vec::new());
         }
-        let limit = limit.max(1).min(500) as i64;
+        let limit = limit.clamp(1, 500) as i64;
         let conn = self
             .conn
             .lock()

@@ -588,6 +588,7 @@ impl CoreRunState {
     /// 装配）。返回 AutoRetry 计划（含退避 delay 与重入协调器引用）；
     /// SteeringQueued / NeedsUser 由协调器内部完成（通知入队/标记），
     /// 无需额外动作。
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn decide_subagent_recovery(
         &self,
         session_id: &str,
@@ -601,12 +602,8 @@ impl CoreRunState {
         if terminal_status != &conex_db::RunStatus::Failed {
             return None;
         }
-        let Some(error_kind) = error_kind else {
-            return None;
-        };
-        let Some(coord) = self.coordinator_for(session_id) else {
-            return None;
-        };
+        let error_kind = error_kind?;
+        let coord = self.coordinator_for(session_id)?;
         let fp = fingerprint(&cfg.subagent_id, first_user_text);
         let ctx = Self::build_run_failure_context(
             cfg,

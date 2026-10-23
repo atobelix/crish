@@ -535,7 +535,7 @@ impl LocalDb {
                 }
             })
             .collect();
-        models.sort_by(|a, b| b.tokens.cmp(&a.tokens));
+        models.sort_by_key(|a| std::cmp::Reverse(a.tokens));
 
         // 5. 计算 6 项核心指标（若无真实用量数据，严禁伪造假数据画像，统一返回 "—"）
         let top_model = if grand_total_tokens > 0 {
@@ -676,13 +676,13 @@ impl LocalDb {
 
         // 初始化单元格
         let mut cells: Vec<ActivityMatrixCell> = Vec::with_capacity(num_rows * num_cols);
-        for r in 0..num_rows {
-            for c in 0..num_cols {
+        for (r, row_label) in rows.iter().enumerate().take(num_rows) {
+            for (c, col_label) in cols.iter().enumerate().take(num_cols) {
                 cells.push(ActivityMatrixCell {
                     row: r,
                     col: c,
-                    row_label: rows[r].clone(),
-                    col_label: cols[c].clone(),
+                    row_label: row_label.clone(),
+                    col_label: col_label.clone(),
                     tokens: 0,
                     cost: 0.0,
                     calls: 0,

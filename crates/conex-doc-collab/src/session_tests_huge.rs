@@ -24,14 +24,13 @@ fn a_huge_01_below_threshold_stays_single_leaf() {
     .unwrap();
     assert_eq!(s.read_text(&id), payload);
     assert_eq!(s.tree.nodes.len(), 1, "亚阈不得强制分段");
-    assert!(s
+    assert!(!s
         .tree
         .get(&id)
         .unwrap()
         .props
         .attrs
-        .get(ATTR_SPLIT_OF)
-        .is_none());
+        .contains_key(ATTR_SPLIT_OF));
     assert!(s.plan_split_huge(id).unwrap().is_empty());
 }
 

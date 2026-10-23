@@ -9,7 +9,7 @@
 //!    dryRun / 可选 batch token；可点名测千级 ops 形状与零写语义。
 //! 2. **恶意扩展拒写 / 零持久化方向**：[`FORBIDDEN_WRITE_HANDLE_KEYS`] 扫描
 //!    + [`reject_malicious_extension_payload`]；被拒后 **不**触达后端写；
-//!    Plugin 源 plan Deny / full 仍 NeedsApproval（表驱动 Source 维）。
+//!      Plugin 源 plan Deny / full 仍 NeedsApproval（表驱动 Source 维）。
 //!
 //! # 诚实边界（强制 · 禁止假关）
 //! - **≠ EL-05**（须 W4-B + **W6-E Strict** + 持久/写锥，见 `08`）

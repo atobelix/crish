@@ -5,7 +5,6 @@ use std::time::Duration;
 
 use conex_types::error::codes;
 
-use super::super::types::*;
 use super::*;
 
 #[tokio::test]

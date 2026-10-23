@@ -50,6 +50,8 @@ pub(crate) struct PendingRequestMeta {
 ///   tool_call_id 在待审批集合**（AA-05 I-02 / PE-12 T12.3：不匹配返回
 ///   NotFound，杜绝伪造审计事件），再送决策并恢复 run 状态机
 ///   （awaiting-approval → running）。
+pub type DeadlockDetectorFn = Box<dyn Fn(&str) -> bool + Send + Sync>;
+
 pub(crate) struct ApprovalGateImpl {
     /// run 标识
     pub(crate) run_id: String,
@@ -64,7 +66,7 @@ pub(crate) struct ApprovalGateImpl {
     /// 命中时路由转用户打破 120s 空等；None = 未接线（退化纯超时兜底，
     /// 行为与现状一致）。真实 wait 态信号源 = orchestrator 子代理跟踪器
     /// （wait_subagents 工具执行期间标记），由 F11 T-D-13 引擎接线注入。
-    pub(crate) deadlock_detector: Option<Box<dyn Fn(&str) -> bool + Send + Sync>>,
+    pub(crate) deadlock_detector: Option<DeadlockDetectorFn>,
     /// 广播 approval-requested（先发后等；信封 sequence=None 实时预览，
     /// 收口流携带持久化序列）
     pub(crate) broadcast: Box<dyn Fn(AgentEvent) + Send + Sync>,

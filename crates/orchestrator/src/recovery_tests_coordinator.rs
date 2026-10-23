@@ -318,7 +318,7 @@ async fn g10_budget_denied_increments_global_stats() {
     );
     let after = global_denied_stats().summary().recovery_budget_denied;
     assert!(
-        after >= before + 1,
+        after > before,
         "全局恢复预算 denied 计数应至少 +1（月度报告数据源）"
     );
 }

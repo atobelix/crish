@@ -579,6 +579,8 @@ pub fn atomic_write(target: impl AsRef<Path>, data: &[u8]) -> io::Result<()> {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
+#[allow(clippy::permissions_set_readonly_false)] // 测试环境下恢复只读文件以便清理
 mod tests {
     use super::*;
 

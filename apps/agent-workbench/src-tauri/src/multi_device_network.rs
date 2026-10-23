@@ -82,7 +82,7 @@ pub fn classify_network_categories(categories: &[u32]) -> NetworkKind {
         return NetworkKind::Unknown;
     }
     // Fail-Closed 铁律：只要存在任何一个 Public (0)，整体判定为 Public
-    if categories.iter().any(|&c| c == 0) {
+    if categories.contains(&0) {
         return NetworkKind::Public;
     }
     // 均为非公网时，取最小信任级别（Private 1 优先于 Domain 2）
@@ -124,6 +124,7 @@ fn hint_for(kind: NetworkKind) -> String {
 mod nlm_com {
     use std::ffi::c_void;
 
+    #[allow(clippy::upper_case_acronyms)]
     #[repr(C)]
     #[derive(Clone, Copy)]
     pub struct GUID {

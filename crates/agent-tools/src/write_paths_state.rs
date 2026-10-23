@@ -9,6 +9,7 @@
 //! - **RAII 守卫**：[WriteClaimGuard]——Drop 时释放本持有者全部声明；
 //! - **工具接线助手**：[claim_write_guard] / [check_write_allowance_for_ctx]
 //!   （写类工具执行前先越权检查、再冲突声明，一先一后串行叠加）。
+//!
 //! 诚实边界：仅结构拆分，互斥语义零改动（≠ EL / ≠ 打开完成 / ≠ 结构债清零）。
 
 use super::write_paths_validate::{
@@ -49,7 +50,7 @@ impl std::fmt::Display for ClaimMode {
 }
 
 /// 锁定持有者身份（三元组：session_id, run_id, tool_call_id，BC10-5）
-#[derive(Debug, Clone, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, Serialize, Deserialize)]
 pub struct HolderId {
     /// 会话标识
     pub session_id: String,
@@ -99,10 +100,9 @@ impl HolderId {
                 || other.session_id.is_empty()
                 || self.session_id == other.session_id)
             && self.run_id == other.run_id
+            && (self.tool_call_id.is_empty() || other.tool_call_id.is_empty())
         {
-            if self.tool_call_id.is_empty() || other.tool_call_id.is_empty() {
-                return true;
-            }
+            return true;
         }
         false
     }
@@ -112,11 +112,7 @@ impl std::ops::Deref for HolderId {
     type Target = str;
     fn deref(&self) -> &str {
         if self.formatted.is_empty() {
-            if self.session_id.is_empty() && self.tool_call_id.is_empty() {
-                &self.run_id
-            } else {
-                &self.run_id
-            }
+            &self.run_id
         } else {
             &self.formatted
         }

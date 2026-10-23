@@ -41,9 +41,11 @@
 //!   [check_write_allowance_for_ctx]）；
 //! - `write_paths_validate`：路径校验与冲突判定域（[validate_write_path] /
 //!   Overlaps 组件级前缀判定 / 归一化底座 / 白名单策略与越权判定）；
+//!
 //! 测试外置 `write_paths_tests.rs`（`#[path]` 旁挂，无孤儿，写路径互斥测
 //! 全保留）；公开 API 经本文件 `pub use` 保持不 break（lib.rs `pub mod
 //! write_paths;` 与 session-loop / workbench 壳消费方 import 路径不变）。
+//!
 //! 诚实边界：仅结构拆分，互斥语义 / 路径校验 / 越权判定零改动
 //! （≠ EL / ≠ 打开完成 / ≠ 结构债清零）。
 

@@ -460,6 +460,7 @@ impl RunUsage {
     /// - hit_ratio / write_ratio 不直接透传（DB 落库不存派生值，T-39），
     ///   统一按 C9 恒等式重算：`input_total = miss + read + write`；
     ///   `input_total == 0` → None。
+    ///
     /// T-40 轮末合并已兑现：CoreRunState::run_usage 消费（core_run_commands.rs
     /// get_run_usage 回退路径 + 测试），E1 过期 allow 已删除（13-T5 核销）。
     pub fn from_run_cache_stats(
@@ -1584,7 +1585,7 @@ mod tests {
         // prompt=1_000 / cache_read=800 → 输入段 200×3/1M=0.0006 + 输出 50×9/1M=0.00045
         // + cache_read 800×0.1/1M=0.00008 → 0.00113 → 引擎格式化 "$0.001130"
         let usage =
-            RunUsage::from_run_cache_stats(stats.clone(), Some(&pricing)).expect("有定价必须出账");
+            RunUsage::from_run_cache_stats(stats, Some(&pricing)).expect("有定价必须出账");
         let engine_cost = agent_provider::pricing::PricingEngine::calculate_cost(
             &Some(pricing.clone()),
             stats.prompt_tokens,
@@ -1603,7 +1604,7 @@ mod tests {
         let mut priced2 = pricing.clone();
         priced2.input = Some(30.0);
         let usage2 =
-            RunUsage::from_run_cache_stats(stats.clone(), Some(&priced2)).expect("改价后必须出账");
+            RunUsage::from_run_cache_stats(stats, Some(&priced2)).expect("改价后必须出账");
         assert_ne!(
             usage2.cost.as_ref().map(|c| c.formatted_total.clone()),
             usage.cost.as_ref().map(|c| c.formatted_total.clone()),
@@ -1612,7 +1613,7 @@ mod tests {
         assert_eq!(usage2.prompt_tokens, usage.prompt_tokens, "token 不变");
 
         // 未定价 → cost None（不是 0）
-        let unpriced = RunUsage::from_run_cache_stats(stats.clone(), None).expect("有样本");
+        let unpriced = RunUsage::from_run_cache_stats(stats, None).expect("有样本");
         assert!(unpriced.cost.is_none(), "无定价 → cost None");
 
         // 四价 0 无阶梯 → 免费（新契约：缺单价与显式免费不同——样本含
@@ -1629,7 +1630,7 @@ mod tests {
             tiers: vec![],
         };
         let free_usage =
-            RunUsage::from_run_cache_stats(stats.clone(), Some(&free)).expect("有样本");
+            RunUsage::from_run_cache_stats(stats, Some(&free)).expect("有样本");
         let free_cost = free_usage.cost.expect("免费模型必须出账");
         assert!(free_cost.is_free);
         assert_eq!(free_cost.formatted_total, "免费");

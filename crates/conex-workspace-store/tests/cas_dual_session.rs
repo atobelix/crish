@@ -1,4 +1,6 @@
 //! CT-01 CAS（乐观锁）· 双会话陈旧写全分支（T5–T7）
+#![allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
+#![allow(deprecated)] // 测试存量全树 undo API
 //!
 //! 验收锚：`docs/review-md-audit/2026-08-13-wave/plans/D-06` §五 T5/T6/T7；
 //! `00-执行方案定稿`（CT-01 排 SR-06g-1 后）。

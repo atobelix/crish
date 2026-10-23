@@ -87,6 +87,7 @@ fn extract_query_param(uri: &str, param_name: &str) -> Option<String> {
     None
 }
 
+#[allow(clippy::result_large_err)] // Callback 签名由 tokio_tungstenite::accept_hdr_async 契约刚性约束
 async fn handle_connection(
     stream: TcpStream,
     peer_addr: SocketAddr,

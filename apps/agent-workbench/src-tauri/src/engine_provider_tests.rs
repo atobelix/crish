@@ -38,8 +38,8 @@ fn call_for(base_url: &str, model: &str, endpoint: Endpoint) -> HttpProviderCall
     HttpProviderCall::new(reqwest::Client::new(), config(base_url, model, endpoint))
 }
 
-/// 进程级 LIVE_CATALOG 为共享静态：与 protocol::live_catalog_tests 共用同一把锁。
-/// 夹具安装与消费必须持锁串行；guard 存活覆盖整个测试体。
+// 进程级 LIVE_CATALOG 为共享静态：与 protocol::live_catalog_tests 共用同一把锁。
+// 夹具安装与消费必须持锁串行；guard 存活覆盖整个测试体。
 
 /// 安装 live yaml 综合夹具（plans/04：协议 / thinking 字典 / compat / headers
 /// 全部从 yaml 长出，禁止 URL / 前缀启发式）。返回互斥 guard，调用方必须持有到测试结束。
@@ -818,6 +818,7 @@ fn describe_model_whitelist_for_deepseek_v4_flash_is_narrow() {
 /// **HTTP 请求未发出**（base_url 指向必然连接失败的端口；若校验未提前 return，
 /// 此处会得到 reqwest 连接错误而非我们的 InvalidRequest）。
 #[tokio::test]
+#[allow(clippy::await_holding_lock)] // 进程级 LIVE_CATALOG 单例测试持锁串行
 async fn out_of_whitelist_effort_rejected_before_http() {
     let _fixture = install_live_fixture();
     // 夹具字典 High/Low/Max + 越档 medium + 死端口 URL：

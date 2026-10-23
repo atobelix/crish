@@ -214,6 +214,8 @@ impl SecureCredentialStore {
     }
 
     /// 删除命名密文
+    // 豁免理由：凭据清除语义必须物理删除敏感密文，不留可恢复数据副本（见 clippy.toml 凭据清除约定）
+    #[allow(clippy::disallowed_methods)]
     pub fn delete_secret(&self, name: &str) -> Result<()> {
         let path = self.secret_path(name)?;
         if path.exists() {
@@ -249,6 +251,7 @@ impl SecureCredentialStore {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
 mod tests {
     use super::*;
 

@@ -333,9 +333,7 @@ fn is_foreign_skill_tree(path: &Path) -> bool {
         .position(|pair| (pair[0] == ".conex" || pair[0] == ".crish") && pair[1] == "skills");
     const FOREIGN_APP_DIRS: [&str; 5] = [".codex", ".claude", ".cursor", ".agents", ".gemini"];
     components.iter().enumerate().any(|(index, name)| {
-        let marked = FOREIGN_APP_DIRS
-            .iter()
-            .any(|marker| name.as_str() == *marker);
+        let marked = FOREIGN_APP_DIRS.contains(&name.as_str());
         marked && owned_at.map(|at| index < at).unwrap_or(true)
     })
 }

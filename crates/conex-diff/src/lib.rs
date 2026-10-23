@@ -259,7 +259,7 @@ pub mod diff_engine {
         }
 
         // Group modifications that are within 2*context of each other (KD-05 preallocated)
-        let mut groups: Vec<(usize, usize)> = Vec::with_capacity(mod_indices.len().min(64).max(1));
+        let mut groups: Vec<(usize, usize)> = Vec::with_capacity(mod_indices.len().clamp(1, 64));
         let mut group_start = 0;
 
         for i in 1..mod_indices.len() {

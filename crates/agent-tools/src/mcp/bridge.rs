@@ -21,9 +21,11 @@
 //!   JSON-RPC 请求-响应通道 / 工具枚举缓存 / 崩溃检测后台任务）
 //! - `bridge_registry`：生命周期/注册域（`McpClientBridge` 会话表 /
 //!   `McpToolAdapter` 本地 Tool 适配器）
+//!
 //! 测试按域旁挂（`bridge_protocol_tests` / `bridge_session_tests` /
 //! `bridge_registry_tests`，`#[path]` 接线，无孤儿，零删除）；
 //! 公开 API 经本文件 `pub use` 保持不 break（mcp/mod.rs 与调用方零改动）。
+//!
 //! 诚实边界：仅结构拆分，MCP 桥语义（list/call 注册、鉴权、参数校验）
 //! 零改动（≠ EL / ≠ 打开完成 / ≠ 结构债清零）。
 

@@ -140,7 +140,9 @@ mod platform {
                 if unicode_offset < link_info_size {
                     let bytes = &link_info[unicode_offset..link_info_size];
                     let u16s: Vec<u16> = bytes
-                        .chunks_exact(2)
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
                         .map(|c| u16::from_le_bytes([c[0], c[1]]))
                         .take_while(|&c| c != 0)
                         .collect();
@@ -284,7 +286,7 @@ mod platform {
         }
 
         // 检测是否存在真实的 Alpha 通道（现代 32 位 ARGB 图标）
-        let has_alpha = pixels.chunks_exact(4).any(|p| p[3] != 0);
+        let has_alpha = pixels.as_chunks::<4>().0.iter().any(|p| p[3] != 0);
 
         if !has_alpha && !hbm_mask.is_null() {
             // 旧版 24 位位图无 Alpha，需借助 hbmMask（1 位单色掩码）补齐透明通道
@@ -323,7 +325,7 @@ mod platform {
                     }
                 }
             } else {
-                for p in pixels.chunks_exact_mut(4) {
+                for p in pixels.as_chunks_mut::<4>().0 {
                     p[3] = 255;
                 }
             }

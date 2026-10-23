@@ -593,6 +593,7 @@ mod server_tests {
 // ═══════════════════════════════════════════════════════════════════
 
 #[cfg(test)]
+#[allow(clippy::await_holding_lock)] // 单元测试持 LIVE_CATALOG_TEST_LOCK 跨网络 await
 mod integration_tests {
     use super::*;
     use crate::core_event_bridge::EventBridge;

@@ -34,6 +34,8 @@ impl WorkspaceStore {
     /// - 标记提交：[`InFlightExportGuard::mark_committed`]（保留 1000ms 自然 TTL 淘汰，彻底废除即时 unregister）
     ///
     /// **勿**将写出路径作为工具默认读源（见模块不变量）。
+    // 豁免理由：原子导出 mirror 文件，清理自家临时文件与旧备份文件（自管临时文件，不进回收站）
+    #[allow(clippy::disallowed_methods)]
     pub fn export_md_mirror(
         &self,
         doc_id: &str,
@@ -88,6 +90,7 @@ impl WorkspaceStore {
             if let Ok(meta) = std::fs::metadata(&final_path) {
                 let mut perms = meta.permissions();
                 if perms.readonly() {
+                    #[allow(clippy::permissions_set_readonly_false)]
                     perms.set_readonly(false);
                     // 清不掉只读位 → 后续 rename 必失败；提前以真实原因上报
                     std::fs::set_permissions(&final_path, perms)?;

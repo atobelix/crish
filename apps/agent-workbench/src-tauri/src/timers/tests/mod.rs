@@ -31,16 +31,18 @@ impl EventSink for ProbeEvents {
     }
 }
 
-/// 构造测试注册表（真实 QueuePendingSink 落点 + mock 事件 + 共享
-/// 内存 store + 注入时钟）。时钟初始 1_000_000（对齐 watchdog.rs
-/// 测试时钟同值）；返回队列句柄与时钟句柄供断言 / 推进。
-pub(crate) fn test_registry() -> (
+pub(crate) type TestRegistryBundle = (
     Arc<TimerRegistry>,
     Arc<Mutex<PendingMessageQueue>>,
     Arc<ProbeEvents>,
     Arc<MemoryTimerStore>,
     Arc<AtomicU64>,
-) {
+);
+
+/// 构造测试注册表（真实 QueuePendingSink 落点 + mock 事件 + 共享
+/// 内存 store + 注入时钟）。时钟初始 1_000_000（对齐 watchdog.rs
+/// 测试时钟同值）；返回队列句柄与时钟句柄供断言 / 推进。
+pub(crate) fn test_registry() -> TestRegistryBundle {
     let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
     let events = Arc::new(ProbeEvents::default());
     let store = MemoryTimerStore::shared();

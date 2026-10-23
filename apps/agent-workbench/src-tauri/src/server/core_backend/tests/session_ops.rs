@@ -185,10 +185,10 @@ fn t07_remote_source_attempt_redacts_token_in_payload() {
         "事件载荷不得含令牌/配对码明文形态：{}",
         recorded[0]
     );
-    assert!(!recorded[0].contains(&token), "事件载荷不得含令牌原文");
+    assert!(!recorded[0].contains(token), "事件载荷不得含令牌原文");
     // 标记载荷同源打码（发射侧与标记共用同一 redact 输入）
     let marker = remote_source_attempt_marker(&conex_telemetry::redact::redact_text(&command));
-    assert!(!marker.contains(&token), "标记载荷不得含令牌原文");
+    assert!(!marker.contains(token), "标记载荷不得含令牌原文");
 }
 
 /// remote-only 事件载荷（D5 §4.4：无人值守移动端单方批准标记）

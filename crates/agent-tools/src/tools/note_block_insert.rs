@@ -219,7 +219,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out["ok"], true);
-        assert!(out["block_id"].as_str().unwrap().len() > 0);
+        assert!(!out["block_id"].as_str().unwrap().is_empty());
         let q = backend
             .query_blocks(crate::note_backend::NoteQueryBlocksParams {
                 doc_id: "doc-ins".into(),

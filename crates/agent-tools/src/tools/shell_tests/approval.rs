@@ -126,12 +126,11 @@ async fn task_type_commit_strictly_enforces_git_only() {
     ];
     for cmd in allowed {
         let res = t.prepare(&ctx, &json!({ "command": cmd })).await;
-        match res {
-            Prepared::Done(Err(e)) => panic!(
+        if let Prepared::Done(Err(e)) = res {
+            panic!(
                 "git 命令 [{}] 必须通过 task_type 门禁，但被拦截: {:?}",
                 cmd, e
-            ),
-            _ => {}
+            );
         }
     }
 

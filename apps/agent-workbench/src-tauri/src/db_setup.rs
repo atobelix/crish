@@ -52,19 +52,16 @@ pub async fn setup_databases_concurrently(
     // 任务 1：阻塞线程打开 sessions.db（LocalDb::open 内建 ReaderPool）
     let session_task = task::spawn_blocking(move || {
         let start = std::time::Instant::now();
-        match open_session_db_at(&session_db_path, &diag_session) {
-            shared => {
-                let elapsed = start.elapsed().as_millis();
-                tracing::info!(
-                    target: "db",
-                    path = %session_db_path.display(),
-                    elapsed_ms = elapsed,
-                    ready = shared.db_ready(),
-                    "会话数据库装配完成（并发路径）"
-                );
-                shared
-            }
-        }
+        let shared = open_session_db_at(&session_db_path, &diag_session);
+        let elapsed = start.elapsed().as_millis();
+        tracing::info!(
+            target: "db",
+            path = %session_db_path.display(),
+            elapsed_ms = elapsed,
+            ready = shared.db_ready(),
+            "会话数据库装配完成（并发路径）"
+        );
+        shared
     });
 
     // 任务 2：阻塞线程打开 workspace.db（NoteRuntime）
@@ -136,6 +133,7 @@ fn open_session_db_at(db_path: &PathBuf, diagnostics: &StatusDiagnostics) -> Sha
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
 mod tests {
     use super::*;
 

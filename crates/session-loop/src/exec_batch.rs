@@ -226,7 +226,7 @@ impl BatchRunner<'_> {
         &self,
         sequence: Vec<Vec<usize>>,
         events: &mut Vec<ToolEvent>,
-        results: &mut Vec<Option<ClassifiedToolResult>>,
+        results: &mut [Option<ClassifiedToolResult>],
         fatal: &mut Option<String>,
     ) {
         'outer: for group in sequence {

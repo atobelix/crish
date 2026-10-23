@@ -94,9 +94,9 @@ fn on_committed_pending_ordered_on_load() {
     assert_eq!(h.pending[1].bytes, vec![0x02, 0x03]);
     assert_eq!(h.pending[2].bytes, vec![0x04]);
     // kind 经 serde 回环
-    let k0 = serde_json::to_value(&h.pending[0].kind).unwrap();
+    let k0 = serde_json::to_value(h.pending[0].kind).unwrap();
     assert_eq!(k0, serde_json::json!("structure"));
-    let k1 = serde_json::to_value(&h.pending[1].kind).unwrap();
+    let k1 = serde_json::to_value(h.pending[1].kind).unwrap();
     assert_eq!(k1, serde_json::json!("text"));
 }
 

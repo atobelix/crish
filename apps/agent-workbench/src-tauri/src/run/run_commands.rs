@@ -340,8 +340,7 @@ pub(crate) async fn read_session_events_impl(
 /// run 全链**含终态后 tail**（同 runId 收尾事件列级归属，R-06）；goal-*
 /// 轮次域因落库 run_id=NULL 自然不命中（SQL WHERE run_id=?）；游标取
 /// 页末**全局** sequence（SQL 层过滤后页内末事件即本 run 事件流位置，
-/// 修复「过滤后取页末游标跳过其它 run 事件」旧语义）；limit = page_size
-/// + 1 判 has_more（n+1 语义，has_more 以原始行数判断，与
+/// 修复「过滤后取页末游标跳过其它 run 事件」旧语义）；limit 为 page_size 加 1 判 has_more（n+1 语义，has_more 以原始行数判断，与
 /// read_session_events_impl 同口径）。
 pub(crate) async fn read_run_events_impl(
     state: &CoreRunState,
@@ -1361,16 +1360,17 @@ mod tests {
         for _ in 0..(ORPHAN_REAP_DEBOUNCE_ROUNDS + 2) {
             reap_orphan_runs_round(&state).await;
         }
-        let registry = state.active_runs.lock().unwrap_or_else(|e| e.into_inner());
-        assert!(
-            registry.contains_key("run-running"),
-            "运行中 run 不得被收割"
-        );
-        assert!(
-            registry.contains_key("run-none"),
-            "未登记驱动 run 不得被收割"
-        );
-        drop(registry);
+        {
+            let registry = state.active_runs.lock().unwrap_or_else(|e| e.into_inner());
+            assert!(
+                registry.contains_key("run-running"),
+                "运行中 run 不得被收割"
+            );
+            assert!(
+                registry.contains_key("run-none"),
+                "未登记驱动 run 不得被收割"
+            );
+        }
         assert!(
             state
                 .orphan_debounce

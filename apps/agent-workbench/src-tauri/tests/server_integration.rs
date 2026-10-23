@@ -17,6 +17,7 @@
 //! 5. 连接上限：第 9 连接拒绝（conn.limit）；
 //! 6. 踢出：撤销设备 → ≤1s 墙钟断开（红线 6）；撤销后重连 401；
 //!    撤销全部 → 全部活动连接被踢。
+//!
 //! 配对链路（任务要求）：真实走 REST POST /v1/pair（pair_endpoint.rs），
 //! 配对码 → 令牌 → 令牌连 WS 订阅成功（端到端验证 G-2 装配面）。
 //!
@@ -848,7 +849,7 @@ async fn integration_revoke_all_kicks_every_active_connection() {
     for (name, ws) in [("dev-a", &mut ws_a), ("dev-b", &mut ws_b)] {
         let text = next_text(ws)
             .await
-            .expect(&format!("{name} 必须收到踢出帧"));
+            .unwrap_or_else(|| panic!("{name} 必须收到踢出帧"));
         let (kind, body) = parse_frame(&text);
         assert_eq!(kind, "error", "{name} 踢出帧：{text}");
         let error: ErrorBody = serde_json::from_value(body).expect("错误载荷必须合法");

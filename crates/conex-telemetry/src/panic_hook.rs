@@ -225,6 +225,7 @@ fn payload_to_string(payload: &dyn std::any::Any) -> String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::disallowed_methods)] // 测试临时目录/文件清理，非产品物理删除路径
     use super::*;
 
     #[test]

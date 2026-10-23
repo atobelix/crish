@@ -32,8 +32,10 @@
 //! - `wait_events`：事件驱动等待域（终态事件信封 [SubagentTerminalEvent] +
 //!   [wait_for_terminal_events] 原语）；
 //! - `wait_tool`：工具域（[WaitSubagentsTool] + Tool 实现）；
+//!
 //! 测试外置 `wait_subagents_tests.rs`（`#[path]` 旁挂，无孤儿）；
 //! 公开 API 经本文件 `pub use` 保持不 break（tools/mod.rs 注册不变）。
+//!
 //! 诚实边界：仅结构拆分，等待/收束语义零改动（≠ EL / ≠ 打开完成 / ≠ 结构债清零）。
 
 // ==================== 拆分接线（SR-06a-3 · 结构拆分 · ≠ EL）====================

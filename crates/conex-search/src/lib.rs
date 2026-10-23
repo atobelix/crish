@@ -262,7 +262,7 @@ pub mod search {
         }
 
         let mut hits: Vec<FileHit> = heap.into_iter().map(|entry| entry.hit).collect();
-        hits.sort_by(|a, b| b.score.cmp(&a.score));
+        hits.sort_by_key(|a| std::cmp::Reverse(a.score));
         hits
     }
 
@@ -321,7 +321,7 @@ pub mod search {
         });
 
         let mut sorted = all_hits;
-        sorted.sort_by(|a, b| b.score.cmp(&a.score));
+        sorted.sort_by_key(|a| std::cmp::Reverse(a.score));
         sorted.truncate(limit);
         sorted
     }

@@ -236,11 +236,11 @@ mod tests {
         assert_ne!(out.tree.root_children[0], id);
         let codes: Vec<_> = out.lossy.items.iter().map(|i| i.code.as_str()).collect();
         assert!(
-            codes.iter().any(|c| *c == "stripped_block_ids"),
+            codes.contains(&"stripped_block_ids"),
             "pure-gfm 须报 stripped_block_ids，got {codes:?}"
         );
         assert!(
-            codes.iter().any(|c| *c == "missing_block_id"),
+            codes.contains(&"missing_block_id"),
             "剥 ID 后缺 ID 须报 missing_block_id，got {codes:?}"
         );
         assert_eq!(

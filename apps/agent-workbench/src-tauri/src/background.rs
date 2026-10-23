@@ -9,7 +9,7 @@
 //!   notifier）；
 //! - writer 转发循环：stdout/stderr → 落盘 `<task_id>.log`（带 `[out]`/`[err]` 行前缀）
 //!   + 内存预览 + 行计数 + 每 512 行 `.meta.json` checkpoint + 行尾提示检测 +
-//!   Crashed 通知（T-AB-16 3：resourceMonitor 任务非零退出 → 通知附最后 20 行）；
+//!     Crashed 通知（T-AB-16 3：resourceMonitor 任务非零退出 → 通知附最后 20 行）；
 //! - read_log：行号范围读取（尾部读取 / checkpoint 二分定位）；send_input：stdin 注入；
 //! - 采样循环（T-AB-15 3）：resourceMonitor 任务挂 [TaskHandle::sampler]——
 //!   周期 2s 采集 CPU/RSS → 更新 `info.resource` + 落盘 `.samples.jsonl` +

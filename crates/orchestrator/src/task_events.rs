@@ -368,6 +368,7 @@ pub fn into_task_audit_event_with_timestamp(
 ///
 /// - task-started 记忆 task_id → command 摘要，供终态记录回填命令摘要
 ///   （completed/failed/killed 事件体不含 command 字段）；
+///
 /// 默认审计记录上限（DEC-04 裁决：有界容量防泄漏）
 pub const DEFAULT_MAX_AUDIT_RECORDS: usize = 1000;
 /// 默认临时命令摘要映射上限
@@ -990,7 +991,7 @@ mod tests {
 
     #[test]
     fn owner_run_id_extraction_and_filtering() {
-        let events = vec![
+        let events = [
             started("t-1", "run-main"),
             started("t-2", "run-sub-1"),
             completed("t-1", 0),

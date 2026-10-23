@@ -323,13 +323,13 @@ pub trait RunStore: Send + Sync {}
 /// `seed_sequence`。保守路线仅文档分层。
 pub trait EventStore: Send + Sync {}
 
-/// Store 逻辑分层说明（E2 保守路线）:
-///
-/// - `Store` 当前为单一 async trait（含 run + event + touch_session +
-///   as_local_db）；评估分层为 `Store: MetaStore + RunStore + EventStore` 时，
-///   `MetaStore` 为同步 meta 面（本文件新增），`RunStore`/`EventStore` 为 async 面；
-/// - 保守路线不强制合并（不改 Store 定义），仅保证三 trait 的
-///   `get_meta`/`set_meta` 签名形状对齐，不改 Cargo.toml，不拆 crate。
+// Store 逻辑分层说明（E2 保守路线）:
+//
+// - `Store` 当前为单一 async trait（含 run + event + touch_session +
+//   as_local_db）；评估分层为 `Store: MetaStore + RunStore + EventStore` 时，
+//   `MetaStore` 为同步 meta 面（本文件新增），`RunStore`/`EventStore` 为 async 面；
+// - 保守路线不强制合并（不改 Store 定义），仅保证三 trait 的
+//   `get_meta`/`set_meta` 签名形状对齐，不改 Cargo.toml，不拆 crate。
 
 /// 会话级 sequence 分配器（T08.12 Q23）
 ///

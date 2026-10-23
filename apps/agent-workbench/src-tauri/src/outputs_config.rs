@@ -4,6 +4,7 @@
 //! - **会话级**：session_meta `"{session_id}:output_root"`（可覆盖，
 //!   resolve_output_dir 下次调用生效，G01 工具侧消费）；
 //! - **默认值**：`<workspace_root>/.agent-outputs`。
+//!
 //! 优先级：会话级 > 默认值。
 //!
 //! RUN-10 退役登记（2026-10-21 死代码清零）：全局级 OutputsRootConfig

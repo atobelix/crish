@@ -254,9 +254,9 @@ async fn system_prompt_stable_across_runs_same_settings() {
         Arc::ptr_eq(&requests[0].messages[0], &requests[1].messages[0]),
         "两轮请求首条用户消息为同一 Arc（无改写）"
     );
-    for i in 0..first_run_msgs.len() {
+    for (i, msg) in first_run_msgs.iter().enumerate() {
         assert!(
-            Arc::ptr_eq(&first_run_msgs[i], &requests[1].messages[i]),
+            Arc::ptr_eq(msg, &requests[1].messages[i]),
             "第二轮请求第 {i} 条必须与第一轮收口对话为同一 Arc（无改写）"
         );
     }

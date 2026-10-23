@@ -1106,7 +1106,9 @@ function Component() {
         let after = raw_bytes(&ws, "u.txt");
         assert!(after.starts_with(&[0xFF, 0xFE]), "必须保留 UTF-16LE BOM");
         let text: String = after[2..]
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|c| {
                 let u = u16::from_le_bytes([c[0], c[1]]);
                 char::from_u32(u as u32).unwrap()

@@ -20,6 +20,8 @@
 //!
 //! 门禁：`cargo test -p conex-note-runtime --test note_plan_parity`
 
+#![allow(clippy::disallowed_methods)]
+
 use agent_tools::note_backend::{
     MemoryNoteBackend, NoteBackend, NoteBackendError, NoteBlockBatchRequest, NoteBlockOp,
     NoteBlockOpKind, NoteQueryBlocksParams,

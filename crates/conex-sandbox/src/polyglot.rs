@@ -310,11 +310,11 @@ impl PolyglotCodeInspector {
                         let content = arg[2..].trim_start_matches('=').trim_matches(['"', '\'']);
                         return Some(content.to_string());
                     }
-                    if arg.starts_with("--eval=") {
-                        return Some(arg[7..].trim_matches(['"', '\'']).to_string());
+                    if let Some(stripped) = arg.strip_prefix("--eval=") {
+                        return Some(stripped.trim_matches(['"', '\'']).to_string());
                     }
-                    if arg.starts_with("--print=") {
-                        return Some(arg[8..].trim_matches(['"', '\'']).to_string());
+                    if let Some(stripped) = arg.strip_prefix("--print=") {
+                        return Some(stripped.trim_matches(['"', '\'']).to_string());
                     }
                 }
                 None
@@ -753,15 +753,14 @@ pub fn is_critical_path_str(path: &str) -> bool {
     }
 
     // 2. Windows 驱动盘根（C:/, C:, C:/* 等）
-    if upper.len() >= 2 && upper.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false) {
-        if &upper[1..2] == ":" {
-            if upper.len() == 2
-                || (upper.len() == 3 && &upper[2..3] == "/")
-                || (upper.len() >= 4 && (&upper[2..4] == "/*" || &upper[2..4] == "/."))
-            {
-                return true;
-            }
-        }
+    if upper.len() >= 2
+        && upper.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false)
+        && &upper[1..2] == ":"
+        && (upper.len() == 2
+            || (upper.len() == 3 && &upper[2..3] == "/")
+            || (upper.len() >= 4 && (&upper[2..4] == "/*" || &upper[2..4] == "/.")))
+    {
+        return true;
     }
 
     // 3. 常见 Unix 核心关键目录

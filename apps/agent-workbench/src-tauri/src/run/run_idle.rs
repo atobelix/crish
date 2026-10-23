@@ -253,9 +253,7 @@ pub(crate) mod idle_resume {
             // ── 主 run error 收场：D2 retryable 分支 ──
             AgentEndReason::Error => {
                 // 3a. 数据面：无结构化错误 / 非 retryable → 不续
-                let Some(pe) = signals.provider_error.as_ref() else {
-                    return None;
-                };
+                let pe = signals.provider_error.as_ref()?;
                 if !pe.retryable {
                     return None;
                 }
@@ -672,9 +670,7 @@ pub(crate) mod idle_resume {
                 // 写面闭包返回「写成功时的叶子 id」（EV-02：created 事件载荷
                 // id 锚点，与注入面 restored 的 checkpoint_id 配对）
                 let leaf_id = with_session_tree(state, session_id, |tree| {
-                    let Some(leaf_id) = tree.current_leaf_id().map(str::to_string) else {
-                        return None;
-                    };
+                    let leaf_id = tree.current_leaf_id().map(str::to_string)?;
                     tree.set_leaf_checkpoint(&leaf_id, &payload)
                         .ok()
                         .map(|_| leaf_id)

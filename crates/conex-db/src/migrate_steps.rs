@@ -483,6 +483,7 @@ pub(crate) use step_10_to_11 as migrate_v10_to_v11;
 ///   （message_count 改由 `save_session_body` 批末单次重算，禁止双轨）；
 /// - `sessions` 补 `body_version INTEGER NOT NULL DEFAULT 0`（CAS 锚点）；
 /// - 新建 `idx_events_session_type` / `idx_sessions_updated`（D3-5 / SEC-12 复合排序对齐）。
+///
 /// 纯 DDL + ADD COLUMN（无表重建；对齐 v5–v11 无 DROP TABLE 策略）。
 pub(crate) fn step_11_to_12(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
     // DROP 双触发器（幂等；旧库可能有，新库无）

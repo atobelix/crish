@@ -183,9 +183,9 @@ pub fn infer_reasoning_vendor(base_url: Option<&str>, model: Option<&str>) -> Re
     ReasoningVendor::Auto
 }
 
-/// reasoning-effort 相关请求头的旧入口已物理删除（轨A SSOT）：
-/// 生产 anthropic-beta 头由壳层 `headers.rs` 按显式档位判定（不触 MODEL_SERIES），
-/// 自适应思考由 yaml 字典值 `"adaptive"` 经 `assemble_thinking_dialect` 表达。
+// reasoning-effort 相关请求头的旧入口已物理删除（轨A SSOT）：
+// 生产 anthropic-beta 头由壳层 `headers.rs` 按显式档位判定（不触 MODEL_SERIES），
+// 自适应思考由 yaml 字典值 `"adaptive"` 经 `assemble_thinking_dialect` 表达。
 
 /// 归一化思考强度（对齐 `shared:thinking-intensity.ts:182-200`）：off/不支持 → None；
 /// 档位缺失降级（xhigh→high、minimal→low、其余取最大支持档位）。

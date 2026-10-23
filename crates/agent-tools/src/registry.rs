@@ -11,6 +11,7 @@
 //!   适配为 `Tool` 后走 `register_runtime` 并入同一注册表；
 //! - `list_definitions`（:162）为定义改写链（ToolMiddleware::on_definition）
 //!   消费面，与执行侧共享构建点。
+//!
 //! 不改结构：本登记为注释级（门面 = 文档登记 + 装配点登记，不新增组件）。
 
 use crate::definition::{Tool, ToolDefinition, ToolError};

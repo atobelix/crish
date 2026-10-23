@@ -511,7 +511,7 @@ impl CompactionEngine {
         // 【核心加固 3：追加后紧急二次预检（Emergency Preflight / Fallback Compaction）】
         // 若追加新摘要或组装保留段后，总 Token 仍超过预算上限，强制执行兜底压缩，杜绝 400 错误
         if budget_tokens >= policy.keep_recent_tokens && tokens_after > budget_tokens as u64 {
-            tokens_after = self.apply_emergency_preflight(
+            tokens_after = Self::apply_emergency_preflight(
                 &mut result,
                 &mut dropped_ids,
                 messages,
@@ -552,7 +552,6 @@ impl CompactionEngine {
     /// 2. 若依然超预算（如单条巨型工具输出），对保留段中的超大 ToolResult 实施紧急截断，
     ///    保证最终输出严格收敛于预算之内。
     fn apply_emergency_preflight(
-        &self,
         result: &mut Vec<Arc<AgentMessage>>,
         dropped_ids: &mut Vec<String>,
         original_messages: &[Arc<AgentMessage>],
@@ -707,7 +706,7 @@ impl CompactionEngine {
                 plan.generation,
                 plan.fold_index.max(1)
             );
-            let new_tokens = self.apply_emergency_preflight(
+            let new_tokens = Self::apply_emergency_preflight(
                 &mut plan.messages,
                 &mut plan.dropped_ids,
                 messages,

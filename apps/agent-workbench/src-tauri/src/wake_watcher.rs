@@ -361,6 +361,7 @@ mod tests {
     }
 
     /// 构造测试 watcher（独立队列 + 替身探测 + 替身拉起器）
+    #[allow(clippy::type_complexity)]
     fn test_watcher() -> (
         Arc<WakeWatcher>,
         Arc<Mutex<PendingMessageQueue>>,

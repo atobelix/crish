@@ -99,7 +99,7 @@ impl Tool for SearchContextTool {
             .search_blocks(&session, &query, limit)
             .map_err(|e| ToolError::execution_failed("search_context", e))?;
         // 排序契约：generation 降序（稳定，同代保持后端序）
-        hits.sort_by(|a, b| b.generation.cmp(&a.generation));
+        hits.sort_by_key(|a| std::cmp::Reverse(a.generation));
         let truncated = hits.len() >= limit;
 
         let items: Vec<serde_json::Value> = hits

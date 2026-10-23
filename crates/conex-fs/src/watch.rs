@@ -1234,7 +1234,7 @@ mod tests {
             .filter(|e| e.kind == ChangeKind::Modified && e.path == target)
             .count();
         assert!(
-            mod_count >= 1 && mod_count < 15,
+            (1..15).contains(&mod_count),
             "密集写入应至少产出 1 条 Modified 且经防抖抑制风暴（实测 {mod_count} 条）：{events:?}"
         );
 

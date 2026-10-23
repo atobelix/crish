@@ -1,4 +1,5 @@
 //! 集成测试：`install_panic_hook`（无崩溃目录）+ 幂等性。
+#![allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
 //!
 //! 独立测试进程：与 panic_hook.rs 分离，保证本文件内的安装是
 //! 本进程的首次安装（幂等语义 = 首次调用配置生效）。

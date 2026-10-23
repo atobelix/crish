@@ -1,4 +1,5 @@
 //! W2-C Strict · FTS5 + blocks 投影 **结构门**
+#![allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
 //!
 //! 验收锚：`plans/09` W2-C；`plans/02` §2.9 / §3 A-PERF-10 结构门 + A-INV-06 索引侧；
 //! `specs/fts-chinese-baseline.md`（中文基线方向）。

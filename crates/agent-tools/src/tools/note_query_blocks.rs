@@ -146,8 +146,7 @@ impl Tool for QueryBlocksTool {
         let ref_from = optional_string(&args, "ref_from");
         let limit = optional_u64(&args, "limit")
             .unwrap_or(LIMIT_DEFAULT)
-            .min(LIMIT_MAX)
-            .max(1);
+            .clamp(1, LIMIT_MAX);
 
         let Some(backend) = ctx.note_backend.as_ref() else {
             return Ok(serde_json::json!({

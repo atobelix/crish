@@ -176,7 +176,7 @@ pub fn windowed_read(
 
     let mut file = File::open(path).map_err(WindowReadError::Io)?;
     let probe_len = opts.binary_probe_bytes.max(4);
-    let mut probe = vec![0_u8; probe_len as usize];
+    let mut probe = vec![0_u8; probe_len];
     let probe_read = file.read(&mut probe).map_err(WindowReadError::Io)?;
     probe.truncate(probe_read);
 
@@ -691,7 +691,7 @@ fn read_utf16_window(
             slice = &slice[..slice.len() - 1];
         }
 
-        let iter = first_unit.into_iter().chain(slice.chunks_exact(2).map(|c| {
+        let iter = first_unit.into_iter().chain(slice.as_chunks::<2>().0.iter().map(|c| {
             if little_endian {
                 u16::from_le_bytes([c[0], c[1]])
             } else {

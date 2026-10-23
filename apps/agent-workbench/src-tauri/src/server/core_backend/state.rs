@@ -92,7 +92,7 @@ impl CoreStateBackend {
     /// 挂接 ServerState.audit_bridge——router 白名单拒绝分支（remote-source-
     /// attempt）与 run 装配面（remote-mode-downgrade）共用同一桥实例）
     #[cfg(test)]
-    pub(crate) fn event_bridge(&self) -> EventBridge {
+    pub(crate) fn event_bridge(&self) -> crate::core_event_bridge::EventBridge {
         self.core.event_bridge()
     }
 

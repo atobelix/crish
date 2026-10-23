@@ -175,6 +175,8 @@ pub fn poll_mirror_once(
     store.detect_mirror_drift(doc_id, authority_rev)
 }
 
+pub type MirrorChangeCallback = Box<dyn FnMut(&MirrorWatchPollResult)>;
+
 /// 带 `on_mirror_change` 回调的轻量观察器（进程内；由上层驱动 [`Self::poll_once`]）。
 ///
 /// # 诚实边界
@@ -184,7 +186,7 @@ pub fn poll_mirror_once(
 pub struct MirrorWatcher {
     handle: MirrorWatchHandle,
     /// 指纹变更时调用（跳过首次基线 poll）。
-    on_change: Option<Box<dyn FnMut(&MirrorWatchPollResult)>>,
+    on_change: Option<MirrorChangeCallback>,
 }
 
 impl MirrorWatcher {

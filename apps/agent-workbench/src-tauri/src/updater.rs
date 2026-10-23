@@ -9,6 +9,7 @@
 //! - `workbench_install_update`：安装已验签的更新包（Windows 上 NSIS/MSI
 //!   安装器启动后进程退出；macOS/Linux 需再调 restart）；
 //! - `workbench_restart_app`：显式重启。
+//!
 //! `workbench_apply_update` 保留前端既有入口名，改为「检查→下载→安装→重启」
 //! 一次编排；任一步失败即 `Err(CoreError)`，**严禁**吞错后误报成功。
 //!
@@ -262,7 +263,7 @@ mod tests {
         #[derive(Clone)]
         struct MockState {
             latest: std::sync::Arc<serde_json::Value>,
-            payload: std::sync::Arc<&'static [u8]>,
+            payload: &'static [u8],
         }
         async fn latest_handler(
             axum::extract::State(state): axum::extract::State<MockState>,
@@ -272,11 +273,11 @@ mod tests {
         async fn bin_handler(
             axum::extract::State(state): axum::extract::State<MockState>,
         ) -> Vec<u8> {
-            (*state.payload).to_vec()
+            state.payload.to_vec()
         }
         let state = MockState {
             latest: std::sync::Arc::new(latest),
-            payload: std::sync::Arc::new(PAYLOAD),
+            payload: PAYLOAD,
         };
         let app = axum::Router::new()
             .route("/latest.json", axum::routing::get(latest_handler))

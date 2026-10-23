@@ -21,6 +21,7 @@
 //! - `PendingMessageQueue::transfer_follow_up` / `transfer_into_input_queue`
 //!   （orchestrator 适配端——把跨 run 条目迁入 followUp / steer 环）；
 //! - 主循环内部安全点（recovery 纠偏注入、safe-point 协作停止等）。
+//!
 //! 外部「下一条用户消息」一律走 `PendingMessageQueue`，不在本队列上挂
 //! 跨 run 注入入口（[InputEnqueueMode] 的 Steer/FollowUp 语义仅服务上述
 //! 适配端与主循环消费面）。
@@ -95,7 +96,7 @@ pub fn next_batch_seq() -> u64 {
 ///
 /// 注（详案 I1-α① 队列归一）：`Steer`/`FollowUp` 仅供 [PendingMessageQueue]
 /// 适配端（orchestrator `transfer_follow_up` / `transfer_into_input_queue`）
-/// + 主循环安全点消费；本队列不再作为「外部注入策略入口」暴露给壳层——
+/// 以及主循环安全点消费；本队列不再作为「外部注入策略入口」暴露给壳层——
 /// 外部「下一条用户消息」一律走 `PendingMessageQueue`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InputEnqueueMode {

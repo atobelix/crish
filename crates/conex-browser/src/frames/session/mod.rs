@@ -38,7 +38,9 @@ pub use types::{
 
 use pump::{pump_loop, PumpContext};
 use static_ctrl::StaticController;
-use supervisor::{send_start_screencast, send_stop_screencast, supervisor_loop};
+use supervisor::{
+    send_start_screencast, send_stop_screencast, supervisor_loop, ScreencastSupervisorContext,
+};
 
 use crate::frames::fps::{FpsController, FpsLevel};
 use crate::frames::sink::{take_receiver, FrameReceiver, FrameReceiverSlot, FrameSink};
@@ -137,13 +139,15 @@ impl ScreencastSession {
         // —— 监督任务（ConnectionRestored → 自动重启，R-9-3）——
         let supervisor_task = tokio::spawn(supervisor_loop(
             session.subscribe(),
-            session.clone(),
-            config.clone(),
-            status_tx.clone(),
-            events.clone(),
-            pump.clone(),
-            stats.clone(),
-            static_ctrl.clone(),
+            ScreencastSupervisorContext {
+                session: session.clone(),
+                config: config.clone(),
+                status_tx: status_tx.clone(),
+                events: events.clone(),
+                pump: pump.clone(),
+                stats: stats.clone(),
+                static_ctrl: static_ctrl.clone(),
+            },
         ));
 
         ScreencastSession {

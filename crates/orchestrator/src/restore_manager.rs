@@ -34,8 +34,8 @@ impl RestoreManager {
     ///    `run-terminal` 事件，再单遍收敛——有终态事件则单向覆盖 runs 表
     ///    （绝不打断、绝不写 run-interrupted）；无终态且在途才打断；
     ///    无终态且 Completed → unbacked Failed 纠偏；Unknown 保真；
-    /// 3b. session_agents 残留 running 归一；
-    /// 3c. 冷启动孤儿工具自愈（04 §5 / D-3）：ToolStart 无 ToolEnd → CAS
+    ///    3b. session_agents 残留 running 归一；
+    ///    3c. 冷启动孤儿工具自愈（04 §5 / D-3）：ToolStart 无 ToolEnd → CAS
     ///    幂等补齐 ToolEnd；声明但连 ToolStart 都无 → 补齐 ToolStart+ToolEnd
     ///    （ToolOutcomeUnknown）；
     /// 4. 会话记录组装（快照会话 ∪ run 派生会话）；

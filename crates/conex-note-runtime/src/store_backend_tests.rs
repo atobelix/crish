@@ -1,4 +1,5 @@
 //! StoreNoteBackend 集成 / 契约测试入口（**SD-39** 按域拆）
+#![allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
 //!
 //! 由 `store_backend` 经 `#[path]` 接入（无孤儿）。子域：
 //! - [`apply_md`]：apply_md / query / outline / W4-A lossy / factory / batch_token

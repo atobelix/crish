@@ -22,6 +22,7 @@ pub(crate) trait SchedStore: Send + Sync {
     /// 追加运行记录（到期触发时记录）
     fn append_run(&self, _record: &crate::workflow_commands::WorkflowRunRecord) {}
     /// 标记单条运行记录终态（完成 / 失败 / 取消）
+    #[allow(clippy::too_many_arguments)]
     fn finish_run(
         &self,
         _workflow_id: &str,

@@ -816,6 +816,7 @@ fn http_stream_parser_dispatch_responses_frames() {
 /// 端到端（DEEPCHECK-05 #10 验收）：v4-flash responses 配置下，真实 HTTP 链路
 /// 三件套一致——URL=/responses + body=input 形状 + ResponsesParser 解析事件流
 #[tokio::test]
+#[allow(clippy::await_holding_lock)] // 进程级 LIVE_CATALOG 单例测试持锁串行
 async fn responses_stream_end_to_end_over_mock_sse() {
     let frames = vec![
         r#"data: {"type":"response.output_text.delta","delta":"你好"}"#,
@@ -3669,7 +3670,7 @@ mod b1_5_poison_tests {
         // 本文件两个 channels 毒化测并行共享同一计数器——用单调 ≥ 断言，
         // 本测试的 +1 由上方 error 日志行独立证明
         assert!(
-            channels_poison_recovery_count() >= before + 1,
+            channels_poison_recovery_count() > before,
             "buffer 锁中毒恢复必须计数 +1"
         );
     }
@@ -3695,7 +3696,7 @@ mod b1_5_poison_tests {
         // 且本文件两个 channels 毒化测并行共享同一计数器——用单调 ≥ 断言，
         // 本测试的 +1 由上方 error 日志行独立证明）
         assert!(
-            channels_poison_recovery_count() >= before + 1,
+            channels_poison_recovery_count() > before,
             "control_bus 锁中毒恢复必须计数 +1"
         );
         // 绑定生效断言：读路径（同锁中毒状态）取回假解析器的总线

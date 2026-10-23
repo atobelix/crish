@@ -82,12 +82,14 @@ async fn timer_registry_persists_and_recovers() {
     );
     // 三态断言之二：恢复侧恰好一条 TimerFired（残留任务只向
     // events_a 发射，events_b 计数不受污染）
-    let emitted_b = events_b.emitted.lock().unwrap_or_else(|e| e.into_inner());
-    assert_eq!(emitted_b.len(), 1, "恢复侧应恰好发射一条 TimerFired");
-    assert!(matches!(
-        emitted_b[0],
-        TimerEvent::Fired { ref timer_id, .. } if timer_id == "timer-0"
-    ));
+    {
+        let emitted_b = events_b.emitted.lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(emitted_b.len(), 1, "恢复侧应恰好发射一条 TimerFired");
+        assert!(matches!(
+            emitted_b[0],
+            TimerEvent::Fired { ref timer_id, .. } if timer_id == "timer-0"
+        ));
+    }
     // 再模拟一次重启：声明已 fired=true → 不得重复注入
     let (_registry_c, queue_c, events_c) = {
         let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));

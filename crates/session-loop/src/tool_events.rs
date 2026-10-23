@@ -129,6 +129,7 @@ pub enum ApprovalDecision {
 ///
 /// - `None` = 主 agent run（现状不变：裁决者 = 用户，UI 审批流程）；
 /// - `Some` = 子代理 run（新默认：裁决者 = 主 agent，可转用户兜底）；
+///
 /// 子代理身份判定 = 本 run 有父 run 归属（`ToolExecCtx.run_id` + 父 run 关系）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApprovalRequester {

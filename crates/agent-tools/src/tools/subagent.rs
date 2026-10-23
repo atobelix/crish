@@ -37,6 +37,7 @@
 //! - `guard`：递归守卫域（深度/嵌套/兄弟/并发 + 祖先链死锁）；
 //! - `contract`：spawn 契约域（请求/结果/错误/spawner 通道 + 工具面防护 + 伪造审批防护）；
 //! - `tool`：run_subagent 工具域（入参解析/单发/批量/Tool 实现）；
+//!
 //! 测试外置 `subagent/subagent_tests.rs`（`#[path]` 旁挂，无孤儿）；
 //! 公开 API 经本文件 `pub use` 保持不 break（tools/mod.rs 注册不变）。
 

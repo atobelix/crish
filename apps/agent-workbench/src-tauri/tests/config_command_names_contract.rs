@@ -84,6 +84,7 @@ fn f5_legacy_config_command_names_excluded() {
 
 /// F3/F4 冻结命令登记（session 族：cleanup_orphan_sessions）
 #[test]
+#[allow(clippy::single_element_loop)] // 预留后续会话冻结命令扩充
 fn f3_f4_session_commands_registered() {
     for name in ["cleanup_orphan_sessions"] {
         let entry = COMMAND_MANIFEST

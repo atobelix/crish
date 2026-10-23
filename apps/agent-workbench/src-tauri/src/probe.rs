@@ -432,6 +432,7 @@ pub async fn provider_probe_scan_models(
 }
 
 #[cfg(test)]
+#[allow(clippy::await_holding_lock)] // 单元测试持 CONFIG_TEST_LOCK 串行执行并跨越网络 await
 mod tests {
     use super::*;
 

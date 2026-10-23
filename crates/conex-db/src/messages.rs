@@ -96,6 +96,7 @@ impl LocalDb {
     /// 1. 按 target_message_id 在 session_messages 表精确定位其行序号 seq；
     /// 2. 物理删除 seq > target_seq 的所有后续消息行；
     /// 3. 原子重算 message_count 并自增 body_version（更新 updated_at）；
+    ///
     /// 彻底根除应用重启或水合后被撤回消息死灰复燃。
     pub fn truncate_session_messages_after(
         &self,
@@ -384,7 +385,7 @@ pub fn truncate_session_messages_after_seq_conn(
 }
 
 /// 灵活解析会话消息：先尝试 JSON 数组，失败再走 JSONL 行解析。
-
+///
 /// 对齐 `sessionLocalStorage.loadSessionBody` 的兼容策略。
 pub(crate) fn parse_session_messages_flexible(raw: &str) -> Vec<SessionMessage> {
     let trimmed = raw.trim();

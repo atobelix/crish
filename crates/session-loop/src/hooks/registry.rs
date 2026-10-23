@@ -6,6 +6,8 @@ use conex_types::events::AgentEvent;
 use regex::Regex;
 use std::sync::{Arc, RwLock};
 
+pub type OutcomeSinkFn = Arc<dyn Fn(AgentEvent) + Send + Sync>;
+
 /// 钩子注册表（广播分派；线程安全，可跨 run 复用）
 ///
 /// 错误事件化重入护栏：不使用全局共享状态（如 AtomicBool），完全由
@@ -18,7 +20,7 @@ pub struct HookRegistry {
     /// hook-outcome 观测镜像出口（D-03 EV-05）：dispatch 聚合出口发射
     /// AgentEvent::HookOutcome（Delta 级可丢）；None = 未接线，dispatch
     /// 语义不变（仅观测，不搬 HookEvent 插件通道）
-    pub(super) outcome_sink: RwLock<Option<Arc<dyn Fn(AgentEvent) + Send + Sync>>>,
+    pub(super) outcome_sink: RwLock<Option<OutcomeSinkFn>>,
 }
 
 impl HookRegistry {
@@ -131,7 +133,7 @@ impl HookRegistry {
     /// 接线 hook-outcome 观测镜像出口（D-03 EV-05）：dispatch 出口处
     /// 每批次发射一次 AgentEvent::HookOutcome；不接线 = 无观测事件，
     /// dispatch 语义完全不变（纯观测，HookEvent 插件通道不受影响）。
-    pub fn set_outcome_sink(&self, sink: Arc<dyn Fn(AgentEvent) + Send + Sync>) {
+    pub fn set_outcome_sink(&self, sink: OutcomeSinkFn) {
         *self.outcome_sink.write().unwrap_or_else(|e| {
             // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续接线
             tracing::error!("hook 观测出口写锁中毒，按恢复模式继续：{e}");

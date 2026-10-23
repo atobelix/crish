@@ -6,6 +6,7 @@
 //!   T-ESC-02 脚本逃逸追踪判定面复用）+ 归一化底座（[normalize_for_compare]）；
 //! - **白名单策略**：[WritePathPolicy] / [WriteAllowanceError] / [check_write_allowance]
 //!   （T-D-08 run 级硬沙箱判定面，语义与 Overlaps 同源）。
+//!
 //! 诚实边界：仅结构拆分，校验与判定语义零改动（≠ EL / ≠ 打开完成 / ≠ 结构债清零）。
 
 use crate::definition::ToolError;

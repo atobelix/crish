@@ -171,6 +171,8 @@ pub fn install_for_test(path: impl AsRef<Path>) -> Result<SharedNoteRuntime, Str
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // 测试临时目录清理，非产品物理删除路径
+#[allow(clippy::await_holding_lock)] // 测试用例串行持有 lock_for_test 跨 await
 mod tests {
     // LR-T1：本模组测走 `open_at` → Store；未安装时 try_* = None。≠ 关 EL-05。
     use super::*;
