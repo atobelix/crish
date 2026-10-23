@@ -17,8 +17,6 @@ import type { Settings } from '../clientApi';
 import {
   getActiveModelId,
   getActiveProfileId,
-} from '../provider-profiles/profileActiveSelection';
-import {
   getLiveModelFromRegistry,
   resolveThinkingHandoffFromRegistry,
 } from '../providerProfilesLight';

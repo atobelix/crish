@@ -810,6 +810,7 @@ export default defineConfig({
         '@tauri-apps/plugin-shell',
       ],
       output: {
+        hoistTransitiveImports: false,
         // Function form: Windows-safe path match + incremental vendor/business splits
         manualChunks(id) {
           const n = id.replace(/\\/g, '/');
