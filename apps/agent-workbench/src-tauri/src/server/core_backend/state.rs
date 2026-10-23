@@ -8,7 +8,6 @@ use conex_types::device::{
 };
 
 use crate::core_commands::SharedSearchState;
-use crate::core_event_bridge::EventBridge;
 use crate::core_run_commands::{
     find_run_by_pending_tool_call, generate_run_id, generate_session_id, list_active_runs_impl,
     list_pending_approval_summaries_impl, run_task_impl, CoreRunState, RunTaskOptions,

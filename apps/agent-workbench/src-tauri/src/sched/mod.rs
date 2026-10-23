@@ -30,6 +30,7 @@ pub(crate) mod types;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
 pub use self::types::SESSION_META_SCHED_INDEX_KEY;
 
 pub(crate) use self::registry::SchedulerRegistry;

@@ -360,13 +360,11 @@ async fn d4_self_termination_diagnostic_does_not_fail_run() {
     );
 }
 
-// ── D5：模型输出与传输错误分离 ──
+// ── D5 / BC02-2：模型输出与传输错误分离 ──
 
-/// D5 正向：文字 + stopReason=error 事件 → Message 收场（错误降级为
-/// metadata.providerError 标注，不以 error 收场）。
-///
-/// 裁决（01 §四 D6 / 00 §3 D5）：响应含文字/tool-call 即 Completed；
-/// 仅「无文字且无 tool-call 且 stopReason=error」走错误路径。
+/// D5 / BC02-2：文字 + stopReason=error 事件 → 正文部分抢救（Partial Salvage），
+/// 文字已 commit 入对话并标注 providerError 与 stopReason=error；
+/// 同时遵循 BC02-2 铁律以 Error 终态收场，排错透明，绝不伪装为成功 Stop。
 #[tokio::test]
 async fn d5_text_with_error_stop_ends_as_message_not_error() {
     let provider = TestProvider::new(vec![
@@ -382,16 +380,17 @@ async fn d5_text_with_error_stop_ends_as_message_not_error() {
 
     let outcome = loop_.run(user("生成内容")).await;
 
-    // 正向：有文字 → Message → 正常 stop 收场
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
-    assert!(outcome.error.is_none());
+    // 正向（BC02-2）：流发生服务端错误，以 Error 收场，真实报告错误
+    assert_eq!(outcome.reason, AgentEndReason::Error);
+    assert!(outcome.error.is_some());
+    // 正向（D5 Partial Salvage）：有文字 → 文字回复必须已 commit 落盘，不丢弃用户可见正文
     let assistant = outcome
         .messages
         .iter()
         .find(|m| m.role == AgentMessageRole::Assistant)
         .expect("文字回复应已 commit");
     assert_eq!(assistant.text(), "部分输出已生成。");
-    // 正向：错误降级为 metadata.providerError 标注（不否决收场）
+    // 正向：错误作为 metadata.providerError 标注保留
     assert_eq!(
         assistant
             .metadata
@@ -401,19 +400,15 @@ async fn d5_text_with_error_stop_ends_as_message_not_error() {
         Some("服务端流异常（已产出部分内容）"),
         "错误应作为标注保留"
     );
-    // 反向：旧行为 stopReason=error 一票否决 → error 收场不复现
+    // BC02-2 铁律：stopReason 标注为 "error"，绝不伪装为 "stop"
     assert_eq!(
         assistant
             .metadata
             .as_ref()
             .and_then(|m| m.get("stopReason"))
             .and_then(|s| s.as_str()),
-        Some("stop"),
-        "stopReason 不应被 error 污染"
-    );
-    assert!(
-        !has_runtime_error(&outcome.events),
-        "文字+error 路径不发 runtime-error"
+        Some("error"),
+        "stopReason 必须如实标注为 error"
     );
 }
 

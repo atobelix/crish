@@ -286,7 +286,9 @@ async fn spawn_and_write_collab(
         "首次写入必须自动创建产出目录"
     );
     // 执行期声明随工具执行结束释放（临时声明随守卫 Drop 释放，不残留记账；
-    // spawn 级守卫随后 drop 幂等）
+    // spawn 级守卫随后 drop 幂等释放）
+    drop(_a_guard);
+    drop(_b_guard);
     assert!(registry.active_claims().is_empty());
     (registry, rel_a, rel_b)
 }
