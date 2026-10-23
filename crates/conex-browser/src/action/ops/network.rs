@@ -35,7 +35,7 @@ impl NetworkCounter {
                                 Ordering::Relaxed,
                                 Ordering::Relaxed,
                             ) {
-                                Ok(_) => break,
+                                Ok(_prev) => break,
                                 Err(observed) => current = observed,
                             }
                         }

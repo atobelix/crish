@@ -71,7 +71,13 @@ const baselinePath = argVal('--baseline')
 /** 测试文件判定：tests/、benches/ 目录内，或文件名 tests.rs / test_* / *_tests.rs / tests_* / *_test_* / *_test.rs */
 function isTestFile(file) {
   const p = file.replace(/\\/g, '/');
-  if (/\/tests\//.test(p) || /\/benches\//.test(p)) return true;
+  if (
+    /\/tests\//.test(p) ||
+    /\/benches\//.test(p) ||
+    /_tests\//.test(p) ||
+    /\/tests_[^/]+\//.test(p)
+  )
+    return true;
   const base = basename(p);
   return (
     base === 'tests.rs' ||

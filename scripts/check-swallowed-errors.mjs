@@ -74,7 +74,13 @@ const baselinePath = argVal('--baseline')
  *  `tests_cas_gc.rs` 等旁挂测试模块（经 #[cfg(test)] #[path] 接线）此前被误计生产口径） */
 function isTestFile(file) {
   const p = file.replace(/\\/g, '/');
-  if (/\/tests\//.test(p) || /\/benches\//.test(p)) return true;
+  if (
+    /\/tests\//.test(p) ||
+    /\/benches\//.test(p) ||
+    /_tests\//.test(p) ||
+    /\/tests_[^/]+\//.test(p)
+  )
+    return true;
   const base = basename(p);
   return (
     base === 'tests.rs' ||
