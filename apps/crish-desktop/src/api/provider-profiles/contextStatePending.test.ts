@@ -29,12 +29,16 @@ describe('contextStatePending（I1-α② context-state 产生器）', () => {
     localStorage.clear();
     resetPendingContextStateForTest();
     sessionRuntimeRegistry.clearAll();
+    sessionRuntimeRegistry.registerActiveIdResolver(
+      () => useSessionStore.getState().activeSessionId
+    );
     useSessionStore.setState({ activeSessionId: 'sess-ctx' });
   });
 
   afterEach(() => {
     resetPendingContextStateForTest();
     sessionRuntimeRegistry.clearAll();
+    sessionRuntimeRegistry.unregisterActiveIdResolver();
     useSessionStore.setState({ activeSessionId: '' });
   });
 

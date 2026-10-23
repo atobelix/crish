@@ -12,6 +12,7 @@ import {
   sessionRuntimeRegistry,
   setSessionThinkingTitle,
 } from '../../api/SessionRuntimeRegistry';
+import '../../api/modelsCatalogLive';
 import type { ProviderSpec } from '../../api/modelsCatalogTypes';
 
 vi.mock('../../api/storeAccess', async (importOriginal) => {
@@ -78,30 +79,36 @@ async function loadGeminiFlash(): Promise<void> {
       version: 2,
       activeModel: null,
       providers: {
-      gemini: {
-        displayName: 'Gemini',
-        baseUrl: 'https://generativelanguage.googleapis.com',
-        protocol: 'google/generate-content',
-        models: [
-          { id: 'flash', thinking: { Off: 'disabled', High: 'HIGH' } },
-        ],
-      } satisfies ProviderSpec,
+        gemini: {
+          displayName: 'Gemini',
+          baseUrl: 'https://generativelanguage.googleapis.com',
+          protocol: 'google/generate-content',
+          models: [
+            { id: 'flash', thinking: { Off: 'disabled', High: 'HIGH' } },
+          ],
+        } satisfies ProviderSpec,
       },
     },
   }));
-  mockTauriCommand('workbench_save_models_yaml', () => ({ path: CATALOG_PATH }));
+  mockTauriCommand('workbench_save_models_yaml', () => ({
+    path: CATALOG_PATH,
+  }));
   const res = await ensureModelsCatalogLoaded(true);
   expect(res.ok).toBe(true);
+  localStorage.setItem('crish_active_profile_id', 'gemini');
+  localStorage.setItem('crish_active_model_id', 'flash');
 }
 
 describe('assembleChatPayload thinking handoff', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionRuntimeRegistry.clearAll();
+    localStorage.clear();
   });
 
   afterEach(() => {
     sessionRuntimeRegistry.clearAll();
+    localStorage.clear();
     resetModelsCatalogMirror();
   });
 

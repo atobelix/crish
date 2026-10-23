@@ -204,3 +204,75 @@ export async function applyUpdateWhenIdle(): Promise<{
     ),
   };
 }
+
+/**
+ * 分段下载更新包（前置：checkForUpdate 检得新版本）。
+ */
+export async function downloadUpdate(): Promise<{
+  ok: boolean;
+  version?: string;
+  size?: number;
+  message?: string;
+}> {
+  try {
+    const { invokeResult } = await import('./tauriInvoke');
+    const res = await invokeResult<{
+      ok?: boolean;
+      version?: string;
+      size?: number;
+    }>('workbench_download_update');
+    if (res.status !== 'ok' || !res.data) {
+      return {
+        ok: false,
+        message:
+          (res.status === 'error' && res.message) ||
+          t('about.updateFailed', '下载更新失败'),
+      };
+    }
+    return { ok: true, version: res.data?.version, size: res.data?.size };
+  } catch (err) {
+    return { ok: false, message: String(err) };
+  }
+}
+
+/**
+ * 分段安装已下载更新包（前置：downloadUpdate 成功）。
+ */
+export async function installUpdate(): Promise<{
+  ok: boolean;
+  version?: string;
+  restartRequired?: boolean;
+  message?: string;
+}> {
+  try {
+    const { invokeResult } = await import('./tauriInvoke');
+    const res = await invokeResult<{
+      ok?: boolean;
+      version?: string;
+      restartRequired?: boolean;
+    }>('workbench_install_update');
+    if (res.status !== 'ok' || !res.data) {
+      return {
+        ok: false,
+        message:
+          (res.status === 'error' && res.message) ||
+          t('about.applyUpdateFailed', '安装更新失败'),
+      };
+    }
+    return {
+      ok: true,
+      version: res.data?.version,
+      restartRequired: res.data?.restartRequired,
+    };
+  } catch (err) {
+    return { ok: false, message: String(err) };
+  }
+}
+
+/**
+ * 重启应用完成更新（macOS/Linux 或显式重启调用）。
+ */
+export async function restartApp(): Promise<void> {
+  const { invokeResult } = await import('./tauriInvoke');
+  await invokeResult('workbench_restart_app');
+}

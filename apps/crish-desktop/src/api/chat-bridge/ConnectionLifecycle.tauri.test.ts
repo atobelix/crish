@@ -17,6 +17,7 @@ import {
   ensureModelsCatalogLoaded,
   resetModelsCatalogMirror,
 } from '../modelsCatalogStore';
+import '../modelsCatalogLive';
 import {
   sessionRuntimeRegistry,
   setSessionThinkingTitle,
@@ -276,12 +277,12 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
           version: 2,
           activeModel: null,
           providers: {
-          p1: {
-            displayName: 'P1',
-            baseUrl: 'https://example.invalid/v1',
-            protocol: 'openai/chat',
-            models: [{ id: 'deepseek-chat', contextWindow: 131_072 }],
-          } satisfies ProviderSpec,
+            p1: {
+              displayName: 'P1',
+              baseUrl: 'https://example.invalid/v1',
+              protocol: 'openai/chat',
+              models: [{ id: 'deepseek-chat', contextWindow: 131_072 }],
+            } satisfies ProviderSpec,
           },
         },
       }));
@@ -425,14 +426,14 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
           version: 2,
           activeModel: null,
           providers: {
-          gemini: {
-            displayName: 'Gemini',
-            baseUrl: 'https://generativelanguage.googleapis.com',
-            protocol: 'google/generate-content',
-            models: [
-              { id: 'flash', thinking: { Off: 'disabled', High: 'HIGH' } },
-            ],
-          } satisfies ProviderSpec,
+            gemini: {
+              displayName: 'Gemini',
+              baseUrl: 'https://generativelanguage.googleapis.com',
+              protocol: 'google/generate-content',
+              models: [
+                { id: 'flash', thinking: { Off: 'disabled', High: 'HIGH' } },
+              ],
+            } satisfies ProviderSpec,
           },
         },
       }));
