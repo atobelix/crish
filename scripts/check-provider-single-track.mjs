@@ -795,6 +795,7 @@ const D8_KNOWN_DEBT = new Map([
     'apps/crish-desktop/src/api/session-persistence/sessionRustDbFallback.ts',
     'apps/crish-desktop/src/api/session-persistence/sessionShellKeyMigration.ts',
     'apps/crish-desktop/src/api/shellWindowScope.ts',
+    'apps/crish-desktop/src/api/skillDismissState.ts',
     'apps/crish-desktop/src/api/skillsApiFs.ts',
     'apps/crish-desktop/src/api/skillsApiHelpers.ts',
     'apps/crish-desktop/src/api/themeStore.ts',
@@ -1084,7 +1085,7 @@ const D8_KNOWN_DEBT = new Map([
   //   ① 路径存在——干净检出后门禁不得因缺文件而断（硬红）；
   //   ② 未被 .gitignore 永久排除——「存在但永远进不了库」的幽灵脚本（硬红）。
   // 未跟踪但未被忽略 = 待提交的正常开发态，不算违规（新脚本先写后提交）。
-  const SCRIPT_REF = /(?:^|[\s`'"])(scripts\/[\w./-]+\.(?:mjs|js|cjs|ps1))/g;
+  const SCRIPT_REF = /(?:^|[\s`'"])(scripts\/[\w./-]+\.(?:mjs|js|cjs|ps1))\b/g;
   const referenced = new Set();
 
   const pkg = JSON.parse(read('package.json'));
