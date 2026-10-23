@@ -1,6 +1,32 @@
 import type { SessionState } from './sessionStore';
 import type { SessionMeta, SessionMetaExtensions } from './sessionSubtreeModel';
-import { shallowArrayEqual, shallowRecordEqual } from './sessionSubtreeModel';
+
+/** 浅比较一维数组元素引用一致性 */
+export function shallowArrayEqual<T>(
+  a: readonly T[] | undefined,
+  b: readonly T[] | undefined
+): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+/** 浅比较平面对象键值一致性 */
+export function shallowRecordEqual<T extends object>(
+  a: T | undefined,
+  b: T | undefined
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const keysA = Object.keys(a) as Array<keyof T>;
+  if (keysA.length !== Object.keys(b).length) return false;
+  for (let i = 0; i < keysA.length; i++) {
+    const k = keysA[i]!;
+    if (a[k] !== b[k]) return false;
+  }
+  return true;
+}
 
 /** 零反射固定字段比对：判断 SessionMeta 与目标会话状态元数据是否一致（首行引用相等短路） */
 export function isSessionMetaEqual(

@@ -58,35 +58,12 @@ export function bumpEpochScalar(prev: number | undefined): number {
   return ((prev ?? 0) + 1) | 0;
 }
 
-/** 浅比较一维数组元素引用一致性 */
-export function shallowArrayEqual<T>(
-  a: readonly T[] | undefined,
-  b: readonly T[] | undefined
-): boolean {
-  if (a === b) return true;
-  if (!a || !b || a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-  return true;
-}
-
-/** 浅比较平面对象键值一致性 */
-export function shallowRecordEqual<T extends object>(
-  a: T | undefined,
-  b: T | undefined
-): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  const keysA = Object.keys(a) as Array<keyof T>;
-  if (keysA.length !== Object.keys(b).length) return false;
-  for (let i = 0; i < keysA.length; i++) {
-    const k = keysA[i]!;
-    if (a[k] !== b[k]) return false;
-  }
-  return true;
-}
-
-import { isSessionMetaEqual } from './sessionMetaEqual';
-export { isSessionMetaEqual };
+import {
+  shallowArrayEqual,
+  shallowRecordEqual,
+  isSessionMetaEqual,
+} from './sessionMetaEqual';
+export { shallowArrayEqual, shallowRecordEqual, isSessionMetaEqual };
 
 function updateMessageBlocksForText(
   prev: SessionMessage,
