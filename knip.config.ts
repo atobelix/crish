@@ -64,6 +64,8 @@ const config: KnipConfig = {
   ignore: [
     // 文档与归档区（docs/archive 含历史原型源码）
     'docs/**',
+    // scripts/*.cjs（排查与诊断辅助脚本，非工程源码）
+    'scripts/*.cjs',
     // vendored 参考项目（reference/ui-replica、reference/newui 等被 .gitignore 保留跟踪）
     'reference/**',
     // vendored 资产（assets/iconLib 第三方图标库源仓）：根 .gitignore 第 9 行
