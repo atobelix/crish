@@ -210,8 +210,13 @@
 }
 
 .item:hover,
-.item.focused {
+.item.focused,
+.item.parentActive {
   background-color: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.item.parentActive .submenuChevron {
   color: var(--text-primary);
 }
 
@@ -320,16 +325,49 @@
   z-index: 2;
 }
 
-/* 二级子菜单卡片（14px 外圆角 / 6px 内衬 / 8px 条目，与一级面板 100% 几何对齐） */
+/* 级联展开动画：对齐 prototype reference/展开面板设计.html 的 --ease-subtle-spring (cubic-bezier(0.22, 1.25, 0.36, 1)) */
+@keyframes cascadeSubmenuEnterRight {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateX(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+  }
+}
+
+@keyframes cascadeSubmenuEnterLeft {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateX(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+  }
+}
+
+@keyframes crish-popover-enter {
+  0% {
+    opacity: 0;
+    transform: scale(0.97) translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* 二级子菜单卡片（14px 外圆角 / 6px 内衬 / 8px 条目，Shell-Body-Footer 解耦） */
 .cascadeSubmenu {
   position: fixed;
   margin: 0;
   width: max-content;
-  min-width: 160px;
-  max-width: min(280px, calc(100vw - 16px));
+  min-width: 170px;
+  max-width: min(280px, calc(100vw - 24px));
   height: auto;
-  max-height: min(360px, calc(100vh - 16px));
-  overflow: visible;
+  overflow: visible; /* 外层卡片绝不出现滚动条，圆角与阴影保持 100% 纯净 */
   border-radius: var(--sep-radius-outer, 14px);
   border: 1px solid var(--border-color);
   background: var(--sep-bg-panel-solid, var(--bg-elevated));
@@ -337,36 +375,97 @@
   padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: var(--sep-item-gap, 4px);
   z-index: var(--z-dropdown-menu, 310);
   outline: none;
-  transform-origin: left top;
-  animation: crish-popover-enter var(--transition-popover-enter) forwards;
+  transform-origin: top left;
+  animation: cascadeSubmenuEnterRight 0.18s cubic-bezier(0.16, 1, 0.3, 1)
+    forwards;
   will-change: transform, opacity;
 }
 
-.cascadeSubmenu::-webkit-scrollbar {
+.cascadeSubmenu[data-side='left'] {
+  transform-origin: top right;
+  animation-name: cascadeSubmenuEnterLeft;
+}
+
+.cascadeSubmenu[data-side='right'] {
+  transform-origin: top left;
+  animation-name: cascadeSubmenuEnterRight;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cascadeSubmenu {
+    animation: none;
+    transition: opacity 100ms ease;
+  }
+}
+
+html[data-perf-tier='eco'] .cascadeSubmenu {
+  animation: none;
+  transition: none;
+}
+
+/* 内部可滚动条目容器：限制最大高度约 7 项（240px），仅在溢出时内部滚动 */
+.cascadeListBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sep-item-gap, 4px);
+  max-height: 240px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+/* 精密微条滚动条：仅在内部列表超出高度时在容器内部渲染，距外边框有 6px 间隙保护 */
+.cascadeListBody::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+.cascadeListBody::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cascadeListBody::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+
+.cascadeListBody::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover, var(--border-color));
+}
+
+.cascadeListBody::-webkit-scrollbar-button {
   display: none;
   width: 0;
   height: 0;
 }
 
-/* 跨面板透明安全命中桥（Hit Bridge）：覆盖主子面板间 6px 缝隙，防止光标移动瞬态断触 */
+/* 尾部常驻操作栏（如管理技能...），吸附在底部，与内部滚动条目解耦 */
+.cascadeFooter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sep-item-gap, 4px);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+/* 跨面板透明安全命中桥（Hit Bridge）：覆盖主子面板间 4px 缝隙，防止光标移动瞬态断触 */
 .cascadeSubmenu::before {
   content: '';
   position: absolute;
   top: -8px;
   bottom: -8px;
-  width: 14px;
+  width: 12px;
   pointer-events: auto;
 }
 
 .cascadeSubmenu[data-side='right']::before {
-  left: -10px;
+  left: -8px;
 }
 
 .cascadeSubmenu[data-side='left']::before {
-  right: -10px;
+  right: -8px;
 }
 
 .cascadeSubmenu .item,

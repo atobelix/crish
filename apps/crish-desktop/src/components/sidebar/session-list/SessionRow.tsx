@@ -24,12 +24,22 @@ import {
   type SessionSearchMatch,
 } from '../../../api/sessionSearch';
 import { Button, Input, Tooltip } from '../../ui';
+import { useI18n } from '../../../i18n';
 import { syntheticContextMenuEvent } from './sessionRowMenuEvent';
 import styles from '../SidebarSessionList.module.css';
 import { AppIcon } from '../../ui/icons/index';
 
 /** 更多钮边长；与行高 28px 保持优雅微内嵌，且与头部动作钮 24px 精确同轴 */
 export const SESSION_ACTIONS_BTN_PX = 24;
+
+const ACTION_BTN_STYLE: React.CSSProperties = {
+  width: SESSION_ACTIONS_BTN_PX,
+  height: SESSION_ACTIONS_BTN_PX,
+  minWidth: SESSION_ACTIONS_BTN_PX,
+  minHeight: SESSION_ACTIONS_BTN_PX,
+  maxWidth: SESSION_ACTIONS_BTN_PX,
+  maxHeight: SESSION_ACTIONS_BTN_PX,
+};
 
 /** Drop indicator place; local type avoids circular runtime import with useSessionListDrag */
 export type SessionRowDropPlace = 'before' | 'after';
@@ -51,15 +61,20 @@ export function getSessionCleanTitle(
     .replace(/\s*[(（](?:分支|branch)[)）]\s*$/i, '');
 }
 
-function isSessionMoreTarget(el: EventTarget | null): boolean {
+function isSessionActionTarget(el: EventTarget | null): boolean {
   return (
     el instanceof Element &&
     Boolean(
       el.closest('[data-testid="session-more-button"]') ||
-      el.closest(`.${styles.sessionActionsBtn}`)
+      el.closest('[data-testid="session-pin-button"]') ||
+      el.closest('[data-testid="session-archive-button"]') ||
+      el.closest(`.${styles.sessionActionsBtn}`) ||
+      el.closest(`.${styles.sessionActionGroup}`)
     )
   );
 }
+
+const isSessionMoreTarget = isSessionActionTarget;
 
 /**
  * NowTickContext – 时间刻度上下文。
@@ -175,6 +190,12 @@ export interface SessionRowActionsProps {
   onDeleteSession?: ((sessionId: string) => void) | undefined;
   /** 分叉会话（Ctrl+Shift+F 键） */
   onBranchSession?: ((sessionId: string) => void) | undefined;
+  /** 置顶会话 */
+  onPinSession?: ((sessionId: string) => void) | undefined;
+  /** 取消置顶 */
+  onUnpinSession?: ((sessionId: string) => void) | undefined;
+  /** 归档会话 */
+  onArchiveSession?: ((sessionId: string) => void) | undefined;
 }
 
 export type SessionRowProps = {
@@ -217,14 +238,45 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
     onReorderKeyboard,
     onDeleteSession,
     onBranchSession,
+    onPinSession,
+    onUnpinSession,
+    onArchiveSession,
   } = props.actions;
   const _rowHeight = props.rowHeight;
   void _rowHeight;
   const dropPlace: SessionRowDropPlace | null = dropPlaceProp ?? null;
 
+  const handleTogglePin = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (s.isPinned) {
+        onUnpinSession?.(s.id);
+      } else {
+        onPinSession?.(s.id);
+      }
+    },
+    [onPinSession, onUnpinSession, s.id, s.isPinned]
+  );
+
+  const handleArchive = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onArchiveSession?.(s.id);
+    },
+    [onArchiveSession, s.id]
+  );
+
   const isBranched = !!s.branchParentId;
   const displayText = getSessionCleanTitle(s);
   const titleHint = (titleHintProp ?? '').trim();
+  const { t } = useI18n();
+  const pinLabel = s.isPinned
+    ? t('session.action.unpin', '取消置顶')
+    : t('session.action.pin', '置顶');
+  const archiveLabel = t('session.action.archive', '归档');
+  const moreLabel = t('session.action.more', '更多操作');
   const isRunning = s.messages?.some((m) => m.status === 'processing') ?? false;
   const sessionActive = s.id === activeSessionId;
   void searchHit;
@@ -399,44 +451,100 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
                 <>
                   <SessionRowScheduleBadge sessionId={s.id} />
                   <SessionRowTime s={s} className={styles.sessionTime ?? ''} />
-                  <Tooltip content="更多操作">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="xs"
-                      className={styles.sessionActionsBtn}
-                      data-testid="session-more-button"
-                      aria-label="更多操作"
-                      aria-haspopup="menu"
-                      tabIndex={-1}
-                      style={{
-                        width: SESSION_ACTIONS_BTN_PX,
-                        height: SESSION_ACTIONS_BTN_PX,
-                        minWidth: SESSION_ACTIONS_BTN_PX,
-                        minHeight: SESSION_ACTIONS_BTN_PX,
-                        maxWidth: SESSION_ACTIONS_BTN_PX,
-                        maxHeight: SESSION_ACTIONS_BTN_PX,
-                      }}
-                      onPointerDown={(e) => {
-                        e.stopPropagation();
-                      }}
-                      onMouseDown={(e) => {
-                        e.stopPropagation();
-                      }}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        openRowMenu(e);
-                      }}
-                      onDoubleClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      icon={
-                        <AppIcon name="more-horizontal" size={16} aria-hidden />
-                      }
-                    />
-                  </Tooltip>
+                  <span
+                    className={styles.sessionActionGroup}
+                    data-testid="session-action-group"
+                  >
+                    <Tooltip content={pinLabel}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        className={styles.sessionActionsBtn}
+                        data-testid="session-pin-button"
+                        aria-label={pinLabel}
+                        tabIndex={-1}
+                        style={ACTION_BTN_STYLE}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                        }}
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                        }}
+                        onClick={handleTogglePin}
+                        onDoubleClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        icon={
+                          <AppIcon
+                            name={s.isPinned ? 'pin-off' : 'pin'}
+                            size={14}
+                            aria-hidden
+                          />
+                        }
+                      />
+                    </Tooltip>
+                    <Tooltip content={archiveLabel}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        className={styles.sessionActionsBtn}
+                        data-testid="session-archive-button"
+                        aria-label={archiveLabel}
+                        tabIndex={-1}
+                        style={ACTION_BTN_STYLE}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                        }}
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                        }}
+                        onClick={handleArchive}
+                        onDoubleClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        icon={<AppIcon name="archive" size={14} aria-hidden />}
+                      />
+                    </Tooltip>
+                    <Tooltip content={moreLabel}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        className={styles.sessionActionsBtn}
+                        data-testid="session-more-button"
+                        aria-label={moreLabel}
+                        aria-haspopup="menu"
+                        tabIndex={-1}
+                        style={ACTION_BTN_STYLE}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                        }}
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          openRowMenu(e);
+                        }}
+                        onDoubleClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        icon={
+                          <AppIcon
+                            name="more-horizontal"
+                            size={16}
+                            aria-hidden
+                          />
+                        }
+                      />
+                    </Tooltip>
+                  </span>
                 </>
               )}
             </span>

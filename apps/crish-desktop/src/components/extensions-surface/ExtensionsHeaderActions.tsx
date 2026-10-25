@@ -4,8 +4,9 @@
  */
 
 import React from 'react';
-import { Button, Input } from '../ui';
+import { Button, Input, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
+import { useI18n } from '../../i18n';
 import styles from './ExtensionsMainSurface.module.css';
 
 export type ExtensionsCategoryFilter = 'plugins' | 'skills' | 'mcp';
@@ -30,63 +31,82 @@ export const ExtensionsHeaderActions: React.FC<
   onOpenPluginImport,
   onOpenSkillCreate,
   onOpenMcpConnect,
-}) => (
-  <>
-    {categoryFilter === 'plugins' && (
-      <>
-        <Button
-          variant="secondary"
-          size="sm"
-          className={styles.headerActionBtn}
-          onClick={onCreatePlugin}
-        >
-          <AppIcon name="plus" size={13} />
-          <span>制作插件</span>
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          className={styles.headerActionBtn}
-          onClick={onOpenPluginImport}
-        >
-          <AppIcon name="folder-input" size={13} />
-          <span>导入插件</span>
-        </Button>
-      </>
-    )}
-    {categoryFilter === 'skills' && (
-      <Button
-        variant="secondary"
-        size="sm"
-        className={styles.headerActionBtn}
-        onClick={onOpenSkillCreate}
-      >
-        <AppIcon name="plus" size={13} />
-        <span>添加技能</span>
-      </Button>
-    )}
-    {categoryFilter === 'mcp' && (
-      <Button
-        variant="secondary"
-        size="sm"
-        className={styles.headerActionBtn}
-        onClick={onOpenMcpConnect}
-      >
-        <AppIcon name="plus" size={13} />
-        <span>接入 MCP</span>
-      </Button>
-    )}
+}) => {
+  const { t } = useI18n();
+  const createPluginLabel = t('extensions.header.createPlugin', '制作插件');
+  const importPluginLabel = t('extensions.header.importPlugin', '导入插件');
+  const addSkillLabel = t('extensions.header.addSkill', '添加技能');
+  const connectMcpLabel = t('extensions.header.connectMcp', '接入 MCP');
 
-    <div className={styles.searchBarWrapper}>
-      <AppIcon name="search" size={13} className={styles.searchIcon} />
-      <Input
-        bare
-        value={searchQuery}
-        onChange={(e) => onSearchQueryChange(e.target.value)}
-        placeholder="搜索扩展、技能与工具…"
-        className={styles.searchInput}
-        aria-label="搜索扩展"
-      />
-    </div>
-  </>
-);
+  return (
+    <>
+      {categoryFilter === 'plugins' && (
+        <>
+          <Tooltip content={createPluginLabel}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={styles.headerIconBtn}
+              onClick={onCreatePlugin}
+              aria-label={createPluginLabel}
+            >
+              <AppIcon name="sparkles" size={16} />
+            </Button>
+          </Tooltip>
+          <Tooltip content={importPluginLabel}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={styles.headerIconBtn}
+              onClick={onOpenPluginImport}
+              aria-label={importPluginLabel}
+            >
+              <AppIcon name="folder-input" size={16} />
+            </Button>
+          </Tooltip>
+        </>
+      )}
+      {categoryFilter === 'skills' && (
+        <Tooltip content={addSkillLabel}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={styles.headerIconBtn}
+            onClick={onOpenSkillCreate}
+            aria-label={addSkillLabel}
+          >
+            <AppIcon name="plus" size={16} />
+          </Button>
+        </Tooltip>
+      )}
+      {categoryFilter === 'mcp' && (
+        <Tooltip content={connectMcpLabel}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={styles.headerIconBtn}
+            onClick={onOpenMcpConnect}
+            aria-label={connectMcpLabel}
+          >
+            <AppIcon name="plus" size={16} />
+          </Button>
+        </Tooltip>
+      )}
+
+      <div className={styles.searchBarWrapper}>
+        <AppIcon name="search" size={14} className={styles.searchIcon} />
+        <Input
+          bare
+          value={searchQuery}
+          onChange={(e) => onSearchQueryChange(e.target.value)}
+          placeholder={t(
+            'extensions.header.searchPlaceholder',
+            '搜索扩展、技能与工具…'
+          )}
+          className={styles.searchInput}
+          aria-label={t('extensions.header.searchLabel', '搜索扩展')}
+        />
+      </div>
+    </>
+  );
+};

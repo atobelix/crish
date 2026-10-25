@@ -378,7 +378,7 @@
   min-height: 28px;
   max-height: 28px;
   border-radius: var(--radius-lg);
-  padding: 0 var(--space-0_5, 2px) 0 var(--space-8);
+  padding: 0 var(--space-1_5, 6px) 0 var(--space-8);
   font-size: var(--font-size-base);
   color: var(--text-secondary);
   background: transparent;
@@ -525,15 +525,17 @@
   min-width: 0;
   font-size: var(--font-size-base);
   line-height: 28px;
-  /* mask-image 只消费 alpha 通道，#000 此处无色彩语义，仅用于文字末端渐变淡出 */
+  /* 优雅三阶缓动衰减遮罩：40px 宽域羽化，消除单字腰斩硬切感，平滑融入底色 */
   -webkit-mask-image: linear-gradient(
     to right,
-    #000 calc(100% - 14px),
+    #000 calc(100% - 40px),
+    rgba(0, 0, 0, 0.45) calc(100% - 14px),
     transparent 100%
   );
   mask-image: linear-gradient(
     to right,
-    #000 calc(100% - 14px),
+    #000 calc(100% - 40px),
+    rgba(0, 0, 0, 0.45) calc(100% - 14px),
     transparent 100%
   );
 }
@@ -559,12 +561,32 @@
   position: relative;
   flex-shrink: 0;
   min-width: 24px;
-  max-width: 60px;
+  max-width: 84px;
   height: 24px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  margin-left: 2px;
+  margin-left: 6px;
+}
+
+.sessionItem:hover .sessionTrailing,
+.sessionItem:focus-within .sessionTrailing {
+  width: 76px;
+  min-width: 76px;
+}
+
+.sessionActionGroup {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1px;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 5;
 }
 
 .sessionTime {
@@ -583,7 +605,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: right;
-  transition: opacity var(--transition-micro);
   pointer-events: none;
 }
 
@@ -604,35 +625,30 @@
   line-height: 1;
 }
 
-.sessionItem .sessionActionsBtn {
-  --btn-icon-size: 16px;
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  opacity: 0;
-  pointer-events: none;
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
-  max-width: 24px;
-  max-height: 24px;
+.sessionItem .sessionActionsBtn,
+.sessionActionsBtn {
+  --btn-icon-size: 14px;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
+  max-width: 26px;
+  max-height: 26px;
   padding: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md, 8px);
   color: var(--text-tertiary);
   background: transparent;
   border: none;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   -webkit-app-region: no-drag;
   transition:
-    opacity var(--transition-micro),
     color var(--transition-micro),
     background var(--transition-micro);
-  z-index: 5;
+  --btn-hover-overlay: transparent;
+  --btn-active-overlay: transparent;
 }
 
 .sessionItem .sessionActionsBtn::before {
@@ -645,6 +661,13 @@
   pointer-events: none;
 }
 
+.sessionItem:hover .sessionActionGroup,
+.sessionItem:focus-within .sessionActionGroup,
+.sessionItem:focus-visible .sessionActionGroup {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .sessionItem:hover .sessionActionsBtn,
 .sessionItem:focus-within .sessionActionsBtn,
 .sessionItem:focus-visible .sessionActionsBtn {
@@ -652,7 +675,8 @@
   pointer-events: auto;
 }
 
-.sessionActionsBtn:hover {
+.sessionActionsBtn:hover,
+.sessionActionsBtn:active {
   color: var(--text-primary);
   background: var(--tint-hover);
 }
@@ -803,6 +827,7 @@ li.isDraggingSource > *,
 :global([data-sidebar-collapsed='1']) .sessionTime,
 :global([data-sidebar-collapsed='1']) .sessionTrailing,
 :global([data-sidebar-collapsed='1']) .sessionActionsBtn,
+:global([data-sidebar-collapsed='1']) .sessionActionGroup,
 :global([data-sidebar-collapsed='1']) .branchBadge,
 :global([data-sidebar-collapsed='1']) .emptyHint,
 :global([data-sidebar-collapsed='true']) .emptyHint {

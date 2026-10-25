@@ -28,6 +28,17 @@ import { Dialog } from '../Dialog/Dialog';
 import type { DialogSize } from '../Dialog/Dialog';
 import { Button } from '../Button/Button';
 
+/**
+ * 方案 A 标尺与纪律（同心几何收敛）：
+ * 底部确认与取消按钮高度统一为 34px~36px，按钮圆角统一设为 var(--radius-md, 8px)，
+ * 消除 7px 杂音值（与外壳 24px + 边距 16px 形成 24 = 8 + 16 绝对同心）。
+ */
+const confirmButtonStyle: React.CSSProperties = {
+  minHeight: '36px',
+  height: '36px',
+  borderRadius: 'var(--radius-md, 8px)',
+};
+
 export interface ConfirmDialogProps {
   /**
    * 受控开合（基座不管理 open 状态，不设内部状态机）。
@@ -93,7 +104,11 @@ export function ConfirmDialog({
       size={size}
       showCloseButton={false}
       initialFocusRef={cancelButtonRef}
-      classNames={className || overlayClassName ? { panel: className, overlay: overlayClassName } : undefined}
+      classNames={
+        className || overlayClassName
+          ? { panel: className, overlay: overlayClassName }
+          : undefined
+      }
       portalTarget={portalTarget}
       footer={
         // Dialog 的 .dialogFooter 已提供 flex + gap 布局，直接挂载按钮 Fragment
@@ -103,6 +118,7 @@ export function ConfirmDialog({
             type="button"
             variant="secondary"
             onClick={cancel}
+            style={confirmButtonStyle}
           >
             {cancelLabel}
           </Button>
@@ -111,6 +127,7 @@ export function ConfirmDialog({
             variant={danger ? 'danger' : 'primary'}
             disabled={disabled}
             onClick={confirm}
+            style={confirmButtonStyle}
           >
             {confirmLabel}
           </Button>

@@ -346,9 +346,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({
           </SettingsCard>
         </SettingsSection>
 
-        <SettingsSection
-          title={t('settings.schedule.runHistorySection', '运行历史记录')}
-        >
+        <SettingsSection>
           <SettingsCard>
             <RunHistoryList
               variant="settings"

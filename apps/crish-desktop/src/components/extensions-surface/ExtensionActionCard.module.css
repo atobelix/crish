@@ -1,13 +1,13 @@
-/* 扩展卡片：落在主层白底上，只用发丝边框分开，不用侧栏那档灰做填充。 */
+/* 扩展卡片：无描边、大圆角，通过柔和底色与 hover 背景变化区分层级，安装/导入/卸载按钮采用语义色彩区分 */
 
 .card {
-  background: var(--surface-main);
-  border: var(--hairline-width, 1px) solid var(--border-subtle);
-  border-radius: var(--radius-l);
-  padding: var(--space-3_5, 14px);
+  background: var(--bg-secondary);
+  border: none;
+  border-radius: var(--radius-xl, 16px);
+  padding: var(--space-4, 16px);
   display: flex;
   flex-direction: column;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2_5, 10px);
   box-sizing: border-box;
   min-width: 0;
   text-align: left;
@@ -20,34 +20,35 @@
 
 .card:hover {
   background:
-    linear-gradient(var(--tint-hover), var(--tint-hover)), var(--surface-main);
+    linear-gradient(var(--bg-card-hover), var(--bg-card-hover)),
+    var(--bg-secondary);
 }
 
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2_5, 10px);
 }
 
 .identity {
   display: flex;
   align-items: center;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2_5, 10px);
   min-width: 0;
   flex: 1;
 }
 
 .icon {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-m);
-  background: transparent;
-  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-lg, 10px);
+  background: var(--tint-hover);
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   flex-shrink: 0;
 }
 
@@ -72,45 +73,113 @@
   flex-shrink: 0;
   font-size: 11px;
   line-height: 1.4;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm, 6px);
+  border: none;
   color: var(--text-tertiary);
-  background: transparent;
+  background: var(--tint-subtle);
   white-space: nowrap;
+}
+
+.badge[data-source='官方'] {
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
 }
 
 .badge[data-source='Claude Code'],
 .badge[data-source='Claude Desktop'] {
   color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
 }
 
 .badge[data-source='Codex'] {
   color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
 }
 
 .badge[data-source='Antigravity'] {
   color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
 }
 
 .badge[data-source='Cursor'] {
   color: var(--color-info);
+  background: color-mix(in srgb, var(--color-info) 12%, transparent);
+}
+
+.actionsGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  flex-shrink: 0;
+}
+
+.switchSlot {
+  display: inline-flex;
+  align-items: center;
 }
 
 .action {
   height: 28px;
-  padding: 0 8px;
-  border-radius: var(--radius-m);
+  padding: 0 10px;
+  border-radius: var(--radius-md, 8px);
+  border: none;
   color: var(--text-secondary);
+  background: var(--tint-hover);
   font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   flex-shrink: 0;
+  transition:
+    background-color var(--duration-fast, 150ms) ease,
+    color var(--duration-fast, 150ms) ease;
+}
+
+/* 安装：翡翠绿品牌色，醒目正向引导 */
+.action[data-verb='install'] {
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+}
+
+.action[data-verb='install']:hover:not(:disabled) {
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 20%, transparent);
+}
+
+/* 导入：科技蓝信息色，与直接安装清晰区分 */
+.action[data-verb='import'] {
+  color: var(--color-info);
+  background: color-mix(in srgb, var(--color-info) 12%, transparent);
+}
+
+.action[data-verb='import']:hover:not(:disabled) {
+  color: var(--color-info);
+  background: color-mix(in srgb, var(--color-info) 20%, transparent);
+}
+
+/* 卸载 / 删除：柔和珊瑚红警示色，一眼识别移除动作 */
+.action[data-verb='uninstall'],
+.action[data-verb='delete'] {
+  color: var(--danger-color);
+  background: color-mix(in srgb, var(--danger-color) 10%, transparent);
+}
+
+.action[data-verb='uninstall']:hover:not(:disabled),
+.action[data-verb='delete']:hover:not(:disabled) {
+  color: var(--danger-color);
+  background: color-mix(in srgb, var(--danger-color) 18%, transparent);
 }
 
 .description {
   font-size: var(--font-size-xs, 12px);
   color: var(--text-secondary);
-  line-height: 1.45;
+  line-height: 1.5;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  min-height: 34px;
+  min-height: 36px;
 }

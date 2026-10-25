@@ -51,9 +51,9 @@
   border: var(--hairline-width) solid var(--border-subtle);
   border-radius: var(
     --sep-radius-outer
-  ); /* 由 8px 重构为 14px，根治 -6px 极端窒息挤压 */
+  ); /* 方案 A 标尺：浮层外壳圆角锁 14px，根治 -6px 极端窒息挤压 */
   box-shadow: var(--shadow-dropdown);
-  padding: var(--space-1_5);
+  padding: 6px; /* 方案 A 标尺：内衬 6px (14 = 8 + 6 绝对同心) */
   display: flex;
   flex-direction: column;
   gap: var(--space-0_5);
@@ -104,8 +104,9 @@
   justify-content: flex-start;
   gap: var(--space-2);
   width: 100%;
-  min-height: var(--control-height);
-  padding: var(--space-1_5) var(--space-2_5);
+  height: 32px;
+  min-height: 32px;
+  padding: 0 var(--space-2_5);
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
   color: var(--text-primary);

@@ -245,7 +245,58 @@ export const SettingsRulesTab: React.FC<Props> = ({
 
       <SettingsSection title={t('settings.rules.quickAddSection', '快速添加')}>
         <SettingsCard>
+          {/* 自定义添加规则行：作为首要输入区置于卡片上方 */}
           <div className={styles.sectionRow}>
+            <div className={styles.labelCol}>
+              <label htmlFor={addInputId} className={styles.labelTitle}>
+                {t('settings.rules.customTitle', '自定义')}
+              </label>
+              <span className={styles.labelDesc}>
+                {t('settings.rules.customDesc', '输入后添加')}
+              </span>
+            </div>
+            <div className={styles.inputGroup}>
+              <Input
+                ref={addInputRef}
+                id={addInputId}
+                size="sm"
+                placeholder={t(
+                  'settings.rules.customRulePlaceholder',
+                  '写一条规则…'
+                )}
+                value={newRuleText}
+                onChange={(e) => setNewRuleText(e.target.value)}
+                className={styles.inputGrow}
+                disabled={busy}
+                aria-label={t('settings.rules.customRuleAria', '自定义规则')}
+                autoComplete="off"
+                spellCheck={false}
+                onEnter={handleAddCustomRule}
+              />
+              <Tooltip
+                content={t(
+                  'settings.rules.addShortRuleTooltip',
+                  '加入{scope}短规则',
+                  { scope: scopeLabel }
+                )}
+              >
+                <Button
+                  type="button"
+                  onClick={handleAddCustomRule}
+                  variant="secondary"
+                  size="sm"
+                  className={styles.actionBtn}
+                  disabled={busy || !normalizeRuleLine(newRuleText)}
+                  aria-label={t('settings.rules.addRuleAria', '添加规则')}
+                >
+                  {t('common.add', '添加')}
+                </Button>
+              </Tooltip>
+            </div>
+          </div>
+
+          {/* 常用预设规则行：后置于底部，作为探索性引导与动态推荐区域 */}
+          <div className={styles.sectionRowNoBorder}>
             <div className={styles.labelCol}>
               <span className={styles.labelTitle}>
                 {t('settings.rules.presetsTitle', '常用')}
@@ -299,55 +350,6 @@ export const SettingsRulesTab: React.FC<Props> = ({
                   </Tooltip>
                 );
               })}
-            </div>
-          </div>
-
-          <div className={styles.sectionRowNoBorder}>
-            <div className={styles.labelCol}>
-              <label htmlFor={addInputId} className={styles.labelTitle}>
-                {t('settings.rules.customTitle', '自定义')}
-              </label>
-              <span className={styles.labelDesc}>
-                {t('settings.rules.customDesc', '输入后添加')}
-              </span>
-            </div>
-            <div className={styles.inputGroup}>
-              <Input
-                ref={addInputRef}
-                id={addInputId}
-                size="sm"
-                placeholder={t(
-                  'settings.rules.customRulePlaceholder',
-                  '写一条规则…'
-                )}
-                value={newRuleText}
-                onChange={(e) => setNewRuleText(e.target.value)}
-                className={styles.inputGrow}
-                disabled={busy}
-                aria-label={t('settings.rules.customRuleAria', '自定义规则')}
-                autoComplete="off"
-                spellCheck={false}
-                onEnter={handleAddCustomRule}
-              />
-              <Tooltip
-                content={t(
-                  'settings.rules.addShortRuleTooltip',
-                  '加入{scope}短规则',
-                  { scope: scopeLabel }
-                )}
-              >
-                <Button
-                  type="button"
-                  onClick={handleAddCustomRule}
-                  variant="secondary"
-                  size="sm"
-                  className={styles.actionBtn}
-                  disabled={busy || !normalizeRuleLine(newRuleText)}
-                  aria-label={t('settings.rules.addRuleAria', '添加规则')}
-                >
-                  {t('common.add', '添加')}
-                </Button>
-              </Tooltip>
             </div>
           </div>
         </SettingsCard>

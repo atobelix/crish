@@ -193,12 +193,14 @@ export const ProjectManageModal: React.FC<ProjectManageModalProps> = ({
             className={styles.folderPickerDropzone}
             onClick={() => void handlePickFolders()}
           >
-            <AppIcon
-              name="folder-plus"
-              size={20}
-              className={styles.dropzoneIcon}
-              aria-hidden
-            />
+            <div className={styles.dropzoneIconWrapper}>
+              <AppIcon
+                name="folder-plus"
+                size={20}
+                className={styles.dropzoneIcon}
+                aria-hidden
+              />
+            </div>
             <span className={styles.dropzoneText}>点击选择项目文件夹</span>
             <span className={styles.dropzoneSubtext}>
               支持单选或多选本地文件夹
@@ -250,7 +252,7 @@ export const ProjectManageModal: React.FC<ProjectManageModalProps> = ({
         )}
       </div>
 
-      <div className={styles.formGroup} style={{ marginTop: 8 }}>
+      <div className={styles.formGroup}>
         <label className={styles.fieldLabel}>项目名称</label>
         <Input
           type="text"

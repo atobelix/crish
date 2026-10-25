@@ -75,8 +75,10 @@ describe('StatusDiagnosticsPanel', () => {
     // 最近诊断（最新在前：第一条为 error 级 run 失败）
     const items = screen.getAllByRole('listitem');
     expect(items).toHaveLength(2);
+    expect(items[0]).toHaveClass(styles.diagItem);
     expect(items[0]).toHaveTextContent('ERROR');
     expect(items[0]).toHaveTextContent('run 失败: 引擎失败');
+    expect(items[1]).toHaveClass(styles.diagItem);
     expect(items[1]).toHaveTextContent('INFO');
     expect(items[1]).toHaveTextContent('engine init complete');
 
@@ -102,8 +104,12 @@ describe('StatusDiagnosticsPanel', () => {
         '无错误记录'
       );
     });
+    expect(screen.getByTestId('diag-no-error')).toHaveClass(styles.noError);
     expect(screen.getByTestId('diag-no-diagnostics')).toHaveTextContent(
       '暂无诊断记录'
+    );
+    expect(screen.getByTestId('diag-no-diagnostics')).toHaveClass(
+      styles.noError
     );
     expect(screen.queryByTestId('diag-last-error')).toBeNull();
     expect(screen.getByTestId('diag-log-level')).toHaveTextContent('debug');

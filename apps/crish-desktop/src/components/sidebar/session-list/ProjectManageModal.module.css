@@ -1,7 +1,7 @@
 .modalPanel {
   --dialog-width: 440px;
   width: var(--dialog-width);
-  border-radius: var(--radius-2xl, 20px);
+  border-radius: var(--radius-3xl, 24px);
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--border-subtle);
@@ -13,8 +13,8 @@
 .modalBody {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3, 12px);
-  padding: 10px 10px var(--space-3, 12px);
+  gap: var(--space-3_5, 14px);
+  padding: var(--space-3, 12px) var(--space-4, 16px) var(--space-4, 16px);
   box-sizing: border-box;
 }
 
@@ -31,15 +31,15 @@
   user-select: none;
 }
 
-/* 文件夹选择区：纯净实线微卡片，克制柔和的边框与背景，同心圆角 10px */
+/* 文件夹选择区：纯净实线微卡片，同心圆角 8px（24px 外壳 - 16px 边距 = 8px 绝对同心） */
 .folderPickerDropzone {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: var(--space-2, 8px);
-  padding: var(--space-5, 20px) var(--space-4, 16px);
-  border-radius: 10px;
+  padding: 24px var(--space-4, 16px);
+  border-radius: var(--radius-md, 8px);
   border: 1px solid var(--border-subtle);
   background: var(--surface-input, var(--bg-card));
   color: var(--text-secondary);
@@ -47,7 +47,8 @@
   transition:
     background var(--transition-fast),
     border-color var(--transition-fast),
-    color var(--transition-fast);
+    color var(--transition-fast),
+    box-shadow var(--transition-fast);
   width: 100%;
   box-sizing: border-box;
   font-family: inherit;
@@ -59,8 +60,8 @@
     var(--surface-input, var(--bg-card));
   border-color: color-mix(
     in srgb,
-    var(--border-subtle) 98%,
-    var(--text-primary) 2%
+    var(--border-subtle) 95%,
+    var(--text-primary) 5%
   );
   color: var(--text-primary);
 }
@@ -71,32 +72,58 @@
   box-shadow: none;
 }
 
-.dropzoneIcon {
-  color: var(--text-tertiary);
-  transition: color var(--transition-fast);
+.dropzoneIconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--tint-hover);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    transform var(--transition-fast);
 }
 
-.folderPickerDropzone:hover .dropzoneIcon {
-  color: var(--text-secondary);
+.folderPickerDropzone:hover .dropzoneIconWrapper {
+  background: var(--tint-active, var(--bg-hover));
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 95%,
+    var(--text-primary) 5%
+  );
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.dropzoneIcon {
+  color: inherit;
+  transition: color var(--transition-fast);
 }
 
 .dropzoneText {
   font-size: var(--font-size-sm, 13px);
   font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
 }
 
 .dropzoneSubtext {
-  font-size: var(--font-size-xs, 11px);
+  font-size: var(--font-size-xs, 12px);
   color: var(--text-tertiary);
 }
 
-/* 已选文件夹列表容器：同心圆角 10px */
+/* 已选文件夹列表容器：微圆 8px */
 .folderListCard {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1, 4px);
-  padding: 4px;
-  border-radius: 10px;
+  gap: 6px;
+  padding: 6px;
+  border-radius: var(--radius-md, 8px);
   border: 1px solid var(--border-subtle);
   background: var(--bg-hover);
   max-height: 180px;
@@ -108,8 +135,8 @@
 .folderItem {
   display: flex;
   align-items: center;
-  gap: var(--space-2, 8px);
-  padding: 6px 10px;
+  gap: var(--space-2_5, 10px);
+  padding: 8px 10px;
   border-radius: var(--radius-sm, 6px);
   background: var(--surface-input, var(--bg-card));
   border: 1px solid var(--border-subtle);
@@ -125,8 +152,8 @@
     var(--surface-input, var(--bg-card));
   border-color: color-mix(
     in srgb,
-    var(--border-subtle) 98%,
-    var(--text-primary) 2%
+    var(--border-subtle) 96%,
+    var(--text-primary) 4%
   );
 }
 
@@ -180,7 +207,7 @@
 
 .folderRemoveBtn:hover {
   background: var(--bg-hover);
-  color: var(--text-primary);
+  color: var(--danger-color, var(--text-primary));
 }
 
 .addMoreBtn {
@@ -188,13 +215,15 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-1_5, 6px);
-  margin-top: var(--space-1, 4px);
-  padding: 6px 10px;
+  margin-top: 2px;
+  height: 34px;
+  padding: 0 12px;
   border-radius: var(--radius-md, 8px);
   border: 1px solid var(--border-subtle);
   background: var(--surface-input, var(--bg-card));
   color: var(--text-secondary);
   font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
   cursor: pointer;
   transition:
     background var(--transition-fast),
@@ -214,16 +243,16 @@
   );
 }
 
-/* 项目名称输入框：适中高度 34px，小字号 13px，极度克制微弱边框 */
+/* 项目名称输入框：标准桌面高度 38px，微圆圆角 8px，与 Dropzone 绝对统一 */
 .nameInput {
-  height: 34px;
-  min-height: 34px;
+  height: 38px;
+  min-height: 38px;
   font-size: var(--font-size-sm, 13px);
   border-radius: var(--radius-md, 8px);
   border: 1px solid var(--border-subtle);
   background: var(--surface-input, var(--bg-card));
   color: var(--text-primary);
-  padding: 0 var(--space-3, 12px);
+  padding: 0 14px;
   box-shadow: none;
   transition:
     border-color var(--transition-fast),
@@ -236,7 +265,11 @@
 }
 
 .nameInput:hover:not(:focus):not(:focus-visible) {
-  border-color: var(--border-subtle);
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 95%,
+    var(--text-primary) 5%
+  );
   background:
     linear-gradient(var(--tint-hover), var(--tint-hover)),
     var(--surface-input, var(--bg-card));
@@ -244,7 +277,11 @@
 
 .nameInput:focus,
 .nameInput:focus-visible {
-  border-color: var(--border-subtle);
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 90%,
+    var(--text-primary) 10%
+  );
   outline: none;
   box-shadow: none;
   background: var(--surface-input, var(--bg-card));
@@ -260,7 +297,7 @@
 .actionList {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .actionItem {
@@ -268,8 +305,8 @@
   align-items: center;
   gap: var(--space-2_5, 10px);
   width: 100%;
-  height: 34px;
-  padding: 0 10px;
+  height: 36px;
+  padding: 0 12px;
   border-radius: var(--radius-md, 8px);
   background: transparent;
   border: none;
@@ -298,4 +335,9 @@
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-2, 8px);
+}
+
+/* 弹窗底部操作按钮同心化：微圆 8px + 16px 边距 = 24px 外壳绝对同心 */
+.modalFooter button {
+  border-radius: var(--radius-md, 8px);
 }

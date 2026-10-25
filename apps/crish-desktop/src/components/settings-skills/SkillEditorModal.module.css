@@ -1,39 +1,58 @@
-/*        PE-05 T05.2 #4 
- *               SkillsSettingsTab.module.css +    skills-discover-*
- *             module          ui/Dialog    :global     
- *   /     create                          */
+/* apps/crish-desktop/src/components/settings-skills/SkillEditorModal.module.css
+ * 技能编辑与发现弹窗（方案 A 标尺：外壳 24px + 16px 留白 + 8px 内部参数表单/代码区域同心闭环）
+ * 彻底消除 7px 杂音，清除多余横向分割线
+ */
 
-/*                  --z-settings-dialog  */
+/* 技能发现弹窗外壳（方案 A 标尺：外壳 24px，内边距统一 16px） */
 .skillsDiscoverOverlay {
+  padding: var(--space-4);
 }
 
-/*                       */
+.skillsDiscoverOverlay :global([role='dialog']) {
+  border-radius: var(--radius-3xl);
+}
+
+/* 兼容显式类名透传 */
+.skillsDiscoverPanel {
+  border-radius: var(--radius-3xl);
+  padding: var(--space-4);
+}
+
+/* 发现技能候选列表：消除虚高压抑，恢复适度内留白与项目间距 */
 .skillsDiscoverList {
-  max-height: 120px;
+  max-height: 220px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: var(--space-1_5);
+  padding: var(--space-1) 0;
 }
 
+/* 发现候选条目：统一为 8px 微圆卡片，清除多余横向分割线 */
 .skillsDiscoverItem {
   display: flex;
   align-items: center;
-  gap: var(--space-1_5);
-  padding: var(--space-0_5);
-  border-radius: 0;
-  border-bottom: var(--hairline-width) solid var(--border-subtle);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md); /* 8px 微圆卡片 */
+  border: 1px solid var(--border-subtle);
+  border-bottom: none; /* 清除多余横向分割线 */
+  background: var(--bg-card-subtle, var(--bg-secondary));
   cursor: pointer;
   font-size: var(--font-size-xs);
-  min-height: 26px;
-}
-
-.skillsDiscoverItem:last-child {
-  border-bottom: none;
+  min-height: 32px;
+  transition:
+    background-color var(--transition-micro),
+    border-color var(--transition-micro);
 }
 
 .skillsDiscoverItem:hover {
   background: var(--tint-hover);
+  border-color: var(--border-color);
+}
+
+.skillsDiscoverItem:last-child {
+  border-bottom: none;
 }
 
 .skillsDiscoverName {
@@ -45,31 +64,39 @@
   text-overflow: ellipsis;
 }
 
-/*    footer     */
+/* 弹窗底部操作区：按钮统一 8px 圆角与 34px~36px 高度 */
 .skillsDiscoverActions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--space-2);
+  padding-top: var(--space-1);
 }
 
-/*    create   paths    / manual         */
+.skillsDiscoverActions button {
+  height: 34px;
+  min-height: 34px;
+  border-radius: var(--radius-md); /* 统一 8px 微圆，消除 7px 杂音 */
+}
+
+/* 新建技能参数表单与代码区域：统一为 8px 微圆卡片，内边距统一 16px，清除多余横向分割线 */
 .skillsCreateBox {
-  padding: var(--space-0_5) 0 var(--space-1_5);
-  border-radius: 0;
-  border: none;
-  border-bottom: var(--hairline-width) solid var(--border-subtle);
-  background: transparent;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle); /* 全周 1px 浅描边，彻底清除旧式多余单侧横线下边框 */
+  background: var(--bg-card-subtle, var(--bg-secondary));
   display: flex;
   flex-direction: column;
-  gap: var(--space-1_5);
+  gap: var(--space-3);
+  margin-top: var(--space-2);
 }
 
 .skillsCreateRow {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: var(--space-1_5);
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -82,22 +109,30 @@
   width: 100%;
 }
 
+.skillsCreateField :global(.input-container),
+.skillsCreateField input {
+  height: 36px;
+  border-radius: var(--radius-md); /* 8px 微圆统一 */
+}
+
 .createSeg {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1_5);
+  gap: var(--space-2);
 }
 
 .createPath {
   appearance: none;
   -webkit-appearance: none;
-  border-radius: var(--radius-btn);
+  border-radius: var(--radius-md); /* 统一 8px 微圆，消除 7px 杂音 */
+  height: 34px;
+  min-height: 34px;
 }
 
 .createHint {
   flex: 1 1 100%;
-  margin: 0;
+  margin: var(--space-1) 0 0;
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   line-height: var(--line-height-body);
@@ -105,4 +140,14 @@
 
 .skillsDiscoverDialogBody {
   min-height: 0;
+}
+
+/* 参数表单与代码展示区域通用微圆规范 */
+.paramForm,
+.codeArea,
+.codeBlock {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-code, var(--bg-card-subtle));
+  padding: var(--space-3) var(--space-4);
 }

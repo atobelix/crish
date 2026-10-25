@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
 import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 import { useToast } from '../../services/toast/ToastContext';
@@ -9,6 +15,7 @@ import {
 } from '../../api/import/importSessions';
 import {
   type DetectedExternalSession,
+  type ExternalSessionScanIssue,
   type ExternalSessionSource,
 } from '../../api/import/types';
 import { externalImportKeyAliases } from '../../api/import/externalSessionTombstone';
@@ -37,9 +44,12 @@ export const ExternalSessionsWorkbench: React.FC<
 
   // 0ms 瞬时水合：优先读取持久化缓存，杜绝每次打开重复全盘扫描
   const [detected, setDetected] = useState<DetectedExternalSession[]>(() => {
-    return loadExternalSessionsFromCache();
+    return loadExternalSessionsFromCache().sessions;
   });
   const [loading, setLoading] = useState(false);
+  const [scanIssues, setScanIssues] = useState<ExternalSessionScanIssue[]>([]);
+  const scanRequestIdRef = useRef(0);
+  const initialScanCompletedRef = useRef(false);
   const [importingId, setImportingId] = useState<string | null>(null);
   const [filterSource, setFilterSource] = useState<FilterSource>('workspace');
   const [onlyWithContent, setOnlyWithContent] = useState(false);
@@ -127,25 +137,59 @@ export const ExternalSessionsWorkbench: React.FC<
   // 扫描逻辑
   const handleScan = useCallback(
     async (force = true) => {
+      const requestId = ++scanRequestIdRef.current;
       setLoading(true);
+      setScanIssues([]);
       try {
         const result = await getOrScanExternalSessions(force);
-        setDetected(result);
+        if (requestId !== scanRequestIdRef.current) return;
+        initialScanCompletedRef.current = true;
+        setDetected(result.sessions);
+        setScanIssues(result.issues);
         onRefresh?.();
         if (force) {
-          showToast(`扫描完成，共检测到 ${result.length} 个外部对话记录`);
+          if (result.issues.length > 0) {
+            showToast(
+              /* i18n-allow */ `扫描未完成，共发现 ${result.sessions.length} 条记录，${result.issues.length} 项目录或文件需要检查`
+            );
+          } else {
+            showToast(
+              `扫描完成，共检测到 ${result.sessions.length} 个外部对话记录`
+            );
+          }
         }
       } catch (err) {
+        if (requestId !== scanRequestIdRef.current) return;
+        initialScanCompletedRef.current = true;
+        setScanIssues([
+          {
+            source: 'claude-code',
+            kind: 'error',
+            /* i18n-allow */ message: `扫描结果处理失败：${String(err)}`,
+          },
+          {
+            source: 'codex',
+            kind: 'error',
+            /* i18n-allow */ message: `扫描结果处理失败：${String(err)}`,
+          },
+        ]);
         showToast('扫描外部会话记录失败: ' + String(err));
       } finally {
-        setLoading(false);
+        if (requestId === scanRequestIdRef.current) setLoading(false);
       }
     },
     [showToast, onRefresh]
   );
 
+  useEffect(
+    () => () => {
+      scanRequestIdRef.current += 1;
+    },
+    []
+  );
+
   useEffect(() => {
-    if (detected.length === 0) {
+    if (detected.length === 0 && !initialScanCompletedRef.current) {
       void handleScan(false);
     }
   }, [detected.length, handleScan]);
@@ -268,6 +312,33 @@ export const ExternalSessionsWorkbench: React.FC<
         </div>
       </div>
 
+      {scanIssues.length > 0 ? (
+        <div className={styles.scanNotice} role="status" aria-live="polite">
+          <strong>
+            {
+              /* i18n-allow */ scanIssues.some(
+                (issue) => issue.kind === 'error'
+              )
+                ? '扫描未能完整完成，结果可能遗漏会话。'
+                : '部分目录或文件未能读取，结果可能不完整。'
+            }
+          </strong>
+          <ul>
+            {scanIssues.map((issue, index) => (
+              <li key={`${issue.source}-${issue.kind}-${index}`}>
+                {issue.source === 'claude-code' ? 'Claude Code' : 'Codex'}
+                {
+                  /* i18n-allow */ issue.kind === 'error'
+                    ? ' 扫描失败：'
+                    : ' 扫描提示：'
+                }
+                {issue.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {/* 外部会话双栏主区域：左侧列表 + 右侧深度解析核验面板 */}
       <div className={styles.splitWorkbenchBody}>
         {/* 左栏：会话列表 */}
@@ -338,11 +409,25 @@ export const ExternalSessionsWorkbench: React.FC<
             ) : filteredSessions.length === 0 ? (
               <div className={styles.emptyWorkbenchState}>
                 <AppIcon name="package" size={24} />
-                <div className={styles.emptyTitle}>未发现匹配记录</div>
+                <div className={styles.emptyTitle}>
+                  {
+                    /* i18n-allow */ scanIssues.length > 0
+                      ? '暂时无法确认是否存在会话'
+                      : detected.length === 0
+                        ? '扫描完成，未发现外部会话'
+                        : '未发现匹配记录'
+                  }
+                </div>
                 <div className={styles.emptyDesc}>
-                  {filterSource === 'workspace'
-                    ? '当前工作区未找到，可切换到「全部」'
-                    : '可检查外部软件目录设置'}
+                  {
+                    /* i18n-allow */ scanIssues.length > 0
+                      ? '请检查上方扫描状态或配置路径后重试。'
+                      : detected.length === 0
+                        ? '可检查外部软件目录设置或重新扫描。'
+                        : filterSource === 'workspace'
+                          ? '当前工作区未找到，可切换到「全部」'
+                          : '可检查外部软件目录设置'
+                  }
                 </div>
               </div>
             ) : (

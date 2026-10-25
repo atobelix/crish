@@ -246,8 +246,13 @@ export const PluginCreateModal: React.FC<PluginCreateModalProps> = ({
           role="region"
           aria-label="插件文件上传区域"
         >
-          <div className={styles.dropZoneIcon}>
-            <AppIcon name="folder-input" size={32} />
+          <div className={styles.dropzoneIconWrapper}>
+            <AppIcon
+              name="folder-input"
+              size={20}
+              className={styles.dropZoneIcon}
+              aria-hidden
+            />
           </div>
           <div className={styles.dropZoneTitle}>
             {loading

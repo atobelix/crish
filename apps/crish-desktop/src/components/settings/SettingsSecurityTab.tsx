@@ -274,9 +274,64 @@ export const SettingsSecurityTab: React.FC = () => {
       </SettingsSection>
 
       <SettingsSection
-        title={t('settings.security.trustedCommandsSection', '信任命令')}
+        title={t(
+          'settings.security.trustedCommandsCount',
+          '已信任命令 ({count})',
+          { count: whitelist.length }
+        )}
       >
         <SettingsCard>
+          {/* 1. 已信任命令列表或空态展示 */}
+          {whitelist.length === 0 ? (
+            <SettingsRow
+              title={
+                <span className="settings-list-empty">
+                  {t('settings.security.noTrustedCommands', '还没有信任的命令')}
+                </span>
+              }
+              desc={t(
+                'settings.security.noTrustedCommandsDesc',
+                '下方输入命令并添加，或点击常用预设'
+              )}
+            />
+          ) : (
+            whitelist.map((cmd) => {
+              return (
+                <SettingsRow
+                  key={cmd}
+                  title={<span className={styles.cmdSpan}>{cmd}</span>}
+                  desc={t(
+                    'settings.security.trustedCmdNote',
+                    '批准记忆：匹配后仍需引擎按当前权限模式裁决'
+                  )}
+                  control={
+                    <Tooltip
+                      content={t(
+                        'settings.security.removeCmdTooltip',
+                        '移除 {cmd}',
+                        { cmd }
+                      )}
+                    >
+                      <Button
+                        type="button"
+                        variant="danger"
+                        size="sm"
+                        onClick={() => removeWhitelist(cmd)}
+                        aria-label={t(
+                          'settings.security.removeCmdAria',
+                          '移除 {cmd}',
+                          { cmd }
+                        )}
+                        icon={<AppIcon name="trash" size={14} aria-hidden />}
+                      />
+                    </Tooltip>
+                  }
+                />
+              );
+            })
+          )}
+
+          {/* 2. 添加自定义命令输入行 */}
           <div className={styles.wlRow}>
             <div className={styles.labelCol}>
               <label htmlFor={wlInputId} className={styles.labelTitle}>
@@ -304,7 +359,7 @@ export const SettingsSecurityTab: React.FC = () => {
                 autoCorrect="off"
                 autoCapitalize="off"
                 aria-label={t('settings.security.cmdInputAria', '要信任的命令')}
-                className={styles.inputGrow}
+                className={`${styles.inputGrow} ${styles.cmdInput}`}
                 // onEnter 回传输入值；必须走无参分支，否则会被当成「预设」而不清空输入框
                 onEnter={() => addWhitelist()}
                 onKeyDown={(e) => {
@@ -328,7 +383,7 @@ export const SettingsSecurityTab: React.FC = () => {
                   type="button"
                   variant="secondary"
                   size="sm"
-                  className={styles.actionBtn}
+                  className={`${styles.actionBtn} ${styles.addBtn}`}
                   aria-label={t('settings.security.addCommandAria', '添加命令')}
                   disabled={!draftTrimmed}
                   onClick={() => addWhitelist()}
@@ -391,6 +446,7 @@ export const SettingsSecurityTab: React.FC = () => {
             </div>
           </div>
 
+          {/* 3. 常用预设（置于卡片最底部，作为引导性推荐，后续可扩展为动态推荐体系） */}
           <div className={styles.wlRowNoBorder}>
             <div className={styles.labelCol}>
               <span className={styles.labelTitle}>
@@ -444,65 +500,6 @@ export const SettingsSecurityTab: React.FC = () => {
               })}
             </div>
           </div>
-        </SettingsCard>
-      </SettingsSection>
-
-      <SettingsSection
-        title={t(
-          'settings.security.trustedCommandsCount',
-          '已信任命令 ({count})',
-          { count: whitelist.length }
-        )}
-      >
-        <SettingsCard>
-          {whitelist.length === 0 ? (
-            <SettingsRow
-              title={
-                <span className="settings-list-empty">
-                  {t('settings.security.noTrustedCommands', '还没有信任的命令')}
-                </span>
-              }
-              desc={t(
-                'settings.security.noTrustedCommandsDesc',
-                '上方输入命令并添加，或点击常用预设'
-              )}
-            />
-          ) : (
-            whitelist.map((cmd) => {
-              return (
-                <SettingsRow
-                  key={cmd}
-                  title={<span className={styles.cmdSpan}>{cmd}</span>}
-                  desc={t(
-                    'settings.security.trustedCmdNote',
-                    '批准记忆：匹配后仍需引擎按当前权限模式裁决'
-                  )}
-                  control={
-                    <Tooltip
-                      content={t(
-                        'settings.security.removeCmdTooltip',
-                        '移除 {cmd}',
-                        { cmd }
-                      )}
-                    >
-                      <Button
-                        type="button"
-                        variant="danger"
-                        size="sm"
-                        onClick={() => removeWhitelist(cmd)}
-                        aria-label={t(
-                          'settings.security.removeCmdAria',
-                          '移除 {cmd}',
-                          { cmd }
-                        )}
-                        icon={<AppIcon name="trash" size={14} aria-hidden />}
-                      />
-                    </Tooltip>
-                  }
-                />
-              );
-            })
-          )}
         </SettingsCard>
       </SettingsSection>
     </SettingsPage>

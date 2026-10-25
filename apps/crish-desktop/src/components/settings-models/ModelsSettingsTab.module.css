@@ -192,6 +192,25 @@
   gap: var(--space-2);
 }
 
+/* 输入框与下拉选择框：高度提升至 36px (消除 32px 紧绷感)，圆角统一为 8px (var(--radius-md, 8px)) */
+.mrdField :global(input:not([type='checkbox']):not([type='radio'])),
+.mrdField :global(button[data-slot='select-trigger']),
+.mrdField :global(button[role='combobox']),
+.mrdField :global(.settings-select-trigger),
+.credentialsBody :global(input:not([type='checkbox']):not([type='radio'])),
+.credentialsBody :global(button[data-slot='select-trigger']),
+.credentialsBody :global(button[role='combobox']),
+.credentialsBody :global(.settings-select-trigger),
+.mrdAddForm :global(input:not([type='checkbox']):not([type='radio'])),
+.mrdAddForm :global(button[data-slot='select-trigger']),
+.mrdAddForm :global(button[role='combobox']),
+.mrdCfgFields :global(input:not([type='checkbox']):not([type='radio'])),
+.modelDialogFields :global(input:not([type='checkbox']):not([type='radio'])) {
+  height: 36px;
+  min-height: 36px;
+  border-radius: var(--radius-md);
+}
+
 /* ── 5. 模型列表区域（细线流式行 + 搜索栏） ── */
 .mrdModelsHead {
   display: flex;
@@ -255,7 +274,7 @@
 
 .mrdModelRow.isExpanded .mrdModelRowInner {
   cursor: pointer;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   transition: background-color var(--transition-micro);
 }
 
@@ -279,6 +298,7 @@
   justify-content: space-between;
   gap: var(--space-3);
   width: 100%;
+  border-radius: var(--radius-md);
 }
 
 .mrdModelInfo {
@@ -328,7 +348,7 @@
   justify-content: center;
   width: 18px;
   height: 18px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   color: var(--text-tertiary);
   cursor: help;
   transition:
@@ -347,6 +367,10 @@
   gap: var(--space-1_5);
 }
 
+.mrdModelActions button {
+  border-radius: var(--radius-md);
+}
+
 .mrdModelEmpty {
   padding: var(--space-7) 0;
   text-align: center;
@@ -354,15 +378,15 @@
   color: var(--text-tertiary);
 }
 
-/* ── 6. 手动添加模型表单（内嵌微卡片） ── */
+/* ── 6. 手动添加模型表单（内嵌微卡片：14px 外框 + 舒展内边距） ── */
 .mrdAddForm {
-  padding: var(--space-3) var(--space-3_5);
+  padding: var(--space-3_5) var(--space-4);
   border: var(--hairline-width) solid var(--border-subtle);
-  border-radius: var(--radius-l);
+  border-radius: var(--sep-radius-outer);
   background: var(--cover-card-bg, var(--bg-card));
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-3_5);
   box-sizing: border-box;
 }
 
@@ -505,6 +529,11 @@
   margin-left: auto;
 }
 
+.mrdAddFooterActions button,
+.mrdAddFormFooter button {
+  border-radius: var(--radius-sm);
+}
+
 .modelDialogFields {
   display: flex;
   flex-direction: column;
@@ -585,7 +614,8 @@
   min-width: 180px;
 }
 
-.cascadeList {
+.cascadeList,
+.cascadePrimaryList {
   min-width: 220px;
   display: flex;
   flex-direction: column;
@@ -612,6 +642,10 @@
   z-index: var(--z-dropdown);
 }
 
+.cascadeMenuPanel {
+  padding: var(--space-1_5);
+}
+
 .addMenuTitle {
   padding: var(--space-1) var(--space-2);
   font-size: var(--font-size-xs);
@@ -627,7 +661,8 @@
 
 .addMenuOption,
 .cascadeRow,
-.cascadeOption {
+.cascadeOption,
+.cascadeSubRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -636,7 +671,7 @@
   height: var(--control-height-sm);
   padding: 0 var(--space-2);
   border: none;
-  border-radius: var(--button-radius);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-primary);
   font-size: var(--font-size-sm);
@@ -649,32 +684,41 @@
 
 .addMenuOption:hover,
 .cascadeRow:hover,
-.cascadeOption:hover {
+.cascadeOption:hover,
+.cascadeSubRow:hover {
   background: var(--tint-hover);
 }
 
 .cascadeOption.isOn,
-.cascadeOption.isSelected {
+.cascadeOption.isSelected,
+.cascadeSubRowActive {
   background: var(--tint-active);
   font-weight: var(--font-weight-medium);
 }
 
-.cascadeSelectTrigger {
+.cascadeSubRowLabel {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.cascadeSelectTrigger,
+.cascadeTrigger {
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  min-width: 220px; /* 布局约束，不入刻度 */
+  min-width: 200px; /* 布局约束，与下拉面板保持适度呼应 */
   border: var(--hairline-width) solid var(--border-subtle);
   background: var(--cover-card-bg, var(--bg-card));
-  border-radius: var(--button-radius);
+  border-radius: var(--radius-sm);
   padding: 0 var(--space-2_5);
-  height: var(--control-height-sm);
-  min-height: var(--control-height-sm);
-  min-width: 220px;
+  height: 28px;
+  min-height: 28px;
   color: var(--text-primary);
   font-family: inherit;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   cursor: pointer;
   box-sizing: border-box;
   transition:
@@ -682,16 +726,21 @@
     border-color var(--transition-fast);
 }
 
-.cascadeSelectTrigger:hover {
+.cascadeSelectTrigger:hover,
+.cascadeTrigger:hover {
   background: var(--tint-hover);
   border-color: var(--border-color);
 }
 
-.cascadeSelectValue {
+.cascadeSelectValue,
+.cascadeTriggerText {
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
   font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-xs);
+  flex: 1;
+  text-align: left;
 }
 
 .cascadeEmpty {
@@ -701,7 +750,8 @@
   cursor: default;
 }
 
-.cascadeChev {
+.cascadeChev,
+.cascadeChevron {
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
@@ -713,7 +763,8 @@
   flex: 1;
 }
 
-.cascadeCheck {
+.cascadeCheck,
+.cascadeCheckIcon {
   color: var(--accent-color, var(--brand-deep));
   flex-shrink: 0;
 }
@@ -731,13 +782,13 @@
   }
 }
 
-/* ── 4.1 连接与凭据高级卡片折叠栏 ── */
+/* ── 4.1 连接与凭据高级卡片折叠栏（大卡片外壳 14px + 舒展内边距） ── */
 .credentialsContainer {
   display: flex;
   flex-direction: column;
   background: var(--cover-card-bg, var(--bg-card));
   border: var(--hairline-width) solid var(--border-subtle);
-  border-radius: var(--radius-xl);
+  border-radius: var(--sep-radius-outer);
   overflow: hidden;
   transition:
     border-color var(--transition-fast),
@@ -752,7 +803,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2_5) var(--space-4);
   cursor: pointer;
   user-select: none;
   background: transparent;
@@ -835,8 +886,8 @@
 .credentialsBody {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3);
+  gap: var(--space-3_5);
+  padding: var(--space-4);
   border-top: var(--hairline-width) solid var(--border-subtle);
   background: var(--cover-card-bg, var(--bg-card));
 }
@@ -853,6 +904,8 @@
 
 .mrdKeySaveBtn {
   flex-shrink: 0;
+  height: 36px;
+  border-radius: var(--radius-md);
 }
 
 /* ── 9. 多模态、拍平思考与四维价格人体工学样式 ── */

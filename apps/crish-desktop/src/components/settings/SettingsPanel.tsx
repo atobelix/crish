@@ -342,6 +342,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           data-scrollbar-hover-host="main"
           onPointerEnter={() => setHoverPane('main')}
         >
+          {/* 顶栏标题与同心圆角关闭按钮：样式见 SettingsPanel.module.css (.settingsHeader / .settingsClose) */}
           <header className={styles.settingsHeader}>
             <h2 className={styles.settingsTitle} data-testid="settings-title">
               <span>{t('settings.title')}</span>

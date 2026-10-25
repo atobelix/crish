@@ -115,13 +115,15 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       '.credentialsContainer 必须声明 border-radius'
     ).toBeTruthy();
     expect(
-      /(?:1[4-9]|[2-9][0-9])px|var\(--radius-xl/.test(radiusDecl![1]),
+      /(?:1[4-9]|[2-9][0-9])px|var\(--(?:radius-xl|sep-radius-outer)/.test(
+        radiusDecl![1]
+      ),
       `.credentialsContainer 的 border-radius 必须为 14px 或以上（当前声明: ${radiusDecl![1]}）`
     ).toBe(true);
   });
 
   // 4. ProjectManageModal 同心断言
-  it('契约 4：ProjectManageModal 同心断言（.modalPanel 必须为 20px，.folderPickerDropzone 必须为 10px）', () => {
+  it('契约 4：ProjectManageModal 方案 A 同心断言（.modalPanel 必须为 24px，.folderPickerDropzone 必须为 8px，.nameInput 必须为 8px）', () => {
     const modalCss = readDesktopFile(
       'components',
       'sidebar',
@@ -129,7 +131,7 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       'ProjectManageModal.module.css'
     );
 
-    // 断言 .modalPanel 必须为 var(--radius-2xl, 20px)
+    // 断言 .modalPanel 必须为 var(--radius-3xl, 24px)
     const panelMatch = modalCss.match(/\.modalPanel\s*\{[^}]+\}/);
     expect(
       panelMatch,
@@ -137,10 +139,10 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
     ).toBeTruthy();
     expect(
       panelMatch![0],
-      '.modalPanel 的 border-radius 必须绑定为 var(--radius-2xl, 20px)'
-    ).toMatch(/border-radius:\s*var\(--radius-2xl,\s*20px\)/);
+      '.modalPanel 的 border-radius 必须绑定为 var(--radius-3xl, 24px)'
+    ).toMatch(/border-radius:\s*var\(--radius-3xl,\s*24px\)/);
 
-    // 断言 .folderPickerDropzone 必须为 10px
+    // 断言 .folderPickerDropzone 必须为 var(--radius-md, 8px)
     const dropzoneMatch = modalCss.match(/\.folderPickerDropzone\s*\{[^}]+\}/);
     expect(
       dropzoneMatch,
@@ -148,8 +150,19 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
     ).toBeTruthy();
     expect(
       dropzoneMatch![0],
-      '.folderPickerDropzone 的 border-radius 必须为 10px，与 10px 内衬达成 20px 同心'
-    ).toMatch(/border-radius:\s*10px/);
+      '.folderPickerDropzone 的 border-radius 必须为 var(--radius-md, 8px)'
+    ).toMatch(/border-radius:\s*var\(--radius-md,\s*8px\)/);
+
+    // 断言 .nameInput 必须为 var(--radius-md, 8px)
+    const nameInputMatch = modalCss.match(/\.nameInput\s*\{[^}]+\}/);
+    expect(
+      nameInputMatch,
+      'ProjectManageModal.module.css 中必须包含 .nameInput 规则块'
+    ).toBeTruthy();
+    expect(
+      nameInputMatch![0],
+      '.nameInput 的 border-radius 必须为 var(--radius-md, 8px)'
+    ).toMatch(/border-radius:\s*var\(--radius-md,\s*8px\)/);
   });
 
   // 5. 通用 Dialog 外壳断言
@@ -194,5 +207,121 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       multilineBlock,
       '.composerCard.isMultiline 必须绑定 20px 圆角'
     ).toMatch(/border-radius:\s*var\(--composer-radius-multi,\s*20px\)/);
+  });
+
+  // 7. Dialog 底部无分割线契约（去除横线和虚高边距）
+  it('契约 7：Dialog 底部无分割线契约（.dialogFooter 严禁含 border-top）', () => {
+    const dialogCss = readDesktopFile(
+      'components',
+      'ui',
+      'Dialog',
+      'Dialog.module.css'
+    );
+
+    const footerMatch = dialogCss.match(/\.dialogFooter\s*\{[^}]+\}/);
+    expect(
+      footerMatch,
+      'Dialog.module.css 中必须包含 .dialogFooter 规则块'
+    ).toBeTruthy();
+    expect(
+      footerMatch![0],
+      '.dialogFooter 严禁出现 border-top 横线'
+    ).not.toMatch(/border-top:/);
+  });
+
+  // 8. PluginCreateModal 方案 A 同心契约断言
+  it('契约 8：PluginCreateModal 方案 A 同心契约断言（.modalPanel 必须为 24px，内部卡片必须为 8px）', () => {
+    const modalCss = readDesktopFile(
+      'components',
+      'extensions-surface',
+      'PluginCreateModal.module.css'
+    );
+
+    const panelMatch = modalCss.match(/\.modalPanel\s*\{[^}]+\}/);
+    expect(
+      panelMatch,
+      'PluginCreateModal.module.css 中必须包含 .modalPanel 规则块'
+    ).toBeTruthy();
+    expect(
+      panelMatch![0],
+      '.modalPanel 的 border-radius 必须绑定为 var(--radius-3xl, 24px)'
+    ).toMatch(/border-radius:\s*var\(--radius-3xl,\s*24px\)/);
+
+    const dropZoneMatch = modalCss.match(/\.dropZone\s*\{[^}]+\}/);
+    expect(
+      dropZoneMatch,
+      'PluginCreateModal.module.css 中必须包含 .dropZone 规则块'
+    ).toBeTruthy();
+    expect(
+      dropZoneMatch![0],
+      '.dropZone 的 border-radius 必须为 var(--radius-md, 8px)'
+    ).toMatch(/border-radius:\s*var\(--radius-md,\s*8px\)/);
+  });
+
+  // 9. ExternalSessionImportModal 方案 A 同心契约断言
+  it('契约 9：ExternalSessionImportModal 方案 A 同心契约断言（.dialogPanel 必须为 24px，.filterTabs 为 14px，.filterTab 为 8px）', () => {
+    const modalCss = readDesktopFile(
+      'components',
+      'plugins',
+      'ExternalSessionImportModal.module.css'
+    );
+
+    const dialogPanelMatch = modalCss.match(/\.dialogPanel\s*\{[^}]+\}/);
+    expect(
+      dialogPanelMatch,
+      'ExternalSessionImportModal.module.css 中必须包含 .dialogPanel 规则块'
+    ).toBeTruthy();
+    expect(
+      dialogPanelMatch![0],
+      '.dialogPanel 的 border-radius 必须绑定为 var(--radius-3xl, 24px)'
+    ).toMatch(/border-radius:\s*var\(--radius-3xl,\s*24px\)/);
+
+    const tabsMatch = modalCss.match(/\.filterTabs\s*\{[^}]+\}/);
+    expect(
+      tabsMatch,
+      'ExternalSessionImportModal.module.css 中必须包含 .filterTabs 规则块'
+    ).toBeTruthy();
+    expect(
+      tabsMatch![0],
+      '.filterTabs 的 border-radius 必须为 var(--sep-radius-outer, 14px)'
+    ).toMatch(/border-radius:\s*var\(--sep-radius-outer,\s*14px\)/);
+
+    const tabMatch = modalCss.match(/\.filterTab\s*\{[^}]+\}/);
+    expect(
+      tabMatch,
+      'ExternalSessionImportModal.module.css 中必须包含 .filterTab 规则块'
+    ).toBeTruthy();
+    expect(
+      tabMatch![0],
+      '.filterTab 的 border-radius 必须为 var(--radius-md, 8px)'
+    ).toMatch(/border-radius:\s*var\(--radius-md,\s*8px\)/);
+  });
+
+  // 10. ScheduledTasksPanel 方案 A 表单同心契约断言
+  it('契约 10：ScheduledTasksPanel 方案 A 表单同心契约断言（.schedForm 为 14px，.schedFieldInput 为 8px）', () => {
+    const schedCss = readDesktopFile(
+      'components',
+      'settings',
+      'ScheduledTasksPanel.module.css'
+    );
+
+    const formMatch = schedCss.match(/\.schedForm\s*\{[^}]+\}/);
+    expect(
+      formMatch,
+      'ScheduledTasksPanel.module.css 中必须包含 .schedForm 规则块'
+    ).toBeTruthy();
+    expect(formMatch![0], '.schedForm 的 border-radius 必须为 14px').toMatch(
+      /border-radius:\s*var\(--(?:sep-radius-outer|radius-xl)/
+    );
+
+    const inputMatch = schedCss.match(/\.schedFieldInput\s*\{[^}]+\}/);
+    expect(
+      inputMatch,
+      'ScheduledTasksPanel.module.css 中必须包含 .schedFieldInput 规则块'
+    ).toBeTruthy();
+    expect(
+      inputMatch![0],
+      '.schedFieldInput 的 border-radius 必须为 var(--radius-md)'
+    ).toMatch(/border-radius:\s*var\(--radius-md/);
   });
 });

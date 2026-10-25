@@ -144,7 +144,6 @@
   gap: var(--space-0_5);
 }
 
-.skillsMoreItem,
 .skillsMoreItem {
   display: block;
   width: 100%;
@@ -155,7 +154,7 @@
   font: inherit;
   font-size: var(--font-size-sm);
   padding: 8px 10px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   cursor: pointer;
 }
 
@@ -282,6 +281,19 @@
   width: 100%;
 }
 
+.skillsSearch input {
+  height: 36px;
+  min-height: 36px;
+  border-radius: var(--radius-md);
+}
+
+.skillsScopeSelect :global(button),
+.skillsScopeSelect :global(.trigger) {
+  height: 36px;
+  min-height: 36px;
+  border-radius: var(--radius-md);
+}
+
 .skillsSlashPreview {
   display: flex;
   flex-wrap: wrap;
@@ -336,6 +348,7 @@
   width: 220px;
   flex-shrink: 0;
   border-right: var(--hairline-width) solid var(--border-subtle);
+  border-radius: var(--radius-xl);
   display: flex;
   flex-direction: column;
   background: transparent;
@@ -369,7 +382,6 @@
   letter-spacing: var(--letter-spacing-wide);
 }
 
-.skillsRailItem,
 .skillsRailItem {
   display: flex;
   align-items: flex-start;
@@ -393,16 +405,16 @@
 
 .skillsRailItemDense {
   align-items: center;
-  min-height: 24px;
-  padding: 1px 6px;
-  gap: 5px;
+  min-height: 32px;
+  padding: var(--space-1) var(--space-2);
+  gap: var(--space-1_5);
   border-radius: var(--radius-md);
 }
 
 .skillsRailItemDense .skillsRailIcon {
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-sm);
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-md);
   border: none;
 }
 
@@ -446,7 +458,7 @@
 .cardCoverIcon {
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
   border: var(--hairline-width) solid var(--border-subtle);
   display: inline-flex;
@@ -534,6 +546,7 @@
 .skillsEmptyHint code {
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
+  border-radius: var(--radius-sm);
 }
 
 .skillsDiscoverActions {
@@ -594,11 +607,17 @@
   width: 100%;
 }
 
+.skillsExtraField input {
+  height: 36px;
+  min-height: 36px;
+  border-radius: var(--radius-md);
+}
+
 .skillsKbd {
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   padding: var(--space-0_5) var(--space-1_5);
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-sm);
   border: var(--hairline-width) solid var(--border-subtle);
   background: var(--control-soft-bg);
   color: var(--text-secondary);
@@ -824,4 +843,5 @@
 
 .skillsRoots code {
   font-family: var(--font-mono);
+  border-radius: var(--radius-sm);
 }

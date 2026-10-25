@@ -7,9 +7,9 @@
   --dialog-width: 760px;
   width: min(var(--dialog-width), calc(100vw - var(--space-8, 32px)));
   max-height: calc(100vh - var(--space-8, 32px));
-  border-radius: var(--radius-xl, 12px);
+  border-radius: var(--radius-2xl, 20px);
   background: var(--bg-card);
-  border: var(--hairline-width, 1px) solid var(--border-color);
+  border: none;
   box-shadow:
     0 24px 48px -12px color-mix(in srgb, var(--shadow-color) 18%, transparent),
     0 8px 16px -4px color-mix(in srgb, var(--shadow-color) 8%, transparent);
@@ -24,7 +24,7 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-4, 16px) var(--space-5, 20px);
-  border-bottom: var(--hairline-width, 1px) solid var(--border-subtle);
+  border-bottom: none;
   background: var(--bg-card);
   gap: var(--space-3, 12px);
 }
@@ -38,11 +38,11 @@
 }
 
 .skillIconBox {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-lg, 10px);
   background: var(--bg-secondary);
-  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -75,10 +75,10 @@
 
 .metaBadge {
   font-size: var(--font-size-xxs, 11px);
-  padding: 1px 6px;
-  border-radius: var(--radius-s, 4px);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm, 6px);
   background: var(--bg-secondary);
-  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  border: none;
   color: var(--text-secondary);
   font-weight: var(--font-weight-medium, 500);
   flex-shrink: 0;
@@ -87,8 +87,7 @@
 .sourceBadgeOfficial {
   composes: metaBadge;
   color: var(--accent-color);
-  border-color: color-mix(in srgb, var(--accent-color) 24%, transparent);
-  background: color-mix(in srgb, var(--accent-color) 8%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
 }
 
 .sourceBadgeCommunity {
@@ -121,7 +120,7 @@
   gap: var(--space-2, 8px);
   padding: var(--space-2, 8px) var(--space-5, 20px);
   background: var(--bg-secondary);
-  border-bottom: var(--hairline-width, 1px) solid var(--border-subtle);
+  border-bottom: none;
 }
 
 .yamlPill {
@@ -130,10 +129,10 @@
   gap: 4px;
   font-size: var(--font-size-xxs, 11px);
   color: var(--text-secondary);
-  background: var(--bg-card);
-  padding: 2px 7px;
-  border-radius: var(--radius-s, 4px);
-  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  background: var(--tint-hover);
+  padding: 2px 8px;
+  border-radius: var(--radius-md, 8px);
+  border: none;
 }
 
 .yamlPillKey {
@@ -164,7 +163,7 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-3, 12px) var(--space-5, 20px);
-  border-top: var(--hairline-width, 1px) solid var(--border-subtle);
+  border-top: none;
   background: var(--bg-card);
   gap: var(--space-3, 12px);
 }

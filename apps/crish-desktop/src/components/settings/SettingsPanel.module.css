@@ -87,14 +87,21 @@
   min-height: 0;
 }
 
-/* 3. 顶部标题行：「设置 / 当前分类」+ 关闭（只关设置）。弹窗不可拖窗口，无拖拽区 */
+/* 3. 顶部标题行：「设置 / 当前分类」+ 关闭（只关设置）。弹窗不可拖窗口，无拖拽区。
+ * 几何同心闭包设计（Concentric Geometry: R_outer = R_inner + Padding）：
+ *   外壳 R_outer = var(--radius-2xl, 20px)；
+ *   关闭按钮留白 P_top = P_right = var(--space-3, 12px)；
+ *   关闭按钮圆角 R_inner = var(--radius-md, 8px)；
+ *   严格满足 20px = 8px + 12px 工业级同心闭包。
+ *   高度由上下对称留白 + 控件尺寸纯函数派生：calc(var(--space-3) * 2 + var(--control-height-sm))，
+ *   使 P_top 恒等于 var(--space-3)，水平垂直边距完全对等（Px == Py == 12px）。 */
 .settingsHeader {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  height: var(--header-height);
-  min-height: var(--header-height);
-  padding: 0 var(--space-2) 0 var(--space-3);
+  height: calc(var(--space-3) * 2 + var(--control-height-sm));
+  min-height: calc(var(--space-3) * 2 + var(--control-height-sm));
+  padding: 0 var(--space-3);
   background: var(--surface-outer);
   flex-shrink: 0;
   box-sizing: border-box;
@@ -134,7 +141,7 @@
   flex-shrink: 0;
   padding: 0;
   border: none;
-  border-radius: var(--button-radius);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;

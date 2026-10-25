@@ -35,6 +35,10 @@ export type RunHistoryListProps = {
   variant?: 'chat' | 'settings';
   /** 显示数量限制 */
   limit?: number;
+  /** 自定义表头标题（默认为“最近运行记录”） */
+  title?: React.ReactNode;
+  /** 是否隐藏表头 */
+  hideHeading?: boolean;
 };
 
 function formatRunWhen(when?: string): { formatted: string; full: string } {
@@ -68,6 +72,8 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
   onRerun,
   variant = 'chat',
   limit,
+  title,
+  hideHeading = false,
 }) => {
   const [selectedRun, setSelectedRun] = useState<WorkflowRunEntry | null>(null);
 
@@ -95,14 +101,18 @@ export const RunHistoryList: React.FC<RunHistoryListProps> = ({
         variant === 'settings' ? styles.runsContainerSettings : ''
       }`}
     >
-      <div className={styles.runsHeading} id="sched-runs-heading">
-        <span>最近运行记录</span>
-        <span className={styles.runsHeadingCount}>共 {runs.length} 次运行</span>
-      </div>
+      {!hideHeading && (
+        <div className={styles.runsHeading} id="sched-runs-heading">
+          <span>{title ?? '最近运行记录'}</span>
+          <span className={styles.runsHeadingCount}>
+            共 {runs.length} 次运行
+          </span>
+        </div>
+      )}
 
       <ul
         className={styles.runsList}
-        aria-labelledby="sched-runs-heading"
+        aria-labelledby={!hideHeading ? 'sched-runs-heading' : undefined}
         role="list"
       >
         {displayRuns.map((r) => {

@@ -1,9 +1,16 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
 import { Dialog, Button, Tooltip, Input, Switch } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 import { useToast } from '../../services/toast/ToastContext';
 import { useSessionStore } from '../../store/storeAccess';
 import {
+  combineExternalSessionScans,
   scanClaudeCodeSessions,
   scanCodexSessions,
 } from '../../api/import/scan';
@@ -14,6 +21,7 @@ import {
 import {
   makeExternalImportKey,
   type DetectedExternalSession,
+  type ExternalSessionScanIssue,
 } from '../../api/import/types';
 import {
   getPersistedImportRoots,
@@ -42,6 +50,8 @@ export const ExternalSessionImportModal: React.FC<
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [detected, setDetected] = useState<DetectedExternalSession[]>([]);
+  const [scanIssues, setScanIssues] = useState<ExternalSessionScanIssue[]>([]);
+  const scanRequestIdRef = useRef(0);
   const [filterTab, setFilterTab] = useState<FilterTab>('workspace');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -60,29 +70,52 @@ export const ExternalSessionImportModal: React.FC<
   }, [sessions]);
 
   const loadSessions = useCallback(async () => {
+    const requestId = ++scanRequestIdRef.current;
     setLoading(true);
+    setScanIssues([]);
     try {
-      const [claudeSessions, codexSessions] = await Promise.all([
-        scanClaudeCodeSessions().catch(() => [] as DetectedExternalSession[]),
-        scanCodexSessions().catch(() => [] as DetectedExternalSession[]),
+      const [claudeScan, codexScan] = await Promise.all([
+        scanClaudeCodeSessions(),
+        scanCodexSessions(),
       ]);
-      const merged = [...claudeSessions, ...codexSessions];
-      setDetected(merged);
+      const result = combineExternalSessionScans([claudeScan, codexScan]);
+      if (requestId !== scanRequestIdRef.current) return;
+      setDetected(result.sessions);
+      setScanIssues(result.issues);
     } catch (err) {
-      showToast('扫描外部会话失败: ' + String(err));
+      if (requestId !== scanRequestIdRef.current) return;
+      setScanIssues([
+        {
+          source: 'claude-code',
+          kind: 'error',
+          /* i18n-allow */ message: `扫描结果处理失败：${String(err)}`,
+        },
+        {
+          source: 'codex',
+          kind: 'error',
+          /* i18n-allow */ message: `扫描结果处理失败：${String(err)}`,
+        },
+      ]);
     } finally {
-      setLoading(false);
+      if (requestId === scanRequestIdRef.current) setLoading(false);
     }
-  }, [showToast]);
+  }, []);
 
   useEffect(() => {
-    if (open) {
-      void loadSessions();
-      const roots = getPersistedImportRoots();
-      setClaudeCustomPath(roots.claudeConfigDir || '');
-      setCodexCustomPath(roots.codexHome || '');
-      setAutoSyncEnabled(getImportAutoSyncEnabled());
+    if (!open) {
+      scanRequestIdRef.current += 1;
+      return;
     }
+
+    void loadSessions();
+    const roots = getPersistedImportRoots();
+    setClaudeCustomPath(roots.claudeConfigDir || '');
+    setCodexCustomPath(roots.codexHome || '');
+    setAutoSyncEnabled(getImportAutoSyncEnabled());
+
+    return () => {
+      scanRequestIdRef.current += 1;
+    };
   }, [open, loadSessions]);
 
   const handleSaveClaudePath = () => {
@@ -202,6 +235,7 @@ export const ExternalSessionImportModal: React.FC<
       ariaLabel="外部对话同步"
       role="dialog"
       showCloseButton={false}
+      classNames={{ panel: styles.dialogPanel, body: styles.dialogBody }}
     >
       <div className={styles.modalOverlay}>
         <div className={styles.header}>
@@ -401,11 +435,40 @@ export const ExternalSessionImportModal: React.FC<
                   placeholder="搜索标题或目录…"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  className={styles.queryInput}
                 />
               </div>
             </div>
 
             <div className={styles.sessionList}>
+              {!loading && scanIssues.length > 0 ? (
+                <div
+                  className={styles.scanNotice}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <strong>
+                    {scanIssues.some((issue) => issue.kind === 'error')
+                      ? /* i18n-allow */ '扫描未能完整完成，结果可能遗漏会话。'
+                      : /* i18n-allow */ '部分目录或文件未能读取，结果可能不完整。'}
+                  </strong>
+                  <ul>
+                    {scanIssues.map((issue, index) => (
+                      <li key={`${issue.source}-${issue.kind}-${index}`}>
+                        {issue.source === 'claude-code'
+                          ? 'Claude Code'
+                          : 'Codex'}
+                        {
+                          /* i18n-allow */ issue.kind === 'error'
+                            ? ' 扫描失败：'
+                            : ' 扫描提示：'
+                        }
+                        {issue.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               {loading ? (
                 <div className={styles.emptyState}>
                   <AppIcon name="sparkles" size={20} />
@@ -414,7 +477,13 @@ export const ExternalSessionImportModal: React.FC<
               ) : filteredSessions.length === 0 ? (
                 <div className={styles.emptyState}>
                   <AppIcon name="info" size={20} />
-                  <span>未发现匹配的外部历史对话</span>
+                  <span>
+                    {detected.length > 0
+                      ? '当前筛选条件下没有匹配的外部历史对话'
+                      : scanIssues.length > 0
+                        ? /* i18n-allow */ '暂时无法确认是否存在可导入会话，请检查上方扫描状态或配置路径后重试。'
+                        : /* i18n-allow */ '扫描完成，未发现外部历史对话'}
+                  </span>
                 </div>
               ) : (
                 filteredSessions.map((item) => {

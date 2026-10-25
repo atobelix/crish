@@ -1,12 +1,12 @@
 /* apps/crish-desktop/src/components/extensions-surface/PluginCreateModal.module.css
  * 制作与导入自定义插件模态框样式
- * 遵循系统 Design Token 规范，按钮圆角严格保持 7px，禁止硬编码颜色
+ * 方案 A 标准：620px 宽大弹窗绑定 24px 圆角，16px 边距，内部卡片与输入框统一 8px 绝对同心
  */
 
 .modalPanel {
   --dialog-width: 620px;
   width: var(--dialog-width);
-  border-radius: var(--radius-2xl, 20px);
+  border-radius: var(--radius-3xl, 24px);
   background: var(--bg-card);
   border: var(--hairline-width, 1px) solid var(--border-color);
   box-shadow: 0 20px 48px -12px
@@ -14,14 +14,14 @@
 }
 
 .modalPanel button {
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--radius-md, 8px);
 }
 
 .modalBody {
   display: flex;
   flex-direction: column;
   gap: var(--space-3, 12px);
-  padding: 10px 10px var(--space-3, 12px);
+  padding: var(--space-3, 12px) var(--space-4, 16px) var(--space-4, 16px);
   max-height: 72vh;
   overflow-y: auto;
   box-sizing: border-box;
@@ -43,10 +43,16 @@
   gap: var(--space-3, 12px);
 }
 
+.rowInputs input {
+  height: 38px;
+  min-height: 38px;
+  border-radius: var(--radius-md, 8px);
+}
+
 .guideCard {
   background: var(--bg-secondary);
   border: var(--hairline-width, 1px) solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-md, 8px);
   padding: var(--space-3, 12px) var(--space-3_5, 14px);
   display: flex;
   flex-direction: column;
@@ -82,15 +88,20 @@
   gap: var(--space-2, 8px);
 }
 
+/* 弹窗底部操作按钮同心化：微圆 8px + 16px 边距 = 24px 外壳绝对同心，消除 7px 杂音 */
+.modalFooter button {
+  border-radius: var(--radius-md, 8px);
+}
+
 .hiddenInput {
   display: none;
 }
 
 .dropZone {
   border: var(--hairline-width) dashed var(--border-color);
-  border-radius: 10px;
+  border-radius: var(--radius-md, 8px);
   background: var(--bg-secondary);
-  padding: var(--space-6, 24px) var(--space-4, 16px);
+  padding: 32px var(--space-4, 16px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -112,9 +123,38 @@
   background: color-mix(in srgb, var(--accent-color) 8%, var(--bg-secondary));
 }
 
-.dropZoneIcon {
-  color: var(--text-tertiary);
+.dropzoneIconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--tint-hover);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
   margin-bottom: var(--space-2, 8px);
+  transition:
+    background var(--transition-fast, 0.15s ease),
+    border-color var(--transition-fast, 0.15s ease),
+    color var(--transition-fast, 0.15s ease),
+    transform var(--transition-fast, 0.15s ease);
+}
+
+.dropZone:hover .dropzoneIconWrapper {
+  background: var(--tint-active, var(--bg-hover));
+  border-color: color-mix(
+    in srgb,
+    var(--border-subtle) 95%,
+    var(--text-primary) 5%
+  );
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.dropZoneIcon {
+  color: inherit;
+  transition: color var(--transition-fast, 0.15s ease);
 }
 
 .dropZoneTitle {
@@ -141,7 +181,7 @@
 .previewCard {
   background: var(--bg-secondary);
   border: var(--hairline-width, 1px) solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-md, 8px);
   padding: var(--space-3_5, 14px) var(--space-4, 16px);
   display: flex;
   flex-direction: column;
@@ -152,8 +192,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: var(--hairline-width, 1px) solid var(--border-subtle);
-  padding-bottom: var(--space-2, 8px);
+  padding-bottom: var(--space-1, 4px);
 }
 
 .previewTitle {
@@ -223,6 +262,6 @@
   color: var(--danger-fg);
   background: var(--danger-soft-bg);
   border: var(--hairline-width, 1px) solid var(--border-color);
-  border-radius: var(--radius-m, 6px);
+  border-radius: var(--radius-md, 8px);
   padding: var(--space-2, 8px) var(--space-3, 12px);
 }

@@ -2,13 +2,15 @@
 
 .pickerPanel {
   width: 230px;
+  border-radius: var(--sep-radius-outer, 14px);
+  padding: 6px;
 }
 
 .item {
   appearance: none;
   -webkit-appearance: none;
   position: relative;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-md, 8px);
   min-height: 28px;
 }
 
@@ -90,24 +92,24 @@
   width: 100%;
 }
 
-/* 级联子卡片：8px 外圆角 / 4px 内衬 / 4px 条目 */
+/* 级联子卡片：方案 A 标尺 14px 外圆角 / 6px 内衬 / 8px 条目 (14 = 8 + 6 绝对同心) */
 .cascadeSubmenu {
   position: absolute;
   left: 100%;
   top: 0;
   margin-left: 4px;
   min-width: 160px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--sep-radius-outer, 14px);
   border: 1px solid var(--sep-border-color, var(--border-color));
   background: var(--sep-bg-panel-solid, var(--bg-elevated));
   box-shadow: var(--sep-shadow);
-  padding: 4px;
+  padding: 6px;
   transform-origin: left top;
   animation: crish-popover-enter var(--transition-popover-enter) forwards;
   will-change: transform, opacity;
 }
 
-/* 级联子菜单同心闭环：4px 条目 + 4px 内衬 = 8px 外圆角 (Δ = 0 完美同心) */
+/* 级联子菜单同心闭环：8px 条目 + 6px 内衬 = 14px 外圆角 (Δ = 0 完美同心) */
 .cascadeSubmenu .item {
-  border-radius: var(--radius-xs, 4px);
+  border-radius: var(--radius-md, 8px);
 }
