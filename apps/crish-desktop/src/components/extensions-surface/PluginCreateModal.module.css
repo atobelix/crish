@@ -220,10 +220,9 @@
 
 .errorHint {
   font-size: var(--font-size-xs, 12px);
-  color: var(--danger-color);
-  background: color-mix(in srgb, var(--danger-color) 8%, transparent);
-  border: var(--hairline-width, 1px) solid
-    color-mix(in srgb, var(--danger-color) 20%, transparent);
+  color: var(--danger-fg);
+  background: var(--danger-soft-bg);
+  border: var(--hairline-width, 1px) solid var(--border-color);
   border-radius: var(--radius-m, 6px);
   padding: var(--space-2, 8px) var(--space-3, 12px);
 }

@@ -263,7 +263,7 @@ export const ModelList: React.FC<{
                 <Tooltip content={DELETE_LABEL}>
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="danger"
                     size="sm"
                     aria-label={DELETE_LABEL}
                     className={`mrd-delete-btn ${styles.mrdRowMiniBtn}`}

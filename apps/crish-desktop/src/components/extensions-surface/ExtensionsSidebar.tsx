@@ -110,7 +110,7 @@ export const ExtensionsSidebar: React.FC<ExtensionsSidebarProps> = ({
                     }
                   >
                     <Button
-                      variant="ghost"
+                      variant="danger"
                       size="sm"
                       className={styles.iconActionBtn}
                       onClick={() => onUninstallItem(item)}

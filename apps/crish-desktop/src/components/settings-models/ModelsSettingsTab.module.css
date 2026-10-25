@@ -1063,6 +1063,10 @@
   height: var(--control-height-sm);
   color: var(--text-tertiary);
 }
+.deleteTriggerBtn:hover {
+  color: var(--danger-fg);
+  background: var(--danger-soft-bg);
+}
 
 .confirmDeleteBubble {
   display: flex;
@@ -1163,6 +1167,10 @@
   padding: 0 var(--space-1); /* 4px */
   height: 26px; /* 布局约束，不入刻度 */
   color: var(--text-tertiary);
+}
+.mrdThinkingDeleteBtn:hover {
+  color: var(--danger-fg);
+  background: var(--danger-soft-bg);
 }
 
 .mrdSearchInputWrapper {

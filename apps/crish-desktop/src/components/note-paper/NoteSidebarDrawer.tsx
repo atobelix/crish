@@ -35,11 +35,14 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
   const [editTitle, setEditTitle] = useState<string>('');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
-  const startRename = useCallback((doc: NoteDocumentMeta, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditingDocId(doc.id);
-    setEditTitle(doc.title);
-  }, []);
+  const startRename = useCallback(
+    (doc: NoteDocumentMeta, e: React.MouseEvent) => {
+      e.stopPropagation();
+      setEditingDocId(doc.id);
+      setEditTitle(doc.title);
+    },
+    []
+  );
 
   const commitRename = useCallback(
     (docId: string) => {
@@ -73,7 +76,9 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
     >
       <div className={styles.header}>
         <div className={styles.titleRow}>
-          <span className={styles.headerTitle}>全部笔记 ({documents.length})</span>
+          <span className={styles.headerTitle}>
+            全部笔记 ({documents.length})
+          </span>
           <div className={styles.actions}>
             <Tooltip content="新建笔记">
               <Button
@@ -103,7 +108,12 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
         </div>
 
         <div className={styles.searchRow} role="search" aria-label="搜索笔记">
-          <AppIcon name="search" size={14} className={styles.searchIcon} aria-hidden="true" />
+          <AppIcon
+            name="search"
+            size={14}
+            className={styles.searchIcon}
+            aria-hidden="true"
+          />
           <Input
             bare
             id={searchInputId}
@@ -163,19 +173,29 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
                   />
                 ) : (
                   <>
-                    <span className={`${styles.sessionTextCol} ${styles.itemTextCol}`}>
+                    <span
+                      className={`${styles.sessionTextCol} ${styles.itemTextCol}`}
+                    >
                       <Tooltip content={doc.title || '未命名笔记'}>
-                        <span className={`${styles.sessionText} ${styles.itemTitle} ${styles.cardTitle}`}>
+                        <span
+                          className={`${styles.sessionText} ${styles.itemTitle} ${styles.cardTitle}`}
+                        >
                           {doc.title || '未命名笔记'}
                         </span>
                       </Tooltip>
                     </span>
 
-                    <span className={`${styles.sessionTrailing} ${styles.itemTrailing}`}>
-                      <time className={`${styles.sessionTime} ${styles.itemTime} ${styles.timeTag}`}>
+                    <span
+                      className={`${styles.sessionTrailing} ${styles.itemTrailing}`}
+                    >
+                      <time
+                        className={`${styles.sessionTime} ${styles.itemTime} ${styles.timeTag}`}
+                      >
                         {formatRelativeTime(doc.updatedAt)}
                       </time>
-                      <div className={`${styles.sessionActions} ${styles.itemActions} ${styles.hoverActions}`}>
+                      <div
+                        className={`${styles.sessionActions} ${styles.itemActions} ${styles.hoverActions}`}
+                      >
                         <Tooltip content="重命名">
                           <Button
                             type="button"
@@ -191,7 +211,7 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
                         <Tooltip content="删除笔记">
                           <Button
                             type="button"
-                            variant="ghost"
+                            variant="danger"
                             className={`${styles.sessionActionBtn} ${styles.actionBtn} ${styles.miniBtn}`}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -215,8 +235,14 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
 
       {/* 删除二次确认弹窗（零伪实现，物理真实删除） */}
       {pendingDeleteId && (
-        <div className={styles.dialogOverlay} onClick={() => setPendingDeleteId(null)}>
-          <div className={styles.dialogBox} onClick={(e) => e.stopPropagation()}>
+        <div
+          className={styles.dialogOverlay}
+          onClick={() => setPendingDeleteId(null)}
+        >
+          <div
+            className={styles.dialogBox}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className={styles.dialogTitle}>确认删除笔记？</div>
             <div className={styles.dialogDesc}>
               删除后该篇文档及全部数据将彻底从数据库中移除，此操作不可撤销。

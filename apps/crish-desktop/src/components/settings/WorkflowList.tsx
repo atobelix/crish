@@ -180,7 +180,7 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                       <Tooltip content="删除">
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="danger"
                           size="sm"
                           aria-label={`删除 ${w.name}`}
                           disabled={isRowBusy}
@@ -318,7 +318,7 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                   <Tooltip content="删除">
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="danger"
                       size="sm"
                       aria-label={`删除 ${w.name}`}
                       disabled={isRowBusy}

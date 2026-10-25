@@ -233,7 +233,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({
                     <Tooltip content="删除">
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="danger"
                         size="sm"
                         aria-label={`删除 ${srv.name}`}
                         onClick={() => void onDeleteDemo(srv.id)}

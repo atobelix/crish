@@ -37,7 +37,8 @@
 }
 
 .deleteBtn:hover {
-  color: var(--color-error);
+  color: var(--danger-fg);
+  background-color: var(--danger-soft-bg);
 }
 
 .emptyTitle {

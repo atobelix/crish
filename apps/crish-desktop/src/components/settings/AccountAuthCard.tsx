@@ -191,7 +191,9 @@ export const AccountAuthCard: React.FC = () => {
                           )}
                         </div>
                         <div>
-                          <div className={styles.deviceName}>{d.name || d.id}</div>
+                          <div className={styles.deviceName}>
+                            {d.name || d.id}
+                          </div>
                           <div className={styles.deviceMeta}>
                             {d.platform} · {formatLastSeen(d.lastSeenAt)}
                           </div>
@@ -200,7 +202,7 @@ export const AccountAuthCard: React.FC = () => {
                       <Tooltip content="撤销此设备对本机的远程协同权限">
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="danger"
                           size="sm"
                           disabled={busyDeviceId === d.id}
                           onClick={() => void handleRevoke(d.id)}

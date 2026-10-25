@@ -100,7 +100,7 @@
   font-size: 10px;
   font-weight: var(--font-weight-semibold);
   color: var(--danger-fg);
-  background-color: color-mix(in srgb, var(--danger-fg) 12%, transparent);
+  background-color: var(--danger-soft-bg);
   padding: 0 5px;
   border-radius: var(--radius-sm);
   line-height: 1.4;
@@ -340,8 +340,8 @@
 }
 
 .probeFailed {
-  background-color: color-mix(in srgb, var(--danger-color) 12%, transparent);
-  color: var(--danger-color);
+  background-color: var(--danger-soft-bg);
+  color: var(--danger-fg);
 }
 
 .toolSearchBar {

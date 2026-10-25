@@ -119,7 +119,7 @@ export const SessionPreviewPane: React.FC<SessionPreviewPaneProps> = ({
               {onDeleteExisting && (
                 <Tooltip content="从本机移除此接续对话，重启后不再自动出现">
                   <Button
-                    variant="secondary"
+                    variant="danger"
                     size="sm"
                     onClick={() => onDeleteExisting(existingSessionId)}
                   >

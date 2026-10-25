@@ -148,7 +148,7 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
             <Tooltip content="从列表移除项目">
               <Button
                 type="button"
-                variant="ghost"
+                variant="danger"
                 className={styles.rowDeleteBtn}
                 aria-label={`从列表移除项目 ${p.name}`}
                 onClick={(e) => {
