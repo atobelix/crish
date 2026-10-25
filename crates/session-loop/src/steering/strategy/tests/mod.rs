@@ -5,9 +5,7 @@ use serde_json::json;
 
 use super::*;
 use crate::steering::metadata_kind_wire;
-use crate::steering::testutil::{
-    assistant_with_tool_calls, tool_result, tool_result_json, user,
-};
+use crate::steering::testutil::{assistant_with_tool_calls, tool_result, tool_result_json, user};
 use crate::steering::{
     SteeringAction, SteeringContext, SteeringPhase, SteeringReason, SteeringStrategy,
     DEFAULT_INTERVENTION_MESSAGE,
@@ -17,10 +15,7 @@ mod eval_tests;
 mod loop_tests;
 mod promise_tests;
 
-fn context<'a>(
-    messages: &'a [Arc<AgentMessage>],
-    steering_count: usize,
-) -> SteeringContext<'a> {
+fn context<'a>(messages: &'a [Arc<AgentMessage>], steering_count: usize) -> SteeringContext<'a> {
     SteeringContext {
         messages,
         turn_index: 0,

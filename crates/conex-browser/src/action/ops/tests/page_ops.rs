@@ -5,11 +5,11 @@ use std::time::Duration;
 
 use serde_json::json;
 
-use super::{AllowHooks, collector_reply_map, restore_reply_map};
-use crate::action::SnapshotStore;
+use super::{collector_reply_map, restore_reply_map, AllowHooks};
 use crate::action::ops::page_ops::BrowserPageOps;
-use crate::action::ops::snapshot_store::{BrowserSnapshotStore, session_for_active};
+use crate::action::ops::snapshot_store::{session_for_active, BrowserSnapshotStore};
 use crate::action::ops::traits::PageOps;
+use crate::action::SnapshotStore;
 use crate::cdp::mock::{MockReply, MockServer};
 use crate::cdp::transport::CdpEndpoint;
 

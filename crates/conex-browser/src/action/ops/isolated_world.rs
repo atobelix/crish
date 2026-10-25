@@ -1,6 +1,6 @@
 //! 隔离世界与只读代理注入逻辑。
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::error::{
     CDP_PAGE_CREATE_ISOLATED_WORLD, CDP_PAGE_GET_FRAME_TREE, CDP_RUNTIME_EVALUATE, CMD_TIMEOUT,

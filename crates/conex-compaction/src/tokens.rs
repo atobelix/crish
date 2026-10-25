@@ -96,7 +96,10 @@ pub fn count_tokens(text: &str) -> usize {
             } else if ch.is_ascii_alphanumeric() || ch == '_' {
                 // ASCII 连续单词字符：每 4 字符折算 1 Token
                 let start = i;
-                while i < n && chars[i].is_ascii() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
+                while i < n
+                    && chars[i].is_ascii()
+                    && (chars[i].is_ascii_alphanumeric() || chars[i] == '_')
+                {
                     i += 1;
                 }
                 let len = i - start;
@@ -333,13 +336,18 @@ mod tests {
             client_message_id: None,
             content: None,
         };
-        assert_eq!(count_agent_message_tokens(&empty_msg), MESSAGE_FRAMING_TOKENS);
+        assert_eq!(
+            count_agent_message_tokens(&empty_msg),
+            MESSAGE_FRAMING_TOKENS
+        );
 
         let tool_msg = AgentMessage {
             id: "m2".to_string(),
             role: AgentMessageRole::Tool,
             created_at: "2026-08-03T10:00:01.000Z".to_string(),
-            blocks: vec![AgentMessageBlock::Text { text: "ok".to_string() }],
+            blocks: vec![AgentMessageBlock::Text {
+                text: "ok".to_string(),
+            }],
             metadata: None,
             client_message_id: None,
             content: None,

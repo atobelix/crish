@@ -614,7 +614,11 @@ mod tests {
                 assert_eq!(steer_messages.len(), 2, "steer 环 2 条");
                 assert_eq!(follow_up_messages.len(), 1, "followUp 环 1 条");
                 assert_eq!(intents.len(), 3);
-                assert_eq!(follow_up_messages[0].text(), "follow-1", "followUp 独立成环");
+                assert_eq!(
+                    follow_up_messages[0].text(),
+                    "follow-1",
+                    "followUp 独立成环"
+                );
             }
             other => panic!("应为 SoftInject，实际 {other:?}"),
         }

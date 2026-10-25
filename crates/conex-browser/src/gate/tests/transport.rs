@@ -3,8 +3,8 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
 
 use crate::gate::segments::{ipv4_reserved, ipv6_reserved};
-use crate::gate::tests::{RecordingSender, glob_match};
-use crate::gate::transport::{TransportGate, blocked_urls};
+use crate::gate::tests::{glob_match, RecordingSender};
+use crate::gate::transport::{blocked_urls, TransportGate};
 
 /// R-11 传输层：段表程序化生成——清单覆盖全部保留段（IPv4/IPv6 逐段抽样
 /// glob 命中），公网/段外抽样不命中；云元数据端点显式在列。

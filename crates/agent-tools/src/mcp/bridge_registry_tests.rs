@@ -30,10 +30,10 @@ async fn poisoned_bridge_stop_paths_return_error_not_panic() {
     assert_eq!(bridge.stop_all().await, 0);
 }
 
+use super::super::bridge_session::McpToolHandle;
 use std::sync::atomic::{AtomicU64, AtomicU8};
 use std::sync::RwLock;
 use tokio::sync::Mutex;
-use super::super::bridge_session::McpToolHandle;
 
 fn create_test_session(server_id: &str, tool_name: &str, state_code: u8) -> Arc<McpServerSession> {
     let mut tool_index = HashMap::new();
@@ -75,10 +75,16 @@ fn test_dynamic_adapter_routes_to_latest_healthy_session_after_restart() {
 
     // 1. 注册初始会话 1 (Ready)
     let s1 = create_test_session(server_id, tool_name, 2); // 2 = STATE_READY
-    bridge.sessions.lock().unwrap().insert(server_id.to_string(), s1.clone());
+    bridge
+        .sessions
+        .lock()
+        .unwrap()
+        .insert(server_id.to_string(), s1.clone());
 
     // 2. 从 bridge 获取适配器
-    let adapter = bridge.get_adapter(server_id, tool_name).expect("应成功获取适配器");
+    let adapter = bridge
+        .get_adapter(server_id, tool_name)
+        .expect("应成功获取适配器");
     assert_eq!(adapter.name(), tool_name);
 
     // 验证当前寻址到的 active session 为 s1
@@ -88,13 +94,22 @@ fn test_dynamic_adapter_routes_to_latest_healthy_session_after_restart() {
 
     // 3. 模拟服务崩溃并重启：会话表替换为全新的 s2 (Ready)
     let s2 = create_test_session(server_id, tool_name, 2);
-    bridge.sessions.lock().unwrap().insert(server_id.to_string(), s2.clone());
+    bridge
+        .sessions
+        .lock()
+        .unwrap()
+        .insert(server_id.to_string(), s2.clone());
 
     // 4. 原 adapter 实例无须重新构建，再次执行寻址时自动取得 s2，绝不指向 s1 死指针
-    let active2 = bridge.get_active_session(server_id).expect("重启后应获取新活跃会话");
+    let active2 = bridge
+        .get_active_session(server_id)
+        .expect("重启后应获取新活跃会话");
     assert_eq!(active2.server_id(), server_id);
     assert!(!Arc::ptr_eq(&active1, &active2), "重启后应取得新会话实例");
-    assert!(Arc::ptr_eq(&active2, &s2), "动态寻址必须精确路由到最新健康会话 s2");
+    assert!(
+        Arc::ptr_eq(&active2, &s2),
+        "动态寻址必须精确路由到最新健康会话 s2"
+    );
 }
 
 /// 适配器在会话退出或停止时返回错误而非 panic
@@ -106,14 +121,23 @@ async fn test_dynamic_adapter_fails_when_session_exited_or_stopped() {
 
     // 初始会话为 Exited (4)
     let s_dead = create_test_session(server_id, tool_name, 4); // 4 = STATE_EXITED
-    bridge.sessions.lock().unwrap().insert(server_id.to_string(), s_dead);
+    bridge
+        .sessions
+        .lock()
+        .unwrap()
+        .insert(server_id.to_string(), s_dead);
 
     // 无法获取 active session
     assert!(bridge.get_active_session(server_id).is_none());
 
-    let adapter = bridge.get_adapter(server_id, tool_name).expect("可获得适配器定义");
+    let adapter = bridge
+        .get_adapter(server_id, tool_name)
+        .expect("可获得适配器定义");
     let ctx = crate::context::create_mock_tool_context();
-    let err = adapter.execute(&ctx, serde_json::json!({})).await.unwrap_err();
+    let err = adapter
+        .execute(&ctx, serde_json::json!({}))
+        .await
+        .unwrap_err();
     assert_eq!(err.code(), "mcp.connection_failed");
     assert!(err.to_string().contains("不可用"));
 }

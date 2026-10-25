@@ -113,7 +113,8 @@ pub fn build_chat_completions_request_body(
     // 不再灌 `WireCompat::default()`；plans/04 §3.3），再 post-pass 施加断点
     // （P2 §3.1.3：纯后处理，与映射解耦；plan 全 false → 请求字节与未施加时完全一致）
     let reasoning_mode = opts.reasoning_content.unwrap_or(ReasoningContentMode::Omit);
-    let wire_compat = WireCompat::from_compat(opts.vendor.map(|v| v.as_str()), opts.compat.as_ref());
+    let wire_compat =
+        WireCompat::from_compat(opts.vendor.map(|v| v.as_str()), opts.compat.as_ref());
     let mut wire = to_chat_messages_with_compat(
         context.system_prompt.as_deref(),
         context.messages,
@@ -311,7 +312,9 @@ mod dialect_wiring_tests {
 
     #[test]
     fn test_build_chat_fail_closed_on_orphan_sanitization() {
-        use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
+        use conex_types::message::{
+            AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock,
+        };
         use std::sync::Arc;
 
         let orphan_call = AgentMessage {
@@ -345,8 +348,13 @@ mod dialect_wiring_tests {
             tools: Vec::new(),
             wire_mode: conex_types::tool::SystemPromptWireMode::NativeSystemRole,
         };
-        let body = build_chat_completions_request_body(&ChatCompletionsRequestOptions::default(), &context);
-        let msgs = body["messages"].as_array().expect("messages must be an array");
+        let body = build_chat_completions_request_body(
+            &ChatCompletionsRequestOptions::default(),
+            &context,
+        );
+        let msgs = body["messages"]
+            .as_array()
+            .expect("messages must be an array");
         let mut found_assistant = false;
         for msg in msgs {
             if let Some(tool_calls) = msg.get("tool_calls").and_then(Value::as_array) {

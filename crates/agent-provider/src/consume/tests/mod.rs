@@ -1,5 +1,5 @@
-use conex_types::response::ProviderOutput;
 use crate::events::{ProviderStreamEvent, ProviderUsage, StopReason};
+use conex_types::response::ProviderOutput;
 
 mod aggregation;
 mod stop_reasons;

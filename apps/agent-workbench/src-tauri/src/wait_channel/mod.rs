@@ -40,10 +40,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use agent_tools::tools::wait_subagents::{
-    DispatchDeclaration, SubagentOutput, SubagentWaitError,
-};
 pub use agent_tools::tools::wait_subagents::SubagentWaitChannel;
+use agent_tools::tools::wait_subagents::{DispatchDeclaration, SubagentOutput, SubagentWaitError};
 use conex_types::SessionAgent;
 use session_loop::control::ControlBus;
 

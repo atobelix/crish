@@ -27,5 +27,5 @@ pub mod types;
 mod tests;
 
 pub use formal::FormalDomainGate;
-pub use transport::{SetBlockedSender, TransportGate, blocked_urls};
-pub use types::{GateClock, HostResolver, REBINDING_WINDOW, SystemClock, SystemResolver};
+pub use transport::{blocked_urls, SetBlockedSender, TransportGate};
+pub use types::{GateClock, HostResolver, SystemClock, SystemResolver, REBINDING_WINDOW};

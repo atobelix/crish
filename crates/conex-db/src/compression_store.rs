@@ -4,9 +4,9 @@
 //! - search_blocks: 基于 compression_blocks 表执行关键词与元数据匹配检索；
 //! - decompress_block: 根据 block_id 查询块元数据，并从 events 表回放无损原始消息文本。
 
-use std::sync::Arc;
-use agent_tools::compression_store::{BlockContent, BlockHit, CompressionContextStore};
 use crate::LocalDb;
+use agent_tools::compression_store::{BlockContent, BlockHit, CompressionContextStore};
+use std::sync::Arc;
 
 /// 生产级 SQLite 压缩块存储（绑定 LocalDb）
 #[derive(Clone)]
@@ -151,8 +151,14 @@ mod tests {
                 "content": "Calculate 40 + 2"
             }
         });
-        db.append_event(session_id, 1, "message-end", &user_payload.to_string(), None)
-            .unwrap();
+        db.append_event(
+            session_id,
+            1,
+            "message-end",
+            &user_payload.to_string(),
+            None,
+        )
+        .unwrap();
 
         let asst_payload = serde_json::json!({
             "sessionId": session_id,
@@ -166,8 +172,14 @@ mod tests {
                 "content": "The answer is 42."
             }
         });
-        db.append_event(session_id, 2, "message-end", &asst_payload.to_string(), None)
-            .unwrap();
+        db.append_event(
+            session_id,
+            2,
+            "message-end",
+            &asst_payload.to_string(),
+            None,
+        )
+        .unwrap();
 
         // 2. 插入压缩块
         let block1 = make_sample_block(
@@ -190,7 +202,9 @@ mod tests {
         assert_eq!(hits[0].state, "committed");
 
         // 4. 测试 search_blocks 空匹配
-        let empty_hits = store.search_blocks(session_id, "nonexistent_keyword", 10).unwrap();
+        let empty_hits = store
+            .search_blocks(session_id, "nonexistent_keyword", 10)
+            .unwrap();
         assert!(empty_hits.is_empty());
 
         // 5. 测试 search_blocks 空串匹配全部
@@ -202,7 +216,9 @@ mod tests {
         assert!(other_hits.is_empty());
 
         // 7. 测试 decompress_block 还原原始文本
-        let decomp = store.decompress_block(session_id, "compacted-summary-1-1").unwrap();
+        let decomp = store
+            .decompress_block(session_id, "compacted-summary-1-1")
+            .unwrap();
         assert!(decomp.is_some());
         let content = decomp.unwrap();
         assert_eq!(content.block_id, "compacted-summary-1-1");
@@ -210,7 +226,9 @@ mod tests {
         assert!(content.text.contains("[assistant] The answer is 42."));
 
         // 8. 测试不存在的 block_id
-        let missing = store.decompress_block(session_id, "non_existent_block").unwrap();
+        let missing = store
+            .decompress_block(session_id, "non_existent_block")
+            .unwrap();
         assert!(missing.is_none());
     }
 
@@ -230,8 +248,13 @@ mod tests {
         db.insert_block(&block).unwrap();
 
         let store = DbCompressionContextStore::new(db);
-        let decomp = store.decompress_block(session_id, "compacted-summary-2-1").unwrap();
+        let decomp = store
+            .decompress_block(session_id, "compacted-summary-2-1")
+            .unwrap();
         assert!(decomp.is_some());
-        assert_eq!(decomp.unwrap().text, "A fallback summary when dropped ids are empty.");
+        assert_eq!(
+            decomp.unwrap().text,
+            "A fallback summary when dropped ids are empty."
+        );
     }
 }

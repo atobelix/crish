@@ -326,11 +326,7 @@ mod tests {
                 fatal_on_error: false,
             })
         }
-        async fn execute(
-            &self,
-            _ctx: &ToolContext,
-            args: Value,
-        ) -> Result<Value, ToolError> {
+        async fn execute(&self, _ctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
             Ok(args)
         }
     }
@@ -357,7 +353,11 @@ mod tests {
             summary: String::new(),
         };
         let verdict = exec.call_verdict(&git_call, &commit_options);
-        assert_eq!(verdict, PermissionVerdict::Allow, "git 命令应通过白名单裁决");
+        assert_eq!(
+            verdict,
+            PermissionVerdict::Allow,
+            "git 命令应通过白名单裁决"
+        );
 
         // 禁止的非 git 命令 (例如 npm test)
         let npm_call = ToolBatchCall {
@@ -369,7 +369,11 @@ mod tests {
             summary: String::new(),
         };
         let verdict = exec.call_verdict(&npm_call, &commit_options);
-        assert_eq!(verdict, PermissionVerdict::Deny, "非 git 命令必须被 task_type 白名单拒决 (Deny)");
+        assert_eq!(
+            verdict,
+            PermissionVerdict::Deny,
+            "非 git 命令必须被 task_type 白名单拒决 (Deny)"
+        );
 
         // 其它非白名单命令
         let rm_call = ToolBatchCall {
@@ -381,7 +385,11 @@ mod tests {
             summary: String::new(),
         };
         let verdict = exec.call_verdict(&rm_call, &commit_options);
-        assert_eq!(verdict, PermissionVerdict::Deny, "删除命令在 commit task_type 下必须被 Deny");
+        assert_eq!(
+            verdict,
+            PermissionVerdict::Deny,
+            "删除命令在 commit task_type 下必须被 Deny"
+        );
 
         // implementation 任务类型放行构建/测试命令
         let impl_options = ToolBatchOptions {
@@ -390,7 +398,11 @@ mod tests {
             ..ToolBatchOptions::default()
         };
         let verdict = exec.call_verdict(&npm_call, &impl_options);
-        assert_eq!(verdict, PermissionVerdict::Allow, "implementation 任务类型应放行构建测试命令");
+        assert_eq!(
+            verdict,
+            PermissionVerdict::Allow,
+            "implementation 任务类型应放行构建测试命令"
+        );
 
         // 未指定 task_type (None) 正常放行
         let unrestricted_options = ToolBatchOptions {
@@ -399,6 +411,10 @@ mod tests {
             ..ToolBatchOptions::default()
         };
         let verdict = exec.call_verdict(&npm_call, &unrestricted_options);
-        assert_eq!(verdict, PermissionVerdict::Allow, "未指定 task_type 时按常规权限模式放行");
+        assert_eq!(
+            verdict,
+            PermissionVerdict::Allow,
+            "未指定 task_type 时按常规权限模式放行"
+        );
     }
 }

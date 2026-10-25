@@ -9,7 +9,7 @@ use crate::tools::{Ctx, TargetInfoLite};
 use agent_tools::context::ToolContext;
 use agent_tools::definition::{Tool, ToolDefinition, ToolError};
 use async_trait::async_trait;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::sync::Arc;
 
 /// browser_list_tabs：列出全部标签页（只读）。

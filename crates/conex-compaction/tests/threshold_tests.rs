@@ -323,9 +323,18 @@ fn test_dual_watermark_decision_helpers() {
 #[test]
 fn test_adaptive_keep_recent_tokens() {
     // 16k available: 16000 * 0.35 = 5600 -> in [4000, 40000]
-    assert_eq!(CompactionThresholds::adaptive_keep_recent_tokens(16_000), 5_600);
+    assert_eq!(
+        CompactionThresholds::adaptive_keep_recent_tokens(16_000),
+        5_600
+    );
     // tiny 8k available: 8000 * 0.35 = 2800 -> clamped to 4000
-    assert_eq!(CompactionThresholds::adaptive_keep_recent_tokens(8_000), 4_000);
+    assert_eq!(
+        CompactionThresholds::adaptive_keep_recent_tokens(8_000),
+        4_000
+    );
     // huge 200k available: 200000 * 0.35 = 70000 -> clamped to 40000
-    assert_eq!(CompactionThresholds::adaptive_keep_recent_tokens(200_000), 40_000);
+    assert_eq!(
+        CompactionThresholds::adaptive_keep_recent_tokens(200_000),
+        40_000
+    );
 }

@@ -37,11 +37,7 @@ fn usage_omits_none_cache_miss_tokens() {
 
 // ---- cache_breakdown：两种口径 + miss 优先值 + 钳 0（P2 §3.3 D、§5.1 测试组） ----
 
-fn usage_with_parts(
-    prompt: Option<u64>,
-    read: Option<u64>,
-    write: Option<u64>,
-) -> ProviderUsage {
+fn usage_with_parts(prompt: Option<u64>, read: Option<u64>, write: Option<u64>) -> ProviderUsage {
     ProviderUsage {
         prompt_tokens: prompt,
         cache_read_tokens: read,

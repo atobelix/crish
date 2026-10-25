@@ -691,13 +691,15 @@ fn read_utf16_window(
             slice = &slice[..slice.len() - 1];
         }
 
-        let iter = first_unit.into_iter().chain(slice.as_chunks::<2>().0.iter().map(|c| {
-            if little_endian {
-                u16::from_le_bytes([c[0], c[1]])
-            } else {
-                u16::from_be_bytes([c[0], c[1]])
-            }
-        }));
+        let iter = first_unit
+            .into_iter()
+            .chain(slice.as_chunks::<2>().0.iter().map(|c| {
+                if little_endian {
+                    u16::from_le_bytes([c[0], c[1]])
+                } else {
+                    u16::from_be_bytes([c[0], c[1]])
+                }
+            }));
 
         for u in iter {
             // 全文精确字符计数（KFS-10 回归修复）：与旧版 UTF-16 路径 `text.chars().count()`

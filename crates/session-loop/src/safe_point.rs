@@ -167,15 +167,13 @@ pub fn apply_safe_point_control(
 
     match drain_action {
         ControlDrainAction::ForceCancel { reason, .. } => {
-            let effective_reason = reason
-                .or(signal_reason)
-                .or_else(|| {
-                    if is_aborted {
-                        Some("aborted_by_signal".into())
-                    } else {
-                        Some("force_cancel".into())
-                    }
-                });
+            let effective_reason = reason.or(signal_reason).or_else(|| {
+                if is_aborted {
+                    Some("aborted_by_signal".into())
+                } else {
+                    Some("force_cancel".into())
+                }
+            });
             Some(ControlAction::ForceCancel {
                 reason: effective_reason,
             })
@@ -206,7 +204,8 @@ pub fn apply_safe_point_control(
             ..
         } => {
             if is_aborted {
-                let effective_reason = signal_reason.or_else(|| Some("aborted_with_pending_inject".into()));
+                let effective_reason =
+                    signal_reason.or_else(|| Some("aborted_with_pending_inject".into()));
                 Some(ControlAction::ForceCancel {
                     reason: effective_reason,
                 })

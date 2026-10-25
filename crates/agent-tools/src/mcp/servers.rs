@@ -690,6 +690,9 @@ mod tests {
         assert_eq!(invalid_sse.validate().unwrap_err().code(), "config.invalid");
 
         let empty_url_sse = McpServerConfig::new_sse("srv", "   ");
-        assert_eq!(empty_url_sse.validate().unwrap_err().code(), "config.invalid");
+        assert_eq!(
+            empty_url_sse.validate().unwrap_err().code(),
+            "config.invalid"
+        );
     }
 }

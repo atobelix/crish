@@ -163,10 +163,7 @@ impl IndexCell {
 
     /// 当前索引快照（Arc clone，零数据拷贝；锁中毒时以 panic 载荷回退）。
     pub fn snapshot(&self) -> Arc<Vec<String>> {
-        self.files
-            .read()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        self.files.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// 当前代数。

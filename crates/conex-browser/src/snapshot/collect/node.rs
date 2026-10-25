@@ -1,6 +1,5 @@
 //! 增强节点中间表示（Bounds/StyleInfo/AxInfo/AxProperties/FrameMarker/EnhancedNode）。
 
-
 /// 布局 bounds（坐标 + 尺寸，CSS 像素；设备像素 ÷ DPR 换算）。
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Bounds {

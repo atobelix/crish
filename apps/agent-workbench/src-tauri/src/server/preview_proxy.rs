@@ -24,9 +24,9 @@ use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use conex_types::device::DeviceErrorCode;
 
-use crate::server::ServerError;
 use crate::server::preview_headers::{cors_response_headers, sanitize_response_headers};
 use crate::server::preview_injector::inject_html_preview_bridge;
+use crate::server::ServerError;
 
 /// 全局复用的 HTTP 客户端实例
 static HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();

@@ -408,8 +408,7 @@ impl ReaderPool {
                     let wait_slice = remaining.min(Duration::from_millis(2));
                     // 等待本身即目的：超时或被归还唤醒都进入下一轮探测。
                     // wait_lock 中毒（曾有等待线程 panic）不改变轮询语义，取回内部值继续。
-                    if let Err(poisoned) =
-                        self.inner.slot_cvar.wait_timeout(wait_guard, wait_slice)
+                    if let Err(poisoned) = self.inner.slot_cvar.wait_timeout(wait_guard, wait_slice)
                     {
                         drop(poisoned.into_inner());
                     }

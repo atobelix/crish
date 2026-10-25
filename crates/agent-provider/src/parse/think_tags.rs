@@ -310,9 +310,9 @@ impl StreamingTagExtractor {
 
                         // 1. 原地切片完整匹配对应闭标签（零 lookahead_buf 拷贝）
                         let matched_close_len = if let Some(idx) = self.active_tag_index {
-                            self.tags
-                                .get(idx)
-                                .and_then(|t| candidate.starts_with(t.close).then_some(t.close.len()))
+                            self.tags.get(idx).and_then(|t| {
+                                candidate.starts_with(t.close).then_some(t.close.len())
+                            })
                         } else {
                             self.tags
                                 .iter()

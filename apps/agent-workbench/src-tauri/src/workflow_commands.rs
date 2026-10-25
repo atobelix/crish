@@ -140,9 +140,11 @@ impl WorkflowScheduleWire {
                     .or_else(|| obj.get("minutes"))
                     .and_then(|v| v.as_u64());
                 match raw {
-                    Some(n) if (1..=INTERVAL_MINUTES_MAX).contains(&n) => Ok(Self::IntervalMinutes {
-                        interval_minutes: n,
-                    }),
+                    Some(n) if (1..=INTERVAL_MINUTES_MAX).contains(&n) => {
+                        Ok(Self::IntervalMinutes {
+                            interval_minutes: n,
+                        })
+                    }
                     _ => Err(format!("间隔分钟须为 1–{} 的整数", INTERVAL_MINUTES_MAX)),
                 }
             }

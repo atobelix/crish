@@ -240,7 +240,10 @@ fn analyze_depth(command_line: &str, depth: usize) -> SemanticAnalysis {
             }
             // BC10-3：若内层分析结果包含 CdShape，整链分类必须判定为 CdShape 或向上传播
             if (inner.overall_class == CommandClass::CdShape
-                || inner.segments.iter().any(|s| s.class == CommandClass::CdShape))
+                || inner
+                    .segments
+                    .iter()
+                    .any(|s| s.class == CommandClass::CdShape))
                 && segment.class != CommandClass::Redline
                 && segment.class != CommandClass::Dangerous
             {
@@ -1229,7 +1232,8 @@ pub fn analyze_indirect_depth(segment_raw: &str, depth: usize) -> SemanticAnalys
             }
             inner
         }
-        "bash" | "sh" | "zsh" | "cmd" | "cmd.exe" | "pwsh" | "powershell" | "node" | "nodejs" | "bun" | "deno" | "python" | "python3" | "py" | "pythonw" | "ruby" | "perl" | "php" => {
+        "bash" | "sh" | "zsh" | "cmd" | "cmd.exe" | "pwsh" | "powershell" | "node" | "nodejs"
+        | "bun" | "deno" | "python" | "python3" | "py" | "pythonw" | "ruby" | "perl" | "php" => {
             if normalized == "pwsh" || normalized == "powershell" {
                 let has_wd = args.iter().any(|a| is_ps_working_directory_flag(a));
                 let has_enc = args.iter().any(|a| is_ps_encoded_command_flag(a));
@@ -1254,7 +1258,10 @@ pub fn analyze_indirect_depth(segment_raw: &str, depth: usize) -> SemanticAnalys
             let mut inner: Option<String> = None;
             let mut iter = args.iter();
             while let Some(a) = iter.next() {
-                if a.eq_ignore_ascii_case("-c") || a.eq_ignore_ascii_case("-command") || a.eq_ignore_ascii_case("/c") {
+                if a.eq_ignore_ascii_case("-c")
+                    || a.eq_ignore_ascii_case("-command")
+                    || a.eq_ignore_ascii_case("/c")
+                {
                     let rest: Vec<&String> = iter.by_ref().collect();
                     if !rest.is_empty() {
                         inner = Some(
@@ -1477,7 +1484,10 @@ fn classify_depth(command: &str, args: &[String], segment_raw: &str, depth: usiz
         }
         // BC10-3：若内层分析结果包含 CdShape，整链分类必须判定为 CdShape 或向上传播
         if inner.overall_class == CommandClass::CdShape
-            || inner.segments.iter().any(|s| s.class == CommandClass::CdShape)
+            || inner
+                .segments
+                .iter()
+                .any(|s| s.class == CommandClass::CdShape)
         {
             return CommandClass::CdShape;
         }
@@ -2472,7 +2482,8 @@ mod tests {
     }
 
     fn b64_encode(bytes: &[u8]) -> String {
-        const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        const TABLE: &[u8; 64] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
         let mut out = String::new();
         for chunk in bytes.chunks(3) {
             let b0 = chunk[0];
@@ -2503,11 +2514,29 @@ mod tests {
     fn test_is_ps_encoded_command_flag_all_variants() {
         // 正向缩写与变体
         let positive = [
-            "-e", "-E", "-ec", "-EC", "-eco", "-ecom", "-en", "-enc", "-enco",
-            "-encode", "-encoded", "-encodedcommand", "-EncodedCommand",
-            "/e", "/ec", "/enc", "/enco", "/encodedcommand",
-            "--ec", "--encodedcommand",
-            "-ec:", "/ec:", "-EncodedCommand=",
+            "-e",
+            "-E",
+            "-ec",
+            "-EC",
+            "-eco",
+            "-ecom",
+            "-en",
+            "-enc",
+            "-enco",
+            "-encode",
+            "-encoded",
+            "-encodedcommand",
+            "-EncodedCommand",
+            "/e",
+            "/ec",
+            "/enc",
+            "/enco",
+            "/encodedcommand",
+            "--ec",
+            "--encodedcommand",
+            "-ec:",
+            "/ec:",
+            "-EncodedCommand=",
             "-ec:cgBtACAALQByAGYAIAAvAA==",
             "/encodedcommand:cgBtACAALQByAGYAIAAvAA==",
             "--encodedcommand=cgBtACAALQByAGYAIAAvAA==",
@@ -2521,11 +2550,22 @@ mod tests {
 
         // 负向参数（绝不能误判）
         let negative = [
-            "-ex", "-exec", "-executionpolicy", "-ExecutionPolicy",
-            "-ExecutionPolicy:Bypass", "/executionpolicy",
-            "-erroraction", "-entity", "-ea",
-            "-w", "-windowstyle", "-whatif",
-            "npm", "powershell", "pwsh", "-help",
+            "-ex",
+            "-exec",
+            "-executionpolicy",
+            "-ExecutionPolicy",
+            "-ExecutionPolicy:Bypass",
+            "/executionpolicy",
+            "-erroraction",
+            "-entity",
+            "-ea",
+            "-w",
+            "-windowstyle",
+            "-whatif",
+            "npm",
+            "powershell",
+            "pwsh",
+            "-help",
         ];
         for flag in negative {
             assert!(
@@ -2539,11 +2579,23 @@ mod tests {
     fn test_is_ps_working_directory_flag_variants() {
         // 正向缩写与变体
         let positive = [
-            "-wd", "-WD", "/wd", "/WD", "--wd", "--WD",
-            "-work", "-working", "-workingdirectory", "-WorkingDirectory",
-            "/workingdirectory", "/WorkingDirectory",
-            "--workingdirectory", "--WorkingDirectory",
-            "-wd:D:\\test", "/wd:D:\\test", "--workingdirectory=D:\\test",
+            "-wd",
+            "-WD",
+            "/wd",
+            "/WD",
+            "--wd",
+            "--WD",
+            "-work",
+            "-working",
+            "-workingdirectory",
+            "-WorkingDirectory",
+            "/workingdirectory",
+            "/WorkingDirectory",
+            "--workingdirectory",
+            "--WorkingDirectory",
+            "-wd:D:\\test",
+            "/wd:D:\\test",
+            "--workingdirectory=D:\\test",
         ];
         for flag in positive {
             assert!(
@@ -2554,8 +2606,15 @@ mod tests {
 
         // 负向参数
         let negative = [
-            "-w", "-windowstyle", "-WindowStyle", "-whatif",
-            "-wait", "-where", "npm", "pwsh", "cd",
+            "-w",
+            "-windowstyle",
+            "-WindowStyle",
+            "-whatif",
+            "-wait",
+            "-where",
+            "npm",
+            "pwsh",
+            "cd",
         ];
         for flag in negative {
             assert!(
@@ -2627,22 +2686,19 @@ mod tests {
         let cmd_redline = format!("powershell -enc {}", to_ps_b64("rm -rf /"));
         let sem_redline = analyze(&cmd_redline);
         assert_eq!(sem_redline.overall_class, CommandClass::Redline);
-        assert_eq!(
-            sem_redline.decoded_payload.as_deref(),
-            Some("rm -rf /")
-        );
+        assert_eq!(sem_redline.decoded_payload.as_deref(), Some("rm -rf /"));
 
         // 3. 内层为 CdShape 命令：识别为 CdShape
         let cmd_cd = format!("pwsh -EncodedCommand {}", to_ps_b64("cd D:\\data"));
         let sem_cd = analyze(&cmd_cd);
         assert_eq!(sem_cd.overall_class, CommandClass::CdShape);
-        assert_eq!(
-            sem_cd.decoded_payload.as_deref(),
-            Some("cd D:\\data")
-        );
+        assert_eq!(sem_cd.decoded_payload.as_deref(), Some("cd D:\\data"));
 
         // 4. 内层为 DeleteShape 命令：识别为删除形态/间接删除
-        let cmd_del = format!("powershell -ec {}", to_ps_b64("Remove-Item C:\\test -Force"));
+        let cmd_del = format!(
+            "powershell -ec {}",
+            to_ps_b64("Remove-Item C:\\test -Force")
+        );
         let sem_del = analyze(&cmd_del);
         assert!(
             sem_del.has_indirect_delete || sem_del.overall_class == CommandClass::DeleteShape,

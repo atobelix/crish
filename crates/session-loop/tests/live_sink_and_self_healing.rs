@@ -372,8 +372,8 @@ fn test_ut_d01_09_toolexecctx_background_and_log_root_fields() {
 
 #[test]
 fn test_toolexecctx_compression_store_field_and_propagation() {
-    use session_loop::ToolExecCtx;
     use agent_tools::compression_store::{BlockContent, BlockHit, CompressionContextStore};
+    use session_loop::ToolExecCtx;
     use std::sync::Arc;
 
     #[derive(Debug)]

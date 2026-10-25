@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crate::action::gate::DomainGate;
 use crate::gate::formal::FormalDomainGate;
 use crate::gate::tests::{
-    FailingResolver, MockClock, MultiIpResolver, SequenceResolver, denied, gate,
+    denied, gate, FailingResolver, MockClock, MultiIpResolver, SequenceResolver,
 };
 use crate::gate::types::{HostResolver, SystemResolver};
 

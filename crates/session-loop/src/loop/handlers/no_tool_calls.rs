@@ -41,7 +41,9 @@ pub struct SessionLanguageDetector;
 impl SessionLanguageDetector {
     /// 判定文本是否包含汉字字符（CJK 统一表意文字）
     pub fn contains_chinese(text: &str) -> bool {
-        text.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c) || ('\u{3400}'..='\u{4dbf}').contains(&c))
+        text.chars().any(|c| {
+            ('\u{4e00}'..='\u{9fff}').contains(&c) || ('\u{3400}'..='\u{4dbf}').contains(&c)
+        })
     }
 
     /// 基于助手文本与会话上下文推导语言环境
@@ -314,7 +316,12 @@ mod tests {
         // 验证进入 steering 队列的消息为纯英文，无中文字符
         let steer_msg = state.input_queue.dequeue().expect("应有 steering 消息入队");
         let text = steer_msg.text();
-        assert!(text.starts_with("[System Auto-Steer]: You expressed an intent to execute an action"));
-        assert!(!SessionLanguageDetector::contains_chinese(&text), "英文会话自愈推进不得包含汉字");
+        assert!(
+            text.starts_with("[System Auto-Steer]: You expressed an intent to execute an action")
+        );
+        assert!(
+            !SessionLanguageDetector::contains_chinese(&text),
+            "英文会话自愈推进不得包含汉字"
+        );
     }
 }

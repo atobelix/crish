@@ -41,6 +41,6 @@ mod tests;
 
 pub(crate) use registry::TimerRegistry;
 pub(crate) use store::{LocalDbTimerStore, MemoryTimerStore, TimerStore};
-pub(crate) use types::{AgentEventSink, EventSink, QueuePendingSink};
 #[cfg(test)]
-pub(crate) use types::{TimerCancelReason, TimerEvent, steering_group_id};
+pub(crate) use types::{steering_group_id, TimerCancelReason, TimerEvent};
+pub(crate) use types::{AgentEventSink, EventSink, QueuePendingSink};

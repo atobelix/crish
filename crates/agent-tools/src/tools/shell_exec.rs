@@ -89,7 +89,11 @@ mod win_job {
         ) -> BOOL;
         pub fn AssignProcessToJobObject(hJob: HANDLE, hProcess: HANDLE) -> BOOL;
         pub fn TerminateJobObject(hJob: HANDLE, uExitCode: u32) -> BOOL;
-        pub fn OpenProcess(dwDesiredAccess: DWORD, bInheritHandle: BOOL, dwProcessId: DWORD) -> HANDLE;
+        pub fn OpenProcess(
+            dwDesiredAccess: DWORD,
+            bInheritHandle: BOOL,
+            dwProcessId: DWORD,
+        ) -> HANDLE;
         pub fn CloseHandle(hObject: HANDLE) -> BOOL;
     }
 }
@@ -933,7 +937,10 @@ pub(crate) fn terminate_process_tree(pid: u32) -> Result<(), String> {
             if ret_single == 0 || std::io::Error::last_os_error().raw_os_error() == Some(3) {
                 Ok(())
             } else {
-                Err(format!("kill(-{pid}, SIGKILL) failed: {}", std::io::Error::last_os_error()))
+                Err(format!(
+                    "kill(-{pid}, SIGKILL) failed: {}",
+                    std::io::Error::last_os_error()
+                ))
             }
         }
     }

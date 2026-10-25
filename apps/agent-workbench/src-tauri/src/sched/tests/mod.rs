@@ -82,9 +82,9 @@ impl ScheduledTaskLauncher for ProbeScheduledLauncher {
         } else {
             Ok(ScheduledRunHandle {
                 run_id: ctx.run_id,
-                session_id: ctx.target_session_id.unwrap_or_else(|| {
-                    format!("sched-run-{}-{}", ctx.cron_id, ctx.fired_at_ms)
-                }),
+                session_id: ctx
+                    .target_session_id
+                    .unwrap_or_else(|| format!("sched-run-{}-{}", ctx.cron_id, ctx.fired_at_ms)),
                 async_terminal_managed: false,
                 immediate_output_summary: Some("自动调度执行完成".to_string()),
             })
@@ -136,7 +136,11 @@ pub(crate) fn test_registry() -> (
     (registry, queue, events, store)
 }
 
-pub(crate) fn test_input(expression: &str, max_iterations: Option<u64>, is_daemon: bool) -> CronTaskInput {
+pub(crate) fn test_input(
+    expression: &str,
+    max_iterations: Option<u64>,
+    is_daemon: bool,
+) -> CronTaskInput {
     CronTaskInput {
         expression: expression.to_string(),
         prompt: "检查编译结果".to_string(),

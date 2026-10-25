@@ -154,11 +154,9 @@ impl PendingMessageQueue {
     /// 未设置分组名的条目恒走入队路径（05 §2.2:106）。
     pub fn replace_or_enqueue(&mut self, entry: SteeringInputEntry) -> bool {
         if let Some(group_id) = &entry.group_id {
-            if let Some(idx) = self
-                .entries
-                .iter()
-                .position(|e| e.session_id == entry.session_id && e.group_id.as_deref() == Some(group_id))
-            {
+            if let Some(idx) = self.entries.iter().position(|e| {
+                e.session_id == entry.session_id && e.group_id.as_deref() == Some(group_id)
+            }) {
                 self.entries[idx] = entry;
                 return true;
             }
@@ -258,7 +256,9 @@ impl PendingMessageQueue {
 
     /// 指定会话是否有待处理条目（防跨会话无差别拉起核心守护）
     pub fn has_pending_for(&self, session_id: &str) -> bool {
-        self.entries.iter().any(|e| Self::matches_session(&e.session_id, session_id))
+        self.entries
+            .iter()
+            .any(|e| Self::matches_session(&e.session_id, session_id))
     }
 
     /// 是否含 steering 条目（对齐 TS hasPendingSteering）
@@ -280,7 +280,9 @@ impl PendingMessageQueue {
 
     /// 预览指定会话的队首条目（不移除）
     pub fn peek_for(&self, session_id: &str) -> Option<&SteeringInputEntry> {
-        self.entries.iter().find(|e| Self::matches_session(&e.session_id, session_id))
+        self.entries
+            .iter()
+            .find(|e| Self::matches_session(&e.session_id, session_id))
     }
 
     /// 清空队列
@@ -650,8 +652,12 @@ mod tests {
         let mut queue = PendingMessageQueue::new();
         queue.enqueue(g1);
         assert!(queue.has_pending(), "入队后 has_pending 立即为 true");
-        let replaced =
-            queue.replace_or_enqueue(grouped_entry("g-2", "更新后的分组通知", 200, "notify-group"));
+        let replaced = queue.replace_or_enqueue(grouped_entry(
+            "g-2",
+            "更新后的分组通知",
+            200,
+            "notify-group",
+        ));
         assert!(replaced, "同 group_id 应原位替换");
         assert_eq!(queue.len(), 1, "去重后仍只一条记录");
         assert!(queue.has_pending());
@@ -703,16 +709,12 @@ mod tests {
     fn session_isolation_and_drain() {
         let mut queue = PendingMessageQueue::new();
         // 会话 A 入队两条
-        queue.enqueue(
-            SteeringInputEntry::user("a1", "sess A msg 1", 1001).with_session("sess-A"),
-        );
+        queue.enqueue(SteeringInputEntry::user("a1", "sess A msg 1", 1001).with_session("sess-A"));
         queue.enqueue(
             SteeringInputEntry::steering("a2", "sess A steer 2", 1002).with_session("sess-A"),
         );
         // 会话 B 入队一条
-        queue.enqueue(
-            SteeringInputEntry::user("b1", "sess B msg 1", 1003).with_session("sess-B"),
-        );
+        queue.enqueue(SteeringInputEntry::user("b1", "sess B msg 1", 1003).with_session("sess-B"));
 
         assert_eq!(queue.len(), 3);
         assert!(queue.has_pending_for("sess-A"));

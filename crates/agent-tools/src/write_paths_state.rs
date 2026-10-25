@@ -267,8 +267,11 @@ impl WriteClaimGuard {
 
     /// 手动刷新续期
     pub fn renew(&self) {
-        self.registry
-            .renew_lease(&self.holder, &self.claimed_paths, self.registry.default_ttl_ms);
+        self.registry.renew_lease(
+            &self.holder,
+            &self.claimed_paths,
+            self.registry.default_ttl_ms,
+        );
     }
 }
 
@@ -373,10 +376,9 @@ impl WritePathRegistry {
             // 检测后、插入前他方抢注同路径
             let mut inner = lock_inner(&self.inner);
             for path in &resolved {
-                if let Some(conflicting) = inner
-                    .iter()
-                    .find(|c| !c.holder.is_compatible_with(&holder) && paths_overlap_normalized(path, &c.path))
-                {
+                if let Some(conflicting) = inner.iter().find(|c| {
+                    !c.holder.is_compatible_with(&holder) && paths_overlap_normalized(path, &c.path)
+                }) {
                     return Err(WritePathConflict {
                         requested_path: path.clone(),
                         conflicting: conflicting.clone(),
@@ -443,14 +445,20 @@ impl WritePathRegistry {
     ///
     /// 排除同持有者；过期声明先清扫。命中返回 [WritePathConflict]（谁占用/何时），
     /// 未命中返回 None。
-    pub fn check_conflict(&self, holder: impl Into<HolderId>, path: &Path) -> Option<WritePathConflict> {
+    pub fn check_conflict(
+        &self,
+        holder: impl Into<HolderId>,
+        path: &Path,
+    ) -> Option<WritePathConflict> {
         self.expire_stale();
         let holder = holder.into();
         let path = strip_prefix_normalized(path);
         let inner = lock_inner(&self.inner);
         inner
             .iter()
-            .find(|c| !c.holder.is_compatible_with(&holder) && paths_overlap_normalized(&path, &c.path))
+            .find(|c| {
+                !c.holder.is_compatible_with(&holder) && paths_overlap_normalized(&path, &c.path)
+            })
             .cloned()
             .map(|conflicting| WritePathConflict {
                 requested_path: path,
@@ -507,14 +515,14 @@ impl WritePathRegistry {
         inner.retain(|c| c.expires_at_ms > now_ms);
         before - inner.len()
     }
-
 }
 
 static GLOBAL_WRITE_REGISTRIES: std::sync::OnceLock<
     Mutex<std::collections::HashMap<String, Arc<WritePathRegistry>>>,
 > = std::sync::OnceLock::new();
 
-fn global_write_registries() -> &'static Mutex<std::collections::HashMap<String, Arc<WritePathRegistry>>> {
+fn global_write_registries(
+) -> &'static Mutex<std::collections::HashMap<String, Arc<WritePathRegistry>>> {
     GLOBAL_WRITE_REGISTRIES.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
 }
 
@@ -525,7 +533,9 @@ pub fn get_or_create_registry(
 ) -> Arc<WritePathRegistry> {
     let session_id = session_id.into();
     let root = workspace_root.as_ref().to_path_buf();
-    let mut map = global_write_registries().lock().unwrap_or_else(|e| e.into_inner());
+    let mut map = global_write_registries()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     map.entry(session_id.clone())
         .or_insert_with(|| Arc::new(WritePathRegistry::new(session_id, root)))
         .clone()
@@ -533,7 +543,9 @@ pub fn get_or_create_registry(
 
 /// 清除会话级写路径互斥单例
 pub fn remove_registry(session_id: &str) -> Option<Arc<WritePathRegistry>> {
-    let mut map = global_write_registries().lock().unwrap_or_else(|e| e.into_inner());
+    let mut map = global_write_registries()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
     map.remove(session_id)
 }
 

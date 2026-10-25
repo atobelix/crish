@@ -44,10 +44,7 @@ pub(crate) async fn supervisor_loop(
 
 /// 重连自动重启：Starting → 重试 startScreencast → Active（失败回 Idle，
 /// 启用静态降级则保持 1fps 轮询——U-3）。
-pub(crate) async fn restart_screencast(
-    ctx: &ScreencastSupervisorContext,
-    epoch: u64,
-) {
+pub(crate) async fn restart_screencast(ctx: &ScreencastSupervisorContext, epoch: u64) {
     // 重启期状态/事件投递：无观察者不改变重启主流程（状态已由 status_tx 持有），
     // 故仅 debug 留痕，不上抛（重启结果由 result 分支决定）。
     if let Err(err) = ctx.status_tx.send(ScreencastStatus::Starting) {
@@ -98,8 +95,11 @@ pub(crate) async fn restart_screencast(
             // U-3 降级：重启失败且启用静态降级 → 保持 1fps 轮询（跨重连持续
             // 供帧——恢复条件取舍：保持降级直到显式 stop/start 重试，或下一次
             // 重连重启成功时切回；不自动反复探测 screencast 可用性）
-            if ctx.config.static_fallback_enabled && *ctx.status_tx.borrow() == ScreencastStatus::Starting {
-                ctx.static_ctrl.enter(&format!("startScreencast 重启失败：{e}"));
+            if ctx.config.static_fallback_enabled
+                && *ctx.status_tx.borrow() == ScreencastStatus::Starting
+            {
+                ctx.static_ctrl
+                    .enter(&format!("startScreencast 重启失败：{e}"));
                 if let Err(err) = ctx.status_tx.send(ScreencastStatus::Active) {
                     tracing::debug!("帧流状态无订阅者（丢弃 Active）：{err}");
                 }

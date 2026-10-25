@@ -14,9 +14,7 @@ use conex_types::events::SubagentEndStatus;
 
 use crate::subagent_events::{started_info_from_spawn, SubagentEmitContext, SubagentEndedInfo};
 
-use super::model::{
-    FailStrategy, FlowGraph, FlowNode, FlowNodeId, FlowNodeRuntime, FlowNodeState,
-};
+use super::model::{FailStrategy, FlowGraph, FlowNode, FlowNodeId, FlowNodeRuntime, FlowNodeState};
 use super::scheduler::{
     FlowAdvance, FlowError, FlowReport, FlowReportKind, FlowScheduler, FlowStarted, FlowWakeup,
 };
@@ -24,9 +22,7 @@ use super::scheduler::{
 /// 判断两个节点的 `depends_on` 集合是否等价（排序无关的集合等价判定，修复 DEFECT-03）。
 #[inline]
 fn same_dependency_set(a: &[FlowNodeId], b: &[FlowNodeId]) -> bool {
-    a.len() == b.len()
-        && a.iter().all(|dep| b.contains(dep))
-        && b.iter().all(|dep| a.contains(dep))
+    a.len() == b.len() && a.iter().all(|dep| b.contains(dep)) && b.iter().all(|dep| a.contains(dep))
 }
 
 impl FlowScheduler {
@@ -85,7 +81,9 @@ impl FlowScheduler {
                         .get(id.as_str())
                         .and_then(|&idx| graph.nodes().get(idx).map(|n| (n, idx, id.clone())))
                 })
-                .filter(|(node, idx, _)| self.is_ready_with_order(node, Some(*idx), Some(&order_index)))
+                .filter(|(node, idx, _)| {
+                    self.is_ready_with_order(node, Some(*idx), Some(&order_index))
+                })
                 .map(|(_, _, id)| id)
                 .collect();
             ready_ids.sort_by_key(|id| order_index.get(id.as_str()).copied().unwrap_or(usize::MAX));
@@ -428,11 +426,9 @@ impl FlowScheduler {
 
     fn serial_predecessor_satisfied(&self, node: &FlowNode) -> bool {
         match self.states.get(&node.id).copied() {
-            Some(
-                FlowNodeState::Completed
-                | FlowNodeState::Blocked
-                | FlowNodeState::Cancelled,
-            ) => true,
+            Some(FlowNodeState::Completed | FlowNodeState::Blocked | FlowNodeState::Cancelled) => {
+                true
+            }
             Some(FlowNodeState::Failed) => matches!(
                 self.effective_strategy(&node.id),
                 FailStrategy::Skip | FailStrategy::Report
@@ -560,7 +556,8 @@ impl FlowScheduler {
 
     /// 将节点置为 Cancelled 终态并触发数据卸载（DEFECT-17）
     pub fn cancel_node(&mut self, node_id: &str) {
-        self.states.insert(node_id.to_string(), FlowNodeState::Cancelled);
+        self.states
+            .insert(node_id.to_string(), FlowNodeState::Cancelled);
         self.mark_successors_dirty(node_id);
         self.unload_terminal_node(node_id);
     }
@@ -578,7 +575,10 @@ mod tests {
         let c = vec!["task_1".to_string(), "task_3".to_string()];
         let d = vec!["task_1".to_string()];
 
-        assert!(same_dependency_set(&a, &b), "乱序声明的相同依赖集合应判定等价");
+        assert!(
+            same_dependency_set(&a, &b),
+            "乱序声明的相同依赖集合应判定等价"
+        );
         assert!(!same_dependency_set(&a, &c), "元素不同应判定不等价");
         assert!(!same_dependency_set(&a, &d), "长度不同应判定不等价");
         assert!(same_dependency_set(&[], &[]), "空集合等价");

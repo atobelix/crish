@@ -1,7 +1,7 @@
 use super::*;
 use crate::cdp::types::CdpEvent;
-use serde_json::Value;
 use serde_json::json;
+use serde_json::Value;
 
 fn raw(method: &str, params: Value, session: Option<&str>) -> CdpEvent {
     CdpEvent {

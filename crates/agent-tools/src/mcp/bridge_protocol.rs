@@ -61,7 +61,10 @@ pub fn format_mcp_tool_name(server_id: &str, tool_name: &str) -> String {
 
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     std::hash::Hash::hash(server_id, &mut hasher);
-    let hash_suffix = format!("{:06x}", (std::hash::Hasher::finish(&hasher) & 0xFFFFFF) as u32);
+    let hash_suffix = format!(
+        "{:06x}",
+        (std::hash::Hasher::finish(&hasher) & 0xFFFFFF) as u32
+    );
 
     format!(
         "mcp_{}_{}__{}",

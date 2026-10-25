@@ -20,7 +20,12 @@ async fn scheduler_registry_fires_cron_steering() {
     wait_until(
         "首次触发完成（CronFired 1 条 + 队列完成通知）",
         move || {
-            events_cond.emitted.lock().unwrap_or_else(|e| e.into_inner()).len() == 1
+            events_cond
+                .emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .len()
+                == 1
                 && queue_len(&pending_cond) == 1
         },
     )
@@ -78,7 +83,12 @@ async fn scheduler_registry_max_iterations_stops() {
     wait_until(
         "两次触发完成（CronFired 2 条 + 队列完成通知）",
         move || {
-            events_cond.emitted.lock().unwrap_or_else(|e| e.into_inner()).len() == 2
+            events_cond
+                .emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .len()
+                == 2
                 && queue_len(&pending_cond) == 1
         },
     )
@@ -91,7 +101,9 @@ async fn scheduler_registry_max_iterations_stops() {
         Some(steering_group_id("cron-0").as_str())
     );
     assert!(
-        entries[0].text.contains("cron cron-0 已达最大触发次数 2，已停止"),
+        entries[0]
+            .text
+            .contains("cron cron-0 已达最大触发次数 2，已停止"),
         "完成通知文本：{}",
         entries[0].text
     );
@@ -143,7 +155,12 @@ async fn scheduler_registry_is_daemon_spawns_run() {
     wait_until(
         "daemon run 拉起完成（launcher 调用 1 次 + 完成通知）",
         move || {
-            launcher_cond.prompts.lock().unwrap_or_else(|e| e.into_inner()).len() == 1
+            launcher_cond
+                .prompts
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .len()
+                == 1
                 && queue_len(&queue_cond) == 1
         },
     )
@@ -165,7 +182,11 @@ async fn scheduler_registry_is_daemon_spawns_run() {
     assert!(entries[0].text.contains("已达最大触发次数 1，已停止"));
 
     assert_eq!(
-        events.emitted.lock().unwrap_or_else(|e| e.into_inner()).len(),
+        events
+            .emitted
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .len(),
         1
     );
 }
@@ -188,7 +209,12 @@ async fn scheduler_registry_daemon_without_launcher_falls_back_to_steering() {
     wait_until(
         "daemon 降级触发 ≥2 次（CronFired 事件 ≥2）",
         move || {
-            events_cond.emitted.lock().unwrap_or_else(|e| e.into_inner()).len() >= 2
+            events_cond
+                .emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .len()
+                >= 2
         },
     )
     .await;
@@ -208,7 +234,12 @@ async fn scheduler_registry_daemon_without_launcher_falls_back_to_steering() {
         entries[0].text
     );
     assert!(
-        events.emitted.lock().unwrap_or_else(|e| e.into_inner()).len() >= 2,
+        events
+            .emitted
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
+            >= 2,
         "持续触发应发射多条 CronFired"
     );
 }
@@ -245,7 +276,11 @@ async fn scheduler_registry_daemon_launch_failure_falls_back_to_steering() {
     wait_until(
         "launch 失败降级条目出现（CronFired ≥1 + 队列非空）",
         move || {
-            !events_cond.emitted.lock().unwrap_or_else(|e| e.into_inner()).is_empty()
+            !events_cond
+                .emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty()
                 && queue_len(&queue_cond) == 1
         },
     )
@@ -262,7 +297,11 @@ async fn scheduler_registry_daemon_launch_failure_falls_back_to_steering() {
         "降级条目文本应含 prompt 与唤醒模板：{}",
         entries[0].text
     );
-    assert!(launcher.prompts.lock().unwrap_or_else(|e| e.into_inner()).is_empty());
+    assert!(launcher
+        .prompts
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .is_empty());
 }
 
 #[tokio::test]

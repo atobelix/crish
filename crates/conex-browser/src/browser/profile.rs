@@ -959,8 +959,7 @@ mod unix_pid_alive_tests {
         assert!(child >= 0, "fork 失败");
         if child == 0 {
             // 子进程：写就绪字节后挂起等待信号（失败直接退出，父进程读到 EOF 即暴露）
-            let written =
-                unsafe { libc::write(fds[1], b"x".as_ptr() as *const libc::c_void, 1) };
+            let written = unsafe { libc::write(fds[1], b"x".as_ptr() as *const libc::c_void, 1) };
             if written != 1 {
                 // 写就绪字节失败：直接退出，父进程读到 EOF 即断言失败（不静默通过）
                 unsafe { libc::_exit(4) };

@@ -1,6 +1,6 @@
 //! 帧专用通道解析（screencastFrame → 帧块）与事件泵（transport 事件面 → 分类 → bus / 帧通道）。
 
-use super::{BusHandle, FrameChunk, Ignored, classify};
+use super::{classify, BusHandle, FrameChunk, Ignored};
 use crate::cdp::types::CdpEvent;
 use base64::Engine;
 use serde_json::Value;

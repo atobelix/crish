@@ -84,37 +84,29 @@ pub(crate) mod storage;
 mod tests;
 
 pub(crate) use bookmarks_history::{
-    __cmd__browser_import_bookmarks, __cmd__browser_import_history,
-    __cmd__browser_list_bookmarks, __cmd__browser_list_history,
-    __tauri_command_name_browser_import_bookmarks,
-    __tauri_command_name_browser_import_history,
-    __tauri_command_name_browser_list_bookmarks,
-    __tauri_command_name_browser_list_history,
-    browser_import_bookmarks, browser_import_history,
+    __cmd__browser_import_bookmarks, __cmd__browser_import_history, __cmd__browser_list_bookmarks,
+    __cmd__browser_list_history, __tauri_command_name_browser_import_bookmarks,
+    __tauri_command_name_browser_import_history, __tauri_command_name_browser_list_bookmarks,
+    __tauri_command_name_browser_list_history, browser_import_bookmarks, browser_import_history,
     browser_list_bookmarks, browser_list_history,
 };
 pub(crate) use frames::{
-    __cmd__browser_frame_status, __cmd__browser_input,
-    __cmd__browser_start_frames, __cmd__browser_stop_frames,
-    __tauri_command_name_browser_frame_status,
-    __tauri_command_name_browser_input,
-    __tauri_command_name_browser_start_frames,
-    __tauri_command_name_browser_stop_frames,
-    browser_frame_status, browser_input,
+    __cmd__browser_frame_status, __cmd__browser_input, __cmd__browser_start_frames,
+    __cmd__browser_stop_frames, __tauri_command_name_browser_frame_status,
+    __tauri_command_name_browser_input, __tauri_command_name_browser_start_frames,
+    __tauri_command_name_browser_stop_frames, browser_frame_status, browser_input,
     browser_start_frames, browser_stop_frames,
 };
 pub(crate) use lifecycle::{
     __cmd__browser_start, __cmd__browser_status, __cmd__browser_stop,
-    __tauri_command_name_browser_start,
-    __tauri_command_name_browser_status,
-    __tauri_command_name_browser_stop,
-    browser_start, browser_status, browser_stop,
+    __tauri_command_name_browser_start, __tauri_command_name_browser_status,
+    __tauri_command_name_browser_stop, browser_start, browser_status, browser_stop,
 };
 pub(crate) use storage::{
     __cmd__browser_export_storage_state, __cmd__browser_import_storage_state,
     __tauri_command_name_browser_export_storage_state,
-    __tauri_command_name_browser_import_storage_state,
-    browser_export_storage_state, browser_import_storage_state,
+    __tauri_command_name_browser_import_storage_state, browser_export_storage_state,
+    browser_import_storage_state,
 };
 
 #[cfg(test)]

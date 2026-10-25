@@ -71,9 +71,9 @@ pub use types::{
 pub use diagnostics::SelfTerminationDiagnostic;
 pub use nudge::{build_steering_message, runtime_steering_text};
 pub use strategy::{
-    DEFAULT_MAX_CONSECUTIVE_TOOL_ERRORS, DEFAULT_MAX_REPEATED_TOOL_CALLS,
-    DEFAULT_MAX_STEERING_MESSAGES, RecoverySteeringStrategy, RecoverySteeringStrategyOptions,
-    detect_recent_tool_error_loop, detect_repeated_tool_call_loop,
+    detect_recent_tool_error_loop, detect_repeated_tool_call_loop, RecoverySteeringStrategy,
+    RecoverySteeringStrategyOptions, DEFAULT_MAX_CONSECUTIVE_TOOL_ERRORS,
+    DEFAULT_MAX_REPEATED_TOOL_CALLS, DEFAULT_MAX_STEERING_MESSAGES,
 };
 
 #[cfg(test)]

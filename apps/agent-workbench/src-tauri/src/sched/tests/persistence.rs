@@ -21,7 +21,10 @@ async fn scheduler_registry_persists_and_recovers() {
             Arc::clone(&store) as Arc<dyn SchedStore>,
             None,
         ));
-        let cron_id = registry.register(test_input("* * * * *", Some(1), false)).await.expect("注册应成功");
+        let cron_id = registry
+            .register(test_input("* * * * *", Some(1), false))
+            .await
+            .expect("注册应成功");
         assert_eq!(cron_id, "cron-0");
         let persisted = store.load_all();
         assert_eq!(persisted.len(), 1);
@@ -56,10 +59,19 @@ async fn scheduler_registry_persists_and_recovers() {
 
     let events_b_cond = Arc::clone(&events_b);
     let queue_b_cond = Arc::clone(&queue_b);
-    wait_until("恢复后触发完成（CronFired 1 条 + 完成通知）", move || {
-        events_b_cond.emitted.lock().unwrap_or_else(|e| e.into_inner()).len() == 1
-            && queue_len(&queue_b_cond) == 1
-    }).await;
+    wait_until(
+        "恢复后触发完成（CronFired 1 条 + 完成通知）",
+        move || {
+            events_b_cond
+                .emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .len()
+                == 1
+                && queue_len(&queue_b_cond) == 1
+        },
+    )
+    .await;
     let entries = snapshot_queue(&queue_b);
     assert_eq!(entries.len(), 1, "恢复后触发应恰好一条");
     assert_eq!(
@@ -154,8 +166,10 @@ fn local_db_sched_store_safe_field_merge_preserves_business_fields() {
         "createdAtMs": 1000,
         "updatedAtMs": 1000
     });
-    db.set_session_meta(&store_key("cron-0"), &raw_workflow_json.to_string()).unwrap();
-    db.set_session_meta(SESSION_META_SCHED_INDEX_KEY, r#"["cron-0"]"#).unwrap();
+    db.set_session_meta(&store_key("cron-0"), &raw_workflow_json.to_string())
+        .unwrap();
+    db.set_session_meta(SESSION_META_SCHED_INDEX_KEY, r#"["cron-0"]"#)
+        .unwrap();
 
     // 底层调度器更新 firedCount 与 nextFireAtMs
     let mut task_update = task("cron-0");
@@ -177,11 +191,23 @@ fn local_db_sched_store_safe_field_merge_preserves_business_fields() {
         .unwrap()
         .expect("key 必须存在");
     let merged_val: serde_json::Value = serde_json::from_str(&raw_json_str).unwrap();
-    assert_eq!(merged_val["name"], "每日自动化审查", "业务字段 name 严禁被抹除！");
-    assert_eq!(merged_val["cwd"], "C:/Software/conex", "业务字段 cwd 严禁被抹除！");
-    assert_eq!(merged_val["schedule"]["type"], "cron", "业务字段 schedule 严禁被抹除！");
+    assert_eq!(
+        merged_val["name"], "每日自动化审查",
+        "业务字段 name 严禁被抹除！"
+    );
+    assert_eq!(
+        merged_val["cwd"], "C:/Software/conex",
+        "业务字段 cwd 严禁被抹除！"
+    );
+    assert_eq!(
+        merged_val["schedule"]["type"], "cron",
+        "业务字段 schedule 严禁被抹除！"
+    );
     assert_eq!(merged_val["createdAtMs"], 1000, "原创建时间必须被保留！");
-    assert_eq!(merged_val["firedCount"], 3, "运行态 firedCount 必须被更新！");
+    assert_eq!(
+        merged_val["firedCount"], 3,
+        "运行态 firedCount 必须被更新！"
+    );
 }
 
 #[test]
@@ -189,19 +215,31 @@ fn local_db_sched_store_index_convergence_merges_legacy_sched_ids() {
     let db = LocalDb::open_in_memory().expect("内存库打开应成功");
     let store = LocalDbSchedStore::new(db.clone());
 
-    db.set_session_meta(LEGACY_SESSION_META_SCHED_INDEX_KEY, r#"["cron-old-1", "cron-old-2"]"#).unwrap();
-    db.set_session_meta(SESSION_META_SCHED_INDEX_KEY, r#"["cron-new-1"]"#).unwrap();
+    db.set_session_meta(
+        LEGACY_SESSION_META_SCHED_INDEX_KEY,
+        r#"["cron-old-1", "cron-old-2"]"#,
+    )
+    .unwrap();
+    db.set_session_meta(SESSION_META_SCHED_INDEX_KEY, r#"["cron-new-1"]"#)
+        .unwrap();
 
     store.save(&task("cron-old-1"));
     store.save(&task("cron-old-2"));
     store.save(&task("cron-new-1"));
 
     let all = store.load_all();
-    assert_eq!(all.len(), 3, "存量 sched_ids 与新 sched_index 必须无缝聚合！");
+    assert_eq!(
+        all.len(),
+        3,
+        "存量 sched_ids 与新 sched_index 必须无缝聚合！"
+    );
 
     let converged_index: Vec<String> = serde_json::from_str(
-        &db.get_session_meta(SESSION_META_SCHED_INDEX_KEY).unwrap().unwrap(),
-    ).unwrap();
+        &db.get_session_meta(SESSION_META_SCHED_INDEX_KEY)
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
     assert_eq!(converged_index.len(), 3);
     assert!(converged_index.contains(&"cron-old-1".to_string()));
     assert!(converged_index.contains(&"cron-old-2".to_string()));
@@ -268,7 +306,10 @@ async fn local_db_scheduler_registry_persists_and_recovers() {
             Arc::new(LocalDbSchedStore::new(db.clone())) as Arc<dyn SchedStore>,
             None,
         ));
-        let cron_id = registry.register(test_input("* * * * *", Some(1), false)).await.expect("注册应成功");
+        let cron_id = registry
+            .register(test_input("* * * * *", Some(1), false))
+            .await
+            .expect("注册应成功");
         assert_eq!(cron_id, "cron-0");
         let persisted = LocalDbSchedStore::new(db.clone()).load_all();
         assert_eq!(persisted.len(), 1);
@@ -302,10 +343,19 @@ async fn local_db_scheduler_registry_persists_and_recovers() {
 
     let events_b_cond = Arc::clone(&events_b);
     let queue_b_cond = Arc::clone(&queue_b);
-    wait_until("恢复后触发完成（CronFired 1 条 + 完成通知）", move || {
-        events_b_cond.emitted.lock().unwrap_or_else(|e| e.into_inner()).len() == 1
-            && queue_len(&queue_b_cond) == 1
-    }).await;
+    wait_until(
+        "恢复后触发完成（CronFired 1 条 + 完成通知）",
+        move || {
+            events_b_cond
+                .emitted
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .len()
+                == 1
+                && queue_len(&queue_b_cond) == 1
+        },
+    )
+    .await;
     let entries = snapshot_queue(&queue_b);
     assert_eq!(entries.len(), 1, "恢复后触发应恰好一条");
     assert_eq!(
@@ -394,14 +444,24 @@ async fn test_restore_idempotency_and_offline_task_pre_insert() {
     registry.restore().await;
 
     // 离线补发任务在 restore() 返回瞬间必须已被预插入 tasks 表消除真空期
-    assert!(registry.has_active(), "离线补发任务必须在 tasks 内存表中消除真空期");
+    assert!(
+        registry.has_active(),
+        "离线补发任务必须在 tasks 内存表中消除真空期"
+    );
     registry.restore().await;
 
     let events_cond = Arc::clone(&events);
-    wait_until("离线补发完成", move || !events_cond.emitted.lock().unwrap().is_empty()).await;
+    wait_until("离线补发完成", move || {
+        !events_cond.emitted.lock().unwrap().is_empty()
+    })
+    .await;
 
     let emitted = events.emitted.lock().unwrap();
-    assert_eq!(emitted.len(), 1, "离线过期任务恰好补发一次，幂等守卫防重复生效！");
+    assert_eq!(
+        emitted.len(),
+        1,
+        "离线过期任务恰好补发一次，幂等守卫防重复生效！"
+    );
     let persisted = store.load_all();
     assert_eq!(persisted[0].fired_count, 1);
     assert_eq!(persisted[0].status, CronTaskStatus::Completed);

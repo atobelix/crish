@@ -1,8 +1,8 @@
 //! 原语便捷入口（§2.3 签名）：内部组装 ActionRequest 走统一流水线。
 
 use super::{
-    ActionError, ActionExecutor, ActionRequest, ActionSuccess, ElementRef, EvaluateRequest,
-    MouseButton, PathBufLike, Primitive, ScrollDir, TabId, WaitCondition, WaitOptions, wait,
+    wait, ActionError, ActionExecutor, ActionRequest, ActionSuccess, ElementRef, EvaluateRequest,
+    MouseButton, PathBufLike, Primitive, ScrollDir, TabId, WaitCondition, WaitOptions,
 };
 use std::path::Path;
 

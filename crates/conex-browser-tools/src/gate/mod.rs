@@ -31,7 +31,7 @@ mod pattern;
 mod tests;
 
 use ip_class::{ipv4_reserved, ipv6_reserved, is_local_hostname, is_loopback_ip, is_reserved};
-use pattern::{Pattern, normalize_host};
+use pattern::{normalize_host, Pattern};
 
 /// 主机名解析器抽象（§4.3 步骤 3；测试注入假解析，生产走系统 resolver）。
 pub trait HostResolver: Send + Sync {

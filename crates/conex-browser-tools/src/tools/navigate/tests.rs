@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::session::SessionOps;
-use crate::tools::navigate_common::{NavigateOps, tool_ctx, tool_ctx_with_max};
+use crate::tools::navigate_common::{tool_ctx, tool_ctx_with_max, NavigateOps};
 use agent_tools::context::create_mock_tool_context;
 use agent_tools::definition::Tool;
 use serde_json::json;

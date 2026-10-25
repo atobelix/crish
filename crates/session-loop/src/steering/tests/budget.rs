@@ -230,11 +230,9 @@ fn phase_filtering_skips_unlisted_phases() {
         })],
         SteeringCoordinatorOptions::default(),
     );
-    assert!(
-        coordinator
-            .evaluate(SteeringPhase::EmptyResponse, &empty_context())
-            .is_empty()
-    );
+    assert!(coordinator
+        .evaluate(SteeringPhase::EmptyResponse, &empty_context())
+        .is_empty());
     assert_eq!(
         coordinator
             .evaluate(SteeringPhase::AfterTools, &empty_context())

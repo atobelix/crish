@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::gate::pattern::Pattern;
 use crate::gate::segments::{is_local_hostname, is_loopback_ip, is_reserved};
-use crate::gate::types::{GateClock, HostResolver, REBINDING_WINDOW, SystemClock, SystemResolver};
+use crate::gate::types::{GateClock, HostResolver, SystemClock, SystemResolver, REBINDING_WINDOW};
 
 /// 正式域名门禁（17 §4.1/§4.2/§4.3 全流程 + R-11 传输层接线面）。
 ///

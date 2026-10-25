@@ -284,7 +284,10 @@ pub fn assemble_thinking_dialect(opts: &DialectBuildOptions<'_>) -> (Option<Valu
         }
         ThinkingDialectFormat::QwenBailianBoolean => {
             // map 值 "true"/"false"/"1"/"0" 解析，否则非 Off → true
-            let enabled = !matches!(custom_wire_val.map(String::as_str), Some("false") | Some("0"));
+            let enabled = !matches!(
+                custom_wire_val.map(String::as_str),
+                Some("false") | Some("0")
+            );
             (Some(json!({ "enable_thinking": enabled })), None)
         }
         ThinkingDialectFormat::GeminiThinkingConfig => {

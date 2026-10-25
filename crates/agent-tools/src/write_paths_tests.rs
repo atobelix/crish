@@ -550,9 +550,17 @@ fn intra_run_parallel_tool_write_conflicts() {
     let holder1 = HolderId::new("s1", "run1", "call_1");
     let holder2 = HolderId::new("s1", "run1", "call_2");
 
-    let _g1 = reg.claim_one(holder1, "shared.txt", ClaimMode::Write).unwrap();
-    let err = reg.claim_one(holder2, "shared.txt", ClaimMode::Write).unwrap_err();
-    assert_eq!(err.code(), TOOL_WRITE_PATH_CONFLICT, "同 run 内不同 tool_call_id 声明同路径必须冲突");
+    let _g1 = reg
+        .claim_one(holder1, "shared.txt", ClaimMode::Write)
+        .unwrap();
+    let err = reg
+        .claim_one(holder2, "shared.txt", ClaimMode::Write)
+        .unwrap_err();
+    assert_eq!(
+        err.code(),
+        TOOL_WRITE_PATH_CONFLICT,
+        "同 run 内不同 tool_call_id 声明同路径必须冲突"
+    );
 }
 
 #[test]
@@ -576,8 +584,12 @@ fn write_claim_guard_drop_releases_exact_paths_only() {
     let reg = Arc::new(WritePathRegistry::new("s1", ws.path()));
     let holder = HolderId::new("s1", "run1", "call1");
 
-    let g1 = reg.claim_one(holder.clone(), "file1.txt", ClaimMode::Write).unwrap();
-    let g2 = reg.claim_one(holder.clone(), "file2.txt", ClaimMode::Write).unwrap();
+    let g1 = reg
+        .claim_one(holder.clone(), "file1.txt", ClaimMode::Write)
+        .unwrap();
+    let g2 = reg
+        .claim_one(holder.clone(), "file2.txt", ClaimMode::Write)
+        .unwrap();
 
     assert_eq!(reg.active_claims().len(), 2);
 
@@ -590,10 +602,17 @@ fn write_claim_guard_drop_releases_exact_paths_only() {
 
     // 此时其他人可以声明 file1.txt，但 file2.txt 仍冲突
     let other = HolderId::new("s1", "run2", "call2");
-    let _g_other = reg.claim_one(other.clone(), "file1.txt", ClaimMode::Write)
+    let _g_other = reg
+        .claim_one(other.clone(), "file1.txt", ClaimMode::Write)
         .expect("file1.txt 已被释放，应允许声明");
-    let err = reg.claim_one(other, "file2.txt", ClaimMode::Write).unwrap_err();
-    assert_eq!(err.code(), TOOL_WRITE_PATH_CONFLICT, "file2.txt 仍被持有，必须冲突");
+    let err = reg
+        .claim_one(other, "file2.txt", ClaimMode::Write)
+        .unwrap_err();
+    assert_eq!(
+        err.code(),
+        TOOL_WRITE_PATH_CONFLICT,
+        "file2.txt 仍被持有，必须冲突"
+    );
 
     drop(g2);
     assert_eq!(reg.active_claims().len(), 1); // 仅剩 other 声明的 file1.txt
@@ -608,11 +627,16 @@ async fn dynamic_heartbeat_renewal_updates_lease() {
     let reg = Arc::new(WritePathRegistry::with_ttl("s1", ws.path(), 200));
     let holder = HolderId::new("s1", "run1", "call1");
 
-    let _g = reg.claim_one(holder.clone(), "a.txt", ClaimMode::Write).unwrap();
+    let _g = reg
+        .claim_one(holder.clone(), "a.txt", ClaimMode::Write)
+        .unwrap();
     let initial_expires = reg.active_claims()[0].expires_at_ms;
 
     tokio::time::sleep(Duration::from_millis(50)).await;
     reg.renew_lease(&holder, &[ws.path().join("a.txt")], 500);
     let renewed_expires = reg.active_claims()[0].expires_at_ms;
-    assert!(renewed_expires > initial_expires, "续期后 expires_at_ms 必须增大");
+    assert!(
+        renewed_expires > initial_expires,
+        "续期后 expires_at_ms 必须增大"
+    );
 }

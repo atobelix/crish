@@ -2,9 +2,9 @@
 
 use std::time::Duration;
 
-use crate::action::ActionErrorKind;
 use crate::action::ops::error::map_cdp_error;
 use crate::action::ops::network::NetworkCounter;
+use crate::action::ActionErrorKind;
 use crate::cdp::bus::BrowserEvent;
 use crate::cdp::error::CdpError;
 

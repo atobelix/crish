@@ -291,7 +291,8 @@ fn cleanup_preserves_session_with_unconsumed_pending() {
     let deleted = db.cleanup_orphan_sessions(&[]).unwrap();
 
     assert_eq!(
-        deleted.len(), 1,
+        deleted.len(),
+        1,
         "仅无 pending 的陈旧会话被清理，pending 未决会话豁免"
     );
     assert_remaining_ids(&db, &["pending-s1"]);

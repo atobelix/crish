@@ -77,7 +77,9 @@ fn warm_index_covers_all_roots_and_both_searchable() {
     let matcher = FuzzyMatcher::new(false);
     let alpha_hits = search_files("alpha", &report.files, 20, &matcher);
     assert!(
-        alpha_hits.iter().any(|h| h.path.ends_with("alpha_handler.rs")),
+        alpha_hits
+            .iter()
+            .any(|h| h.path.ends_with("alpha_handler.rs")),
         "第一根文件可搜：{alpha_hits:?}"
     );
     let beta_hits = search_files("beta", &report.files, 20, &matcher);
@@ -100,14 +102,13 @@ fn warm_index_reports_root_failure_observably() {
     let missing_str = path_str(&missing);
     let _ = fs::remove_dir_all(&missing); // 制造根级失败：目录不存在
 
-    let report = warm_index(&[path_str(&good), missing_str.clone()], &WarmupLimits::default());
+    let report = warm_index(
+        &[path_str(&good), missing_str.clone()],
+        &WarmupLimits::default(),
+    );
 
     assert_eq!(report.root_count, 2);
-    assert_eq!(
-        report.root_errors.len(),
-        1,
-        "根级失败必须可见：{report:?}"
-    );
+    assert_eq!(report.root_errors.len(), 1, "根级失败必须可见：{report:?}");
     assert_eq!(report.root_errors[0].root, missing_str);
     assert!(
         !report.root_errors[0].message.is_empty(),
@@ -223,17 +224,18 @@ fn warm_index_dedupes_nested_roots() {
     write_file(&root, "src/dup_target.rs");
     let sub = root.join("src");
 
-    let report = warm_index(
-        &[path_str(&root), path_str(&sub)],
-        &WarmupLimits::default(),
-    );
+    let report = warm_index(&[path_str(&root), path_str(&sub)], &WarmupLimits::default());
 
     let dup_count = report
         .files
         .iter()
         .filter(|f| f.ends_with("dup_target.rs"))
         .count();
-    assert_eq!(dup_count, 1, "嵌套根的同一文件只出现一次：{:?}", report.files);
+    assert_eq!(
+        dup_count, 1,
+        "嵌套根的同一文件只出现一次：{:?}",
+        report.files
+    );
 
     let _ = fs::remove_dir_all(&root);
 }

@@ -4,12 +4,12 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::BrowserSession;
 use crate::action::{ActionError, ActionErrorKind, ElementMeta, SnapshotStore};
 use crate::cdp::bus::VersionReason;
 use crate::cdp::version::{Stale, TabId};
-use crate::snapshot::SnapshotManager;
 use crate::snapshot::budget::BudgetConfig;
+use crate::snapshot::SnapshotManager;
+use crate::BrowserSession;
 
 /// 标签 → 会话解析器（引擎侧维度 15 标签管理注入；MVP 可用 session_for_active 兜底）。
 pub type SessionResolver = Arc<dyn Fn(&TabId) -> Option<String> + Send + Sync>;

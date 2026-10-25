@@ -1,7 +1,7 @@
 //! 在途请求计数（wait_for NetworkIdle 消费，维度 11 事件总线订阅维护）。
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use crate::cdp::bus::BrowserEvent;
 

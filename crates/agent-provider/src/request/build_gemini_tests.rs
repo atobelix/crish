@@ -159,8 +159,7 @@ fn function_call_and_function_response_pairing() {
         .expect("应存在 model functionCall content");
     assert_eq!(contents[fc]["role"], "model");
     assert_eq!(
-        contents[fc]["parts"][0]["functionCall"]["id"],
-        "call_1",
+        contents[fc]["parts"][0]["functionCall"]["id"], "call_1",
         "functionCall 必须保全真实 call.id"
     );
     assert_eq!(
@@ -179,8 +178,7 @@ fn function_call_and_function_response_pairing() {
         .expect("应存在 user functionResponse content");
     assert_eq!(contents[fr]["role"], "user");
     assert_eq!(
-        contents[fr]["parts"][0]["functionResponse"]["id"],
-        "call_1",
+        contents[fr]["parts"][0]["functionResponse"]["id"], "call_1",
         "functionResponse 必须回填真实 tool_call_id"
     );
     assert_eq!(
@@ -475,7 +473,10 @@ fn tool_config_choice_variants() {
                 .iter()
                 .filter_map(Value::as_str)
                 .collect();
-            assert_eq!(names, expected_names, "ToolChoice {description} allowedFunctionNames");
+            assert_eq!(
+                names, expected_names,
+                "ToolChoice {description} allowedFunctionNames"
+            );
         } else {
             assert!(
                 fcc.get("allowedFunctionNames").is_none(),
@@ -627,7 +628,10 @@ fn pairing_gate_validate_returns_err_on_orphan() {
     let messages: Vec<Arc<AgentMessage>> = vec![Arc::new(user_msg("读文件")), Arc::new(call)];
     let res = validate_gemini_tool_pairing(&messages);
     match res {
-        Err(RequestBuildError::UnpairedToolCalls { protocol, orphan_ids }) => {
+        Err(RequestBuildError::UnpairedToolCalls {
+            protocol,
+            orphan_ids,
+        }) => {
             assert_eq!(protocol, "gemini");
             assert_eq!(orphan_ids, vec!["read_file#0"]);
         }

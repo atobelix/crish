@@ -12,10 +12,8 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-pub use self::stream::{
-    stream_error_kind, ProviderStreamEvent, StreamParseError, StreamParser,
-};
+pub use self::stream::{stream_error_kind, ProviderStreamEvent, StreamParseError, StreamParser};
 pub use self::types::{
-    merge_usage_shards, CacheAccounting, CacheBreakdown, ModelRequestInfo,
-    ModelRequestObserver, ModelResponseInfo, ProviderUsage, StopReason,
+    merge_usage_shards, CacheAccounting, CacheBreakdown, ModelRequestInfo, ModelRequestObserver,
+    ModelResponseInfo, ProviderUsage, StopReason,
 };

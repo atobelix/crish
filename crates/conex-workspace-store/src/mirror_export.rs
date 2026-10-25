@@ -79,7 +79,11 @@ impl WorkspaceStore {
 
         if let Err(e) = write_res {
             // 主错误优先返回；临时文件清理属次生动作，失败也必须留痕（不静默丢）
-            report_secondary("清理临时文件", &tmp_path, std::fs::remove_file(&tmp_path).err());
+            report_secondary(
+                "清理临时文件",
+                &tmp_path,
+                std::fs::remove_file(&tmp_path).err(),
+            );
             return Err(StoreError::Io(e));
         }
 

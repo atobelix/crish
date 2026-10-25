@@ -210,9 +210,7 @@ impl FlowGraph {
 
     /// 按 id 查节点（O(1) 索引查表）
     pub fn node(&self, id: &str) -> Option<&FlowNode> {
-        self.node_index
-            .get(id)
-            .and_then(|&idx| self.nodes.get(idx))
+        self.node_index.get(id).and_then(|&idx| self.nodes.get(idx))
     }
 
     /// 按 id 查节点声明序下标（O(1) 索引查表）
@@ -615,7 +613,10 @@ mod tests {
         assert!(FlowNodeState::Blocked.is_terminal());
         assert!(FlowNodeState::Cancelled.is_terminal());
 
-        assert_eq!(FlowNodeState::parse("cancelled"), Some(FlowNodeState::Cancelled));
+        assert_eq!(
+            FlowNodeState::parse("cancelled"),
+            Some(FlowNodeState::Cancelled)
+        );
         assert_eq!(FlowNodeState::Cancelled.as_str(), "cancelled");
     }
 }

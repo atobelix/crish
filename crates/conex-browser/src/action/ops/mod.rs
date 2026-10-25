@@ -27,6 +27,6 @@ pub use self::isolated_world::CRISH_READ_INJECTION;
 pub use self::network::NetworkCounter;
 pub use self::page_ops::BrowserPageOps;
 pub use self::snapshot_store::{
-    BrowserSnapshotStore, SessionResolver, session_for_active, session_for_tab,
+    session_for_active, session_for_tab, BrowserSnapshotStore, SessionResolver,
 };
 pub use self::traits::{Delay, PageOps, TokioDelay};

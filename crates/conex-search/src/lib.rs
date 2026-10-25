@@ -224,8 +224,7 @@ pub mod search {
                 (score, indices)
             } else {
                 // Fallback: try matching against full path
-                let (path_score, path_indices) =
-                    matcher.score_and_indices_prepared(prepared, path);
+                let (path_score, path_indices) = matcher.score_and_indices_prepared(prepared, path);
                 let penalized = path_score / 2;
                 if penalized > 0 {
                     (penalized, path_indices)
@@ -624,16 +623,18 @@ mod tests {
     #[test]
     #[allow(clippy::disallowed_methods)]
     fn build_directory_index_prunes_skip_dirs() {
-        let dir = std::env::temp_dir().join(format!(
-            "conex_search_prune_test_{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("conex_search_prune_test_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("src")).unwrap();
         std::fs::create_dir_all(dir.join("node_modules/pkg")).unwrap();
         std::fs::create_dir_all(dir.join("target/debug")).unwrap();
         std::fs::write(dir.join("src/index.ts"), "export {};").unwrap();
-        std::fs::write(dir.join("node_modules/pkg/index.js"), "module.exports = {};").unwrap();
+        std::fs::write(
+            dir.join("node_modules/pkg/index.js"),
+            "module.exports = {};",
+        )
+        .unwrap();
         std::fs::write(dir.join("target/debug/out.rlib"), "bin").unwrap();
 
         let files = build_directory_index(dir.to_str().unwrap());

@@ -1,7 +1,7 @@
-use std::sync::Arc;
 use crate::browser::panel_input::BrowserInputEvent;
 use crate::core_run_commands::CoreRunState;
 use serde_json::json;
+use std::sync::Arc;
 
 use super::fixtures::mock_core_state;
 use crate::browser_commands::{
@@ -59,8 +59,7 @@ async fn status_and_stop_contract_on_idle_state() {
         .expect("mock app");
     let state_ref = app.state::<Arc<CoreRunState>>();
 
-    let status =
-        browser_status(app.handle().clone(), state_ref.clone()).expect("status 不应失败");
+    let status = browser_status(app.handle().clone(), state_ref.clone()).expect("status 不应失败");
     assert_eq!(status.state, "idle", "从未启动 = idle");
     assert_eq!(
         serde_json::to_value(&status).unwrap(),

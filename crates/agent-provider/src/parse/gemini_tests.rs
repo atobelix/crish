@@ -249,7 +249,8 @@ fn single_frame_array_of_candidate_objects_parsed() {
                 "finishReason": "STOP",
             }]
         }
-    ])).expect("序列化");
+    ]))
+    .expect("序列化");
 
     let events = parse_all(vec![&array_payload]);
     let texts: Vec<&str> = events

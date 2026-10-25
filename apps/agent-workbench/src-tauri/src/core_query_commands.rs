@@ -1584,8 +1584,7 @@ mod tests {
         };
         // prompt=1_000 / cache_read=800 → 输入段 200×3/1M=0.0006 + 输出 50×9/1M=0.00045
         // + cache_read 800×0.1/1M=0.00008 → 0.00113 → 引擎格式化 "$0.001130"
-        let usage =
-            RunUsage::from_run_cache_stats(stats, Some(&pricing)).expect("有定价必须出账");
+        let usage = RunUsage::from_run_cache_stats(stats, Some(&pricing)).expect("有定价必须出账");
         let engine_cost = agent_provider::pricing::PricingEngine::calculate_cost(
             &Some(pricing.clone()),
             stats.prompt_tokens,
@@ -1603,8 +1602,7 @@ mod tests {
         // 改价（input 3.0 → 30.0）→ 字符串变，token 字段不变
         let mut priced2 = pricing.clone();
         priced2.input = Some(30.0);
-        let usage2 =
-            RunUsage::from_run_cache_stats(stats, Some(&priced2)).expect("改价后必须出账");
+        let usage2 = RunUsage::from_run_cache_stats(stats, Some(&priced2)).expect("改价后必须出账");
         assert_ne!(
             usage2.cost.as_ref().map(|c| c.formatted_total.clone()),
             usage.cost.as_ref().map(|c| c.formatted_total.clone()),
@@ -1629,8 +1627,7 @@ mod tests {
             per_image: None,
             tiers: vec![],
         };
-        let free_usage =
-            RunUsage::from_run_cache_stats(stats, Some(&free)).expect("有样本");
+        let free_usage = RunUsage::from_run_cache_stats(stats, Some(&free)).expect("有样本");
         let free_cost = free_usage.cost.expect("免费模型必须出账");
         assert!(free_cost.is_free);
         assert_eq!(free_cost.formatted_total, "免费");

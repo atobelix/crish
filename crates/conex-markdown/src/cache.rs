@@ -122,14 +122,20 @@ mod tests {
     #[test]
     fn cache_supports_zero_copy_str_lookup() {
         let r_cache = render_cache();
-        r_cache.insert("str-lookup-key".to_string(), Arc::new("rendered-html".to_string()));
+        r_cache.insert(
+            "str-lookup-key".to_string(),
+            Arc::new("rendered-html".to_string()),
+        );
         let key_slice: &str = "str-lookup-key";
         assert_eq!(
             r_cache.get(key_slice).as_deref().map(|s| s.as_str()),
             Some("rendered-html")
         );
         assert_eq!(
-            r_cache.get_borrowed(key_slice).as_deref().map(|s| s.as_str()),
+            r_cache
+                .get_borrowed(key_slice)
+                .as_deref()
+                .map(|s| s.as_str()),
             Some("rendered-html")
         );
         assert_eq!(
@@ -137,14 +143,22 @@ mod tests {
             Some("rendered-html")
         );
 
-        assert!(insert_render_cached("helper-key", Arc::new("helper-val".to_string())));
+        assert!(insert_render_cached(
+            "helper-key",
+            Arc::new("helper-val".to_string())
+        ));
         assert_eq!(
-            get_render_cached("helper-key").as_deref().map(|s| s.as_str()),
+            get_render_cached("helper-key")
+                .as_deref()
+                .map(|s| s.as_str()),
             Some("helper-val")
         );
 
         let h_cache = highlight_cache();
-        h_cache.insert("ts:const x = 1;".to_string(), Arc::new("<span>const</span>".to_string()));
+        h_cache.insert(
+            "ts:const x = 1;".to_string(),
+            Arc::new("<span>const</span>".to_string()),
+        );
         let hl_slice: &str = "ts:const x = 1;";
         assert_eq!(
             h_cache.get(hl_slice).as_deref().map(|s| s.as_str()),

@@ -71,8 +71,8 @@ pub(crate) const TOOL_WRITE_PATH_CONFLICT: &str = codes::TOOL_WRITE_PATH_CONFLIC
 
 pub(crate) use write_paths_state::{check_write_allowance_for_ctx, claim_write_guard};
 pub use write_paths_state::{
-    get_or_create_registry, remove_registry, ClaimMode, HolderId, WriteClaimGuard,
-    WritePathClaim, WritePathConflict, WritePathRegistry, DEFAULT_CLAIM_TTL_MS,
+    get_or_create_registry, remove_registry, ClaimMode, HolderId, WriteClaimGuard, WritePathClaim,
+    WritePathConflict, WritePathRegistry, DEFAULT_CLAIM_TTL_MS,
 };
 pub use write_paths_validate::{
     check_write_allowance, paths_overlap_normalized, validate_write_path, WriteAllowanceError,

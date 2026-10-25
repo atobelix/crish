@@ -461,7 +461,8 @@ mod tests {
         .unwrap();
 
         // 1. Initial insert_run
-        db.insert_run("r1", "s1", RunStatus::Running, None, 10).unwrap();
+        db.insert_run("r1", "s1", RunStatus::Running, None, 10)
+            .unwrap();
         let run1 = db.get_run("r1").unwrap().expect("run exists");
         assert_eq!(run1.run_id, "r1");
         assert_eq!(run1.session_id, "s1");
@@ -472,13 +473,17 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(5));
 
         // 2. Second insert_run with same run_id: must UPSERT and keep created_at
-        db.insert_run("r1", "s1", RunStatus::Completed, Some("done"), 20).unwrap();
+        db.insert_run("r1", "s1", RunStatus::Completed, Some("done"), 20)
+            .unwrap();
         let run2 = db.get_run("r1").unwrap().expect("run exists");
         assert_eq!(run2.run_id, "r1");
         assert_eq!(run2.status, RunStatus::Completed);
         assert_eq!(run2.end_reason.as_deref(), Some("done"));
         assert_eq!(run2.cursor, 20);
-        assert_eq!(run2.created_at, created_at_1, "created_at must be preserved on conflict");
+        assert_eq!(
+            run2.created_at, created_at_1,
+            "created_at must be preserved on conflict"
+        );
         assert!(run2.updated_at >= created_at_1);
     }
 
@@ -498,13 +503,15 @@ mod tests {
         })
         .unwrap();
 
-        db.save_pending_input("p1", "s1", None, "payload-1").unwrap();
+        db.save_pending_input("p1", "s1", None, "payload-1")
+            .unwrap();
         let inputs1 = db.load_pending_inputs("s1").unwrap();
         assert_eq!(inputs1.len(), 1);
         assert_eq!(inputs1[0].payload, "payload-1");
 
         // Upsert same id with new payload
-        db.save_pending_input("p1", "s1", Some("r1"), "payload-2").unwrap();
+        db.save_pending_input("p1", "s1", Some("r1"), "payload-2")
+            .unwrap();
         let inputs2 = db.load_pending_inputs("s1").unwrap();
         assert_eq!(inputs2.len(), 1);
         assert_eq!(inputs2[0].payload, "payload-2");

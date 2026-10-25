@@ -28,7 +28,6 @@ pub use heuristics::{
     detect_recent_tool_error_loop, detect_repeated_tool_call_loop, ToolPromiseDetector,
 };
 pub use types::{
-    RecoverySteeringStrategy, RecoverySteeringStrategyOptions,
-    DEFAULT_MAX_CONSECUTIVE_TOOL_ERRORS, DEFAULT_MAX_REPEATED_TOOL_CALLS,
-    DEFAULT_MAX_STEERING_MESSAGES,
+    RecoverySteeringStrategy, RecoverySteeringStrategyOptions, DEFAULT_MAX_CONSECUTIVE_TOOL_ERRORS,
+    DEFAULT_MAX_REPEATED_TOOL_CALLS, DEFAULT_MAX_STEERING_MESSAGES,
 };

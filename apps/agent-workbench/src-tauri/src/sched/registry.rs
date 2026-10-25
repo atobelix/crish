@@ -89,7 +89,13 @@ impl SchedulerRegistry {
 
     /// 清除指定任务的失效目标会话绑定（INT-04 僵尸会话自愈同步用）
     pub(crate) fn clear_target_session_id(&self, cron_id: &str) {
-        if let Some(entry) = self.components.tasks.lock().unwrap_or_else(|e| e.into_inner()).get_mut(cron_id) {
+        if let Some(entry) = self
+            .components
+            .tasks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_mut(cron_id)
+        {
             entry.task.target_session_id = None;
         }
         self.components.store.clear_target_session_id(cron_id);
@@ -126,15 +132,19 @@ impl SchedulerRegistry {
         let delay = fire_delay_ms(&self.components, next_fire_at_ms);
         let generation = 1;
         let handle = spawn_fire_task(self.components.clone(), task.clone(), delay, generation);
-        self.components.tasks.lock().unwrap_or_else(|e| e.into_inner()).insert(
-            cron_id.clone(),
-            CronEntry {
-                task,
-                status: CronTaskStatus::Active,
-                generation,
-                sleep_task: Some(handle),
-            },
-        );
+        self.components
+            .tasks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(
+                cron_id.clone(),
+                CronEntry {
+                    task,
+                    status: CronTaskStatus::Active,
+                    generation,
+                    sleep_task: Some(handle),
+                },
+            );
         tracing::info!(target: "sched", cron_id = %cron_id, next_fire_at_ms, "cron 任务已注册");
         Ok(cron_id)
     }
@@ -144,14 +154,28 @@ impl SchedulerRegistry {
         let task_to_save: CronTask;
 
         {
-            let mut tasks = self.components.tasks.lock().unwrap_or_else(|e| e.into_inner());
-            let entry = tasks.get_mut(cron_id).ok_or_else(|| CoreError::NotFound(format!("cron 任务 {cron_id} 不存在")))?;
+            let mut tasks = self
+                .components
+                .tasks
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let entry = tasks
+                .get_mut(cron_id)
+                .ok_or_else(|| CoreError::NotFound(format!("cron 任务 {cron_id} 不存在")))?;
 
             if entry.status == CronTaskStatus::Paused {
-                return Err(CoreError::invalid_input(format!("cron 任务 {cron_id} 已处于暂停态")));
+                return Err(CoreError::invalid_input(format!(
+                    "cron 任务 {cron_id} 已处于暂停态"
+                )));
             }
-            if matches!(entry.status, CronTaskStatus::Completed | CronTaskStatus::Cancelled) {
-                return Err(CoreError::invalid_input(format!("cron 任务 {cron_id} 已处于终态 ({:?})", entry.status)));
+            if matches!(
+                entry.status,
+                CronTaskStatus::Completed | CronTaskStatus::Cancelled
+            ) {
+                return Err(CoreError::invalid_input(format!(
+                    "cron 任务 {cron_id} 已处于终态 ({:?})",
+                    entry.status
+                )));
             }
 
             if let Some(handle) = entry.sleep_task.take() {
@@ -177,20 +201,37 @@ impl SchedulerRegistry {
         let delay_ms: u64;
 
         {
-            let mut tasks = self.components.tasks.lock().unwrap_or_else(|e| e.into_inner());
-            let entry = tasks.get_mut(cron_id).ok_or_else(|| CoreError::NotFound(format!("cron 任务 {cron_id} 不存在")))?;
+            let mut tasks = self
+                .components
+                .tasks
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let entry = tasks
+                .get_mut(cron_id)
+                .ok_or_else(|| CoreError::NotFound(format!("cron 任务 {cron_id} 不存在")))?;
 
             if entry.status == CronTaskStatus::Active {
-                return Err(CoreError::invalid_input(format!("cron 任务 {cron_id} 已处于活跃态")));
+                return Err(CoreError::invalid_input(format!(
+                    "cron 任务 {cron_id} 已处于活跃态"
+                )));
             }
-            if matches!(entry.status, CronTaskStatus::Completed | CronTaskStatus::Cancelled) {
-                return Err(CoreError::invalid_input(format!("cron 任务 {cron_id} 已处于终态 ({:?})", entry.status)));
+            if matches!(
+                entry.status,
+                CronTaskStatus::Completed | CronTaskStatus::Cancelled
+            ) {
+                return Err(CoreError::invalid_input(format!(
+                    "cron 任务 {cron_id} 已处于终态 ({:?})",
+                    entry.status
+                )));
             }
 
             let schedule = parse_cron(&entry.task.expression)
                 .map_err(|e| CoreError::invalid_input(format!("cron 表达式非法：{e:?}")))?;
             let next = schedule.next_fire_after(now).ok_or_else(|| {
-                CoreError::invalid_input(format!("cron 表达式 {} 无未来触发时刻", entry.task.expression))
+                CoreError::invalid_input(format!(
+                    "cron 表达式 {} 无未来触发时刻",
+                    entry.task.expression
+                ))
             })?;
 
             entry.task.next_fire_at_ms = next;
@@ -201,7 +242,12 @@ impl SchedulerRegistry {
             delay_ms = fire_delay_ms(&self.components, next);
             task_to_save = entry.task.clone();
 
-            let handle = spawn_fire_task(self.components.clone(), entry.task.clone(), delay_ms, entry.generation);
+            let handle = spawn_fire_task(
+                self.components.clone(),
+                entry.task.clone(),
+                delay_ms,
+                entry.generation,
+            );
             if let Some(old_h) = entry.sleep_task.replace(handle) {
                 old_h.abort();
             }

@@ -217,12 +217,10 @@ pub(crate) fn catalog_request_profile(config: &EngineProviderConfig) -> CatalogR
     let compat = spec.compat.as_ref().or(provider.compat.as_ref());
     // thinking_format：yaml compat ≻ 协议缺省（openai/chat 与 openai/responses →
     // OpenAi；anthropic/gemini 无声明 → None = fail-closed 不注入思考键，§2.3）
-    let thinking_format = compat
-        .and_then(|c| c.thinking_format)
-        .or(match protocol {
-            WireProtocol::Chat | WireProtocol::Responses => Some(ThinkingFormat::OpenAi),
-            _ => None,
-        });
+    let thinking_format = compat.and_then(|c| c.thinking_format).or(match protocol {
+        WireProtocol::Chat | WireProtocol::Responses => Some(ThinkingFormat::OpenAi),
+        _ => None,
+    });
     let max_tokens_field = compat
         .and_then(|c| c.max_tokens_field)
         .map(|f| match f {

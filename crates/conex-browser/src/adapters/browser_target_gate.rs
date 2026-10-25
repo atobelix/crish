@@ -119,9 +119,11 @@ mod tests {
         assert!(gate
             .check(&ActionTarget::Url("https://a.example".to_string()))
             .is_ok());
-        assert!(gate.check(&ActionTarget::Window {
-            title: "x".to_string(),
-            process: None,
-        }).is_err());
+        assert!(gate
+            .check(&ActionTarget::Window {
+                title: "x".to_string(),
+                process: None,
+            })
+            .is_err());
     }
 }

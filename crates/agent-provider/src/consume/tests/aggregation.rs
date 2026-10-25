@@ -1,9 +1,9 @@
 use super::{message, stop, stop_with, text_delta, thought_delta, tool_call};
 use crate::consume::{consume, ConsumeStopReason};
+use crate::events::{ProviderStreamEvent, ProviderUsage, StopReason};
 use conex_types::error::ProviderErrorKind;
 use conex_types::response::ProviderOutput;
 use conex_types::tool::{ProviderDiagnostic, ProviderDiagnosticPhase};
-use crate::events::{ProviderStreamEvent, ProviderUsage, StopReason};
 
 /// thought 聚合：metadata.thought 为聚合全文，thoughtBlocks 逐段保留 redacted（02 §一.4）
 #[test]

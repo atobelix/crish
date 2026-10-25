@@ -233,7 +233,9 @@ pub fn highlight_code(code: &str, lang: Option<&str>) -> String {
     }
 
     let html = match find_syntax(&lang_norm) {
-        Some(syntax) => render_with_syntect(&raw, syntax).unwrap_or_else(|_| escape_html_plain(&raw)),
+        Some(syntax) => {
+            render_with_syntect(&raw, syntax).unwrap_or_else(|_| escape_html_plain(&raw))
+        }
         None => escape_html_plain(&raw),
     };
 

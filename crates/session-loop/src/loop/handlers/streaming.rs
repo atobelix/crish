@@ -316,7 +316,12 @@ async fn consume_classify(
             }
 
             // 【截断工具强隔离防火墙与 Error 终态处理（BC02-2）】
-            if let Some(ConsumeStopReason::Error { kind, message, retryable }) = consumed.stop_reason() {
+            if let Some(ConsumeStopReason::Error {
+                kind,
+                message,
+                retryable,
+            }) = consumed.stop_reason()
+            {
                 if has_tool_calls {
                     tracing::warn!(
                         assistant_id = %assistant_message_id,
@@ -946,7 +951,10 @@ mod tests {
             .expect("consume_classify 应处理并返回结果");
 
         // 验证：无 tool_calls 时内容被部分保留，回合正常收工进入 TurnComplete（由外层触发 content-resume 续写）
-        assert!(outcome.end.is_none(), "无工具调用的断流不直接 fatal 终止，而放行由外层触发续写");
+        assert!(
+            outcome.end.is_none(),
+            "无工具调用的断流不直接 fatal 终止，而放行由外层触发续写"
+        );
         assert_eq!(state.machine.state(), S::TurnComplete);
     }
 
@@ -956,16 +964,12 @@ mod tests {
         let stream = futures::stream::iter(vec![
             Ok(ProviderStreamEvent::text("正文1")),
             Ok(ProviderStreamEvent::stop(StopReason::Stop)),
-            Ok(ProviderStreamEvent::text("Stop 之后的脏数据（绝不应被推入）")),
+            Ok(ProviderStreamEvent::text(
+                "Stop 之后的脏数据（绝不应被推入）",
+            )),
         ]);
         let mut state = test_state();
-        let outcome = consume_stream(
-            &mut state,
-            None,
-            "a1",
-            Ok(Box::pin(stream)),
-        )
-        .await;
+        let outcome = consume_stream(&mut state, None, "a1", Ok(Box::pin(stream))).await;
 
         let consumed = outcome.consumed.expect("应成功聚合");
         assert_eq!(consumed.response.text(), "正文1");

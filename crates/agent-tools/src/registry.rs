@@ -552,7 +552,11 @@ mod tests {
                     fatal_on_error: false,
                 })
             }
-            async fn execute(&self, _ctx: &crate::context::ToolContext, args: serde_json::Value) -> Result<serde_json::Value, ToolError> {
+            async fn execute(
+                &self,
+                _ctx: &crate::context::ToolContext,
+                args: serde_json::Value,
+            ) -> Result<serde_json::Value, ToolError> {
                 Ok(args)
             }
         }

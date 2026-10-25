@@ -122,7 +122,6 @@ fn budget_and_level_conversion_tables() {
     assert_eq!(thinking_to_gemini_thinking_level(I::Max), "high");
 }
 
-
 // ── normalize_thinking_intensity（降级钳制；AllowDegrade 路径消费）──
 
 #[test]

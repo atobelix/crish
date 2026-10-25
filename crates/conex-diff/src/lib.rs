@@ -170,8 +170,7 @@ pub mod diff_engine {
             if result.hunks.is_empty() {
                 return Vec::new();
             }
-            let total_view_lines: usize =
-                result.hunks.iter().map(|h| 1 + h.lines.len()).sum();
+            let total_view_lines: usize = result.hunks.iter().map(|h| 1 + h.lines.len()).sum();
             let mut out = Vec::with_capacity(total_view_lines);
 
             for hunk in &result.hunks {
@@ -557,7 +556,10 @@ mod tests {
 
         // 空 Diff 不分配冗余内存
         let empty = DiffEngine::diff("same\n", "same\n");
-        assert_eq!(DiffEngine::estimate_unified_capacity("a", "b", &empty), (0, 0));
+        assert_eq!(
+            DiffEngine::estimate_unified_capacity("a", "b", &empty),
+            (0, 0)
+        );
         assert!(DiffEngine::format_unified("a", "b", &empty).is_empty());
         assert!(DiffEngine::format_unified_lines(&empty).is_empty());
     }

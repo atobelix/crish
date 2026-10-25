@@ -77,10 +77,7 @@ pub(crate) async fn workbench_check_update<R: Runtime>(
                 "target": update.target,
             });
             // T07.6 恢复式锁：中毒时接管原守卫继续，不在更新链路 panic
-            *session
-                .pending
-                .lock()
-                .unwrap_or_else(|e| e.into_inner()) = Some(update);
+            *session.pending.lock().unwrap_or_else(|e| e.into_inner()) = Some(update);
             Ok(out)
         }
         None => {
@@ -120,10 +117,7 @@ pub(crate) async fn workbench_download_update<R: Runtime>(
         .await
         .map_err(map_updater_err)?;
     let out = json!({ "ok": true, "version": update.version, "size": bytes.len() });
-    *session
-        .downloaded
-        .lock()
-        .unwrap_or_else(|e| e.into_inner()) = Some((update, bytes));
+    *session.downloaded.lock().unwrap_or_else(|e| e.into_inner()) = Some((update, bytes));
     Ok(out)
 }
 

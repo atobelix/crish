@@ -357,7 +357,10 @@ fn crish_error_and_payload_dynamic_params_serialization() {
     let mut params = std::collections::HashMap::new();
     params.insert("target".to_string(), serde_json::json!("workspace/foo.rs"));
     params.insert("code".to_string(), serde_json::json!(403));
-    params.insert("detail".to_string(), serde_json::json!({ "subsystem": "sandbox" }));
+    params.insert(
+        "detail".to_string(),
+        serde_json::json!({ "subsystem": "sandbox" }),
+    );
 
     let err = CrishError::new(codes::TOOL_WRITE_NOT_ALLOWED, "path access denied")
         .with_params(params)

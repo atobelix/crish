@@ -132,7 +132,6 @@ pub fn build_gemini_request_body(
         );
     }
 
-
     Value::Object(body)
 }
 

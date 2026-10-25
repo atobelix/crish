@@ -159,7 +159,10 @@ async fn irreversible_exited_terminal_state() {
     assert_eq!(session.state(), McpServerRuntimeState::Ready);
 
     // 正常变迁到 Degraded
-    assert!(session.transition_state(McpServerRuntimeState::Ready, McpServerRuntimeState::Degraded));
+    assert!(session.transition_state(
+        McpServerRuntimeState::Ready,
+        McpServerRuntimeState::Degraded
+    ));
     assert_eq!(session.state(), McpServerRuntimeState::Degraded);
 
     // 标记 Exited 终态
@@ -170,7 +173,10 @@ async fn irreversible_exited_terminal_state() {
     assert!(!session.transition_state(McpServerRuntimeState::Exited, McpServerRuntimeState::Ready));
     assert_eq!(session.state(), McpServerRuntimeState::Exited);
 
-    assert!(!session.transition_state(McpServerRuntimeState::Exited, McpServerRuntimeState::Degraded));
+    assert!(!session.transition_state(
+        McpServerRuntimeState::Exited,
+        McpServerRuntimeState::Degraded
+    ));
     assert_eq!(session.state(), McpServerRuntimeState::Exited);
 
     // set_state 也被锁死，不可覆盖 Exited

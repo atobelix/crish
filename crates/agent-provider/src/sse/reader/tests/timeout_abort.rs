@@ -55,9 +55,7 @@ async fn abort_interrupts_pending_read() {
     let (flag, mut abort) = AbortFlag::new();
     let options = StreamReadOptions::default();
     let handle =
-        tokio::spawn(
-            async move { read_sse(&mut reader, &mut parser, &options, &mut abort).await },
-        );
+        tokio::spawn(async move { read_sse(&mut reader, &mut parser, &options, &mut abort).await });
     tokio::time::sleep(Duration::from_millis(50)).await;
     flag.abort();
     let error = handle.await.unwrap().unwrap_err();

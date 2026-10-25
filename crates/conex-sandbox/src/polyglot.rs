@@ -439,7 +439,10 @@ impl PolyglotCodeInspector {
         for nested in nested_cmds {
             let res = crate::semantics::analyze_depth_pub(&nested, depth + 1);
             if res.overall_class == CommandClass::Redline
-                || res.segments.iter().any(|s| s.class == CommandClass::Redline)
+                || res
+                    .segments
+                    .iter()
+                    .any(|s| s.class == CommandClass::Redline)
             {
                 return Ok(redline_only_analysis());
             }
@@ -547,7 +550,8 @@ impl PolyglotCodeInspector {
                         let list_content = list_match.as_str();
                         let mut items = Vec::new();
                         for item_cap in rules.py_string_literal.captures_iter(list_content) {
-                            if let Some(item_s) = get_captured_str(&item_cap, &["item_d", "item_s"]) {
+                            if let Some(item_s) = get_captured_str(&item_cap, &["item_d", "item_s"])
+                            {
                                 items.push(clean_escaped_string(item_s));
                             }
                         }
@@ -569,7 +573,9 @@ impl PolyglotCodeInspector {
                         if let Some(args_m) = cap.name("args") {
                             let mut items = vec![cmd_str];
                             for item_cap in rules.py_string_literal.captures_iter(args_m.as_str()) {
-                                if let Some(item_val) = get_captured_str(&item_cap, &["item_d", "item_s"]) {
+                                if let Some(item_val) =
+                                    get_captured_str(&item_cap, &["item_d", "item_s"])
+                                {
                                     items.push(clean_escaped_string(item_val));
                                 }
                             }
@@ -715,7 +721,8 @@ impl PolyglotCodeInspector {
         let rules = rules()?;
         Ok(match kind {
             InterpreterKind::Python => {
-                rules.py_reflection_danger.is_match(script) || rules.py_general_proc.is_match(script)
+                rules.py_reflection_danger.is_match(script)
+                    || rules.py_general_proc.is_match(script)
             }
             InterpreterKind::Node => {
                 rules.node_reflection_danger.is_match(script)
@@ -754,7 +761,11 @@ pub fn is_critical_path_str(path: &str) -> bool {
 
     // 2. Windows 驱动盘根（C:/, C:, C:/* 等）
     if upper.len() >= 2
-        && upper.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false)
+        && upper
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_alphabetic())
+            .unwrap_or(false)
         && &upper[1..2] == ":"
         && (upper.len() == 2
             || (upper.len() == 3 && &upper[2..3] == "/")
@@ -765,8 +776,18 @@ pub fn is_critical_path_str(path: &str) -> bool {
 
     // 3. 常见 Unix 核心关键目录
     const UNIX_CRITICAL: &[&str] = &[
-        "/BIN", "/SBIN", "/USR/BIN", "/USR/SBIN", "/ETC",
-        "/BOOT", "/DEV", "/PROC", "/SYS", "/LIB", "/LIB64", "/VAR/RUN",
+        "/BIN",
+        "/SBIN",
+        "/USR/BIN",
+        "/USR/SBIN",
+        "/ETC",
+        "/BOOT",
+        "/DEV",
+        "/PROC",
+        "/SYS",
+        "/LIB",
+        "/LIB64",
+        "/VAR/RUN",
     ];
     for crit in UNIX_CRITICAL {
         if upper == *crit || upper.starts_with(&format!("{crit}/")) {
@@ -776,9 +797,14 @@ pub fn is_critical_path_str(path: &str) -> bool {
 
     // 4. Windows 核心关键目录
     const WIN_CRITICAL: &[&str] = &[
-        "WINDOWS", "PROGRAM FILES", "PROGRAM FILES (X86)",
-        "PROGRAMDATA/MICROSOFT", "SYSTEM VOLUME INFORMATION",
-        "RECOVERY", "BOOT", "$RECYCLE.BIN",
+        "WINDOWS",
+        "PROGRAM FILES",
+        "PROGRAM FILES (X86)",
+        "PROGRAMDATA/MICROSOFT",
+        "SYSTEM VOLUME INFORMATION",
+        "RECOVERY",
+        "BOOT",
+        "$RECYCLE.BIN",
     ];
     if upper.len() >= 3 && &upper[1..3] == ":/" {
         let after_drive = &upper[3..];
@@ -906,12 +932,16 @@ mod tests {
         for (cmd, target) in delete_cases {
             let a = analyze(cmd);
             assert!(
-                a.overall_class == CommandClass::Indirect || a.overall_class == CommandClass::DeleteShape,
+                a.overall_class == CommandClass::Indirect
+                    || a.overall_class == CommandClass::DeleteShape,
                 "cmd failed: {cmd}, actual: {:?}",
                 a.overall_class
             );
             assert!(a.has_indirect_delete, "has_indirect_delete failed: {cmd}");
-            assert!(a.delete_targets.contains(&target.to_string()), "target failed: {cmd}");
+            assert!(
+                a.delete_targets.contains(&target.to_string()),
+                "target failed: {cmd}"
+            );
             let gk = SHARED_GATEKEEPER.check_command(cmd, &[]);
             assert_eq!(gk, GatekeeperResult::RequiresApproval, "gk failed: {cmd}");
         }
@@ -946,7 +976,8 @@ mod tests {
         for (cmd, target) in deletes {
             let a = analyze(cmd);
             assert!(
-                a.overall_class == CommandClass::Indirect || a.overall_class == CommandClass::DeleteShape,
+                a.overall_class == CommandClass::Indirect
+                    || a.overall_class == CommandClass::DeleteShape,
                 "cmd failed: {cmd}, actual: {:?}",
                 a.overall_class
             );
@@ -983,7 +1014,8 @@ mod tests {
         for (cmd, target) in deletes {
             let a = analyze(cmd);
             assert!(
-                a.overall_class == CommandClass::Indirect || a.overall_class == CommandClass::DeleteShape,
+                a.overall_class == CommandClass::Indirect
+                    || a.overall_class == CommandClass::DeleteShape,
                 "cmd failed: {cmd}, actual: {:?}",
                 a.overall_class
             );
@@ -1026,7 +1058,11 @@ mod tests {
         ];
         for cmd in dangerous_cases {
             let a = analyze(cmd);
-            assert_eq!(a.overall_class, CommandClass::Dangerous, "cmd failed: {cmd}");
+            assert_eq!(
+                a.overall_class,
+                CommandClass::Dangerous,
+                "cmd failed: {cmd}"
+            );
             let gk = SHARED_GATEKEEPER.check_command(cmd, &[]);
             assert_eq!(gk, GatekeeperResult::RequiresApproval, "gk failed: {cmd}");
         }

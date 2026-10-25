@@ -46,7 +46,9 @@ fn cleanup(dir: std::path::PathBuf) {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
             Err(e) => {
                 last_err = Some(e);
-                std::thread::sleep(std::time::Duration::from_millis(50u64 * (attempt as u64 + 1)));
+                std::thread::sleep(std::time::Duration::from_millis(
+                    50u64 * (attempt as u64 + 1),
+                ));
             }
         }
     }

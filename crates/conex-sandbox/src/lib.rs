@@ -1,11 +1,11 @@
-pub mod semantics;
 pub mod polyglot;
+pub mod semantics;
 // T-AB-05 / Unit 5.1 新增公开导出：禁 cd 语义层与反混淆/AST 门禁接口
 pub use polyglot::{InterpreterKind, PolyglotCodeInspector, PolyglotRulesError};
 pub use semantics::{
     analyze_segment_ast, analyze_token_danger, classify_command_segments,
-    extract_and_decode_ps_payload, is_ps_encoded_command_flag,
-    is_ps_working_directory_flag, split_command_args_normalized, CommandClass,
+    extract_and_decode_ps_payload, is_ps_encoded_command_flag, is_ps_working_directory_flag,
+    split_command_args_normalized, CommandClass,
 };
 pub mod gatekeeper {
     use regex::RegexSet;

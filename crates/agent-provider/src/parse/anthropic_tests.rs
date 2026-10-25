@@ -215,7 +215,11 @@ fn redacted_thinking_start_yields_thought_with_redacted_true() {
     match thoughts[0] {
         ProviderStreamEvent::ThoughtDelta { text, redacted } => {
             assert_eq!(text, "encrypted_blob_data");
-            assert_eq!(redacted, &Some(true), "redacted_thinking 必须带有 redacted=true 标识");
+            assert_eq!(
+                redacted,
+                &Some(true),
+                "redacted_thinking 必须带有 redacted=true 标识"
+            );
         }
         _ => unreachable!(),
     }
@@ -274,7 +278,10 @@ fn signature_delta_is_captured_in_parser() {
     parser.finish().unwrap();
 
     assert_eq!(parser.last_thinking_signature(), Some("sig_xyz_987"));
-    assert_eq!(parser.thinking_signatures().get(&0).map(String::as_str), Some("sig_xyz_987"));
+    assert_eq!(
+        parser.thinking_signatures().get(&0).map(String::as_str),
+        Some("sig_xyz_987")
+    );
 }
 
 #[test]

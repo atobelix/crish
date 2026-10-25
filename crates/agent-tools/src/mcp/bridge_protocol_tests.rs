@@ -27,7 +27,10 @@ fn mcp_tool_name_prefixes_and_sanitizes() {
 fn test_mcp_tool_name_hashing_collision_free() {
     let name_dot = format_mcp_tool_name("my.server", "read");
     let name_under = format_mcp_tool_name("my_server", "read");
-    assert_ne!(name_dot, name_under, "不同 server_id 绝对不能产生相同的名称");
+    assert_ne!(
+        name_dot, name_under,
+        "不同 server_id 绝对不能产生相同的名称"
+    );
     assert!(name_dot.starts_with("mcp_my_server_"));
     assert!(name_under.starts_with("mcp_my_server_"));
     assert!(name_dot.ends_with("__read"));

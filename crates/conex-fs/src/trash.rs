@@ -609,7 +609,11 @@ impl TrashService {
                 }
                 Ok(payload_meta) => bail!(
                     "nil-content 快照意外包含 payload（{}）：{}",
-                    if payload_meta.is_dir() { "目录" } else { "文件" },
+                    if payload_meta.is_dir() {
+                        "目录"
+                    } else {
+                        "文件"
+                    },
                     meta.entry.id
                 ),
             }

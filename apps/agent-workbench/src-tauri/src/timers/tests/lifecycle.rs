@@ -11,7 +11,7 @@ use crate::timers::store::TimerStore;
 use crate::timers::tests::{
     assert_early_exit_notice, poll_until, queue_len, queue_snapshot, subagent_ended, test_registry,
 };
-use crate::timers::types::{TimerCancelReason, TimerEvent, steering_group_id};
+use crate::timers::types::{steering_group_id, TimerCancelReason, TimerEvent};
 
 // ── T-CF-06：注册 / 到期 / 取消 ───────────────────────────────────
 

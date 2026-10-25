@@ -74,8 +74,11 @@ static EN_BOLD_RE: Lazy<Regex> = Lazy::new(|| {
     .expect("valid en bold regex")
 });
 static EN_BARE_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(&format!(r"(?im)^{}\s*[:：·.\-—–]*\s*$", RE_ROUND_SUMMARY_EN))
-        .expect("valid en bare regex")
+    Regex::new(&format!(
+        r"(?im)^{}\s*[:：·.\-—–]*\s*$",
+        RE_ROUND_SUMMARY_EN
+    ))
+    .expect("valid en bare regex")
 });
 static FENCE_FILE_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r#"\bfile=(?:"([^"]*)"|(\S+))"#).expect("valid file regex"));
@@ -349,8 +352,9 @@ impl Renderer {
                 };
                 self.output.replace_range(pos..end, li_new);
                 if checked {
-                    self.output
-                        .push_str("<span class=\"md-task-box checked\" aria-checked=\"true\"></span>");
+                    self.output.push_str(
+                        "<span class=\"md-task-box checked\" aria-checked=\"true\"></span>",
+                    );
                 } else {
                     self.output
                         .push_str("<span class=\"md-task-box\" aria-checked=\"false\"></span>");
@@ -490,8 +494,7 @@ impl Renderer {
         self.output.push('"');
         if matches!(kind, ListKind::Ordered) && start_val > 1 {
             // 写入 String 不可能失败：直接 push_str
-            self.output
-                .push_str(&format!(" start=\"{}\"", start_val));
+            self.output.push_str(&format!(" start=\"{}\"", start_val));
         }
         self.output.push('>');
     }
@@ -553,8 +556,7 @@ impl Renderer {
             return;
         }
         let safe = sanitize_url_candidate(&url);
-        self.output
-            .push_str("<a class=\"md-a\" href=\"");
+        self.output.push_str("<a class=\"md-a\" href=\"");
         escape_html_attr_into(&safe, &mut self.output);
         self.output
             .push_str("\" target=\"_blank\" rel=\"noreferrer\">");
@@ -1076,9 +1078,7 @@ static BARE_PATH_RE: Lazy<Regex> = Lazy::new(|| {
 
 /// 扫描文本中的裸路径, 包装为 `<button class="md-path-link">` 并直接写入缓冲区。
 fn wrap_bare_paths_and_escape_into(text: &str, out: &mut String) {
-    if !text.contains('.')
-        || (!text.contains('/') && !text.contains('\\') && !text.contains('~'))
-    {
+    if !text.contains('.') || (!text.contains('/') && !text.contains('\\') && !text.contains('~')) {
         let escaped = escape_html(text);
         let wrapped = wrap_cjk_text_segment(&escaped);
         out.push_str(&wrapped);
@@ -1162,8 +1162,8 @@ pub fn lang_from_fence_info_cow(info: &str) -> Cow<'_, str> {
         "py" | "PY" => Cow::Borrowed("python"),
         "rb" | "RB" => Cow::Borrowed("ruby"),
         "rs" | "RS" => Cow::Borrowed("rust"),
-        "sh" | "shell" | "zsh" | "ps1" | "powershell"
-        | "SH" | "SHELL" | "ZSH" | "PS1" | "POWERSHELL" => Cow::Borrowed("bash"),
+        "sh" | "shell" | "zsh" | "ps1" | "powershell" | "SH" | "SHELL" | "ZSH" | "PS1"
+        | "POWERSHELL" => Cow::Borrowed("bash"),
         "yml" | "YML" => Cow::Borrowed("yaml"),
         "md" | "MD" => Cow::Borrowed("markdown"),
         other => {
@@ -1201,9 +1201,9 @@ pub fn extract_file_path_from_fence_info_str(info: &str) -> Option<&str> {
     if !info.contains("file=") {
         return None;
     }
-    FENCE_FILE_RE.captures(info).and_then(|c| {
-        c.get(1).or_else(|| c.get(2)).map(|m| m.as_str())
-    })
+    FENCE_FILE_RE
+        .captures(info)
+        .and_then(|c| c.get(1).or_else(|| c.get(2)).map(|m| m.as_str()))
 }
 
 /// 构建 fence 代码块的 HTML。
@@ -1623,7 +1623,10 @@ mod tests {
     #[test]
     fn fence_info_cow_returns_borrowed_for_standard_languages() {
         assert_eq!(lang_from_fence_info_cow("rust"), Cow::Borrowed("rust"));
-        assert_eq!(lang_from_fence_info_cow("typescript"), Cow::Borrowed("typescript"));
+        assert_eq!(
+            lang_from_fence_info_cow("typescript"),
+            Cow::Borrowed("typescript")
+        );
         assert_eq!(lang_from_fence_info_cow("ts"), Cow::Borrowed("typescript"));
         assert_eq!(lang_from_fence_info_cow("c++"), Cow::Borrowed("cpp"));
 

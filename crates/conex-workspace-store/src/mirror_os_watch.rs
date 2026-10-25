@@ -206,9 +206,7 @@ impl MirrorOsWatcher {
                     if tx.send(MirrorOsEvent { path, kind }).is_err() {
                         // 接收端已析构（watcher 正在关闭）：事件无处投递属预期终止，
                         // 但必须留痕，避免异常关闭被静默吞掉。
-                        eprintln!(
-                            "[conex-workspace-store] mirror OS 事件接收端已关闭，事件丢弃"
-                        );
+                        eprintln!("[conex-workspace-store] mirror OS 事件接收端已关闭，事件丢弃");
                     }
                 }
             },

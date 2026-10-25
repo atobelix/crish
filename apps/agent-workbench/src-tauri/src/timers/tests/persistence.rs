@@ -10,10 +10,10 @@ use orchestrator::PendingMessageQueue;
 
 use crate::timers::registry::TimerRegistry;
 use crate::timers::store::{
-    LocalDbTimerStore, MemoryTimerStore, SESSION_META_TIMER_INDEX_KEY, TimerStore, store_key,
+    store_key, LocalDbTimerStore, MemoryTimerStore, TimerStore, SESSION_META_TIMER_INDEX_KEY,
 };
-use crate::timers::tests::{ProbeEvents, declaration, poll_until, queue_len, queue_snapshot};
-use crate::timers::types::{EventSink, QueuePendingSink, TimerEvent, steering_group_id};
+use crate::timers::tests::{declaration, poll_until, queue_len, queue_snapshot, ProbeEvents};
+use crate::timers::types::{steering_group_id, EventSink, QueuePendingSink, TimerEvent};
 
 /// 重启恢复：注册 → 重建注册表（共享 store + 共享注入时钟）→
 /// restore → 剩余时间重建轮询且到期恰好注入一次；已到期已注入的
@@ -58,8 +58,8 @@ async fn timer_registry_persists_and_recovers() {
         (registry, queue, events)
     };
     drop(registry_a); // 模拟重启（注册表消亡，store 残留；残留 fire
-    // 任务仅向自己的探针发射，不污染阶段 B 断言）
-    // 阶段 B：restore 扫描重建 → 推进时钟 → 恰好注入一条
+                      // 任务仅向自己的探针发射，不污染阶段 B 断言）
+                      // 阶段 B：restore 扫描重建 → 推进时钟 → 恰好注入一条
     let (_registry_b, queue_b, events_b) = {
         let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
         let events = Arc::new(ProbeEvents::default());

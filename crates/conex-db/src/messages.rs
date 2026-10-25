@@ -11,7 +11,6 @@ use super::{DbFailure, DbFailureKind, LocalDb};
 use conex_types::SessionMessage;
 use rusqlite::OptionalExtension;
 
-
 impl LocalDb {
     /// 加载会话正文消息（按 seq 升序）。
     /// 读路径经 [`LocalDb::read`]：优先 ReaderPool 并发读，无池时回退主连接。
@@ -122,7 +121,6 @@ impl LocalDb {
         })
     }
 }
-
 
 /// 连接级纯函数：会话正文增量 Upsert + Diff Shrink + 元数据推进。
 ///
@@ -331,7 +329,9 @@ pub fn truncate_session_messages_after_conn(
             return Ok(0);
         }
         return Err(DbFailure {
-            message: format!("目标消息 {target_message_id} 在会话 {session_id} 的 session_messages 中不存在"),
+            message: format!(
+                "目标消息 {target_message_id} 在会话 {session_id} 的 session_messages 中不存在"
+            ),
             kind: DbFailureKind::Other("truncate_target_not_found".to_string()),
         });
     };
@@ -385,7 +385,7 @@ pub fn truncate_session_messages_after_seq_conn(
 }
 
 /// 灵活解析会话消息：先尝试 JSON 数组，失败再走 JSONL 行解析。
-///
+///
 /// 对齐 `sessionLocalStorage.loadSessionBody` 的兼容策略。
 pub(crate) fn parse_session_messages_flexible(raw: &str) -> Vec<SessionMessage> {
     let trimmed = raw.trim();

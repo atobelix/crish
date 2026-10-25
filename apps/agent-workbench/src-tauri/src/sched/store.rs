@@ -82,10 +82,19 @@ pub(crate) fn safe_merge_task_json(existing_json: Option<&str>, task: &CronTask)
     map.insert("cronId".to_string(), serde_json::json!(task.cron_id));
     map.insert("expression".to_string(), serde_json::json!(task.expression));
     map.insert("prompt".to_string(), serde_json::json!(task.prompt));
-    map.insert("maxIterations".to_string(), serde_json::json!(task.max_iterations));
+    map.insert(
+        "maxIterations".to_string(),
+        serde_json::json!(task.max_iterations),
+    );
     map.insert("isDaemon".to_string(), serde_json::json!(task.is_daemon));
-    map.insert("nextFireAtMs".to_string(), serde_json::json!(task.next_fire_at_ms));
-    map.insert("firedCount".to_string(), serde_json::json!(task.fired_count));
+    map.insert(
+        "nextFireAtMs".to_string(),
+        serde_json::json!(task.next_fire_at_ms),
+    );
+    map.insert(
+        "firedCount".to_string(),
+        serde_json::json!(task.fired_count),
+    );
     map.insert("status".to_string(), serde_json::json!(task.status));
     map.insert("enabled".to_string(), serde_json::json!(task.enabled));
 
@@ -93,9 +102,15 @@ pub(crate) fn safe_merge_task_json(existing_json: Option<&str>, task: &CronTask)
         map.insert("targetSessionId".to_string(), serde_json::json!(target_sid));
     }
     if !map.contains_key("createdAtMs") {
-        map.insert("createdAtMs".to_string(), serde_json::json!(task.created_at_ms));
+        map.insert(
+            "createdAtMs".to_string(),
+            serde_json::json!(task.created_at_ms),
+        );
     }
-    map.insert("updatedAtMs".to_string(), serde_json::json!(task.updated_at_ms));
+    map.insert(
+        "updatedAtMs".to_string(),
+        serde_json::json!(task.updated_at_ms),
+    );
 
     serde_json::to_string(&map).ok()
 }
@@ -213,7 +228,8 @@ impl SchedStore for MemorySchedStore {
                 duration_ms: Some(duration_ms),
                 status: status.to_string(),
                 prompt: String::new(),
-                error, output_summary,
+                error,
+                output_summary,
             });
         }
     }
@@ -325,38 +341,47 @@ impl SchedStore for LocalDbSchedStore {
     fn save(&self, task: &CronTask) {
         // 落实 Safe Field Merge：在 save 时使用 LocalDb::update_session_meta 保留非调度业务字段
         let task_clone = task.clone();
-        let _ = self.db.update_session_meta(&store_key(&task.cron_id), move |curr| {
-            safe_merge_task_json(curr, &task_clone)
-        });
+        let _ = self
+            .db
+            .update_session_meta(&store_key(&task.cron_id), move |curr| {
+                safe_merge_task_json(curr, &task_clone)
+            });
 
         // 索引幂等原子追加
         let cron_id = task.cron_id.clone();
-        let _ = self.db.update_session_meta(SESSION_META_SCHED_INDEX_KEY, move |curr| {
-            let mut index: Vec<String> = curr
-                .and_then(|raw| serde_json::from_str(raw).ok())
-                .unwrap_or_default();
-            if !index.contains(&cron_id) {
-                index.push(cron_id);
-            }
-            serde_json::to_string(&index).ok()
-        });
+        let _ = self
+            .db
+            .update_session_meta(SESSION_META_SCHED_INDEX_KEY, move |curr| {
+                let mut index: Vec<String> = curr
+                    .and_then(|raw| serde_json::from_str(raw).ok())
+                    .unwrap_or_default();
+                if !index.contains(&cron_id) {
+                    index.push(cron_id);
+                }
+                serde_json::to_string(&index).ok()
+            });
     }
 
     fn remove(&self, cron_id: &str) {
         let key = store_key(cron_id);
         let _ = self.db.write_blocking(move |conn| {
-            let _ = conn.execute("DELETE FROM session_meta WHERE key = ?1", rusqlite::params![key]);
+            let _ = conn.execute(
+                "DELETE FROM session_meta WHERE key = ?1",
+                rusqlite::params![key],
+            );
             Ok(())
         });
 
         let cron_id_str = cron_id.to_string();
-        let _ = self.db.update_session_meta(SESSION_META_SCHED_INDEX_KEY, move |curr| {
-            let mut index: Vec<String> = curr
-                .and_then(|raw| serde_json::from_str(raw).ok())
-                .unwrap_or_default();
-            index.retain(|id| id != &cron_id_str);
-            serde_json::to_string(&index).ok()
-        });
+        let _ = self
+            .db
+            .update_session_meta(SESSION_META_SCHED_INDEX_KEY, move |curr| {
+                let mut index: Vec<String> = curr
+                    .and_then(|raw| serde_json::from_str(raw).ok())
+                    .unwrap_or_default();
+                index.retain(|id| id != &cron_id_str);
+                serde_json::to_string(&index).ok()
+            });
     }
 
     fn append_run(&self, record: &crate::workflow_commands::WorkflowRunRecord) {

@@ -514,7 +514,10 @@ fn pairing_gate_validate_returns_err_on_orphan() {
     })];
     let res = validate_anthropic_tool_pairing(&messages);
     match res {
-        Err(RequestBuildError::UnpairedToolCalls { protocol, orphan_ids }) => {
+        Err(RequestBuildError::UnpairedToolCalls {
+            protocol,
+            orphan_ids,
+        }) => {
             assert_eq!(protocol, "anthropic");
             assert_eq!(orphan_ids, vec!["call_x"]);
         }
@@ -585,10 +588,7 @@ fn build_anthropic_fail_closed_on_orphan_no_text_injects_continuation_note() {
         client_message_id: None,
         content: None,
     };
-    let messages = vec![
-        Arc::new(user_message("hello")),
-        Arc::new(orphan_call),
-    ];
+    let messages = vec![Arc::new(user_message("hello")), Arc::new(orphan_call)];
     let context = RequestBuildContext {
         system_prompt: None,
         messages: &messages,
@@ -601,7 +601,9 @@ fn build_anthropic_fail_closed_on_orphan_no_text_injects_continuation_note() {
     for msg in msgs {
         if msg.get("role").and_then(Value::as_str) == Some("assistant") {
             found_assistant = true;
-            let content = msg["content"].as_array().expect("assistant content 必须为数组");
+            let content = msg["content"]
+                .as_array()
+                .expect("assistant content 必须为数组");
             assert_eq!(content.len(), 1);
             assert_eq!(content[0]["type"], "text");
             assert_eq!(content[0]["text"], WIRE_CONTINUATION_NOTE);
@@ -632,10 +634,7 @@ fn build_anthropic_fail_closed_on_orphan_thinking_only_injects_continuation_note
         client_message_id: None,
         content: None,
     };
-    let messages = vec![
-        Arc::new(user_message("hello")),
-        Arc::new(orphan_call),
-    ];
+    let messages = vec![Arc::new(user_message("hello")), Arc::new(orphan_call)];
     let context = RequestBuildContext {
         system_prompt: None,
         messages: &messages,
@@ -648,7 +647,9 @@ fn build_anthropic_fail_closed_on_orphan_thinking_only_injects_continuation_note
     for msg in msgs {
         if msg.get("role").and_then(Value::as_str) == Some("assistant") {
             found_assistant = true;
-            let content = msg["content"].as_array().expect("assistant content 必须为数组");
+            let content = msg["content"]
+                .as_array()
+                .expect("assistant content 必须为数组");
             assert_eq!(content.len(), 2);
             assert_eq!(content[0]["type"], "thinking");
             assert_eq!(content[1]["type"], "text");
@@ -676,7 +677,10 @@ fn test_system_steering_message_preservation_and_alternation() {
 
     let messages = vec![
         Arc::new(user_message("帮我搜索项目文件")),
-        Arc::new(assistant_with_text_and_thought("正在检索...", "需要先遍历目录")),
+        Arc::new(assistant_with_text_and_thought(
+            "正在检索...",
+            "需要先遍历目录",
+        )),
         Arc::new(system_steering),
     ];
     let context = RequestBuildContext {
@@ -733,7 +737,11 @@ fn test_system_steering_after_tool_result_merges_into_user_message() {
     let messages = vec![
         Arc::new(user_message("执行命令")),
         Arc::new(assistant_with_thought_and_tool("我来执行", "思考命令参数")),
-        Arc::new(tool_result_message("call_1", "error: command not found", true)),
+        Arc::new(tool_result_message(
+            "call_1",
+            "error: command not found",
+            true,
+        )),
         Arc::new(system_steering),
     ];
     let context = RequestBuildContext {
@@ -825,8 +833,7 @@ fn test_thinking_signature_and_redacted_preservation() {
     assert_eq!(a1_content[0]["type"], "thinking");
     assert_eq!(a1_content[0]["thinking"], "深度推理中...");
     assert_eq!(
-        a1_content[0]["signature"],
-        "sig_claude_37_valid_signature_xyz",
+        a1_content[0]["signature"], "sig_claude_37_valid_signature_xyz",
         "必须携带原版 signature"
     );
 

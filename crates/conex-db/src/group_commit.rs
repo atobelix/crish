@@ -96,8 +96,7 @@ impl StatsInner {
 pub const WRITER_REBUILD_FAILURE_THRESHOLD: usize = 3;
 
 /// 写连接重建工厂：按既有初始化构造路径重新打开并初始化一个写连接。
-pub type WriterConnFactory =
-    Arc<dyn Fn() -> Result<rusqlite::Connection, DbFailure> + Send + Sync>;
+pub type WriterConnFactory = Arc<dyn Fn() -> Result<rusqlite::Connection, DbFailure> + Send + Sync>;
 
 type AnySendResult = Result<Box<dyn Any + Send>, DbFailure>;
 type BoxedWriteFn = Box<dyn FnOnce(&mut rusqlite::Connection) -> AnySendResult + Send>;
@@ -847,11 +846,13 @@ mod blocking_write_tests {
         let writer = new_writer(GroupCommitConfig::default());
         let val = writer
             .write(|conn| {
-                conn.execute_batch("CREATE TABLE test_single (id INT); INSERT INTO test_single VALUES (99);")
-                    .map_err(|e| DbFailure {
-                        message: e.to_string(),
-                        kind: DbFailureKind::Other("test".to_string()),
-                    })?;
+                conn.execute_batch(
+                    "CREATE TABLE test_single (id INT); INSERT INTO test_single VALUES (99);",
+                )
+                .map_err(|e| DbFailure {
+                    message: e.to_string(),
+                    kind: DbFailureKind::Other("test".to_string()),
+                })?;
                 Ok::<_, DbFailure>(99usize)
             })
             .await
@@ -983,7 +984,10 @@ mod recovery_tests {
         broken
             .execute_batch("CREATE TABLE t (v INTEGER); PRAGMA query_only = ON;")
             .expect("prepare broken (read-only) connection");
-        assert!(broken.is_autocommit(), "坏死连接应处于 autocommit（无残留事务）");
+        assert!(
+            broken.is_autocommit(),
+            "坏死连接应处于 autocommit（无残留事务）"
+        );
 
         let rebuilds = Arc::new(AtomicUsize::new(0));
         let rebuilds_clone = Arc::clone(&rebuilds);
@@ -995,12 +999,9 @@ mod recovery_tests {
             Ok(conn)
         });
 
-        let writer = DbWriteHandle::spawn_with_rebuild(
-            broken,
-            GroupCommitConfig::default(),
-            Some(factory),
-        )
-        .expect("writer actor with rebuild factory should start");
+        let writer =
+            DbWriteHandle::spawn_with_rebuild(broken, GroupCommitConfig::default(), Some(factory))
+                .expect("writer actor with rebuild factory should start");
 
         // 阈值之前：每次提交都失败（BEGIN IMMEDIATE 持续失败且未重建）
         for attempt in 1..WRITER_REBUILD_FAILURE_THRESHOLD {
@@ -1014,11 +1015,7 @@ mod recovery_tests {
                 "第 {attempt} 次失败应来自 begin_failed 路径"
             );
         }
-        assert_eq!(
-            rebuilds.load(Ordering::SeqCst),
-            0,
-            "未达阈值不应触发重建"
-        );
+        assert_eq!(rebuilds.load(Ordering::SeqCst), 0, "未达阈值不应触发重建");
 
         // 达到阈值：触发重建，写入恢复成功
         let val = writer

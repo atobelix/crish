@@ -5,8 +5,8 @@ use std::time::Duration;
 use async_trait::async_trait;
 use serde_json::Value;
 
-use crate::action::ActionError;
 use crate::action::locate::ViewportSize;
+use crate::action::ActionError;
 use crate::cdp::domains::{BoxModel, DispatchKeyEventParams, DispatchMouseEventParams};
 
 /// 延迟注入抽象（重试延迟/type 节流/轮询间隔共用；测试注入记录型不真实等待）。

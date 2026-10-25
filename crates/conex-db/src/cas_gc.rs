@@ -375,17 +375,16 @@ impl LocalDb {
         config: &CasGcConfig,
     ) -> Result<Vec<String>, DbFailure> {
         let cfg_scan = config.clone();
-        let (candidate_hashes, has_expired_leases) = self.read(move |conn| {
-            let candidates =
-                scan_expired_quarantined_candidates_conn(conn, &cfg_scan).map_err(|e| {
-                    DbFailure {
+        let (candidate_hashes, has_expired_leases) =
+            self.read(move |conn| {
+                let candidates = scan_expired_quarantined_candidates_conn(conn, &cfg_scan)
+                    .map_err(|e| DbFailure {
                         message: format!("purge_expired_quarantined_scan: {e}"),
                         kind: DbFailureKind::Other("purge_expired_quarantined".to_string()),
-                    }
-                })?;
-            let expired_leases = has_expired_blob_leases_conn(conn).unwrap_or(false);
-            Ok((candidates, expired_leases))
-        })?;
+                    })?;
+                let expired_leases = has_expired_blob_leases_conn(conn).unwrap_or(false);
+                Ok((candidates, expired_leases))
+            })?;
 
         let candidate_hashes: Vec<String> = candidate_hashes
             .into_iter()

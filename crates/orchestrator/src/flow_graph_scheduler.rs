@@ -769,9 +769,7 @@ impl FlowScheduler {
 
 impl FlowAdvance {
     /// 批量取出本轮外部事件分发载荷（started / wakeups / reports），供调用方在释放内部同步锁后安全分发（DEFECT-03）
-    pub fn take_dispatch_batch(
-        &mut self,
-    ) -> (Vec<FlowStarted>, Vec<FlowWakeup>, Vec<FlowReport>) {
+    pub fn take_dispatch_batch(&mut self) -> (Vec<FlowStarted>, Vec<FlowWakeup>, Vec<FlowReport>) {
         (
             std::mem::take(&mut self.started),
             std::mem::take(&mut self.wakeups),
@@ -835,12 +833,9 @@ mod tests {
     #[tokio::test]
     async fn declare_flow_prevalidates_meta_config_before_mutating_state() {
         let meta = Arc::new(TestMetaStore::default());
-        let mut scheduler = FlowScheduler::new(
-            "sess-1",
-            Arc::new(NoopSubagentSpawner),
-            meta.clone(),
-        )
-        .expect("初始配置合法");
+        let mut scheduler =
+            FlowScheduler::new("sess-1", Arc::new(NoopSubagentSpawner), meta.clone())
+                .expect("初始配置合法");
         // 在 declare_flow 前注入非法的 flow_on_failed 配置
         meta.set_meta(FLOW_ON_FAILED_KEY, "invalid-strategy")
             .unwrap();

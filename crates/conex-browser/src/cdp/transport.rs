@@ -218,7 +218,9 @@ impl Transport {
                                     if let Err(err) =
                                         shared_sup.conn_state.send(ConnectionState::Connected)
                                     {
-                                        tracing::debug!("连接状态无订阅者（丢弃 Connected）：{err}");
+                                        tracing::debug!(
+                                            "连接状态无订阅者（丢弃 Connected）：{err}"
+                                        );
                                     }
                                     if let Err(err) = shared_sup.ready.send(true) {
                                         tracing::debug!("就绪信号无订阅者（丢弃 true）：{err}");

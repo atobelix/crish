@@ -2,15 +2,15 @@
 
 use crate::exec;
 use crate::helpers;
-use crate::tools::Ctx;
 use crate::tools::navigate_common::{
     history_back, history_forward, navigate_current_tab, parse_http_url, reject_bad_timeout_ms,
     reload_current_tab,
 };
+use crate::tools::Ctx;
 use agent_tools::context::ToolContext;
 use agent_tools::definition::{Tool, ToolDefinition, ToolError};
 use async_trait::async_trait;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::sync::Arc;
 
 /// browser_navigate：导航当前标签页（导航检查点先行，17 §4.4）。

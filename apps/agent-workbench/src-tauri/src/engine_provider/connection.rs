@@ -20,7 +20,6 @@ pub(crate) struct ClientConnectionConfig {
     pub http2_keep_alive_timeout: Option<Duration>,
 }
 
-
 impl ClientConnectionConfig {
     /// 默认连接配置（D1 §3.3 / 04 §2.3 连接配置表）
     pub(crate) fn defaults() -> Self {

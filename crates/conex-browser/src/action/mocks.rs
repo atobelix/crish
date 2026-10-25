@@ -630,12 +630,7 @@ impl SnapshotStore for MockSnapshotStore {
         Ok(s.version)
     }
 
-    fn element_by_index(
-        &self,
-        _tab_id: &TabId,
-        version: u64,
-        index: usize,
-    ) -> Option<ElementMeta> {
+    fn element_by_index(&self, _tab_id: &TabId, version: u64, index: usize) -> Option<ElementMeta> {
         let s = self.state.lock().unwrap_or_else(|p| p.into_inner());
         s.elements
             .get(&version)

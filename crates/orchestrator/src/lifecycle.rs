@@ -174,7 +174,9 @@ pub struct SubagentLifecycleService {
     /// L3 强停投递通道（引擎侧接线）
     control: Arc<dyn ForceCancelSink>,
     /// BC03-2：子代理 run 的 AbortSignal 广播注册表（秒级物理打断工具批）
-    signals: Arc<std::sync::RwLock<std::collections::HashMap<String, session_loop::safe_point::AbortSignal>>>,
+    signals: Arc<
+        std::sync::RwLock<std::collections::HashMap<String, session_loop::safe_point::AbortSignal>>,
+    >,
 }
 
 impl SubagentLifecycleService {
@@ -188,7 +190,11 @@ impl SubagentLifecycleService {
     }
 
     /// 注册子代理 run 的 AbortSignal 实例
-    pub fn register_signal(&self, subagent_run_id: impl Into<String>, signal: session_loop::safe_point::AbortSignal) {
+    pub fn register_signal(
+        &self,
+        subagent_run_id: impl Into<String>,
+        signal: session_loop::safe_point::AbortSignal,
+    ) {
         if let Ok(mut map) = self.signals.write() {
             map.insert(subagent_run_id.into(), signal);
         }
@@ -701,7 +707,10 @@ mod tests {
             true
         }
         fn broadcast_abort(&self, subagent_run_id: &str) -> bool {
-            self.aborted_runs.lock().unwrap().push(subagent_run_id.to_string());
+            self.aborted_runs
+                .lock()
+                .unwrap()
+                .push(subagent_run_id.to_string());
             true
         }
     }

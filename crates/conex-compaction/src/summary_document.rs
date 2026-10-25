@@ -496,7 +496,9 @@ mod tests {
             ]
         });
         let md = summary_to_markdown(&doc);
-        assert!(md.contains("## Critical Context\n- path/to/file.rs:42\n- Command failed: exit 1\n"));
+        assert!(
+            md.contains("## Critical Context\n- path/to/file.rs:42\n- Command failed: exit 1\n")
+        );
         // 杜绝空白标题
         let crit_section = md.split("## Critical Context").nth(1).unwrap();
         assert!(crit_section.trim().starts_with("- path/to/file.rs:42"));

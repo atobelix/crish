@@ -1,8 +1,8 @@
 use super::{message, stop, stop_with, text_delta, tool_call};
 use crate::consume::{consume, ConsumeStopReason};
+use crate::events::{ProviderStreamEvent, StopReason};
 use conex_types::error::ProviderErrorKind;
 use conex_types::response::ProviderOutput;
-use crate::events::{ProviderStreamEvent, StopReason};
 
 /// 文字 + error stop → Message（不失败）；error 降级为 metadata 标注，stopReason 不为 error。
 /// D7 §3.7（T9）：标注含结构化分类 providerErrorKind/providerErrorRetryable

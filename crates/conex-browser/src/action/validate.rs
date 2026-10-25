@@ -1,8 +1,8 @@
 //! 原语分类与入参校验：元素/坐标/滚动点需求判定、定位结果提取、validate_request。
 
 use super::{
-    ActionError, ActionErrorKind, ActionRequest, Located, MAX_TYPE_CHARS, Primitive, ResolvedPoint,
-    keyboard, upload,
+    keyboard, upload, ActionError, ActionErrorKind, ActionRequest, Located, Primitive,
+    ResolvedPoint, MAX_TYPE_CHARS,
 };
 
 /// 需要元素的原语（参数校验 + 定位前置）。

@@ -54,7 +54,7 @@ async fn gate_unwired_returns_error() {
 #[tokio::test]
 async fn version_invalid_retakes_and_succeeds() {
     let snapshot = MockSnapshotStore::new(1); // 兜底索引表注入在下方
-    // 新快照 v2 上索引 0 存在（重定位到新 backendNodeId 21）
+                                              // 新快照 v2 上索引 0 存在（重定位到新 backendNodeId 21）
     snapshot.state.lock().unwrap().elements.insert(
         2,
         vec![ElementMeta {
