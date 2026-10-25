@@ -119,7 +119,7 @@ export const ToastCard: React.FC<ToastCardProps> = ({
         return (
           <AppIcon
             name="check-circle"
-            size={16}
+            size={18}
             style={{ color: 'var(--color-success, var(--brand-deep))' }}
             aria-hidden="true"
           />
@@ -128,7 +128,7 @@ export const ToastCard: React.FC<ToastCardProps> = ({
         return (
           <AppIcon
             name="alert-circle"
-            size={16}
+            size={18}
             style={{ color: 'var(--color-error)' }}
             aria-hidden="true"
           />
@@ -137,7 +137,7 @@ export const ToastCard: React.FC<ToastCardProps> = ({
         return (
           <AppIcon
             name="alert-triangle"
-            size={16}
+            size={18}
             style={{ color: 'var(--color-warning)' }}
             aria-hidden="true"
           />
@@ -146,7 +146,7 @@ export const ToastCard: React.FC<ToastCardProps> = ({
         return (
           <AppIcon
             name="loader"
-            size={16}
+            size={18}
             className="animate-spin"
             style={{ color: 'var(--brand)' }}
             aria-hidden="true"
@@ -156,7 +156,7 @@ export const ToastCard: React.FC<ToastCardProps> = ({
         return (
           <AppIcon
             name="info"
-            size={16}
+            size={18}
             style={{ color: 'var(--accent-color, var(--text-primary))' }}
             aria-hidden="true"
           />
@@ -242,7 +242,7 @@ export const ToastCard: React.FC<ToastCardProps> = ({
               handleDismissAnimation();
             }}
           >
-            <AppIcon name="x" size={12} aria-hidden="true" />
+            <AppIcon name="x" size={14} aria-hidden="true" />
           </Button>
         </div>
       </div>
