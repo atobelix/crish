@@ -31,6 +31,8 @@
   z-index: var(--z-dropdown);
   font-family: var(--font-sans);
   animation: launcherEnter var(--duration-fast) var(--ease-standard);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 @keyframes launcherEnter {
@@ -61,6 +63,8 @@
   background: transparent;
   outline: none;
   cursor: pointer;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
   transition:
     background var(--duration-micro) var(--ease-standard),
     color var(--duration-micro) var(--ease-standard);
@@ -77,6 +81,8 @@
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 /* 加号右上角实时状态小圆点 (G-04: border-radius: 50%) */
@@ -89,6 +95,8 @@
   border-radius: 50%;
   background: var(--color-active);
   pointer-events: none;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .plusLiveDot[data-urgent='true'] {

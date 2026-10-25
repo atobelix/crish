@@ -119,6 +119,14 @@ describe('NewTabLauncherPopover Interaction & Visual Guardrail Suite (R2 / M5)',
     // 初始状态下第一项（新建对话）默认高亮聚焦 (<100ms 即按即开)
     const newChatBtn = screen.getByText('新建对话').closest('button');
     expect(newChatBtn).toHaveAttribute('data-focused', 'true');
+
+    // 再次点击加号触发器：平滑收起浮层（双态闭环，防死锁/无法点击）
+    fireEvent.click(plusTrigger);
+    await waitFor(() => {
+      expect(
+        document.querySelector(`.${styles.popoverContent}`)
+      ).not.toBeInTheDocument();
+    });
   });
 
   it('Test 2: 全键盘无障碍漫游 (ArrowDown, ArrowUp, Enter, Escape)', async () => {

@@ -327,6 +327,16 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     expect(() => {
       fireEvent.doubleClick(newTabBtn!);
     }).not.toThrow();
+
+    // 加号外层包装器必须存在且挂载 data-tauri-drag-region="false"，并且支持外沿点击转发
+    const launcherWrap = container.querySelector(
+      `[data-tauri-drag-region="false"]:has(button[aria-label="新对话"])`
+    ) as HTMLElement;
+    expect(launcherWrap).toBeTruthy();
+    expect(() => {
+      fireEvent.doubleClick(launcherWrap);
+      fireEvent.click(launcherWrap);
+    }).not.toThrow();
   });
 
   it('多标签关闭时锁定等宽单变量通道生效，鼠标移出后解锁', () => {

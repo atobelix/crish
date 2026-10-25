@@ -27,6 +27,9 @@ function readRepoFile(relativePath: string): string {
 const paneCss = readRepoFile(
   'src/components/binary-tree/PaneHeader.module.css'
 );
+const launcherCss = readRepoFile(
+  'src/components/binary-tree/NewTabLauncherPopover.module.css'
+);
 const toolCss = readRepoFile(
   'src/components/binary-tree/LeafToolTabStrip.module.css'
 );
@@ -106,7 +109,7 @@ describe('标签条动效单一真理路径契约', () => {
     expect(paneCss).not.toMatch(/!important\s*[;}]/);
   });
 
-  it('原生 app-region 遮蔽在场：两条条带必须显式 no-drag（WebView2 HWND 层通道，勿删）', () => {
+  it('原生 app-region 遮蔽在场：条带、容器与加号功能区必须显式 no-drag（WebView2 HWND 层通道，勿删）', () => {
     // 顶栏 spacer 的 app-region:drag 由 WebView2 在 HWND 层原生命中（绕过 JS），
     // 罩住顶行标签条带；条带必须显式 no-drag 才能挡住原生标题栏双击最大化。
     // 2026-09-06 事故：误判 app-region 为死代码删除后，双击标签即被原生 caption 最大化。
@@ -114,7 +117,24 @@ describe('标签条动效单一真理路径契约', () => {
     expect(paneCss).toMatch(
       /\.tabsContainer[\s\S]{0,400}?app-region:\s*no-drag/
     );
+    expect(paneCss).toMatch(
+      /\.launcherWrapper[\s\S]{0,400}?app-region:\s*no-drag/
+    );
     expect(paneCss).toMatch(/\.tabItem[\s\S]{0,1200}?app-region:\s*no-drag/);
     expect(toolCss).toMatch(/-webkit-app-region:\s*no-drag/);
+
+    // 加号启动器自身及其功能区元素（按钮/图标/弹出菜单）必须显式具备 no-drag，防御原生标题栏劫持
+    expect(launcherCss).toMatch(
+      /\.newTabBtn[\s\S]{0,600}?app-region:\s*no-drag/
+    );
+    expect(launcherCss).toMatch(
+      /\.newTabBtn[\s\S]{0,600}?-webkit-app-region:\s*no-drag/
+    );
+    expect(launcherCss).toMatch(
+      /\.popoverContent[\s\S]{0,600}?app-region:\s*no-drag/
+    );
+    expect(launcherCss).toMatch(
+      /\.plusIconWrap[\s\S]{0,400}?app-region:\s*no-drag/
+    );
   });
 });

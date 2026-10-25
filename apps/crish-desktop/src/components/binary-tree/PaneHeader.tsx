@@ -477,12 +477,8 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
           </div>
 
           <div
+            className={styles.launcherWrapper}
             data-tauri-drag-region="false"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              flexShrink: 0,
-            }}
             onDoubleClick={(e) => {
               e.stopPropagation();
               e.preventDefault();
@@ -492,6 +488,12 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
             }}
             onMouseDown={(e) => {
               e.stopPropagation();
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                const triggerBtn = e.currentTarget.querySelector('button');
+                triggerBtn?.click();
+              }
             }}
           >
             <NewTabLauncherPopover
