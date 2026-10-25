@@ -5,7 +5,7 @@
    ========================================================================== */
 
 .attachmentCard {
-  border-radius: var(--radius-xl);
+  border-radius: var(--composer-attach-card-radius, var(--radius-xl));
   border: 1px solid var(--border-subtle);
   background: var(--bg-card);
   box-sizing: border-box;

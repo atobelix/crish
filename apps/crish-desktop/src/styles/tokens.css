@@ -279,9 +279,9 @@ html[data-theme='light'] {
   --selection-fg: #ffffff;
 
   /* --- SmartExpandablePanel & Zero-Blue Design System Tokens (Light) --- */
-  --sep-radius-outer: var(--radius-l);
-  --sep-item-radius: var(--radius-m);
-  --sep-badge-radius: var(--radius-s);
+  --sep-radius-outer: 14px; /* 平反恢复 14px 枢纽键：8px (item) + 6px (pad) 完美同心 */
+  --sep-item-radius: var(--radius-md);
+  --sep-badge-radius: var(--radius-xs);
 
   --sep-item-height: 28px;
   --sep-item-gap: 2px;
@@ -483,33 +483,42 @@ html[data-theme='light'] {
 
   /* 5           (Ro = Ri + P: 12/8/6/4/2px) */
   /* 刻度新增：设置/按钮恒 7px（用户锁；来源 docs/desktop-ui-repair/survey/04-*） */
-  /* ── 圆角 SSOT（2026-10-10 统一）：只允许下列 5 档 + 正圆 50% + 0 ──
-     s     小   4px    标签/徽标/行内代码/复选框/Kbd/骨架线/细条
-     m     中   8px    图标按钮/小输入框/下拉触发器/菜单项/列表行/会话行/Tooltip/标签页/代码块/表格
-           （文字按钮 + 分段控件 = --radius-btn 7px，用户锁 U1，唯一例外）
-     l     大   12px   卡片/面板/弹层/下拉面板/对话框/工具调用块/附件卡片/artifact
-     input 输入 20px   底部输入框（单行/多行）与用户消息气泡
-     pill  胶囊 9999px 胶囊按钮/开关/滚动条滑块/计数胶囊
-     旧 token（xs…3xl、btn、seg-*、sep-*、md-*、composer-*、chat-bubble）全部是这 5 档的别名。 */
-  --radius-s: 4px;
-  --radius-m: 8px;
-  --radius-l: 12px;
-  --radius-input: 20px;
+  /* ── 工业同心几何完备偶数阶梯（2026-10-25 平反定稿）──
+     完备闭包：4px, 6px, 8px, 10px, 12px, 14px, 16px, 20px, 24px + 9999px + 50%
+     双形态：圆角形态模态 20px 枢纽；微圆形态浮层 14px / 卡片 16px 枢纽。
+     公式：R_outer = R_inner + Padding <=> R_inner = max(0, R_outer - Padding) */
+  --radius-xs: 4px; /* 标签/徽标/微型角标/复选框/行内代码 */
+  --radius-sm: 6px; /* 分段控件滑块/紧凑行/小项 (解救原 4px 坍塌，解决代数闭包) */
+  --radius-md: 8px; /* 标准控件基准: 输入框/下拉触发器/菜单项/按钮基座 */
+  --radius-lg: 10px; /* 过渡衔接次级卡片 (解救原 8px 坍塌) */
+  --radius-l: 12px; /* 微圆紧凑卡片/面板/附件卡片 */
+  --radius-xl: 16px; /* 标准业务大卡片外壳 (容纳 8px 控件 + 8px 内边距) */
+  --radius-2xl: 20px; /* 平反升级为 20px: 顶级模态主外壳 (Dialog/Settings) 消除与输入框倒挂 */
+  --radius-3xl: 24px; /* 宏观容器最大刻度 */
   --radius-pill: 9999px;
   --radius-circle: 50%; /* Avatar 等正圆；被 ModelsSettingsTab 等消费 */
-  --radius-btn: 7px; /* 用户锁 U1（survey 04）：按钮圆角钉死 7px，是 5 档之外唯一的例外；禁止改成 8px */
-  /* :root 唯一权威定义（U1）；密度档/主题块禁止覆写 */
+
+  /* 传统 3 档快捷别名映射（平滑兼容历史代码） */
+  --radius-s: 4px;
+  --radius-m: 8px;
+  --radius-input: 20px;
+
+  /* 用户锁 U1（独立文字按钮圆角，禁止改成 8px；分段控件已解绑） */
+  --radius-btn: 7px;
   --button-radius: var(--radius-btn);
-  --radius-xs: var(--radius-s);
-  --radius-sm: var(--radius-s);
-  --radius-md: var(--radius-m);
-  --radius-lg: var(--radius-m);
-  --radius-xl: var(--radius-l);
-  --radius-2xl: var(--radius-l);
-  --radius-3xl: var(--radius-input);
-  /* 语义场景契约 Token（Tier 2，BATCH-01 新增）：组件优先消费语义层 */
-  --composer-radius-single: var(--radius-input);
-  --composer-radius-multi: var(--radius-input);
+
+  /* 分段控件专属同心外壳（解绑 7px，消灭 5px 亚像素危机） */
+  --segment-shell-radius: var(--radius-md); /* 8px */
+  --segment-indicator-radius: var(--radius-sm); /* 6px (8px - 2px = 6px) */
+
+  /* 语义场景契约 Token（Tier 2）：组件优先消费语义层 */
+  --modal-radius-outer: var(--radius-2xl);
+  --modal-header-btn-radius: var(--radius-xs);
+  --card-radius-outer: var(--radius-xl);
+  --card-radius-compact: var(--radius-l);
+  --card-control-radius: var(--radius-md);
+  --composer-radius-single: var(--radius-2xl);
+  --composer-radius-multi: var(--radius-2xl);
   /* 水平内衬基座 = 结束侧（右）内衬，与 --composer-pad-x-start 成对消费。
    * 等宽内衬：左右两端均锁 10px。 */
   --composer-pad-x: 10px;
@@ -1293,9 +1302,9 @@ html[data-theme='dark'] {
   --selection-fg: #ffffff;
 
   /* --- SmartExpandablePanel & Zero-Blue Design System Tokens (Dark) --- */
-  --sep-radius-outer: var(--radius-l);
-  --sep-item-radius: var(--radius-m);
-  --sep-badge-radius: var(--radius-s);
+  --sep-radius-outer: 14px; /* 平反恢复 14px 枢纽键：8px (item) + 6px (pad) 完美同心 */
+  --sep-item-radius: var(--radius-md);
+  --sep-badge-radius: var(--radius-xs);
 
   --sep-item-height: 28px;
   --sep-item-gap: 2px;
@@ -1732,9 +1741,9 @@ html[data-theme='dark'] {
   /* --- 6. 用量监控与时序分析（Usage Dashboard）暗色体系 (Dark) --- */
   --usage-capsule-outer-radius: var(--radius-pill);
   --usage-capsule-pad: 3px;
-  --usage-capsule-inner-radius: calc(
-    var(--usage-capsule-outer-radius) - var(--usage-capsule-pad)
-  ); /* 6px */
+  --usage-capsule-inner-radius: var(
+    --radius-pill
+  ); /* 胶囊内圆角同样使用 pill，消除 9996px 魔术数 */
 
   --usage-color-brand: hsl(160 84% 45%);
   --usage-color-brand-bg: hsl(160 84% 45% / 0.18);
@@ -1823,15 +1832,15 @@ html[data-ui-size='small'] {
   --line-height-ui: 1.32;
   --line-height-body: 1.5;
 
-  /* 圆角偶数化（BATCH-01 §4.4）；禁止改写 --radius-btn / --button-radius */
-  /* small 密度档：圆角不再按密度档缩放，统一引用 :root 的 5 档 */
-  --radius-xs: var(--radius-s);
-  --radius-sm: var(--radius-s);
-  --radius-md: var(--radius-m);
-  --radius-lg: var(--radius-m);
-  --radius-xl: var(--radius-l);
-  --radius-2xl: var(--radius-l);
-  --radius-3xl: var(--radius-input);
+  /* 圆角偶数化（完备偶数阶梯保持一致，不随密度失真）；禁止改写 --radius-btn / --button-radius */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-l: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
   --radius-full: var(--radius-pill);
 
   --card-header-min-height: 32px;
@@ -1891,16 +1900,20 @@ html[data-ui-size='large'] {
   --line-height-ui: 1.4;
   --line-height-body: 1.6;
 
-  /* 圆角偶数化（BATCH-01 §4.4）；禁止改写 --radius-btn / --button-radius */
-  /* large 密度档：圆角不再按密度档缩放，统一引用 :root 的 5 档 */
-  --radius-xs: var(--radius-s);
-  --radius-sm: var(--radius-s);
-  --radius-md: var(--radius-m);
-  --radius-lg: var(--radius-m);
-  --radius-xl: var(--radius-l);
-  --radius-2xl: var(--radius-l);
-  --radius-3xl: var(--radius-input);
+  /* 圆角偶数化（完备偶数阶梯保持一致，不随密度失真）；禁止改写 --radius-btn / --button-radius */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-l: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
   --radius-full: var(--radius-pill);
+
+  /* Large 密度动态补偿（详案 §6.3）：间距放大 +2px，外壳同步微调保持内部 8px item 同心方程 */
+  --sep-radius-outer: 16px;
+  --card-radius-outer: 18px;
 
   --card-header-min-height: 40px;
   --card-header-pad-y: 5px;
@@ -1921,9 +1934,9 @@ html[data-ui-size='large'] {
   /* 胶囊进度行：outer(9px) = inner(6px) + pad(3px) */
   --usage-capsule-outer-radius: var(--radius-pill);
   --usage-capsule-pad: 3px;
-  --usage-capsule-inner-radius: calc(
-    var(--usage-capsule-outer-radius) - var(--usage-capsule-pad)
-  ); /* 6px */
+  --usage-capsule-inner-radius: var(
+    --radius-pill
+  ); /* 胶囊内圆角同样使用 pill，消除 9996px 魔术数 */
 
   /* 色彩体系回退 (现代 HSL / 斜杠透明度，严格零 rgba) */
   --usage-color-brand: hsl(160 84% 39%);

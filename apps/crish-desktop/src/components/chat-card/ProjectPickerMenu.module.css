@@ -106,3 +106,8 @@
   animation: crish-popover-enter var(--transition-popover-enter) forwards;
   will-change: transform, opacity;
 }
+
+/* 级联子菜单同心闭环：4px 条目 + 4px 内衬 = 8px 外圆角 (Δ = 0 完美同心) */
+.cascadeSubmenu .item {
+  border-radius: var(--radius-xs, 4px);
+}

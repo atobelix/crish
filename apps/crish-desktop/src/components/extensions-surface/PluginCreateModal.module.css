@@ -6,7 +6,7 @@
 .modalPanel {
   --dialog-width: 620px;
   width: var(--dialog-width);
-  border-radius: var(--radius-xl, 12px);
+  border-radius: var(--radius-2xl, 20px);
   background: var(--bg-card);
   border: var(--hairline-width, 1px) solid var(--border-color);
   box-shadow: 0 20px 48px -12px
@@ -14,14 +14,14 @@
 }
 
 .modalPanel button {
-  border-radius: var(--radius-md);
+  border-radius: var(--button-radius, 7px);
 }
 
 .modalBody {
   display: flex;
   flex-direction: column;
   gap: var(--space-3, 12px);
-  padding: var(--space-2, 8px) var(--space-4, 16px) var(--space-3, 12px);
+  padding: 10px 10px var(--space-3, 12px);
   max-height: 72vh;
   overflow-y: auto;
   box-sizing: border-box;
@@ -46,7 +46,7 @@
 .guideCard {
   background: var(--bg-secondary);
   border: var(--hairline-width, 1px) solid var(--border-subtle);
-  border-radius: var(--radius-l, 10px);
+  border-radius: 10px;
   padding: var(--space-3, 12px) var(--space-3_5, 14px);
   display: flex;
   flex-direction: column;
@@ -88,7 +88,7 @@
 
 .dropZone {
   border: var(--hairline-width) dashed var(--border-color);
-  border-radius: var(--radius-l, 10px);
+  border-radius: 10px;
   background: var(--bg-secondary);
   padding: var(--space-6, 24px) var(--space-4, 16px);
   display: flex;
@@ -141,7 +141,7 @@
 .previewCard {
   background: var(--bg-secondary);
   border: var(--hairline-width, 1px) solid var(--border-subtle);
-  border-radius: var(--radius-l, 10px);
+  border-radius: 10px;
   padding: var(--space-3_5, 14px) var(--space-4, 16px);
   display: flex;
   flex-direction: column;

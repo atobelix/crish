@@ -3,7 +3,7 @@
   max-width: min(240px, calc(100vw - 16px));
   padding: var(--space-1_5);
   gap: var(--space-0_5);
-  border-radius: var(--radius-2xl);
+  border-radius: var(--sep-radius-outer, 14px);
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-lg);
@@ -98,7 +98,7 @@
   padding: 6px;
   background: var(--sep-bg-panel-solid, var(--bg-elevated));
   border: 1px solid var(--border-color);
-  border-radius: var(--sep-radius-outer);
+  border-radius: var(--sep-radius-outer, 14px);
   box-shadow: var(--sep-shadow, var(--shadow-lg));
   display: none;
   flex-direction: column;
@@ -187,7 +187,7 @@
   padding: 6px;
   background: var(--sep-bg-panel-solid, var(--bg-elevated));
   border: 1px solid var(--border-color);
-  border-radius: var(--sep-radius-outer);
+  border-radius: var(--sep-radius-outer, 14px);
   box-shadow: var(--sep-shadow, var(--shadow-lg));
   display: flex;
   flex-direction: column;

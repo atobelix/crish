@@ -14,7 +14,7 @@
   justify-content: center;
   width: 44px;
   height: 44px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-l);
   background: var(--tint-hover);
   color: var(--text-primary);
   border: none;

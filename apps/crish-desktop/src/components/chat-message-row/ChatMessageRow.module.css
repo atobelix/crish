@@ -134,6 +134,15 @@
   padding: 2px 0;
 }
 
+/* 用户气泡内嵌附件卡片同心化：外框 20px - 垂直内边距 10px = 10px 内部卡片圆角 (Δy = 0 绝对同心) */
+.userBubble .userAttachmentStrip :global(.attachmentCard),
+.userBubble .userAttachmentStrip :global(.cardImageMode),
+.userBubble .userAttachmentStrip :global(.fileCardHorizontal),
+.userBubble .userAttachmentStrip :global(.file-card) {
+  --composer-attach-card-radius: calc(var(--chat-bubble-radius, 20px) - 10px);
+  border-radius: calc(var(--chat-bubble-radius, 20px) - 10px);
+}
+
 .userBubble {
   /* DIM-01 §1.3: 统一类输入框卡片结构，5.5% 灰度混入保持气泡底色，消除图文分离 */
   background: var(--user-bubble-bg, var(--bg-card-hover));
@@ -811,7 +820,10 @@
   background: transparent;
   box-shadow: none;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(
+    --radius-xs,
+    4px
+  ); /* 4px 按钮 + 6px 间距 = 10px 外圆角同心 */
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;

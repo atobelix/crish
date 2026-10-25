@@ -290,7 +290,10 @@
   --btn-px: 8px;
   line-height: 22px;
   padding: 0 8px;
-  border-radius: var(--radius-sm);
+  border-radius: var(
+    --radius-sm,
+    6px
+  ); /* 6px 内圆角 + 6px 边距 = 12px 外圆角，绝对同心 */
   border: none;
   outline: none;
   font-family: inherit;
@@ -830,7 +833,10 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(
+    --radius-sm,
+    6px
+  ); /* 消除 8px 圆角在 50px 卡片内的倒挂，微圆顺接 */
   background: var(--bg-subtle);
 }
 
@@ -1289,7 +1295,7 @@
 
 .composerCard.isMultiline {
   padding: 8px var(--composer-pad-x, 10px) 8px var(--composer-pad-x-start, 10px);
-  border-radius: var(--composer-radius-multi, 24px);
+  border-radius: var(--composer-radius-multi, 20px);
 }
 
 .composerCard.disabled,

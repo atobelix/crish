@@ -34,6 +34,7 @@
   max-height: none;
   background: var(--surface-outer);
   border: none;
+  border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-2xl);
   overflow: hidden;
   color: var(--text-primary);
@@ -133,7 +134,7 @@
   flex-shrink: 0;
   padding: 0;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--button-radius);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;

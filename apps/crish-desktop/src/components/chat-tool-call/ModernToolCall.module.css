@@ -220,7 +220,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2, 8px);
-  padding: var(--space-2, 8px) var(--space-3, 12px);
+  padding: var(--space-2, 8px) var(--space-2, 8px); /* 8px 内边距 + 4px 按钮 = 12px 外圆角双向完美同心 */
   background: transparent;
   user-select: text;
 }
@@ -267,7 +267,10 @@
   min-width: unset;
   min-height: unset;
   padding: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(
+    --radius-xs,
+    4px
+  ); /* 4px 按钮 + 8px 边距 = 12px 外圆角绝对同心 */
   border: none;
   background: transparent;
   color: var(--text-tertiary);
@@ -508,7 +511,10 @@
 }
 
 .approvalTargetBox {
-  border-radius: var(--radius-lg);
+  border-radius: var(
+    --radius-sm,
+    6px
+  ); /* 治愈 -10px 倒挂：超距平直区内盒圆角收敛为微圆 6px */
   border: 1px solid var(--border-subtle);
   background: var(--tint-hover);
   overflow: hidden;

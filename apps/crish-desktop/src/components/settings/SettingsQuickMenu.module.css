@@ -49,7 +49,9 @@
   z-index: var(--z-modal);
   background: var(--bg-card);
   border: var(--hairline-width) solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  border-radius: var(
+    --sep-radius-outer
+  ); /* 由 8px 重构为 14px，根治 -6px 极端窒息挤压 */
   box-shadow: var(--shadow-dropdown);
   padding: var(--space-1_5);
   display: flex;
@@ -57,11 +59,7 @@
   gap: var(--space-0_5);
   min-width: 220px; /* 容器约束·不入 token */
   max-width: min(280px, calc(100vw - 16px)); /* 容器约束·不入 token */
-  max-height: min(
-    var(--radix-popover-content-available-height),
-    70vh,
-    360px
-  );
+  max-height: min(var(--radix-popover-content-available-height), 70vh, 360px);
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;

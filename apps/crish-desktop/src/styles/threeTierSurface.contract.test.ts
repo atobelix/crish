@@ -204,26 +204,23 @@ describe('三档底色契约', () => {
     expect(active).toMatch(/border-color:\s*var\(--content-frame-border/);
   });
 
-  it('圆角：5 档 + 按钮用户锁 7px', () => {
-    expect(decl(css, '--radius-s')).toBe('4px');
-    expect(decl(css, '--radius-m')).toBe('8px');
+  it('圆角：完备偶数阶梯 + 按钮用户锁 7px', () => {
+    expect(decl(css, '--radius-xs')).toBe('4px');
+    expect(decl(css, '--radius-sm')).toBe('6px');
+    expect(decl(css, '--radius-md')).toBe('8px');
+    expect(decl(css, '--radius-lg')).toBe('10px');
     expect(decl(css, '--radius-l')).toBe('12px');
-    expect(decl(css, '--radius-input')).toBe('20px');
+    expect(decl(css, '--radius-xl')).toBe('16px');
+    expect(decl(css, '--radius-2xl')).toBe('20px');
+    expect(decl(css, '--radius-3xl')).toBe('24px');
     expect(decl(css, '--radius-pill')).toBe('9999px');
     expect(decl(css, '--radius-btn')).toBe('7px');
     for (const n of [
-      '--radius-xs',
-      '--radius-sm',
-      '--radius-md',
-      '--radius-lg',
-      '--radius-xl',
-      '--radius-2xl',
-      '--radius-3xl',
       '--chat-bubble-radius',
       '--composer-radius-single',
       '--composer-radius-multi',
     ]) {
-      expect(decl(css, n), n).toMatch(/^var\(--radius-(s|m|l|input|pill)\)$/);
+      expect(decl(css, n), n).toMatch(/^var\(--radius-(2xl|3xl|input)\)$/);
     }
   });
 });

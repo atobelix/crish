@@ -327,7 +327,7 @@
   flex: 1;
   min-height: min(360px, calc(100vh - 220px));
   border: none;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   overflow: hidden;
   background: var(--cover-card-bg, var(--bg-card));
 }
@@ -381,7 +381,7 @@
   background: transparent;
   text-align: left;
   padding: var(--space-2_5);
-  border-radius: var(--radius-btn);
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-family: inherit;
   position: relative;
@@ -396,7 +396,7 @@
   min-height: 24px;
   padding: 1px 6px;
   gap: 5px;
-  border-radius: var(--radius-btn);
+  border-radius: var(--radius-md);
 }
 
 .skillsRailItemDense .skillsRailIcon {
@@ -441,10 +441,12 @@
   font-weight: var(--font-weight-medium);
 }
 
-.skillsRailIcon {
+.skillsRailIcon,
+.cardCover,
+.cardCoverIcon {
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm);
   background: transparent;
   border: var(--hairline-width) solid var(--border-subtle);
   display: inline-flex;
@@ -596,7 +598,7 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   padding: var(--space-0_5) var(--space-1_5);
-  border-radius: var(--button-radius);
+  border-radius: var(--radius-s);
   border: var(--hairline-width) solid var(--border-subtle);
   background: var(--control-soft-bg);
   color: var(--text-secondary);

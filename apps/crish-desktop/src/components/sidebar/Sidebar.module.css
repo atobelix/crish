@@ -304,13 +304,20 @@
   gap: var(--space-1_5);
 }
 
+/* 侧栏设置按钮统一为 8px 微圆图标卡片 */
+.footerGearCol :global(.icon-button),
+.footerGearCol button {
+  --btn-radius: var(--radius-md);
+  border-radius: var(--radius-md);
+}
+
 .userProfileCard {
   width: 100%;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 4px 8px;
-  border-radius: var(--radius-btn);
+  padding: 3px 8px;
+  border-radius: var(--radius-xl, 16px);
   border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
@@ -476,11 +483,20 @@
   justify-content: center;
 }
 
+/* 折叠态 32x32px 图标卡片全轴线统一为 8px */
+.iconCollapse .footerGearCol :global(.icon-button),
+.iconCollapse .footerGearCol button,
+.iconCollapse :global(.sidebar-toggle-btn) {
+  --btn-radius: var(--radius-md);
+  border-radius: var(--radius-md);
+}
+
 .iconCollapse .userProfileCard {
   justify-content: center;
   padding: 0;
   width: 32px;
   height: 32px;
+  border-radius: var(--radius-md);
 }
 
 .iconCollapse .userTextStack {

@@ -378,7 +378,7 @@
   min-height: 28px;
   max-height: 28px;
   border-radius: var(--radius-lg);
-  padding: 0 var(--space-1) 0 var(--space-8);
+  padding: 0 var(--space-0_5, 2px) 0 var(--space-8);
   font-size: var(--font-size-base);
   color: var(--text-secondary);
   background: transparent;
@@ -619,7 +619,7 @@
   max-width: 24px;
   max-height: 24px;
   padding: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   color: var(--text-tertiary);
   background: transparent;
   border: none;

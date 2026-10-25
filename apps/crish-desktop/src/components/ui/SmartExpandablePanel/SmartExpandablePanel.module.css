@@ -330,8 +330,6 @@
   height: auto;
   max-height: min(360px, calc(100vh - 16px));
   overflow: visible;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
   border-radius: var(--sep-radius-outer, 14px);
   border: 1px solid var(--border-color);
   background: var(--sep-bg-panel-solid, var(--bg-elevated));
