@@ -120,11 +120,11 @@ describe('三档底色契约', () => {
     // T-BLK-07b：字面实测值现在钉在 --user-surface-* 参数声明上
     expect(decl(light, '--user-surface-outer')).toBe('#f7f6f5');
     expect(decl(light, '--user-bubble-bg')).toBe(
-      'color-mix(in srgb, var(--text-primary) 3%, transparent)'
+      'color-mix(in srgb, var(--text-primary) 5.5%, transparent)'
     );
     expect(decl(dark, '--user-surface-outer')).toBe('#1e1e1e');
     expect(decl(dark, '--user-bubble-bg')).toBe(
-      'color-mix(in srgb, var(--user-text-primary) 5%, transparent)'
+      'color-mix(in srgb, var(--user-text-primary) 9%, transparent)'
     );
     expect(decl(light, '--user-surface-main')).toBe('#ffffff');
     expect(decl(light, '--user-surface-input')).toBe('#ffffff');

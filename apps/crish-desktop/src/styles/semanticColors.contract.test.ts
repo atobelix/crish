@@ -55,10 +55,10 @@ describe('固定语义色契约', () => {
     ['light', light],
     ['dark', dark],
   ] as const) {
-    it(`${theme}: 每个语义色都是不透明的固定 hex（不混色、不透明叠加）`, () => {
+    it(`${theme}: 每个语义色都是不透明的固定格式（支持纯色 hex 与纯正 hsla）`, () => {
       for (const name of FIXED) {
         expect(decl(block, name), `${theme} ${name}`).toMatch(
-          /^#[0-9a-f]{6}$/i
+          /^(?:#[0-9a-f]{6}|hsla?\([^)]+\))$/i
         );
       }
     });
@@ -134,5 +134,100 @@ describe('固定语义色契约', () => {
       '.item.danger:active { background-color: var(--danger-soft-bg-hover); }'
     );
     expect(decl(light, '--sep-danger-color')).toBe('var(--danger-fg)');
+  });
+
+  it('活力色系完整调色盘契约测试 (Full Saturated Palette)', () => {
+    const paletteTokens = [
+      '--palette-mint-green-fg',
+      '--palette-mint-green-bg',
+      '--palette-mint-green-border',
+      '--palette-coral-rose-fg',
+      '--palette-coral-rose-bg',
+      '--palette-coral-rose-border',
+      '--palette-amber-orange-fg',
+      '--palette-amber-orange-bg',
+      '--palette-amber-orange-border',
+      '--palette-pure-blue-fg',
+      '--palette-pure-blue-bg',
+      '--palette-pure-blue-border',
+      '--palette-pure-purple-fg',
+      '--palette-pure-purple-bg',
+      '--palette-pure-purple-border',
+      '--palette-lime-green-fg',
+      '--palette-lime-green-bg',
+      '--palette-lime-green-border',
+      '--palette-electric-cyan-fg',
+      '--palette-electric-cyan-bg',
+      '--palette-electric-cyan-border',
+      '--palette-vivid-orange-fg',
+      '--palette-vivid-orange-bg',
+      '--palette-vivid-orange-border',
+      '--palette-hot-pink-fg',
+      '--palette-hot-pink-bg',
+      '--palette-hot-pink-border',
+      '--palette-peacock-teal-fg',
+      '--palette-peacock-teal-bg',
+      '--palette-peacock-teal-border',
+      '--palette-royal-cobalt-fg',
+      '--palette-royal-cobalt-bg',
+      '--palette-royal-cobalt-border',
+      '--palette-fuchsia-fg',
+      '--palette-fuchsia-bg',
+      '--palette-fuchsia-border',
+      '--palette-sky-blue-fg',
+      '--palette-sky-blue-bg',
+      '--palette-sky-blue-border',
+      '--palette-warm-gold-fg',
+      '--palette-warm-gold-bg',
+      '--palette-warm-gold-border',
+      '--palette-jade-emerald-fg',
+      '--palette-jade-emerald-bg',
+      '--palette-jade-emerald-border',
+      '--palette-warm-coral-fg',
+      '--palette-warm-coral-bg',
+      '--palette-warm-coral-border',
+      '--palette-vermillion-fg',
+      '--palette-vermillion-bg',
+      '--palette-vermillion-border',
+      '--palette-forest-green-fg',
+      '--palette-forest-green-bg',
+      '--palette-forest-green-border',
+      '--palette-warm-lavender-fg',
+      '--palette-warm-lavender-bg',
+      '--palette-warm-lavender-border',
+      '--palette-turmeric-deep-fg',
+      '--palette-turmeric-deep-bg',
+      '--palette-turmeric-deep-border',
+      '--palette-true-indigo-fg',
+      '--palette-true-indigo-bg',
+      '--palette-true-indigo-border',
+      '--palette-vivid-aqua-fg',
+      '--palette-vivid-aqua-bg',
+      '--palette-vivid-aqua-border',
+      '--palette-grape-fg',
+      '--palette-grape-bg',
+      '--palette-grape-border',
+      '--palette-spring-green-fg',
+      '--palette-spring-green-bg',
+      '--palette-spring-green-border',
+      '--palette-deep-rouge-fg',
+      '--palette-deep-rouge-bg',
+      '--palette-deep-rouge-border',
+      '--palette-mango-orange-fg',
+      '--palette-mango-orange-bg',
+      '--palette-mango-orange-border',
+      '--palette-cerulean-fg',
+      '--palette-cerulean-bg',
+      '--palette-cerulean-border',
+      '--palette-vivid-yellow-fg',
+      '--palette-vivid-yellow-bg',
+      '--palette-vivid-yellow-border',
+      '--palette-deep-wine-fg',
+      '--palette-deep-wine-bg',
+      '--palette-deep-wine-border',
+    ];
+    for (const token of paletteTokens) {
+      expect(css).toContain(token);
+    }
   });
 });

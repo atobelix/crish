@@ -22,10 +22,8 @@ import {
 } from './helpers';
 import { getSessionById } from '../../store/sessionStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
-import { setStreamText } from '../../store/streamingStore';
 import { useSessionExecutionTrackerStore } from '../../store/sessionExecutionTrackerStore';
 import { clearRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
-import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import { streamBatchKey } from '../../api/streamTextBatcher';
 import { recordChunkSample } from '../../api/streamDiag';
 import { useGoalMode } from './useGoalMode';
@@ -49,6 +47,7 @@ import {
   createFinalHtmlScheduler,
   handleThinkingResetOnChunk,
   executeStreamCompletion,
+  setupStreamRenderBuffer,
 } from './streamExecutionHelper';
 
 const tracker = () => useSessionExecutionTrackerStore.getState();
@@ -152,31 +151,19 @@ export function useRunStreamingAssistant(
         });
       };
 
-      const buffer = new StreamRenderBuffer();
-      renderBufferRef.current = buffer;
-      buffer.reset();
-
-      const myGen = (generationMapRef.current.get(sid) ?? 0) + 1;
-      generationMapRef.current.set(sid, myGen);
-
       const assertLive = (): boolean =>
         !state.runClosed &&
         isLiveStreamRun(streamManagerRef.current?.get(sid), assistantMsgId);
 
-      buffer.onFrame = (frame) => {
-        if (frame.isFinal) {
-          if (state.draining) {
-            setStreamText(sid, assistantMsgId, frame.full);
-            finishComplete();
-          }
-          return;
-        }
-        if (state.runClosed && !state.draining) return;
-        if (!assertLive() && !state.draining) return;
-        if (myGen !== generationMapRef.current.get(sid)) return;
-        setStreamText(sid, assistantMsgId, frame.full);
-      };
-      buffer.start();
+      const buffer = setupStreamRenderBuffer({
+        sid,
+        assistantMsgId,
+        renderBufferRef,
+        generationMapRef,
+        state,
+        assertLive,
+        finishComplete,
+      });
 
       const { queueToolCallPatch, upsertToolCall } = createToolPatchQueue({
         sid,

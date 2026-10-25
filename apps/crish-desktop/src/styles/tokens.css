@@ -74,8 +74,8 @@ html[data-theme='light'] {
   --bg-card-hover: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
   --bg-card-active: color-mix(in srgb, var(--text-primary) 6%, transparent);
   --bg-card-subtle: var(--surface-outer);
-  /* 用户消息气泡：主题文字色 3% 透明叠底。浅色是淡暖灰，深色与换肤后的文字色自动跟着走。 */
-  --user-bubble-bg: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  /* 用户消息气泡：DIM-01 标准 5.5% 透明叠底。浅色是清晰温和的淡暖灰，全主题自动跟随。 */
+  --user-bubble-bg: color-mix(in srgb, var(--text-primary) 5.5%, transparent);
   /* 激活标签页 = 输入框档（纯白，比外层/主层都亮一档）；未激活标签透明，透出外层 */
   --tab-active-bg: var(--surface-input);
   /* 次级按钮底色（元素底色 token；浅色 = 所在层卡片色，不变） */
@@ -396,19 +396,19 @@ html[data-theme='light'] {
     0 4px 14px -2px color-mix(in srgb, var(--shadow-color) 4%, transparent),
     0 1px 3px 0 color-mix(in srgb, var(--shadow-color) 2%, transparent);
 
-  /* legacy/semantic aliases used across modules (prefer --color-* going forward) */
-  --danger-color: var(--color-error);
-  --accent-danger: var(--color-error);
+  /* legacy/semantic aliases used across modules (统一收拢危险语义至 --danger-fg 单一真源) */
+  --danger-color: var(--danger-fg);
+  --accent-danger: var(--danger-fg);
   --warning-color: var(--color-warning);
 
-  --text-danger: var(--color-error);
+  --text-danger: var(--danger-fg);
   --text-success: var(--color-success);
   --text-warning: var(--color-warning);
   --text-warning-strong: oklch(0.52 0.16 55);
   --text-success-strong: oklch(0.48 0.15 150);
   --text-on-danger: #ffffff;
   --ui-text-success: var(--color-success);
-  --ui-text-danger: var(--color-error);
+  --ui-text-danger: var(--danger-fg);
   --ui-text-muted: var(--text-tertiary);
   --ui-text-info: var(--color-info);
   --ui-text-warning: var(--text-warning-strong);
@@ -894,10 +894,10 @@ html[data-theme='light'] {
   --status-renamed: #8250df;
   --status-untracked: #57606a;
   --status-conflicted: #bc4c00;
-  /* 语义色 fg / soft 底 / hover·按下底：固定纯色，不混主题色、底色、黑色，不透明（heson 2026-10-11） */
-  --danger-fg: #e5484d;
-  --danger-soft-bg: #fdecec;
-  --danger-soft-bg-hover: #fbdcdc;
+  /* 语义色 fg / soft 底 / hover·按下底：固定纯色，不混主题色、底色、黑色，不透明（对齐朱砂红 HSLA 规范） */
+  --danger-fg: hsl(0 72% 51%);
+  --danger-soft-bg: hsl(0 86% 97%);
+  --danger-soft-bg-hover: hsl(0 80% 93%);
   --success-fg: #1a7f37;
   --success-soft-bg: #e7f6ec;
   --success-soft-bg-hover: #d3eedc;
@@ -1111,10 +1111,10 @@ html[data-theme='dark'] {
     var(--element-ink) var(--elevate-step-3),
     transparent
   );
-  /* 深色用户气泡：未压灰的主题前景 5%。比浅色的 3% 再亮 2 个点，暗底上才看得出。 */
+  /* 深色用户气泡：未压灰的主题前景 9%（对齐 elevate-2 阶梯），暗底上温和浮起清晰可辨。 */
   --user-bubble-bg: color-mix(
     in srgb,
-    var(--user-text-primary) 5%,
+    var(--user-text-primary) 9%,
     transparent
   );
   /* 激活标签页 = 输入框档（深色最亮一层 #232323；旧值 hsl(0 0% 25%) 是第四种灰）；未激活透明 */
@@ -1335,9 +1335,10 @@ html[data-theme='dark'] {
   --accent-primary: #10b981;
   /* primary     dark    text-secondary    */
   --text-on-accent: var(--bg-primary, #0a0a0a);
-  /* legacy/semantic aliases dark        light             dark      */
-  --accent-danger: var(--color-error);
-  --text-danger: var(--color-error);
+  /* legacy/semantic aliases dark (统一收拢危险语义至 --danger-fg 单一真源) */
+  --danger-color: var(--danger-fg);
+  --accent-danger: var(--danger-fg);
+  --text-danger: var(--danger-fg);
   --text-success: var(--color-success);
   --text-warning: var(--color-warning);
   /*         dark            4.5:1    --ui-text-* dark        10:1  */
@@ -1445,7 +1446,7 @@ html[data-theme='dark'] {
    *             muted   4.6:1      dark      light
    *                --text-secondary           */
   --ui-text-success: #69db7c;
-  --ui-text-danger: #ff8787;
+  --ui-text-danger: var(--danger-fg);
   --ui-text-muted: #a3a3a3;
   --ui-text-info: #74c0fc;
   --ui-text-warning: #ffa94d;
@@ -1675,10 +1676,10 @@ html[data-theme='dark'] {
   --status-renamed: #a371f7;
   --status-untracked: #8b949e;
   --status-conflicted: #f0883e;
-  /* 语义色 fg / soft 底 / hover·按下底：固定纯色（深色） */
-  --danger-fg: #ff6369;
-  --danger-soft-bg: #4a1f22;
-  --danger-soft-bg-hover: #5a2629;
+  /* 语义色 fg / soft 底 / hover·按下底：固定纯色（深色 HSLA 规范） */
+  --danger-fg: hsl(0 85% 65%);
+  --danger-soft-bg: hsl(0 50% 16%);
+  --danger-soft-bg-hover: hsl(0 50% 22%);
   --success-fg: #3fb950;
   --success-soft-bg: #17301f;
   --success-soft-bg-hover: #1e3d28;
@@ -1968,6 +1969,126 @@ html[data-ui-size='large'] {
   --pin-hue-cyan: #00ffff;
   --pin-hue-blue: #0000ff;
   --pin-hue-magenta: #ff00ff;
+}
+
+/* ── 活力色系完整调色盘 · 29 色 (Full Saturated Palette · 系统性统一录入) ─────
+ * 纯正 HSLA 规范；供系统按需取用，不强行赋予未使用的业务组件，保持视觉纯粹。 */
+:root {
+  --palette-mint-green-fg: hsl(160 84% 39%);
+  --palette-mint-green-bg: hsl(140 80% 97%);
+  --palette-mint-green-border: hsl(141 79% 93%);
+
+  --palette-coral-rose-fg: hsl(349 89% 60%);
+  --palette-coral-rose-bg: hsl(356 100% 97%);
+  --palette-coral-rose-border: hsl(355 100% 95%);
+
+  --palette-amber-orange-fg: hsl(21 90% 48%);
+  --palette-amber-orange-bg: hsl(33 100% 96%);
+  --palette-amber-orange-border: hsl(34 100% 92%);
+
+  --palette-pure-blue-fg: hsl(209 100% 50%);
+  --palette-pure-blue-bg: hsl(212 100% 97%);
+  --palette-pure-blue-border: hsl(204 93% 94%);
+
+  --palette-pure-purple-fg: hsl(271 91% 65%);
+  --palette-pure-purple-bg: hsl(270 100% 98%);
+  --palette-pure-purple-border: hsl(252 100% 97%);
+
+  --palette-lime-green-fg: hsl(84 85% 35%);
+  --palette-lime-green-bg: hsl(78 91% 95%);
+  --palette-lime-green-border: hsl(80 88% 89%);
+
+  --palette-electric-cyan-fg: hsl(190 100% 42%);
+  --palette-electric-cyan-bg: hsl(196 100% 97%);
+  --palette-electric-cyan-border: hsl(192 88% 89%);
+
+  --palette-vivid-orange-fg: hsl(25 95% 53%);
+  --palette-vivid-orange-bg: hsl(28 100% 97%);
+  --palette-vivid-orange-border: hsl(32 98% 83%);
+
+  --palette-hot-pink-fg: hsl(330 81% 60%);
+  --palette-hot-pink-bg: hsl(327 73% 97%);
+  --palette-hot-pink-border: hsl(326 84% 90%);
+
+  --palette-peacock-teal-fg: hsl(175 84% 32%);
+  --palette-peacock-teal-bg: hsl(166 67% 97%);
+  --palette-peacock-teal-border: hsl(168 80% 78%);
+
+  --palette-royal-cobalt-fg: hsl(221 83% 53%);
+  --palette-royal-cobalt-bg: hsl(214 100% 97%);
+  --palette-royal-cobalt-border: hsl(213 94% 87%);
+
+  --palette-fuchsia-fg: hsl(294 72% 49%);
+  --palette-fuchsia-bg: hsl(289 100% 98%);
+  --palette-fuchsia-border: hsl(288 91% 91%);
+
+  --palette-sky-blue-fg: hsl(199 89% 48%);
+  --palette-sky-blue-bg: hsl(200 100% 97%);
+  --palette-sky-blue-border: hsl(201 94% 86%);
+
+  --palette-warm-gold-fg: hsl(38 92% 50%);
+  --palette-warm-gold-bg: hsl(48 100% 96%);
+  --palette-warm-gold-border: hsl(48 96% 77%);
+
+  --palette-jade-emerald-fg: hsl(161 94% 30%);
+  --palette-jade-emerald-bg: hsl(152 77% 96%);
+  --palette-jade-emerald-border: hsl(152 69% 80%);
+
+  --palette-warm-coral-fg: hsl(351 95% 71%);
+  --palette-warm-coral-bg: hsl(356 100% 97%);
+  --palette-warm-coral-border: hsl(353 96% 90%);
+
+  --palette-vermillion-fg: hsl(0 72% 51%);
+  --palette-vermillion-bg: hsl(0 86% 97%);
+  --palette-vermillion-border: hsl(0 93% 89%);
+
+  --palette-forest-green-fg: hsl(142 76% 36%);
+  --palette-forest-green-bg: hsl(140 80% 97%);
+  --palette-forest-green-border: hsl(141 76% 85%);
+
+  --palette-warm-lavender-fg: hsl(263 70% 50%);
+  --palette-warm-lavender-bg: hsl(252 100% 98%);
+  --palette-warm-lavender-border: hsl(251 91% 92%);
+
+  --palette-turmeric-deep-fg: hsl(26 91% 37%);
+  --palette-turmeric-deep-bg: hsl(48 100% 96%);
+  --palette-turmeric-deep-border: hsl(47 97% 89%);
+
+  --palette-true-indigo-fg: hsl(245 58% 51%);
+  --palette-true-indigo-bg: hsl(229 100% 97%);
+  --palette-true-indigo-border: hsl(230 92% 89%);
+
+  --palette-vivid-aqua-fg: hsl(189 94% 43%);
+  --palette-vivid-aqua-bg: hsl(187 100% 96%);
+  --palette-vivid-aqua-border: hsl(187 88% 82%);
+
+  --palette-grape-fg: hsl(272 72% 47%);
+  --palette-grape-bg: hsl(270 100% 98%);
+  --palette-grape-border: hsl(273 91% 92%);
+
+  --palette-spring-green-fg: hsl(142 71% 45%);
+  --palette-spring-green-bg: hsl(140 80% 97%);
+  --palette-spring-green-border: hsl(141 76% 85%);
+
+  --palette-deep-rouge-fg: hsl(333 77% 42%);
+  --palette-deep-rouge-bg: hsl(327 73% 97%);
+  --palette-deep-rouge-border: hsl(326 84% 90%);
+
+  --palette-mango-orange-fg: hsl(27 96% 61%);
+  --palette-mango-orange-bg: hsl(33 100% 96%);
+  --palette-mango-orange-border: hsl(32 98% 83%);
+
+  --palette-cerulean-fg: hsl(200 98% 39%);
+  --palette-cerulean-bg: hsl(204 100% 97%);
+  --palette-cerulean-border: hsl(201 94% 86%);
+
+  --palette-vivid-yellow-fg: hsl(45 93% 47%);
+  --palette-vivid-yellow-bg: hsl(55 85% 95%);
+  --palette-vivid-yellow-border: hsl(53 95% 77%);
+
+  --palette-deep-wine-fg: hsl(344 80% 35%);
+  --palette-deep-wine-bg: hsl(356 100% 97%);
+  --palette-deep-wine-border: hsl(353 96% 90%);
 }
 
 /* ── B 类运行期量 · 静态默认声明（消除「静态不可知」与「靠兜底存活」）────────

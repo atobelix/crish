@@ -12,7 +12,8 @@ import { getCompositionRoot } from '../../app/compositionRoot';
 import { markStreamingActive } from '../../api/streamStop';
 import { scheduleFinalMarkdownHtml, buildTerminalToolPatches } from './helpers';
 import { streamBatchKey } from '../../api/streamTextBatcher';
-import { getStreamThinking } from '../../store/streamingStore';
+import { getStreamThinking, setStreamText } from '../../store/streamingStore';
+import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import {
   commitRunCompletion,
   decideEmptyRunNotice,
@@ -211,4 +212,41 @@ export function executeStreamCompletion(ctx: StreamCompletionContext): void {
   if (!maybeContinueGoalMode(sid, assistantMsgId)) {
     drainQueuedAfterComplete(sid);
   }
+}
+
+/**
+ * 初始化并启动流式渲染缓冲器（StreamRenderBuffer），
+ * 绑定帧刷新与生命周期守卫，返回当前缓冲器实例。
+ */
+export function setupStreamRenderBuffer(opts: {
+  sid: string;
+  assistantMsgId: string;
+  renderBufferRef: MutableRefObject<StreamRenderBuffer | null>;
+  generationMapRef: MutableRefObject<Map<string, number>>;
+  state: StreamRunState;
+  assertLive: () => boolean;
+  finishComplete: () => void;
+}): StreamRenderBuffer {
+  const buffer = new StreamRenderBuffer();
+  opts.renderBufferRef.current = buffer;
+  buffer.reset();
+
+  const myGen = (opts.generationMapRef.current.get(opts.sid) ?? 0) + 1;
+  opts.generationMapRef.current.set(opts.sid, myGen);
+
+  buffer.onFrame = (frame) => {
+    if (frame.isFinal) {
+      if (opts.state.draining) {
+        setStreamText(opts.sid, opts.assistantMsgId, frame.full);
+        opts.finishComplete();
+      }
+      return;
+    }
+    if (opts.state.runClosed && !opts.state.draining) return;
+    if (!opts.assertLive() && !opts.state.draining) return;
+    if (myGen !== opts.generationMapRef.current.get(opts.sid)) return;
+    setStreamText(opts.sid, opts.assistantMsgId, frame.full);
+  };
+  buffer.start();
+  return buffer;
 }
