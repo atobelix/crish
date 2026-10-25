@@ -1,20 +1,31 @@
-/* Setup soft banner — 与主对话输入框同宽居中、中性发丝边框、图标与文本同水平中线 */
+/* Setup soft banner — 与主对话输入框同宽居中、背景对齐输入框底色、同心几何圆角、图标与文本同水平中线 */
 .chatSoftHint {
+  --soft-hint-py: 10px;
+  --soft-hint-px-start: 16px;
+  --soft-hint-px-end: 10px;
+  --soft-hint-btn-radius: var(--radius-md, 8px);
+  /* 同心几何标尺：外圆角 = 内圆角 (8px) + 等距内边距 (10px) = 18px，内外圆弧处处平行同心 */
+  --soft-hint-radius: calc(var(--soft-hint-btn-radius) + var(--soft-hint-py));
+
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  margin: 0 auto;
-  padding: 6px 10px;
-  border-radius: var(--radius-md);
-  background: transparent;
+  gap: var(--space-2_5, 10px);
+  margin: 0 auto 8px;
+  padding: var(--soft-hint-py) var(--soft-hint-px-end) var(--soft-hint-py)
+    var(--soft-hint-px-start);
+  min-height: 48px;
+  border-radius: var(--soft-hint-radius);
+  background: var(--surface-input);
   border: 1px solid var(--hairline, var(--border-subtle));
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm, 13px);
   line-height: 20px;
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
-  box-shadow: none;
+  box-shadow:
+    0 1px 3px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
+    0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
 }
 
 .chatSoftHintIcon {
@@ -38,39 +49,58 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 20px;
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-secondary);
 }
 
 .chatSoftHintAction,
 .chatSoftHintAction {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-width: unset;
   min-height: unset;
-  height: 20px;
-  line-height: 20px;
-  border: none;
+  height: 28px;
+  padding: 0 13px;
+  border-radius: var(--soft-hint-btn-radius);
+  border: 1px solid transparent;
   box-shadow: none;
-  background: transparent;
+  background: var(--tint-hover);
   color: var(--text-primary);
-  font-weight: var(--font-weight-normal);
-  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium, 500);
+  font-size: var(--font-size-xs, 12px);
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  padding: 0;
+  text-decoration: none;
   font-family: inherit;
   flex-shrink: 0;
+  user-select: none;
+  white-space: nowrap;
+  transition:
+    background-color var(--transition-fast, 120ms ease),
+    border-color var(--transition-fast, 120ms ease),
+    transform 100ms ease;
 }
 
 .chatSoftHintAction:hover {
+  background: var(--tint-active);
   color: var(--text-primary);
-  text-decoration-thickness: 1.5px;
+  text-decoration: none;
+}
+
+.chatSoftHintAction:active {
+  background: var(--tint-strong);
+  transform: scale(0.98);
 }
 
 .chatSoftHintAction:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent-color) 10%, transparent);
-  outline-offset: 2px;
-  border-radius: var(--radius-xs);
+  outline: none;
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 90%,
+    var(--text-primary) 10%
+  );
 }
 
 .chatSoftHint[data-setup-hint='needs-key'] {

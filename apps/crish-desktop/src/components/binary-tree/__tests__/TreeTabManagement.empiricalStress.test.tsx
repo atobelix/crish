@@ -326,7 +326,10 @@ describe('TreeTabManagement Empirical Stress & Invariant Fuzzing Harness', () =>
 
         // Verify draft state: activeTabId === '', tabs.length === 0
         let root = useLayoutTreeStore.getState().tree.root;
-        let leaf = findLeafInTree(root, leafId);
+        const currentLeafId =
+          useLayoutTreeStore.getState().activeLeafId ||
+          (root.type === 'leaf' ? root.id : leafId);
+        let leaf = findLeafInTree(root, currentLeafId);
         expect(leaf?.activeTabId).toBe('');
         expect(leaf?.tabs).toHaveLength(0);
 
@@ -334,12 +337,12 @@ describe('TreeTabManagement Empirical Stress & Invariant Fuzzing Harness', () =>
         await act(async () => {
           useWorkspaceShellStore
             .getState()
-            .openOrFocusSession(sid, { activeLeafId: leafId });
+            .openOrFocusSession(sid, { activeLeafId: currentLeafId });
         });
 
         // Verify materialized: exactly 1 tab, non-empty activeTabId, matches sid
         root = useLayoutTreeStore.getState().tree.root;
-        leaf = findLeafInTree(root, leafId);
+        leaf = findLeafInTree(root, currentLeafId);
         expect(leaf?.tabs).toHaveLength(1);
         expect(leaf?.tabs[0].sessionId).toBe(sid);
         expect(leaf?.activeTabId).toBe(leaf?.tabs[0].tabId);
