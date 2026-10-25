@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use crate::core_run_commands::CoreRunState;
+use std::sync::Arc;
 
 use super::fixtures::{
-    cdp_cookie, inject_local_storage_mock, inject_mock, mock_core_state, ChannelCall,
+    cdp_cookie, err_detail, inject_local_storage_mock, inject_mock, mock_core_state, ChannelCall,
     MockLocalStorageChannel, MockStorageOps,
 };
 use crate::browser_commands::browser_export_storage_state;
@@ -103,7 +103,8 @@ async fn export_requires_authorization_no_cdp_read() {
     let err = browser_export_storage_state(false, state_ref)
         .await
         .expect_err("未授权必须拒绝");
-    assert!(err.contains("未获显式授权"), "拒绝文案：{err}");
+    let detail = err_detail(err);
+    assert!(detail.contains("未获显式授权"), "拒绝文案：{detail}");
     assert_eq!(
         get_calls.load(std::sync::atomic::Ordering::SeqCst),
         0,
@@ -134,9 +135,10 @@ async fn export_not_ready_without_session() {
     let err = browser_export_storage_state(true, state_ref)
         .await
         .expect_err("未连接必须失败");
+    let detail = err_detail(err);
     assert!(
-        err.starts_with("tool.browser.not_ready:"),
-        "not_ready 结构化码前缀：{err}"
+        detail.starts_with("tool.browser.not_ready:"),
+        "not_ready 结构化码前缀：{detail}"
     );
 }
 
@@ -164,9 +166,10 @@ async fn export_local_storage_channel_unavailable_not_ready() {
     let err = browser_export_storage_state(true, state_ref)
         .await
         .expect_err("通道不可用必须失败");
+    let detail = err_detail(err);
     assert!(
-        err.starts_with("tool.browser.not_ready:"),
-        "not_ready 结构化码前缀：{err}"
+        detail.starts_with("tool.browser.not_ready:"),
+        "not_ready 结构化码前缀：{detail}"
     );
 }
 

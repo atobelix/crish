@@ -25,6 +25,12 @@
 /// 命令面唯一错误类型（serde `{kind, detail}` 协议，`conex-types` 权威定义）。
 pub use conex_types::CoreError;
 
+/// 内部 String 错误 → `CoreError::Internal` 兜底（历史 String 契约在命令
+/// 边界的统一收口：宿主环境/内部辅助错误无更细 kind 可分时使用）。
+pub fn map_internal_string(err: String) -> CoreError {
+    CoreError::Internal(err)
+}
+
 /// 把 `orchestrator::persist::StoreError` 映射为 CoreError。
 ///
 /// - kind 语义 = 存储操作名（append_event / query_events / lock ...），随 detail 保留

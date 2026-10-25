@@ -1,13 +1,27 @@
-use std::sync::Arc;
-use async_trait::async_trait;
-use conex_browser::cdp::domains::Cookie as CdpCookie;
-use conex_browser::cdp::domains::SetCookieParam;
 use crate::browser::StorageStateOps;
+use crate::core_error::CoreError;
 use crate::core_event_bridge::{Emitter, EventBridge};
 use crate::core_run_commands::CoreRunState;
 use crate::status_diagnostics::StatusDiagnostics;
+use async_trait::async_trait;
+use conex_browser::cdp::domains::Cookie as CdpCookie;
+use conex_browser::cdp::domains::SetCookieParam;
 use orchestrator::persist::InMemoryStore;
 use orchestrator::restore::SnapshotFileStore;
+use std::sync::Arc;
+
+/// `CoreError` → detail 文本（断言辅助：错误文案与旧 String 契约同形，
+/// 测试继续用 `starts_with` / `contains` 校验 J1b 码前缀与文案）。
+pub(crate) fn err_detail(err: CoreError) -> String {
+    match err {
+        CoreError::InvalidInput(detail) => detail,
+        CoreError::Encoding(detail) => detail,
+        CoreError::Io(detail) => detail,
+        CoreError::NotFound(detail) => detail,
+        CoreError::Internal(detail) => detail,
+        CoreError::Cancelled => "cancelled".to_string(),
+    }
+}
 
 /// 单元测试专用内存事件接收器（实现 [Emitter] trait，记录信道与载荷）。
 pub(crate) struct TestEmitter(pub(crate) Arc<std::sync::Mutex<Vec<String>>>);
@@ -130,8 +144,7 @@ pub(crate) enum ChannelCall {
     GetItems(String),
 }
 
-type MockItemsMap =
-    Arc<std::sync::Mutex<std::collections::HashMap<String, Vec<(String, String)>>>>;
+type MockItemsMap = Arc<std::sync::Mutex<std::collections::HashMap<String, Vec<(String, String)>>>>;
 
 /// J1b 扩展面 mock 通道：记录调用（命令层断言 wire 参数透传，
 /// 不依赖真实浏览器会话；对齐 import/storage_state.rs 测试面）。

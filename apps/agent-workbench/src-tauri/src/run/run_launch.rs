@@ -2,6 +2,7 @@
 //!
 //! 经 run/mod.rs 聚合接线；顶层符号 pub(crate) 化供兄弟模与门面 re-export。
 use super::*;
+use crate::core_error::CoreError;
 ///
 /// - runtime-error 事件（持久化，03 §2.4 四源失败收口）；
 /// - run 标记 failed（event-store-write-failed 语义，不假装可回放）；
@@ -1793,7 +1794,7 @@ pub(crate) async fn cancel_run_impl(
 pub(crate) async fn workbench_abort_run(
     state: tauri::State<'_, Arc<CoreRunState>>,
     session_id: String,
-) -> Result<bool, String> {
+) -> Result<bool, CoreError> {
     let sid = session_id.trim();
     if sid.is_empty() {
         return Ok(false);

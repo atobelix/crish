@@ -8,13 +8,21 @@
 
 use agent_tools::mcp::servers::{LocalFileMcpPersistence, McpConfigPersistence, McpTransport};
 use agent_tools::mcp::McpServerRuntimeState;
+use agent_tools::ToolError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::State;
 
+use crate::core_error::{map_internal_string, CoreError};
 use crate::core_run_commands::CoreRunState;
+
+/// MCP 配置持久化失败 → `Io`（detail 携带 `mcp.config:` 操作名与原始文案，
+/// 对齐 map_store_err 风格；持久化错误码统一为 config.invalid，kind 取存储语义）。
+fn map_mcp_persistence_err(err: ToolError) -> CoreError {
+    CoreError::Io(format!("mcp.config: {err}"))
+}
 
 /// MCP 单个工具反射 DTO（对应前端 McpToolDefinitionDto）
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,8 +99,8 @@ fn runtime_state_to_str(state: McpServerRuntimeState) -> &'static str {
 #[tauri::command]
 pub async fn workbench_list_mcp_servers(
     state: State<'_, Arc<CoreRunState>>,
-) -> Result<McpListResponse, String> {
-    let app_dir = crate::host_paths::app_dir().map_err(|e| e.to_string())?;
+) -> Result<McpListResponse, CoreError> {
+    let app_dir = crate::host_paths::app_dir().map_err(map_internal_string)?;
     let persistence = LocalFileMcpPersistence::new(app_dir);
     let saved_configs = persistence.load().await.unwrap_or_default();
 
@@ -209,15 +217,15 @@ pub async fn workbench_list_mcp_servers(
 pub async fn workbench_start_mcp_server(
     state: State<'_, Arc<CoreRunState>>,
     server_id: String,
-) -> Result<McpControlResult, String> {
-    let app_dir = crate::host_paths::app_dir().map_err(|e| e.to_string())?;
+) -> Result<McpControlResult, CoreError> {
+    let app_dir = crate::host_paths::app_dir().map_err(map_internal_string)?;
     let persistence = LocalFileMcpPersistence::new(app_dir);
-    let configs = persistence.load().await.map_err(|e| e.to_string())?;
+    let configs = persistence.load().await.map_err(map_mcp_persistence_err)?;
 
     let config = configs
         .into_iter()
         .find(|c| c.server_id == server_id)
-        .ok_or_else(|| format!("未找到 MCP 服务配置: {}", server_id))?;
+        .ok_or_else(|| CoreError::NotFound(format!("未找到 MCP 服务配置: {}", server_id)))?;
 
     match state.engine().register_plugin_mcp_server(config).await {
         Ok(_) => Ok(McpControlResult {
@@ -242,7 +250,7 @@ pub async fn workbench_start_mcp_server(
 pub async fn workbench_stop_mcp_server(
     state: State<'_, Arc<CoreRunState>>,
     server_id: String,
-) -> Result<McpControlResult, String> {
+) -> Result<McpControlResult, CoreError> {
     let bridge = state.engine().mcp_bridge();
     match bridge.stop(&server_id).await {
         Ok(_) => Ok(McpControlResult {
@@ -269,16 +277,16 @@ pub async fn workbench_toggle_mcp_tool(
     server_id: String,
     tool_name: String,
     enabled: bool,
-) -> Result<bool, String> {
+) -> Result<bool, CoreError> {
     let _ = state;
-    let app_dir = crate::host_paths::app_dir().map_err(|e| e.to_string())?;
+    let app_dir = crate::host_paths::app_dir().map_err(map_internal_string)?;
     let persistence = LocalFileMcpPersistence::new(app_dir);
-    let mut configs = persistence.load().await.map_err(|e| e.to_string())?;
+    let mut configs = persistence.load().await.map_err(map_mcp_persistence_err)?;
 
     let config = configs
         .iter_mut()
         .find(|c| c.server_id == server_id)
-        .ok_or_else(|| format!("未找到 MCP 服务配置: {}", server_id))?;
+        .ok_or_else(|| CoreError::NotFound(format!("未找到 MCP 服务配置: {}", server_id)))?;
 
     let short_name = tool_name
         .split("__")
@@ -299,7 +307,7 @@ pub async fn workbench_toggle_mcp_tool(
     persistence
         .save(&configs)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(map_mcp_persistence_err)?;
     Ok(true)
 }
 

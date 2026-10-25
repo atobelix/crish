@@ -1,9 +1,10 @@
-use std::sync::Arc;
+use super::common::{map_browser_err, slot};
 use crate::browser::frame_stream::FrameStreamState;
 use crate::browser::panel_input::BrowserInputEvent;
+use crate::core_error::CoreError;
 use crate::core_run_commands::CoreRunState;
+use std::sync::Arc;
 use tauri::ipc::Channel;
-use super::common::slot;
 
 /// 启动帧流（P1-B1）：注册前端帧通道（Uint8Array 二进制）→ 浏览器就绪 →
 /// 帧泵启动（startScreencast + ack pacing，8fps Base 档）→ 帧状态
@@ -16,17 +17,17 @@ pub(crate) async fn browser_start_frames<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     on_frame: Channel<tauri::ipc::Response>,
     core: tauri::State<'_, Arc<CoreRunState>>,
-) -> Result<FrameStreamState, String> {
+) -> Result<FrameStreamState, CoreError> {
     let slot = slot(core.inner());
     slot.attach_emitter(Arc::new(crate::browser::TauriStateEmitter::new(app)));
-    slot.start_frames(on_frame).await
+    slot.start_frames(on_frame).await.map_err(map_browser_err)
 }
 
 /// 退订帧流（P1-B1；幂等）：停止帧泵 + stopScreencast + 状态 stopped。
 #[tauri::command]
 pub(crate) async fn browser_stop_frames(
     core: tauri::State<'_, Arc<CoreRunState>>,
-) -> Result<FrameStreamState, String> {
+) -> Result<FrameStreamState, CoreError> {
     Ok(slot(core.inner()).stop_frames().await)
 }
 
@@ -34,7 +35,7 @@ pub(crate) async fn browser_stop_frames(
 #[tauri::command]
 pub(crate) fn browser_frame_status(
     core: tauri::State<'_, Arc<CoreRunState>>,
-) -> Result<FrameStreamState, String> {
+) -> Result<FrameStreamState, CoreError> {
     Ok(slot(core.inner()).frames().state())
 }
 
@@ -50,7 +51,7 @@ pub(crate) fn browser_frame_status(
 pub(crate) async fn browser_input(
     event: BrowserInputEvent,
     core: tauri::State<'_, Arc<CoreRunState>>,
-) -> Result<(), String> {
+) -> Result<(), CoreError> {
     slot(core.inner()).forward_input(&event);
     Ok(())
 }

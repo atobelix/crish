@@ -1,3 +1,4 @@
+use crate::core_error::CoreError;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -96,7 +97,7 @@ fn strip_prefix(path: &str) -> String {
     }
 }
 
-pub(crate) fn parse_unified_diff(input: &str) -> Result<DiffParseResult, String> {
+pub(crate) fn parse_unified_diff(input: &str) -> Result<DiffParseResult, CoreError> {
     let mut files: Vec<DiffFile> = Vec::new();
     let mut total_additions = 0usize;
     let mut total_deletions = 0usize;
@@ -292,7 +293,7 @@ pub(crate) fn parse_diff_truncated(input: &str, max_lines: Option<u32>) -> DiffR
 pub(crate) fn perf_diff_parse(
     unified_diff: String,
     max_lines: Option<u32>,
-) -> Result<DiffResult, String> {
+) -> Result<DiffResult, CoreError> {
     Ok(parse_diff_truncated(&unified_diff, max_lines))
 }
 

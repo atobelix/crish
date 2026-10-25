@@ -10,9 +10,22 @@ use std::sync::Arc;
 
 use tauri::State;
 
+use crate::core_error::{map_internal_string, CoreError};
 use crate::multi_device_network::NetworkEnvInfo;
+use crate::server::error::ServerError;
 use crate::server::pairing::{DeviceInfo, PairStartResult, PairStatus, PairingCoordinator};
 use crate::MultiDeviceService;
+
+/// 配对失败 → `CoreError`：detail 逐字保留旧 String 契约的跨端错误码
+/// （`device_code()`，前端按码消费，文案不得漂移）；kind 按变体语义：
+/// Protocol（状态机/配对冷却等调用时机问题）→ InvalidInput，
+/// Io/Config（服务装配层）→ Internal。
+fn map_pair_start_err(err: ServerError) -> CoreError {
+    match err {
+        ServerError::Protocol { code, .. } => CoreError::InvalidInput(code.as_str().to_string()),
+        other => CoreError::Internal(other.device_code().as_str().to_string()),
+    }
+}
 
 /// 激活配对：生成 CXN 码 → 开启局域网监听 → 返回码/二维码/防火墙提示。
 ///
@@ -23,17 +36,15 @@ use crate::MultiDeviceService;
 pub fn multi_device_pair_start(
     service: State<'_, Arc<MultiDeviceService>>,
     coordinator: State<'_, Arc<PairingCoordinator>>,
-) -> Result<PairStartResult, String> {
+) -> Result<PairStartResult, CoreError> {
     if !service.enabled() {
-        return Err(
+        return Err(CoreError::InvalidInput(
             "多端服务未开启（multi_device.enabled=false），请先开启多端服务（multi_device_set_enabled(true)）"
                 .to_string(),
-        );
+        ));
     }
     let now = crate::server::now_ms();
-    coordinator
-        .start_pairing(now)
-        .map_err(|e| e.device_code().as_str().to_string())
+    coordinator.start_pairing(now).map_err(map_pair_start_err)
 }
 
 /// 配对状态快照（状态机/剩余时间/失败次数/令牌数；服务开关语义衔接：
@@ -66,9 +77,9 @@ pub fn multi_device_list_devices(
 pub fn multi_device_revoke_device(
     coordinator: State<'_, Arc<PairingCoordinator>>,
     hash: String,
-) -> Result<bool, String> {
+) -> Result<bool, CoreError> {
     if hash.len() != 64 {
-        return Err("无效的令牌哈希".to_string());
+        return Err(CoreError::InvalidInput("无效的令牌哈希".to_string()));
     }
     Ok(coordinator.revoke_device(&hash))
 }
@@ -79,13 +90,13 @@ pub fn multi_device_rename_device(
     coordinator: State<'_, Arc<PairingCoordinator>>,
     hash: String,
     new_label: String,
-) -> Result<bool, String> {
+) -> Result<bool, CoreError> {
     if hash.len() != 64 {
-        return Err("无效的令牌哈希".to_string());
+        return Err(CoreError::InvalidInput("无效的令牌哈希".to_string()));
     }
     let label = new_label.trim();
     if label.is_empty() || label.chars().count() > 40 {
-        return Err("标签需为 1-40 字符".to_string());
+        return Err(CoreError::InvalidInput("标签需为 1-40 字符".to_string()));
     }
     Ok(coordinator.rename_device(&hash, label))
 }
@@ -112,6 +123,9 @@ pub async fn multi_device_network_info() -> NetworkEnvInfo {
 pub async fn multi_device_set_enabled(
     service: State<'_, Arc<MultiDeviceService>>,
     enabled: bool,
-) -> Result<(), String> {
-    service.set_enabled(enabled).await
+) -> Result<(), CoreError> {
+    service
+        .set_enabled(enabled)
+        .await
+        .map_err(map_internal_string)
 }

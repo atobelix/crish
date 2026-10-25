@@ -24,6 +24,7 @@
 //! - 建窗 / 定位失败：`tracing::warn!` 记录并让命令返回 `Err`，前端记 warn 后保持普通点击实现；
 //! - 非 Windows：命令返回 `Ok(false)`（平台不提供该能力），前端同样走普通点击。
 
+use crate::core_error::{map_internal_string, CoreError};
 use serde::{Deserialize, Serialize};
 use tauri::WebviewWindow;
 
@@ -120,8 +121,10 @@ pub struct SnapOverlayEventPayload {
 pub async fn workbench_set_snap_overlay_rect(
     window: WebviewWindow,
     rect: Option<SnapButtonRect>,
-) -> Result<bool, String> {
-    let result = platform::apply(window, rect).await;
+) -> Result<bool, CoreError> {
+    let result = platform::apply(window, rect)
+        .await
+        .map_err(map_internal_string);
     if let Err(err) = &result {
         tracing::warn!(
             target: "window",
@@ -137,7 +140,7 @@ pub async fn workbench_set_snap_overlay_rect(
 pub async fn workbench_set_snap_overlay_rect(
     window: WebviewWindow,
     rect: Option<SnapButtonRect>,
-) -> Result<bool, String> {
+) -> Result<bool, CoreError> {
     let _ = (window, rect);
     Ok(false)
 }

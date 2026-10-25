@@ -1,3 +1,4 @@
+use crate::core_error::CoreError;
 use chardetng::EncodingDetector;
 use encoding_rs::{Encoding, UTF_8};
 use serde::Serialize;
@@ -73,10 +74,10 @@ fn detect_bom(data: &[u8]) -> Option<String> {
 /// If `encoding_hint` is provided, uses that encoding for decoding.
 /// Otherwise auto-detects the encoding first.
 /// Invalid characters are replaced with U+FFFD (never panics).
-fn decode_to_utf8(data: &[u8], encoding_hint: Option<&str>) -> Result<String, String> {
+fn decode_to_utf8(data: &[u8], encoding_hint: Option<&str>) -> Result<String, CoreError> {
     let encoding: &Encoding = match encoding_hint {
         Some(hint) => Encoding::for_label(hint.as_bytes())
-            .ok_or_else(|| format!("Unsupported encoding: {hint}"))?,
+            .ok_or_else(|| CoreError::Encoding(format!("Unsupported encoding: {hint}")))?,
         None => {
             let detected = detect_encoding(data);
             Encoding::for_label(detected.encoding.as_bytes()).unwrap_or(UTF_8)
@@ -90,7 +91,7 @@ fn decode_to_utf8(data: &[u8], encoding_hint: Option<&str>) -> Result<String, St
 ///
 /// First checks for BOM signatures (UTF-8, UTF-16LE, UTF-16BE, etc.),
 /// then falls back to `chardetng` statistical detection.
-pub(crate) fn perf_encoding_detect(data: Vec<u8>) -> Result<EncodingDetectResult, String> {
+pub(crate) fn perf_encoding_detect(data: Vec<u8>) -> Result<EncodingDetectResult, CoreError> {
     Ok(detect_encoding(&data))
 }
 
@@ -102,7 +103,7 @@ pub(crate) fn perf_encoding_detect(data: Vec<u8>) -> Result<EncodingDetectResult
 pub(crate) fn perf_encoding_decode(
     data: Vec<u8>,
     encoding: Option<String>,
-) -> Result<String, String> {
+) -> Result<String, CoreError> {
     decode_to_utf8(&data, encoding.as_deref())
 }
 
@@ -180,6 +181,18 @@ mod tests {
         let data = b"hello";
         let result = decode_to_utf8(data, Some("nonexistent-encoding"));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_unsupported_encoding_error_kind() {
+        // 不支持的编码标签 → Encoding（文案与旧 String 契约逐字一致）
+        let err = decode_to_utf8(b"hello", Some("nonexistent-encoding")).unwrap_err();
+        match err {
+            CoreError::Encoding(detail) => {
+                assert_eq!(detail, "Unsupported encoding: nonexistent-encoding")
+            }
+            other => panic!("expected Encoding, got {other:?}"),
+        }
     }
 
     #[test]

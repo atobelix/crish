@@ -37,6 +37,14 @@ impl FileCommandError {
     }
 }
 
+impl std::fmt::Display for FileCommandError {
+    /// `{code}: {message}`（与历史 String 契约的错误文案同形，
+    /// 诊断记录与日志消费方文本不漂移）。
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.code, self.message)
+    }
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ListDirectoryResult {

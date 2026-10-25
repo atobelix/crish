@@ -1,6 +1,6 @@
+use super::fixtures::err_detail;
 use crate::browser_commands::{
-    browser_import_bookmarks, browser_import_history, browser_list_bookmarks,
-    browser_list_history,
+    browser_import_bookmarks, browser_import_history, browser_list_bookmarks, browser_list_history,
 };
 
 /// G-4：书签导入落库（03-方案 §4.2 U4）——解析 → 落库统计聚合；
@@ -83,9 +83,10 @@ async fn import_bookmarks_rejects_bad_json() {
     let err = browser_import_bookmarks("{ not json !!".to_string(), db_state)
         .await
         .expect_err("非法 JSON 必须失败");
+    let detail = err_detail(err);
     assert!(
-        err.starts_with("tool.invalid_input:"),
-        "invalid_input 结构化码前缀：{err}"
+        detail.starts_with("tool.invalid_input:"),
+        "invalid_input 结构化码前缀：{detail}"
     );
 }
 
@@ -192,8 +193,9 @@ async fn import_history_rejects_missing_file() {
     )
     .await
     .expect_err("库缺失必须失败");
+    let detail = err_detail(err);
     assert!(
-        err.starts_with("tool.invalid_input:"),
-        "invalid_input 结构化码前缀：{err}"
+        detail.starts_with("tool.invalid_input:"),
+        "invalid_input 结构化码前缀：{detail}"
     );
 }

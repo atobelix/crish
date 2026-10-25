@@ -12,6 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::core_error::CoreError;
 use agent_provider::model_store::ResolvedProviderConfig;
 use agent_provider::models::{ModelRef, ProtocolKind, ScannedModel};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
@@ -409,7 +410,7 @@ pub async fn provider_probe_ping(
     profile_id: String,
     model: Option<String>,
     timeout_ms: Option<u64>,
-) -> Result<ProbePingResult, String> {
+) -> Result<ProbePingResult, CoreError> {
     Ok(probe_ping_core(ProbePingRequest {
         profile_id,
         model,
@@ -423,7 +424,7 @@ pub async fn provider_probe_ping(
 pub async fn provider_probe_scan_models(
     profile_id: String,
     timeout_ms: Option<u64>,
-) -> Result<ProbeScanResult, String> {
+) -> Result<ProbeScanResult, CoreError> {
     Ok(probe_scan_models_core(ProbeScanRequest {
         profile_id,
         timeout_ms,

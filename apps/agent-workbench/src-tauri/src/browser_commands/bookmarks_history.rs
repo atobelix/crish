@@ -1,8 +1,9 @@
-use std::path::Path;
+use super::common::{invalid_input, map_browser_err};
+use crate::core_error::CoreError;
 use conex_browser::import::bookmarks::{parse_bookmarks, persist_bookmarks, BookmarksOptions};
 use conex_browser::import::history::{persist_history, read_history, HistoryOptions};
 use serde::Serialize;
-use super::common::invalid_input;
+use std::path::Path;
 
 // ---------------------------------------------------------------------------
 // G-4 收尾：书签/历史导入命令（03-方案 §4.2 U4；落库编排见
@@ -69,9 +70,9 @@ fn unix_now_secs() -> i64 {
 pub(crate) async fn browser_import_bookmarks(
     json: String,
     db_state: tauri::State<'_, crate::session_commands::SharedDb>,
-) -> Result<BookmarksImportPayload, String> {
+) -> Result<BookmarksImportPayload, CoreError> {
     let report = parse_bookmarks(&json, &BookmarksOptions::default())
-        .map_err(|e| invalid_input(e.to_string()))?;
+        .map_err(|e| map_browser_err(invalid_input(e.to_string())))?;
     let db = db_state.inner().local_db();
     let now = unix_now_secs();
     let parsed_items = report.items.len();
@@ -81,7 +82,8 @@ pub(crate) async fn browser_import_bookmarks(
             .map_err(|e| format!("书签落库失败：{e}"))
     })
     .await
-    .map_err(|e| format!("书签落库任务异常：{e}"))??;
+    .map_err(|e| CoreError::Internal(format!("书签落库任务异常：{e}")))?
+    .map_err(CoreError::Io)?;
     Ok(BookmarksImportPayload {
         inserted: persist_stats.inserted,
         skipped_dupes: persist_stats.skipped_dupes,
@@ -108,19 +110,19 @@ pub(crate) async fn browser_import_bookmarks(
 pub(crate) async fn browser_import_history(
     path: String,
     db_state: tauri::State<'_, crate::session_commands::SharedDb>,
-) -> Result<HistoryImportPayload, String> {
+) -> Result<HistoryImportPayload, CoreError> {
     let db = db_state.inner().local_db();
     let now = unix_now_secs();
     let (report, persist_stats) = tokio::task::spawn_blocking(move || {
         let report = read_history(Path::new(&path), &HistoryOptions::default())
-            .map_err(|e| invalid_input(e.to_string()))?;
+            .map_err(|e| map_browser_err(invalid_input(e.to_string())))?;
         let mut sink = crate::browser_import_sinks::LocalDbHistorySink::new(db);
         let stats = persist_history(&report.items, &mut sink, HISTORY_SOURCE, now)
-            .map_err(|e| format!("历史落库失败：{e}"))?;
-        Ok::<_, String>((report, stats))
+            .map_err(|e| CoreError::Io(format!("历史落库失败：{e}")))?;
+        Ok::<_, CoreError>((report, stats))
     })
     .await
-    .map_err(|e| format!("历史导入任务异常：{e}"))??;
+    .map_err(|e| CoreError::Internal(format!("历史导入任务异常：{e}")))??;
     Ok(HistoryImportPayload {
         inserted: persist_stats.inserted,
         skipped_dupes: persist_stats.skipped_dupes,
@@ -137,12 +139,12 @@ pub(crate) async fn browser_import_history(
 #[tauri::command]
 pub(crate) async fn browser_list_bookmarks(
     db_state: tauri::State<'_, crate::session_commands::SharedDb>,
-) -> Result<Vec<conex_db::ImportedBookmarkRow>, String> {
+) -> Result<Vec<conex_db::ImportedBookmarkRow>, CoreError> {
     let db = db_state.inner().local_db();
     tokio::task::spawn_blocking(move || db.list_bookmarks())
         .await
-        .map_err(|e| format!("书签列表任务异常：{e}"))?
-        .map_err(|e| format!("书签列表失败：{}: {}", e.kind, e.message))
+        .map_err(|e| CoreError::Internal(format!("书签列表任务异常：{e}")))?
+        .map_err(|e| CoreError::Io(format!("书签列表失败：{}: {}", e.kind, e.message)))
 }
 
 /// 历史列表（G-4 收尾查询面）：imported_history 行（visited_at 倒序 +
@@ -156,11 +158,11 @@ pub(crate) async fn browser_list_history(
     since: Option<i64>,
     limit: Option<usize>,
     db_state: tauri::State<'_, crate::session_commands::SharedDb>,
-) -> Result<Vec<conex_db::ImportedHistoryRow>, String> {
+) -> Result<Vec<conex_db::ImportedHistoryRow>, CoreError> {
     let db = db_state.inner().local_db();
     let limit = limit.unwrap_or(usize::MAX);
     tokio::task::spawn_blocking(move || db.list_history(since, limit))
         .await
-        .map_err(|e| format!("历史列表任务异常：{e}"))?
-        .map_err(|e| format!("历史列表失败：{}: {}", e.kind, e.message))
+        .map_err(|e| CoreError::Internal(format!("历史列表任务异常：{e}")))?
+        .map_err(|e| CoreError::Io(format!("历史列表失败：{}: {}", e.kind, e.message)))
 }

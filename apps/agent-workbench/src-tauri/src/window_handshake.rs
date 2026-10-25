@@ -19,6 +19,7 @@ use std::time::Duration;
 
 use tauri::{AppHandle, Manager, WebviewWindow};
 
+use crate::core_error::{map_internal_string, CoreError};
 use crate::status_diagnostics::StatusDiagnostics;
 
 /// 原生兜底看门狗超时（RISK-MED-02：收窄至 1000ms，杜绝 1.5s 死寂）。
@@ -149,7 +150,7 @@ pub async fn workbench_window_ready(
     window: WebviewWindow,
     state: tauri::State<'_, Arc<WindowHandshakeState>>,
     diagnostics: tauri::State<'_, Arc<StatusDiagnostics>>,
-) -> Result<(), String> {
+) -> Result<(), CoreError> {
     if window.label() != MAIN_WINDOW_LABEL {
         crate::window_backdrop::apply_adaptive_backdrop(&window);
         let _ = window.show();
@@ -178,7 +179,7 @@ pub async fn workbench_window_ready(
         true,
         Some("frontend_handshake_received".into()),
     );
-    reveal_window_internal(&window, &state.shown, "frontend_handshake")
+    reveal_window_internal(&window, &state.shown, "frontend_handshake").map_err(map_internal_string)
 }
 
 /// second-launch 统一显现入口：禁止裸调 `window.show()`。

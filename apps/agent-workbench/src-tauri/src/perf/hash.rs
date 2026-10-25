@@ -1,3 +1,4 @@
+use crate::core_error::CoreError;
 use base64::prelude::{Engine as _, BASE64_STANDARD, BASE64_URL_SAFE_NO_PAD};
 use sha2::{Digest, Sha256};
 
@@ -14,7 +15,7 @@ fn sha256_compute(data: &[u8]) -> String {
 ///
 /// - `standard` (default): standard base64 with `=` padding
 /// - `url_safe`: URL-safe base64 without padding
-fn base64_encode(data: &[u8], config: &str) -> Result<String, String> {
+fn base64_encode(data: &[u8], config: &str) -> Result<String, CoreError> {
     match config {
         "url_safe" => Ok(BASE64_URL_SAFE_NO_PAD.encode(data)),
         _ => Ok(BASE64_STANDARD.encode(data)),
@@ -25,14 +26,14 @@ fn base64_encode(data: &[u8], config: &str) -> Result<String, String> {
 ///
 /// - `standard` (default): standard base64 with `=` padding
 /// - `url_safe`: URL-safe base64 without padding
-fn base64_decode(input: &str, config: &str) -> Result<Vec<u8>, String> {
+fn base64_decode(input: &str, config: &str) -> Result<Vec<u8>, CoreError> {
     match config {
         "url_safe" => BASE64_URL_SAFE_NO_PAD
             .decode(input)
-            .map_err(|e| format!("Base64 URL-safe decode failed: {e}")),
+            .map_err(|e| CoreError::Encoding(format!("Base64 URL-safe decode failed: {e}"))),
         _ => BASE64_STANDARD
             .decode(input)
-            .map_err(|e| format!("Base64 decode failed: {e}")),
+            .map_err(|e| CoreError::Encoding(format!("Base64 decode failed: {e}"))),
     }
 }
 
@@ -44,7 +45,7 @@ fn base64_decode(input: &str, config: &str) -> Result<Vec<u8>, String> {
 pub(crate) fn perf_hash_compute(
     data: Vec<u8>,
     algorithm: Option<String>,
-) -> Result<String, String> {
+) -> Result<String, CoreError> {
     let _algo = algorithm.as_deref().unwrap_or("sha256-hex");
     Ok(sha256_compute(&data))
 }
@@ -55,7 +56,10 @@ pub(crate) fn perf_hash_compute(
 /// - `standard` (default): standard base64 with `=` padding
 /// - `url_safe`: URL-safe base64 without padding
 #[tauri::command]
-pub(crate) fn perf_base64_encode(data: Vec<u8>, config: Option<String>) -> Result<String, String> {
+pub(crate) fn perf_base64_encode(
+    data: Vec<u8>,
+    config: Option<String>,
+) -> Result<String, CoreError> {
     base64_encode(&data, config.as_deref().unwrap_or("standard"))
 }
 
@@ -68,7 +72,7 @@ pub(crate) fn perf_base64_encode(data: Vec<u8>, config: Option<String>) -> Resul
 pub(crate) fn perf_base64_decode(
     encoded: String,
     config: Option<String>,
-) -> Result<Vec<u8>, String> {
+) -> Result<Vec<u8>, CoreError> {
     base64_decode(&encoded, config.as_deref().unwrap_or("standard"))
 }
 
@@ -122,6 +126,16 @@ mod tests {
     fn test_base64_decode_invalid() {
         let result = base64_decode("!!!invalid!!!", "standard");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_base64_decode_invalid_error_kind_is_encoding() {
+        // 解码失败 → Encoding（错误文案与旧 String 契约逐字一致）
+        let err = base64_decode("!!!invalid!!!", "standard").unwrap_err();
+        match err {
+            CoreError::Encoding(detail) => assert!(detail.starts_with("Base64 decode failed")),
+            other => panic!("expected Encoding, got {other:?}"),
+        }
     }
 
     #[test]

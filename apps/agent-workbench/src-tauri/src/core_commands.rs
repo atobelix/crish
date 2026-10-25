@@ -376,11 +376,6 @@ pub fn check_command_verdict(
 //   - Io: JSONL 追加的存储/IO 失败
 //   - Internal: 内部错误（spawn_blocking join 失败 / 序列化失败）
 
-/// 把 perf 模块的 `Result<T, String>` 转为 `Result<T, CoreError>`（Internal 兜底）。
-fn map_perf_err(e: String) -> CoreError {
-    CoreError::Internal(e)
-}
-
 /// 计算 SHA-256 哈希，返回小写 hex 字符串（复用 perf::hash）。
 #[tauri::command]
 pub async fn core_hash_compute(
@@ -390,8 +385,7 @@ pub async fn core_hash_compute(
     let result =
         tokio::task::spawn_blocking(move || crate::perf::hash::perf_hash_compute(data, algorithm))
             .await
-            .map_err(|e| CoreError::Internal(format!("core_hash_compute join: {e}")))?
-            .map_err(map_perf_err)?;
+            .map_err(|e| CoreError::Internal(format!("core_hash_compute join: {e}")))??;
     Ok(result)
 }
 
@@ -404,8 +398,7 @@ pub async fn core_base64_encode(
     let result =
         tokio::task::spawn_blocking(move || crate::perf::hash::perf_base64_encode(data, config))
             .await
-            .map_err(|e| CoreError::Internal(format!("core_base64_encode join: {e}")))?
-            .map_err(map_perf_err)?;
+            .map_err(|e| CoreError::Internal(format!("core_base64_encode join: {e}")))??;
     Ok(result)
 }
 
@@ -418,8 +411,7 @@ pub async fn core_base64_decode(
     let result =
         tokio::task::spawn_blocking(move || crate::perf::hash::perf_base64_decode(encoded, config))
             .await
-            .map_err(|e| CoreError::Internal(format!("core_base64_decode join: {e}")))?
-            .map_err(map_perf_err)?;
+            .map_err(|e| CoreError::Internal(format!("core_base64_decode join: {e}")))??;
     Ok(result)
 }
 
@@ -431,8 +423,7 @@ pub async fn core_detect_encoding(
     let result =
         tokio::task::spawn_blocking(move || crate::perf::encoding::perf_encoding_detect(data))
             .await
-            .map_err(|e| CoreError::Internal(format!("core_detect_encoding join: {e}")))?
-            .map_err(map_perf_err)?;
+            .map_err(|e| CoreError::Internal(format!("core_detect_encoding join: {e}")))??;
     Ok(result)
 }
 
@@ -446,8 +437,7 @@ pub async fn core_decode_text(
         crate::perf::encoding::perf_encoding_decode(data, encoding)
     })
     .await
-    .map_err(|e| CoreError::Internal(format!("core_decode_text join: {e}")))?
-    .map_err(map_perf_err)?;
+    .map_err(|e| CoreError::Internal(format!("core_decode_text join: {e}")))??;
     Ok(result)
 }
 
@@ -461,8 +451,7 @@ pub async fn core_parse_diff(
         crate::perf::diff::perf_diff_parse(unified_diff, max_lines)
     })
     .await
-    .map_err(|e| CoreError::Internal(format!("core_parse_diff join: {e}")))?
-    .map_err(map_perf_err)?;
+    .map_err(|e| CoreError::Internal(format!("core_parse_diff join: {e}")))??;
     Ok(result)
 }
 
@@ -790,15 +779,8 @@ mod tests {
     }
 
     // ── Stream E 回归（对齐旧测试断言）──
-
-    #[test]
-    fn map_perf_err_preserves_message() {
-        let err = map_perf_err("base64 decode failed: invalid byte".to_string());
-        match err {
-            CoreError::Internal(msg) => assert!(msg.contains("base64")),
-            other => panic!("expected Internal, got {other:?}"),
-        }
-    }
+    // 注：原 map_perf_err 桥接测试随桥接删除而移除——String→CoreError 映射
+    // 已下沉至 perf 模块（kind 语义由 perf::hash / perf::encoding 单测守护）。
 
     #[test]
     fn core_hash_compute_matches_perf() {

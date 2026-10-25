@@ -2,10 +2,11 @@
 
 use std::collections::HashMap;
 
-use conex_types::{CoreError, ImportStats};
+use conex_types::ImportStats;
 use tauri::State;
 
 use super::{guard_cleanup_keep, map_db_err, SharedDb};
+use crate::core_error::CoreError;
 
 /// 清理不在 keepIds 中的会话（孤儿清理，F4 冻结签名）。
 ///

@@ -1,13 +1,13 @@
-use std::sync::Arc;
+use crate::browser::StorageStateOps;
+use crate::core_run_commands::CoreRunState;
 use async_trait::async_trait;
 use conex_browser::cdp::domains::{Cookie as CdpCookie, SetCookieParam};
 use conex_browser::import::storage_state::{build_import_plan, parse_storage_state};
-use crate::browser::StorageStateOps;
-use crate::core_run_commands::CoreRunState;
 use serde_json::json;
+use std::sync::Arc;
 
 use super::fixtures::{
-    cdp_cookie, inject_local_storage_mock, inject_mock, mock_core_state, ChannelCall,
+    cdp_cookie, err_detail, inject_local_storage_mock, inject_mock, mock_core_state, ChannelCall,
     MockLocalStorageChannel, MockStorageOps,
 };
 use crate::browser_commands::{browser_import_storage_state, verify_cookie_injection};
@@ -259,9 +259,10 @@ async fn import_rejects_bad_json() {
     let err = browser_import_storage_state("{ not json !!".to_string(), state_ref)
         .await
         .expect_err("非法 JSON 必须失败");
+    let detail = err_detail(err);
     assert!(
-        err.starts_with("tool.invalid_input:"),
-        "invalid_input 结构化码前缀：{err}"
+        detail.starts_with("tool.invalid_input:"),
+        "invalid_input 结构化码前缀：{detail}"
     );
 }
 
@@ -282,9 +283,10 @@ async fn import_rejects_invalid_domain() {
     let err = browser_import_storage_state(json.to_string(), state_ref)
         .await
         .expect_err("domain 守卫必须拒绝");
+    let detail = err_detail(err);
     assert!(
-        err.starts_with("tool.invalid_input:"),
-        "invalid_input 结构化码前缀：{err}"
+        detail.starts_with("tool.invalid_input:"),
+        "invalid_input 结构化码前缀：{detail}"
     );
 }
 
@@ -307,9 +309,10 @@ async fn import_not_ready_without_session() {
     )
     .await
     .expect_err("未连接必须失败");
+    let detail = err_detail(err);
     assert!(
-        err.starts_with("tool.browser.not_ready:"),
-        "not_ready 结构化码前缀：{err}"
+        detail.starts_with("tool.browser.not_ready:"),
+        "not_ready 结构化码前缀：{detail}"
     );
 }
 
@@ -399,8 +402,9 @@ async fn import_storage_state_local_storage_not_ready_without_channel() {
     let err = browser_import_storage_state(json.to_string(), state_ref)
         .await
         .expect_err("无通道必须失败");
+    let detail = err_detail(err);
     assert!(
-        err.starts_with("tool.browser.not_ready:"),
-        "not_ready 结构化码前缀：{err}"
+        detail.starts_with("tool.browser.not_ready:"),
+        "not_ready 结构化码前缀：{detail}"
     );
 }

@@ -1,4 +1,6 @@
-use std::sync::Arc;
+use super::common::{invalid_input, map_browser_err, not_ready, slot};
+use crate::core_error::CoreError;
+use crate::core_run_commands::CoreRunState;
 use conex_browser::cdp::domains::Cookie as CdpCookie;
 use conex_browser::import::storage_state::{
     build_import_plan, export_origins_from_cookies, export_storage_state,
@@ -6,8 +8,7 @@ use conex_browser::import::storage_state::{
     ExportAuthorization, ImportPlan, StorageStateError,
 };
 use serde::Serialize;
-use crate::core_run_commands::CoreRunState;
-use super::common::{invalid_input, not_ready, slot};
+use std::sync::Arc;
 
 /// 导入统计载荷（J1b，维度 16 §5.3/§5.4：数量脱敏，**不含任何 cookie value**）。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -49,15 +50,18 @@ pub(crate) struct StorageImportPayload {
 pub(crate) async fn browser_export_storage_state(
     authorized: bool,
     core: tauri::State<'_, Arc<CoreRunState>>,
-) -> Result<String, String> {
+) -> Result<String, CoreError> {
     // 授权先行：未授权直接拒绝，不执行实读（§5.2 显式授权，零副作用）
     if !authorized {
-        return Err(
+        return Err(CoreError::InvalidInput(
             "storage_state 导出未获显式授权（须授权对话框确认后 authorized=true）".to_string(),
-        );
+        ));
     }
     let ops = slot(core.inner()).storage_ops();
-    let cookies = ops.get_all_cookies().await.map_err(not_ready)?;
+    let cookies = ops
+        .get_all_cookies()
+        .await
+        .map_err(|e| map_browser_err(not_ready(e)))?;
     // 导出侧 origins 聚合（P1-3 接线）：origin 清单由 cookie domain 推导
     // （协议按 secure 标志，非法 host 跳过），经会话 LocalStorageChannel
     // 逐 origin 实读；无 cookie / 推导不出合法 origin 时无需通道，直接返回
@@ -65,12 +69,12 @@ pub(crate) async fn browser_export_storage_state(
     let origins = export_origins_from_cookies(&cookies);
     let state = if origins.is_empty() {
         export_storage_state(&cookies, ExportAuthorization::Confirmed)
-            .map_err(|e| invalid_input(e.to_string()))?
+            .map_err(|e| map_browser_err(invalid_input(e.to_string())))?
     } else {
         // 通道不可用（未连接/无活动标签）→ not_ready（storage 命令不触发惰性启动）
         let channel = slot(core.inner())
             .local_storage_channel()
-            .map_err(not_ready)?;
+            .map_err(|e| map_browser_err(not_ready(e)))?;
         export_storage_state_with_origins(
             &cookies,
             &origins,
@@ -80,9 +84,11 @@ pub(crate) async fn browser_export_storage_state(
         .await
         .map_err(|e| match e {
             // 防御性再检失败（推导面已过滤，正常不可达）：输入面错误
-            StorageStateError::InvalidOrigin { .. } => invalid_input(e.to_string()),
+            StorageStateError::InvalidOrigin { .. } => {
+                map_browser_err(invalid_input(e.to_string()))
+            }
             // CDP 实读失败 → 透传原因（契约）
-            other => other.to_string(),
+            other => CoreError::Internal(other.to_string()),
         })?
     };
     Ok(state.to_json())
@@ -116,12 +122,15 @@ pub(crate) async fn browser_export_storage_state(
 pub(crate) async fn browser_import_storage_state(
     json: String,
     core: tauri::State<'_, Arc<CoreRunState>>,
-) -> Result<StorageImportPayload, String> {
-    let state = parse_storage_state(&json).map_err(|e| invalid_input(e.to_string()))?;
+) -> Result<StorageImportPayload, CoreError> {
+    let state =
+        parse_storage_state(&json).map_err(|e| map_browser_err(invalid_input(e.to_string())))?;
     let plan = build_import_plan(&state);
     let params = plan.to_cdp_params();
     let ops = slot(core.inner()).storage_ops();
-    ops.set_cookies(params).await.map_err(not_ready)?;
+    ops.set_cookies(params)
+        .await
+        .map_err(|e| map_browser_err(not_ready(e)))?;
     // N8 回验（M4 遗留 2 落地）：注入后 `Storage.getCookies` 回读比对——
     // 以注入计划为基准逐键核对（域去点容差 + value 严格相等，见
     // verify_cookie_injection）。差异**只记录不回滚**，取舍与理由：
@@ -160,14 +169,16 @@ pub(crate) async fn browser_import_storage_state(
     if !plan.origin_scripts.is_empty() {
         let channel = slot(core.inner())
             .local_storage_channel()
-            .map_err(not_ready)?;
+            .map_err(|e| map_browser_err(not_ready(e)))?;
         let stats = inject_origin_scripts(channel.as_ref(), &plan)
             .await
             .map_err(|e| {
                 match e {
                     // 防御性再检失败（非法 origin）：输入面错误
-                    StorageStateError::InvalidOrigin { .. } => invalid_input(e.to_string()),
-                    other => format!("localStorage 注入失败：{other}"),
+                    StorageStateError::InvalidOrigin { .. } => {
+                        map_browser_err(invalid_input(e.to_string()))
+                    }
+                    other => CoreError::Internal(format!("localStorage 注入失败：{other}")),
                 }
             })?;
         injected_scripts = stats.scripts;
