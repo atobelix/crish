@@ -10,8 +10,9 @@ import {
   setPersistedCodexImportRoot,
   getImportAutoSyncEnabled,
   setImportAutoSyncEnabled,
+  getImportSuggestionEnabled,
+  setImportSuggestionEnabled,
 } from '../../api/import/importRootSettings';
-import { useSettingsStore } from '../../store/storeAccess';
 import styles from './ImportPluginSettingsModal.module.css';
 
 export interface ImportPluginSettingsModalProps {
@@ -25,13 +26,8 @@ export const ImportPluginSettingsModal: React.FC<
 > = ({ open, onClose, onScanNeeded }) => {
   const { showToast } = useToast();
   const sessions = useSessionStore((s) => s.sessions);
-  const autoShowExternalSessionOnStartup = useSettingsStore(
-    (s) => s.autoShowExternalSessionOnStartup
-  );
-  const setAutoShowExternalSessionOnStartup = useSettingsStore(
-    (s) => s.setAutoShowExternalSessionOnStartup
-  );
 
+  const [autoDetectEnabled, setAutoDetectEnabled] = useState(true);
   const [claudeCustomPath, setClaudeCustomPath] = useState('');
   const [codexCustomPath, setCodexCustomPath] = useState('');
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
@@ -62,9 +58,18 @@ export const ImportPluginSettingsModal: React.FC<
       setClaudeCustomPath(roots.claudeConfigDir || '');
       setCodexCustomPath(roots.codexHome || '');
       setAutoSyncEnabled(getImportAutoSyncEnabled());
+      setAutoDetectEnabled(getImportSuggestionEnabled());
       setConfirmCleanOpen(false);
     }
   }, [open]);
+
+  const handleToggleAutoDetect = (checked: boolean) => {
+    setAutoDetectEnabled(checked);
+    setImportSuggestionEnabled(checked);
+    showToast(
+      checked ? '已开启启动时长对话自动探测' : '已关闭启动时长对话探测'
+    );
+  };
 
   const handleToggleAutoSync = (checked: boolean) => {
     setAutoSyncEnabled(checked);
@@ -133,13 +138,8 @@ export const ImportPluginSettingsModal: React.FC<
           </div>
         </div>
         <Switch
-          checked={autoShowExternalSessionOnStartup}
-          onCheckedChange={(checked) => {
-            setAutoShowExternalSessionOnStartup(checked);
-            showToast(
-              checked ? '已开启启动时长对话自动探测' : '已关闭启动时长对话探测'
-            );
-          }}
+          checked={autoDetectEnabled}
+          onCheckedChange={handleToggleAutoDetect}
           aria-label="启动时自动检测并呈现外部活跃长对话开关"
         />
       </div>

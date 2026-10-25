@@ -23,7 +23,6 @@ import {
 import type { DetectedExternalSession, MappedImportSession } from './types';
 import { mapExternalSession } from './map';
 import { getSessionStoreState } from '../../store';
-import { getSettingsState } from '../../store/storeAccess';
 
 let isAutoSyncing = false;
 
@@ -111,26 +110,15 @@ export interface DetectedLongSessionResult {
 }
 
 /**
- * 启动时探测外部终端（Claude Code / Codex）的活跃长对话（默认 >= 8 条消息）。
+ * 探测外部终端（Claude Code / Codex）的活跃长对话（默认 >= 8 条消息）。
  * 满足条件：
- * 1. settingsStore.autoShowExternalSessionOnStartup 开启
- * 2. 官方插件 @crish/plugin-import-claude-codex 启用
- * 3. 未被用户删除（无墓碑）且尚未在系统导入
- * 4. 优先匹配当前工作区，按活跃时间倒序选取最新一条并解析出预览消息
+ * 1. 官方插件 @crish/plugin-import-claude-codex 启用
+ * 2. 未被用户删除（无墓碑）且尚未在系统导入
+ * 3. 优先匹配当前工作区，按活跃时间倒序选取最新一条并解析出预览消息
  */
 export async function detectLatestExternalLongSession(
   minMessages = 8
 ): Promise<DetectedLongSessionResult | null> {
-  // 0. 硬性守卫：用户是否开启了启动时自动检测呈现外部活跃长对话设置
-  try {
-    const autoShow = getSettingsState().autoShowExternalSessionOnStartup;
-    if (autoShow === false) {
-      return null;
-    }
-  } catch {
-    return null;
-  }
-
   // 1. 守卫：官方导入插件是否处于启用状态
   if (!isPluginEnabled('@crish/plugin-import-claude-codex')) {
     return null;

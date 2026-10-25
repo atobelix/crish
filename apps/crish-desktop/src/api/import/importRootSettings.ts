@@ -8,6 +8,7 @@ import {
   IMPORT_AUTO_SYNC_ENABLED_KEY,
   IMPORT_CLAUDE_ROOT_KEY,
   IMPORT_CODEX_ROOT_KEY,
+  IMPORT_SUGGESTION_ENABLED_KEY,
 } from '../../utils/storageKeys';
 import type { ImportPathEnv } from './types';
 
@@ -107,4 +108,14 @@ export function getImportAutoSyncEnabled(): boolean {
 /** Persist the auto-sync switch (explicit opt-in only). */
 export function setImportAutoSyncEnabled(enabled: boolean): void {
   writeLs(IMPORT_AUTO_SYNC_ENABLED_KEY, enabled ? 'true' : 'false');
+}
+
+/** Whether auto-detection / suggestion of external long sessions on startup is enabled (default true). */
+export function getImportSuggestionEnabled(): boolean {
+  return readLs(IMPORT_SUGGESTION_ENABLED_KEY) !== 'false';
+}
+
+/** Persist the auto-detection / suggestion switch. */
+export function setImportSuggestionEnabled(enabled: boolean): void {
+  writeLs(IMPORT_SUGGESTION_ENABLED_KEY, enabled ? 'true' : 'false');
 }

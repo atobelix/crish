@@ -87,7 +87,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   layoutVariant = 'adaptive',
   disabled = false,
   placeholder,
-  externalSessionPreview,
 }) => {
   const scopedSessionId = useScopedSessionId();
   const plusMenuId = useId();
@@ -192,9 +191,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   });
 
   const isMultiline =
-    !externalSessionPreview &&
-    (layoutVariant === 'multiline' ||
-      (layoutVariant === 'adaptive' && multilineDetected));
+    layoutVariant === 'multiline' ||
+    (layoutVariant === 'adaptive' && multilineDetected);
 
   const { effectiveNotice, isClosing, handleDismissNotice } = useComposerNotice(
     {
@@ -340,46 +338,17 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               />
             </div>
 
-            {/* 中间输入区：富文本/单多行自适应输入框，外部会话预览时展示极简导入接续触发器 */}
-            <div
-              className={styles.fieldSlot}
-              data-composer-grid="text"
-              onClick={
-                externalSessionPreview
-                  ? () => void externalSessionPreview.onImportAndContinue()
-                  : undefined
-              }
-            >
-              {externalSessionPreview ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className={styles.externalSessionImportBtn}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void externalSessionPreview.onImportAndContinue();
-                  }}
-                  disabled={externalSessionPreview.isImporting}
-                  aria-label="点击以导入对话并继续输入"
-                  data-testid="external-session-import-btn"
-                >
-                  <span className={styles.externalSessionImportText}>
-                    {externalSessionPreview.isImporting
-                      ? '正在导入对话并接续…'
-                      : '点击以导入对话并继续输入…'}
-                  </span>
-                </Button>
-              ) : (
-                <ComposerFieldSlot
-                  fieldContract={fieldContract}
-                  filteredCommands={filteredCommands}
-                  emptyKind={emptyKind}
-                  onFilesSelected={onFilesSelected}
-                  onPasteFiles={onPasteFiles}
-                  richTextFailed={richTextFailed}
-                  onRichTextFail={() => setRichTextFailed(true)}
-                />
-              )}
+            {/* 中间输入区：富文本/单多行自适应输入框 */}
+            <div className={styles.fieldSlot} data-composer-grid="text">
+              <ComposerFieldSlot
+                fieldContract={fieldContract}
+                filteredCommands={filteredCommands}
+                emptyKind={emptyKind}
+                onFilesSelected={onFilesSelected}
+                onPasteFiles={onPasteFiles}
+                richTextFailed={richTextFailed}
+                onRichTextFail={() => setRichTextFailed(true)}
+              />
             </div>
 
             {/* 权限模式切换按钮：多行态常驻左下角；单行态并入右侧动作区融合胶囊 */}
@@ -445,17 +414,11 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               ) : null}
               <ComposerSendControls
                 appearance="circle"
-                canSend={
-                  !disabled && (canSend || Boolean(externalSessionPreview))
-                }
+                canSend={!disabled && canSend}
                 disabled={disabled}
                 isProcessing={isProcessing}
                 onSend={() => {
                   if (disabled) return;
-                  if (externalSessionPreview) {
-                    void externalSessionPreview.onImportAndContinue();
-                    return;
-                  }
                   if (sendApiRef.current) sendApiRef.current.flushAndSend();
                   else void handleProtectedSend();
                 }}

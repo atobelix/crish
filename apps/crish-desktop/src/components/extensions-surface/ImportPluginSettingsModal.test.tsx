@@ -59,6 +59,35 @@ describe('ImportPluginSettingsModal', () => {
     );
   });
 
+  it('handles auto detect switch toggle and persists state via getImportSuggestionEnabled / setImportSuggestionEnabled', () => {
+    render(
+      <ToastProvider>
+        <ImportPluginSettingsModal
+          open={true}
+          onClose={onClose}
+          onScanNeeded={onScanNeeded}
+        />
+      </ToastProvider>
+    );
+
+    const switchBtn = screen.getByLabelText(
+      '启动时自动检测并呈现外部活跃长对话开关'
+    );
+    expect(importRootSettings.getImportSuggestionEnabled()).toBe(true);
+
+    fireEvent.click(switchBtn);
+    expect(importRootSettings.getImportSuggestionEnabled()).toBe(false);
+    expect(localStorage.getItem('crish_import_suggestion_enabled')).toBe(
+      'false'
+    );
+
+    fireEvent.click(switchBtn);
+    expect(importRootSettings.getImportSuggestionEnabled()).toBe(true);
+    expect(localStorage.getItem('crish_import_suggestion_enabled')).toBe(
+      'true'
+    );
+  });
+
   it('saves and resets custom Claude path', () => {
     const saveClaudeSpy = vi.spyOn(
       importRootSettings,

@@ -13,6 +13,8 @@ export const IMPORT_CODEX_ROOT_KEY = 'crish_import_codex_root';
 
 /** 检测到外部长对话后自动接续开关（读取/写入统一经 api/import/importRootSettings） */
 export const IMPORT_AUTO_SYNC_ENABLED_KEY = 'crish_auto_sync_external_sessions';
+/** 启动时检测外部长对话并提示/建议开关（读取/写入统一经 api/import/importRootSettings） */
+export const IMPORT_SUGGESTION_ENABLED_KEY = 'crish_import_suggestion_enabled';
 
 // ── 运行期临时缓存与非偏好状态 keys ──────────────────────────────────────────
 

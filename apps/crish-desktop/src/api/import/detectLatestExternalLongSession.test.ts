@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { detectLatestExternalLongSession } from './autoSyncExternalSessions';
-import { useSettingsStore } from '../../store/settingsStore';
 import * as pluginRegistry from '../../components/settings-extensions/pluginRegistryAdapter';
 import * as scan from './scan';
 import * as map from './map';
@@ -18,16 +17,9 @@ describe('detectLatestExternalLongSession', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    useSettingsStore.setState({ autoShowExternalSessionOnStartup: true });
     useSessionStore.setState({ sessions: [], activeSessionId: null });
     vi.mocked(pluginRegistry.isPluginEnabled).mockReturnValue(true);
     vi.mocked(workspace.getWorkspacePath).mockReturnValue('/workspaces/my-app');
-  });
-
-  it('returns null if autoShowExternalSessionOnStartup is false', async () => {
-    useSettingsStore.setState({ autoShowExternalSessionOnStartup: false });
-    const result = await detectLatestExternalLongSession();
-    expect(result).toBeNull();
   });
 
   it('returns null if plugin is disabled', async () => {

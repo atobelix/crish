@@ -282,10 +282,4 @@ export type ChatComposerProps = {
   disabled?: boolean;
   /** 自定义占位文案 */
   placeholder?: string;
-  /** 外部历史对话预览态：在输入框内以极简模式提供一键导入并接续输入功能 */
-  externalSessionPreview?: {
-    source: 'claude-code' | 'codex';
-    isImporting?: boolean;
-    onImportAndContinue: () => void | Promise<void>;
-  };
 };

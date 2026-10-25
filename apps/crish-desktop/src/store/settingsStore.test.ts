@@ -220,27 +220,4 @@ describe('settingsStore — persistence (crish-settings-v1)', () => {
     expect(freshSettings.getState().appSettings).toBeNull();
     expect(freshSettings.getState().providers).toEqual([]);
   });
-
-  it('persists and rehydrates autoShowExternalSessionOnStartup', async () => {
-    expect(useSettingsStore.getState().autoShowExternalSessionOnStartup).toBe(
-      true
-    );
-    useSettingsStore.getState().setAutoShowExternalSessionOnStartup(false);
-    expect(useSettingsStore.getState().autoShowExternalSessionOnStartup).toBe(
-      false
-    );
-
-    const raw = localStorage.getItem('crish-settings-v1');
-    expect(raw).toBeTruthy();
-    const parsed = JSON.parse(raw!) as {
-      state: { autoShowExternalSessionOnStartup: boolean };
-    };
-    expect(parsed.state.autoShowExternalSessionOnStartup).toBe(false);
-
-    vi.resetModules();
-    const { useSettingsStore: freshSettings } = await import('./settingsStore');
-    expect(freshSettings.getState().autoShowExternalSessionOnStartup).toBe(
-      false
-    );
-  });
 });

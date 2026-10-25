@@ -107,7 +107,6 @@ function renderChatComposer(opts: {
   onPasteImage?: (e: React.ClipboardEvent) => void;
   isProcessing?: boolean;
   initialInput?: string;
-  externalSessionPreview?: ChatComposerProps['externalSessionPreview'];
 }) {
   const loadSkillSlash = vi.fn();
   const onSend = vi.fn(opts.onSend ?? (() => {}));
@@ -163,7 +162,6 @@ function renderChatComposer(opts: {
         setShowPlusMenu={() => {}}
         permissionMode={permission}
         onPermissionChange={setPermission}
-        externalSessionPreview={opts.externalSessionPreview}
       />
     );
   }
@@ -396,33 +394,32 @@ describe('ChatComposer 全链（T6 接线）', () => {
     expect(typeof mod.STOP_TOOLTIP).toBe('string');
   });
 
-  it('外部历史对话预览态：强制单行胶囊形态，无多行权限条，响应点击与发送', () => {
-    const onImport = vi.fn();
+  it('ChatComposer 始终渲染可编辑输入槽（ComposerFieldSlot），无幽灵按钮与点击劫持', async () => {
     renderChatComposer({
-      externalSessionPreview: {
-        source: 'claude-code',
-        isImporting: false,
-        onImportAndContinue: onImport,
-      },
+      initialInput: '',
     });
 
-    const card = document.querySelector('[data-composer-card]');
-    expect(card?.getAttribute('data-multiline')).toBe('0');
-    expect(document.querySelector('[data-composer-grid="perm"]')).toBeNull();
+    // 1. 绝对不存在幽灵导入按钮与劫持文案
+    expect(screen.queryByTestId('external-session-import-btn')).toBeNull();
+    expect(screen.queryByText(/点击以导入对话并继续输入/)).toBeNull();
+    expect(screen.queryByText(/正在导入对话并接续/)).toBeNull();
 
-    const trigger = screen.getByTestId('external-session-import-btn');
-    expect(trigger).toBeInTheDocument();
-    expect(screen.getByText('点击以导入对话并继续输入…')).toBeInTheDocument();
+    // 2. 核心编辑域（ProseMirror / ContentEditable / Textarea）100% 可用且可聚焦
+    const editor = await waitFor(() => getEditorDom());
+    expect(editor).toBeInTheDocument();
+    expect(editor.getAttribute('contenteditable')).toBe('true');
 
-    fireEvent.click(trigger);
-    expect(onImport).toHaveBeenCalledTimes(1);
+    // 3. 键盘输入行为与发送状态机完全由真实文本驱动
+    await typeText('你好，这是全新的对话');
+    await waitFor(() => {
+      const sendBtn = screen.getByRole('button', { name: /发送/ });
+      expect(sendBtn).not.toBeDisabled();
+    });
 
-    const sendBtn = screen.getByRole('button', { name: /发送/ });
-    fireEvent.click(sendBtn);
-    expect(onImport).toHaveBeenCalledTimes(2);
-
+    // 4. 点击输入槽网格容器仅起到获取焦点的自然语义，不存在任何第三方导入拦截回调
     const slot = document.querySelector('[data-composer-grid="text"]');
+    expect(slot).toBeTruthy();
     if (slot) fireEvent.click(slot);
-    expect(onImport).toHaveBeenCalledTimes(3);
+    expect(getEditorDom()).toBeInTheDocument();
   });
 });

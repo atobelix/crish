@@ -49,8 +49,6 @@ export interface SettingsStore {
   scheduledTasks: CronJob[];
   mcpServers: McpServer[];
   tokenUsage: TokenUsageState;
-  /** 启动时是否自动探测并呈现外部活跃长对话预览（Claude Code / Codex） */
-  autoShowExternalSessionOnStartup: boolean;
   setProviders: (providers: ProviderInfo[]) => void;
   setAppSettings: (settings: Settings | null) => void;
   setScheduledTasks: (tasks: CronJob[]) => void;
@@ -59,7 +57,6 @@ export interface SettingsStore {
   mcpRosterEpoch: number;
   lockMcpRoster: () => void;
   syncTelemetryData: (data: TelemetrySyncPayload) => void;
-  setAutoShowExternalSessionOnStartup: (enabled: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -72,7 +69,6 @@ export const useSettingsStore = create<SettingsStore>()(
           scheduledTasks: [],
           mcpServers: [],
           mcpRosterEpoch: 0,
-          autoShowExternalSessionOnStartup: true,
           tokenUsage: isDemoMode()
             ? { ...DEMO_TOKEN_USAGE }
             : { ...DEFAULT_TOKEN_USAGE },
@@ -134,18 +130,11 @@ export const useSettingsStore = create<SettingsStore>()(
               activeWorkers: data.activeWorkers,
             });
           },
-
-          setAutoShowExternalSessionOnStartup: (enabled: boolean) =>
-            set((state) => {
-              state.autoShowExternalSessionOnStartup = Boolean(enabled);
-            }),
         })),
         {
           name: 'crish-settings-v1',
           partialize: (s) => ({
             scheduledTasks: s.scheduledTasks,
-            autoShowExternalSessionOnStartup:
-              s.autoShowExternalSessionOnStartup,
           }),
         }
       )
