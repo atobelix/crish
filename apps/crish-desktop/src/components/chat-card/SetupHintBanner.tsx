@@ -46,11 +46,14 @@ export const SetupHintBanner: React.FC<SetupHintBannerProps> = ({
       aria-live="polite"
       aria-atomic="true"
     >
-      <span className={styles.chatSoftHintIcon}>{SETUP_HINT_ICON[state.kind]}</span>
+      <span className={styles.chatSoftHintIcon}>
+        {SETUP_HINT_ICON[state.kind]}
+      </span>
       <span className={styles.chatSoftHintText}>{state.text}</span>
       <Button
         variant="ghost"
         type="button"
+        size="sm"
         className={styles.chatSoftHintAction}
         aria-label={state.actionAriaLabel}
         onClick={() => onAction(state.kind)}

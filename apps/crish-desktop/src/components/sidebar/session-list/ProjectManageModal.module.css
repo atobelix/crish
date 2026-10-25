@@ -67,13 +67,8 @@
 
 .folderPickerDropzone:focus-visible {
   outline: none;
-  border-color: color-mix(
-    in srgb,
-    var(--border-subtle) 96%,
-    var(--text-primary) 4%
-  );
-  box-shadow: 0 0 0 1.5px
-    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: var(--border-subtle);
+  box-shadow: none;
 }
 
 .dropzoneIcon {
@@ -241,11 +236,7 @@
 }
 
 .nameInput:hover:not(:focus):not(:focus-visible) {
-  border-color: color-mix(
-    in srgb,
-    var(--border-subtle) 98%,
-    var(--text-primary) 2%
-  );
+  border-color: var(--border-subtle);
   background:
     linear-gradient(var(--tint-hover), var(--tint-hover)),
     var(--surface-input, var(--bg-card));
@@ -253,14 +244,9 @@
 
 .nameInput:focus,
 .nameInput:focus-visible {
-  border-color: color-mix(
-    in srgb,
-    var(--border-subtle) 96%,
-    var(--text-primary) 4%
-  );
+  border-color: var(--border-subtle);
   outline: none;
-  box-shadow: 0 0 0 1.5px
-    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  box-shadow: none;
   background: var(--surface-input, var(--bg-card));
 }
 

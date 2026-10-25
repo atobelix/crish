@@ -222,7 +222,7 @@ export const ComposerProjectPicker: React.FC<ComposerProjectPickerProps> = ({
           aria-haspopup="menu"
           aria-label={ariaLabel}
         >
-          <AppIcon name="folder" size={12} aria-hidden />
+          <AppIcon name="folder-01" size={14} aria-hidden />
           <span className={styles.projectName}>{displayName}</span>
           <AppIcon
             name="chevron-down"

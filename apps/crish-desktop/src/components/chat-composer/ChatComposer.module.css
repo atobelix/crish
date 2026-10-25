@@ -1383,9 +1383,9 @@
   box-sizing: border-box;
 }
 
-/* 多行态 fieldSlot 呼吸内衬：四周由 composerCard 与 7px 内衬协同提供，文字左右缘与加号/发送按钮视觉同轴对齐 (10px + 7px = 17px) */
+/* 多行态 fieldSlot 呼吸内衬：四周由 composerCard (8px) 与 8px 7px 内衬协同提供（总顶距 16px 充裕大气呼吸），文字左右缘与加号/发送按钮视觉同轴对齐 (10px + 7px = 17px) */
 .composerCard.isMultiline .fieldSlot {
-  padding: 0 7px;
+  padding: 8px 7px 0 7px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -1914,7 +1914,7 @@
   box-sizing: border-box;
 }
 
-/* 空界面落地输入：文本区内衬，首行保持充裕垂直呼吸间距，水平与多行轴线严格统一 */
+/* 空界面落地输入：内衬与全界面多行态严格统一为 8px 7px 0 7px（总顶距 16px），保持同轴垂直呼吸节奏 */
 .composerCard[data-empty-kind='session-empty'].isMultiline .fieldSlot {
   padding: 8px 7px 0 7px;
 }
