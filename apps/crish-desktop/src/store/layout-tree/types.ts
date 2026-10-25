@@ -7,6 +7,7 @@
 
 import {
   normalizeSessionTab,
+  isChatTab,
   isRealSessionId,
   activeSessionIdOf,
   createDefaultDock,
@@ -150,11 +151,11 @@ export function createLeaf(input?: CreateLeafInput): LayoutLeaf {
   const id = input?.id ?? generateNodeId('leaf');
   const tabs = (input?.tabs ?? [])
     .map((t) => normalizeSessionTab(t))
-    .filter((t) => isRealSessionId(t.sessionId));
+    .filter((t) => (isChatTab(t) ? isRealSessionId(t.sessionId) : true));
   const activeTabId =
     input?.activeTabId && tabs.some((t) => t.tabId === input.activeTabId)
       ? input.activeTabId
-      : tabs[0]?.tabId ?? '';
+      : (tabs[0]?.tabId ?? '');
   return {
     type: 'leaf',
     id,
@@ -190,7 +191,9 @@ export function createDefaultTree(): LayoutTree {
 }
 
 /** 根删光兜底：单叶新对话界面（不保留已删根 id，不创建标签） */
-export function createFallbackDraftTree(version: number = LAYOUT_TREE_VERSION): LayoutTree {
+export function createFallbackDraftTree(
+  version: number = LAYOUT_TREE_VERSION
+): LayoutTree {
   return {
     version,
     root: createLeaf(),

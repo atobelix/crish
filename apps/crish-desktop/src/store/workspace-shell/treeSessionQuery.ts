@@ -25,13 +25,19 @@ export interface TabLocation {
 
 function isSessionTab(x: unknown): x is SessionTab {
   if (!x || typeof x !== 'object') return false;
-  const rec = x as { tabId?: unknown; sessionId?: unknown };
-  return typeof rec.tabId === 'string' && typeof rec.sessionId === 'string';
+  const rec = x as { tabId?: unknown; sessionId?: unknown; kind?: unknown };
+  if (typeof rec.tabId !== 'string') return false;
+  if (typeof rec.sessionId === 'string') return true;
+  return rec.kind === 'terminal' || rec.kind === 'browser';
 }
 
 function normalizeTab(raw: SessionTab): SessionTab {
-  const rec = raw as SessionTab & { dock?: SessionTab['dock']; rightDock?: SessionTab['dock'] };
+  const rec = raw as SessionTab & {
+    dock?: SessionTab['dock'];
+    rightDock?: SessionTab['dock'];
+  };
   return {
+    ...rec,
     tabId: raw.tabId,
     sessionId: raw.sessionId,
     title: typeof raw.title === 'string' ? raw.title : '',
@@ -66,9 +72,9 @@ export function readOwnedLeaf(leaf: {
     leaf.activeTabId === ''
       ? ''
       : typeof leaf.activeTabId === 'string' &&
-        tabs.some((t) => t.tabId === leaf.activeTabId)
+          tabs.some((t) => t.tabId === leaf.activeTabId)
         ? leaf.activeTabId
-        : (tabs[0]?.tabId || '');
+        : tabs[0]?.tabId || '';
   return {
     type: 'leaf',
     id: leaf.id,
@@ -152,12 +158,12 @@ export function resolveActiveChatLeaf(
   if (chats.length === 0) {
     throw new Error('I2 被破坏：ensureAtLeastOneChatLeaf 后仍无 chat 叶');
   }
-  const byActive = chats.find((l) => l.id === treeStore.activeLeafId);
-  if (byActive) return byActive;
   const byCache = lastChatLeafId
     ? chats.find((l) => l.id === lastChatLeafId)
     : undefined;
   if (byCache) return byCache;
+  const byActive = chats.find((l) => l.id === treeStore.activeLeafId);
+  if (byActive) return byActive;
   return chats[0]!;
 }
 

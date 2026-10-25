@@ -299,6 +299,14 @@ describe('TreeLeafPanel Tab Anti-Hijack & Sacred Blank Slate Suite', () => {
       await Promise.resolve();
     });
 
+    const newChatOption = screen.queryByRole('button', { name: /新建对话/ });
+    if (newChatOption) {
+      await act(async () => {
+        fireEvent.click(newChatOption);
+        await Promise.resolve();
+      });
+    }
+
     // 状态机验证：leaf 进入草稿态（activeTabId 变为空字符串）
     const leaf = findLeafInTree(
       useLayoutTreeStore.getState().tree.root,
@@ -514,6 +522,14 @@ describe('TreeLeafPanel Tab Anti-Hijack & Sacred Blank Slate Suite', () => {
       fireEvent.click(leafBPlusBtn!);
       await Promise.resolve();
     });
+
+    const newChatOptionB = screen.queryByRole('button', { name: /新建对话/ });
+    if (newChatOptionB) {
+      await act(async () => {
+        fireEvent.click(newChatOptionB);
+        await Promise.resolve();
+      });
+    }
 
     const root = useLayoutTreeStore.getState().tree.root;
     const currentA = findLeafInTree(root, leafA);

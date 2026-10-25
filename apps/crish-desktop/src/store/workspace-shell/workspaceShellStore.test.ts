@@ -66,6 +66,13 @@ vi.mock('../../api/workspaceChromeTabs', () => ({
   clearLegacyOpenTabsMap: vi.fn(),
 }));
 
+const mockKillPtyForSessionBackground = vi.fn();
+vi.mock('../../api/ptyRegistry', () => ({
+  killPtyForSessionBackground: (...args: unknown[]) =>
+    mockKillPtyForSessionBackground(...args),
+  killAllPtys: vi.fn(),
+}));
+
 import { useWorkspaceShellStore } from './workspaceShellStore';
 
 function tab(
@@ -196,6 +203,59 @@ function installTreeCommands(): void {
       owned.id
     );
     return { leafId: owned.id, tabId: created.tabId, created: true };
+  };
+
+  store.replaceActiveSessionInLeaf = (
+    leafId: string,
+    sessionId: string,
+    meta?: { title?: string; workspaceKey?: string }
+  ) => {
+    const st = useLayoutTreeStore.getState();
+    const owned = readLeaf(st.tree.root, leafId);
+    if (!owned) return { leafId, tabId: '' };
+    if (!owned.activeTabId || owned.tabs.length === 0) {
+      return (store.materializeDraftSession as any)(leafId, sessionId, meta);
+    }
+    const tabIndex = owned.tabs.findIndex((t) => t.tabId === owned.activeTabId);
+    if (tabIndex < 0) {
+      return (store.materializeDraftSession as any)(leafId, sessionId, meta);
+    }
+    const currentTab = owned.tabs[tabIndex]!;
+    const updatedTab = {
+      ...currentTab,
+      sessionId,
+      title: meta?.title ?? currentTab.title,
+      workspaceKey: meta?.workspaceKey ?? currentTab.workspaceKey,
+    };
+    const nextTabs = [...owned.tabs];
+    nextTabs[tabIndex] = updatedTab;
+    const nextLeaf = leaf(owned.id, nextTabs, currentTab.tabId);
+    setTree(
+      { ...st.tree, root: walkReplace(st.tree.root, leafId, nextLeaf) },
+      leafId
+    );
+    return { leafId, tabId: currentTab.tabId };
+  };
+
+  store.materializeDraftSession = (
+    leafId: string,
+    sessionId: string,
+    meta?: { title?: string; workspaceKey?: string }
+  ) => {
+    const st = useLayoutTreeStore.getState();
+    const owned = readLeaf(st.tree.root, leafId);
+    if (!owned) return { leafId, tabId: '' };
+    const created: SessionTab = tab(sessionId, mintTabId(), {
+      title: meta?.title ?? sessionId,
+      workspaceKey: meta?.workspaceKey ?? 'general',
+    });
+    const nextTabs = [...owned.tabs, created];
+    const nextLeaf = leaf(owned.id, nextTabs, created.tabId);
+    setTree(
+      { ...st.tree, root: walkReplace(st.tree.root, leafId, nextLeaf) },
+      leafId
+    );
+    return { leafId, tabId: created.tabId };
   };
 
   store.removeTab = (leafId: string, tabId: string) => {
@@ -392,7 +452,7 @@ beforeEach(() => {
 });
 
 describe('openOrFocusSession — 未放置进活动叶 / 已放置只聚焦', () => {
-  it('两叶 A=s1 / B=s2，活动叶 B，打开未放置 s3 → 进入 B.tabs，A 不动', () => {
+  it('两叶 A=s1 / B=s2，活动叶 B，打开未放置 s3 → 就地替换 B.tabs 中活动会话 (Δ = 0)，A 不动', () => {
     const a = leaf('leaf-a', [tab('s1', 't1')]);
     const b = leaf('leaf-b', [tab('s2', 't2')]);
     resetLayout(
@@ -434,9 +494,70 @@ describe('openOrFocusSession — 未放置进活动叶 / 已放置只聚焦', ()
       ).tabs
     ).toBe(tabsABefore);
     expect(leafA.tabs.map((t) => t.sessionId)).toEqual(['s1']);
-    expect(leafB.tabs.map((t) => t.sessionId)).toEqual(['s2', 's3']);
-    expect(leafB.activeTabId).toBe(leafB.tabs[1]!.tabId);
+    // 就地替换：标签数量守恒 (Δ = 0)，复用 t2 tabId，sessionId 变为 s3
+    expect(leafB.tabs.map((t) => t.sessionId)).toEqual(['s3']);
+    expect(leafB.activeTabId).toBe('t2');
     expect(sessionSetActiveSessionId).toHaveBeenCalledWith('s3');
+  });
+
+  it('连续打开多个未放置会话：保持标签总数恒定 (Δ = 0)', () => {
+    const b = leaf('leaf-b', [tab('s1', 't1')]);
+    resetLayout({ version: 3, root: b }, 'leaf-b');
+    useWorkspaceShellStore.setState({ lastChatLeafId: 'leaf-b' });
+
+    useWorkspaceShellStore.getState().openOrFocusSession('s2');
+    useWorkspaceShellStore.getState().openOrFocusSession('s3');
+    useWorkspaceShellStore.getState().openOrFocusSession('s4');
+
+    const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
+    expect(chats[0]!.tabs).toHaveLength(1);
+    expect(chats[0]!.tabs[0]!.sessionId).toBe('s4');
+    expect(chats[0]!.tabs[0]!.tabId).toBe('t1');
+    expect(chats[0]!.activeTabId).toBe('t1');
+  });
+
+  it('活动叶处于草稿态 (activeTabId === "")，打开未放置 s3 → 平滑物化草稿槽 (Δ = +1)', () => {
+    const a = leaf('leaf-a', [tab('s1', 't1')]);
+    const b = leaf('leaf-b', [tab('s2', 't2')], '');
+    resetLayout(
+      {
+        version: 3,
+        root: {
+          type: 'branch',
+          id: 'br',
+          direction: 'horizontal',
+          children: [a, b],
+          splitRatio: 0.5,
+        },
+      },
+      'leaf-b'
+    );
+    useWorkspaceShellStore.setState({ lastChatLeafId: 'leaf-b' });
+
+    useWorkspaceShellStore.getState().openOrFocusSession('s3', { title: 'S3' });
+
+    const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
+    const leafB = chats.find((l) => l.id === 'leaf-b')!;
+    expect(leafB.tabs.map((t) => t.sessionId)).toEqual(['s2', 's3']);
+    expect(leafB.tabs.find((t) => t.sessionId === 's3')!.title).toBe('S3');
+    expect(leafB.activeTabId).toBe(
+      leafB.tabs.find((t) => t.sessionId === 's3')!.tabId
+    );
+  });
+
+  it('显式指定 insertIdx 打开未放置会话 → 插入新标签 (Δ = +1)', () => {
+    const b = leaf('leaf-b', [tab('s1', 't1')]);
+    resetLayout({ version: 3, root: b }, 'leaf-b');
+    useWorkspaceShellStore.setState({ lastChatLeafId: 'leaf-b' });
+
+    useWorkspaceShellStore.getState().openOrFocusSession('s2', {
+      title: 'S2',
+      insertIdx: 1,
+    });
+
+    const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
+    expect(chats[0]!.tabs.map((t) => t.sessionId)).toEqual(['s1', 's2']);
+    expect(chats[0]!.tabs[1]!.sessionId).toBe('s2');
   });
 
   it('s3 已在 B.tabs，活动叶是 A，再点 s3 → 只激活 B，不塞进 A', () => {
@@ -757,5 +878,36 @@ describe('focusLeaf 契约', () => {
     expect(useLayoutTreeStore.getState().activeLeafId).toBe('L-draft');
     expect(useWorkspaceShellStore.getState().lastChatLeafId).toBe('L-draft');
     expect(sessionEnterDraftMode).toHaveBeenCalled();
+  });
+});
+
+describe('closeTab — 终端 PTY 确定性销毁', () => {
+  it('关闭普通会话 tab 时销毁该会话 pty', async () => {
+    mockKillPtyForSessionBackground.mockClear();
+    const a = leaf('leaf-a', [tab('s1', 't1')]);
+    resetLayout({ version: 3, root: a }, 'leaf-a');
+
+    useWorkspaceShellStore.getState().closeTab('leaf-a', 't1');
+
+    await vi.waitFor(() => {
+      expect(mockKillPtyForSessionBackground).toHaveBeenCalledWith('s1');
+    });
+  });
+
+  it('关闭 terminalTab (kind: terminal, terminalKey) 时确定性销毁 PTY', async () => {
+    mockKillPtyForSessionBackground.mockClear();
+    const termTab = {
+      ...tab('term_session', 't-term'),
+      kind: 'terminal',
+      terminalKey: 'pty-12345',
+    };
+    const a = leaf('leaf-a', [termTab as unknown as SessionTab]);
+    resetLayout({ version: 3, root: a }, 'leaf-a');
+
+    useWorkspaceShellStore.getState().closeTab('leaf-a', 't-term');
+
+    await vi.waitFor(() => {
+      expect(mockKillPtyForSessionBackground).toHaveBeenCalledWith('pty-12345');
+    });
   });
 });

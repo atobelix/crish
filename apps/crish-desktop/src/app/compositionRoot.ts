@@ -144,6 +144,22 @@ export type ShellFacade = {
       | import('../store/workspace-shell/types').RightToolDockState
       | Partial<import('../store/workspace-shell/types').RightToolDockState>
   ) => void;
+  addTerminalTab: (
+    leafId?: string,
+    opts?: Parameters<
+      ReturnType<typeof useWorkspaceShellStore.getState>['addTerminalTab']
+    >[1]
+  ) => ReturnType<
+    ReturnType<typeof useWorkspaceShellStore.getState>['addTerminalTab']
+  >;
+  addBrowserTab: (
+    leafId?: string,
+    opts?: Parameters<
+      ReturnType<typeof useWorkspaceShellStore.getState>['addBrowserTab']
+    >[1]
+  ) => ReturnType<
+    ReturnType<typeof useWorkspaceShellStore.getState>['addBrowserTab']
+  >;
 };
 
 /**
@@ -311,6 +327,10 @@ function buildDefaultRoot(): CompositionRoot {
         useWorkspaceShellStore.getState().openOrFocusSession(sessionId, opts),
       updateTabDock: (tabId, patch) =>
         useWorkspaceShellStore.getState().updateRightDock(tabId, patch),
+      addTerminalTab: (leafId, opts) =>
+        useWorkspaceShellStore.getState().addTerminalTab(leafId, opts),
+      addBrowserTab: (leafId, opts) =>
+        useWorkspaceShellStore.getState().addBrowserTab(leafId, opts),
     },
     layout: buildDefaultLayoutFacade(),
     workspace: {

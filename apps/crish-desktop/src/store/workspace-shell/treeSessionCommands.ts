@@ -10,6 +10,8 @@ import {
   ownedChatLeaves,
   type TabLocation,
 } from './treeSessionQuery';
+import { replaceNode } from '../layout-tree/layoutTreeNodeOps';
+import type { LayoutNode } from '../layout-tree/types';
 
 export interface OpenSessionOpts {
   title: string;
@@ -31,10 +33,17 @@ type TreeCmdState = ReturnType<typeof useLayoutTreeStore.getState> & {
     tab?: Partial<SessionTab> | string
   ) => SessionTab | void;
   insertTab?: (leafId: string, tab: SessionTab, insertIdx?: number) => void;
-  openSession?: (
+  openSession?: (sessionId: string, opts: OpenSessionOpts) => OpenSessionResult;
+  replaceActiveSessionInLeaf?: (
+    leafId: string,
     sessionId: string,
-    opts: OpenSessionOpts
-  ) => OpenSessionResult;
+    meta?: { title?: string; workspaceKey?: string }
+  ) => { leafId: string; tabId: string } | void;
+  materializeDraftSession?: (
+    leafId: string,
+    sessionId: string,
+    meta?: { title?: string; workspaceKey?: string }
+  ) => { leafId: string; tabId: string } | void;
   removeTab?: (leafId: string, tabId: string) => void;
   moveTab?: (
     srcLeafId: string,
@@ -172,11 +181,9 @@ export function treeOpenSession(
       created: false,
     };
   }
-  treePromoteDraftTab(
-    `__pending_draft__:${opts.activeLeafId}`,
-    sessionId,
-    { title: opts.title }
-  );
+  treePromoteDraftTab(`__pending_draft__:${opts.activeLeafId}`, sessionId, {
+    title: opts.title,
+  });
   const after = treeFindTabBySessionId(sessionId);
   return {
     leafId: after?.leafId ?? opts.activeLeafId,
@@ -240,4 +247,84 @@ export function treeResetToSingleDraftLeaf(workspaceKey?: string): void {
     return;
   }
   st.resetTree();
+}
+
+export function treeReplaceActiveSessionInLeaf(
+  leafId: string,
+  sessionId: string,
+  meta?: { title?: string; workspaceKey?: string }
+): { leafId: string; tabId: string } {
+  const st = tree();
+  if (typeof st.replaceActiveSessionInLeaf === 'function') {
+    const res = st.replaceActiveSessionInLeaf(leafId, sessionId, meta);
+    if (res && typeof res.leafId === 'string') {
+      return res;
+    }
+    const after = treeFindTabBySessionId(sessionId);
+    return {
+      leafId: after?.leafId ?? leafId,
+      tabId: after?.tab.tabId ?? '',
+    };
+  }
+  const rootNode = root();
+  const leaf = ownedChatLeaves(rootNode).find((l) => l.id === leafId);
+  if (!leaf) return { leafId, tabId: '' };
+  if (!leaf.activeTabId || leaf.tabs.length === 0) {
+    return treeMaterializeDraftSession(leafId, sessionId, meta);
+  }
+  const tab = leaf.tabs.find((t) => t.tabId === leaf.activeTabId);
+  if (!tab) return { leafId, tabId: '' };
+
+  const updatedTab: SessionTab = {
+    ...tab,
+    sessionId,
+    title: meta?.title ?? tab.title,
+    workspaceKey: meta?.workspaceKey ?? tab.workspaceKey,
+  };
+  const nextTabs = leaf.tabs.map((t) =>
+    t.tabId === tab.tabId ? updatedTab : t
+  );
+  const nextLeaf = { ...leaf, tabs: nextTabs };
+
+  const nextTree = {
+    ...useLayoutTreeStore.getState().tree,
+    root: replaceNode(rootNode, leafId, nextLeaf as unknown as LayoutNode),
+  };
+  useLayoutTreeStore.setState({ tree: nextTree, activeLeafId: leafId });
+  return { leafId, tabId: tab.tabId };
+}
+
+export function treeMaterializeDraftSession(
+  leafId: string,
+  sessionId: string,
+  meta?: { title?: string; workspaceKey?: string }
+): { leafId: string; tabId: string } {
+  const st = tree();
+  if (typeof st.materializeDraftSession === 'function') {
+    const res = st.materializeDraftSession(leafId, sessionId, meta);
+    if (res && typeof res.leafId === 'string') {
+      return res;
+    }
+    const after = treeFindTabBySessionId(sessionId);
+    return {
+      leafId: after?.leafId ?? leafId,
+      tabId: after?.tab.tabId ?? '',
+    };
+  }
+  treePromoteDraftTab(`__pending_draft__:${leafId}`, sessionId, {
+    title: meta?.title,
+  });
+  const after = treeFindTabBySessionId(sessionId);
+  if (after) {
+    return { leafId: after.leafId, tabId: after.tab.tabId };
+  }
+  const added = treeAddTab(leafId, {
+    sessionId,
+    title: meta?.title,
+    workspaceKey: meta?.workspaceKey,
+  });
+  return {
+    leafId,
+    tabId: added?.tabId ?? '',
+  };
 }

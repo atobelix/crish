@@ -4,11 +4,7 @@
  * 会话身份写端没有 setLeafSessionId；身份只在 leaf.tabs[].sessionId。
  */
 
-import type {
-  LayoutTree,
-  DropDirection,
-  TreeDragSource,
-} from './types';
+import type { LayoutTree, DropDirection, TreeDragSource } from './types';
 import type { SplitRegion } from './layoutTreeInsert';
 import type { DropZone } from './dropDetection';
 
@@ -60,12 +56,16 @@ export interface LayoutTreeStoreActions {
   /** 只改该 tab 的 dock，不改拓扑、不推历史 */
   updateTabDock: (
     tabId: string,
-    patch: import('./sessionTabModel').RightToolDockState | Partial<import('./sessionTabModel').RightToolDockState>
+    patch:
+      | import('./sessionTabModel').RightToolDockState
+      | Partial<import('./sessionTabModel').RightToolDockState>
   ) => void;
   /** 写本叶坞：有活动 tab 写 tab.dock，否则写叶上新对话坞 */
   updateLeafDock: (
     leafId: string,
-    patch: import('./sessionTabModel').RightToolDockState | Partial<import('./sessionTabModel').RightToolDockState>
+    patch:
+      | import('./sessionTabModel').RightToolDockState
+      | Partial<import('./sessionTabModel').RightToolDockState>
   ) => void;
   /** 进入本叶新对话界面（不建标签）；带真 sessionId 则插入标签。推历史。 */
   addTab: (
@@ -79,11 +79,49 @@ export interface LayoutTreeStoreActions {
           dock?: Partial<import('./sessionTabModel').RightToolDockState>;
         }
   ) => void;
+  /** 在指定叶子（或当前活动叶）新增终端标签，自动绑定 cwd 与标题。推历史。 */
+  addTerminalTab: (
+    leafId?: string,
+    opts?: {
+      tabId?: string;
+      title?: string;
+      workspaceKey?: string;
+      terminalKey?: string;
+      cwd?: string;
+      dock?: Partial<import('./sessionTabModel').RightToolDockState>;
+      insertIdx?: number;
+    }
+  ) => import('./sessionTabModel').TerminalTab;
+  /** 在指定叶子（或当前活动叶）新增浏览器标签。推历史。 */
+  addBrowserTab: (
+    leafId?: string,
+    opts?: {
+      tabId?: string;
+      title?: string;
+      workspaceKey?: string;
+      url?: string;
+      favicon?: string;
+      dock?: Partial<import('./sessionTabModel').RightToolDockState>;
+      insertIdx?: number;
+    }
+  ) => import('./sessionTabModel').BrowserTab;
   /** 打开或聚焦会话（已存在则激活，否则插入新 tab 并激活）。推历史（新建时）。 */
   openSession: (
     sessionId: string,
     opts: { title?: string; workspaceKey?: string; activeLeafId: string }
   ) => { leafId: string; tabId: string; created: boolean };
+  /** 侧栏点击就地切换会话（保持当前 activeTabId 不变，Δ = 0）。推历史。 */
+  replaceActiveSessionInLeaf: (
+    leafId: string,
+    newSessionId: string,
+    meta?: import('./layoutTreeTransform').SessionTabMeta
+  ) => void;
+  /** 草稿态平滑物化（activeTabId 为空时填充为真会话，Δ = +1）。推历史。 */
+  materializeDraftSession: (
+    leafId: string,
+    sessionId: string,
+    meta?: import('./layoutTreeTransform').SessionTabMeta
+  ) => void;
   /** 发送成功：把未提交新对话物化成真会话标签。推历史。 */
   promoteDraftTab: (
     draftSessionId: string,

@@ -24,6 +24,7 @@ import {
   isRealSessionId,
   findTabById,
   findTabBySessionId,
+  type ChatTab,
   type RightToolDockState,
 } from './sessionTabModel';
 import type { DropZone } from './dropDetection';
@@ -113,25 +114,32 @@ export function promoteDraftTab(
 
   const existingReal = findTabBySessionId(tree.root, realSessionId);
   if (existingReal) {
-    return activateTabInTree(tree, existingReal.leaf.id, existingReal.tab.tabId);
+    return activateTabInTree(
+      tree,
+      existingReal.leaf.id,
+      existingReal.tab.tabId
+    );
   }
 
   for (const leaf of collectLeaves(tree.root)) {
     const idx = leaf.tabs.findIndex((t) => t.sessionId === draftSessionId);
     if (idx < 0) continue;
-    const nextTabs = leaf.tabs.map((t, i) =>
-      i === idx
-        ? {
-            ...t,
-            sessionId: realSessionId,
-            title: patch?.title ? patch.title.trim() || t.title : t.title,
-          }
-        : t
-    );
+    const targetTab = leaf.tabs[idx]!;
+    const promotedTab: ChatTab = {
+      kind: 'chat',
+      tabId: targetTab.tabId,
+      sessionId: realSessionId,
+      title: patch?.title
+        ? patch.title.trim() || targetTab.title
+        : targetTab.title,
+      workspaceKey: targetTab.workspaceKey,
+      dock: targetTab.dock,
+    };
+    const nextTabs = leaf.tabs.map((t, i) => (i === idx ? promotedTab : t));
     const updated: LayoutLeaf = {
       ...leaf,
       tabs: nextTabs,
-      activeTabId: nextTabs[idx]!.tabId,
+      activeTabId: promotedTab.tabId,
     };
     return { ...tree, root: replaceNode(tree.root, leaf.id, updated) };
   }
@@ -170,9 +178,7 @@ export function updateTabTitle(
     const idx = leaf.tabs.findIndex((t) => t.sessionId === sessionId);
     if (idx < 0) continue;
     if (leaf.tabs[idx]!.title === title) return tree;
-    const nextTabs = leaf.tabs.map((t, i) =>
-      i === idx ? { ...t, title } : t
-    );
+    const nextTabs = leaf.tabs.map((t, i) => (i === idx ? { ...t, title } : t));
     const updated: LayoutLeaf = { ...leaf, tabs: nextTabs };
     return { ...tree, root: replaceNode(tree.root, leaf.id, updated) };
   }
@@ -204,16 +210,20 @@ export function openSession(
 ): { tree: LayoutTree; leafId: string; tabId: string; created: boolean } {
   const existing = findTabBySessionId(tree.root, sessionId);
   if (existing) {
-    const isDifferentLeaf = opts.activeLeafId && existing.leaf.id !== opts.activeLeafId;
+    const isDifferentLeaf =
+      opts.activeLeafId && existing.leaf.id !== opts.activeLeafId;
     const isDifferentIndex =
       opts.insertIdx !== undefined &&
-      existing.leaf.tabs.findIndex((t) => t.tabId === existing.tab.tabId) !== opts.insertIdx;
+      existing.leaf.tabs.findIndex((t) => t.tabId === existing.tab.tabId) !==
+        opts.insertIdx;
 
     if (isDifferentLeaf || isDifferentIndex) {
       const targetLeafId = opts.activeLeafId || existing.leaf.id;
       const targetTabs =
-        collectLeaves(tree.root).find((l) => l.id === targetLeafId)?.tabs.length ?? 0;
-      const finalInsertIdx = opts.insertIdx !== undefined ? opts.insertIdx : targetTabs;
+        collectLeaves(tree.root).find((l) => l.id === targetLeafId)?.tabs
+          .length ?? 0;
+      const finalInsertIdx =
+        opts.insertIdx !== undefined ? opts.insertIdx : targetTabs;
 
       const movedTree = moveTab(
         tree,
@@ -229,7 +239,11 @@ export function openSession(
         created: false,
       };
     }
-    const nextTree = activateTabInTree(tree, existing.leaf.id, existing.tab.tabId);
+    const nextTree = activateTabInTree(
+      tree,
+      existing.leaf.id,
+      existing.tab.tabId
+    );
     return {
       tree: nextTree,
       leafId: existing.leaf.id,
@@ -237,7 +251,9 @@ export function openSession(
       created: false,
     };
   }
-  const chatLeaves = collectLeaves(tree.root).filter((l) => l.panelId === 'chat');
+  const chatLeaves = collectLeaves(tree.root).filter(
+    (l) => l.panelId === 'chat'
+  );
   const targetLeaf =
     chatLeaves.find((l) => l.id === opts.activeLeafId) ?? chatLeaves[0];
   if (!targetLeaf) {
@@ -256,6 +272,12 @@ export function openSession(
     created: true,
   };
 }
+
+export type { SessionTabMeta } from './layoutTreeSessionReplace';
+export {
+  replaceActiveSessionInLeaf,
+  materializeDraftSession,
+} from './layoutTreeSessionReplace';
 
 function zoneTypeToRegion(
   zoneType: DropZone['type']

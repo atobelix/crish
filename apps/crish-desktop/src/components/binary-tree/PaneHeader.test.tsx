@@ -11,6 +11,8 @@ import { useSessionStore, useLayoutTreeStore } from '../../store/storeAccess';
 const shellMocks = vi.hoisted(() => ({
   activateTab: vi.fn(),
   addTab: vi.fn(),
+  addTerminalTab: vi.fn(),
+  addBrowserTab: vi.fn(),
   removeTab: vi.fn(),
 }));
 
@@ -89,6 +91,8 @@ describe('PaneHeader 叶子拥有会话标签', () => {
   beforeEach(() => {
     shellMocks.activateTab.mockReset();
     shellMocks.addTab.mockReset();
+    shellMocks.addTerminalTab.mockReset();
+    shellMocks.addBrowserTab.mockReset();
     shellMocks.removeTab.mockReset();
     roManagerMock.state.cb = null;
     useSessionStore.setState({
@@ -150,14 +154,39 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     expect(shellMocks.removeTab).not.toHaveBeenCalled();
   });
 
-  it('加号只调 addTab(leafId)', () => {
+  it('加号展开启动器且选择新建对话调 addTab(leafId)', () => {
     const leaf = makeLeaf('leaf-b', [makeTab('tb2', 's2', '会话二')], 'tb2');
-    const { getAllByLabelText } = render(
+    const { getAllByLabelText, getByRole } = render(
       <PaneHeader leaf={leaf} isActive isChat />
     );
     fireEvent.click(getAllByLabelText('新对话')[0]!);
+    fireEvent.click(getByRole('button', { name: /新建对话/ }));
     expect(shellMocks.addTab).toHaveBeenCalledTimes(1);
     expect(shellMocks.addTab).toHaveBeenCalledWith('leaf-b');
+    expect(shellMocks.activateTab).not.toHaveBeenCalled();
+  });
+
+  it('加号展开启动器且选择新建终端调 addTerminalTab(leafId)', () => {
+    const leaf = makeLeaf('leaf-b', [makeTab('tb2', 's2', '会话二')], 'tb2');
+    const { getAllByLabelText, getByRole } = render(
+      <PaneHeader leaf={leaf} isActive isChat />
+    );
+    fireEvent.click(getAllByLabelText('新对话')[0]!);
+    fireEvent.click(getByRole('button', { name: /新建终端/ }));
+    expect(shellMocks.addTerminalTab).toHaveBeenCalledTimes(1);
+    expect(shellMocks.addTerminalTab).toHaveBeenCalledWith('leaf-b');
+    expect(shellMocks.activateTab).not.toHaveBeenCalled();
+  });
+
+  it('加号展开启动器且选择新建浏览器调 addBrowserTab(leafId)', () => {
+    const leaf = makeLeaf('leaf-b', [makeTab('tb2', 's2', '会话二')], 'tb2');
+    const { getAllByLabelText, getByRole } = render(
+      <PaneHeader leaf={leaf} isActive isChat />
+    );
+    fireEvent.click(getAllByLabelText('新对话')[0]!);
+    fireEvent.click(getByRole('button', { name: /新建浏览器/ }));
+    expect(shellMocks.addBrowserTab).toHaveBeenCalledTimes(1);
+    expect(shellMocks.addBrowserTab).toHaveBeenCalledWith('leaf-b');
     expect(shellMocks.activateTab).not.toHaveBeenCalled();
   });
 
@@ -282,6 +311,22 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     rerender(<PaneHeader leaf={leaf} isActive isChat isTopRow={false} />);
     const nonTopHeader = container.querySelector('[data-pane-header="true"]');
     expect(nonTopHeader?.hasAttribute('data-tauri-drag-region')).toBe(false);
+  });
+
+  it('加号按钮双击事件与系统拖拽隔离：按钮必须具备 data-tauri-drag-region="false"，防止系统标题栏双击最大化劫持', () => {
+    const leaf = makeLeaf('leaf-a', [makeTab('ta1', 's1', '会话一')], 'ta1');
+    const { container } = render(
+      <PaneHeader leaf={leaf} isActive isChat isTopRow={true} />
+    );
+
+    const newTabBtn = container.querySelector('button[aria-label="新对话"]');
+    expect(newTabBtn).toBeTruthy();
+    expect(newTabBtn?.getAttribute('data-tauri-drag-region')).toBe('false');
+
+    // 双击加号按钮必须正常交互，不抛出异常，data-tauri-drag-region="false" 保障窗口手势隔离
+    expect(() => {
+      fireEvent.doubleClick(newTabBtn!);
+    }).not.toThrow();
   });
 
   it('多标签关闭时锁定等宽单变量通道生效，鼠标移出后解锁', () => {

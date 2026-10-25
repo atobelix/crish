@@ -2,14 +2,20 @@ import type { LayoutLeaf } from '../../store/types';
 import {
   isPendingDraftSessionId,
   mintDraftSessionId,
+  getCompositionRoot,
 } from '../../store/storeAccess';
 
 export { isPendingDraftSessionId as isDraftSessionId };
 
 export interface LeafSessionTab {
   tabId: string;
-  sessionId: string;
+  sessionId?: string;
   title?: string;
+  kind?: 'chat' | 'terminal' | 'browser' | string;
+  terminalKey?: string;
+  cwd?: string;
+  url?: string;
+  favicon?: string;
   dock?: {
     collapsed: boolean;
     openPanelIds: string[];
@@ -84,6 +90,9 @@ export function resolveLeafSessionId(
   if (activeTab?.sessionId) {
     return activeTab.sessionId;
   }
+  if (activeTab?.terminalKey) {
+    return activeTab.terminalKey;
+  }
   if (tabs.length === 0) {
     const isFocused = options?.isFocused ?? false;
     const globalId = options?.globalActiveSessionId;
@@ -130,7 +139,67 @@ export function leafPropsEqual(a: LayoutLeaf, b: LayoutLeaf): boolean {
     return (
       tab.tabId === nextTab.tabId &&
       tab.sessionId === nextTab.sessionId &&
+      tab.kind === nextTab.kind &&
+      tab.terminalKey === nextTab.terminalKey &&
+      tab.cwd === nextTab.cwd &&
+      tab.url === nextTab.url &&
       dockPropsEqual(tab.dock, nextTab.dock)
     );
   });
+}
+
+export interface TreeLeafPanelProps {
+  leaf: LayoutLeaf;
+  /** leaf 的渲染 rect（百分比，0-1） */
+  rect: { x: number; y: number; width: number; height: number };
+  /** 是否为激活 leaf */
+  isActive: boolean;
+  /** 是否为拖拽源（旧拖拽兼容，缺省 false） */
+  isDragSource?: boolean;
+  /** 当前是否多 chat 分屏（>1 chat leaf）；条带不再依赖此旗标 */
+  isMultiChat?: boolean;
+}
+
+export type SessionShellCommands = {
+  activateTab: (leafId: string, tabId: string) => void;
+};
+
+export function sessionShell(): SessionShellCommands {
+  return getCompositionRoot().shell as unknown as SessionShellCommands;
+}
+
+export function killDockTerminalPty(
+  panelId: string,
+  sessionForPanel: string
+): void {
+  if (panelId === 'terminal' || panelId.startsWith('terminal:')) {
+    void import('../../api/ptyRegistry').then((m) => {
+      const panelKey =
+        panelId === 'terminal'
+          ? sessionForPanel
+          : `${sessionForPanel}:${panelId}`;
+      void m.killPtyForSession(panelKey);
+      void m.killPtyForSession(`${panelKey}:split-2`);
+    });
+  }
+}
+
+export function computeNextDockAfterClose(
+  openPanelIds: string[],
+  activePanelId: string | null,
+  closedPanelId: string
+): {
+  collapsed?: boolean;
+  openPanelIds: string[];
+  activePanelId: string | null;
+} {
+  const nextIds = openPanelIds.filter((id) => id !== closedPanelId);
+  if (nextIds.length === 0) {
+    return { collapsed: true, openPanelIds: [], activePanelId: null };
+  }
+  const nextActive =
+    activePanelId === closedPanelId
+      ? (nextIds[nextIds.length - 1] ?? null)
+      : activePanelId;
+  return { openPanelIds: nextIds, activePanelId: nextActive };
 }

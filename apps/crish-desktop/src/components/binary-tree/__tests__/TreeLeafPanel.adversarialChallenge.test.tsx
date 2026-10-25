@@ -315,6 +315,13 @@ describe('Empirical Adversarial Stress Suite: Sacred Blank Slate & Universal Com
         fireEvent.click(newTabBtn);
         await Promise.resolve();
       });
+      const newChatOption = screen.queryByRole('button', { name: /新建对话/ });
+      if (newChatOption) {
+        await act(async () => {
+          fireEvent.click(newChatOption);
+          await Promise.resolve();
+        });
+      }
     }
 
     const leaf = findLeafInTree(
@@ -372,9 +379,8 @@ describe('Empirical Adversarial Stress Suite: Sacred Blank Slate & Universal Com
 
     // 1. 输入前缀文本
     const prefixText = '正在编写核心算法测试';
-    fireEvent.input(inputArea, {
-      target: { value: prefixText, textContent: prefixText },
-    });
+    inputArea.textContent = prefixText;
+    fireEvent.input(inputArea);
 
     // 保存当前 DOM 元素引用
     const originalInputDom = inputArea;
@@ -399,9 +405,8 @@ describe('Empirical Adversarial Stress Suite: Sacred Blank Slate & Universal Com
 
     // 4. 继续键入后续文本，无阻断
     const fullText = `${prefixText}，且后台扫描不得打断`;
-    fireEvent.input(currentInputDom, {
-      target: { value: fullText, textContent: fullText },
-    });
+    currentInputDom.textContent = fullText;
+    fireEvent.input(currentInputDom);
 
     expect(
       currentInputDom.textContent ||
@@ -503,6 +508,14 @@ describe('Empirical Adversarial Stress Suite: Sacred Blank Slate & Universal Com
         await Promise.resolve();
       });
 
+      const newChatOption = screen.queryByRole('button', { name: /新建对话/ });
+      if (newChatOption) {
+        await act(async () => {
+          fireEvent.click(newChatOption);
+          await Promise.resolve();
+        });
+      }
+
       let leaf = findLeafInTree(
         useLayoutTreeStore.getState().tree.root,
         leafId
@@ -530,6 +543,15 @@ describe('Empirical Adversarial Stress Suite: Sacred Blank Slate & Universal Com
       fireEvent.click(newTabBtnFinal);
       await Promise.resolve();
     });
+    const newChatOptionFinal = screen.queryByRole('button', {
+      name: /新建对话/,
+    });
+    if (newChatOptionFinal) {
+      await act(async () => {
+        fireEvent.click(newChatOptionFinal);
+        await Promise.resolve();
+      });
+    }
 
     const leafFinal = findLeafInTree(
       useLayoutTreeStore.getState().tree.root,

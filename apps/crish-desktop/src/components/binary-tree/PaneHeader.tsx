@@ -55,9 +55,8 @@ import {
   readCommittedLeafTabs,
 } from './paneHeaderModel';
 import { PaneTabItem } from './PaneTabItem';
-import { Button } from '../ui';
 import styles from './PaneHeader.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { NewTabLauncherPopover } from './NewTabLauncherPopover';
 
 export interface PaneHeaderProps {
   leaf: LayoutLeaf;
@@ -364,10 +363,8 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
             maxFittingWidth,
           });
           if (isRightmost) {
-            // 分支 B：末尾摘除后无右邻补位，几何已变，必须整体覆盖锁宽重新对齐光标
             setLockedTabWidth(lockWidth);
           } else {
-            // 分支 A：连击保宽，仅首次锁定取实测值
             setLockedTabWidth((prev) =>
               prev != null && prev > 0 ? prev : lockWidth
             );
@@ -479,16 +476,29 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
             })}
           </div>
 
-          <Button
-            type="button"
-            variant="ghost"
-            className={styles.newTabBtn}
-            onClick={handleNewTab}
-            aria-label="新对话"
+          <div
             data-tauri-drag-region="false"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              flexShrink: 0,
+            }}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+            }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+            }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+            }}
           >
-            <AppIcon name="plus" size={14} />
-          </Button>
+            <NewTabLauncherPopover
+              leafId={leaf.id}
+              onBeforeOpen={clearLockedWidth}
+            />
+          </div>
         </div>
       </div>
     );

@@ -59,11 +59,7 @@ export {
 } from './sessionTabMigration';
 
 // ── 查询操作 ─────────────────────────────────────────────────────────
-export {
-  findNodeById,
-  collectLeaves,
-  flattenTree,
-} from './operations';
+export { findNodeById, collectLeaves, flattenTree } from './operations';
 
 // ── 维 02 树命令 ─────────────────────────────────────────────────────
 export {
@@ -71,6 +67,8 @@ export {
   addTab,
   enterComposer,
   insertTab,
+  insertTerminalTab,
+  insertBrowserTab,
   openSession,
   promoteDraftTab,
   updateTabTitle,

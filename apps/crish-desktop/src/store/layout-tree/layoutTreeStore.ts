@@ -17,7 +17,10 @@ import {
   findNodeById,
   applyDrop,
   addTab as addTabOp,
+  insertTab as insertTabOp,
   openSession as openSessionOp,
+  replaceActiveSessionInLeaf as replaceActiveSessionInLeafOp,
+  materializeDraftSession as materializeDraftSessionOp,
   promoteDraftTab as promoteDraftTabOp,
   updateTabTitle as updateTabTitleOp,
   resetToSingleDraftLeaf as resetToSingleDraftLeafOp,
@@ -29,76 +32,37 @@ import {
   updateTabDock as updateTabDockOp,
   updateLeafDock as updateLeafDockOp,
 } from './operations';
-import { migrateToLeafOwnedTabs } from './sessionTabMigration';
+import {
+  findTabBySessionId,
+  type TerminalTab,
+  type BrowserTab,
+} from './sessionTabModel';
+import {
+  createTerminalTabForStore,
+  createBrowserTabForStore,
+  killAllTerminalPtysInTree,
+  killTerminalInLeafActiveTab,
+  killTerminalInLeafTab,
+} from './layoutTreeTerminalOps';
+import {
+  firstLeafId,
+  resolveActiveLeaf,
+  pushTreeWithHistory,
+  rehydrateLayoutTreeState,
+} from './layoutTreeHydrateHelpers';
 export type {
   LayoutTreeStoreState,
   LayoutTreeStoreActions,
   LayoutTreeStore,
 } from './layoutTreeStoreTypes';
-import type {
-  LayoutTreeStore,
-  LayoutTreeStoreState,
-} from './layoutTreeStoreTypes';
-import {
-  validateRestorableLayoutTree,
-  RESTORE_LAST_WORKSPACE_LS_KEY,
-} from './layoutRestorePolicy';
-import { migrateScopedStorageKeyIfNeeded, readScopedLocalStorageWithLegacyMigrate } from '../../api/shellWindowScope';
-import { OPEN_SESSION_TABS_KEY } from '../../api/workspaceChromeTabs';
+import type { LayoutTreeStore } from './layoutTreeStoreTypes';
+import { migrateScopedStorageKeyIfNeeded } from '../../api/shellWindowScope';
 
 const MAX_HISTORY = 50;
 const LAYOUT_TREE_STORAGE_KEY_BASE = 'crish-layout-tree-v1';
 
 export function layoutTreeStorageKey(): string {
   return migrateScopedStorageKeyIfNeeded(LAYOUT_TREE_STORAGE_KEY_BASE);
-}
-
-function firstLeafId(tree: LayoutTree): string | null {
-  const leaves = collectLeaves(tree.root);
-  return leaves[0]?.id ?? null;
-}
-
-function resolveActiveLeaf(
-  tree: LayoutTree,
-  activeLeafId: string | null
-): string | null {
-  if (activeLeafId && findNodeById(tree.root, activeLeafId))
-    return activeLeafId;
-  return firstLeafId(tree);
-}
-
-function readRestoreLastWorkspaceFlag(): boolean {
-  try {
-    const raw = localStorage.getItem(RESTORE_LAST_WORKSPACE_LS_KEY);
-    if (raw === 'true' || raw === '1') return true;
-    if (raw === 'false' || raw === '0') return false;
-  } catch {
-    /* private mode / SSR */
-  }
-  return false;
-}
-
-function loadLegacyOpenTabsMap(): Record<string, string[]> {
-  try {
-    const raw = readScopedLocalStorageWithLegacyMigrate(OPEN_SESSION_TABS_KEY);
-    if (!raw) return {};
-    const obj = JSON.parse(raw) as unknown;
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return {};
-    return obj as Record<string, string[]>;
-  } catch {
-    return {};
-  }
-}
-
-function applyCleanColdStartOnState(state: LayoutTreeStoreState): void {
-  const cleanTree = createDefaultTree();
-  state.tree = cleanTree;
-  state.activeLeafId = firstLeafId(cleanTree);
-  state.toolColumnCollapsed = true;
-  state.past = [];
-  state.future = [];
-  state.draggedSource = null;
-  state.activeDropZone = null;
 }
 
 const initialTree = createDefaultTree();
@@ -124,6 +88,7 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
 
       resetTree: () =>
         set((state) => {
+          killAllTerminalPtysInTree(state.tree);
           const newTree = createDefaultTree();
           return {
             past: [...state.past, state.tree].slice(-MAX_HISTORY),
@@ -136,24 +101,13 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
       mergeBranch: (branchId, keepIndex = 0) =>
         set((state) => {
           const result = mergeBranch(state.tree, branchId, keepIndex);
-          if (result === state.tree) return {};
-          return {
-            past: [...state.past, state.tree].slice(-MAX_HISTORY),
-            future: [],
-            tree: result,
-            activeLeafId: resolveActiveLeaf(result, state.activeLeafId),
-          };
+          return pushTreeWithHistory(state, result, state.activeLeafId);
         }),
 
       moveLeaf: (sourceId, targetId, direction) =>
         set((state) => {
           const result = moveLeaf(state.tree, sourceId, targetId, direction);
-          if (result === state.tree) return {};
-          return {
-            past: [...state.past, state.tree].slice(-MAX_HISTORY),
-            future: [],
-            tree: result,
-          };
+          return pushTreeWithHistory(state, result);
         }),
 
       resizeBranch: (branchId, ratio, commit = true) =>
@@ -182,21 +136,54 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
       addTab: (leafId, tabOrWorkspaceKey) =>
         set((state) => {
           const result = addTabOp(state.tree, leafId, tabOrWorkspaceKey);
-          if (result === state.tree) return {};
-          return {
-            past: [...state.past, state.tree].slice(-MAX_HISTORY),
-            future: [],
-            tree: result,
-            activeLeafId: leafId,
-          };
+          return pushTreeWithHistory(state, result, leafId);
         }),
+
+      addTerminalTab: (leafId, opts) => {
+        let createdTab!: TerminalTab;
+        set((state) => {
+          const targetLeafId =
+            leafId || state.activeLeafId || firstLeafId(state.tree);
+          const tab = createTerminalTabForStore(opts);
+          createdTab = tab;
+          if (!targetLeafId) return {};
+          const result = insertTabOp(
+            state.tree,
+            targetLeafId,
+            tab,
+            opts?.insertIdx
+          );
+          return pushTreeWithHistory(state, result, targetLeafId);
+        });
+        return createdTab;
+      },
+
+      addBrowserTab: (leafId, opts) => {
+        let createdTab!: BrowserTab;
+        set((state) => {
+          const targetLeafId =
+            leafId || state.activeLeafId || firstLeafId(state.tree);
+          const tab = createBrowserTabForStore(opts);
+          createdTab = tab;
+          if (!targetLeafId) return {};
+          const result = insertTabOp(
+            state.tree,
+            targetLeafId,
+            tab,
+            opts?.insertIdx
+          );
+          return pushTreeWithHistory(state, result, targetLeafId);
+        });
+        return createdTab;
+      },
 
       openSession: (sessionId, opts) => {
         let out = { leafId: opts.activeLeafId, tabId: '', created: false };
         set((state) => {
           const res = openSessionOp(state.tree, sessionId, opts);
           out = { leafId: res.leafId, tabId: res.tabId, created: res.created };
-          if (res.tree === state.tree && state.activeLeafId === res.leafId) return {};
+          if (res.tree === state.tree && state.activeLeafId === res.leafId)
+            return {};
           return {
             past: res.created
               ? [...state.past, state.tree].slice(-MAX_HISTORY)
@@ -209,6 +196,54 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
         return out;
       },
 
+      replaceActiveSessionInLeaf: (leafId, newSessionId, meta) =>
+        set((state) => {
+          const existing = findTabBySessionId(state.tree.root, newSessionId);
+          if (!existing) {
+            killTerminalInLeafActiveTab(state.tree, leafId);
+          }
+          const result = replaceActiveSessionInLeafOp(
+            state.tree,
+            leafId,
+            newSessionId,
+            meta
+          );
+          const dest = findTabBySessionId(
+            (result === state.tree ? state.tree : result).root,
+            newSessionId
+          );
+          const targetLeafId = dest ? dest.leaf.id : leafId;
+          if (result === state.tree && state.activeLeafId === targetLeafId) {
+            return {};
+          }
+          if (result === state.tree) {
+            return { activeLeafId: targetLeafId };
+          }
+          return pushTreeWithHistory(state, result, targetLeafId);
+        }),
+
+      materializeDraftSession: (leafId, sessionId, meta) =>
+        set((state) => {
+          const result = materializeDraftSessionOp(
+            state.tree,
+            leafId,
+            sessionId,
+            meta
+          );
+          const existing = findTabBySessionId(
+            (result === state.tree ? state.tree : result).root,
+            sessionId
+          );
+          const targetLeafId = existing ? existing.leaf.id : leafId;
+          if (result === state.tree && state.activeLeafId === targetLeafId) {
+            return {};
+          }
+          if (result === state.tree) {
+            return { activeLeafId: targetLeafId };
+          }
+          return pushTreeWithHistory(state, result, targetLeafId);
+        }),
+
       promoteDraftTab: (draftSessionId, realSessionId, patch) =>
         set((state) => {
           const result = promoteDraftTabOp(
@@ -217,12 +252,7 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
             realSessionId,
             patch
           );
-          if (result === state.tree) return {};
-          return {
-            past: [...state.past, state.tree].slice(-MAX_HISTORY),
-            future: [],
-            tree: result,
-          };
+          return pushTreeWithHistory(state, result);
         }),
 
       updateTabTitle: (sessionId, title) =>
@@ -234,25 +264,16 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
 
       resetToSingleDraftLeaf: (workspaceKey) =>
         set((state) => {
+          killAllTerminalPtysInTree(state.tree);
           const result = resetToSingleDraftLeafOp(state.tree, workspaceKey);
-          return {
-            past: [...state.past, state.tree].slice(-MAX_HISTORY),
-            future: [],
-            tree: result,
-            activeLeafId: resolveActiveLeaf(result, null),
-          };
+          return pushTreeWithHistory(state, result, null);
         }),
 
       removeTab: (leafId, tabId) =>
         set((state) => {
+          killTerminalInLeafTab(state.tree, leafId, tabId);
           const result = removeTabOp(state.tree, leafId, tabId);
-          if (result === state.tree) return {};
-          return {
-            past: [...state.past, state.tree].slice(-MAX_HISTORY),
-            future: [],
-            tree: result,
-            activeLeafId: resolveActiveLeaf(result, state.activeLeafId),
-          };
+          return pushTreeWithHistory(state, result, state.activeLeafId);
         }),
 
       moveTab: (srcLeafId, tabId, dstLeafId, insertIdx) =>
@@ -264,13 +285,7 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
             dstLeafId,
             insertIdx
           );
-          if (result === state.tree) return {};
-          return {
-            past: [...state.past, state.tree].slice(-MAX_HISTORY),
-            future: [],
-            tree: result,
-            activeLeafId: resolveActiveLeaf(result, dstLeafId),
-          };
+          return pushTreeWithHistory(state, result, dstLeafId);
         }),
 
       splitTab: (srcLeafId, tabId, dstLeafId, region) =>
@@ -287,20 +302,20 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
           if (region !== 'center') {
             const leaves = collectLeaves(result.root);
             const fresh = leaves.find(
-              (l) =>
-                l.id !== dstLeafId && l.tabs.some((t) => t.tabId === tabId)
+              (l) => l.id !== dstLeafId && l.tabs.some((t) => t.tabId === tabId)
             );
             if (fresh) activeLeafId = fresh.id;
           }
-          return {
-            past: [...state.past, state.tree].slice(-MAX_HISTORY),
-            future: [],
-            tree: result,
-            activeLeafId: resolveActiveLeaf(result, activeLeafId),
-          };
+          return pushTreeWithHistory(state, result, activeLeafId);
         }),
 
-      splitSessionFromSidebar: (sessionId, dstLeafId, region, splitRatio, opts) =>
+      splitSessionFromSidebar: (
+        sessionId,
+        dstLeafId,
+        region,
+        splitRatio,
+        opts
+      ) =>
         set((state) => {
           const result = splitSessionFromSidebarOp(
             state.tree,
@@ -317,12 +332,7 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
             l.tabs.some((t) => t.sessionId === sessionId)
           );
           if (fresh) activeLeafId = fresh.id;
-          return {
-            past: [...state.past, state.tree].slice(-MAX_HISTORY),
-            future: [],
-            tree: result,
-            activeLeafId: resolveActiveLeaf(result, activeLeafId),
-          };
+          return pushTreeWithHistory(state, result, activeLeafId);
         }),
 
       setTreeWithDock: (
@@ -387,10 +397,7 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
           }
 
           return {
-            past: [...state.past, tree].slice(-MAX_HISTORY),
-            future: [],
-            tree: resultTree,
-            activeLeafId: resolveActiveLeaf(resultTree, state.activeLeafId),
+            ...pushTreeWithHistory(state, resultTree, state.activeLeafId),
             draggedSource: null,
             activeDropZone: null,
           };
@@ -441,32 +448,7 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
         toolColumnCollapsed: s.toolColumnCollapsed,
       }),
       onRehydrateStorage: () => (state) => {
-        if (!state) return;
-        try {
-          const restore = readRestoreLastWorkspaceFlag();
-          if (!restore || !state.tree?.root) {
-            applyCleanColdStartOnState(state);
-            return;
-          }
-          const result = migrateToLeafOwnedTabs({
-            tree: state.tree,
-            openTabsMap: loadLegacyOpenTabsMap(),
-            activeLeafId: state.activeLeafId,
-          });
-          const verdict = validateRestorableLayoutTree(result.tree);
-          if (!result.ok || !verdict.ok) {
-            applyCleanColdStartOnState(state);
-            return;
-          }
-          state.tree = result.tree;
-          state.activeLeafId = resolveActiveLeaf(result.tree, state.activeLeafId);
-          state.past = [];
-          state.future = [];
-          state.draggedSource = null;
-          state.activeDropZone = null;
-        } catch {
-          applyCleanColdStartOnState(state);
-        }
+        rehydrateLayoutTreeState(state);
       },
     }
   )

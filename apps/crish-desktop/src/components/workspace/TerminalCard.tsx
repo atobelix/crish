@@ -28,12 +28,14 @@ export type TerminalCardProps = {
   /** 面板 ID（多终端标签支持，如 'terminal', 'terminal:2' 等） */
   panelId?: string | null;
   leafId?: string | null;
+  initialCwd?: string;
 };
 
 export const TerminalCard: React.FC<TerminalCardProps> = ({
   sessionId: sessionIdProp,
   panelId: panelIdProp,
   leafId: leafIdProp,
+  initialCwd,
 }) => {
   const scope = useLeafScope();
   const scopedSessionId = useScopedSessionId(sessionIdProp);
@@ -93,7 +95,7 @@ export const TerminalCard: React.FC<TerminalCardProps> = ({
 
   const fullCwd = (() => {
     void cwdTick;
-    return getWorkspacePath() || '';
+    return initialCwd || getWorkspacePath() || '';
   })();
 
   const handlePtyStatus = useCallback(

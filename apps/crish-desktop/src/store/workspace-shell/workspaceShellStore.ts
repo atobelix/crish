@@ -15,22 +15,10 @@
  */
 
 import { create } from 'zustand';
-import {
-  GENERAL_FOLDER,
-  canonicalSessionFolder,
-  getActiveProjectId,
-  activateWorkspaceForSessionFolder,
-} from '../../api/projectStore';
-import { isPendingDraft, mintDraftSessionId } from '../draftSession';
-import { draftFolderRegistry } from '../draft-routing/draftFolderRegistry';
-import { resolveMostActiveProjectFolder } from '../draft-routing/draftProjectResolver';
+import { GENERAL_FOLDER, canonicalSessionFolder } from '../../api/projectStore';
+import { isPendingDraft } from '../draftSession';
 import { useSessionStore } from '../sessionStore';
 import { useLayoutStore } from '../layoutStore';
-import { currentWorkspaceFolderKey } from '../../api/workspaceChromeTabs';
-import {
-  isDefaultSessionTitle,
-  resolveChromeSessionTitle,
-} from '../../api/sessionTitle';
 import { listChatLeaves, useLayoutTreeStore } from '../layout-tree';
 import {
   recordClosedSessionTab,
@@ -46,83 +34,42 @@ import {
   ownedChatLeaves,
   pictureFromActiveLeaf,
   resolveActiveChatLeaf,
-  scanRealSessionTabs,
 } from './treeSessionQuery';
 import {
   treeActivateTab,
-  treeAddTab,
   treeFindTabBySessionId,
   treeFindTabByTabId,
+  treeMaterializeDraftSession,
   treeMoveTab,
   treeOpenSession,
   treePromoteDraftTab,
   treeRemoveTab,
-  treeResetToSingleDraftLeaf,
+  treeReplaceActiveSessionInLeaf,
   treeUpdateTabDock,
-  treeUpdateTabTitle,
 } from './treeSessionCommands';
+import {
+  sessionFromStore,
+  workspaceKeyNow,
+  resolveSessionTabTitle,
+  rememberChatLeaf,
+  syncSessionFromActiveLeaf,
+  killPty,
+  killTerminalPty,
+  findRawTabForClose,
+  cleanupActiveTerminalBeforeReplace,
+  addTerminalTabToShell,
+  addBrowserTabToShell,
+  syncOpenTabTitlesHelper,
+  openNewDraftTabHelper,
+  resetToCleanDraftHelper,
+  type TabWithTerminalInfo,
+} from './workspaceShellTerminalBrowser';
 
 export {
   loadLegacyOpenTabsMap,
   selectActiveTabSessionId,
 } from './shellSelectors';
 export { registerTreeDockSync } from './treeDockSync';
-
-function workspaceKeyNow(): string {
-  return currentWorkspaceFolderKey(getActiveProjectId());
-}
-
-function sessionFromStore(sessionId: string) {
-  const state = useSessionStore.getState();
-  return (
-    state.sessionsById?.[sessionId] ??
-    state.sessions?.find((s) => s.id === sessionId)
-  );
-}
-
-function resolveSessionTabTitle(sessionId: string, title?: string): string {
-  return resolveChromeSessionTitle(sessionFromStore(sessionId), title);
-}
-
-function rememberChatLeaf(
-  set: (partial: { lastChatLeafId: string | null }) => void,
-  leafId: string
-): void {
-  set({ lastChatLeafId: leafId });
-}
-
-function syncSessionFromActiveLeaf(lastChatLeafId: string | null): void {
-  const tab = pictureFromActiveLeaf(lastChatLeafId);
-  const session = useSessionStore.getState();
-  if (!tab) {
-    const leaf = resolveActiveChatLeaf(lastChatLeafId);
-    const draftId = mintDraftSessionId(leaf.id);
-    if (session.activeSessionId !== draftId) {
-      session.enterDraftMode(workspaceKeyNow() || GENERAL_FOLDER, {
-        draftSessionId: draftId,
-      });
-    }
-    return;
-  }
-  if (isPendingDraft(tab.sessionId)) {
-    session.enterDraftMode(tab.workspaceKey, {
-      draftSessionId: tab.sessionId,
-    });
-    return;
-  }
-  if (session.activeSessionId !== tab.sessionId) {
-    session.setActiveSessionId(tab.sessionId);
-  }
-}
-
-function killPty(sessionId: string): void {
-  if (!sessionId || isPendingDraft(sessionId)) return;
-  void import('../../api/ptyRegistry')
-    .then((m) => m.killPtyForSessionBackground(sessionId))
-    .catch(() => {
-      /* ignore */
-    });
-}
 
 export const useWorkspaceShellStore = create<WorkspaceShellStore>(
   (set, get) => ({
@@ -134,23 +81,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>(
     setShellReady: (ready) => set({ shellReady: ready }),
 
     syncOpenTabTitles: (overrides) => {
-      const root = useLayoutTreeStore.getState().tree.root;
-      for (const tab of scanRealSessionTabs(root)) {
-        if (overrides && overrides[tab.sessionId] === undefined) continue;
-        const resolved = resolveSessionTabTitle(
-          tab.sessionId,
-          overrides?.[tab.sessionId]
-        );
-        if (resolved === tab.title) continue;
-        if (
-          isDefaultSessionTitle(resolved) &&
-          tab.title.trim() &&
-          !isDefaultSessionTitle(tab.title)
-        ) {
-          continue;
-        }
-        treeUpdateTabTitle(tab.sessionId, resolved);
-      }
+      syncOpenTabTitlesHelper(overrides);
     },
 
     openOrFocusSession: (sessionId, opts) => {
@@ -176,13 +107,36 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>(
         }
       }
 
+      // Branch A: Existing tab in any leaf -> focus/activate without duplicating (Δ = 0)
       const existingLoc = treeFindTabBySessionId(sid);
-      const existingLeafId = existingLoc?.leafId ?? null;
-      if (
-        existingLoc &&
-        existingLeafId &&
-        (!opts?.activeLeafId || opts.activeLeafId === existingLeafId)
-      ) {
+      if (existingLoc) {
+        const existingLeafId = existingLoc.leafId;
+        if (
+          opts?.activeLeafId &&
+          opts.activeLeafId !== existingLeafId &&
+          opts.insertIdx !== undefined
+        ) {
+          treeMoveTab(
+            existingLeafId,
+            existingLoc.tab.tabId,
+            opts.activeLeafId,
+            opts.insertIdx
+          );
+          treeActivateTab(opts.activeLeafId, existingLoc.tab.tabId);
+          rememberChatLeaf(set, opts.activeLeafId);
+          useSessionStore.getState().setActiveSessionId(sid);
+          useLayoutStore.getState().setChatMainSurface('chat');
+          syncSessionFromActiveLeaf(opts.activeLeafId);
+          return;
+        }
+        if (opts?.insertIdx !== undefined) {
+          treeMoveTab(
+            existingLeafId,
+            existingLoc.tab.tabId,
+            existingLeafId,
+            opts.insertIdx
+          );
+        }
         treeActivateTab(existingLeafId, existingLoc.tab.tabId);
         rememberChatLeaf(set, existingLeafId);
         useSessionStore.getState().setActiveSessionId(sid);
@@ -191,15 +145,45 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>(
         return;
       }
 
+      const rootNode = useLayoutTreeStore.getState().tree.root;
       const targetLeaf = opts?.activeLeafId
-        ? { id: opts.activeLeafId }
+        ? (ownedChatLeaves(rootNode).find((l) => l.id === opts.activeLeafId) ??
+          resolveActiveChatLeaf(get().lastChatLeafId))
         : resolveActiveChatLeaf(get().lastChatLeafId);
 
-      const result = treeOpenSession(sid, {
+      // Branch B: Target leaf in draft mode (activeTabId === '') -> smoothly materialize draft slot (Δ = +1)
+      if (targetLeaf.activeTabId === '') {
+        const result = treeMaterializeDraftSession(targetLeaf.id, sid, {
+          title,
+          workspaceKey,
+        });
+        rememberChatLeaf(set, result.leafId);
+        useSessionStore.getState().setActiveSessionId(sid);
+        useLayoutStore.getState().setChatMainSurface('chat');
+        syncSessionFromActiveLeaf(result.leafId);
+        return;
+      }
+
+      // Branch C: Explicit drag drop to tabstrip (insertIdx !== undefined) -> insert new tab (Δ = +1)
+      if (opts?.insertIdx !== undefined) {
+        const result = treeOpenSession(sid, {
+          title,
+          workspaceKey,
+          activeLeafId: targetLeaf.id,
+          insertIdx: opts.insertIdx,
+        });
+        rememberChatLeaf(set, result.leafId);
+        useSessionStore.getState().setActiveSessionId(sid);
+        useLayoutStore.getState().setChatMainSurface('chat');
+        syncSessionFromActiveLeaf(result.leafId);
+        return;
+      }
+
+      // Branch D: Default sidebar click -> in-place reuse in active tab (Δ = 0)
+      cleanupActiveTerminalBeforeReplace(targetLeaf.id);
+      const result = treeReplaceActiveSessionInLeaf(targetLeaf.id, sid, {
         title,
         workspaceKey,
-        activeLeafId: targetLeaf.id,
-        insertIdx: opts?.insertIdx,
       });
       rememberChatLeaf(set, result.leafId);
       useSessionStore.getState().setActiveSessionId(sid);
@@ -263,11 +247,20 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>(
     },
 
     closeTab: (leafId, tabId) => {
+      const rootNode = useLayoutTreeStore.getState().tree.root;
+      const rawLoc = findRawTabForClose(rootNode, tabId);
       const loc = treeFindTabByTabId(tabId);
-      if (loc) {
-        if (loc.leafId !== leafId) return;
-        const closing = loc.tab;
-        if (!isPendingDraft(closing.sessionId)) {
+      const actualLeafId = rawLoc?.leafId || loc?.leafId;
+      if (loc || rawLoc) {
+        if (actualLeafId !== leafId) return;
+        const closing: TabWithTerminalInfo = rawLoc?.tab || {
+          tabId: loc?.tab.tabId ?? '',
+          sessionId: loc?.tab.sessionId,
+        };
+        if (closing.kind === 'terminal' || closing.terminalKey) {
+          killTerminalPty(closing.terminalKey || closing.sessionId);
+        }
+        if (closing.sessionId && !isPendingDraft(closing.sessionId)) {
           killPty(closing.sessionId);
           recordClosedSessionTab(closing.sessionId);
         }
@@ -304,53 +297,19 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>(
       treeUpdateTabDock(tabId, patch);
     },
 
+    updateTabDock: (
+      tabId,
+      patch: Partial<RightToolDockState> | RightToolDockState
+    ) => {
+      treeUpdateTabDock(tabId, patch);
+    },
+
     openNewDraftTab: (opts) => {
-      const args =
-        typeof opts === 'string' ? { workspaceKey: opts } : (opts ?? {});
-      const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
-      const listed = listChatLeaves(useLayoutTreeStore.getState().tree.root);
-      const leaf =
-        (args.leafId &&
-          (chats.find((l) => l.id === args.leafId) ||
-            listed.find((l) => l.id === args.leafId))) ||
-        resolveActiveChatLeaf(get().lastChatLeafId);
-
-      const rawKey = args.workspaceKey?.trim();
-      const workspaceKey = rawKey
-        ? canonicalSessionFolder(rawKey)
-        : resolveMostActiveProjectFolder();
-
-      treeAddTab(leaf.id, { workspaceKey });
-      rememberChatLeaf(set, leaf.id);
-      useLayoutStore.getState().setChatMainSurface('chat');
-      const draftId = mintDraftSessionId(leaf.id);
-      useSessionStore.getState().enterDraftMode(workspaceKey, {
-        draftSessionId: draftId,
-      });
-      draftFolderRegistry.set(draftId, workspaceKey);
-      try {
-        activateWorkspaceForSessionFolder(workspaceKey);
-      } catch {
-        /* ignore */
-      }
+      openNewDraftTabHelper(opts, get().lastChatLeafId, set);
     },
 
     resetToCleanDraft: (workspaceKey) => {
-      const key =
-        canonicalSessionFolder(workspaceKey) ||
-        workspaceKeyNow() ||
-        GENERAL_FOLDER;
-      void import('../../api/ptyRegistry')
-        .then((m) => m.killAllPtys())
-        .catch(() => {
-          /* ignore */
-        });
-      treeResetToSingleDraftLeaf(key);
-      const leaf = ownedChatLeaves(useLayoutTreeStore.getState().tree.root)[0];
-      set({ lastChatLeafId: leaf?.id ?? null });
-      useSessionStore.getState().enterDraftMode(key, {
-        draftSessionId: leaf ? mintDraftSessionId(leaf.id) : undefined,
-      });
+      resetToCleanDraftHelper(workspaceKey, set);
     },
 
     focusLeaf: (leafId) => {
@@ -391,6 +350,12 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>(
       syncSessionFromActiveLeaf(get().lastChatLeafId);
       return removed;
     },
+
+    addTerminalTab: (leafId, opts) =>
+      addTerminalTabToShell(leafId, opts, get().lastChatLeafId, set),
+
+    addBrowserTab: (leafId, opts) =>
+      addBrowserTabToShell(leafId, opts, get().lastChatLeafId, set),
   })
 );
 

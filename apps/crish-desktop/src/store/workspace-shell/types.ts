@@ -74,6 +74,11 @@ export interface WorkspaceShellActions {
     tabId: string,
     patch: Partial<RightToolDockState> | RightToolDockState
   ) => void;
+  /** 别名：兼容等同于 updateRightDock */
+  updateTabDock: (
+    tabId: string,
+    patch: Partial<RightToolDockState> | RightToolDockState
+  ) => void;
   openNewDraftTab: (
     opts?: { leafId?: string; workspaceKey?: string } | string
   ) => void;
@@ -88,6 +93,30 @@ export interface WorkspaceShellActions {
     title?: string
   ) => void;
   deleteSessionAndCloseTab: (sessionId: string) => boolean;
+  addTerminalTab: (
+    leafId?: string,
+    opts?: {
+      tabId?: string;
+      title?: string;
+      workspaceKey?: string;
+      terminalKey?: string;
+      cwd?: string;
+      dock?: Partial<RightToolDockState>;
+      insertIdx?: number;
+    }
+  ) => import('../layout-tree/sessionTabModel').TerminalTab;
+  addBrowserTab: (
+    leafId?: string,
+    opts?: {
+      tabId?: string;
+      title?: string;
+      workspaceKey?: string;
+      url?: string;
+      favicon?: string;
+      dock?: Partial<RightToolDockState>;
+      insertIdx?: number;
+    }
+  ) => import('../layout-tree/sessionTabModel').BrowserTab;
 }
 
 export type WorkspaceShellStore = WorkspaceShellState & WorkspaceShellActions;

@@ -31,7 +31,11 @@ export const builtinViewFactories: ViewFactoryMap = {
     lazy(() =>
       import('./components/workspace/TerminalCard').then((m) => ({
         default: (ctx: ViewRenderContext) => (
-          <m.TerminalCard sessionId={ctx.sessionId} panelId={ctx.panelId} />
+          <m.TerminalCard
+            sessionId={ctx.sessionId}
+            panelId={ctx.panelId}
+            initialCwd={(ctx.params?.cwd as string) || undefined}
+          />
         ),
       }))
     ),

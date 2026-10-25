@@ -17,10 +17,20 @@ import {
   isLeaf,
   clampSplitRatio,
 } from './types';
-import type { SessionTab } from './sessionTabModel';
+import type {
+  SessionTab,
+  TerminalTab,
+  BrowserTab,
+  RightToolDockState,
+} from './sessionTabModel';
 import {
   createSessionTab,
+  createTerminalTab,
+  createBrowserTab,
   createDefaultDock,
+  isChatTab,
+  isTerminalTab,
+  isBrowserTab,
   isRealSessionId,
   sessionIdTaken,
 } from './sessionTabModel';
@@ -80,7 +90,9 @@ export function mergeBranch(
 // ── 会话 tab 命令 ────────────────────────────────────────────────────
 
 /**
- * 把已有 SessionTab 推进目标叶（openSession 用）。I1：重复真实 sessionId 入口拒绝。
+ * 把已有 SessionTab 推进目标叶（openSession 用）。
+ * 非 chat 标签（TerminalTab / BrowserTab）无须 sessionId 即可插入。
+ * ChatTab 则要求真实 sessionId 且防重复。
  */
 export function insertTab(
   tree: LayoutTree,
@@ -91,9 +103,11 @@ export function insertTab(
   const leaf = requireChatLeaf(tree.root, leafId);
   if (!leaf) return tree;
   if (!tab || !tab.tabId) return tree;
-  if (!isRealSessionId(tab.sessionId)) return tree;
+  if (isChatTab(tab)) {
+    if (!isRealSessionId(tab.sessionId)) return tree;
+    if (sessionIdTaken(tree.root, tab.sessionId)) return tree;
+  }
   if (leaf.tabs.some((t) => t.tabId === tab.tabId)) return tree;
-  if (sessionIdTaken(tree.root, tab.sessionId)) return tree;
 
   const tabs = [...leaf.tabs];
   const idx = insertIdx;
@@ -116,13 +130,15 @@ export function insertTab(
 }
 
 /**
- * 进入本叶未提交的新对话界面：不创建标签，条带已有真会话保留且无选中。
+ * 进入本叶未提交的新对话界面：不创建标签，条带已有真会话及非 chat 标签保留且无选中。
  * 传入真 sessionId 时才插入标签（openSession / 发送成功物化）。
  */
 export function enterComposer(tree: LayoutTree, leafId: string): LayoutTree {
   const leaf = requireChatLeaf(tree.root, leafId);
   if (!leaf) return tree;
-  const tabs = leaf.tabs.filter((t) => isRealSessionId(t.sessionId));
+  const tabs = leaf.tabs.filter((t) =>
+    isChatTab(t) ? isRealSessionId(t.sessionId) : true
+  );
   if (leaf.activeTabId === '' && tabs.length === leaf.tabs.length) {
     return tree;
   }
@@ -130,7 +146,7 @@ export function enterComposer(tree: LayoutTree, leafId: string): LayoutTree {
   return { ...tree, root: replaceNode(tree.root, leafId, updated) };
 }
 
-/** 加号 / 新对话：进入新对话界面。带真 sessionId 的对象则插入标签。 */
+/** 加号 / 新对话：进入新对话界面。带真 sessionId 或终端/浏览器的对象则插入标签。 */
 export function addTab(
   tree: LayoutTree,
   leafId: string,
@@ -141,10 +157,30 @@ export function addTab(
         sessionId?: string;
         title?: string;
         workspaceKey?: string;
-        dock?: Partial<import('./sessionTabModel').RightToolDockState>;
+        dock?: Partial<RightToolDockState>;
+        kind?: import('./sessionTabModel').TabKind;
+        terminalKey?: string;
+        cwd?: string;
+        url?: string;
+        favicon?: string;
       }
+    | import('./sessionTabModel').UnifiedTab
 ): LayoutTree {
   if (tabOrWorkspaceKey && typeof tabOrWorkspaceKey === 'object') {
+    if ('kind' in tabOrWorkspaceKey) {
+      if (tabOrWorkspaceKey.kind === 'terminal') {
+        const terminalTab = isTerminalTab(tabOrWorkspaceKey)
+          ? tabOrWorkspaceKey
+          : createTerminalTab(tabOrWorkspaceKey);
+        return insertTab(tree, leafId, terminalTab);
+      }
+      if (tabOrWorkspaceKey.kind === 'browser') {
+        const browserTab = isBrowserTab(tabOrWorkspaceKey)
+          ? tabOrWorkspaceKey
+          : createBrowserTab(tabOrWorkspaceKey);
+        return insertTab(tree, leafId, browserTab);
+      }
+    }
     const sid =
       typeof tabOrWorkspaceKey.sessionId === 'string'
         ? tabOrWorkspaceKey.sessionId.trim()
@@ -164,6 +200,48 @@ export function addTab(
     }
   }
   return enterComposer(tree, leafId);
+}
+
+/**
+ * 插入终端标签到目标叶。
+ */
+export function insertTerminalTab(
+  tree: LayoutTree,
+  leafId: string,
+  opts?: {
+    tabId?: string;
+    title?: string;
+    workspaceKey?: string;
+    terminalKey?: string;
+    cwd?: string;
+    dock?: Partial<RightToolDockState>;
+    insertIdx?: number;
+  }
+): { tree: LayoutTree; tab: TerminalTab } {
+  const tab = createTerminalTab(opts);
+  const nextTree = insertTab(tree, leafId, tab, opts?.insertIdx);
+  return { tree: nextTree, tab };
+}
+
+/**
+ * 插入浏览器标签到目标叶。
+ */
+export function insertBrowserTab(
+  tree: LayoutTree,
+  leafId: string,
+  opts?: {
+    tabId?: string;
+    title?: string;
+    workspaceKey?: string;
+    url?: string;
+    favicon?: string;
+    dock?: Partial<RightToolDockState>;
+    insertIdx?: number;
+  }
+): { tree: LayoutTree; tab: BrowserTab } {
+  const tab = createBrowserTab(opts);
+  const nextTree = insertTab(tree, leafId, tab, opts?.insertIdx);
+  return { tree: nextTree, tab };
 }
 
 export type SplitRegion = 'left' | 'right' | 'top' | 'bottom' | 'center';

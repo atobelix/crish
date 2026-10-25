@@ -18,6 +18,7 @@ import {
   createDefaultDock,
   isDraftSessionId,
   isRealSessionId,
+  isChatTab,
   mintDraftSessionId,
   normalizeSessionTab,
   PENDING_DRAFT_SESSION_ID,
@@ -74,13 +75,16 @@ function classifyLeaf(n: Record<string, unknown>): LeafKind {
   }
   const first = tabs[0];
   if (typeof first === 'string') return 'v2';
-  if (
-    first &&
-    typeof first === 'object' &&
-    typeof (first as { tabId?: unknown }).tabId === 'string' &&
-    typeof (first as { sessionId?: unknown }).sessionId === 'string'
-  ) {
-    return 'v3';
+  if (first && typeof first === 'object') {
+    const f = first as Record<string, unknown>;
+    const hasKind =
+      f.kind === 'terminal' || f.kind === 'browser' || f.kind === 'chat';
+    if (
+      typeof f.tabId === 'string' &&
+      (typeof f.sessionId === 'string' || hasKind)
+    ) {
+      return 'v3';
+    }
   }
   return 'unknown';
 }
@@ -222,10 +226,10 @@ function ingestNode(raw: unknown, kind: LeafKind): WorkNode {
     leaf.tabs = (n.tabs as unknown[])
       .map((t) => {
         if (!t || typeof t !== 'object') return null;
-        const o = t as Partial<SessionTab>;
-        if (typeof o.tabId !== 'string' || typeof o.sessionId !== 'string') {
-          return null;
-        }
+        const o = t as Record<string, unknown>;
+        if (typeof o.tabId !== 'string') return null;
+        const isNonChat = o.kind === 'terminal' || o.kind === 'browser';
+        if (!isNonChat && typeof o.sessionId !== 'string') return null;
         return normalizeSessionTab(o);
       })
       .filter((t): t is SessionTab => t !== null);
@@ -254,7 +258,9 @@ function makeTabFromSources(
 }
 
 function finalizeLeaf(leaf: WorkLeaf): LayoutLeaf {
-  const tabs = leaf.tabs.filter((t) => isRealSessionId(t.sessionId));
+  const tabs = leaf.tabs.filter((t) =>
+    isChatTab(t) ? isRealSessionId(t.sessionId) : true
+  );
   const activeTabId = tabs.some((t) => t.tabId === leaf.activeTabId)
     ? leaf.activeTabId
     : (tabs[0]?.tabId ?? '');
@@ -383,13 +389,7 @@ function sameShape(a: LayoutTree, b: LayoutTree): boolean {
         id: n.id,
         panelId: n.panelId,
         activeTabId: n.activeTabId,
-        tabs: n.tabs.map((t) => ({
-          tabId: t.tabId,
-          sessionId: t.sessionId,
-          title: t.title,
-          workspaceKey: t.workspaceKey,
-          dock: t.dock,
-        })),
+        tabs: n.tabs.map((t) => ({ ...t })),
       };
     }
     if (!isBranch(n)) return null;
@@ -442,9 +442,9 @@ export function migrateToLeafOwnedTabs(
     } else {
       for (const leaf of chatLeaves()) {
         for (const tab of leaf.tabs) {
-          if (tab.sessionId === PENDING_DRAFT_SESSION_ID) {
+          if (!isChatTab(tab)) continue;
+          if (tab.sessionId === PENDING_DRAFT_SESSION_ID)
             tab.sessionId = mintDraftSessionId(tab.tabId);
-          }
           if (isRealSessionId(tab.sessionId)) placed.add(tab.sessionId);
         }
       }
@@ -481,7 +481,7 @@ export function migrateToLeafOwnedTabs(
     for (const leaf of chatLeaves()) {
       const unitDock = inferDockFromUnit(work, leaf.id);
       for (const tab of leaf.tabs) {
-        if (!isRealSessionId(tab.sessionId)) continue;
+        if (!isChatTab(tab) || !isRealSessionId(tab.sessionId)) continue;
         const fromOpen = input.openTabs?.find(
           (t) => (t.sessionId || '').trim() === tab.sessionId
         );
@@ -500,15 +500,17 @@ export function migrateToLeafOwnedTabs(
 
     if (chatLeaves().length === 0) return fail();
 
-    // S5：真实 sessionId 去重（保留先序第一次）；草稿 tab 丢弃
+    // S5：真实 sessionId 去重（保留先序第一次）；草稿 tab 丢弃；非 chat 标签保留
     const seenReal = new Set<string>();
     for (const leaf of chatLeaves()) {
-      leaf.tabs = leaf.tabs.filter(
-        (tab) =>
+      leaf.tabs = leaf.tabs.filter((tab) => {
+        if (!isChatTab(tab)) return true;
+        return (
           isRealSessionId(tab.sessionId) &&
           !seenReal.has(tab.sessionId) &&
           seenReal.add(tab.sessionId)
-      );
+        );
+      });
     }
 
     const pruned = pruneEmptyChatLeaves(work);
@@ -519,7 +521,7 @@ export function migrateToLeafOwnedTabs(
     // S7：activeTabId 校正；panelId 强制 chat
     for (const leaf of chatLeaves()) {
       const prefer = leaf.legacySid
-        ? leaf.tabs.find((t) => t.sessionId === leaf.legacySid)
+        ? leaf.tabs.find((t) => isChatTab(t) && t.sessionId === leaf.legacySid)
         : undefined;
       if (prefer) {
         leaf.activeTabId = prefer.tabId;

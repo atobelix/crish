@@ -23,6 +23,7 @@ import {
 import { getSessionById } from '../../store/sessionStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { setStreamText } from '../../store/streamingStore';
+import { useSessionExecutionTrackerStore } from '../../store/sessionExecutionTrackerStore';
 import { clearRuntimeStatus } from '../../store/sessionRuntimeStatusStore';
 import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import { streamBatchKey } from '../../api/streamTextBatcher';
@@ -50,6 +51,8 @@ import {
   executeStreamCompletion,
 } from './streamExecutionHelper';
 
+const tracker = () => useSessionExecutionTrackerStore.getState();
+
 export function useRunStreamingAssistant(
   options: UseChatStreamOptions,
   refs: StreamBatcherRefs,
@@ -68,9 +71,8 @@ export function useRunStreamingAssistant(
     flushStreamBatchers,
   } = refs;
 
-  const { maybeContinueGoalMode, drainQueuedAfterComplete } = useGoalMode(
-    streamManagerRef
-  );
+  const { maybeContinueGoalMode, drainQueuedAfterComplete } =
+    useGoalMode(streamManagerRef);
 
   const runStreamingAssistant: StreamRunStarter = useCallback(
     (input, userMsgId, sessionIdOverride, streamOptions) => {
@@ -112,6 +114,7 @@ export function useRunStreamingAssistant(
       });
 
       markStreamingActive(true);
+      tracker().startRun(sid, null, 'thinking');
       store.addMessage(wsId, sid, {
         id: assistantMsgId,
         sender: 'assistant',
@@ -130,6 +133,7 @@ export function useRunStreamingAssistant(
       const finishComplete = () => {
         if (completed) return;
         completed = true;
+        tracker().completeRun(sid);
         executeStreamCompletion({
           sid,
           userMsgId,
@@ -201,6 +205,7 @@ export function useRunStreamingAssistant(
           onRunMeta: ({ runId }) => {
             if (!assertLive()) return;
             localRunId = runId;
+            tracker().updateRunId(sid, runId);
             const entry = streamManagerRef.current?.get(sid);
             if (entry && entry.assistantMsgId === assistantMsgId)
               entry.runId = runId;
@@ -214,6 +219,7 @@ export function useRunStreamingAssistant(
             if (!assertLive()) return;
             // S4.3：首帧思考清理运行时状态（消除幽灵重试瞬态行）
             clearRuntimeStatus(sid);
+            tracker().updateStage(sid, 'thinking');
             thinkingBatcherRef.current?.push(
               streamBatchKey(sid, assistantMsgId),
               thought
@@ -223,6 +229,7 @@ export function useRunStreamingAssistant(
             if (!assertLive()) return;
             // S4.3：首帧工具调用清理运行时状态（消除幽灵重试瞬态行）
             clearRuntimeStatus(sid);
+            tracker().updateStage(sid, 'executing_tool', name);
             upsertToolCall(toolId, name, args, explanation, 'running');
           },
           onToolPendingApproval: (
@@ -233,6 +240,7 @@ export function useRunStreamingAssistant(
             approvalMeta
           ) => {
             if (!assertLive()) return;
+            tracker().markApprovalPending(sid, toolId, name);
             upsertToolCall(
               toolId,
               name,
@@ -244,6 +252,7 @@ export function useRunStreamingAssistant(
           },
           onApprovalResolved: (toolId, decision) => {
             if (!assertLive()) return;
+            tracker().resolveApproval(sid);
             handleApprovalResolved({
               toolId,
               decision,
@@ -305,6 +314,7 @@ export function useRunStreamingAssistant(
               snapshotStreamThinkingToSession(sid, assistantMsgId);
               // 单轨收敛 §2.0：新 Token 到达 = 重试成功信号，瞬态重试行立即消失（不留痕）
               clearRuntimeStatus(sid);
+              tracker().updateStage(sid, 'streaming_text');
             }
             gotRealText = true;
             streamedFullText += chunk;
@@ -325,6 +335,7 @@ export function useRunStreamingAssistant(
           onRunError: (message, kind, detail) => {
             if (!assertLive()) return;
             state.runEndedWithError = true;
+            tracker().failRun(sid, message);
             const res = handleRunError({
               wsId,
               sid,

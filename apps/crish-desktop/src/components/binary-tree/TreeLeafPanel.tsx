@@ -5,6 +5,7 @@ import { Button } from '../ui';
  *
  * 架构契约：
  * - 纯几何叶子空间容器，100% 剥离 switch(panelId) 静态硬编码；
+ * - 依据 Rule G-08 规约，通过 tabViewAdapter 动态映射 UnifiedTab 视图；
  * - chat 叶：PaneHeader + 叶内抽屉头 LeafToolTabStrip；
  * - 仍禁止复活 ChatHeader / UnitSessionTabStrip / GlobalSessionTabBar。
  * 未提交的新对话不占标签；画面会话 = 本叶选中 tab，否则为本叶草稿哨兵。
@@ -20,7 +21,6 @@ import React, {
   useState,
   useSyncExternalStore,
 } from 'react';
-import type { LayoutLeaf } from '../../store/types';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { UnitChromeActions } from '../chat-card/UnitChromeActions';
 import { LeafToolTabStrip } from './LeafToolTabStrip';
@@ -31,14 +31,14 @@ import styles from './BinaryTreeWorkspace.module.css';
 import {
   openToolInLeaf,
   updateLeafDock,
-  selectTabModeEnabled,
   useLayoutStore,
   useSessionStore,
+  useLayoutTreeStore,
   getCompositionRoot,
   isPendingDraft,
 } from '../../store/storeAccess';
-import { useLayoutTreeStore } from '../../store/storeAccess';
 import { LeafScopeProvider } from '../../contexts/LeafScopeContext';
+import { resolveTabView } from './tabViewAdapter';
 import {
   COLLAPSED_DOCK,
   leafPropsEqual,
@@ -47,6 +47,10 @@ import {
   readLeafTabs,
   rectPropsEqual,
   resolveLeafSessionId,
+  sessionShell,
+  killDockTerminalPty,
+  computeNextDockAfterClose,
+  type TreeLeafPanelProps,
 } from './treeLeafPanelModel';
 import {
   viewRegistry,
@@ -54,41 +58,57 @@ import {
   type ViewRenderContext,
 } from '../../services/view-registry';
 
-interface TreeLeafPanelProps {
-  leaf: LayoutLeaf;
-  /** leaf 的渲染 rect（百分比，0-1） */
-  rect: { x: number; y: number; width: number; height: number };
-  /** 是否为激活 leaf */
-  isActive: boolean;
-  /** 是否为拖拽源（旧拖拽兼容，缺省 false） */
-  isDragSource?: boolean;
-  /** 当前是否多 chat 分屏（>1 chat leaf）；条带不再依赖此旗标 */
-  isMultiChat?: boolean;
-}
+const isCloseTarget = (e?: React.SyntheticEvent) =>
+  Boolean(
+    e?.target &&
+    'closest' in (e.target as HTMLElement) &&
+    (e.target as HTMLElement).closest(
+      '[data-tab-close], [data-pane-close], [data-prevent-leaf-activate="true"], button[aria-label*="关闭"], button[title*="关闭"]'
+    )
+  );
 
-type SessionShellCommands = {
-  activateTab: (leafId: string, tabId: string) => void;
+const dockPaneFlexStyle: React.CSSProperties = {
+  flex: '1 1 auto',
+  width: '100%',
+  height: '100%',
+  minHeight: 0,
+  minWidth: 0,
+  flexDirection: 'column',
 };
-
-function sessionShell(): SessionShellCommands {
-  return getCompositionRoot().shell as unknown as SessionShellCommands;
-}
 
 export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
   ({ leaf, rect, isActive, isDragSource }) => {
     const leafElRef = useRef<HTMLDivElement>(null);
     const leafBodyRef = useRef<HTMLDivElement>(null);
-    const _tabModeEnabled = useLayoutStore(selectTabModeEnabled);
     const chatMainSurface = useLayoutStore((s) => s.chatMainSurface) ?? 'chat';
     const isChatSurface = chatMainSurface === 'chat';
 
     const globalActiveSessionId = useSessionStore((s) => s.activeSessionId);
-    const effectiveSessionId = resolveLeafSessionId(leaf, {
+    const rawActiveTab = readActiveTab(leaf);
+    const isLeafDraft =
+      !rawActiveTab ||
+      ((!rawActiveTab.kind || rawActiveTab.kind === 'chat') &&
+        isPendingDraft(rawActiveTab.sessionId));
+    const activeTab =
+      isLeafDraft && !rawActiveTab?.sessionId ? undefined : rawActiveTab;
+
+    const tabResolution = useMemo(
+      () => resolveTabView(activeTab),
+      [
+        activeTab?.tabId,
+        activeTab?.kind,
+        activeTab?.sessionId,
+        activeTab?.terminalKey,
+        activeTab?.cwd,
+        activeTab?.url,
+      ]
+    );
+
+    const fallbackSessionId = resolveLeafSessionId(leaf, {
       isFocused: isActive,
       globalActiveSessionId,
     });
-    const isLeafDraft = isPendingDraft(effectiveSessionId);
-    const activeTab = readActiveTab(leaf, isLeafDraft);
+    const effectiveSessionId = tabResolution.sessionId ?? fallbackSessionId;
     const sessionForPanel = effectiveSessionId;
     const dock = activeTab?.dock ?? leaf.dock ?? COLLAPSED_DOCK;
     const dockOpen =
@@ -108,19 +128,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
 
     const handleCaptureActivate = useCallback(
       (e: React.SyntheticEvent) => {
-        if (e && e.target && 'closest' in (e.target as HTMLElement)) {
-          const target = e.target as HTMLElement;
-          if (
-            target.closest(
-              '[data-tab-close], [data-pane-close], [data-prevent-leaf-activate="true"], button[aria-label*="关闭"], button[title*="关闭"]'
-            )
-          ) {
-            return;
-          }
-        }
-        if (chatMainSurface !== 'chat') {
-          return;
-        }
+        if (isCloseTarget(e) || chatMainSurface !== 'chat') return;
 
         // 幂等短路守卫（Guard-2）：若当前叶子已是全局激活叶且 activeSessionId 已对齐，立即 return
         const currentActiveLeafId = useLayoutTreeStore.getState().activeLeafId;
@@ -162,19 +170,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
 
     const handleActivate = useCallback(
       (e?: React.PointerEvent) => {
-        if (e && e.target && 'closest' in (e.target as HTMLElement)) {
-          const target = e.target as HTMLElement;
-          if (
-            target.closest(
-              '[data-tab-close], [data-pane-close], [data-prevent-leaf-activate="true"], button[aria-label*="关闭"], button[title*="关闭"]'
-            )
-          ) {
-            return;
-          }
-        }
-        if (chatMainSurface !== 'chat') {
-          return;
-        }
+        if (isCloseTarget(e) || chatMainSurface !== 'chat') return;
         const tabId = readActiveTabId(leaf);
         if (tabId) {
           sessionShell().activateTab(leaf.id, tabId);
@@ -193,8 +189,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
      */
     useLayoutEffect(() => {
       const el = leafElRef.current;
-      if (!el) return;
-      if (document.body.classList.contains('tree-resizing')) return;
+      if (!el || document.body.classList.contains('tree-resizing')) return;
       el.style.top = `${rect.y * 100}%`;
       el.style.left = `${rect.x * 100}%`;
       el.style.width = `${rect.width * 100}%`;
@@ -233,37 +228,13 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
 
     const handleCloseToolTab = useCallback(
       (panelId: string) => {
-        // 用户铁律：只要终端标签页关闭了，该终端关联的底层 PTY 进程肯定就没了；切 Tab / 折坞则保活
-        if (panelId === 'terminal' || panelId.startsWith('terminal:')) {
-          void import('../../api/ptyRegistry').then((m) => {
-            // 精准推导（audit-repair-202609 T3）：TerminalCard 的 registry key
-            // 恒为 `<sid>`（主格）/ `<sid>:split-2`（主格分屏副格）；
-            // terminal:N 主格 key 为 `<sid>:terminal:N`（分屏副格再加 :split-2）。
-            // sessionForPanel 在派生处保证非空，不存在无前缀 key。
-            const sKey = sessionForPanel;
-            const panelKey =
-              panelId === 'terminal' ? sKey : `${sKey}:${panelId}`;
-            void m.killPtyForSession(panelKey);
-            void m.killPtyForSession(`${panelKey}:split-2`);
-          });
-        }
-        const nextIds = dock.openPanelIds.filter((id) => id !== panelId);
-        if (nextIds.length === 0) {
-          updateLeafDock(leaf.id, {
-            collapsed: true,
-            openPanelIds: [],
-            activePanelId: null,
-          });
-          return;
-        }
-        const nextActive =
-          dock.activePanelId === panelId
-            ? (nextIds[nextIds.length - 1] ?? null)
-            : dock.activePanelId;
-        updateLeafDock(leaf.id, {
-          openPanelIds: nextIds,
-          activePanelId: nextActive,
-        });
+        killDockTerminalPty(panelId, sessionForPanel);
+        const next = computeNextDockAfterClose(
+          dock.openPanelIds,
+          dock.activePanelId,
+          panelId
+        );
+        updateLeafDock(leaf.id, next);
       },
       [dock.activePanelId, dock.openPanelIds, leaf.id, sessionForPanel]
     );
@@ -294,20 +265,34 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
     );
     void registryVersion;
 
-    const chatResolved = viewRegistry.resolveView('chat');
+    const mainViewId = tabResolution.viewId;
+    const mainResolved = viewRegistry.resolveView(mainViewId);
     const toolPanelId = dock.activePanelId || 'overview';
     const toolResolved = viewRegistry.resolveView(toolPanelId);
 
-    const chatCtx: ViewRenderContext = useMemo(
+    const mainParams = useMemo(() => {
+      if (!mainResolved.params && !tabResolution.params) return undefined;
+      return { ...mainResolved.params, ...tabResolution.params };
+    }, [mainResolved.params, tabResolution.params]);
+
+    const mainCtx: ViewRenderContext = useMemo(
       () => ({
-        panelId: 'chat',
+        panelId: mainViewId,
         leafId: leaf.id,
-        sessionId: sessionForPanel ?? undefined,
+        sessionId: tabResolution.sessionId ?? sessionForPanel ?? undefined,
         isActive,
         openView: handleOpenTool,
-        params: chatResolved.params,
+        params: mainParams,
       }),
-      [leaf.id, sessionForPanel, isActive, handleOpenTool, chatResolved.params]
+      [
+        mainViewId,
+        leaf.id,
+        tabResolution.sessionId,
+        sessionForPanel,
+        isActive,
+        handleOpenTool,
+        mainParams,
+      ]
     );
 
     const toolCtx: ViewRenderContext = useMemo(
@@ -380,7 +365,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
         onFocusCapture={handleCaptureActivate}
         onPointerDown={handleActivate}
         role="region"
-        aria-label={`${viewRegistry.getTitle('chat', chatCtx)} 面板`}
+        aria-label={`${viewRegistry.getTitle(mainViewId, mainCtx)} 面板`}
       >
         <LeafScopeProvider
           leafId={leaf.id}
@@ -401,32 +386,37 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
             data-dock-open={dockOpen ? 'true' : 'false'}
           >
             <div className={styles.leafChatColumn}>
-              {isChatSurface && !isLeafDraft && !isMaximized && (
-                <UnitChromeActions
-                  activeSessionId={sessionForPanel}
-                  dockOpen={dockOpen}
-                  dockPanelId={dock.activePanelId}
-                  onOpenPreview={() => handleOpenTool('preview')}
-                  onOpenFiles={() => handleOpenTool('files')}
-                />
-              )}
-              <AppErrorBoundary compact title="面板 [chat] 渲染异常">
+              {isChatSurface &&
+                !isLeafDraft &&
+                !isMaximized &&
+                mainViewId === 'chat' && (
+                  <UnitChromeActions
+                    activeSessionId={sessionForPanel}
+                    dockOpen={dockOpen}
+                    dockPanelId={dock.activePanelId}
+                    onOpenPreview={() => handleOpenTool('preview')}
+                    onOpenFiles={() => handleOpenTool('files')}
+                  />
+                )}
+              <AppErrorBoundary compact title={`面板 [${mainViewId}] 渲染异常`}>
                 <Suspense
                   fallback={<div className={styles.emptyState}>加载中…</div>}
                 >
-                  {chatResolved.definition ? (
+                  {mainResolved.definition ? (
                     <SlotOutlet
                       slotKey="workspace.leaf.panel"
-                      context={chatCtx}
-                      entryKey={chatResolved.definition.id}
+                      context={mainCtx}
+                      entryKey={mainResolved.definition.id}
                       fallback={
                         <div className={styles.emptyState}>
-                          未知面板类型：chat
+                          未知面板类型：{mainViewId}
                         </div>
                       }
                     />
                   ) : (
-                    <div className={styles.emptyState}>未知面板类型：chat</div>
+                    <div className={styles.emptyState}>
+                      未知面板类型：{mainViewId}
+                    </div>
                   )}
                 </Suspense>
               </AppErrorBoundary>
@@ -469,30 +459,22 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
                         <div className={styles.emptyState}>加载中…</div>
                       }
                     >
-                      {/* 面板内容**互斥**：标签条已把 openPanelIds 呈现为标签，
-                        因此同一时刻只允许激活面板可见。此前非标签模式走
-                        `stackedPanelIds` 全量堆叠 ⇒ 三个标签的内容会同时出现在
-                        一个右侧边栏里（实证缺陷 2026-09-15）。所有面板仍保持挂载
-                        （仅切 display），切标签不丢状态。 */}
                       {dock.openPanelIds.length > 0
                         ? dock.openPanelIds.map((pid) => {
-                            const isActive = pid === toolPanelId;
+                            const isPanelActive = pid === toolPanelId;
                             return (
                               <div
                                 key={pid}
                                 className={styles.dockPanelPane}
                                 style={{
-                                  display: isActive ? 'flex' : 'none',
-                                  flex: '1 1 auto',
-                                  width: '100%',
-                                  height: '100%',
-                                  minHeight: 0,
-                                  minWidth: 0,
-                                  flexDirection: 'column',
+                                  ...dockPaneFlexStyle,
+                                  display: isPanelActive ? 'flex' : 'none',
                                 }}
                                 data-panel-id={pid}
-                                data-active-panel={isActive ? 'true' : 'false'}
-                                aria-hidden={!isActive}
+                                data-active-panel={
+                                  isPanelActive ? 'true' : 'false'
+                                }
+                                aria-hidden={!isPanelActive}
                               >
                                 {renderToolOutlet(pid)}
                               </div>

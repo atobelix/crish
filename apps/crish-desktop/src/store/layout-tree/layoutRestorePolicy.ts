@@ -8,6 +8,7 @@ import type { LayoutNode, LayoutTree } from './types';
 import {
   PENDING_DRAFT_SESSION_ID,
   isRealSessionId,
+  isChatTab,
   listChatLeaves,
 } from './sessionTabModel';
 
@@ -37,7 +38,6 @@ function isSessionTabStructurallyValid(t: unknown): boolean {
   if (!t || typeof t !== 'object') return false;
   const o = t as Record<string, unknown>;
   if (typeof o.tabId !== 'string' || !o.tabId) return false;
-  if (typeof o.sessionId !== 'string' || !o.sessionId) return false;
   if (typeof o.title !== 'string' || !o.title) return false;
   if (typeof o.workspaceKey !== 'string' || !o.workspaceKey) return false;
   if (!o.dock || typeof o.dock !== 'object') return false;
@@ -50,11 +50,28 @@ function isSessionTabStructurallyValid(t: unknown): boolean {
   if (d.activePanelId !== null && typeof d.activePanelId !== 'string') {
     return false;
   }
+
+  const kind = o.kind;
+  if (kind === 'terminal') {
+    if (typeof o.terminalKey !== 'string' || !o.terminalKey) return false;
+    if (typeof o.cwd !== 'string') return false;
+    return true;
+  }
+  if (kind === 'browser') {
+    if (typeof o.url !== 'string' || !o.url) return false;
+    if (o.favicon !== undefined && typeof o.favicon !== 'string') return false;
+    return true;
+  }
+  // Default/chat tab (kind === 'chat' or pre-UnifiedTab where kind is undefined)
+  if (kind !== undefined && kind !== 'chat') return false;
+  if (typeof o.sessionId !== 'string' || !o.sessionId) return false;
   return true;
 }
 
 /** Basic structural sanity for rehydrated JSON. */
-export function isLayoutNodeStructurallyValid(node: unknown): node is LayoutNode {
+export function isLayoutNodeStructurallyValid(
+  node: unknown
+): node is LayoutNode {
   if (!node || typeof node !== 'object') return false;
   const n = node as Record<string, unknown>;
   if (typeof n.id !== 'string' || !n.id) return false;
@@ -66,7 +83,8 @@ export function isLayoutNodeStructurallyValid(node: unknown): node is LayoutNode
     return n.tabs.every((t) => isSessionTabStructurallyValid(t));
   }
   if (n.type === 'branch') {
-    if (n.direction !== 'horizontal' && n.direction !== 'vertical') return false;
+    if (n.direction !== 'horizontal' && n.direction !== 'vertical')
+      return false;
     if (typeof n.splitRatio !== 'number' || !Number.isFinite(n.splitRatio)) {
       return false;
     }
@@ -118,7 +136,7 @@ export function validateRestorableLayoutTree(
       return { ok: false, reason: 'active-tab-missing', chatCount };
     }
     for (const tab of leaf.tabs) {
-      if (tab.sessionId === PENDING_DRAFT_SESSION_ID) {
+      if (isChatTab(tab) && tab.sessionId === PENDING_DRAFT_SESSION_ID) {
         return { ok: false, reason: 'illegal-global-draft', chatCount };
       }
     }
@@ -132,7 +150,7 @@ export function validateRestorableLayoutTree(
         return { ok: false, reason: 'duplicate-tab-id', chatCount };
       }
       tabIds.add(tab.tabId);
-      if (isRealSessionId(tab.sessionId)) {
+      if (isChatTab(tab) && isRealSessionId(tab.sessionId)) {
         realSeen.set(tab.sessionId, (realSeen.get(tab.sessionId) ?? 0) + 1);
       }
     }
@@ -150,5 +168,8 @@ function collectAllLeaves(
   node: LayoutNode
 ): Array<{ panelId: string; tabs: unknown[]; activeTabId?: string }> {
   if (node.type === 'leaf') return [node];
-  return [...collectAllLeaves(node.children[0]), ...collectAllLeaves(node.children[1])];
+  return [
+    ...collectAllLeaves(node.children[0]),
+    ...collectAllLeaves(node.children[1]),
+  ];
 }
