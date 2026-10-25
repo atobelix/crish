@@ -50,11 +50,7 @@
 }
 
 .nativeTextarea:where(:hover:not(:focus):not(:focus-visible):not(:disabled)) {
-  border-color: color-mix(
-    in srgb,
-    var(--border-subtle) 98%,
-    var(--text-primary) 2%
-  );
+  border-color: var(--border-subtle);
   /* hover = 输入档上的统一透明叠加 */
   background:
     linear-gradient(var(--tint-hover), var(--tint-hover)), var(--surface-input);
@@ -69,11 +65,7 @@
   outline: none;
   background: var(--surface-input);
   box-shadow: none;
-  border-color: color-mix(
-    in srgb,
-    var(--border-subtle) 96%,
-    var(--text-primary) 4%
-  );
+  border-color: var(--border-subtle);
 }
 
 .nativeTextarea:where(:disabled) {

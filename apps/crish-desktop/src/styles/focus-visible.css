@@ -8,11 +8,7 @@
 :root {
   /* --focus-ring-color 已收敛至 tokens.css（亮/暗块各自定义，2026-09-12 清退死定义：
    * 此处的 (0,1,0) :root 定义从未在层叠中胜过 tokens.css 亮/暗块的 (0,1,1)，属死代码）。 */
-  --focus-border-color: color-mix(
-    in srgb,
-    var(--border-subtle) 96%,
-    var(--text-primary) 4%
-  );
+  --focus-border-color: var(--border-subtle);
   --focus-ring-shadow: none;
   --focus-visible-ring: color-mix(
     in srgb,

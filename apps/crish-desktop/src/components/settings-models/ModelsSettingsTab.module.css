@@ -192,25 +192,6 @@
   gap: var(--space-2);
 }
 
-/* 输入框与下拉选择框：高度提升至 36px (消除 32px 紧绷感)，圆角统一为 8px (var(--radius-md, 8px)) */
-.mrdField :global(input:not([type='checkbox']):not([type='radio'])),
-.mrdField :global(button[data-slot='select-trigger']),
-.mrdField :global(button[role='combobox']),
-.mrdField :global(.settings-select-trigger),
-.credentialsBody :global(input:not([type='checkbox']):not([type='radio'])),
-.credentialsBody :global(button[data-slot='select-trigger']),
-.credentialsBody :global(button[role='combobox']),
-.credentialsBody :global(.settings-select-trigger),
-.mrdAddForm :global(input:not([type='checkbox']):not([type='radio'])),
-.mrdAddForm :global(button[data-slot='select-trigger']),
-.mrdAddForm :global(button[role='combobox']),
-.mrdCfgFields :global(input:not([type='checkbox']):not([type='radio'])),
-.modelDialogFields :global(input:not([type='checkbox']):not([type='radio'])) {
-  height: 36px;
-  min-height: 36px;
-  border-radius: var(--radius-md);
-}
-
 /* ── 5. 模型列表区域（细线流式行 + 搜索栏） ── */
 .mrdModelsHead {
   display: flex;
@@ -886,8 +867,8 @@
 .credentialsBody {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3_5);
-  padding: var(--space-4);
+  gap: var(--space-2_5);
+  padding: var(--space-3);
   border-top: var(--hairline-width) solid var(--border-subtle);
   background: var(--cover-card-bg, var(--bg-card));
 }
@@ -904,7 +885,9 @@
 
 .mrdKeySaveBtn {
   flex-shrink: 0;
-  height: 36px;
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
+  --btn-h: var(--control-height-sm);
   border-radius: var(--radius-md);
 }
 

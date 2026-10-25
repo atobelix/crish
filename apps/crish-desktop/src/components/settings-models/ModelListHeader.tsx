@@ -46,8 +46,11 @@ export const ModelListHeader: React.FC<{
             aria-label="检查连通性"
             icon={
               checkBusy ? (
-                <AppIcon name="loader" size={13}
-                  className={styles.loadingSpinner} />
+                <AppIcon
+                  name="loader"
+                  size={13}
+                  className={styles.loadingSpinner}
+                />
               ) : (
                 <AppIcon name="wifi" size={13} />
               )
@@ -65,8 +68,11 @@ export const ModelListHeader: React.FC<{
             aria-label="自动获取"
             icon={
               scanBusy ? (
-                <AppIcon name="loader" size={13}
-                  className={styles.loadingSpinner} />
+                <AppIcon
+                  name="loader"
+                  size={13}
+                  className={styles.loadingSpinner}
+                />
               ) : (
                 <AppIcon name="refresh" size={13} />
               )
@@ -75,7 +81,7 @@ export const ModelListHeader: React.FC<{
         </Tooltip>
         <Input
           variant="search"
-          size="xs"
+          size="sm"
           placeholder="搜索模型…"
           value={modelFilter}
           onChange={(e) => setModelFilter(e.target.value)}
