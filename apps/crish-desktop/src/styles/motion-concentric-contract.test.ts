@@ -254,6 +254,10 @@ describe('契约测试：同心几何圆角与物理动效防回潮门禁 (DIM-0
         '--ease-tactile-release: cubic-bezier(0.16, 1, 0.3, 1)'
       );
     }
+
+    if (tokensContent.includes('--transition-landing-fade:')) {
+      expect(tokensContent).toContain('--transition-landing-fade');
+    }
   });
 
   it('4. Button 原子基座触感安全网检验（结构完整与无障碍降级）', () => {

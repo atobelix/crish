@@ -54,13 +54,11 @@ import {
 const tracker = () => useSessionExecutionTrackerStore.getState();
 
 export function useRunStreamingAssistant(
-  options: UseChatStreamOptions,
+  _options: UseChatStreamOptions,
   refs: StreamBatcherRefs,
   queryHelpers: StreamRunQueryHelpers,
   generationMapRef: MutableRefObject<Map<string, number>>
-): {
-  runStreamingAssistant: StreamRunStarter;
-} {
+): { runStreamingAssistant: StreamRunStarter } {
   const { wsId, upsertSessionAgent } = queryHelpers;
   const {
     streamManagerRef,
