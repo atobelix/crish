@@ -16,7 +16,6 @@ import {
 import {
   createSessionTab,
   createDefaultDock,
-  isDraftSessionId,
   isRealSessionId,
   isChatTab,
   mintDraftSessionId,
@@ -383,23 +382,22 @@ function pruneEmptyChatLeaves(root: WorkNode): WorkNode | null {
 }
 
 function sameShape(a: LayoutTree, b: LayoutTree): boolean {
-  const dump = (n: LayoutNode): unknown => {
-    if (isLeaf(n)) {
-      return {
-        id: n.id,
-        panelId: n.panelId,
-        activeTabId: n.activeTabId,
-        tabs: n.tabs.map((t) => ({ ...t })),
-      };
-    }
-    if (!isBranch(n)) return null;
-    return {
-      id: n.id,
-      direction: n.direction,
-      splitRatio: n.splitRatio,
-      children: [dump(n.children[0]), dump(n.children[1])],
-    };
-  };
+  const dump = (n: LayoutNode): unknown =>
+    isLeaf(n)
+      ? {
+          id: n.id,
+          panelId: n.panelId,
+          activeTabId: n.activeTabId,
+          tabs: n.tabs.map((t) => ({ ...t })),
+        }
+      : isBranch(n)
+        ? {
+            id: n.id,
+            direction: n.direction,
+            splitRatio: n.splitRatio,
+            children: [dump(n.children[0]), dump(n.children[1])],
+          }
+        : null;
   return JSON.stringify(dump(a.root)) === JSON.stringify(dump(b.root));
 }
 
@@ -431,9 +429,6 @@ export function migrateToLeafOwnedTabs(
           ];
           leaf.activeTabId = leaf.tabs[0]!.tabId;
           placed.add(boundSid);
-        } else if (isDraftSessionId(boundSid)) {
-          leaf.tabs = [];
-          leaf.activeTabId = '';
         } else {
           leaf.tabs = [];
           leaf.activeTabId = '';
