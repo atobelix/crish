@@ -65,22 +65,29 @@ export class SafeAimEngine {
     if (!SafeAimEngine.instance) {
       SafeAimEngine.instance = new SafeAimEngine(options);
     } else if (options) {
-      if (options.enabled !== undefined) SafeAimEngine.instance.enabled = options.enabled;
-      if (options.debug !== undefined) SafeAimEngine.instance.setDebug(options.debug);
+      if (options.enabled !== undefined)
+        SafeAimEngine.instance.enabled = options.enabled;
+      if (options.debug !== undefined)
+        SafeAimEngine.instance.setDebug(options.debug);
     }
     return SafeAimEngine.instance;
   }
 
   public initSvgOverlay(): void {
     if (typeof document === 'undefined') return;
-    let svg = document.getElementById('sepSafeAimOverlay') as unknown as SVGSVGElement | null;
+    let svg = document.getElementById(
+      'sepSafeAimOverlay'
+    ) as unknown as SVGSVGElement | null;
     if (!svg) {
       svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.id = 'sepSafeAimOverlay';
       svg.classList.add('sep-safe-aim-overlay');
       if (this.debug) svg.classList.add('sep-debug-visible');
 
-      const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      const poly = document.createElementNS(
+        'http://www.w3.org/2000/svg',
+        'polygon'
+      );
       svg.appendChild(poly);
       const parent = this.container || document.body;
       if (parent) {
@@ -208,7 +215,8 @@ export class SafeAimEngine {
       return;
     }
 
-    const targetSubmenu = this.activeSubmenu || this.getActiveSubmenu()?.submenuEl;
+    const targetSubmenu =
+      this.activeSubmenu || this.getActiveSubmenu()?.submenuEl;
     if (!targetSubmenu) {
       this.clearPolygon();
       return;
@@ -258,54 +266,78 @@ export class SafeAimEngine {
     placement?: SubmenuPlacement
   ): boolean {
     if (!this.enabled) return false;
-    const targetSubmenu = this.activeSubmenu || this.getActiveSubmenu()?.submenuEl;
+    const targetSubmenu =
+      this.activeSubmenu || this.getActiveSubmenu()?.submenuEl;
     if (!targetSubmenu) return false;
 
     const subRect = targetSubmenu.getBoundingClientRect();
     if (subRect.width === 0 || subRect.height === 0) return false;
 
-    const mouse = this.getRecentMousePos();
-    const prevMouse = this.getPreviousMousePos();
-
-    // 速度矢量导数判定 (v · d > 0)
-    const vx = mouse.x - prevMouse.x;
-    const vy = mouse.y - prevMouse.y;
-    const targetCenterX = subRect.left + subRect.width / 2;
-    const targetCenterY = subRect.top + subRect.height / 2;
-    const dx = targetCenterX - mouse.x;
-    const dy = targetCenterY - mouse.y;
-    const dotProduct = vx * dx + vy * dy;
-
-    // 若光标反向远离目标子菜单，立即释放安全区
-    if (this.mouseHistory.length > 1 && (vx !== 0 || vy !== 0) && dotProduct <= 0) {
-      this.safeZoneEntryTimestamp = null;
-      return false;
+    // 1. 若光标已经在目标子菜单矩形内部（带 4px 容差外扩），绝对处于安全保护状态
+    const inSubmenuRect =
+      point.x >= subRect.left - 4 &&
+      point.x <= subRect.right + 4 &&
+      point.y >= subRect.top - 4 &&
+      point.y <= subRect.bottom + 4;
+    if (inSubmenuRect) {
+      return true;
     }
 
-    const resolvedPlacement = placement ?? this.activePlacement;
+    const mouse = this.getRecentMousePos();
+    const prevMouse = this.getPreviousMousePos();
+    const resolvedPlacement: SubmenuPlacement =
+      placement ??
+      this.activePlacement ??
+      (subRect.left >= prevMouse.x ? 'right' : 'left');
+
+    // 2. 运动趋势判定：只有当光标明显向反方向撤退回缩时，才提前释放安全区
+    // 严禁将目标当成单一几何中心点作内积判断，避免斜向划入目标下半部分时被误杀
+    const vx = mouse.x - prevMouse.x;
+    const vy = mouse.y - prevMouse.y;
+    if (this.mouseHistory.length > 1) {
+      if (resolvedPlacement === 'right' && vx < -2) {
+        this.safeZoneEntryTimestamp = null;
+        return false;
+      }
+      if (resolvedPlacement === 'left' && vx > 2) {
+        this.safeZoneEntryTimestamp = null;
+        return false;
+      }
+      if (resolvedPlacement === 'bottom' && vy < -2) {
+        this.safeZoneEntryTimestamp = null;
+        return false;
+      }
+      if (resolvedPlacement === 'top' && vy > 2) {
+        this.safeZoneEntryTimestamp = null;
+        return false;
+      }
+    }
+
+    // 3. 锥形安全三角形 (Safe Triangle) 判定
     let pTop: Point2D;
     let pBottom: Point2D;
+    const pad = 4;
 
     if (resolvedPlacement === 'bottom') {
-      pTop = { x: subRect.left, y: subRect.top };
-      pBottom = { x: subRect.right, y: subRect.top };
+      pTop = { x: subRect.left - pad, y: subRect.top };
+      pBottom = { x: subRect.right + pad, y: subRect.top };
     } else if (resolvedPlacement === 'top') {
-      pTop = { x: subRect.left, y: subRect.bottom };
-      pBottom = { x: subRect.right, y: subRect.bottom };
+      pTop = { x: subRect.left - pad, y: subRect.bottom };
+      pBottom = { x: subRect.right + pad, y: subRect.bottom };
     } else if (resolvedPlacement === 'left') {
-      pTop = { x: subRect.right, y: subRect.top };
-      pBottom = { x: subRect.right, y: subRect.bottom };
+      pTop = { x: subRect.right, y: subRect.top - pad };
+      pBottom = { x: subRect.right, y: subRect.bottom + pad };
     } else if (resolvedPlacement === 'right') {
-      pTop = { x: subRect.left, y: subRect.top };
-      pBottom = { x: subRect.left, y: subRect.bottom };
+      pTop = { x: subRect.left, y: subRect.top - pad };
+      pBottom = { x: subRect.left, y: subRect.bottom + pad };
     } else {
       const isSubmenuOnRight = subRect.left >= prevMouse.x;
       if (isSubmenuOnRight) {
-        pTop = { x: subRect.left, y: subRect.top };
-        pBottom = { x: subRect.left, y: subRect.bottom };
+        pTop = { x: subRect.left, y: subRect.top - pad };
+        pBottom = { x: subRect.left, y: subRect.bottom + pad };
       } else {
-        pTop = { x: subRect.right, y: subRect.top };
-        pBottom = { x: subRect.right, y: subRect.bottom };
+        pTop = { x: subRect.right, y: subRect.top - pad };
+        pBottom = { x: subRect.right, y: subRect.bottom + pad };
       }
     }
 
@@ -315,7 +347,7 @@ export class SafeAimEngine {
       return false;
     }
 
-    // 停顿安全超时熔断
+    // 4. 停顿安全超时熔断
     const now = Date.now();
     if (this.safeZoneEntryTimestamp === null) {
       this.safeZoneEntryTimestamp = now;
@@ -333,7 +365,12 @@ export class SafeAimEngine {
    * 重心坐标系 (Barycentric Coordinates) 三角形内点判定
    * 采用 float epsilon 容差（1e-6），确保边界点与顶点判定稳定
    */
-  public pointInTriangle(p: Point2D, a: Point2D, b: Point2D, c: Point2D): boolean {
+  public pointInTriangle(
+    p: Point2D,
+    a: Point2D,
+    b: Point2D,
+    c: Point2D
+  ): boolean {
     const v0x = c.x - a.x;
     const v0y = c.y - a.y;
     const v1x = b.x - a.x;

@@ -11,11 +11,14 @@ interface SmartPanelCascadeSubmenuProps {
   /** 子菜单的无障碍名称（父条目 label，缺省由调用方给出兜底文案）。 */
   ariaLabel: string;
   style: React.CSSProperties;
+  side: 'left' | 'right';
   submenuRef: React.RefObject<HTMLDivElement | null>;
   /** Portal 挂载点：对话框覆盖层内优先，否则 document.body。 */
   container: Element | DocumentFragment;
   /** 指针进入子菜单：取消 Safe-Aim 的延迟关闭。 */
   onPointerEnter: () => void;
+  /** 指针离开子菜单：触发平滑缓冲延迟关闭。 */
+  onPointerLeave?: () => void;
   onSelect: (item: MenuItem) => void;
   /** 选中后关闭整个面板（closeOnSelect !== false 时）。 */
   onRequestClose: () => void;
@@ -28,9 +31,11 @@ export const SmartPanelCascadeSubmenu: React.FC<
   parent: activeSubmenu,
   ariaLabel,
   style: submenuStyle,
+  side,
   submenuRef: cascadeSubmenuRef,
   container,
   onPointerEnter,
+  onPointerLeave,
   onSelect,
   onRequestClose,
 }) =>
@@ -39,9 +44,11 @@ export const SmartPanelCascadeSubmenu: React.FC<
       ref={cascadeSubmenuRef}
       className={`${menuStyles.menuContent} ${styles.cascadeSubmenu}`}
       role="menu"
+      data-side={side}
       aria-label={ariaLabel}
       style={submenuStyle}
       onMouseEnter={onPointerEnter}
+      onMouseLeave={onPointerLeave}
     >
       {activeSubmenu.children.map((subItem) => (
         <SmartPanelItem

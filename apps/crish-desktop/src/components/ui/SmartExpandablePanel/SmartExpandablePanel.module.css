@@ -329,6 +329,9 @@
   max-width: min(280px, calc(100vw - 16px));
   height: auto;
   max-height: min(360px, calc(100vh - 16px));
+  overflow: visible;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   border-radius: var(--sep-radius-outer, 14px);
   border: 1px solid var(--border-color);
   background: var(--sep-bg-panel-solid, var(--bg-elevated));
@@ -342,6 +345,30 @@
   transform-origin: left top;
   animation: crish-popover-enter var(--transition-popover-enter) forwards;
   will-change: transform, opacity;
+}
+
+.cascadeSubmenu::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* 跨面板透明安全命中桥（Hit Bridge）：覆盖主子面板间 6px 缝隙，防止光标移动瞬态断触 */
+.cascadeSubmenu::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  bottom: -8px;
+  width: 14px;
+  pointer-events: auto;
+}
+
+.cascadeSubmenu[data-side='right']::before {
+  left: -10px;
+}
+
+.cascadeSubmenu[data-side='left']::before {
+  right: -10px;
 }
 
 .cascadeSubmenu .item,

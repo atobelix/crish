@@ -16,6 +16,7 @@ import styles from './SmartExpandablePanel.module.css';
 import {
   cascadeStyle,
   estimateCascadeHeight,
+  estimateCascadeWidth,
   placeCascadeSubmenu,
   readCascadeSize,
 } from './PositionEngine';
@@ -51,6 +52,7 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
 
   const [query, setQuery] = useState('');
   const [activeSubmenu, setActiveSubmenu] = useState<MenuItem | null>(null);
+  const [submenuSide, setSubmenuSide] = useState<'left' | 'right'>('right');
   const [submenuStyle, setSubmenuStyle] = useState<React.CSSProperties | null>(
     null
   );
@@ -61,6 +63,7 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const cascadeSubmenuRef = useRef<HTMLDivElement | null>(null);
   const safeAimTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverItemTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -72,6 +75,10 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
     if (hoverCloseTimerRef.current) {
       clearTimeout(hoverCloseTimerRef.current);
       hoverCloseTimerRef.current = null;
+    }
+    if (hoverItemTimerRef.current) {
+      clearTimeout(hoverItemTimerRef.current);
+      hoverItemTimerRef.current = null;
     }
   }, []);
 
@@ -159,10 +166,23 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   const handleContentMouseLeave = useCallback(() => {
     if (triggerMode === 'hover' || triggerMode === 'both') {
       hoverCloseTimerRef.current = setTimeout(() => {
+        // 如果当前子菜单仍处于打开且光标在子菜单或安全区内，不误关闭主菜单
+        if (cascadeSubmenuRef.current) {
+          const mousePos = safeAim.getRecentMousePos();
+          const subRect = cascadeSubmenuRef.current.getBoundingClientRect();
+          const inSub =
+            mousePos.x >= subRect.left - 4 &&
+            mousePos.x <= subRect.right + 4 &&
+            mousePos.y >= subRect.top - 4 &&
+            mousePos.y <= subRect.bottom + 4;
+          if (inSub || safeAim.isPointerInSafeZone(mousePos, submenuSide)) {
+            return;
+          }
+        }
         handleOpenChange(false);
       }, 250);
     }
-  }, [triggerMode, handleOpenChange]);
+  }, [triggerMode, handleOpenChange, safeAim, submenuSide]);
 
   useLayerRegistration(
     {
@@ -199,49 +219,84 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   // Safe-Aim hover 处理
   const handleHoverSubmenu = useCallback(
     (item: MenuItem, el: HTMLElement) => {
-      if (safeAimTimeoutRef.current) {
-        clearTimeout(safeAimTimeoutRef.current);
-        safeAimTimeoutRef.current = null;
+      if (activeSubmenu?.id === item.id) {
+        if (safeAimTimeoutRef.current) {
+          clearTimeout(safeAimTimeoutRef.current);
+          safeAimTimeoutRef.current = null;
+        }
+        return;
       }
-      const itemRect = el.getBoundingClientRect();
-      const panelRect = contentRef.current?.getBoundingClientRect() ?? itemRect;
-      setActiveSubmenu(item);
-      setSubmenuStyle(
-        cascadeStyle(
-          placeCascadeSubmenu(
-            panelRect,
-            itemRect.top,
-            200,
-            estimateCascadeHeight(item.children)
-          )
-        )
-      );
 
-      // 按真实宽高再放一次，短菜单贴着触发行，不再预留 200px
-      requestAnimationFrame(() => {
-        const sub = cascadeSubmenuRef.current;
-        const panel = contentRef.current;
-        if (!sub || !panel) return;
-        const box = readCascadeSize(sub, estimateCascadeHeight(item.children));
-        const next = placeCascadeSubmenu(
-          panel.getBoundingClientRect(),
+      const openAction = () => {
+        if (safeAimTimeoutRef.current) {
+          clearTimeout(safeAimTimeoutRef.current);
+          safeAimTimeoutRef.current = null;
+        }
+        if (hoverItemTimerRef.current) {
+          clearTimeout(hoverItemTimerRef.current);
+          hoverItemTimerRef.current = null;
+        }
+        const itemRect = el.getBoundingClientRect();
+        const panelRect =
+          contentRef.current?.getBoundingClientRect() ?? itemRect;
+        const estWidth = estimateCascadeWidth(item.children);
+        const estHeight = estimateCascadeHeight(item.children);
+        const placed = placeCascadeSubmenu(
+          panelRect,
           itemRect.top,
-          box.width,
-          box.height
+          estWidth,
+          estHeight
         );
-        setSubmenuStyle(cascadeStyle(next));
-        safeAim.setSubmenu(el, sub, next.side);
-      });
+
+        setActiveSubmenu(item);
+        setSubmenuSide(placed.side);
+        setSubmenuStyle(cascadeStyle(placed));
+
+        // 按真实宽高同步校准，短菜单贴着触发行，长菜单视口钳制
+        requestAnimationFrame(() => {
+          const sub = cascadeSubmenuRef.current;
+          const panel = contentRef.current;
+          if (!sub || !panel) return;
+          const box = readCascadeSize(sub, estHeight);
+          const next = placeCascadeSubmenu(
+            panel.getBoundingClientRect(),
+            itemRect.top,
+            box.width,
+            box.height
+          );
+          setSubmenuSide(next.side);
+          setSubmenuStyle(cascadeStyle(next));
+          safeAim.setSubmenu(el, sub, next.side);
+        });
+      };
+
+      // 若当前有打开的子菜单且光标正向其移动，设置防抖延迟切换
+      if (
+        activeSubmenu &&
+        safeAim.isPointerInSafeZone(safeAim.getRecentMousePos(), submenuSide)
+      ) {
+        if (hoverItemTimerRef.current) {
+          clearTimeout(hoverItemTimerRef.current);
+        }
+        hoverItemTimerRef.current = setTimeout(openAction, 150);
+        return;
+      }
+
+      openAction();
     },
-    [safeAim]
+    [activeSubmenu, safeAim, submenuSide]
   );
 
   const handleHoverItem = useCallback(
     (_item: MenuItem, _el: HTMLElement) => {
+      if (hoverItemTimerRef.current) {
+        clearTimeout(hoverItemTimerRef.current);
+        hoverItemTimerRef.current = null;
+      }
       if (!activeSubmenu) return;
 
       const mousePos = safeAim.getRecentMousePos();
-      if (safeAim.isPointerInSafeZone(mousePos, 'right')) {
+      if (safeAim.isPointerInSafeZone(mousePos, submenuSide)) {
         if (!safeAimTimeoutRef.current) {
           safeAimTimeoutRef.current = setTimeout(() => {
             setActiveSubmenu(null);
@@ -255,7 +310,7 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
       setActiveSubmenu(null);
       safeAim.clearSubmenu();
     },
-    [activeSubmenu, safeAim]
+    [activeSubmenu, safeAim, submenuSide]
   );
 
   const cancelSafeAimClose = useCallback(() => {
@@ -264,6 +319,16 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
       safeAimTimeoutRef.current = null;
     }
   }, []);
+
+  const handleSubmenuPointerLeave = useCallback(() => {
+    if (!safeAimTimeoutRef.current) {
+      safeAimTimeoutRef.current = setTimeout(() => {
+        setActiveSubmenu(null);
+        safeAim.clearSubmenu();
+        safeAimTimeoutRef.current = null;
+      }, 200);
+    }
+  }, [safeAim]);
 
   // Trigger 渲染
   const renderedTrigger = renderSmartPanelTrigger({
@@ -372,12 +437,14 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
                 parent={{ ...activeSubmenu, children: activeSubmenu.children }}
                 ariaLabel={activeSubmenu.label || '子菜单'}
                 style={submenuStyle}
+                side={submenuSide}
                 submenuRef={cascadeSubmenuRef}
                 container={
                   dialogOverlay ??
                   (typeof document !== 'undefined' ? document.body : null)!
                 }
                 onPointerEnter={cancelSafeAimClose}
+                onPointerLeave={handleSubmenuPointerLeave}
                 onSelect={(item) => onSelect?.(item)}
                 onRequestClose={() => handleOpenChange(false)}
               />

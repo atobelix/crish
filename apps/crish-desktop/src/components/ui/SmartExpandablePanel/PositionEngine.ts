@@ -254,6 +254,25 @@ export interface CascadePlacement {
   transformOrigin: 'top left' | 'top right';
 }
 
+/** 级联子菜单最大限制高度（与 CSS .cascadeSubmenu 契约单源一致） */
+export const MAX_CASCADE_PANEL_HEIGHT = 360;
+
+/** 按子项内容估算级联面板宽度（min: 160px, max: 280px），消除盲猜 200px 导致的向左展开空洞 */
+export function estimateCascadeWidth(
+  children: Array<{ label?: string }> | undefined
+): number {
+  const list = children ?? [];
+  if (list.length === 0) return 160;
+  let maxLen = 0;
+  for (const child of list) {
+    const len = (child.label || '').length;
+    if (len > maxLen) maxLen = len;
+  }
+  // 左右内边距(12) + 图标(16+8) + 估算字宽(约13px/字) + 尾部留白(24)
+  const estimated = 12 + 24 + maxLen * 13 + 24;
+  return Math.max(160, Math.min(estimated, 280));
+}
+
 /**
  * 固定定位且子项 width:100% 时，offset 可能被撑成整屏。
  * 超过视口的读数丢弃，改用估算，避免被钳到角落。
@@ -263,17 +282,20 @@ export function readCascadeSize(
   fallbackHeight: number
 ): { width: number; height: number } {
   const maxW = Math.max(160, window.innerWidth - 32);
-  const maxH = Math.max(44, window.innerHeight - 32);
+  const maxH = Math.min(
+    MAX_CASCADE_PANEL_HEIGHT,
+    Math.max(44, window.innerHeight - 32)
+  );
   const width =
-    el.offsetWidth > 0 && el.offsetWidth <= maxW ? el.offsetWidth : 220;
+    el.offsetWidth > 0 && el.offsetWidth <= maxW ? el.offsetWidth : 160;
   const height =
     el.offsetHeight > 0 && el.offsetHeight <= maxH
       ? el.offsetHeight
-      : fallbackHeight;
+      : Math.min(fallbackHeight, MAX_CASCADE_PANEL_HEIGHT);
   return { width, height };
 }
 
-/** 按子项行数估算级联高度，避免用固定 200px 把短菜单顶离触发行。 */
+/** 按子项行数估算级联高度，严格钳制在 MAX_CASCADE_PANEL_HEIGHT 内，避免用虚高把短菜单顶离触发行。 */
 export function estimateCascadeHeight(
   children: Array<{ type?: string }> | undefined
 ): number {
@@ -282,7 +304,7 @@ export function estimateCascadeHeight(
   for (const child of list) {
     height += child.type === 'divider' ? 9 : 34;
   }
-  return Math.max(44, Math.min(height, 480));
+  return Math.max(44, Math.min(height, MAX_CASCADE_PANEL_HEIGHT));
 }
 
 /**
@@ -300,7 +322,10 @@ export function placeCascadeSubmenu(
   const gap = 6;
   const pad = 8;
   const width = Math.max(1, submenuWidth);
-  const height = Math.max(1, submenuHeight);
+  const height = Math.min(
+    Math.max(1, submenuHeight),
+    Math.max(44, viewportHeight - pad * 2)
+  );
   const spaceRight = viewportWidth - pad - (panelRect.right + gap);
   const spaceLeft = panelRect.left - gap - pad;
   const side: 'left' | 'right' =

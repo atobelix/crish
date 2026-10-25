@@ -63,6 +63,7 @@ export const ICON_NAMES = [
   'file-search',
   'file-text',
   'folder',
+  'folder-01',
   'folder-check',
   'folder-cog',
   'folder-input',
