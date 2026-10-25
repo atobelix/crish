@@ -296,8 +296,10 @@ describe('PaneHeader 叶子拥有会话标签', () => {
       <PaneHeader leaf={leaf} isActive isChat isTopRow={true} />
     );
     const header = container.querySelector('[data-pane-header="true"]');
-    // 顶行叶子挂载原生拖拽区
+    const tabsContainer = container.querySelector('[role="tablist"]');
+    // 顶行叶子及其非功能区域挂载原生拖拽区，保证鼠标按下移动可拖拽窗口
     expect(header?.hasAttribute('data-tauri-drag-region')).toBe(true);
+    expect(tabsContainer?.hasAttribute('data-tauri-drag-region')).toBe(true);
 
     // 内部标签项显式声明 data-tauri-drag-region="false"，防止系统标题栏手势劫持标签点选与拖拽
     const tab = container.querySelector('[role="tab"]');
@@ -310,7 +312,11 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     // 非顶行窗格（如上下分屏的下方叶子）不挂载窗口拖拽区，避免非标题栏区域污染系统拖拽
     rerender(<PaneHeader leaf={leaf} isActive isChat isTopRow={false} />);
     const nonTopHeader = container.querySelector('[data-pane-header="true"]');
+    const nonTopTabsContainer = container.querySelector('[role="tablist"]');
     expect(nonTopHeader?.hasAttribute('data-tauri-drag-region')).toBe(false);
+    expect(nonTopTabsContainer?.hasAttribute('data-tauri-drag-region')).toBe(
+      false
+    );
   });
 
   it('加号按钮双击事件与系统拖拽隔离：按钮必须具备 data-tauri-drag-region="false"，防止系统标题栏双击最大化劫持', () => {

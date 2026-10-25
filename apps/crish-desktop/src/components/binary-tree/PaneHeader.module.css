@@ -77,8 +77,6 @@
   gap: var(--pane-tab-gap);
   padding-left: 2px;
   contain: layout;
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
 }
 
 .launcherWrapper {

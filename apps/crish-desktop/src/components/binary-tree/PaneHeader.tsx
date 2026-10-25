@@ -433,7 +433,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
           style={paneTabStripVars(effectiveTabWidth)}
           data-locked={lockedTabWidth != null ? 'true' : 'false'}
           data-booted={booted ? 'true' : 'false'}
-          data-tauri-drag-region="false"
+          data-tauri-drag-region={isTopRow ? '' : undefined}
           onScroll={handleScroll}
           onMouseLeave={handleHeaderMouseLeave}
           onKeyDown={handleTablistKeyDown}

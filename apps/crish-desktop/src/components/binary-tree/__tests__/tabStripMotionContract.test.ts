@@ -109,14 +109,12 @@ describe('标签条动效单一真理路径契约', () => {
     expect(paneCss).not.toMatch(/!important\s*[;}]/);
   });
 
-  it('原生 app-region 遮蔽在场：条带、容器与加号功能区必须显式 no-drag（WebView2 HWND 层通道，勿删）', () => {
-    // 顶栏 spacer 的 app-region:drag 由 WebView2 在 HWND 层原生命中（绕过 JS），
-    // 罩住顶行标签条带；条带必须显式 no-drag 才能挡住原生标题栏双击最大化。
-    // 2026-09-06 事故：误判 app-region 为死代码删除后，双击标签即被原生 caption 最大化。
+  it('原生 app-region 遮蔽在场：功能区显式 no-drag，非功能区保留原生窗口拖拽', () => {
+    // 顶栏 spacer 的 app-region:drag 由 WebView2 在 HWND 层原生命中（绕过 JS）；
+    // 功能区（标签条、会话项、加号包裹区与加号按钮）必须显式 no-drag 才能挡住原生标题栏手势劫持。
+    // 而容器非功能区域（空白标题栏区域）不带 no-drag，保证鼠标按下移动可正常拖拽窗口。
     expect(paneCss).toMatch(/-webkit-app-region:\s*no-drag/);
-    expect(paneCss).toMatch(
-      /\.tabsContainer[\s\S]{0,400}?app-region:\s*no-drag/
-    );
+    expect(paneCss).toMatch(/\.tabsList[\s\S]{0,400}?app-region:\s*no-drag/);
     expect(paneCss).toMatch(
       /\.launcherWrapper[\s\S]{0,400}?app-region:\s*no-drag/
     );
