@@ -67,7 +67,7 @@ impl MemoryDeviceResolver {
     pub fn register(&self, device_key: impl Into<String>, device: VendorDevice) {
         self.devices
             .lock()
-            .expect("内存注册表锁")
+            .unwrap_or_else(|e| e.into_inner())
             .insert(device_key.into(), device);
     }
 
@@ -75,7 +75,7 @@ impl MemoryDeviceResolver {
     pub fn remove(&self, device_key: &str) {
         self.devices
             .lock()
-            .expect("内存注册表锁")
+            .unwrap_or_else(|e| e.into_inner())
             .remove(device_key);
     }
 }
@@ -84,7 +84,7 @@ impl DeviceResolver for MemoryDeviceResolver {
     fn resolve(&self, device_key: &str) -> Option<VendorDevice> {
         self.devices
             .lock()
-            .expect("内存注册表锁")
+            .unwrap_or_else(|e| e.into_inner())
             .get(device_key)
             .cloned()
     }

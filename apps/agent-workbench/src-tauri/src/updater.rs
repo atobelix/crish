@@ -76,10 +76,11 @@ pub(crate) async fn workbench_check_update<R: Runtime>(
                 "notes": update.body,
                 "target": update.target,
             });
+            // T07.6 恢复式锁：中毒时接管原守卫继续，不在更新链路 panic
             *session
                 .pending
                 .lock()
-                .expect("updater session pending lock") = Some(update);
+                .unwrap_or_else(|e| e.into_inner()) = Some(update);
             Ok(out)
         }
         None => {
@@ -100,7 +101,7 @@ pub(crate) async fn workbench_download_update<R: Runtime>(
     let update = session
         .pending
         .lock()
-        .expect("updater session pending lock")
+        .unwrap_or_else(|e| e.into_inner())
         .take()
         .ok_or_else(|| {
             CoreError::InvalidInput("没有待下载的更新，请先调用 workbench_check_update".into())
@@ -122,7 +123,7 @@ pub(crate) async fn workbench_download_update<R: Runtime>(
     *session
         .downloaded
         .lock()
-        .expect("updater session downloaded lock") = Some((update, bytes));
+        .unwrap_or_else(|e| e.into_inner()) = Some((update, bytes));
     Ok(out)
 }
 
@@ -137,7 +138,7 @@ pub(crate) async fn workbench_install_update<R: Runtime>(
     let (update, bytes) = session
         .downloaded
         .lock()
-        .expect("updater session downloaded lock")
+        .unwrap_or_else(|e| e.into_inner())
         .take()
         .ok_or_else(|| {
             CoreError::InvalidInput("没有已下载的更新包，请先调用 workbench_download_update".into())

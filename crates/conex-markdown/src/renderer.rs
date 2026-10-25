@@ -996,7 +996,11 @@ fn post_process_void_elements(html: String) -> String {
     if s.contains("<img") {
         IMG_RE
             .replace_all(&s, |caps: &regex::Captures| {
-                let tag = caps.get(0).unwrap().as_str();
+                // 匹配成功时 group 0 恒存在（regex 不变量），expect 声明而非裸 unwrap
+                let tag = caps
+                    .get(0)
+                    .expect("regex 替换回调中 group 0 恒存在")
+                    .as_str();
                 if tag.ends_with("/>") {
                     tag.to_string()
                 } else {

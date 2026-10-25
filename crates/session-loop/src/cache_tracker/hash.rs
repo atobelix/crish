@@ -251,34 +251,30 @@ pub fn build_request_signature_incremental(
 ) -> RequestSignature {
     let system_hash = fnv1a(system.unwrap_or("").as_bytes());
     let tools_hash = tools_hash(tools);
-    // 增量适用判定：上一签名存在、前缀覆盖、system/tools 未变
-    let incremental = prev
-        .as_ref()
-        .filter(|p| {
-            p.message_count <= messages.len()
-                && p.system_hash == system_hash
-                && p.tools_hash == tools_hash
-        })
-        .is_some();
-    if !incremental {
-        return build_request_signature(system, tools, messages);
+    // 增量适用判定：上一签名存在、前缀覆盖、system/tools 未变；
+    // `if let` 直接消费过滤结果，避免「先 is_some 再 unwrap」的脆弱双写
+    if let Some(prev) = prev.as_ref().filter(|p| {
+        p.message_count <= messages.len()
+            && p.system_hash == system_hash
+            && p.tools_hash == tools_hash
+    }) {
+        let prev_count = prev.message_count;
+        // 复用前缀哈希，只对新增消息计算
+        let mut message_hashes = prev.message_hashes.clone();
+        let mut messages_hash = prev.messages_hash;
+        for m in &messages[prev_count..] {
+            let h = message_hash(m);
+            messages_hash = fnv1a_mix(messages_hash, h);
+            message_hashes.push(h);
+        }
+        return RequestSignature {
+            system_hash,
+            tools_hash,
+            messages_hash,
+            message_hashes,
+            message_count: messages.len(),
+            tool_count: tools.len(),
+        };
     }
-    let prev = prev.unwrap();
-    let prev_count = prev.message_count;
-    // 复用前缀哈希，只对新增消息计算
-    let mut message_hashes = prev.message_hashes;
-    let mut messages_hash = prev.messages_hash;
-    for m in &messages[prev_count..] {
-        let h = message_hash(m);
-        messages_hash = fnv1a_mix(messages_hash, h);
-        message_hashes.push(h);
-    }
-    RequestSignature {
-        system_hash,
-        tools_hash,
-        messages_hash,
-        message_hashes,
-        message_count: messages.len(),
-        tool_count: tools.len(),
-    }
+    build_request_signature(system, tools, messages)
 }
