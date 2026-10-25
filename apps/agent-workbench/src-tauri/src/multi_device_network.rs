@@ -5,11 +5,10 @@
 //!   回退读注册表 `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\NetworkList\Profiles`
 //!   下各 profile 的 `Category` 值（REG_DWORD：0 = 公用 / 1 = 专用 / 2 = 域），
 //!   按 Fail-Closed min() 聚合判定当前网络类型（公网优先：任何 Public 即判定 Public）。
-//! - 可直连 IP 枚举：独立实现，逻辑与 server/pairing.rs 的
-//!   `windows_ip_enum::local_unicast_ips`（GetAdaptersAddresses，
-//!   pairing.rs:449-533）及 `default_route_ip`（UDP connect 技巧，
-//!   pairing.rs:318-330）同源——该文件并行阵营活跃且模块私有，禁止修改，
-//!   故在本文件复刻并注明来源，过滤规则保持一致；
+//! - 可直连 IP 枚举：网络原语（`windows_ip_enum::local_unicast_ips`、
+//!   `default_route_ip`、`is_private_ip`、`is_usable_lan_ip`）复用
+//!   server/pairing.rs 的 `pub(crate)` 单一真源（历史复刻双源已收敛，
+//!   本文件仅保留 UI 排序语义的组合层 `usable_lan_ips`）；
 //! - hint 引导文案：公用网络 → 提示切换专用；AP 隔离 → 引导手动输 IP
 //!   （规格 Z0-master-plan.md:416 G-4）。
 //!
@@ -479,7 +478,12 @@ fn read_profile_categories() -> Vec<u32> {
     Vec::new()
 }
 
-// ── 可直连 IP 枚举（复刻 server/pairing.rs，来源注明）─────────────────
+// ── 可直连 IP 枚举（委托 server/pairing.rs 单一真源）─────────────────
+
+// 网络原语自 pairing.rs `pub(crate)` 化后直接复用，消除历史复刻双源
+// （原复制件含 unsafe FFI——GetAdaptersAddresses 整段 80 行，双源漂移
+// 即安全风险）。原「pairing.rs 禁止修改故独立维护」的约束已由可见性
+// 放开解除：pairing.rs 侧仅 `fn` → `pub(crate) fn`，零逻辑改动。
 
 /// 本机可达 IP 集合（手机可手动输入列表）：
 /// 默认路由 IP 恒在首位（与配对二维码内嵌同源），其余为网卡枚举
@@ -488,6 +492,7 @@ fn usable_lan_ips() -> Vec<String> {
     let mut ips: Vec<String> = Vec::new();
     #[cfg(windows)]
     {
+        use crate::server::pairing::{is_usable_lan_ip, windows_ip_enum};
         ips.extend(
             windows_ip_enum::local_unicast_ips()
                 .into_iter()
@@ -497,8 +502,7 @@ fn usable_lan_ips() -> Vec<String> {
         // 私有网段优先（手机直连首选；排序规则同 pairing.rs pick_recommended_ip）
         ips.sort_by_key(|s| !is_private_ip_str(s));
     }
-    // 默认路由 IP（UDP connect 技巧；来源 pairing.rs:318-330）
-    let host = default_route_ip();
+    let host = crate::server::pairing::default_route_ip();
     if host != "0.0.0.0" && !ips.contains(&host) {
         ips.insert(0, host);
     }
@@ -508,170 +512,20 @@ fn usable_lan_ips() -> Vec<String> {
     ips
 }
 
-/// 默认路由 IP（UDP connect 技巧：零依赖、非 Windows 专用）。
-/// 失败（无网络/多网卡环境）返回 "0.0.0.0"——UI 侧引导检查网络。
-/// 来源：server/pairing.rs `default_route_ip`（pairing.rs:318-330）。
-fn default_route_ip() -> String {
-    use std::net::UdpSocket;
-    let sock = match UdpSocket::bind("0.0.0.0:0") {
-        Ok(s) => s,
-        Err(_) => return "0.0.0.0".to_string(),
-    };
-    match sock.connect("8.8.8.8:80") {
-        Ok(()) => match sock.local_addr() {
-            Ok(addr) if !addr.ip().is_unspecified() => addr.ip().to_string(),
-            _ => "0.0.0.0".to_string(),
-        },
-        Err(_) => "0.0.0.0".to_string(),
-    }
-}
-
-/// 判定 IP 是否属于私有网段：RFC1918（10/8、172.16/12、192.168/16）+
-/// IPv6 ULA（fc00::/7）。来源：pairing.rs:396-406。
-#[cfg_attr(not(windows), allow(dead_code))]
-fn is_private_ip(ip: &std::net::IpAddr) -> bool {
-    match ip {
-        std::net::IpAddr::V4(v4) => {
-            let o = v4.octets();
-            o[0] == 10 || (o[0] == 172 && (16..=31).contains(&o[1])) || (o[0] == 192 && o[1] == 168)
-        }
-        std::net::IpAddr::V6(v6) => (v6.segments()[0] & 0xfe00) == 0xfc00,
-    }
-}
-
 /// 字符串形式私有网段判定（排序键用；解析失败按非私有）。
 #[cfg_attr(not(windows), allow(dead_code))]
 fn is_private_ip_str(s: &str) -> bool {
     match s.parse::<std::net::IpAddr>() {
-        Ok(ip) => is_private_ip(&ip),
+        Ok(ip) => crate::server::pairing::is_private_ip(&ip),
         Err(_) => false,
-    }
-}
-
-/// 判定 IP 是否可被手机直连：排除回环/未指定/链路本地/组播；
-/// 服务监听为 IPv4（0.0.0.0），IPv6 地址不可直连，不在集合内。
-/// 来源：pairing.rs:408-422。
-#[cfg_attr(not(windows), allow(dead_code))]
-fn is_usable_lan_ip(ip: &std::net::IpAddr) -> bool {
-    fn is_link_local(ip: &std::net::IpAddr) -> bool {
-        match ip {
-            std::net::IpAddr::V4(v4) => {
-                let o = v4.octets();
-                o[0] == 169 && o[1] == 254
-            }
-            std::net::IpAddr::V6(v6) => (v6.segments()[0] & 0xffc0) == 0xfe80,
-        }
-    }
-    ip.is_ipv4()
-        && !ip.is_loopback()
-        && !ip.is_unspecified()
-        && !is_link_local(ip)
-        && !ip.is_multicast()
-}
-
-/// Windows 网卡单播地址枚举（GetAdaptersAddresses，经 windows-sys 直调）。
-///
-/// 复刻自 server/pairing.rs `windows_ip_enum`（pairing.rs:449-533）：
-/// 该模块为私有且配对文件并行阵营活跃（禁止修改），故在此独立维护；
-/// 实现与过滤语义同源（仅取 IPv4 单播，去重）。
-/// 失败返回空 Vec——调用方回退默认路由 IP。
-/// # Safety
-/// 仅在低频调用路径执行；错误路径全部安全降级。
-#[cfg(windows)]
-mod windows_ip_enum {
-    #![allow(unsafe_code)] // 受控 FFI：仅指针遍历 + 明确的结构体读取，已评审
-    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-    use windows_sys::Win32::NetworkManagement::IpHelper::IP_ADAPTER_ADDRESSES_LH;
-    use windows_sys::Win32::Networking::WinSock::{
-        AF_INET, SOCKADDR_IN, SOCKADDR_IN6, SOCKET_ADDRESS,
-    };
-
-    /// 固定大小对齐缓冲（IP_ADAPTER_ADDRESSES_LH 要求 8 字节对齐读取）
-    #[repr(C, align(8))]
-    struct Align8Buf([u8; 65536]);
-
-    /// 遍历适配器单播地址链表，仅取 IPv4（服务监听 0.0.0.0，v6 不可直连）。
-    pub fn local_unicast_ips() -> Vec<IpAddr> {
-        use windows_sys::Win32::NetworkManagement::IpHelper::GetAdaptersAddresses;
-        let mut out = Vec::new();
-        let mut buf = Box::new(Align8Buf([0u8; 65536]));
-        let mut size = std::mem::size_of::<Align8Buf>() as u32;
-        let first = buf.0.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH;
-        let rc = unsafe { GetAdaptersAddresses(0, 0, std::ptr::null(), first, &mut size) };
-        if rc == 0 {
-            unsafe { collect_ips(first, &mut out) };
-        }
-        // 缓冲区不足（ERROR_BUFFER_OVERFLOW）：按 API 报告 size 动态扩容重试一次
-        if rc == 111 && size > std::mem::size_of::<Align8Buf>() as u32 {
-            let layout =
-                std::alloc::Layout::from_size_align(size as usize, 8).expect("布局参数合法");
-            let raw = unsafe { std::alloc::alloc_zeroed(layout) };
-            let first = raw as *mut IP_ADAPTER_ADDRESSES_LH;
-            let rc2 = unsafe { GetAdaptersAddresses(0, 0, std::ptr::null(), first, &mut size) };
-            if rc2 == 0 {
-                unsafe { collect_ips(first, &mut out) };
-            }
-            unsafe { std::alloc::dealloc(raw, layout) };
-        }
-        out
-    }
-
-    /// 遍历单播地址链表收集 IPv4 地址（去重）。
-    /// # Safety
-    /// first 必须指向 GetAdaptersAddresses 成功返回的合法链表头。
-    unsafe fn collect_ips(first: *mut IP_ADAPTER_ADDRESSES_LH, out: &mut Vec<IpAddr>) {
-        let mut node = first;
-        while !node.is_null() {
-            let mut unicast = (*node).FirstUnicastAddress;
-            while !unicast.is_null() {
-                if let Some(ip) = sockaddr_to_ipv4(&(*unicast).Address) {
-                    if !out.contains(&ip) {
-                        out.push(ip);
-                    }
-                }
-                unicast = (*unicast).Next;
-            }
-            node = (*node).Next;
-        }
-    }
-
-    /// 从 SOCKET_ADDRESS 读取 IPv4；非 AF_INET（v6 等）返回 None。
-    /// # Safety
-    /// lpSockaddr 由系统填充且长度字段约束为完整 sockaddr，类型按 sin_family 判定。
-    unsafe fn sockaddr_to_ipv4(sa: &SOCKET_ADDRESS) -> Option<IpAddr> {
-        if sa.lpSockaddr.is_null() || sa.iSockaddrLength < std::mem::size_of::<SOCKADDR_IN>() as i32
-        {
-            return None;
-        }
-        if *(sa.lpSockaddr as *const u16) != AF_INET {
-            return None;
-        }
-        let sin = &*(sa.lpSockaddr as *const SOCKADDR_IN);
-        // sin_addr 以网络字节序存储：from_be 还原内存字节序
-        Some(IpAddr::V4(Ipv4Addr::from(u32::from_be(
-            sin.sin_addr.S_un.S_addr,
-        ))))
-    }
-
-    /// 备用：SOCKADDR_IN6 读取（保留给未来 v6 监听支持；当前未用）
-    #[allow(dead_code)]
-    unsafe fn sockaddr_to_ipv6(sa: &SOCKET_ADDRESS) -> Option<IpAddr> {
-        if sa.lpSockaddr.is_null()
-            || sa.iSockaddrLength < std::mem::size_of::<SOCKADDR_IN6>() as i32
-        {
-            return None;
-        }
-        if *(sa.lpSockaddr as *const u16) == AF_INET {
-            return None;
-        }
-        let sin6 = &*(sa.lpSockaddr as *const SOCKADDR_IN6);
-        Some(IpAddr::V6(Ipv6Addr::from(sin6.sin6_addr.u.Byte)))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    // 网络原语已收敛至 pairing.rs 单一真源；本文件测试直接复用共享实现
+    use crate::server::pairing::{is_private_ip, is_usable_lan_ip};
 
     /// 网络类别聚合：空集合 → 未知；单类别直判；Fail-Closed（公网优先，min() 聚合）；异常值按公用 fail-closed。
     #[test]
@@ -725,7 +579,7 @@ mod tests {
         assert!(unknown.contains("手动输入上方 IP"));
     }
 
-    /// 私有网段判定（复刻自 pairing.rs 的过滤规则自测）。
+    /// 私有网段判定（pairing.rs 共享实现的规则自测，防共享原语回归）。
     #[test]
     fn private_ip_classification() {
         use std::net::IpAddr;
@@ -745,7 +599,7 @@ mod tests {
         }
     }
 
-    /// 可直连过滤（复刻自 pairing.rs 的过滤规则自测）。
+    /// 可直连过滤（pairing.rs 共享实现的规则自测，防共享原语回归）。
     #[test]
     fn usable_lan_ip_filter() {
         use std::net::IpAddr;

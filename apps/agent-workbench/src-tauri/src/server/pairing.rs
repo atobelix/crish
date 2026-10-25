@@ -342,7 +342,8 @@ impl PairingCoordinator {
 
 /// 默认路由 IP（UDP connect 技巧：零依赖、非 Windows 专用）。
 /// 失败（无网络/多网卡环境）返回 "0.0.0.0"——UI 侧允许手动输入。
-fn default_route_ip() -> String {
+/// `pub(crate)`：multi_device_network 网络检测复用本单一真源。
+pub(crate) fn default_route_ip() -> String {
     use std::net::UdpSocket;
     let sock = match UdpSocket::bind("0.0.0.0:0") {
         Ok(s) => s,
@@ -423,7 +424,8 @@ fn pick_recommended_ip(ips: &[String]) -> Option<String> {
 
 /// 判定 IP 是否属于私有网段：RFC1918（10/8、172.16/12、192.168/16）+
 /// IPv6 ULA（fc00::/7）。家庭/办公局域网基本都在私有网段。
-fn is_private_ip(ip: &std::net::IpAddr) -> bool {
+/// `pub(crate)`：multi_device_network 网络检测复用本单一真源（原为其复刻件收敛）。
+pub(crate) fn is_private_ip(ip: &std::net::IpAddr) -> bool {
     match ip {
         std::net::IpAddr::V4(v4) => {
             let o = v4.octets();
@@ -435,7 +437,8 @@ fn is_private_ip(ip: &std::net::IpAddr) -> bool {
 
 /// 判定 IP 是否可被手机直连：排除回环/未指定/链路本地/组播。
 /// 服务监听为 IPv4（0.0.0.0），IPv6 地址不可直连，不在集合内。
-fn is_usable_lan_ip(ip: &std::net::IpAddr) -> bool {
+/// `pub(crate)`：multi_device_network 网络检测复用本单一真源。
+pub(crate) fn is_usable_lan_ip(ip: &std::net::IpAddr) -> bool {
     fn is_link_local(ip: &std::net::IpAddr) -> bool {
         match ip {
             std::net::IpAddr::V4(v4) => {
@@ -474,10 +477,12 @@ fn firewall_hint() -> String {
 
 /// Windows 网卡单播地址枚举（GetAdaptersAddresses，经 windows-sys 直调；
 /// 无新增 crate，仅追加 feature）。失败返回空 Vec——调用方回退默认路由 IP。
+/// `pub(crate)`：multi_device_network 网络检测复用本单一真源（原为其
+/// 复刻件收敛——复制 unsafe FFI 双源漂移即安全风险）。
 /// # Safety
 /// 该模块仅在配对开启等低频路径调用，错误路径全部安全降级。
 #[cfg(windows)]
-mod windows_ip_enum {
+pub(crate) mod windows_ip_enum {
     #![allow(unsafe_code)] // 受控 FFI：仅指针遍历 + 明确的结构体读取，已评审
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
     use windows_sys::Win32::NetworkManagement::IpHelper::IP_ADAPTER_ADDRESSES_LH;
