@@ -1283,8 +1283,7 @@
     border-radius var(--duration-normal) var(--ease-decelerate),
     border-color var(--duration-fast) var(--ease-decelerate),
     box-shadow var(--duration-fast) var(--ease-decelerate),
-    min-height var(--duration-fast) var(--ease-decelerate),
-    height var(--transition-accordion);
+    min-height var(--duration-fast) var(--ease-decelerate);
   container-type: inline-size;
 }
 

@@ -106,7 +106,7 @@
   background: var(--chat-footer-fade);
   pointer-events: auto;
   transform: none;
-  transition: transform var(--duration-landing-fade) var(--ease-decelerate);
+  transition: transform var(--transition-landing-settle);
 }
 
 .chatFooter .chatCol {
@@ -170,8 +170,8 @@
   transform: translateY(-8px);
   pointer-events: none;
   transition:
-    opacity var(--transition-landing-fade),
-    transform var(--transition-landing-fade);
+    opacity var(--transition-landing-settle),
+    transform var(--transition-landing-settle);
 }
 
 .floatZone {

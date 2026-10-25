@@ -234,38 +234,53 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
 
   describe('五、点击展开态与交互：自然流出、受控模式与独立复制', () => {
     it('非受控模式下点击切换展开状态并渲染 reasoningBody', () => {
-      const { container } = render(
-        <ReasoningRow
-          content="完整的深度思考推导思维链"
-          isLive={false}
-          durationMs={1800}
-        />
-      );
+      vi.useFakeTimers();
+      try {
+        const { container } = render(
+          <ReasoningRow
+            content="完整的深度思考推导思维链"
+            isLive={false}
+            durationMs={1800}
+          />
+        );
 
-      // 初始收起态
-      expect(
-        container.querySelector('[data-testid="reasoning-body"]')
-      ).toBeNull();
+        // 初始收起态
+        expect(
+          container.querySelector('[data-testid="reasoning-body"]')
+        ).toBeNull();
 
-      // 点击展开
-      const btn = screen.getByRole('button');
-      fireEvent.click(btn);
+        // 点击展开
+        const btn = screen.getByRole('button');
+        fireEvent.click(btn);
 
-      // 展开态自然呈现
-      const body = container.querySelector('[data-testid="reasoning-body"]');
-      expect(body).not.toBeNull();
-      expect(btn.getAttribute('aria-expanded')).toBe('true');
+        // 展开态自然呈现
+        const body = container.querySelector('[data-testid="reasoning-body"]');
+        expect(body).not.toBeNull();
+        expect(btn.getAttribute('aria-expanded')).toBe('true');
 
-      // 负向断言（用户裁决）：彻底切除复制按钮，不得再出现复制按钮
-      expect(screen.queryByTestId('copy-thinking-button')).toBeNull();
-      expect(screen.queryByRole('button', { name: /复制/i })).toBeNull();
+        // 负向断言（用户裁决）：彻底切除复制按钮，不得再出现复制按钮
+        expect(screen.queryByTestId('copy-thinking-button')).toBeNull();
+        expect(screen.queryByRole('button', { name: /复制/i })).toBeNull();
 
-      // 再次点击收起
-      fireEvent.click(btn);
-      expect(
-        container.querySelector('[data-testid="reasoning-body"]')
-      ).toBeNull();
-      expect(btn.getAttribute('aria-expanded')).toBe('false');
+        // 再次点击收起（触发折叠动画过渡态）
+        fireEvent.click(btn);
+        expect(btn.getAttribute('aria-expanded')).toBe('false');
+        const root = container.querySelector(
+          '[data-testid="reasoning-container"]'
+        );
+        expect(root?.getAttribute('data-collapsing')).toBe('true');
+
+        // 220ms 动效结束后注销 DOM
+        act(() => {
+          vi.advanceTimersByTime(220);
+        });
+        expect(
+          container.querySelector('[data-testid="reasoning-body"]')
+        ).toBeNull();
+        expect(root?.getAttribute('data-collapsing')).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('支持受控模式：外部传入 isOpen 与 onToggle', () => {
@@ -467,27 +482,41 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       }
     });
 
-    it('手动点击折叠不进入 collapsing 动画延迟，直接即时收起', () => {
-      const { container } = render(
-        <ReasoningRow content="手动测试内容" isTurnWorking={false} />
-      );
+    it('手动点击折叠进入平滑 collapsing 动画过渡，并在窗口结束后安全卸载', () => {
+      vi.useFakeTimers();
+      try {
+        const { container } = render(
+          <ReasoningRow content="手动测试内容" isTurnWorking={false} />
+        );
 
-      const btn = screen.getByRole('button');
-      // 展开
-      fireEvent.click(btn);
-      expect(
-        container.querySelector('[data-testid="reasoning-body"]')
-      ).not.toBeNull();
+        const btn = screen.getByRole('button');
+        // 展开
+        fireEvent.click(btn);
+        expect(
+          container.querySelector('[data-testid="reasoning-body"]')
+        ).not.toBeNull();
 
-      // 收起
-      fireEvent.click(btn);
-      const root = container.querySelector(
-        '[data-testid="reasoning-container"]'
-      );
-      expect(root?.getAttribute('data-collapsing')).toBeNull();
-      expect(
-        container.querySelector('[data-testid="reasoning-body"]')
-      ).toBeNull();
+        // 收起：第一阶段保留 DOM，启动平滑过渡
+        fireEvent.click(btn);
+        const root = container.querySelector(
+          '[data-testid="reasoning-container"]'
+        );
+        expect(root?.getAttribute('data-collapsing')).toBe('true');
+        expect(
+          container.querySelector('[data-testid="reasoning-body"]')
+        ).not.toBeNull();
+
+        // 第二阶段：220ms 动效窗口结束后安全注销 DOM
+        act(() => {
+          vi.advanceTimersByTime(220);
+        });
+        expect(root?.getAttribute('data-collapsing')).toBeNull();
+        expect(
+          container.querySelector('[data-testid="reasoning-body"]')
+        ).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('折叠过渡中途若工作态重新激活，应立即取消折叠并恢复展开', () => {

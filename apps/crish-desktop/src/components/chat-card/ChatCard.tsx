@@ -34,6 +34,8 @@ const ExtensionsMainSurface = lazy(() =>
 import { useChatCardDragDrop } from './useChatCardDragDrop';
 import { AppIcon } from '../ui/icons/index';
 
+export type ComposerSurfaceState = 'landing' | 'docking' | 'docked';
+
 export interface ChatCardProps {
   handleGlobalTabClick: (cardId: string) => void;
   sessionId?: string | null;
@@ -170,42 +172,53 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       />
     ) : null;
 
-    // 空界面与已有对话切换时，输入框只做位移。占位高度冻结，消息视口不跟着 flex 伸缩。
-    const isLanding = state.emptyKind === 'session-empty';
+    // 显式表面过渡状态机（ComposerSurfaceCoordinator）：
+    // 严格解耦场景 A（同一会话首条消息发送：自然落底协同滑动）与 场景 B（切换会话标签：极简瞬时直切）
+    const isLandingKind = state.emptyKind === 'session-empty';
+    const [surfaceState, setSurfaceState] = useState<ComposerSurfaceState>(
+      () => (isLandingKind ? 'landing' : 'docked')
+    );
+    const prevSessionIdRef = useRef(state.activeSessionId);
     const prevEmptyKindRef = useRef(state.emptyKind);
-    const [isLandingSettling, setIsLandingSettling] = useState(false);
-
-    const isJustTriggeredSettling =
-      prevEmptyKindRef.current === 'session-empty' &&
-      state.emptyKind == null &&
-      !state.messagesLoading;
-    const activeSettling = isLandingSettling || isJustTriggeredSettling;
 
     useEffect(() => {
       let timer: number | undefined;
-      if (
-        prevEmptyKindRef.current === 'session-empty' &&
-        state.emptyKind == null
-      ) {
-        setIsLandingSettling(true);
+      const isSameSession = prevSessionIdRef.current === state.activeSessionId;
+      const wasLanding = prevEmptyKindRef.current === 'session-empty';
+      const isNowDocked = state.emptyKind == null;
+
+      if (!isSameSession) {
+        // 场景 B：切换会话标签页时瞬时就位，不进入跨视口物理滑动
+        setSurfaceState(isLandingKind ? 'landing' : 'docked');
+      } else if (wasLanding && isNowDocked) {
+        // 场景 A：当前会话发送首条消息，触发平滑降落停靠态（docking）
+        setSurfaceState('docking');
         timer = window.setTimeout(() => {
-          setIsLandingSettling(false);
+          setSurfaceState('docked');
         }, DURATION_LANDING_SETTLE_MS);
+      } else {
+        setSurfaceState(isLandingKind ? 'landing' : 'docked');
       }
+
+      prevSessionIdRef.current = state.activeSessionId;
       prevEmptyKindRef.current = state.emptyKind;
+
       return () => {
         if (timer !== undefined) {
           window.clearTimeout(timer);
         }
       };
-    }, [state.emptyKind]);
+    }, [state.activeSessionId, state.emptyKind, isLandingKind]);
+
+    const isLanding = surfaceState === 'landing';
+    const isDocking = surfaceState === 'docking';
 
     // 底部主输入框：持续常驻，草稿状态完全独立保全
     const mainComposerElement = (
       <ChatComposer
         {...state.composerProps}
         emptyKind={state.emptyKind}
-        layoutVariant={isLanding || activeSettling ? 'multiline' : 'adaptive'}
+        layoutVariant={isLanding ? 'multiline' : 'adaptive'}
         onPasteImage={state.composerProps.handlePasteImage}
         onPasteFiles={state.composerProps.handlePasteFiles}
         onStop={state.composerProps.handleStopGeneration}
@@ -350,7 +363,8 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           aria-busy={state.messagesLoading || undefined}
           data-main-surface={state.mainSurface}
           data-empty-kind={state.emptyKind ?? undefined}
-          data-settling={activeSettling ? 'true' : undefined}
+          data-surface-state={surfaceState}
+          data-settling={isDocking ? 'true' : undefined}
           data-messages-loading={state.messagesLoading ? 'true' : undefined}
           data-engine-ok={
             state.engineOk === false
@@ -423,7 +437,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           <ChatComposerWrapper
             mainSurface={state.mainSurface}
             emptyKind={state.emptyKind}
-            isSettling={activeSettling}
+            isSettling={isDocking}
             composerElement={mainComposerElement}
             ribbons={ribbons}
             pendingApprovalCount={state.approvalState.pendingApprovalCount}
@@ -442,7 +456,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
             isProcessing={state.isProcessing}
             onStopGeneration={state.composerProps.handleStopGeneration}
             composerLead={
-              isLanding || activeSettling ? (
+              surfaceState !== 'docked' ? (
                 <>
                   <ChatLandingBrand />
                   <ComposerProjectPicker

@@ -193,12 +193,17 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
     }
   }
 
-  // 若外部显式受控传入 isOpen，外部控制优先级最高，立即终止过渡态
-  if (isOpen !== undefined && isCollapsing) {
-    setIsCollapsing(false);
-  }
+  const prevIsOpenRef = useRef(isOpen);
+  useEffect(() => {
+    if (prevIsOpenRef.current === true && isOpen === false) {
+      setIsCollapsing(true);
+    } else if (isOpen === true) {
+      setIsCollapsing(false);
+    }
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen]);
 
-  // 第二阶段完全卸载：160ms 物理过渡完成后解除 DOM 挂载
+  // 第二阶段完全卸载：物理过渡完成后解除 DOM 挂载
   useEffect(() => {
     if (!isCollapsing) {
       return undefined;
@@ -225,8 +230,13 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
 
   const handleToggle = useCallback(() => {
     setUserInteracted(true);
-    setUserExpanded(!isExpanded);
-    setIsCollapsing(false);
+    if (isExpanded) {
+      setUserExpanded(false);
+      setIsCollapsing(true);
+    } else {
+      setUserExpanded(true);
+      setIsCollapsing(false);
+    }
     onToggle?.();
   }, [isExpanded, onToggle]);
 

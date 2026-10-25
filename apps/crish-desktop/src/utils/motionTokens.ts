@@ -31,11 +31,11 @@ export const DURATION_ACCORDION_MS = 220;
 /** 手风琴内部插槽渐隐/渐显时长（对应 tokens.css 中 --duration-accordion-fade 180ms） */
 export const DURATION_ACCORDION_FADE_MS = 180;
 
-/** 新对话落地框平滑变形过渡时长（对应 tokens.css 中 --transition-landing-settle 360ms） */
-export const DURATION_LANDING_SETTLE_MS = 360;
+/** 新对话落地框平滑变形过渡时长（对应 tokens.css 中 --transition-landing-settle 260ms） */
+export const DURATION_LANDING_SETTLE_MS = 260;
 
-/** 新对话落地品牌渐隐时长（对应 tokens.css 中 --duration-landing-fade 240ms） */
-export const DURATION_LANDING_FADE_MS = 240;
+/** 新对话落地品牌渐隐时长（对应 tokens.css 中 --duration-landing-fade 260ms） */
+export const DURATION_LANDING_FADE_MS = 260;
 
 /** 减速入场曲线（对应 tokens.css 中的 --ease-decelerate） */
 export const EASE_DECELERATE = 'cubic-bezier(0.2, 0, 0, 1)';

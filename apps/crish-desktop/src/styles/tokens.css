@@ -569,10 +569,10 @@ html[data-theme='light'] {
   --duration-accordion-fade: 180ms;
   --transition-accordion-fade: var(--duration-accordion-fade)
     var(--ease-decelerate);
-  --duration-landing-settle: 360ms;
+  --duration-landing-settle: 260ms;
   --transition-landing-settle: var(--duration-landing-settle)
     var(--ease-emphasized);
-  --duration-landing-fade: 240ms;
+  --duration-landing-fade: 260ms;
   --transition-landing-fade: var(--duration-landing-fade) var(--ease-emphasized);
   /* 折角是状态切换后的短程旋转，落到终点，不跟手抢停 */
   --transition-chevron: 150ms var(--ease-decelerate);
