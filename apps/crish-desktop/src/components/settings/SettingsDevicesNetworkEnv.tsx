@@ -86,7 +86,11 @@ export const SettingsDevicesNetworkEnv: React.FC<
                 aria-hidden
                 className={styles.networkFooterHintIcon}
               />
-              <span>{netEnv.hint}</span>
+              <span>
+                {netEnv.hint
+                  .replace(/[，,]\s*或手动输入上方\s*IP[。.]?/g, '。')
+                  .replace(/或手动输入上方\s*IP[。.]?/g, '')}
+              </span>
             </div>
           )}
         </div>
