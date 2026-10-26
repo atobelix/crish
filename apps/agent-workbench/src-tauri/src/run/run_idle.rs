@@ -1445,6 +1445,17 @@ pub(crate) mod idle_resume {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .remove(&run_id);
+        // 终态时刻（poison-pill 清理的时间下界，消费点见收口 None 分支）：
+        // 此刻之后入队的队列条目（run 结束后才到期的新定时器等）是新事件，
+        // 迟到的收口清理不得吞掉——本行到收口尾部的清理之间存在多个
+        // await（审计排空 / goal 评估 / decide 判定），无边界清理会把这个
+        // 异步窗口内入队的用户事件一并抹掉（测试与生产均观察到该竞态）。
+        let terminal_ms = now_ms_internal();
+        // 终态时刻的用户介入快照（条目保留语义的判据）：新 run 装配会
+        // clear_user_stopped，收口尾部的迟到判定若在执行时刻读标志，会把
+        // 「用户停止」误判为「系统不续」而清掉用户待消费的条目（竞态实测：
+        // 下一 run 装配先于本 run 的 decide 落地）——以终态快照为准。
+        let user_stopped_at_terminal = state.is_user_stopped(&session_id);
         // 15-T-6（裁决 D9）：工具级审计路由收口注销（run 级桥随 run 结束
         // 释放，防 session 泄漏；与 escape_watch 句柄同生命周期收口——
         // 重复注销幂等，finalize_failed 失败路径不重复进入本函数）
@@ -1635,12 +1646,33 @@ pub(crate) mod idle_resume {
                 }
             } else {
                 // 当不再续跑（如错误收场、熔断、空转超限、四源全空时）：
-                // 清理本会话可能残留的旧条目，杜绝 poison pill 遗留
-                let mut queue = state
-                    .pending_queue
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner());
-                queue.clear_for(&session_id);
+                // 清理本会话可能残留的旧条目，杜绝 poison pill 遗留。
+                // 边界一（用户停止路径不清，以终态快照为准）：user_stopped
+                // 的 None 属用户显式介入——残留条目（已到期定时器等）是已
+                // 发生事件，watcher 护栏 ③ 期间不拉起、用户新 run 收口判定
+                // 会消费它们；「永不自动续」≠「用户事件被清除」。不得在
+                // 执行时刻读标志（新 run 装配的 clear_user_stopped 可能已
+                // 并发落地，实测会将用户停止误判为系统不续）。
+                // 边界二（时间下界）：仅清终态（terminal_ms）前入队的条目，
+                // 终态后新入队的事件保留——见 terminal_ms 捕获点注释。
+                if !user_stopped_at_terminal {
+                    let purged = {
+                        let mut queue = state
+                            .pending_queue
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner());
+                        queue.clear_for_before(&session_id, terminal_ms)
+                    };
+                    if !purged.is_empty() {
+                        tracing::info!(
+                            target: "run",
+                            session_id = %session_id,
+                            run_id = %run_id,
+                            purged = purged.len(),
+                            "收口不续 run：清理终态前残留条目（poison-pill 清理，含 timer-/sched-/cron- 前缀广播）"
+                        );
+                    }
+                }
             }
         }
     } // drive_run_loop 收口闭

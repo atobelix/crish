@@ -10,6 +10,7 @@
 //!
 //! 命令（需集成 agent 在 main.rs 注册 + `app.manage(WorkspaceRegistry)`）：
 //! - `workbench_open_workspace(path)`：复授权（recent / 默认根），否则 `workspace_not_granted`
+//! - `workbench_activate_default_workspace()`：激活已注册的默认应用根，不接收路径
 //! - `workbench_list_workspaces()`：列出已授权根（供 UI 状态同步）
 //!
 //! 锁使用 `lock().map_err(...)` 恢复式模式（对齐 T07.6，禁用 expect 中毒路径）。
@@ -22,13 +23,11 @@ use crate::fs_commands::types::{
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::Manager;
+use tauri_plugin_dialog::{DialogExt, FilePath};
 
 /// 注册来源：决定该路径属于「新授权」还是「复授权」。
 ///
-/// G11a 备注：RecentList 变体仅由登记先行命令 workbench_open_workspace
-/// （command_manifest registered=false，PE-07 T07.2 接线在途）构造——
-/// dead_code 静音待接线。
-#[allow(dead_code)]
+/// RecentList 变体仅用于已有 recent/default 根的复授权。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RegisterSource {
     /// 原生目录对话框选中（唯一新授权入口）
@@ -62,6 +61,13 @@ struct RegistryInner {
 /// 命令侧经 `tauri::AppHandle::try_state` 获取。
 pub(crate) struct WorkspaceRegistry {
     inner: Mutex<RegistryInner>,
+}
+
+/// 本次 recent 批量复授权期间完成 canonicalize 与授权校验的结果。
+#[derive(Debug)]
+struct RegisteredWorkspaceBatch {
+    primary: PathBuf,
+    roots: Vec<PathBuf>,
 }
 
 /// recent 文件固定文件名（webview 不可写，防恶意仓库改写授权）
@@ -106,6 +112,18 @@ impl WorkspaceRegistry {
     /// 注册授权根。Dialog 为唯一新授权入口；RecentList/DefaultAppRoot 仅复授权
     /// （路径必须在 recent 列表内或等于默认应用根），否则 `workspace_not_granted`。
     pub(crate) fn register(&self, path: &Path, source: RegisterSource) -> Result<PathBuf, String> {
+        if source == RegisterSource::Dialog {
+            return self
+                .register_dialog_paths(&[path.to_path_buf()], true)?
+                .into_iter()
+                .next()
+                .ok_or_else(|| format!("{ERR_WORKSPACE_NOT_GRANTED}: no selected workspace"));
+        }
+        if source == RegisterSource::RecentList {
+            return self
+                .register_recent_paths(&[path.to_path_buf()], path, true)
+                .map(|registered| registered.primary);
+        }
         if path.as_os_str().is_empty() {
             return Err(format!("{ERR_WORKSPACE_NOT_GRANTED}: path is empty"));
         }
@@ -132,22 +150,8 @@ impl WorkspaceRegistry {
             .map_err(|e| format!("{ERR_INTERNAL}: workspace registry lock poisoned: {e}"))?;
 
         match source {
-            RegisterSource::Dialog => {
-                // 新授权：无条件接受
-            }
-            RegisterSource::RecentList => {
-                // 复授权：仅 recent 列表内或默认应用根
-                let in_recent = inner
-                    .recent
-                    .iter()
-                    .any(|item| paths_equal(item, &canonical));
-                if !in_recent && !is_default_app_root(&canonical) {
-                    return Err(format!(
-                        "{ERR_WORKSPACE_NOT_GRANTED}: workspace not in recent list: `{}`",
-                        canonical.display()
-                    ));
-                }
-            }
+            RegisterSource::Dialog => unreachable!("Dialog uses register_dialog_paths"),
+            RegisterSource::RecentList => unreachable!("RecentList uses register_recent_paths"),
             RegisterSource::DefaultAppRoot => {
                 // 复授权：仅默认应用根（启动内部注册使用）
                 if !is_default_app_root(&canonical) {
@@ -159,6 +163,14 @@ impl WorkspaceRegistry {
             }
         }
 
+        let mut next_recent = inner.recent.clone();
+        if !next_recent.iter().any(|item| paths_equal(item, &canonical)) {
+            next_recent.push(canonical.clone());
+        }
+        if next_recent != inner.recent {
+            persist_recent_list(&inner.config_dir, &next_recent)?;
+        }
+
         // 去重 + 置为活动根（最近授权者）
         inner
             .roots
@@ -168,18 +180,210 @@ impl WorkspaceRegistry {
             source,
         });
         inner.active = Some(inner.roots.len() - 1);
-
-        // recent 记录追加（去重）并落盘（tmp + rename）
-        if !inner
-            .recent
-            .iter()
-            .any(|item| paths_equal(item, &canonical))
-        {
-            inner.recent.push(canonical.clone());
-        }
-        persist_recent_list(&inner.config_dir, &inner.recent);
+        inner.recent = next_recent;
 
         Ok(canonical)
+    }
+
+    /// RecentList 批量复授权：先验证全部路径与 primary，再一次更新 roots。
+    /// 不接受任何 Dialog 来源的新授权；路径必须已经在 recent 或等于默认应用根。
+    fn register_recent_paths(
+        &self,
+        paths: &[PathBuf],
+        primary_path: &Path,
+        activate_primary: bool,
+    ) -> Result<RegisteredWorkspaceBatch, String> {
+        if paths.is_empty() {
+            return Err(format!("{ERR_WORKSPACE_NOT_GRANTED}: path list is empty"));
+        }
+
+        // 显式 PathBuf 标注：首个使用点是 .iter()（paths_equal 形参 &Path），
+        // 无标注时推断会把元素类型统一成未加尺寸的 Path（编译错误）。
+        let mut canonical_paths: Vec<PathBuf> = Vec::with_capacity(paths.len());
+        for path in paths {
+            if path.as_os_str().is_empty() {
+                return Err(format!("{ERR_WORKSPACE_NOT_GRANTED}: path is empty"));
+            }
+            let path_str = path.to_string_lossy();
+            if path_str.contains('\0') {
+                return Err(format!(
+                    "{ERR_WORKSPACE_NOT_GRANTED}: path contains NUL byte"
+                ));
+            }
+            let canonical = canonicalize_root(path).map_err(|e| {
+                format!(
+                    "{ERR_WORKSPACE_NOT_GRANTED}: cannot resolve workspace root `{path_str}`: {e}"
+                )
+            })?;
+            if !canonical.is_dir() {
+                return Err(format!(
+                    "{ERR_WORKSPACE_NOT_GRANTED}: not a directory: `{}`",
+                    canonical.display()
+                ));
+            }
+            if !canonical_paths
+                .iter()
+                .any(|item| paths_equal(item, &canonical))
+            {
+                canonical_paths.push(canonical);
+            }
+        }
+
+        let primary_canonical = canonicalize_root(primary_path).map_err(|e| {
+            format!(
+                "{ERR_WORKSPACE_NOT_GRANTED}: cannot resolve primary workspace root `{}`: {e}",
+                primary_path.display()
+            )
+        })?;
+        if !canonical_paths
+            .iter()
+            .any(|path| paths_equal(path, &primary_canonical))
+        {
+            return Err(format!(
+                "{ERR_WORKSPACE_NOT_GRANTED}: primary workspace is not in the path list: `{}`",
+                primary_canonical.display()
+            ));
+        }
+
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|e| format!("{ERR_INTERNAL}: workspace registry lock poisoned: {e}"))?;
+        for canonical in &canonical_paths {
+            let in_recent = inner.recent.iter().any(|item| paths_equal(item, canonical));
+            if !in_recent && !is_default_app_root(canonical) {
+                return Err(format!(
+                    "{ERR_WORKSPACE_NOT_GRANTED}: workspace not in recent list: `{}`",
+                    canonical.display()
+                ));
+            }
+        }
+
+        let previous_active = inner
+            .active
+            .and_then(|index| inner.roots.get(index))
+            .map(|root| root.path.clone());
+
+        let mut next_recent = inner.recent.clone();
+        for canonical in &canonical_paths {
+            if !next_recent.iter().any(|item| paths_equal(item, canonical)) {
+                next_recent.push(canonical.clone());
+            }
+        }
+        if next_recent != inner.recent {
+            persist_recent_list(&inner.config_dir, &next_recent)?;
+        }
+
+        for canonical in &canonical_paths {
+            inner
+                .roots
+                .retain(|root| !paths_equal(&root.path, canonical));
+            inner.roots.push(WorkspaceRoot {
+                path: canonical.clone(),
+                source: RegisterSource::RecentList,
+            });
+        }
+        inner.active = if activate_primary {
+            inner
+                .roots
+                .iter()
+                .position(|root| paths_equal(&root.path, &primary_canonical))
+        } else {
+            previous_active.and_then(|active_path| {
+                inner
+                    .roots
+                    .iter()
+                    .position(|root| paths_equal(&root.path, &active_path))
+            })
+        };
+        inner.recent = next_recent;
+        Ok(RegisteredWorkspaceBatch {
+            primary: primary_canonical,
+            roots: canonical_paths,
+        })
+    }
+
+    /// 在 native dialog 回调已交付路径后批量登记；此方法不接受 IPC 参数。
+    ///
+    /// 多选先完整验证，再一次持锁更新根、recent 与活动根，避免部分注册。选择
+    /// “添加文件夹”时 `activate_first=false`，保持当前活动根；创建项目时则激活首选根。
+    fn register_dialog_paths(
+        &self,
+        paths: &[PathBuf],
+        activate_first: bool,
+    ) -> Result<Vec<PathBuf>, String> {
+        // 显式 PathBuf 标注：首个使用点是 .iter()（paths_equal 形参 &Path），
+        // 无标注时推断会把元素类型统一成未加尺寸的 Path（编译错误）。
+        let mut canonical_paths: Vec<PathBuf> = Vec::with_capacity(paths.len());
+        for path in paths {
+            if path.as_os_str().is_empty() {
+                return Err(format!("{ERR_WORKSPACE_NOT_GRANTED}: path is empty"));
+            }
+            let path_str = path.to_string_lossy();
+            if path_str.contains('\0') {
+                return Err(format!(
+                    "{ERR_WORKSPACE_NOT_GRANTED}: path contains NUL byte"
+                ));
+            }
+            let canonical = canonicalize_root(path).map_err(|e| {
+                format!(
+                    "{ERR_WORKSPACE_NOT_GRANTED}: cannot resolve workspace root `{path_str}`: {e}"
+                )
+            })?;
+            if !canonical.is_dir() {
+                return Err(format!(
+                    "{ERR_WORKSPACE_NOT_GRANTED}: not a directory: `{}`",
+                    canonical.display()
+                ));
+            }
+            canonical_paths.push(canonical);
+        }
+
+        if canonical_paths.is_empty() {
+            return Ok(canonical_paths);
+        }
+
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|e| format!("{ERR_INTERNAL}: workspace registry lock poisoned: {e}"))?;
+        let previous_active = inner
+            .active
+            .and_then(|index| inner.roots.get(index))
+            .map(|root| root.path.clone());
+        let mut next_recent = inner.recent.clone();
+        for canonical in &canonical_paths {
+            if !next_recent.iter().any(|item| paths_equal(item, canonical)) {
+                next_recent.push(canonical.clone());
+            }
+        }
+        if next_recent != inner.recent {
+            persist_recent_list(&inner.config_dir, &next_recent)?;
+        }
+
+        for canonical in &canonical_paths {
+            inner
+                .roots
+                .retain(|root| !paths_equal(&root.path, canonical));
+            inner.roots.push(WorkspaceRoot {
+                path: canonical.clone(),
+                source: RegisterSource::Dialog,
+            });
+        }
+        inner.recent = next_recent;
+
+        let target_active = if activate_first {
+            canonical_paths.first()
+        } else {
+            previous_active.as_ref()
+        };
+        inner.active = target_active.and_then(|path| {
+            inner
+                .roots
+                .iter()
+                .position(|root| paths_equal(&root.path, path))
+        });
+        Ok(canonical_paths)
     }
 
     /// 解析请求路径对应的沙箱守卫。
@@ -264,6 +468,35 @@ impl WorkspaceRegistry {
         let inner = self.inner.lock().ok()?;
         active_root_path(&inner).ok()
     }
+
+    /// 激活已登记的默认应用工作区根，不接收 renderer 路径，也不创建新授权。
+    pub(crate) fn activate_default_root(&self) -> Result<PathBuf, String> {
+        let app_dir = crate::host_paths::app_dir()?;
+        let default_root = crate::host_paths::workspace_root(&app_dir);
+        self.activate_registered_root(&default_root)
+    }
+
+    fn activate_registered_root(&self, path: &Path) -> Result<PathBuf, String> {
+        let canonical = canonicalize_root(path).map_err(|e| {
+            format!("{ERR_WORKSPACE_NOT_GRANTED}: cannot resolve default workspace root: {e}")
+        })?;
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|e| format!("{ERR_INTERNAL}: workspace registry lock poisoned: {e}"))?;
+        let index = inner
+            .roots
+            .iter()
+            .position(|root| paths_equal(&root.path, &canonical))
+            .ok_or_else(|| {
+                format!(
+                    "{ERR_WORKSPACE_NOT_GRANTED}: default workspace root is not registered: `{}`",
+                    canonical.display()
+                )
+            })?;
+        inner.active = Some(index);
+        Ok(inner.roots[index].path.clone())
+    }
 }
 
 /// 活动根路径（无活动根时退回第一个已授权根）。
@@ -343,22 +576,25 @@ fn load_recent_list(config_dir: &Path) -> Vec<PathBuf> {
 }
 
 /// recent 列表落盘：tmp + rename（原子替换，损坏不会留下半截文件）。
-fn persist_recent_list(config_dir: &Path, recent: &[PathBuf]) {
-    let Ok(()) = std::fs::create_dir_all(config_dir) else {
-        return;
-    };
+fn persist_recent_list(config_dir: &Path, recent: &[PathBuf]) -> Result<(), String> {
+    std::fs::create_dir_all(config_dir).map_err(|e| {
+        format!("{ERR_WORKSPACE_NOT_GRANTED}: cannot create workspace config directory: {e}")
+    })?;
     let target = config_dir.join(RECENT_FILE_NAME);
     let tmp = target.with_extension("json.tmp");
     let list: Vec<String> = recent
         .iter()
         .map(|p| p.to_string_lossy().into_owned())
         .collect();
-    let Ok(text) = serde_json::to_string_pretty(&list) else {
-        return;
-    };
-    if std::fs::write(&tmp, text).is_ok() {
-        let _ = std::fs::rename(&tmp, &target);
-    }
+    let text = serde_json::to_string_pretty(&list).map_err(|e| {
+        format!("{ERR_WORKSPACE_NOT_GRANTED}: cannot serialize workspace history: {e}")
+    })?;
+    std::fs::write(&tmp, text)
+        .map_err(|e| format!("{ERR_WORKSPACE_NOT_GRANTED}: cannot write workspace history: {e}"))?;
+    std::fs::rename(&tmp, &target).map_err(|e| {
+        format!("{ERR_WORKSPACE_NOT_GRANTED}: cannot commit workspace history: {e}")
+    })?;
+    Ok(())
 }
 
 /// 命令侧获取注册表状态（try_state，缺失时返回内部错误而非 panic）。
@@ -382,12 +618,16 @@ pub(crate) fn resolve_guard(
     registry(app)?.resolve_guard(requested)
 }
 
-/// T07.2 复授权命令：仅当 path ∈ recent 列表或 = 默认应用根时授权；
-/// 否则返回 `workspace_not_granted`（提示走文件夹选择器）。授权成功后写回 recent。
-///
-/// G11a 备注（登记先行面）：command_manifest registered=false（契约测试锚定），
-/// PE-07 T07.2 接线在途——dead_code 静音待接线。
-#[allow(dead_code)]
+/// 只同步本次注册方法返回的 canonical 根；调用方不得传入原始 IPC 路径。
+fn sync_asset_scope<R: tauri::Runtime, M: tauri::Manager<R>>(
+    app: &M,
+    roots: &[PathBuf],
+) -> Result<(), String> {
+    crate::asset_scope::allow_registered_workspace_roots(app, roots.iter().cloned())
+        .map_err(|error| format!("工作区已登记，但 asset 协议授权同步失败：{error}"))
+}
+
+/// 复授权命令：只接受 recent 列表或默认应用根；其 path 不产生新授权。
 #[tauri::command]
 pub(crate) fn workbench_open_workspace(
     app: tauri::AppHandle,
@@ -395,14 +635,45 @@ pub(crate) fn workbench_open_workspace(
 ) -> Result<OpenWorkspaceResult, String> {
     let reg = registry(&app).map_err(|e| format!("{}: {}", e.code, e.message))?;
     let canonical = reg.register(Path::new(&path), RegisterSource::RecentList)?;
+    sync_asset_scope(&app, std::slice::from_ref(&canonical))?;
     Ok(OpenWorkspaceResult {
         path: canonical.to_string_lossy().into_owned(),
     })
 }
 
-/// T07.2 状态同步命令：列出已授权根（供 UI 状态同步）。
-// G11a 备注：登记先行面（command_manifest registered=false），PE-07 T07.2 接线在途。
-#[allow(dead_code)]
+/// 多目录项目的 RecentList 原子复授权；所有路径验证成功后才更新 roots。
+/// 任一 renderer 路径不在 recent/default 内时整批拒绝，不新增 Dialog 授权。
+#[tauri::command]
+pub(crate) fn workbench_open_workspaces(
+    app: tauri::AppHandle,
+    paths: Vec<String>,
+    primary_path: String,
+    activate_primary: bool,
+) -> Result<OpenWorkspaceResult, String> {
+    let reg = registry(&app).map_err(|e| format!("{}: {}", e.code, e.message))?;
+    let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
+    let registered =
+        reg.register_recent_paths(&paths, Path::new(&primary_path), activate_primary)?;
+    sync_asset_scope(&app, &registered.roots)?;
+    Ok(OpenWorkspaceResult {
+        path: registered.primary.to_string_lossy().into_owned(),
+    })
+}
+
+/// 切回 Rust 内部注册的默认应用工作区根；不接受 renderer 提供的路径。
+#[tauri::command]
+pub(crate) fn workbench_activate_default_workspace(
+    app: tauri::AppHandle,
+) -> Result<OpenWorkspaceResult, String> {
+    let reg = registry(&app).map_err(|e| format!("{}: {}", e.code, e.message))?;
+    let canonical = reg.activate_default_root()?;
+    sync_asset_scope(&app, std::slice::from_ref(&canonical))?;
+    Ok(OpenWorkspaceResult {
+        path: canonical.to_string_lossy().into_owned(),
+    })
+}
+
+/// 列出当前已授权根，供 UI 状态同步。
 #[tauri::command]
 pub(crate) fn workbench_list_workspaces(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     let reg = registry(&app).map_err(|e| format!("{}: {}", e.code, e.message))?;
@@ -414,12 +685,112 @@ pub(crate) fn workbench_list_workspaces(app: tauri::AppHandle) -> Result<Vec<Str
 }
 
 /// 复授权成功返回体（camelCase 序列化）。
-// G11a 备注：随登记先行命令 workbench_open_workspace 保留（同理由）。
-#[allow(dead_code)]
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct OpenWorkspaceResult {
     pub(crate) path: String,
+}
+
+/// 打开 Tauri plugin-dialog 原生目录选择器并等待用户结果。
+///
+/// 调用端不提供路径；唯一输入来自插件回调的 FilePath。
+async fn select_native_folder_paths(
+    app: &tauri::AppHandle,
+    title: &'static str,
+    multiple: bool,
+) -> Result<Option<Vec<PathBuf>>, String> {
+    let (tx, rx) = tokio::sync::oneshot::channel::<Option<Vec<FilePath>>>();
+    if multiple {
+        app.dialog()
+            .file()
+            .set_title(title)
+            .pick_folders(move |paths| {
+                let _ = tx.send(paths);
+            });
+    } else {
+        app.dialog()
+            .file()
+            .set_title(title)
+            .pick_folder(move |path| {
+                let _ = tx.send(path.map(|path| vec![path]));
+            });
+    }
+
+    let Some(selected) = rx
+        .await
+        .map_err(|_| "原生文件夹选择器未返回结果".to_string())?
+    else {
+        return Ok(None);
+    };
+
+    selected
+        .into_iter()
+        .map(|path| {
+            path.into_path()
+                .map_err(|e| format!("无法读取原生选择的文件夹路径: {e}"))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
+}
+
+/// 只允许由原生 dialog 结果调用；None 代表取消且不改注册表。
+fn register_native_dialog_selection(
+    registry: &WorkspaceRegistry,
+    selected: Option<Vec<PathBuf>>,
+    activate_first: bool,
+) -> Result<Option<Vec<PathBuf>>, String> {
+    let Some(selected) = selected else {
+        return Ok(None);
+    };
+    registry
+        .register_dialog_paths(&selected, activate_first)
+        .map(Some)
+}
+
+fn register_native_dialog_selection_and_sync<R: tauri::Runtime, M: tauri::Manager<R>>(
+    app: &M,
+    registry: &WorkspaceRegistry,
+    selected: Option<Vec<PathBuf>>,
+    activate_first: bool,
+) -> Result<Option<Vec<PathBuf>>, String> {
+    let registered = register_native_dialog_selection(registry, selected, activate_first)?;
+    if let Some(roots) = registered.as_ref().filter(|paths| !paths.is_empty()) {
+        sync_asset_scope(app, roots)?;
+    }
+    Ok(registered)
+}
+
+/// 用户在 Rust 侧原生目录选择器中选出的项目根；命令无 path 参数。
+#[tauri::command]
+pub(crate) async fn workbench_pick_workspace_folder(
+    app: tauri::AppHandle,
+) -> Result<Option<String>, String> {
+    let selected = select_native_folder_paths(&app, "选择项目文件夹", false).await?;
+    let registry = registry(&app).map_err(|e| format!("{}: {}", e.code, e.message))?;
+    let paths = register_native_dialog_selection_and_sync(&app, &registry, selected, true)?;
+    Ok(paths
+        .and_then(|mut paths| paths.pop())
+        .map(|path| path.to_string_lossy().into_owned()))
+}
+
+/// 用户在 Rust 侧原生多选目录选择器中选出的项目根；命令只收是否激活首选根。
+#[tauri::command]
+pub(crate) async fn workbench_pick_workspace_folders(
+    app: tauri::AppHandle,
+    activate_first: bool,
+) -> Result<Option<Vec<String>>, String> {
+    let selected = select_native_folder_paths(&app, "选择项目文件夹", true).await?;
+    let registry = registry(&app).map_err(|e| format!("{}: {}", e.code, e.message))?;
+    register_native_dialog_selection_and_sync(&app, &registry, selected, activate_first).map(
+        |paths| {
+            paths.map(|paths| {
+                paths
+                    .into_iter()
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .collect()
+            })
+        },
+    )
 }
 
 #[cfg(test)]
@@ -486,6 +857,55 @@ mod tests {
         }
     }
 
+    #[test]
+    fn activate_default_root_restores_registered_root_after_project_switch() {
+        let temp = TestDir::new();
+        let default_root = temp.path().join("default-root");
+        let project_root = temp.path().join("active-project");
+        fs::create_dir(&default_root).expect("create default root");
+        fs::create_dir(&project_root).expect("create project root");
+        let config_dir = temp.path().join("config");
+        fs::create_dir(&config_dir).expect("create config dir");
+
+        let reg = make_root_registry(&default_root, &config_dir);
+        let project = reg
+            .register_dialog_paths(std::slice::from_ref(&project_root), true)
+            .expect("register selected project")
+            .remove(0);
+        assert_eq!(reg.active_root(), Some(project));
+
+        let activated = reg
+            .activate_registered_root(&default_root)
+            .expect("registered default root should reactivate");
+        let canonical_default =
+            strip_verbatim_prefix(&default_root.canonicalize().expect("canonical default root"));
+        assert_eq!(activated, canonical_default);
+        assert_eq!(reg.active_root(), Some(canonical_default));
+    }
+
+    #[test]
+    fn activate_default_root_rejects_unregistered_path_without_mutation() {
+        let temp = TestDir::new();
+        let active_root = temp.path().join("active-project");
+        let unregistered_root = temp.path().join("unregistered-root");
+        fs::create_dir(&active_root).expect("create active root");
+        fs::create_dir(&unregistered_root).expect("create unregistered root");
+        let config_dir = temp.path().join("config");
+        fs::create_dir(&config_dir).expect("create config dir");
+
+        let reg = make_root_registry(&active_root, &config_dir);
+        let roots_before = reg.roots();
+        let active_before = reg.active_root();
+
+        let error = reg
+            .activate_registered_root(&unregistered_root)
+            .expect_err("unregistered root must not be activated");
+
+        assert!(error.contains(ERR_WORKSPACE_NOT_GRANTED));
+        assert_eq!(reg.roots(), roots_before);
+        assert_eq!(reg.active_root(), active_before);
+    }
+
     /// T07.2 用例 3：register(Dialog) 后根内读写成功（注册返回 canonical 路径）。
     #[test]
     fn register_dialog_returns_canonical_path() {
@@ -501,6 +921,241 @@ mod tests {
         assert_eq!(
             canonical,
             strip_verbatim_prefix(&root.canonicalize().expect("canonical root"))
+        );
+    }
+
+    /// 原生 picker 的回调路径进入注册表后可执行沙箱写入，未选路径仍被拒绝。
+    #[test]
+    fn native_dialog_selection_authorizes_guarded_write_only_for_selected_root() {
+        let temp = TestDir::new();
+        let selected_root = temp.path().join("selected-project");
+        let unselected_root = temp.path().join("unselected-project");
+        fs::create_dir(&selected_root).expect("create selected root");
+        fs::create_dir(&unselected_root).expect("create unselected root");
+        let reg = WorkspaceRegistry::init_with_config_dir(&temp.path().join("config"))
+            .expect("init registry");
+
+        let selected =
+            register_native_dialog_selection(&reg, Some(vec![selected_root.clone()]), true)
+                .expect("register selected root")
+                .expect("selection result");
+        let canonical = selected[0].clone();
+        let guard = reg
+            .resolve_guard(&canonical.to_string_lossy())
+            .expect("selected root must resolve through the workspace guard");
+        crate::fs_commands::write::write_file_content_with_guard(
+            &guard,
+            "authorized.txt",
+            "selected by native dialog",
+            false,
+        )
+        .expect("guarded write inside selected root");
+        assert_eq!(
+            fs::read_to_string(canonical.join("authorized.txt")).expect("read guarded file"),
+            "selected by native dialog"
+        );
+
+        let err = reg
+            .register(&unselected_root, RegisterSource::RecentList)
+            .expect_err("arbitrary unselected root must not be reauthorized");
+        assert!(err.starts_with(ERR_WORKSPACE_NOT_GRANTED), "err: {err}");
+        assert_eq!(
+            reg.resolve_guard(&unselected_root.to_string_lossy())
+                .expect_err("unselected root must be outside the guard")
+                .code,
+            ERR_OUTSIDE_WORKSPACE
+        );
+    }
+
+    /// 成功的原生 picker 注册会把且仅把注册表授权根同步到 asset 协议。
+    #[test]
+    fn native_dialog_selection_syncs_asset_scope_for_registered_root() {
+        let temp = TestDir::new();
+        let selected_root = temp.path().join("selected-project");
+        let unselected_root = temp.path().join("unselected-project");
+        fs::create_dir(&selected_root).expect("create selected root");
+        fs::create_dir(&unselected_root).expect("create unselected root");
+        let registry = WorkspaceRegistry::init_with_config_dir(&temp.path().join("config"))
+            .expect("init registry");
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("build mock Tauri app");
+
+        let result = register_native_dialog_selection_and_sync(
+            app.handle(),
+            &registry,
+            Some(vec![selected_root.clone()]),
+            true,
+        )
+        .expect("register and scope selected root");
+
+        assert!(result.is_some());
+        assert!(app
+            .asset_protocol_scope()
+            .is_allowed(selected_root.join("image.png")));
+        assert!(!app
+            .asset_protocol_scope()
+            .is_allowed(unselected_root.join("secret.png")));
+    }
+
+    /// 失效的旧根不应阻止本次成功注册的新根同步到 asset scope。
+    #[test]
+    fn native_dialog_selection_syncs_new_root_when_old_registered_root_is_unavailable() {
+        let temp = TestDir::new();
+        let old_root = temp.path().join("old-project");
+        let new_root = temp.path().join("new-project");
+        fs::create_dir(&old_root).expect("create old root");
+        fs::create_dir(&new_root).expect("create new root");
+        let registry = WorkspaceRegistry::init_with_config_dir(&temp.path().join("config"))
+            .expect("init registry");
+        registry
+            .register_dialog_paths(std::slice::from_ref(&old_root), true)
+            .expect("register old root");
+        fs::remove_dir_all(&old_root).expect("remove old root");
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("build mock Tauri app");
+
+        register_native_dialog_selection_and_sync(
+            app.handle(),
+            &registry,
+            Some(vec![new_root.clone()]),
+            true,
+        )
+        .expect("register new root despite unavailable old root");
+
+        assert!(app
+            .asset_protocol_scope()
+            .is_allowed(new_root.join("image.png")));
+        assert!(!app
+            .asset_protocol_scope()
+            .is_allowed(old_root.join("secret.png")));
+    }
+
+    /// RecentList 复授权成功后同步 asset scope，不依赖旧进程内的授权状态。
+    #[test]
+    fn opening_recent_workspace_syncs_asset_scope() {
+        let temp = TestDir::new();
+        let root = temp.path().join("recent-project");
+        fs::create_dir(&root).expect("create recent root");
+        let config_dir = temp.path().join("config");
+        fs::create_dir(&config_dir).expect("create config dir");
+        fs::write(
+            config_dir.join(RECENT_FILE_NAME),
+            serde_json::to_string(&vec![root.to_string_lossy().to_string()]).expect("json"),
+        )
+        .expect("write recent workspace");
+        let registry = WorkspaceRegistry::init_with_config_dir(&config_dir).expect("init registry");
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("build mock Tauri app");
+        assert!(!app
+            .asset_protocol_scope()
+            .is_allowed(root.join("image.png")));
+        let registered = registry
+            .register(&root, RegisterSource::RecentList)
+            .expect("recent workspace reauthorization");
+        sync_asset_scope(app.handle(), std::slice::from_ref(&registered))
+            .expect("sync recent workspace asset scope");
+
+        assert!(app
+            .asset_protocol_scope()
+            .is_allowed(root.join("image.png")));
+    }
+
+    /// 原生 picker 取消不注册根、不更新 recent，也不创建持久化文件。
+    #[test]
+    fn native_dialog_cancel_has_no_registry_or_persistence_side_effects() {
+        let temp = TestDir::new();
+        let config_dir = temp.path().join("config");
+        let reg = WorkspaceRegistry::init_with_config_dir(&config_dir).expect("init registry");
+        let roots_before = reg.roots();
+        let recent_before = reg.inner.lock().expect("lock registry").recent.clone();
+
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("build mock Tauri app");
+        let asset_scope_before = app.asset_protocol_scope().allowed_patterns();
+        let result = register_native_dialog_selection_and_sync(app.handle(), &reg, None, true)
+            .expect("cancel should be a successful no-op");
+
+        assert_eq!(result, None);
+        assert_eq!(reg.roots(), roots_before);
+        assert_eq!(
+            reg.inner.lock().expect("lock registry").recent,
+            recent_before
+        );
+        assert!(!config_dir.join(RECENT_FILE_NAME).exists());
+        assert_eq!(
+            app.asset_protocol_scope().allowed_patterns(),
+            asset_scope_before
+        );
+    }
+
+    /// 原生多选先校验全部路径；任一无效项都不得留下部分授权。
+    #[test]
+    fn native_dialog_multi_selection_validation_is_atomic() {
+        let temp = TestDir::new();
+        let valid_root = temp.path().join("valid-project");
+        fs::create_dir(&valid_root).expect("create valid root");
+        let invalid_root = temp.path().join("missing-project");
+        let config_dir = temp.path().join("config");
+        let reg = WorkspaceRegistry::init_with_config_dir(&config_dir).expect("init registry");
+        let roots_before = reg.roots();
+
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("build mock Tauri app");
+        let asset_scope_before = app.asset_protocol_scope().allowed_patterns();
+        let err = register_native_dialog_selection_and_sync(
+            app.handle(),
+            &reg,
+            Some(vec![valid_root.clone(), invalid_root]),
+            true,
+        )
+        .expect_err("missing selected root must reject the batch");
+
+        assert!(err.starts_with(ERR_WORKSPACE_NOT_GRANTED), "err: {err}");
+        assert_eq!(reg.roots(), roots_before);
+        assert!(!config_dir.join(RECENT_FILE_NAME).exists());
+        assert_eq!(
+            app.asset_protocol_scope().allowed_patterns(),
+            asset_scope_before
+        );
+    }
+
+    /// recent 持久化失败时注册失败，不能提前扩展 asset scope。
+    #[test]
+    fn native_dialog_persistence_failure_does_not_expand_asset_scope() {
+        let temp = TestDir::new();
+        let selected_root = temp.path().join("selected-project");
+        fs::create_dir(&selected_root).expect("create selected root");
+        let config_path_is_file = temp.path().join("config-file");
+        fs::write(&config_path_is_file, "not a directory").expect("create config file");
+        let registry =
+            WorkspaceRegistry::init_with_config_dir(&config_path_is_file).expect("init registry");
+        let roots_before = registry.roots();
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("build mock Tauri app");
+        let asset_scope_before = app.asset_protocol_scope().allowed_patterns();
+
+        let error = register_native_dialog_selection_and_sync(
+            app.handle(),
+            &registry,
+            Some(vec![selected_root.clone()]),
+            true,
+        )
+        .expect_err("failed recent persistence must reject registration");
+
+        assert!(
+            error.starts_with(ERR_WORKSPACE_NOT_GRANTED),
+            "error: {error}"
+        );
+        assert_eq!(registry.roots(), roots_before);
+        assert_eq!(
+            app.asset_protocol_scope().allowed_patterns(),
+            asset_scope_before
         );
     }
 
@@ -559,6 +1214,131 @@ mod tests {
             serde_json::from_str(&fs::read_to_string(&recent_path).expect("read recent"))
                 .expect("parse recent");
         assert!(persisted.contains(&root.to_string_lossy().to_string()));
+    }
+
+    /// 重启后多目录项目的 recent 根可整批复授权，primary 成为活动根。
+    #[test]
+    fn recent_batch_reauthorizes_all_project_roots_and_activates_primary() {
+        let temp = TestDir::new();
+        let primary = temp.path().join("project-primary");
+        let secondary = temp.path().join("project-secondary");
+        fs::create_dir(&primary).expect("create primary root");
+        fs::create_dir(&secondary).expect("create secondary root");
+        let config_dir = temp.path().join("config");
+        fs::create_dir(&config_dir).expect("create config dir");
+        let recent_file = config_dir.join(RECENT_FILE_NAME);
+        fs::write(
+            &recent_file,
+            serde_json::to_string(&vec![
+                primary.to_string_lossy().into_owned(),
+                secondary.to_string_lossy().into_owned(),
+            ])
+            .expect("serialize recent roots"),
+        )
+        .expect("write recent roots");
+
+        let reg = WorkspaceRegistry::init_with_config_dir(&config_dir).expect("init registry");
+        let registered = reg
+            .register_recent_paths(&[primary.clone(), secondary.clone()], &primary, true)
+            .expect("all recent roots should authorize together");
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("build mock Tauri app");
+        sync_asset_scope(app.handle(), &registered.roots)
+            .expect("sync every canonical recent root");
+        assert!(app
+            .asset_protocol_scope()
+            .is_allowed(primary.join("image.png")));
+        assert!(app
+            .asset_protocol_scope()
+            .is_allowed(secondary.join("image.png")));
+
+        let canonical_primary = registered.primary;
+        assert_eq!(registered.roots.len(), 2);
+
+        assert_eq!(
+            canonical_primary,
+            strip_verbatim_prefix(&primary.canonicalize().expect("canonical primary"))
+        );
+        assert_eq!(reg.active_root(), Some(canonical_primary));
+        assert_eq!(
+            reg.resolve_guard(&secondary.to_string_lossy())
+                .expect("secondary root must be registered")
+                .root(),
+            &strip_verbatim_prefix(&secondary.canonicalize().expect("canonical secondary"))
+        );
+    }
+
+    /// 修改非活动项目时仍整批登记所有 recent 根，但不得改变当前活动根。
+    #[test]
+    fn recent_batch_can_preserve_active_root_for_inactive_project_edit() {
+        let temp = TestDir::new();
+        let active = temp.path().join("active-project");
+        let primary = temp.path().join("inactive-primary");
+        let secondary = temp.path().join("inactive-secondary");
+        fs::create_dir(&active).expect("create active root");
+        fs::create_dir(&primary).expect("create primary root");
+        fs::create_dir(&secondary).expect("create secondary root");
+        let config_dir = temp.path().join("config");
+        fs::create_dir(&config_dir).expect("create config dir");
+
+        let reg = WorkspaceRegistry::init_with_config_dir(&config_dir).expect("init registry");
+        let active = reg
+            .register_dialog_paths(&[active], true)
+            .expect("register current native selection")
+            .remove(0);
+        reg.register_dialog_paths(&[primary.clone(), secondary.clone()], false)
+            .expect("register inactive project roots without switching");
+        assert_eq!(reg.active_root(), Some(active.clone()));
+
+        let registered = reg
+            .register_recent_paths(&[primary.clone(), secondary.clone()], &primary, false)
+            .expect("reauthorize every inactive project root");
+        let canonical_primary = registered.primary;
+        assert_eq!(registered.roots.len(), 2);
+
+        assert_eq!(
+            canonical_primary,
+            strip_verbatim_prefix(&primary.canonicalize().expect("canonical primary"))
+        );
+        assert_eq!(reg.active_root(), Some(active));
+        assert!(reg.resolve_guard(&secondary.to_string_lossy()).is_ok());
+    }
+
+    /// 多目录复授权只要有一个未在 recent/default，整批不得改 registry 或 recent 文件。
+    #[test]
+    fn recent_batch_rejects_untrusted_root_without_partial_state_change() {
+        let temp = TestDir::new();
+        let trusted = temp.path().join("recent-root");
+        let untrusted = temp.path().join("untrusted-root");
+        fs::create_dir(&trusted).expect("create trusted root");
+        fs::create_dir(&untrusted).expect("create untrusted root");
+        let config_dir = temp.path().join("config");
+        fs::create_dir(&config_dir).expect("create config dir");
+        let recent_file = config_dir.join(RECENT_FILE_NAME);
+        let recent_json = serde_json::to_string(&vec![trusted.to_string_lossy().into_owned()])
+            .expect("serialize recent root");
+        fs::write(&recent_file, &recent_json).expect("write recent root");
+
+        let reg = WorkspaceRegistry::init_with_config_dir(&config_dir).expect("init registry");
+        let roots_before = reg.roots();
+        let active_before = reg.active_root();
+
+        let err = reg
+            .register_recent_paths(
+                &[trusted, untrusted],
+                &temp.path().join("recent-root"),
+                true,
+            )
+            .expect_err("one untrusted root must reject the entire batch");
+
+        assert!(err.starts_with(ERR_WORKSPACE_NOT_GRANTED), "err: {err}");
+        assert_eq!(reg.roots(), roots_before);
+        assert_eq!(reg.active_root(), active_before);
+        assert_eq!(
+            fs::read_to_string(recent_file).expect("read recent"),
+            recent_json
+        );
     }
 
     /// T07.2 用例 7：recent-workspaces.json 损坏/缺失 → 空列表 + 不 panic。

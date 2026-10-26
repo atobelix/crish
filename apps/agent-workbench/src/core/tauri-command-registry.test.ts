@@ -170,6 +170,31 @@ describe('Tauri command registry', () => {
     }
   });
 
+  it('keeps all workspace authorization commands in the registered snapshot', () => {
+    const rustMain = readFileSync(rustMainPath, 'utf8');
+    const registered = new Set(extractRegisteredTauriCommands(rustMain));
+    const frontend = new Map(
+      REGISTERED_TAURI_COMMANDS.map((entry) => [entry.command, entry])
+    );
+
+    for (const command of [
+      'workbench_open_workspace',
+      'workbench_open_workspaces',
+      'workbench_activate_default_workspace',
+      'workbench_list_workspaces',
+      'workbench_pick_workspace_folder',
+      'workbench_pick_workspace_folders',
+    ]) {
+      expect(registered.has(command), `${command} must be registered`).toBe(
+        true
+      );
+      expect(
+        frontend.get(command),
+        `${command} must be in the snapshot`
+      ).toMatchObject({ status: 'implemented' });
+    }
+  });
+
   it('keeps every declared command registered without placeholder entries', () => {
     const wired = REGISTERED_TAURI_COMMANDS.filter(shouldHaveTauriRegistration);
     const pending = REGISTERED_TAURI_COMMANDS.filter(
@@ -263,7 +288,7 @@ describe('Tauri command registry', () => {
       isProductCapabilityCommand
     );
 
-    // 校准：全量 137 条 registered 命令（含 models_yaml 三命令、usage 五命令，
+    // 校准：全量 153 条 registered 命令（含 models_yaml 三命令、usage 五命令，
     // 以及 b6 core_generate_session_title）。
     // 2026-09-15 更正：131 为陈旧值——旧 config/catalog 命令族 5 条
     // （config_get / config_profile_apply / config_update / catalog_get /
@@ -278,8 +303,9 @@ describe('Tauri command registry', () => {
     // 技能副本写入 workbench_mutate_owned_skill 追加后 142 → 143。
     // 更新器分段 4 条（workbench_check_update / download_update / install_update /
     // restart_app）在 manifest 与 main.rs 早已注册、本表漏登，D11 补齐后 143 → 147。
+    // 工作区授权六命令漏登，D11 命中后补齐 147 → 153。
     // 条数与四方集合一致性由 scripts/check-provider-single-track.mjs 的 D11 守护。
-    expect(productCommands).toHaveLength(147);
+    expect(productCommands).toHaveLength(153);
     expect(
       productCommands.every(
         (entry) => commandCapabilityStatus(entry) !== UNSUPPORTED_CODE

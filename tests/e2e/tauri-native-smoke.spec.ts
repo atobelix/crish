@@ -42,7 +42,7 @@ const CARGO_TARGET_DIR = process.env.CARGO_TARGET_DIR?.trim();
  * 发布门禁模式：ci-slow.yml native-smoke-windows 设置
  * CRISH_NATIVE_SMOKE_REQUIRE_BINARY=1，此时二进制缺失必须判红而非跳过
  * （否则构建产物路径漂移时 job 照样绿，门禁形同虚设）。本地/快层
- * `npm test` 不设该变量，保持「无二进制显式报 SKIP 数」的行为。
+ * `npm test` 不设该变量，保持「无二进制或已有实例时显式报 SKIP 数」的行为。
  */
 const REQUIRE_BINARY = process.env.CRISH_NATIVE_SMOKE_REQUIRE_BINARY === '1';
 
@@ -83,6 +83,36 @@ function resolveBinaryPath(): string | null {
   }
   return null;
 }
+
+/**
+ * Windows 单实例插件会将第二次启动转发给首实例并退出。
+ * 本地桌面正在运行时不应把这个正常行为误报为 native smoke 启动失败，
+ * 也不应由测试结束时清理逻辑触碰用户的首实例。
+ * 返回 null 表示无法可靠读取进程表；本地采取显式跳过，发布门禁则判红。
+ */
+function findExistingWorkbenchPids(): number[] | null {
+  if (process.platform !== 'win32') return [];
+  try {
+    const output = execSync(
+      `tasklist /FO CSV /NH /FI "IMAGENAME eq ${BINARY_NAME}"`,
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+    );
+    return output.split(/\r?\n/).flatMap((line) => {
+      const match = line.match(/^"[^"]+","(\d+)"/);
+      if (!match) return [];
+      const pid = Number(match[1]);
+      return pid > 0 && pid !== process.pid ? [pid] : [];
+    });
+  } catch {
+    return null;
+  }
+}
+
+const EXISTING_WORKBENCH_PIDS = findExistingWorkbenchPids();
+const NATIVE_SMOKE_SAFE_TO_RUN =
+  Boolean(resolveBinaryPath()) &&
+  EXISTING_WORKBENCH_PIDS !== null &&
+  EXISTING_WORKBENCH_PIDS.length === 0;
 
 /** 进程是否存活（win32 用 tasklist；其余用 process.kill(pid, 0)） */
 function isProcessAlive(pid: number | undefined): boolean {
@@ -125,9 +155,19 @@ function killProcessTree(pid: number | undefined): void {
 describe('native-smoke 前置探针（跳过必须显式报数）', () => {
   it('报告二进制解析结果与跳过决策', () => {
     const binary = resolveBinaryPath();
-    if (binary) {
+    if (NATIVE_SMOKE_SAFE_TO_RUN) {
       console.log(
         `[tauri-native-smoke] SKIP=0：二进制已解析 ${binary}，完整冒烟 2 例执行`
+      );
+    } else if (EXISTING_WORKBENCH_PIDS && EXISTING_WORKBENCH_PIDS.length > 0) {
+      console.warn(
+        `[tauri-native-smoke] SKIP=2：检测到已运行的单实例工作台 PID ${EXISTING_WORKBENCH_PIDS.join(', ')}，` +
+          '第二次启动会被转发并退出；为避免误报或触碰用户进程，本地完整冒烟 2 例全部跳过。'
+      );
+    } else if (EXISTING_WORKBENCH_PIDS === null) {
+      console.warn(
+        '[tauri-native-smoke] SKIP=2：无法可靠读取工作台进程表，不能确认单实例隔离；' +
+          '本地完整冒烟 2 例全部跳过。'
       );
     } else {
       console.warn(
@@ -144,11 +184,19 @@ describe('native-smoke 前置探针（跳过必须显式报数）', () => {
         'CRISH_NATIVE_SMOKE_REQUIRE_BINARY=1（发布门禁）下二进制必须存在，候选路径:\n' +
           BINARY_CANDIDATES.join('\n')
       ).not.toBeNull();
+      expect(
+        EXISTING_WORKBENCH_PIDS,
+        '原生冒烟发布门禁必须能可靠检查单实例隔离'
+      ).not.toBeNull();
+      expect(
+        EXISTING_WORKBENCH_PIDS,
+        '原生冒烟发布门禁必须在没有现存工作台实例时执行'
+      ).toEqual([]);
     }
   });
 });
 
-describe.skipIf(!resolveBinaryPath())(
+describe.skipIf(!NATIVE_SMOKE_SAFE_TO_RUN)(
   'L3 进程级原生冒烟（tauri-native-smoke 重写版）',
   () => {
     let binaryPath: string = '';

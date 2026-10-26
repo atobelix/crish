@@ -966,4 +966,63 @@ mod tests {
         assert_core_error_kind(result, "InvalidInput", "workspace_not_granted");
         let _ = std::fs::remove_dir_all(&base);
     }
+
+    /// 原生选择授权后的根可通过 Git cwd 守卫并执行 git；未选根仍拒绝。
+    #[tokio::test]
+    async fn selected_workspace_root_allows_git_and_rejects_unselected_root() {
+        use crate::workspace::{RegisterSource, WorkspaceRegistry};
+        let base = std::env::temp_dir().join(format!(
+            "conex-git-selected-workspace-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        let selected = base.join("selected");
+        let unselected = base.join("unselected");
+        let config_dir = base.join("config");
+        std::fs::create_dir_all(&selected).expect("create selected root");
+        std::fs::create_dir(&unselected).expect("create unselected root");
+        std::fs::create_dir(&config_dir).expect("create config directory");
+
+        let git_init = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&selected)
+            .output()
+            .expect("git must be available for the desktop Git integration");
+        assert!(
+            git_init.status.success(),
+            "git init failed: {}",
+            String::from_utf8_lossy(&git_init.stderr)
+        );
+
+        let reg = WorkspaceRegistry::init_with_config_dir(&config_dir).expect("init registry");
+        reg.register(&selected, RegisterSource::Dialog)
+            .expect("simulate the native dialog result being registered in Rust");
+        let app = tauri::test::mock_builder()
+            .manage(reg)
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+
+        let result = workbench_git_run(
+            app.handle().clone(),
+            selected.to_string_lossy().into_owned(),
+            vec!["status".to_string()],
+            None,
+        )
+        .await
+        .expect("selected root must pass the Git authorization guard");
+        assert!(result.ok, "git status failed: {}", result.stderr);
+
+        let denied = workbench_git_run(
+            app.handle().clone(),
+            unselected.to_string_lossy().into_owned(),
+            vec!["status".to_string()],
+            None,
+        )
+        .await;
+        assert_core_error_kind(denied, "InvalidInput", "workspace_not_granted");
+        let _ = std::fs::remove_dir_all(&base);
+    }
 }

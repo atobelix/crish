@@ -4,7 +4,7 @@
 //! `BUILTIN_COMMAND_MANIFEST` 是本文件的**内置快照镜像**（启动拉取失败 / 非 Tauri
 //! 环境回退面），双端手工同步，条数由双端测试锁定：
 //! - Rust 侧：本文件 `manifest_*` 测试（条数公式化 / 幽灵命令排除 / 新增命令登记）；
-//! - 前端侧：`commandManifest.test.ts`（**137 = 注册面 137 + 登记先行 0**；
+//! - 前端侧：`commandManifest.test.ts`（**153 = 注册面 153 + 登记先行 0**；
 //!   条数与集合由该文件的动态对照断言直读本文件真源双向锁定）。
 //!
 //! 维护规则：
@@ -60,12 +60,12 @@ const fn entry(
     }
 }
 
-/// 命令清单（**137 条 = 全部 registered=true 实装命令**；与前端
+/// 命令清单（**153 条 = 全部 registered=true 实装命令**；与前端
 /// `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `command_registry!` 注册一致；
-/// 登记先行（registered=false）为「已登记未接线」：workbench_open_workspace /
-/// workbench_list_workspaces / workbench_dev_mcp_enabled / core_resume_run（P2）。
+/// 登记先行（registered=false）为「已登记未接线」：workbench_dev_mcp_enabled /
+/// core_resume_run（P2）。
 /// F-03（DM-07）：core_read_run_events 恢复激活；R1 撤回 core_session_retract 登记
 ///（统一输入流收敛战役）后总数 125（注册面 120 → 121）；R7 收口 GUI fs 删除命令
 /// 幽灵退役（R6-D5 后零消费）后总数 124（注册面 121 → 120）；
@@ -82,7 +82,9 @@ const fn entry(
 /// 后 143 → **135**。`core_read_run_events` 经复核**保留**（跨端契约面，
 /// 见 command-contract-drift.test.ts DRIFT_DEBT 的待裁决登记）。
 /// b6：`core_generate_session_title` 追加后 135 → **136**。
-/// Win11 贴靠布局热区 `workbench_set_snap_overlay_rect` 追加后 136 → **137**。
+/// Win11 贴靠布局热区 `workbench_set_snap_overlay_rect` 追加后 136 → **137**；
+/// PE-07 工作区复授权与 Rust 原生目录选择五命令接线后 147 → **152**；
+/// 默认工作区激活命令追加后 152 → **153**。
 pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     contract_version: COMMAND_MANIFEST_CONTRACT_VERSION,
     commands: &[
@@ -134,6 +136,18 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("workbench_list_directory", "workbench", "gui", true),
         entry("workbench_read_file_content", "workbench", "gui", true),
         entry("workbench_write_file_content", "workbench", "gui", true),
+        // PE-07：复授权命令 + Rust 原生目录选择器（选择结果在 Rust 内登记）
+        entry("workbench_open_workspace", "workbench", "gui", true),
+        entry("workbench_open_workspaces", "workbench", "gui", true),
+        entry(
+            "workbench_activate_default_workspace",
+            "workbench",
+            "gui",
+            true,
+        ),
+        entry("workbench_list_workspaces", "workbench", "gui", true),
+        entry("workbench_pick_workspace_folder", "workbench", "gui", true),
+        entry("workbench_pick_workspace_folders", "workbench", "gui", true),
         entry("workbench_discover_skills", "workbench", "gui", true),
         entry("workbench_mutate_owned_skill", "workbench", "gui", true),
         // workbench_http_request 已退役（唯一调用点在 Rust `#[cfg(test)]` 内）
@@ -354,6 +368,8 @@ mod tests {
     ///   computer_session_enable / computer_session_disable / computer_status）
     ///   后 143 → **135**；b6 `core_generate_session_title` 追加后 135 → **136**；
     ///   Win11 贴靠布局热区 `workbench_set_snap_overlay_rect` 追加后 136 → **137**；
+    ///   PE-07 工作区复授权与 Rust 原生目录选择五命令接线后 147 → **152**；
+    ///   默认工作区激活命令追加后 152 → **153**；
     /// - `core_read_run_events` 复核后**保留**（跨端契约面 tauri_command 映射 +
     ///   移动端 monitorCommands 映射真源 + 实现处「不得静默再退役」登记）——
     ///   在 command-contract-drift.test.ts 记为待裁决，不计入本次退役。
@@ -367,12 +383,12 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 147,
-            "总数 146；技能副本写入 workbench_mutate_owned_skill 追加后 147"
+            total, 153,
+            "总数 147；PE-07 工作区授权五命令接线后 152，默认根激活命令追加后 153"
         );
         assert_eq!(
-            registered, 147,
-            "注册面 147（全部为 registered=true 实装命令）"
+            registered, 153,
+            "注册面 153（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");
     }
@@ -399,6 +415,12 @@ mod tests {
             "workbench_apply_models_config",
             "config_secret_reveal",
             "workbench_git_run",
+            "workbench_open_workspace",
+            "workbench_open_workspaces",
+            "workbench_activate_default_workspace",
+            "workbench_list_workspaces",
+            "workbench_pick_workspace_folder",
+            "workbench_pick_workspace_folders",
         ] {
             assert!(
                 by_name.contains_key(name),

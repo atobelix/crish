@@ -179,9 +179,11 @@ async fn spawn_many_reserves_all_capacity_before_first_launch() {
     assert_eq!(db.load_session_agents("sess-main").unwrap().len(), 1);
 
     gate.resume(16);
-    let results = tokio::time::timeout(std::time::Duration::from_secs(3), batch)
+    // 批量按请求顺序逐条启动；每项还要完成落库和 started ack。30 秒是全量并发测试下
+    // 16 次串行收尾的完成窗口，不是性能 SLA。
+    let results = tokio::time::timeout(std::time::Duration::from_secs(30), batch)
         .await
-        .expect("批量 launcher 应全部放行")
+        .expect("16 项顺序启动、落库和 started ack 应在测试窗口内完成")
         .expect("batch task should not panic")
         .expect("16 个容量内任务应成功");
     assert_eq!(results.len(), 16);

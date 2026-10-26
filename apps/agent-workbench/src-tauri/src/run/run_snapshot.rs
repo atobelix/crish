@@ -127,6 +127,53 @@ impl CoreRunState {
     }
 }
 
+fn merge_live_session_record(sessions: &mut Vec<SessionRecord>, mut live_record: SessionRecord) {
+    if let Some(index) = sessions
+        .iter()
+        .position(|record| record.session_id == live_record.session_id)
+    {
+        live_record.context_meta = sessions[index].context_meta.clone();
+        sessions[index] = live_record;
+    } else {
+        sessions.push(live_record);
+    }
+}
+
+fn clamp_snapshot_fork_anchor(
+    session: &SessionRecord,
+    mut anchor: u64,
+    sidecar: &[orchestrator::persist::RecoveryForkTreeEntry],
+) -> Result<u64, String> {
+    for fork_entry in sidecar {
+        if fork_entry.event_sequence == 0 {
+            return Err(format!(
+                "Recovery fork 条目 {} 缺少有效 event sequence",
+                fork_entry.entry.id
+            ));
+        }
+        if fork_entry.event_sequence > anchor {
+            continue;
+        }
+        match session
+            .branches
+            .iter()
+            .find(|entry| entry.id == fork_entry.entry.id)
+        {
+            Some(existing) if existing == &fork_entry.entry => {}
+            Some(_) => {
+                return Err(format!(
+                    "Recovery fork 条目 {} 与 live SessionTree 冲突",
+                    fork_entry.entry.id
+                ));
+            }
+            None => {
+                anchor = anchor.min(fork_entry.event_sequence - 1);
+            }
+        }
+    }
+    Ok(anchor)
+}
+
 impl CoreRunState {
     /// T08.6 启动接线：restore + seed + 立即快照（main.rs 在
     /// `app.manage(CoreRunState)` 之前 run_in_runtime 执行）
@@ -340,26 +387,61 @@ impl CoreRunState {
             return Err("restore 失败，跳过快照保存（保留既有快照文件）".to_string());
         }
         let runs = self.store.query_runs().await.map_err(|e| e.to_string())?;
-        let sessions = self
+        let registry_sessions = self
             .sessions
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone();
-        let mut pending = Vec::new();
-        let mut last_sequence = 0u64;
+        let tree_refs = self
+            .session_trees
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .map(|(session_id, tree)| (session_id.clone(), Arc::clone(tree)))
+            .collect::<Vec<_>>();
+        let mut session_ids = registry_sessions
+            .iter()
+            .map(|record| record.session_id.clone())
+            .collect::<HashSet<_>>();
+        session_ids.extend(tree_refs.iter().map(|(session_id, _)| session_id.clone()));
         // PERSIST-02 P1-1：逐会话锚点（session_id → 该会话事件 max）。
         // 事件序列为会话内独立，恢复按会话自身锚点取增量，全局 max 作
         // 会话级 base 会永久跳过落后会话的快照后事件（多会话粘性错误）。
         let mut session_last_sequence: HashMap<String, u64> = HashMap::new();
-        for session in &sessions {
+        let mut last_sequence = 0u64;
+        for session_id in &session_ids {
             let events = self
                 .store
-                .query_events(&session.session_id, 0, None)
+                .query_events(session_id, 0, None)
                 .await
                 .map_err(|e| e.to_string())?;
             let session_max = events.iter().map(|e| e.sequence).max().unwrap_or(0);
             last_sequence = last_sequence.max(session_max);
-            session_last_sequence.insert(session.session_id.clone(), session_max);
+            session_last_sequence.insert(session_id.clone(), session_max);
+        }
+
+        // 先读取事件最大序号，再捕获实时会话树。若 fork 事务与捕获竞态，
+        // 下方 sidecar 检查会把缺树条目的锚点退到对应事件之前，供恢复重放。
+        let mut sessions = registry_sessions;
+        for (session_id, tree) in &tree_refs {
+            let live_record = tree
+                .lock()
+                .map_err(|error| format!("会话树锁中毒，无法保存快照 {session_id}: {error}"))?
+                .to_session_record();
+            merge_live_session_record(&mut sessions, live_record);
+        }
+
+        let mut pending = Vec::new();
+        for session in &sessions {
+            let Some(anchor) = session_last_sequence.get_mut(&session.session_id) else {
+                return Err(format!("快照缺少会话 {} 的事件锚点", session.session_id));
+            };
+            let sidecar = self
+                .store
+                .load_recovery_fork_tree_entries(&session.session_id)
+                .await
+                .map_err(|e| e.to_string())?;
+            *anchor = clamp_snapshot_fork_anchor(session, *anchor, &sidecar)?;
             pending.extend(
                 self.store
                     .load_pending_inputs(&session.session_id)
@@ -415,5 +497,77 @@ impl CoreRunState {
     pub fn save_snapshot_blocking(self: &Arc<Self>) {
         let this = Arc::clone(self);
         tauri::async_runtime::block_on(async move { this.save_snapshot_now().await });
+    }
+}
+
+#[cfg(test)]
+mod recovery_snapshot_tests {
+    use super::*;
+    use orchestrator::session::SessionTreeEntry;
+
+    #[test]
+    fn snapshot_record_uses_live_tree_and_preserves_context_meta() {
+        let mut tree = SessionTree::new("s1");
+        tree.append("leaf-a", serde_json::json!({"text":"root"}))
+            .unwrap();
+        let entry = SessionTreeEntry::node(
+            "fork-a",
+            Some("leaf-a".to_string()),
+            serde_json::json!({
+                "kind":"recovery-fork",
+                "fromRunId":"run-a",
+                "fromLeafId":"leaf-a",
+                "task":"finish the task",
+                "contextMode":"verbatim"
+            }),
+        );
+        tree.insert_persisted_entry(entry).unwrap();
+
+        let context_meta = Some(conex_types::context::SessionContextMeta {
+            last_compaction_generation: Some(7),
+            ..Default::default()
+        });
+        let mut sessions = vec![SessionRecord {
+            session_id: "s1".to_string(),
+            current_leaf_id: Some("leaf-a".to_string()),
+            branches: vec![SessionTreeEntry::node(
+                "leaf-a",
+                None,
+                serde_json::json!({"text":"root"}),
+            )],
+            context_meta: context_meta.clone(),
+        }];
+        merge_live_session_record(&mut sessions, tree.to_session_record());
+
+        assert_eq!(sessions[0].branches, tree.to_session_record().branches);
+        assert_eq!(sessions[0].current_leaf_id.as_deref(), Some("fork-a"));
+        assert_eq!(sessions[0].context_meta, context_meta);
+    }
+
+    #[test]
+    fn snapshot_anchor_stops_before_unpublished_durable_fork_entry() {
+        let session = SessionRecord {
+            session_id: "s1".to_string(),
+            current_leaf_id: Some("leaf-a".to_string()),
+            branches: vec![SessionTreeEntry::node(
+                "leaf-a",
+                None,
+                serde_json::json!({}),
+            )],
+            context_meta: None,
+        };
+        let sidecar = [orchestrator::persist::RecoveryForkTreeEntry {
+            event_sequence: 8,
+            entry: SessionTreeEntry::node(
+                "fork-a",
+                Some("leaf-a".to_string()),
+                serde_json::json!({"kind":"recovery-fork","task":"task"}),
+            ),
+        }];
+
+        assert_eq!(
+            clamp_snapshot_fork_anchor(&session, 12, &sidecar).unwrap(),
+            7
+        );
     }
 }

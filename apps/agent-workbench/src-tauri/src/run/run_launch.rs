@@ -376,6 +376,12 @@ mod tests {
     /// 测试用 CoreRunState（InMemoryStore + 独立快照文件 + 记录桥；
     /// 对齐 run_commands tests::test_state）
     fn launch_guard_test_state() -> Arc<CoreRunState> {
+        launch_guard_test_state_with_store(Arc::new(InMemoryStore::new()))
+    }
+
+    fn launch_guard_test_state_with_store(
+        store: Arc<dyn orchestrator::persist::Store>,
+    ) -> Arc<CoreRunState> {
         let emitter = Arc::new(RecordingEmitter::default());
         let bridge = EventBridge::new(
             "workbench-run-event",
@@ -391,7 +397,7 @@ mod tests {
                     .as_nanos()
             ))));
         Arc::new(CoreRunState::new(
-            Arc::new(InMemoryStore::new()),
+            store,
             snapshots,
             bridge,
             Arc::new(StatusDiagnostics::new()),
@@ -500,6 +506,66 @@ mod tests {
         assert!(
             !state.assembling_sessions.lock().unwrap().contains("sess-a"),
             "拒绝路径不得残留装配期占位"
+        );
+    }
+
+    /// provider 快照缺失时必须在启动装配任何可观察副作用前拒绝：
+    /// 不建 watcher、不清用户停止标记，也不覆盖既有 goal_state。
+    #[tokio::test]
+    async fn missing_provider_is_rejected_before_launch_side_effects() {
+        let db = conex_db::LocalDb::open_in_memory().expect("内存数据库");
+        let previous_goal = GoalState::new("保留中的目标", 7, 3).to_json();
+        db.set_session_meta(orchestrator::goal_state::GOAL_STATE_KEY, &previous_goal)
+            .expect("预置既有 goal_state");
+        let store: Arc<dyn orchestrator::persist::Store> =
+            Arc::new(orchestrator::persist::LocalDbStore::new(db.clone()));
+        let state = launch_guard_test_state_with_store(store);
+        state.restore_ready.store(true, Ordering::SeqCst);
+        // 模拟就绪标记与 provider 快照不一致的瞬间，确保 provider 快照
+        // 自身在装配副作用前完成校验。
+        *state
+            .engine
+            .provider
+            .lock()
+            .unwrap_or_else(|error| error.into_inner()) = None;
+        state.engine.ready.store(true, Ordering::SeqCst);
+        state.set_user_stopped("sess-missing-provider");
+
+        let options = serde_json::from_value(serde_json::json!({
+            "runId": "run-missing-provider",
+            "sessionId": "sess-missing-provider",
+            "prompt": "启动应被拒绝",
+            "mode": "goal",
+            "visibleGoal": "不得覆盖的目标"
+        }))
+        .expect("构造 run options");
+        match run_task_impl(Arc::clone(&state), options).await {
+            Err(CoreError::Internal(detail)) => assert!(
+                detail.contains("provider 配置缺失"),
+                "应由 provider 快照缺失拒绝，实际 detail={detail}"
+            ),
+            other => panic!("provider 快照缺失时应返回 Internal，实际结果={other:?}"),
+        }
+
+        assert!(
+            !state
+                .wake_watchers
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .contains_key("sess-missing-provider"),
+            "provider 缺失时不得创建 wake watcher"
+        );
+        assert!(
+            state.is_user_stopped("sess-missing-provider"),
+            "provider 缺失时不得清除 user_stopped"
+        );
+        let goal_after = db
+            .get_session_meta(orchestrator::goal_state::GOAL_STATE_KEY)
+            .expect("读取 goal_state")
+            .expect("既有 goal_state 仍存在");
+        assert_eq!(
+            goal_after, previous_goal,
+            "provider 缺失时不得覆盖既有 goal_state"
         );
     }
 }
@@ -736,6 +802,12 @@ pub(crate) async fn run_task_impl(
             .unwrap_or_else(|| "engine not ready".to_string());
         return Err(CoreError::internal(reason));
     }
+    // 固定本次启动所用 provider 快照，并在 watcher / user_stopped /
+    // goal_state 等装配副作用之前验证。配置热重载可替换引擎当前 provider，
+    // 后续本次 run 全程使用此处取得的同一实例。
+    let Some(provider) = state.engine.provider() else {
+        return Err(CoreError::internal("engine not ready（provider 配置缺失）"));
+    };
     // 会话内串行守卫（同会话同时只允许一个活动 run）+ 装配期占用
     //（TOCTOU 闭合：检查与占用同一临界区；守卫 drop 无条件清理全部
     // 早退路径，成功 insert 后显式释放——见下方 active_runs.insert）
@@ -782,10 +854,7 @@ pub(crate) async fn run_task_impl(
     } else {
         None
     };
-    // provider / 工具注册表（engine 生效配置）
-    let Some(provider) = state.engine.provider() else {
-        return Err(CoreError::internal("engine not ready（provider 配置缺失）"));
-    };
+    // 工具注册表（engine 生效配置）
     // T-D-13：子代理 run 的工具注册表按 task_type 默认权限集裁剪
     // （filter_registry_for_task_type，T-D-08 fail-closed 白名单）+ 剔除
     // run_subagent（T-D-02 工具面防护：子代理无派发能力，防浪费非安全

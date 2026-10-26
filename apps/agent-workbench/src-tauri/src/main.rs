@@ -253,6 +253,31 @@ command_registry![
         "workbench_write_file_content",
         fs_commands::write_file_content
     ),
+    // PE-07：recent/default 根复授权；新根只能由 Rust 内部原生目录选择器登记
+    (
+        "workbench_open_workspace",
+        workspace::workbench_open_workspace
+    ),
+    (
+        "workbench_open_workspaces",
+        workspace::workbench_open_workspaces
+    ),
+    (
+        "workbench_activate_default_workspace",
+        workspace::workbench_activate_default_workspace
+    ),
+    (
+        "workbench_list_workspaces",
+        workspace::workbench_list_workspaces
+    ),
+    (
+        "workbench_pick_workspace_folder",
+        workspace::workbench_pick_workspace_folder
+    ),
+    (
+        "workbench_pick_workspace_folders",
+        workspace::workbench_pick_workspace_folders
+    ),
     (
         "workbench_discover_skills",
         fs_commands::workbench_discover_skills

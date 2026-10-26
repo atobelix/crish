@@ -49,19 +49,19 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use axum::{
-    Json,
     body::Bytes,
     extract::{FromRequestParts, Request, State, WebSocketUpgrade},
-    http::{HeaderMap, StatusCode, Uri, header},
+    http::{header, HeaderMap, StatusCode, Uri},
     response::{IntoResponse, Response},
+    Json,
 };
 use conex_types::device::version::{
     EVENT_WINDOW, MAX_SUBSCRIPTIONS, PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX,
 };
 use conex_types::device::{
     DeviceEndpoint, DeviceEnvelope, DeviceErrorCode, ErrorBody, EventAck, EventsPush, MessageKind,
-    PROTOCOL_VERSION, Resume, ResumeDone, ResumePage, SessionCursor, Subscribe, SubscribeAll,
-    SubscribeOk,
+    Resume, ResumeDone, ResumePage, SessionCursor, Subscribe, SubscribeAll, SubscribeOk,
+    PROTOCOL_VERSION,
 };
 use conex_types::events::BackpressureLevel;
 use futures_util::{SinkExt, StreamExt};
@@ -71,7 +71,7 @@ use sha2::{Digest, Sha256};
 use tokio::sync::{mpsc, watch};
 
 use crate::server::fanout::{FanoutError, FanoutReceiver, SubscriptionFilter};
-use crate::server::{ServerError, ServerState, auth, gateway, now_ms};
+use crate::server::{auth, gateway, now_ms, ServerError, ServerState};
 
 /// WS 事件端点路径（R1-02 占位登记；R1-05 注册路由）
 pub const WS_EVENTS_PATH: &str = "/v1/events";
@@ -1152,7 +1152,7 @@ async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
     }
 }
 
-/// remote.<cmd>：移动端远程命令处理（approve / deny / listPendingApprovals 等，消除 10s 黑洞）
+/// remote.<cmd>：移动端远程命令处理（审批与会话命令，消除 10s 黑洞）
 async fn handle_remote_command_frame(
     cmd: &str,
     body: Value,
@@ -1170,6 +1170,45 @@ async fn handle_remote_command_frame(
     // audit-repair-202609 T26：三命令的「反序列化 → 调用 → 序列化回包」
     // 样板收敛为泛型骨架（行为与原逐字段等价）；cmd 名进错误文案与原实现一致。
     let result = match cmd {
+        "runTask" => {
+            let be = backend.clone();
+            run_remote_command(
+                "runTask",
+                msg_id,
+                params_val,
+                move |p: conex_types::device::RunTaskParams| {
+                    let be = be.clone();
+                    async move { be.run_task(p).await }
+                },
+            )
+            .await
+        }
+        "runControl" => {
+            let be = backend.clone();
+            run_remote_command(
+                "runControl",
+                msg_id,
+                params_val,
+                move |p: conex_types::device::RunControlParams| {
+                    let be = be.clone();
+                    async move { be.run_control(p).await }
+                },
+            )
+            .await
+        }
+        "cancelRun" => {
+            let be = backend.clone();
+            run_remote_command(
+                "cancelRun",
+                msg_id,
+                params_val,
+                move |p: conex_types::device::CancelRunParams| {
+                    let be = be.clone();
+                    async move { be.cancel_run(p).await }
+                },
+            )
+            .await
+        }
         "approve" => {
             let be = backend.clone();
             run_remote_command("approve", msg_id, params_val, move |p| {
@@ -1201,6 +1240,15 @@ async fn handle_remote_command_frame(
             )
             .await
         }
+        // C27 在当前服务协议中仍是 P2 未注册能力：移动端必须回退本地搜索，
+        // 若旧客户端仍发送请求，按注册表错误契约返回 cmd.unknown。
+        "searchSessions" => conex_types::device::commands::CommandResult::failure(
+            msg_id,
+            ErrorBody::new(
+                DeviceErrorCode::CmdUnknown,
+                "searchSessions is not registered in this service version",
+            ),
+        ),
         _ => conex_types::device::commands::CommandResult::failure(
             msg_id,
             ErrorBody::new(
@@ -1782,15 +1830,15 @@ mod tests {
 
     use super::*;
     use crate::core_event_bridge::Emitter;
-    use crate::server::auth::{TokenStore, sha256_hex};
+    use crate::server::auth::{sha256_hex, TokenStore};
     use crate::server::backend::ApiBackend;
     use crate::server::fanout::FanOutEmitter;
-    use crate::server::{ServerConfig, ServerHandle, ServerInstance, ServerState, router};
+    use crate::server::{router, ServerConfig, ServerHandle, ServerInstance, ServerState};
     use conex_types::device::version::MAX_FRAME_BYTES;
     use conex_types::device::{
         ApproveParams, ApproveResult, CancelRunParams, CancelRunResult, DenyParams,
         EventPageParams, EventPageResult, ListCommandsResult, ListSessionsParams,
-        ListSessionsResult, RunControlParams, RunControlResult, RunSnapshotParams,
+        ListSessionsResult, RunControlLevel, RunControlParams, RunControlResult, RunSnapshotParams,
         RunSnapshotResult, RunTaskParams, RunTaskResult,
     };
     use std::net::SocketAddr;
@@ -1803,12 +1851,20 @@ mod tests {
     struct MemoryBackend {
         /// 会话 → (sequence, 扁平事件 JSON)
         events: Mutex<HashMap<String, Vec<(u64, Value)>>>,
+        run_tasks: Mutex<Vec<RunTaskParams>>,
+        run_controls: Mutex<Vec<RunControlParams>>,
+        run_control_error: Mutex<Option<ServerError>>,
+        cancel_runs: Mutex<Vec<CancelRunParams>>,
     }
 
     impl MemoryBackend {
         fn new() -> Self {
             Self {
                 events: Mutex::new(HashMap::new()),
+                run_tasks: Mutex::new(Vec::new()),
+                run_controls: Mutex::new(Vec::new()),
+                run_control_error: Mutex::new(None),
+                cancel_runs: Mutex::new(Vec::new()),
             }
         }
 
@@ -1840,14 +1896,30 @@ mod tests {
         async fn get_status(&self) -> Result<serde_json::Value, ServerError> {
             Ok(serde_json::json!({ "initialized": true }))
         }
-        async fn run_task(&self, _p: RunTaskParams) -> Result<RunTaskResult, ServerError> {
-            Err(ServerError::internal("测试后端不支持"))
+        async fn run_task(&self, p: RunTaskParams) -> Result<RunTaskResult, ServerError> {
+            let session_id = p
+                .session_id
+                .clone()
+                .unwrap_or_else(|| "s-mobile".to_string());
+            self.run_tasks.lock().unwrap().push(p);
+            Ok(RunTaskResult {
+                run_id: "r-mobile".to_string(),
+                session_id,
+            })
         }
-        async fn run_control(&self, _p: RunControlParams) -> Result<RunControlResult, ServerError> {
-            Err(ServerError::internal("测试后端不支持"))
+        async fn run_control(&self, p: RunControlParams) -> Result<RunControlResult, ServerError> {
+            self.run_controls.lock().unwrap().push(p);
+            if let Some(error) = self.run_control_error.lock().unwrap().take() {
+                return Err(error);
+            }
+            Ok(RunControlResult { ok: true })
         }
-        async fn cancel_run(&self, _p: CancelRunParams) -> Result<CancelRunResult, ServerError> {
-            Err(ServerError::internal("测试后端不支持"))
+        async fn cancel_run(&self, p: CancelRunParams) -> Result<CancelRunResult, ServerError> {
+            self.cancel_runs.lock().unwrap().push(p.clone());
+            Ok(CancelRunResult {
+                ok: true,
+                run_id: p.run_id,
+            })
         }
         async fn approve(&self, _p: ApproveParams) -> Result<ApproveResult, ServerError> {
             Err(ServerError::internal("测试后端不支持"))
@@ -2019,6 +2091,29 @@ mod tests {
             DeviceEndpoint::Mobile,
             DeviceEndpoint::Desktop,
             body,
+        );
+        let text = serde_json::to_string(&envelope).unwrap();
+        let _ = ws
+            .send(tokio_tungstenite::tungstenite::Message::Text(text.into()))
+            .await;
+    }
+
+    /// 移动端 SessionCommand wire 帧（remote.<command> + body.command/params）
+    async fn send_remote_command(
+        ws: &mut tokio_tungstenite::WebSocketStream<
+            tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+        >,
+        command: &str,
+        msg_id: &str,
+        params: Value,
+    ) {
+        let envelope = DeviceEnvelope::unsigned(
+            MessageKind::Remote(command.to_string()),
+            msg_id,
+            now_ms(),
+            DeviceEndpoint::Mobile,
+            DeviceEndpoint::Desktop,
+            serde_json::json!({ "command": command, "params": params }),
         );
         let text = serde_json::to_string(&envelope).unwrap();
         let _ = ws
@@ -3545,6 +3640,197 @@ mod tests {
         let err: ErrorBody = serde_json::from_value(body_res).unwrap();
         assert_eq!(err.code, DeviceErrorCode::AuthStale);
 
+        let _ = ws.close(None).await;
+    }
+
+    #[tokio::test]
+    async fn remote_run_control_dispatches_mobile_wire_params_and_preserves_errors() {
+        let backend = Arc::new(MemoryBackend::new());
+        let (addr, _handle, token, _registry) =
+            test_server(Some(backend.clone() as Arc<dyn ApiBackend>), None).await;
+        let mut ws = ws_connect(addr, &token).await;
+
+        for (msg_id, level, payload) in [
+            (
+                "mobile-inject",
+                "soft_inject",
+                Some(serde_json::json!({ "text": "follow-up from mobile" })),
+            ),
+            ("mobile-pause", "cooperative_stop", None),
+            ("mobile-resume", "continue", None),
+            ("mobile-cancel", "force_cancel", None),
+        ] {
+            let mut params = serde_json::json!({
+                "level": level,
+                "runId": "r-mobile",
+                "sessionId": "s-mobile",
+                "reason": "from mobile",
+            });
+            if let Some(payload) = payload {
+                params["payload"] = payload;
+            }
+            send_remote_command(&mut ws, "runControl", msg_id, params).await;
+            let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
+            assert_eq!(kind, "result.runControl");
+            let result: conex_types::device::commands::CommandResult =
+                serde_json::from_value(body).unwrap();
+            assert_eq!(result.req_msg_id, msg_id);
+            assert!(result.ok);
+            assert_eq!(result.result, Some(serde_json::json!({ "ok": true })));
+        }
+
+        let received = backend.run_controls.lock().unwrap().clone();
+        assert_eq!(received.len(), 4);
+        assert_eq!(received[0].level, RunControlLevel::SoftInject);
+        assert_eq!(received[0].run_id, "r-mobile");
+        assert_eq!(received[0].session_id, "s-mobile");
+        assert_eq!(
+            received[0].payload,
+            Some(serde_json::json!({ "text": "follow-up from mobile" }))
+        );
+        assert_eq!(received[0].reason.as_deref(), Some("from mobile"));
+        assert_eq!(received[1].level, RunControlLevel::CooperativeStop);
+        assert_eq!(received[2].level, RunControlLevel::Continue);
+        assert_eq!(received[3].level, RunControlLevel::ForceCancel);
+
+        // Dispatcher must preserve the backend's business error code.
+        *backend.run_control_error.lock().unwrap() = Some(ServerError::protocol(
+            DeviceErrorCode::CmdNotFound,
+            "run 不存在或已终态：r-terminal",
+        ));
+        send_remote_command(
+            &mut ws,
+            "runControl",
+            "mobile-terminal-run",
+            serde_json::json!({
+                "level": "continue",
+                "runId": "r-terminal",
+                "sessionId": "s-mobile",
+            }),
+        )
+        .await;
+        let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
+        assert_eq!(kind, "result.runControl");
+        let result: conex_types::device::commands::CommandResult =
+            serde_json::from_value(body).unwrap();
+        assert!(!result.ok);
+        assert_eq!(
+            result.error.unwrap().code,
+            DeviceErrorCode::CmdNotFound,
+            "目标缺失/已终态必须保留 CoreStateBackend 错误码"
+        );
+
+        // 枚举参数非法时在反序列化阶段拒绝，不调用后端。
+        send_remote_command(
+            &mut ws,
+            "runControl",
+            "mobile-invalid-level",
+            serde_json::json!({
+                "level": "pause",
+                "runId": "r-mobile",
+                "sessionId": "s-mobile",
+            }),
+        )
+        .await;
+        let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
+        assert_eq!(kind, "result.runControl");
+        let result: conex_types::device::commands::CommandResult =
+            serde_json::from_value(body).unwrap();
+        assert_eq!(result.error.unwrap().code, DeviceErrorCode::CmdInvalid);
+        assert_eq!(backend.run_controls.lock().unwrap().len(), 5);
+        let _ = ws.close(None).await;
+    }
+
+    #[tokio::test]
+    async fn remote_other_session_commands_keep_their_wire_contracts() {
+        let backend = Arc::new(MemoryBackend::new());
+        let (addr, _handle, token, _registry) =
+            test_server(Some(backend.clone() as Arc<dyn ApiBackend>), None).await;
+        let mut ws = ws_connect(addr, &token).await;
+
+        send_remote_command(
+            &mut ws,
+            "runTask",
+            "mobile-run-task",
+            serde_json::json!({
+                "sessionId": "s-mobile",
+                "prompt": "hello from mobile",
+                "clientMessageId": "msg-client-1",
+            }),
+        )
+        .await;
+        let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
+        assert_eq!(kind, "result.runTask");
+        let result: conex_types::device::commands::CommandResult =
+            serde_json::from_value(body).unwrap();
+        assert!(result.ok);
+        assert_eq!(result.req_msg_id, "mobile-run-task");
+        assert_eq!(
+            result.result,
+            Some(serde_json::json!({ "runId": "r-mobile", "sessionId": "s-mobile" }))
+        );
+        let run_task = backend.run_tasks.lock().unwrap()[0].clone();
+        assert_eq!(run_task.prompt, "hello from mobile");
+        assert_eq!(run_task.client_message_id.as_deref(), Some("msg-client-1"));
+
+        send_remote_command(
+            &mut ws,
+            "cancelRun",
+            "mobile-cancel-run",
+            serde_json::json!({ "runId": "r-mobile", "reason": "user cancelled" }),
+        )
+        .await;
+        let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
+        assert_eq!(kind, "result.cancelRun");
+        let result: conex_types::device::commands::CommandResult =
+            serde_json::from_value(body).unwrap();
+        assert!(result.ok);
+        assert_eq!(
+            result.result,
+            Some(serde_json::json!({ "ok": true, "runId": "r-mobile" }))
+        );
+        assert_eq!(backend.cancel_runs.lock().unwrap()[0].run_id, "r-mobile");
+
+        // searchSessions 是协议中的 P2 未注册能力，保持 cmd.unknown 契约。
+        send_remote_command(
+            &mut ws,
+            "searchSessions",
+            "mobile-search-sessions",
+            serde_json::json!({ "query": "hello" }),
+        )
+        .await;
+        let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
+        assert_eq!(kind, "result.searchSessions");
+        let result: conex_types::device::commands::CommandResult =
+            serde_json::from_value(body).unwrap();
+        assert!(!result.ok);
+        assert_eq!(result.req_msg_id, "mobile-search-sessions");
+        assert_eq!(result.error.unwrap().code, DeviceErrorCode::CmdUnknown);
+        let _ = ws.close(None).await;
+    }
+
+    #[tokio::test]
+    async fn remote_run_control_rejects_pairing_state_connection() {
+        let (addr, _handle, coordinator) = spawn_pairing_server().await;
+        coordinator
+            .start_pairing(now_ms())
+            .expect("激活配对必须成功");
+        let mut ws = ws_connect_anonymous(addr).await;
+        send_remote_command(
+            &mut ws,
+            "runControl",
+            "anonymous-run-control",
+            serde_json::json!({
+                "level": "cooperative_stop",
+                "runId": "r-mobile",
+                "sessionId": "s-mobile",
+            }),
+        )
+        .await;
+        let (kind, body) = parse_frame(&next_text(&mut ws).await.unwrap());
+        assert_eq!(kind, "error");
+        let error: ErrorBody = serde_json::from_value(body).unwrap();
+        assert_eq!(error.code, DeviceErrorCode::AuthUnknownDevice);
         let _ = ws.close(None).await;
     }
 

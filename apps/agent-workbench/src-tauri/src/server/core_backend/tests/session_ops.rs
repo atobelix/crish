@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use conex_types::device::{PermissionMode, RunTaskParams};
+use conex_types::device::{
+    DeviceErrorCode, PermissionMode, RunControlLevel, RunControlParams, RunTaskParams,
+};
 use conex_types::events::{AgentEvent, SecurityAuditDecision, SecurityAuditOperation};
 
 use crate::core_backend::{
@@ -17,6 +19,134 @@ use super::{
     g5_test_session_entry, g5_wait_audit_operation, r2_test_core_state, recorded_security_audit,
     recording_bridge,
 };
+
+#[tokio::test]
+async fn remote_run_control_missing_run_returns_not_found() {
+    let backend = CoreStateBackend::new(r2_test_core_state());
+    let error = backend
+        .run_control(RunControlParams {
+            level: RunControlLevel::Continue,
+            run_id: "r-missing".to_string(),
+            session_id: "s-mobile".to_string(),
+            reason: None,
+            payload: None,
+        })
+        .await
+        .expect_err("缺失 run 必须拒绝控制");
+
+    assert_eq!(error.device_code(), DeviceErrorCode::CmdNotFound);
+    assert!(error.to_string().contains("run 不存在或已终态"));
+}
+
+#[tokio::test]
+async fn remote_run_control_completed_run_returns_not_found() {
+    use agent_provider::config::Endpoint;
+    use session_loop::provider::ProviderCall;
+    use session_loop::stream::{ProviderStreamEvent, StopReason};
+    use session_loop::testing::TestProvider;
+
+    let (bridge, _emitter) = recording_bridge();
+    let db = conex_db::LocalDb::open_in_memory().expect("in-memory database");
+    db.upsert_session_entry(&g5_test_session_entry("s-terminal"))
+        .expect("insert session");
+    static TERMINAL_TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let seq = TERMINAL_TMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let snapshots: Arc<dyn orchestrator::restore::SnapshotStore> = Arc::new(
+        orchestrator::restore::SnapshotFileStore::new(std::env::temp_dir().join(format!(
+            "conex_remote_terminal_{}_{seq}_snapshot.json",
+            std::process::id()
+        ))),
+    );
+    let state = Arc::new(crate::core_run_commands::CoreRunState::new(
+        Arc::new(orchestrator::persist::LocalDbStore::new(db.clone())),
+        snapshots,
+        bridge,
+        Arc::new(crate::status_diagnostics::StatusDiagnostics::new()),
+        None,
+    ));
+    let provider = Arc::new(TestProvider::new(vec![
+        ProviderStreamEvent::text("terminal run completes"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]));
+    let routed: Arc<dyn ProviderCall> = provider;
+    let config = crate::engine::EngineProviderConfig {
+        base_url: "http://test.local/v1".to_string(),
+        api_key: "test-key".to_string(),
+        model: "test-model".to_string(),
+        endpoint: Endpoint::ChatCompletions,
+        stream: true,
+        extra: std::collections::BTreeMap::new(),
+        ..Default::default()
+    };
+    state.engine().inject_provider_for_test(routed, config);
+    state.run_restore().await;
+
+    let backend = CoreStateBackend::new(Arc::clone(&state));
+    let started = backend
+        .run_task(RunTaskParams {
+            session_id: Some("s-terminal".to_string()),
+            prompt: "complete this run".to_string(),
+            prompt_ref: None,
+            mode: None,
+            cwd: None,
+            permission_mode: Some(PermissionMode::Ask),
+            history: None,
+            client_message_id: None,
+        })
+        .await
+        .expect("test run should start");
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    loop {
+        let events = match db.query_events("s-terminal", 0, Some(500)) {
+            Ok(events) => events,
+            Err(_) => {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "test run did not reach a completed terminal state"
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+                continue;
+            }
+        };
+        let completed = events.iter().any(|event| {
+            if event.event_type != "run-terminal" {
+                return false;
+            }
+            let Ok(payload) = serde_json::from_str::<serde_json::Value>(&event.payload) else {
+                return false;
+            };
+            payload["terminal"] == "completed"
+        });
+        let active = backend.get_status().await.expect("read backend status")["activeRuns"]
+            .as_array()
+            .expect("activeRuns should be an array")
+            .iter()
+            .any(|run| run["runId"] == started.run_id);
+        if completed && !active {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "test run did not reach a completed terminal state"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+    }
+
+    let error = backend
+        .run_control(RunControlParams {
+            level: RunControlLevel::Continue,
+            run_id: started.run_id,
+            session_id: "s-terminal".to_string(),
+            reason: None,
+            payload: None,
+        })
+        .await
+        .expect_err("completed run must reject further controls");
+
+    assert_eq!(error.device_code(), DeviceErrorCode::CmdNotFound);
+    assert!(error.to_string().contains("run 不存在或已终态"));
+}
 
 // ── R1-10 T-08：远程权限模式上限（D5 §4.6.1 / §9.2 矩阵）──
 

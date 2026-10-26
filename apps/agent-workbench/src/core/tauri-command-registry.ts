@@ -20,7 +20,7 @@ export interface RegisteredTauriCommand {
   owner?: string;
 }
 
-// 注册面（137 条 = 与 command_manifest.rs `COMMAND_MANIFEST`、
+// 注册面（153 条 = 与 command_manifest.rs `COMMAND_MANIFEST`、
 // main.rs `command_registry!` 及前端 `BUILTIN_COMMAND_MANIFEST` 四方对齐；
 // 条数与集合一致性由 scripts/check-provider-single-track.mjs 的 D11 防线守护）：
 // - 注册面：`command_registry!` 宏已注册的命令，status=implemented；
@@ -37,6 +37,7 @@ export interface RegisteredTauriCommand {
 // Win11 贴靠布局热区 `workbench_set_snap_overlay_rect` 追加后 136 → **137**。
 // 此后 manifest 增至 147 条；本表漏登更新器分段 4 条（workbench_check_update /
 // download_update / install_update / restart_app），D11 命中后补齐。
+// 工作区授权六命令（单/多路径复授权、默认根、列表、单/多目录选择）漏登，D11 命中后补齐：147 → 153。
 export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   // ── GUI 专属面（workbench_*，§2.3）──
   {
@@ -83,6 +84,36 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     command: 'workbench_open_path_default',
     status: 'implemented',
     feature: 'host default app open',
+  },
+  {
+    command: 'workbench_open_workspace',
+    status: 'implemented',
+    feature: 'recent workspace reauthorization',
+  },
+  {
+    command: 'workbench_open_workspaces',
+    status: 'implemented',
+    feature: 'atomic recent multi-workspace reauthorization',
+  },
+  {
+    command: 'workbench_activate_default_workspace',
+    status: 'implemented',
+    feature: 'default workspace activation',
+  },
+  {
+    command: 'workbench_list_workspaces',
+    status: 'implemented',
+    feature: 'authorized workspace listing',
+  },
+  {
+    command: 'workbench_pick_workspace_folder',
+    status: 'implemented',
+    feature: 'native single workspace selection',
+  },
+  {
+    command: 'workbench_pick_workspace_folders',
+    status: 'implemented',
+    feature: 'native multi-workspace selection',
   },
   {
     command: 'workbench_abort_run',
