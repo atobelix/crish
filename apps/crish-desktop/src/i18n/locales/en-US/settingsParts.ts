@@ -1,23 +1,10 @@
 // Settings dictionary part: sections 13-26, moved out of settings.ts for the RL-03 line budget.
 // Keys and values are byte-identical to the original settings.ts; the key set must stay in
 // sync with zh-CN/settingsParts.ts. The main settings.ts spreads this object.
+import { settingsPartExtensions } from './settingsPartExtensions';
 
 export const settingsPartRest = {
-  // ── 13. Extensions & Plugins (extensions.*) ──
-  'extensions.title': 'Extensions & Plugins',
-  'extensions.desc':
-    'Manage installed MCP tool servers, third-party extensions, and local skills',
-  'extensions.installedTab': 'Installed Extensions',
-  'extensions.marketTab': 'Extension Market',
-  'extensions.mcpGroup': 'Model Context Protocol (MCP) Servers',
-  'extensions.addMcpServer': 'Add MCP Server',
-  'extensions.mcpServerName': 'Server Name',
-  'extensions.mcpCommand': 'Executable Command',
-  'extensions.mcpArgs': 'Command Arguments',
-  'extensions.mcpEnv': 'Environment Variables',
-  'extensions.installSuccess': 'Extension "{name}" installed successfully',
-  'extensions.uninstallConfirm': 'Are you sure you want to uninstall "{name}"?',
-  'extensions.noExtensions': 'No third-party extensions installed',
+  ...settingsPartExtensions,
 
   // ── 14. About & Compliance (about.*) ──
   'about.title': 'About Crish Desktop',
@@ -278,6 +265,7 @@ export const settingsPartRest = {
 
   // ── 22. Scheduled Tasks (schedule.*) ──
   'schedule.pageTitle': 'Scheduled Tasks',
+  'schedule.taskListSection': 'Task List',
   'schedule.createAi': 'Create with AI (Recommended)',
   'schedule.createManual': 'Create Manually',
   'schedule.defaultTaskName': 'Scheduled Task',
@@ -294,6 +282,7 @@ export const settingsPartRest = {
   'schedule.new': 'New',
   'schedule.createModeAria': 'Creation mode',
   'schedule.runHistorySection': 'Execution History',
+  'schedule.runCount': '{count} runs total',
 
   // ── 23. Security & Approvals (security.*) ──
   'security.invalidCommand': 'Invalid command',

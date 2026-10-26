@@ -157,7 +157,7 @@ apps/crish-desktop/src/components/files/FileViewerCard.tsx 464
 apps/crish-desktop/src/components/files/FilesCard.tsx 480
 apps/crish-desktop/src/components/markdown/MarkdownDocumentView.tsx 428
 apps/crish-desktop/src/components/note-paper/useNoteTextPersistence.ts 454
-apps/crish-desktop/src/components/plugins/ExternalSessionImportModal.tsx 480
+apps/crish-desktop/src/components/plugins/ExternalSessionImportModal.tsx 559
 apps/crish-desktop/src/components/settings-extensions/useExtensionMarket.tsx 470
 apps/crish-desktop/src/components/settings-models/ModelProfileList.tsx 440
 apps/crish-desktop/src/components/settings-models/ModelsSettingsTab.tsx 526
@@ -182,7 +182,7 @@ apps/crish-desktop/src/hooks/chat-stream/slashSendPreflight.ts 382
 apps/crish-desktop/src/hooks/chat-stream/useRunStreamingAssistant.ts 343
 apps/crish-desktop/src/hooks/useFileNavigation.ts 373
 apps/crish-desktop/src/hooks/useTreeResize.ts 367
-apps/crish-desktop/src/i18n/locales/en-US/settingsParts.ts 355
+apps/crish-desktop/src/i18n/locales/en-US/settingsParts.ts 358
 apps/crish-desktop/src/services/toast/ToastStore.ts 363
 apps/crish-desktop/src/store/dualLatchProtocol.ts 346
 apps/crish-desktop/src/store/layout-helpers/store-persistence.ts 355

@@ -117,3 +117,17 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.sectionTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.sectionCount {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-normal);
+  text-transform: none;
+}

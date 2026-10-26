@@ -65,6 +65,18 @@
   line-height: var(--line-height-base);
 }
 
+.pairExpiredNotice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2_5) var(--space-3_5);
+  border-top: var(--hairline-width) solid var(--border-subtle);
+  background: var(--color-warning-bg);
+  color: var(--text-warning);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-base);
+}
+
 .closePairBtn {
   color: var(--text-tertiary);
   margin-left: auto;
@@ -178,37 +190,43 @@
 .profileBadge {
   display: inline-flex;
   align-items: center;
-  padding: var(--space-0_5) var(--space-2_5);
-  border-radius: var(--radius-sm);
+  gap: var(--space-1);
+  padding: 2px var(--space-2_5);
+  border-radius: var(--radius-md);
   background: var(--bg-primary);
   border: var(--hairline-width) solid var(--border-subtle);
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-base);
 }
 
 .profileBadgeSuccess {
   display: inline-flex;
   align-items: center;
-  padding: var(--space-0_5) var(--space-2_5);
-  border-radius: var(--radius-sm);
+  gap: var(--space-1);
+  padding: 2px var(--space-2_5);
+  border-radius: var(--radius-md);
   background: var(--color-success-bg);
-  border: none;
+  border: var(--hairline-width) solid var(--border-subtle);
   color: var(--color-success);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-base);
 }
 
 .profileBadgeWarn {
   display: inline-flex;
   align-items: center;
-  padding: var(--space-0_5) var(--space-2_5);
-  border-radius: var(--radius-sm);
+  gap: var(--space-1);
+  padding: 2px var(--space-2_5);
+  border-radius: var(--radius-md);
   background: var(--color-warning-bg);
-  border: none;
+  border: var(--hairline-width) solid var(--border-subtle);
   color: var(--text-warning);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-base);
 }
 
 .networkWarnBanner {
@@ -224,49 +242,20 @@
   line-height: var(--line-height-base);
 }
 
-.ipBadgeGroup {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1_5);
-}
-
-.ipBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1_5);
-  padding: var(--space-0_5) var(--space-2);
-  background: var(--cover-card-bg, var(--bg-card));
-  border: none;
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: background var(--transition-fast);
-}
-
-.ipBadge:hover {
-  background: var(--tint-hover);
-}
-
-.depItem {
-  border: none;
-  background: var(--tint-hover);
-}
-
-.ipListEmpty {
-  font-size: var(--font-size-xs);
-  color: var(--text-warning);
-}
-
 .networkFooterHint {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-1_5);
-  padding: var(--space-2_5) var(--space-4) var(--space-3);
+  gap: var(--space-2);
+  padding: var(--space-2_5) var(--space-3_5);
   border-top: var(--hairline-width) solid var(--border-subtle);
   font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  line-height: var(--line-height-body);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-base);
+}
+
+.networkFooterHintIcon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--text-secondary);
 }

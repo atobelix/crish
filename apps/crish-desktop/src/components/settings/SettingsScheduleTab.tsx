@@ -318,7 +318,9 @@ export const SettingsScheduleTab: React.FC<Props> = ({
           />
         ) : null}
 
-        <SettingsSection>
+        <SettingsSection
+          title={t('settings.schedule.taskListSection', '任务列表')}
+        >
           <SettingsCard>
             <WorkflowList
               variant="settings"
@@ -346,10 +348,26 @@ export const SettingsScheduleTab: React.FC<Props> = ({
           </SettingsCard>
         </SettingsSection>
 
-        <SettingsSection>
+        <SettingsSection
+          title={
+            <div className={styles.sectionTitleRow}>
+              <span>
+                {t('settings.schedule.runHistorySection', '运行历史记录')}
+              </span>
+              {runs.length > 0 && (
+                <span className={styles.sectionCount}>
+                  {t('settings.schedule.runCount', '共 {count} 次运行', {
+                    count: runs.length,
+                  })}
+                </span>
+              )}
+            </div>
+          }
+        >
           <SettingsCard>
             <RunHistoryList
               variant="settings"
+              hideHeading
               runs={runs}
               workflows={workflows}
               onOpenRun={handleOpenRunSession}

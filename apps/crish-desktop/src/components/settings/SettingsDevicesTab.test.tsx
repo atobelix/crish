@@ -258,16 +258,13 @@ describe('SettingsDevicesTab', () => {
     );
   });
 
-  it('配对开启时显示网络环境卡片：配置文件类别 + IP 列表 + AP 隔离提示（R1-09 G-4）', async () => {
+  it('配对开启时显示网络环境卡片：配置文件类别 + AP 隔离提示（极简直连设计）', async () => {
     pairStatus.mockResolvedValue(ACTIVE_STATUS);
     renderTab();
     await enableService();
     const card = await screen.findByTestId('network-env');
     expect(card.textContent).toContain('专用网络');
-    expect(card.textContent).toContain('192.168.1.5');
-    expect(card.textContent).toContain('10.0.0.8');
     expect(card.textContent).toContain('关闭路由器客户端隔离');
-    expect(card.textContent).toContain('手动输入上方 IP');
     // 专用网络不显示「切换到专用网络」提示
     expect(screen.queryByTestId('network-public-hint')).toBeNull();
   });
@@ -288,7 +285,7 @@ describe('SettingsDevicesTab', () => {
     expect(screen.getByTestId('network-env').textContent).toContain('公用网络');
   });
 
-  it('IP 占位 0.0.0.0 不渲染；空列表显示检查网络提示', async () => {
+  it('网络类型为未知时显示未知状态与提示', async () => {
     pairStatus.mockResolvedValue(ACTIVE_STATUS);
     networkEnvInfo.mockResolvedValue({
       profile: 'unknown',
@@ -299,8 +296,6 @@ describe('SettingsDevicesTab', () => {
     await enableService();
     const card = await screen.findByTestId('network-env');
     expect(card.textContent).toContain('未知');
-    expect(card.textContent).toContain('未检测到可直连地址');
-    expect(card.textContent).not.toContain('0.0.0.0');
     expect(card.textContent).toContain('未能识别当前网络类型');
   });
 

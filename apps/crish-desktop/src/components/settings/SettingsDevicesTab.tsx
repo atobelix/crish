@@ -278,14 +278,16 @@ export const SettingsDevicesTab: React.FC<Props> = ({
               />
               {enabled && !pairing.pairResult && (
                 <div
-                  className={styles.firewallHint}
+                  className={styles.pairExpiredNotice}
                   data-testid="pair-code-missing"
                 >
-                  <AppIcon name="info" size={14} aria-hidden />
-                  {t(
-                    'settings.devices.pairCodeExpiredHint',
-                    '配对已开启但配对码已过期。点击上方开关重新开启即可生成新码。'
-                  )}
+                  <AppIcon name="alert-triangle" size={14} aria-hidden />
+                  <span>
+                    {t(
+                      'settings.devices.pairCodeExpiredHint',
+                      '配对已开启但配对码已过期。点击上方开关重新开启即可生成新码。'
+                    )}
+                  </span>
                 </div>
               )}
             </>
@@ -296,10 +298,6 @@ export const SettingsDevicesTab: React.FC<Props> = ({
                 title={t(
                   'settings.devices.serviceOffTitle',
                   '多端互通服务未开启'
-                )}
-                desc={t(
-                  'settings.devices.serviceOffDesc',
-                  '开启后本机可被局域网内的移动设备发现并连接'
                 )}
                 control={
                   <Button

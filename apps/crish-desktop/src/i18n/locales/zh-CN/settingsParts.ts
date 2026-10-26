@@ -1,22 +1,10 @@
 // 设置词典拆分部分：第 13-26 节，自 settings.ts 移出以满足行数门禁。
 // 键与文案与原 settings.ts 逐字节一致，且须与 en-US/settingsParts.ts 保持键集合一致；
 // 主文件 settings.ts 通过 spread 聚合本对象。
+import { settingsPartExtensions } from './settingsPartExtensions';
 
 export const settingsPartRest = {
-  // ── 13. 扩展与插件 (extensions.*) ──
-  'extensions.title': '扩展与插件中心',
-  'extensions.desc': '管理已安装的 MCP 工具服务器、第三方扩展与本地技能',
-  'extensions.installedTab': '已安装扩展',
-  'extensions.marketTab': '插件市场',
-  'extensions.mcpGroup': 'Model Context Protocol (MCP) 服务',
-  'extensions.addMcpServer': '添加 MCP 服务器',
-  'extensions.mcpServerName': '服务器标识',
-  'extensions.mcpCommand': '执行命令',
-  'extensions.mcpArgs': '命令参数',
-  'extensions.mcpEnv': '环境变量',
-  'extensions.installSuccess': '扩展「{name}」安装成功',
-  'extensions.uninstallConfirm': '确定要卸载扩展「{name}」吗？',
-  'extensions.noExtensions': '暂无安装的第三方扩展',
+  ...settingsPartExtensions,
 
   // ── 14. 关于与合规 (about.*) ──
   'about.title': '关于 Crish Desktop',
@@ -267,6 +255,7 @@ export const settingsPartRest = {
 
   // ── 22. 计划与定时任务 (schedule.*) ──
   'schedule.pageTitle': '定时任务',
+  'schedule.taskListSection': '任务列表',
   'schedule.createAi': '用对话创建（推荐）',
   'schedule.createManual': '手动创建',
   'schedule.defaultTaskName': '定时任务',
@@ -281,6 +270,7 @@ export const settingsPartRest = {
   'schedule.new': '新建',
   'schedule.createModeAria': '创建方式',
   'schedule.runHistorySection': '运行历史记录',
+  'schedule.runCount': '共 {count} 次运行',
 
   // ── 23. 安全交互与信任白名单 (security.*) ──
   'security.invalidCommand': '无效命令',

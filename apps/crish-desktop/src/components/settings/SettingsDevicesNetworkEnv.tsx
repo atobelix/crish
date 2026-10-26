@@ -1,18 +1,12 @@
 /**
  * 设置 · 多端互通 · 网络环境卡片（从 SettingsDevicesTab 提取）。
- * 展示网络配置文件类别、可直连 IP 列表与 AP 隔离提示（R1-09 G-4）。
+ * 展示网络配置文件类别与 AP 隔离 / 防火墙提示（R1-09 G-4）。
  */
 import React from 'react';
 import styles from './SettingsDevicesTab.module.css';
-import {
-  SettingsSection,
-  SettingsCard,
-  SettingsRow,
-} from './SettingsUI';
+import { SettingsSection, SettingsCard, SettingsRow } from './SettingsUI';
 import type { NetworkEnvInfo } from '../../api/multiDevice';
-import { useToast } from '../../services/toast/ToastContext';
 import { AppIcon } from '../ui/icons/index';
-import { Button, Tooltip } from '../ui';
 
 /** 网络配置文件类别 → 展示名（Rust multi_device_network_info 四态） */
 const PROFILE_LABELS: Record<NetworkEnvInfo['profile'], string> = {
@@ -26,31 +20,26 @@ export interface SettingsDevicesNetworkEnvProps {
   netEnv: NetworkEnvInfo;
 }
 
-export const SettingsDevicesNetworkEnv: React.FC<SettingsDevicesNetworkEnvProps> = ({
-  netEnv,
-}) => {
-  const { showToast } = useToast();
-  const ips = (netEnv.usableIps ?? netEnv.usable_ips ?? []).filter(
-    (ip) => ip !== '0.0.0.0'
-  );
-
+export const SettingsDevicesNetworkEnv: React.FC<
+  SettingsDevicesNetworkEnvProps
+> = ({ netEnv }) => {
   const isPublic = netEnv.profile === 'public';
   const isPrivate = netEnv.profile === 'private';
+  const isDomain = netEnv.profile === 'domain';
 
   const badgeClass = isPublic
     ? styles.profileBadgeWarn
     : isPrivate
-    ? styles.profileBadgeSuccess
-    : styles.profileBadge;
+      ? styles.profileBadgeSuccess
+      : styles.profileBadge;
 
-  const handleCopyIp = async (ip: string) => {
-    try {
-      await navigator.clipboard.writeText(ip);
-      showToast(`已复制 IP 地址：${ip}`);
-    } catch {
-      // ignore
-    }
-  };
+  const profileIcon = isPrivate
+    ? 'check'
+    : isPublic
+      ? 'alert-triangle'
+      : isDomain
+        ? 'shield'
+        : 'help-circle';
 
   return (
     <SettingsSection title="网络环境">
@@ -63,11 +52,12 @@ export const SettingsDevicesNetworkEnv: React.FC<SettingsDevicesNetworkEnvProps>
               isPublic
                 ? '当前处于公用网络，Windows 防火墙可能阻断手机访问'
                 : isPrivate
-                ? '专用网络环境，局域网直连通畅'
-                : '网络配置文件状态'
+                  ? '专用网络环境，局域网直连通畅'
+                  : '未识别到当前网络类型（请检查 Windows 防火墙设置）'
             }
             control={
               <span className={badgeClass}>
+                <AppIcon name={profileIcon} size={12} aria-hidden />
                 {PROFILE_LABELS[netEnv.profile] ?? netEnv.profile}
               </span>
             }
@@ -85,42 +75,17 @@ export const SettingsDevicesNetworkEnv: React.FC<SettingsDevicesNetworkEnvProps>
             </div>
           )}
 
-          <SettingsRow
-            icon={<AppIcon name="network" size={18} aria-hidden />}
-            title="手机直连地址"
-            desc="扫码失败或跨网段时手动输入"
-            control={
-              ips.length > 0 ? (
-                <div className={styles.ipBadgeGroup}>
-                  {ips.map((ip) => (
-                    <Tooltip key={ip} content="点击复制 IP 地址">
-                      <Button
-                        bare
-                        type="button"
-                        className={styles.ipBadge}
-                        onClick={() => void handleCopyIp(ip)}
-                        aria-label="点击复制 IP 地址"
-                      >
-                        <code>{ip}</code>
-                        <AppIcon name="copy" size={11} aria-hidden />
-                      </Button>
-                    </Tooltip>
-                  ))}
-                </div>
-              ) : (
-                <span className={styles.ipListEmpty}>
-                  未检测到可直连地址，请检查网络连接。
-                </span>
-              )
-            }
-          />
-
           {netEnv.hint && (
             <div
               className={styles.networkFooterHint}
               data-testid="network-hint"
             >
-              <AppIcon name="info" size={13} aria-hidden />
+              <AppIcon
+                name="info"
+                size={13}
+                aria-hidden
+                className={styles.networkFooterHintIcon}
+              />
               <span>{netEnv.hint}</span>
             </div>
           )}
