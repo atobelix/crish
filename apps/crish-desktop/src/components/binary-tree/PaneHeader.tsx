@@ -133,7 +133,6 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
     const effectiveActiveTabId =
       activeTabId ||
       (isLeafDraft && hasCommittedTabs ? '' : visibleTabs[0]?.tabId || '');
-    void isActive;
 
     const clearLockedWidth = useCallback(() => {
       setLockedTabWidth(null);
@@ -413,6 +412,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
         <div
           className={styles.paneHeader}
           data-pane-header="true"
+          data-active={isActive ? 'true' : 'false'}
           data-top-row={isTopRow ? 'true' : undefined}
           data-tauri-drag-region={isTopRow ? '' : undefined}
         />
@@ -423,6 +423,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
       <div
         className={styles.paneHeader}
         data-pane-header="true"
+        data-active={isActive ? 'true' : 'false'}
         data-top-row={isTopRow ? 'true' : undefined}
         data-tauri-drag-region={isTopRow ? '' : undefined}
         onMouseLeave={handleHeaderMouseLeave}

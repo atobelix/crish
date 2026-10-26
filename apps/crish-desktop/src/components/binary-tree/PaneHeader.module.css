@@ -18,11 +18,7 @@
   height: var(--header-height);
   min-height: var(--header-height);
   max-height: var(--header-height);
-  /* 顶部标签栏属于外层：无材质 = 不透明外层色；有云母时透明，透出 body 的唯一外层着色 */
-  background: var(
-    --outer-layer-child-bg,
-    var(--shell-chrome-bg, var(--bg-secondary))
-  );
+  background: var(--surface-shell);
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -36,6 +32,11 @@
   z-index: 5;
   overflow: hidden;
   pointer-events: auto;
+  transition: opacity var(--duration-fast, 150ms) var(--ease-standard);
+}
+
+.paneHeader[data-active='false'] {
+  opacity: 0.75;
 }
 
 /* 声明式避让规则：让位值来自壳几何 token（tokens.css --edge-reserve-*） */
@@ -99,7 +100,7 @@
   app-region: no-drag;
 }
 
-/* 单个会话标签项：28px 高、8px 圆角、绝对等宽严格锁定 */
+/* 单个会话标签项：28px 高、var(--radius-control, 8px) 圆角、绝对等宽严格锁定 */
 .tabItem {
   height: var(--pane-tab-height);
   min-height: var(--pane-tab-height);
@@ -113,7 +114,7 @@
   padding: 0;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-control, 8px);
   font-size: var(--font-size-xs-plus, 12.5px);
   font-weight: 400;
   color: var(--text-secondary);
@@ -147,8 +148,8 @@
   top: 50%;
   transform: translateY(-50%);
   width: 1px;
-  height: 14px;
-  background: color-mix(in srgb, var(--border-color) 60%, transparent);
+  height: 12px;
+  background: color-mix(in srgb, var(--border-color) 40%, transparent);
   pointer-events: none;
   opacity: 1;
   transition: opacity var(--duration-micro) var(--ease-standard);
@@ -179,33 +180,30 @@
   box-sizing: border-box;
   flex-shrink: 0;
   overflow: hidden;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-control, 8px);
 }
 
 .tabItem:hover:not(.tabItemActive),
 .tabItem:focus-visible:not(.tabItemActive) {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border-color: transparent;
   box-shadow: none;
   color: var(--text-primary);
 }
 
 .tabItemActive {
-  background: var(--tab-active-bg, var(--bg-card));
+  background: var(--surface-card);
   color: var(--text-primary);
   /* 与未选中同字重。切标签若改字重，字形宽度变化会让省略号和文字跳动。 */
   font-weight: 400;
-  border-color: var(
-    --border-subtle,
-    color-mix(in srgb, var(--border-color) 80%, transparent)
-  );
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color) 6%, transparent);
+  border: 1px solid transparent;
+  box-shadow: var(--edge-rim), var(--shadow-lift-card);
 }
 
 .tabItemActive:hover {
-  background: var(--tab-active-bg, var(--bg-card));
-  border-color: var(--border-color);
-  box-shadow: 0 2px 5px color-mix(in srgb, var(--shadow-color) 8%, transparent);
+  background: var(--surface-card);
+  border: 1px solid transparent;
+  box-shadow: var(--edge-rim), var(--shadow-lift-raised);
 }
 
 /* 入场：@starting-style 首帧以左侧实际落地位置为锚点展开，无纵向浮动漂移；首轮挂载由 data-booted 关闭。
@@ -257,13 +255,13 @@
   height: 18px;
   min-width: 18px;
   min-height: unset;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 0;
   opacity: 0;
@@ -296,37 +294,34 @@
   opacity: 0;
 }
 
-.tabItemActive .tabCloseBtn,
+/* 渐进显现：默认静默隐退（包括激活态默认也隐退），仅在 hover 标签项或 focus 时浮现 */
 .tabItem:hover .tabCloseBtn,
-.tabItemActive .tabCloseBtn {
-  opacity: 0.7;
+.tabCloseBtn:focus-visible {
+  opacity: 0.75;
   pointer-events: auto;
 }
 
-/* 单一简单 hover 变量，清爽利落零嵌套 */
-.tabCloseBtn:hover,
-.tabItem .tabCloseBtn:hover,
+/* 按钮自身 hover：极浅中性微光 */
 .tabCloseBtn:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
   opacity: 1;
 }
 
-.tabCloseBtn:active,
 .tabCloseBtn:active {
-  background: var(--tint-active);
+  background: var(--state-active);
 }
 
-/* 新建标签按钮（加号）：28px 与标签同高、8px 圆角，纯流式紧贴末尾标签 */
+/* 新建标签按钮（加号）：26x26px、var(--radius-control, 8px) 圆角，纯流式紧贴末尾标签 */
 .newTabBtn,
 .newTabBtn {
-  width: var(--pane-tab-height);
-  height: var(--pane-tab-height);
-  min-width: var(--pane-tab-height);
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
   min-height: unset;
-  flex: 0 0 var(--pane-tab-height);
+  flex: 0 0 26px;
   padding: 0;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-control, 8px);
   border: 1px solid transparent;
   background: transparent;
   display: inline-flex;
@@ -345,14 +340,14 @@
 }
 
 .newTabBtn:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border-color: transparent;
   box-shadow: none;
   color: var(--text-primary);
 }
 
 .newTabBtn:active {
-  background: var(--tint-active);
+  background: var(--state-active);
   border-color: transparent;
   box-shadow: none;
   color: var(--text-primary);
