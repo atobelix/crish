@@ -65,7 +65,7 @@ pub struct NoteBlockOp {
     /// insert 块 kind（默认 paragraph）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
-    /// set_attr 属性
+    /// insert 的初始属性或 set_attr 的增量属性；update 不接受 attrs。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attrs: Option<Map<String, JsonValue>>,
 }

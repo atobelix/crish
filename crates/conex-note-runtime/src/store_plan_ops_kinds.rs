@@ -146,8 +146,13 @@ pub(super) fn plan_insert(
     Ok(())
 }
 
-/// Update：全量 TextEdit 替换 + 可选 UpdateProps。
+/// Update：全量 TextEdit 替换；attrs 仅允许由独立 SetAttr op 增量更新。
 pub(super) fn plan_update(state: &mut PlanState, op: &NoteBlockOp) -> Result<(), NoteBackendError> {
+    if op.attrs.is_some() {
+        return Err(NoteBackendError::Invalid(
+            "update does not accept attrs; use set_attr".into(),
+        ));
+    }
     let id_s = op
         .id
         .clone()
@@ -170,12 +175,6 @@ pub(super) fn plan_update(state: &mut PlanState, op: &NoteBlockOp) -> Result<(),
         end,
         insert: content.clone(),
     });
-    if let Some(ref attrs) = op.attrs {
-        let props = BlockProps {
-            attrs: attrs.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
-        };
-        state.collab_ops.push(Op::UpdateProps { id, props });
-    }
     if let Some(m) = state.known.get_mut(&id) {
         m.text_len = content.chars().count() as u32;
         m.text = content.clone();
@@ -304,7 +303,7 @@ pub(super) fn plan_move(state: &mut PlanState, op: &NoteBlockOp) -> Result<(), N
     Ok(())
 }
 
-/// SetAttr：UpdateProps 仅 attrs。
+/// SetAttr：只设置传入 attrs，未提及的键保持原值。
 pub(super) fn plan_set_attr(
     state: &mut PlanState,
     op: &NoteBlockOp,
@@ -321,15 +320,17 @@ pub(super) fn plan_set_attr(
         .ok_or_else(|| NoteBackendError::NotFound(format!("block not found: {id}")))?;
     let kind_label = kind_label(&meta.kind);
     let attrs = op.attrs.clone().unwrap_or_default();
-    let props = BlockProps {
-        attrs: attrs.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
-    };
-    state.collab_ops.push(Op::UpdateProps { id, props });
+    let attrs_len = attrs.len();
+    state.collab_ops.push(Op::PatchAttrs {
+        id,
+        set: attrs.into_iter().collect(),
+        remove: Default::default(),
+    });
     state.previews.push(NoteBlockOpPreview {
         op: "set_attr".into(),
         id: Some(id.to_string()),
         kind: Some(kind_label),
-        summary: Some(format!("{} attrs", attrs.len())),
+        summary: Some(format!("{} attrs", attrs_len)),
     });
     state.block_ids.push(id.to_string());
     Ok(())

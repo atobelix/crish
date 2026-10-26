@@ -76,10 +76,16 @@ pub(super) fn plan_insert(
 }
 
 /// Update：校验 id/content → 工作副本改 text + PlannedMutation::Update。
+/// attrs 必须由独立 SetAttr op 更新，避免与 UpdateProps 全量替换语义混淆。
 pub(super) fn plan_update(
     state: &mut MemPlanState,
     op: &NoteBlockOp,
 ) -> Result<(), NoteBackendError> {
+    if op.attrs.is_some() {
+        return Err(NoteBackendError::Invalid(
+            "update does not accept attrs; use set_attr".into(),
+        ));
+    }
     let id = op
         .id
         .clone()
@@ -176,7 +182,7 @@ pub(super) fn plan_move(
     Ok(())
 }
 
-/// SetAttr：校验 id → 工作副本改 attrs + PlannedMutation::SetAttr。
+/// SetAttr：将传入 attrs 增量合并到工作副本 + PlannedMutation::SetAttr。
 pub(super) fn plan_set_attr(
     state: &mut MemPlanState,
     op: &NoteBlockOp,
@@ -192,7 +198,7 @@ pub(super) fn plan_set_attr(
         .iter()
         .position(|b| b.id == id)
         .ok_or_else(|| NoteBackendError::NotFound(format!("block not found: {id}")))?;
-    state.work[pos].attrs = attrs.clone();
+    state.work[pos].attrs.extend(attrs.clone());
     state.previews.push(NoteBlockOpPreview {
         op: "set_attr".into(),
         id: Some(id.clone()),

@@ -1,6 +1,8 @@
 use crate::block_id::BlockId;
 use crate::ir::{BlockKind, BlockProps};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// 变更来源标签（写入 `CommitBatch`；Undo 栈仅 `User`/`Agent`）。
 ///
@@ -19,7 +21,7 @@ pub enum Origin {
 ///
 /// # Wire（JSON）
 /// `#[serde(tag = "op", rename_all = "snake_case")]`：
-/// `{ "op": "insert" | "update_props" | "move" | "delete" | "text_edit" | "turn_into", ... }`。
+/// `{ "op": "insert" | "update_props" | "patch_attrs" | "move" | "delete" | "text_edit" | "turn_into", ... }`。
 /// 与 TS `@crish/block-paper-contract` `CollabOpWire` / `structureIntentToOps` 对齐
 ///（`turn_into` 为 CONN-D 子集；TS provisional 仍可走 `update_props`+pending 标记，
 /// RS 在 apply 时消费 pending 改 kind，见 [`crate::ir::pending_turn_into_kind`]）。
@@ -38,9 +40,19 @@ pub enum Op {
         kind: BlockKind,
         props: BlockProps,
     },
+    /// 全量替换块属性；调用方须提供完整 `BlockProps`。
     UpdateProps {
         id: BlockId,
         props: BlockProps,
+    },
+    /// 对 attrs 做局部修改：`set` 写入键，`remove` 删除键，其它键保留。
+    /// 同一键同时出现在两者时，以 `set` 为准。
+    ///
+    /// Wire：`{"op":"patch_attrs","id":"…","set":{"collapsed":true},"remove":["old_key"]}`。
+    PatchAttrs {
+        id: BlockId,
+        set: BTreeMap<String, Value>,
+        remove: BTreeSet<String>,
     },
     Move {
         id: BlockId,
@@ -173,6 +185,11 @@ mod wire_tests {
                 id,
                 props: props.clone(),
             },
+            Op::PatchAttrs {
+                id,
+                set: BTreeMap::from([(String::from("collapsed"), serde_json::json!(true))]),
+                remove: BTreeSet::from([String::from("legacy_attr")]),
+            },
             Op::TextEdit {
                 id,
                 start: 0,
@@ -201,6 +218,7 @@ mod wire_tests {
         assert!(s.contains(r#""op":"move""#));
         assert!(s.contains(r#""new_parent""#));
         assert!(s.contains(r#""op":"update_props""#));
+        assert!(s.contains(r#""op":"patch_attrs""#));
         assert!(s.contains(r#""op":"text_edit""#));
         assert!(s.contains(r#""op":"turn_into""#));
     }
@@ -223,6 +241,55 @@ mod wire_tests {
             }
             other => panic!("expected turn_into, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn patch_attrs_wire_roundtrip_has_explicit_set_and_remove() {
+        let json = r#"[
+          {
+            "op": "patch_attrs",
+            "id": "11111111-1111-1111-1111-111111111111",
+            "set": { "collapsed": true },
+            "remove": ["legacy_attr"]
+          }
+        ]"#;
+
+        let ops = ops_from_json_str(json).expect("parse patch attrs wire");
+        assert_eq!(ops.len(), 1);
+        match &ops[0] {
+            Op::PatchAttrs { id, set, remove } => {
+                assert_eq!(*id, sample_id());
+                assert_eq!(set.get("collapsed").and_then(Value::as_bool), Some(true));
+                assert!(remove.contains("legacy_attr"));
+            }
+            other => panic!("expected patch attrs, got {other:?}"),
+        }
+
+        let encoded = ops_to_json_string(&ops).expect("encode patch attrs wire");
+        assert!(encoded.contains(r#""op":"patch_attrs""#));
+        assert!(encoded.contains(r#""set":{"collapsed":true}"#));
+        assert!(encoded.contains(r#""remove":["legacy_attr"]"#));
+    }
+
+    #[test]
+    fn patch_attrs_wire_requires_both_set_and_remove() {
+        let missing_set = r#"[
+            {
+                "op": "patch_attrs",
+                "id": "11111111-1111-1111-1111-111111111111",
+                "remove": []
+            }
+        ]"#;
+        let missing_remove = r#"[
+            {
+                "op": "patch_attrs",
+                "id": "11111111-1111-1111-1111-111111111111",
+                "set": {}
+            }
+        ]"#;
+
+        assert!(ops_from_json_str(missing_set).is_err());
+        assert!(ops_from_json_str(missing_remove).is_err());
     }
 
     #[test]

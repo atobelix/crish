@@ -83,7 +83,7 @@ impl BlockBatchTool {
                                     },
                                     "attrs": {
                                         "type": "object",
-                                        "description": "属性（set_attr / insert 可选）"
+                                        "description": "属性（insert 初始属性 / set_attr 增量属性可选；update 不接受 attrs）"
                                     }
                                 },
                                 "required": ["op"],

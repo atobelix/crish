@@ -1,12 +1,25 @@
 //! Round6 · 列表 / 有序 / 引用 golden：结构 + plain 文本往返。
 
+use conex_doc_collab::{BlockProps, DocSession, Op, Origin};
 use conex_md_ast::{
-    document_to_md, parse_document, serialize_tree, structure_eq, BlockId, BlockKind,
+    document_to_md, parse_document, serialize_tree, structure_eq, BlockId, BlockKind, BlockTree,
+    ORDERED_LIST_ITEM_NUMBER_ATTR,
 };
+use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 
 fn bid(s: &str) -> BlockId {
     BlockId::from_str(s).expect("uuid")
+}
+
+fn ordered_item_number(tree: &BlockTree, text: &str) -> Option<u64> {
+    tree.nodes
+        .values()
+        .find(|node| node.text_snapshot.as_deref() == Some(text))?
+        .props
+        .attrs
+        .get(ORDERED_LIST_ITEM_NUMBER_ATTR)
+        .and_then(serde_json::Value::as_u64)
 }
 
 #[test]
@@ -76,6 +89,182 @@ fn golden_ordered_list_structure_and_text() {
     let md2 = document_to_md(&tree);
     let tree2 = parse_document(&md2).unwrap();
     assert!(structure_eq(&tree, &tree2), "rt md2=\n{md2}");
+}
+
+#[test]
+fn ordered_list_start_values_survive_parse_serialize_parse() {
+    let md = "\
+5. 起始编号五
+6. 连续编号六
+
+列表分隔段落
+
+- 无序列表甲
+- 无序列表乙
+
+1. 默认起始一
+2. 默认连续二
+";
+    let tree = parse_document(md).expect("parse list starts");
+
+    for (text, number) in [
+        ("起始编号五", 5),
+        ("连续编号六", 6),
+        ("默认起始一", 1),
+        ("默认连续二", 2),
+    ] {
+        assert_eq!(
+            ordered_item_number(&tree, text),
+            Some(number),
+            "parsed number for {text}"
+        );
+    }
+
+    let paragraph = tree
+        .nodes
+        .values()
+        .find(|node| node.text_snapshot.as_deref() == Some("列表分隔段落"))
+        .expect("paragraph separating lists");
+    assert_eq!(paragraph.kind, BlockKind::Paragraph);
+    let paragraph_parent = tree
+        .get(
+            &paragraph
+                .parent
+                .expect("following paragraph belongs to the preceding item"),
+        )
+        .expect("preceding ordered list item");
+    assert_eq!(paragraph_parent.kind, BlockKind::OrderedItem);
+    assert_eq!(
+        paragraph_parent.text_snapshot.as_deref(),
+        Some("连续编号六")
+    );
+    for text in ["无序列表甲", "无序列表乙"] {
+        let unordered = tree
+            .nodes
+            .values()
+            .find(|node| node.text_snapshot.as_deref() == Some(text))
+            .expect("unordered list item");
+        assert_eq!(unordered.kind, BlockKind::BulletItem);
+        assert_eq!(unordered.parent, None);
+        assert!(!unordered
+            .props
+            .attrs
+            .contains_key(ORDERED_LIST_ITEM_NUMBER_ATTR));
+    }
+    assert_eq!(tree.root_children.len(), 6, "分隔段落作为前一列表项的子块");
+    assert!(tree
+        .root_children
+        .iter()
+        .all(|id| tree.get(id).is_some_and(|node| node.parent.is_none())));
+
+    let serialized = document_to_md(&tree);
+    for marker in [
+        "5. 起始编号五",
+        "6. 连续编号六",
+        "列表分隔段落",
+        "- 无序列表甲",
+        "- 无序列表乙",
+        "1. 默认起始一",
+        "2. 默认连续二",
+    ] {
+        assert!(
+            serialized.lines().any(|line| line == marker),
+            "missing {marker:?} in:\n{serialized}"
+        );
+    }
+
+    let reparsed = parse_document(&serialized).expect("reparse serialized list starts");
+    for (text, number) in [
+        ("起始编号五", 5),
+        ("连续编号六", 6),
+        ("默认起始一", 1),
+        ("默认连续二", 2),
+    ] {
+        assert_eq!(
+            ordered_item_number(&reparsed, text),
+            Some(number),
+            "reparsed number for {text}"
+        );
+    }
+    assert_eq!(reparsed.root_children.len(), 6);
+    assert!(reparsed
+        .root_children
+        .iter()
+        .all(|id| reparsed.get(id).is_some_and(|node| node.parent.is_none())));
+    assert_eq!(
+        document_to_md(&reparsed),
+        serialized,
+        "serialization must stabilize"
+    );
+}
+
+#[test]
+fn patch_attrs_preserves_ordered_ordinal_through_markdown_roundtrip() {
+    let parsed = parse_document("5. patched item\n").expect("parse non-default ordinal");
+    let id = *parsed
+        .root_children
+        .first()
+        .expect("one parsed ordered item");
+    let parsed_node = parsed.get(&id).expect("parsed ordered item");
+    assert_eq!(parsed_node.kind, BlockKind::OrderedItem);
+    assert_eq!(ordered_item_number(&parsed, "patched item"), Some(5));
+
+    let text = parsed_node.text_snapshot.clone().expect("parsed item text");
+    let props: BlockProps = parsed_node.props.clone();
+    let mut session = DocSession::new("patch-attrs-ordered-ordinal-roundtrip");
+    session
+        .apply(
+            Origin::User,
+            &[Op::Insert {
+                id,
+                parent: None,
+                order: "a0000".into(),
+                kind: BlockKind::OrderedItem,
+                props,
+            }],
+        )
+        .expect("insert parsed ordered item into collab session");
+    session
+        .apply(
+            Origin::User,
+            &[Op::TextEdit {
+                id,
+                start: 0,
+                end: 0,
+                insert: text,
+            }],
+        )
+        .expect("write parsed item text");
+    session
+        .apply(
+            Origin::Agent,
+            &[Op::PatchAttrs {
+                id,
+                set: BTreeMap::from([(String::from("collapsed"), serde_json::json!(true))]),
+                remove: BTreeSet::new(),
+            }],
+        )
+        .expect("patch a non-ordinal attr");
+
+    assert_eq!(ordered_item_number(session.tree(), "patched item"), Some(5));
+    assert_eq!(
+        session
+            .tree()
+            .get(&id)
+            .expect("ordered item after patch")
+            .props
+            .attrs
+            .get("collapsed")
+            .and_then(serde_json::Value::as_bool),
+        Some(true)
+    );
+    let serialized = serialize_tree(session.tree());
+    assert!(
+        serialized.lines().any(|line| line == "5. patched item"),
+        "serialized Markdown lost the ordinal:\n{serialized}"
+    );
+    let reparsed = parse_document(&serialized).expect("reparse patched Markdown");
+    assert_eq!(ordered_item_number(&reparsed, "patched item"), Some(5));
 }
 
 #[test]

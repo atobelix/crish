@@ -25,6 +25,7 @@ pub type InjectError = String;
 
 /// enigo 事件标记("conex" ASCII 位):与真实物理输入区分
 const ENIGO_EXTRA_INFO: usize = u64::from_be_bytes(*b"\0\0\0conex") as usize;
+const ABORT_POLL_SLICE_MS: u64 = 5;
 
 /// 安全释放所有按键与鼠标按键（停止中断时清理残留按下状态）
 pub fn release_all_keys_and_buttons(enigo: &mut Enigo) {
@@ -53,7 +54,31 @@ pub fn release_all_keys_and_buttons(enigo: &mut Enigo) {
     }
 }
 
-/// 执行步骤序列（持锁逐条注入；每一步及 5ms 切片休眠原子轮询停止查询，<=5ms 响应停止）
+/// 将可中止延时拆为短切片；每片前后都会查询停止状态。
+///
+/// `sleep` 可注入以确定性验证切片与轮询顺序。生产调用使用系统休眠；切片长度
+/// 限制的是单次休眠请求，不构成操作系统调度的硬实时上界。
+fn delay_ms_with_abort(
+    total_ms: u64,
+    mut should_abort: impl FnMut() -> bool,
+    mut sleep: impl FnMut(Duration),
+) -> bool {
+    let mut remaining_ms = total_ms;
+    loop {
+        if should_abort() {
+            return false;
+        }
+        if remaining_ms == 0 {
+            return true;
+        }
+
+        let slice_ms = remaining_ms.min(ABORT_POLL_SLICE_MS);
+        sleep(Duration::from_millis(slice_ms));
+        remaining_ms -= slice_ms;
+    }
+}
+
+/// 执行步骤序列（持锁逐条注入；延时按 5ms 请求切片并轮询停止状态）
 #[allow(unsafe_code)]
 pub fn run_steps_guarded(
     enigo: &mut Enigo,
@@ -102,18 +127,12 @@ pub fn run_steps_guarded(
                     .map_err(|e| format!("滚动失败: {e:?}"))?;
             }
             InjectStep::DelayMs { ms } => {
-                let mut remaining = *ms;
-                while remaining > 0 {
-                    if should_abort() {
-                        release_all_keys_and_buttons(enigo);
-                        return Err(format!(
-                            "停止触发，注入已中止（已完成 {idx}/{} 步）",
-                            steps.len()
-                        ));
-                    }
-                    let slice = remaining.min(5);
-                    thread::sleep(Duration::from_millis(slice));
-                    remaining -= slice;
+                if !delay_ms_with_abort(*ms, &should_abort, thread::sleep) {
+                    release_all_keys_and_buttons(enigo);
+                    return Err(format!(
+                        "停止触发，注入已中止（已完成 {idx}/{} 步）",
+                        steps.len()
+                    ));
                 }
             }
         }
@@ -387,6 +406,34 @@ impl OsInputBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn delay_ms_with_abort_uses_five_ms_slices_and_checks_after_each_sleep() {
+        let aborted = std::cell::Cell::new(false);
+        let checks = std::cell::Cell::new(0);
+        let mut requested_slices = Vec::new();
+
+        let completed = delay_ms_with_abort(
+            100,
+            || {
+                checks.set(checks.get() + 1);
+                aborted.get()
+            },
+            |duration| {
+                requested_slices.push(duration);
+                if requested_slices.len() == 2 {
+                    aborted.set(true);
+                }
+            },
+        );
+
+        assert!(!completed, "第二片后的停止标志必须中止延时");
+        assert_eq!(
+            requested_slices,
+            [Duration::from_millis(5), Duration::from_millis(5)]
+        );
+        assert_eq!(checks.get(), 3, "第二片后应立即进行第三次停止检查");
+    }
 
     #[test]
     fn os_input_backend_send_sync() {

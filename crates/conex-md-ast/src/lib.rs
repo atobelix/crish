@@ -107,6 +107,12 @@ impl LossyReport {
 /// 规格：机器主编码独占行 `<!--c:UUID-->`（W0-B / 15）。
 pub const BLOCK_ID_COMMENT_PREFIX: &str = "<!--c:";
 
+/// 有序列表项在 `BlockProps.attrs` 中保存有效 Markdown 序号的键。
+///
+/// IR 将列表项表示为独立节点而非列表容器，因此每项保存其渲染序号，
+/// 以便 P/S 往返保留非默认起始编号。
+pub const ORDERED_LIST_ITEM_NUMBER_ATTR: &str = "conex_md_ordered_item_number";
+
 /// 将块 ID 编码为 MD 起始注释行。
 pub fn encode_block_id_line(id: &BlockId) -> String {
     id.to_html_comment()

@@ -18,7 +18,10 @@
 //! - wiki `[[…]]`：**未**建模；作 plain 文本保留（**≠** A-MD-03 / EL-06）
 
 use crate::assemble::RawBlock;
-use crate::{block_id_from_comment, BlockId, BlockKind, LossyReport, MdError};
+use crate::{
+    block_id_from_comment, BlockId, BlockKind, BlockProps, LossyReport, MdError,
+    ORDERED_LIST_ITEM_NUMBER_ATTR,
+};
 use markdown::mdast::Node;
 use markdown::{to_mdast, ParseOptions};
 use std::collections::HashSet;
@@ -60,6 +63,7 @@ pub(crate) fn lower_md_to_raw_blocks(
             kind: BlockKind::Paragraph,
             text: String::new(),
             line: p.line,
+            props: BlockProps::default(),
         });
     }
 
@@ -110,6 +114,7 @@ fn set_pending_id(
             kind: BlockKind::Paragraph,
             text: String::new(),
             line: prev.line,
+            props: BlockProps::default(),
         });
     }
     if !seen_ids.insert(bid) {
@@ -135,13 +140,45 @@ fn push_block(
     text: String,
     line: usize,
 ) {
-    let id = take_block_id(pending, seen_ids, lossy, line);
-    blocks.push(RawBlock {
-        id,
-        kind,
-        text,
-        line,
-    });
+    BlockWriter::new(blocks, pending, seen_ids, lossy).push(kind, text, line);
+}
+
+struct BlockWriter<'a> {
+    blocks: &'a mut Vec<RawBlock>,
+    pending: &'a mut Option<PendingId>,
+    seen_ids: &'a mut HashSet<BlockId>,
+    lossy: &'a mut LossyReport,
+}
+
+impl<'a> BlockWriter<'a> {
+    fn new(
+        blocks: &'a mut Vec<RawBlock>,
+        pending: &'a mut Option<PendingId>,
+        seen_ids: &'a mut HashSet<BlockId>,
+        lossy: &'a mut LossyReport,
+    ) -> Self {
+        Self {
+            blocks,
+            pending,
+            seen_ids,
+            lossy,
+        }
+    }
+
+    fn push(&mut self, kind: BlockKind, text: String, line: usize) {
+        self.push_with_props(kind, text, line, BlockProps::default());
+    }
+
+    fn push_with_props(&mut self, kind: BlockKind, text: String, line: usize, props: BlockProps) {
+        let id = take_block_id(self.pending, self.seen_ids, self.lossy, line);
+        self.blocks.push(RawBlock {
+            id,
+            kind,
+            text,
+            line,
+            props,
+        });
+    }
 }
 
 fn lower_flow_node(
@@ -384,6 +421,8 @@ fn lower_list(
         );
     }
 
+    let start = list.start.unwrap_or(1);
+    let mut item_index = 0usize;
     for item in &list.children {
         let Node::ListItem(li) = item else {
             continue;
@@ -398,15 +437,27 @@ fn lower_list(
             item_text = encode_task_checkbox(checked, &item_text);
         }
 
-        let kind = if ordered {
-            BlockKind::OrderedItem
+        let (kind, props) = if ordered {
+            let item_offset = u32::try_from(item_index)
+                .map_err(|_| MdError::Parse(format!("line {line}: 有序列表项序号超过支持范围")))?;
+            let number = start.checked_add(item_offset).ok_or_else(|| {
+                MdError::Parse(format!("line {line}: 有序列表项编号超过支持范围"))
+            })?;
+            item_index += 1;
+            let mut props = BlockProps::default();
+            props.attrs.insert(
+                ORDERED_LIST_ITEM_NUMBER_ATTR.to_string(),
+                serde_json::Value::from(number),
+            );
+            (BlockKind::OrderedItem, props)
         } else {
-            BlockKind::BulletItem
+            (BlockKind::BulletItem, BlockProps::default())
         };
-        push_block(blocks, pending, seen_ids, lossy, kind, item_text, line);
+        BlockWriter::new(blocks, pending, seen_ids, lossy)
+            .push_with_props(kind, item_text, line, props);
 
-        // 列表项内后续块（嵌套列表 / 额外段落）作为后续 RawBlock，
-        // 由容器栈挂到本 BulletItem/OrderedItem 下。
+        // 列表项内后续块作为后续 RawBlock；叶子内容由容器栈挂到当前项，
+        // 同秩嵌套列表项按既有容器规则扁平为兄弟（真嵌套语义未实现）。
         for t in trailing {
             lower_flow_node(t, blocks, seen_ids, pending, lossy)?;
         }

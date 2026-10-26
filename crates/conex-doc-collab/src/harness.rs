@@ -191,7 +191,8 @@ impl DualSessionHarness {
     /// 结构推送：对端因块已删返回 [`ApplyError::NotFound`] 时视为 **删胜 no-op**（M1），
     /// 返回 `Ok(None)`；其它错误上浮。
     ///
-    /// 用于 delete ∥ remote update 并发交换：滞后的 TextEdit/UpdateProps/Move 不得复活已删块。
+    /// 用于 delete ∥ remote update 并发交换：滞后的 TextEdit/UpdateProps/PatchAttrs/Move
+    /// 不得复活已删块。
     pub fn push_delete_wins(
         &mut self,
         to: PeerSide,

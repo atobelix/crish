@@ -131,6 +131,87 @@ fn plan_block_ops_update_missing_content_invalid() {
     assert!(matches!(err, NoteBackendError::Invalid(_)));
 }
 
+/// Memory Update 带 attrs 必须拒绝，且输入块的文本与 attrs 均不变。
+#[test]
+fn plan_block_ops_update_with_attrs_rejected_without_mutating_input() {
+    let mut existing = seed_p1();
+    existing[0]
+        .attrs
+        .insert("conex_md_ordered_item_number".into(), serde_json::json!(5));
+    let ops = [NoteBlockOp {
+        op: NoteBlockOpKind::Update,
+        id: Some("p1".into()),
+        parent_id: None,
+        previous_id: None,
+        content: Some("replacement".into()),
+        kind: None,
+        attrs: Some(Map::from_iter([(
+            "collapsed".into(),
+            serde_json::json!(true),
+        )])),
+    }];
+
+    let err = plan_block_ops(Some(&existing), &ops, || "unused".into()).unwrap_err();
+
+    assert!(matches!(err, NoteBackendError::Invalid(_)));
+    assert_eq!(err.message(), "update does not accept attrs; use set_attr");
+    assert_eq!(existing[0].text, "keep");
+    assert_eq!(
+        existing[0]
+            .attrs
+            .get("conex_md_ordered_item_number")
+            .and_then(serde_json::Value::as_u64),
+        Some(5)
+    );
+    assert!(!existing[0].attrs.contains_key("collapsed"));
+}
+
+/// Memory SetAttr 增量合并属性，保留已有 ordinal 与其它 attrs。
+#[test]
+fn plan_and_apply_set_attr_preserves_existing_attrs() {
+    let mut existing = seed_p1();
+    existing[0]
+        .attrs
+        .insert("conex_md_ordered_item_number".into(), serde_json::json!(5));
+    existing[0]
+        .attrs
+        .insert("existing_attr".into(), serde_json::json!("keep"));
+    let ops = [NoteBlockOp {
+        op: NoteBlockOpKind::SetAttr,
+        id: Some("p1".into()),
+        parent_id: None,
+        previous_id: None,
+        content: None,
+        kind: None,
+        attrs: Some(Map::from_iter([(
+            "collapsed".into(),
+            serde_json::json!(true),
+        )])),
+    }];
+
+    let plan = plan_block_ops(Some(&existing), &ops, || "unused".into()).unwrap();
+    let mut doc = MemDoc { blocks: existing };
+    apply_planned_ops(&mut doc, plan.mutations).unwrap();
+
+    let attrs = &doc.blocks[0].attrs;
+    assert_eq!(
+        attrs
+            .get("conex_md_ordered_item_number")
+            .and_then(serde_json::Value::as_u64),
+        Some(5)
+    );
+    assert_eq!(
+        attrs
+            .get("existing_attr")
+            .and_then(serde_json::Value::as_str),
+        Some("keep")
+    );
+    assert_eq!(
+        attrs.get("collapsed").and_then(serde_json::Value::as_bool),
+        Some(true)
+    );
+}
+
 /// P-06：update 空 id → note.invalid
 #[test]
 fn plan_block_ops_update_empty_id_invalid() {

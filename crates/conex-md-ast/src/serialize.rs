@@ -9,7 +9,7 @@
 //! [`document_to_md`] / [`serialize_tree`] 即契约 **S(树)**：`get_md` / Agent 读必须走
 //! **即时序列化**，禁止默认读陈旧 exports / mirror（见 `plans/03-MD契约.md` §S1 / §2）。
 
-use crate::{BlockId, BlockKind, BlockTree};
+use crate::{BlockId, BlockKind, BlockProps, BlockTree, ORDERED_LIST_ITEM_NUMBER_ATTR};
 
 /// 将整棵块树序列化为 Conex-MD 文本（含块 ID 注释）。
 ///
@@ -50,6 +50,7 @@ fn serialize_node(tree: &BlockTree, id: &BlockId, out: &mut String) {
     out.push_str(&format_block_content(
         &node.kind,
         node.text_snapshot.as_deref(),
+        &node.props,
     ));
     out.push('\n');
 
@@ -62,7 +63,7 @@ fn serialize_node(tree: &BlockTree, id: &BlockId, out: &mut String) {
 }
 
 /// 按 kind 写出块「自身」内容（不含子块）。
-fn format_block_content(kind: &BlockKind, text: Option<&str>) -> String {
+fn format_block_content(kind: &BlockKind, text: Option<&str>, props: &BlockProps) -> String {
     let text = text.unwrap_or("");
     match kind {
         BlockKind::Heading { level } => {
@@ -82,10 +83,16 @@ fn format_block_content(kind: &BlockKind, text: Option<&str>) -> String {
             }
         }
         BlockKind::OrderedItem => {
+            let number = props
+                .attrs
+                .get(ORDERED_LIST_ITEM_NUMBER_ATTR)
+                .and_then(serde_json::Value::as_u64)
+                .and_then(|n| u32::try_from(n).ok())
+                .unwrap_or(1);
             if text.is_empty() {
-                "1.".to_string()
+                format!("{number}.")
             } else {
-                format!("1. {text}")
+                format!("{number}. {text}")
             }
         }
         BlockKind::Code => {

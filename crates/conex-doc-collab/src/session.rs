@@ -392,6 +392,7 @@ impl DocSession {
             match op {
                 Op::Insert { id, .. }
                 | Op::UpdateProps { id, .. }
+                | Op::PatchAttrs { id, .. }
                 | Op::TurnInto { id, .. }
                 | Op::Move { id, .. }
                 | Op::TextEdit { id, .. } => {

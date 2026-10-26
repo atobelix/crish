@@ -16,6 +16,7 @@ pub(crate) struct RawBlock {
     pub id: BlockId,
     pub kind: BlockKind,
     pub text: String,
+    pub props: BlockProps,
     #[allow(dead_code)]
     pub line: usize,
 }
@@ -56,7 +57,7 @@ pub(crate) fn assemble_tree(blocks: &[RawBlock]) -> Result<BlockTree, MdError> {
             parent,
             order,
             kind: b.kind.clone(),
-            props: BlockProps::default(),
+            props: b.props.clone(),
             text_snapshot: Some(b.text.clone()),
             children: Vec::new(),
         };

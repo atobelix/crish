@@ -168,6 +168,24 @@ impl DocSession {
                     }
                     upserts.push(block_to_upsert(n));
                 }
+                Op::PatchAttrs { id, set, remove } => {
+                    let n = self
+                        .tree
+                        .nodes
+                        .get_mut(id)
+                        .ok_or_else(|| ApplyError::NotFound(id.to_string()))?;
+                    for key in remove {
+                        n.props.attrs.remove(key);
+                    }
+                    n.props
+                        .attrs
+                        .extend(set.iter().map(|(key, value)| (key.clone(), value.clone())));
+                    // 与全量 UpdateProps 保持一致：增量写入待转类型标记时也消费该标记。
+                    if let Some(kind) = pending_turn_into_kind(&n.props) {
+                        n.kind = kind;
+                    }
+                    upserts.push(block_to_upsert(n));
+                }
                 Op::TurnInto { id, kind } => {
                     // CONN-D：真 structure turn_into Op 子集
                     let n = self

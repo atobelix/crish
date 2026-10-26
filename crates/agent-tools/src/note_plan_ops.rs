@@ -196,7 +196,7 @@ pub(crate) fn apply_planned_ops(
                 let b = doc.blocks.iter_mut().find(|b| b.id == id).ok_or_else(|| {
                     NoteBackendError::NotFound(format!("block not found on commit: {id}"))
                 })?;
-                b.attrs = attrs;
+                b.attrs.extend(attrs);
             }
         }
     }

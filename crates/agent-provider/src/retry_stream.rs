@@ -14,7 +14,7 @@ use crate::error::ProviderError;
 use crate::events::{ModelRequestInfo, ModelRequestObserver, ModelResponseInfo};
 use crate::sse::{AbortHandle, SseFrame};
 
-use super::retry_decision::{should_retry, RetryPolicy, RetryState};
+use super::retry_decision::{is_transient_error, should_retry, RetryPolicy, RetryState};
 
 /// 可中断睡眠抽象（便于测试注入时钟/记录等待）
 #[async_trait]
@@ -149,6 +149,13 @@ where
                         usage: None,
                     });
                 }
+                // 终态失败观测点：半途流断是最难排查的供应商故障形态
+                // （用户看到内容中断但无重试痕迹），warn 留痕
+                tracing::warn!(
+                    attempt = attempt_number,
+                    transient = is_transient_error(&error),
+                    "流已产出内容后失败，不重试直接上抛：{error}"
+                );
                 return Err(error);
             }
             // 未产出内容：可重试则退避等待后重试，否则上抛
@@ -180,7 +187,16 @@ where
                         sleeper.sleep(decision.delay).await?;
                         state.retries += 1;
                     }
-                    None => return Err(error),
+                    None => {
+                        // 终态失败观测点：重试预算耗尽 / 不可重试错误的上抛
+                        // 时刻（下游只见最终错误，看不到重试史），warn 留痕
+                        tracing::warn!(
+                            attempts = attempt_number,
+                            transient = is_transient_error(&error),
+                            "provider 错误不可重试（预算耗尽或非瞬态），上抛终态：{error}"
+                        );
+                        return Err(error);
+                    }
                 }
             }
         }

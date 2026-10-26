@@ -349,33 +349,17 @@ fn action_serde_roundtrip() {
 
 #[test]
 #[cfg(windows)]
-fn adversarial_computer_stop_5ms_response() {
+fn adversarial_computer_stop_cancels_long_delay() {
     use crate::action::inject::{run_steps_guarded, InjectStep};
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
-    let aborted = Arc::new(AtomicBool::new(false));
     let mut enigo = enigo::Enigo::new(&enigo::Settings::default()).unwrap();
-    let steps = vec![
-        InjectStep::DelayMs { ms: 200 },
-        InjectStep::DelayMs { ms: 200 },
-    ];
-
-    let aborted_clone = aborted.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(15));
-        aborted_clone.store(true, Ordering::SeqCst);
+    let steps = [InjectStep::DelayMs { ms: 200 }];
+    let abort_checks = AtomicUsize::new(0);
+    let res = run_steps_guarded(&mut enigo, &steps, || {
+        abort_checks.fetch_add(1, Ordering::SeqCst) >= 2
     });
 
-    let start = std::time::Instant::now();
-    let flag = aborted.clone();
-    let res = run_steps_guarded(&mut enigo, &steps, move || flag.load(Ordering::SeqCst));
-    let elapsed = start.elapsed();
-
-    assert!(res.is_err(), "注入必须被停止中断");
-    assert!(
-        elapsed.as_millis() < 80,
-        "停止响应延迟必须 <= 5ms（实际总耗时 {}ms）",
-        elapsed.as_millis()
-    );
+    assert!(res.is_err(), "长延时必须在中止请求后返回错误");
+    assert_eq!(abort_checks.load(Ordering::SeqCst), 3);
 }

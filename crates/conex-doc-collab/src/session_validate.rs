@@ -43,7 +43,7 @@ impl DocSession {
                         }
                     }
                 }
-                Op::UpdateProps { id, .. } => {
+                Op::UpdateProps { id, .. } | Op::PatchAttrs { id, .. } => {
                     if deleted.contains(id) {
                         return Err(ApplyError::NotFound(id.to_string()));
                     }
