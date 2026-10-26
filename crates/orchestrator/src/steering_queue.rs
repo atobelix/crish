@@ -217,6 +217,24 @@ impl PendingMessageQueue {
         self.withdraw(|e| Self::matches_session(&e.session_id, session_id));
     }
 
+    /// 清空指定会话中「入队时刻 ≤ `before_ms`」的条目，保留其后入队的新事件。
+    ///
+    /// 收口 poison-pill 清理的时间边界版：run 终态后新入队的条目（run 结束
+    /// 后才到期的新定时器等）属于新事件，迟到的收口清理不得吞掉——
+    /// 收口尾部的清理与 `active_runs` 移除之间存在异步窗口，无边界版会
+    /// 把窗口期入队的新事件一并抹掉。
+    ///
+    /// 返回被清条目（调用方记日志/诊断；空 Vec = 无残留）。
+    pub fn clear_for_before(
+        &mut self,
+        session_id: &str,
+        before_ms: u64,
+    ) -> Vec<SteeringInputEntry> {
+        self.withdraw(|e| {
+            Self::matches_session(&e.session_id, session_id) && e.enqueued_at <= before_ms
+        })
+    }
+
     /// 跨 run 转移：全部条目迁入目标队列并清空本队列。
     ///
     /// 目标队列按自身容量限制与 steering 优先级逐条收容——满容量时普通
@@ -766,5 +784,48 @@ mod tests {
         queue.clear_for("sess-A");
         assert!(!queue.has_pending_for("sess-A"));
         assert_eq!(queue.len(), 2); // 剩余 sess-B 的两条
+    }
+
+    /// clear_for_before：时间边界版 poison-pill 清理——仅清终态前入队的
+    /// 条目，终态后入队的新事件保留（收口迟到清理竞态的回归锚）。
+    #[test]
+    fn clear_for_before_keeps_later_entries() {
+        let mut queue = PendingMessageQueue::new();
+        // 终态前入队两条（一条目标会话、一条 timer- 前缀广播）
+        queue.enqueue(
+            SteeringInputEntry::steering("stale-1", "旧到期提醒", 1_000).with_session("sess-A"),
+        );
+        queue.enqueue(
+            SteeringInputEntry::steering("timer-stale", "旧定时器", 1_100).with_session("timer-x"),
+        );
+        // 终态后入队一条新事件
+        queue.enqueue(
+            SteeringInputEntry::steering("fresh-1", "新到期提醒", 5_000).with_session("sess-A"),
+        );
+        // 无关会话条目（不应被波及）
+        queue.enqueue(
+            SteeringInputEntry::steering("other-1", "别会话条目", 900).with_session("sess-B"),
+        );
+
+        queue.clear_for_before("sess-A", 2_000);
+
+        // sess-A 仍有终态后入队的新事件（未被迟到清理吞掉）
+        assert!(queue.has_pending_for("sess-A"), "终态后新事件必须保留");
+        let remaining: Vec<String> = queue.dequeue_all().into_iter().map(|e| e.id).collect();
+        assert_eq!(
+            remaining,
+            vec!["fresh-1", "other-1"],
+            "仅终态前条目被清，新事件与会话外条目保留"
+        );
+    }
+
+    /// clear_for_before：全部条目都早于边界 → 等价 clear_for。
+    #[test]
+    fn clear_for_before_with_all_stale_clears_everything() {
+        let mut queue = PendingMessageQueue::new();
+        queue.enqueue(SteeringInputEntry::steering("a", "早条目", 100).with_session("sess-A"));
+        queue.clear_for_before("sess-A", 200);
+        assert!(!queue.has_pending_for("sess-A"));
+        assert_eq!(queue.len(), 0);
     }
 }

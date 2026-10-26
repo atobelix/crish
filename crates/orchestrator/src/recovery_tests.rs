@@ -18,6 +18,10 @@ use serde_json::json;
 #[derive(Debug, Default)]
 struct InMemoryRecoveryStore {
     meta: StdMutex<HashMap<String, String>>,
+    fail_next_meta_key: StdMutex<Option<String>>,
+    fail_next_event_type: StdMutex<Option<String>>,
+    fail_next_status_run: StdMutex<Option<String>>,
+    fail_next_path_run: StdMutex<Option<String>>,
     events: StdMutex<Vec<(String, String, String)>>,
     run_status: StdMutex<HashMap<String, (String, String)>>,
     paths: StdMutex<HashMap<String, String>>,
@@ -42,6 +46,22 @@ impl InMemoryRecoveryStore {
         self.paths.lock().unwrap().get(run_id).cloned()
     }
 
+    fn fail_next_meta_write(&self, key: &str) {
+        *self.fail_next_meta_key.lock().unwrap() = Some(key.to_string());
+    }
+
+    fn fail_next_event_append(&self, event_type: &str) {
+        *self.fail_next_event_type.lock().unwrap() = Some(event_type.to_string());
+    }
+
+    fn fail_next_run_status_write(&self, run_id: &str) {
+        *self.fail_next_status_run.lock().unwrap() = Some(run_id.to_string());
+    }
+
+    fn fail_next_path_write(&self, run_id: &str) {
+        *self.fail_next_path_run.lock().unwrap() = Some(run_id.to_string());
+    }
+
     /// LK-02：预置原 run 行的父工具调用 id（fork 传播测试锚）
     fn seed_parent_tool_call(&self, run_id: &str, value: Option<String>) {
         self.parent_tool_calls
@@ -57,6 +77,14 @@ impl RecoveryStore for InMemoryRecoveryStore {
     }
 
     fn set_meta(&self, key: &str, value: &str) -> Result<(), RecoveryError> {
+        let mut fail_next_key = self.fail_next_meta_key.lock().unwrap();
+        if fail_next_key.as_deref() == Some(key) {
+            *fail_next_key = None;
+            return Err(RecoveryError::PersistFailed {
+                message: format!("injected failure writing {key}"),
+            });
+        }
+        drop(fail_next_key);
         self.meta
             .lock()
             .unwrap()
@@ -70,10 +98,92 @@ impl RecoveryStore for InMemoryRecoveryStore {
         event_type: &str,
         payload: &str,
     ) -> Result<(), RecoveryError> {
+        let mut fail_next_type = self.fail_next_event_type.lock().unwrap();
+        if fail_next_type.as_deref() == Some(event_type) {
+            *fail_next_type = None;
+            return Err(RecoveryError::PersistFailed {
+                message: format!("injected failure appending {event_type}"),
+            });
+        }
+        drop(fail_next_type);
         self.events.lock().unwrap().push((
             session_id.to_string(),
             event_type.to_string(),
             payload.to_string(),
+        ));
+        Ok(())
+    }
+
+    fn append_recovery_report_once(
+        &self,
+        session_id: &str,
+        subagent_run_id: &str,
+        payload: &str,
+    ) -> Result<bool, RecoveryError> {
+        let mut fail_next_type = self.fail_next_event_type.lock().unwrap();
+        if fail_next_type.as_deref() == Some(RECOVER_REPORT_EVENT) {
+            *fail_next_type = None;
+            return Err(RecoveryError::PersistFailed {
+                message: "injected recovery report event failure".to_string(),
+            });
+        }
+        drop(fail_next_type);
+
+        let mut events = self.events.lock().unwrap();
+        let already_reported = events.iter().any(|(existing_session, event_type, existing_payload)| {
+            existing_session == session_id
+                && event_type == RECOVER_REPORT_EVENT
+                && serde_json::from_str::<serde_json::Value>(existing_payload)
+                    .ok()
+                    .and_then(|value| value.get("subagentRunId").and_then(serde_json::Value::as_str).map(str::to_owned))
+                    .as_deref()
+                    == Some(subagent_run_id)
+        });
+        if already_reported {
+            return Ok(false);
+        }
+        events.push((
+            session_id.to_string(),
+            RECOVER_REPORT_EVENT.to_string(),
+            payload.to_string(),
+        ));
+        Ok(true)
+    }
+
+    fn persist_acknowledgment(
+        &self,
+        session_id: &str,
+        notification_json: &str,
+        acknowledgment_payload: &str,
+    ) -> Result<(), RecoveryError> {
+        let mut fail_next_type = self.fail_next_event_type.lock().unwrap();
+        if fail_next_type.as_deref() == Some(RECOVER_ACKNOWLEDGED_EVENT) {
+            *fail_next_type = None;
+            return Err(RecoveryError::PersistFailed {
+                message: "injected recovery acknowledgment event failure".to_string(),
+            });
+        }
+        drop(fail_next_type);
+
+        let mut fail_next_key = self.fail_next_meta_key.lock().unwrap();
+        if fail_next_key.as_deref() == Some(RECOVER_NOTIFICATIONS_KEY) {
+            *fail_next_key = None;
+            return Err(RecoveryError::PersistFailed {
+                message: "injected recovery notification metadata failure".to_string(),
+            });
+        }
+        drop(fail_next_key);
+
+        let mut meta = self.meta.lock().unwrap();
+        let mut events = self.events.lock().unwrap();
+        meta.insert(
+            RECOVER_NOTIFICATIONS_KEY.to_string(),
+            notification_json.to_string(),
+        );
+        events.push((
+            session_id.to_string(),
+            RECOVER_ACKNOWLEDGED_EVENT.to_string(),
+            acknowledgment_payload.to_string(),
         ));
         Ok(())
     }
@@ -84,6 +194,14 @@ impl RecoveryStore for InMemoryRecoveryStore {
         status: &str,
         end_reason: &str,
     ) -> Result<(), RecoveryError> {
+        let mut fail_next_run = self.fail_next_status_run.lock().unwrap();
+        if fail_next_run.as_deref() == Some(subagent_run_id) {
+            *fail_next_run = None;
+            return Err(RecoveryError::PersistFailed {
+                message: format!("injected failure updating run {subagent_run_id}"),
+            });
+        }
+        drop(fail_next_run);
         self.run_status.lock().unwrap().insert(
             subagent_run_id.to_string(),
             (status.to_string(), end_reason.to_string()),
@@ -97,6 +215,14 @@ impl RecoveryStore for InMemoryRecoveryStore {
         subagent_run_id: &str,
         path_json: &str,
     ) -> Result<(), RecoveryError> {
+        let mut fail_next_run = self.fail_next_path_run.lock().unwrap();
+        if fail_next_run.as_deref() == Some(subagent_run_id) {
+            *fail_next_run = None;
+            return Err(RecoveryError::PersistFailed {
+                message: format!("injected failure writing path for run {subagent_run_id}"),
+            });
+        }
+        drop(fail_next_run);
         self.paths
             .lock()
             .unwrap()
@@ -125,7 +251,7 @@ impl RecoveryStore for InMemoryRecoveryStore {
 struct RecordingSpawner {
     requests: StdMutex<Vec<SubagentSpawnRequest>>,
     seq: std::sync::atomic::AtomicUsize,
-    reject: bool,
+    reject_next: std::sync::atomic::AtomicBool,
 }
 
 impl RecordingSpawner {
@@ -133,15 +259,15 @@ impl RecordingSpawner {
         Arc::new(Self {
             requests: StdMutex::new(Vec::new()),
             seq: std::sync::atomic::AtomicUsize::new(0),
-            reject: false,
+            reject_next: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
-    fn rejecting() -> Arc<Self> {
+    fn rejecting_once() -> Arc<Self> {
         Arc::new(Self {
             requests: StdMutex::new(Vec::new()),
             seq: std::sync::atomic::AtomicUsize::new(0),
-            reject: true,
+            reject_next: std::sync::atomic::AtomicBool::new(true),
         })
     }
 
@@ -157,7 +283,10 @@ impl SubagentSpawner for RecordingSpawner {
         req: &SubagentSpawnRequest,
     ) -> Result<SubagentSpawnResult, SubagentSpawnError> {
         self.requests.lock().unwrap().push(req.clone());
-        if self.reject {
+        if self
+            .reject_next
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
             return Err(SubagentSpawnError::GuardRejected(
                 RecursionGuardRejection::ConcurrentExceeded { current: 7, max: 6 },
             ));

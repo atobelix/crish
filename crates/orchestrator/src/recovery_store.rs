@@ -4,8 +4,11 @@
 
 use std::fmt;
 
-use super::{RECOVER_ESCALATED_EVENT, RECOVER_NOTIFICATIONS_KEY, RECOVER_STEERING_EVENT};
-use conex_db::{LocalDb, RunStatus};
+use super::{
+    RECOVER_ACKNOWLEDGED_EVENT, RECOVER_EPISODES_KEY, RECOVER_ESCALATED_EVENT, RECOVER_FORKS_KEY,
+    RECOVER_FORK_EVENT, RECOVER_NOTIFICATIONS_KEY, RECOVER_STEERING_EVENT,
+};
+use conex_db::{LocalDb, RecoveryForkCompletion, RunStatus};
 // RecoveryError 本文件 :135 定义（原 recovery.rs 迁入），无需自引用导入；
 // 公开面经 recovery.rs `pub use` 重导出。SR-06d 拆分注记。
 
@@ -28,6 +31,17 @@ pub trait RecoveryStore: Send + Sync {
         event_type: &str,
         payload: &str,
     ) -> Result<(), RecoveryError>;
+    /// Append the first ladder-4 report for a session/run pair.
+    ///
+    /// This operation must deduplicate on `(session_id, subagent_run_id)` rather
+    /// than the full payload, because `stuckAtMs` changes on every invocation.
+    /// The lookup and append must be serialized atomically by the implementation.
+    fn append_recovery_report_once(
+        &self,
+        session_id: &str,
+        subagent_run_id: &str,
+        payload: &str,
+    ) -> Result<bool, RecoveryError>;
     /// 原子持久化一次阶梯 2 escalation。
     ///
     /// 默认实现按既有顺序追加升级事件、写通知元数据、追加 steering 事件，
@@ -43,6 +57,13 @@ pub trait RecoveryStore: Send + Sync {
         self.set_meta(RECOVER_NOTIFICATIONS_KEY, notification_json)?;
         self.append_event(session_id, RECOVER_STEERING_EVENT, steering_payload)
     }
+    /// 原子确认一次阶梯 2 通知：ack 事件与 pending 状态一并提交。
+    fn persist_acknowledgment(
+        &self,
+        session_id: &str,
+        notification_json: &str,
+        acknowledgment_payload: &str,
+    ) -> Result<(), RecoveryError>;
     /// 更新 run 状态（阶梯 3 原 run 置 failed）
     fn update_run_status(
         &self,
@@ -57,6 +78,29 @@ pub trait RecoveryStore: Send + Sync {
         subagent_run_id: &str,
         path_json: &str,
     ) -> Result<(), RecoveryError>;
+    /// 完成一次已成功 spawn 的 fork。
+    ///
+    /// 默认实现按幂等 upsert 顺序写入各项状态，并最后追加 fork 事件，供
+    /// 简易存储与测试替身沿用；只有生产 LocalDb 实现能原子保存树条目 sidecar
+    /// 与事件 sequence。协调器只在此操作成功后发布内存态与会话树分支。
+    fn persist_fork_completion(
+        &self,
+        completion: RecoveryForkCompletion<'_>,
+    ) -> Result<(), RecoveryError> {
+        self.set_subagent_path(
+            completion.session_id,
+            completion.new_run_id,
+            completion.path_json,
+        )?;
+        self.update_run_status(completion.original_run_id, "failed", "recovery-fork")?;
+        self.set_meta(RECOVER_FORKS_KEY, completion.forks_json)?;
+        self.set_meta(RECOVER_EPISODES_KEY, completion.episodes_json)?;
+        self.append_event(
+            completion.session_id,
+            RECOVER_FORK_EVENT,
+            completion.event_payload,
+        )
+    }
     /// 反查子代理行的父工具调用 id（LK-02：fork 传播原行键）。
     ///
     /// 行不存在返回 None；查询失败返回 Err（调用方降级 None 不阻断
@@ -103,6 +147,19 @@ impl RecoveryStore for LocalDb {
             })
     }
 
+    fn append_recovery_report_once(
+        &self,
+        session_id: &str,
+        subagent_run_id: &str,
+        payload: &str,
+    ) -> Result<bool, RecoveryError> {
+        LocalDb::append_recovery_report_once(self, session_id, subagent_run_id, payload).map_err(
+            |e| RecoveryError::PersistFailed {
+                message: e.to_string(),
+            },
+        )
+    }
+
     fn persist_escalation(
         &self,
         session_id: &str,
@@ -115,6 +172,23 @@ impl RecoveryStore for LocalDb {
             (RECOVER_ESCALATED_EVENT, escalation_payload),
             (RECOVER_NOTIFICATIONS_KEY, notification_json),
             (RECOVER_STEERING_EVENT, steering_payload),
+        )
+        .map(|_| ())
+        .map_err(|e| RecoveryError::PersistFailed {
+            message: e.to_string(),
+        })
+    }
+
+    fn persist_acknowledgment(
+        &self,
+        session_id: &str,
+        notification_json: &str,
+        acknowledgment_payload: &str,
+    ) -> Result<(), RecoveryError> {
+        self.append_event_and_set_session_meta(
+            session_id,
+            (RECOVER_ACKNOWLEDGED_EVENT, acknowledgment_payload),
+            (RECOVER_NOTIFICATIONS_KEY, notification_json),
         )
         .map(|_| ())
         .map_err(|e| RecoveryError::PersistFailed {
@@ -174,6 +248,17 @@ impl RecoveryStore for LocalDb {
             });
         }
         Ok(())
+    }
+
+    fn persist_fork_completion(
+        &self,
+        completion: RecoveryForkCompletion<'_>,
+    ) -> Result<(), RecoveryError> {
+        LocalDb::persist_recovery_fork_completion(self, completion)
+            .map(|_| ())
+            .map_err(|e| RecoveryError::PersistFailed {
+                message: e.to_string(),
+            })
     }
 
     fn get_subagent_parent_tool_call_id(

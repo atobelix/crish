@@ -1,7 +1,22 @@
 //! 事件域：events 表追加 / 查询（含 StoredEvent 记录行），以及会话级
 //! sequence 原子取号（session_sequence，T08.12）。
 
+use rusqlite::OptionalExtension;
+
 use super::{DbFailure, DbFailureKind, LocalDb};
+
+/// Inputs for the transaction that completes a persisted recovery fork.
+#[derive(Clone, Copy, Debug)]
+pub struct RecoveryForkCompletion<'a> {
+    pub session_id: &'a str,
+    pub new_run_id: &'a str,
+    pub path_json: &'a str,
+    pub original_run_id: &'a str,
+    pub forks_json: &'a str,
+    pub episodes_json: &'a str,
+    pub event_payload: &'a str,
+    pub tree_entry_json: &'a str,
+}
 
 impl LocalDb {
     /// Append an event to a session.
@@ -85,6 +100,242 @@ impl LocalDb {
             )?;
 
             Ok([first_sequence, second_sequence])
+        })
+    }
+
+    /// 持久化一次 recovery acknowledgment：确认事件与通知元数据共享一个 writer 事务。
+    /// 任一步失败时，事件、meta 与序号一并回滚，使上层可安全重试。
+    pub fn append_event_and_set_session_meta(
+        &self,
+        session_id: &str,
+        event: (&str, &str),
+        meta: (&str, &str),
+    ) -> Result<i64, DbFailure> {
+        let session_id = session_id.to_string();
+        let (event_type, event_payload) = (event.0.to_string(), event.1.to_string());
+        let (meta_key, meta_value) = (meta.0.to_string(), meta.1.to_string());
+
+        self.write_blocking(move |conn| {
+            let sequence = reserve_sequence_conn(conn, &session_id)?;
+            append_event_conn(
+                conn,
+                &session_id,
+                sequence,
+                &event_type,
+                &event_payload,
+                None,
+            )?;
+
+            conn.execute(
+                "INSERT INTO session_meta (key, value) VALUES (?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                rusqlite::params![meta_key, meta_value],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("append_event_set_meta: {e}"),
+                kind: DbFailureKind::Other("append_event_set_meta".to_string()),
+            })?;
+
+            Ok(sequence)
+        })
+    }
+
+    /// Atomically persist a completed recovery fork and its idempotent event.
+    ///
+    /// The recovery coordinator calls this only after the replacement run has
+    /// started. Keeping the path, source run status, fork/budget metadata, and
+    /// event in one writer transaction means a failed write can be retried as
+    /// one operation. The event is deduplicated by its stable full payload so
+    /// a retry after an ambiguous commit does not reserve another sequence.
+    pub fn persist_recovery_fork_completion(
+        &self,
+        completion: RecoveryForkCompletion<'_>,
+    ) -> Result<i64, DbFailure> {
+        let RecoveryForkCompletion {
+            session_id,
+            new_run_id,
+            path_json,
+            original_run_id,
+            forks_json,
+            episodes_json,
+            event_payload,
+            tree_entry_json,
+        } = completion;
+        let session_id = session_id.to_string();
+        let new_run_id = new_run_id.to_string();
+        let path_json = path_json.to_string();
+        let original_run_id = original_run_id.to_string();
+        let forks_json = forks_json.to_string();
+        let episodes_json = episodes_json.to_string();
+        let event_payload = event_payload.to_string();
+        let tree_entry_json = tree_entry_json.to_string();
+
+        self.write_blocking(move |conn| {
+            let affected = conn
+                .execute(
+                    "UPDATE session_agents
+                     SET subagent_path_json = ?3
+                     WHERE session_id = ?1 AND subagent_run_id = ?2",
+                    rusqlite::params![session_id, new_run_id, path_json],
+                )
+                .map_err(|e| DbFailure {
+                    message: format!("persist_recovery_fork_path: {e}"),
+                    kind: DbFailureKind::Other("persist_recovery_fork_completion".to_string()),
+                })?;
+            if affected != 1 {
+                return Err(DbFailure {
+                    message: format!(
+                        "persist_recovery_fork_path: expected one child row, updated {affected}"
+                    ),
+                    kind: DbFailureKind::Other("persist_recovery_fork_completion".to_string()),
+                });
+            }
+
+            conn
+                .execute(
+                    "UPDATE runs SET status = 'failed', end_reason = 'recovery-fork',
+                        updated_at = ?2
+                     WHERE run_id = ?1",
+                    rusqlite::params![original_run_id, super::runs::now_millis()],
+                )
+                .map_err(|e| DbFailure {
+                    message: format!("persist_recovery_fork_source_status: {e}"),
+                    kind: DbFailureKind::Other("persist_recovery_fork_completion".to_string()),
+                })?;
+
+            for (key, value) in [
+                ("recover_forks", forks_json.as_str()),
+                ("recover_episodes", episodes_json.as_str()),
+            ] {
+                conn.execute(
+                    "INSERT INTO session_meta (key, value) VALUES (?1, ?2)
+                     ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    rusqlite::params![key, value],
+                )
+                .map_err(|e| DbFailure {
+                    message: format!("persist_recovery_fork_meta({key}): {e}"),
+                    kind: DbFailureKind::Other(
+                        "persist_recovery_fork_completion".to_string(),
+                    ),
+                })?;
+            }
+
+            let existing_sequence: Option<i64> = conn
+                .query_row(
+                    "SELECT sequence FROM events
+                     WHERE session_id = ?1 AND event_type = 'recovery-fork' AND payload = ?2
+                     ORDER BY sequence ASC LIMIT 1",
+                    rusqlite::params![session_id, event_payload],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|e| DbFailure {
+                    message: format!("persist_recovery_fork_event_lookup: {e}"),
+                    kind: DbFailureKind::Other(
+                        "persist_recovery_fork_completion".to_string(),
+                    ),
+                })?;
+            let sequence = if let Some(sequence) = existing_sequence {
+                sequence
+            } else {
+                let sequence = reserve_sequence_conn(conn, &session_id)?;
+                append_event_conn(
+                    conn,
+                    &session_id,
+                    sequence,
+                    "recovery-fork",
+                    &event_payload,
+                    None,
+                )?;
+                sequence
+            };
+
+            let entry: serde_json::Value = serde_json::from_str(&tree_entry_json).map_err(|e| {
+                DbFailure {
+                    message: format!("persist_recovery_fork_tree_entry_parse: {e}"),
+                    kind: DbFailureKind::Other(
+                        "persist_recovery_fork_completion".to_string(),
+                    ),
+                }
+            })?;
+            let entry_id = entry
+                .get("id")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| DbFailure {
+                    message: "persist_recovery_fork_tree_entry_parse: 缺少条目 id".to_string(),
+                    kind: DbFailureKind::Other(
+                        "persist_recovery_fork_completion".to_string(),
+                    ),
+                })?;
+            let tree_entries_key = format!("{session_id}:recover_fork_nodes");
+            let existing_tree_entries: Option<String> = conn
+                .query_row(
+                    "SELECT value FROM session_meta WHERE key = ?1",
+                    rusqlite::params![tree_entries_key],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|e| DbFailure {
+                    message: format!("persist_recovery_fork_tree_entries_lookup: {e}"),
+                    kind: DbFailureKind::Other(
+                        "persist_recovery_fork_completion".to_string(),
+                    ),
+                })?;
+            let mut tree_entries: Vec<serde_json::Value> = existing_tree_entries
+                .map(|raw| serde_json::from_str(&raw))
+                .transpose()
+                .map_err(|e| DbFailure {
+                    message: format!("persist_recovery_fork_tree_entries_parse: {e}"),
+                    kind: DbFailureKind::Other(
+                        "persist_recovery_fork_completion".to_string(),
+                    ),
+                })?
+                .unwrap_or_default();
+            if let Some(existing) = tree_entries.iter().find(|item| {
+                item.get("entry")
+                    .and_then(|value| value.get("id"))
+                    .and_then(serde_json::Value::as_str)
+                    == Some(entry_id)
+            }) {
+                let existing_entry = existing.get("entry");
+                let existing_sequence = existing
+                    .get("eventSequence")
+                    .and_then(serde_json::Value::as_i64);
+                if existing_entry != Some(&entry) || existing_sequence != Some(sequence) {
+                    return Err(DbFailure {
+                        message: format!(
+                            "persist_recovery_fork_tree_entry_conflict: 条目 {entry_id} 已存在且内容不同"
+                        ),
+                        kind: DbFailureKind::Other(
+                            "persist_recovery_fork_completion".to_string(),
+                        ),
+                    });
+                }
+            } else {
+                tree_entries.push(serde_json::json!({
+                    "eventSequence": sequence,
+                    "entry": entry,
+                }));
+            }
+            let tree_entries_json = serde_json::to_string(&tree_entries).map_err(|e| DbFailure {
+                message: format!("persist_recovery_fork_tree_entries_serialize: {e}"),
+                kind: DbFailureKind::Other(
+                    "persist_recovery_fork_completion".to_string(),
+                ),
+            })?;
+            conn.execute(
+                "INSERT INTO session_meta (key, value) VALUES (?1, ?2)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                rusqlite::params![tree_entries_key, tree_entries_json],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("persist_recovery_fork_tree_entries_write: {e}"),
+                kind: DbFailureKind::Other(
+                    "persist_recovery_fork_completion".to_string(),
+                ),
+            })?;
+
+            Ok(sequence)
         })
     }
 
@@ -251,6 +502,51 @@ impl LocalDb {
         })
     }
 
+    /// 按会话和事件类型过滤查询事件（含会话域事件，run_id 可为 NULL）。
+    ///
+    /// `after_sequence` 为开区间，`limit` 在 SQL 层下推并按 sequence 升序；
+    /// 用于恢复时验证快照锚点之前的 Recovery fork 记录是否有树条目 sidecar。
+    pub fn query_session_events_by_type(
+        &self,
+        session_id: &str,
+        event_type: &str,
+        after_sequence: i64,
+        limit: Option<i64>,
+    ) -> Result<Vec<StoredEvent>, DbFailure> {
+        let sid = session_id.to_string();
+        let etype = event_type.to_string();
+        let limit_value = limit.unwrap_or(i64::MAX);
+        self.read(move |conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT session_id, sequence, event_type, payload, run_id, created_at
+                     FROM events WHERE session_id = ?1 AND event_type = ?2 AND sequence > ?3
+                     ORDER BY sequence ASC LIMIT ?4",
+                )
+                .map_err(|e| self.latch_error("query_session_events_by_type_prepare", e))?;
+
+            let events = stmt
+                .query_map(
+                    rusqlite::params![sid, etype, after_sequence, limit_value],
+                    |row| {
+                        Ok(StoredEvent {
+                            session_id: row.get(0)?,
+                            sequence: row.get(1)?,
+                            event_type: row.get(2)?,
+                            payload: row.get(3)?,
+                            run_id: row.get(4)?,
+                            created_at: row.get(5)?,
+                        })
+                    },
+                )
+                .map_err(|e| self.latch_error("query_session_events_by_type_map", e))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| self.latch_error("query_session_events_by_type_collect", e))?;
+            drop(stmt);
+            Ok(events)
+        })
+    }
+
     /// 会话级序列号原子取号（T08.12 Q23 + D3-2 热路径单语句）。
     ///
     /// 热路径：`UPDATE … SET next_sequence = next_sequence + 1 … RETURNING next_sequence - 1`
@@ -290,7 +586,7 @@ impl LocalDb {
     }
 }
 
-fn append_event_conn(
+pub(super) fn append_event_conn(
     conn: &rusqlite::Connection,
     session_id: &str,
     sequence: i64,
@@ -310,7 +606,10 @@ fn append_event_conn(
     Ok(())
 }
 
-fn reserve_sequence_conn(conn: &rusqlite::Connection, session_id: &str) -> Result<i64, DbFailure> {
+pub(super) fn reserve_sequence_conn(
+    conn: &rusqlite::Connection,
+    session_id: &str,
+) -> Result<i64, DbFailure> {
     // 冷路径 seed：首次以已落库 max(sequence)+1 建行（隐式预热）
     conn.execute(
         "INSERT OR IGNORE INTO session_sequence (session_id, next_sequence)

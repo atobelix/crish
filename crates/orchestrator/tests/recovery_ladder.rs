@@ -20,7 +20,7 @@
 #![allow(clippy::disallowed_methods)]
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use agent_tools::tools::subagent::{
@@ -34,8 +34,9 @@ use conex_types::SessionAgent;
 use orchestrator::recovery::{
     fingerprint, RecoveryAction, RecoveryCoordinator, RecoveryError, RecoveryLadder,
     RecoveryNotification, RecoveryRetryPolicy, RecoveryStore, RunFailureContext,
-    RECOVER_EPISODES_KEY, RECOVER_ESCALATED_EVENT, RECOVER_FORK_EVENT, RECOVER_MAX_EPISODES_KEY,
-    RECOVER_NOTIFICATIONS_KEY, RECOVER_REPORT_EVENT, RECOVER_STEERING_EVENT,
+    RECOVER_ACKNOWLEDGED_EVENT, RECOVER_EPISODES_KEY, RECOVER_ESCALATED_EVENT, RECOVER_FORK_EVENT,
+    RECOVER_MAX_EPISODES_KEY, RECOVER_NOTIFICATIONS_KEY, RECOVER_REPORT_EVENT,
+    RECOVER_STEERING_EVENT,
 };
 use orchestrator::session::SessionTree;
 use orchestrator::steering_queue::PendingMessageQueue;
@@ -94,6 +95,61 @@ impl RecoveryStore for InMemoryRecoveryStore {
             session_id.to_string(),
             event_type.to_string(),
             payload.to_string(),
+        ));
+        Ok(())
+    }
+
+    fn append_recovery_report_once(
+        &self,
+        session_id: &str,
+        subagent_run_id: &str,
+        payload: &str,
+    ) -> Result<bool, RecoveryError> {
+        let mut events = self.events.lock().unwrap();
+        let already_reported =
+            events
+                .iter()
+                .any(|(existing_session, event_type, existing_payload)| {
+                    existing_session == session_id
+                        && event_type == RECOVER_REPORT_EVENT
+                        && serde_json::from_str::<serde_json::Value>(existing_payload)
+                            .ok()
+                            .and_then(|value| {
+                                value
+                                    .get("subagentRunId")
+                                    .and_then(serde_json::Value::as_str)
+                                    .map(str::to_owned)
+                            })
+                            .as_deref()
+                            == Some(subagent_run_id)
+                });
+        if already_reported {
+            return Ok(false);
+        }
+        events.push((
+            session_id.to_string(),
+            RECOVER_REPORT_EVENT.to_string(),
+            payload.to_string(),
+        ));
+        Ok(true)
+    }
+
+    fn persist_acknowledgment(
+        &self,
+        session_id: &str,
+        notification_json: &str,
+        acknowledgment_payload: &str,
+    ) -> Result<(), RecoveryError> {
+        let mut meta = self.meta.lock().unwrap();
+        let mut events = self.events.lock().unwrap();
+        meta.insert(
+            RECOVER_NOTIFICATIONS_KEY.to_string(),
+            notification_json.to_string(),
+        );
+        events.push((
+            session_id.to_string(),
+            RECOVER_ACKNOWLEDGED_EVENT.to_string(),
+            acknowledgment_payload.to_string(),
         ));
         Ok(())
     }
@@ -183,6 +239,37 @@ impl RecoveryStore for DbStore {
             })
     }
 
+    fn persist_acknowledgment(
+        &self,
+        session_id: &str,
+        notification_json: &str,
+        acknowledgment_payload: &str,
+    ) -> Result<(), RecoveryError> {
+        self.db
+            .append_event_and_set_session_meta(
+                session_id,
+                (RECOVER_ACKNOWLEDGED_EVENT, acknowledgment_payload),
+                (RECOVER_NOTIFICATIONS_KEY, notification_json),
+            )
+            .map(|_| ())
+            .map_err(|e| RecoveryError::PersistFailed {
+                message: e.to_string(),
+            })
+    }
+
+    fn append_recovery_report_once(
+        &self,
+        session_id: &str,
+        subagent_run_id: &str,
+        payload: &str,
+    ) -> Result<bool, RecoveryError> {
+        self.db
+            .append_recovery_report_once(session_id, subagent_run_id, payload)
+            .map_err(|e| RecoveryError::PersistFailed {
+                message: e.to_string(),
+            })
+    }
+
     fn persist_escalation(
         &self,
         session_id: &str,
@@ -257,6 +344,18 @@ impl RecoveryStore for DbStore {
             })
     }
 
+    fn persist_fork_completion(
+        &self,
+        completion: conex_db::RecoveryForkCompletion<'_>,
+    ) -> Result<(), RecoveryError> {
+        self.db
+            .persist_recovery_fork_completion(completion)
+            .map(|_| ())
+            .map_err(|e| RecoveryError::PersistFailed {
+                message: e.to_string(),
+            })
+    }
+
     fn get_subagent_parent_tool_call_id(
         &self,
         session_id: &str,
@@ -278,12 +377,12 @@ impl RecoveryStore for DbStore {
 }
 
 /// 记录式 spawner：DB 模式同时落库 session_agents 行（pending 首写即
-/// running）；可注入守卫拒绝
+/// running）；可注入一次启动失败并将子代理行归一为 failed。
 struct RecordingSpawner {
     requests: Mutex<Vec<SubagentSpawnRequest>>,
     seq: AtomicUsize,
     db: Option<(LocalDb, String)>,
-    reject: bool,
+    fail_next_launch: AtomicBool,
 }
 
 impl RecordingSpawner {
@@ -292,7 +391,7 @@ impl RecordingSpawner {
             requests: Mutex::new(Vec::new()),
             seq: AtomicUsize::new(0),
             db: None,
-            reject: false,
+            fail_next_launch: AtomicBool::new(false),
         })
     }
 
@@ -301,7 +400,16 @@ impl RecordingSpawner {
             requests: Mutex::new(Vec::new()),
             seq: AtomicUsize::new(0),
             db: Some((db, session_id.to_string())),
-            reject: false,
+            fail_next_launch: AtomicBool::new(false),
+        })
+    }
+
+    fn with_db_rejecting_once(db: LocalDb, session_id: &str) -> Arc<Self> {
+        Arc::new(Self {
+            requests: Mutex::new(Vec::new()),
+            seq: AtomicUsize::new(0),
+            db: Some((db, session_id.to_string())),
+            fail_next_launch: AtomicBool::new(true),
         })
     }
 
@@ -323,13 +431,9 @@ impl SubagentSpawner for RecordingSpawner {
         req: &SubagentSpawnRequest,
     ) -> Result<SubagentSpawnResult, SubagentSpawnError> {
         self.requests.lock().unwrap().push(req.clone());
-        if self.reject {
-            return Err(SubagentSpawnError::SpawnFailed(
-                "模拟 spawn 失败".to_string(),
-            ));
-        }
         let n = self.seq.fetch_add(1, Ordering::SeqCst);
         let run_id = format!("fork-run-{n}");
+        let fail_launch = self.fail_next_launch.swap(false, Ordering::SeqCst);
         if let Some((db, session_id)) = &self.db {
             let mut agents = db
                 .load_session_agents(session_id)
@@ -366,6 +470,17 @@ impl SubagentSpawner for RecordingSpawner {
             });
             db.save_session_agents(session_id, &agents)
                 .map_err(|e| SubagentSpawnError::PersistFailed(e.to_string()))?;
+            if fail_launch {
+                db.update_session_agent_status(session_id, &run_id, "failed", Some(now_ms()))
+                    .map_err(|e| SubagentSpawnError::PersistFailed(e.to_string()))?;
+                return Err(SubagentSpawnError::SpawnFailed(
+                    "模拟 run 启动失败；子代理行已归一 failed".to_string(),
+                ));
+            }
+        } else if fail_launch {
+            return Err(SubagentSpawnError::SpawnFailed(
+                "模拟 spawn 失败".to_string(),
+            ));
         }
         Ok(SubagentSpawnResult {
             subagent_id: format!("sub-{n}"),
@@ -724,6 +839,7 @@ async fn ladder3_fork_persists_path_and_events_in_sqlite() {
         .unwrap()
         .append("leaf-a", serde_json::json!({ "text": "root" }))
         .unwrap();
+    let original_tree = tree.lock().unwrap().clone();
     let spawner = RecordingSpawner::with_db(db.clone(), "s1");
     let mut coordinator = RecoveryCoordinator::new(
         "s1",
@@ -760,6 +876,10 @@ async fn ladder3_fork_persists_path_and_events_in_sqlite() {
     };
     assert_eq!(record.from_run_id, "run-1");
     assert_eq!(record.new_run_id, "fork-run-0");
+    assert!(record
+        .new_leaf_id
+        .starts_with(&format!("recovery-fork-{}-", record.from_run_id)));
+    assert!(original_tree.entry(&record.new_leaf_id).is_none());
     assert_eq!(
         record.context_mode.as_str(),
         "verbatim",
@@ -775,7 +895,7 @@ async fn ladder3_fork_persists_path_and_events_in_sqlite() {
     let path: Vec<String> =
         serde_json::from_str(new_row.subagent_path_json.as_deref().expect("路径必须落库"))
             .expect("路径 JSON 解析失败");
-    assert_eq!(path, vec!["leaf-a", "recovery-fork-run-1-0"]);
+    assert_eq!(path, vec!["leaf-a".to_string(), record.new_leaf_id.clone()]);
 
     // 原 run 置 failed（runs 表经既有 update_run_status 接口）
     let runs = db.query_all_runs().expect("读取 runs 失败");
@@ -804,6 +924,181 @@ async fn ladder3_fork_persists_path_and_events_in_sqlite() {
         .entry(&record.new_leaf_id)
         .expect("fork 叶子必须存在");
     assert_eq!(new_leaf.parent_id.as_deref(), Some("leaf-a"));
+    assert_eq!(
+        tree_guard.entries().len(),
+        original_tree.entries().len() + 1,
+        "fork id 必须只插入一次"
+    );
+}
+
+/// spawn 启动失败会留下 failed 子代理行；同一协调器重试复用收口事务，
+/// 只保留一个活动 child、一个树分支和一条 recovery-fork 事件。
+#[tokio::test]
+async fn ladder3_sqlite_spawn_failure_keeps_state_and_retry_completes_once() {
+    let ws = TempWorkspace::new("recovery_ladder3_spawn_retry");
+    let db = LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
+    db.insert_session("s1", "会话").expect("插入会话失败");
+    db.insert_run("run-1", "s1", RunStatus::Running, None, 1)
+        .expect("插入 run 失败");
+    db.save_session_agents(
+        "s1",
+        &[SessionAgent {
+            id: "sub-a".to_string(),
+            subagent_run_id: "run-1".to_string(),
+            parent_session_id: "s1".to_string(),
+            parent_run_id: "run-main".to_string(),
+            parent_tool_call_id: None,
+            description: String::new(),
+            mode: String::new(),
+            status: "running".to_string(),
+            summary: None,
+            messages: Vec::new(),
+            started_at: now_ms(),
+            ended_at: None,
+            depth: Some(1),
+            subagent_path_json: None,
+            task_type: None,
+            display_label: None,
+            allowed_write_paths_json: None,
+            sub_session_id: None,
+        }],
+    )
+    .expect("原子代理行落库失败");
+
+    let store: Arc<dyn RecoveryStore> = Arc::new(DbStore { db: db.clone() });
+    let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+    let tree = Arc::new(Mutex::new(SessionTree::new("s1")));
+    tree.lock()
+        .unwrap()
+        .append("leaf-a", serde_json::json!({ "text": "root" }))
+        .unwrap();
+    let original_tree = tree.lock().unwrap().clone();
+    let spawner = RecordingSpawner::with_db_rejecting_once(db.clone(), "s1");
+    let mut coordinator = RecoveryCoordinator::new(
+        "s1",
+        store.clone(),
+        queue,
+        tree.clone(),
+        spawner.clone(),
+        retry_policy(),
+    )
+    .expect("协调器构造失败");
+    let ctx = failure_ctx("run-1", ProviderErrorKind::ServerError, 5, 61_000);
+
+    let error = coordinator
+        .fork_and_reassign(&ctx)
+        .await
+        .expect_err("第一次启动注入失败必须向上返回");
+    assert!(matches!(error, RecoveryError::PersistFailed { .. }));
+    assert_eq!(*tree.lock().unwrap(), original_tree, "失败时树必须保持不变");
+    assert_eq!(
+        coordinator
+            .budget()
+            .count(&fingerprint("sub-a", "完成模块 A")),
+        0,
+        "spawn 失败不能消费 fork 预算"
+    );
+    assert_eq!(spawner.requests().len(), 1);
+
+    let agents_after_failure = db.load_session_agents("s1").expect("读取子代理行失败");
+    let failed_child = agents_after_failure
+        .iter()
+        .find(|agent| agent.subagent_run_id == "fork-run-0")
+        .expect("失败的启动仍应保留子代理行");
+    assert_eq!(failed_child.status, "failed");
+    assert!(failed_child.ended_at.is_some(), "失败行必须记录结束时间");
+    let original_run_after_failure = db
+        .query_all_runs()
+        .expect("读取 runs 失败")
+        .into_iter()
+        .find(|run| run.run_id == "run-1")
+        .expect("原 run 必须存在");
+    assert_eq!(original_run_after_failure.status, RunStatus::Running);
+    assert_eq!(original_run_after_failure.end_reason, None);
+    assert!(
+        db.query_events("s1", 0, None)
+            .expect("读取 events 失败")
+            .iter()
+            .all(|event| event.event_type != RECOVER_FORK_EVENT),
+        "spawn 失败不能留下成功 fork 事件"
+    );
+
+    let outcome = coordinator
+        .fork_and_reassign(&ctx)
+        .await
+        .expect("同一协调器重试应完成 fork");
+    let RecoveryAction::Forked { record } = outcome.action else {
+        panic!("期望 Forked");
+    };
+    assert_eq!(record.new_run_id, "fork-run-1");
+    assert!(record.new_leaf_id.starts_with("recovery-fork-run-1-"));
+    assert_eq!(spawner.requests().len(), 2, "失败尝试一次，重试 spawn 一次");
+
+    let agents_after_retry = db.load_session_agents("s1").expect("读取子代理行失败");
+    let failed_child = agents_after_retry
+        .iter()
+        .find(|agent| agent.subagent_run_id == "fork-run-0")
+        .expect("失败 child 行必须保留");
+    assert_eq!(failed_child.status, "failed");
+    let active_children: Vec<_> = agents_after_retry
+        .iter()
+        .filter(|agent| agent.subagent_run_id.starts_with("fork-run-") && agent.status == "running")
+        .collect();
+    assert_eq!(active_children.len(), 1, "只能有一个活动 fork child");
+    assert_eq!(active_children[0].subagent_run_id, record.new_run_id);
+    let path: Vec<String> = serde_json::from_str(
+        active_children[0]
+            .subagent_path_json
+            .as_deref()
+            .expect("活动 child 的工作流路径必须落库"),
+    )
+    .expect("工作流路径 JSON 必须合法");
+    assert_eq!(path, vec!["leaf-a".to_string(), record.new_leaf_id.clone()]);
+
+    let original_run_after_retry = db
+        .query_all_runs()
+        .expect("读取 runs 失败")
+        .into_iter()
+        .find(|run| run.run_id == "run-1")
+        .expect("原 run 必须存在");
+    assert_eq!(original_run_after_retry.status, RunStatus::Failed);
+    assert_eq!(
+        original_run_after_retry.end_reason.as_deref(),
+        Some("recovery-fork")
+    );
+
+    let tree_guard = tree.lock().unwrap();
+    assert_eq!(
+        tree_guard.entries().len(),
+        original_tree.entries().len() + 1
+    );
+    assert_eq!(
+        tree_guard.current_leaf_id(),
+        Some(record.new_leaf_id.as_str())
+    );
+    assert_eq!(
+        tree_guard
+            .entries()
+            .iter()
+            .filter(|entry| entry.id.starts_with("recovery-fork-"))
+            .count(),
+        1,
+        "重试只能发布一个树分支"
+    );
+    drop(tree_guard);
+
+    let events = db.query_events("s1", 0, None).expect("读取 events 失败");
+    let fork_events: Vec<_> = events
+        .iter()
+        .filter(|event| event.event_type == RECOVER_FORK_EVENT)
+        .collect();
+    assert_eq!(fork_events.len(), 1, "重试只能落一条 fork 事件");
+    let fork_payload: serde_json::Value =
+        serde_json::from_str(&fork_events[0].payload).expect("fork 事件载荷必须合法");
+    assert_eq!(
+        fork_payload["newRunId"].as_str(),
+        Some(record.new_run_id.as_str())
+    );
 }
 
 // ── LK-02 fork 反查传播（真实 SQLite：session_agents 行真值）──────

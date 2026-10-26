@@ -36,6 +36,7 @@ use conex_db::{DbFailure, DbFailureKind, LocalDb, PendingInput, RunStatus, Store
 use conex_types::{codes, CrishError};
 
 use crate::now_ms;
+use crate::session::SessionTreeEntry;
 
 /// 存储层错误（kind 为操作名，message 为详情；cause 保留底层 DbFailure
 /// 上下文，T06.5.8：From<StoreError> for CrishError 时 cause 链不丢失）
@@ -145,6 +146,19 @@ pub struct PersistedEvent {
     pub created_at: String,
 }
 
+/// 与事件序号配对的持久化 Recovery fork 树条目。
+///
+/// 事件载荷继续使用既有 ForkRecord 镜像；sidecar 保存完整 SessionTree
+/// 条目，使恢复流程能还原 task，而不改变事件 wire 形状。
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoveryForkTreeEntry {
+    /// 对应 `recovery-fork` 事件的序列号。
+    pub event_sequence: u64,
+    /// 完成事务后发布到 SessionTree 的精确节点。
+    pub entry: SessionTreeEntry,
+}
+
 /// 事件存储连接抽象（run 记录 + 事件流）
 ///
 /// 方法签名对齐 conex-db：insert_run / update_run_status / append_event /
@@ -200,6 +214,39 @@ pub trait Store: Send + Sync {
         after_sequence: u64,
         limit: Option<u64>,
     ) -> StoreResult<Vec<PersistedEvent>>;
+
+    /// 查询某会话的指定事件类型（包括 run_id 为 None 的会话域事件）。
+    ///
+    /// 默认实现供内存测试存储使用；生产 LocalDbStore 下推到 SQL 过滤。
+    async fn query_session_events_by_type(
+        &self,
+        session_id: &str,
+        event_type: &str,
+        after_sequence: u64,
+        limit: Option<u64>,
+    ) -> StoreResult<Vec<PersistedEvent>> {
+        let mut events = self
+            .query_events(session_id, after_sequence, None)
+            .await?
+            .into_iter()
+            .filter(|event| event.event_type == event_type)
+            .collect::<Vec<_>>();
+        if let Some(limit) = limit {
+            events.truncate(limit as usize);
+        }
+        Ok(events)
+    }
+
+    /// Load the durable SessionTree entries paired with Recovery fork events.
+    ///
+    /// 不模拟 Recovery 重启持久化的非 SQLite 测试存储可返回空列表；
+    /// RestoreManager 会拒绝缺少对应条目的 Recovery fork 回放。
+    async fn load_recovery_fork_tree_entries(
+        &self,
+        _session_id: &str,
+    ) -> StoreResult<Vec<RecoveryForkTreeEntry>> {
+        Ok(Vec::new())
+    }
 
     /// 按 run 归属过滤查询会话内事件（DM-07 按 run 读取用；LocalDb 面
     /// SQL 下推走 idx_events_run 索引，InMemory 面内存过滤等价）。
@@ -413,6 +460,7 @@ struct InMemoryInner {
     runs: Vec<StoredRun>,
     events: Vec<PersistedEvent>,
     pending_inputs: Vec<PendingInput>,
+    recovery_fork_tree_entries: HashMap<String, Vec<RecoveryForkTreeEntry>>,
     /// 会话 → 最近一次已分配 sequence（T08.12：会话级原子计数器的本地镜像）
     sequence_counters: HashMap<String, u64>,
     append_delay: Duration,
@@ -472,6 +520,19 @@ impl InMemoryStore {
                 guard.pending_inputs.retain(|p| p.id != input.id);
                 guard.pending_inputs.push(input);
             }
+        }
+    }
+
+    /// Seed Recovery fork tree entries for restore and snapshot tests.
+    pub fn seed_recovery_fork_tree_entry(&self, session_id: &str, entry: RecoveryForkTreeEntry) {
+        if let Ok(mut guard) = self.inner.lock() {
+            let entries = guard
+                .recovery_fork_tree_entries
+                .entry(session_id.to_string())
+                .or_default();
+            entries.retain(|existing| existing.entry.id != entry.entry.id);
+            entries.push(entry);
+            entries.sort_by_key(|entry| entry.event_sequence);
         }
     }
 }
@@ -652,6 +713,22 @@ impl Store for InMemoryStore {
             events.truncate(limit as usize);
         }
         Ok(events)
+    }
+
+    async fn load_recovery_fork_tree_entries(
+        &self,
+        session_id: &str,
+    ) -> StoreResult<Vec<RecoveryForkTreeEntry>> {
+        self.inner
+            .lock()
+            .map(|guard| {
+                guard
+                    .recovery_fork_tree_entries
+                    .get(session_id)
+                    .cloned()
+                    .unwrap_or_default()
+            })
+            .map_err(|error| StoreError::new("lock", error.to_string()))
     }
 
     async fn query_events_by_run(
@@ -936,6 +1013,50 @@ impl Store for LocalDbStore {
         let rows = blocking_db_call("query_events", move || {
             db.query_events(
                 &session_id,
+                after_sequence as i64,
+                limit.map(|limit| limit as i64),
+            )
+        })
+        .await?;
+        Ok(map_stored_events(rows))
+    }
+
+    async fn load_recovery_fork_tree_entries(
+        &self,
+        session_id: &str,
+    ) -> StoreResult<Vec<RecoveryForkTreeEntry>> {
+        let db = self.db.clone();
+        let key = format!("{session_id}:recover_fork_nodes");
+        let raw = blocking_db_call("load_recovery_fork_tree_entries", move || {
+            db.get_session_meta(&key)
+        })
+        .await?;
+        raw.map(|value| {
+            serde_json::from_str(&value).map_err(|error| {
+                StoreError::new(
+                    "load_recovery_fork_tree_entries",
+                    format!("fork tree sidecar JSON 无效: {error}"),
+                )
+            })
+        })
+        .transpose()
+        .map(|entries| entries.unwrap_or_default())
+    }
+
+    async fn query_session_events_by_type(
+        &self,
+        session_id: &str,
+        event_type: &str,
+        after_sequence: u64,
+        limit: Option<u64>,
+    ) -> StoreResult<Vec<PersistedEvent>> {
+        let db = self.db.clone();
+        let session_id = session_id.to_string();
+        let event_type = event_type.to_string();
+        let rows = blocking_db_call("query_session_events_by_type", move || {
+            db.query_session_events_by_type(
+                &session_id,
+                &event_type,
                 after_sequence as i64,
                 limit.map(|limit| limit as i64),
             )

@@ -22,6 +22,10 @@ mod rewind_plan;
 mod time;
 mod tree;
 
+#[cfg(test)]
+#[path = "tree_tests.rs"]
+mod tree_tests;
+
 pub use record::{
     session_leaf_moved_payload, SessionRecord, SessionTreeEntry, SessionTreeEntryKind,
     SessionTreeError, CONTEXT_COMPRESSION_END_EVENT, SESSION_LEAF_MOVED_EVENT,

@@ -46,16 +46,19 @@ use orchestrator::flow_graph::{
     FLOW_RESERVED_KEY, FLOW_STATE_KEY,
 };
 use orchestrator::lifecycle::SubagentLifecycleService;
-use orchestrator::persist::{LocalDbStore, SessionSequencer, Store};
+use orchestrator::persist::{
+    InMemoryStore, LocalDbStore, RecoveryForkTreeEntry, SessionSequencer, Store,
+};
 use orchestrator::recovery::{
-    fingerprint, RecoveryCoordinator, RecoveryRetryPolicy, RunFailureContext,
+    fingerprint, fork_node_payload, ForkContextMode, ForkRecord, RecoveryCoordinator,
+    RecoveryRetryPolicy, RunFailureContext, RECOVER_FORK_EVENT,
 };
 use orchestrator::restore::{
     RestoreManager, RestoreMode, SnapshotError, SnapshotFileStore, SnapshotStore, StateSnapshot,
     CANCEL_INTERRUPTED_ERROR, INTERRUPTED_ERROR, INTERRUPTED_REASON, RUN_INTERRUPTED_EVENT,
 };
 use orchestrator::run::{RunError, RunHandle, RunManager, EVENT_STORE_WRITE_FAILED_REASON};
-use orchestrator::session::{SessionRecord, SessionTree};
+use orchestrator::session::{SessionRecord, SessionTree, SessionTreeEntry};
 use orchestrator::steering_queue::PendingMessageQueue;
 
 use common::{agent_end, agent_start, message_end, outcome, setup, RecordingCancelSink};
@@ -115,6 +118,318 @@ fn snapshot_with_leaf(generation: u64, last_sequence: u64, leaf: &str) -> StateS
         Vec::new(),
         HashMap::new(),
     )
+}
+
+fn recovery_fork_record() -> ForkRecord {
+    ForkRecord {
+        fingerprint: "fp-sub-a-task".to_string(),
+        subagent_id: "sub-a".to_string(),
+        from_run_id: "source-run".to_string(),
+        from_leaf_id: "leaf-a".to_string(),
+        new_run_id: "child-run".to_string(),
+        new_leaf_id: "fork-leaf".to_string(),
+        context_mode: ForkContextMode::Verbatim,
+        created_at_ms: 1234,
+    }
+}
+
+fn recovery_fork_event_payload(record: &ForkRecord) -> String {
+    let mut payload = serde_json::to_value(record).unwrap();
+    payload["type"] = serde_json::Value::String(RECOVER_FORK_EVENT.to_string());
+    serde_json::to_string(&payload).unwrap()
+}
+
+struct FixedSnapshot(StateSnapshot);
+
+impl SnapshotStore for FixedSnapshot {
+    fn load_snapshot(&self) -> Result<(Option<StateSnapshot>, Option<String>), SnapshotError> {
+        Ok((Some(self.0.clone()), None))
+    }
+
+    fn save_snapshot(&self, _snapshot: &StateSnapshot) -> Result<(), SnapshotError> {
+        Ok(())
+    }
+}
+
+fn recovery_fork_tree_entry(record: &ForkRecord) -> RecoveryForkTreeEntry {
+    let mut entry = SessionTreeEntry::node(
+        record.new_leaf_id.clone(),
+        Some(record.from_leaf_id.clone()),
+        fork_node_payload(record, "restore task"),
+    );
+    entry.created_at = 5678;
+    RecoveryForkTreeEntry {
+        event_sequence: 1,
+        entry,
+    }
+}
+
+fn snapshot_before_recovery_fork(sequence: u64, current_leaf: &str) -> StateSnapshot {
+    StateSnapshot::build(
+        1,
+        sequence,
+        vec![SessionRecord {
+            session_id: "s1".to_string(),
+            current_leaf_id: Some(current_leaf.to_string()),
+            branches: vec![SessionTreeEntry::node(
+                "leaf-a",
+                None,
+                serde_json::json!({"text":"root"}),
+            )],
+            context_meta: None,
+        }],
+        Vec::new(),
+        Vec::new(),
+        HashMap::from([("s1".to_string(), sequence)]),
+    )
+}
+
+#[tokio::test]
+async fn recovery_fork_sidecar_rebuilds_branch_and_replays_current_leaf_in_sequence() {
+    let record = recovery_fork_record();
+    let payload = recovery_fork_event_payload(&record);
+    let sidecar_entry = recovery_fork_tree_entry(&record);
+    let store = InMemoryStore::new();
+    store
+        .append_event("s1", 1, RECOVER_FORK_EVENT, &payload, None)
+        .await
+        .unwrap();
+    store
+        .append_event(
+            "s1",
+            2,
+            "session-leaf-moved",
+            r#"{"toLeafId":"leaf-a"}"#,
+            None,
+        )
+        .await
+        .unwrap();
+    store.seed_recovery_fork_tree_entry("s1", sidecar_entry.clone());
+
+    let outcome = RestoreManager::new()
+        .restore(
+            &store,
+            &FixedSnapshot(snapshot_before_recovery_fork(0, "leaf-a")),
+        )
+        .await
+        .unwrap();
+    let session = outcome
+        .sessions
+        .iter()
+        .find(|session| session.session_id == "s1")
+        .unwrap();
+    assert_eq!(session.current_leaf_id.as_deref(), Some("leaf-a"));
+    assert_eq!(session.branches.len(), 2);
+    assert_eq!(session.branches[1], sidecar_entry.entry);
+}
+
+#[tokio::test]
+async fn sqlite_restart_restores_exact_recovery_fork_entry_and_task() {
+    let workspace = TempWorkspace::new("recovery_fork_sidecar_restart");
+    let database_path = workspace.path().join("sessions.db");
+    let record = recovery_fork_record();
+    let payload = recovery_fork_event_payload(&record);
+    let sidecar_entry = recovery_fork_tree_entry(&record);
+    {
+        let db = LocalDb::open(&database_path).expect("打开 Recovery 测试库失败");
+        db.insert_session("s1", "Recovery fork restart")
+            .expect("插入测试会话失败");
+        db.append_event("s1", 1, RECOVER_FORK_EVENT, &payload, None)
+            .expect("写入 Recovery fork 事件失败");
+        db.append_event(
+            "s1",
+            2,
+            "session-leaf-moved",
+            r#"{"toLeafId":"leaf-a"}"#,
+            None,
+        )
+        .expect("写入叶子移动事件失败");
+        db.set_session_meta(
+            "s1:recover_fork_nodes",
+            &serde_json::to_string(std::slice::from_ref(&sidecar_entry)).unwrap(),
+        )
+        .expect("写入 Recovery fork sidecar 失败");
+    }
+
+    let db = LocalDb::open(&database_path).expect("重启后重新打开 Recovery 测试库失败");
+    let store = LocalDbStore::new(db);
+    let outcome = RestoreManager::new()
+        .restore(
+            &store,
+            &FixedSnapshot(snapshot_before_recovery_fork(0, "leaf-a")),
+        )
+        .await
+        .expect("重启后应从 sidecar 重建 Recovery fork");
+    let session = outcome
+        .sessions
+        .iter()
+        .find(|session| session.session_id == "s1")
+        .unwrap();
+    assert_eq!(session.current_leaf_id.as_deref(), Some("leaf-a"));
+    assert_eq!(session.branches[1], sidecar_entry.entry);
+    assert_eq!(
+        session.branches[1].kind,
+        orchestrator::session::SessionTreeEntryKind::Node {
+            payload: fork_node_payload(&record, "restore task")
+        }
+    );
+}
+
+#[tokio::test]
+async fn recovery_fork_after_leaf_move_becomes_current_leaf() {
+    let record = recovery_fork_record();
+    let payload = recovery_fork_event_payload(&record);
+    let mut sidecar_entry = recovery_fork_tree_entry(&record);
+    sidecar_entry.event_sequence = 2;
+    let store = InMemoryStore::new();
+    store
+        .append_event(
+            "s1",
+            1,
+            "session-leaf-moved",
+            r#"{"toLeafId":"leaf-a"}"#,
+            None,
+        )
+        .await
+        .unwrap();
+    store
+        .append_event("s1", 2, RECOVER_FORK_EVENT, &payload, None)
+        .await
+        .unwrap();
+    store.seed_recovery_fork_tree_entry("s1", sidecar_entry.clone());
+
+    let outcome = RestoreManager::new()
+        .restore(
+            &store,
+            &FixedSnapshot(snapshot_before_recovery_fork(0, "leaf-a")),
+        )
+        .await
+        .unwrap();
+    let session = outcome
+        .sessions
+        .iter()
+        .find(|session| session.session_id == "s1")
+        .unwrap();
+    assert_eq!(session.current_leaf_id.as_deref(), Some("fork-leaf"));
+    assert_eq!(session.branches[1], sidecar_entry.entry);
+}
+
+#[tokio::test]
+async fn recovery_fork_sidecar_fills_snapshot_gap_without_rewinding_leaf() {
+    let record = recovery_fork_record();
+    let payload = recovery_fork_event_payload(&record);
+    let store = InMemoryStore::new();
+    store
+        .append_event("s1", 1, RECOVER_FORK_EVENT, &payload, None)
+        .await
+        .unwrap();
+    store.seed_recovery_fork_tree_entry("s1", recovery_fork_tree_entry(&record));
+
+    let outcome = RestoreManager::new()
+        .restore(
+            &store,
+            &FixedSnapshot(snapshot_before_recovery_fork(1, "leaf-a")),
+        )
+        .await
+        .unwrap();
+    let session = outcome
+        .sessions
+        .iter()
+        .find(|session| session.session_id == "s1")
+        .unwrap();
+    assert_eq!(session.current_leaf_id.as_deref(), Some("leaf-a"));
+    assert_eq!(session.branches.len(), 2);
+    assert_eq!(session.branches[1], recovery_fork_tree_entry(&record).entry);
+}
+
+#[tokio::test]
+async fn recovery_fork_snapshot_gap_then_later_leaf_move_replays_in_sequence() {
+    let record = recovery_fork_record();
+    let store = InMemoryStore::new();
+    store
+        .append_event(
+            "s1",
+            1,
+            RECOVER_FORK_EVENT,
+            &recovery_fork_event_payload(&record),
+            None,
+        )
+        .await
+        .unwrap();
+    store
+        .append_event(
+            "s1",
+            2,
+            "session-leaf-moved",
+            r#"{"toLeafId":"leaf-b"}"#,
+            None,
+        )
+        .await
+        .unwrap();
+    let sidecar_entry = recovery_fork_tree_entry(&record);
+    store.seed_recovery_fork_tree_entry("s1", sidecar_entry.clone());
+
+    let snapshot = StateSnapshot::build(
+        1,
+        1,
+        vec![SessionRecord {
+            session_id: "s1".to_string(),
+            current_leaf_id: Some("leaf-a".to_string()),
+            branches: vec![
+                SessionTreeEntry::node("leaf-a", None, serde_json::json!({"text":"root"})),
+                SessionTreeEntry::node(
+                    "leaf-b",
+                    Some("leaf-a".to_string()),
+                    serde_json::json!({"text":"move target"}),
+                ),
+            ],
+            context_meta: None,
+        }],
+        Vec::new(),
+        Vec::new(),
+        HashMap::from([("s1".to_string(), 1)]),
+    );
+    let outcome = RestoreManager::new()
+        .restore(&store, &FixedSnapshot(snapshot))
+        .await
+        .unwrap();
+    let session = outcome
+        .sessions
+        .iter()
+        .find(|session| session.session_id == "s1")
+        .unwrap();
+
+    assert!(session
+        .branches
+        .iter()
+        .any(|entry| entry == &sidecar_entry.entry));
+    assert_eq!(session.branches.len(), 3);
+    assert_eq!(session.current_leaf_id.as_deref(), Some("leaf-b"));
+}
+
+#[tokio::test]
+async fn legacy_recovery_fork_without_snapshot_node_or_sidecar_fails_closed() {
+    let record = recovery_fork_record();
+    let store = InMemoryStore::new();
+    store
+        .append_event(
+            "s1",
+            1,
+            RECOVER_FORK_EVENT,
+            &recovery_fork_event_payload(&record),
+            None,
+        )
+        .await
+        .unwrap();
+
+    let result = RestoreManager::new()
+        .restore(
+            &store,
+            &FixedSnapshot(snapshot_before_recovery_fork(1, "leaf-a")),
+        )
+        .await;
+    let error = result.expect_err("缺失 task 时不得伪造 fork 树条目");
+    assert_eq!(error.kind, "recovery_fork_tree_payload_missing");
 }
 
 // ── T12.1 杀进程恢复：in-flight → interrupted，审计事件逐条落库 ──

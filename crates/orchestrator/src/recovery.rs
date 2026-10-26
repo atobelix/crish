@@ -59,6 +59,7 @@
 //! 生产链路触发四级阶梯恢复。恢复域持久化经 [RecoveryStore] 抽象；阶梯 2
 //! 通知元数据与两个留痕事件经 conex-db 单 writer 原子提交，不新增 schema。
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -67,8 +68,10 @@ use conex_types::error::ProviderErrorKind;
 use conex_types::events::AgentEvent;
 
 use crate::now_ms;
-use crate::session::SessionTree;
+use crate::session::{SessionTree, SessionTreeEntry};
 use crate::steering_queue::PendingMessageQueue;
+
+static NEXT_RECOVERY_FORK_ID: AtomicU64 = AtomicU64::new(0);
 
 // SR-06d · 拆分 · ≠ EL：本文件为薄门面（常量 + 协调器），逻辑域拆 3 模：
 // - recovery_policy.rs：阶梯 1 重试策略与 Episode 预算制（recovery_policy::*）
@@ -264,12 +267,34 @@ pub struct RecoveryCoordinator {
     budget: RecoveryBudget,
     /// 阶梯 3 fork 记录（`recover_forks` 落库，幂等依据）
     forks: Vec<ForkRecord>,
+    /// 已 spawn 但尚未完成持久化/发布的 fork。失败重试复用同一 run；
+    /// 仅保证同一协调器进程内重试，跨进程崩溃恢复需要 spawner 提供持久关联键。
+    pending_forks: std::collections::HashMap<String, PendingForkCompletion>,
     /// 并发 Fork 防重占位表（TOCTOU 保护：(fingerprint:from_run_id) 集合）
     in_flight_forks: std::collections::HashSet<String>,
     /// 阶梯 2 通知（`recover_notifications` 落库）
     notifications: Vec<RecoveryNotification>,
     /// 阶梯 4 需用户介入标记（`recover_needs_user` 落库，UI 可观察）
     needs_user: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+struct PendingForkCompletion {
+    record: ForkRecord,
+    tree_entry: SessionTreeEntry,
+    path_json: String,
+    prepared: Option<PreparedForkCompletion>,
+    persistence_complete: bool,
+}
+
+#[derive(Debug, Clone)]
+struct PreparedForkCompletion {
+    next_forks: Vec<ForkRecord>,
+    next_budget: RecoveryBudget,
+    forks_json: String,
+    episodes_json: String,
+    event_payload: String,
+    tree_entry_json: String,
 }
 
 impl RecoveryCoordinator {
@@ -304,6 +329,7 @@ impl RecoveryCoordinator {
             policy,
             budget,
             forks,
+            pending_forks: std::collections::HashMap::new(),
             in_flight_forks: std::collections::HashSet::new(),
             notifications,
             needs_user,
@@ -489,8 +515,16 @@ impl RecoveryCoordinator {
                 },
             });
         }
-        // TOCTOU 锁保护：并发 Fork 防重占位
         let in_flight_key = format!("{}:{}", fp, ctx.subagent_run_id);
+        if self.pending_forks.contains_key(&in_flight_key) {
+            return self.complete_pending_fork(&in_flight_key);
+        }
+        // 同一协调器内先收口其他已 spawn 的 fork，避免尚未发布的预算计数
+        // 被新的恢复分支遗漏。
+        while let Some(pending_key) = self.pending_forks.keys().next().cloned() {
+            self.complete_pending_fork(&pending_key)?;
+        }
+        // TOCTOU 锁保护：并发 Fork 防重占位
         if !self.in_flight_forks.insert(in_flight_key.clone()) {
             if let Some(existing) = self
                 .forks
@@ -512,7 +546,9 @@ impl RecoveryCoordinator {
             });
         }
 
-        let res = self.fork_and_reassign_inner(ctx, fp).await;
+        let res = self
+            .fork_and_reassign_inner(ctx, fp, in_flight_key.clone())
+            .await;
         self.in_flight_forks.remove(&in_flight_key);
         res
     }
@@ -521,6 +557,7 @@ impl RecoveryCoordinator {
         &mut self,
         ctx: &RunFailureContext,
         fp: String,
+        pending_key: String,
     ) -> Result<RecoveryOutcome, RecoveryError> {
         // 预算制：超预算禁止自动恢复，直接阶梯 4
         if !self.budget.can_recover(&fp) {
@@ -546,7 +583,13 @@ impl RecoveryCoordinator {
                 message: "fork 需要源叶子节点（from_leaf_id 为空）".to_string(),
             })?;
         // 会话树 fork（冻结接口只读消费）：派生新叶子承接同一目标
-        let new_leaf_id = format!("recovery-fork-{}-{}", ctx.subagent_run_id, self.forks.len());
+        let fork_sequence = NEXT_RECOVERY_FORK_ID.fetch_add(1, Ordering::Relaxed);
+        let new_leaf_id = format!(
+            "recovery-fork-{}-{}-{}",
+            ctx.subagent_run_id,
+            now_ms(),
+            fork_sequence
+        );
         let context_mode = decide_fork_context(
             ctx.started_at_ms,
             now_ms(),
@@ -563,28 +606,29 @@ impl RecoveryCoordinator {
             context_mode,
             created_at_ms: now_ms() as u64,
         };
-        let payload = fork_node_payload(&record, &ctx.task);
-        // fork 与读路径同一次持锁：消除 fork 后、读路径前的 TOCTOU
-        let path_ids: Vec<String> = {
-            let mut tree = self.tree.lock().map_err(|e| RecoveryError::InvalidState {
+        // 先只读源分支路径。spawn 失败时不能在 SessionTree 留下无法回滚的节点。
+        let mut path_ids: Vec<String> = {
+            let tree = self.tree.lock().map_err(|e| RecoveryError::InvalidState {
                 message: format!("会话树锁中毒：{e}"),
             })?;
-            tree.fork(&from_leaf_id, &new_leaf_id, payload)
-                .map_err(|e| RecoveryError::InvalidState {
-                    message: format!("会话树 fork 失败：{e}"),
-                })?;
-            // 工作流路径（根 → 新叶子）落 subagent_path_json
-            let path = tree.read_branch_path(Some(&new_leaf_id)).map_err(|e| {
+            if tree.entry(&new_leaf_id).is_some() {
+                return Err(RecoveryError::InvalidState {
+                    message: format!("恢复 fork 叶子 id 已存在：{new_leaf_id}"),
+                });
+            }
+            let path = tree.read_branch_path(Some(&from_leaf_id)).map_err(|e| {
                 RecoveryError::InvalidState {
-                    message: format!("工作流路径读取失败：{e}"),
+                    message: format!("源工作流路径读取失败：{e}"),
                 }
             })?;
             path.into_iter().map(|e| e.id).collect()
         };
+        path_ids.push(new_leaf_id.clone());
         // 关键性能优化（DEFECT-08）：将耗时的 JSON 序列化移出 Mutex<SessionTree> 同步互斥锁临界区，避免阻塞其他线程
-        let path_json = serde_json::to_string(&path_ids).map_err(|e| RecoveryError::InvalidState {
-            message: format!("工作流路径序列化失败：{e}"),
-        })?;
+        let path_json =
+            serde_json::to_string(&path_ids).map_err(|e| RecoveryError::InvalidState {
+                message: format!("工作流路径序列化失败：{e}"),
+            })?;
         // 新 run 启动（spawner 契约：守卫校验 + 落库 + 独立 run，引擎侧实现）
         // LK-02：fork 前反查原 run 的 session_agents 行，传播其
         // parent_tool_call_id（链路键随 fork 延续，行 + 事件体真值）；
@@ -640,31 +684,122 @@ impl RecoveryCoordinator {
             new_run_id: spawned.subagent_run_id.clone(),
             ..record
         };
-        // 新 run 行落工作流路径（subagent_path_json）
-        self.store
-            .set_subagent_path(&self.session_id, &spawned.subagent_run_id, &path_json)?;
-        // 原 run 置 failed 并留痕（C7 行为 3：原 run 状态置 failed）
-        self.store
-            .update_run_status(&ctx.subagent_run_id, "failed", "recovery-fork")?;
-        // 预算消费 + 记录落库 + 事件留痕
-        self.budget.record_fork(&record.fingerprint)?;
-        self.forks.push(record.clone());
-        self.persist_forks()?;
-        self.persist_budget()?;
-        // DM-05 降级路径：ForkRecord 镜像 + 顶层 type 键（createdAtMs
-        // 超出 typed 变体形状，镜像保真不丢失）
-        let payload_value =
-            serde_json::to_value(&record).map_err(|e| RecoveryError::InvalidState {
-                message: format!("fork 事件序列化失败：{e}"),
+        let tree_entry = SessionTreeEntry::node(
+            record.new_leaf_id.clone(),
+            Some(from_leaf_id.clone()),
+            fork_node_payload(&record, &ctx.task),
+        );
+        // 成功 spawn 后立即记录待收口状态。之后任何持久化失败都保留这个
+        // run id，重试只补齐完成事务，不会再次 spawn。
+        self.pending_forks.insert(
+            pending_key.clone(),
+            PendingForkCompletion {
+                record,
+                tree_entry,
+                path_json,
+                prepared: None,
+                persistence_complete: false,
+            },
+        );
+        self.complete_pending_fork(&pending_key)
+    }
+
+    fn complete_pending_fork(
+        &mut self,
+        pending_key: &str,
+    ) -> Result<RecoveryOutcome, RecoveryError> {
+        let pending = self
+            .pending_forks
+            .get(pending_key)
+            .cloned()
+            .ok_or_else(|| RecoveryError::InvalidState {
+                message: format!("待完成的恢复 fork 不存在：{pending_key}"),
             })?;
-        self.store.append_event(
-            &self.session_id,
-            RECOVER_FORK_EVENT,
-            &serialize_recovery_mirror(RECOVER_FORK_EVENT, &payload_value)?,
-        )?;
+
+        let prepared = if let Some(prepared) = pending.prepared.clone() {
+            prepared
+        } else {
+            let mut next_budget = self.budget.clone();
+            next_budget.record_fork(&pending.record.fingerprint)?;
+            let mut next_forks = self.forks.clone();
+            next_forks.push(pending.record.clone());
+            let forks_json =
+                serde_json::to_string(&next_forks).map_err(|e| RecoveryError::InvalidState {
+                    message: format!("fork 记录列表序列化失败：{e}"),
+                })?;
+            let payload_value =
+                serde_json::to_value(&pending.record).map_err(|e| RecoveryError::InvalidState {
+                    message: format!("fork 事件序列化失败：{e}"),
+                })?;
+            let event_payload = serialize_recovery_mirror(RECOVER_FORK_EVENT, &payload_value)?;
+            let tree_entry_json = serde_json::to_string(&pending.tree_entry).map_err(|e| {
+                RecoveryError::InvalidState {
+                    message: format!("fork 树条目序列化失败：{e}"),
+                }
+            })?;
+            let episodes_json = next_budget.to_json();
+            let prepared = PreparedForkCompletion {
+                next_forks,
+                next_budget,
+                forks_json,
+                episodes_json,
+                event_payload,
+                tree_entry_json,
+            };
+            if let Some(pending) = self.pending_forks.get_mut(pending_key) {
+                pending.prepared = Some(prepared.clone());
+            }
+            prepared
+        };
+
+        if !pending.persistence_complete {
+            self.store
+                .persist_fork_completion(conex_db::RecoveryForkCompletion {
+                    session_id: &self.session_id,
+                    new_run_id: &pending.record.new_run_id,
+                    path_json: &pending.path_json,
+                    original_run_id: &pending.record.from_run_id,
+                    forks_json: &prepared.forks_json,
+                    episodes_json: &prepared.episodes_json,
+                    event_payload: &prepared.event_payload,
+                    tree_entry_json: &prepared.tree_entry_json,
+                })?;
+            if let Some(pending) = self.pending_forks.get_mut(pending_key) {
+                pending.persistence_complete = true;
+            }
+        }
+
+        // 持久化全部成功后才发布 SessionTree 与预算/幂等记录。若树锁失败，
+        // pending 仍保留且已标记持久化完成，重试不会重复写事件或再次 spawn。
+        {
+            let mut tree = self.tree.lock().map_err(|e| RecoveryError::InvalidState {
+                message: format!("会话树锁中毒：{e}"),
+            })?;
+            if let Some(existing) = tree.entry(&pending.record.new_leaf_id) {
+                if existing != &pending.tree_entry {
+                    return Err(RecoveryError::InvalidState {
+                        message: format!(
+                            "恢复 fork 叶子 id 已被其他分支占用：{}",
+                            pending.record.new_leaf_id
+                        ),
+                    });
+                }
+            } else {
+                tree.insert_persisted_entry(pending.tree_entry.clone())
+                    .map_err(|e| RecoveryError::InvalidState {
+                        message: format!("会话树 fork 失败：{e}"),
+                    })?;
+            }
+        }
+        self.budget = prepared.next_budget;
+        self.forks = prepared.next_forks;
+        self.pending_forks.remove(pending_key);
+
         Ok(RecoveryOutcome {
             ladder: RecoveryLadder::Ladder3Fork,
-            action: RecoveryAction::Forked { record },
+            action: RecoveryAction::Forked {
+                record: pending.record,
+            },
         })
     }
 
@@ -688,8 +823,10 @@ impl RecoveryCoordinator {
             ctx.retries,
         );
         if !self.needs_user.iter().any(|id| id == &ctx.subagent_run_id) {
-            self.needs_user.push(ctx.subagent_run_id.clone());
-            self.persist_needs_user()?;
+            let mut next_needs_user = self.needs_user.clone();
+            next_needs_user.push(ctx.subagent_run_id.clone());
+            self.persist_needs_user(&next_needs_user)?;
+            self.needs_user = next_needs_user;
         }
         // DM-05 降级路径：UserReport 镜像 + 顶层 type 键（attempts 尝试
         // 明细超出 typed 变体形状——注册表明确「attempts 不在事件面」，
@@ -698,9 +835,9 @@ impl RecoveryCoordinator {
             serde_json::to_value(&report).map_err(|e| RecoveryError::InvalidState {
                 message: format!("上报事件序列化失败：{e}"),
             })?;
-        self.store.append_event(
+        self.store.append_recovery_report_once(
             &self.session_id,
-            RECOVER_REPORT_EVENT,
+            &ctx.subagent_run_id,
             &serialize_recovery_mirror(RECOVER_REPORT_EVENT, &payload_value)?,
         )?;
         Ok(RecoveryOutcome {
@@ -710,34 +847,43 @@ impl RecoveryCoordinator {
     }
 
     /// 阶梯 2 确认：主 agent 已注入激活指令处理该 run——通知置
-    /// pending = false（幂等），重启后不再重排入队。
+    /// pending = false（幂等），重启后不再重排入队。通知元数据与确认事件
+    /// 由 RecoveryStore 在一个原子写中提交；写入失败时保留内存 pending 状态，供重试。
     ///
     /// EV-08：每次实际翻转（pending→false）发射 `recovery-acknowledged`
     /// 留痕事件（动作链闭合——「主 agent 已处理该通知」可查；幂等二次
     /// 确认无翻转不发）。
     pub fn acknowledge(&mut self, subagent_run_id: &str) -> Result<bool, RecoveryError> {
+        let mut next_notifications = self.notifications.clone();
         let mut changed = false;
-        for notification in &mut self.notifications {
+        for notification in &mut next_notifications {
             if notification.subagent_run_id == subagent_run_id && notification.pending {
                 notification.pending = false;
                 changed = true;
             }
         }
         if changed {
-            self.persist_notifications()?;
+            let notification_json = serde_json::to_string(&next_notifications).map_err(|e| {
+                RecoveryError::InvalidState {
+                    message: format!("通知列表序列化失败：{e}"),
+                }
+            })?;
             // DM-05 typed 序列化：字段形状与 engine-events.json 注册表
             // 一致（recovery-acknowledged；notificationId 缺省 None——
             // RecoveryNotification 无独立 id，subagentRunId 即关联键）
-            self.store.append_event(
-                &self.session_id,
-                RECOVER_ACKNOWLEDGED_EVENT,
-                &serialize_recovery_typed(&AgentEvent::RecoveryAcknowledged {
+            let acknowledgment_payload =
+                serialize_recovery_typed(&AgentEvent::RecoveryAcknowledged {
                     session_id: self.session_id.clone(),
                     timestamp: conex_shared::time::now_iso_utc(),
                     notification_id: None,
                     subagent_run_id: subagent_run_id.to_string(),
-                })?,
+                })?;
+            self.store.persist_acknowledgment(
+                &self.session_id,
+                &notification_json,
+                &acknowledgment_payload,
             )?;
+            self.notifications = next_notifications;
         }
         Ok(changed)
     }
@@ -763,36 +909,11 @@ impl RecoveryCoordinator {
         Ok(count)
     }
 
-    /// 持久化通知列表
-    fn persist_notifications(&self) -> Result<(), RecoveryError> {
-        let raw = serde_json::to_string(&self.notifications).map_err(|e| {
-            RecoveryError::InvalidState {
-                message: format!("通知列表序列化失败：{e}"),
-            }
-        })?;
-        self.store.set_meta(RECOVER_NOTIFICATIONS_KEY, &raw)
-    }
-
-    /// 持久化 fork 记录列表
-    fn persist_forks(&self) -> Result<(), RecoveryError> {
-        let raw = serde_json::to_string(&self.forks).map_err(|e| RecoveryError::InvalidState {
-            message: format!("fork 记录列表序列化失败：{e}"),
-        })?;
-        self.store.set_meta(RECOVER_FORKS_KEY, &raw)
-    }
-
-    /// 持久化预算计数
-    fn persist_budget(&self) -> Result<(), RecoveryError> {
-        self.store
-            .set_meta(RECOVER_EPISODES_KEY, &self.budget.to_json())
-    }
-
     /// 持久化需介入标记列表
-    fn persist_needs_user(&self) -> Result<(), RecoveryError> {
-        let raw =
-            serde_json::to_string(&self.needs_user).map_err(|e| RecoveryError::InvalidState {
-                message: format!("需介入列表序列化失败：{e}"),
-            })?;
+    fn persist_needs_user(&self, needs_user: &[String]) -> Result<(), RecoveryError> {
+        let raw = serde_json::to_string(needs_user).map_err(|e| RecoveryError::InvalidState {
+            message: format!("需介入列表序列化失败：{e}"),
+        })?;
         self.store.set_meta(RECOVER_NEEDS_USER_KEY, &raw)
     }
 }

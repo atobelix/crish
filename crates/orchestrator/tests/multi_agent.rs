@@ -62,8 +62,9 @@ use orchestrator::flow_graph::{
 use orchestrator::persist::{InMemoryStore, Store};
 use orchestrator::recovery::{
     fingerprint, RecoveryAction, RecoveryCoordinator, RecoveryError, RecoveryLadder,
-    RecoveryRetryPolicy, RecoveryStore, RunFailureContext, RECOVER_ESCALATED_EVENT,
-    RECOVER_FORK_EVENT, RECOVER_MAX_EPISODES_KEY, RECOVER_STEERING_EVENT,
+    RecoveryRetryPolicy, RecoveryStore, RunFailureContext, RECOVER_ACKNOWLEDGED_EVENT,
+    RECOVER_ESCALATED_EVENT, RECOVER_FORK_EVENT, RECOVER_MAX_EPISODES_KEY,
+    RECOVER_NOTIFICATIONS_KEY, RECOVER_REPORT_EVENT, RECOVER_STEERING_EVENT,
 };
 use orchestrator::session::SessionTree;
 use orchestrator::steering_queue::PendingMessageQueue;
@@ -461,6 +462,61 @@ impl RecoveryStore for MemRecoveryStore {
             session_id.to_string(),
             event_type.to_string(),
             payload.to_string(),
+        ));
+        Ok(())
+    }
+
+    fn append_recovery_report_once(
+        &self,
+        session_id: &str,
+        subagent_run_id: &str,
+        payload: &str,
+    ) -> Result<bool, RecoveryError> {
+        let mut events = self.events.lock().unwrap();
+        let already_reported =
+            events
+                .iter()
+                .any(|(existing_session, event_type, existing_payload)| {
+                    existing_session == session_id
+                        && event_type == RECOVER_REPORT_EVENT
+                        && serde_json::from_str::<serde_json::Value>(existing_payload)
+                            .ok()
+                            .and_then(|value| {
+                                value
+                                    .get("subagentRunId")
+                                    .and_then(serde_json::Value::as_str)
+                                    .map(str::to_owned)
+                            })
+                            .as_deref()
+                            == Some(subagent_run_id)
+                });
+        if already_reported {
+            return Ok(false);
+        }
+        events.push((
+            session_id.to_string(),
+            RECOVER_REPORT_EVENT.to_string(),
+            payload.to_string(),
+        ));
+        Ok(true)
+    }
+
+    fn persist_acknowledgment(
+        &self,
+        session_id: &str,
+        notification_json: &str,
+        acknowledgment_payload: &str,
+    ) -> Result<(), RecoveryError> {
+        let mut meta = self.meta.lock().unwrap();
+        let mut events = self.events.lock().unwrap();
+        meta.insert(
+            RECOVER_NOTIFICATIONS_KEY.to_string(),
+            notification_json.to_string(),
+        );
+        events.push((
+            session_id.to_string(),
+            RECOVER_ACKNOWLEDGED_EVENT.to_string(),
+            acknowledgment_payload.to_string(),
         ));
         Ok(())
     }

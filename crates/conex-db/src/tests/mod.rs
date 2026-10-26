@@ -10,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 mod cascade_meta;
 mod events;
 mod lease_agents;
+mod recovery_reports;
 mod recovery_tx;
 mod session_body;
 

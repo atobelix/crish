@@ -35,6 +35,7 @@ mod migrate;
 mod migrate_steps;
 pub mod preferences;
 pub mod reader_pool;
+mod recovery_reports;
 mod runs;
 mod schema;
 mod sessions;
@@ -44,7 +45,7 @@ pub use blocks::{BlockState, CompactionBlockRow, BLOCK_SCHEMA_VERSION};
 pub use cas_gc::{compute_sha256_hex, spawn_cas_gc_loop, CasBlobRow, CasGcConfig, GcScanStats};
 pub use compression_store::DbCompressionContextStore;
 pub use error::{DbFailure, DbFailureKind};
-pub use events::StoredEvent;
+pub use events::{RecoveryForkCompletion, StoredEvent};
 pub use explore_docs_quota_store::SessionMetaExploreDocsQuotaStore;
 pub use group_commit::{
     DbWriteHandle, GroupCommitConfig, GroupCommitStats, WriterConnFactory,

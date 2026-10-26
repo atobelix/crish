@@ -105,6 +105,40 @@ impl SessionTree {
         Ok(entry)
     }
 
+    /// 插入已持久化的条目，保留原始 id、父节点、载荷和创建时间。
+    ///
+    /// 用于 Recovery fork 的原子完成记录在重启或同进程重试后重建；
+    /// 与 [Self::fork] 不同，此方法不重新生成 `created_at`。
+    pub fn insert_persisted_entry(
+        &mut self,
+        entry: SessionTreeEntry,
+    ) -> Result<SessionTreeEntry, SessionTreeError> {
+        if let Some(existing) = self.entry(&entry.id) {
+            if existing == &entry {
+                return Ok(existing.clone());
+            }
+            return Err(SessionTreeError::DuplicateId { id: entry.id });
+        }
+        if let Some(parent) = &entry.parent_id {
+            if self.entry(parent).is_none() {
+                return Err(SessionTreeError::NotFound { id: parent.clone() });
+            }
+        }
+        if let SessionTreeEntryKind::BranchSummary {
+            abandoned_leaf_id: Some(abandoned),
+            ..
+        } = &entry.kind
+        {
+            if self.entry(abandoned).is_none() {
+                return Err(SessionTreeError::NotFound {
+                    id: abandoned.clone(),
+                });
+            }
+        }
+        self.push_entry(entry.clone());
+        Ok(entry)
+    }
+
     /// 叶子移动：当前叶子指针迁移到 target_leaf_id（None = 根前位置），
     /// 不新增条目（session-tree.test.ts:33 语义）。
     ///

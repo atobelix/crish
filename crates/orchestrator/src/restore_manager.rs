@@ -13,8 +13,12 @@ use super::{
     INTERRUPTED_ERROR, INTERRUPTED_REASON, RUN_INTERRUPTED_EVENT,
 };
 use crate::now_ms;
-use crate::persist::{PersistedEvent, Store, StoreError};
-use crate::session::{SessionRecord, CONTEXT_COMPRESSION_END_EVENT, SESSION_LEAF_MOVED_EVENT};
+use crate::persist::{PersistedEvent, RecoveryForkTreeEntry, Store, StoreError};
+use crate::recovery::{fork_node_payload, ForkRecord, RECOVER_FORK_EVENT};
+use crate::session::{
+    SessionRecord, SessionTreeEntry, SessionTreeEntryKind, CONTEXT_COMPRESSION_END_EVENT,
+    SESSION_LEAF_MOVED_EVENT,
+};
 
 /// 重启恢复管理器（B4.3）
 pub struct RestoreManager;
@@ -315,6 +319,135 @@ impl RestoreManager {
             } else {
                 0
             };
+            let mut sidecar_by_sequence = HashMap::<u64, RecoveryForkTreeEntry>::new();
+            let mut sidecar_ids = HashSet::new();
+            for sidecar_entry in store
+                .load_recovery_fork_tree_entries(&session.session_id)
+                .await?
+            {
+                if sidecar_entry.event_sequence == 0
+                    || !sidecar_ids.insert(sidecar_entry.entry.id.clone())
+                    || sidecar_by_sequence
+                        .insert(sidecar_entry.event_sequence, sidecar_entry)
+                        .is_some()
+                {
+                    return Err(RestoreError::new(
+                        "recovery_fork_tree_sidecar_invalid",
+                        format!(
+                            "会话 {} 的 fork 树 sidecar 存在重复或无效键",
+                            session.session_id
+                        ),
+                    ));
+                }
+            }
+
+            // 校验全部 fork event，包括快照锚点之前的历史。旧快照若已越过
+            // fork event，却没有保存完整树节点，则不能从 ForkRecord 猜 task。
+            const FORK_EVENT_PAGE_SIZE: u64 = 500;
+            let mut fork_events = Vec::new();
+            let mut fork_page_after = 0u64;
+            loop {
+                let page = store
+                    .query_session_events_by_type(
+                        &session.session_id,
+                        RECOVER_FORK_EVENT,
+                        fork_page_after,
+                        Some(FORK_EVENT_PAGE_SIZE),
+                    )
+                    .await?;
+                if page.is_empty() {
+                    break;
+                }
+                fork_page_after = page
+                    .last()
+                    .map(|event| event.sequence)
+                    .unwrap_or(fork_page_after);
+                let exhausted = page.len() < FORK_EVENT_PAGE_SIZE as usize;
+                fork_events.extend(page);
+                if exhausted {
+                    break;
+                }
+            }
+            let mut fork_entries_for_replay = HashMap::<u64, SessionTreeEntry>::new();
+            for fork_event in &fork_events {
+                let record = parse_recovery_fork_record(fork_event)?;
+                let sidecar_entry = sidecar_by_sequence.remove(&fork_event.sequence);
+                if fork_event.sequence <= base {
+                    if let Some(sidecar_entry) = sidecar_entry {
+                        validate_recovery_fork_tree_entry(
+                            fork_event,
+                            &record,
+                            &sidecar_entry.entry,
+                        )?;
+                        if let Some(existing) = session
+                            .branches
+                            .iter()
+                            .find(|entry| entry.id == sidecar_entry.entry.id)
+                        {
+                            if existing != &sidecar_entry.entry {
+                                return Err(RestoreError::new(
+                                    "recovery_fork_tree_entry_conflict",
+                                    format!(
+                                        "快照中的 fork 条目 {} 与持久化 sidecar 冲突",
+                                        sidecar_entry.entry.id
+                                    ),
+                                ));
+                            }
+                        } else {
+                            if let Some(parent_id) = &sidecar_entry.entry.parent_id {
+                                if !session.branches.iter().any(|entry| entry.id == *parent_id) {
+                                    return Err(RestoreError::new(
+                                        "recovery_fork_parent_missing",
+                                        format!(
+                                            "历史 fork 条目 {} 缺少父节点 {}",
+                                            sidecar_entry.entry.id, parent_id
+                                        ),
+                                    ));
+                                }
+                            }
+                            // 快照锚点已覆盖此事件，只补树条目，不移动快照中较新的当前叶子。
+                            session.branches.push(sidecar_entry.entry);
+                        }
+                    } else {
+                        let Some(snapshot_entry) = session
+                            .branches
+                            .iter()
+                            .find(|entry| entry.id == record.new_leaf_id)
+                        else {
+                            return Err(RestoreError::new(
+                                "recovery_fork_tree_payload_missing",
+                                format!(
+                                    "历史 fork {} 已被快照锚点覆盖，但快照与 sidecar 都没有完整树条目；无法恢复 task",
+                                    record.new_leaf_id
+                                ),
+                            ));
+                        };
+                        validate_recovery_fork_tree_entry(fork_event, &record, snapshot_entry)?;
+                    }
+                } else {
+                    let Some(sidecar_entry) = sidecar_entry else {
+                        return Err(RestoreError::new(
+                            "recovery_fork_tree_payload_missing",
+                            format!(
+                                "fork event {} 缺少完整树条目 sidecar：{}",
+                                fork_event.sequence, record.new_leaf_id
+                            ),
+                        ));
+                    };
+                    validate_recovery_fork_tree_entry(fork_event, &record, &sidecar_entry.entry)?;
+                    fork_entries_for_replay.insert(fork_event.sequence, sidecar_entry.entry);
+                }
+            }
+            if let Some((sequence, orphan)) = sidecar_by_sequence.into_iter().next() {
+                return Err(RestoreError::new(
+                    "recovery_fork_tree_event_missing",
+                    format!(
+                        "会话 {} 的 fork 树条目 {} 指向不存在的 event sequence {sequence}",
+                        session.session_id, orphan.entry.id
+                    ),
+                ));
+            }
+
             // 1C-3：分页加载快照锚点后事件，避免 `limit=None` 全量加载导致
             // 恢复路径内存峰值随事件量线性增长。PAGE_SIZE=500：按 sequence
             // 升序翻页直到无更多事件，结果集与全量加载一致（crash_consistency
@@ -338,7 +471,18 @@ impl RestoreManager {
             }
             for event in &events {
                 last_sequence = last_sequence.max(event.sequence);
-                if event.event_type == SESSION_LEAF_MOVED_EVENT {
+                if event.event_type == RECOVER_FORK_EVENT {
+                    let entry =
+                        fork_entries_for_replay
+                            .remove(&event.sequence)
+                            .ok_or_else(|| {
+                                RestoreError::new(
+                                    "recovery_fork_tree_payload_missing",
+                                    format!("fork event {} 没有对应的完整树条目", event.sequence),
+                                )
+                            })?;
+                    apply_recovery_fork_tree_entry(session, entry)?;
+                } else if event.event_type == SESSION_LEAF_MOVED_EVENT {
                     // 叶子移动重放（载荷损坏时跳过，不中断恢复；失败必须留痕）
                     if let Err(e) = session.apply_leaf_move_event(&event.payload) {
                         tracing::warn!(
@@ -364,6 +508,15 @@ impl RestoreManager {
                         ),
                     }
                 }
+            }
+            if let Some((sequence, entry)) = fork_entries_for_replay.into_iter().next() {
+                return Err(RestoreError::new(
+                    "recovery_fork_event_not_replayed",
+                    format!(
+                        "会话 {} 的 fork 树条目 {} sequence {sequence} 不在增量事件中",
+                        session.session_id, entry.id
+                    ),
+                ));
             }
         }
 
@@ -966,4 +1119,99 @@ pub fn is_blocked_reason(reason: Option<&str>) -> bool {
         reason,
         Some("goal-blocked") | Some("goal-max-rounds") | Some("goal-stalled")
     )
+}
+
+fn parse_recovery_fork_record(event: &PersistedEvent) -> Result<ForkRecord, RestoreError> {
+    serde_json::from_str(&event.payload).map_err(|error| {
+        RestoreError::new(
+            "recovery_fork_event_invalid",
+            format!("recovery-fork event {} 无法解析：{error}", event.sequence),
+        )
+    })
+}
+
+fn validate_recovery_fork_tree_entry(
+    event: &PersistedEvent,
+    record: &ForkRecord,
+    entry: &SessionTreeEntry,
+) -> Result<(), RestoreError> {
+    if entry.id != record.new_leaf_id
+        || entry.parent_id.as_deref() != Some(record.from_leaf_id.as_str())
+    {
+        return Err(RestoreError::new(
+            "recovery_fork_tree_entry_mismatch",
+            format!(
+                "fork event {} 与树条目 {} 的 id/parent 不匹配",
+                event.sequence, entry.id
+            ),
+        ));
+    }
+    let payload = match &entry.kind {
+        SessionTreeEntryKind::Node { payload } => payload,
+        SessionTreeEntryKind::BranchSummary { .. } => {
+            return Err(RestoreError::new(
+                "recovery_fork_tree_entry_mismatch",
+                format!("fork event {} 指向非节点条目 {}", event.sequence, entry.id),
+            ));
+        }
+    };
+    let task = payload
+        .get("task")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| {
+            RestoreError::new(
+                "recovery_fork_tree_payload_missing_task",
+                format!("fork 树条目 {} 缺少 task，无法无损恢复", entry.id),
+            )
+        })?;
+    if payload != &fork_node_payload(record, task) {
+        return Err(RestoreError::new(
+            "recovery_fork_tree_entry_mismatch",
+            format!(
+                "fork event {} 与树条目 {} 的 payload 不匹配",
+                event.sequence, entry.id
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn apply_recovery_fork_tree_entry(
+    session: &mut SessionRecord,
+    entry: SessionTreeEntry,
+) -> Result<(), RestoreError> {
+    if let Some(existing) = session
+        .branches
+        .iter()
+        .find(|existing| existing.id == entry.id)
+    {
+        if existing != &entry {
+            return Err(RestoreError::new(
+                "recovery_fork_tree_entry_conflict",
+                format!(
+                    "会话 {} 的 fork 条目 {} 与快照冲突",
+                    session.session_id, entry.id
+                ),
+            ));
+        }
+        return Ok(());
+    }
+    if let Some(parent_id) = &entry.parent_id {
+        if !session
+            .branches
+            .iter()
+            .any(|existing| existing.id == *parent_id)
+        {
+            return Err(RestoreError::new(
+                "recovery_fork_parent_missing",
+                format!(
+                    "会话 {} 的 fork 条目 {} 缺少父节点 {}",
+                    session.session_id, entry.id, parent_id
+                ),
+            ));
+        }
+    }
+    session.current_leaf_id = Some(entry.id.clone());
+    session.branches.push(entry);
+    Ok(())
 }

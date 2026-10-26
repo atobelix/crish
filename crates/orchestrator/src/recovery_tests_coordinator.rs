@@ -88,10 +88,12 @@ async fn ladder2_activation_path_and_acknowledge() {
             .as_ref()
             .and_then(|m| m.get("kind"))
             .and_then(|k| k.as_str()),
-        Some(session_loop::steering::metadata_kind_wire(
-            conex_types::message::AgentMessageMetadataKind::Steering
+        Some(
+            session_loop::steering::metadata_kind_wire(
+                conex_types::message::AgentMessageMetadataKind::Steering
+            )
+            .as_str()
         )
-        .as_str())
     );
     drop(queue);
     // acknowledge：主 agent 已处理 → pending = false
@@ -117,6 +119,218 @@ async fn ladder2_activation_path_and_acknowledge() {
     assert_eq!(value["sessionId"], "s1");
     assert_eq!(value["subagentRunId"], "run-1", "载荷携带被确认的 run id");
     assert!(value["timestamp"].as_str().is_some(), "时间戳非空");
+}
+
+#[tokio::test]
+async fn acknowledge_persist_failure_keeps_pending_state_and_retry_persists() {
+    let (env, mut coordinator) = env();
+    coordinator
+        .on_subagent_run_failure(&ctx("run-1", ProviderErrorKind::Timeout, 3, 61_000))
+        .await
+        .unwrap();
+    env.store.fail_next_meta_write(RECOVER_NOTIFICATIONS_KEY);
+
+    assert!(matches!(
+        coordinator.acknowledge("run-1"),
+        Err(RecoveryError::PersistFailed { .. })
+    ));
+    assert_eq!(coordinator.pending_notifications(), 1);
+
+    let restarted_after_failure = RecoveryCoordinator::new(
+        "s1",
+        env.store.clone(),
+        Arc::new(Mutex::new(PendingMessageQueue::new())),
+        env.tree.clone(),
+        env.spawner.clone(),
+        RecoveryRetryPolicy::default(),
+    )
+    .unwrap();
+    assert_eq!(restarted_after_failure.pending_notifications(), 1);
+
+    assert!(coordinator.acknowledge("run-1").unwrap());
+    assert_eq!(coordinator.pending_notifications(), 0);
+    let restarted_after_retry = RecoveryCoordinator::new(
+        "s1",
+        env.store.clone(),
+        Arc::new(Mutex::new(PendingMessageQueue::new())),
+        env.tree.clone(),
+        env.spawner.clone(),
+        RecoveryRetryPolicy::default(),
+    )
+    .unwrap();
+    assert_eq!(restarted_after_retry.pending_notifications(), 0);
+    assert_eq!(
+        env.store
+            .events()
+            .iter()
+            .filter(|(_, event_type, _)| event_type == RECOVER_ACKNOWLEDGED_EVENT)
+            .count(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn acknowledge_event_failure_keeps_pending_state_and_retry_persists() {
+    let (env, mut coordinator) = env();
+    coordinator
+        .on_subagent_run_failure(&ctx("run-1", ProviderErrorKind::Timeout, 3, 61_000))
+        .await
+        .unwrap();
+    env.store.fail_next_event_append(RECOVER_ACKNOWLEDGED_EVENT);
+
+    assert!(matches!(
+        coordinator.acknowledge("run-1"),
+        Err(RecoveryError::PersistFailed { .. })
+    ));
+    assert_eq!(coordinator.pending_notifications(), 1);
+
+    let restarted_after_failure = RecoveryCoordinator::new(
+        "s1",
+        env.store.clone(),
+        Arc::new(Mutex::new(PendingMessageQueue::new())),
+        env.tree.clone(),
+        env.spawner.clone(),
+        RecoveryRetryPolicy::default(),
+    )
+    .unwrap();
+    assert_eq!(restarted_after_failure.pending_notifications(), 1);
+
+    assert!(coordinator.acknowledge("run-1").unwrap());
+    assert_eq!(coordinator.pending_notifications(), 0);
+    let restarted_after_retry = RecoveryCoordinator::new(
+        "s1",
+        env.store.clone(),
+        Arc::new(Mutex::new(PendingMessageQueue::new())),
+        env.tree.clone(),
+        env.spawner.clone(),
+        RecoveryRetryPolicy::default(),
+    )
+    .unwrap();
+    assert_eq!(restarted_after_retry.pending_notifications(), 0);
+    assert_eq!(
+        env.store
+            .events()
+            .iter()
+            .filter(|(_, event_type, _)| event_type == RECOVER_ACKNOWLEDGED_EVENT)
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn report_persist_failure_keeps_needs_user_state_and_retry_persists() {
+    let (env, mut coordinator) = env();
+    let failure_ctx = ctx("run-report", ProviderErrorKind::ServerError, 5, 61_000);
+    env.store.fail_next_meta_write(RECOVER_NEEDS_USER_KEY);
+
+    assert!(matches!(
+        coordinator.report_to_user(&failure_ctx),
+        Err(RecoveryError::PersistFailed { .. })
+    ));
+    assert!(!coordinator.run_needs_user("run-report"));
+
+    let failed_restart = RecoveryCoordinator::new(
+        "s1",
+        env.store.clone(),
+        Arc::new(Mutex::new(PendingMessageQueue::new())),
+        env.tree.clone(),
+        env.spawner.clone(),
+        RecoveryRetryPolicy::default(),
+    )
+    .unwrap();
+    assert!(!failed_restart.run_needs_user("run-report"));
+
+    coordinator.report_to_user(&failure_ctx).unwrap();
+    assert!(coordinator.run_needs_user("run-report"));
+    let successful_restart = RecoveryCoordinator::new(
+        "s1",
+        env.store.clone(),
+        Arc::new(Mutex::new(PendingMessageQueue::new())),
+        env.tree.clone(),
+        env.spawner.clone(),
+        RecoveryRetryPolicy::default(),
+    )
+    .unwrap();
+    assert!(successful_restart.run_needs_user("run-report"));
+    assert_eq!(
+        env.store
+            .events()
+            .iter()
+            .filter(|(_, event_type, _)| event_type == RECOVER_REPORT_EVENT)
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn report_event_failure_keeps_persisted_state_and_retry_appends_event() {
+    let (env, mut coordinator) = env();
+    let failure_ctx = ctx(
+        "run-report-event",
+        ProviderErrorKind::ServerError,
+        5,
+        61_000,
+    );
+    env.store.fail_next_event_append(RECOVER_REPORT_EVENT);
+
+    assert!(matches!(
+        coordinator.report_to_user(&failure_ctx),
+        Err(RecoveryError::PersistFailed { .. })
+    ));
+    assert!(coordinator.run_needs_user("run-report-event"));
+
+    let restarted_after_failure = RecoveryCoordinator::new(
+        "s1",
+        env.store.clone(),
+        Arc::new(Mutex::new(PendingMessageQueue::new())),
+        env.tree.clone(),
+        env.spawner.clone(),
+        RecoveryRetryPolicy::default(),
+    )
+    .unwrap();
+    assert!(restarted_after_failure.run_needs_user("run-report-event"));
+
+    coordinator.report_to_user(&failure_ctx).unwrap();
+    assert_eq!(
+        env.store
+            .events()
+            .iter()
+            .filter(|(_, event_type, _)| event_type == RECOVER_REPORT_EVENT)
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn report_to_user_is_idempotent_per_run_but_allows_another_run() {
+    let (env, mut coordinator) = env();
+    let first_run = ctx("run-report-once", ProviderErrorKind::ServerError, 5, 61_000);
+    coordinator.report_to_user(&first_run).unwrap();
+    coordinator.report_to_user(&first_run).unwrap();
+
+    let second_run = ctx("run-report-other", ProviderErrorKind::ServerError, 5, 61_000);
+    coordinator.report_to_user(&second_run).unwrap();
+    coordinator.report_to_user(&second_run).unwrap();
+
+    let report_events: Vec<_> = env
+        .store
+        .events()
+        .into_iter()
+        .filter(|(_, event_type, _)| event_type == RECOVER_REPORT_EVENT)
+        .collect();
+    assert_eq!(report_events.len(), 2, "每个 run 只能有一个用户报告事件");
+    let run_ids: Vec<_> = report_events
+        .iter()
+        .map(|(_, _, payload)| {
+            serde_json::from_str::<serde_json::Value>(payload)
+                .unwrap()["subagentRunId"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        })
+        .collect();
+    assert!(run_ids.contains(&"run-report-once".to_string()));
+    assert!(run_ids.contains(&"run-report-other".to_string()));
 }
 
 /// 重启恢复：未处理的阶梯 2 通知仍在队列（04 C7 验收 5）
@@ -421,7 +635,7 @@ async fn ladder3_fork_without_leaf_rejected() {
 
 /// fork spawn 失败 → 结构化错误上抛（不 panic、原 run 状态不变）
 #[tokio::test]
-async fn ladder3_spawn_failure_escalates() {
+async fn ladder3_spawn_failure_keeps_tree_unchanged_and_retry_succeeds() {
     let store = InMemoryRecoveryStore::new();
     let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
     let tree = Arc::new(Mutex::new(SessionTree::new("s1")));
@@ -429,13 +643,13 @@ async fn ladder3_spawn_failure_escalates() {
         .unwrap()
         .append("leaf-a", json!({ "text": "root" }))
         .unwrap();
-    let spawner = RecordingSpawner::rejecting();
+    let spawner = RecordingSpawner::rejecting_once();
     let mut coordinator = RecoveryCoordinator::new(
         "s1",
         store.clone(),
         queue.clone(),
         tree.clone(),
-        spawner,
+        spawner.clone(),
         RecoveryRetryPolicy {
             max_retries: 5,
             ..RecoveryRetryPolicy::default()
@@ -443,6 +657,7 @@ async fn ladder3_spawn_failure_escalates() {
     )
     .unwrap();
     let failure_ctx = ctx("run-1", ProviderErrorKind::ServerError, 4, 61_000);
+    let original_tree = tree.lock().unwrap().clone();
     let err = coordinator
         .fork_and_reassign(&failure_ctx)
         .await
@@ -451,6 +666,7 @@ async fn ladder3_spawn_failure_escalates() {
         matches!(err, RecoveryError::PersistFailed { .. }),
         "spawn 失败必须结构化上抛：{err:?}"
     );
+    assert_eq!(*tree.lock().unwrap(), original_tree);
     // 预算未消费（spawn 失败不计数）
     assert_eq!(
         coordinator
@@ -458,6 +674,176 @@ async fn ladder3_spawn_failure_escalates() {
             .count(&fingerprint("sub-1", "完成模块 A")),
         0
     );
+
+    let outcome = coordinator
+        .fork_and_reassign(&failure_ctx)
+        .await
+        .expect("retry with the same coordinator should succeed");
+    let RecoveryAction::Forked { record } = outcome.action else {
+        panic!("expected fork outcome");
+    };
+    assert_eq!(record.new_run_id, "fork-run-0");
+    let tree_after_retry = tree.lock().unwrap();
+    assert_eq!(
+        tree_after_retry.entries().len(),
+        original_tree.entries().len() + 1
+    );
+    assert_eq!(
+        tree_after_retry.current_leaf_id(),
+        Some(record.new_leaf_id.as_str())
+    );
+    assert_eq!(
+        tree_after_retry
+            .entry(&record.new_leaf_id)
+            .and_then(|entry| entry.parent_id.as_deref()),
+        Some("leaf-a")
+    );
+    assert_eq!(spawner.requests().len(), 2);
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ForkCompletionFailurePoint {
+    Path,
+    OriginalRunStatus,
+    ForksMetadata,
+    EpisodesMetadata,
+    Event,
+}
+
+/// spawn 成功后的任一收口写入失败都保留 pending run；同协调器重试只补齐
+/// 持久化并在完整成功后一次性发布树、预算与幂等记录。
+#[tokio::test]
+async fn ladder3_completion_failures_retry_without_respawn_or_early_publish() {
+    let failure_points = [
+        ForkCompletionFailurePoint::Path,
+        ForkCompletionFailurePoint::OriginalRunStatus,
+        ForkCompletionFailurePoint::ForksMetadata,
+        ForkCompletionFailurePoint::EpisodesMetadata,
+        ForkCompletionFailurePoint::Event,
+    ];
+
+    for failure_point in failure_points {
+        let (env, mut coordinator) = env();
+        let failure_ctx = ctx("run-retry", ProviderErrorKind::ServerError, 4, 61_000);
+        let original_tree = env.tree.lock().unwrap().clone();
+        match failure_point {
+            ForkCompletionFailurePoint::Path => {
+                env.store.fail_next_path_write("fork-run-0");
+            }
+            ForkCompletionFailurePoint::OriginalRunStatus => {
+                env.store.fail_next_run_status_write("run-retry");
+            }
+            ForkCompletionFailurePoint::ForksMetadata => {
+                env.store.fail_next_meta_write(RECOVER_FORKS_KEY);
+            }
+            ForkCompletionFailurePoint::EpisodesMetadata => {
+                env.store.fail_next_meta_write(RECOVER_EPISODES_KEY);
+            }
+            ForkCompletionFailurePoint::Event => {
+                env.store.fail_next_event_append(RECOVER_FORK_EVENT);
+            }
+        }
+
+        let error = coordinator
+            .fork_and_reassign(&failure_ctx)
+            .await
+            .expect_err("注入的 fork 收口写入失败必须向上返回");
+        assert!(
+            matches!(error, RecoveryError::PersistFailed { .. }),
+            "{failure_point:?} must report a persistence error: {error:?}"
+        );
+        assert_eq!(env.spawner.requests().len(), 1, "只应 spawn 一次");
+        assert_eq!(
+            *env.tree.lock().unwrap(),
+            original_tree,
+            "失败时不发布树分支"
+        );
+        assert_eq!(
+            coordinator
+                .budget()
+                .count(&fingerprint("sub-1", "完成模块 A")),
+            0,
+            "失败时不发布预算计数"
+        );
+        assert!(coordinator.forks.is_empty(), "失败时不发布 fork 记录");
+        assert_eq!(
+            coordinator.pending_forks.len(),
+            1,
+            "保留已 spawn run 供重试"
+        );
+        assert_eq!(
+            env.store
+                .events()
+                .iter()
+                .filter(|(_, event_type, _)| event_type == RECOVER_FORK_EVENT)
+                .count(),
+            0,
+            "注入事件失败时事件不得假装成功"
+        );
+
+        let outcome = coordinator
+            .fork_and_reassign(&failure_ctx)
+            .await
+            .expect("同协调器重试应完成待处理 fork");
+        let RecoveryAction::Forked { record } = outcome.action else {
+            panic!("期望 fork outcome");
+        };
+        assert_eq!(record.new_run_id, "fork-run-0");
+        assert_eq!(env.spawner.requests().len(), 1, "重试不得再次 spawn");
+        assert_eq!(coordinator.pending_forks.len(), 0);
+        assert_eq!(coordinator.forks, vec![record.clone()]);
+        assert_eq!(
+            coordinator
+                .budget()
+                .count(&fingerprint("sub-1", "完成模块 A")),
+            1
+        );
+
+        let tree = env.tree.lock().unwrap();
+        assert_eq!(tree.entries().len(), original_tree.entries().len() + 1);
+        assert_eq!(tree.current_leaf_id(), Some(record.new_leaf_id.as_str()));
+        drop(tree);
+
+        let path: Vec<String> = serde_json::from_str(
+            env.store
+                .path("fork-run-0")
+                .as_deref()
+                .expect("新 run 路径必须落库"),
+        )
+        .expect("新 run 路径必须是合法 JSON");
+        assert_eq!(path.last(), Some(&record.new_leaf_id));
+        assert_eq!(
+            env.store.run_status("run-retry"),
+            Some(("failed".to_string(), "recovery-fork".to_string()))
+        );
+        let persisted_forks: Vec<ForkRecord> = serde_json::from_str(
+            &env.store
+                .get_meta(RECOVER_FORKS_KEY)
+                .unwrap()
+                .expect("fork 列表必须落库"),
+        )
+        .expect("fork 列表必须是合法 JSON");
+        assert_eq!(persisted_forks, vec![record.clone()]);
+        let episodes = env
+            .store
+            .get_meta(RECOVER_EPISODES_KEY)
+            .unwrap()
+            .expect("预算必须落库");
+        assert_eq!(
+            RecoveryBudget::from_json(Some(&episodes), RecoveryBudget::default_limit())
+                .count(&record.fingerprint),
+            1
+        );
+        assert_eq!(
+            env.store
+                .events()
+                .iter()
+                .filter(|(_, event_type, _)| event_type == RECOVER_FORK_EVENT)
+                .count(),
+            1,
+            "retry 只追加一个 fork 事件"
+        );
+    }
 }
 
 // ── DM-05 直写路径规范化：payload 顶层 type 键 ──────────────────
@@ -489,7 +875,12 @@ async fn recovery_event_payload_type_tagged() {
     }
     // 预算耗尽：fork 路径 budget-denied + report
     coordinator
-        .fork_and_reassign(&ctx("run-fork-3", ProviderErrorKind::ServerError, 4, 61_000))
+        .fork_and_reassign(&ctx(
+            "run-fork-3",
+            ProviderErrorKind::ServerError,
+            4,
+            61_000,
+        ))
         .await
         .unwrap();
     // 预算耗尽：on_subagent_run_failure 路径 budget-denied + report
@@ -541,10 +932,8 @@ async fn recovery_event_payload_type_tagged() {
         assert_eq!(d["sessionId"], "s1");
         assert!(d.get("fingerprint").is_some());
     }
-    let denied_ids: Vec<Option<&str>> = denied
-        .iter()
-        .map(|d| d["subagentRunId"].as_str())
-        .collect();
+    let denied_ids: Vec<Option<&str>> =
+        denied.iter().map(|d| d["subagentRunId"].as_str()).collect();
     assert_eq!(
         denied_ids,
         vec![Some("run-fork-3"), Some("run-9")],
@@ -560,8 +949,12 @@ async fn recovery_event_payload_type_tagged() {
     );
     assert_eq!(steering["subagentRunId"], "run-1");
     let fork: serde_json::Value = serde_json::from_str(&payload_of(RECOVER_FORK_EVENT)).unwrap();
-    assert!(fork.get("createdAtMs").is_some(), "fork 镜像保真 createdAtMs");
-    let report: serde_json::Value = serde_json::from_str(&payload_of(RECOVER_REPORT_EVENT)).unwrap();
+    assert!(
+        fork.get("createdAtMs").is_some(),
+        "fork 镜像保真 createdAtMs"
+    );
+    let report: serde_json::Value =
+        serde_json::from_str(&payload_of(RECOVER_REPORT_EVENT)).unwrap();
     assert!(
         report.get("attempts").is_some(),
         "report 镜像保真 attempts（typed 变体不含该字段）"

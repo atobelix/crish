@@ -433,7 +433,7 @@ fn map_run_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredRun> {
 }
 
 /// 当前 UTC 毫秒时间戳（epoch ms；runs / pending_inputs 时间列）
-fn now_millis() -> i64 {
+pub(crate) fn now_millis() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
