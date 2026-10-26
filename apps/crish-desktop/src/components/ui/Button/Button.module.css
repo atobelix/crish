@@ -307,8 +307,9 @@
   --btn-hover-overlay: var(--state-hover);
   --btn-active-overlay: var(--state-active);
   transition:
+    color var(--transition-fast),
     background-color var(--transition-fast),
-    color var(--transition-fast);
+    box-shadow var(--transition-micro);
 }
 
 /* 4 档尺寸：对齐 --row-h-{dense,list,control,chrome} */
@@ -348,13 +349,24 @@
   --btn-h: var(--row-h-chrome);
 }
 
-/* 状态走 --state-* 交互叠加量 */
+/* 状态走 --state-* 交互叠加量：
+ * 1. 继承 .button 基类的 IconButton 统一由 .button::before 伪元素承载单层物理微光，彻底消除本体 background-color 双层叠加翻倍发黑；
+ * 2. 悬浮时平滑加深图标前景色至 var(--text-primary)；
+ * 3. 对无 .button 基类的孤立 .iconButton 退化单层 background-color 兜底，确保仅单层微光生效。
+ */
 .iconButton:where(:hover:not(:disabled):not([aria-disabled='true'])) {
-  background-color: var(--state-hover);
   color: var(--text-primary);
 }
 
-.iconButton:where(:active:not(:disabled):not([aria-disabled='true'])) {
+.iconButton:not(.button):where(
+    :hover:not(:disabled):not([aria-disabled='true'])
+  ) {
+  background-color: var(--state-hover);
+}
+
+.iconButton:not(.button):where(
+    :active:not(:disabled):not([aria-disabled='true'])
+  ) {
   background-color: var(--state-active);
 }
 

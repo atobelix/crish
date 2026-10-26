@@ -25,6 +25,8 @@ import { onUiEvent } from '../../api/uiEvents';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import type { AppSettings } from '../../store/types';
 import { abbreviateModel } from '../../api/modelAbbreviation';
+import { AppIcon } from '../ui/icons/index';
+import { useI18n } from '../../i18n';
 
 import { ModelBadgePickerMenu } from '../provider/ModelBadgePickerMenu';
 
@@ -156,9 +158,10 @@ export function useModelSelection(
   };
 }
 
-interface ModelBadgePickerProps {
+export interface ModelBadgePickerProps {
   engineModel: string;
   needsModelSetup: boolean;
+  needsKeySetup?: boolean;
   showModelDropdown?: boolean;
   setShowModelDropdown?: React.Dispatch<React.SetStateAction<boolean>>;
 }
@@ -166,9 +169,11 @@ interface ModelBadgePickerProps {
 export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
   engineModel,
   needsModelSetup,
+  needsKeySetup = false,
   showModelDropdown: showModelDropdownProp,
   setShowModelDropdown: setShowModelDropdownProp,
 }) => {
+  const { t } = useI18n();
   const [internalShow, setInternalShow] = useState(false);
   const showModelDropdown = showModelDropdownProp ?? internalShow;
   const setShowModelDropdown = setShowModelDropdownProp ?? setInternalShow;
@@ -187,41 +192,84 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
     );
   }, [showModelDropdown, setShowModelDropdown]);
 
-  const renderModelName = (modelId: string) => {
-    if (!modelId) return '选择模型';
-    if (modelId === '填写模型' || modelId === '无可用模型') return modelId;
-    const abbr = abbreviateModel(modelId);
+  const renderBadgeLabel = () => {
+    // 正常配置就绪态
+    if (
+      engineModel &&
+      !needsKeySetup &&
+      !needsModelSetup &&
+      !engineModel.includes('\u586B\u5199') &&
+      !engineModel.includes('\u65E0\u53EF\u7528')
+    ) {
+      const abbr = abbreviateModel(engineModel);
+      return (
+        <span className={styles.modelAdaptiveWrapper}>
+          <span className={styles.modelStandard}>{abbr.standard}</span>
+          <span className={styles.modelCompact}>{abbr.compact}</span>
+          <span className={styles.modelMicro}>{abbr.micro}</span>
+        </span>
+      );
+    }
+
+    // 未配置密钥态或未选模型态：自适应三级阶梯文案
+    const isUnconfigured = needsKeySetup || choiceCount === 0;
+    const standardText = isUnconfigured
+      ? t('models.unconfigured', '未配置模型')
+      : t('models.selectModel', '选择模型');
+    const compactText = isUnconfigured
+      ? t('models.configModel', '配置模型')
+      : t('models.selectModel', '选择模型');
+    const microText = t('models.modelLabel', '模型');
+
     return (
       <span className={styles.modelAdaptiveWrapper}>
-        <span className={styles.modelStandard}>{abbr.standard}</span>
-        <span className={styles.modelCompact}>{abbr.compact}</span>
-        <span className={styles.modelMicro}>{abbr.micro}</span>
+        <span className={styles.modelStandard}>{standardText}</span>
+        <span className={styles.modelCompact}>{compactText}</span>
+        <span className={styles.modelMicro}>{microText}</span>
       </span>
     );
   };
 
+  const tooltipText = useMemo(() => {
+    const activeProf = getActiveProfile();
+    if (activeProf && engineModel && !needsKeySetup && !needsModelSetup) {
+      return `${activeProf.name} · ${engineModel}`;
+    }
+    if (needsKeySetup) {
+      return t(
+        'models.unconfiguredTooltip',
+        '尚未配置模型服务商 · 点击打开配置'
+      );
+    }
+    if (needsModelSetup) {
+      return t(
+        'models.configuredChooseTooltip',
+        '已配置服务商，请选择具体模型'
+      );
+    }
+    return choiceCount > 0
+      ? t('models.chooseModelTooltip', '在此选择模型 · 点击切换')
+      : t('models.unconfiguredTooltip', '尚未配置模型服务商 · 点击打开配置');
+  }, [engineModel, needsKeySetup, needsModelSetup, choiceCount, t]);
+
   return (
     <Suspense fallback={null}>
-      <Tooltip
-        content={
-          getActiveProfile()
-            ? `${getActiveProfile()!.name} · ${engineModel || '未选模型'}`
-            : choiceCount > 0
-              ? '在此选择模型。设置里的默认模型可以不填'
-              : '服务商与模型'
-        }
-        disabled={showModelDropdown}
-      >
+      <Tooltip content={tooltipText} disabled={showModelDropdown}>
         <Button
           ref={badgeRef}
           type="button"
           variant="ghost"
-          className={`${styles.modelBadge} ${showModelDropdown ? styles.active : ''}`}
+          className={`${styles.modelBadge} model-badge-btn ${showModelDropdown ? styles.active : ''}`}
           data-testid="model-selector-button"
           data-needs-model-setup={needsModelSetup ? 'true' : 'false'}
+          data-needs-key-setup={needsKeySetup ? 'true' : 'false'}
           aria-haspopup="menu"
           aria-expanded={showModelDropdown}
-          aria-label="选择模型"
+          aria-label={
+            needsKeySetup
+              ? t('models.unconfiguredAria', '未配置模型，点击进行配置')
+              : t('models.selectModel', '选择模型')
+          }
           style={{ cursor: 'pointer', position: 'relative' }}
           onClick={handleBadgeClick}
         >
@@ -233,17 +281,23 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
               whiteSpace: 'nowrap',
               flex: 1,
               textAlign: 'left',
+              display: 'inline-flex',
+              alignItems: 'center',
             }}
           >
-            {renderModelName(
-              engineModel ||
-                (needsModelSetup
-                  ? '填写模型'
-                  : choiceCount > 0
-                    ? '选择模型'
-                    : '无可用模型')
-            )}
+            {renderBadgeLabel()}
           </span>
+          <AppIcon
+            name="chevron-down"
+            size={11}
+            style={{
+              color: 'var(--text-tertiary)',
+              flexShrink: 0,
+              marginLeft: 3,
+              transition: 'transform var(--transition-micro, 100ms ease)',
+              transform: showModelDropdown ? 'rotate(180deg)' : 'none',
+            }}
+          />
         </Button>
       </Tooltip>
       {showModelDropdown ? (

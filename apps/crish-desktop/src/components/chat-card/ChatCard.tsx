@@ -156,21 +156,23 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       []
     );
 
-    const mainModelBadgeNode = state.showModelPicker ? (
+    const mainModelBadgeNode = (
       <ModelBadgePicker
         engineModel={state.engineModel}
         needsModelSetup={state.needsModelSetup}
+        needsKeySetup={state.needsKeySetup}
         showModelDropdown={state.showModelDropdown}
         setShowModelDropdown={state.setShowModelDropdown}
       />
-    ) : null;
+    );
 
-    const editModelBadgeNode = state.showModelPicker ? (
+    const editModelBadgeNode = (
       <ModelBadgePicker
         engineModel={state.engineModel}
         needsModelSetup={state.needsModelSetup}
+        needsKeySetup={state.needsKeySetup}
       />
-    ) : null;
+    );
 
     // 显式表面过渡状态机（ComposerSurfaceCoordinator）：
     // 严格解耦场景 A（同一会话首条消息发送：自然落底协同滑动）与 场景 B（切换会话标签：极简瞬时直切）

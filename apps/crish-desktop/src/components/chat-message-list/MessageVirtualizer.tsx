@@ -407,7 +407,6 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
           data-vsm-spacer=""
           style={{
             height: `${totalHeight}px`,
-            width: '100%',
             position: 'relative',
             overflow: 'hidden',
             overflowAnchor: 'none',

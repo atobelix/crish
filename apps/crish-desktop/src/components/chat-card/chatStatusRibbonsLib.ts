@@ -32,8 +32,14 @@ export function resolveSetupHintKind(opts: {
   engineHasApiKey?: boolean | null;
   localHasKey?: boolean;
   firstRunOpen?: boolean;
+  /** 会话存在运行时错误时，静默让位给 ComposerErrorBar，严禁双显 */
+  hasRuntimeError?: boolean;
+  /** 空态欢迎面存在时，让位中央导流卡片 */
+  onEmptySurface?: boolean;
 }): SetupHintKind | null {
   if (opts.firstRunOpen) return null;
+  if (opts.hasRuntimeError) return null;
+  if (opts.onEmptySurface) return null;
   // null = 探测中：不展示离线条（避免启动闪一下「引擎离线」）
   if (opts.engineOk === false) return 'engine-down';
   if (
@@ -245,7 +251,6 @@ export function resolveSetupHintAction(kind: SetupHintKind): {
   }
 }
 
-
 /**
  * 是否真正挂载 approval dock DOM。
  * 默认 show=false 防双渲染；count≤0 也不挂（空条无意义）。
@@ -284,4 +289,95 @@ export function resolveApprovalDockAriaLabel(
   const n = Math.max(0, Number.isFinite(Number(count)) ? count | 0 : 0);
   if (n <= 0) return '待确认项';
   return `${n} 项等待确认`;
+}
+
+/**
+ * 输入坞顶部唯一激活条带种类（严格互斥单轨状态机，至多渲染 1 个条带）。
+ * - 'none': 无任何条带挂载（极简状态或全量静默）
+ * - 'engine-crashed': 引擎崩溃判死（L1，强阻断）
+ * - 'runtime-error': 会话运行时终态错误（L2，ComposerErrorBar）
+ * - 'approval': 敏感工具待审批（L3，ApprovalDock）
+ * - 'plan-goal': 任务计划/目标推进（L4，PlanGoalRibbons）
+ * - 'setup-hint': 静态配置软引导（L5，SetupHintBanner）
+ */
+export type ActiveRibbonKind =
+  | 'none'
+  | 'engine-crashed'
+  | 'runtime-error'
+  | 'approval'
+  | 'plan-goal'
+  | 'setup-hint';
+
+export interface ResolveActiveRibbonParams {
+  firstRunOpen: boolean;
+  engineCrashed: boolean;
+  hasRuntimeError: boolean;
+  hasApproval: boolean;
+  hasPlanGoal: boolean;
+  hasSetupHint: boolean;
+  onEmptySurface?: boolean;
+}
+
+/**
+ * 刚性优先级单轨仲裁纯函数（Priority Ladder）。
+ * 任何时刻输入框上方最多只有 1 个条带渲染，绝对禁止多个 banner 垂直堆叠。
+ * Gate 0 (空态主画布向导 / firstRun) ≻ L1 (引擎崩溃) ≻ L2 (配置/执行阻断) ≻ L3 (权限审批) ≻ L4 (任务推进) ≻ L5 (常态引导)
+ */
+export function resolveActiveRibbon(
+  params: ResolveActiveRibbonParams
+): ActiveRibbonKind {
+  // Gate 0: 首次运行向导打开时，输入坞全量通知条带 100% 物理静默
+  if (params.firstRunOpen) {
+    return 'none';
+  }
+
+  // Priority 1 (L1): 引擎崩溃判死，拥有最高阻断优先级
+  if (params.engineCrashed) {
+    return 'engine-crashed';
+  }
+
+  // Priority 2 (L2): 会话运行时终态错误（ComposerErrorBar）
+  if (params.hasRuntimeError) {
+    return 'runtime-error';
+  }
+
+  // Priority 3 (L3): 敏感工具待审批（ApprovalDock）
+  if (params.hasApproval) {
+    return 'approval';
+  }
+
+  // Priority 4 (L4): 任务目标/计划模式推进（PlanGoalRibbons）
+  if (params.hasPlanGoal) {
+    return 'plan-goal';
+  }
+
+  // Priority 5 (L5): 静态配置软引导（SetupHintBanner）
+  if (params.hasSetupHint) {
+    // 空态让位规则：在 session-empty 或空态主画布，中央卡片负责主导流，底部引导软提示让位
+    if (params.onEmptySurface) {
+      return 'none';
+    }
+    return 'setup-hint';
+  }
+
+  return 'none';
+}
+
+const MODEL_CONFIG_ERROR_REGEX =
+  /(?:provider.*not configured|\u6A21\u578B\u670D\u52A1\u5C1A\u672A\u914D\u7F6E|\u8BBE\u7F6E\s*(?:\u2192|->)\s*\u6A21\u578B|\u5C1A\u672A\u914D\u7F6E|\u8BF7\u5148\u914D\u7F6E)/i;
+
+/**
+ * 判断会话运行时错误是否属于模型/密钥未配置（S2 域错误或缺少 key）。
+ * 当命中时，ComposerErrorBar 将智能合并去配置引导动作，无需双显条带。
+ */
+export function isModelConfigurationError(
+  kind?: string | null,
+  message?: string | null
+): boolean {
+  if (kind === 'no_key') return true;
+  const msg = (message || '').toLowerCase();
+  return (
+    (msg.includes('provider') && msg.includes('not configured')) ||
+    MODEL_CONFIG_ERROR_REGEX.test(msg)
+  );
 }

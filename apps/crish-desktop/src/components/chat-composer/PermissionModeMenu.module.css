@@ -1,9 +1,10 @@
 /**
  * PermissionModeMenu.module.css
- * 权限模式菜单样式（T6-6：常驻左槽 + 稳态中性化，退出全橙色常亮）
+ * 权限模式菜单样式（二值形态法典：28px 饱满半圆胶囊与正圆单图标）
  */
 
-.menuHost {
+.menuHost,
+.permModeWrap {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -11,9 +12,19 @@
 }
 
 .trigger {
+  border-radius: 14px;
+}
+
+.permPill,
+.trigger {
   height: 28px;
-  padding: 0 10px 0 8px;
-  border-radius: var(--radius-control);
+  min-height: 28px;
+  max-height: 28px;
+  --btn-h: 28px;
+  --btn-px: 8px;
+  --btn-radius: 14px;
+  padding: 0 8px 0 8px;
+  border-radius: 14px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-secondary);
@@ -35,6 +46,23 @@
     color var(--transition-micro, 100ms ease);
 }
 
+/* 消除 Button 基座自带的 ::before 遮罩叠加，悬停背景由纯 Token 驱动统一为中性浅灰 */
+.permPill::before,
+.trigger::before {
+  display: none;
+}
+
+.permIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.permIcon svg,
 .trigger svg {
   width: 13px;
   height: 13px;
@@ -42,6 +70,9 @@
   color: currentColor;
 }
 
+.permPill:hover,
+.permPill:focus-visible,
+.permPill.isOpen,
 .trigger:hover,
 .trigger:focus-visible,
 .trigger.isOpen {
@@ -49,22 +80,50 @@
   color: var(--text-primary);
 }
 
+.permPill:active,
 .trigger:active {
   background: var(--tint-active);
   color: var(--text-primary);
 }
 
+.permPill:disabled,
 .trigger:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
+.permPill.iconOnly,
+.trigger.iconOnly {
+  width: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  --btn-px: 0px;
+  padding: 0;
+  border-radius: 50%;
+  justify-content: center;
+}
+
+.permPill.iconOnly .permLabel,
+.permPill.iconOnly .permPillChev,
+.trigger.iconOnly .label,
+.trigger.iconOnly .chevron {
+  display: none;
+}
+
+.permPill.fused,
+.trigger.fused {
+  /* 融合形态由外层 ComposerFusedTrigger 或自身端点半圆控制 */
+}
+
+.permLabel,
 .label {
   max-width: 112px;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1;
 }
 
+.permPillChev,
 .chevron {
   width: 11px;
   height: 11px;
@@ -74,6 +133,7 @@
   transition: transform var(--duration-normal) var(--ease-decelerate);
 }
 
+.permPill.isOpen .permPillChev,
 .trigger.isOpen .chevron {
   transform: rotate(180deg);
 }
@@ -82,6 +142,7 @@
    Menu Popover (Portal / Floating)
    ========================================================================== */
 
+.permMenu,
 .menu {
   --perm-menu-pad: 4px;
   --perm-item-radius: 6px;
@@ -116,6 +177,7 @@
   }
 }
 
+.permMenuItem,
 .item {
   width: 100%;
   min-height: 28px;
@@ -139,28 +201,37 @@
     color var(--transition-micro, 100ms ease);
 }
 
+.permMenuItem:hover,
+.permMenuItem:focus-visible,
 .item:hover,
 .item:focus-visible {
   background: var(--tint-hover);
 }
 
+.permMenuItem.isSelected,
 .item[data-selected='true'] {
   font-weight: var(--font-weight-medium, 500);
   background: var(--tint-hover);
   color: var(--text-primary);
 }
 
+.iconWrapper,
 .itemIcon {
   width: 13px;
   height: 13px;
   flex-shrink: 0;
   color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
+.permMenuItem.isSelected .iconWrapper,
 .item[data-selected='true'] .itemIcon {
   color: var(--text-primary);
 }
 
+.labelRow,
 .itemText {
   flex: 1;
   min-width: 0;
@@ -169,6 +240,7 @@
   gap: 1px;
 }
 
+.title,
 .itemLabel {
   line-height: 1.25;
   white-space: nowrap;
@@ -182,6 +254,7 @@
   line-height: 1.25;
 }
 
+.checkIcon,
 .check {
   width: 13px;
   height: 13px;

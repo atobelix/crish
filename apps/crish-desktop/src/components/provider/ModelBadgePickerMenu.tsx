@@ -27,6 +27,7 @@ import { groupLivePickerEntries } from './ModelBadgePickerMenu.data';
 import { recordPendingContextState } from '../../api/provider-profiles/contextStatePending';
 import { AppIcon } from '../ui/icons/index';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
+import { useI18n } from '../../i18n';
 
 export type Props = {
   sessionId?: string | null;
@@ -48,6 +49,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
   side = 'top',
   anchor,
 }) => {
+  const { t } = useI18n();
   const [keyword, setKeyword] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [, setThinkingEpoch] = useState(0);
@@ -167,10 +169,6 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
     onClose();
   }, [onOpenChange, onClose]);
 
-  // 生效档位：命中当前模型 thinking 声明才显示；未选 / 未命中 → 引导重选（不降级）。
-  const currentThinkingDisplay = handoff.selectedTitle ?? '';
-  const thinkingDisplayText = currentThinkingDisplay || '请选择思考档位';
-
   if (!open) return null;
 
   return (
@@ -233,9 +231,109 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
           </Tooltip>
         </div>
 
-        <div className={styles.modelScrollArea}>
+        <div
+          className={styles.modelScrollArea}
+          style={
+            entries.length === 0
+              ? { maxHeight: 'none', minHeight: '160px' }
+              : undefined
+          }
+        >
           {filteredGroups.length === 0 ? (
-            <div className={styles.emptyState}>未找到匹配的模型或厂商</div>
+            entries.length === 0 ? (
+              <div
+                className={styles.emptyGuideState}
+                data-testid="model-picker-empty-guide"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '24px 16px',
+                  gap: '8px',
+                  textAlign: 'center',
+                }}
+              >
+                <div
+                  className={styles.emptyIconCircle}
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '50%',
+                    background: 'var(--tint-hover)',
+                    border: '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--brand)',
+                  }}
+                >
+                  <AppIcon
+                    name="sliders"
+                    size={18}
+                    className={styles.emptyIcon}
+                  />
+                </div>
+                <div
+                  className={styles.emptyTitle}
+                  style={{
+                    fontSize: 'var(--font-size-sm, 13px)',
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  {t('models.unconfiguredTitle', '尚未配置模型服务商')}
+                </div>
+                <div
+                  className={styles.emptySubtitle}
+                  style={{
+                    fontSize: 'var(--font-size-xs, 12px)',
+                    color: 'var(--text-tertiary)',
+                    lineHeight: 1.5,
+                    maxWidth: '220px',
+                  }}
+                >
+                  {t(
+                    'models.unconfiguredDesc',
+                    'Crish 需要配置至少一个 AI 模型服务商才能开始对话与编码'
+                  )}
+                </div>
+                <div
+                  className={styles.emptyState}
+                  style={{
+                    padding: '2px 0 6px',
+                    fontSize: '11px',
+                    color: 'var(--text-tertiary)',
+                  }}
+                >
+                  {t('models.notFound', '未找到匹配的模型或厂商')}
+                </div>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className={styles.emptySettingsCta}
+                  onClick={handleOpenSettings}
+                  data-testid="model-picker-open-settings-btn"
+                  style={{
+                    marginTop: '4px',
+                    height: '28px',
+                    fontSize: 'var(--font-size-xs, 12px)',
+                    borderRadius: '14px',
+                    padding: '0 12px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>{t('models.openSettings', '前往模型设置配置')}</span>
+                  <AppIcon name="arrow-right" size={13} />
+                </Button>
+              </div>
+            ) : (
+              <div className={styles.emptyState}>
+                {t('models.notFound', '未找到匹配的模型或厂商')}
+              </div>
+            )
           ) : (
             filteredGroups.map((group) => (
               <div
@@ -295,12 +393,6 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                   <div className={styles.thinkingSection}>
                     <div className={styles.thinkingHeader}>
                       <span className={styles.thinkingTitle}>思考强度</span>
-                      <span
-                        className={styles.thinkingValue}
-                        data-testid="thinking-value"
-                      >
-                        {thinkingDisplayText}
-                      </span>
                     </div>
                     <div className={styles.thinkingTrack}>
                       {thinkingOptions.map((o) => {

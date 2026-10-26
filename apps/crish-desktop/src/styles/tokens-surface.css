@@ -15,27 +15,27 @@
 :root,
 html[data-theme='default'],
 html[data-theme='light'] {
-  --surface-base-default: #f7f6f4;
+  --surface-base-default: #fcfcfb;
   --surface-base: var(--user-surface-base, var(--surface-base-default));
   --surface-tint-target: var(--user-surface-tint, #ffffff);
   --surface-deep-target: var(--user-surface-deep, #000000);
   --elev-direction: var(--user-elev-direction, -1);
 
-  /* e0 下凹：向深混合 5% 形成清爽下凹槽 */
+  /* e0 下凹：向深混合 3.5% 形成清爽浅下凹槽 */
   --surface-sunken: color-mix(
     in oklab,
     var(--surface-base),
-    var(--surface-deep-target) 5%
+    var(--surface-deep-target) 3.5%
   );
 
-  /* e1 画布：柔和暖白基准地平面 */
+  /* e1 画布：柔和高明度清爽基准地平面（灰度下调 2~3 点） */
   --surface-canvas: var(--surface-base);
 
-  /* e2 外壳：微弱收敛（或外壳透出云母） */
+  /* e2 外壳：微弱收敛（0.8% 微收，透出轻盈通透感） */
   --surface-shell: color-mix(
     in oklab,
     var(--surface-base),
-    var(--surface-deep-target) 1.5%
+    var(--surface-deep-target) 0.8%
   );
 
   /* e3 卡片：向白提升，在暖灰底板上自浮起 */

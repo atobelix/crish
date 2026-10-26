@@ -85,18 +85,76 @@
   position: relative;
 }
 
-/* 消息列居中容器。
+/* 消息列居中容器（Central Column Spacer）
    纵向 padding 归零：顶/底呼吸区由 chatScrollGeometry.ts（CHAT_SCROLL_PAD_TOP/BOTTOM）单轨接管；
    CSS 仅保留水平衬垫，严禁再写同值纵向 padding（几何 SSOT）。 */
 .listInner {
   width: 100%;
-  max-width: min(var(--chat-col-max, 760px), 100%);
+  max-width: var(
+    --chat-column-width,
+    min(var(--chat-col-max, 760px), calc(100% - var(--chat-col-gutter, 48px)))
+  );
   margin-left: auto;
   margin-right: auto;
-  padding: 0 var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
+  padding-left: var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
+  padding-right: var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
+  padding-top: 0;
+  padding-bottom: 0;
   box-sizing: border-box;
   min-width: 0;
   overflow-anchor: none;
+}
+
+/* 顶层视口媒体查询回退（当不支持 @container 或容器未命名时） */
+@media (min-width: 1000px) {
+  .listInner {
+    max-width: min(840px, calc(100% - 64px));
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
+    padding-right: var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
+  }
+}
+
+@media (max-width: 699px) {
+  .listInner {
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+/* 容器查询优先（响应分屏 pane 与 Inspector 抽屉挤压） */
+@container chatContainer (min-width: 1000px) {
+  .listInner {
+    max-width: min(840px, calc(100% - 64px));
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
+    padding-right: var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
+  }
+}
+
+@container chatContainer (min-width: 700px) and (max-width: 999px) {
+  .listInner {
+    max-width: min(760px, calc(100% - 48px));
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
+    padding-right: var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
+  }
+}
+
+@container chatContainer (max-width: 699px) {
+  .listInner {
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
 }
 
 /* 纯净垂直节奏体系（DEF-13）：彻底消除相邻兄弟选择器与外部 margin 黑洞。
@@ -120,12 +178,6 @@
   flex-direction: column;
   gap: var(--space-0_5);
   overflow-y: visible;
-}
-
-@media (max-width: 720px) {
-  .listInner {
-    max-width: 100%;
-  }
 }
 
 /* W3-3: 虚拟滚动超视距 DOM 回收骨架占位态 */

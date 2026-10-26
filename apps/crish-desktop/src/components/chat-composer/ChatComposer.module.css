@@ -22,7 +22,8 @@
    ========================================================================== */
 
 .composerCard {
-  --composer-radius-outer: var(--composer-radius-single, 20px);
+  --composer-radius-outer: var(--radius-dock, 21px);
+  min-height: 42px;
   position: relative;
   z-index: var(--z-dock);
   display: flex;
@@ -30,10 +31,9 @@
   gap: 0;
   width: 100%;
   box-sizing: border-box;
-  padding: var(--space-2_5, 10px) var(--composer-pad-x, 10px)
-    var(--space-2_5, 10px) var(--composer-pad-x-start, 10px);
+  padding: 6px var(--composer-pad-x, 10px) 6px var(--composer-pad-x-start, 10px);
   border: 1px solid var(--edge-rim, var(--border-subtle));
-  border-radius: var(--composer-radius-single, 20px);
+  border-radius: var(--composer-radius-outer);
   background: var(--surface-raised, var(--composer-bg, var(--surface-input)));
   box-shadow: var(
     --shadow-lift-raised,
@@ -49,9 +49,10 @@
 }
 
 .composerCard.isMultiline {
-  padding: var(--space-3, 12px) var(--composer-pad-x, 10px) var(--space-3, 12px)
-    var(--composer-pad-x-start, 10px);
-  border-radius: var(--composer-radius-multi, 20px);
+  --composer-radius-outer: var(--radius-dock, 20px);
+  padding: var(--space-2_5, 10px) var(--composer-pad-x, 10px)
+    var(--space-2_5, 10px) var(--composer-pad-x-start, 10px);
+  border-radius: var(--radius-dock, 20px);
 }
 
 .composerCard.disabled,
@@ -231,9 +232,13 @@
   box-sizing: border-box;
 }
 
+.cancelEditBtn::before {
+  display: none;
+}
+
 .cancelEditBtn:hover,
 .cancelEditBtn:active {
-  background: var(--composer-control-hover-bg);
+  background: var(--composer-control-hover-bg, var(--tint-hover));
   color: var(--text-primary);
 }
 
@@ -262,12 +267,16 @@
     color var(--transition-micro, 100ms ease);
 }
 
+.plusBtn::before {
+  display: none;
+}
+
 .plusBtn.isOn,
 .plusBtn:hover,
 .plusBtn:active,
 .plusBtn:focus-visible,
 .plusBtn.isOpen {
-  background: var(--composer-control-hover-bg);
+  background: var(--composer-control-hover-bg, var(--tint-hover));
   color: var(--text-primary);
 }
 
@@ -304,10 +313,14 @@
     background var(--transition-fast, 120ms ease);
 }
 
+.actionCircleBtn::before {
+  display: none;
+}
+
 .actionCircleBtn:hover,
 .actionCircleBtn:active {
   color: var(--text-primary);
-  background: var(--composer-control-hover-bg);
+  background: var(--composer-control-hover-bg, var(--tint-hover));
 }
 
 .actionCircleBtn svg {

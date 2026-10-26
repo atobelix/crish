@@ -67,15 +67,70 @@
     both;
 }
 
-/* 主列栅格对齐容器 */
+/* 主列栅格对齐容器（输入框、空态、审批浮条的公共宿主） */
 .chatCol {
   width: 100%;
-  max-width: min(var(--chat-col-max, 760px), 100%);
+  max-width: var(
+    --chat-column-width,
+    min(var(--chat-col-max, 760px), calc(100% - var(--chat-col-gutter, 48px)))
+  );
   margin-left: auto;
   margin-right: auto;
-  padding-left: var(--space-5, 20px);
-  padding-right: var(--space-5, 20px);
+  padding-left: var(--stream-pad-x, var(--space-5, 20px));
+  padding-right: var(--stream-pad-x, var(--space-5, 20px));
   box-sizing: border-box;
+}
+
+/* 顶层视口媒体查询回退（当不支持 @container 或容器未命名时） */
+@media (min-width: 1000px) {
+  .chatCol {
+    max-width: min(840px, calc(100% - 64px));
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: var(--stream-pad-x, var(--space-5, 20px));
+    padding-right: var(--stream-pad-x, var(--space-5, 20px));
+  }
+}
+
+@media (max-width: 699px) {
+  .chatCol {
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+/* 容器查询驱动的响应式中心列几何模型（与消息流 .listInner 绝对同宽铅垂咬合） */
+@container chatContainer (min-width: 1000px) {
+  .chatCol {
+    max-width: min(840px, calc(100% - 64px));
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: var(--stream-pad-x, var(--space-5, 20px));
+    padding-right: var(--stream-pad-x, var(--space-5, 20px));
+  }
+}
+
+@container chatContainer (min-width: 700px) and (max-width: 999px) {
+  .chatCol {
+    max-width: min(760px, calc(100% - 48px));
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: var(--stream-pad-x, var(--space-5, 20px));
+    padding-right: var(--stream-pad-x, var(--space-5, 20px));
+  }
+}
+
+@container chatContainer (max-width: 699px) {
+  .chatCol {
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
 }
 
 /* 只保留停靠高度。视觉层绝对定位，落地/回落只做 transform，禁止 flex-grow。 */
@@ -276,18 +331,6 @@
   }
   .modelAdaptiveWrapper .modelMicro {
     display: none;
-  }
-}
-
-@media (max-width: 720px) {
-  .chatCol {
-    max-width: 100%;
-  }
-}
-
-@media (min-width: 1200px) {
-  .chatCol {
-    max-width: min(var(--chat-col-max-wide, 840px), 100%);
   }
 }
 

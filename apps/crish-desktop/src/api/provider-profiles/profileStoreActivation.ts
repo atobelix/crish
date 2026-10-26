@@ -201,6 +201,7 @@ export type ProviderSetupStatus = {
   resolvedProfileId: string | null;
   needsKeySetup: boolean;
   needsModelSetup: boolean;
+  /** 模型选择器视图骨架常驻性（100% 恒定渲染为 true，不随未配 Key 坍塌） */
   showModelPicker: boolean;
 };
 
@@ -234,6 +235,7 @@ export function getProviderSetupStatus(opts?: {
     resolvedProfileId,
     needsKeySetup,
     needsModelSetup,
-    showModelPicker: hasKey,
+    // 模型选择器作为输入坞核心第一公民，100% 恒定渲染，不随未配 Key 而消失
+    showModelPicker: true,
   };
 }

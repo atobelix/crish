@@ -13,23 +13,34 @@ import React, { useState } from 'react';
 import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 import { emitUiEvent } from '../../api/uiEvents';
+import { openSettings } from '../../api/storeAccess';
+import { useI18n } from '../../i18n';
 import {
   clearRuntimeStatus,
   useSessionRuntimeStatus,
 } from '../../store/storeAccess';
+import { isModelConfigurationError } from './chatStatusRibbonsLib';
 import styles from './ComposerErrorBar.module.css';
 
 export interface ComposerErrorBarProps {
   activeSessionId: string | null;
+  /** 可选：打开模型设置回调，未提供时默认调用 openSettings('models') */
+  onOpenModelSettings?: () => void;
 }
 
 export const ComposerErrorBar: React.FC<ComposerErrorBarProps> = React.memo(
-  function ComposerErrorBar({ activeSessionId }) {
+  function ComposerErrorBar({ activeSessionId, onOpenModelSettings }) {
     const status = useSessionRuntimeStatus(activeSessionId);
     const [detailOpen, setDetailOpen] = useState(false);
+    const { t } = useI18n();
 
     if (!activeSessionId || status?.phase !== 'failed') return null;
     const sid = activeSessionId;
+
+    const isModelConfig = isModelConfigurationError(
+      status.kind,
+      status.message
+    );
 
     const handleDismiss = () => {
       clearRuntimeStatus(sid);
@@ -45,9 +56,27 @@ export const ComposerErrorBar: React.FC<ComposerErrorBarProps> = React.memo(
       });
     };
 
+    const handleOpenSettings = () => {
+      if (onOpenModelSettings) {
+        onOpenModelSettings();
+      } else {
+        openSettings('models');
+      }
+    };
+
     return (
       <div
         className={styles.errorBar}
+        style={{
+          border:
+            '1px solid color-mix(in srgb, var(--text-danger) 15%, var(--border-subtle))',
+          borderLeft:
+            '1px solid color-mix(in srgb, var(--text-danger) 15%, var(--border-subtle))',
+          borderRadius: 'var(--radius-lg, 12px)',
+          backgroundColor:
+            'color-mix(in srgb, var(--text-danger) 5%, var(--bg-secondary))',
+          color: 'var(--text-primary)',
+        }}
         role="alert"
         aria-live="assertive"
         aria-atomic="true"
@@ -63,6 +92,25 @@ export const ComposerErrorBar: React.FC<ComposerErrorBarProps> = React.memo(
         <span className={styles.errorText} data-testid="composer-error-text">
           {status.message}
         </span>
+        {isModelConfig ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleOpenSettings}
+            data-testid="composer-error-settings"
+            style={{
+              flexShrink: 0,
+              fontWeight: 500,
+              color: 'var(--text-primary)',
+              backgroundColor:
+                'color-mix(in srgb, var(--text-primary) 8%, transparent)',
+              borderRadius: 'var(--radius-md, 8px)',
+            }}
+          >
+            {t('common.configure', '去配置')}
+          </Button>
+        ) : null}
         {status.technicalDetail ? (
           <Button
             type="button"
@@ -72,7 +120,7 @@ export const ComposerErrorBar: React.FC<ComposerErrorBarProps> = React.memo(
             aria-expanded={detailOpen}
             onClick={() => setDetailOpen((v) => !v)}
           >
-            详情
+            {t('common.details', '详情')}
           </Button>
         ) : null}
         <Button
@@ -83,22 +131,25 @@ export const ComposerErrorBar: React.FC<ComposerErrorBarProps> = React.memo(
           onClick={handleRetry}
           data-testid="composer-error-retry"
         >
-          重试
+          {t('common.retry', '重试')}
         </Button>
-        <Tooltip content="关闭">
+        <Tooltip content={t('common.close', '关闭')}>
           <Button
             type="button"
             variant="ghost"
             size="sm"
             className={styles.closeButton}
-            aria-label="关闭错误提示"
+            aria-label={t('common.closeNotice', '关闭错误提示')}
             onClick={handleDismiss}
             data-testid="composer-error-close"
             icon={<AppIcon name="x" size={14} aria-hidden />}
           />
         </Tooltip>
         {detailOpen && status.technicalDetail ? (
-          <div className={styles.detailBody} data-testid="composer-error-detail">
+          <div
+            className={styles.detailBody}
+            data-testid="composer-error-detail"
+          >
             {status.technicalDetail}
           </div>
         ) : null}

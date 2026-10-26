@@ -304,11 +304,22 @@
   gap: var(--space-1_5);
 }
 
-/* 侧栏设置按钮统一为 8px 微圆图标卡片 */
+/* 底部功能区圆角统合：右列设置与更新按钮统一为 16px 大圆角 / 饱满胶囊，与左列胶囊完全呼应 */
 .footerGearCol :global(.icon-button),
 .footerGearCol button {
-  --btn-radius: var(--radius-md);
-  border-radius: var(--radius-md);
+  --btn-radius: var(--radius-xl, 16px);
+  border-radius: var(--radius-xl, 16px);
+}
+
+.footerGearCol :global(.icon-button):hover,
+.footerGearCol button:hover {
+  background-color: var(--sidebar-hover, var(--tint-hover));
+  color: var(--text-primary);
+}
+
+.footerGearCol :global(.icon-button):active,
+.footerGearCol button:active {
+  background-color: var(--tint-active);
 }
 
 .userProfileCard {
@@ -483,12 +494,12 @@
   justify-content: center;
 }
 
-/* 折叠态 32x32px 图标卡片全轴线统一为 8px */
+/* 折叠态 32x32px 图标卡片全轴线统一为 16px 正圆形态 */
 .iconCollapse .footerGearCol :global(.icon-button),
 .iconCollapse .footerGearCol button,
 .iconCollapse :global(.sidebar-toggle-btn) {
-  --btn-radius: var(--radius-md);
-  border-radius: var(--radius-md);
+  --btn-radius: var(--radius-xl, 16px);
+  border-radius: var(--radius-xl, 16px);
 }
 
 .iconCollapse .userProfileCard {
@@ -496,7 +507,7 @@
   padding: 0;
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xl, 16px);
 }
 
 .iconCollapse .userTextStack {

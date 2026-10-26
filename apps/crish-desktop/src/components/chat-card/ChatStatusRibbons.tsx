@@ -15,7 +15,10 @@ import styles from './ChatStatusRibbons.module.css';
 
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import type { EngineStatus } from '../../api/engineConfig';
-import { useSessionStore } from '../../store/storeAccess';
+import {
+  useSessionStore,
+  useSessionRuntimeStatus,
+} from '../../store/storeAccess';
 import {
   resolveSessionProgressItems,
   computeChecklistProgress,
@@ -47,6 +50,8 @@ import {
   resolveSetupHintAction,
   resolveSetupHintKind,
   resolveSyncEngineSoftHintText,
+  resolveActiveRibbon,
+  shouldRenderApprovalDock,
   type SetupHintKind,
 } from './chatStatusRibbonsLib';
 import {
@@ -208,6 +213,20 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
     [progressItems]
   );
 
+  // 运行错误状态（failed 相位）：ComposerErrorBar 的数据源
+  const runtimeStatus = useSessionRuntimeStatus(activeSessionId ?? null);
+  const hasRuntimeError = Boolean(
+    activeSessionId && runtimeStatus?.phase === 'failed'
+  );
+
+  // 审批 dock 候选状态
+  const hasApproval =
+    !omitApprovalDock &&
+    shouldRenderApprovalDock(showApprovalDock, pendingApprovalCount);
+
+  // 计划/目标推进条候选状态
+  const hasPlanGoal = !omitPlanRibbons && (inPlanMode || goalModeActive);
+
   const hasActivePlan = goalModeActive || checklistProgress.total > 0;
   // 盖层生命周期优先于 LS gate（密钥步落盘后向导仍可能打开）
   const firstRunOpen = isFirstRunOverlayOpen();
@@ -219,6 +238,21 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
     engineHasApiKey: engineHint?.hasApiKey ?? null,
     localHasKey,
     firstRunOpen,
+    onEmptySurface,
+    hasRuntimeError,
+  });
+
+  const hasSetupHint = setupHint !== null;
+
+  // 核心单轨仲裁：输入坞通知状态机，任何时刻最多渲染 1 个条带
+  const activeRibbon = resolveActiveRibbon({
+    firstRunOpen,
+    engineCrashed,
+    hasRuntimeError,
+    hasApproval,
+    hasPlanGoal,
+    hasSetupHint,
+    onEmptySurface,
   });
   const keySoftHintText = resolveNeedsKeySoftHintText({ onEmptySurface });
   const modelSoftHintText = resolveNeedsModelSoftHintText({ onEmptySurface });
@@ -306,14 +340,13 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
         drawerRef={planDrawerRef}
       />
 
-      {/* 引导态：页内 soft-hint 互斥一条；FirstRun 盖层时 resolveSetupHintKind=null */}
-      <SetupHintBanner state={setupState} onAction={handleSetupAction} />
+      {/* 引导态：页内 soft-hint 单轨互斥；当有高阶条带或空态时 100% 物理不挂载 */}
+      {activeRibbon === 'setup-hint' ? (
+        <SetupHintBanner state={setupState} onAction={handleSetupAction} />
+      ) : null}
 
-      {/* T5-1：引擎崩溃 ribbon（心跳判死域；「自动重连」入口——不给
-          「重启引擎」按钮，进程内架构重启 = 整个 Tauri 重启，产品待决
-          明示不做；崩溃现场见 errorStore ENGINE_CRASH_PROBED technical
-          = logDir/crash-*.log） */}
-      {engineCrashed ? (
+      {/* T5-1：引擎崩溃 ribbon（心跳判死域；「自动重连」入口） */}
+      {activeRibbon === 'engine-crashed' ? (
         <div
           className={styles.crashRibbon}
           data-crash-ribbon="true"
@@ -340,18 +373,22 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
         </div>
       ) : null}
 
-      {omitPlanRibbons ? null : (
+      {activeRibbon === 'plan-goal' && !omitPlanRibbons ? (
         <PlanGoalRibbons plan={planState} goal={goalState} />
-      )}
+      ) : null}
 
       {between}
 
-      {/* 单轨收敛 §2.3：会话运行终态错误唯一承载体（ComposerErrorBar → failed 相位）。
-          retrying 相位在对话流内 InFlowStatusLine 呈现。 */}
-      <ComposerErrorBar activeSessionId={activeSessionId ?? null} />
+      {/* 会话运行终态错误唯一承载体（ComposerErrorBar → failed 相位） */}
+      {activeRibbon === 'runtime-error' ? (
+        <ComposerErrorBar
+          activeSessionId={activeSessionId ?? null}
+          onOpenModelSettings={onOpenModelSettings}
+        />
+      ) : null}
 
-      {/* 审批 sticky：队列/子 agent 待确认时显示；单条主时间线靠 ApprovalAskCard */}
-      {omitApprovalDock ? null : (
+      {/* 审批 sticky：队列/子 agent 待确认时显示 */}
+      {activeRibbon === 'approval' && !omitApprovalDock ? (
         <ApprovalDock
           show={showApprovalDock}
           pendingCount={pendingApprovalCount}
@@ -360,7 +397,7 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
           msgId={pendingApprovalMsgId}
           activeSessionId={activeSessionId}
         />
-      )}
+      ) : null}
     </AppErrorBoundary>
   );
 };

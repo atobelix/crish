@@ -5,8 +5,8 @@
 :root,
 html[data-theme='default'],
 html[data-theme='light'] {
-  /* 3 档状态透明叠加阶梯（SSOT · P1/P2 终局裁定：浅色 4% / 6% / 8%） */
-  --state-hover-pct: 4%;
+  /* 3 档状态透明叠加阶梯（SSOT · 浅色 3.5% / 6% / 8% 纯净轻中性微光） */
+  --state-hover-pct: 3.5%;
   --state-active-pct: 6%;
   --state-selected-pct: 8%;
   --state-hover: color-mix(
@@ -148,8 +148,8 @@ html[data-theme='light'] {
 }
 
 html[data-theme='dark'] {
-  /* 3 档状态透明叠加阶梯（SSOT · P1/P2 终局裁定：深色 6% / 8% / 10%） */
-  --state-hover-pct: 6%;
+  /* 3 档状态透明叠加阶梯（SSOT · 深色 5% / 8% / 10% 纯净轻中性微光） */
+  --state-hover-pct: 5%;
   --state-active-pct: 8%;
   --state-selected-pct: 10%;
   --state-hover: color-mix(
