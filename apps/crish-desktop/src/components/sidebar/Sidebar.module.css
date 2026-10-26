@@ -69,7 +69,7 @@
 .sidebarHeaderLeft {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2, 8px);
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
@@ -82,69 +82,55 @@
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-  overflow: visible;
 }
 
 .toggleBrandIcon {
-  position: absolute;
-  inset: 0;
-  width: 18px;
-  height: 18px;
-  aspect-ratio: 1 / 1;
-  display: block;
-  overflow: visible;
-  opacity: 1;
-  transform: translate3d(0, 0, 0) scale(1);
-  transition:
-    opacity var(--duration-fast) var(--ease-standard),
-    transform var(--duration-normal) var(--ease-decelerate);
-  will-change: transform, opacity;
+  display: none;
 }
 
 .toggleActionIcon {
-  position: absolute;
-  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 18px;
   height: 18px;
-  display: block;
-  opacity: 0;
-  transform: translate3d(3px, 0, 0) scale(0.72);
-  transition:
-    opacity var(--duration-fast) var(--ease-standard),
-    transform var(--duration-normal) var(--ease-decelerate);
-  pointer-events: none;
-  color: var(--text-primary);
-  will-change: transform, opacity;
+  opacity: 1;
+  color: var(--text-secondary);
+  transition: color var(--transition-micro);
 }
 
-/* 悬停 (Hover) 或键盘聚焦 (Focus) 时的流体形变与方向位移动效 */
-:global(.sidebar-toggle-btn):hover .toggleBrandIcon,
-:global(.sidebar-toggle-btn):focus-visible .toggleBrandIcon {
-  opacity: 0;
-  transform: translate3d(-3px, 0, 0) scale(0.72);
+:global(.sidebar-toggle-btn) {
+  border-radius: var(--radius-md, 8px);
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--text-secondary);
   transition:
-    opacity var(--duration-fast) var(--ease-standard),
-    transform var(--duration-fast) var(--ease-decelerate);
+    background-color var(--transition-micro),
+    color var(--transition-micro);
+}
+
+/* 悬停与键盘聚焦保持中性浅灰微光，消除深色块与生硬投影 */
+:global(.sidebar-toggle-btn):hover,
+:global(.sidebar-toggle-btn):focus-visible {
+  background-color: var(--sidebar-hover, var(--tint-hover));
+  color: var(--text-primary);
+  border: none;
+  box-shadow: none;
 }
 
 :global(.sidebar-toggle-btn):hover .toggleActionIcon,
 :global(.sidebar-toggle-btn):focus-visible .toggleActionIcon {
-  opacity: 1;
-  transform: translate3d(0, 0, 0) scale(1);
-  transition:
-    opacity var(--duration-fast) var(--ease-standard),
-    transform var(--duration-normal) var(--ease-decelerate);
+  color: var(--text-primary);
+}
+
+:global(.sidebar-toggle-btn):active {
+  background-color: var(--tint-active);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .sidebar {
     transition: none;
-  }
-
-  .toggleBrandIcon,
-  .toggleActionIcon {
-    transform: none;
-    transition: opacity 100ms ease;
   }
 }
 
@@ -511,5 +497,9 @@
 }
 
 .iconCollapse .userTextStack {
+  display: none;
+}
+
+.iconCollapse .brandName {
   display: none;
 }

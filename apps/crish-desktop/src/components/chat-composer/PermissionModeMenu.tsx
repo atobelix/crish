@@ -95,6 +95,7 @@ export const PermissionModeMenu: React.FC<Props> = ({
           variant="ghost"
           className={[
             styles.permPill,
+            styles.trigger,
             open ? styles.isOpen : null,
             iconOnly ? styles.iconOnly : null,
             variant === 'fused' ? styles.fused : null,
@@ -156,6 +157,11 @@ export const PermissionModeMenu: React.FC<Props> = ({
                 </span>
                 <div className={styles.labelRow}>
                   <span className={styles.title}>{itemMeta.label}</span>
+                  {itemMeta.matrixHint ? (
+                    <span className={styles.itemDesc}>
+                      {itemMeta.matrixHint}
+                    </span>
+                  ) : null}
                 </div>
                 {isSelected ? (
                   <AppIcon

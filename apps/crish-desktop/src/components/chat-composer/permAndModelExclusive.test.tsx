@@ -46,7 +46,11 @@ async function seedYamlCatalog(): Promise<void> {
     revision: 'revision-0',
     credentialStates: { p1: { hasKey: true } },
     parseError: null,
-    tree: { version: 2, activeModel: null, providers: { p1: yamlProvider(['model-a', 'model-b']) } },
+    tree: {
+      version: 2,
+      activeModel: null,
+      providers: { p1: yamlProvider(['model-a', 'model-b']) },
+    },
   }));
   const res = await ensureModelsCatalogLoaded(true);
   expect(res.ok).toBe(true);
@@ -73,9 +77,7 @@ afterEach(() => {
 
 describe('permPill × modelBadge 互斥 / 四击', () => {
   it('模型徽标：开一次、pointerdown+click 关且不重开', async () => {
-    render(
-      <ModelBadgePicker engineModel="model-a" needsModelSetup={false} />
-    );
+    render(<ModelBadgePicker engineModel="model-a" needsModelSetup={false} />);
     const badge = screen.getByTestId('model-selector-button');
     expect(badge.className).not.toMatch(/\bno-drag\b/);
     fireEvent.click(badge);
@@ -100,7 +102,9 @@ describe('permPill × modelBadge 互斥 / 四击', () => {
     pointerClick(badge);
     expect(await screen.findByText('测试服务商')).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.queryByText('当前会话操作需手动授权')).not.toBeInTheDocument()
+      expect(
+        screen.queryByText('当前会话操作需手动授权')
+      ).not.toBeInTheDocument()
     );
     expect(screen.getByText('模型管理...')).toBeInTheDocument();
   });
@@ -121,5 +125,23 @@ describe('permPill × modelBadge 互斥 / 四击', () => {
     await waitFor(() =>
       expect(screen.queryByText('测试服务商')).not.toBeInTheDocument()
     );
+  });
+
+  it('未配置模型或未配置密钥时：徽标直出「去配置模型供应商」按钮，点击直接打开设置', async () => {
+    const { openSettings } = await import('../../api/storeAccess');
+    render(
+      <ModelBadgePicker
+        engineModel=""
+        needsModelSetup={false}
+        needsKeySetup={true}
+      />
+    );
+    const badge = screen.getByTestId('model-selector-button');
+    expect(badge).toHaveTextContent('去配置模型供应商');
+    expect(badge.querySelector('svg[data-icon="chevron-down"]')).toBeNull();
+
+    fireEvent.click(badge);
+    expect(openSettings).toHaveBeenCalledWith('models');
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 });

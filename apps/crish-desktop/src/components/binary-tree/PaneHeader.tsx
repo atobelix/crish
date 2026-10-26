@@ -76,6 +76,10 @@ function sessionShell(): SessionShellCommands {
   return getCompositionRoot().shell as unknown as SessionShellCommands;
 }
 
+function isDraftTabId(tabId: string): boolean {
+  return tabId.startsWith('draft-') || tabId.startsWith('pane-');
+}
+
 export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
   ({ leaf, isActive, isChat, isTopRow = true }) => {
     const containerRef = useRef<HTMLDivElement | null>(null);
@@ -107,10 +111,6 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
       () => computeVisibleLeafTabs(leaf, isMultiPane),
       [leaf, isMultiPane]
     );
-    const hasCommittedTabs = useMemo(
-      () => readCommittedLeafTabs(leaf).length > 0,
-      [leaf]
-    );
     const sessionTitlesById = useSessionStore(
       useShallow((s) => {
         const titles: Record<string, string | undefined> = {};
@@ -130,9 +130,14 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
 
     const activeTabId = readActiveTabId(leaf);
     const isLeafDraft = isLeafInDraftMode(leaf);
-    const effectiveActiveTabId =
-      activeTabId ||
-      (isLeafDraft && hasCommittedTabs ? '' : visibleTabs[0]?.tabId || '');
+    const effectiveActiveTabId = useMemo(() => {
+      if (activeTabId) return activeTabId;
+      if (isLeafDraft) {
+        const draftTab = visibleTabs.find((t) => isDraftTabId(t.tabId));
+        if (draftTab) return draftTab.tabId;
+      }
+      return visibleTabs[0]?.tabId || '';
+    }, [activeTabId, isLeafDraft, visibleTabs]);
 
     const clearLockedWidth = useCallback(() => {
       setLockedTabWidth(null);
@@ -274,9 +279,15 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
           window.clearTimeout(fuse);
           fuseTimersRef.current.delete(tabId);
         }
-        sessionShell().removeTab(leaf.id, tabId);
+        const committed = readCommittedLeafTabs(leaf);
+        if (isDraftTabId(tabId) && committed.length > 0) {
+          const lastCommitted = committed[committed.length - 1]!;
+          sessionShell().activateTab(leaf.id, lastCommitted.tabId);
+        } else {
+          sessionShell().removeTab(leaf.id, tabId);
+        }
       },
-      [leaf.id]
+      [leaf.id, leaf]
     );
 
     const handleTabClose = useCallback(
@@ -285,15 +296,18 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
         if (closingIdsRef.current.has(tab.tabId)) return;
 
         const tabs = visibleTabs;
-        const currentActive = readActiveTabId(leaf);
+        const currentActive = effectiveActiveTabId;
+        const isCurrentActive = tab.tabId === currentActive;
+        const committed = readCommittedLeafTabs(leaf);
+        const isDraftTab = isDraftTabId(tab.tabId);
+
         // 关的是本叶 active 且还有邻居：先算邻居，延后两帧再切——
         // 条带离场首帧先行绘制，内容面切换与条带动画不同帧争抢主线程
-        if (tab.tabId === currentActive && tabs.length > 1) {
-          const nextActiveId = nextAvailableNeighborId(
-            tabs,
-            tab.tabId,
-            closingIdsRef.current
-          );
+        if (isCurrentActive && tabs.length > 1) {
+          const nextActiveId =
+            isDraftTab && committed.length > 0
+              ? committed[committed.length - 1]!.tabId
+              : nextAvailableNeighborId(tabs, tab.tabId, closingIdsRef.current);
           if (nextActiveId) {
             const raf1 = requestAnimationFrame(() => {
               const raf2 = requestAnimationFrame(() => {

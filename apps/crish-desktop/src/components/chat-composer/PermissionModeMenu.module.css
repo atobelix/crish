@@ -1,6 +1,6 @@
 /**
  * PermissionModeMenu.module.css
- * 权限模式菜单样式（二值形态法典：28px 饱满半圆胶囊与正圆单图标）
+ * 权限模式菜单样式（二值形态法典：28px 饱满 14px 胶囊端点 + 对齐加号菜单规格的浮层面板）
  */
 
 .menuHost,
@@ -139,65 +139,65 @@
 }
 
 /* ==========================================================================
-   Menu Popover (Portal / Floating)
+   Menu Popover (Portal / Floating) — 对齐加号菜单规格规范
+   - 绝不声明 position: fixed（由 Radix Popper 自身精确定位）
+   - 绝不声明覆盖 translate 的 keyframes transform（防止冲掉定位偏移）
    ========================================================================== */
 
 .permMenu,
 .menu {
-  --perm-menu-pad: 4px;
-  --perm-item-radius: 6px;
-  position: fixed;
-  z-index: var(--z-popover);
   min-width: 184px;
   max-width: 240px;
-  padding: var(--perm-menu-pad);
+  padding: 6px;
   margin: 0;
   list-style: none;
-  border-radius: calc(var(--perm-item-radius) + var(--perm-menu-pad));
-  background: var(--bg-elevated, var(--composer-bg));
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--popover-shadow);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  border-radius: var(--sep-radius-outer, 12px);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
   gap: 2px;
   box-sizing: border-box;
-  animation: permMenuIn var(--transition-popover-enter);
+  color: var(--text-primary);
+  font-family: var(--font-sans, var(--sep-font-sans));
+  animation: permMenuIn var(--transition-micro, 100ms ease);
 }
 
 @keyframes permMenuIn {
   from {
     opacity: 0;
-    transform: translateY(4px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
 
 .permMenuItem,
 .item {
-  width: 100%;
-  min-height: 28px;
-  padding: 5px 8px;
-  border-radius: var(--perm-item-radius);
-  border: none;
-  background: transparent;
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-normal, 400);
-  text-align: left;
   display: flex;
   align-items: center;
-  gap: 7px;
+  justify-content: flex-start;
+  gap: var(--space-2, 8px);
+  width: 100%;
+  height: auto;
+  min-height: 32px;
+  --btn-h: auto;
+  --btn-px: 8px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: var(--sep-item-radius, 8px);
   cursor: pointer;
+  font-family: inherit;
+  color: var(--text-primary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal, 400);
   box-sizing: border-box;
   outline: none;
   transition:
-    background var(--transition-micro, 100ms ease),
+    background-color var(--transition-micro, 100ms ease),
     color var(--transition-micro, 100ms ease);
 }
 
@@ -205,7 +205,14 @@
 .permMenuItem:focus-visible,
 .item:hover,
 .item:focus-visible {
+  outline: none;
   background: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.permMenuItem:active,
+.item:active {
+  background: var(--tint-active);
 }
 
 .permMenuItem.isSelected,
@@ -217,15 +224,18 @@
 
 .iconWrapper,
 .itemIcon {
-  width: 13px;
-  height: 13px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
   color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: color var(--transition-micro, 100ms ease);
 }
 
+.permMenuItem:hover .iconWrapper,
+.permMenuItem:focus-visible .iconWrapper,
 .permMenuItem.isSelected .iconWrapper,
 .item[data-selected='true'] .itemIcon {
   color: var(--text-primary);
@@ -242,22 +252,29 @@
 
 .title,
 .itemLabel {
+  font-size: var(--font-size-sm, 13px);
+  font-weight: 500;
   line-height: 1.25;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .itemDesc {
-  font-size: var(--font-size-2xs);
+  font-size: var(--font-size-xs, 11px);
   color: var(--text-tertiary);
   line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .checkIcon,
 .check {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
   color: var(--text-primary);
+  margin-left: auto;
 }

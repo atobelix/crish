@@ -35,7 +35,7 @@ const BRAND_MARK_LINES = [
 ];
 
 /**
- * 侧栏切换按钮图标：常态显示正方形 1:1 软件品牌图标，hover/focus 时过渡显示侧栏操作图标。
+ * 侧栏切换按钮图标：常态清晰显示侧栏折叠/展开图标（AppIcon sidebar-left），隐藏品牌标记保留测试锚点。
  */
 export const SidebarToggleIcon: React.FC = React.memo(() => (
   <span className={styles.toggleIconMorph} aria-hidden="true">
@@ -44,6 +44,7 @@ export const SidebarToggleIcon: React.FC = React.memo(() => (
       viewBox="12 9.5 176 176"
       focusable="false"
       data-testid="toggle-brand-icon"
+      style={{ display: 'none' }}
     >
       <ellipse
         className={styles.brandMarkDot}
@@ -160,12 +161,6 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
                 icon={<SidebarToggleIcon />}
               />
             )}
-          </div>
-          <div
-            className={styles.sidebarHeaderRight}
-            data-testid="sidebar-header-extra"
-            data-tauri-drag-region
-          >
             <span
               className={styles.brandName}
               data-testid="sidebar-brand-title"
@@ -174,6 +169,11 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
               Crish
             </span>
           </div>
+          <div
+            className={styles.sidebarHeaderRight}
+            data-testid="sidebar-header-extra"
+            data-tauri-drag-region
+          />
         </header>
 
         {sidebarBehavior === 'overlay' && (

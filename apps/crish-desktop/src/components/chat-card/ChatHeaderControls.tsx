@@ -15,6 +15,7 @@ import {
   getActiveProfile,
   getActiveProfileId,
 } from '../../api/providerProfiles';
+import { openSettings } from '../../api/storeAccess';
 import {
   getLiveModel,
   getLiveProvider,
@@ -183,14 +184,19 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
     () => listLivePickerEntries().length,
     [catalogVersion]
   );
+  const isUnconfigured = needsKeySetup || choiceCount === 0;
 
   const handleBadgeClick = useCallback(() => {
+    if (isUnconfigured) {
+      openSettings('models');
+      return;
+    }
     toggleExclusiveMenu(
       showModelDropdown,
       setShowModelDropdown,
       badgeRef.current
     );
-  }, [showModelDropdown, setShowModelDropdown]);
+  }, [isUnconfigured, showModelDropdown, setShowModelDropdown]);
 
   const renderBadgeLabel = () => {
     // 正常配置就绪态
@@ -211,15 +217,16 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
       );
     }
 
-    // 未配置密钥态或未选模型态：自适应三级阶梯文案
-    const isUnconfigured = needsKeySetup || choiceCount === 0;
+    // 未配置密钥态或未选模型态：自适应三级阶梯文案（直出行动按钮「去配置模型供应商」）
     const standardText = isUnconfigured
-      ? t('models.unconfigured', '未配置模型')
+      ? t('models.goToConfigProvider', '去配置模型供应商')
       : t('models.selectModel', '选择模型');
     const compactText = isUnconfigured
-      ? t('models.configModel', '配置模型')
+      ? t('models.goToConfigProvider', '去配置模型供应商')
       : t('models.selectModel', '选择模型');
-    const microText = t('models.modelLabel', '模型');
+    const microText = isUnconfigured
+      ? t('models.goToConfig', '去配置')
+      : t('models.modelLabel', '模型');
 
     return (
       <span className={styles.modelAdaptiveWrapper}>
@@ -235,7 +242,7 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
     if (activeProf && engineModel && !needsKeySetup && !needsModelSetup) {
       return `${activeProf.name} · ${engineModel}`;
     }
-    if (needsKeySetup) {
+    if (isUnconfigured) {
       return t(
         'models.unconfiguredTooltip',
         '尚未配置模型服务商 · 点击打开配置'
@@ -250,24 +257,34 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
     return choiceCount > 0
       ? t('models.chooseModelTooltip', '在此选择模型 · 点击切换')
       : t('models.unconfiguredTooltip', '尚未配置模型服务商 · 点击打开配置');
-  }, [engineModel, needsKeySetup, needsModelSetup, choiceCount, t]);
+  }, [
+    engineModel,
+    needsKeySetup,
+    needsModelSetup,
+    isUnconfigured,
+    choiceCount,
+    t,
+  ]);
 
   return (
     <Suspense fallback={null}>
-      <Tooltip content={tooltipText} disabled={showModelDropdown}>
+      <Tooltip
+        content={tooltipText}
+        disabled={showModelDropdown || isUnconfigured}
+      >
         <Button
           ref={badgeRef}
           type="button"
           variant="ghost"
-          className={`${styles.modelBadge} model-badge-btn ${showModelDropdown ? styles.active : ''}`}
+          className={`${styles.modelBadge} model-badge-btn ${showModelDropdown && !isUnconfigured ? styles.active : ''}`}
           data-testid="model-selector-button"
           data-needs-model-setup={needsModelSetup ? 'true' : 'false'}
           data-needs-key-setup={needsKeySetup ? 'true' : 'false'}
-          aria-haspopup="menu"
-          aria-expanded={showModelDropdown}
+          aria-haspopup={isUnconfigured ? undefined : 'menu'}
+          aria-expanded={isUnconfigured ? undefined : showModelDropdown}
           aria-label={
-            needsKeySetup
-              ? t('models.unconfiguredAria', '未配置模型，点击进行配置')
+            isUnconfigured
+              ? t('models.goToConfigProvider', '去配置模型供应商')
               : t('models.selectModel', '选择模型')
           }
           style={{ cursor: 'pointer', position: 'relative' }}
@@ -287,20 +304,22 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
           >
             {renderBadgeLabel()}
           </span>
-          <AppIcon
-            name="chevron-down"
-            size={11}
-            style={{
-              color: 'var(--text-tertiary)',
-              flexShrink: 0,
-              marginLeft: 3,
-              transition: 'transform var(--transition-micro, 100ms ease)',
-              transform: showModelDropdown ? 'rotate(180deg)' : 'none',
-            }}
-          />
+          {!isUnconfigured && (
+            <AppIcon
+              name="chevron-down"
+              size={11}
+              style={{
+                color: 'var(--text-tertiary)',
+                flexShrink: 0,
+                marginLeft: 3,
+                transition: 'transform var(--transition-micro, 100ms ease)',
+                transform: showModelDropdown ? 'rotate(180deg)' : 'none',
+              }}
+            />
+          )}
         </Button>
       </Tooltip>
-      {showModelDropdown ? (
+      {showModelDropdown && !isUnconfigured ? (
         <ModelBadgePickerMenu
           activeModel={engineModel}
           onClose={() => setShowModelDropdown(false)}

@@ -21,7 +21,16 @@ const DIR =
 const CRISH_DESKTOP_ROOT = join(DIR, '../../../..');
 
 function readRepoFile(relativePath: string): string {
-  return readFileSync(join(CRISH_DESKTOP_ROOT, relativePath), 'utf-8');
+  const content = readFileSync(join(CRISH_DESKTOP_ROOT, relativePath), 'utf-8');
+  if (relativePath === 'src/styles/tokens.css') {
+    return content.replace(/@import\s+['"]\.\/([^'"]+)['"];/g, (_, file) => {
+      return readFileSync(
+        join(CRISH_DESKTOP_ROOT, 'src/styles', file),
+        'utf-8'
+      );
+    });
+  }
+  return content;
 }
 
 const paneCss = readRepoFile(

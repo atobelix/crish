@@ -30,6 +30,12 @@ const DIR =
     : dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = join(DIR, '../../../..');
 const read = (rel: string) => readFileSync(join(APP_ROOT, rel), 'utf8');
+const readTokens = (rel: string) => {
+  const content = readFileSync(join(APP_ROOT, rel), 'utf8');
+  return content.replace(/@import\s+['"]\.\/([^'"]+)['"];/g, (_, file) => {
+    return readFileSync(join(APP_ROOT, 'src/styles', file), 'utf8');
+  });
+};
 
 const WORKSPACE_CSS =
   'src/components/binary-tree/BinaryTreeWorkspace.module.css';
@@ -78,8 +84,9 @@ describe('叶右上浮动坞开关 · 几何契约（防遮挡顶栏窗控与抽
     ).not.toMatch(/--leaf-corner-btn-gap/);
 
     // 几何自洽：推导出的按钮必须完全落在第二行内 [h, 2*h]
-    const heights = tokenPx(read(TOKENS_CSS), '--header-height');
-    const size = tokenPx(read(TOKENS_CSS), '--leaf-corner-btn-size');
+    const tokenContent = readTokens(TOKENS_CSS);
+    const heights = tokenPx(tokenContent, '--header-height');
+    const size = tokenPx(tokenContent, '--leaf-corner-btn-size');
     expect(heights.length, 'tokens.css 未定义 --header-height').toBeGreaterThan(
       0
     );
@@ -115,7 +122,7 @@ describe('叶右上浮动坞开关 · 几何契约（防遮挡顶栏窗控与抽
   });
 
   it('③ 间隙 token 不得复活（--leaf-corner-btn-* 只留尺寸与右边距）', () => {
-    const tokens = read(TOKENS_CSS);
+    const tokens = readTokens(TOKENS_CSS);
     expect(
       tokens,
       '--leaf-corner-btn-gap 已随缺陷修复删除（纵向位置改为推导）；' +

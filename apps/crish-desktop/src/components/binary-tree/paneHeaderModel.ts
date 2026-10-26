@@ -1,6 +1,7 @@
 import type { LayoutLeaf } from '../../store/types';
 import { isPendingDraft } from '../../store/storeAccess';
 import type { LeafSessionTab } from './paneHeaderGeometry';
+import { isLeafInDraftMode } from './treeLeafPanelModel';
 
 /** PaneHeader 的标签模型读取：仅保留已提交会话，草稿由视图层按叶状态补位。 */
 export function readCommittedLeafTabs(leaf: LayoutLeaf): LeafSessionTab[] {
@@ -20,13 +21,31 @@ export function readActiveTabId(leaf: LayoutLeaf): string {
   return typeof id === 'string' ? id : '';
 }
 
-/** 条带成员计算：已提交会话 tabs，分屏下若无真会话但有草稿保留草稿以支持关闭 */
+const DEFAULT_DRAFT_TITLE = '新对话';
+
+/** 条带成员计算：已提交会话 tabs，草稿态下动态追加草稿标签；分屏下若无真会话但有草稿保留草稿以支持关闭 */
 export function computeVisibleLeafTabs(
   leaf: LayoutLeaf,
   isMultiPane: boolean
 ): LeafSessionTab[] {
   const committedTabs = readCommittedLeafTabs(leaf);
   if (committedTabs.length > 0) {
+    if (isLeafInDraftMode(leaf)) {
+      const raw = leaf.tabs as unknown;
+      const existingDraft = Array.isArray(raw)
+        ? (raw as LeafSessionTab[]).find(
+            (t) => !t.sessionId || isPendingDraft(t.sessionId)
+          )
+        : undefined;
+      return [
+        ...committedTabs,
+        {
+          tabId: existingDraft?.tabId || `draft-${leaf.id}`,
+          sessionId: existingDraft?.sessionId || '',
+          title: existingDraft?.title || DEFAULT_DRAFT_TITLE,
+        },
+      ];
+    }
     return committedTabs;
   }
   const raw = leaf.tabs as unknown;
@@ -36,12 +55,12 @@ export function computeVisibleLeafTabs(
       {
         tabId: first.tabId || `draft-${leaf.id}`,
         sessionId: first.sessionId || '',
-        title: '新对话',
+        title: DEFAULT_DRAFT_TITLE,
       },
     ];
   }
   return isMultiPane
-    ? [{ tabId: `pane-${leaf.id}`, sessionId: '', title: '新对话' }]
+    ? [{ tabId: `pane-${leaf.id}`, sessionId: '', title: DEFAULT_DRAFT_TITLE }]
     : [];
 }
 
