@@ -1,26 +1,30 @@
 /**
- * ui/Badge 原子徽标组件（RED-DETAILED-02 / T-ATOM-07）
+ * ui/Badge 原子徽标组件（P4 T-P4-03 就地升级）
  *
- * 遵循 4px 微圆角矩形设计（--radius-sm），严禁 9999px 药丸圆角，
- * 提供 neutral / info (brand) / success / warning / danger 5 种微透明度 tone。
+ * 遵循展示型容器 0 描边铁律（border: none），
+ * 圆角采用角色圆角 --radius-row (6px)，
+ * 提供 neutral / accent / warning / danger / success 5 类受限语义 tone，
+ * 同时向后兼容旧 brand / info / error 别名。
  *
- * 分层契约：本组件只依赖 react 与 tokens CSS 变量，不依赖任何业务模块。
+ * 分层契约：本组件只依赖 react 与 CSS 变量，严禁反向依赖任何业务模块。
  */
 import React from 'react';
 import styles from './Badge.module.css';
 import { ICON_STROKE } from '../icons/iconTokens';
 
-export type BadgeTone =
-  'neutral' | 'brand' | 'info' | 'success' | 'warning' | 'danger' | 'error';
+export type StandardBadgeTone =
+  'neutral' | 'accent' | 'warning' | 'danger' | 'success';
+
+export type BadgeTone = StandardBadgeTone | 'brand' | 'info' | 'error';
 
 export type BadgeSize = 'xs' | 'sm' | 'md';
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  /** 语义色调：neutral / brand / info / success / warning / danger(error) */
+  /** 严格受限的语义 tone：neutral / accent / warning / danger / success（兼容旧 brand/info/error 别名） */
   tone?: BadgeTone;
   /** 兼容 variant 别名 */
   variant?: BadgeTone;
-  /** 尺寸：xs(18px) / sm(20px) / md(24px) */
+  /** 尺寸：xs(18px) / sm(20px) / md(24px)，默认 'sm' */
   size?: BadgeSize;
   /** 是否展示前置微圆点状态指示 */
   dot?: boolean;
@@ -34,11 +38,12 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
 
 const TONE_CLASS_MAP: Record<BadgeTone, string | undefined> = {
   neutral: styles.toneNeutral,
-  brand: styles.toneBrand,
-  info: styles.toneInfo,
-  success: styles.toneSuccess,
+  accent: styles.toneAccent,
   warning: styles.toneWarning,
   danger: styles.toneDanger,
+  success: styles.toneSuccess,
+  brand: styles.toneBrand ?? styles.toneAccent,
+  info: styles.toneInfo ?? styles.toneNeutral,
   error: styles.toneDanger,
 };
 
@@ -64,11 +69,11 @@ export const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
     },
     ref
   ) {
-    const resolvedTone: BadgeTone = tone ?? variant ?? 'neutral';
+    const rawTone: BadgeTone = tone ?? variant ?? 'neutral';
 
     const classNames = [
       styles.badge,
-      TONE_CLASS_MAP[resolvedTone],
+      TONE_CLASS_MAP[rawTone],
       SIZE_CLASS_MAP[size],
       className,
     ]
@@ -79,7 +84,7 @@ export const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
       <span
         ref={ref}
         className={classNames}
-        data-tone={resolvedTone}
+        data-tone={rawTone}
         data-size={size}
         {...restProps}
       >
@@ -118,4 +123,5 @@ export const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
     );
   }
 );
+
 Badge.displayName = 'Badge';

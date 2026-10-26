@@ -9,7 +9,7 @@
  * - 点击文件名/卡片在右侧打开该文件（openFileInPanel / onOpenPath）。
  */
 import React, { useState } from 'react';
-import styles from './ChatComposer.module.css';
+import styles from './ComposerAttachmentBar.module.css';
 import type { ChatAttachment } from '../../hooks/useChatStream';
 import { openFileInPanel } from '../../api/filePanelOpener';
 import {
@@ -103,6 +103,7 @@ export const ComposerAttachmentBar: React.FC<ComposerAttachmentBarProps> = ({
       role="list"
       aria-label={attachAriaLabel}
       data-testid="composer-attach-strip"
+      data-composer-attachments=""
     >
       {attachments.map((a, index) => {
         const kind = attachKind(a);

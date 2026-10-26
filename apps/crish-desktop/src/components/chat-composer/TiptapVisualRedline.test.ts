@@ -1,11 +1,11 @@
 /**
- * 视觉红线断言（40 方案 §4 token 映射表 / §4.2 红线 1-6）：
+ * 视觉红线断言（40 方案 §4 token 映射表 / §4.2 红线 1-6 / P6 T6-7）：
  * 以源码文本直检 chat-composer 域 CSS，防止硬编码色值 / 阴影 / z-index /
  * 位移动效 / 高对比度 mix 回流。
  * - 零阴影：box-shadow 仅允许 none（!important 可附）；
  * - 无硬编码色：hex / rgb() / rgba() 零命中；
  * - z-index 只走 var(--z-popover)，无字面量 200；
- * - 焦点混色 ≤10%（border-color mix ≥90%），session-empty 落地面 5% 特例存在；
+ * - 焦点混色 ≤10%（border-color mix ≥90%），session-empty 落地面 ≤5%（border-color mix ≥95%）特例存在；
  * - 占位符走 text-tertiary token；无 transform 位移入场；无 will-change 滥用。
  */
 import { describe, expect, it } from 'vitest';
@@ -25,6 +25,12 @@ const STRICT_CSS = [
 
 const HOST_CSS_FILES = [
   'ChatComposer.module.css',
+  'ComposerPermissionBar.module.css',
+  'ComposerPlanProgressBar.module.css',
+  'ComposerAttachmentBar.module.css',
+  'AnnotationChipItem.module.css',
+  'ComposerSendControls.module.css',
+  'ComposerEmbeddedNotice.module.css',
   'ComposerFusedTrigger.module.css',
   'ComposerDirTree.module.css',
 ].map((name) => ({
@@ -34,7 +40,7 @@ const HOST_CSS_FILES = [
 
 const HOST_CSS = HOST_CSS_FILES[0]!;
 
-describe('chat-composer 视觉红线（T10）', () => {
+describe('chat-composer 视觉红线（T10 & P6）', () => {
   for (const { name, css } of STRICT_CSS) {
     it(`${name}：零阴影（box-shadow 仅 none）`, () => {
       for (const line of css.split('\n')) {
@@ -97,13 +103,13 @@ describe('chat-composer 视觉红线（T10）', () => {
     expect(rule).toContain('var(--text-tertiary)');
   });
 
-  it('落地面特例：session-empty 焦点与常态保持一致静态无位移（RL-01 消除边框跳变）', () => {
+  it('落地面特例：session-empty 焦点混色 ≤5%（--edge-focus-empty 或 var(--border-color) ≥95%，AGENTS.md §13 & T6-7）', () => {
     expect(HOST_CSS.css).toMatch(
-      /data-empty-kind=['"]session-empty['"][^{]*focus-within[^{]*\{[^}]*var\(--border-subtle\)[^}]*\}/
+      /data-empty-kind=['"]session-empty['"][^{]*focus-within[^{]*\{[\s\S]*?(?:--edge-focus-empty|var\(--border-subtle\))/
     );
   });
 
-  it('宿主域同样零硬编码色与 z-index 字面量（ChatComposer.module.css）', () => {
+  it('宿主域同样零硬编码色与 z-index 字面量（全 9 个模块）', () => {
     for (const { name, css } of HOST_CSS_FILES) {
       expect(css, name).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
       expect(css, name).not.toMatch(/z-index:\s*\d/);

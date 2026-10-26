@@ -1,20 +1,12 @@
 /**
  * ChatComposer.module.css
- * 四层空间垂直堆叠架构（Four-Layer Vertical Spatial Stacking Architecture）
- * - Layer 1: 浮动权限审批条（.flowPermissionBar / .flow-permission-bar）
- * - Layer 2: 目标/计划模式进度条（.planProgressBar / .plan-progress-bar）
- * - Layer 3: 上下文与文件引用卡片区（.fileZone / .fileCard / .attachChip）
- * - Layer 4: 主输入区（.composerCard / .inputMainLayout / .sendBtnCircle / .actionCircleBtn）
+ * 输入坞主容器与网格布局样式模块（P6 输入坞一体化：单卡片围合 + 内嵌顶槽 + 柔焦护欄）
  *
  * 遵循设计规范与反过度设计铁律：
  * - 纯 Token 驱动：零硬编码色（无 hex）、z-index 纯 token 化；
- * - 聚焦边框混入克制：session-empty 5%，普通 6%（color-mix ≥90%）；
- * - 墨绿色正圆发送按钮：32x32px 正圆，var(--brand)，Hover var(--brand-deep)，200ms spring 弹性展开/收缩。
+ * - 聚焦边框混入克制：普通态 6%（--edge-focus），全页空态 session-empty 3%（--edge-focus-empty，≤ 5%）；
+ * - 通知条/权限审批条/计划进度条统一收入 .composerCard 内部顶槽（.embeddedTopSlot）。
  */
-
-/* ==========================================================================
-   Composer Root Wrapper & Float Zone (Layer 1 + Layer 2 Host)
-   ========================================================================== */
 
 .composerWrapper {
   position: relative;
@@ -25,1248 +17,11 @@
   width: 100%;
 }
 
-.composerFloatZone {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  position: relative;
-  z-index: var(--z-base);
-}
-
-.composerFloatZone:empty {
-  display: none;
-}
-
-.composerNoticeZone {
-  display: grid;
-  grid-template-rows: 1fr;
-  width: 100%;
-  position: relative;
-  z-index: var(--z-base);
-  margin-bottom: 6px;
-  transition:
-    grid-template-rows var(--duration-fast) var(--ease-decelerate),
-    margin-bottom var(--duration-fast) var(--ease-decelerate);
-}
-
-.composerNoticeZone[data-closing='true'] {
-  grid-template-rows: 0fr;
-  margin-bottom: 0;
-}
-
-.composerNoticeZoneInner {
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 100%;
-}
-
 /* ==========================================================================
-   Layer 1: 浮动权限审批条（Floating Permission Approval Bar）
-   ========================================================================== */
-
-.flowPermissionHost {
-  display: flex;
-  flex-direction: column;
-  row-gap: 6px;
-  margin: 0;
-  padding: 0;
-  width: 100%;
-}
-
-.flowPermissionBar {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px 12px;
-  margin: 0;
-  border-radius: var(--radius-xl);
-  background: var(--color-warning-bg, var(--warning-soft-bg));
-  border: 1px solid
-    color-mix(in srgb, var(--color-warning) 16%, var(--border-color));
-  box-shadow: 0 1px 3px var(--shadow-color);
-  overflow: hidden;
-  font-size: var(--font-size-xs);
-  color: var(--text-primary);
-  transition:
-    border-color var(--transition-fast),
-    background var(--transition-fast),
-    opacity var(--duration-normal) var(--ease-decelerate),
-    transform var(--duration-normal) var(--ease-decelerate);
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.flowPermissionBar:hover {
-  border-color: color-mix(
-    in srgb,
-    var(--color-warning) 22%,
-    var(--border-color)
-  );
-}
-
-.flowPermissionBarLine1 {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-  height: 20px;
-  line-height: 20px;
-  flex-shrink: 0;
-}
-
-.flowPermissionBarTitleGroup {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  height: 20px;
-  line-height: 20px;
-}
-
-.shieldIcon {
-  color: var(--brand-deep);
-  flex-shrink: 0;
-}
-
-.flowPermissionBarBadge {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  padding: 0;
-  border-radius: 0;
-  background: transparent;
-  border: none;
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-  color: var(--text-secondary);
-  flex-shrink: 0;
-  letter-spacing: 0.01em;
-  line-height: 1.2;
-}
-
-.flowPermissionBarBadge[data-risk='low'] {
-  color: var(--brand-deep);
-  font-weight: 600;
-}
-
-.flowPermissionBarBadge[data-risk='high'] {
-  color: var(--color-error);
-  font-weight: 600;
-}
-
-.flowPermissionBarSummary {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.2;
-}
-
-.flowPermissionBarMetaRight {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  margin-left: auto;
-  padding-right: 2px;
-}
-
-.flowPermissionBarTimer {
-  font-family: var(--font-mono, monospace);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-  user-select: none;
-}
-
-.flowPermissionBarTimer.isOrange {
-  color: var(--color-warning);
-}
-
-.flowPermissionBarTimer.isWarningFlash {
-  color: var(--color-warning);
-  animation: permWarnPulse 2s ease-in-out infinite;
-}
-
-.flowPermissionBarTimer.isExpired {
-  color: var(--color-error);
-  animation: permExpirePulse 1.4s ease-in-out infinite alternate;
-}
-
-@keyframes permWarnPulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.65;
-  }
-}
-
-@keyframes permExpirePulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-.flowPermissionBarMore {
-  flex-shrink: 0;
-  font-size: var(--font-size-xs);
-  color: var(--text-secondary);
-  background: var(--tint-hover);
-  padding: 1px 6px;
-  border-radius: var(--radius-sm);
-}
-
-.flowPermissionBarLine2 {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-  height: 22px;
-  line-height: 22px;
-  font-size: var(--font-size-xs);
-  flex-shrink: 0;
-}
-
-.flowPermissionCmd {
-  flex: 1 1 auto;
-  min-width: 0;
-  max-width: 100%;
-  height: 22px;
-  line-height: 22px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono, monospace);
-  font-size: var(--font-size-xs);
-  color: var(--text-secondary);
-  background: transparent;
-  border: none;
-  padding: 0;
-  margin: 0;
-}
-
-.flowPermissionBarActions {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 22px;
-  line-height: 22px;
-  flex-shrink: 0;
-  margin-left: auto;
-}
-
-.flowPermissionBtn,
-.flowPermissionBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  height: 22px;
-  min-height: 22px;
-  max-height: 22px;
-  --btn-h: 22px;
-  --btn-px: 8px;
-  line-height: 22px;
-  padding: 0 8px;
-  border-radius: var(
-    --radius-sm,
-    6px
-  ); /* 6px 内圆角 + 6px 边距 = 12px 外圆角，绝对同心 */
-  border: none;
-  outline: none;
-  font-family: inherit;
-  font-size: var(--font-size-xs);
-  font-weight: 400;
-  cursor: pointer;
-  user-select: none;
-  box-sizing: border-box;
-  transition: background 120ms ease;
-  box-shadow: none;
-}
-
-.flowPermissionBtnDeny,
-.flowPermissionBtnDeny {
-  background: transparent;
-  color: var(--color-error);
-}
-
-.flowPermissionBtnDeny:hover,
-.flowPermissionBtnDeny:hover {
-  background: var(--danger-soft-bg);
-}
-
-.flowPermissionBtnAllow,
-.flowPermissionBtnAllow {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  border: 1px solid var(--border-subtle);
-  font-weight: 500;
-}
-
-.flowPermissionBtnAllow:hover,
-.flowPermissionBtnAllow:hover {
-  background: var(--bg-elevated);
-}
-
-.flowPermissionBtnAlways,
-.flowPermissionBtnAlways {
-  background: transparent;
-  color: var(--text-secondary);
-}
-
-.flowPermissionBtnAlways:hover,
-.flowPermissionBtnAlways:hover {
-  background: var(--tint-hover);
-}
-
-.flowPermissionBarResolved {
-  opacity: 0.55;
-  transform: scale(0.96);
-  pointer-events: none;
-}
-
-/* ==========================================================================
-   Layer 2: 目标/计划模式进度条（Plan Progress Bar & Scrubber）
-   ========================================================================== */
-
-.planProgressBar {
-  display: flex;
-  position: relative;
-  flex-direction: column;
-  /* 独立闭合卡片：废除抽屉舌头负边距与内缩假象 */
-  width: 100%;
-  max-width: min(var(--chat-col-max, 760px), 100%);
-  align-self: flex-start;
-  margin-left: 0;
-  margin-right: auto;
-  margin-bottom: 2px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-bottom: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 -2px 10px
-    color-mix(in srgb, var(--shadow-color) 2%, transparent);
-  box-sizing: border-box;
-  transition:
-    border-color var(--transition-fast, 120ms ease),
-    box-shadow var(--transition-fast, 120ms ease);
-  outline: none;
-  z-index: var(--z-base);
-}
-
-.planStepList {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows var(--transition-accordion);
-  background: var(--bg-card);
-  border-bottom: 0px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.planProgressBar.isExpanded .planStepList {
-  grid-template-rows: 1fr;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.planStepListInner {
-  overflow: hidden;
-  padding: 0 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  transition: padding var(--transition-accordion);
-}
-
-.planProgressBar.isExpanded .planStepListInner {
-  padding: 10px 14px 4px 14px;
-}
-
-.planExpandedStep {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 6px 10px;
-  border-radius: var(--radius-md);
-  border: none;
-  outline: none;
-  transition:
-    background var(--transition-fast, 120ms ease),
-    color var(--transition-fast, 120ms ease);
-}
-
-.planExpandedStep:hover {
-  background: var(--tint-hover);
-  color: var(--text-primary);
-}
-
-.planExpandedStep.completed {
-  color: var(--text-primary);
-}
-
-.planExpandedStep.active {
-  color: var(--text-primary);
-  font-weight: 600;
-  background: var(--tint-hover);
-  border: none;
-  outline: none;
-}
-
-.planStepDot {
-  width: 6.5px;
-  height: 6.5px;
-  border-radius: 50%;
-  background: var(--text-muted);
-  flex-shrink: 0;
-  box-sizing: border-box;
-  transition:
-    background var(--transition-fast, 120ms ease),
-    box-shadow var(--transition-fast, 120ms ease);
-}
-
-.planExpandedStep.completed .planStepDot {
-  background: var(--text-secondary);
-}
-
-.planExpandedStep.pending .planStepDot {
-  background: transparent;
-  border: 1px solid var(--border-subtle);
-}
-
-.planExpandedStep.active .planStepDot {
-  background: var(--accent-green);
-  box-shadow: 0 0 0 2.5px
-    color-mix(in srgb, var(--accent-green) 25%, transparent);
-}
-
-.stepText {
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.planCollapsed {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  /* 底部 14px 垫高是 -10px 舌头补偿，已随闭合卡片废除 */
-  padding: 6px 12px;
-  height: 44px;
-  box-sizing: border-box;
-}
-
-.planModeBadge,
-.planModeBadge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 2px 6px;
-  border-radius: var(--radius-md);
-  border: none;
-  background: transparent;
-  color: var(--text-primary);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  cursor: pointer;
-  user-select: none;
-  height: 24px;
-  min-height: 24px;
-  --btn-h: 24px;
-  --btn-px: 6px;
-  box-sizing: border-box;
-  line-height: 1;
-  flex-shrink: 0;
-  transition:
-    background var(--transition-fast, 120ms ease),
-    color var(--transition-fast, 120ms ease);
-}
-
-.planModeBadge:hover {
-  background: var(--tint-hover);
-  color: var(--text-primary);
-}
-
-.planModeBadge .modeIcon {
-  width: 13px;
-  height: 13px;
-  color: var(--text-secondary);
-}
-
-.planModeBadge:hover .modeIcon {
-  color: var(--text-primary);
-}
-
-.planDividerV {
-  width: 1px;
-  height: 16px;
-  background: var(--border-subtle);
-  flex-shrink: 0;
-}
-
-.planStepCounter {
-  display: none;
-}
-
-.planActiveTaskBox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-  cursor: pointer;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  height: 24px;
-  line-height: 24px;
-  box-sizing: border-box;
-}
-
-.planActiveTaskBox:hover .planStep {
-  color: var(--text-primary);
-}
-
-.planRoller {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  height: 24px;
-}
-
-.planRollerTrack {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-
-.planStep {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--text-primary);
-  height: 24px;
-  line-height: 24px;
-  display: flex;
-  align-items: center;
-  font-size: var(--font-size-sm);
-  font-weight: 400;
-}
-
-.planSpacer {
-  flex: 0;
-}
-
-.planRightControls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 24px;
-  flex-shrink: 0;
-}
-
-.planDuration {
-  font-family: inherit;
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-  line-height: 16px;
-  height: 16px;
-}
-
-.planQuickActions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.planActionBtn,
-.planActionBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  min-width: unset;
-  min-height: unset;
-  --btn-h: 24px;
-  --btn-px: 0px;
-  border-radius: var(--radius-sm);
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 0;
-  transition:
-    background var(--transition-fast, 120ms ease),
-    color var(--transition-fast, 120ms ease);
-}
-
-.planActionBtn:hover,
-.planActionBtn:hover {
-  background: var(--tint-hover);
-  color: var(--text-primary);
-}
-
-.planActionBtn.stop:hover,
-.planActionBtn.stop:hover {
-  background: var(--danger-soft-bg);
-  color: var(--color-error);
-}
-
-.planActionBtn svg {
-  width: 13px;
-  height: 13px;
-  pointer-events: none;
-}
-
-/* ==========================================================================
-   Layer 3: 上下文与文件引用卡片区（Attachment Bar）
-   ========================================================================== */
-
-.fileZone,
-.attachStrip {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 8px;
-  padding: 0;
-  margin: 0;
-  overflow-x: auto;
-  overflow-y: visible;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-  max-width: 100%;
-}
-
-.fileZone:empty,
-.attachStrip:empty {
-  display: none;
-}
-
-@keyframes composerAttachArrive {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.fileCard,
-.attachChip,
-.attachChipImage,
-.fileCardHorizontal {
-  animation: composerAttachArrive var(--transition-accordion) both;
-}
-
-.fileCard,
-.attachChip {
-  position: relative;
-  z-index: var(--z-base);
-  display: inline-flex;
-  flex-direction: column;
-  justify-content: space-between;
-  width: var(--composer-attach-card-size, 58px);
-  height: var(--composer-attach-card-size, 58px);
-  padding: 6px;
-  background: var(--composer-attach-card-bg, var(--bg-card));
-  border: var(--composer-attach-card-border, 1px solid var(--border-subtle));
-  border-radius: var(--composer-attach-card-radius, var(--radius-xl));
-  cursor: pointer;
-  user-select: none;
-  box-sizing: border-box;
-  max-width: var(--composer-attach-card-size, 58px);
-  flex-shrink: 0;
-  overflow: hidden;
-  box-shadow: none;
-  transition:
-    border-color var(--transition-fast, 120ms ease),
-    background-color var(--transition-fast, 120ms ease);
-}
-
-.fileCard:hover,
-.attachChip:hover,
-.attachChip:focus-visible {
-  border-color: var(--composer-attach-card-hover-border, var(--border-color));
-  background: var(--bg-card-subtle);
-  box-shadow: none;
-  outline: none;
-  z-index: var(--z-popover);
-}
-
-.attachChipImage {
-  width: var(--composer-attach-card-size, 58px);
-  height: var(--composer-attach-card-size, 58px);
-  max-width: var(--composer-attach-card-size, 58px);
-  padding: 0;
-  background: var(--bg-primary);
-  border: var(--composer-attach-card-border, 1px solid var(--border-subtle));
-  border-radius: var(--composer-attach-card-radius, 12px);
-  box-sizing: border-box;
-  position: relative;
-  box-shadow: none;
-}
-
-.attachChipImage:hover {
-  border-color: var(--composer-attach-card-hover-border, var(--border-color));
-}
-
-.fileThumbnail,
-.attachThumb {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: inherit;
-  display: block;
-  flex-shrink: 0;
-  background: var(--bg-primary);
-}
-
-.fileIcon,
-.attachIconBox {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  flex-shrink: 0;
-  background: transparent;
-  color: var(--text-secondary);
-}
-
-.attachIcon {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-}
-
-.fileName,
-.attachName {
-  font-size: var(--composer-attach-name-size, 11px);
-  font-weight: 500;
-  color: var(--composer-attach-name-color, var(--text-secondary));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  width: 100%;
-  max-width: 100%;
-  line-height: 1.25;
-  display: block;
-  box-sizing: border-box;
-  text-align: left;
-}
-
-.annotationTag {
-  display: inline-flex;
-  align-items: center;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-  padding: 2px 4px;
-  margin-right: 4px;
-  border-radius: var(--radius-xs);
-  background: color-mix(in srgb, var(--accent-color) 14%, transparent);
-  color: var(--accent-color);
-  letter-spacing: -0.01em;
-  flex-shrink: 0;
-}
-
-/* --------------------------------------------------------------------------
-   文档 / 文件横向微卡片模式 (Document/File Mode - 对齐 AttachmentCard 序号 1 规范)
-   -------------------------------------------------------------------------- */
-.fileCard.fileCardHorizontal,
-.attachChip.fileCardHorizontal {
-  width: auto;
-  min-width: 160px;
-  max-width: 220px;
-  height: 50px;
-  min-height: 48px;
-  max-height: 52px;
-  padding: 6px 10px;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-}
-
-.fileCardHorizontal .fileIconBox {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  min-height: 28px;
-  max-width: 28px;
-  max-height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border-radius: var(
-    --radius-sm,
-    6px
-  ); /* 消除 8px 圆角在 50px 卡片内的倒挂，微圆顺接 */
-  background: var(--bg-subtle);
-}
-
-.fileCardHorizontal .fileInfoCol,
-.fileCardHorizontal .fileInfo {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  min-width: 0;
-  flex: 1;
-  gap: 2px;
-  overflow: hidden;
-}
-
-.fileCardHorizontal .fileMeta {
-  font-size: 10px;
-  font-weight: var(--font-weight-medium, 500);
-  line-height: 1;
-  color: var(--text-tertiary);
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  width: 100%;
-}
-
-.attachProgressBadge {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1px 4px;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--composer-attach-progress-color, var(--accent-primary));
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
-  pointer-events: none;
-  z-index: var(--z-dock);
-  font-variant-numeric: tabular-nums;
-  transition: opacity var(--transition-fast, 120ms ease);
-}
-
-.attachProgressBadgeImage {
-  background: var(--surface-overlay);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  color: var(--text-on-overlay);
-  text-shadow: 0 1px 2px
-    color-mix(in srgb, var(--shadow-color) 60%, transparent);
-}
-
-.attachProgressBorder {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: var(--z-base);
-}
-
-.attachProgressBorder rect {
-  transition: stroke-dashoffset 200ms ease;
-}
-
-.fileCard:hover .attachProgressBadge,
-.attachChip:hover .attachProgressBadge {
-  opacity: 0;
-}
-
-.attachWarnBadge {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: var(--composer-attach-remove-size, 18px);
-  height: var(--composer-attach-remove-size, 18px);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-warning, var(--warning-color));
-  background: var(--color-warning-bg, var(--warning-soft-bg-hover));
-  border: 1px solid
-    var(
-      --color-warning-border,
-      color-mix(
-        in srgb,
-        var(--color-warning, var(--warning-color)) 35%,
-        transparent
-      )
-    );
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  cursor: help;
-  z-index: var(--z-popover);
-  box-shadow: none;
-  pointer-events: auto;
-  transition:
-    transform 140ms ease,
-    background-color 140ms ease;
-}
-
-.attachWarnBadge:hover {
-  transform: scale(1.08);
-  background: var(--color-warning-bg, var(--warning-soft-bg-hover));
-}
-
-.attachRemove,
-.fileRemove,
-.attachRemove {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: var(--composer-attach-remove-size, 18px);
-  height: var(--composer-attach-remove-size, 18px);
-  min-width: unset;
-  min-height: unset;
-  --btn-h: var(--composer-attach-remove-size, 18px);
-  --btn-px: 0px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  opacity: 0;
-  transform: scale(0.85);
-  pointer-events: none;
-  background: var(--composer-attach-remove-bg);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid var(--composer-attach-remove-border, var(--border-subtle));
-  color: var(--text-primary);
-  padding: 0;
-  box-shadow: none;
-  filter: none;
-  outline: none;
-  transition:
-    opacity var(--duration-fast) var(--ease-decelerate),
-    transform var(--duration-fast) var(--ease-decelerate),
-    background-color var(--transition-micro),
-    border-color var(--transition-micro),
-    color var(--transition-micro);
-  z-index: var(--z-popover);
-}
-
-/* 扩展无缝命中区，防止鼠标从卡片边界移动向叉号时失焦 */
-.fileRemove::before,
-.attachRemove::before {
-  content: '';
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-}
-
-.fileRemove svg,
-.attachRemove svg {
-  width: 10px;
-  height: 10px;
-  stroke-width: 2.2;
-}
-
-.fileCard:hover .fileRemove,
-.fileCard:hover .attachRemove,
-.attachChip:hover .fileRemove,
-.attachChip:hover .attachRemove,
-.attachChip:focus-within .fileRemove,
-.attachChip:focus-within .attachRemove,
-.fileRemove:hover,
-.attachRemove:hover {
-  opacity: 1;
-  transform: scale(1);
-  pointer-events: auto;
-}
-
-/* 单一真理源统一 Hover：正红色稍弱一点（不混合黑色），纯白叉号，清透干净，全卡片类型绝对统一样式 */
-.fileCard .fileRemove:hover,
-.fileCard .attachRemove:hover,
-.attachChip .fileRemove:hover,
-.attachChip .attachRemove:hover,
-.fileRemove:hover,
-.attachRemove:hover {
-  background: var(--color-error);
-  border-color: transparent;
-  color: var(--text-on-danger);
-}
-
-/* ==========================================================================
-   选区批注卡片浮层 (Design Token SSOT - 少就是多，极简高阶排版)
-   ========================================================================== */
-
-.dotSep {
-  margin: 0 2px;
-  color: var(--text-tertiary);
-  user-select: none;
-}
-
-.annPopoverCard {
-  /* 同心几何标尺：外圆角 = 内圆角 + 内边距 (Ro = Ri + P = 6 + 12 = 18px) */
-  --ann-pad: 12px;
-  --ann-radius-inner: 6px;
-  --ann-radius-outer: calc(var(--ann-radius-inner) + var(--ann-pad));
-
-  position: fixed;
-  z-index: var(--z-modal);
-  width: 320px;
-  max-width: calc(100vw - 24px);
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--ann-radius-outer);
-  box-shadow:
-    0 16px 36px color-mix(in srgb, var(--shadow-color) 8%, transparent),
-    0 2px 8px color-mix(in srgb, var(--shadow-color) 3%, transparent);
-  padding: var(--ann-pad);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  animation: annPopoverFadeIn var(--transition-popover-enter);
-  box-sizing: border-box;
-}
-
-@keyframes annPopoverFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(4px) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.annPopoverHeader {
-  display: flex;
-  align-items: center;
-  line-height: 1.2;
-  padding: 0 2px;
-}
-
-.annPopoverFileName {
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  letter-spacing: -0.01em;
-}
-
-/* 分区容器与语义标签：建立清晰直观的排版层级 */
-.annSectionBlock {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.annSectionLabel {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--text-tertiary);
-  user-select: none;
-  line-height: 1;
-  padding-left: 1px;
-}
-
-/* 引用代码块：无灰色实体背景，采用极简品牌引用竖线，紧凑且可平滑滚动 */
-.annSnippetQuote {
-  margin: 0;
-  padding: 3px 0 3px 8px;
-  border-left: 2px solid
-    color-mix(in srgb, var(--brand) 40%, var(--border-color));
-  background: transparent;
-  max-height: 80px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.annSnippetQuote::-webkit-scrollbar {
-  width: 4px;
-}
-
-.annSnippetQuote::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.annSnippetQuote::-webkit-scrollbar-thumb {
-  background: var(--border-subtle);
-  border-radius: var(--radius-sm);
-}
-
-.annSnippetQuote::-webkit-scrollbar-thumb:hover,
-.annSnippetQuote::-webkit-scrollbar-thumb:active {
-  background: var(--border-color);
-}
-
-.annSnippetQuote::-webkit-scrollbar-button {
-  display: none;
-  width: 0;
-  height: 0;
-}
-
-.annSnippetText {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--text-secondary);
-  white-space: pre-wrap;
-  word-break: break-all;
-  tab-size: 2;
-}
-
-/* 批注输入区：采用约 2% 的设计 Token 柔和微底色，遵循几何同心法则 (Ri = 6px) */
-.annInputContainer {
-  background: var(--md-code-block-bg);
-  border: 1px solid transparent;
-  border-radius: var(--ann-radius-inner);
-  padding: 6px 8px;
-  box-sizing: border-box;
-  transition:
-    background var(--transition-fast, 120ms ease),
-    border-color var(--transition-fast, 120ms ease);
-}
-
-.annCommentInput {
-  width: 100%;
-  box-sizing: border-box;
-  background: transparent;
-  border: none;
-  outline: none;
-  box-shadow: none;
-  padding: 0;
-  margin: 0;
-  font-family: inherit;
-  font-size: var(--font-size-xs);
-  line-height: 1.5;
-  color: var(--text-primary);
-  caret-color: var(--text-primary);
-  resize: none;
-  min-height: 42px;
-  max-height: 140px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.annCommentInput::placeholder {
-  color: var(--text-tertiary);
-  opacity: 0.85;
-}
-
-/* 底部操作区：无冗余分割线与噪声文字，纯净右对齐双按钮组 */
-.annFooter {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  padding-top: 2px;
-}
-
-.annCancelBtn,
-.annCancelBtn {
-  height: 24px;
-  min-height: unset;
-  --btn-h: 24px;
-  --btn-px: 10px;
-  padding: 0 10px;
-  border-radius: var(--ann-radius-inner);
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 400;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    background var(--transition-fast, 120ms ease),
-    color var(--transition-fast, 120ms ease);
-}
-
-.annCancelBtn:hover,
-.annCancelBtn:hover {
-  background: var(--tint-hover);
-  color: var(--text-primary);
-}
-
-.annSaveBtn,
-.annSaveBtn {
-  height: 24px;
-  min-height: unset;
-  --btn-h: 24px;
-  --btn-px: 12px;
-  padding: 0 12px;
-  border-radius: var(--ann-radius-inner);
-  border: none;
-  background: var(--brand);
-  color: var(--text-on-accent);
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    opacity var(--transition-fast, 120ms ease),
-    transform var(--transition-fast, 120ms ease);
-}
-
-.annSaveBtn:hover,
-.annSaveBtn:hover {
-  opacity: 0.88;
-}
-
-.annSaveBtn:active,
-.annSaveBtn:active {
-  opacity: 0.8;
-}
-
-/* ==========================================================================
-   Layer 4: 主输入区（Composer Card & Grid Layout）
+   主输入卡片容器（Composer Card & Embedded Top Slot）
    ========================================================================== */
 
 .composerCard {
-  /* 同心几何标尺：外圆角 = 内边距 + 内圆角 */
   --composer-radius-outer: var(--composer-radius-single, 20px);
   position: relative;
   z-index: var(--z-dock);
@@ -1275,16 +30,16 @@
   gap: 0;
   width: 100%;
   box-sizing: border-box;
-  /* 水平内衬 SSOT：X 轴锁 --composer-pad-x（结束侧）+ --composer-pad-x-start（起始侧内衬）。
-   * 单/多行消费同一对 token——模式切换时 ＋（left-ctrl 同列）与右缘动作组 X 轴零位移。 */
-  padding: 6px var(--composer-pad-x, 10px) 6px var(--composer-pad-x-start, 10px);
-  border: 1px solid var(--border-subtle);
+  padding: var(--space-2_5, 10px) var(--composer-pad-x, 10px)
+    var(--space-2_5, 10px) var(--composer-pad-x-start, 10px);
+  border: 1px solid var(--edge-rim, var(--border-subtle));
   border-radius: var(--composer-radius-single, 20px);
-  /* 三档底色：输入框独立一档（浅色纯白 / 深色最亮层） */
-  background: var(--composer-bg, var(--surface-input));
-  box-shadow:
+  background: var(--surface-raised, var(--composer-bg, var(--surface-input)));
+  box-shadow: var(
+    --shadow-lift-raised,
     0 1px 3px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
-    0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
+    0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent)
+  );
   transition:
     border-radius var(--duration-normal) var(--ease-decelerate),
     border-color var(--duration-fast) var(--ease-decelerate),
@@ -1294,7 +49,8 @@
 }
 
 .composerCard.isMultiline {
-  padding: 8px var(--composer-pad-x, 10px) 8px var(--composer-pad-x-start, 10px);
+  padding: var(--space-3, 12px) var(--composer-pad-x, 10px) var(--space-3, 12px)
+    var(--composer-pad-x-start, 10px);
   border-radius: var(--composer-radius-multi, 20px);
 }
 
@@ -1309,35 +65,80 @@
   cursor: not-allowed;
 }
 
-.composerCard:has(.attachStrip),
-.composerCard:has(.fileZone) {
+.composerCard:has([data-composer-attachments]) {
   gap: 6px;
 }
 
 .composerCard:hover {
-  border-color: var(--border-subtle);
-  box-shadow:
+  border-color: var(--edge-rim, var(--border-subtle));
+  box-shadow: var(
+    --shadow-lift-raised,
     0 1px 3px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
-    0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
+    0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent)
+  );
 }
 
 .composerCard:focus-within,
 .composerCard:active {
-  border-color: var(--border-subtle);
-  box-shadow:
+  border-color: var(
+    --edge-focus,
+    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)
+  );
+  box-shadow: var(
+    --shadow-lift-raised,
     0 1px 3px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
-    0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
+    0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent)
+  );
   outline: none;
 }
 
-/* RL-01 特例：全页空态落地输入焦点边框（保持静态无位移，零跳变） */
+/* RL-01 / AGENTS.md §13 特例：全页空态落地输入焦点边框（混入比 ≤ 5%，不设过渡动画） */
 .composerCard[data-empty-kind='session-empty']:focus-within {
-  border-color: var(--border-subtle);
-  box-shadow:
+  border-color: var(
+    --edge-focus-empty,
+    color-mix(in srgb, var(--border-color) 97%, var(--text-primary) 3%)
+  );
+  box-shadow: var(
+    --shadow-lift-raised,
     0 1px 3px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
-    0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
+    0 3px 8px -1px color-mix(in srgb, var(--shadow-color) 2%, transparent)
+  );
   outline: none;
 }
+
+/* ==========================================================================
+   内嵌顶槽（Embedded Top Slot：承载权限审批 / 计划进度 / 内嵌通知）
+   ========================================================================== */
+
+.embeddedTopSlot {
+  display: grid;
+  grid-template-rows: 1fr;
+  width: 100%;
+  border: none;
+  margin-bottom: 6px;
+  transition:
+    grid-template-rows var(--duration-fast) var(--ease-decelerate),
+    margin-bottom var(--duration-fast) var(--ease-decelerate);
+}
+
+.embeddedTopSlot[data-closing='true'] {
+  grid-template-rows: 0fr;
+  margin-bottom: 0;
+}
+
+.embeddedTopSlotInner {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  border: none;
+}
+
+/* ==========================================================================
+   主输入网格布局（Grid Layout）
+   ========================================================================== */
 
 .inputMainLayout {
   display: grid;
@@ -1346,28 +147,28 @@
   gap: 2px;
 }
 
-/* 单行模式（默认）：所有控件位于同一行：左侧[＋]，中间输入框，右侧动作组（含融合胶囊），保留充足呼吸留白 */
+/* 单行模式：左侧控制组（＋与权限模式菜单）、中间输入框、右侧动作组 */
 .composerCard:not(.isMultiline) .inputMainLayout {
   grid-template-areas: 'left-ctrl text actions';
   grid-template-columns: auto minmax(0, 1fr) auto;
   column-gap: 6px;
 }
 
-/* 多行模式：输入框占满顶部，控制按钮移至底部，充足呼吸间距 */
+/* 多行模式：输入框占满顶部，左下角控制组（＋与权限模式菜单）与右下角动作组 */
 .composerCard.isMultiline .inputMainLayout {
   grid-template-areas:
-    'text text text text'
-    'left-ctrl perm . actions';
-  grid-template-columns: auto auto 1fr auto;
+    'text text text'
+    'left-ctrl . actions';
+  grid-template-columns: auto 1fr auto;
   row-gap: 6px;
-  column-gap: 2px;
+  column-gap: 6px;
 }
 
 .actionLeft {
   grid-area: left-ctrl;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
   position: relative;
   height: 28px;
@@ -1380,7 +181,6 @@
   overflow: hidden;
 }
 
-/* 单行态 fieldSlot 水平留白微调，与 column-gap: 6px 合计 10px，对齐左侧 --composer-pad-x-start (10px) */
 .composerCard:not(.isMultiline) .fieldSlot {
   display: flex;
   align-items: center;
@@ -1389,19 +189,10 @@
   box-sizing: border-box;
 }
 
-/* 多行态 fieldSlot 呼吸内衬：四周由 composerCard (8px) 与 8px 7px 内衬协同提供（总顶距 16px 充裕大气呼吸），文字左右缘与加号/发送按钮视觉同轴对齐 (10px + 7px = 17px) */
 .composerCard.isMultiline .fieldSlot {
-  padding: 8px 7px 0 7px;
+  padding: 6px 7px 0 7px;
   width: 100%;
   box-sizing: border-box;
-}
-
-.permSlot {
-  grid-area: perm;
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  height: 28px;
 }
 
 .actionRight {
@@ -1414,7 +205,6 @@
   gap: 0;
 }
 
-.cancelEditBtn,
 .cancelEditBtn {
   width: 28px;
   height: 28px;
@@ -1441,15 +231,12 @@
   box-sizing: border-box;
 }
 
-.cancelEditBtn:active,
 .cancelEditBtn:hover,
 .cancelEditBtn:active {
   background: var(--composer-control-hover-bg);
   color: var(--text-primary);
 }
 
-/* ---- Plus Button (28x28 正圆按钮，同心几何标尺) ---- */
-.plusBtn,
 .plusBtn {
   background: transparent;
   border: none;
@@ -1479,8 +266,7 @@
 .plusBtn:hover,
 .plusBtn:active,
 .plusBtn:focus-visible,
-.plusBtn.isOpen,
-.plusBtn.isOn {
+.plusBtn.isOpen {
   background: var(--composer-control-hover-bg);
   color: var(--text-primary);
 }
@@ -1491,8 +277,6 @@
   stroke-width: 1.75;
 }
 
-/* ---- Action Circle Button (Voice / Stats) (28x28 正圆按钮) ---- */
-.actionCircleBtn,
 .actionCircleBtn {
   width: 28px;
   height: 28px;
@@ -1520,7 +304,6 @@
     background var(--transition-fast, 120ms ease);
 }
 
-.actionCircleBtn:active,
 .actionCircleBtn:hover,
 .actionCircleBtn:active {
   color: var(--text-primary);
@@ -1535,167 +318,38 @@
 }
 
 /* ==========================================================================
-   Emerald Green Solid Circle Send Button (.sendBtnCircle / send-btn-circle)
+   编辑器网格宿主与回退输入框样式（Field in Grid & Fallback Textarea）
    ========================================================================== */
 
-.sendBtnCircle,
-.sendCircle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 28px;
-  width: 0;
-  min-width: 0;
-  padding: 0;
-  margin-left: 0;
-  opacity: 0;
-  transform: scale(0.92);
-  pointer-events: none;
-  overflow: hidden;
-  border-radius: 50%;
-  border: none;
-  cursor: pointer;
-  background: var(--brand);
-  color: var(--text-on-accent);
-  flex-shrink: 0;
-  font-size: 0;
-  line-height: 1;
-  box-sizing: border-box;
-  transition:
-    width var(--duration-normal) var(--ease-decelerate),
-    margin-left var(--duration-normal) var(--ease-decelerate),
-    opacity var(--duration-fast) var(--ease-decelerate),
-    transform var(--duration-normal) var(--ease-decelerate),
-    background var(--transition-fast),
-    box-shadow var(--transition-fast);
-}
-
-.sendBtnCircle.active,
-.sendCircle[data-send-active='1'],
-.sendCircle:not(:disabled) {
-  width: 28px;
-  min-width: 28px;
-  max-width: 28px;
-  height: 28px;
-  margin-left: 6px;
-  opacity: 1;
-  transform: scale(1);
-  pointer-events: auto;
-  box-shadow: none;
-}
-
-.sendBtnCircle.active:hover,
-.sendCircle[data-send-active='1']:hover,
-.sendCircle:not(:disabled):hover {
-  background: var(--brand-deep);
-}
-
-.sendBtnCircle.active:active,
-.sendCircle[data-send-active='1']:active,
-.sendCircle:not(:disabled):active {
-  background: var(--brand-deep);
-}
-
-.sendBtnCircle svg,
-.sendCircle svg {
-  display: block;
-  width: 14px;
-  height: 14px;
-  stroke-width: 2.4;
-  color: var(--text-on-accent);
-  stroke: currentColor;
-  flex-shrink: 0;
-  margin: auto;
-}
-
-.stopCircleBtn {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  max-width: 28px;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  cursor: pointer;
-  transition:
-    color var(--transition-fast, 120ms ease),
-    background var(--transition-fast, 120ms ease);
-}
-
-.stopCircleBtn:hover {
-  background: var(--danger-soft-bg);
-  color: var(--color-error);
-}
-
-/* ==========================================================================
-   Composer Field in Grid & Fallback Textarea styles
-   ========================================================================== */
-
-.container {
+.fieldInGrid {
+  --composer-min-lines: 1;
   --composer-line-height: 1.45;
-  --composer-min-lines: 2;
   --composer-max-lines: 10;
-  --composer-shell-bg: var(--composer-bg);
-  --composer-shell-bg-focus: var(--composer-bg);
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: center;
-  background: var(--composer-shell-bg);
-  background-color: var(--composer-shell-bg);
-  border: 1px solid var(--border-color);
-  border-radius: var(--composer-radius-single);
-  padding: 10px 14px;
-  gap: var(--space-2);
-  min-height: calc(
-    1em * var(--composer-line-height) * var(--composer-min-lines) + 16px
-  );
-  transition: none;
+  background: transparent;
+  background-color: transparent;
+  border: none;
+  padding: 0;
+  min-height: 0;
+  border-radius: 0;
+  box-shadow: none;
+  gap: 0;
   color: var(--text-primary);
   box-sizing: border-box;
 }
 
-.container:hover {
-  border-color: var(--border-color);
-}
-
-.container:focus-within,
-.container:active {
-  background: var(--composer-shell-bg);
-  background-color: var(--composer-shell-bg);
-  border-color: var(--border-color);
+.fieldInGrid:focus-within {
+  background: transparent;
+  background-color: transparent;
+  border: none;
   box-shadow: none;
   outline: none;
 }
 
-.container[data-empty-kind='session-empty']:focus-within {
-  border-color: var(--border-color);
-  outline: none;
-}
-
-.containerDense {
-  --composer-line-height: 1.4;
-  padding: 6px 10px;
-  gap: var(--space-1);
-  border-radius: var(--radius-md);
-  background: var(--composer-shell-bg);
-  background-color: var(--composer-shell-bg);
-  border: 1px solid var(--border-color);
-}
-
-.containerDense:focus-within,
-.containerDense:active {
-  background: var(--composer-shell-bg);
-  background-color: var(--composer-shell-bg);
-  border-color: var(--border-color);
-  outline: none;
-}
-
-.textarea {
+.fieldTextarea {
   flex: 1 1 auto;
   min-width: 0;
   align-self: center;
@@ -1713,13 +367,13 @@
   font-weight: var(--font-weight-normal);
   resize: none;
   min-height: calc(
-    1em * var(--composer-line-height) * var(--composer-min-lines)
+    1em * var(--composer-line-height, 1.45) * var(--composer-min-lines, 1)
   );
   max-height: calc(
-    1em * var(--composer-line-height) * var(--composer-max-lines)
+    1em * var(--composer-line-height, 1.45) * var(--composer-max-lines, 10)
   );
   color: var(--text-primary);
-  line-height: var(--composer-line-height);
+  line-height: var(--composer-line-height, 1.45);
   padding: 0;
   margin: 0;
   overflow-y: hidden;
@@ -1728,111 +382,16 @@
   vertical-align: middle;
 }
 
-.textarea::placeholder {
+.fieldTextarea::placeholder {
   color: var(--text-tertiary);
   opacity: 1;
 }
 
-.textarea:disabled {
+.fieldTextarea:disabled {
   background: transparent;
   background-color: transparent;
   opacity: 0.72;
   color: var(--text-secondary);
-}
-
-.containerDense .textarea {
-  font-size: var(--font-size-sm, 13px);
-  line-height: var(--composer-line-height);
-}
-
-.buttons {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  flex-shrink: 0;
-  padding: 0;
-  align-self: center;
-}
-
-.sendBtn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--text-tertiary);
-  width: var(--control-height, 32px);
-  height: var(--control-height, 32px);
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    color var(--transition-micro, 80ms ease),
-    background var(--transition-micro, 80ms ease);
-  flex-shrink: 0;
-  padding: 0;
-}
-
-.sendBtn:hover:not(:disabled) {
-  background: transparent;
-  color: var(--text-primary);
-}
-
-.sendBtn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.sendBtn svg {
-  width: var(--icon-size-sm, 14px);
-  height: var(--icon-size-sm, 14px);
-}
-
-.stop {
-  background: transparent;
-  color: var(--text-secondary);
-}
-
-.stop:hover:not(:disabled) {
-  background: transparent;
-  color: var(--text-primary);
-}
-
-.queue {
-  width: auto;
-  height: var(--control-height-sm, 28px);
-  padding: 0 8px;
-  gap: var(--space-1);
-  background: transparent;
-  color: var(--text-tertiary);
-  font-size: var(--font-size-sm, 13px);
-  font-weight: var(--font-weight-medium, 500);
-  border-radius: var(--radius-md);
-  font-family: var(--font-sans);
-}
-
-.queue:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text-secondary);
-}
-
-.fieldInGrid {
-  --composer-min-lines: 1;
-  background: transparent;
-  background-color: transparent;
-  border: none;
-  padding: 0;
-  min-height: 0;
-  border-radius: 0;
-  box-shadow: none;
-  gap: 0;
-}
-
-.fieldInGrid:focus-within {
-  background: transparent;
-  background-color: transparent;
-  border: none;
-  box-shadow: none;
-  outline: none;
 }
 
 .composerCard:not(.isMultiline) .fieldInGrid {
@@ -1845,7 +404,7 @@
   max-width: 100%;
 }
 
-.composerCard:not(.isMultiline) .fieldInGrid .textarea,
+.composerCard:not(.isMultiline) .fieldInGrid .fieldTextarea,
 .composerCard:not(.isMultiline) .fieldInGrid :global(.ProseMirror) {
   min-height: 28px;
   max-height: 28px;
@@ -1906,7 +465,7 @@
   width: 100%;
 }
 
-.composerCard.isMultiline .fieldInGrid .textarea,
+.composerCard.isMultiline .fieldInGrid .fieldTextarea,
 .composerCard.isMultiline .fieldInGrid :global(.ProseMirror) {
   white-space: pre-wrap;
   overflow-y: auto;
@@ -1920,29 +479,17 @@
   box-sizing: border-box;
 }
 
-/* 空界面落地输入：内衬与全界面多行态严格统一为 8px 7px 0 7px（总顶距 16px），保持同轴垂直呼吸节奏 */
 .composerCard[data-empty-kind='session-empty'].isMultiline .fieldSlot {
-  padding: 8px 7px 0 7px;
+  padding: 6px 7px 0 7px;
 }
 
-/* 空界面落地输入：新对话默认四行（三行空消息行 + 一行工具行），空间充裕呼吸感强 */
 .composerCard[data-empty-kind='session-empty'].isMultiline
   .fieldInGrid
-  .textarea,
+  .fieldTextarea,
 .composerCard[data-empty-kind='session-empty'].isMultiline
   .fieldInGrid
   :global(.ProseMirror) {
   min-height: calc(1em * var(--composer-line-height, 1.5) * 3);
-}
-
-/* 空界面落地输入：发送按钮常驻（空输入为 disabled 态，占位不收起） */
-.composerCard[data-empty-kind='session-empty'] .sendCircle:disabled {
-  width: 28px;
-  min-width: 28px;
-  max-width: 28px;
-  margin-left: 6px;
-  opacity: var(--opacity-disabled);
-  transform: scale(1);
 }
 
 .dropMask {
@@ -1966,5 +513,3 @@
 .dropMask svg {
   flex-shrink: 0;
 }
-
-/* field 模式 .sendBtn 保留一份；禁止再复制整块 */

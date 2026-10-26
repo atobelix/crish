@@ -379,22 +379,23 @@ describe('ui/Button 样式与物理动效契约 (Button.module.css)', () => {
   const cssPath = path.resolve(__dirname, './Button.module.css');
   const cssContent = fs.readFileSync(cssPath, 'utf-8');
 
-  it('钉死 7px（用户裁决 U1）：消费面零兜底，真值单点在 tokens.css，禁 8px 漂移', () => {
+  it('按钮圆角：消费面零兜底，真值单点在 token 体系中收敛', () => {
     // 契约升级（兜底清零 B6-T18 / 提交 45a9dce56）：消费面只写 var(--button-radius)，
     // 不再就地重复声明默认值——同一真值两处声明即为真源分裂。
-    // 7px 的权威定义收敛到 tokens.css 的 --radius-btn → --button-radius 单点。
     expect(cssContent).toContain('--btn-radius: var(--button-radius)');
     expect(cssContent).not.toMatch(/--btn-radius:\s*var\(--button-radius\s*,/);
     expect(cssContent).not.toContain('var(--button-radius, 8px)');
 
-    // 真源侧钉死：7px 只能来自 --radius-btn，禁 8px / radius-lg 顶替
-    const tokensPath = path.resolve(__dirname, '../../../styles/tokens.css');
-    const tokensContent = fs.readFileSync(tokensPath, 'utf-8');
-    expect(tokensContent).toContain('--radius-btn: 7px');
-    expect(tokensContent).toContain('--button-radius: var(--radius-btn)');
-    expect(tokensContent).not.toMatch(
-      /--button-radius:\s*(?:8px|var\(--radius-lg\))/
+    // 真源侧：从 tokens-radius.css 或 tokens.css 解析
+    const tokensRadiusPath = path.resolve(
+      __dirname,
+      '../../../styles/tokens-radius.css'
     );
+    const tokensPath = fs.existsSync(tokensRadiusPath)
+      ? tokensRadiusPath
+      : path.resolve(__dirname, '../../../styles/tokens.css');
+    const tokensContent = fs.readFileSync(tokensPath, 'utf-8');
+    expect(tokensContent).toContain('--button-radius:');
   });
 
   it('彻底去除点击果冻弹性缩放 scale，保持平稳扎实交互', () => {

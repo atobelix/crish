@@ -7,7 +7,7 @@
  */
 import React, { useEffect, useState } from 'react';
 
-import styles from './ChatComposer.module.css';
+import styles from './ComposerPermissionBar.module.css';
 import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
@@ -58,7 +58,8 @@ export const ComposerPermissionBar: React.FC<ComposerPermissionBarProps> = ({
     return () => clearInterval(timer);
   }, [resolved, timeLeft]);
 
-  const riskLabel = risk === 'high' ? '高风险' : risk === 'medium' ? '中风险' : '低风险';
+  const riskLabel =
+    risk === 'high' ? '高风险' : risk === 'medium' ? '中风险' : '低风险';
   const timerClass =
     timeLeft <= 10
       ? styles.isExpired
@@ -77,24 +78,34 @@ export const ComposerPermissionBar: React.FC<ComposerPermissionBarProps> = ({
       role="region"
       aria-label="权限确认审批条"
     >
-      <div className={`${styles.flowPermissionBarLine1} flow-permission-bar__line1`}>
-        <div className={`${styles.flowPermissionBarTitleGroup} flow-permission-bar__title-group`}>
-          <AppIcon name="shield-alert" size={14} className={styles.shieldIcon} aria-hidden />
+      <div
+        className={`${styles.flowPermissionBarLine1} flow-permission-bar__line1`}
+      >
+        <div
+          className={`${styles.flowPermissionBarTitleGroup} flow-permission-bar__title-group`}
+        >
+          <AppIcon
+            name="shield-alert"
+            size={14}
+            className={styles.shieldIcon}
+            aria-hidden
+          />
           <span
             className={`${styles.flowPermissionBarBadge} flow-permission-bar__badge`}
             data-risk={risk}
           >
             {title ? `${title} · ` : ''}[{riskLabel}]
           </span>
-          <span className={`${styles.flowPermissionBarSummary} flow-permission-bar__summary`}>
-            {summary}
-          </span>
         </div>
-        <div className={`${styles.flowPermissionBarMetaRight} flow-permission-bar__meta-right`}>
+        <div
+          className={`${styles.flowPermissionBarMetaRight} flow-permission-bar__meta-right`}
+        >
           {moreCount > 0 ? (
             <Tooltip content={`队列中还有 ${moreCount} 项待确认`}>
-              <span className={`${styles.flowPermissionBarMore} flow-permission-bar__more`}>
-                +{moreCount} 更多
+              <span
+                className={`${styles.flowPermissionBarMore} flow-permission-bar__more`}
+              >
+                +{moreCount}
               </span>
             </Tooltip>
           ) : null}
@@ -109,11 +120,17 @@ export const ComposerPermissionBar: React.FC<ComposerPermissionBarProps> = ({
         </div>
       </div>
 
-      <div className={`${styles.flowPermissionBarLine2} flow-permission-bar__line2`}>
-        <code className={`${styles.flowPermissionCmd} flow-permission-bar__cmd`}>
+      <div
+        className={`${styles.flowPermissionBarLine2} flow-permission-bar__line2`}
+      >
+        <code
+          className={`${styles.flowPermissionCmd} flow-permission-bar__cmd`}
+        >
           {command || summary}
         </code>
-        <div className={`${styles.flowPermissionBarActions} flow-permission-bar__actions`}>
+        <div
+          className={`${styles.flowPermissionBarActions} flow-permission-bar__actions`}
+        >
           <Button
             type="button"
             variant="ghost"

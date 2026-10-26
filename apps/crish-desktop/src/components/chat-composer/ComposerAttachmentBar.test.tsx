@@ -49,7 +49,9 @@ describe('ComposerAttachmentBar（S4 附件卡）', () => {
     fireEvent.click(screen.getByText('src/report.md'));
     expect(onOpenPath).toHaveBeenCalledTimes(1);
     expect(onOpenPath).toHaveBeenCalledWith('src/report.md');
-    fireEvent.click(screen.getByRole('button', { name: '移除附件 src/report.md' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: '移除附件 src/report.md' })
+    );
     expect(onRemove).toHaveBeenCalledWith('src/report.md');
     expect(onOpenPath).toHaveBeenCalledTimes(1);
   });
@@ -137,7 +139,9 @@ describe('ComposerAttachmentBar（S4 附件卡）', () => {
     );
     const card = screen.getByTestId('composer-attach-card');
     expect(card.getAttribute('data-attach-kind')).toBe('annotation');
-    expect(screen.getByText('批注')).toBeTruthy();
+    expect(
+      card.querySelector('[data-icon="message-square-quote"]')
+    ).not.toBeNull();
     expect(screen.getByText('main.rs')).toBeTruthy();
   });
 
@@ -169,7 +173,9 @@ describe('ComposerAttachmentBar（S4 附件卡）', () => {
 
     // 文档卡片：包含横向微卡片样式，包含文件名与格式徽标
     expect(cards[1]?.className).toMatch(/fileCardHorizontal/);
-    expect(cards[1]?.querySelector('.file-name')?.textContent).toBe('presentation.pptx');
+    expect(cards[1]?.querySelector('.file-name')?.textContent).toBe(
+      'presentation.pptx'
+    );
     expect(screen.getByText(/PPTX/)).toBeTruthy();
   });
 
@@ -193,6 +199,8 @@ describe('ComposerAttachmentBar（S4 附件卡）', () => {
     );
     const warnBadges = screen.getAllByTestId('composer-attach-warn-badge');
     expect(warnBadges).toHaveLength(1);
-    expect(warnBadges[0]?.getAttribute('aria-label')).toContain('当前模型不支持多模态视觉解析');
+    expect(warnBadges[0]?.getAttribute('aria-label')).toContain(
+      '当前模型不支持多模态视觉解析'
+    );
   });
 });

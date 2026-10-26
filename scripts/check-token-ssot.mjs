@@ -40,7 +40,18 @@ const BASELINE_PATH_DEFAULT = resolve(
 );
 const REGISTRY_PATH = resolve(REPO_ROOT, 'scripts/token-registry.json');
 
-const A_CLASS_SOURCES = ['apps/crish-desktop/src/styles/tokens.css'];
+const A_CLASS_SOURCES = [
+  'apps/crish-desktop/src/styles/tokens.css',
+  'apps/crish-desktop/src/styles/tokens-base.css',
+  'apps/crish-desktop/src/styles/tokens-palette.css',
+  'apps/crish-desktop/src/styles/tokens-surface.css',
+  'apps/crish-desktop/src/styles/tokens-text.css',
+  'apps/crish-desktop/src/styles/tokens-type.css',
+  'apps/crish-desktop/src/styles/tokens-space.css',
+  'apps/crish-desktop/src/styles/tokens-radius.css',
+  'apps/crish-desktop/src/styles/tokens-state.css',
+  'apps/crish-desktop/src/styles/tokens-components.css',
+];
 const AUTHORIZED_EXTRA_SOURCES = ['apps/crish-desktop/src/styles/z-index.css'];
 function argVal(name) {
   const i = process.argv.indexOf(name);
@@ -179,7 +190,16 @@ for (const [name, sites] of cssDefs) {
   if (sites.some((s) => A_CLASS_SOURCES.includes(s.file) || authorized.has(s.file))) aClassNames.add(name);
 }
 
-const bClassNames = new Set(registry.bClass.map((b) => b.name));
+const bClassNames = new Set([
+  ...registry.bClass.map((b) => b.name),
+  // P1/P2 运行时表面与文字基准参数（injectRootTokens.ts 单点写入）
+  '--user-surface-base',
+  '--user-surface-tint',
+  '--user-surface-deep',
+  '--user-elev-direction',
+  '--elev-direction',
+  '--text-base',
+]);
 const externalNames = new Set(registry.externallyInjected);
 const islandPrefixes = registry.componentIslands.map((c) => c.prefix);
 
@@ -204,11 +224,21 @@ const documentedApiDefs = [];
 for (const [name, sites] of cssDefs) {
   const files = [...new Set(sites.map((s) => s.file))];
   if (files.length < 2) continue;
-  // 授权例外：--z-* 真源在 z-index.css；降动覆盖在 reduced-motion.css
+  // 授权例外：--z-* 真源在 z-index.css；降动覆盖在 reduced-motion.css；同心圆角局部容器覆写
   if (name.startsWith('--z-') && files.every((f) => f.endsWith('z-index.css') || A_CLASS_SOURCES.includes(f))) continue;
   const others = files.filter((f) => !f.endsWith('reduced-motion.css'));
   if (name.startsWith('--transition-') || name.startsWith('--duration-')) {
     if (others.length < 2) continue;
+  }
+  if (
+    (name === '--composer-attach-card-radius' &&
+      files.every((f) => f.endsWith('ChatMessageRow.module.css') || A_CLASS_SOURCES.includes(f))) ||
+    (name === '--radius-xl' &&
+      files.every((f) => f.endsWith('SettingsRulesTab.module.css') || A_CLASS_SOURCES.includes(f))) ||
+    (name === '--badge-h' &&
+      files.every((f) => f.endsWith('Badge.module.css') || A_CLASS_SOURCES.includes(f)))
+  ) {
+    continue;
   }
   if (isDocumentedApi(name, files)) {
     documentedApiDefs.push({ name, files, sites });

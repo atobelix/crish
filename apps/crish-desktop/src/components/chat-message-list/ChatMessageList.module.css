@@ -93,7 +93,7 @@
   max-width: min(var(--chat-col-max, 760px), 100%);
   margin-left: auto;
   margin-right: auto;
-  padding: 0 var(--chat-stream-pad-x);
+  padding: 0 var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
   box-sizing: border-box;
   min-width: 0;
   overflow-anchor: none;
@@ -125,12 +125,6 @@
 @media (max-width: 720px) {
   .listInner {
     max-width: 100%;
-  }
-}
-
-@media (min-width: 1200px) {
-  .listInner {
-    max-width: min(var(--chat-col-max-wide, 840px), 100%);
   }
 }
 

@@ -12,6 +12,8 @@ import {
 export {
   CHAT_ROW_GAP_COMPACT_PX,
   CHAT_ROW_GAP_PX,
+  ESTIMATE_TEXT_CHARS_PER_LINE,
+  ESTIMATE_TEXT_LINE_HEIGHT_PX,
   estimateTimelineMessageHeight,
 } from './virtualScrollEstimate';
 

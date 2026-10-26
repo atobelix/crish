@@ -48,6 +48,20 @@ export interface SelectionRestorableEditorLike {
   };
 }
 
+export interface ComposerCompositionLifecycleOptions {
+  readonly dom: HTMLElement;
+  readonly composingRef: { current: boolean };
+  readonly guard: ComposerImeDragGuard;
+  readonly captureSelection: () => ComposerSelectionSnapshot;
+  readonly getCurrentContent: () => string | undefined;
+  readonly onCompositionChange?: (composing: boolean) => void;
+  readonly applyDeferred: (
+    content: string,
+    selection: ComposerSelectionSnapshot | null
+  ) => void;
+  readonly resyncSlashTrigger: () => void;
+}
+
 const DRAG_ALLOWED_KEYS = new Set<string>([
   'ArrowLeft',
   'ArrowRight',
@@ -90,8 +104,21 @@ export class ComposerImeDragGuard {
   }
 
   endComposition(): string | null {
+    if (!this.composing) return null;
     this.composing = false;
     return this.consumeDeferredIfUnlocked();
+  }
+
+  /**
+   * 编辑器失焦时结束组合；失焦也终止并发拖拽，消费延迟值且丢弃旧选区快照。
+   */
+  settleCompositionOnBlur(): string | null {
+    if (!this.composing) return null;
+    this.composing = false;
+    this.dragging = false;
+    const deferred = this.consumeDeferredIfUnlocked();
+    this.selectionSnapshot = null;
+    return deferred;
   }
 
   beginDrag(snapshot: ComposerSelectionSnapshot): void {
@@ -233,6 +260,58 @@ export class ComposerImeDragGuard {
     }
     return null;
   }
+}
+
+/** 在编辑器 DOM 和窗口失焦时收束 IME 状态；迟到事件由 composingRef 幂等拦截。 */
+export function bindComposerCompositionLifecycle({
+  dom,
+  composingRef,
+  guard,
+  captureSelection,
+  getCurrentContent,
+  onCompositionChange,
+  applyDeferred,
+  resyncSlashTrigger,
+}: ComposerCompositionLifecycleOptions): () => void {
+  const handleCompositionStart = () => {
+    if (composingRef.current) return;
+    composingRef.current = true;
+    guard.beginComposition(captureSelection());
+    onCompositionChange?.(true);
+  };
+
+  const settleComposition = (fromBlur: boolean) => {
+    if (!composingRef.current) return;
+    composingRef.current = false;
+    const deferred = fromBlur
+      ? guard.settleCompositionOnBlur()
+      : guard.endComposition();
+    onCompositionChange?.(false);
+    if (deferred !== null && deferred !== getCurrentContent()) {
+      requestAnimationFrame(() =>
+        applyDeferred(deferred, guard.getSelectionSnapshot())
+      );
+    } else if (!fromBlur) {
+      requestAnimationFrame(resyncSlashTrigger);
+    }
+  };
+
+  const handleCompositionEnd = () => settleComposition(false);
+  const handleBlur = () => settleComposition(true);
+
+  dom.addEventListener('compositionstart', handleCompositionStart);
+  dom.addEventListener('compositionend', handleCompositionEnd);
+  dom.addEventListener('blur', handleBlur);
+  dom.addEventListener('focusout', handleBlur);
+  window.addEventListener('blur', handleBlur);
+
+  return () => {
+    dom.removeEventListener('compositionstart', handleCompositionStart);
+    dom.removeEventListener('compositionend', handleCompositionEnd);
+    dom.removeEventListener('blur', handleBlur);
+    dom.removeEventListener('focusout', handleBlur);
+    window.removeEventListener('blur', handleBlur);
+  };
 }
 
 /**

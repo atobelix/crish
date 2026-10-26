@@ -10,7 +10,11 @@ export { Button } from './Button/Button';
 export type { ButtonProps, ButtonVariant, ButtonSize } from './Button/Button';
 
 export { IconButton } from './Button/IconButton';
-export type { IconButtonProps } from './Button/IconButton';
+export type {
+  IconButtonProps,
+  IconButtonSize,
+  StandardIconButtonSize,
+} from './Button/IconButton';
 
 export { Input } from './Input/Input';
 export type { InputProps, InputVariant, InputSize } from './Input/Input';
@@ -87,7 +91,12 @@ export type {
 } from './SegmentedControl/SegmentedControl';
 
 export { Badge } from './Badge/Badge';
-export type { BadgeProps, BadgeTone, BadgeSize } from './Badge/Badge';
+export type {
+  BadgeProps,
+  BadgeTone,
+  BadgeSize,
+  StandardBadgeTone,
+} from './Badge/Badge';
 
 export { Slider } from './Slider/Slider';
 export type { SliderProps } from './Slider/Slider';
@@ -99,7 +108,13 @@ export type {
   TabStripRenderCtx,
 } from './TabStrip/TabStrip';
 
-export { Tabs, TabsList, TabsTrigger, TabsContent, useTabsContext } from './Tabs';
+export {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+  useTabsContext,
+} from './Tabs';
 export type {
   TabsProps,
   TabsListProps,
@@ -179,3 +194,12 @@ export type {
 
 export { SmartModelBadge } from './SmartModelBadge';
 export type { SmartModelBadgeProps } from './SmartModelBadge';
+
+export { Row } from './Row';
+export type { RowProps, RowHeight } from './Row';
+
+export { Card } from './Card';
+export type { CardProps, CardPadding } from './Card';
+
+export { DisclosureAffordance } from './DisclosureAffordance';
+export type { DisclosureAffordanceProps } from './DisclosureAffordance';

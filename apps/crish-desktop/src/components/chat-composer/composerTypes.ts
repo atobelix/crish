@@ -11,11 +11,16 @@
 import type React from 'react';
 import type { PermissionMode } from '../../api/permissionModes';
 import type { ChatAttachment } from '../../hooks/useChatStream';
-import type { ComposerNotice } from './ComposerNoticeBar';
+import type { ComposerNotice } from './composerNoticeTypes';
 import type { ComposerPermissionBarProps } from './ComposerPermissionBar';
 import type { ComposerPlanProgressBarProps } from './ComposerPlanProgressBar';
 
 export type { PermissionMode } from '../../api/permissionModes';
+export type {
+  ComposerNotice,
+  ComposerNoticeAction,
+  ComposerNoticeSeverity,
+} from './composerNoticeTypes';
 
 /**
  * 核心输入契约（F1-γ canonical，唯一契约基准）：

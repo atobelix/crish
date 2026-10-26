@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { kOf, shiftWarmLayers } from '../warmLayerShift';
+import { kOf, shiftSurfaceBase, shiftWarmLayers } from '../warmLayerShift';
 
 const LIGHT = { outer: '#f2f1f0', main: '#fcfbfa', input: '#ffffff' };
 const DARK = { outer: '#1e1e1e', main: '#141414', input: '#232323' };
@@ -48,5 +48,26 @@ describe('亮度微调只平移 K（review P1-3）', () => {
       expect(lum(up[k])).toBeGreaterThan(lum(DARK[k]));
       expect(lum(dn[k])).toBeLessThan(lum(DARK[k]));
     }
+  });
+
+  describe('P1 单值基底微调 shiftSurfaceBase / shiftWarmLayers(surfaceBase)', () => {
+    it('adjust=0 时原样返回 surfaceBase', () => {
+      expect(shiftSurfaceBase('#141414', 0, true)).toBe('#141414');
+      expect(shiftWarmLayers('#f7f6f4', 0, false)).toBe('#f7f6f4');
+    });
+
+    it('深色与浅色基底随 adjust 单调变亮或变暗且保持在安全钳制区间内', () => {
+      const darkUp = shiftSurfaceBase('#141414', 3, true);
+      const darkDown = shiftSurfaceBase('#141414', -3, true);
+      expect(lum(darkUp)).toBeGreaterThan(lum('#141414'));
+      expect(lum(darkDown)).toBeLessThan(lum('#141414'));
+      expect(shiftWarmLayers('#141414', 3, true)).toBe(darkUp);
+
+      const lightUp = shiftSurfaceBase('#f0efed', 3, false);
+      const lightDown = shiftSurfaceBase('#f7f6f4', -3, false);
+      expect(lum(lightUp)).toBeGreaterThan(lum('#f0efed'));
+      expect(lum(lightDown)).toBeLessThan(lum('#f7f6f4'));
+      expect(shiftWarmLayers('#f7f6f4', -3, false)).toBe(lightDown);
+    });
   });
 });

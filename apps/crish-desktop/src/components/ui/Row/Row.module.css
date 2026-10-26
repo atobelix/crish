@@ -1,0 +1,94 @@
+/**
+ * ui/Row 样式契约（P4 T-P4-01）
+ *
+ * 单行条目基元样式：展示型容器严禁边框（border: none），
+ * 高度严格对齐 4 档标尺（--row-h-*），状态统一走 --state-*，
+ * 圆角锁定角色圆角 --radius-row。
+ */
+
+.row {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  padding-inline: var(--gap-group);
+  gap: var(--gap-inline);
+  border: none;
+  border-radius: var(--radius-row);
+  background-color: transparent;
+  color: var(--ink-label, var(--text-secondary));
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+  user-select: none;
+}
+
+/* 4 档标准化行高标尺 */
+.dense {
+  height: var(--row-h-dense);
+  min-height: var(--row-h-dense);
+}
+
+.list {
+  height: var(--row-h-list);
+  min-height: var(--row-h-list);
+}
+
+.control {
+  height: var(--row-h-control);
+  min-height: var(--row-h-control);
+}
+
+.chrome {
+  height: var(--row-h-chrome);
+  min-height: var(--row-h-chrome);
+}
+
+/* 交互状态：统一走 P1 表面与状态 token */
+.interactive {
+  cursor: pointer;
+}
+
+.interactive:hover {
+  background-color: var(--state-hover);
+  color: var(--text-primary);
+}
+
+.interactive:active {
+  background-color: var(--state-active);
+}
+
+.selected {
+  background-color: var(--state-selected);
+  color: var(--text-primary);
+  font-weight: var(--fw-regular, 400);
+}
+
+/* 键盘可访问性焦点环：混入 ≤10% 软灰（AGENTS §13） */
+.row:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--edge-focus);
+}
+
+/* 槽位布局结构 */
+.leading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.content {
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-inline);
+  flex-shrink: 0;
+}

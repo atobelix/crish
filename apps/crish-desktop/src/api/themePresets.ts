@@ -1,34 +1,62 @@
 /**
- * 外观主题：皮肤预设（调色板纯数据定义）。
- * 本文件仅作为底层基础色板（Palette）的静态预设数据源，严禁包含任何硬编码覆盖语义 token 的运行时逻辑。
- * 所有语义 token（如 surface、background、text、border、control-soft 等）严格由 CSS 规范与
- * TokenRuntimeController 统一规范化派生，确保单真源与设计系统解耦。
+ * apps/crish-desktop/src/api/themePresets.ts
+ *
+ * 主题预设调色板真源（SKIN_PRESETS）。
+ * P1 U1.4 + P2 T-P2-01：每个预设提供 4 个表面基准参数（surfaceBase / surfaceTint / surfaceDeep / elevDirection）
+ * 与 1 个文字基准参数（textBase），供 tokens-surface.css 与 tokens-text.css 统一派生；
+ * 旧三档背景与多级字色字段标注 [WAVE2-DEPRECATED] 在过渡期内保留只读兼容。
  */
 
-/** 单个皮肤预设的色板结构 */
 export interface SkinPreset {
   name: string;
+  /** P1 画布基底颜色（--user-surface-base） */
+  surfaceBase: string;
+  /** P1 高程提亮目标色（--user-surface-tint） */
+  surfaceTint: string;
+  /** P1 下潜深色目标色（--user-surface-deep） */
+  surfaceDeep: string;
+  /** P1 高程方向符号：1 (暗色向上提亮) | -1 (亮色浅底白卡)（--elev-direction） */
+  elevDirection: 1 | -1;
+  /** P2 单一文字基准参数（--text-base） */
+  textBase: string;
+  borderColor: string;
+  borderSubtle: string;
+  mixColor?: string;
+  // [WAVE2-DEPRECATED] 过渡兼容字段
   bgPrimary: string;
   bgSecondary: string;
   bgTertiary: string;
   bgCard: string;
-  bgElevated: string;
-  shellChromeBg: string;
-  textPrimary: string;
-  textSecondary: string;
+  bgElevated?: string;
+  shellChromeBg?: string;
+  textPrimary?: string;
+  textSecondary?: string;
   textTertiary?: string;
   textFaint?: string;
-  borderColor: string;
-  borderSubtle: string;
-  mixColor?: string;
   composerBg?: string;
 }
 
+const LIGHT_BASE = {
+  surfaceTint: '#ffffff',
+  surfaceDeep: '#000000',
+  elevDirection: -1 as const,
+};
+
+const DARK_BASE = {
+  surfaceTint: '#ffffff',
+  surfaceDeep: '#000000',
+  elevDirection: 1 as const,
+};
+
 export const SKIN_PRESETS: Record<string, SkinPreset> = {
   'warm-gray': {
-    name: '护眼暖灰',
-    // 浅色模式：外层 K3 #f7f6f5 → 主界面纯白 #ffffff → 输入框纯白 #ffffff
-    //（运行时 TokenRuntimeController 的 warm-gray 分支按同一组数值计算）
+    ...LIGHT_BASE,
+    name: '暖灰默认',
+    surfaceBase: '#f7f6f4',
+    textBase: '#121212',
+    borderColor: '#e2e1e0',
+    borderSubtle: '#f0efee',
+    mixColor: 'hsl(30, 6%, 22%)',
     bgPrimary: '#ffffff',
     bgSecondary: '#f7f6f5',
     bgTertiary: 'hsl(30 8.33% 92.29%)',
@@ -39,113 +67,124 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     textSecondary: '#383838',
     textTertiary: '#666666',
     textFaint: '#969696',
-    // 与 tokens.css 浅色线色同值（M0.4/Y0.8，review P2-1）
-    borderColor: '#e2e1e0',
-    borderSubtle: '#f0efee',
-    mixColor: 'hsl(35 40% 30%)',
+    composerBg: '#ffffff',
   },
   cream: {
-    name: '杏仁奶油',
-    bgPrimary: 'color-mix(in srgb, var(--accent-orange) 4%, #ffffff)',
-    bgSecondary: 'color-mix(in srgb, var(--accent-orange) 6%, #ffffff)',
-    bgTertiary: 'color-mix(in srgb, var(--accent-orange) 8%, #ffffff)',
-    bgCard: 'color-mix(in srgb, var(--accent-orange) 3%, #ffffff)',
-    bgElevated: 'color-mix(in srgb, var(--accent-orange) 4%, #ffffff)',
-    shellChromeBg: 'color-mix(in srgb, var(--accent-orange) 9%, #ffffff)',
-    textPrimary: '#120e06',
-    textSecondary: '#4a3f28',
-    borderColor: 'color-mix(in srgb, var(--accent-orange) 8%, #e5dfcf)',
-    borderSubtle: 'color-mix(in srgb, var(--accent-orange) 4%, #efeada)',
-    mixColor: 'hsl(30, 45%, 32%)',
-    composerBg: 'color-mix(in srgb, var(--accent-orange) 3%, #ffffff)',
+    ...LIGHT_BASE,
+    name: '柔和米黄',
+    surfaceBase: '#f7f3eb',
+    textBase: '#18130a',
+    borderColor: 'color-mix(in srgb, var(--accent-yellow) 8%, #dfd8c8)',
+    borderSubtle: 'color-mix(in srgb, var(--accent-yellow) 4%, #ece6d8)',
+    mixColor: 'hsl(38, 45%, 25%)',
+    bgPrimary: 'color-mix(in srgb, var(--accent-yellow) 3%, #fdfbf7)',
+    bgSecondary: 'color-mix(in srgb, var(--accent-yellow) 5%, #f5f0e6)',
+    bgTertiary: 'color-mix(in srgb, var(--accent-yellow) 7%, #ebe4d5)',
+    bgCard: 'color-mix(in srgb, var(--accent-yellow) 2%, #ffffff)',
+    bgElevated: 'color-mix(in srgb, var(--accent-yellow) 4%, #ffffff)',
+    shellChromeBg: 'color-mix(in srgb, var(--accent-yellow) 8%, #f8f4ec)',
+    textPrimary: '#18130a',
+    textSecondary: '#4a3f2d',
+    composerBg: 'color-mix(in srgb, var(--accent-yellow) 1.5%, #ffffff)',
   },
   paper: {
-    // review P2-7（2026-10-11）：三层方向统一为「外层最暗 → 主层 → 输入框最亮」（原外层比主层亮）
-    name: '极简纸质',
-    bgPrimary: '#fafafa',
-    bgSecondary: '#f5f5f5',
-    bgTertiary: '#ebebeb',
-    bgCard: '#fafafa',
-    bgElevated: '#fafafa',
-    shellChromeBg: 'color-mix(in srgb, #fafafa 82%, #d0d0d0 18%)',
-    textPrimary: '#121212',
-    textSecondary: '#383838',
-    textTertiary: '#666666',
-    textFaint: '#969696',
-    borderColor: '#e0e0e0',
-    borderSubtle: '#eeeeee',
-    mixColor: 'hsl(0, 0%, 25%)',
+    ...LIGHT_BASE,
+    name: '极简纯白',
+    surfaceBase: '#fafafa',
+    textBase: '#09090b',
+    borderColor: '#dcdcdc',
+    borderSubtle: '#f0f0f0',
+    mixColor: 'hsl(0, 0%, 15%)',
+    bgPrimary: '#ffffff',
+    bgSecondary: '#fafafa',
+    bgTertiary: '#f0f0f0',
+    bgCard: '#ffffff',
+    bgElevated: '#ffffff',
+    shellChromeBg: '#fafafa',
+    textPrimary: '#09090b',
+    textSecondary: '#3f3f46',
+    composerBg: '#ffffff',
   },
   'classic-gray': {
-    // review P2-7（2026-10-11）：三层方向统一为「外层最暗 → 主层 → 输入框最亮」（原外层比主层亮）
+    ...LIGHT_BASE,
     name: '经典浅灰',
+    surfaceBase: '#f8f9fa',
+    textBase: '#111214',
+    borderColor: '#dee2e6',
+    borderSubtle: '#e9ecef',
+    mixColor: 'hsl(210, 12%, 22%)',
     bgPrimary: '#f8f9fa',
     bgSecondary: '#f1f3f5',
     bgTertiary: '#e9ecef',
-    bgCard: '#f8f9fa',
-    bgElevated: '#f8f9fa',
-    shellChromeBg: 'color-mix(in srgb, #f8f9fa 82%, #ced4da 18%)',
+    bgCard: '#ffffff',
+    bgElevated: '#ffffff',
+    shellChromeBg: '#f1f3f5',
     textPrimary: '#111214',
-    textSecondary: '#373d43',
-    textTertiary: '#666d75',
-    textFaint: '#949aa0',
-    borderColor: '#dee2e6',
-    borderSubtle: '#e9ecef',
-    mixColor: 'hsl(210, 10%, 30%)',
+    textSecondary: '#3b4046',
+    composerBg: '#ffffff',
   },
   sakura: {
+    ...LIGHT_BASE,
     name: '落樱微风',
-    bgPrimary:
-      'color-mix(in srgb, var(--accent-orange) 1%, color-mix(in srgb, #9d4edd 2%, #ffffff))',
-    bgSecondary:
-      'color-mix(in srgb, var(--accent-orange) 1.5%, color-mix(in srgb, #9d4edd 4%, #ffffff))',
-    bgTertiary:
-      'color-mix(in srgb, var(--accent-orange) 2%, color-mix(in srgb, #9d4edd 6%, #ffffff))',
-    bgCard: 'color-mix(in srgb, #9d4edd 1.5%, #ffffff)',
-    bgElevated: 'color-mix(in srgb, #9d4edd 2.5%, #ffffff)',
-    shellChromeBg: 'color-mix(in srgb, #9d4edd 7%, #ffffff)',
+    surfaceBase: '#f7f2f9',
+    textBase: '#18081b',
+    borderColor: 'color-mix(in srgb, var(--accent-purple) 6%, #e2d4e6)',
+    borderSubtle: 'color-mix(in srgb, var(--accent-purple) 3%, #f0e8f3)',
+    mixColor: 'hsl(290, 35%, 28%)',
+    bgPrimary: 'color-mix(in srgb, var(--accent-purple) 2.5%, #fdfbfe)',
+    bgSecondary: 'color-mix(in srgb, var(--accent-purple) 4.5%, #f5eff7)',
+    bgTertiary: 'color-mix(in srgb, var(--accent-purple) 6.5%, #ece2f0)',
+    bgCard: 'color-mix(in srgb, var(--accent-purple) 2%, #ffffff)',
+    bgElevated: 'color-mix(in srgb, var(--accent-purple) 3.5%, #ffffff)',
+    shellChromeBg: 'color-mix(in srgb, var(--accent-purple) 7%, #f7f2f9)',
     textPrimary: '#18081b',
     textSecondary: '#592b63',
-    borderColor: 'color-mix(in srgb, #9d4edd 7%, #e8e0ec)',
-    borderSubtle: 'color-mix(in srgb, #9d4edd 3%, #f4eff8)',
-    mixColor: 'hsl(285, 30%, 35%)',
-    composerBg: 'color-mix(in srgb, #9d4edd 1%, #ffffff)',
+    composerBg: 'color-mix(in srgb, var(--accent-purple) 1.5%, #ffffff)',
   },
   matcha: {
-    name: '抹茶拿铁',
-    bgPrimary:
-      'color-mix(in srgb, var(--accent-orange) 1.5%, color-mix(in srgb, #2ec4b6 2%, #ffffff))',
-    bgSecondary:
-      'color-mix(in srgb, var(--accent-orange) 2%, color-mix(in srgb, #2ec4b6 4%, #ffffff))',
-    bgTertiary:
-      'color-mix(in srgb, var(--accent-orange) 2.5%, color-mix(in srgb, #2ec4b6 6.5%, #ffffff))',
-    bgCard: 'color-mix(in srgb, #2ec4b6 1.5%, #ffffff)',
-    bgElevated: 'color-mix(in srgb, #2ec4b6 2.5%, #ffffff)',
-    shellChromeBg: 'color-mix(in srgb, #2ec4b6 7%, #ffffff)',
-    textPrimary: '#0a140e',
-    textSecondary: '#314f3b',
-    borderColor: 'color-mix(in srgb, #2ec4b6 7%, #dfede2)',
-    borderSubtle: 'color-mix(in srgb, var(--accent-orange) 3%, #eff6f1)',
-    mixColor: 'hsl(120, 20%, 30%)',
-    composerBg: 'color-mix(in srgb, #2ec4b6 1%, #ffffff)',
+    ...LIGHT_BASE,
+    name: '抹茶清茗',
+    surfaceBase: '#f1f8f5',
+    textBase: '#091912',
+    borderColor: 'color-mix(in srgb, var(--accent-green) 6%, #cde0d6)',
+    borderSubtle: 'color-mix(in srgb, var(--accent-green) 3%, #e3efe8)',
+    mixColor: 'hsl(145, 35%, 24%)',
+    bgPrimary: 'color-mix(in srgb, var(--accent-green) 2.5%, #fafdfb)',
+    bgSecondary: 'color-mix(in srgb, var(--accent-green) 4.5%, #eef5f1)',
+    bgTertiary: 'color-mix(in srgb, var(--accent-green) 6.5%, #e2ede6)',
+    bgCard: 'color-mix(in srgb, var(--accent-green) 2%, #ffffff)',
+    bgElevated: 'color-mix(in srgb, var(--accent-green) 3.5%, #ffffff)',
+    shellChromeBg: 'color-mix(in srgb, var(--accent-green) 7%, #f1f8f4)',
+    textPrimary: '#091912',
+    textSecondary: '#274e3d',
+    composerBg: 'color-mix(in srgb, var(--accent-green) 1.5%, #ffffff)',
   },
   glacier: {
+    ...LIGHT_BASE,
     name: '冰川薄荷',
-    bgPrimary: 'color-mix(in srgb, #e9fcf9 40%, #ffffff)',
+    surfaceBase: '#eef9f7',
+    textBase: '#071917',
+    borderColor: 'color-mix(in srgb, #0d9488 7%, #cce3df)',
+    borderSubtle: 'color-mix(in srgb, #0d9488 3.5%, #e0f0ed)',
+    mixColor: 'hsl(172, 42%, 24%)',
+    bgPrimary: '#f7fefe',
     bgSecondary: '#e9fcf9',
-    bgTertiary: 'color-mix(in srgb, #e9fcf9 75%, #d4ede8)',
-    bgCard: 'color-mix(in srgb, #e9fcf9 20%, #ffffff)',
-    bgElevated: 'color-mix(in srgb, #e9fcf9 35%, #ffffff)',
-    shellChromeBg: 'color-mix(in srgb, #e9fcf9 85%, #f4faf9)',
-    textPrimary: '#071514',
-    textSecondary: '#244a46',
-    borderColor: 'color-mix(in srgb, #e9fcf9 35%, #d0e5e2)',
-    borderSubtle: 'color-mix(in srgb, #e9fcf9 55%, #e6f3f1)',
-    mixColor: 'hsl(172, 25%, 32%)',
-    composerBg: 'color-mix(in srgb, #e9fcf9 15%, #ffffff)',
+    bgTertiary: '#dcf5f1',
+    bgCard: '#ffffff',
+    bgElevated: '#ffffff',
+    shellChromeBg: '#e9fcf9',
+    textPrimary: '#071917',
+    textSecondary: '#1f544e',
+    composerBg: '#ffffff',
   },
-  pearl: {
-    name: '金沙流光',
+  oatmeal: {
+    ...LIGHT_BASE,
+    name: '燕麦拿铁',
+    surfaceBase: '#f6f1e8',
+    textBase: '#160f07',
+    borderColor: 'color-mix(in srgb, var(--accent-orange) 5%, #e5dbc9)',
+    borderSubtle: 'color-mix(in srgb, var(--accent-orange) 2.5%, #f2ebdf)',
+    mixColor: 'hsl(30, 35%, 28%)',
     bgPrimary:
       'color-mix(in srgb, var(--accent-orange) 2%, color-mix(in srgb, #ffe5ec 1%, #faf6f0))',
     bgSecondary:
@@ -157,14 +196,16 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     shellChromeBg: 'color-mix(in srgb, var(--accent-orange) 6%, #f6f1e8)',
     textPrimary: '#160f07',
     textSecondary: '#523d29',
-    borderColor: 'color-mix(in srgb, var(--accent-orange) 5%, #e5dbc9)',
-    borderSubtle: 'color-mix(in srgb, var(--accent-orange) 2.5%, #f2ebdf)',
-    mixColor: 'hsl(30, 35%, 28%)',
     composerBg: 'color-mix(in srgb, var(--accent-orange) 1.5%, #ffffff)',
   },
   'dark-cozy': {
+    ...DARK_BASE,
     name: '护眼暗灰',
-    // 深色层级校正：主界面沉底偏黑 #141414 → 外层侧栏深灰浮层 #1e1e1e → 输入框/卡片微亮 #232323
+    surfaceBase: '#141414',
+    textBase: '#f5f5f5',
+    borderColor: '#3a3a3a',
+    borderSubtle: '#282828',
+    mixColor: 'hsl(0, 0%, 75%)',
     bgPrimary: '#141414',
     bgSecondary: '#1e1e1e',
     bgTertiary: '#181818',
@@ -175,12 +216,15 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     textSecondary: '#cccccc',
     textTertiary: '#8c8c8c',
     textFaint: '#666666',
-    borderColor: '#3a3a3a',
-    borderSubtle: '#282828',
-    mixColor: 'hsl(0, 0%, 75%)',
   },
   'deep-night': {
+    ...DARK_BASE,
     name: '深邃夜空',
+    surfaceBase: '#0a0e17',
+    textBase: '#f1f5f9',
+    borderColor: '#28354c',
+    borderSubtle: '#1a2232',
+    mixColor: 'hsl(217, 30%, 75%)',
     bgPrimary: '#0a0e17',
     bgSecondary: '#1c2536',
     bgTertiary: '#111724',
@@ -190,12 +234,15 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     textPrimary: '#f1f5f9',
     textSecondary: '#c4d0de',
     textTertiary: '#8290a4',
-    borderColor: '#28354c',
-    borderSubtle: '#1a2232',
-    mixColor: 'hsl(217, 30%, 75%)',
   },
   'dark-forest': {
+    ...DARK_BASE,
     name: '森林绿影',
+    surfaceBase: '#0a120e',
+    textBase: '#f2f8f5',
+    borderColor: '#283a30',
+    borderSubtle: '#1a2821',
+    mixColor: 'hsl(145, 20%, 75%)',
     bgPrimary: '#0a120e',
     bgSecondary: '#1a2720',
     bgTertiary: '#111b15',
@@ -205,12 +252,15 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     textPrimary: '#f2f8f5',
     textSecondary: '#b8cfc3',
     textTertiary: '#7d9188',
-    borderColor: '#283a30',
-    borderSubtle: '#1a2821',
-    mixColor: 'hsl(145, 20%, 75%)',
   },
   aurora: {
+    ...DARK_BASE,
     name: '北欧极光',
+    surfaceBase: '#071213',
+    textBase: '#f1f9f9',
+    borderColor: '#223c3e',
+    borderSubtle: '#162829',
+    mixColor: 'hsl(180, 25%, 70%)',
     bgPrimary: '#071213',
     bgSecondary: '#162728',
     bgTertiary: '#0c191a',
@@ -220,12 +270,15 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     textPrimary: '#f1f9f9',
     textSecondary: '#b2d2d4',
     textTertiary: '#6f9193',
-    borderColor: '#223c3e',
-    borderSubtle: '#162829',
-    mixColor: 'hsl(180, 25%, 70%)',
   },
   cocoa: {
+    ...DARK_BASE,
     name: '可可暗香',
+    surfaceBase: '#110d0c',
+    textBase: '#f8f6f3',
+    borderColor: '#3c302c',
+    borderSubtle: '#261f1c',
+    mixColor: 'hsl(25, 25%, 70%)',
     bgPrimary: '#110d0c',
     bgSecondary: '#261f1d',
     bgTertiary: '#181311',
@@ -235,12 +288,15 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     textPrimary: '#f8f6f3',
     textSecondary: '#d1c5bf',
     textTertiary: '#9a8b85',
-    borderColor: '#3c302c',
-    borderSubtle: '#261f1c',
-    mixColor: 'hsl(25, 25%, 70%)',
   },
   burgundy: {
+    ...DARK_BASE,
     name: '暗红丝绒',
+    surfaceBase: '#11080a',
+    textBase: '#faecf0',
+    borderColor: '#3d232b',
+    borderSubtle: '#26161b',
+    mixColor: 'hsl(345, 20%, 72%)',
     bgPrimary: '#11080a',
     bgSecondary: '#26161b',
     bgTertiary: '#180d10',
@@ -250,12 +306,15 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     textPrimary: '#faecf0',
     textSecondary: '#d8c3c8',
     textTertiary: '#a38c91',
-    borderColor: '#3d232b',
-    borderSubtle: '#26161b',
-    mixColor: 'hsl(345, 20%, 72%)',
   },
   cyber: {
+    ...DARK_BASE,
     name: '赛博星空',
+    surfaceBase: '#0a0812',
+    textBase: '#f1effa',
+    borderColor: '#31284d',
+    borderSubtle: '#1e1930',
+    mixColor: 'hsl(255, 25%, 72%)',
     bgPrimary: '#0a0812',
     bgSecondary: '#1c172c',
     bgTertiary: '#120e1f',
@@ -265,12 +324,15 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     textPrimary: '#f1effa',
     textSecondary: '#c6c1de',
     textTertiary: '#8a84a6',
-    borderColor: '#31284d',
-    borderSubtle: '#1e1930',
-    mixColor: 'hsl(255, 25%, 72%)',
   },
   obsidian: {
+    ...DARK_BASE,
     name: '黑曜石墨',
+    surfaceBase: '#0f1011',
+    textBase: '#f6f7f8',
+    borderColor: '#35373a',
+    borderSubtle: '#212325',
+    mixColor: 'hsl(200, 5%, 75%)',
     bgPrimary: '#0f1011',
     bgSecondary: '#232527',
     bgTertiary: '#161719',
@@ -280,8 +342,5 @@ export const SKIN_PRESETS: Record<string, SkinPreset> = {
     textPrimary: '#f6f7f8',
     textSecondary: '#c6c9cc',
     textTertiary: '#8c8e90',
-    borderColor: '#35373a',
-    borderSubtle: '#212325',
-    mixColor: 'hsl(200, 5%, 75%)',
   },
 };

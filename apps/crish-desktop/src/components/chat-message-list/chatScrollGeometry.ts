@@ -1,14 +1,37 @@
 /**
  * 会话消息流虚拟滚动垂直节奏常量（与 ChatMessageList 几何 SSOT 对齐）。
  * 绝对定位切片不吃 CSS padding，必须进入文档高度与 translate 偏移。
+ * P3-T02/T03: 水平内衬已单点收敛至 .listInner 的 CSS 变量（--stream-pad-x），
+ * 切片绝对定位使用 left: 0, right: 0，不再维护 TS 侧静态 CHAT_SCROLL_PAD_X 双源常量。
  */
 export const CHAT_SCROLL_PAD_TOP = 48;
 export const CHAT_SCROLL_PAD_BOTTOM = 16;
-/** 水平内边距仍由 CSS 承载（不参与纵向虚拟偏移） */
-export const CHAT_SCROLL_PAD_X = 20;
+
+/**
+ * 运行时从 DOM 元素或全局读取 `--stream-pad-x`（兼容 fallback `--chat-stream-pad-x`, 20px）。
+ * CSS 为唯一样式真源，本函数仅供非样式计算场景安全读取。
+ */
+export function readStreamPadX(el?: HTMLElement | null): number {
+  if (
+    typeof window === 'undefined' ||
+    typeof getComputedStyle === 'undefined'
+  ) {
+    return 20;
+  }
+  const target =
+    el || (typeof document !== 'undefined' ? document.documentElement : null);
+  if (!target) return 20;
+  const style = getComputedStyle(target);
+  const raw =
+    style.getPropertyValue('--stream-pad-x') ||
+    style.getPropertyValue('--chat-stream-pad-x');
+  const val = parseFloat(raw);
+  return Number.isFinite(val) && val >= 0 ? val : 20;
+}
 
 export function chatSpacerHeight(contentHeight: number): number {
-  const h = Number.isFinite(contentHeight) && contentHeight > 0 ? contentHeight : 0;
+  const h =
+    Number.isFinite(contentHeight) && contentHeight > 0 ? contentHeight : 0;
   return CHAT_SCROLL_PAD_TOP + h + CHAT_SCROLL_PAD_BOTTOM;
 }
 

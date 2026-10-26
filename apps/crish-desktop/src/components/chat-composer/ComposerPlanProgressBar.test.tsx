@@ -27,7 +27,9 @@ describe('ComposerPlanProgressBar (Layer 2 目标/计划进度条)', () => {
     const bar = screen.getByTestId('composer-plan-progress-bar');
     expect(bar).toBeTruthy();
 
-    expect(screen.getByText('计划模式')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: '切换计划模式详情展开' })
+    ).toBeTruthy();
     expect(screen.queryByText('2/5')).toBeNull();
     expect(screen.getByText('84:09')).toBeTruthy();
     expect(screen.getByRole('button', { name: '编辑目标' })).toBeTruthy();

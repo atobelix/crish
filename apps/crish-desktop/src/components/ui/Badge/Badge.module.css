@@ -1,16 +1,16 @@
-/* ui/Badge        RED-DETAILED-02 / T-ATOM-07
- *      0-        4px       (--radius-sm)
- * 100%    Design Tokens    5         tone
+/* ui/Badge 样式契约（P4 T-P4-03 就地升级）
+ * 展示型容器 0 描边铁律（border: none），
+ * 圆角采用角色圆角 --radius-row，
+ * 语义 tone 收敛为 5 类：neutral / accent / warning / danger / success。
  */
 
 .badge {
   --badge-h: 20px;
   --badge-px: 6px;
   --badge-fs: var(--font-size-xs);
-  --badge-radius: var(--radius-sm);
-  --badge-bg: var(--control-soft-bg);
+  --badge-radius: var(--radius-row);
+  --badge-bg: var(--surface-raised);
   --badge-fg: var(--text-secondary);
-  --badge-border: transparent;
 
   display: inline-flex;
   align-items: center;
@@ -30,14 +30,14 @@
   line-height: 1;
   color: var(--badge-fg);
   background-color: var(--badge-bg);
-  border: 1px solid var(--badge-border);
+  border: none; /* 彻底移除旧边框，展示型容器 0 描边 */
   border-radius: var(--badge-radius);
   user-select: none;
   white-space: nowrap;
   vertical-align: middle;
 }
 
-/*       */
+/* 尺寸阶梯 */
 .sizeXs,
 .badge[data-size='xs'] {
   --badge-h: 18px;
@@ -59,50 +59,56 @@
   --badge-fs: var(--font-size-sm);
 }
 
-/*      (Tone)     */
+/* 5 类受限语义语气 (Tone) */
 .toneNeutral,
 .badge[data-tone='neutral'] {
-  --badge-bg: var(--control-soft-bg);
+  --badge-bg: var(--surface-raised);
   --badge-fg: var(--text-secondary);
-  --badge-border: transparent;
 }
 
-.toneBrand,
-.badge[data-tone='brand'] {
-  --badge-bg: color-mix(in srgb, var(--brand) 10%, transparent);
-  --badge-fg: var(--brand-deep);
-  --badge-border: transparent;
-}
-
-.toneInfo,
-.badge[data-tone='info'] {
-  --badge-bg: var(--info-soft-bg);
-  --badge-fg: var(--color-info);
-  --badge-border: transparent;
-}
-
-.toneSuccess,
-.badge[data-tone='success'] {
-  --badge-bg: var(--success-soft-bg);
-  --badge-fg: var(--color-success);
-  --badge-border: transparent;
+.toneAccent,
+.badge[data-tone='accent'] {
+  --badge-bg: color-mix(in srgb, var(--accent) 12%, transparent);
+  --badge-fg: var(--accent);
 }
 
 .toneWarning,
 .badge[data-tone='warning'] {
-  --badge-bg: var(--warning-soft-bg);
+  --badge-bg: color-mix(in srgb, var(--color-warning) 12%, transparent);
   --badge-fg: var(--color-warning);
-  --badge-border: transparent;
 }
 
 .toneDanger,
 .badge[data-tone='danger'] {
-  --badge-bg: var(--danger-soft-bg);
-  --badge-fg: var(--color-error);
-  --badge-border: transparent;
+  --badge-bg: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  --badge-fg: var(--color-danger);
 }
 
-/*        */
+.toneSuccess,
+.badge[data-tone='success'] {
+  --badge-bg: color-mix(in srgb, var(--color-success) 12%, transparent);
+  --badge-fg: var(--color-success);
+}
+
+/* 向后兼容旧 tone 别名（映射至 accent/neutral） */
+.toneBrand,
+.badge[data-tone='brand'] {
+  --badge-bg: color-mix(in srgb, var(--accent) 12%, transparent);
+  --badge-fg: var(--accent);
+}
+
+.toneInfo,
+.badge[data-tone='info'] {
+  --badge-bg: var(--surface-raised);
+  --badge-fg: var(--text-secondary);
+}
+
+.badge[data-tone='error'] {
+  --badge-bg: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  --badge-fg: var(--color-danger);
+}
+
+/* 内部指示元素 */
 .dot {
   width: 6px;
   height: 6px;
@@ -124,7 +130,7 @@
   text-overflow: ellipsis;
 }
 
-/*      */
+/* 移除按钮（Chip/Tag 语义） */
 .removeButton {
   display: inline-flex;
   align-items: center;
@@ -135,7 +141,7 @@
   margin-left: var(--space-0_5);
   margin-right: -2px;
   border: none;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-row);
   background: transparent;
   color: inherit;
   cursor: pointer;

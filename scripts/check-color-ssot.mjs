@@ -30,10 +30,13 @@ if (__debt08GuideFlag) {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 const SRC = path.resolve(REPO_ROOT, 'apps/crish-desktop/src');
-const TOKENS = path.join(SRC, 'styles/tokens.css');
+const TOKENS_FILES = [
+  path.join(SRC, 'styles/tokens.css'),
+  path.join(SRC, 'styles/tokens-surface.css'),
+];
 
 const ALLOW_PATHS = [
-  'styles/tokens.css',
+  'styles/tokens',
   'styles/__tests__/',
   'components/gallery/',
   'components/shell/WindowControls.module.css',
@@ -46,16 +49,20 @@ const ALLOW_PATHS = [
 ];
 
 const L0_KEYS = new Set([
+  '--surface-base-default',
+  '--surface-sunken',
+  '--surface-canvas',
+  '--surface-shell',
+  '--surface-card',
+  '--surface-raised',
+  '--surface-overlay',
   '--surface-outer',
   '--surface-main',
   '--surface-input',
   '--surface-paper',
-  '--surface-card',
   '--surface-elevated',
   '--surface-chrome',
-  '--surface-sunken',
   '--surface-scrim',
-  '--surface-overlay',
   '--surface-overlay-fg',
 ]);
 
@@ -82,9 +89,10 @@ function walk(dir, out = []) {
 
 const errors = [];
 
-// 1. tokens.css L2 别名与表面变量禁止独立取裸色
-if (fs.existsSync(TOKENS)) {
-  const tokensCss = stripComments(fs.readFileSync(TOKENS, 'utf8'));
+// 1. tokens.css / tokens-surface.css L2 别名与表面变量禁止独立取裸色
+for (const tokenFile of TOKENS_FILES) {
+  if (!fs.existsSync(tokenFile)) continue;
+  const tokensCss = stripComments(fs.readFileSync(tokenFile, 'utf8'));
   const surfaceAssign = /(--(?:bg|surface)-[a-z0-9-]+)\s*:\s*([^;]+);/g;
   let m;
   while ((m = surfaceAssign.exec(tokensCss))) {
@@ -93,9 +101,9 @@ if (fs.existsSync(TOKENS)) {
     if (L0_KEYS.has(key)) continue;
     if (/^#|^hsl|^rgb|^oklch|^white|^black/i.test(val)) {
       errors.push({
-        file: 'styles/tokens.css',
+        file: path.relative(SRC, tokenFile).replace(/\\/g, '/'),
         line: 0,
-        message: `tokens.css L2/别名禁止独立取值: ${key}: ${val.slice(0, 48)}`,
+        message: `tokens L2/别名禁止独立取值: ${key}: ${val.slice(0, 48)}`,
       });
     }
   }

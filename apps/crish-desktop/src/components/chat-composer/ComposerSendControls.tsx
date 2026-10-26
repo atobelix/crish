@@ -1,11 +1,11 @@
 /**
  * 发送 / 排队 / 停止（L2 协作 · L3 强制取消）。
- * 主对话卡片使用墨绿色实体圆形发送按钮（32x32px 正圆，var(--brand)，Hover #059669，白色上箭头，200ms Spring 展开/收缩）；
+ * 主对话卡片使用墨绿色实体圆形发送按钮（28x28px 正圆常驻，var(--brand)，Hover var(--brand-deep)，disabled 态 0.38 透明度）；
  * 侧栏 ComposerField / 兜底模式回落至盒内回车折角按钮。
  */
 import React, { useCallback, useEffect, useRef } from 'react';
 
-import styles from './ChatComposer.module.css';
+import styles from './ComposerSendControls.module.css';
 import { Button, ConfirmDialog, Tooltip } from '../ui';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
 import { useI18n } from '../../i18n';
@@ -155,7 +155,7 @@ export const ComposerSendControls: React.FC<ComposerSendControlsProps> = ({
   return (
     <>
       {renderConfirmGate(<ConfirmDialog />)}
-      <div className={styles.buttons} data-composer-send={appearance}>
+      <div className={styles.sendControls} data-composer-send={appearance}>
         {isProcessing ? (
           <>
             <Tooltip content={sendTitle}>
@@ -179,7 +179,7 @@ export const ComposerSendControls: React.FC<ComposerSendControlsProps> = ({
               type="button"
               variant="primary"
               size="md"
-              className={`${styles.sendBtnCircle} ${styles.sendCircle} send-btn-circle ${sendDisabled ? '' : `${styles.active} active`}`}
+              className={`${styles.sendCircle} send-btn-circle ${sendDisabled ? '' : `${styles.active} active`}`}
               data-send-active={sendDisabled ? '0' : '1'}
               aria-label={sendAria}
               onClick={trySend}
@@ -194,7 +194,7 @@ export const ComposerSendControls: React.FC<ComposerSendControlsProps> = ({
               type="button"
               variant="primary"
               size="sm"
-              className={styles.sendBtn}
+              className={styles.fieldActionBtn}
               data-send-active={sendDisabled ? '0' : '1'}
               aria-label={sendAria}
               onClick={trySend}

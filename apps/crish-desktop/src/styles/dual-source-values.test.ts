@@ -28,7 +28,10 @@ function readFile(relPath: string): string {
 /** 从 tokens.css 顶层提取某 token 的声明值（先剥注释，取最后一次声明） */
 function readToken(css: string, token: string): string {
   const clean = css.replace(/\/\*[\s\S]*?\*\//g, '');
-  const re = new RegExp(`(?<![\\w-])${token.replace(/[-]/g, '\\$&')}\\s*:\\s*([^;]+);`, 'g');
+  const re = new RegExp(
+    `(?<![\\w-])${token.replace(/[-]/g, '\\$&')}\\s*:\\s*([^;]+);`,
+    'g'
+  );
   let value: string | null = null;
   let m: RegExpExecArray | null;
   while ((m = re.exec(clean))) value = m[1].trim();
@@ -36,32 +39,43 @@ function readToken(css: string, token: string): string {
   return value as string;
 }
 
-describe('双层同源协议 · chat-stream-pad-x（滚动几何）', () => {
-  const geometryTs = readFile('src/components/chat-message-list/chatScrollGeometry.ts');
+describe('双层同源协议 · stream-pad-x（滚动几何 SSOT 单源化）', () => {
+  const geometryTs = readFile(
+    'src/components/chat-message-list/chatScrollGeometry.ts'
+  );
   const tokensCss = readFile('src/styles/tokens.css');
 
-  it('TS 真源存在：CHAT_SCROLL_PAD_X 为数值常量', () => {
-    const m = geometryTs.match(/export\s+const\s+CHAT_SCROLL_PAD_X\s*=\s*(\d+(?:\.\d+)?)/);
-    expect(m, 'chatScrollGeometry.ts 缺少 CHAT_SCROLL_PAD_X 常量').not.toBeNull();
+  it('反向 SSOT 守护：TS 侧 chatScrollGeometry.ts 严禁导出硬编码 CHAT_SCROLL_PAD_X 常量', () => {
+    const hasExport = /export\s+const\s+CHAT_SCROLL_PAD_X\b/.test(geometryTs);
+    expect(
+      hasExport,
+      'chatScrollGeometry.ts 严禁硬编码导出 CHAT_SCROLL_PAD_X 双源常量'
+    ).toBe(false);
+  });
+
+  it('TS 运行时辅助：导出 readStreamPadX 纯函数且提供 20px 安全回退', async () => {
+    const geometryModule =
+      await import('../components/chat-message-list/chatScrollGeometry');
+    expect(typeof geometryModule.readStreamPadX).toBe('function');
+    expect(geometryModule.readStreamPadX(null)).toBe(20);
   });
 
   it('CSS token 存在且为固定值（不得引用 --space-*，防止密度缩放分叉）', () => {
-    const value = readToken(tokensCss, '--chat-stream-pad-x');
-    expect(value).toBe('20px');
+    const tokenName = tokensCss.includes('--stream-pad-x:')
+      ? '--stream-pad-x'
+      : '--chat-stream-pad-x';
+    const value = readToken(tokensCss, tokenName);
+    expect(value).toMatch(/^20px$/);
     // 负向：禁止改回 var(--space-…) —— 那会重演「TS 固定 20 / CSS large 24」的分叉
-    expect(value.startsWith('var('), 'pad-x 不得引用空间刻度（2026-09-11 裁决：固定 20px）').toBe(false);
+    expect(
+      value.startsWith('var('),
+      'pad-x 不得引用空间刻度（2026-09-11 裁决：固定 20px）'
+    ).toBe(false);
   });
 
-  it('双源同值：TS CHAT_SCROLL_PAD_X === CSS --chat-stream-pad-x 数值', () => {
-    const tsValue = Number(geometryTs.match(/export\s+const\s+CHAT_SCROLL_PAD_X\s*=\s*(\d+(?:\.\d+)?)/)![1]);
-    const cssValue = parseFloat(readToken(tokensCss, '--chat-stream-pad-x'));
-    expect(cssValue, `CSS --chat-stream-pad-x(${cssValue}px) 应等于 TS CHAT_SCROLL_PAD_X(${tsValue})`).toBe(tsValue);
-  });
-
-  it('负向断言：兜底仅允许「占用中且同值」，空闲文件禁止兜底', () => {
-    // 占用豁免：ChatScrollFloorSlot.module.css 正被并行会话迁移阴影 token（2026-09-11），
-    // 其兜底 20px 与静态默认同值、行为等价；待其提交后应移出豁免名单，升级为严格断言。
-    const OCCUPIED_SAME_VALUE_OK = new Set([
+  it('负向断言：兜底仅允许「合法迁移期且与 20px 同值」，禁止引入偏离值', () => {
+    const ALLOWED_WITH_FALLBACK = new Set([
+      'src/components/chat-message-list/ChatMessageList.module.css',
       'src/components/chat-message-list/ChatScrollFloorSlot.module.css',
     ]);
     for (const rel of [
@@ -69,27 +83,40 @@ describe('双层同源协议 · chat-stream-pad-x（滚动几何）', () => {
       'src/components/chat-message-list/ChatScrollFloorSlot.module.css',
     ]) {
       const css = readFile(rel);
-      if (!css.includes('--chat-stream-pad-x')) continue;
-      const fallbacks = [...css.matchAll(/var\(--chat-stream-pad-x\s*,\s*([^)]*)\)/g)].map((m) => m[1].trim());
+      if (
+        !css.includes('--chat-stream-pad-x') &&
+        !css.includes('--stream-pad-x')
+      )
+        continue;
+      const fallbacks = [
+        ...css.matchAll(/var\(--(?:chat-)?stream-pad-x\s*,\s*([^)]*)\)/g),
+      ].map((m) => m[1].trim());
       if (fallbacks.length === 0) continue;
       expect(
-        OCCUPIED_SAME_VALUE_OK.has(rel),
-        `${rel} 存在兜底 ${fallbacks.join(' ')}——默认值由 tokens.css 静态声明提供；若该文件占用已释放，请移出豁免名单`
+        ALLOWED_WITH_FALLBACK.has(rel),
+        `${rel} 存在未知兜底 ${fallbacks.join(' ')}`
       ).toBe(true);
       for (const v of fallbacks) {
-        expect(v, `${rel} 兜底值必须与静态默认同值（20px），否则构成第二真源`).toBe('20px');
+        expect(
+          v === '20px' || v.includes('20px'),
+          `${rel} 兜底值必须与规范默认值（20px）同值，否则构成第二真源`
+        ).toBe(true);
       }
     }
   });
 });
 
 describe('双层同源协议 · pin 产品色板（钉选取色器）', () => {
-  const pickerTs = readFile('src/components/chat-message-row/colorPickerUtils.ts');
+  const pickerTs = readFile(
+    'src/components/chat-message-row/colorPickerUtils.ts'
+  );
   const tokensCss = readFile('src/styles/tokens.css');
 
   /** TS 侧真源：PRESET_PIN_COLORS 的 {label, value} 数组 */
   function readPresetPinColors(): Array<{ label: string; value: string }> {
-    const block = pickerTs.match(/export\s+const\s+PRESET_PIN_COLORS[^=]*=\s*\[([\s\S]*?)\n\]/);
+    const block = pickerTs.match(
+      /export\s+const\s+PRESET_PIN_COLORS[^=]*=\s*\[([\s\S]*?)\n\]/
+    );
     expect(block, 'colorPickerUtils.ts 缺少 PRESET_PIN_COLORS').not.toBeNull();
     const out: Array<{ label: string; value: string }> = [];
     const re = /label:\s*'([^']+)'\s*,\s*value:\s*'(#[0-9a-fA-F]{6})'/g;
@@ -105,7 +132,10 @@ describe('双层同源协议 · pin 产品色板（钉选取色器）', () => {
   it('双源同值：TS PRESET_PIN_COLORS 每一项都有同值的 CSS --pin-palette-*', () => {
     const cssByValue = new Map<string, string>();
     for (const name of ['rose', 'amber', 'sky', 'violet', 'pink']) {
-      cssByValue.set(readToken(tokensCss, `--pin-palette-${name}`).toLowerCase(), `--pin-palette-${name}`);
+      cssByValue.set(
+        readToken(tokensCss, `--pin-palette-${name}`).toLowerCase(),
+        `--pin-palette-${name}`
+      );
     }
     for (const { label, value } of readPresetPinColors()) {
       expect(

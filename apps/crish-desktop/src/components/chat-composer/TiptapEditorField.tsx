@@ -44,6 +44,7 @@ import {
 import { IncrementalMarkdownSerializer } from './twoTierBlockEditorCache';
 import {
   ComposerImeDragGuard,
+  bindComposerCompositionLifecycle,
   restoreSelectionSafely,
   type ComposerSelectionSnapshot,
 } from './composerImeDragGuard';
@@ -378,33 +379,6 @@ export const TiptapEditorField = React.forwardRef<
       const dom = safeViewDom(editor);
       if (!dom) return;
 
-      const handleCompositionStart = () => {
-        isComposingRef.current = true;
-        imeDragGuardRef.current.beginComposition(
-          captureEditorSelection(editor)
-        );
-        callbacksRef.current.onCompositionChange?.(true);
-      };
-
-      const handleCompositionEnd = () => {
-        isComposingRef.current = false;
-        const deferred = imeDragGuardRef.current.endComposition();
-        callbacksRef.current.onCompositionChange?.(false);
-        if (deferred !== null && deferred !== lastContentRef.current) {
-          requestAnimationFrame(() => {
-            applyHydratedMarkdown(
-              editor,
-              deferred,
-              imeDragGuardRef.current.getSelectionSnapshot()
-            );
-          });
-        } else {
-          requestAnimationFrame(() => {
-            resyncSlashTriggerAfterComposition(editor);
-          });
-        }
-      };
-
       const handleDragStart = () => {
         imeDragGuardRef.current.beginDrag(captureEditorSelection(editor));
       };
@@ -424,14 +398,23 @@ export const TiptapEditorField = React.forwardRef<
         }
       };
 
-      dom.addEventListener('compositionstart', handleCompositionStart);
-      dom.addEventListener('compositionend', handleCompositionEnd);
+      const unbindCompositionLifecycle = bindComposerCompositionLifecycle({
+        dom,
+        composingRef: isComposingRef,
+        guard: imeDragGuardRef.current,
+        captureSelection: () => captureEditorSelection(editor),
+        getCurrentContent: () => lastContentRef.current,
+        onCompositionChange: (composing) =>
+          callbacksRef.current.onCompositionChange?.(composing),
+        applyDeferred: (content, selection) =>
+          applyHydratedMarkdown(editor, content, selection),
+        resyncSlashTrigger: () => resyncSlashTriggerAfterComposition(editor),
+      });
       dom.addEventListener('dragstart', handleDragStart);
       dom.addEventListener('dragend', handleDragEnd);
 
       return () => {
-        dom.removeEventListener('compositionstart', handleCompositionStart);
-        dom.removeEventListener('compositionend', handleCompositionEnd);
+        unbindCompositionLifecycle();
         dom.removeEventListener('dragstart', handleDragStart);
         dom.removeEventListener('dragend', handleDragEnd);
       };

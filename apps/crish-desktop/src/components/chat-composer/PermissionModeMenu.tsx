@@ -20,13 +20,6 @@ const MODE_ICON_MAP: Record<PermissionMode, React.ReactNode> = {
   full: <AppIcon name="alert-circle" size={14} />,
 };
 
-const MODE_SUBLABEL_MAP: Record<PermissionMode, string> = {
-  ask: '改文件、执行前需手动批准',
-  deep: '只读分析与代码深入检索',
-  plan: '生成执行方案，不修改项目',
-  full: '读写自动执行，极危操作确认',
-};
-
 type Props = {
   mode: PermissionMode;
   onChange: (m: PermissionMode) => void;
@@ -147,13 +140,6 @@ export const PermissionModeMenu: React.FC<Props> = ({
             const icon = MODE_ICON_MAP[opt.id as PermissionMode] ?? (
               <AppIcon name="shield" size={14} />
             );
-            const sublabel =
-              MODE_SUBLABEL_MAP[opt.id as PermissionMode] ??
-              itemMeta.description;
-            const noteAriaLabel = t('chat.permission.modeNoteAria', {
-              mode: itemMeta.label,
-              desc: sublabel,
-            });
             return (
               <Button
                 key={opt.id}
@@ -170,19 +156,6 @@ export const PermissionModeMenu: React.FC<Props> = ({
                 </span>
                 <div className={styles.labelRow}>
                   <span className={styles.title}>{itemMeta.label}</span>
-                  <Tooltip content={sublabel} side="right">
-                    <span
-                      className={styles.infoTrigger}
-                      role="note"
-                      aria-label={noteAriaLabel}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        opt.onClick?.();
-                      }}
-                    >
-                      <AppIcon name="help-circle" size={13} aria-hidden />
-                    </span>
-                  </Tooltip>
                 </div>
                 {isSelected ? (
                   <AppIcon

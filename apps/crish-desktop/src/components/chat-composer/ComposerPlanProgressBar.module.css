@@ -1,0 +1,286 @@
+/**
+ * ComposerPlanProgressBar.module.css
+ * 内嵌目标/计划模式进度条样式模块（T6-1 拆分自 ChatComposer.module.css）
+ */
+
+.planProgressBar {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  align-self: flex-start;
+  margin: 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--edge-divider, var(--border-subtle));
+  border-radius: 0;
+  box-shadow: none;
+  box-sizing: border-box;
+  transition: border-color var(--transition-fast, 120ms ease);
+  outline: none;
+  z-index: var(--z-base);
+}
+
+.planStepList {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--transition-accordion);
+  background: transparent;
+  border-bottom: 0px solid var(--edge-divider, var(--border-subtle));
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.planProgressBar.isExpanded .planStepList {
+  grid-template-rows: 1fr;
+  border-bottom: 1px solid var(--edge-divider, var(--border-subtle));
+}
+
+.planStepListInner {
+  overflow: hidden;
+  padding: 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: padding var(--transition-accordion);
+}
+
+.planProgressBar.isExpanded .planStepListInner {
+  padding: 10px 14px 4px 14px;
+}
+
+.planExpandedStep {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  border: none;
+  outline: none;
+  transition:
+    background var(--transition-fast, 120ms ease),
+    color var(--transition-fast, 120ms ease);
+}
+
+.planExpandedStep:hover {
+  background: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.planExpandedStep.completed {
+  color: var(--text-primary);
+}
+
+.planExpandedStep.active {
+  color: var(--text-primary);
+  font-weight: 600;
+  background: var(--tint-hover);
+  border: none;
+  outline: none;
+}
+
+.planStepDot {
+  width: 6.5px;
+  height: 6.5px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+  box-sizing: border-box;
+  transition:
+    background var(--transition-fast, 120ms ease),
+    box-shadow var(--transition-fast, 120ms ease);
+}
+
+.planExpandedStep.completed .planStepDot {
+  background: var(--text-secondary);
+}
+
+.planExpandedStep.pending .planStepDot {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+}
+
+.planExpandedStep.active .planStepDot {
+  background: var(--accent-green);
+  box-shadow: 0 0 0 2.5px
+    color-mix(in srgb, var(--accent-green) 25%, transparent);
+}
+
+.stepText {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.planCollapsed {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  height: 44px;
+  box-sizing: border-box;
+}
+
+.planModeBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 2px 6px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  height: 24px;
+  min-height: 24px;
+  --btn-h: 24px;
+  --btn-px: 6px;
+  box-sizing: border-box;
+  line-height: 1;
+  flex-shrink: 0;
+  transition:
+    background var(--transition-fast, 120ms ease),
+    color var(--transition-fast, 120ms ease);
+}
+
+.planModeBadge:hover {
+  background: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.planModeBadge .modeIcon {
+  width: 13px;
+  height: 13px;
+  color: var(--text-secondary);
+}
+
+.planModeBadge:hover .modeIcon {
+  color: var(--text-primary);
+}
+
+.planDividerV {
+  width: 1px;
+  height: 16px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.planActiveTaskBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  height: 24px;
+  line-height: 24px;
+  box-sizing: border-box;
+}
+
+.planActiveTaskBox:hover .planStep {
+  color: var(--text-primary);
+}
+
+.planRoller {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  height: 24px;
+}
+
+.planRollerTrack {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.planStep {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+  height: 24px;
+  line-height: 24px;
+  display: flex;
+  align-items: center;
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+}
+
+.planSpacer {
+  flex: 0;
+}
+
+.planRightControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.planDuration {
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  height: 16px;
+}
+
+.planQuickActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.planActionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-width: unset;
+  min-height: unset;
+  --btn-h: 24px;
+  --btn-px: 0px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition:
+    background var(--transition-fast, 120ms ease),
+    color var(--transition-fast, 120ms ease);
+}
+
+.planActionBtn:hover {
+  background: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.planActionBtn.stop:hover {
+  background: var(--danger-soft-bg);
+  color: var(--color-error);
+}
+
+.planActionBtn svg {
+  width: 13px;
+  height: 13px;
+  pointer-events: none;
+}

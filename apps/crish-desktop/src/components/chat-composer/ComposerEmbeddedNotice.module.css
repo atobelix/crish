@@ -1,0 +1,166 @@
+/**
+ * ComposerEmbeddedNotice.module.css
+ * 输入坞内嵌通知顶槽样式（P6 T6-2）
+ *
+ * 视觉层级纪律：
+ * - 共享 `.composerCard` 外围合，自身零独立外边框（border: none），仅保留 1px 底部分隔线；
+ * - 宽度 100% 贴合 `.composerCard` 内容区，消除旧版外部独立胶囊宽度脱节；
+ * - 纯语义 Token 驱动，零硬编码色值，零私有阴影。
+ */
+
+.embeddedNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 8px 8px 8px;
+  margin: 0;
+  border: none;
+  border-bottom: 1px solid var(--edge-divider, var(--border-subtle));
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  box-sizing: border-box;
+  font-size: var(--font-size-meta);
+  color: var(--text-primary);
+  transition: opacity var(--duration-fast) var(--ease-decelerate);
+}
+
+.embeddedNotice[data-closing='true'],
+.noticeBarClosing {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.leadGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.severityBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  font-size: var(--font-size-caption);
+  font-weight: var(--fw-strong);
+  line-height: var(--lh-dense);
+  user-select: none;
+  cursor: help;
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
+}
+
+.embeddedNotice[data-notice-severity='error'] .severityBadge {
+  color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 14%, transparent);
+}
+
+.embeddedNotice[data-notice-severity='info'] .severityBadge {
+  color: var(--text-secondary);
+  background: var(--tint-hover);
+}
+
+.embeddedNotice[data-notice-severity='rate-limit'] .severityBadge {
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 16%, transparent);
+}
+
+.noticeText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-meta);
+  line-height: var(--lh-ui);
+  color: var(--text-primary);
+}
+
+.actionGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.actionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-row);
+  border: 1px solid var(--edge-divider, var(--border-subtle));
+  background: var(--surface-base, var(--bg-elevated));
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-meta);
+  font-weight: var(--fw-regular);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition-micro, 100ms ease);
+}
+
+.actionBtn:hover {
+  background: var(--tint-hover);
+}
+
+.ghostBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--radius-row);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-meta);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease);
+}
+
+.ghostBtn:hover {
+  background: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.closeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: var(--radius-sm, 6px);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease);
+}
+
+.closeBtn:hover {
+  background: var(--tint-hover);
+  color: var(--text-primary);
+}

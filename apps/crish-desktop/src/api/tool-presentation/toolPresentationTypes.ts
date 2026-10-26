@@ -2,8 +2,12 @@
  * 工具展示与时间线类型与契约。
  */
 
-import type { MessageContextInjection, MessageToolCall } from '../../store/layoutStore';
+import type {
+  MessageContextInjection,
+  MessageToolCall,
+} from '../../store/layoutStore';
 import type { IconName } from '../../components/ui/icons';
+import type { ToolCommandKind } from './toolCommandType';
 
 export type ToolRenderItem =
   | { kind: 'single'; tc: MessageToolCall }
@@ -80,13 +84,7 @@ export type AssistantTimelineItem =
  * `'generic'` 已改为 `'mixed'`。
  */
 export type ProcessLeadAction =
-  | 'subagent'
-  | 'edit'
-  | 'search'
-  | 'read'
-  | 'command'
-  | 'thought'
-  | 'mixed';
+  'subagent' | 'edit' | 'search' | 'read' | 'command' | 'thought' | 'mixed';
 
 /**
  * 主导动作 → 语义图标名（AppIcon / @hugeicons/core-free-icons）。
@@ -213,9 +211,7 @@ export interface StateNoticeTimelineSegment {
 
 /** 时间线交错分段（判别联合） */
 export type TimelineSegment =
-  | ProcessTimelineSegment
-  | TextTimelineSegment
-  | StateNoticeTimelineSegment;
+  ProcessTimelineSegment | TextTimelineSegment | StateNoticeTimelineSegment;
 
 /**
  * Slot DOM ID 唯一生成规则（SSOT）。
@@ -243,3 +239,99 @@ export function isSubagentToolName(name?: string): boolean {
     name === 'wait_subagents'
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * P5 对话流过程呈现 · ToolPresentation SSOT 与过程簇聚合契约（T-P5-01 / T-P5-04）
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/** 工具调用展示状态（仅 running 与 error 赋予语义色） */
+export type ToolPresentationStatus =
+  'running' | 'success' | 'error' | 'pending';
+
+/** 目标对象语义类型 */
+export type ToolTargetKind = 'path' | 'pattern' | 'command' | 'url' | 'text';
+
+/** 工具行目标对象（与 label 互斥承载“对象”，杜绝双写回显） */
+export interface ToolTarget {
+  /** 目标文本：路径、搜索关键词、命令预览、URL 等 */
+  text: string;
+  kind: ToolTargetKind;
+  /** 是否允许点击交互（例如打开文件面板或终端） */
+  clickable: boolean;
+  tooltip?: string | undefined;
+}
+
+/** 工具行右侧元数据类型 */
+export type ToolMetaType = 'diff' | 'duration' | 'metric';
+
+/** 工具行右侧紧凑元数据（最多保留 2 项：diff > metric > duration） */
+export interface ToolMeta {
+  type: ToolMetaType;
+  /** 格式化后的紧凑展示文本，如 "+32 -0"、"15 行"、"340ms" */
+  text: string;
+  add?: number | undefined;
+  del?: number | undefined;
+  ariaLabel?: string | undefined;
+}
+
+/** 单条工具调用或过程簇的统一展示模型（SSOT） */
+export interface ToolPresentation {
+  /** 唯一首要人类语义标签：已去重、已消解动词冗余，如「读取文件」「Grep」「写入配置」 */
+  label: string;
+  /** 可选目标：与 label 互斥地承载“对象”。当 label 已含对象时为 undefined，杜绝双写 */
+  target?: ToolTarget | undefined;
+  /** 右侧元信息：最多 2 项（diff 统计优先、次要指标其次、耗时兜底） */
+  meta: readonly ToolMeta[];
+  /** 运行状态：仅 error 与 running 赋予语义色 */
+  status: ToolPresentationStatus;
+  /** 图标名称：严格映射自语义图标契约 */
+  iconName: string;
+  /** 工具命令语义分类轴 */
+  kind: ToolCommandKind;
+  /** 无障碍辅助朗读完整文本 */
+  rowAriaLabel: string;
+}
+
+/** 构建 ToolPresentation 的可选覆盖参数 */
+export interface ToolPresentationOptions {
+  /** 外部已提取的文件路径 */
+  filePath?: string | undefined;
+  /** 外部已提取的路径短标签 */
+  pathLabel?: string | undefined;
+  /** 外部已格式化的耗时文本 */
+  durationStr?: string | null | undefined;
+  /** 外部已计算的 diff 增删统计 */
+  diffStats?: { add: number; del: number } | null | undefined;
+}
+
+/** 相邻同类工具调用聚合后的过程簇项（T-P5-04） */
+export interface ProcessClusterItem {
+  id: string;
+  kind: 'process_cluster';
+  clusterKind: ToolCommandKind;
+  /** 簇内原始工具调用列表（供展开查看明细） */
+  tools: readonly MessageToolCall[];
+  /** 与 tools 同引用的原始项列表（供展开查看明细） */
+  items: readonly MessageToolCall[];
+  /** 簇摘要标签：如「读取 5 个文件 · 耗时 1.2s」或单项工具标签 */
+  summaryLabel: string;
+  /** summaryLabel 的同义属性 */
+  label: string;
+  /** 簇行统一展示模型（N===1 时直出原工具 ToolPresentation，N>=2 时为聚合摘要模型） */
+  presentation: ToolPresentation;
+  /** 簇内累计耗时（毫秒） */
+  totalDurationMs: number;
+  /** 是否存在运行中的工具 */
+  hasRunning: boolean;
+  /** 是否存在失败的工具 */
+  hasError: boolean;
+  /** 默认展开状态：相邻同类 >= 2 默认 false 收起为单行摘要 */
+  defaultExpanded: boolean;
+  /** 是否为单工具退化态（tools.length === 1） */
+  isSingle: boolean;
+}
+
+export type ProcessCluster = ProcessClusterItem;
+
+export type TimelineClusteredItem =
+  Exclude<AssistantTimelineItem, { kind: 'tools' }> | ProcessClusterItem;

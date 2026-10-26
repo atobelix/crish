@@ -6,8 +6,8 @@
 import type { SessionMessage } from '../store/types';
 import { isContextStateCarrierMessage } from '../store/storeAccess';
 
-/** 默认行距，对应 `--chat-row-gap` 默认 16。 */
-export const CHAT_ROW_GAP_PX = 16;
+/** 默认行距，对应 `--chat-row-gap` / `--gap-block` 默认 20（P3 垂直节奏规范）。 */
+export const CHAT_ROW_GAP_PX = 20;
 /** 载体紧凑行距，对应 `--chat-row-gap-compact` 默认 4。 */
 export const CHAT_ROW_GAP_COMPACT_PX = 4;
 /** 操作栏槽位：margin-top 4 + min-height 28（.userMeta / .assistantMeta 在文档流中占位）。 */
@@ -41,8 +41,8 @@ export const ESTIMATE_FALLBACK_TEXT_PADDING_PX = 12;
 export const ESTIMATE_CONTEXT_INJECTION_HEIGHT_PX = 44;
 /** Markdown 正文文本行高（px） */
 export const ESTIMATE_TEXT_LINE_HEIGHT_PX = 22;
-/** 正文文本平均每行字符数折行基准 */
-export const ESTIMATE_TEXT_CHARS_PER_LINE = 38;
+/** 正文文本平均每行字符数折行基准（双重内衬根除后列宽拓宽至 720px，对齐 P3 规范）。 */
+export const ESTIMATE_TEXT_CHARS_PER_LINE = 40;
 /** 助手消息单项最小保底高度（px） */
 export const ESTIMATE_ASSISTANT_MIN_HEIGHT_PX = 50;
 /** 单条消息估算最大保护上限（px） */

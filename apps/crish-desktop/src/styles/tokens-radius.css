@@ -1,0 +1,86 @@
+/* ==========================================================================
+   tokens-radius.css — 4 档行高 (--row-h-*)、5 档圆角角色 (--radius-*) 与描边预算
+   ========================================================================== */
+
+:root,
+html[data-theme='default'],
+html[data-theme='light'] {
+  /* 4 档单行条目高度与徽标高度（SSOT · P4 基元契约） */
+  --row-h-dense: 24px;
+  --row-h-list: 28px;
+  --row-h-control: 32px;
+  --row-h-chrome: 36px;
+  --badge-h: 20px;
+
+  /* 5 档圆角角色（SSOT · P4 圆角语义化） */
+  --radius-row: 6px;
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-dock: 20px;
+  --radius-pill: 9999px;
+  --radius-circle: 50%;
+
+  /* 基础边框与发丝线（浅色基线） */
+  --user-border-color: #e2e1e0;
+  --user-border-subtle: #f0efee;
+  --border-color: var(--user-border-color, #e2e1e0);
+  --border-subtle: var(--user-border-subtle, #f0efee);
+  --hairline-width: 1px;
+  --hairline: var(--border-subtle);
+  --hairline-strong: var(--border-color);
+  --border-width-emphasis: 2px;
+
+  /* 3 类合法描边预算（P4 §4.3 · AGENTS.md §13 焦点混入 <= 10%） */
+  --edge-control: var(--border-color);
+  --edge-focus: color-mix(
+    in srgb,
+    var(--border-color) 90%,
+    var(--text-primary) 10%
+  );
+  --edge-semantic-danger: var(--color-error-border);
+  --edge-semantic-warning: var(--color-warning-border);
+  --edge-semantic-success: var(--color-success-border);
+
+  /* [WAVE2-DEPRECATED-ALIAS] 旧圆角尺寸梯度别名桥接层（Wave 2 Codemod 后一键清除） */
+  --radius-xs: var(--radius-row); /* [WAVE2-DEPRECATED-ALIAS] */
+  --radius-s: var(--radius-row); /* [WAVE2-DEPRECATED-ALIAS] */
+  --radius-sm: var(--radius-row); /* [WAVE2-DEPRECATED-ALIAS] */
+  --radius-md: var(--radius-row); /* [WAVE2-DEPRECATED-ALIAS] */
+  --radius-m: var(--radius-row); /* [WAVE2-DEPRECATED-ALIAS] */
+  --radius-btn: var(--radius-control); /* [WAVE2-DEPRECATED-ALIAS] */
+  --radius-input: var(--radius-control); /* [WAVE2-DEPRECATED-ALIAS] */
+  --button-radius: var(--radius-control); /* [WAVE2-DEPRECATED-ALIAS] */
+  --radius-lg: var(--radius-control); /* [WAVE2-DEPRECATED-ALIAS] */
+  --radius-l: var(--radius-control); /* [WAVE2-DEPRECATED-ALIAS] */
+  --radius-xl: var(--radius-card); /* [WAVE2-DEPRECATED-ALIAS] */
+  --radius-2xl: var(--radius-card); /* [WAVE2-DEPRECATED-ALIAS] */
+  --radius-3xl: var(--radius-dock); /* [WAVE2-DEPRECATED-ALIAS] */
+  --radius-full: var(--radius-pill); /* [WAVE2-DEPRECATED-ALIAS] */
+  --sep-radius-outer: var(--radius-card); /* [WAVE2-DEPRECATED-ALIAS] */
+  --composer-radius-single: var(--radius-dock); /* [WAVE2-DEPRECATED-ALIAS] */
+  --composer-radius-multi: var(--radius-dock); /* [WAVE2-DEPRECATED-ALIAS] */
+  --chat-bubble-radius: var(--radius-dock); /* [WAVE2-DEPRECATED-ALIAS] */
+}
+
+html[data-theme='dark'] {
+  /* 基础边框与发丝线（深色基线） */
+  --user-border-color: #3a3a3a;
+  --user-border-subtle: #2e2e2e;
+  --border-color: var(--user-border-color, #3a3a3a);
+  --border-subtle: var(--user-border-subtle, #2e2e2e);
+  --hairline-width: 1px;
+  --hairline: var(--border-subtle);
+  --hairline-strong: var(--border-color);
+  --border-width-emphasis: 2px;
+
+  /* 3 类合法描边预算（深色同构） */
+  --edge-control: var(--border-color);
+  --edge-focus: color-mix(
+    in srgb,
+    var(--border-color) 90%,
+    var(--text-primary) 10%
+  );
+  --edge-semantic-danger: var(--color-error-border);
+  --edge-semantic-warning: var(--color-warning-border);
+  --edge-semantic-success: var(--color-success-border);
+}

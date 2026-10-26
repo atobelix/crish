@@ -1,0 +1,66 @@
+/**
+ * ui/Card 样式契约（P4 T-P4-02）
+ *
+ * 内容容器原子基元：展示型容器严禁边框（border: none），
+ * 靠 --surface-card 明度阶梯成形，圆角锁定角色圆角 --radius-card。
+ * 仅在复杂背景/低反差环境下通过 rim 属性开启微弱轮廓光（--edge-rim）。
+ */
+
+.card {
+  box-sizing: border-box;
+  background-color: var(--surface-card);
+  border: none; /* 描边预算铁律：Card 默认零描边！ */
+  border-radius: var(--radius-card);
+  color: var(--text-primary);
+  position: relative;
+}
+
+/* 内边距档位 */
+.padNone {
+  padding: 0;
+}
+
+.padSm {
+  padding: var(--gap-group);
+}
+
+.padMd {
+  padding: 12px;
+}
+
+.padLg {
+  padding: 16px;
+}
+
+/* 轮廓光兜底（1px 弱光叠加，非实体边框） */
+.rim {
+  box-shadow: 0 0 0 1px var(--edge-rim);
+}
+
+/* 交互态 */
+.interactive {
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.interactive:hover {
+  background-color: color-mix(
+    in oklab,
+    var(--surface-card),
+    var(--state-hover)
+  );
+}
+
+.interactive:active {
+  background-color: color-mix(
+    in oklab,
+    var(--surface-card),
+    var(--state-active)
+  );
+}
+
+/* 键盘可访问性焦点环（混入 ≤10%） */
+.card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--edge-focus);
+}

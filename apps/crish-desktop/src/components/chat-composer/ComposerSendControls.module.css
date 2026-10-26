@@ -1,0 +1,161 @@
+/**
+ * ComposerSendControls.module.css
+ * 发送/中止控制按钮组样式模块（T6-1 & T6-4：28x28 正圆发送钮全场景常驻）
+ */
+
+.sendControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  flex-shrink: 0;
+  padding: 0;
+  align-self: center;
+}
+
+.sendBtnCircle,
+.sendCircle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  height: 28px;
+  padding: 0;
+  margin-left: 6px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  background: var(--brand);
+  color: var(--text-on-accent);
+  flex-shrink: 0;
+  font-size: 0;
+  line-height: 1;
+  box-sizing: border-box;
+  transition:
+    opacity var(--duration-fast) var(--ease-decelerate),
+    background var(--transition-fast);
+}
+
+.sendBtnCircle:disabled,
+.sendCircle:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.sendBtnCircle.active,
+.sendCircle[data-send-active='1'],
+.sendCircle:not(:disabled) {
+  opacity: 1;
+  pointer-events: auto;
+  box-shadow: none;
+}
+
+.sendBtnCircle.active:hover:not(:disabled),
+.sendCircle[data-send-active='1']:hover:not(:disabled),
+.sendCircle:not(:disabled):hover {
+  background: var(--brand-deep);
+}
+
+.sendBtnCircle.active:active:not(:disabled),
+.sendCircle[data-send-active='1']:active:not(:disabled),
+.sendCircle:not(:disabled):active {
+  background: var(--brand-deep);
+}
+
+.sendBtnCircle svg,
+.sendCircle svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.4;
+  color: var(--text-on-accent);
+  stroke: currentColor;
+  flex-shrink: 0;
+  margin: auto;
+}
+
+.stopCircleBtn {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast, 120ms ease),
+    background var(--transition-fast, 120ms ease);
+}
+
+.stopCircleBtn:hover {
+  background: var(--danger-soft-bg);
+  color: var(--color-error);
+}
+
+.fieldActionBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  width: var(--control-height, 32px);
+  height: var(--control-height, 32px);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    color var(--transition-micro, 80ms ease),
+    background var(--transition-micro, 80ms ease);
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.fieldActionBtn:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.fieldActionBtn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.fieldActionBtn svg {
+  width: var(--icon-size-sm, 14px);
+  height: var(--icon-size-sm, 14px);
+}
+
+.stop {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.stop:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.queue {
+  width: auto;
+  height: var(--control-height-sm, 28px);
+  padding: 0 8px;
+  gap: var(--space-1, 4px);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+}
+
+.queue:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}

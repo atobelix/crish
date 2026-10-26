@@ -1,0 +1,59 @@
+/**
+ * ui/DisclosureAffordance 样式契约（P4 T-P4-05）
+ *
+ * 展开/收起指示指示符基元样式：
+ * 静止态低权隐蔽（opacity: 0），消灭界面 5~9 处常驻视觉噪音；
+ * 仅在父级 Row 被 Hover/Focus、或已处于展开状态时平滑淡入。
+ * 展开时平滑顺时针旋转 90 度。
+ */
+
+.affordanceSlot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  user-select: none;
+  color: var(--text-tertiary);
+  opacity: 0;
+  transition:
+    opacity var(--transition-fast),
+    transform var(--transition-fast),
+    color var(--transition-fast);
+}
+
+/* 所在 Row / 容器被 Hover、Focus-within，或自身已展开/常显时淡入 */
+:global(.row:hover) .affordanceSlot,
+:global(.row:focus-within) .affordanceSlot,
+:global([data-row]:hover) .affordanceSlot,
+:global([data-row]:focus-within) .affordanceSlot,
+:global(:hover) > .affordanceSlot,
+.alwaysVisible,
+.expanded {
+  opacity: 1;
+}
+
+.expanded {
+  transform: rotate(90deg);
+  color: var(--text-secondary);
+}
+
+.affordanceSlot.disabled,
+:global(.row:hover) .affordanceSlot.disabled,
+:global(.row:focus-within) .affordanceSlot.disabled,
+:global([data-row]:hover) .affordanceSlot.disabled,
+:global([data-row]:focus-within) .affordanceSlot.disabled,
+:global(:hover) > .affordanceSlot.disabled,
+.disabled.alwaysVisible,
+.disabled.expanded {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.chevronIcon {
+  display: block;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}

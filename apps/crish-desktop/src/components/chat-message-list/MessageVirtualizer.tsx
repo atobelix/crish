@@ -25,11 +25,7 @@ import {
   type MessageVirtualizerProps,
   type PinnedItem,
 } from './messageVirtualizerMemo';
-import {
-  CHAT_SCROLL_PAD_TOP,
-  CHAT_SCROLL_PAD_X,
-  chatSpacerHeight,
-} from './chatScrollGeometry';
+import { CHAT_SCROLL_PAD_TOP, chatSpacerHeight } from './chatScrollGeometry';
 import {
   DEFAULT_VIEWPORT_HEIGHT_PX,
   MESSAGE_VIEWPORT_OVERSCAN,
@@ -422,8 +418,8 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
             style={{
               position: 'absolute',
               top: CHAT_SCROLL_PAD_TOP,
-              left: CHAT_SCROLL_PAD_X,
-              right: CHAT_SCROLL_PAD_X,
+              left: 0,
+              right: 0,
               transform: `translateY(${startOffset}px)`,
               overflowAnchor: 'none',
             }}

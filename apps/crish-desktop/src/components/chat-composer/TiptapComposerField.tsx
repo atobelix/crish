@@ -18,7 +18,6 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import styles from './ChatComposer.module.css';
 import { TiptapEditorField } from './TiptapEditorField';
 import type {
   SlashCommandItem,
@@ -352,7 +351,7 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
   return (
     <div
       ref={containerRef}
-      className={`${styles.container} input-container${dense ? ` ${styles.containerDense}` : ''}${className ? ` ${className}` : ''}`}
+      className={`input-container${className ? ` ${className}` : ''}`}
       data-composer-field="1"
       data-composer-dense={dense ? '1' : '0'}
       data-composer-max-lines={lines}

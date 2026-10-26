@@ -6,7 +6,8 @@ import React, {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import styles from './ChatComposer.module.css';
+import attachStyles from './ComposerAttachmentBar.module.css';
+import styles from './AnnotationChipItem.module.css';
 import type { ChatAttachment } from '../../hooks/useChatStream';
 import { openFileInPanel } from '../../api/filePanelOpener';
 import { Button, Textarea } from '../ui';
@@ -41,8 +42,12 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
     const chipRef = useRef<HTMLSpanElement>(null);
     const popoverRef = useRef<HTMLDivElement>(null);
     const [posStyle, setPosStyle] = useState<React.CSSProperties | null>(null);
-    const showTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-    const hideTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    const showTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+      undefined
+    );
+    const hideTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+      undefined
+    );
 
     useEffect(() => {
       setDraftComment(attachment.annotation?.comment || '');
@@ -99,7 +104,7 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
       // 绝不遮挡胶囊：在视口下方空间有限时，向上锚定，bottom 严格等于 winH - rect.top + 8px
       // 如此卡片底边永远在胶囊上方 8px，卡片再高也绝不会覆盖到胶囊与鼠标！
       const spaceAbove = rect.top;
-      const placeAbove = spaceAbove >= 180 || spaceAbove >= (winH - rect.bottom);
+      const placeAbove = spaceAbove >= 180 || spaceAbove >= winH - rect.bottom;
 
       if (placeAbove) {
         setPosStyle({
@@ -148,7 +153,10 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
         if (!attachment.annotation?.id) return;
         attachment.annotation.comment = newComment;
         attachment.text = `【代码选区批注: ${attachment.path || attachment.name}】\n选中内容:\n${attachment.annotation.selectedText}\n批注:\n${newComment}`;
-        updatePendingFileAnnotationComment(attachment.annotation.id, newComment);
+        updatePendingFileAnnotationComment(
+          attachment.annotation.id,
+          newComment
+        );
       },
       [attachment]
     );
@@ -171,7 +179,9 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
       open(targetPath);
     };
 
-    const fileName = attachment.path ? pathBasename(attachment.path) : attachment.name;
+    const fileName = attachment.path
+      ? pathBasename(attachment.path)
+      : attachment.name;
 
     return (
       <>
@@ -184,7 +194,7 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
           data-file-type="annotation"
           data-file-name={attachment.name}
           data-file-open-path={attachment.path || attachment.name}
-          className={`${styles.fileCard} ${styles.attachChip} file-card`}
+          className={`${attachStyles.fileCard} ${attachStyles.attachChip} file-card`}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           onClick={(e) => {
@@ -204,13 +214,20 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
             }
           }}
         >
-          <span className={`${styles.fileIcon} ${styles.attachIconBox} file-icon`} aria-hidden>
-            <AppIcon name="message-square-quote" size={20} className={styles.attachIcon} />
+          <span
+            className={`${attachStyles.fileIcon} ${attachStyles.attachIconBox} file-icon`}
+            aria-hidden
+          >
+            <AppIcon
+              name="message-square-quote"
+              size={20}
+              className={attachStyles.attachIcon}
+            />
           </span>
 
-          <span className={`${styles.fileName} ${styles.attachName} file-name`}>
-            <span>批注</span>
-            <span className={styles.dotSep}>·</span>
+          <span
+            className={`${attachStyles.fileName} ${attachStyles.attachName} file-name`}
+          >
             <span>{fileName}</span>
           </span>
 
@@ -218,7 +235,7 @@ export const AnnotationChipItem: React.FC<AnnotationChipItemProps> = React.memo(
             type="button"
             variant="ghost"
             size="xs"
-            className={`${styles.fileRemove} ${styles.attachRemove} file-remove chat-attach-remove`}
+            className={`${attachStyles.fileRemove} ${attachStyles.attachRemove} file-remove chat-attach-remove`}
             aria-label={`移除附件 ${attachment.name}`}
             onClick={(e) => {
               e.stopPropagation();

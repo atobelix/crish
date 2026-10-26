@@ -1,0 +1,244 @@
+/* ==========================================================================
+   tokens-surface.css — 六级表面阶梯 (e0~e5)、边缘光、阴影与 Win11 云母窗口材质
+   ========================================================================== */
+
+/* ── 步长常量（P1 SSOT 定值，定义于一处） ── */
+:root {
+  --elev-step-sunken: 20%; /* e0 下潜混合比例 */
+  --elev-step-shell: 3.5%; /* e2 外壳浮起比例 */
+  --elev-step-card: 7%; /* e3 卡片浮起比例 */
+  --elev-step-raised: 13%; /* e4 交互浮起比例 */
+  --elev-step-overlay: 17%; /* e5 弹层浮起比例 */
+}
+
+/* ── 浅色主题表面派生 (Light Surface Ladder) ── */
+:root,
+html[data-theme='default'],
+html[data-theme='light'] {
+  --surface-base-default: #f7f6f4;
+  --surface-base: var(--user-surface-base, var(--surface-base-default));
+  --surface-tint-target: var(--user-surface-tint, #ffffff);
+  --surface-deep-target: var(--user-surface-deep, #000000);
+  --elev-direction: var(--user-elev-direction, -1);
+
+  /* e0 下凹：向深混合 5% 形成清爽下凹槽 */
+  --surface-sunken: color-mix(
+    in oklab,
+    var(--surface-base),
+    var(--surface-deep-target) 5%
+  );
+
+  /* e1 画布：柔和暖白基准地平面 */
+  --surface-canvas: var(--surface-base);
+
+  /* e2 外壳：微弱收敛（或外壳透出云母） */
+  --surface-shell: color-mix(
+    in oklab,
+    var(--surface-base),
+    var(--surface-deep-target) 1.5%
+  );
+
+  /* e3 卡片：向白提升，在暖灰底板上自浮起 */
+  --surface-card: color-mix(
+    in oklab,
+    var(--surface-base),
+    var(--surface-tint-target) 60%
+  );
+
+  /* e4 浮起：交互中心（输入坞）向白进一步提升 */
+  --surface-raised: color-mix(
+    in oklab,
+    var(--surface-base),
+    var(--surface-tint-target) 85%
+  );
+
+  /* e5 弹层：顶层纯白底板 + 强环境遮罩 */
+  --surface-overlay: color-mix(
+    in oklab,
+    var(--surface-base),
+    var(--surface-tint-target) 100%
+  );
+
+  /* 边缘光与三级抬升阴影（Light） */
+  --edge-rim: 0 0 0 1px hsl(0 0% 0% / 0.04);
+  --edge-rim-subtle: 0 0 0 1px hsl(0 0% 0% / 0.02);
+
+  --shadow-lift-card: 0 1px 3px hsl(0 0% 0% / 0.05);
+  --shadow-lift-raised:
+    0 4px 16px -2px hsl(0 0% 0% / 0.08), 0 1px 2px hsl(0 0% 0% / 0.04);
+  --shadow-lift-overlay:
+    0 12px 32px -4px hsl(0 0% 0% / 0.15), 0 4px 8px -2px hsl(0 0% 0% / 0.06);
+
+  /* 遮罩与通用阴影基底 */
+  --shadow-color: #000;
+  --surface-scrim: var(--shadow-color, #000);
+  --surface-overlay-fg: hsl(0 0% 100%);
+  --modal-scrim: color-mix(in srgb, var(--shadow-color) 12%, transparent);
+
+  --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.05);
+  --shadow-md: 0 2px 8px hsl(0 0% 0% / 0.06), 0 1px 2px hsl(0 0% 0% / 0.04);
+  --shadow-lg:
+    0 4px 16px -2px color-mix(in srgb, var(--shadow-color) 4%, transparent),
+    0 1px 3px color-mix(in srgb, var(--shadow-color) 2%, transparent);
+  --shadow-2xl:
+    0 12px 24px color-mix(in srgb, var(--shadow-color) 2.5%, transparent),
+    0 32px 64px color-mix(in srgb, var(--shadow-color) 3.5%, transparent),
+    0 1px 3px color-mix(in srgb, var(--shadow-color) 1%, transparent);
+  --shadow-dropdown: var(--shadow-md);
+  --shadow-popover: var(--shadow-lg);
+
+  --chat-footer-fade: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--surface-canvas) 55%, transparent) 42%,
+    color-mix(in srgb, var(--surface-canvas) 92%, transparent) 78%,
+    var(--surface-canvas) 100%
+  );
+
+  /* [WAVE2-DEPRECATED-ALIAS] 旧表面与背景别名桥接层（Wave 2 Codemod 后一键清除） */
+  --user-surface-outer: #f7f6f5; /* [WAVE2-DEPRECATED-ALIAS] */
+  --user-surface-main: #ffffff; /* [WAVE2-DEPRECATED-ALIAS] */
+  --user-surface-input: #ffffff; /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-outer: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-main: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-input: var(--surface-raised); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-chrome: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-paper: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-elevated: var(--surface-overlay); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-primary: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-secondary: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-tertiary: var(--surface-sunken); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-card: var(--surface-card); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-elevated: var(--surface-overlay); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-canvas: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-page: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-workspace: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-subtle: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-card-subtle: var(--surface-sunken); /* [WAVE2-DEPRECATED-ALIAS] */
+  --leaf-card-bg: var(--surface-card); /* [WAVE2-DEPRECATED-ALIAS] */
+  --workspace-surface-bg: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --shell-chrome-bg: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --shell-inset-bg: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --composer-bg: var(--surface-raised); /* [WAVE2-DEPRECATED-ALIAS] */
+  --user-bubble-bg: var(--surface-card); /* [WAVE2-DEPRECATED-ALIAS] */
+  --content-frame-border: #ebeae9; /* [WAVE2-DEPRECATED-ALIAS] */
+}
+
+/* ── 暗色主题表面派生 (Dark Surface Ladder) ── */
+html[data-theme='dark'] {
+  --surface-base-default: #141414;
+  --surface-base: var(--user-surface-base, var(--surface-base-default));
+  --surface-tint-target: var(--user-surface-tint, #ffffff);
+  --surface-deep-target: var(--user-surface-deep, #000000);
+  --elev-direction: var(--user-elev-direction, 1);
+
+  /* e0 下凹：与深色目标混合（负向深入，消除倒挂） */
+  --surface-sunken: color-mix(
+    in oklab,
+    var(--surface-base),
+    var(--surface-deep-target) var(--elev-step-sunken)
+  );
+
+  /* e1 画布：基准地平面 */
+  --surface-canvas: var(--surface-base);
+
+  /* e2 外壳：微弱抬升，勾勒侧栏与视窗帽檐 */
+  --surface-shell: color-mix(
+    in oklab,
+    var(--surface-base),
+    var(--surface-tint-target) var(--elev-step-shell)
+  );
+
+  /* e3 卡片：坚决抬升，形成容积感（无需描边即可靠明度场区分） */
+  --surface-card: color-mix(
+    in oklab,
+    var(--surface-base),
+    var(--surface-tint-target) var(--elev-step-card)
+  );
+
+  /* e4 浮起：交互中心（输入坞）沉着悬浮 */
+  --surface-raised: color-mix(
+    in oklab,
+    var(--surface-base),
+    var(--surface-tint-target) var(--elev-step-raised)
+  );
+
+  /* e5 弹层：顶层悬浮（菜单与对话框） */
+  --surface-overlay: color-mix(
+    in oklab,
+    var(--surface-base),
+    var(--surface-tint-target) var(--elev-step-overlay)
+  );
+
+  /* 边缘光与三级抬升阴影（Dark） */
+  --edge-rim: 0 0 0 1px hsl(0 0% 100% / 0.05);
+  --edge-rim-subtle: 0 0 0 1px hsl(0 0% 100% / 0.03);
+
+  --shadow-lift-card: 0 1px 3px hsl(0 0% 0% / 0.25);
+  --shadow-lift-raised: var(--edge-rim), 0 4px 16px -2px hsl(0 0% 0% / 0.45);
+  --shadow-lift-overlay: var(--edge-rim), 0 12px 32px -4px hsl(0 0% 0% / 0.65);
+
+  /* 遮罩与通用阴影基底 */
+  --shadow-color: #000;
+  --surface-scrim: var(--shadow-color, #000);
+  --surface-overlay-fg: hsl(0 0% 100%);
+  --modal-scrim: color-mix(in srgb, var(--shadow-color) 30%, transparent);
+
+  --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.16), 0 1px 1px hsl(0 0% 0% / 0.1);
+  --shadow-md: 0 2px 8px hsl(0 0% 0% / 0.2), 0 1px 2px hsl(0 0% 0% / 0.12);
+  --shadow-lg: 0 4px 18px hsl(0 0% 0% / 0.28), 0 1px 3px hsl(0 0% 0% / 0.18);
+  --shadow-2xl:
+    0 12px 24px color-mix(in srgb, var(--shadow-color) 30%, transparent),
+    0 32px 64px color-mix(in srgb, var(--shadow-color) 40%, transparent),
+    0 1px 3px color-mix(in srgb, var(--shadow-color) 15%, transparent);
+  --shadow-dropdown: var(--shadow-md);
+  --shadow-popover: var(--shadow-lg);
+
+  /* [WAVE2-DEPRECATED-ALIAS] 旧表面与背景别名桥接层（Wave 2 Codemod 后一键清除） */
+  --user-surface-outer: #1e1e1e; /* [WAVE2-DEPRECATED-ALIAS] */
+  --user-surface-main: #141414; /* [WAVE2-DEPRECATED-ALIAS] */
+  --user-surface-input: #232323; /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-outer: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-main: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-input: var(--surface-raised); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-chrome: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-paper: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-elevated: var(--surface-overlay); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-primary: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-secondary: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-tertiary: var(--surface-sunken); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-card: var(--surface-card); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-elevated: var(--surface-overlay); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-canvas: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-page: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-workspace: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-subtle: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-card-subtle: var(--surface-sunken); /* [WAVE2-DEPRECATED-ALIAS] */
+  --leaf-card-bg: var(--surface-card); /* [WAVE2-DEPRECATED-ALIAS] */
+  --workspace-surface-bg: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --shell-chrome-bg: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --shell-inset-bg: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --composer-bg: var(--surface-raised); /* [WAVE2-DEPRECATED-ALIAS] */
+  --user-bubble-bg: var(--surface-card); /* [WAVE2-DEPRECATED-ALIAS] */
+  --content-frame-border: #222121; /* [WAVE2-DEPRECATED-ALIAS] */
+}
+
+/* ── 系统窗口材质分层 (Win11 Mica / Win10 Acrylic · P1 §5.8 绑定 --surface-shell) ── */
+:root {
+  --outer-layer-bg: var(--surface-shell);
+  --outer-layer-child-bg: var(--surface-shell);
+}
+
+html[data-backdrop='mica'] {
+  /* Mica 透光率优化：由原 68% 提升至 80%，抑制高亮桌面壁纸的过度漂移 */
+  --outer-layer-bg: color-mix(in srgb, var(--surface-shell) 80%, transparent);
+  --outer-layer-child-bg: transparent;
+  --workspace-surface-bg: transparent;
+}
+
+html[data-backdrop='acrylic'] {
+  /* Acrylic 透光率优化：由原 75% 提升至 85% */
+  --outer-layer-bg: color-mix(in srgb, var(--surface-shell) 85%, transparent);
+  --outer-layer-child-bg: transparent;
+  --workspace-surface-bg: transparent;
+}

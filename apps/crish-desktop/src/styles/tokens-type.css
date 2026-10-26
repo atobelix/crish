@@ -1,0 +1,154 @@
+/* ==========================================================================
+   tokens-type.css — 字体栈、6 档字阶、2 档字重、4 档行高与 8 个排版角色 (--type-*)
+   ========================================================================== */
+
+:root,
+html[data-theme='default'],
+html[data-theme='light'] {
+  /* 字体族基线（前置 Segoe UI Variable Text） */
+  --font-family-ui:
+    'Segoe UI Variable Text', -apple-system, BlinkMacSystemFont,
+    'HarmonyOS Sans SC', 'HarmonyOS Sans', 'PingFang SC', 'Hiragino Sans GB',
+    'Noto Sans SC', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  --font-family-mono:
+    'Cascadia Code', 'Cascadia Mono', 'JetBrains Mono', 'Segoe UI Mono',
+    'SF Mono', 'Consolas', 'Liberation Mono', 'Courier New', ui-monospace,
+    monospace;
+
+  --font-sans: var(
+    --user-font-sans,
+    'Segoe UI Variable Text',
+    'HarmonyOS Sans SC',
+    'HarmonyOS Sans',
+    'PingFang SC',
+    'Noto Sans SC',
+    'Microsoft YaHei UI',
+    'Microsoft YaHei',
+    'Hiragino Sans GB',
+    'Noto Sans CJK SC',
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'Helvetica Neue',
+    Arial,
+    sans-serif
+  );
+  --font-mono: var(
+    --user-font-mono,
+    'Cascadia Mono',
+    'Cascadia Code',
+    'JetBrains Mono',
+    'Segoe UI Mono',
+    'SF Mono',
+    Consolas,
+    'Liberation Mono',
+    ui-monospace,
+    monospace
+  );
+
+  /* 6 档字阶体系（SSOT · 退役 13px 与半像素，步长 >= 2px） */
+  --font-size-adjust: 0px;
+  --font-size-caption: calc(11px + var(--font-size-adjust, 0px));
+  --font-size-meta: calc(12px + var(--font-size-adjust, 0px));
+  --font-size-body: calc(14px + var(--font-size-adjust, 0px));
+  --font-size-subhead: calc(16px + var(--font-size-adjust, 0px));
+  --font-size-heading: calc(18px + var(--font-size-adjust, 0px));
+  --font-size-title: calc(22px + var(--font-size-adjust, 0px));
+
+  /* 字重两档化（SSOT） */
+  --fw-regular: 400;
+  --fw-strong: 700;
+
+  /* 4 档行高阶梯（SSOT · P3 裁定定值） */
+  --lh-dense: 1.2;
+  --lh-ui: 1.35;
+  --lh-prose: 1.55;
+  --lh-row: 24px;
+
+  /* 8 个核心排版角色（font 简写属性规范） */
+  --type-prose: var(--fw-regular) var(--font-size-body)/var(--lh-prose)
+    var(--font-family-ui);
+  --type-process: var(--fw-regular) var(--font-size-meta)/var(--lh-row)
+    var(--font-family-ui);
+  --type-label: var(--fw-regular) var(--font-size-body)/var(--lh-ui)
+    var(--font-family-ui);
+  --type-meta: var(--fw-regular) var(--font-size-meta)/var(--lh-ui)
+    var(--font-family-ui);
+  --type-caption: var(--fw-regular) var(--font-size-caption)/var(--lh-dense)
+    var(--font-family-ui);
+  --type-card-title: var(--fw-strong) var(--font-size-subhead)/var(--lh-ui)
+    var(--font-family-ui);
+  --type-heading: var(--fw-strong) var(--font-size-heading)/var(--lh-ui)
+    var(--font-family-ui);
+  --type-title: var(--fw-strong) var(--font-size-title)/var(--lh-dense)
+    var(--font-family-ui);
+  --type-code: var(--fw-regular) var(--font-size-meta)/var(--lh-ui)
+    var(--font-family-mono);
+
+  /* 字距刻度 */
+  --letter-spacing-tight: -0.01em;
+  --letter-spacing-normal: 0em;
+  --letter-spacing-snug: 0.01em;
+  --letter-spacing-wide: 0.02em;
+  --letter-spacing-tighter: -0.02em;
+
+  /* [WAVE2-DEPRECATED-ALIAS] 旧字阶、字重与行高别名桥接层（Wave 2 Codemod 后一键清除） */
+  --font-size-xxs: var(--font-size-caption); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-xs: var(--font-size-meta); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-sm: var(--font-size-meta); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-base: var(--font-size-body); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-md: var(--font-size-subhead); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-lg: var(--font-size-heading); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-xl: var(--font-size-title); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-2xl: var(--font-size-title); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-nano: var(--font-size-caption); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-micro: var(--font-size-caption); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-xs-plus: var(--font-size-meta); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-sm-plus: var(--font-size-body); /* [WAVE2-DEPRECATED-ALIAS] */
+
+  --font-weight-normal: var(--fw-regular); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-weight-code: var(--fw-regular); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-weight-medium: var(--fw-regular); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-weight-content: var(--fw-strong); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-weight-semibold: var(--fw-strong); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-weight-heavy: var(--fw-strong); /* [WAVE2-DEPRECATED-ALIAS] */
+
+  --line-height-dense: var(--lh-dense); /* [WAVE2-DEPRECATED-ALIAS] */
+  --line-height-tight: var(--lh-dense); /* [WAVE2-DEPRECATED-ALIAS] */
+  --line-height-compact: var(--lh-ui); /* [WAVE2-DEPRECATED-ALIAS] */
+  --line-height-ui: var(--lh-ui); /* [WAVE2-DEPRECATED-ALIAS] */
+  --line-height-base: var(--lh-ui); /* [WAVE2-DEPRECATED-ALIAS] */
+  --line-height-body: var(--lh-prose); /* [WAVE2-DEPRECATED-ALIAS] */
+  --line-height-none: 1; /* [WAVE2-DEPRECATED-ALIAS] */
+}
+
+html[data-ui-size='small'] {
+  /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-xxs: var(--font-size-caption); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-xs: var(--font-size-meta); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-sm: var(--font-size-meta); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-base: var(--font-size-body); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-md: var(--font-size-subhead); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-lg: var(--font-size-heading); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-xl: var(--font-size-title); /* [WAVE2-DEPRECATED-ALIAS] */
+
+  --line-height-tight: var(--lh-dense); /* [WAVE2-DEPRECATED-ALIAS] */
+  --line-height-ui: var(--lh-ui); /* [WAVE2-DEPRECATED-ALIAS] */
+  --line-height-body: var(--lh-prose); /* [WAVE2-DEPRECATED-ALIAS] */
+}
+
+html[data-ui-size='large'] {
+  /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-xxs: var(--font-size-caption); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-xs: var(--font-size-meta); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-sm: var(--font-size-meta); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-base: var(--font-size-body); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-md: var(--font-size-subhead); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-lg: var(--font-size-heading); /* [WAVE2-DEPRECATED-ALIAS] */
+  --font-size-xl: var(--font-size-title); /* [WAVE2-DEPRECATED-ALIAS] */
+
+  --line-height-tight: var(--lh-dense); /* [WAVE2-DEPRECATED-ALIAS] */
+  --line-height-ui: var(--lh-ui); /* [WAVE2-DEPRECATED-ALIAS] */
+  --line-height-body: var(--lh-prose); /* [WAVE2-DEPRECATED-ALIAS] */
+}

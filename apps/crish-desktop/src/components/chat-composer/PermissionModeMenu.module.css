@@ -1,286 +1,190 @@
-/* 默认：宽屏药丸态（高度 28px，半圆端头，与加号等高平权，显示文字即可） */
-.permPill,
-.permPill {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  height: 28px;
-  min-height: 28px;
-  max-height: 28px;
-  min-width: unset;
-  padding: 0 10px;
-  border: none;
-  border-radius: var(--sep-radius-outer, 14px);
-  background: transparent;
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: var(--font-size-xs, 12px);
-  font-weight: 500;
-  cursor: pointer;
-  box-shadow: none;
-  white-space: nowrap;
-  flex-shrink: 0;
-  box-sizing: border-box;
-  transition:
-    background var(--transition-micro, 100ms ease),
-    color var(--transition-micro, 100ms ease);
-}
+/**
+ * PermissionModeMenu.module.css
+ * 权限模式菜单样式（T6-6：常驻左槽 + 稳态中性化，退出全橙色常亮）
+ */
 
-/* 融合模式（单行胶囊左段）：左圆弧 14px，右平切贴合中间模型槽 */
-.permPill.fused {
-  border-radius: var(--sep-radius-outer) 0 0 var(--sep-radius-outer);
-  padding: 0 10px;
-}
-
-.permPill:hover,
-.permPill:active,
-.permPill.isOpen {
-  background: var(--composer-control-hover-bg);
-  color: var(--text-primary);
-}
-
-.permPill:focus-visible {
-  outline: none;
-  background: var(--composer-control-hover-bg);
-  box-shadow: 0 0 0 1.5px
-    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
-}
-
-.permLabel {
-  display: inline;
-  white-space: nowrap;
-  line-height: 1;
-}
-
-.permPillChev {
-  opacity: 0.55;
-  transition:
-    transform var(--transition-chevron),
-    opacity var(--transition-micro);
-  flex-shrink: 0;
-  will-change: transform;
-}
-
-.permPill.isOpen .permPillChev,
-.permPill[aria-expanded='true'] .permPillChev {
-  transform: rotate(180deg);
-  opacity: 0.9;
-}
-
-.permIcon {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-
-.permIcon svg {
-  width: 14px;
-  height: 14px;
-  stroke-width: 1.75;
-}
-
-.permPill[data-perm-mode='ask'] {
-  color: var(--color-warning);
-}
-
-.permPill[data-perm-mode='full'] {
-  color: color-mix(in srgb, var(--accent-orange) 85%, var(--text-primary));
-}
-
-.permPill[data-perm-mode='plan'],
-.permPill[data-perm-mode='deep'] {
-  color: var(--text-secondary);
-}
-
-/* 窄屏或显式 iconOnly：自动折叠为 28x28 正圆图标按钮，与旁边的加号 100% 几何与视觉同构 */
-@container (max-width: 520px) {
-  .permPill {
-    width: 28px;
-    height: 28px;
-    min-width: 28px;
-    max-width: 28px;
-    padding: 0;
-    border-radius: 50%;
-    justify-content: center;
-    gap: 0;
-  }
-
-  .permPill .permLabel,
-  .permPill .permPillChev {
-    display: none;
-  }
-
-  .permPill .permIcon {
-    display: inline-flex;
-  }
-}
-
-.permPill.iconOnly {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  max-width: 28px;
-  padding: 0;
-  border-radius: 50%;
-  justify-content: center;
-  gap: 0;
-}
-
-.permPill.iconOnly .permLabel,
-.permPill.iconOnly .permPillChev {
-  display: none;
-}
-
-.permPill.iconOnly .permIcon {
-  display: inline-flex;
-}
-
-.permMenu {
-  z-index: var(--z-dropdown-menu, var(--z-dropdown));
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
-  border-radius: var(--sep-radius-outer, 12px);
-  box-shadow: var(--shadow-lg);
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: min(240px, calc(100vw - 16px));
-  max-width: min(320px, calc(100vw - 16px));
-  /* 动效与几何锚点完全由基座 Menu.module.css 托管，彻底清除 cds-popover-* 幽灵引用 */
-  max-height: min(
-    var(--radix-popover-content-available-height, 360px),
-    70vh,
-    360px
-  );
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  box-sizing: border-box;
-  color: var(--text-primary);
-  font-family: var(--font-sans, var(--sep-font-sans));
-}
-
-.permMenuItem,
-.permMenuItem {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-width: unset;
-  padding: 0 8px;
-  min-height: 32px;
-  height: 32px;
-  border-radius: var(--sep-item-radius, 8px);
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  box-shadow: none;
-  box-sizing: border-box;
-  transition:
-    background var(--transition-micro, 100ms ease),
-    color var(--transition-micro, 100ms ease);
-  text-align: left;
-  font-family: inherit;
+.menuHost {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
-.permMenuItem:hover {
-  background: var(--tint-hover);
+.trigger {
+  height: 28px;
+  padding: 0 10px 0 8px;
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium, 500);
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  outline: none;
+  transition:
+    background var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease);
+}
+
+.trigger svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.trigger:hover,
+.trigger:focus-visible,
+.trigger.isOpen {
+  background: var(--composer-control-hover-bg, var(--tint-hover));
   color: var(--text-primary);
 }
 
-.permMenuItem.isSelected {
+.trigger:active {
   background: var(--tint-active);
   color: var(--text-primary);
-  font-weight: 500;
 }
 
-.permMenuItem:focus-visible {
-  outline: none;
-  background: var(--tint-hover);
-  box-shadow: 0 0 0 1.5px
-    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+.trigger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
-.iconWrapper {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  flex-shrink: 0;
+.label {
+  max-width: 112px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.permMenuItem.isSelected .iconWrapper {
-  color: var(--brand-deep);
+.chevron {
+  width: 11px;
+  height: 11px;
+  color: currentColor;
+  opacity: 0.72;
+  margin-left: 1px;
+  transition: transform var(--duration-normal) var(--ease-decelerate);
 }
 
-.labelRow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  min-width: 0;
-  text-align: left;
+.trigger.isOpen .chevron {
+  transform: rotate(180deg);
 }
 
-.infoTrigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  color: var(--text-faint);
-  border-radius: var(--radius-xs, 4px);
-  cursor: help;
-  transition: color var(--transition-micro, 100ms ease);
-  flex-shrink: 0;
-}
+/* ==========================================================================
+   Menu Popover (Portal / Floating)
+   ========================================================================== */
 
-.infoTrigger:hover {
-  color: var(--text-primary);
-}
-
-.textCol {
+.menu {
+  --perm-menu-pad: 4px;
+  --perm-item-radius: 6px;
+  position: fixed;
+  z-index: var(--z-popover);
+  min-width: 184px;
+  max-width: 240px;
+  padding: var(--perm-menu-pad);
+  margin: 0;
+  list-style: none;
+  border-radius: calc(var(--perm-item-radius) + var(--perm-menu-pad));
+  background: var(--bg-elevated, var(--composer-bg));
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--popover-shadow);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   display: flex;
   flex-direction: column;
   gap: 2px;
+  box-sizing: border-box;
+  animation: permMenuIn var(--transition-popover-enter);
+}
+
+@keyframes permMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.item {
+  width: 100%;
+  min-height: 28px;
+  padding: 5px 8px;
+  border-radius: var(--perm-item-radius);
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal, 400);
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  box-sizing: border-box;
+  outline: none;
+  transition:
+    background var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease);
+}
+
+.item:hover,
+.item:focus-visible {
+  background: var(--tint-hover);
+}
+
+.item[data-selected='true'] {
+  font-weight: var(--font-weight-medium, 500);
+  background: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.itemIcon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.item[data-selected='true'] .itemIcon {
+  color: var(--text-primary);
+}
+
+.itemText {
   flex: 1;
   min-width: 0;
-  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
-.title,
-.permMenuTitle {
-  font-size: var(--font-size-sm, 13px);
-  font-weight: 500;
-  line-height: var(--line-height-ui, 1.35);
-  color: var(--text-primary);
+.itemLabel {
+  line-height: 1.25;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.desc {
-  font-size: var(--font-size-xs, 11px);
-  font-weight: 400;
-  color: var(--text-secondary);
-  line-height: var(--line-height-ui, 1.35);
-  word-break: break-word;
-  white-space: normal;
+.itemDesc {
+  font-size: var(--font-size-2xs);
+  color: var(--text-tertiary);
+  line-height: 1.25;
 }
 
-.checkIcon,
-.permMenuCheck {
-  color: var(--brand-deep);
+.check {
+  width: 13px;
+  height: 13px;
   flex-shrink: 0;
-  margin-left: auto;
+  color: var(--text-primary);
 }

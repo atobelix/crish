@@ -1,5 +1,5 @@
 /**
- * composer-wrapper 卡片网格：附件在上、加号/盾/融合/发送在网格、页脚无撤回。
+ * composer-wrapper 卡片网格：附件在上、加号/权限常驻左槽、融合/发送在右槽、页脚无撤回。
  */
 // @vitest-environment jsdom
 import React, { useRef, useState } from 'react';
@@ -95,7 +95,9 @@ describe('ChatComposer 卡片网格（composer-wrapper 结构）', () => {
       screen.queryByRole('button', { name: '撤回上一条用户消息' })
     ).toBeNull();
     expect(
-      document.querySelector('[data-composer-footer="1"] [data-testid="message-retract"]')
+      document.querySelector(
+        '[data-composer-footer="1"] [data-testid="message-retract"]'
+      )
     ).toBeNull();
   });
 
@@ -131,14 +133,16 @@ describe('ChatComposer 卡片网格（composer-wrapper 结构）', () => {
       );
     }
     render(<Harness />);
-    const send = await waitFor(() => screen.getByRole('button', { name: '发送' }));
+    const send = await waitFor(() =>
+      screen.getByRole('button', { name: '发送' })
+    );
     fireEvent.click(send);
     await waitFor(() => {
       expect(onSend).toHaveBeenCalled();
     });
   });
 
-  it('单行模式：权限合并进右侧融合胶囊（无 independent permSlot，胶囊内无 chevron）', () => {
+  it('单行模式：权限模式按钮常驻左槽（[data-composer-grid="left"]），不跳入右侧融合胶囊（T6-6）', () => {
     function SingleLineHarness() {
       const [input, setInput] = useState('');
       const fileInputRef = useRef<HTMLInputElement>(null);
@@ -174,18 +178,15 @@ describe('ChatComposer 卡片网格（composer-wrapper 结构）', () => {
     const card = container.querySelector('[data-composer-card]');
     expect(card?.getAttribute('data-multiline')).toBe('0');
 
-    // 单行时独立 permSlot 不渲染在网格中
     expect(container.querySelector('[data-composer-grid="perm"]')).toBeNull();
 
-    // 权限按钮位于 composer-fused-trigger 内部作为前置插槽
+    const leftSlot = container.querySelector('[data-composer-grid="left"]');
     const fusedTrigger = screen.getByTestId('composer-fused-trigger');
-    expect(fusedTrigger).toBeTruthy();
-    expect(fusedTrigger.getAttribute('data-has-prefix')).toBe('true');
-    const permBtn = screen.getByRole('button', { name: /当前权限模式：需确认/ });
-    expect(fusedTrigger.contains(permBtn)).toBe(true);
-
-    // 权限按钮为 fused 变体且不含折叠展开箭头
-    expect(permBtn.className).toMatch(/fused/);
-    expect(permBtn.querySelector('[data-icon="chevron-down"]')).toBeNull();
+    const permBtn = screen.getByRole('button', {
+      name: /当前权限模式：需确认/,
+    });
+    expect(leftSlot?.contains(permBtn)).toBe(true);
+    expect(fusedTrigger.contains(permBtn)).toBe(false);
+    expect(fusedTrigger.getAttribute('data-has-prefix')).toBe('false');
   });
 });

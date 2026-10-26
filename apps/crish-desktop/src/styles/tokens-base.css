@@ -1,0 +1,149 @@
+/* ==========================================================================
+   tokens-base.css — 骨架门闩、:root 运行期静态默认、缓动与动效时长、性能档与减弱动效
+   ========================================================================== */
+
+/* 冷启动骨架局部门闩（ACT-203 · Zero-FOUC Latch） */
+.skeleton-latched .app-initial-loader,
+.skeleton-latched #skel-app {
+  -webkit-transition: none !important;
+  -moz-transition: none !important;
+  -ms-transition: none !important;
+  -o-transition: none !important;
+  transition: none !important;
+}
+
+:root,
+html[data-theme='default'],
+html[data-theme='light'] {
+  /* 缓动曲线与过渡时长（SSOT） */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-decelerate: cubic-bezier(0.2, 0, 0, 1);
+  --ease-accelerate: cubic-bezier(0.4, 0, 1, 1);
+
+  --duration-micro: 100ms;
+  --duration-snappy: 120ms;
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-enter: 200ms;
+  --duration-exit: 150ms;
+  --duration-accordion: 220ms;
+  --duration-accordion-fade: 180ms;
+  --duration-landing-settle: 260ms;
+  --duration-landing-fade: 260ms;
+
+  --transition-micro: 100ms ease-out;
+  --transition-snappy: var(--duration-snappy) var(--ease-standard);
+  --transition-fast: 150ms var(--ease-standard);
+  --transition-normal: var(--duration-normal) var(--ease-standard);
+  --transition-smooth: 300ms var(--ease-standard);
+  --transition-popover-enter: 180ms var(--ease-decelerate);
+  --transition-popover-exit: 120ms var(--ease-accelerate);
+  --transition-modal-enter: 220ms var(--ease-decelerate);
+  --transition-accordion: var(--duration-accordion) var(--ease-decelerate);
+  --transition-accordion-fade: var(--duration-accordion-fade)
+    var(--ease-decelerate);
+  --transition-landing-settle: var(--duration-landing-settle)
+    var(--ease-emphasized);
+  --transition-landing-fade: var(--duration-landing-fade) var(--ease-emphasized);
+  --transition-chevron: 150ms var(--ease-decelerate);
+  --transition-press: 80ms ease-out;
+  --transition-skeleton: 1.5s ease-in-out;
+  --transition-spin: 0.8s linear;
+  --transition-pulse: 1.6s ease-in-out;
+
+  --opacity-disabled: 0.5;
+
+  color-scheme: light;
+}
+
+html[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+/* ── B 类运行期量 · 静态默认声明（对齐 scripts/token-registry.json bClass[].staticDefault） ── */
+:root {
+  --tooltip-translate: translate(0);
+  --tree-level: 0;
+  --toast-index: 0;
+  --toast-offset-y: 0px;
+  --toast-swipe-movement-x: 0px;
+  --toast-swipe-movement-y: 0px;
+  --sidebar-visible-width: 260px;
+  --font-mono-features: normal;
+  --files-list-ratio: 35%;
+  --flow-output-max: 600px;
+  --anchor-width: auto;
+  --transform-origin: center;
+  --composer-dock-block: 104px;
+}
+
+/* ── 系统性能档（Performance Tiers） ── */
+html[data-perf-tier='high'] {
+}
+html[data-perf-tier='high'][data-theme='dark'] {
+}
+
+html[data-perf-tier='eco'] {
+  --duration-snappy: 0ms;
+  --transition-micro: 0ms;
+  --transition-snappy: 0ms;
+  --transition-fast: 0ms;
+  --transition-normal: 0ms;
+  --transition-smooth: 0ms;
+  --transition-popover-enter: 0ms;
+  --transition-popover-exit: 0ms;
+  --transition-modal-enter: 0ms;
+  --duration-accordion: 0ms;
+  --transition-accordion: 0ms;
+  --duration-accordion-fade: 0ms;
+  --transition-accordion-fade: 0ms;
+  --duration-landing-settle: 0ms;
+  --transition-landing-settle: 0ms;
+  --duration-landing-fade: 0ms;
+  --transition-landing-fade: 0ms;
+  --transition-chevron: 0ms;
+}
+
+/* ── 减弱动效偏好（Reduced Motion Preference） ── */
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  html[data-theme='default'],
+  html[data-theme='light'],
+  html[data-theme='dark'] {
+    --duration-micro: 0ms;
+    --duration-snappy: 0ms;
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+    --duration-enter: 0ms;
+    --duration-exit: 0ms;
+    --duration-accordion: 0ms;
+    --duration-accordion-fade: 0ms;
+    --duration-landing-settle: 0ms;
+    --duration-landing-fade: 0ms;
+    --transition-micro: 0ms;
+    --transition-snappy: 0ms;
+    --transition-fast: 0ms;
+    --transition-normal: 0ms;
+    --transition-smooth: 0ms;
+    --transition-popover-enter: 0ms;
+    --transition-popover-exit: 0ms;
+    --transition-modal-enter: 0ms;
+    --transition-accordion: 0ms;
+    --transition-accordion-fade: 0ms;
+    --transition-landing-settle: 0ms;
+    --transition-landing-fade: 0ms;
+    --transition-chevron: 0ms;
+  }
+}
+
+/* ── Western-First 等宽数值字体工具类 ── */
+.tabular-nums {
+  font-family:
+    'Segoe UI Variable Text',
+    'Segoe UI',
+    -apple-system,
+    var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}

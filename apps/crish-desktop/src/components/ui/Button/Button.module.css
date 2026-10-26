@@ -292,9 +292,81 @@
 }
 
 .iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   width: var(--btn-h);
   padding: 0;
+  border: none;
+  background-color: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-control);
+  cursor: pointer;
   flex-shrink: 0;
+  --btn-hover-overlay: var(--state-hover);
+  --btn-active-overlay: var(--state-active);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+/* 4 档尺寸：对齐 --row-h-{dense,list,control,chrome} */
+.dense,
+.iconButton:where(.dense, [data-size='dense'], [data-size='xs']) {
+  width: var(--row-h-dense);
+  height: var(--row-h-dense);
+  min-width: var(--row-h-dense);
+  min-height: var(--row-h-dense);
+  --btn-h: var(--row-h-dense);
+}
+
+.list,
+.iconButton:where(.list, [data-size='list'], [data-size='sm']) {
+  width: var(--row-h-list);
+  height: var(--row-h-list);
+  min-width: var(--row-h-list);
+  min-height: var(--row-h-list);
+  --btn-h: var(--row-h-list);
+}
+
+.control,
+.iconButton:where(.control, [data-size='control'], [data-size='md']) {
+  width: var(--row-h-control);
+  height: var(--row-h-control);
+  min-width: var(--row-h-control);
+  min-height: var(--row-h-control);
+  --btn-h: var(--row-h-control);
+}
+
+.chrome,
+.iconButton:where(.chrome, [data-size='chrome'], [data-size='lg']) {
+  width: var(--row-h-chrome);
+  height: var(--row-h-chrome);
+  min-width: var(--row-h-chrome);
+  min-height: var(--row-h-chrome);
+  --btn-h: var(--row-h-chrome);
+}
+
+/* 状态走 --state-* 交互叠加量 */
+.iconButton:where(:hover:not(:disabled):not([aria-disabled='true'])) {
+  background-color: var(--state-hover);
+  color: var(--text-primary);
+}
+
+.iconButton:where(:active:not(:disabled):not([aria-disabled='true'])) {
+  background-color: var(--state-active);
+}
+
+/* 焦点态：混入 ≤10%（AGENTS §13） */
+.iconButton:where(:focus-visible) {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--edge-focus);
+}
+
+.iconButton:where(:disabled, [aria-disabled='true']) {
+  opacity: 0.38;
+  cursor: not-allowed;
 }
 
 .touchExpand {

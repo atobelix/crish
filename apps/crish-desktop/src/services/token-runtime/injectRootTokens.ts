@@ -2,7 +2,8 @@
  * apps/crish-desktop/src/services/token-runtime/injectRootTokens.ts
  *
  * 根元素 Token 注入与主题属性/类名切换。
- * 拆分来源：services/TokenRuntimeController.ts 的 applyTokens（行数门禁收口，行为不变）。
+ * P1/P2 收口：向根节点写入 --user-surface-base / --user-surface-tint / --user-surface-deep /
+ * --elev-direction / --text-base；Wave 1 过渡期同步保留旧参数注入以免破坏未清理的外部集成测试。
  */
 
 import type { UiTheme } from '../../api/themeTypes';
@@ -39,49 +40,70 @@ export function injectRootTokens(args: {
     }
   }
 
-  // 全仓唯一合法注入点：显式受控注入，满足 style-contract 静态同源契约与精准应用。
-  // T-BLK-07b 参数化：A 类设计 token（surface-*/text-*/border-*/control-*）不再由
-  // JS 直写——只写 --user-* 运行期参数（token-registry.json B 类登记），A 类视觉值
-  // 全部由 tokens.css 的 var(--user-*, 静态兜底) 派生；--font-size-adjust 为既有
-  // B 类运行期量；bg-primary/secondary/card/elevated/paper/workspace、
-  // shell-inset-bg、terminal-* 仍由 tokens.css 静态链派生，不注入。
-  // 注意：写入名必须保持字面量（check-token-ssot 门禁按 setProperty 字面名扫描）。
+  // 全仓唯一合法注入点：写入名必须保持字面量（check-token-ssot 门禁按 setProperty 字面名扫描）。
   if (tokens['--font-size-adjust'])
     root.style.setProperty('--font-size-adjust', tokens['--font-size-adjust']);
+
+  // P1 表面阶梯基准参数与 P2 单一文字基准参数（SSOT）
+  if (tokens['--user-surface-base'])
+    root.style.setProperty(
+      '--user-surface-base',
+      tokens['--user-surface-base']
+    );
+  if (tokens['--user-surface-tint'])
+    root.style.setProperty(
+      '--user-surface-tint',
+      tokens['--user-surface-tint']
+    );
+  if (tokens['--user-surface-deep'])
+    root.style.setProperty(
+      '--user-surface-deep',
+      tokens['--user-surface-deep']
+    );
+  if (tokens['--elev-direction'])
+    root.style.setProperty('--elev-direction', tokens['--elev-direction']);
+  if (tokens['--user-elev-direction'])
+    root.style.setProperty(
+      '--user-elev-direction',
+      tokens['--user-elev-direction']
+    );
+  if (tokens['--text-base'])
+    root.style.setProperty('--text-base', tokens['--text-base']);
+
+  // [WAVE2-DEPRECATED] Wave 1 过渡期内同步写入旧参数名，以免破坏尚未清理的外部集成测试
   if (tokens['--user-surface-outer'])
     root.style.setProperty(
       '--user-surface-outer',
       tokens['--user-surface-outer']
-    );
+    ); // [WAVE2-DEPRECATED]
   if (tokens['--user-surface-main'])
     root.style.setProperty(
       '--user-surface-main',
       tokens['--user-surface-main']
-    );
+    ); // [WAVE2-DEPRECATED]
   if (tokens['--user-surface-input'])
     root.style.setProperty(
       '--user-surface-input',
       tokens['--user-surface-input']
-    );
+    ); // [WAVE2-DEPRECATED]
   if (tokens['--user-text-primary'])
     root.style.setProperty(
       '--user-text-primary',
       tokens['--user-text-primary']
-    );
+    ); // [WAVE2-DEPRECATED]
   if (tokens['--user-text-secondary'])
     root.style.setProperty(
       '--user-text-secondary',
       tokens['--user-text-secondary']
-    );
+    ); // [WAVE2-DEPRECATED]
   if (tokens['--user-text-tertiary'])
     root.style.setProperty(
       '--user-text-tertiary',
       tokens['--user-text-tertiary']
-    );
-  // T-BLK-07b：--text-muted 不再注入 —— tokens.css 静态 `--text-muted:
-  // var(--text-tertiary)`（明/暗两块）已单源派生同值，JS 再写即同值多写。
+    ); // [WAVE2-DEPRECATED]
   if (tokens['--user-text-faint'])
-    root.style.setProperty('--user-text-faint', tokens['--user-text-faint']);
+    root.style.setProperty('--user-text-faint', tokens['--user-text-faint']); // [WAVE2-DEPRECATED]
+
   if (tokens['--user-border-color'])
     root.style.setProperty(
       '--user-border-color',
@@ -97,7 +119,6 @@ export function injectRootTokens(args: {
       '--user-control-mix-color',
       tokens['--user-control-mix-color']
     );
-  // 语义 soft 底接线：固定语义色引用（常量，非 A 类字面量；registry B 类登记）
   if (tokens['--accent-green-light-adaptive'])
     root.style.setProperty(
       '--accent-green-light-adaptive',
@@ -108,14 +129,7 @@ export function injectRootTokens(args: {
       '--accent-red-light-adaptive',
       tokens['--accent-red-light-adaptive']
     );
-  // T-BLK-07b：--accent-green/red-light-adaptive 不再注入 —— JS 写的是常量
-  // var(--success-soft-bg)/var(--danger-soft-bg)，与 tokens.css 静态声明完全
-  // 同值（明/暗两块），JS 再写即同值多写。
-  // T-BLK-07b 滚动条参数化：JS 只写 --user-* 参数（B 类登记），A 类
-  // --scrollbar-thumb-bg/active 与 8 个按钮 token 由 tokens.css 静态兜底 +
-  // tinted 门控（data-scrollbar-tint）派生。按钮 SVG 仍由 scrollbarIcons 序列化
-  // （纯 finalFg 透传 + 固定 opacity，零颜色计算）——::-webkit-scrollbar-button
-  // 伪元素仅支持 background 白名单属性，不支持 mask，无法纯 CSS 换色。
+
   if (tokens['--user-scrollbar-fg'])
     root.style.setProperty(
       '--user-scrollbar-fg',

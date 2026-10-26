@@ -41,15 +41,17 @@ describe('ComposerPermissionBar (Layer 1 权限审批条)', () => {
 
     // Line 1
     expect(screen.getByText(/Shell 命令审批 · \[低风险\]/)).toBeTruthy();
-    expect(screen.getByText('请求执行 cargo test')).toBeTruthy();
-    expect(screen.getByText('+2 更多')).toBeTruthy();
+
+    expect(screen.getByText('+2')).toBeTruthy();
     expect(screen.getByText('60s')).toBeTruthy();
 
     // Line 2
     expect(screen.getByText('cargo test --workspace')).toBeTruthy();
     expect(screen.getByRole('button', { name: '拒绝命令执行' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '批准执行命令' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '始终允许此类命令' })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: '始终允许此类命令' })
+    ).toBeTruthy();
   });
 
   it('点击批准、拒绝、始终允许按钮触发对应回调', () => {
@@ -92,7 +94,11 @@ describe('ComposerPermissionBar (Layer 1 权限审批条)', () => {
     expect(screen.getByText('58s')).toBeTruthy();
 
     rerender(
-      <ComposerPermissionBar countdownSeconds={60} resolved resolvedLabel="已批准" />
+      <ComposerPermissionBar
+        countdownSeconds={60}
+        resolved
+        resolvedLabel="已批准"
+      />
     );
 
     expect(screen.getByText(/✓ 已批准/)).toBeTruthy();

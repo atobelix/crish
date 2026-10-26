@@ -1,0 +1,182 @@
+/**
+ * ComposerAttachmentBar.module.css
+ * 上下文与文件引用卡片区样式模块（T6-1 拆分自 ChatComposer.module.css，已剔除 13 个死类）
+ */
+
+.fileZone,
+.attachStrip {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+.fileZone:empty,
+.attachStrip:empty {
+  display: none;
+}
+
+@keyframes composerAttachArrive {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fileCard,
+.attachChip {
+  animation: composerAttachArrive var(--transition-accordion) both;
+  position: relative;
+  z-index: var(--z-base);
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: var(--composer-attach-card-size, 58px);
+  height: var(--composer-attach-card-size, 58px);
+  padding: 6px;
+  background: var(--composer-attach-card-bg, var(--bg-card));
+  border: var(--composer-attach-card-border, 1px solid var(--border-subtle));
+  border-radius: var(--composer-attach-card-radius, var(--radius-xl));
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+  max-width: var(--composer-attach-card-size, 58px);
+  flex-shrink: 0;
+  overflow: hidden;
+  box-shadow: none;
+  transition:
+    border-color var(--transition-fast, 120ms ease),
+    background-color var(--transition-fast, 120ms ease);
+}
+
+.fileCard:hover,
+.attachChip:hover,
+.attachChip:focus-visible {
+  border-color: var(--composer-attach-card-hover-border, var(--border-color));
+  background: var(--bg-card-subtle);
+  box-shadow: none;
+  outline: none;
+  z-index: var(--z-popover);
+}
+
+.fileIcon,
+.attachIconBox {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-shrink: 0;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.attachIcon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.fileName,
+.attachName {
+  font-size: var(--composer-attach-name-size, 11px);
+  font-weight: 500;
+  color: var(--composer-attach-name-color, var(--text-secondary));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  max-width: 100%;
+  line-height: 1.25;
+  display: block;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+.attachRemove,
+.fileRemove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: var(--composer-attach-remove-size, 18px);
+  height: var(--composer-attach-remove-size, 18px);
+  min-width: unset;
+  min-height: unset;
+  --btn-h: var(--composer-attach-remove-size, 18px);
+  --btn-px: 0px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.85);
+  pointer-events: none;
+  background: var(--composer-attach-remove-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--composer-attach-remove-border, var(--border-subtle));
+  color: var(--text-primary);
+  padding: 0;
+  box-shadow: none;
+  filter: none;
+  outline: none;
+  transition:
+    opacity var(--duration-fast) var(--ease-decelerate),
+    transform var(--duration-fast) var(--ease-decelerate),
+    background-color var(--transition-micro),
+    border-color var(--transition-micro),
+    color var(--transition-micro);
+  z-index: var(--z-popover);
+}
+
+.fileRemove::before,
+.attachRemove::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+}
+
+.fileRemove svg,
+.attachRemove svg {
+  width: 10px;
+  height: 10px;
+  stroke-width: 2.2;
+}
+
+.fileCard:hover .fileRemove,
+.fileCard:hover .attachRemove,
+.attachChip:hover .fileRemove,
+.attachChip:hover .attachRemove,
+.attachChip:focus-within .fileRemove,
+.attachChip:focus-within .attachRemove,
+.fileRemove:hover,
+.attachRemove:hover {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.fileCard .fileRemove:hover,
+.fileCard .attachRemove:hover,
+.attachChip .fileRemove:hover,
+.attachChip .attachRemove:hover,
+.fileRemove:hover,
+.attachRemove:hover {
+  background: var(--color-error);
+  border-color: transparent;
+  color: var(--text-on-danger);
+}

@@ -260,6 +260,69 @@ describe('TiptapEditorField T3 补全', () => {
     // composition 结束 → 状态复位同步宿主
     fireEvent.compositionEnd(dom);
     expect(onCompositionChange).toHaveBeenLastCalledWith(false);
+    fireEvent.blur(dom);
+    expect(onCompositionChange).toHaveBeenCalledTimes(2);
+  });
+
+  it('组合期间 blur 保留聊天草稿、解锁状态并忽略迟到的 compositionend', async () => {
+    const onCompositionChange = vi.fn();
+
+    function Harness() {
+      const [content, setContent] = React.useState('已有草稿');
+      return (
+        <TiptapEditorField
+          content={content}
+          onMarkdownChange={setContent}
+          onCompositionChange={onCompositionChange}
+        />
+      );
+    }
+
+    render(<Harness />);
+    const dom = getEditorDom();
+    await waitFor(() => expect(dom.textContent).toContain('已有草稿'));
+
+    fireEvent.compositionStart(dom);
+    await typeText('中文草稿');
+    const draftAtBlur = dom.textContent;
+    expect(draftAtBlur).toContain('中文草稿');
+
+    fireEvent.blur(dom);
+    expect(onCompositionChange.mock.calls).toEqual([[true], [false]]);
+    await waitFor(() => expect(dom.textContent).toBe(draftAtBlur));
+
+    fireEvent.compositionEnd(dom);
+    expect(onCompositionChange).toHaveBeenCalledTimes(2);
+    expect(dom.textContent).toBe(draftAtBlur);
+  });
+
+  it('blur 消费组合期间最新外部草稿更新，迟到结束事件不重复应用', async () => {
+    const onCompositionChange = vi.fn();
+    const { rerender } = render(
+      <TiptapEditorField
+        content="旧草稿"
+        onMarkdownChange={vi.fn()}
+        onCompositionChange={onCompositionChange}
+      />
+    );
+    const dom = getEditorDom();
+    await waitFor(() => expect(dom.textContent).toContain('旧草稿'));
+
+    fireEvent.compositionStart(dom);
+    rerender(
+      <TiptapEditorField
+        content="较新的外部草稿"
+        onMarkdownChange={vi.fn()}
+        onCompositionChange={onCompositionChange}
+      />
+    );
+    fireEvent.blur(dom);
+
+    await waitFor(() => expect(dom.textContent).toContain('较新的外部草稿'));
+    expect(onCompositionChange.mock.calls).toEqual([[true], [false]]);
+    fireEvent.compositionEnd(dom);
+    expect(onCompositionChange).toHaveBeenCalledTimes(2);
+    expect(dom.textContent).toContain('较新的外部草稿');
   });
 
   it('event.isComposing 门：标记中的 Enter 不发送，普通 Enter 恢复发送', async () => {

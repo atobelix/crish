@@ -1,11 +1,16 @@
 /**
- * warmLayerShift — 三档底色的亮度微调：只平移 CMYK 的 K，保持每层自身的 C/M/Y（review P1-3）。
+ * warmLayerShift — 基底表面色亮度微调（P1 U1.4 收口）
  *
- * 做法：K-only 变化在 RGB 里等价于三通道同比例缩放：RGB' = RGB × (1 − K') / (1 − K)，
- * 所以浅色暖灰的 M0.4/Y0.8 在任何档位都保持（深色本来就是中性，保持中性）。
- * 三层同步平移（每档 STEP_K 个 K 点），再夹紧，保证相邻两层至少差 MIN_GAP_K：
- *   - 浅色：外层 K > 主层 K > 输入框 K（输入框恒为纯白 K0，heson 定稿）；
- *   - 深色：主层 K > 外层 K > 输入框 K（主层沉底偏黑、外层侧栏居中、输入框/卡片微亮浮层），任何档位都不反转、不贴合。
+ * 核心原则：
+ * 1. P1 六级表面阶梯（e0~e5）由 CSS `color-mix(in oklab, ...)` 依据固定步长常量构造保证严格单调；
+ * 2. 运行时 JS 仅对单一画布基色 `surfaceBase` 平移 CMYK 的 K（保持色相 C/M/Y 不变），
+ *    并在极端档位做防饱和截断保护，确保 e0 下潜与 e5 浮起始终留有物理余量；
+ * 3. [WAVE2-DEPRECATED] 保留三层对象重载签名供尚未清理的旧测试过渡兼容。
+ */
+
+/**
+ * @deprecated [WAVE2-DEPRECATED] 过渡兼容接口，新代码请直接传入单一 surfaceBase 字符串
+ * @removeWhen Wave 3 P9 旧三层表面别名全面清零后移除
  */
 export interface WarmLayers {
   outer: string;
@@ -15,7 +20,10 @@ export interface WarmLayers {
 
 /** 每档亮度微调平移的 K 点数（与原主层斜率 0.6 L/档同量级） */
 export const STEP_K = 0.6;
-/** 相邻两层的最小 K 差（≈ 3 个 8-bit 单位，肉眼可辨） */
+/**
+ * @deprecated [WAVE2-DEPRECATED] 旧三层最小 K 差
+ * @removeWhen Wave 3 P9 旧三层表面别名全面清零后移除
+ */
 export const MIN_GAP_K = 1.2;
 
 type Rgb = [number, number, number];
@@ -28,7 +36,7 @@ function hexToRgb(hex: string): Rgb {
           .split('')
           .map((c) => c + c)
           .join('')
-      : h;
+      : h.slice(0, 6);
   return [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16)) as Rgb;
 }
 
@@ -63,19 +71,67 @@ const clamp = (v: number, lo: number, hi: number): number =>
   Math.min(hi, Math.max(lo, v));
 
 /**
- * @param base   adjust = 0 时的三档 hex（外层 / 主层 / 输入框）
- * @param adjust 亮度微调档位（正 = 更亮，负 = 更暗；可为小数）
- * @param isDark 深色模式（输入框参与平移；浅色输入框固定纯白）
+ * P1 单一画布基底色亮度微调纯函数：仅对 `surfaceBase` 单值平移 K。
+ * 夹紧区间保证在 adjust ∈ [-5, +5] 下：
+ * - 暗色不会过黑吞没 e0 Sunken（ΔL* ≥ 2.0），也不会过亮压缩 e4 Raised（ΔL* ≥ 8.0）；
+ * - 浅色不会过白导致 e3~e5 坍塌为同值 #ffffff。
  */
+export function shiftSurfaceBase(
+  surfaceBase: string,
+  adjust: number,
+  isDark = false
+): string {
+  if (!adjust) return surfaceBase;
+  const trimmed = surfaceBase.trim();
+  if (!trimmed.startsWith('#')) {
+    const pct = Math.min(25, Math.abs(adjust) * 3.5);
+    const target = adjust > 0 ? 'hsl(0 0% 100%)' : 'hsl(0 0% 0%)';
+    return `color-mix(in srgb, ${trimmed} ${100 - pct}%, ${target})`;
+  }
+
+  const k0 = kOf(trimmed);
+  if (isDark) {
+    const d = -adjust * STEP_K;
+    const maxK = Math.max(k0, 94.5);
+    const k = clamp(k0 + d, 70, maxK);
+    return withK(trimmed, k);
+  }
+
+  const d = -adjust * 0.4;
+  const minK = Math.min(k0, 3.1);
+  const k = clamp(k0 + d, minK, 25);
+  return withK(trimmed, k);
+}
+
+/**
+ * 亮度微调平移 K：
+ * - P1 标准签名：传入单一 `surfaceBase: string`，返回平移后的 hex 字符串；
+ * - [WAVE2-DEPRECATED] 兼容签名：传入 `WarmLayers` 三层对象，返回平移后的三层对象。
+ */
+export function shiftWarmLayers(
+  surfaceBase: string,
+  adjust: number,
+  isDark?: boolean
+): string;
 export function shiftWarmLayers(
   base: WarmLayers,
   adjust: number,
   isDark: boolean
-): WarmLayers {
+): WarmLayers;
+export function shiftWarmLayers(
+  baseOrSurface: string | WarmLayers,
+  adjust: number,
+  isDark = false
+): string | WarmLayers {
+  if (typeof baseOrSurface === 'string') {
+    return shiftSurfaceBase(baseOrSurface, adjust, isDark);
+  }
+
+  // [WAVE2-DEPRECATED] 旧三档底色兼容分支
+  const base = baseOrSurface;
   if (!adjust) return { ...base };
-  const d = -adjust * STEP_K; // 更亮 = K 变小
+  const d = -adjust * STEP_K;
   if (isDark) {
-    // 深色：主层偏黑沉底（K 最大）> 外层侧栏偏灰（K 居中）> 输入框/卡片微亮（K 最小）
     const kIn0 = kOf(base.input);
     const kInput = clamp(kIn0 + d, 0, 100 - 3 * MIN_GAP_K);
     const kOuter = clamp(
@@ -93,22 +149,16 @@ export function shiftWarmLayers(
       main: withK(base.main, kMain),
       input: withK(base.input, kInput),
     };
-  } else {
-    // 浅色：外层偏灰（K 最大）> 主层亮白（K 居中）> 输入框纯白（K=0）
-    const kIn0 = kOf(base.input);
-    const kInput = kIn0;
-    // 当主层与输入层同色（如浅色纯白模式 #ffffff）时，主层下限即为 kInput (0)，避免正向调亮反遭 1.2K 垫底加深
-    const minMainK = base.main === base.input ? kInput : kInput + MIN_GAP_K;
-    const kMain = clamp(kOf(base.main) + d, minMainK, 100 - 2 * MIN_GAP_K);
-    const kOuter = clamp(
-      kOf(base.outer) + d,
-      kMain + MIN_GAP_K,
-      100 - MIN_GAP_K
-    );
-    return {
-      outer: withK(base.outer, kOuter),
-      main: withK(base.main, kMain),
-      input: base.input,
-    };
   }
+
+  const kIn0 = kOf(base.input);
+  const kInput = kIn0;
+  const minMainK = base.main === base.input ? kInput : kInput + MIN_GAP_K;
+  const kMain = clamp(kOf(base.main) + d, minMainK, 100 - 2 * MIN_GAP_K);
+  const kOuter = clamp(kOf(base.outer) + d, kMain + MIN_GAP_K, 100 - MIN_GAP_K);
+  return {
+    outer: withK(base.outer, kOuter),
+    main: withK(base.main, kMain),
+    input: base.input,
+  };
 }

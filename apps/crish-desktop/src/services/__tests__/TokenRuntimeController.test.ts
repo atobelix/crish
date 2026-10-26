@@ -8,6 +8,11 @@ import {
   DEFAULT_PERSONALIZATION,
 } from '../TokenRuntimeController';
 import { computeContrastGuardedTokens } from '../../api/oklchColorGuard';
+import {
+  CONTRAST_GUARD_THRESHOLDS,
+  computeWcagContrastRgb,
+  resolveContrastGuardedText,
+} from '../token-runtime/skinPaintPlan';
 
 /**
  * T7 别名收敛（2026-09-12）负向契约：JS 运行时**不得**注入这些派生别名。
@@ -79,7 +84,19 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       // （tokens.css:51-64、307-308），JS 再写即「同值多写」双写者。
       // 故此处断言**独立侧取值**，并由 expectNoDerivedAliasesInjected 钉死
       // 「派生别名零注入」——比断言旧别名更强（旧写法对收敛回归无感知）。
-      // 2026-10-10 三档底色：运行时只写 --surface-outer / --surface-main / --surface-input
+      // P1/P2 运行时基准参数注入（SSOT）
+      expect(root.style.getPropertyValue('--user-surface-base')).toBe(
+        '#f7f6f4'
+      );
+      expect(root.style.getPropertyValue('--user-surface-tint')).toBe(
+        '#ffffff'
+      );
+      expect(root.style.getPropertyValue('--user-surface-deep')).toBe(
+        '#000000'
+      );
+      expect(root.style.getPropertyValue('--elev-direction')).toBe('-1');
+      expect(root.style.getPropertyValue('--text-base')).toBe('#121212');
+      // [WAVE2-DEPRECATED] 过渡期兼容三档底色
       expect(root.style.getPropertyValue('--user-surface-main')).toBe(
         '#ffffff'
       );
@@ -151,6 +168,19 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(root.classList.contains('theme-dark')).toBe(true);
       expect(root.classList.contains('theme-light')).toBe(false);
 
+      // P1/P2 运行时基准参数注入（SSOT）
+      expect(root.style.getPropertyValue('--user-surface-base')).toBe(
+        '#141414'
+      );
+      expect(root.style.getPropertyValue('--user-surface-tint')).toBe(
+        '#ffffff'
+      );
+      expect(root.style.getPropertyValue('--user-surface-deep')).toBe(
+        '#000000'
+      );
+      expect(root.style.getPropertyValue('--elev-direction')).toBe('1');
+      expect(root.style.getPropertyValue('--text-base')).toBe('#f5f5f5');
+      // [WAVE2-DEPRECATED] 过渡期兼容三档底色
       expect(root.style.getPropertyValue('--user-surface-main')).toBe(
         '#141414'
       );
@@ -185,6 +215,11 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(root.classList.contains('theme-light')).toBe(true);
       expect(root.classList.contains('theme-dark')).toBe(false);
 
+      expect(root.style.getPropertyValue('--user-surface-base')).toBe(
+        '#f8f9fa'
+      );
+      expect(root.style.getPropertyValue('--elev-direction')).toBe('-1');
+      expect(root.style.getPropertyValue('--text-base')).toBe('#111214');
       // P2-7：classic-gray 方向修正后主层 #f8f9fa 比外层 #f1f3f5 亮
       expect(root.style.getPropertyValue('--user-surface-main')).toBe(
         '#f8f9fa'
@@ -241,6 +276,42 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
         explicitTextPrimary: '#1a1a1a',
       });
       expect(nonOverridden).toBeNull();
+    });
+
+    it('P2 contrastGuard 四级阈值（12 / 7 / 4.5 / 3.0）严格保底', () => {
+      expect(CONTRAST_GUARD_THRESHOLDS).toEqual({
+        primary: 12.0,
+        secondary: 7.0,
+        tertiary: 4.5,
+        decor: 3.0,
+      });
+
+      const parseHex = (hex: string) => ({
+        r: parseInt(hex.slice(1, 3), 16),
+        g: parseInt(hex.slice(3, 5), 16),
+        b: parseInt(hex.slice(5, 7), 16),
+      });
+
+      // 自定义暗底配低对比深灰字色时自动推升至 Primary >= 12.0
+      const darkLow = resolveContrastGuardedText({
+        surfaceBase: '#141414',
+        candidateTextBase: '#303030',
+        isDark: true,
+        isCustomSkin: true,
+      });
+      const darkBgRgb = parseHex('#141414');
+      expect(
+        computeWcagContrastRgb(parseHex(darkLow.textPrimary), darkBgRgb)
+      ).toBeGreaterThanOrEqual(12.0);
+      expect(
+        computeWcagContrastRgb(parseHex(darkLow.textSecondary), darkBgRgb)
+      ).toBeGreaterThanOrEqual(7.0);
+      expect(
+        computeWcagContrastRgb(parseHex(darkLow.textTertiary), darkBgRgb)
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(
+        computeWcagContrastRgb(parseHex(darkLow.textDecor), darkBgRgb)
+      ).toBeGreaterThanOrEqual(3.0);
     });
   });
 
@@ -303,7 +374,7 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
   });
 
   describe('6. 自定义颜色派生', () => {
-    it('在自定义皮肤下正确派生双层背景与边界色', () => {
+    it('在自定义皮肤下正确派生表面基准参数与对比度保底字色', () => {
       const result = applyTokens(
         {
           skin: 'custom',
@@ -315,10 +386,17 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       );
 
       expect(result.isDark).toBe(true);
+      expect(result.tokens['--user-surface-base']).toBe('#223344');
+      expect(result.tokens['--user-surface-tint']).toBe('#ffffff');
+      expect(result.tokens['--user-surface-deep']).toBe('#000000');
+      expect(result.tokens['--elev-direction']).toBe('1');
+      expect(result.tokens['--text-base']).toBe('#ffffff');
       expect(result.tokens['--user-surface-main']).toBe('#223344');
-      // 自定义极端暗色背景触发对比度防崩安全算法，派生高对比度亮白
-      expect(result.tokens['--user-text-primary']).toBe('hsl(0, 0%, 96%)');
+      expect(result.tokens['--user-text-primary']).toBe('#ffffff');
       expect(result.tokens['--user-surface-outer']).toContain('color-mix(');
+      expect(
+        document.documentElement.style.getPropertyValue('--user-surface-base')
+      ).toBe('#223344');
       expect(
         document.documentElement.style.getPropertyValue('--user-surface-main')
       ).toBe('#223344');
@@ -346,10 +424,12 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
         'default'
       );
 
+      expect(result.tokens['--user-surface-base']).toBe('#f7f2f9');
+      expect(result.tokens['--text-base']).toBe('#18081b');
       expect(result.tokens['--user-text-primary']).toBe('#18081b');
-      expect(result.tokens['--user-text-secondary']).toBe('#592b63');
-      expect(result.tokens['--user-text-tertiary']).toContain('color-mix(');
-      expect(result.tokens['--user-text-faint']).toContain('color-mix(');
+      expect(result.tokens['--user-text-secondary']).toBe('#504353');
+      expect(result.tokens['--user-text-tertiary']).toBe('#6d616f');
+      expect(result.tokens['--user-text-faint']).toBe('#938995');
       // T-BLK-07b：滑块色改 CSS tinted 派生，JS 只写 fg 参数 + 按钮 SVG 参数
       expect(result.tokens['--user-scrollbar-fg']).toBe('#18081b');
       expect(result.tokens['--user-scrollbar-button-up']).toContain(
@@ -357,9 +437,8 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       );
 
       const root = document.documentElement;
-      expect(root.style.getPropertyValue('--user-text-faint')).toContain(
-        'color-mix('
-      );
+      expect(root.style.getPropertyValue('--text-base')).toBe('#18081b');
+      expect(root.style.getPropertyValue('--user-text-faint')).toBe('#938995');
       expect(root.getAttribute('data-scrollbar-tint')).toBe('');
       expect(root.style.getPropertyValue('--user-scrollbar-fg')).toBe(
         '#18081b'

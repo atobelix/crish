@@ -42,6 +42,13 @@ describe('composerImeDragGuard (Stage 05 §4 & §5)', () => {
       hasPendingExternalValue: false,
       flushedSyncCount: 1,
     });
+    // 重复结束事件不得再次消费或复活已经清理的更新。
+    expect(guard.endComposition()).toBeNull();
+    expect(guard.getDiagnostics()).toMatchObject({
+      composing: false,
+      hasPendingExternalValue: false,
+      flushedSyncCount: 1,
+    });
   });
 
   it('composing 与 dragging 双锁叠加时：仅当两者全部解除后才释放延迟更新与选区恢复', () => {
@@ -80,6 +87,34 @@ describe('composerImeDragGuard (Stage 05 §4 & §5)', () => {
     const flushedAfterIme = guard.endComposition();
     expect(flushedAfterIme).toBe('external-sync');
     expect(guard.isLocked()).toBe(false);
+  });
+
+  it('组合期间失焦：保留组合文本由宿主负责，清除双锁并消费最新外部值', () => {
+    const guard = new ComposerImeDragGuard();
+    guard.beginComposition({
+      selectionStart: 2,
+      selectionEnd: 4,
+      blockId: 'draft',
+      capturedAtMs: 10,
+    });
+    guard.beginDrag({
+      selectionStart: 2,
+      selectionEnd: 4,
+      blockId: 'draft',
+      capturedAtMs: 11,
+    });
+    guard.tryApplyExternalSync('latest-draft', 'local-composition-draft');
+
+    expect(guard.settleCompositionOnBlur()).toBe('latest-draft');
+    expect(guard.getDiagnostics()).toMatchObject({
+      composing: false,
+      dragging: false,
+      isLocked: false,
+      hasPendingExternalValue: false,
+      flushedSyncCount: 1,
+    });
+    expect(guard.getSelectionSnapshot()).toBeNull();
+    expect(guard.endComposition()).toBeNull();
   });
 
   it('纯拖拽态结束时：原子返回延迟外部值并精确恢复原选区快照（零选区丢失）', () => {

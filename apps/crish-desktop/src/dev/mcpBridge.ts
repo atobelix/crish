@@ -11,6 +11,10 @@ import { getActiveProjectId } from '../api/projectStore';
 import { selectActiveTabSessionId } from '../store/workspace-shell';
 import { scanRealSessionTabs } from '../store/workspace-shell/treeSessionQuery';
 import { logger } from '../services/LoggerService';
+import {
+  runHierarchyAudit,
+  registerHierarchyAuditGlobal,
+} from './hierarchyAudit';
 
 type McpBridge = {
   register: (
@@ -29,6 +33,8 @@ function getBridge(): McpBridge | null {
 export function registerCrishMcpBridge(): void {
   if (!import.meta.env.DEV) return;
 
+  registerHierarchyAuditGlobal();
+
   const tryRegister = () => {
     const bridge = getBridge();
     if (!bridge?.register) return false;
@@ -46,8 +52,7 @@ export function registerCrishMcpBridge(): void {
               ? title.trim()
               : target?.title,
           workspaceKey:
-            target?.folder ||
-            currentWorkspaceFolderKey(getActiveProjectId()),
+            target?.folder || currentWorkspaceFolderKey(getActiveProjectId()),
         });
         return {
           ok: true,
@@ -96,7 +101,20 @@ export function registerCrishMcpBridge(): void {
       'Snapshot workspace shell tabs + active session ids.'
     );
 
-    logger.info('[crish] MCP app_bridge helpers registered', { module: 'mcpBridge' });
+    bridge.register(
+      'run_hierarchy_audit',
+      (scope?: unknown) => {
+        const scopeParam = typeof scope === 'string' ? scope : undefined;
+        return runHierarchyAudit(
+          scopeParam ? { scope: scopeParam } : undefined
+        );
+      },
+      'Run visual hierarchy and clarity audit (text contrast, borders, left edges, stutter).'
+    );
+
+    logger.info('[crish] MCP app_bridge helpers registered', {
+      module: 'mcpBridge',
+    });
     return true;
   };
 

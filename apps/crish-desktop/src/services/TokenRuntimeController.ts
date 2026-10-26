@@ -126,6 +126,14 @@ export class TokenRuntimeController {
       const fg = p.customFg;
       skinConfig = {
         name: '自定义颜色',
+        surfaceBase: bg,
+        surfaceTint: '#ffffff',
+        surfaceDeep: '#000000',
+        elevDirection: isDark ? 1 : -1,
+        textBase: fg,
+        borderColor: `color-mix(in srgb, ${bg} 82%, ${fg} 18%)`,
+        borderSubtle: `color-mix(in srgb, ${bg} 92%, ${fg} 8%)`,
+        // [WAVE2-DEPRECATED]
         bgPrimary: bg,
         bgSecondary: isDark
           ? `color-mix(in srgb, ${bg} 82%, hsl(0 0% 100%) 18%)`
@@ -142,19 +150,12 @@ export class TokenRuntimeController {
           : `color-mix(in srgb, ${bg} 88%, hsl(38 8% 70%) 12%)`,
         textPrimary: fg,
         textSecondary: `color-mix(in srgb, ${bg} 22%, ${fg} 78%)`,
-        borderColor: `color-mix(in srgb, ${bg} 82%, ${fg} 18%)`,
-        borderSubtle: `color-mix(in srgb, ${bg} 92%, ${fg} 8%)`,
       };
     } else {
-      const isPresetDark =
-        skinKey.startsWith('dark-') ||
-        skinKey === 'deep-night' ||
-        skinKey === 'dark-forest' ||
-        skinKey === 'aurora' ||
-        skinKey === 'cocoa' ||
-        skinKey === 'burgundy' ||
-        skinKey === 'cyber' ||
-        skinKey === 'obsidian';
+      const candidatePreset = SKIN_PRESETS[skinKey];
+      const isPresetDark = candidatePreset
+        ? candidatePreset.elevDirection === 1
+        : skinKey.startsWith('dark-');
 
       if (isDark && !isPresetDark) {
         skinKey = 'dark-cozy';
@@ -178,34 +179,35 @@ export class TokenRuntimeController {
         vibrant: !!p.themeBrightnessVibrant,
       });
 
-      // 三档底色 SSOT（2026-10-10）：运行时只写三个独立源 —— 外层（侧栏 + 标签栏）/ 主层（聊天区 +
-      // 卡片/弹层…）/ 输入框，其余别名链（--surface-chrome/paper/card/elevated/sunken、--bg-tertiary、
-      // --shell-chrome-bg、--composer-bg 等）由 tokens.css 静态派生。
-      // T-BLK-07b 参数化：独立侧也改为 --user-* 参数名（B 类登记），A 类
-      // --surface-*/--text-*/--border-*/--control-mix-color 由 tokens.css
-      // var(--user-*, 静态兜底) 派生，JS 不再直写 A 类设计 token。
-      tokens['--user-surface-outer'] = paint.bgSecondary;
-      tokens['--user-surface-main'] = paint.bgPrimary;
-      tokens['--user-surface-input'] = paint.composerBg;
-      // T7 别名收敛（2026-09-12）：--bg-primary/--bg-secondary/--bg-card/--bg-elevated/
-      // --bg-paper/--bg-workspace/--shell-inset-bg/--terminal-* 不再由 JS 写入，只写独立侧。
-      tokens['--user-text-primary'] = paint.finalFg;
-      tokens['--user-text-secondary'] = paint.finalSec;
-      tokens['--user-text-tertiary'] = paint.finalTert;
-      tokens['--user-text-faint'] = paint.finalFaint;
+      // P1 六级表面阶梯基准参数（SSOT）
+      tokens['--user-surface-base'] = paint.surfaceBase;
+      tokens['--user-surface-tint'] = paint.surfaceTint;
+      tokens['--user-surface-deep'] = paint.surfaceDeep;
+      tokens['--elev-direction'] = String(paint.elevDirection);
+      tokens['--user-elev-direction'] = String(paint.elevDirection);
+
+      // P2 四级文字阶梯单一基准参数（SSOT）
+      tokens['--text-base'] = paint.textBase;
+
+      // [WAVE2-DEPRECATED] Wave 1 过渡期内同步写入旧参数名，以免破坏尚未清理的外部集成测试
+      tokens['--user-surface-outer'] = paint.bgSecondary; // [WAVE2-DEPRECATED]
+      tokens['--user-surface-main'] = paint.bgPrimary; // [WAVE2-DEPRECATED]
+      tokens['--user-surface-input'] = paint.composerBg; // [WAVE2-DEPRECATED]
+      tokens['--user-text-primary'] = paint.finalFg; // [WAVE2-DEPRECATED]
+      tokens['--user-text-secondary'] = paint.finalSec; // [WAVE2-DEPRECATED]
+      tokens['--user-text-tertiary'] = paint.finalTert; // [WAVE2-DEPRECATED]
+      tokens['--user-text-faint'] = paint.finalFaint; // [WAVE2-DEPRECATED]
+
       tokens['--user-border-color'] = paint.borderColor;
       tokens['--user-border-subtle'] = paint.borderSubtle;
       tokens['--user-control-mix-color'] = paint.mixColor;
-      // 语义 soft 底：一律引用 tokens.css 固定纯色（heson 2026-10-11：混色发脏）。
-      // G-CASCADE 引用面契约：adaptive soft 底只引用固定语义 token，不得指向 --user-*。
-      // 值为常量引用（非 A 类字面量），tokens.css 静态声明同名同值，双源同值。
       tokens['--accent-green-light-adaptive'] = 'var(--success-soft-bg)';
       tokens['--accent-red-light-adaptive'] = 'var(--danger-soft-bg)';
 
       // 滚动条主题色与微调按钮 SVG（warm-gray 皮肤走 tokens.css 静态 SSOT，不注入）
       Object.assign(
         tokens,
-        buildScrollbarTokens({ skinKey, isDark, finalFg: paint.finalFg })
+        buildScrollbarTokens({ skinKey, isDark, finalFg: paint.textBase })
       );
     }
 

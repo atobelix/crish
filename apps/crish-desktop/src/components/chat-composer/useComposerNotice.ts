@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { ChatAttachment } from '../../hooks/useChatStream';
-import type { ComposerNotice } from './ComposerNoticeBar';
+import {
+  resolveNoticeSeverity,
+  type ComposerNotice,
+} from './composerNoticeTypes';
 
 export interface UseComposerNoticeOptions {
   attachments: ChatAttachment[];
@@ -27,6 +30,7 @@ function isNoticeEqual(
   if (!a || !b) return false;
   return (
     a.id === b.id &&
+    resolveNoticeSeverity(a) === resolveNoticeSeverity(b) &&
     a.type === b.type &&
     a.message === b.message &&
     a.detail === b.detail
@@ -34,8 +38,8 @@ function isNoticeEqual(
 }
 
 /**
- * 封装输入框上方提示条两阶段平滑退场状态机：
- * - 聚合外部 noticeProp（如网络降级、系统错误等）；
+ * 封装输入坞内嵌通知顶槽两阶段平滑退场状态机：
+ * - 聚合外部 noticeProp（如网络降级、系统错误、上下文超限等）；
  * - 点击关闭触发两阶段退场：置位 isClosing=true 并启动 120ms 定时器；
  * - 定时器到期后重置 displayNotice=null 与 isClosing=false；
  * - 退场期间若外部传入新 noticeProp，立即取消定时器并展示新通知，重置 isClosing=false。

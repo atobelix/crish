@@ -101,7 +101,7 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(
     return (
       <div
         ref={containerRef}
-        className={`${styles.container} input-container${dense ? ` ${styles.containerDense}` : ''}${className ? ` ${className}` : ''}`}
+        className={`input-container${className ? ` ${className}` : ''}`}
         data-composer-field="1"
         data-composer-dense={dense ? '1' : '0'}
         data-composer-max-lines={resolvedLines}
@@ -119,7 +119,7 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(
           bare
           id={textAreaId}
           ref={taRef}
-          className={styles.textarea}
+          className={styles.fieldTextarea}
           data-testid="chat-input"
           placeholder={resolvedPlaceholder}
           rows={1}

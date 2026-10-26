@@ -1,0 +1,183 @@
+/* ==========================================================================
+   tokens-space.css — 4 档垂直节奏 (--gap-*)、对齐轴、布局断点与密度矩阵
+   ========================================================================== */
+
+:root,
+html[data-theme='default'],
+html[data-theme='light'] {
+  /* 4 档垂直节奏阶梯（SSOT · 接近性定律：block/group >= 2.5，section/block >= 1.5） */
+  --gap-inline: 4px;
+  --gap-group: 8px;
+  --gap-block: 20px;
+  --gap-section: 32px;
+
+  /* 水平前导对齐轴与流内衬（SSOT） */
+  --stream-pad-x: 20px;
+  --col-lead: 20px;
+  --composer-pad-x: 10px;
+  --composer-pad-x-start: 10px;
+
+  /* 对话流单源列宽与视口自适应上限（SSOT） */
+  --chat-col-max: 760px;
+
+  /* P8 活动轨、会话抽屉与右侧 Inspector 抽屉几何契约 */
+  --rail-width: 48px;
+  --activity-rail-width: 48px;
+  --drawer-width: 260px;
+  --session-drawer-width: 260px;
+  --inspector-width: 360px;
+  --inspector-tray-width: 360px;
+  --leaf-width-compact: 560px;
+  --breakpoint-inspector-overlay: 1024px;
+
+  /* 响应式容器断点 */
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 880px;
+  --breakpoint-lg: 1200px;
+  --breakpoint-xl: 1440px;
+
+  /* 窗口壳层与顶栏几何 */
+  --header-height: 36px;
+  --edge-reserve-left: 52px;
+  --edge-reserve-left-macos: 106px;
+  --edge-reserve-right-win: 144px;
+  --edge-reserve-right-macos: 38px;
+  --window-caption-btn-width: 46px;
+  --leaf-corner-btn-size: 28px;
+  --leaf-corner-btn-inset: 10px;
+  --sidebar-width: 260px;
+  --settings-nav-width: 220px;
+
+  /* 图标与控件尺寸刻度 */
+  --icon-size: 15px;
+  --icon-size-sm: 14px;
+  --icon-size-lg: 16px;
+  --control-height: 28px;
+  --control-height-sm: 24px;
+  --control-height-xs: 20px;
+  --control-height-lg: 32px;
+
+  /* 卡片与面板内衬刻度 */
+  --card-header-min-height: 26px;
+  --card-header-pad-y: 4px;
+  --card-header-pad-x: 10px;
+  --card-header-gap: 6px;
+  --panel-pad-x: 12px;
+  --panel-pad-y: 8px;
+  --panel-gap: 8px;
+  --tab-gap: 4px;
+  --settings-content-max: 720px;
+
+  /* [WAVE2-DEPRECATED-ALIAS] 旧间距刻度与布局别名桥接层（Wave 2 Codemod 后一键清除） */
+  --chat-stream-pad-x: var(--stream-pad-x); /* [WAVE2-DEPRECATED-ALIAS] */
+  --chat-col-max-wide: 840px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --chat-row-gap: 10px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --chat-row-gap-compact: 6px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-0_5: 2px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-1: 4px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-1_5: 6px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-2: 8px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-2_5: 10px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-3: 12px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-3_5: 14px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-4: 16px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-5: 20px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-6: 24px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-7: 28px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-8: 32px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-10: 40px; /* [WAVE2-DEPRECATED-ALIAS] */
+}
+
+@media (min-width: 1200px) {
+  :root {
+    --chat-col-max: 840px;
+  }
+}
+
+html[data-ui-size='small'] {
+  --gap-inline: 4px;
+  --gap-group: 6px;
+  --gap-block: 16px;
+  --gap-section: 28px;
+
+  --header-height: 32px;
+  --sidebar-width: 240px;
+  --icon-size: 14px;
+  --icon-size-sm: 12px;
+  --icon-size-lg: 16px;
+  --control-height: 24px;
+  --control-height-sm: 20px;
+  --control-height-xs: 18px;
+  --control-height-lg: 28px;
+  --card-header-min-height: 24px;
+  --card-header-pad-y: 2px;
+  --card-header-pad-x: 8px;
+  --card-header-gap: 4px;
+  --panel-pad-x: 10px;
+  --panel-pad-y: 6px;
+  --panel-gap: 6px;
+  --tab-gap: 2px;
+  --chat-col-max: 720px;
+  --settings-content-max: 680px;
+
+  /* [WAVE2-DEPRECATED-ALIAS] */
+  --chat-row-gap: 8px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --chat-row-gap-compact: 4px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-0_5: 2px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-1: 4px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-1_5: 6px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-2: 8px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-2_5: 10px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-3: 12px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-3_5: 14px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-4: 16px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-5: 18px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-6: 22px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-7: 26px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-8: 30px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-10: 36px; /* [WAVE2-DEPRECATED-ALIAS] */
+}
+
+html[data-ui-size='large'] {
+  --gap-inline: 4px;
+  --gap-group: 10px;
+  --gap-block: 26px;
+  --gap-section: 40px;
+
+  --header-height: 40px;
+  --sidebar-width: 280px;
+  --icon-size: 16px;
+  --icon-size-sm: 14px;
+  --icon-size-lg: 18px;
+  --control-height: 32px;
+  --control-height-sm: 28px;
+  --control-height-xs: 24px;
+  --control-height-lg: 36px;
+  --card-header-min-height: 30px;
+  --card-header-pad-y: 6px;
+  --card-header-pad-x: 12px;
+  --card-header-gap: 8px;
+  --panel-pad-x: 16px;
+  --panel-pad-y: 10px;
+  --panel-gap: 10px;
+  --tab-gap: 6px;
+  --chat-col-max: 800px;
+  --settings-content-max: 760px;
+
+  /* [WAVE2-DEPRECATED-ALIAS] */
+  --chat-row-gap: 12px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --chat-row-gap-compact: 8px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-0_5: 2px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-1: 6px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-1_5: 8px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-2: 10px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-2_5: 12px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-3: 14px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-3_5: 16px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-4: 20px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-5: 24px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-6: 30px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-7: 34px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-8: 40px; /* [WAVE2-DEPRECATED-ALIAS] */
+  --space-10: 48px; /* [WAVE2-DEPRECATED-ALIAS] */
+}

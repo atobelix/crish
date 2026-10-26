@@ -5,7 +5,7 @@
  * - 向上展开抽屉：真实任务步骤列表（完成态黑点、正在执行绿点、等待态空圈）。
  */
 import React, { useState, useEffect } from 'react';
-import styles from './ChatComposer.module.css';
+import styles from './ComposerPlanProgressBar.module.css';
 import { Button, Tooltip } from '../ui';
 import { AppIcon } from '../ui/icons/index';
 
@@ -165,7 +165,6 @@ export const ComposerPlanProgressBar: React.FC<
             className={`${styles.modeIcon} mode-icon`}
             aria-hidden
           />
-          <span className="mode-text">{modeLabel}</span>
         </Button>
 
         <div className={`${styles.planDividerV} plan-divider-v`} aria-hidden />

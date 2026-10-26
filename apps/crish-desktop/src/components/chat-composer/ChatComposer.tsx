@@ -31,7 +31,7 @@ import { ComposerFusedTrigger } from './ComposerFusedTrigger';
 import { ComposerSendControls } from './ComposerSendControls';
 import { useComposerMultiline } from './useComposerMultiline';
 import { useComposerFileHandlers } from './useComposerFileHandlers';
-import { ComposerNoticeBar } from './ComposerNoticeBar';
+import { ComposerEmbeddedNotice } from './ComposerEmbeddedNotice';
 import { useComposerNotice } from './useComposerNotice';
 import { useComposerEmptyKind } from './useComposerEmptyKind';
 import { useComposerProtectedSend } from './useComposerProtectedSend';
@@ -221,39 +221,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           void onFilesSelected(files);
         }}
       >
-        {/* 浮动层区域（Layer 1: 权限审批条 + Layer 2: 目标/计划进度条） */}
-        {hasFloatLayer ? (
-          <div className={styles.composerFloatZone} data-composer-float-zone="">
-            {permissionBarNode ||
-              (permissionBarProps ? (
-                <ComposerPermissionBar {...permissionBarProps} />
-              ) : null)}
-            {planProgressNode ||
-              (planProgressProps ? (
-                <ComposerPlanProgressBar {...planProgressProps} />
-              ) : null)}
-          </div>
-        ) : null}
-
-        {/* 输入框上方精致提示条（极细浅描边通白背景，叹号hover详情，复制，反馈，关闭） */}
-        {effectiveNotice ? (
-          <div
-            className={styles.composerNoticeZone}
-            data-closing={isClosing ? 'true' : undefined}
-            data-composer-notice-zone=""
-          >
-            <div className={styles.composerNoticeZoneInner}>
-              <ComposerNoticeBar
-                notice={effectiveNotice}
-                isClosing={isClosing}
-                onDismiss={handleDismissNotice}
-                onFeedback={onNoticeFeedback}
-              />
-            </div>
-          </div>
-        ) : null}
-
-        {/* 主输入卡片（Layer 4: 输入网格） */}
+        {/* 主输入卡片（单卡片围合：内嵌顶槽 + 附件条 + 主输入网格） */}
         <div
           className={`${styles.composerCard}${isMultiline ? ` ${styles.isMultiline}` : ''}${disabled ? ` ${styles.disabled}` : ''}`}
           data-composer-card=""
@@ -261,7 +229,35 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           data-empty-kind={emptyKind}
           data-disabled={disabled ? 'true' : undefined}
         >
-          {/* Layer 3: 附件与批注卡片区（内嵌于主输入卡片顶部，对齐图四） */}
+          {/* 内嵌顶槽：权限审批条、目标/计划进度条、内嵌通知顶条共享 .composerCard 同一围合 */}
+          {hasFloatLayer || effectiveNotice ? (
+            <div
+              className={styles.embeddedTopSlot}
+              data-composer-top-slot-host=""
+              data-closing={!hasFloatLayer && isClosing ? 'true' : undefined}
+            >
+              <div className={styles.embeddedTopSlotInner}>
+                {permissionBarNode ||
+                  (permissionBarProps ? (
+                    <ComposerPermissionBar {...permissionBarProps} />
+                  ) : null)}
+                {planProgressNode ||
+                  (planProgressProps ? (
+                    <ComposerPlanProgressBar {...planProgressProps} />
+                  ) : null)}
+                {effectiveNotice ? (
+                  <ComposerEmbeddedNotice
+                    notice={effectiveNotice}
+                    isClosing={isClosing}
+                    onDismiss={handleDismissNotice}
+                    onFeedback={onNoticeFeedback}
+                  />
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Layer 3: 附件与批注卡片区（内嵌于主输入卡片顶部） */}
           {attachments.length > 0 && (
             <ComposerAttachmentBar
               attachments={attachments}
@@ -277,7 +273,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             data-composer-layout=""
             data-composer-footer="1"
           >
-            {/* 左侧控制区：[ ＋ 加号按钮 ] + [ 权限盾牌按钮 ]（icon-only 模式） */}
+            {/* 左侧控制区：[ ＋ 加号按钮 ] + [ 权限模式菜单（全场景常驻左槽） ] */}
             <div className={styles.actionLeft} data-composer-grid="left">
               <Tooltip
                 content="添加文件或附件、使用 skill…"
@@ -336,6 +332,14 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                 }}
                 restoreFocusRef={plusBtnRef}
               />
+              <PermissionModeMenu
+                mode={permissionMode}
+                onChange={(m) => {
+                  onPermissionChange(m);
+                  setShowPlusMenu(false);
+                  onCloseSiblingMenus?.();
+                }}
+              />
             </div>
 
             {/* 中间输入区：富文本/单多行自适应输入框 */}
@@ -351,40 +355,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               />
             </div>
 
-            {/* 权限模式切换按钮：多行态常驻左下角；单行态并入右侧动作区融合胶囊 */}
-            {isMultiline ? (
-              <div className={styles.permSlot} data-composer-grid="perm">
-                <PermissionModeMenu
-                  mode={permissionMode}
-                  onChange={(m) => {
-                    onPermissionChange(m);
-                    setShowPlusMenu(false);
-                    onCloseSiblingMenus?.();
-                  }}
-                />
-              </div>
-            ) : null}
-
-            {/* 右侧动作区：[ 权限(单行) ⏐ 3.7 Sonnet ⏐ High ] 融合模型胶囊 + 语音/统计 + 墨绿正圆发送按钮 */}
+            {/* 右侧动作区：模型胶囊 + 语音/统计 + 墨绿正圆常驻发送按钮 */}
             <div className={styles.actionRight} data-composer-grid="right">
-              <ComposerFusedTrigger
-                prefix={
-                  !isMultiline ? (
-                    <PermissionModeMenu
-                      mode={permissionMode}
-                      hideChevron
-                      variant="fused"
-                      onChange={(m) => {
-                        onPermissionChange(m);
-                        setShowPlusMenu(false);
-                        onCloseSiblingMenus?.();
-                      }}
-                    />
-                  ) : undefined
-                }
-              >
-                {rightActions}
-              </ComposerFusedTrigger>
+              <ComposerFusedTrigger>{rightActions}</ComposerFusedTrigger>
               {voiceStatsButton ||
                 (showVoiceStatsButton ? (
                   <Tooltip content="语音输入 / 上下文统计">

@@ -1,0 +1,345 @@
+/* ==========================================================================
+   tokens-palette.css — 基础色板层、固定语义纯色、29 色活力调色盘、子 Agent 8 色 OKLCH 身份环
+   ========================================================================== */
+
+:root,
+html[data-theme='default'],
+html[data-theme='light'] {
+  /* 品牌与选区色 */
+  --brand-primary: #10b981;
+  --brand: #10b981;
+  --brand-deep: hsl(160 84% 30%);
+  --selection-bg: #0d9668;
+  --selection-fg: #ffffff;
+
+  /* 强调色与语义角色（Light） */
+  --accent: hsl(160 84% 36%);
+  --accent-color: hsl(160 84% 36%);
+  --accent-hover: #059669;
+  --accent-orange: oklch(0.7 0.16 65);
+  --accent-green: oklch(0.6 0.16 150);
+  --accent-green-muted: oklch(0.6 0.16 150 / 0.22);
+  --accent-red: oklch(0.61 0.19 31.8);
+  --accent-blue: oklch(0.5 0.18 250);
+  --accent-primary: #10b981;
+  --accent-red-light-adaptive: var(--danger-soft-bg);
+  --accent-green-light-adaptive: var(--success-soft-bg);
+  --text-on-accent: #ffffff;
+
+  /* 固定语义纯色（Light · 不混底色、不透明） */
+  --diff-add: #1a7f37;
+  --diff-del: #cf222e;
+  --status-modified: #9a6700;
+  --status-added: #1a7f37;
+  --status-deleted: #cf222e;
+  --status-renamed: #8250df;
+  --status-untracked: #57606a;
+  --status-conflicted: #bc4c00;
+  --danger-fg: hsl(0 72% 51%);
+  --danger-soft-bg: hsl(0 86% 97%);
+  --danger-soft-bg-hover: hsl(0 80% 93%);
+  --success-fg: #1a7f37;
+  --success-soft-bg: #e7f6ec;
+  --success-soft-bg-hover: #d3eedc;
+  --warning-fg: #b25e00;
+  --warning-soft-bg: #fdf3e1;
+  --warning-soft-bg-hover: #fae6c2;
+  --info-fg: #0b66d6;
+  --info-soft-bg: #e8f1fd;
+  --info-soft-bg-hover: #d4e4fb;
+
+  /* 语义色角色映射 */
+  --color-success: var(--accent-green);
+  --color-success-bg: var(--success-soft-bg);
+  --color-success-border: var(--accent-green-muted);
+  --color-warning: var(--accent-orange);
+  --color-warning-bg: var(--warning-soft-bg);
+  --color-warning-border: oklch(0.78 0.16 80 / 0.25);
+  --color-error: var(--accent-red);
+  --color-danger: var(--accent-red);
+  --color-error-bg: var(--danger-soft-bg);
+  --color-error-border: oklch(0.61 0.19 31.8 / 0.25);
+  --color-info: var(--accent-blue);
+  --color-info-bg: var(--info-soft-bg);
+
+  --danger-color: var(--danger-fg);
+  --accent-danger: var(--danger-fg);
+  --warning-color: var(--color-warning);
+
+  --text-danger: var(--danger-fg);
+  --text-success: var(--color-success);
+  --text-warning: var(--color-warning);
+  --text-warning-strong: oklch(0.52 0.16 55);
+  --text-success-strong: oklch(0.48 0.15 150);
+  --text-on-danger: #ffffff;
+  --ui-text-success: var(--color-success);
+  --ui-text-danger: var(--danger-fg);
+  --ui-text-muted: var(--text-tertiary);
+  --ui-text-info: var(--color-info);
+  --ui-text-warning: var(--text-warning-strong);
+
+  --window-close-hover-bg: #c42b1c;
+  --window-close-hover-fg: #ffffff;
+  --window-close-active-bg: color-mix(
+    in srgb,
+    var(--window-close-hover-bg) 90%,
+    transparent
+  );
+
+  --color-active: #15803d;
+
+  /* 超链接标识（Light） */
+  --color-link: #2563eb;
+  --color-link-hover: #1d4ed8;
+  --link-color: var(--color-link);
+  --link-hover-color: var(--color-link-hover);
+
+  /* ── P5 子 Agent 确定性色彩身份环（OKLCH 8 色 · Light） ── */
+  --agent-hue-1: oklch(0.5 0.16 25); /* 珊瑚红 Coral */
+  --agent-hue-2: oklch(0.5 0.16 65); /* 琥珀金 Amber */
+  --agent-hue-3: oklch(0.5 0.16 115); /* 橄榄绿 Olive Green */
+  --agent-hue-4: oklch(0.5 0.16 160); /* 薄荷青 Mint */
+  --agent-hue-5: oklch(0.5 0.16 205); /* 冰天蓝 Cyan */
+  --agent-hue-6: oklch(0.5 0.16 250); /* 钴海蓝 Cobalt Blue */
+  --agent-hue-7: oklch(0.5 0.16 295); /* 鸢尾紫 Violet */
+  --agent-hue-8: oklch(0.5 0.16 340); /* 洋红粉 Magenta */
+}
+
+html[data-theme='dark'] {
+  /* 品牌与选区色 */
+  --brand-primary: #10b981;
+  --brand: #10b981;
+  --brand-deep: hsl(160 84% 30%);
+  --selection-bg: #0d9668;
+  --selection-fg: #ffffff;
+
+  /* 强调色与语义角色（Dark） */
+  --accent: hsl(160 84% 45%);
+  --accent-color: hsl(160 84% 45%);
+  --accent-hover: #ffffff;
+  --accent-orange: oklch(0.8 0.17 75);
+  --accent-green: oklch(0.76 0.16 152);
+  --accent-green-muted: oklch(0.76 0.16 152 / 0.26);
+  --accent-red: oklch(0.72 0.19 27.5);
+  --accent-red-light-adaptive: var(--danger-soft-bg);
+  --accent-green-light-adaptive: var(--success-soft-bg);
+  --accent-blue: oklch(0.74 0.16 250);
+  --accent-primary: #10b981;
+  --text-on-accent: var(--bg-primary, #0a0a0a);
+
+  /* 固定语义纯色（Dark · 不混底色、不透明） */
+  --diff-add: #3fb950;
+  --diff-del: #f85149;
+  --status-modified: #d29922;
+  --status-added: #3fb950;
+  --status-deleted: #f85149;
+  --status-renamed: #a371f7;
+  --status-untracked: #8b949e;
+  --status-conflicted: #f0883e;
+  --danger-fg: hsl(0 85% 65%);
+  --danger-soft-bg: hsl(0 50% 16%);
+  --danger-soft-bg-hover: hsl(0 50% 22%);
+  --success-fg: #3fb950;
+  --success-soft-bg: #17301f;
+  --success-soft-bg-hover: #1e3d28;
+  --warning-fg: #e3a33b;
+  --warning-soft-bg: #3a2a12;
+  --warning-soft-bg-hover: #4a3617;
+  --info-fg: #58a6ff;
+  --info-soft-bg: #14263d;
+  --info-soft-bg-hover: #1b304d;
+
+  /* 语义色角色映射 */
+  --color-success: var(--accent-green);
+  --color-success-bg: var(--success-soft-bg);
+  --color-success-border: var(--accent-green-muted);
+  --color-warning: var(--accent-orange);
+  --color-warning-bg: var(--warning-soft-bg);
+  --color-warning-border: color-mix(
+    in srgb,
+    var(--accent-orange) 25%,
+    transparent
+  );
+  --color-error: var(--accent-red);
+  --color-danger: var(--accent-red);
+  --color-error-bg: var(--danger-soft-bg);
+  --color-error-border: color-mix(in srgb, var(--accent-red) 25%, transparent);
+  --color-info: var(--accent-blue);
+  --color-info-bg: var(--info-soft-bg);
+
+  --danger-color: var(--danger-fg);
+  --accent-danger: var(--danger-fg);
+  --warning-color: var(--color-warning);
+
+  --text-danger: var(--danger-fg);
+  --text-success: var(--color-success);
+  --text-warning: var(--color-warning);
+  --text-warning-strong: var(--ui-text-warning);
+  --text-success-strong: var(--ui-text-success);
+  --text-on-danger: #ffffff;
+  --ui-text-success: #69db7c;
+  --ui-text-danger: var(--danger-fg);
+  --ui-text-muted: #a3a3a3;
+  --ui-text-info: #74c0fc;
+  --ui-text-warning: #ffa94d;
+
+  --window-close-hover-bg: #c42b1c;
+  --window-close-hover-fg: #ffffff;
+  --window-close-active-bg: color-mix(
+    in srgb,
+    var(--window-close-hover-bg) 90%,
+    transparent
+  );
+
+  --color-active: #16a34a;
+
+  /* 超链接标识（Dark） */
+  --color-link: #60a5fa;
+  --color-link-hover: #93c5fd;
+  --link-color: var(--color-link);
+  --link-hover-color: var(--color-link-hover);
+
+  /* ── P5 子 Agent 确定性色彩身份环（OKLCH 8 色 · Dark） ── */
+  --agent-hue-1: oklch(0.72 0.14 25); /* 珊瑚红 Coral */
+  --agent-hue-2: oklch(0.72 0.14 65); /* 琥珀金 Amber */
+  --agent-hue-3: oklch(0.72 0.14 115); /* 橄榄绿 Olive Green */
+  --agent-hue-4: oklch(0.72 0.14 160); /* 薄荷青 Mint */
+  --agent-hue-5: oklch(0.72 0.14 205); /* 冰天蓝 Cyan */
+  --agent-hue-6: oklch(0.72 0.14 250); /* 钴海蓝 Cobalt Blue */
+  --agent-hue-7: oklch(0.72 0.14 295); /* 鸢尾紫 Violet */
+  --agent-hue-8: oklch(0.72 0.14 340); /* 洋红粉 Magenta */
+}
+
+/* ── 产品色板层（钉选取色器色轮与色相条） ── */
+:root {
+  --pin-palette-rose: #f43f5e;
+  --pin-palette-amber: #f59e0b;
+  --pin-palette-sky: #0ea5e9;
+  --pin-palette-violet: #8b5cf6;
+  --pin-palette-pink: #ec4899;
+  --pin-hue-red: #ff0000;
+  --pin-hue-yellow: #ffff00;
+  --pin-hue-green: #00ff00;
+  --pin-hue-cyan: #00ffff;
+  --pin-hue-blue: #0000ff;
+  --pin-hue-magenta: #ff00ff;
+}
+
+/* ── 活力色系完整调色盘 · 29 色 (Full Saturated Palette) ── */
+:root {
+  --palette-mint-green-fg: hsl(160 84% 39%);
+  --palette-mint-green-bg: hsl(140 80% 97%);
+  --palette-mint-green-border: hsl(141 79% 93%);
+
+  --palette-coral-rose-fg: hsl(349 89% 60%);
+  --palette-coral-rose-bg: hsl(356 100% 97%);
+  --palette-coral-rose-border: hsl(355 100% 95%);
+
+  --palette-amber-orange-fg: hsl(21 90% 48%);
+  --palette-amber-orange-bg: hsl(33 100% 96%);
+  --palette-amber-orange-border: hsl(34 100% 92%);
+
+  --palette-pure-blue-fg: hsl(209 100% 50%);
+  --palette-pure-blue-bg: hsl(212 100% 97%);
+  --palette-pure-blue-border: hsl(204 93% 94%);
+
+  --palette-pure-purple-fg: hsl(271 91% 65%);
+  --palette-pure-purple-bg: hsl(270 100% 98%);
+  --palette-pure-purple-border: hsl(252 100% 97%);
+
+  --palette-lime-green-fg: hsl(84 85% 35%);
+  --palette-lime-green-bg: hsl(78 91% 95%);
+  --palette-lime-green-border: hsl(80 88% 89%);
+
+  --palette-electric-cyan-fg: hsl(190 100% 42%);
+  --palette-electric-cyan-bg: hsl(196 100% 97%);
+  --palette-electric-cyan-border: hsl(192 88% 89%);
+
+  --palette-vivid-orange-fg: hsl(25 95% 53%);
+  --palette-vivid-orange-bg: hsl(28 100% 97%);
+  --palette-vivid-orange-border: hsl(32 98% 83%);
+
+  --palette-hot-pink-fg: hsl(330 81% 60%);
+  --palette-hot-pink-bg: hsl(327 73% 97%);
+  --palette-hot-pink-border: hsl(326 84% 90%);
+
+  --palette-peacock-teal-fg: hsl(175 84% 32%);
+  --palette-peacock-teal-bg: hsl(166 67% 97%);
+  --palette-peacock-teal-border: hsl(168 80% 78%);
+
+  --palette-royal-cobalt-fg: hsl(221 83% 53%);
+  --palette-royal-cobalt-bg: hsl(214 100% 97%);
+  --palette-royal-cobalt-border: hsl(213 94% 87%);
+
+  --palette-fuchsia-fg: hsl(294 72% 49%);
+  --palette-fuchsia-bg: hsl(289 100% 98%);
+  --palette-fuchsia-border: hsl(288 91% 91%);
+
+  --palette-sky-blue-fg: hsl(199 89% 48%);
+  --palette-sky-blue-bg: hsl(200 100% 97%);
+  --palette-sky-blue-border: hsl(201 94% 86%);
+
+  --palette-warm-gold-fg: hsl(38 92% 50%);
+  --palette-warm-gold-bg: hsl(48 100% 96%);
+  --palette-warm-gold-border: hsl(48 96% 77%);
+
+  --palette-jade-emerald-fg: hsl(161 94% 30%);
+  --palette-jade-emerald-bg: hsl(152 77% 96%);
+  --palette-jade-emerald-border: hsl(152 69% 80%);
+
+  --palette-warm-coral-fg: hsl(351 95% 71%);
+  --palette-warm-coral-bg: hsl(356 100% 97%);
+  --palette-warm-coral-border: hsl(353 96% 90%);
+
+  --palette-vermillion-fg: hsl(0 72% 51%);
+  --palette-vermillion-bg: hsl(0 86% 97%);
+  --palette-vermillion-border: hsl(0 93% 89%);
+
+  --palette-forest-green-fg: hsl(142 76% 36%);
+  --palette-forest-green-bg: hsl(140 80% 97%);
+  --palette-forest-green-border: hsl(141 76% 85%);
+
+  --palette-warm-lavender-fg: hsl(263 70% 50%);
+  --palette-warm-lavender-bg: hsl(252 100% 98%);
+  --palette-warm-lavender-border: hsl(251 91% 92%);
+
+  --palette-turmeric-deep-fg: hsl(26 91% 37%);
+  --palette-turmeric-deep-bg: hsl(48 100% 96%);
+  --palette-turmeric-deep-border: hsl(47 97% 89%);
+
+  --palette-true-indigo-fg: hsl(245 58% 51%);
+  --palette-true-indigo-bg: hsl(229 100% 97%);
+  --palette-true-indigo-border: hsl(230 92% 89%);
+
+  --palette-vivid-aqua-fg: hsl(189 94% 43%);
+  --palette-vivid-aqua-bg: hsl(187 100% 96%);
+  --palette-vivid-aqua-border: hsl(187 88% 82%);
+
+  --palette-grape-fg: hsl(272 72% 47%);
+  --palette-grape-bg: hsl(270 100% 98%);
+  --palette-grape-border: hsl(273 91% 92%);
+
+  --palette-spring-green-fg: hsl(142 71% 45%);
+  --palette-spring-green-bg: hsl(140 80% 97%);
+  --palette-spring-green-border: hsl(141 76% 85%);
+
+  --palette-deep-rouge-fg: hsl(333 77% 42%);
+  --palette-deep-rouge-bg: hsl(327 73% 97%);
+  --palette-deep-rouge-border: hsl(326 84% 90%);
+
+  --palette-mango-orange-fg: hsl(27 96% 61%);
+  --palette-mango-orange-bg: hsl(33 100% 96%);
+  --palette-mango-orange-border: hsl(32 98% 83%);
+
+  --palette-cerulean-fg: hsl(200 98% 39%);
+  --palette-cerulean-bg: hsl(204 100% 97%);
+  --palette-cerulean-border: hsl(201 94% 86%);
+
+  --palette-vivid-yellow-fg: hsl(45 93% 47%);
+  --palette-vivid-yellow-bg: hsl(55 85% 95%);
+  --palette-vivid-yellow-border: hsl(53 95% 77%);
+
+  --palette-deep-wine-fg: hsl(344 80% 35%);
+  --palette-deep-wine-bg: hsl(356 100% 97%);
+  --palette-deep-wine-border: hsl(353 96% 90%);
+}
