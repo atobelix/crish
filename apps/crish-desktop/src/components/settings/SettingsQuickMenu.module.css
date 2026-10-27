@@ -47,8 +47,9 @@
 
 .sbQuickMenu {
   z-index: var(--z-modal);
-  background: var(--bg-card);
-  border: var(--hairline-width) solid var(--border-subtle);
+  background: var(--surface-overlay);
+  border: var(--hairline-width) solid
+    color-mix(in srgb, var(--surface-overlay) 95%, var(--text-primary) 5%);
   border-radius: var(
     --sep-radius-outer
   ); /* 方案 A 标尺：浮层外壳圆角锁 14px，根治 -6px 极端窒息挤压 */
@@ -82,6 +83,13 @@
 
 .sbQuickSegment {
   width: 100%;
+  --seg-outer-radius: var(--radius-menu-inner, 12px);
+  --seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad, 2px));
+}
+
+:global(.sb-quick-menu) :global(.sb-quick-segment) {
+  --seg-outer-radius: var(--radius-menu-inner, 12px);
+  --seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad, 2px));
 }
 
 .sbQuickSegment :global(button) {
@@ -98,7 +106,8 @@
 }
 
 .sbQuickItem,
-.sbQuickItem {
+.sbQuickItem,
+:global(.sb-quick-menu) :global(.sb-quick-item) {
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -107,7 +116,7 @@
   height: 32px;
   min-height: 32px;
   padding: 0 var(--space-2_5);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-menu-inner);
   font-size: var(--font-size-sm);
   color: var(--text-primary);
   border: none;

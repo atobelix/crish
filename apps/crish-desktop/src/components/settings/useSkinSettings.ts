@@ -19,6 +19,7 @@ const DARK_SKIN_IDS = [
 ];
 const LIGHT_SKIN_IDS = [
   'warm-gray',
+  'pure-gray',
   'cream',
   'paper',
   'classic-gray',
@@ -31,9 +32,7 @@ const LIGHT_SKIN_IDS = [
 export interface UseSkinSettingsArgs {
   activeTheme: ThemeId;
   personalization: PersonalizationSettings;
-  updatePersonalization: (
-    updates: Partial<PersonalizationSettings>
-  ) => void;
+  updatePersonalization: (updates: Partial<PersonalizationSettings>) => void;
 }
 
 export interface UseSkinSettingsResult {
@@ -74,6 +73,7 @@ export function useSkinSettings({
           ]
         : [
             { value: 'warm-gray', label: '护眼暖灰' },
+            { value: 'pure-gray', label: 'Pure Gray' },
             { value: 'cream', label: '杏仁奶油' },
             { value: 'paper', label: '极简纸质' },
             { value: 'classic-gray', label: '经典浅灰' },

@@ -13,7 +13,10 @@
   max-width: min(340px, calc(100vw - 16px));
   box-sizing: border-box;
   max-height: min(
-    var(--radix-popover-content-available-height, calc(100vh - 32px)),
+    var(
+      --available-height,
+      var(--radix-popover-content-available-height, calc(100vh - 32px))
+    ),
     calc(100vh - 32px),
     640px
   );
@@ -23,10 +26,10 @@
   overscroll-behavior: contain;
 
   padding: 6px;
-  border-radius: var(--sep-radius-outer);
-  border: 1px solid var(--border-color);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-menu-outer);
+  border: 1px solid var(--border-panel, var(--border-subtle));
+  background: var(--surface-overlay);
+  box-shadow: var(--shadow-popover, var(--shadow-lg));
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -135,8 +138,8 @@
   border: none;
   background: transparent;
   text-align: left;
-  padding: 8px 10px;
-  border-radius: var(--sep-item-radius);
+  padding: 6px 10px;
+  border-radius: var(--radius-menu-inner);
   min-height: 32px;
   height: auto;
   font-family: inherit;

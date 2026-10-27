@@ -1,0 +1,36 @@
+.frame {
+  position: relative;
+  display: inline-block;
+  box-sizing: content-box;
+  padding: 0.25em 0.35em;
+  margin: -0.25em -0.35em;
+  text-align: start;
+  white-space: nowrap;
+  vertical-align: baseline;
+  mask-image: linear-gradient(90deg, #000 calc(100% - 0.5em), transparent);
+}
+
+.track {
+  position: relative;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.glyph {
+  display: inline-block;
+  white-space: pre;
+  transform-origin: 50% 60%;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  user-select: none;
+}

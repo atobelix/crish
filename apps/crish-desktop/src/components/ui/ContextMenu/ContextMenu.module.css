@@ -1,0 +1,276 @@
+/**
+ * apps/crish-desktop/src/components/ui/ContextMenu/ContextMenu.module.css
+ *
+ * 现代化声明式 ContextMenu 核心样式体系
+ * 1px 发丝边框、18px 外壳同心圆角、6px 统一内衬、12px 条目内圆角
+ * 遵循 Conex 架构规范：Zero-Blue 墨阶、柔和渐变与无障碍焦点
+ */
+
+.content {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-popover);
+  min-width: 190px;
+  max-width: 340px;
+  max-height: min(440px, calc(100vh - 16px));
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  padding: 6px;
+  border-radius: 18px;
+  border: 1px solid
+    var(--border-panel, var(--border-color, rgba(255, 255, 255, 0.08)));
+  background: var(--surface-overlay);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: var(
+    --shadow-popover,
+    var(
+      --shadow-lg,
+      0 14px 36px -6px rgba(0, 0, 0, 0.45),
+      0 0 0 1px rgba(255, 255, 255, 0.05)
+    )
+  );
+  outline: none;
+  font-family: inherit;
+  color: var(--text-primary, #ffffff);
+  user-select: none;
+  transform-origin: var(--transform-origin, top left);
+  transition:
+    opacity 150ms cubic-bezier(0.16, 1, 0.3, 1),
+    scale 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity, scale;
+}
+
+.content[data-state='open'] {
+  opacity: 1;
+  scale: 1;
+}
+
+.content[data-state='closed'] {
+  opacity: 0;
+  scale: 0.97;
+  pointer-events: none;
+}
+
+@starting-style {
+  .content[data-state='open'] {
+    opacity: 0;
+    scale: 0.97;
+  }
+}
+
+/* 二级级联子菜单特化：更高的 z-index 与独立微投影 */
+.subContent {
+  composes: content;
+  z-index: calc(var(--z-popover) + 1);
+  box-shadow: var(
+    --shadow-popover,
+    var(
+      --shadow-xl,
+      0 18px 42px -8px rgba(0, 0, 0, 0.55),
+      0 0 0 1px rgba(255, 255, 255, 0.06)
+    )
+  );
+}
+
+/* 尺寸规格扩展 */
+.size-sm {
+  min-width: 160px;
+  border-radius: 14px;
+  padding: 4px;
+}
+
+.size-sm .item {
+  border-radius: 10px;
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.size-lg {
+  min-width: 220px;
+  border-radius: 20px;
+  padding: 8px;
+}
+
+.size-lg .item {
+  border-radius: 14px;
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+/* 菜单项基础规范 */
+.item {
+  display: flex;
+  align-items: center;
+  position: relative;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  box-sizing: border-box;
+  font-size: 13px;
+  font-weight: 450;
+  line-height: 1.4;
+  color: var(--text-primary, #ffffff);
+  cursor: pointer;
+  outline: none;
+  border: 1px solid transparent;
+  background-color: transparent;
+  transition:
+    background-color 100ms ease,
+    color 100ms ease,
+    border-color 100ms ease;
+  user-select: none;
+}
+
+.item:focus-visible,
+.item[data-highlighted='true'] {
+  background-color: var(--tint-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary, #ffffff);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color, rgba(255, 255, 255, 0.1)) 94%,
+    var(--text-primary, #ffffff) 6%
+  );
+}
+
+.item:hover:not([data-disabled='true']) {
+  background-color: var(--tint-hover, rgba(255, 255, 255, 0.08));
+}
+
+.item[data-disabled='true'] {
+  opacity: var(--opacity-disabled, 0.4);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* 危险操作项 */
+.item[data-variant='danger'],
+.item[data-variant='destructive'] {
+  color: var(--color-danger, #ff453a);
+}
+
+.item[data-variant='danger']:focus-visible,
+.item[data-variant='danger'][data-highlighted='true'],
+.item[data-variant='destructive']:focus-visible,
+.item[data-variant='destructive'][data-highlighted='true'] {
+  background-color: var(--color-danger-subtle, rgba(255, 69, 58, 0.14));
+  color: var(--color-danger, #ff453a);
+  border-color: color-mix(
+    in srgb,
+    var(--color-danger, #ff453a) 25%,
+    transparent
+  );
+}
+
+/* Inset 缩进对齐 */
+.item[data-inset='true'] {
+  padding-left: 30px;
+}
+
+/* 指示器（勾选/单选） */
+.indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  left: 8px;
+  width: 16px;
+  height: 16px;
+  color: var(--text-primary, #ffffff);
+  pointer-events: none;
+}
+
+.indicator svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.5;
+}
+
+.itemContent {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 二级菜单箭头指示 */
+.subTriggerIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  width: 14px;
+  height: 14px;
+  color: var(--text-tertiary, rgba(255, 255, 255, 0.45));
+  pointer-events: none;
+  transition: transform 120ms ease;
+}
+
+.item[data-highlighted='true'] .subTriggerIcon {
+  color: var(--text-primary, #ffffff);
+}
+
+/* 快捷键徽标 */
+.shortcut {
+  margin-left: auto;
+  padding-left: 16px;
+  font-size: 11px;
+  font-family: var(
+    --font-mono,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace
+  );
+  color: var(--text-tertiary, rgba(255, 255, 255, 0.45));
+  letter-spacing: 0.05em;
+  user-select: none;
+}
+
+/* 分割线 */
+.separator {
+  height: 1px;
+  margin: 4px 2px;
+  background-color: var(--border-color, rgba(255, 255, 255, 0.08));
+  box-sizing: border-box;
+}
+
+/* 分组与标题 */
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+.label {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary, rgba(255, 255, 255, 0.45));
+  user-select: none;
+}
+
+.label[data-inset='true'] {
+  padding-left: 30px;
+}
+
+/* 无障碍减少动效支持 */
+@media (prefers-reduced-motion: reduce) {
+  .content,
+  .item,
+  .subTriggerIcon {
+    transition: none;
+    animation: none;
+  }
+}
