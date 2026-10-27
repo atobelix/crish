@@ -79,6 +79,7 @@ export type {
   CollabBlockPropsWire,
   CollabInsertOpWire,
   CollabUpdatePropsOpWire,
+  CollabPatchAttrsOpWire,
   CollabMoveOpWire,
   CollabDeleteOpWire,
   CollabTextEditOpWire,

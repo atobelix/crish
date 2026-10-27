@@ -27,6 +27,7 @@ import {
   isStructureIntent,
   isPaperIntent,
   structureIntentToOp,
+  structureIntentToOps,
   type DeleteBlocksIntent,
   type SlashInsertIntent,
 } from './structureIntents';
@@ -411,7 +412,41 @@ describe('BlockChromeModel 多选 → 结构 Intent', () => {
     expect(r2.ok).toBe(true);
     if (!r2.ok) return;
     expect(r2.intent.blockIds).toEqual(['b-3']);
+    expect(r2.intent.collapsedByBlock).toEqual({ 'b-3': true });
     expect(chrome.isCollapsed('b-3')).toBe(true);
+  });
+
+  it('多选逐块 toggle 固化混合目标态供 wire 精确下发', () => {
+    const chrome = new BlockChromeModel({
+      createIntentId: () => 'col-mixed',
+    });
+    chrome.setCollapsed('b-1', true);
+    chrome.setMultiSelected(['b-1', 'b-2']);
+
+    const result = chrome.requestToggleCollapse();
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.intent.collapsedByBlock).toEqual({
+      'b-1': false,
+      'b-2': true,
+    });
+    expect(structureIntentToOps(result.intent)).toEqual([
+      {
+        op: 'patch_attrs',
+        id: 'b-1',
+        set: { collapsed: false },
+        remove: [],
+      },
+      {
+        op: 'patch_attrs',
+        id: 'b-2',
+        set: { collapsed: true },
+        remove: [],
+      },
+    ]);
+    expect(chrome.isCollapsed('b-1')).toBe(false);
+    expect(chrome.isCollapsed('b-2')).toBe(true);
   });
 
   it('无目标折叠 empty_selection', () => {

@@ -108,6 +108,9 @@ export function alignToSurrogateBoundaryFloor(
   text: string,
   offsetU16: number
 ): Utf16CodeUnitOffset {
+  if (!Number.isFinite(offsetU16)) {
+    throw new RangeError(`[Coordinate] 非法的 UTF-16 偏移量: ${offsetU16}`);
+  }
   const clamped = Math.max(0, Math.min(Math.floor(offsetU16), text.length));
   if (isInsideSurrogatePair(text, clamped)) {
     return asUtf16Offset(clamped - 1);
@@ -122,6 +125,9 @@ export function alignToSurrogateBoundaryCeil(
   text: string,
   offsetU16: number
 ): Utf16CodeUnitOffset {
+  if (!Number.isFinite(offsetU16)) {
+    throw new RangeError(`[Coordinate] 非法的 UTF-16 偏移量: ${offsetU16}`);
+  }
   const clamped = Math.max(0, Math.min(Math.floor(offsetU16), text.length));
   if (isInsideSurrogatePair(text, clamped)) {
     return asUtf16Offset(clamped + 1);
@@ -142,6 +148,9 @@ export function utf16OffsetToUnicodeScalar(
   text: string,
   offsetU16: Utf16CodeUnitOffset | number
 ): UnicodeScalarOffset {
+  if (!Number.isFinite(offsetU16)) {
+    throw new RangeError(`[Coordinate] 非法的 UTF-16 偏移量: ${offsetU16}`);
+  }
   let scalarCount = 0;
   const rawLimit = Math.min(
     Math.max(0, Math.floor(offsetU16 as number)),
@@ -175,6 +184,11 @@ export function unicodeScalarToUtf16Offset(
   text: string,
   scalarOffset: UnicodeScalarOffset | number
 ): Utf16CodeUnitOffset {
+  if (!Number.isFinite(scalarOffset)) {
+    throw new RangeError(
+      `[Coordinate] 非法的 Unicode 标量偏移量: ${scalarOffset}`
+    );
+  }
   let currentScalar = 0;
   let i = 0;
   const target = Math.max(0, Math.floor(scalarOffset as number));

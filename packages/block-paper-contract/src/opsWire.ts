@@ -55,9 +55,19 @@ export type CollabInsertOpWire = {
 };
 
 export type CollabUpdatePropsOpWire = {
+  /** 全量替换 props，不是 attrs 局部更新。 */
   op: 'update_props';
   id: BlockId;
   props: CollabBlockPropsWire;
+};
+
+export type CollabPatchAttrsOpWire = {
+  op: 'patch_attrs';
+  id: BlockId;
+  /** 写入或覆盖的 attrs；可与 remove 重叠，重叠时 set 生效。 */
+  set: Record<string, unknown>;
+  /** 明确删除的 attrs 键。 */
+  remove: string[];
 };
 
 export type CollabMoveOpWire = {
@@ -88,6 +98,7 @@ export type CollabTextEditOpWire = {
 export type CollabOpWire =
   | CollabInsertOpWire
   | CollabUpdatePropsOpWire
+  | CollabPatchAttrsOpWire
   | CollabMoveOpWire
   | CollabDeleteOpWire
   | CollabTextEditOpWire;
@@ -97,6 +108,7 @@ export type CollabOpTag = CollabOpWire['op'];
 const OP_TAGS: ReadonlySet<string> = new Set([
   'insert',
   'update_props',
+  'patch_attrs',
   'move',
   'delete',
   'text_edit',
@@ -190,6 +202,10 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
   return v != null && typeof v === 'object' && !Array.isArray(v);
 }
 
+function isStringArray(v: unknown): v is string[] {
+  return Array.isArray(v) && v.every((item) => typeof item === 'string');
+}
+
 function isBlockIdLike(v: unknown): v is string {
   return typeof v === 'string' && v.length > 0;
 }
@@ -247,6 +263,12 @@ export function isCollabOpWire(value: unknown): value is CollabOpWire {
       );
     case 'update_props':
       return isBlockIdLike(value.id) && isPropsWire(value.props);
+    case 'patch_attrs':
+      return (
+        isBlockIdLike(value.id) &&
+        isPlainObject(value.set) &&
+        isStringArray(value.remove)
+      );
     case 'move':
       return (
         isBlockIdLike(value.id) &&
@@ -323,6 +345,8 @@ export function requiredWireFields(op: CollabOpWire): readonly string[] {
       return ['op', 'id', 'parent', 'order', 'kind', 'props'];
     case 'update_props':
       return ['op', 'id', 'props'];
+    case 'patch_attrs':
+      return ['op', 'id', 'set', 'remove'];
     case 'move':
       return ['op', 'id', 'new_parent', 'order'];
     case 'delete':
@@ -346,5 +370,13 @@ export function assertWireFieldsPresent(op: CollabOpWire): void {
         `assertWireFieldsPresent：props.attrs 必须为对象（op=${op.op}）`
       );
     }
+  }
+  if (
+    op.op === 'patch_attrs' &&
+    (!isPlainObject(op.set) || !isStringArray(op.remove))
+  ) {
+    throw new Error(
+      'assertWireFieldsPresent：patch_attrs 的 set 必须为对象且 remove 必须为字符串数组'
+    );
   }
 }

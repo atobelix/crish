@@ -62,5 +62,8 @@
     "build:js:browser": "esbuild src/browser-index.ts --bundle --platform=browser --format=esm --target=es2022 --packages=external --outfile=dist/browser-index.js --sourcemap",
     "build:js:node": "esbuild src/node-index.ts --bundle --platform=node --format=esm --target=es2022 --packages=external --outfile=dist/node-index.js --sourcemap",
     "build": "npm run clean && npm run build:types && npm run build:js && npm run build:js:browser && npm run build:js:node"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.2"
   }
 }

@@ -54,6 +54,30 @@ describe('coordinates: 强类型品牌类型与构造器', () => {
     expect(() => createUtf16Offset(1.2)).toThrow(TypeError);
     expect(() => createUnicodeOffset(-3)).toThrow(TypeError);
   });
+
+  it('所有坐标转换入口拒绝非有限偏移，不将 NaN 静默映射到文本起点', () => {
+    const text = 'A🎉B';
+    for (const invalidOffset of [NaN, Infinity, -Infinity]) {
+      expect(() => utf16OffsetToUnicodeScalar(text, invalidOffset)).toThrow(
+        RangeError
+      );
+      expect(() => unicodeScalarToUtf16Offset(text, invalidOffset)).toThrow(
+        RangeError
+      );
+      expect(() => alignToSurrogateBoundaryFloor(text, invalidOffset)).toThrow(
+        RangeError
+      );
+      expect(() => alignToSurrogateBoundaryCeil(text, invalidOffset)).toThrow(
+        RangeError
+      );
+    }
+    expect(() => utf16RangeToUnicodeScalarRange(text, [NaN, 1])).toThrow(
+      RangeError
+    );
+    expect(() => unicodeScalarRangeToUtf16Range(text, [1, Infinity])).toThrow(
+      RangeError
+    );
+  });
 });
 
 describe('coordinates: 代理项检测与边界保护', () => {
@@ -147,6 +171,23 @@ describe('coordinates: 标量坐标双向单射转换（对齐 Rust chars().coun
     const text = 'e\u0301text'; // 2 scalars, 2 code units + 4 = 6
     expect(utf16OffsetToUnicodeScalar(text, 2)).toBe(2);
     expect(unicodeScalarToUtf16Offset(text, 2)).toBe(2);
+  });
+
+  it('场景 D2：Emoji、组合符与 CRLF 区间保持 UTF-16/标量边界', () => {
+    const text = 'A🎉e\u0301\r\n𠮷';
+    expect(text.length).toBe(9);
+    expect(unicodeScalarLength(text)).toBe(7);
+
+    expect(utf16RangeToUnicodeScalarRange(text, [1, 3])).toEqual([1, 2]);
+    expect(utf16RangeToUnicodeScalarRange(text, [3, 5])).toEqual([2, 4]);
+    expect(utf16RangeToUnicodeScalarRange(text, [5, 7])).toEqual([4, 6]);
+    expect(unicodeScalarRangeToUtf16Range(text, [4, 6])).toEqual([5, 7]);
+
+    // 零长度区间仍是零长度；若落在代理对中间，按既有 Floor 契约对齐。
+    expect(utf16RangeToUnicodeScalarRange(text, [3, 3])).toEqual([2, 2]);
+    expect(unicodeScalarRangeToUtf16Range(text, [2, 2])).toEqual([3, 3]);
+    expect(utf16RangeToUnicodeScalarRange('A🎉B', [2, 2])).toEqual([1, 1]);
+    expect(unicodeScalarRangeToUtf16Range('A🎉B', [1, 1])).toEqual([1, 1]);
   });
 
   it('场景 E：区间映射 utf16RangeToUnicodeScalarRange 与 unicodeScalarRangeToUtf16Range', () => {

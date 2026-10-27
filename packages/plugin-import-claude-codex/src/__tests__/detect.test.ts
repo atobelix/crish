@@ -151,7 +151,7 @@ describe('detectExternalSessions', () => {
     expect(codex?.titlePreview).toContain('Fix tests');
   });
 
-  it('根目录缺失时返回警告', async () => {
+  it('Claude 根目录不可读时返回错误', async () => {
     const fs = createMemoryImportFs({});
     const result = await detectExternalSessions({
       fs,
@@ -159,7 +159,55 @@ describe('detectExternalSessions', () => {
       sources: ['claude-code'],
     });
     expect(result.sessions).toHaveLength(0);
-    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.errors).toEqual([
+      'Claude projects dir not readable: /empty/.claude/projects',
+    ]);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('Claude 与 Codex 根目录都不可读时分别返回来源错误', async () => {
+    const fs = createMemoryImportFs({});
+    const result = await detectExternalSessions({
+      fs,
+      env: { home: '/empty', platform: 'linux', sep: '/' },
+    });
+
+    expect(result.sessions).toEqual([]);
+    expect(result.errors).toEqual([
+      'Claude projects dir not readable: /empty/.claude/projects',
+      'Codex sessions dir not readable: /empty/.codex/sessions',
+    ]);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('Codex 日期子目录部分不可读时保留可读会话并返回警告', async () => {
+    const uuid = 'ffffffff-1111-2222-3333-444444444444';
+    const fs = createMemoryImportFs({
+      [`/home/u/.codex/sessions/2026/07/02/rollout-2026-07-02T12-00-00-${uuid}.jsonl`]:
+        '{"timestamp":"2026-07-02T12:00:00.000Z","type":"session_meta","payload":{"meta":{"cwd":"/repo"}}}\n',
+      '/home/u/.codex/sessions/2026/08/01/placeholder.jsonl': '',
+    });
+    const listDir = fs.listDir.bind(fs);
+    fs.listDir = async (dirPath, allowRoot) => {
+      if (dirPath === '/home/u/.codex/sessions/2026/08') {
+        throw new Error('permission denied');
+      }
+      return listDir(dirPath, allowRoot);
+    };
+
+    const result = await detectExternalSessions({
+      fs,
+      env: { home: '/home/u', platform: 'linux', sep: '/' },
+      sources: ['codex'],
+    });
+
+    expect(result.sessions.map((session) => session.sourceSessionId)).toEqual([
+      uuid,
+    ]);
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toContain(
+      'Skip unreadable Codex month directory: /home/u/.codex/sessions/2026/08'
+    );
   });
 
   it('joinImportPath 感知分隔符', () => {

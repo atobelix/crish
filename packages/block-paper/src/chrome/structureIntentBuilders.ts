@@ -128,6 +128,7 @@ export function buildMoveBlocksIntent(
 export type BuildToggleCollapseInput = {
   blockIds: readonly BlockId[];
   collapsed?: boolean;
+  collapsedByBlock?: Readonly<Record<BlockId, boolean>>;
   origin?: StructureIntentOrigin;
   createIntentId?: BuildIntentIdFn;
 };
@@ -139,6 +140,11 @@ export function buildToggleCollapseIntent(
   if (blockIds.length === 0) {
     throw new Error('buildToggleCollapseIntent：blockIds 不可为空');
   }
+  if (input.collapsed !== undefined && input.collapsedByBlock !== undefined) {
+    throw new Error(
+      'buildToggleCollapseIntent：collapsed 与 collapsedByBlock 不可同时提供'
+    );
+  }
   const intent: ToggleCollapseIntent = {
     type: 'toggle_collapse',
     intentId: resolveIntentId(input.createIntentId),
@@ -147,6 +153,21 @@ export function buildToggleCollapseIntent(
   };
   if (input.collapsed !== undefined) {
     intent.collapsed = input.collapsed;
+  }
+  if (input.collapsedByBlock !== undefined) {
+    const collapsedByBlock: Partial<Record<BlockId, boolean>> = {};
+    for (const id of blockIds) {
+      if (
+        !Object.prototype.hasOwnProperty.call(input.collapsedByBlock, id) ||
+        typeof input.collapsedByBlock[id] !== 'boolean'
+      ) {
+        throw new Error(
+          `buildToggleCollapseIntent：collapsedByBlock 缺少 ${id} 的布尔目标态`
+        );
+      }
+      collapsedByBlock[id] = input.collapsedByBlock[id];
+    }
+    intent.collapsedByBlock = collapsedByBlock as Record<BlockId, boolean>;
   }
   return intent;
 }

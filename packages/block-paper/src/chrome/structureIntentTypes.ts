@@ -97,10 +97,15 @@ export type ToggleCollapseIntent = StructureIntentBase & {
   type: 'toggle_collapse';
   blockIds: BlockId[];
   /**
-   * 强制目标态；缺省表示「逐块 toggle」。
+   * 所有块共用的强制目标态。
    * true = 折叠；false = 展开。
    */
   collapsed?: boolean;
+  /**
+   * 逐块 toggle 的目标态。每个 blockIds 都必须有一项；
+   * 用于当前折叠状态不一致的多选目标。
+   */
+  collapsedByBlock?: Readonly<Record<BlockId, boolean>>;
 };
 
 /**

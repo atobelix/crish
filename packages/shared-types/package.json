@@ -16,6 +16,16 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./validators": {
+      "development": {
+        "types": "./src/validators/index.ts",
+        "import": "./src/validators/index.ts",
+        "default": "./src/validators/index.ts"
+      },
+      "types": "./dist/validators/index.d.ts",
+      "import": "./dist/validators/index.js",
+      "default": "./dist/validators/index.js"
     }
   },
   "files": [
@@ -26,10 +36,10 @@
     "test": "vitest run",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build:types": "node -e \"require('node:fs').rmSync('../../node_modules/.cache/shared-types.tsbuildinfo', { force: true })\" && tsc -p tsconfig.build.json --emitDeclarationOnly --declarationMap false && tsc-alias -p tsconfig.build.json --resolve-full-paths",
-    "build:js": "esbuild src/index.ts --bundle --platform=node --format=esm --target=es2022 --packages=external --outfile=dist/index.js --sourcemap",
+    "build:js": "esbuild src/index.ts src/validators/index.ts --bundle --platform=node --format=esm --target=es2022 --packages=external --outdir=dist --outbase=src --sourcemap",
     "build": "npm run clean && npm run build:types && npm run build:js"
   },
   "dependencies": {
-    "zod": "^3.25.76"
+    "zod": "^4.6.7"
   }
 }

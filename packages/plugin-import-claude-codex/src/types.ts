@@ -201,5 +201,6 @@ export type DetectExternalSessionsOptions = {
 export type DetectExternalSessionsResult = {
   roots: ExternalImportRoots;
   sessions: ExternalSessionMeta[];
+  errors: string[];
   warnings: string[];
 };

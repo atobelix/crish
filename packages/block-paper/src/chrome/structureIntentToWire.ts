@@ -29,7 +29,6 @@ import type {
 import {
   assertCollabOpsWire,
   collabOpsToJson,
-  collabPropsWithAttrs,
   emptyCollabProps,
   flavourToCollabKind,
   isCollabOpWire,
@@ -64,7 +63,8 @@ export type StructureToOpsOptions = {
   }) => string;
   /**
    * toggle_collapse 且 Intent.collapsed 缺省时，解析每块目标态。
-   * 仍缺省则 **collapse=true**（桥占位；宿主应注入真实态）。
+   * Intent 未携带 collapsedByBlock 且未提供此解析器时，转换失败，
+   * 避免把逐块 toggle 错误地转换成统一折叠。
    */
   resolveCollapsed?: (blockId: BlockId) => boolean;
 };
@@ -100,7 +100,7 @@ function resolveOrderKey(
  * | slash_insert      | insert（1；id 来自 blockIds/allocateId）  |
  * | delete_blocks     | delete × N                                |
  * | move_blocks       | move × N（order 来自 index 或序号）       |
- * | toggle_collapse   | update_props × N（attrs.collapsed）       |
+ * | toggle_collapse   | patch_attrs × N（set.collapsed）         |
  *
  * **不**直接 apply；调用方须下发 sink / RS。
  */
@@ -170,19 +170,43 @@ export function structureIntentToOps(
       }));
     }
     case 'toggle_collapse': {
+      if (
+        intent.collapsed !== undefined &&
+        intent.collapsedByBlock !== undefined
+      ) {
+        throw new Error(
+          'structureIntentToOps：toggle_collapse 不可同时提供 collapsed 与 collapsedByBlock'
+        );
+      }
       return intent.blockIds.map((id) => {
         let collapsed: boolean;
         if (intent.collapsed !== undefined) {
           collapsed = intent.collapsed;
+        } else if (intent.collapsedByBlock !== undefined) {
+          if (
+            !Object.prototype.hasOwnProperty.call(
+              intent.collapsedByBlock,
+              id
+            ) ||
+            typeof intent.collapsedByBlock[id] !== 'boolean'
+          ) {
+            throw new Error(
+              `structureIntentToOps：collapsedByBlock 缺少 ${id} 的布尔目标态`
+            );
+          }
+          collapsed = intent.collapsedByBlock[id];
         } else if (options.resolveCollapsed) {
           collapsed = options.resolveCollapsed(id);
         } else {
-          collapsed = true;
+          throw new Error(
+            `structureIntentToOps：toggle_collapse 缺少 ${id} 的目标态；请提供 collapsed、collapsedByBlock 或 options.resolveCollapsed`
+          );
         }
         return {
-          op: 'update_props' as const,
+          op: 'patch_attrs' as const,
           id,
-          props: collabPropsWithAttrs({ collapsed }),
+          set: { collapsed },
+          remove: [],
         };
       });
     }

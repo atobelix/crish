@@ -77,7 +77,7 @@ describe('Unit 7.3: IME 协同对抗与并发 CRDT 极限实证', () => {
     expect(countUnicodeScalars(initialFullText)).toBeGreaterThan(0);
 
     // 2. 本地触发 IME compositionstart（光标在 prefixText 之后）
-    patchBuffer.beginComposition(ACTIVE_BLOCK_ID);
+    patchBuffer.beginComposition(ACTIVE_BLOCK_ID, 'doc-collab-1');
     pinRegistry.pin(ACTIVE_BLOCK_ID);
     imeMachine.startComposition(ACTIVE_BLOCK_ID);
 

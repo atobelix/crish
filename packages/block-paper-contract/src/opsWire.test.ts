@@ -66,6 +66,12 @@ describe('opsWire · 形状守卫与字段齐全', () => {
       props: { attrs: { collapsed: true } },
     },
     {
+      op: 'patch_attrs',
+      id: SAMPLE_ID,
+      set: { collapsed: true },
+      remove: ['legacy_key'],
+    },
+    {
       op: 'text_edit',
       id: SAMPLE_ID,
       start: 0,
@@ -97,6 +103,28 @@ describe('opsWire · 形状守卫与字段齐全', () => {
       false
     );
     expect(isCollabOpWire({ op: 'delete' })).toBe(false);
+    expect(
+      isCollabOpWire({
+        op: 'patch_attrs',
+        id: SAMPLE_ID,
+        remove: [],
+      })
+    ).toBe(false);
+    expect(
+      isCollabOpWire({
+        op: 'patch_attrs',
+        id: SAMPLE_ID,
+        set: {},
+      })
+    ).toBe(false);
+    expect(
+      isCollabOpWire({
+        op: 'patch_attrs',
+        id: SAMPLE_ID,
+        set: { collapsed: true },
+        remove: [1],
+      })
+    ).toBe(false);
     expect(
       isCollabOpWire({
         op: 'insert',

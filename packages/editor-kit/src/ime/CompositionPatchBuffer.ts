@@ -9,7 +9,11 @@
  *   交由上层宿主通过坐标 Mapping 增量合入，彻底消除并发协同吞字与光标跳跃。
  */
 
-import type { BlockId, ProjectionDiff } from '@crish/block-paper-contract';
+import type {
+  BlockId,
+  DocId,
+  ProjectionDiff,
+} from '@crish/block-paper-contract';
 
 /** 暂存补丁类型 */
 export type BufferedPatchType = 'text_edit' | 'structure';
@@ -43,6 +47,7 @@ export type PatchInterceptResult = {
  */
 export class CompositionPatchBuffer {
   private activeBlockId: BlockId | null = null;
+  private activeDocId: DocId | null = null;
   private isComposing = false;
   private patchQueue: BufferedPatch[] = [];
 
@@ -50,16 +55,22 @@ export class CompositionPatchBuffer {
    * 开始 IME 组合态合成会话。
    *
    * @param blockId 当前正在输入的块 ID
+   * @param docId 当前块所属文档 ID；块 ID 只保证文档内稳定，因此必须同时绑定文档
    */
-  beginComposition(blockId: BlockId): void {
-    if (!blockId) {
+  beginComposition(blockId: BlockId, docId: DocId): void {
+    if (!blockId || !docId) {
       throw new Error(
-        '[CompositionPatchBuffer] beginComposition: blockId 不可为空'
+        '[CompositionPatchBuffer] beginComposition: blockId 与 docId 不可为空'
+      );
+    }
+    if (this.isComposing) {
+      throw new Error(
+        `[CompositionPatchBuffer] beginComposition: 文档 ${this.activeDocId} 的块 ${this.activeBlockId} 仍在合成`
       );
     }
     this.activeBlockId = blockId;
+    this.activeDocId = docId;
     this.isComposing = true;
-    this.patchQueue = [];
   }
 
   /**
@@ -68,11 +79,15 @@ export class CompositionPatchBuffer {
    * @returns 暂存的补丁列表（按到达时序排列）
    */
   endComposition(): BufferedPatch[] {
-    this.isComposing = false;
-    this.activeBlockId = null;
-    const flushed = [...this.patchQueue];
-    this.patchQueue = [];
-    return flushed;
+    return this.closeComposition();
+  }
+
+  /**
+   * 取消本地合成并返回期间暂存的远端补丁。
+   * 取消只丢弃本地预编辑；远端补丁仍须由宿主按序合入。
+   */
+  cancelComposition(): BufferedPatch[] {
+    return this.closeComposition();
   }
 
   /**
@@ -96,6 +111,11 @@ export class CompositionPatchBuffer {
     return this.activeBlockId;
   }
 
+  /** 获取当前合成块所属文档 ID；未合成时返回 null。 */
+  getActiveDocId(): DocId | null {
+    return this.activeDocId;
+  }
+
   /**
    * 只读窥视当前暂存队列长度。
    */
@@ -111,12 +131,10 @@ export class CompositionPatchBuffer {
   }
 
   /**
-   * 重置/清空缓冲区。
+   * 结束当前会话并交还暂存补丁。调用方需要按序处理返回值。
    */
-  clear(): void {
-    this.isComposing = false;
-    this.activeBlockId = null;
-    this.patchQueue = [];
+  clear(): BufferedPatch[] {
+    return this.closeComposition();
   }
 
   /**
@@ -127,11 +145,19 @@ export class CompositionPatchBuffer {
    * @param diff 远端或协同引擎派发的 ProjectionDiff
    */
   intercept(diff: ProjectionDiff): PatchInterceptResult {
-    if (!this.isComposing || !this.activeBlockId) {
+    if (!this.isComposing || !this.activeBlockId || !this.activeDocId) {
       return {
         passThrough: true,
         buffered: false,
         reason: 'IME 处于 idle 态，直接放行',
+      };
+    }
+
+    if (diff.docId !== this.activeDocId) {
+      return {
+        passThrough: true,
+        buffered: false,
+        reason: `异文档操作（当前合成文档 ${this.activeDocId}），直接放行`,
       };
     }
 
@@ -174,5 +200,14 @@ export class CompositionPatchBuffer {
       buffered: false,
       reason: `异块操作（未触及当前合成块 ${currentActive}），直接放行`,
     };
+  }
+
+  private closeComposition(): BufferedPatch[] {
+    this.isComposing = false;
+    this.activeBlockId = null;
+    this.activeDocId = null;
+    const flushed = this.patchQueue;
+    this.patchQueue = [];
+    return flushed;
   }
 }

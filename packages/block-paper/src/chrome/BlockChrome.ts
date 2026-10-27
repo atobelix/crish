@@ -232,7 +232,7 @@ export class BlockChromeModel {
    * - 允许单焦点块折叠（无需多选抬升）
    * - 仍拒绝完全无目标（empty_selection）
    *
-   * @param collapsed 强制目标态；缺省 = 逐块 toggle
+   * @param collapsed 强制目标态；缺省 = 按本地状态逐块 toggle
    */
   requestToggleCollapse(
     collapsed?: boolean,
@@ -250,14 +250,30 @@ export class BlockChromeModel {
       );
     }
 
-    const intent = buildToggleCollapseIntent({
-      blockIds: ids,
-      origin: options.origin ?? 'chrome',
-      createIntentId: options.createIntentId ?? this.createIntentId,
-      ...(collapsed !== undefined ? { collapsed } : {}),
-    });
+    const intent =
+      collapsed === undefined
+        ? buildToggleCollapseIntent({
+            blockIds: ids,
+            origin: options.origin ?? 'chrome',
+            createIntentId: options.createIntentId ?? this.createIntentId,
+            collapsedByBlock: Object.fromEntries(
+              ids.map((id) => [id, !this.collapsed.has(id)])
+            ),
+          })
+        : buildToggleCollapseIntent({
+            blockIds: ids,
+            origin: options.origin ?? 'chrome',
+            createIntentId: options.createIntentId ?? this.createIntentId,
+            collapsed,
+          });
 
-    applyLocalCollapse(this.collapsed, ids, collapsed);
+    if (collapsed === undefined) {
+      for (const id of ids) {
+        applyLocalCollapse(this.collapsed, [id], !this.collapsed.has(id));
+      }
+    } else {
+      applyLocalCollapse(this.collapsed, ids, collapsed);
+    }
     return { ok: true, intent, snapshot: this.getSnapshot() };
   }
 

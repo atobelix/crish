@@ -125,7 +125,7 @@ describe('structureIntentToOps · 四类结构 Intent', () => {
     expectAllWire(ops);
   });
 
-  it('toggle_collapse → update_props attrs.collapsed', () => {
+  it('toggle_collapse → patch_attrs collapsed', () => {
     const forced = buildToggleCollapseIntent({
       blockIds: [ID_A],
       collapsed: false,
@@ -133,9 +133,10 @@ describe('structureIntentToOps · 四类结构 Intent', () => {
     });
     expect(structureIntentToOps(forced)).toEqual([
       {
-        op: 'update_props',
+        op: 'patch_attrs',
         id: ID_A,
-        props: { attrs: { collapsed: false } },
+        set: { collapsed: false },
+        remove: [],
       },
     ]);
 
@@ -148,17 +149,49 @@ describe('structureIntentToOps · 四类结构 Intent', () => {
     });
     expect(ops).toEqual([
       {
-        op: 'update_props',
+        op: 'patch_attrs',
         id: ID_A,
-        props: { attrs: { collapsed: false } },
+        set: { collapsed: false },
+        remove: [],
       },
       {
-        op: 'update_props',
+        op: 'patch_attrs',
         id: ID_B,
-        props: { attrs: { collapsed: true } },
+        set: { collapsed: true },
+        remove: [],
       },
     ]);
     expectAllWire(ops);
+  });
+
+  it('逐块 toggle 目标态可展开到 wire；缺少目标态时拒绝转换', () => {
+    const mixed = buildToggleCollapseIntent({
+      blockIds: [ID_A, ID_B],
+      collapsedByBlock: { [ID_A]: false, [ID_B]: true },
+      createIntentId: () => 'si-mixed-toggle',
+    });
+    const ops = structureIntentToOps(mixed);
+    expect(ops).toEqual([
+      {
+        op: 'patch_attrs',
+        id: ID_A,
+        set: { collapsed: false },
+        remove: [],
+      },
+      {
+        op: 'patch_attrs',
+        id: ID_B,
+        set: { collapsed: true },
+        remove: [],
+      },
+    ]);
+    expectAllWire(ops);
+
+    const unresolved = buildToggleCollapseIntent({
+      blockIds: [ID_A],
+      createIntentId: () => 'si-unresolved-toggle',
+    });
+    expect(() => structureIntentToOps(unresolved)).toThrow(/缺少 .* 的目标态/);
   });
 });
 
@@ -249,7 +282,7 @@ describe('Intent → wire JSON 往返（双向）', () => {
     expect(json).toContain('"op":"delete"');
     expect(json).toContain('"op":"move"');
     expect(json).toContain('"new_parent"');
-    expect(json).toContain('"op":"update_props"');
+    expect(json).toContain('"op":"patch_attrs"');
     expect(json).toContain('"op":"insert"');
 
     const back = collabOpsFromJson(json);

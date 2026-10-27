@@ -409,6 +409,7 @@ async function detectClaude(
   opts: Required<
     Pick<DetectExternalSessionsOptions, 'liteReadBytes' | 'maxFileSizeBytes'>
   >,
+  errors: string[],
   warnings: string[]
 ): Promise<ExternalSessionMeta[]> {
   const out: ExternalSessionMeta[] = [];
@@ -418,7 +419,7 @@ async function detectClaude(
   try {
     projectDirs = await fs.listDir(projectsRoot, allow);
   } catch {
-    warnings.push(`Claude projects dir not readable: ${projectsRoot}`);
+    errors.push(`Claude projects dir not readable: ${projectsRoot}`);
     return out;
   }
 
@@ -485,6 +486,7 @@ async function detectCodex(
   opts: Required<
     Pick<DetectExternalSessionsOptions, 'liteReadBytes' | 'maxFileSizeBytes'>
   >,
+  errors: string[],
   warnings: string[]
 ): Promise<ExternalSessionMeta[]> {
   const out: ExternalSessionMeta[] = [];
@@ -494,7 +496,7 @@ async function detectCodex(
   try {
     years = await fs.listDir(sessionsRoot, allow);
   } catch {
-    warnings.push(`Codex sessions dir not readable: ${sessionsRoot}`);
+    errors.push(`Codex sessions dir not readable: ${sessionsRoot}`);
     return out;
   }
 
@@ -504,6 +506,7 @@ async function detectCodex(
     try {
       months = await fs.listDir(year.path, allow);
     } catch {
+      warnings.push(`Skip unreadable Codex year directory: ${year.path}`);
       continue;
     }
     for (const month of months) {
@@ -512,6 +515,7 @@ async function detectCodex(
       try {
         days = await fs.listDir(month.path, allow);
       } catch {
+        warnings.push(`Skip unreadable Codex month directory: ${month.path}`);
         continue;
       }
       for (const day of days) {
@@ -520,6 +524,7 @@ async function detectCodex(
         try {
           files = await fs.listDir(day.path, allow);
         } catch {
+          warnings.push(`Skip unreadable Codex day directory: ${day.path}`);
           continue;
         }
         for (const f of files) {
@@ -600,6 +605,7 @@ export async function detectExternalSessions(
   } = options;
 
   const roots = resolveDefaultImportRoots(env);
+  const errors: string[] = [];
   const warnings: string[] = [];
   const sessions: ExternalSessionMeta[] = [];
   const liteOpts = { liteReadBytes, maxFileSizeBytes };
@@ -608,10 +614,14 @@ export async function detectExternalSessions(
   );
 
   if (want.has('claude-code')) {
-    sessions.push(...(await detectClaude(fs, roots, liteOpts, warnings)));
+    sessions.push(
+      ...(await detectClaude(fs, roots, liteOpts, errors, warnings))
+    );
   }
   if (want.has('codex')) {
-    sessions.push(...(await detectCodex(fs, roots, liteOpts, warnings)));
+    sessions.push(
+      ...(await detectCodex(fs, roots, liteOpts, errors, warnings))
+    );
   }
 
   sessions.sort(
@@ -622,6 +632,7 @@ export async function detectExternalSessions(
   return {
     roots,
     sessions: sessions.slice(0, Math.max(1, limit)),
+    errors,
     warnings,
   };
 }
