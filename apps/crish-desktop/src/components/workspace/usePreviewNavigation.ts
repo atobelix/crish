@@ -1,12 +1,17 @@
-import { toast } from '../../services/toast/ToastContext';
 /**
- * 内置预览浏览器导航 hook：导航栈 + 历史/书签状态 + 加载超时 + 外部事件。
- * 收拢 PreviewCard 的全部状态副作用；渲染层（工具栏 / 历史面板 / 内容区）
- * 只消费返回值。
+ * apps/crish-desktop/src/components/workspace/usePreviewNavigation.ts
  *
- * 反馈约定：导航 / 开面板成功静默；仅错误 toast。
+ * 内置预览浏览器导航 hook：原生子 Webview 驱动 + 导航栈 + 历史/书签状态 + 外部事件。
+ * 收拢 PreviewCard 的全部状态副作用；渲染层（工具栏 / 历史面板 / 内容区）只消费返回值。
+ *
+ * 核心升级：
+ * 1. 彻底移除 safeIframeSrc 对代理端点的依赖，activeUrl 100% 保持公网原始 URL；
+ * 2. 导航指令直接由 browserWebviewNavigate / browserWebviewAction 驱动原生 Webview；
+ * 3. 监听 onNativeBrowserNavigationState 事件实现响应式状态同步（SSOT 原则）。
  */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from '../../services/toast/ToastContext';
 import {
   canOpenExternally,
   clearPreviewHistory,
@@ -24,7 +29,12 @@ import {
   togglePreviewBookmark,
   validateBrowseUrl,
 } from '../../api/previewBrowserStore';
-import { LOAD_TIMEOUT_MS, safeIframeSrc } from './previewCardLib';
+import {
+  browserWebviewAction,
+  browserWebviewNavigate,
+  onNativeBrowserNavigationState,
+} from '../../api/nativeBrowserApi';
+import { LOAD_TIMEOUT_MS } from './previewCardLib';
 import {
   shouldConsumeScopedEvent,
   useLeafScope,
@@ -32,11 +42,13 @@ import {
 } from '../../contexts/LeafScopeContext';
 
 export type UsePreviewNavigationOptions = {
+  tabId?: string | null;
   leafId?: string | null;
   sessionId?: string | null;
 };
 
 export type UsePreviewNavigationResult = {
+  tabId: string;
   urlInput: string;
   setUrlInput: (v: string) => void;
   activeUrl: string;
@@ -62,6 +74,7 @@ export type UsePreviewNavigationResult = {
   goBack: () => void;
   goForward: () => void;
   reload: () => void;
+  stop: () => void;
   goHome: () => void;
   openExternal: () => void;
   onBookmark: () => void;
@@ -81,6 +94,12 @@ export function usePreviewNavigation(
   const leafScope = useLeafScope();
   const scopedSessionId = useScopedSessionId(opts.sessionId);
   const effectiveLeafId = opts.leafId ?? leafScope.leafId;
+  const effectiveTabId = useMemo(() => {
+    if (opts.tabId) return opts.tabId;
+    if (effectiveLeafId) return `browser-${effectiveLeafId}`;
+    return 'browser-default';
+  }, [opts.tabId, effectiveLeafId]);
+
   const scopeTargetRef = useRef({
     leafId: effectiveLeafId,
     sessionId: scopedSessionId,
@@ -119,6 +138,10 @@ export function usePreviewNavigation(
     return u && !isAboutBlank(u) ? [u] : [];
   });
   const [stackIdx, setStackIdx] = useState(0);
+  const [nativeCanBack, setNativeCanBack] = useState<boolean | null>(null);
+  const [nativeCanForward, setNativeCanForward] = useState<boolean | null>(
+    null
+  );
   const [loadError, setLoadError] = useState(false);
   const [loading, setLoading] = useState(false);
   const [bookmarked, setBookmarked] = useState(() =>
@@ -137,17 +160,22 @@ export function usePreviewNavigation(
 
   const blank = isAboutBlank(activeUrl);
   const canEmbed = isEmbeddablePreviewUrl(activeUrl);
-  const frameSrc = useMemo(() => safeIframeSrc(activeUrl), [activeUrl]);
+  // 彻底移除代理前缀，原生 Webview 与 frameSrc 100% 直连目标 URL
+  const frameSrc = useMemo(
+    () => (isAboutBlank(activeUrl) ? null : activeUrl),
+    [activeUrl]
+  );
   const showFrame = Boolean(frameSrc) && !loadError;
-  const canBack = stackIdx > 0 && stack.length > 0;
-  const canForward = stackIdx < stack.length - 1;
+  const canBack =
+    nativeCanBack !== null ? nativeCanBack : stackIdx > 0 && stack.length > 0;
+  const canForward =
+    nativeCanForward !== null ? nativeCanForward : stackIdx < stack.length - 1;
   const canExternal = canOpenExternally(activeUrl);
   const canBookmark = !blank && Boolean(activeUrl);
 
   const navigate = useCallback(
     (raw: string, fromExternal = false) => {
       const checked = validateBrowseUrl(raw);
-      // 错误才 toast；成功路径静默。用类型守卫收窄 reason / url。
       if (!isBrowseUrlOk(checked)) {
         toastRef.current(checked.reason);
         return;
@@ -160,9 +188,16 @@ export function usePreviewNavigation(
       setLoading(!nextBlank && isEmbeddablePreviewUrl(url));
       setBookmarked(isPreviewBookmarked(url));
       emitScopedUrlChange(url);
-      // 外部事件已由 setPreviewUrl 广播：只同步本地 UI，禁止再 setPreviewUrl，否则事件环栈溢出
+
+      // 下发原生 Webview 导航命令
+      browserWebviewNavigate(effectiveTabId, url).catch((err) => {
+        console.warn(
+          `[usePreviewNavigation] browserWebviewNavigate [${effectiveTabId}] error:`,
+          err
+        );
+      });
+
       if (fromExternal) return;
-      // 内部导航静默持久化，避免无目标 crish-preview-url 广播劫持其他分屏预览实例
       setPreviewUrl(url, { silent: true });
       setStack((prev) => {
         const base = prev.slice(0, stackIdx + 1);
@@ -172,12 +207,38 @@ export function usePreviewNavigation(
         return next;
       });
     },
-    [emitScopedUrlChange, stackIdx]
+    [effectiveTabId, emitScopedUrlChange, stackIdx]
   );
 
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
 
+  // 监听原生 Webview 广播的细粒度导航状态事件
+  useEffect(() => {
+    const unsub = onNativeBrowserNavigationState((payload) => {
+      if (payload.tabId !== effectiveTabId) return;
+
+      const nextUrl = payload.url;
+      const nextBlank = isAboutBlank(nextUrl);
+
+      setActiveUrl((prev) => (prev === nextUrl ? prev : nextUrl));
+      setUrlInput(nextBlank ? '' : nextUrl);
+      setLoading(payload.isLoading);
+      setNativeCanBack(payload.canGoBack);
+      setNativeCanForward(payload.canGoForward);
+      setBookmarked(isPreviewBookmarked(nextUrl));
+      setLoadError(false);
+
+      if (!nextBlank) {
+        setPreviewUrl(nextUrl, { silent: true });
+        emitScopedUrlChange(nextUrl);
+      }
+    });
+
+    return unsub;
+  }, [effectiveTabId, emitScopedUrlChange]);
+
+  // 外部全局事件监听
   useEffect(() => {
     const onExt = (ev: Event) => {
       const detail = (
@@ -192,7 +253,6 @@ export function usePreviewNavigation(
       }
       const url = detail?.url;
       if (typeof url !== 'string' || !url) return;
-      // navigate 内 validateBrowseUrl：外部广播同样拒绝危险 scheme
       navigateRef.current(url, true);
     };
     const onBooks = () => setHistTick((n) => n + 1);
@@ -207,7 +267,7 @@ export function usePreviewNavigation(
     };
   }, []);
 
-  // 加载超时：只收 loading 态，不 toast（跨域/慢站常见，状态条已有「加载中」）
+  // 加载超时保护
   useEffect(() => {
     if (!loading) return;
     const t = window.setTimeout(() => {
@@ -246,7 +306,6 @@ export function usePreviewNavigation(
   }, [showHist]);
 
   const applyStackUrl = (url: string, idx: number) => {
-    // 后退/前进也走校验，避免栈内脏 URL 写入 iframe / 存储
     const checked = validateBrowseUrl(url);
     if (!isBrowseUrlOk(checked)) {
       toastRef.current(checked.reason);
@@ -262,50 +321,83 @@ export function usePreviewNavigation(
     setLoadError(false);
     setLoading(!nextBlank && isEmbeddablePreviewUrl(safe));
     setBookmarked(isPreviewBookmarked(safe));
+
+    browserWebviewNavigate(effectiveTabId, safe).catch((err) => {
+      console.warn(
+        `[usePreviewNavigation] applyStackUrl [${effectiveTabId}] error:`,
+        err
+      );
+    });
   };
 
-  const goBack = () => {
+  const goBack = useCallback(() => {
     if (!canBack) return;
-    const i = stackIdx - 1;
-    const url = stack[i];
-    if (!url) return;
-    applyStackUrl(url, i);
-  };
-
-  const goForward = () => {
-    if (!canForward) return;
-    const i = stackIdx + 1;
-    const url = stack[i];
-    if (!url) return;
-    applyStackUrl(url, i);
-  };
-
-  const reload = () => {
-    if (isAboutBlank(activeUrl)) return;
-    const src = safeIframeSrc(activeUrl);
-    if (!src) {
-      toastRef.current('当前地址无法刷新');
-      return;
+    browserWebviewAction(effectiveTabId, 'back').catch((err) => {
+      console.warn(
+        `[usePreviewNavigation] back [${effectiveTabId}] error:`,
+        err
+      );
+    });
+    if (stackIdx > 0 && stack.length > 0) {
+      const i = stackIdx - 1;
+      const url = stack[i];
+      if (url) applyStackUrl(url, i);
     }
-    const el = iframeRef.current;
+  }, [canBack, effectiveTabId, stackIdx, stack]);
+
+  const goForward = useCallback(() => {
+    if (!canForward) return;
+    browserWebviewAction(effectiveTabId, 'forward').catch((err) => {
+      console.warn(
+        `[usePreviewNavigation] forward [${effectiveTabId}] error:`,
+        err
+      );
+    });
+    if (stackIdx < stack.length - 1) {
+      const i = stackIdx + 1;
+      const url = stack[i];
+      if (url) applyStackUrl(url, i);
+    }
+  }, [canForward, effectiveTabId, stackIdx, stack]);
+
+  const reload = useCallback(() => {
+    if (isAboutBlank(activeUrl)) return;
     setLoadError(false);
     setLoading(true);
+
+    browserWebviewAction(effectiveTabId, 'reload').catch((err) => {
+      console.warn(
+        `[usePreviewNavigation] reload [${effectiveTabId}] error:`,
+        err
+      );
+    });
+
+    const el = iframeRef.current;
     if (el) {
       try {
-        el.src = src;
+        el.src = activeUrl;
       } catch {
         setLoadError(true);
         setLoading(false);
-        toastRef.current('页面无法刷新');
       }
     }
-  };
+  }, [activeUrl, effectiveTabId]);
 
-  const goHome = () => {
+  const stop = useCallback(() => {
+    setLoading(false);
+    browserWebviewAction(effectiveTabId, 'stop').catch((err) => {
+      console.warn(
+        `[usePreviewNavigation] stop [${effectiveTabId}] error:`,
+        err
+      );
+    });
+  }, [effectiveTabId]);
+
+  const goHome = useCallback(() => {
     navigate('about:blank');
-  };
+  }, [navigate]);
 
-  const openExternal = () => {
+  const openExternal = useCallback(() => {
     if (!canOpenExternally(activeUrl)) {
       toastRef.current('当前地址无法在外部打开');
       return;
@@ -313,13 +405,12 @@ export function usePreviewNavigation(
     try {
       const w = window.open(activeUrl, '_blank', 'noopener,noreferrer');
       if (!w) toastRef.current('浏览器拦截了弹窗');
-      // 成功打开：静默
     } catch {
       toastRef.current('无法打开系统浏览器');
     }
-  };
+  }, [activeUrl]);
 
-  const onBookmark = () => {
+  const onBookmark = useCallback(() => {
     if (isAboutBlank(activeUrl) || !activeUrl) {
       toastRef.current('空白页无法加入书签');
       return;
@@ -330,42 +421,47 @@ export function usePreviewNavigation(
     );
     setBookmarked(on);
     setHistTick((n) => n + 1);
-    // 星标高亮即反馈，不 toast
-  };
+  }, [activeUrl]);
 
-  const pickHistory = (u: string) => {
-    navigate(u);
-    setShowHist(false);
-  };
+  const pickHistory = useCallback(
+    (u: string) => {
+      navigate(u);
+      setShowHist(false);
+    },
+    [navigate]
+  );
 
-  const removeBookmarkAt = (url: string) => {
-    removePreviewBookmark(url);
-    setBookmarked(isPreviewBookmarked(activeUrl));
-    setHistTick((n) => n + 1);
-  };
+  const removeBookmarkAt = useCallback(
+    (url: string) => {
+      removePreviewBookmark(url);
+      setBookmarked(isPreviewBookmarked(activeUrl));
+      setHistTick((n) => n + 1);
+    },
+    [activeUrl]
+  );
 
-  const clearHistoryAll = () => {
+  const clearHistoryAll = useCallback(() => {
     clearPreviewHistory();
     setHistTick((n) => n + 1);
-  };
+  }, []);
 
-  const removeHistoryAt = (url: string) => {
+  const removeHistoryAt = useCallback((url: string) => {
     removePreviewHistory(url);
     setHistTick((n) => n + 1);
-  };
+  }, []);
 
-  const onFrameLoad = () => {
+  const onFrameLoad = useCallback(() => {
     setLoading(false);
     setLoadError(false);
-  };
+  }, []);
 
-  const onFrameError = () => {
+  const onFrameError = useCallback(() => {
     setLoading(false);
     setLoadError(true);
-    // 内嵌失败用状态条 + 空态展示；不 toast（常见于 XFO，避免吵）
-  };
+  }, []);
 
   return {
+    tabId: effectiveTabId,
     urlInput,
     setUrlInput,
     activeUrl,
@@ -391,6 +487,7 @@ export function usePreviewNavigation(
     goBack,
     goForward,
     reload,
+    stop,
     goHome,
     openExternal,
     onBookmark,

@@ -1,0 +1,50 @@
+/**
+ * apps/crish-desktop/src/components/workspace/NativeBrowserSurface.module.css
+ *
+ * 原生子 Webview 挖洞占位容器样式规约
+ */
+
+.nativeHole {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+
+  /* 核心几何与渲染守卫：严格限制布局与重绘范围，切断与外层 DOM 树的样式重排联动 */
+  contain: strict;
+
+  /* 必须保证背景 100% 透明，由底层的原生 Webview 呈现内容 */
+  background: transparent;
+
+  /* 禁止占用鼠标命中，鼠标事件直接由底层的原生子 HWND 接收 */
+  pointer-events: none;
+
+  /* 消除一切外边距与内边距漂移 */
+  margin: 0;
+  padding: 0;
+  border: none;
+  box-sizing: border-box;
+}
+
+/* 模态框展开时的平滑半透明毛玻璃占位底板 (Airspace 避让态) */
+.scrimPlaceholder {
+  position: absolute;
+  inset: 0;
+  background: var(--surface-translucent, hsla(0 0% 15% / 0.45));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  pointer-events: none;
+  animation: fadeIn 150ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

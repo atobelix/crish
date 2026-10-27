@@ -17,6 +17,7 @@ import {
   clearActivePortCache,
   fetchActiveDevPorts,
   useActiveDevPorts,
+  inferServiceInfo,
 } from './activePortDetector';
 
 describe('activePortDetector 活跃端口探测引擎', () => {
@@ -165,6 +166,30 @@ describe('activePortDetector 活跃端口探测引擎', () => {
       });
 
       expect(result.current.ports).toEqual([3000, 5173]);
+      expect(result.current.services.length).toBe(2);
+      expect(result.current.services[0].port).toBe(3000);
+      expect(result.current.services[1].port).toBe(5173);
+    });
+  });
+
+  describe('4. inferServiceInfo 服务元数据推断', () => {
+    it('正确推断常用端口的服务名称与标签', () => {
+      const vite = inferServiceInfo(5173);
+      expect(vite.name).toContain('Vite');
+      expect(vite.tag).toContain('Vite');
+
+      const next = inferServiceInfo(3000);
+      expect(next.name).toContain('Web App');
+      expect(next.tag).toContain('Next.js');
+
+      const fastapi = inferServiceInfo(8000);
+      expect(fastapi.name).toContain('Backend API');
+
+      const streamlit = inferServiceInfo(8501);
+      expect(streamlit.name).toContain('Streamlit');
+
+      const custom = inferServiceInfo(9999);
+      expect(custom.name).toBe('Local Service :9999');
     });
   });
 });
