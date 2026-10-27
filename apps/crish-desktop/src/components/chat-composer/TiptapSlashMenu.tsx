@@ -28,40 +28,118 @@ import {
   type SafeAnchorRect,
 } from './safeCursorAnchor';
 import { Button } from '../ui';
-import { AppIcon, type IconName } from '../ui/icons';
+import { AppIcon, ICON_NAMES, type IconName } from '../ui/icons';
 
 export { isValidClientRect } from './safeCursorAnchor';
 
-/** 斜杠命令 iconName → AppIcon IconName（键沿用历史 PascalCase 语义名） */
+/** 斜杠命令 iconName → AppIcon IconName（兼容小写、kebab-case 与历史 PascalCase 语义名） */
 const ICON_MAP: Record<string, IconName> = {
+  target: 'target',
   Target: 'target',
+  bookopen: 'book-open',
+  'book-open': 'book-open',
   BookOpen: 'book-open',
+  calendar: 'calendar',
   Calendar: 'calendar',
+  users: 'users',
   Users: 'users',
+  globe: 'globe',
   Globe: 'globe',
+  play: 'play',
+  Play: 'play',
+  playcircle: 'play-circle',
+  'play-circle': 'play-circle',
   PlayCircle: 'play-circle',
+  sparkles: 'sparkles',
   Sparkles: 'sparkles',
+  compress: 'shrink',
   Compress: 'shrink',
+  shrink: 'shrink',
   Shrink: 'shrink',
+  minimize: 'minimize',
+  minimize2: 'minimize',
   Minimize2: 'minimize',
+  atsign: 'at-sign',
+  'at-sign': 'at-sign',
   AtSign: 'at-sign',
+  filetext: 'file-text',
+  'file-text': 'file-text',
   FileText: 'file-text',
+  bot: 'bot',
   Bot: 'bot',
+  search: 'search',
   Search: 'search',
+  eraser: 'eraser',
   Eraser: 'eraser',
+  terminal: 'terminal',
   Terminal: 'terminal',
+  helpcircle: 'help-circle',
+  'help-circle': 'help-circle',
   HelpCircle: 'help-circle',
+  square: 'square',
   Square: 'square',
+  sliders: 'sliders',
   Sliders: 'sliders',
+  filecode: 'file-code',
+  'file-code': 'file-code',
   FileCode: 'file-code',
+  shield: 'shield',
   Shield: 'shield',
+  clock: 'clock',
   Clock: 'clock',
+  flame: 'zap',
   Flame: 'zap',
+  zap: 'zap',
+  Zap: 'zap',
+  compass: 'globe',
   Compass: 'globe',
+  settings: 'settings',
   Settings: 'settings',
+  'cancel-circle': 'x-circle',
+  cancelcircle: 'x-circle',
+  CancelCircle: 'x-circle',
+  'x-circle': 'x-circle',
   blocks: 'blocks',
   Blocks: 'blocks',
 };
+
+/**
+ * 语义化图标匹配：优先 item.iconName，次查 command ID/Title 专属特征名，终极按技能统一符号兜底。
+ * 每一个功能均对应一种符号，绝不无故退避为 help-circle 问号。
+ */
+export function resolveSlashCommandIcon(
+  item: SlashCommandItem,
+  isSkill: boolean
+): IconName {
+  if (isSkill) return 'blocks';
+
+  const raw = item.iconName;
+  if (raw) {
+    if (ICON_MAP[raw]) return ICON_MAP[raw];
+    const lower = raw.toLowerCase();
+    if (ICON_MAP[lower]) return ICON_MAP[lower];
+    if ((ICON_NAMES as readonly string[]).includes(raw)) {
+      return raw as IconName;
+    }
+  }
+
+  // 专属特征名 / ID 匹配（保证每一个功能均有专属符号）
+  const key = (item.id || item.title || '').toLowerCase().replace(/^[/#]/, '');
+  if (key.includes('goal')) return 'target';
+  if (key.includes('compact')) return 'shrink';
+  if (key.includes('schedule') || key.includes('cron')) return 'clock';
+  if (key.includes('browser') || key.includes('web')) return 'globe';
+  if (key.includes('teamwork') || key.includes('team')) return 'users';
+  if (key.includes('learn')) return 'book-open';
+  if (key.includes('grill')) return 'zap';
+  if (key.includes('clear')) return 'eraser';
+  if (key.includes('stop')) return 'x-circle';
+  if (key.includes('settings')) return 'settings';
+  if (key.includes('simulate')) return 'play';
+  if (key.includes('skill')) return 'blocks';
+
+  return 'sparkles';
+}
 
 export interface SlashMenuRefHandle {
   onKeyDown: (props: { event: KeyboardEvent }) => boolean;
@@ -254,9 +332,7 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
         item.id.includes('skill') ||
         item.title.startsWith('/skill:') ||
         item.iconName === 'blocks';
-      const iconName: IconName =
-        (item.iconName && ICON_MAP[item.iconName]) ||
-        (isSkill ? 'blocks' : 'help-circle');
+      const iconName: IconName = resolveSlashCommandIcon(item, isSkill);
       const isActive = index === selectedIndex;
 
       return (
@@ -284,7 +360,7 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
             <span className={styles.itemTitle}>
               {isGoalCommand(item.id) || isGoalCommand(item.title)
                 ? goalCommandDisplayLabel()
-                : item.title}
+                : item.title.replace(/^\/+/, '')}
             </span>
             {item.description && (
               <span className={styles.itemDescription}>{item.description}</span>
@@ -305,6 +381,10 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
             className={styles.popoverContent}
             style={{
               width:
+                anchor && anchor.width >= 48
+                  ? `${Math.round(anchor.width)}px`
+                  : undefined,
+              maxWidth:
                 anchor && anchor.width >= 48
                   ? `${Math.round(anchor.width)}px`
                   : undefined,

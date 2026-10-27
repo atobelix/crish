@@ -6,6 +6,7 @@ import {
   TiptapSlashMenu,
   isValidClientRect,
   isCursorVisibleInField,
+  resolveSlashCommandIcon,
 } from './TiptapSlashMenu';
 import { measureCursorLineBox } from './safeCursorAnchor';
 
@@ -245,5 +246,72 @@ describe('CJK IME Composition State Anti-Hijack Assertion (WO-19)', () => {
     const handledEsc = menuRef.onKeyDown({ event: normalEscEvent });
     expect(handledEsc).toBe(true);
     expect(onClose).toHaveBeenCalled();
+  });
+});
+describe('resolveSlashCommandIcon 语义符号精确映射与非退避契约', () => {
+  it('所有核心系统指令均映射到专属符号，杜绝退避至问号 help-circle', () => {
+    const commands = [
+      { id: 'goal', title: '/goal', iconName: 'target' },
+      { id: 'compact', title: '/compact', iconName: 'sliders' },
+      { id: 'schedule', title: '/schedule', iconName: 'clock' },
+      { id: 'browser', title: '/browser', iconName: 'compass' },
+      { id: 'teamwork', title: '/teamwork', iconName: 'users' },
+      { id: 'learn', title: '/learn', iconName: 'book-open' },
+      { id: 'grill-me', title: '/grill-me', iconName: 'flame' },
+      { id: 'clear', title: '/clear', iconName: 'eraser' },
+      { id: 'stop', title: '/stop', iconName: 'cancel-circle' },
+      { id: 'settings', title: '/settings', iconName: 'settings' },
+    ];
+    for (const cmd of commands) {
+      const icon = resolveSlashCommandIcon(cmd as any, false);
+      expect(icon).not.toBe('help-circle');
+      expect(typeof icon).toBe('string');
+      expect(icon.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('技能统一映射为 blocks 图标', () => {
+    const skillCmd = { id: 'host-/skill:review', title: '代码审查' };
+    expect(resolveSlashCommandIcon(skillCmd as any, true)).toBe('blocks');
+  });
+});
+
+describe('Composer Card Alignment & Concentric Visual Boundary (Round 3 W1-4)', () => {
+  it('应当接收输入卡片全宽 Rect 并饱满展开，对齐 720px 宽度', () => {
+    const onSelect = vi.fn();
+    const items = [
+      {
+        id: 'clear',
+        title: '/clear',
+        description: '清空会话',
+        command: onSelect,
+      },
+    ];
+    const cardRect = new DOMRect(111, 500, 720, 52);
+
+    const { container } = render(
+      <TiptapSlashMenu
+        isOpen={true}
+        items={items}
+        command={onSelect}
+        onClose={vi.fn()}
+        clientRect={cardRect}
+      />
+    );
+
+    // 虚拟锚点定位验证
+    const anchorEl = container.querySelector(
+      '[style*="position: fixed"]'
+    ) as HTMLElement | null;
+    expect(anchorEl).toBeTruthy();
+    expect(anchorEl?.style.left).toBe('111px');
+    expect(anchorEl?.style.width).toBe('720px');
+
+    // Portal 中的浮层验证宽度饱满与列表项
+    const popoverContent = document.body.querySelector(
+      '[class*="popoverContent"]'
+    ) as HTMLElement | null;
+    expect(popoverContent).toBeTruthy();
+    expect(popoverContent?.style.width).toBe('720px');
   });
 });

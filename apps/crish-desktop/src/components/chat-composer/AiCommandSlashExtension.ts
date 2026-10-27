@@ -30,10 +30,10 @@ export function extractEditorScopeTarget(editor: any): {
 export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   {
     id: 'goal',
-    title: '/goal',
+    title: 'goal',
     description: '开启长程自主推进模式，直到彻底达成目标',
     iconName: 'target',
-    keywords: ['goal', '目标', '长程', '推进', 'autonomous'],
+    keywords: ['goal', '/goal', '目标', '长程', '推进', 'autonomous'],
     command: ({ editor, range }: any) => {
       editor
         .chain()
@@ -44,7 +44,7 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
             type: 'mention',
             attrs: {
               id: '/goal',
-              label: '/goal',
+              label: 'goal',
               kind: 'command',
               iconName: 'target',
             },
@@ -56,10 +56,10 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   },
   {
     id: 'compact',
-    title: '/compact',
+    title: 'compact',
     description: '手动触发会话上下文摘要压缩，释放 Token 预算',
     iconName: 'sliders',
-    keywords: ['compact', '压缩', '摘要', 'summarize', 'budget'],
+    keywords: ['compact', '/compact', '压缩', '摘要', 'summarize', 'budget'],
     command: ({ editor, range }: any) => {
       editor
         .chain()
@@ -70,7 +70,7 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
             type: 'mention',
             attrs: {
               id: '/compact',
-              label: '/compact',
+              label: 'compact',
               kind: 'command',
               iconName: 'sliders',
             },
@@ -82,10 +82,10 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   },
   {
     id: 'schedule',
-    title: '/schedule',
+    title: 'schedule',
     description: '安排一次性定时提醒或周期性 Cron 任务',
     iconName: 'clock',
-    keywords: ['schedule', '定时', '计划', 'cron', 'timer'],
+    keywords: ['schedule', '/schedule', '定时', '计划', 'cron', 'timer'],
     command: ({ editor, range }: any) => {
       editor
         .chain()
@@ -96,7 +96,7 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
             type: 'mention',
             attrs: {
               id: '/schedule',
-              label: '/schedule',
+              label: 'schedule',
               kind: 'command',
               iconName: 'clock',
             },
@@ -108,10 +108,10 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   },
   {
     id: 'browser',
-    title: '/browser',
+    title: 'browser',
     description: '唤起内置受管浏览器自动化插件并导航至指定 URL',
     iconName: 'compass',
-    keywords: ['browser', '浏览器', 'web', '网页', 'navigate'],
+    keywords: ['browser', '/browser', '浏览器', 'web', '网页', 'navigate'],
     command: ({ editor, range }: any) => {
       editor
         .chain()
@@ -122,7 +122,7 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
             type: 'mention',
             attrs: {
               id: '/browser',
-              label: '/browser',
+              label: 'browser',
               kind: 'command',
               iconName: 'compass',
             },
@@ -134,10 +134,17 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   },
   {
     id: 'teamwork',
-    title: '/teamwork',
+    title: 'teamwork',
     description: '预览多 Agent 团队并行协同分工与执行流水线',
     iconName: 'users',
-    keywords: ['teamwork', '协同', '多Agent', 'pipeline', 'preview'],
+    keywords: [
+      'teamwork',
+      '/teamwork',
+      '协同',
+      '多Agent',
+      'pipeline',
+      'preview',
+    ],
     command: ({ editor, range }: any) => {
       editor
         .chain()
@@ -148,7 +155,7 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
             type: 'mention',
             attrs: {
               id: '/teamwork',
-              label: '/teamwork',
+              label: 'teamwork',
               kind: 'command',
               iconName: 'users',
             },
@@ -160,10 +167,10 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   },
   {
     id: 'learn',
-    title: '/learn',
+    title: 'learn',
     description: '从当前会话与调试经验中提取长期模式记忆',
     iconName: 'book-open',
-    keywords: ['learn', '记忆', '学习', 'persist', 'memory'],
+    keywords: ['learn', '/learn', '记忆', '学习', 'persist', 'memory'],
     command: ({ editor, range }: any) => {
       editor
         .chain()
@@ -174,7 +181,7 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
             type: 'mention',
             attrs: {
               id: '/learn',
-              label: '/learn',
+              label: 'learn',
               kind: 'command',
               iconName: 'book-open',
             },
@@ -186,10 +193,18 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   },
   {
     id: 'grill-me',
-    title: '/grill-me',
+    title: 'grill-me',
     description: '进入深度交互式方案推演模式，对设计决策进行严格拷问',
     iconName: 'flame',
-    keywords: ['grill', '拷问', '推演', 'interview', 'review'],
+    keywords: [
+      'grill',
+      '/grill-me',
+      'grill-me',
+      '拷问',
+      '推演',
+      'interview',
+      'review',
+    ],
     command: ({ editor, range }: any) => {
       editor
         .chain()
@@ -200,7 +215,7 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
             type: 'mention',
             attrs: {
               id: '/grill-me',
-              label: '/grill-me',
+              label: 'grill-me',
               kind: 'command',
               iconName: 'flame',
             },
@@ -212,10 +227,10 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   },
   {
     id: 'clear',
-    title: '/clear',
+    title: 'clear',
     description: '清空当前会话上下文并重置状态',
     iconName: 'eraser',
-    keywords: ['clear', '清空', '重置', 'reset', 'cls'],
+    keywords: ['clear', '/clear', '清空', '重置', 'reset', 'cls'],
     command: ({ editor, range }: any) => {
       editor.chain().focus().deleteRange(range).run();
       const target = extractEditorScopeTarget(editor);
@@ -224,10 +239,10 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   },
   {
     id: 'stop',
-    title: '/stop',
+    title: 'stop',
     description: '停止当前正在生成的回答或运行中的任务',
     iconName: 'cancel-circle',
-    keywords: ['stop', '停止', '终止', 'cancel', 'abort'],
+    keywords: ['stop', '/stop', '停止', '终止', 'cancel', 'abort'],
     command: ({ editor, range }: any) => {
       editor.chain().focus().deleteRange(range).run();
       const target = extractEditorScopeTarget(editor);
@@ -236,10 +251,17 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   },
   {
     id: 'settings',
-    title: '/settings',
+    title: 'settings',
     description: '打开工作台设置中心（模型、快捷键、插件与通用偏好）',
     iconName: 'settings',
-    keywords: ['settings', '设置', '偏好', 'config', 'preferences'],
+    keywords: [
+      'settings',
+      '/settings',
+      '设置',
+      '偏好',
+      'config',
+      'preferences',
+    ],
     command: ({ editor, range }: any) => {
       editor.chain().focus().deleteRange(range).run();
       openSettings();

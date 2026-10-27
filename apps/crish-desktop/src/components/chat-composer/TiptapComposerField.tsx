@@ -271,10 +271,13 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
         const isSkill = Boolean(
           c.skillName || c.cmd.startsWith('/skill:') || c.filePath
         );
-        const skillName =
+        const rawName = c.cmd.replace(/^\/+/, '');
+        const cleanName =
           c.skillName ||
-          (c.cmd.startsWith('/skill:') ? c.cmd.slice('/skill:'.length) : c.cmd);
-        const title = c.skillName ? c.skillName : c.cmd;
+          (c.cmd.startsWith('/skill:')
+            ? c.cmd.slice('/skill:'.length)
+            : rawName);
+        const title = c.skillName ? c.skillName : cleanName;
         const skillPath = c.filePath || '';
 
         return {
@@ -284,7 +287,7 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
           iconName: isSkill
             ? 'blocks'
             : (HOST_SLASH_ICONS[c.cmd] ?? HOST_SLASH_ICONS['/skill']),
-          keywords: [c.cmd.replace(/^\/+/, ''), skillName],
+          keywords: [rawName, cleanName, c.cmd],
           category: isSkill ? 'skill' : 'system',
           command: ({ editor, range }) => {
             if (isSkill) {
@@ -295,8 +298,8 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
                   {
                     type: 'mention',
                     attrs: {
-                      id: skillPath || skillName,
-                      label: c.skillName || c.cmd,
+                      id: skillPath || c.cmd,
+                      label: cleanName,
                       kind: 'skill',
                       iconName: 'blocks',
                     },
@@ -330,7 +333,7 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
                     type: 'mention',
                     attrs: {
                       id: c.cmd,
-                      label: c.cmd,
+                      label: title,
                       kind: 'command',
                       iconName: HOST_SLASH_ICONS[c.cmd] ?? 'sparkles',
                     },
@@ -348,9 +351,12 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
   const resolvedPlaceholder =
     isProcessing && processingPlaceholder ? processingPlaceholder : placeholder;
 
+  const innerFieldSlotRef = useRef<HTMLDivElement>(null);
+  const effectiveContainerRef = containerRef ?? innerFieldSlotRef;
+
   return (
     <div
-      ref={containerRef}
+      ref={innerFieldSlotRef}
       className={`input-container${className ? ` ${className}` : ''}`}
       data-composer-field="1"
       data-composer-dense={dense ? '1' : '0'}
@@ -392,7 +398,7 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
         onPasteFiles={onPasteFiles ? handlePasteFiles : undefined}
         slashExtraItems={slashExtraItems}
         mentionCandidates={mentionCandidates}
-        containerRef={containerRef}
+        containerRef={effectiveContainerRef}
       />
       {hideSendControls ? null : (
         <ComposerSendControls
