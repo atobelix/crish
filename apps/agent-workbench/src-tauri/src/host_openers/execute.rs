@@ -791,6 +791,7 @@ mod tests {
         assert!(!is_blocked_executable_path("notes.md"));
     }
 
+    #[cfg(windows)]
     #[test]
     fn shortcut_target_must_be_an_application_not_a_script_host() {
         assert!(is_safe_shortcut_executable(Path::new("Editor.EXE")));
