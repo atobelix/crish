@@ -87,7 +87,7 @@ describe('ui/SegmentedControl 现代化测试套件', () => {
     expect(CSS_SRC).toContain('isolation: isolate;');
 
     // 4. 验证滑块锁定实体纯色卡底 var(--seg-slider-bg)
-    expect(CSS_SRC).toContain('background-color: var(--seg-slider-bg');
+    expect(CSS_SRC).toMatch(/background-color:\s*var\(\s*--seg-slider-bg/);
   });
 
   it('[SC-04] 同心大圆角体系：size="panel" 正确应用 containerPanel 类名与几何属性', () => {

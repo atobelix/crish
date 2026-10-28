@@ -354,8 +354,8 @@ describe('DockPane 分屏子窗格容器架构与渲染断言', () => {
     expect(cssContent).toMatch(/container-name:\s*dock-pane;/);
 
     // 验证激活边框遵循 AGENTS.md §13：克制微混不超过 5%~6%，严禁黑实线
-    expect(cssContent).toContain(
-      'border-color: color-mix(in srgb, var(--border-subtle) 95%, var(--text-primary) 5%);'
+    expect(cssContent).toMatch(
+      /border-color:\s*color-mix\(\s*in srgb,\s*var\(--border-subtle\)\s*95%,\s*var\(--text-primary\)\s*5%\s*\)/
     );
   });
 

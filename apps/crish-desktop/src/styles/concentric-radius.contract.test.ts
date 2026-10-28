@@ -51,7 +51,7 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       tokens,
       'tokens-radius.css 必须显式声明 --sep-radius-outer: var(--radius-menu-outer, 18px);'
     ).toMatch(
-      /--sep-radius-outer:\s*(?:var\(--radius-menu-outer,\s*18px\)|18px);/
+      /--sep-radius-outer:\s*(?:var\(\s*--radius-menu-outer,\s*18px\s*\)|18px);/
     );
 
     // 1.3 断言现代同心圆角角色标尺

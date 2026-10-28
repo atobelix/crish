@@ -663,8 +663,8 @@ describe('设置按钮圆角 7px 契约（用户锁，survey 04）', () => {
     // （见上方 it），消费点一律无兜底直连 var(--button-radius) / var(--seg-outer-radius)。
     expect(button).toContain('--btn-radius: var(--button-radius)');
     expect(seg).toContain('--seg-outer-radius: var(--button-radius)');
-    expect(seg).toContain(
-      '--seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad))'
+    expect(seg).toMatch(
+      /--seg-inner-radius:\s*calc\(\s*var\(--seg-outer-radius\)\s*-\s*var\(--seg-pad\)\s*\)/
     );
     expect(seg).toContain('border-radius: var(--seg-outer-radius)');
     expect(seg).toContain('border-radius: var(--seg-inner-radius)');

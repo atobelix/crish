@@ -147,8 +147,10 @@ describe('标签条动效单一真理路径契约', () => {
 
   it('TS 侧弹簧与 tokens-base.css 原生 37 点 linear() 曲线双向锁定', () => {
     // 1. 验证 37 点采样点严格一致
-    expect(tokensCss).toContain('--ease-spring: linear(0, 0.0213, 0.0739,');
-    expect(tokensCss).toContain('0.9955, 0.9963, 1);');
+    expect(tokensCss).toMatch(
+      /--ease-spring:\s*linear\(\s*0,\s*0\.0213,\s*0\.0739,/
+    );
+    expect(tokensCss).toMatch(/0\.9955,\s*0\.9963,\s*1\s*\)/);
     expect(motionTs).toContain('EASE_SPRING_LINEAR =');
     expect(motionTs).toContain("'linear(0, 0.0213, 0.0739,");
 

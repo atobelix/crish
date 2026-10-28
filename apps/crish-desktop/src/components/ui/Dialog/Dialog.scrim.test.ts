@@ -29,7 +29,8 @@ function themeBlock(selectorRe: RegExp): string {
 
 describe('ui/Dialog 遮罩（--modal-scrim）', () => {
   it('遮罩只引用 --modal-scrim，且没有任何模糊 / 主题分叉', () => {
-    const backdrop = css.match(/\n\.backdrop\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
+    const backdrop =
+      css.match(/\n\s*\.backdrop\s*\{[\s\S]*?\n\s*\}/)?.[0] ?? '';
     expect(backdrop).toMatch(/background:\s*var\(--modal-scrim\);/);
     expect(css).not.toMatch(/backdrop-filter/);
     expect(css).not.toMatch(/data-theme='dark'\]\)\s*\.backdrop/);

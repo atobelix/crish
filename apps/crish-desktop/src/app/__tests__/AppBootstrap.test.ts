@@ -137,8 +137,8 @@ describe('AppBootstrap — Stage 4 结构收敛', () => {
   it('T-A-1：bootstrapStores 装配后快照桥已绑定', () => {
     expect(BOOTSTRAP_STORES_SRC).toContain('bindMessageSnapshotsOps(');
     expect(BOOTSTRAP_STORES_SRC).toContain('new MessageSnapshots()');
-    expect(BOOTSTRAP_STORES_SRC).toContain(
-      "logger.warn('[Snapshots] bridge bind failed"
+    expect(BOOTSTRAP_STORES_SRC).toMatch(
+      /logger\.warn\(\s*'\[Snapshots\] bridge bind failed/
     );
   });
 
