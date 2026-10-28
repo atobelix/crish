@@ -1,0 +1,10 @@
+{
+  "endedAt": "2026-07-31T00:00:00.000Z",
+  "runId": "run-1",
+  "sessionId": "s1",
+  "status": "cancelled",
+  "subagentId": "sa-1",
+  "subagentRunId": "sr-1",
+  "summary": "被用户终止",
+  "type": "subagent-ended"
+}

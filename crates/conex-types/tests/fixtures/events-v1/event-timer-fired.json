@@ -1,0 +1,7 @@
+{
+  "firedAtMs": 1785456600000,
+  "prompt": "检查编译",
+  "sessionId": "s1",
+  "timerId": "timer-1",
+  "type": "timer-fired"
+}

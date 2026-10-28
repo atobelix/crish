@@ -1,0 +1,23 @@
+{
+  "roots": [
+    {
+      "id": 1,
+      "tag": "div",
+      "marker": "shadow-closed",
+      "bounds": [0, 0, 400, 80],
+      "children": [
+        {
+          "id": -1,
+          "tag": "div",
+          "attrs": [["role", "button"]],
+          "text": "主题切换",
+          "bounds": [0, 0, 100, 32]
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "interactive": [],
+    "not_interactive": [-1]
+  }
+}

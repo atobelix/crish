@@ -1,0 +1,45 @@
+{
+  "roots": [
+    { "id": 1, "tag": "button", "text": "保存", "bounds": [0, 0, 100, 36] },
+    {
+      "id": 2,
+      "tag": "a",
+      "attrs": [["href", "/x"]],
+      "text": "链接",
+      "bounds": [0, 50, 100, 36]
+    },
+    {
+      "id": 3,
+      "tag": "input",
+      "attrs": [["type", "text"]],
+      "bounds": [0, 100, 200, 32]
+    },
+    {
+      "id": 4,
+      "tag": "select",
+      "bounds": [0, 140, 200, 32],
+      "children": [
+        { "id": 5, "tag": "option", "text": "北京" },
+        { "id": 6, "tag": "option", "text": "上海" }
+      ]
+    },
+    { "id": 7, "tag": "textarea", "bounds": [0, 180, 200, 60] },
+    {
+      "id": 8,
+      "tag": "details",
+      "bounds": [0, 250, 100, 30],
+      "children": [
+        {
+          "id": 9,
+          "tag": "summary",
+          "text": "摘要",
+          "bounds": [0, 250, 100, 30]
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "interactive": [1, 2, 3, 4, 7, 8, 9],
+    "not_interactive": []
+  }
+}

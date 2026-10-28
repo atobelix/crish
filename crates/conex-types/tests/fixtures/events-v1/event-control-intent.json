@@ -1,0 +1,8 @@
+{
+  "intentId": "ci-1",
+  "kind": "soft-inject",
+  "sessionId": "s1",
+  "state": "enqueued",
+  "timestamp": "2026-07-31T00:00:00.000Z",
+  "type": "control-intent"
+}

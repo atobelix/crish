@@ -1,0 +1,9 @@
+{
+  "resource": {
+    "cpuPercent": 12.5,
+    "rssBytes": 1048576
+  },
+  "sessionId": "s1",
+  "taskId": "t-1",
+  "type": "task-heartbeat"
+}

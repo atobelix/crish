@@ -1,0 +1,11 @@
+{
+  "decision": "Continue",
+  "evidence": "fp-1",
+  "messageCount": 3,
+  "reasonDetail": "目标未达成，继续执行",
+  "round": 1,
+  "stalledDelta": 0,
+  "toolCallCount": 5,
+  "toolSuccessCount": 4,
+  "type": "goal-round-completed"
+}

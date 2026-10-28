@@ -1,0 +1,29 @@
+{
+  "roots": [
+    {
+      "id": 1,
+      "tag": "div",
+      "text": "装饰",
+      "ax": { "present": true, "ignored": true },
+      "bounds": [0, 0, 100, 30]
+    },
+    {
+      "id": 2,
+      "tag": "div",
+      "text": "可聚焦",
+      "ax": { "present": true, "properties": { "focusable": true } },
+      "bounds": [0, 50, 100, 30]
+    },
+    {
+      "id": 3,
+      "tag": "div",
+      "text": "按钮角色",
+      "ax": { "present": true, "role": "button" },
+      "bounds": [0, 100, 100, 30]
+    }
+  ],
+  "expected": {
+    "interactive": [2, 3],
+    "not_interactive": [1]
+  }
+}

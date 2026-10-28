@@ -1,0 +1,35 @@
+{
+  "roots": [
+    {
+      "id": 1,
+      "tag": "select",
+      "bounds": [0, 0, 200, 32],
+      "children": [
+        { "id": 5, "tag": "option", "text": "北京" },
+        { "id": 6, "tag": "option", "text": "上海" },
+        { "id": 7, "tag": "option", "text": "深圳" }
+      ]
+    },
+    {
+      "id": 2,
+      "tag": "input",
+      "attrs": [
+        ["type", "date"],
+        ["name", "birthday"]
+      ],
+      "bounds": [0, 50, 200, 32]
+    },
+    {
+      "id": 3,
+      "tag": "input",
+      "attrs": [["type", "file"]],
+      "styles": { "opacity": "0" },
+      "bounds": [0, 100, 200, 32]
+    },
+    { "id": 4, "tag": "textarea", "bounds": [0, 150, 200, 60] }
+  ],
+  "expected": {
+    "interactive": [1, 2, 3, 4],
+    "not_interactive": []
+  }
+}

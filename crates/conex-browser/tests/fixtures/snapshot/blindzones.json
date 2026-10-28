@@ -1,0 +1,28 @@
+{
+  "roots": [
+    { "id": 1, "tag": "canvas", "bounds": [0, 0, 300, 150] },
+    {
+      "id": 2,
+      "tag": "video",
+      "attrs": [["src", "clip.mp4"]],
+      "bounds": [0, 200, 320, 180]
+    },
+    {
+      "id": 3,
+      "tag": "img",
+      "attrs": [["alt", "示意图"]],
+      "bounds": [0, 400, 100, 100]
+    },
+    {
+      "id": 4,
+      "tag": "button",
+      "text": "正常按钮",
+      "bounds": [0, 520, 100, 36]
+    }
+  ],
+  "expected": {
+    "interactive": [4],
+    "not_interactive": [1, 2, 3]
+  },
+  "blind_zone": { "canvas": 1, "video": 1, "image": 1, "unoperable": 0 }
+}

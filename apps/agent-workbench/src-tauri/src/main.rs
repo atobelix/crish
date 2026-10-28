@@ -1,4 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// 非 Windows 平台：WebView2 / Win32 / COM 专属路径不参与运行，平台门控下的
+// 死代码与未使用项放行；Windows（主发布面）仍保持 -D warnings 全量。
+#![cfg_attr(
+    not(windows),
+    allow(dead_code, unused_imports, unused_variables, unused_mut)
+)]
 
 //! Tauri 壳集成接线（B6.4 重建版）
 //!

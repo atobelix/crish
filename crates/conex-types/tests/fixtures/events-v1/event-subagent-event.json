@@ -1,0 +1,14 @@
+{
+  "event": {
+    "kind": "progress",
+    "payload": {
+      "percent": 40,
+      "step": "reading"
+    }
+  },
+  "runId": "run-1",
+  "sessionId": "s1",
+  "subagentId": "sa-1",
+  "subagentRunId": "sr-1",
+  "type": "subagent-event"
+}

@@ -1,0 +1,14 @@
+{
+  "capabilityMode": "readonly",
+  "description": "调研子代理",
+  "mode": "research",
+  "parentToolCallId": "tc-1",
+  "role": "researcher",
+  "runId": "run-1",
+  "sessionId": "s1",
+  "startedAt": "2026-07-31T00:00:00.000Z",
+  "subagentId": "sa-1",
+  "subagentRunId": "sr-1",
+  "timestamp": "2026-07-31T00:00:00.000Z",
+  "type": "subagent-started"
+}

@@ -1,0 +1,9 @@
+{
+  "command": "cargo build",
+  "cwd": "/ws",
+  "isDaemon": false,
+  "ownerRunId": "run-main",
+  "sessionId": "s1",
+  "taskId": "t-1",
+  "type": "task-started"
+}

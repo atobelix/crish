@@ -191,6 +191,7 @@ pub fn env_adaptive_flags() -> Vec<String> {
 }
 
 /// CI 环境变量（GITHUB_ACTIONS/Jenkins/GitLab 等）或容器特征（/.dockerenv、cgroup）。
+#[allow(unsafe_code)]
 pub fn is_ci_or_container() -> bool {
     for var in [
         "CI",
@@ -215,13 +216,9 @@ pub fn is_ci_or_container() -> bool {
                 return true;
             }
         }
-        // unix euid=0（root）：id -u 探测，失败视为非 root
-        if let Ok(out) = std::process::Command::new("id").arg("-u").output() {
-            if let Ok(text) = String::from_utf8(out.stdout) {
-                if text.trim() == "0" {
-                    return true;
-                }
-            }
+        // unix euid=0（root）：直读内核身份，不派生进程
+        if unsafe { libc::geteuid() } == 0 {
+            return true;
         }
     }
     false

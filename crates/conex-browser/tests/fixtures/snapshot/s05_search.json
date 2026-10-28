@@ -1,0 +1,34 @@
+{
+  "roots": [
+    {
+      "id": 1,
+      "tag": "div",
+      "attrs": [["class", "search-btn"]],
+      "text": "搜索",
+      "bounds": [0, 0, 100, 30]
+    },
+    {
+      "id": 2,
+      "tag": "div",
+      "attrs": [["id", "searchBox"]],
+      "bounds": [0, 50, 200, 30]
+    },
+    {
+      "id": 3,
+      "tag": "div",
+      "attrs": [["data-action", "search"]],
+      "bounds": [0, 100, 100, 30]
+    },
+    {
+      "id": 4,
+      "tag": "div",
+      "attrs": [["class", "content"]],
+      "text": "普通容器",
+      "bounds": [0, 150, 300, 100]
+    }
+  ],
+  "expected": {
+    "interactive": [1, 2, 3],
+    "not_interactive": [4]
+  }
+}

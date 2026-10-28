@@ -287,7 +287,7 @@ CI 以脚本实时输出为准。
 
 <!-- BASELINE_START -->
 apps/agent-workbench/src-tauri/src/background_tests_resource.rs 671
-apps/agent-workbench/src-tauri/src/browser/mod.rs 1890
+apps/agent-workbench/src-tauri/src/browser/mod.rs 1899
 apps/agent-workbench/src-tauri/src/browser/native_manager.rs 2504
 apps/agent-workbench/src-tauri/src/browser/panel_input.rs 769
 apps/agent-workbench/src-tauri/src/command_manifest.rs 695
@@ -299,7 +299,7 @@ apps/agent-workbench/src-tauri/src/fs_commands/mod.rs 638
 apps/agent-workbench/src-tauri/src/git.rs 1028
 apps/agent-workbench/src-tauri/src/host_openers/discovery.rs 609
 apps/agent-workbench/src-tauri/src/host_openers/execute.rs 874
-apps/agent-workbench/src-tauri/src/main.rs 1931
+apps/agent-workbench/src-tauri/src/main.rs 1937
 apps/agent-workbench/src-tauri/src/multi_device/tls.rs 1196
 apps/agent-workbench/src-tauri/src/multi_device_network.rs 644
 apps/agent-workbench/src-tauri/src/note_commands_tests.rs 713
@@ -359,7 +359,7 @@ crates/agent-tools/src/tools/mod.rs 1107
 crates/agent-tools/src/tools/replace.rs 1289
 crates/agent-tools/src/tools/search.rs 886
 crates/agent-tools/src/tools/set_timer.rs 613
-crates/agent-tools/src/tools/shell_exec.rs 969
+crates/agent-tools/src/tools/shell_exec.rs 967
 crates/agent-tools/src/write_paths_state.rs 624
 crates/agent-tools/src/write_paths_tests.rs 642
 crates/conex-browser-tools/src/session.rs 993
@@ -371,7 +371,7 @@ crates/conex-browser/src/action/pointer.rs 624
 crates/conex-browser/src/action/wait.rs 783
 crates/conex-browser/src/adapters/cdp_input_backend.rs 931
 crates/conex-browser/src/browser/discover.rs 801
-crates/conex-browser/src/browser/profile.rs 997
+crates/conex-browser/src/browser/profile.rs 995
 crates/conex-browser/src/browser/state.rs 765
 crates/conex-browser/src/cdp/client.rs 728
 crates/conex-browser/src/cdp/transport.rs 996

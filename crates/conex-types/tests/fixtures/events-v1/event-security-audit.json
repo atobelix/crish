@@ -1,0 +1,18 @@
+{
+  "decision": "redirected",
+  "impact": {
+    "crossDirectory": false,
+    "directoryCount": 0,
+    "fileCount": 1,
+    "flagged": false,
+    "totalSizeBytes": 5
+  },
+  "operation": "delete",
+  "permissionMode": "full",
+  "runId": "run-1",
+  "sessionId": "s1",
+  "targets": ["a.txt"],
+  "timestamp": "2026-07-31T00:00:00.000Z",
+  "toolCallId": "tc-1",
+  "type": "security-audit"
+}

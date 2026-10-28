@@ -1,0 +1,23 @@
+{
+  "roots": [
+    {
+      "id": 1,
+      "tag": "button",
+      "attrs": [["disabled", ""]],
+      "text": "禁用",
+      "bounds": [0, 0, 100, 36]
+    },
+    {
+      "id": 2,
+      "tag": "button",
+      "attrs": [["aria-disabled", "true"]],
+      "text": "ARIA 禁用",
+      "bounds": [0, 50, 100, 36]
+    },
+    { "id": 3, "tag": "button", "text": "可用", "bounds": [0, 100, 100, 36] }
+  ],
+  "expected": {
+    "interactive": [3],
+    "not_interactive": [1, 2]
+  }
+}

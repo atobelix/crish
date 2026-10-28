@@ -1,0 +1,9 @@
+{
+  "boundarySeq": 42,
+  "reason": "user-requested",
+  "runId": "run-1",
+  "sessionId": "s1",
+  "targetMessageId": "msg-9",
+  "timestamp": "2026-07-31T00:00:00.000Z",
+  "type": "timeline-truncate"
+}

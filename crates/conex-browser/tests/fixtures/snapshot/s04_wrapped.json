@@ -1,0 +1,21 @@
+{
+  "roots": [
+    {
+      "id": 1,
+      "tag": "label",
+      "bounds": [0, 0, 200, 40],
+      "children": [
+        {
+          "id": 2,
+          "tag": "span",
+          "bounds": [0, 0, 100, 30],
+          "children": [{ "id": 3, "tag": "input", "bounds": [0, 0, 80, 20] }]
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "interactive": [1, 2, 3],
+    "not_interactive": []
+  }
+}

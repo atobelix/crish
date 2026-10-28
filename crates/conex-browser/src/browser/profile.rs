@@ -485,6 +485,7 @@ mod platform_lock {
     ///   （探测失败不误判已死，避免误删活跃 SingletonLock 造成双开冲突）；
     /// - 其余 errno（如 EINVAL）：未知错误 → 保守存活（与 unix.rs killpg_result
     ///   的「非 ESRCH 即存在」errno 语义同源收敛）。
+    ///
     /// libc 调用为 unsafe：错误经 errno 面（last_os_error）转出，
     /// 无内存不安全面，unsafe 局部化（workspace 逐处评审惯例）。
     #[allow(unsafe_code)]
@@ -509,10 +510,7 @@ mod platform_lock {
         if ret == 0 {
             return true;
         }
-        match errno {
-            libc::ESRCH => false,
-            _ => true,
-        }
+        errno != libc::ESRCH
     }
 }
 

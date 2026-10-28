@@ -1,0 +1,11 @@
+{
+  "createdAtMs": 1785456600000,
+  "fingerprint": "sa-1:调研",
+  "pending": true,
+  "remainingStatus": "running",
+  "retries": 3,
+  "sessionId": "s1",
+  "subagentId": "sa-1",
+  "subagentRunId": "sr-1",
+  "type": "recovery-steering"
+}

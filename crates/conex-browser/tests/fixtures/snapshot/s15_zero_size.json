@@ -1,0 +1,11 @@
+{
+  "roots": [
+    { "id": 1, "tag": "div", "text": "零宽", "bounds": [0, 0, 0, 10] },
+    { "id": 2, "tag": "button", "text": "零高", "bounds": [0, 0, 100, 0] },
+    { "id": 3, "tag": "button", "text": "正常", "bounds": [0, 0, 100, 36] }
+  ],
+  "expected": {
+    "interactive": [3],
+    "not_interactive": [1, 2]
+  }
+}

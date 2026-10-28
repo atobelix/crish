@@ -1,0 +1,15 @@
+{
+  "roots": [
+    {
+      "id": 1,
+      "tag": "label",
+      "attrs": [["for", "target"]],
+      "bounds": [0, 0, 200, 40],
+      "children": [{ "id": 2, "tag": "input", "bounds": [0, 0, 80, 20] }]
+    }
+  ],
+  "expected": {
+    "interactive": [2],
+    "not_interactive": [1]
+  }
+}

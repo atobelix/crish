@@ -1,0 +1,28 @@
+{
+  "roots": [
+    {
+      "id": 1,
+      "tag": "div",
+      "attrs": [["onclick", "go()"]],
+      "text": "内联事件",
+      "bounds": [0, 0, 100, 30]
+    },
+    {
+      "id": 2,
+      "tag": "div",
+      "listeners": true,
+      "text": "监听器按钮",
+      "bounds": [0, 50, 100, 30]
+    },
+    {
+      "id": 3,
+      "tag": "button",
+      "text": "原生兜底",
+      "bounds": [0, 100, 100, 30]
+    }
+  ],
+  "expected": {
+    "interactive": [1, 3],
+    "not_interactive": [2]
+  }
+}

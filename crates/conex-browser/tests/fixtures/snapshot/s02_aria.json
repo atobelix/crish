@@ -1,0 +1,34 @@
+{
+  "roots": [
+    {
+      "id": 1,
+      "tag": "div",
+      "attrs": [["role", "button"]],
+      "text": "确认",
+      "bounds": [0, 0, 120, 36]
+    },
+    {
+      "id": 2,
+      "tag": "span",
+      "attrs": [["role", "checkbox"]],
+      "bounds": [0, 50, 20, 20]
+    },
+    {
+      "id": 3,
+      "tag": "div",
+      "attrs": [["role", "combobox"]],
+      "bounds": [0, 100, 200, 32]
+    },
+    {
+      "id": 4,
+      "tag": "div",
+      "attrs": [["role", "banner"]],
+      "text": "非交互角色",
+      "bounds": [0, 150, 400, 40]
+    }
+  ],
+  "expected": {
+    "interactive": [1, 2, 3],
+    "not_interactive": [4]
+  }
+}

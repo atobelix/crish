@@ -1,0 +1,24 @@
+{
+  "roots": [
+    {
+      "id": 1,
+      "tag": "svg",
+      "bounds": [0, 0, 100, 100],
+      "children": [
+        { "id": 2, "tag": "path", "svg": true, "bounds": [0, 0, 100, 100] },
+        { "id": 3, "tag": "g", "svg": true, "bounds": [0, 0, 100, 100] },
+        {
+          "id": 4,
+          "tag": "g",
+          "svg": true,
+          "attrs": [["onclick", "zoom()"]],
+          "bounds": [0, 0, 50, 50]
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "interactive": [4],
+    "not_interactive": [1, 2, 3]
+  }
+}

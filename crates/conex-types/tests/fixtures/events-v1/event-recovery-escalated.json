@@ -1,0 +1,8 @@
+{
+  "elapsedMs": 45000,
+  "kind": "Timeout",
+  "retries": 2,
+  "sessionId": "s1",
+  "subagentRunId": "sr-1",
+  "type": "recovery-escalated"
+}

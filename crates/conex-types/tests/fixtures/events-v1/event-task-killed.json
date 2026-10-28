@@ -1,0 +1,7 @@
+{
+  "diagnostics": "5s 宽限后强制终止",
+  "sessionId": "s1",
+  "taskId": "t-1",
+  "type": "task-killed",
+  "viaForce": true
+}

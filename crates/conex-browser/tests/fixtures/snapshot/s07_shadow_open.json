@@ -1,0 +1,23 @@
+{
+  "roots": [
+    {
+      "id": 1,
+      "tag": "div",
+      "marker": "shadow-open",
+      "bounds": [0, 0, 400, 120],
+      "children": [
+        { "id": 2, "tag": "button", "text": "确定", "bounds": [0, 0, 100, 32] },
+        {
+          "id": 3,
+          "tag": "input",
+          "attrs": [["placeholder", "请输入"]],
+          "bounds": [0, 40, 200, 32]
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "interactive": [2, 3],
+    "not_interactive": [1]
+  }
+}

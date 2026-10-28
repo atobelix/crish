@@ -1,0 +1,11 @@
+{
+  "contextMode": "verbatim",
+  "fingerprint": "sa-1:调研",
+  "fromLeafId": "leaf-1",
+  "fromRunId": "sr-1",
+  "newLeafId": "leaf-2",
+  "newRunId": "sr-2",
+  "sessionId": "s1",
+  "subagentId": "sa-1",
+  "type": "recovery-fork"
+}

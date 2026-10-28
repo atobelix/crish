@@ -1,0 +1,29 @@
+{
+  "roots": [
+    { "id": 1, "tag": "div", "scrollable": true, "bounds": [0, 0, 300, 400] },
+    {
+      "id": 2,
+      "tag": "div",
+      "attrs": [["role", "listbox"]],
+      "bounds": [0, 420, 200, 200]
+    },
+    {
+      "id": 3,
+      "tag": "div",
+      "scrollable": true,
+      "bounds": [0, 640, 300, 200],
+      "children": [
+        {
+          "id": 4,
+          "tag": "button",
+          "text": "内部按钮",
+          "bounds": [0, 0, 100, 32]
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "interactive": [1, 2, 4],
+    "not_interactive": [3]
+  }
+}

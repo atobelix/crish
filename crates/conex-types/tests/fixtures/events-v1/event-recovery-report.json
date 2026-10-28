@@ -1,0 +1,8 @@
+{
+  "sessionId": "s1",
+  "stuckAtMs": 1785456600000,
+  "subagentId": "sa-1",
+  "subagentRunId": "sr-1",
+  "suggestion": "请检查 provider 网络与配额后人工决策：继续重试 / 降低要求 / 取消该任务。",
+  "type": "recovery-report"
+}

@@ -1,0 +1,36 @@
+{
+  "roots": [
+    {
+      "id": 1,
+      "tag": "iframe",
+      "marker": "iframe",
+      "attrs": [["src", "https://same.example/frame.html"]],
+      "bounds": [0, 0, 300, 200],
+      "children": [
+        {
+          "id": 2,
+          "tag": "form",
+          "bounds": [0, 0, 280, 180],
+          "children": [
+            {
+              "id": 3,
+              "tag": "input",
+              "attrs": [["name", "user"]],
+              "bounds": [0, 0, 200, 32]
+            },
+            {
+              "id": 4,
+              "tag": "button",
+              "text": "提交",
+              "bounds": [0, 40, 100, 32]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "interactive": [3, 4],
+    "not_interactive": [1, 2]
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "roots": [
+    {
+      "id": 1,
+      "tag": "button",
+      "text": "隐藏A",
+      "styles": { "display": "none" },
+      "bounds": [0, 0, 100, 36]
+    },
+    {
+      "id": 2,
+      "tag": "button",
+      "text": "隐藏B",
+      "styles": { "visibility": "hidden" },
+      "bounds": [0, 50, 100, 36]
+    },
+    {
+      "id": 3,
+      "tag": "button",
+      "text": "隐藏C",
+      "styles": { "opacity": "0" },
+      "bounds": [0, 100, 100, 36]
+    },
+    { "id": 4, "tag": "button", "text": "可见", "bounds": [0, 150, 100, 36] }
+  ],
+  "expected": {
+    "interactive": [4],
+    "not_interactive": [1, 2, 3]
+  }
+}

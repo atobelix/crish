@@ -1,0 +1,7 @@
+{
+  "action": "continue",
+  "prompt": "继续完成目标：修复登录页 bug",
+  "progressSignature": "sig-1",
+  "reason": "goal-pending",
+  "type": "goal-continuation-decided"
+}

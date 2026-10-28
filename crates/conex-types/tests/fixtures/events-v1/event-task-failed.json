@@ -1,0 +1,8 @@
+{
+  "durationMs": 800,
+  "exitCode": 1,
+  "sessionId": "s1",
+  "tail": ["error[E0308]: mismatched types", "the task failed"],
+  "taskId": "t-1",
+  "type": "task-failed"
+}
