@@ -25,7 +25,7 @@
 import type { InboundEnvelope, OutgoingEnvelope } from './WsEnvelope';
 import { DEVICE_KINDS } from '@crish/shared-types';
 import { parseDeviceMessage } from '@crish/shared-types';
-import type { JsonValue } from '../../../../packages/shared-types/src/primitive-types';
+import type { JsonValue } from '@crish/shared-types';
 import { PROTOCOL_VERSION } from './protocolVersion';
 
 /** 单帧上限（D3 §5.5 / version.rs MAX_FRAME_BYTES = 1 MiB） */

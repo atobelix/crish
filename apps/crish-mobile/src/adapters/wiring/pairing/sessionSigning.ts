@@ -9,7 +9,7 @@ import { PROTOCOL_VERSION } from '@/network/protocolVersion';
 import type { OutgoingEnvelope } from '@/network/WsEnvelope';
 import { WsGateway } from '@/network/WsGateway';
 import type { WebSocketFactory } from '@/network/ReconnectingWsClient';
-import type { JsonValue } from '../../../../../../packages/shared-types/src/primitive-types';
+import type { JsonValue } from '@crish/shared-types';
 import { ensureObservationWiring } from '../observationWiring';
 import type { PairingSessionContext } from './PairingWiring';
 

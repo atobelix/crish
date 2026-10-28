@@ -84,7 +84,6 @@ function resetState() {
   connectionStore.setState({
     phase: 'disconnected',
     lastError: null,
-    retryCount: 0,
     lastSyncAt: null,
   });
 }

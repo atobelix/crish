@@ -20,7 +20,7 @@ import {
   PAIRING_META_DESKTOP_ID_KEY,
   PAIRING_META_HOST_KEY,
   resetPairingWiringForTest,
-} from '@/adapters/wiring/pairingWiring';
+} from '@/adapters/wiring/pairing';
 import {
   configurePairingDriver,
   ensurePairingController,
@@ -37,14 +37,14 @@ const CRED = {
 beforeEach(() => {
   resetPairingWiringForTest();
   configurePairingDriver(null);
-  authStore.getState().revokeLocal();
+  authStore.getState().clearPairing();
   connectionStore.setState({ phase: 'disconnected' });
 });
 
 afterEach(() => {
   resetPairingWiringForTest();
   configurePairingDriver(null);
-  authStore.getState().revokeLocal();
+  authStore.getState().clearPairing();
 });
 
 describe('ensurePairingController（装配单例）', () => {

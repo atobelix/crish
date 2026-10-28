@@ -17,7 +17,7 @@
 
 import { sha256 } from '@noble/hashes/sha2.js';
 import { hmac } from '@noble/hashes/hmac.js';
-import type { JsonValue } from '../../../../packages/shared-types/src/primitive-types';
+import type { JsonValue } from '@crish/shared-types';
 
 /** 签名上下文（deviceId + 会话令牌派生密钥；tokenKey 来源 R2-03 接线） */
 export interface SignContext {

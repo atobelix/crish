@@ -3,15 +3,14 @@
 // packages/shared-types/src/generated/device（R0-03 产物，已入库）。本文件
 // **禁止手抄第二套协议类型**：wire 类型全部引用生成面，仅以类型运算附加
 // 本地入站形态（配对期 auth 可选，D3 §5.2 / mock-daemon envelope.ts 先例）。
-// 生成面经相对路径引用（shared-types exports 仅暴露 "."，mock-daemon 同款做法）。
 
 import type {
   DeviceEnvelope as ContractEnvelope,
   AuthHeader as ContractAuthHeader,
   Endpoint,
+  JsonValue,
 } from '@crish/shared-types';
 import type { DeviceKind } from '@crish/shared-types';
-import type { JsonValue } from '../../../../packages/shared-types/src/primitive-types';
 
 /** 帧种类（生成面注册表 103 种 kind；新增 kind 经生成器自动跟进，本地不维护第二份清单） */
 export type EnvelopeKind = DeviceKind;

@@ -103,12 +103,12 @@ describe('notificationRouteToPath（深链白名单翻译）', () => {
     ).toBe('/');
   });
 
-  it('F2 §6.2 形态 conex://approval?toolCallId=… → /approval/…（查询参数取 id）', () => {
+  it('非 crish:// scheme 拒绝（conex:// 历史形态已废止，M4 §4.3 统一 crish://）', () => {
     expect(
       notificationRouteToPath(
-        makeSource({ route: 'conex://approval?toolCallId=tc-x&runId=run-1' })
+        makeSource({ route: 'conex://approval?toolCallId=tc-x' })
       )
-    ).toBe('/approval/tc-x');
+    ).toBeNull();
   });
 
   it('expo-router 相对路径透传（白名单内）；白名单外相对路径拒绝', () => {

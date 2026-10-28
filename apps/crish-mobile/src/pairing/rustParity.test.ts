@@ -23,7 +23,11 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { buildPairHello, parsePairError, parsePairOk } from './pairProtocol';
 import type { BuildPairHelloInput, PairErrorKind } from './pairProtocol';
-import { formatPairCode, isValidPairCode, normalizePairCode } from './cxnCode';
+import {
+  formatPairCode,
+  isValidPairCode,
+  normalizePairCode,
+} from '@/domain/pure/cxnCode';
 import { formatQrPayload, parseQrPayload, QR_SCHEME } from './qrPayload';
 import { DEVICE_ERROR_PROTOCOL } from '@crish/shared-types';
 

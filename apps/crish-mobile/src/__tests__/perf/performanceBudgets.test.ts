@@ -18,7 +18,7 @@ import {
   appendTerminalChunk,
   createTerminalLineBuffer,
   replaceAllTerminalText,
-} from '@/presentation/components/terminal/terminalLineBuffer';
+} from '@/domain/pure/terminalLineBuffer';
 import { mapDeviceFrame, mapIngestFrame } from '@/domain/store/eventMappers';
 import { createLruCache } from '@/domain/store/filesCache';
 import { ENGINE_EVENT_TYPES } from '@crish/shared-types';

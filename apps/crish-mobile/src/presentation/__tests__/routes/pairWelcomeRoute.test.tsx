@@ -14,7 +14,7 @@ const replaceMock = router.replace as jest.Mock;
 
 beforeEach(async () => {
   jest.clearAllMocks();
-  authStore.getState().revokeLocal();
+  authStore.getState().clearPairing();
   await act(async () => {
     authStore.setState({ hydrated: true });
   });

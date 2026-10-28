@@ -17,7 +17,7 @@ function seedPaired(): Promise<void> {
 }
 
 beforeEach(async () => {
-  authStore.getState().revokeLocal();
+  authStore.getState().clearPairing();
   await act(async () => {
     authStore.setState({ hydrated: true });
   });
@@ -137,11 +137,13 @@ describe('PairWelcomeScreen 云端账号一键直连（免扫码免输码）', (
       },
     });
 
-    jest.spyOn(cloudAuthStore.getState(), 'requestTicketForDesktop').mockResolvedValueOnce({
-      ticket: 'tkt-test',
-      relayUrl: 'wss://relay.flowbit.me',
-      exp: Math.floor(Date.now() / 1000) + 3600,
-    });
+    jest
+      .spyOn(cloudAuthStore.getState(), 'requestTicketForDesktop')
+      .mockResolvedValueOnce({
+        ticket: 'tkt-test',
+        relayUrl: 'wss://relay.flowbit.me',
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      });
 
     const onEnterApp = jest.fn();
     await render(

@@ -5,7 +5,7 @@
 // - 无障碍：Switch accessibilityLabel = 「label + 状态/未连接」，行热区 ≥44
 //   （minHeight 48，M4 §3.4 触控尺寸）。
 import { StyleSheet, Switch, Text, View } from 'react-native';
-import { useAppTheme } from '@/adapters/settings/themeProjection';
+import { useTheme } from '@/adapters/platform/theme';
 
 export interface SettingsSwitchRowProps {
   label: string;
@@ -28,7 +28,7 @@ export default function SettingsSwitchRow({
   onValueChange,
   testID,
 }: SettingsSwitchRowProps) {
-  const theme = useAppTheme();
+  const theme = useTheme();
   const stateLabel = disabled
     ? `${label}，${disabledHint}`
     : `${label}，${value ? '已开启' : '已关闭'}`;

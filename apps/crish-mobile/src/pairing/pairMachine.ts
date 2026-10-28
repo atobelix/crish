@@ -32,13 +32,10 @@
 // generateKeys/deriveKeys 由事件注入（接线层提供，reducer 仅调用），
 // 帧发送与令牌持久化等 IO 由接线层（WsGateway.invoke / secure-store）承担。
 
-import type {
-  PairHello,
-  Platform,
-} from '@crish/shared-types';
+import type { PairHello, Platform } from '@crish/shared-types';
 import { buildPairHello } from './pairProtocol';
 import type { PairErrorInfo, PairOkResult } from './pairProtocol';
-import { normalizePairCode } from './cxnCode';
+import { normalizePairCode } from '@/domain/pure/cxnCode';
 import { base64Encode } from './crypto/keyAgreement';
 import type { PairKeyMaterial, PairingTokenSet } from './crypto/keyAgreement';
 import type { LocalKeys } from './crypto/primitives';

@@ -32,11 +32,11 @@ import {
   PAIR_CODE_LENGTH,
   PAIR_CODE_PREFIX,
   PAIR_CODE_SEPARATOR,
-} from '@/pairing/cxnCode';
+} from '@/domain/pure/cxnCode';
 import type {
   PairingSnapshot,
   PairingStartResult,
-} from '@/adapters/wiring/pairingWiring';
+} from '@/adapters/wiring/pairing';
 import { useConnectionStore } from '@/adapters/hooks/useAppStore';
 import { selectConnectionPhaseText } from '@/domain/store/connectionStore';
 import { useTheme } from '@/adapters/platform/theme';
@@ -61,8 +61,6 @@ export const PAIR_ABANDON_DIALOG_DESCRIPTION =
 /** 锁定冷却提示（本地/服务端失败次数达上限，D3 §4.3） */
 export const PAIR_LOCKED_TEXT =
   '尝试次数过多，请在桌面端重新开启配对（冷却 5 分钟）';
-
-
 
 /** wire/接线错误码 → 人话文案（D3 §6.2 pair.* 全表 + 接线层本地码） */
 export const PAIR_ERROR_TEXT: Record<string, string> = {

@@ -32,7 +32,7 @@ beforeEach(async () => {
   jest.clearAllMocks();
   resetNotificationsForTest();
   notificationStore.setState({ hydrated: true });
-  authStore.getState().revokeLocal();
+  authStore.getState().clearPairing();
   await act(async () => {
     authStore.setState({ hydrated: true });
   });

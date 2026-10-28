@@ -4,7 +4,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { connectionStore } from '@/domain/store/connectionStore';
 import { authStore } from '@/domain/store/authStore';
-import { resetPairingWiringForTest } from '@/adapters/wiring/pairingWiring';
+import { resetPairingWiringForTest } from '@/adapters/wiring/pairing';
 import {
   resetSettingsContextForTest,
   type SettingsContext,
@@ -18,7 +18,7 @@ import {
 import {
   resetThemeModeForTest,
   themeModeStore,
-} from '@/adapters/settings/themeProjection';
+} from '@/adapters/platform/theme';
 import {
   defaultRemoveLocal,
   mirrorInfoOf,
@@ -54,7 +54,7 @@ beforeEach(() => {
   resetSettingsLocalStoreForTest();
   resetThemeModeForTest();
   resetPairingWiringForTest();
-  authStore.getState().revokeLocal();
+  authStore.getState().clearPairing();
 });
 
 // ── mirrorInfoOf（F6 §3.2 镜像摘要抽取） ──────────────────────────────────

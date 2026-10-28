@@ -11,7 +11,7 @@
 //
 // 接线注记（R2-14b）：本层为「设置命令面」接线；本机偏好（通知/外观/缩略图）
 // 存储面在 settingsLocalStore.ts（R2-14b 迁入 settingsStore 分片并接 settingsDao
-// kv 持久化）；主题偏好存储面在 themeProjection.ts。
+// kv 持久化）；主题偏好存储面在 platform/theme.ts。
 
 import { WsGateway } from '@/network/WsGateway';
 import { getObservationWiring } from '../wiring/observationWiring';

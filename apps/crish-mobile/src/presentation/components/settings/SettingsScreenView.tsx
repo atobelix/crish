@@ -7,7 +7,7 @@
 // - 移除本机：底部危险区（SettingsRemoveLocalZone，R2UX-06-06 双保险）。
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { SettingsVm } from '@/adapters/viewmodels/useSettingsVm';
-import { useAppTheme } from '@/adapters/settings/themeProjection';
+import { useTheme } from '@/adapters/platform/theme';
 import { LOCAL_PREFERENCE_META } from '@/adapters/settings/settingsLocalStore';
 import SettingsGroup from './SettingsGroup';
 import SettingsSwitchRow from './SettingsSwitchRow';
@@ -25,7 +25,7 @@ export default function SettingsScreenView({
   vm,
   onConfirmRemove,
 }: SettingsScreenViewProps) {
-  const theme = useAppTheme();
+  const theme = useTheme();
   const notifyDisabled = !vm.connected;
 
   return (

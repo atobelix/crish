@@ -22,18 +22,11 @@
 // Platform/ErrorBody），领域附加字段（PairOkResult.token、PairErrorInfo）
 // 用「契约类型 & 本地附加」的组合形式，不复制契约字段定义。
 
-import { normalizePairCode, PAIR_CODE_ALPHABET } from './cxnCode';
-import {
-  parseErr,
-  parseOk,
-} from '@crish/shared-types';
+import { normalizePairCode, PAIR_CODE_ALPHABET } from '@/domain/pure/cxnCode';
+import { parseErr, parseOk } from '@crish/shared-types';
 import type { ParseResult } from '@crish/shared-types';
 import { parsePairOk as parseWirePairOk } from '@crish/shared-types';
-import type {
-  PairHello,
-  PairOk,
-  Platform,
-} from '@crish/shared-types';
+import type { PairHello, PairOk, Platform } from '@crish/shared-types';
 
 /** 设备名上限（注册表 maxLength 64；pair_endpoint.rs:164 同口径截断） */
 export const DEVICE_NAME_MAX_LENGTH = 64;

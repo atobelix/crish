@@ -8,11 +8,8 @@
 // 解析结果为领域组合类型：code 返回标准化 12 位（直接可入 pair.hello.code，
 // Rust PairCode 序列化形态），host/port 供建立 WS 连接。
 
-import { normalizePairCode, formatPairCode } from './cxnCode';
-import {
-  parseErr,
-  parseOk,
-} from '@crish/shared-types';
+import { normalizePairCode, formatPairCode } from '@/domain/pure/cxnCode';
+import { parseErr, parseOk } from '@crish/shared-types';
 import type { ParseResult } from '@crish/shared-types';
 
 /** 二维码载荷 scheme（与 Rust 生成侧字面量一致） */

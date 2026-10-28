@@ -21,7 +21,6 @@ function resetStore(): void {
     phase: 'disconnected',
     selectedEndpoint: null,
     attemptCount: 0,
-    retryCount: 0,
     lastError: null,
     lastSyncAt: null,
   });
@@ -116,15 +115,6 @@ describe('onReconnectAttempt / onError（重连与错误数据面）', () => {
     connectionStore.getState().onReconnectAttempt();
     connectionStore.getState().onReconnectAttempt();
     expect(connectionStore.getState().attemptCount).toBe(3);
-  });
-
-  it('retryCount 兼容别名与 attemptCount 同步（M5 §3.1.1 原字段名；并行域 setState 种子兼容）', () => {
-    connectionStore.getState().onReconnectAttempt();
-    const s = connectionStore.getState();
-    expect(s.retryCount).toBe(s.attemptCount);
-    expect(s.retryCount).toBe(1);
-    connectionStore.getState().setPhase('ready');
-    expect(connectionStore.getState().retryCount).toBe(0);
   });
 
   it('onError 记录最近错误（可读文案），不改相位', () => {

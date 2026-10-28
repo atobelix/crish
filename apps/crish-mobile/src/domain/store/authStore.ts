@@ -122,8 +122,6 @@ export interface AuthState {
   /** 令牌过期/吊销（刷新失败，M5 §4.3.5）→ 引导重新配对（保留 SQLite 缓存，D4 §5.2）；
    *  仅 paired 可进入（经转移表校验），身份/令牌元数据保留供重新配对预填。 */
   markTokenExpired: () => void;
-  /** 移除本机（M5 §3.1.1 revokeLocal）：与 clearPairing 同语义（清状态回未配对态） */
-  revokeLocal: () => void;
 }
 
 function emptyToken(): TokenMeta {
@@ -142,7 +140,7 @@ function persistOf(persist?: AuthPersist): AuthPersist | null {
   return persist ?? defaultPersist;
 }
 
-/** immer draft 就地清理（clearPairing / onUnpaired / revokeLocal 共用复位面） */
+/** immer draft 就地清理（clearPairing / onUnpaired 共用复位面） */
 function resetPairingState(s: AuthState): void {
   s.pairState = 'unpaired';
   s.deviceId = null;
@@ -262,11 +260,6 @@ export const authStore = createStore<AuthState>()(
     markTokenExpired: () =>
       set((s) => {
         s.pairState = transitionPairState(s.pairState, 'token_expired');
-      }),
-
-    revokeLocal: () =>
-      set((s) => {
-        resetPairingState(s);
       }),
   }))
 );

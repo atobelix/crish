@@ -9,7 +9,7 @@ import {
 import { router } from 'expo-router';
 import { connectionStore } from '@/domain/store/connectionStore';
 import { authStore } from '@/domain/store/authStore';
-import { resetPairingWiringForTest } from '@/adapters/wiring/pairingWiring';
+import { resetPairingWiringForTest } from '@/adapters/wiring/pairing';
 import SettingsScreen from '../../../../app/(tabs)/settings';
 
 jest.mock('expo-router', () => ({
@@ -22,7 +22,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   connectionStore.setState({ phase: 'disconnected' });
   resetPairingWiringForTest();
-  authStore.getState().revokeLocal();
+  authStore.getState().clearPairing();
 });
 
 describe('设置页（R2-06 部分 3）', () => {

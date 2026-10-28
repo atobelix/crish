@@ -1,16 +1,16 @@
 // 深色模式三选（R2UX-06-05：跟随系统/浅色/深色，F6 §9 外观）：
 // - 分段式三选（chips 行内切换，M4 §6.1 分段控件）；选中态 = 绿底绿字双通道
 //   （颜色 + accessibilityState.selected，M4 §6.5 状态表达双通道）；
-// - 模式文案/顺序单一真源：THEME_MODES / THEME_MODE_LABELS（themeProjection）；
-// - 切换即时生效（themeModeStore → useAppTheme 投影 token，设置页与后续全局一致）；
+// - 模式文案/顺序单一真源：THEME_MODES / THEME_MODE_LABELS（platform/theme）；
+// - 切换即时生效（themeModeStore → useTheme 投影 token，设置页与后续全局一致）；
 // - 热区（R2-16 §3.2 第 1 项修复）：视觉 minHeight 44（下限）+ Android HitSlop 补 48。
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   THEME_MODES,
   THEME_MODE_LABELS,
-  useAppTheme,
+  useTheme,
   type ThemeMode,
-} from '@/adapters/settings/themeProjection';
+} from '@/adapters/platform/theme';
 import { dualHitSlop } from '@/presentation/components/ui/hitTargets';
 
 export interface SettingsThemeSelectorProps {
@@ -31,7 +31,7 @@ export default function SettingsThemeSelector({
   onChange,
   testID = 'setting-theme',
 }: SettingsThemeSelectorProps) {
-  const theme = useAppTheme();
+  const theme = useTheme();
   return (
     <View
       testID={testID}

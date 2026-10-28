@@ -1,7 +1,7 @@
 // 设置页视图模型（R2-06 部分 3，M4 §2.2.2 页面唯一数据入口）：
 //
 // - 数据面：本机偏好（settingsLocalStore：通知偏好 + 缩略图）+ 主题三选
-//   （themeProjection）+ 关于（wire 只读：queryPresence 桌面在场/版本 + getSettings
+//   （platform/theme）+ 关于（wire 只读：queryPresence 桌面在场/版本 + getSettings
 //   镜像摘要，F6 §3.2 只读参考 + F6 §4.2 mirror 不持久化）+ 配对身份
 //   （authStore deviceId/desktopId/host）；
 // - 连接投影：connectionStore.phase === 'ready' → connected；未连接 → 设置项
@@ -11,13 +11,13 @@
 //   ready）→ disconnected 态（F6 §4.2「桌面端离线」诚实化）；
 // - 移除本机：removeLocal 可注入（测试注入；缺省 = defaultRemoveLocal →
 //   pairingWiring.unpair()：清 secure-store + 断开 + authStore 复位，M5 §6.2；
-//   接线未装配时退化为 authStore.revokeLocal 内存复位——装配后由 unpair 全量
+//   接线未装配时退化为 authStore.clearPairing 内存复位——装配后由 unpair 全量
 //   清除，见接线注记）；成功后由页面层重定向 /pair/welcome（R2UX-06-06）。
 //
 // 只读纪律：本文件只调用既有 store 动作与 settingsCommands 接线 API，不修改 domain。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { JsonValue } from '../../../../../packages/shared-types/src/primitive-types';
+import type { JsonValue } from '@crish/shared-types';
 import type { PresenceResult } from '@crish/shared-types';
 import { useConnectionStore, useAuthStore } from '@/adapters/hooks/useAppStore';
 import { authStore } from '@/domain/store/authStore';
@@ -30,12 +30,12 @@ import {
   useThemeMode,
   themeModeStore,
   type ThemeMode,
-} from '@/adapters/settings/themeProjection';
+} from '@/adapters/platform/theme';
 import {
   getSettingsContext,
   type SettingsContext,
 } from '@/adapters/settings/settingsWiring';
-import { getPairingWiring } from '@/adapters/wiring/pairingWiring';
+import { getPairingWiring } from '@/adapters/wiring/pairing';
 
 // ── 关于页数据模型 ────────────────────────────────────────────────────────
 
@@ -131,7 +131,7 @@ export async function defaultRemoveLocal(): Promise<void> {
     await wiring.unpair();
     return;
   }
-  authStore.getState().revokeLocal();
+  authStore.getState().clearPairing();
 }
 
 const IDLE_ABOUT = {
@@ -216,7 +216,7 @@ export function useSettingsVm(
     void loadAbout();
   }, [loadAbout]);
 
-  // ── 主题（themeProjection 存储面） ──────────────────────────────────────
+  // ── 主题（platform/theme 存储面） ───────────────────────────────────────
   const setThemeMode = useCallback((mode: ThemeMode) => {
     themeModeStore.getState().setMode(mode);
   }, []);

@@ -276,7 +276,7 @@ describe('onUnpaired（被动解除配对：auth.revoked / unknown_desktop / 刷
   });
 });
 
-describe('clearPairing / revokeLocal（主动清除本地配对）', () => {
+describe('clearPairing（主动清除本地配对）', () => {
   it('clearPairing 纯内存复位（重新配对前重置表单，不触持久化）', async () => {
     await authStore
       .getState()
@@ -291,9 +291,9 @@ describe('clearPairing / revokeLocal（主动清除本地配对）', () => {
     expect(s.hasKeyMaterial).toBe(false);
   });
 
-  it('revokeLocal（M5 §3.1.1 移除本机）与 clearPairing 同复位面', () => {
+  it('clearPairing 对 token_expired / 已配对态同样复位（移除本机单一动作面）', () => {
     authStore.getState().setPairState('paired');
-    authStore.getState().revokeLocal();
+    authStore.getState().clearPairing();
     expect(authStore.getState().pairState).toBe('unpaired');
     expect(authStore.getState().hasKeyMaterial).toBe(false);
   });

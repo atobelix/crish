@@ -12,7 +12,7 @@ import {
   readRecord,
   readString,
   type EventEnvelopeFrame,
-} from '../../../../../packages/shared-utils/src/event-envelope';
+} from '@crish/shared-utils';
 import {
   FEED_RING_MAX,
   advanceCursor,
@@ -23,7 +23,7 @@ import {
   type AppendOutcome,
   type EventWindow,
   type FeedEntry,
-} from '../../../../../packages/shared-utils/src/event-ring-window';
+} from '@crish/shared-utils';
 import {
   deriveErrorLevel,
   filterByRunId,
@@ -31,7 +31,7 @@ import {
   filterErrors,
   filterFeed,
   type FeedFilter,
-} from '../../../../../packages/shared-utils/src/event-filter';
+} from '@crish/shared-utils';
 
 export {
   readBool,

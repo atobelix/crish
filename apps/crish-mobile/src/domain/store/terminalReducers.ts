@@ -1,6 +1,6 @@
 // terminalReducers（R2-14 第三波）：run 终端行缓冲纯函数层（jest 直测，无 zustand 依赖）
 // 数据面对齐 R2-05c 的 terminalLineBuffer 语义（M5 §3.1.1 terminalStore / F3 §4.0）：
-// - 行缓冲本体 = presentation/components/terminal/terminalLineBuffer.ts（R2-05c 纯函数库，
+// - 行缓冲本体 = domain/pure/terminalLineBuffer.ts（R2-05c 纯函数库，
 //   零 UI 依赖：5000 行环形 + 单行 5000 字符 + \n 提交 /\r 覆盖 + 空行折叠 + ANSI 白名单剥离）；
 //   本层只做「按 runId 持有缓冲实例 + 游标」的映射管理，不重复实现缓冲逻辑；
 // - 游标 cursor：已 ingest 的文本块计数（单调递增），渲染层可据此做增量判定；

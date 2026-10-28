@@ -4,7 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import { authStore } from '@/domain/store/authStore';
 import { connectionStore } from '@/domain/store/connectionStore';
-import { resetPairingWiringForTest } from '@/adapters/wiring/pairingWiring';
+import { resetPairingWiringForTest } from '@/adapters/wiring/pairing';
 import PairManualRoute from '../../../../app/pair/manual';
 
 jest.mock('expo-router', () => ({
@@ -16,7 +16,7 @@ const backMock = router.back as jest.Mock;
 beforeEach(() => {
   jest.clearAllMocks();
   resetPairingWiringForTest();
-  authStore.getState().revokeLocal();
+  authStore.getState().clearPairing();
   connectionStore.setState({ phase: 'disconnected' });
 });
 

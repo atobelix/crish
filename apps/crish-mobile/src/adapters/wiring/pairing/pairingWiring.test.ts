@@ -31,30 +31,36 @@ import {
   verifySignature,
 } from '@/network/signer';
 import type { InboundEnvelope } from '@/network/WsEnvelope';
-import type { JsonValue } from '../../../../../packages/shared-types/src/primitive-types';
+import type { JsonValue } from '@crish/shared-types';
 import type { WsSocket } from '@/network/ReconnectingWsClient';
 import {
   ensureObservationWiring,
   getObservationWiring,
   resetObservationWiringForTest,
-} from './observationWiring';
+} from '../observationWiring';
 import {
   buildAuthPersist,
-  buildSessionGateway,
-  buildSignedRequest,
-  defaultConnectSession,
   engineTlsEnabled,
-  randomNonce,
-  resetPairingWiringForTest,
-  startPairingWiring,
   PAIRING_META_DEVICE_ID_KEY,
   PAIRING_META_DESKTOP_ID_KEY,
   PAIRING_META_HOST_KEY,
-  type PairingSessionContext,
-  type PairingWiring,
-  type PairingWiringError,
-  type PairingWiringOptions,
-} from './pairingWiring';
+} from './pairingPersistence';
+import {
+  buildSessionGateway,
+  buildSignedRequest,
+  defaultConnectSession,
+  randomNonce,
+} from './sessionSigning';
+import {
+  resetPairingWiringForTest,
+  startPairingWiring,
+} from './pairingAssembly';
+import type {
+  PairingSessionContext,
+  PairingWiring,
+  PairingWiringError,
+  PairingWiringOptions,
+} from './PairingWiring';
 
 const VALID_CODE = 'CXN-7K4P-Q2MB-9XRT';
 
@@ -186,7 +192,7 @@ async function runFullChain(
 }
 
 beforeEach(() => {
-  authStore.getState().revokeLocal();
+  authStore.getState().clearPairing();
   connectionStore.getState().reset();
   resetObservationWiringForTest();
   resetPairingWiringForTest();
@@ -1044,7 +1050,9 @@ describe('配对端点明文开关（EXPO_PUBLIC_ENGINE_TLS，R2-16 裁决-1 联
     });
     h.wiring.beginPairing({ code: VALID_CODE, host: '10.0.2.2' });
     expect(urls[0]).toBe('ws://10.0.2.2:8765/v1/events');
-    expect(h.wiring.getPairingClient()!.url).toBe('ws://10.0.2.2:8765/v1/events');
+    expect(h.wiring.getPairingClient()!.url).toBe(
+      'ws://10.0.2.2:8765/v1/events'
+    );
   });
 
   it('EXPO_PUBLIC_ENGINE_TLS=false：配对成功会话连接解析 ws', async () => {

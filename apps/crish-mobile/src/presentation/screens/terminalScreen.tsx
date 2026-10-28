@@ -17,7 +17,7 @@ import {
   createTerminalLineBuffer,
   appendTerminalChunk,
   terminalLinesOf,
-} from '@/presentation/components/terminal/terminalLineBuffer';
+} from '@/domain/pure/terminalLineBuffer';
 import { terminalStore } from '@/domain/store/terminalStore';
 import { terminalViewOf } from '@/domain/store/terminalReducers';
 import {

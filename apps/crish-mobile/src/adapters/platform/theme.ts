@@ -5,9 +5,6 @@
 //
 // 主题消费入口（M4 §7.4）：适配层统一消费主题投影——useTheme 订阅外观三选
 // （F6 §9 跟随系统/浅色/深色），system 模式透传系统外观（useColorScheme 订阅即时切换）。
-// R2-05（R2-16 走查 §2.1 R-T1~4 修复）：三选存储/投影下沉本层，useTheme 与 useAppTheme
-// 同源（settings/themeProjection.ts 为薄兼容层）——主屏 20+ 组件（仅 useTheme 消费）
-// 与设置/配对页（useAppTheme）全部跟随三选，修复「深色模式三选强制对主屏不生效」。
 import { useColorScheme } from 'react-native';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
@@ -90,8 +87,8 @@ interface ThemeModeState {
 
 /**
  * 主题偏好存储（适配层单例，R2-05 由 settings 域下沉至 platform 层）：
- * - 下沉原因：useTheme（主屏消费入口）与 useAppTheme 同源消费投影，存储须位于
- *   两者共同的下层（platform），避免 settings → platform 反向依赖；
+ * - 下沉原因：useTheme（全部组件的统一消费入口）与外观三选存储同层，
+ *   避免 settings → platform 反向依赖；
  * - R2-14b settingsStore（appearance 分片，F6 §4.2）落地后存储面替换为
  *   settingsStore 订阅（本机持久化），本接口保持不变。
  */
@@ -121,16 +118,13 @@ export function projectThemeTokens(
 /**
  * 主题 token 统一消费入口（M4 §7.4 / §3.8）：
  * 外观三选投影 + 系统外观（useColorScheme 订阅，system 档即时跟随）。
- * 主屏 20+ 组件经此消费；settings/themeProjection.useAppTheme 与本函数同源。
+ * 全部组件经此消费（设置/配对页与主屏同一入口）。
  */
 export function useTheme(): ThemeTokens {
   const mode = useThemeMode((s) => s.mode);
   const systemTokens = useColorScheme() === 'dark' ? darkTokens : lightTokens;
   return projectThemeTokens(mode, systemTokens);
 }
-
-/** 兼容别名：useAppTheme 与 useTheme 函数恒等（单一真理源） */
-export const useAppTheme = useTheme;
 
 /** 测试隔离：主题偏好复位（仅测试调用） */
 export function resetThemeModeForTest(): void {

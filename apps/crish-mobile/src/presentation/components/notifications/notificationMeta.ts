@@ -59,19 +59,13 @@ const DEEP_LINK_ROUTE_TABLE: Record<string, (id: string) => string | null> = {
   run: (id) => (id ? `/run/${id}` : null),
   terminal: (id) => (id ? `/terminal/${id}` : null),
   approvals: () => '/approvals',
-  tasks: () => '/tasks',
-  usage: () => '/usage',
-  diagnostics: () => '/diagnostics',
   dashboard: () => '/',
   files: () => '/files',
   settings: () => '/settings',
 };
 
-/** 深链 scheme 白名单（M4 §4.3 统一 schema crish://；F2 §6.2 历史形态 conex://） */
-const ALLOWED_DEEP_LINK_SCHEMES: ReadonlySet<string> = new Set([
-  'crish',
-  'conex',
-]);
+/** 深链 scheme 白名单（M4 §4.3：统一 crish://，app.json scheme 同源） */
+const ALLOWED_DEEP_LINK_SCHEMES: ReadonlySet<string> = new Set(['crish']);
 
 /** 查询串手工解析（避免依赖 URLSearchParams 的 Hermes 行为差异；键存在但无值视为缺省） */
 function readQueryParams(
@@ -91,8 +85,8 @@ function readQueryParams(
 
 /**
  * 通知项 → expo-router 路径（深链白名单翻译）：
- * - route 优先（D7 §7.4 / M4 §4.3 形态 crish://approval/{toolCallId}、
- *   F2 §6.2 形态 conex://approval?toolCallId=…、以及 expo-router 相对路径 /approval/…）；
+ * - route 优先（D7 §7.4 / M4 §4.3 形态 crish://approval/{toolCallId}，
+ *   以及 expo-router 相对路径 /approval/…）；
  * - route 缺失/不可解析时按 kind/字段兜底（审批 → toolCallId；run/task/subagent 事件 → runId）；
  * - 白名单外目标 / 缺 id → null（不导航，仅已读）。
  */
@@ -107,7 +101,7 @@ export function notificationRouteToPath(
       return first && first in DEEP_LINK_ROUTE_TABLE ? raw : null;
     }
     const [pathPart = '', queryPart] = raw.split('?');
-    // scheme 白名单校验（M4 §4.3：仅 crish:// / conex:// 形态；其余 scheme 拒绝）
+    // scheme 白名单校验（M4 §4.3：仅 crish:// 形态；其余 scheme 拒绝）
     const schemeMatch = /^([a-z][a-z0-9+.-]*):\/\//i.exec(pathPart);
     const scheme = schemeMatch ? (schemeMatch[1] ?? '') : null;
     if (scheme !== null && !ALLOWED_DEEP_LINK_SCHEMES.has(scheme)) {

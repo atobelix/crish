@@ -12,7 +12,7 @@ import type {
   PairingInput,
   PairingSnapshot,
   PairingStartResult,
-} from '@/adapters/wiring/pairingWiring';
+} from '@/adapters/wiring/pairing';
 import { connectionStore } from '@/domain/store/connectionStore';
 import PairManualScreen, {
   PAIR_ABANDON_DIALOG_DESCRIPTION,

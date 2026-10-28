@@ -10,13 +10,11 @@
 import {
   ensurePairingWiring,
   getPairingWiring,
-} from '@/adapters/wiring/pairingWiring';
-import type {
-  PairingInput,
-  PairingSnapshot,
-  PairingStartResult,
-  PairingWiring,
-} from '@/adapters/wiring/pairingWiring';
+  type PairingInput,
+  type PairingSnapshot,
+  type PairingStartResult,
+  type PairingWiring,
+} from '@/adapters/wiring/pairing';
 import { expoSecureStoreDriver } from '@/db/secureStore';
 import type { SecureStoreDriver } from '@/db/secureStore';
 

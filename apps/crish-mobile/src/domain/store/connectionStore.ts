@@ -37,9 +37,6 @@ export interface ConnectionState {
   selectedEndpoint: ConnectionEndpoint | null;
   /** 累计连接/重连尝试次数（任务书 attemptCount，诊断数据面；ready 相位与 reset 清零） */
   attemptCount: number;
-  /** 兼容别名：M5 §3.1.1 原字段名 retryCount（并行域 useFilesVm 测试 setState 种子），
-   *  与 attemptCount 同步维护——动作面统一走 attemptCount，读侧两者等价 */
-  retryCount: number;
   /** 最近一次连接错误（可读文案；useDashboardVm 诊断展示，不改相位） */
   lastError: string | null;
   /** 最后同步时刻 ms（ready 相位打点；stale 灰字数据面，R2UX-05-10） */
@@ -63,7 +60,6 @@ export const connectionStore = createStore<ConnectionState>()(
     phase: 'disconnected',
     selectedEndpoint: null,
     attemptCount: 0,
-    retryCount: 0,
     lastError: null,
     lastSyncAt: null,
 
@@ -74,7 +70,6 @@ export const connectionStore = createStore<ConnectionState>()(
           s.lastSyncAt = Date.now();
           // 重连成功：清连续失败计数（M5 §4.3.2「重连成功重置 retryCount」对齐）
           s.attemptCount = 0;
-          s.retryCount = 0;
         }
       }),
 
@@ -86,7 +81,6 @@ export const connectionStore = createStore<ConnectionState>()(
     onReconnectAttempt: () =>
       set((s) => {
         s.attemptCount += 1;
-        s.retryCount += 1; // 兼容别名同步（M5 §3.1.1 retryCount 口径）
       }),
 
     onError: (message) =>
@@ -98,7 +92,6 @@ export const connectionStore = createStore<ConnectionState>()(
       set((s) => {
         s.phase = 'disconnected';
         s.attemptCount = 0;
-        s.retryCount = 0;
         s.lastError = null;
         s.lastSyncAt = null;
       }),

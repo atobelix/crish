@@ -13,7 +13,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import Button from '../ui/Button';
 import Dialog from '../ui/Dialog';
 import type { DialogAction } from '../ui/Dialog';
-import { useAppTheme } from '@/adapters/settings/themeProjection';
+import { useTheme } from '@/adapters/platform/theme';
 
 export const REMOVE_LOCAL_DIALOG_TITLE = '移除本机';
 
@@ -53,7 +53,7 @@ export interface SettingsRemoveLocalZoneProps {
 export default function SettingsRemoveLocalZone({
   onConfirm,
 }: SettingsRemoveLocalZoneProps) {
-  const theme = useAppTheme();
+  const theme = useTheme();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [removing, setRemoving] = useState(false);
 

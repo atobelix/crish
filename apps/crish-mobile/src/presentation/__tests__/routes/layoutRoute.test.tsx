@@ -57,7 +57,7 @@ async function setHydrated(value: boolean): Promise<void> {
 
 beforeEach(async () => {
   jest.clearAllMocks();
-  authStore.getState().revokeLocal();
+  authStore.getState().clearPairing();
   configureAuthPersistence(pendingAuthPersist);
   authStore.setState({ hydrated: false });
 });

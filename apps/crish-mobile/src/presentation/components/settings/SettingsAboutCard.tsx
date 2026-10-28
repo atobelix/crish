@@ -19,7 +19,7 @@ import type {
   AboutStatus,
   SettingsMirror,
 } from '@/adapters/viewmodels/useSettingsVm';
-import { useAppTheme } from '@/adapters/settings/themeProjection';
+import { useTheme } from '@/adapters/platform/theme';
 import { dualHitSlop } from '@/presentation/components/ui/hitTargets';
 
 export interface SettingsAboutCardProps {
@@ -44,7 +44,7 @@ export default function SettingsAboutCard({
   desktopId,
   onRefresh,
 }: SettingsAboutCardProps) {
-  const theme = useAppTheme();
+  const theme = useTheme();
   const online = presence?.desktopOnline === true;
   const desktopIdShort = shortDesktopId(desktopId);
 

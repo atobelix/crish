@@ -203,17 +203,13 @@ describe('formatPairCodeDraft 与 extractCodeFromDraft 互逆闭环', () => {
   });
 
   it('extractCodeFromDraft(formatPairCodeDraft(raw)) 保持恒等', () => {
-    const rawCodes = [
-      'K',
-      'KC5Q',
-      'KC5QBNTV',
-      '7K4PQ2MB9XRT',
-      'CXN7K4PQ2MB9',
-    ];
+    const rawCodes = ['K', 'KC5Q', 'KC5QBNTV', '7K4PQ2MB9XRT', 'CXN7K4PQ2MB9'];
     for (const raw of rawCodes) {
       const formatted = formatPairCodeDraft(raw);
       const extracted = extractCodeFromDraft(formatted);
-      expect(extracted).toBe(raw.startsWith('CXN') && raw.length > 12 ? raw.slice(3) : raw);
+      expect(extracted).toBe(
+        raw.startsWith('CXN') && raw.length > 12 ? raw.slice(3) : raw
+      );
     }
   });
 });

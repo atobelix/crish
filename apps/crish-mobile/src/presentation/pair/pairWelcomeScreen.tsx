@@ -4,12 +4,7 @@
 // - 未登录/断网保底：友好提醒并引导登录，同时 100% 完整保留现有局域网扫码与 CXN 6 位码直连（本地优先）；
 // - 已配对态兜底：authStore hydrated 且 paired → 展示已配对设备信息 + 进入应用。
 import { useState, useSyncExternalStore } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuthStore } from '@/adapters/hooks/useAppStore';
 import { useTheme } from '@/adapters/platform/theme';
 import Button from '@/presentation/components/ui/Button';
@@ -44,9 +39,8 @@ export default function PairWelcomeScreen({
   const deviceId = useAuthStore((s) => s.deviceId);
   const paired = hydrated && pairState === 'paired';
 
-  const cloudAuth = useSyncExternalStore(
-    cloudAuthStore.subscribe,
-    () => cloudAuthStore.getState()
+  const cloudAuth = useSyncExternalStore(cloudAuthStore.subscribe, () =>
+    cloudAuthStore.getState()
   );
 
   const [email, setEmail] = useState('');
@@ -69,7 +63,9 @@ export default function PairWelcomeScreen({
     if (!cloudAuth.onlineDesktop) return;
     setConnectingDesktop(true);
     try {
-      const ticketRes = await cloudAuthStore.getState().requestTicketForDesktop();
+      const ticketRes = await cloudAuthStore
+        .getState()
+        .requestTicketForDesktop();
       const relayHost =
         ticketRes.relayUrl.replace(/^wss?:\/\//, '').split('/')[0] ||
         'relay.flowbit.me';
@@ -136,7 +132,11 @@ export default function PairWelcomeScreen({
           </Text>
           {cloudAuth.onlineDesktop ? (
             <Button
-              label={connectingDesktop ? '正在建立安全直连…' : '⚡ 一键免扫码直连协同'}
+              label={
+                connectingDesktop
+                  ? '正在建立安全直连…'
+                  : '⚡ 一键免扫码直连协同'
+              }
               testID="pair-one-click-connect"
               onPress={handleOneClickConnect}
               disabled={connectingDesktop}
@@ -195,7 +195,9 @@ export default function PairWelcomeScreen({
                   hitSlop={dualHitSlop(36, 60)}
                   onPress={() => setShowLogin(false)}
                 >
-                  <Text style={[styles.cancelText, { color: theme.textTertiary }]}>
+                  <Text
+                    style={[styles.cancelText, { color: theme.textTertiary }]}
+                  >
                     取消
                   </Text>
                 </Pressable>
@@ -333,13 +335,6 @@ const styles = StyleSheet.create({
   loginBox: {
     gap: 8,
     marginTop: 4,
-  },
-  input: {
-    height: 40,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    fontSize: 14,
   },
   errorText: {
     fontSize: 12,

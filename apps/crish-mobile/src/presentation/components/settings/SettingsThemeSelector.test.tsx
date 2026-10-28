@@ -1,7 +1,7 @@
 // SettingsThemeSelector 组件测试（R2UX-06-05 深色模式三选）：
 // 三选渲染 / 当前值选中态 / 点击回调 / 无障碍 label
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { THEME_MODE_LABELS } from '@/adapters/settings/themeProjection';
+import { THEME_MODE_LABELS } from '@/adapters/platform/theme';
 import SettingsThemeSelector from './SettingsThemeSelector';
 
 describe('SettingsThemeSelector（F6 §9 主题三选）', () => {
