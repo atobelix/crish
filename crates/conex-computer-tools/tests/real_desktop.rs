@@ -34,6 +34,8 @@
 // 测试面：真实桌面冒烟需拉起/终止记事本进程（非产品执行路径，无门禁面；
 // 参数仅固定可执行名与临时文件路径，无用户自由参数）
 #![allow(clippy::disallowed_methods)]
+// 真实桌面集成测试仅 Windows 有实现（UIA/输入注入），非 Windows 不编译测试体。
+#![cfg(windows)]
 
 use agent_tools::context::ToolContext;
 use agent_tools::definition::ToolError;
