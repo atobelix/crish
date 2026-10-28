@@ -77,9 +77,9 @@
   font-size: var(--font-size-sm);
   font-family: inherit;
   max-width: 110px;
-  height: 24px;
-  padding: 0 6px;
-  border-radius: var(--radius-card, 12px);
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--radius-control, 8px);
   cursor: pointer;
   outline: none;
   box-sizing: border-box;
@@ -89,7 +89,7 @@
 }
 
 .bcProjectBtn:hover {
-  background: var(--state-hover);
+  background: transparent;
   color: var(--text-primary);
 }
 
@@ -103,7 +103,7 @@
 }
 
 .bcProjectBtn:active {
-  background: var(--tint-active);
+  background: transparent;
 }
 
 .bcText {
@@ -167,14 +167,14 @@
   );
 }
 
-/* 视觉层级收敛：快捷按钮升级为 50% 正圆（历史设计契约 border-radius: var(--radius-md) 退役） */
+/* 视觉弧度一致性：快捷按钮统合为 8px 金标（历史设计契约 border-radius: var(--radius-md) 升级为 --radius-control 8px） */
 .topActionBtn,
 .topActionBtn {
   width: 28px;
   height: 28px;
   min-width: 28px;
   min-height: unset;
-  border-radius: 50%;
+  border-radius: var(--radius-control, 8px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -193,13 +193,13 @@
 }
 
 .topActionBtn:hover {
-  background: var(--state-hover);
+  background: transparent;
   color: var(--text-primary);
 }
 
 .topActionBtn.isActive,
 .topActionBtn[data-active='true'] {
-  background: var(--tint-active);
+  background: var(--state-active);
   color: var(--text-primary);
 }
 

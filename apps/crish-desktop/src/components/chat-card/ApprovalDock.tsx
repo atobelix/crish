@@ -6,7 +6,7 @@
 import React, { useRef } from 'react';
 
 import styles from './ApprovalDock.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import { getSessionById } from '../../store/storeAccess';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
 import { useToast } from '../../services/toast/ToastContext';
@@ -15,7 +15,7 @@ import {
   resolveApprovalDockLabelText,
   shouldRenderApprovalDock,
 } from './chatStatusRibbonsLib';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 function escapeCss(id: string): string {
   if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {

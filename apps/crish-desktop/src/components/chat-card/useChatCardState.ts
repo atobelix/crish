@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useChatSessionMeta } from './useChatSessionMeta';
 import { useChatProjectPicker } from './useChatProjectPicker';
 import { useChatModelPicker } from './useChatModelPicker';
@@ -6,6 +7,8 @@ import { useChatApproval } from './useChatApproval';
 import { useChatDiffPanel } from './useChatDiffPanel';
 import { useChatSessionActions } from './useChatSessionActions';
 import { useChatComposerProps } from './useChatComposerProps';
+import { syncRuntimePermissionMode } from '../../api/runtimePermissionSync';
+import type { PermissionMode } from '../../api/permissionModes';
 
 export { useScopedSessionField } from './useScopedSessionField';
 export type { SessionStoreStateShape } from './useScopedSessionField';
@@ -82,6 +85,16 @@ export function useChatCardState({
   const engineOk: boolean | null =
     modelPicker.engineHint == null ? null : modelPicker.engineHint.ok;
 
+  // 权限选择：本地 store（下一次 run 初始态）+ 活动主 run 活单元同步
+  // （子代理 PermissionCell 经父链自动跟随）
+  const setPermissionMode = useCallback(
+    (mode: PermissionMode) => {
+      approval.setPermissionMode(mode);
+      void syncRuntimePermissionMode(sessionMeta.activeSessionId, mode);
+    },
+    [approval.setPermissionMode, sessionMeta.activeSessionId]
+  );
+
   return {
     activeSessionId: sessionMeta.activeSessionId,
     activeSessionTitle: sessionMeta.activeSessionTitle,
@@ -116,10 +129,7 @@ export function useChatCardState({
     onEmptySurface: chatMessages.onEmptySurface,
     chatRegionAria: chatMessages.chatRegionAria,
     permissionMode: approval.permissionMode,
-    setPermissionMode: approval.setPermissionMode,
-    planApproved: approval.planApproved,
-    setPlanApproved: approval.setPlanApproved,
-    inPlanMode: approval.inPlanMode,
+    setPermissionMode,
     openSidePanel: sessionActions.openSidePanel,
     isProcessing: chatMessages.isProcessing,
     openPathInFilesPanel: sessionActions.openPathInFilesPanel,
@@ -134,8 +144,7 @@ export function useChatCardState({
     isFiltering: projectPicker.isFiltering,
     firstRunOpen: sessionMeta.firstRunOpen,
     engineOk,
-    handleCreateSessionFromEmpty:
-      sessionActions.handleCreateSessionFromEmpty,
+    handleCreateSessionFromEmpty: sessionActions.handleCreateSessionFromEmpty,
     handleProjectChanged: sessionActions.handleProjectChanged,
     handleSendFollowUp: sessionActions.handleSendFollowUp,
     handleOpenTerminal: sessionActions.handleOpenTerminal,

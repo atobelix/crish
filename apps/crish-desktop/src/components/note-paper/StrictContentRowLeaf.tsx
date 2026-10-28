@@ -154,6 +154,8 @@ export const StrictContentRowLeaf: React.FC<StrictContentRowLeafProps> = ({
       Boolean(onTextCommit) ||
       mdPrefixWriteMode === 'writable');
   const composingRef = useRef(false);
+  const compositionBaseTextRef = useRef<string | null>(null);
+  const ignoreLateCompositionEndRef = useRef(false);
   const elRef = useRef<HTMLDivElement | null>(null);
   /** 防 input 重入 / 未完成 commit 交错 */
   const commitInFlight = useRef(false);
@@ -179,7 +181,7 @@ export const StrictContentRowLeaf: React.FC<StrictContentRowLeafProps> = ({
   }, [projectionText, writable, editSession, blockId]);
 
   const runCommit = useCallback(
-    async (plain: string) => {
+    async (plain: string, notifyPlainTextChange = true) => {
       if (!writable || commitInFlight.current) return;
       if (composingRef.current) return;
       // 无完整空格结尾的前缀时库会拒；仍走桥以统一路径
@@ -206,7 +208,9 @@ export const StrictContentRowLeaf: React.FC<StrictContentRowLeafProps> = ({
           editSession.commit(blockId);
         } else {
           // 普通文本输入（非 Markdown 前缀，如常规汉字或英文），正常更新状态并触发回调，不被阻断
-          onTextChangeRef.current?.(blockId, plain);
+          if (notifyPlainTextChange) {
+            onTextChangeRef.current?.(blockId, plain);
+          }
         }
       } finally {
         commitInFlight.current = false;
@@ -223,41 +227,64 @@ export const StrictContentRowLeaf: React.FC<StrictContentRowLeafProps> = ({
     ]
   );
 
-  const onCompositionStart = useCallback(() => {
-    composingRef.current = true;
-  }, []);
+  const onCompositionStart = useCallback(
+    (ev: React.CompositionEvent<HTMLDivElement>) => {
+      ignoreLateCompositionEndRef.current = false;
+      compositionBaseTextRef.current =
+        ev.currentTarget.textContent ?? projectionText ?? '';
+      composingRef.current = true;
+    },
+    [projectionText]
+  );
 
   const onCompositionEnd = useCallback(
     (ev: React.CompositionEvent<HTMLDivElement>) => {
+      if (ignoreLateCompositionEndRef.current) {
+        ignoreLateCompositionEndRef.current = false;
+        return;
+      }
+      if (!composingRef.current) return;
       composingRef.current = false;
+      compositionBaseTextRef.current = null;
       // 声明编辑持有（无竞态建会话，记录 baseRev）；提交成功后 commit 关闭
       editSession.open(blockId, baseRev);
       const plain = ev.currentTarget.textContent ?? '';
       onTextChangeRef.current?.(blockId, plain);
-      void runCommit(plain);
+      void runCommit(plain, false);
     },
     [runCommit, editSession, blockId, baseRev]
   );
 
   const onInput = useCallback(
     (ev: React.FormEvent<HTMLDivElement>) => {
+      const plain = ev.currentTarget.textContent ?? '';
+      // composition 预编辑只留在 DOM 中；不得进入持久化防抖队列。
+      if (composingRef.current) return;
       // 首次合法输入声明编辑持有；提交成功后 commit 关闭（幂等，已持有不覆盖）
       editSession.open(blockId, baseRev);
-      const plain = ev.currentTarget.textContent ?? '';
       onTextChangeRef.current?.(blockId, plain);
-      if (composingRef.current) return;
-      void runCommit(plain);
+      void runCommit(plain, false);
     },
     [runCommit, editSession, blockId, baseRev]
   );
 
   const onBlur = useCallback(
     (ev: React.FocusEvent<HTMLDivElement>) => {
+      if (composingRef.current) {
+        // blur 早于 compositionend 时按取消处理：恢复组合开始前的已确认文本。
+        composingRef.current = false;
+        ignoreLateCompositionEndRef.current = true;
+        const baseline = compositionBaseTextRef.current ?? projectionText ?? '';
+        compositionBaseTextRef.current = null;
+        if (ev.currentTarget.textContent !== baseline) {
+          ev.currentTarget.textContent = baseline;
+        }
+      }
       const plain = ev.currentTarget.textContent ?? '';
       onTextChangeRef.current?.(blockId, plain);
       onTextCommitRef.current?.(blockId, plain);
     },
-    [blockId]
+    [blockId, projectionText]
   );
 
   const onKeyDown = useCallback(

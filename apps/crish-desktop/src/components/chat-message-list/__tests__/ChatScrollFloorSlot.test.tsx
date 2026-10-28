@@ -54,8 +54,6 @@ function createVirtualizerProps(
     },
     flowControl: {
       hideThinkingBlock: false,
-      inPlanMode: false,
-      planApproved: false,
       lastAssistantId:
         messages.find((m) => m.sender === 'assistant')?.id ?? null,
       lastUserId:

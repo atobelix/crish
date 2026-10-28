@@ -389,5 +389,31 @@ describe('useScrollAnchoringOnToggle', () => {
       expect(result.current.isAnchorLocked()).toBe(false);
       expect(isAtBottomRef.current).toBe(true);
     });
+
+    it('点击回底浮钮（chat-scroll-floor-slot / chat-scroll-floor-btn）：绝不触发折叠锚定锁且不取消程序吸底（防 1 帧闪烁）', () => {
+      const cancelProgrammaticScroll = vi.fn();
+      const { result, container, isAtBottomRef } = setup({
+        cancelProgrammaticScroll,
+      });
+
+      const floorSlot = document.createElement('div');
+      floorSlot.setAttribute('data-testid', 'chat-scroll-floor-slot');
+      const floorBtn = document.createElement('button');
+      floorBtn.setAttribute('data-testid', 'chat-scroll-floor-btn');
+      floorSlot.appendChild(floorBtn);
+      container.appendChild(floorSlot);
+
+      act(() => {
+        result.current.handlePointerDownCapture({
+          nativeEvent: { offsetX: 50 },
+          currentTarget: container,
+          target: floorBtn,
+        } as unknown as React.PointerEvent<HTMLDivElement>);
+      });
+
+      expect(result.current.isAnchorLocked()).toBe(false);
+      expect(cancelProgrammaticScroll).not.toHaveBeenCalled();
+      expect(isAtBottomRef.current).toBe(true);
+    });
   });
 });

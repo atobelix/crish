@@ -11,7 +11,8 @@
   max-width: 100%;
   margin: var(--space-2, 8px) 0;
   border-radius: var(--md-table-radius, var(--radius-lg));
-  border: var(--md-table-border-width, var(--hairline-width, 1px)) solid var(--md-table-border, var(--border-color));
+  border: var(--md-table-border-width, var(--hairline-width, 1px)) solid
+    var(--md-table-border, var(--border-color));
   background: var(--md-table-bg, var(--bg-secondary));
   box-sizing: border-box;
 }
@@ -45,9 +46,13 @@
 .tableScrollViewport table td,
 .tableScrollViewport :global(.md-th),
 .tableScrollViewport :global(.md-td) {
-  padding: var(--md-table-cell-padding, var(--space-2, 8px) var(--space-3, 12px));
+  padding: var(
+    --md-table-cell-padding,
+    var(--space-2, 8px) var(--space-3, 12px)
+  );
   text-align: left;
-  border-bottom: var(--md-table-border-width, var(--hairline-width, 1px)) solid var(--md-table-row-border, var(--border-subtle));
+  border-bottom: var(--md-table-border-width, var(--hairline-width, 1px)) solid
+    var(--md-table-row-border, var(--border-subtle));
   overflow-wrap: anywhere;
 }
 
@@ -61,7 +66,8 @@
   background: var(--md-table-header-bg, var(--bg-secondary));
   font-weight: var(--md-table-header-font-weight, 600);
   color: var(--md-table-header-fg, var(--text-primary));
-  border-bottom: var(--md-table-border-width, var(--hairline-width, 1px)) solid var(--md-table-header-border, var(--border-color));
+  border-bottom: var(--md-table-border-width, var(--hairline-width, 1px)) solid
+    var(--md-table-header-border, var(--border-color));
   user-select: none;
 }
 
@@ -80,40 +86,103 @@
 
 /* 活跃单元格呼吸脉冲动画定义 (GPU 硬件加速) */
 @keyframes md-table-pulse {
-  0%, 100% {
-    outline-color: color-mix(in srgb, var(--accent-color) 48%, var(--border-color));
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-color) 18%, transparent);
-    background-color: var(--stream-table-active-bg, color-mix(in srgb, var(--accent-color) 6%, transparent));
+  0%,
+  100% {
+    outline-color: color-mix(
+      in srgb,
+      var(--accent-color) 48%,
+      var(--border-color)
+    );
+    box-shadow: 0 0 0 1px
+      color-mix(in srgb, var(--accent-color) 18%, transparent);
+    background-color: var(
+      --stream-table-active-bg,
+      color-mix(in srgb, var(--accent-color) 6%, transparent)
+    );
   }
   50% {
-    outline-color: color-mix(in srgb, color-mix(in srgb, var(--accent-color) 48%, var(--border-color)) 35%, transparent);
+    outline-color: color-mix(
+      in srgb,
+      color-mix(in srgb, var(--accent-color) 48%, var(--border-color)) 35%,
+      transparent
+    );
     box-shadow: 0 0 0 0 transparent;
-    background-color: color-mix(in srgb, var(--stream-table-active-bg, color-mix(in srgb, var(--accent-color) 6%, transparent)) 25%, transparent);
+    background-color: color-mix(
+      in srgb,
+      var(
+          --stream-table-active-bg,
+          color-mix(in srgb, var(--accent-color) 6%, transparent)
+        )
+        25%,
+      transparent
+    );
   }
 }
 
 /* 活跃单元格呼吸脉冲边框反馈 (挂载在根容器契约 data-table-streaming='true')
  * 12-T1：去掉常驻 will-change（无限脉冲 + 错误合成层）；动画仅 outline/bg。 */
-.tableContainerRoot[data-table-streaming='true'] .tableScrollViewport table tbody tr:last-child td:last-child,
-.tableContainerRoot[data-table-streaming='true'] .tableScrollViewport :global(.md-table) tbody tr:last-child td:last-child,
-.tableContainerRoot[data-table-streaming='true'] .tableScrollViewport :global(.md-table) tbody tr:last-child :global(.md-td:last-child) {
+.tableContainerRoot[data-table-streaming='true']
+  .tableScrollViewport
+  table
+  tbody
+  tr:last-child
+  td:last-child,
+.tableContainerRoot[data-table-streaming='true']
+  .tableScrollViewport
+  :global(.md-table)
+  tbody
+  tr:last-child
+  td:last-child,
+.tableContainerRoot[data-table-streaming='true']
+  .tableScrollViewport
+  :global(.md-table)
+  tbody
+  tr:last-child
+  :global(.md-td:last-child) {
   position: relative;
-  outline: 1px dashed color-mix(in srgb, var(--accent-color) 48%, var(--border-color));
+  outline: 1px dashed
+    color-mix(in srgb, var(--accent-color) 48%, var(--border-color));
   outline-offset: -1px;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-color) 18%, transparent);
-  background-color: var(--stream-table-active-bg, color-mix(in srgb, var(--accent-color) 6%, transparent));
-  animation: md-table-pulse 1.6s var(--stream-anim-easing) infinite;
+  background-color: var(
+    --stream-table-active-bg,
+    color-mix(in srgb, var(--accent-color) 6%, transparent)
+  );
+  animation: md-table-pulse var(--transition-pulse, 1.6s)
+    var(--stream-anim-easing) infinite;
 }
 
 /* 节能模式与无障碍性能分档适配 */
-:global(html[data-perf-tier='eco']) .tableContainerRoot[data-table-streaming='true'] .tableScrollViewport table tbody tr:last-child td:last-child,
-:global(html[data-perf-tier='eco']) .tableContainerRoot[data-table-streaming='true'] .tableScrollViewport :global(.md-table) tbody tr:last-child td:last-child {
+:global(html[data-perf-tier='eco'])
+  .tableContainerRoot[data-table-streaming='true']
+  .tableScrollViewport
+  table
+  tbody
+  tr:last-child
+  td:last-child,
+:global(html[data-perf-tier='eco'])
+  .tableContainerRoot[data-table-streaming='true']
+  .tableScrollViewport
+  :global(.md-table)
+  tbody
+  tr:last-child
+  td:last-child {
   animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tableContainerRoot[data-table-streaming='true'] .tableScrollViewport table tbody tr:last-child td:last-child,
-  .tableContainerRoot[data-table-streaming='true'] .tableScrollViewport :global(.md-table) tbody tr:last-child td:last-child {
+  .tableContainerRoot[data-table-streaming='true']
+    .tableScrollViewport
+    table
+    tbody
+    tr:last-child
+    td:last-child,
+  .tableContainerRoot[data-table-streaming='true']
+    .tableScrollViewport
+    :global(.md-table)
+    tbody
+    tr:last-child
+    td:last-child {
     animation: none;
   }
 }
@@ -124,7 +193,10 @@
   .tableScrollViewport table td,
   .tableScrollViewport :global(.md-th),
   .tableScrollViewport :global(.md-td) {
-    padding: var(--md-table-cell-padding-compact, var(--space-1_5, 6px) var(--space-2, 8px));
+    padding: var(
+      --md-table-cell-padding-compact,
+      var(--space-1_5, 6px) var(--space-2, 8px)
+    );
     font-size: var(--font-size-xs, 12px);
     line-height: 1.45;
   }

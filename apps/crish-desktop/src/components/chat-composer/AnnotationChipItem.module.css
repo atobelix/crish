@@ -145,7 +145,7 @@
 }
 
 .annCancelBtn:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 

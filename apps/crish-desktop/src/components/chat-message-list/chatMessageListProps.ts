@@ -132,10 +132,7 @@ export interface MessageVirtualizerPinsProps {
 /** 流程与思考流控制域 */
 export interface MessageVirtualizerFlowControlProps {
   hideThinkingBlock: boolean;
-  inPlanMode: boolean;
-  planApproved: boolean;
   setPermissionMode?: (mode: PermissionMode) => void;
-  setPlanApproved?: (v: boolean) => void;
   lastAssistantId: string | null;
   lastUserId?: string | null;
   thinkingMsgId?: string;

@@ -24,7 +24,7 @@
   font-size: 12px;
   line-height: 1.4;
   box-shadow: var(--shadow-lg);
-  animation: undoToastIn 160ms ease-out;
+  animation: undoToastIn var(--duration-fast, 160ms) var(--ease-standard);
 }
 
 @keyframes undoToastIn {
@@ -61,7 +61,7 @@
   font-weight: normal;
   cursor: pointer;
   box-shadow: none;
-  transition: background-color 120ms ease;
+  transition: background-color var(--duration-fast, 120ms) var(--ease-standard);
 }
 
 .undoBtn:hover {
@@ -90,7 +90,9 @@
   color: var(--text-tertiary);
   cursor: pointer;
   box-shadow: none;
-  transition: background-color 120ms ease, color 120ms ease;
+  transition:
+    background-color var(--duration-fast, 120ms) var(--ease-standard),
+    color var(--duration-fast, 120ms) var(--ease-standard);
 }
 
 .closeBtn:hover {

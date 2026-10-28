@@ -7,10 +7,13 @@ import { describe, expect, it } from 'vitest';
 
 // CRLF 检出（core.autocrlf=true）下多行选择器含 \r\n，统一成 \n 再匹配
 const read = (rel: string) =>
-  readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8').replace(/\r\n/g, '\n');
+  readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8').replace(
+    /\r\n/g,
+    '\n'
+  );
 const rowCss = read('../ChatMessageRow.module.css');
 const noticeCss = read('../../chat-message/ContextStateNotice.module.css');
-const tokens = read('../../../styles/tokens.css');
+const tokens = read('../../../styles/tokens-space.css');
 const bar = read('../AssistantMessageActionsBar.tsx');
 
 function block(css: string, selector: string): string {
@@ -21,13 +24,17 @@ function block(css: string, selector: string): string {
 }
 
 describe('行距 token', () => {
-  it('三档 tokens.css 都声明 --chat-row-gap / --chat-row-gap-compact', () => {
+  it('三档 tokens-space.css 都声明 --chat-row-gap / --chat-row-gap-compact', () => {
     expect(tokens.match(/--chat-row-gap:\s*\d+px;/g)).toHaveLength(3);
     expect(tokens.match(/--chat-row-gap-compact:\s*\d+px;/g)).toHaveLength(3);
   });
   it('.row / .rowCarrier 引用 token；ContextStateNotice 不再叠加 margin', () => {
-    expect(block(rowCss, '.row')).toMatch(/padding-bottom:\s*var\(--chat-row-gap,/);
-    expect(block(rowCss, '.rowCarrier')).toMatch(/var\(--chat-row-gap-compact,/);
+    expect(block(rowCss, '.row')).toMatch(
+      /padding-bottom:\s*var\(--chat-row-gap,/
+    );
+    expect(block(rowCss, '.rowCarrier')).toMatch(
+      /var\(--chat-row-gap-compact,/
+    );
     expect(noticeCss).not.toMatch(/margin:\s*var\(--space-1, 4px\) 0;/);
   });
 });
@@ -38,7 +45,10 @@ function allBlocks(css: string, selector: string): string {
   const re = /([^{}]+)\{([^}]*)\}/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(css))) {
-    const sels = m[1]!.replace(/\/\*[\s\S]*?\*\//g, '').split(',').map((s) => s.trim());
+    const sels = m[1]!
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split(',')
+      .map((s) => s.trim());
     if (sels.includes(selector)) out.push(m[2]!);
   }
   return out.join('\n');
@@ -59,14 +69,19 @@ describe('操作栏在正文下方占位，不与气泡 / 正文重叠', () => {
       expect(css).toMatch(/margin-top:\s*var\(--space-1, 4px\)/);
     }
     // 全文件不再出现「非常显 meta 绝对定位」的浮层规则
-    expect(rowCss).not.toMatch(/\.(userMeta|assistantMeta):not\(\.metaAlways\)[^{]*\{[^}]*position:\s*absolute/);
+    expect(rowCss).not.toMatch(
+      /\.(userMeta|assistantMeta):not\(\.metaAlways\)[^{]*\{[^}]*position:\s*absolute/
+    );
   });
 
   it('默认透明、hover / focus-within 只改 opacity 与 pointer-events，不切 display / visibility', () => {
     const base = allBlocks(rowCss, '.userMeta');
     expect(base).toMatch(/opacity:\s*0/);
     expect(base).toMatch(/pointer-events:\s*none/);
-    for (const sel of ['.rowUser:hover .userMeta', '.rowAssistant:hover .assistantMeta']) {
+    for (const sel of [
+      '.rowUser:hover .userMeta',
+      '.rowAssistant:hover .assistantMeta',
+    ]) {
       const hover = allBlocks(rowCss, sel);
       expect(hover).toMatch(/opacity:\s*1/);
       expect(hover).not.toMatch(/display|visibility|height|margin|padding/);

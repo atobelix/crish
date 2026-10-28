@@ -52,7 +52,9 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
         />
       );
 
-      expect(screen.getByText('输入')).toBeDefined();
+      expect(
+        screen.getByRole('region', { name: '工具输入参数' })
+      ).toBeDefined();
       expect(screen.getByText('AbsolutePath')).toBeDefined();
       expect(screen.getByText('C:/Software/conex/src/App.tsx')).toBeDefined();
       expect(screen.getByText('StartLine')).toBeDefined();
@@ -93,7 +95,9 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
         />
       );
 
-      expect(screen.getByText('输出')).toBeDefined();
+      expect(
+        screen.getByRole('region', { name: '工具执行输出' })
+      ).toBeDefined();
       expect(screen.getByText(/1.4s/)).toBeDefined();
       expect(screen.getByText(/Tests passed successfully/)).toBeDefined();
     });
@@ -212,7 +216,9 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
       expect(
         screen.getByRole('region', { name: '工具执行输出' })
       ).toBeDefined();
-      expect(screen.getByText('输出')).toBeDefined();
+      expect(
+        screen.getByRole('region', { name: '工具执行输出' })
+      ).toBeDefined();
       expect(screen.getByText(/1.5s/)).toBeDefined();
       expect(
         screen.getByText('test result: ok. 10 passed; 0 failed')
@@ -236,13 +242,17 @@ describe('DIM-05 两段式结构化分栏容器与大输出保护测试套件', 
       expect(
         screen.getByRole('region', { name: '工具输入参数' })
       ).toBeDefined();
-      expect(screen.getByText('输入')).toBeDefined();
+      expect(
+        screen.getByRole('region', { name: '工具输入参数' })
+      ).toBeDefined();
       expect(screen.getByText('TargetFile')).toBeDefined();
       expect(screen.getByText('C:/Software/conex/src/App.tsx')).toBeDefined();
       expect(
         screen.getByRole('region', { name: '工具执行输出' })
       ).toBeDefined();
-      expect(screen.getByText('输出')).toBeDefined();
+      expect(
+        screen.getByRole('region', { name: '工具执行输出' })
+      ).toBeDefined();
       expect(screen.getByText('lint passed successfully')).toBeDefined();
     });
 

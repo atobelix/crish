@@ -278,12 +278,12 @@ describe('TiptapComposerField 适配层契约（T2）', () => {
     const { onChangeLog } = renderAdapter({});
     await typeText('/');
     const scheduleItem = await screen.findByRole('option', {
-      name: /\/schedule/,
+      name: /schedule/,
     });
     fireEvent.click(scheduleItem);
-    // 编辑器内容注入 '/schedule '（尾空格供续写）；序列化回流尾随空格被 trim（宿主发送同样 trim，语义一致）
+    // 编辑器芯片展示 'schedule'（无斜杠）；序列化回流仍是 /schedule
     await waitFor(() => {
-      expect(getEditorDom().textContent).toContain('/schedule');
+      expect(getEditorDom().textContent).toContain('schedule');
     });
     await waitFor(() => {
       expect(onChangeLog).toContain('/schedule');
@@ -296,11 +296,11 @@ describe('TiptapComposerField 适配层契约（T2）', () => {
     });
     await typeText('/');
     const skillItem = await screen.findByRole('option', {
-      name: /\/skill:检视/,
+      name: /检视/,
     });
     fireEvent.click(skillItem);
     await waitFor(() => {
-      expect(getEditorDom().textContent).toContain('/skill:检视');
+      expect(getEditorDom().textContent).toContain('检视');
       expect(document.querySelector('.mention-chip-skill')).toBeTruthy();
       expect(document.querySelector('.mention-chip-goal')).toBeNull();
     });

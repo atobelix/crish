@@ -26,46 +26,78 @@ describe('shouldShowApprovalDock / approvalRenderMode', () => {
 
   it('hides dock for single main timeline pending (inline card only — no double render)', () => {
     expect(shouldShowApprovalDock({ mainCount: 1, agentCount: 0 })).toBe(false);
-    expect(resolveApprovalDockVisible({ mainCount: 1, agentCount: 0 })).toBe(false);
-    expect(isSingleMainTimelineApproval({ mainCount: 1, agentCount: 0 })).toBe(true);
-    expect(approvalRenderMode({ mainCount: 1, agentCount: 0 })).toBe('inline-only');
+    expect(resolveApprovalDockVisible({ mainCount: 1, agentCount: 0 })).toBe(
+      false
+    );
+    expect(isSingleMainTimelineApproval({ mainCount: 1, agentCount: 0 })).toBe(
+      true
+    );
+    expect(approvalRenderMode({ mainCount: 1, agentCount: 0 })).toBe(
+      'inline-only'
+    );
   });
 
   it('shows dock for multiple main pending (queue)', () => {
     expect(shouldShowApprovalDock({ mainCount: 2, agentCount: 0 })).toBe(true);
-    expect(resolveApprovalDockVisible({ mainCount: 2, agentCount: 0 })).toBe(true);
+    expect(resolveApprovalDockVisible({ mainCount: 2, agentCount: 0 })).toBe(
+      true
+    );
     expect(approvalRenderMode({ mainCount: 2, agentCount: 0 })).toBe('dock');
   });
 
   it('shows dock when agent has pending even if main is 0 or 1', () => {
     expect(shouldShowApprovalDock({ mainCount: 0, agentCount: 1 })).toBe(true);
     expect(shouldShowApprovalDock({ mainCount: 1, agentCount: 1 })).toBe(true);
-    expect(resolveApprovalDockVisible({ mainCount: 0, agentCount: 1 })).toBe(true);
-    expect(resolveApprovalDockVisible({ mainCount: 1, agentCount: 1 })).toBe(true);
+    expect(resolveApprovalDockVisible({ mainCount: 0, agentCount: 1 })).toBe(
+      true
+    );
+    expect(resolveApprovalDockVisible({ mainCount: 1, agentCount: 1 })).toBe(
+      true
+    );
     expect(approvalRenderMode({ mainCount: 0, agentCount: 1 })).toBe('dock');
   });
 
   it('resolveApprovalDockVisible forces off for single main even if counts look odd', () => {
     // 与 shouldShow 一致：单条主列永远不挂 dock（防双份）
-    expect(resolveApprovalDockVisible({ mainCount: 1, agentCount: 0 })).toBe(false);
-    expect(resolveApprovalDockVisible({ mainCount: 1.2, agentCount: 0 })).toBe(false);
-    expect(resolveApprovalDockVisible({ mainCount: 0, agentCount: 0 })).toBe(false);
+    expect(resolveApprovalDockVisible({ mainCount: 1, agentCount: 0 })).toBe(
+      false
+    );
+    expect(resolveApprovalDockVisible({ mainCount: 1.2, agentCount: 0 })).toBe(
+      false
+    );
+    expect(resolveApprovalDockVisible({ mainCount: 0, agentCount: 0 })).toBe(
+      false
+    );
   });
 
   it('clamps negative / NaN / Infinity counts so dock never false-positive double-render', () => {
-    expect(clampApprovalCounts({ mainCount: -1, agentCount: Number.NaN })).toEqual({
+    expect(
+      clampApprovalCounts({ mainCount: -1, agentCount: Number.NaN })
+    ).toEqual({
       mainCount: 0,
       agentCount: 0,
     });
-    expect(clampApprovalCounts({ mainCount: Number.POSITIVE_INFINITY, agentCount: -0.5 })).toEqual({
+    expect(
+      clampApprovalCounts({
+        mainCount: Number.POSITIVE_INFINITY,
+        agentCount: -0.5,
+      })
+    ).toEqual({
       mainCount: 0,
       agentCount: 0,
     });
-    expect(shouldShowApprovalDock({ mainCount: -3, agentCount: 0 })).toBe(false);
-    expect(approvalRenderMode({ mainCount: 1.9, agentCount: 0 })).toBe('inline-only');
-    expect(resolveApprovalDockVisible({ mainCount: Number.POSITIVE_INFINITY, agentCount: 0 })).toBe(
-      false,
+    expect(shouldShowApprovalDock({ mainCount: -3, agentCount: 0 })).toBe(
+      false
     );
+    expect(approvalRenderMode({ mainCount: 1.9, agentCount: 0 })).toBe(
+      'inline-only'
+    );
+    expect(
+      resolveApprovalDockVisible({
+        mainCount: Number.POSITIVE_INFINITY,
+        agentCount: 0,
+      })
+    ).toBe(false);
   });
 
   it('invariant: inline-only never shows dock', () => {
@@ -113,7 +145,9 @@ describe('planApprovalUi', () => {
   it('queue / agent → dock', () => {
     expect(planApprovalUi({ mainCount: 2, agentCount: 0 }).showDock).toBe(true);
     expect(planApprovalUi({ mainCount: 0, agentCount: 2 }).mode).toBe('dock');
-    expect(planApprovalUi({ mainCount: 1, agentCount: 1 }).inlineOnly).toBe(false);
+    expect(planApprovalUi({ mainCount: 1, agentCount: 1 }).inlineOnly).toBe(
+      false
+    );
   });
 });
 
@@ -133,7 +167,7 @@ describe('collectPendingApprovals', () => {
           toolCalls: [{ id: 'tc-1', status: 'pending_approval', name: 'edit' }],
         },
       ],
-      [],
+      []
     );
     expect(counts).toEqual({ mainCount: 1, agentCount: 0 });
     expect(uniqueToolIds).toEqual(['tc-1']);
@@ -145,7 +179,7 @@ describe('collectPendingApprovals', () => {
   it('counts distinct main + agent tools', () => {
     const { counts } = collectPendingApprovals(
       [{ id: 'm1', toolCalls: [{ id: 'a', status: 'pending_approval' }] }],
-      [[{ id: 'ag1', toolCalls: [{ id: 'b', status: 'pending_approval' }] }]],
+      [[{ id: 'ag1', toolCalls: [{ id: 'b', status: 'pending_approval' }] }]]
     );
     expect(counts).toEqual({ mainCount: 1, agentCount: 1 });
     expect(shouldShowApprovalDock(counts)).toBe(true);
@@ -156,17 +190,21 @@ describe('collectPendingApprovals', () => {
       [
         {
           id: 'm1',
-          toolCalls: [{ id: 'shared', status: 'pending_approval', name: 'shell' }],
+          toolCalls: [
+            { id: 'shared', status: 'pending_approval', name: 'shell' },
+          ],
         },
       ],
       [
         [
           {
             id: 'ag1',
-            toolCalls: [{ id: 'shared', status: 'pending_approval', name: 'shell' }],
+            toolCalls: [
+              { id: 'shared', status: 'pending_approval', name: 'shell' },
+            ],
           },
         ],
-      ],
+      ]
     );
     expect(counts).toEqual({ mainCount: 1, agentCount: 0 });
     expect(uniqueToolIds).toEqual(['shared']);
@@ -188,7 +226,7 @@ describe('collectPendingApprovals', () => {
           ],
         },
       ],
-      [],
+      []
     );
     expect(counts.mainCount).toBe(1);
     expect(uniqueToolIds).toEqual(['real']);
@@ -206,7 +244,7 @@ describe('collectPendingApprovals', () => {
           ],
         },
       ],
-      [],
+      []
     );
     expect(counts).toEqual({ mainCount: 1, agentCount: 0 });
   });
@@ -226,7 +264,7 @@ describe('collectPendingApprovals', () => {
           ],
         },
       ],
-      [null, undefined, []],
+      [null, undefined, []]
     );
     expect(counts).toEqual({ mainCount: 1, agentCount: 0 });
     expect(uniqueToolIds).toEqual(['ok']);
@@ -245,7 +283,7 @@ describe('collectPendingApprovals', () => {
   it('falls back msgId to toolId when message id missing', () => {
     const { first } = collectPendingApprovals(
       [{ toolCalls: [{ id: 'tc-x', status: 'pending_approval' }] }],
-      [],
+      []
     );
     expect(first?.msgId).toBe('tc-x');
     expect(first?.toolId).toBe('tc-x');
@@ -257,7 +295,7 @@ describe('collectPendingApprovals', () => {
       [
         [{ id: 'a1', toolCalls: [{ id: 't1', status: 'pending_approval' }] }],
         [{ id: 'a2', toolCalls: [{ id: 't2', status: 'pending_approval' }] }],
-      ],
+      ]
     );
     expect(counts).toEqual({ mainCount: 0, agentCount: 2 });
     expect(uniqueToolIds).toEqual(['t1', 't2']);
@@ -282,25 +320,25 @@ describe('approvalDockLabel', () => {
 
   it('marks agent-only as 协作任务', () => {
     expect(approvalDockLabel({ mainCount: 0, agentCount: 1 }, '运行命令')).toBe(
-      '1 待审批 · 协作任务 · 运行命令',
+      '1 待审批 · 协作任务 · 运行命令'
     );
   });
 
   it('marks multi-main as 队列', () => {
     expect(approvalDockLabel({ mainCount: 3, agentCount: 0 }, '写文件')).toBe(
-      '3 待审批 · 队列 · 写文件',
+      '3 待审批 · 队列 · 写文件'
     );
   });
 
   it('marks mixed main+agent as 队列', () => {
     expect(approvalDockLabel({ mainCount: 1, agentCount: 2 }, 'shell')).toBe(
-      '3 待审批 · 队列 · shell',
+      '3 待审批 · 队列 · shell'
     );
   });
 
   it('omits empty summary segment', () => {
     expect(approvalDockLabel({ mainCount: 2, agentCount: 0 }, '  ')).toBe(
-      '2 待审批 · 队列',
+      '2 待审批 · 队列'
     );
   });
 
@@ -321,12 +359,9 @@ describe('nextAllowConfirmPhase / allowButtonLabel (二次确认)', () => {
   });
 
   it('labels match arm / commit states', () => {
-    expect(allowButtonLabel(false, false, false)).toBe('允许');
-    expect(allowButtonLabel(false, false, true)).toBe('允许并记住');
-    expect(allowButtonLabel(true, false, false)).toBe('允许…');
-    expect(allowButtonLabel(true, false, true)).toBe('记住并准备允许');
-    expect(allowButtonLabel(true, true, false)).toBe('再次确认允许');
-    expect(allowButtonLabel(true, true, true)).toBe('再次确认并记住');
+    expect(allowButtonLabel(false, false)).toBe('允许');
+    expect(allowButtonLabel(true, false)).toBe('允许…');
+    expect(allowButtonLabel(true, true)).toBe('再次确认允许');
   });
 });
 
@@ -338,7 +373,7 @@ describe('shouldResetAllowConfirmArmed', () => {
         needsDouble: true,
         prevToolId: 'a',
         nextToolId: 'b',
-      }),
+      })
     ).toBe(false);
   });
 
@@ -349,7 +384,7 @@ describe('shouldResetAllowConfirmArmed', () => {
         needsDouble: false,
         prevToolId: 'a',
         nextToolId: 'a',
-      }),
+      })
     ).toBe(true);
   });
 
@@ -360,7 +395,7 @@ describe('shouldResetAllowConfirmArmed', () => {
         needsDouble: true,
         prevToolId: 'tc-1',
         nextToolId: 'tc-2',
-      }),
+      })
     ).toBe(true);
   });
 
@@ -371,37 +406,45 @@ describe('shouldResetAllowConfirmArmed', () => {
         needsDouble: true,
         prevToolId: 'tc-1',
         nextToolId: 'tc-1',
-      }),
+      })
     ).toBe(false);
   });
 });
 
 describe('plainApprovalQuestion', () => {
   it('keeps already-phrased Chinese questions', () => {
-    expect(plainApprovalQuestion('是否允许删除缓存？')).toBe('是否允许删除缓存？');
+    expect(plainApprovalQuestion('是否允许删除缓存？')).toBe(
+      '是否允许删除缓存？'
+    );
   });
 
   it('wraps Chinese action summary', () => {
-    expect(plainApprovalQuestion('正在修改登录页')).toBe('是否允许：修改登录页？');
+    expect(plainApprovalQuestion('正在修改登录页')).toBe(
+      '是否允许：修改登录页？'
+    );
   });
 
   it('classifies read / write / delete / git / package heuristics', () => {
-    expect(plainApprovalQuestion('read package.json')).toBe('是否允许查看相关文件或信息？');
-    expect(plainApprovalQuestion('edit App.tsx')).toBe('是否允许修改项目中的文件？');
+    expect(plainApprovalQuestion('read package.json')).toBe(
+      '是否允许查看相关文件或信息？'
+    );
+    expect(plainApprovalQuestion('edit App.tsx')).toBe(
+      '是否允许修改项目中的文件？'
+    );
     expect(plainApprovalQuestion('rm -rf dist', 'rm -rf dist')).toBe(
-      '是否允许删除文件或执行有风险的清理？',
+      '是否允许删除文件或执行有风险的清理？'
     );
     expect(plainApprovalQuestion('Git commit', 'git commit -m x')).toBe(
-      '是否允许执行 Git 相关操作？',
+      '是否允许执行 Git 相关操作？'
     );
     expect(plainApprovalQuestion('install', 'npm install lodash')).toBe(
-      '是否允许运行安装或构建类命令？',
+      '是否允许运行安装或构建类命令？'
     );
   });
 
   it('falls back to command / generic when no signal', () => {
     expect(plainApprovalQuestion('', 'some-binary --flag')).toBe(
-      '是否允许运行下面这条命令？',
+      '是否允许运行下面这条命令？'
     );
     expect(plainApprovalQuestion('')).toBe('是否允许继续这项操作？');
   });
@@ -452,13 +495,13 @@ describe('buildApprovalRiskChips / approvalCardClassName (风险元数据)', () 
   it('approvalCardClassName joins elevated + armed', () => {
     expect(approvalCardClassName({})).toBe('approval-card');
     expect(approvalCardClassName({ needsDouble: true })).toBe(
-      'approval-card approval-card--elevated',
+      'approval-card approval-card--elevated'
     );
-    expect(approvalCardClassName({ needsDouble: true, confirmArmed: true })).toBe(
-      'approval-card approval-card--elevated is-confirm-armed',
-    );
+    expect(
+      approvalCardClassName({ needsDouble: true, confirmArmed: true })
+    ).toBe('approval-card approval-card--elevated is-confirm-armed');
     expect(approvalCardClassName({ confirmArmed: true })).toBe(
-      'approval-card is-confirm-armed',
+      'approval-card is-confirm-armed'
     );
   });
 });
@@ -469,10 +512,12 @@ describe('single main: no double dock (resolve + mode 联立)', () => {
       [
         {
           id: 'm1',
-          toolCalls: [{ id: 'only', status: 'pending_approval', name: 'shell' }],
+          toolCalls: [
+            { id: 'only', status: 'pending_approval', name: 'shell' },
+          ],
         },
       ],
-      [],
+      []
     );
     expect(counts).toEqual({ mainCount: 1, agentCount: 0 });
     expect(approvalRenderMode(counts)).toBe('inline-only');
@@ -515,14 +560,25 @@ describe('single main: no double dock (resolve + mode 联立)', () => {
       [
         {
           id: 'm-stream-1',
-          toolCalls: [{ id: 'shell-1', status: 'pending_approval', name: 'bash' }],
+          toolCalls: [
+            { id: 'shell-1', status: 'pending_approval', name: 'bash' },
+          ],
         },
         {
           id: 'm-stream-1b',
-          toolCalls: [{ id: 'shell-1', status: 'pending_approval', name: 'bash' }],
+          toolCalls: [
+            { id: 'shell-1', status: 'pending_approval', name: 'bash' },
+          ],
         },
       ],
-      [[{ id: 'ag', toolCalls: [{ id: 'shell-1', status: 'pending_approval' }] }]],
+      [
+        [
+          {
+            id: 'ag',
+            toolCalls: [{ id: 'shell-1', status: 'pending_approval' }],
+          },
+        ],
+      ]
     );
     expect(counts).toEqual({ mainCount: 1, agentCount: 0 });
     expect(planApprovalUi(counts)).toMatchObject({

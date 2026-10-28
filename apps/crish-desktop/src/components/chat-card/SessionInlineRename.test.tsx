@@ -8,7 +8,9 @@ describe('SessionInlineRename', () => {
   it('renders session title and pencil icon in display mode', () => {
     render(<SessionInlineRename title="我的设计会话" onRename={vi.fn()} />);
 
-    expect(screen.getByRole('button', { name: '会话名称：我的设计会话' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '会话名称：我的设计会话' })
+    ).toBeInTheDocument();
     expect(screen.getByText('我的设计会话')).toBeInTheDocument();
   });
 
@@ -18,7 +20,9 @@ describe('SessionInlineRename', () => {
     const btn = screen.getByRole('button', { name: '会话名称：初始标题' });
     fireEvent.click(btn);
 
-    const input = screen.getByRole('textbox', { name: '修改会话名称' }) as HTMLInputElement;
+    const input = screen.getByRole('textbox', {
+      name: '修改会话名称',
+    }) as HTMLInputElement;
     expect(input).toBeInTheDocument();
     expect(input.value).toBe('初始标题');
     expect(input.maxLength).toBe(64);
@@ -81,7 +85,9 @@ describe('SessionInlineRename', () => {
   });
 
   it('does not open input when disabled', () => {
-    render(<SessionInlineRename title="只读标题" onRename={vi.fn()} disabled />);
+    render(
+      <SessionInlineRename title="只读标题" onRename={vi.fn()} disabled />
+    );
 
     const btn = screen.getByRole('button', { name: '会话名称：只读标题' });
     expect(btn).toBeDisabled();

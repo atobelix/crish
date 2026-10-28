@@ -35,17 +35,18 @@
 .moreBtn:focus-visible,
 .moreWrap:hover .moreBtn,
 .moreWrap.isOpen .moreBtn {
-  background-color: var(--tint-hover);
+  background-color: transparent;
   color: var(--text-primary);
 }
 
 .moreBtn:active {
-  background-color: var(--tint-active);
+  background-color: var(--state-active);
 }
 
 .moreBtn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 0 0 2px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .moreMenu {

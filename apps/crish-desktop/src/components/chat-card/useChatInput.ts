@@ -13,7 +13,13 @@
  * CI Guardrail: Max 400 lines of effective code, UTF-8 无 BOM.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
 
 export interface UseChatInputOptions {
@@ -93,8 +99,7 @@ export function useChatInput({
   const setChatInput = useCallback((textOrFn: React.SetStateAction<string>) => {
     const sid = activeSessionIdRef.current;
     setChatInputState((prev) => {
-      const next =
-        typeof textOrFn === 'function' ? textOrFn(prev) : textOrFn;
+      const next = typeof textOrFn === 'function' ? textOrFn(prev) : textOrFn;
       latestTextRef.current = next;
       if (sid) {
         sessionDraftManager.setDraft(sid, next, false);
@@ -105,14 +110,16 @@ export function useChatInput({
 
   // 4. 订阅定向注入 / 撤销事件（后台会话注入零视口干扰）
   useEffect(() => {
-    return sessionDraftManager.subscribe(({ sessionId, content, hasUndo: undoAvail }) => {
-      if (sessionId === activeSessionIdRef.current) {
-        setChatInputState(content);
-        latestTextRef.current = content;
-        setHasUndo(undoAvail);
-        setDraftInjectionTick((t) => t + 1);
+    return sessionDraftManager.subscribe(
+      ({ sessionId, content, hasUndo: undoAvail }) => {
+        if (sessionId === activeSessionIdRef.current) {
+          setChatInputState(content);
+          latestTextRef.current = content;
+          setHasUndo(undoAvail);
+          setDraftInjectionTick((t) => t + 1);
+        }
       }
-    });
+    );
   }, []);
 
   // 5. 撤销操作（外部模板覆盖原位无损恢复）

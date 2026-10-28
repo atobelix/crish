@@ -11,7 +11,6 @@ import {
   A_INV_02_UI_DIRECTION_ID,
   isDriftAttention,
   makeMirrorDriftReportView,
-  MIRROR_DRIFT_UI_HONESTY,
   resolveThreeWayAction,
   shouldShowThreeWayActions,
 } from './mirrorDriftUi';
@@ -111,10 +110,7 @@ describe('mirrorDriftUi · 展示辅助与诚实锚', () => {
     expect(isDriftAttention('authority_only')).toBe(false);
   });
 
-  it('诚实脚注钉 EL-03 / inotify 非关', () => {
-    expect(MIRROR_DRIFT_UI_HONESTY).toMatch(/poll|OS/);
-    expect(MIRROR_DRIFT_UI_HONESTY).toMatch(/≠ EL-03|EL-03/);
-    expect(MIRROR_DRIFT_UI_HONESTY).toMatch(/inotify/);
+  it('包方向 ID 契约保持', () => {
     expect(A_INV_02_UI_DIRECTION_ID).toBe('A-INV-02-UI');
   });
 

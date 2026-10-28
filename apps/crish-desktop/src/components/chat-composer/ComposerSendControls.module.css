@@ -23,7 +23,7 @@
   height: 28px;
   padding: 0;
   margin-left: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius-circle, 50%);
   border: none;
   cursor: pointer;
   background: var(--brand);
@@ -67,8 +67,8 @@
 .sendBtnCircle svg,
 .sendCircle svg {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   stroke-width: 2.4;
   color: var(--text-on-accent);
   stroke: currentColor;
@@ -81,7 +81,7 @@
   height: 28px;
   min-width: 28px;
   max-width: 28px;
-  border-radius: 50%;
+  border-radius: var(--radius-circle, 50%);
   background: transparent;
   color: var(--text-secondary);
   display: flex;
@@ -156,6 +156,6 @@
 }
 
 .queue:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-secondary);
 }

@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import styles from './ModernToolCall.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface ModernJsonToolCallProps {
   id?: string;
@@ -63,7 +63,8 @@ export const ModernJsonToolCall: React.FC<ModernJsonToolCallProps> = ({
   className = '',
 }) => {
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
-  const isExpanded = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const isExpanded =
+    controlledOpen !== undefined ? controlledOpen : internalOpen;
 
   const handleToggle = () => {
     const next = !isExpanded;
@@ -86,7 +87,8 @@ export const ModernJsonToolCall: React.FC<ModernJsonToolCallProps> = ({
 
   const formattedRequest = useMemo(() => formatRequest(request), [request]);
 
-  const isSuccess = status === 'success' || status === 'completed' || status === 'done';
+  const isSuccess =
+    status === 'success' || status === 'completed' || status === 'done';
   const isError = status === 'error' || status === 'failed';
   const isRunning = status === 'running';
 
@@ -105,7 +107,9 @@ export const ModernJsonToolCall: React.FC<ModernJsonToolCallProps> = ({
         aria-expanded={isExpanded}
         aria-label={`${displayActionText} ${paramPill ? paramPill : ''}`}
       >
-        <span className={`${styles.chevron} ${isExpanded ? styles.isOpen : ''}`}>
+        <span
+          className={`${styles.chevron} ${isExpanded ? styles.isOpen : ''}`}
+        >
           <AppIcon name="chevron-right" size={14} aria-hidden="true" />
         </span>
 
@@ -113,15 +117,17 @@ export const ModernJsonToolCall: React.FC<ModernJsonToolCallProps> = ({
 
         {paramPill ? (
           <Tooltip content={paramPill}>
-            <span className={styles.paramPill}>
-              {paramPill}
-            </span>
+            <span className={styles.paramPill}>{paramPill}</span>
           </Tooltip>
         ) : null}
 
         <span className={styles.statusIcon} aria-hidden="true">
           {isSuccess ? (
-            <AppIcon name="check" size={13} className={styles.statusIconSuccess} />
+            <AppIcon
+              name="check"
+              size={13}
+              className={styles.statusIconSuccess}
+            />
           ) : isError ? (
             <AppIcon name="x" size={13} className={styles.statusIconError} />
           ) : isRunning ? (
@@ -135,7 +141,6 @@ export const ModernJsonToolCall: React.FC<ModernJsonToolCallProps> = ({
         <div className={styles.jsonToolCard}>
           {/* Request 区域 */}
           <div className={styles.cardSection}>
-            <div className={styles.sectionLabel}>请求参数</div>
             <pre className={styles.jsonCode}>{formattedRequest}</pre>
           </div>
 
@@ -143,7 +148,6 @@ export const ModernJsonToolCall: React.FC<ModernJsonToolCallProps> = ({
 
           {/* Result 区域 */}
           <div className={styles.cardSection}>
-            <div className={styles.sectionLabel}>执行结果</div>
             <div className={styles.resultText}>
               {result !== undefined && result !== null && result !== ''
                 ? result

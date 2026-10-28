@@ -45,7 +45,9 @@ describe('SubagentHeaderPanel', () => {
 
     render(<SubagentHeaderPanel agents={agents} parentSessionId="sess-1" />);
 
-    expect(screen.getByRole('button', { name: '展开子代理状态面板' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: '展开子代理状态面板' })
+    ).toBeInTheDocument();
     expect(screen.getByText('1 个运行中')).toBeInTheDocument();
   });
 
@@ -90,18 +92,19 @@ describe('SubagentHeaderPanel', () => {
   });
 
   it('navigates to side panel on clicking subagent info card', () => {
-    const agents = [
-      createMockAgent({ id: 'sub-1', displayLabel: '架构评审' }),
-    ];
+    const agents = [createMockAgent({ id: 'sub-1', displayLabel: '架构评审' })];
 
     render(<SubagentHeaderPanel agents={agents} parentSessionId="sess-1" />);
 
     fireEvent.click(screen.getByRole('button', { name: '展开子代理状态面板' }));
     fireEvent.click(screen.getByText('架构评审'));
 
-    expect(openAgentPanelModule.openAgentInSidePanel).toHaveBeenCalledWith('sub-1', {
-      sessionId: 'sess-1',
-    });
+    expect(openAgentPanelModule.openAgentInSidePanel).toHaveBeenCalledWith(
+      'sub-1',
+      {
+        sessionId: 'sess-1',
+      }
+    );
   });
 
   it('calls killSubagent when clicking kill button for running subagent', () => {
@@ -119,7 +122,10 @@ describe('SubagentHeaderPanel', () => {
 
     fireEvent.click(killButtons[0]);
 
-    expect(subagentRecoveryApiModule.killSubagent).toHaveBeenCalledWith('sess-1', 'sub-running');
+    expect(subagentRecoveryApiModule.killSubagent).toHaveBeenCalledWith(
+      'sess-1',
+      'sub-running'
+    );
     expect(openAgentPanelModule.openAgentInSidePanel).not.toHaveBeenCalled();
   });
 });

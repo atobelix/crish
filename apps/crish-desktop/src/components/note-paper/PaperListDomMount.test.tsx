@@ -14,7 +14,13 @@
  */
 import React, { useState } from 'react';
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import {
   BP_CHROME_ROOT,
   BP_PAPER_BLOCK,
@@ -774,6 +780,94 @@ describe('PaperListDomMount · 直接打字与编辑交互契约', () => {
     });
   });
 
+  it('组合未结束时 blur 回滚预编辑并释放另一块的键盘操作', () => {
+    const onBlockInput = vi.fn();
+    const onBlockChange = vi.fn();
+    const onTextCommit = vi.fn();
+    const onEnter = vi.fn();
+
+    render(
+      <PaperListDomMount
+        blocks={[
+          { id: 'ime-blur', flavour: 'paragraph', text: '已确认' },
+          { id: 'after-blur', flavour: 'paragraph', text: '下一段' },
+        ]}
+        window={{ startIndex: 0, endIndex: 2 }}
+        overscan={0}
+        onBlockInput={onBlockInput}
+        onBlockChange={onBlockChange}
+        onTextCommit={onTextCommit}
+        onEnter={onEnter}
+        debounceMs={1000}
+        onListReady={(l) => {
+          list = l;
+        }}
+      />
+    );
+
+    const composingBlock = list!.getBlockElement('ime-blur')!;
+    const nextBlock = list!.getBlockElement('after-blur')!;
+    fireEvent.compositionStart(composingBlock);
+    composingBlock.textContent = '已确认拼音';
+    fireEvent.input(composingBlock);
+    expect(onBlockInput).not.toHaveBeenCalled();
+    expect(onBlockChange).not.toHaveBeenCalled();
+
+    fireEvent.blur(composingBlock);
+    expect(composingBlock.textContent).toBe('已确认');
+    expect(onBlockChange).toHaveBeenCalledTimes(1);
+    expect(onBlockChange).toHaveBeenCalledWith('ime-blur', '已确认');
+    expect(onTextCommit).toHaveBeenCalledTimes(1);
+    expect(onTextCommit).toHaveBeenCalledWith('ime-blur', '已确认');
+
+    // blur 后到达的 compositionend 不再提交预编辑，也不残留全局 composing 门。
+    fireEvent.compositionEnd(composingBlock);
+    expect(onBlockInput).not.toHaveBeenCalled();
+    expect(onBlockChange).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(nextBlock, { key: 'Enter' });
+    expect(onEnter).toHaveBeenCalledWith('after-blur', '下一段');
+  });
+
+  it('compositionend 先于 blur 时失焦只持久化一次', async () => {
+    const onBlockInput = vi.fn();
+    const onBlockChange = vi.fn();
+    const onTextCommit = vi.fn();
+
+    render(
+      <PaperListDomMount
+        blocks={[{ id: 'ime-end-blur', flavour: 'paragraph', text: '原文' }]}
+        window={{ startIndex: 0, endIndex: 1 }}
+        overscan={0}
+        onBlockInput={onBlockInput}
+        onBlockChange={onBlockChange}
+        onTextCommit={onTextCommit}
+        debounceMs={10}
+        onListReady={(l) => {
+          list = l;
+        }}
+      />
+    );
+
+    const block = list!.getBlockElement('ime-end-blur')!;
+    fireEvent.compositionStart(block);
+    block.textContent = '已确认中文';
+    fireEvent.input(block);
+    fireEvent.compositionEnd(block);
+    fireEvent.blur(block);
+    fireEvent.compositionEnd(block);
+
+    expect(onBlockInput).toHaveBeenCalledTimes(1);
+    expect(onBlockInput).toHaveBeenCalledWith('ime-end-blur', '已确认中文');
+    expect(onBlockChange).toHaveBeenCalledTimes(1);
+    expect(onBlockChange).toHaveBeenCalledWith('ime-end-blur', '已确认中文');
+    expect(onTextCommit).toHaveBeenCalledTimes(1);
+    expect(onTextCommit).toHaveBeenCalledWith('ime-end-blur', '已确认中文');
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(onBlockChange).toHaveBeenCalledTimes(1);
+  });
+
   it('w3g_desktop_keydown_enter_and_backspace: 回车提交/插入与退格自动前移焦点', async () => {
     const onTextCommit = vi.fn();
     const onBlockChange = vi.fn();
@@ -852,9 +946,7 @@ describe('PaperListDomMount · 直接打字与编辑交互契约', () => {
 
   it('w3g_desktop_active_editing_protection: 打字期间外部投影刷新不冲掉本地文本与光标', async () => {
     let setExternalBlocks: React.Dispatch<
-      React.SetStateAction<
-        { id: string; flavour: string; text: string }[]
-      >
+      React.SetStateAction<{ id: string; flavour: string; text: string }[]>
     > = () => {};
 
     function TestHost() {

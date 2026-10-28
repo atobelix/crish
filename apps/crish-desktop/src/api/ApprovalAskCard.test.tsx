@@ -3,7 +3,7 @@
  * ApprovalAskCard 审批卡渲染状态与按钮行为测试（审计补齐）。
  *
  * 覆盖点：
- * - pending 渲染：问题 / 状态「等待中」/ 命令展示 / 备注输入
+ * - pending 渲染：问题 / 命令展示 / 备注输入
  * - 允许 / 拒绝 / 记住 按钮行为
  * - 二次确认（requiresDoubleConfirm）武装 → 提交 / Esc 取消 / 快捷键
  * - busy 防连点、超时 expired（onTimeout + 倒计时进度条）
@@ -36,7 +36,6 @@ function makeProps(overrides: Partial<Props> = {}): Props {
     summary: '是否允许执行 git commit？',
     cmd: 'git commit -m "feat: x"',
     onAllow: vi.fn(),
-    onAllowRemember: vi.fn(),
     onDeny: vi.fn(),
     ...overrides,
   };
@@ -53,22 +52,37 @@ afterEach(() => {
 });
 
 describe('ApprovalAskCard pending 渲染', () => {
-  it('渲染问题、等待中状态、命令与备注输入', () => {
+  it('渲染问题、命令与备注输入', () => {
     renderCard();
 
     // aria-labelledby（标题）优先于 aria-label，可访问名取标题正文
     expect(
       screen.getByRole('region', { name: '是否允许执行 git commit？' })
     ).toBeInTheDocument();
-    expect(screen.getByText('等待中')).toBeInTheDocument();
+    expect(screen.queryByText('等待中')).toBeNull();
     expect(screen.getByText('是否允许执行 git commit？')).toBeInTheDocument();
     expect(screen.getByText('git commit -m "feat: x"')).toBeInTheDocument();
     expect(screen.getByLabelText('补充说明（可选）')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '允许' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '拒绝此操作' })).toBeEnabled();
-    expect(
-      screen.getByRole('button', { name: '允许并记住命令前缀' })
-    ).toBeEnabled();
+  });
+
+  it('展示引擎判点原因（metadata.approvalReason）', () => {
+    renderCard({
+      riskMeta: {
+        riskLevel: 'unknown',
+        requiresDoubleConfirm: false,
+        recommendSnapshot: false,
+        source: 'unknown',
+        metadata: {
+          approvalReason: '破坏性删除：./tmp',
+          expiresAtMs: Date.now() + 60_000,
+          timeoutMs: 120_000,
+          timeoutPolicy: 'auto-deny',
+        },
+      },
+    });
+    expect(screen.getByText('审批原因：破坏性删除：./tmp')).toBeInTheDocument();
   });
 
   it('无二次确认：单击允许即提交（onAllow）', () => {
@@ -90,15 +104,6 @@ describe('ApprovalAskCard pending 渲染', () => {
     fireEvent.click(screen.getByRole('button', { name: '允许' }));
 
     expect(props.onAllow).toHaveBeenCalledWith('只要这一次');
-  });
-
-  it('单击记住：onAllowRemember 收到备注', () => {
-    const { props } = renderCard();
-
-    fireEvent.click(screen.getByRole('button', { name: '允许并记住命令前缀' }));
-
-    expect(props.onAllowRemember).toHaveBeenCalledTimes(1);
-    expect(props.onAllow).not.toHaveBeenCalled();
   });
 
   it('点击拒绝：onDeny，不触发允许', () => {
@@ -155,20 +160,6 @@ describe('ApprovalAskCard 二次确认（requiresDoubleConfirm）', () => {
     expect(props.onAllow).toHaveBeenCalledTimes(1);
   });
 
-  it('二次确认 + 记住：两步提交走 onAllowRemember', () => {
-    const { props } = renderCard({ riskMeta: DOUBLE_META });
-
-    fireEvent.click(
-      screen.getByRole('button', { name: '记住并准备允许（需再次确认）' })
-    );
-    expect(screen.getByText('再次确认（将记住）')).toBeInTheDocument();
-    expect(props.onAllowRemember).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole('button', { name: '再次确认允许并记住' }));
-    expect(props.onAllowRemember).toHaveBeenCalledTimes(1);
-    expect(props.onAllow).not.toHaveBeenCalled();
-  });
-
   it('武装态 Enter 快捷键触发提交（非 textarea 焦点）', () => {
     const { props } = renderCard({ riskMeta: DOUBLE_META });
 
@@ -221,20 +212,14 @@ describe('ApprovalAskCard busy 与超时', () => {
       name: '准备允许（需再次确认）',
     });
     const denyBtn = screen.getByRole('button', { name: '拒绝此操作' });
-    const rememberBtn = screen.getByRole('button', {
-      name: '记住并准备允许（需再次确认）',
-    });
     expect(allowBtn).toBeDisabled();
     expect(denyBtn).toBeDisabled();
-    expect(rememberBtn).toBeDisabled();
 
     fireEvent.click(allowBtn);
     fireEvent.click(denyBtn);
-    fireEvent.click(rememberBtn);
 
     expect(props.onAllow).not.toHaveBeenCalled();
     expect(props.onDeny).not.toHaveBeenCalled();
-    expect(props.onAllowRemember).not.toHaveBeenCalled();
   });
 
   it('remainingMs=0（expired）：触发 onTimeout', () => {

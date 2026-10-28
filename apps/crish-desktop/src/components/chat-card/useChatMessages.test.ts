@@ -20,7 +20,11 @@ function makeMsg(
   } as SessionMessage;
 }
 
-function makeStateCarrierMsg(id: string, text: string, stateKey: string): SessionMessage {
+function makeStateCarrierMsg(
+  id: string,
+  text: string,
+  stateKey: string
+): SessionMessage {
   return {
     id,
     sender: 'user',
@@ -42,10 +46,7 @@ describe('useChatMessages', () => {
           isPinned: false,
           isArchived: false,
           timestamp: 't0',
-          messages: [
-            makeMsg('m1', 'hello world'),
-            makeMsg('m2', 'foo bar'),
-          ],
+          messages: [makeMsg('m1', 'hello world'), makeMsg('m2', 'foo bar')],
           agents: [],
         } as unknown as SessionState,
       };
@@ -126,7 +127,9 @@ describe('useChatMessages', () => {
 
     expect(result.current.messages).toHaveLength(3);
     // 载体去重后只保留最后一条同一 carrierKey 的消息
-    expect(result.current.displayMessages.some((m) => m.id === 'c2')).toBe(true);
+    expect(result.current.displayMessages.some((m) => m.id === 'c2')).toBe(
+      true
+    );
   });
 
   it('乱序 messages 输入时 displayMessages 按 (timestamp,id) 有序（防御性排序兜底）', () => {

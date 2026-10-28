@@ -6,7 +6,7 @@
  */
 import React, { useCallback, useRef } from 'react';
 import styles from './ComposerProjectPicker.module.css';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 import {
   getActiveProject,
   listProjects,
@@ -16,7 +16,7 @@ import {
   type ProjectEntry,
 } from '../../api/projectStore';
 import { ProjectPickerMenu } from './ProjectPickerMenu';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 import { useDraftFolder } from '../../store/storeAccess';
 
@@ -222,11 +222,11 @@ export const ComposerProjectPicker: React.FC<ComposerProjectPickerProps> = ({
           aria-haspopup="menu"
           aria-label={ariaLabel}
         >
-          <AppIcon name="folder-01" size={14} aria-hidden />
+          <AppIcon name="folder-01" size={16} aria-hidden />
           <span className={styles.projectName}>{displayName}</span>
           <AppIcon
             name="chevron-down"
-            size={12}
+            size={14}
             className={styles.chevron}
             aria-hidden
           />

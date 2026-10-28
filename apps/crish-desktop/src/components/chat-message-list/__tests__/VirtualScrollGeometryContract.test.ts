@@ -4,9 +4,18 @@ import path from 'path';
 
 describe('虚拟滚动几何稳定与统一盒模型契约 (Plan 05 DEF-13 & DEF-14)', () => {
   const listCssPath = path.resolve(__dirname, '../ChatMessageList.module.css');
-  const rowCssPath = path.resolve(__dirname, '../../chat-message-row/ChatMessageRow.module.css');
-  const virtualizerTsxPath = path.resolve(__dirname, '../MessageVirtualizer.tsx');
-  const measurePath = path.resolve(__dirname, '../messageVirtualizerMeasure.ts');
+  const rowCssPath = path.resolve(
+    __dirname,
+    '../../chat-message-row/ChatMessageRow.module.css'
+  );
+  const virtualizerTsxPath = path.resolve(
+    __dirname,
+    '../MessageVirtualizer.tsx'
+  );
+  const measurePath = path.resolve(
+    __dirname,
+    '../messageVirtualizerMeasure.ts'
+  );
 
   const listCss = fs.readFileSync(listCssPath, 'utf-8');
   const rowCss = fs.readFileSync(rowCssPath, 'utf-8');
@@ -16,9 +25,15 @@ describe('虚拟滚动几何稳定与统一盒模型契约 (Plan 05 DEF-13 & DEF
   describe('1. ChatMessageList.module.css 契约：消除相邻兄弟外边距黑洞 (DEF-13)', () => {
     it('彻底切除 [data-chat-list-inner] 相邻兄弟 margin-top 选择器', () => {
       // 严禁存在相邻兄弟 + 选择器注入 margin-top: 16px
-      expect(listCss).not.toMatch(/\[data-chat-list-inner\][\s\S]*?\+[\s\S]*?margin-top/);
-      expect(listCss).not.toContain('[data-chat-list-inner] > :not([hidden]) + :not([hidden])');
-      expect(listCss).not.toContain('[data-chat-list-inner] > :not([hidden]) + :not([hidden]) > [data-vindex]');
+      expect(listCss).not.toMatch(
+        /\[data-chat-list-inner\][\s\S]*?\+[\s\S]*?margin-top/
+      );
+      expect(listCss).not.toContain(
+        '[data-chat-list-inner] > :not([hidden]) + :not([hidden])'
+      );
+      expect(listCss).not.toContain(
+        '[data-chat-list-inner] > :not([hidden]) + :not([hidden]) > [data-vindex]'
+      );
     });
 
     it('保留虚拟化 Spacer 几何占位', () => {
@@ -29,6 +44,16 @@ describe('虚拟滚动几何稳定与统一盒模型契约 (Plan 05 DEF-13 & DEF
       // 纵向 padding 会与绝对切片脱节 → 顶遮挡/底截断
       expect(listCss).not.toMatch(/\.listInner\s*\{[^}]*padding:\s*48px/);
       expect(listCss).not.toMatch(/\.listInner\s*\{[^}]*padding-top:\s*48px/);
+    });
+
+    it('彻底切除未定义变量引用：--chat-col-gutter 与 --stream-pad-end', () => {
+      expect(listCss).not.toContain('--chat-col-gutter');
+      expect(listCss).not.toContain('--stream-pad-end');
+      const geometrySrc = fs.readFileSync(
+        path.resolve(__dirname, '../chatScrollGeometry.ts'),
+        'utf-8'
+      );
+      expect(geometrySrc).not.toContain('--stream-pad-end');
     });
   });
 
@@ -62,11 +87,15 @@ describe('虚拟滚动几何稳定与统一盒模型契约 (Plan 05 DEF-13 & DEF
   describe('3. MessageVirtualizer.tsx 统一度量契约 (DEF-13 §2.2)', () => {
     it('ResizeObserver 统一度量入口使用 el.offsetHeight 度量完整盒模型高度', () => {
       expect(measureSrc).toContain('el.offsetHeight');
-      expect(measureSrc).toMatch(/const measuredHeight =\s*el\.offsetHeight \|\| Math\.ceil\(entry\.contentRect\.height\);/);
+      expect(measureSrc).toMatch(
+        /const measuredHeight =\s*el\.offsetHeight \|\| Math\.ceil\(entry\.contentRect\.height\);/
+      );
       expect(measureSrc).toMatch(/ResizeObserverManager/);
       expect(measureSrc).not.toMatch(/new\s+ResizeObserver\s*\(/);
       expect(virtualizerTsx).toMatch(/ref=\{rowMeasureRef\(msg\.id\)\}/);
-      expect(virtualizerTsx).not.toMatch(/querySelectorAll\(\s*'\[data-vindex\]'\s*\)/);
+      expect(virtualizerTsx).not.toMatch(
+        /querySelectorAll\(\s*'\[data-vindex\]'\s*\)/
+      );
     });
   });
 

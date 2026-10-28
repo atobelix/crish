@@ -13,7 +13,7 @@
   margin: 0;
   background: transparent;
   border: none;
-  border-bottom: 1px solid var(--edge-divider, var(--border-subtle));
+  border-bottom: 1px solid var(--border-subtle);
   border-radius: 0;
   box-shadow: none;
   box-sizing: border-box;
@@ -27,14 +27,14 @@
   grid-template-rows: 0fr;
   transition: grid-template-rows var(--transition-accordion);
   background: transparent;
-  border-bottom: 0px solid var(--edge-divider, var(--border-subtle));
+  border-bottom: 0px solid var(--border-subtle);
   border-radius: 0;
   overflow: hidden;
 }
 
 .planProgressBar.isExpanded .planStepList {
   grid-template-rows: 1fr;
-  border-bottom: 1px solid var(--edge-divider, var(--border-subtle));
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .planStepListInner {
@@ -67,7 +67,7 @@
 }
 
 .planExpandedStep:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -78,7 +78,7 @@
 .planExpandedStep.active {
   color: var(--text-primary);
   font-weight: 600;
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border: none;
   outline: none;
 }
@@ -153,7 +153,7 @@
 }
 
 .planModeBadge:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -270,7 +270,7 @@
 }
 
 .planActionBtn:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 

@@ -34,7 +34,7 @@
   border-width: var(--hairline-width);
   border-style: solid;
   border-color: var(--hairline, var(--border-subtle));
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .chatEmptyIcon {
@@ -79,7 +79,7 @@
   padding: var(--space-2) var(--space-5);
   border: none;
   border-radius: var(--radius-sm);
-  background: var(--control-soft-bg);
+  background: var(--state-hover);
   color: var(--text-primary);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
@@ -91,12 +91,12 @@
 }
 
 .chatEmptyAction:hover {
-  background: var(--control-soft-bg-hover);
+  background: var(--state-hover);
 }
 
 .chatEmptyAction:focus-visible {
   outline: none;
-  background: var(--control-soft-bg-active);
+  background: var(--state-hover);
   box-shadow: var(--focus-ring);
 }
 

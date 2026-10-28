@@ -18,9 +18,9 @@ import type {
   SessionAgent,
 } from '../../store/types';
 import type { ToolRenderItem } from '../../api/toolPresentation';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 import { CompactToolRow } from './CompactToolRow';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface ChatToolStackActions {
   onOpenDiff?: ((diff: FileDiff) => void) | undefined;
@@ -63,8 +63,13 @@ export interface ChatToolStackProps {
   /**
    * 工具展开 toggle。第三参 msgId 由行装配层绑定（FE-INV-5 per-message）。
    */
-  onToggleTool: (toolId: string, currentlyOpen: boolean, msgId?: string) => void;
-  onToggleInjection?: ((injectionId: string, currentlyOpen: boolean) => void) | undefined;
+  onToggleTool: (
+    toolId: string,
+    currentlyOpen: boolean,
+    msgId?: string
+  ) => void;
+  onToggleInjection?:
+    ((injectionId: string, currentlyOpen: boolean) => void) | undefined;
   approvalBusy: boolean;
   pendingApprovalMsgId?: string | undefined;
   /** 操作回调与关联渲染器组（打开/审批/重试/批量/子 agent） */

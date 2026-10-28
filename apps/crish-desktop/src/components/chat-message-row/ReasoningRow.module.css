@@ -35,6 +35,7 @@
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows var(--transition-accordion);
+  transition-duration: var(--accordion-duration, var(--transition-accordion));
   margin: 0;
   padding: 0;
   border: none;
@@ -43,7 +44,8 @@
 
 .reasoningContainer[data-expanded='true']:not([data-collapsing='true'])
   .reasoningExpandGrid {
-  animation: reasoning-grid-expand var(--transition-accordion) forwards;
+  animation: reasoning-grid-expand
+    var(--accordion-duration, var(--transition-accordion)) forwards;
   grid-template-rows: 1fr;
 }
 
@@ -99,6 +101,7 @@
   box-sizing: border-box;
   contain: size layout;
   align-items: center;
+  gap: var(--space-1_5, 6px);
   margin: 0;
   padding: 0;
   border: none;
@@ -152,7 +155,7 @@
   background: var(--text-tertiary);
   display: inline-block;
   flex-shrink: 0;
-  margin-right: 5px;
+  margin: 0;
 }
 
 /*
@@ -171,16 +174,6 @@
   flex-shrink: 0;
   pointer-events: none;
   white-space: nowrap;
-}
-
-/* 微型分割点 */
-.dotSeparator {
-  flex-shrink: 0;
-  margin: 0 4px;
-  font-size: 14px;
-  color: var(--text-tertiary);
-  pointer-events: none;
-  user-select: none;
 }
 
 /* 动态文字追踪窗：尾窗追踪截断 (Tail-Window Tracking) */
@@ -227,7 +220,7 @@
   padding: 1px 5px;
   margin: 0 2px;
   border-radius: var(--radius-xs, 4px);
-  background: var(--bg-card-hover);
+  background: var(--state-hover);
   color: inherit;
 }
 
@@ -265,7 +258,7 @@
 .sweepShine {
   color: var(--text-secondary);
   font-weight: var(--font-weight-normal);
-  animation: sweep-shine 2.6s infinite ease-in-out;
+  animation: sweep-shine var(--transition-pulse, 2.6s ease-in-out) infinite;
 }
 
 /* 无障碍降级：系统偏好减弱动态效果时关停扫光 */
@@ -290,7 +283,8 @@
 /* 终态耗时文案：数字等宽对齐 font-variant-numeric: tabular-nums */
 .durationBadge {
   font-variant-numeric: tabular-nums;
-  color: var(--text-tertiary);
+  font-weight: var(--font-weight-normal);
+  color: inherit;
   font-size: 14px;
   line-height: 24px;
   flex-shrink: 0;

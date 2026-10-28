@@ -28,9 +28,83 @@ import {
   ReasoningRow,
   extractLatestLine,
   extractFirstLine,
+  resolveReasoningPresentation,
 } from '../ReasoningRow';
 
 describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光微交互', () => {
+  describe('零、呈现契约纯逻辑：resolveReasoningPresentation 状态覆盖', () => {
+    const mockT = vi.fn(
+      (
+        key: string,
+        fallbackOrParams?: string | Record<string, unknown>,
+        params?: Record<string, unknown>
+      ) => {
+        if (key === 'chat.thinking.label') return '思考中';
+        if (key === 'chat.thinking.completed') return '已思考';
+        if (key === 'chat.thinking.durationShort') {
+          const d =
+            (typeof fallbackOrParams === 'object'
+              ? (fallbackOrParams as Record<string, unknown>).duration
+              : params?.duration) ?? '';
+          return `已思考 ${d}s`;
+        }
+        if (key === 'chat.thinking.process') return '思考过程';
+        return typeof fallbackOrParams === 'string' ? fallbackOrParams : key;
+      }
+    );
+
+    it('流式态返回思考中并启用 liveDot', () => {
+      const pres = resolveReasoningPresentation({
+        isLive: true,
+        isExpanded: false,
+        content: '第一行\n最新第二行',
+        t: mockT,
+      });
+      expect(pres.badgeText).toBe('思考中');
+      expect(pres.hasLiveDot).toBe(true);
+      expect(pres.summaryText).toBe('最新第二行');
+      expect(pres.ariaLabel).toBe('思考中');
+      expect(pres.interactive).toBe(true);
+    });
+
+    it('终态带耗时返回格式化时长，无 liveDot', () => {
+      const pres = resolveReasoningPresentation({
+        isLive: false,
+        isExpanded: false,
+        durationMs: 3200,
+        content: '首行核心主题\n第二行细节',
+        t: mockT,
+      });
+      expect(pres.badgeText).toBe('已思考 3.2s');
+      expect(pres.hasLiveDot).toBe(false);
+      expect(pres.summaryText).toBe('首行核心主题');
+      expect(pres.ariaLabel).toBe('已思考 3.2s');
+    });
+
+    it('终态无耗时稳定兜底已思考', () => {
+      const pres = resolveReasoningPresentation({
+        isLive: false,
+        isExpanded: false,
+        content: '首行核心主题',
+        t: mockT,
+      });
+      expect(pres.badgeText).toBe('已思考');
+      expect(pres.hasLiveDot).toBe(false);
+      expect(pres.summaryText).toBe('首行核心主题');
+      expect(pres.ariaLabel).toBe('思考过程');
+    });
+
+    it('展开态下 summaryText 恒为空以阻断双份复读', () => {
+      const pres = resolveReasoningPresentation({
+        isLive: false,
+        isExpanded: true,
+        durationMs: 2000,
+        content: '首行核心主题\n正文长篇思维链',
+        t: mockT,
+      });
+      expect(pres.summaryText).toBe('');
+    });
+  });
   describe('一、纯算法层：512B 尾窗切片与 O(1) 复杂度断言', () => {
     it('extractLatestLine: 面对超长文本严格截取尾窗最新行并保持 O(1) 耗时', () => {
       const longPrefix = '历史推理链阶段思考输出与分析步骤\n'.repeat(3000); // 约 60KB
@@ -141,8 +215,11 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       const dot = container.querySelector('[data-testid="status-dot"]');
       expect(dot).not.toBeNull();
 
-      // 语义标签
+      // 语义标签与状态圆点
       expect(screen.getByText('思考中')).toBeDefined();
+      expect(
+        container.querySelector('button')?.getAttribute('aria-label')
+      ).toBe('思考中');
 
       // 尾窗打字机跟随视窗
       const summaryContainer = container.querySelector(
@@ -162,7 +239,9 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
 
       // 扫光微交互动画名称声明
       expect(cssContent).toMatch(/@keyframes\s+sweep-shine/);
-      expect(cssContent).toMatch(/animation:\s*sweep-shine\s+2\.6s/);
+      expect(cssContent).toMatch(
+        /animation:\s*sweep-shine\s+var\(--transition-pulse,\s*2\.6s ease-in-out\)/
+      );
 
       // 无障碍 a11y 降级声明
       expect(cssContent).toMatch(
@@ -196,6 +275,11 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       expect(cssContent).toMatch(/font-variant-numeric:\s*tabular-nums/);
     });
 
+    it('无耗时终态展示兜底“已思考 >”', () => {
+      render(<ReasoningRow content="" isLive={false} />);
+      expect(screen.getByText('已思考')).toBeDefined();
+    });
+
     it('多阶段思考轮次统一展示思考与耗时（无第 N 阶段）', () => {
       render(
         <ReasoningRow
@@ -218,6 +302,7 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
         />
       );
       expect(screen.getByText('正在执行具体分析细节...')).toBeDefined();
+      expect(screen.getByText('思考中')).toBeDefined();
 
       // 跃迁为终态
       rerender(
@@ -229,6 +314,14 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       );
       expect(screen.getByText('首行设计方案')).toBeDefined();
       expect(screen.getByText('已思考 3.2s')).toBeDefined();
+    });
+
+    it('负向断言：排版严格去符号化，绝不渲染任何 dotSeparator 分割点', () => {
+      const { container } = render(
+        <ReasoningRow content="首行思考内容" isLive={false} durationMs={3200} />
+      );
+      expect(container.querySelector('[class*="dotSeparator"]')).toBeNull();
+      expect(container.textContent).not.toContain('·');
     });
   });
 
@@ -587,6 +680,55 @@ describe('DIM-03 §1.1: 24px ReasoningRow 极简思考行流式追踪与扫光�
       expect(tsxContent).not.toMatch(/NODE_ENV\s*===/);
       expect(tsxContent).not.toMatch(/typeof\s+window\s*===/);
       expect(tsxContent).not.toMatch(/!important/);
+    });
+
+    it('收起长思维链时若滚出屏幕顶部，触发视口平滑回退保护', () => {
+      const { getByTestId } = render(
+        <ReasoningRow
+          content="详细思考步骤\n第一步\n第二步\n第三步"
+          isTurnWorking={true}
+          defaultExpanded={true}
+        />
+      );
+
+      const container = getByTestId('reasoning-container');
+      const scrollIntoViewMock = vi.fn();
+      container.scrollIntoView = scrollIntoViewMock;
+      vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+        top: -300,
+        bottom: 500,
+        left: 0,
+        right: 400,
+        width: 400,
+        height: 800,
+        x: 0,
+        y: -300,
+        toJSON: () => {},
+      });
+
+      const btn = container.querySelector('button') as HTMLButtonElement;
+      fireEvent.click(btn);
+
+      expect(container.getAttribute('data-expanded')).toBe('false');
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({
+        block: 'start',
+        behavior: 'smooth',
+      });
+    });
+
+    it('展开和折叠阶段注入自适应物理时长 --accordion-duration', () => {
+      const { getByTestId } = render(
+        <ReasoningRow
+          content="详细思考步骤"
+          defaultExpanded={true}
+          isTurnWorking={true}
+        />
+      );
+
+      const grid = getByTestId('reasoning-grid');
+      expect(grid.style.getPropertyValue('--accordion-duration')).toMatch(
+        /\d+ms/
+      );
     });
   });
 });

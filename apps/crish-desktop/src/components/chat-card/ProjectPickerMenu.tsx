@@ -1,29 +1,33 @@
 import React, { useMemo, useState, useCallback, useRef } from 'react';
 
 import {
-  addProjectFromPath,
   GENERAL_FOLDER,
   getActiveProjectId,
   listProjects,
-  openProject,
-  removeProject,
-  setNoProject,
   type ProjectEntry,
 } from '../../api/projectStore';
-import { openDirectoryDialogSafe } from '../../api/openDirectoryDialog';
+import {
+  activateDefaultWorkspace,
+  openAuthorizedProject,
+  pickAndAddWorkspaceProject,
+  removeAuthorizedProject,
+  WorkspaceAccessError,
+} from '../../api/workspaceAccessApi';
 import { isPendingDraft } from '../../store/storeAccess';
-import { Button, ConfirmDialog, Tooltip } from '../ui';
+import { Button, ConfirmDialog, Tooltip } from '@/components/ui';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
 import {
   SmartExpandablePanel,
   type MenuItem,
   type SmartPanelProps,
-} from '../ui/SmartExpandablePanel';
+} from '@/components/ui';
 import styles from './ProjectPickerMenu.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 import { ProjectManageModal } from '../sidebar/session-list/ProjectManageModal';
 import { setDraftProjectFolder } from '../../store/storeAccess';
+import { toast } from '../../services/toast';
+import { useI18n } from '../../i18n';
 
 export interface ProjectPickerMenuProps {
   sessionId?: string | null;
@@ -54,6 +58,7 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
   avoidCollisions,
   onCloseAutoFocus,
 }) => {
+  const { t } = useI18n();
   const scopedSessionId = useScopedSessionId(sessionIdProp);
   const [projectListVersion, setProjectListVersion] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -83,18 +88,23 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
   const handlePickFolder = useCallback(async () => {
     setBusy(true);
     try {
-      const path = await openDirectoryDialogSafe('选择现有项目文件夹');
-      if (path) {
-        const entry = addProjectFromPath(path);
+      const entry = await pickAndAddWorkspaceProject();
+      if (entry) {
         syncDraftFolderOnProjectChange(entry.id);
         onChanged?.();
         refresh();
         onOpenChange(false);
       }
+    } catch (error) {
+      toast.error(
+        error instanceof WorkspaceAccessError
+          ? error.message
+          : t('workspace.project.pickerUnavailable')
+      );
     } finally {
       setBusy(false);
     }
-  }, [onChanged, onOpenChange, refresh, syncDraftFolderOnProjectChange]);
+  }, [onChanged, onOpenChange, refresh, syncDraftFolderOnProjectChange, t]);
 
   const handleCreateEmptyProject = useCallback(() => {
     if (typeof document !== 'undefined') {
@@ -110,24 +120,49 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
 
   const handleRemoveProject = async (p: ProjectEntry) => {
     const ok = await confirmGate({
-      title: '移除项目',
-      description: `确定从列表移除项目「${p.name}」？`,
-      confirmLabel: '移除项目',
+      title: t('workspace.project.removeTitle'),
+      description: t('workspace.project.confirmRemoveDescription', {
+        name: p.name,
+      }),
+      confirmLabel: t('workspace.project.removeTitle'),
     });
     if (!ok) return;
-    removeProject(p.id);
-    refresh();
-    onChanged?.();
+    setBusy(true);
+    try {
+      await removeAuthorizedProject(p.id);
+      refresh();
+      onChanged?.();
+    } catch (error) {
+      toast.error(
+        error instanceof WorkspaceAccessError
+          ? error.message
+          : t('workspace.project.removeFailed')
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   const pickProject = useCallback(
-    (id: string) => {
-      openProject(id);
-      syncDraftFolderOnProjectChange(id);
-      onChanged?.();
-      onOpenChange(false);
+    async (id: string) => {
+      setBusy(true);
+      try {
+        const project = await openAuthorizedProject(id);
+        if (!project) return;
+        syncDraftFolderOnProjectChange(id);
+        onChanged?.();
+        onOpenChange(false);
+      } catch (error) {
+        toast.error(
+          error instanceof WorkspaceAccessError
+            ? error.message
+            : t('workspace.project.notAuthorized')
+        );
+      } finally {
+        setBusy(false);
+      }
     },
-    [onChanged, onOpenChange, syncDraftFolderOnProjectChange]
+    [onChanged, onOpenChange, syncDraftFolderOnProjectChange, t]
   );
 
   // 纯数据驱动 Schema 构造
@@ -145,12 +180,14 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
         onSelect: () => pickProject(p.id),
         trailingAction:
           p.id !== GENERAL_FOLDER ? (
-            <Tooltip content="从列表移除项目">
+            <Tooltip content={t('workspace.project.removeFromList')}>
               <Button
                 type="button"
                 variant="danger"
                 className={styles.rowDeleteBtn}
-                aria-label={`从列表移除项目 ${p.name}`}
+                aria-label={t('workspace.project.removeAria', {
+                  name: p.name,
+                })}
                 onClick={(e) => {
                   e.stopPropagation();
                   void handleRemoveProject(p);
@@ -167,14 +204,26 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
     const generalItem: MenuItem = {
       id: 'proj:general',
       type: 'selectable',
-      label: '通用项目',
+      label: t('workspace.project.general'),
       icon: <AppIcon name="folder" size={14} />,
       selected: isGeneralSelected,
+      disabled: busy,
       onSelect: () => {
-        setNoProject();
-        syncDraftFolderOnProjectChange(GENERAL_FOLDER);
-        onChanged?.();
-        onOpenChange(false);
+        setBusy(true);
+        void activateDefaultWorkspace()
+          .then(() => {
+            syncDraftFolderOnProjectChange(GENERAL_FOLDER);
+            onChanged?.();
+            onOpenChange(false);
+          })
+          .catch((error: unknown) => {
+            toast.error(
+              error instanceof WorkspaceAccessError
+                ? error.message
+                : t('workspace.switchToDefaultFailed')
+            );
+          })
+          .finally(() => setBusy(false));
       },
     };
 
@@ -188,12 +237,12 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
       {
         id: 'action:add-project',
         type: 'submenu',
-        label: '添加项目',
+        label: t('workspace.project.add'),
         icon: <AppIcon name="plus" size={14} />,
         children: [
           {
             id: 'action:open-local',
-            label: '打开本地项目...',
+            label: t('workspace.project.openLocal'),
             icon: <AppIcon name="folder-open" size={14} />,
             disabled: busy,
             closeOnSelect: false,
@@ -201,7 +250,7 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
           },
           {
             id: 'action:create-empty',
-            label: '新建空白项目...',
+            label: t('workspace.project.createBlank'),
             icon: <AppIcon name="folder-plus" size={14} />,
             disabled: busy,
             closeOnSelect: false,
@@ -220,6 +269,7 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
     syncDraftFolderOnProjectChange,
     handlePickFolder,
     handleCreateEmptyProject,
+    t,
   ]);
 
   return (
@@ -231,7 +281,7 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
         trigger={children}
         items={menuItems}
         enableSearch={true}
-        searchPlaceholder="搜索项目"
+        searchPlaceholder={t('workspace.project.search')}
         position={position}
         triggerMode={triggerMode}
         avoidCollisions={avoidCollisions}

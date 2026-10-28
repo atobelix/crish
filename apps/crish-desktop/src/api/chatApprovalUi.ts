@@ -36,18 +36,27 @@ export type ApprovalUiPlan = {
   agentCount: number;
 };
 
-type ApprovalMsgLike = {
-  id?: string;
-  toolCalls?: ReadonlyArray<{
-    id?: string;
-    status?: string;
-    name?: string;
-    explanation?: string;
-  } | null | undefined> | null;
-} | null | undefined;
+type ApprovalMsgLike =
+  | {
+      id?: string;
+      toolCalls?: ReadonlyArray<
+        | {
+            id?: string;
+            status?: string;
+            name?: string;
+            explanation?: string;
+          }
+        | null
+        | undefined
+      > | null;
+    }
+  | null
+  | undefined;
 
 /** 将计数钳到非负整数，避免 NaN/负数/Infinity 导致 dock 误显 */
-export function clampApprovalCounts(c: ApprovalPendingCounts): ApprovalPendingCounts {
+export function clampApprovalCounts(
+  c: ApprovalPendingCounts
+): ApprovalPendingCounts {
   const clamp = (n: number) => {
     if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) return 0;
     return Math.floor(n);
@@ -66,8 +75,12 @@ export function collectPendingApprovals(
   agentMessagesLists:
     | ReadonlyArray<ReadonlyArray<ApprovalMsgLike> | null | undefined>
     | null
-    | undefined = [],
-): { counts: ApprovalPendingCounts; first: PendingApprovalRef | null; uniqueToolIds: string[] } {
+    | undefined = []
+): {
+  counts: ApprovalPendingCounts;
+  first: PendingApprovalRef | null;
+  uniqueToolIds: string[];
+} {
   const seen = new Set<string>();
   let mainCount = 0;
   let agentCount = 0;
@@ -76,7 +89,7 @@ export function collectPendingApprovals(
 
   const scan = (
     msgs: ReadonlyArray<ApprovalMsgLike> | null | undefined,
-    bucket: 'main' | 'agent',
+    bucket: 'main' | 'agent'
   ) => {
     if (!msgs) return;
     for (const m of msgs) {
@@ -122,7 +135,9 @@ export function totalPendingApproval(c: ApprovalPendingCounts): number {
 /**
  * 统一渲染模式：单条主时间线 → inline-only（禁止 dock 双渲染）。
  */
-export function approvalRenderMode(c: ApprovalPendingCounts): ApprovalRenderMode {
+export function approvalRenderMode(
+  c: ApprovalPendingCounts
+): ApprovalRenderMode {
   const { mainCount, agentCount } = clampApprovalCounts(c);
   if (mainCount + agentCount <= 0) return 'none';
   // 单条且已在主时间线 → 只靠内联卡（dock 再出现 = 双渲染）
@@ -141,7 +156,9 @@ export function shouldShowApprovalDock(c: ApprovalPendingCounts): boolean {
 /**
  * 单条主时间线是否应隐藏任何 sticky/dock 审批壳（仅内联）。
  */
-export function isSingleMainTimelineApproval(c: ApprovalPendingCounts): boolean {
+export function isSingleMainTimelineApproval(
+  c: ApprovalPendingCounts
+): boolean {
   return approvalRenderMode(c) === 'inline-only';
 }
 
@@ -182,7 +199,9 @@ export function planApprovalUi(c: ApprovalPendingCounts): ApprovalUiPlan {
  * 不变量：inline-only 时不得 show dock；none 时两者皆关。
  * 供测试与调用方防御校验（含 plan ↔ legacy shouldShow 对齐）。
  */
-export function assertApprovalUiNoDoubleRender(c: ApprovalPendingCounts): boolean {
+export function assertApprovalUiNoDoubleRender(
+  c: ApprovalPendingCounts
+): boolean {
   const plan = planApprovalUi(c);
   const dockLegacy = shouldShowApprovalDock(c);
   // 核心：showDock 仅当 mode===dock；且与 legacy / resolve 一致
@@ -215,7 +234,7 @@ export function assertApprovalUiNoDoubleRender(c: ApprovalPendingCounts): boolea
 /** dock 文案：队列 vs 子任务跳转，避免「待审批」 alone 含糊 */
 export function approvalDockLabel(
   c: ApprovalPendingCounts,
-  summary?: string,
+  summary?: string
 ): string {
   const counts = clampApprovalCounts(c);
   const total = totalPendingApproval(counts);
@@ -224,7 +243,10 @@ export function approvalDockLabel(
   const bits: string[] = [`${total} 待审批`];
   if (counts.agentCount > 0 && counts.mainCount === 0) {
     bits.push('协作任务');
-  } else if (counts.mainCount > 1 || (counts.mainCount > 0 && counts.agentCount > 0)) {
+  } else if (
+    counts.mainCount > 1 ||
+    (counts.mainCount > 0 && counts.agentCount > 0)
+  ) {
     bits.push('队列');
   }
   const s = (summary || '').trim();
@@ -243,7 +265,7 @@ export type AllowConfirmPhase = 'idle' | 'armed' | 'commit';
  */
 export function nextAllowConfirmPhase(
   needsDouble: boolean,
-  armed: boolean,
+  armed: boolean
 ): AllowConfirmPhase {
   if (!needsDouble) return 'commit';
   if (!armed) return 'armed';
@@ -268,18 +290,10 @@ export function shouldResetAllowConfirmArmed(opts: {
 }
 
 /** 允许按钮可见文案（与二次确认状态对齐） */
-export function allowButtonLabel(
-  needsDouble: boolean,
-  armed: boolean,
-  remember: boolean,
-): string {
-  if (needsDouble && !armed) {
-    return remember ? '记住并准备允许' : '允许…';
-  }
-  if (needsDouble && armed) {
-    return remember ? '再次确认并记住' : '再次确认允许';
-  }
-  return remember ? '允许并记住' : '允许';
+export function allowButtonLabel(needsDouble: boolean, armed: boolean): string {
+  if (needsDouble && !armed) return '允许…';
+  if (needsDouble && armed) return '再次确认允许';
+  return '允许';
 }
 
 /**
@@ -294,7 +308,7 @@ export function plainApprovalQuestion(summary: string, cmd?: string): string {
     if (/^是否允许/.test(s)) return s;
     if (
       /正在|查看|修改|搜索|运行|安装|构建|列出|浏览|执行|启动|切换|推送|拉取|暂存|贮藏|创建|克隆|配置|发布|还原|回退|重置|请求|连接|传输|管理|查询|应用|进入|删除|复制|移动|格式化|检查|获取|操作|通过|处理|添加|卸载|编译|刷新|更新/.test(
-        s,
+        s
       )
     ) {
       return `是否允许：${s.replace(/^正在/, '')}？`.replace(/？？$/, '？');
@@ -318,7 +332,9 @@ export function plainApprovalQuestion(summary: string, cmd?: string): string {
   ) {
     return '是否允许执行系统或云资源相关操作？';
   }
-  if (/npm |pnpm |yarn |bun |pip |cargo |go |composer |安装|构建/i.test(c + s)) {
+  if (
+    /npm |pnpm |yarn |bun |pip |cargo |go |composer |安装|构建/i.test(c + s)
+  ) {
     return '是否允许运行安装或构建类命令？';
   }
   if (c) {
@@ -339,13 +355,18 @@ export type ApprovalRiskChip = {
  * 从后端风险字段生成卡片 chips（不猜工具名）。
  * 空输入 → []。
  */
-export function buildApprovalRiskChips(meta: {
-  trustZone?: string;
-  risk?: string;
-  riskLevel?: string;
-  requiresDoubleConfirm?: boolean;
-  recommendSnapshot?: boolean;
-} | null | undefined): ApprovalRiskChip[] {
+export function buildApprovalRiskChips(
+  meta:
+    | {
+        trustZone?: string;
+        risk?: string;
+        riskLevel?: string;
+        requiresDoubleConfirm?: boolean;
+        recommendSnapshot?: boolean;
+      }
+    | null
+    | undefined
+): ApprovalRiskChip[] {
   if (!meta) return [];
   const chips: ApprovalRiskChip[] = [];
   const zone = (meta.trustZone || '').trim().toUpperCase();
@@ -353,7 +374,12 @@ export function buildApprovalRiskChips(meta: {
     chips.push({
       key: 'zone',
       label: zone,
-      tone: zone === 'T4' || zone === 'T3' ? 'danger' : zone === 'T1' || zone === 'T2' ? 'warn' : 'neutral',
+      tone:
+        zone === 'T4' || zone === 'T3'
+          ? 'danger'
+          : zone === 'T1' || zone === 'T2'
+            ? 'warn'
+            : 'neutral',
     });
   }
   const risk = (meta.risk || '').trim();
@@ -365,8 +391,9 @@ export function buildApprovalRiskChips(meta: {
     chips.push({
       key: 'risk',
       label: risk,
-      tone:
-        /hardline|destructive|critical|secret/i.test(risk) ? 'danger' : 'warn',
+      tone: /hardline|destructive|critical|secret/i.test(risk)
+        ? 'danger'
+        : 'warn',
     });
   }
   const level = (meta.riskLevel || '').trim().toLowerCase();
@@ -378,7 +405,12 @@ export function buildApprovalRiskChips(meta: {
     chips.push({
       key: 'level',
       label: level,
-      tone: level === 'critical' || level === 'high' ? 'danger' : level === 'medium' ? 'warn' : 'info',
+      tone:
+        level === 'critical' || level === 'high'
+          ? 'danger'
+          : level === 'medium'
+            ? 'warn'
+            : 'info',
     });
   }
   if (meta.requiresDoubleConfirm) {

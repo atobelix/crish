@@ -150,7 +150,9 @@ describe('4 层 XSS 纵深防御体系', () => {
   });
 
   it('TC-X05 (Tier 4): CustomTagErrorBoundary 隔离局部崩溃并支持重试恢复', () => {
-    const BrokenChild: React.FC<{ shouldThrow?: boolean }> = ({ shouldThrow }) => {
+    const BrokenChild: React.FC<{ shouldThrow?: boolean }> = ({
+      shouldThrow,
+    }) => {
       if (shouldThrow) {
         throw new Error('模拟子组件崩溃');
       }
@@ -167,7 +169,9 @@ describe('4 层 XSS 纵深防御体系', () => {
     );
 
     expect(screen.getByRole('alert')).toBeDefined();
-    expect(screen.getByText(/自定义组件渲染异常 \[broken-widget\]/)).toBeDefined();
+    expect(
+      screen.getByText(/自定义组件渲染异常 \[broken-widget\]/)
+    ).toBeDefined();
     expect(screen.getByText('模拟子组件崩溃')).toBeDefined();
 
     // 重新渲染正常子组件并点击重试恢复
@@ -210,11 +214,23 @@ describe('React 富交互组件套件功能交互', () => {
     );
 
     expect(screen.getByText('修复内存泄漏')).toBeDefined();
-    expect(screen.getByText((_, el) => (el?.textContent?.includes('added line 1') ?? false) && el?.tagName === 'SPAN')).toBeDefined();
-    expect(screen.getByText((_, el) => (el?.textContent?.includes('deleted line') ?? false) && el?.tagName === 'SPAN')).toBeDefined();
+    expect(
+      screen.getByText(
+        (_, el) =>
+          (el?.textContent?.includes('added line 1') ?? false) &&
+          el?.tagName === 'SPAN'
+      )
+    ).toBeDefined();
+    expect(
+      screen.getByText(
+        (_, el) =>
+          (el?.textContent?.includes('deleted line') ?? false) &&
+          el?.tagName === 'SPAN'
+      )
+    ).toBeDefined();
 
     // 切换到 Split 模式
-    const splitBtn = screen.getByRole('button', { name: '分栏比对' });
+    const splitBtn = screen.getByRole('button', { name: '分栏' });
     fireEvent.click(splitBtn);
     expect(screen.getByText(/Original/)).toBeDefined();
     expect(screen.getByText(/Modified/)).toBeDefined();
@@ -229,18 +245,24 @@ describe('React 富交互组件套件功能交互', () => {
     // 点击采纳
     const acceptBtn = screen.getByRole('button', { name: '采纳' });
     fireEvent.click(acceptBtn);
-    expect(onAction).toHaveBeenCalledWith('accept_diff', expect.objectContaining({
-      title: '修复内存泄漏',
-      from: 'old.ts',
-      to: 'new.ts',
-    }));
+    expect(onAction).toHaveBeenCalledWith(
+      'accept_diff',
+      expect.objectContaining({
+        title: '修复内存泄漏',
+        from: 'old.ts',
+        to: 'new.ts',
+      })
+    );
 
     // 点击拒绝
     const rejectBtn = screen.getByRole('button', { name: '拒绝' });
     fireEvent.click(rejectBtn);
-    expect(onAction).toHaveBeenCalledWith('reject_diff', expect.objectContaining({
-      title: '修复内存泄漏',
-    }));
+    expect(onAction).toHaveBeenCalledWith(
+      'reject_diff',
+      expect.objectContaining({
+        title: '修复内存泄漏',
+      })
+    );
   });
 
   it('TC-UI02: <FileTree> 渲染树形结构、展开折叠与文件点击 IPC 导航', () => {
@@ -267,10 +289,11 @@ describe('React 富交互组件套件功能交互', () => {
     // 点击文件触发导航
     const fileNode = screen.getByText('markdown.ts');
     fireEvent.click(fileNode);
-    expect(onAction).toHaveBeenCalledWith('open_file', { path: 'conex-project/src/api/markdown.ts' });
+    expect(onAction).toHaveBeenCalledWith('open_file', {
+      path: 'conex-project/src/api/markdown.ts',
+    });
     expect(onSelect).toHaveBeenCalledWith('conex-project/src/api/markdown.ts');
   });
-
 
   it('TC-UI03: <AiCard> 展示 Emerald 脉冲动画、自适应折叠与错误重试', () => {
     const onRetry = vi.fn();
@@ -316,7 +339,11 @@ describe('React 富交互组件套件功能交互', () => {
   it('TC-UI04: <CustomTagPortal> 在 DOM 顶层容器正确挂载与卸载', () => {
     const onClose = vi.fn();
     const { unmount } = render(
-      <CustomTagPortal containerId="test-portal-root" isOpen={true} onClose={onClose}>
+      <CustomTagPortal
+        containerId="test-portal-root"
+        isOpen={true}
+        onClose={onClose}
+      >
         <div data-testid="portal-content">浮层内容</div>
       </CustomTagPortal>
     );

@@ -67,7 +67,7 @@
   padding: 0;
   border: none;
   border-radius: var(--radius-xs);
-  background-color: var(--tint-divider);
+  background-color: var(--border-color);
   opacity: 1;
   transform-origin: right center;
   cursor: pointer;
@@ -104,18 +104,18 @@
 }
 
 .tick.isActive {
-  background-color: var(--tint-overlay);
+  background-color: var(--state-overlay);
   width: 16px;
 }
 
 .root:hover .tick {
   width: 16px;
-  background-color: var(--tint-divider);
+  background-color: var(--border-color);
 }
 
 .root:hover .tick.isActive {
   width: 24px;
-  background-color: var(--tint-highlight);
+  background-color: var(--state-highlight);
 }
 
 .root .tick:hover,
@@ -261,7 +261,7 @@
 
 .scrubberPinBtn:hover,
 .scrubberPinBtn:hover {
-  background-color: var(--tint-hover);
+  background-color: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -272,7 +272,7 @@
 
 .scrubberPinBtn.isPinned:hover,
 .scrubberPinBtn.isPinned:hover {
-  background-color: var(--tint-hover);
+  background-color: var(--state-hover);
   color: var(--tick-pin-color, var(--brand));
 }
 
@@ -295,7 +295,7 @@
 
 .scrubberTooltipUserBtn:hover,
 .scrubberTooltipUserBtn:hover {
-  background-color: var(--tint-hover);
+  background-color: var(--state-hover);
 }
 
 .scrubberTooltipUserText {
@@ -331,7 +331,7 @@
 
 .scrubberTooltipAssistantBtn:hover,
 .scrubberTooltipAssistantBtn:hover {
-  background-color: var(--tint-hover);
+  background-color: var(--state-hover);
 }
 
 .scrubberTooltipAssistantText {

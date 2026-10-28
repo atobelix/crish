@@ -6,10 +6,10 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 
 import styles from './ComposerSendControls.module.css';
-import { Button, ConfirmDialog, Tooltip } from '../ui';
+import { Button, ConfirmDialog, Tooltip } from '@/components/ui';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
 import { useI18n } from '../../i18n';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export const STOP_TOOLTIP = '停止生成（协作停止）。Shift+点击或长按：强制取消';
 export const STOP_ARIA_LABEL =

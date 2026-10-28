@@ -1,11 +1,11 @@
 import React from 'react';
 
 import styles from './ChatMessageRow.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import { formatMsgTime } from './chatMessageRowUtils';
 import { RetractActionButton } from './RetractActionButton';
 import { PinActionWithPicker } from './PinActionWithPicker';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 // ─── User Message Meta Actions Bar ──────────────────────────────────────────
 
@@ -58,7 +58,7 @@ export const UserMessageActionsBar: React.FC<UserMessageActionsBarProps> = ({
         />
       </Tooltip>
       {onEdit ? (
-        <Tooltip content="编辑上一条消息（回填输入框并重新编辑）">
+        <Tooltip content="编辑消息">
           <Button
             type="button"
             variant="ghost"

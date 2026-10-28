@@ -109,7 +109,7 @@ describe('P6 输入坞一体化契约 (composerNotice.contract)', () => {
     expect(resolveLegacyNoticeType('info')).toBe('info');
   });
 
-  it('T6-2: 通知顶槽与权限/计划条均内嵌于 [data-composer-card] 内部，零外部脱节容器与零 360px 限宽', () => {
+  it('T6-2: 通知顶槽内嵌于 [data-composer-card] 内部，零外部脱节容器与零 360px 限宽', () => {
     const { container } = render(
       React.createElement(
         ChatComposer,
@@ -118,11 +118,6 @@ describe('P6 输入坞一体化契约 (composerNotice.contract)', () => {
             text: '模型请求触发速率限制，将在 5 秒后重试',
             severity: 'rate-limit',
             source: 'rate-limit',
-          },
-          permissionBarProps: {
-            risk: 'low',
-            summary: '读取工作区配置',
-            command: 'cat package.json',
           },
         })
       )
@@ -141,11 +136,6 @@ describe('P6 输入坞一体化契约 (composerNotice.contract)', () => {
     // 严禁在 .composerCard 外部遗留旧版浮动区或独立通知胶囊区
     expect(container.querySelector('[data-composer-notice-zone]')).toBeNull();
     expect(container.querySelector('[data-composer-float-zone]')).toBeNull();
-
-    // 权限审批条同样位于 .composerCard 内部
-    expect(
-      card?.querySelector('[data-testid="composer-permission-bar"]')
-    ).toBeTruthy();
 
     // CSS 契约：内嵌通知无 360px 限宽、无独立四周实线框（border: none + border-bottom: 1px solid）
     const embeddedCss = readComposerFile('ComposerEmbeddedNotice.module.css');

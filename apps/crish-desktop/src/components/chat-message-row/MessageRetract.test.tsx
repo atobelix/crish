@@ -130,8 +130,6 @@ describe('消息级撤回入口', () => {
         isSearchHit={false}
         isThinkingMsg
         hideThinkingBlock={false}
-        inPlanMode={false}
-        planApproved={false}
         isLastAssistant
         toolStackProps={stubStack()}
         onTogglePin={vi.fn()}
@@ -139,13 +137,14 @@ describe('消息级撤回入口', () => {
         onBranch={vi.fn()}
         onOpenDiff={vi.fn()}
         setPermissionMode={vi.fn()}
-        setPlanApproved={vi.fn()}
         onRetract={onRetract}
         messageIndex={1}
         virtualScrollManager={null}
       />
     );
-    expect(screen.queryByRole('button', { name: '撤回上一条用户消息' })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: '撤回上一条用户消息' })
+    ).toBeNull();
   });
 
   it('AssistantMessageActionsBar 严守契约：AI 助手消息不提供撤回功能', () => {
@@ -161,7 +160,9 @@ describe('消息级撤回入口', () => {
         onRetract={vi.fn()}
       />
     );
-    expect(screen.queryByRole('button', { name: '撤回上一条用户消息' })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: '撤回上一条用户消息' })
+    ).toBeNull();
   });
 
   it('UserMessageActionsBar 未固定时渲染固定按钮，点击触发 onTogglePin', () => {
@@ -241,9 +242,14 @@ describe('消息级撤回入口', () => {
   });
 
   it('RetractActionButton 源码与 DOM 契约：精准 Tooltip、无原生 title 且图标隐藏于无障碍树', () => {
-    const retractSrc = readFileSync(join(here, 'RetractActionButton.tsx'), 'utf8');
-    expect(retractSrc).toMatch(/content="撤回上一条消息（还原文件、截断并回填输入框）"/);
-    expect(retractSrc).toMatch(/<AppIcon name="undo" size=\{16\} aria-hidden \/>/);
+    const retractSrc = readFileSync(
+      join(here, 'RetractActionButton.tsx'),
+      'utf8'
+    );
+    expect(retractSrc).toMatch(/content="撤回消息"/);
+    expect(retractSrc).toMatch(
+      /<AppIcon name="undo" size=\{16\} aria-hidden \/>/
+    );
     expect(retractSrc).not.toMatch(/\btitle=/);
 
     const onRetract = vi.fn();
@@ -256,8 +262,11 @@ describe('消息级撤回入口', () => {
   });
 
   it('UserMessageActionsBar 编辑与撤回统一契约：Tooltip 与样式类一致性', () => {
-    const userBarSrc = readFileSync(join(here, 'UserMessageActionsBar.tsx'), 'utf8');
-    expect(userBarSrc).toMatch(/content="编辑上一条消息（回填输入框并重新编辑）"/);
+    const userBarSrc = readFileSync(
+      join(here, 'UserMessageActionsBar.tsx'),
+      'utf8'
+    );
+    expect(userBarSrc).toMatch(/content="编辑消息"/);
     expect(userBarSrc).not.toMatch(/\btitle=/);
 
     const onEdit = vi.fn();

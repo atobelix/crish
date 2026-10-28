@@ -50,7 +50,4 @@ export {
   approvalRiskSummary,
 } from './approvalMetaLabels';
 
-export {
-  parseApprovalRiskMeta,
-  rememberPrefixFromToolArgs,
-} from './approvalMetaParse';
+export { parseApprovalRiskMeta } from './approvalMetaParse';

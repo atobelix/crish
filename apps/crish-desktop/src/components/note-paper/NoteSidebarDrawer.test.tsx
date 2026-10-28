@@ -36,7 +36,9 @@ const mockDocs: NoteDocumentMeta[] = [
   },
 ];
 
-function renderDrawer(props: Partial<React.ComponentProps<typeof NoteSidebarDrawer>> = {}) {
+function renderDrawer(
+  props: Partial<React.ComponentProps<typeof NoteSidebarDrawer>> = {}
+) {
   const defaultProps = {
     isOpen: true,
     onClose: vi.fn(),
@@ -186,7 +188,9 @@ describe('NoteSidebarDrawer · 像素级对齐会话项与去噪验证套件', (
     expect(renameBtns.length).toBe(2);
 
     fireEvent.click(renameBtns[0]);
-    expect(screen.getByRole('textbox', { name: '重命名笔记' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('textbox', { name: '重命名笔记' })
+    ).toBeInTheDocument();
   });
 
   it('删除操作二次确认弹窗：点击取消不删除，点击确认执行物理删除', () => {
@@ -253,6 +257,6 @@ describe('NoteSidebarDrawer · 像素级对齐会话项与去噪验证套件', (
         onSearchChange={vi.fn()}
       />
     );
-    expect(screen.getByText('暂无笔记，点击上方“+”新建')).toBeInTheDocument();
+    expect(screen.getByText('暂无笔记')).toBeInTheDocument();
   });
 });

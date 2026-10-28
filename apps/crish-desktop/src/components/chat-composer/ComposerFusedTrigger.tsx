@@ -15,8 +15,8 @@ import React, {
 } from 'react';
 
 import styles from './ComposerFusedTrigger.module.css';
-import { Button, Menu, Tooltip } from '../ui';
-import { toggleExclusiveMenu } from '../ui/Menu';
+import { Button, Menu, Tooltip } from '@/components/ui';
+import { toggleExclusiveMenu } from '@/components/ui';
 import {
   getActiveModelId,
   getActiveProfileId,
@@ -33,7 +33,7 @@ import {
 } from '../../api/SessionRuntimeRegistry';
 import { recordPendingContextState } from '../../api/provider-profiles/contextStatePending';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 
 export type ComposerFusedTriggerProps = {

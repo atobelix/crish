@@ -4,11 +4,8 @@ import styles from './ComposePlusMenu.module.css';
 import { openSettings } from '../../api/storeAccess';
 import { navigateToSurface } from '../../store/storeAccess';
 import { useI18n } from '../../i18n';
-import {
-  SmartExpandablePanel,
-  type MenuItem,
-} from '../ui/SmartExpandablePanel';
-import { AppIcon } from '../ui/icons/index';
+import { SmartExpandablePanel, type MenuItem } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface ComposePlusMenuProps {
   open: boolean;

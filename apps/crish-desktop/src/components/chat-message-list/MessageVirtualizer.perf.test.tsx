@@ -13,7 +13,9 @@ import { MessageVirtualizer } from './MessageVirtualizer';
 // 行内 useToast 在无 Provider 时会刷屏 fallback 警告，污染帧计时；与虚拟滚动性能无关
 vi.mock('../../services/toast/ToastContext', () => ({
   useToast: () => ({ showToast: vi.fn(), toast: { show: vi.fn() } }),
-  ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  ToastProvider: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
 }));
 import type { SessionMessage } from '../../store/types';
 import {
@@ -69,7 +71,9 @@ function createMockMessages(count: number): SessionMessage[] {
   return msgs;
 }
 
-function createDefaultProps(messages: SessionMessage[]): MessageVirtualizerProps {
+function createDefaultProps(
+  messages: SessionMessage[]
+): MessageVirtualizerProps {
   return {
     messages,
     activeSessionId: 'sess-1',
@@ -102,8 +106,6 @@ function createDefaultProps(messages: SessionMessage[]): MessageVirtualizerProps
     },
     flowControl: {
       hideThinkingBlock: false,
-      inPlanMode: false,
-      planApproved: false,
       lastAssistantId: messages[messages.length - 1]?.id ?? null,
       showAllMessages: true,
     },
@@ -172,90 +174,96 @@ describe('MessageVirtualizer — 长会话 (1000+ 消息) 性能与高度断言'
     expect(manager.getTotalHeight(1500)).toBe(expectedTotal);
   });
 
-  it('100 次高频虚拟滚动：单帧工作量不随消息总数增长（自校准相对门禁）', { timeout: 60000 }, () => {
-    // ── 门禁可信化改造（2026-09-15）────────────────────────────────────
-    // 原实现断言绝对墙钟：avgFrameTime < 80ms / maxFrameTime < 350ms。
-    // 实测（8 次隔离复跑，含全量套件并发轮次）：
-    //   · 帧耗时分布右偏，中位数在 61-99ms 区间随机漂移（±20%），
-    //     阈值 80ms 正落在噪声带中央 ⇒ 实测误红率 3/8；
-    //   · 全量 847 文件并发时单帧曾达 703ms（> 350ms 阈值）。
-    // 结论：本机对该负载的吞吐本身有 ±20% 漂移，**任何贴着实测值标定的
-    // 绝对墙钟阈值都必然误红**。绝对阈值在此不可作为稳定判据，而误红会
-    // 训练出「忽略红」的习惯，反而使门禁失效。
-    //
-    // 改造为「同一进程内自校准」：以 300 条消息为基线、1500 条为对照
-    // （5 倍消息量），两者使用**相同的每帧推进量（5 行）与相同的帧数**，
-    // 比较各自的帧耗时低分位。虚拟滚动若正确，每帧只渲染视口窗口 +
-    // overscan，与消息总数无关 ⇒ 比值接近 1；若退化为 O(N)（全量挂载 /
-    // 每帧全量遍历 / offset 前缀和未缓存）⇒ 5 倍消息量将放大比值到 3 倍以上。
-    //
-    // 估计量与采样协议（全量并发下实测校准）：
-    //   ① 用 **P10 低分位**而非中位数/均值——争抢使所有帧一致变慢，而
-    //      「最不受争抢的那批帧」最接近真实单帧成本，故低分位对 CPU
-    //      争抢的敏感度远低于中心统计量；
-    //   ② **交错重复两轮（A,B,A,B）并对每个负载取两轮的较小值**——
-    //      大负载若恒在第二个测，会系统性继承更多已累积垃圾（GC 压力）
-    //      与更晚出现的争抢突发，形成顺序偏差；交错 + 取最小可抵消它。
-    // 机器速度在比值中完全抵消 ⇒ 零误红，且对「随 N 增长」这一真回归类的
-    // 探测力**强于**原绝对阈值（原阈值在快机器上即使存在 O(N) 退化也可能
-    // 因绝对值低而放行）。
-    //
-    // 本门禁上线即捕获到一处真缺陷（2026-09-15，已修）：
-    // FlowScrubber 的轨道按**每条用户消息**产出一枚刻度 DOM，而轨道是固定
-    // 高度条带 ⇒ 每次滚动提交都要协调 O(N) 个元素。实测修复前
-    // t(300)=18ms / t(1500)=40ms / t(6000)=128ms（线性，N=6000 时是 16.7ms
-    // 帧预算的 7.7 倍）；短路轨道渲染后每帧与 N 无关（25ms 持平）。
-    // 修复：轨道刻度按像素容量有界渲染（flowScrubberModel.capScrubberSegments），
-    // 修复后 t(300)=15ms / t(1500)=14ms / t(6000)=13ms（持平，N=6000 时约 9.5 倍改善）。
-    const FRAMES = 20; // 每轮 20 帧；共 4 轮 = 80 帧采样
-    const STEP = 5 * MESSAGE_ESTIMATED_ROW_HEIGHT; // 每帧推进 5 行，两侧一致
+  it(
+    '100 次高频虚拟滚动：单帧工作量不随消息总数增长（自校准相对门禁）',
+    { timeout: 60000 },
+    () => {
+      // ── 门禁可信化改造（2026-09-15）────────────────────────────────────
+      // 原实现断言绝对墙钟：avgFrameTime < 80ms / maxFrameTime < 350ms。
+      // 实测（8 次隔离复跑，含全量套件并发轮次）：
+      //   · 帧耗时分布右偏，中位数在 61-99ms 区间随机漂移（±20%），
+      //     阈值 80ms 正落在噪声带中央 ⇒ 实测误红率 3/8；
+      //   · 全量 847 文件并发时单帧曾达 703ms（> 350ms 阈值）。
+      // 结论：本机对该负载的吞吐本身有 ±20% 漂移，**任何贴着实测值标定的
+      // 绝对墙钟阈值都必然误红**。绝对阈值在此不可作为稳定判据，而误红会
+      // 训练出「忽略红」的习惯，反而使门禁失效。
+      //
+      // 改造为「同一进程内自校准」：以 300 条消息为基线、1500 条为对照
+      // （5 倍消息量），两者使用**相同的每帧推进量（5 行）与相同的帧数**，
+      // 比较各自的帧耗时低分位。虚拟滚动若正确，每帧只渲染视口窗口 +
+      // overscan，与消息总数无关 ⇒ 比值接近 1；若退化为 O(N)（全量挂载 /
+      // 每帧全量遍历 / offset 前缀和未缓存）⇒ 5 倍消息量将放大比值到 3 倍以上。
+      //
+      // 估计量与采样协议（全量并发下实测校准）：
+      //   ① 用 **P10 低分位**而非中位数/均值——争抢使所有帧一致变慢，而
+      //      「最不受争抢的那批帧」最接近真实单帧成本，故低分位对 CPU
+      //      争抢的敏感度远低于中心统计量；
+      //   ② **交错重复两轮（A,B,A,B）并对每个负载取两轮的较小值**——
+      //      大负载若恒在第二个测，会系统性继承更多已累积垃圾（GC 压力）
+      //      与更晚出现的争抢突发，形成顺序偏差；交错 + 取最小可抵消它。
+      // 机器速度在比值中完全抵消 ⇒ 零误红，且对「随 N 增长」这一真回归类的
+      // 探测力**强于**原绝对阈值（原阈值在快机器上即使存在 O(N) 退化也可能
+      // 因绝对值低而放行）。
+      //
+      // 本门禁上线即捕获到一处真缺陷（2026-09-15，已修）：
+      // FlowScrubber 的轨道按**每条用户消息**产出一枚刻度 DOM，而轨道是固定
+      // 高度条带 ⇒ 每次滚动提交都要协调 O(N) 个元素。实测修复前
+      // t(300)=18ms / t(1500)=40ms / t(6000)=128ms（线性，N=6000 时是 16.7ms
+      // 帧预算的 7.7 倍）；短路轨道渲染后每帧与 N 无关（25ms 持平）。
+      // 修复：轨道刻度按像素容量有界渲染（flowScrubberModel.capScrubberSegments），
+      // 修复后 t(300)=15ms / t(1500)=14ms / t(6000)=13ms（持平，N=6000 时约 9.5 倍改善）。
+      const FRAMES = 20; // 每轮 20 帧；共 4 轮 = 80 帧采样
+      const STEP = 5 * MESSAGE_ESTIMATED_ROW_HEIGHT; // 每帧推进 5 行，两侧一致
 
-    /** 低分位估计量：最不受争抢的帧最接近真实单帧成本 */
-    const lowPercentile = (durations: number[], q: number): number => {
-      const asc = [...durations].sort((a, b) => a - b);
-      return asc[Math.min(asc.length - 1, Math.floor(asc.length * q))]!;
-    };
+      /** 低分位估计量：最不受争抢的帧最接近真实单帧成本 */
+      const lowPercentile = (durations: number[], q: number): number => {
+        const asc = [...durations].sort((a, b) => a - b);
+        return asc[Math.min(asc.length - 1, Math.floor(asc.length * q))]!;
+      };
 
-    const measure = (count: number): number[] => {
-      const props = createDefaultProps(createMockMessages(count));
-      const { container, unmount } = render(<MessageVirtualizer {...props} />);
-      const listEl = container.querySelector(
-        '[data-virtual-scroll="true"]'
-      ) as HTMLElement;
-      expect(listEl).not.toBeNull();
+      const measure = (count: number): number[] => {
+        const props = createDefaultProps(createMockMessages(count));
+        const { container, unmount } = render(
+          <MessageVirtualizer {...props} />
+        );
+        const listEl = container.querySelector(
+          '[data-virtual-scroll="true"]'
+        ) as HTMLElement;
+        expect(listEl).not.toBeNull();
 
-      const durations: number[] = [];
-      for (let i = 0; i < FRAMES; i++) {
-        Object.defineProperty(listEl, 'scrollTop', {
-          value: i * STEP,
-          configurable: true,
-        });
-        const startTime = performance.now();
-        act(() => {
-          fireEvent.scroll(listEl);
-        });
-        durations.push(performance.now() - startTime);
-      }
-      unmount();
-      return durations;
-    };
+        const durations: number[] = [];
+        for (let i = 0; i < FRAMES; i++) {
+          Object.defineProperty(listEl, 'scrollTop', {
+            value: i * STEP,
+            configurable: true,
+          });
+          const startTime = performance.now();
+          act(() => {
+            fireEvent.scroll(listEl);
+          });
+          durations.push(performance.now() - startTime);
+        }
+        unmount();
+        return durations;
+      };
 
-    // 交错采样：A,B,A,B（抵消顺序偏差）
-    const a1 = measure(300);
-    const b1 = measure(1500);
-    const a2 = measure(300);
-    const b2 = measure(1500);
+      // 交错采样：A,B,A,B（抵消顺序偏差）
+      const a1 = measure(300);
+      const b1 = measure(1500);
+      const a2 = measure(300);
+      const b2 = measure(1500);
 
-    const baseline = Math.min(lowPercentile(a1, 0.1), lowPercentile(a2, 0.1));
-    const large = Math.min(lowPercentile(b1, 0.1), lowPercentile(b2, 0.1));
+      const baseline = Math.min(lowPercentile(a1, 0.1), lowPercentile(a2, 0.1));
+      const large = Math.min(lowPercentile(b1, 0.1), lowPercentile(b2, 0.1));
 
-    // ① 主判据：5 倍消息量下典型帧成本不得放大（自校准，机器速度抵消）
-    const growthRatio = large / Math.max(baseline, 0.001);
-    expect(growthRatio).toBeLessThan(2.5);
-    // ② 绝对冒烟界：仅拦「挂死」级异常，故意取得极宽以免与机器负载耦合
-    //    （并发争抢下曾观测单帧 703ms）
-    expect(Math.max(...b1, ...b2)).toBeLessThan(5000.0);
-    // ③ 基线自身必须有可测耗时（防止 measure 静默返回 0 使比值失去意义）
-    expect(baseline).toBeGreaterThan(0);
-  });
+      // ① 主判据：5 倍消息量下典型帧成本不得放大（自校准，机器速度抵消）
+      const growthRatio = large / Math.max(baseline, 0.001);
+      expect(growthRatio).toBeLessThan(2.5);
+      // ② 绝对冒烟界：仅拦「挂死」级异常，故意取得极宽以免与机器负载耦合
+      //    （并发争抢下曾观测单帧 703ms）
+      expect(Math.max(...b1, ...b2)).toBeLessThan(5000.0);
+      // ③ 基线自身必须有可测耗时（防止 measure 静默返回 0 使比值失去意义）
+      expect(baseline).toBeGreaterThan(0);
+    }
+  );
 });

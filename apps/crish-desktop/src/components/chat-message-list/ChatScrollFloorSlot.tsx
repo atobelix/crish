@@ -1,7 +1,7 @@
 import React from 'react';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import styles from './ChatScrollFloorSlot.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface ChatScrollFloorSlotProps {
   /** 显式控制回底按钮是否可见 */

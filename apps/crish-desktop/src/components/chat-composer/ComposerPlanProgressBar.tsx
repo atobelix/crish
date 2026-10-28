@@ -6,8 +6,8 @@
  */
 import React, { useState, useEffect } from 'react';
 import styles from './ComposerPlanProgressBar.module.css';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface PlanStepItem {
   id?: string;
@@ -34,11 +34,6 @@ export interface ComposerPlanProgressBarProps {
   onTogglePause?: () => void;
   isPaused?: boolean;
   onStop?: () => void;
-  /**
-   * 未消费：计划审批入口由 ApprovalDock 承担（见 ChatComposerWrapper 的 liftApproval 分支）。
-   * 保留入参仅为不打断既有调用方接线；是否下线需 UI 侧裁决。
-   */
-  onApprovePlan?: () => void;
   className?: string;
 }
 

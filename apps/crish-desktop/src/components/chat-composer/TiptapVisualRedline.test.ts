@@ -25,7 +25,6 @@ const STRICT_CSS = [
 
 const HOST_CSS_FILES = [
   'ChatComposer.module.css',
-  'ComposerPermissionBar.module.css',
   'ComposerPlanProgressBar.module.css',
   'ComposerAttachmentBar.module.css',
   'AnnotationChipItem.module.css',

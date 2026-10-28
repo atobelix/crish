@@ -25,13 +25,11 @@ import {
 } from './handlers/eventParser';
 import { dispatchEvent } from './handlers/dispatch';
 import { isDataPlaneEventType } from './dataPlaneRouter';
+import { isSessionTombstoned } from '../../utils/lifecycle/ScopedLifecycleRegistry';
 import type { HandlerEnv, SendLike } from './handlers/handlerEnv';
 import type { StreamState } from './handlers/streamState';
 // 纯函数拆分至 eventDedupe（T4-11 基线清零），re-export 维持消费方 import 路径不变
-import {
-  extractToolIdFromEnvelope,
-  buildEventDedupeKey,
-} from './eventDedupe';
+import { extractToolIdFromEnvelope, buildEventDedupeKey } from './eventDedupe';
 export { extractToolIdFromEnvelope, buildEventDedupeKey };
 
 export class EventRouter {
@@ -152,6 +150,12 @@ export class EventRouter {
   handleAgentEvent(envelope: BridgeEventEnvelope): void {
     if (this.state.cancelled || this.state.finished) return;
 
+    // 【P1 重构落地：在途迟到 IPC 包前置墓碑硬拦截，杜绝跨进程异步回包脏写】
+    if (this.sessionId && isSessionTombstoned(this.sessionId)) {
+      this.finish(true);
+      return;
+    }
+
     // 维护当前活跃轮次
     if (envelope.type === 'turn-start') {
       const rawTurn =
@@ -217,6 +221,12 @@ export class EventRouter {
 
   onMsg = (msg: Record<string, unknown>): void => {
     if (this.state.cancelled || this.state.finished) return;
+
+    // 【P1 重构落地：在途迟到 IPC 包前置墓碑硬拦截，杜绝跨进程异步回包脏写】
+    if (this.sessionId && isSessionTombstoned(this.sessionId)) {
+      this.finish(true);
+      return;
+    }
     const envelope = resolveEventType(msg);
     if (!envelope) return;
     const raw = envelope.raw;

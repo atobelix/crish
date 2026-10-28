@@ -12,7 +12,6 @@ import type React from 'react';
 import type { PermissionMode } from '../../api/permissionModes';
 import type { ChatAttachment } from '../../hooks/useChatStream';
 import type { ComposerNotice } from './composerNoticeTypes';
-import type { ComposerPermissionBarProps } from './ComposerPermissionBar';
 import type { ComposerPlanProgressBarProps } from './ComposerPlanProgressBar';
 
 export type { PermissionMode } from '../../api/permissionModes';
@@ -202,10 +201,6 @@ export interface TiptapEditorFieldHandle {
 }
 
 export type {
-  ComposerPermissionBarProps,
-  PermissionRiskLevel,
-} from './ComposerPermissionBar';
-export type {
   ComposerPlanProgressBarProps,
   PlanStepItem,
 } from './ComposerPlanProgressBar';
@@ -254,9 +249,8 @@ export type ChatComposerProps = {
   className?: string;
   /** 落地面态（session-empty）；未传时从 DOM 祖先 data-empty-kind 感知 */
   emptyKind?: string | null;
-  /** Layer 1: 权限审批条节点或属性 */
+  /** Layer 1: 权限审批条节点（由 chat-card 审批层注入；单一审批 UI） */
   permissionBarNode?: React.ReactNode;
-  permissionBarProps?: ComposerPermissionBarProps;
   /** Layer 2: 目标/计划进度条节点或属性 */
   planProgressNode?: React.ReactNode;
   planProgressProps?: ComposerPlanProgressBarProps;

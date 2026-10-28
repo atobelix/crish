@@ -22,10 +22,8 @@ import {
   normalizeRiskLevel,
   normalizeTrustZone,
   parseApprovalRiskMeta,
-  rememberPrefixFromToolArgs,
   type ApprovalRiskMeta,
 } from './approvalMeta';
-import { extractCommandForMatch } from './commandPermissions';
 
 describe('parseApprovalRiskMeta', () => {
   it('reads backend trustZone + requiresDoubleConfirm from nested metadata', () => {
@@ -45,6 +43,8 @@ describe('parseApprovalRiskMeta', () => {
       riskLevel: 'high',
       source: 'backend',
     });
+    // 原始 metadata 必须透传（倒计时 / 策略 / approvalReason 的载荷通道）
+    expect(meta.metadata).toEqual({ trustZone: 'T3', riskLevel: 'high' });
   });
 
   it('derives double-confirm from T4 hardline when flags omitted', () => {
@@ -144,13 +144,13 @@ describe('approvalRiskBadgeLabel + zone/level labels', () => {
   it('prefers trustZone labels', () => {
     expect(
       approvalRiskBadgeLabel(
-        parseApprovalRiskMeta({ metadata: { trustZone: 'T3' } }),
-      ),
+        parseApprovalRiskMeta({ metadata: { trustZone: 'T3' } })
+      )
     ).toBe('高风险');
     expect(
       approvalRiskBadgeLabel(
-        parseApprovalRiskMeta({ metadata: { trustZone: 'T1' } }),
-      ),
+        parseApprovalRiskMeta({ metadata: { trustZone: 'T1' } })
+      )
     ).toBe('写操作');
   });
 
@@ -171,12 +171,16 @@ describe('approvalRiskBadgeLabel + zone/level labels', () => {
     expect(approvalRiskLevelLabel('nope')).toBe('需确认');
     expect(approvalRiskLevelLabel(undefined)).toBe('需确认');
 
-    expect(approvalRiskBadgeLabel(parseApprovalRiskMeta({ metadata: { trustZone: 'T0' } }))).toBe(
-      '只读',
-    );
-    expect(approvalRiskBadgeLabel(parseApprovalRiskMeta({ metadata: { trustZone: 'T4' } }))).toBe(
-      '极危',
-    );
+    expect(
+      approvalRiskBadgeLabel(
+        parseApprovalRiskMeta({ metadata: { trustZone: 'T0' } })
+      )
+    ).toBe('只读');
+    expect(
+      approvalRiskBadgeLabel(
+        parseApprovalRiskMeta({ metadata: { trustZone: 'T4' } })
+      )
+    ).toBe('极危');
     // badge：medium 保持历史「需确认」；等级表仍为「中风险」
     expect(
       approvalRiskBadgeLabel({
@@ -184,7 +188,7 @@ describe('approvalRiskBadgeLabel + zone/level labels', () => {
         requiresDoubleConfirm: false,
         recommendSnapshot: false,
         source: 'backend',
-      }),
+      })
     ).toBe('需确认');
     expect(approvalRiskLevelLabel('medium')).toBe('中风险');
   });
@@ -192,7 +196,9 @@ describe('approvalRiskBadgeLabel + zone/level labels', () => {
   it('null-safe badge falls back to 需确认', () => {
     expect(approvalRiskBadgeLabel(null)).toBe('需确认');
     expect(approvalRiskBadgeLabel(undefined)).toBe('需确认');
-    expect(approvalRiskBadgeLabel(EMPTY_APPROVAL_RISK_META as ApprovalRiskMeta)).toBe('需确认');
+    expect(
+      approvalRiskBadgeLabel(EMPTY_APPROVAL_RISK_META as ApprovalRiskMeta)
+    ).toBe('需确认');
   });
 
   it('exports complete label tables for T0–T4 and all levels', () => {
@@ -225,35 +231,39 @@ describe('risk kind / zone hint / tone / summary (Chinese copy)', () => {
         parseApprovalRiskMeta({
           risk: 'destructive',
           metadata: { trustZone: 'T3' },
-        }),
-      ),
+        })
+      )
     ).toBe('T3 · destructive');
-    expect(approvalZoneHint(parseApprovalRiskMeta({ metadata: { trustZone: 't1' } }))).toBe(
-      'T1',
+    expect(
+      approvalZoneHint(parseApprovalRiskMeta({ metadata: { trustZone: 't1' } }))
+    ).toBe('T1');
+    expect(approvalZoneHint(parseApprovalRiskMeta({ risk: 'network' }))).toBe(
+      'network'
     );
-    expect(approvalZoneHint(parseApprovalRiskMeta({ risk: 'network' }))).toBe('network');
     expect(approvalZoneHint(null)).toBe('');
-    expect(approvalZoneHint(EMPTY_APPROVAL_RISK_META as ApprovalRiskMeta)).toBe('');
+    expect(approvalZoneHint(EMPTY_APPROVAL_RISK_META as ApprovalRiskMeta)).toBe(
+      ''
+    );
   });
 
   it('assigns tone by zone / level / double-confirm', () => {
     expect(approvalRiskTone(null)).toBe('neutral');
     expect(
-      approvalRiskTone(parseApprovalRiskMeta({ metadata: { trustZone: 'T4' } })),
+      approvalRiskTone(parseApprovalRiskMeta({ metadata: { trustZone: 'T4' } }))
     ).toBe('danger');
     expect(
-      approvalRiskTone(parseApprovalRiskMeta({ metadata: { trustZone: 'T3' } })),
+      approvalRiskTone(parseApprovalRiskMeta({ metadata: { trustZone: 'T3' } }))
     ).toBe('danger');
     expect(
-      approvalRiskTone(parseApprovalRiskMeta({ metadata: { trustZone: 'T1' } })),
+      approvalRiskTone(parseApprovalRiskMeta({ metadata: { trustZone: 'T1' } }))
     ).toBe('warn');
     expect(
-      approvalRiskTone(parseApprovalRiskMeta({ metadata: { trustZone: 'T0' } })),
+      approvalRiskTone(parseApprovalRiskMeta({ metadata: { trustZone: 'T0' } }))
     ).toBe('info');
     expect(
       approvalRiskTone(
-        parseApprovalRiskMeta({ requiresDoubleConfirm: true, riskLevel: 'low' }),
-      ),
+        parseApprovalRiskMeta({ requiresDoubleConfirm: true, riskLevel: 'low' })
+      )
     ).toBe('danger');
   });
 
@@ -261,19 +271,21 @@ describe('risk kind / zone hint / tone / summary (Chinese copy)', () => {
     expect(approvalRiskSummary(null)).toContain('缺少后端风险元数据');
     expect(
       approvalRiskSummary(
-        parseApprovalRiskMeta({ riskReason: '将执行 rm -rf /tmp/x' }),
-      ),
+        parseApprovalRiskMeta({ riskReason: '将执行 rm -rf /tmp/x' })
+      )
     ).toBe('将执行 rm -rf /tmp/x');
     expect(
       approvalRiskSummary(
         parseApprovalRiskMeta({
           requiresDoubleConfirm: true,
           riskLevel: 'high',
-        }),
-      ),
+        })
+      )
     ).toContain('二次确认');
     expect(
-      approvalRiskSummary(parseApprovalRiskMeta({ metadata: { trustZone: 'T4' } })),
+      approvalRiskSummary(
+        parseApprovalRiskMeta({ metadata: { trustZone: 'T4' } })
+      )
     ).toMatch(/极危|快照/);
     expect(approvalRiskLevelHint('critical')).toContain('极危');
   });
@@ -283,9 +295,9 @@ describe('empty meta guards + coerce', () => {
   it('isEmpty / hasFacts cover null and partial shapes', () => {
     expect(isEmptyApprovalRiskMeta(null)).toBe(true);
     expect(isEmptyApprovalRiskMeta(undefined)).toBe(true);
-    expect(isEmptyApprovalRiskMeta(EMPTY_APPROVAL_RISK_META as ApprovalRiskMeta)).toBe(
-      true,
-    );
+    expect(
+      isEmptyApprovalRiskMeta(EMPTY_APPROVAL_RISK_META as ApprovalRiskMeta)
+    ).toBe(true);
     expect(hasApprovalRiskFacts(null)).toBe(false);
 
     expect(
@@ -294,7 +306,7 @@ describe('empty meta guards + coerce', () => {
         requiresDoubleConfirm: false,
         recommendSnapshot: false,
         source: 'unknown',
-      }),
+      })
     ).toBe(true);
 
     expect(
@@ -304,7 +316,7 @@ describe('empty meta guards + coerce', () => {
         requiresDoubleConfirm: false,
         recommendSnapshot: false,
         source: 'backend',
-      }),
+      })
     ).toBe(false);
 
     expect(
@@ -313,7 +325,7 @@ describe('empty meta guards + coerce', () => {
         requiresDoubleConfirm: false,
         recommendSnapshot: false,
         source: 'backend',
-      }),
+      })
     ).toBe(false);
 
     expect(
@@ -322,7 +334,7 @@ describe('empty meta guards + coerce', () => {
         requiresDoubleConfirm: true,
         recommendSnapshot: false,
         source: 'unknown',
-      }),
+      })
     ).toBe(false);
   });
 
@@ -362,62 +374,5 @@ describe('empty meta guards + coerce', () => {
     expect(coerceMetaText(null)).toBe('');
     expect(coerceMetaText(7)).toBe('7');
     expect(coerceMetaText({ a: 1 })).toBe('');
-  });
-});
-
-describe('rememberPrefixFromToolArgs', () => {
-  it('digs command out of JSON and takes up to 3 tokens', () => {
-    expect(
-      rememberPrefixFromToolArgs(
-        'shell_command',
-        JSON.stringify({ command: 'git push origin main' }),
-        extractCommandForMatch,
-      ),
-    ).toBe('git push origin');
-  });
-
-  it('rejects raw JSON without command field as prefix', () => {
-    expect(
-      rememberPrefixFromToolArgs(
-        'edit',
-        JSON.stringify({ path: 'a.ts', content: 'x' }),
-        extractCommandForMatch,
-      ),
-    ).toBe('');
-  });
-
-  it('normalizes $ prompt and only remembers first shell segment', () => {
-    expect(
-      rememberPrefixFromToolArgs(
-        'shell_command',
-        '$  git   status  --short',
-        extractCommandForMatch,
-      ),
-    ).toBe('git status --short');
-    expect(
-      rememberPrefixFromToolArgs(
-        'shell_command',
-        'git status && rm -rf /',
-        extractCommandForMatch,
-      ),
-    ).toBe('git status');
-  });
-
-  it('null-safe args and extractCommand throw → empty prefix', () => {
-    expect(
-      rememberPrefixFromToolArgs(
-        null as unknown as string,
-        null as unknown as string,
-        extractCommandForMatch,
-      ),
-    ).toBe('');
-    expect(
-      rememberPrefixFromToolArgs('shell_command', 'git status', () => {
-        throw new Error('boom');
-      }),
-    ).toBe('');
-    expect(
-      rememberPrefixFromToolArgs('shell_command', 'echo a | cat', extractCommandForMatch),
-    ).toBe('echo a');
   });
 });

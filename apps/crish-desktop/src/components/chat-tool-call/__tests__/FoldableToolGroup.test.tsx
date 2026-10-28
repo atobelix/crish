@@ -290,4 +290,69 @@ describe('FoldableToolGroup 独立工具折叠组', () => {
     );
     expect(root.getAttribute('data-expanded')).toBe('false');
   });
+
+  it('收起长内容时若滚出屏幕顶部，触发视口平滑回退保护', () => {
+    const items: ToolRenderItem[] = [
+      { kind: 'single', tc: tc('t1', 'run_command', 'success') },
+      { kind: 'single', tc: tc('t2', 'run_command', 'success') },
+    ];
+
+    const { getByTestId } = render(
+      <FoldableToolGroup
+        items={items}
+        msgId="m1"
+        hostProps={{ ...baseHostProps(), items }}
+        defaultExpanded={true}
+      />
+    );
+
+    const root = getByTestId('foldable-tool-group');
+    const scrollIntoViewMock = vi.fn();
+    root.scrollIntoView = scrollIntoViewMock;
+    vi.spyOn(root, 'getBoundingClientRect').mockReturnValue({
+      top: -200,
+      bottom: 600,
+      left: 0,
+      right: 500,
+      width: 500,
+      height: 800,
+      x: 0,
+      y: -200,
+      toJSON: () => {},
+    });
+
+    const header = root.querySelector('[class*="groupHeader"]') as HTMLElement;
+    fireEvent.click(header);
+
+    expect(root.getAttribute('data-expanded')).toBe('false');
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({
+      block: 'start',
+      behavior: 'smooth',
+    });
+  });
+
+  it('聚焦槽位内部子项时通过 onFocusCapture 主动唤醒展开', () => {
+    const items: ToolRenderItem[] = [
+      { kind: 'single', tc: tc('t1', 'run_command', 'success') },
+      { kind: 'single', tc: tc('t2', 'run_command', 'success') },
+    ];
+
+    const { getByTestId } = render(
+      <FoldableToolGroup
+        items={items}
+        msgId="m1"
+        hostProps={{ ...baseHostProps(), items }}
+      />
+    );
+
+    const root = getByTestId('foldable-tool-group');
+    expect(root.getAttribute('data-expanded')).toBe('false');
+
+    const innerChild = root.querySelector(
+      '[class*="groupBodyInner"]'
+    ) as HTMLElement;
+    fireEvent.focus(innerChild);
+
+    expect(root.getAttribute('data-expanded')).toBe('true');
+  });
 });

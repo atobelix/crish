@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 
 import styles from './ChatToolCallBlock.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import type { FileDiff } from '../../store/types';
 import { ToolCallDiffPreview } from './ToolCallDiffPreview';
 import {
@@ -12,7 +12,7 @@ import {
   formatJsonIfApplicable,
 } from './toolOutputParser';
 import { isEditToolName } from '../../api/toolFeedbackDiff';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useTransientFlag } from '../../hooks/useTransientFlag';
 
 export interface ToolCallOutputPaneProps {
@@ -143,13 +143,6 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
       {showHeader ? (
         <header className={styles.toolSectionHeader}>
           <div className={styles.toolSectionTitleGroup}>
-            {!isSingleCard ? (
-              <span
-                className={`${styles.toolSectionBadge} ${styles.toolSectionBadgeOutput}`}
-              >
-                输出
-              </span>
-            ) : null}
             <span className={styles.toolSectionMeta}>
               {isRunning ? (
                 <span className={styles.runningTag}>执行中</span>

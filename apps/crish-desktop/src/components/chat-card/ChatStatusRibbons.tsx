@@ -5,7 +5,7 @@
  *
  * 壳组件：保留动态快捷 chip 区（DynamicChipBar）、计划抽屉（PlanDrawer）、
  * 回到底部 FAB 与编排；文案纯函数见 chatStatusRibbonsLib，
- * 各功能条见 SetupHintBanner / PlanGoalRibbons / ApprovalDock。
+ * 各功能条见 SetupHintBanner / GoalRibbon / ApprovalDock。
  *
  * 引导态（密钥 / 手填模型）只用页内 soft-hint，禁止 toast 刷屏。
  * FirstRun 盖层打开时让位给向导（见 isFirstRunOverlayOpen）。
@@ -28,13 +28,9 @@ import {
   resolveNeedsModelSoftHintText,
 } from '../../api/chatEmptyState';
 import { isFirstRunOverlayOpen } from '../firstRunOverlayFlag';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 import { SetupHintBanner, type SetupHintState } from './SetupHintBanner';
-import {
-  PlanGoalRibbons,
-  type GoalRibbonState,
-  type PlanRibbonState,
-} from './PlanGoalRibbons';
+import { GoalRibbon, type GoalRibbonState } from './GoalRibbon';
 import { ApprovalDock } from './ApprovalDock';
 import { ComposerErrorBar } from './ComposerErrorBar';
 import { useConnectionStatus } from '../../hooks/useConnectionStatus';
@@ -59,7 +55,7 @@ import {
   PlanDrawer,
   usePlanDrawerState,
 } from './DynamicChipBar';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface StreamingRibbonProps {
   onOpenTerminal?: () => void;
@@ -84,20 +80,7 @@ export interface StreamingRibbonProps {
   onScrollToBottom?: () => void;
 }
 
-export interface GoalRibbonProps {
-  /** 计划模式条 */
-  inPlanMode: boolean;
-  planApproved: boolean;
-  onApprovePlan: () => void;
-  /** 目标模式条 */
-  goalModeActive: boolean;
-  goalText: string;
-  goalIteration: number;
-  /** 与 TasksCard 同源：done/total；无清单时不展示分数 */
-  goalTasksDone?: number;
-  goalTasksTotal?: number;
-  onStopGoal: () => void;
-}
+export type GoalRibbonProps = GoalRibbonState;
 
 export interface ApprovalRibbonProps {
   /** 审批 sticky 条（队列/子任务跳转；单条主时间线内联卡时不展示，避免重复） */
@@ -126,7 +109,7 @@ export type ChatStatusRibbonsProps = {
    */
   between?: React.ReactNode;
   /** 计划/目标条改挂 composer 上沿时省略，避免双渲染 */
-  omitPlanRibbons?: boolean;
+  omitGoalRibbon?: boolean;
   /** 审批 dock 改挂 composer 上沿时省略 */
   omitApprovalDock?: boolean;
 };
@@ -143,7 +126,7 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
   goal: gp,
   approval: ap,
   between,
-  omitPlanRibbons = false,
+  omitGoalRibbon = false,
   omitApprovalDock = false,
 }) => {
   const {
@@ -159,9 +142,6 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
     onOpenModelDropdown,
   } = sp;
   const {
-    inPlanMode,
-    planApproved,
-    onApprovePlan,
     goalModeActive,
     goalText,
     goalIteration,
@@ -225,7 +205,7 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
     shouldRenderApprovalDock(showApprovalDock, pendingApprovalCount);
 
   // 计划/目标推进条候选状态
-  const hasPlanGoal = !omitPlanRibbons && (inPlanMode || goalModeActive);
+  const hasGoalRibbon = !omitGoalRibbon && goalModeActive;
 
   const hasActivePlan = goalModeActive || checklistProgress.total > 0;
   // 盖层生命周期优先于 LS gate（密钥步落盘后向导仍可能打开）
@@ -250,7 +230,7 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
     engineCrashed,
     hasRuntimeError,
     hasApproval,
-    hasPlanGoal,
+    hasGoalRibbon,
     hasSetupHint,
     onEmptySurface,
   });
@@ -290,11 +270,6 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
     else onOpenModelDropdown();
   };
 
-  const planState: PlanRibbonState = {
-    inPlanMode,
-    planApproved,
-    onApprovePlan,
-  };
   const goalState: GoalRibbonState = {
     goalModeActive,
     goalText,
@@ -334,7 +309,6 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
         shouldRender={shouldRenderPlanDrawer}
         goalModeActive={goalModeActive}
         goalText={goalText}
-        inPlanMode={inPlanMode}
         progressItems={progressItems}
         onClose={closePlanDrawer}
         drawerRef={planDrawerRef}
@@ -373,8 +347,8 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
         </div>
       ) : null}
 
-      {activeRibbon === 'plan-goal' && !omitPlanRibbons ? (
-        <PlanGoalRibbons plan={planState} goal={goalState} />
+      {activeRibbon === 'goal' && !omitGoalRibbon ? (
+        <GoalRibbon goal={goalState} />
       ) : null}
 
       {between}

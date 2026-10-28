@@ -37,10 +37,7 @@ function renderChrome(
   let utils!: ReturnType<typeof render>;
   act(() => {
     utils = render(
-      <UnitChromeActions
-        activeSessionId={sessionId}
-        leading={extra?.leading}
-      />
+      <UnitChromeActions activeSessionId={sessionId} leading={extra?.leading} />
     );
   });
   return utils;
@@ -270,9 +267,9 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     expect(queryByTestId('sidebar-toggle-btn')).toBeNull();
     expect(queryByTestId('top-quick-dock-btn')).toBeNull();
 
-    expect(getByTestId('top-quick-preview-btn').getAttribute('aria-label')).toBe(
-      '浏览器'
-    );
+    expect(
+      getByTestId('top-quick-preview-btn').getAttribute('aria-label')
+    ).toBe('浏览器');
     expect(getByTestId('top-quick-files-btn').getAttribute('aria-label')).toBe(
       '打开文件'
     );
@@ -383,7 +380,9 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     expect(css).toMatch(/margin-bottom:\s*0/);
     expect(css).toMatch(/pointer-events:\s*auto/);
     // 2026-10-11 圆角兜底清退（theme review P2-5）：兜底可选
-    expect(css).toMatch(/border-radius:\s*(?:var\(--radius-md(?:,\s*6px)?\)|6px)/);
+    expect(css).toMatch(
+      /border-radius:\s*(?:var\(--radius-md(?:,\s*6px)?\)|6px)/
+    );
     expect(css).not.toMatch(/\.chatTopHeader\s*\{[^}]*display:\s*none/);
   });
 });
@@ -398,7 +397,9 @@ describe('UnitChromeActions 重构与交互验证 (00-总方案 §4.1 & 02-pixel
   });
 
   it('点击项目名称应调用 enterDraftMode 进入新建草稿态', () => {
-    const draftSpy = vi.spyOn(storeAccess, 'enterDraftMode').mockImplementation(() => {});
+    const draftSpy = vi
+      .spyOn(storeAccess, 'enterDraftMode')
+      .mockImplementation(() => {});
     seedSession('sess-proj', { folder: 'my-proj' });
     const { getByText } = renderChrome('sess-proj');
     act(() => {
@@ -408,7 +409,9 @@ describe('UnitChromeActions 重构与交互验证 (00-总方案 §4.1 & 02-pixel
   });
 
   it('点击标题进入编辑态，按 Enter 成功触发 renameSession', () => {
-    const renameSpy = vi.spyOn(storeAccess, 'renameSession').mockImplementation(() => {});
+    const renameSpy = vi
+      .spyOn(storeAccess, 'renameSession')
+      .mockImplementation(() => {});
     seedSession('sess-rename', { title: '旧标题' });
     const { getByText, container } = renderChrome('sess-rename');
     act(() => {

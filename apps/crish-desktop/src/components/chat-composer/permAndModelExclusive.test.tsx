@@ -14,7 +14,7 @@ import {
 } from '@testing-library/react';
 import { PermissionModeMenu } from './PermissionModeMenu';
 import { ModelBadgePicker } from '../chat-card/ChatHeaderControls';
-import { layerStackService } from '../ui/internal/layer-stack/LayerStackService';
+import { layerStackService } from '@/components/ui';
 import { mockTauriCommand } from '../../test-setup';
 import {
   ensureModelsCatalogLoaded,

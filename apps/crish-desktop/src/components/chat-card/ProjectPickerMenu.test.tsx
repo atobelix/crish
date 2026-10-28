@@ -14,8 +14,10 @@ import {
 import { ProjectPickerMenu } from './ProjectPickerMenu';
 import * as projectStore from '../../api/projectStore';
 import { openDirectoryDialogSafe } from '../../api/openDirectoryDialog';
-import { layerStackService } from '../ui/internal/layer-stack/LayerStackService';
+import { layerStackService } from '@/components/ui';
+import { mockTauriCommand } from '../../test-setup';
 import menuStyles from '../ui/Menu/Menu.module.css';
+import panelStyles from '../ui/SmartExpandablePanel/SmartExpandablePanel.module.css';
 import styles from './ProjectPickerMenu.module.css';
 
 const here =
@@ -86,7 +88,10 @@ describe('ProjectPickerMenu（ui/Menu menuItem 皮）', () => {
 
   it('源码不再引用已删的 sort-filter-* 全局类', () => {
     const tsx = readFileSync(join(here, 'ProjectPickerMenu.tsx'), 'utf8');
-    const css = readFileSync(join(here, 'ProjectPickerMenu.module.css'), 'utf8');
+    const css = readFileSync(
+      join(here, 'ProjectPickerMenu.module.css'),
+      'utf8'
+    );
     expect(tsx).not.toMatch(/sort-filter-/);
     expect(css).not.toMatch(/sort-filter-/);
     expect(css).toContain('--button-radius');
@@ -113,19 +118,26 @@ describe('ProjectPickerMenu（ui/Menu menuItem 皮）', () => {
 
   it('能选项目并关闭', async () => {
     const openSpy = vi.spyOn(projectStore, 'openProject');
+    mockTauriCommand('workbench_open_workspaces', (args) => ({
+      path: (args as { primaryPath: string }).primaryPath,
+    }));
     const { onChanged, onOpenChange } = renderPicker(true);
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Beta' }));
-    expect(openSpy).toHaveBeenCalledWith('proj-b');
-    expect(onChanged).toHaveBeenCalledTimes(1);
-    expect(onOpenChange).toHaveBeenCalledWith(false);
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledWith('proj-b');
+      expect(onChanged).toHaveBeenCalledTimes(1);
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
   });
 
   it('能选通用项目', async () => {
     const noneSpy = vi.spyOn(projectStore, 'setNoProject');
     const { onChanged } = renderPicker(true);
     fireEvent.click(await screen.findByRole('menuitem', { name: '通用项目' }));
-    expect(noneSpy).toHaveBeenCalled();
-    expect(onChanged).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(noneSpy).toHaveBeenCalled();
+      expect(onChanged).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('搜索过滤项目列表', async () => {
@@ -149,7 +161,7 @@ describe('ProjectPickerMenu（ui/Menu menuItem 皮）', () => {
     expect(openLocal.className).toContain(menuStyles.menuItem);
     expect(openLocal.className).not.toContain('sort-filter-option');
     const cascade = screen.getByRole('menu', { name: '添加项目' });
-    expect(cascade.className).toContain(menuStyles.menuContent);
+    expect(cascade.className).toContain(panelStyles.cascadeSubmenu);
   });
 
   it('受控关闭后面板卸掉', async () => {

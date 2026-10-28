@@ -1,60 +1,61 @@
 import React, { useCallback, useRef, useState } from 'react';
 
 import styles from './PermissionModeMenu.module.css';
-import { Button, Menu, Tooltip } from '../ui';
-import { toggleExclusiveMenu } from '../ui/Menu';
+import { Button, Menu, Tooltip } from '@/components/ui';
+import { toggleExclusiveMenu } from '@/components/ui';
 import { useI18n } from '../../i18n';
 import {
-  DESKTOP_PERMISSION_MODE_IDS,
+  PERMISSION_MODES,
   coercePermissionMode,
-  permissionModeMeta,
-  transitionPermissionMode,
   type PermissionMode,
 } from '../../api/permissionModes';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
-const MODE_ICON_MAP: Record<PermissionMode, React.ReactNode> = {
-  ask: <AppIcon name="shield-check" size={14} />,
-  deep: <AppIcon name="search" size={14} />,
-  plan: <AppIcon name="target" size={14} />,
-  full: <AppIcon name="alert-circle" size={14} />,
-};
-
-type Props = {
+export interface PermissionModeMenuProps {
   mode: PermissionMode;
   onChange: (m: PermissionMode) => void;
-  /** 主对话网格：盾形 icon-only；侧栏/测试默认文字药丸 */
-  iconOnly?: boolean;
-  /** 隐藏折叠展开箭头（单行融合胶囊左段时使用） */
-  hideChevron?: boolean;
-  /** 药丸形态变体：default 独立药丸；fused 左半融入三段式胶囊 */
-  variant?: 'default' | 'fused';
-};
+}
+
+interface ModeConfig {
+  id: PermissionMode;
+  iconName: 'shield' | 'shield-check' | 'zap';
+  label: string;
+  description: string;
+  isRecommended?: boolean;
+}
+
+// 三态文案唯一真理源 = api/permissionModes；本组件只做渲染，禁止本地再抄一份
+const MODE_CONFIGS: readonly ModeConfig[] = PERMISSION_MODES.map((m) => ({
+  id: m.id,
+  iconName: m.iconName,
+  label: m.label,
+  description: m.description,
+  ...(m.isRecommended ? { isRecommended: true } : {}),
+}));
+
+const MODE_CONFIG_MAP: Record<PermissionMode, ModeConfig> = Object.fromEntries(
+  MODE_CONFIGS.map((m) => [m.id, m])
+) as Record<PermissionMode, ModeConfig>;
 
 /**
- * 权限模式菜单（显式 Anchor + 加号同构开关）：
- * - 药丸自管 pillBtnRef；关则写死 false，禁止 setOpen(prev => !prev) 与外点对打；
- * - 外点已关后同一 pointer 落到药丸不得再打开；
- * - 坐标/Esc/外点关闭由基座接管；side="top"；
- * - 键盘漫游由基座 options 模式提供；
- * - 每项 Tooltip 展示矩阵提示，专属语义图标 + 11px 次级描述，选中态翡翠绿打勾。
+ * 权限模式菜单（显式 Anchor + 加号同构互斥）：
+ * - 纯三态收敛：每次询问 (ask) / 智能放行 (smart，推荐) / 完全允许 (full)；
+ * - 极简药丸：28px 高度、14px 圆角胶囊端点，无冗余形态分支；
+ * - 坐标/Esc/外点关闭由 Menu 基座接管，side="top"；
+ * - 键盘漫游由 Menu 基座 options 模式驱动。
  */
-export const PermissionModeMenu: React.FC<Props> = ({
+export const PermissionModeMenu: React.FC<PermissionModeMenuProps> = ({
   mode: modeRaw,
   onChange,
-  iconOnly = false,
-  hideChevron = false,
-  variant = 'default',
 }) => {
   const { t } = useI18n();
   const mode = coercePermissionMode(modeRaw);
-  const meta = permissionModeMeta(mode);
+  const currentMeta = MODE_CONFIG_MAP[mode] ?? MODE_CONFIG_MAP.smart;
   const [open, setOpen] = useState(false);
   const pillBtnRef = useRef<HTMLButtonElement>(null);
 
   const selectMode = useCallback(
-    (nextRaw: unknown) => {
-      const next = transitionPermissionMode(mode, nextRaw);
+    (next: PermissionMode) => {
       if (next !== mode) {
         onChange(next);
       }
@@ -67,41 +68,30 @@ export const PermissionModeMenu: React.FC<Props> = ({
     toggleExclusiveMenu(open, setOpen, pillBtnRef.current);
   }, [open]);
 
-  const options = DESKTOP_PERMISSION_MODE_IDS.map((m) => ({
-    id: m,
-    label: permissionModeMeta(m).label,
-    onClick: () => selectMode(m),
+  const options = MODE_CONFIGS.map((item) => ({
+    id: item.id,
+    label: item.label,
+    onClick: () => selectMode(item.id),
   }));
 
   const tooltipContent = t('chat.permission.tooltip', {
-    mode: meta.label,
-    hint: meta.matrixHint,
+    mode: currentMeta.label,
+    hint: currentMeta.description,
+    desc: currentMeta.description,
   });
 
   const pillAriaLabel = t('chat.permission.ariaLabel', {
-    mode: meta.label,
+    mode: currentMeta.label,
   });
 
   return (
-    <div
-      className={styles.permModeWrap}
-      data-density="compact"
-      style={{ position: 'relative', display: 'inline-block' }}
-    >
+    <div className={styles.permModeWrap}>
       <Tooltip content={tooltipContent} disabled={open} side="top">
         <Button
           ref={pillBtnRef}
           type="button"
           variant="ghost"
-          className={[
-            styles.permPill,
-            styles.trigger,
-            open ? styles.isOpen : null,
-            iconOnly ? styles.iconOnly : null,
-            variant === 'fused' ? styles.fused : null,
-          ]
-            .filter(Boolean)
-            .join(' ')}
+          className={`${styles.permPill} ${open ? styles.isOpen : ''}`}
           data-perm-mode={mode}
           onClick={handleToggle}
           aria-expanded={open}
@@ -109,21 +99,19 @@ export const PermissionModeMenu: React.FC<Props> = ({
           aria-label={pillAriaLabel}
         >
           <span className={styles.permIcon} aria-hidden="true">
-            {MODE_ICON_MAP[mode] ?? <AppIcon name="shield" size={14} />}
+            <AppIcon name={currentMeta.iconName} size={14} />
           </span>
-          <span className={styles.permLabel}>{meta.label}</span>
-          {!hideChevron && (
-            <AppIcon
-              name="chevron-down"
-              size={11}
-              className={styles.permPillChev}
-              aria-hidden="true"
-            />
-          )}
+          <span className={styles.permLabel}>{currentMeta.label}</span>
+          <AppIcon
+            name="chevron-down"
+            size={11}
+            className={styles.permPillChev}
+            aria-hidden="true"
+          />
         </Button>
       </Tooltip>
 
-      {open ? (
+      {open && (
         <Menu
           openState={{
             open,
@@ -136,11 +124,10 @@ export const PermissionModeMenu: React.FC<Props> = ({
           position={{ side: 'top', align: 'start', sideOffset: 6 }}
           panel={{ contentClassName: styles.permMenu }}
           renderItem={(opt) => {
-            const itemMeta = permissionModeMeta(opt.id);
+            const itemMeta =
+              MODE_CONFIG_MAP[opt.id as PermissionMode] ??
+              MODE_CONFIG_MAP.smart;
             const isSelected = opt.id === mode;
-            const icon = MODE_ICON_MAP[opt.id as PermissionMode] ?? (
-              <AppIcon name="shield" size={14} />
-            );
             return (
               <Button
                 key={opt.id}
@@ -148,34 +135,35 @@ export const PermissionModeMenu: React.FC<Props> = ({
                 type="button"
                 className={`${styles.permMenuItem} ${isSelected ? styles.isSelected : ''}`}
                 role="menuitem"
-                onClick={() => {
-                  opt.onClick?.();
-                }}
+                onClick={opt.onClick}
               >
                 <span className={styles.iconWrapper} aria-hidden="true">
-                  {icon}
+                  <AppIcon name={itemMeta.iconName} size={16} />
                 </span>
-                <div className={styles.labelRow}>
-                  <span className={styles.title}>{itemMeta.label}</span>
-                  {itemMeta.matrixHint ? (
-                    <span className={styles.itemDesc}>
-                      {itemMeta.matrixHint}
-                    </span>
-                  ) : null}
+                <div className={styles.labelCol}>
+                  <div className={styles.titleRow}>
+                    <span className={styles.title}>{itemMeta.label}</span>
+                    {itemMeta.isRecommended && (
+                      <span className={styles.recommendBadge}>推荐</span>
+                    )}
+                  </div>
+                  <span className={styles.itemDesc}>
+                    {itemMeta.description}
+                  </span>
                 </div>
-                {isSelected ? (
+                {isSelected && (
                   <AppIcon
                     name="check"
-                    size={13}
+                    size={14}
                     className={styles.checkIcon}
                     aria-hidden="true"
                   />
-                ) : null}
+                )}
               </Button>
             );
           }}
         />
-      ) : null}
+      )}
     </div>
   );
 };

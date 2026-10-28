@@ -77,7 +77,7 @@
 }
 
 .planModeRibbonIconBtn:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 

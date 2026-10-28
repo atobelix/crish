@@ -61,16 +61,16 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
       const headBtn = screen.getByRole('button', { name: /Searched the docs/ });
       fireEvent.click(headBtn);
 
-      expect(screen.getByText('请求参数')).toBeDefined();
+      // 请求参数 label removed
       expect(screen.getByText(/"query": "draft persistence"/)).toBeDefined();
-      expect(screen.getByText('执行结果')).toBeDefined();
+      // 执行结果 label removed
       expect(
         screen.getByText('3 matches, best hit /docs/runtime/drafts')
       ).toBeDefined();
 
       // 再次点击折叠
       fireEvent.click(headBtn);
-      expect(screen.queryByText('请求参数')).toBeNull();
+      expect(screen.queryByText(/"query": "draft persistence"/)).toBeNull();
     });
 
     it('支持 defaultOpen 与外部受控 isOpen / onToggle', () => {
@@ -86,7 +86,7 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
         />
       );
 
-      expect(screen.getByText('请求参数')).toBeDefined();
+      // 请求参数 label removed
       expect(screen.getByText('# Overview')).toBeDefined();
 
       const headBtn = screen.getByRole('button');
@@ -117,7 +117,9 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
         screen.getByText('cargo test -p conex-session-loop -- --nocapture')
       ).toBeDefined();
       expect(
-        screen.getByText(/test batcher::tests::test_batch_flush_interval \.\.\. ok/)
+        screen.getByText(
+          /test batcher::tests::test_batch_flush_interval \.\.\. ok/
+        )
       ).toBeDefined();
     });
 
@@ -144,16 +146,21 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
         />
       );
 
-      const copyOutputBtn = screen.getByRole('button', { name: '复制终端输出' });
+      const copyOutputBtn = screen.getByRole('button', {
+        name: '复制终端输出',
+      });
       fireEvent.click(copyOutputBtn);
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Tests passed successfully');
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+        'Tests passed successfully'
+      );
     });
 
     it('超过 30 行时默认截断为首尾 15 行并展示展开药丸，点击后展开全量行', () => {
-      const sixtyLines = Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join('\n');
-      render(
-        <TerminalCard command="cargo test" output={sixtyLines} />
-      );
+      const sixtyLines = Array.from(
+        { length: 60 },
+        (_, i) => `line ${i + 1}`
+      ).join('\n');
+      render(<TerminalCard command="cargo test" output={sixtyLines} />);
 
       // 默认展示首尾
       expect(screen.getByText('line 1')).toBeDefined();
@@ -161,14 +168,18 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
       expect(screen.queryByText('line 30')).toBeNull();
 
       // 点击展开药丸
-      const expandBtn = screen.getByRole('button', { name: /展开中间剩余 30 行/ });
+      const expandBtn = screen.getByRole('button', {
+        name: /展开中间剩余 30 行/,
+      });
       fireEvent.click(expandBtn);
 
       // 展开后全量展示
       expect(screen.getByText('line 30')).toBeDefined();
 
       // 点击收起
-      const collapseBtn = screen.getByRole('button', { name: '收起中间日志输出' });
+      const collapseBtn = screen.getByRole('button', {
+        name: '收起中间日志输出',
+      });
       fireEvent.click(collapseBtn);
       expect(screen.queryByText('line 30')).toBeNull();
     });
@@ -225,8 +236,8 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
       // 提取出的参数胶囊
       expect(screen.getByText('draft persistence')).toBeDefined();
       // 展开的请求参数与执行结果
-      expect(screen.getByText('请求参数')).toBeDefined();
-      expect(screen.getByText('执行结果')).toBeDefined();
+      // 请求参数 label removed
+      // 执行结果 label removed
       expect(screen.getByText('3 matches found')).toBeDefined();
     });
   });
@@ -275,8 +286,16 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
       deletions: 3,
       changes: [
         { type: 'normal', content: 'import React from "react";', lineNum: 1 },
-        { type: 'deletion', content: 'export const OldButton = () => null;', lineNum: 2 },
-        { type: 'addition', content: 'export const Button = () => <button />;', lineNum: 2 },
+        {
+          type: 'deletion',
+          content: 'export const OldButton = () => null;',
+          lineNum: 2,
+        },
+        {
+          type: 'addition',
+          content: 'export const Button = () => <button />;',
+          lineNum: 2,
+        },
         { type: 'addition', content: 'export default Button;', lineNum: 3 },
       ],
     };
@@ -305,7 +324,8 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
       fireEvent.click(copyBtn);
 
       expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1);
-      const copiedText = vi.mocked(navigator.clipboard.writeText).mock.calls[0]?.[0];
+      const copiedText = vi.mocked(navigator.clipboard.writeText).mock
+        .calls[0]?.[0];
       expect(copiedText).toContain('+ export const Button = () => <button />;');
       expect(copiedText).toContain('- export const OldButton = () => null;');
       expect(copiedText).toContain('  import React from "react";');
@@ -315,12 +335,16 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
       const onOpenDiff = vi.fn();
       render(<DiffCard diff={mockDiff} onOpenDiff={onOpenDiff} />);
 
-      const openTag = screen.getByRole('button', { name: '在右侧面板查看完整差异' });
+      const openTag = screen.getByRole('button', {
+        name: '在右侧面板查看完整差异',
+      });
       fireEvent.click(openTag);
       expect(onOpenDiff).toHaveBeenCalledWith(mockDiff);
 
       // 头部点击
-      const header = screen.getByRole('button', { name: '查看差异：src/components/Button.tsx' });
+      const header = screen.getByRole('button', {
+        name: '查看差异：src/components/Button.tsx',
+      });
       fireEvent.click(header);
       expect(onOpenDiff).toHaveBeenCalledTimes(2);
     });
@@ -346,14 +370,18 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
       expect(container.textContent).not.toContain('const val28 = 28;');
 
       // 点击平铺展开
-      const expandBtn = screen.getByRole('button', { name: /平铺展开剩余 6 行/ });
+      const expandBtn = screen.getByRole('button', {
+        name: /平铺展开剩余 6 行/,
+      });
       fireEvent.click(expandBtn);
 
       // 全量平铺呈现
       expect(container.textContent).toContain('const val28 = 28;');
 
       // 点击收起
-      const collapseBtn = screen.getByRole('button', { name: '收起部分平铺行' });
+      const collapseBtn = screen.getByRole('button', {
+        name: '收起部分平铺行',
+      });
       fireEvent.click(collapseBtn);
       expect(container.textContent).not.toContain('const val28 = 28;');
     });

@@ -117,7 +117,9 @@
   border: none;
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows var(--transition-accordion);
+  transition: grid-template-rows
+    var(--accordion-duration, var(--transition-accordion))
+    var(--ease-standard, ease);
   overflow: hidden;
 }
 
@@ -138,4 +140,53 @@
 .groupBody[data-expanded='true'] .groupBodyInner {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* ───── 按钮文案单格重叠防抖架构（CSS Grid 1 / 1） ───── */
+/* 双文案同格容器：自动锁定为最大宽度，Chevron 零位移 */
+.stackedLabels {
+  display: inline-grid;
+  justify-items: start;
+  align-items: center;
+  position: relative;
+}
+
+/* 两个状态文案共享同一个 (行 1 / 列 1) 单元格 */
+.stackedLabel {
+  grid-area: 1 / 1;
+  opacity: 0;
+  filter: blur(2px);
+  transform: translateY(-3px);
+  transition:
+    opacity var(--duration-fast, 150ms)
+      var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1)),
+    transform var(--duration-fast, 150ms)
+      var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1)),
+    filter var(--duration-fast, 150ms)
+      var(--ease-standard, cubic-bezier(0.4, 0, 0.2, 1));
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* 激活态文案：原地清晰展示 */
+.stackedLabel[data-active='true'] {
+  opacity: 1;
+  filter: blur(0);
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* 处于失活态的第二文案从下方退场 */
+.stackedLabel + .stackedLabel:not([data-active='true']) {
+  transform: translateY(3px);
+}
+
+/* 无障碍偏好降级 */
+@media (prefers-reduced-motion: reduce) {
+  .stackedLabel {
+    transition: none;
+    filter: none;
+    transform: none;
+  }
 }

@@ -110,6 +110,17 @@ export function useScrollAnchoringOnToggle({
     React.PointerEventHandler<HTMLDivElement>
   >(
     (e) => {
+      const target = e.target as Element | null;
+      // 豁免：回底浮钮本身即为程序吸底触发器，绝不可解除吸底或锁定折叠展开锚定（避免产生 1 帧显隐闪烁）
+      if (
+        target?.closest('[data-testid="chat-scroll-floor-slot"]') ||
+        target?.closest('[data-testid="chat-scroll-floor-btn"]') ||
+        target?.closest('[class*="floorSlot"]') ||
+        target?.closest('[class*="chatScrollFab"]')
+      ) {
+        return;
+      }
+
       cancelProgrammaticScroll();
 
       // (a) 滚动条轨道命中：用户手动拖拽滚动条，解除吸底
@@ -126,7 +137,6 @@ export function useScrollAnchoringOnToggle({
 
       // (b) 展开/折叠控件或交互项点击命中：
       // 用户点击折叠/展开内容时，视口必须以点击位置为锚点向下展开，绝不强行自动滚到底部！
-      const target = e.target as Element | null;
       if (target?.closest(TOGGLE_INTERACTIVE_SELECTOR)) {
         activateAnchorLock();
       }
@@ -141,6 +151,14 @@ export function useScrollAnchoringOnToggle({
     (e) => {
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
         const target = e.target as Element | null;
+        if (
+          target?.closest('[data-testid="chat-scroll-floor-slot"]') ||
+          target?.closest('[data-testid="chat-scroll-floor-btn"]') ||
+          target?.closest('[class*="floorSlot"]') ||
+          target?.closest('[class*="chatScrollFab"]')
+        ) {
+          return;
+        }
         if (target?.closest(TOGGLE_INTERACTIVE_SELECTOR)) {
           activateAnchorLock();
         }

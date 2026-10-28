@@ -252,7 +252,7 @@
 
 .diffLineEmpty {
   composes: diffLine;
-  background: var(--tint-hover);
+  background: var(--state-hover);
   user-select: none;
 }
 
@@ -350,7 +350,7 @@
 }
 
 .fileTreeNode:hover {
-  background: var(--filetree-node-hover-bg);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -422,7 +422,7 @@
   height: 0.5rem;
   border-radius: 50%;
   background: var(--aicard-status-running);
-  animation: emeraldPulse 1.6s infinite;
+  animation: emeraldPulse var(--transition-pulse, 1.6s ease-in-out) infinite;
 }
 
 .statusSuccess {

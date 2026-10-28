@@ -1,10 +1,7 @@
 import React, { useCallback } from 'react';
 import type { FileDiff, SessionMessage } from '../../store/types';
 import type { PermissionMode } from '../../api/permissionModes';
-import {
-  AssistantMessageActionsBar,
-  PlanApprovalRow,
-} from '../chat-message-row/MessageActionsBar';
+import { AssistantMessageActionsBar } from '../chat-message-row/MessageActionsBar';
 import { useToast } from '../../services/toast/ToastContext';
 import { assistantCopyText } from '../../api/toolPresentation';
 import { ChatSendToNoteEntry } from './ChatSendToNoteEntry';
@@ -17,8 +14,6 @@ export interface MessageActionsState {
   pinnedColor?: string;
   /** 未消费：追问建议 UI 未接入本组件（提示态判定在 api/followUpSuggestions）。 */
   isThinkingMsg?: boolean | undefined;
-  inPlanMode: boolean;
-  planApproved: boolean;
   /** 未消费：同上，追问建议气泡未在本组件渲染。 */
   followUpDismissed?: boolean | undefined;
 }
@@ -27,8 +22,7 @@ export interface MessageActionsActions {
   onCopy: () => void;
   onRegenerate?: (msgId: string) => void;
   onTogglePin: (msgId: string, color?: string) => void;
-  setPermissionMode: (mode: PermissionMode) => void;
-  setPlanApproved: (v: boolean) => void;
+  setPermissionMode?: ((mode: PermissionMode) => void) | undefined;
   /** 未消费：追问建议回调由上层编排，本组件不渲染追问入口。 */
   onFillFollowUp?: ((prompt: string) => void) | undefined;
   /** 未消费：同上。 */
@@ -56,15 +50,11 @@ export const MessageActions: React.FC<MessageActionsProps> = React.memo(
       isLastAssistant = false,
       isPinned = false,
       pinnedColor,
-      inPlanMode = false,
-      planApproved = false,
     } = state ?? {};
     const {
       onCopy,
       onRegenerate,
       onTogglePin,
-      setPermissionMode,
-      setPlanApproved,
       onOpenDiff: _onOpenDiff,
       onOpenDiffPanel: _onOpenDiffPanel,
       onRetract,
@@ -90,14 +80,6 @@ export const MessageActions: React.FC<MessageActionsProps> = React.memo(
 
     return (
       <>
-        <PlanApprovalRow
-          inPlanMode={inPlanMode}
-          planApproved={planApproved}
-          isLastAssistant={isLastAssistant}
-          text={noteMarkdown}
-          setPermissionMode={setPermissionMode}
-          setPlanApproved={setPlanApproved}
-        />
         <AssistantMessageActionsBar
           timestamp={msg.timestamp}
           copied={copied}

@@ -33,6 +33,7 @@
  * （应用生命周期常驻，与 per-run 订阅共存）。
  */
 import { getTransport } from '../transport';
+import { isSessionTombstoned } from '../../utils/lifecycle/ScopedLifecycleRegistry';
 import { logInternalError } from '../userFacingErrors';
 import {
   resolveEventType,
@@ -188,7 +189,8 @@ export const SUBAGENT_PLANE_EVENT_TYPES = [
   'subagent-ended',
 ] as const;
 
-export type SubagentPlaneEventType = (typeof SUBAGENT_PLANE_EVENT_TYPES)[number];
+export type SubagentPlaneEventType =
+  (typeof SUBAGENT_PLANE_EVENT_TYPES)[number];
 
 /** 子代理面类型判定（全局面过滤；per-run 面照常消费，双面共存） */
 export function isSubagentPlaneEventType(
@@ -235,6 +237,9 @@ function handleSubagentPlaneMessage(msg: Record<string, unknown>): void {
     return;
   }
   if (!isSubagentPlaneEventType(envelope.type)) return;
+  const targetSessionId =
+    typeof raw?.sessionId === 'string' ? (raw.sessionId as string).trim() : '';
+  if (targetSessionId && isSessionTombstoned(targetSessionId)) return;
   // 父 run 缺失：宽容形态不归全局（per-run 路由对无 runId 事件放行，
   // 双面共存时归 per-run；全局面跳过防双写）
   if (!runId) return;

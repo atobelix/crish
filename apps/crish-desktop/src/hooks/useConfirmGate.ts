@@ -23,7 +23,7 @@
  * 分层契约：hooks/ 业务层依赖 ui/ 原子层（类型 import），反向不成立。
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import type { ConfirmDialogProps } from '../components/ui';
+import type { ConfirmDialogProps } from '@/components/ui';
 
 /** confirmGate 请求载荷：与 ui/ConfirmDialog 的展示 props 对齐（渲染点元素 props 优先覆盖） */
 export interface ConfirmGateRequest {
@@ -51,7 +51,9 @@ export function useConfirmGate(): [ConfirmGate, ConfirmGateRender] {
   // ref 镜像：settle 与卸载清理不依赖渲染闭包，避免 setState 时序竞态
   const pendingRef = useRef<PendingGate | null>(null);
   // 挂起期间渲染物单例缓存：同一 pending 重复调用 renderConfirmGate 不重复挂载
-  const viewCacheRef = useRef<React.ReactElement<ConfirmDialogProps> | null>(null);
+  const viewCacheRef = useRef<React.ReactElement<ConfirmDialogProps> | null>(
+    null
+  );
 
   const settle = useCallback((ok: boolean) => {
     const p = pendingRef.current;

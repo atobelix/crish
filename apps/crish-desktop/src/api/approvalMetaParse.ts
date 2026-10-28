@@ -1,14 +1,16 @@
 /**
  * 审批风险元数据解析（从 approvalMeta 拆分）。
- * 含 approval-requested 事件解析与白名单前缀记忆。
  */
 
-import { type ApprovalRiskLevel, type ApprovalRiskMeta, type ApprovalRiskSource } from './approvalMetaTypes';
+import {
+  type ApprovalRiskLevel,
+  type ApprovalRiskMeta,
+  type ApprovalRiskSource,
+} from './approvalMetaTypes';
 import {
   asRecord,
   firstString,
   firstBoolean,
-  coerceMetaText,
   normalizeTrustZone,
   normalizeRiskLevel,
   levelFromZone,
@@ -25,12 +27,10 @@ export function parseApprovalRiskMeta(event: unknown): ApprovalRiskMeta {
   const root = asRecord(event) ?? {};
   const nestedReq = asRecord(root.request) ?? {};
   const nestedMeta =
-    asRecord(root.metadata) ??
-    asRecord(nestedReq.metadata) ??
-    {};
+    asRecord(root.metadata) ?? asRecord(nestedReq.metadata) ?? {};
 
   const trustZone = normalizeTrustZone(
-    firstString(nestedMeta.trustZone, root.trustZone, nestedReq.trustZone),
+    firstString(nestedMeta.trustZone, root.trustZone, nestedReq.trustZone)
   );
   const risk = firstString(root.risk, nestedMeta.risk, nestedReq.risk);
   const riskReason = firstString(
@@ -39,18 +39,18 @@ export function parseApprovalRiskMeta(event: unknown): ApprovalRiskMeta {
     nestedMeta.reason,
     nestedMeta.riskReason,
     nestedReq.riskReason,
-    nestedReq.summary,
+    nestedReq.summary
   );
 
   const explicitDouble = firstBoolean(
     root.requiresDoubleConfirm,
     nestedMeta.requiresDoubleConfirm,
-    nestedReq.requiresDoubleConfirm,
+    nestedReq.requiresDoubleConfirm
   );
   const explicitSnap = firstBoolean(
     root.recommendSnapshot,
     nestedMeta.recommendSnapshot,
-    nestedReq.recommendSnapshot,
+    nestedReq.recommendSnapshot
   );
   const hardlineFlag =
     nestedMeta.hardline === true ||
@@ -59,7 +59,7 @@ export function parseApprovalRiskMeta(event: unknown): ApprovalRiskMeta {
   const hardline = isHardlineRisk(risk, trustZone, hardlineFlag);
 
   const explicitLevel = normalizeRiskLevel(
-    root.riskLevel ?? nestedMeta.riskLevel ?? nestedReq.riskLevel,
+    root.riskLevel ?? nestedMeta.riskLevel ?? nestedReq.riskLevel
   );
   const derivedLevel = levelFromZone(trustZone);
   const riskLevel: ApprovalRiskLevel =
@@ -87,10 +87,10 @@ export function parseApprovalRiskMeta(event: unknown): ApprovalRiskMeta {
       ? explicitDouble
       : Boolean(
           hardline ||
-            trustZone === 'T3' ||
-            trustZone === 'T4' ||
-            riskLevel === 'high' ||
-            riskLevel === 'critical',
+          trustZone === 'T3' ||
+          trustZone === 'T4' ||
+          riskLevel === 'high' ||
+          riskLevel === 'critical'
         );
 
   const recommendSnapshot =
@@ -98,9 +98,9 @@ export function parseApprovalRiskMeta(event: unknown): ApprovalRiskMeta {
       ? explicitSnap
       : Boolean(
           trustZone === 'T1' ||
-            trustZone === 'T3' ||
-            trustZone === 'T4' ||
-            hardline,
+          trustZone === 'T3' ||
+          trustZone === 'T4' ||
+          hardline
         );
 
   return {
@@ -111,38 +111,6 @@ export function parseApprovalRiskMeta(event: unknown): ApprovalRiskMeta {
     requiresDoubleConfirm: Boolean(requiresDoubleConfirm),
     recommendSnapshot: Boolean(recommendSnapshot),
     source,
+    ...(Object.keys(nestedMeta).length > 0 ? { metadata: nestedMeta } : {}),
   };
-}
-
-// ─── 白名单前缀 ─────────────────────────────────────────────────────────────
-
-/** 从工具参数提取可记忆的命令前缀（最多 3 token；与白名单 token 边界一致） */
-export function rememberPrefixFromToolArgs(
-  toolName: string,
-  args: string,
-  extractCommand: (toolName: string, args: string) => string,
-): string {
-  const name = coerceMetaText(toolName);
-  const rawArgs = coerceMetaText(args);
-  let raw = '';
-  try {
-    raw = extractCommand(name, rawArgs || '');
-  } catch {
-    return '';
-  }
-  raw = coerceMetaText(raw);
-  // 与 commandPermissions.normalizeCommandLine 对齐：折叠空白、去 $
-  const line = raw
-    .replace(/\r?\n/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/^\$\s*/, '');
-  if (!line) return '';
-  // 拒绝整段 JSON / 数组字面量进白名单（无 token 边界语义）
-  if (line.startsWith('{') || line.startsWith('[')) return '';
-  // 拒绝明显的 shell 链式命令整段记忆（用户应只记首段安全前缀）
-  const head = line.split(/\s+(?:&&|\|\||;|\|)\s+/)[0]?.trim() || line;
-  const parts = head.split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '';
-  return parts.slice(0, Math.min(3, parts.length)).join(' ');
 }

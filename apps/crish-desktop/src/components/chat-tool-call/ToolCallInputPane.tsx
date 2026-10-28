@@ -1,13 +1,13 @@
 import React, { useState, useMemo } from 'react';
 
 import styles from './ChatToolCallBlock.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import {
   parseToolArgsSafe,
   isShellToolName,
   type ExtractedToolArgs,
 } from '../../api/toolPresentation';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useTransientFlag } from '../../hooks/useTransientFlag';
 
 const TOOL_INPUT_LINE_CAP = 1000;
@@ -118,7 +118,11 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
                 onClick={handleCopy}
                 icon={
                   copied ? (
-                    <AppIcon name="check" size={12} className={styles.copiedIcon} />
+                    <AppIcon
+                      name="check"
+                      size={12}
+                      className={styles.copiedIcon}
+                    />
                   ) : (
                     <AppIcon name="copy" size={12} />
                   )
@@ -140,9 +144,7 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
       data-tool-id={toolId}
     >
       <header className={styles.toolSectionHeader}>
-        <div className={styles.toolSectionTitleGroup}>
-          <span className={styles.toolSectionBadge}>输入</span>
-        </div>
+        <div className={styles.toolSectionTitleGroup} />
         <div className={styles.toolSectionActions}>
           {hasProps ? (
             <Tooltip
@@ -178,7 +180,11 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
               onClick={handleCopy}
               icon={
                 copied ? (
-                  <AppIcon name="check" size={12} className={styles.copiedIcon} />
+                  <AppIcon
+                    name="check"
+                    size={12}
+                    className={styles.copiedIcon}
+                  />
                 ) : (
                   <AppIcon name="copy" size={12} />
                 )

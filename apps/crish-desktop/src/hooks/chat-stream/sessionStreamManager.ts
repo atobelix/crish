@@ -56,6 +56,15 @@ export function flushAndRemoveSessionRenderBuffer(
   current.flushFinal();
 }
 
+export function abortSessionRenderBuffer(sessionId: string): void {
+  if (!sessionId) return;
+  const current = sessionRenderBuffers.get(sessionId);
+  if (current) {
+    sessionRenderBuffers.delete(sessionId);
+    current.reset();
+  }
+}
+
 export function clearSessionRenderBuffers(): void {
   for (const [, buf] of sessionRenderBuffers) {
     buf?.stop?.();

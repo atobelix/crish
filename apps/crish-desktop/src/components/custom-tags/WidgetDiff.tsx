@@ -2,8 +2,8 @@ import React, { useState, useMemo, type ReactNode } from 'react';
 import styles from './custom-tags.module.css';
 import { CustomTagErrorBoundary } from './CustomTagErrorBoundary';
 import type { ExtraComponentProps } from './CustomTagRegistry';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { escapeHtml, langFromFilename } from '../../api/codeHighlight';
 import {
   useDiffHighlightMap,
@@ -42,7 +42,10 @@ export const WidgetDiffInner: React.FC<WidgetDiffProps> = ({
 
   // 消费公共 diffPairMatcher 单真源
   const parsedLines = useMemo(() => parseDiffText(rawDiffText), [rawDiffText]);
-  const splitPairs = useMemo(() => buildSplitLinePairs(parsedLines), [parsedLines]);
+  const splitPairs = useMemo(
+    () => buildSplitLinePairs(parsedLines),
+    [parsedLines]
+  );
 
   const codeLang = useMemo(() => {
     const targetPath = to || from || '';
@@ -59,10 +62,18 @@ export const WidgetDiffInner: React.FC<WidgetDiffProps> = ({
     splitPairs.forEach((pair, idx) => {
       if (pair.isHeader) return;
       if (pair.left) {
-        out.push({ id: `s:${idx}:L`, code: pair.left.text, language: codeLang });
+        out.push({
+          id: `s:${idx}:L`,
+          code: pair.left.text,
+          language: codeLang,
+        });
       }
       if (pair.right) {
-        out.push({ id: `s:${idx}:R`, code: pair.right.text, language: codeLang });
+        out.push({
+          id: `s:${idx}:R`,
+          code: pair.right.text,
+          language: codeLang,
+        });
       }
     });
     return out;
@@ -90,12 +101,18 @@ export const WidgetDiffInner: React.FC<WidgetDiffProps> = ({
   const displayTitle = title || from || to || '代码审查比对';
 
   return (
-    <div className={styles.widgetDiff} data-streaming={isStreaming ? 'true' : 'false'}>
+    <div
+      className={styles.widgetDiff}
+      data-streaming={isStreaming ? 'true' : 'false'}
+    >
       <div className={styles.cardHeader}>
         <div className={styles.cardTitleGroup}>
           {isStreaming ? (
             <Tooltip content="正在流式生成比对...">
-              <span className={styles.statusRunning} aria-label="正在流式生成比对" />
+              <span
+                className={styles.statusRunning}
+                aria-label="正在流式生成比对"
+              />
             </Tooltip>
           ) : (
             <AppIcon name="file-diff" size={14} aria-hidden />
@@ -112,7 +129,7 @@ export const WidgetDiffInner: React.FC<WidgetDiffProps> = ({
               className={`${styles.diffModeBtn} ${viewMode === 'unified' ? styles.active : ''}`}
               onClick={() => setViewMode('unified')}
             >
-              单栏比对
+              单栏
             </Button>
             <Button
               type="button"
@@ -121,7 +138,7 @@ export const WidgetDiffInner: React.FC<WidgetDiffProps> = ({
               className={`${styles.diffModeBtn} ${viewMode === 'split' ? styles.active : ''}`}
               onClick={() => setViewMode('split')}
             >
-              分栏比对
+              分栏
             </Button>
           </div>
 
@@ -207,8 +224,12 @@ export const WidgetDiffInner: React.FC<WidgetDiffProps> = ({
         ) : (
           <div className={styles.diffSplitLayout}>
             <div className={styles.diffSplitHeaderRow}>
-              <div className={styles.diffSplitColHeader}>Original ({from || 'Base'})</div>
-              <div className={styles.diffSplitColHeader}>Modified ({to || 'Target'})</div>
+              <div className={styles.diffSplitColHeader}>
+                Original ({from || 'Base'})
+              </div>
+              <div className={styles.diffSplitColHeader}>
+                Modified ({to || 'Target'})
+              </div>
             </div>
             {splitPairs.map((pair, idx) => {
               const { left, right, isHeader } = pair;
@@ -233,8 +254,12 @@ export const WidgetDiffInner: React.FC<WidgetDiffProps> = ({
                           : styles.diffLineContext
                     }`}
                   >
-                    <span className={styles.diffLineNum}>{left?.oldNum ?? ''}</span>
-                    <span className={styles.diffMarker}>{left ? (left.type === 'delete' ? '-' : ' ') : ''}</span>
+                    <span className={styles.diffLineNum}>
+                      {left?.oldNum ?? ''}
+                    </span>
+                    <span className={styles.diffMarker}>
+                      {left ? (left.type === 'delete' ? '-' : ' ') : ''}
+                    </span>
                     <span
                       className={styles.diffLineContent}
                       dangerouslySetInnerHTML={{
@@ -255,8 +280,12 @@ export const WidgetDiffInner: React.FC<WidgetDiffProps> = ({
                           : styles.diffLineContext
                     }`}
                   >
-                    <span className={styles.diffLineNum}>{right?.newNum ?? ''}</span>
-                    <span className={styles.diffMarker}>{right ? (right.type === 'add' ? '+' : ' ') : ''}</span>
+                    <span className={styles.diffLineNum}>
+                      {right?.newNum ?? ''}
+                    </span>
+                    <span className={styles.diffMarker}>
+                      {right ? (right.type === 'add' ? '+' : ' ') : ''}
+                    </span>
                     <span
                       className={styles.diffLineContent}
                       dangerouslySetInnerHTML={{

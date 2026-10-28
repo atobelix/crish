@@ -17,7 +17,7 @@ import { useAgentToolApproval } from '../hooks/useAgentToolApproval';
 // 会话域（sessions / activeSessionId / agent 消息）在独立 SessionStore 实例；
 // layoutStore 已纯化为壳层 chrome 域（无 sessions 字段）。
 import { useSessionStore } from '../store/storeAccess';
-import { getCommandPermissions, getSessionAgent } from './storeAccess';
+import { getSessionAgent } from './storeAccess';
 import type {
   MessageToolCall,
   SessionAgent,
@@ -126,29 +126,6 @@ describe('useAgentToolApproval 允许 / 拒绝动作', () => {
     expect(readAgentTool(sid, agentId, 'tc-1')?.output).toBe('执行中…');
     expect(result.current.approvalBusy).toBe(false);
     expect(showSpy).not.toHaveBeenCalled();
-  });
-
-  it('onApprovalAllow remember=true：命令前缀写入白名单', async () => {
-    const { sid, agentId } = seedAgentSession('ag-1', [
-      {
-        id: 'm1',
-        sender: 'assistant',
-        timestamp: Date.now(),
-        toolCalls: [
-          makeToolCall('tc-1', {
-            arguments: '{"command":"npm install lodash"}',
-          }),
-        ],
-      },
-    ]);
-    const { result } = renderHook(() => useAgentToolApproval(sid, agentId));
-
-    await act(async () => {
-      result.current.onApprovalAllow('tc-1', 'm1', true);
-      await vi.advanceTimersByTimeAsync(200);
-    });
-
-    expect(getCommandPermissions()).toContain('npm install lodash');
   });
 
   it('onApprovalDeny：乐观标已拒绝 + engineDenyTool 直发', async () => {

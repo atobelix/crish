@@ -23,7 +23,7 @@ describe('ContextStateNotice', () => {
     );
 
     expect(
-      screen.getByText('已切换到 deepseek-chat · 权限 需确认')
+      screen.getByText('已切换到 deepseek-chat · 权限 每次询问')
     ).toBeInTheDocument();
 
     // No buttons, no svg icons

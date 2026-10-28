@@ -64,7 +64,6 @@ describe('ScheduledTaskExecutionCard UI Component', () => {
       />
     );
 
-    expect(screen.getByText('[定时执行]')).toBeDefined();
     expect(screen.getByText('每日汇总')).toBeDefined();
     expect(screen.getByText('运行中')).toBeDefined();
     expect(screen.getByText('生成今日代办')).toBeDefined();
@@ -84,7 +83,6 @@ describe('ScheduledTaskExecutionCard UI Component', () => {
       />
     );
 
-    expect(screen.getByText('[定时执行]')).toBeDefined();
     expect(screen.getByText('每日汇总')).toBeDefined();
     expect(screen.getByText('已完成')).toBeDefined();
     expect(screen.getByText('2.5s')).toBeDefined();

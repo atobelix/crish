@@ -17,14 +17,42 @@ import React, {
   useRef,
   useEffect,
 } from 'react';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 import styles from './ReasoningRow.module.css';
 import { StreamingMarkdownView } from './StreamingMarkdownView';
 import { Priority } from '../../workers';
 import { useStreamingMarkdownHtml } from '../../api/markdownRenderAsync';
 import { ReconciledMarkdownHtml } from '../markdown/ReconciledMarkdownHtml';
 import type { IncrementalMarkdownUnitSnapshot } from '../../api/markdown/IncrementalMarkdownSession';
+import * as motionTokens from '../../utils/motionTokens';
 import { DURATION_ACCORDION_MS } from '../../utils/motionTokens';
+import { useAccordionViewportGuard } from '../../hooks/useAccordionViewportGuard';
+import { useI18n } from '../../i18n';
+
+/**
+ * 距离自适应手风琴折叠展开物理时长计算器（带 motionTokens 动态回退）
+ */
+function calcAccordionDuration(height: number, isOpening: boolean): number {
+  if (
+    typeof (motionTokens as Record<string, unknown>).calcAccordionDuration ===
+    'function'
+  ) {
+    return (
+      (motionTokens as Record<string, unknown>).calcAccordionDuration as (
+        h: number,
+        o: boolean
+      ) => number
+    )(height, isOpening);
+  }
+  const safeHeight = Math.max(0, Number.isFinite(height) ? height : 0);
+  if (isOpening) {
+    const raw = 180 + 90 * Math.log(1 + safeHeight / 120);
+    return Math.round(Math.min(480, Math.max(180, raw)));
+  } else {
+    const raw = 150 + 65 * Math.log(1 + safeHeight / 120);
+    return Math.round(Math.min(350, Math.max(150, raw)));
+  }
+}
 
 function ReasoningSummaryMarkup({
   markdown,
@@ -78,6 +106,78 @@ export interface ReasoningRowProps {
   messageId?: string;
   /** 外层容器附加类名 */
   className?: string;
+}
+
+/**
+ * 思考呈现契约模型（单一真相源 SSOT）
+ */
+export interface ReasoningPresentation {
+  /** 头部徽标/状态文案（如：“思考中”、“已思考”、“已思考 3.2s”） */
+  badgeText: string;
+  /** 是否需要前置状态圆点（仅流式进行态） */
+  hasLiveDot: boolean;
+  /** 单行收拢模式下的动态文本预览（展开态恒为空串，彻底阻断内容双份复读） */
+  summaryText: string;
+  /** 无障碍屏幕阅读器专用 aria-label */
+  ariaLabel: string;
+  /** 是否允许点击交互 */
+  interactive: boolean;
+}
+
+export interface ResolveReasoningPresentationOptions {
+  isLive: boolean;
+  isExpanded: boolean;
+  durationMs?: number;
+  turnIndex?: number;
+  content: string;
+  t: (
+    key: string,
+    fallbackOrParams?: string | Record<string, unknown>,
+    params?: Record<string, unknown>
+  ) => string;
+}
+
+/**
+ * 纯逻辑函数：派发思维链在各生命周期状态下的标准呈现契约（零 JSX 补丁、零硬编码）
+ */
+export function resolveReasoningPresentation(
+  opts: ResolveReasoningPresentationOptions
+): ReasoningPresentation {
+  const { isLive, isExpanded, durationMs, content, t } = opts;
+
+  // 1. 流式运行态
+  if (isLive) {
+    const label = t('chat.thinking.label', '思考中');
+    return {
+      badgeText: label,
+      hasLiveDot: true,
+      summaryText: isExpanded ? '' : extractLatestLine(content),
+      ariaLabel: label,
+      interactive: true,
+    };
+  }
+
+  // 2. 终态收敛：格式化耗时与身份徽标
+  let badgeText = t('chat.thinking.completed', '已思考');
+  if (durationMs != null && durationMs > 0) {
+    const sec = (durationMs / 1000).toFixed(1);
+    badgeText = t('chat.thinking.durationShort', `已思考 ${sec}s`, {
+      duration: sec,
+    });
+  }
+
+  const ariaLabel =
+    durationMs != null && durationMs > 0
+      ? badgeText
+      : t('chat.thinking.process', '思考过程');
+
+  return {
+    badgeText,
+    hasLiveDot: false,
+    summaryText: isExpanded ? '' : extractFirstLine(content),
+    ariaLabel,
+    interactive: Boolean(content.trim()),
+  };
 }
 
 /**
@@ -156,27 +256,35 @@ export function extractFirstLine(text: string): string {
   return trimmed;
 }
 
-const FOLDING_TRANSITION_MS = DURATION_ACCORDION_MS;
-
 export const ReasoningRow: React.FC<ReasoningRowProps> = ({
   content,
   isLive = false,
   isTurnWorking = false,
   durationMs,
+  turnIndex,
   isOpen,
   onToggle,
   defaultExpanded,
   messageId,
   className = '',
 }) => {
+  const { t } = useI18n();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
   const [userInteracted, setUserInteracted] = useState(false);
   const [userExpanded, setUserExpanded] = useState(false);
   const [isCollapsing, setIsCollapsing] = useState(false);
   const [prevTurnWorking, setPrevTurnWorking] = useState(isTurnWorking);
+  const [accordionDuration, setAccordionDuration] = useState<number>(
+    DURATION_ACCORDION_MS
+  );
+
+  // 视口保护：长思维链收拢时防迷失
+  const { triggerViewportRecovery } = useAccordionViewportGuard(containerRef);
 
   // 终态跃迁状态同步：当模型整轮工作态结束（isTurnWorking 从 true 转为 false）
   // 且未被外部显式受控或用户手动交互覆盖时，进入第一阶段折叠过渡态（isCollapsing: true），
-  // 保留 DOM 结构由 CSS Grid 执行 160ms 平滑收缩，彻底消除视口跳跃。
+  // 保留 DOM 结构由 CSS Grid 执行平滑收缩，彻底消除视口跳跃。
   // 天然兼容生产环境与既有单元测试，零测试环境特判分支。
   if (prevTurnWorking !== isTurnWorking) {
     setPrevTurnWorking(isTurnWorking);
@@ -187,6 +295,9 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
       !userInteracted &&
       defaultExpanded !== false
     ) {
+      const h = bodyRef.current?.getBoundingClientRect().height ?? 0;
+      setAccordionDuration(calcAccordionDuration(h, false));
+      triggerViewportRecovery();
       setIsCollapsing(true);
     } else if (isTurnWorking && isCollapsing) {
       setIsCollapsing(false);
@@ -196,12 +307,16 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
   const prevIsOpenRef = useRef(isOpen);
   useEffect(() => {
     if (prevIsOpenRef.current === true && isOpen === false) {
+      const h = bodyRef.current?.getBoundingClientRect().height ?? 0;
+      setAccordionDuration(calcAccordionDuration(h, false));
+      triggerViewportRecovery();
       setIsCollapsing(true);
     } else if (isOpen === true) {
+      setAccordionDuration(calcAccordionDuration(400, true));
       setIsCollapsing(false);
     }
     prevIsOpenRef.current = isOpen;
-  }, [isOpen]);
+  }, [isOpen, triggerViewportRecovery]);
 
   // 第二阶段完全卸载：物理过渡完成后解除 DOM 挂载
   useEffect(() => {
@@ -210,11 +325,11 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
     }
     const timer = window.setTimeout(() => {
       setIsCollapsing(false);
-    }, FOLDING_TRANSITION_MS);
+    }, accordionDuration);
     return () => {
       window.clearTimeout(timer);
     };
-  }, [isCollapsing]);
+  }, [isCollapsing, accordionDuration]);
 
   // 默认开合策略（2026-09-18 / 2026-10-13 用户裁决）：
   // 1. 若外部显式受控传入 isOpen，遵循 isOpen；
@@ -228,39 +343,40 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
     return false;
   }, [isOpen, userInteracted, userExpanded, isTurnWorking, defaultExpanded]);
 
+  // 派发单一真相源呈现契约（纯逻辑解耦，零 JSX 补丁，零标点噪点）
+  const presentation = useMemo(
+    () =>
+      resolveReasoningPresentation({
+        isLive,
+        isExpanded,
+        durationMs,
+        turnIndex,
+        content,
+        t,
+      }),
+    [isLive, isExpanded, durationMs, turnIndex, content, t]
+  );
+
   const handleToggle = useCallback(() => {
+    if (!presentation.interactive) return;
     setUserInteracted(true);
     if (isExpanded) {
+      const h = bodyRef.current?.getBoundingClientRect().height ?? 0;
+      setAccordionDuration(calcAccordionDuration(h, false));
+      triggerViewportRecovery();
       setUserExpanded(false);
       setIsCollapsing(true);
     } else {
+      setAccordionDuration(calcAccordionDuration(400, true));
       setUserExpanded(true);
       setIsCollapsing(false);
     }
     onToggle?.();
-  }, [isExpanded, onToggle]);
-
-  // 终态耗时格式化（支持已思考 3.2s）
-  const durationText = useMemo(() => {
-    if (durationMs != null && durationMs > 0) {
-      const sec = (durationMs / 1000).toFixed(1);
-      return `已思考 ${sec}s`;
-    }
-    return null;
-  }, [durationMs]);
-
-  // 动态摘要计算：仅在单行收拢模式（!isExpanded）下作为预览计算与展示；
-  // 展开阅读模式下，正文在下方完整直出，头部作为纯净标题栏，不计算也不展示摘要，彻底阻断内容双份复读
-  const displaySummary = useMemo(() => {
-    if (isExpanded) return '';
-    if (isLive) {
-      return extractLatestLine(content);
-    }
-    return extractFirstLine(content);
-  }, [content, isLive, isExpanded]);
+  }, [isExpanded, onToggle, presentation.interactive, triggerViewportRecovery]);
 
   return (
     <div
+      ref={containerRef}
       className={`${styles.reasoningContainer} ${isLive ? styles.isLive : ''} ${className}`}
       data-expanded={isExpanded ? 'true' : 'false'}
       data-collapsing={isCollapsing ? 'true' : undefined}
@@ -274,37 +390,34 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
         className={styles.reasoningRow}
         onClick={handleToggle}
         aria-expanded={isExpanded}
-        aria-label={
-          isLive ? '思考中' : durationText ? durationText : '思考过程'
-        }
+        aria-label={presentation.ariaLabel}
       >
-        {isLive ? (
-          <>
-            <span
-              className={styles.statusDot}
-              aria-hidden
-              data-testid="status-dot"
-            />
-            <span className={styles.reasoningLabel}>思考中</span>
-          </>
-        ) : (
-          <span className={styles.durationBadge}>
-            {durationText || '已思考'}
-          </span>
-        )}
+        {presentation.hasLiveDot ? (
+          <span
+            className={styles.statusDot}
+            aria-hidden
+            data-testid="status-dot"
+          />
+        ) : null}
 
-        {displaySummary ? (
-          <>
-            <span className={styles.dotSeparator} aria-hidden>
-              ·
-            </span>
-            <span className={styles.reasoningSummary} data-follow-end="true">
-              <ReasoningSummaryMarkup
-                markdown={displaySummary}
-                isLive={isLive}
-              />
-            </span>
-          </>
+        <span
+          className={
+            presentation.hasLiveDot
+              ? styles.reasoningLabel
+              : styles.durationBadge
+          }
+          data-testid="reasoning-badge"
+        >
+          {presentation.badgeText}
+        </span>
+
+        {presentation.summaryText ? (
+          <span className={styles.reasoningSummary} data-follow-end="true">
+            <ReasoningSummaryMarkup
+              markdown={presentation.summaryText}
+              isLive={isLive}
+            />
+          </span>
         ) : null}
 
         <span
@@ -319,10 +432,19 @@ export const ReasoningRow: React.FC<ReasoningRowProps> = ({
       {(isExpanded || isCollapsing) && (
         <div
           className={styles.reasoningExpandGrid}
+          style={
+            {
+              '--accordion-duration': `${accordionDuration}ms`,
+            } as React.CSSProperties
+          }
           data-testid="reasoning-grid"
         >
           <div className={styles.reasoningExpandSlot}>
-            <div className={styles.reasoningBody} data-testid="reasoning-body">
+            <div
+              ref={bodyRef}
+              className={styles.reasoningBody}
+              data-testid="reasoning-body"
+            >
               <div className={styles.reasoningContent}>
                 <StreamingMarkdownView
                   text={content}

@@ -280,7 +280,7 @@
   min-height: 4px;
   border-radius: 50%;
   background: var(--text-secondary);
-  animation: tool-dot-pulse 1.6s ease-in-out infinite;
+  animation: tool-dot-pulse var(--transition-pulse, 1.6s ease-in-out) infinite;
   display: inline-block;
   flex-shrink: 0;
   margin-right: 0;
@@ -368,7 +368,7 @@
 }
 
 .diffStatsBtn:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .toolRowHeadRight {
@@ -505,7 +505,7 @@
   padding: 6px 8px;
   margin: 2px 0;
   border-radius: var(--radius-xl);
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border: 1px solid var(--border-subtle);
 }
 
@@ -645,7 +645,7 @@
 
 .toolSectionActionBtn:hover {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border-color: transparent;
 }
 
@@ -1014,9 +1014,11 @@
   overflow: hidden;
   margin-left: 0;
   transition:
-    max-width 0.22s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.18s ease,
-    margin-left 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    max-width var(--duration-accordion, 220ms)
+      var(--ease-emphasized, cubic-bezier(0.22, 1, 0.36, 1)),
+    opacity var(--duration-moderate, 180ms) var(--ease-standard),
+    margin-left var(--duration-accordion, 220ms)
+      var(--ease-emphasized, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
 .toolPathWrap:hover .toolPathActions,
@@ -1041,9 +1043,10 @@
   flex-shrink: 0;
   transform: translateX(2px);
   transition:
-    color 0.15s ease,
-    background 0.15s ease,
-    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    color var(--duration-normal, 150ms) var(--ease-standard),
+    background var(--duration-normal, 150ms) var(--ease-standard),
+    transform var(--duration-accordion, 220ms)
+      var(--ease-emphasized, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
 .toolPathWrap:hover .toolPathAction,
@@ -1053,7 +1056,7 @@
 
 .toolPathAction:hover {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .toolPathLink,
@@ -1130,7 +1133,7 @@
 .toolResultHintBtn:hover,
 .toolResultOpenFile:hover {
   border-color: var(--hairline-strong, var(--border-color));
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .toolResultOpenFile {
@@ -1155,7 +1158,7 @@
 
 .toolRowFileOpen:hover {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--state-hover);
   border-color: var(--hairline-strong, var(--border-color));
   text-decoration: none;
 }

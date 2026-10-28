@@ -27,8 +27,8 @@ import {
   calculateSafeCursorAnchor,
   type SafeAnchorRect,
 } from './safeCursorAnchor';
-import { Button } from '../ui';
-import { AppIcon, ICON_NAMES, type IconName } from '../ui/icons';
+import { Button } from '@/components/ui';
+import { AppIcon, ICON_NAMES, type IconName } from '@/components/ui/icons';
 
 export { isValidClientRect } from './safeCursorAnchor';
 

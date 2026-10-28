@@ -97,15 +97,18 @@ function fieldText(
 /**
  * 结构化字段 → `已切换到 ornith-1.5-9b · 思考 High`。
  * 有 `changed` 时只渲染这些字段；没有 `changed`（历史消息）渲染全部已有字段。
- * 无「系统 ·」前缀，无句号。权限值走 permissionModeLabel（full → 完全访问）。
+ * 无「系统 ·」前缀，无句号。权限值走 permissionModeLabel（full → 完全允许）。
  */
-function formatStructuredContextState(metadata: Record<string, unknown>): string {
+function formatStructuredContextState(
+  metadata: Record<string, unknown>
+): string {
   const changed = readChangedKeys(metadata);
   const explicit = changed != null;
   let keys: readonly string[] = explicit
     ? CONTEXT_STATE_FIELD_ORDER.filter((key) => changed.includes(key))
     : CONTEXT_STATE_FIELD_ORDER;
-  const modelValue = typeof metadata.model === 'string' ? metadata.model.trim() : '';
+  const modelValue =
+    typeof metadata.model === 'string' ? metadata.model.trim() : '';
   // 历史消息没有 changed：沿用「有模型就不单列服务商」
   if (!explicit && modelValue) {
     keys = keys.filter((key) => key !== 'profile');

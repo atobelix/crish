@@ -6,7 +6,7 @@ import React, { useCallback, useRef, useState } from 'react';
 
 import styles from './ChatComposer.module.css';
 import { useI18n } from '../../i18n';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export function hasFiles(dt: DataTransfer | null | undefined): boolean {
   if (!dt) return false;

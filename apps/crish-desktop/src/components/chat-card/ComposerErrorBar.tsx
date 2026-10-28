@@ -10,8 +10,8 @@
  *   （按 userMsgId 现查提问、撤回失败的 assistant 节点后重跑，不新建用户消息）。
  */
 import React, { useState } from 'react';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { emitUiEvent } from '../../api/uiEvents';
 import { openSettings } from '../../api/storeAccess';
 import { useI18n } from '../../i18n';
@@ -103,8 +103,7 @@ export const ComposerErrorBar: React.FC<ComposerErrorBarProps> = React.memo(
               flexShrink: 0,
               fontWeight: 500,
               color: 'var(--text-primary)',
-              backgroundColor:
-                'color-mix(in srgb, var(--text-primary) 8%, transparent)',
+              backgroundColor: 'var(--state-hover)',
               borderRadius: 'var(--radius-md, 8px)',
             }}
           >

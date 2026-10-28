@@ -49,7 +49,9 @@ describe('FoldableProcessSection 动态测高与检索穿透断言', () => {
         isFoldable={true}
         onToggle={onToggle}
         onExpand={onExpand}
-        renderItem={() => <div data-testid="tool-item">read_file('src/index.ts')</div>}
+        renderItem={() => (
+          <div data-testid="tool-item">read_file('src/index.ts')</div>
+        )}
       />
     );
 
@@ -145,9 +147,101 @@ describe('FoldableProcessSection 动态测高与检索穿透断言', () => {
     const slot = screen.getByTestId('process-slot-msg-test-proc-subagent');
     expect(slot.getAttribute('hidden')).toBeNull();
 
-    const toggleBtn = screen.getByTestId('process-toggle-msg-test-proc-subagent');
+    const toggleBtn = screen.getByTestId(
+      'process-toggle-msg-test-proc-subagent'
+    );
     fireEvent.click(toggleBtn);
     expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  it('收起过程分段时若顶部已滚出屏幕，触发视口平滑回退保护', () => {
+    const onToggle = vi.fn();
+    const onExpand = vi.fn();
+
+    const { container } = render(
+      <FoldableProcessSection
+        msgId="msg-guard"
+        sectionId="msg-guard-proc-0"
+        items={[]}
+        metrics={mockMetrics()}
+        showWorkTime={false}
+        isExpanded={true}
+        isFoldable={true}
+        onToggle={onToggle}
+        onExpand={onExpand}
+        renderItem={() => <div>Details</div>}
+      />
+    );
+
+    const sectionEl = container.firstElementChild as HTMLElement;
+    const scrollIntoViewMock = vi.fn();
+    sectionEl.scrollIntoView = scrollIntoViewMock;
+    vi.spyOn(sectionEl, 'getBoundingClientRect').mockReturnValue({
+      top: -250,
+      bottom: 500,
+      left: 0,
+      right: 400,
+      width: 400,
+      height: 750,
+      x: 0,
+      y: -250,
+      toJSON: () => {},
+    });
+
+    const toggleBtn = screen.getByTestId('process-toggle-msg-guard-proc-0');
+    fireEvent.click(toggleBtn);
+
+    expect(onToggle).toHaveBeenCalledWith('msg-guard-proc-0', false);
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({
+      block: 'start',
+      behavior: 'smooth',
+    });
+  });
+
+  it('收起时过渡完成 (transitionend) 挂载 hidden="until-found"', () => {
+    const onToggle = vi.fn();
+    const onExpand = vi.fn();
+
+    const { rerender } = render(
+      <FoldableProcessSection
+        msgId="msg-trans"
+        sectionId="msg-trans-proc-0"
+        items={[]}
+        metrics={mockMetrics()}
+        showWorkTime={false}
+        isExpanded={true}
+        isFoldable={true}
+        onToggle={onToggle}
+        onExpand={onExpand}
+        renderItem={() => <div>Details</div>}
+      />
+    );
+
+    const slot = screen.getByTestId('process-slot-msg-trans-proc-0');
+    expect(slot.getAttribute('hidden')).toBeNull();
+
+    // 重新渲染为折叠态
+    rerender(
+      <FoldableProcessSection
+        msgId="msg-trans"
+        sectionId="msg-trans-proc-0"
+        items={[]}
+        metrics={mockMetrics()}
+        showWorkTime={false}
+        isExpanded={false}
+        isFoldable={true}
+        onToggle={onToggle}
+        onExpand={onExpand}
+        renderItem={() => <div>Details</div>}
+      />
+    );
+
+    // 动画未完成前不立即挂载 hidden
+    expect(slot.getAttribute('hidden')).toBeNull();
+
+    // 动画完成事件触发
+    fireEvent.transitionEnd(slot, { propertyName: 'grid-template-rows' });
+    expect(slot.getAttribute('hidden')).toBe('until-found');
   });
 });
 
@@ -195,13 +289,21 @@ describe('FoldableProcessSection 控制栏工作时间', () => {
   }
 
   it('负向断言（物理切除）：dashed hairline 工作时间区节点已彻底消失', () => {
-    renderBar({ showWorkTime: true, startTime: 1_700_000_000_000, endTime: 1_700_000_012_500 });
+    renderBar({
+      showWorkTime: true,
+      startTime: 1_700_000_000_000,
+      endTime: 1_700_000_012_500,
+    });
     expect(screen.queryByTestId('process-time-capsule')).toBeNull();
     expect(document.querySelector('[class*="timeCapsule"]')).toBeNull();
   });
 
   it('运行中（isLive）→ 控制栏跳秒且不写「工作」前缀，标记 data-live=true', () => {
-    const bar = renderBar({ showWorkTime: true, isLive: true, startTime: Date.now() - 3_400 });
+    const bar = renderBar({
+      showWorkTime: true,
+      isLive: true,
+      startTime: Date.now() - 3_400,
+    });
     expect(bar.getAttribute('data-live')).toBe('true');
     expect(bar.textContent ?? '').toMatch(/\d+\.\d 秒/);
     expect(bar.textContent ?? '').not.toContain('工作');
@@ -245,13 +347,20 @@ describe('FoldableProcessSection 控制栏工作时间', () => {
     // 负向断言：控制栏节点必须彻底切除（杜绝重复外层思考栏）
     expect(screen.queryByTestId('process-toggle-msg-cap-proc-0')).toBeNull();
     // 正向断言：内容槽位常驻渲染
-    expect(screen.getByTestId('process-slot-msg-cap-proc-0')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('process-slot-msg-cap-proc-0')
+    ).toBeInTheDocument();
   });
 
   it('单工具调用段（命令行）→ 展示「已运行 N 条命令」', () => {
     const bar = renderBar({
       showWorkTime: false,
-      metrics: { toolCount: 1, thoughtCount: 0, readFilesCount: 0, commandCount: 1 },
+      metrics: {
+        toolCount: 1,
+        thoughtCount: 0,
+        readFilesCount: 0,
+        commandCount: 1,
+      },
     });
     expect(bar.textContent).toContain('已运行 1 条命令');
   });
@@ -264,14 +373,25 @@ describe('FoldableProcessSection 控制栏工作时间', () => {
     // 2. showWorkTime=false: 存在对应主导动作图标
     const barWithTools = renderBar({
       showWorkTime: false,
-      metrics: { toolCount: 1, commandCount: 1, readFilesCount: 0, leadAction: 'command' },
+      metrics: {
+        toolCount: 1,
+        commandCount: 1,
+        readFilesCount: 0,
+        leadAction: 'command',
+      },
     });
-    expect(barWithTools.querySelector('svg[data-icon="terminal"]')).toBeInTheDocument();
+    expect(
+      barWithTools.querySelector('svg[data-icon="terminal"]')
+    ).toBeInTheDocument();
   });
 
   it('负向断言：控制栏文案区绝不得出现「已深度思考」', () => {
     const banned = ['已深', '度思考'].join('');
-    for (const [capsule, live] of [[true, true], [true, false], [false, false]] as const) {
+    for (const [capsule, live] of [
+      [true, true],
+      [true, false],
+      [false, false],
+    ] as const) {
       const bar = renderBar({
         showWorkTime: capsule,
         isLive: live,
@@ -295,7 +415,8 @@ describe('FoldableProcessSection.module.css 契约', () => {
   ).replace(/\/\*[\s\S]*?\*\//g, '');
 
   it('同段内容槽 gap 必须为 0（思考 / 工具之间不得有额外留白）', () => {
-    const block = css.match(/\.sectionBody:not\(\[hidden\]\)\s*\{[^}]*\}/)?.[0] ?? '';
+    const block =
+      css.match(/\.sectionBody:not\(\[hidden\]\)\s*\{[^}]*\}/)?.[0] ?? '';
     expect(block).not.toBe('');
     expect(block).toMatch(/gap:\s*0/);
     // 负向断言：禁止以 padding 变相制造留白
@@ -332,6 +453,8 @@ describe('FoldableProcessSection.module.css 契约', () => {
   });
 
   it('负向断言：严禁对 [hidden] 施加 display: none !important', () => {
-    expect(css).not.toMatch(/\[hidden\][^{]*\{[^}]*display:\s*none\s*!important/);
+    expect(css).not.toMatch(
+      /\[hidden\][^{]*\{[^}]*display:\s*none\s*!important/
+    );
   });
 });

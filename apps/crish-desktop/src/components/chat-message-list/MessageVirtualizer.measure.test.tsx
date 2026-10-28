@@ -68,8 +68,6 @@ function propsFor(messages: SessionMessage[]): MessageVirtualizerProps {
     },
     flowControl: {
       hideThinkingBlock: false,
-      inPlanMode: false,
-      planApproved: false,
       lastAssistantId: null,
       showAllMessages: true,
     },

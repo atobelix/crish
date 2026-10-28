@@ -10,7 +10,7 @@ import type { ComposerFieldProps } from './composerTypes';
 import { readSendShortcut } from '../../api/store-access/settingsAccess';
 import { readCodeBlockIndent } from '../../api/codeBlockIndent';
 import { ComposerSendControls } from './ComposerSendControls';
-import { Textarea } from '../ui';
+import { Textarea } from '@/components/ui';
 
 export {
   STOP_TOOLTIP,

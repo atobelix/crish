@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import styles from './AttachmentCard.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import { FileFormatIcon } from '../../assets/icons';
 import {
   useActiveModelAcceptsImage,
@@ -60,7 +60,7 @@ import {
   resolveCardImageSrc,
   getFileKindBadge,
 } from './attachmentCardUtils';
-import { AppIcon } from '../ui/icons';
+import { AppIcon } from '@/components/ui/icons';
 
 export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
   ({
@@ -126,9 +126,7 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
       effectiveStatus === 'parsing' ||
       (typeof effectiveProgress === 'number' && effectiveProgress < 100);
     const progressVal =
-      typeof effectiveProgress === 'number'
-        ? Math.round(effectiveProgress)
-        : 0;
+      typeof effectiveProgress === 'number' ? Math.round(effectiveProgress) : 0;
 
     const tooltipContent = useMemo(() => {
       const baseName = isImage
@@ -136,16 +134,23 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
           ? '[图片无法加载] 本地文件已被移动或删除'
           : item.name || item.path || '图片'
         : isItemMissing
-        ? item.name || item.path
-          ? `[文件失效] ${item.name || item.path}`
-          : '[文件无法访问] 本地文件已被移动或删除'
-        : item.name || item.path || '附件';
+          ? item.name || item.path
+            ? `[文件失效] ${item.name || item.path}`
+            : '[文件无法访问] 本地文件已被移动或删除'
+          : item.name || item.path || '附件';
 
       if (warnText) {
         return `${baseName}（警告: ${warnText}）`;
       }
       return baseName;
-    }, [isImage, isImageMissing, isItemMissing, item.name, item.path, warnText]);
+    }, [
+      isImage,
+      isImageMissing,
+      isItemMissing,
+      item.name,
+      item.path,
+      warnText,
+    ]);
 
     // 核心拦截（MIN-01）：阻断点击冒泡，严禁意外触发气泡折叠
     const handleClick = useCallback(
@@ -180,7 +185,9 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
       [onAuxClick, onRemove, item]
     );
 
-    const defaultTestId = onRemove ? 'composer-attach-card' : 'attachment-card-58';
+    const defaultTestId = onRemove
+      ? 'composer-attach-card'
+      : 'attachment-card-58';
     const resolvedTestId = testId || defaultTestId;
     const kind = kindProp || (isImage ? 'image' : 'file');
 
@@ -219,7 +226,11 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
                   </span>
                 </Tooltip>
               ) : null}
-              <AppIcon name="image-off" size={20} className={styles.missingIcon} />
+              <AppIcon
+                name="image-off"
+                size={20}
+                className={styles.missingIcon}
+              />
               <span className={styles.missingBadge}>失效</span>
               {onRemove ? (
                 <Button
@@ -369,7 +380,11 @@ export const AttachmentCard: React.FC<AttachmentCardProps> = React.memo(
           ) : null}
           <div className={`${styles.fileIconBox} ${styles.fileIcon} file-icon`}>
             {isItemMissing ? (
-              <AppIcon name="file-question" size={18} className={styles.missingIcon} />
+              <AppIcon
+                name="file-question"
+                size={18}
+                className={styles.missingIcon}
+              />
             ) : (
               <FileFormatIcon
                 fileName={item.name || item.path || ''}

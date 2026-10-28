@@ -64,10 +64,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   } = pins ?? {};
   const {
     hideThinkingBlock = false,
-    inPlanMode = false,
-    planApproved = false,
     setPermissionMode = () => {},
-    setPlanApproved = () => {},
     lastAssistantId = null,
     lastUserId,
     thinkingMsgId,
@@ -421,6 +418,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
               right: 0,
               transform: `translateY(${startOffset}px)`,
               overflowAnchor: 'none',
+              boxSizing: 'border-box',
             }}
           >
             {/* 渲染身份（C2）：key / 高度缓存键 = message.id；stream 与 final 共用同一行 id */}
@@ -491,8 +489,6 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
                       isSearchHit={row.isSearchHit}
                       isThinkingMsg={msg.id === thinkingMsgId}
                       hideThinkingBlock={hideThinkingBlock}
-                      inPlanMode={inPlanMode}
-                      planApproved={planApproved}
                       isLastAssistant={msg.id === lastAssistantId}
                       toolStackProps={toolStackProps}
                       onTogglePin={togglePin}
@@ -501,7 +497,6 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
                       onOpenDiff={onOpenDiff}
                       onOpenDiffPanel={onOpenDiffPanel}
                       setPermissionMode={setPermissionMode}
-                      setPlanApproved={setPlanApproved}
                       onFillFollowUp={handleFillFollowUp}
                       onSendFollowUp={
                         onSendFollowUp ? handleSendFollowUp : undefined

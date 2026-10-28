@@ -465,7 +465,7 @@ describe('ChatUserMessageRow 全新解耦与物理删除立体验证套件', () 
     const cssContent = fs.readFileSync(cssPath, 'utf-8');
     expect(cssContent).toContain('@keyframes userBubbleGlideUp');
     expect(cssContent).toContain('translateY(14px)');
-    expect(cssContent).toContain('0.22s');
+    expect(cssContent).toContain('var(--duration-accordion, 220ms)');
     expect(cssContent).toContain('will-change: transform, opacity');
   });
 });

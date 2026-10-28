@@ -68,15 +68,6 @@ export function userBubbleDisplayText(
   return t;
 }
 
-export function looksLikePlan(text: string): boolean {
-  const t = (text || '').trim();
-  if (!t) return false;
-  if (/步骤|计划/.test(t)) return true;
-  if (/^#{1,3}\s/m.test(t)) return true;
-  if (/(?:^|\n)\s*\d+[.、]\s*\S/.test(t)) return true;
-  return false;
-}
-
 export function shouldHostToolStack(
   items: readonly ToolRenderItem[] | undefined | null
 ): boolean {
@@ -189,8 +180,6 @@ export type ChatAssistantMessageRowProps = {
   isSearchHit: boolean;
   isThinkingMsg: boolean;
   hideThinkingBlock: boolean;
-  inPlanMode: boolean;
-  planApproved: boolean;
   isLastAssistant: boolean;
   toolStackProps: ChatToolStackSharedProps;
   onTogglePin: (msgId: string, color?: string) => void;
@@ -199,7 +188,6 @@ export type ChatAssistantMessageRowProps = {
   onOpenDiff?: ((diff: FileDiff) => void) | undefined;
   onOpenDiffPanel?: (() => void) | undefined;
   setPermissionMode: (mode: PermissionMode) => void;
-  setPlanApproved: (v: boolean) => void;
   onFillFollowUp?: ((prompt: string) => void) | undefined;
   onSendFollowUp?: ((prompt: string) => void) | undefined;
   followUpDismissed?: boolean | undefined;
@@ -227,8 +215,6 @@ export const MEMO_COMPARE_FIELDS = [
   'isSearchHit',
   'isThinkingMsg',
   'hideThinkingBlock',
-  'inPlanMode',
-  'planApproved',
   'isLastAssistant',
   'toolStackProps',
   'onTogglePin',
@@ -237,7 +223,6 @@ export const MEMO_COMPARE_FIELDS = [
   'onOpenDiff',
   'onOpenDiffPanel',
   'setPermissionMode',
-  'setPlanApproved',
   'onFillFollowUp',
   'onSendFollowUp',
   'followUpDismissed',
@@ -280,8 +265,6 @@ export function assistantRowPropsEqual(
     prev.isFollowUp === next.isFollowUp &&
     prev.isThinkingMsg === next.isThinkingMsg &&
     prev.hideThinkingBlock === next.hideThinkingBlock &&
-    prev.inPlanMode === next.inPlanMode &&
-    prev.planApproved === next.planApproved &&
     prev.isLastAssistant === next.isLastAssistant &&
     prev.followUpDismissed === next.followUpDismissed &&
     // D7.3：行级展开态按 msgId 切片比较——单卡 toggle 只换目标消息槽位，
@@ -297,7 +280,6 @@ export function assistantRowPropsEqual(
     prev.onOpenDiff === next.onOpenDiff &&
     prev.onOpenDiffPanel === next.onOpenDiffPanel &&
     prev.setPermissionMode === next.setPermissionMode &&
-    prev.setPlanApproved === next.setPlanApproved &&
     prev.onFillFollowUp === next.onFillFollowUp &&
     prev.onSendFollowUp === next.onSendFollowUp &&
     prev.onDismissFollowUp === next.onDismissFollowUp &&

@@ -2,7 +2,10 @@ import React, { Suspense, useState, useMemo, useEffect } from 'react';
 import styles from './ChatToolCallBlock.module.css';
 import type { MessageToolCall } from '../../store/types';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
-import { ApprovalAskCard } from '../agent-card/ApprovalAskCard';
+import {
+  ApprovalAskCard,
+  type ApprovalTimeoutPolicy,
+} from '../agent-card/ApprovalAskCard';
 import { slotCore } from '../../services/view-registry/SlotCore';
 import '../chat-card/workspaceChatComposerAbove.slot';
 import { isEditToolName } from '../../api/toolFeedback';
@@ -143,12 +146,40 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
           : toolCommandPreview(tc, 72);
       const mid = msgId || pendingApprovalMsgId;
       const approvalWired = Boolean(onApprovalAllow && onApprovalDeny);
+
+      // 服务端下发的倒计时与策略权威元数据 (SSOT)：approvalMeta.metadata 透传
+      const rawMeta: Record<string, unknown> =
+        tc.approvalMeta?.metadata ??
+        (tc.approvalMeta as unknown as Record<string, unknown> | undefined) ??
+        {};
+
+      const expiresAtMs: number | undefined =
+        typeof rawMeta.expiresAtMs === 'number'
+          ? rawMeta.expiresAtMs
+          : undefined;
+
+      const timeoutMs: number | undefined =
+        typeof rawMeta.timeoutMs === 'number' ? rawMeta.timeoutMs : undefined;
+
+      const timeoutPolicy: ApprovalTimeoutPolicy =
+        rawMeta.timeoutPolicy === 'auto-allow' ||
+        rawMeta.timeoutPolicy === 'auto-deny' ||
+        rawMeta.timeoutPolicy === 'manual-only'
+          ? rawMeta.timeoutPolicy
+          : 'auto-deny';
+
+      const actionHint: string | undefined =
+        typeof rawMeta.actionHint === 'string' ? rawMeta.actionHint : undefined;
+
+      const isPaused: boolean = Boolean(rawMeta.isPaused);
+
       return (
         <div
           key={rowKey}
           className={`${styles.toolRow} ${styles.toolRowApproval} ${styles.isPending} tool-row tool-row-approval is-pending`}
           data-tool-id={tc.id}
           data-approval-wired={approvalWired ? 'true' : 'false'}
+          data-timeout-policy={timeoutPolicy}
         >
           {approvalWired ? (
             <ApprovalAskCard
@@ -158,11 +189,13 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = React.memo(
               cmd={tech && tech !== summary ? tech : techFull || undefined}
               busy={approvalBusy}
               riskMeta={tc.approvalMeta}
+              expiresAtMs={expiresAtMs}
+              timeoutMs={timeoutMs}
+              timeoutPolicy={timeoutPolicy}
+              actionHint={actionHint}
+              isPaused={isPaused}
               onAllow={() => {
                 if (tc.id && mid) onApprovalAllow!(tc.id, mid, false);
-              }}
-              onAllowRemember={() => {
-                if (tc.id && mid) onApprovalAllow!(tc.id, mid, true);
               }}
               onDeny={() => {
                 if (tc.id && mid) onApprovalDeny!(tc.id, mid);

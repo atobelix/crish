@@ -9,6 +9,7 @@
   height: 28px;
   padding: 0;
   border: none;
+  border-radius: 14px;
   background: transparent;
   box-shadow: none;
   min-width: 0;
@@ -23,7 +24,7 @@
   height: 100%;
 }
 
-/* 穿透控制前置插槽中的权限模式按钮（默认左半药丸形态，左右等宽内衬） */
+/* 穿透控制前置插槽中的权限模式按钮（默认左侧控制件，左右等宽内衬） */
 .prefix :global(button) {
   height: 28px;
   min-height: 28px;
@@ -35,18 +36,18 @@
   display: inline-flex;
   align-items: center;
   padding: 0 10px;
-  border-radius: var(--sep-radius-outer) 0 0 var(--sep-radius-outer);
+  border-radius: 14px 0 0 14px;
   transition:
     background var(--transition-fast, 120ms ease),
     color var(--transition-fast, 120ms ease);
 }
 
-/* 仅权限 prefix 单独显示（无模型槽且无思考档位） -> 独立全胶囊全圆弧 */
+/* 仅权限 prefix 单独显示（无模型槽且无思考档位） -> 完整 14px 胶囊外角 */
 .capsule:not([data-has-children='true']):not([data-has-thinking='true'])
   .prefix
   :global(button) {
   padding: 0 10px;
-  border-radius: var(--sep-radius-outer);
+  border-radius: 14px;
 }
 
 .prefix :global(button:hover),
@@ -54,7 +55,7 @@
 .prefix :global(button.is-open),
 .prefix :global(button.isOpen),
 .prefix :global(button[aria-expanded='true']) {
-  background: var(--composer-control-hover-bg);
+  background: var(--state-hover);
 }
 
 .left {
@@ -73,7 +74,7 @@
   min-width: 0;
   border: none;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   font-size: var(--font-size-xs);
   font-weight: 500;
   cursor: pointer;
@@ -83,6 +84,12 @@
   transition:
     background var(--transition-fast, 120ms ease),
     color var(--transition-fast, 120ms ease);
+}
+
+.left :global(button.model-badge-btn)::before,
+.left :global(button[data-testid='model-selector-button'])::before,
+.left :global(button)::before {
+  display: none;
 }
 
 /* 场景 A：单行融合三段式（有权限 prefix + 有思考档位） -> 中间矩形直角平切 */
@@ -119,10 +126,10 @@
   .left
   :global(button) {
   padding: 0 10px;
-  border-radius: 0 var(--sep-radius-outer) var(--sep-radius-outer) 0;
+  border-radius: 0 14px 14px 0;
 }
 
-/* 场景 C：多行态两段式（无权限 prefix + 有思考档位） -> 左半圆弧，右平切贴合思考 */
+/* 场景 C：多行态两段式（无权限 prefix + 有思考档位） -> 左 14px，右平切贴合思考 */
 .capsule:not([data-has-prefix='true'])[data-has-thinking='true']
   .left
   :global(button.model-badge-btn),
@@ -133,10 +140,10 @@
   .left
   :global(button) {
   padding: 0 10px;
-  border-radius: var(--sep-radius-outer) 0 0 var(--sep-radius-outer);
+  border-radius: 14px 0 0 14px;
 }
 
-/* 场景 D：多行态一段式（无权限 prefix + 无思考档位） -> 独立全胶囊全圆弧 */
+/* 场景 D：多行态一段式（无权限 prefix + 无思考档位） -> 完整 14px 胶囊圆角 */
 .capsule:not([data-has-prefix='true'])[data-has-thinking='false']
   .left
   :global(button.model-badge-btn),
@@ -156,27 +163,31 @@
   .left
   :global(button) {
   padding: 0 10px;
-  border-radius: var(--sep-radius-outer);
+  border-radius: 14px;
 }
 
 /* 独立悬停态与激活态：光标悬停或激活在模型槽时单独高亮 */
 .left :global(button.model-badge-btn:hover),
+.left :global(button[data-testid='model-selector-button']:hover),
+.left :global(button:hover) {
+  background: var(--state-hover);
+  color: var(--text-primary);
+}
+
 .left :global(button.model-badge-btn:active),
 .left :global(button.model-badge-btn.active),
 .left :global(button.model-badge-btn[aria-expanded='true']),
 .left :global(button.model-badge-btn[data-active='true']),
-.left :global(button[data-testid='model-selector-button']:hover),
 .left :global(button[data-testid='model-selector-button']:active),
 .left :global(button[data-testid='model-selector-button'].active),
 .left
   :global(button[data-testid='model-selector-button'][aria-expanded='true']),
 .left :global(button[data-testid='model-selector-button'][data-active='true']),
-.left :global(button:hover),
 .left :global(button:active),
 .left :global(button.active),
 .left :global(button[aria-expanded='true']),
 .left :global(button[data-active='true']) {
-  background: var(--composer-control-hover-bg);
+  background: var(--state-active);
   color: var(--text-primary);
 }
 
@@ -184,7 +195,7 @@
 .left :global(button[data-testid='model-selector-button']:focus-visible),
 .left :global(button:focus-visible) {
   outline: none;
-  background: var(--composer-control-hover-bg);
+  background: var(--state-hover);
 }
 
 /* 中间弱发丝分割线：不占据水平排版空间（margin-left: -1px），实现左右槽无缝贴合整体感 */
@@ -217,7 +228,7 @@
   min-width: unset;
   padding: 0 10px;
   border: none;
-  border-radius: 0 var(--sep-radius-outer) var(--sep-radius-outer) 0;
+  border-radius: 0 14px 14px 0;
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
@@ -232,24 +243,32 @@
     color var(--transition-fast, 120ms ease);
 }
 
-/* 仅思考强度槽单独显示（无权限 prefix 且无模型槽） -> 独立全胶囊全圆弧 */
+.thinkBtn::before {
+  display: none;
+}
+
+/* 仅思考强度槽单独显示（无权限 prefix 且无模型槽） -> 完整 14px 胶囊外角 */
 .capsule:not([data-has-prefix='true']):not([data-has-children='true'])
   .thinkBtn {
   padding: 0 10px;
-  border-radius: var(--sep-radius-outer);
+  border-radius: 14px;
 }
 
 /* 独立悬停态与激活态：光标悬停或激活在思考档时单独高亮 */
-.thinkBtn:hover,
+.thinkBtn:hover {
+  background: var(--state-hover);
+  color: var(--text-primary);
+}
+
 .thinkBtn:active,
 .thinkBtn.isOpen {
-  background: var(--composer-control-hover-bg);
+  background: var(--state-active);
   color: var(--text-primary);
 }
 
 .thinkBtn:focus-visible {
   outline: none;
-  background: var(--composer-control-hover-bg);
+  background: var(--state-hover);
 }
 
 .chev {
@@ -260,7 +279,7 @@
   z-index: var(--z-dropdown-menu, var(--z-dropdown));
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--sep-radius-outer, 14px);
+  border-radius: var(--radius-menu-outer, 18px);
   box-shadow: var(--shadow-dropdown);
   padding: 6px;
   display: flex;
@@ -286,7 +305,7 @@
   min-width: unset;
   padding: 5px 8px;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-menu-inner, 12px);
   background: transparent;
   color: var(--text-primary);
   font-family: inherit;
@@ -302,19 +321,19 @@
 }
 
 .item:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
 .item.isSelected {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
   font-weight: 500;
 }
 
 .item:focus-visible {
   outline: none;
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .check {

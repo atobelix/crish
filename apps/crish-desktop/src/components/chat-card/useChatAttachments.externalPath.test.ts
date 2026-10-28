@@ -28,7 +28,10 @@ vi.mock('../../services/toast/ToastContext', async (importOriginal) => {
     await importOriginal<typeof import('../../services/toast/ToastContext')>();
   return {
     ...actual,
-    toast: { ...actual.toast, show: (...args: unknown[]) => toastShow(...args) },
+    toast: {
+      ...actual.toast,
+      show: (...args: unknown[]) => toastShow(...args),
+    },
   };
 });
 
@@ -200,12 +203,16 @@ describe('useChatAttachments 外部路径放行与状态机 (模块 B)', () => {
       useChatAttachments({ activeSessionId: 'test-paste-files-session' })
     );
 
-    const fileWithPath = new File(['code'], 'script.py', { type: 'text/x-python' });
+    const fileWithPath = new File(['code'], 'script.py', {
+      type: 'text/x-python',
+    });
     Object.defineProperty(fileWithPath, 'path', {
       value: 'C:/Users/test/Desktop/script.py',
     });
 
-    const fileBlobOnly = new File(['plain text'], 'note.txt', { type: 'text/plain' });
+    const fileBlobOnly = new File(['plain text'], 'note.txt', {
+      type: 'text/plain',
+    });
 
     await act(async () => {
       await result.current.handlePasteFiles([fileWithPath, fileBlobOnly]);

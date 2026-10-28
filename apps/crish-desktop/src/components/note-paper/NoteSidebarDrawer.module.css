@@ -12,8 +12,9 @@
   box-sizing: border-box;
   overflow: hidden;
   transition:
-    width 200ms cubic-bezier(0.2, 0, 1, 1),
-    opacity 200ms ease;
+    width var(--duration-normal, 200ms)
+      var(--ease-in-out, cubic-bezier(0.2, 0, 1, 1)),
+    opacity var(--duration-normal, 200ms) var(--ease-standard);
   z-index: 10;
 }
 
@@ -79,13 +80,13 @@
   color: var(--text-secondary);
   cursor: pointer;
   transition:
-    background-color 150ms ease,
-    color 150ms ease;
+    background-color var(--duration-normal, 150ms) var(--ease-standard),
+    color var(--duration-normal, 150ms) var(--ease-standard);
 }
 
 .iconBtn:hover,
 .iconBtn:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -109,7 +110,7 @@
 
 .searchRow:hover,
 .searchRow:focus-within {
-  background: var(--sidebar-hover, var(--bg-hover));
+  background: var(--state-hover);
   border: none;
   box-shadow: none;
 }
@@ -200,7 +201,7 @@
 .sessionItem:hover,
 .item:hover,
 .card:hover {
-  background: var(--sidebar-hover, var(--bg-hover));
+  background: var(--state-hover);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium, 500);
 }
@@ -211,7 +212,7 @@
 .card.isActive,
 .item.active,
 .card.active {
-  background: var(--sidebar-active);
+  background: var(--state-strong);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium, 500);
   box-shadow: none;
@@ -230,13 +231,13 @@
 .card:focus-visible {
   outline: none;
   box-shadow: 0 0 0 1.5px var(--focus-border-color);
-  background-color: var(--tint-hover, var(--bg-hover));
+  background-color: var(--state-hover);
 }
 
 .sessionItem:active,
 .item:active,
 .card:active {
-  background: var(--sidebar-active);
+  background: var(--state-strong);
   color: var(--text-primary);
 }
 
@@ -384,7 +385,7 @@
 .actionBtn:hover,
 .miniBtn:hover {
   color: var(--text-primary);
-  background: var(--tint-hover, var(--bg-hover));
+  background: var(--state-hover);
 }
 
 /* Hover / Focus 切换显隐：平时显示时间，hover / focus 时时间渐隐浮现重命名与删除按钮 */
@@ -462,12 +463,6 @@
   color: var(--text-primary);
 }
 
-.dialogDesc {
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.4;
-}
-
 .dialogFooter {
   display: flex;
   justify-content: flex-end;
@@ -493,7 +488,7 @@
 
 .cancelBtn:hover,
 .cancelBtn:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .dangerBtn,

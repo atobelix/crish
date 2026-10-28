@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './ContextStateNotice.module.css';
-import { Tooltip } from '../ui';
+import { Tooltip } from '@/components/ui';
 import type { MessageContextInjection } from '../../store/types';
 import { formatContextStateDisplayText } from './contextStateUtils';
 

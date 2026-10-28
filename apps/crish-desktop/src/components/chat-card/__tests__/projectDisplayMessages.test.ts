@@ -9,15 +9,28 @@ import { resolveChatEmptyKind } from '../../../api/chatEmptyState';
 
 let t = 0;
 const user = (id: string, text = '问题'): SessionMessage => ({
-  id, sender: 'user', text, timestamp: ++t, status: 'completed',
+  id,
+  sender: 'user',
+  text,
+  timestamp: ++t,
+  status: 'completed',
 });
 const asst = (id: string, p: Partial<SessionMessage> = {}): SessionMessage => ({
-  id, sender: 'assistant', text: '', timestamp: ++t, status: 'completed', ...p,
+  id,
+  sender: 'assistant',
+  text: '',
+  timestamp: ++t,
+  status: 'completed',
+  ...p,
 });
 const carrier = (id: string, model: string): SessionMessage =>
   asst(id, {
     injections: [
-      { id: `inj-${id}`, title: '上下文状态切换', metadata: { mode: 'context-state', model } } as never,
+      {
+        id: `inj-${id}`,
+        title: '上下文状态切换',
+        metadata: { mode: 'context-state', model },
+      } as never,
     ],
     blocks: [{ type: 'context_injection', id: `inj-${id}` } as never],
   });
@@ -56,7 +69,11 @@ describe('projectDisplayMessages', () => {
   });
 
   it('末尾是空行时，最后一条可见助手消息是上一条实质助手（regenerate / 撤回入口归属）', () => {
-    const msgs = [user('u1'), asst('a1', { text: '实质回答' }), asst('a-tail-empty')];
+    const msgs = [
+      user('u1'),
+      asst('a1', { text: '实质回答' }),
+      asst('a-tail-empty'),
+    ];
     const display = projectDisplayMessages(msgs, '').display;
     expect(display.findLast((m) => m.sender === 'assistant')?.id).toBe('a1');
   });

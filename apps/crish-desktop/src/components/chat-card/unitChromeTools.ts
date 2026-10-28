@@ -3,7 +3,7 @@
  * 对话顶快捷行与坞头共用；双表面可以，不能只留坞头。
  */
 
-import type { IconName } from '../ui/icons';
+import type { IconName } from '@/components/ui/icons';
 
 export const UNIT_TOOL_PANELS = [
   {

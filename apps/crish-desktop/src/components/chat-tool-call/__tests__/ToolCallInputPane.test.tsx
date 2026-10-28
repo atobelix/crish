@@ -10,7 +10,10 @@ describe('ToolCallInputPane', () => {
       <ToolCallInputPane
         toolId="t-shell-1"
         name="execute_command"
-        argumentsStr={JSON.stringify({ CommandLine: 'npm test', Cwd: 'c:/Software/conex' })}
+        argumentsStr={JSON.stringify({
+          CommandLine: 'npm test',
+          Cwd: 'c:/Software/conex',
+        })}
       />
     );
 
@@ -31,9 +34,8 @@ describe('ToolCallInputPane', () => {
       />
     );
 
-    // 普通工具调用保留「输入」徽章
+    // 普通工具调用保留结构化内容，省略多余的「输入」硬编码文字
     expect(container.querySelector('header')).not.toBeNull();
-    expect(container.textContent).toContain('输入');
     expect(container.textContent).toContain('Query');
   });
 });

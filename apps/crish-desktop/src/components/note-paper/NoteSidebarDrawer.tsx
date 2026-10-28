@@ -1,9 +1,9 @@
 import React, { useState, useId, useCallback } from 'react';
 import type { NoteDocumentMeta } from '../../api/noteDocumentContracts';
 import { formatRelativeActivity } from '../../api/sessionTime';
-import { Button, Input, Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '@/components/ui';
 import styles from './NoteSidebarDrawer.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface NoteSidebarDrawerProps {
   isOpen: boolean;
@@ -130,7 +130,7 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
       <div className={styles.list} role="list">
         {documents.length === 0 ? (
           <div className={styles.emptyState}>
-            {searchQuery ? '未找到匹配的笔记' : '暂无笔记，点击上方“+”新建'}
+            {searchQuery ? '未找到匹配的笔记' : '暂无笔记'}
           </div>
         ) : (
           documents.map((doc) => {
@@ -244,9 +244,6 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
             onClick={(e) => e.stopPropagation()}
           >
             <div className={styles.dialogTitle}>确认删除笔记？</div>
-            <div className={styles.dialogDesc}>
-              删除后该篇文档及全部数据将彻底从数据库中移除，此操作不可撤销。
-            </div>
             <div className={styles.dialogFooter}>
               <Button
                 type="button"

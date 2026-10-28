@@ -1,15 +1,12 @@
 /**
  * 子 agent（侧栏 AgentCard / 内联 InlineAgentPanel）审批：
- * 与主对话 ChatCard 同路径——乐观摘 pending、白名单 remember、基于 inFlightToolIdsRef 请求级持久锁防重入。
+ * 与主对话 ChatCard 同路径——乐观摘 pending、基于 inFlightToolIdsRef 请求级持久锁防重入。
  * 二次确认 UI 在 ApprovalAskCard（ChatToolStack 已挂载）；本 hook 只做决定落地。
  * 错误回滚：在 .catch() 中配置状态防倒退守卫，避免后发过期错误覆写已推进的 success/completed 终态或已接收实际输出的 running 态。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { engineApproveTool, engineDenyTool } from '../api/chatBridge';
-import { rememberPrefixFromToolArgs } from '../api/approvalMeta';
-import { extractCommandForMatch } from '../api/commandPermissions';
 import {
-  addCommandPermission,
   getSessionAgent,
   getSessionById,
   patchAgentTool,
@@ -19,6 +16,7 @@ import {
   shouldSkipApprovalRollback,
   shouldSkipDenyRollback,
 } from '../api/chat-approval/approvalRollbackGuard';
+import { toast } from '../services/toast/ToastContext';
 
 function findAgentTool(
   parentSessionId: string,
@@ -49,13 +47,10 @@ export type AgentApprovalHandlers = {
 /**
  * @param parentSessionId 主会话 id
  * @param agentId 子 agent id
- * @param onShowToast 可选；send 失败时提示（与 ChatCard 批准/拒绝失败对称）
  */
-import { toast } from '../services/toast/ToastContext';
-
 export function useAgentToolApproval(
   parentSessionId: string,
-  agentId: string,
+  agentId: string
 ): AgentApprovalHandlers {
   const showToast = (m: string) => toast.show(m);
   // 请求级闭包持久锁：记录在途请求中的 toolId 集合，与 Promise 生命周期强绑定
@@ -75,7 +70,7 @@ export function useAgentToolApproval(
   }, []);
 
   const onApprovalAllow = useCallback(
-    async (toolId: string, msgId: string, remember = false) => {
+    async (toolId: string, msgId: string, _remember = false) => {
       const tid = String(toolId || '').trim();
       const mid = String(msgId || '').trim();
       if (!parentSessionId || !agentId || !tid) return;
@@ -89,16 +84,6 @@ export function useAgentToolApproval(
       setInFlightCount(inFlightToolIdsRef.current.size);
 
       try {
-        if (remember) {
-          const { t } = findAgentTool(parentSessionId, agentId, mid, tid);
-          const prefix = rememberPrefixFromToolArgs(
-            t?.name || '',
-            t?.arguments || '',
-            extractCommandForMatch
-          );
-          if (prefix) addCommandPermission(prefix);
-        }
-
         // 乐观标 running；send 失败回滚 error
         patchAgentTool(parentSessionId, agentId, tid, {
           status: 'running' as MessageToolCallStatus,

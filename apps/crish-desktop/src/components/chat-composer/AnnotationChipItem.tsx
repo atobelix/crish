@@ -10,12 +10,12 @@ import attachStyles from './ComposerAttachmentBar.module.css';
 import styles from './AnnotationChipItem.module.css';
 import type { ChatAttachment } from '../../hooks/useChatStream';
 import { openFileInPanel } from '../../api/filePanelOpener';
-import { Button, Textarea } from '../ui';
+import { Button, Textarea } from '@/components/ui';
 import {
   pathBasename,
   updatePendingFileAnnotationComment,
 } from '../../api/workspaceFsApi';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface AnnotationChipItemProps {
   attachment: ChatAttachment;

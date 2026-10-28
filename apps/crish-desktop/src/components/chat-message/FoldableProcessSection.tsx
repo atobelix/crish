@@ -38,8 +38,36 @@ import {
   arbitrateLeadAction,
   formatProcessControlLabel,
 } from '../../api/tool-presentation/processMetricsEngine';
-import { AppIcon, type IconName } from '../ui/icons';
+import { AppIcon, type IconName } from '@/components/ui/icons';
+import * as motionTokens from '../../utils/motionTokens';
+import { DURATION_ACCORDION_MS } from '../../utils/motionTokens';
+import { useAccordionViewportGuard } from '../../hooks/useAccordionViewportGuard';
 import styles from './FoldableProcessSection.module.css';
+
+/**
+ * 距离自适应手风琴折叠展开物理时长计算器（带 motionTokens 动态回退）
+ */
+function calcAccordionDuration(height: number, isOpening: boolean): number {
+  if (
+    typeof (motionTokens as Record<string, unknown>).calcAccordionDuration ===
+    'function'
+  ) {
+    return (
+      (motionTokens as Record<string, unknown>).calcAccordionDuration as (
+        h: number,
+        o: boolean
+      ) => number
+    )(height, isOpening);
+  }
+  const safeHeight = Math.max(0, Number.isFinite(height) ? height : 0);
+  if (isOpening) {
+    const raw = 180 + 90 * Math.log(1 + safeHeight / 120);
+    return Math.round(Math.min(480, Math.max(180, raw)));
+  } else {
+    const raw = 150 + 65 * Math.log(1 + safeHeight / 120);
+    return Math.round(Math.min(350, Math.max(150, raw)));
+  }
+}
 
 export interface FoldableProcessSectionProps {
   /** 宿主消息唯一 ID */
@@ -166,9 +194,19 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
     onInvalidateActual,
     className = '',
   }) {
+    const containerRef = useRef<HTMLDivElement | null>(null);
     const slotId = useMemo(() => buildSlotId(sectionId), [sectionId]);
     const bodyId = `${slotId}-body`;
     const slotRef = useRef<HTMLDivElement | null>(null);
+    const innerRef = useRef<HTMLDivElement | null>(null);
+    const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isInitialMount = useRef(true);
+    const [transitionDuration, setTransitionDuration] = useState<number>(
+      DURATION_ACCORDION_MS
+    );
+
+    // 视口保护
+    const { triggerViewportRecovery } = useAccordionViewportGuard(containerRef);
 
     // 展开态：强制展开段恒为展开（用户级状态不得覆盖）
     const expanded = forceExpanded ? true : isExpanded;
@@ -176,19 +214,68 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
     // 隐藏判定：可折叠 && 未展开 && 非强制展开
     const isHidden = isFoldable && !expanded && !forceExpanded;
 
-    // ── Callback Ref：原生操纵 hidden 属性 ──
+    // ── Callback Ref：挂载时原生注入 hidden="until-found" ──
     const setSlotRef = useCallback(
       (el: HTMLDivElement | null) => {
         slotRef.current = el;
         if (!el) return;
-        if (isHidden) {
-          el.setAttribute('hidden', 'until-found');
-        } else {
-          el.removeAttribute('hidden');
+        if (isInitialMount.current) {
+          if (isHidden) {
+            el.setAttribute('hidden', 'until-found');
+          } else {
+            el.removeAttribute('hidden');
+          }
         }
       },
       [isHidden]
     );
+
+    // ── 过渡与 hidden 协同：展开即刻剥离 hidden，收合在 CSS Grid 0fr 过渡完成后挂载 ──
+    useEffect(() => {
+      const el = slotRef.current;
+      if (!el) return;
+      if (collapseTimerRef.current) {
+        clearTimeout(collapseTimerRef.current);
+        collapseTimerRef.current = null;
+      }
+
+      if (expanded || !isHidden) {
+        el.removeAttribute('hidden');
+      } else {
+        if (isInitialMount.current) {
+          el.setAttribute('hidden', 'until-found');
+        } else {
+          collapseTimerRef.current = setTimeout(() => {
+            if (!expanded && slotRef.current) {
+              slotRef.current.setAttribute('hidden', 'until-found');
+            }
+          }, transitionDuration);
+        }
+      }
+      isInitialMount.current = false;
+    }, [expanded, isHidden, transitionDuration]);
+
+    const handleTransitionEnd = useCallback(
+      (e: React.TransitionEvent<HTMLDivElement>) => {
+        if (e.target !== slotRef.current) return;
+        if (e.propertyName === 'grid-template-rows' && isHidden) {
+          if (collapseTimerRef.current) {
+            clearTimeout(collapseTimerRef.current);
+            collapseTimerRef.current = null;
+          }
+          slotRef.current?.setAttribute('hidden', 'until-found');
+        }
+      },
+      [isHidden]
+    );
+
+    useEffect(() => {
+      return () => {
+        if (collapseTimerRef.current) {
+          clearTimeout(collapseTimerRef.current);
+        }
+      };
+    }, []);
 
     // ── beforematch：Ctrl+F 穿透命中时精准唤醒展开 ──
     useEffect(() => {
@@ -226,18 +313,25 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
     const handleToggle = useCallback(() => {
       // 铁律四：强制展开段不接受收起
       if (forceExpanded) return;
-      onToggle(sectionId, !expanded);
-    }, [forceExpanded, onToggle, sectionId, expanded]);
+      const nextExpanded = !expanded;
+      if (!nextExpanded) {
+        triggerViewportRecovery();
+      }
+      const currentHeight =
+        innerRef.current?.getBoundingClientRect().height ?? 0;
+      setTransitionDuration(calcAccordionDuration(currentHeight, nextExpanded));
+      onToggle(sectionId, nextExpanded);
+    }, [forceExpanded, onToggle, sectionId, expanded, triggerViewportRecovery]);
 
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent) => {
         if (forceExpanded) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          onToggle(sectionId, !expanded);
+          handleToggle();
         }
       },
-      [forceExpanded, onToggle, sectionId, expanded]
+      [forceExpanded, handleToggle]
     );
 
     const isSingleThought =
@@ -253,6 +347,7 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
     if (omitOuterControlBar) {
       return (
         <div
+          ref={containerRef}
           className={`${styles.section} ${className}`}
           data-process-segment={sectionId}
           data-single-thought={isSingleThought ? 'true' : undefined}
@@ -263,13 +358,22 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
             id={bodyId}
             ref={setSlotRef}
             className={styles.sectionBody}
+            data-expanded={expanded ? 'true' : 'false'}
+            style={
+              {
+                '--accordion-duration': `${transitionDuration}ms`,
+              } as React.CSSProperties
+            }
+            onTransitionEnd={handleTransitionEnd}
             data-testid={`process-slot-${sectionId}`}
           >
-            {items.map((item, index) => (
-              <React.Fragment key={item.key}>
-                {renderItem(item, index)}
-              </React.Fragment>
-            ))}
+            <div ref={innerRef} className={styles.sectionBodyInner}>
+              {items.map((item, index) => (
+                <React.Fragment key={item.key}>
+                  {renderItem(item, index)}
+                </React.Fragment>
+              ))}
+            </div>
           </div>
         </div>
       );
@@ -279,6 +383,7 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
 
     return (
       <div
+        ref={containerRef}
         className={`${styles.section} ${className}`}
         data-process-segment={sectionId}
         data-force-expanded={forceExpanded ? 'true' : 'false'}
@@ -317,13 +422,22 @@ export const FoldableProcessSection: React.FC<FoldableProcessSectionProps> =
           id={bodyId}
           ref={setSlotRef}
           className={styles.sectionBody}
+          data-expanded={expanded ? 'true' : 'false'}
+          style={
+            {
+              '--accordion-duration': `${transitionDuration}ms`,
+            } as React.CSSProperties
+          }
+          onTransitionEnd={handleTransitionEnd}
           data-testid={`process-slot-${sectionId}`}
         >
-          {items.map((item, index) => (
-            <React.Fragment key={item.key}>
-              {renderItem(item, index)}
-            </React.Fragment>
-          ))}
+          <div ref={innerRef} className={styles.sectionBodyInner}>
+            {items.map((item, index) => (
+              <React.Fragment key={item.key}>
+                {renderItem(item, index)}
+              </React.Fragment>
+            ))}
+          </div>
         </div>
       </div>
     );

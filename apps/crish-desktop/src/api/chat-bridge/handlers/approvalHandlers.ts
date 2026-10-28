@@ -12,7 +12,6 @@
  * ApprovalGateImpl::resolve 单一 pending 校验（竞态红线测试锁定）。
  */
 import { logInternalError } from '../../userFacingErrors';
-import { getPermissionMode } from '../../storeAccess';
 import { extractApprovalCommandArgs } from '../../engineEventSchema';
 import { parseApprovalRiskMeta } from '../../approvalMeta';
 import { parseApprovalPayload } from '../../approvalPayload';
@@ -55,12 +54,6 @@ export function onApprovalRequested(
   const metaWithPayload = payload ? { ...approvalMeta, payload } : approvalMeta;
 
   if (approvalFlow.debugSets().pending.includes(toolCallId)) {
-    return;
-  }
-
-  const perm = getPermissionMode();
-  if (perm === 'plan') {
-    callbacks.onToolStart(toolCallId, toolName, args, explanation);
     return;
   }
 

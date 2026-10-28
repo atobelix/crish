@@ -11,8 +11,8 @@
  *   - 已完成态：`已落盘 (1.2KB)`。
  */
 import React from 'react';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import styles from './FlowArtifactChip.module.css';
 
 export interface ArtifactCapsuleProps {
@@ -26,7 +26,7 @@ export interface ArtifactCapsuleProps {
 
 export const ArtifactCapsule: React.FC<ArtifactCapsuleProps> = ({
   name,
-  prefix = '已生成',
+  prefix,
   path,
   docId,
   onClick,
@@ -38,10 +38,13 @@ export const ArtifactCapsule: React.FC<ArtifactCapsuleProps> = ({
       className={`${styles.flowArtifactRow} ${className || ''} flow-artifact`}
       data-flow-artifact="true"
     >
-      <span className={`${styles.flowArtifactIcon} flow-artifact__icon`} aria-hidden>
+      <span
+        className={`${styles.flowArtifactIcon} flow-artifact__icon`}
+        aria-hidden
+      >
         <AppIcon name="file-text" size={14} aria-hidden />
       </span>
-      <span className="flow-artifact__prefix">{prefix}</span>
+      {prefix ? <span className="flow-artifact__prefix">{prefix}</span> : null}
       <Tooltip content={`打开产物 ${name}`}>
         <Button
           type="button"
@@ -87,7 +90,7 @@ export const SyncLine: React.FC<SyncLineProps> = ({
       ) : (
         <span className={`${styles.flowSyncDone} flow-sync-done`}>
           <AppIcon name="check" size={13} aria-hidden />
-          <span>已落盘 {size ? `(${size})` : ''}</span>
+          {size ? <span>({size})</span> : null}
         </span>
       )}
     </div>

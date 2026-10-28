@@ -19,7 +19,6 @@ import { useChatApprovalHandlers } from '../components/chat-card/useChatApproval
 // layoutStore 已纯化为壳层 chrome 域（无 sessions 字段）。
 import { useSessionStore } from '../store/storeAccess';
 import { reindexSessionsById } from '../store/sessionIndex';
-import { getCommandPermissions } from './storeAccess';
 import type {
   MessageToolCall,
   SessionAgent,
@@ -217,22 +216,6 @@ describe('useChatApprovalHandlers 单个允许 / 拒绝动作', () => {
     expect(readTool(sid, 'm1', 'tc-1')?.status).toBe('error');
     expect(readTool(sid, 'm1', 'tc-1')?.output).toBe('已拒绝');
     expect(result.current.approvalBusy).toBe(false);
-  });
-
-  it('remember=true：把命令前缀写入白名单（自动放行路径的前置）', async () => {
-    const sid = seedSession([
-      pendingMsg('m1', [
-        makeToolCall('tc-1', { arguments: '{"command":"npm install lodash"}' }),
-      ]),
-    ]);
-    const { result } = renderApproval(sid);
-
-    await act(async () => {
-      result.current.handleApprovalAllow('tc-1', 'm1', true);
-      await vi.advanceTimersByTimeAsync(200);
-    });
-
-    expect(getCommandPermissions()).toContain('npm install lodash');
   });
 
   it('approve 发送失败：回滚 error + toast', async () => {

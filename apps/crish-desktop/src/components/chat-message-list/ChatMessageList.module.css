@@ -90,10 +90,7 @@
    CSS 仅保留水平衬垫，严禁再写同值纵向 padding（几何 SSOT）。 */
 .listInner {
   width: 100%;
-  max-width: var(
-    --chat-column-width,
-    min(var(--chat-col-max, 760px), calc(100% - var(--chat-col-gutter, 48px)))
-  );
+  max-width: min(var(--chat-col-max, 760px), calc(100% - 48px));
   margin-left: auto;
   margin-right: auto;
   padding-left: var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
@@ -118,11 +115,11 @@
 
 @media (max-width: 699px) {
   .listInner {
-    max-width: 100%;
-    margin-left: 0;
-    margin-right: 0;
-    padding-left: 16px;
-    padding-right: 16px;
+    max-width: calc(100% - 24px);
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
+    padding-right: 48px;
   }
 }
 
@@ -149,11 +146,33 @@
 
 @container chatContainer (max-width: 699px) {
   .listInner {
-    max-width: 100%;
-    margin-left: 0;
-    margin-right: 0;
-    padding-left: 16px;
-    padding-right: 16px;
+    max-width: calc(100% - 24px);
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
+    padding-right: 48px;
+  }
+}
+
+/* 绝对切片容器（继承内衬与右侧 48px 避让，彻底隔离刻度盘与滚动条） */
+:global([data-chat-slice-container]) {
+  box-sizing: border-box;
+  width: 100%;
+  padding-left: var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
+  padding-right: var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
+}
+
+@container chatContainer (max-width: 699px) {
+  :global([data-chat-slice-container]) {
+    padding-left: var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
+    padding-right: 48px;
+  }
+}
+
+@media (max-width: 699px) {
+  :global([data-chat-slice-container]) {
+    padding-left: var(--stream-pad-x, var(--chat-stream-pad-x, 20px));
+    padding-right: 48px;
   }
 }
 

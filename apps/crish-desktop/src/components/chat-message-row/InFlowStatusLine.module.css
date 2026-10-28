@@ -33,7 +33,8 @@
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
-  animation: inflow-status-shimmer 1.8s ease-in-out infinite;
+  animation: inflow-status-shimmer var(--transition-pulse, 1.8s ease-in-out)
+    infinite;
 }
 
 @keyframes inflow-status-shimmer {

@@ -10,14 +10,20 @@
  * - 刚性保全测试桩：note-paper-strict-open-slash、note-paper-strict-refresh、note-paper-strict-close。
  */
 
-import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+  useEffect,
+} from 'react';
 import type { SlashOverlayWriteMode } from './SlashMenuOverlay';
-import { Button, IconButton, Tooltip } from '../ui';
+import { Button, IconButton, Tooltip } from '@/components/ui';
 import { EditableTitle } from './EditableTitle';
 import { computeNoteMetrics, exportBlocksToMarkdown } from './noteMetrics';
 import type { SerializableBlock } from './noteMetrics';
 import styles from './NotePaperPanel.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { copyTextToClipboard } from '@crish/shared-utils';
 
 export interface NoteDocumentDropdownItem {
@@ -67,8 +73,8 @@ export interface NotePaperStrictHeaderProps {
   blockCount?: number;
 }
 
-export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React.memo(
-  function NotePaperStrictHeader({
+export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> =
+  React.memo(function NotePaperStrictHeader({
     docId,
     title,
     blocks = [],
@@ -94,7 +100,10 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
     useEffect(() => {
       if (!isDropdownOpen) return;
       const handleClickOutside = (e: MouseEvent) => {
-        if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        if (
+          dropdownRef.current &&
+          !dropdownRef.current.contains(e.target as Node)
+        ) {
           setIsDropdownOpen(false);
         }
       };
@@ -107,7 +116,8 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
     // 纯逻辑高效统计指标
     const metrics = useMemo(() => computeNoteMetrics(blocks), [blocks]);
     const computedWordCount = metrics.chineseChars + metrics.englishWords;
-    const wordCount = blocks.length > 0 ? computedWordCount : (blockCountProp ?? 0);
+    const wordCount =
+      blocks.length > 0 ? computedWordCount : (blockCountProp ?? 0);
 
     // 复制全文 Markdown
     const handleCopyMarkdown = useCallback(async () => {
@@ -121,8 +131,13 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
     // 导出为 .md 文件
     const handleExportMarkdown = useCallback(() => {
       const mdContent = exportBlocksToMarkdown(blocks, title);
-      const safeTitle = (title || 'untitled-note').replace(/[\\/:*?"<>|]/g, '_');
-      const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8' });
+      const safeTitle = (title || 'untitled-note').replace(
+        /[\\/:*?"<>|]/g,
+        '_'
+      );
+      const blob = new Blob([mdContent], {
+        type: 'text/markdown;charset=utf-8',
+      });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -157,7 +172,12 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
             />
           )}
 
-          <AppIcon name="file-text" size={14} className={styles.noteIcon} aria-hidden />
+          <AppIcon
+            name="file-text"
+            size={14}
+            className={styles.noteIcon}
+            aria-hidden
+          />
 
           <EditableTitle
             title={title}
@@ -179,7 +199,12 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
                   aria-label="切换笔记文档"
                   data-testid="note-document-dropdown-trigger"
                 >
-                  <AppIcon name="chevron-down" size={13} className={styles.dropdownChevron} aria-hidden />
+                  <AppIcon
+                    name="chevron-down"
+                    size={13}
+                    className={styles.dropdownChevron}
+                    aria-hidden
+                  />
                 </Button>
               </Tooltip>
 
@@ -228,10 +253,22 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
                           aria-selected={isSelected}
                           data-testid={`note-document-dropdown-item-${id}`}
                         >
-                          <AppIcon name="file-text" size={12} className={styles.dropdownItemIcon} aria-hidden />
-                          <span className={styles.dropdownItemTitle}>{doc.title || '无标题笔记'}</span>
+                          <AppIcon
+                            name="file-text"
+                            size={12}
+                            className={styles.dropdownItemIcon}
+                            aria-hidden
+                          />
+                          <span className={styles.dropdownItemTitle}>
+                            {doc.title || '无标题笔记'}
+                          </span>
                           {isSelected && (
-                            <AppIcon name="check" size={12} className={styles.dropdownItemCheck} aria-hidden />
+                            <AppIcon
+                              name="check"
+                              size={12}
+                              className={styles.dropdownItemCheck}
+                              aria-hidden
+                            />
                           )}
                         </Button>
                       );
@@ -250,7 +287,12 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
           >
             {saveStatus === 'syncing' || saveStatus === 'saving' ? (
               <span className={styles.saveStatusSyncing}>
-                <AppIcon name="loader" size={12} className={styles.spinIcon} aria-hidden />
+                <AppIcon
+                  name="loader"
+                  size={12}
+                  className={styles.spinIcon}
+                  aria-hidden
+                />
                 <span>保存中...</span>
               </span>
             ) : saveStatus === 'unsaved' ? (
@@ -299,7 +341,11 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
               style={{ display: 'none' }}
               aria-hidden="true"
               onClick={onOpenSlash}
-              aria-label={slashWriteMode === 'readonly' ? '打开斜杠菜单（只读）' : '打开斜杠菜单'}
+              aria-label={
+                slashWriteMode === 'readonly'
+                  ? '打开斜杠菜单（只读）'
+                  : '打开斜杠菜单'
+              }
               data-testid="note-paper-strict-open-slash"
               data-slash-open-trigger="1"
               data-slash-write-mode={slashWriteMode}
@@ -340,9 +386,12 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
             }}
             data-testid="note-paper-strict-refresh"
             icon={
-              <AppIcon name="rotate-cw" size={14}
+              <AppIcon
+                name="rotate-cw"
+                size={14}
                 className={isLoading ? styles.spinIcon : undefined}
-                aria-hidden />
+                aria-hidden
+              />
             }
           />
 
@@ -364,8 +413,7 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
         </div>
       </header>
     );
-  }
-);
+  });
 
 NotePaperStrictHeader.displayName = 'NotePaperStrictHeader';
 export default NotePaperStrictHeader;

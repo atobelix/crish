@@ -1,9 +1,9 @@
 import React from 'react';
 
 import styles from './ChatMessageRow.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import { formatMsgTime } from './chatMessageRowUtils';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 // ─── Assistant Message Meta Actions Bar ─────────────────────────────────────
 

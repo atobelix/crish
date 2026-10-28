@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import { parseAnsi } from '../../utils/parseAnsi';
 import styles from './ModernToolCall.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useTransientFlag } from '../../hooks/useTransientFlag';
 
 export interface ModernTerminalToolCallProps {
@@ -73,11 +73,11 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
       {/* 顶部命令栏：$ command */}
       <div className={styles.terminalHead}>
         <div className={styles.terminalCommandRow}>
-          <span className={styles.terminalPromptDollar} aria-hidden="true">$</span>
+          <span className={styles.terminalPromptDollar} aria-hidden="true">
+            $
+          </span>
           <Tooltip content={command || '$'}>
-            <span className={styles.terminalCommandText}>
-              {command}
-            </span>
+            <span className={styles.terminalCommandText}>{command}</span>
           </Tooltip>
         </div>
 
@@ -91,7 +91,11 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
               aria-label="复制命令行"
             >
               {copied ? (
-                <AppIcon name="check" size={12} className={styles.copiedCheckIcon} />
+                <AppIcon
+                  name="check"
+                  size={12}
+                  className={styles.copiedCheckIcon}
+                />
               ) : (
                 <AppIcon name="copy" size={12} />
               )}
@@ -107,7 +111,11 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
                 aria-label="复制终端输出"
               >
                 {copiedOutput ? (
-                  <AppIcon name="check" size={12} className={styles.copiedCheckIcon} />
+                  <AppIcon
+                    name="check"
+                    size={12}
+                    className={styles.copiedCheckIcon}
+                  />
                 ) : (
                   <AppIcon name="file-text" size={12} />
                 )}
@@ -142,9 +150,13 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
                   }}
                   aria-label={`展开中间剩余 ${lines.length - (TERMINAL_HEAD_LINES + TERMINAL_TAIL_LINES)} 行日志输出`}
                 >
-                  <span className={styles.midFoldIcon} aria-hidden="true">⤢</span>
+                  <span className={styles.midFoldIcon} aria-hidden="true">
+                    ⤢
+                  </span>
                   <span>
-                    展开中间剩余 {lines.length - (TERMINAL_HEAD_LINES + TERMINAL_TAIL_LINES)} 行日志输出
+                    +
+                    {lines.length - (TERMINAL_HEAD_LINES + TERMINAL_TAIL_LINES)}{' '}
+                    lines
                   </span>
                 </Button>
               </div>
@@ -173,7 +185,7 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
                     }}
                     aria-label="收起中间日志输出"
                   >
-                    <span>收起部分日志输出</span>
+                    <span>收起</span>
                   </Button>
                 </div>
               )}

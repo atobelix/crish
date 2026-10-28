@@ -9,7 +9,7 @@
  */
 import React from 'react';
 import styles from './InFlowStatusLine.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import type { RuntimeRetryInfo } from '../../store';
 import { formatRetryStatusText } from './inFlowStatusLineLib';
 

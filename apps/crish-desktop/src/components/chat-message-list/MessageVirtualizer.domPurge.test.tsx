@@ -107,8 +107,6 @@ function createDefaultProps(messages: SessionMessage[]) {
     },
     flowControl: {
       hideThinkingBlock: false,
-      inPlanMode: false,
-      planApproved: false,
       lastAssistantId: messages[messages.length - 1]?.id ?? null,
       showAllMessages: true,
     },

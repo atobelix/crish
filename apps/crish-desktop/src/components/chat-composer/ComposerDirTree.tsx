@@ -13,10 +13,7 @@ import React, {
 import * as Popover from '@radix-ui/react-popover';
 import type { SlashMenuProps } from './composerTypes';
 import type { FsDirEntry } from '../../api/workspaceFsApi';
-import {
-  getWorkspacePath,
-  listDirectory,
-} from '../../api/workspaceFsApi';
+import { getWorkspacePath, listDirectory } from '../../api/workspaceFsApi';
 import {
   calculateSafeCursorAnchor,
   isAnchorInsideVisibleField,
@@ -25,8 +22,8 @@ import {
 } from './safeCursorAnchor';
 import slashStyles from './TiptapSlashMenu.module.css';
 import styles from './ComposerDirTree.module.css';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 
 export type ComposerDirTreeHandle = {
   onKeyDown: (props: { event: KeyboardEvent }) => boolean;
@@ -46,8 +43,14 @@ export const ComposerDirTree = forwardRef<
   ComposerDirTreeHandle,
   SlashMenuProps
 >(function ComposerDirTree(props, ref) {
-  const { isOpen = true, onClose, clientRect, editor, range, listboxId } =
-    props;
+  const {
+    isOpen = true,
+    onClose,
+    clientRect,
+    editor,
+    range,
+    listboxId,
+  } = props;
   const [root, setRoot] = useState('');
   const [cwd, setCwd] = useState('');
   const [entries, setEntries] = useState<FsDirEntry[]>([]);

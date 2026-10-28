@@ -36,7 +36,9 @@ function createProps(messages: SessionMessage[]): MessageVirtualizerProps {
   return createGroupedProps(messages);
 }
 
-function createGroupedProps(messages: SessionMessage[]): MessageVirtualizerProps {
+function createGroupedProps(
+  messages: SessionMessage[]
+): MessageVirtualizerProps {
   return {
     messages,
     activeSessionId: 'sess-1',
@@ -68,8 +70,6 @@ function createGroupedProps(messages: SessionMessage[]): MessageVirtualizerProps
     },
     flowControl: {
       hideThinkingBlock: false,
-      inPlanMode: false,
-      planApproved: false,
       lastAssistantId: null,
       showAllMessages: true,
     },
@@ -162,16 +162,21 @@ describe('比较器字段清单（T4.3，R-06 守卫 与 DIM-DATA 收敛契约�
     // 3. flowControl 变更 -> 放行
     const flowChanged = {
       ...baseProps,
-      flowControl: { ...baseProps.flowControl!, inPlanMode: true },
+      flowControl: { ...baseProps.flowControl!, hideThinkingBlock: true },
     };
     expect(messageVirtualizerPropsEqual(baseProps, flowChanged)).toBe(false);
 
     // 4. interaction 变更 -> 放行
     const interactionChanged = {
       ...baseProps,
-      interaction: { ...baseProps.interaction!, expandedUserMsgs: { m1: true } },
+      interaction: {
+        ...baseProps.interaction!,
+        expandedUserMsgs: { m1: true },
+      },
     };
-    expect(messageVirtualizerPropsEqual(baseProps, interactionChanged)).toBe(false);
+    expect(messageVirtualizerPropsEqual(baseProps, interactionChanged)).toBe(
+      false
+    );
 
     // 5. navigation / generation / composer / approval 变更 -> 放行
     const navChanged = {

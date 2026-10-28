@@ -44,7 +44,7 @@
 }
 
 .upBtn:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -79,7 +79,7 @@
 
 .row:hover,
 .rowActive {
-  background: var(--tint-active);
+  background: var(--state-active);
 }
 
 .icon {

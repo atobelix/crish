@@ -1,8 +1,14 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { createPortal } from 'react-dom';
 
 import styles from './ChatMessageRow.module.css';
-import { Button, Tooltip, Input } from '../ui';
+import { Button, Tooltip, Input } from '@/components/ui';
 import { pinToggleLabels } from './chatMessageRowUtils';
 import {
   DEFAULT_PIN_COLOR,
@@ -14,7 +20,7 @@ import {
 
 export { DEFAULT_PIN_COLOR, PRESET_PIN_COLORS };
 export type { PinColorOption } from './colorPickerUtils';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface PinActionWithPickerProps {
   isPinned: boolean;
@@ -23,8 +29,8 @@ export interface PinActionWithPickerProps {
   className?: string;
 }
 
-export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.memo(
-  function PinActionWithPicker({
+export const PinActionWithPicker: React.FC<PinActionWithPickerProps> =
+  React.memo(function PinActionWithPicker({
     isPinned,
     pinnedColor,
     onTogglePin,
@@ -51,10 +57,12 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
     /** 本次打开时选定的方向（上 / 下）；展开自定义时沿用，不翻转到鼠标另一侧。 */
     const placementRef = useRef<'top' | 'bottom' | null>(null);
 
-    const [popoverPos, setPopoverPos] = useState<{ top: number; left: number }>({
-      top: 0,
-      left: 0,
-    });
+    const [popoverPos, setPopoverPos] = useState<{ top: number; left: number }>(
+      {
+        top: 0,
+        left: 0,
+      }
+    );
 
     const pinLabels = pinToggleLabels(isPinned);
 
@@ -79,8 +87,8 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
       if (!triggerEl) return;
       const rect = triggerEl.getBoundingClientRect();
       const popoverEl = popoverRef.current;
-      const width = showCustom ? 196 : (popoverEl?.offsetWidth || 180);
-      const height = showCustom ? 180 : (popoverEl?.offsetHeight || 32);
+      const width = showCustom ? 196 : popoverEl?.offsetWidth || 180;
+      const height = showCustom ? 180 : popoverEl?.offsetHeight || 32;
 
       // 触发器若已滚出视口则自动隐藏
       if (rect.bottom < 0 || rect.top > window.innerHeight) {
@@ -95,7 +103,9 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
       const spaceBelow = window.innerHeight - rect.bottom;
       if (placementRef.current == null) {
         placementRef.current =
-          spaceAbove >= height + 8 || spaceAbove >= spaceBelow ? 'top' : 'bottom';
+          spaceAbove >= height + 8 || spaceAbove >= spaceBelow
+            ? 'top'
+            : 'bottom';
       }
       const placeTop = placementRef.current === 'top';
 
@@ -134,7 +144,10 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
       window.addEventListener('app:window-resize-settled', onScrollOrResize);
       return () => {
         window.removeEventListener('scroll', onScrollOrResize, true);
-        window.removeEventListener('app:window-resize-settled', onScrollOrResize);
+        window.removeEventListener(
+          'app:window-resize-settled',
+          onScrollOrResize
+        );
       };
     }, [popoverOpen, updatePosition]);
 
@@ -179,8 +192,10 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
 
     useEffect(() => {
       return () => {
-        if (enterTimerRef.current != null) window.clearTimeout(enterTimerRef.current);
-        if (leaveTimerRef.current != null) window.clearTimeout(leaveTimerRef.current);
+        if (enterTimerRef.current != null)
+          window.clearTimeout(enterTimerRef.current);
+        if (leaveTimerRef.current != null)
+          window.clearTimeout(leaveTimerRef.current);
       };
     }, []);
 
@@ -333,7 +348,13 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
             aria-label={pinLabels.ariaLabel}
             aria-pressed={isPinned}
             onClick={handleMainClick}
-            icon={isPinned ? <AppIcon name="pin-off" size={16} /> : <AppIcon name="pin" size={16} />}
+            icon={
+              isPinned ? (
+                <AppIcon name="pin-off" size={16} />
+              ) : (
+                <AppIcon name="pin" size={16} />
+              )
+            }
           />
         </Tooltip>
 
@@ -359,7 +380,8 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
                     <div className={styles.pinColorsRow}>
                       {PRESET_PIN_COLORS.map((c) => {
                         const isSelected =
-                          isPinned && activeColor.toLowerCase() === c.value.toLowerCase();
+                          isPinned &&
+                          activeColor.toLowerCase() === c.value.toLowerCase();
                         return (
                           <Tooltip key={c.value} content={c.label}>
                             <Button
@@ -378,7 +400,9 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
                         );
                       })}
 
-                      <Tooltip content={isExpanded ? '收起自定义' : '自定义颜色'}>
+                      <Tooltip
+                        content={isExpanded ? '收起自定义' : '自定义颜色'}
+                      >
                         <Button
                           type="button"
                           variant="ghost"
@@ -387,7 +411,9 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
                             stickyRef.current = true;
                             setShowCustom(!isExpanded);
                           }}
-                          aria-label={isExpanded ? '收起自定义颜色' : '自定义固定颜色'}
+                          aria-label={
+                            isExpanded ? '收起自定义颜色' : '自定义固定颜色'
+                          }
                           aria-expanded={isExpanded}
                         >
                           {isExpanded || isCustomSelected ? (
@@ -484,6 +510,5 @@ export const PinActionWithPicker: React.FC<PinActionWithPickerProps> = React.mem
           : null}
       </div>
     );
-  }
-);
+  });
 PinActionWithPicker.displayName = 'PinActionWithPicker';

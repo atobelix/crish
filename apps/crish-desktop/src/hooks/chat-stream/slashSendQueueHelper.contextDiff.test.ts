@@ -17,6 +17,7 @@ import {
 import { useSessionStore } from '../../store/sessionStore';
 import { usePermissionStore } from '../../store/permissionStore';
 import { formatContextStateDisplayText } from '../../components/chat-message/contextStateUtils';
+import { permissionModeLabel } from '../../api/permissionModes';
 
 const SID = 'sess-diff';
 
@@ -24,9 +25,7 @@ function seedSession(): void {
   const session = {
     id: SID,
     title: '差分',
-    messages: [
-      { id: 'm0', sender: 'user' as const, text: 'hi', timestamp: 1 },
-    ],
+    messages: [{ id: 'm0', sender: 'user' as const, text: 'hi', timestamp: 1 }],
     createdAt: 1,
     updatedAt: 1,
   };
@@ -39,15 +38,19 @@ function seedSession(): void {
 
 function messages() {
   return (
-    useSessionStore.getState().sessions.find((s) => s.id === SID)?.messages ?? []
+    useSessionStore.getState().sessions.find((s) => s.id === SID)?.messages ??
+    []
   );
 }
 
 function lastContextMetadata(): Record<string, unknown> | undefined {
   const carrier = [...messages()]
     .reverse()
-    .find((m) => m.injections?.some((inj) => inj.metadata?.mode === 'context-state'));
-  return carrier?.injections?.[0]?.metadata as Record<string, unknown> | undefined;
+    .find((m) =>
+      m.injections?.some((inj) => inj.metadata?.mode === 'context-state')
+    );
+  return carrier?.injections?.[0]?.metadata as
+    Record<string, unknown> | undefined;
 }
 
 describe('flushContextStateBeforeSend context diff', () => {
@@ -84,7 +87,7 @@ describe('flushContextStateBeforeSend context diff', () => {
     expect(metadata?.permission).toBe('ask');
     expect(metadata?.thinking).toBe('High');
     expect(formatContextStateDisplayText({ metadata })).toBe(
-      '已切换到 ornith-1.5-9b · 服务商 local · 权限 需确认 · 思考 High'
+      `已切换到 ornith-1.5-9b · 服务商 local · 权限 ${permissionModeLabel('ask')} · 思考 High`
     );
   });
 
@@ -116,7 +119,9 @@ describe('flushContextStateBeforeSend context diff', () => {
     const metadata = lastContextMetadata();
     expect(metadata?.changed).toEqual(['permission']);
     expect(metadata?.permission).toBe('full');
-    expect(formatContextStateDisplayText({ metadata })).toBe('权限 完全访问');
+    expect(formatContextStateDisplayText({ metadata })).toBe(
+      `权限 ${permissionModeLabel('full')}`
+    );
   });
 
   it('no field change does not inject, including when the text signature would still differ', () => {

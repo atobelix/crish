@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 import {
   BP_SLASH_EMPTY,
   BP_SLASH_GROUP,

@@ -3,8 +3,8 @@ import { useLeafScope } from '../../contexts/LeafScopeContext';
 
 import type { SessionGoalTask } from '../../store/types';
 import styles from './ChatStatusRibbons.module.css';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface DynamicChipBarProps {
   /** 空态时 100% 物理不挂载（核心门闩 1）。 */
@@ -73,9 +73,7 @@ export const DynamicChipBar: React.FC<DynamicChipBarProps> = ({
             <span>
               {goalModeActive
                 ? `目标模式 · 第 ${goalIteration + 1} 轮`
-                : checklistTotal > 0
-                  ? `计划任务 · ${checklistDone}/${checklistTotal}`
-                  : '计划模式'}
+                : `计划任务 · ${checklistDone}/${checklistTotal}`}
             </span>
           </Button>
         </Tooltip>
@@ -89,7 +87,6 @@ export interface PlanDrawerProps {
   shouldRender: boolean;
   goalModeActive: boolean;
   goalText: string;
-  inPlanMode: boolean;
   progressItems: SessionGoalTask[];
   onClose: () => void;
   /** focus trap 接力：把抽屉根节点注册到父级 ref（沿用旧聚焦逻辑）。 */
@@ -104,7 +101,6 @@ export const PlanDrawer: React.FC<PlanDrawerProps> = ({
   shouldRender,
   goalModeActive,
   goalText,
-  inPlanMode,
   progressItems,
   onClose,
   drawerRef,
@@ -134,35 +130,29 @@ export const PlanDrawer: React.FC<PlanDrawerProps> = ({
           icon={<AppIcon name="x" size={14} />}
         />
       </div>
-      {progressItems.length > 0 ? (
-        <ul className={styles.dynamicPlanList}>
-          {progressItems.map((item) => (
-            <li
-              key={item.id}
-              className={`${styles.dynamicPlanItem}${item.done ? ` ${styles.isDone}` : ''}`}
-            >
-              {item.done ? (
-                <AppIcon
-                  name="check-circle"
-                  size={13}
-                  style={{ color: 'var(--accent-green)' }}
-                />
-              ) : (
-                <AppIcon
-                  name="circle"
-                  size={13}
-                  style={{ color: 'var(--text-tertiary)' }}
-                />
-              )}
-              <span>{item.text}</span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-          {inPlanMode ? '计划模式生效中，AI 将集中思考规划' : '暂无清单步数'}
-        </div>
-      )}
+      <ul className={styles.dynamicPlanList}>
+        {progressItems.map((item) => (
+          <li
+            key={item.id}
+            className={`${styles.dynamicPlanItem}${item.done ? ` ${styles.isDone}` : ''}`}
+          >
+            {item.done ? (
+              <AppIcon
+                name="check-circle"
+                size={13}
+                style={{ color: 'var(--accent-green)' }}
+              />
+            ) : (
+              <AppIcon
+                name="circle"
+                size={13}
+                style={{ color: 'var(--text-tertiary)' }}
+              />
+            )}
+            <span>{item.text}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 };

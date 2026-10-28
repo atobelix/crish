@@ -10,8 +10,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import styles from './ScheduledTaskExecutionCard.module.css';
 import { workflowRunStatusLabel } from '../../api/workflowApi';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 
 export type ScheduledTaskExecutionStatus =
   'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled';
@@ -265,10 +265,7 @@ export const ScheduledTaskExecutionCard: React.FC<
             <AppIcon name="clock" size={14} aria-hidden />
           </span>
           <Tooltip content={`定时执行任务：${displayWorkflowName}`}>
-            <span className={styles.titleText}>
-              <span className={styles.prefixTag}>[定时执行]</span>
-              {displayWorkflowName}
-            </span>
+            <span className={styles.titleText}>{displayWorkflowName}</span>
           </Tooltip>
           <span
             className={badgeCls}
@@ -324,7 +321,6 @@ export const ScheduledTaskExecutionCard: React.FC<
                 size={14}
                 aria-hidden
               />
-              <span>{expanded ? '收起' : '展开'}</span>
             </Button>
           </Tooltip>
         </div>
@@ -340,7 +336,6 @@ export const ScheduledTaskExecutionCard: React.FC<
                   className={styles.metaItem}
                   data-testid="scheduled-card-triggered-at"
                 >
-                  <span className={styles.metaLabel}>触发时间：</span>
                   <span className={styles.metaValue}>{triggeredAtLabel}</span>
                 </span>
               ) : null}
@@ -349,7 +344,6 @@ export const ScheduledTaskExecutionCard: React.FC<
                   className={styles.metaItem}
                   data-testid="scheduled-card-schedule-text"
                 >
-                  <span className={styles.metaLabel}>定时规则：</span>
                   <span className={styles.metaValue}>{scheduleText}</span>
                 </span>
               ) : null}
@@ -358,7 +352,6 @@ export const ScheduledTaskExecutionCard: React.FC<
                   className={styles.metaItem}
                   data-testid="scheduled-card-run-id"
                 >
-                  <span className={styles.metaLabel}>运行 ID：</span>
                   <span className={styles.metaValue}>{runId}</span>
                 </span>
               ) : null}
@@ -367,7 +360,6 @@ export const ScheduledTaskExecutionCard: React.FC<
 
           {prompt ? (
             <div className={styles.section}>
-              <span className={styles.sectionLabel}>执行指令</span>
               <pre
                 className={styles.sectionContent}
                 data-testid="scheduled-card-prompt"
@@ -379,7 +371,6 @@ export const ScheduledTaskExecutionCard: React.FC<
 
           {summary ? (
             <div className={styles.section}>
-              <span className={styles.sectionLabel}>执行结论摘要</span>
               <div
                 className={styles.sectionContent}
                 data-testid="scheduled-card-summary"
@@ -391,7 +382,6 @@ export const ScheduledTaskExecutionCard: React.FC<
 
           {error ? (
             <div className={styles.section}>
-              <span className={styles.sectionLabel}>异常信息</span>
               <pre
                 className={styles.errorBox}
                 data-testid="scheduled-card-error"

@@ -9,7 +9,7 @@ import React, {
 import { ChatHeaderMore } from './ChatHeaderMore';
 import { SessionInlineRename } from './SessionInlineRename';
 import { SubagentHeaderPanel } from './SubagentHeaderPanel';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import {
   resolveUnitChromeLabel,
   UNIT_CHROME_TOOL_TIP_SIDE,
@@ -33,7 +33,7 @@ import { toast } from '../../services/toast';
 import { sessionListDisplayTitle } from '../../api/sessionTitle';
 import { useDraftFolder } from '../../store/storeAccess';
 import styles from './UnitChromeActions.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 const SHARE_FLASH_MS = 2000;
 const EMPTY_SESSION_TITLE = '新会话';
@@ -78,7 +78,7 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
     });
 
     const folder = isDraft
-      ? (registeredDraftFolder || storeDraftFolder)
+      ? registeredDraftFolder || storeDraftFolder
       : (sessionFolder ?? registeredDraftFolder ?? storeDraftFolder);
 
     const isPinned = useSessionField((s) => {
@@ -104,10 +104,7 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
     });
 
     const canExport = messageCount > 0;
-    const projectLabel = resolveUnitChromeLabel(
-      { folder },
-      listProjects()
-    );
+    const projectLabel = resolveUnitChromeLabel({ folder }, listProjects());
 
     const rightDockCollapsed = !dockOpen;
     const isPreviewActive = dockOpen && dockPanelId === 'preview';
@@ -255,10 +252,16 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
         {/* ── 左侧：三级面包屑导航 (3-Level Breadcrumbs) ── */}
         <div className={`${styles.topLeft} chat-top-left`}>
           {leading}
-          <nav className={`${styles.breadcrumbs} top-breadcrumbs`} aria-label="Breadcrumb">
+          <nav
+            className={`${styles.breadcrumbs} top-breadcrumbs`}
+            aria-label="Breadcrumb"
+          >
             {/* Level 1: Project */}
             <div className={`${styles.breadcrumbItem} breadcrumb-item`}>
-              <Tooltip content="点击新建此项目对话" side={UNIT_CHROME_TOOL_TIP_SIDE}>
+              <Tooltip
+                content="点击新建此项目对话"
+                side={UNIT_CHROME_TOOL_TIP_SIDE}
+              >
                 <Button
                   variant="ghost"
                   type="button"
@@ -266,7 +269,9 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
                   className={`${styles.bcProjectBtn} breadcrumb-project`}
                   onClick={handleJumpToNewDraft}
                 >
-                  <span className={`${styles.bcText} bc-text`}>{projectLabel}</span>
+                  <span className={`${styles.bcText} bc-text`}>
+                    {projectLabel}
+                  </span>
                 </Button>
               </Tooltip>
             </div>
@@ -326,7 +331,7 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
               aria-label="浏览器"
               onClick={handleOpenPreview}
             >
-              <AppIcon name="globe" size={14} aria-hidden="true" />
+              <AppIcon name="globe" size={16} aria-hidden="true" />
             </Button>
           </Tooltip>
 
@@ -342,12 +347,14 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
               aria-label="打开文件"
               onClick={handleOpenFiles}
             >
-              <AppIcon name="folder-tree" size={14} aria-hidden="true" />
+              <AppIcon name="folder-tree" size={16} aria-hidden="true" />
             </Button>
           </Tooltip>
 
           {/* 按钮 3: 更多操作 (⋯ More) */}
-          <div className={`${styles.chatHeaderMoreTrigger} chat-header-more-trigger`}>
+          <div
+            className={`${styles.chatHeaderMoreTrigger} chat-header-more-trigger`}
+          >
             <ChatHeaderMore
               className={`${styles.topActionBtn} top-action-btn`}
               onTogglePin={realSession ? handleTogglePin : undefined}

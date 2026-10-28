@@ -12,6 +12,8 @@ import type { StreamCallbacks } from '../chatApi';
 import type { StreamState } from './handlers/streamState';
 import type { SessionMessage } from '../../store/types';
 import { resetControlMetrics } from '../controlMetrics';
+import { usePermissionStore } from '../../store/permissionStore';
+import { DEFAULT_PERMISSION_MODE } from '../permissionModes';
 import { mockTauriCommand } from '../../test-setup';
 import {
   ensureModelsCatalogLoaded,
@@ -68,10 +70,7 @@ vi.mock('../projectStore', async (importOriginal) => {
 
 vi.mock('../storeAccess', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../storeAccess')>();
-  return {
-    ...actual,
-    getPermissionMode: () => 'ask',
-  };
+  return { ...actual };
 });
 
 vi.mock('../clientApi', async (importOriginal) => {
@@ -102,6 +101,8 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
     startRunTask.mockClear();
     loadSessionBodyMock.mockClear();
     loadSessionBodyMock.mockResolvedValue([]);
+    localStorage.removeItem('crish_permission_mode');
+    usePermissionStore.setState({ permissionMode: DEFAULT_PERMISSION_MODE });
     resetControlMetrics();
   });
 
@@ -110,6 +111,8 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
     localStorage.removeItem('crish_active_model_id');
     localStorage.removeItem('crish_model_meta_v1');
     localStorage.removeItem('crish_pending_context_state_v1');
+    localStorage.removeItem('crish_permission_mode');
+    usePermissionStore.setState({ permissionMode: DEFAULT_PERMISSION_MODE });
     resetModelsCatalogMirror();
     sessionRuntimeRegistry.clearAll();
   });
@@ -161,7 +164,7 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
           runId: 'run-id-1',
           prompt: 'hello',
           sessionId: 'sess-id-1',
-          permissionMode: 'ask',
+          permissionMode: 'smart',
           clientMessageId: 'user-msg-1',
           assistantClientMessageId: 'assistant-msg-1',
           // P1：systemPrompt 经 composeSystemPrompt 组装后下发（settings 为 medium → 仅 guidance）

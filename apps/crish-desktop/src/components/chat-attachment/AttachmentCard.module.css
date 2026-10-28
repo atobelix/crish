@@ -21,10 +21,18 @@
   flex-shrink: 0;
 }
 
-/* 柔和 Hover 态：边框加深控制在 5-10%，背景混入 2.5% 文本色，严禁纯黑边框 (AGENTS.md §13) */
+/* 柔和 Hover 态：边框加深控制在 5-10%，背景混入 6% 文本色，呈现微光上浮感，严禁降入 e0 下潜槽 (AGENTS.md §13) */
 .attachmentCard:hover {
-  /* border-color: var(--border-color); */
-  background: var(--bg-card-subtle);
+  background: color-mix(
+    in srgb,
+    var(--surface-card) 94%,
+    var(--text-primary) 6%
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 92%,
+    var(--text-primary) 8%
+  );
   box-shadow: var(--shadow-sm);
 }
 
@@ -111,7 +119,7 @@
 }
 
 .missingCard:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .cardImageMode.missingCard {

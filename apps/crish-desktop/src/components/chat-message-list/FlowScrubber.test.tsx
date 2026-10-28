@@ -8,7 +8,12 @@ import { FlowScrubber } from './FlowScrubber';
 import { MessageVirtualizer } from './MessageVirtualizer';
 
 function userMsg(id: string, text: string): SessionMessage {
-  return { id, sender: 'user', timestamp: 1_700_000_000_000, text } as SessionMessage;
+  return {
+    id,
+    sender: 'user',
+    timestamp: 1_700_000_000_000,
+    text,
+  } as SessionMessage;
 }
 
 function assistantMsg(id: string, text: string): SessionMessage {
@@ -20,7 +25,9 @@ function assistantMsg(id: string, text: string): SessionMessage {
   } as SessionMessage;
 }
 
-function createVirtualizerProps(messages: SessionMessage[]): MessageVirtualizerProps {
+function createVirtualizerProps(
+  messages: SessionMessage[]
+): MessageVirtualizerProps {
   return {
     messages,
     activeSessionId: 'sess-1',
@@ -53,10 +60,10 @@ function createVirtualizerProps(messages: SessionMessage[]): MessageVirtualizerP
     },
     flowControl: {
       hideThinkingBlock: false,
-      inPlanMode: false,
-      planApproved: false,
-      lastAssistantId: messages.find((m) => m.sender === 'assistant')?.id ?? null,
-      lastUserId: [...messages].reverse().find((m) => m.sender === 'user')?.id ?? null,
+      lastAssistantId:
+        messages.find((m) => m.sender === 'assistant')?.id ?? null,
+      lastUserId:
+        [...messages].reverse().find((m) => m.sender === 'user')?.id ?? null,
       showAllMessages: true,
     },
     interaction: {
@@ -98,7 +105,7 @@ describe('FlowScrubber', () => {
     manager.setActual('a1', 120);
     const onlyAsst = render(
       <FlowScrubber
-        messages={[assistantMsg('a1', '助手')] }
+        messages={[assistantMsg('a1', '助手')]}
         manager={manager}
         totalHeight={120}
         scrollerRef={scrollerRef}
@@ -222,16 +229,22 @@ describe('FlowScrubber', () => {
     });
 
     // 呼出卡片，图 5 结构断言
-    const tooltipCard = container.querySelector('[class*="scrubberTooltipCard"]');
+    const tooltipCard = container.querySelector(
+      '[class*="scrubberTooltipCard"]'
+    );
     expect(tooltipCard).not.toBeNull();
     expect(tooltipCard?.textContent).toContain('提问一');
     expect(tooltipCard?.textContent).toContain('回答一');
     // 断言无细分割线
-    expect(container.querySelector('[class*="scrubberTooltipDivider"]')).toBeNull();
+    expect(
+      container.querySelector('[class*="scrubberTooltipDivider"]')
+    ).toBeNull();
 
     // 2. 跨 tick 移动至第二个 tick：立刻无缝切至提问二
     fireEvent.mouseEnter(ticks[1]!);
-    const updatedCard = container.querySelector('[class*="scrubberTooltipCard"]');
+    const updatedCard = container.querySelector(
+      '[class*="scrubberTooltipCard"]'
+    );
     expect(updatedCard?.textContent).toContain('提问二');
     expect(updatedCard?.textContent).toContain('回答二');
 
@@ -249,11 +262,13 @@ describe('MessageVirtualizer 挂载 FlowScrubber', () => {
     const { container } = render(
       <MessageVirtualizer {...createVirtualizerProps(messages)} />
     );
-    expect(container.querySelector('[data-virtual-scroll="true"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-virtual-scroll="true"]')
+    ).not.toBeNull();
     expect(container.querySelector('[data-flow-scrubber]')).not.toBeNull();
-    expect(container.querySelectorAll('[data-flow-scrubber-tick]')).toHaveLength(
-      2
-    );
+    expect(
+      container.querySelectorAll('[data-flow-scrubber-tick]')
+    ).toHaveLength(2);
     expect(container.querySelector('[data-role="user"]')).not.toBeNull();
     expect(container.querySelector('[data-chat-stream-host]')).not.toBeNull();
   });
@@ -264,7 +279,9 @@ describe('MessageVirtualizer 挂载 FlowScrubber', () => {
         {...createVirtualizerProps([assistantMsg('a1', '只有助手')])}
       />
     );
-    expect(container.querySelector('[data-virtual-scroll="true"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-virtual-scroll="true"]')
+    ).not.toBeNull();
     expect(container.querySelector('[data-flow-scrubber]')).toBeNull();
   });
 });

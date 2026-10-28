@@ -29,7 +29,10 @@ vi.mock('../../services/toast/ToastContext', async (importOriginal) => {
     await importOriginal<typeof import('../../services/toast/ToastContext')>();
   return {
     ...actual,
-    toast: { ...actual.toast, show: (...args: unknown[]) => toastShow(...args) },
+    toast: {
+      ...actual.toast,
+      show: (...args: unknown[]) => toastShow(...args),
+    },
   };
 });
 

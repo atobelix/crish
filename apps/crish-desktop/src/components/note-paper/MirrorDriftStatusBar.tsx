@@ -27,12 +27,11 @@
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
-import { Button, Input, Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '@/components/ui';
 import {
   A_INV_02_UI_DIRECTION_ID,
   isDriftAttention,
   MIRROR_DRIFT_CLASS_LABEL,
-  MIRROR_DRIFT_UI_HONESTY,
   MIRROR_WATCH_SOURCE_LABEL,
   resolveThreeWayAction,
   shouldShowThreeWayActions,
@@ -68,8 +67,6 @@ export type MirrorDriftStatusBarProps = {
   onAction?: (decision: ThreeWayDecision) => void;
   /** 额外 className */
   className?: string;
-  /** 是否显示诚实脚注（默认 true） */
-  showHonestyNote?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -86,7 +83,6 @@ export const MirrorDriftStatusBar: React.FC<MirrorDriftStatusBarProps> = ({
   watchSource = 'unknown',
   onAction,
   className,
-  showHonestyNote = true,
 }) => {
   const [lastDecision, setLastDecision] = useState<ThreeWayDecision | null>(
     null
@@ -158,9 +154,9 @@ export const MirrorDriftStatusBar: React.FC<MirrorDriftStatusBarProps> = ({
           className={styles.mirrorDriftBadge}
           data-testid="mirror-drift-class"
         >
-          镜像：{statusLabel}
+          {statusLabel}
         </span>
-        <Tooltip content={MIRROR_DRIFT_UI_HONESTY}>
+        <Tooltip content={`检测源：${sourceLabel}`}>
           <span
             className={styles.mirrorDriftMeta}
             data-testid="mirror-drift-watch-source"
@@ -250,7 +246,7 @@ export const MirrorDriftStatusBar: React.FC<MirrorDriftStatusBarProps> = ({
                 }}
                 data-testid="mirror-drift-confirm-discard-input"
               />
-              显式丢弃 unpushed 后接受镜像（X-05）
+              显式丢弃 unpushed 后接受镜像
             </label>
           ) : null}
         </div>
@@ -281,15 +277,6 @@ export const MirrorDriftStatusBar: React.FC<MirrorDriftStatusBarProps> = ({
             ? ` → ${lastDecision.strategy}`
             : '（不 import）'}
         </div>
-      ) : null}
-
-      {showHonestyNote ? (
-        <p
-          className={styles.mirrorDriftHonesty}
-          data-testid="mirror-drift-honesty"
-        >
-          {MIRROR_DRIFT_UI_HONESTY}
-        </p>
       ) : null}
     </div>
   );

@@ -131,10 +131,6 @@ export const THREE_WAY_ACTION_LABEL: Record<MirrorThreeWayAction, string> = {
   mark_conflict: '标记冲突',
 };
 
-/** 产品诚实脚注（UI 可展示；≠ 关 EL-03） */
-export const MIRROR_DRIFT_UI_HONESTY =
-  '底层可能仍是 poll 或 OS 事件 hint → detect；≠ inotify 产品满关；≠ EL-03；≠ A-INV-02 全关';
-
 /** 包方向 ID（调度/DOM 锚；**不是** 09 官方关包号） */
 export const A_INV_02_UI_DIRECTION_ID = 'A-INV-02-UI' as const;
 

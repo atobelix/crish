@@ -2,15 +2,12 @@ import React, { useMemo } from 'react';
 
 import type { SessionAgent } from '../../store/types';
 import { countRunningSubagents } from './unitChromeLabel';
-import { Button, IconButton, Tooltip } from '../ui';
+import { Button, IconButton, Tooltip } from '@/components/ui';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
 import { killSubagent } from '../../api/subagentRecoveryApi';
-import {
-  SmartExpandablePanel,
-  type MenuItem,
-} from '../ui/SmartExpandablePanel';
+import { SmartExpandablePanel, type MenuItem } from '@/components/ui';
 import styles from './SubagentHeaderPanel.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface SubagentHeaderPanelProps {
   agents: SessionAgent[];
@@ -48,7 +45,12 @@ export const SubagentHeaderPanel: React.FC<SubagentHeaderPanelProps> = ({
           </>
         ) : (
           <>
-            <AppIcon name="bot" size={13} className={styles.botIcon} aria-hidden="true" />
+            <AppIcon
+              name="bot"
+              size={13}
+              className={styles.botIcon}
+              aria-hidden="true"
+            />
             <span
               className={`${styles.triggerText} ${styles.bcAgentText} bc-agent-text`}
             >
@@ -56,9 +58,12 @@ export const SubagentHeaderPanel: React.FC<SubagentHeaderPanelProps> = ({
             </span>
           </>
         )}
-        <AppIcon name="chevron-down" size={11}
+        <AppIcon
+          name="chevron-down"
+          size={11}
           className={`${styles.bcChevron} bc-chevron`}
-          aria-hidden="true" />
+          aria-hidden="true"
+        />
       </Button>
     </Tooltip>
   );
@@ -86,7 +91,9 @@ export const SubagentHeaderPanel: React.FC<SubagentHeaderPanelProps> = ({
 
       if (isRunning) {
         statusBadgeText = '运行中';
-        statusIcon = <AppIcon name="play" size={14} className={styles.pulseGreen} />;
+        statusIcon = (
+          <AppIcon name="play" size={14} className={styles.pulseGreen} />
+        );
         badgeClass = styles.badgeRunning;
       } else if (agent.status === 'completed') {
         statusBadgeText = '已完成';

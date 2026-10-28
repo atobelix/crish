@@ -102,7 +102,7 @@
 }
 
 .titleDisplay:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .titleInput {
@@ -160,7 +160,7 @@
 
 .dropdownTriggerBtn:hover,
 .dropdownTriggerBtn:hover {
-  background: var(--tint-hover, var(--bg-hover));
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -223,7 +223,7 @@
 
 .dropdownNewBtn:hover,
 .dropdownNewBtn:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .dropdownList {
@@ -254,11 +254,11 @@
 }
 
 .dropdownItem:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .dropdownItemSelected {
-  background: var(--tint-hover, var(--bg-hover));
+  background: var(--state-hover);
   font-weight: var(--font-weight-medium, 500);
 }
 
@@ -524,19 +524,19 @@ button.badge:focus-visible {
 
 .blockRow:hover,
 .blockRow[data-handle='hover'] {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .blockRow[data-handle='focus'],
 .blockRow[tabindex]:not([tabindex='-1']):focus-visible,
 .blockRow:has(.text[data-strict-leaf-input='1']:focus-visible) {
   outline: none;
-  background: var(--bg-active, var(--tint-active));
+  background: var(--state-active);
   box-shadow: inset 0 0 0 1px var(--np-focus-row, var(--np-focus-edge));
 }
 
 .blockRow[data-handle='multi'] {
-  background: var(--tint-strong);
+  background: var(--state-strong);
   box-shadow: inset 0 0 0 1px var(--border-color);
 }
 
@@ -548,8 +548,8 @@ button.badge:focus-visible {
   right: var(--space-2, 8px);
   height: 2px;
   border-radius: 1px;
-  background: var(--tint-highlight);
-  box-shadow: 0 0 0 0.5px var(--tint-focus-ring);
+  background: var(--state-highlight);
+  box-shadow: 0 0 0 0.5px var(--state-focus-ring);
   pointer-events: none;
   z-index: 1;
 }
@@ -604,7 +604,7 @@ button.badge:focus-visible {
 }
 
 .blockRow:hover .handle {
-  background-color: var(--tint-hover);
+  background-color: var(--state-hover);
 }
 
 .blockContent {

@@ -3,7 +3,6 @@ export {
   UserMessageActionsBar,
   type UserMessageActionsBarProps,
 } from './UserMessageActionsBar';
-export { PlanApprovalRow, type PlanApprovalRowProps } from './PlanApprovalRow';
 export {
   AssistantMessageActionsBar,
   type AssistantMessageActionsBarProps,

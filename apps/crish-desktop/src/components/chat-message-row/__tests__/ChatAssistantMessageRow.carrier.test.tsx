@@ -14,7 +14,8 @@ vi.mock('../../../services/toast/ToastContext', () => ({
 }));
 
 vi.mock('../../../store/storeAccess', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../store/storeAccess')>();
+  const actual =
+    await importOriginal<typeof import('../../../store/storeAccess')>();
   return {
     ...actual,
     useSettingsField: vi.fn(() => 2),
@@ -72,7 +73,6 @@ describe('ChatAssistantMessageRow 去助手化与纯状态载体', () => {
         onTogglePin={vi.fn()}
         onOpenDiff={vi.fn()}
         setPermissionMode={vi.fn()}
-        setPlanApproved={vi.fn()}
       />
     );
 
@@ -92,16 +92,22 @@ describe('ChatAssistantMessageRow 去助手化与纯状态载体', () => {
     expect(notice).toBeInTheDocument();
     expect(notice).toHaveAttribute('aria-live', 'polite');
     expect(notice).toHaveAttribute('tabindex', '0');
-    expect(
-      screen.getByText(/已切换到 deepseek-chat/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/已切换到 deepseek-chat/)).toBeInTheDocument();
 
     // 4. 彻底消灭 MessageActions：无时间戳、无复制按钮、无重新生成按钮、无固定按钮
     expect(screen.queryByText(/\d{2}:\d{2}/)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /复制/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /重新生成/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /固定/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /撤回/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /复制/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /重新生成/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /固定/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /撤回/i })
+    ).not.toBeInTheDocument();
   });
 
   it('完善 isPureCarrier 防御门禁：含思维链、图片、正文、工具调用时不为纯载体', () => {
@@ -179,7 +185,6 @@ describe('ChatAssistantMessageRow 去助手化与纯状态载体', () => {
         onTogglePin={vi.fn()}
         onOpenDiff={vi.fn()}
         setPermissionMode={vi.fn()}
-        setPlanApproved={vi.fn()}
       />
     );
 
@@ -190,6 +195,8 @@ describe('ChatAssistantMessageRow 去助手化与纯状态载体', () => {
     expect(row.classList.contains('msg-row-assistant')).toBe(true);
 
     // 2. 正常渲染 MessageActions 按钮（如复制、固定、重试等）
-    expect(container.querySelector('[data-message-body="assistant"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-message-body="assistant"]')
+    ).not.toBeNull();
   });
 });

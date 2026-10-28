@@ -8,8 +8,8 @@ import React, {
 } from 'react';
 
 import styles from './ChatCard.module.css';
-import { Button, Tooltip } from '../ui';
-import { toggleExclusiveMenu } from '../ui/Menu';
+import { Button, Tooltip } from '@/components/ui';
+import { toggleExclusiveMenu } from '@/components/ui';
 import {
   getActiveModelId,
   getActiveProfile,
@@ -26,7 +26,7 @@ import { onUiEvent } from '../../api/uiEvents';
 import { useModelsCatalogVersion } from '../../hooks/useModelsCatalogVersion';
 import type { AppSettings } from '../../store/types';
 import { abbreviateModel } from '../../api/modelAbbreviation';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 
 import { ModelBadgePickerMenu } from '../provider/ModelBadgePickerMenu';

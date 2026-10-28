@@ -11,7 +11,7 @@ import { ComposerProjectPicker } from './ComposerProjectPicker';
 import { ChatLandingBrand } from './ChatLandingBrand';
 import { ChatComposer } from '../chat-composer/ChatComposer';
 import * as projectStore from '../../api/projectStore';
-import { layerStackService } from '../ui/internal/layer-stack/LayerStackService';
+import { layerStackService } from '@/components/ui';
 
 vi.mock('../../app/compositionRoot', () => ({
   getCompositionRoot: () => ({
@@ -182,7 +182,7 @@ describe('新对话空界面（项目选择 + 多行输入框）', () => {
     await screen.findByRole('menu', { name: '选择项目' });
     fireEvent.click(await screen.findByText('通用项目'));
 
-    expect(onProjectChanged).toHaveBeenCalled();
+    await waitFor(() => expect(onProjectChanged).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(screen.queryByRole('menu', { name: '选择项目' })).toBeNull()
     );

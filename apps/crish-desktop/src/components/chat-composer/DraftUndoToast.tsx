@@ -10,9 +10,9 @@
 import React, { useEffect, useState } from 'react';
 
 import styles from './DraftUndoToast.module.css';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 import { useI18n } from '../../i18n';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface DraftUndoToastProps {
   /** 是否存在可撤销历史（外部模板覆盖后为 true） */

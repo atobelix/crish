@@ -25,7 +25,7 @@
 
 .agentTrigger:hover,
 .breadcrumbAgentBtn:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -33,13 +33,13 @@
 .breadcrumbAgentBtn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 1.5px var(--focus-border-color);
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
 .agentTrigger:active,
 .breadcrumbAgentBtn:active {
-  background: var(--tint-active);
+  background: var(--state-active);
 }
 
 .liveDot,
@@ -49,7 +49,7 @@
   border-radius: 50%;
   background: var(--accent-color);
   flex-shrink: 0;
-  animation: agentDotPulse 1.4s ease-in-out infinite;
+  animation: agentDotPulse var(--transition-pulse, 1.4s ease-in-out) infinite;
 }
 
 @keyframes agentDotPulse {
@@ -110,11 +110,11 @@
 }
 
 .agentItemRow:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .agentItemRow:active {
-  background: var(--tint-active);
+  background: var(--state-active);
 }
 
 .agentInfo {
@@ -142,7 +142,7 @@
   font-size: var(--font-size-xxs);
   padding: 1px 4px;
   border-radius: var(--radius-xs);
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-tertiary);
 }
 
@@ -162,7 +162,7 @@
 }
 
 .statusBadge.stopped {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-tertiary);
 }
 

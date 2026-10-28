@@ -149,7 +149,7 @@ export function mergeGoalTasksFromAssistantText(
 
 /**
  * 将未勾任务标 done 并收口 active。
- * ⚠️ 仅在 tasks 已实质完成（或调用方有证据）时使用；
+ * 注意：仅在 tasks 已实质完成（或调用方有证据）时使用；
  * 禁止因文案 DONE 无证据时强制勾满（假完成）。
  */
 export function markAllGoalTasksDone(gm: SessionGoalMode): SessionGoalMode {

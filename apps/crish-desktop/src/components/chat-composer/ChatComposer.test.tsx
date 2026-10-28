@@ -294,19 +294,19 @@ describe('ChatComposer 全链（T6 接线）', () => {
 
   it('权限菜单全链：胶囊展示当前模式，切换触发 onPermissionChange', async () => {
     renderChatComposer({});
-    const pill = screen.getByRole('button', { name: /当前权限模式：需确认/ });
+    const pill = screen.getByRole('button', { name: /当前权限模式：每次询问/ });
     expect(pill).toBeTruthy();
     fireEvent.click(pill);
     const menu = await screen.findByRole('menu');
     expect(menu).toBeTruthy();
     const items = screen.getAllByRole('menuitem');
     expect(items.length).toBeGreaterThan(1);
-    // 点击非当前项（plan）→ 胶囊切换（菜单项为 role=menuitem 按钮）
-    const planItem = screen.getByRole('menuitem', { name: /计划/ });
-    fireEvent.click(planItem);
+    // 点击非当前项（smart）→ 胶囊切换（菜单项为 role=menuitem 按钮）
+    const smartItem = screen.getByRole('menuitem', { name: /智能放行/ });
+    fireEvent.click(smartItem);
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: /当前权限模式：计划/ })
+        screen.getByRole('button', { name: /当前权限模式：智能放行/ })
       ).toBeTruthy();
     });
   });
@@ -334,11 +334,11 @@ describe('ChatComposer 全链（T6 接线）', () => {
     renderChatComposer({});
     await typeText('/sche');
     const scheduleItem = await screen.findByRole('option', {
-      name: /\/schedule/,
+      name: /schedule/,
     });
     fireEvent.click(scheduleItem);
     await waitFor(() => {
-      expect(getEditorDom().textContent).toContain('/schedule');
+      expect(getEditorDom().textContent).toContain('schedule');
     });
   });
 
@@ -350,7 +350,7 @@ describe('ChatComposer 全链（T6 接线）', () => {
     });
     // skill 命令经 filteredCommands 桥入菜单
     const skillItem = await screen.findByRole('option', {
-      name: /\/skill:检视/,
+      name: /检视/,
     });
     expect(skillItem).toBeTruthy();
   });

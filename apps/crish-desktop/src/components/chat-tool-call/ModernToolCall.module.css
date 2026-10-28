@@ -81,7 +81,7 @@
   align-items: center;
   padding: 2px 8px;
   border-radius: var(--radius-md);
-  background: var(--tint-hover);
+  background: var(--state-hover);
   font-family: var(--font-mono, monospace);
   font-size: var(--font-size-xs, 12px);
   color: var(--text-primary);
@@ -120,7 +120,7 @@
   height: 6px;
   border-radius: 50%;
   background: var(--text-tertiary);
-  animation: pulseDot 1.4s infinite ease-in-out;
+  animation: pulseDot var(--transition-pulse, 1.4s ease-in-out) infinite;
 }
 
 @keyframes pulseDot {
@@ -289,7 +289,7 @@
 }
 
 .terminalCopyBtn:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -333,7 +333,7 @@
   cursor: text;
   box-sizing: border-box;
   background: var(
-    --tint-hover
+    --state-hover
   ); /* 三档：层上统一叠加（原 bg-card 96% + text 4% 不透明新灰） */
 }
 
@@ -362,7 +362,9 @@
   min-width: unset;
   min-height: unset;
   padding: 6px 12px;
-  background: var(--tint-active); /* 三档：层上统一叠加（原 92/8 不透明新灰） */
+  background: var(
+    --state-active
+  ); /* 三档：层上统一叠加（原 92/8 不透明新灰） */
   border: none;
   border-top: 1px dashed var(--border-subtle);
   border-bottom: 1px dashed var(--border-subtle);
@@ -382,7 +384,7 @@
 
 .terminalMidFoldBar:hover {
   background:
-    linear-gradient(var(--tint-hover), var(--tint-hover)), var(--tint-active); /* hover = 静止态再叠一层 tint-hover */
+    linear-gradient(var(--state-hover), var(--state-hover)), var(--state-active); /* hover = 静止态再叠一层 tint-hover */
   color: var(--text-primary);
 }
 
@@ -407,7 +409,7 @@
   min-width: unset;
   min-height: unset;
   padding: 5px 12px;
-  background: var(--tint-hover); /* 三档：层上统一叠加（原 95/5 不透明新灰） */
+  background: var(--state-hover); /* 三档：层上统一叠加（原 95/5 不透明新灰） */
   border: none;
   border-top: 1px dashed var(--border-subtle);
   color: var(--text-tertiary);
@@ -423,7 +425,7 @@
 }
 
 .terminalCollapseBtn:hover {
-  background: var(--tint-active); /* hover：tint-hover → tint-active */
+  background: var(--state-active); /* hover：tint-hover → tint-active */
   color: var(--text-primary);
 }
 
@@ -470,7 +472,7 @@
   width: 22px;
   height: 22px;
   border-radius: var(--radius-md);
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-tertiary);
 }
 
@@ -486,7 +488,7 @@
   padding: 2px 8px;
   border-radius: var(--radius-sm);
   font-weight: 500;
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-tertiary);
 }
 
@@ -516,7 +518,7 @@
     6px
   ); /* 治愈 -10px 倒挂：超距平直区内盒圆角收敛为微圆 6px */
   border: 1px solid var(--border-subtle);
-  background: var(--tint-hover);
+  background: var(--state-hover);
   overflow: hidden;
   font-family: var(--font-mono, monospace);
 }
@@ -720,7 +722,7 @@
   justify-content: space-between;
   gap: var(--space-2, 8px);
   padding: var(--space-2, 8px) var(--space-3, 12px);
-  background: var(--tint-hover); /* 三档：层上统一叠加（原 97/3 不透明新灰） */
+  background: var(--state-hover); /* 三档：层上统一叠加（原 97/3 不透明新灰） */
   border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
   user-select: none;
@@ -731,7 +733,9 @@
 
 .diffCardHeader:hover,
 .gitDiffCardHeader:hover {
-  background: var(--tint-active); /* 三档：层上统一叠加（原 94/6 不透明新灰） */
+  background: var(
+    --state-active
+  ); /* 三档：层上统一叠加（原 94/6 不透明新灰） */
 }
 
 .diffCardHeader:focus-visible,
@@ -813,7 +817,7 @@
 
 .diffActionBtn:hover,
 .diffCopyBtn:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -837,7 +841,7 @@
   font-family: inherit;
   font-weight: normal;
   color: var(--text-secondary);
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border: none;
   cursor: pointer;
   box-shadow: none;
@@ -848,7 +852,7 @@
 
 .diffPreviewTag:hover,
 .gitDiffPreviewTag:hover {
-  background: var(--tint-active);
+  background: var(--state-active);
   color: var(--text-primary);
 }
 
@@ -961,7 +965,7 @@
   gap: var(--space-3, 12px);
   padding: 8px 12px;
   background: var(
-    --tint-hover
+    --state-hover
   ); /* 三档：层上统一叠加（原 bg-card 96% + text 4% 不透明新灰） */
   color: var(--text-secondary);
   font-size: var(--font-size-micro, 11px);
@@ -992,7 +996,7 @@
 }
 
 .diffMoreBtn:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 

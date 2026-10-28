@@ -14,8 +14,8 @@ import React, { useState, useMemo, type ReactNode } from 'react';
 import styles from './custom-tags.module.css';
 import { CustomTagErrorBoundary } from './CustomTagErrorBoundary';
 import type { ExtraComponentProps } from './CustomTagRegistry';
-import { Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface FileTreeProps extends ExtraComponentProps {
   root?: string;
@@ -62,13 +62,18 @@ function parseTreeFromText(rawText: string, rootDir: string): TreeNode[] {
       cleanName = cleanName.replace(/\((added|new)\)|\[A\]/gi, '').trim();
     } else if (/\((modified|updated)\)|\[M\]/i.test(cleanName)) {
       status = 'modified';
-      cleanName = cleanName.replace(/\((modified|updated)\)|\[M\]/gi, '').trim();
+      cleanName = cleanName
+        .replace(/\((modified|updated)\)|\[M\]/gi, '')
+        .trim();
     } else if (/\((deleted|removed)\)|\[D\]/i.test(cleanName)) {
       status = 'deleted';
       cleanName = cleanName.replace(/\((deleted|removed)\)|\[D\]/gi, '').trim();
     }
 
-    const isFolder = cleanName.endsWith('/') || cleanName.includes('/') || (!cleanName.includes('.') && i < lines.length - 1);
+    const isFolder =
+      cleanName.endsWith('/') ||
+      cleanName.includes('/') ||
+      (!cleanName.includes('.') && i < lines.length - 1);
     const nodeName = cleanName.replace(/\/$/, '');
 
     // 构建相对全路径
@@ -76,8 +81,10 @@ function parseTreeFromText(rawText: string, rootDir: string): TreeNode[] {
       stack.pop();
     }
 
-    const parentPath = stack.length > 0 ? stack[stack.length - 1]!.node.path : rootDir;
-    const currentPath = parentPath === '.' ? nodeName : `${parentPath}/${nodeName}`;
+    const parentPath =
+      stack.length > 0 ? stack[stack.length - 1]!.node.path : rootDir;
+    const currentPath =
+      parentPath === '.' ? nodeName : `${parentPath}/${nodeName}`;
 
     const newNode: TreeNode = {
       id: `${currentPath}-${i}`,
@@ -159,7 +166,17 @@ export const FileTreeInner: React.FC<FileTreeProps> = ({
           data-file-path={node.path}
         >
           <span className={styles.fileTreeNodeIcon}>
-            <AppIcon name={node.isFolder ? (isCollapsed ? 'folder' : 'folder-open') : 'file-text'} size={14} aria-hidden />
+            <AppIcon
+              name={
+                node.isFolder
+                  ? isCollapsed
+                    ? 'folder'
+                    : 'folder-open'
+                  : 'file-text'
+              }
+              size={14}
+              aria-hidden
+            />
           </span>
           <span className={styles.fileTreeNodeName}>{node.name}</span>
 
@@ -169,11 +186,15 @@ export const FileTreeInner: React.FC<FileTreeProps> = ({
                 node.status === 'added'
                   ? styles.statusAdded
                   : node.status === 'modified'
-                  ? styles.statusModified
-                  : styles.statusDeleted
+                    ? styles.statusModified
+                    : styles.statusDeleted
               }
             >
-              {node.status === 'added' ? 'A' : node.status === 'modified' ? 'M' : 'D'}
+              {node.status === 'added'
+                ? 'A'
+                : node.status === 'modified'
+                  ? 'M'
+                  : 'D'}
             </span>
           )}
         </div>
@@ -188,11 +209,16 @@ export const FileTreeInner: React.FC<FileTreeProps> = ({
   };
 
   return (
-    <div className={styles.fileTree} data-streaming={isStreaming ? 'true' : 'false'}>
+    <div
+      className={styles.fileTree}
+      data-streaming={isStreaming ? 'true' : 'false'}
+    >
       <div className={styles.cardHeader}>
         <div className={styles.cardTitleGroup}>
           <AppIcon name="folder-tree" size={14} aria-hidden />
-          <span className={styles.cardTitle}>{root === '.' ? '工程文件树' : root}</span>
+          <span className={styles.cardTitle}>
+            {root === '.' ? '工程文件树' : root}
+          </span>
         </div>
         {isStreaming && (
           <Tooltip content="正在加载工程树...">
@@ -205,9 +231,7 @@ export const FileTreeInner: React.FC<FileTreeProps> = ({
         {treeNodes.length > 0 ? (
           treeNodes.map((node) => renderNode(node))
         ) : (
-          <div className={styles.fileTreeEmpty}>
-            {rawText || '空文件树'}
-          </div>
+          <div className={styles.fileTreeEmpty}>{rawText || '空文件树'}</div>
         )}
       </div>
     </div>

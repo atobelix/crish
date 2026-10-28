@@ -194,6 +194,97 @@ describe('StrictContentRowLeaf · DOM 叶宿主', () => {
     });
   });
 
+  it('composition 期间 blur 取消预编辑、回滚并忽略迟到的 compositionend', async () => {
+    const onTextChange = vi.fn();
+    const onTextCommit = vi.fn();
+    const turnIntoSink = createMockTurnIntoSink().sink;
+    const { rerender } = render(
+      <StrictContentRowLeaf
+        blockId="b-ime-blur"
+        flavour="paragraph"
+        text="已确认文本"
+        turnIntoSink={turnIntoSink}
+        mdPrefixWriteMode="writable"
+        onTextChange={onTextChange}
+        onTextCommit={onTextCommit}
+        editSession={new EditSessionRegistry()}
+      />
+    );
+    const leaf = screen.getByTestId('note-strict-leaf-b-ime-blur');
+
+    await act(async () => {
+      leaf.focus();
+      fireEvent.compositionStart(leaf);
+      leaf.textContent = '已确认文本未完成拼音';
+      fireEvent.input(leaf);
+    });
+    // 预编辑值不得进入持久化调度回调。
+    expect(onTextChange).not.toHaveBeenCalled();
+
+    await act(async () => {
+      fireEvent.blur(leaf);
+    });
+    expect(leaf.textContent).toBe('已确认文本');
+    expect(onTextCommit).toHaveBeenCalledTimes(1);
+    expect(onTextCommit).toHaveBeenCalledWith('b-ime-blur', '已确认文本');
+
+    await act(async () => {
+      fireEvent.compositionEnd(leaf);
+    });
+    expect(onTextChange).not.toHaveBeenCalledWith(
+      'b-ime-blur',
+      '已确认文本未完成拼音'
+    );
+    expect(onTextCommit).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <StrictContentRowLeaf
+        blockId="b-ime-blur"
+        flavour="paragraph"
+        text="新投影文本"
+        turnIntoSink={turnIntoSink}
+        mdPrefixWriteMode="writable"
+        onTextChange={onTextChange}
+        onTextCommit={onTextCommit}
+        editSession={new EditSessionRegistry()}
+      />
+    );
+    expect(leaf.textContent).toBe('新投影文本');
+  });
+
+  it('compositionend 先于 blur 时只触发一次失焦持久化提交', async () => {
+    const onTextChange = vi.fn();
+    const onTextCommit = vi.fn();
+    const turnIntoSink = createMockTurnIntoSink().sink;
+    render(
+      <StrictContentRowLeaf
+        blockId="b-ime-end-blur"
+        flavour="paragraph"
+        text="原文"
+        turnIntoSink={turnIntoSink}
+        mdPrefixWriteMode="writable"
+        onTextChange={onTextChange}
+        onTextCommit={onTextCommit}
+        editSession={new EditSessionRegistry()}
+      />
+    );
+    const leaf = screen.getByTestId('note-strict-leaf-b-ime-end-blur');
+
+    await act(async () => {
+      leaf.focus();
+      fireEvent.compositionStart(leaf);
+      leaf.textContent = '最终中文';
+      fireEvent.input(leaf);
+      fireEvent.compositionEnd(leaf);
+      fireEvent.blur(leaf);
+      fireEvent.compositionEnd(leaf);
+    });
+
+    expect(leaf.textContent).toBe('最终中文');
+    expect(onTextCommit).toHaveBeenCalledTimes(1);
+    expect(onTextCommit).toHaveBeenCalledWith('b-ime-end-blur', '最终中文');
+  });
+
   it('conn_d3_leaf_commit_then_projection_refresh_rewrites', async () => {
     // R2-a② 验收：本地编辑 commit 成功后，投影再次刷新能写入该叶
     // （dirty 后投影可重覆盖——dirty-after-commit 不再永久脱节）。

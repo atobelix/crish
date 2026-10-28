@@ -7,7 +7,6 @@ import {
   copyTextBestEffort,
   formatMsgTime,
   isUserBubbleLong,
-  looksLikePlan,
   messageRoleLabelZh,
   messageRowAriaLabel,
   pinToggleLabels,
@@ -183,15 +182,6 @@ describe('density: long user bubble + time + plan', () => {
     // locale-dependent digits but always HH:MM-ish without AM/PM
     expect(label).toMatch(/\d{1,2}:\d{2}/);
     expect(label.toLowerCase()).not.toMatch(/am|pm/);
-  });
-
-  it('looksLikePlan detects 中文计划 / headings / numbered lists', () => {
-    expect(looksLikePlan('')).toBe(false);
-    expect(looksLikePlan('普通闲聊')).toBe(false);
-    expect(looksLikePlan('执行步骤如下')).toBe(true);
-    expect(looksLikePlan('## 实施计划')).toBe(true);
-    expect(looksLikePlan('1. 先改 A\n2. 再改 B')).toBe(true);
-    expect(looksLikePlan('1、准备环境')).toBe(true);
   });
 });
 

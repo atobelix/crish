@@ -3,8 +3,7 @@
  * 严格对齐 docs/ui-reference-alignment-audit/02-pixel-perfect-implementation-plan.md §4 与 reference/chat-composer-component/index.html (L269-420) / css/composer.css
  *
  * 【四层垂直空间层级】：
- * - Layer 1: 浮动权限审批条（ComposerPermissionBar）
- * - Layer 2: 目标/计划模式进度条（ComposerPlanProgressBar）
+ * - Layer 2: 目标/计划任务进度条（ComposerPlanProgressBar）
  * - Layer 3: 上下文与文件引用卡片区（ComposerAttachmentBar，24px 高度圆角芯片卡片）
  * - Layer 4: 主输入区（Composer Card：加号/权限盾牌 + 富文本/兜底输入 + 融合模型胶囊 + 统计/语音 + 墨绿实体正圆发送按钮）
  */
@@ -14,8 +13,8 @@ import styles from './ChatComposer.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { ComposePlusMenu } from './ComposePlusMenu';
 import { PermissionModeMenu } from './PermissionModeMenu';
-import { Button, Input, Tooltip } from '../ui';
-import { shouldSuppressMenuReopen } from '../ui/Menu';
+import { Button, Input, Tooltip } from '@/components/ui';
+import { shouldSuppressMenuReopen } from '@/components/ui';
 import { ComposerField, STOP_TOOLTIP } from './ComposerField';
 import type {
   ComposerFieldProps,
@@ -24,7 +23,6 @@ import type {
   ComposerLayoutVariant,
 } from './composerTypes';
 import { ComposerAttachmentBar } from './ComposerAttachmentBar';
-import { ComposerPermissionBar } from './ComposerPermissionBar';
 import { ComposerPlanProgressBar } from './ComposerPlanProgressBar';
 import { ComposerDropHost } from './ComposerDropHost';
 import { ComposerFusedTrigger } from './ComposerFusedTrigger';
@@ -40,7 +38,7 @@ import { ComposerFieldSlot } from './ComposerFieldSlot';
 
 export type { ComposerFieldProps, ChatComposerProps, ComposerLayoutVariant };
 export { ComposerField, STOP_TOOLTIP };
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
   chatInput,
@@ -74,7 +72,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   className,
   emptyKind: emptyKindProp,
   permissionBarNode,
-  permissionBarProps,
   planProgressNode,
   planProgressProps,
   voiceStatsButton,
@@ -91,6 +88,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   const scopedSessionId = useScopedSessionId();
   const plusMenuId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const cardContainerRef = useRef<HTMLDivElement>(null);
   const fieldContainerRef = useRef<HTMLDivElement>(null);
   const plusBtnRef = useRef<HTMLButtonElement>(null);
   const layoutRef = useRef<HTMLDivElement>(null);
@@ -155,7 +153,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       processingPlaceholder: '输入排队消息…（当前回复结束后发送，可粘贴截图）',
       disabled,
       ariaLabel: '主对话输入',
-      containerRef: fieldContainerRef,
+      containerRef: cardContainerRef,
       hideSendControls: true,
       sendApiRef,
       className: styles.fieldInGrid,
@@ -203,10 +201,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   );
 
   const hasFloatLayer = Boolean(
-    permissionBarNode ||
-    permissionBarProps ||
-    planProgressNode ||
-    planProgressProps
+    permissionBarNode || planProgressNode || planProgressProps
   );
 
   return (
@@ -223,6 +218,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       >
         {/* 主输入卡片（单卡片围合：内嵌顶槽 + 附件条 + 主输入网格） */}
         <div
+          ref={cardContainerRef}
           className={`${styles.composerCard}${isMultiline ? ` ${styles.isMultiline}` : ''}${disabled ? ` ${styles.disabled}` : ''}`}
           data-composer-card=""
           data-multiline={isMultiline ? '1' : '0'}
@@ -237,10 +233,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               data-closing={!hasFloatLayer && isClosing ? 'true' : undefined}
             >
               <div className={styles.embeddedTopSlotInner}>
-                {permissionBarNode ||
-                  (permissionBarProps ? (
-                    <ComposerPermissionBar {...permissionBarProps} />
-                  ) : null)}
+                {permissionBarNode}
                 {planProgressNode ||
                   (planProgressProps ? (
                     <ComposerPlanProgressBar {...planProgressProps} />
@@ -300,7 +293,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                     }
                   }}
                 >
-                  <AppIcon name="plus" size={14} aria-hidden />
+                  <AppIcon name="plus" size={16} aria-hidden />
                 </Button>
               </Tooltip>
               <ComposePlusMenu

@@ -7,8 +7,8 @@ import React from 'react';
 
 import styles from './SetupHintBanner.module.css';
 import type { SetupHintKind } from './chatStatusRibbonsLib';
-import { Button } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 
 /** 单条 soft-hint 的完整渲染状态（文案层已在壳组件算好）。 */
 export type SetupHintState = {

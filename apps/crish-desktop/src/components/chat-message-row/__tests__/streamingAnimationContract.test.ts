@@ -3,11 +3,14 @@ import fs from 'fs';
 import path from 'path';
 
 describe('Streaming Animation, Caret & Performance Tier Tokens Contract', () => {
-  const tokensCssPath = path.resolve(__dirname, '../../../styles/tokens.css');
+  const tokenComponentsCssPath = path.resolve(
+    __dirname,
+    '../../../styles/tokens-components.css'
+  );
   const animCssPath = path.resolve(__dirname, '../streaming-animation.css');
   const rowCssPath = path.resolve(__dirname, '../ChatMessageRow.module.css');
 
-  const tokensCss = fs.readFileSync(tokensCssPath, 'utf-8');
+  const tokensComponentsCss = fs.readFileSync(tokenComponentsCssPath, 'utf-8');
   const animCss = fs.readFileSync(animCssPath, 'utf-8');
   const rowCss = fs.readFileSync(rowCssPath, 'utf-8');
 
@@ -38,33 +41,39 @@ describe('Streaming Animation, Caret & Performance Tier Tokens Contract', () => 
     expect(animCss).not.toContain('@keyframes sd-fade-in');
   });
 
-  it('Token 完整度：tokens.css 完整声明 --stream-caret-* 与 --stream-anim-*', () => {
-    expect(tokensCss).toContain('--stream-caret-color');
-    expect(tokensCss).toContain('--stream-caret-blink-dur');
-    expect(tokensCss).toContain('--stream-caret-width');
-    expect(tokensCss).toContain('--stream-caret-height');
-    expect(tokensCss).toContain('--stream-caret-radius');
-    expect(tokensCss).toContain('--stream-anim-word-fade');
-    expect(tokensCss).toContain('--stream-anim-word-offset-y');
-    expect(tokensCss).toContain('--stream-anim-marker-fade');
-    expect(tokensCss).toContain('--stream-anim-easing');
-    expect(tokensCss).toContain('--stream-pulse-glow');
-    expect(tokensCss).toContain('--stream-pulse-bg');
-    expect(tokensCss).toContain('--stream-pulse-duration');
+  it('Token 完整度：tokens-components.css 完整声明 --stream-caret-* 与 --stream-anim-*', () => {
+    expect(tokensComponentsCss).toContain('--stream-caret-color');
+    expect(tokensComponentsCss).toContain('--stream-caret-blink-dur');
+    expect(tokensComponentsCss).toContain('--stream-caret-width');
+    expect(tokensComponentsCss).toContain('--stream-caret-height');
+    expect(tokensComponentsCss).toContain('--stream-caret-radius');
+    expect(tokensComponentsCss).toContain('--stream-anim-word-fade');
+    expect(tokensComponentsCss).toContain('--stream-anim-word-offset-y');
+    expect(tokensComponentsCss).toContain('--stream-anim-marker-fade');
+    expect(tokensComponentsCss).toContain('--stream-anim-easing');
+    expect(tokensComponentsCss).toContain('--stream-pulse-glow');
+    expect(tokensComponentsCss).toContain('--stream-pulse-bg');
+    expect(tokensComponentsCss).toContain('--stream-pulse-duration');
   });
 
   it('Light 模式高对比度：--stream-caret-color 必须锁定 --brand-deep (4.88:1)', () => {
-    const lightSection = tokensCss.slice(tokensCss.indexOf("html[data-theme='light']"));
+    const lightSection = tokensComponentsCss.slice(
+      tokensComponentsCss.indexOf("html[data-theme='light']")
+    );
     expect(lightSection).toContain('--stream-caret-color: var(--brand-deep);');
   });
 
   it('Dark 模式高对比度：--stream-caret-color 必须锁定 --brand (8.92:1)', () => {
-    const darkSection = tokensCss.slice(tokensCss.indexOf("html[data-theme='dark']"));
+    const darkSection = tokensComponentsCss.slice(
+      tokensComponentsCss.indexOf("html[data-theme='dark']")
+    );
     expect(darkSection).toContain('--stream-caret-color: var(--brand);');
   });
 
   it('性能分档折叠：data-perf-tier="eco" 必须将流式动画折叠为 0ms', () => {
-    const ecoSection = tokensCss.slice(tokensCss.indexOf("html[data-perf-tier='eco']"));
+    const ecoSection = tokensComponentsCss.slice(
+      tokensComponentsCss.indexOf("html[data-perf-tier='eco']")
+    );
     expect(ecoSection).toContain('--stream-anim-word-fade: 0ms;');
     expect(ecoSection).toContain('--stream-caret-blink-dur: 0ms;');
     expect(ecoSection).toContain('--stream-pulse-duration: 0ms;');
@@ -73,7 +82,9 @@ describe('Streaming Animation, Caret & Performance Tier Tokens Contract', () => 
   });
 
   it('性能分档深度绑定：streaming-animation.css 对 Eco 与 Reduced Motion 提供 0 损耗静止兜底', () => {
-    expect(animCss).toContain("html[data-perf-tier='eco'] .conex-streaming-caret");
+    expect(animCss).toContain(
+      "html[data-perf-tier='eco'] .conex-streaming-caret"
+    );
     expect(animCss).toContain('@media (prefers-reduced-motion: reduce)');
   });
 
@@ -83,7 +94,9 @@ describe('Streaming Animation, Caret & Performance Tier Tokens Contract', () => 
 
   it('智能上下文光标抑制：表格与 suppressCaret 修饰符严格隐藏光标', () => {
     expect(animCss).toContain('.suppressCaret .conex-streaming-caret');
-    expect(animCss).toContain('[data-contains-table="true"] .conex-streaming-caret');
+    expect(animCss).toContain(
+      '[data-contains-table="true"] .conex-streaming-caret'
+    );
     expect(animCss).toContain('display: none');
     expect(animCss).toContain('visibility: hidden');
   });
@@ -92,6 +105,8 @@ describe('Streaming Animation, Caret & Performance Tier Tokens Contract', () => 
     expect(animCss).not.toContain('contain-intrinsic-size: auto 48px');
     expect(animCss).toContain('.md-block-sealed');
     expect(animCss).toContain('contain: layout style paint;');
-    expect(animCss).toContain('contain-intrinsic-size: auto var(--stream-table-intrinsic-h, 320px);');
+    expect(animCss).toContain(
+      'contain-intrinsic-size: auto var(--stream-table-intrinsic-h, 320px);'
+    );
   });
 });

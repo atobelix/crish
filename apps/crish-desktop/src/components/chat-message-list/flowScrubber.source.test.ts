@@ -43,7 +43,7 @@ describe('FlowScrubber 源码钉', () => {
     expect(css).not.toMatch(/calc\(50%/);
     const tsx = read('FlowScrubber.tsx');
     expect(tsx).toMatch(/data-flow-scrubber/);
-    expect(tsx).toMatch(/from '\.\.\/ui'/);
+    expect(tsx).toMatch(/from '(?:\.\.\/ui|@\/components\/ui)'/);
     expect(tsx).not.toMatch(/\btitle=/);
   });
 
@@ -51,10 +51,7 @@ describe('FlowScrubber 源码钉', () => {
     const list = read('ChatMessageList.tsx');
     const virt = read('MessageVirtualizer.tsx');
     const slot = read('workspaceChatStream.slot.ts');
-    const card = readFileSync(
-      join(DIR, '../chat-card/ChatCard.tsx'),
-      'utf8'
-    );
+    const card = readFileSync(join(DIR, '../chat-card/ChatCard.tsx'), 'utf8');
     expect(list).toMatch(/onRetract/);
     expect(list).toMatch(/MessageVirtualizer/);
     expect(list).toMatch(/NarrativeRenderSlotsContext/);

@@ -24,8 +24,8 @@ import {
   type ScrubberTick,
 } from './flowScrubberModel';
 import { DEFAULT_PIN_COLOR } from '../chat-message-row/colorPickerUtils';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface FlowScrubberProps {
   messages: SessionMessage[];

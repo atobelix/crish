@@ -7,7 +7,7 @@ import React, {
   useState,
 } from 'react';
 import styles from './ChatMessageRow.module.css';
-import { Tooltip } from '../ui';
+import { Tooltip } from '@/components/ui';
 import type { SessionMessage } from '../../store/types';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
 import {
@@ -29,6 +29,7 @@ import {
   normalizeMessageAttachments,
   type AttachmentItem,
 } from '../chat-attachment/AttachmentCard';
+import { AppIcon } from '@/components/ui/icons';
 import type { ChatAttachment } from '../../hooks/useChatStream';
 import { isBusyRetryPending } from '../../api/sessionStreamManager';
 import { DOMAIN_MESSAGES } from '../../api/userFacingErrors';
@@ -492,8 +493,11 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
                           role="note"
                           aria-label="系统环境上下文"
                         >
-                          <span className={styles.userBubbleContextBadge}>
-                            [系统环境上下文]
+                          <span
+                            className={styles.userBubbleContextBadge}
+                            aria-hidden
+                          >
+                            <AppIcon name="cpu" size={12} />
                           </span>
                           <span className={styles.userBubbleContextContent}>
                             {parsedStructured.contextStateText}

@@ -74,35 +74,10 @@ export function resolveSetupHintKind(opts: {
   return null;
 }
 
-/** 计划模式 ribbon 主行（slim）。 */
-export function formatPlanModeRibbonLabel(planApproved: boolean): string {
-  return planApproved ? '计划模式 · 已批准' : '计划模式 · 只规划';
-}
-
-/** 计划模式 aria-label（比主行稍完整）。 */
-export function resolvePlanModeAriaLabel(planApproved: boolean): string {
-  return planApproved ? '计划模式，已批准' : '计划模式，只规划不改文件';
-}
-
-/** 计划条 title：与批准态一致，避免已批准仍写「不改文件」。 */
-export function resolvePlanModeTitle(planApproved: boolean): string {
-  return planApproved
-    ? '计划模式：已批准，可执行改动'
-    : '计划模式：只规划不改文件';
-}
-
-/**
- * 已批准后隐藏「批准」动作，避免幽灵按钮再次把权限切回 ask。
- * 未批准时才展示。
- */
-export function shouldShowPlanApproveAction(planApproved: boolean): boolean {
-  return !planApproved;
-}
-
 /** slim 条默认截断长度（密度优先；完整 goal 走 title / aria）。 */
 export const GOAL_RIBBON_PREVIEW_MAX_LEN = 28;
 
-/** 目标文案截断：ellipsis 仅用于 ribbon 主行，完整 goal 走 title。 */
+/** 目标模式 ribbon 主行（slim）。 */
 export function formatGoalRibbonPreview(
   goalText: string,
   maxLen = GOAL_RIBBON_PREVIEW_MAX_LEN
@@ -297,7 +272,7 @@ export function resolveApprovalDockAriaLabel(
  * - 'engine-crashed': 引擎崩溃判死（L1，强阻断）
  * - 'runtime-error': 会话运行时终态错误（L2，ComposerErrorBar）
  * - 'approval': 敏感工具待审批（L3，ApprovalDock）
- * - 'plan-goal': 任务计划/目标推进（L4，PlanGoalRibbons）
+ * - 'goal': 目标推进（L4，GoalRibbon）
  * - 'setup-hint': 静态配置软引导（L5，SetupHintBanner）
  */
 export type ActiveRibbonKind =
@@ -305,7 +280,7 @@ export type ActiveRibbonKind =
   | 'engine-crashed'
   | 'runtime-error'
   | 'approval'
-  | 'plan-goal'
+  | 'goal'
   | 'setup-hint';
 
 export interface ResolveActiveRibbonParams {
@@ -313,7 +288,7 @@ export interface ResolveActiveRibbonParams {
   engineCrashed: boolean;
   hasRuntimeError: boolean;
   hasApproval: boolean;
-  hasPlanGoal: boolean;
+  hasGoalRibbon: boolean;
   hasSetupHint: boolean;
   onEmptySurface?: boolean;
 }
@@ -346,9 +321,9 @@ export function resolveActiveRibbon(
     return 'approval';
   }
 
-  // Priority 4 (L4): 任务目标/计划模式推进（PlanGoalRibbons）
-  if (params.hasPlanGoal) {
-    return 'plan-goal';
+  // Priority 4 (L4): 目标推进（GoalRibbon）
+  if (params.hasGoalRibbon) {
+    return 'goal';
   }
 
   // Priority 5 (L5): 静态配置软引导（SetupHintBanner）

@@ -16,7 +16,7 @@ describe('ArtifactCapsule & SyncLine (§5.4)', () => {
     );
 
     expect(container.querySelector('[data-icon="file-text"]')).not.toBeNull();
-    expect(screen.getByText('已生成')).toBeDefined();
+    // 移除“已生成”前缀冗余，布局自解释
     const btn = screen.getByRole('button', {
       name: '打开产物 PE-08-session-loop-ipc-batcher',
     });
@@ -29,26 +29,21 @@ describe('ArtifactCapsule & SyncLine (§5.4)', () => {
 
   it('SyncLine 在同步中态渲染呼吸绿点与同步提示文案', () => {
     const { container } = render(
-      <SyncLine
-        status="syncing"
-        label="batcher.rs 与前端虚拟列表渲染管线"
-      />
+      <SyncLine status="syncing" label="batcher.rs 与前端虚拟列表渲染管线" />
     );
 
-    expect(screen.getByText(/正在同步 batcher.rs 与前端虚拟列表渲染管线\.\.\./)).toBeDefined();
+    expect(
+      screen.getByText(/正在同步 batcher.rs 与前端虚拟列表渲染管线\.\.\./)
+    ).toBeDefined();
     expect(container.querySelector('.flow-sync-dot')).not.toBeNull();
   });
 
   it('SyncLine 在完成态渲染已落盘与文件大小', () => {
     const { container } = render(
-      <SyncLine
-        status="completed"
-        label="batcher.rs"
-        size="1.2KB"
-      />
+      <SyncLine status="completed" label="batcher.rs" size="1.2KB" />
     );
 
-    expect(screen.getByText(/已落盘 \(1.2KB\)/)).toBeDefined();
+    expect(screen.getByText(/\(1\.2KB\)/)).toBeDefined();
     expect(container.querySelector('[data-icon="check"]')).not.toBeNull();
   });
 });

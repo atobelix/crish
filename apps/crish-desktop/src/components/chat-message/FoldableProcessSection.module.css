@@ -64,7 +64,8 @@
 .controlBar:focus-visible {
   outline: none;
   border-radius: var(--radius-sm);
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 /* ─────────── 主导动作图标（AppIcon 承载） ─────────── */
@@ -115,6 +116,24 @@
 .sectionBody {
   width: 100%;
   box-sizing: border-box;
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows
+    var(--accordion-duration, var(--transition-accordion))
+    var(--ease-standard, ease);
+  overflow: hidden;
+}
+
+.sectionBody[data-expanded='true'] {
+  grid-template-rows: 1fr;
+}
+
+.sectionBodyInner {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 /*
@@ -129,8 +148,6 @@
  * 用户裁决（2026-09-11）：思考与工具调用之间的空白必须收紧为 0。
  */
 .sectionBody:not([hidden]) {
-  display: flex;
-  flex-direction: column;
   gap: 0;
   padding-top: 0;
   padding-bottom: 0;

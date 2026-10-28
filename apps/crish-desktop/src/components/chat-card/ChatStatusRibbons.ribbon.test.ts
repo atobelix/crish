@@ -1,12 +1,11 @@
 /**
- * ChatStatusRibbons 纯函数：goal / plan ribbon、setup 文案、
+ * ChatStatusRibbons 纯函数：goal ribbon、setup 文案、
  * approval dock a11y 与挂载门闩（无幽灵条）。
  */
 import { describe, expect, it } from 'vitest';
 import {
   formatGoalRibbonLabel,
   formatGoalRibbonPreview,
-  formatPlanModeRibbonLabel,
   GOAL_RIBBON_PREVIEW_MAX_LEN,
   goalRibbonProgressPercent,
   goalRibbonProgressRatio,
@@ -14,12 +13,9 @@ import {
   resolveApprovalDockLabelText,
   resolveEngineDownSoftHintText,
   resolveGoalRibbonAriaLabel,
-  resolvePlanModeAriaLabel,
-  resolvePlanModeTitle,
   resolveSetupHintAction,
   resolveSyncEngineSoftHintText,
   shouldRenderApprovalDock,
-  shouldShowPlanApproveAction,
   type SetupHintKind,
 } from './chatStatusRibbonsLib';
 
@@ -64,7 +60,7 @@ describe('formatGoalRibbonLabel', () => {
         goalIteration: 0,
         goalTasksDone: 0,
         goalTasksTotal: 0,
-      }),
+      })
     ).toBe('目标 · 第 1 轮 · 落地 soft-hint');
   });
 
@@ -75,7 +71,7 @@ describe('formatGoalRibbonLabel', () => {
         goalIteration: 2,
         goalTasksDone: 1,
         goalTasksTotal: 3,
-      }),
+      })
     ).toBe('目标 · 第 3 轮 · 1/3 · 收口 dock');
   });
 
@@ -86,7 +82,7 @@ describe('formatGoalRibbonLabel', () => {
         goalIteration: 0,
         goalTasksDone: 9,
         goalTasksTotal: 2,
-      }),
+      })
     ).toBe('目标 · 第 1 轮 · 2/2');
   });
 
@@ -97,7 +93,7 @@ describe('formatGoalRibbonLabel', () => {
         goalIteration: Number.NaN,
         goalTasksDone: Number.NaN,
         goalTasksTotal: -2,
-      }),
+      })
     ).toBe('目标 · 第 1 轮 · x');
   });
 });
@@ -153,26 +149,6 @@ describe('goalRibbonProgressRatio / percent', () => {
   });
 });
 
-describe('plan mode ribbon copy', () => {
-  it('formats slim label and aria for approved / planning', () => {
-    expect(formatPlanModeRibbonLabel(false)).toBe('计划模式 · 只规划');
-    expect(formatPlanModeRibbonLabel(true)).toBe('计划模式 · 已批准');
-    expect(resolvePlanModeAriaLabel(false)).toBe('计划模式，只规划不改文件');
-    expect(resolvePlanModeAriaLabel(true)).toBe('计划模式，已批准');
-  });
-
-  it('title follows approve state (no stale 不改文件 when approved)', () => {
-    expect(resolvePlanModeTitle(false)).toMatch(/只规划/);
-    expect(resolvePlanModeTitle(true)).toMatch(/已批准/);
-    expect(resolvePlanModeTitle(true)).not.toMatch(/不改文件/);
-  });
-
-  it('hides approve action after plan is approved (no ghost button)', () => {
-    expect(shouldShowPlanApproveAction(false)).toBe(true);
-    expect(shouldShowPlanApproveAction(true)).toBe(false);
-  });
-});
-
 describe('engine-down vs key-setup copy', () => {
   it('engine-down text talks about 恢复/连接, never 密钥 or 恐吓离线', () => {
     const full = resolveEngineDownSoftHintText({ onEmptySurface: false });
@@ -221,12 +197,12 @@ describe('engine-down vs key-setup copy', () => {
 
 describe('resolveApprovalDockAriaLabel / label text', () => {
   it('prefers full summary when present', () => {
-    expect(
-      resolveApprovalDockAriaLabel(3, '3 待审批 · 队列 · shell'),
-    ).toBe('3 待审批 · 队列 · shell');
-    expect(
-      resolveApprovalDockLabelText(3, '3 待审批 · 队列 · shell'),
-    ).toBe('3 待审批 · 队列 · shell');
+    expect(resolveApprovalDockAriaLabel(3, '3 待审批 · 队列 · shell')).toBe(
+      '3 待审批 · 队列 · shell'
+    );
+    expect(resolveApprovalDockLabelText(3, '3 待审批 · 队列 · shell')).toBe(
+      '3 待审批 · 队列 · shell'
+    );
   });
 
   it('falls back to count phrasing (aria more spoken)', () => {

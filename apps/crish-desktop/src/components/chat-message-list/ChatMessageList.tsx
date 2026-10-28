@@ -5,13 +5,7 @@ import React, {
   useSyncExternalStore,
 } from 'react';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import {
-  usePermissionField,
-  useSettingsField,
-  selectPermissionMode,
-  selectPlanModeEnabled,
-  selectPlanApproved,
-} from '../../store/storeAccess';
+import { usePermissionField, useSettingsField } from '../../store/storeAccess';
 import {
   messageMatchesSearch,
   subscribeSearchQuery,
@@ -159,15 +153,10 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     leafRootRef,
   ]);
 
-  const permissionMode = usePermissionField(selectPermissionMode);
   const hideThinkingBlock = useSettingsField((s) =>
     Boolean(s.appSettings?.hideThinkingBlock)
   );
-  const planModeEnabled = usePermissionField(selectPlanModeEnabled);
-  const planApproved = usePermissionField(selectPlanApproved);
-  const setPlanApproved = usePermissionField((s) => s.setPlanApproved);
   const setPermissionMode = usePermissionField((s) => s.setPermissionMode);
-  const inPlanMode = permissionMode === 'plan' || planModeEnabled;
 
   const lastAssistantId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -225,10 +214,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   const flowControl = useMemo(
     () => ({
       hideThinkingBlock,
-      inPlanMode,
-      planApproved,
       setPermissionMode,
-      setPlanApproved,
       lastAssistantId,
       lastUserId,
       thinkingMsgId,
@@ -236,10 +222,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     }),
     [
       hideThinkingBlock,
-      inPlanMode,
-      planApproved,
       setPermissionMode,
-      setPlanApproved,
       lastAssistantId,
       lastUserId,
       thinkingMsgId,

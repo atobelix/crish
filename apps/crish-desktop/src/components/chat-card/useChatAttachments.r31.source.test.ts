@@ -7,7 +7,10 @@ import { fileURLToPath } from 'node:url';
 describe('R3-1 handleFilesSelected File.path ??', () => {
   it('? File.path ?? await handlePathsSelected??? continue ????', () => {
     const src = fs.readFileSync(
-      path.join(path.dirname(fileURLToPath(import.meta.url)), 'useChatAttachments.ts'),
+      path.join(
+        path.dirname(fileURLToPath(import.meta.url)),
+        'useChatAttachments.ts'
+      ),
       'utf8'
     );
     expect(src).toContain('pathBatch.push(fsPath)');

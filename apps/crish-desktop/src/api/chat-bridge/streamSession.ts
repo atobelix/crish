@@ -6,7 +6,6 @@
  */
 import { getTransport, startRunTask } from '../transport';
 import type { StreamCallbacks, StreamRequestOptions } from '../chatApi';
-import { toEnginePermissionMode } from '../permissionModes';
 import { getPermissionMode, getSessionStoreState } from '../storeAccess';
 import {
   classifyErrorDomain,
@@ -87,8 +86,7 @@ export async function createStreamSession(
 
     const { getWorkspacePath } = await import('../projectStore');
     const cwd = getWorkspacePath() || undefined;
-    const mode = getPermissionMode();
-    const permissionMode = toEnginePermissionMode(mode);
+    const permissionMode = getPermissionMode();
     const hasImages = Boolean(
       options?.hasImages ||
       options?.content?.some((p) => p.type === 'image_url')
@@ -156,34 +154,40 @@ export async function createStreamSession(
       return;
     }
 
-    await startRunTask(transport, {
-      runId,
-      prompt,
-      sessionId: safeSessionId,
-      permissionMode,
-      ...(cwd ? { cwd } : {}),
-      ...(mcpDisabledTools ? { mcpDisabledTools } : {}),
-      ...(reasoningEffort ? { reasoningEffort } : {}),
-      ...(thinkingTitle ? { thinkingTitle } : {}),
-      ...(thinkingWire ? { thinkingWire } : {}),
-      ...(contextStateText ? { contextState: contextStateText } : {}),
-      ...(options?.content?.length ? { content: options.content } : {}),
-      ...(hasImages ? { hasImages: true } : {}),
-      ...(options?.attachments?.length
-        ? { attachments: options.attachments }
-        : {}),
-      ...(goalMode ? { mode: goalMode } : {}),
-      ...(visibleGoal ? { visibleGoal } : {}),
-      ...(maxRounds !== undefined ? { maxRounds } : {}),
-      ...(maxStalledRounds !== undefined ? { maxStalledRounds } : {}),
-      ...(systemPrompt ? { systemPrompt } : {}),
-      ...(history ? { history } : {}),
-      ...(contextWindow !== undefined ? { contextWindow } : {}),
-      ...(userClientMessageId ? { clientMessageId: userClientMessageId } : {}),
-      ...(asstClientMessageId
-        ? { assistantClientMessageId: asstClientMessageId }
-        : {}),
-    });
+    await startRunTask(
+      transport,
+      {
+        runId,
+        prompt,
+        sessionId: safeSessionId,
+        permissionMode,
+        ...(cwd ? { cwd } : {}),
+        ...(mcpDisabledTools ? { mcpDisabledTools } : {}),
+        ...(reasoningEffort ? { reasoningEffort } : {}),
+        ...(thinkingTitle ? { thinkingTitle } : {}),
+        ...(thinkingWire ? { thinkingWire } : {}),
+        ...(contextStateText ? { contextState: contextStateText } : {}),
+        ...(options?.content?.length ? { content: options.content } : {}),
+        ...(hasImages ? { hasImages: true } : {}),
+        ...(options?.attachments?.length
+          ? { attachments: options.attachments }
+          : {}),
+        ...(goalMode ? { mode: goalMode } : {}),
+        ...(visibleGoal ? { visibleGoal } : {}),
+        ...(maxRounds !== undefined ? { maxRounds } : {}),
+        ...(maxStalledRounds !== undefined ? { maxStalledRounds } : {}),
+        ...(systemPrompt ? { systemPrompt } : {}),
+        ...(history ? { history } : {}),
+        ...(contextWindow !== undefined ? { contextWindow } : {}),
+        ...(userClientMessageId
+          ? { clientMessageId: userClientMessageId }
+          : {}),
+        ...(asstClientMessageId
+          ? { assistantClientMessageId: asstClientMessageId }
+          : {}),
+      },
+      () => getWorkspacePath() || undefined
+    );
     // run 已被后端受理：串行守卫退避计数归零
     if (userClientMessageId) clearBusy(userClientMessageId);
   } catch (e) {

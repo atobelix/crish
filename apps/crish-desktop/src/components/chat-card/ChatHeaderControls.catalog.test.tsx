@@ -25,7 +25,10 @@ import {
 } from './ChatHeaderControls';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SRC = readFileSync(resolve(__dirname, './ChatHeaderControls.tsx'), 'utf8');
+const SRC = readFileSync(
+  resolve(__dirname, './ChatHeaderControls.tsx'),
+  'utf8'
+);
 const CATALOG_PATH = 'C:\\Users\\tester\\.conex\\models.yaml';
 
 vi.mock('../../api/engineConfig', () => ({
@@ -76,7 +79,9 @@ async function loadProviders(
   providers: Record<string, ProviderSpec>
 ): Promise<void> {
   mockReadOk(providers);
-  mockTauriCommand('workbench_save_models_yaml', () => ({ path: CATALOG_PATH }));
+  mockTauriCommand('workbench_save_models_yaml', () => ({
+    path: CATALOG_PATH,
+  }));
   const res = await ensureModelsCatalogLoaded(true);
   expect(res.ok).toBe(true);
 }

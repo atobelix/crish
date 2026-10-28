@@ -4,7 +4,11 @@ import {
   formatContextStateDisplayText,
   dedupeStateCarrierMessages,
 } from '../contextStateUtils';
-import type { MessageContextInjection, SessionMessage } from '../../../store/types';
+import type {
+  MessageContextInjection,
+  SessionMessage,
+} from '../../../store/types';
+import { permissionModeLabel } from '../../../api/permissionModes';
 
 describe('contextStateUtils', () => {
   it('isContextStateInjection correctly identifies state injections', () => {
@@ -41,7 +45,9 @@ describe('contextStateUtils', () => {
       },
     } as Partial<MessageContextInjection>);
 
-    expect(text).toBe('已切换到 deepseek-chat · 权限 需确认 · 思考 high');
+    expect(text).toBe(
+      `已切换到 deepseek-chat · 权限 ${permissionModeLabel('ask')} · 思考 high`
+    );
     // Strict assertion: zero emoji in output
     expect(/[\u{1F300}-\u{1F9FF}]/u.test(text)).toBe(false);
   });
@@ -51,7 +57,9 @@ describe('contextStateUtils', () => {
       undefined,
       '[系统上下文注入 · 状态切换] 当前已切换到模型 deepseek-chat。 权限模式: full'
     );
-    expect(text).toBe('已切换到 deepseek-chat · 权限 完全访问');
+    expect(text).toBe(
+      `已切换到 deepseek-chat · 权限 ${permissionModeLabel('full')}`
+    );
     expect(/[\u{1F300}-\u{1F9FF}]/u.test(text)).toBe(false);
   });
 
@@ -120,7 +128,7 @@ describe('contextStateUtils', () => {
     expect(text.endsWith('。')).toBe(false);
   });
 
-  it('formatContextStateDisplayText maps permission full to 完全访问 via the shared label', () => {
+  it('formatContextStateDisplayText maps permission full to the shared label', () => {
     const text = formatContextStateDisplayText({
       metadata: {
         mode: 'context-state',
@@ -128,6 +136,6 @@ describe('contextStateUtils', () => {
         changed: ['permission'],
       },
     } as Partial<MessageContextInjection>);
-    expect(text).toBe('权限 完全访问');
+    expect(text).toBe(`权限 ${permissionModeLabel('full')}`);
   });
 });

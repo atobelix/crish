@@ -10,7 +10,9 @@ vi.mock('../../hooks/useEngineState', () => ({
 }));
 
 function setBg(tasks: BackgroundTaskInfo[]) {
-  (useEngineState as unknown as () => { bgTasks: BackgroundTaskInfo[] }).mockReturnValue({
+  (
+    useEngineState as unknown as () => { bgTasks: BackgroundTaskInfo[] }
+  ).mockReturnValue({
     bgTasks: tasks,
   });
 }
@@ -32,11 +34,20 @@ describe('useBackgroundTaskPolling 单源（D6.1）', () => {
         sessionId: 's1',
       } as unknown as BackgroundTaskInfo,
     ]);
-    expect(renderHook(() => useBackgroundTaskPolling({ enabled: false })).result.current).toEqual([]);
-    expect(renderHook(() => useBackgroundTaskPolling({ enabled: true })).result.current).toEqual([]);
+    expect(
+      renderHook(() => useBackgroundTaskPolling({ enabled: false })).result
+        .current
+    ).toEqual([]);
+    expect(
+      renderHook(() => useBackgroundTaskPolling({ enabled: true })).result
+        .current
+    ).toEqual([]);
     expect(
       renderHook(() =>
-        useBackgroundTaskPolling({ sessionId: '__pending_draft_x', enabled: true })
+        useBackgroundTaskPolling({
+          sessionId: '__pending_draft_x',
+          enabled: true,
+        })
       ).result.current
     ).toEqual([]);
   });

@@ -81,7 +81,7 @@ describe('ChatComposer 卡片网格（composer-wrapper 结构）', () => {
 
     expect(screen.getByRole('button', { name: '打开添加菜单' })).toBeTruthy();
     expect(
-      screen.getByRole('button', { name: /当前权限模式：需确认/ })
+      screen.getByRole('button', { name: /当前权限模式：每次询问/ })
     ).toBeTruthy();
     expect(screen.getByTestId('composer-fused-trigger')).toBeTruthy();
     expect(screen.getByRole('button', { name: /发送/ })).toBeTruthy();
@@ -183,7 +183,7 @@ describe('ChatComposer 卡片网格（composer-wrapper 结构）', () => {
     const leftSlot = container.querySelector('[data-composer-grid="left"]');
     const fusedTrigger = screen.getByTestId('composer-fused-trigger');
     const permBtn = screen.getByRole('button', {
-      name: /当前权限模式：需确认/,
+      name: /当前权限模式：每次询问/,
     });
     expect(leftSlot?.contains(permBtn)).toBe(true);
     expect(fusedTrigger.contains(permBtn)).toBe(false);

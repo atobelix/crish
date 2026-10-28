@@ -8,8 +8,8 @@ import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 
 import { openFileInPanel } from '../../api/filePanelOpener';
 import { useI18n } from '../../i18n';
-import { AppIcon, type IconName } from '../ui/icons';
-import { IconButton } from '../ui/Button/IconButton';
+import { AppIcon, type IconName } from '@/components/ui/icons';
+import { IconButton } from '@/components/ui';
 import { goalCommandDisplayLabel, isGoalCommand } from './goalChipLabel';
 
 function iconForKind(kind: string, customIcon?: string): IconName {
@@ -36,7 +36,7 @@ export const ComposerInlineTag: React.FC<NodeViewProps> = ({
   const text = isGoal
     ? goalCommandDisplayLabel()
     : kind === 'skill' || kind === 'command'
-      ? label
+      ? label.replace(/^\/+/, '')
       : `@${label}`;
   const canOpen = (kind === 'file' || kind === 'skill') && id.length > 0;
   const removeLabel = t('chat.inlineTagRemove', { name: text });

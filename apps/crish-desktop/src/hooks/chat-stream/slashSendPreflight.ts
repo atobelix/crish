@@ -6,11 +6,7 @@ import { checkEngineReadyRealtime } from '../../api/chat-bridge/ConnectionLifecy
 import { resolveSendThinkingFields } from '../../api/chat-bridge/readiness';
 import { useSessionStore } from '../../store/sessionStore';
 import { navigateToNewDraft } from '../../store/storeAccess';
-import {
-  openSettings,
-  patchSession,
-  setPermissionMode,
-} from '../../api/storeAccess';
+import { openSettings, patchSession } from '../../api/storeAccess';
 import {
   resolveSlashCommand,
   isNavigationSlash,
@@ -357,7 +353,6 @@ export function assembleChatPayload(opts: AssembleChatPayloadOptions): {
   }
 
   if (slash.kind === 'grill-me') {
-    setPermissionMode('plan');
     displayText = `/grill-me ${slash.topic}`;
     // 需求对齐：wire 文本 = GRILL_ME_PROMPT（隐式前缀已清退）
     const rendered = GRILL_ME_PROMPT.render({ topic: slash.topic });

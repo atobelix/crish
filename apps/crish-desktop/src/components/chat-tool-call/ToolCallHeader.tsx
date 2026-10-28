@@ -2,8 +2,8 @@ import React, { useMemo } from 'react';
 import styles from './ChatToolCallBlock.module.css';
 import type { FileDiff, MessageToolCall } from '../../store/types';
 import { toolCommandType, toolCommandIcon } from '../../api/toolPresentation';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import {
   type ResolvedToolAction,
   extractFallbackParam,

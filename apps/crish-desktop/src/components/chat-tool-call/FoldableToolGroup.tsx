@@ -28,11 +28,38 @@ import {
   aggregateProcessMetrics,
   formatProcessActionsSummary,
 } from '../../api/tool-presentation/processMetricsEngine';
-import { AppIcon, type IconName } from '../ui/icons';
-import { Tooltip } from '../ui/Tooltip/Tooltip';
+import { AppIcon, type IconName } from '@/components/ui/icons';
+import { Tooltip } from '@/components/ui';
 import { ChatToolStack, type ChatToolStackProps } from './ChatToolCallBlock';
+import * as motionTokens from '../../utils/motionTokens';
 import { DURATION_ACCORDION_MS } from '../../utils/motionTokens';
+import { useAccordionViewportGuard } from '../../hooks/useAccordionViewportGuard';
 import styles from './FoldableToolGroup.module.css';
+
+/**
+ * 距离自适应手风琴折叠展开物理时长计算器（带 motionTokens 动态回退）
+ */
+function calcAccordionDuration(height: number, isOpening: boolean): number {
+  if (
+    typeof (motionTokens as Record<string, unknown>).calcAccordionDuration ===
+    'function'
+  ) {
+    return (
+      (motionTokens as Record<string, unknown>).calcAccordionDuration as (
+        h: number,
+        o: boolean
+      ) => number
+    )(height, isOpening);
+  }
+  const safeHeight = Math.max(0, Number.isFinite(height) ? height : 0);
+  if (isOpening) {
+    const raw = 180 + 90 * Math.log(1 + safeHeight / 120);
+    return Math.round(Math.min(480, Math.max(180, raw)));
+  } else {
+    const raw = 150 + 65 * Math.log(1 + safeHeight / 120);
+    return Math.round(Math.min(350, Math.max(150, raw)));
+  }
+}
 
 export interface FoldableToolGroupProps {
   items: ToolRenderItem[];
@@ -50,10 +77,19 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
     onInvalidate,
     defaultExpanded = false,
   }) {
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const headerRef = useRef<HTMLDivElement | null>(null);
     const slotRef = useRef<HTMLDivElement | null>(null);
+    const innerRef = useRef<HTMLDivElement | null>(null);
     const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isInitialMount = useRef(true);
     const userInteractedRef = useRef(false);
+    const [transitionDuration, setTransitionDuration] = useState<number>(
+      DURATION_ACCORDION_MS
+    );
+
+    // 视口保护：折叠收起时若顶部脱离视口，平滑拉回
+    const { triggerViewportRecovery } = useAccordionViewportGuard(containerRef);
 
     const metrics: ProcessSegmentMetrics = useMemo(() => {
       return aggregateProcessMetrics([
@@ -84,6 +120,10 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
       if (metrics.hasRunning || metrics.subagentCount > 0) {
         setIsExpanded(true);
       } else if (wasRunning && !userInteractedRef.current && !defaultExpanded) {
+        const currentHeight =
+          innerRef.current?.getBoundingClientRect().height ?? 0;
+        setTransitionDuration(calcAccordionDuration(currentHeight, false));
+        triggerViewportRecovery();
         setIsExpanded(false);
         onInvalidate?.();
       }
@@ -92,16 +132,24 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
       metrics.subagentCount,
       defaultExpanded,
       onInvalidate,
+      triggerViewportRecovery,
     ]);
 
     const handleToggle = useCallback(() => {
       userInteractedRef.current = true;
       setIsExpanded((prev) => {
         const next = !prev;
+        if (!next) {
+          triggerViewportRecovery();
+        }
+        const currentHeight =
+          innerRef.current?.getBoundingClientRect().height ?? 0;
+        const dur = calcAccordionDuration(currentHeight, next);
+        setTransitionDuration(dur);
         onInvalidate?.();
         return next;
       });
-    }, [onInvalidate]);
+    }, [onInvalidate, triggerViewportRecovery]);
 
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent) => {
@@ -113,7 +161,18 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
       [handleToggle]
     );
 
-    // 解耦 hidden 阻断：展开态确保无 hidden，收起态在 160ms CSS Grid 过渡后安全附加 hidden="until-found"
+    // 无障碍键盘聚焦穿透：内部子元素获得焦点时平滑展开
+    const handleFocusCapture = useCallback(
+      (e: React.FocusEvent) => {
+        if (isExpanded) return;
+        if (headerRef.current?.contains(e.target as Node)) return;
+        setIsExpanded(true);
+        onInvalidate?.();
+      },
+      [isExpanded, onInvalidate]
+    );
+
+    // 解耦 hidden 阻断：展开态确保无 hidden，收起态在自适应过渡后安全附加 hidden="until-found"
     useEffect(() => {
       const el = slotRef.current;
       if (!el) return;
@@ -134,12 +193,12 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
             if (!isExpanded && slotRef.current) {
               slotRef.current.setAttribute('hidden', 'until-found');
             }
-          }, DURATION_ACCORDION_MS);
+          }, transitionDuration);
         }
       }
       isInitialMount.current = false;
       // isGroupFolding：单工具→多工具时槽位首次挂载，需按当前折叠态补挂 hidden
-    }, [isExpanded, isGroupFolding]);
+    }, [isExpanded, isGroupFolding, transitionDuration]);
 
     // CSS Grid 过渡结束时立即附加 hidden="until-found" 支持 Ctrl+F 页面穿透
     const handleTransitionEnd = useCallback(
@@ -188,6 +247,7 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
     if (!isGroupFolding) {
       return (
         <div
+          ref={containerRef}
           className={styles.groupContainer}
           data-testid="foldable-tool-group"
           data-single-tool="true"
@@ -199,11 +259,14 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
 
     return (
       <div
+        ref={containerRef}
         className={styles.groupContainer}
         data-testid="foldable-tool-group"
         data-expanded={isExpanded ? 'true' : 'false'}
+        onFocusCapture={handleFocusCapture}
       >
         <div
+          ref={headerRef}
           className={styles.groupHeader}
           role="button"
           tabIndex={0}
@@ -242,9 +305,14 @@ export const FoldableToolGroup: React.FC<FoldableToolGroupProps> = React.memo(
           ref={slotRef}
           className={styles.groupBody}
           data-expanded={isExpanded ? 'true' : 'false'}
+          style={
+            {
+              '--accordion-duration': `${transitionDuration}ms`,
+            } as React.CSSProperties
+          }
           onTransitionEnd={handleTransitionEnd}
         >
-          <div className={styles.groupBodyInner}>
+          <div ref={innerRef} className={styles.groupBodyInner}>
             <ChatToolStack {...hostProps} />
           </div>
         </div>

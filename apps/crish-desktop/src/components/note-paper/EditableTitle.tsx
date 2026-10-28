@@ -9,7 +9,7 @@
  * - 物理剔除原生 title 属性，全量换装项目自定义 <Tooltip>
  */
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Input, Tooltip } from '../ui';
+import { Input, Tooltip } from '@/components/ui';
 import styles from './NotePaperPanel.module.css';
 
 export interface EditableTitleProps {
@@ -53,7 +53,8 @@ export const EditableTitle: React.FC<EditableTitleProps> = React.memo(
     const handleCommit = useCallback(async () => {
       setIsEditing(false);
       const trimmed = draftText.trim();
-      const finalTitle = trimmed.length > 0 ? trimmed.slice(0, 120) : placeholder;
+      const finalTitle =
+        trimmed.length > 0 ? trimmed.slice(0, 120) : placeholder;
 
       if (finalTitle !== title && onRename) {
         try {

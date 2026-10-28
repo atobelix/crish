@@ -177,7 +177,10 @@ export const PaperListDomMount: React.FC<PaperListDomMountProps> = ({
   const activeEditingBlockIdRef = useRef<string | null>(null);
   const activeDraftsRef = useRef<Map<string, string>>(new Map());
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isComposingRef = useRef(false);
+  const compositionRef = useRef<{
+    blockId: string;
+    baseline: string;
+  } | null>(null);
 
   // 回调引用保持最新，避免 effect 重复注销绑定
   const onBlockChangeRef = useRef(onBlockChange);
@@ -366,7 +369,7 @@ export const PaperListDomMount: React.FC<PaperListDomMountProps> = ({
       const newText = blockEl.textContent ?? '';
       activeDraftsRef.current.set(blockId, newText);
 
-      if (isComposingRef.current) {
+      if (compositionRef.current) {
         return;
       }
 
@@ -381,19 +384,23 @@ export const PaperListDomMount: React.FC<PaperListDomMountProps> = ({
     };
 
     const handleCompositionStart = (e: CompositionEvent) => {
-      isComposingRef.current = true;
       const blockEl = findBlockElement(e.target, parent);
       const blockId = getBlockId(blockEl);
       if (blockId) {
+        compositionRef.current = {
+          blockId,
+          baseline: blockEl?.textContent ?? '',
+        };
         activeEditingBlockIdRef.current = blockId;
       }
     };
 
     const handleCompositionEnd = (e: CompositionEvent) => {
-      isComposingRef.current = false;
       const blockEl = findBlockElement(e.target, parent);
       const blockId = getBlockId(blockEl);
-      if (!blockId || !blockEl) return;
+      const composition = compositionRef.current;
+      if (!blockId || !blockEl || composition?.blockId !== blockId) return;
+      compositionRef.current = null;
 
       const newText = blockEl.textContent ?? '';
       activeDraftsRef.current.set(blockId, newText);
@@ -413,7 +420,7 @@ export const PaperListDomMount: React.FC<PaperListDomMountProps> = ({
       if (!blockId || !blockEl) return;
 
       if (e.key === 'Enter') {
-        if (isComposingRef.current) return;
+        if (compositionRef.current) return;
         e.preventDefault();
         if (debounceTimerRef.current) {
           clearTimeout(debounceTimerRef.current);
@@ -428,7 +435,7 @@ export const PaperListDomMount: React.FC<PaperListDomMountProps> = ({
       }
 
       if (e.key === 'Backspace') {
-        if (isComposingRef.current) return;
+        if (compositionRef.current) return;
         const currentText = blockEl.textContent ?? '';
         if (currentText === '') {
           e.preventDefault();
@@ -464,6 +471,14 @@ export const PaperListDomMount: React.FC<PaperListDomMountProps> = ({
       const blockEl = findBlockElement(e.target, parent);
       const blockId = getBlockId(blockEl);
       if (!blockId || !blockEl) return;
+
+      const composition = compositionRef.current;
+      if (composition?.blockId === blockId) {
+        // blur 早于 compositionend 时取消预编辑，并回到组合前确认的文本。
+        compositionRef.current = null;
+        blockEl.textContent = composition.baseline;
+        activeDraftsRef.current.set(blockId, composition.baseline);
+      }
 
       const now = Date.now();
       if (lastBlurBlockId === blockId && now - lastBlurTime < 50) {

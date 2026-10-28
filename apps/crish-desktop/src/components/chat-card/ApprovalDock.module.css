@@ -4,11 +4,16 @@
   align-items: center;
   gap: var(--space-2);
   width: 100%;
-  max-width: min(var(--chat-col-max, 760px), 100%);
+  max-width: 100%;
   margin: 0 auto 6px;
   padding: 8px 12px;
   border-radius: var(--radius-xl);
-  border: 1px solid color-mix(in srgb, var(--accent-orange) 30%, var(--hairline, var(--border-subtle)));
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--accent-orange) 30%,
+      var(--hairline, var(--border-subtle))
+    );
   background: var(--warning-soft-bg);
   cursor: pointer;
   font-family: inherit;
@@ -24,10 +29,10 @@
 }
 
 .approvalDock.docked {
-  width: calc(100% - 36px);
+  width: 100%;
   max-width: none;
-  margin-left: 18px;
-  margin-right: auto;
+  margin-left: 0;
+  margin-right: 0;
   margin-bottom: 0;
 }
 
@@ -52,10 +57,12 @@
 
 @keyframes approval-dock-dot-pulse {
   0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-orange) 45%, transparent);
+    box-shadow: 0 0 0 0
+      color-mix(in srgb, var(--accent-orange) 45%, transparent);
   }
   70% {
-    box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-orange) 0%, transparent);
+    box-shadow: 0 0 0 6px
+      color-mix(in srgb, var(--accent-orange) 0%, transparent);
   }
   100% {
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-orange) 0%, transparent);

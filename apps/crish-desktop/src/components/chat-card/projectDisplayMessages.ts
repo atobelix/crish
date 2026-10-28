@@ -24,8 +24,8 @@ export function projectDisplayMessages(
   query: string
 ): DisplayProjection {
   const q = query.trim();
-  const renderable = sortMessagesByOrder(messages as SessionMessage[]).filter((m) =>
-    isRenderableAssistantMessage(m)
+  const renderable = sortMessagesByOrder(messages as SessionMessage[]).filter(
+    (m) => isRenderableAssistantMessage(m)
   );
   const all = dedupeStateCarrierMessages(renderable);
   if (!q) return { display: all, visibleCount: all.length };

@@ -6,8 +6,8 @@ import {
   useDiffHighlightMap,
   type DiffHighlightItem,
 } from '../../api/codeHighlightBatch';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { useTransientFlag } from '../../hooks/useTransientFlag';
 
 export interface ToolCallDiffPreviewProps {
@@ -153,7 +153,7 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
                   aria-label="在右侧面板查看完整差异"
                 >
                   <span>在右侧查看</span>
-                  <AppIcon name="external-link" size={11} aria-hidden="true" />
+                  <AppIcon name="external-link" size={13} aria-hidden="true" />
                 </Button>
               </Tooltip>
             )}

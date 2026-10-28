@@ -29,6 +29,37 @@ export function readStreamPadX(el?: HTMLElement | null): number {
   return Number.isFinite(val) && val >= 0 ? val : 20;
 }
 
+/**
+ * 运行时从 DOM 元素读取对话流水平安全内衬（左侧行首线 + 右侧功能区避让区）。
+ * 严格基于盒模型与 --chat-stream-pad-x 契约，保证几何测量与 CSS 布局的单源真理（SSOT）。
+ */
+export function readStreamPadding(el?: HTMLElement | null): {
+  padStart: number;
+  padEnd: number;
+} {
+  const padX = readStreamPadX(el);
+  if (
+    typeof window === 'undefined' ||
+    typeof getComputedStyle === 'undefined'
+  ) {
+    return { padStart: padX, padEnd: padX };
+  }
+  const target =
+    el || (typeof document !== 'undefined' ? document.documentElement : null);
+  if (!target) return { padStart: padX, padEnd: padX };
+  const style = getComputedStyle(target);
+  const padLeftRaw = parseFloat(style.getPropertyValue('padding-left'));
+  const padRightRaw = parseFloat(style.getPropertyValue('padding-right'));
+  const padStart =
+    Number.isFinite(padLeftRaw) && padLeftRaw > 0 ? padLeftRaw : padX;
+  const padEnd =
+    Number.isFinite(padRightRaw) && padRightRaw > 0 ? padRightRaw : padX;
+  return {
+    padStart,
+    padEnd,
+  };
+}
+
 export function chatSpacerHeight(contentHeight: number): number {
   const h =
     Number.isFinite(contentHeight) && contentHeight > 0 ? contentHeight : 0;

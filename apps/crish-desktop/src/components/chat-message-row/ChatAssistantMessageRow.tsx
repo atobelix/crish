@@ -10,7 +10,13 @@ import { useToast } from '../../services/toast/ToastContext';
  * - 展开或收拢思考/工具时，联动 ResizeObserver 触发 VSM 树状数组动态测高自愈，零重排撕裂；
  * - 保持 assistantRowPropsEqual 比较契约与 memo 完整性。
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import styles from './ChatMessageRow.module.css';
 import {
   assistantCopyText,
@@ -32,9 +38,7 @@ import { useInvalidateActualOnChange } from './useInvalidateActualOnChange';
 
 export type { ChatAssistantMessageRowProps } from './chatMessageRowUtils';
 
-const ChatAssistantMessageRowInner: React.FC<
-  ChatAssistantMessageRowProps
-> = ({
+const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
   msg,
   streamText,
   isFollowUp,
@@ -43,8 +47,6 @@ const ChatAssistantMessageRowInner: React.FC<
   isSearchHit,
   isThinkingMsg,
   hideThinkingBlock,
-  inPlanMode,
-  planApproved,
   isLastAssistant,
   toolStackProps,
   onTogglePin,
@@ -53,7 +55,6 @@ const ChatAssistantMessageRowInner: React.FC<
   onOpenDiff,
   onOpenDiffPanel,
   setPermissionMode,
-  setPlanApproved,
   onFillFollowUp,
   onSendFollowUp,
   followUpDismissed = false,
@@ -99,9 +100,10 @@ const ChatAssistantMessageRowInner: React.FC<
       msg.blocks,
       isThinkingMsg,
       hideThinkingBlock,
-      toolStackProps?.expandedToolsByMessage?.[msg.id] ?? toolStackProps?.expandedTools,
+      toolStackProps?.expandedToolsByMessage?.[msg.id] ??
+        toolStackProps?.expandedTools,
       virtualScrollManager,
-    ],
+    ]
   );
 
   // 增强 toolStackProps：
@@ -178,7 +180,10 @@ const ChatAssistantMessageRowInner: React.FC<
       aria-label={isPureCarrier ? '系统状态提示行' : rowAria}
     >
       {/* 拔除置顶独立的 MessageThinkingBlock，所有思维链下放至 MessageContent 自然交错渲染 */}
-      <div className={isPureCarrier ? styles.carrierBody : styles.assistantBody} data-message-body={isPureCarrier ? 'carrier' : 'assistant'}>
+      <div
+        className={isPureCarrier ? styles.carrierBody : styles.assistantBody}
+        data-message-body={isPureCarrier ? 'carrier' : 'assistant'}
+      >
         <MessageContent
           msg={msg}
           streamText={streamText}
@@ -198,8 +203,6 @@ const ChatAssistantMessageRowInner: React.FC<
             isPinned,
             pinnedColor,
             isThinkingMsg,
-            inPlanMode,
-            planApproved,
             followUpDismissed,
           }}
           actions={{
@@ -207,7 +210,6 @@ const ChatAssistantMessageRowInner: React.FC<
             ...(onRegenerate !== undefined && { onRegenerate }),
             onTogglePin,
             setPermissionMode,
-            setPlanApproved,
             ...(onFillFollowUp !== undefined && { onFillFollowUp }),
             ...(onSendFollowUp !== undefined && { onSendFollowUp }),
             ...(onDismissFollowUp !== undefined && { onDismissFollowUp }),

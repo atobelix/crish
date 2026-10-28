@@ -100,8 +100,9 @@
   margin-left: 4px;
   min-width: 160px;
   border-radius: var(--sep-radius-outer, 14px);
-  border: 1px solid var(--sep-border-color, var(--border-color));
-  background: var(--sep-bg-panel-solid, var(--bg-elevated));
+  border: 1px solid
+    var(--border-panel, var(--sep-border-color, var(--border-color)));
+  background: var(--surface-overlay);
   box-shadow: var(--sep-shadow);
   padding: 6px;
   transform-origin: left top;

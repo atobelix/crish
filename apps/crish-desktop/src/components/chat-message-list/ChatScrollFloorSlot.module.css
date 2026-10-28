@@ -27,8 +27,9 @@
 }
 
 /* 回底轻量浮钮：GPU transform 向上物理位移（对文档流 scrollHeight 贡献严格为 0），
-   彻底拔除破坏性负 margin。基态 -46px；hover 再抬 1px（-47px）；active 回落至基态。 */
-.chatScrollFab,
+   彻底拔除破坏性负 margin。基态 -46px；组件严格禁止位移动画；
+   继承 .button 单层 ::before 物理微光，通过 --btn-hover-overlay 注入体系最浅档 --state-subtle，
+   杜绝本体直接覆写透明 background 导致的视口穿透透底问题。 */
 .chatScrollFab {
   width: 34px;
   height: 34px;
@@ -36,6 +37,9 @@
   min-height: unset;
   --btn-h: 34px;
   --btn-px: 0px;
+  --btn-bg: var(--bg-elevated);
+  --btn-hover-overlay: var(--state-subtle);
+  --btn-active-overlay: var(--state-subtle);
   border-radius: 50%;
   border: 1px solid var(--border-subtle);
   background: var(--bg-elevated);
@@ -44,22 +48,20 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: var(--shadow-md), 0 0 0 1px var(--hairline, var(--border-subtle));
+  box-shadow:
+    var(--shadow-md),
+    0 0 0 1px var(--hairline, var(--border-subtle));
   padding: 0;
   transform: translateY(-46px);
-  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition:
+    background var(--duration-fast, 120ms) var(--ease-standard),
+    border-color var(--duration-fast, 120ms) var(--ease-standard),
+    color var(--duration-fast, 120ms) var(--ease-standard);
   position: relative;
 }
 
 .chatScrollFab:hover {
-  transform: translateY(-47px);
   color: var(--text-primary);
-  border-color: var(--border-color);
-  background: var(--bg-hover);
-}
-
-.chatScrollFab:active {
-  transform: translateY(-46px);
 }
 
 /* 遵循 AGENTS.md §13 软环焦点态：对比度 <= 10%，杜绝粗黑硬边 */
@@ -67,7 +69,8 @@
   outline: none;
   box-shadow:
     0 0 0 0.5px var(--border-subtle),
-    0 0 0 2px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+    0 0 0 2px
+      color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .unreadBadge {

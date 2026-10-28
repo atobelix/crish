@@ -193,7 +193,7 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> =
           streaming={ribbons.streaming}
           goal={ribbons.goal}
           approval={approval}
-          omitPlanRibbons
+          omitGoalRibbon
           omitApprovalDock
         />
       );
@@ -260,11 +260,6 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> =
                       steps={planSteps}
                       activeStepText={activeStepText}
                       isRunning={isProcessing}
-                      onApprovePlan={
-                        ribbons.goal?.planApproved
-                          ? undefined
-                          : ribbons.goal?.onApprovePlan
-                      }
                       onStop={
                         isGoalActive
                           ? ribbons.goal?.onStopGoal

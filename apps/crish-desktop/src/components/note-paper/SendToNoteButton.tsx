@@ -16,7 +16,7 @@
 
 import React, { useCallback, useState } from 'react';
 
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import type { NoteTransport } from '../../api/noteApi';
 import {
   dispatchSendToNote,
@@ -25,7 +25,7 @@ import {
   type SendToNoteSink,
 } from '../../bridges/send-to-note';
 import styles from './NotePaperPanel.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export type SendToNoteButtonProps = {
   /** 消息 id */

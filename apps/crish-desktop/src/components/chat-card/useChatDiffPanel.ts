@@ -18,10 +18,7 @@ export function useChatDiffPanel({
   messages,
   handleGlobalTabClick,
 }: UseChatDiffPanelOptions): UseChatDiffPanelResult {
-  const diffFiles = useMemo(
-    () => selectSessionDiffFiles(messages),
-    [messages]
-  );
+  const diffFiles = useMemo(() => selectSessionDiffFiles(messages), [messages]);
 
   const openDiffInRightPanel = useCallback(
     (diff: FileDiff) => {

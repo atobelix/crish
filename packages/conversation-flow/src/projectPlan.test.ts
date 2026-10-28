@@ -7,12 +7,9 @@ import { projectMessage, projectPlanRoot, isPlanModeEnabled } from './index';
 const DEMO_STEP = '摸清 crates/session-loop 的 IPC 通道瓶颈';
 
 describe('isPlanModeEnabled', () => {
-  it('permissionMode=plan 或 planModeEnabled 任一为真', () => {
-    expect(isPlanModeEnabled({ permissionMode: 'plan' })).toBe(true);
+  it('仅当 planModeEnabled 为真时判定开启', () => {
     expect(isPlanModeEnabled({ planModeEnabled: true })).toBe(true);
-    expect(isPlanModeEnabled({ permissionMode: 'ask', planModeEnabled: false })).toBe(
-      false,
-    );
+    expect(isPlanModeEnabled({ planModeEnabled: false })).toBe(false);
     expect(isPlanModeEnabled(null)).toBe(false);
     expect(isPlanModeEnabled({})).toBe(false);
   });
@@ -20,14 +17,12 @@ describe('isPlanModeEnabled', () => {
 
 describe('projectPlanRoot', () => {
   it('非 plan 模式返回 null', () => {
-    expect(projectPlanRoot({ permissionMode: 'ask' })).toBeNull();
-    expect(projectPlanRoot({ permissionMode: 'full', planModeEnabled: false })).toBeNull();
+    expect(projectPlanRoot({ planModeEnabled: false })).toBeNull();
     expect(projectPlanRoot(undefined)).toBeNull();
   });
 
   it('plan 模式长出 Task 根，steps / children 为空', () => {
     const node = projectPlanRoot({
-      permissionMode: 'plan',
       planModeEnabled: true,
       planApproved: false,
     });

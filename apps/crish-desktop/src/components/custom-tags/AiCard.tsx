@@ -14,8 +14,8 @@ import React, { useState, type ReactNode } from 'react';
 import styles from './custom-tags.module.css';
 import { CustomTagErrorBoundary } from './CustomTagErrorBoundary';
 import type { ExtraComponentProps } from './CustomTagRegistry';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface AiCardProps extends ExtraComponentProps {
   title?: string;
@@ -41,7 +41,8 @@ export const AiCardInner: React.FC<AiCardProps> = ({
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   // 若未显式传入 status，在流式生成中默认为 running，否则为 success
-  const effectiveStatus = initialStatus || (isStreaming ? 'running' : 'success');
+  const effectiveStatus =
+    initialStatus || (isStreaming ? 'running' : 'success');
 
   const toggleExpand = () => {
     if (collapsible) {

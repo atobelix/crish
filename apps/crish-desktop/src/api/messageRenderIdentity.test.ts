@@ -168,8 +168,13 @@ describe('stream / final single-row identity (static + pure)', () => {
     expect(src).toMatch(
       /const assistantMsgId = generateMessageId\('assistant'\)/
     );
-    // 热路径写 streamingStore，按同一 id
-    expect(src).toMatch(/setStreamText\(sid,\s*assistantMsgId/);
+    // 热路径由 StreamRenderBuffer 回调写 streamingStore，按装配时绑定的同一 id
+    expect(src).toMatch(
+      /setupStreamRenderBuffer\(\{[\s\S]*?sid,[\s\S]*?assistantMsgId/
+    );
+    expect(helperSrc).toMatch(
+      /setStreamText\(opts\.sid,\s*opts\.assistantMsgId/
+    );
     // 终态 commit 同一 id
     expect(completionSrc).toMatch(
       /commitStreamToSession\(sid,\s*assistantMsgId/

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 import styles from './ModernToolCall.module.css';
 
 export interface ModernApprovalCardProps {
@@ -17,39 +17,28 @@ export interface ModernApprovalCardProps {
 export const ModernApprovalCard: React.FC<ModernApprovalCardProps> = ({
   id,
   command,
-  summary = '高危命令执行确认',
+  summary,
   onAllow,
   onDeny,
   className = '',
 }) => {
   return (
-    <div
-      className={`${styles.approvalCard} ${className}`}
-      data-tool-id={id}
-    >
-      <div className={styles.approvalHead}>
-        <span className={styles.approvalTitle}>{summary}</span>
-      </div>
+    <div className={`${styles.approvalCard} ${className}`} data-tool-id={id}>
+      {summary && summary !== '高危命令执行确认' ? (
+        <div className={styles.approvalHead}>
+          <span className={styles.approvalTitle}>{summary}</span>
+        </div>
+      ) : null}
 
       <div className={styles.approvalBody}>
         <pre className={styles.approvalCodePreview}>$ {command}</pre>
       </div>
 
       <div className={styles.approvalFooter}>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onDeny}
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={onDeny}>
           拒绝
         </Button>
-        <Button
-          type="button"
-          variant="primary"
-          size="sm"
-          onClick={onAllow}
-        >
+        <Button type="button" variant="primary" size="sm" onClick={onAllow}>
           允许执行
         </Button>
       </div>

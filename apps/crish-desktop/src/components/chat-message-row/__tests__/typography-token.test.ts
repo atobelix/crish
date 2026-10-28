@@ -56,10 +56,10 @@ describe('Markdown Typography & Syntax Highlighting Tokens (Plan 06)', () => {
   const stylesDir = path.resolve(__dirname, '../../../styles');
   const componentDir = path.resolve(__dirname, '..');
 
-  const tokensCss = fs.readFileSync(
-    path.join(stylesDir, 'tokens.css'),
-    'utf-8'
-  );
+  const tokensCss = [
+    fs.readFileSync(path.join(stylesDir, 'tokens.css'), 'utf-8'),
+    fs.readFileSync(path.join(stylesDir, 'tokens-components.css'), 'utf-8'),
+  ].join('\n');
   const designSystemCss = fs.readFileSync(
     path.join(stylesDir, 'design-system.css'),
     'utf-8'

@@ -15,9 +15,7 @@ import { ChatComposerWrapper, type RibbonsGroup } from './ChatComposerWrapper';
 import './workspaceChatComposerAbove.slot';
 
 vi.mock('./ChatStatusRibbons', () => ({
-  ChatStatusRibbons: (props: {
-    approval?: { showApprovalDock?: boolean };
-  }) => (
+  ChatStatusRibbons: (props: { approval?: { showApprovalDock?: boolean } }) => (
     <div
       data-testid="ribbons"
       data-show-dock={String(Boolean(props.approval?.showApprovalDock))}
@@ -28,12 +26,11 @@ vi.mock('./ChatStatusRibbons', () => ({
 vi.mock('./ApprovalDock', () => ({
   ApprovalDock: (props: { show?: boolean; pendingCount?: number }) =>
     props.show ? (
-      <div data-testid="approval-dock" data-pending={String(props.pendingCount)} />
+      <div
+        data-testid="approval-dock"
+        data-pending={String(props.pendingCount)}
+      />
     ) : null,
-}));
-
-vi.mock('./PlanGoalRibbons', () => ({
-  PlanGoalRibbons: () => null,
 }));
 
 const ribbons = { streaming: {}, goal: {} } as RibbonsGroup;
@@ -84,13 +81,15 @@ describe('ChatComposerWrapper workspace.chat.composerAbove', () => {
     expect(
       container.querySelector('[data-slot="workspace.chat.composerAbove"]')
     ).not.toBeNull();
-    expect(container.querySelector('[data-composer-float-zone]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-composer-float-zone]')
+    ).not.toBeNull();
     expect(container.querySelector('[data-composer-wrapper]')).not.toBeNull();
     expect(container.querySelector('[data-permission-bar]')).toBeNull();
     expect(
-      container.querySelector('[data-testid="ribbons"]')?.getAttribute(
-        'data-show-dock'
-      )
+      container
+        .querySelector('[data-testid="ribbons"]')
+        ?.getAttribute('data-show-dock')
     ).toBe('true');
   });
 
@@ -104,9 +103,9 @@ describe('ChatComposerWrapper workspace.chat.composerAbove', () => {
     expect(bar?.getAttribute('data-tool-id')).toBe('t1');
     expect(bar?.textContent).toMatch(/还有 1/);
     expect(
-      container.querySelector('[data-testid="ribbons"]')?.getAttribute(
-        'data-show-dock'
-      )
+      container
+        .querySelector('[data-testid="ribbons"]')
+        ?.getAttribute('data-show-dock')
     ).toBe('false');
   });
 
@@ -118,9 +117,7 @@ describe('ChatComposerWrapper workspace.chat.composerAbove', () => {
       showApprovalDock: false,
     });
     await waitFor(() => {
-      expect(
-        slotCore.getSingle('workspace.chat.composerAbove')
-      ).toBeDefined();
+      expect(slotCore.getSingle('workspace.chat.composerAbove')).toBeDefined();
     });
     expect(container.querySelector('[data-permission-bar]')).toBeNull();
   });

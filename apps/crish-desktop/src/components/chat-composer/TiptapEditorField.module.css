@@ -162,7 +162,7 @@
 }
 
 .proseMirrorField :global(code) {
-  background: var(--tint-active);
+  background: var(--state-active);
   padding: 0.15em 0.35em;
   border-radius: var(--radius-sm);
   font-size: 0.9em;
@@ -240,7 +240,7 @@
   margin: 0 1px;
   border: none;
   border-radius: var(--radius-sm);
-  background: var(--tint-quiet);
+  background: var(--state-quiet);
   color: var(--text-secondary);
   font-size: inherit;
   font-weight: 500;
@@ -252,7 +252,7 @@
 .proseMirrorField :global(.mention-chip-goal:hover),
 .proseMirrorField :global(.mention-chip-goal:focus-within) {
   opacity: 1;
-  background: var(--tint-quiet);
+  background: var(--state-quiet);
 }
 
 .proseMirrorField :global(.mention-chip-goal .mention-remove) {

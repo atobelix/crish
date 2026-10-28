@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getSessionById } from '../../store/storeAccess';
-import {
-  addCommandPermission,
-  updateMessageToolCall,
-} from '../../api/storeAccess';
-import { rememberPrefixFromToolArgs } from '../../api/approvalMeta';
-import { extractCommandForMatch } from '../../api/commandPermissions';
+import { updateMessageToolCall } from '../../api/storeAccess';
 import { engineApproveTool, engineDenyTool } from '../../api/chatBridge';
 import { toast } from '../../services/toast/ToastContext';
 import {
@@ -26,9 +21,7 @@ function findChatTool(sessionId: string, msgId: string, toolId: string) {
   return { sess, m, t };
 }
 
-export function useChatApprovalExecutor(
-  activeSessionId: string | null,
-) {
+export function useChatApprovalExecutor(activeSessionId: string | null) {
   const showToast = (m: string) => toast.show(m);
   const [, setLockVersion] = useState(0);
 
@@ -43,7 +36,7 @@ export function useChatApprovalExecutor(
   }, []);
 
   const handleApprovalAllow = useCallback(
-    async (toolId: string, msgId: string, remember = false) => {
+    async (toolId: string, msgId: string, _remember?: boolean) => {
       const tid = String(toolId || '').trim();
       const mid = String(msgId || '').trim();
       if (!activeSessionId || !tid || !mid) return;
@@ -52,15 +45,6 @@ export function useChatApprovalExecutor(
       if (acquired.length === 0) return;
 
       try {
-        if (remember) {
-          const { t: tc } = findChatTool(activeSessionId, mid, tid);
-          const prefix = rememberPrefixFromToolArgs(
-            tc?.name || '',
-            tc?.arguments || '',
-            extractCommandForMatch
-          );
-          if (prefix) addCommandPermission(prefix);
-        }
         updateMessageToolCall(activeSessionId, mid, tid, {
           status: 'running',
           output: '执行中…',

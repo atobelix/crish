@@ -16,7 +16,7 @@
 import React, { useId } from 'react';
 import styles from './ChatEmptyState.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 import {
   chatEmptyKindAriaLabel,
   isChatEmptyKind,
@@ -26,7 +26,7 @@ import {
   type ChatEmptyKind,
   type ChatEmptyPrimaryAction,
 } from '../../api/chatEmptyState';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 
 export type ChatEmptyStateProps = {

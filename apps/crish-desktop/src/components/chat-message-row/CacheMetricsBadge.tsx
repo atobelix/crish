@@ -10,7 +10,8 @@
  */
 import React from 'react';
 import type { CacheMetrics } from '@crish/shared-types';
-import { Tooltip } from '../ui';
+import { Tooltip } from '@/components/ui';
+import { AnimatedCounter } from '@/components/ui';
 import styles from './CacheMetricsBadge.module.css';
 
 export interface CacheMetricsBadgeProps {
@@ -36,8 +37,6 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
 
   // 态 2：缓存命中 (Read > 0)
   if (read > 0) {
-    const percent = ratio >= 0.01 ? `${Math.round(ratio * 100)}%` : '<1%';
-    const writePart = write > 0 ? ` · 写 ${write.toLocaleString()}` : '';
     const hitRatePct = (ratio * 100).toFixed(1);
 
     return (
@@ -56,7 +55,7 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
               <div className={styles.statRow}>
                 <span className={styles.statLabel}>命中读取</span>
                 <span className={styles.statValue}>
-                  {read.toLocaleString()}{' '}
+                  <AnimatedCounter value={read} locale="zh-CN" />{' '}
                   <span className={styles.statUnit}>tokens</span>
                 </span>
               </div>
@@ -64,7 +63,7 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
                 <div className={styles.statRow}>
                   <span className={styles.statLabel}>本轮写入</span>
                   <span className={styles.statValue}>
-                    {write.toLocaleString()}{' '}
+                    <AnimatedCounter value={write} locale="zh-CN" />{' '}
                     <span className={styles.statUnit}>tokens</span>
                   </span>
                 </div>
@@ -73,7 +72,7 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
                 <div className={styles.statRow}>
                   <span className={styles.statLabel}>未命中量</span>
                   <span className={styles.statValue}>
-                    {miss.toLocaleString()}{' '}
+                    <AnimatedCounter value={miss} locale="zh-CN" />{' '}
                     <span className={styles.statUnit}>tokens</span>
                   </span>
                 </div>
@@ -82,7 +81,7 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
                 <div className={styles.statRowTotal}>
                   <span className={styles.statLabel}>提示词总量</span>
                   <span className={styles.statValue}>
-                    {total.toLocaleString()}{' '}
+                    <AnimatedCounter value={total} locale="zh-CN" />{' '}
                     <span className={styles.statUnit}>tokens</span>
                   </span>
                 </div>
@@ -97,9 +96,20 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
           data-state="hit"
         >
           <span>
-            缓存命中 {percent} · 读 {read.toLocaleString()}
+            缓存命中{' '}
+            {ratio >= 0.01 ? (
+              <AnimatedCounter value={Math.round(ratio * 100)} suffix="%" />
+            ) : (
+              '<1%'
+            )}{' '}
+            · 读 <AnimatedCounter value={read} locale="zh-CN" />
           </span>
-          {writePart}
+          {write > 0 && (
+            <span>
+              {' · 写 '}
+              <AnimatedCounter value={write} locale="zh-CN" />
+            </span>
+          )}
         </span>
       </Tooltip>
     );
@@ -121,7 +131,7 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
               <div className={styles.statRow}>
                 <span className={styles.statLabel}>本轮写入</span>
                 <span className={styles.statValue}>
-                  {write.toLocaleString()}{' '}
+                  <AnimatedCounter value={write} locale="zh-CN" />{' '}
                   <span className={styles.statUnit}>tokens</span>
                 </span>
               </div>
@@ -137,7 +147,9 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
           data-testid="cache-metrics-badge"
           data-state="write"
         >
-          <span>写入缓存 {write.toLocaleString()}</span>
+          <span>
+            写入缓存 <AnimatedCounter value={write} locale="zh-CN" />
+          </span>
         </span>
       </Tooltip>
     );
@@ -159,7 +171,7 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
               <div className={styles.statRow}>
                 <span className={styles.statLabel}>输入总量</span>
                 <span className={styles.statValue}>
-                  {total.toLocaleString()}{' '}
+                  <AnimatedCounter value={total} locale="zh-CN" />{' '}
                   <span className={styles.statUnit}>tokens</span>
                 </span>
               </div>

@@ -32,7 +32,7 @@ const ExtensionsMainSurface = lazy(() =>
 );
 
 import { useChatCardDragDrop } from './useChatCardDragDrop';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export type ComposerSurfaceState = 'landing' | 'docking' | 'docked';
 
@@ -230,9 +230,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         onOpenPath={state.openPathInFilesPanel}
         isProcessing={state.isProcessing}
         permissionMode={state.permissionMode}
-        onPermissionChange={(m) => {
-          state.setPermissionMode(m);
-        }}
+        onPermissionChange={state.setPermissionMode}
         rightActions={mainModelBadgeNode}
       />
     );
@@ -261,7 +259,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         showPlusMenu={editShowPlusMenu}
         setShowPlusMenu={setEditShowPlusMenu}
         permissionMode={state.permissionMode}
-        onPermissionChange={(m) => state.setPermissionMode(m)}
+        onPermissionChange={state.setPermissionMode}
         isEditingMessage={true}
         onCancelEdit={handleCancelEditMessage}
         rightActions={editModelBadgeNode}
@@ -286,12 +284,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           onOpenModelDropdown: () => state.setShowModelDropdown(true),
         },
         goal: {
-          inPlanMode: state.inPlanMode,
-          planApproved: state.planApproved,
-          onApprovePlan: () => {
-            state.setPermissionMode('ask');
-            state.setPlanApproved(true);
-          },
           goalModeActive: state.goalModeActive,
           goalText: state.goalMode?.goal || '',
           goalIteration: state.goalMode?.iteration ?? 0,

@@ -20,15 +20,20 @@ vi.mock('../../api/storeAccess', async (importOriginal) => {
 });
 
 vi.mock('../../services/toast/ToastContext', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../services/toast/ToastContext')>();
+  const actual =
+    await importOriginal<typeof import('../../services/toast/ToastContext')>();
   return {
     ...actual,
-    toast: { ...actual.toast, show: (...args: unknown[]) => toastShowMock(...args) },
+    toast: {
+      ...actual.toast,
+      show: (...args: unknown[]) => toastShowMock(...args),
+    },
   };
 });
 
 vi.mock('../../api/modelVisionSupport', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../api/modelVisionSupport')>();
+  const actual =
+    await importOriginal<typeof import('../../api/modelVisionSupport')>();
   return {
     ...actual,
     isModelVisionSupported: () => false,
@@ -36,7 +41,8 @@ vi.mock('../../api/modelVisionSupport', async (importOriginal) => {
 });
 
 vi.mock('../../api/providerProfiles', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../api/providerProfiles')>();
+  const actual =
+    await importOriginal<typeof import('../../api/providerProfiles')>();
   return {
     ...actual,
     getActiveModelId: () => 'test-model',
@@ -45,7 +51,8 @@ vi.mock('../../api/providerProfiles', async (importOriginal) => {
 });
 
 vi.mock('../../api/workspaceFsApi', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../api/workspaceFsApi')>();
+  const actual =
+    await importOriginal<typeof import('../../api/workspaceFsApi')>();
   return {
     ...actual,
     formatAnnotationsForModel: () => '',
@@ -54,7 +61,8 @@ vi.mock('../../api/workspaceFsApi', async (importOriginal) => {
 });
 
 vi.mock('../../store/sessionStore', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../store/sessionStore')>();
+  const actual =
+    await importOriginal<typeof import('../../store/sessionStore')>();
   return {
     ...actual,
     getSessionById: () => ({ goalMode: null }),
@@ -74,7 +82,11 @@ describe('assembleChatPayload §2.1 无伪连通', () => {
   });
 
   it('/goal 写入 goalMode 并产出 wire 前缀，不依赖空壳派发', () => {
-    const slash = { kind: 'goal' as const, goal: '完成审计', raw: '/goal 完成审计' };
+    const slash = {
+      kind: 'goal' as const,
+      goal: '完成审计',
+      raw: '/goal 完成审计',
+    };
     const out = assembleChatPayload({
       sessionId: 'sess-1',
       rawInput: '/goal 完成审计',
@@ -109,7 +121,7 @@ describe('assembleChatPayload §2.1 无伪连通', () => {
     expect(toastShowMock).toHaveBeenCalled();
   });
 
-  it('/grill-me 切 plan 权限并产出渲染 wire 文本', () => {
+  it('/grill-me 产出渲染 wire 文本（plan 伪模式已物理移除）', () => {
     const slash = {
       kind: 'grill-me' as const,
       topic: '权限模型',
@@ -123,7 +135,7 @@ describe('assembleChatPayload §2.1 无伪连通', () => {
       displayText: '/grill-me 权限模型',
       attachments: [],
     });
-    expect(setPermissionModeMock).toHaveBeenCalledWith('plan');
+    expect(setPermissionModeMock).not.toHaveBeenCalled();
     expect(out.displayText).toBe('/grill-me 权限模型');
     expect(out.input).toContain('权限模型');
     expect(out.input).not.toBe('/grill-me 权限模型');

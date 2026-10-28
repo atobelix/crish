@@ -170,9 +170,18 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
 
         try {
           // 斜杠指令优先以主输入卡片（Composer Card）为锚定目标（对齐 ChatGPT Work 浮动卡片）
+          // 强化查找：显式 containerRef (卡片 SSOT) -> view.dom 向上祖先探测 -> 外层 wrapper 兜底
+          const cRef = ctx.containerRef?.current as
+            HTMLElement | null | undefined;
           const cardEl =
-            (view.dom?.closest('[data-composer-card]') as HTMLElement | null) ||
-            (ctx.containerRef?.current as HTMLElement | null);
+            cRef?.closest?.('[data-composer-card]') ||
+            cRef?.querySelector?.('[data-composer-card]') ||
+            (view.dom?.closest?.(
+              '[data-composer-card], [data-composer-wrapper]'
+            ) as HTMLElement | null) ||
+            cRef ||
+            null;
+
           if (cardEl && typeof cardEl.getBoundingClientRect === 'function') {
             const cardRect = cardEl.getBoundingClientRect();
             if (cardRect.width > 0 && cardRect.height > 0) {
@@ -476,7 +485,10 @@ export const MentionExtension = Node.create({
       kind === 'file'
         ? String(node.attrs.id || node.attrs.label || '').trim()
         : '';
-    const text = kind === 'skill' ? String(label) : `@${label}`;
+    const text =
+      kind === 'skill' || kind === 'command'
+        ? String(label).replace(/^\/+/, '')
+        : `@${label}`;
     return [
       'span',
       mergeAttributes(

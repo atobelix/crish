@@ -1,12 +1,9 @@
 import React, { useMemo } from 'react';
 
-import { Button, Tooltip } from '../ui';
-import {
-  SmartExpandablePanel,
-  type MenuItem,
-} from '../ui/SmartExpandablePanel';
+import { Button, Tooltip } from '@/components/ui';
+import { SmartExpandablePanel, type MenuItem } from '@/components/ui';
 import { UNIT_CHROME_TOOL_TIP_SIDE } from './unitChromeLabel';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface FolderOption {
   id: string;
@@ -52,7 +49,11 @@ export const ChatHeaderMore: React.FC<ChatHeaderMoreProps> = ({
       items.push({
         id: 'action:pin',
         label: isPinned ? '取消固定' : '固定会话',
-        icon: isPinned ? <AppIcon name="pin-off" size={14} /> : <AppIcon name="pin" size={14} />,
+        icon: isPinned ? (
+          <AppIcon name="pin-off" size={14} />
+        ) : (
+          <AppIcon name="pin" size={14} />
+        ),
         onSelect: onTogglePin,
       });
     }
@@ -138,6 +139,7 @@ export const ChatHeaderMore: React.FC<ChatHeaderMoreProps> = ({
       <Button
         type="button"
         variant="ghost"
+        size="sm"
         className={`${className || ''} top-action-btn`}
         data-testid="chat-header-more"
         aria-label="更多选项"

@@ -115,8 +115,6 @@ beforeEach(() => {
   fakeTransport.send.mockReset();
   usePermissionStore.setState({
     permissionMode: 'ask',
-    planModeEnabled: false,
-    commandPermissions: [],
   });
 });
 
@@ -272,7 +270,7 @@ describe('审批链路契约：挂起期间 run-terminal 的 defer / 收口', ()
 
 describe('审批链路契约：白名单 = 批准记忆（P1 权限归一 D1，前端二次决策 1→0）', () => {
   it('白名单命中：仍进入挂起展示审批卡，不再自动直发引擎批准命令', () => {
-    usePermissionStore.setState({ commandPermissions: ['git status'] });
+    usePermissionStore.setState({ permissionMode: 'ask' });
     const { router, callbacks, approvalFlow } = makeEnv();
 
     router.onMsg(toolStartEvent('tc-w'));
@@ -311,7 +309,7 @@ describe('审批链路契约：白名单 = 批准记忆（P1 权限归一 D1，�
   });
 
   it('危险命令白名单命中同样挂起等用户确认（引擎权威裁决，不读前端风险表）', () => {
-    usePermissionStore.setState({ commandPermissions: ['rm'] });
+    usePermissionStore.setState({ permissionMode: 'ask' });
     const { router, callbacks, approvalFlow } = makeEnv();
 
     router.onMsg(approvalRequestedEvent('tc-h', 'rm -rf /tmp/x'));
@@ -328,23 +326,23 @@ describe('审批链路契约：白名单 = 批准记忆（P1 权限归一 D1，�
     );
   });
 
-  it('plan 模式：不弹审批，直接 onToolStart（只读规划语义）', () => {
+  it('三态权限契约：不存在独立 plan 权限模式，引擎要求审批时一律挂起审批卡', () => {
     usePermissionStore.setState({
-      permissionMode: 'plan',
-      planModeEnabled: true,
+      permissionMode: 'smart',
     });
     const { router, callbacks, approvalFlow } = makeEnv();
 
     router.onMsg(approvalRequestedEvent('tc-p', 'npm install lodash'));
 
-    expect(approvalFlow.snapshot().pendingCount).toBe(0);
-    expect(callbacks.onToolPendingApproval).not.toHaveBeenCalled();
-    expect(fakeTransport.send).not.toHaveBeenCalled();
-    expect(callbacks.onToolStart).toHaveBeenCalledWith(
+    expect(approvalFlow.snapshot().pendingCount).toBe(1);
+    expect(approvalFlow.hasPending()).toBe(true);
+    expect(callbacks.onToolPendingApproval).toHaveBeenCalledWith(
       'tc-p',
       'shell_command',
       'npm install lodash',
-      '运行命令'
+      '运行命令',
+      expect.any(Object)
     );
+    expect(fakeTransport.send).not.toHaveBeenCalled();
   });
 });

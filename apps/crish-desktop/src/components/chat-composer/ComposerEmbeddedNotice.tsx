@@ -7,8 +7,8 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './ComposerEmbeddedNotice.module.css';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 import {
   resolveLegacyNoticeType,
