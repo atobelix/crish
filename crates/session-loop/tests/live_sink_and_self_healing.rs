@@ -89,7 +89,7 @@ async fn test_ut_d01_01_live_sink_turn_and_agent_lifecycle() {
     let mut loop_ = loop_with_tools(provider, vec![], options);
 
     let outcome = loop_.run(user("你好")).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
 
     let live_events = live_sink.received_events();
     let has_agent_start = live_events
@@ -153,7 +153,7 @@ async fn test_ut_d01_03_live_sink_tool_lifecycle() {
 
     let mut loop_ = loop_with_tools(provider, vec![echo_tool], options);
     let outcome = loop_.run(user("调用工具")).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
 
     let live_events = live_sink.received_events();
 
@@ -276,7 +276,7 @@ async fn test_ut_d01_06_tool_promise_self_healing_advances_turn() {
     let mut loop_ = loop_with_tools(provider, vec![echo_tool], options);
     let outcome = loop_.run(user("帮我看看文件")).await;
 
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert!(outcome.turn_index >= 2, "自愈状态机必须自动推进至下一轮次");
 
     // 验证 Nudge 消息是否注入到了对话中
@@ -318,7 +318,7 @@ async fn test_ut_d01_07_tool_promise_self_healing_caps_at_two_heals() {
     let mut loop_ = loop_with_tools(provider, vec![], options);
     let outcome = loop_.run(user("持续测试")).await;
 
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert_eq!(
         outcome.turn_index, 3,
         "达到 2 次上限后执行第 3 轮必须安全收口，不得无限循环"
@@ -343,7 +343,7 @@ async fn test_ut_d01_08_tool_promise_disabled_when_flag_false() {
     let mut loop_ = loop_with_tools(provider, vec![], options);
     let outcome = loop_.run(user("开关关闭测试")).await;
 
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert_eq!(
         outcome.turn_index, 1,
         "开关关闭时不会自愈续轮，单轮正常收口"

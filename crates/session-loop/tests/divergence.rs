@@ -182,8 +182,8 @@ async fn d2_tool_promise_language_ends_stop_no_nudge_no_diagnostic() {
 
     let outcome = loop_.run(user("帮我看看")).await;
 
-    // 正向：承诺性语言无 tool_call → 正常 stop 收场（不 error 不 aborted）
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    // 正向：承诺性语言无 tool_call → 协作式让出收场（内核映射 Stop；不 error 不 aborted）
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert!(outcome.error.is_none());
     // 承诺文本作为最终助手消息保留
     let assistant = outcome
@@ -269,8 +269,8 @@ async fn d3_pre_injected_steer_consumed_without_double_steering() {
     // 反向：旧行为（无短路时对预注入内容叠加 steering）不复现——
     // 对话中不会出现多条 runtime-steering 系统消息
     assert_ne!(injected, 2, "不得叠加第二次 steering 注入");
-    // 反向：不以 error 收场
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    // 反向：不以 error 收场（纯文本协作式让出）
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert!(outcome.error.is_none());
 }
 
@@ -336,8 +336,8 @@ async fn d4_self_termination_diagnostic_does_not_fail_run() {
             .contains("agent-self-terminated"),
         "诊断载荷应含自终止标记"
     );
-    // 正向：run 正常 stop 收场（诊断不使 run 失败）
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    // 正向：run 正常收场（协作式让出，诊断不使 run 失败）
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert!(outcome.error.is_none());
     // 反向：旧行为自终止以 runtime-error（retryable:true）事件表达——
     // 现在不产生 runtime-error，也不以 error 收场（D4 非 error 语义）
@@ -380,8 +380,8 @@ async fn d5_text_with_error_stop_ends_as_message_not_error() {
 
     let outcome = loop_.run(user("生成内容")).await;
 
-    // 正向（D5）：文字 + error 事件 → Message 收场，正常 stop（错误在 metadata 留痕，以便外层触发续写）
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    // 正向（D5）：文字 + error 事件 → Message 收场，协作式让出（内核映射 Stop；错误在 metadata 留痕）
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert!(outcome.error.is_none());
     // 正向（D5 Partial Salvage）：有文字 → 文字回复必须已 commit 落盘，不丢弃用户可见正文
     let assistant = outcome
@@ -438,8 +438,8 @@ async fn d6_empty_response_retry_within_budget_then_recover() {
     assert_eq!(injected_steering_count(&outcome.messages), 1);
     // 计数在「无 tool-call 正常结束」时重置（01 §3.3 ③）
     assert_eq!(outcome.steering_count, 0, "恢复后正常结束时计数重置");
-    // 正向：注入后恢复，stop 收场
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    // 正向：注入后恢复，协作式让出收场
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert!(outcome.error.is_none());
     let final_text = outcome
         .messages
@@ -521,7 +521,7 @@ async fn d8_run_never_injects_nudge_in_run_followup_consumed_next_message() {
     let provider = TestProvider::text_reply("普通回复。");
     let mut loop_ = loop_with(provider, vec![]);
     let outcome = loop_.run(user("你好")).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     for message in &outcome.messages {
         let kind = message
             .metadata
@@ -560,7 +560,7 @@ async fn d8_run_never_injects_nudge_in_run_followup_consumed_next_message() {
 
     let outcome = loop_.run(user("开始")).await;
 
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert!(outcome.error.is_none());
     // 正向：预注入消息作为下一条用户消息消费（User 角色，文本保留）
     let consumed = outcome

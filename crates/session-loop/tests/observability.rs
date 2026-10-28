@@ -97,8 +97,8 @@ fn run_emits_start_and_end_logs() {
     // AgentEndReason 未从 conex-types 导出，用 Debug 串比较
     let reason_debug = format!("{:?}", outcome.reason);
     assert!(
-        reason_debug.contains("Stop"),
-        "期望 stop 收场，实际：{reason_debug}"
+        reason_debug.contains("YieldSuspended"),
+        "期望协作式让出收场，实际：{reason_debug}"
     );
     let joined = lines.join("\n");
     assert!(

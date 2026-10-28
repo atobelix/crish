@@ -128,7 +128,7 @@ async fn plain_text_reply_ends_with_stop_not_error() {
     let outcome = loop_.run(user("你好")).await;
 
     // 核心断言：stop 收场，非 error
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert!(outcome.error.is_none());
     // 助手消息已落对话
     let assistant = outcome
@@ -176,7 +176,7 @@ async fn full_turn_with_tool_execution_then_final_reply() {
 
     let outcome = loop_.run(user("请查询")).await;
 
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert!(outcome.error.is_none());
     // 工具只调用一次
     assert_eq!(tool.call_count(), 1);
@@ -240,7 +240,7 @@ async fn tool_result_leads_to_next_turn() {
 
     let outcome = loop_.run(user("干吧")).await;
 
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     // 两轮：第 1 轮工具 + 第 2 轮文字；provider 调用 2 次
     assert_eq!(
         outcome.messages.len(),
@@ -281,7 +281,7 @@ async fn empty_response_injects_steering_then_recovers() {
     let outcome = loop_.run(user("回答")).await;
 
     // 预算内恢复：stop 收场（不 error）
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert!(outcome.error.is_none());
     // 注入消息在对话中（system 角色，metadata.kind=steering——I1-α④ 枚举 canonical）
     let injected = outcome
@@ -420,7 +420,7 @@ async fn steering_disabled_prepare_turn_skips_evaluation() {
 
     let outcome = loop_.run(user("执行")).await;
 
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     // 无 steering 注入消息（system 角色，kind=steering 枚举 canonical）
     assert!(!outcome.messages.iter().any(|m| {
         m.role == AgentMessageRole::System
@@ -547,7 +547,7 @@ async fn idempotency_enabled_deduplicates_across_runs() {
     });
 
     let first = loop_.run(user("执行")).await;
-    assert_eq!(first.reason, AgentEndReason::Stop);
+    assert_eq!(first.reason, AgentEndReason::YieldSuspended);
     assert_eq!(tool.call_count(), 1, "首次执行");
 
     // T09.3.3（R4）：收口 mem::take 后对话移交 RunOutcome——用上一轮
@@ -555,7 +555,7 @@ async fn idempotency_enabled_deduplicates_across_runs() {
     // 「对话跨 run 持久」语义（真实接线每 run 重建 loop，无此需求）
     loop_ = loop_.with_initial_conversation_arc(first.messages);
     let second = loop_.run(user("再执行")).await;
-    assert_eq!(second.reason, AgentEndReason::Stop);
+    assert_eq!(second.reason, AgentEndReason::YieldSuspended);
     assert_eq!(tool.call_count(), 1, "同域同参第二次命中幂等守卫，不再执行");
     // 幂等去重输出带 deduplicated 标记（取最后一次 tool 消息——对话跨 run 持久）
     let second_tool = second
@@ -751,7 +751,7 @@ async fn transient_provider_error_retries_then_succeeds() {
     let outcome = loop_.run(user("你好")).await;
 
     // 瞬态错误重试后成功：stop 收场
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert!(outcome.error.is_none());
     let assistant = outcome
         .messages
@@ -873,7 +873,7 @@ async fn length_ladder_upgrades_max_tokens_and_retries() {
 
     let outcome = loop_.run(user("写长文")).await;
 
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert!(outcome.error.is_none());
     // length 恢复后重进 provider 循环：两次 TurnStart 而非一次
     let turn_starts = outcome
@@ -1109,7 +1109,7 @@ async fn reasoning_effort_options_injects_through_product_path() {
         o
     });
     let outcome = loop_.run(user("请求")).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert!(outcome.error.is_none());
     assert_eq!(
         provider_handle.request_reasoning_effort(0),
@@ -1124,7 +1124,7 @@ async fn reasoning_effort_options_injects_through_product_path() {
     ]));
     let mut loop_none = loop_with_arc(provider_none_handle.clone(), vec![]);
     let outcome = loop_none.run(user("请求")).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert_eq!(
         provider_none_handle.request_reasoning_effort(0),
         None,
@@ -1145,7 +1145,7 @@ async fn request_session_id_injected_into_provider_request() {
     let mut loop_ = loop_with_arc(provider_handle.clone(), vec![]);
 
     let outcome = loop_.run(user("你好")).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert!(outcome.error.is_none());
     // 构造时传入 session_id = "sess-1"（loop_with_arc），请求快照捕获真实值
     assert_eq!(
@@ -1227,7 +1227,7 @@ async fn long_conversation_request_and_record_are_zero_copy() {
     loop_ = loop_.with_initial_conversation(history);
 
     let outcome = loop_.run(user("你好")).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert_eq!(outcome.messages.len(), 102, "100 条历史 + user + assistant");
 
     // 请求链零拷贝：唯一一次调用的请求快照 = 100 条历史 + 用户消息，
@@ -1292,7 +1292,7 @@ async fn cross_run_continuation_via_with_initial_conversation() {
     let mut loop_ = loop_with_arc(provider_handle.clone(), vec![]);
 
     let first = loop_.run(user("第一轮")).await;
-    assert_eq!(first.reason, AgentEndReason::Stop);
+    assert_eq!(first.reason, AgentEndReason::YieldSuspended);
     assert_eq!(first.messages.len(), 2, "user + assistant");
 
     // 收口后对话已移交（mem::take 零拷贝）：conversation 为空
@@ -1305,7 +1305,7 @@ async fn cross_run_continuation_via_with_initial_conversation() {
     loop_ = loop_.with_initial_conversation_arc(first.messages);
 
     let second = loop_.run(user("第二轮")).await;
-    assert_eq!(second.reason, AgentEndReason::Stop);
+    assert_eq!(second.reason, AgentEndReason::YieldSuspended);
     // 第二轮对话 = 第一轮 2 条 + 第二轮 user/assistant 2 条
     assert_eq!(second.messages.len(), 4, "跨 run 对话续接完整");
     // 第二轮请求快照 = 第一轮 2 条 + 第二轮用户消息（3 条）——历史进请求，
@@ -1335,7 +1335,7 @@ async fn tool_only_turn_then_reply() {
 
     let outcome = loop_.run(user("跑起来")).await;
 
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     // 第一轮 assistant 消息无正文但有 tool-call 块（01 §2.4 期望语义；
     // 有 tool-call 即有效模型输出）
     let first_assistant = outcome
@@ -1445,7 +1445,7 @@ async fn empty_tool_registry_unknown_call_fed_back_and_continues() {
     let outcome = loop_.run(user("用工具")).await;
 
     // 未知工具非致命：run 以 stop 收场（不 error）
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert!(outcome.error.is_none());
     // 工具结果消息（Tool 角色）为错误形态（NotFound 喂回模型）
     let tool_msg = outcome
@@ -1737,7 +1737,7 @@ async fn turn_pair_invariant_normal_stop() {
 
     let outcome = loop_.run(user("你好")).await;
 
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     // 不变量：正常路径 turn 恒成对（EV-08 回归，与 event_sequence_contract
     // 互补——后者断言序列位置，本辅助断言配对计数）
     assert_turn_pairs_closed(&outcome.events);
@@ -1781,7 +1781,7 @@ async fn provider_request_anchored_carries_turn_model_and_precedes_delta() {
     });
 
     let outcome = loop_.run(user("验证")).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
 
     // turn-start 的 turn_index（当前轮展示值）
     let turn_index = outcome
@@ -1882,7 +1882,7 @@ async fn turn_end_carries_turn_usage_from_provider() {
     ]);
     let mut loop_ = loop_with(provider, vec![]);
     let outcome = loop_.run(user("验证")).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
 
     let usage = outcome
         .events
@@ -2034,7 +2034,7 @@ async fn empty_response_emits_steering_evaluated_event() {
     let mut loop_ = loop_with(provider, vec![]);
 
     let outcome = loop_.run(user("回答")).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
 
     // S5 测钉：快照记录 steering-evaluated 事件 + getter + 断言
     let evaluated: Vec<&conex_types::events::AgentEvent> = outcome
@@ -2113,7 +2113,7 @@ async fn length_ladder_emits_length_escalation_diagnostic() {
     let mut loop_ = loop_with(provider, vec![]);
 
     let outcome = loop_.run(user("写长文")).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
 
     // S5 测钉：length-escalation 诊断载荷断言
     let diag = outcome
@@ -2164,7 +2164,7 @@ async fn tool_failure_carries_real_duration_and_atoms() {
     let mut loop_ = loop_with_tools(provider, vec![tool]);
 
     let outcome = loop_.run(user("执行")).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
 
     // tool-end 载荷：duration_ms 非零 + 原子要素真值
     let tool_end = outcome
@@ -2229,7 +2229,7 @@ async fn batch_tool_events_carry_summary_calls_and_turn_index() {
     let mut loop_ = loop_with(provider, vec![tool]);
 
     let outcome = loop_.run(user("并行执行")).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
 
     // 批开始 calls 摘要级（id + toolName；input 摘要级不复制全量入参）
     let batch_start = outcome

@@ -136,7 +136,7 @@ async fn two_turn_tool_loop_keeps_request_prefix_byte_stable() {
 
     let outcome = loop_.run(user("请查询")).await;
 
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     let requests = provider.requests();
     assert_eq!(requests.len(), 2, "工具循环两轮各一次请求");
 
@@ -217,7 +217,7 @@ async fn system_prompt_stable_across_runs_same_settings() {
 
     // 第一轮 run（请求 0：构建时对话仅含用户消息——助手回复在请求后 commit）
     let outcome1 = loop_.run(user("第一轮问题")).await;
-    assert_eq!(outcome1.reason, AgentEndReason::Stop);
+    assert_eq!(outcome1.reason, AgentEndReason::YieldSuspended);
     // 保留第一轮收口对话的 Arc 身份（续接前克隆——Arc 克隆只增引用计数）
     let first_run_msgs = outcome1.messages.clone();
 
@@ -226,7 +226,7 @@ async fn system_prompt_stable_across_runs_same_settings() {
     loop_ = loop_.with_initial_conversation_arc(outcome1.messages);
     // 第二轮 run（请求 1）
     let outcome2 = loop_.run(user("第二轮问题")).await;
-    assert_eq!(outcome2.reason, AgentEndReason::Stop);
+    assert_eq!(outcome2.reason, AgentEndReason::YieldSuspended);
 
     let requests = inner.requests();
     assert_eq!(requests.len(), 2, "两轮 run 各一次请求");
@@ -295,7 +295,7 @@ async fn conversation_is_append_only_within_run() {
 
     let outcome = loop_.run(user("干吧")).await;
 
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     let requests = provider.requests();
     assert_eq!(requests.len(), 2, "工具循环两轮各一次请求");
 

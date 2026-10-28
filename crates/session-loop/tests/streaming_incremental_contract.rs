@@ -616,7 +616,7 @@ async fn pure_thought_stream_commits_assistant_message() {
     ]);
     let outcome = loop_with(Box::new(provider)).run(user("纯思考测试")).await;
 
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     let assistant_msg = outcome
         .messages
         .iter()

@@ -98,7 +98,7 @@ async fn write_file_through_loop_lands_crish_trash_snapshot() {
 
     let outcome = loop_.run(user("写文件")).await;
 
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert!(outcome.error.is_none());
     // 文件已写入
     assert_eq!(ws.read_file("doc.txt"), "v1\n");
@@ -137,7 +137,7 @@ async fn empty_response_still_steered_with_shell_injection() {
 
     let outcome = loop_.run(user("空响应")).await;
 
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
     assert!(outcome.error.is_none());
     // steering 注入发生（empty-response → runtime-steering）
     assert!(
