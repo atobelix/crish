@@ -2626,10 +2626,20 @@ mod tests {
                                 break;
                             }
                         }
-                        // 控制帧（Ping/Pong）：库已自动处理（Ping 自动回
-                        // Pong），应用层忽略继续读
-                        Some(Ok(tokio_tungstenite::tungstenite::Message::Ping(_)))
-                        | Some(Ok(tokio_tungstenite::tungstenite::Message::Pong(_))) => {}
+                        // 控制帧：显式回 Pong 并立即 flush（不依赖库自动回
+                        // 复的调度时机——虚拟时间下 Linux 可能延迟写出导致
+                        // 服务端心跳超时误踢，CI 实测）
+                        Some(Ok(tokio_tungstenite::tungstenite::Message::Ping(payload))) => {
+                            if ws
+                                .send(tokio_tungstenite::tungstenite::Message::Pong(payload))
+                                .await
+                                .is_err()
+                            {
+                                break;
+                            }
+                            let _ = ws.flush().await;
+                        }
+                        Some(Ok(tokio_tungstenite::tungstenite::Message::Pong(_))) => {}
                         Some(Ok(tokio_tungstenite::tungstenite::Message::Close(_)))
                         | Some(Err(_))
                         | None => break,
