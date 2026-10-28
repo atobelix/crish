@@ -19,8 +19,10 @@
 //
 // 纪律：本文件为新增文件，不改动 src/domain、src/network、src/adapters/wiring。
 
-import { WsGateway, GatewayError } from '@/network/WsGateway';
+import { WsGateway } from '@/network/WsGateway';
+import { invokeCommand } from '@/adapters/wiring/gatewayCommand';
 import { getObservationWiring } from '@/adapters/wiring/observationWiring';
+import { createContextSingleton } from '@/adapters/wiring/contextSingleton';
 import {
   buildRunControlRequest,
   buildCancelRunRequest,
@@ -89,59 +91,27 @@ export class GatewayRunControlRepository implements RunControlRepository {
   constructor(private readonly gateway: WsGateway) {}
 
   async runControl(params: RunControlParams): Promise<RunControlResult> {
-    try {
-      const raw: unknown = await this.gateway.invoke(
-        'remote.runControl',
-        buildRunControlRequest(params).body
-      );
-      const parsed = parseSessionCommandResult('runControl', raw);
-      if (!parsed.ok) {
-        throw new RunControlCommandError(
-          RUN_CONTROL_ERROR_INTERNAL,
-          `响应解析失败（runControl）：${parsed.error}`,
-          false
-        );
-      }
-      return parsed.data;
-    } catch (e) {
-      if (e instanceof RunControlCommandError) throw e;
-      if (e instanceof GatewayError) {
-        throw new RunControlCommandError(e.code, e.message, e.retryable);
-      }
-      throw new RunControlCommandError(
-        RUN_CONTROL_ERROR_INTERNAL,
-        e instanceof Error ? e.message : '未知错误',
-        false
-      );
-    }
+    const req = buildRunControlRequest(params);
+    return invokeCommand(
+      this.gateway,
+      req,
+      'runControl',
+      (raw) => parseSessionCommandResult('runControl', raw),
+      (code, message, retryable) =>
+        new RunControlCommandError(code, message, retryable)
+    );
   }
 
   async cancelRun(params: CancelRunParams): Promise<CancelRunResult> {
-    try {
-      const raw: unknown = await this.gateway.invoke(
-        'remote.cancelRun',
-        buildCancelRunRequest(params).body
-      );
-      const parsed = parseSessionCommandResult('cancelRun', raw);
-      if (!parsed.ok) {
-        throw new RunControlCommandError(
-          RUN_CONTROL_ERROR_INTERNAL,
-          `响应解析失败（cancelRun）：${parsed.error}`,
-          false
-        );
-      }
-      return parsed.data;
-    } catch (e) {
-      if (e instanceof RunControlCommandError) throw e;
-      if (e instanceof GatewayError) {
-        throw new RunControlCommandError(e.code, e.message, e.retryable);
-      }
-      throw new RunControlCommandError(
-        RUN_CONTROL_ERROR_INTERNAL,
-        e instanceof Error ? e.message : '未知错误',
-        false
-      );
-    }
+    const req = buildCancelRunRequest(params);
+    return invokeCommand(
+      this.gateway,
+      req,
+      'cancelRun',
+      (raw) => parseSessionCommandResult('cancelRun', raw),
+      (code, message, retryable) =>
+        new RunControlCommandError(code, message, retryable)
+    );
   }
 }
 
@@ -152,23 +122,25 @@ export interface RunControlContext {
   repository: RunControlRepository;
 }
 
-let singleton: RunControlContext | null = null;
+/** run 控制上下文单例：首次调用从观测接线取网关装配；
+ * 接线未启动 → null（VM 投影「未连接」禁用态）。 */
+const runControlSingleton = createContextSingleton<RunControlContext>(() => {
+  const wiring = getObservationWiring();
+  if (!wiring) return null;
+  return {
+    repository: new GatewayRunControlRepository(wiring.client.gateway),
+  };
+});
 
 /**
  * run 控制上下文单例读取：首次调用从观测接线取网关装配；
  * 接线未启动 → null（VM 投影「未连接」禁用态）。
  */
 export function getRunControlContext(): RunControlContext | null {
-  if (singleton) return singleton;
-  const wiring = getObservationWiring();
-  if (!wiring) return null;
-  singleton = {
-    repository: new GatewayRunControlRepository(wiring.client.gateway),
-  };
-  return singleton;
+  return runControlSingleton.get();
 }
 
 /** 测试隔离：清空 run 控制上下文单例（仅测试调用） */
 export function resetRunControlContextForTest(): void {
-  singleton = null;
+  runControlSingleton.reset();
 }

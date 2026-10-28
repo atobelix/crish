@@ -1,4 +1,7 @@
 // 派生选择器与纯投影（M4 §2.2.3 pure/selectors.ts）：纯函数、可单测
+// - WsPhase 类型所有权 = network/ReconnectingWsClient（R4 批次6 归位；本层只消费类型）；
+// - ConnectionPhase = 本仓 UI 相位（connectionStore），映射表 mapWsPhase 为单一真源。
+import type { WsPhase } from '@/network/ReconnectingWsClient';
 import type { ConnectionPhase } from '../store/connectionStore';
 
 // 连接相位 → 中文文案（ConnectionBanner 消费）
@@ -33,6 +36,3 @@ export function mapWsPhase(
 export function selectConnectionPhaseText(phase: ConnectionPhase): string {
   return CONNECTION_PHASE_TEXT[phase];
 }
-
-// 内部相位类型（D4 §6.2.2 WsPhase）：与 ConnectionPhase 的映射关系见 mapWsPhase
-export type WsPhase = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'dead';

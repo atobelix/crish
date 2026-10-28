@@ -12,7 +12,7 @@
 // 注入模式：gateway 实例构造注入（测试 mock；生产由 ReconnectingWsClient.gateway 提供）。
 import { WsGateway } from '@/network/WsGateway';
 import type { InboundEnvelope } from '@/network/WsEnvelope';
-import type { WsPhase } from '@/domain/pure/selectors';
+import type { WsPhase } from '@/network/ReconnectingWsClient';
 import { mapWsPhase } from '@/domain/pure/selectors';
 import type { FeedNetwork } from '@/domain/store/eventStore';
 import { eventStore, lastSeqOf } from '@/domain/store/eventStore';
@@ -104,7 +104,8 @@ export class FeedBridge {
     if (frame.kind === 'events.push') {
       const body = readRecord(frame.body) ?? {};
       const ev = readRecord(body['event']) ?? {};
-      const sessionId = typeof ev['sessionId'] === 'string' ? ev['sessionId'] : null;
+      const sessionId =
+        typeof ev['sessionId'] === 'string' ? ev['sessionId'] : null;
       const seq = typeof ev['sequence'] === 'number' ? ev['sequence'] : null;
       if (sessionId && seq !== null) {
         const currentSeq = lastSeqOf(sessionId);

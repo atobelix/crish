@@ -11,16 +11,15 @@
 //
 // 纪律：本文件为新增文件，不改动 src/domain、src/network、src/adapters/wiring。
 
-import { WsGateway, GatewayError } from '@/network/WsGateway';
+import { WsGateway } from '@/network/WsGateway';
+import { invokeCommand } from '@/adapters/wiring/gatewayCommand';
 import { getObservationWiring } from '@/adapters/wiring/observationWiring';
+import { createContextSingleton } from '@/adapters/wiring/contextSingleton';
 import {
   buildRunTaskRequest,
   parseSessionCommandResult,
 } from '@/domain/repositories/sessionCommands';
-import type {
-  RunTaskParams,
-  RunTaskResult,
-} from '@crish/shared-types';
+import type { RunTaskParams, RunTaskResult } from '@crish/shared-types';
 
 // ── 错误类型与文案映射 ────────────────────────────────────────────────────
 
@@ -75,31 +74,15 @@ export class GatewayRunTaskRepository implements RunTaskRepository {
   constructor(private readonly gateway: WsGateway) {}
 
   async runTask(params: RunTaskParams): Promise<RunTaskResult> {
-    try {
-      const raw: unknown = await this.gateway.invoke(
-        'remote.runTask',
-        buildRunTaskRequest(params).body
-      );
-      const parsed = parseSessionCommandResult('runTask', raw);
-      if (!parsed.ok) {
-        throw new RunTaskCommandError(
-          RUN_TASK_ERROR_INTERNAL,
-          `响应解析失败（runTask）：${parsed.error}`,
-          false
-        );
-      }
-      return parsed.data;
-    } catch (e) {
-      if (e instanceof RunTaskCommandError) throw e;
-      if (e instanceof GatewayError) {
-        throw new RunTaskCommandError(e.code, e.message, e.retryable);
-      }
-      throw new RunTaskCommandError(
-        RUN_TASK_ERROR_INTERNAL,
-        e instanceof Error ? e.message : '未知错误',
-        false
-      );
-    }
+    const req = buildRunTaskRequest(params);
+    return invokeCommand(
+      this.gateway,
+      req,
+      'runTask',
+      (raw) => parseSessionCommandResult('runTask', raw),
+      (code, message, retryable) =>
+        new RunTaskCommandError(code, message, retryable)
+    );
   }
 }
 
@@ -110,23 +93,23 @@ export interface QuickRunContext {
   repository: RunTaskRepository;
 }
 
-let singleton: QuickRunContext | null = null;
+/** 快速操作上下文单例：首次调用从观测接线取网关装配；
+ * 接线未启动 → null（VM 投影「未连接」禁用态）。 */
+const quickRunSingleton = createContextSingleton<QuickRunContext>(() => {
+  const wiring = getObservationWiring();
+  if (!wiring) return null;
+  return { repository: new GatewayRunTaskRepository(wiring.client.gateway) };
+});
 
 /**
  * 快速操作上下文单例读取：首次调用从观测接线取网关装配；
  * 接线未启动 → null（VM 投影「未连接」禁用态）。
  */
 export function getQuickRunContext(): QuickRunContext | null {
-  if (singleton) return singleton;
-  const wiring = getObservationWiring();
-  if (!wiring) return null;
-  singleton = {
-    repository: new GatewayRunTaskRepository(wiring.client.gateway),
-  };
-  return singleton;
+  return quickRunSingleton.get();
 }
 
 /** 测试隔离：清空快速操作上下文单例（仅测试调用） */
 export function resetQuickRunContextForTest(): void {
-  singleton = null;
+  quickRunSingleton.reset();
 }

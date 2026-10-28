@@ -17,9 +17,13 @@
 // 常量真源 = crates/conex-types/src/device/version.rs 协议常量表：
 // HEARTBEAT_INTERVAL_MS=30_000（D3 §9.3 移动端 30s 心跳）、
 // HEARTBEAT_TIMEOUT_FACTOR=3（3×间隔无消息 → 判定断线，90s 假死）、
-import type { WsPhase } from '@/domain/pure/selectors';
 import { WsGateway, GatewayError, decodeFrame } from './WsGateway';
 import { buildAuthenticatedWsUrl } from './EndpointResolver';
+
+/** WS 内部相位（D4 §6.2.2 / 本类状态机词汇表：类型所有权归 network——
+ *  上层（domain 投影 / wiring）依赖本类型为正确单向；此前定义在
+ *  domain/pure/selectors 造成 network → domain 反向引用，R4 批次6 归位） */
+export type WsPhase = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'dead';
 
 /** 注入的 WebSocket 最小接口（RN 内建 WebSocket 子集；mock 用同一形状） */
 export interface WsSocket {
@@ -339,7 +343,11 @@ export class ReconnectingWsClient {
   }
 
   /** 动态更新认证凭据（支持动态刷新 token / ticket 避免重构连接实例） */
-  setAuth(params: { token?: string; ticket?: string; role?: 'client' | 'host' }): void {
+  setAuth(params: {
+    token?: string;
+    ticket?: string;
+    role?: 'client' | 'host';
+  }): void {
     if (params.token !== undefined) this.opts.token = params.token;
     if (params.ticket !== undefined) this.opts.ticket = params.ticket;
     if (params.role !== undefined) this.opts.role = params.role;

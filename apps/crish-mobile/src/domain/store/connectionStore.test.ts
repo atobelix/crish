@@ -8,7 +8,7 @@ import {
   selectConnectionPhaseText,
 } from './connectionStore';
 import type { ConnectionPhase, ConnectionEndpoint } from './connectionStore';
-import type { WsPhase } from './connectionStore';
+import type { WsPhase } from '@/network/ReconnectingWsClient';
 
 const ENDPOINT: ConnectionEndpoint = {
   host: '192.168.1.100',

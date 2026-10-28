@@ -102,11 +102,11 @@ export const connectionStore = createStore<ConnectionState>()(
 // 本体在 domain/pure/selectors.ts（mapWsPhase 映射表 + CONNECTION_PHASE_TEXT 标签表 +
 // selectConnectionPhaseText 选择器），经本 store 统一出口供 UI/诊断消费：
 // - 相位投影：mapWsPhase(wsPhase, offline) → ConnectionPhase；
-// - 连接状态标签：CONNECTION_PHASE_TEXT[phase] / selectConnectionPhaseText(phase)；
-// - WsPhase 类型：ReconnectingWsClient 内部相位（数据源契约）。
+// - 连接状态标签：CONNECTION_PHASE_TEXT[phase] / selectConnectionPhaseText(phase)。
+// WsPhase 类型不经此转发（R4 批次6 归位）：消费方直接 import 自
+// '@/network/ReconnectingWsClient'（类型所有权 = network）。
 export {
   mapWsPhase,
   CONNECTION_PHASE_TEXT,
   selectConnectionPhaseText,
 } from '../pure/selectors';
-export type { WsPhase } from '../pure/selectors';

@@ -13,6 +13,7 @@
 
 import { WsGateway } from '@/network/WsGateway';
 import { getObservationWiring } from './observationWiring';
+import { createContextSingleton } from './contextSingleton';
 import {
   GatewayFilesRepository,
   type FilesRepository,
@@ -47,23 +48,25 @@ export function createFilesContext(
   };
 }
 
-let singleton: FilesContext | null = null;
+/** 文件域上下文单例：首次调用时从观测接线取网关装配；
+ * 接线未启动 → null（VM 投影「未连接」，retry 经 observationWiring 拉起连接）。 */
+const filesSingleton = createContextSingleton<FilesContext>(() => {
+  const wiring = getObservationWiring();
+  if (!wiring) return null;
+  return createFilesContext(wiring.client.gateway);
+});
 
 /**
  * 文件域上下文单例读取：首次调用时从观测接线取网关装配；
  * 接线未启动 → null（VM 投影「未连接」，retry 经 observationWiring 拉起连接）。
  */
 export function getFilesContext(): FilesContext | null {
-  if (singleton) return singleton;
-  const wiring = getObservationWiring();
-  if (!wiring) return null;
-  singleton = createFilesContext(wiring.client.gateway);
-  return singleton;
+  return filesSingleton.get();
 }
 
 /** 测试隔离：清空文件域上下文单例（仅测试调用） */
 export function resetFilesContextForTest(): void {
-  singleton = null;
+  filesSingleton.reset();
 }
 
 /** 相对路径拼接（父目录 relPath + 条目名；'' 根级 = 直接条目名，F4 §1.2 relPath 语义） */

@@ -27,8 +27,8 @@ import {
   WsGateway,
   encodeFrame,
 } from '../WsGateway';
-import type { WsPhase } from '@/domain/pure/selectors';
-import type { JsonValue } from '../../../../../packages/shared-types/src/primitive-types';
+import type { JsonValue } from '@crish/shared-types';
+import type { WsPhase } from '../ReconnectingWsClient';
 
 describe('指数退避参数表（D4 §6.2.4：1s → 2s → 4s → 8s → 16s → 30s 封顶）', () => {
   test('参数表常量对齐任务书口径', () => {
@@ -433,7 +433,9 @@ describe('ReconnectingWsClient connect 生命周期（M5 §4.3.1）', () => {
     client.connect();
     ws.emitOpen();
     client.sendSubscribe(['s-1', 's-2'], { 's-1': 42 });
-    const subFrame = ws.sent.map((s) => JSON.parse(s) as { kind: string; body: unknown }).find((f) => f.kind === 'events.subscribe');
+    const subFrame = ws.sent
+      .map((s) => JSON.parse(s) as { kind: string; body: unknown })
+      .find((f) => f.kind === 'events.subscribe');
     expect(subFrame).toBeDefined();
     expect(subFrame!.body).toEqual({
       sessions: ['s-1', 's-2'],

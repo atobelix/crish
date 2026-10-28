@@ -1,8 +1,8 @@
+import type { WsPhase } from '@/network/ReconnectingWsClient';
 import {
   CONNECTION_PHASE_TEXT,
   mapWsPhase,
   selectConnectionPhaseText,
-  type WsPhase,
 } from './selectors';
 
 // 相位投影纯函数单测（D4 §6.2.5 映射表全量覆盖）

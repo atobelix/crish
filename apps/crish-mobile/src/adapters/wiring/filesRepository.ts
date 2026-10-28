@@ -1,16 +1,18 @@
-// 文件域命令仓库（R2-06b 接线层）：WsGateway.invoke → filesCommands 构造/解析
+// 文件域命令仓库（R2-06b 接线层 · R4 批次6 执行链下沉）：WsGateway.invoke → filesCommands 构造/解析
 //
 // 职责（对齐 M5 §1.2 repository 组合纪律：仓库 = 命令构造 + 网络发送 + 响应解析）：
 // - 命令发送唯一入口：listDir / readFile / listWorkspaces / switchWorkspace 四条
 //   （F4 附录 A 命令映射总表；写命令/搜索/资产/元数据属后续轮次，不在此展开）；
 // - 响应解析复用 filesCommands.parseFileCommandResult（生成面解析器，M5 §1.3
-//   组合纪律：不手写第二套字段校验），解析失败 → FilesCommandError('internal')；
-// - 错误归一化：GatewayError（transport.closed / cmd.timeout / 服务端 error 帧）
-//   → FilesCommandError{code, message, retryable}（F4 附录 B 映射面在 UI 层）；
+//   组合纪律：不手写第二套字段校验）；
+// - 错误归一化：invokeCommand 统一执行链（gatewayCommand.ts）——GatewayError 透传
+//   code/retryable → FilesCommandError；解析失败/未知异常 → internal
+//   （F4 附录 B 映射面在 UI 层）；
 // - 注入模式：gateway 实例构造注入（测试 mock；生产 = ReconnectingWsClient.gateway，
 //   observationWiring 装配，对齐 FeedBridge 先例 feedBridge.ts:40-47）。
 
-import { WsGateway, GatewayError } from '@/network/WsGateway';
+import { WsGateway } from '@/network/WsGateway';
+import { invokeCommand } from './gatewayCommand';
 import {
   buildListDirRequest,
   buildReadFileRequest,
@@ -89,32 +91,18 @@ export class GatewayFilesRepository implements FilesRepository {
     return this.invoke('switchWorkspace', buildSwitchWorkspaceRequest(params));
   }
 
-  /** 统一执行链：invoke → 生成面解析 → 错误归一化（解析失败/未知异常 → internal） */
-  private async invoke<T extends FileCommandName>(
+  /** 统一执行链转发（invokeCommand，gatewayCommand.ts；错误归一化为域错误类） */
+  private invoke<T extends FileCommandName>(
     command: T,
     req: FileCommandRequest
   ): Promise<FileCommandResultMap[T]> {
-    try {
-      const raw: unknown = await this.gateway.invoke(req.kind, req.body);
-      const parsed = parseFileCommandResult(command, raw);
-      if (!parsed.ok) {
-        throw new FilesCommandError(
-          FILES_ERROR_INTERNAL,
-          `响应解析失败（${command}）：${parsed.error}`,
-          false
-        );
-      }
-      return parsed.data;
-    } catch (e) {
-      if (e instanceof FilesCommandError) throw e;
-      if (e instanceof GatewayError) {
-        throw new FilesCommandError(e.code, e.message, e.retryable);
-      }
-      throw new FilesCommandError(
-        FILES_ERROR_INTERNAL,
-        e instanceof Error ? e.message : '未知错误',
-        false
-      );
-    }
+    return invokeCommand(
+      this.gateway,
+      req,
+      command,
+      (raw) => parseFileCommandResult(command, raw),
+      (code, message, retryable) =>
+        new FilesCommandError(code, message, retryable)
+    );
   }
 }
