@@ -96,7 +96,9 @@ impl WorkspaceStore {
                 m.created_at,
                 (SELECT COUNT(*) FROM blocks b WHERE b.doc_id = m.doc_id) AS block_count
             FROM doc_meta m
-            ORDER BY m.updated_at DESC;
+            -- 同毫秒创建/更新时以插入序（rowid）倒序兜底：跨平台/跨 SQLite
+            -- 版本排序稳定，避免 list_documents 顺序漂移
+            ORDER BY m.updated_at DESC, m.rowid DESC;
             "#,
         )?;
 
