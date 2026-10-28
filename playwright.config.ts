@@ -62,10 +62,10 @@ export default defineConfig({
     /[\\/](?:active-token|ast-block-tables|bug-repro|console-errors|cursor-position|editor-fuzz-thrash|format-checker|ime-composition|keyboard-navigation|matrix-ime-selection|matrix-navigation|matrix-tables|syntax-render|wysiwyg-interaction)\.spec\.ts$/,
   ],
   fullyParallel: true,
-  // 并发收敛（tiptap 接线后冷编译回归记录 2026-08-07）：fullyParallel 下 26 用例
-  // 同时触发 vite 首屏编译，早期页面 bundle 未就绪 → 白屏（sidebar/chat-input 缺失）。
-  // 限制 worker（= 同时页面数）为 4，编译压力骤降；用例预算 26/4≈7 轮，无感。
-  workers: 4,
+  // 单 worker 串行（2026-10-28 冷启动回归）：应用模块图增长后，4 个页面并发首屏
+  // 编译会让 composer 草稿桥接等待超时（cache-metrics 假红）。15 个冒烟用例
+  // 串行实测 1.4 分钟，远低于 CI 预算；确定性优先于并发度。
+  workers: 1,
   reporter: [['list']],
   expect: {
     // 断言层默认超时（spec 内显式 timeout 8s 为局部覆盖，语义一致）
