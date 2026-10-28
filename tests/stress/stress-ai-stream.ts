@@ -324,13 +324,14 @@ export const AI_STREAM_STRESS: StressScenario = {
   expectedErrorRate: 0.01,
   expected: {
     // 阈值按实测基线设定并留 ≥30% 余量（F10-13 flaky 教训）：
-    //   ops/min 实测 52,400-59,900（不同机器负载）→ 30,000（余量 ≥42%）
+    //   ops/sec 实测 42k-63k（不同机器/共享 runner 负载；CI 最低观测 29.8k）
+    //   → 20,000（对最低观测仍留 ~33% 余量，严重吞吐回退必红）
     //   内存峰值实测 271MB（空闲）/ 449MB（共享机器并发负载最差观测）
     //   → 900MB：CI（Linux，~42k ops/s、30s 1.28M runs / 185M chars）实测
     //   659MB 峰值为 GC 滞后瞬时垃圾，非泄漏；900MB 保留 ~37% 余量，同时仍能
     //   捕获真实无界增长（泄漏量级为 GB）。
     //   延迟实测 p95=p99=0ms（微任务级）→ 50/100ms 兜底
-    ops: { min: 30000 },
+    ops: { min: 20000 },
     memory: { maxHeap: 900 * 1024 * 1024 },
     latency: { p95: 50, p99: 100 },
   },
