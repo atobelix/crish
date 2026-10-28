@@ -4,18 +4,22 @@ import { useTheme } from '@/adapters/platform/theme';
 import { useNotificationStore } from '@/adapters/hooks/useNotificationStore';
 import { NotificationBadge } from '@/presentation/components/notifications/NotificationBadge';
 import { QuickRunPanel } from '@/presentation/components/dashboard/QuickRunPanel';
+import { DashboardStatusCard } from '@/presentation/components/dashboard/DashboardStatusCard';
+import { DashboardFeedPreview } from '@/presentation/components/dashboard/DashboardFeedPreview';
 import {
   DashboardSkeleton,
   dashboardShowSkeleton,
 } from '@/presentation/components/dashboard/DashboardSkeleton';
+import { feedPreviewOf } from '@/adapters/viewmodels/useDashboardVm';
 import { useQuickRunVm } from '@/adapters/viewmodels/useQuickRunVm';
 import { useDashboardVm } from '@/adapters/viewmodels/useDashboardVm';
 
-// 首页仪表盘（F1）：连接状态卡 / 活跃 run / 待批概览 / 会话摘要 —— R2-05 落地
-// 通知入口（R2-04 部分 5 裁决：方案 a 首页顶部铃铛入口 + 未读角标，不新增 Tab——tab 已 5 个）：
+// 首页仪表盘（F1 · R4 批次3 状态卡补全）：连接状态卡（相位/设备数/统计行 + 重试）/
+// 最近会话动态预览（EventRow 复用 + 查看全部）/ 快速操作区；
+// 通知入口（R2-04 部分 5 裁决：首页顶部铃铛入口 + 未读角标，不新增 Tab——tab 已 5 个）：
 // 铃铛角标 = notificationStore.unreadCount（>0 显示，99+ 收敛，F1 §4.8 / notificationBadgeLabel）；
 // hydrated 前置：水合完成前不显示角标（notificationStore 注记：回填完成前展示会误导用户）。
-// 首页首帧骨架（R2UX-05-10）：数据未就绪（无会话/feed 且连接未稳定）→ 骨架三块
+// 首帧骨架（R2UX-05-10）：数据未就绪（无会话/feed 且连接未稳定）→ 骨架三块
 // 避免白屏；缓存优先（已水合数据立即可见不显示骨架）；数据到达原位替换不闪烁。
 export default function DashboardScreen() {
   const theme = useTheme();
@@ -57,10 +61,26 @@ export default function DashboardScreen() {
           ) : null}
         </Pressable>
       </View>
+
       {showSkeleton ? (
         <DashboardSkeleton />
       ) : (
-        <QuickRunPanel vm={quickRunVm} />
+        <>
+          <DashboardStatusCard
+            vm={dashboardVm}
+            onRetry={dashboardVm.retry}
+            onOpenApprovals={() => router.navigate('/approvals')}
+          />
+          <DashboardFeedPreview
+            sessionId={dashboardVm.sessionId}
+            sessionTitle={dashboardVm.sessionTitle}
+            entries={feedPreviewOf(dashboardVm.entries)}
+            onOpenSession={(sessionId) =>
+              router.navigate(`/session/${sessionId}`)
+            }
+          />
+          <QuickRunPanel vm={quickRunVm} />
+        </>
       )}
     </View>
   );

@@ -9,12 +9,14 @@
 // - 测试注入：VM 钩子接受 context 参数（缺省走单例）；resetSettingsContextForTest
 //   清空单例（仅测试调用）。
 //
-// 接线注记（R2-14b）：本层为「设置命令面」接线；本机偏好（通知/外观/缩略图）
-// 存储面在 settingsLocalStore.ts（R2-14b 迁入 settingsStore 分片并接 settingsDao
-// kv 持久化）；主题偏好存储面在 platform/theme.ts。
+// 接线注记（R4 批次2 单真源）：本层为「设置命令面」接线（queryPresence/getSettings
+// 桌面镜像）；本机偏好（通知/外观）存储面 = domain/store/settingsStore（F6 §4.2 SSOT，
+// settingsDao kv 持久化，dbBootstrap 装配注入）；通知偏好过滤读取器接线在
+// settingsNotificationWiring.ts。
 
 import { WsGateway } from '@/network/WsGateway';
 import { getObservationWiring } from '../wiring/observationWiring';
+import { createContextSingleton } from '../wiring/contextSingleton';
 import {
   GatewaySettingsRepository,
   type SettingsRepository,
@@ -32,21 +34,23 @@ export function createSettingsContext(gateway: WsGateway): SettingsContext {
   };
 }
 
-let singleton: SettingsContext | null = null;
+/** 设置域上下文单例：首次调用时从观测接线取网关装配；
+ * 接线未启动 → null（VM 投影「未连接」禁用态）。 */
+const settingsSingleton = createContextSingleton<SettingsContext>(() => {
+  const wiring = getObservationWiring();
+  if (!wiring) return null;
+  return createSettingsContext(wiring.client.gateway);
+});
 
 /**
  * 设置域上下文单例读取：首次调用时从观测接线取网关装配；
  * 接线未启动 → null（VM 投影「未连接」禁用态）。
  */
 export function getSettingsContext(): SettingsContext | null {
-  if (singleton) return singleton;
-  const wiring = getObservationWiring();
-  if (!wiring) return null;
-  singleton = createSettingsContext(wiring.client.gateway);
-  return singleton;
+  return settingsSingleton.get();
 }
 
 /** 测试隔离：清空设置域上下文单例（仅测试调用） */
 export function resetSettingsContextForTest(): void {
-  singleton = null;
+  settingsSingleton.reset();
 }

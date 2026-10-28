@@ -19,7 +19,7 @@ import {
   useApprovalListVm,
 } from '@/adapters/viewmodels/useApprovalListVm';
 import ApprovalCard from '@/presentation/components/blocks/ApprovalCard';
-import type { ApprovalRecord } from '@/domain/types/domain';
+import { ApprovalHistoryRow } from '@/presentation/components/approval/ApprovalHistoryRow';
 
 export interface ApprovalListScreenProps {
   /** 点击待办卡 → 审批详情（路由注入，F2 §5.1） */
@@ -27,28 +27,6 @@ export interface ApprovalListScreenProps {
   /** 已处理入口 → 历史页（F2 §7，路由注入） */
   onOpenHistory: () => void;
 }
-
-/** 已处理行时间格式化（F2 §7.2 线框口径：HH:MM:SS） */
-export function formatHistoryTime(ms: number): string {
-  const d = new Date(ms);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-/** 决策徽标文案（F2 §7.2 线框：✓ 已允许 / ✗ 已拒绝 / ⏳ 已过期） */
-export const HISTORY_DECISION_TEXT: Record<ApprovalRecord['decision'], string> =
-  {
-    approved: '已允许',
-    denied: '已拒绝',
-    expired: '已过期',
-  };
-
-/** 决策渠道文案（F2 §7.1-3：本机 / 桌面端 / 自动过期） */
-export const HISTORY_CHANNEL_TEXT: Record<ApprovalRecord['channel'], string> = {
-  mobile: '本机',
-  desktop: '桌面端',
-  auto: '自动过期',
-};
 
 export default function ApprovalListScreen({
   onOpenItem,
@@ -175,61 +153,21 @@ export default function ApprovalListScreen({
           </>
         )}
 
-        {/* 已处理区（F2 §7.2：最近 N 条，decision 徽标 + 时间 + 渠道；空待办时同样可见） */}
+        {/* 已处理区（F2 §7.2：最近 N 条，decision 徽标 + 时间 + 渠道；空待办时同样可见；
+            行渲染复用 ApprovalHistoryRow，与审批历史全量页共用同一行组件） */}
         {historyRecent.length > 0 ? (
           <View testID="approval-history" style={styles.historySection}>
             <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
               已处理（最近{' '}
               {Math.min(historyRecent.length, APPROVAL_HISTORY_RECENT_SHOWN)}）
             </Text>
-            {historyRecent.map((r) => {
-              const badgeBg =
-                r.decision === 'approved'
-                  ? theme.colorSuccessBg
-                  : r.decision === 'denied'
-                    ? theme.colorErrorBg
-                    : theme.bgTertiary;
-              const badgeColor =
-                r.decision === 'approved'
-                  ? theme.colorSuccess
-                  : r.decision === 'denied'
-                    ? theme.colorError
-                    : theme.textSecondary;
-              return (
-                <View
-                  key={r.toolCallId}
-                  testID={`history-row-${r.toolCallId}`}
-                  style={[
-                    styles.historyRow,
-                    { borderBottomColor: theme.hairline },
-                  ]}
-                >
-                  <View
-                    style={[styles.decisionBadge, { backgroundColor: badgeBg }]}
-                  >
-                    <Text
-                      style={[styles.decisionBadgeText, { color: badgeColor }]}
-                    >
-                      {HISTORY_DECISION_TEXT[r.decision]}
-                    </Text>
-                  </View>
-                  <Text
-                    style={[styles.historyTool, { color: theme.textPrimary }]}
-                    numberOfLines={1}
-                  >
-                    {r.toolName}
-                  </Text>
-                  <Text
-                    style={[styles.historyMeta, { color: theme.textTertiary }]}
-                  >
-                    {formatHistoryTime(r.resolvedAtMs)} ·{' '}
-                    <Text style={{ color: theme.textTertiary }}>
-                      {HISTORY_CHANNEL_TEXT[r.channel]}
-                    </Text>
-                  </Text>
-                </View>
-              );
-            })}
+            {historyRecent.map((r) => (
+              <ApprovalHistoryRow
+                key={r.toolCallId}
+                record={r}
+                testID={`history-row-${r.toolCallId}`}
+              />
+            ))}
           </View>
         ) : null}
       </ScrollView>
@@ -335,29 +273,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 4,
-  },
-  historyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  decisionBadge: {
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  decisionBadgeText: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  historyTool: {
-    flex: 1,
-    fontSize: 14,
-  },
-  historyMeta: {
-    fontSize: 12,
-    fontVariant: ['tabular-nums'],
   },
 });

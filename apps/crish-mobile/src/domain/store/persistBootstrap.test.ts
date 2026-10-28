@@ -1,5 +1,6 @@
-// persistBootstrap 装配测试（R-3）：configureSqlitePersistence 一次注入两个 store 的
-// 真实持久化（SqlSettingsDao / SqlNotificationsDao 经 MemorySqlDriver 直跑真实 SQL 子集）
+// persistBootstrap 装配测试（R-3 · R4 批次2 分组收敛）：configureSqlitePersistence
+// 一次注入两个 store 的真实持久化（SqlSettingsDao / SqlNotificationsDao 经
+// MemorySqlDriver 直跑真实 SQL 子集）
 // - settings：set/update 无参持久化走注入默认 → 落 settings 表；hydrate 从表回填合并；
 // - notification：hydrate 三态回填（listByStatus 出口 title ?? '' 归一——DAO 行 title
 //   可空，InAppNotification 非空展示字段）；ingest 不落库（接线层职责，store 只读回填）。
@@ -50,39 +51,47 @@ describe('configureSqlitePersistence（真实持久化装配注入）', () => {
 
   it('注入后 settingsStore.set 缺省参数也落 settings 表（真实 DAO 链路）', async () => {
     configureSqlitePersistence(driver);
-    settingsStore.getState().set('general', {
-      responseStyle: 'high',
-      enableAnalytics: true,
-      enableCrashTelemetry: false,
+    settingsStore.getState().set('notification', {
+      masterOn: false,
+      sceneFlags: {
+        message: true,
+        taskDone: true,
+        approval: true,
+        error: true,
+        deviceOffline: false,
+      },
     });
     await flush();
 
     const dao = new SqlSettingsDao(driver);
-    const raw = await dao.get(settingsGroupKey('general'));
+    const raw = await dao.get(settingsGroupKey('notification'));
     expect(raw).not.toBeNull();
     expect(JSON.parse(raw!)).toEqual({
-      responseStyle: 'high',
-      enableAnalytics: true,
-      enableCrashTelemetry: false,
+      masterOn: false,
+      sceneFlags: {
+        message: true,
+        taskDone: true,
+        approval: true,
+        error: true,
+        deviceOffline: false,
+      },
     });
   });
 
   it('注入后 settingsStore.update 局部合并落盘（整组编码，缺省字段由 reducer 补全）', async () => {
     configureSqlitePersistence(driver);
-    settingsStore.getState().update('general', { responseStyle: 'low' });
+    settingsStore.getState().update('appearance', { theme: 'dark' });
     await flush();
 
     const dao = new SqlSettingsDao(driver);
-    const raw = await dao.get(settingsGroupKey('general'));
-    const decoded = JSON.parse(raw!) as Record<string, unknown>;
-    expect(decoded.responseStyle).toBe('low');
-    expect(decoded.enableAnalytics).toBe(false); // 未提及字段随 store 整组值
+    const raw = await dao.get(settingsGroupKey('appearance'));
+    expect(JSON.parse(raw!)).toEqual({ theme: 'dark' });
   });
 
   it('hydrate 从 settings 表回填（真实 DAO 读出 → 深合并默认值 + hydrated）', async () => {
     await new SqlSettingsDao(driver).set(
-      settingsGroupKey('general'),
-      encodeSettingsGroup({ responseStyle: 'high' })
+      settingsGroupKey('notification'),
+      encodeSettingsGroup({ masterOn: false })
     );
     configureSqlitePersistence(driver);
 
@@ -90,8 +99,9 @@ describe('configureSqlitePersistence（真实持久化装配注入）', () => {
 
     const st = settingsStore.getState();
     expect(st.hydrated).toBe(true);
-    expect(st.groups.general.responseStyle).toBe('high');
-    expect(st.groups.general.enableAnalytics).toBe(false); // 默认值保留
+    expect(st.groups.notification.masterOn).toBe(false);
+    expect(st.groups.notification.sceneFlags.approval).toBe(true); // 默认值保留
+    expect(st.groups.appearance.theme).toBe('system'); // 未持久化分组保持默认
   });
 
   it('notificationStore.hydrate 三态回填（DAO title 可空 → 展示空串归一）', async () => {
@@ -104,7 +114,7 @@ describe('configureSqlitePersistence（真实持久化装配注入）', () => {
       seq: 7,
       title: '需要确认：删除文件',
       body: 'rm 高危操作',
-      route: 'conex://mobile/approval/tc-1',
+      route: 'crish://approval/tc-1',
       status: 'shown',
       receivedAt: 1_700_000_000_000,
     });
@@ -135,11 +145,7 @@ describe('configureSqlitePersistence（真实持久化装配注入）', () => {
   it('configureSqlitePersistence(null) 复位两 store 默认注入（回退无持久化）', () => {
     configureSqlitePersistence(driver);
     configureSqlitePersistence(null);
-    settingsStore.getState().set('general', {
-      responseStyle: 'medium',
-      enableAnalytics: false,
-      enableCrashTelemetry: false,
-    });
+    settingsStore.getState().set('appearance', { theme: 'light' });
     // 无默认注入 → 不落库（silent no-op，且不抛错）
     return expect(flush()).resolves.toBeUndefined();
   });

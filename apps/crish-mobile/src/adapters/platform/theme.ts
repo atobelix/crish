@@ -3,12 +3,14 @@
 // - 键集合完整性由类型强制：darkTokens 标注 ThemeTokens，缺键/多键编译期报错（R2UX-06-05）；
 // - 组件禁止硬编码色值/间距，一律经 useTheme() 取 token（M4 §3.8）。
 //
-// 主题消费入口（M4 §7.4）：适配层统一消费主题投影——useTheme 订阅外观三选
-// （F6 §9 跟随系统/浅色/深色），system 模式透传系统外观（useColorScheme 订阅即时切换）。
+// 主题消费入口（M4 §7.4 / R4 批次2 单真源）：外观三选（跟随系统/浅色/深色）的唯一
+// 存储面 = settingsStore.appearance.theme（F6 §9 本机偏好，settingsDao kv 持久化，
+// 重启保留）。本文件只做「token 表 + 投影 + React 订阅绑定」，不再持有独立存储——
+// 旧 themeModeStore 内存态（重启丢偏好）已删除，写入统一走 setThemeMode。
 import { useColorScheme } from 'react-native';
 import { useStore } from 'zustand';
-import { useShallow } from 'zustand/react/shallow';
-import { createStore } from 'zustand/vanilla';
+import { settingsStore } from '@/domain/store/settingsStore';
+import type { ThemeMode } from '@/domain/store/settingsReducers';
 
 export const lightTokens = {
   bgPrimary: 'hsl(35,12%,94%)',
@@ -67,9 +69,6 @@ export const darkTokens: ThemeTokens = {
   backdrop: 'rgba(0,0,0,0.45)',
 };
 
-/** 主题模式三选（F6 §9：跟随系统/浅色/深色，默认跟随系统） */
-export type ThemeMode = 'system' | 'light' | 'dark';
-
 /** 三选顺序（UI 渲染顺序 = 焦点/读屏初始顺序，R2UX-06-05） */
 export const THEME_MODES: readonly ThemeMode[] = ['system', 'light', 'dark'];
 
@@ -79,27 +78,6 @@ export const THEME_MODE_LABELS: Record<ThemeMode, string> = {
   light: '浅色',
   dark: '深色',
 };
-
-interface ThemeModeState {
-  mode: ThemeMode;
-  setMode: (mode: ThemeMode) => void;
-}
-
-/**
- * 主题偏好存储（适配层单例，R2-05 由 settings 域下沉至 platform 层）：
- * - 下沉原因：useTheme（全部组件的统一消费入口）与外观三选存储同层，
- *   避免 settings → platform 反向依赖；
- * - R2-14b settingsStore（appearance 分片，F6 §4.2）落地后存储面替换为
- *   settingsStore 订阅（本机持久化），本接口保持不变。
- */
-export const themeModeStore = createStore<ThemeModeState>()((set) => ({
-  mode: 'system',
-  setMode: (mode) => set({ mode }),
-}));
-
-/** 主题模式订阅绑定（selector 经 useShallow 稳定引用） */
-export const useThemeMode = <T>(selector: (s: ThemeModeState) => T): T =>
-  useStore(themeModeStore, useShallow(selector));
 
 /**
  * token 投影纯函数（单测面，R2UX-06-05）：
@@ -117,16 +95,36 @@ export function projectThemeTokens(
 
 /**
  * 主题 token 统一消费入口（M4 §7.4 / §3.8）：
- * 外观三选投影 + 系统外观（useColorScheme 订阅，system 档即时跟随）。
+ * 外观三选（settingsStore.appearance.theme）投影 + 系统外观（useColorScheme 订阅，
+ * system 档即时跟随）。hydrate 完成前显示默认 system 档，回填后随持久化值切换。
  * 全部组件经此消费（设置/配对页与主屏同一入口）。
  */
 export function useTheme(): ThemeTokens {
-  const mode = useThemeMode((s) => s.mode);
+  const mode = useStore(settingsStore, (s) => s.groups.appearance.theme);
   const systemTokens = useColorScheme() === 'dark' ? darkTokens : lightTokens;
   return projectThemeTokens(mode, systemTokens);
 }
 
+/**
+ * 外观三选写入（唯一写入口）：内存立即生效 + 经注入持久化异步落 kv
+ * （settingsStore.update 语义；hydrate 前写入会随后续回填合并）。
+ */
+export function setThemeMode(mode: ThemeMode): void {
+  settingsStore.getState().update('appearance', { theme: mode });
+}
+
 /** 测试隔离：主题偏好复位（仅测试调用） */
 export function resetThemeModeForTest(): void {
-  themeModeStore.setState({ mode: 'system' });
+  settingsStore.setState({
+    groups: defaultGroupsWithTheme('system'),
+    hydrated: false,
+  });
+}
+
+/** 测试基座：以当前 groups 克隆 appearance 指定档（避免跨用例污染其它分组） */
+function defaultGroupsWithTheme(
+  theme: ThemeMode
+): ReturnType<typeof settingsStore.getState>['groups'] {
+  const groups = settingsStore.getState().groups;
+  return { ...groups, appearance: { theme } };
 }

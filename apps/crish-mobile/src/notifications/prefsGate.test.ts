@@ -1,4 +1,5 @@
-// 通知偏好过滤测试（R3-04 部分 3）：通道×开关组合 / 推送级归一 / 权限联动 / 实时接线
+// 通知偏好过滤测试（R3-04 部分 3 · R4 批次2 单真源）：
+// 通道×场景组合 / 总开关一票否决 / 推送级归一 / 权限联动 / 实时接线
 import { requestPermissionsAsync } from 'expo-notifications';
 import {
   bindNotificationPrefs,
@@ -12,9 +13,11 @@ import {
   shouldShowSystemNotificationForPushLive,
   shouldShowSystemNotificationLive,
   unbindNotificationPrefsForTest,
+  type NotificationPrefs,
 } from './prefsGate';
 import { notificationPermissionStore } from './permissions';
 import type { PushMessage } from './types';
+import type { NotifyScene } from '@/domain/store/settingsReducers';
 
 /** 构造最小推送（channelId 可覆盖；其余字段对齐 schema v1 子集） */
 function makePush(channelId: string): PushMessage {
@@ -35,9 +38,29 @@ function makePush(channelId: string): PushMessage {
   };
 }
 
-const ALL_OFF = { approvalNotifications: false, eventNotifications: false };
-const APPROVAL_OFF = { approvalNotifications: false, eventNotifications: true };
-const EVENT_OFF = { approvalNotifications: true, eventNotifications: false };
+/** 偏好构造助手：场景覆盖 + 总开关（未提及场景 = 默认开） */
+function prefsOf(
+  overrides: Partial<Record<NotifyScene, boolean>> = {},
+  masterOn = true
+): NotificationPrefs {
+  return {
+    masterOn,
+    sceneFlags: {
+      message: true,
+      taskDone: true,
+      approval: true,
+      error: true,
+      deviceOffline: false,
+      ...overrides,
+    },
+  };
+}
+
+const APPROVAL_OFF = prefsOf({ approval: false });
+const TASK_DONE_OFF = prefsOf({ taskDone: false });
+const MESSAGE_OFF = prefsOf({ message: false });
+const ALL_OFF = prefsOf({ approval: false, taskDone: false, message: false });
+const MASTER_OFF = prefsOf({}, false);
 
 beforeEach(() => {
   unbindNotificationPrefsForTest();
@@ -48,8 +71,8 @@ beforeEach(() => {
   });
 });
 
-describe('shouldShowSystemNotification（通道×开关组合，Z0 §7.4 四类）', () => {
-  it('全开 → 四通道全部放行（审批/事件/安全）', () => {
+describe('shouldShowSystemNotification（通道×场景组合，Z0 §7.4 × F6 §10.1）', () => {
+  it('默认全开 → 四通道全部放行（审批/任务结果/消息/安全）', () => {
     expect(
       shouldShowSystemNotification('approval', DEFAULT_NOTIFICATION_PREFS)
     ).toBe(true);
@@ -64,42 +87,51 @@ describe('shouldShowSystemNotification（通道×开关组合，Z0 §7.4 四类�
     ).toBe(true);
   });
 
-  it('审批关 → approval 过滤；run/general/security 不受影响', () => {
+  it('审批场景关 → approval 过滤；run/general/security 不受影响', () => {
     expect(shouldShowSystemNotification('approval', APPROVAL_OFF)).toBe(false);
     expect(shouldShowSystemNotification('run', APPROVAL_OFF)).toBe(true);
     expect(shouldShowSystemNotification('general', APPROVAL_OFF)).toBe(true);
     expect(shouldShowSystemNotification('security', APPROVAL_OFF)).toBe(true);
   });
 
-  it('事件关 → run/general 过滤；approval/security 不受影响', () => {
-    expect(shouldShowSystemNotification('run', EVENT_OFF)).toBe(false);
-    expect(shouldShowSystemNotification('general', EVENT_OFF)).toBe(false);
-    expect(shouldShowSystemNotification('approval', EVENT_OFF)).toBe(true);
-    expect(shouldShowSystemNotification('security', EVENT_OFF)).toBe(true);
+  it('任务结果关 → run 过滤；消息关 → general 过滤；approval/security 不受影响', () => {
+    expect(shouldShowSystemNotification('run', TASK_DONE_OFF)).toBe(false);
+    expect(shouldShowSystemNotification('general', TASK_DONE_OFF)).toBe(true);
+    expect(shouldShowSystemNotification('general', MESSAGE_OFF)).toBe(false);
+    expect(shouldShowSystemNotification('run', MESSAGE_OFF)).toBe(true);
+    expect(shouldShowSystemNotification('approval', MESSAGE_OFF)).toBe(true);
+    expect(shouldShowSystemNotification('security', MESSAGE_OFF)).toBe(true);
   });
 
-  it('全关 → 仅 security 恒放行（S11 不可逆操作必达，无场景开关覆盖）', () => {
+  it('场景全关 → 仅 security 恒放行（S11 不可逆操作必达，无场景开关覆盖）', () => {
     expect(shouldShowSystemNotification('approval', ALL_OFF)).toBe(false);
     expect(shouldShowSystemNotification('run', ALL_OFF)).toBe(false);
     expect(shouldShowSystemNotification('general', ALL_OFF)).toBe(false);
     expect(shouldShowSystemNotification('security', ALL_OFF)).toBe(true);
   });
+
+  it('总开关关 → 一票否决（含场景全开的通道；security 例外恒放行）', () => {
+    expect(shouldShowSystemNotification('approval', MASTER_OFF)).toBe(false);
+    expect(shouldShowSystemNotification('run', MASTER_OFF)).toBe(false);
+    expect(shouldShowSystemNotification('general', MASTER_OFF)).toBe(false);
+    expect(shouldShowSystemNotification('security', MASTER_OFF)).toBe(true);
+  });
 });
 
 describe('shouldShowSystemNotificationForPush（D7 七渠道 → Z0 四类归一后过滤）', () => {
-  it('approval 推送受审批开关控制', () => {
+  it('approval 推送受审批场景开关控制', () => {
     expect(
       shouldShowSystemNotificationForPush(makePush('approval'), APPROVAL_OFF)
     ).toBe(false);
     expect(
-      shouldShowSystemNotificationForPush(makePush('approval'), EVENT_OFF)
+      shouldShowSystemNotificationForPush(makePush('approval'), TASK_DONE_OFF)
     ).toBe(true);
   });
 
-  it('run/subagent/task/timer 折叠进 run 通道 → 事件开关（D7 §7.7 归一表）', () => {
+  it('run/subagent/task/timer 折叠进 run 通道 → 任务结果场景开关（D7 §7.7 归一表）', () => {
     for (const raw of ['run', 'subagent', 'task', 'timer']) {
       expect(
-        shouldShowSystemNotificationForPush(makePush(raw), EVENT_OFF)
+        shouldShowSystemNotificationForPush(makePush(raw), TASK_DONE_OFF)
       ).toBe(false);
       expect(
         shouldShowSystemNotificationForPush(makePush(raw), APPROVAL_OFF)
@@ -107,18 +139,21 @@ describe('shouldShowSystemNotificationForPush（D7 七渠道 → Z0 四类归一
     }
   });
 
-  it('summary/未知通道兜底 general → 事件开关（低打扰安全收敛）', () => {
+  it('summary/未知通道兜底 general → 消息场景开关（低打扰安全收敛）', () => {
     expect(
-      shouldShowSystemNotificationForPush(makePush('summary'), EVENT_OFF)
+      shouldShowSystemNotificationForPush(makePush('summary'), MESSAGE_OFF)
     ).toBe(false);
     expect(
-      shouldShowSystemNotificationForPush(makePush('unknown'), EVENT_OFF)
+      shouldShowSystemNotificationForPush(makePush('unknown'), MESSAGE_OFF)
     ).toBe(false);
   });
 
-  it('security 推送恒放行（S11 必达，不受场景开关影响）', () => {
+  it('security 推送恒放行（S11 必达，不受场景/总开关影响）', () => {
     expect(
       shouldShowSystemNotificationForPush(makePush('security'), ALL_OFF)
+    ).toBe(true);
+    expect(
+      shouldShowSystemNotificationForPush(makePush('security'), MASTER_OFF)
     ).toBe(true);
   });
 });
@@ -176,7 +211,7 @@ describe('decideForegroundPresentationFor（偏好过滤合成）', () => {
   it('通道放行 → 沿用前台策略（当前恒不弹——app 内已展示，双通道去重）', () => {
     const pres = decideForegroundPresentationFor(
       makePush('approval'),
-      EVENT_OFF
+      TASK_DONE_OFF
     );
     expect(pres.shouldShowBanner).toBe(false);
     expect(pres.shouldShowList).toBe(false);
@@ -197,11 +232,11 @@ describe('实时接线（bindNotificationPrefs 读取器）', () => {
     bindNotificationPrefs(() => prefs);
 
     expect(shouldShowSystemNotificationLive('approval')).toBe(true);
-    prefs = { approvalNotifications: false, eventNotifications: true };
+    prefs = prefsOf({ approval: false });
     expect(shouldShowSystemNotificationLive('approval')).toBe(false);
     expect(shouldShowSystemNotificationLive('security')).toBe(true);
     expect(shouldShowSystemNotificationForPushLive(makePush('run'))).toBe(true);
-    prefs = { approvalNotifications: false, eventNotifications: false };
+    prefs = prefsOf({}, false);
     expect(shouldShowSystemNotificationLive('run')).toBe(false);
     expect(shouldShowSystemNotificationForPushLive(makePush('general'))).toBe(
       false
@@ -209,7 +244,7 @@ describe('实时接线（bindNotificationPrefs 读取器）', () => {
   });
 
   it('unbind 复位 → 回退全放行', () => {
-    bindNotificationPrefs(() => ({ ...ALL_OFF }));
+    bindNotificationPrefs(() => prefsOf({ approval: false }));
     expect(shouldShowSystemNotificationLive('approval')).toBe(false);
     unbindNotificationPrefsForTest();
     expect(shouldShowSystemNotificationLive('approval')).toBe(true);

@@ -3,6 +3,8 @@ export { default as ApprovalDetailScreen } from './approvalDetailScreen';
 export type { ApprovalDetailScreenProps } from './approvalDetailScreen';
 export { default as ApprovalListScreen } from './approvalListScreen';
 export type { ApprovalListScreenProps } from './approvalListScreen';
+export { default as ApprovalHistoryScreen } from './approvalHistoryScreen';
+export type { ApprovalHistoryScreenProps } from './approvalHistoryScreen';
 export { default as SessionsScreen } from './sessionsScreen';
 export type { SessionsScreenProps } from './sessionsScreen';
 export { default as SessionDetailScreen } from './sessionDetailScreen';

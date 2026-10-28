@@ -25,13 +25,13 @@ beforeEach(() => {
   authStore.getState().clearPairing();
 });
 
-describe('设置页（R2-06 部分 3）', () => {
-  it('整页渲染：分组列表（通用/通知偏好/文件/关于）+ 移除本机', async () => {
+describe('设置页（R2-06 部分 3 · R4 批次2 分组收敛）', () => {
+  it('整页渲染：分组列表（通用/通知偏好/关于）+ 移除本机（缩略图假开关已删）', async () => {
     await render(<SettingsScreen />);
     expect(screen.getByText('通用')).toBeTruthy();
     expect(screen.getByText('通知偏好')).toBeTruthy();
-    expect(screen.getByText('文件')).toBeTruthy();
     expect(screen.getByText('关于')).toBeTruthy();
+    expect(screen.queryByText('文件')).toBeNull();
     expect(screen.getByTestId('settings-remove-local')).toBeTruthy();
   });
 

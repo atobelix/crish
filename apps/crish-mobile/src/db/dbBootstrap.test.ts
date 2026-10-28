@@ -171,11 +171,17 @@ describe('ensureDatabaseForApp（启动装配链）', () => {
     expect(settingsStore.getState().hydrated).toBe(true);
 
     // 注入的默认持久化生效：store 写 → 真实 DAO 落 settings 表（参数化写路径）
-    settingsStore.getState().set('general', {
-      responseStyle: 'high',
-      enableAnalytics: true,
-      enableCrashTelemetry: false,
+    settingsStore.getState().set('notification', {
+      masterOn: false,
+      sceneFlags: {
+        message: true,
+        taskDone: true,
+        approval: true,
+        error: true,
+        deviceOffline: false,
+      },
     });
+    settingsStore.getState().set('appearance', { theme: 'dark' });
     await flush();
     expect(calls).toContain('write');
 
@@ -192,8 +198,9 @@ describe('ensureDatabaseForApp（启动装配链）', () => {
     expect(calls).not.toContain('migrate');
     const st = settingsStore.getState();
     expect(st.hydrated).toBe(true);
-    expect(st.groups.general.responseStyle).toBe('high');
-    expect(st.groups.general.enableAnalytics).toBe(true);
+    expect(st.groups.notification.masterOn).toBe(false);
+    expect(st.groups.notification.sceneFlags.approval).toBe(true); // 缺字段默认
+    expect(st.groups.appearance.theme).toBe('dark');
   });
 });
 
@@ -262,11 +269,7 @@ describe('ensureDatabaseForApp（失败降级内存态）', () => {
     });
     await ensureDatabaseForApp({ open });
 
-    settingsStore.getState().set('general', {
-      responseStyle: 'medium',
-      enableAnalytics: false,
-      enableCrashTelemetry: false,
-    });
+    settingsStore.getState().set('appearance', { theme: 'dark' });
     // 无默认注入 → 不落库（silent no-op，且不抛错）
     await expect(flush()).resolves.toBeUndefined();
   });

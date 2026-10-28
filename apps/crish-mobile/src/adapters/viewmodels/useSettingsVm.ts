@@ -1,9 +1,11 @@
-// 设置页视图模型（R2-06 部分 3，M4 §2.2.2 页面唯一数据入口）：
+// 设置页视图模型（R2-06 部分 3 · R4 批次2 单真源收敛，M4 §2.2.2 页面唯一数据入口）：
 //
-// - 数据面：本机偏好（settingsLocalStore：通知偏好 + 缩略图）+ 主题三选
-//   （platform/theme）+ 关于（wire 只读：queryPresence 桌面在场/版本 + getSettings
-//   镜像摘要，F6 §3.2 只读参考 + F6 §4.2 mirror 不持久化）+ 配对身份
-//   （authStore deviceId/desktopId/host）；
+// - 数据面：本机偏好 = settingsStore（F6 §4.2 SSOT，settingsDao kv 持久化，重启保留；
+//   R4 批次2 起主题/通知偏好不再经旧内存 store）+ 关于（wire 只读：queryPresence 桌面
+//   在场/版本 + getSettings 镜像摘要，F6 §3.2 只读参考）+ 配对身份（authStore）；
+// - 通知偏好（F6 §10）：总开关 + 场景级开关；权限联动（F6 §10.3）：denied → 开关禁用
+//   + 引导文案（notifySwitchGate）；开关首次开（undetermined）→ 先弹系统权限框再落值
+//   （requestPermissionOnEnable，请求前建渠道由 permissions.request 内部自保证）；
 // - 连接投影：connectionStore.phase === 'ready' → connected；未连接 → 设置项
 //   禁用「未连接」态（任务书：settingsCommands 读取/更新未连接时禁用）；
 // - 关于装载：connected 时并行拉 queryPresence + getSettings（竞态防护：per-load
@@ -17,25 +19,31 @@
 // 只读纪律：本文件只调用既有 store 动作与 settingsCommands 接线 API，不修改 domain。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { JsonValue } from '@crish/shared-types';
-import type { PresenceResult } from '@crish/shared-types';
-import { useConnectionStore, useAuthStore } from '@/adapters/hooks/useAppStore';
+import { useStore } from 'zustand';
+import type { JsonValue, PresenceResult } from '@crish/shared-types';
+import {
+  useConnectionStore,
+  useAuthStore,
+  useSettingsStore,
+} from '@/adapters/hooks/useAppStore';
 import { authStore } from '@/domain/store/authStore';
-import {
-  useSettingsLocalStore,
-  settingsLocalStore,
-  type LocalPreferenceKey,
-} from '@/adapters/settings/settingsLocalStore';
-import {
-  useThemeMode,
-  themeModeStore,
-  type ThemeMode,
-} from '@/adapters/platform/theme';
+import { settingsStore } from '@/domain/store/settingsStore';
+import type { ThemeMode, NotifyScene } from '@/domain/store/settingsReducers';
+import { setThemeMode } from '@/adapters/platform/theme';
 import {
   getSettingsContext,
   type SettingsContext,
 } from '@/adapters/settings/settingsWiring';
 import { getPairingWiring } from '@/adapters/wiring/pairing';
+import {
+  notificationPermissionStore,
+  type NotificationPermissionStatus,
+} from '@/notifications/permissions';
+import {
+  notifySwitchGate,
+  requestPermissionOnEnable,
+  type NotificationSwitchGate,
+} from '@/notifications/prefsGate';
 
 // ── 关于页数据模型 ────────────────────────────────────────────────────────
 
@@ -82,19 +90,22 @@ export interface SettingsVm {
   /** 连接是否就绪（phase === 'ready'；否则设置项「未连接」禁用态） */
   connected: boolean;
 
-  // 通用（主题三选，R2UX-06-05）
+  // 通用（主题三选，R2UX-06-05；settingsStore 持久化）
   themeMode: ThemeMode;
   setThemeMode: (mode: ThemeMode) => void;
 
-  // 通知偏好（本机，F6 §10；未连接禁用）
-  approvalNotifications: boolean;
-  eventNotifications: boolean;
-  setApprovalNotifications: (value: boolean) => void;
-  setEventNotifications: (value: boolean) => void;
-
-  // 文件（本机，R2UX-06-03；未连接禁用）
-  thumbnailWifiOnly: boolean;
-  setThumbnailWifiOnly: (value: boolean) => void;
+  // 通知偏好（F6 §10：总开关 + 场景开关；权限联动 F6 §10.3）
+  /** 通知总开关（关闭后场景开关一并失效） */
+  notifyMasterOn: boolean;
+  /** 场景级开关快照（5 场景；UI 渲染有通道映射的子集） */
+  notifyScenes: Readonly<Record<NotifyScene, boolean>>;
+  /** 系统通知权限三态（denied → 场景开关禁用 + 引导） */
+  notifyPermission: NotificationPermissionStatus;
+  /** 权限 → 开关可用性投影（denied → 禁用 + 引导文案，F6 §10.3） */
+  notifySwitchGate: NotificationSwitchGate;
+  setNotifyMasterOn: (value: boolean) => void;
+  /** 场景开关（undetermined → 先请求权限再落值；denied → 拒绝并不落值） */
+  setNotifyScene: (scene: NotifyScene, value: boolean) => Promise<void>;
 
   // 关于（wire 只读镜像，F6 §3.2）
   aboutStatus: AboutStatus;
@@ -140,6 +151,11 @@ const IDLE_ABOUT = {
   mirror: null as SettingsMirror | null,
 };
 
+/** 权限三态订阅绑定（通知域 store → React；权限 refresh/request 均触发重渲染） */
+function useNotificationPermission(): NotificationPermissionStatus {
+  return useStore(notificationPermissionStore, (s) => s.status);
+}
+
 /**
  * 视图模型（位置参数对齐 useFilesVm 注入风格；context/removeLocal 缺省走接线单例）。
  * 注：调用方（页面/测试）须保持 context 引用稳定——内联新建对象会使 ctxOf 引用
@@ -152,8 +168,9 @@ export function useSettingsVm(
   // ── store 订阅（适配层唯一绑定入口） ───────────────────────────────────
   const phase = useConnectionStore((s) => s.phase);
   const connected = phase === 'ready';
-  const prefs = useSettingsLocalStore((s) => s.prefs);
-  const themeMode = useThemeMode((s) => s.mode);
+  const themeMode = useSettingsStore((s) => s.groups.appearance.theme);
+  const notifyPrefs = useSettingsStore((s) => s.groups.notification);
+  const permissionStatus = useNotificationPermission();
   const identity = useAuthStore((s) => ({
     host: s.host,
     desktopId: s.desktopId,
@@ -216,20 +233,36 @@ export function useSettingsVm(
     void loadAbout();
   }, [loadAbout]);
 
-  // ── 主题（platform/theme 存储面） ───────────────────────────────────────
-  const setThemeMode = useCallback((mode: ThemeMode) => {
-    themeModeStore.getState().setMode(mode);
+  // ── 主题（settingsStore.appearance 持久化） ─────────────────────────────
+  const changeThemeMode = useCallback((mode: ThemeMode) => {
+    setThemeMode(mode);
   }, []);
 
-  // ── 本机偏好开关（settingsLocalStore 存储面） ───────────────────────────
-  const setPreference = useCallback(
-    (key: LocalPreferenceKey, value: boolean) => {
-      settingsLocalStore.getState().setPreference(key, value);
+  // ── 通知偏好（settingsStore.notification 持久化；权限联动 F6 §10.3） ────
+  const setNotifyMasterOn = useCallback((value: boolean) => {
+    settingsStore.getState().update('notification', { masterOn: value });
+  }, []);
+
+  const setNotifyScene = useCallback(
+    async (scene: NotifyScene, value: boolean) => {
+      // 开关开 + 未询问 → 先弹系统权限框（F6 §10.3 防开了收不到；拒绝则不落值）
+      if (value) {
+        const status = await requestPermissionOnEnable(
+          notificationPermissionStore.getState().status
+        );
+        if (status === 'denied') return;
+      }
+      settingsStore.getState().update('notification', {
+        sceneFlags: {
+          ...settingsStore.getState().groups.notification.sceneFlags,
+          [scene]: value,
+        },
+      });
     },
     []
   );
 
-  // ── 移除本机（注入优先；缺省 defaultRemoveLocal） ───────────────────────
+  // ── 移除本机（注入优先；缺省 defaultRemoveLocal；恒 true 由页面重定向） ──
   const removeLocalFn = removeLocal ?? defaultRemoveLocal;
   const removeLocalAction = useCallback(async (): Promise<boolean> => {
     await removeLocalFn();
@@ -239,15 +272,13 @@ export function useSettingsVm(
   return {
     connected,
     themeMode,
-    setThemeMode,
-    approvalNotifications: prefs.approvalNotifications,
-    eventNotifications: prefs.eventNotifications,
-    thumbnailWifiOnly: prefs.thumbnailWifiOnly,
-    setApprovalNotifications: (value) =>
-      setPreference('approvalNotifications', value),
-    setEventNotifications: (value) =>
-      setPreference('eventNotifications', value),
-    setThumbnailWifiOnly: (value) => setPreference('thumbnailWifiOnly', value),
+    setThemeMode: changeThemeMode,
+    notifyMasterOn: notifyPrefs.masterOn,
+    notifyScenes: notifyPrefs.sceneFlags,
+    notifyPermission: permissionStatus,
+    notifySwitchGate: notifySwitchGate(permissionStatus),
+    setNotifyMasterOn,
+    setNotifyScene,
     aboutStatus: about.status,
     presence: about.presence,
     mirror: about.mirror,

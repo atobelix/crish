@@ -11,6 +11,7 @@ import { devicePresenceStore } from '@/adapters/wiring/devicePresenceStore';
 import {
   activeRunTotal,
   deriveCurrentRunId,
+  feedPreviewOf,
   feedSessionOf,
   pendingApprovalTotal,
   useDashboardVm,
@@ -164,19 +165,34 @@ describe('useDashboardVm 钩子渲染面（store 订阅聚合）', () => {
     expect(result.current.stale).toBe(true);
   });
 
-  it('过滤开关切换（errorsOnly/runOnly/toolOnly 本地 useState 翻转）', async () => {
+  it('事件到达 → entries 响应式更新（R4 批次3 修复非响应式 windowOf 读法）', async () => {
+    sessionStore.getState().upsert(makeSession({ id: 's-1' }));
     const { result } = await renderHook(() => useDashboardVm());
-    expect(result.current.errorsOnly).toBe(false);
+    expect(result.current.entries).toEqual([]);
     await act(async () => {
-      result.current.toggleErrorsOnly();
+      eventStore.getState().ingest('s-1', {
+        type: 'message-end',
+        sessionId: 's-1',
+        sequence: 1,
+        text: 'hi',
+      });
     });
-    expect(result.current.errorsOnly).toBe(true);
-    await act(async () => {
-      result.current.toggleRunOnly();
-      result.current.toggleToolOnly();
-    });
-    expect(result.current.runOnly).toBe(true);
-    expect(result.current.toolOnly).toBe(true);
+    expect(result.current.entries).toHaveLength(1);
+  });
+
+  it('feedPreviewOf：窗口尾部 N 条倒序（最新在前预览）', () => {
+    const entries = [
+      makeEntry({ sequence: 1 }),
+      makeEntry({ sequence: 2 }),
+      makeEntry({ sequence: 3 }),
+    ];
+    expect(feedPreviewOf(entries, 2).map((e) => e.sequence)).toEqual([3, 2]);
+    // limit 超出窗口长度 → 全量倒序
+    expect(feedPreviewOf(entries, 10).map((e) => e.sequence)).toEqual([
+      3, 2, 1,
+    ]);
+    // 空窗口 → 空数组
+    expect(feedPreviewOf([], 5)).toEqual([]);
   });
 
   it('retry：接线未启动时静默（不抛错）', async () => {

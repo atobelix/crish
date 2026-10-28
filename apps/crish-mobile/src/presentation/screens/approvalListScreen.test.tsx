@@ -9,7 +9,8 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ApprovalItem } from '@/domain/types/domain';
 import type { PermissionRequest } from '@crish/shared-types';
 import { approvalStore } from '@/domain/store/approvalStore';
-import ApprovalListScreen, { formatHistoryTime } from './approvalListScreen';
+import ApprovalListScreen from './approvalListScreen';
+import { formatHistoryTime } from '@/presentation/components/approval/ApprovalHistoryRow';
 
 function makeRequest(
   overrides: Partial<PermissionRequest> = {}

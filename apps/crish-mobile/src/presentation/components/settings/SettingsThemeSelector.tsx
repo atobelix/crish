@@ -9,8 +9,8 @@ import {
   THEME_MODES,
   THEME_MODE_LABELS,
   useTheme,
-  type ThemeMode,
 } from '@/adapters/platform/theme';
+import type { ThemeMode } from '@/domain/store/settingsReducers';
 import { dualHitSlop } from '@/presentation/components/ui/hitTargets';
 
 export interface SettingsThemeSelectorProps {

@@ -1,9 +1,15 @@
-// useSettingsVm 视图模型测试（R2-06 部分 3）：
-// 未连接禁用投影 / 本机偏好开关 / 主题切换 / 关于装载（queryPresence+getSettings
-// 并行 + 竞态 + 错误重试 + 断线诚实化）/ 移除本机（注入 + 缺省 unpair 退化路径）
+// useSettingsVm 视图模型测试（R2-06 部分 3 · R4 批次2 单真源）：
+// 未连接禁用投影 / 通知偏好开关（settingsStore 持久化 + 权限联动）/ 主题切换 /
+// 关于装载（queryPresence+getSettings 并行 + 竞态 + 错误重试 + 断线诚实化）/
+// 移除本机（注入 + 缺省 unpair 退化路径）
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { connectionStore } from '@/domain/store/connectionStore';
 import { authStore } from '@/domain/store/authStore';
+import {
+  settingsStore,
+  configureSettingsPersistence,
+} from '@/domain/store/settingsStore';
+import { defaultSettingsGroups } from '@/domain/store/settingsReducers';
 import { resetPairingWiringForTest } from '@/adapters/wiring/pairing';
 import {
   resetSettingsContextForTest,
@@ -11,14 +17,7 @@ import {
 } from '@/adapters/settings/settingsWiring';
 import type { SettingsRepository } from '@/adapters/settings/settingsRepository';
 import { SettingsCommandError } from '@/adapters/settings/settingsRepository';
-import {
-  resetSettingsLocalStoreForTest,
-  settingsLocalStore,
-} from '@/adapters/settings/settingsLocalStore';
-import {
-  resetThemeModeForTest,
-  themeModeStore,
-} from '@/adapters/platform/theme';
+import { notificationPermissionStore } from '@/notifications/permissions';
 import {
   defaultRemoveLocal,
   mirrorInfoOf,
@@ -51,8 +50,16 @@ function makeFakeContext(repo: SettingsRepository): SettingsContext {
 beforeEach(() => {
   connectionStore.setState({ phase: 'disconnected' });
   resetSettingsContextForTest();
-  resetSettingsLocalStoreForTest();
-  resetThemeModeForTest();
+  configureSettingsPersistence(null);
+  settingsStore.setState({
+    groups: defaultSettingsGroups(),
+    hydrated: false,
+  });
+  notificationPermissionStore.setState({
+    status: 'undetermined',
+    checked: false,
+    refreshing: false,
+  });
   resetPairingWiringForTest();
   authStore.getState().clearPairing();
 });
@@ -151,35 +158,56 @@ describe('useSettingsVm 连接投影与关于装载', () => {
   });
 });
 
-// ── 本机偏好开关与主题 ────────────────────────────────────────────────────
+// ── 通知偏好与主题（settingsStore 单真源） ────────────────────────────────
 
-describe('useSettingsVm 开关与主题', () => {
-  it('开关切换 → settingsLocalStore 更新（通知偏好 + 缩略图）', async () => {
+describe('useSettingsVm 通知偏好与主题', () => {
+  it('总开关与场景开关切换 → settingsStore.notification 更新（持久化分组）', async () => {
     const { result } = await renderHook(() => useSettingsVm());
-    expect(result.current.approvalNotifications).toBe(true);
-    expect(result.current.eventNotifications).toBe(true);
-    expect(result.current.thumbnailWifiOnly).toBe(true);
+    expect(result.current.notifyMasterOn).toBe(true);
+    expect(result.current.notifyScenes.approval).toBe(true);
     await act(async () => {
-      result.current.setApprovalNotifications(false);
-      result.current.setEventNotifications(false);
-      result.current.setThumbnailWifiOnly(false);
+      result.current.setNotifyMasterOn(false);
+      result.current.setNotifyScene('approval', false);
     });
-    expect(settingsLocalStore.getState().prefs.approvalNotifications).toBe(
-      false
-    );
-    expect(settingsLocalStore.getState().prefs.eventNotifications).toBe(false);
-    expect(settingsLocalStore.getState().prefs.thumbnailWifiOnly).toBe(false);
-    expect(result.current.approvalNotifications).toBe(false);
+    const notify = settingsStore.getState().groups.notification;
+    expect(notify.masterOn).toBe(false);
+    expect(notify.sceneFlags.approval).toBe(false);
+    expect(notify.sceneFlags.message).toBe(true); // 未提及保留
+    expect(result.current.notifyMasterOn).toBe(false);
   });
 
-  it('主题切换 → themeModeStore 更新（三选，R2UX-06-05）', async () => {
+  it('场景开关开（undetermined 首次）→ 先请求权限再落值', async () => {
+    const { result } = await renderHook(() => useSettingsVm());
+    await act(async () => {
+      await result.current.setNotifyScene('taskDone', false);
+      await result.current.setNotifyScene('taskDone', true);
+    });
+    // undetermined → requestPermissionOnEnable 弹系统框（jest mock 恒 granted）→ 落值
+    expect(
+      settingsStore.getState().groups.notification.sceneFlags.taskDone
+    ).toBe(true);
+  });
+
+  it('主题切换 → settingsStore.appearance 更新（三选，R2UX-06-05）', async () => {
     const { result } = await renderHook(() => useSettingsVm());
     expect(result.current.themeMode).toBe('system');
     await act(async () => {
       result.current.setThemeMode('dark');
     });
-    expect(themeModeStore.getState().mode).toBe('dark');
+    expect(settingsStore.getState().groups.appearance.theme).toBe('dark');
     expect(result.current.themeMode).toBe('dark');
+  });
+
+  it('权限 denied → notifySwitchGate 禁用投影（F6 §10.3 UI 置灰数据面）', async () => {
+    notificationPermissionStore.setState({
+      status: 'denied',
+      checked: true,
+      refreshing: false,
+    });
+    const { result } = await renderHook(() => useSettingsVm());
+    expect(result.current.notifyPermission).toBe('denied');
+    expect(result.current.notifySwitchGate.enabled).toBe(false);
+    expect(result.current.notifySwitchGate.hint).toContain('前往设置');
   });
 });
 
