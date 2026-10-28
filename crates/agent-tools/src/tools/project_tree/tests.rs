@@ -426,7 +426,9 @@ async fn cache_invalidates_when_file_removed() {
 #[tokio::test]
 async fn line_width_truncated_at_char_boundary() {
     let ws = TempWorkspace::new("ptree_wide");
-    let long_name = "超长文件名".repeat(50); // 250 chars
+    // 80 个 CJK 字符（240 UTF-8 字节）— 超过 120 字符行宽但低于 Linux
+    // 文件名 255 字节上限（原 250 CJK = 750 字节，仅 Windows 可建）
+    let long_name = "超长文件名".repeat(16); // 80 chars / 240 bytes
     ws.write_file(&format!("{long_name}.txt"), "x");
     let tool = ProjectTreeTool::new();
     let out = tool
