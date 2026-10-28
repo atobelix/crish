@@ -358,6 +358,8 @@ fn ctx(run_id: &str, kind: ProviderErrorKind, retries: u32, elapsed_ms: u64) -> 
         started_at_ms: now_ms() - 1_000,
         inject_bytes: 100,
         window_bytes: 10_000,
+        capability_mode: None,
+        model_override: None,
     }
 }
 

@@ -17,6 +17,10 @@ use serde_json::Value;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+pub use crate::approval_policy::{
+    generate_semantic_denial_message, ApprovalPolicyConfig, ApprovalPolicyEngine,
+    DefaultApprovalPolicyEngine, TimeoutAction, TimeoutEvaluationContext,
+};
 use crate::approval_router::relay_denied_message;
 use crate::safe_point::AbortSignal;
 use crate::tool_events::{ApprovalDecision, ApprovalGate, ApprovalRequester, ToolEvent};
@@ -127,6 +131,7 @@ impl AskChannel for ApprovalChannel {
                 // T-D-14：请求方身份随事件透传（子代理 run 携带 run id +
                 // 理由；主 agent run = None）
                 requester: self.requester.clone(),
+                reason: None,
             });
 
         // 2. 等待裁决；abort（批级信号 / abort_token）触发即取消等待，
@@ -136,7 +141,7 @@ impl AskChannel for ApprovalChannel {
         let tool_name = tool_name.to_string();
         let args = args.clone();
         let requester = self.requester.clone();
-        let wait = gate.request_approval(&call_id, &tool_name, &args, requester.as_ref());
+        let wait = gate.request_approval(&call_id, &tool_name, &args, requester.as_ref(), None);
         let cancelled = self.wait_aborted();
         tokio::select! {
             biased;
@@ -205,6 +210,7 @@ mod tests {
             _tool_name: &str,
             _args: &Value,
             _requester: Option<&ApprovalRequester>,
+            _reason: Option<&str>,
         ) -> ApprovalDecision {
             self.consulted.fetch_add(1, Ordering::SeqCst);
             self.decision.clone()
@@ -225,6 +231,7 @@ mod tests {
             _tool_name: &str,
             _args: &Value,
             requester: Option<&ApprovalRequester>,
+            _reason: Option<&str>,
         ) -> ApprovalDecision {
             *self.received.lock().unwrap() = requester.cloned();
             self.decision.clone()
@@ -245,6 +252,7 @@ mod tests {
             _tool_name: &str,
             _args: &Value,
             _requester: Option<&ApprovalRequester>,
+            _reason: Option<&str>,
         ) -> ApprovalDecision {
             self.consulted.fetch_add(1, Ordering::SeqCst);
             self.release.notified().await;
@@ -289,12 +297,15 @@ mod tests {
                 tool_name,
                 args,
                 requester,
+                reason,
             } => {
                 assert_eq!(call_id, "c1");
                 assert_eq!(tool_name, "shell_command");
                 assert_eq!(args["command"], "git push");
                 // 主 agent 请求：请求方身份 None（向后兼容）
                 assert_eq!(requester, &None);
+                // ApprovalChannel 不携带判点原因（None）
+                assert_eq!(reason, &None);
             }
             other => panic!("应记录 ApprovalRequested，实际 {other:?}"),
         }

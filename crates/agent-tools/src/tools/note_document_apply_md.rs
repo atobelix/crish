@@ -7,12 +7,8 @@
 //! - **出参**（W4-A）：`ok / block_ids / inserted / idempotent / lossy.items[]`
 //!   —— Store 路径透出 `ApplyReport.lossy`；Memory 可为空 items。
 //!
-//! # 审批（W4-B）
-//! - `dangerous=true`；session-loop 按权限模式：plan **Deny**、ask **NeedsApproval**、
-//!   full **Allow**（见 [`crate::note_permission`]）。
-//! - 若 `ctx.ask` 存在则 [`maybe_ask_note_write`]；**Denied → `tool.user_denied`**，
-//!   **不**调用 backend（写路径零副作用）。
-//! - 无 ask 时按 write_file 惯例直接执行（权限层在 execute 前已判定）。
+//! # 权限
+//! - `dangerous=true`；由内核调度层统一裁决判定。
 //!
 //! # batch token（W4-B）
 //! 可选 `batch_id`：已占用且未过期才允许写；非法 / 过期 → `tool.invalid_input`。
@@ -22,7 +18,7 @@
 //! - 批/表驱动/execution_unknown 见 **W4-F**（`block_batch` 等）；**≠ W6-E**
 //! - Memory 测绿 **禁止**关生产 A-AGT
 
-use crate::context::{AskDecision, ToolContext};
+use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::note_backend::{
     apply_result_json, backend_err_to_tool_err, NoteApplyMdRequest, NoteApplyMode, NoteBackendError,
@@ -92,25 +88,6 @@ impl DocumentApplyMdTool {
     }
 }
 
-/// 写工具审批：ask 存在则询问；Denied → user_denied；无 ask → 放行（write_file 惯例）
-pub(crate) async fn maybe_ask_note_write(
-    ctx: &ToolContext,
-    tool_name: &str,
-    args: &JsonValue,
-) -> Result<(), ToolError> {
-    if let Some(ask) = &ctx.ask {
-        match ask.ask(tool_name, args).await? {
-            AskDecision::Allowed => Ok(()),
-            AskDecision::Denied { reason } => Err(ToolError::new(
-                "tool.user_denied",
-                format!("user denied: {reason}"),
-            )),
-        }
-    } else {
-        Ok(())
-    }
-}
-
 pub(crate) fn parse_apply_mode(args: &JsonValue) -> Result<NoteApplyMode, ToolError> {
     match optional_string(args, "mode") {
         None => Ok(NoteApplyMode::default()),
@@ -161,8 +138,6 @@ impl Tool for DocumentApplyMdTool {
         let mode = parse_apply_mode(&args)?;
         let batch_id = optional_string(&args, "batch_id");
         let intent_id = optional_string(&args, "intent_id");
-
-        maybe_ask_note_write(ctx, self.name(), &args).await?;
 
         let Some(backend) = ctx.note_backend.as_ref() else {
             return Ok(serde_json::json!({
@@ -366,70 +341,7 @@ mod tests {
         assert!(out["lossy"]["items"].as_array().unwrap().is_empty());
     }
 
-    // ── W4-B：审批拒绝 / batch 过期 ──────────────────────────────────
-
-    /// 固定拒绝的 ask 通道（W4-B：写路径 user_denied）
-    #[derive(Debug)]
-    struct DenyAskChannel {
-        reason: String,
-    }
-
-    #[async_trait]
-    impl crate::context::AskChannel for DenyAskChannel {
-        async fn ask(
-            &self,
-            _tool_name: &str,
-            _args: &serde_json::Value,
-        ) -> Result<crate::context::AskDecision, ToolError> {
-            Ok(crate::context::AskDecision::Denied {
-                reason: self.reason.clone(),
-            })
-        }
-    }
-
-    /// W4-B：ask 拒绝 → `tool.user_denied`，backend **零写入**
-    #[tokio::test]
-    async fn document_apply_md_ask_denied_returns_user_denied() {
-        let backend = Arc::new(MemoryNoteBackend::new());
-        let ctx = ToolContext {
-            note_backend: Some(backend.clone()),
-            ask: Some(std::sync::Arc::new(DenyAskChannel {
-                reason: "no note write".into(),
-            })),
-            ..create_mock_tool_context()
-        };
-        let tool = DocumentApplyMdTool::new();
-        let err = tool
-            .execute(
-                &ctx,
-                serde_json::json!({
-                    "doc_id": "doc-deny",
-                    "markdown": "must not land",
-                }),
-            )
-            .await
-            .unwrap_err();
-        assert_eq!(err.code(), "tool.user_denied");
-        assert!(
-            err.to_string().contains("no note write"),
-            "拒绝理由应透传：{err}"
-        );
-        // 写未发生：outline 空
-        let outline = DocumentOutlineTool::new();
-        let o = outline
-            .execute(&ctx, serde_json::json!({ "doc_id": "doc-deny" }))
-            .await
-            .unwrap();
-        assert_eq!(o["ok"], true);
-        assert!(
-            o["outline"]
-                .as_array()
-                .map(|a| a.is_empty())
-                .unwrap_or(true),
-            "拒绝后不得有块：{:?}",
-            o
-        );
-    }
+    // ── W4-B：batch 过期 ──────────────────────────────────
 
     /// W4-B：batch_id 占用后过期 → 写拒绝（invalid_input + batch_token_expired）
     #[tokio::test]
@@ -461,18 +373,6 @@ mod tests {
             err.to_string().contains("note.batch_token_expired")
                 || err.to_string().contains("expired"),
             "过期错误应可识别：{err}"
-        );
-    }
-
-    /// W4-B：矩阵方向——本写工具名 plan 必 Deny（与 note_permission 一致）
-    #[test]
-    fn document_apply_md_plan_denied_by_note_matrix() {
-        use crate::note_permission::{decide_note_tool, plan_denies_note_tool};
-        use crate::permission::{PermissionMode, PermissionVerdict};
-        assert!(plan_denies_note_tool("document_apply_md"));
-        assert_eq!(
-            decide_note_tool("document_apply_md", PermissionMode::Plan),
-            Some(PermissionVerdict::Deny)
         );
     }
 }

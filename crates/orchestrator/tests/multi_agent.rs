@@ -679,6 +679,7 @@ async fn full_chain_dependency_graph_to_reinjection() {
         task_type: None,
         allowed_write_paths: None,
         display_label: None,
+        permission_mode: None,
         // 扩展点预留：全构造点显式 None（编译器强制）
         model_override: None,
     };
@@ -755,6 +756,8 @@ async fn full_chain_dependency_graph_to_reinjection() {
         started_at_ms: now_ms() - 1_000,
         inject_bytes: 100,
         window_bytes: 10_000,
+        capability_mode: None,
+        model_override: None,
     };
     // 阶梯 1：预算内瞬态错误自动重试、无 steering（04 C7 验收 1）
     let out1 = engine
@@ -938,6 +941,7 @@ async fn chain_event_envelopes_carry_subagent_identity() {
         task_type: None,
         allowed_write_paths: None,
         display_label: None,
+        permission_mode: None,
         // 扩展点预留：全构造点显式 None（编译器强制）
         model_override: None,
     };
@@ -1024,6 +1028,8 @@ async fn chain_recovery_budget_exhausted_skips_ladder2() {
         started_at_ms: now_ms() - 1_000,
         inject_bytes: 100,
         window_bytes: 10_000,
+        capability_mode: None,
+        model_override: None,
     };
     // 限制 = 1：预置预算键（recover_max_episodes=1）→ 新协调器
     engine

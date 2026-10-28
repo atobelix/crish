@@ -8,11 +8,10 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn approval_denied_is_not_fatal() {
-    let reg = registry_with(vec![Arc::new(EchoTool)]);
+    let reg = registry_with(vec![Arc::new(DangerousEchoTool)]);
     let exec = ToolExecutor::new(reg);
     let calls = vec![call("c1", "echo", ToolConcurrency::Sequential)];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         ..Default::default()
     };
     let gate = MockApproval {
@@ -34,11 +33,10 @@ async fn approval_denied_is_not_fatal() {
 
 #[tokio::test]
 async fn approval_approved_executes() {
-    let reg = registry_with(vec![Arc::new(EchoTool)]);
+    let reg = registry_with(vec![Arc::new(DangerousEchoTool)]);
     let exec = ToolExecutor::new(reg);
     let calls = vec![call("c1", "echo", ToolConcurrency::Sequential)];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         ..Default::default()
     };
     let gate = MockApproval {
@@ -53,11 +51,10 @@ async fn approval_approved_executes() {
 
 #[tokio::test]
 async fn approval_expired_not_fatal() {
-    let reg = registry_with(vec![Arc::new(EchoTool)]);
+    let reg = registry_with(vec![Arc::new(DangerousEchoTool)]);
     let exec = ToolExecutor::new(reg);
     let calls = vec![call("c1", "echo", ToolConcurrency::Sequential)];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         ..Default::default()
     };
     let gate = MockApproval {
@@ -85,7 +82,6 @@ async fn approval_parallel_executes_concurrently() {
         .map(|i| call(&format!("p{i}"), "slow", ToolConcurrency::Parallel))
         .collect::<Vec<_>>();
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         ..Default::default()
     };
     let gate = MockApproval {
@@ -107,7 +103,10 @@ async fn approval_parallel_executes_concurrently() {
 /// tool-start → approval-requested → tool-end；审批逐个按组序发起
 #[tokio::test]
 async fn approval_parallel_event_order_preserved() {
-    let reg = registry_with(vec![Arc::new(EchoTool), Arc::new(SlowTool { ms: 0 })]);
+    let reg = registry_with(vec![
+        Arc::new(DangerousEchoTool),
+        Arc::new(SlowTool { ms: 0 }),
+    ]);
     let exec = ToolExecutor::new(reg);
     let ids = ["p0", "p1", "p2"];
     let calls = ids
@@ -115,7 +114,6 @@ async fn approval_parallel_event_order_preserved() {
         .map(|id| call(id, "echo", ToolConcurrency::Parallel))
         .collect::<Vec<_>>();
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         ..Default::default()
     };
     let order = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -166,7 +164,10 @@ async fn approval_parallel_event_order_preserved() {
 /// T09.6/P8：并行组中单项被拒 → 该项 user_denied 不执行，其余项并行执行
 #[tokio::test]
 async fn approval_parallel_denied_skips_execution() {
-    let reg = registry_with(vec![Arc::new(EchoTool), Arc::new(SlowTool { ms: 0 })]);
+    let reg = registry_with(vec![
+        Arc::new(DangerousEchoTool),
+        Arc::new(SlowTool { ms: 0 }),
+    ]);
     let exec = ToolExecutor::new(reg);
     let calls = vec![
         call("p0", "echo", ToolConcurrency::Parallel),
@@ -174,7 +175,6 @@ async fn approval_parallel_denied_skips_execution() {
         call("p2", "echo", ToolConcurrency::Parallel),
     ];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         ..Default::default()
     };
     let gate = Arc::new(DenySomeApproval {
@@ -193,13 +193,12 @@ async fn approval_parallel_denied_skips_execution() {
 /// 发起审批并全部以取消收场（与顺序路径逐项 abort 前置检查一致）
 #[tokio::test]
 async fn approval_parallel_abort_skips_remaining_approvals() {
-    let reg = registry_with(vec![Arc::new(SlowTool { ms: 0 })]);
+    let reg = registry_with(vec![Arc::new(DangerousEchoTool)]);
     let exec = ToolExecutor::new(reg);
     let calls = (0..3)
-        .map(|i| call(&format!("a{i}"), "slow", ToolConcurrency::Parallel))
+        .map(|i| call(&format!("a{i}"), "echo", ToolConcurrency::Parallel))
         .collect::<Vec<_>>();
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         ..Default::default()
     };
     let release = Arc::new(tokio::sync::Notify::new());

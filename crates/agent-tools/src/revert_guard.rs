@@ -106,10 +106,9 @@ pub fn evaluate_streak(
 /// `gate_verdict` 产出）与 C4 连续计数判定。
 ///
 /// 合并矩阵（I3-S7 任务卡第 2 条）：
-/// - 面积大 → 面积判定优先（ask/full-access 由 S6 产出 NeedsApproval，
-///   plan 由 S6 产出 Deny）；
-/// - 面积小但窗口内第 2 次 → 必审批（ask/full-access NeedsApproval；
-///   plan 拒绝——安全优先，审批通道在 plan 下不存在）；
+/// - 面积大 → 面积判定优先（Ask/Smart 产出 NeedsApproval；Full 已在
+///   调用方早退，不进入本护栏）；
+/// - 面积小但窗口内第 2 次 → 必审批（Ask/Smart 均 NeedsApproval）；
 /// - 面积小且首次 → `None`（按既有三态矩阵，零打扰）。
 ///
 /// 返回 `Option<PermissionVerdict>`：`Some` = 回退护栏接管判定（不落既有
@@ -117,16 +116,13 @@ pub fn evaluate_streak(
 pub fn combine_revert_gate(
     area_verdict: Option<PermissionVerdict>,
     streak: StreakVerdict,
-    mode: PermissionMode,
+    _mode: PermissionMode,
 ) -> Option<PermissionVerdict> {
     if let Some(verdict) = area_verdict {
         return Some(verdict);
     }
     match streak {
-        StreakVerdict::NeedsApproval => Some(match mode {
-            PermissionMode::Plan => PermissionVerdict::Deny,
-            _ => PermissionVerdict::NeedsApproval,
-        }),
+        StreakVerdict::NeedsApproval => Some(PermissionVerdict::NeedsApproval),
         StreakVerdict::Allow => None,
     }
 }
@@ -470,14 +466,14 @@ mod tests {
 
     // ---- 统一回退护栏（面积 + 连续，I3-S7 任务卡第 2 条）----
 
-    /// 面积大 → 面积判定优先（S6 产出，如 full-access 下 NeedsApproval）。
+    /// 面积大 → 面积判定优先（S6 产出 NeedsApproval；Full 由调用方早退）。
     #[test]
     fn combine_area_verdict_takes_priority() {
         assert_eq!(
             combine_revert_gate(
                 Some(PermissionVerdict::NeedsApproval),
                 StreakVerdict::Allow,
-                PermissionMode::FullAccess,
+                PermissionMode::Full,
             ),
             Some(PermissionVerdict::NeedsApproval),
             "面积大必审批（即使首次）"
@@ -486,28 +482,27 @@ mod tests {
             combine_revert_gate(
                 Some(PermissionVerdict::Deny),
                 StreakVerdict::Allow,
-                PermissionMode::Plan,
+                PermissionMode::Smart,
             ),
             Some(PermissionVerdict::Deny),
-            "plan 下面积大保持更严拒绝"
+            "护栏面积拒绝优先于其它判定"
         );
     }
 
     /// 面积小但窗口内第 2 次 → 必审批（防分多次小额回退绕过 C3）。
     #[test]
     fn combine_streak_second_call_requires_approval() {
-        for mode in [PermissionMode::Ask, PermissionMode::FullAccess] {
+        for mode in [
+            PermissionMode::Ask,
+            PermissionMode::Smart,
+            PermissionMode::Full,
+        ] {
             assert_eq!(
                 combine_revert_gate(None, StreakVerdict::NeedsApproval, mode),
                 Some(PermissionVerdict::NeedsApproval),
-                "{mode:?} 下连续回退第 2 次必审批（full-access 不豁免）"
+                "{mode:?} 下连续回退第 2 次必审批"
             );
         }
-        assert_eq!(
-            combine_revert_gate(None, StreakVerdict::NeedsApproval, PermissionMode::Plan),
-            Some(PermissionVerdict::Deny),
-            "plan 下连续回退拒绝（审批通道不存在，安全优先）"
-        );
     }
 
     /// 面积小且首次 → 按既有矩阵放行（不产生审批）。
@@ -515,8 +510,8 @@ mod tests {
     fn combine_first_call_small_area_allows() {
         for mode in [
             PermissionMode::Ask,
-            PermissionMode::FullAccess,
-            PermissionMode::Plan,
+            PermissionMode::Full,
+            PermissionMode::Smart,
         ] {
             assert_eq!(
                 combine_revert_gate(None, StreakVerdict::Allow, mode),

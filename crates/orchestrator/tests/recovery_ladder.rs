@@ -467,6 +467,10 @@ impl SubagentSpawner for RecordingSpawner {
                     .map(|paths| serde_json::to_string(paths).expect("路径白名单序列化不应失败")),
                 // D-02 LK-04 v9 列：测试域无子会话映射（None）
                 sub_session_id: None,
+                capability_mode: None,
+                model_override: None,
+                resumable: true,
+                last_heartbeat_ms: None,
             });
             db.save_session_agents(session_id, &agents)
                 .map_err(|e| SubagentSpawnError::PersistFailed(e.to_string()))?;
@@ -515,6 +519,8 @@ fn failure_ctx(
         started_at_ms: now_ms() - 1_000,
         inject_bytes: 100,
         window_bytes: 10_000,
+        capability_mode: None,
+        model_override: None,
     }
 }
 
@@ -828,6 +834,10 @@ async fn ladder3_fork_persists_path_and_events_in_sqlite() {
             allowed_write_paths_json: None,
             // D-02 LK-04 v9 列：测试域无子会话映射（None）
             sub_session_id: None,
+            capability_mode: None,
+            model_override: None,
+            resumable: true,
+            last_heartbeat_ms: None,
         }],
     )
     .expect("原子代理行落库失败");
@@ -961,6 +971,10 @@ async fn ladder3_sqlite_spawn_failure_keeps_state_and_retry_completes_once() {
             display_label: None,
             allowed_write_paths_json: None,
             sub_session_id: None,
+            capability_mode: None,
+            model_override: None,
+            resumable: true,
+            last_heartbeat_ms: None,
         }],
     )
     .expect("原子代理行落库失败");
@@ -1136,6 +1150,10 @@ async fn ladder3_fork_propagates_parent_tool_call_id_in_sqlite() {
             allowed_write_paths_json: None,
             // v9 新列（LK-04 并行契约）：测试域构造点缺省 None
             sub_session_id: None,
+            capability_mode: None,
+            model_override: None,
+            resumable: true,
+            last_heartbeat_ms: None,
         }],
     )
     .expect("原子代理行落库失败");

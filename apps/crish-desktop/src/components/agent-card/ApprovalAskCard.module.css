@@ -144,11 +144,6 @@
   gap: var(--space-1);
 }
 
-.approvalCardCmdLabel {
-  font-size: var(--font-size-xxs);
-  color: var(--text-tertiary);
-}
-
 .approvalCardCmd {
   display: block;
   font-family: var(--font-mono);
@@ -239,7 +234,7 @@
 }
 
 .approvalCardBtn.deny:hover:not(:disabled) {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border-color: var(--border-color);
   color: var(--text-primary);
 }
@@ -284,7 +279,7 @@
   height: 100%;
   background: var(--accent-orange);
   border-radius: 1px;
-  transition: width 0.1s linear;
+  transition: width var(--duration-micro, 100ms) linear;
 }
 
 .approvalCardTimeoutBarExpired .approvalCardTimeoutFill {

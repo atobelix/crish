@@ -32,7 +32,7 @@ export type PageDirection = (typeof PAGE_DIRECTION_VALUES)[number];
 export const RUN_CONTROL_LEVEL_VALUES = ["continue","soft_inject","cooperative_stop","force_cancel"] as const;
 export type RunControlLevel = (typeof RUN_CONTROL_LEVEL_VALUES)[number];
 
-export const PERMISSION_MODE_VALUES = ["ask","plan","full-access"] as const;
+export const PERMISSION_MODE_VALUES = ["ask","smart","full"] as const;
 export type PermissionMode = (typeof PERMISSION_MODE_VALUES)[number];
 
 export const APPROVAL_DECISION_VALUES = ["approved","denied","expired"] as const;

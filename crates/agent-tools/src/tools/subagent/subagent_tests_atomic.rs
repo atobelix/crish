@@ -6,9 +6,8 @@
 
 use super::*;
 
-use crate::context::{create_mock_tool_context, AskCallback, ToolContext};
+use crate::context::{create_mock_tool_context, ToolContext};
 use crate::definition::Tool;
-use crate::tools::shell::ShellCommandTool;
 use conex_test_utils::TempWorkspace;
 
 // ── T-D-06：批量派发原子性（spawn_many 前瞻快照统一守卫）────────
@@ -238,51 +237,4 @@ async fn tool_batch_three_tasks_unique_ids_via_db_spawner() {
     assert_eq!(ids.len(), 3, "3 条 subagentId 必须唯一");
     let agents = db.load_session_agents("sess-main").expect("读取落库行失败");
     assert_eq!(agents.len(), 3, "3 个任务全部落库");
-}
-
-// ── 审批通道挂靠（I3 原样挂靠，写类调用产生审批记录）──────────
-
-#[tokio::test]
-async fn subagent_write_ops_route_through_ask_channel() {
-    // 子代理 run 的写类调用（shell_command 需审批形态）经 ctx.ask
-    // 接线面（引擎侧由 ApprovalChannel → ApprovalGate 实现）产生审批
-    // 请求；放行后继续执行（命令失败非致命，本测试只断言审批记录）。
-    // 审计修复（T-3 预检高严重度）：原用例在 mock 上下文（cwd 默认
-    // 仓库根）真实执行 `git push --force origin main`——存在真实强推
-    // 与网络依赖隐患；改为在**临时目录**执行同形态写类命令：临时目录
-    // 非 git 仓库，命令必然快速失败但审批挂靠语义不变（测试只断言
-    // 审批记录与 exitCode 存在，不关心成败）。
-    let recorder = RecordingAskChannel::allowing();
-    let mut ctx = create_mock_tool_context();
-    let probe_dir = std::env::temp_dir().join(format!("ask_probe_{}", std::process::id()));
-    std::fs::create_dir_all(&probe_dir).ok();
-    ctx.workspace_root = probe_dir;
-    ctx.ask = Some(Arc::new(recorder.clone()) as AskCallback);
-    let tool = ShellCommandTool::new(30_000, 200_000, None);
-    let command = "git push --force origin main";
-    let out = tool
-        .execute(&ctx, serde_json::json!({ "command": command }))
-        .await
-        .expect("审批放行后命令执行不应返回工具错误（非致命）");
-    let calls = recorder.calls();
-    assert_eq!(calls.len(), 1, "写类调用必须产生一次审批请求");
-    assert_eq!(calls[0].0, "shell_command");
-    assert_eq!(calls[0].1["command"], command);
-    assert!(out.get("exitCode").is_some(), "命令已执行（审批放行语义）");
-}
-
-#[tokio::test]
-async fn ask_unwired_returns_requires_approval() {
-    // 审批通道未接线（ask=None）：返回 tool.requires_approval 结构化
-    // 错误——执行器按 ApprovalRequired 分类透传（零打扰兜底，C3 语义）
-    let ctx = create_mock_tool_context();
-    let tool = ShellCommandTool::new(30_000, 200_000, None);
-    let err = tool
-        .execute(
-            &ctx,
-            serde_json::json!({ "command": "git push --force origin main" }),
-        )
-        .await
-        .unwrap_err();
-    assert_eq!(err.code(), "tool.requires_approval");
 }

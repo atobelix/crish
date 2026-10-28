@@ -167,7 +167,7 @@ async fn run_single(
             ctx,
             None,
             &ToolBatchOptions {
-                permission_mode: Some(agent_tools::permission::PermissionMode::FullAccess),
+                permission_mode: Some(agent_tools::permission::PermissionMode::Full),
                 ..Default::default()
             },
             None,

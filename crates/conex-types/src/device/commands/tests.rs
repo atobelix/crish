@@ -122,9 +122,23 @@ fn enum_wire_values() {
         "\"cooperative_stop\""
     );
     assert_eq!(
-        serde_json::to_string(&PermissionMode::FullAccess).unwrap(),
-        "\"full-access\""
+        serde_json::to_string(&PermissionMode::Full).unwrap(),
+        "\"full\""
     );
+    assert_eq!(
+        serde_json::to_string(&PermissionMode::Smart).unwrap(),
+        "\"smart\""
+    );
+    assert_eq!(
+        serde_json::to_string(&PermissionMode::Ask).unwrap(),
+        "\"ask\""
+    );
+    assert_eq!(PermissionMode::default(), PermissionMode::Smart);
+    assert_eq!(PermissionMode::Full.as_str(), "full");
+    assert_eq!(PermissionMode::Full.to_string(), "full");
+    assert_eq!("full".parse::<PermissionMode>().unwrap(), PermissionMode::Full);
+    assert_eq!("smart".parse::<PermissionMode>().unwrap(), PermissionMode::Smart);
+    assert_eq!("ask".parse::<PermissionMode>().unwrap(), PermissionMode::Ask);
     assert_eq!(
         serde_json::to_string(&PairState::Handshaking).unwrap(),
         "\"handshaking\""

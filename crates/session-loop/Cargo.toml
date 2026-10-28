@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 agent-tools = { path = "../agent-tools" }
+conex-agents = { path = "../conex-agents" }
 # T-ESC-02（脚本逃逸追踪判定面）：判定器消费 conex-fs::watch 的事件形状
 # （FileChangeEvent，T-ESC-01 数据面产物）；依赖链无环（conex-fs 仅依赖
 # conex-types，agent-tools → conex-fs 已存在）
@@ -20,6 +21,7 @@ conex-fs = { path = "../conex-fs" }
 # 核心决策——run 循环内直接依赖 conex-compaction，不走 core_compact_messages
 # IPC 绕行）；conex-compaction 仅依赖 conex-types + serde_json，无环。
 conex-compaction = { path = "../conex-compaction" }
+conex-sandbox = { path = "../conex-sandbox" }
 conex-types = { path = "../conex-types" }
 # now_iso_utc / civil_from_days / unix_millis 真源（纯 std）
 conex-shared = { path = "../conex-shared" }

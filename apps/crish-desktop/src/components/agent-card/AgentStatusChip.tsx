@@ -1,10 +1,11 @@
 import React from 'react';
 import styles from './AgentCard.module.css';
-import { Tooltip } from '../ui';
+import { Tooltip } from '@/components/ui';
+import { TextMorph } from '@/components/ui';
 import type { SessionAgent } from '../../store/types';
 import { STATUS_LABEL } from './agentCardUtils';
 
-/** 状态芯片：统一中文 + a11y role/status */
+/** 状态芯片：统一中文 + a11y role/status，字形平滑流转 */
 export function AgentStatusChip({
   status,
   mode,
@@ -25,7 +26,7 @@ export function AgentStatusChip({
         data-agent-status={status}
         aria-label={`状态：${label}${mode ? `，${modeHint}` : ''}`}
       >
-        {label}
+        <TextMorph as="span">{label}</TextMorph>
       </span>
     </Tooltip>
   );

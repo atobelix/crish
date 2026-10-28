@@ -29,6 +29,10 @@ fn save_and_load_session_agents() {
             display_label: Some("Rust 内核分析师".into()),
             allowed_write_paths_json: Some(r#"["docs/notes"]"#.into()),
             sub_session_id: Some("sub-sess-0-1".into()),
+            capability_mode: Some("read-only".into()),
+            model_override: Some("grok-3".into()),
+            resumable: false,
+            last_heartbeat_ms: Some(150),
         },
         SessionAgent {
             id: "a2".into(),
@@ -49,6 +53,10 @@ fn save_and_load_session_agents() {
             display_label: None,
             allowed_write_paths_json: None,
             sub_session_id: None,
+            capability_mode: None,
+            model_override: None,
+            resumable: false,
+            last_heartbeat_ms: None,
         },
     ];
     db.save_session_agents("s1", &agents).unwrap();
@@ -140,6 +148,10 @@ fn sample_agent(id: &str, status: &str, messages: Vec<SessionMessage>) -> Sessio
         display_label: None,
         allowed_write_paths_json: None,
         sub_session_id: None,
+        capability_mode: None,
+        model_override: None,
+        resumable: false,
+        last_heartbeat_ms: None,
     }
 }
 

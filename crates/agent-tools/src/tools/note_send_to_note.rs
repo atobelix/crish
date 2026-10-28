@@ -5,10 +5,8 @@
 //! - 内部走同一 `apply_md_fragment` 后端路径。
 //! - 重复 `intent_id`：幂等 no-op / 返回首次结果（Memory 用 HashMap）。
 //!
-//! # 审批 / batch（W4-B）
-//! 同 `document_apply_md`：dangerous=true；[`maybe_ask_note_write`] 拒绝 →
-//! `tool.user_denied`；可选 `batch_id` 占用/过期校验。矩阵见
-//! [`crate::note_permission`]。
+//! # 权限 / batch
+//! 同 `document_apply_md`：dangerous=true；由内核调度层统一裁决判定；可选 `batch_id` 占用/过期校验。
 //!
 //! # 诚实边界
 //! - **≠ EL-05**；**≠ W4-F 满表**；**≠ W6-E**
@@ -21,9 +19,7 @@ use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::note_backend::{
     apply_result_json, backend_err_to_tool_err, NoteApplyMdRequest, NoteBackendError,
 };
-use crate::tools::note_document_apply_md::{
-    maybe_ask_note_write, parse_apply_mode, require_markdown,
-};
+use crate::tools::note_document_apply_md::{parse_apply_mode, require_markdown};
 use crate::tools::note_query_blocks::NOTE_BACKEND_UNWIRED;
 use crate::tools::{optional_string, require_string};
 use async_trait::async_trait;
@@ -123,8 +119,6 @@ impl Tool for SendToNoteTool {
             return Err(ToolError::invalid_input("origin must be 'user' or 'agent'"));
         }
         let batch_id = optional_string(&args, "batch_id");
-
-        maybe_ask_note_write(ctx, self.name(), &args).await?;
 
         let Some(backend) = ctx.note_backend.as_ref() else {
             return Ok(serde_json::json!({

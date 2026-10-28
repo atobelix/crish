@@ -5,7 +5,6 @@ use agent_tools::executor::{
     execute_stream_with_output_policy, ExecutorContext, ToolExecutionPolicy,
 };
 use agent_tools::idempotency::ToolIdempotencyGuard;
-use agent_tools::permission::{decide, PermissionVerdict};
 use agent_tools::ToolContext;
 use serde_json::Value;
 
@@ -37,6 +36,24 @@ impl ToolExecutor {
                 ),
                 Vec::new(),
             );
+        }
+        // 能力 gate（运行中升级/降级即时生效；注册表裁剪只是纵深防御）
+        if let Some(capability) = options.capability_cell.as_ref() {
+            if !capability.allows_tool(&call.tool_name) {
+                return (
+                    ClassifiedToolResult::error(
+                        &call.id,
+                        &call.tool_name,
+                        ToolErrorKind::PolicyBlocked,
+                        conex_agents::capability::denial_message(
+                            &call.tool_name,
+                            capability.effective(),
+                        ),
+                        0,
+                    ),
+                    Vec::new(),
+                );
+            }
         }
         let (tool_ctx, approval_channel, mw_ctx, exec_ctx, abort_token) =
             self.build_execution_contexts(call, ctx, options, abort, &approval);
@@ -152,151 +169,82 @@ impl ToolExecutor {
         abort: Option<&crate::safe_point::AbortSignal>,
         approval: Option<Arc<dyn ApprovalGate>>,
     ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
-        let call_cx = ExecCallContext {
-            call,
-            ctx,
-            options,
-            abort,
-            approval,
-        };
-        let (r, extra) = self
-            .execute_single(
-                call_cx.call,
-                call_cx.ctx,
-                call_cx.options,
-                call_cx.abort,
-                call_cx.approval.clone(),
-                1,
-            )
+        let (result, mut events) = self
+            .execute_single(call, ctx, options, abort, approval.clone(), 1)
             .await;
-        if r.error_kind != Some(ToolErrorKind::ApprovalRequired) {
-            return (r, extra);
+        // 工具返回 tool.requires_approval → 发起第二次真实审批，批准后重试执行
+        // （T10：requires_approval 不再折叠为软拒绝；无门时保持 ApprovalRequired 透传）
+        if result.error_kind != Some(ToolErrorKind::ApprovalRequired) {
+            return (result, events);
         }
-        self.handle_retry_after_approval_required(&call_cx, r, extra)
-            .await
-    }
-
-    async fn handle_retry_after_approval_required(
-        &self,
-        cx: &ExecCallContext<'_>,
-        _initial_result: ClassifiedToolResult,
-        extra: Vec<ToolEvent>,
-    ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
-        let verdict = match cx.options.permission_mode {
-            Some(mode) => decide(false, true, mode),
-            None => PermissionVerdict::NeedsApproval,
-        };
-        match verdict {
-            PermissionVerdict::Deny => (
-                denied_result(cx.call, cx.options, Some(&self.registry)),
-                extra,
-            ),
-            PermissionVerdict::Allow => self.retry_after_allow(cx, extra).await,
-            PermissionVerdict::NeedsApproval => self.handle_retry_needs_approval(cx, extra).await,
+        // Full 模式不发起审批（工具返回 ApprovalRequired 原样喂回模型）
+        if options.effective_permission_mode() == PermissionMode::Full {
+            return (result, events);
         }
-    }
-
-    async fn retry_after_allow(
-        &self,
-        cx: &ExecCallContext<'_>,
-        extra: Vec<ToolEvent>,
-    ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
-        let (r2, extra2) = self
-            .execute_single(
-                cx.call,
-                cx.ctx,
-                cx.options,
-                cx.abort,
-                cx.approval.clone(),
-                2,
-            )
-            .await;
-        (r2, [extra, extra2].concat())
-    }
-
-    async fn handle_retry_needs_approval(
-        &self,
-        cx: &ExecCallContext<'_>,
-        extra: Vec<ToolEvent>,
-    ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
-        let Some(gate) = cx.approval.as_ref() else {
-            return (
-                ClassifiedToolResult::error(
-                    &cx.call.id,
-                    &cx.call.tool_name,
-                    ToolErrorKind::ApprovalRequired,
-                    self.revert_refusal_message(cx.call),
-                    0,
-                ),
-                extra,
-            );
+        let Some(gate) = approval else {
+            return (result, events);
         };
-        let mut extra_mut = extra;
-        let requester = self.approval_requester_for(cx.ctx, &cx.call.input);
-        extra_mut.push(ToolEvent::ApprovalRequested {
-            call_id: cx.call.id.clone(),
-            tool_name: cx.call.tool_name.clone(),
-            args: cx.call.input.clone(),
+        let requester = self.approval_requester_for(ctx, &call.input);
+        events.push(ToolEvent::ApprovalRequested {
+            call_id: call.id.clone(),
+            tool_name: call.tool_name.clone(),
+            args: call.input.clone(),
             requester: requester.clone(),
+            reason: Some(format!("工具 {} 请求执行审批", call.tool_name)),
         });
         match approval_wait(
-            &**gate,
-            &cx.call.id,
-            &cx.call.tool_name,
-            &cx.call.input,
+            gate.as_ref(),
+            &call.id,
+            &call.tool_name,
+            &call.input,
             requester.as_ref(),
-            cx.abort,
-            cx.options.approval_timeout,
+            Some("工具执行请求审批"),
+            abort,
+            options.approval_timeout,
         )
         .await
         {
             ApprovalWaitOutcome::Cancelled => (
                 ClassifiedToolResult::error(
-                    &cx.call.id,
-                    &cx.call.tool_name,
+                    &call.id,
+                    &call.tool_name,
                     ToolErrorKind::Cancelled,
                     "aborted",
                     0,
                 ),
-                extra_mut,
+                events,
             ),
             ApprovalWaitOutcome::Decision(ApprovalDecision::Approved) => {
-                let (r2, extra2) = self
-                    .execute_single(
-                        cx.call,
-                        cx.ctx,
-                        cx.options,
-                        cx.abort,
-                        Some(Arc::clone(gate)),
-                        2,
-                    )
+                let (retried, extra) = self
+                    .execute_single(call, ctx, options, abort, Some(gate), 2)
                     .await;
-                (r2, [extra_mut, extra2].concat())
+                events.extend(extra);
+                (retried, events)
             }
             ApprovalWaitOutcome::Decision(ApprovalDecision::Denied { reason }) => (
                 ClassifiedToolResult::error(
-                    &cx.call.id,
-                    &cx.call.tool_name,
+                    &call.id,
+                    &call.tool_name,
                     ToolErrorKind::UserDenied,
                     denied_message(requester.is_some(), &reason),
                     0,
                 ),
-                extra_mut,
+                events,
             ),
             ApprovalWaitOutcome::Decision(ApprovalDecision::Expired) => {
-                extra_mut.push(ToolEvent::ApprovalResolved {
-                    call_id: cx.call.id.clone(),
+                events.push(ToolEvent::ApprovalResolved {
+                    call_id: call.id.clone(),
                     decision: ApprovalDecision::Expired,
                 });
                 (
                     ClassifiedToolResult::error(
-                        &cx.call.id,
-                        &cx.call.tool_name,
+                        &call.id,
+                        &call.tool_name,
                         ToolErrorKind::ApprovalExpired,
                         "approval expired",
                         0,
                     ),
-                    extra_mut,
+                    events,
                 )
             }
         }

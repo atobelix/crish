@@ -65,6 +65,7 @@ impl ApprovalGate for InstantApprovalGate {
         _tool_name: &str,
         _args: &serde_json::Value,
         _requester: Option<&ApprovalRequester>,
+        _reason: Option<&str>,
     ) -> ApprovalDecision {
         ApprovalDecision::Approved
     }
@@ -158,7 +159,7 @@ fn bench_tool_batch(c: &mut Criterion) {
                 };
                 let options = ToolBatchOptions {
                     timeout: Duration::from_secs(10),
-                    approval_enabled: true,
+                    permission_mode: Some(conex_types::PermissionMode::Full),
                     ..ToolBatchOptions::default()
                 };
                 let gate = Arc::new(InstantApprovalGate);

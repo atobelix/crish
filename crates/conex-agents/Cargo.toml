@@ -1,0 +1,17 @@
+[package]
+name = "conex-agents"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "子代理领域模型、策略规则与扩展端口（纯逻辑，无 I/O）"
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+conex-types = { path = "../conex-types" }
+serde = { workspace = true }
+serde_json = { workspace = true }

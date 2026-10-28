@@ -9,8 +9,9 @@ use conex_db::RunStatus;
 use conex_types::events::AgentEvent;
 
 use super::{
-    HealedToolRecord, RestoreError, RestoreMode, RestoreOutcome, CANCEL_INTERRUPTED_ERROR,
-    INTERRUPTED_ERROR, INTERRUPTED_REASON, RUN_INTERRUPTED_EVENT,
+    HealedToolRecord, InterruptedSubagent, RestoreError, RestoreMode, RestoreOutcome,
+    CANCEL_INTERRUPTED_ERROR, INTERRUPTED_ERROR, INTERRUPTED_REASON, INTERRUPTED_SUBAGENT_SUMMARY,
+    RUN_INTERRUPTED_EVENT,
 };
 use crate::now_ms;
 use crate::persist::{PersistedEvent, RecoveryForkTreeEntry, Store, StoreError};
@@ -219,43 +220,65 @@ impl RestoreManager {
             }
         }
 
-        // 3b. session_agents 残留 running 归一（PERSIST-02 P1-3）：子代理
-        // 运行中崩溃 → 行 status 残留 running；不归一则 FlowScheduler::load
-        // 重建为 Running 节点，is_ready 要求 Pending → 永不重派发、流程
-        // 永久卡死（flow_graph.rs:1473-1476）。与主 run 打断对称（kill_all
-        // 语义）：running → failed + ended_at 落库。仅 LocalDb 路径可用
-        // （as_local_db 下转；InMemoryStore 等测试替身无 session_agents 面，
-        // 跳过——生产恒为 LocalDbStore）
+        // 3b. session_agents 残留 running 归一（PERSIST-02 P1-3 / P3 可恢复）：
+        // 子代理运行中崩溃 → 行 status 残留 running；不归一则
+        // FlowScheduler::load 重建为 Running 节点，is_ready 要求 Pending →
+        // 永不重派发、流程永久卡死（flow_graph.rs:1473-1476）。与主 run
+        // 打断对称：running → failed + ended_at + resumable=1（可恢复），
+        // 并收集父会话汇总通知源。仅 LocalDb 路径可用（as_local_db 下转；
+        // InMemoryStore 等测试替身无 session_agents 面，跳过——生产恒为
+        // LocalDbStore）
+        let mut interrupted_subagents = Vec::new();
         if let Some(db) = store.as_local_db() {
             let running_rows = db
-                .load_running_session_agents()
-                .map_err(|e| RestoreError::new("load_running_session_agents", e.to_string()))?;
+                .load_running_session_agent_rows()
+                .map_err(|e| RestoreError::new("load_running_agent_rows", e.to_string()))?;
             if !running_rows.is_empty() {
                 let ended_at = now_ms();
-                for (session_id, subagent_run_id) in &running_rows {
+                for row in &running_rows {
                     let affected = db
-                        .update_session_agent_status(
-                            session_id,
-                            subagent_run_id,
-                            "failed",
-                            Some(ended_at),
+                        .mark_session_agent_interrupted(
+                            &row.parent_session_id,
+                            &row.subagent_run_id,
+                            ended_at,
+                            INTERRUPTED_SUBAGENT_SUMMARY,
                         )
-                        .map_err(|e| RestoreError::new("normalize_session_agent", e.to_string()))?;
+                        .map_err(|e| {
+                            RestoreError::new("normalize_session_agent", e.to_string())
+                        })?;
                     if affected == 0 {
                         tracing::warn!(
                             target: "restore",
-                            session_id,
-                            subagent_run_id,
-                            "归一目标行已消失，跳过"
+                            session_id = %row.parent_session_id,
+                            subagent_run_id = %row.subagent_run_id,
+                            "归一目标行已消失或已终态，跳过"
                         );
-                    } else {
-                        tracing::info!(
-                            target: "restore",
-                            session_id,
-                            subagent_run_id,
-                            "session_agents running 行归一 failed（崩溃恢复）"
-                        );
+                        continue;
                     }
+                    let label = row
+                        .display_label
+                        .clone()
+                        .filter(|label| !label.is_empty())
+                        .or_else(|| {
+                            Some(row.description.clone()).filter(|desc| !desc.is_empty())
+                        })
+                        .unwrap_or_else(|| row.id.clone());
+                    interrupted_subagents.push(InterruptedSubagent {
+                        parent_session_id: row.parent_session_id.clone(),
+                        agent_id: row.id.clone(),
+                        subagent_run_id: row.subagent_run_id.clone(),
+                        subagent_session_id: row.sub_session_id.clone(),
+                        label,
+                        model_override: row.model_override.clone(),
+                        capability_mode: row.capability_mode.clone(),
+                        interrupted_at: ended_at,
+                    });
+                    tracing::info!(
+                        target: "restore",
+                        session_id = %row.parent_session_id,
+                        subagent_run_id = %row.subagent_run_id,
+                        "session_agents running 行归一 failed + resumable（崩溃恢复）"
+                    );
                 }
             }
         }
@@ -532,6 +555,7 @@ impl RestoreManager {
             runs,
             pending_inputs,
             interrupted,
+            interrupted_subagents,
             unknown_status_runs,
             last_sequence,
             snapshot_note,

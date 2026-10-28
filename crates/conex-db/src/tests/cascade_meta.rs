@@ -30,6 +30,10 @@ fn delete_session_cascades() {
             display_label: None,
             allowed_write_paths_json: None,
             sub_session_id: None,
+            capability_mode: None,
+            model_override: None,
+            resumable: false,
+            last_heartbeat_ms: None,
         }],
     )
     .unwrap();

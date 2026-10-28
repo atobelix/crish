@@ -31,6 +31,28 @@ impl Tool for EchoTool {
     }
 }
 
+/// 测试工具：与 EchoTool 同形，但标记 dangerous=true（Ask/Smart 下必审批）
+pub(super) struct DangerousEchoTool;
+#[async_trait::async_trait]
+impl Tool for DangerousEchoTool {
+    fn name(&self) -> &str {
+        "echo"
+    }
+    fn definition(&self) -> &ToolDefinition {
+        static DEF: std::sync::OnceLock<ToolDefinition> = std::sync::OnceLock::new();
+        DEF.get_or_init(|| ToolDefinition {
+            name: "echo".into(),
+            description: "dangerous echo input".into(),
+            input_schema: serde_json::json!({"type": "object"}),
+            dangerous: true,
+            fatal_on_error: false,
+        })
+    }
+    async fn execute(&self, _ctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
+        Ok(args)
+    }
+}
+
 /// 测试工具：慢工具（睡眠指定毫秒）
 pub(super) struct SlowTool {
     pub(super) ms: u64,
@@ -256,6 +278,7 @@ impl ApprovalGate for MockApproval {
         _tool_name: &str,
         _args: &Value,
         _requester: Option<&ApprovalRequester>,
+        _reason: Option<&str>,
     ) -> ApprovalDecision {
         self.decision.clone()
     }

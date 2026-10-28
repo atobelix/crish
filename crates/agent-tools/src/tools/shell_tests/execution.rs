@@ -388,3 +388,21 @@ fn output_accumulator_under_hard_cap_no_overflow() {
     assert!(!truncated, "限内输出不得截断");
     assert_eq!(text, "hello world");
 }
+
+/// 叶子工具纯 I/O 无状态断言：无审批通道下直接执行并返回输出
+#[tokio::test]
+async fn shell_command_pure_io_direct_execution() {
+    let ws = TempWorkspace::new("shell_pure_io");
+    let t = tool();
+    let command = if cfg!(windows) {
+        "Write-Output pure-io-hello"
+    } else {
+        "echo pure-io-hello"
+    };
+    let out = t
+        .execute(&ctx(&ws), json!({ "command": command }))
+        .await
+        .unwrap();
+    assert_eq!(out["exitCode"], 0);
+    assert!(out["stdout"].as_str().unwrap().contains("pure-io-hello"));
+}

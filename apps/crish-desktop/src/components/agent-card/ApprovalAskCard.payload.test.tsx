@@ -24,7 +24,6 @@ function makeProps(overrides: Partial<Props> = {}): Props {
     summary: '是否允许执行 git revert？',
     cmd: 'git revert HEAD',
     onAllow: vi.fn(),
-    onAllowRemember: vi.fn(),
     onDeny: vi.fn(),
     ...overrides,
   };
@@ -102,15 +101,23 @@ describe('ApprovalAskCard payload 透传（S9）', () => {
     };
     renderCard({ riskMeta });
 
-    expect(screen.queryByTestId('approval-payload-revert')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('approval-payload-delete')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('approval-payload-revert')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('approval-payload-delete')
+    ).not.toBeInTheDocument();
   });
 
   it('无 payload 时不渲染载荷区块', () => {
     renderCard();
 
-    expect(screen.queryByTestId('approval-payload-revert')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('approval-payload-delete')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('approval-payload-revert')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('approval-payload-delete')
+    ).not.toBeInTheDocument();
   });
 
   it('纯 ApprovalRiskMeta（无 payload 字段）不报错、不渲染载荷', () => {
@@ -124,7 +131,11 @@ describe('ApprovalAskCard payload 透传（S9）', () => {
     };
     renderCard({ riskMeta });
 
-    expect(screen.queryByTestId('approval-payload-revert')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('approval-payload-delete')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('approval-payload-revert')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('approval-payload-delete')
+    ).not.toBeInTheDocument();
   });
 });

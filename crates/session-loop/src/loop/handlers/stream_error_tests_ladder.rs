@@ -299,50 +299,33 @@
     /// 仍超限才 fatal（P4 §3.5 验收：第三次 length 升级后先压缩两次，
     /// compression_retries ≤ 2）
     #[tokio::test]
-    async fn context_length_uses_length_ladder_then_compresses_then_fatals() {
+    async fn context_length_over_threshold_bypasses_length_ladder_and_compresses() {
+        // W1-T7：输入上下文超限（≥80% 阈值）直接穿透 length 阶梯进入压缩，
+        // 不再翻倍输出预算；压缩上限 2 次，第三次仍超限才 fatal。
         let mut state = budgeted_state();
-        // 第一次：length 升级（1/2）
         let o1 = handle(&mut state, transient_error(ProviderErrorKind::ContextLengthExceeded))
             .await
             .unwrap();
-        assert!(o1.end.is_none());
-        assert_eq!(state.length_upgrades, 1);
-        assert_eq!(state.max_tokens, DEFAULT_MAX_TOKENS * 2);
-        // 升级后重进 streaming（生产路径 prepare_turn TURN_PREPARED）
+        assert!(o1.end.is_none(), "输入超限应直接压缩而非 fatal");
+        assert_eq!(state.length_upgrades, 0, "输入超限不再消费 length 阶梯");
+        assert_eq!(state.compaction.compression_retries, 1);
+        assert_eq!(state.compaction.compactions_this_run, 1);
+        assert_eq!(
+            compression_record(&state).expect("压缩必须广播结束事件").trigger,
+            ContextCompressionTrigger::Overflow
+        );
         re_enter_streaming(&mut state);
-        // 第二次：length 升级（2/2）
         let o2 = handle(&mut state, transient_error(ProviderErrorKind::ContextLengthExceeded))
             .await
             .unwrap();
-        assert!(o2.end.is_none());
-        assert_eq!(state.length_upgrades, 2);
-        assert_eq!(state.max_tokens, DEFAULT_MAX_TOKENS * 4);
-        re_enter_streaming(&mut state);
-        // 第三次：length 用尽 → 压缩阶梯（输入超限维度）→ 压缩 #1 + 重试
-        let o3 = handle(&mut state, transient_error(ProviderErrorKind::ContextLengthExceeded))
-            .await
-            .unwrap();
-        assert!(o3.end.is_none(), "length 用尽后必须走压缩阶梯而非 fatal");
-        assert_eq!(state.compaction.compression_retries, 1);
-        assert_eq!(state.compaction.compactions_this_run, 1);
-        let record = compression_record(&state).expect("压缩阶梯必须广播结束事件");
-        assert_eq!(record.trigger, ContextCompressionTrigger::Overflow);
-        // 压缩重试后循环重进 streaming
-        re_enter_streaming(&mut state);
-        // 第四次：压缩后仍超限 → 压缩 #2（上限 2，E2 F2 层 2——第二次
-        // 重试前 keep_recent_tokens 阶梯下调，请求体真实变化）
-        let o4 = handle(&mut state, transient_error(ProviderErrorKind::ContextLengthExceeded))
-            .await
-            .unwrap();
-        assert!(o4.end.is_none(), "压缩 #2 必须发生（上限 2 未耗尽）");
+        assert!(o2.end.is_none(), "压缩 #2 必须发生（上限 2 未耗尽）");
         assert_eq!(state.compaction.compression_retries, 2);
         assert_eq!(state.compaction.compactions_this_run, 2);
         re_enter_streaming(&mut state);
-        // 第五次：压缩后仍超限 → fatal（上限 2 耗尽，不再次压缩）
-        let o5 = handle(&mut state, transient_error(ProviderErrorKind::ContextLengthExceeded))
+        let o3 = handle(&mut state, transient_error(ProviderErrorKind::ContextLengthExceeded))
             .await
             .unwrap();
-        assert!(o5.end.is_some());
+        assert!(o3.end.is_some(), "压缩上限耗尽后仍超限必须 fatal");
         assert_eq!(state.machine.context().end_reason, R::Error);
         assert_eq!(state.compaction.compression_retries, 2, "compression_retries ≤ 2");
         assert_eq!(state.compaction.compactions_this_run, 2, "不得再次压缩");

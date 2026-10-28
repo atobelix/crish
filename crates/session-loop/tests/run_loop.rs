@@ -24,7 +24,7 @@ use conex_test_utils::clock::TimePauseGuard;
 use conex_types::error::ProviderErrorKind;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::response::ClassifiedStreamError;
-use conex_types::session::AgentEndReason;
+use session_loop::r#loop::AgentEndReason;
 use conex_types::tool::ToolOutput;
 use session_loop::{
     AgentSessionLoop, ControlKind, ControlLevel, ProviderCall, ProviderEventStream,
@@ -148,7 +148,7 @@ async fn plain_text_reply_ends_with_stop_not_error() {
             _ => None,
         })
         .expect("应有 agent-end 事件");
-    assert_eq!(end, (AgentEndReason::Stop, None));
+    assert_eq!(end, (conex_types::session::AgentEndReason::Stop, None));
 }
 
 /// 完整一轮：文字 + tool-call → 执行工具 → 再回复 → stop

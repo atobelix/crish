@@ -31,7 +31,7 @@ import {
 import { AgentCardHeader } from './AgentCardHeader';
 import { useAgentCardPanelNav } from './useAgentCardPanelNav';
 import { useAgentCardStatusPoll } from './useAgentCardStatusPoll';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export { openAgentInNewWindow };
 
@@ -223,27 +223,12 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(
                 <span
                   style={{
                     display: 'inline-flex',
-                    flexDirection: 'column',
                     alignItems: 'center',
-                    gap: 4,
+                    gap: 6,
                   }}
                 >
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                    }}
-                  >
-                    <AppIcon name="message-square" size={13} aria-hidden />
-                    暂无消息
-                  </span>
-                  <span
-                    className={`${styles.agentCardEmptyP} ${styles.agentCardEmptyPMuted}`}
-                    style={{ margin: 0 }}
-                  >
-                    可在下方输入，继续与子智能体对话
-                  </span>
+                  <AppIcon name="message-square" size={13} aria-hidden />
+                  暂无消息
                 </span>
               )}
             </div>

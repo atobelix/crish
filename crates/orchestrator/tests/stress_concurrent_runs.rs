@@ -541,6 +541,8 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
                         started_at_ms: 1700000000000,
                         inject_bytes: 50,
                         window_bytes: 1000,
+                        capability_mode: None,
+                        model_override: None,
                     };
                     let outcome = recovery.on_subagent_run_failure(&ctx).await.expect("恢复决策失败");
                     assert!(matches!(
@@ -873,6 +875,10 @@ async fn stress_kill_all_cascade_no_orphans() {
                 display_label: Some(format!("Worker #{i}")),
                 allowed_write_paths_json: None,
                 sub_session_id: None,
+                capability_mode: None,
+                model_override: None,
+                resumable: true,
+                last_heartbeat_ms: None,
             });
         }
 

@@ -281,7 +281,10 @@ impl BatchRunner<'_> {
         fatal: &mut Option<String>,
     ) {
         self.emit_group_starts(group, events);
-        let approval_active = self.options.approval_enabled && self.approval.is_some();
+        // 审批门只在非 Full 模式生效（permission_mode = 单一准绳；
+        // approval_enabled 字段已废弃，不再参与门控）
+        let approval_active = self.approval.is_some()
+            && self.options.effective_permission_mode() != PermissionMode::Full;
         let (approvals, requesters) = self.collect_approvals(group, approval_active, events).await;
         let executed = self
             .execute_group(group, &approvals, &requesters, approval_active, events)
@@ -310,8 +313,8 @@ impl BatchRunner<'_> {
     /// 审批逐个发起：approval-requested 事件全组先发（防死锁硬契约，
     /// 01 §五.8），再逐个等待决策；abort 中断后不再发起剩余审批（与顺序
     /// 路径逐项 abort 前置检查一致）。R4 T10：permission_mode 显式设置时仅
-    /// 「需审批」项发起（dangerous → ask 问询 / plan 拒绝 / full-access 放行）；
-    /// 未设置时沿用既有语义（approval_enabled → 全批审批）。
+    /// 「需审批」项发起（危险工具 / Smart 敏感命令 / Ask 非只读命令；
+    /// Full 模式由裁决层放行，不进入本分支）。
     async fn collect_approvals(
         &self,
         group: &[usize],
@@ -325,17 +328,19 @@ impl BatchRunner<'_> {
         // T-D-14：并行组逐项请求方身份（拒绝文案按来源分支：
         // 子代理申请被拒 → 含「主 agent 拒绝 / 回报主 agent」指引）
         let mut requesters: Vec<Option<ApprovalRequester>> = vec![None; group.len()];
+        // 逐项裁决原因（Smart/Ask 判点产出，随审批请求透传）
+        let mut approval_reasons: Vec<Option<String>> = vec![None; group.len()];
         if approval_active {
             if let Some(gate) = self.approval.as_deref() {
                 let mut needs: Vec<usize> = Vec::new();
                 for (pos, &idx) in group.iter().enumerate() {
                     let call = &self.calls[idx];
-                    if self.executor.call_verdict(call, self.options)
-                        == PermissionVerdict::NeedsApproval
-                    {
+                    let decision = self.executor.call_verdict_detailed(call, self.options);
+                    if decision.verdict == PermissionVerdict::NeedsApproval {
                         needs.push(pos);
                         let requester = self.executor.approval_requester_for(self.ctx, &call.input);
                         requesters[pos] = requester.clone();
+                        approval_reasons[pos] = decision.reason.clone();
                         events.push(ToolEvent::ApprovalRequested {
                             call_id: call.id.clone(),
                             tool_name: call.tool_name.clone(),
@@ -343,6 +348,7 @@ impl BatchRunner<'_> {
                             // T-D-14：子代理 run 携带请求方身份（理由
                             // 从入参保留键提取；主 agent run = None）
                             requester,
+                            reason: decision.reason,
                         });
                     }
                 }
@@ -364,6 +370,7 @@ impl BatchRunner<'_> {
                         &call.tool_name,
                         &call.input,
                         requester,
+                        approval_reasons[pos].as_deref(),
                         self.abort,
                         self.options.approval_timeout,
                     )

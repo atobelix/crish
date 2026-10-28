@@ -61,7 +61,7 @@ use async_trait::async_trait;
 use conex_types::error::{codes, CrishError};
 use conex_types::session::AgentSessionState;
 
-pub use end::{EndDecision, RunOutcome};
+pub use end::{AgentEndReason, EndDecision, RunOutcome};
 pub use options::{RetryBackoffConfig, SessionLoopOptions};
 pub use runner::AgentSessionLoop;
 

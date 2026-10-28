@@ -147,8 +147,92 @@ impl Default for AgentSessionContext {
 }
 
 impl AgentSessionContext {
-    /// 是否达到最大轮次（对齐 shouldStopForMaxTurns）
+    /// 是否达到最大轮次（核心重构：0 代表无限循环预算）
+    #[inline]
     pub fn should_stop_for_max_turns(&self) -> bool {
+        if self.max_turns == 0 {
+            return false;
+        }
         self.turn_index >= self.max_turns
+    }
+
+    /// 是否逼近租约上限需要评估续期（默认剩余 headroom 轮以内）
+    #[inline]
+    pub fn is_approaching_lease_limit(&self, headroom: u32) -> bool {
+        if self.max_turns == 0 {
+            return false;
+        }
+        self.turn_index >= self.max_turns.saturating_sub(headroom)
+    }
+
+    /// 动态续订最大轮次租约（保持单调递增性）
+    #[inline]
+    pub fn renew_budget(&mut self, additional_turns: u32) -> u32 {
+        if self.max_turns == 0 {
+            return 0; // 无限预算无需续期
+        }
+        self.max_turns = self.max_turns.saturating_add(additional_turns);
+        self.max_turns
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_max_turns_zero_represents_unlimited() {
+        let mut ctx = AgentSessionContext::initial("test-sess", 0);
+        assert!(!ctx.should_stop_for_max_turns());
+        assert!(!ctx.is_approaching_lease_limit(3));
+
+        ctx.turn_index = 0;
+        assert!(!ctx.should_stop_for_max_turns());
+
+        ctx.turn_index = 100;
+        assert!(!ctx.should_stop_for_max_turns());
+
+        ctx.turn_index = u32::MAX;
+        assert!(!ctx.should_stop_for_max_turns());
+
+        // 0 预算下 renew_budget 返回 0 且保持 0
+        assert_eq!(ctx.renew_budget(64), 0);
+        assert_eq!(ctx.max_turns, 0);
+    }
+
+    #[test]
+    fn test_max_turns_positive_threshold() {
+        let mut ctx = AgentSessionContext::initial("test-sess", 10);
+        ctx.turn_index = 6;
+        assert!(!ctx.should_stop_for_max_turns());
+        assert!(!ctx.is_approaching_lease_limit(3));
+
+        ctx.turn_index = 7; // 10 - 3 = 7
+        assert!(!ctx.should_stop_for_max_turns());
+        assert!(ctx.is_approaching_lease_limit(3));
+
+        ctx.turn_index = 9;
+        assert!(!ctx.should_stop_for_max_turns());
+        assert!(ctx.is_approaching_lease_limit(3));
+
+        ctx.turn_index = 10;
+        assert!(ctx.should_stop_for_max_turns());
+        assert!(ctx.is_approaching_lease_limit(3));
+
+        ctx.turn_index = 11;
+        assert!(ctx.should_stop_for_max_turns());
+
+        // 动态续订 64 轮
+        assert_eq!(ctx.renew_budget(64), 74);
+        assert_eq!(ctx.max_turns, 74);
+        assert!(!ctx.should_stop_for_max_turns());
+        assert!(!ctx.is_approaching_lease_limit(3));
+    }
+
+    #[test]
+    fn test_renew_budget_saturating_addition() {
+        let mut ctx = AgentSessionContext::initial("test-sess", u32::MAX - 10);
+        assert_eq!(ctx.renew_budget(20), u32::MAX);
+        assert_eq!(ctx.max_turns, u32::MAX);
     }
 }

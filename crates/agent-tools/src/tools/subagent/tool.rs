@@ -194,6 +194,7 @@ impl RunSubagentTool {
                 task_type: None,
                 allowed_write_paths: None,
                 display_label: task.display_label.clone(),
+                permission_mode: None,
                 // 扩展点预留：批量路径同样恒不解析 modelOverride（T-D-10）
                 model_override: None,
             })
@@ -420,6 +421,8 @@ impl Tool for RunSubagentTool {
             task_type,
             allowed_write_paths,
             display_label,
+            permission_mode: crate::tools::optional_string(&args, "permissionMode")
+                .or_else(|| crate::tools::optional_string(&args, "permission_mode")),
             // 扩展点预留：工具路径恒不解析 modelOverride 入参（T-D-10 多模型
             // 不做，不得附带消费逻辑）——全构造点显式 None（编译器强制）
             model_override: None,

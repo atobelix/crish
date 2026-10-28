@@ -4,8 +4,8 @@
  */
 import React from 'react';
 import styles from './AgentCard.module.css';
-import { ICON_STROKE } from '../ui/icons/iconTokens';
-import { Tooltip } from '../ui';
+import { ICON_STROKE } from '@/components/ui/icons';
+import { Tooltip } from '@/components/ui';
 import type { SessionAgent } from '../../store/types';
 
 export const AgentStatusDot: React.FC<{

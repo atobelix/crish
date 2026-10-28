@@ -16,11 +16,10 @@ use std::time::Duration;
 /// abort 无法打断，外层 tokio timeout 触发（红）
 #[tokio::test]
 async fn approval_hang_sequential_abort_race_converges() {
-    let reg = registry_with(vec![Arc::new(EchoTool)]);
+    let reg = registry_with(vec![Arc::new(DangerousEchoTool)]);
     let exec = ToolExecutor::new(reg);
     let calls = vec![call("c1", "echo", ToolConcurrency::Sequential)];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         ..Default::default()
     };
     let gate = Arc::new(PendingApproval);
@@ -55,14 +54,13 @@ async fn approval_hang_sequential_abort_race_converges() {
 /// 事件顺序契约保持
 #[tokio::test]
 async fn approval_hang_parallel_group_abort_race_converges() {
-    let reg = registry_with(vec![Arc::new(EchoTool)]);
+    let reg = registry_with(vec![Arc::new(DangerousEchoTool)]);
     let exec = ToolExecutor::new(reg);
     let calls = vec![
         call("p0", "echo", ToolConcurrency::Parallel),
         call("p1", "echo", ToolConcurrency::Parallel),
     ];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         ..Default::default()
     };
     let gate = Arc::new(PendingApproval);
@@ -110,7 +108,6 @@ async fn requires_approval_retry_hang_abort_race_converges() {
     let exec = ToolExecutor::new(reg);
     let calls = vec![call("c1", "always_approval", ToolConcurrency::Sequential)];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         ..Default::default()
     };
     // 首次问询（批级审批）通过，重试审批挂起
@@ -144,11 +141,10 @@ async fn requires_approval_retry_hang_abort_race_converges() {
 /// tokio timeout 不触发）
 #[tokio::test]
 async fn approval_wait_times_out_when_gate_hangs() {
-    let reg = registry_with(vec![Arc::new(EchoTool)]);
+    let reg = registry_with(vec![Arc::new(DangerousEchoTool)]);
     let exec = ToolExecutor::new(reg);
     let calls = vec![call("c1", "echo", ToolConcurrency::Sequential)];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         approval_timeout: Some(Duration::from_millis(50)),
         ..Default::default()
     };
@@ -203,14 +199,13 @@ async fn approval_wait_times_out_when_gate_hangs() {
 /// Expired，无悬挂；approval-requested 全组先发事件顺序契约保持
 #[tokio::test]
 async fn approval_wait_parallel_group_timeout_converges() {
-    let reg = registry_with(vec![Arc::new(EchoTool)]);
+    let reg = registry_with(vec![Arc::new(DangerousEchoTool)]);
     let exec = ToolExecutor::new(reg);
     let calls = vec![
         call("p0", "echo", ToolConcurrency::Parallel),
         call("p1", "echo", ToolConcurrency::Parallel),
     ];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         approval_timeout: Some(Duration::from_millis(50)),
         ..Default::default()
     };
@@ -290,7 +285,6 @@ async fn requires_approval_retry_hang_times_out() {
     let exec = ToolExecutor::new(reg);
     let calls = vec![call("c1", "always_approval", ToolConcurrency::Sequential)];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         approval_timeout: Some(Duration::from_millis(50)),
         ..Default::default()
     };
@@ -376,7 +370,6 @@ async fn requires_approval_approved_then_retries_execution() {
     let exec = ToolExecutor::new(reg);
     let calls = vec![call("c1", "approval_once", ToolConcurrency::Sequential)];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         ..Default::default()
     };
     let gate = MockApproval {
@@ -407,7 +400,6 @@ async fn requires_approval_denied_returns_user_denied() {
     let exec = ToolExecutor::new(reg);
     let calls = vec![call("c1", "always_approval", ToolConcurrency::Sequential)];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         ..Default::default()
     };
     // 批级审批通过（首问），重试审批拒绝（次问）
@@ -438,7 +430,6 @@ async fn requires_approval_expired_returns_approval_expired() {
     let exec = ToolExecutor::new(reg);
     let calls = vec![call("c1", "always_approval", ToolConcurrency::Sequential)];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         ..Default::default()
     };
     let gate = SequenceApproval::new(vec![ApprovalDecision::Approved, ApprovalDecision::Expired]);

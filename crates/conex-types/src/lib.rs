@@ -44,6 +44,7 @@ pub use checkpoint::{
 pub use context::{ContextBudget, SessionContextMeta, CONTEXT_SAFETY_TOKENS};
 pub use cron::{CronError, CronField, CronSchedule};
 pub use denied_stats::{global_denied_stats, DeniedStats, DeniedStatsSummary};
+pub use device::PermissionMode;
 pub use error::codes;
 
 pub use error::{
@@ -225,6 +226,22 @@ pub struct SessionAgent {
     /// parent_tool_call_id 回父会话；v9 新列，旧行空串/未接线 = None）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sub_session_id: Option<String>,
+    /// spawn 时声明的能力档（read-only / all；v14 列）。
+    /// 展示与恢复建议用；运行期生效值由 `CapabilityCell` 按父链实时钳制。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_mode: Option<String>,
+    /// 绑定的模型覆盖（None = 跟随引擎当前配置；v14 列）。
+    /// 跨重启保留，恢复时作为子代理 run 的初始模型。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_override: Option<String>,
+    /// 可恢复标记（v14 列）：中断对账置 true，正常终态置 false。
+    /// 主 agent 可据此决定是否重派/恢复；前端展示「可恢复」徽标。
+    #[serde(default)]
+    pub resumable: bool,
+    /// 最近心跳（epoch ms；v14 列）。运行期周期刷新，用于识别
+    /// 长时间无进展的失联子代理；None = 旧行/未采集。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_heartbeat_ms: Option<i64>,
 }
 
 /// 会话索引条目（对齐 SessionIndexEntry in sessionPersistenceTypes.ts L20-36）
@@ -535,6 +552,10 @@ mod tests {
             display_label: Some("Rust 内核分析师".into()),
             allowed_write_paths_json: Some(r#"["docs/notes"]"#.into()),
             sub_session_id: Some("sub-sess-0-1".into()),
+            capability_mode: Some("read-only".into()),
+            model_override: Some("grok-3".into()),
+            resumable: true,
+            last_heartbeat_ms: Some(140),
         };
         let json = serde_json::to_string(&agent).unwrap();
         let back: SessionAgent = serde_json::from_str(&json).unwrap();
@@ -548,6 +569,10 @@ mod tests {
             "SessionAgent wire 键必须为 camelCase subSessionId"
         );
         assert_eq!(value["parentToolCallId"], "tc-1", "既有 camelCase 键不回归");
+        assert_eq!(value["capabilityMode"], "read-only", "能力快照 wire 键");
+        assert_eq!(value["modelOverride"], "grok-3", "模型覆盖 wire 键");
+        assert_eq!(value["resumable"], true, "可恢复标记 wire 键");
+        assert_eq!(value["lastHeartbeatMs"], 140, "心跳 wire 键");
         // 缺省兼容：旧载荷无新字段 → 反序列化为 None
         let legacy = r#"{"id":"a1","subagentRunId":"r1","parentSessionId":"s1",
                          "parentRunId":"p1","description":"","mode":"",
@@ -557,6 +582,10 @@ mod tests {
         assert_eq!(old.display_label, None);
         assert_eq!(old.allowed_write_paths_json, None);
         assert_eq!(old.sub_session_id, None, "旧载荷无 subSessionId → None");
+        assert_eq!(old.capability_mode, None, "旧载荷能力快照默认 None");
+        assert_eq!(old.model_override, None, "旧载荷模型覆盖默认 None");
+        assert!(!old.resumable, "旧载荷 resumable 默认 false");
+        assert_eq!(old.last_heartbeat_ms, None, "旧载荷心跳默认 None");
     }
 
     #[test]

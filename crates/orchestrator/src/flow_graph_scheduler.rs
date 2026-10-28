@@ -8,9 +8,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::sync::Arc;
 
-use agent_tools::tools::subagent::{
-    check_recursion_guard, RecursionGuardConfig, RecursionGuardRejection, RecursionGuardSnapshot,
-    SubagentSpawner, SubagentState, DEFAULT_RECURSION_GUARD,
+use agent_tools::tools::subagent::{SubagentSpawner, SubagentState};
+use conex_agents::guard::{
+    check_recursion_guard, RecursionGuardRejection, RecursionGuardSnapshot, SpawnPolicy,
+    DEFAULT_SPAWN_POLICY,
 };
 use conex_db::LocalDb;
 use conex_types::SessionAgent;
@@ -264,11 +265,9 @@ pub const FLOW_ON_FAILED_KEY: &str = "flow_on_failed";
 pub const FLOW_RESERVED_KEY: &str = "flow_reserved";
 /// 预算已释放计数键
 pub const FLOW_RELEASED_KEY: &str = "flow_released";
-/// 全局并发上限键（默认 RecursionGuardConfig.max_concurrent = 16，
-/// 2026-08-11 用户裁决 12→16，跟随 DEFAULT_RECURSION_GUARD）
+/// 全局并发上限键（缺失 = 不限制，跟随 SpawnPolicy 默认）
 pub const FLOW_MAX_CONCURRENT_KEY: &str = "flow_max_concurrent";
-/// 兄弟并发上限键（默认 RecursionGuardConfig.max_siblings = 16，
-/// 2026-08-11 用户裁决 12→16，同父上限 = 全局上限）
+/// 兄弟并发上限键（缺失 = 不限制，跟随 SpawnPolicy 默认）
 pub const FLOW_MAX_SIBLINGS_KEY: &str = "flow_max_siblings";
 /// 综合节点自动排队开关键（默认 true；false = 观测态只发唤醒事件）
 pub const FLOW_AUTO_COMPOSITE_KEY: &str = "flow_auto_composite";
@@ -318,13 +317,21 @@ pub(crate) fn read_meta_strategy(meta: &dyn FlowMetaStore) -> Result<FailStrateg
     }
 }
 
-/// 读取可配预算与综合节点开关（缺失 = DEFAULT_RECURSION_GUARD / true）
+/// 读取可配预算与综合节点开关（缺失 = SpawnPolicy 默认 / true）
 pub(crate) fn read_meta_config(
     meta: &dyn FlowMetaStore,
-) -> Result<(usize, usize, bool), FlowError> {
-    let default = DEFAULT_RECURSION_GUARD;
-    let max_siblings = read_meta_usize(meta, FLOW_MAX_SIBLINGS_KEY, default.max_siblings)?;
-    let max_concurrent = read_meta_usize(meta, FLOW_MAX_CONCURRENT_KEY, default.max_concurrent)?;
+) -> Result<(Option<usize>, Option<usize>, bool), FlowError> {
+    let default = DEFAULT_SPAWN_POLICY;
+    let max_siblings = read_meta_opt_usize(
+        meta,
+        FLOW_MAX_SIBLINGS_KEY,
+        default.max_active_per_parent,
+    )?;
+    let max_concurrent = read_meta_opt_usize(
+        meta,
+        FLOW_MAX_CONCURRENT_KEY,
+        default.max_active_per_session,
+    )?;
     let auto_spawn_composite = match meta.get_meta(FLOW_AUTO_COMPOSITE_KEY)? {
         Some(raw) => raw.parse::<bool>().map_err(|e| FlowError::InvalidState {
             message: format!("flow_auto_composite 解析失败：{e}"),
@@ -334,14 +341,14 @@ pub(crate) fn read_meta_config(
     Ok((max_siblings, max_concurrent, auto_spawn_composite))
 }
 
-/// 读取 usize 型元数据键（缺失 / 解析失败取默认；可配位宽容语义）
-pub(crate) fn read_meta_usize(
+/// 读取可选 usize 元数据键（缺失 → default；解析失败 → default）
+pub(crate) fn read_meta_opt_usize(
     meta: &dyn FlowMetaStore,
     key: &str,
-    default: usize,
-) -> Result<usize, FlowError> {
+    default: Option<usize>,
+) -> Result<Option<usize>, FlowError> {
     match meta.get_meta(key)? {
-        Some(raw) => Ok(raw.parse::<usize>().unwrap_or(default)),
+        Some(raw) => Ok(raw.parse::<usize>().ok().or(default)),
         None => Ok(default),
     }
 }
@@ -357,8 +364,8 @@ pub struct FlowScheduler {
     pub(crate) planner_run_id: Option<String>,
     /// 会话级默认失败策略（节点 on_failed 未声明时生效）
     pub(crate) default_strategy: FailStrategy,
-    /// 守卫配置（maxSiblings / maxConcurrent，复用 DEFAULT_RECURSION_GUARD）
-    pub(crate) guard: RecursionGuardConfig,
+    /// 派遣策略（深度默认扁平；并发默认不限，可由 flow_* 元数据设软上限）
+    pub(crate) policy: SpawnPolicy,
     /// 综合节点自动排队开关（false = 观测态只发唤醒事件）
     pub(crate) auto_spawn_composite: bool,
     /// 节点运行时记录（run 映射 / 唤醒标记；状态在 session_agents 行）
@@ -399,10 +406,11 @@ impl FlowScheduler {
             graph: None,
             planner_run_id: None,
             default_strategy: read_meta_strategy(&*meta)?,
-            guard: RecursionGuardConfig {
-                max_depth: DEFAULT_RECURSION_GUARD.max_depth,
-                max_siblings,
-                max_concurrent,
+            policy: SpawnPolicy {
+                max_depth: DEFAULT_SPAWN_POLICY.max_depth,
+                allow_child_spawn: false,
+                max_active_per_parent: max_siblings,
+                max_active_per_session: max_concurrent,
             },
             auto_spawn_composite,
             runtime: HashMap::new(),
@@ -508,10 +516,11 @@ impl FlowScheduler {
         self.meta.set_meta(FLOW_RESERVED_KEY, "0")?;
         self.meta.set_meta(FLOW_RELEASED_KEY, "0")?;
 
-        self.guard = RecursionGuardConfig {
-            max_depth: DEFAULT_RECURSION_GUARD.max_depth,
-            max_siblings,
-            max_concurrent,
+        self.policy = SpawnPolicy {
+            max_depth: DEFAULT_SPAWN_POLICY.max_depth,
+            allow_child_spawn: false,
+            max_active_per_parent: max_siblings,
+            max_active_per_session: max_concurrent,
         };
         self.auto_spawn_composite = auto_spawn_composite;
         self.default_strategy = default_strategy;
@@ -570,7 +579,7 @@ impl FlowScheduler {
             active_siblings: in_flight,
             active_concurrent: in_flight,
         };
-        if let Err(rejection) = check_recursion_guard(snapshot, self.guard) {
+        if let Err(rejection) = check_recursion_guard(snapshot, self.policy) {
             return Err(FlowError::from_guard_rejection(rejection));
         }
         {
@@ -695,10 +704,11 @@ impl FlowScheduler {
             graph: Some(graph),
             planner_run_id: declaration.planner_run_id,
             default_strategy,
-            guard: RecursionGuardConfig {
-                max_depth: DEFAULT_RECURSION_GUARD.max_depth,
-                max_siblings,
-                max_concurrent,
+            policy: SpawnPolicy {
+                max_depth: DEFAULT_SPAWN_POLICY.max_depth,
+                allow_child_spawn: false,
+                max_active_per_parent: max_siblings,
+                max_active_per_session: max_concurrent,
             },
             auto_spawn_composite,
             runtime,

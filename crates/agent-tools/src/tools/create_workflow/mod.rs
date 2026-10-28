@@ -9,7 +9,7 @@
 //!   注册链路——接线注记见 05 详案 §2.4）；
 //! - 本模块只定义**契约与工具本体**：agent-tools 是叶子 crate，不依赖引擎
 //!   （对齐 set_timer.rs TimerChannel 先例）；引擎侧实现
-//!   [WorkflowCreationChannel]（workflow_commands.rs 后端适配）后经
+//!   [WorkflowCreationChannel]（Tauri `workflow_ipc.rs` 后端适配）后经
 //!   BuiltinToolConfig 注入，通道未接线时工具返回 common.unsupported
 //!   结构化错误；
 //! - 入参形状对齐 05 详案 §2.4 `CreateWorkflowInput` 冻结契约

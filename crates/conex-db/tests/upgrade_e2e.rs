@@ -613,5 +613,9 @@ fn sample_agent(id: &str) -> SessionAgent {
         display_label: Some("测试分析师".to_string()),
         allowed_write_paths_json: None,
         sub_session_id: Some("sub-sess-0-1".to_string()),
+        capability_mode: None,
+        model_override: None,
+        resumable: false,
+        last_heartbeat_ms: None,
     }
 }

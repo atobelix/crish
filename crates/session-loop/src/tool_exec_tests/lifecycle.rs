@@ -43,7 +43,6 @@ async fn subagent_approval_flow_reaches_gate_with_requester_and_executes() {
         concurrency: ToolConcurrency::Sequential,
     }];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         permission_mode: Some(PermissionMode::Ask),
         ..Default::default()
     };
@@ -110,7 +109,6 @@ async fn subagent_denied_carries_relay_guidance() {
         concurrency: ToolConcurrency::Sequential,
     }];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         permission_mode: Some(PermissionMode::Ask),
         ..Default::default()
     };
@@ -141,7 +139,6 @@ async fn main_agent_approval_requester_none_and_legacy_denied_text() {
     });
     let calls = vec![call("c1", "dangerous_tool", ToolConcurrency::Sequential)];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         permission_mode: Some(PermissionMode::Ask),
         ..Default::default()
     };
@@ -178,7 +175,6 @@ async fn subagent_approval_expired_does_not_interrupt_run() {
         concurrency: ToolConcurrency::Sequential,
     }];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         permission_mode: Some(PermissionMode::Ask),
         ..Default::default()
     };

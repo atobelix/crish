@@ -205,7 +205,6 @@ async fn cancel_siblings_approval_parallel_completes_before_fatal_judged() {
     ];
     let opts = ToolBatchOptions {
         fail_strategy: FailStrategy::CancelSiblings,
-        approval_enabled: true,
         ..Default::default()
     };
     let gate = MockApproval {

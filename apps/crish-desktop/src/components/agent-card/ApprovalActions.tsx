@@ -1,21 +1,18 @@
 import React from 'react';
-import { allowButtonLabel } from '../../api/chatApprovalUi';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import styles from './ApprovalAskCard.module.css';
 
-/** 同意/拒绝按钮组（ConfirmButton 组：取消准备 / 记住并允许 / 拒绝 / 允许） */
+/** 同意/拒绝按钮组（单次确权：取消准备 / 拒绝 / 允许） */
 export const ApprovalActions: React.FC<{
   confirmArmed: boolean;
-  rememberIntent: boolean;
   needsDouble: boolean;
   busy: boolean;
   allowBtnRef: React.RefObject<HTMLButtonElement | null>;
   onDisarm: () => void;
-  onAllow: (remember: boolean) => void;
+  onAllow: () => void;
   onDeny: () => void;
 }> = ({
   confirmArmed,
-  rememberIntent,
   needsDouble,
   busy,
   allowBtnRef,
@@ -44,26 +41,7 @@ export const ApprovalActions: React.FC<{
             取消准备
           </Button>
         </Tooltip>
-      ) : (
-        <Tooltip content="允许，并将命令前缀加入白名单">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className={styles.approvalCardBtn}
-            disabled={busy}
-            onClick={() => onAllow(true)}
-            aria-label={
-              needsDouble
-                ? '记住并准备允许（需再次确认）'
-                : '允许并记住命令前缀'
-            }
-            aria-busy={busy ? true : undefined}
-          >
-            {allowButtonLabel(needsDouble, confirmArmed, true)}
-          </Button>
-        </Tooltip>
-      )}
+      ) : null}
       <Button
         type="button"
         variant="danger"
@@ -83,12 +61,10 @@ export const ApprovalActions: React.FC<{
         size="sm"
         className={styles.approvalCardBtn}
         disabled={busy}
-        onClick={() => onAllow(false)}
+        onClick={onAllow}
         aria-label={
           confirmArmed
-            ? rememberIntent
-              ? '再次确认允许并记住'
-              : '再次确认允许'
+            ? '再次确认允许'
             : needsDouble
               ? '准备允许（需再次确认）'
               : '允许'
@@ -97,7 +73,7 @@ export const ApprovalActions: React.FC<{
         aria-busy={busy ? true : undefined}
         data-armed={confirmArmed ? 'true' : undefined}
       >
-        {allowButtonLabel(needsDouble, confirmArmed, rememberIntent)}
+        {confirmArmed ? '再次确认允许' : needsDouble ? '准备允许' : '允许'}
       </Button>
     </div>
   );

@@ -5,7 +5,7 @@
 //! （结构化 tracing 审计日志始终照发，见 delete.rs / shell.rs 发射点）。
 //!
 //! 接线路径（I3 遗留，登记于 01-安全监控与删除接管方案 §2 S8）：
-//! 引擎侧（session-loop / workbench engine.rs）在注册工具时注入真实 sink
+//! 引擎侧（`conex-run::engine_handle::assemble_engine_core`）在注册工具时注入真实 sink
 //! （经 `BuiltinToolConfig.audit_sink` 或工具 `with_audit_sink` 构造器），
 //! 把事件汇入会话事件流 → EventQueue append_event 落库（agent-tools 为
 //! 叶子依赖，不能依赖 orchestrator，依赖方向为 orchestrator → session-loop

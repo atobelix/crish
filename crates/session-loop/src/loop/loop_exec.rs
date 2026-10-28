@@ -42,39 +42,7 @@ impl AgentSessionLoop {
         // 每 run 全新状态机（会话 / 对话 / 输入队列跨 run 持久）
         self.state.machine =
             crate::state::AgentSessionMachine::new(self.session_id.clone(), self.max_turns);
-        // F2-02：max_turns=0 边界——预算不允许任何轮次，run 起始显式收场
-        // （修复前首轮完整执行后 turn_index(1) >= 0 恒真才收场：用户消息已
-        // 消费、provider 已调用，「max_turns=0 = 不允许任何轮次」语义失效）。
-        // 收场原因与观测对齐 turn_complete 的 max-turns 路径（独立预算 reason
-        // + runtime-error 观测事件 + error.occurred 钩子广播）
-        if self.max_turns == 0 {
-            self.state.emit_event(AgentEvent::RuntimeError {
-                session_id: self.session_id.clone(),
-                timestamp: conex_shared::time::now_iso_utc(),
-                error: "maxTurns 预算用尽（turnIndex=0，maxTurns=0）".to_string(),
-                // 与注册表 AGENT_MAX_TURNS_REACHED（Permanent/retryable=false）对齐：
-                // max-turns 是预算收场而非可重试故障
-                retryable: Some(false),
-            });
-            if let Some(hooks) = &self.state.options.tool_exec.hooks {
-                // 观察面分派：失败只记日志，不阻断收场（BLK-05）
-                if let Err(err) = hooks
-                    .dispatch(&crate::hooks::HookEvent::ErrorOccurred {
-                        session_id: self.session_id.clone(),
-                        error: "maxTurns 预算用尽（turnIndex=0，maxTurns=0）".to_string(),
-                        retryable: false,
-                    })
-                    .await
-                {
-                    tracing::warn!(
-                        session_id = %self.session_id,
-                        error = %err,
-                        "max-turns error.occurred hook 分派失败（观察面不阻断收场）"
-                    );
-                }
-            }
-            return self.converge(EndDecision::max_turns(&self.state)).await;
-        }
+        // max_turns=0 代表无上限循环预算（对齐方案 04 §4.2），允许全天候自主运转，不再在启动点误杀收场
         // 恢复阶梯计数归零（fresh run）
         self.state.length_upgrades = 0;
         self.state.transient_retries = 0;
@@ -167,7 +135,7 @@ impl AgentSessionLoop {
         // 状态机已到 done 但未收敛（防御性）：按机器 endReason 收场
         let reason = self.state.machine.context().end_reason;
         self.converge(EndDecision::new(
-            reason,
+            reason.into(),
             self.state.terminal_error.clone(),
             None,
             &self.state,
@@ -335,10 +303,16 @@ impl AgentSessionLoop {
         let reason = decision.reason;
         let error = decision.error.clone();
         let diagnostic = decision.diagnostic.clone();
+        let yield_payload = decision.yield_payload.clone();
+
+        // 安全映射：YieldSuspended 在底层事件广播中安全映射为 CoreAgentEndReason::Stop，
+        // 保证对现有 wire 协议与前端 EventRouter 的向前兼容；
+        // 挂起元数据与真实状态随 RunOutcome 强类型移交外层编排层。
+        let core_reason = reason.to_core_reason();
         let end_event = AgentEvent::AgentEnd {
             session_id: self.session_id.clone(),
             timestamp: conex_shared::time::now_iso_utc(),
-            reason,
+            reason: core_reason,
             error: error.clone(),
         };
         self.state.emit_event(end_event);
@@ -358,7 +332,12 @@ impl AgentSessionLoop {
                 );
             }
         }
-        tracing::info!(end_reason = ?reason, has_error = error.is_some(), "run 收场");
+        tracing::info!(
+            end_reason = ?reason,
+            has_error = error.is_some(),
+            is_yield_suspended = yield_payload.is_some(),
+            "run 收场"
+        );
         RunOutcome {
             reason,
             error,
@@ -379,6 +358,7 @@ impl AgentSessionLoop {
             // provider 错误摘要（D1 §3.4）：fatal 填充 → 收口零拷贝移交
             // （与 messages/events 同批 mem::take；D2/D3 消费，00 §6 契约）
             provider_error: std::mem::take(&mut self.state.terminal_provider_error),
+            yield_payload,
         }
     }
 }

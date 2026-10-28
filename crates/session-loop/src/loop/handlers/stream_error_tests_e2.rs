@@ -8,55 +8,40 @@
     /// （显式失败不静默丢语义，禁止纯丢弃式线性压缩）；对话原样、
     /// 无压缩事件、compression_retries 不消耗
     #[tokio::test]
-    async fn overflow_without_summarizer_fatals_with_llm_unavailable_note() {
+    async fn overflow_without_summarizer_degrades_to_stub_and_continues() {
+        // W1-T7：LLM 摘要不可用不再判死刑——中性 Stub 降级并放行（后台补摘要）
         let mut state = budgeted_state();
-        state.compaction.summarizer = None; // 无 Summarizer 注入（LLM 摘要不可用）
-        let snapshot = state.conversation.clone();
+        state.compaction.summarizer = None;
         let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
-        assert!(outcome.end.is_some(), "无 Summarizer 且 LLM 强制必须直接 fatal");
-        assert_eq!(state.machine.context().end_reason, R::Error);
-        assert_eq!(state.compaction.compression_retries, 0, "未压缩不消耗重试计数");
-        assert_eq!(state.compaction.compactions_this_run, 0, "未压缩不消耗单 run 计数");
-        // 对话原样（无 stub 入对话——禁止纯丢弃式）
-        assert_eq!(state.conversation.len(), snapshot.len(), "对话必须保持原样");
         assert!(
-            !state
+            outcome.end.is_none(),
+            "无 Summarizer 应 Stub 降级并继续，而非 fatal"
+        );
+        assert_eq!(
+            state.compaction.compression_retries, 1,
+            "降级路径仍计入一次压缩重试"
+        );
+        assert!(
+            state
                 .conversation
                 .iter()
                 .any(|m| m.id.starts_with("compacted-summary")),
-            "不得产出中性 stub（F1 禁止面）"
+            "必须落一条中性 Stub 解除请求体超限"
         );
-        // 无压缩事件（未发生压缩）
         assert!(
-            state
+            !state
                 .events
                 .iter()
-                .all(|e| !matches!(e, AgentEvent::ContextCompressionEnd { .. })),
-            "未压缩不得广播压缩事件"
+                .any(|e| matches!(e, AgentEvent::RuntimeError { .. })),
+            "降级不得发 fatal runtime-error"
         );
-        // fatal 文案含「LLM 不可用」（runtime-error 事件 + terminal_error 双面）
-        let runtime_error = state
-            .events
-            .iter()
-            .find_map(|e| match e {
-                AgentEvent::RuntimeError { error, .. } => Some(error.clone()),
-                _ => None,
-            })
-            .expect("fatal 必须发 runtime-error 事件");
+        assert!(state.terminal_error.is_none(), "降级不得把 run 判为 error");
         assert!(
-            runtime_error.contains("LLM 不可用"),
-            "runtime-error 文案必须含「LLM 不可用」：{runtime_error}"
+            state.terminal_provider_error.is_none(),
+            "未 fatal 不填 provider_error 终态摘要"
         );
-        let terminal = state.terminal_error.as_deref().expect("fatal 必须填充文案");
-        assert!(
-            terminal.contains("LLM 不可用"),
-            "terminal_error 必须含「LLM 不可用」：{terminal}"
-        );
-        // provider_error 数据面照常填充（D1 §3.4）
-        let p = state.terminal_provider_error.as_ref().expect("fatal 必须填充摘要");
-        assert_eq!(p.kind, ProviderErrorKind::PayloadTooLarge);
     }
 
     /// E2 F1 L3 豁免：compact_allow_stub_fallback=true + 无 Summarizer →
@@ -105,7 +90,7 @@
     /// 不落 stub 先行（「压缩不成功不生效」而非「先丢后补」）→ 直接 fatal，
     /// 文案含「LLM 不可用」；失败重试留给后台/后续触发（F2 层 1 语义）
     #[tokio::test]
-    async fn overflow_summarizer_error_fatals_with_llm_unavailable() {
+    async fn overflow_summarizer_error_degrades_to_stub_and_continues() {
         struct FailingSummarizer;
         impl conex_compaction::Summarizer for FailingSummarizer {
             fn summarize(
@@ -116,26 +101,30 @@
                 Err("摘要请求失败（模拟 L2 降级）".to_string())
             }
         }
+        // W1-T7：摘要失败同样 Stub 降级（后台补摘要），不再 fatal
         let mut state = budgeted_state();
         state.compaction.summarizer = Some(Arc::new(FailingSummarizer));
-        let snapshot = state.conversation.clone();
         let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
-        assert!(outcome.end.is_some(), "摘要失败且 LLM 强制必须直接 fatal");
-        assert_eq!(state.compaction.compression_retries, 0);
-        assert_eq!(state.conversation.len(), snapshot.len(), "对话保持原样");
-        let runtime_error = state
-            .events
-            .iter()
-            .find_map(|e| match e {
-                AgentEvent::RuntimeError { error, .. } => Some(error.clone()),
-                _ => None,
-            })
-            .expect("fatal 必须发 runtime-error 事件");
         assert!(
-            runtime_error.contains("LLM 不可用"),
-            "摘要失败 fatal 文案必须含「LLM 不可用」：{runtime_error}"
+            outcome.end.is_none(),
+            "摘要失败应 Stub 降级并继续，而非 fatal"
+        );
+        assert_eq!(state.compaction.compression_retries, 1);
+        assert!(
+            state
+                .conversation
+                .iter()
+                .any(|m| m.id.starts_with("compacted-summary")),
+            "摘要失败必须落中性 Stub"
+        );
+        assert!(
+            !state
+                .events
+                .iter()
+                .any(|e| matches!(e, AgentEvent::RuntimeError { .. })),
+            "降级不得发 fatal runtime-error"
         );
     }
 
@@ -227,35 +216,48 @@
         assert_eq!(OVERFLOW_KEEP_RECENT_STAIRCASE, [20_000, 12_000, 8_000]);
     }
 
-    /// E2 信息分级（约束 C）：LLM 摘要不可用的等待/fatal 一律经事件面
-    /// （runtime-error / runtime-intervention-required）呈现，对话零注入
-    /// ——无 Summarizer 溢出 fatal 路径对话逐字节不变（无「重试中」/失败
-    /// 标记类注入消息）
+    /// E2 信息分级（约束 C）：LLM 摘要不可用时只允许落一条**中性 Stub**，
+    /// 对话中不得注入「重试中 / 摘要失败 / LLM 不可用」等诊断类消息
+    /// （诊断只走事件面）。
     #[tokio::test]
-    async fn llm_unavailable_overflow_never_injects_diagnostic_into_conversation() {
+    async fn llm_unavailable_overflow_only_injects_neutral_stub() {
         let mut state = budgeted_state();
         state.compaction.summarizer = None;
         let snapshot: Vec<Arc<AgentMessage>> = state.conversation.clone();
         handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
-        assert_eq!(state.conversation.len(), snapshot.len(), "对话长度不变");
+        let stubs: Vec<_> = state
+            .conversation
+            .iter()
+            .filter(|m| m.id.starts_with("compacted-summary"))
+            .collect();
+        assert_eq!(stubs.len(), 1, "只允许一条中性 Stub");
         assert!(
-            state
-                .conversation
-                .iter()
-                .zip(&snapshot)
-                .all(|(a, b)| Arc::ptr_eq(a, b)),
-            "对话 Arc 身份不变（零注入、零改写——信息分级约束 C）"
+            stubs[0].text().contains("[Compacted"),
+            "Stub 必须是中性压缩标记：{}",
+            stubs[0].text()
         );
-        // 事件面呈现：runtime-error 含「LLM 不可用」
-        assert!(
-            state.events.iter().any(|e| matches!(
-                e,
-                AgentEvent::RuntimeError { error, .. } if error.contains("LLM 不可用")
-            )),
-            "LLM 不可用必须经 runtime-error 事件呈现"
-        );
+        for message in &state.conversation {
+            let text = message.text();
+            assert!(
+                !text.contains("重试中")
+                    && !text.contains("LLM 不可用")
+                    && !text.contains("摘要失败"),
+                "对话不得注入诊断类消息：{text}"
+            );
+        }
+        // 保留段消息仍为原 Arc（除 Stub 外零改写）
+        for (index, message) in state.conversation.iter().enumerate() {
+            if message.id.starts_with("compacted-summary") {
+                continue;
+            }
+            let _ = index;
+            assert!(
+                snapshot.iter().any(|original| Arc::ptr_eq(original, message)),
+                "非 Stub 消息必须保持原 Arc 身份"
+            );
+        }
     }
 
 

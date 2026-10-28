@@ -132,7 +132,7 @@ impl FlowScheduler {
                     active_siblings: in_flight,
                     active_concurrent: in_flight,
                 };
-                if let Err(_rejection) = check_recursion_guard(snapshot, self.guard) {
+                if let Err(_rejection) = check_recursion_guard(snapshot, self.policy) {
                     // 预算满：剩余就绪节点保留入 dirty，下次终态释放后重试（O(dirty)保留，不全量重扫）
                     budget_blocked.extend(ready_ids[idx..].iter().cloned());
                     break;
@@ -154,6 +154,7 @@ impl FlowScheduler {
                     task_type: None,
                     allowed_write_paths: None,
                     display_label: None,
+                    permission_mode: None,
                     model_override: None,
                 };
                 let spawner_owns_flow_events = self.spawner.owns_flow_lifecycle_events();

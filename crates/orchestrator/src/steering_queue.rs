@@ -114,11 +114,42 @@ impl SteeringInputEntry {
     }
 }
 
+/// 消息条目二阶段租约事务状态
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum MessageEntryState {
+    /// 可用状态（待消费）
+    Available,
+    /// 租借在途中（已被 Run 预占处理中）
+    Leased {
+        lease_id: u64,
+        expires_at_ms: u64,
+    },
+    /// 已确认消费（已物理清除或生命周期终结）
+    Committed,
+}
+
+/// 队列内部条目包装
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct QueuedMessageEntry {
+    pub entry: SteeringInputEntry,
+    pub state: MessageEntryState,
+}
+
+impl QueuedMessageEntry {
+    pub fn available(entry: SteeringInputEntry) -> Self {
+        Self {
+            entry,
+            state: MessageEntryState::Available,
+        }
+    }
+}
+
 /// 跨 run steering 队列（对齐 TS SteeringInputQueue）
 #[derive(Debug, Clone)]
 pub struct PendingMessageQueue {
-    entries: VecDeque<SteeringInputEntry>,
+    entries: VecDeque<QueuedMessageEntry>,
     max_size: usize,
+    next_lease_id: u64,
 }
 
 impl PendingMessageQueue {
@@ -132,6 +163,7 @@ impl PendingMessageQueue {
         Self {
             entries: VecDeque::new(),
             max_size: max_size.max(1),
+            next_lease_id: 1,
         }
     }
 
@@ -144,7 +176,7 @@ impl PendingMessageQueue {
             self.evict_for(&entry);
         }
         if self.entries.len() < self.max_size {
-            self.entries.push_back(entry);
+            self.entries.push_back(QueuedMessageEntry::available(entry));
         }
     }
 
@@ -155,9 +187,11 @@ impl PendingMessageQueue {
     pub fn replace_or_enqueue(&mut self, entry: SteeringInputEntry) -> bool {
         if let Some(group_id) = &entry.group_id {
             if let Some(idx) = self.entries.iter().position(|e| {
-                e.session_id == entry.session_id && e.group_id.as_deref() == Some(group_id)
+                e.state == MessageEntryState::Available
+                    && e.entry.session_id == entry.session_id
+                    && e.entry.group_id.as_deref() == Some(group_id)
             }) {
-                self.entries[idx] = entry;
+                self.entries[idx].entry = entry;
                 return true;
             }
         }
@@ -172,27 +206,28 @@ impl PendingMessageQueue {
         self.withdraw(|e| e.group_id.as_deref() == Some(group_id))
     }
 
-    /// 按谓词提取条目（撤销语义，对齐 TS withdraw）
+    /// 按谓词提取条目（撤销语义，对齐 TS withdraw）。
+    /// 仅对当前处于 Available 状态的条目生效，Leased 条目受保护不被抽走。
     pub fn withdraw(
         &mut self,
         predicate: impl Fn(&SteeringInputEntry) -> bool,
     ) -> Vec<SteeringInputEntry> {
         let mut matched = Vec::new();
         let mut remaining = VecDeque::new();
-        while let Some(entry) = self.entries.pop_front() {
-            if predicate(&entry) {
-                matched.push(entry);
+        while let Some(item) = self.entries.pop_front() {
+            if item.state == MessageEntryState::Available && predicate(&item.entry) {
+                matched.push(item.entry);
             } else {
-                remaining.push_back(entry);
+                remaining.push_back(item);
             }
         }
         self.entries = remaining;
         matched
     }
 
-    /// FIFO 取出全部条目（对齐 TS dequeueAll，05 §2.2:104）
+    /// FIFO 取出全部处于 Available 状态的条目（对齐 TS dequeueAll，05 §2.2:104）
     pub fn dequeue_all(&mut self) -> Vec<SteeringInputEntry> {
-        self.entries.drain(..).collect()
+        self.withdraw(|_| true)
     }
 
     /// 判定条目是否归属于目标会话：
@@ -207,22 +242,17 @@ impl PendingMessageQueue {
             || entry_session_id.starts_with("cron-")
     }
 
-    /// FIFO 取出指定会话的全部条目，保持其余会话条目顺序（跨会话强隔离核心消费路径）
+    /// FIFO 取出指定会话的全部可用条目，保持其余会话条目顺序（跨会话强隔离核心消费路径）
     pub fn dequeue_all_for(&mut self, session_id: &str) -> Vec<SteeringInputEntry> {
         self.withdraw(|e| Self::matches_session(&e.session_id, session_id))
     }
 
-    /// 清空指定会话的全部条目
+    /// 清空指定会话的全部可用条目
     pub fn clear_for(&mut self, session_id: &str) {
         self.withdraw(|e| Self::matches_session(&e.session_id, session_id));
     }
 
-    /// 清空指定会话中「入队时刻 ≤ `before_ms`」的条目，保留其后入队的新事件。
-    ///
-    /// 收口 poison-pill 清理的时间边界版：run 终态后新入队的条目（run 结束
-    /// 后才到期的新定时器等）属于新事件，迟到的收口清理不得吞掉——
-    /// 收口尾部的清理与 `active_runs` 移除之间存在异步窗口，无边界版会
-    /// 把窗口期入队的新事件一并抹掉。
+    /// 清空指定会话中「入队时刻 ≤ `before_ms`」的可用条目，保留其后入队的新事件。
     ///
     /// 返回被清条目（调用方记日志/诊断；空 Vec = 无残留）。
     pub fn clear_for_before(
@@ -235,12 +265,10 @@ impl PendingMessageQueue {
         })
     }
 
-    /// 跨 run 转移：全部条目迁入目标队列并清空本队列。
-    ///
-    /// 目标队列按自身容量限制与 steering 优先级逐条收容——满容量时普通
-    /// 消息先被挤掉、steering 消息保留（05 §2.2:108 transferTo 语义）。
+    /// 跨 run 转移：全部可用条目迁入目标队列并从本队列移除。
     pub fn transfer_to(&mut self, other: &mut Self) {
-        while let Some(entry) = self.entries.pop_front() {
+        let entries = self.dequeue_all();
+        for entry in entries {
             other.enqueue(entry);
         }
     }
@@ -267,40 +295,154 @@ impl PendingMessageQueue {
         self.transfer_into_input_queue(queue, InputEnqueueMode::FollowUp)
     }
 
+    /// 预占批次条目，标记为 Leased，生成唯一 lease_id。
+    ///
+    /// 自动巡检过期租约，将已超期的在途租约复苏为 Available 后再进行分配。
+    /// 若无可用条目，返回 `(0, Vec::new())`。
+    pub fn reserve_batch(
+        &mut self,
+        session_id: &str,
+        limit: usize,
+        lease_duration: std::time::Duration,
+    ) -> (u64, Vec<SteeringInputEntry>) {
+        if limit == 0 {
+            return (0, Vec::new());
+        }
+
+        let now_ms = now_millis();
+        self.purge_expired_leases(now_ms);
+
+        let mut reserved = Vec::new();
+        let lease_id = self.next_lease_id;
+        self.next_lease_id = self.next_lease_id.wrapping_add(1).max(1);
+        let expires_at_ms = now_ms.saturating_add(lease_duration.as_millis() as u64);
+
+        for item in self.entries.iter_mut() {
+            if item.state == MessageEntryState::Available
+                && Self::matches_session(&item.entry.session_id, session_id)
+            {
+                item.state = MessageEntryState::Leased {
+                    lease_id,
+                    expires_at_ms,
+                };
+                reserved.push(item.entry.clone());
+                if reserved.len() >= limit {
+                    break;
+                }
+            }
+        }
+
+        if reserved.is_empty() {
+            (0, Vec::new())
+        } else {
+            (lease_id, reserved)
+        }
+    }
+
+    /// 确认消费（Commit）：新 Run 首轮成功连接并落盘后，调用 commit 物理清除已消费条目。
+    ///
+    /// 返回物理清除的条目数量。
+    pub fn commit_batch(&mut self, session_id: &str, lease_id: u64) -> usize {
+        if lease_id == 0 {
+            return 0;
+        }
+        let mut committed = 0;
+        self.entries.retain(|item| {
+            let matches = matches!(item.state, MessageEntryState::Leased { lease_id: l_id, .. } if l_id == lease_id)
+                && Self::matches_session(&item.entry.session_id, session_id);
+            if matches {
+                committed += 1;
+                false // 物理清除
+            } else {
+                true
+            }
+        });
+        committed
+    }
+
+    /// 消费回滚（Rollback）：若因网络瞬态故障、429 或启动失败未成功执行，
+    /// 瞬间将条目状态回滚为 Available，绝不丢失任何异步事件！
+    ///
+    /// 返回回滚的条目数量。条目在队列中原本的物理位置与时间戳完全保留。
+    pub fn rollback_batch(&mut self, session_id: &str, lease_id: u64) -> usize {
+        if lease_id == 0 {
+            return 0;
+        }
+        let mut rolled_back = 0;
+        for item in self.entries.iter_mut() {
+            if matches!(item.state, MessageEntryState::Leased { lease_id: l_id, .. } if l_id == lease_id)
+                && Self::matches_session(&item.entry.session_id, session_id)
+            {
+                item.state = MessageEntryState::Available;
+                rolled_back += 1;
+            }
+        }
+        rolled_back
+    }
+
+    /// 租约超时保护：将超期未 commit 的条目自动还原为 Available。
+    ///
+    /// 返回自动复苏的过期租约条目数。
+    pub fn purge_expired_leases(&mut self, now_ms: u64) -> usize {
+        let mut expired = 0;
+        for item in self.entries.iter_mut() {
+            if let MessageEntryState::Leased { expires_at_ms, .. } = item.state {
+                if now_ms >= expires_at_ms {
+                    item.state = MessageEntryState::Available;
+                    expired += 1;
+                }
+            }
+        }
+        expired
+    }
+
     /// 是否有待处理条目（O(1) 判定）
     pub fn has_pending(&self) -> bool {
-        !self.entries.is_empty()
+        self.entries.iter().any(|e| e.state == MessageEntryState::Available)
     }
 
     /// 指定会话是否有待处理条目（防跨会话无差别拉起核心守护）
     pub fn has_pending_for(&self, session_id: &str) -> bool {
         self.entries
             .iter()
-            .any(|e| Self::matches_session(&e.session_id, session_id))
+            .any(|e| e.state == MessageEntryState::Available && Self::matches_session(&e.entry.session_id, session_id))
     }
 
     /// 是否含 steering 条目（对齐 TS hasPendingSteering）
     pub fn has_pending_steering(&self) -> bool {
-        self.entries.iter().any(|e| e.is_steering)
+        self.entries
+            .iter()
+            .any(|e| e.state == MessageEntryState::Available && e.entry.is_steering)
     }
 
     /// 指定会话是否含 steering 条目
     pub fn has_pending_steering_for(&self, session_id: &str) -> bool {
         self.entries
             .iter()
-            .any(|e| Self::matches_session(&e.session_id, session_id) && e.is_steering)
+            .any(|e| {
+                e.state == MessageEntryState::Available
+                    && Self::matches_session(&e.entry.session_id, session_id)
+                    && e.entry.is_steering
+            })
     }
 
-    /// 预览队首（不移除）
+    /// 预览可用队首（不移除）
     pub fn peek(&self) -> Option<&SteeringInputEntry> {
-        self.entries.front()
+        self.entries
+            .iter()
+            .find(|e| e.state == MessageEntryState::Available)
+            .map(|e| &e.entry)
     }
 
-    /// 预览指定会话的队首条目（不移除）
+    /// 预览指定会话的可用队首条目（不移除）
     pub fn peek_for(&self, session_id: &str) -> Option<&SteeringInputEntry> {
         self.entries
             .iter()
-            .find(|e| Self::matches_session(&e.session_id, session_id))
+            .find(|e| {
+                e.state == MessageEntryState::Available
+                    && Self::matches_session(&e.entry.session_id, session_id)
+            })
+            .map(|e| &e.entry)
     }
 
     /// 清空队列
@@ -308,25 +450,51 @@ impl PendingMessageQueue {
         self.entries.clear();
     }
 
-    /// 当前条数
+    /// 当前可用条数
     pub fn len(&self) -> usize {
+        self.entries
+            .iter()
+            .filter(|e| e.state == MessageEntryState::Available)
+            .count()
+    }
+
+    /// 队列中包含在途租约的全部条目数
+    pub fn total_len(&self) -> usize {
         self.entries.len()
+    }
+
+    /// 当前处于租借在途（Leased）的条目数
+    pub fn leased_len(&self) -> usize {
+        self.entries
+            .iter()
+            .filter(|e| matches!(e.state, MessageEntryState::Leased { .. }))
+            .count()
     }
 
     /// 是否为空
     pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
+        self.len() == 0
     }
 
     /// 满容量挤占策略（对齐 TS evictFor，steering-input-queue.ts:111-118）：
-    /// - 优先挤掉**最旧的非 steering** 条目；
-    /// - 全为 steering 且新条目也是 steering 时挤掉最旧；
-    /// - 全为 steering 而新条目是普通消息时**不挤占**（由调用方丢弃）。
+    /// - 优先挤掉**最旧的处于 Available 状态的非 steering** 条目；
+    /// - 全为 steering 且新条目也是 steering 时挤掉最旧的 Available steering 条目；
+    /// - 正在租借中（Leased）的条目受严格保护，绝不被挤占。
     fn evict_for(&mut self, entry: &SteeringInputEntry) {
-        if let Some(idx) = self.entries.iter().position(|e| !e.is_steering) {
+        if let Some(idx) = self
+            .entries
+            .iter()
+            .position(|e| e.state == MessageEntryState::Available && !e.entry.is_steering)
+        {
             self.entries.remove(idx);
         } else if entry.is_steering {
-            self.entries.pop_front();
+            if let Some(idx) = self
+                .entries
+                .iter()
+                .position(|e| e.state == MessageEntryState::Available)
+            {
+                self.entries.remove(idx);
+            }
         }
     }
 }
@@ -361,6 +529,14 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
     let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
     let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
     (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+/// 获取当前系统 Unix 毫秒时间戳
+fn now_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -827,5 +1003,141 @@ mod tests {
         queue.clear_for_before("sess-A", 200);
         assert!(!queue.has_pending_for("sess-A"));
         assert_eq!(queue.len(), 0);
+    }
+
+    /// 二阶段租约事务：空队列 reserve 返回 (0, empty)
+    #[test]
+    fn reserve_batch_empty_queue() {
+        let mut queue = PendingMessageQueue::new();
+        let (lease_id, entries) =
+            queue.reserve_batch("sess-1", 10, std::time::Duration::from_secs(60));
+        assert_eq!(lease_id, 0);
+        assert!(entries.is_empty());
+    }
+
+    /// 二阶段租约事务：预占与确认消费（Reserve -> Commit）
+    #[test]
+    fn reserve_and_commit_batch() {
+        let mut queue = PendingMessageQueue::new();
+        queue.enqueue(user_entry("a1", "plain-1", 1).with_session("sess-1"));
+        queue.enqueue(user_entry("a2", "plain-2", 2).with_session("sess-1"));
+        queue.enqueue(user_entry("b1", "other-sess", 3).with_session("sess-2"));
+
+        assert_eq!(queue.len(), 3);
+        assert_eq!(queue.leased_len(), 0);
+
+        // 预占 1 条
+        let (lease_id, entries) =
+            queue.reserve_batch("sess-1", 1, std::time::Duration::from_secs(60));
+        assert!(lease_id > 0);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].id, "a1");
+
+        // Available 条数减少为 2（sess-1 的 a2 和 sess-2 的 b1）
+        assert_eq!(queue.len(), 2);
+        assert_eq!(queue.leased_len(), 1);
+        assert_eq!(queue.total_len(), 3);
+
+        // sess-1 仍有 a2 可用
+        assert!(queue.has_pending_for("sess-1"));
+
+        // 确认消费已预占的 a1
+        let committed = queue.commit_batch("sess-1", lease_id);
+        assert_eq!(committed, 1);
+        assert_eq!(queue.leased_len(), 0);
+        assert_eq!(queue.total_len(), 2);
+        assert_eq!(queue.len(), 2);
+
+        // 剩余条目可正常出队
+        let remaining = queue.dequeue_all_for("sess-1");
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].id, "a2");
+    }
+
+    /// 二阶段租约事务：预占与回滚（Reserve -> Rollback，零丢失保证）
+    #[test]
+    fn reserve_and_rollback_batch() {
+        let mut queue = PendingMessageQueue::new();
+        queue.enqueue(user_entry("a1", "plain-1", 1).with_session("sess-1"));
+        queue.enqueue(user_entry("a2", "plain-2", 2).with_session("sess-1"));
+
+        let (lease_id, entries) =
+            queue.reserve_batch("sess-1", 2, std::time::Duration::from_secs(60));
+        assert!(lease_id > 0);
+        assert_eq!(entries.len(), 2);
+
+        // 全部进入 Leased 态，Available 为 0
+        assert_eq!(queue.len(), 0);
+        assert_eq!(queue.leased_len(), 2);
+        assert!(!queue.has_pending_for("sess-1"));
+
+        // 遭遇网络故障或启动异常，执行回滚
+        let rolled_back = queue.rollback_batch("sess-1", lease_id);
+        assert_eq!(rolled_back, 2);
+
+        // 状态瞬间还原为 Available，零事件丢失！
+        assert_eq!(queue.len(), 2);
+        assert_eq!(queue.leased_len(), 0);
+        assert!(queue.has_pending_for("sess-1"));
+
+        // 顺序与时间戳无损保持
+        let dequeued = queue.dequeue_all_for("sess-1");
+        assert_eq!(dequeued.len(), 2);
+        assert_eq!(dequeued[0].id, "a1");
+        assert_eq!(dequeued[1].id, "a2");
+    }
+
+    /// 二阶段租约事务：超时自动复苏（purge_expired_leases）
+    #[test]
+    fn purge_expired_leases() {
+        let mut queue = PendingMessageQueue::new();
+        queue.enqueue(user_entry("a1", "plain-1", 1).with_session("sess-1"));
+
+        let (lease_id, entries) =
+            queue.reserve_batch("sess-1", 1, std::time::Duration::from_secs(60));
+        assert!(lease_id > 0);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(queue.leased_len(), 1);
+        assert_eq!(queue.len(), 0);
+
+        // 模拟当前时间未超时（+30s）
+        let now = now_millis();
+        let purged = queue.purge_expired_leases(now + 30_000);
+        assert_eq!(purged, 0);
+        assert_eq!(queue.leased_len(), 1);
+
+        // 模拟当前时间已超时（+65s）
+        let purged = queue.purge_expired_leases(now + 65_000);
+        assert_eq!(purged, 1);
+        assert_eq!(queue.leased_len(), 0);
+        assert_eq!(queue.len(), 1);
+        assert!(queue.has_pending_for("sess-1"));
+    }
+
+    /// 二阶段租约事务：满容量挤占保护 Leased 条目
+    #[test]
+    fn evict_for_protects_leased_entries() {
+        let mut queue = PendingMessageQueue::with_capacity(2);
+        queue.enqueue(user_entry("a1", "plain-1", 1).with_session("sess-1"));
+        queue.enqueue(user_entry("a2", "plain-2", 2).with_session("sess-1"));
+
+        // a1 被租借
+        let (lease_id, entries) =
+            queue.reserve_batch("sess-1", 1, std::time::Duration::from_secs(60));
+        assert_eq!(entries[0].id, "a1");
+
+        // 满容量下再入队一条普通条目：挤掉的是 Available 的 a2，绝不挤占 Leased 的 a1！
+        queue.enqueue(user_entry("a3", "plain-3", 3).with_session("sess-1"));
+        assert_eq!(queue.total_len(), 2);
+        assert_eq!(queue.leased_len(), 1);
+
+        // 回滚租约后检查：a1 完好无损保留！
+        queue.rollback_batch("sess-1", lease_id);
+        let ids: Vec<String> = queue
+            .dequeue_all_for("sess-1")
+            .into_iter()
+            .map(|e| e.id)
+            .collect();
+        assert_eq!(ids, vec!["a1", "a3"], "Leased 条目 a1 受保护未被挤占");
     }
 }

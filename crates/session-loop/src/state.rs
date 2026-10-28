@@ -94,6 +94,23 @@ impl AgentSessionMachine {
         }
         self.state = transition.to;
     }
+
+    /// 受控的动态租约预算续期接口（对齐方案 04 §4.3 / §7.2）
+    pub fn renew_budget(&mut self, additional_turns: u32) -> u32 {
+        if self.context.max_turns == 0 {
+            return 0; // 无限预算无需续期
+        }
+        let old = self.context.max_turns;
+        let new_budget = self.context.renew_budget(additional_turns);
+        tracing::info!(
+            session_id = %self.context.session_id,
+            old_budget = old,
+            new_budget = new_budget,
+            additional = additional_turns,
+            "会话状态机轮次租约已原子续订"
+        );
+        new_budget
+    }
 }
 
 #[cfg(test)]

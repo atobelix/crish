@@ -23,6 +23,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use orchestrator::events::{drive_outcome, EventQueue};
 use orchestrator::persist::{InMemoryStore, Store};
 use orchestrator::run::RunManager;
+use session_loop::r#loop::AgentEndReason as LoopAgentEndReason;
 use session_loop::RunOutcome;
 
 /// 固定时间戳（事件构造开销不纳入基准目标）
@@ -127,7 +128,7 @@ fn build_outcome(text_size: usize) -> RunOutcome {
         error: None,
     });
     RunOutcome {
-        reason: AgentEndReason::Stop,
+        reason: LoopAgentEndReason::Stop,
         error: None,
         diagnostic: None,
         messages: Vec::new(),
@@ -139,6 +140,8 @@ fn build_outcome(text_size: usize) -> RunOutcome {
         cache_stats: None,
         // D1：provider 错误摘要（本构造点非 fatal 收场 → None，缺省向后兼容）
         provider_error: None,
+        // W1-T7：挂起元数据（本构造点非 YieldSuspended → None）
+        yield_payload: None,
     }
 }
 

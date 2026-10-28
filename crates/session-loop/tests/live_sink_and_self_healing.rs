@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use agent_tools::registry::ToolRegistry;
 use conex_types::events::AgentEvent;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
-use conex_types::session::AgentEndReason;
+use session_loop::r#loop::AgentEndReason;
 use session_loop::provider::LiveEventSink;
 use session_loop::steering::ToolPromiseDetector;
 use session_loop::{

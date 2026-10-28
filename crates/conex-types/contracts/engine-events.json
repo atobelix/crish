@@ -950,7 +950,7 @@
           "name": "permissionMode",
           "type": "string",
           "required": false,
-          "description": "权限模式（ask/full-access/plan；emit 层可注入，工具侧为 None）"
+          "description": "权限模式（统一三态：ask/smart/full；emit 层可注入，工具侧为 None）"
         },
         {
           "name": "toolCallId",

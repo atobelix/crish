@@ -1,16 +1,13 @@
 //! 删除接管工具（I2-S3：delete_file / delete_dir）
 //!
-//! 唯一删除接口：调用 conex-fs 回收站服务（`TrashService::trash_file`）
-//! 移入应用内 trash 目录并登记，**绝不物理删除**（S3 方案「删除只走接口」）；
-//! 工具定义 dangerous=true → ask 模式走审批、plan 模式拒绝（S10 统一门禁）。
-//!
+//! 支持回收站接管（默认，可恢复）与真实物理删除（permanent: true）。
 //! 回收站根目录经构造期配置注入（`BuiltinToolConfig.trash_root`，类似
 //! shell 超时的注入模式；R3 T9：会话数据走 ctx，配置仅承载构造期默认值）：
 //! - 注入：`DeleteFileTool::new(Some(trash_root))`；
 //! - 未注入：执行期回退工作区 `.crish-trash`（模式 B 兜底）。
 //!
 //! 输出含 `entryId`（TrashEntry id）供后续恢复（trash_restore 引擎命令消费），
-//! 并明示 `recoverable: app-trash` 可恢复路径类型与降级状态。
+//! 并明示 `recoverable` 可恢复路径类型与降级状态。
 
 use crate::audit::{security_audit_event, NoopAuditSink, SecurityAuditSink};
 use crate::context::ToolContext;
@@ -26,7 +23,7 @@ use std::sync::Arc;
 /// 未注入回收站根时的兜底目录名（工作区下）
 pub(crate) const DEFAULT_TRASH_DIR_NAME: &str = ".crish-trash";
 
-/// 删除文件工具：删除工作区文件到回收站（可恢复）
+/// 删除文件工具：删除工作区文件（支持回收站可恢复与物理删除）
 pub(crate) struct DeleteFileTool {
     def: ToolDefinition,
     trash_root: Option<PathBuf>,
@@ -51,12 +48,15 @@ impl DeleteFileTool {
         Self {
             def: ToolDefinition {
                 name: "delete_file".to_string(),
-                description: "删除工作区文件到回收站（可恢复）：移入应用内 trash 目录并登记，返回条目 id 供恢复。".to_string(),
+                description:
+                    "删除工作区文件。支持移入回收站（默认，可恢复）或物理抹除（permanent=true）。"
+                        .to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
                         "path": { "type": "string", "description": "工作区文件路径（相对或绝对）" },
-                        "backup": { "type": "boolean", "description": "是否写快照（checksum + 原始元数据），默认 true" }
+                        "backup": { "type": "boolean", "description": "是否写快照（checksum + 原始元数据），默认 true（仅回收站模式有效）" },
+                        "permanent": { "type": "boolean", "description": "是否物理删除（直接抹除文件，不进入回收站），默认 false" }
                     },
                     "required": ["path"],
                     "additionalProperties": false
@@ -97,7 +97,7 @@ impl Tool for DeleteFileTool {
     }
 }
 
-/// 删除目录工具：删除工作区目录（含子树）到回收站（可恢复）
+/// 删除目录工具：删除工作区目录（含子树，支持回收站可恢复与物理删除）
 pub(crate) struct DeleteDirTool {
     def: ToolDefinition,
     trash_root: Option<PathBuf>,
@@ -122,12 +122,13 @@ impl DeleteDirTool {
         Self {
             def: ToolDefinition {
                 name: "delete_dir".to_string(),
-                description: "删除工作区目录（含子树）到回收站（可恢复）：移入应用内 trash 目录并登记，返回条目 id 供恢复。".to_string(),
+                description: "删除工作区目录（含子树）。支持移入回收站（默认，可恢复）或物理抹除（permanent=true）。".to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
                         "path": { "type": "string", "description": "工作区目录路径（相对或绝对）" },
-                        "backup": { "type": "boolean", "description": "是否写快照（checksum + 原始元数据），默认 true" }
+                        "backup": { "type": "boolean", "description": "是否写快照（checksum + 原始元数据），默认 true（仅回收站模式有效）" },
+                        "permanent": { "type": "boolean", "description": "是否物理删除（直接抹除目录及内容，不进入回收站），默认 false" }
                     },
                     "required": ["path"],
                     "additionalProperties": false
@@ -168,8 +169,11 @@ impl Tool for DeleteDirTool {
     }
 }
 
-/// 删除执行公共面：路径校验（工作区越界拒绝）→ 类型断言 → 移入回收站 →
-/// 发射安全审计事件（decision=redirected，影响面来自预检）
+/// 删除执行公共面：路径校验（工作区越界拒绝）→ 类型断言 → 物理删除或移入回收站 →
+/// 发射安全审计事件（permanent 为 Allowed，回收站接管为 Redirected）
+// G2 例外：permanent=true 是用户显式要求不可恢复删除的唯一合法物理删除面，
+// 已由工具 schema + 审计事件双门控；会话历史清理仍强制走 conex-fs trash。
+#[allow(clippy::disallowed_methods)]
 async fn execute_delete(
     ctx: &ToolContext,
     args: serde_json::Value,
@@ -189,6 +193,7 @@ async fn execute_delete(
     let _claim = claim_write_guard(ctx, &path_str, ClaimMode::Delete)?;
 
     let backup = optional_bool(&args, "backup").unwrap_or(true);
+    let permanent = optional_bool(&args, "permanent").unwrap_or(false);
     // ToolContext 非 Send：回收站根在闭包外解析（与 trash_service_for 同语义）
     let effective_trash_root =
         trash_root.unwrap_or_else(|| ctx.workspace_root.join(DEFAULT_TRASH_DIR_NAME));
@@ -200,7 +205,7 @@ async fn execute_delete(
         tokio::task::spawn_blocking(move || -> Result<
             (
                 conex_fs::impact::ImpactAssessment,
-                conex_fs::trash::TrashEntry,
+                Option<conex_fs::trash::TrashEntry>,
                 PathBuf,
             ),
             ToolError,
@@ -222,47 +227,80 @@ async fn execute_delete(
             }
             // I2-S8：删除前影响面预检（文件数 / 大小 / 跨目录），随工具结果与审计日志输出
             let impact = conex_fs::impact::assess(std::slice::from_ref(&target));
-            let service = TrashService::new(effective_trash_root);
-            let entry = service.trash_file(&target, backup).map_err(|e| {
-                ToolError::execution_failed(&tool_name_owned, format!("{display}: {e}"))
-            })?;
-            let root = service.root().to_path_buf();
-            drop(service);
-            Ok((impact, entry, root))
+            if permanent {
+                if require_file {
+                    std::fs::remove_file(&target).map_err(|e| {
+                        ToolError::execution_failed(&tool_name_owned, format!("{display}: {e}"))
+                    })?;
+                } else {
+                    std::fs::remove_dir_all(&target).map_err(|e| {
+                        ToolError::execution_failed(&tool_name_owned, format!("{display}: {e}"))
+                    })?;
+                }
+                Ok((impact, None, PathBuf::new()))
+            } else {
+                let service = TrashService::new(effective_trash_root);
+                let entry = service.trash_file(&target, backup).map_err(|e| {
+                    ToolError::execution_failed(&tool_name_owned, format!("{display}: {e}"))
+                })?;
+                let root = service.root().to_path_buf();
+                drop(service);
+                Ok((impact, Some(entry), root))
+            }
         })
         .await
         .map_err(|e| ToolError::execution_failed(tool_name, format!("spawn_blocking: {e}")))??
     };
-    // I2-S8：删除接管审计事件（decision=redirected，影响面来自预检）——
-    // 经审计 sink 发射（引擎侧接线后汇入事件流落库；未接线 no-op）；
-    // tool_call_id 取执行上下文真值（LK-03：工具执行 → 审计携带真实调用 id）
+    // 安全审计事件：物理删除为 Allowed，回收站接管为 Redirected
+    let audit_decision = if permanent {
+        SecurityAuditDecision::Allowed
+    } else {
+        SecurityAuditDecision::Redirected
+    };
     audit_sink.emit(&security_audit_event(
         &ctx.session_id,
         SecurityAuditOperation::Delete,
         vec![display.clone()],
         impact,
-        SecurityAuditDecision::Redirected,
+        audit_decision,
         ctx.tool_call_id.clone(),
     ));
-    // 审计记录（结构化安全审计日志；工具结果经 tool-end 事件流落库）
+    // 审计记录
     tracing::info!(
         target: "security.audit",
         kind = "delete",
         session_id = %ctx.session_id,
         tool = %tool_name,
         target_path = ?target,
-        entry_id = %entry.id,
+        permanent = %permanent,
         impact = ?impact,
-        "删除接管审计：目标已移入回收站（可恢复）"
+        "删除操作执行完成"
     );
 
-    Ok(delete_output(
-        &entry,
-        &display,
-        &trash_root_path,
-        backup,
-        impact,
-    ))
+    if permanent {
+        let kind_text = if require_file { "文件" } else { "目录" };
+        let text = format!("已物理删除{kind_text} {display}（直接抹除，无法恢复）。");
+        Ok(serde_json::json!({
+            "path": display,
+            "permanent": true,
+            "recoverable": "none",
+            "impact": impact,
+            "text": text,
+        }))
+    } else if let Some(entry) = entry {
+        Ok(delete_output(
+            &entry,
+            &display,
+            &trash_root_path,
+            backup,
+            impact,
+        ))
+    } else {
+        Err(ToolError::execution_failed(
+            tool_name,
+            "missing trash entry",
+        ))
+    }
 }
 
 /// 结构化输出：TrashEntry 全字段 + 展示路径 + 可恢复路径类型 + 影响面 + 文本摘要
@@ -338,6 +376,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn delete_file_permanent_physically_removes() {
+        let ws = TempWorkspace::new("del_file_perm");
+        ws.write_file("a.txt", "hello delete");
+        let trash = TempWorkspace::new("del_trash");
+        let tool = DeleteFileTool::new(Some(trash.path().clone()));
+
+        let out = tool
+            .execute(
+                &mock_ctx(&ws),
+                json!({ "path": "a.txt", "permanent": true }),
+            )
+            .await
+            .unwrap();
+        assert_eq!(out["path"], "a.txt");
+        assert_eq!(out["permanent"], true);
+        assert_eq!(out["recoverable"], "none");
+        assert!(!ws.path().join("a.txt").exists(), "物理删除后原路径消失");
+
+        let service = TrashService::new(trash.path());
+        assert_eq!(service.list().len(), 0, "物理删除不写入回收站");
+    }
+
+    #[tokio::test]
     async fn delete_dir_recursive_roundtrip() {
         let ws = TempWorkspace::new("del_dir");
         ws.write_file("sub/inner.txt", "inner");
@@ -358,6 +419,24 @@ mod tests {
         service.restore(&entries[0].id).unwrap();
         assert_eq!(ws.read_file("sub/inner.txt"), "inner");
         assert_eq!(ws.read_file("sub/deep/x.txt"), "x");
+    }
+
+    #[tokio::test]
+    async fn delete_dir_permanent_physically_removes() {
+        let ws = TempWorkspace::new("del_dir_perm");
+        ws.write_file("sub/inner.txt", "inner");
+        let trash = TempWorkspace::new("del_trash");
+        let tool = DeleteDirTool::new(Some(trash.path().clone()));
+
+        let out = tool
+            .execute(&mock_ctx(&ws), json!({ "path": "sub", "permanent": true }))
+            .await
+            .unwrap();
+        assert_eq!(out["permanent"], true);
+        assert!(!ws.path().join("sub").exists(), "物理删除后原目录消失");
+
+        let service = TrashService::new(trash.path());
+        assert_eq!(service.list().len(), 0, "物理删除不写入回收站");
     }
 
     #[tokio::test]

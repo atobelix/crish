@@ -4,7 +4,11 @@
 //! 越界目标拦截、T-AB-04 cd 形态拦截、I2-S8 拦截/重定向审计发射、门禁路径串
 //! （gate_path）。安全红线（命令白名单 / 路径校验 / 写路径互斥）与拆分前
 //! 逐字一致；未经门禁（prepare）的命令不会到达执行面。
-//! 诚实边界：仅结构拆分，语义零改动（≠ EL-01…10 / ≠ 打开完成 / ≠ 结构债清零）。
+//!
+//! 2026-10-27 恢复说明：权限三模式改造曾把 shell 降为纯 I/O，误删本模块；
+//! 审计发现"删除直落物理删除、丢失重定向审计"后原样恢复。本模块只承担
+//! **执行行为**（如何安全地删除 / 拦截形态），不参与 allow/deny 裁决——
+//! 裁决唯一入口仍是 `session-loop` 的 `call_verdict`。
 
 use crate::audit::{security_audit_event, SecurityAuditSink};
 use crate::context::ToolContext;
@@ -376,31 +380,26 @@ pub(crate) fn gate_path(p: &Path) -> String {
 ///   不代为执行）；
 /// - PowerShell -WorkingDirectory (-wd) 启动参数目录篡改 → 拦截并引导使用 Cwd。
 pub(crate) fn intercept_cd_shape(analysis: &SemanticAnalysis, command: &str) -> Option<ToolError> {
-    // 1. 检查分析结果本身是否判定为 CdShape 或包含 CdShape 段
-    let is_cd = analysis.overall_class == CommandClass::CdShape
-        || analysis
-            .segments
-            .iter()
-            .any(|s| s.class == CommandClass::CdShape);
-
-    // 复用分析结果的拆段（参照 :276-293 整链拦截模式）：命令 + 参数重建
-    // 段字符串（引号内容已剥离，`echo "cd x"` 段首为 echo 不命中）
-    let segments: Vec<String> = analysis
+    // 1. 段级 cd 形态识别（语义层已收敛为六类，不再有 CdShape；
+    //    这里按命令名直接判定，覆盖 cmd / PowerShell 变体）
+    let is_cd_command = |name: &str| {
+        matches!(
+            name,
+            "cd" | "chdir"
+                | "pushd"
+                | "popd"
+                | "set-location"
+                | "sl"
+                | "push-location"
+                | "pop-location"
+        )
+    };
+    let cd_segments: Vec<&conex_sandbox::semantics::CommandSegment> = analysis
         .segments
         .iter()
-        .map(|s| {
-            if s.args.is_empty() {
-                s.command.clone()
-            } else {
-                format!("{} {}", s.command, s.args.join(" "))
-            }
-        })
+        .filter(|s| is_cd_command(s.command.as_str()))
         .collect();
-
-    let classified_cd = !segments.is_empty()
-        && conex_sandbox::semantics::classify_command_segments(&segments) == CommandClass::CdShape;
-
-    if !is_cd && !classified_cd {
+    if cd_segments.is_empty() {
         return None;
     }
 
@@ -415,15 +414,12 @@ pub(crate) fn intercept_cd_shape(analysis: &SemanticAnalysis, command: &str) -> 
     let message = if is_wd_escape {
         "检测到 PowerShell 启动参数 (-WorkingDirectory / -wd) 目录篡改，已拦截；请使用工具级 Cwd 参数指定工作目录，禁止在命令行中切换初始目录"
     } else {
-        let pure_cd = segments.len() == 1
-            && analysis.segments.len() == 1
-            && analysis.segments[0].class == CommandClass::CdShape
-            && !analysis.segments[0].command.eq_ignore_ascii_case("cmd")
-            && !analysis.segments[0].command.eq_ignore_ascii_case("cmd.exe")
-            && !analysis.segments[0]
-                .command
-                .eq_ignore_ascii_case("powershell")
-            && !analysis.segments[0].command.eq_ignore_ascii_case("pwsh");
+        let pure_cd = analysis.segments.len() == 1
+            && cd_segments.len() == 1
+            && !cd_segments[0].command.eq_ignore_ascii_case("cmd")
+            && !cd_segments[0].command.eq_ignore_ascii_case("cmd.exe")
+            && !cd_segments[0].command.eq_ignore_ascii_case("powershell")
+            && !cd_segments[0].command.eq_ignore_ascii_case("pwsh");
 
         if pure_cd {
             "请使用 Cwd 参数指定工作目录，而非 cd 命令"
@@ -442,4 +438,22 @@ pub(crate) fn intercept_cd_shape(analysis: &SemanticAnalysis, command: &str) -> 
         TOOL_CD_BLOCKED,
         format!("{message}。原始命令：{display_cmd}"),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cd_shape_is_intercepted() {
+        for cmd in ["cd /tmp", r"Set-Location C:\Users"] {
+            let analysis = conex_sandbox::semantics::analyze(cmd);
+            assert!(
+                intercept_cd_shape(&analysis, cmd).is_some(),
+                "cd 形态必须拦截：{cmd}"
+            );
+        }
+        let analysis = conex_sandbox::semantics::analyze("echo hi");
+        assert!(intercept_cd_shape(&analysis, "echo hi").is_none());
+    }
 }

@@ -4,149 +4,15 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+// 领域模型单一真源 = conex-agents；本模块只做门面重导出与默认权限映射。
+pub use conex_agents::task::{
+    is_db_status_allowed, SubagentCapabilityMode, SubagentRole, SubagentState, TaskType,
+    DB_STATUS_ALLOWED,
+};
+
 // ── 子代理角色与能力模式（对齐 shared-types/subagent.ts）──────────
 
-/// 子代理角色（对齐 SubagentRole：5 角色，仅展示/过滤标签，不影响调度）
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SubagentRole {
-    /// 探索类
-    Researcher,
-    /// 实现类
-    Implementer,
-    /// 评审类
-    Reviewer,
-    /// 排障类
-    Debugger,
-    /// 规划类
-    Planner,
-}
-
-impl SubagentRole {
-    /// 角色字面量（wire 名，snake_case）
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Researcher => "researcher",
-            Self::Implementer => "implementer",
-            Self::Reviewer => "reviewer",
-            Self::Debugger => "debugger",
-            Self::Planner => "planner",
-        }
-    }
-
-    /// 从 wire 名解析（未知返回 None）
-    pub fn parse(s: &str) -> Option<Self> {
-        match s {
-            "researcher" => Some(Self::Researcher),
-            "implementer" => Some(Self::Implementer),
-            "reviewer" => Some(Self::Reviewer),
-            "debugger" => Some(Self::Debugger),
-            "planner" => Some(Self::Planner),
-            _ => None,
-        }
-    }
-}
-
-/// 子代理能力模式（对齐 SubagentCapabilityMode：4 档，控制实际权限）
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SubagentCapabilityMode {
-    /// 只读（工具集裁剪见 readonly.rs，M3 挂接）
-    ReadOnly,
-    /// 读写
-    ReadWrite,
-    /// 可执行
-    Execute,
-    /// 全量
-    All,
-}
-
-impl SubagentCapabilityMode {
-    /// 能力模式字面量（wire 名，kebab-case）
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::ReadOnly => "read-only",
-            Self::ReadWrite => "read-write",
-            Self::Execute => "execute",
-            Self::All => "all",
-        }
-    }
-
-    /// 从 wire 名解析（未知返回 None）
-    pub fn parse(s: &str) -> Option<Self> {
-        match s {
-            "read-only" => Some(Self::ReadOnly),
-            "read-write" => Some(Self::ReadWrite),
-            "execute" => Some(Self::Execute),
-            "all" => Some(Self::All),
-            _ => None,
-        }
-    }
-}
-
 // ── 任务类型与系统默认权限集（T-D-07：REQ-D04 定义扩展）──────────
-
-/// 子代理任务类型（对齐 SubagentTaskType，shared-types/subagent.ts）
-///
-/// 六枚举与 TS 契约一一对应，wire 名 kebab-case。任务类型是**新维度**，
-/// 不并入 role / capabilityMode（禁令 21 保持，subagent.ts:8-12）：
-/// - role 是展示/过滤标签（不影响调度）；
-/// - capabilityMode 是既有能力档（read-only 做工具集裁剪）；
-/// - task_type 驱动系统默认权限集（[default_permissions]），缺省 =
-///   analysis（最安全，fail-closed，配少不配错）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TaskType {
-    /// 只读调研，不产生任何改动
-    Analysis,
-    /// 只读 + 可在方案文档目录产出一份设计文档
-    Design,
-    /// 只读 + 可在评审报告目录产出一份评审报告
-    Review,
-    /// 可读写工作区 + 常用构建/测试命令
-    Implementation,
-    /// 只读 + 可在指定文档目录整理/编辑文档
-    Organization,
-    /// 仅 git 操作，不碰其他
-    Commit,
-}
-
-impl TaskType {
-    /// wire 名（kebab-case，对齐 TS 枚举字面量）
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Analysis => "analysis",
-            Self::Design => "design",
-            Self::Review => "review",
-            Self::Implementation => "implementation",
-            Self::Organization => "organization",
-            Self::Commit => "commit",
-        }
-    }
-
-    /// 从 wire 名解析（未知返回 None，由调用方报结构化错误）
-    pub fn parse(s: &str) -> Option<Self> {
-        match s {
-            "analysis" => Some(Self::Analysis),
-            "design" => Some(Self::Design),
-            "review" => Some(Self::Review),
-            "implementation" => Some(Self::Implementation),
-            "organization" => Some(Self::Organization),
-            "commit" => Some(Self::Commit),
-            _ => None,
-        }
-    }
-
-    /// 一句话边界（给主 agent / UI 展示用，调研-权限传递层.md §2.2
-    /// 第二列；系统默认集的实现细节不暴露）
-    pub fn boundary_summary(&self) -> &'static str {
-        match self {
-            Self::Analysis => "只读调研，不产生任何改动",
-            Self::Design => "只读 + 可在方案文档目录产出一份设计文档",
-            Self::Review => "只读 + 可在评审报告目录产出一份评审报告",
-            Self::Implementation => "可读写工作区 + 常用构建/测试命令",
-            Self::Organization => "只读 + 可在指定文档目录整理/编辑文档",
-            Self::Commit => "仅 git 操作，不碰其他",
-        }
-    }
-}
 
 /// 默认权限集的工具集面（D2-2 按此裁剪工具注册表，fail-closed 白名单语义）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -206,8 +72,8 @@ pub enum DefaultCommandPolicy {
 /// 引擎侧（T-D-13）在 spawn 时把「定义显式字段 > 默认集」合并后转成
 /// 策略再注册。
 ///
-/// 默认集在会话级 permissionMode 之上叠加：父会话 full-access 不传导给
-/// 子代理（调研-权限传递层.md §2.1 独立价值）——判定与装配均在执行层。
+/// 默认集在会话级 permissionMode 之上叠加：子代理无损继承父会话权限模式
+/// （00-总方案 §9.1），默认集只追加工具/写入/命令范围的限制，不得抬高权限。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DefaultPermissions {
     /// 工具集面
@@ -374,64 +240,4 @@ impl SubagentDefinitionRegistry {
     pub fn is_empty(&self) -> bool {
         self.definitions.is_empty()
     }
-}
-
-// ── 三方状态机映射（TS SubagentState ↔ DB status CHECK 集）────────
-
-/// 子代理状态机（TS 语义 4 态：'pending' | 'running' | 'completed' | 'failed'，
-/// shared-types/subagent.ts:17）
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SubagentState {
-    /// 内存态：已声明未启动（落库时首写即 running，不落 pending）
-    Pending,
-    /// 运行中
-    Running,
-    /// 完成
-    Completed,
-    /// 失败（被终止的 run 终态也归一为 failed，I0 裁决）
-    Failed,
-}
-
-impl SubagentState {
-    /// TS 语义字面量（wire 名）
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Pending => "pending",
-            Self::Running => "running",
-            Self::Completed => "completed",
-            Self::Failed => "failed",
-        }
-    }
-
-    /// 落库值映射（写面）：**pending 首写即 running**——DB CHECK 集
-    /// （running/completed/failed/stopped，schema.rs:59）无 pending；
-    /// **写面不产生 stopped**——被终止 run 的终态直接写 failed。
-    /// 全部返回值 ∈ CHECK 允许集（[DB_STATUS_ALLOWED]）。
-    pub fn to_db_status(&self) -> &'static str {
-        match self {
-            Self::Pending | Self::Running => "running",
-            Self::Completed => "completed",
-            Self::Failed => "failed",
-        }
-    }
-
-    /// 读回映射（读面）：DB 行 → TS 状态。**stopped 归一 failed**
-    /// （TS 状态机无 stopped 值，subagent.ts:17）；未知值宽容归一 failed
-    /// （读回不 panic，M2 内容 4「读回 stopped 归一 failed」）。
-    pub fn from_db_status(s: &str) -> Self {
-        match s {
-            "running" => Self::Running,
-            "completed" => Self::Completed,
-            "failed" | "stopped" => Self::Failed,
-            _ => Self::Failed,
-        }
-    }
-}
-
-/// DB status CHECK 允许集（schema.rs:59/217，只读对齐不迁移）
-pub const DB_STATUS_ALLOWED: [&str; 4] = ["running", "completed", "failed", "stopped"];
-
-/// 值是否属于 DB CHECK 允许集（落库前护栏断言用）
-pub fn is_db_status_allowed(s: &str) -> bool {
-    DB_STATUS_ALLOWED.contains(&s)
 }

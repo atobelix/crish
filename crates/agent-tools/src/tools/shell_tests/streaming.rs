@@ -238,15 +238,20 @@ async fn stream_abort_before_start_terminates_promptly() {
         .execute_stream(&ctx, json!({ "command": "echo never-seen" }))
         .await;
     let (progress, terminal) = collect_stream(stream).await;
-    assert_eq!(progress.len(), 0, "执行前 abort 不得推任何 Progress");
-    assert!(terminal.is_ok(), "abort 收口为 Terminal(Ok(已聚合结果))");
+    assert_eq!(progress.len(), 0, "启动前已 abort 不得产出 Progress");
+    match terminal {
+        Ok(out) => {
+            assert_eq!(out["aborted"], true, "结果须标记 aborted");
+            assert_eq!(out["timedOut"], false);
+        }
+        Err(e) => panic!("abort 正常收口不得为 Err：{e}"),
+    }
 }
 
-/// S1 验收（§3.1.8 abort）：流中途 abort → 停止推送（已发 Progress
-/// 保留），杀进程尽快收口（3s 睡眠被中止，收口远快于自然结束），
-/// 流不变式仍成立（Terminal 恒为末项）
+/// S1 验收（§3.1.8 abort）：执行中 abort（子进程睡眠 3s，第 1 帧后 abort）
+/// → 尽快杀进程收口为 Terminal，流不悬挂（耗时远小于 3s）
 #[tokio::test]
-async fn stream_abort_mid_stream_stops_pushing() {
+async fn stream_abort_midflight_kills_and_terminates() {
     let ws = TempWorkspace::new("shell_stream_abort_mid");
     let t = tool();
     let ctx = ctx(&ws);
@@ -256,10 +261,6 @@ async fn stream_abort_mid_stream_stops_pushing() {
         "echo first; sleep 3"
     };
     let mut stream = t.execute_stream(&ctx, json!({ "command": command })).await;
-    // 第一帧到达后 abort：首帧可能是 stdout「first」块，也可能是
-    // PowerShell 首启混入的 CLIXML stderr 进度噪音（既有测试注释同述，
-    // shell_streaming_preserves_sync_semantics）——不断言内容，只断言
-    // 是 Progress；块后 3s 睡眠保证 abort 后下一帧必然命中中止检查
     let first = stream.next().await.expect("第一帧应到达");
     assert!(
         matches!(first, ToolStreamItem::Progress(_)),
@@ -269,7 +270,6 @@ async fn stream_abort_mid_stream_stops_pushing() {
     let started = std::time::Instant::now();
     let next = stream.next().await;
     let elapsed = started.elapsed();
-    // 3s 睡眠若未被中止，收口需等自然结束（≈3s）；杀进程收口远快于此
     assert!(
         elapsed.as_millis() < 2500,
         "中止后应杀进程尽快收口，实际 {elapsed:?}"
@@ -279,59 +279,6 @@ async fn stream_abort_mid_stream_stops_pushing() {
         Some(_) => panic!("abort 后不得再推 Progress"),
         None => panic!("流必须收口为 Terminal（流不变式）"),
     }
-}
-
-/// S1 错误路径一致性：门禁拦截命令经 execute_stream → Terminal(Err)，
-/// 与 execute 错误逐字节一致（无 Progress、恒为末项）
-#[tokio::test]
-async fn stream_blocked_command_error_terminal_matches_execute() {
-    let ws = TempWorkspace::new("shell_stream_blocked");
-    let t = tool();
-    let ctx = ctx(&ws);
-    let legacy = t
-        .execute(&ctx, json!({ "command": "rm -rf /" }))
-        .await
-        .unwrap_err();
-    let stream = t
-        .execute_stream(&ctx, json!({ "command": "rm -rf /" }))
-        .await;
-    let (progress, terminal) = collect_stream(stream).await;
-    assert_eq!(progress.len(), 0, "拦截路径不得产生 Progress");
-    match terminal {
-        Err(e) => {
-            assert_eq!(e.code(), TOOL_COMMAND_BLOCKED);
-            assert_eq!(e.to_string(), legacy.to_string(), "错误文案与 execute 一致");
-        }
-        Ok(_) => panic!("红线命令必须拦截"),
-    }
-}
-
-/// S1 重定向一致性：删除形态经 execute_stream → 重定向结果与 execute
-/// 结构一致（entryId 为时间戳、两调用产物不同，只比稳定字段；
-/// 两次调用各用一个目标文件——首次调用已把目标移入回收站）
-#[tokio::test]
-async fn stream_delete_redirect_matches_execute() {
-    let ws = TempWorkspace::new("shell_stream_redirect");
-    ws.write_file("tmp/a.txt", "stream");
-    ws.write_file("tmp/b.txt", "stream");
-    let trash = TempWorkspace::new("shell_stream_redirect_trash");
-    let t = ShellCommandTool::new(30_000, 200_000, Some(trash.path().clone()));
-    let ctx = ctx(&ws);
-    let legacy = t
-        .execute(&ctx, json!({ "command": "rm -rf ./tmp/a.txt" }))
-        .await
-        .unwrap();
-    let stream = t
-        .execute_stream(&ctx, json!({ "command": "rm -rf ./tmp/b.txt" }))
-        .await;
-    let (_, terminal) = collect_stream(stream).await;
-    let out = terminal.expect("重定向不得失败");
-    assert_eq!(out["redirected"], legacy["redirected"]);
-    assert_eq!(out["redirect"]["kind"], legacy["redirect"]["kind"]);
-    assert_eq!(out["redirect"]["reason"], legacy["redirect"]["reason"]);
-    assert_eq!(out["trashEntries"].as_array().unwrap().len(), 1);
-    assert_eq!(out["impact"], legacy["impact"]);
-    assert!(out["text"].as_str().unwrap().contains("trash_restore"));
 }
 
 /// S1 兼容面：非 sync 模式（auto-background）回落既有 execute——结果

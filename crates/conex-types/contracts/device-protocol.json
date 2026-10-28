@@ -5529,7 +5529,7 @@
           "name": "permissionMode",
           "type": "PermissionMode",
           "required": false,
-          "description": "缺省 ask；full-access 移动端不可改（D3 §8.2）"
+          "description": "权限模式（统一三态：每次询问 / 智能命令放行 / 完全允许）"
         },
         {
           "name": "history",
@@ -5874,9 +5874,9 @@
       "values": ["continue", "soft_inject", "cooperative_stop", "force_cancel"]
     },
     "PermissionMode": {
-      "wire": "kebab-case",
-      "description": "权限模式（full-access 移动端不可改）",
-      "values": ["ask", "plan", "full-access"]
+      "wire": "lowercase",
+      "description": "权限模式（统一三态：每次询问 / 智能命令放行 / 完全允许）",
+      "values": ["ask", "smart", "full"]
     },
     "ApprovalDecision": {
       "wire": "lowercase",

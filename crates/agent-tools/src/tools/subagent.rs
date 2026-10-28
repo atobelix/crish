@@ -43,8 +43,13 @@
 
 mod contract;
 mod defs;
-mod guard;
 mod tool;
+
+// 守卫与策略的领域真源 = conex-agents（本门面保留原公开路径）
+pub use conex_agents::guard::{
+    check_ancestor_chain, check_recursion_guard, DeadlockCheckInput, RecursionGuardRejection,
+    RecursionGuardSnapshot, SpawnPolicy, DEFAULT_SPAWN_POLICY,
+};
 
 pub use contract::{
     apply_forgery_boundary, detect_forgery_wording, filter_out_subagent_spawner,
@@ -56,10 +61,6 @@ pub use defs::{
     DefaultToolSet, DefaultWriteScope, SubagentCapabilityMode, SubagentDefinition,
     SubagentDefinitionRegistry, SubagentRegistryError, SubagentRole, SubagentState, TaskType,
     DB_STATUS_ALLOWED,
-};
-pub use guard::{
-    check_ancestor_chain, check_recursion_guard, DeadlockCheckInput, RecursionGuardConfig,
-    RecursionGuardRejection, RecursionGuardSnapshot, DEFAULT_RECURSION_GUARD,
 };
 pub(crate) use tool::RunSubagentTool;
 

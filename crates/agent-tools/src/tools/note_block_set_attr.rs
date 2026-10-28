@@ -14,7 +14,6 @@
 use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::note_backend::{backend_err_to_tool_err, NoteBackendError, NoteBlockSetAttrRequest};
-use crate::tools::note_document_apply_md::maybe_ask_note_write;
 use crate::tools::note_query_blocks::NOTE_BACKEND_UNWIRED;
 use crate::tools::{optional_string, require_string};
 use async_trait::async_trait;
@@ -116,15 +115,6 @@ impl Tool for BlockSetAttrTool {
             ));
         }
 
-        maybe_ask_note_write(ctx, self.name(), &args).await?;
-
-        if ctx.abort_token.is_aborted() {
-            return Err(ToolError::new(
-                "note.execution_unknown",
-                "write interrupted (abort) after approval; execution state unknown — do not auto-retry write",
-            ));
-        }
-
         let Some(backend) = ctx.note_backend.as_ref() else {
             return Ok(serde_json::json!({
                 "ok": false,
@@ -159,8 +149,7 @@ mod tests {
     use super::*;
     use crate::context::{create_mock_tool_context, AbortToken};
     use crate::note_backend::{MemoryNoteBackend, NoteBackend};
-    use crate::note_permission::{decide_note_tool, plan_denies_note_tool};
-    use crate::permission::{PermissionMode, PermissionVerdict};
+
     use std::sync::Arc;
 
     #[test]
@@ -338,71 +327,6 @@ mod tests {
         let q = backend
             .query_blocks(crate::note_backend::NoteQueryBlocksParams {
                 doc_id: "doc-ab".into(),
-                ..Default::default()
-            })
-            .await
-            .unwrap();
-        assert!(q.blocks[0].attrs.is_empty());
-    }
-
-    #[test]
-    fn block_set_attr_plan_denied() {
-        assert!(plan_denies_note_tool("block_set_attr"));
-        assert_eq!(
-            decide_note_tool("block_set_attr", PermissionMode::Plan),
-            Some(PermissionVerdict::Deny)
-        );
-    }
-
-    #[derive(Debug)]
-    struct DenyAskChannel {
-        reason: String,
-    }
-
-    #[async_trait]
-    impl crate::context::AskChannel for DenyAskChannel {
-        async fn ask(
-            &self,
-            _tool_name: &str,
-            _args: &serde_json::Value,
-        ) -> Result<crate::context::AskDecision, ToolError> {
-            Ok(crate::context::AskDecision::Denied {
-                reason: self.reason.clone(),
-            })
-        }
-    }
-
-    /// ask 拒绝 → `tool.user_denied`，与其它写工具一致
-    #[tokio::test]
-    async fn block_set_attr_ask_denied_returns_user_denied() {
-        let backend = Arc::new(MemoryNoteBackend::new());
-        backend.seed_doc(
-            "doc-deny",
-            vec![("b1".into(), "paragraph".into(), "stay".into())],
-        );
-        let ctx = ToolContext {
-            note_backend: Some(backend.clone()),
-            ask: Some(std::sync::Arc::new(DenyAskChannel {
-                reason: "no note write".into(),
-            })),
-            ..create_mock_tool_context()
-        };
-        let tool = BlockSetAttrTool::new();
-        let err = tool
-            .execute(
-                &ctx,
-                serde_json::json!({
-                    "doc_id": "doc-deny",
-                    "id": "b1",
-                    "attrs": { "x": 1 },
-                }),
-            )
-            .await
-            .unwrap_err();
-        assert_eq!(err.code(), "tool.user_denied");
-        let q = backend
-            .query_blocks(crate::note_backend::NoteQueryBlocksParams {
-                doc_id: "doc-deny".into(),
                 ..Default::default()
             })
             .await

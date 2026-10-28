@@ -127,6 +127,10 @@ impl SubagentSpawner for DbSpawner {
                 .map(|paths| serde_json::to_string(paths).expect("路径白名单序列化不应失败")),
             // D-02 LK-04 v9 列：测试域无子会话映射（None）
             sub_session_id: None,
+            capability_mode: None,
+            model_override: None,
+            resumable: true,
+            last_heartbeat_ms: None,
         });
         self.db
             .save_session_agents(&self.session_id, &agents)
@@ -232,6 +236,10 @@ fn agent_row(
         display_label: None,
         allowed_write_paths_json: None,
         sub_session_id: None,
+        capability_mode: None,
+        model_override: None,
+        resumable: false,
+        last_heartbeat_ms: None,
     }
 }
 
@@ -500,6 +508,10 @@ impl orchestrator::lifecycle::ForceCancelSink for SpawnDuringCancelSink {
             display_label: None,
             allowed_write_paths_json: None,
             sub_session_id: None,
+            capability_mode: None,
+            model_override: None,
+            resumable: true,
+            last_heartbeat_ms: None,
         };
         self.db.upsert_session_agent(&row).unwrap();
         true
@@ -819,6 +831,8 @@ async fn resume_shares_episode_budget_with_recovery_ladder() {
         started_at_ms: started_at,
         inject_bytes: 100,
         window_bytes: 10_000,
+        capability_mode: None,
+        model_override: None,
     };
     let out = env
         .coordinator
@@ -905,6 +919,8 @@ async fn resume_budget_exhausted_falls_to_ladder4() {
             started_at_ms: started_at,
             inject_bytes: 100,
             window_bytes: 10_000,
+            capability_mode: None,
+            model_override: None,
         };
         env.coordinator.fork_and_reassign(&ctx).await.unwrap();
     }
@@ -1190,19 +1206,23 @@ async fn prepare_resume_builds_context_synchronously() {
     let session_id = "s-prep";
     let env = resume_env(session_id);
     let started_at = now_ms() - 1_000;
+    let mut first_row = agent_row(
+        "sub-1",
+        "run-1",
+        "failed",
+        started_at,
+        session_id,
+        Some(r#"["leaf-root","leaf-1"]"#),
+        vec![user_msg("完成模块 A"), assistant_msg(&"X".repeat(20))],
+    );
+    // P3：能力档与模型覆盖跨重启保留，prepare_resume 透传到 fork 上下文
+    first_row.capability_mode = Some("read-write".to_string());
+    first_row.model_override = Some("grok-3".to_string());
     env.db
         .save_session_agents(
             session_id,
             &[
-                agent_row(
-                    "sub-1",
-                    "run-1",
-                    "failed",
-                    started_at,
-                    session_id,
-                    Some(r#"["leaf-root","leaf-1"]"#),
-                    vec![user_msg("完成模块 A"), assistant_msg(&"X".repeat(20))],
-                ),
+                first_row,
                 agent_row(
                     "sub-2",
                     "run-2",
@@ -1232,6 +1252,16 @@ async fn prepare_resume_builds_context_synchronously() {
     // window = 全会话子代理消息字节（34 + 100 = 134）
     assert_eq!(ctx.inject_bytes, 34);
     assert_eq!(ctx.window_bytes, 134);
+    assert_eq!(
+        ctx.capability_mode.as_deref(),
+        Some("read-write"),
+        "能力档跨恢复保留"
+    );
+    assert_eq!(
+        ctx.model_override.as_deref(),
+        Some("grok-3"),
+        "模型覆盖跨恢复保留"
+    );
     // 显式 prompt 覆盖缺省任务
     let ctx = service
         .prepare_resume(session_id, "sub-1", Some("新任务"))

@@ -204,7 +204,7 @@ pub fn approval_resolved(
 /// 构造 run 结果（session-loop 收口类型；error 收场时携带文案）
 pub fn outcome(reason: AgentEndReason, error: Option<&str>, events: Vec<AgentEvent>) -> RunOutcome {
     RunOutcome {
-        reason,
+        reason: reason.into(),
         error: error.map(str::to_string),
         diagnostic: None,
         messages: Vec::new(),
@@ -214,6 +214,7 @@ pub fn outcome(reason: AgentEndReason, error: Option<&str>, events: Vec<AgentEve
         steering_count: 0,
         // T-36：缓存统计字段（本构造点无样本 → None，缺省向后兼容）
         cache_stats: None,
+        yield_payload: None,
         // D1：provider 错误摘要（本构造点非 fatal 收场 → None，缺省向后兼容）
         provider_error: None,
     }

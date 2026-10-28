@@ -68,7 +68,156 @@ impl LocalDb {
         })
     }
 
-    /// 单行 upsert（spawn 落库用）。全 18 列 `INSERT ... ON CONFLICT(session_id,
+    /// 加载全部 status='running' 的子代理行（P3 启动对账用；不含消息）。
+    ///
+    /// 与 [LocalDb::load_running_session_agents] 的差异：返回完整行，供
+    /// 对账时读取父会话 / agent_id / 子会话 id / 模型能力快照；消息面
+    /// 不加载（对账只需元数据，避免冷启动 N+1 查询）。
+    pub fn load_running_session_agent_rows(&self) -> Result<Vec<SessionAgent>, DbFailure> {
+        self.read(|conn| {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT agent_id, subagent_run_id, parent_session_id, parent_run_id,
+                            parent_tool_call_id, description, mode, status, summary,
+                            started_at, ended_at, depth, subagent_path_json,
+                            task_type, display_label, allowed_write_paths_json,
+                            sub_session_id, capability_mode, model_override,
+                            resumable, last_heartbeat_ms
+                     FROM session_agents
+                     WHERE status = 'running'
+                     ORDER BY started_at ASC, agent_id ASC",
+                )
+                .map_err(|e| self.latch_error("load_running_agent_rows_prepare", e))?;
+            let rows = stmt
+                .query_map([], super::agents::map_agent_row)
+                .map_err(|e| self.latch_error("load_running_agent_rows_map", e))?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| self.latch_error("load_running_agent_rows_collect", e))?;
+            Ok(rows)
+        })
+    }
+
+    /// 心跳落库（P3）：仅刷新 running 行的 last_heartbeat_ms。
+    ///
+    /// 条件写（`last_heartbeat_ms <= now - min_interval_ms`）在 SQL 内完成，
+    /// 调用方无需在内存记账；重复 tick 不产生无意义写入。返回 1 = 已刷新。
+    pub fn touch_session_agent_heartbeat(
+        &self,
+        session_id: &str,
+        subagent_run_id: &str,
+        now_ms: i64,
+        min_interval_ms: u64,
+    ) -> Result<usize, DbFailure> {
+        let session_id = session_id.to_string();
+        let subagent_run_id = subagent_run_id.to_string();
+        let min_interval_ms = min_interval_ms.min(i64::MAX as u64) as i64;
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "UPDATE session_agents
+                 SET last_heartbeat_ms = ?3
+                 WHERE session_id = ?1 AND subagent_run_id = ?2
+                   AND status = 'running'
+                   AND (last_heartbeat_ms IS NULL
+                        OR last_heartbeat_ms <= ?3 - ?4)",
+                rusqlite::params![session_id, subagent_run_id, now_ms, min_interval_ms],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("touch_session_agent_heartbeat: {e}"),
+                kind: DbFailureKind::Other("touch_session_agent_heartbeat".to_string()),
+            })
+        })
+    }
+
+    /// 启动对账：把残留 running 行标记为中断可恢复（P3）。
+    ///
+    /// `status` 只能落 DB CHECK 集内的终态字面量（failed/stopped）；
+    /// `resumable=1` 供主 agent/前端识别可恢复；summary 仅在原值为
+    /// NULL 时写入（保留子代理已有总结）。返回受影响行数（0 = 行已
+    /// 终态/消失，对账幂等）。
+    pub fn mark_session_agent_interrupted(
+        &self,
+        session_id: &str,
+        subagent_run_id: &str,
+        ended_at: i64,
+        summary: &str,
+    ) -> Result<usize, DbFailure> {
+        let session_id = session_id.to_string();
+        let subagent_run_id = subagent_run_id.to_string();
+        let summary = summary.to_string();
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "UPDATE session_agents
+                 SET status = 'failed',
+                     ended_at = COALESCE(ended_at, ?3),
+                     resumable = 1,
+                     last_heartbeat_ms = COALESCE(last_heartbeat_ms, ?3),
+                     summary = COALESCE(summary, ?4)
+                 WHERE session_id = ?1 AND subagent_run_id = ?2
+                   AND status = 'running'",
+                rusqlite::params![session_id, subagent_run_id, ended_at, summary],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("mark_session_agent_interrupted: {e}"),
+                kind: DbFailureKind::Other("mark_session_agent_interrupted".to_string()),
+            })
+        })
+    }
+
+    /// 按 agent_id / run_id 更新模型覆盖（P2/P3：主 agent 对运行中或
+    /// 已终态子代理设定模型，跨重启保留）。
+    ///
+    /// 作用域限定父会话（session_id），避免跨会话同名 agent 误改；返回
+    /// 受影响行数（0 = 目标不存在）。
+    pub fn update_session_agent_model(
+        &self,
+        session_id: &str,
+        agent_or_run: &str,
+        model: Option<&str>,
+    ) -> Result<usize, DbFailure> {
+        let session_id = session_id.to_string();
+        let agent_or_run = agent_or_run.to_string();
+        let model = model.map(str::to_string);
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "UPDATE session_agents
+                 SET model_override = ?3
+                 WHERE session_id = ?1
+                   AND (agent_id = ?2 OR subagent_run_id = ?2)",
+                rusqlite::params![session_id, agent_or_run, model],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("update_session_agent_model: {e}"),
+                kind: DbFailureKind::Other("update_session_agent_model".to_string()),
+            })
+        })
+    }
+
+    /// 按 agent_id / run_id 更新能力档快照（P3：授权结果跨重启保留）。
+    pub fn update_session_agent_capability(
+        &self,
+        session_id: &str,
+        agent_or_run: &str,
+        capability: &str,
+    ) -> Result<usize, DbFailure> {
+        let session_id = session_id.to_string();
+        let agent_or_run = agent_or_run.to_string();
+        let capability = capability.to_string();
+        self.write_blocking(move |conn| {
+            conn.execute(
+                "UPDATE session_agents
+                 SET capability_mode = ?3
+                 WHERE session_id = ?1
+                   AND (agent_id = ?2 OR subagent_run_id = ?2)",
+                rusqlite::params![session_id, agent_or_run, capability],
+            )
+            .map_err(|e| DbFailure {
+                message: format!("update_session_agent_capability: {e}"),
+                kind: DbFailureKind::Other("update_session_agent_capability".to_string()),
+            })
+        })
+    }
+
+    /// 单行 upsert（spawn 落库用）。全 22 列 `INSERT ... ON CONFLICT(session_id,
     /// agent_id) DO UPDATE SET`（v6 三列 task_type / display_label /
     /// allowed_write_paths_json + v9 sub_session_id 随行），字段集与
     /// [LocalDb::save_session_agents] 列清单严格一致（map_agent_row 双向核对）。
@@ -85,8 +234,9 @@ impl LocalDb {
                     parent_tool_call_id, description, mode, status, summary,
                     started_at, ended_at, depth, subagent_path_json,
                     task_type, display_label, allowed_write_paths_json,
-                    sub_session_id
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+                    sub_session_id, capability_mode, model_override, resumable,
+                    last_heartbeat_ms
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)
                 ON CONFLICT(session_id, agent_id) DO UPDATE SET
                     subagent_run_id = excluded.subagent_run_id,
                     parent_session_id = excluded.parent_session_id,
@@ -103,7 +253,11 @@ impl LocalDb {
                     task_type = excluded.task_type,
                     display_label = excluded.display_label,
                     allowed_write_paths_json = excluded.allowed_write_paths_json,
-                    sub_session_id = excluded.sub_session_id",
+                    sub_session_id = excluded.sub_session_id,
+                    capability_mode = excluded.capability_mode,
+                    model_override = excluded.model_override,
+                    resumable = excluded.resumable,
+                    last_heartbeat_ms = excluded.last_heartbeat_ms",
                 rusqlite::params![
                     row.parent_session_id,
                     row.id,
@@ -123,6 +277,10 @@ impl LocalDb {
                     row.display_label,
                     row.allowed_write_paths_json,
                     row.sub_session_id.clone().unwrap_or_default(),
+                    row.capability_mode,
+                    row.model_override,
+                    row.resumable,
+                    row.last_heartbeat_ms,
                 ],
             )
             .map_err(|e| DbFailure {
@@ -186,6 +344,10 @@ mod tests {
             display_label: Some(format!("标签-{id}")),
             allowed_write_paths_json: Some(r#"["docs/notes"]"#.to_string()),
             sub_session_id: None,
+            capability_mode: None,
+            model_override: None,
+            resumable: false,
+            last_heartbeat_ms: None,
         }
     }
 
@@ -615,5 +777,138 @@ mod tests {
             a2.sub_session_id, None,
             "None 落库空串读回归一 None（无子会话映射）"
         );
+    }
+
+    /// P3：能力/模型/可恢复/心跳四列 save/upsert/查询扩展三面 roundtrip
+    #[test]
+    fn lifecycle_columns_roundtrip_all_read_paths() {
+        let db = LocalDb::open_in_memory().unwrap();
+        db.upsert_session_entry(&session_entry("s1")).unwrap();
+        let mut row = agent("a1", "run-1", "running", "s1", None, None, Vec::new());
+        row.capability_mode = Some("read-only".to_string());
+        row.model_override = Some("claude-sonnet".to_string());
+        row.resumable = true;
+        row.last_heartbeat_ms = Some(12_345);
+        db.save_session_agents("s1", std::slice::from_ref(&row))
+            .unwrap();
+
+        let loaded = &db.load_session_agents("s1").unwrap()[0];
+        assert_eq!(loaded.capability_mode.as_deref(), Some("read-only"));
+        assert_eq!(loaded.model_override.as_deref(), Some("claude-sonnet"));
+        assert!(loaded.resumable);
+        assert_eq!(loaded.last_heartbeat_ms, Some(12_345));
+
+        // upsert 覆盖四列
+        let mut updated = row.clone();
+        updated.capability_mode = Some("all".to_string());
+        updated.model_override = None;
+        updated.resumable = false;
+        updated.last_heartbeat_ms = Some(99_999);
+        db.upsert_session_agent(&updated).unwrap();
+        let loaded = &db.load_session_agents("s1").unwrap()[0];
+        assert_eq!(loaded.capability_mode.as_deref(), Some("all"));
+        assert_eq!(loaded.model_override, None);
+        assert!(!loaded.resumable);
+        assert_eq!(loaded.last_heartbeat_ms, Some(99_999));
+
+        // 查询扩展面（kill_all 过滤）同样带回四列
+        let by_status = db
+            .load_session_agents_by_parent_status("s1", "running")
+            .unwrap();
+        assert_eq!(by_status[0].capability_mode.as_deref(), Some("all"));
+        assert_eq!(by_status[0].last_heartbeat_ms, Some(99_999));
+
+        // 启动对账轻量读面（全库 running 行）同样带回
+        let running = db.load_running_session_agent_rows().unwrap();
+        assert_eq!(running.len(), 1);
+        assert_eq!(running[0].id, "a1");
+        assert_eq!(running[0].model_override, None);
+    }
+
+    /// P3 心跳条件写：仅 running 行、仅到达最小间隔才刷新；重复 tick 零写
+    #[test]
+    fn heartbeat_refreshes_only_when_stale_and_running() {
+        let db = LocalDb::open_in_memory().unwrap();
+        seed_running_rows(&db, "s1");
+
+        // 首写（last_heartbeat_ms NULL）→ 命中
+        assert_eq!(
+            db.touch_session_agent_heartbeat("s1", "run-1", 10_000, 5_000)
+                .unwrap(),
+            1
+        );
+        // 同刻重复 → 未达间隔，零写
+        assert_eq!(
+            db.touch_session_agent_heartbeat("s1", "run-1", 10_000, 5_000)
+                .unwrap(),
+            0
+        );
+        // 未达间隔 → 零写
+        assert_eq!(
+            db.touch_session_agent_heartbeat("s1", "run-1", 14_999, 5_000)
+                .unwrap(),
+            0
+        );
+        // 到达间隔 → 刷新
+        assert_eq!(
+            db.touch_session_agent_heartbeat("s1", "run-1", 15_000, 5_000)
+                .unwrap(),
+            1
+        );
+        let rows = db.load_session_agents("s1").unwrap();
+        let a1 = rows.iter().find(|a| a.id == "a1").unwrap();
+        assert_eq!(a1.last_heartbeat_ms, Some(15_000));
+
+        // 终态行不再接受心跳
+        db.update_session_agent_status("s1", "run-1", "completed", Some(20_000))
+            .unwrap();
+        assert_eq!(
+            db.touch_session_agent_heartbeat("s1", "run-1", 30_000, 0)
+                .unwrap(),
+            0,
+            "非 running 行心跳零写"
+        );
+    }
+
+    /// P3 启动对账写面：running → failed + resumable=1 + ended_at/心跳补齐；
+    /// 二次对账幂等（0 行影响），终态行不被改写
+    #[test]
+    fn mark_interrupted_sets_resumable_and_is_idempotent() {
+        let db = LocalDb::open_in_memory().unwrap();
+        seed_running_rows(&db, "s1");
+
+        assert_eq!(
+            db.mark_session_agent_interrupted(
+                "s1",
+                "run-1",
+                50_000,
+                "应用重启中断（可恢复）"
+            )
+            .unwrap(),
+            1
+        );
+        let rows = db.load_session_agents("s1").unwrap();
+        let a1 = rows.iter().find(|a| a.id == "a1").unwrap();
+        assert_eq!(a1.status, "failed");
+        assert!(a1.resumable, "中断对账必须置可恢复");
+        assert_eq!(a1.ended_at, Some(50_000));
+        assert_eq!(a1.last_heartbeat_ms, Some(50_000), "旧行心跳以中断时刻兜底");
+        assert_eq!(a1.summary.as_deref(), Some("应用重启中断（可恢复）"));
+        // 同批其他 running 行不受影响（单行定点写）
+        let a2 = rows.iter().find(|a| a.id == "a2").unwrap();
+        assert_eq!(a2.status, "running");
+        assert!(!a2.resumable);
+
+        // 幂等：目标行已终态 → 0 行影响，字段不再变化
+        assert_eq!(
+            db.mark_session_agent_interrupted("s1", "run-1", 60_000, "重复")
+                .unwrap(),
+            0
+        );
+        let rows = db.load_session_agents("s1").unwrap();
+        let a1 = rows.iter().find(|a| a.id == "a1").unwrap();
+        assert_eq!(a1.ended_at, Some(50_000), "重复对账不覆盖 ended_at");
+        assert_eq!(a1.summary.as_deref(), Some("应用重启中断（可恢复）"));
+        assert!(db.load_running_session_agent_rows().unwrap().len() == 1);
     }
 }

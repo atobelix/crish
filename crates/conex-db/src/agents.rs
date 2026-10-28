@@ -33,11 +33,16 @@ pub(crate) fn map_agent_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Session
         depth: row.get(11)?,
         subagent_path_json: row.get(12)?,
         // v6 新列（T-D-07 定义扩展）：task_type / display_label /
-        // allowed_write_paths_json（model_override 不落库）
+        // allowed_write_paths_json
         task_type: row.get(13)?,
         display_label: row.get(14)?,
         allowed_write_paths_json: row.get(15)?,
         sub_session_id: sub_session_id.filter(|s| !s.is_empty()),
+        // v14 新列（P3）：能力快照 / 模型覆盖 / 可恢复 / 心跳
+        capability_mode: row.get(17)?,
+        model_override: row.get(18)?,
+        resumable: row.get(19)?,
+        last_heartbeat_ms: row.get(20)?,
         messages: Vec::new(),
     })
 }
@@ -53,7 +58,8 @@ impl LocalDb {
                             parent_tool_call_id, description, mode, status, summary,
                             started_at, ended_at, depth, subagent_path_json,
                             task_type, display_label, allowed_write_paths_json,
-                            sub_session_id
+                            sub_session_id, capability_mode, model_override,
+                            resumable, last_heartbeat_ms
                      FROM session_agents
                      WHERE session_id = ?1
                      ORDER BY started_at ASC, agent_id ASC",
@@ -121,7 +127,8 @@ impl LocalDb {
                             parent_tool_call_id, description, mode, status, summary,
                             started_at, ended_at, depth, subagent_path_json,
                             task_type, display_label, allowed_write_paths_json,
-                            sub_session_id
+                            sub_session_id, capability_mode, model_override,
+                            resumable, last_heartbeat_ms
                      FROM session_agents
                      WHERE parent_session_id = ?1 AND status = ?2
                      ORDER BY started_at ASC, agent_id ASC",
@@ -230,8 +237,9 @@ pub(crate) fn save_session_agents_conn(
                 parent_tool_call_id, description, mode, status, summary,
                 started_at, ended_at, depth, subagent_path_json,
                 task_type, display_label, allowed_write_paths_json,
-                sub_session_id
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+                sub_session_id, capability_mode, model_override, resumable,
+                last_heartbeat_ms
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)
             ON CONFLICT(session_id, agent_id) DO UPDATE SET
                 subagent_run_id = excluded.subagent_run_id,
                 parent_session_id = excluded.parent_session_id,
@@ -248,7 +256,11 @@ pub(crate) fn save_session_agents_conn(
                 task_type = excluded.task_type,
                 display_label = excluded.display_label,
                 allowed_write_paths_json = excluded.allowed_write_paths_json,
-                sub_session_id = excluded.sub_session_id",
+                sub_session_id = excluded.sub_session_id,
+                capability_mode = excluded.capability_mode,
+                model_override = excluded.model_override,
+                resumable = excluded.resumable,
+                last_heartbeat_ms = excluded.last_heartbeat_ms",
             rusqlite::params![
                 session_id,
                 agent.id,
@@ -268,6 +280,10 @@ pub(crate) fn save_session_agents_conn(
                 agent.display_label,
                 agent.allowed_write_paths_json,
                 agent.sub_session_id.clone().unwrap_or_default(),
+                agent.capability_mode,
+                agent.model_override,
+                agent.resumable,
+                agent.last_heartbeat_ms,
             ],
         )
         .map_err(|e| DbFailure {
@@ -427,6 +443,10 @@ mod tests {
             display_label: Some(format!("标签-{id}")),
             allowed_write_paths_json: Some(r#"["docs/notes"]"#.to_string()),
             sub_session_id: None,
+            capability_mode: None,
+            model_override: None,
+            resumable: false,
+            last_heartbeat_ms: None,
         }
     }
 

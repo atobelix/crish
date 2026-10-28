@@ -37,8 +37,8 @@ import {
   resumeSubagent,
 } from '../../api/subagentRecoveryApi';
 import { resolveErrorKindLabel } from '../../api/continuity/continuityNotices';
-import { Button } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface InlineAgentPanelProps {
   agent: SessionAgent;

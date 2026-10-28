@@ -35,6 +35,8 @@
 //! > 终值仍由 tool-end 承载；`ToolProgress`（agent-tools 流式协议类型）保留。
 
 use agent_tools::permission::PermissionMode;
+use conex_agents::capability::CapabilityCell;
+use conex_agents::permission::PermissionCell;
 use conex_shared::perf_budget::TOOL_OUTPUT_BUDGET_BYTES_DEFAULT;
 use conex_types::tool::{ToolCategory, ToolConcurrency};
 use serde_json::Value;
@@ -71,6 +73,8 @@ pub enum ToolEvent {
         /// 请求方身份（T-D-14 权限传递层；None = 主 agent run，裁决者 = 用户；
         /// Some = 子代理 run，裁决者默认 = 主 agent）
         requester: Option<ApprovalRequester>,
+        /// 裁决原因摘要（Smart/Ask 判点产出，解释为何升级审批；None = 未提供）
+        reason: Option<String>,
     },
     /// 审批结果（G-9 引擎侧超时权威语义落库）：恒位于本工具
     /// approval-requested 之后、tool-end 之前。引擎当前仅对**超时 →
@@ -152,12 +156,16 @@ pub trait ApprovalGate: Send + Sync {
     /// run（携带 run id / 任务类型 / 申请理由）——实现方按此构造载荷
     /// `requester_run_id` / `reason` 字段并路由裁决者。参数全 Option，
     /// 现有实现与测试 MockGate 签名兼容。
+    ///
+    /// `reason`：执行器裁决点产出的需审批原因摘要（如「破坏性删除：…」），
+    /// 实现方应并入审批载荷 metadata 供卡片展示；None = 未提供。
     async fn request_approval(
         &self,
         call_id: &str,
         tool_name: &str,
         args: &Value,
         requester: Option<&ApprovalRequester>,
+        reason: Option<&str>,
     ) -> ApprovalDecision;
 }
 
@@ -188,6 +196,8 @@ pub enum ToolErrorKind {
     AbortedBeforeDispatch,
     /// 崩溃恢复结果未知（冷启动自愈合成）
     OutcomeUnknown,
+    /// 系统安全策略阻断（红线拦截、只读模式拦截、任务类型越界）
+    PolicyBlocked,
 }
 
 impl ToolErrorKind {
@@ -206,6 +216,7 @@ impl ToolErrorKind {
                 | ToolErrorKind::Cancelled
                 | ToolErrorKind::AbortedBeforeDispatch
                 | ToolErrorKind::OutcomeUnknown
+                | ToolErrorKind::PolicyBlocked
         )
     }
 
@@ -237,6 +248,7 @@ impl ToolErrorKind {
             ToolErrorKind::Cancelled => codes::TOOL_CANCELLED,
             ToolErrorKind::AbortedBeforeDispatch => codes::TOOL_ABORTED_BEFORE_DISPATCH,
             ToolErrorKind::OutcomeUnknown => codes::TOOL_OUTCOME_UNKNOWN,
+            ToolErrorKind::PolicyBlocked => "tool.policy_blocked",
         }
     }
 }
@@ -331,8 +343,6 @@ pub struct ToolBatchOptions {
     pub timeout: Duration,
     /// 失败策略
     pub fail_strategy: FailStrategy,
-    /// 是否启用审批（配合 ApprovalGate）
-    pub approval_enabled: bool,
     /// 单工具输出预算（字节；None 不截断）。
     ///
     /// U-OUT-RS / T-D1-D：**默认 Some(TOOL_OUTPUT_BUDGET_BYTES_DEFAULT)**
@@ -340,10 +350,12 @@ pub struct ToolBatchOptions {
     /// `Some`，禁止仅靠 `..Default::default()` 隐式继承；测试若需无预算
     /// 须**显式**传 `None`。透传 agent-tools executor 的 summarize 截断语义。
     pub output_budget_bytes: Option<usize>,
-    /// 权限模式（R4 T10）：显式设置时按工具 dangerous 标记 + 模式做三态
-    /// 判定（ask 问询 / plan 拒绝写类 / full-access 放行）；None = 既有
-    /// 语义（approval_enabled 开启 → 全部工具调用走审批）。
+    /// 权限模式（静态快照；有 `permission_cell` 时以活单元为准）
     pub permission_mode: Option<PermissionMode>,
+    /// 运行时权限单元（父子链实时继承；每批解析，父变更下一批生效）
+    pub permission_cell: Option<Arc<PermissionCell>>,
+    /// 运行时能力单元（仅子代理；主 agent None = 不设能力 gate）
+    pub capability_cell: Option<Arc<CapabilityCell>>,
     /// 批级审批等待超时（F1-02 修复）：None = 缺省 120s（与编排层
     /// approval_router 的 APPROVAL_TIMEOUT=120s 超时兜底对齐——审批卡片
     /// 丢失/事件桥断连时内核强制收敛，run 不再无限悬挂）；超时 →
@@ -359,16 +371,29 @@ pub struct ToolBatchOptions {
     pub task_type: Option<String>,
 }
 
+impl ToolBatchOptions {
+    /// 获取有效的强类型权限模式（活单元优先；None 安全归一至 Ask）
+    #[inline]
+    pub fn effective_permission_mode(&self) -> PermissionMode {
+        self.permission_cell
+            .as_ref()
+            .map(|cell| cell.effective())
+            .or(self.permission_mode)
+            .unwrap_or(PermissionMode::Ask)
+    }
+}
+
 impl Default for ToolBatchOptions {
     fn default() -> Self {
         Self {
             timeout: Duration::from_secs(60),
             fail_strategy: FailStrategy::ContinueDrain,
-            approval_enabled: false,
             // U-OUT-RS / T-D1-D：默认 Some——防测试/旁路装配漏网无预算
             //（生产 run_launch 仍须显式写 Some，N6 负向断言）
             output_budget_bytes: Some(TOOL_OUTPUT_BUDGET_BYTES_DEFAULT),
-            permission_mode: None,
+            permission_mode: Some(PermissionMode::Ask),
+            permission_cell: None,
+            capability_cell: None,
             approval_timeout: None,
             max_parallel: None,
             task_type: None,
@@ -383,4 +408,27 @@ pub enum FailStrategy {
     CancelSiblings,
     /// 继续执行其余项
     ContinueDrain,
+}
+
+#[cfg(test)]
+mod permission_cell_tests {
+    use super::*;
+    use conex_agents::permission::PermissionCell;
+
+    #[test]
+    fn live_permission_cell_overrides_static_snapshot() {
+        let root = PermissionCell::root(PermissionMode::Ask);
+        let options = ToolBatchOptions {
+            permission_mode: Some(PermissionMode::Ask),
+            permission_cell: Some(Arc::clone(&root)),
+            ..ToolBatchOptions::default()
+        };
+        assert_eq!(options.effective_permission_mode(), PermissionMode::Ask);
+        root.set(PermissionMode::Full);
+        assert_eq!(
+            options.effective_permission_mode(),
+            PermissionMode::Full,
+            "活单元在批次边界读取父级最新值"
+        );
+    }
 }

@@ -67,6 +67,8 @@ pub const INTERRUPTED_ERROR: &str = "Run was interrupted by daemon restart.";
 pub const CANCEL_INTERRUPTED_ERROR: &str = "Run cancellation was interrupted by daemon restart.";
 /// 恢复审计事件类型名（previousStatus 审计字段落库）
 pub const RUN_INTERRUPTED_EVENT: &str = "run-interrupted";
+/// 子代理中断对账落库摘要（session_agents.summary；保留已有总结）
+pub const INTERRUPTED_SUBAGENT_SUMMARY: &str = "应用重启中断（可恢复）";
 
 /// 恢复模式（05 §2.8 orchestrator.test.ts:1008 / :1066）
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,6 +118,32 @@ pub struct HealedToolRecord {
     pub healed_at: i64,
 }
 
+/// 重启对账：被中断并标记可恢复的子代理（P3）。
+///
+/// 与 [InterruptedRun] 的区别：后者是 run 级审计记录（含主 run），
+/// 本记录是 `session_agents` 行级结果——用于父会话汇总通知与前端
+/// 「可恢复」展示（resumable=true 已落库）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterruptedSubagent {
+    /// 父会话 id（汇总通知目标）
+    pub parent_session_id: String,
+    /// 子代理 id（session_agents.agent_id）
+    pub agent_id: String,
+    /// 子代理 run id（session_agents.subagent_run_id）
+    pub subagent_run_id: String,
+    /// 子会话 id（反向导航键；None = 旧行未记录）
+    pub subagent_session_id: Option<String>,
+    /// 展示名（display_label 优先，退化 description/agent_id）
+    pub label: String,
+    /// 绑定的模型覆盖（恢复建议展示用）
+    pub model_override: Option<String>,
+    /// 能力档快照
+    pub capability_mode: Option<String>,
+    /// 中断时刻（epoch ms）
+    pub interrupted_at: i64,
+}
+
 /// 恢复结果
 ///
 /// 说明：不派生 PartialEq/Eq——库内 [StoredRun] / [PendingInput] /
@@ -132,6 +160,8 @@ pub struct RestoreOutcome {
     pub pending_inputs: Vec<PendingInput>,
     /// 本次恢复打断的 run（previousStatus 审计）
     pub interrupted: Vec<InterruptedRun>,
+    /// 本次恢复中被对账为「中断可恢复」的子代理行（P3；父会话汇总通知源）
+    pub interrupted_subagents: Vec<InterruptedSubagent>,
     /// 未知状态字面量保留的 run（run_id + 原字面量；裁决 D3，11-T1——
     /// 不打断、不改写，显式上报对冲「诚实滞留」）
     pub unknown_status_runs: Vec<(String, String)>,

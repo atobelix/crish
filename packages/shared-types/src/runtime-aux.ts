@@ -5,9 +5,6 @@
  * 避免跨层引用 agent-runtime。仅下沉类型闭包，运行时实现仍保留在 agent-runtime。
  */
 
-// 从 agent-runtime/tools/tool-preset-registry.ts 下沉
-export type ToolMode = 'plan' | 'ask' | 'auto' | 'full-access' | 'unattended';
-
 // 从 agent-runtime/provider-transport/stream-recovery.ts 下沉
 export interface StreamRecoveryGlobalStats {
   activeRecoveries: number;

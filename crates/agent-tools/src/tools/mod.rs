@@ -87,7 +87,11 @@ pub mod search_context;
 // D4 §3.10 / E3：send_message 工具模块声明（仅主 agent 工具集；子代理注入
 // 通道经 BuiltinToolConfig.subagent_inject_channel、主 agent 消息通道经
 // main_agent_message_channel 注入，None = common.unsupported）
+pub mod configure_agents;
+pub mod grant_capability;
 pub mod send_message;
+pub mod subagent_report;
+pub mod switch_agent_model;
 pub mod set_timer;
 pub mod shell;
 pub mod subagent;
@@ -144,6 +148,18 @@ pub struct BuiltinToolConfig {
     /// target=self 返回结构化不可用错误；引擎侧实现会话留档 + followUp 环
     /// 入队后注入——agent-tools 只定义契约）
     pub main_agent_message_channel: Option<Arc<dyn send_message::MainAgentMessageChannel>>,
+    /// 子代理策略通道（configure_agents：None = 未接线，返回结构化不可用；
+    /// 引擎侧实现会话策略持久化 + spawner 准入同步）
+    pub agent_policy_channel: Option<Arc<dyn configure_agents::AgentPolicyChannel>>,
+    /// 子代理上报通道（report_progress / ask_parent / request_capability）
+    pub subagent_report_channel: Option<Arc<dyn subagent_report::SubagentReportChannel>>,
+    /// 能力授予通道（grant_capability；仅主 agent）
+    pub subagent_capability_channel:
+        Option<Arc<dyn grant_capability::SubagentCapabilityGrantChannel>>,
+    /// 子代理路由注册（mailbox；spawn/终态登记与冲洗）
+    pub child_agent_registrar: Option<Arc<dyn subagent_report::ChildAgentRegistrar>>,
+    /// 子代理模型切换通道（switch_agent_model；仅主 agent）
+    pub subagent_model_channel: Option<Arc<dyn switch_agent_model::SubagentModelChannel>>,
     /// 工作流创建通道（维度五 / 05 详案 §2.4：None = 未接线，create_workflow
     /// 返回结构化不可用错误；引擎侧复用既有 create-workflow IPC 校验/注册
     /// 逻辑适配后注入——agent-tools 只定义契约，禁止平行第二套注册链路）
@@ -166,6 +182,11 @@ impl Default for BuiltinToolConfig {
             subagent_kill_channel: None,
             subagent_inject_channel: None,
             main_agent_message_channel: None,
+            agent_policy_channel: None,
+            subagent_report_channel: None,
+            subagent_capability_channel: None,
+            child_agent_registrar: None,
+            subagent_model_channel: None,
             workflow_creation_channel: None,
         }
     }
@@ -230,6 +251,32 @@ pub fn register_builtin_tools_with_config(
         config.subagent_inject_channel.clone(),
         config.main_agent_message_channel.clone(),
     )))?;
+    // configure_agents（P0）：主 agent 调整会话级策略（仅主 agent 工具集）
+    registry.register(Arc::new(
+        configure_agents::ConfigureAgentsTool::with_channel(config.agent_policy_channel.clone()),
+    ))?;
+    // 子代理上报工具（P1）：progress（摘要）/ ask（即时）/ request_capability
+    registry.register(Arc::new(
+        subagent_report::ReportProgressTool::with_channel(config.subagent_report_channel.clone()),
+    ))?;
+    registry.register(Arc::new(subagent_report::AskParentTool::with_channel(
+        config.subagent_report_channel.clone(),
+    )))?;
+    registry.register(Arc::new(
+        subagent_report::RequestCapabilityTool::with_channel(config.subagent_report_channel.clone()),
+    ))?;
+    // grant_capability（P0）：主 agent 批准子代理能力申请
+    registry.register(Arc::new(
+        grant_capability::GrantCapabilityTool::with_channel(
+            config.subagent_capability_channel.clone(),
+        ),
+    ))?;
+    // switch_agent_model（P2）：主 agent 运行中切换子代理模型
+    registry.register(Arc::new(
+        switch_agent_model::SwitchAgentModelTool::with_channel(
+            config.subagent_model_channel.clone(),
+        ),
+    ))?;
     // set_timer / cancel_timer（T-CF-05）：一次性后台定时器注册与取消，
     // timer_channel 字段透传（None = 未接线，工具返回 common.unsupported）
     registry.register(Arc::new(set_timer::SetTimerTool::with_channel(
@@ -271,7 +318,7 @@ pub fn register_builtin_tools_with_config(
     registry.register(Arc::new(note_send_to_note::SendToNoteTool::new()))?;
     // block_batch / block_insert / block_update / block_delete / block_move（W4-F）
     // + block_set_attr（W4-R）：批 ops+dryRun + 细粒度 mutate；
-    // dangerous=true；plan Deny；≠ EL-05 / ≠ W6-E
+    // dangerous=true；Ask/Smart 下按危险工具审批；≠ EL-05 / ≠ W6-E
     registry.register(Arc::new(note_block_batch::BlockBatchTool::new()))?;
     registry.register(Arc::new(note_block_insert::BlockInsertTool::new()))?;
     registry.register(Arc::new(note_block_update::BlockUpdateTool::new()))?;
@@ -817,7 +864,10 @@ mod tests {
         // →32（W4-F 余量 block_move）
         // →33（W4-R block_set_attr）
         // →34（维度五：create_workflow 并入）
-        assert_eq!(registry.len(), 34);
+        // →35（P0：configure_agents 并入）
+        // →39（P1：report_progress / ask_parent / request_capability / grant_capability）
+        // →40（P2：switch_agent_model 并入）
+        assert_eq!(registry.len(), 40);
         let names: Vec<String> = registry
             .list_definitions()
             .iter()
@@ -826,6 +876,7 @@ mod tests {
         assert_eq!(
             names,
             [
+                "ask_parent",
                 "background_task",
                 "block_batch",
                 "block_delete",
@@ -834,6 +885,7 @@ mod tests {
                 "block_set_attr",
                 "block_update",
                 "cancel_timer",
+                "configure_agents",
                 "create_workflow",
                 "decompress_context",
                 "delete_dir",
@@ -844,6 +896,7 @@ mod tests {
                 "document_outline",
                 "file_stat",
                 "fuzzy_find",
+                "grant_capability",
                 "grep_search",
                 "kill_subagent",
                 "list_dir",
@@ -851,6 +904,8 @@ mod tests {
                 "project_tree",
                 "query_blocks",
                 "read_file",
+                "report_progress",
+                "request_capability",
                 "resolve_output_dir",
                 "run_subagent",
                 "search_context",
@@ -858,6 +913,7 @@ mod tests {
                 "send_to_note",
                 "set_timer",
                 "shell_command",
+                "switch_agent_model",
                 "wait_subagents",
                 "write_file",
             ]

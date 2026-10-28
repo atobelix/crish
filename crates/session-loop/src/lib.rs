@@ -35,6 +35,7 @@
 //! steering/、runtime-components/。
 
 pub mod approval;
+pub mod approval_policy;
 pub mod approval_router;
 // 附件注入防爆护栏（战役 prompt-injection-pipeline 维度四 · 详案 04
 // §2.2/§2.5；wire 权威在 Rust，00-总方案 §三 #5）——Head-Tail 首尾截断
@@ -43,6 +44,7 @@ pub mod attachment_budget;
 pub mod attachment_truncation;
 pub mod cache_tracker;
 pub mod checkpoint;
+pub mod compaction;
 pub mod control;
 // 统一输入流收敛战役 R1：撤回协议 / 冻结护栏 / 类别回滚注册表
 // （扩展点 D 承载，不进核心循环；会话级冻结注册表供 orchestrator
@@ -65,12 +67,20 @@ pub mod tool_exec;
 
 pub use agent_tools::permission::{decide, PermissionMode, PermissionVerdict};
 pub use approval::ApprovalChannel;
+pub use approval_policy::{
+    generate_semantic_denial_message, ApprovalPolicyConfig, ApprovalPolicyEngine,
+    DefaultApprovalPolicyEngine, TimeoutAction, TimeoutEvaluationContext,
+};
 pub use approval_router::{
     approval_reason_from_args, arbiter_metadata, classify_source, relay_denied_message,
     requester_from_context, route_approval, route_approval_guarded, ApprovalSource, Arbiter,
     APPROVAL_REASON_ARG_KEY, ARBITER_WIRE_MAIN_AGENT, ARBITER_WIRE_USER,
 };
 pub use cache_tracker::{CacheMiss, CacheStatsTracker, CacheTrackingConfig};
+pub use compaction::{
+    DecisionCategory, DecisionLedgerEntry, PinnedDecisionLedger, MAX_DECISION_LEDGER_TOKENS,
+    PINNED_LEDGER_MESSAGE_ID,
+};
 
 pub use control::{
     level_for_kind, ControlBus, ControlDrainAction, ControlIntent, ControlIntentInput, ControlKind,

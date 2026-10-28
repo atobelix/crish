@@ -13,7 +13,7 @@
 use crate::context::ToolContext;
 use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::note_backend::{backend_err_to_tool_err, NoteBackendError, NoteBlockInsertRequest};
-use crate::tools::note_document_apply_md::{maybe_ask_note_write, require_markdown};
+use crate::tools::note_document_apply_md::require_markdown;
 use crate::tools::note_query_blocks::NOTE_BACKEND_UNWIRED;
 use crate::tools::{optional_string, require_string};
 use async_trait::async_trait;
@@ -113,15 +113,6 @@ impl Tool for BlockInsertTool {
             ));
         }
 
-        maybe_ask_note_write(ctx, self.name(), &args).await?;
-
-        if ctx.abort_token.is_aborted() {
-            return Err(ToolError::new(
-                "note.execution_unknown",
-                "write interrupted (abort) after approval; execution state unknown — do not auto-retry write",
-            ));
-        }
-
         let Some(backend) = ctx.note_backend.as_ref() else {
             return Ok(serde_json::json!({
                 "ok": false,
@@ -160,8 +151,7 @@ mod tests {
     use super::*;
     use crate::context::create_mock_tool_context;
     use crate::note_backend::{MemoryNoteBackend, NoteBackend};
-    use crate::note_permission::{decide_note_tool, plan_denies_note_tool};
-    use crate::permission::{PermissionMode, PermissionVerdict};
+
     use std::sync::Arc;
 
     #[test]
@@ -229,14 +219,5 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(q.blocks.len(), 1);
-    }
-
-    #[test]
-    fn block_insert_plan_denied() {
-        assert!(plan_denies_note_tool("block_insert"));
-        assert_eq!(
-            decide_note_tool("block_insert", PermissionMode::Plan),
-            Some(PermissionVerdict::Deny)
-        );
     }
 }

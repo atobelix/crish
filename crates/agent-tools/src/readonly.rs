@@ -27,43 +27,10 @@
 use crate::definition::ToolError;
 use crate::registry::ToolRegistry;
 
-/// 写类工具名单（只读子代理整体剔除）
-pub const WRITE_TOOL_NAMES: [&str; 5] = [
-    "write_file",
-    "multi_replace_file_content",
-    "delete_file",
-    "delete_dir",
-    "shell_command",
-];
-
-/// 只读工具白名单（仅保留这些工具）
-///
-/// T-38/T-40/T-41（记忆韧性轮次 5）：project_tree / search_context /
-/// decompress_context 三只读工具入列（dangerous=false，00-plan §7.3）——
-/// search/decompress 只读视图经 ToolContext.compression_store trait 注入
-/// （引擎侧实现，不携带会话外数据）；decompress 落文件面仅主 agent
-/// 生效，子代理上下文（write_claim_holder 注入）恒回退 inline。
-///
-/// W4-A：query_blocks / document_outline 笔记读工具入列（dangerous=false；
-/// 未接 note_backend 时 stub 返回 note_backend_unwired，不写盘）。
-/// Round7：document_get_md 即时 S(树) 读全文，只读入列。
-/// W4-B/F/R 写工具 document_apply_md / send_to_note / block_batch /
-/// block_insert / block_update / block_delete / block_move / block_set_attr
-/// **不**入只读集（dangerous=true）。
-pub const READONLY_TOOL_NAMES: [&str; 12] = [
-    "read_file",
-    "list_dir",
-    "file_stat",
-    "grep_search",
-    "fuzzy_find",
-    "diff_text",
-    "project_tree",
-    "search_context",
-    "decompress_context",
-    "query_blocks",
-    "document_outline",
-    "document_get_md",
-];
+// 工具名单唯一真源 = conex-agents::capability（本模块只做注册表过滤）
+pub use conex_agents::capability::{READONLY_TOOL_NAMES, WRITE_TOOL_NAMES};
+use conex_agents::capability::COMMUNICATION_TOOL_NAMES;
+use conex_agents::task::SubagentCapabilityMode;
 
 /// commit 类型默认工具集（仅 shell_command；命令前缀过滤 git 见命令策略）
 pub const COMMIT_TOOL_NAMES: [&str; 1] = ["shell_command"];
@@ -108,6 +75,16 @@ pub fn filter_readonly_registry(registry: &ToolRegistry) -> Result<ToolRegistry,
     filter_registry_by_names(registry, &READONLY_TOOL_NAMES)
 }
 
+/// 按能力档裁剪注册表（spawn 时的纵深防御；运行中升级靠执行面 gate）
+pub fn filter_registry_for_capability(
+    registry: &ToolRegistry,
+    capability: SubagentCapabilityMode,
+) -> Result<ToolRegistry, ToolError> {
+    filter_registry(registry, |name| {
+        conex_agents::capability::allows_tool(capability, name)
+    })
+}
+
 /// 按任务类型派生默认工具集裁剪（T-D-08；供引擎侧 T-D-13 spawn 装配）
 ///
 /// 默认集映射（对齐《调研-权限传递层》§2.2，工具面）：
@@ -132,17 +109,28 @@ pub fn filter_registry_for_task_type(
     registry: &ToolRegistry,
     task_type: &str,
 ) -> Result<ToolRegistry, ToolError> {
+    // 通信工具（上报/提问/申请能力）对所有任务类型常开——否则只读代理
+    // 无法向父 agent 汇报或求助。
+    let keep = |name: &str| COMMUNICATION_TOOL_NAMES.contains(&name);
     match task_type {
-        "analysis" | "organization" => filter_registry_by_names(registry, &READONLY_TOOL_NAMES),
-        "design" | "review" => filter_registry(registry, |name| {
-            READONLY_TOOL_NAMES.contains(&name) || name == "write_file"
+        "analysis" | "organization" => filter_registry(registry, |name| {
+            keep(name) || READONLY_TOOL_NAMES.contains(&name)
         }),
-        "commit" => filter_registry_by_names(registry, &COMMIT_TOOL_NAMES),
+        "design" | "review" => filter_registry(registry, |name| {
+            keep(name) || READONLY_TOOL_NAMES.contains(&name) || name == "write_file"
+        }),
+        "commit" => filter_registry(registry, |name| {
+            keep(name) || COMMIT_TOOL_NAMES.contains(&name)
+        }),
         // implementation → 全工具集剔除 browser_* 前缀（27 §3 / 31 评审 F1，
         // fail-closed：子代理永不获得浏览器共享会话操作权；注释见函数头）
-        "implementation" => filter_registry(registry, |name| !name.starts_with("browser_")),
+        "implementation" => filter_registry(registry, |name| {
+            keep(name) || !name.starts_with("browser_")
+        }),
         // 未知/缺省：最安全回退（对齐缺省 task_type = analysis 的口径）
-        _ => filter_registry_by_names(registry, &READONLY_TOOL_NAMES),
+        _ => filter_registry(registry, |name| {
+            keep(name) || READONLY_TOOL_NAMES.contains(&name)
+        }),
     }
 }
 
@@ -284,8 +272,8 @@ mod tests {
         }
         assert!(!out.has("run_subagent"), "名单外的 run_subagent 必须剔除");
         // 原注册表不受影响（非破坏性裁剪）
-        // 注册面 →34（W4-R block_set_attr + 维度五 create_workflow）
-        assert_eq!(reg.len(), 34);
+        // 注册面 →40（新增 P1 通信/能力四工具 + P2 switch_agent_model）
+        assert_eq!(reg.len(), 40);
         assert!(reg.has("run_subagent"));
     }
 
@@ -305,9 +293,8 @@ mod tests {
         // 假谓词 → 空注册表（fail-closed 底线）
         let empty = filter_registry(&reg, |_| false).unwrap();
         assert!(empty.is_empty());
-        // 原注册表不受影响（注册面 33 = W4-F + W4-R block_set_attr + D4
-        // kill_subagent/send_message 后）
-        assert_eq!(reg.len(), 34);
+        // 原注册表不受影响（注册面 40 = 内置 + P1 通信/能力工具 + P2 模型切换）
+        assert_eq!(reg.len(), 40);
     }
 
     /// 六类型各自工具面：analysis/organization 只读、design/review 只读 +
@@ -319,7 +306,11 @@ mod tests {
         // analysis / organization → 只读白名单（无写工具、无命令工具）
         for tt in ["analysis", "organization"] {
             let out = filter_registry_for_task_type(&reg, tt).unwrap();
-            assert_eq!(out.len(), READONLY_TOOL_NAMES.len(), "{tt} 应为只读白名单");
+            assert_eq!(
+                out.len(),
+                READONLY_TOOL_NAMES.len() + COMMUNICATION_TOOL_NAMES.len(),
+                "{tt} 应为只读白名单 + 通信工具"
+            );
             for name in READONLY_TOOL_NAMES {
                 assert!(out.has(name), "{tt} 必须保留只读工具 {name}");
             }
@@ -333,8 +324,8 @@ mod tests {
             let out = filter_registry_for_task_type(&reg, tt).unwrap();
             assert_eq!(
                 out.len(),
-                READONLY_TOOL_NAMES.len() + 1,
-                "{tt} 应为只读白名单 + write_file"
+                READONLY_TOOL_NAMES.len() + 1 + COMMUNICATION_TOOL_NAMES.len(),
+                "{tt} 应为只读白名单 + write_file + 通信工具"
             );
             for name in READONLY_TOOL_NAMES {
                 assert!(out.has(name));
@@ -343,9 +334,13 @@ mod tests {
             assert!(!out.has("delete_file"), "{tt} 不得含删除工具");
             assert!(!out.has("shell_command"), "{tt} 不得含命令工具");
         }
-        // commit → 仅 shell_command（无写文件工具）
+        // commit → shell_command + 通信工具（无写文件工具）
         let out = filter_registry_for_task_type(&reg, "commit").unwrap();
-        assert_eq!(out.len(), 1, "commit 工具面应仅 shell_command");
+        assert_eq!(
+            out.len(),
+            1 + COMMUNICATION_TOOL_NAMES.len(),
+            "commit 工具面 = shell_command + 通信工具"
+        );
         assert!(out.has("shell_command"));
         assert!(!out.has("write_file"));
         assert!(!out.has("read_file"));
@@ -360,13 +355,13 @@ mod tests {
             let out = filter_registry_for_task_type(&reg, tt).unwrap();
             assert_eq!(
                 out.len(),
-                READONLY_TOOL_NAMES.len(),
-                "未知 task_type {tt:?} 应回退只读白名单"
+                READONLY_TOOL_NAMES.len() + COMMUNICATION_TOOL_NAMES.len(),
+                "未知 task_type {tt:?} 应回退只读白名单 + 通信工具"
             );
             assert!(!out.has("write_file"));
         }
-        // 原注册表不受影响（非破坏性裁剪；注册面 34 = W4-R block_set_attr + 维度五 create_workflow 后）
-        assert_eq!(reg.len(), 34);
+        // 原注册表不受影响（非破坏性裁剪；注册面 40 = 内置 + P1 通信/能力工具 + P2 模型切换）
+        assert_eq!(reg.len(), 40);
         assert!(reg.has("write_file"));
         // W4-B/F/R 写工具不得进只读 / design 面（design 仅 + diff_file）
         for tt in ["analysis", "design"] {
@@ -447,9 +442,8 @@ mod tests {
         assert!(impl_reg.has("shell_command"));
         assert!(impl_reg.has("run_subagent"));
         // 原注册表不受影响（非破坏性裁剪）
-        // 34 内置（含 W4-R block_set_attr + D4 kill_subagent/
-        // send_message + 维度五 create_workflow）+ 4 browser_* 假工具
-        assert_eq!(reg.len(), 38);
+        // 40 内置（含 P0/P1/P2 工具）+ 4 browser_* 假工具
+        assert_eq!(reg.len(), 44);
         assert!(reg.has("browser_navigate"));
     }
 
@@ -510,7 +504,6 @@ mod tests {
             "sudo apt-get install x",
             "rm -rf src",
             "git reset --hard HEAD~1",
-            "cd src",
             "bash -c 'cargo build'",
             "mkfs.ext4 /dev/sdb",
             "",

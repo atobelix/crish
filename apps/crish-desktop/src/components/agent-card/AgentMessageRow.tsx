@@ -61,8 +61,6 @@ export function AgentMessageRow({
       isSearchHit={false}
       isThinkingMsg={isThinkingMsg}
       hideThinkingBlock={false}
-      inPlanMode={false}
-      planApproved={false}
       isLastAssistant={isLastAssistant}
       messageIndex={idx}
       virtualScrollManager={null}
@@ -86,7 +84,6 @@ export function AgentMessageRow({
       onOpenDiff={onOpenDiff}
       onOpenDiffPanel={() => {}}
       setPermissionMode={() => {}}
-      setPlanApproved={() => {}}
     />
   );
 }

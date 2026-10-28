@@ -50,33 +50,32 @@ fn command_call(id: &str, name: &str, command: &str) -> ToolBatchCall {
     }
 }
 
-/// C3 验收 5 + full-access 不豁免：full-access 下大面积回退且无审批门 →
-/// 阈值检查仍生效（CommandPolicy 兜底：结构化拒绝，不做无限等待），
-/// 工具不执行、run 非致命
+/// Full 模式语义（用户裁决）：除物理红线外所有命令直接执行——C3 大面积
+/// 回退护栏属权限审批层，Full 由 call_verdict 早退放行，不弹审批、不拒绝。
 #[tokio::test]
-async fn full_access_large_revert_refused_without_gate() {
+async fn full_access_large_revert_executes_without_gate() {
     let reg = registry_with(vec![Arc::new(EchoTool)]);
     let exec = ToolExecutor::new(reg).with_revert_policy(revert_policy(large_area()));
     let calls = vec![command_call("c1", "echo", "git checkout abc1234")];
     let opts = ToolBatchOptions {
-        approval_enabled: false,
-        permission_mode: Some(PermissionMode::FullAccess),
+        permission_mode: Some(PermissionMode::Full),
         ..Default::default()
     };
     let out = exec
         .execute_batch(&calls, &exec_ctx(), None, &opts, None)
         .await;
-    assert_eq!(
-        out.results[0].error_kind,
-        Some(ToolErrorKind::ApprovalRequired),
-        "full-access 下大面积回退不得静默执行"
+    assert!(
+        out.results[0].is_ok(),
+        "Full 模式下大面积回退直接执行：{:?}",
+        out.results[0]
     );
-    let msg = out.results[0].error_message.as_deref().unwrap_or_default();
-    assert!(msg.contains("大面积 git 回退需用户审批"), "拒绝文案：{msg}");
-    assert!(msg.contains("缩小回退范围或改用单文件修复"), "指引：{msg}");
-    assert!(msg.contains("full-access 不豁免"), "不豁免声明：{msg}");
-    // 工具未执行：EchoTool 若执行必成功（is_ok），拒绝态即证明未执行
-    assert!(out.fatal.is_none(), "拒绝不是引擎故障");
+    assert!(
+        !out.events
+            .iter()
+            .any(|e| matches!(e, ToolEvent::ApprovalRequested { .. })),
+        "Full 模式不发起审批"
+    );
+    assert!(out.fatal.is_none(), "放行不是引擎故障");
 }
 
 /// C3 验收 1：ask 模式大面积回退产生审批请求（approval-requested 事件），
@@ -87,7 +86,6 @@ async fn ask_large_revert_denied_after_approval_request() {
     let exec = ToolExecutor::new(reg).with_revert_policy(revert_policy(large_area()));
     let calls = vec![command_call("c1", "echo", "git reset --hard HEAD~30")];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         permission_mode: Some(PermissionMode::Ask),
         ..Default::default()
     };
@@ -116,7 +114,6 @@ async fn ask_large_revert_approved_then_executes() {
     let exec = ToolExecutor::new(reg).with_revert_policy(revert_policy(large_area()));
     let calls = vec![command_call("c1", "echo", "git checkout abc1234")];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         permission_mode: Some(PermissionMode::Ask),
         ..Default::default()
     };
@@ -140,8 +137,7 @@ async fn full_access_small_revert_executes_without_approval() {
         "git restore --source=HEAD~1 src/main.rs",
     )];
     let opts = ToolBatchOptions {
-        approval_enabled: false,
-        permission_mode: Some(PermissionMode::FullAccess),
+        permission_mode: Some(PermissionMode::Full),
         ..Default::default()
     };
     let out = exec
@@ -161,8 +157,7 @@ async fn checkout_branch_switch_not_gated() {
     let exec = ToolExecutor::new(reg).with_revert_policy(revert_policy(large_area()));
     let calls = vec![command_call("c1", "echo", "git checkout main")];
     let opts = ToolBatchOptions {
-        approval_enabled: false,
-        permission_mode: Some(PermissionMode::FullAccess),
+        permission_mode: Some(PermissionMode::Full),
         ..Default::default()
     };
     let out = exec
@@ -178,8 +173,7 @@ async fn non_command_input_not_gated() {
     let exec = ToolExecutor::new(reg).with_revert_policy(revert_policy(large_area()));
     let calls = vec![call("c1", "echo", ToolConcurrency::Sequential)];
     let opts = ToolBatchOptions {
-        approval_enabled: false,
-        permission_mode: Some(PermissionMode::FullAccess),
+        permission_mode: Some(PermissionMode::Full),
         ..Default::default()
     };
     let out = exec

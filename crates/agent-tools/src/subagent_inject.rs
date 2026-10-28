@@ -7,9 +7,9 @@
 //!   函数；真实 git 年代查询（`git log -1 --format=%ct <ref>`）由引擎侧接线，
 //!   对齐 revert.rs「不猜命令参数」契约）。
 //!
-//! 挂载约定（04 §4 互斥）：engine.rs build_context 主体归 C10（M1 立口、
-//! M11 实装），本模块只读经 M1 注入点挂载——M1 冻结注入顺序（system →
-//! skills → mcp → agent 定义，engine.rs `CONTEXT_INJECTION_ORDER`），
+//! 挂载约定（04 §4 互斥）：run 装配在 `conex-run/src/run/run_launch.rs`
+//! 的 run-task 路径经 M1 注入点挂载；M1 冻结注入顺序（system → skills →
+//! mcp → agent 定义）由 `conex-run::context_injection::CONTEXT_INJECTION_ORDER` 定义，
 //! 挂载方式 = 经 `ContextInjector::push` 追加 `ContextInjection`：
 //!
 //! ```ignore
@@ -33,12 +33,12 @@
 //!
 //! F5 EG 追加（REQ-E03 提示词面）：[comment_preservation_section] 固定注入段，
 //! 约束替换时 replacement_content 完整承载原注释行——与 C2 注入同构，挂载
-//! 点仍在引擎侧 build_context（M1 注入点，主体归 C10，本模块只提供固定片段）。
+//! 点在 `conex-run` 的 run-task 装配路径（M1 注入点，本模块只提供固定片段）。
 //!
 //! F10 EG 追加（REQ-G01 文档工作区）：[output_dir_section] 参数化注入段，
 //! 主控确定产出目录后通知 AI（「工作目录路径在创建后通知 AI」），与 C2 /
-//! REQ-E03 注入同构；挂载点仍在引擎侧（主 agent 系统提示词与子代理注入
-//! 面，主控已确定产出目录时 spawn 注入），实际装配归 F11 T-D-13，本模块
+//! REQ-E03 注入同构；挂载点在 `conex-run` 的 run-task 装配路径（主 agent
+//! 系统提示词与子代理注入面，主控已确定产出目录时 spawn 注入），本模块
 //! 只提供注入函数与快照断言。
 
 use crate::revert::DEFAULT_REVERT_MAX_REF_AGE_HOURS;
@@ -74,7 +74,7 @@ pub const OUTPUT_DIR_SECTION_TITLE: &str = "文档产出目录";
 pub const OUTPUT_DIR_SECTION_TITLE_EN: &str = "Document Output Directory";
 
 /// epoch ms → ISO8601（毫秒精度 UTC，`2026-07-31T08:00:00.000Z`；与
-/// engine.rs now_iso_utc / session-loop hydrate.rs 同源的 Howard Hinnant
+/// `conex-run::engine_provider::now_iso_utc` / session-loop hydrate.rs 同源的 Howard Hinnant
 /// civil-from-days 手工换算，不引入 chrono 依赖；负值经 div_euclid /
 /// rem_euclid 容错不 panic）
 pub fn iso8601_from_epoch_ms(epoch_ms: i64) -> String {
@@ -162,7 +162,7 @@ pub fn git_revert_caution_section_with_locale(
         format!(
             "- You are a subagent created at started_at (see above; this timestamp is part of the isolation boundary);\n\
              - Before executing git revert operations, check the target ref age: if the commit timestamp of the target ref is older than your started_at by more than {threshold_hours} hours (configurable threshold, default 24 hours), prioritize single-file repairs (git checkout -- <file> level within your file domain), and avoid overall revert;\n\
-             - Only initiate an overall revert when single-file repair fails and a full revert is strictly necessary. Overall revert must go through approval gating (C3: large-scale revert approval, approver=user, full-access not exempt) and will not be executed without approval;\n\
+             - Only initiate an overall revert when single-file repair fails and a full revert is strictly necessary. Overall revert must go through approval gating (C3: large-scale revert approval, approver=user; not silent under Ask/Smart, Full mode exempt) and will not be executed without approval;\n\
              - When revert is rejected or exceeds threshold, narrow the revert scope or switch to single-file repair."
         )
     } else {
@@ -173,7 +173,7 @@ pub fn git_revert_caution_section_with_locale(
              优先采用单文件修复（git checkout -- <file> 级别，在你的文件域内直接改文件），\
              不要整体回退；\n\
              - 只有单文件修复失败、且确需整体回退时，才发起整体回退——整体回退必须走\
-             审批门禁（C3：大面积回退审批，审批人=user，full-access 不豁免），\
+             审批门禁（C3：大面积回退审批，审批人=user；Ask/Smart 下不可静默执行，Full 模式除外），\
              未经审批不会执行；\n\
              - 回退被拒或超阈值时，请缩小回退范围或改用单文件修复。"
         )
@@ -441,7 +441,7 @@ mod tests {
         assert!(guidance.contains("审批门禁"));
         assert!(guidance.contains("C3"));
         assert!(guidance.contains("审批人=user"));
-        assert!(guidance.contains("full-access 不豁免"));
+        assert!(guidance.contains("Ask/Smart 下不可静默执行"));
         assert!(guidance.contains("超过 24 小时"));
         // 快照：两次构建字节一致
         assert_eq!(

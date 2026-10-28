@@ -62,8 +62,17 @@ pub(crate) fn create_v1_schema() -> &'static str {
         ended_at INTEGER,
         depth INTEGER DEFAULT 0,
         subagent_path_json TEXT,
+        task_type TEXT,
+        display_label TEXT,
+        allowed_write_paths_json TEXT,
+        sub_session_id TEXT NOT NULL DEFAULT '',
+        capability_mode TEXT,
+        model_override TEXT,
+        resumable INTEGER NOT NULL DEFAULT 0,
+        last_heartbeat_ms INTEGER,
         PRIMARY KEY (session_id, agent_id)
     ) WITHOUT ROWID;
+    CREATE INDEX IF NOT EXISTS idx_session_agents_status ON session_agents(status);
 
     CREATE TABLE IF NOT EXISTS session_agent_messages (
         session_id TEXT NOT NULL,
@@ -237,8 +246,13 @@ pub(crate) fn create_v5_schema() -> &'static str {
         display_label TEXT,
         allowed_write_paths_json TEXT,
         sub_session_id TEXT NOT NULL DEFAULT '',
+        capability_mode TEXT,
+        model_override TEXT,
+        resumable INTEGER NOT NULL DEFAULT 0,
+        last_heartbeat_ms INTEGER,
         PRIMARY KEY (session_id, agent_id)
     ) WITHOUT ROWID;
+    CREATE INDEX IF NOT EXISTS idx_session_agents_status ON session_agents(status);
 
     CREATE TABLE IF NOT EXISTS session_agent_messages (
         session_id TEXT NOT NULL,

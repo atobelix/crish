@@ -698,7 +698,7 @@ impl ShellStreamState {
         if r.abort_token.is_aborted() {
             kill_child(r.child, &mut r.guard, r.child_pid).await;
             let duration_ms = r.started.elapsed().as_millis() as u64;
-            let terminal = build_sync_result(
+            let mut terminal = build_sync_result(
                 &r.command,
                 &r.cwd,
                 &r.shell_label,
@@ -710,6 +710,9 @@ impl ShellStreamState {
                 r.log_root.as_deref(),
                 &r.session_id,
             );
+            if let Ok(ref mut val) = terminal {
+                val["aborted"] = serde_json::Value::Bool(true);
+            }
             return Some((ToolStreamItem::Terminal(terminal), ShellStreamState::Done));
         }
 
@@ -752,6 +755,27 @@ impl ShellStreamState {
                 .deadline
                 .saturating_duration_since(tokio::time::Instant::now());
             tokio::select! {
+                // 中止信号触发：立即杀进程尽快收口
+                _ = r.abort_token.wait_aborted() => {
+                    kill_child(r.child, &mut r.guard, r.child_pid).await;
+                    let duration_ms = r.started.elapsed().as_millis() as u64;
+                    let mut terminal = build_sync_result(
+                        &r.command,
+                        &r.cwd,
+                        &r.shell_label,
+                        None,
+                        duration_ms,
+                        &r.acc_out,
+                        &r.acc_err,
+                        r.max_output_bytes,
+                        r.log_root.as_deref(),
+                        &r.session_id,
+                    );
+                    if let Ok(ref mut val) = terminal {
+                        val["aborted"] = serde_json::Value::Bool(true);
+                    }
+                    return Some((ToolStreamItem::Terminal(terminal), ShellStreamState::Done));
+                }
                 // 等待窗口耗尽（与上方 now >= deadline 检查互补）
                 _ = tokio::time::sleep(remain) => {
                     kill_child(r.child, &mut r.guard, r.child_pid).await;
@@ -847,12 +871,10 @@ async fn read_one_chunk<R: AsyncBufRead + Unpin>(
 async fn kill_child(
     mut child: tokio::process::Child,
     guard: &mut ProcessTreeGuard,
-    child_pid: Option<u32>,
+    _child_pid: Option<u32>,
 ) {
+    let _ = child.start_kill();
     guard.kill_tree().await;
-    if let Some(pid) = child_pid {
-        terminate_tree_best_effort(pid, "kill_child:回收子进程树");
-    }
     kill_and_reap_best_effort(&mut child, "kill_child").await;
 }
 

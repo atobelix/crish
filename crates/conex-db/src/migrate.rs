@@ -1,4 +1,4 @@
-//! 迁移链域：`PRAGMA user_version` 驱动的版本化迁移（v1→v11，PE-08 T08.7 + P5 §3.1.4
+//! 迁移链域：`PRAGMA user_version` 驱动的版本化迁移（v1→v14，PE-08 T08.7 + P5 §3.1.4
 //! 及 T-D-07 v6 新列 + T-15 v7 compression_blocks 单表 + v8 浏览器导入目标表 +
 //! v9 事件 run 归属列 + v10 usage_records 时序表 + v11 app_preferences 偏好表 +
 //! v13 孤儿 session_meta 键 GC（RUN-15））。逐版本独立事务、
@@ -173,12 +173,12 @@ impl LocalDb {
             // 备份时序（11-T2 确定化）：版本事务 commit 之前执行
             // 「checkpoint(TRUNCATE) → 拷贝备份」。TRUNCATE 后 WAL 清空、
             // 主文件 = 完整旧库态，拷贝内容确定（与 autocheckpoint 偶然时机无关）。
-            // v5/v6/v9 纯 ADD COLUMN、v7/v8/v10/v11/v12 纯新建表/纯 DDL、
+            // v5/v6/v9/v14 纯 ADD COLUMN、v7/v8/v10/v11/v12 纯新建表/纯 DDL、
             // v13 纯 DML（均无 DROP）：跳过备份，保持「DROP 前备份」语义。
             // （backup_file_contains_pre_migration_data / upgrade_e2e_backup_*
-            // 锚定 v3→v4 只产 .bak-v4，v5..v13 不额外产生备份）
+            // 锚定 v3→v4 只产 .bak-v4，v5..v14 不额外产生备份）
             if let Some(p) = &path {
-                if !(5..=13).contains(&version) {
+                if !(5..=14).contains(&version) {
                     // checkpoint 失败 → 备份内容不确定，按备份失败处理：
                     // 告警 + 跳过本次备份，不阻断迁移（裁定案）
                     if let Err(e) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);") {
@@ -209,6 +209,7 @@ impl LocalDb {
                 11 => step_10_to_11(&tx),
                 12 => step_11_to_12(&tx),
                 13 => step_12_to_13(&tx),
+                14 => step_13_to_14(&tx),
                 _ => unreachable!(),
             };
             if let Err(e) = step_result {

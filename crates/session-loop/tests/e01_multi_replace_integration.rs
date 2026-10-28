@@ -49,7 +49,7 @@ const MULTI_REPLACE_TOOL: &str = "multi_replace_file_content";
 /// 权限模式放行（与 c1b_backup_through_loop 同口径）
 fn exec_opts() -> ToolBatchOptions {
     ToolBatchOptions {
-        permission_mode: Some(agent_tools::permission::PermissionMode::FullAccess),
+        permission_mode: Some(agent_tools::permission::PermissionMode::Full),
         ..Default::default()
     }
 }

@@ -23,7 +23,7 @@ use agent_tools::registry::ToolRegistry;
 use conex_fs::trash::{EntryMode, TrashService};
 use conex_test_utils::TempWorkspace;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
-use conex_types::session::AgentEndReason;
+use session_loop::r#loop::AgentEndReason;
 use session_loop::{
     AgentSessionLoop, ProviderStreamEvent, RecoverySteeringStrategy, SessionLoopOptions,
     SteeringCoordinator, SteeringCoordinatorOptions, StopReason, TestProvider,
@@ -66,7 +66,7 @@ async fn write_file_through_loop_lands_crish_trash_snapshot() {
     // 危险工具（write_file 属 dangerous）——本验收聚焦写前备份注入面而非
     // 权限，故显式声明 full-access 权限模式（放行 write_file，备份语义不变）
     let tool_options = session_loop::tool_events::ToolBatchOptions {
-        permission_mode: Some(session_loop::PermissionMode::FullAccess),
+        permission_mode: Some(session_loop::PermissionMode::Full),
         ..Default::default()
     };
 

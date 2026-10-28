@@ -42,17 +42,22 @@ impl Default for RetryConfig {
         }
     }
 }
-/// 压缩策略配置（Compaction 域，7 字段）
+/// 压缩策略配置（Compaction 域，9 字段）
 #[derive(Clone)]
 pub struct CompactionConfig {
     pub compaction_policy: Option<CompactionPolicy>,
     pub summarizer: Option<Arc<dyn Summarizer>>,
+    /// 单 Run 自动压缩上限（0 表示不设静态门限，由会话级代际增量防抖全权接管；>0 表示显式护栏上限）
     pub max_auto_compactions_per_run: u32,
     pub compact_overflow_retries: u32,
     pub compact_require_llm: bool,
     pub compact_allow_stub_fallback: bool,
     pub compact_stage_ratios: Option<Vec<f64>>,
     pub compression_store: Option<Arc<dyn agent_tools::compression_store::CompressionContextStore>>,
+    /// 最小防抖回合间隔（默认 2 轮，长程自主运行下避免连续每轮抖动重写）
+    pub min_turn_interval: u64,
+    /// 最小防抖新增 Token 阈值（默认 1024 Tokens）
+    pub min_token_delta: u64,
 }
 impl Default for CompactionConfig {
     fn default() -> Self {
@@ -68,6 +73,8 @@ impl Default for CompactionConfig {
                 crate::r#loop::stage_summary::DEFAULT_COMPACT_STAGE_RATIOS.to_vec(),
             ),
             compression_store: None,
+            min_turn_interval: 2,
+            min_token_delta: 1024,
         }
     }
 }
@@ -264,6 +271,12 @@ impl SessionLoopOptions {
     }
     pub fn compact_allow_stub_fallback(&self) -> bool {
         self.compaction.compact_allow_stub_fallback
+    }
+    pub fn min_turn_interval(&self) -> u64 {
+        self.compaction.min_turn_interval
+    }
+    pub fn min_token_delta(&self) -> u64 {
+        self.compaction.min_token_delta
     }
     pub fn compact_stage_ratios(&self) -> Option<Vec<f64>> {
         self.compaction.compact_stage_ratios.clone()

@@ -9,8 +9,8 @@ use conex_types::tool::{ContextCompressionReason, ContextCompressionTrigger};
 use super::super::super::LoopError;
 use super::super::streaming::streaming_aborted;
 use super::super::{
-    apply_compaction, compaction_shape_ok, dispatch, CompactionTriggerInfo, HandlerOutcome,
-    LoopState,
+    apply_compaction, compaction_shape_ok, dispatch, estimate_context, CompactionTriggerInfo,
+    HandlerOutcome, LoopState,
 };
 use super::fatal::fatal_provider_error;
 use crate::r#loop::summary_dispatch::summarize_via_blocking;
@@ -38,8 +38,8 @@ pub(crate) const OVERFLOW_KEEP_RECENT_STAIRCASE: [usize; 3] = [20_000, 12_000, 8
 pub(crate) const MAX_LENGTH_UPGRADES: u32 = 2;
 
 /// length 恢复阶梯：max_tokens 翻倍升级（8192→16384→32768，上限 2 次）；
-/// 用尽后接压缩阶梯（P4 §3.5）——输入超限维度，对齐 pi「溢出 → 压缩 →
-/// 重试一次」
+/// 输入超限时直接穿透至压缩阶梯（P-05 §4.4 / Wave 1 任务 7），杜绝翻倍输出预算的假自愈；
+/// 用尽后接压缩阶梯（P4 §3.5）。
 pub(crate) async fn length_ladder(
     state: &mut LoopState,
     classified: &ClassifiedStreamError,
@@ -47,6 +47,23 @@ pub(crate) async fn length_ladder(
     // Q40（T09.9）：每级决策前查 abort——已取消不再发起 length 升级重试
     if state.abort_signal.is_aborted() {
         return streaming_aborted(state);
+    }
+
+    // P-05 §4.4 / Wave 1 任务 7：输入上下文超限时直接穿透至 compression_ladder，杜绝翻倍输出预算的假自愈
+    if let Some(budget) = state.budget_state.budget {
+        super::super::streaming::ensure_tools_snapshot(state);
+        let estimate = estimate_context(state);
+        let prompt_overflow_threshold = ((budget.context_window as u64).saturating_mul(80) / 100)
+            .min(budget.context_window.saturating_sub(budget.reserve_tokens) as u64);
+        if estimate.tokens >= prompt_overflow_threshold {
+            tracing::info!(
+                estimate_tokens = estimate.tokens,
+                prompt_overflow_threshold,
+                context_window = budget.context_window,
+                "ContextLengthExceeded 根因为输入上下文超限，直接穿透 length_ladder 进入 compression_ladder"
+            );
+            return compression_ladder(state, classified).await;
+        }
     }
     let limit = state
         .options
@@ -101,12 +118,10 @@ pub(crate) async fn length_ladder(
 /// 3. 第二次重试前 keep_recent_tokens 阶梯下调（20K→12K→8K，min 配置值，
 ///    优先更小保留预算）。
 ///
-/// LLM 摘要强制（E2 F1 L3）：默认以 [StubPolicy::LlmRequired] 调用引擎——
-/// 无 Summarizer / 摘要失败（plan.llm_unavailable）→ **不落 stub 直接
-/// fatal**（显式失败不静默丢语义，fatal 文案含「LLM 不可用」）；
-/// [SessionLoopOptions::compact_allow_stub_fallback] = true 或
-/// [SessionLoopOptions::compact_require_llm] = false 时允许临时 stub
-/// 降级（豁免路径，stub 非永驻——后台补摘要成功自动替换）。
+/// LLM 摘要自愈降级（P-05 §4.2 / Wave 1 任务 7）：默认以 [StubPolicy::StubAllowed]
+/// （compact_allow_stub_fallback 默认 true）运行；若 LLM 摘要不可用（plan.llm_unavailable），
+/// 平滑降级为中性 Stub 消息（解除 400 危险并放行业务前行，废除 fatal_provider_error
+/// 死刑判决；stub 非永驻——后台补摘要成功跨边界自动升级替换）。
 ///
 /// 压缩动作复用 [apply_compaction]（trigger/reason=Overflow，事件广播 +
 /// 时间戳护栏 + 单 run 计数）；目标预算 = window - reserve（与预检同一
@@ -182,16 +197,22 @@ pub(crate) async fn compression_ladder(
         stub_policy,
         summarize_precomputed.clone(),
     );
+    let mut effective_stub_policy = stub_policy;
     if plan.llm_unavailable {
-        // E2 F1 L3：LLM 摘要不可用（无 Summarizer / 同步失败）且无豁免 →
-        // 不落 stub、不重试（对话未变，重试必再超）→ 直接 fatal，
-        // 文案含「LLM 不可用」（compression_fatal_note 附注分支）
+        // 彻底废除因 LLM 摘要失败直接调用 fatal_provider_error 杀死全会话的死刑判决（P-05 §4.2 / Wave 1 任务 7）：
+        // 平滑降级为中性 Stub 消息解除 400 危险并放行业务前行
         tracing::warn!(
             session_id = %state.machine.context().session_id,
-            "溢出压缩因 LLM 摘要不可用而未压缩（默认 fatal；compact_allow_stub_fallback=true 可豁免为临时 stub）"
+            "溢出压缩 LLM 摘要不可用，平滑降级为中性 Stub 消息（解除 400 危险并放行业务前行）"
         );
-        state.compaction.overflow_llm_unavailable = true;
-        return fatal_provider_error(state, classified);
+        effective_stub_policy = conex_compaction::compaction::StubPolicy::StubAllowed;
+        plan = engine.compact_agent_messages_with_stub_policy(
+            &state.conversation,
+            budget_tokens as usize,
+            &policy,
+            effective_stub_policy,
+            summarize_precomputed.clone(),
+        );
     }
     if plan.dropped_ids.is_empty() {
         // 无合法切割点 / 无可丢内容：不重试（请求体未变，重试必再超）
@@ -218,7 +239,7 @@ pub(crate) async fn compression_ladder(
                     &state.conversation,
                     budget_tokens as usize,
                     &tighter_policy,
-                    stub_policy,
+                    effective_stub_policy,
                     summarize_precomputed,
                 );
                 if compaction_shape_ok(&tighter_plan.messages)

@@ -3,6 +3,8 @@ use super::approval_fixture::*;
 use super::fixture::*;
 use agent_tools::permission::PermissionMode;
 use agent_tools::registry::ToolRegistry;
+use conex_agents::capability::CapabilityCell;
+use conex_agents::task::SubagentCapabilityMode;
 use conex_types::tool::ToolConcurrency;
 use std::sync::Arc;
 
@@ -15,7 +17,6 @@ async fn permission_ask_mode_routes_only_dangerous_to_approval() {
         call("c2", "echo", ToolConcurrency::Parallel),
     ];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         permission_mode: Some(PermissionMode::Ask),
         ..Default::default()
     };
@@ -48,7 +49,6 @@ async fn permission_ask_mode_denied_dangerous_skips_execution() {
     let exec = ToolExecutor::new(reg);
     let calls = vec![call("c1", "dangerous_tool", ToolConcurrency::Sequential)];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         permission_mode: Some(PermissionMode::Ask),
         ..Default::default()
     };
@@ -63,9 +63,9 @@ async fn permission_ask_mode_denied_dangerous_skips_execution() {
     assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::UserDenied));
 }
 
-/// T10 消费 dangerous：plan 模式写类（dangerous）工具拒绝且不弹窗
+/// T10 消费 dangerous：smart 模式写类（dangerous）工具需审批；安全工具直接放行
 #[tokio::test]
-async fn permission_plan_mode_denies_dangerous_tools() {
+async fn permission_smart_mode_routes_dangerous_to_approval() {
     let reg = registry_with(vec![Arc::new(DangerousTool), Arc::new(EchoTool)]);
     let exec = ToolExecutor::new(reg);
     let calls = vec![
@@ -73,8 +73,7 @@ async fn permission_plan_mode_denies_dangerous_tools() {
         call("c2", "echo", ToolConcurrency::Sequential),
     ];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
-        permission_mode: Some(PermissionMode::Plan),
+        permission_mode: Some(PermissionMode::Smart),
         ..Default::default()
     };
     let order = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -84,26 +83,46 @@ async fn permission_plan_mode_denies_dangerous_tools() {
     let out = exec
         .execute_batch(&calls, &exec_ctx(), Some(gate), &opts, None)
         .await;
-    // plan 模式：写类工具直接拒绝（Denied 语义），安全工具放行
-    assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::UserDenied));
-    assert!(out.results[0]
-        .error_message
-        .as_deref()
-        .unwrap_or_default()
-        .contains("permission denied"));
+    // Smart 模式：危险工具发起审批，通过后执行；安全工具直接放行
+    assert_eq!(*order.lock().unwrap(), vec!["c1".to_string()]);
+    assert!(out.results[0].is_ok());
     assert!(out.results[1].is_ok());
-    // 不发起任何审批（不弹窗）
-    assert!(order.lock().unwrap().is_empty(), "plan 模式不应发起审批");
-    assert!(!out
+    assert!(out
         .events
         .iter()
-        .any(|e| matches!(e, ToolEvent::ApprovalRequested { .. })));
+        .any(|e| matches!(e, ToolEvent::ApprovalRequested { call_id, .. } if call_id == "c1")));
     assert!(out.fatal.is_none());
 }
 
-/// T10 消费 dangerous：plan 模式并行组——写类拒绝、安全项并行执行
+/// T10 消费 dangerous：smart 模式下危险工具被用户拒绝 → UserDenied 且不执行
 #[tokio::test]
-async fn permission_plan_parallel_denies_dangerous_runs_safe() {
+async fn permission_smart_mode_denied_dangerous_skips_execution() {
+    let reg = registry_with(vec![Arc::new(DangerousTool), Arc::new(EchoTool)]);
+    let exec = ToolExecutor::new(reg);
+    let calls = vec![
+        call("c1", "dangerous_tool", ToolConcurrency::Sequential),
+        call("c2", "echo", ToolConcurrency::Sequential),
+    ];
+    let opts = ToolBatchOptions {
+        permission_mode: Some(PermissionMode::Smart),
+        ..Default::default()
+    };
+    let gate = MockApproval {
+        decision: ApprovalDecision::Denied {
+            reason: "denied by user".into(),
+        },
+    };
+    let out = exec
+        .execute_batch(&calls, &exec_ctx(), Some(Arc::new(gate)), &opts, None)
+        .await;
+    assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::UserDenied));
+    assert!(out.results[1].is_ok());
+    assert!(out.fatal.is_none());
+}
+
+/// T10 消费 dangerous：smart 模式并行组——危险项走审批，安全项并行执行
+#[tokio::test]
+async fn permission_smart_parallel_routes_dangerous_runs_safe() {
     let reg = registry_with(vec![Arc::new(DangerousTool), Arc::new(EchoTool)]);
     let exec = ToolExecutor::new(reg);
     let calls = vec![
@@ -112,8 +131,7 @@ async fn permission_plan_parallel_denies_dangerous_runs_safe() {
         call("c3", "echo", ToolConcurrency::Sequential),
     ];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
-        permission_mode: Some(PermissionMode::Plan),
+        permission_mode: Some(PermissionMode::Smart),
         ..Default::default()
     };
     let order = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -123,28 +141,28 @@ async fn permission_plan_parallel_denies_dangerous_runs_safe() {
     let out = exec
         .execute_batch(&calls, &exec_ctx(), Some(gate), &opts, None)
         .await;
-    assert_eq!(out.results[0].error_kind, Some(ToolErrorKind::UserDenied));
+    // Smart 模式下危险项触发审批，安全项直接放行
+    assert_eq!(*order.lock().unwrap(), vec!["c1".to_string()]);
+    assert!(out.results[0].is_ok());
     assert!(out.results[1].is_ok());
     assert!(out.results[2].is_ok());
-    assert!(order.lock().unwrap().is_empty());
     assert!(out.fatal.is_none());
 }
 
-/// T10 消费 dangerous：full-access 模式危险工具直接放行（无审批）
+/// T10 消费 dangerous：full 模式危险工具直接放行（无审批）
 #[tokio::test]
 async fn permission_full_access_allows_dangerous_tools() {
     let reg = registry_with(vec![Arc::new(DangerousTool)]);
     let exec = ToolExecutor::new(reg);
     let calls = vec![call("c1", "dangerous_tool", ToolConcurrency::Sequential)];
     let opts = ToolBatchOptions {
-        approval_enabled: false,
-        permission_mode: Some(PermissionMode::FullAccess),
+        permission_mode: Some(PermissionMode::Full),
         ..Default::default()
     };
     let out = exec
         .execute_batch(&calls, &exec_ctx(), None, &opts, None)
         .await;
-    assert!(out.results[0].is_ok(), "full-access 放行危险工具");
+    assert!(out.results[0].is_ok(), "full 放行危险工具");
     assert!(!out
         .events
         .iter()
@@ -158,7 +176,6 @@ async fn permission_ask_without_gate_passes_through_approval_required() {
     let exec = ToolExecutor::new(reg);
     let calls = vec![call("c1", "dangerous_tool", ToolConcurrency::Sequential)];
     let opts = ToolBatchOptions {
-        approval_enabled: false,
         permission_mode: Some(PermissionMode::Ask),
         ..Default::default()
     };
@@ -174,9 +191,9 @@ async fn permission_ask_without_gate_passes_through_approval_required() {
 
 // ── W4-B：笔记写工具经 session-loop 审批矩阵接线 ──────────────────
 
-/// W4-B：plan 模式拒绝真实 `document_apply_md`（不弹窗、不执行 backend）
+/// W4-B：smart 模式对真实 `document_apply_md` 发起审批（通过后执行至 backend）
 #[tokio::test]
-async fn w4b_plan_mode_denies_document_apply_md() {
+async fn w4b_smart_mode_routes_document_apply_md_to_approval() {
     use agent_tools::register_builtin_tools;
     let mut reg = ToolRegistry::new();
     register_builtin_tools(&mut reg).expect("register builtins");
@@ -190,8 +207,7 @@ async fn w4b_plan_mode_denies_document_apply_md() {
         concurrency: ToolConcurrency::Sequential,
     }];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
-        permission_mode: Some(PermissionMode::Plan),
+        permission_mode: Some(PermissionMode::Smart),
         ..Default::default()
     };
     let order = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -201,24 +217,24 @@ async fn w4b_plan_mode_denies_document_apply_md() {
     let out = exec
         .execute_batch(&calls, &exec_ctx(), Some(gate), &opts, None)
         .await;
-    assert_eq!(
-        out.results[0].error_kind,
-        Some(ToolErrorKind::UserDenied),
-        "plan 必须拒绝笔记写：{:?}",
+    // Smart 模式：笔记写工具属于 dangerous，必须触发审批；审批通过后进入工具执行（unwired backend）
+    assert_eq!(*order.lock().unwrap(), vec!["c-note-write".to_string()]);
+    assert!(
+        out.results[0].error_kind.is_none(),
+        "审批通过后不应报权限错误：{:?}",
         out.results[0]
     );
-    assert!(out.results[0]
-        .error_message
-        .as_deref()
-        .unwrap_or_default()
-        .contains("permission denied"));
-    assert!(order.lock().unwrap().is_empty(), "plan 不得弹审批窗");
+    assert_eq!(out.results[0].output["ok"], false);
+    assert_eq!(out.results[0].output["reason"], "note_backend_unwired");
+    assert!(out.events.iter().any(
+        |e| matches!(e, ToolEvent::ApprovalRequested { call_id, .. } if call_id == "c-note-write")
+    ));
     assert!(out.fatal.is_none());
 }
 
-/// W4-B：plan 模式放行笔记只读 `query_blocks`（safe 边界）
+/// W4-B：smart 模式放行笔记只读 `query_blocks`（safe 边界，无需审批）
 #[tokio::test]
-async fn w4b_plan_mode_allows_query_blocks_safe() {
+async fn w4b_smart_mode_allows_query_blocks_safe() {
     use agent_tools::register_builtin_tools;
     let mut reg = ToolRegistry::new();
     register_builtin_tools(&mut reg).expect("register builtins");
@@ -232,17 +248,16 @@ async fn w4b_plan_mode_allows_query_blocks_safe() {
         concurrency: ToolConcurrency::Sequential,
     }];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
-        permission_mode: Some(PermissionMode::Plan),
+        permission_mode: Some(PermissionMode::Smart),
         ..Default::default()
     };
     let out = exec
         .execute_batch(&calls, &exec_ctx(), None, &opts, None)
         .await;
-    // plan 下只读应执行（未接线 backend → ok=false unwired，非 user_denied）
+    // Smart 模式下只读应执行且无需审批（未接线 backend → ok=false unwired，非 user_denied）
     assert!(
         out.results[0].error_kind.is_none(),
-        "plan 不得拒 safe 读：{:?}",
+        "Smart 模式不得拒 safe 读：{:?}",
         out.results[0]
     );
     let out_val = &out.results[0].output;
@@ -266,7 +281,6 @@ async fn w4b_ask_mode_denied_document_apply_md_user_denied() {
         concurrency: ToolConcurrency::Sequential,
     }];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         permission_mode: Some(PermissionMode::Ask),
         ..Default::default()
     };
@@ -307,7 +321,6 @@ async fn permission_ask_mode_approval_channel_events_in_batch_stream() {
     let exec = ToolExecutor::new(reg);
     let calls = vec![call("c1", "dangerous_tool", ToolConcurrency::Sequential)];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         permission_mode: Some(PermissionMode::Ask),
         ..Default::default()
     };
@@ -335,4 +348,41 @@ async fn permission_ask_mode_approval_channel_events_in_batch_stream() {
         .position(|e| matches!(e, ToolEvent::ToolEnd { call_id, .. } if call_id == "c1"))
         .unwrap();
     assert!(start < approval && approval < end, "审批事件顺序契约被破坏");
+}
+
+/// 能力 gate：只读子代理调用写类工具 → PolicyBlocked；父级授权后同 run 可写
+#[tokio::test]
+async fn capability_gate_blocks_write_until_granted() {
+    let reg = registry_with(vec![Arc::new(DangerousTool)]);
+    let exec = ToolExecutor::new(reg);
+    let calls = vec![call("c1", "dangerous_tool", ToolConcurrency::Sequential)];
+    let capability = CapabilityCell::root(SubagentCapabilityMode::ReadOnly);
+    let opts = ToolBatchOptions {
+        permission_mode: Some(PermissionMode::Full),
+        capability_cell: Some(Arc::clone(&capability)),
+        ..Default::default()
+    };
+
+    let denied = exec
+        .execute_batch(&calls, &exec_ctx(), None, &opts, None)
+        .await;
+    assert_eq!(
+        denied.results[0].error_kind,
+        Some(ToolErrorKind::PolicyBlocked)
+    );
+    assert!(
+        denied.results[0]
+            .error_message
+            .as_deref()
+            .unwrap_or_default()
+            .contains("agent.capability_denied"),
+        "拒绝必须带结构化能力错误"
+    );
+
+    // 运行中授权（下一批次生效）
+    capability.set(SubagentCapabilityMode::ReadWrite);
+    let allowed = exec
+        .execute_batch(&calls, &exec_ctx(), None, &opts, None)
+        .await;
+    assert!(allowed.results[0].is_ok(), "授权后同 run 内应可写");
 }

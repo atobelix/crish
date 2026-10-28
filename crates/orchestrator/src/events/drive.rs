@@ -171,14 +171,15 @@ pub async fn drive_outcome(
     }
 
     // 3. 正常收口：outcome reason → 终态
+    let core_reason = outcome.reason.to_core_reason();
     let (terminal_status, end_reason) =
-        map_outcome_to_terminal(run.cancel_requested(), outcome.reason);
+        map_outcome_to_terminal(run.cancel_requested(), core_reason);
     let terminal_error = match terminal_status {
         RunTerminalStatus::Failed => Some(
             outcome
                 .error
                 .or_else(|| {
-                    if outcome.reason == AgentEndReason::MaxTurns {
+                    if core_reason == AgentEndReason::MaxTurns {
                         Some(MAX_TURNS_FAILED_MESSAGE.to_string())
                     } else {
                         None

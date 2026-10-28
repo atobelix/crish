@@ -2,7 +2,8 @@
 //!
 //! `ToolContext` 承载会话级数据：`session_id`、中止令牌（`abort_token`）、
 //! 审批回调通道（`ask`，R4 T10 由 session-loop 接线为真实审批通道
-//! [crate 外 ApprovalChannel] / full-access 自动放行 NoopAskChannel）、
+//! [crate 外 ApprovalChannel]；Full 模式的免审批语义由
+//! session-loop `exec_verdict::call_verdict` 在判点层实现）、
 //! 工作区根目录（`workspace_root`）。
 //!
 //! I4-M3 起另承载写路径互斥注册表（`write_claims`，None = 未接线不强制）
@@ -95,24 +96,6 @@ pub trait AskChannel: Send + Sync + std::fmt::Debug {
     ) -> Result<AskDecision, ToolError>;
 }
 
-/// 默认 no-op 审批通道：直接放行（未接线时的兜底行为）
-///
-/// T9 阶段 `ToolContext.ask` 缺省为 None（未接线）；消费方可显式注入
-/// 本通道以保持「可提问」语义不变（T10 替换为真实审批实现）。
-#[derive(Debug, Clone, Copy, Default)]
-pub struct NoopAskChannel;
-
-#[async_trait]
-impl AskChannel for NoopAskChannel {
-    async fn ask(
-        &self,
-        _tool_name: &str,
-        _args: &serde_json::Value,
-    ) -> Result<AskDecision, ToolError> {
-        Ok(AskDecision::Allowed)
-    }
-}
-
 /// 审批回调（trait 对象引用；`Option<AskCallback>` = 未接线）
 pub type AskCallback = Arc<dyn AskChannel>;
 
@@ -123,11 +106,10 @@ pub struct ToolContext {
     pub session_id: String,
     /// 中止令牌（工具执行 / 审批等待期间可自查 `is_aborted`）
     pub abort_token: AbortToken,
-    /// 审批回调通道（T10 接线；None = 未接线，按放行语义兜底）
-    pub ask: Option<AskCallback>,
     /// 工作区根目录：路径类工具相对路径解析与越界校验基准
     pub workspace_root: PathBuf,
-    /// 当前生效的权限模式（DIM-04 核心装配：Plan / Ask / FullAccess）
+    /// 当前生效的权限模式（上下文记录用；**工具不得据此自行判定放行**——
+    /// 放行裁决唯一入口 = `session-loop::exec_verdict::call_verdict`）
     pub permission_mode: PermissionMode,
     /// 写路径互斥注册表（I4-M3：None = 未接线，写工具不强制互斥；
     /// 接线由执行器按会话装配，M2 子代理执行上下文注入）
@@ -197,7 +179,6 @@ impl ToolContext {
         Self {
             session_id: session_id.into(),
             abort_token: AbortToken::new(),
-            ask: None,
             workspace_root,
             permission_mode: PermissionMode::default(),
             write_claims: None,
@@ -225,7 +206,6 @@ pub fn create_mock_tool_context() -> ToolContext {
     ToolContext {
         session_id: "mock-session".to_string(),
         abort_token: AbortToken::new(),
-        ask: None,
         workspace_root: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
         permission_mode: PermissionMode::default(),
         write_claims: None,
@@ -244,7 +224,6 @@ pub fn create_mock_tool_context() -> ToolContext {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn abort_token_starts_unaborted_and_flips() {
@@ -260,22 +239,11 @@ mod tests {
         assert!(clone.is_aborted());
     }
 
-    #[tokio::test]
-    async fn noop_ask_channel_allows() {
-        let channel = NoopAskChannel;
-        let decision = channel
-            .ask("shell_command", &json!({ "command": "git push" }))
-            .await
-            .unwrap();
-        assert_eq!(decision, AskDecision::Allowed);
-    }
-
     #[test]
     fn mock_context_factory_shapes() {
         let ctx = create_mock_tool_context();
         assert_eq!(ctx.session_id, "mock-session");
         assert!(!ctx.abort_token.is_aborted());
-        assert!(ctx.ask.is_none());
         assert!(ctx.workspace_root.is_absolute() || !ctx.workspace_root.as_os_str().is_empty());
 
         // ToolContext::new 便捷构造

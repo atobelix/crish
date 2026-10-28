@@ -30,7 +30,8 @@ use conex_types::SessionAgent;
 use orchestrator::flow_graph::{
     FailStrategy, FlowDeclaration, FlowError, FlowGraphError, FlowMetaStore, FlowNode,
     FlowNodeState, FlowReportKind, FlowScheduler, FLOW_AUTO_COMPOSITE_KEY, FLOW_DECLARATION_KEY,
-    FLOW_MAX_SIBLINGS_KEY, FLOW_ON_FAILED_KEY, FLOW_RELEASED_KEY, FLOW_RESERVED_KEY,
+    FLOW_MAX_CONCURRENT_KEY, FLOW_MAX_SIBLINGS_KEY, FLOW_ON_FAILED_KEY, FLOW_RELEASED_KEY,
+    FLOW_RESERVED_KEY,
 };
 
 // ── 测试替身 ──────────────────────────────────────────────────────
@@ -164,6 +165,10 @@ impl SubagentSpawner for RecordingSpawner {
                     .map(|paths| serde_json::to_string(paths).expect("路径白名单序列化不应失败")),
                 // D-02 LK-04：子会话 id 随行（与结果信封 session_id 同源）
                 sub_session_id: Some(format!("sess-{n}")),
+                capability_mode: None,
+                model_override: None,
+                resumable: true,
+                last_heartbeat_ms: None,
             });
             db.save_session_agents(&self.session_id, &agents)
                 .map_err(|e| SubagentSpawnError::PersistFailed(e.to_string()))?;
@@ -266,7 +271,10 @@ async fn dependent_starts_only_after_prerequisite_completed() {
 
 #[tokio::test]
 async fn parallel_burst_peak_respects_max_concurrent_event_driven() {
-    let (mut sched, spawner, _meta) = harness();
+    let (mut sched, spawner, meta) = harness();
+    // S1：flow 预算默认不限——本测试显式设置 16/16 边界覆盖
+    meta.set_meta(FLOW_MAX_SIBLINGS_KEY, "16").unwrap();
+    meta.set_meta(FLOW_MAX_CONCURRENT_KEY, "16").unwrap();
     let tasks: Vec<FlowNode> = (0..20).map(|i| node(&format!("n{i}"), &[])).collect();
     let adv = sched.declare_flow(&decl(tasks)).await.unwrap();
     assert_eq!(
@@ -867,6 +875,9 @@ async fn attach_run_requires_all_prerequisites_completed() {
 async fn attach_run_rejected_when_budget_full() {
     let (mut sched, _spawner, meta) = harness();
     meta.set_meta(FLOW_AUTO_COMPOSITE_KEY, "false").unwrap();
+    // S1：flow 预算默认不限——本测试显式设置 16/16 边界覆盖
+    meta.set_meta(FLOW_MAX_SIBLINGS_KEY, "16").unwrap();
+    meta.set_meta(FLOW_MAX_CONCURRENT_KEY, "16").unwrap();
     // 17 个并行普通节点 + 1 个综合节点（全部无前置 → gate 立即就绪）
     let mut tasks: Vec<FlowNode> = (0..17).map(|i| node(&format!("n{i}"), &[])).collect();
     let mut gate = node("gate", &[]);

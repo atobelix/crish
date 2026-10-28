@@ -25,7 +25,7 @@ pub struct RunTaskParams {
     /// 工作目录
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
-    /// 权限模式（缺省 ask；full-access 移动端不可改）
+    /// 权限模式（统一三态：每次询问 / 智能命令放行 / 完全允许模式）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permission_mode: Option<PermissionMode>,
     /// 历史（移动端一般省略；桌面 SessionHistoryCache 兜底）

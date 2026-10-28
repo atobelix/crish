@@ -14,8 +14,9 @@
 //!   时超时收敛为 Expired，run 不再无限悬挂；
 //! - 审批并行（T09.6/P8）：审批模式并行组不再退化串行——审批逐个 await
 //!   （执行模型 A，UX 与事件顺序不变），通过后执行阶段 join_all 并行；
-//! - 权限判定（R4 T10）：permission_mode 显式设置时按 dangerous 标记三态
-//!   判定（ask 问询 / plan 拒绝写类 / full-access 放行）；requires_approval
+//! - 权限判定（R4 T10）：permission_mode 为单一准绳——Ask（非只读/危险
+//!   工具问询）/ Smart（敏感命令升级审批）/ Full（除物理红线外全部放行）；
+//!   requires_approval
 //!   错误分类为 ApprovalRequired（不再折叠 SoftDeny），走真实审批——用户
 //!   同意后重试执行，拒绝返回明确拒绝结果；ctx.ask 接线 ApprovalChannel；
 //! - 单工具执行复用 agent-tools 的 execute_with_output_policy（幂等+输出预算）；
@@ -58,9 +59,7 @@ use crate::tool_events::{
     ApprovalDecision, ApprovalGate, ApprovalRequester, ClassifiedToolResult, FailStrategy,
     ToolBatchOptions, ToolErrorKind, ToolEvent,
 };
-use agent_tools::context::{
-    AbortToken, AskCallback, ExploreDocsQuotaContext, NoopAskChannel, ToolContext,
-};
+use agent_tools::context::{AbortToken, ExploreDocsQuotaContext, ToolContext};
 use agent_tools::definition::ToolError;
 use agent_tools::executor::{
     execute_stream_with_output_policy, ExecutorContext, ToolExecutionPolicy,
@@ -71,7 +70,7 @@ use agent_tools::middleware::{
     ToolMiddleware,
 };
 use agent_tools::note_backend::NoteBackendHandle;
-use agent_tools::permission::{decide, PermissionMode, PermissionVerdict};
+use agent_tools::permission::{PermissionMode, PermissionVerdict};
 use agent_tools::registry::ToolRegistry;
 use agent_tools::revert::RevertPolicy;
 use agent_tools::write_paths::WritePathRegistry;
@@ -207,7 +206,7 @@ pub(crate) use exec_batch::DEFAULT_MAX_PARALLEL;
 pub(crate) use exec_middleware::run_hook_with_timeout;
 pub(crate) use exec_verdict::{
     approval_wait, classify_tool_error, denied_message, denied_result, mark_rest_cancelled,
-    ApprovalWaitOutcome,
+    ApprovalWaitOutcome, VerdictDecision,
 };
 
 /// 工具批处理执行器
@@ -223,7 +222,7 @@ pub struct ToolExecutor {
     /// 插件钩子注册表（tool.pre / tool.post 广播；None = 不启用）
     hooks: Option<Arc<HookRegistry>>,
     /// C3 回退护栏策略（I3-S6）：git 回退形态 + 面积超阈值 → 需审批
-    /// （无论权限模式，full-access 不豁免；审批人 = 用户）。默认启用
+    /// （Ask/Smart 下生效；Full 由判点早退放行；审批人 = 用户）。默认启用
     /// （语义估算评估器 + 默认阈值），引擎可经 [Self::with_revert_policy]
     /// 注入 session_meta 覆盖阈值 / 真实 git 面积评估器。
     revert_policy: RevertPolicy,
@@ -233,4 +232,6 @@ pub struct ToolExecutor {
 
 #[cfg(test)]
 #[path = "tool_exec_tests/mod.rs"]
-mod tests;
+mod tool_exec_tests;
+#[cfg(test)]
+use tool_exec_tests as tests;

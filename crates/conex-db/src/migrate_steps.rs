@@ -580,3 +580,42 @@ pub(crate) fn step_12_to_13(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqli
     }
     Ok(())
 }
+
+/// v13 → v14：session_agents 生命周期/可恢复扩展（子代理协作 P3）。
+///
+/// 纯 ADD COLUMN + 索引（无 DROP、无表重建），col-check 幂等：
+/// - `capability_mode` TEXT：spawn 时声明的能力档快照（展示/恢复建议；
+///   运行期生效值仍由 CapabilityCell 按父链钳制）；
+/// - `model_override` TEXT：绑定的模型覆盖（跨重启保留）；
+/// - `resumable` INTEGER NOT NULL DEFAULT 0：启动对账中断置 1，
+///   正常终态置 0，主 agent/前端据此决定是否恢复；
+/// - `last_heartbeat_ms` INTEGER：运行期心跳（epoch ms），
+///   用于识别失联子代理。
+///
+/// 索引 `idx_session_agents_status` 支撑启动对账的 `status='running'`
+/// 轻量扫描（旧库全表扫描，子代理多时冷启动变慢）。
+pub(crate) fn step_13_to_14(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
+    let has_agents: i64 = tx.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='session_agents'",
+        [],
+        |r| r.get(0),
+    )?;
+    if has_agents == 0 {
+        return Ok(());
+    }
+    let cols = table_columns(tx, "session_agents")?;
+    let add_col = |col: &str, ddl: &str| -> Result<(), rusqlite::Error> {
+        if !cols.iter().any(|c| c == col) {
+            tx.execute_batch(&format!("ALTER TABLE session_agents ADD COLUMN {ddl};"))?;
+        }
+        Ok(())
+    };
+    add_col("capability_mode", "capability_mode TEXT")?;
+    add_col("model_override", "model_override TEXT")?;
+    add_col("resumable", "resumable INTEGER NOT NULL DEFAULT 0")?;
+    add_col("last_heartbeat_ms", "last_heartbeat_ms INTEGER")?;
+    tx.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_session_agents_status ON session_agents(status);",
+    )?;
+    Ok(())
+}

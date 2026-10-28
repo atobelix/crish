@@ -1084,6 +1084,10 @@ impl SubagentSpawner for DbSpawner {
                 .map(|paths| serde_json::to_string(paths).expect("路径白名单序列化不应失败")),
             // D-02 LK-04 v9 列：测试域无子会话映射（None）
             sub_session_id: None,
+            capability_mode: None,
+            model_override: None,
+            resumable: true,
+            last_heartbeat_ms: None,
         });
         self.db
             .save_session_agents(&self.session_id, &agents)
@@ -1190,6 +1194,8 @@ async fn flow_budget_and_recovery_episodes_survive_crash_window() {
             started_at_ms: now_ms() - 1_000,
             inject_bytes: 100,
             window_bytes: 10_000,
+            capability_mode: None,
+            model_override: None,
         };
         // 阶梯 2：通知落库（pending=true，重启后仍可见）
         coordinator.on_subagent_run_failure(&ctx).await.unwrap();
@@ -1412,6 +1418,32 @@ async fn running_subagents_normalized_across_crash_restart() {
     assert!(
         rows.iter().all(|r| r.ended_at.is_some()),
         "ended_at 由 restore 落库"
+    );
+    // P3：中断行标记可恢复 + 摘要 + 心跳兜底；对账结果供父会话汇总
+    assert!(
+        rows.iter().all(|r| r.resumable),
+        "崩溃中断行必须标记 resumable（主 agent 可决策恢复）：{rows:?}"
+    );
+    assert!(
+        rows.iter()
+            .all(|r| r.summary.as_deref() == Some(orchestrator::restore::INTERRUPTED_SUBAGENT_SUMMARY)),
+        "中断摘要落库（保留已有 summary 语义由 DB 层单测覆盖）"
+    );
+    assert!(
+        rows.iter().all(|r| r.last_heartbeat_ms == r.ended_at),
+        "旧行无心跳 → 以中断时刻兜底"
+    );
+    assert_eq!(
+        outcome.interrupted_subagents.len(),
+        3,
+        "对账结果逐行上报（父会话汇总通知源）"
+    );
+    assert!(
+        outcome
+            .interrupted_subagents
+            .iter()
+            .all(|row| row.parent_session_id == session_id),
+        "中断子代理父会话归属正确"
     );
 
     // FlowScheduler 从归一后的行重建：全部节点终态、无残留运行节点，

@@ -6,9 +6,8 @@
 //! - 实写：经 [`NoteBackend::apply_block_ops`] 批路径；origin=agent
 //! - 写中断 / abort：稳定码 **`note.execution_unknown`**（A-AGT-07）；**禁止**半写
 //!
-//! # 审批
-//! - `dangerous=true`；plan **Deny**（见 `note_permission` / 表驱动矩阵）
-//! - ask 存在则 [`maybe_ask_note_write`]
+//! # 权限
+//! - `dangerous=true`；由内核调度层统一裁决判定。
 //!
 //! # 诚实边界
 //! - **≠ EL-05**；**≠ A-AGT 全表关闭**；**≠ W6-E Strict** 千次+恶意闭环
@@ -22,7 +21,6 @@ use crate::note_backend::{
     backend_err_to_tool_err, block_batch_result_json, NoteBackendError, NoteBlockBatchRequest,
     NoteBlockOp, NoteBlockOpKind,
 };
-use crate::tools::note_document_apply_md::maybe_ask_note_write;
 use crate::tools::note_query_blocks::NOTE_BACKEND_UNWIRED;
 use crate::tools::{optional_string, require_string};
 use async_trait::async_trait;
@@ -200,19 +198,6 @@ impl Tool for BlockBatchTool {
             ));
         }
 
-        // dryRun 只读预览：不走写审批（无副作用）
-        if !dry_run {
-            maybe_ask_note_write(ctx, self.name(), &args).await?;
-        }
-
-        // 审批后再次检查 abort（A-AGT-07）
-        if ctx.abort_token.is_aborted() && !dry_run {
-            return Err(ToolError::new(
-                "note.execution_unknown",
-                "write interrupted (abort) after approval; execution state unknown — do not auto-retry write",
-            ));
-        }
-
         let Some(backend) = ctx.note_backend.as_ref() else {
             return Ok(serde_json::json!({
                 "ok": false,
@@ -249,8 +234,7 @@ mod tests {
     use super::*;
     use crate::context::{create_mock_tool_context, AbortToken};
     use crate::note_backend::{MemoryNoteBackend, NoteBackend};
-    use crate::note_permission::{decide_note_tool, plan_denies_note_tool};
-    use crate::permission::{PermissionMode, PermissionVerdict};
+
     use std::sync::Arc;
 
     #[test]
@@ -396,16 +380,6 @@ mod tests {
             .await
             .unwrap();
         assert!(q.blocks.is_empty(), "abort 不得半写");
-    }
-
-    /// plan Deny 新写工具
-    #[test]
-    fn block_batch_plan_denied() {
-        assert!(plan_denies_note_tool("block_batch"));
-        assert_eq!(
-            decide_note_tool("block_batch", PermissionMode::Plan),
-            Some(PermissionVerdict::Deny)
-        );
     }
 
     #[test]

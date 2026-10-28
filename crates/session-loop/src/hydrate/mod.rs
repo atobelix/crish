@@ -32,9 +32,12 @@
 //! 解析失败）只跳过该条或降级对应字段，不中断整体映射。
 
 mod blocks;
+pub mod cache;
 pub(crate) mod repair;
 pub(crate) mod time_text;
 pub(crate) mod tool_calls;
+
+pub use cache::{SessionHistoryLruCache, MAX_CACHED_SESSIONS_DEFAULT};
 
 #[cfg(test)]
 mod tests;

@@ -5,9 +5,33 @@
 //! 权限判定（call_verdict / revert_refusal_message）、致命判定
 //! （result_is_fatal）、错误分类与拒绝结果构造（classify_tool_error /
 //! denied_result / denied_message / mark_rest_cancelled）随本模落位。
-//! 语义与拆分前逐行一致（只搬移不改行为）。
 
 use super::*;
+use agent_tools::permission::{decide_verdict, PermissionMode, PermissionVerdict};
+use conex_sandbox::SmartClassifier;
+
+/// 裁决详情：判点结果 + 需审批原因（审批卡片展示与审计共用）
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct VerdictDecision {
+    pub verdict: PermissionVerdict,
+    pub reason: Option<String>,
+}
+
+impl VerdictDecision {
+    fn allow() -> Self {
+        Self {
+            verdict: PermissionVerdict::Allow,
+            reason: None,
+        }
+    }
+
+    fn deny(reason: String) -> Self {
+        Self {
+            verdict: PermissionVerdict::Deny,
+            reason: Some(reason),
+        }
+    }
+}
 
 /// 批级审批缺省超时（120s，F1-02 修复）：与编排层 approval_router 的
 /// APPROVAL_TIMEOUT=120s 超时兜底对齐——审批卡片丢失/事件桥断连时
@@ -24,7 +48,6 @@ pub(crate) enum ApprovalWaitOutcome {
     Decision(ApprovalDecision),
 }
 
-///
 /// 批级审批三个 await 点（顺序路径 / 并行组审批循环 /
 /// requires_approval 重试）共用本函数：`tokio::select!{biased}` 竞速
 /// abort 等待 vs 审批门（带超时），对齐 approval.rs:131-160 的
@@ -34,17 +57,19 @@ pub(crate) enum ApprovalWaitOutcome {
 /// 超时语义：`timeout` 为 None 时用 [DEFAULT_APPROVAL_TIMEOUT]；超时
 /// 命中返回 `Expired`（既有 Expired 分支复用：非致命、喂回模型）。
 /// 竞速兜底：超时/裁决与 abort 同时就绪时取消优先（L3 强停语义）。
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn approval_wait(
     gate: &dyn ApprovalGate,
     call_id: &str,
     tool_name: &str,
     input: &Value,
     requester: Option<&ApprovalRequester>,
+    reason: Option<&str>,
     abort: Option<&AbortSignal>,
     timeout: Option<Duration>,
 ) -> ApprovalWaitOutcome {
     let t = timeout.unwrap_or(DEFAULT_APPROVAL_TIMEOUT);
-    let wait = gate.request_approval(call_id, tool_name, input, requester);
+    let wait = gate.request_approval(call_id, tool_name, input, requester, reason);
     let cancelled = async {
         match abort {
             Some(sig) => sig.wait_aborted().await,
@@ -86,88 +111,148 @@ impl ToolExecutor {
             .unwrap_or(false)
     }
 
-    /// 权限判定（R4 T10）：permission_mode 显式设置时按工具 dangerous
-    /// 标记 + 模式三态判定；未设置（None）时沿用既有语义——approval
-    /// 开启即视为需审批（legacy 全批审批）；approval 未开启（无审批
-    /// 基础设施）时按 Ask 矩阵判定（A3 fail-closed 配套：安全项放行、
-    /// 危险项 NeedsApproval → 由执行器不透传执行）。
-    ///
-    /// ## E2 扩展点 C 承载登记（统一输入流收敛 · 扩展门面详案 §1②）
-    ///
-    /// **已登记为 C（审查策略）承载面**：本判点是工具审查的**单一链
-    /// 判点**——`call_verdict` → `approval_router` → `permission.rs`
-    /// 三态（decide/decide_command_with_revert）+ `Option<Arc<dyn
-    /// ApprovalGate>>`（tool_events.rs:148）。类别轴（ToolCategory）当前
-    /// 仅作事件载荷（executing_tools.rs:71 硬编码 Internal，不参与裁决
-    /// 分派）——**类别 → 策略分派依赖 P1 完成**（P1 主导，E2 只登记
-    /// 承载面形状，不超前实现）。
-    ///
-    /// 命令判定唯一链（P1 权限归一 A2/D8）：`input.command` 携带命令文本时
-    /// 经 [agent_tools::permission::decide_command_with_revert] 单一链判定
-    /// （红线先行 → C3 回退护栏 → 三态矩阵）——与 shell 工具执行器消费
-    /// 同一条链，杜绝「pre 判定 one way / during 判定 another way」；
-    /// 回退护栏的字符串便捷入口已随收敛删除（护栏仍经链内 `gate_verdict`
-    /// 挂载，语义不变）。
-    ///
-    /// C3（I3-S6）判定点（C4/S10b 经此挂载，不并写本文件主体）：入参含
-    /// 命令文本时先过回退护栏——GitRevertShape 段 + 面积超阈值 →
-    /// NeedsApproval（无论权限模式，full-access 不豁免；plan 保持更严
-    /// Deny），面积小 → 按既有矩阵。红线语义仍由工具内门禁 100% 拦截
-    /// （S2），本层不重复。审批人 = 用户：NeedsApproval 走既有
-    /// ApprovalGate 链路等待用户裁决，主 Agent 仅转呈。
-    pub(crate) fn call_verdict(
+    /// 裁决详情（含需审批原因）：执行器唯一判点的完整产物，
+    /// 原因随 approval-requested 透传给审批卡片（SSOT）。
+    pub(crate) fn call_verdict_detailed(
         &self,
         call: &ToolBatchCall,
         options: &ToolBatchOptions,
-    ) -> PermissionVerdict {
+    ) -> VerdictDecision {
         if !self.registry.is_tool_enabled(&call.tool_name) {
-            return PermissionVerdict::Deny;
+            return VerdictDecision::deny(format!("工具未启用：{}", call.tool_name));
         }
+
+        let mode = options.effective_permission_mode();
+
         if let Some(command) = call
             .input
             .get("command")
             .and_then(serde_json::Value::as_str)
         {
-            // BC10-6: 任务类型命令白名单刚性前置门禁
+            // 任务类型命令白名单（BC10-6）：commit 等严格类型只允许白名单命令
             if let Some(task_type) = &options.task_type {
                 if !agent_tools::readonly::command_allowed_for_task_type(task_type, command) {
-                    return PermissionVerdict::Deny;
+                    tracing::warn!(
+                        target: "security.audit",
+                        task_type,
+                        command,
+                        "任务类型命令白名单拒绝执行"
+                    );
+                    return VerdictDecision::deny(format!("任务类型 {task_type} 不允许执行该命令"));
                 }
             }
-
-            // 未设置权限模式：沿用既有语义（approval 开启 → 全批审批），
-            // 不进入单链（与 legacy 逐行等价：C3 大回退在此同样
-            // NeedsApproval，其余一律按需审批收口）
-            if options.permission_mode.is_none() {
-                return PermissionVerdict::NeedsApproval;
-            }
-            let mode = options.permission_mode.unwrap_or_default();
-            let dangerous = self
-                .registry
-                .get(&call.tool_name)
-                .map(|t| t.definition().dangerous)
-                .unwrap_or(false);
-            // 命令判定唯一链：红线先行 → C3 回退护栏 → 三态矩阵
-            return agent_tools::permission::decide_command_with_revert(
-                command,
-                dangerous,
-                false,
-                mode,
-                &self.revert_policy,
-            );
+            return self.call_command_verdict_detailed(command, mode);
         }
+
+        // 常规非命令工具审查
         let dangerous = self
             .registry
             .get(&call.tool_name)
             .map(|t| t.definition().dangerous)
             .unwrap_or(false);
-        match options.permission_mode {
-            Some(mode) => decide(dangerous, false, mode),
-            // legacy：approval 开启 → 全部工具调用走审批
-            None if options.approval_enabled => PermissionVerdict::NeedsApproval,
-            // A3 fail-closed 配套：无审批基础设施时安全项放行执行、
-            // 危险项 NeedsApproval（执行器不透传执行，见 exec_single/exec_batch）
-            None => decide(dangerous, false, PermissionMode::Ask),
+
+        if mode == PermissionMode::Full {
+            return VerdictDecision::allow();
+        }
+
+        let verdict = decide_verdict(mode, dangerous, !dangerous);
+        let reason = (verdict == PermissionVerdict::NeedsApproval)
+            .then(|| format!("工具 {} 标记为危险操作，需确认", call.tool_name));
+        VerdictDecision { verdict, reason }
+    }
+
+    /// 全系统唯一的法定工具审查判点（SSOT）
+    ///
+    /// 所有工具调用在派发执行前必须经过本裁决，且后续环节绝不再进行任何二次审查：
+    /// 1. 工具未启用 → Deny；超任务类型命令白名单 → Deny；
+    /// 2. Full 模式：除物理红线（Redline）外全部放行——红线是"不可授权底线"，
+    ///    任何模式不得豁免（防提示词注入抹盘）；其余命令 0 延迟直通；
+    /// 3. Shell 命令审查：SmartClassifier 统一分析（重定向/命令替换/换行等复杂形态
+    ///    保守升级审批），Smart 放行安全命令、Ask 仅放行严格只读；
+    /// 4. 常规非命令工具审查：根据 dangerous 标记和权限模式判定。
+    pub(crate) fn call_verdict(
+        &self,
+        call: &ToolBatchCall,
+        options: &ToolBatchOptions,
+    ) -> PermissionVerdict {
+        self.call_verdict_detailed(call, options).verdict
+    }
+
+    /// Shell 命令复合语义审查（两层分类矩阵）
+    fn call_command_verdict_detailed(
+        &self,
+        command: &str,
+        mode: PermissionMode,
+    ) -> VerdictDecision {
+        let analysis = SmartClassifier::analyze(command);
+
+        // 红线：任何模式（含 Full）一律刚性拒绝
+        if let conex_sandbox::SmartVerdict::Deny { reason } = analysis.verdict {
+            tracing::warn!(
+                target: "security.audit",
+                mode = mode.as_str(),
+                command,
+                reason,
+                "Redline 命令被硬阻断"
+            );
+            return VerdictDecision::deny(reason.to_string());
+        }
+
+        if mode == PermissionMode::Full {
+            return VerdictDecision::allow();
+        }
+
+        match mode {
+            PermissionMode::Smart => {
+                // C3 大回退护栏检查（大面积回退弹窗确认）
+                let semantic = conex_sandbox::semantics::analyze(command);
+                if let Some(revert_verdict) = self.revert_policy.gate_verdict(&semantic, mode) {
+                    let reason = (revert_verdict == PermissionVerdict::NeedsApproval)
+                        .then(|| "检测到大面积回退操作，需确认".to_string());
+                    return VerdictDecision {
+                        verdict: revert_verdict,
+                        reason,
+                    };
+                }
+                match analysis.verdict {
+                    conex_sandbox::SmartVerdict::Allow => VerdictDecision::allow(),
+                    conex_sandbox::SmartVerdict::RequireApproval { reason } => {
+                        let summary = reason.summary();
+                        tracing::info!(
+                            target: "security.audit",
+                            mode = mode.as_str(),
+                            command,
+                            approval_reason = %summary,
+                            "Smart 模式升级审批"
+                        );
+                        VerdictDecision {
+                            verdict: PermissionVerdict::NeedsApproval,
+                            reason: Some(summary),
+                        }
+                    }
+                    conex_sandbox::SmartVerdict::Deny { reason } => {
+                        VerdictDecision::deny(reason.to_string())
+                    }
+                }
+            }
+            // Ask（Full 已在上面早退；其余未知同样按 Ask 兜底）
+            _ => {
+                // Ask 模式：仅严格只读命令放行，其余均需审批
+                if analysis.pure_read_only {
+                    VerdictDecision::allow()
+                } else {
+                    tracing::info!(
+                        target: "security.audit",
+                        mode = mode.as_str(),
+                        command,
+                        "Ask 模式升级审批（非严格只读）"
+                    );
+                    VerdictDecision {
+                        verdict: PermissionVerdict::NeedsApproval,
+                        reason: Some("每次询问模式：非严格只读命令需确认".to_string()),
+                    }
+                }
+            }
         }
     }
 
@@ -225,21 +310,14 @@ pub(crate) fn denied_result(
     options: &ToolBatchOptions,
     registry: Option<&ToolRegistry>,
 ) -> ClassifiedToolResult {
+    let mode = options.effective_permission_mode().as_str();
     let message = if let Some(reg) = registry {
         if !reg.is_tool_enabled(&call.tool_name) {
             format!("tool disabled: {}", call.tool_name)
         } else {
-            let mode = options
-                .permission_mode
-                .unwrap_or(PermissionMode::Ask)
-                .as_engine_str();
             format!("permission denied by {mode} mode: {}", call.tool_name)
         }
     } else {
-        let mode = options
-            .permission_mode
-            .unwrap_or(PermissionMode::Ask)
-            .as_engine_str();
         format!("permission denied by {mode} mode: {}", call.tool_name)
     };
     ClassifiedToolResult::error(
@@ -275,7 +353,6 @@ pub(crate) fn mark_rest_cancelled(
             category: call.category,
             concurrency: call.concurrency,
             summary: call.summary.clone(),
-            // EV-09（D-03）：兄弟失败取消——标记时刻打点（未执行，duration=0）
             occurred_at_ms: Some(conex_shared::time::unix_millis() as u64),
         });
         events.push(ToolEvent::ToolEnd {
@@ -283,13 +360,9 @@ pub(crate) fn mark_rest_cancelled(
             tool_name: call.tool_name.clone(),
             is_error: true,
             duration_ms: 0,
-            // U-OUT-RS：出口 Arc——Null 也走共享边界
             output: Arc::new(serde_json::Value::Null),
-            // Tier-1（02 §3.1.3 DEL-05）：统一 codes::TOOL_CANCELLED 常量，
-            // 废除字面量 "tool.cancelled"
             error_code: Some(conex_types::error::codes::TOOL_CANCELLED.to_string()),
             error_message: Some("cancelled: sibling failure".to_string()),
-            // EV-09（D-03）：未执行路径原子要素留空
             attempt: None,
             deduplicated: None,
             executed_input: None,
@@ -331,90 +404,264 @@ mod tests {
         }
     }
 
+    struct DummyFsTool {
+        name: &'static str,
+        dangerous: bool,
+    }
+    #[async_trait::async_trait]
+    impl Tool for DummyFsTool {
+        fn name(&self) -> &str {
+            self.name
+        }
+        fn definition(&self) -> &ToolDefinition {
+            static DEF_SAFE: std::sync::OnceLock<ToolDefinition> = std::sync::OnceLock::new();
+            static DEF_DANGEROUS: std::sync::OnceLock<ToolDefinition> = std::sync::OnceLock::new();
+            if self.dangerous {
+                DEF_DANGEROUS.get_or_init(|| ToolDefinition {
+                    name: "write_file".into(),
+                    description: "write file".into(),
+                    input_schema: serde_json::json!({"type": "object"}),
+                    dangerous: true,
+                    fatal_on_error: false,
+                })
+            } else {
+                DEF_SAFE.get_or_init(|| ToolDefinition {
+                    name: "read_file".into(),
+                    description: "read file".into(),
+                    input_schema: serde_json::json!({"type": "object"}),
+                    dangerous: false,
+                    fatal_on_error: false,
+                })
+            }
+        }
+        async fn execute(&self, _ctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
+            Ok(args)
+        }
+    }
+
     #[test]
-    fn test_call_verdict_task_type_commit_whitelist() {
+    fn full_mode_denies_redline_but_allows_regular_commands() {
         let mut reg = ToolRegistry::new();
         let _ = reg.register(Arc::new(DummyShellTool));
         let exec = ToolExecutor::new(Arc::new(reg));
 
-        let commit_options = ToolBatchOptions {
-            task_type: Some("commit".to_string()),
-            permission_mode: Some(PermissionMode::FullAccess),
+        let full_options = ToolBatchOptions {
+            permission_mode: Some(PermissionMode::Full),
             ..ToolBatchOptions::default()
         };
 
-        // 允许的 git 命令
-        let git_call = ToolBatchCall {
-            id: "call-git".into(),
+        // 物理红线是不可授权底线：Full 模式同样刚性拒绝
+        let redline_call = ToolBatchCall {
+            id: "call-redline".into(),
             tool_name: "execute_command".into(),
-            input: serde_json::json!({ "command": "git status" }),
+            input: serde_json::json!({ "command": "rm -rf /" }),
             category: conex_types::tool::ToolCategory::Internal,
             concurrency: ToolConcurrency::Sequential,
             summary: String::new(),
         };
-        let verdict = exec.call_verdict(&git_call, &commit_options);
         assert_eq!(
-            verdict,
-            PermissionVerdict::Allow,
-            "git 命令应通过白名单裁决"
+            exec.call_verdict(&redline_call, &full_options),
+            PermissionVerdict::Deny
         );
 
-        // 禁止的非 git 命令 (例如 npm test)
-        let npm_call = ToolBatchCall {
-            id: "call-npm".into(),
+        // Regular commands also Allow
+        let normal_call = ToolBatchCall {
+            id: "call-normal".into(),
             tool_name: "execute_command".into(),
             input: serde_json::json!({ "command": "npm test" }),
             category: conex_types::tool::ToolCategory::Internal,
             concurrency: ToolConcurrency::Sequential,
             summary: String::new(),
         };
-        let verdict = exec.call_verdict(&npm_call, &commit_options);
         assert_eq!(
-            verdict,
-            PermissionVerdict::Deny,
-            "非 git 命令必须被 task_type 白名单拒决 (Deny)"
+            exec.call_verdict(&normal_call, &full_options),
+            PermissionVerdict::Allow
         );
+    }
 
-        // 其它非白名单命令
-        let rm_call = ToolBatchCall {
-            id: "call-rm".into(),
+    #[test]
+    fn smart_mode_classifies_commands() {
+        let mut reg = ToolRegistry::new();
+        let _ = reg.register(Arc::new(DummyShellTool));
+        let exec = ToolExecutor::new(Arc::new(reg));
+
+        let smart_options = ToolBatchOptions {
+            permission_mode: Some(PermissionMode::Smart),
+            ..ToolBatchOptions::default()
+        };
+
+        // 1. Safe build/test/probe commands are allowed directly
+        for cmd in ["git status", "ls -la", "cargo check", "npm test", "pwd"] {
+            let call = ToolBatchCall {
+                id: "call-safe".into(),
+                tool_name: "execute_command".into(),
+                input: serde_json::json!({ "command": cmd }),
+                category: conex_types::tool::ToolCategory::Internal,
+                concurrency: ToolConcurrency::Sequential,
+                summary: String::new(),
+            };
+            assert_eq!(
+                exec.call_verdict(&call, &smart_options),
+                PermissionVerdict::Allow,
+                "Safe command {cmd} should be Allowed in Smart mode"
+            );
+        }
+
+        // 2. Sensitive commands require approval
+        for cmd in ["rm -rf ./tmp", "git push origin main -f", "sudo apt update"] {
+            let call = ToolBatchCall {
+                id: "call-sensitive".into(),
+                tool_name: "execute_command".into(),
+                input: serde_json::json!({ "command": cmd }),
+                category: conex_types::tool::ToolCategory::Internal,
+                concurrency: ToolConcurrency::Sequential,
+                summary: String::new(),
+            };
+            assert_eq!(
+                exec.call_verdict(&call, &smart_options),
+                PermissionVerdict::NeedsApproval,
+                "Sensitive command {cmd} should require approval in Smart mode"
+            );
+        }
+
+        // 3. Redline commands are Denied in Smart mode
+        let redline_call = ToolBatchCall {
+            id: "call-redline".into(),
             tool_name: "execute_command".into(),
-            input: serde_json::json!({ "command": "rm -rf file.txt" }),
+            input: serde_json::json!({ "command": "rm -rf /" }),
             category: conex_types::tool::ToolCategory::Internal,
             concurrency: ToolConcurrency::Sequential,
             summary: String::new(),
         };
-        let verdict = exec.call_verdict(&rm_call, &commit_options);
         assert_eq!(
-            verdict,
+            exec.call_verdict(&redline_call, &smart_options),
             PermissionVerdict::Deny,
-            "删除命令在 commit task_type 下必须被 Deny"
+            "Redline command should be Denied in Smart mode"
         );
+    }
 
-        // implementation 任务类型放行构建/测试命令
-        let impl_options = ToolBatchOptions {
-            task_type: Some("implementation".to_string()),
-            permission_mode: Some(PermissionMode::FullAccess),
+    #[test]
+    fn ask_mode_requires_approval_except_pure_readonly() {
+        let mut reg = ToolRegistry::new();
+        let _ = reg.register(Arc::new(DummyShellTool));
+        let exec = ToolExecutor::new(Arc::new(reg));
+
+        let ask_options = ToolBatchOptions {
+            permission_mode: Some(PermissionMode::Ask),
             ..ToolBatchOptions::default()
         };
-        let verdict = exec.call_verdict(&npm_call, &impl_options);
+
+        // Pure read-only probe commands are allowed
+        let read_call = ToolBatchCall {
+            id: "call-read".into(),
+            tool_name: "execute_command".into(),
+            input: serde_json::json!({ "command": "git status" }),
+            category: conex_types::tool::ToolCategory::Internal,
+            concurrency: ToolConcurrency::Sequential,
+            summary: String::new(),
+        };
         assert_eq!(
-            verdict,
-            PermissionVerdict::Allow,
-            "implementation 任务类型应放行构建测试命令"
+            exec.call_verdict(&read_call, &ask_options),
+            PermissionVerdict::Allow
         );
 
-        // 未指定 task_type (None) 正常放行
-        let unrestricted_options = ToolBatchOptions {
-            task_type: None,
-            permission_mode: Some(PermissionMode::FullAccess),
+        // Build/test commands require approval in Ask mode
+        let test_call = ToolBatchCall {
+            id: "call-test".into(),
+            tool_name: "execute_command".into(),
+            input: serde_json::json!({ "command": "npm test" }),
+            category: conex_types::tool::ToolCategory::Internal,
+            concurrency: ToolConcurrency::Sequential,
+            summary: String::new(),
+        };
+        assert_eq!(
+            exec.call_verdict(&test_call, &ask_options),
+            PermissionVerdict::NeedsApproval
+        );
+
+        // Redline is denied
+        let redline_call = ToolBatchCall {
+            id: "call-redline".into(),
+            tool_name: "execute_command".into(),
+            input: serde_json::json!({ "command": "rm -rf /" }),
+            category: conex_types::tool::ToolCategory::Internal,
+            concurrency: ToolConcurrency::Sequential,
+            summary: String::new(),
+        };
+        assert_eq!(
+            exec.call_verdict(&redline_call, &ask_options),
+            PermissionVerdict::Deny
+        );
+    }
+
+    #[test]
+    fn non_command_tools_handled_by_dangerous_flag() {
+        let mut reg = ToolRegistry::new();
+        let _ = reg.register(Arc::new(DummyFsTool {
+            name: "read_file",
+            dangerous: false,
+        }));
+        let _ = reg.register(Arc::new(DummyFsTool {
+            name: "write_file",
+            dangerous: true,
+        }));
+        let exec = ToolExecutor::new(Arc::new(reg));
+
+        let ask_options = ToolBatchOptions {
+            permission_mode: Some(PermissionMode::Ask),
             ..ToolBatchOptions::default()
         };
-        let verdict = exec.call_verdict(&npm_call, &unrestricted_options);
+
+        let read_call = ToolBatchCall {
+            id: "call-read".into(),
+            tool_name: "read_file".into(),
+            input: serde_json::json!({ "path": "test.txt" }),
+            category: conex_types::tool::ToolCategory::Internal,
+            concurrency: ToolConcurrency::Sequential,
+            summary: String::new(),
+        };
         assert_eq!(
-            verdict,
-            PermissionVerdict::Allow,
-            "未指定 task_type 时按常规权限模式放行"
+            exec.call_verdict(&read_call, &ask_options),
+            PermissionVerdict::Allow
+        );
+
+        let write_call = ToolBatchCall {
+            id: "call-write".into(),
+            tool_name: "write_file".into(),
+            input: serde_json::json!({ "path": "test.txt" }),
+            category: conex_types::tool::ToolCategory::Internal,
+            concurrency: ToolConcurrency::Sequential,
+            summary: String::new(),
+        };
+        assert_eq!(
+            exec.call_verdict(&write_call, &ask_options),
+            PermissionVerdict::NeedsApproval
+        );
+    }
+
+    #[test]
+    fn disabled_tools_are_denied() {
+        let mut reg = ToolRegistry::new();
+        let _ = reg.register(Arc::new(DummyShellTool));
+        reg.set_tool_enabled("execute_command", false);
+        let exec = ToolExecutor::new(Arc::new(reg));
+
+        let full_options = ToolBatchOptions {
+            permission_mode: Some(PermissionMode::Full),
+            ..ToolBatchOptions::default()
+        };
+
+        let disabled_call = ToolBatchCall {
+            id: "call-disabled".into(),
+            tool_name: "execute_command".into(),
+            input: serde_json::json!({ "command": "git status" }),
+            category: conex_types::tool::ToolCategory::Internal,
+            concurrency: ToolConcurrency::Sequential,
+            summary: String::new(),
+        };
+        assert_eq!(
+            exec.call_verdict(&disabled_call, &full_options),
+            PermissionVerdict::Deny
         );
     }
 }

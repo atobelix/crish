@@ -421,7 +421,7 @@ fn all_events() -> Vec<AgentEvent> {
                 flagged: false,
             },
             decision: SecurityAuditDecision::Redirected,
-            permission_mode: Some("full-access".into()),
+            permission_mode: Some("full".into()),
             tool_call_id: Some("tc-1".into()),
         },
         // I5-M7：子代理域三事件（C8 事件契约；runId 由信封注入 = 父 run）

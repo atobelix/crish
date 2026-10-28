@@ -18,6 +18,7 @@ impl ApprovalGate for RecordingApproval {
         _tool_name: &str,
         _args: &Value,
         _requester: Option<&ApprovalRequester>,
+        _reason: Option<&str>,
     ) -> ApprovalDecision {
         self.order
             .lock()
@@ -40,6 +41,7 @@ impl ApprovalGate for BlockingApproval {
         _tool_name: &str,
         _args: &Value,
         _requester: Option<&ApprovalRequester>,
+        _reason: Option<&str>,
     ) -> ApprovalDecision {
         self.order
             .lock()
@@ -62,6 +64,7 @@ impl ApprovalGate for DenySomeApproval {
         _tool_name: &str,
         _args: &Value,
         _requester: Option<&ApprovalRequester>,
+        _reason: Option<&str>,
     ) -> ApprovalDecision {
         if call_id == self.deny {
             ApprovalDecision::Denied {
@@ -94,6 +97,7 @@ impl ApprovalGate for SequenceApproval {
         _tool_name: &str,
         _args: &Value,
         _requester: Option<&ApprovalRequester>,
+        _reason: Option<&str>,
     ) -> ApprovalDecision {
         self.decisions
             .lock()
@@ -116,6 +120,7 @@ impl ApprovalGate for PendingApproval {
         _tool_name: &str,
         _args: &Value,
         _requester: Option<&ApprovalRequester>,
+        _reason: Option<&str>,
     ) -> ApprovalDecision {
         std::future::pending().await
     }
@@ -145,6 +150,7 @@ impl ApprovalGate for HangAfterApprovals {
         _tool_name: &str,
         _args: &Value,
         _requester: Option<&ApprovalRequester>,
+        _reason: Option<&str>,
     ) -> ApprovalDecision {
         let n = self.consulted.fetch_add(1, Ordering::SeqCst);
         if n < self.hang_after {
@@ -168,6 +174,7 @@ impl ApprovalGate for RequesterRecordingApproval {
         _tool_name: &str,
         _args: &Value,
         requester: Option<&ApprovalRequester>,
+        _reason: Option<&str>,
     ) -> ApprovalDecision {
         *self.received.lock().unwrap() = requester.cloned();
         self.decision.clone()

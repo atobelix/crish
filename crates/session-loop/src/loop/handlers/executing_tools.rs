@@ -83,7 +83,7 @@ pub(crate) async fn handle(
             // P1 权限归一（主控裁决 2，ToolCategory 登记降级）：类别轴为
             // 「权限 + 回滚共用投影标签」——安全判定（allow/deny/ask）不读
             // 类别（决策 4：判定以 dangerous 标记 + PermissionMode +
-            // decide_with_redline 为准）；此处恒 Internal 为投影标签登记，
+            // exec_verdict::call_verdict 为准）；此处恒 Internal 为投影标签登记，
             // 不接线真类别；R1 回滚注册表将在此轴上挂「类别 → 回滚策略」
             // 策略表（P1 只登记不实现）。
             category: ToolCategory::Internal,
@@ -386,6 +386,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                 tool_name,
                 args,
                 requester,
+                reason,
             } => {
                 // approval-requested 事件先于等待发出（防死锁，01 §五.8）；
                 // 真实 PermissionRequest 由 B4/B6 审批层补齐
@@ -400,7 +401,10 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                         parameters: args.clone(),
                         summary: format!("call {tool_name}"),
                         tool_metadata: Default::default(),
-                        metadata: None,
+                        // 判点原因随持久化载荷落库（重放/多端展示一致）
+                        metadata: reason
+                            .as_deref()
+                            .map(|r| serde_json::json!({ "approvalReason": r })),
                         // T-D-14：请求方身份随事件落库（子代理 run 携带
                         // run id + 理由；主 agent run = None）
                         requester_run_id: requester.as_ref().map(|r| r.run_id.clone()),

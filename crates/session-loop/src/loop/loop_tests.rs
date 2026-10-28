@@ -408,33 +408,27 @@ use std::sync::Arc;
         assert_eq!(end.error.as_deref(), Some("模拟内部错误"));
     }
 
-    /// F2-02（红→绿）：max_turns=0 边界——run 起始显式拦截，不得执行
-    /// 任何轮次后才以 max-turns 收场。修复前：首轮完整执行（provider 已
-    /// 调用、回复已 commit、turn-start 已发）后 turn_index(1) >= 0 恒真
-    /// 才收场——「max_turns=0 = 不允许任何轮次」语义失效，红
+    /// 0 预算无上限重构（对齐方案 04 §4.2）：max_turns=0 代表无限预算模式，
+    /// 允许正常执行轮次而不被误杀；单轮纯文本回复正常以 Stop 收场。
     #[tokio::test]
-    async fn run_with_max_turns_zero_stops_before_any_turn() {
+    async fn run_with_max_turns_zero_represents_unlimited_and_executes_normally() {
         use conex_types::session::AgentEndReason;
         let provider = Arc::new(TestProvider::text_reply("hi"));
         let mut loop_ = AgentSessionLoop::new("s1", "r1", 0, Box::new(provider.clone()), registry());
         let outcome = loop_.run(user_input("hello")).await;
         assert_eq!(
-            outcome.reason,
-            AgentEndReason::MaxTurns,
-            "max_turns=0 必须立即以 max-turns 收场（修复前执行完整轮次后 stop 类收场，红）"
+            outcome.reason.to_core_reason(),
+            AgentEndReason::Stop,
+            "max_turns=0 无限模式下，纯文本回复对外以 stop 收场（内核 YieldSuspended 映射），绝不被误判为 MaxTurns"
         );
-        assert_eq!(outcome.turn_index, 0, "max_turns=0 不得执行任何轮次");
-        assert_eq!(provider.call_count(), 0, "max_turns=0 不得调用 provider");
+        assert_eq!(outcome.turn_index, 1, "max_turns=0 允许正常执行轮次");
+        assert_eq!(provider.call_count(), 1, "max_turns=0 正常调用 provider");
         assert!(
             outcome
                 .events
                 .iter()
-                .all(|e| !matches!(e, AgentEvent::TurnStart { .. })),
-            "max_turns=0 不得产生 turn-start 事件"
-        );
-        assert!(
-            outcome.messages.is_empty(),
-            "max_turns=0 时输入不得被消费为对话消息"
+                .any(|e| matches!(e, AgentEvent::TurnStart { turn_index: 1, .. })),
+            "max_turns=0 正常产生首轮 turn-start 事件"
         );
     }
 

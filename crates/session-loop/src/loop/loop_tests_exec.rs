@@ -209,7 +209,11 @@
         });
 
         let outcome = loop_.run(user_input("装配冒烟")).await;
-        assert_eq!(outcome.reason, AgentEndReason::Stop, "装配冒烟 run 应正常收场");
+        assert_eq!(
+            outcome.reason.to_core_reason(),
+            AgentEndReason::Stop,
+            "装配冒烟 run 对外应正常收场（YieldSuspended 映射为 Stop）"
+        );
         assert!(outcome.error.is_none());
 
         // 1) 工具执行面装配可见（注册表 / 配额 / 持有者 / 声明成功）
@@ -316,7 +320,7 @@
         let provider = TestProvider::text_reply("hi");
         let mut loop_ = AgentSessionLoop::new("s1", "r1", 16, Box::new(provider), registry());
         let outcome = loop_.run(user_input("你好")).await;
-        assert_eq!(outcome.reason, AgentEndReason::Stop);
+        assert_eq!(outcome.reason.to_core_reason(), AgentEndReason::Stop);
         assert!(
             outcome.provider_error.is_none(),
             "正常 stop 收场不得携带 provider_error"

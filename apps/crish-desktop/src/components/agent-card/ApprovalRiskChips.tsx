@@ -6,7 +6,6 @@ import {
   type ApprovalRiskMeta,
 } from '../../api/approvalMeta';
 import type { ApprovalRiskChip } from '../../api/chatApprovalUi';
-import { Tooltip } from '../ui';
 import styles from './ApprovalAskCard.module.css';
 
 /** 将 helper 产出的英/代码 chips 本地化为中文短标签（不改 chatApprovalUi） */
@@ -35,7 +34,9 @@ export function localizeRiskChips(
 }
 
 /** 去重中文 chip 标签（zone/risk 中文可能撞车，如写操作） */
-export function dedupeChipLabels(chips: ApprovalRiskChip[]): ApprovalRiskChip[] {
+export function dedupeChipLabels(
+  chips: ApprovalRiskChip[]
+): ApprovalRiskChip[] {
   const seen = new Set<string>();
   const out: ApprovalRiskChip[] = [];
   for (const c of chips) {
@@ -60,24 +61,23 @@ export const ApprovalRiskChips: React.FC<{
       aria-label="风险标签"
     >
       {chips.map((chip) => (
-        <Tooltip key={chip.key} content={chip.label}>
-          <span
-            role="listitem"
-            className={`${styles.approvalCardChip} ${
-              chip.tone === 'warn'
-                ? styles.approvalCardChipWarn
-                : chip.tone === 'danger'
-                  ? styles.approvalCardChipDanger
-                  : chip.tone === 'info'
-                    ? styles.approvalCardChipInfo
-                    : chip.tone === 'neutral'
-                      ? styles.approvalCardChipNeutral
-                      : ''
-            }`}
-          >
-            {chip.label}
-          </span>
-        </Tooltip>
+        <span
+          key={chip.key}
+          role="listitem"
+          className={`${styles.approvalCardChip} ${
+            chip.tone === 'warn'
+              ? styles.approvalCardChipWarn
+              : chip.tone === 'danger'
+                ? styles.approvalCardChipDanger
+                : chip.tone === 'info'
+                  ? styles.approvalCardChipInfo
+                  : chip.tone === 'neutral'
+                    ? styles.approvalCardChipNeutral
+                    : ''
+          }`}
+        >
+          {chip.label}
+        </span>
       ))}
     </div>
   );

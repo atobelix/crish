@@ -17,6 +17,7 @@ workspace = true
 # （check_recursion_guard / DEFAULT_RECURSION_GUARD）做并发预算判定，并经
 # SubagentSpawner 契约启动流程节点（agent-tools 为叶子 crate，无循环依赖）。
 agent-tools = { path = "../agent-tools" }
+conex-agents = { path = "../conex-agents" }
 async-trait = { workspace = true }
 conex-db = { path = "../conex-db" }
 conex-types = { path = "../conex-types" }

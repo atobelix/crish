@@ -388,6 +388,7 @@ mod tests {
             task_type: None,
             allowed_write_paths: None,
             display_label: None,
+            permission_mode: None,
             model_override: None,
         }
     }

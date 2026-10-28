@@ -14,7 +14,7 @@ use conex_types::error::codes;
 
 #[test]
 fn guard_depth_exceeded_rejected() {
-    let config = DEFAULT_RECURSION_GUARD;
+    let config = DEFAULT_SPAWN_POLICY;
     let snapshot = RecursionGuardSnapshot {
         depth: 2,
         active_siblings: 0,
@@ -41,10 +41,10 @@ fn guard_depth_exceeded_rejected() {
 fn guard_depth_exceeded_semantics_preserved() {
     // DepthExceeded 语义保留：非 1 的 maxDepth 配置下，新会话深度超过
     // 界限仍按 DepthExceeded 拒绝（max=2：深度 3 拒绝、深度 2 通过）
-    let config = RecursionGuardConfig {
-        max_depth: 2,
-        max_siblings: 16,
-        max_concurrent: 16,
+    let config = SpawnPolicy {
+        max_depth: Some(2),
+        allow_child_spawn: true,
+        ..SpawnPolicy::default()
     };
     let err = check_recursion_guard(
         RecursionGuardSnapshot {
@@ -56,7 +56,7 @@ fn guard_depth_exceeded_semantics_preserved() {
     )
     .unwrap_err();
     assert_eq!(err.code(), codes::SUBAGENT_DEPTH_EXCEEDED);
-    assert!(err.message().contains("减少递归层级"));
+    assert!(err.message().contains("子代理代数超限"));
     assert_eq!(
         err,
         RecursionGuardRejection::DepthExceeded { current: 3, max: 2 }
@@ -78,7 +78,7 @@ fn guard_nesting_denied() {
     // T-D-02 验收（守卫层最终防线）：子 Agent 发起 spawn（新会话深度 2，
     // 发起者自身深度 1）→ NestingDenied 专用变体 + 专用错误码
     // subagent.nesting_denied + 编排指引文案
-    let config = DEFAULT_RECURSION_GUARD;
+    let config = DEFAULT_SPAWN_POLICY;
     let snapshot = RecursionGuardSnapshot {
         depth: 2,
         active_siblings: 0,
@@ -99,7 +99,7 @@ fn guard_nesting_denied() {
         "文案必须带「所有子 Agent 由主 Agent 分配」指引"
     );
     assert!(
-        err.message().contains("请通过消息/上报向主 Agent 请求派发"),
+        err.message().contains("请通过消息"),
         "文案必须带上报指引"
     );
     assert_eq!(
@@ -110,7 +110,10 @@ fn guard_nesting_denied() {
 
 #[test]
 fn guard_siblings_exceeded_rejected() {
-    let config = DEFAULT_RECURSION_GUARD;
+    let config = SpawnPolicy {
+        max_active_per_parent: Some(16),
+        ..SpawnPolicy::default()
+    };
     let snapshot = RecursionGuardSnapshot {
         depth: 1,
         active_siblings: 17,
@@ -122,7 +125,7 @@ fn guard_siblings_exceeded_rejected() {
         codes::SUBAGENT_DEPTH_EXCEEDED,
         "兄弟并发超限拒绝 spawn（复用 subagent 域永久码，语义见 message）"
     );
-    assert!(err.message().contains("减少并发/合并任务"));
+    assert!(err.message().contains("同父并发超过会话策略"));
     assert_eq!(
         err,
         RecursionGuardRejection::SiblingsExceeded {
@@ -134,7 +137,10 @@ fn guard_siblings_exceeded_rejected() {
 
 #[test]
 fn guard_concurrent_exceeded_rejected() {
-    let config = DEFAULT_RECURSION_GUARD;
+    let config = SpawnPolicy {
+        max_active_per_session: Some(16),
+        ..SpawnPolicy::default()
+    };
     let snapshot = RecursionGuardSnapshot {
         depth: 1,
         active_siblings: 0,
@@ -146,51 +152,47 @@ fn guard_concurrent_exceeded_rejected() {
         codes::SUBAGENT_DEPTH_EXCEEDED,
         "全局并发超限拒绝 spawn（复用 subagent 域永久码，语义见 message）"
     );
-    assert!(err.message().contains("减少并发/合并任务"));
+    assert!(err.message().contains("全会话并发超过会话策略"));
     assert_eq!(
         err,
         RecursionGuardRejection::ConcurrentExceeded {
             current: 17,
             max: 16
         },
-        "2026-08-11 用户裁决边界：maxConcurrent=16 时第 17 个并发被拒"
     );
 }
 
 #[test]
-fn default_guard_limits_terminal_values() {
-    // 2026-08-11 用户裁决终态断言（上限 12→16）：maxConcurrent=16 /
-    // maxSiblings=16（必须同步 16，否则「同时跑 16 个」在第 6 个同父
-    // 子代理即被拒；同父上限 = 全局上限）/ maxDepth=1（嵌套禁止，
-    // 仅主 Agent 可派发）
-    let guard = DEFAULT_RECURSION_GUARD;
-    assert_eq!(guard.max_depth, 1, "maxDepth=1（仅主 Agent 可派发）");
+fn default_policy_is_flat_and_unlimited() {
+    let policy = DEFAULT_SPAWN_POLICY;
+    assert_eq!(policy.max_depth, Some(1), "默认扁平：仅主 Agent 可派发");
+    assert!(!policy.allow_child_spawn, "默认禁止子代理再派发");
     assert_eq!(
-        guard.max_siblings, 16,
-        "maxSiblings=16（同父上限 = 全局上限）"
+        policy.max_active_per_parent, None,
+        "数量默认不限（由主 agent 按压力配置）"
     );
-    assert_eq!(
-        guard.max_concurrent, 16,
-        "maxConcurrent=16（用户裁决 12→16）"
-    );
+    assert_eq!(policy.max_active_per_session, None);
 }
 
 #[test]
 fn guard_within_limits_allowed() {
-    let config = DEFAULT_RECURSION_GUARD;
-    // T-D-01 验收：depth=1 通过、depth=2 拒绝。边界值语义
-    // （maxDepth=1 / maxSiblings=16 / maxConcurrent=16，2026-08-11
-    // 用户裁决 12→16）：
-    // - depth=1（主 Agent 派发直接子代理，含 flow_graph 流程节点快照
-    //   depth 恒为 1）在嵌套判定界限内，通过；
-    // - depth=0（主 Agent 自身上下文）同样通过（主 Agent spawn 回归）；
-    // - 兄弟/并发取边界值 16/16 通过（第 17 个并发才被拒）。
+    let config = DEFAULT_SPAWN_POLICY;
+    // 默认策略下数量不限；深度 1 通过、深度 2 拒绝。
     let snapshot = RecursionGuardSnapshot {
         depth: 1,
         active_siblings: 16,
         active_concurrent: 16,
     };
     assert!(check_recursion_guard(snapshot, config).is_ok());
+    let snapshot = RecursionGuardSnapshot {
+        depth: 1,
+        active_siblings: 10_000,
+        active_concurrent: 10_000,
+    };
+    assert!(
+        check_recursion_guard(snapshot, config).is_ok(),
+        "默认不限制子代理数量"
+    );
     let snapshot = RecursionGuardSnapshot {
         depth: 0,
         active_siblings: 0,
@@ -260,7 +262,7 @@ async fn guard_rejection_maps_to_structured_tool_error() {
         .await
         .unwrap_err();
     assert_eq!(err.code(), codes::SUBAGENT_DEPTH_EXCEEDED);
-    assert!(err.to_string().contains("减少并发/合并任务"));
+    assert!(err.to_string().contains("全会话并发超过会话策略"));
     // spawner 已校验但未产出 run（零 run 语义由引擎侧保证，见落库测试）
     assert_eq!(spawner.requests().len(), 1);
 }
@@ -289,8 +291,7 @@ async fn nesting_denied_maps_to_structured_tool_error() {
         "文案必须带「所有子 Agent 由主 Agent 分配」指引"
     );
     assert!(
-        err.to_string()
-            .contains("请通过消息/上报向主 Agent 请求派发"),
+        err.to_string().contains("请通过消息"),
         "文案必须带上报指引"
     );
 }

@@ -5,7 +5,7 @@
 import React, { useState } from 'react';
 
 import styles from './InlineAgentPanel.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { StreamingMarkdownView } from '../chat-message-row/StreamingMarkdownView';
 
 export const InlineAgentThinkingFold: React.FC<{
@@ -21,8 +21,11 @@ export const InlineAgentThinkingFold: React.FC<{
       onToggle={(e) => setOpen(e.currentTarget.open)}
     >
       <summary className={styles.thinkingFoldSum}>
-        <AppIcon name="chevron-right" size={14}
-          className={`${styles.thinkingChevron} ${isExpanded ? styles.isOpen : ''}`} />
+        <AppIcon
+          name="chevron-right"
+          size={14}
+          className={`${styles.thinkingChevron} ${isExpanded ? styles.isOpen : ''}`}
+        />
         <span className={styles.thinkingFoldLabel}>思考</span>
       </summary>
       <div

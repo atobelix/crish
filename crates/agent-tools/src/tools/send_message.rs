@@ -75,7 +75,7 @@ pub trait SubagentInjectChannel: Send + Sync + std::fmt::Debug {
 /// run）；③ 当前 run 已收口 → PendingMessageQueue 入队 steering 条目
 /// （group_id=`main-agent-msg`，下一 run decide_idle_resume 消费）。
 /// **恒不标记 user_touched**（主 agent 自发消息不算用户交互，收口不因此
-/// 抑制 idle 续 run——core_run_commands.rs:2517-2519 语义）。
+/// 抑制 idle 续 run——判定见 `conex-run::run::run_idle::decide_idle_resume`）。
 ///
 /// `session_id` 入参为执行上下文会话（ToolContext.session_id）——多会话
 /// 并发时消息必须落在**发起会话**的主 run 环上（会话留档语义按会话隔离）。

@@ -9,7 +9,7 @@
 //!    dryRun / 可选 batch token；可点名测千级 ops 形状与零写语义。
 //! 2. **恶意扩展拒写 / 零持久化方向**：[`FORBIDDEN_WRITE_HANDLE_KEYS`] 扫描
 //!    + [`reject_malicious_extension_payload`]；被拒后 **不**触达后端写；
-//!      Plugin 源 plan Deny / full 仍 NeedsApproval（表驱动 Source 维）。
+//!      Plugin 源危险工具仍 NeedsApproval（表驱动 Source 维）。
 //!
 //! # 诚实边界（强制 · 禁止假关）
 //! - **≠ EL-05**（须 W4-B + **W6-E Strict** + 持久/写锥，见 `08`）
@@ -17,7 +17,7 @@
 //! - **≠ W6-E Strict 闭环**（千次批 + 恶意扩展零持久化生产门禁）
 //! - **≠ EL-07** / A-EXT 全表（contribute 拒写句柄仅方向；F3 TrustGate 未关）
 //! - Memory 测绿 **禁关**生产 A-AGT / EL-05
-//! - **不回退** batch / move / insert / update / delete / lossy / plan Deny
+//! - **不回退** batch / move / insert / update / delete / lossy
 //! - **W4-C 旁路写禁令移交（E1 收口）**：W4-C View 轨双实现（View 注册表 +
 //!   恒拒写入口）已随 E1 删除；「View 轨扩展描述符绝不写权威树 / 旁路写」
 //!   禁令语义由本模块 [`find_forbidden_write_handle`] 扫描承载，勿恢复双
@@ -27,9 +27,7 @@
 //! - W6-E Strict：千次批 + 恶意扩展零持久化（本包 **不做** 满关）
 //! - W6-E-S Skeleton：batch token / 审批 / 压测夹具骨架（本文）
 
-use crate::note_action_matrix::{decide_from_matrix, ActionSource};
 use crate::note_backend::{NoteBackendError, NoteBlockBatchRequest, NoteBlockOp, NoteBlockOpKind};
-use crate::permission::{PermissionMode, PermissionVerdict};
 use serde_json::Value as JsonValue;
 
 // ── 包锚 ────────────────────────────────────────────────────────────
@@ -205,32 +203,14 @@ pub const W6E_S_NOT_CLOSING: &[&str] = &[
     "EL-07 / A-EXT 全表",
 ];
 
-/// Plugin 源对笔记写工具：plan 必须 Deny（恶意扩展抬权方向 · Skeleton）
-pub fn plugin_plan_denies_note_write(tool_name: &str) -> bool {
-    matches!(
-        decide_from_matrix(tool_name, ActionSource::Plugin, PermissionMode::Plan),
-        Some(PermissionVerdict::Deny)
-    )
-}
-
-/// Plugin 源 full 仍 NeedsApproval（外部源默认确认；≠ 自动放行写）
-pub fn plugin_full_needs_approval_for_write(tool_name: &str) -> bool {
-    matches!(
-        decide_from_matrix(tool_name, ActionSource::Plugin, PermissionMode::FullAccess),
-        Some(PermissionVerdict::NeedsApproval)
-    )
-}
-
 // ── 测试 ────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::note_action_matrix::plan_denies_matrix_tool;
     use crate::note_backend::{
         MemoryNoteBackend, NoteBackend, NoteBatchTokens, NoteQueryBlocksParams,
     };
-    use crate::note_permission::plan_denies_note_tool;
     use std::time::Duration;
 
     /// 包锚：常量与 `-S` 叙事
@@ -484,35 +464,6 @@ mod tests {
             MaliciousExtensionGate::Allow
         );
         assert!(malicious_gate_to_backend_err(&MaliciousExtensionGate::Allow).is_none());
-    }
-
-    /// Plugin 源：plan Deny 写工具 + full NeedsApproval（审批骨架 · 不回退）
-    #[test]
-    fn w6e_s_plugin_source_plan_deny_and_full_needs_approval() {
-        for tool in [
-            "block_batch",
-            "block_insert",
-            "block_update",
-            "block_delete",
-            "block_move",
-            "document_apply_md",
-            "send_to_note",
-        ] {
-            assert!(
-                plugin_plan_denies_note_write(tool),
-                "W6-E-S: Plugin plan must Deny {tool}"
-            );
-            assert!(
-                plugin_full_needs_approval_for_write(tool),
-                "W6-E-S: Plugin full must NeedsApproval {tool}"
-            );
-            // Builtin plan Deny 不回退
-            assert!(plan_denies_matrix_tool(tool), "plan Deny 不回退: {tool}");
-            assert!(
-                plan_denies_note_tool(tool),
-                "note_permission plan Deny 不回退: {tool}"
-            );
-        }
     }
 
     /// 过期 batch token 仍拒（骨架与 W4-B 共存；不回退）

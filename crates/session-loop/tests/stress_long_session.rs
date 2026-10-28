@@ -20,7 +20,7 @@ use async_trait::async_trait;
 use conex_types::events::AgentEvent;
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::response::ClassifiedStreamError;
-use conex_types::session::AgentEndReason;
+use session_loop::r#loop::AgentEndReason;
 use session_loop::{
     AgentSessionLoop, ProviderCall, ProviderEventStream, ProviderRequest, ProviderStreamEvent,
     RunOutcome, StopReason, TestProvider,

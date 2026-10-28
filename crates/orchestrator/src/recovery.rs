@@ -211,6 +211,10 @@ pub struct RunFailureContext {
     pub inject_bytes: u64,
     /// 会话窗口字节数（fork 三态判定）
     pub window_bytes: u64,
+    /// 恢复后沿用的能力档快照（None = 按 task_type 默认；P3 跨重启保留）
+    pub capability_mode: Option<String>,
+    /// 恢复后沿用的模型覆盖（None = 跟随引擎当前配置；P3 跨重启保留）
+    pub model_override: Option<String>,
 }
 
 /// 协调器动作
@@ -651,7 +655,6 @@ impl RecoveryCoordinator {
             agent_id: None,
             prompt: ctx.task.clone(),
             role: None,
-            capability_mode: None,
             allowed_tools: None,
             description: Some("恢复 fork（C7 阶梯 3，承接同一目标）".to_string()),
             mode: None,
@@ -665,8 +668,13 @@ impl RecoveryCoordinator {
             task_type: None,
             allowed_write_paths: None,
             display_label: None,
-            // 扩展点预留：全构造点显式 None（编译器强制）
-            model_override: None,
+            permission_mode: None,
+            // P3：恢复沿用小代理上次的能力档与模型覆盖（跨重启保留）
+            capability_mode: ctx
+                .capability_mode
+                .as_deref()
+                .and_then(conex_agents::task::SubagentCapabilityMode::parse),
+            model_override: ctx.model_override.clone(),
         };
         let spawned =
             self.spawner

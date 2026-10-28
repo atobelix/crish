@@ -43,6 +43,7 @@ use conex_types::tool::{
 use super::handlers::{compaction_shape_ok, new_message_id, record_message, streaming, LoopState};
 use super::SessionLoopOptions;
 use crate::cache_tracker::CacheStatsTracker;
+use crate::compaction::{CacheInvarianceGuard, PinnedDecisionLedger};
 use crate::r#loop::summary_coordinator::SessionSummaryCoordinator;
 use crate::r#loop::summary_dispatch::{summarize_via_blocking_with_abort, SummaryDispatch};
 
@@ -175,6 +176,91 @@ pub(crate) struct PendingSummaryRetry {
     pub(crate) max_bytes: usize,
 }
 
+/// 会话级压缩代际与增量防抖状态（P-05 §2.1）
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CompactionGenerationState {
+    /// 当前压缩代数（每次实际执行压缩后 +1）
+    pub current_generation: u32,
+    /// 上次发生压缩时的回合序号 (Turn Index)
+    pub last_compaction_turn: Option<u64>,
+    /// 上次发生压缩时的总输入 Token 估算
+    pub last_compaction_tokens: u64,
+    /// 最小防抖回合间隔（默认 2 轮，长程自主运行下避免连续每轮抖动重写）
+    pub min_turn_interval: u64,
+    /// 最小防抖新增 Token 阈值（默认 1024 Tokens）
+    pub min_token_delta: u64,
+}
+
+impl Default for CompactionGenerationState {
+    fn default() -> Self {
+        Self {
+            current_generation: 0,
+            last_compaction_turn: None,
+            last_compaction_tokens: 0,
+            min_turn_interval: 2,
+            min_token_delta: 1024,
+        }
+    }
+}
+
+/// 检查是否通过自适应增量防抖判定（P-05 §2.1）：
+///
+/// - 规则 3（临界穿透）：若估算值达到临界红线（>= 95% 窗口），无条件穿透防抖立即放行；
+/// - 规则 1（代际间隔）：若 current_turn < last_compaction_turn + min_turn_interval，拦截；
+/// - 规则 2（Token 增量）：若 estimate.tokens < last_compaction_tokens + min_token_delta，拦截；
+///
+/// 返回 true 表示允许触发压缩，false 表示被防抖拦截。
+pub(crate) fn check_compaction_debounce(
+    state: &LoopState,
+    estimate_tokens: u64,
+    context_window: u32,
+) -> bool {
+    // 规则 3: 临界红线（>= 95% 窗口）无条件穿透防抖
+    let critical_threshold = (context_window as u64).saturating_mul(95) / 100;
+    if estimate_tokens >= critical_threshold {
+        tracing::debug!(
+            estimate_tokens,
+            critical_threshold,
+            "估算达到临界红线（>= 95%），无条件穿透增量防抖"
+        );
+        return true;
+    }
+
+    let gen = &state.compaction.generation_state;
+    let Some(last_turn) = gen.last_compaction_turn else {
+        // 从未发生过压缩，首发放行
+        return true;
+    };
+
+    let current_turn = state.machine.context().turn_index as u64;
+
+    // 规则 1: 轮次间隔防抖
+    let min_turn_interval = state.options.compaction.min_turn_interval.max(gen.min_turn_interval);
+    if current_turn < last_turn.saturating_add(min_turn_interval) {
+        tracing::info!(
+            current_turn,
+            last_turn,
+            min_turn_interval,
+            "压缩被轮次间隔防抖拦截（避免连续每轮抖动重写）"
+        );
+        return false;
+    }
+
+    // 规则 2: Token 增量防抖
+    let min_token_delta = state.options.compaction.min_token_delta.max(gen.min_token_delta);
+    if estimate_tokens < gen.last_compaction_tokens.saturating_add(min_token_delta) {
+        tracing::info!(
+            estimate_tokens,
+            last_tokens = gen.last_compaction_tokens,
+            min_token_delta,
+            "压缩被 Token 增量防抖拦截（新增 Tokens 不足阈值）"
+        );
+        return false;
+    }
+
+    true
+}
+
 /// 阈值预检触发（P4 阶段 3-2 / §3.4.1 触发点 1，prepare_turn 步骤 5）。
 ///
 /// 条件（全部满足才压缩）：
@@ -182,8 +268,9 @@ pub(crate) struct PendingSummaryRetry {
 /// 1. 预算与压缩策略均已配置（None = 向后兼容现状，不预检）；
 /// 2. `estimate ≥ window - reserve`（对齐 pi threshold = window - reserve，
 ///    估算 = [estimate_context] 双源结果，C9 口径）；
-/// 3. 本 run 压缩次数未达上限（[SessionLoopOptions::max_auto_compactions_per_run]，
-///    单 run 护栏，仅约束预检/边界/分阶段——E2 F2 层 2 后溢出绕开本计数）。
+/// 3. 本 run 压缩次数未达上限（若配置了 >0 的静态上限则严格遵守；默认 0 为
+///    无上限，由会话级代际增量防抖全权接管，P-05 §2.1）；
+/// 4. 通过自适应增量防抖判定（[check_compaction_debounce]）；
 ///
 /// 压缩动作（LLM 摘要强制 / 切割点 / 形状护栏见 [compact_with_llm_guard]）。
 ///
@@ -198,9 +285,9 @@ pub(crate) async fn maybe_compact_preflight(state: &mut LoopState) -> bool {
     let Some(policy) = state.compaction.compaction_policy.clone() else {
         return false;
     };
-    if state.compaction.compactions_this_run
-        >= state.options.compaction.max_auto_compactions_per_run
-    {
+    // 显式配置上限判定（若配置了 >0 的静态上限则严格遵守；默认 0 表示无上限）
+    let max_run = state.options.compaction.max_auto_compactions_per_run;
+    if max_run > 0 && state.compaction.compactions_this_run >= max_run {
         return false;
     }
     // 快照锁定（与 streaming 同一入口；预检发生在首次 build_request 之前，
@@ -210,6 +297,10 @@ pub(crate) async fn maybe_compact_preflight(state: &mut LoopState) -> bool {
     let budget_tokens = budget.context_window.saturating_sub(budget.reserve_tokens);
     let engine = CompactionEngine::new(0);
     if !engine.should_compact(estimate.tokens, u64::from(budget_tokens)) {
+        return false;
+    }
+    // 会话级自适应增量防抖判定（P-05 §2.1）
+    if !check_compaction_debounce(state, estimate.tokens, budget.context_window) {
         return false;
     }
     let info = CompactionTriggerInfo {
@@ -262,12 +353,14 @@ pub(crate) async fn maybe_compact_user_boundary(state: &mut LoopState) -> bool {
         maybe_retry_pending_summary(state);
         return false;
     }
-    if state.compaction.compactions_this_run
-        >= state.options.compaction.max_auto_compactions_per_run
-    {
-        // 计数封顶 → 不压缩（与预检共享单 run 计数，边界压缩后预检自然
-        // 跳过）；被动补摘要**不受压缩计数约束**（不压缩对话、不消耗
-        // 计数——仅补摘要的被动触发面）
+    let max_run = state.options.compaction.max_auto_compactions_per_run;
+    if max_run > 0 && state.compaction.compactions_this_run >= max_run {
+        // 计数封顶 → 不压缩（显式配置上限生效时跳过）；被动补摘要不受压缩计数约束
+        maybe_retry_pending_summary(state);
+        return false;
+    }
+    // 会话级自适应增量防抖判定（P-05 §2.1）
+    if !check_compaction_debounce(state, estimate.tokens, budget.context_window) {
         maybe_retry_pending_summary(state);
         return false;
     }
@@ -340,7 +433,7 @@ pub(crate) async fn compact_with_llm_guard(
     } else {
         None
     };
-    let plan = engine.compact_agent_messages_with_stub_policy(
+    let mut plan = engine.compact_agent_messages_with_stub_policy(
         &state.conversation,
         budget_tokens as usize,
         policy,
@@ -368,6 +461,12 @@ pub(crate) async fn compact_with_llm_guard(
         });
         return false;
     }
+
+    // 跨代不可折叠保护（Slot 2.2 不可变决策账本 / Pinned Decision Ledger Protection）：
+    // 依据 03-context-and-resilience-improvement.md §七（§7.1）：
+    // Slot 2 决策账本在后续所有轮次的多代压缩中标记为不可折叠，绝不允许被后续摘要级联压缩抹平！
+    PinnedDecisionLedger::protect_from_dropped(&mut plan.dropped_ids, &mut plan.kept_ids);
+
     if plan.dropped_ids.is_empty() {
         // 放弃压缩（无合法切割点 / 无可丢内容）：不广播、不计数
         return false;
@@ -525,10 +624,64 @@ pub(crate) async fn apply_compaction(
     // 对话替换（压缩是唯一前缀重写点；plan 已保留 system 消息；
     // SL-PERF-06：以 `mem::replace` 暂存旧对话，仅在同步摘要失败需后台重试时按需提取丢弃消息）
     let prev_conversation = std::mem::replace(&mut state.conversation, plan.messages.clone());
+
+    // 决策提升（Slot 2.2 不可变决策账本 - Pinned Decision Ledger Promotion）：
+    // 依据 03-context-and-resilience-improvement.md §七（§7.1）：
+    // 从即将被丢弃的历史交互中提取带有 DECISION: / CONSTRAINT: / REDLINE: 的关键决策与约束，
+    // 自动提升沉淀进入 Slot 2.2 账本，确保经历多代压缩核心决策永不退相干、绝对不抹平！
+    let current_turn = state.machine.context().turn_index as u64;
+    let dropped_for_ledger: Vec<conex_types::message::AgentMessage> = prev_conversation
+        .iter()
+        .filter(|m| plan.dropped_ids.contains(&m.id))
+        .map(|m| (**m).clone())
+        .collect();
+    let promoted_count = state
+        .compaction
+        .decision_ledger
+        .promote_from_messages(&dropped_for_ledger, current_turn);
+    if promoted_count > 0 {
+        tracing::info!(
+            session_id = %session_id,
+            promoted_count,
+            total_entries = state.compaction.decision_ledger.len(),
+            "Slot 2.2 不可变决策账本：成功从丢弃历史中提取并沉淀关键决断与约束"
+        );
+    }
+
+    // Slot 2.2 账本锚点同步：
+    // 若账本非空，在 state.conversation 的 Slot 2 位置（紧随 System 之后）同步或更新不可变账本消息
+    if let Some(anchor_msg) = state.compaction.decision_ledger.to_anchor_message() {
+        let anchor_arc = Arc::new(anchor_msg);
+        if let Some(pos) = state
+            .conversation
+            .iter()
+            .position(|m| PinnedDecisionLedger::is_pinned_ledger_message(m))
+        {
+            state.conversation[pos] = anchor_arc;
+        } else {
+            let insert_pos = if state
+                .conversation
+                .first()
+                .is_some_and(|m| m.role == AgentMessageRole::System)
+            {
+                1
+            } else {
+                0
+            };
+            state.conversation.insert(insert_pos, anchor_arc);
+        }
+    }
+    // 缓存绝对不变性原则守卫（依据 03 改进方案 §6.1 / PURGE-04 规约）：
+    // 压缩是唯一合法的前缀重写点（I1 不变量）；此后当前 Run 内前缀严格冻结，严禁 In-Flight Hot-Swap
+    let _ = state.compaction.invariance_guard.is_run_active();
     // 护栏：单 run 压缩计数 + 时间戳护栏重置（§3.4.6）
     state.compaction.compactions_this_run += 1;
     state.compaction.current_generation = plan.generation;
     state.compaction.last_compaction_at = Some(boundary_ms);
+    let current_turn = state.machine.context().turn_index as u64;
+    state.compaction.generation_state.current_generation = plan.generation;
+    state.compaction.generation_state.last_compaction_turn = Some(current_turn);
+    state.compaction.generation_state.last_compaction_tokens = plan.tokens_after;
     let system_text = plan
         .messages
         .iter()
@@ -821,6 +974,12 @@ pub(crate) struct CompactionRuntime {
     pub(crate) tools_prefix_json: std::sync::OnceLock<String>,
     /// 会话权威压缩代数（BC05-3 单源化；单调递增，消除 SQLite 主键冲突）
     pub(crate) current_generation: u32,
+    /// 会话级代际自适应增量防抖状态（P-05 §2.1）
+    pub(crate) generation_state: CompactionGenerationState,
+    /// Slot 2.2 不可变决策账本（跨代绝对不折叠核心决策，<= 800t）
+    pub(crate) decision_ledger: PinnedDecisionLedger,
+    /// KV Cache 绝对不变性守卫（废除 In-Flight Hot-Swap，锁定当前 Run 前缀恒定）
+    pub(crate) invariance_guard: CacheInvarianceGuard,
 }
 
 /// 预算/用量运行态子结构（C1c 收敛 · 07 §4.2-2 / §6.2）：P4 预算配置 +
@@ -869,6 +1028,15 @@ impl CompactionRuntime {
             pending_summary_retry: None,
             tools_prefix_json: std::sync::OnceLock::new(),
             current_generation: 0,
+            generation_state: CompactionGenerationState {
+                current_generation: 0,
+                last_compaction_turn: None,
+                last_compaction_tokens: 0,
+                min_turn_interval: options.compaction.min_turn_interval,
+                min_token_delta: options.compaction.min_token_delta,
+            },
+            decision_ledger: PinnedDecisionLedger::new(),
+            invariance_guard: CacheInvarianceGuard::new(),
         }
     }
 
@@ -897,6 +1065,27 @@ impl CompactionRuntime {
         }
         max_gen + 1
     }
+
+    /// 获取不可变决策账本引用
+    #[allow(dead_code)]
+    #[inline]
+    pub(crate) fn decision_ledger(&self) -> &PinnedDecisionLedger {
+        &self.decision_ledger
+    }
+
+    /// 获取可变决策账本引用
+    #[allow(dead_code)]
+    #[inline]
+    pub(crate) fn decision_ledger_mut(&mut self) -> &mut PinnedDecisionLedger {
+        &mut self.decision_ledger
+    }
+
+    /// 获取 KV Cache 不变性守卫引用
+    #[allow(dead_code)]
+    #[inline]
+    pub(crate) fn invariance_guard(&self) -> &CacheInvarianceGuard {
+        &self.invariance_guard
+    }
 }
 
 impl BudgetState {
@@ -908,5 +1097,127 @@ impl BudgetState {
             // EV-11（D-03）：usage 槽位初始空（provider 未报告前无数据）
             turn_usage: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::compaction::{DecisionCategory, PINNED_LEDGER_MESSAGE_ID};
+    use crate::steering::{RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions};
+    use agent_tools::registry::ToolRegistry;
+    use conex_types::message::{AgentMessageBlock, AgentMessageRole};
+
+    fn make_test_state() -> LoopState {
+        let steering = SteeringCoordinator::new(
+            vec![Box::new(RecoverySteeringStrategy::default())],
+            SteeringCoordinatorOptions::default(),
+        );
+        LoopState::new(
+            "sess-compaction-test",
+            10,
+            steering,
+            SessionLoopOptions::default(),
+            Arc::new(ToolRegistry::new()),
+        )
+    }
+
+    #[test]
+    fn test_compaction_runtime_decision_ledger_and_invariance_accessors() {
+        let mut state = make_test_state();
+        assert!(state.compaction.decision_ledger().is_empty());
+
+        let entry = crate::compaction::DecisionLedgerEntry {
+            id: "dec-1".to_string(),
+            category: DecisionCategory::SecurityBoundary,
+            statement: "绝对禁止 In-Flight Hot-Swap".to_string(),
+            created_at_turn: 1,
+            source_message_id: None,
+        };
+        state.compaction.decision_ledger_mut().add_entry(entry);
+        assert_eq!(state.compaction.decision_ledger().len(), 1);
+
+        let guard = state.compaction.invariance_guard();
+        assert!(guard.check_swap_permission().is_ok());
+        guard.enter_run();
+        assert!(guard.check_swap_permission().is_err());
+        guard.exit_run();
+        assert!(guard.check_swap_permission().is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_apply_compaction_promotes_decisions_and_syncs_slot2_anchor() {
+        let mut state = make_test_state();
+        let sys_msg = Arc::new(AgentMessage {
+            id: "sys-0".to_string(),
+            role: AgentMessageRole::System,
+            created_at: "2026-10-27T00:00:00Z".to_string(),
+            blocks: vec![AgentMessageBlock::Text {
+                text: "System prompt".to_string(),
+            }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        });
+        let history_msg = Arc::new(AgentMessage {
+            id: "user-dec-msg".to_string(),
+            role: AgentMessageRole::User,
+            created_at: "2026-10-27T00:01:00Z".to_string(),
+            blocks: vec![AgentMessageBlock::Text {
+                text: "请记住这些原则：\nREDLINE: 绝对禁止 In-Flight Hot-Swap 击穿 KV Cache\nDECISION: 启用 Slot 2.2 不可变决策账本".to_string(),
+            }],
+            metadata: None,
+            client_message_id: None,
+            content: None,
+        });
+        state.conversation = vec![sys_msg.clone(), history_msg.clone()];
+
+        let plan = CompactionPlan {
+            messages: vec![sys_msg.clone()],
+            dropped_ids: vec!["user-dec-msg".to_string()],
+            kept_ids: vec!["sys-0".to_string()],
+            tokens_before: 2000,
+            tokens_after: 500,
+            first_kept_message_id: Some("sys-0".to_string()),
+            summary: "Summary".to_string(),
+            generation: 1,
+            fold_index: 1,
+            fold_chain_prev: 0,
+            fold_chain_after: 1,
+            summary_is_llm: false,
+            llm_unavailable: false,
+        };
+        let info = CompactionTriggerInfo {
+            trigger: ContextCompressionTrigger::Threshold,
+            reason: ContextCompressionReason::Threshold,
+        };
+
+        apply_compaction(&mut state, &plan, &info, Some(1000)).await;
+
+        // 验证 1：决策已成功从丢弃消息中提升沉淀至 Slot 2.2 账本
+        assert_eq!(state.compaction.decision_ledger().len(), 2);
+        let statements: Vec<&str> = state.compaction.decision_ledger().entries().iter().map(|e| e.statement.as_str()).collect();
+        assert!(statements.iter().any(|s| s.contains("绝对禁止 In-Flight Hot-Swap")));
+        assert!(statements.iter().any(|s| s.contains("启用 Slot 2.2 不可变决策账本")));
+
+        // 验证 2：Slot 2 锚点消息已成功注入 conversation 中（紧随 System 消息）
+        assert_eq!(state.conversation[0].id, "sys-0");
+        assert_eq!(state.conversation[1].id, PINNED_LEDGER_MESSAGE_ID);
+        let block_text = match &state.conversation[1].blocks[0] {
+            AgentMessageBlock::Text { text } => text.as_str(),
+            _ => "",
+        };
+        assert!(block_text.contains("Slot 2.2"));
+    }
+
+    #[test]
+    fn test_pinned_decision_ledger_non_foldable_cross_generation_protection() {
+        let mut dropped = vec!["msg-1".to_string(), PINNED_LEDGER_MESSAGE_ID.to_string(), "msg-2".to_string()];
+        let mut kept = vec!["sys-0".to_string()];
+
+        let protected = PinnedDecisionLedger::protect_from_dropped(&mut dropped, &mut kept);
+        assert!(protected);
+        assert_eq!(dropped, vec!["msg-1".to_string(), "msg-2".to_string()]);
+        assert!(kept.contains(&PINNED_LEDGER_MESSAGE_ID.to_string()));
     }
 }

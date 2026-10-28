@@ -47,11 +47,6 @@ mod note_memory;
 mod note_plan_ops;
 mod note_types;
 mod poison;
-// W4-B/F：笔记工具审批名单（safe / write × plan|ask|full）
-pub mod note_permission;
-// W4-F：safeActions × Effects × Source **表驱动**矩阵起点（A-AGT-06）
-// ≠ EL-05；≠ W6-E；≠ A-AGT 全表关闭
-pub mod note_action_matrix;
 // W6-E-S Skeleton：千次批压测夹具 + 恶意扩展拒写/零持久化方向
 // ≠ EL-05；≠ A-AGT 满表；≠ W6-E Strict 闭环；Memory 禁关生产
 pub mod definition;
@@ -76,8 +71,7 @@ pub use audit::{
     security_audit_event, AuditSink, NoopAuditSink, RecordingAuditSink, SecurityAuditSink,
 };
 pub use context::{
-    create_mock_tool_context, AbortToken, AskCallback, AskChannel, AskDecision, NoopAskChannel,
-    ToolContext,
+    create_mock_tool_context, AbortToken, AskCallback, AskChannel, AskDecision, ToolContext,
 };
 // T-AB-02（后台任务契约，冻结接口 #1/#2）：trait 与数据结构导出——
 // 壳层（A3 注册表）与 R-AB2 工具面按冻结形状消费
@@ -105,10 +99,7 @@ pub use middleware::{
     AfterExecuteResult, BeforeExecuteResult, MiddlewareTimeoutConfig, ToolExecutionContext,
     ToolMiddleware,
 };
-pub use permission::{
-    decide, decide_analysis_with_revert, decide_command, decide_command_with_revert,
-    PermissionMode, PermissionVerdict,
-};
+pub use permission::{decide, decide_verdict, PermissionMode, PermissionVerdict};
 pub use streaming::{
     terminal_only, with_progress, ContentBlock, ToolProgress, ToolStream, ToolStreamItem,
 };
@@ -139,12 +130,7 @@ pub use revert_guard::{
 // I4-M4（C2 创建时间注入 + git 回退谨慎指引）+ F5 EG（REQ-E03 注释保留
 // 注入段）：注入内容模块——started_at 注入段 / 续跑不刷新解析 / git 回退
 // 指引固定文案 / ref 年代判定 / 注释保留固定文案，经 M1 注入点只读挂载
-// （engine.rs build_context 主体归 C10，M4 不并写）
-pub use note_action_matrix::{
-    decide_from_matrix, has_local_write, is_matrix_safe, lookup_action, plan_denies_matrix_tool,
-    safe_tool_names, write_tool_names, ActionEffect, ActionSource, NoteActionRow,
-    NOTE_ACTION_MATRIX,
-};
+// （conex-run 的 run-task 装配路径消费注入段，M4 不并写）
 pub use note_backend::{
     apply_result_json, block_batch_result_json, MemoryNoteBackend, NoteApplyMdRequest,
     NoteApplyMdResult, NoteApplyMode, NoteBackend, NoteBackendError, NoteBackendHandle,
@@ -155,10 +141,6 @@ pub use note_backend::{
     NoteLossyReport, NoteOutline, NoteOutlineNode, NoteQueryBlockHit, NoteQueryBlocksParams,
     NoteQueryBlocksResult, DEFAULT_BATCH_TOKEN_TTL,
 };
-pub use note_permission::{
-    decide_note_tool, is_note_safe_tool, is_note_tool, is_note_write_tool, plan_denies_note_tool,
-    NOTE_SAFE_TOOLS, NOTE_WRITE_TOOLS,
-};
 pub use subagent_inject::{
     comment_preservation_section, git_revert_caution_section, iso8601_from_epoch_ms,
     ref_older_than_threshold, resolve_started_at, started_at_section, subagent_session_injections,
@@ -168,7 +150,6 @@ pub use subagent_inject::{
 // W6-E-S Skeleton 导出（压测夹具 + 恶意扩展门闸；≠ EL-05 / ≠ W6-E Strict）
 pub use note_stress_guard::{
     build_stress_insert_ops, find_forbidden_write_handle, malicious_gate_to_backend_err,
-    plugin_full_needs_approval_for_write, plugin_plan_denies_note_write,
     reject_malicious_extension_payload, thousand_batch_apply_request,
     thousand_batch_dry_run_request, MaliciousExtensionGate, FORBIDDEN_WRITE_HANDLE_KEYS,
     MALICIOUS_EXTENSION_FORBIDDEN_WRITE, W6E_SKELETON_PACKAGE_ID, W6E_S_NOT_CLOSING,

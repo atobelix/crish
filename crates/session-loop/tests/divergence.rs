@@ -31,7 +31,7 @@ use conex_types::events::AgentEvent;
 use conex_types::message::{
     AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole,
 };
-use conex_types::session::AgentEndReason;
+use session_loop::r#loop::AgentEndReason;
 use conex_types::tool::{ProviderDiagnostic, ProviderDiagnosticPhase};
 use session_loop::steering::metadata_kind_wire;
 use session_loop::{

@@ -255,7 +255,6 @@ mod tests {
         let tool_ctx = crate::context::ToolContext {
             session_id: ctx.session_id.clone().unwrap_or_default(),
             abort_token: crate::context::AbortToken::new(),
-            ask: None,
             workspace_root: ctx
                 .cwd
                 .clone()

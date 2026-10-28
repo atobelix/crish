@@ -76,7 +76,7 @@ pub enum SecurityAuditOperation {
     #[serde(rename = "remote-source-attempt")]
     RemoteSourceAttempt,
     /// 远程 run 权限模式降级（D5 §6.2 remote-mode-downgrade：
-    /// full-access 申请被降级为 ask，TH-12 直接缓解；targets 承载
+    /// full 申请被降级为 ask，TH-12 直接缓解；targets 承载
     /// runId（run 创建前为空）、permission_mode 记录降级前申请值，
     /// decision 取 blocked 语义——降级动作已记录）
     #[serde(rename = "remote-mode-downgrade")]
@@ -99,6 +99,8 @@ pub enum SecurityAuditDecision {
     Blocked,
     /// 已批准执行
     Approved,
+    /// 直接放行执行
+    Allowed,
     /// 被拒绝
     Denied,
     /// 已重定向到删除接管接口（未物理删除，可恢复）
@@ -656,7 +658,7 @@ pub enum AgentEvent {
         impact: ImpactAssessment,
         /// 处置决策（blocked/approved/denied/redirected/restored/purged）
         decision: SecurityAuditDecision,
-        /// 权限模式（ask/full-access/plan；emit 层可注入，工具侧为 None）
+        /// 权限模式（统一三态：ask/smart/full；emit 层可注入，工具侧为 None）
         #[serde(default, skip_serializing_if = "Option::is_none")]
         permission_mode: Option<String>,
         /// 工具调用 id（工具侧发射时填充；None = 非工具上下文，如引擎命令）

@@ -1,8 +1,9 @@
-import React, { useId, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import styles from './AgentCard.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
+import { useI18n } from '../../i18n';
 import {
   selectActiveSessionId,
   selectSessionsById,
@@ -16,7 +17,7 @@ import {
   formatAgentDuration,
   sortAgentsForBrowse,
 } from './agentCardUtils';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 /**
  * Agent 侧栏空态 / 浏览列表：仅浏览本会话已有、由主 AI 拉起的子 agent。
@@ -32,7 +33,7 @@ export function AgentBrowsePad({
   onClose?: (() => void) | undefined;
   embedded?: boolean | undefined;
 }) {
-  const headingId = useId();
+  const { t } = useI18n();
   const sessionsById = useSessionField(selectSessionsById);
   const activeSessionId = useSessionField(selectActiveSessionId);
   const parentId = parentSessionId || activeSessionId;
@@ -149,11 +150,8 @@ export function AgentBrowsePad({
           <div
             className={styles.agentLaunchList}
             role="list"
-            aria-labelledby={headingId}
+            aria-label="已拉起智能体列表"
           >
-            <div className={styles.agentLaunchListH} id={headingId}>
-              本会话 · AI 已拉起
-            </div>
             {sorted.map((a) => {
               const name = agentDisplayName(a);
               const pending = countPendingApprovals(a);
@@ -161,8 +159,19 @@ export function AgentBrowsePad({
               const titleBits = [
                 name,
                 STATUS_LABEL[a.status],
-                a.mode ? `模式 ${a.mode}` : '',
-                pending ? `${pending} 项待批` : '',
+                a.mode ? t('chat.agentBrowse.modeValue', { mode: a.mode }) : '',
+                a.capabilityMode === 'read-only'
+                  ? t('chat.agentBrowse.readOnly')
+                  : '',
+                a.modelOverride
+                  ? t('chat.agentBrowse.modelValue', {
+                      model: a.modelOverride,
+                    })
+                  : '',
+                a.resumable ? t('chat.agentBrowse.resumable') : '',
+                pending
+                  ? t('chat.agentBrowse.pendingCount', { count: pending })
+                  : '',
                 dur || '',
                 (a.summary || '').trim().slice(0, 80),
               ].filter(Boolean);
@@ -188,9 +197,20 @@ export function AgentBrowsePad({
                     <AppIcon name="bot" size={13} aria-hidden />
                     <span className={styles.agentLaunchItemT}>{name}</span>
                     {pending > 0 ? (
-                      <Tooltip content={`${pending} 项待批`}>
+                      <Tooltip
+                        content={t('chat.agentBrowse.pendingCount', {
+                          count: pending,
+                        })}
+                      >
                         <span className={styles.agentCardBadge} aria-hidden>
-                          待批
+                          {t('chat.agentBrowse.pendingBadge')}
+                        </span>
+                      </Tooltip>
+                    ) : null}
+                    {a.resumable ? (
+                      <Tooltip content={t('chat.agentBrowse.resumeHint')}>
+                        <span className={styles.agentCardBadge} role="status">
+                          {t('chat.agentBrowse.resumable')}
                         </span>
                       </Tooltip>
                     ) : null}

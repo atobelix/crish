@@ -14,10 +14,98 @@
 use conex_types::error::ProviderErrorKind;
 use conex_types::events::RunCacheStats;
 use conex_types::message::AgentMessage;
-use conex_types::session::AgentEndReason;
+pub use conex_types::session::AgentEndReason as CoreAgentEndReason;
 use std::sync::Arc;
 
 use super::handlers::LoopState;
+
+/// 模型 Token 用量（对齐 [conex_types::events::TurnUsage]）
+pub use conex_types::events::TurnUsage as ModelUsage;
+
+/// run 收口决策原因（对齐 [CoreAgentEndReason]，并引入 [AgentEndReason::YieldSuspended] 挂起变体）
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AgentEndReason {
+    /// 正常停止（默认收场）
+    Stop,
+    /// 预算用尽（非错误非中止）
+    MaxTurns,
+    /// 用户中止
+    Aborted,
+    /// 错误收场（仅 01 §1.6 四事件）
+    Error,
+    /// 用户协作停止（D1 新增，独立于 stop/aborted）
+    Stopped,
+    /// 挂起让出（无工具无即时输入，原子交由外层编排层接管）
+    YieldSuspended,
+}
+
+impl From<CoreAgentEndReason> for AgentEndReason {
+    fn from(core: CoreAgentEndReason) -> Self {
+        match core {
+            CoreAgentEndReason::Stop => Self::Stop,
+            CoreAgentEndReason::MaxTurns => Self::MaxTurns,
+            CoreAgentEndReason::Aborted => Self::Aborted,
+            CoreAgentEndReason::Error => Self::Error,
+            CoreAgentEndReason::Stopped => Self::Stopped,
+        }
+    }
+}
+
+impl From<AgentEndReason> for CoreAgentEndReason {
+    fn from(reason: AgentEndReason) -> Self {
+        reason.to_core_reason()
+    }
+}
+
+impl AgentEndReason {
+    /// 安全映射为外部通信与内核状态机兼容的 [CoreAgentEndReason]
+    pub fn to_core_reason(self) -> CoreAgentEndReason {
+        match self {
+            Self::Stop => CoreAgentEndReason::Stop,
+            Self::MaxTurns => CoreAgentEndReason::MaxTurns,
+            Self::Aborted => CoreAgentEndReason::Aborted,
+            Self::Error => CoreAgentEndReason::Error,
+            Self::Stopped => CoreAgentEndReason::Stopped,
+            Self::YieldSuspended => CoreAgentEndReason::Stop,
+        }
+    }
+
+    /// 是否为挂起让出状态
+    pub fn is_yield_suspended(&self) -> bool {
+        matches!(self, Self::YieldSuspended)
+    }
+}
+
+impl PartialEq<CoreAgentEndReason> for AgentEndReason {
+    fn eq(&self, other: &CoreAgentEndReason) -> bool {
+        matches!(
+            (self, other),
+            (AgentEndReason::Stop, CoreAgentEndReason::Stop)
+                | (AgentEndReason::MaxTurns, CoreAgentEndReason::MaxTurns)
+                | (AgentEndReason::Aborted, CoreAgentEndReason::Aborted)
+                | (AgentEndReason::Error, CoreAgentEndReason::Error)
+                | (AgentEndReason::Stopped, CoreAgentEndReason::Stopped)
+        )
+    }
+}
+
+impl PartialEq<AgentEndReason> for CoreAgentEndReason {
+    fn eq(&self, other: &AgentEndReason) -> bool {
+        other == self
+    }
+}
+
+/// 挂起元数据载荷结构体（无阻塞让出时的上下文快照）
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct YieldSuspendedPayload {
+    /// 活性状态描述（如 "no_pending_action"）
+    pub liveness: String,
+    /// 当前 Episode 消费的轮次数
+    pub turns_executed: u32,
+    /// 当前回合累计/结算 Token 用量
+    pub usage: Option<ModelUsage>,
+}
 
 /// provider 错误摘要（D1 §3.4：fatal 收场时由 [super::handlers::stream_error::fatal_provider_error]
 /// 填充 [super::handlers::LoopState::terminal_provider_error]，converge 时零拷贝移交
@@ -38,7 +126,7 @@ pub struct ProviderErrorSummary {
 /// 单一收口决策（01 §五.2：`{reason, error?}` + 诊断字段）
 #[derive(Debug, Clone, PartialEq)]
 pub struct EndDecision {
-    /// 收场 reason（stop / max-turns / aborted / stopped / error）
+    /// 收场 reason（stop / max-turns / aborted / stopped / error / yield-suspended）
     pub reason: AgentEndReason,
     /// error 收场时的错误文案（其余 reason 为 None）
     pub error: Option<String>,
@@ -51,6 +139,8 @@ pub struct EndDecision {
     pub tool_call_count: u32,
     /// 收场时的 steering 计数（观测字段，coordinator 单一计数源）
     pub steering_count: usize,
+    /// 挂起元数据载荷（YieldSuspended 收场时填充）
+    pub yield_payload: Option<YieldSuspendedPayload>,
 }
 
 impl EndDecision {
@@ -68,6 +158,7 @@ impl EndDecision {
             turn_index: state.machine.context().turn_index,
             tool_call_count: state.machine.context().tool_call_count,
             steering_count: state.steering.get_steering_count(),
+            yield_payload: None,
         }
     }
 
@@ -105,9 +196,23 @@ impl EndDecision {
         Self::new(AgentEndReason::Error, Some(message.into()), None, state)
     }
 
-    /// max-turns 预算收场（独立 reason，非错误非中止，01 §1.5）
+    /// max-turns 预算收场（独立预算 reason，非错误非中止，01 §1.5）
     pub(crate) fn max_turns(state: &LoopState) -> Self {
         Self::new(AgentEndReason::MaxTurns, None, None, state)
+    }
+
+    /// 会话循环挂起让出执行权（无工具无即时输入，交由外层编排层接管，内层绝不阻塞睡眠）
+    #[allow(private_interfaces)]
+    pub fn yield_suspended(state: &LoopState, liveness: impl Into<String>) -> Self {
+        let live = liveness.into();
+        let payload = YieldSuspendedPayload {
+            liveness: live.clone(),
+            turns_executed: state.machine.context().turn_index,
+            usage: state.budget_state.turn_usage,
+        };
+        let mut decision = Self::new(AgentEndReason::YieldSuspended, None, Some(live), state);
+        decision.yield_payload = Some(payload);
+        decision
     }
 }
 
@@ -134,7 +239,7 @@ pub struct RunOutcome {
     pub tool_call_count: u32,
     /// 收场时的 steering 计数
     pub steering_count: usize,
-    /// 缓存统计（P5 S2 / T-36）：tracker.finish() 产物——run 内多 turn usage
+    /// 缓存统计（P5 S2 / T-36）：tracker.finish() 产出物——run 内多 turn usage
     /// 聚合 + 浪费审计累计（missed_tokens）+ 缓存温暖截止（warm_until_ms）；
     /// 未配置缓存测量或无可测 usage 时为 None（缺省 None，向后兼容；
     /// T-40 消费本字段发 cache-stats-updated 事件与落库 runs 表）
@@ -143,4 +248,13 @@ pub struct RunOutcome {
     /// provider 错误收场为 None——熔断计数判定（S2 收口）与 D2/D3 恢复面
     /// 消费，00 总纲 §6 契约表）
     pub provider_error: Option<ProviderErrorSummary>,
+    /// 挂起元数据载荷（YieldSuspended 收口时移交）
+    pub yield_payload: Option<YieldSuspendedPayload>,
+}
+
+impl RunOutcome {
+    /// 判定是否以挂起让出（YieldSuspended）收场
+    pub fn is_yield_suspended(&self) -> bool {
+        self.reason == AgentEndReason::YieldSuspended || self.yield_payload.is_some()
+    }
 }

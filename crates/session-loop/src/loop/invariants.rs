@@ -241,7 +241,7 @@ async fn i3_hydrate_then_append_preserves_initial_arcs() {
     )
     .with_initial_conversation_arc(initial.clone());
     let outcome = loop_.run(user("h2")).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason.to_core_reason(), AgentEndReason::Stop);
     // 纯追加：初始两条（同一 Arc）+ 本轮 user + assistant 回复
     assert_eq!(outcome.messages.len(), 4);
     assert!(

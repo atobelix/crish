@@ -477,6 +477,9 @@ impl SubagentLifecycleService {
             started_at_ms: current.started_at,
             inject_bytes,
             window_bytes,
+            // P3：恢复沿用行内能力档与模型覆盖（跨重启保留）
+            capability_mode: current.capability_mode.clone(),
+            model_override: current.model_override.clone(),
         })
     }
 

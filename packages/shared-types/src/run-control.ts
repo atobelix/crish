@@ -13,6 +13,20 @@
  */
 
 import type { JsonObject } from './primitive-types';
+import {
+  PERMISSION_MODE_VALUES,
+  type PermissionMode,
+} from './generated/device/types';
+
+export { PERMISSION_MODE_VALUES };
+export type { PermissionMode };
+
+export function isPermissionMode(value: unknown): value is PermissionMode {
+  return (
+    typeof value === 'string' &&
+    (PERMISSION_MODE_VALUES as readonly string[]).includes(value)
+  );
+}
 
 /** Run 控制级别（协议 wire 名） */
 export type RunControlLevel =

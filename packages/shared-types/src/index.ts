@@ -274,6 +274,7 @@ export type {
   RunControlLevel,
   RunControlLevelCode,
   RunControlIntent,
+  PermissionMode,
 } from './run-control';
 export {
   RUN_CONTROL_LEVELS,
@@ -283,11 +284,12 @@ export {
   isTerminatingRunControl,
   isForceCancelRunControl,
   createRunControlIntent,
+  isPermissionMode,
+  PERMISSION_MODE_VALUES,
 } from './run-control';
 
 // 运行时辅助类型（从 agent-runtime 下沉的纯类型）
 export type {
-  ToolMode,
   StreamRecoveryGlobalStats,
   TokenLedgerStats,
   SessionBranchState,

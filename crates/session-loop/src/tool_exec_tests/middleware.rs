@@ -319,7 +319,6 @@ async fn middleware_empty_chain_is_noop() {
 async fn middleware_runs_after_approval_gate() {
     let calls = vec![call("c1", "dangerous_tool", ToolConcurrency::Sequential)];
     let opts = ToolBatchOptions {
-        approval_enabled: true,
         permission_mode: Some(PermissionMode::Ask),
         ..Default::default()
     };

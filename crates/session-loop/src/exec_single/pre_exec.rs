@@ -1,9 +1,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use agent_tools::context::AskCallback;
 use agent_tools::executor::ExecutorContext;
-use agent_tools::permission::{PermissionMode, PermissionVerdict};
+use agent_tools::permission::PermissionVerdict;
 use agent_tools::ToolContext;
 use serde_json::Value;
 
@@ -24,10 +23,17 @@ impl ToolExecutor {
         } else {
             cx.options
         };
-        let verdict = self.call_verdict(cx.call, effective_options);
-        match (&cx.approval, cx.options.approval_enabled) {
-            (Some(gate), true) => self.handle_gated_verdict(cx, gate, events, verdict).await,
-            _ => self.handle_ungated_verdict(cx, events, verdict).await,
+        let decision = self.call_verdict_detailed(cx.call, effective_options);
+        // 审批门只在非 Full 模式生效（permission_mode = 单一准绳；
+        // approval_enabled 字段已废弃，不再参与门控）
+        let approval_active = cx.approval.is_some()
+            && effective_options.effective_permission_mode() != PermissionMode::Full;
+        match (&cx.approval, approval_active) {
+            (Some(gate), true) => self.handle_gated_verdict(cx, gate, events, decision).await,
+            _ => {
+                self.handle_ungated_verdict(cx, events, decision.verdict)
+                    .await
+            }
         }
     }
 
@@ -36,9 +42,9 @@ impl ToolExecutor {
         cx: &ExecCallContext<'_>,
         gate: &Arc<dyn ApprovalGate>,
         events: &mut Vec<ToolEvent>,
-        verdict: PermissionVerdict,
+        decision: VerdictDecision,
     ) -> ClassifiedToolResult {
-        match verdict {
+        match decision.verdict {
             PermissionVerdict::Allow => {
                 let (r, extra) = self
                     .execute_single_with_retry(
@@ -54,7 +60,8 @@ impl ToolExecutor {
             }
             PermissionVerdict::Deny => denied_result(cx.call, cx.options, Some(&self.registry)),
             PermissionVerdict::NeedsApproval => {
-                self.handle_gated_needs_approval(cx, gate, events).await
+                self.handle_gated_needs_approval(cx, gate, events, decision.reason)
+                    .await
             }
         }
     }
@@ -64,6 +71,7 @@ impl ToolExecutor {
         cx: &ExecCallContext<'_>,
         gate: &Arc<dyn ApprovalGate>,
         events: &mut Vec<ToolEvent>,
+        reason: Option<String>,
     ) -> ClassifiedToolResult {
         let requester = self.approval_requester_for(cx.ctx, &cx.call.input);
         events.push(ToolEvent::ApprovalRequested {
@@ -71,6 +79,7 @@ impl ToolExecutor {
             tool_name: cx.call.tool_name.clone(),
             args: cx.call.input.clone(),
             requester: requester.clone(),
+            reason: reason.clone(),
         });
         match approval_wait(
             gate.as_ref(),
@@ -78,6 +87,7 @@ impl ToolExecutor {
             &cx.call.tool_name,
             &cx.call.input,
             requester.as_ref(),
+            reason.as_deref(),
             cx.abort,
             cx.options.approval_timeout,
         )
@@ -165,7 +175,7 @@ impl ToolExecutor {
         ctx: &ToolExecCtx,
         options: &ToolBatchOptions,
         abort: Option<&crate::safe_point::AbortSignal>,
-        approval: &Option<Arc<dyn ApprovalGate>>,
+        _approval: &Option<Arc<dyn ApprovalGate>>,
     ) -> (
         ToolContext,
         Option<Arc<ApprovalChannel>>,
@@ -193,32 +203,15 @@ impl ToolExecutor {
                 });
             }
         }
-        let mut approval_channel: Option<Arc<ApprovalChannel>> = None;
-        let requester = self.approval_requester_for(ctx, &call.input);
-        let ask: Option<AskCallback> = match options.permission_mode {
-            Some(PermissionMode::FullAccess) => Some(Arc::new(NoopAskChannel)),
-            _ => approval.as_ref().map(|gate| {
-                let channel = Arc::new(ApprovalChannel::new(
-                    Arc::clone(gate),
-                    &call.id,
-                    abort.cloned(),
-                    abort_token.clone(),
-                    requester.clone(),
-                ));
-                approval_channel = Some(Arc::clone(&channel));
-                channel as AskCallback
-            }),
-        };
         let tool_ctx = ToolContext {
             session_id: ctx.session_id.clone(),
             abort_token: abort_token.clone(),
-            ask,
             workspace_root: ctx
                 .workspace_root
                 .clone()
                 .or_else(|| ctx.cwd.clone().map(PathBuf::from))
                 .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
-            permission_mode: options.permission_mode.unwrap_or_default(),
+            permission_mode: options.effective_permission_mode(),
             write_claims: ctx.write_claims.clone(),
             write_claim_holder: Some(ctx.run_id.clone()),
             explore_docs_quota: ctx.explore_docs_quota.clone(),
@@ -239,7 +232,7 @@ impl ToolExecutor {
             tool_call_id: Some(call.id.clone()),
             cwd: ctx.cwd.clone(),
         };
-        (tool_ctx, approval_channel, mw_ctx, exec_ctx, abort_token)
+        (tool_ctx, None, mw_ctx, exec_ctx, abort_token)
     }
 
     pub(super) async fn run_pre_checks(

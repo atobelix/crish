@@ -22,8 +22,8 @@
 //!
 //! 挂载点（合并轮交接登记）：执行器中间件链经
 //! `session-loop` 的 `SessionLoopOptions.tool_middleware` 注入（壳层装配，
-//! 见 apps/agent-workbench/src-tauri/src/core_run_commands.rs 的 options
-//! 构建处，tool_exec.rs 中间件链本身已接线，本钩子为数据驱动挂载，无需
+//! 见 `crates/conex-run/src/run/run_launch.rs` 的 options 构建处；
+//! tool_exec.rs 中间件链本身已接线，本钩子为数据驱动挂载，无需
 //! 改动执行器）。建议以 BuiltinToolConfig.trash_root 同源值构造
 //! （None 时执行期回退工作区 `.crish-trash`，与删除工具兜底一致）。
 

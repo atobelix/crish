@@ -369,7 +369,10 @@ async fn restart_keeps_pending_steering() {
 #[tokio::test]
 async fn ladder3_fork_creates_new_run_with_path() {
     let (env, mut coordinator) = env();
-    let failure_ctx = ctx("run-1", ProviderErrorKind::ServerError, 5, 61_000);
+    let mut failure_ctx = ctx("run-1", ProviderErrorKind::ServerError, 5, 61_000);
+    // P3：恢复沿用小代理能力档与模型覆盖（跨重启保留）
+    failure_ctx.capability_mode = Some("read-write".to_string());
+    failure_ctx.model_override = Some("grok-3".to_string());
     coordinator
         .on_subagent_run_failure(&failure_ctx)
         .await
@@ -404,6 +407,16 @@ async fn ladder3_fork_creates_new_run_with_path() {
     let requests = env.spawner.requests();
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].prompt, "完成模块 A");
+    assert_eq!(
+        requests[0].capability_mode.map(|mode| mode.as_str()),
+        Some("read-write"),
+        "fork 携带原能力档"
+    );
+    assert_eq!(
+        requests[0].model_override.as_deref(),
+        Some("grok-3"),
+        "fork 携带原模型覆盖"
+    );
     // 事件留痕
     let events = env.store.events();
     let types: Vec<&str> = events.iter().map(|(_, t, _)| t.as_str()).collect();

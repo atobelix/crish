@@ -6,10 +6,7 @@
 #![allow(clippy::disallowed_methods)]
 
 use super::*;
-use crate::context::{AskChannel, AskDecision};
-use crate::definition::ToolError;
 use async_trait::async_trait;
-use serde_json::Value;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -75,44 +72,14 @@ impl SubagentSpawner for RecordingSpawner {
     }
 }
 
-/// 记录式审批通道（AskChannel 接线面测试：写类调用产生审批记录）
-#[derive(Debug, Clone)]
-struct RecordingAskChannel {
-    calls: Arc<Mutex<Vec<(String, Value)>>>,
-    decision: AskDecision,
-}
-
-impl RecordingAskChannel {
-    fn allowing() -> Self {
-        Self {
-            calls: Arc::new(Mutex::new(Vec::new())),
-            decision: AskDecision::Allowed,
-        }
-    }
-
-    fn calls(&self) -> Vec<(String, Value)> {
-        self.calls.lock().unwrap().clone()
-    }
-}
-
-#[async_trait]
-impl AskChannel for RecordingAskChannel {
-    async fn ask(&self, tool_name: &str, args: &Value) -> Result<AskDecision, ToolError> {
-        self.calls
-            .lock()
-            .unwrap()
-            .push((tool_name.to_string(), args.clone()));
-        Ok(self.decision.clone())
-    }
-}
-
 // ── 落库链路（conex-db dev-dependency，I3-S7 同款接线模式）────
 
 /// 测试 spawner：模拟引擎侧实现——守卫快照采集（内存记账）→ 校验 →
 /// session_agents 落库 → 返回结果
 struct DbSpawner {
     db: conex_db::LocalDb,
-    guard: RecursionGuardConfig,
+    /// 测试用有界策略：保留容量/前瞻判定覆盖（生产默认数量不限）
+    policy: SpawnPolicy,
     /// 自增序号（agent id 唯一性，模拟引擎侧 id 生成）
     seq: AtomicUsize,
     /// run id → 深度（主会话 run 无记录 = 深度 0，沿 parent_id 链数）
@@ -127,7 +94,11 @@ impl DbSpawner {
     fn new(db: conex_db::LocalDb) -> Self {
         Self {
             db,
-            guard: DEFAULT_RECURSION_GUARD,
+            policy: SpawnPolicy {
+                max_active_per_parent: Some(16),
+                max_active_per_session: Some(16),
+                ..SpawnPolicy::default()
+            },
             seq: AtomicUsize::new(0),
             run_depths: Mutex::new(std::collections::HashMap::new()),
             active_siblings: Mutex::new(std::collections::HashMap::new()),
@@ -138,7 +109,7 @@ impl DbSpawner {
     /// 手动 Debug 助手（LocalDb 不实现 Debug，内部为 Mutex<Connection>）
     fn debug_fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DbSpawner")
-            .field("guard", &self.guard)
+            .field("policy", &self.policy)
             .field("active_concurrent", &self.active_concurrent)
             .finish_non_exhaustive()
     }
@@ -147,7 +118,7 @@ impl DbSpawner {
     /// subagent.nesting_denied；其余复用 GuardRejected）——引擎侧
     /// spawner（T-D-13）按同一映射实现
     fn check_guard(&self, snapshot: RecursionGuardSnapshot) -> Result<(), SubagentSpawnError> {
-        check_recursion_guard(snapshot, self.guard).map_err(|rejection| match rejection {
+        check_recursion_guard(snapshot, self.policy).map_err(|rejection| match rejection {
             RecursionGuardRejection::NestingDenied { .. } => {
                 SubagentSpawnError::NestingDenied(rejection)
             }
@@ -236,6 +207,10 @@ impl DbSpawner {
                 .map(|paths| serde_json::to_string(paths).expect("路径白名单序列化不应失败")),
             // v9 新列（D-02 LK-04 并行契约）：测试替身行无子会话映射
             sub_session_id: None,
+            capability_mode: None,
+            model_override: None,
+            resumable: false,
+            last_heartbeat_ms: None,
         }
     }
 }
@@ -342,6 +317,7 @@ fn request(prompt: &str, parent_session: &str, parent_run: Option<&str>) -> Suba
         task_type: None,
         allowed_write_paths: None,
         display_label: None,
+        permission_mode: None,
         // 扩展点预留：测试构造点同样显式 None（编译器强制）
         model_override: None,
     }

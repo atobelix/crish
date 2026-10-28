@@ -43,6 +43,7 @@ fn approval_resolved_expired_maps_to_agent_event() {
             tool_name: "shell_command".into(),
             args: serde_json::json!({ "command": "git push" }),
             requester: None,
+            reason: None,
         },
         ToolEvent::ApprovalResolved {
             call_id: "c1".into(),

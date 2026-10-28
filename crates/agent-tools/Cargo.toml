@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
+conex-agents = { path = "../conex-agents" }
 conex-diff = { path = "../conex-diff" }
 conex-fs = { path = "../conex-fs" }
 conex-sandbox = { path = "../conex-sandbox" }

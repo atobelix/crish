@@ -4,8 +4,8 @@
  */
 import React, { useCallback, useId, useMemo, useRef } from 'react';
 import styles from './AgentCard.module.css';
-import { ICON_STROKE } from '../ui/icons/iconTokens';
-import { Button, Tooltip } from '../ui';
+import { ICON_STROKE } from '@/components/ui/icons';
+import { Button, Tooltip } from '@/components/ui';
 
 import type { SessionAgent } from '../../store/types';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
@@ -25,7 +25,7 @@ import {
 
 // 保留测试消费入口（AgentTeamBoard.title.test.ts 从 ./AgentTeamBoard 导入 agentTitle）
 export { agentTitle } from './agentTeamBoardUtils';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface AgentTeamBoardProps {
   agents: SessionAgent[];
@@ -100,14 +100,21 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
         // 默认：仅侧栏 openAgentInSidePanel（内部强制 activeAgentId=null）
         openAgentInSidePanel(id, sessionId ? { sessionId } : undefined);
       },
-      [activeId, onSelect, sessionId],
+      [activeId, onSelect, sessionId]
     );
 
     /** listbox 方向键漫游焦点；Enter/Space 由 button 原生处理 */
     const onListKeyDown = useCallback(
       (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (sorted.length === 0) return;
-        const keys = ['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'];
+        const keys = [
+          'ArrowDown',
+          'ArrowUp',
+          'ArrowRight',
+          'ArrowLeft',
+          'Home',
+          'End',
+        ];
         if (!keys.includes(e.key)) return;
 
         const ids = sorted.map((a) => a.id);
@@ -138,19 +145,17 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
             ? CSS.escape(targetId)
             : targetId.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         const el = listRef.current?.querySelector<HTMLElement>(
-          `[data-agent-id="${safe}"]`,
+          `[data-agent-id="${safe}"]`
         );
         el?.focus();
       },
-      [sorted, activeId],
+      [sorted, activeId]
     );
 
     const snippetMax = compact ? SNIPPET_MAX.compact : SNIPPET_MAX.full;
     const density = compact ? 'compact' : 'full';
     const headLabel = compact ? '侧栏切换' : '协作切换';
-    const regionLabel = compact
-      ? '侧栏切换子智能体'
-      : '协作 agent 侧栏切换';
+    const regionLabel = compact ? '侧栏切换子智能体' : '协作 agent 侧栏切换';
 
     // ── 空团队：中文空态（可 showEmpty=false 静默）────────────────────────
     if (sorted.length === 0) {
@@ -178,16 +183,7 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
             aria-live="polite"
             data-agent-team-empty="1"
           >
-            <div className={styles.agentTeamCardSummary} style={{ padding: '4px 2px' }}>
-              暂无协作 agent
-              {!compact ? (
-                <span style={{ display: 'block', marginTop: 2, color: 'var(--text-tertiary)' }}>
-                  由主对话 AI 自动拉起；点开仅在侧栏查看，不覆盖主对话。
-                </span>
-              ) : (
-                <span style={{ color: 'var(--text-tertiary)' }}> · 仅侧栏查看</span>
-              )}
-            </div>
+            <div className={styles.agentTeamCardSummary}>暂无协作智能体</div>
           </div>
         </div>
       );
@@ -221,9 +217,19 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
           <span className={styles.agentTeamBoardLabel}>
             {compact ? '子智能体' : '协作智能体'} ({boardStats.total})
           </span>
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div
+            style={{
+              marginLeft: 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
             {boardStats.runningN > 0 ? (
-              <span className={styles.statusSpinner} aria-label="有正在运行的子智能体">
+              <span
+                className={styles.statusSpinner}
+                aria-label="有正在运行的子智能体"
+              >
                 <svg className={styles.spinnerSvg} viewBox="0 0 24 24">
                   <circle
                     className={styles.spinnerCircle}
@@ -239,9 +245,17 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
                 </svg>
               </span>
             ) : boardStats.pendingN > 0 || boardStats.failedN > 0 ? (
-              <span className={styles.statusDot} style={{ backgroundColor: 'var(--accent-orange)' }} aria-label="有待审批或失败的协作" />
+              <span
+                className={styles.statusDot}
+                style={{ backgroundColor: 'var(--accent-orange)' }}
+                aria-label="有待审批或失败的协作"
+              />
             ) : (
-              <span className={styles.statusDot} style={{ backgroundColor: 'var(--accent-green)' }} aria-label="所有协作已完成" />
+              <span
+                className={styles.statusDot}
+                style={{ backgroundColor: 'var(--accent-green)' }}
+                aria-label="所有协作已完成"
+              />
             )}
           </div>
         </div>
@@ -261,8 +275,7 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
                 ? `${STATUS_LABEL[a.status]} · ${dur}`
                 : STATUS_LABEL[a.status]);
             // roving tabindex：当前项 0，其余 -1（无 active 时首项可 Tab 入）
-            const isTabStop =
-              isOn || (!activeNorm && sorted[0]?.id === a.id);
+            const isTabStop = isOn || (!activeNorm && sorted[0]?.id === a.id);
 
             return (
               <Tooltip
@@ -296,22 +309,26 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
                   {/* compact：单行摘要+工具/时长，提高侧栏信息密度 */}
                   {compact ? (
                     <div className={styles.agentTeamCardMetaLine}>
-                      <span className={`${styles.agentTeamCardSummary} ${styles.agentTeamCardSummaryInline}`}>
+                      <span
+                        className={`${styles.agentTeamCardSummary} ${styles.agentTeamCardSummaryInline}`}
+                      >
                         {snippet}
                       </span>
                       {toolsHint ? (
-                        <span className={styles.agentTeamCardTools}>{toolsHint}</span>
-                      ) : dur ? (
                         <span className={styles.agentTeamCardTools}>
-                          {dur}
+                          {toolsHint}
                         </span>
+                      ) : dur ? (
+                        <span className={styles.agentTeamCardTools}>{dur}</span>
                       ) : null}
                     </div>
                   ) : (
                     <div className={styles.agentTeamCardSummary}>
                       {snippet}
                       {dur ? (
-                        <span style={{ color: 'var(--text-tertiary)' }}>{` · ${dur}`}</span>
+                        <span
+                          style={{ color: 'var(--text-tertiary)' }}
+                        >{` · ${dur}`}</span>
                       ) : null}
                     </div>
                   )}
@@ -329,7 +346,9 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
                       />
                     </div>
                     {!compact && toolsHint ? (
-                      <span className={styles.agentTeamCardTools}>{toolsHint}</span>
+                      <span className={styles.agentTeamCardTools}>
+                        {toolsHint}
+                      </span>
                     ) : null}
                   </div>
                 </Button>
@@ -339,7 +358,7 @@ export const AgentTeamBoard: React.FC<AgentTeamBoardProps> = React.memo(
         </div>
       </div>
     );
-  },
+  }
 );
 
 AgentTeamBoard.displayName = 'AgentTeamBoard';

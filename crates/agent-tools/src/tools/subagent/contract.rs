@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use conex_types::error::codes;
 
 use super::defs::{SubagentCapabilityMode, SubagentRole, SubagentState, TaskType};
-use super::guard::RecursionGuardRejection;
+use conex_agents::guard::RecursionGuardRejection;
 
 // ── 工具面防护（T-D-02：子代理无派发能力，工具面剔除 run_subagent）──
 
@@ -88,6 +88,8 @@ pub struct SubagentSpawnRequest {
     pub allowed_write_paths: Option<Vec<PathBuf>>,
     /// 角色展示标签（可选；仅展示，不影响调度；T-D-05）
     pub display_label: Option<String>,
+    /// 期望/派发权限模式（可选；None = 继承父级上下文并受单向最小特权衰减）
+    pub permission_mode: Option<String>,
     /// 模型覆盖（扩展点预留，T-D-10「多模型不做」）：**全构造点显式
     /// None（编译器强制）**，引擎侧恒不消费（新增消费即编译断裂），
     /// 不落库（session_agents 无对应列）。
@@ -174,6 +176,21 @@ pub trait SubagentSpawner: Send + Sync + std::fmt::Debug {
         &self,
         req: &SubagentSpawnRequest,
     ) -> Result<SubagentSpawnResult, SubagentSpawnError>;
+
+    /// 绑定子代理路由注册（mailbox 反查父会话；默认 no-op 兼容测试替身）。
+    fn set_child_registrar(
+        &self,
+        _registrar: std::sync::Arc<dyn crate::tools::subagent_report::ChildAgentRegistrar>,
+    ) {
+    }
+
+    /// 更新会话级派遣策略（`configure_agents` 落地；默认 no-op 兼容测试替身）。
+    fn set_session_policy(
+        &self,
+        _session_id: &str,
+        _policy: conex_agents::guard::SpawnPolicy,
+    ) {
+    }
 
     /// 为流程节点派发子代理，并声明此 flow 是否启用了生命周期事件。
     /// 默认实现保留既有 spawner 行为；未接管事件的调度器会自行发射。

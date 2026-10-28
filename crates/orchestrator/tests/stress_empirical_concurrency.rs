@@ -192,6 +192,8 @@ async fn stress_real_localdb_and_kernel_state_machine_zero_deadlock() {
                         started_at_ms: 1700000000000,
                         inject_bytes: 50,
                         window_bytes: 1000,
+                        capability_mode: None,
+                        model_override: None,
                     };
                     let outcome = coord
                         .on_subagent_run_failure(&ctx)
