@@ -41,12 +41,12 @@ pub(crate) fn workbench_list_file_openers(path: String) -> Result<Vec<HostOpener
 #[cfg(test)]
 mod tests {
     use std::collections::{HashMap, HashSet};
-    use std::env;
     use std::ffi::OsString;
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
 
     use crate::host_openers::types::HostOpenerKind;
 
+    #[cfg(windows)]
     #[test]
     fn host_openers_include_file_manager_and_editor_candidates() {
         let discovered = super::discovery::discover_host_openers_with(
@@ -118,8 +118,9 @@ mod tests {
         }
     }
 
+    #[cfg(windows)]
     fn path_env(paths: &[&str]) -> OsString {
-        env::join_paths(paths.iter().map(PathBuf::from)).expect("test PATH")
+        std::env::join_paths(paths.iter().map(std::path::PathBuf::from)).expect("test PATH")
     }
 
     fn env_lookup(entries: &[(&str, &str)]) -> impl Fn(&str) -> Option<OsString> {

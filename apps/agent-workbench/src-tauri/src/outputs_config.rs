@@ -354,8 +354,9 @@ mod tests {
     #[test]
     fn resolve_rejects_parent_traversal_components() {
         let ws = TempDir::new("ws");
-        // 相对路径含逃逸/根组件 → 非法组件拒绝
-        for evil in ["../evil", "a/../../b", "/abs"] {
+        // Unix 绝对路径由 resolve_rejects_outside_root_unless_allowed 覆盖；
+        // 此处仅验证相对路径的 ParentDir 逃逸（跨平台一致）
+        for evil in ["../evil", "a/../../b"] {
             let err = resolve_outputs_root(Some(Path::new(evil)), ws.path(), false).unwrap_err();
             assert!(
                 err.contains("非法路径组件"),

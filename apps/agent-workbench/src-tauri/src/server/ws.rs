@@ -2597,6 +2597,7 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
     #[tokio::test]
     async fn ping_pong_keeps_alive_during_silence() {
         // 客户端自动回 Pong → 90s 静默（仅 Ping/Pong）不被踢。

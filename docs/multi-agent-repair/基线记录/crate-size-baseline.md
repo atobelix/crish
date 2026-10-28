@@ -303,7 +303,7 @@ apps/agent-workbench/src-tauri/src/main.rs 1937
 apps/agent-workbench/src-tauri/src/multi_device/tls.rs 1196
 apps/agent-workbench/src-tauri/src/multi_device_network.rs 644
 apps/agent-workbench/src-tauri/src/note_commands_tests.rs 713
-apps/agent-workbench/src-tauri/src/outputs_config.rs 614
+apps/agent-workbench/src-tauri/src/outputs_config.rs 615
 apps/agent-workbench/src-tauri/src/preferences_commands.rs 622
 apps/agent-workbench/src-tauri/src/probe.rs 723
 apps/agent-workbench/src-tauri/src/pty/session.rs 880
@@ -324,7 +324,7 @@ apps/agent-workbench/src-tauri/src/server/limiter.rs 663
 apps/agent-workbench/src-tauri/src/server/mod.rs 1444
 apps/agent-workbench/src-tauri/src/server/pair_endpoint.rs 673
 apps/agent-workbench/src-tauri/src/server/pairing.rs 966
-apps/agent-workbench/src-tauri/src/server/ws.rs 3878
+apps/agent-workbench/src-tauri/src/server/ws.rs 3879
 apps/agent-workbench/src-tauri/src/watchdog.rs 695
 apps/agent-workbench/src-tauri/src/workspace.rs 2154
 crates/agent-provider/src/error_tests.rs 712
