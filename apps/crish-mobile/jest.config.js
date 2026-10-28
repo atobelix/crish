@@ -15,12 +15,11 @@ module.exports = {
   moduleNameMapper: {
     '^@crish/shared-types$': '<rootDir>/../../packages/shared-types/src/index.ts',
     '^@/(.*)$': '<rootDir>/src/$1',
-    // 单 React 副本纪律：仓库并存多版本 react（根 node_modules 为桌面端 19.2.7），
-    // 组件测试必须让 renderer / react-native / 应用代码共用 app 声明的 19.2.3 同一实例，
-    // 否则出现 "Invalid hook call"（两 React 副本）。升级 React 版本时同步此三处映射。
-    '^react$': '<rootDir>/node_modules/react/index.js',
-    '^react/jsx-runtime$': '<rootDir>/node_modules/react/jsx-runtime.js',
-    '^react/jsx-dev-runtime$': '<rootDir>/node_modules/react/jsx-dev-runtime.js',
+    // 依 npm workspace 的 Node 解析顺序定位 React：不同版本时使用 mobile 自己的副本，
+    // 与根目录版本相同并被 npm 提升时则使用根副本；三条映射始终来自同一个 package。
+    '^react$': require.resolve('react'),
+    '^react/jsx-runtime$': require.resolve('react/jsx-runtime'),
+    '^react/jsx-dev-runtime$': require.resolve('react/jsx-dev-runtime'),
   },
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
   collectCoverageFrom: [

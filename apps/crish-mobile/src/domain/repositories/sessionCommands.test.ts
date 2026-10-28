@@ -584,14 +584,14 @@ describe('permissionMode 降级语义（R2-10 B4 只读核对结论）', () => {
     expect(REMOTE_MODE_CLAMP_SNAPSHOT['(缺省不申报)']).toBe('(缺省不申报)');
   });
 
-  it('构造层允许全值域（注册表 PermissionMode 三值透传），降级在桌面端执行', () => {
-    // 移动端即便申报 full-access，桌面仍以 ask 执行——构造侧不本地改写
+  it('构造层允许三值域透传，降级在桌面端执行', () => {
+    // 移动端申报 full，桌面仍按协作/安全策略裁决——构造侧不本地改写
     const req = buildRunTaskRequest({
       prompt: 'p',
-      permissionMode: 'full-access',
+      permissionMode: 'full',
     });
     expect((req.body.params as Record<string, unknown>).permissionMode).toBe(
-      'full-access'
+      'full'
     );
   });
 
