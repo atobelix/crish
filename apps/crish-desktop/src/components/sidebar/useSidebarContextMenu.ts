@@ -10,7 +10,7 @@ import {
   type SessionContextMenuState,
   type SessionMenuAction,
 } from './SidebarContextMenus';
-import { toggleExclusiveMenu } from '../ui/Menu';
+import { toggleExclusiveMenu } from '@/components/ui';
 import { openSessionInNewWindow } from './sidebarHelpers';
 import {
   deleteSessionCascade,
@@ -64,21 +64,68 @@ export function useSidebarContextMenu({
   const contextMenuTriggerRef = useRef<HTMLElement | null>(null);
 
   const handleContextMenu = (e: React.MouseEvent, sessionId: string) => {
-    const triggerEl =
+    const customTrigger = (e as unknown as { triggerEl?: HTMLElement })
+      .triggerEl;
+    const rawTarget =
+      customTrigger ??
       (e.currentTarget instanceof HTMLElement ? e.currentTarget : null) ??
       (e.target instanceof HTMLElement ? e.target : null);
 
     const isMoreTrigger = Boolean(
-      triggerEl?.dataset?.testid === 'session-more-button' ||
-      triggerEl?.closest?.('[data-testid="session-more-button"]')
+      (e as unknown as { isMoreButton?: boolean }).isMoreButton ||
+      rawTarget?.dataset?.testid === 'session-more-button' ||
+      rawTarget?.closest?.('[data-testid="session-more-button"]')
     );
+
+    const moreBtn = rawTarget?.closest?.(
+      '[data-testid="session-more-button"]'
+    ) as HTMLElement | null;
+    const triggerEl = isMoreTrigger ? (moreBtn ?? rawTarget) : rawTarget;
 
     const openThis = () => {
       setRenamingSessionId(null);
       setSortDropdownOpen(false);
       contextMenuTriggerRef.current = triggerEl;
+
+      const triggerRect = triggerEl?.getBoundingClientRect();
+      const customRect = (
+        e as unknown as {
+          triggerRect?: {
+            left: number;
+            top: number;
+            right: number;
+            bottom: number;
+            width: number;
+            height: number;
+          };
+        }
+      ).triggerRect;
+      const finalRect =
+        triggerRect && (triggerRect.width > 0 || triggerRect.height > 0)
+          ? {
+              left: triggerRect.left,
+              top: triggerRect.top,
+              right: triggerRect.right,
+              bottom: triggerRect.bottom,
+              width: triggerRect.width,
+              height: triggerRect.height,
+            }
+          : customRect;
+
+      const nextMenuState: SessionContextMenuState = {
+        x: e.clientX,
+        y: e.clientY,
+        sessionId,
+      };
+      if (isMoreTrigger) {
+        nextMenuState.isMoreButton = true;
+      }
+      if (finalRect && (finalRect.width > 0 || finalRect.height > 0)) {
+        nextMenuState.triggerRect = finalRect;
+      }
+
       // 严格保存原始物理点击坐标，不可变锚点传递给浮层组件（彻底根除 Double Flip 二次翻转）
-      setContextMenu({ x: e.clientX, y: e.clientY, sessionId });
+      setContextMenu(nextMenuState);
     };
 
     // 只有左键「更多」走 exclusive（开着写死 false，外点关后抑制重开）。

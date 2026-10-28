@@ -21,7 +21,7 @@ import {
   computeFixedRowViewport,
   DIFF_FIXED_ROW_HEIGHT,
 } from './fixedRowViewport';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 type UnifiedRenderItem = PlaceholderRenderItem | ChangeRenderItem;
 

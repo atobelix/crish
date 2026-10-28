@@ -1,4 +1,4 @@
-import type { IconName } from '../../components/ui/icons';
+import type { IconName } from '@/components/ui/icons';
 import type {
   ViewDefinition,
   ViewRenderContext,

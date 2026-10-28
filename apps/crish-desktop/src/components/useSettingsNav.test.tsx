@@ -17,7 +17,7 @@ import { Dialog } from './ui/Dialog/Dialog';
 import { Menu } from './ui/Menu/Menu';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { layerStackService } from './ui/internal/layer-stack/LayerStackService';
+import { layerStackService } from '@/components/ui';
 
 function SettingsEscHarness({
   rulesModalOpen = false,

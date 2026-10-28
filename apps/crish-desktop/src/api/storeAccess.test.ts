@@ -9,7 +9,6 @@ import { usePermissionStore } from '../store/permissionStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useTerminalStore } from '../store/terminalStore';
 import {
-  addCommandPermission,
   addMessage,
   addMessageToolCall,
   archiveSession,
@@ -26,7 +25,6 @@ import {
   getActiveSessionId,
   getActiveWorkspace,
   getAppSettings,
-  getCommandPermissions,
   getDiffFiles,
   getDropPreview,
   getLayoutState,
@@ -65,7 +63,6 @@ import {
   setGroupActiveCard,
   setPanelAgentId,
   setPermissionMode,
-  setPlanModeEnabled,
   setScheduledTasks,
   setSettingsActiveTab,
   setShowSettingsOverlay,
@@ -293,7 +290,6 @@ describe('storeAccess + domain facades', () => {
     setActiveSessionId(seedId);
     closeSettings();
     setPermissionMode('ask');
-    setPlanModeEnabled(false);
     setDropPreview(null);
     setActiveAgentId(null);
     setPanelAgentId(null);
@@ -713,15 +709,6 @@ describe('storeAccess + domain facades', () => {
     setAppSettings(null);
     setScheduledTasks([]);
     expect(getScheduledTasks()).toEqual([]);
-  });
-
-  it('cross-domain: addCommandPermission + getCommandPermissions', () => {
-    const before = getCommandPermissions().length;
-    const cmd = `sa-perm-${Date.now()}`;
-    addCommandPermission(cmd);
-    const list = getCommandPermissions();
-    expect(list.length).toBeGreaterThanOrEqual(before);
-    expect(list.some((c) => c.includes(cmd) || c === cmd)).toBe(true);
   });
 
   it('getSessionAgent returns undefined for missing agent', () => {

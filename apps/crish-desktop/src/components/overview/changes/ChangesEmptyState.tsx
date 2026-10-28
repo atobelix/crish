@@ -11,13 +11,11 @@ export interface ChangesEmptyStateProps {
 }
 
 export const ChangesEmptyState: React.FC<ChangesEmptyStateProps> = ({
-  message = '当前对话暂无文件改动',
+  message = '暂无改动',
 }) => {
   return (
     <div className={styles.emptyWrap} role="status">
-      <p className={`${styles.empty} ${styles.emptyQuiet}`}>
-        {message}
-      </p>
+      <p className={`${styles.empty} ${styles.emptyQuiet}`}>{message}</p>
     </div>
   );
 };

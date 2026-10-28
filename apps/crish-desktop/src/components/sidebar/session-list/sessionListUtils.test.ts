@@ -10,10 +10,7 @@ import {
   sessionListProjectLabel,
 } from './sessionListUtils';
 
-function sess(
-  id: string,
-  extra: Partial<SessionState> = {}
-): SessionState {
+function sess(id: string, extra: Partial<SessionState> = {}): SessionState {
   return {
     id,
     title: id,

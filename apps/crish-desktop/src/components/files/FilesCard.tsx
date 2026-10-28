@@ -1,7 +1,7 @@
 import { useToast } from '../../services/toast/ToastContext';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './FilesCard.module.css';
-import { Button, Tooltip, Input } from '../ui';
+import { Button, Tooltip, Input } from '@/components/ui';
 
 import {
   countPendingFileAnnotations,
@@ -18,7 +18,7 @@ import { FileBreadcrumb } from './FileBreadcrumb';
 import { FileTreeView } from './FileTreeView';
 import { FilePreview } from './FilePreview';
 import { FileActions } from './FileActions';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { preferencesClient } from '../../api/preferences';
 import { useFileListRatio } from './hooks/useFileListRatio';
 import {
@@ -436,9 +436,6 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
           {noRoot ? (
             <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>
               <div className={styles.filesEmptyTitle}>未选择项目</div>
-              <div className={styles.filesEmptySub}>
-                在侧栏选择工作区后即可浏览
-              </div>
             </div>
           ) : (
             <div

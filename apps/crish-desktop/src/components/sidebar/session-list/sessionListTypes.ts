@@ -48,4 +48,10 @@ export interface SidebarSessionListProps {
   onDeleteSession?: (sessionId: string) => void;
   /** 分叉会话快捷键回调 */
   onBranchSession?: (sessionId: string) => void;
+  /** 置顶会话快捷回调 */
+  onPinSession?: (sessionId: string) => void;
+  /** 取消置顶快捷回调 */
+  onUnpinSession?: (sessionId: string) => void;
+  /** 归档会话快捷回调 */
+  onArchiveSession?: (sessionId: string) => void;
 }

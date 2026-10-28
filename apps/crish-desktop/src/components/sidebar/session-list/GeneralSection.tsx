@@ -5,9 +5,9 @@ import { navigateToNewDraft } from '../../../store/storeAccess';
 import type { SessionListWindowRange } from '../../../api/sessionListWindow';
 import { WindowedSessionUl } from './WindowedSessionUl';
 import { resolveActualScrollHost } from './useSessionListWindow';
-import { Button, Tooltip } from '../../ui';
+import { Button, Tooltip } from '@/components/ui';
 import styles from '../SidebarSessionList.module.css';
-import { AppIcon } from '../../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../../i18n';
 
 export interface GeneralSectionProps {
@@ -191,15 +191,7 @@ export function GeneralSection({
               className={`${styles.emptyHint} ${styles.subtle}`}
               role="status"
             >
-              {isFlatList
-                ? t(
-                    'sidebar.noGeneralYet',
-                    '暂无常规对话，点击右上角 + 新建对话'
-                  )
-                : t(
-                    'sidebar.generalWillAppearHere',
-                    '不在项目中的对话会出现在这里'
-                  )}
+              {t('sidebar.noGeneralYet', '暂无对话')}
             </div>
           )}
         </div>

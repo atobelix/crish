@@ -7,9 +7,6 @@ import type { Settings } from '../clientApi';
 import {
   setShowSettingsOverlay as setShowSettingsOverlayUi,
   setSettingsActiveTab as setSettingsActiveTabUi,
-  setPermissionMode as setPermissionModeUi,
-  setPlanModeEnabled as setPlanModeEnabledUi,
-  setPlanApproved as setPlanApprovedUi,
 } from '../../store/settingsUiStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePermissionStore } from '../../store/permissionStore';
@@ -23,15 +20,7 @@ export function setSettingsActiveTab(tab: SettingsTabType): void {
 }
 
 export function setPermissionMode(mode: PermissionMode): void {
-  setPermissionModeUi(mode);
-}
-
-export function setPlanModeEnabled(enabled: boolean): void {
-  setPlanModeEnabledUi(enabled);
-}
-
-export function setPlanApproved(approved: boolean): void {
-  setPlanApprovedUi(approved);
+  usePermissionStore.getState().setPermissionMode(mode);
 }
 
 export function setAppSettings(settings: Settings | null): void {
@@ -40,14 +29,6 @@ export function setAppSettings(settings: Settings | null): void {
 
 export function getAppSettings(): Settings | null {
   return useSettingsStore.getState().appSettings;
-}
-
-export function addCommandPermission(cmd: string): void {
-  usePermissionStore.getState().addCommandPermission(cmd);
-}
-
-export function getCommandPermissions(): string[] {
-  return usePermissionStore.getState().commandPermissions ?? [];
 }
 
 /** 发送快捷键唯一钥匙：settingsStore.appSettings.sendShortcut */
@@ -64,7 +45,11 @@ export function normalizeSendShortcut(raw: unknown): SendShortcut {
 export function readSendShortcut(): SendShortcut {
   try {
     const settings = useSettingsStore.getState().appSettings;
-    if (settings && typeof settings === 'object' && 'sendShortcut' in settings) {
+    if (
+      settings &&
+      typeof settings === 'object' &&
+      'sendShortcut' in settings
+    ) {
       return normalizeSendShortcut(settings.sendShortcut);
     }
     return memorySendShortcut;

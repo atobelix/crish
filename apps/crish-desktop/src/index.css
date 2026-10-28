@@ -4,9 +4,9 @@
 @import './styles/markdown-typography.css';
 @import './styles/responsive.css';
 @import './styles/z-index.css' layer(base);
-@import './styles/shell/shell-reset.css';
-@import './styles/shell/shell-layout.css';
-@import './styles/overlay-scrollbar.css';
+@import './styles/shell/shell-reset.css' layer(reset);
+@import './styles/shell/shell-layout.css' layer(base);
+@import './styles/overlay-scrollbar.css' layer(base);
 @import './styles/focus-visible.css' layer(base);
 @import './styles/reduced-motion.css' layer(base);
 @import './styles/sr-only.css' layer(base);

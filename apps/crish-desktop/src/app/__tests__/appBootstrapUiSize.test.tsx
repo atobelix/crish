@@ -10,7 +10,12 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { render } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
+import { mockTauriError } from '../../test-setup';
+import { emitUiEvent } from '../../api/uiEvents';
+import { addProjectFromPath } from '../../api/projectStore';
+import { __resetWorkspaceAccessApiForTests } from '../../api/workspaceAccessApi';
+import { toast } from '../../services/toast';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useAppBootstrap } from '../AppBootstrap';
 
@@ -56,7 +61,11 @@ vi.mock('../../api/providerProfiles', () => ({
   migrateLegacyProfiles: () => Promise.resolve(),
 }));
 vi.mock('../../api/storeAccess', () => ({ syncTelemetryData: () => {} }));
-vi.mock('../../api/uiEvents', () => ({ onUiEvent: () => () => {} }));
+vi.mock('../../api/uiEvents', () => ({
+  emitUiEvent: vi.fn(),
+  onUiEvent: () => () => {},
+}));
+vi.mock('../../services/toast', () => ({ toast: { error: vi.fn() } }));
 vi.mock('../../api/pickWorkspaceFolder', () => ({
   pickWorkspaceFolder: () => Promise.resolve(),
 }));
@@ -90,6 +99,9 @@ function Harness() {
 
 describe('Stage 4 · AppBootstrap 属性写入收敛', () => {
   beforeEach(() => {
+    localStorage.clear();
+    __resetWorkspaceAccessApiForTests();
+    vi.clearAllMocks();
     document.body.removeAttribute('data-ui-size');
     document.documentElement.removeAttribute('data-ui-size');
   });
@@ -105,6 +117,20 @@ describe('Stage 4 · AppBootstrap 属性写入收敛', () => {
   it('渲染 AppBootstrap Harness 不污染 body[data-ui-size]', () => {
     render(<Harness />);
     expect(document.body.getAttribute('data-ui-size')).toBeNull();
+  });
+
+  it('启动授权失败时显示错误并仍完成 AppBootstrap 渲染', async () => {
+    addProjectFromPath('D:/cached/untrusted', 'cached');
+    mockTauriError(
+      'workbench_open_workspaces',
+      new Error('workspace_not_granted: path not in recent list')
+    );
+
+    const { container } = render(<Harness />);
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+
+    expect(emitUiEvent).toHaveBeenCalledWith('open-project-picker');
+    expect(container).toBeTruthy();
   });
 
   it('App.tsx 接线结构：useAppBootstrap 已透传 store 订阅值（API 兼容）', () => {

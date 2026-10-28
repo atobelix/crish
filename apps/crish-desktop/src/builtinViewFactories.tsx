@@ -35,6 +35,10 @@ export const builtinViewFactories: ViewFactoryMap = {
             sessionId={ctx.sessionId}
             panelId={ctx.panelId}
             initialCwd={(ctx.params?.cwd as string) || undefined}
+            isStandalone={
+              Boolean(ctx.params?.isStandalone) ||
+              ctx.sessionId?.startsWith('standalone:')
+            }
           />
         ),
       }))
@@ -42,14 +46,31 @@ export const builtinViewFactories: ViewFactoryMap = {
   preview: () =>
     lazy(() =>
       import('./components/workspace/PreviewCard').then((m) => ({
-        // T20：透传 resolver 的 params.target——`preview:<url>` 带目标打开
-        default: (ctx: ViewRenderContext) => (
-          <m.PreviewCard
-            initialTarget={(ctx?.params?.target as string | undefined) ?? null}
-            sessionId={ctx.sessionId}
-            leafId={ctx.leafId}
-          />
-        ),
+        // V2 架构：参数直通（params.url 优先，params.target 兼容）+ tabId 单一真理源 + 显隐隔离
+        default: (ctx: ViewRenderContext) => {
+          const directUrl =
+            typeof ctx?.params?.url === 'string'
+              ? ctx.params.url
+              : typeof ctx?.params?.target === 'string'
+                ? ctx.params.target
+                : null;
+          const directTabId =
+            typeof ctx?.params?.tabId === 'string' && ctx.params.tabId.trim()
+              ? ctx.params.tabId.trim()
+              : ctx.panelId;
+
+          return (
+            <m.PreviewCard
+              tabId={directTabId}
+              panelId={ctx.panelId}
+              initialTarget={directUrl}
+              initialUrl={directUrl}
+              sessionId={ctx.sessionId}
+              leafId={ctx.leafId}
+              isActive={ctx.isActive}
+            />
+          );
+        },
       }))
     ),
   overview: () =>

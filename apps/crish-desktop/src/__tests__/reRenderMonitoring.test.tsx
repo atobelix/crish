@@ -262,8 +262,6 @@ describe('重渲染监控 (Component Re-render Monitoring)', () => {
       onToggleExpandUser: vi.fn(),
       onShowToast: vi.fn(),
       hideThinkingBlock: false,
-      inPlanMode: false,
-      planApproved: false,
       lastAssistantId: null,
       toolStackProps: {
         activeSessionId: 'sess-rr-1',
@@ -276,7 +274,6 @@ describe('重渲染监控 (Component Re-render Monitoring)', () => {
       onOpenDiff: vi.fn(),
       onOpenDiffPanel: vi.fn(),
       setPermissionMode: vi.fn(),
-      setPlanApproved: vi.fn(),
       handleFillFollowUp: vi.fn(),
       onSendFollowUp: vi.fn(),
       handleSendFollowUp: vi.fn(),
@@ -504,9 +501,8 @@ describe('工具密集会话全链重渲染（T4.4：= 工具事件数，而非�
 // ──────────────────────────────────────────────
 describe('单卡展开隔离（D7.3 / FE-INV-5：其它消息 0 渲染）', () => {
   it('rowToolStackSharedPropsEqual：单卡 toggle 只换目标消息槽位引用，其它行 shallow 相等', async () => {
-    const { rowToolStackSharedPropsEqual } = await import(
-      '../components/chat-message-row/chatMessageRowUtils'
-    );
+    const { rowToolStackSharedPropsEqual } =
+      await import('../components/chat-message-row/chatMessageRowUtils');
 
     const emptyTools = {};
     const msgAExpanded = { 'tool-a': true };
@@ -537,19 +533,18 @@ describe('单卡展开隔离（D7.3 / FE-INV-5：其它消息 0 渲染）', () =
     } as unknown as ChatToolStackSharedProps;
 
     // 目标行（msg-a）：expandedTools 切片变化 → 不相等（须重渲染）
-    expect(
-      rowToolStackSharedPropsEqual(sharedV1, sharedV2, 'msg-a')
-    ).toBe(false);
+    expect(rowToolStackSharedPropsEqual(sharedV1, sharedV2, 'msg-a')).toBe(
+      false
+    );
     // 其它行（msg-b）：切片引用不变 → 相等（0 重渲染）
-    expect(
-      rowToolStackSharedPropsEqual(sharedV1, sharedV2, 'msg-b')
-    ).toBe(true);
+    expect(rowToolStackSharedPropsEqual(sharedV1, sharedV2, 'msg-b')).toBe(
+      true
+    );
   });
 
   it('assistantRowPropsEqual：单卡展开时其它消息行 props shallow 相等（0 重渲染探针）', async () => {
-    const { assistantRowPropsEqual } = await import(
-      '../components/chat-message-row/chatMessageRowUtils'
-    );
+    const { assistantRowPropsEqual } =
+      await import('../components/chat-message-row/chatMessageRowUtils');
 
     const SID = 'sess-iso';
     const msgA: SessionMessage = {
@@ -559,7 +554,9 @@ describe('单卡展开隔离（D7.3 / FE-INV-5：其它消息 0 渲染）', () =
       thinking: '',
       timestamp: 1,
       status: 'completed',
-      toolCalls: [{ id: 't-a', name: 'read_file', arguments: '{}', status: 'success' }],
+      toolCalls: [
+        { id: 't-a', name: 'read_file', arguments: '{}', status: 'success' },
+      ],
       blocks: [{ type: 'text', content: 'A 正文' }],
     };
     const msgB: SessionMessage = {
@@ -569,7 +566,9 @@ describe('单卡展开隔离（D7.3 / FE-INV-5：其它消息 0 渲染）', () =
       thinking: '',
       timestamp: 2,
       status: 'completed',
-      toolCalls: [{ id: 't-b', name: 'read_file', arguments: '{}', status: 'success' }],
+      toolCalls: [
+        { id: 't-b', name: 'read_file', arguments: '{}', status: 'success' },
+      ],
       blocks: [{ type: 'text', content: 'B 正文' }],
     };
 
@@ -580,14 +579,11 @@ describe('单卡展开隔离（D7.3 / FE-INV-5：其它消息 0 渲染）', () =
       isSearchHit: false,
       isThinkingMsg: false,
       hideThinkingBlock: false,
-      inPlanMode: false,
-      planApproved: false,
       isLastAssistant: true,
       onTogglePin: vi.fn(),
       onBranch: vi.fn(),
       onOpenDiff: vi.fn(),
       setPermissionMode: vi.fn(),
-      setPlanApproved: vi.fn(),
       messageIndex: 1,
       virtualScrollManager: null,
     };

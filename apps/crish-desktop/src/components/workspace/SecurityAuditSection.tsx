@@ -12,7 +12,7 @@
  *   见 REQ-逃逸追踪分析 §5.2 P4；优先级高于 flagged）。
  */
 import React from 'react';
-import { Tooltip } from '../ui';
+import { Tooltip } from '@/components/ui';
 import styles from './RuntimePanel.module.css';
 import { RuntimeSection } from './RuntimeSection';
 import {
@@ -67,10 +67,7 @@ export const SecurityAuditSection: React.FC<SecurityAuditSectionProps> = ({
               data-testid="audit-entry"
             >
               <div className={styles.rowMain}>
-                <span
-                  className={`${styles.dot} ${dotClass}`}
-                  aria-hidden
-                />
+                <span className={`${styles.dot} ${dotClass}`} aria-hidden />
                 <div className={styles.rowText}>
                   <span className={styles.rowTitle}>
                     {auditOperationLabel(entry.operation)} ·{' '}

@@ -9,6 +9,10 @@ export { openPathDefault } from './hostOpenersApi';
 import { invokeResult } from './tauriInvoke';
 import { countTextLines } from './countTextLines';
 import {
+  FILE_PREVIEW_CHUNK_LINES,
+  FILE_PREVIEW_MAX_LINES,
+} from './workspaceFilePreviewBudget';
+import {
   assertWorkspacePath,
   getWorkspaceRoot,
   joinWorkspaceRootPath,
@@ -23,6 +27,12 @@ export {
   resolveWorkspacePath,
   type ResolvedPath,
 } from './workspacePathResolver';
+export {
+  FILE_PREVIEW_CHUNK_LINES,
+  FILE_PREVIEW_CODE_BUDGET,
+  FILE_PREVIEW_MAX_LINES,
+  nextFilePreviewLineBudget,
+} from './workspaceFilePreviewBudget';
 
 export type FsDirEntry = {
   name: string;
@@ -47,13 +57,15 @@ function parentPath(p: string): string {
 }
 
 export async function listDirectory(dirPath?: string): Promise<FsDirEntry[]> {
-  const root = getWorkspaceRoot();
-  const path = resolveWorkspacePath(dirPath || root);
-  if (!path) throw new Error('未打开项目工作区，请先选择项目');
-
+  let path = '';
   const res = await invokeResult<{ items?: Array<Record<string, unknown>> }>(
     'workbench_list_directory',
-    { path }
+    () => {
+      const root = getWorkspaceRoot();
+      path = resolveWorkspacePath(dirPath || root);
+      if (!path) throw new Error('未打开项目工作区，请先选择项目');
+      return { path };
+    }
   );
 
   if (res.status === 'ok' && res.data?.items) {
@@ -69,35 +81,11 @@ export async function listDirectory(dirPath?: string): Promise<FsDirEntry[]> {
   throw new Error('当前环境无法浏览本地目录（需桌面壳）');
 }
 
-/** 首屏预览行数；长文件可再分段加载 */
-export const FILE_PREVIEW_CHUNK_LINES = 400;
-/** 后端硬上限对齐 fs_commands 安全最大行数 */
-export const FILE_PREVIEW_MAX_LINES = 20000;
-/** 虚拟化代码与文档预览全量预算（解除 400 行截断手铐，直连虚拟 DOM） */
-export const FILE_PREVIEW_CODE_BUDGET = FILE_PREVIEW_MAX_LINES;
-
-/**
- * 下一段预览行预算（纯函数，供 UI 与单测共用）。
- * 返回 null 表示已达上限，不应再请求。
- */
-export function nextFilePreviewLineBudget(
-  currentBudget: number,
-  chunk: number = FILE_PREVIEW_CHUNK_LINES,
-  max: number = FILE_PREVIEW_MAX_LINES
-): number | null {
-  const cur = Math.max(0, Math.floor(currentBudget));
-  const step = Math.max(1, Math.floor(chunk));
-  const cap = Math.max(1, Math.floor(max));
-  if (cur >= cap) return null;
-  return Math.min(cap, cur + step);
-}
-
 export async function readTextFile(
   filePath: string,
   maxLines = FILE_PREVIEW_CHUNK_LINES
 ): Promise<FsReadResult> {
-  const path = resolveReadableFilePath(filePath);
-  if (!path) throw new Error(`无效或不合法的文件路径: ${filePath}`);
+  let path = '';
   const lines = Math.max(
     1,
     Math.min(FILE_PREVIEW_MAX_LINES, Math.floor(maxLines))
@@ -108,9 +96,10 @@ export async function readTextFile(
     lineCount?: number;
     line_count?: number;
     truncated?: boolean;
-  }>('workbench_read_file_content', {
-    path,
-    maxLines: lines,
+  }>('workbench_read_file_content', () => {
+    path = resolveReadableFilePath(filePath);
+    if (!path) throw new Error(`无效或不合法的文件路径: ${filePath}`);
+    return { path, maxLines: lines };
   });
 
   if (res.status === 'ok' && typeof res.data?.content === 'string') {
@@ -141,12 +130,11 @@ export async function writeTextFile(
   overwrite = false
 ): Promise<void> {
   if (!filePath) throw new Error('路径为空');
-  const path = assertWorkspacePath(filePath);
-  const res = await invokeResult('workbench_write_file_content', {
-    path,
+  const res = await invokeResult('workbench_write_file_content', () => ({
+    path: assertWorkspacePath(filePath),
     content,
     overwrite,
-  });
+  }));
   if (res.status === 'ok') return;
   if (res.status === 'error') throw new Error(res.message);
   throw new Error('当前环境无法写入文件（需桌面壳写权限）');
@@ -178,11 +166,13 @@ export async function toAssetUrl(filePath: string): Promise<string | null> {
 
 /** 在系统资源管理器中显示（直连 host opener，契约：system-file-manager + 原始路径） */
 export async function revealInOs(filePath: string): Promise<void> {
-  const path = resolveReadableFilePath(filePath);
-  if (!path) throw new Error('路径为空或不合法');
-  const res = await invokeResult('workbench_open_host_target', {
-    openerId: 'system-file-manager',
-    target: { type: 'path', path },
+  const res = await invokeResult('workbench_open_host_target', () => {
+    const path = resolveReadableFilePath(filePath);
+    if (!path) throw new Error('路径为空或不合法');
+    return {
+      openerId: 'system-file-manager',
+      target: { type: 'path', path },
+    };
   });
   if (res.status === 'ok') return;
   if (res.status === 'error') throw new Error(res.message);

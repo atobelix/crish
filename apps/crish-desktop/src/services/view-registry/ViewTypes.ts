@@ -1,5 +1,5 @@
 import type React from 'react';
-import type { IconName } from '../../components/ui/icons';
+import type { IconName } from '@/components/ui/icons';
 
 export type ViewCategory = 'primary' | 'tool' | 'auxiliary' | 'debug';
 

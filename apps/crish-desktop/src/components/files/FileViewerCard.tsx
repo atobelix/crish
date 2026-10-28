@@ -11,7 +11,6 @@ import {
   openToolInSession,
   useTerminalField,
   selectDiffFiles,
-  consumeFileViewerModeOverride,
 } from '../../store/storeAccess';
 import {
   openPathDefault,
@@ -24,15 +23,14 @@ import {
   getWorkspacePath,
   pathRelativeToRoot,
   revealInOs,
-  FILE_PREVIEW_MAX_LINES,
 } from '../../api/workspaceFsApi';
 import { usePlainCodeLoader } from './hooks/usePlainCodeLoader';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
 import { DiffCardUnifiedView } from '../diff/DiffCardUnifiedView';
 import { getComputedChanges } from '../diff/useDiffData';
 import { useToast } from '../../services/toast/ToastContext';
-import { Button, Tooltip, Menu } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Tooltip, Menu } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { FileViewerHistoryDrawer } from './FileViewerHistoryDrawer';
 import { useWordWrapPreference } from './hooks/useWordWrapPreference';
 import { isJsonFileOrContent, formatJsonSafe } from './jsonFormatUtils';
@@ -40,7 +38,6 @@ import { FileAnnotationPopover } from './FileAnnotationPopover';
 import styles from './FileViewerCard.module.css';
 import { createFileViewerMenuOptions } from './fileViewerMenuOptions';
 import {
-  shouldConsumeScopedEvent,
   useLeafScope,
   useScopedSessionId,
 } from '../../contexts/LeafScopeContext';
@@ -75,12 +72,8 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
       );
     }, [diffFiles, filePath]);
 
-    // 模式切换状态：优先消费单轨模式意图，其次使用 initialMode (冷启动)
-    const [viewMode, setViewMode] = useState<'plain' | 'diff'>(() => {
-      const canonicalTabId = `file-viewer:${filePath}`;
-      const override = consumeFileViewerModeOverride(canonicalTabId);
-      return override || initialMode;
-    });
+    // 模式切换状态：由 initialMode 参数驱动，支持组件生命周期内响应 DockTree 参数热更新
+    const [viewMode, setViewMode] = useState<'plain' | 'diff'>(initialMode);
 
     // 根卡片容器引用（供选区批注几何锚定）
     const cardRef = useRef<HTMLDivElement>(null);
@@ -91,37 +84,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
     // 历史编辑记录抽屉打开状态
     const [historyOpen, setHistoryOpen] = useState(false);
 
-    // 监听同名 Tab 热激活微任务事件（通道 1：解决已存在 Tab 热聚焦切模问题）
-    useEffect(() => {
-      const handleModeSwitch = (e: Event) => {
-        const customEvent = e as CustomEvent<{
-          canonicalTabId: string;
-          mode: 'plain' | 'diff';
-          leafId?: string;
-          sessionId?: string;
-        }>;
-        if (!customEvent.detail) return;
-        if (
-          !shouldConsumeScopedEvent(customEvent.detail, {
-            sessionId: scopedSessionId,
-            leafId: effectiveLeafId,
-            isActive: scope.inLeafScope ? scope.isActive : undefined,
-          })
-        ) {
-          return;
-        }
-        const currentCanonical = `file-viewer:${filePath}`;
-        if (customEvent.detail.canonicalTabId === currentCanonical) {
-          setViewMode(customEvent.detail.mode);
-        }
-      };
-      window.addEventListener('conex:file-viewer-mode', handleModeSwitch);
-      return () => {
-        window.removeEventListener('conex:file-viewer-mode', handleModeSwitch);
-      };
-    }, [filePath, scopedSessionId, effectiveLeafId, scope]);
-
-    // 监听 initialMode prop 变动（通道 2：React 组件生命周期更新防死锁）
+    // 监听 initialMode prop 变动（响应 DockTree ToolTab.params 纯参数流下发与热更新）
     useEffect(() => {
       if (initialMode) {
         setViewMode(initialMode);
@@ -447,9 +410,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                   />
                   {plainTruncated && (
                     <div className={styles.truncNotice} role="status">
-                      已加载前 {plainLineCount} 行（超出{' '}
-                      {FILE_PREVIEW_MAX_LINES}{' '}
-                      行上限已截断），如需完整内容请用系统关联程序打开
+                      已加载前 {plainLineCount} 行（已截断）
                     </div>
                   )}
                 </>
@@ -469,9 +430,6 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                   aria-hidden
                 />
                 <div>该文件目前没有本地改动</div>
-                <div className={styles.diffEmptySub}>
-                  本地工作区与基准版本完全一致。
-                </div>
               </div>
             )}
           </div>
@@ -502,7 +460,9 @@ FileViewerCard.displayName = 'FileViewerCard';
 
 export const FileViewerCardView: React.FC<ViewRenderContext> = (ctx) => {
   const filePath = (ctx.params?.filePath as string) || '';
-  const initialMode = (ctx.params?.initialMode as 'plain' | 'diff') || 'plain';
+  const initialMode =
+    ((ctx.params?.initialMode ?? ctx.params?.mode) as 'plain' | 'diff') ||
+    'plain';
   return (
     <FileViewerCard
       key={filePath}

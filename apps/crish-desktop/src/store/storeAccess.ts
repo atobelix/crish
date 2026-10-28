@@ -112,20 +112,13 @@ export function usePermissionField<T>(
   return usePermissionStore(selector);
 }
 
-export const selectPermissionMode = (
-  s: Pick<PermissionStore, 'permissionMode'>
-) => s.permissionMode;
+export const selectPermissionMode = (s: PermissionStore) => s.permissionMode;
 
-export const selectPlanModeEnabled = (
-  s: Pick<PermissionStore, 'planModeEnabled'>
-) => s.planModeEnabled;
+export function getPermissionMode(): PermissionMode {
+  return usePermissionStore.getState().permissionMode;
+}
 
-export const selectPlanApproved = (s: Pick<PermissionStore, 'planApproved'>) =>
-  s.planApproved;
-
-export const selectCommandPermissions = (
-  s: Pick<PermissionStore, 'commandPermissions'>
-) => s.commandPermissions;
+export { usePermissionStore };
 
 // ── settings 域读面 ─────────────────────────────────────────────────────────
 
@@ -208,6 +201,10 @@ export { useWorkspaceStore, useActiveWorkspace } from './workspaceStore';
 // ── session 域只读与生命周期协调面 ───────────────────────────────────────────
 
 export { getSessionById } from './sessionStore';
+export {
+  useSessionExecutionTrackerStore,
+  type SessionExecutionItem,
+} from './sessionExecutionTrackerStore';
 export { SessionCoordinator, deleteSessionCascade } from './SessionCoordinator';
 
 export {
@@ -294,6 +291,25 @@ export {
   rectFromDOM,
   MIN_SPLIT_RATIO,
   MAX_SPLIT_RATIO,
+  isDockTreeEmpty,
+  findSpatialNode,
+  moveDockTab,
+  splitDockWithTab,
+  activateDockLeaf,
+  activateDockTab,
+  closeDockLeaf,
+  closeDockTab,
+  createDefaultDockTree,
+  createToolTab,
+  openToolInDock,
+  resizeDockBranch,
+  splitDockLeaf,
+  collectSpatialLeaves,
+  flattenSpatialTree,
+  isSpatialLeaf,
+  DEFAULT_RIGHT_DOCK,
+  migrateLegacyDockStateToV2,
+  assertIsSessionLevelTab,
 } from './layout-tree';
 
 export type {
@@ -301,6 +317,20 @@ export type {
   FlatBranch,
   TreeDragSource,
   DropZone,
+  DockLeaf,
+  DockTree,
+  ToolTab,
+  ToolViewId,
+  OpenToolInput,
+  NormalizedRect,
+  SashSegment,
+  SpatialDirection,
+  BaseSpatialLeaf,
+  SpatialBranch,
+  SpatialNode,
+  SpatialTree,
+  FlattenedSpatialItem,
+  RightToolDockState,
 } from './layout-tree';
 
 export { findParent, moveNode } from './layout-tree/operations';
@@ -320,8 +350,6 @@ export {
   openNewTerminalInActiveTab,
   resolveLeafIdForSession,
   openFileViewerInSession,
-  setFileViewerModeOverride,
-  consumeFileViewerModeOverride,
   updateLeafDock,
   updateTabDock,
   collapseActiveTabRightDock,

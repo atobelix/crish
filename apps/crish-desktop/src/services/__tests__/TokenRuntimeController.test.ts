@@ -13,6 +13,7 @@ import {
   computeWcagContrastRgb,
   resolveContrastGuardedText,
 } from '../token-runtime/skinPaintPlan';
+import { SKIN_PRESETS } from '../../api/themePresets';
 
 /**
  * T7 别名收敛（2026-09-12）负向契约：JS 运行时**不得**注入这些派生别名。
@@ -86,7 +87,7 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       // 「派生别名零注入」——比断言旧别名更强（旧写法对收敛回归无感知）。
       // P1/P2 运行时基准参数注入（SSOT）
       expect(root.style.getPropertyValue('--user-surface-base')).toBe(
-        '#f7f6f4'
+        SKIN_PRESETS['warm-gray'].surfaceBase
       );
       expect(root.style.getPropertyValue('--user-surface-tint')).toBe(
         '#ffffff'
@@ -123,8 +124,8 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(root.style.getPropertyValue('--user-border-color')).toBe(
         '#e2e1e0'
       ); // P2-1：与 tokens.css 同值（M0.4/Y0.8）
-      // control-soft-* 改为 tokens.css 统一叠加（--tint-hover/--tint-active），不再注入
-      expect(root.style.getPropertyValue('--control-soft-bg')).toBe('');
+      // control-soft-* 改为 tokens.css 统一叠加（--state-hover/--state-active），不再注入
+      expect(root.style.getPropertyValue('--state-hover')).toBe('');
       expectNoDerivedAliasesInjected(root);
     });
 
@@ -170,7 +171,7 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
 
       // P1/P2 运行时基准参数注入（SSOT）
       expect(root.style.getPropertyValue('--user-surface-base')).toBe(
-        '#141414'
+        SKIN_PRESETS['dark-cozy'].surfaceBase
       );
       expect(root.style.getPropertyValue('--user-surface-tint')).toBe(
         '#ffffff'
@@ -182,16 +183,16 @@ describe('TokenRuntimeController 全仓单一运行时 Token 注入控制器测�
       expect(root.style.getPropertyValue('--text-base')).toBe('#f5f5f5');
       // [WAVE2-DEPRECATED] 过渡期兼容三档底色
       expect(root.style.getPropertyValue('--user-surface-main')).toBe(
-        '#141414'
+        SKIN_PRESETS['dark-cozy'].bgPrimary
       );
       expect(root.style.getPropertyValue('--user-surface-outer')).toBe(
-        '#1e1e1e'
+        SKIN_PRESETS['dark-cozy'].bgSecondary
       );
       expect(root.style.getPropertyValue('--user-surface-input')).toBe(
-        '#232323'
+        SKIN_PRESETS['dark-cozy'].composerBg
       );
       expect(root.style.getPropertyValue('--user-text-primary')).toBe(
-        '#f5f5f5'
+        SKIN_PRESETS['dark-cozy'].textPrimary
       );
       expectNoDerivedAliasesInjected(root);
     });

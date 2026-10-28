@@ -24,18 +24,33 @@ import {
 const mocks = vi.hoisted(() => ({
   getTransport: vi.fn(),
   call: vi.fn(),
+  cwd: 'C:/repo/work',
 }));
 
 vi.mock('./transport', () => ({
   getTransport: mocks.getTransport,
 }));
+vi.mock('./projectStore', () => ({
+  getWorkspacePath: () => mocks.cwd,
+}));
 
-const CWD = 'C:/repo/work';
-const OK_DATA = { status: 'ok' as const, data: { ok: true, stdout: '', stderr: '' } };
+const CWD = mocks.cwd;
+const OK_DATA = {
+  status: 'ok' as const,
+  data: { ok: true, stdout: '', stderr: '' },
+};
 
 function gitCallArgs() {
-  const calls = mocks.call.mock.calls.filter((c) => c[0] === 'workbench_git_run');
-  return calls.map((c) => c[1] as { cwd: string; gitArgs: string[]; timeoutMs: number });
+  const calls = mocks.call.mock.calls.filter(
+    (c) => c[0] === 'workbench_git_run'
+  );
+  return calls.map((c) => {
+    const args = c[1];
+    expect(typeof args).toBe('function');
+    return (
+      args as () => { cwd: string; gitArgs: string[]; timeoutMs: number }
+    )();
+  });
 }
 
 beforeEach(() => {
@@ -55,7 +70,7 @@ describe('PE-07 T07.3：参数数组直传（无 shell 拼串）', () => {
   it('T07.3 用例 2：a$(whoami).txt / 反引号 / & | 引号等特殊字符文件名直传', async () => {
     const paths = [
       'a$(whoami).txt',
-      'a`b&c\'d(e)f.g',
+      "a`b&c'd(e)f.g",
       'sp ace.txt',
       'a$(Start-Process calc).txt',
     ];
@@ -78,14 +93,26 @@ describe('PE-07 T07.3：参数数组直传（无 shell 拼串）', () => {
 
   it('恶意分支名同样数组直传（Rust 侧白名单兜底）', async () => {
     await switchGitBranch(CWD, 'feature/x;calc.exe');
-    expect(gitCallArgs().pop()?.gitArgs).toEqual(['checkout', 'feature/x;calc.exe']);
+    expect(gitCallArgs().pop()?.gitArgs).toEqual([
+      'checkout',
+      'feature/x;calc.exe',
+    ]);
   });
 
   it('unstage / discard 路径直传（含 -- 分隔符）', async () => {
     await unstageGitPath(CWD, 'src/a b.ts');
-    expect(gitCallArgs().pop()?.gitArgs).toEqual(['reset', 'HEAD', '--', 'src/a b.ts']);
+    expect(gitCallArgs().pop()?.gitArgs).toEqual([
+      'reset',
+      'HEAD',
+      '--',
+      'src/a b.ts',
+    ]);
     await discardGitPath(CWD, 'src/a b.ts');
-    expect(gitCallArgs().pop()?.gitArgs).toEqual(['checkout', '--', 'src/a b.ts']);
+    expect(gitCallArgs().pop()?.gitArgs).toEqual([
+      'checkout',
+      '--',
+      'src/a b.ts',
+    ]);
   });
 
   it('invoke payload 不包含任何命令拼接字符串（gitArgs 恒为数组）', async () => {
@@ -130,6 +157,49 @@ describe('正常 git 操作回归（结果归一不变）', () => {
     expect(r).toEqual({ current: 'main', list: ['main', 'dev'] });
   });
 
+  it('fetchGitBranches 空仓库成功返回空列表，不伪造 main', async () => {
+    mocks.call.mockResolvedValueOnce({
+      status: 'ok',
+      data: { ok: true, stdout: '', stderr: '' },
+    });
+
+    await expect(fetchGitBranches(CWD)).resolves.toEqual({
+      current: '',
+      list: [],
+    });
+  });
+
+  it('fetchGitBranches 执行失败时传播错误，不伪造 main', async () => {
+    mocks.call.mockResolvedValueOnce({
+      status: 'ok',
+      data: { ok: false, stdout: '', stderr: 'branch 查询被拒绝' },
+    });
+
+    await expect(fetchGitBranches(CWD)).rejects.toMatchObject({
+      message: 'branch 查询被拒绝',
+    });
+  });
+
+  it('fetchGitBranches 命令不可用时也不伪造 main', async () => {
+    mocks.call.mockResolvedValueOnce({ status: 'missing' });
+
+    await expect(fetchGitBranches(CWD)).rejects.toMatchObject({
+      message: 'Local Git branch read unavailable',
+    });
+  });
+
+  it('fetchGitBranches 透传 WorkspaceAccess 错误', async () => {
+    mocks.call.mockResolvedValueOnce({
+      status: 'error',
+      kind: 'WorkspaceAccess',
+      message: '工作区授权尚未完成',
+    });
+
+    await expect(fetchGitBranches(CWD)).rejects.toMatchObject({
+      message: '工作区授权尚未完成',
+    });
+  });
+
   it('fetchGitDiff 带 path 时走 diff --cached -- path', async () => {
     mocks.call.mockResolvedValueOnce({
       status: 'ok',
@@ -151,6 +221,47 @@ describe('正常 git 操作回归（结果归一不变）', () => {
     expect(r.found).toBe(true);
   });
 
+  it.each([
+    ['WorkspaceAccess', '工作区授权尚未完成'],
+    ['InvalidInput', '路径不在当前工作区'],
+  ])(
+    'fetchGitDiff path 透传 %s 错误，不生成占位 diff',
+    async (kind, message) => {
+      mocks.call.mockResolvedValueOnce({
+        status: 'error',
+        kind,
+        message,
+      });
+
+      await expect(
+        fetchGitDiff({ cwd: CWD, path: 'src/a.ts' })
+      ).rejects.toMatchObject({ message });
+    }
+  );
+
+  it('fetchGitDiff 成功但无行级输出时保留旧 path 占位结果', async () => {
+    mocks.call.mockResolvedValueOnce({
+      status: 'ok',
+      data: { ok: true, stdout: '', stderr: '' },
+    });
+
+    await expect(fetchGitDiff({ cwd: CWD, path: 'src/a.ts' })).resolves.toEqual(
+      {
+        found: true,
+        files: [
+          {
+            filePath: 'src/a.ts',
+            additions: 0,
+            deletions: 0,
+            changes: [
+              { type: 'normal', content: '（暂无行级 diff，文件已变更）' },
+            ],
+          },
+        ],
+      }
+    );
+  });
+
   it('timedOut 透传', async () => {
     mocks.call.mockResolvedValueOnce({
       status: 'ok',
@@ -168,7 +279,10 @@ describe('正常 git 操作回归（结果归一不变）', () => {
       message: 'arg_not_allowed：git push：不允许 flag --force',
     });
     const r = await pushGitChanges(CWD);
-    expect(r).toEqual({ ok: false, error: 'arg_not_allowed：git push：不允许 flag --force' });
+    expect(r).toEqual({
+      ok: false,
+      error: 'arg_not_allowed：git push：不允许 flag --force',
+    });
   });
 
   it('非桌面壳（missing）→ null（回落引擎，原行为）', async () => {

@@ -79,15 +79,16 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
     // applyTokens 只写独立 surface 侧（TokenRuntimeController 合流）
     // 2026-10-10 三档底色：运行时只写 outer / main / input 三个独立源
     // T-BLK-07b 参数化：注入名为 --user-surface-*，A 类 --surface-* 由 tokens.css 派生
+    const darkCozy = SKIN_PRESETS['dark-cozy'];
     expect(
       document.documentElement.style.getPropertyValue('--user-surface-main')
-    ).toBe('#141414');
+    ).toBe(darkCozy.bgPrimary);
     expect(
       document.documentElement.style.getPropertyValue('--user-surface-outer')
-    ).toBe('#1e1e1e');
+    ).toBe(darkCozy.bgSecondary);
     expect(
       document.documentElement.style.getPropertyValue('--user-surface-input')
-    ).toBe('#232323');
+    ).toBe(darkCozy.composerBg || darkCozy.bgCard);
     expect(
       document.documentElement.style.getPropertyValue('--surface-main')
     ).toBe('');
@@ -99,9 +100,9 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
   it('SSOT-04: dark-cozy 与 warm-gray 官方预设满足 WCAG 单真源契约', () => {
     const darkCozy = SKIN_PRESETS['dark-cozy'];
     expect(darkCozy).toBeDefined();
-    expect(darkCozy.bgPrimary).toBe('#141414');
-    expect(darkCozy.bgSecondary).toBe('#1e1e1e');
-    expect(darkCozy.bgCard).toBe('#232323');
+    expect(darkCozy.bgPrimary).toBe('#111112');
+    expect(darkCozy.bgSecondary).toBe('#1c1c1e');
+    expect(darkCozy.bgCard).toBe('#111112');
     expect(darkCozy.textPrimary).toBe('#f5f5f5');
 
     const warmGray = SKIN_PRESETS['warm-gray'];
@@ -109,7 +110,7 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
     // 同一暖色调 CMYK C0 M0.4 Y0.8 —— 主层纯白 #ffffff、外层 K3 #f7f6f5
     expect(warmGray.bgPrimary).toBe('#ffffff');
     expect(warmGray.bgSecondary).toBe('#f7f6f5');
-    expect(warmGray.bgTertiary).toBe('hsl(30 8.33% 92.29%)');
+    expect(warmGray.bgTertiary).toBe('#ececeb');
     expect(warmGray.textPrimary).toBe('#121212');
   });
 

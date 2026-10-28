@@ -11,6 +11,9 @@ import { MessageSnapshots } from '../api/MessageSnapshots';
 import { bindMessageSnapshotsOps } from './messageSnapshotsBridge';
 import { logger, toErrMeta } from '../services/LoggerService';
 import { initTabModeProjection } from './tabModeApply';
+import { sharedSessionStreamManager } from '../hooks/chat-stream/sessionStreamManager';
+import { sessionDraftManager } from '../api/draft/sessionDraftManager';
+import { bindDraftManagerForEviction } from './sessionDeleteTransition';
 
 // ── Store update frequency logging ──
 const _counters = new Map<string, number>();
@@ -31,7 +34,9 @@ let _freqInterval: ReturnType<typeof setInterval> | null = null;
  * 包装各 store 的 subscribe：统计活跃订阅者数与订阅回调执行次数
  * （一次 set 触发多少组件重渲染的近似口径）。仅 dev overlay/日志消费。
  */
-type SubscribeFn = (listener: (state: unknown, prev: unknown) => void) => () => void;
+type SubscribeFn = (
+  listener: (state: unknown, prev: unknown) => void
+) => () => void;
 const _subscriberStats = new Map<
   string,
   () => { active: number; invocations: number }
@@ -87,7 +92,9 @@ function _setupFrequencyLogging(): void {
       if (count > 0 || (sub && sub.active > 0)) {
         logger.debug(
           `[StoreFreq] ${name}: ${count} updates in last 60s` +
-            (sub ? `, subscribers=${sub.active}, invocations=${sub.invocations}` : ''),
+            (sub
+              ? `, subscribers=${sub.active}, invocations=${sub.invocations}`
+              : ''),
           { module: 'perf' }
         );
       }
@@ -109,9 +116,11 @@ export function bootstrapStores(): () => void {
 
   // Note: Facade stores share the same underlying LayoutStore instance in Phase 0/1,
   // so no inter-store subscribe sync is required. Single listener for frequency metrics:
-  unsubs.push(useLayoutStore.subscribe(() => {
-    _counters.set('layoutStore', (_counters.get('layoutStore') ?? 0) + 1);
-  }));
+  unsubs.push(
+    useLayoutStore.subscribe(() => {
+      _counters.set('layoutStore', (_counters.get('layoutStore') ?? 0) + 1);
+    })
+  );
   // R-13（T5.4）：订阅者计数 + 重渲染范围统计（dev overlay 消费面）
   _wrapSubscriberCounting(useLayoutStore, 'layoutStore');
   // T11 域 store：独立实例，各计各的
@@ -133,11 +142,7 @@ export function bootstrapStores(): () => void {
     _wrapSubscriberCounting(domainHooks[i]!, _STORE_NAMES[4 + i]!);
   }
 
-  initStoreAccess(
-    useSessionStore,
-    useWorkspaceStore,
-    useSettingsUiStore,
-  );
+  initStoreAccess(useSessionStore, useWorkspaceStore, useSettingsUiStore);
 
   unsubs.push(initTabModeProjection());
 
@@ -147,18 +152,41 @@ export function bootstrapStores(): () => void {
     const snapshots = new MessageSnapshots();
     bindMessageSnapshotsOps({
       save: (sessionId, entry, options) =>
-        snapshots.save(sessionId, entry, { afterMessages: options?.afterMessages ?? [] }),
+        snapshots.save(sessionId, entry, {
+          afterMessages: options?.afterMessages ?? [],
+        }),
       clearSession: (sessionId) => snapshots.clearSession(sessionId),
     });
     if (process.env.NODE_ENV === 'development') {
       logger.debug('[Snapshots] bridge bound', { module: 'store' });
     }
   } catch (err) {
-    logger.warn('[Snapshots] bridge bind failed — snapshot protection disabled', {
-      module: 'store',
-      err: toErrMeta(err),
-    });
+    logger.warn(
+      '[Snapshots] bridge bind failed — snapshot protection disabled',
+      {
+        module: 'store',
+        err: toErrMeta(err),
+      }
+    );
   }
+
+  // Double-Lock 墓碑与存活探针（E3-01）：为流式调度器注入会话在 Store 中的存活判定闭包
+  sharedSessionStreamManager.bindSessionAliveOracle((sessionId: string) => {
+    const state = useSessionStore.getState();
+    return Boolean(
+      state.sessionsById[sessionId] ||
+      state.sessions?.some((s) => s.id === sessionId)
+    );
+  });
+  unsubs.push(() => {
+    sharedSessionStreamManager.bindSessionAliveOracle(null);
+  });
+
+  // 草稿管理器驱逐单向解耦（E3-04）：为 store 会话删除注入草稿管理器实例
+  bindDraftManagerForEviction(sessionDraftManager);
+  unsubs.push(() => {
+    bindDraftManagerForEviction(null);
+  });
 
   return () => {
     _teardownFrequencyLogging();

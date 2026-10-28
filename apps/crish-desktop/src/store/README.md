@@ -9,7 +9,7 @@ Three **real** store instances matter for “what is open / where is it painted 
 | **layoutStore** (god, T11 瘦身) | `layoutStore.ts` | sessions[], messages, agents, chrome (sidebar/tabMode/uiSize/shellChrome/chatSurface/settingsOverlay), legacy columns | Opening tabs by `setActiveSessionId` alone; mutating layout-tree |
 | **terminalStore** | `terminalStore.ts` | terminal buffers（terminalLines / terminalBySession）+ diff buffers（diffFiles / activeDiffSource） | 会话 CRUD；权限写入 |
 | **workerStore** | `workerStore.ts` | activeWorkers / killedWorkerIds / manuallyTriggeredWorkers（killWorker / triggerCronJobNow） | 权限写入；settings 数据 |
-| **permissionStore** | `permissionStore.ts` | permissionMode / planModeEnabled / planApproved / commandPermissions | 会话 CRUD |
+| **permissionStore** | `permissionStore.ts` | permissionMode / commandPermissions | 会话 CRUD |
 | **settingsStore** | `settingsStore.ts` | appSettings / providers / scheduledTasks / mcpServers / tokenUsage（syncTelemetryData 单向委托 workerStore） | 布局 chrome |
 | **workspaceShellStore** | `workspace-shell/*` | openTabs / TabSurface, activeTabId, rightDock, shellReady; open/focus/close/new-draft | Session message body; raw tree split as “open chat” |
 | **layoutTreeStore** | `layout-tree/*` | binary tree geometry, activeLeafId, history, leaf↔session bind | Tab strip order; sessions[] CRUD |
@@ -89,7 +89,7 @@ Type tags: `storeOwnership.ts` (`StoreOwnership`, `SHELL_TAB_OWNERSHIP`, …).
 | showSettingsOverlay / settingsActiveTab / openSettings | 布局 chrome（layoutStore） | 设置浮层 = 布局 UI |
 | terminalLines / terminalBySession / activeDiffSource / diffFiles | **terminalStore** | 会话输出/工作缓冲 |
 | activeWorkers / killedWorkerIds / manuallyTriggeredWorkers | **workerStore** | killWorker / triggerCronJobNow / applyTelemetryWorkers |
-| permissionMode / planModeEnabled / planApproved / commandPermissions | **permissionStore** | 权限三态联动 + 白名单 |
+| permissionMode / commandPermissions | **permissionStore** | 权限三态联动 + 白名单 |
 | appSettings / providers / scheduledTasks / mcpServers / tokenUsage | **settingsStore** | 设置/遥测；syncTelemetryData 单向委托 workerStore |
 
 新代码读取新域 store：`storeAccess.ts`（`useTerminalField` / `getWorkerState` / `usePermissionField` / `useSettingsField` …）。

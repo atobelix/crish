@@ -15,10 +15,7 @@ const DIR =
     ? import.meta.dirname
     : dirname(fileURLToPath(import.meta.url));
 
-const TREE_LEAF = join(
-  DIR,
-  '../../components/binary-tree/TreeLeafPanel.tsx'
-);
+const TREE_LEAF = join(DIR, '../../components/binary-tree/TreeLeafPanel.tsx');
 const ACTIVATE = join(DIR, 'activate.ts');
 const SELF = join(DIR, 'unknown-note-leaf.source.test.ts');
 
@@ -44,17 +41,11 @@ describe('07 · 未知 note 叶文案源码钉（≠ 真壳到达 · ≠ 打开�
     expect(treeSrc).toMatch(/未知面板类型/);
     expect(treeSrc).toMatch(/viewRegistry\.resolveView/);
     expect(treeSrc).toMatch(/<SlotOutlet[\s\S]*?fallback=\{/);
-    expect(treeSrc).toMatch(/未知面板类型：\{panelId\}/);
+    expect(treeSrc).toMatch(/未知面板类型：\{mainViewId\}/);
   });
 
-  it('文案钉扩展未激活 / 未知，而非 note 内置名单兜底', () => {
-    expect(treeSrc).toMatch(/笔记扩展未激活|扩展未激活/);
-    expect(treeSrc).toMatch(
-      /note\s*\?\s*['"]（笔记扩展未激活）['"]/
-    );
-    expect(treeSrc).toMatch(
-      /panelId\s*===\s*['"]note['"]\s*\|\|\s*panelId\.startsWith\(\s*['"]note:['"]\s*\)/
-    );
+  it('文案钉通用未知回退，而非 note 内置名单兜底', () => {
+    expect(treeSrc).toMatch(/未知面板类型/);
     expect(treeSrc).not.toMatch(/registerBuiltInViews/);
     expect(treeSrc).not.toMatch(/NotePaperStrictPanel|NoteLeafHost/);
     expect(treeSrc).not.toMatch(/case\s+['"]note['"]/);

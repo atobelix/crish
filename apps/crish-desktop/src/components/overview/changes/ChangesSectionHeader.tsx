@@ -9,10 +9,10 @@
 
 import React, { useMemo } from 'react';
 import { ChevronDownIcon } from '../../../assets/icons';
-import { Select } from '../../ui';
+import { Select } from '@/components/ui';
 import type { ChangesScopeMode } from './types';
 import styles from './ChangesSectionHeader.module.css';
-import { AppIcon } from '../../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface ChangesSectionHeaderProps {
   open: boolean;
@@ -36,13 +36,22 @@ export const ChangesSectionHeader: React.FC<ChangesSectionHeaderProps> = ({
   onScopeChange,
 }) => {
   const currentCount = scope === 'session' ? sessionCount : gitCount;
-  const branchDisplay = branch ? `分支: ${branch}` : '当前分支';
+  const branchDisplay = branch || '当前分支';
 
   const selectOptions = useMemo(
     () => [
-      { id: 'session', label: `当前对话${sessionCount > 0 ? ` (${sessionCount})` : ' (0)'}` },
-      { id: 'unstaged', label: `未提交${gitCount > 0 ? ` (${gitCount})` : ' (0)'}` },
-      { id: 'branch', label: `${branchDisplay}${gitCount > 0 ? ` (${gitCount})` : ''}` },
+      {
+        id: 'session',
+        label: sessionCount > 0 ? `当前对话 (${sessionCount})` : '当前对话',
+      },
+      {
+        id: 'unstaged',
+        label: gitCount > 0 ? `未提交 (${gitCount})` : '未提交',
+      },
+      {
+        id: 'branch',
+        label: `${branchDisplay}${gitCount > 0 ? ` (${gitCount})` : ''}`,
+      },
     ],
     [sessionCount, gitCount, branchDisplay]
   );
@@ -65,12 +74,10 @@ export const ChangesSectionHeader: React.FC<ChangesSectionHeaderProps> = ({
     >
       {/* 1. 左侧区域：图标、标题、数量 */}
       <div className={styles.leftCluster}>
-        <AppIcon name="file-diff" size={15} aria-hidden />
+        <AppIcon name="file-diff" size={16} aria-hidden />
         <span className={styles.titleText}>改动</span>
         {currentCount > 0 && (
-          <span className={styles.countText}>
-            {currentCount}
-          </span>
+          <span className={styles.countText}>{currentCount}</span>
         )}
       </div>
 

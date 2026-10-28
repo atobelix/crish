@@ -33,8 +33,12 @@ vi.mock('../../api/workspaceChromeTabs', () => ({
   MAX_OPEN_SESSION_TABS: 20,
 }));
 
-import { useWorkspaceShellStore, registerTreeDockSync } from './workspaceShellStore';
+import {
+  useWorkspaceShellStore,
+  registerTreeDockSync,
+} from './workspaceShellStore';
 import { createDefaultDock } from './types';
+import { getActiveDockTab } from '../layout-tree/dockLayoutModel';
 import {
   findTabBySessionId,
   openToolInSession,
@@ -106,7 +110,7 @@ describe('registerTreeDockSync 不再反推 shell dock', () => {
       's1'
     );
     expect(hit?.tab.dock.collapsed).toBe(false);
-    expect(hit?.tab.dock.activePanelId).toBe('terminal');
+    expect(getActiveDockTab(hit!.tab.dock.tree)?.viewId).toBe('terminal');
 
     unsubscribe();
   });
@@ -116,8 +120,8 @@ describe('registerTreeDockSync 不再反推 shell dock', () => {
     const b = registerTreeDockSync();
     a();
     b();
-    expect(useWorkspaceShellStore.getState().openTabs[0]!.rightDock.collapsed).toBe(
-      true
-    );
+    expect(
+      useWorkspaceShellStore.getState().openTabs[0]!.rightDock.collapsed
+    ).toBe(true);
   });
 });

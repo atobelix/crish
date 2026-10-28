@@ -5,24 +5,15 @@
  * 与命令接口；`SessionTab` / dock 工厂可临时 re-export，维 07 再删。
  */
 
-export interface RightToolDockState {
-  collapsed: boolean;
-  /** 如 files | diff | terminal | overview | agent | runtime | preview */
-  openPanelIds: string[];
-  activePanelId: string | null;
-  /** 抽屉宽度占叶内容区比例 */
-  widthRatio: number;
-}
-
-/** 叶上会话标签（维 01 权威形状；shell 只读/转发） */
-export interface SessionTab {
-  tabId: string;
-  /** 真会话，或 `__pending_draft__:${tabId}` */
-  sessionId: string;
-  title: string;
-  workspaceKey: string;
-  dock: RightToolDockState;
-}
+import type {
+  RightToolDockState,
+  SessionTab,
+} from '../layout-tree/sessionTabModel';
+export type { RightToolDockState, SessionTab };
+export {
+  createDefaultDock,
+  DEFAULT_RIGHT_DOCK,
+} from '../layout-tree/sessionTabModel';
 
 export interface WorkspaceShellState {
   /** 冷启动门闩：hydrate / migrate 完成前 UI 不画多叶 */
@@ -112,27 +103,12 @@ export interface WorkspaceShellActions {
       title?: string;
       workspaceKey?: string;
       url?: string;
-      favicon?: string;
-      dock?: Partial<RightToolDockState>;
       insertIdx?: number;
     }
   ) => import('../layout-tree/sessionTabModel').BrowserTab;
 }
 
 export type WorkspaceShellStore = WorkspaceShellState & WorkspaceShellActions;
-
-const DEFAULT_RIGHT_DOCK: RightToolDockState = {
-  collapsed: true,
-  openPanelIds: [],
-  activePanelId: null,
-  widthRatio: 0.5,
-};
-
-export function createDefaultDock(
-  partial?: Partial<RightToolDockState>
-): RightToolDockState {
-  return { ...DEFAULT_RIGHT_DOCK, ...partial };
-}
 
 export function mintTabId(): string {
   return `tab_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;

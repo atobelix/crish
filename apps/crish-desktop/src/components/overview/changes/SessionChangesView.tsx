@@ -30,7 +30,7 @@ export const SessionChangesView: React.FC<SessionChangesViewProps> = ({
   onOpenFile,
 }) => {
   if (files.length === 0) {
-    return <ChangesEmptyState message="当前对话暂无文件改动" />;
+    return <ChangesEmptyState message="暂无改动" />;
   }
 
   const gitStatusFiles: GitStatusFile[] = files.map((f) => ({

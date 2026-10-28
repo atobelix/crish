@@ -8,8 +8,8 @@ import { buildSessionsById, filterSidebarSessions } from './sessionIndex';
 import { PENDING_DRAFT_SESSION_ID, isPendingDraft } from './draftSession';
 import type { SessionMessage, SessionState } from './types';
 
-// setActiveSessionId 正式版会动态 import projectStore 并 dispatch window 事件；
-// node 测试环境无 DOM，统一走 demo 短路避免 unhandled rejection。
+// setActiveSessionId 正式版会同步预留工作区授权并 dispatch window 事件；
+// node 测试环境无 DOM，统一走 demo 短路避免未处理的异步错误。
 vi.mock('../api/appMode', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/appMode')>();
   return {
@@ -1180,9 +1180,7 @@ describe('sessionActions failure branches (C8)', () => {
   });
 
   it('updateMessageText on missing session is a silent no-op', () => {
-    const h = makeHarness([
-      makeMessage({ id: 'm1', text: 'hello' }),
-    ]);
+    const h = makeHarness([makeMessage({ id: 'm1', text: 'hello' })]);
     const before = h.getState();
     h.actions.updateMessageText('no-such-session', 'm1', 'changed');
     expect(h.getState()).toBe(before);
@@ -1191,9 +1189,7 @@ describe('sessionActions failure branches (C8)', () => {
   });
 
   it('updateMessageText on missing message is a silent no-op', () => {
-    const h = makeHarness([
-      makeMessage({ id: 'm1', text: 'hello' }),
-    ]);
+    const h = makeHarness([makeMessage({ id: 'm1', text: 'hello' })]);
     const before = h.getState();
     h.actions.updateMessageText('s1', 'no-such-message', 'changed');
     expect(h.getState()).toBe(before);
@@ -1201,9 +1197,7 @@ describe('sessionActions failure branches (C8)', () => {
   });
 
   it('setSessionMessageStatus on missing message is a silent no-op', () => {
-    const h = makeHarness([
-      makeMessage({ id: 'm1', status: 'completed' }),
-    ]);
+    const h = makeHarness([makeMessage({ id: 'm1', status: 'completed' })]);
     const before = h.getState();
     h.actions.setSessionMessageStatus('s1', 'no-such-msg', 'error', 0);
     expect(h.getState()).toBe(before);
@@ -1283,9 +1277,7 @@ describe('sessionActions failure branches (C8)', () => {
   });
 
   it('clearSessionMessages on missing session is a silent no-op', () => {
-    const h = makeHarness([
-      makeMessage({ id: 'm1', text: 'keep me' }),
-    ]);
+    const h = makeHarness([makeMessage({ id: 'm1', text: 'keep me' })]);
     const before = h.getState();
     h.actions.clearSessionMessages('no-such-session');
     expect(h.getState()).toBe(before);
@@ -1317,7 +1309,9 @@ describe('sessionActions failure branches (C8)', () => {
       makeMessage({ id: 'm2', text: 'message 2' }),
     ]);
     expect(getSessionOrThrow(h.getState(), 's1').messages).toHaveLength(2);
-    expect(getSessionOrThrow(h.getState(), 's1').messagesHydrated).toBeUndefined();
+    expect(
+      getSessionOrThrow(h.getState(), 's1').messagesHydrated
+    ).toBeUndefined();
 
     h.actions.clearSessionMessages('s1');
     const updated = getSessionOrThrow(h.getState(), 's1');
@@ -1351,9 +1345,7 @@ describe('sessionActions failure branches (C8)', () => {
     const s2 = emptyShell({ id: 's2', title: 'S2' });
     const s3 = emptyShell({ id: 's3', title: 'S3' });
 
-    const h = makeHarnessFromState(
-      makeStateFromSessions([s1, s2, s3], 's2')
-    );
+    const h = makeHarnessFromState(makeStateFromSessions([s1, s2, s3], 's2'));
     expect(h.getState().activeSessionId).toBe('s2');
 
     // 删除居中的 s2，右邻居为 s3，应原子转移到 s3
@@ -1368,9 +1360,7 @@ describe('sessionActions failure branches (C8)', () => {
     const s2 = emptyShell({ id: 's2', title: 'S2' });
     const s3 = emptyShell({ id: 's3', title: 'S3' });
 
-    const h = makeHarnessFromState(
-      makeStateFromSessions([s1, s2, s3], 's3')
-    );
+    const h = makeHarnessFromState(makeStateFromSessions([s1, s2, s3], 's3'));
     expect(h.getState().activeSessionId).toBe('s3');
 
     // 删除末尾的 s3，无右邻居，应退化转移至左邻居 s2
@@ -1385,9 +1375,7 @@ describe('sessionActions failure branches (C8)', () => {
     const s2 = emptyShell({ id: 's2', title: 'S2' });
     const s3 = emptyShell({ id: 's3', title: 'S3' });
 
-    const h = makeHarnessFromState(
-      makeStateFromSessions([s1, s2, s3], 's1')
-    );
+    const h = makeHarnessFromState(makeStateFromSessions([s1, s2, s3], 's1'));
     expect(h.getState().activeSessionId).toBe('s1');
 
     // 删除首个 s1，应转移至右邻居 s2
@@ -1402,9 +1390,7 @@ describe('sessionActions failure branches (C8)', () => {
     const s2 = emptyShell({ id: 's2', title: 'S2' });
     const s3 = emptyShell({ id: 's3', title: 'S3' });
 
-    const h = makeHarnessFromState(
-      makeStateFromSessions([s1, s2, s3], 's1')
-    );
+    const h = makeHarnessFromState(makeStateFromSessions([s1, s2, s3], 's1'));
     expect(h.getState().activeSessionId).toBe('s1');
 
     // 删除非活动的 s2，activeSessionId 保持 s1 不变
@@ -1420,26 +1406,40 @@ describe('sessionActions failure branches (C8)', () => {
       const s2 = emptyShell({ id: 's2', folder: 'general', isPinned: false });
       const s3 = emptyShell({ id: 's3', folder: 'general', isPinned: false });
 
-      const h = makeHarnessFromState(
-        makeStateFromSessions([s1, s2, s3], 's1')
-      );
+      const h = makeHarnessFromState(makeStateFromSessions([s1, s2, s3], 's1'));
 
       // 1. 将 s3 移到 s1 前面 (向前拖动)
       h.actions.moveSessionRealtime('s3', 's1', 'general', false);
-      expect(h.getState().sessions.map((s) => s.id)).toEqual(['s3', 's1', 's2']);
+      expect(h.getState().sessions.map((s) => s.id)).toEqual([
+        's3',
+        's1',
+        's2',
+      ]);
 
       // 2. 将 s3 移到 s1 后面 (通过插入在 s2 之前)
       h.actions.moveSessionRealtime('s3', 's2', 'general', false);
-      expect(h.getState().sessions.map((s) => s.id)).toEqual(['s1', 's3', 's2']);
+      expect(h.getState().sessions.map((s) => s.id)).toEqual([
+        's1',
+        's3',
+        's2',
+      ]);
 
       // 3. 将 s1 移到末尾 (通过 after:s2 语法)
       h.actions.moveSessionRealtime('s1', 'after:s2', 'general', false);
-      expect(h.getState().sessions.map((s) => s.id)).toEqual(['s3', 's2', 's1']);
+      expect(h.getState().sessions.map((s) => s.id)).toEqual([
+        's3',
+        's2',
+        's1',
+      ]);
 
       // 4. 将 s2 置顶
       h.actions.moveSessionRealtime('s2', 's3', 'general', true);
       expect(getSessionOrThrow(h.getState(), 's2').isPinned).toBe(true);
-      expect(h.getState().sessions.map((s) => s.id)).toEqual(['s2', 's3', 's1']);
+      expect(h.getState().sessions.map((s) => s.id)).toEqual([
+        's2',
+        's3',
+        's1',
+      ]);
     });
   });
 });

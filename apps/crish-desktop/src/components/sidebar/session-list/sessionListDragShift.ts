@@ -12,7 +12,9 @@ const SHIFT_TRANSITION = 'transform 120ms cubic-bezier(0.2, 0, 0, 1)';
 
 /** 容器内当前可见的会话行（隐藏或零高度的行不参与位移）。 */
 export function collectVisibleRows(container: ParentNode): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>('li[data-session-id]')).filter(
+  return Array.from(
+    container.querySelectorAll<HTMLElement>('li[data-session-id]')
+  ).filter(
     (r) => r.offsetParent !== null && r.getBoundingClientRect().height > 0
   );
 }
@@ -59,7 +61,9 @@ export function collapseSourceRows(
 ): HTMLElement[] {
   const shifted: HTMLElement[] = [];
   const allSourceRows = collectVisibleRows(sourceContainer);
-  const origIdx = allSourceRows.findIndex((r) => r.getAttribute('data-session-id') === sessionId);
+  const origIdx = allSourceRows.findIndex(
+    (r) => r.getAttribute('data-session-id') === sessionId
+  );
   if (origIdx < 0) return shifted;
   for (let i = 0; i < allSourceRows.length; i++) {
     const sRow = allSourceRows[i]!;
@@ -71,7 +75,9 @@ export function collapseSourceRows(
     }
   }
   // 若源容器内有折叠切换按钮（如「查看全部」），亦同步向上收缩
-  const foldBtn = sourceContainer.parentElement?.querySelector(`.${foldToggleClass}`) as HTMLElement | null;
+  const foldBtn = sourceContainer.parentElement?.querySelector(
+    `.${foldToggleClass}`
+  ) as HTMLElement | null;
   if (foldBtn) {
     foldBtn.style.transition = SHIFT_TRANSITION;
     foldBtn.style.transform = `translateY(-${stepPx}px)`;
@@ -93,19 +99,41 @@ export type ShiftRowsForDragArgs = {
 
 /** 应用一帧拖拽位移，返回本帧被位移的全部元素（调用方据此复位上一帧多出来的元素）。 */
 export function shiftRowsForDrag(args: ShiftRowsForDragArgs): HTMLElement[] {
-  const { activeContainer, sourceContainer, sessionId, overId, place, stepPx, foldToggleClass } = args;
+  const {
+    activeContainer,
+    sourceContainer,
+    sessionId,
+    overId,
+    place,
+    stepPx,
+    foldToggleClass,
+  } = args;
   const allTargetRows = collectVisibleRows(activeContainer);
-  const isSameContainer = Boolean(sourceContainer && activeContainer.contains(sourceContainer));
-  const otherRows = allTargetRows.filter((r) => r.getAttribute('data-session-id') !== sessionId);
+  const isSameContainer = Boolean(
+    sourceContainer && activeContainer.contains(sourceContainer)
+  );
+  const otherRows = allTargetRows.filter(
+    (r) => r.getAttribute('data-session-id') !== sessionId
+  );
   const srcIdx = isSameContainer
-    ? allTargetRows.findIndex((r) => r.getAttribute('data-session-id') === sessionId)
+    ? allTargetRows.findIndex(
+        (r) => r.getAttribute('data-session-id') === sessionId
+      )
     : -1;
   let targetIdx = otherRows.length;
   if (overId) {
-    const matchIdx = otherRows.findIndex((r) => r.getAttribute('data-session-id') === overId);
+    const matchIdx = otherRows.findIndex(
+      (r) => r.getAttribute('data-session-id') === overId
+    );
     if (matchIdx >= 0) targetIdx = place === 'before' ? matchIdx : matchIdx + 1;
   }
-  const offsets = computeRowShiftOffsets(otherRows.length, srcIdx, targetIdx, isSameContainer, stepPx);
+  const offsets = computeRowShiftOffsets(
+    otherRows.length,
+    srcIdx,
+    targetIdx,
+    isSameContainer,
+    stepPx
+  );
   const nextShifted: HTMLElement[] = [];
   otherRows.forEach((row, i) => {
     applyRowShift(row, offsets[i]!);
@@ -113,7 +141,9 @@ export function shiftRowsForDrag(args: ShiftRowsForDragArgs): HTMLElement[] {
   });
   // 跨分组拖拽时：原分组容器下的列表项向上补位收缩空洞，避免源与目标出现双空行
   if (!isSameContainer && sourceContainer) {
-    nextShifted.push(...collapseSourceRows(sourceContainer, sessionId, stepPx, foldToggleClass));
+    nextShifted.push(
+      ...collapseSourceRows(sourceContainer, sessionId, stepPx, foldToggleClass)
+    );
   }
   return nextShifted;
 }

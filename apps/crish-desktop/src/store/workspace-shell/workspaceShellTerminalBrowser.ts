@@ -26,6 +26,10 @@ import {
 } from '../layout-tree';
 import type { LayoutNode } from '../layout-tree/types';
 import {
+  collectSpatialLeaves,
+  type DockTree,
+} from '../layout-tree/dockLayoutModel';
+import {
   ownedChatLeaves,
   pictureFromActiveLeaf,
   resolveActiveChatLeaf,
@@ -76,13 +80,13 @@ export function syncSessionFromActiveLeaf(lastChatLeafId: string | null): void {
     }
     return;
   }
-  if (isPendingDraft(tab.sessionId)) {
+  if (tab.sessionId && isPendingDraft(tab.sessionId)) {
     session.enterDraftMode(tab.workspaceKey, {
       draftSessionId: tab.sessionId,
     });
     return;
   }
-  if (session.activeSessionId !== tab.sessionId) {
+  if (tab.sessionId && session.activeSessionId !== tab.sessionId) {
     session.setActiveSessionId(tab.sessionId);
   }
 }
@@ -122,6 +126,46 @@ export interface TabWithTerminalInfo {
   sessionId?: string;
   kind?: string;
   terminalKey?: string;
+  dock?: { tree?: DockTree };
+}
+
+/**
+ * 递归全量析构整棵 DockTree 下全部窗格与标签的底层物理资源（ConPTY 与原生 WebView2）
+ */
+export function teardownDockTree(
+  tree?: DockTree | null,
+  sessionId?: string | null
+): void {
+  if (!tree || !tree.root) return;
+  const leaves = collectSpatialLeaves(tree.root);
+  for (const leaf of leaves) {
+    for (const tab of leaf.tabs) {
+      if (tab.viewId === 'terminal' || tab.viewId.startsWith('terminal:')) {
+        if (
+          tab.tabId &&
+          tab.tabId !== 'terminal' &&
+          !tab.tabId.startsWith('terminal:')
+        ) {
+          void import('../../api/ptyRegistry').then((m) =>
+            m.killPtyForSession(tab.tabId)
+          );
+        } else if (sessionId) {
+          const panelKey =
+            tab.tabId === 'terminal' ? sessionId : `${sessionId}:${tab.tabId}`;
+          void import('../../api/ptyRegistry').then((m) =>
+            m.killPtyForSession(panelKey)
+          );
+        }
+      } else if (
+        tab.viewId === 'preview' ||
+        tab.viewId.startsWith('preview:')
+      ) {
+        void import('../../api/nativeBrowserApi').then((m) => {
+          void m.browserWebviewClose(tab.tabId);
+        });
+      }
+    }
+  }
 }
 
 export function findRawTabForClose(
@@ -156,7 +200,8 @@ export function cleanupActiveTerminalBeforeReplace(targetLeafId: string): void {
         terminalKey?: string;
         sessionId?: string;
       };
-      killTerminalPty(tInfo.terminalKey || tInfo.sessionId);
+      const keyToKill = tInfo.terminalKey || tInfo.sessionId;
+      if (keyToKill) killTerminalPty(keyToKill);
     }
   }
 }
@@ -199,8 +244,6 @@ export function addBrowserTabToShell(
         title?: string;
         workspaceKey?: string;
         url?: string;
-        favicon?: string;
-        dock?: Partial<import('./types').RightToolDockState>;
         insertIdx?: number;
       }
     | undefined,
@@ -226,6 +269,7 @@ export function syncOpenTabTitlesHelper(
 ): void {
   const root = useLayoutTreeStore.getState().tree.root;
   for (const tab of scanRealSessionTabs(root)) {
+    if (!tab.sessionId) continue;
     if (overrides && overrides[tab.sessionId] === undefined) continue;
     const resolved = resolveSessionTabTitle(
       tab.sessionId,
@@ -272,7 +316,7 @@ export function openNewDraftTabHelper(
   });
   draftFolderRegistry.set(draftId, workspaceKey);
   try {
-    activateWorkspaceForSessionFolder(workspaceKey);
+    void activateWorkspaceForSessionFolder(workspaceKey);
   } catch {
     /* ignore */
   }

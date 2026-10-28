@@ -73,11 +73,11 @@
 
 .toggleTab:hover:not(:disabled) {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .toggleTabActive {
-  background: var(--tint-active);
+  background: var(--state-active);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium, 500);
   border: none;
@@ -85,7 +85,7 @@
 }
 
 .toggleTabActive:hover {
-  background: var(--tint-active);
+  background: var(--state-active);
   color: var(--text-primary);
 }
 
@@ -113,12 +113,12 @@
 
 .actBtn:hover {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .actBtnActive {
   color: var(--text-primary);
-  background: var(--tint-active, var(--tint-hover));
+  background: var(--state-active, var(--state-hover));
 }
 
 .bodyWrap {
@@ -189,11 +189,6 @@
 .diffEmptyIcon {
   color: var(--text-secondary);
   margin-bottom: 2px;
-}
-
-.diffEmptySub {
-  font-size: 11px;
-  color: var(--text-tertiary);
 }
 
 /* 更多操作容器 */
@@ -269,7 +264,7 @@
 
 .drawerActBtn:hover {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .historyBody {
@@ -296,7 +291,7 @@
 }
 
 .historyWorkingItem:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .historyWorkingHeader {
@@ -309,17 +304,6 @@
   font-size: 11px;
   font-weight: var(--font-weight-medium, 500);
   color: var(--accent-color);
-}
-
-.workingHint {
-  font-size: 10px;
-  color: var(--text-tertiary);
-}
-
-.historyWorkingDesc {
-  font-size: 11px;
-  color: var(--text-secondary);
-  line-height: 1.4;
 }
 
 .historyList {
@@ -341,7 +325,7 @@
 }
 
 .historyItem:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .commitMeta {
@@ -404,10 +388,4 @@
 .historyEmptyTitle {
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-primary);
-}
-
-.historyEmptySub {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  line-height: 1.4;
 }

@@ -61,6 +61,9 @@ export function useSidebarSessionList(
     onCancelRename,
     onDeleteSession,
     onBranchSession,
+    onPinSession,
+    onUnpinSession,
+    onArchiveSession,
   } = props;
 
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -357,6 +360,9 @@ export function useSidebarSessionList(
             onNavigateSession: navigateSession,
             onDeleteSession,
             onBranchSession,
+            onPinSession,
+            onUnpinSession,
+            onArchiveSession,
           }}
         />
       );
@@ -379,6 +385,9 @@ export function useSidebarSessionList(
       onCancelRename,
       onDeleteSession,
       onBranchSession,
+      onPinSession,
+      onUnpinSession,
+      onArchiveSession,
       navigateSession,
       dropIndicator,
       titleHints,

@@ -15,6 +15,7 @@
  * 避免 App 侧 `as SettingsTabType` 与 string 漂移。
  */
 import type { Settings } from '../api/clientApi';
+import type { SessionAgentRuntimeMeta } from './sessionAgentRuntimeMeta';
 // 维度 3 步骤 1（3-D 第 1 步）：斩断 types.ts → generated/engine 深路径。
 // 原先 `import type { AgentMessage } from '../../../../packages/shared-types/src/generated/engine'`
 // 是跨包深路径直引；现统一经 @crish/shared-types 公共面。
@@ -147,6 +148,8 @@ export interface MessageToolApprovalMeta {
   source?: MessageApprovalRiskSource;
   /** S9 审批载荷（revertGate 面积 / 删除影响面），宽容缺失 */
   payload?: MessageToolApprovalPayload;
+  /** 原始审批 metadata（倒计时 / 超时策略 / 判点原因，卡片透传展示） */
+  metadata?: Record<string, unknown>;
 }
 
 /** 回退面积（C3/S6 载荷；字段可空 = 未知，与 revert.rs RevertArea 对齐） */
@@ -594,7 +597,7 @@ export interface SessionMessage extends Pick<
 type SessionAgentStatus = 'running' | 'completed' | 'failed' | 'stopped';
 
 /** 主会话下的协作子 agent（run_subagent） */
-export interface SessionAgent {
+export interface SessionAgent extends SessionAgentRuntimeMeta {
   id: string;
   subagentRunId: string;
   parentSessionId: string;

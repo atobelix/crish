@@ -32,6 +32,7 @@ import { Sidebar } from './components/sidebar/Sidebar';
 import { SidebarToggle } from './components/sidebar/SidebarHeader';
 import { AppTopBar } from './components/AppTopBar';
 import { SessionTabDragProvider } from './components/shell/SessionTabDragContext';
+import { AppMotionProvider } from './components/motion/AppMotionProvider';
 // REDLINE-403：首屏核心工作区静态同步导入，消除 Suspense 悬挂闪烁
 import { BinaryTreeWorkspace } from './components/binary-tree/BinaryTreeWorkspace';
 
@@ -156,101 +157,102 @@ function App() {
 
   return (
     <PlatformAdaptationCtx.Provider value={platformAdaptation}>
-      <SessionTabDragProvider>
-        <div
-          className={`app-container ${appModeClass}`}
-          data-engine-ready={engineReady ? 'true' : 'false'}
-          data-preferences-hydrated={isHydrated ? 'true' : 'false'}
-          data-first-run={showFirstRun ? 'true' : 'false'}
-          data-sidebar-collapsed={sidebarCollapsed ? 'true' : 'false'}
-          data-perf-level={
-            platformAdaptation.hardwareReady
-              ? String(platformAdaptation.level)
-              : undefined
-          }
-        >
-          <a href="#crish-main" className={styles.skipLink}>
-            跳转到主要内容
-          </a>
+      <AppMotionProvider>
+        <SessionTabDragProvider>
+          <div
+            className={`app-container ${appModeClass}`}
+            data-engine-ready={engineReady ? 'true' : 'false'}
+            data-preferences-hydrated={isHydrated ? 'true' : 'false'}
+            data-first-run={showFirstRun ? 'true' : 'false'}
+            data-sidebar-collapsed={sidebarCollapsed ? 'true' : 'false'}
+            data-perf-level={
+              platformAdaptation.hardwareReady
+                ? String(platformAdaptation.level)
+                : undefined
+            }
+          >
+            <a href="#crish-main" className={styles.skipLink}>
+              跳转到主要内容
+            </a>
 
-          <main id="crish-main" className="main-layout" aria-label="主工作区">
-            {sidebarCollapsed && (
+            <main id="crish-main" className="main-layout" aria-label="主工作区">
+              {/* 常驻唯一侧栏开关：跨折叠/展开生命周期持久保留，零卸载/挂载闪烁，锁死鼠标悬停态 */}
               <SidebarToggle
                 collapsed={sidebarCollapsed}
                 onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
               />
-            )}
 
-            <div
-              id="crish-sidebar"
-              className={`sidebar-wrapper ${sidebarCollapsed ? 'collapsed' : ''}`}
-              role="navigation"
-              aria-label="会话侧栏"
-              style={{
-                width: sidebarCollapsed ? 0 : 'var(--sidebar-width)',
-                height: '100%',
-                flexShrink: 0,
-                overflow: 'hidden',
-                position: 'relative',
-              }}
-            >
-              <AppErrorBoundary compact title="侧栏出错">
-                <Suspense fallback={<SkeletonFallback height="100%" />}>
-                  <Sidebar
-                    searchQuery={sessionSearch}
-                    searchInput={sessionSearchInput}
-                    onSearchChange={setSessionSearchInput}
-                  />
-                </Suspense>
-              </AppErrorBoundary>
-            </div>
-
-            <div
-              className="workspaces-column"
-              role="region"
-              aria-label="工作台内容"
-            >
-              {/* 流内顶栏：只盖工作区列，不再绝对定位横跨全宽 */}
-              <AppTopBar />
               <div
-                className="workspaces-stack"
-                role="region"
-                aria-label="会话与面板"
+                id="crish-sidebar"
+                className={`sidebar-wrapper ${sidebarCollapsed ? 'collapsed' : ''}`}
+                role="navigation"
+                aria-label="会话侧栏"
+                style={{
+                  width: sidebarCollapsed ? 0 : 'var(--sidebar-width)',
+                  height: '100%',
+                  flexShrink: 0,
+                  overflow: 'hidden',
+                  position: 'relative',
+                }}
               >
+                <AppErrorBoundary compact title="侧栏出错">
+                  <Suspense fallback={<SkeletonFallback height="100%" />}>
+                    <Sidebar
+                      searchQuery={sessionSearch}
+                      searchInput={sessionSearchInput}
+                      onSearchChange={setSessionSearchInput}
+                    />
+                  </Suspense>
+                </AppErrorBoundary>
+              </div>
+
+              <div
+                className="workspaces-column"
+                role="region"
+                aria-label="工作台内容"
+              >
+                {/* 流内顶栏：只盖工作区列，不再绝对定位横跨全宽 */}
+                <AppTopBar />
                 <div
-                  className="workspaces-container"
+                  className="workspaces-stack"
                   role="region"
-                  aria-label="工作区面板"
+                  aria-label="会话与面板"
                 >
-                  <AppErrorBoundary compact title="工作区出错">
-                    {/* Coordinator 已在挂载前 applyAtomicCommit + hydrateWorkspaceShell；
+                  <div
+                    className="workspaces-container"
+                    role="region"
+                    aria-label="工作区面板"
+                  >
+                    <AppErrorBoundary compact title="工作区出错">
+                      {/* Coordinator 已在挂载前 applyAtomicCommit + hydrateWorkspaceShell；
                       shellReady 常规路径为 true；fallback 兜底仍显示骨架 */}
-                    {!shellReady ? (
-                      <SkeletonFallback height={400} />
-                    ) : (
-                      <BinaryTreeWorkspace />
-                    )}
-                  </AppErrorBoundary>
+                      {!shellReady ? (
+                        <SkeletonFallback height={400} />
+                      ) : (
+                        <BinaryTreeWorkspace />
+                      )}
+                    </AppErrorBoundary>
+                  </div>
                 </div>
               </div>
-            </div>
-          </main>
+            </main>
 
-          <AppGlobalDialogs
-            showFirstRun={showFirstRun}
-            setShowFirstRun={setShowFirstRun}
-            firstRunInitialStep={firstRunInitialStep}
-            showTelemetry={showTelemetry}
-            setShowTelemetry={setShowTelemetry}
-            showSettingsOverlay={showSettingsOverlay}
-            setShowSettingsOverlay={setShowSettingsOverlay}
-            activeWorkspaceId={activeWorkspaceId}
-            settingsActiveTab={settingsActiveTab}
-          />
+            <AppGlobalDialogs
+              showFirstRun={showFirstRun}
+              setShowFirstRun={setShowFirstRun}
+              firstRunInitialStep={firstRunInitialStep}
+              showTelemetry={showTelemetry}
+              setShowTelemetry={setShowTelemetry}
+              showSettingsOverlay={showSettingsOverlay}
+              setShowSettingsOverlay={setShowSettingsOverlay}
+              activeWorkspaceId={activeWorkspaceId}
+              settingsActiveTab={settingsActiveTab}
+            />
 
-          <DevHealthOverlayMount />
-        </div>
-      </SessionTabDragProvider>
+            <DevHealthOverlayMount />
+          </div>
+        </SessionTabDragProvider>
+      </AppMotionProvider>
     </PlatformAdaptationCtx.Provider>
   );
 }

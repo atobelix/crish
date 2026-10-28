@@ -9,6 +9,15 @@
  * 重开项目后 id 变成 proj-mrlldzn 这类新值，旧会话绑在幽灵 id 上「像丢了」。
  */
 
+import { invokeTyped, isTauriRuntimeAvailable } from './tauriInvoke';
+import { withWorkspaceAccessTransition } from './workspaceAccessGate';
+import {
+  activateDefaultWorkspaceWithinTransition,
+  activateWorkspaceForSessionFolderWithinTransition,
+  authorizeProjectWorkspacePathsWithinTransition,
+  runSessionWorkspaceActivation,
+} from './workspaceAccessContract';
+
 export type ProjectEntry = {
   id: string;
   name: string;
@@ -22,6 +31,11 @@ const PROJECTS_KEY = 'crish_projects_v1';
 const ACTIVE_PROJECT_KEY = 'crish_active_project_id';
 /** 当前工作区路径，供 run-task 的 cwd 使用 */
 const WORKSPACE_KEY = 'crish_workspace';
+const PROJECT_STATE_KEYS = new Set([
+  PROJECTS_KEY,
+  ACTIVE_PROJECT_KEY,
+  WORKSPACE_KEY,
+]);
 /**
  * 历史 projectId → 路径。删除/重建项目后仍能把旧会话挂回新 id。
  * 每次 open/add 都会写入当前 id→path。
@@ -37,6 +51,38 @@ import {
 export { rememberProjectFolderAlias };
 
 export const GENERAL_FOLDER = '对话';
+
+const projectStorageBridgeCleanups = new WeakMap<Window, () => void>();
+
+/** 将其他 WebView 写入的项目状态变化桥接为本窗口已有事件。 */
+export function installProjectStoreStorageBridge(target: Window): () => void {
+  const existingCleanup = projectStorageBridgeCleanups.get(target);
+  if (existingCleanup) return existingCleanup;
+
+  const onStorage = (rawEvent: Event) => {
+    const event = rawEvent as StorageEvent;
+    if (event.storageArea && event.storageArea !== target.localStorage) return;
+    if (event.key !== null && !PROJECT_STATE_KEYS.has(event.key)) return;
+
+    const projectChanged = target.document.createEvent('CustomEvent');
+    projectChanged.initCustomEvent('crish-project-changed', false, false, {
+      reason: 'storage-sync',
+    });
+    target.dispatchEvent(projectChanged);
+  };
+
+  target.addEventListener('storage', onStorage);
+  const cleanup = () => {
+    target.removeEventListener('storage', onStorage);
+    projectStorageBridgeCleanups.delete(target);
+  };
+  projectStorageBridgeCleanups.set(target, cleanup);
+  return cleanup;
+}
+
+if (typeof window !== 'undefined') {
+  installProjectStoreStorageBridge(window);
+}
 
 /** 路径 → 稳定 projectId（同一路径永远同一 id） */
 export function stableProjectIdFromPath(path: string): string {
@@ -394,26 +440,37 @@ export function rebindSessionFoldersToProjects<T extends { folder?: string }>(
 }
 
 /**
- * 切换会话时同步工作区：会话绑定项目则打开该项目；归入「对话」则取消项目 cwd。
+ * 切换会话时同步工作区：项目路径先经 Rust RecentList 复授权，再更新本地活动项目。
  */
-export function activateWorkspaceForSessionFolder(folder: string): void {
-  if (
-    !folder ||
-    folder === GENERAL_FOLDER ||
-    folder === '会话' ||
-    folder === '常规会话' ||
-    folder === 'general'
-  ) {
-    setNoProject();
-    return;
-  }
-  const id = resolveFolderToProjectId(folder);
-  if (id) {
-    openProject(id);
-    return;
-  }
-  // 幽灵 folder：不要 setNoProject 静默吞掉；尽量保持当前 cwd
-  // （用户仍能在侧栏「对话」区看到该会话，点开后至少不切换错项目）
+export function activateWorkspaceForSessionFolder(
+  folder: string
+): Promise<void> {
+  return runSessionWorkspaceActivation(
+    folder,
+    GENERAL_FOLDER,
+    withWorkspaceAccessTransition,
+    () =>
+      activateWorkspaceForSessionFolderWithinTransition(folder, {
+        generalFolder: GENERAL_FOLDER,
+        resolveFolderToProjectId,
+        findProject: (projectId) =>
+          listProjects().find((item) => item.id === projectId),
+        authorizeProject: (project) =>
+          authorizeProjectWorkspacePathsWithinTransition(invokeTyped, project),
+        activateDefaultWorkspace: () =>
+          activateDefaultWorkspaceWithinTransition(
+            invokeTyped,
+            isTauriRuntimeAvailable,
+            setNoProject
+          ),
+        openProject,
+      }),
+    isTauriRuntimeAvailable,
+    async (message) => {
+      const { toast } = await import('../services/toast');
+      toast.error(message);
+    }
+  );
 }
 
 /** 设置页 / 引擎用：当前工作区路径，无项目时返回空串 */

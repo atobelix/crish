@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { useLeafScope } from '../../contexts/LeafScopeContext';
 import styles from './DiffCard.module.css';
-import { Button, Textarea, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Textarea, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 
 interface DiffCardGitActionsProps {
   open: boolean;
@@ -110,7 +110,7 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
   return (
     <div ref={containerRef} className={styles.commitPanel}>
       <div className={styles.commitHeader}>
-        <span className={styles.commitTitle}>提交与推送 (Commit & Push)</span>
+        <span className={styles.commitTitle}>提交与推送</span>
         <Button
           type="button"
           variant="ghost"
@@ -124,11 +124,7 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
       <Textarea
         bare
         className={styles.commitInput}
-        placeholder={
-          stagedCount > 0
-            ? '输入提交信息… 将仅提交已暂存的更改 (Ctrl+Enter 提交)'
-            : '输入提交信息… 将自动暂存全部更改并提交 (Ctrl+Enter 提交)'
-        }
+        placeholder="提交说明… (Ctrl+Enter)"
         value={commitMsg}
         disabled={commitLoading || pushLoading}
         onChange={(e) => onCommitMsgChange(e.target.value)}

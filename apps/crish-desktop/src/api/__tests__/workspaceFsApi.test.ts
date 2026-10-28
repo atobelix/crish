@@ -14,6 +14,7 @@ import {
   takePendingOpenPath,
 } from '../filePanelOpener';
 import * as tauriInvoke from '../tauriInvoke';
+import type { InvokeArgs } from '../tauriInvoke';
 
 describe('Wave 1 核心规范与契约验收套件 (SPEC-01)', () => {
   const WORKSPACE_KEY = 'crish_workspace';
@@ -31,9 +32,13 @@ describe('Wave 1 核心规范与契约验收套件 (SPEC-01)', () => {
   // ─────────────────────────────────────────────────────────────────────────
   describe('toCanonicalFsPath 纯函数', () => {
     it('1.1 基础转换：Windows 反斜杠统一转换为正斜杠', () => {
-      expect(toCanonicalFsPath('c:\\work\\project\\file.ts')).toBe('c:/work/project/file.ts');
+      expect(toCanonicalFsPath('c:\\work\\project\\file.ts')).toBe(
+        'c:/work/project/file.ts'
+      );
       expect(toCanonicalFsPath('c:\\work\\sub\\')).toBe('c:/work/sub');
-      expect(toCanonicalFsPath('src\\components\\Button.tsx')).toBe('src/components/Button.tsx');
+      expect(toCanonicalFsPath('src\\components\\Button.tsx')).toBe(
+        'src/components/Button.tsx'
+      );
     });
 
     it('1.2 盘符小写标准化：Windows 盘符统一强制小写（对齐 HB-16 与 master-plan）', () => {
@@ -54,28 +59,42 @@ describe('Wave 1 核心规范与契约验收套件 (SPEC-01)', () => {
     });
 
     it('1.4 冗余清理：非 UNC 连续多余斜杠压缩为单斜杠', () => {
-      expect(toCanonicalFsPath('c://work///sub////file.ts')).toBe('c:/work/sub/file.ts');
+      expect(toCanonicalFsPath('c://work///sub////file.ts')).toBe(
+        'c:/work/sub/file.ts'
+      );
       expect(toCanonicalFsPath('/usr///local//bin')).toBe('/usr/local/bin');
       expect(toCanonicalFsPath('///root///dir')).toBe('/root/dir');
     });
 
     it('1.5 UNC 路径支持：正确保留前导双斜杠并规范化内部路径', () => {
-      expect(toCanonicalFsPath('\\\\server\\share\\folder\\file.txt')).toBe('//server/share/folder/file.txt');
-      expect(toCanonicalFsPath('//wsl$/Ubuntu//var///log')).toBe('//wsl$/Ubuntu/var/log');
+      expect(toCanonicalFsPath('\\\\server\\share\\folder\\file.txt')).toBe(
+        '//server/share/folder/file.txt'
+      );
+      expect(toCanonicalFsPath('//wsl$/Ubuntu//var///log')).toBe(
+        '//wsl$/Ubuntu/var/log'
+      );
       expect(toCanonicalFsPath('//server/share/')).toBe('//server/share');
     });
 
     it('1.6 相对段消解与防越界栈消除：消解 /./ 与 /../，杜绝绝对路径越界逃逸', () => {
-      expect(toCanonicalFsPath('c:/work/./src/./components/App.tsx')).toBe('c:/work/src/components/App.tsx');
+      expect(toCanonicalFsPath('c:/work/./src/./components/App.tsx')).toBe(
+        'c:/work/src/components/App.tsx'
+      );
       expect(toCanonicalFsPath('c:/work/sub/..')).toBe('c:/work');
-      expect(toCanonicalFsPath('c:/work/sub/../file.ts')).toBe('c:/work/file.ts');
+      expect(toCanonicalFsPath('c:/work/sub/../file.ts')).toBe(
+        'c:/work/file.ts'
+      );
       expect(toCanonicalFsPath('c:/work/././dir')).toBe('c:/work/dir');
       // 绝对路径到顶不越界逃逸
       expect(toCanonicalFsPath('c:/..')).toBe('c:/');
       expect(toCanonicalFsPath('c:/../../work')).toBe('c:/work');
       // 保持隐藏文件与多扩展名无损
-      expect(toCanonicalFsPath('c:/work/.gitignore')).toBe('c:/work/.gitignore');
-      expect(toCanonicalFsPath('c:/work/.env.local')).toBe('c:/work/.env.local');
+      expect(toCanonicalFsPath('c:/work/.gitignore')).toBe(
+        'c:/work/.gitignore'
+      );
+      expect(toCanonicalFsPath('c:/work/.env.local')).toBe(
+        'c:/work/.env.local'
+      );
     });
 
     it('1.7 空值防御：空串、纯空白、无效输入恒定返回空串', () => {
@@ -118,8 +137,12 @@ describe('Wave 1 核心规范与契约验收套件 (SPEC-01)', () => {
     });
 
     it('2.3 UNC 路径：大小写不敏感等值比对', () => {
-      expect(isSameFsPath('\\\\SERVER\\SHARE\\a.txt', '//server/share/A.TXT')).toBe(true);
-      expect(isSameFsPath('//wsl$/ubuntu/file', '//WSL$/Ubuntu/file')).toBe(true);
+      expect(
+        isSameFsPath('\\\\SERVER\\SHARE\\a.txt', '//server/share/A.TXT')
+      ).toBe(true);
+      expect(isSameFsPath('//wsl$/ubuntu/file', '//WSL$/Ubuntu/file')).toBe(
+        true
+      );
     });
 
     it('2.4 空值与异常防御：任一路径为空恒定返回 false', () => {
@@ -171,8 +194,12 @@ describe('Wave 1 核心规范与契约验收套件 (SPEC-01)', () => {
     });
 
     it('3.4 目标与根相同：祖先集恒为空数组', () => {
-      expect(getAncestorDirPaths('c:/Software/conex', 'c:/Software/conex')).toEqual([]);
-      expect(getAncestorDirPaths('C:\\software\\conex\\', 'c:/Software/conex')).toEqual([]);
+      expect(
+        getAncestorDirPaths('c:/Software/conex', 'c:/Software/conex')
+      ).toEqual([]);
+      expect(
+        getAncestorDirPaths('C:\\software\\conex\\', 'c:/Software/conex')
+      ).toEqual([]);
     });
 
     it('3.5 越界隔离防御：兄弟前缀目录坚决拒绝', () => {
@@ -183,8 +210,12 @@ describe('Wave 1 核心规范与契约验收套件 (SPEC-01)', () => {
     });
 
     it('3.6 跨盘符与树外路径防御：坚决拒绝返回空数组', () => {
-      expect(getAncestorDirPaths('d:/other/project/file.ts', 'c:/project')).toEqual([]);
-      expect(getAncestorDirPaths('c:/Windows/System32/cmd.exe', 'c:/Software/conex')).toEqual([]);
+      expect(
+        getAncestorDirPaths('d:/other/project/file.ts', 'c:/project')
+      ).toEqual([]);
+      expect(
+        getAncestorDirPaths('c:/Windows/System32/cmd.exe', 'c:/Software/conex')
+      ).toEqual([]);
     });
 
     it('3.7 空值防御：目标或根为空时恒定返回空数组', () => {
@@ -208,23 +239,27 @@ describe('Wave 1 核心规范与契约验收套件 (SPEC-01)', () => {
   // ─────────────────────────────────────────────────────────────────────────
   describe('listDirectory IPC 契约校准与负向守门断言', () => {
     it('[CRIT-02 & NEG-01] 出站 IPC 参数仅发 { path }，绝对无 workspaceRoot 幽灵字段', async () => {
-      const invokeSpy = vi.spyOn(tauriInvoke, 'invokeResult').mockResolvedValue({
-        status: 'ok',
-        data: { items: [] },
-      });
+      const invokeSpy = vi
+        .spyOn(tauriInvoke, 'invokeResult')
+        .mockResolvedValue({
+          status: 'ok',
+          data: { items: [] },
+        });
 
       await listDirectory('c:/Software/conex/src');
 
       expect(invokeSpy).toHaveBeenCalledTimes(1);
-      const [cmd, payload] = invokeSpy.mock.calls[0] as [string, Record<string, unknown>];
-      
+      const [cmd, payload] = invokeSpy.mock.calls[0] as [string, InvokeArgs];
+      const resolvedPayload =
+        typeof payload === 'function' ? payload() : payload;
+
       // 1. 命令名称对齐
       expect(cmd).toBe('workbench_list_directory');
       // 2. 刚性负向断言：出站参数绝无 workspaceRoot
-      expect(payload).toHaveProperty('path');
-      expect(payload.workspaceRoot).toBeUndefined();
-      expect(Object.keys(payload)).toEqual(['path']);
-      expect(payload.path).toBe('c:/Software/conex/src');
+      expect(resolvedPayload).toHaveProperty('path');
+      expect(resolvedPayload.workspaceRoot).toBeUndefined();
+      expect(Object.keys(resolvedPayload)).toEqual(['path']);
+      expect(resolvedPayload.path).toBe('c:/Software/conex/src');
     });
 
     it('[NEG-07] readTextFile / writeTextFile 出站负载同样零 workspaceRoot（全域闭环）', async () => {
@@ -235,18 +270,32 @@ describe('Wave 1 核心规范与契约验收套件 (SPEC-01)', () => {
       });
       await readTextFile('c:/Software/conex/src/a.ts', 400);
 
-      const [readCmd, readPayload] = invokeSpy.mock.calls[0] as [string, Record<string, unknown>];
+      const [readCmd, readPayload] = invokeSpy.mock.calls[0] as [
+        string,
+        InvokeArgs,
+      ];
+      const resolvedReadPayload =
+        typeof readPayload === 'function' ? readPayload() : readPayload;
       expect(readCmd).toBe('workbench_read_file_content');
-      expect(readPayload.workspaceRoot).toBeUndefined();
-      expect(Object.keys(readPayload)).toEqual(['path', 'maxLines']);
+      expect(resolvedReadPayload.workspaceRoot).toBeUndefined();
+      expect(Object.keys(resolvedReadPayload)).toEqual(['path', 'maxLines']);
 
       invokeSpy.mockResolvedValueOnce({ status: 'ok', data: {} });
       await writeTextFile('c:/Software/conex/src/a.ts', 'new', true);
 
-      const [writeCmd, writePayload] = invokeSpy.mock.calls[1] as [string, Record<string, unknown>];
+      const [writeCmd, writePayload] = invokeSpy.mock.calls[1] as [
+        string,
+        InvokeArgs,
+      ];
+      const resolvedWritePayload =
+        typeof writePayload === 'function' ? writePayload() : writePayload;
       expect(writeCmd).toBe('workbench_write_file_content');
-      expect(writePayload.workspaceRoot).toBeUndefined();
-      expect(Object.keys(writePayload)).toEqual(['path', 'content', 'overwrite']);
+      expect(resolvedWritePayload.workspaceRoot).toBeUndefined();
+      expect(Object.keys(resolvedWritePayload)).toEqual([
+        'path',
+        'content',
+        'overwrite',
+      ]);
     });
   });
 
@@ -264,11 +313,16 @@ describe('Wave 1 核心规范与契约验收套件 (SPEC-01)', () => {
 
       // 1. 宿主分流至 file-viewer
       expect(res).toBe('file-viewer');
-      expect(mockViewerOpener).toHaveBeenCalledWith('c:/Software/conex/src/main.ts', undefined);
+      expect(mockViewerOpener).toHaveBeenCalledWith(
+        'c:/Software/conex/src/main.ts',
+        undefined
+      );
 
       // 2. 核心物证：window 广播事件 100% 触发，未被提前 return 截断
       expect(dispatchSpy).toHaveBeenCalledTimes(1);
-      const event = dispatchSpy.mock.calls[0][0] as CustomEvent<{ path: string }>;
+      const event = dispatchSpy.mock.calls[0][0] as CustomEvent<{
+        path: string;
+      }>;
       expect(event.type).toBe('crish-open-file');
       expect(event.detail.path).toBe('c:/Software/conex/src/main.ts');
 

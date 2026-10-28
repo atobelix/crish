@@ -1,8 +1,10 @@
 /**
- * 开工具：只改目标 SessionTab.dock（维 02 updateTabDock），不改树拓扑。
+ * 开工具：操作目标 SessionTab.dock.tree（V2 DockTree 纯函数），不改叶拓扑。
  *
- * I3 只改该 tab；I5 不造 tool 叶；I6 不写 setLeafSessionId。
- * 失败原样返回。
+ * 遵循单一真理源（SSOT）与正交抽象：
+ * 1. 彻底清退数字后缀拼接循环（terminal:2 / preview:2），由 openToolInDock 自动分配全新独立不可变的 tabId；
+ * 2. 彻底清退全局 Map 寄存器与微任务 CustomEvent 补丁，所有参数通过 ToolTab.params 正交下发；
+ * 3. 依赖 layout-tree 的纯函数变迁。
  */
 
 import {
@@ -19,6 +21,11 @@ import {
   DRAFT_SESSION_ID_PREFIX,
   isDraftSessionId,
 } from '../layout-tree/sessionTabModel';
+import {
+  openToolInDock,
+  createDefaultDockTree,
+  type ToolViewId,
+} from '../layout-tree/dockLayoutModel';
 import { registerFileViewerOpener } from '../../api/filePanelOpener';
 import type { RightToolDockState } from './types';
 import { clampDockWidthRatio } from './adapterShapeTreeOps';
@@ -33,35 +40,10 @@ const TOOL_ALIASES: Record<string, string> = {
 /** 与维 01 SessionTab 同形；供本维测试与维 05 读坞 */
 export type LeafSessionTab = SessionTab;
 
-export type LeafDockView = {
-  collapsed: boolean;
-  openPanelIds: string[];
-  activePanelId: string | null;
-  widthRatio: number;
-};
+export type LeafDockView = RightToolDockState;
 
 /** 文件预览模式意图契约 */
 export type FileViewerInitialMode = 'plain' | 'diff';
-
-/** 模式意图轻量寄存器（模块作用域存储，供冷启动组件单次消费） */
-const fileViewerModeOverrides = new Map<string, FileViewerInitialMode>();
-
-export function setFileViewerModeOverride(
-  canonicalTabId: string,
-  mode: FileViewerInitialMode
-): void {
-  fileViewerModeOverrides.set(canonicalTabId, mode);
-}
-
-export function consumeFileViewerModeOverride(
-  canonicalTabId: string
-): FileViewerInitialMode | undefined {
-  const mode = fileViewerModeOverrides.get(canonicalTabId);
-  if (mode) {
-    fileViewerModeOverrides.delete(canonicalTabId);
-  }
-  return mode;
-}
 
 /** I1：非 draft sessionId 全树至多一个命中；先序第一个 */
 export function findTabBySessionId(
@@ -97,10 +79,12 @@ export function updateTabDock(
 ): void {
   const id = (tabId || '').trim();
   if (!id) return;
-  const nextPatch: Partial<RightToolDockState> = { ...patch };
-  if (typeof patch.widthRatio === 'number') {
-    nextPatch.widthRatio = clampDockWidthRatio(patch.widthRatio);
-  }
+  const nextPatch: Partial<RightToolDockState> = {
+    ...patch,
+    ...(typeof patch.widthRatio === 'number'
+      ? { widthRatio: clampDockWidthRatio(patch.widthRatio) }
+      : {}),
+  };
   const store = useLayoutTreeStore.getState();
   const next = updateTabDockInTree(store.tree, id, nextPatch);
   if (next === store.tree) return;
@@ -113,10 +97,12 @@ export function updateLeafDock(
 ): void {
   const id = (leafId || '').trim();
   if (!id) return;
-  const nextPatch: Partial<RightToolDockState> = { ...patch };
-  if (typeof patch.widthRatio === 'number') {
-    nextPatch.widthRatio = clampDockWidthRatio(patch.widthRatio);
-  }
+  const nextPatch: Partial<RightToolDockState> = {
+    ...patch,
+    ...(typeof patch.widthRatio === 'number'
+      ? { widthRatio: clampDockWidthRatio(patch.widthRatio) }
+      : {}),
+  };
   const store = useLayoutTreeStore.getState();
   const next = updateLeafDockInTree(store.tree, id, nextPatch);
   if (next === store.tree) return;
@@ -124,7 +110,7 @@ export function updateLeafDock(
 }
 
 /** 本叶正在画的坞：活动 tab 优先，否则新对话坞 */
-export function readLeafDock(leaf: LayoutLeaf): LeafDockView {
+export function readLeafDock(leaf: LayoutLeaf): RightToolDockState {
   const tab = leaf.activeTabId
     ? leaf.tabs.find((t) => t.tabId === leaf.activeTabId)
     : undefined;
@@ -146,78 +132,81 @@ export function resolveLeafIdForSession(sessionId: string): string | null {
   return null;
 }
 
-export function openToolInLeaf(leafId: string, panelId: string): void {
+/**
+ * 在指定叶的右坞中打开工具标签页
+ */
+export function openToolInLeaf(
+  leafId: string,
+  viewId: string,
+  params?: Record<string, unknown>,
+  opts?: { isSingleton?: boolean }
+): void {
   const id = (leafId || '').trim();
   if (!id) return;
-  let mapped = TOOL_ALIASES[panelId] || panelId;
-  if (panelId.startsWith('browser:')) {
-    mapped = `preview:${panelId.slice('browser:'.length)}`;
-  }
-  const store = useLayoutTreeStore.getState();
-  const node = findNodeById(store.tree.root, id);
-  if (!node || !isLeaf(node)) return;
-  const dock = readLeafDock(node);
+
+  const mapped = TOOL_ALIASES[viewId] || viewId;
 
   if (mapped === 'chat') {
     updateLeafDock(id, { collapsed: true });
     return;
   }
 
-  const openPanelIds = dock.openPanelIds.includes(mapped)
-    ? dock.openPanelIds
-    : [...dock.openPanelIds, mapped];
+  const store = useLayoutTreeStore.getState();
+  const node = findNodeById(store.tree.root, id);
+  if (!node || !isLeaf(node)) return;
+
+  const dock = readLeafDock(node);
+  const currentTree = dock.tree ?? createDefaultDockTree();
+  const isSingleton =
+    opts?.isSingleton ?? (mapped !== 'terminal' && mapped !== 'preview');
+
+  const { tree: nextTree, tabId } = openToolInDock(currentTree, {
+    viewId: mapped as ToolViewId,
+    params,
+    isSingleton,
+  });
 
   updateLeafDock(id, {
     collapsed: false,
-    openPanelIds,
-    activePanelId: mapped,
+    tree: nextTree,
   });
 
-  if (mapped === 'terminal' || mapped.startsWith('terminal:')) {
-    const sid =
-      node.tabs.find((t) => t.tabId === node.activeTabId)?.sessionId ?? '';
-    if (sid) {
-      const termKey = mapped === 'terminal' ? sid : `${sid}:${mapped}`;
-      void import('../../api/ptyRegistry')
-        .then((m) => m.ensurePtyForSession(termKey))
-        .catch(() => {
-          /* PTY 与树无关；C2 未就绪时 no-op */
-        });
-    }
+  if (mapped === 'terminal') {
+    void import('../../api/ptyRegistry')
+      .then((m) => m.ensurePtyForSession(tabId))
+      .catch(() => {
+        /* PTY 与树无关；未就绪时 no-op */
+      });
   }
 }
 
 /** 在指定 session 所属叶的坞中打开工具。找不到该叶则不动。 */
-export function openToolInSession(sessionId: string, panelId: string): void {
+export function openToolInSession(
+  sessionId: string,
+  viewId: string,
+  params?: Record<string, unknown>,
+  opts?: { isSingleton?: boolean }
+): void {
   const leafId = resolveLeafIdForSession(sessionId);
   if (!leafId) return;
-  openToolInLeaf(leafId, panelId);
+  openToolInLeaf(leafId, viewId, params, opts);
 }
 
-export function openToolInActiveTab(panelId: string): void {
+export function openToolInActiveTab(
+  viewId: string,
+  params?: Record<string, unknown>,
+  opts?: { isSingleton?: boolean }
+): void {
   const activeId = useLayoutTreeStore.getState().activeLeafId;
   if (!activeId) return;
-  openToolInLeaf(activeId, panelId);
+  openToolInLeaf(activeId, viewId, params, opts);
 }
 
-/** 在指定叶或当前活动叶中新建一个全新独立的终端标签页（如 terminal:2, terminal:3 等） */
+/** 在指定叶中新建一个全新独立的终端标签页 */
 export function openNewTerminalInLeaf(leafId: string): void {
   const id = (leafId || '').trim();
   if (!id) return;
-  const store = useLayoutTreeStore.getState();
-  const node = findNodeById(store.tree.root, id);
-  if (!node || !isLeaf(node)) return;
-  const dock = readLeafDock(node);
-
-  let targetId = 'terminal';
-  if (dock.openPanelIds.includes('terminal')) {
-    let nextIdx = 2;
-    while (dock.openPanelIds.includes(`terminal:${nextIdx}`)) {
-      nextIdx++;
-    }
-    targetId = `terminal:${nextIdx}`;
-  }
-  openToolInLeaf(id, targetId);
+  openToolInLeaf(id, 'terminal', undefined, { isSingleton: false });
 }
 
 export function openNewTerminalInActiveTab(): void {
@@ -226,45 +215,31 @@ export function openNewTerminalInActiveTab(): void {
   openNewTerminalInLeaf(activeId);
 }
 
-/** 在指定叶或当前活动叶中新建一个全新独立的浏览器标签页（如 preview:2, preview:3 等） */
-export function openNewBrowserInLeaf(leafId: string): void {
+/** 在指定叶中新建一个全新独立的浏览器标签页（参数直通） */
+export function openNewBrowserInLeaf(
+  leafId: string,
+  initialUrl?: string
+): void {
   const id = (leafId || '').trim();
   if (!id) return;
-  const store = useLayoutTreeStore.getState();
-  const node = findNodeById(store.tree.root, id);
-  if (!node || !isLeaf(node)) return;
-  const dock = readLeafDock(node);
-
-  let targetId = 'preview';
-  if (dock.openPanelIds.includes('preview')) {
-    let nextIdx = 2;
-    while (dock.openPanelIds.includes(`preview:${nextIdx}`)) {
-      nextIdx++;
-    }
-    targetId = `preview:${nextIdx}`;
-  }
-  openToolInLeaf(id, targetId);
+  const params = initialUrl ? { url: initialUrl } : undefined;
+  openToolInLeaf(id, 'preview', params, { isSingleton: false });
 }
 
-export function openNewBrowserInActiveTab(): void {
+export function openNewBrowserInActiveTab(initialUrl?: string): void {
   const activeId = useLayoutTreeStore.getState().activeLeafId;
   if (!activeId) return;
-  openNewBrowserInLeaf(activeId);
+  openNewBrowserInLeaf(activeId, initialUrl);
 }
 
 /**
- * 文件查看器单轨下发点火器 (DETAIL-PLAN-03 终局定稿实现)
+ * 文件查看器单轨下发点火器（V2 正交参数与 Clean Break SSOT）
  *
- * 刚性守门契约与防回归铁律：
- * 1. 严格过滤 note/notebook 前缀：/^(note|notebook)(:|$)/i 守卫，杜绝误唤起与状态混淆；
- * 2. 变量名绝对死锁为 trimmed，严格经由 normalizeViewerFilePath 归一化，盘符强制大写并剥离 ./；
- * 3. 严格匹配 filePreviewLeaf.source.test.ts 源码硬编码正则：
- *    - expect(src).toMatch(/file-viewer:\$\{trimmed\}/);
- *    - expect(src).toMatch(/\/\^\(note\|notebook\)\(:\|\$\)\/i/);
- * 4. Canonical Tab ID 格式锁死为 `file-viewer:${trimmed}`，严禁拼入 ?mode=diff；
- * 5. initialMode 参数严禁抛弃，通过 setFileViewerModeOverride 独立登记初始模式意图；
- * 6. 同名 Tab 热激活微任务覆盖触发机制：通过 queueMicrotask 派发 'conex:file-viewer-mode' 事件；
- * 7. 健壮性保障：支持 (filePath, initialMode) 与 (sessionId, filePath, mode) 双重调用契约。
+ * 遵循原则：
+ * 1. 严格过滤 note/notebook 前缀：/^(note|notebook)(:|$)/i 守卫；
+ * 2. 路径严格经由 normalizeViewerFilePath 归一化；
+ * 3. 初始呈现模式 initialMode 直接封装入 params 透传；
+ * 4. 彻底消除全局 Map 寄存器与微任务事件，由 openToolInDock 自动根据 filePath 匹配或创建 Tab 并热更新 params。
  */
 export function openFileViewerInSession(
   filePath: string,
@@ -318,43 +293,19 @@ export function openFileViewerInSession(
 
   const initialMode: FileViewerInitialMode =
     rawMode === 'diff' ? 'diff' : 'plain';
-  const canonicalTabId = `file-viewer:${trimmed}`;
 
-  // 1. 登记初始呈现模式意图（供冷启动挂载读取）
-  setFileViewerModeOverride(canonicalTabId, initialMode);
-
-  // 2. 派发至坞状态机（使用 Canonical Tab ID 进行严格去重与激活）
-  openToolInLeaf(activeId, canonicalTabId);
-
-  // 3. 同名 Tab 热激活微任务覆盖触发机制（解决已存在激活 Tab 时的模式更新）
-  queueMicrotask(() => {
-    window.dispatchEvent(
-      new CustomEvent('conex:file-viewer-mode', {
-        detail: {
-          canonicalTabId,
-          mode: initialMode,
-          leafId: activeId,
-          sessionId: targetSessionId || undefined,
-        },
-      })
-    );
-  });
+  openToolInLeaf(
+    activeId,
+    'file-viewer',
+    { filePath: trimmed, initialMode },
+    { isSingleton: true }
+  );
 }
 
 export function collapseActiveTabRightDock(collapsed: boolean): void {
   const activeId = useLayoutTreeStore.getState().activeLeafId;
   if (!activeId) return;
-  const node = findNodeById(useLayoutTreeStore.getState().tree.root, activeId);
-  if (!node || !isLeaf(node)) return;
-  const dock = readLeafDock(node);
-  const patch: Partial<RightToolDockState> = { collapsed };
-  if (!collapsed && !dock.activePanelId) {
-    patch.activePanelId = 'overview';
-    patch.openPanelIds = dock.openPanelIds.length
-      ? dock.openPanelIds
-      : ['overview'];
-  }
-  updateLeafDock(activeId, patch);
+  updateLeafDock(activeId, { collapsed });
 }
 
 registerFileViewerOpener((path, mode) => {

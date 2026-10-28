@@ -70,6 +70,7 @@ const mockKillPtyForSessionBackground = vi.fn();
 vi.mock('../../api/ptyRegistry', () => ({
   killPtyForSessionBackground: (...args: unknown[]) =>
     mockKillPtyForSessionBackground(...args),
+  killPtyForSession: vi.fn(),
   killAllPtys: vi.fn(),
 }));
 

@@ -317,8 +317,8 @@ export function useOverviewState(
       pushDiffFile(pl);
       setActiveDiffSource(pl);
       onOpenPanel('diff');
-    } catch {
-      showActionErr('打开变更失败');
+    } catch (error) {
+      showActionErr(error instanceof Error ? error.message : '打开变更失败');
     } finally {
       setOpeningPath(null);
     }

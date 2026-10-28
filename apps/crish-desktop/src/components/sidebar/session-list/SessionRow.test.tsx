@@ -31,6 +31,9 @@ function renderRow(overrides?: Partial<SessionRowProps>) {
   const onStartRename = vi.fn();
   const onCommitRename = vi.fn();
   const onRenameDraftChange = vi.fn();
+  const onPinSession = vi.fn();
+  const onUnpinSession = vi.fn();
+  const onArchiveSession = vi.fn();
   const renameInputRef = React.createRef<HTMLInputElement>();
   const session = makeSession();
   const utils = render(
@@ -56,6 +59,9 @@ function renderRow(overrides?: Partial<SessionRowProps>) {
           onSelectSession,
           onContextMenuSession,
           onStartSessionDrag,
+          onPinSession,
+          onUnpinSession,
+          onArchiveSession,
         }}
         {...overrides}
       />
@@ -66,6 +72,9 @@ function renderRow(overrides?: Partial<SessionRowProps>) {
     onSelectSession,
     onContextMenuSession,
     onStartSessionDrag,
+    onPinSession,
+    onUnpinSession,
+    onArchiveSession,
     session,
   };
 }
@@ -108,6 +117,54 @@ describe('SessionRow 点击 / 更多钮', () => {
       button: 0,
     });
     expect(onStartSessionDrag).not.toHaveBeenCalled();
+  });
+
+  it('置顶按钮点击触发 onPinSession，pointerdown 不启动行拖拽且不触发行选中', () => {
+    const { onPinSession, onSelectSession, onStartSessionDrag } = renderRow();
+    const pinBtn = screen.getByTestId('session-pin-button');
+    expect(pinBtn).toBeTruthy();
+    expect(pinBtn.getAttribute('aria-label')).toBe('置顶');
+
+    fireEvent.pointerDown(pinBtn, { button: 0 });
+    expect(onStartSessionDrag).not.toHaveBeenCalled();
+
+    fireEvent.click(pinBtn);
+    expect(onPinSession).toHaveBeenCalledWith('sess-1');
+    expect(onSelectSession).not.toHaveBeenCalled();
+  });
+
+  it('已置顶会话渲染取消置顶图标与文案，点击触发 onUnpinSession', () => {
+    const { onUnpinSession, onSelectSession } = renderRow({
+      session: {
+        s: makeSession({ isPinned: true }),
+        activeSessionId: 'other',
+        searchQuery: '',
+        isDraggingThis: false,
+        isRenaming: false,
+        isDraggable: true,
+      },
+    });
+    const pinBtn = screen.getByTestId('session-pin-button');
+    expect(pinBtn.getAttribute('aria-label')).toBe('取消置顶');
+
+    fireEvent.click(pinBtn);
+    expect(onUnpinSession).toHaveBeenCalledWith('sess-1');
+    expect(onSelectSession).not.toHaveBeenCalled();
+  });
+
+  it('归档按钮点击触发 onArchiveSession，pointerdown 不启动行拖拽且不触发行选中', () => {
+    const { onArchiveSession, onSelectSession, onStartSessionDrag } =
+      renderRow();
+    const archiveBtn = screen.getByTestId('session-archive-button');
+    expect(archiveBtn).toBeTruthy();
+    expect(archiveBtn.getAttribute('aria-label')).toBe('归档');
+
+    fireEvent.pointerDown(archiveBtn, { button: 0 });
+    expect(onStartSessionDrag).not.toHaveBeenCalled();
+
+    fireEvent.click(archiveBtn);
+    expect(onArchiveSession).toHaveBeenCalledWith('sess-1');
+    expect(onSelectSession).not.toHaveBeenCalled();
   });
 
   it('同分区重名后缀只展示在行内，不改标题文本', () => {

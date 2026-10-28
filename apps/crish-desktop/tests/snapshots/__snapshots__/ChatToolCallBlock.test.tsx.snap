@@ -164,11 +164,6 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
                 class="_toolSectionTitleGroup_d18ff4"
               >
                 <span
-                  class="_toolSectionBadge_d18ff4 _toolSectionBadgeOutput_d18ff4"
-                >
-                  输出
-                </span>
-                <span
                   class="_toolSectionMeta_d18ff4"
                 >
                   <span
@@ -417,11 +412,6 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
               <div
                 class="_toolSectionTitleGroup_d18ff4"
               >
-                <span
-                  class="_toolSectionBadge_d18ff4 _toolSectionBadgeOutput_d18ff4"
-                >
-                  输出
-                </span>
                 <span
                   class="_toolSectionMeta_d18ff4"
                 >

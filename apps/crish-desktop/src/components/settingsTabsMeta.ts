@@ -4,7 +4,7 @@
  */
 
 import type { SettingsTabType } from '../store/types';
-import type { IconName } from './ui/icons';
+import type { IconName } from '@/components/ui/icons';
 
 export type TabType = SettingsTabType;
 

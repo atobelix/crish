@@ -49,9 +49,7 @@ describe('AppTopBar', () => {
   it('侧栏开关不在顶栏', () => {
     const { queryByTestId } = renderBar();
     expect(queryByTestId('sidebar-toggle')).toBeNull();
-    expect(
-      document.querySelector('.app-top-bar__rail')
-    ).toBeNull();
+    expect(document.querySelector('.app-top-bar__rail')).toBeNull();
   });
 
   it('顶栏不再渲染快捷键/帮助问号按钮（任何平台）', () => {
@@ -98,9 +96,17 @@ describe('AppTopBar', () => {
       /\.closeBtn:hover\s*\{[^}]*background:\s*var\(--window-close-hover-bg\)[^}]*color:\s*var\(--window-close-hover-fg\)/
     );
     expect(code).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
-    const tokens = readFileSync(join(DIR, '../../styles/tokens.css'), 'utf8');
+    const readAllTokensCss = () => {
+      const entry = readFileSync(join(DIR, '../../styles/tokens.css'), 'utf8');
+      return entry.replace(/@import\s+['"]\.\/([^'"]+)['"];/g, (_, file) =>
+        readFileSync(join(DIR, '../../styles', file), 'utf8')
+      );
+    };
+    const tokens = readAllTokensCss();
     for (const name of ['--window-close-hover-bg', '--window-close-hover-fg']) {
-      expect(tokens.match(new RegExp(`${name}\\s*:`, 'g'))?.length ?? 0).toBeGreaterThanOrEqual(2);
+      expect(
+        tokens.match(new RegExp(`${name}\\s*:`, 'g'))?.length ?? 0
+      ).toBeGreaterThanOrEqual(2);
     }
   });
 
@@ -117,7 +123,13 @@ describe('AppTopBar', () => {
     const topBarCss = readFileSync(join(DIR, 'AppTopBar.module.css'), 'utf8');
     const trail = /\.trail\s*\{([^}]*)\}/.exec(topBarCss)?.[1] ?? '';
     expect(trail).toMatch(/padding-right:\s*0;/);
-    const tokens = readFileSync(join(DIR, '../../styles/tokens.css'), 'utf8');
+    const readAllTokensCss = () => {
+      const entry = readFileSync(join(DIR, '../../styles/tokens.css'), 'utf8');
+      return entry.replace(/@import\s+['"]\.\/([^'"]+)['"];/g, (_, file) =>
+        readFileSync(join(DIR, '../../styles', file), 'utf8')
+      );
+    };
+    const tokens = readAllTokensCss();
     expect(tokens).toMatch(/--window-caption-btn-width:\s*46px/);
   });
 

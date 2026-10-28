@@ -173,7 +173,7 @@
 }
 
 .row:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .rowMain {
@@ -382,11 +382,11 @@
 }
 
 .row.isLive:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .row.isLive.isClickable:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .row.isLive .rowTitle {

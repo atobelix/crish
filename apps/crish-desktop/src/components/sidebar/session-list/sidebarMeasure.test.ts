@@ -65,7 +65,8 @@ describe('sidebarMeasure', () => {
 
     it('calculates sidebar content width based on --sidebar-width CSS variable', () => {
       vi.stubGlobal('getComputedStyle', () => ({
-        getPropertyValue: (p: string) => (p === '--sidebar-width' ? '300px' : ''),
+        getPropertyValue: (p: string) =>
+          p === '--sidebar-width' ? '300px' : '',
         fontSize: '14px',
       }));
       const width = readSidebarContentWidth();
@@ -74,7 +75,8 @@ describe('sidebarMeasure', () => {
 
     it('clamps min width to 180 when calculated width is too small', () => {
       vi.stubGlobal('getComputedStyle', () => ({
-        getPropertyValue: (p: string) => (p === '--sidebar-width' ? '150px' : ''),
+        getPropertyValue: (p: string) =>
+          p === '--sidebar-width' ? '150px' : '',
         fontSize: '14px',
       }));
       const width = readSidebarContentWidth();

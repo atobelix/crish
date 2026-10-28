@@ -1,4 +1,11 @@
-import { createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  createElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { getWorkspacePath } from '../../../api/projectStore';
 import {
   assertWorkspacePath,
@@ -9,7 +16,7 @@ import {
   type FsDirEntry,
 } from '../../../api/workspaceFsApi';
 import { fetchGitStatus, type GitStatusFile } from '../../../api/gitApi';
-import { ConfirmDialog } from '../../ui';
+import { ConfirmDialog } from '@/components/ui';
 import { useConfirmGate } from '../../../hooks/useConfirmGate';
 
 export type TreeNode = FsDirEntry & { depth: number };
@@ -118,7 +125,8 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
       const rootLower = normRoot.toLowerCase();
       const rootPrefix = rootLower.endsWith('/') ? rootLower : rootLower + '/';
 
-      const isInside = targetLower.startsWith(rootPrefix) || targetLower === rootLower;
+      const isInside =
+        targetLower.startsWith(rootPrefix) || targetLower === rootLower;
       if (!isInside) {
         setError('文件不在当前工作区内');
         return false;
@@ -169,7 +177,9 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
             results[res.value.dir] = res.value.items;
           } else {
             const reason =
-              res.reason instanceof Error ? res.reason.message : String(res.reason);
+              res.reason instanceof Error
+                ? res.reason.message
+                : String(res.reason);
             failureReasons.push(reason);
           }
         }
@@ -247,7 +257,8 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
     void fetchGitStatus().then((r) => {
       if (r.found && r.files) buildMap(r.files);
     });
-    return () => window.removeEventListener('crish-git-status-changed', onGitUpdate);
+    return () =>
+      window.removeEventListener('crish-git-status-changed', onGitUpdate);
   }, []);
 
   const isDirty = useCallback(() => getIsDirtyRef.current?.() ?? false, []);

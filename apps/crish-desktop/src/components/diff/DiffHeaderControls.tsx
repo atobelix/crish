@@ -1,6 +1,6 @@
 /**
  * apps/crish-desktop/src/components/diff/DiffHeaderControls.tsx
- * 
+ *
  * 差异面板紧凑工具栏 (v2.0 现代化 SegmentedControl 与 28px 几何对齐版)
  */
 import React, { useMemo } from 'react';
@@ -9,10 +9,10 @@ import {
   Select,
   SegmentedControl,
   type SegmentedControlOption,
-} from '../ui';
+} from '@/components/ui';
 import styles from './DiffCard.module.css';
 import type { FileDiff } from '../../store/types';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface DiffHeaderControlsProps {
   sourceMode: 'list' | 'session' | 'git';
@@ -65,21 +65,33 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
     onCopyPatch,
     onClear,
   }) {
-    const sourceOptions = useMemo<
-      SegmentedControlOption<'session' | 'git'>[]
-    >(
+    const sourceOptions = useMemo<SegmentedControlOption<'session' | 'git'>[]>(
       () => [
         {
           value: 'session',
           label: 'AI',
-          icon: <AppIcon name="sparkles" size={12} className={styles.tabIcon} aria-hidden />,
+          icon: (
+            <AppIcon
+              name="sparkles"
+              size={12}
+              className={styles.tabIcon}
+              aria-hidden
+            />
+          ),
           'aria-label': '当前对话中 AI 产生的改动',
           disabled: applyBusy,
         },
         {
           value: 'git',
           label: gitLoading ? 'Git…' : 'Git',
-          icon: <AppIcon name="git-branch" size={12} className={styles.tabIcon} aria-hidden />,
+          icon: (
+            <AppIcon
+              name="git-branch"
+              size={12}
+              className={styles.tabIcon}
+              aria-hidden
+            />
+          ),
           'aria-label': '工作区 Git 未提交变更',
           disabled: gitLoading || applyBusy,
         },
@@ -87,8 +99,7 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
       [applyBusy, gitLoading]
     );
 
-    const activeSegmentValue =
-      sourceMode === 'git' ? 'git' : 'session';
+    const activeSegmentValue = sourceMode === 'git' ? 'git' : 'session';
 
     return (
       <div
@@ -135,9 +146,7 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
                 onChange={(val) => onBranchChange(val)}
                 aria-label="选择 Git 分支"
               />
-            ) : (
-              <span className={styles.idleHint}>载入变更源开始对比</span>
-            )}
+            ) : null}
           </div>
         </div>
 

@@ -143,6 +143,23 @@ describe('commandMap', () => {
       }
     });
 
+    it('覆盖前端原生 Webview 浏览器 API 使用的注册命令', () => {
+      for (const command of [
+        'browser_webview_create',
+        'browser_webview_set_bounds',
+        'browser_webview_set_visible',
+        'browser_webview_navigate',
+        'browser_webview_action',
+        'browser_webview_close',
+        'browser_webview_set_muted',
+        'browser_webview_set_hit_test',
+        'browser_webview_set_inspector',
+      ]) {
+        expect(COMMAND_NAME_ALLOWLIST.has(command), command).toBe(true);
+        expect(resolveTauriCommand(command), command).toBe(command);
+      }
+    });
+
     it('mock 清单对照：命令名不在清单内 → null（显式 missing，不静默兜底）', () => {
       resetCommandManifestForTests(
         makeManifest([

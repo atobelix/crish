@@ -12,7 +12,10 @@ import type { MockPhysicalGeometryEngine } from './MockPhysicalGeometryEngine';
  */
 export function installRangeShim(
   engine: MockPhysicalGeometryEngine,
-  onRestore: (original: typeof Range.prototype.getBoundingClientRect, originalRects: typeof Range.prototype.getClientRects) => void
+  onRestore: (
+    original: typeof Range.prototype.getBoundingClientRect,
+    originalRects: typeof Range.prototype.getClientRects
+  ) => void
 ): boolean {
   if (typeof Range === 'undefined') return false;
   onRestore(
@@ -52,8 +55,7 @@ export function installRangeShim(
       const cjkCount = cjkMatches.length;
       const latinCount = Math.max(0, startOffset - cjkCount);
       const computedCharOffset =
-        latinCount * engine.defaultCharWidth +
-        cjkCount * engine.cjkCharWidth;
+        latinCount * engine.defaultCharWidth + cjkCount * engine.cjkCharWidth;
 
       return new DOMRect(
         baseRect.left + computedCharOffset,
@@ -199,24 +201,15 @@ export function installElementShim(
       }
 
       if (topVal !== undefined || leftVal !== undefined) {
-        const defaultW =
+        const isMenuOrDialog =
           role === 'dialog' ||
           role === 'menu' ||
           role === 'listbox' ||
-          this.classList.contains('menuContent')
-            ? 200
-            : role === 'tooltip'
-              ? 80
-              : 100;
-        const defaultH =
-          role === 'dialog' ||
-          role === 'menu' ||
-          role === 'listbox' ||
-          this.classList.contains('menuContent')
-            ? 240
-            : role === 'tooltip'
-              ? 24
-              : 30;
+          this.classList.contains('menuContent') ||
+          this.className.includes('positioner') ||
+          this.hasAttribute('data-floating-ui-positioner');
+        const defaultW = isMenuOrDialog ? 200 : role === 'tooltip' ? 80 : 100;
+        const defaultH = isMenuOrDialog ? 200 : role === 'tooltip' ? 24 : 30;
         let finalLeft = leftVal ?? 0;
         let finalTop = topVal ?? 0;
 
@@ -224,8 +217,7 @@ export function installElementShim(
           this.style.transform ||
           this.style.getPropertyValue('--tooltip-translate');
         if (selfTf) {
-          if (selfTf.includes('-50%'))
-            finalLeft -= (widthVal ?? defaultW) / 2;
+          if (selfTf.includes('-50%')) finalLeft -= (widthVal ?? defaultW) / 2;
           if (selfTf.includes('-100%')) finalTop -= heightVal ?? defaultH;
         }
 
@@ -243,10 +235,12 @@ export function installElementShim(
       role === 'dialog' ||
       role === 'menu' ||
       role === 'listbox' ||
-      this.classList.contains('menuContent')
+      this.classList.contains('menuContent') ||
+      this.className.includes('positioner') ||
+      this.hasAttribute('data-floating-ui-positioner')
     ) {
-      // 菜单/弹窗默认规格：宽 200px, 高 240px
-      return new DOMRect(100, 100, 200, 240);
+      // 菜单/弹窗默认规格：宽 200px, 高 200px
+      return new DOMRect(100, 100, 200, 200);
     }
     if (role === 'tooltip') {
       return new DOMRect(100, 100, 80, 24);

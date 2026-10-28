@@ -4,7 +4,7 @@
  */
 import React from 'react';
 
-import { Tooltip } from '../ui';
+import { Tooltip } from '@/components/ui';
 import styles from './RuntimePanel.module.css';
 import type { LiveTask } from './useRuntimePanelData';
 import { useConnectionStatus } from '../../hooks/useConnectionStatus';
@@ -13,7 +13,7 @@ import {
   formatElapsed,
   liveTaskAriaLabel,
 } from './runtimePanelLib';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export type LiveTasksSectionProps = {
   liveTasks: LiveTask[];

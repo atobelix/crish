@@ -1,12 +1,12 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 
 import { ChevronDownIcon } from '../../assets/icons';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
 import { agentOneLineLabel, agentStatusLabel } from './helpers';
 import type { SessionAgent } from '../../store/types';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 interface AgentSectionProps {
   open: boolean;
@@ -43,7 +43,7 @@ export const AgentSection = React.memo(function AgentSection({
         aria-controls="overview-sec-agents-b"
         onClick={onToggle}
       >
-        <AppIcon name="bot" size={15} aria-hidden />
+        <AppIcon name="bot" size={16} aria-hidden />
         <span>协作体</span>
         {sortedAgents.length > 0 ? (
           <span className={styles.pill}>

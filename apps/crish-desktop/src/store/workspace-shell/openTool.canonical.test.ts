@@ -1,18 +1,20 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  openFileViewerInSession,
-  consumeFileViewerModeOverride,
-  readLeafDock,
-} from './openTool';
+import { openFileViewerInSession, readLeafDock } from './openTool';
 import { useLayoutTreeStore } from '../layout-tree/layoutTreeStore';
 import * as workspaceFsApi from '../../api/workspaceFsApi';
+import {
+  createDefaultDockTree,
+  collectSpatialLeaves,
+} from '../layout-tree/dockLayoutModel';
 
-describe('openFileViewerInSession (DETAIL-PLAN-03 Canonical Tab ID 幂等与去重测试)', () => {
+describe('openFileViewerInSession (V2 DockTree 规范化、去重与参数流直通测试)', () => {
   const mockLeafId = 'leaf-test-canonical';
 
   beforeEach(() => {
     vi.restoreAllMocks();
-    vi.spyOn(workspaceFsApi, 'getWorkspacePath').mockReturnValue('C:/Software/conex');
+    vi.spyOn(workspaceFsApi, 'getWorkspacePath').mockReturnValue(
+      'C:/Software/conex'
+    );
 
     useLayoutTreeStore.setState({
       activeLeafId: mockLeafId,
@@ -26,41 +28,45 @@ describe('openFileViewerInSession (DETAIL-PLAN-03 Canonical Tab ID 幂等与去�
               sessionId: 'sess-1',
               title: '主对话',
               dock: {
-                openPanelIds: ['chat'],
-                activePanelId: 'chat',
                 collapsed: false,
+                widthRatio: 0.5,
+                tree: createDefaultDockTree(),
               },
             },
           ],
           activeTabId: 'tab-1',
           dock: {
-            openPanelIds: ['chat'],
-            activePanelId: 'chat',
             collapsed: false,
+            widthRatio: 0.5,
+            tree: createDefaultDockTree(),
           },
         },
       },
     });
   });
 
-  it('1. Canonical Tab ID 严禁拼接 ?mode=diff，保持纯净路径标识', () => {
+  it('1. V2 ToolTab 严禁拼接 ?mode=diff，保持纯净不可变 tabId 并直通 initialMode 参数', () => {
     openFileViewerInSession('src/App.tsx', 'diff');
 
     const state = useLayoutTreeStore.getState();
     const leaf = state.tree.root as any;
     const dock = readLeafDock(leaf);
 
-    const expectedCanonical = 'file-viewer:C:/Software/conex/src/App.tsx';
+    const leaves = collectSpatialLeaves(dock.tree.root);
+    const tabs = leaves.flatMap((l) => l.tabs);
 
-    // 断言 Tab ID 绝无 ?mode=diff
-    expect(dock.activePanelId).toBe(expectedCanonical);
-    expect(dock.openPanelIds).toContain(expectedCanonical);
-    expect(dock.activePanelId).not.toContain('?mode=');
+    expect(tabs.length).toBe(1);
+    const tab = tabs[0];
+
+    // 断言 Tab ID 绝无 ?mode=diff 污染，且为规范的前缀
+    expect(tab.viewId).toBe('file-viewer');
+    expect(tab.tabId).toMatch(/^dtab_file-viewer_/);
+    expect(tab.tabId).not.toContain('?mode=');
     expect(dock.collapsed).toBe(false);
 
-    // 断言模式意图被独立登记到通道中
-    const override = consumeFileViewerModeOverride(expectedCanonical);
-    expect(override).toBe('diff');
+    // 断言参数直通在 params 字段中
+    expect(tab.params?.filePath).toBe('C:/Software/conex/src/App.tsx');
+    expect(tab.params?.initialMode).toBe('diff');
   });
 
   it('2. 异构模式调用相同物理文件时，绝对不产生重复同名 Tab (BUG-A02 根治验证)', () => {
@@ -74,13 +80,20 @@ describe('openFileViewerInSession (DETAIL-PLAN-03 Canonical Tab ID 幂等与去�
     const leaf = state.tree.root as any;
     const dock = readLeafDock(leaf);
 
+    const leaves = collectSpatialLeaves(dock.tree.root);
+    const tabs = leaves.flatMap((l) => l.tabs);
+
     // 统计包含 Button.tsx 的 Tab 数量
-    const buttonTabs = dock.openPanelIds.filter((id: string) =>
-      id.includes('Button.tsx')
+    const buttonTabs = tabs.filter((t) =>
+      (t.params?.filePath as string)?.includes('Button.tsx')
     );
 
     expect(buttonTabs.length).toBe(1);
-    expect(buttonTabs[0]).toBe('file-viewer:C:/Software/conex/src/components/Button.tsx');
+    expect(buttonTabs[0].params?.filePath).toBe(
+      'C:/Software/conex/src/components/Button.tsx'
+    );
+    // 热更新后模式就地变为 'plain'
+    expect(buttonTabs[0].params?.initialMode).toBe('plain');
   });
 
   it('3. Windows 小写盘符与大写盘符输入，自动收敛至同一 Tab (BUG-A03 根治验证)', () => {
@@ -94,34 +107,39 @@ describe('openFileViewerInSession (DETAIL-PLAN-03 Canonical Tab ID 幂等与去�
     const leaf = state.tree.root as any;
     const dock = readLeafDock(leaf);
 
-    const mainTabs = dock.openPanelIds.filter((id: string) =>
-      id.includes('main.ts')
+    const leaves = collectSpatialLeaves(dock.tree.root);
+    const tabs = leaves.flatMap((l) => l.tabs);
+
+    const mainTabs = tabs.filter((t) =>
+      (t.params?.filePath as string)?.includes('main.ts')
     );
 
     expect(mainTabs.length).toBe(1);
-    expect(mainTabs[0]).toBe('file-viewer:C:/Software/conex/src/main.ts');
+    expect(mainTabs[0].params?.filePath).toBe('C:/Software/conex/src/main.ts');
+    expect(mainTabs[0].params?.initialMode).toBe('diff');
   });
 
-  it('4. 同名 Tab 热激活时触发微任务模式覆盖事件 (HAL-06 根治验证)', async () => {
-    let receivedDetail: any = null;
-    const listener = (e: Event) => {
-      receivedDetail = (e as CustomEvent).detail;
-    };
-    window.addEventListener('conex:file-viewer-mode', listener);
+  it('4. 同名 Tab 热激活时直接通过不可变 params 变迁完成，杜绝全局事件注入', () => {
+    // 初次打开 plain
+    openFileViewerInSession('src/main.ts', 'plain');
+    let state = useLayoutTreeStore.getState();
+    let leaf = state.tree.root as any;
+    let tabs = collectSpatialLeaves(readLeafDock(leaf).tree.root).flatMap(
+      (l) => l.tabs
+    );
+    const initialTabId = tabs[0].tabId;
+    expect(tabs[0].params?.initialMode).toBe('plain');
 
-    try {
-      openFileViewerInSession('src/main.ts', 'diff');
+    // 热激活切为 diff
+    openFileViewerInSession('src/main.ts', 'diff');
+    state = useLayoutTreeStore.getState();
+    leaf = state.tree.root as any;
+    tabs = collectSpatialLeaves(readLeafDock(leaf).tree.root).flatMap(
+      (l) => l.tabs
+    );
 
-      // 调度微任务排队执行
-      await Promise.resolve();
-
-      expect(receivedDetail).not.toBeNull();
-      expect(receivedDetail.canonicalTabId).toBe(
-        'file-viewer:C:/Software/conex/src/main.ts'
-      );
-      expect(receivedDetail.mode).toBe('diff');
-    } finally {
-      window.removeEventListener('conex:file-viewer-mode', listener);
-    }
+    expect(tabs.length).toBe(1);
+    expect(tabs[0].tabId).toBe(initialTabId); // tabId 保持恒定
+    expect(tabs[0].params?.initialMode).toBe('diff'); // 纯参数流直通热更新
   });
 });

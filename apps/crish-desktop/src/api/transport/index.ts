@@ -34,14 +34,23 @@ export function createTransport(): Transport {
  */
 export function startRunTask(
   transport: Transport,
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  resolveWorkspaceCwd?: () => string | undefined
 ): Promise<unknown> {
-  const payload =
-    'options' in params &&
-    typeof params.options === 'object' &&
-    params.options !== null
-      ? params
-      : { options: params };
+  const createPayload = (): Record<string, unknown> => {
+    const resolved = { ...params };
+    if (resolveWorkspaceCwd) {
+      delete resolved.cwd;
+      const cwd = resolveWorkspaceCwd();
+      if (cwd) resolved.cwd = cwd;
+    }
+    return 'options' in resolved &&
+      typeof resolved.options === 'object' &&
+      resolved.options !== null
+      ? resolved
+      : { options: resolved };
+  };
+  const payload = resolveWorkspaceCwd ? createPayload : createPayload();
   return transport.request('core_run_task', payload);
 }
 

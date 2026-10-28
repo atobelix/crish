@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tooltip } from '../ui';
+import { Tooltip } from '@/components/ui';
 import type { GitStatusCode } from '../../api/gitTreeHelpers';
 import { calculateDiffStatBars } from '../../api/gitTreeHelpers';
 import styles from './GitStatusBadge.module.css';

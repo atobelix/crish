@@ -2,7 +2,7 @@
  * 命令类型 → 语义图标名最小映射（决策 12 · 最小映射，V1-γ）。
  * 经 AppIcon 渲染；不接安全判定、不做插件化注册表。
  */
-import type { IconName } from '../../components/ui/icons';
+import type { IconName } from '@/components/ui/icons';
 import type { ToolCommandKind } from './toolCommandType';
 
 /** kind → 语义图标名（每 kind 一个；与 toolCommandType 的 15 轴一一对应） */

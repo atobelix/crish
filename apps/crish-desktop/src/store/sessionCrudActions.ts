@@ -1,6 +1,10 @@
 import { MAX_FOLDERS } from '@crish/shared-utils/browser';
 import { isDemoMode } from '../api/appMode';
-import { GENERAL_FOLDER, getActiveProjectId } from '../api/projectStore';
+import {
+  GENERAL_FOLDER,
+  activateWorkspaceForSessionFolder,
+  getActiveProjectId,
+} from '../api/projectStore';
 import { EMPTY_SESSION_TITLE, shellPruneKeepIds } from '../api/sessionTitle';
 import { nowIsoTimestamp } from '../api/sessionTime';
 import type { SessionImportMeta, SessionState } from './types';
@@ -47,6 +51,10 @@ import { createSessionStateActions } from './sessionStateActions';
 import { triggerSessionMessageHydrateIfNeeded } from './sessionActivateHydrate';
 // 可见注入卡片挂载辅助纯函数（addContextInjection 复用，见 sessionInjectionMount.ts）
 import { createSessionInjectionActions } from './sessionInjectionActions';
+import {
+  evictSessionDraftsAndTimers,
+  prepareSessionDeletionTransition,
+} from './sessionDeleteTransition';
 
 export function createSessionCrudActions<T extends SessionStoreSlice>(
   set: SessionImmerSet<T>,
@@ -128,6 +136,11 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         });
         return;
       }
+      const sessionForWorkspace = getSessionById(get(), nextId);
+      if (sessionForWorkspace && !isDemoMode()) {
+        // 同步预留 transition，确保本 turn 后续 workspace IPC 看见 pending。
+        void activateWorkspaceForSessionFolder(sessionForWorkspace.folder);
+      }
       let skipped = false;
       set((state) => {
         if (!getSessionById(state, nextId)) {
@@ -177,11 +190,6 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
       if (!isDemoMode()) {
         const sess = getSessionById(get(), nextId);
         if (sess) {
-          void import('../api/projectStore').then(
-            ({ activateWorkspaceForSessionFolder }) => {
-              activateWorkspaceForSessionFolder(sess.folder);
-            }
-          );
           // Lazy message hydrate：list/sync 可只带 title；正文在 activate 时从引擎补。
           // 非丢消息 — 见 needsEngineMessageHydrate / store README「会话消息水合」。
           triggerSessionMessageHydrateIfNeeded(nextId, get, set);
@@ -342,22 +350,22 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
       }
 
       let removed = false;
-      let isDeletingActive = false;
+      let isDeletingActive = get().activeSessionId === id;
       let nextActiveIdToSwitch: string | null = null;
+
+      const stateBeforeDelete = get();
+      if (isDeletingActive && getSessionById(stateBeforeDelete, id)) {
+        nextActiveIdToSwitch = prepareSessionDeletionTransition(
+          stateBeforeDelete.sessions,
+          id,
+          isDemoMode,
+          activateWorkspaceForSessionFolder
+        );
+      }
 
       set((state) => {
         // 1. 检查被删除的是否为当前活跃会话
         isDeletingActive = state.activeSessionId === id;
-
-        if (isDeletingActive) {
-          // 原子计算相邻会话焦点转移（优先右邻居，退化左邻居，无则切安全空会话）
-          const currentIdx = state.sessions.findIndex((s) => s.id === id);
-          if (currentIdx !== -1) {
-            const candidate =
-              state.sessions[currentIdx + 1] || state.sessions[currentIdx - 1];
-            nextActiveIdToSwitch = candidate ? candidate.id : null;
-          }
-        }
 
         // 2. 从索引与数组中物理删除目标会话
         removed = deleteSessionFromIndexed(state, id);
@@ -401,12 +409,20 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         // =SQLite），尽力而为，防重启后幽灵键残留。
         deleteSessionBody(id);
 
-        // U-PERSIST-A A-5：删除会话成功路径必须对称清 draft（08-M5）
+        // U-PERSIST-A A-5：删除会话成功路径必须对称清 draft（08-M5 & E3-01）
         set((state) => {
-          if (state.composerDrafts && state.composerDrafts[id] !== undefined) {
-            delete state.composerDrafts[id];
+          if (state.composerDrafts) {
+            const prefix = `${id}::`;
+            for (const key of Object.keys(state.composerDrafts)) {
+              if (key === id || key.startsWith(prefix)) {
+                delete state.composerDrafts[key];
+              }
+            }
           }
         });
+
+        // E3-01：同步回收 SessionDraftManager 内存池中的草稿与防抖定时器
+        evictSessionDraftsAndTimers(id);
 
         // 外部对话删除后立刻改写会话索引。防抖写盘若被关闭窗口截断，重启仍会从旧索引灌回。
         const afterDelete = get() as ReturnType<SessionStoreGet> & {
@@ -426,11 +442,6 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
           if (newActiveId && !isPendingDraft(newActiveId)) {
             const nextSess = getSessionById(get(), newActiveId);
             if (nextSess) {
-              void import('../api/projectStore').then(
-                ({ activateWorkspaceForSessionFolder }) => {
-                  activateWorkspaceForSessionFolder(nextSess.folder);
-                }
-              );
               triggerSessionMessageHydrateIfNeeded(newActiveId, get, set);
             }
           }

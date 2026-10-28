@@ -29,6 +29,8 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({
       toasts={toasts}
       onDismiss={onDismiss}
       position={position}
+      portalContainer={root}
+      containerId={containerId}
     />,
     root
   );

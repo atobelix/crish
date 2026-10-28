@@ -5,7 +5,7 @@ import { useToast } from '../../services/toast/ToastContext';
  */
 import React, { useState } from 'react';
 import styles from './RuntimePanel.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import type { PendingApprovalInfo } from '../../api/engineStatus';
 import { engineApproveTool, engineDenyTool } from '../../api/chatBridge';
 import { useSessionStore } from '../../store/storeAccess';

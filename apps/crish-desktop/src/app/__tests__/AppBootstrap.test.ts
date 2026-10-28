@@ -72,13 +72,19 @@ describe('AppBootstrap — Stage 4 结构收敛', () => {
     expect(engine.every((e) => e.type === 'useEffect')).toBe(true);
   });
 
-  it('AppBootstrap effect 收敛为 13（原 16：hydrate 上提 + data-ui-size 删除 + 旧 v1 迁移切除）', () => {
-    expect(app.length).toBe(13);
+  it('AppBootstrap effect 收敛为 14（含工作区启动复授权）', () => {
+    expect(app.length).toBe(14);
   });
 
-  it('combined = engine + app = 15', () => {
+  it('combined = engine + app = 16', () => {
     expect(combined).toHaveLength(engine.length + app.length);
-    expect(combined).toHaveLength(15);
+    expect(combined).toHaveLength(16);
+  });
+
+  it('启动时先预留工作区门闩，再执行当前项目复授权', () => {
+    expect(APP_SRC).toContain('reserveWorkspaceAccessStartup();');
+    expect(APP_SRC).toContain('restoreActiveWorkspaceAtStartup()');
+    expect(APP_SRC).toContain('completeWorkspaceAccessStartup(');
   });
 
   it('hydrateWorkspaceShell 已上提至 Coordinator，AppBootstrap 不再持有且不调用旧 migrateLayoutIfNeeded', () => {

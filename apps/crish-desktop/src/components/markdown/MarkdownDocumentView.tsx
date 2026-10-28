@@ -6,8 +6,7 @@ import {
   sanitizeUrlCandidate,
 } from '../../api/markdown-render/markdownSanitizer';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
-import { ScrollArea } from '../ui/ScrollArea';
-import { AppIcon } from '../ui/icons/index';
+import { ScrollArea } from '@/components/ui';
 import { copyTextToClipboard } from '@crish/shared-utils';
 import { useLeafScope } from '../../contexts/LeafScopeContext';
 import { useI18n } from '../../i18n';
@@ -169,7 +168,7 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> =
           const applyCopiedState = () => {
             copyBtn.classList.add('is-copied');
             const originalText = copyBtn.textContent;
-            copyBtn.textContent = `✓ ${t('common.copied')}`;
+            copyBtn.textContent = t('common.copied');
             copyBtn.setAttribute('aria-label', t('common.copied'));
 
             setTimeout(() => {
@@ -314,9 +313,8 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> =
       return emptyNode;
     }
 
-    // 5. 大文件防崩熔断分支：挂载 VirtualPlainCodeViewer 并附带优雅提示条
+    // 5. 大文件防崩熔断分支：挂载 VirtualPlainCodeViewer
     if (isLargeFile) {
-      const sizeKb = Math.round(contentLength / 1024);
       return (
         <div
           ref={containerRef}
@@ -334,33 +332,6 @@ export const MarkdownDocumentView: React.FC<MarkdownDocumentViewProps> =
             } as React.CSSProperties
           }
         >
-          <div
-            className="md-large-file-banner"
-            role="status"
-            aria-live="polite"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--space-2, 8px)',
-              padding: 'var(--space-2, 8px) var(--space-3, 12px)',
-              fontSize: 'var(--font-size-xs, 12px)',
-              color: 'var(--text-secondary)',
-              backgroundColor: 'var(--bg-card-hover)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-md)',
-              marginBottom: 'var(--space-2, 8px)',
-              lineHeight: 1.4,
-              flexShrink: 0,
-            }}
-          >
-            <AppIcon
-              name="zap"
-              size={14}
-              color="var(--color-warning)"
-              aria-hidden
-            />
-            <span>大文件 Markdown（{sizeKb} KB）已启用虚拟化极速代码呈现</span>
-          </div>
           <div style={{ flex: 1, minHeight: 0, height: '100%', width: '100%' }}>
             <VirtualPlainCodeViewer
               content={content}

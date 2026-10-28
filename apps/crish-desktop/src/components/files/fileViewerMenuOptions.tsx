@@ -1,9 +1,6 @@
-import { AppIcon } from '../ui/icons';
-import type { SelectOptionItem } from '../ui/Menu/types';
-import {
-  openWithHostOpener,
-  type HostOpener,
-} from '../../api/hostOpenersApi';
+import { AppIcon } from '@/components/ui/icons';
+import type { SelectOptionItem } from '@/components/ui';
+import { openWithHostOpener, type HostOpener } from '../../api/hostOpenersApi';
 import { logInternalError } from '../../api/userFacingErrors';
 
 interface FileViewerMenuOptionsInput {

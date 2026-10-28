@@ -26,13 +26,16 @@
  */
 
 /** 连接状态（Tauri 路径为「核心已初始化」投影） */
-export type TransportStatus = 'disconnected' | 'connecting' | 'connected' | 'failed';
+export type TransportStatus =
+  'disconnected' | 'connecting' | 'connected' | 'failed';
 
 /** 广播事件载荷（与 listen('workbench-run-event') payload 同形状） */
 export type TransportMessage = Record<string, unknown>;
 
 /** 唯一 invoke 通道的返回（对齐 tauriInvoke 三态，见 InvokeTypedResult） */
-export type TransportCallResult<T> = import('../tauriInvoke').InvokeTypedResult<T>;
+export type TransportCallResult<T> =
+  import('../tauriInvoke').InvokeTypedResult<T>;
+export type TransportInvokeArgs = import('../tauriInvoke').InvokeArgs;
 
 /** request 选项 */
 export interface TransportRequestOptions {
@@ -40,7 +43,10 @@ export interface TransportRequestOptions {
   timeoutMs?: number;
 }
 
-export type TransportStatusListener = (status: TransportStatus, err?: Error) => void;
+export type TransportStatusListener = (
+  status: TransportStatus,
+  err?: Error
+) => void;
 
 export type TransportMessageListener = (msg: TransportMessage) => void;
 
@@ -48,20 +54,23 @@ export interface Transport {
   /**
    * 唯一 invoke 通道（PE-03 T03.2）：命令级调用，返回结构化三态。
    * - 命令不在 manifest registered 面内 → `{ status: 'missing' }`（显式 missing，不 invoke）；
-   * - 暂态失败自动重试一次（与 request 行为合并）。
+   * - run 恢复门禁拒绝时自动重试一次；其它 error 不重放，避免重复副作用。
    * 页面代码一律经此通道直调命令（取代旧宽松包装的裸直连）。
    */
-  call<T = unknown>(cmd: string, args?: Record<string, unknown>): Promise<TransportCallResult<T>>;
+  call<T = unknown>(
+    cmd: string,
+    args?: TransportInvokeArgs
+  ): Promise<TransportCallResult<T>>;
 
   /** 请求-响应配对（03 §3.3 职责 5）：invoke 天然配对。 */
   request<T = unknown>(
     type: string,
-    payload?: Record<string, unknown>,
+    payload?: TransportInvokeArgs,
     opts?: TransportRequestOptions
   ): Promise<T>;
 
   /** fire-and-forget 发送（职责 6）：invoke 命令。 */
-  send(type: string, payload?: Record<string, unknown>): Promise<void>;
+  send(type: string, payload?: TransportInvokeArgs): Promise<void>;
 
   /** 广播订阅（职责 7）：listen('workbench-run-event')。返回退订函数。 */
   onMessage(listener: TransportMessageListener): () => void;

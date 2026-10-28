@@ -207,7 +207,7 @@ export class TokenRuntimeController {
       // 滚动条主题色与微调按钮 SVG（warm-gray 皮肤走 tokens.css 静态 SSOT，不注入）
       Object.assign(
         tokens,
-        buildScrollbarTokens({ skinKey, isDark, finalFg: paint.textBase })
+        buildScrollbarTokens({ skinKey, finalFg: paint.textBase })
       );
     }
 

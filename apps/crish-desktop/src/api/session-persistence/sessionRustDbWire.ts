@@ -78,6 +78,16 @@ export interface RustSessionAgent {
   endedAt?: number | null;
   depth?: number | null;
   subagentPathJson?: string | null;
+  /** v6/v9：任务类型 / 展示标签 / 写路径白名单 / 子会话 id */
+  taskType?: string | null;
+  displayLabel?: string | null;
+  allowedWritePathsJson?: string | null;
+  subSessionId?: string | null;
+  /** v14：能力档快照 / 模型覆盖 / 可恢复 / 心跳 */
+  capabilityMode?: string | null;
+  modelOverride?: string | null;
+  resumable?: boolean | null;
+  lastHeartbeatMs?: number | null;
 }
 
 /**
@@ -213,6 +223,22 @@ export function toRustSessionAgent(agent: SessionAgent): RustSessionAgent {
       /* swallow-ok: 子代理路径序列化失败时字段留空，不阻塞形状转换 */
     }
   }
+  // v6/v9/v14 持久化字段随快照回写（防止前端全量保存抹掉引擎写入值）
+  if (agent.taskType != null) out.taskType = agent.taskType;
+  if (agent.displayLabel != null) out.displayLabel = agent.displayLabel;
+  if (agent.allowedWritePaths && agent.allowedWritePaths.length) {
+    try {
+      out.allowedWritePathsJson = JSON.stringify(agent.allowedWritePaths);
+    } catch {
+      /* swallow-ok: 写路径白名单序列化失败时留空，不阻塞形状转换 */
+    }
+  }
+  if (agent.subSessionId != null) out.subSessionId = agent.subSessionId;
+  if (agent.capabilityMode != null) out.capabilityMode = agent.capabilityMode;
+  if (agent.modelOverride != null) out.modelOverride = agent.modelOverride;
+  if (agent.resumable != null) out.resumable = agent.resumable;
+  if (agent.lastHeartbeatMs != null)
+    out.lastHeartbeatMs = agent.lastHeartbeatMs;
   return out;
 }
 
@@ -329,6 +355,11 @@ function fromRustSessionAgent(rust: RustSessionAgent): SessionAgent | null {
   const subagentPath = rust.subagentPathJson
     ? parseJsonArray<unknown[]>(rust.subagentPathJson, [])
     : undefined;
+  const allowedWritePaths = rust.allowedWritePathsJson
+    ? parseJsonArray<unknown[]>(rust.allowedWritePathsJson, []).filter(
+        (p): p is string => typeof p === 'string'
+      )
+    : undefined;
   const normalized: unknown = {
     id: rust.id,
     subagentRunId: rust.subagentRunId,
@@ -346,6 +377,18 @@ function fromRustSessionAgent(rust: RustSessionAgent): SessionAgent | null {
     ...(rust.endedAt != null ? { endedAt: rust.endedAt } : {}),
     ...(rust.depth != null ? { depth: rust.depth } : {}),
     ...(subagentPath && Array.isArray(subagentPath) ? { subagentPath } : {}),
+    ...(rust.taskType ? { taskType: rust.taskType } : {}),
+    ...(rust.displayLabel ? { displayLabel: rust.displayLabel } : {}),
+    ...(allowedWritePaths && allowedWritePaths.length
+      ? { allowedWritePaths }
+      : {}),
+    ...(rust.subSessionId ? { subSessionId: rust.subSessionId } : {}),
+    ...(rust.capabilityMode ? { capabilityMode: rust.capabilityMode } : {}),
+    ...(rust.modelOverride ? { modelOverride: rust.modelOverride } : {}),
+    ...(rust.resumable === true ? { resumable: true } : {}),
+    ...(rust.lastHeartbeatMs != null
+      ? { lastHeartbeatMs: rust.lastHeartbeatMs }
+      : {}),
   };
   return parseSessionAgent(normalized);
 }

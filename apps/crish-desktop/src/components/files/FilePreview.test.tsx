@@ -85,7 +85,7 @@ describe('FilePreview 渲染与虚拟源码展示', () => {
     expect(editor.parentElement?.className).toContain('editorWrapper');
   });
 
-  it('3. 未选择文件时展示在左侧选择文件空态提示', () => {
+  it('3. 未选择文件时展示预览空态提示', () => {
     render(
       <FilePreview
         file={{ ...defaultFileProps, selected: null }}
@@ -94,7 +94,8 @@ describe('FilePreview 渲染与虚拟源码展示', () => {
       />
     );
 
-    expect(screen.getByText('在左侧选择文件')).toBeDefined();
+    expect(screen.getByText('预览')).toBeDefined();
+    expect(screen.queryByText('在左侧选择文件')).toBeNull();
     expect(screen.queryByTestId('virtual-plain-code-viewer')).toBeNull();
   });
 

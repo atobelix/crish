@@ -35,12 +35,12 @@
   appearance: none;
   -webkit-appearance: none;
   transition:
-    background 80ms ease-out,
-    color 80ms ease-out;
+    background var(--duration-micro, 80ms) var(--ease-standard),
+    color var(--duration-micro, 80ms) var(--ease-standard);
   box-sizing: border-box;
 }
 
-/* 关掉 ui/Button ::before，避免暖褐 --sidebar-hover 再叠 6% 黑罩 */
+/* 关掉 ui/Button ::before，避免暖褐 --state-hover 再叠 6% 黑罩 */
 .navItem::before {
   content: none;
   display: none;
@@ -54,7 +54,7 @@
 }
 
 .navItem:hover {
-  background: var(--sidebar-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -64,7 +64,7 @@
 
 .navItem.isActive,
 .navItem.isActive:hover {
-  background: var(--sidebar-active);
+  background: var(--state-strong);
   color: var(--text-primary);
   border-color: transparent;
 }
@@ -74,13 +74,13 @@
 }
 
 .navItem:active {
-  background: var(--sidebar-active);
+  background: var(--state-strong);
   color: var(--text-primary);
 }
 
 .navItem:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--state-focus-ring));
 }
 
 /* Specific to search input (形态 ①：侧边栏无边框透明纯净型，图 1 标号 ① 锁定样式) */
@@ -94,7 +94,7 @@
 .navItem[role='search']:hover,
 .navItem[role='search']:focus-within,
 .navItem[role='search']:active {
-  background: var(--sidebar-hover);
+  background: var(--state-hover);
   border: none;
   box-shadow: none;
 }

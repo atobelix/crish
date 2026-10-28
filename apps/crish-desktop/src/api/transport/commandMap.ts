@@ -60,9 +60,21 @@ export const COMMAND_NAME_ALLOWLIST: ReadonlySet<string> = new Set([
   // ── 运行生命周期类（core_*）──
   'core_run_task',
   'core_cancel_run',
+  // 运行时权限切换（会话主 run 活单元；子代理随父链同步）
+  'core_set_run_permission_mode',
   // ── 规范配置事务与会话 ──
   'workbench_apply_models_config',
   'list_sessions',
+  // ── 原生子 Webview 浏览器（API 封装经 invokeTyped 直调）──
+  'browser_webview_create',
+  'browser_webview_set_bounds',
+  'browser_webview_set_visible',
+  'browser_webview_navigate',
+  'browser_webview_action',
+  'browser_webview_close',
+  'browser_webview_set_muted',
+  'browser_webview_set_hit_test',
+  'browser_webview_set_inspector',
 ]);
 
 /**

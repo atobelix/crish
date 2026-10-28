@@ -135,7 +135,9 @@ describe('统一配置树是 enabled / contextLength 的唯一权威', () => {
     expect(
       modelsCatalogStore
         .getState()
-        .modelIndex.has(modelRefKey({ providerId: 'provider-1', modelId: 'gpt-4o' }))
+        .modelIndex.has(
+          modelRefKey({ providerId: 'provider-1', modelId: 'gpt-4o' })
+        )
     ).toBe(true);
 
     expect(getModelMeta('provider-1', 'gpt-4o')).toEqual({
@@ -160,7 +162,9 @@ describe('统一配置树是 enabled / contextLength 的唯一权威', () => {
 
   it('树重新加载后立即生效（读树是实时读，不是启动快照）', () => {
     installTree({
-      'provider-1': provider([{ id: 'm', enabled: true, contextWindow: 1_000 }]),
+      'provider-1': provider([
+        { id: 'm', enabled: true, contextWindow: 1_000 },
+      ]),
     });
     expect(getModelMeta('provider-1', 'm')).toMatchObject({
       enabled: true,
@@ -352,7 +356,7 @@ describe('memoryMetaCache 单例内存镜像机制', () => {
     });
   });
 
-  it('Devil-06: 连续执行 2,000 次 getModelMeta，主线程耗时必须严格小于 5ms', () => {
+  it('Devil-06: 连续执行 2,000 次 getModelMeta 仍走内存镜像，不读盘或反复解码', () => {
     for (let i = 0; i < 20; i++) {
       upsertModelMetaExport('provider-1', `model-bench-${i}`, {
         lastTest: lastTest(i),
@@ -364,20 +368,23 @@ describe('memoryMetaCache 单例内存镜像机制', () => {
       getModelMeta('provider-1', `model-bench-${i % 20}`);
     }
 
-    const t0 = performance.now();
+    const getItemSpy = spyStorageGetItem();
+    const parseSpy = vi.spyOn(JSON, 'parse');
     for (let i = 0; i < 2000; i++) {
       getModelMeta('provider-1', `model-bench-${i % 20}`);
     }
-    const elapsed = performance.now() - t0;
 
-    // 验证极速内存直读（通常 < 1ms，门禁要求 < 5ms）
-    expect(elapsed).toBeLessThan(5);
+    // 计数约束验证性能根因：缓存命中不得退回同步 LocalStorage 读取或全量 JSON 解码。
+    expect(getItemSpy).not.toHaveBeenCalled();
+    expect(parseSpy).not.toHaveBeenCalled();
   });
 });
 
 describe('跨窗口 StorageEvent 监听与失效机制', () => {
   it('接收到 crish_model_meta_v1 键的 storage 事件时自动使内存缓存过期', () => {
-    upsertModelMetaExport('provider-1', 'model-sync', { lastTest: lastTest(1) });
+    upsertModelMetaExport('provider-1', 'model-sync', {
+      lastTest: lastTest(1),
+    });
     expect(_getMemoryMetaCacheSnapshot()).not.toBeNull();
 
     window.dispatchEvent(
@@ -397,7 +404,9 @@ describe('跨窗口 StorageEvent 监听与失效机制', () => {
   });
 
   it('接收到其他不相干 key 的 storage 事件不会清空内存缓存', () => {
-    upsertModelMetaExport('provider-1', 'model-sync', { lastTest: lastTest(1) });
+    upsertModelMetaExport('provider-1', 'model-sync', {
+      lastTest: lastTest(1),
+    });
     const before = _getMemoryMetaCacheSnapshot();
     expect(before).not.toBeNull();
 

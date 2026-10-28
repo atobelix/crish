@@ -30,7 +30,7 @@ import { SidebarFooter } from './SidebarFooter';
 import { useSidebarResize } from './useSidebarResize';
 import { useSidebarContextMenu } from './useSidebarContextMenu';
 import { useSidebarHandlers } from './useSidebarHandlers';
-import { ConfirmDialog } from '../ui';
+import { ConfirmDialog } from '@/components/ui';
 
 interface SidebarProps {
   hoverExpanded?: boolean;
@@ -360,6 +360,9 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
             onCancelRename={handleCancelRename}
             onDeleteSession={(id) => void handleAction('delete', id)}
             onBranchSession={(id) => void handleAction('branch', id)}
+            onPinSession={(id) => void handleAction('pin', id)}
+            onUnpinSession={(id) => void handleAction('unpin', id)}
+            onArchiveSession={(id) => void handleAction('archive', id)}
           />
         </div>
 
@@ -413,9 +416,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
           open={pendingDelete !== null}
           title="删除对话"
           description={
-            pendingDelete
-              ? `确定要彻底删除对话“${pendingDelete.title}”吗？删除后数据将永久丢失。`
-              : undefined
+            pendingDelete ? `确定要删除“${pendingDelete.title}”吗？` : undefined
           }
           confirmLabel="确认删除"
           danger

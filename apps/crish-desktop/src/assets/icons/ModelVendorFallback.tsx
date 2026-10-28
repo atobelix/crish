@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tooltip } from '../../components/ui';
+import { Tooltip } from '@/components/ui';
 
 export interface ModelVendorFallbackProps {
   /** 显示尺寸（像素），默认 24 */
@@ -30,7 +30,8 @@ export const ModelVendorFallback: React.FC<ModelVendorFallbackProps> = ({
   style = {},
 }) => {
   // 若未显式传入 radius，则按 app-icon 原生 50/200 = 25% 比例自适应计算
-  const computedRadius = radius !== undefined ? radius : Math.round(size * 0.25);
+  const computedRadius =
+    radius !== undefined ? radius : Math.round(size * 0.25);
 
   const element = (
     <div
@@ -61,17 +62,34 @@ export const ModelVendorFallback: React.FC<ModelVendorFallbackProps> = ({
         style={{ display: 'block', width: '100%', height: '100%' }}
       >
         <defs>
-          <linearGradient id="crish-fallback-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <linearGradient
+            id="crish-fallback-grad"
+            x1="0%"
+            y1="0%"
+            x2="0%"
+            y2="100%"
+          >
             <stop offset="0%" stopColor="#131316" />
             <stop offset="100%" stopColor="#08080a" />
           </linearGradient>
         </defs>
         {/* 圆角背景底板 */}
-        <rect width="200" height="200" rx="50" fill="url(#crish-fallback-grad)" />
+        <rect
+          width="200"
+          height="200"
+          rx="50"
+          fill="url(#crish-fallback-grad)"
+        />
         {/* 翡翠绿微点 */}
         <ellipse cx="100" cy="35" rx="16" ry="16" fill="#10B981" />
         {/* 白线条星芒核心（strokeWidth 26 为 200×200 画布的几何构造参数，非图标描边，不走 ICON_STROKE） */}
-        <g fill="none" stroke="#F4F4F5" strokeWidth="26" strokeLinecap="round" strokeLinejoin="round">
+        <g
+          fill="none"
+          stroke="#F4F4F5"
+          strokeWidth="26"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M 100 118 L 28 118" />
           <path d="M 100 118 L 172 118" />
           <path d="M 100 118 L 58 42" />

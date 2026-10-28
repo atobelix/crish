@@ -43,7 +43,9 @@ describe('FileViewerCard 单轨差异比对与模式响应', () => {
     vi.spyOn(workspaceFsApi, 'readTextFile').mockResolvedValue({
       content: 'console.log("hello world");',
     });
-    vi.spyOn(workspaceFsApi, 'getWorkspacePath').mockReturnValue('C:/Software/conex');
+    vi.spyOn(workspaceFsApi, 'getWorkspacePath').mockReturnValue(
+      'C:/Software/conex'
+    );
     vi.spyOn(hostOpenersApi, 'listOpenOptionsForFile').mockResolvedValue({
       defaultLabel: 'VSCode',
       openers: [],
@@ -71,7 +73,9 @@ describe('FileViewerCard 单轨差异比对与模式响应', () => {
       </ToastProvider>
     );
 
-    expect(await screen.findByTestId('virtual-plain-code-viewer')).toBeDefined();
+    expect(
+      await screen.findByTestId('virtual-plain-code-viewer')
+    ).toBeDefined();
     expect(screen.queryByTestId('diff-card-unified-view')).toBeNull();
   });
 
@@ -97,26 +101,35 @@ describe('FileViewerCard 单轨差异比对与模式响应', () => {
     expect(screen.queryByTestId('diff-card-unified-view')).toBeNull();
   });
 
-  it('4. 响应 conex:file-viewer-mode 微任务热激活事件（彻底根除 HAL-06 状态死锁）', async () => {
-    render(
+  it('4. 响应 ViewRenderContext 参数热更新（纯参数流下发取代全局事件）', async () => {
+    const { rerender } = render(
       <ToastProvider>
-        <FileViewerCard filePath="src/App.tsx" initialMode="plain" />
+        <FileViewerCardView
+          panelId="dtab_file_1"
+          leafId="dleaf_1"
+          isActive={true}
+          openView={() => {}}
+          params={{ filePath: 'src/App.tsx', initialMode: 'plain' }}
+        />
       </ToastProvider>
     );
 
-    expect(await screen.findByTestId('virtual-plain-code-viewer')).toBeDefined();
+    expect(
+      await screen.findByTestId('virtual-plain-code-viewer')
+    ).toBeDefined();
 
-    // 模拟同名 Tab 热激活事件派发
-    act(() => {
-      window.dispatchEvent(
-        new CustomEvent('conex:file-viewer-mode', {
-          detail: {
-            canonicalTabId: 'file-viewer:src/App.tsx',
-            mode: 'diff',
-          },
-        })
-      );
-    });
+    // 模拟 DockTree 纯参数更新重新渲染
+    rerender(
+      <ToastProvider>
+        <FileViewerCardView
+          panelId="dtab_file_1"
+          leafId="dleaf_1"
+          isActive={true}
+          openView={() => {}}
+          params={{ filePath: 'src/App.tsx', initialMode: 'diff' }}
+        />
+      </ToastProvider>
+    );
 
     expect(await screen.findByTestId('diff-card-unified-view')).toBeDefined();
     expect(screen.queryByTestId('virtual-plain-code-viewer')).toBeNull();
@@ -129,7 +142,9 @@ describe('FileViewerCard 单轨差异比对与模式响应', () => {
       </ToastProvider>
     );
 
-    expect(await screen.findByTestId('virtual-plain-code-viewer')).toBeDefined();
+    expect(
+      await screen.findByTestId('virtual-plain-code-viewer')
+    ).toBeDefined();
 
     rerender(
       <ToastProvider>
@@ -168,7 +183,8 @@ describe('FileViewerCard 单轨差异比对与模式响应', () => {
   it('7. 点击查看历史编辑情况展开 Git 提交历史抽屉并展示提交列表与未提交改动', async () => {
     vi.spyOn(gitApi, 'runLocalGit').mockResolvedValue({
       ok: true,
-      stdout: 'a1b2c3d feat: initial commit\ne4f5a6b fix: update button style\n',
+      stdout:
+        'a1b2c3d feat: initial commit\ne4f5a6b fix: update button style\n',
       stderr: '',
     });
 
@@ -185,7 +201,9 @@ describe('FileViewerCard 单轨差异比对与模式响应', () => {
       </ToastProvider>
     );
 
-    const historyBtn = await screen.findByRole('button', { name: '查看历史编辑情况' });
+    const historyBtn = await screen.findByRole('button', {
+      name: '查看历史编辑情况',
+    });
     expect(historyBtn).toBeInTheDocument();
 
     await act(async () => {
@@ -197,7 +215,9 @@ describe('FileViewerCard 单轨差异比对与模式响应', () => {
     expect(screen.getByText('fix: update button style')).toBeInTheDocument();
 
     // 点击复制提交哈希
-    const hashBtn = screen.getByRole('button', { name: '复制提交哈希 a1b2c3d' });
+    const hashBtn = screen.getByRole('button', {
+      name: '复制提交哈希 a1b2c3d',
+    });
     await act(async () => {
       hashBtn.click();
     });
@@ -208,8 +228,12 @@ describe('FileViewerCard 单轨差异比对与模式响应', () => {
   });
 
   it('8. 更多操作下拉菜单提供打开文件路径、复制相对/绝对路径与选择打开方式', async () => {
-    const revealSpy = vi.spyOn(workspaceFsApi, 'revealInOs').mockResolvedValue(true as any);
-    const openDefaultSpy = vi.spyOn(hostOpenersApi, 'openPathDefault').mockResolvedValue({} as any);
+    const revealSpy = vi
+      .spyOn(workspaceFsApi, 'revealInOs')
+      .mockResolvedValue(true as any);
+    const openDefaultSpy = vi
+      .spyOn(hostOpenersApi, 'openPathDefault')
+      .mockResolvedValue({} as any);
 
     const writeTextSpy = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, {

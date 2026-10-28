@@ -23,6 +23,23 @@ export type {
   ImportFs,
 } from '@crish/plugin-import-claude-codex';
 
+export type ExternalSessionScanIssue = {
+  source: ExternalSessionSource;
+  kind: 'warning' | 'error';
+  message: string;
+};
+
+export type ExternalSessionSourceScan = {
+  source: ExternalSessionSource;
+  sessions: DetectedExternalSession[];
+  issues: ExternalSessionScanIssue[];
+};
+
+export type ExternalSessionScanBatch = {
+  sessions: DetectedExternalSession[];
+  issues: ExternalSessionScanIssue[];
+};
+
 // ---------------------------------------------------------------------------
 // UI / store write path (scan → select → importDetectedSessions)
 // ---------------------------------------------------------------------------

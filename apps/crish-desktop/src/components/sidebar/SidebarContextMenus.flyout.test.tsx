@@ -104,7 +104,7 @@ describe('SidebarContextMenus flyout 关闭语义（F7-F12）', () => {
       screen.queryByRole('group', { name: '列表范围' })
     ).not.toBeInTheDocument();
     // 整个排序菜单仍展开
-    expect(screen.getByText('排序与过滤')).toBeInTheDocument();
+    expect(screen.getByText('排序方式')).toBeInTheDocument();
     expect(props.onCloseSortDropdown).not.toHaveBeenCalled();
   });
 
@@ -117,7 +117,7 @@ describe('SidebarContextMenus flyout 关闭语义（F7-F12）', () => {
     expect(
       screen.queryByRole('group', { name: '排序方式' })
     ).not.toBeInTheDocument();
-    expect(screen.getByText('排序与过滤')).toBeInTheDocument();
+    expect(screen.getByText('排序方式')).toBeInTheDocument();
     expect(props.onCloseSortDropdown).not.toHaveBeenCalled();
   });
 

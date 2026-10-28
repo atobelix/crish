@@ -13,11 +13,29 @@ import {
 } from '../agentIdentity';
 
 describe('agentIdentity 子智能体确定性色彩身份契约', () => {
+  const EXPECTED_HUE_TOKENS = [
+    '--agent-hue-1',
+    '--agent-hue-2',
+    '--agent-hue-3',
+    '--agent-hue-4',
+    '--agent-hue-5',
+    '--agent-hue-6',
+    '--agent-hue-7',
+    '--agent-hue-8',
+  ] as const;
+
+  it('8 档色环 Token 字面量具备强类型契约绑定', () => {
+    EXPECTED_HUE_TOKENS.forEach((token, idx) => {
+      expect(AGENT_HUE_PALETTE[idx].tokenName).toBe(token);
+      expect(AGENT_HUE_PALETTE[idx].hueVar).toBe('var(' + token + ')');
+    });
+  });
+
   it('同一 Agent ID 映射色相与几何标识绝对幂等', () => {
     const first = resolveAgentIdentity('task-99');
     expect(first.hueIndex).toBeGreaterThanOrEqual(1);
     expect(first.hueIndex).toBeLessThanOrEqual(8);
-    expect(first.hueVar).toBe(`var(--agent-hue-${first.hueIndex})`);
+    expect(first.hueVar).toBe(`var(${first.tokenName})`);
     expect(first.tokenName).toBe(`--agent-hue-${first.hueIndex}`);
     expect(AGENT_GLYPHS).toContain(first.glyph);
     expect(ICON_NAMES).toContain(first.iconName);

@@ -10,8 +10,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import styles from './RuntimePanel.module.css';
 import { RuntimeSection } from './RuntimeSection';
 import { useToast } from '../../services/toast/ToastContext';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
+import { useI18n } from '../../i18n';
 import {
   formatTrashedAt,
   listTrashEntries,
@@ -38,21 +39,31 @@ export const TrashSection: React.FC<TrashSectionProps> = ({
   leafId: _leafId,
 }) => {
   const { showToast } = useToast();
+  const { t } = useI18n();
   const scopedSessionId = useScopedSessionId(sessionIdProp);
   const [entries, setEntries] = useState<TrashEntryDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       const res = await listTrashEntries();
       setEntries(res.entries);
-    } catch {
-      setEntries([]);
+      setLoadError(null);
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : t('workspace.trash.unknownError');
+      setLoadError(message);
+      showToast(t('workspace.trash.readFailedDetail', { message }), undefined, {
+        type: 'error',
+      });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showToast, t]);
 
   useEffect(() => {
     void refresh();
@@ -73,12 +84,14 @@ export const TrashSection: React.FC<TrashSectionProps> = ({
           showToast(res.message, undefined, { type: 'error' });
         }
       } catch {
-        showToast('恢复失败，请重试', undefined, { type: 'error' });
+        showToast(t('workspace.trash.restoreFailed'), undefined, {
+          type: 'error',
+        });
       } finally {
         setBusyId(null);
       }
     },
-    [busyId, scopedSessionId, showToast, refresh]
+    [busyId, scopedSessionId, showToast, refresh, t]
   );
 
   const handlePurge = useCallback(
@@ -96,48 +109,68 @@ export const TrashSection: React.FC<TrashSectionProps> = ({
           showToast(res.message, undefined, { type: 'error' });
         }
       } catch {
-        showToast('清除失败，请重试', undefined, { type: 'error' });
+        showToast(t('workspace.trash.purgeFailed'), undefined, {
+          type: 'error',
+        });
       } finally {
         setBusyId(null);
       }
     },
-    [busyId, scopedSessionId, showToast, refresh]
+    [busyId, scopedSessionId, showToast, refresh, t]
   );
 
-  const countLabel = entries.length > 0 ? `${entries.length} 项` : null;
-  const showEmpty = !loading && entries.length === 0;
+  const countLabel =
+    entries.length > 0
+      ? t('workspace.trash.count', { count: entries.length })
+      : null;
+  const emptyMessage =
+    loading && entries.length === 0
+      ? t('workspace.trash.loading')
+      : entries.length > 0
+        ? null
+        : loadError
+          ? t('workspace.trash.readFailedDetail', { message: loadError })
+          : t('workspace.trash.empty');
 
   return (
     <RuntimeSection
       titleId="rt-sec-trash"
-      title="回收站"
+      title={t('workspace.trash.title')}
       count={
         countLabel
-          ? { label: countLabel, ariaLabel: `${entries.length} 项可恢复` }
+          ? {
+              label: countLabel,
+              ariaLabel: t('workspace.trash.recoverableCount', {
+                count: entries.length,
+              }),
+            }
           : undefined
       }
-      empty={
-        showEmpty
-          ? '回收站为空（误删文件可在此恢复）'
-          : loading
-            ? '加载中…'
-            : null
-      }
+      empty={emptyMessage}
     >
+      {loadError && entries.length > 0 ? (
+        <div className={styles.rowMeta} role="alert">
+          {t('workspace.trash.refreshFailed', { message: loadError })}
+        </div>
+      ) : null}
       {!loading && entries.length > 0 ? (
         <div
           className={`${styles.list} ${styles.listScroll}`}
           role="list"
-          aria-label="回收站条目"
+          aria-label={t('workspace.trash.entriesAria')}
         >
           {entries.map((entry) => {
             const busy = busyId === entry.id;
             const metaBits = [
               formatTrashedAt(entry.trashedAt),
-              entry.kind === 'dir' ? '目录' : '文件',
+              entry.kind === 'dir'
+                ? t('workspace.trash.directory')
+                : t('workspace.trash.file'),
               formatSize(entry.size),
             ];
-            if (entry.checksum) metaBits.push('有校验和');
+            if (entry.checksum) {
+              metaBits.push(t('workspace.trash.hasChecksum'));
+            }
             return (
               <div
                 key={entry.id}
@@ -164,36 +197,42 @@ export const TrashSection: React.FC<TrashSectionProps> = ({
                 <div
                   className={styles.rowActions}
                   role="group"
-                  aria-label={`${entry.originalPath} 回收站操作`}
+                  aria-label={t('workspace.trash.operationsAria', {
+                    path: entry.originalPath,
+                  })}
                 >
                   <Tooltip
                     content={
                       entry.checksum
-                        ? '恢复到原路径（校验和防篡改）'
-                        : '恢复到原路径'
+                        ? t('workspace.trash.restoreToOriginalWithChecksum')
+                        : t('workspace.trash.restoreToOriginal')
                     }
                   >
                     <Button
                       type="button"
                       variant="primary"
                       size="sm"
-                      aria-label={`恢复 ${entry.originalPath}`}
+                      aria-label={t('workspace.trash.restoreAria', {
+                        path: entry.originalPath,
+                      })}
                       disabled={Boolean(busyId)}
                       onClick={() => void handleRestore(entry)}
                     >
-                      {busy ? '…' : '恢复'}
+                      {busy ? '…' : t('workspace.trash.restore')}
                     </Button>
                   </Tooltip>
-                  <Tooltip content="彻底清除（不可恢复）">
+                  <Tooltip content={t('workspace.trash.permanentlyDelete')}>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      aria-label={`清除 ${entry.originalPath}`}
+                      aria-label={t('workspace.trash.purgeAria', {
+                        path: entry.originalPath,
+                      })}
                       disabled={Boolean(busyId)}
                       onClick={() => void handlePurge(entry)}
                     >
-                      清除
+                      {t('workspace.trash.purge')}
                     </Button>
                   </Tooltip>
                 </div>

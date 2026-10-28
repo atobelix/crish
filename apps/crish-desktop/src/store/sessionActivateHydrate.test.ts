@@ -43,6 +43,7 @@ const saveBodyMock = vi
   >()
   .mockResolvedValue(undefined);
 const hydrateMock = vi.fn();
+const activateWorkspaceMock = vi.hoisted(() => vi.fn());
 const mergeMock = vi.fn(
   (existing: SessionMessage[], incoming: SessionMessage[]) => [
     ...existing,
@@ -62,7 +63,7 @@ vi.mock('../api/projectStore', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/projectStore')>();
   return {
     ...actual,
-    activateWorkspaceForSessionFolder: vi.fn(),
+    activateWorkspaceForSessionFolder: activateWorkspaceMock,
     getActiveProjectId: () => GENERAL_FOLDER,
   };
 });
@@ -170,6 +171,111 @@ describe('setActiveSessionId — lazy engine message hydrate', () => {
   afterEach(() => {
     __resetSessionHydrateStateForTests();
     vi.clearAllMocks();
+  });
+
+  it('reserves workspace authorization before synchronously switching the active session', () => {
+    const current = emptyRemoteShell({
+      id: 'current-session',
+      title: 'current',
+      hydratedFromEngine: true,
+      messagesHydrated: true,
+    });
+    const target = emptyRemoteShell({
+      id: 'target-session',
+      title: 'target',
+      folder: 'proj-target',
+      hydratedFromEngine: true,
+      messagesHydrated: true,
+    });
+    const h = makeHarness({
+      sessions: [current, target],
+      sessionsById: buildSessionsById([current, target]),
+      folderOrder: [GENERAL_FOLDER, 'proj-target'],
+      activeSessionId: current.id,
+      draftFolder: '',
+      activeAgentId: null,
+      panelAgentId: null,
+      composerDrafts: {},
+    });
+    let activeIdAtReservation = '';
+    activateWorkspaceMock.mockImplementationOnce(() => {
+      activeIdAtReservation = h.getState().activeSessionId;
+      return Promise.resolve();
+    });
+
+    h.actions.setActiveSessionId(target.id);
+
+    expect(activateWorkspaceMock).toHaveBeenCalledWith(target.folder);
+    expect(activeIdAtReservation).toBe(current.id);
+    expect(h.getState().activeSessionId).toBe(target.id);
+  });
+
+  it('reserves the fallback workspace before atomically deleting the active session', () => {
+    const left = emptyRemoteShell({
+      id: 'left-session',
+      title: 'left',
+      folder: 'proj-left',
+      hydratedFromEngine: true,
+      messagesHydrated: true,
+    });
+    const current = emptyRemoteShell({
+      id: 'current-session',
+      title: 'current',
+      folder: 'proj-current',
+      hydratedFromEngine: true,
+      messagesHydrated: true,
+    });
+    const right = emptyRemoteShell({
+      id: 'right-session',
+      title: 'right',
+      folder: 'proj-right',
+      hydratedFromEngine: true,
+      messagesHydrated: true,
+    });
+    const h = makeHarness({
+      sessions: [left, current, right],
+      sessionsById: buildSessionsById([left, current, right]),
+      folderOrder: [GENERAL_FOLDER, 'proj-left', 'proj-current', 'proj-right'],
+      activeSessionId: current.id,
+      draftFolder: '',
+      activeAgentId: null,
+      panelAgentId: null,
+      composerDrafts: {},
+    });
+    let activeIdAtReservation = '';
+    activateWorkspaceMock.mockImplementationOnce(() => {
+      activeIdAtReservation = h.getState().activeSessionId;
+      return Promise.resolve();
+    });
+
+    expect(h.actions.deleteSession(current.id)).toBe(true);
+
+    expect(activateWorkspaceMock).toHaveBeenCalledWith(right.folder);
+    expect(activeIdAtReservation).toBe(current.id);
+    expect(h.getState().activeSessionId).toBe(right.id);
+  });
+
+  it('does not reserve a workspace when deleting a stale active ID is a no-op', () => {
+    const remaining = emptyRemoteShell({
+      id: 'remaining-session',
+      title: 'remaining',
+      folder: 'proj-remaining',
+      hydratedFromEngine: true,
+      messagesHydrated: true,
+    });
+    const h = makeHarness({
+      sessions: [remaining],
+      sessionsById: buildSessionsById([remaining]),
+      folderOrder: [GENERAL_FOLDER, 'proj-remaining'],
+      activeSessionId: 'stale-active-session',
+      draftFolder: '',
+      activeAgentId: null,
+      panelAgentId: null,
+      composerDrafts: {},
+    });
+
+    expect(h.actions.deleteSession('stale-active-session')).toBe(false);
+    expect(activateWorkspaceMock).not.toHaveBeenCalled();
   });
 
   it('activate empty remote shell merges daemon messages into sessions[] and sessionsById', async () => {

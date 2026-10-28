@@ -1,15 +1,22 @@
-import { useEffect, useLayoutEffect } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useLayoutStore } from '../store/layoutStore';
 import { usePermissionStore } from '../store/permissionStore';
 import { bootstrapStores } from '../store/bootstrapStores';
 import { bootstrapServices } from '../bootstrap-services';
-import { onUiEvent } from '../api/uiEvents';
+import { emitUiEvent, onUiEvent } from '../api/uiEvents';
 import { pickWorkspaceFolder } from '../api/pickWorkspaceFolder';
 import { syncTelemetryData } from '../api/storeAccess';
 import { telemetry } from '../services/TelemetryService';
+import { toast } from '../services/toast';
 import { isDemoModeFast } from '../createSsrGlobals';
 import type { AppSettings } from '../store/types';
 import { getCompositionRoot } from './compositionRoot';
+import {
+  completeWorkspaceAccessStartup,
+  reserveWorkspaceAccessStartup,
+} from '../api/workspaceAccessGate';
+import { isTauriRuntimeAvailable } from '../api/tauriInvoke';
+import { useI18n } from '../i18n';
 
 /** Devtools / internal globals attached to window */
 export type CrishWindow = Window & {
@@ -22,9 +29,6 @@ if (typeof window !== 'undefined') {
   (window as CrishWindow).useLayoutStore = useLayoutStore;
   (window as CrishWindow).usePermissionStore = usePermissionStore;
 }
-
-/** 浏览器标签 / 任务栏标题 */
-const APP_DOCUMENT_TITLE = 'Crish · AI 工作台';
 
 export async function winCtl(
   action: 'minimize' | 'toggleMaximize' | 'close'
@@ -60,6 +64,12 @@ export function useAppBootstrap({
   uiSize: _uiSize,
   shellChromeMode: _shellChromeMode,
 }: UseAppBootstrapOptions) {
+  const { language, t } = useI18n();
+  const startupTranslator = useRef(t);
+  startupTranslator.current = t;
+  // 首屏渲染时先关住工作区 IPC；授权 effect 完成或失败后再释放。
+  reserveWorkspaceAccessStartup();
+
   // 1. Window globals & document metadata
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -72,11 +82,12 @@ export function useAppBootstrap({
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
-    document.documentElement.lang = 'zh-CN';
-    if (document.title !== APP_DOCUMENT_TITLE) {
-      document.title = APP_DOCUMENT_TITLE;
+    document.documentElement.lang = language;
+    const title = t('workspace.documentTitle');
+    if (document.title !== title) {
+      document.title = title;
     }
-  }, []);
+  }, [language, t]);
 
   // 2. Session persistence init (layout tree hydrate is Coordinator-owned)
   useEffect(() => {
@@ -114,6 +125,35 @@ export function useAppBootstrap({
   useEffect(() => {
     const cleanup = bootstrapStores();
     return () => cleanup();
+  }, []);
+
+  // 启动时只用 Rust recent 列表复授权 localStorage 当前项目；失败时提示重选。
+  useEffect(() => {
+    let disposed = false;
+    const reportFailure = (error: unknown) => {
+      const unavailable =
+        error instanceof Error &&
+        'code' in error &&
+        error.code === 'command-unavailable' &&
+        !isTauriRuntimeAvailable();
+      completeWorkspaceAccessStartup(unavailable ? undefined : error);
+      if (disposed || unavailable) return;
+      toast.error(
+        error instanceof Error && error.message
+          ? error.message
+          : startupTranslator.current('workspace.startupAuthorizationFailed')
+      );
+      emitUiEvent('open-project-picker');
+    };
+    void import('../api/workspaceAccessApi')
+      .then(
+        ({ restoreActiveWorkspaceAtStartup }) =>
+          void restoreActiveWorkspaceAtStartup().catch(reportFailure)
+      )
+      .catch(reportFailure);
+    return () => {
+      disposed = true;
+    };
   }, []);
 
   // 3. Session folder rebind：Store 就绪事件驱动（ACT-405，铲除双 rAF）。

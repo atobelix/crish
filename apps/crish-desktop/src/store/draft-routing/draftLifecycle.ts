@@ -54,7 +54,7 @@ export function navigateToNewDraft(
 
   // 3. 同步底层工作区环境（cwd 与 activeProjectId）
   try {
-    activateWorkspaceForSessionFolder(targetFolder);
+    void activateWorkspaceForSessionFolder(targetFolder);
   } catch {
     /* ignore if environment is headless */
   }
@@ -69,7 +69,8 @@ export function navigateToNewDraft(
   }
 
   // 5. 将草稿 ID 登记到注册表中
-  const targetLeafId = opts.leafId || root?.shell?.getState?.()?.lastChatLeafId || 'root';
+  const targetLeafId =
+    opts.leafId || root?.shell?.getState?.()?.lastChatLeafId || 'root';
   const draftId = mintDraftSessionId(targetLeafId);
   draftFolderRegistry.set(draftId, targetFolder);
 }

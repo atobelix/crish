@@ -1,13 +1,13 @@
 /**
  * 向导第 3 步：选择项目（可选）。
  * 已有项目展示状态；否则「选择文件夹」+ 手填路径。
- * 目录选择副作用（openDirectoryDialogSafe + addProjectFromPath）由 useFirstRunWizard 提供。
+ * 目录选择副作用（Rust 原生 picker 授权 + addProjectFromPath）由 useFirstRunWizard 提供。
  */
 import React from 'react';
 
 import styles from './overlay/FirstRunWizard.module.css';
-import { Button, Input } from './ui';
-import { AppIcon } from './ui/icons/index';
+import { Button, Input } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 
 /** 本步用到的可访问 id（useId 生成，壳层透传） */
 export type WizardProjectStepIds = {

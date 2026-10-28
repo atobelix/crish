@@ -109,11 +109,6 @@ export function useAppShortcuts({
           setSidebarCollapsed(layout.getSidebarCollapsed());
           return;
         }
-        case 'toggle_plan_mode': {
-          e.preventDefault();
-          getCompositionRoot().layout.togglePlanMode();
-          return;
-        }
         case 'branch_session': {
           e.preventDefault();
           const session = getCompositionRoot().session;

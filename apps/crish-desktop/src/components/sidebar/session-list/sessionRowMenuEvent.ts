@@ -6,14 +6,57 @@ export function syntheticContextMenuEvent(
   base?: React.MouseEvent | React.KeyboardEvent,
   opts?: { anchor?: 'bottom-left' | 'right-center' }
 ): React.MouseEvent {
-  const targetEl =
-    base && base.currentTarget && base.currentTarget !== el
-      ? (base.currentTarget as HTMLElement)
-      : el;
-  const rect = targetEl?.getBoundingClientRect();
-  const isTargetButton = Boolean(targetEl && targetEl !== el);
   const anchor = opts?.anchor;
   const isMoreButton = anchor === 'right-center';
+
+  let targetEl: HTMLElement | null = null;
+  if (
+    base &&
+    'currentTarget' in base &&
+    base.currentTarget &&
+    base.currentTarget !== el
+  ) {
+    targetEl = base.currentTarget as HTMLElement;
+  } else if (base && 'target' in base && base.target && base.target !== el) {
+    targetEl =
+      ((base.target as HTMLElement).closest?.(
+        '[data-testid="session-more-button"]'
+      ) as HTMLElement | null) ?? (base.target as HTMLElement);
+  }
+
+  if (
+    isMoreButton &&
+    (!targetEl ||
+      targetEl === el ||
+      targetEl.dataset?.testid !== 'session-more-button')
+  ) {
+    const foundBtn =
+      ((
+        (base && 'currentTarget' in base
+          ? base.currentTarget
+          : null) as HTMLElement | null
+      )?.closest?.(
+        '[data-testid="session-more-button"]'
+      ) as HTMLElement | null) ??
+      ((
+        (base && 'target' in base ? base.target : null) as HTMLElement | null
+      )?.closest?.(
+        '[data-testid="session-more-button"]'
+      ) as HTMLElement | null) ??
+      (el?.querySelector?.(
+        '[data-testid="session-more-button"]'
+      ) as HTMLElement | null);
+    if (foundBtn) {
+      targetEl = foundBtn;
+    }
+  }
+
+  if (!targetEl) {
+    targetEl = el;
+  }
+
+  const rect = targetEl?.getBoundingClientRect();
+  const isTargetButton = Boolean(targetEl && targetEl !== el);
 
   // 更多操作按钮或显式锚点模式：严格根据按钮几何边缘锚定（右侧 + 6px），不跟随鼠标指针位置，彻底防止误触
   const clientX =
@@ -50,7 +93,8 @@ export function syntheticContextMenuEvent(
   const stopPropagation = () => {
     if (base && 'stopPropagation' in base) base.stopPropagation();
   };
-  return {
+
+  const syntheticEv: Record<string, unknown> = {
     clientX,
     clientY,
     preventDefault,
@@ -58,5 +102,22 @@ export function syntheticContextMenuEvent(
     button: isMoreButton ? 0 : 2,
     currentTarget: targetEl ?? el,
     target: targetEl ?? el,
-  } as unknown as React.MouseEvent;
+    isMoreButton,
+  };
+
+  if (rect) {
+    syntheticEv.triggerRect = {
+      left: rect.left,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      width: rect.width,
+      height: rect.height,
+    };
+  }
+  if (targetEl) {
+    syntheticEv.triggerEl = targetEl;
+  }
+
+  return syntheticEv as unknown as React.MouseEvent;
 }

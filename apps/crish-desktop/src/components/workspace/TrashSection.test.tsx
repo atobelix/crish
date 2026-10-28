@@ -114,10 +114,50 @@ describe('TrashSection 数据源渲染（trash_list 接线）', () => {
     mockList.mockResolvedValue({ entries: [], trashRoot: '' });
     renderSection();
 
-    expect(
-      await screen.findByText('回收站为空（误删文件可在此恢复）')
-    ).toBeInTheDocument();
+    expect(await screen.findByText('回收站为空')).toBeInTheDocument();
     expect(screen.queryByTestId('trash-entry')).not.toBeInTheDocument();
+  });
+
+  it('工作区授权失败时显示错误，不显示回收站为空', async () => {
+    mockList.mockRejectedValueOnce(new Error('当前工作区授权未完成，请重试。'));
+    const { toast } = renderSection();
+
+    expect(
+      await screen.findByText('读取回收站失败：当前工作区授权未完成，请重试。')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('回收站为空')).not.toBeInTheDocument();
+    expect(toast).toHaveBeenCalledWith(
+      '读取回收站失败：当前工作区授权未完成，请重试。',
+      undefined,
+      { type: 'error' }
+    );
+  });
+
+  it('刷新失败时保留已加载条目并通知读取错误', async () => {
+    mockList
+      .mockResolvedValueOnce({
+        entries: [fileEntry],
+        trashRoot: 'C:/trash',
+      })
+      .mockRejectedValueOnce(new Error('磁盘读取失败'));
+    mockRestore.mockResolvedValue({
+      ok: true,
+      data: { ok: true, originalPath: fileEntry.originalPath },
+    });
+    const { toast } = renderSection();
+    const row = await screen.findByTestId('trash-entry');
+    fireEvent.click(withinRow(row, '恢复 C:/repo/src/a.txt'));
+
+    expect(
+      await screen.findByText('回收站刷新失败：磁盘读取失败')
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('trash-entry')).toBeInTheDocument();
+    expect(screen.queryByText('回收站为空')).not.toBeInTheDocument();
+    expect(toast).toHaveBeenCalledWith(
+      '读取回收站失败：磁盘读取失败',
+      undefined,
+      { type: 'error' }
+    );
   });
 });
 

@@ -9,16 +9,9 @@ import {
   type CSSProperties,
   type ReactElement,
 } from 'react';
-import { projectMessage, projectPlanRoot } from '@crish/conversation-flow';
+import { projectMessage } from '@crish/conversation-flow';
 import type { ChatMessageListProps } from '../../components/chat-message-list/chatMessageListProps';
-import {
-  selectPermissionMode,
-  selectPlanApproved,
-  selectPlanModeEnabled,
-} from '../../store/settingsUiStore';
-import { usePermissionStore } from '../../store/permissionStore';
 import type { SessionMessage } from '../../store/types';
-import { PlanRoot } from './PlanRoot';
 import { createNarrativeRenderers } from './narrativeRenderers';
 
 const ChatMessageList = lazy(async () => {
@@ -48,22 +41,13 @@ export function ConversationFlowHost(
     () => createNarrativeRenderers(list),
     [list]
   );
-  const permissionMode = usePermissionStore(selectPermissionMode);
-  const planModeEnabled = usePermissionStore(selectPlanModeEnabled);
-  const planApproved = usePermissionStore(selectPlanApproved);
-  const planNode = useMemo(
-    () => projectPlanRoot({ permissionMode, planModeEnabled, planApproved }),
-    [permissionMode, planModeEnabled, planApproved]
-  );
 
   return (
     <div
       data-conversation-flow="on"
       data-flow-node-count={nodeCount}
-      data-flow-plan-mounted={planNode ? 'true' : 'false'}
       style={HOST_STYLE}
     >
-      {planNode ? <PlanRoot plan={planNode} /> : null}
       <Suspense fallback={null}>
         <ChatMessageList
           {...props}

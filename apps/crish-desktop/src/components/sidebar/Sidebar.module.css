@@ -6,7 +6,7 @@
   flex-direction: column;
   justify-content: space-between;
   flex-shrink: 0;
-  transition: width 200ms var(--ease-decelerate);
+  transition: width var(--duration-normal, 200ms) var(--ease-decelerate);
   z-index: var(--z-sidebar);
   position: relative;
   overflow: hidden;
@@ -36,7 +36,7 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 52px;
+  width: var(--edge-reserve-left, 52px);
   height: var(--header-height, 36px);
   min-height: var(--header-height, 36px);
   display: flex;
@@ -44,7 +44,7 @@
   padding: 0 10px;
   box-sizing: border-box;
   flex-shrink: 0;
-  z-index: calc(var(--z-sidebar, 100) + 1);
+  z-index: calc(var(--z-sidebar, 100) + 10);
   pointer-events: auto;
   -webkit-app-region: no-drag;
   app-region: no-drag;
@@ -74,63 +74,181 @@
   app-region: no-drag;
 }
 
+/* 展开态侧栏内部开关作为几何占位符，由外层常驻 SidebarToggle 承载单一真理交互与零闪烁生命周期 */
+:global(.app-container) .sidebarHeaderLeft :global(.sidebar-toggle-btn) {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
 .toggleIconMorph {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
+  overflow: visible;
+  pointer-events: none;
+  cursor: pointer;
 }
 
 .toggleBrandIcon {
-  display: none;
+  position: absolute;
+  inset: 0;
+  width: 16px;
+  height: 16px;
+  aspect-ratio: 1 / 1;
+  display: block;
+  overflow: visible;
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  pointer-events: none;
+  will-change: transform, opacity;
 }
 
 .toggleActionIcon {
+  position: absolute;
+  inset: 0;
+  width: 16px;
+  height: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  opacity: 1;
-  color: var(--text-secondary);
-  transition: color var(--transition-micro);
+  opacity: 0;
+  transform: translate3d(2px, 0, 0) scale(0.72);
+  pointer-events: none;
+  color: var(--text-primary);
+  will-change: transform, opacity;
+}
+
+/* 动效播放：软件图标转侧栏图标，紧凑停留后利索转回软件图标（750ms） */
+@keyframes morphBrandToSidebarAndBack {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  16%,
+  64% {
+    opacity: 0;
+    transform: translate3d(-2px, 0, 0) scale(0.72);
+  }
+  84%,
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes morphSidebarFromBrandAndBack {
+  0% {
+    opacity: 0;
+    transform: translate3d(2px, 0, 0) scale(0.72);
+  }
+  16%,
+  64% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  84%,
+  100% {
+    opacity: 0;
+    transform: translate3d(2px, 0, 0) scale(0.72);
+  }
+}
+
+.toggleIconMorph[data-morphing='true'] .toggleBrandIcon {
+  animation: morphBrandToSidebarAndBack var(--duration-spring-morph, 750ms)
+    var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) forwards;
+}
+
+.toggleIconMorph[data-morphing='true'] .toggleActionIcon {
+  animation: morphSidebarFromBrandAndBack var(--duration-spring-morph, 750ms)
+    var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) forwards;
 }
 
 :global(.sidebar-toggle-btn) {
-  border-radius: var(--radius-md, 8px);
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  margin-left: 2px;
+  padding: 0;
+  border-radius: var(--radius-control, 8px);
   background-color: transparent;
   border: none;
   box-shadow: none;
   color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
   transition:
     background-color var(--transition-micro),
     color var(--transition-micro);
 }
 
+:global(.sidebar-toggle-btn) *,
+:global(.sidebar-toggle-btn) svg,
+:global(.sidebar-toggle-btn) path,
+:global(.sidebar-toggle-btn) ellipse,
+:global(.sidebar-toggle-btn) span {
+  cursor: pointer;
+  pointer-events: none;
+}
+
 /* 悬停与键盘聚焦保持中性浅灰微光，消除深色块与生硬投影 */
 :global(.sidebar-toggle-btn):hover,
-:global(.sidebar-toggle-btn):focus-visible {
-  background-color: var(--sidebar-hover, var(--tint-hover));
+:global(.sidebar-toggle-btn):focus-visible,
+:global(.sidebar-toggle-btn)[data-hovered='true'] {
+  background-color: var(--state-hover);
   color: var(--text-primary);
   border: none;
   box-shadow: none;
 }
 
+/* 鼠标 hover / active / focus 按钮本身时：始终恒定保持侧边栏图标形态，杜绝点击切换时闪烁回到品牌图标 */
+:global(.sidebar-toggle-btn):hover .toggleBrandIcon,
+:global(.sidebar-toggle-btn):active .toggleBrandIcon,
+:global(.sidebar-toggle-btn):focus .toggleBrandIcon,
+:global(.sidebar-toggle-btn):focus-visible .toggleBrandIcon,
+:global(.sidebar-toggle-btn)[data-hovered='true'] .toggleBrandIcon {
+  opacity: 0;
+  transform: translate3d(-2px, 0, 0) scale(0.72);
+  animation: none;
+  transition: none;
+}
+
 :global(.sidebar-toggle-btn):hover .toggleActionIcon,
-:global(.sidebar-toggle-btn):focus-visible .toggleActionIcon {
+:global(.sidebar-toggle-btn):active .toggleActionIcon,
+:global(.sidebar-toggle-btn):focus .toggleActionIcon,
+:global(.sidebar-toggle-btn):focus-visible .toggleActionIcon,
+:global(.sidebar-toggle-btn)[data-hovered='true'] .toggleActionIcon {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  animation: none;
   color: var(--text-primary);
+  transition: none;
 }
 
 :global(.sidebar-toggle-btn):active {
-  background-color: var(--tint-active);
+  background-color: var(--state-active);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .sidebar {
     transition: none;
+  }
+
+  .toggleIconMorph[data-morphing='true'] .toggleBrandIcon,
+  .toggleIconMorph[data-morphing='true'] .toggleActionIcon {
+    animation: none;
   }
 }
 
@@ -290,22 +408,22 @@
   gap: var(--space-1_5);
 }
 
-/* 底部功能区圆角统合：右列设置与更新按钮统一为 16px 大圆角 / 饱满胶囊，与左列胶囊完全呼应 */
+/* 底部功能区圆角统合：似圆非圆的大圆角 (10px squircle)，彻底消除 16px 胶囊全圆角感 */
 .footerGearCol :global(.icon-button),
 .footerGearCol button {
-  --btn-radius: var(--radius-xl, 16px);
-  border-radius: var(--radius-xl, 16px);
+  --btn-radius: 10px;
+  border-radius: 10px;
 }
 
 .footerGearCol :global(.icon-button):hover,
 .footerGearCol button:hover {
-  background-color: var(--sidebar-hover, var(--tint-hover));
+  background-color: transparent;
   color: var(--text-primary);
 }
 
 .footerGearCol :global(.icon-button):active,
 .footerGearCol button:active {
-  background-color: var(--tint-active);
+  background-color: transparent;
 }
 
 .userProfileCard {
@@ -314,7 +432,7 @@
   align-items: center;
   gap: var(--space-2);
   padding: 3px 8px;
-  border-radius: var(--radius-xl, 16px);
+  border-radius: 10px;
   border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
@@ -328,13 +446,13 @@
 }
 
 .userProfileCard:hover {
-  background: var(--sidebar-hover, var(--tint-hover));
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
 .userProfileCard:active,
 .userProfileCard.isOpen {
-  background: var(--tint-active);
+  background: var(--state-active);
   color: var(--text-primary);
 }
 
@@ -429,8 +547,8 @@
 .overlayBackdrop {
   position: fixed;
   inset: 0;
-  /* S6     token --tint-overlay 25% text-primary         */
-  background: var(--tint-overlay);
+  /* S6     token --state-overlay 25% text-primary         */
+  background: var(--state-overlay);
   z-index: calc(var(--z-sidebar, 100) - 1);
 }
 
@@ -480,12 +598,18 @@
   justify-content: center;
 }
 
-/* 折叠态 32x32px 图标卡片全轴线统一为 16px 正圆形态 */
+/* 折叠态 32x32px 图标卡片统一为 10px 似圆非圆大圆角形态 */
 .iconCollapse .footerGearCol :global(.icon-button),
-.iconCollapse .footerGearCol button,
+.iconCollapse .footerGearCol button {
+  --btn-radius: 10px;
+  border-radius: 10px;
+}
+
 .iconCollapse :global(.sidebar-toggle-btn) {
-  --btn-radius: var(--radius-xl, 16px);
-  border-radius: var(--radius-xl, 16px);
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-radius: var(--radius-control, 8px);
 }
 
 .iconCollapse .userProfileCard {
@@ -493,7 +617,7 @@
   padding: 0;
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-xl, 16px);
+  border-radius: 10px;
 }
 
 .iconCollapse .userTextStack {

@@ -1,12 +1,12 @@
 .contextMenu {
   min-width: 160px;
   max-width: min(240px, calc(100vw - 16px));
-  padding: var(--space-1_5);
+  padding: 6px;
   gap: var(--space-0_5);
-  border-radius: var(--sep-radius-outer, 14px);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-lg);
+  border-radius: var(--radius-menu-outer, 18px);
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-panel, var(--border-color));
+  box-shadow: var(--shadow-popover, var(--shadow-lg));
   display: none;
   flex-direction: column;
   box-sizing: border-box;
@@ -52,11 +52,11 @@
   border: none;
   background: transparent;
   min-height: 32px;
-  padding: 6px 10px;
+  padding: 5px 10px;
   gap: var(--space-2);
   font-size: var(--font-size-sm);
   line-height: 1.35;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-menu-inner, 12px);
   color: var(--text-secondary);
   transition: background var(--transition-fast);
   cursor: pointer;
@@ -65,7 +65,7 @@
 
 .contextMenuItem:hover,
 .contextMenuItem:focus-visible {
-  background-color: var(--sidebar-hover);
+  background-color: var(--state-hover);
   color: var(--text-primary);
   outline: none;
 }
@@ -96,10 +96,10 @@
 .sortFilterMenu {
   min-width: 212px;
   padding: 6px;
-  background: var(--sep-bg-panel-solid, var(--bg-elevated));
-  border: 1px solid var(--border-color);
-  border-radius: var(--sep-radius-outer, 14px);
-  box-shadow: var(--sep-shadow, var(--shadow-lg));
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-panel, var(--border-color));
+  border-radius: var(--radius-menu-outer, 18px);
+  box-shadow: var(--shadow-popover, var(--shadow-lg));
   display: none;
   flex-direction: column;
   gap: 2px;
@@ -117,15 +117,6 @@
   overflow-y: visible;
 }
 
-.sortFilterMenuTitle {
-  padding: 4px 8px 4px;
-  font-size: var(--font-size-xxs);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-tertiary);
-  letter-spacing: var(--letter-spacing-wide);
-  user-select: none;
-}
-
 .sortFilterRow {
   position: relative;
   display: flex;
@@ -134,7 +125,7 @@
   gap: var(--space-2);
   min-height: 28px;
   padding: 4px 8px;
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-menu-inner, 12px);
   cursor: pointer;
   color: var(--text-primary);
   font-size: var(--font-size-sm);
@@ -153,7 +144,7 @@
 .sortFilterRow:hover,
 .sortFilterRow:focus-visible,
 .sortFilterRow.isOpen {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .sortFilterRowLabel {
@@ -181,14 +172,14 @@
 
 .sortFilterFlyout {
   position: absolute;
-  left: calc(100% + 10px);
+  left: calc(100% - 5px);
   top: -6px;
   min-width: 152px;
   padding: 6px;
-  background: var(--sep-bg-panel-solid, var(--bg-elevated));
-  border: 1px solid var(--border-color);
-  border-radius: var(--sep-radius-outer, 14px);
-  box-shadow: var(--sep-shadow, var(--shadow-lg));
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-panel, var(--border-color));
+  border-radius: var(--radius-menu-outer, 18px);
+  box-shadow: var(--shadow-popover, var(--shadow-lg));
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -199,26 +190,10 @@
   -webkit-app-region: no-drag;
 }
 
-/* 透明悬停桥接区：消除父行与右侧/左侧级联面板间的指针间隙 */
-.sortFilterFlyout::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -14px;
-  width: 14px;
-  background: transparent;
-}
-
 .sortFilterFlyout.flipLeft {
   left: auto;
-  right: calc(100% + 10px);
+  right: calc(100% - 5px);
   transform-origin: top right;
-}
-
-.sortFilterFlyout.flipLeft::before {
-  left: auto;
-  right: -14px;
 }
 
 .sortFilterOption {
@@ -233,7 +208,7 @@
   padding: 4px 8px;
   border: none;
   box-shadow: none;
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-menu-inner, 12px);
   background: transparent;
   color: var(--text-primary);
   font-size: var(--font-size-sm);
@@ -250,7 +225,7 @@
 
 .sortFilterOption:hover,
 .sortFilterOption:focus-visible {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .sortFilterOption.isOn {

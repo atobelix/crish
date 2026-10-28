@@ -3,7 +3,7 @@
  * 浮层只挂本组件树（对话叶内），不挂 document.body。
  */
 import type { ReactElement } from 'react';
-import { Button } from '../../components/ui';
+import { Button } from '@/components/ui';
 import { StreamingMarkdownView } from '../../components/chat-message-row/StreamingMarkdownView';
 import styles from './narrative.module.css';
 

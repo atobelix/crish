@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useDeferredValue, useMemo, useState } from 'react';
 import styles from './DiffCard.module.css';
-import { Button, Input, Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '@/components/ui';
 import { useSessionMessages } from '../../store/storeAccess';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
 import type { FileDiff } from '../../store/types';
@@ -26,7 +26,7 @@ import { formatGitPatch } from './GitPatchFormatter';
 import { getWorkspacePath } from '../../api/projectStore';
 
 import { useToast } from '../../services/toast/ToastContext';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface DiffCardProps {
   className?: string;
@@ -349,10 +349,6 @@ const DiffCardInner: React.FC<DiffCardProps> = ({
               aria-hidden
             />
             <div>暂无变更</div>
-            <div className={styles.emptySub}>
-              上方切换「AI
-              改动」查看本对话回合；或切「Git」加载工作区未提交变更。
-            </div>
             <div className={styles.emptyActions}>
               <Button
                 type="button"

@@ -6,7 +6,7 @@ import React, {
   useState,
 } from 'react';
 import styles from './FilesCard.module.css';
-import { Button, Input, Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '@/components/ui';
 
 import {
   detectFileKind,
@@ -18,7 +18,7 @@ import {
 } from '../../api/workspaceFsApi';
 import { fileExtColor } from '../../api/codeHighlight';
 import type { ViewMode } from './hooks/useFilePreview';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useLeafScope } from '../../contexts/LeafScopeContext';
 
 function joinLocal(base: string, name: string): string {

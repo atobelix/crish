@@ -10,7 +10,11 @@
 import { isPluginEnabled } from '../../components/settings-extensions/pluginRegistryAdapter';
 import { getWorkspacePath } from '../workspaceFsApi';
 import { getImportAutoSyncEnabled } from './importRootSettings';
-import { scanClaudeCodeSessions, scanCodexSessions } from './scan';
+import {
+  combineExternalSessionScans,
+  scanClaudeCodeSessions,
+  scanCodexSessions,
+} from './scan';
 import {
   importDetectedSessions,
   collectExistingImportKeys,
@@ -20,7 +24,11 @@ import {
   getDeletedExternalSessionKeys,
   isExternalImportBlocked,
 } from './externalSessionTombstone';
-import type { DetectedExternalSession, MappedImportSession } from './types';
+import type {
+  DetectedExternalSession,
+  ExternalSessionScanIssue,
+  MappedImportSession,
+} from './types';
 import { mapExternalSession } from './map';
 import { getSessionStoreState } from '../../store';
 
@@ -29,6 +37,19 @@ let isAutoSyncing = false;
 export interface AutoSyncOptions {
   silent?: boolean;
   onSynced?: (count: number) => void;
+  onScanIssues?: (issues: ExternalSessionScanIssue[]) => void;
+}
+
+function reportScanIssues(
+  issues: ExternalSessionScanIssue[],
+  handler?: (issues: ExternalSessionScanIssue[]) => void
+): void {
+  if (issues.length === 0) return;
+  if (handler) {
+    handler(issues);
+    return;
+  }
+  console.warn('External session scan was incomplete:', issues);
 }
 
 /**
@@ -58,11 +79,13 @@ export async function checkAndAutoSyncExternalSessions(
     const normRoot = workspaceRoot.replace(/\\/g, '/').toLowerCase();
 
     // 3. 扫描外部终端会话
-    const [claudeSessions, codexSessions] = await Promise.all([
-      scanClaudeCodeSessions().catch(() => [] as DetectedExternalSession[]),
-      scanCodexSessions().catch(() => [] as DetectedExternalSession[]),
+    const [claudeScan, codexScan] = await Promise.all([
+      scanClaudeCodeSessions(),
+      scanCodexSessions(),
     ]);
-    const all = [...claudeSessions, ...codexSessions];
+    const scanResult = combineExternalSessionScans([claudeScan, codexScan]);
+    reportScanIssues(scanResult.issues, options?.onScanIssues);
+    const all = scanResult.sessions;
 
     // 4. 匹配当前工作区 (cwd)
     const matching = all.filter((s) => {
@@ -97,7 +120,8 @@ export async function checkAndAutoSyncExternalSessions(
       options?.onSynced?.(res.imported);
     }
     return res.imported;
-  } catch {
+  } catch (error) {
+    console.error('External session auto-sync failed:', error);
     return 0;
   } finally {
     isAutoSyncing = false;
@@ -126,11 +150,13 @@ export async function detectLatestExternalLongSession(
 
   try {
     // 2. 扫描外部终端会话
-    const [claudeSessions, codexSessions] = await Promise.all([
-      scanClaudeCodeSessions().catch(() => [] as DetectedExternalSession[]),
-      scanCodexSessions().catch(() => [] as DetectedExternalSession[]),
+    const [claudeScan, codexScan] = await Promise.all([
+      scanClaudeCodeSessions(),
+      scanCodexSessions(),
     ]);
-    const all = [...claudeSessions, ...codexSessions];
+    const scanResult = combineExternalSessionScans([claudeScan, codexScan]);
+    reportScanIssues(scanResult.issues);
+    const all = scanResult.sessions;
     if (all.length === 0) return null;
 
     // 3. 过滤已被用户删除的会话（防墓碑）与已导入会话
@@ -193,7 +219,8 @@ export async function detectLatestExternalLongSession(
     }
 
     return null;
-  } catch {
+  } catch (error) {
+    console.error('External long-session detection failed:', error);
     return null;
   }
 }

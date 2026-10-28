@@ -54,7 +54,9 @@ describe('conversation-flow extension import 边界', () => {
       /registerSingle\s*\(\s*['"]workspace\.chat\.composerAbove['"]/
     );
     expect(src).toMatch(/id:\s*['"]conversation-flow['"]/);
-    expect(src).toMatch(/from\s+['"]\.\/host['"]|import\s*\(\s*['"]\.\/host['"]/);
+    expect(src).toMatch(
+      /from\s+['"]\.\/host['"]|import\s*\(\s*['"]\.\/host['"]/
+    );
     expect(src).toMatch(
       /from\s+['"]\.\/PermissionBar['"]|import\s*\(\s*['"]\.\/PermissionBar['"]/
     );
@@ -114,14 +116,12 @@ describe('conversation-flow extension import 边界', () => {
     const src = readFileSync(join(DIR, 'host.tsx'), 'utf8');
     expect(src).toMatch(/from\s+['"]@crish\/conversation-flow['"]/);
     expect(src).toMatch(/\bprojectMessage\b/);
-    expect(src).toMatch(/\bprojectPlanRoot\b/);
-    expect(src).toMatch(/selectPlanModeEnabled/);
     expect(src).toMatch(/\bChatMessageList\b/);
     expect(src).toMatch(/data-conversation-flow=["']on["']/);
     expect(src).toMatch(/data-flow-node-count=/);
     expect(src).not.toMatch(/@crish\/conversation-flow\//);
     expect(src).not.toMatch(/\bPurpose\b|\bPermissionBar\b/);
-    expect(src).not.toMatch(/PlanGoalRibbons/);
+    expect(src).not.toMatch(/PlanGoalRibbons|PlanRoot|projectPlanRoot/);
   });
 
   it('host / activate / 包路径不出现 block-paper', () => {

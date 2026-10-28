@@ -84,11 +84,6 @@
   width: 100%;
 }
 
-.idleHint {
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
 .rightActions {
   display: flex;
   align-items: center;
@@ -229,11 +224,11 @@
 }
 
 .fileRow:hover {
-  background-color: var(--bg-hover);
+  background-color: var(--state-hover);
 }
 
 .fileRow:focus-within {
-  outline: 1px solid var(--tint-focus-ring);
+  outline: 1px solid var(--state-focus-ring);
   outline-offset: -1px;
 }
 
@@ -244,7 +239,7 @@
 }
 
 .fileRow.isActive:hover {
-  background-color: var(--bg-hover);
+  background-color: var(--state-hover);
 }
 
 /* --------------------------------------------------------------------------
@@ -843,7 +838,7 @@
 }
 
 .collapseBar:hover {
-  background-color: var(--bg-hover);
+  background-color: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -874,11 +869,11 @@
 }
 
 .commitTriggerBar:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .commitTriggerBar:focus-visible {
-  outline: 1px solid var(--tint-focus-ring);
+  outline: 1px solid var(--state-focus-ring);
   outline-offset: -1px;
 }
 
@@ -1058,7 +1053,7 @@
   --btn-shadow: none;
   color: var(--text-secondary);
   --btn-fg: var(--text-secondary);
-  --btn-hover-overlay: var(--tint-hover);
+  --btn-hover-overlay: var(--state-hover);
   cursor: pointer;
   transition:
     color var(--transition-fast, 120ms),
@@ -1067,7 +1062,7 @@
 
 .groupActionBtn:hover {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border: none;
 }
 
@@ -1081,18 +1076,6 @@
   width: 100%;
   padding: 0;
   gap: 0;
-}
-
-.emptyGroup {
-  font-family: var(--font-sans);
-  font-size: var(--font-size-xxs, 11px);
-  color: var(--text-tertiary);
-  padding: 8px 12px;
-  text-align: center;
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  user-select: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -1193,6 +1176,6 @@
 }
 
 .expandLineBtn:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }

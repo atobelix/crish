@@ -4,7 +4,7 @@ import { openSettings } from '../api/storeAccess';
 import { emitUiEvent } from '../api/uiEvents';
 import type { SettingsTabType } from '../store/types';
 import type { WizardStep } from '../components/firstRunWizardLib';
-import { useAnimatedPresence } from '../components/ui/Dialog/useAnimatedPresence';
+import { useAnimatedPresence } from '@/components/ui';
 
 /** 设置弹窗退场时长：与 Dialog 基座退场（--duration-exit 150ms）一致，动画播完才卸载 */
 const SETTINGS_EXIT_MS = 150;

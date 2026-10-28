@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './FilesCard.module.css';
-import { Button, Tooltip, Menu } from '../ui';
+import { Button, Tooltip, Menu } from '@/components/ui';
 
 import { revealInOs } from '../../api/workspaceFsApi';
 import {
@@ -10,7 +10,7 @@ import {
 } from '../../api/hostOpenersApi';
 import { logInternalError } from '../../api/userFacingErrors';
 import type { ViewMode } from './hooks/useFilePreview';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export function getOpenerIcon(op: HostOpener, size = 14) {
   if (op.iconDataUrl)
@@ -24,9 +24,12 @@ export function getOpenerIcon(op: HostOpener, size = 14) {
       />
     );
   return (
-    <AppIcon name="app-window" size={size}
+    <AppIcon
+      name="app-window"
+      size={size}
       aria-hidden
-      style={{ flexShrink: 0, color: 'var(--text-secondary)' }} />
+      style={{ flexShrink: 0, color: 'var(--text-secondary)' }}
+    />
   );
 }
 
@@ -200,7 +203,9 @@ export const FileActions = React.memo(function FileActions({
             </>
           ) : null}
           {isJson && !editing && onToggleFormatJson ? (
-            <Tooltip content={isFormatted ? '还原紧凑格式' : '格式化 JSON 排版'}>
+            <Tooltip
+              content={isFormatted ? '还原紧凑格式' : '格式化 JSON 排版'}
+            >
               <Button
                 type="button"
                 variant="secondary"
@@ -253,7 +258,9 @@ export const FileActions = React.memo(function FileActions({
                       size="sm"
                       className={styles.filesOpenChev}
                       aria-label={OPEN_WITH_LABEL}
-                      icon={<AppIcon name="chevron-down" size={14} aria-hidden />}
+                      icon={
+                        <AppIcon name="chevron-down" size={14} aria-hidden />
+                      }
                     />
                   </Tooltip>
                 }

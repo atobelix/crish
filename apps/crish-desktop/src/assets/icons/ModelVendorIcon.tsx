@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tooltip } from '../../components/ui';
+import { Tooltip } from '@/components/ui';
 import { resolveModelVendor } from './modelVendorCatalog';
 import { MODEL_VENDOR_ICONS } from './modelVendorIcons';
 import { ModelVendorFallback } from './ModelVendorFallback';

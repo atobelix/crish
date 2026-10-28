@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import styles from './overlay/FirstRunWizard.module.css';
-import { Button, Select, Input } from './ui';
+import { Button, Select, Input } from '@/components/ui';
 import { YAML_PROTOCOL_SELECT_OPTIONS } from './settings-models/catalogWriteGate';
 import { DEFAULT_WIZARD_PROTOCOL } from './firstRunWizardLib';
 

@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './FileAnnotationPopover.module.css';
-import { Button, Textarea, Tooltip } from '../ui';
+import { Button, Textarea, Tooltip } from '@/components/ui';
 import { addPendingFileAnnotation } from '../../api/workspaceFsApi';
 import { useSessionStore } from '../../store/storeAccess';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface FileAnnotationPopoverProps {
   filePath: string;
@@ -13,8 +13,8 @@ export interface FileAnnotationPopoverProps {
   onAnnotated?: () => void;
 }
 
-export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React.memo(
-  function FileAnnotationPopover({
+export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> =
+  React.memo(function FileAnnotationPopover({
     filePath,
     containerRef,
     targetSessionId,
@@ -25,9 +25,10 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [selText, setSelText] = useState('');
     const [commentDraft, setCommentDraft] = useState('');
-    const [selAnchor, setSelAnchor] = useState<{ top: number; left: number } | null>(
-      null
-    );
+    const [selAnchor, setSelAnchor] = useState<{
+      top: number;
+      left: number;
+    } | null>(null);
 
     const clearSelectionHighlight = useCallback(() => {
       if (typeof CSS !== 'undefined' && CSS.highlights) {
@@ -136,7 +137,10 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React
 
       const handleMouseDown = (e: MouseEvent) => {
         // 若点击在批注框内，不收起
-        if (popoverRef.current && popoverRef.current.contains(e.target as Node)) {
+        if (
+          popoverRef.current &&
+          popoverRef.current.contains(e.target as Node)
+        ) {
           return;
         }
         // 用户在编辑器中按下鼠标准备开始新拖选或取消选区，即刻收起浮层，保证拖选原生流畅
@@ -144,7 +148,10 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React
       };
 
       const handleMouseUp = (e: MouseEvent) => {
-        if (popoverRef.current && popoverRef.current.contains(e.target as Node)) {
+        if (
+          popoverRef.current &&
+          popoverRef.current.contains(e.target as Node)
+        ) {
           return;
         }
         updateAnchorFromSelection();
@@ -155,7 +162,10 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React
           handleClose();
           return;
         }
-        if (popoverRef.current && popoverRef.current.contains(e.target as Node)) {
+        if (
+          popoverRef.current &&
+          popoverRef.current.contains(e.target as Node)
+        ) {
           return;
         }
         updateAnchorFromSelection();
@@ -187,7 +197,9 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React
         passive: true,
       });
       return () => {
-        container.removeEventListener('scroll', handleScroll, { capture: true });
+        container.removeEventListener('scroll', handleScroll, {
+          capture: true,
+        });
       };
     }, [containerRef, selAnchor, updateAnchorFromSelection]);
 
@@ -196,7 +208,10 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React
       if (!selAnchor) return;
 
       const handleWindowMouseDown = (e: MouseEvent) => {
-        if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        if (
+          popoverRef.current &&
+          !popoverRef.current.contains(e.target as Node)
+        ) {
           handleClose();
         }
       };
@@ -211,7 +226,9 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React
       if (!filePath || !selText.trim() || !commentDraft.trim()) return;
 
       const activeSid =
-        targetSessionId || useSessionStore.getState().activeSessionId || undefined;
+        targetSessionId ||
+        useSessionStore.getState().activeSessionId ||
+        undefined;
 
       addPendingFileAnnotation(
         {
@@ -224,7 +241,14 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React
 
       handleClose();
       onAnnotated?.();
-    }, [filePath, selText, commentDraft, targetSessionId, onAnnotated, handleClose]);
+    }, [
+      filePath,
+      selText,
+      commentDraft,
+      targetSessionId,
+      onAnnotated,
+      handleClose,
+    ]);
 
     if (!selText || !selAnchor || disabled) {
       return null;
@@ -297,8 +321,6 @@ export const FileAnnotationPopover: React.FC<FileAnnotationPopoverProps> = React
         </div>
       </div>
     );
-  }
-);
+  });
 
 FileAnnotationPopover.displayName = 'FileAnnotationPopover';
-

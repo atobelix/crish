@@ -115,9 +115,11 @@ describe('S6 · 预览进叶源码钉（≠ 真壳到达绿）', () => {
     );
   });
 
-  it('file-viewer 打开器拒 note，URI 仍是 file-viewer:，不 persist', () => {
+  it('file-viewer 打开器拒 note，结构化 ToolTab（filePath/initialMode），不 persist', () => {
     const src = readUtf8(OPEN_TOOL);
-    expect(src).toMatch(/file-viewer:\$\{trimmed\}/);
+    expect(src).toMatch(/openToolInLeaf\([\s\S]*'file-viewer'/);
+    expect(src).toMatch(/filePath:\s*trimmed/);
+    expect(src).toMatch(/initialMode/);
     expect(src).toMatch(/\/\^\(note\|notebook\)\(:\|\$\)\/i/);
     expect(src).not.toMatch(
       /apply\+commit|applyAndCommit|persistDocument|note_document/

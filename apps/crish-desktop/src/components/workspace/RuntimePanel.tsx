@@ -23,7 +23,7 @@ import { TrashSection } from './TrashSection';
 import { FlowDagView } from './FlowDagView';
 import { useFlowDagVisible } from '../../hooks/useFlowDagVisible';
 import { connectionManager } from '../../services/ConnectionManager';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import {
   formatEngineStatusFull,
   formatEngineStatusShort,
@@ -157,9 +157,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = () => {
             </div>
             <div className={`${styles.statRow} ${styles.isTotal}`}>
               <span className={styles.statLabel}>费用</span>
-              <span className={styles.statValue}>
-                {data.estimated}
-              </span>
+              <span className={styles.statValue}>{data.estimated}</span>
             </div>
           </div>
         </div>
@@ -179,10 +177,7 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = () => {
         onFocusSession={data.focusSession}
       />
 
-      <BgTasksSection
-        bgTasks={ds.bgTasks}
-        countLabel={data.bgCountLabel}
-      />
+      <BgTasksSection bgTasks={ds.bgTasks} countLabel={data.bgCountLabel} />
 
       {/* L2：定时/Cron 数据面展示——timer-fired/timer-cancelled/cron-fired
           事件经 taskEventHandlers 摘要订阅（事件驱动更新，无事件空态） */}

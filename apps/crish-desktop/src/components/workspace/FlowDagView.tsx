@@ -29,7 +29,7 @@ import {
 import { invokeTyped } from '../../api/tauriInvoke';
 import { getActiveSessionId } from '../../api/storeAccess';
 import { useScopedSessionId } from '../../contexts/LeafScopeContext';
-import { Tooltip } from '../ui';
+import { Tooltip } from '@/components/ui';
 
 /** 快照轻量轮询间隔（≥2s；首查立即执行，此后按此周期刷新） */
 const FLOW_SNAPSHOT_POLL_MS = 3000;
@@ -169,10 +169,7 @@ export const FlowDagView: React.FC<FlowDagViewProps> = ({
         aria-label="编排图"
       >
         <div className={styles.emptyContent}>
-          <div className={styles.emptyTitle}>暂无编排图数据</div>
-          <div className={styles.emptyDesc}>
-            当前会话尚未生成子任务依赖拓扑。
-          </div>
+          <div className={styles.emptyTitle}>暂无编排图</div>
         </div>
       </div>
     );

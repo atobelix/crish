@@ -1,12 +1,12 @@
 import React, { useMemo, useCallback } from 'react';
 import styles from './DiffCard.module.css';
-import { Button, IconButton, Tooltip } from '../ui';
+import { Button, IconButton, Tooltip } from '@/components/ui';
 import type { FileDiff } from '../../store/types';
 import type { DiffSourceMode } from '../../api/diffPanelHelpers';
 import type { CompareMode } from './diffCardTypes';
 import { formatGitPatch } from './GitPatchFormatter';
 import { useToast } from '../../services/toast/ToastContext';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 /** 整行点击切换展开时要排除的功能区（按钮、链接、表单控件、菜单项、显式标记的区域） */
 export const ROW_TOGGLE_EXCLUDE =
@@ -91,7 +91,11 @@ function resolveStatusBadge(f: FileDiff): {
 } {
   const rawStatus = (f as { status?: string }).status;
   const rawNewPath = (f as { newPath?: string }).newPath;
-  const gitStatus = (f.gitStatus || (f.untracked ? 'untracked' : undefined) || '').toUpperCase();
+  const gitStatus = (
+    f.gitStatus ||
+    (f.untracked ? 'untracked' : undefined) ||
+    ''
+  ).toUpperCase();
 
   if (
     rawStatus === 'added' ||
@@ -113,7 +117,9 @@ function resolveStatusBadge(f: FileDiff): {
   if (
     rawStatus === 'renamed' ||
     gitStatus === 'R' ||
-    (Boolean(f.oldPath) && Boolean(rawNewPath || f.filePath) && f.oldPath !== (rawNewPath || f.filePath))
+    (Boolean(f.oldPath) &&
+      Boolean(rawNewPath || f.filePath) &&
+      f.oldPath !== (rawNewPath || f.filePath))
   ) {
     return { char: 'R', key: 'ren', tooltip: '重命名文件' };
   }
@@ -155,7 +161,11 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
       const targetDiff = getFileDiffData ? (getFileDiffData(f) ?? f) : f;
       const patch = formatGitPatch(targetDiff);
       const { name } = splitFilePath(f.filePath);
-      if (!patch || typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+      if (
+        !patch ||
+        typeof navigator === 'undefined' ||
+        !navigator.clipboard?.writeText
+      ) {
         showToast(`复制失败：暂无 ${name} 的差异内容`);
         return;
       }
@@ -229,13 +239,17 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
            * 子域 A：折叠展开控制与语义化状态徽章单槽位融合（原子 Tooltip 包裹）
            * 未 hover 显示字母，hover 显示折叠/展开 Chevron，字母无背景纯文字有色
            * ================================================================= */}
-          <Tooltip content={`${badge.tooltip} · ${active ? `折叠 ${name} 差异` : `展开 ${name} 差异`}`}>
+          <Tooltip
+            content={`${badge.tooltip} · ${active ? `折叠 ${name} 差异` : `展开 ${name} 差异`}`}
+          >
             <Button
               type="button"
               variant="ghost"
               className={styles.fileNodeToggle}
               onClick={() => onSetActiveDiffSource(active ? null : f)}
-              aria-label={active ? `折叠 ${name} 差异代码` : `展开 ${name} 差异代码`}
+              aria-label={
+                active ? `折叠 ${name} 差异代码` : `展开 ${name} 差异代码`
+              }
               aria-expanded={active}
             >
               <span
@@ -244,9 +258,12 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
               >
                 {badge.char}
               </span>
-              <AppIcon name="chevron-right" size={14}
+              <AppIcon
+                name="chevron-right"
+                size={14}
                 className={`${styles.chevronIcon} ${active ? styles.expanded : ''}`}
-                aria-hidden />
+                aria-hidden
+              />
             </Button>
           </Tooltip>
 
@@ -254,7 +271,9 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
            * 子域 B：独立超链接与路径分级 (点击在右侧打开独立预览 Tab，原子 Tooltip 包裹)
            * ================================================================= */}
           <div className={styles.pathWrap}>
-            <Tooltip content={`${f.filePath} · 单击展开/折叠，双击或 Ctrl/⌘+单击在独立标签页打开`}>
+            <Tooltip
+              content={`${f.filePath} · 单击展开/折叠，双击或 Ctrl/⌘+单击在独立标签页打开`}
+            >
               <Button
                 type="button"
                 variant="ghost"
@@ -280,9 +299,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
 
             {dir ? (
               <Tooltip content={`文件所在目录：${dir}（点击折叠/展开）`}>
-                <span className={styles.dirPath}>
-                  {dir}
-                </span>
+                <span className={styles.dirPath}>{dir}</span>
               </Tooltip>
             ) : null}
           </div>
@@ -290,16 +307,21 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
           {/* =================================================================
            * 子域 C：统计与操作共用槽 (数字加减与暂存撤销共用区域，消除右侧空洞)
            * ================================================================= */}
-          <div className={`${styles.statActionSlot} ${styles.statActionsGroup} ${styles.actionsContainer}`}>
+          <div
+            className={`${styles.statActionSlot} ${styles.statActionsGroup} ${styles.actionsContainer}`}
+          >
             {sourceMode === 'git' ? (
               <div
                 className={styles.rowActions}
                 onClick={(e) => e.stopPropagation()}
               >
                 {isStaging ? (
-                  <AppIcon name="loader" size={13}
+                  <AppIcon
+                    name="loader"
+                    size={13}
                     className={styles.spinner}
-                    aria-label="正在处理暂存操作" />
+                    aria-label="正在处理暂存操作"
+                  />
                 ) : f.staged ? (
                   <>
                     <IconButton
@@ -379,20 +401,14 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
 
         {/* 展开的代码比对视口（无缝垂直嵌合，零外框，零工具行） */}
         {active ? (
-          <div className={styles.diffPane}>
-            {renderInlineDiffContent(f)}
-          </div>
+          <div className={styles.diffPane}>{renderInlineDiffContent(f)}</div>
         ) : null}
       </div>
     );
   };
 
   return (
-    <div
-      className={styles.flatFileList}
-      role="list"
-      aria-label="变更文件列表"
-    >
+    <div className={styles.flatFileList} role="list" aria-label="变更文件列表">
       {sourceMode === 'git' ? (
         <>
           {/* 已暂存分组 */}
@@ -409,16 +425,20 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                   className={styles.groupActionBtn}
                   disabled={applyBusy}
                   onClick={onUnstageAll}
-                  icon={<AppIcon name="minus-circle" size={13} className={styles.btnIcon} />}
+                  icon={
+                    <AppIcon
+                      name="minus-circle"
+                      size={13}
+                      className={styles.btnIcon}
+                    />
+                  }
                 >
                   全部取消暂存
                 </Button>
               ) : null}
             </div>
 
-            {stagedFiles.length === 0 ? (
-              <div className={styles.emptyGroup}>无已暂存的文件</div>
-            ) : (
+            {stagedFiles.length > 0 && (
               <div className={styles.groupBody}>
                 {stagedFiles.map(renderFlatFileNode)}
               </div>
@@ -439,16 +459,20 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                   className={styles.groupActionBtn}
                   disabled={applyBusy}
                   onClick={onStageAll}
-                  icon={<AppIcon name="plus-circle" size={13} className={styles.btnIcon} />}
+                  icon={
+                    <AppIcon
+                      name="plus-circle"
+                      size={13}
+                      className={styles.btnIcon}
+                    />
+                  }
                 >
                   全部暂存
                 </Button>
               ) : null}
             </div>
 
-            {unstagedFiles.length === 0 ? (
-              <div className={styles.emptyGroup}>无未暂存的修改</div>
-            ) : (
+            {unstagedFiles.length > 0 && (
               <div className={styles.groupBody}>
                 {unstagedFiles.map(renderFlatFileNode)}
               </div>

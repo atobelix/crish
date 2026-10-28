@@ -8,8 +8,20 @@ import * as tombstones from './externalSessionTombstone';
 import { useSessionStore } from '../../store/sessionStore';
 import type { DetectedExternalSession, MappedImportSession } from './types';
 
+const sourceScan = (
+  source: 'claude-code' | 'codex',
+  sessions: DetectedExternalSession[]
+) => ({ source, sessions, issues: [] });
+
 vi.mock('../../components/settings-extensions/pluginRegistryAdapter');
-vi.mock('./scan');
+vi.mock('./scan', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./scan')>();
+  return {
+    ...actual,
+    scanClaudeCodeSessions: vi.fn(),
+    scanCodexSessions: vi.fn(),
+  };
+});
 vi.mock('./map');
 vi.mock('../workspaceFsApi');
 
@@ -56,11 +68,12 @@ describe('detectLatestExternalLongSession', () => {
       },
     ];
 
-    vi.mocked(scan.scanClaudeCodeSessions).mockResolvedValue([
-      mockSessions[0],
-      mockSessions[1],
-    ]);
-    vi.mocked(scan.scanCodexSessions).mockResolvedValue([mockSessions[2]]);
+    vi.mocked(scan.scanClaudeCodeSessions).mockResolvedValue(
+      sourceScan('claude-code', [mockSessions[0], mockSessions[1]])
+    );
+    vi.mocked(scan.scanCodexSessions).mockResolvedValue(
+      sourceScan('codex', [mockSessions[2]])
+    );
 
     const mockMapped: MappedImportSession = {
       source: 'codex',
@@ -128,8 +141,12 @@ describe('detectLatestExternalLongSession', () => {
       },
     ];
 
-    vi.mocked(scan.scanClaudeCodeSessions).mockResolvedValue(mockSessions);
-    vi.mocked(scan.scanCodexSessions).mockResolvedValue([]);
+    vi.mocked(scan.scanClaudeCodeSessions).mockResolvedValue(
+      sourceScan('claude-code', mockSessions)
+    );
+    vi.mocked(scan.scanCodexSessions).mockResolvedValue(
+      sourceScan('codex', [])
+    );
     vi.mocked(map.mapExternalSession).mockResolvedValue({
       source: 'claude-code',
       sourceId: 'valid-long-session',
@@ -164,8 +181,12 @@ describe('detectLatestExternalLongSession', () => {
       },
     ];
 
-    vi.mocked(scan.scanClaudeCodeSessions).mockResolvedValue(mockSessions);
-    vi.mocked(scan.scanCodexSessions).mockResolvedValue([]);
+    vi.mocked(scan.scanClaudeCodeSessions).mockResolvedValue(
+      sourceScan('claude-code', mockSessions)
+    );
+    vi.mocked(scan.scanCodexSessions).mockResolvedValue(
+      sourceScan('codex', [])
+    );
 
     const result = await detectLatestExternalLongSession(8);
     expect(result).toBeNull();

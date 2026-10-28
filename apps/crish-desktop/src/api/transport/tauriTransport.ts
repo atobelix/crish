@@ -22,8 +22,18 @@
  * 不依赖 WebSocket：无心跳、无重连（进程内核心，断连即应用退出）。
  */
 
-import { invokeTyped, type InvokeTypedResult } from '../tauriInvoke';
+import {
+  invokeTyped,
+  type InvokeArgs,
+  type InvokeTypedResult,
+} from '../tauriInvoke';
 import { initCommandManifest } from './commandManifest';
+import {
+  fromInvokeTyped,
+  isCoreReady,
+  isTransientInvokeResult,
+  safeParseEventPayload,
+} from './tauriTransportHelpers';
 import {
   checkCommandMapConsistency,
   resolveTauriCommand,
@@ -58,28 +68,6 @@ export interface TauriTransportOptions {
   timeoutMs?: number;
 }
 
-/**
- * 核心初始化判定：engineReady / dbReady（B6.2「核心已初始化」布尔），
- * 兼容现有壳的 searchIndexReady 别名；任一为 true 即视为就绪。
- */
-function isCoreReady(status: unknown): boolean {
-  if (typeof status !== 'object' || status === null) return false;
-  const s = status as Record<string, unknown>;
-  for (const key of [
-    'engineReady',
-    'engine_ready',
-    'dbReady',
-    'db_ready',
-    'searchIndexReady',
-    'search_index_ready',
-  ] as const) {
-    if (typeof s[key] === 'boolean') {
-      if (s[key] === true) return true;
-    }
-  }
-  return false;
-}
-
 /** 惰性加载并缓存 Tauri listen（非 Tauri 环境返回 null，与 tauriInvoke.getTauriInvoke 同策略） */
 let cachedListen:
   | ((
@@ -89,24 +77,6 @@ let cachedListen:
   | null
   | undefined;
 let listenChecked = false;
-
-/**
- * 解析事件 payload 为对象（Rust emit 字符串 JSON；解析失败返回 null，
- * 由调用方静默丢弃——防御 Tauri 内部异常载荷）。
- */
-function safeParseEventPayload(
-  payload: string
-): Record<string, unknown> | null {
-  try {
-    const value: unknown = JSON.parse(payload);
-    if (typeof value === 'object' && value !== null) {
-      return value as Record<string, unknown>;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
 
 async function getTauriListen(): Promise<typeof cachedListen> {
   if (listenChecked) return cachedListen;
@@ -119,29 +89,6 @@ async function getTauriListen(): Promise<typeof cachedListen> {
     cachedListen = null;
   }
   return cachedListen;
-}
-
-/** 把 invokeTyped 三态结果转成 Promise<T>（missing / error 抛错，文案对齐严格 invoke 语义） */
-function fromInvokeTyped<T>(res: InvokeTypedResult<T>, cmd: string): T {
-  if (res.status === 'ok') return res.data;
-  if (res.status === 'missing') {
-    throw new Error(`Tauri command not available: ${cmd}`);
-  }
-  // PE-04 T04.4-1：invoke 失败统一落 LoggerService（关键路径接线）
-  logger.error('invoke failed', {
-    module: 'transport',
-    err: { message: `${res.kind}: ${res.message}`, code: res.kind, name: cmd },
-  });
-  throw new Error(`${res.kind}: ${res.message}`);
-}
-
-/**
- * 暂态失败判定（三态结果版，供 [TauriTransport.call] 内部使用）：
- * missing 已在清单校验层拦截；error 一律视为暂态，重试一次
- * （对齐 [TauriTransport.request] 对 CoreError 的重试语义）。
- */
-function isTransientInvokeResult(res: InvokeTypedResult<unknown>): boolean {
-  return res.status === 'error';
 }
 
 export class TauriTransport {
@@ -186,12 +133,13 @@ export class TauriTransport {
    * - 命令不在 manifest registered 面内 → `{ status: 'missing' }`（显式 missing，
    *   不 invoke；登记先行命令 registered=false 亦在此列，调用方显式降级）；
    *   引导探针白名单（BOOTSTRAP_PROBE_ALLOWLIST）无条件放行（CON-07 加固面）；
-   * - error 为暂态失败（核心启动竞态等）时自动重试一次后返回最终结果；
+   * - 仅 `restore in progress`（run 装配前的恢复门禁）自动重试一次；
+   *   其它结构化错误不重放，避免权限/参数错误或部分成功后的副作用重复执行；
    * - 调用方按三态处理（不再依赖旧宽松包装吞 null 的语义）。
    */
   async call<T = unknown>(
     cmd: string,
-    args?: Record<string, unknown>
+    args?: InvokeArgs
   ): Promise<InvokeTypedResult<T>> {
     const resolved = resolveTauriCommand(cmd);
     if (!resolved) return { status: 'missing' };
@@ -209,12 +157,13 @@ export class TauriTransport {
    * 无静默降级；幽灵调用点裁决归 T03.7）。
    *
    * C3.3 等价能力（断流恢复 → invoke 重试）：内部经 [TauriTransport.call]，
-   * 暂态失败自动重试一次；超时/命令缺失不重试（可能重复副作用或永不可用）。
+   * 恢复门禁拒绝时自动重试一次；其它错误与超时/命令缺失不重试
+   * （命令可能已部分产生副作用，或错误本身不可重试）。
    * IPC 进程内不中断，不做事件重放。
    */
   async request<T = unknown>(
     type: string,
-    payload?: Record<string, unknown>,
+    payload?: InvokeArgs,
     opts?: { timeoutMs?: number }
   ): Promise<T> {
     const cmd = resolveTauriCommand(type);
@@ -222,16 +171,21 @@ export class TauriTransport {
       throw new Error(`Tauri command not available: ${type}`);
     }
     const timeoutMs = opts?.timeoutMs ?? this.timeoutMs;
-    const shaped = shapeTauriPayload(type, payload);
+    const shaped =
+      typeof payload === 'function'
+        ? () => shapeTauriPayload(type, payload()) ?? {}
+        : shapeTauriPayload(type, payload);
     const res = await this.callWithTimeout<T>(cmd, shaped, timeoutMs);
     return fromInvokeTyped<T>(res, cmd);
   }
 
   /** fire-and-forget 发送：invoke 命令（职责 6）；失败上抛（与旧 WS send 抛「未连接」一致） */
-  async send(type: string, payload?: Record<string, unknown>): Promise<void> {
+  async send(type: string, payload?: InvokeArgs): Promise<void> {
     const res = await this.call<unknown>(
       type,
-      shapeTauriPayload(type, payload)
+      typeof payload === 'function'
+        ? () => shapeTauriPayload(type, payload()) ?? {}
+        : shapeTauriPayload(type, payload)
     );
     if (res.status === 'ok') return;
     fromInvokeTyped(res, type);
@@ -344,10 +298,7 @@ export class TauriTransport {
           return;
         }
         // 短退避自愈：1.5× 增长、50ms 封顶（ACT-501，废除 250ms 盲等）
-        currentBackoff = Math.min(
-          currentBackoff * 1.5,
-          MAX_PROBE_BACKOFF_MS
-        );
+        currentBackoff = Math.min(currentBackoff * 1.5, MAX_PROBE_BACKOFF_MS);
         scheduleProbe();
       };
 
@@ -444,7 +395,7 @@ export class TauriTransport {
    */
   private callWithTimeout<T>(
     cmd: string,
-    payload: Record<string, unknown> | undefined,
+    payload: InvokeArgs | undefined,
     timeoutMs: number
   ): Promise<InvokeTypedResult<T>> {
     return new Promise<InvokeTypedResult<T>>((resolve, reject) => {
@@ -489,10 +440,7 @@ export class TauriTransport {
           if (!parsed) return;
           // Stage 5a ACT-501：engine-ready Native Push 0ms 命中握手
           //（同时仍透传给业务订阅者——事件载荷逐字透传不变）
-          if (
-            parsed.type === ENGINE_READY_EVENT_TYPE ||
-            isCoreReady(parsed)
-          ) {
+          if (parsed.type === ENGINE_READY_EVENT_TYPE || isCoreReady(parsed)) {
             this.markConnected();
           }
           for (const cb of this.messageListeners) {

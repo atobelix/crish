@@ -6,11 +6,8 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join as joinPath } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import net from 'node:net';
-import { PREVIEW_BRIDGE_SCRIPT } from './dev-server/previewBridgeScript';
-import { isSameOriginRequest } from './dev-server/sameOriginRequest';
-import { Readable } from 'node:stream';
-import { createRequire } from 'node:module';
 import { transformSync } from 'esbuild';
+import { isSameOriginRequest } from './dev-server/sameOriginRequest';
 
 /**
  * CSP 单一真源（06-步骤3 / T-G 批次 7.2）：
@@ -338,8 +335,6 @@ function probePort(port: number, timeoutMs = 50): Promise<boolean> {
   });
 }
 
-/** 同源校验：见 ./dev-server/sameOriginRequest.ts（§4.1 正式策略，禁缺 Origin 即放行） */
-
 function crishActivePortsPlugin(): Plugin {
   return {
     name: 'crish-active-ports',
@@ -380,218 +375,6 @@ function crishActivePortsPlugin(): Plugin {
           res.setHeader('Content-Type', 'application/json');
           res.setHeader('Cache-Control', 'no-store');
           res.end(JSON.stringify(activePorts));
-        }
-      );
-    },
-  };
-}
-
-/**
- * 应用预览透明反向代理插件：
- * 解决外部网站（如 Google）嵌入 iframe 时的 X-Frame-Options、CSP frame-ancestors 与跨域阻断。
- * 拦截 GET /__crish_preview_proxy?url=<targetUrl>
- */
-function crishPreviewProxyPlugin(): Plugin {
-  let envDispatcher: unknown = undefined;
-  try {
-    const req = createRequire(import.meta.url);
-
-    const { EnvHttpProxyAgent, setGlobalDispatcher } = req('undici');
-    if (EnvHttpProxyAgent) {
-      envDispatcher = new EnvHttpProxyAgent();
-      if (setGlobalDispatcher) {
-        setGlobalDispatcher(envDispatcher);
-      }
-    }
-  } catch {
-    // 运行环境无 undici 或加载失败时平滑降级为默认出站
-  }
-
-  // 出站伪装 UA（audit-repair-202609 T18）：常量集中 + 注明约束——
-  // 部分站点拒绝无 UA/非常规 UA 的服务端请求，伪装值本身是反爬现实，
-  // 不随构建变化。
-  const PROXY_USER_AGENT =
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
-
-  return {
-    name: 'crish-preview-proxy',
-    configureServer(server) {
-      server.middlewares.use(
-        async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
-          const reqUrl = req.url || '';
-          if (!reqUrl.startsWith('/__crish_preview_proxy')) {
-            next();
-            return;
-          }
-
-          // T18：仅限同源（iframe 与宿主同源加载代理页，无需 CORS）；
-          // 跨源一律 403，杜绝 dev server 被本机任意网页当 SSRF 中继使用。
-          if (!isSameOriginRequest(req)) {
-            res.statusCode = 403;
-            res.end('Forbidden: cross-origin requests are not allowed');
-            return;
-          }
-
-          if (req.method !== 'GET' && req.method !== 'HEAD') {
-            res.statusCode = 405;
-            res.end('Method Not Allowed');
-            return;
-          }
-
-          // 宽松提取与解码 url 参数
-          let targetUrl = '';
-          try {
-            const parsed = new URL(reqUrl, 'http://localhost');
-            targetUrl = parsed.searchParams.get('url') || '';
-          } catch {
-            // fallback
-          }
-
-          if (!targetUrl) {
-            const match = reqUrl.match(/[?&]url=([^&]*)/);
-            if (match) {
-              try {
-                targetUrl = decodeURIComponent(match[1]);
-              } catch {
-                targetUrl = match[1];
-              }
-            }
-          }
-
-          targetUrl = targetUrl.trim();
-          if (targetUrl.includes('%')) {
-            try {
-              targetUrl = decodeURI(targetUrl);
-            } catch {
-              // 容错保留
-            }
-          }
-
-          if (!/^https?:\/\//i.test(targetUrl)) {
-            res.statusCode = 400;
-            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-            res.end('url parameter must be a valid http or https URL');
-            return;
-          }
-
-          try {
-            const fetchHeaders: Record<string, string> = {
-              'User-Agent': PROXY_USER_AGENT,
-              Accept:
-                'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-              'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
-            };
-
-            // dispatcher 为 undici 专有属性（Node fetch 运行时支持，TS lib
-            // 类型不识别）——envDispatcher 未知类型经窄化断言传入
-            const init = {
-              method: req.method,
-              headers: fetchHeaders,
-              redirect: 'follow',
-              ...(envDispatcher ? { dispatcher: envDispatcher } : {}),
-            } as RequestInit;
-
-            const upstream = await fetch(targetUrl, init);
-
-            // 清洗阻断头（T18：追加 set-cookie——目标站 cookie 不得写入
-            // 应用 origin 的 cookie jar）：剔除 XFO / CSP / 长度与压缩头
-            //（Node fetch 会自动解压）
-            for (const [key, value] of upstream.headers.entries()) {
-              const lower = key.toLowerCase();
-              if (
-                lower === 'x-frame-options' ||
-                lower === 'content-security-policy' ||
-                lower === 'content-security-policy-report-only' ||
-                lower === 'frame-options' ||
-                lower === 'set-cookie' ||
-                lower === 'content-encoding' ||
-                lower === 'content-length' ||
-                lower === 'transfer-encoding' ||
-                lower === 'connection' ||
-                lower === 'keep-alive'
-              ) {
-                continue;
-              }
-              res.setHeader(key, value);
-            }
-
-            res.statusCode = upstream.status;
-
-            const contentType = upstream.headers.get('content-type') || '';
-            const isHtml = contentType.toLowerCase().includes('text/html');
-
-            if (isHtml) {
-              const finalUrl = upstream.url || targetUrl;
-              const rawHtml = await upstream.text();
-              const baseTag = `<base href="${finalUrl.replace(/"/g, '&quot;')}">`;
-              const bridgeScript = PREVIEW_BRIDGE_SCRIPT;
-              const injection = `${baseTag}\n${bridgeScript}`;
-
-              let injectedHtml: string;
-              const lowerHtml = rawHtml.toLowerCase();
-              const headIdx = lowerHtml.indexOf('<head');
-              if (headIdx !== -1) {
-                const headClose = lowerHtml.indexOf('>', headIdx);
-                if (headClose !== -1) {
-                  injectedHtml =
-                    rawHtml.slice(0, headClose + 1) +
-                    '\n' +
-                    injection +
-                    rawHtml.slice(headClose + 1);
-                } else {
-                  injectedHtml = `<head>${injection}</head>\n${rawHtml}`;
-                }
-              } else {
-                const htmlIdx = lowerHtml.indexOf('<html');
-                if (htmlIdx !== -1) {
-                  const htmlClose = lowerHtml.indexOf('>', htmlIdx);
-                  if (htmlClose !== -1) {
-                    injectedHtml =
-                      rawHtml.slice(0, htmlClose + 1) +
-                      '\n<head>' +
-                      injection +
-                      '</head>' +
-                      rawHtml.slice(htmlClose + 1);
-                  } else {
-                    injectedHtml = `<head>${injection}</head>\n${rawHtml}`;
-                  }
-                } else {
-                  injectedHtml = `<head>${injection}</head>\n${rawHtml}`;
-                }
-              }
-
-              res.setHeader('Content-Type', 'text/html; charset=utf-8');
-              res.end(injectedHtml);
-            } else {
-              if (upstream.body) {
-                const stream = Readable.fromWeb(
-                  upstream.body as unknown as Parameters<
-                    typeof Readable.fromWeb
-                  >[0]
-                );
-                stream.on('error', () => {
-                  if (!res.headersSent) {
-                    res.statusCode = 502;
-                  }
-                  res.end();
-                });
-                stream.pipe(res);
-              } else {
-                res.end();
-              }
-            }
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            if (!res.headersSent) {
-              res.statusCode = 502;
-              res.setHeader('Content-Type', 'text/html; charset=utf-8');
-              res.end(
-                `<!DOCTYPE html><html><head><meta charset="utf-8"><title>代理访问异常</title></head><body style="font-family:sans-serif;padding:2rem;color:#444;"><h3>无法加载外部网站</h3><p>${msg}</p><p>URL: <code>${targetUrl}</code></p></body></html>`
-              );
-            } else {
-              res.end();
-            }
-          }
         }
       );
     },
@@ -678,7 +461,6 @@ export default defineConfig({
   plugins: [
     react(),
     crishHttpProxyPlugin(),
-    crishPreviewProxyPlugin(),
     crishActivePortsPlugin(),
     nodeBuiltinStubPlugin(),
     cspPlugin(),

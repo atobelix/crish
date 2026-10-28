@@ -13,7 +13,10 @@ import {
 } from '../layout-tree/types';
 import { viewRegistry } from '../../services/view-registry';
 import { collectLeaves, flattenTree } from '../layout-tree/operations';
-import { listChatLeaves, listToolLeaves } from '../layout-tree/conversationUnit';
+import {
+  listChatLeaves,
+  listToolLeaves,
+} from '../layout-tree/conversationUnit';
 import { useLayoutTreeStore } from '../layout-tree/layoutTreeStore';
 import { setPrimaryPanelChecker } from '../layout-tree';
 import {
@@ -23,6 +26,10 @@ import {
   ensureAdapterShape,
 } from './adapterShape';
 import { createDefaultDock } from './types';
+import {
+  getActiveDockTab,
+  collectSpatialLeaves,
+} from '../layout-tree/dockLayoutModel';
 import {
   findTabBySessionId,
   openToolInSession,
@@ -52,7 +59,11 @@ function makeChatLeaf(
   return createLeaf({ tabs: [tab], activeTabId: tabId });
 }
 
-function multiChatTree(): { tree: LayoutTree; chatA: LayoutLeaf; chatB: LayoutLeaf } {
+function multiChatTree(): {
+  tree: LayoutTree;
+  chatA: LayoutLeaf;
+  chatB: LayoutLeaf;
+} {
   const chatA = makeChatLeaf('sess-a', 'tab-a');
   const chatB = makeChatLeaf('sess-b', 'tab-b');
   return {
@@ -133,9 +144,11 @@ describe('updateLeafDock 不改变树拓扑', () => {
     expect(root.id).toBe(beforeId);
     expect(countChatLeaves(root)).toBe(2);
     expect(countToolLeaves(root)).toBe(0);
-    expect(listChatLeaves(root).map((c) => c.id).sort()).toEqual(
-      [chatA.id, chatB.id].sort()
-    );
+    expect(
+      listChatLeaves(root)
+        .map((c) => c.id)
+        .sort()
+    ).toEqual([chatA.id, chatB.id].sort());
   });
 });
 
@@ -159,7 +172,11 @@ describe('openTool 后仍单 chat 叶', () => {
 
     const hit = findTabBySessionId(state.tree.root, 'sess-a');
     expect(hit?.tab.dock.collapsed).toBe(false);
-    expect(hit?.tab.dock.activePanelId).toBe('terminal');
-    expect(hit?.tab.dock.openPanelIds).toContain('terminal');
+    expect(getActiveDockTab(hit!.tab.dock.tree)?.viewId).toBe('terminal');
+    expect(
+      collectSpatialLeaves(hit!.tab.dock.tree.root).flatMap((l) =>
+        l.tabs.map((t) => t.viewId)
+      )
+    ).toContain('terminal');
   });
 });

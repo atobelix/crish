@@ -22,12 +22,12 @@ import {
   type AddModelDraft,
 } from './settings-models/modelsIpcHelpers';
 import { calculateAutofillDraft } from './settings-models/manualAddAutofill';
+import { getActiveProject, getWorkspacePath } from '../api/projectStore';
 import {
-  addProjectFromPath,
-  getActiveProject,
-  getWorkspacePath,
-} from '../api/projectStore';
-import { openDirectoryDialogSafe } from '../api/openDirectoryDialog';
+  addProjectFromRecentPath,
+  pickAndAddWorkspaceProject,
+  WorkspaceAccessError,
+} from '../api/workspaceAccessApi';
 import { fetchEngineStatus } from '../api/engineConfig';
 import { setFirstRunOverlayOpen } from './firstRunOverlayFlag';
 import {
@@ -378,7 +378,16 @@ export function useFirstRunWizard(
     }
     if (step === 2) {
       if (!hasProject && pathDraft.trim()) {
-        addProjectFromPath(pathDraft.trim());
+        try {
+          await addProjectFromRecentPath(pathDraft.trim());
+        } catch (error) {
+          setError(
+            error instanceof WorkspaceAccessError
+              ? error.message
+              : '该路径未获授权，请重新选择项目文件夹。'
+          );
+          return;
+        }
         setProjectTick((n) => n + 1);
       }
       setStep(nextWizardStep(2));
@@ -393,13 +402,16 @@ export function useFirstRunWizard(
     setBusy(true);
     setError('');
     try {
-      const path = await openDirectoryDialogSafe('选择项目文件夹');
-      if (path) {
-        addProjectFromPath(path);
+      const project = await pickAndAddWorkspaceProject();
+      if (project) {
         setProjectTick((n) => n + 1);
-      } else {
-        setError('未能打开文件夹选择器，可手动填写路径');
       }
+    } catch (error) {
+      setError(
+        error instanceof WorkspaceAccessError
+          ? error.message
+          : '无法打开本地文件夹选择器。'
+      );
     } finally {
       setBusy(false);
     }

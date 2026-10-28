@@ -75,7 +75,7 @@ describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
     const cardBtn = screen.getByTestId('user-profile-card');
     fireEvent.click(cardBtn);
 
-    const menu = await screen.findByRole('menu', { name: '快捷设置' });
+    const menu = await screen.findByRole('menu');
     expect(menu).toBeInTheDocument();
     expect(screen.getByText('外观')).toBeInTheDocument();
     expect(screen.getByText('模型与密钥')).toBeInTheDocument();

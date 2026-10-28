@@ -11,10 +11,7 @@ import {
   resetPtyRegistryForTests,
   ptyRegistry,
 } from '../api/ptyRegistry';
-import {
-  getSnapshot,
-  resetControlMetrics,
-} from '../api/controlMetrics';
+import { getSnapshot, resetControlMetrics } from '../api/controlMetrics';
 import { RUN_CONTROL_LEVEL } from '@crish/shared-types';
 
 // 避免 dispatch 真连核心 transport（同 runControlClient.test）
@@ -59,9 +56,6 @@ describe('compositionRoot (B3)', () => {
     expect(typeof root.layout.getSidebarCollapsed).toBe('function');
     expect(typeof root.layout.setSidebarCollapsed).toBe('function');
     expect(typeof root.layout.toggleSidebarCollapsed).toBe('function');
-    expect(typeof root.layout.getPlanModeEnabled).toBe('function');
-    expect(typeof root.layout.setPlanModeEnabled).toBe('function');
-    expect(typeof root.layout.togglePlanMode).toBe('function');
     expect(typeof root.layout.getAppSettings).toBe('function');
     expect(typeof root.layout.setAppSettings).toBe('function');
     expect(typeof root.workspace.getState).toBe('function');

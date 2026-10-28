@@ -8,6 +8,15 @@ export type SessionContextMenuState = {
   x: number;
   y: number;
   sessionId: string;
+  triggerRect?: {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+    width: number;
+    height: number;
+  };
+  isMoreButton?: boolean;
 };
 
 /** 侧栏会话右键菜单动作（与 Sidebar.handleAction 对齐） */

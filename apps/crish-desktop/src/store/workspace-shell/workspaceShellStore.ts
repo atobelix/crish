@@ -55,6 +55,7 @@ import {
   syncSessionFromActiveLeaf,
   killPty,
   killTerminalPty,
+  teardownDockTree,
   findRawTabForClose,
   cleanupActiveTerminalBeforeReplace,
   addTerminalTabToShell,
@@ -256,7 +257,11 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>(
         const closing: TabWithTerminalInfo = rawLoc?.tab || {
           tabId: loc?.tab.tabId ?? '',
           sessionId: loc?.tab.sessionId,
+          dock: loc?.tab.dock,
         };
+        if (closing.dock?.tree) {
+          teardownDockTree(closing.dock.tree, closing.sessionId);
+        }
         if (closing.kind === 'terminal' || closing.terminalKey) {
           killTerminalPty(closing.terminalKey || closing.sessionId);
         }

@@ -12,6 +12,7 @@
  * 为空态或 toast），不抛未分类错误。
  */
 import { invokeTyped } from './tauriInvoke';
+import { t } from '../i18n';
 
 /** 回收站条目（对齐 conex_fs::trash::TrashEntry serde camelCase） */
 export interface TrashEntryDto {
@@ -67,16 +68,17 @@ function failureOf(
     ok: false,
     message:
       kind === 'NotFound'
-        ? `未找到条目：${message}`
-        : `${fallback}：${message}`,
+        ? t('workspace.trash.itemNotFound', { message })
+        : t('workspace.trash.operationFailed', { fallback, message }),
   };
 }
 
-/** 列出回收站条目；命令缺失 / 非 Tauri 环境 → 空列表（面板空态） */
+/** 列出回收站条目；命令缺失 / 非 Tauri 环境 → 空列表，读取错误继续向上报告。 */
 export async function listTrashEntries(): Promise<TrashListDto> {
   const res = await invokeTyped<TrashListDto>('trash_list');
   if (res.status === 'ok') return res.data;
-  return { entries: [], trashRoot: '' };
+  if (res.status === 'missing') return { entries: [], trashRoot: '' };
+  throw new Error(res.message || t('workspace.trash.readFailed'));
 }
 
 /** 恢复到原路径（校验 checksum 防篡改；原路径已存在拒绝覆盖） */
@@ -90,11 +92,20 @@ export async function restoreTrashEntry(
   });
   if (res.status === 'ok') return { ok: true, data: res.data };
   if (res.status === 'missing') {
-    return { ok: false, message: '回收站命令不可用（trash_restore 未注册）' };
+    return {
+      ok: false,
+      message: t('workspace.trash.commandUnavailable', {
+        command: 'trash_restore',
+      }),
+    };
   }
   return {
     ok: false,
-    message: failureOf(res.message, res.kind, '恢复失败').message,
+    message: failureOf(
+      res.message,
+      res.kind,
+      t('workspace.trash.restoreFailed')
+    ).message,
   };
 }
 
@@ -109,11 +120,17 @@ export async function purgeTrashEntry(
   });
   if (res.status === 'ok') return { ok: true, data: res.data };
   if (res.status === 'missing') {
-    return { ok: false, message: '回收站命令不可用（trash_purge 未注册）' };
+    return {
+      ok: false,
+      message: t('workspace.trash.commandUnavailable', {
+        command: 'trash_purge',
+      }),
+    };
   }
   return {
     ok: false,
-    message: failureOf(res.message, res.kind, '清除失败').message,
+    message: failureOf(res.message, res.kind, t('workspace.trash.purgeFailed'))
+      .message,
   };
 }
 

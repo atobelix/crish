@@ -27,6 +27,7 @@ import {
   readLeafDock,
   type LeafSessionTab,
 } from '../../store/workspace-shell/openTool';
+import { collectDockTabs } from '../../store/layout-tree/dockLayoutModel';
 import { activateNotePaper, deactivateNotePaper } from './activate';
 
 const SID = 'sess-note-open';
@@ -105,9 +106,12 @@ describe('note-paper open integration（02 F8 / F9）', () => {
 
     const root = useLayoutTreeStore.getState().tree.root;
     const hit = findTabBySessionId(root, SID);
-    expect(hit?.tab.dock.openPanelIds).toContain('note');
-    expect(hit?.tab.dock.activePanelId).toBe('note');
-    expect(hit?.tab.dock.collapsed).toBe(false);
+    const dock = hit?.tab.dock;
+    expect(dock).toBeTruthy();
+    expect(
+      collectDockTabs(dock!.tree).some((tab) => tab.viewId === 'note')
+    ).toBe(true);
+    expect(dock!.collapsed).toBe(false);
     expect(listChatLeaves(root)).toHaveLength(1);
     expect(listToolLeaves(root)).toHaveLength(0);
   });
@@ -121,8 +125,11 @@ describe('note-paper open integration（02 F8 / F9）', () => {
     const chatLeaf = listChatLeaves(state.tree.root)[0];
     expect(chatLeaf).toBeTruthy();
     expect(listToolLeaves(state.tree.root)).toHaveLength(0);
-    expect(readLeafDock(chatLeaf!).activePanelId).toBe('note');
-    expect(readLeafDock(chatLeaf!).collapsed).toBe(false);
+    const dock = readLeafDock(chatLeaf!);
+    expect(
+      collectDockTabs(dock.tree).some((tab) => tab.viewId === 'note')
+    ).toBe(true);
+    expect(dock.collapsed).toBe(false);
     expect(chatLeaf!.id).toBe(state.activeLeafId);
   });
 });

@@ -137,6 +137,34 @@ export function __inspectMockState(): Record<string, string[]> {
   return byState;
 }
 
+function createTestLockManager(): LockManager {
+  let queue: Promise<unknown> = Promise.resolve();
+  const request = (
+    name: string,
+    optionsOrCallback:
+      LockOptions | ((lock: Lock | null) => Promise<unknown> | unknown),
+    callback?: (lock: Lock | null) => Promise<unknown> | unknown
+  ): Promise<unknown> => {
+    const options =
+      typeof optionsOrCallback === 'function' ? {} : optionsOrCallback;
+    const onGranted =
+      typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
+    if (!onGranted)
+      return Promise.reject(new Error('Lock callback is required'));
+    const scheduled = queue
+      .catch(() => undefined)
+      .then(() =>
+        onGranted({ name, mode: options.mode ?? 'exclusive' } as Lock)
+      );
+    queue = scheduled.then(
+      () => undefined,
+      () => undefined
+    );
+    return scheduled;
+  };
+  return { request } as unknown as LockManager;
+}
+
 // =============================================================================
 // DOM 基础辅助垫片
 // =============================================================================
@@ -213,6 +241,12 @@ try {
 // =============================================================================
 beforeEach(() => {
   clearMockTauriCommands();
+  if (typeof navigator !== 'undefined') {
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: createTestLockManager(),
+    });
+  }
   geometryEngine.reset();
   ControllableResizeObserver.clearAll();
 });

@@ -304,16 +304,18 @@ describe('Desktop Native Features - Tauri Native Commands Suite', () => {
       });
 
       await revealInOs('C:\\Users\\dev\\project\\src\\App.tsx');
-      expect(mockedInvokeResult).toHaveBeenCalledWith(
-        'workbench_open_host_target',
-        {
-          openerId: 'system-file-manager',
-          target: {
-            type: 'path',
-            path: 'C:\\Users\\dev\\project\\src\\App.tsx',
-          },
-        }
+      const invocation = mockedInvokeResult.mock.calls.find(
+        ([command]) => command === 'workbench_open_host_target'
       );
+      expect(invocation?.[0]).toBe('workbench_open_host_target');
+      expect(typeof invocation?.[1]).toBe('function');
+      expect((invocation?.[1] as () => Record<string, unknown>)()).toEqual({
+        openerId: 'system-file-manager',
+        target: {
+          type: 'path',
+          path: 'C:\\Users\\dev\\project\\src\\App.tsx',
+        },
+      });
     });
 
     it('sorts host opener options dynamically based on file type', async () => {

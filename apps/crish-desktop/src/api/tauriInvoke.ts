@@ -16,10 +16,14 @@
  * @see invokeTyped
  */
 
+import { withWorkspaceAccess } from './workspaceAccessGate';
+
 export type InvokeOk<T> = { status: 'ok'; data: T };
 export type InvokeMissing = { status: 'missing' };
 export type InvokeErr = { status: 'error'; message: string };
 export type InvokeResult<T> = InvokeOk<T> | InvokeMissing | InvokeErr;
+export type InvokeArgs =
+  Record<string, unknown> | (() => Record<string, unknown>);
 
 /**
  * 结构化错误（对齐 Rust 侧 CoreError serde tagged enum）。
@@ -124,6 +128,31 @@ let invokeCheckPromise: Promise<
   typeof import('@tauri-apps/api/core').invoke | null
 > | null = null;
 
+const WORKSPACE_ACCESS_COMMANDS = new Set([
+  'core_search_files',
+  'core_rebuild_search_index',
+  'core_run_task',
+  'trash_list',
+  'trash_purge',
+  'trash_restore',
+  'workbench_discover_skills',
+  'workbench_git_run',
+  'workbench_list_directory',
+  'workbench_list_file_openers',
+  'workbench_mutate_owned_skill',
+  'workbench_open_host_target',
+  'workbench_open_path_default',
+  'workbench_pty_create',
+  'workbench_read_file_content',
+  'workbench_run_shell',
+  'workbench_write_file_content',
+]);
+
+/** 检查真实 Tauri 注入标记，区分纯浏览器与 Tauri 命令未注册。 */
+export function isTauriRuntimeAvailable(): boolean {
+  return typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__);
+}
+
 async function getTauriInvoke() {
   // 冷启动竞态修复（F-A 收尾审计发现，d9e5b61e 起存在）：原实现先置
   // tauriChecked=true 再 await import——首个并发调用期间第二个调用读到
@@ -152,12 +181,16 @@ async function getTauriInvoke() {
  */
 export async function invokeResult<T = unknown>(
   cmd: string,
-  args?: Record<string, unknown>
+  args?: InvokeArgs
 ): Promise<InvokeResult<T>> {
   try {
     const invoke = await getTauriInvoke();
     if (!invoke) return { status: 'missing' };
-    const data = (await invoke(cmd, args)) as T;
+    const execute = () =>
+      invoke(cmd, typeof args === 'function' ? args() : args) as Promise<T>;
+    const data = WORKSPACE_ACCESS_COMMANDS.has(cmd)
+      ? await withWorkspaceAccess(execute)
+      : await execute();
     return { status: 'ok', data };
   } catch (err) {
     const msg = formatInvokeError(err);
@@ -185,12 +218,16 @@ export async function invokeResult<T = unknown>(
  */
 export async function invokeTyped<T = unknown>(
   cmd: string,
-  args?: Record<string, unknown>
+  args?: InvokeArgs
 ): Promise<InvokeTypedResult<T>> {
   try {
     const invoke = await getTauriInvoke();
     if (!invoke) return { status: 'missing' };
-    const data = (await invoke(cmd, args)) as T;
+    const execute = () =>
+      invoke(cmd, typeof args === 'function' ? args() : args) as Promise<T>;
+    const data = WORKSPACE_ACCESS_COMMANDS.has(cmd)
+      ? await withWorkspaceAccess(execute)
+      : await execute();
     return { status: 'ok', data };
   } catch (err) {
     const msg = formatInvokeError(err);

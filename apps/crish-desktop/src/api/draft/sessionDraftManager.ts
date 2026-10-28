@@ -414,6 +414,39 @@ export class SessionDraftManager {
     }
   }
 
+  /**
+   * 会话销毁时回收该会话关联的所有草稿（含多分栏复合键）、防抖计时器与焦点锁
+   * 杜绝在内存 Map 与持久化 Store 中遗留复合分栏死键
+   */
+  evictSession(sessionId: string): void {
+    const safeSession = sessionId?.trim();
+    if (!safeSession) return;
+    const prefix = `${safeSession}::`;
+
+    // 1. 取消并清除以该 session 为作用域的所有挂起防抖保存定时器
+    for (const [key, timer] of this.pendingTimers.entries()) {
+      if (key === safeSession || key.startsWith(prefix)) {
+        clearTimeout(timer);
+        this.pendingTimers.delete(key);
+        this.pendingSaves.delete(key);
+      }
+    }
+
+    // 2. 从内存草稿池中彻底移除
+    for (const key of Array.from(this.drafts.keys())) {
+      if (key === safeSession || key.startsWith(prefix)) {
+        this.drafts.delete(key);
+      }
+    }
+
+    // 3. 清除当前正在输入状态锁
+    for (const key of Array.from(this.activeTypingSessions)) {
+      if (key === safeSession || key.startsWith(prefix)) {
+        this.activeTypingSessions.delete(key);
+      }
+    }
+  }
+
   /** 获取当前挂起的防抖计时器数量（供测试与诊断断言） */
   getPendingTimerCount(): number {
     return this.pendingTimers.size;

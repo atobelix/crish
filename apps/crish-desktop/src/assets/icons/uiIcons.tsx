@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { getFileIconSvg } from './fileIcons';
-import { ICON_STROKE } from '../../components/ui/icons/iconTokens';
+import { ICON_STROKE } from '@/components/ui/icons';
 
 export interface IconProps extends React.SVGProps<SVGSVGElement> {
   size?: number | string;
@@ -31,7 +31,12 @@ export const ChevronDownIcon: React.FC<IconProps> = ({
     strokeLinecap="round"
     strokeLinejoin="round"
     className={className}
-    style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0, ...style }}
+    style={{
+      display: 'inline-block',
+      verticalAlign: 'middle',
+      flexShrink: 0,
+      ...style,
+    }}
     aria-hidden="true"
     {...props}
   >
@@ -58,7 +63,12 @@ export const ChevronRightIcon: React.FC<IconProps> = ({
     strokeLinecap="round"
     strokeLinejoin="round"
     className={className}
-    style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0, ...style }}
+    style={{
+      display: 'inline-block',
+      verticalAlign: 'middle',
+      flexShrink: 0,
+      ...style,
+    }}
     aria-hidden="true"
     {...props}
   >
@@ -81,7 +91,12 @@ export const GitIcon: React.FC<IconProps> = ({
     viewBox="0 0 32 32"
     fill="none"
     className={className}
-    style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0, ...style }}
+    style={{
+      display: 'inline-block',
+      verticalAlign: 'middle',
+      flexShrink: 0,
+      ...style,
+    }}
     aria-hidden="true"
     {...props}
   >
@@ -111,7 +126,12 @@ export const DefaultFileIcon: React.FC<IconProps> = ({
     strokeLinecap="round"
     strokeLinejoin="round"
     className={className}
-    style={{ display: 'inline-block', verticalAlign: 'middle', flexShrink: 0, ...style }}
+    style={{
+      display: 'inline-block',
+      verticalAlign: 'middle',
+      flexShrink: 0,
+      ...style,
+    }}
     aria-hidden="true"
     {...props}
   >
@@ -151,7 +171,7 @@ export const FileFormatIcon: React.FC<FileFormatIconProps> = ({
           flexShrink: 0,
           ...style,
         }}
-        // eslint-disable-next-line react/no-danger
+
         dangerouslySetInnerHTML={{ __html: svg }}
         aria-hidden="true"
       />

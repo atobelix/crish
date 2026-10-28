@@ -16,22 +16,10 @@ const DIR =
     : dirname(fileURLToPath(import.meta.url));
 
 const TOOLS = join(DIR, '../../components/chat-card/unitChromeTools.ts');
-const CHROME = join(
-  DIR,
-  '../../components/chat-card/UnitChromeActions.tsx'
-);
-const STRIP = join(
-  DIR,
-  '../../components/binary-tree/LeafToolTabStrip.tsx'
-);
-const TOOL_BTN = join(
-  DIR,
-  '../../components/binary-tree/ToolTabAddButton.tsx'
-);
-const TREE_LEAF = join(
-  DIR,
-  '../../components/binary-tree/TreeLeafPanel.tsx'
-);
+const CHROME = join(DIR, '../../components/chat-card/UnitChromeActions.tsx');
+const STRIP = join(DIR, '../../components/binary-tree/LeafToolTabStrip.tsx');
+const TOOL_BTN = join(DIR, '../../components/binary-tree/ToolTabAddButton.tsx');
+const TREE_LEAF = join(DIR, '../../components/binary-tree/TreeLeafPanel.tsx');
 const OPEN_TOOL = join(DIR, '../../store/workspace-shell/openTool.ts');
 const ARRIVE = join(
   DIR,
@@ -88,7 +76,7 @@ describe('07 · 坞头 chat-open-note 源码钉（≠ 真壳到达绿 · ≠ 打
     expect(toolBtnSrc).toMatch(/openPanel\(pid\)/);
     expect(chromeSrc).toMatch(/openToolInSession\(/);
     expect(openToolSrc).toMatch(
-      /export function openToolInSession\(\s*sessionId:\s*string,\s*panelId:\s*string/
+      /export function openToolInSession\(\s*sessionId:\s*string,\s*viewId:\s*string/
     );
     expect(openToolSrc).not.toMatch(/note\s*:\s*['"]/);
     expect(chromeSrc).not.toMatch(/open-note-paper-strict/);

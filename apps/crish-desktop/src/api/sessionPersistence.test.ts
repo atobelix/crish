@@ -181,7 +181,11 @@ describe('parseSessionIndexEntry / parseSessionIndexList', () => {
   });
 
   it('titleSource round-trips and missing field stays absent', () => {
-    const user = parseSessionIndexEntry({ id: 'u', title: '手改', titleSource: 'user' });
+    const user = parseSessionIndexEntry({
+      id: 'u',
+      title: '手改',
+      titleSource: 'user',
+    });
     expect(user?.titleSource).toBe('user');
     const trivial = parseSessionIndexEntry({
       id: 't',
@@ -189,14 +193,20 @@ describe('parseSessionIndexEntry / parseSessionIndexList', () => {
       titleSource: 'auto-trivial',
     });
     expect(trivial?.titleSource).toBe('auto-trivial');
-    const junk = parseSessionIndexEntry({ id: 'j', title: 'x', titleSource: 'manual' });
+    const junk = parseSessionIndexEntry({
+      id: 'j',
+      title: 'x',
+      titleSource: 'manual',
+    });
     expect(junk?.titleSource).toBeUndefined();
 
     const s = baseSession({
       id: 's-user',
       title: '手改',
       titleSource: 'user',
-      messages: [baseMsg({ id: 'm1', sender: 'user', text: 'hi', timestamp: 50 })],
+      messages: [
+        baseMsg({ id: 'm1', sender: 'user', text: 'hi', timestamp: 50 }),
+      ],
     });
     const idx = sessionsToIndex([s]);
     expect(idx[0]?.titleSource).toBe('user');
@@ -398,6 +408,55 @@ describe('parseSessionAgent / hydrateSessionAgents', () => {
       description: '',
       mode: '',
     });
+  });
+
+  it('parses persisted agent metadata (task type / label / write paths / sub-session)', () => {
+    const agent = parseSessionAgent({
+      id: 'a',
+      subagentRunId: 'r',
+      parentSessionId: 'p',
+      parentRunId: 'pr',
+      taskType: 'analysis',
+      displayLabel: '调研员',
+      allowedWritePaths: ['docs/', 'src/'],
+      subSessionId: 'sub-sess-1-1',
+    });
+    expect(agent).toMatchObject({
+      taskType: 'analysis',
+      displayLabel: '调研员',
+      allowedWritePaths: ['docs/', 'src/'],
+      subSessionId: 'sub-sess-1-1',
+    });
+  });
+
+  it('parses v14 lifecycle fields (capability / model / resumable / heartbeat)', () => {
+    const agent = parseSessionAgent({
+      id: 'a',
+      subagentRunId: 'r',
+      parentSessionId: 'p',
+      parentRunId: 'pr',
+      capabilityMode: 'read-only',
+      modelOverride: 'grok-3',
+      resumable: true,
+      lastHeartbeatMs: 12345,
+    });
+    expect(agent).toMatchObject({
+      capabilityMode: 'read-only',
+      modelOverride: 'grok-3',
+      resumable: true,
+      lastHeartbeatMs: 12345,
+    });
+    // 缺省字段不注入（旧载荷保持形状稳定）
+    const bare = parseSessionAgent({
+      id: 'b',
+      subagentRunId: 'r',
+      parentSessionId: 'p',
+      parentRunId: 'pr',
+    });
+    expect(bare!.capabilityMode).toBeUndefined();
+    expect(bare!.modelOverride).toBeUndefined();
+    expect(bare!.resumable).toBeUndefined();
+    expect(bare!.lastHeartbeatMs).toBeUndefined();
   });
 
   it('hydrate converts running → stopped with summary', () => {
@@ -804,9 +863,7 @@ describe('sessionsToIndex / hydrate / persist edges', () => {
 
     expect(loadSessionIndex().map((e) => e.id)).toEqual(['keep']);
     // D-F06 剥双轨：persist 降级回退不再写 LS 正文镜像（SQLite 为正文权威）
-    expect(
-      localStorage.getItem(SESSION_BODY_PREFIX + 'keep')
-    ).toBeNull();
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 'keep')).toBeNull();
     // 孤儿删除语义保留：不在 keep 集合的残键清除
     expect(loadSessionBody('orphan')).toEqual([]);
     expect(localStorage.getItem(SESSION_AGENTS_PREFIX + 'orphan')).toBeNull();

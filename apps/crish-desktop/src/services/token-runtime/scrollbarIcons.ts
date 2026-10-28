@@ -33,26 +33,25 @@ function makeScrollbarArrowSvg(
  */
 export function buildScrollbarTokens(params: {
   skinKey: string;
-  isDark: boolean;
   finalFg: string;
 }): Record<string, string> {
-  const { skinKey, isDark, finalFg } = params;
+  const { skinKey, finalFg } = params;
   const tokens: Record<string, string> = {};
 
   // 滚动条主题色融合：在各类皮肤下自然融入当前主题色相，杜绝孤立突兀的灰白硬块。
-  // 滑块色由 CSS 以 var(--user-scrollbar-fg) 派生（明 13%/58%、暗 16%/48%），
+  // 滑块色由 CSS 以 var(--user-scrollbar-fg) 派生（统一静止 15% / 激活 25%），
   // JS 不再拼 color-mix 字符串。
   if (skinKey === 'warm-gray') {
-    // 暖灰皮肤（默认浅色纸温）走 tokens.css 静态权威 SSOT（降低灰度的 #dedddc 与深沉激活态 #6b6a69）
+    // 暖灰皮肤（默认浅色纸温）走 tokens.css 静态权威 SSOT（降低灰度的 #dedddc 与深沉激活态 #c8c7c6）
     // 按钮 SVG 同步继承 tokens.css 权威满宽平滑大圆角矢量，不向 root.style 写入参数
   } else {
     tokens['--user-scrollbar-fg'] = finalFg;
 
     // 滚动条微调三角按钮：::-webkit-scrollbar-button 伪元素仅支持 background
     // 白名单属性（不支持 mask/calc 换色），SVG 序列化保留在 JS——finalFg 纯透传
-    // + 固定 opacity，与旧实现逐字节同串；A 类 token 由 tokens.css var(--user-*, 静态) 派生。
-    const btnNormalOp = isDark ? '0.16' : '0.13';
-    const btnActiveOp = isDark ? '0.48' : '0.58';
+    // + 固定 opacity（统一静止 0.15 / 激活 0.25）；A 类 token 由 tokens.css var(--user-*, 静态) 派生。
+    const btnNormalOp = '0.15';
+    const btnActiveOp = '0.25';
 
     tokens['--user-scrollbar-button-up'] = makeScrollbarArrowSvg(
       SCROLLBAR_UP_PATH,

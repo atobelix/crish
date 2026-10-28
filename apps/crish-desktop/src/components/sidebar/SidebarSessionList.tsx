@@ -122,8 +122,7 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
             data-empty="search"
             style={{ padding: '16px 12px', textAlign: 'center' }}
           >
-            <div style={{ fontWeight: 500, marginBottom: 4 }}>无匹配会话</div>
-            <div className={styles.subtle}>试试其他关键词，或清空搜索</div>
+            <div style={{ fontWeight: 500 }}>无匹配会话</div>
           </div>
         ) : null}
         {isAllEmpty ? (
@@ -133,8 +132,7 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
             data-empty="all"
             style={{ padding: '16px 12px', textAlign: 'center' }}
           >
-            <div style={{ fontWeight: 500, marginBottom: 4 }}>暂无会话</div>
-            <div className={styles.subtle}>点击右上角 + 新建对话</div>
+            <div style={{ fontWeight: 500 }}>暂无会话</div>
           </div>
         ) : null}
 

@@ -15,7 +15,7 @@ import { TOOL_OUTPUT_DOM_CHAR_CAP } from '../../workers';
 import { FLOW_OUTPUT_STYLE } from './flowOutputStyle';
 import { ArtifactChip } from './ArtifactChip';
 import { actionPathOf } from './narrativeModel';
-import { Button } from '../../components/ui';
+import { Button } from '@/components/ui';
 import styles from './narrative.module.css';
 
 export interface ActionRowProps {
@@ -61,17 +61,17 @@ export function ActionRow({
     (tool?.arguments ? extractToolCommand(tool.arguments) : '');
   const rawOutput = tool?.output ?? action.output ?? '';
   const output = capOutput(fullToolOutput(rawOutput));
-  const expandable =
-    action.expandable || Boolean(command) || Boolean(output);
+  const expandable = action.expandable || Boolean(command) || Boolean(output);
   const human = tool
     ? toolHumanLabel(tool)
     : [action.verb, action.objectLabel].filter(Boolean).join(' · ');
   const kindPrefix =
-    action.kind === 'skill' ? 'Skill' : action.kind === 'mcp' ? 'MCP' : '工具调用';
-  const meta = [
-    statusMeta(action.status),
-    action.parallelGroupId ? '并行' : '',
-  ]
+    action.kind === 'skill'
+      ? 'Skill'
+      : action.kind === 'mcp'
+        ? 'MCP'
+        : '工具调用';
+  const meta = [statusMeta(action.status), action.parallelGroupId ? '并行' : '']
     .filter(Boolean)
     .join(' · ');
   const outputMax = FLOW_OUTPUT_STYLE;

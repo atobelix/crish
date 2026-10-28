@@ -21,7 +21,7 @@ const rowCss = fs.readFileSync(
   'utf8'
 );
 const tokensCss = fs.readFileSync(
-  path.join(desktopSrc, 'styles/tokens.css'),
+  path.join(desktopSrc, 'styles/tokens-space.css'),
   'utf8'
 );
 const estimateSrc = fs.readFileSync(
@@ -104,7 +104,7 @@ describe('estimate constants lock to chat row gap defaults', () => {
       paddingBottomExpr(cssBlock(rowCss, '.rowCarrier')),
       tokensCss
     );
-    expect(rowGap).toBe(16);
+    expect(rowGap).toBe(20);
     expect(compactGap).toBe(4);
     expect(CHAT_ROW_GAP_PX).toBe(rowGap);
     expect(CHAT_ROW_GAP_COMPACT_PX).toBe(compactGap);

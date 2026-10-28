@@ -9,7 +9,7 @@ import {
   useState,
   type ReactElement,
 } from 'react';
-import { Button } from '../../components/ui';
+import { Button } from '@/components/ui';
 import {
   useAsyncMarkdownHtml,
   useStreamingMarkdownHtml,

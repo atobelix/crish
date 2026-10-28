@@ -19,7 +19,15 @@
     "exactOptionalPropertyTypes": false,
 
     /* Linting */
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+
+    /* Path mapping */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@/components/ui": ["src/components/ui/index.ts"],
+      "@/components/ui/*": ["src/components/ui/*"]
+    }
   },
   "include": ["src"],
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/__tests__/**"]

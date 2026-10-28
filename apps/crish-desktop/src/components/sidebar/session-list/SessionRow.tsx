@@ -23,11 +23,11 @@ import {
   storeSessionSearchQuery,
   type SessionSearchMatch,
 } from '../../../api/sessionSearch';
-import { Button, Input, Tooltip } from '../../ui';
+import { Button, Input, Tooltip } from '@/components/ui';
 import { useI18n } from '../../../i18n';
 import { syntheticContextMenuEvent } from './sessionRowMenuEvent';
 import styles from '../SidebarSessionList.module.css';
-import { AppIcon } from '../../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 /** 更多钮边长；与行高 28px 保持优雅微内嵌，且与头部动作钮 24px 精确同轴 */
 export const SESSION_ACTIONS_BTN_PX = 24;
@@ -554,3 +554,5 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
     </li>
   );
 });
+
+SessionRow.displayName = 'SessionRow';

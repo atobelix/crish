@@ -61,7 +61,9 @@ describe('resolveDefaultImportRoots', () => {
 
   it('mungeProjectPath matches Claude non-alnum rule', () => {
     expect(mungeProjectPath('C:\\Software\\conex')).toBe('C--Software-conex');
-    expect(mungeProjectPath('/Users/foo/my-project')).toBe('-Users-foo-my-project');
+    expect(mungeProjectPath('/Users/foo/my-project')).toBe(
+      '-Users-foo-my-project'
+    );
   });
 });
 
@@ -78,14 +80,17 @@ describe('mergeImportPathEnv / persisted roots', () => {
   it('mergeImportPathEnv prefers explicit base over persisted', () => {
     const merged = mergeImportPathEnv(
       { home: '/h', claudeConfigDir: '/explicit/claude' },
-      { claudeConfigDir: '/persisted/claude', codexHome: '/persisted/codex' },
+      { claudeConfigDir: '/persisted/claude', codexHome: '/persisted/codex' }
     );
     expect(merged.claudeConfigDir).toBe('/explicit/claude');
     expect(merged.codexHome).toBe('/persisted/codex');
   });
 
   it('empty override falls back to default via resolveDefaultImportRoots', () => {
-    const merged = mergeImportPathEnv({ home: '/home/u', platform: 'linux', sep: '/' }, {});
+    const merged = mergeImportPathEnv(
+      { home: '/home/u', platform: 'linux', sep: '/' },
+      {}
+    );
     const roots = resolveDefaultImportRoots(merged);
     expect(roots.claudeConfig).toBe('/home/u/.claude');
     expect(roots.codexSessions).toBe('/home/u/.codex/sessions');
@@ -167,11 +172,15 @@ describe('lite extractors', () => {
     const head =
       '{"type":"user","timestamp":"2026-01-01T00:00:00.000Z","message":{"role":"user","content":"Hello path join"}}\n';
     const tail = '{"type":"custom-title","customTitle":"My Title"}\n';
-    expect(extractJsonStringField(head, 'timestamp')).toBe('2026-01-01T00:00:00.000Z');
-    expect(extractClaudeTitlePreview(head, tail)).toBe('My Title');
-    expect(extractCodexTitlePreview('{"payload":{"content":[{"type":"input_text","text":"Do X"}]}}')).toBe(
-      'Do X',
+    expect(extractJsonStringField(head, 'timestamp')).toBe(
+      '2026-01-01T00:00:00.000Z'
     );
+    expect(extractClaudeTitlePreview(head, tail)).toBe('My Title');
+    expect(
+      extractCodexTitlePreview(
+        '{"payload":{"content":[{"type":"input_text","text":"Do X"}]}}'
+      )
+    ).toBe('Do X');
     expect(truncatePreview('a'.repeat(300)).endsWith('…')).toBe(true);
     expect(estimateLineCount('a\nb\nc\n', false)).toBe(3);
   });
@@ -211,7 +220,7 @@ describe('detectExternalSessions', () => {
     expect(codex?.titlePreview).toContain('Fix tests');
   });
 
-  it('returns warnings when roots missing', async () => {
+  it('returns errors when source roots are missing', async () => {
     const fs = createMemoryImportFs({});
     const result = await detectExternalSessions({
       fs,
@@ -219,15 +228,16 @@ describe('detectExternalSessions', () => {
       sources: ['claude-code'],
     });
     expect(result.sessions).toHaveLength(0);
-    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.warnings).toEqual([]);
   });
 
   it('joinImportPath is sep-aware', () => {
     expect(joinImportPath('\\', 'C:\\Users\\a', '.claude', 'projects')).toBe(
-      'C:\\Users\\a\\.claude\\projects',
+      'C:\\Users\\a\\.claude\\projects'
     );
     expect(joinImportPath('/', '/home/a', '.codex', 'sessions')).toBe(
-      '/home/a/.codex/sessions',
+      '/home/a/.codex/sessions'
     );
   });
 });

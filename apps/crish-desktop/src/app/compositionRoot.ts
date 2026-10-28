@@ -9,7 +9,7 @@
  * - session：getState + enterDraft / openOrFocusSession / deleteSession / getActiveSessionId
  *   + pin/unpin/archive/unarchive/branch（侧栏菜单等命令式写）
  * - shell：会话手势门面 + shellReady（activateTab / closeTab / focusLeaf / promoteDraftTab）
- * - layout：layoutStore 命令式读/写（sessions / tabMode / sidebar / planMode / appSettings）
+ * - layout：layoutStore 命令式读/写（sessions / tabMode / sidebar / appSettings）
  * - workspace：workspace facade getState（legacy columns — alias of layoutStore）
  * - tree：layout-tree 薄门面（仅 getState；hydrate/bootstrap 用）
  * - runControl：L1/L2/L3 dispatch（wrap runControlClient）
@@ -71,7 +71,6 @@ import {
 } from '../store/layout-tree';
 import type { SessionState } from '../store/types';
 import type { Settings } from '../api/clientApi';
-import { usePermissionStore } from '../store/permissionStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { viewRegistry } from '../services/view-registry/ViewRegistry';
 
@@ -184,9 +183,6 @@ export type LayoutFacade = {
   getSidebarCollapsed: () => boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
   toggleSidebarCollapsed: () => void;
-  getPlanModeEnabled: () => boolean;
-  setPlanModeEnabled: (enabled: boolean) => void;
-  togglePlanMode: () => void;
   getAppSettings: () => Settings | null;
   setAppSettings: (settings: Settings | null) => void;
 };
@@ -248,13 +244,6 @@ function buildDefaultLayoutFacade(): LayoutFacade {
     toggleSidebarCollapsed: () => {
       const st = getLayoutState();
       st.setSidebarCollapsed(!st.sidebarCollapsed);
-    },
-    getPlanModeEnabled: () => usePermissionStore.getState().planModeEnabled,
-    setPlanModeEnabled: (enabled) =>
-      usePermissionStore.getState().setPlanModeEnabled(enabled),
-    togglePlanMode: () => {
-      const st = usePermissionStore.getState();
-      st.setPlanModeEnabled(!st.planModeEnabled);
     },
     getAppSettings: () => useSettingsStore.getState().appSettings,
     setAppSettings: (settings) =>

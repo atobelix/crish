@@ -2,7 +2,7 @@
  * apps/crish-desktop/src/components/files/FileEditor.tsx
  */
 import React from 'react';
-import { Textarea } from '../ui';
+import { Textarea } from '@/components/ui';
 import styles from './FileEditor.module.css';
 
 interface FileEditorProps {

@@ -14,6 +14,11 @@ import {
   validateCronExpression,
   type WorkflowSchedule,
 } from './workflowScheduler';
+import {
+  DEFAULT_PERMISSION_MODE,
+  coercePermissionMode,
+  type PermissionMode,
+} from '../permissionModes';
 
 /** 引擎支持的四大标准调度类型（单轨契约） */
 export const WORKFLOW_SCHEDULE_TYPES = [
@@ -51,6 +56,8 @@ export type WorkflowScheduleDraft = {
   cwd?: string;
   targetSessionId?: string;
   executionTarget: WorkflowExecutionTarget;
+  /** 该定时任务执行时使用的权限模式（缺省 smart，不继承创建者会话） */
+  permissionMode?: PermissionMode;
 };
 
 /** WorkflowScheduleDraft 别名 */
@@ -261,6 +268,7 @@ export function emptyWorkflowDraft(defaultCwd?: string): WorkflowScheduleDraft {
     cwd: defaultCwd ? defaultCwd.trim() : '',
     targetSessionId: '',
     executionTarget: 'isolated_session',
+    permissionMode: DEFAULT_PERMISSION_MODE,
   };
 }
 
@@ -304,6 +312,7 @@ export type WorkflowDraftSource = {
   prompt?: string | null;
   cwd?: string | null;
   targetSessionId?: string | null;
+  permissionMode?: string | null;
   schedule?: WorkflowSchedule | Record<string, unknown> | null;
 };
 
@@ -321,6 +330,9 @@ export function draftFromWorkflow(
   d.name = String(w.name ?? '');
   d.prompt = String(w.prompt || '');
   d.cwd = String(w.cwd || '');
+  d.permissionMode = coercePermissionMode(
+    w.permissionMode ?? DEFAULT_PERMISSION_MODE
+  );
 
   const rawTargetId = w.targetSessionId;
   const targetId = typeof rawTargetId === 'string' ? rawTargetId.trim() : '';

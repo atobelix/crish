@@ -10,7 +10,7 @@ import { scheduleLabel } from '../../api/workflowApi';
 import { emitUiEvent } from '../../api/uiEvents';
 import { emptyPlansHint } from './runtimePanelLib';
 import { useConnectionStatus } from '../../hooks/useConnectionStatus';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 
 export type PlansSectionProps = {
   workflows: WorkflowDefinition[];

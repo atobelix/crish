@@ -179,14 +179,14 @@ describe('skinPaintPlan 与 injectRootTokens（P1 U1.4 + P2 T-P2-01）', () => {
     });
 
     const root = document.documentElement;
-    expect(root.style.getPropertyValue('--user-surface-base')).toBe('#141414');
+    expect(root.style.getPropertyValue('--user-surface-base')).toBe('#111112');
     expect(root.style.getPropertyValue('--user-surface-tint')).toBe('#ffffff');
     expect(root.style.getPropertyValue('--user-surface-deep')).toBe('#000000');
     expect(root.style.getPropertyValue('--elev-direction')).toBe('1');
     expect(root.style.getPropertyValue('--user-elev-direction')).toBe('1');
     expect(root.style.getPropertyValue('--text-base')).toBe('#f5f5f5');
     // [WAVE2-DEPRECATED] 过渡兼容变量
-    expect(root.style.getPropertyValue('--user-surface-main')).toBe('#141414');
+    expect(root.style.getPropertyValue('--user-surface-main')).toBe('#111112');
     expect(root.style.getPropertyValue('--user-text-primary')).toBe('#f5f5f5');
   });
 });

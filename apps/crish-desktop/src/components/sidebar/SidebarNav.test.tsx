@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * 侧栏顶钮：选中不居中；hover 只走 --sidebar-hover，不叠 Button 罩
+ * 侧栏顶钮：选中不居中；hover 只走 --state-hover，不叠 Button 罩
  */
 import React from 'react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
@@ -74,12 +74,12 @@ describe('SidebarNav 顶钮', () => {
     expect(active).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('navItem hover 只走 --sidebar-hover，圆角与会话行同 --radius-lg', () => {
+  it('navItem hover 只走 --state-hover，圆角与会话行同 --radius-lg', () => {
     const css = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), 'SidebarNav.module.css'),
       'utf8'
     );
-    expect(css).toMatch(/background:\s*var\(--sidebar-hover\)/);
+    expect(css).toMatch(/background:\s*var\(--state-hover\)/);
     expect(css).toMatch(/border-radius:\s*var\(--radius-lg\)/);
     expect(css).not.toMatch(/--radius-xl/);
     expect(css).toMatch(/\.navItem::before[\s\S]*display:\s*none/);
@@ -106,11 +106,11 @@ describe('SidebarNav 顶钮', () => {
       'utf8'
     );
     expect(navCss).toMatch(
-      /transition:\s*[\s\S]*background\s+80ms\s+ease-out[\s\S]*color\s+80ms\s+ease-out/
+      /transition:\s*[\s\S]*background\s+var\(--duration-micro,\s*80ms\)\s+var\(--ease-standard\)[\s\S]*color\s+var\(--duration-micro,\s*80ms\)\s+var\(--ease-standard\)/
     );
     expect(navCss).not.toContain('transform: scale(');
     expect(navCss).toMatch(
-      /\.navItem:active\s*\{[\s\S]*background:\s*var\(--sidebar-active\);[\s\S]*color:\s*var\(--text-primary\);/
+      /\.navItem:active\s*\{[\s\S]*background:\s*var\(--state-strong\);[\s\S]*color:\s*var\(--text-primary\);/
     );
   });
 });

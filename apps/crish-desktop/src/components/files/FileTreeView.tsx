@@ -1,14 +1,22 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import styles from './FilesCard.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import { FileFormatIcon } from '../../assets/icons';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import { isSameFsPath } from '../../api/workspaceFsApi';
 import type { TreeNode } from './hooks/useFileNavigation';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 function TreeFileIcon({ name }: { name: string }) {
-  return <FileFormatIcon fileName={name} size={14} className={styles.filesRowIco} />;
+  return (
+    <FileFormatIcon fileName={name} size={14} className={styles.filesRowIco} />
+  );
 }
 
 function formatSize(n: number): string {
@@ -92,13 +100,16 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
         return;
       }
 
-      const targetIndex = flatTree.findIndex((n) => isSameFsPath(n.path, selected));
+      const targetIndex = flatTree.findIndex((n) =>
+        isSameFsPath(n.path, selected)
+      );
       if (targetIndex === -1) {
         return;
       }
 
       const isNewSelection =
-        !prevSelectedRef.current || !isSameFsPath(prevSelectedRef.current, selected);
+        !prevSelectedRef.current ||
+        !isSameFsPath(prevSelectedRef.current, selected);
       prevSelectedRef.current = selected;
 
       if (!isNewSelection) return;
@@ -123,7 +134,8 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
         (viewHeight >= 2 * ITEM_HEIGHT
           ? itemTop >= currentScrollTop + ITEM_HEIGHT &&
             itemBottom <= currentScrollTop + viewHeight - ITEM_HEIGHT
-          : itemTop >= currentScrollTop && itemBottom <= currentScrollTop + viewHeight);
+          : itemTop >= currentScrollTop &&
+            itemBottom <= currentScrollTop + viewHeight);
 
       let pulseTimer: number | null = null;
       let cleanupScrollEnd: (() => void) | null = null;
@@ -140,8 +152,12 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
       };
 
       if (!isInView) {
-        const rawScrollTop = itemTop - Math.floor((viewHeight - ITEM_HEIGHT) / 2);
-        const targetScrollTop = Math.min(maxScrollTop, Math.max(0, rawScrollTop));
+        const rawScrollTop =
+          itemTop - Math.floor((viewHeight - ITEM_HEIGHT) / 2);
+        const targetScrollTop = Math.min(
+          maxScrollTop,
+          Math.max(0, rawScrollTop)
+        );
 
         let settled = false;
         const onScrollEnd = () => {
@@ -224,7 +240,11 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
         onScroll={onScroll}
         role="tree"
         aria-label="工作区文件树"
-        style={{ overflowY: 'auto', position: 'relative', overflowAnchor: 'none' }}
+        style={{
+          overflowY: 'auto',
+          position: 'relative',
+          overflowAnchor: 'none',
+        }}
       >
         {loading && flatTree.length === 0 ? (
           <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>
@@ -281,14 +301,18 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
               {visibleItems.map((e, index) => {
                 const globalIdx = startIndex + index;
                 const top = globalIdx * ITEM_HEIGHT;
-                const isSelected = Boolean(selected && isSameFsPath(e.path, selected));
-                const isPulse = Boolean(pulseTarget && isSameFsPath(e.path, pulseTarget));
+                const isSelected = Boolean(
+                  selected && isSameFsPath(e.path, selected)
+                );
+                const isPulse = Boolean(
+                  pulseTarget && isSameFsPath(e.path, pulseTarget)
+                );
 
                 return (
                   <div
                     key={e.path}
                     data-tree-index={globalIdx}
-                    className={`${styles.filesRow} ${isSelected ? styles.isSelected : ''} ${isPulse ? (styles.isSelectedPulse || 'isSelectedPulse') : ''}`}
+                    className={`${styles.filesRow} ${isSelected ? styles.isSelected : ''} ${isPulse ? styles.isSelectedPulse || 'isSelectedPulse' : ''}`}
                     style={{
                       position: 'absolute',
                       top: `${top}px`,
@@ -318,8 +342,11 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
                         单击行 → onSelect（目录即 toggleExpand），键盘 ←/→/Enter 同样可展开折叠；
                         展开态由 aria-expanded 暴露。差异面板用自己的 fileNodeToggle，不受影响。 */}
                     {e.isDir ? (
-                      <AppIcon name="folder" size={14}
-                        className={`${styles.filesRowIco} ${styles.dir}`} />
+                      <AppIcon
+                        name="folder"
+                        size={14}
+                        className={`${styles.filesRowIco} ${styles.dir}`}
+                      />
                     ) : (
                       <TreeFileIcon name={e.name} />
                     )}

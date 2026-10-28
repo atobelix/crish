@@ -43,7 +43,7 @@ function normalizeTab(raw: SessionTab): SessionTab {
     title: typeof raw.title === 'string' ? raw.title : '',
     workspaceKey: typeof raw.workspaceKey === 'string' ? raw.workspaceKey : '',
     dock: rec.dock ?? rec.rightDock ?? createDefaultDock(),
-  };
+  } as SessionTab;
 }
 
 /** 把 chat 叶读成叶拥有标签形状；string[] tabs（旧 v2）视为尚未迁移，跳过。 */

@@ -30,7 +30,7 @@
   pointer-events: auto;
   transition:
     border-color var(--transition-fast, 120ms ease),
-    border-radius 120ms ease;
+    border-radius var(--duration-fast, 120ms) var(--ease-standard);
 }
 
 .popover:focus-within {
@@ -143,5 +143,5 @@
 
 .closeBtn:hover {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }

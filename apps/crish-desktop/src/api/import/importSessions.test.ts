@@ -29,8 +29,16 @@ import {
 
 describe('import scan (real detect path + inject)', () => {
   it('returns empty when inject is empty', async () => {
-    await expect(scanClaudeCodeSessions({ inject: [] })).resolves.toEqual([]);
-    await expect(scanCodexSessions({ inject: [] })).resolves.toEqual([]);
+    await expect(scanClaudeCodeSessions({ inject: [] })).resolves.toEqual({
+      source: 'claude-code',
+      sessions: [],
+      issues: [],
+    });
+    await expect(scanCodexSessions({ inject: [] })).resolves.toEqual({
+      source: 'codex',
+      sessions: [],
+      issues: [],
+    });
   });
 
   it('respects inject filter by source', async () => {
@@ -50,10 +58,83 @@ describe('import scan (real detect path + inject)', () => {
     ];
     const claude = await scanClaudeCodeSessions({ inject });
     const codex = await scanCodexSessions({ inject });
-    expect(claude).toHaveLength(1);
-    expect(claude[0]!.id).toBe('c1');
-    expect(codex).toHaveLength(1);
-    expect(codex[0]!.id).toBe('x1');
+    expect(claude.sessions).toHaveLength(1);
+    expect(claude.sessions[0]!.id).toBe('c1');
+    expect(codex.sessions).toHaveLength(1);
+    expect(codex.sessions[0]!.id).toBe('x1');
+  });
+
+  it('keeps successful sessions and reports unreadable projects as a partial scan', async () => {
+    const sessionUuid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const path = `/home/u/.claude/projects/ok/${sessionUuid}.jsonl`;
+    const fs = createMemoryImportFs({
+      [path]: '{"type":"user","cwd":"/ok"}\n',
+      '/home/u/.claude/projects/unreadable/ignored/placeholder.jsonl': '',
+    });
+    const listDir = fs.listDir.bind(fs);
+    fs.listDir = async (dirPath, allowRoot) => {
+      if (dirPath === '/home/u/.claude/projects/unreadable') {
+        throw new Error('permission denied');
+      }
+      return listDir(dirPath, allowRoot);
+    };
+
+    const result = await scanClaudeCodeSessions({
+      fs,
+      env: { home: '/home/u', platform: 'linux', sep: '/' },
+    });
+
+    expect(result.sessions.map((session) => session.id)).toContain(sessionUuid);
+    expect(result.issues).toEqual([
+      {
+        source: 'claude-code',
+        kind: 'warning',
+        message: 'Skip unreadable project: unreadable',
+      },
+    ]);
+  });
+
+  it('reports an unreadable root as a source error instead of a successful empty scan', async () => {
+    const fs = createMemoryImportFs({});
+    fs.listDir = async (dirPath) => {
+      if (dirPath === '/home/u/.claude/projects') {
+        throw new Error('permission denied');
+      }
+      return [];
+    };
+
+    const result = await scanClaudeCodeSessions({
+      fs,
+      env: { home: '/home/u', platform: 'linux', sep: '/' },
+    });
+
+    expect(result.sessions).toEqual([]);
+    expect(result.issues).toEqual([
+      {
+        source: 'claude-code',
+        kind: 'error',
+        message: 'Claude projects dir not readable: /home/u/.claude/projects',
+      },
+    ]);
+  });
+
+  it('turns scan setup exceptions into source-specific errors', async () => {
+    const env = Object.defineProperty({}, 'home', {
+      get() {
+        throw new Error('host path resolution failed');
+      },
+    });
+
+    const result = await scanCodexSessions({ env: env as never });
+
+    expect(result.sessions).toEqual([]);
+    expect(result.issues).toEqual([
+      {
+        source: 'codex',
+        kind: 'error',
+        message: 'host path resolution failed',
+      },
+    ]);
   });
 
   it('scanClaudeCodeSessions uses detect + memory FS (OPT-1 path)', async () => {
@@ -67,11 +148,11 @@ describe('import scan (real detect path + inject)', () => {
       fs,
       env: { home: '/home/u', platform: 'linux', sep: '/' },
     });
-    expect(list).toHaveLength(1);
-    expect(list[0]!.id).toBe(sessionUuid);
-    expect(list[0]!.title).toBe('Scan title');
-    expect(list[0]!.path).toBe(path);
-    expect(list[0]!.source).toBe('claude-code');
+    expect(list.sessions).toHaveLength(1);
+    expect(list.sessions[0]!.id).toBe(sessionUuid);
+    expect(list.sessions[0]!.title).toBe('Scan title');
+    expect(list.sessions[0]!.path).toBe(path);
+    expect(list.sessions[0]!.source).toBe('claude-code');
   });
 });
 
@@ -319,11 +400,11 @@ describe('map + write', () => {
     };
 
     const detected = await scanClaudeCodeSessions({ fs, env });
-    expect(detected.length).toBeGreaterThan(0);
+    expect(detected.sessions.length).toBeGreaterThan(0);
 
     const createSession = vi.fn(() => 'sess-e2e');
     const addMessage = vi.fn();
-    const result = await importDetectedSessions(detected, {
+    const result = await importDetectedSessions(detected.sessions, {
       createSession,
       addMessage,
       fs,

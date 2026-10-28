@@ -12,7 +12,11 @@
  */
 
 import { invokeResult } from '../tauriInvoke';
-import { mergeImportPathEnv } from './importRootSettings';
+import {
+  getPersistedImportRoots,
+  mergeImportPathEnv,
+  type PersistedImportRoots,
+} from './importRootSettings';
 import type { ImportDirEntry, ImportFs, ImportPathEnv } from './types';
 
 function joinPath(base: string, name: string): string {
@@ -43,7 +47,8 @@ function inferSep(home?: string, platform?: string): '\\' | '/' | undefined {
  * (see {@link mergeImportPathEnv}) so non-default installs are scanned when set.
  */
 export async function resolveHostImportEnv(
-  overrides: ImportPathEnv = {}
+  overrides: ImportPathEnv = {},
+  persistedRoots: PersistedImportRoots = getPersistedImportRoots()
 ): Promise<ImportPathEnv> {
   let home = overrides.home?.trim() || undefined;
 
@@ -81,7 +86,7 @@ export async function resolveHostImportEnv(
     ...(sep ? { sep } : {}),
   };
   // Explicit claudeConfigDir / codexHome on overrides win over localStorage.
-  return mergeImportPathEnv(withHost);
+  return mergeImportPathEnv(withHost, persistedRoots);
 }
 
 /**

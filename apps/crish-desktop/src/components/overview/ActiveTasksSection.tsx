@@ -1,13 +1,13 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 
 import { ChevronDownIcon } from '../../assets/icons';
 import { formatElapsed } from './helpers';
 import type { PendingApprovalInfo } from '../../api/engineStatus';
 
 import type { LiveTask } from './useOverviewState';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 interface ActiveTasksSectionProps {
   open: boolean;
@@ -43,7 +43,7 @@ export const ActiveTasksSection = React.memo(function ActiveTasksSection({
         aria-expanded={open}
         onClick={onToggle}
       >
-        <AppIcon name="activity" size={15} aria-hidden />
+        <AppIcon name="activity" size={16} aria-hidden />
         <span>活动任务</span>
         {total > 0 ? <span className={styles.pill}>{total}</span> : null}
         <ChevronDownIcon
@@ -72,7 +72,7 @@ export const ActiveTasksSection = React.memo(function ActiveTasksSection({
                       <span className={`${styles.dot} ${styles.warn}`} />
                       <span className={styles.itemMain}>
                         <span className={styles.itemName}>
-                          {a.toolName || '工具'} (待确认)
+                          {a.toolName || '工具'}
                         </span>
                         <em>{a.summary || '等待批准'}</em>
                       </span>

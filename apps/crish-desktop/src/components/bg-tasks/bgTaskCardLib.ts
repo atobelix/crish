@@ -5,14 +5,10 @@
  */
 import {
   buildBackgroundTaskTerminalLines,
-  isBackgroundTaskActive,
   type BackgroundTaskInfo,
   type BackgroundTaskResourceSample,
   type KillBackgroundTaskResult,
 } from '../../api/backgroundTasksApi';
-
-/** 未启用资源监控时的占位文案（resource: None 缺失容忍） */
-export const RESOURCE_MONITOR_DISABLED_TEXT = '未启用资源监控';
 
 /** 疑似卡死标记文案（task-suspicious 事件 / 轮询快照字段） */
 export const SUSPICIOUS_TASK_TEXT = '疑似卡死';
@@ -33,7 +29,7 @@ export const BGTASK_CARD_LOG_TAIL_LINES = 5;
  */
 export function resolveBgTaskDurationMs(
   task: Pick<BackgroundTaskInfo, 'durationMs' | 'startedAt' | 'finishedAtMs'>,
-  now?: number,
+  now?: number
 ): number | null {
   if (typeof task.durationMs === 'number' && Number.isFinite(task.durationMs)) {
     return Math.max(0, task.durationMs);
@@ -41,7 +37,10 @@ export function resolveBgTaskDurationMs(
   if (typeof task.startedAt !== 'number' || !Number.isFinite(task.startedAt)) {
     return null;
   }
-  if (typeof task.finishedAtMs === 'number' && Number.isFinite(task.finishedAtMs)) {
+  if (
+    typeof task.finishedAtMs === 'number' &&
+    Number.isFinite(task.finishedAtMs)
+  ) {
     return Math.max(0, task.finishedAtMs - task.startedAt);
   }
   const n = typeof now === 'number' && Number.isFinite(now) ? now : Date.now();
@@ -60,17 +59,19 @@ export function formatBgTaskDurationMs(ms: number): string {
 }
 
 /**
- * 时长展示标签：活跃任务前缀「已运行」，终态前缀「时长」；
+ * 时长展示标签：输出纯时长；
  * 无时间依据（无 durationMs 且无 startedAt）→ null（不展示）。
  */
 export function formatBgTaskDurationLabel(
-  task: Pick<BackgroundTaskInfo, 'durationMs' | 'startedAt' | 'finishedAtMs' | 'state'>,
-  now?: number,
+  task: Pick<
+    BackgroundTaskInfo,
+    'durationMs' | 'startedAt' | 'finishedAtMs' | 'state'
+  >,
+  now?: number
 ): string | null {
   const ms = resolveBgTaskDurationMs(task, now);
   if (ms === null) return null;
-  const prefix = isBackgroundTaskActive(task.state) ? '已运行' : '时长';
-  return `${prefix} ${formatBgTaskDurationMs(ms)}`;
+  return formatBgTaskDurationMs(ms);
 }
 
 // ── 资源快照 ───────────────────────────────────────────────────────
@@ -78,21 +79,22 @@ export function formatBgTaskDurationLabel(
 /** 字节 → 可读大小（1024 进制；≥ 1 GB 显示 GB，否则 MB） */
 export function formatRssBytes(bytes: number): string {
   const b = Math.max(0, bytes);
-  if (b >= 1024 * 1024 * 1024) return `${(b / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  if (b >= 1024 * 1024 * 1024)
+    return `${(b / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   return `${(b / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /**
  * 资源快照摘要：`CPU 12.5% · 内存 1.0 MB`。
- * resource 为 null / undefined（未启用 resourceMonitor）→ 返回
- * RESOURCE_MONITOR_DISABLED_TEXT（缺失容忍）。
+ * resource 为 null / undefined 或无有效指标时返回空字符串（调用处不渲染）。
  */
 export function formatBgTaskResourceSummary(
-  resource: BackgroundTaskResourceSample | null | undefined,
+  resource: BackgroundTaskResourceSample | null | undefined
 ): string {
-  if (resource == null) return RESOURCE_MONITOR_DISABLED_TEXT;
+  if (resource == null) return '';
   const cpu =
-    typeof resource.cpuPercent === 'number' && Number.isFinite(resource.cpuPercent)
+    typeof resource.cpuPercent === 'number' &&
+    Number.isFinite(resource.cpuPercent)
       ? resource.cpuPercent.toFixed(1)
       : null;
   const rss =
@@ -102,16 +104,18 @@ export function formatBgTaskResourceSummary(
   const parts: string[] = [];
   if (cpu !== null) parts.push(`CPU ${cpu}%`);
   if (rss !== null) parts.push(`内存 ${rss}`);
-  if (parts.length === 0) return RESOURCE_MONITOR_DISABLED_TEXT;
+  if (parts.length === 0) return '';
   return parts.join(' · ');
 }
 
 // ── 退出码 / 异常高亮 ───────────────────────────────────────────────
 
 /** 退出码展示文案；null / undefined（未知）→ null（不展示） */
-export function formatBgTaskExitCode(exitCode: number | null | undefined): string | null {
+export function formatBgTaskExitCode(
+  exitCode: number | null | undefined
+): string | null {
   if (typeof exitCode !== 'number' || !Number.isFinite(exitCode)) return null;
-  return `退出码 ${exitCode}`;
+  return `exit ${exitCode}`;
 }
 
 /**
@@ -137,7 +141,7 @@ export const KILL_FEEDBACK_INVOKE_FAILED_TEXT = '终止失败：命令不可用'
  * - null → 「终止失败：命令不可用」                         tone=error
  */
 export function formatKillResultFeedback(
-  result: KillBackgroundTaskResult | null | undefined,
+  result: KillBackgroundTaskResult | null | undefined
 ): { tone: KillFeedbackTone; text: string } {
   if (!result) return { tone: 'error', text: KILL_FEEDBACK_INVOKE_FAILED_TEXT };
   switch (result.kind) {
@@ -148,7 +152,9 @@ export function formatKillResultFeedback(
       };
     case 'alreadyExited': {
       const code =
-        typeof result.exitCode === 'number' ? `（退出码 ${result.exitCode}）` : '';
+        typeof result.exitCode === 'number'
+          ? `（退出码 ${result.exitCode}）`
+          : '';
       return { tone: 'info', text: `进程已自然退出${code}` };
     }
     case 'failed':
@@ -160,7 +166,9 @@ export function formatKillResultFeedback(
 }
 
 /** kill 二次确认提示文案 */
-export function buildKillConfirmPrompt(task: Pick<BackgroundTaskInfo, 'label'>): string {
+export function buildKillConfirmPrompt(
+  task: Pick<BackgroundTaskInfo, 'label'>
+): string {
   const label = (task.label || '').trim() || '该任务';
   return `确定终止任务「${label}」？将先发送优雅终止信号，5 秒内未退出则升级为强制终止。`;
 }
@@ -179,7 +187,9 @@ export function formatSendInputFeedback(ok: boolean): string {
  * - 其余（请输入 / Press Enter 等）→ null（不预填）
  * 注意：否定模式 `[y/N]` 必须大小写敏感匹配且先于肯定模式（`[Y/n]` 含 i 标志）。
  */
-export function recommendPromptAnswer(prompt: string | null | undefined): string | null {
+export function recommendPromptAnswer(
+  prompt: string | null | undefined
+): string | null {
   if (!prompt || !prompt.trim()) return null;
   const p = prompt.trim();
   if (/\[y\/N\]/.test(p)) return 'n';
@@ -195,7 +205,7 @@ export function recommendPromptAnswer(prompt: string | null | undefined): string
  */
 export function formatLogTailLines(
   output: string | null | undefined,
-  maxLines: number = BGTASK_CARD_LOG_TAIL_LINES,
+  maxLines: number = BGTASK_CARD_LOG_TAIL_LINES
 ): string[] {
   const cap =
     typeof maxLines === 'number' && Number.isFinite(maxLines) && maxLines > 0

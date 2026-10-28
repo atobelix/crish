@@ -1,20 +1,29 @@
+/**
+ * apps/crish-desktop/src/components/sidebar/ContextMenuFlyout.tsx
+ *
+ * 现代化侧栏排序/分组/过滤级联子菜单
+ * 架构收敛：标准自研 5px 负重叠级联、无缝覆盖与全键盘无障碍漫游。
+ */
+
 import React, {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
-
-import { Button, Menu } from '../ui';
+import { Button, Menu } from '@/components/ui';
 import styles from './SidebarContextMenus.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 type FlyKey = 'sort' | 'group' | 'filter' | null;
 
 const FLY_ORDER: NonNullable<FlyKey>[] = ['sort', 'group', 'filter'];
 
-/** 排序下拉 flyout 行（sort/group/filter 三行同构基件） */
+/**
+ * 级联下拉行（具 5px 负重叠几何自适应与按需避让翻转）
+ */
 const FlyoutRow: React.FC<{
   type: NonNullable<FlyKey>;
   label: string;
@@ -70,7 +79,8 @@ const FlyoutRow: React.FC<{
     if (!open || !localRowElRef.current) return;
     const rowRect = localRowElRef.current.getBoundingClientRect();
     const flyoutWidth = localFlyoutElRef.current?.offsetWidth || 156;
-    setFlipLeft(rowRect.right + flyoutWidth + 10 > window.innerWidth - 8);
+    // 5px 负重叠几何判定：贴合右侧，若溢出视口则翻转至左侧
+    setFlipLeft(rowRect.right + flyoutWidth - 5 > window.innerWidth - 8);
   }, [open]);
 
   return (
@@ -123,7 +133,9 @@ const FlyoutRow: React.FC<{
   );
 };
 
-/** flyout 单选选项（role=menuitemradio + Check 勾选） */
+/**
+ * 级联子菜单单选项
+ */
 const FlyoutOption: React.FC<{
   checked: boolean;
   onSelect: () => void;
@@ -154,12 +166,7 @@ const FlyoutOption: React.FC<{
   );
 };
 
-/**
- * 排序/分组/过滤下拉（ui/Menu 基座 + 自研 flyout 状态机）。
- * flyout 状态机 + 键盘漫游（ArrowRight/ArrowLeft/ArrowUp/ArrowDown/Esc）+ 宽限期关闭语义
- * 全部内聚于本基件（03-detail T10 拆分）。
- */
-export const ContextMenuFlyout: React.FC<{
+export interface ContextMenuFlyoutProps {
   sortMenuRef: React.RefObject<HTMLDivElement | null>;
   sortDropdownOpen: boolean;
   sortDropdownCoords: { x: number; y: number } | null;
@@ -171,7 +178,12 @@ export const ContextMenuFlyout: React.FC<{
   onSetFilterType: (v: 'all' | 'pinned') => void;
   onCloseSortDropdown: () => void;
   sortTriggerRef?: React.RefObject<HTMLElement | null>;
-}> = ({
+}
+
+/**
+ * 排序/分组/过滤级联下拉主组件
+ */
+export const ContextMenuFlyout: React.FC<ContextMenuFlyoutProps> = ({
   sortMenuRef,
   sortDropdownOpen,
   sortDropdownCoords,
@@ -208,8 +220,6 @@ export const ContextMenuFlyout: React.FC<{
     }, 80);
   }, []);
 
-  // F7-F12：flyout 关闭语义——鼠标移出行/飞层后经宽限期关闭；
-  // 宽限期内移入飞层内部（onMouseEnter 取消）不误关
   const handleFlyLeave = useCallback((type: FlyKey) => {
     clearTimeout(flyTimerRef.current.enter);
     clearTimeout(flyTimerRef.current.leave);
@@ -230,7 +240,6 @@ export const ContextMenuFlyout: React.FC<{
     [clearFlyTimers]
   );
 
-  // F7-F12：flyout/入口行 DOM 引用
   const flyoutRefs = useRef<Record<NonNullable<FlyKey>, HTMLDivElement | null>>(
     {
       sort: null,
@@ -244,7 +253,6 @@ export const ContextMenuFlyout: React.FC<{
     filter: null,
   });
 
-  // F7-F12：ArrowRight/Enter/Space 打开 flyout 并聚焦首项；ArrowUp/ArrowDown 在父行间导航
   const handleRowKeyDown = useCallback(
     (type: NonNullable<FlyKey>, e: React.KeyboardEvent) => {
       if (e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ') {
@@ -306,12 +314,8 @@ export const ContextMenuFlyout: React.FC<{
     [clearFlyTimers]
   );
 
-  const sortDropdownRestoreRef = useRef<HTMLElement | null>(null);
-
   useEffect(() => {
     if (!sortDropdownOpen) return;
-    sortDropdownRestoreRef.current =
-      document.activeElement as HTMLElement | null;
     requestAnimationFrame(() => {
       const first =
         rowRefs.current.sort ??
@@ -322,9 +326,88 @@ export const ContextMenuFlyout: React.FC<{
     });
   }, [sortDropdownOpen, sortMenuRef]);
 
-  const sortValueLabel = sortType === 'name' ? '按名称' : '按最近活跃';
-  const groupValueLabel = groupType === 'none' ? '平铺列表' : '按项目分组';
-  const filterValueLabel = filterType === 'pinned' ? '仅置顶' : '全部会话';
+  const sections = useMemo(
+    () => [
+      {
+        type: 'sort' as const,
+        label: '排序方式',
+        valueLabel: sortType === 'name' ? '按名称' : '按最近活跃',
+        options: [
+          {
+            label: '按最近活跃',
+            checked: sortType === 'active',
+            onSelect: () => {
+              onSetSortType('active');
+              onCloseSortDropdown();
+            },
+          },
+          {
+            label: '按名称',
+            checked: sortType === 'name',
+            onSelect: () => {
+              onSetSortType('name');
+              onCloseSortDropdown();
+            },
+          },
+        ],
+      },
+      {
+        type: 'group' as const,
+        label: '分组方式',
+        valueLabel: groupType === 'none' ? '平铺列表' : '按项目分组',
+        options: [
+          {
+            label: '按项目分组',
+            checked: groupType === 'folder',
+            onSelect: () => {
+              onSetGroupType('folder');
+              onCloseSortDropdown();
+            },
+          },
+          {
+            label: '平铺列表',
+            checked: groupType === 'none',
+            onSelect: () => {
+              onSetGroupType('none');
+              onCloseSortDropdown();
+            },
+          },
+        ],
+      },
+      {
+        type: 'filter' as const,
+        label: '列表范围',
+        valueLabel: filterType === 'pinned' ? '仅置顶' : '全部会话',
+        options: [
+          {
+            label: '全部会话',
+            checked: filterType === 'all',
+            onSelect: () => {
+              onSetFilterType('all');
+              onCloseSortDropdown();
+            },
+          },
+          {
+            label: '仅置顶',
+            checked: filterType === 'pinned',
+            onSelect: () => {
+              onSetFilterType('pinned');
+              onCloseSortDropdown();
+            },
+          },
+        ],
+      },
+    ],
+    [
+      sortType,
+      groupType,
+      filterType,
+      onSetSortType,
+      onSetGroupType,
+      onSetFilterType,
+      onCloseSortDropdown,
+    ]
+  );
 
   return (
     <Menu
@@ -358,126 +441,38 @@ export const ContextMenuFlyout: React.FC<{
             : undefined,
       }}
     >
-      <div className={styles.sortFilterMenuTitle} id="sort-filter-title">
-        排序与过滤
-      </div>
-
-      <FlyoutRow
-        type="sort"
-        label="排序方式"
-        valueLabel={sortValueLabel}
-        open={fly === 'sort'}
-        flyoutRef={(el) => {
-          flyoutRefs.current.sort = el;
-        }}
-        rowRef={(el) => {
-          rowRefs.current.sort = el;
-        }}
-        onFlyEnter={() => handleFlyEnter('sort')}
-        onFlyLeave={() => handleFlyLeave('sort')}
-        onFlyClick={() => handleFlyClick('sort')}
-        onFlyoutEnter={cancelFlyLeave}
-        onFlyoutLeave={() => handleFlyLeave('sort')}
-        onRowKeyDown={(e) => handleRowKeyDown('sort', e)}
-        onFlyoutKeyDown={(e) => handleFlyoutKeyDown('sort', e)}
-      >
-        <FlyoutOption
-          checked={sortType === 'active'}
-          onSelect={() => {
-            onSetSortType('active');
-            onCloseSortDropdown();
+      {sections.map((sec) => (
+        <FlyoutRow
+          key={sec.type}
+          type={sec.type}
+          label={sec.label}
+          valueLabel={sec.valueLabel}
+          open={fly === sec.type}
+          flyoutRef={(el) => {
+            flyoutRefs.current[sec.type] = el;
           }}
-        >
-          按最近活跃
-        </FlyoutOption>
-        <FlyoutOption
-          checked={sortType === 'name'}
-          onSelect={() => {
-            onSetSortType('name');
-            onCloseSortDropdown();
+          rowRef={(el) => {
+            rowRefs.current[sec.type] = el;
           }}
+          onFlyEnter={() => handleFlyEnter(sec.type)}
+          onFlyLeave={() => handleFlyLeave(sec.type)}
+          onFlyClick={() => handleFlyClick(sec.type)}
+          onFlyoutEnter={cancelFlyLeave}
+          onFlyoutLeave={() => handleFlyLeave(sec.type)}
+          onRowKeyDown={(e) => handleRowKeyDown(sec.type, e)}
+          onFlyoutKeyDown={(e) => handleFlyoutKeyDown(sec.type, e)}
         >
-          按名称
-        </FlyoutOption>
-      </FlyoutRow>
-
-      <FlyoutRow
-        type="group"
-        label="分组方式"
-        valueLabel={groupValueLabel}
-        open={fly === 'group'}
-        flyoutRef={(el) => {
-          flyoutRefs.current.group = el;
-        }}
-        rowRef={(el) => {
-          rowRefs.current.group = el;
-        }}
-        onFlyEnter={() => handleFlyEnter('group')}
-        onFlyLeave={() => handleFlyLeave('group')}
-        onFlyClick={() => handleFlyClick('group')}
-        onFlyoutEnter={cancelFlyLeave}
-        onFlyoutLeave={() => handleFlyLeave('group')}
-        onRowKeyDown={(e) => handleRowKeyDown('group', e)}
-        onFlyoutKeyDown={(e) => handleFlyoutKeyDown('group', e)}
-      >
-        <FlyoutOption
-          checked={groupType === 'folder'}
-          onSelect={() => {
-            onSetGroupType('folder');
-            onCloseSortDropdown();
-          }}
-        >
-          按项目分组
-        </FlyoutOption>
-        <FlyoutOption
-          checked={groupType === 'none'}
-          onSelect={() => {
-            onSetGroupType('none');
-            onCloseSortDropdown();
-          }}
-        >
-          平铺列表
-        </FlyoutOption>
-      </FlyoutRow>
-
-      <FlyoutRow
-        type="filter"
-        label="列表范围"
-        valueLabel={filterValueLabel}
-        open={fly === 'filter'}
-        flyoutRef={(el) => {
-          flyoutRefs.current.filter = el;
-        }}
-        rowRef={(el) => {
-          rowRefs.current.filter = el;
-        }}
-        onFlyEnter={() => handleFlyEnter('filter')}
-        onFlyLeave={() => handleFlyLeave('filter')}
-        onFlyClick={() => handleFlyClick('filter')}
-        onFlyoutEnter={cancelFlyLeave}
-        onFlyoutLeave={() => handleFlyLeave('filter')}
-        onRowKeyDown={(e) => handleRowKeyDown('filter', e)}
-        onFlyoutKeyDown={(e) => handleFlyoutKeyDown('filter', e)}
-      >
-        <FlyoutOption
-          checked={filterType === 'all'}
-          onSelect={() => {
-            onSetFilterType('all');
-            onCloseSortDropdown();
-          }}
-        >
-          全部会话
-        </FlyoutOption>
-        <FlyoutOption
-          checked={filterType === 'pinned'}
-          onSelect={() => {
-            onSetFilterType('pinned');
-            onCloseSortDropdown();
-          }}
-        >
-          仅置顶
-        </FlyoutOption>
-      </FlyoutRow>
+          {sec.options.map((opt) => (
+            <FlyoutOption
+              key={opt.label}
+              checked={opt.checked}
+              onSelect={opt.onSelect}
+            >
+              {opt.label}
+            </FlyoutOption>
+          ))}
+        </FlyoutRow>
+      ))}
     </Menu>
   );
 };

@@ -15,9 +15,9 @@ import {
   W5B_STRICT_PACKAGE_ID,
   W5B_STRICT_TRACK,
 } from '../note-paper/notePaperStrictTrack';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 import styles from './WorkspaceEmptyState.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export type WorkspaceEmptyStateActionsProps = {
   preferredNotePaperTrack: 'strict' | 'skeleton';
@@ -108,9 +108,6 @@ export function WorkspaceEmptyStateLanding(
         <AppIcon name="layout-panel-left" size={32} aria-hidden />
       </div>
       <div className={styles.emptyStateTitle}>工作区暂无面板</div>
-      <div className={styles.emptyStateDesc}>
-        从侧栏打开对话，或用标签栏「+」添加文件、终端、预览等面板。
-      </div>
       {/*
         夹具双轨 CTA：Strict（W5-B）+ Skeleton 预览壳（W5-B-S）。
         点 CTA = 夹具路径；≠ 产品入口；≠ 打开完成；≠ 关 EL。

@@ -106,7 +106,7 @@ describe('侧栏折叠动效与拖拽解耦 CSS 契约', () => {
 
   it('.sidebar 声明离散折叠/展开过渡：宽度到位后减速停住', () => {
     expect(css).toMatch(
-      /\.sidebar\s*\{[^}]*transition:\s*width\s+200ms\s+var\(--ease-decelerate\);/
+      /\.sidebar\s*\{[^}]*transition:\s*width\s+var\(--duration-normal,\s*200ms\)\s+var\(--ease-decelerate\);/
     );
   });
 

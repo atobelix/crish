@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import { useToast } from '../../services/toast/ToastContext';
 import { runLocalGit } from '../../api/gitApi';
 import { getWorkspacePath, pathRelativeToRoot } from '../../api/workspaceFsApi';
 import styles from './FileViewerCard.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface FileViewerHistoryDrawerProps {
   filePath: string;
@@ -18,12 +18,9 @@ interface CommitRecord {
   message: string;
 }
 
-export const FileViewerHistoryDrawer: React.FC<FileViewerHistoryDrawerProps> = ({
-  filePath,
-  hasWorkingChanges,
-  onSelectDiffView,
-  onClose,
-}) => {
+export const FileViewerHistoryDrawer: React.FC<
+  FileViewerHistoryDrawerProps
+> = ({ filePath, hasWorkingChanges, onSelectDiffView, onClose }) => {
   const { showToast } = useToast();
   const [history, setHistory] = useState<CommitRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -92,7 +89,12 @@ export const FileViewerHistoryDrawer: React.FC<FileViewerHistoryDrawerProps> = (
     >
       <div className={styles.historyHeader}>
         <div className={styles.historyTitleWrap}>
-          <AppIcon name="history" size={14} className={styles.historyHeaderIcon} aria-hidden />
+          <AppIcon
+            name="history"
+            size={14}
+            className={styles.historyHeaderIcon}
+            aria-hidden
+          />
           <span className={styles.historyTitle}>
             提交历史 {history.length > 0 ? `(${history.length})` : ''}
           </span>
@@ -106,7 +108,14 @@ export const FileViewerHistoryDrawer: React.FC<FileViewerHistoryDrawerProps> = (
               className={styles.drawerActBtn}
               onClick={() => void loadHistory()}
               disabled={loading}
-              icon={<AppIcon name="refresh" size={13} className={loading ? 'spin' : ''} aria-hidden />}
+              icon={
+                <AppIcon
+                  name="refresh"
+                  size={13}
+                  className={loading ? 'spin' : ''}
+                  aria-hidden
+                />
+              }
               aria-label="刷新历史记录"
             />
           </Tooltip>
@@ -141,26 +150,28 @@ export const FileViewerHistoryDrawer: React.FC<FileViewerHistoryDrawerProps> = (
           >
             <div className={styles.historyWorkingHeader}>
               <span className={styles.workingBadge}>工作区未提交改动</span>
-              <span className={styles.workingHint}>点击查看差异</span>
-            </div>
-            <div className={styles.historyWorkingDesc}>
-              本地代码与上次提交相比已发生变动。
             </div>
           </div>
         )}
 
         {loading ? (
-          <div className={styles.historyLoading} role="status" aria-live="polite">
+          <div
+            className={styles.historyLoading}
+            role="status"
+            aria-live="polite"
+          >
             <AppIcon name="loader" size={16} className="spin" aria-hidden />
             <span>正在读取 Git 提交历史…</span>
           </div>
         ) : history.length === 0 ? (
           <div className={styles.historyEmpty} role="status" aria-live="polite">
-            <AppIcon name="git-commit" size={22} className={styles.historyEmptyIcon} aria-hidden />
+            <AppIcon
+              name="git-commit"
+              size={22}
+              className={styles.historyEmptyIcon}
+              aria-hidden
+            />
             <div className={styles.historyEmptyTitle}>暂无提交历史</div>
-            <div className={styles.historyEmptySub}>
-              该文件尚未提交至 Git 仓库或为全新创建。
-            </div>
           </div>
         ) : (
           <div className={styles.historyList} role="list" aria-label="提交列表">
@@ -179,15 +190,18 @@ export const FileViewerHistoryDrawer: React.FC<FileViewerHistoryDrawerProps> = (
                       onClick={() => handleCopyHash(commit.hash)}
                       aria-label={`复制提交哈希 ${commit.hash}`}
                     >
-                      <AppIcon name="git-commit" size={12} className={styles.commitIcon} aria-hidden />
+                      <AppIcon
+                        name="git-commit"
+                        size={12}
+                        className={styles.commitIcon}
+                        aria-hidden
+                      />
                       <span>{commit.hash}</span>
                     </Button>
                   </Tooltip>
                 </div>
                 <Tooltip content={commit.message}>
-                  <div className={styles.commitMsg}>
-                    {commit.message}
-                  </div>
+                  <div className={styles.commitMsg}>{commit.message}</div>
                 </Tooltip>
               </div>
             ))}

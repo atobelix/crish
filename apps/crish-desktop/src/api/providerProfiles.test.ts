@@ -356,7 +356,7 @@ describe('providerProfiles', () => {
     expect(resolvePreferredModelSelection()).toBeNull();
   });
 
-  it('getProviderSetupStatus: fresh install needs key, hides picker', () => {
+  it('getProviderSetupStatus: fresh install needs key, model picker remains visible', () => {
     // 中立产品：空库无预置服务商/模型/密钥
     loadProfiles();
     const s = getProviderSetupStatus({
@@ -366,7 +366,8 @@ describe('providerProfiles', () => {
     expect(s.needsKeySetup).toBe(true);
     // 无密钥时不进入 needsModelSetup（先要配连接）
     expect(s.needsModelSetup).toBe(false);
-    expect(s.showModelPicker).toBe(false);
+    // 模型选择器作为输入坞第一公民恒定渲染（不随未配 Key 消失）
+    expect(s.showModelPicker).toBe(true);
     expect(s.hasLocalKey).toBe(false);
     expect(anyProfileHasKey()).toBe(false);
     // 空库：无任何模型
@@ -882,7 +883,9 @@ describe('providerProfiles', () => {
       expect(
         findProfileByDisplayName([custom, seed], 'OpenCode Go 订阅')?.id
       ).toBe('opencode-go');
-      expect(findProfileByDisplayName([zen], 'OpenCode Go 订阅')).toBeUndefined();
+      expect(
+        findProfileByDisplayName([zen], 'OpenCode Go 订阅')
+      ).toBeUndefined();
     });
 
     it('foldProfilesByDisplayName prefers keyed custom over empty seed', () => {
@@ -900,9 +903,9 @@ describe('providerProfiles', () => {
         models: ['deepseek-v4-flash', 'glm-5.2'],
         hasKey: true,
       };
-      expect(foldProfilesByDisplayName([seed, custom]).map((p) => p.id)).toEqual([
-        'custom-keyed',
-      ]);
+      expect(
+        foldProfilesByDisplayName([seed, custom]).map((p) => p.id)
+      ).toEqual(['custom-keyed']);
     });
 
     it('empty catalog guards: no mimo fallback', () => {

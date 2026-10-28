@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 
 import {
   computeChecklistProgress,
@@ -9,7 +9,7 @@ import {
 } from '../../api/sessionProgressApi';
 import { agentOneLineLabel } from './helpers';
 import type { SessionState } from '../../store/types';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 interface ProgressSectionProps {
   session?: SessionState | null;
@@ -49,9 +49,12 @@ export const ProgressSection = React.memo(function ProgressSection({
             }
             onClick={onGoalClick}
           >
-            <AppIcon name="target" size={14}
+            <AppIcon
+              name="target"
+              size={14}
               className={styles.liveIco}
-              aria-hidden />
+              aria-hidden
+            />
             <span className={styles.itemName}>
               {goalMode ? agentOneLineLabel(goalMode.goal, '目标') : '清单'}
             </span>

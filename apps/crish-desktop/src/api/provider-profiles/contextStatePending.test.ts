@@ -48,7 +48,7 @@ describe('contextStatePending（I1-α② context-state 产生器）', () => {
     setSessionThinkingTitle('sess-ctx', 'High');
     const text = buildContextStateText();
     expect(text).toContain('当前已切换到模型 deepseek-v4-flash（服务商 p1）');
-    expect(text).toContain('权限模式：ask');
+    expect(text).toContain('权限模式：smart');
     expect(text).toContain('思考档位：High');
     expect(text).not.toContain('思考档位：medium');
   });
@@ -67,7 +67,7 @@ describe('contextStatePending（I1-α② context-state 产生器）', () => {
     const taken = takePendingContextState('sess-ctx');
     expect(taken).toBeDefined();
     expect(taken?.model).toBe('deepseek-v4-flash');
-    expect(taken?.permission).toBe('ask');
+    expect(taken?.permission).toBe('smart');
     expect(taken?.thinking).toBe('High');
     expect(taken?.text).toContain('当前已切换到模型 deepseek-v4-flash');
     expect(takePendingContextState('sess-ctx')).toBeUndefined();
@@ -104,9 +104,9 @@ describe('contextStatePending（I1-α② context-state 产生器）', () => {
       sessionId: 'sess-ctx',
       model: 'qwen-2.5-max',
       profile: 'aliyun',
-      permission: 'ask',
+      permission: 'smart',
       thinking: 'High',
-      text: '当前已切换到模型 qwen-2.5-max（服务商 aliyun）。权限模式：ask。思考档位：High。',
+      text: '当前已切换到模型 qwen-2.5-max（服务商 aliyun）。权限模式：smart。思考档位：High。',
     });
   });
 
@@ -115,7 +115,7 @@ describe('contextStatePending（I1-α② context-state 产生器）', () => {
     localStorage.setItem('crish_active_profile_id', 'aliyun');
     const text = buildContextStateText();
     expect(text).toContain('当前已切换到模型 qwen-2.5-max（服务商 aliyun）');
-    expect(text).toContain('权限模式：ask');
+    expect(text).toContain('权限模式：smart');
     expect(text).not.toContain('思考档位');
   });
 

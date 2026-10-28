@@ -18,6 +18,10 @@ import {
 } from '../layout-tree';
 import { countChatLeaves, countToolLeaves } from './adapterShape';
 import { createDefaultDock } from './types';
+import {
+  getActiveDockTab,
+  collectSpatialLeaves,
+} from '../layout-tree/dockLayoutModel';
 
 vi.mock('../../api/projectStore', () => ({
   GENERAL_FOLDER: 'general',
@@ -97,10 +101,8 @@ function resetLayout(tree: LayoutTree): void {
 }
 
 function dockOf(sessionId: string) {
-  return findTabBySessionId(
-    useLayoutTreeStore.getState().tree.root,
-    sessionId
-  )?.tab.dock;
+  return findTabBySessionId(useLayoutTreeStore.getState().tree.root, sessionId)
+    ?.tab.dock;
 }
 
 beforeEach(() => {
@@ -121,20 +123,30 @@ describe('multi-unit two docks = two tab.dock', () => {
     const root = useLayoutTreeStore.getState().tree.root;
     expect(countChatLeaves(root)).toBe(2);
     expect(countToolLeaves(root)).toBe(0);
-    expect(listChatLeaves(root).map((c) => c.id).sort()).toEqual(
-      [chatA.id, chatB.id].sort()
-    );
+    expect(
+      listChatLeaves(root)
+        .map((c) => c.id)
+        .sort()
+    ).toEqual([chatA.id, chatB.id].sort());
     expect(listToolLeaves(root)).toHaveLength(0);
     expect(flattenTree(root).branches.length).toBe(branchesBefore);
 
     const a = dockOf(SESSION_A)!;
     const b = dockOf(SESSION_B)!;
     expect(a.collapsed).toBe(false);
-    expect(a.activePanelId).toBe('terminal');
-    expect(a.openPanelIds).toContain('terminal');
+    expect(getActiveDockTab(a.tree)?.viewId).toBe('terminal');
+    expect(
+      collectSpatialLeaves(a.tree.root).flatMap((l) =>
+        l.tabs.map((t) => t.viewId)
+      )
+    ).toContain('terminal');
     expect(b.collapsed).toBe(false);
-    expect(b.activePanelId).toBe('files');
-    expect(b.openPanelIds).toContain('files');
+    expect(getActiveDockTab(b.tree)?.viewId).toBe('files');
+    expect(
+      collectSpatialLeaves(b.tree.root).flatMap((l) =>
+        l.tabs.map((t) => t.viewId)
+      )
+    ).toContain('files');
   });
 
   it('折叠 A 只改 A.dock.collapsed，B dock 与叶数不变', () => {
@@ -146,12 +158,14 @@ describe('multi-unit two docks = two tab.dock', () => {
     openToolInSession(SESSION_A, 'chat');
 
     const root = useLayoutTreeStore.getState().tree.root;
-    expect(listChatLeaves(root).map((c) => c.id).sort()).toEqual(
-      [chatA.id, chatB.id].sort()
-    );
+    expect(
+      listChatLeaves(root)
+        .map((c) => c.id)
+        .sort()
+    ).toEqual([chatA.id, chatB.id].sort());
     expect(listToolLeaves(root)).toHaveLength(0);
     expect(dockOf(SESSION_A)!.collapsed).toBe(true);
-    expect(dockOf(SESSION_B)!.activePanelId).toBe('files');
+    expect(getActiveDockTab(dockOf(SESSION_B)!.tree)?.viewId).toBe('files');
     expect(dockOf(SESSION_B)!.collapsed).toBe(false);
   });
 });
@@ -166,10 +180,10 @@ describe('openToolInSession session isolation', () => {
 
     openToolInSession(SESSION_A, 'terminal');
 
-    expect(dockOf(SESSION_A)!.activePanelId).toBe('terminal');
+    expect(getActiveDockTab(dockOf(SESSION_A)!.tree)?.viewId).toBe('terminal');
     expect(dockOf(SESSION_B)).toEqual(dockBBefore);
-    expect(listToolLeaves(useLayoutTreeStore.getState().tree.root)).toHaveLength(
-      0
-    );
+    expect(
+      listToolLeaves(useLayoutTreeStore.getState().tree.root)
+    ).toHaveLength(0);
   });
 });

@@ -14,7 +14,7 @@ import React from 'react';
 import styles from './AppErrorBoundary.module.css';
 import { errorStore } from '../services/ErrorStore';
 import { logger, toErrMeta } from '../services/LoggerService';
-import { Button, Tooltip } from './ui';
+import { Button, Tooltip } from '@/components/ui';
 
 type Variant = 'fullscreen' | 'compact' | 'minimal';
 

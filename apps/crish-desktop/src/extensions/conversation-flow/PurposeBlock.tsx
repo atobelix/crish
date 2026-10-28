@@ -4,7 +4,7 @@
  */
 import { useState, type ReactElement } from 'react';
 import type { PurposeNode } from '@crish/conversation-flow';
-import { Button } from '../../components/ui';
+import { Button } from '@/components/ui';
 import { findAgentForTool } from '../../components/chat-tool-call/chatToolCallUtils';
 import type { MessageToolCall, SessionAgent } from '../../store/types';
 import { ActionRow } from './ActionRow';
@@ -23,9 +23,12 @@ export interface PurposeBlockProps {
 
 function purposeMeta(status: PurposeNode['status'], n: number): string {
   const count = n > 1 ? `${n} 步` : '';
-  if (status === 'running') return [count, '进行中'].filter(Boolean).join(' · ');
-  if (status === 'error') return [count, '未完全成功'].filter(Boolean).join(' · ');
-  if (status === 'partial') return [count, '部分完成'].filter(Boolean).join(' · ');
+  if (status === 'running')
+    return [count, '进行中'].filter(Boolean).join(' · ');
+  if (status === 'error')
+    return [count, '未完全成功'].filter(Boolean).join(' · ');
+  if (status === 'partial')
+    return [count, '部分完成'].filter(Boolean).join(' · ');
   return count;
 }
 

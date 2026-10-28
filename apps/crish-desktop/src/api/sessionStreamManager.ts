@@ -5,8 +5,12 @@
 
 import type { StreamCancelFn } from './chat-bridge/ConnectionLifecycle';
 import { logger } from '../services/LoggerService';
+import { isSessionTombstoned } from '../utils/lifecycle/ScopedLifecycleRegistry';
 
-export type { StreamCancelFn, StreamCancelMode } from './chat-bridge/ConnectionLifecycle';
+export type {
+  StreamCancelFn,
+  StreamCancelMode,
+} from './chat-bridge/ConnectionLifecycle';
 
 export type SessionStreamHandle = {
   /** 支持 L2 cooperative / L3 force；无参时按 force（旧调用兼容） */
@@ -19,7 +23,7 @@ export type SessionStreamHandle = {
 export type StreamStarter = (
   input: string,
   userMsgId: string,
-  sessionIdOverride?: string,
+  sessionIdOverride?: string
 ) => void;
 
 export type PendingContinue = {
@@ -93,6 +97,15 @@ export class SessionStreamManager {
   private starter: StreamStarter | null = null;
 
   /** 绑定当前 hook 的 runStreamingAssistant（每 render 更新，避免 setTimeout 抓到 undefined） */
+  private sessionAliveOracle: ((sessionId: string) => boolean) | null = null;
+
+  /** 绑定存活探测断言闭包（避免直接反向依赖 Store 内部实现，符合 depcruise 契约） */
+  bindSessionAliveOracle(
+    oracle: ((sessionId: string) => boolean) | null
+  ): void {
+    this.sessionAliveOracle = oracle;
+  }
+
   bindStarter(fn: StreamStarter): void {
     this.starter = fn;
   }
@@ -118,7 +131,10 @@ export class SessionStreamManager {
   }
 
   /** 替换同会话流前先 cancel 旧句柄，避免幽灵 run */
-  replace(sessionId: string, next: SessionStreamHandle): SessionStreamHandle | undefined {
+  replace(
+    sessionId: string,
+    next: SessionStreamHandle
+  ): SessionStreamHandle | undefined {
     const prev = this.streams.get(sessionId);
     if (prev) {
       this.streams.delete(sessionId);
@@ -172,7 +188,7 @@ export class SessionStreamManager {
 
   endDrainNextTick(
     sessionId: string,
-    schedule: (fn: () => void) => void = (fn) => queueMicrotask(fn),
+    schedule: (fn: () => void) => void = (fn) => queueMicrotask(fn)
   ): void {
     schedule(() => {
       this.draining.delete(sessionId);
@@ -187,9 +203,31 @@ export class SessionStreamManager {
     sessionId: string,
     modelText: string,
     userMsgId: string,
-    schedule: (fn: () => void) => void = (fn) => queueMicrotask(fn),
+    schedule: (fn: () => void) => void = (fn) => queueMicrotask(fn)
   ): void {
     schedule(() => {
+      // 【Double-Lock 双重守卫】：1. 墓碑黑名单守卫
+      if (isSessionTombstoned(sessionId)) {
+        logger.info(
+          '[SessionStreamManager] session tombstoned; cancel scheduled start',
+          {
+            module: 'SessionStreamManager',
+            sessionId,
+          }
+        );
+        return;
+      }
+      // 2. Store 存活性二次校验（防御 LRU 墓碑驱逐后长延迟定时器执行）
+      if (this.sessionAliveOracle && !this.sessionAliveOracle(sessionId)) {
+        logger.info(
+          '[SessionStreamManager] session not alive in store; drop scheduled start',
+          {
+            module: 'SessionStreamManager',
+            sessionId,
+          }
+        );
+        return;
+      }
       const start = this.starter;
       if (!start) {
         logger.warn('[SessionStreamManager] starter not bound; drop continue', {
@@ -234,5 +272,6 @@ export class SessionStreamManager {
     this.goalCancelled.clear();
     busyRetry.clear();
     this.starter = null;
+    this.sessionAliveOracle = null;
   }
 }

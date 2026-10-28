@@ -228,7 +228,7 @@ export function streamViaDirectFetch(
           if (errText) msg = `${msg}\n${errText.slice(0, 300)}`;
         }
         if (callbacks.onRunError) callbacks.onRunError(msg, 'network', errText);
-        else callbacks.onChunk(`\n⚠️ ${msg}`);
+        else callbacks.onChunk(`\n[Notice] ${msg}`);
         finished = true;
         callbacks.onComplete();
         return;
@@ -317,7 +317,7 @@ export function streamViaDirectFetch(
       if (controller.signal.aborted || finished) return;
       const msg = err instanceof Error ? err.message : String(err);
       if (callbacks.onRunError) callbacks.onRunError(msg, 'network');
-      else callbacks.onChunk(`\n⚠️ ${msg}`);
+      else callbacks.onChunk(`\n[Notice] ${msg}`);
       finished = true;
       callbacks.onComplete();
     }

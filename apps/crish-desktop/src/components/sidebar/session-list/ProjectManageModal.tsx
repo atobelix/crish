@@ -1,17 +1,22 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  addProjectFromPaths,
-  openProject,
   projectFolderLabel,
-  removeProject,
-  updateProject,
   type ProjectEntry,
 } from '../../../api/projectStore';
-import { openDirectoriesDialogSafe } from '../../../api/openDirectoryDialog';
+import {
+  addProjectFromRecentPaths,
+  openAuthorizedProject,
+  removeAuthorizedProject,
+  selectWorkspaceFolders,
+  updateAuthorizedProjectPaths,
+  WorkspaceAccessError,
+} from '../../../api/workspaceAccessApi';
 import { navigateToNewDraft } from '../../../store/storeAccess';
-import { Button, Dialog, Input, Tooltip } from '../../ui';
-import { AppIcon } from '../../ui/icons/index';
+import { Button, Dialog, Input, Tooltip } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
+import { toast } from '../../../services/toast';
 import styles from './ProjectManageModal.module.css';
+import { useI18n } from '../../../i18n';
 
 export interface ProjectManageModalProps {
   mode: 'create' | 'manage';
@@ -32,11 +37,13 @@ export const ProjectManageModal: React.FC<ProjectManageModalProps> = ({
   onProjectRemoved,
   onOpenProject,
 }) => {
+  const { t } = useI18n();
   const [folderPaths, setFolderPaths] = useState<string[]>([]);
   const [projectName, setProjectName] = useState('');
   const [nameTouched, setNameTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!open) return;
@@ -56,16 +63,15 @@ export const ProjectManageModal: React.FC<ProjectManageModalProps> = ({
       setNameTouched(false);
     }
     setCopied(false);
+    setError('');
   }, [open, mode, project]);
 
   const handlePickFolders = useCallback(async () => {
     if (busy) return;
     setBusy(true);
     try {
-      const picked = await openDirectoriesDialogSafe(
-        mode === 'create' ? '选择项目文件夹（支持多选）' : '添加文件夹到项目'
-      );
-      if (picked.length > 0) {
+      const picked = await selectWorkspaceFolders(false);
+      if (picked && picked.length > 0) {
         setFolderPaths((prev) => {
           const next = [...prev];
           for (const p of picked) {
@@ -77,10 +83,16 @@ export const ProjectManageModal: React.FC<ProjectManageModalProps> = ({
           return next;
         });
       }
+    } catch (selectionError) {
+      setError(
+        selectionError instanceof WorkspaceAccessError
+          ? selectionError.message
+          : t('workspace.project.pickerUnavailable')
+      );
     } finally {
       setBusy(false);
     }
-  }, [busy, mode, nameTouched, projectName]);
+  }, [busy, nameTouched, projectName, t]);
 
   const handleRemovePath = useCallback(
     (index: number) => {
@@ -98,43 +110,100 @@ export const ProjectManageModal: React.FC<ProjectManageModalProps> = ({
   );
 
   const handleSubmit = useCallback(
-    (e?: React.FormEvent) => {
+    async (e?: React.FormEvent) => {
       e?.preventDefault();
-      if (folderPaths.length === 0) return;
+      if (busy || folderPaths.length === 0) return;
+      setError('');
       const primaryPath = folderPaths[0]!;
       const resolvedName =
         projectName.trim() || projectFolderLabel(primaryPath);
 
       if (mode === 'create') {
-        const entry = addProjectFromPaths(folderPaths, resolvedName);
-        onOpenProject?.(entry.id);
-        onProjectSaved?.(entry);
-        onClose();
+        setBusy(true);
+        try {
+          const entry = await addProjectFromRecentPaths(
+            folderPaths,
+            resolvedName
+          );
+          onOpenProject?.(entry.id);
+          onProjectSaved?.(entry);
+          onClose();
+        } catch {
+          setError(t('workspace.project.saveFailed'));
+        } finally {
+          setBusy(false);
+        }
         return;
       }
 
       if (project) {
-        const updated = updateProject(project.id, {
-          name: resolvedName,
-          path: primaryPath,
-          paths: folderPaths,
-        });
-        if (updated) {
-          onProjectSaved?.(updated);
+        setBusy(true);
+        try {
+          const updated = await updateAuthorizedProjectPaths(
+            project.id,
+            folderPaths,
+            resolvedName
+          );
+          if (updated) {
+            onProjectSaved?.(updated);
+          }
+          onClose();
+        } catch (authorizationError) {
+          setError(
+            authorizationError instanceof WorkspaceAccessError
+              ? authorizationError.message
+              : t('workspace.project.saveFailed')
+          );
+        } finally {
+          setBusy(false);
         }
-        onClose();
       }
     },
     [
       folderPaths,
       projectName,
+      busy,
       mode,
       project,
       onOpenProject,
       onProjectSaved,
       onClose,
+      t,
     ]
   );
+
+  const handleCreateChatInProject = useCallback(async () => {
+    if (!project) return;
+    try {
+      const opened = await openAuthorizedProject(project.id);
+      if (!opened) return;
+      onOpenProject?.(project.id);
+      navigateToNewDraft(project.id);
+      onClose();
+    } catch (openError) {
+      toast.error(
+        openError instanceof WorkspaceAccessError
+          ? openError.message
+          : t('workspace.project.notAuthorized')
+      );
+    }
+  }, [project, onOpenProject, onClose, t]);
+
+  const handleSetCurrentWorkspace = useCallback(async () => {
+    if (!project) return;
+    try {
+      const opened = await openAuthorizedProject(project.id);
+      if (!opened) return;
+      onOpenProject?.(project.id);
+      onClose();
+    } catch (openError) {
+      toast.error(
+        openError instanceof WorkspaceAccessError
+          ? openError.message
+          : t('workspace.project.notAuthorized')
+      );
+    }
+  }, [project, onOpenProject, onClose, t]);
 
   const handleCopyPath = useCallback(async () => {
     const targetPath = (folderPaths[0] || project?.path || '').trim();
@@ -147,6 +216,25 @@ export const ProjectManageModal: React.FC<ProjectManageModalProps> = ({
       /* ignore clipboard error */
     }
   }, [folderPaths, project]);
+
+  const handleRemoveProject = useCallback(async () => {
+    if (!project || busy) return;
+    setError('');
+    setBusy(true);
+    try {
+      await removeAuthorizedProject(project.id);
+      onProjectRemoved?.(project.id);
+      onClose();
+    } catch (removeError) {
+      setError(
+        removeError instanceof WorkspaceAccessError
+          ? removeError.message
+          : t('workspace.project.removeFailed')
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, onClose, onProjectRemoved, project, t]);
 
   const isDirty =
     mode === 'create'
@@ -162,16 +250,20 @@ export const ProjectManageModal: React.FC<ProjectManageModalProps> = ({
   const footer = (
     <div className={styles.modalFooter}>
       <Button type="button" variant="ghost" size="sm" onClick={onClose}>
-        取消
+        {t('common.cancel')}
       </Button>
       <Button
         type="button"
         variant="primary"
         size="sm"
-        disabled={mode === 'create' ? folderPaths.length === 0 : !isDirty}
-        onClick={handleSubmit}
+        disabled={
+          busy || (mode === 'create' ? folderPaths.length === 0 : !isDirty)
+        }
+        onClick={() => void handleSubmit()}
       >
-        {mode === 'create' ? '新建项目' : '保存修改'}
+        {mode === 'create'
+          ? t('workspace.project.create')
+          : t('workspace.project.saveChanges')}
       </Button>
     </div>
   );
@@ -180,16 +272,23 @@ export const ProjectManageModal: React.FC<ProjectManageModalProps> = ({
     <Dialog
       open={open}
       onClose={onClose}
-      title={mode === 'create' ? '新建项目' : '项目管理'}
+      title={
+        mode === 'create'
+          ? t('workspace.project.create')
+          : t('workspace.project.manage')
+      }
       classNames={{ panel: styles.modalPanel, body: styles.modalBody }}
       footer={footer}
     >
       <div className={styles.formGroup}>
-        <label className={styles.fieldLabel}>项目文件夹</label>
+        <label className={styles.fieldLabel}>
+          {t('workspace.project.folder')}
+        </label>
         {folderPaths.length === 0 ? (
           <Button
             bare
             type="button"
+            disabled={busy}
             className={styles.folderPickerDropzone}
             onClick={() => void handlePickFolders()}
           >
@@ -201,9 +300,8 @@ export const ProjectManageModal: React.FC<ProjectManageModalProps> = ({
                 aria-hidden
               />
             </div>
-            <span className={styles.dropzoneText}>点击选择项目文件夹</span>
-            <span className={styles.dropzoneSubtext}>
-              支持单选或多选本地文件夹
+            <span className={styles.dropzoneText}>
+              {t('workspace.project.chooseFolder')}
             </span>
           </Button>
         ) : (
@@ -225,12 +323,14 @@ export const ProjectManageModal: React.FC<ProjectManageModalProps> = ({
                       <span className={styles.folderItemPath}>{p}</span>
                     </Tooltip>
                   </div>
-                  <Tooltip content="移除此文件夹">
+                  <Tooltip content={t('workspace.project.removeFolder')}>
                     <Button
                       bare
                       type="button"
                       className={styles.folderRemoveBtn}
-                      aria-label={`移除文件夹 ${p}`}
+                      aria-label={t('workspace.project.removeFolderAria', {
+                        path: p,
+                      })}
                       onClick={() => handleRemovePath(idx)}
                     >
                       <AppIcon name="x" size={12} aria-hidden />
@@ -242,24 +342,27 @@ export const ProjectManageModal: React.FC<ProjectManageModalProps> = ({
             <Button
               bare
               type="button"
+              disabled={busy}
               className={styles.addMoreBtn}
               onClick={() => void handlePickFolders()}
             >
               <AppIcon name="plus" size={12} aria-hidden />
-              <span>添加更多文件夹</span>
+              <span>{t('workspace.project.addMoreFolders')}</span>
             </Button>
           </>
         )}
       </div>
 
       <div className={styles.formGroup}>
-        <label className={styles.fieldLabel}>项目名称</label>
+        <label className={styles.fieldLabel}>
+          {t('workspace.project.name')}
+        </label>
         <Input
           type="text"
           size="md"
           className={styles.nameInput}
-          aria-label="项目名称"
-          placeholder="输入项目名称（默认按首个文件夹命名）"
+          aria-label={t('workspace.project.name')}
+          placeholder={t('workspace.project.name')}
           value={projectName}
           onChange={(e) => {
             setNameTouched(true);
@@ -267,6 +370,12 @@ export const ProjectManageModal: React.FC<ProjectManageModalProps> = ({
           }}
         />
       </div>
+
+      {error ? (
+        <div className={styles.errorMessage} role="alert">
+          {error}
+        </div>
+      ) : null}
 
       {mode === 'manage' && project ? (
         <>
@@ -276,28 +385,20 @@ export const ProjectManageModal: React.FC<ProjectManageModalProps> = ({
               bare
               type="button"
               className={styles.actionItem}
-              onClick={() => {
-                onOpenProject?.(project.id);
-                navigateToNewDraft(project.id);
-                onClose();
-              }}
+              onClick={() => void handleCreateChatInProject()}
             >
               <AppIcon name="file-plus" size={14} aria-hidden />
-              <span>在本项目新建对话</span>
+              <span>{t('workspace.project.createConversation')}</span>
             </Button>
 
             <Button
               bare
               type="button"
               className={styles.actionItem}
-              onClick={() => {
-                openProject(project.id);
-                onOpenProject?.(project.id);
-                onClose();
-              }}
+              onClick={() => void handleSetCurrentWorkspace()}
             >
               <AppIcon name="folder-open" size={14} aria-hidden />
-              <span>设为当前工作区</span>
+              <span>{t('workspace.project.setCurrentWorkspace')}</span>
             </Button>
 
             <Button
@@ -307,21 +408,22 @@ export const ProjectManageModal: React.FC<ProjectManageModalProps> = ({
               onClick={() => void handleCopyPath()}
             >
               <AppIcon name={copied ? 'check' : 'copy'} size={14} aria-hidden />
-              <span>{copied ? '已复制路径' : '复制文件夹路径'}</span>
+              <span>
+                {copied
+                  ? t('workspace.project.pathCopied')
+                  : t('workspace.project.copyFolderPath')}
+              </span>
             </Button>
 
             <Button
               bare
               type="button"
               className={`${styles.actionItem} ${styles.actionItemDanger}`}
-              onClick={() => {
-                removeProject(project.id);
-                onProjectRemoved?.(project.id);
-                onClose();
-              }}
+              disabled={busy}
+              onClick={() => void handleRemoveProject()}
             >
               <AppIcon name="trash" size={14} aria-hidden />
-              <span>从列表移除项目</span>
+              <span>{t('workspace.project.removeFromList')}</span>
             </Button>
           </div>
         </>

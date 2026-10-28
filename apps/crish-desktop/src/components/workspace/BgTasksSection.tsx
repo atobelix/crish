@@ -8,7 +8,7 @@ import { useToast } from '../../services/toast/ToastContext';
 import React, { useState } from 'react';
 
 import styles from './RuntimePanel.module.css';
-import { Tooltip } from '../ui';
+import { Tooltip } from '@/components/ui';
 import {
   BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER,
   backgroundTaskStateLabel,
@@ -19,7 +19,7 @@ import {
 import { emptyBgTasksHint, formatBgTaskMeta } from './runtimePanelLib';
 import { useConnectionStatus } from '../../hooks/useConnectionStatus';
 import { SUSPICIOUS_TASK_TEXT } from '../bg-tasks/bgTaskCardLib';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export type BgTasksSectionProps = {
   bgTasks: BackgroundTaskInfo[];

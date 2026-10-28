@@ -35,7 +35,7 @@ describe('commandManifest', () => {
       ).length;
       const pending = BUILTIN_COMMAND_MANIFEST.commands.length - registered;
       expect(pending).toBe(0);
-      // 与 Rust COMMAND_MANIFEST（126 = 注册面 126 全实装）保持同步；
+      // 与 Rust COMMAND_MANIFEST（162 = 注册面 162 全实装）保持同步；
       // 变更 Rust 侧时同步本快照，双向条数由两端测试锁定
       // PE-07：T07.3（git_run/fs_delete_file）+ T07.4（profile_apply/secret_reveal）已接线
       // P3 步骤 5（C7 ③）：catalog_get / catalog_refresh 曾接线；**单轨收敛
@@ -83,6 +83,8 @@ describe('commandManifest', () => {
       // 偏好持久化面三命令追加（142 → 145，prefs_get / prefs_set / prefs_delete）
       // 首绘就绪握手命令追加（145 → 146，workbench_window_ready）
       // Win11 贴靠布局热区追加（136 → 137，workbench_set_snap_overlay_rect）
+      // PE-07：五条工作区授权命令后 147 → 152；默认根激活命令追加后 152 → 153
+      // 原生 Hit-Test 能力诊断命令追加后 160 → 161；Inspector 命令 161 → 162
       const rust = rustManifestOnce();
       expect(registered).toBe(rust.registered.length);
       expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(
@@ -103,9 +105,41 @@ describe('commandManifest', () => {
         'workbench_apply_models_config',
         'config_secret_reveal',
         'workbench_git_run',
+        'workbench_open_workspace',
+        'workbench_open_workspaces',
+        'workbench_activate_default_workspace',
+        'workbench_list_workspaces',
+        'workbench_pick_workspace_folder',
+        'workbench_pick_workspace_folders',
       ]) {
         expect(byName.has(name), `${name} 必须登记内置快照`).toBe(true);
         expect(byName.get(name)?.registered, `${name} 已接线`).toBe(true);
+      }
+    });
+
+    it('原生多 Webview 浏览器命令登记齐备（已接线 registered=true）', () => {
+      const byName = new Map(
+        BUILTIN_COMMAND_MANIFEST.commands.map((c) => [c.name, c])
+      );
+      for (const name of [
+        'browser_webview_create',
+        'browser_webview_set_bounds',
+        'browser_webview_set_visible',
+        'browser_webview_navigate',
+        'browser_webview_action',
+        'browser_webview_close',
+        'browser_webview_set_muted',
+        'browser_webview_set_hit_test',
+        'browser_webview_set_inspector',
+      ]) {
+        expect(byName.has(name), `${name} 必须登记内置快照`).toBe(true);
+        expect(byName.get(name)?.registered, `${name} 已接线`).toBe(true);
+        expect(byName.get(name)?.family, `${name} 属于 browser 族`).toBe(
+          'browser'
+        );
+        expect(byName.get(name)?.surface, `${name} 属于 engine 契约面`).toBe(
+          'engine'
+        );
       }
     });
 
@@ -171,6 +205,14 @@ describe('commandManifest', () => {
       expect(isRegisteredCommand('prefs_get')).toBe(true);
       expect(isRegisteredCommand('prefs_set')).toBe(true);
       expect(isRegisteredCommand('prefs_delete')).toBe(true);
+      // 原生多 Webview 浏览器七命令已接线
+      expect(isRegisteredCommand('browser_webview_create')).toBe(true);
+      expect(isRegisteredCommand('browser_webview_set_bounds')).toBe(true);
+      expect(isRegisteredCommand('browser_webview_set_visible')).toBe(true);
+      expect(isRegisteredCommand('browser_webview_navigate')).toBe(true);
+      expect(isRegisteredCommand('browser_webview_action')).toBe(true);
+      expect(isRegisteredCommand('browser_webview_close')).toBe(true);
+      expect(isRegisteredCommand('browser_webview_set_muted')).toBe(true);
       // 未知名
       expect(isRegisteredCommand('nope')).toBe(false);
     });

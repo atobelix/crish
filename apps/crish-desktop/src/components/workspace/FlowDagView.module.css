@@ -126,9 +126,3 @@
   font-weight: var(--font-weight-medium);
   color: var(--text-primary);
 }
-
-.emptyDesc {
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  max-width: 240px;
-}

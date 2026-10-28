@@ -12,7 +12,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import React, { Suspense, useSyncExternalStore } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import * as projectStore from '../../api/projectStore';
 import * as noteApi from '../../api/noteApi';
 import { createMemoryNoteTransport } from '../../api/noteApi';
@@ -131,7 +138,9 @@ describe('CONN-EXT · 扩展叶工厂 / 注销（≠ EL · ≠ 打开完成 · �
     const { container } = await renderActivatedFactory();
     expect(screen.getByTestId('note-paper-strict-panel')).toBeTruthy();
     expect(screen.queryByTestId('open-note-paper-strict')).toBeNull();
-    expect(container.querySelector('[data-note-leaf-host="true"]')).toBeTruthy();
+    expect(
+      container.querySelector('[data-note-leaf-host="true"]')
+    ).toBeTruthy();
   });
 
   // jsdom 属性 ≠ 皮像素 ≠ 打开完成
@@ -235,9 +244,7 @@ describe('CONN-EXT · 扩展叶工厂 / 注销（≠ EL · ≠ 打开完成 · �
       mirrorIpc: ipc,
     });
 
-    render(
-      <NoteLeafHost {...ctx({ params: { docId: 'doc-ext-e2-fail' } })} />
-    );
+    render(<NoteLeafHost {...ctx({ params: { docId: 'doc-ext-e2-fail' } })} />);
     await waitFor(() => {
       expect(ipc.detectCalls.length).toBeGreaterThanOrEqual(1);
     });
@@ -290,9 +297,7 @@ describe('CONN-EXT · 扩展叶工厂 / 注销（≠ EL · ≠ 打开完成 · �
       hydrate: (id) => inner.hydrate(id),
     });
 
-    render(
-      <NoteLeafHost {...ctx({ params: { docId: 'doc-ext-g2' } })} />
-    );
+    render(<NoteLeafHost {...ctx({ params: { docId: 'doc-ext-g2' } })} />);
     await waitFor(() => {
       expect(screen.getByText('seed-ext-g2')).toBeInTheDocument();
     });
@@ -329,9 +334,7 @@ describe('CONN-EXT · 扩展叶工厂 / 注销（≠ EL · ≠ 打开完成 · �
       },
     });
 
-    render(
-      <NoteLeafHost {...ctx({ params: { docId: 'doc-ext-keep' } })} />
-    );
+    render(<NoteLeafHost {...ctx({ params: { docId: 'doc-ext-keep' } })} />);
     await waitFor(() => {
       expect(screen.getByText('keep-ext-g2')).toBeInTheDocument();
     });
@@ -375,7 +378,7 @@ describe('CONN-EXT · 扩展叶工厂 / 注销（≠ EL · ≠ 打开完成 · �
       'utf8'
     );
     expect(treeSrc).toMatch(/未知面板类型：/);
-    expect(treeSrc).toMatch(/笔记扩展未激活/);
+    expect(treeSrc).toMatch(/未知|扩展未激活/);
 
     activateNotePaper();
     render(<ResidualNoteTab {...ctx()} />);
@@ -402,7 +405,9 @@ describe('CONN-EXT · 扩展叶工厂 / 注销（≠ EL · ≠ 打开完成 · �
     const e2p = readWorkspace('Workspace.conn-e2-prime.test.tsx');
     expect(c2).toMatch(/conn_c2_prod_default_paper_list_on/);
     expect(c2).toMatch(/conn_c2_prod_paper_list_mutex_content_row/);
-    expect(e2p).toMatch(/conn_e2p_workspace_product_host_enables_detect_schedule/);
+    expect(e2p).toMatch(
+      /conn_e2p_workspace_product_host_enables_detect_schedule/
+    );
     expect(e2p).toMatch(/conn_e2p_empty_state_direct_still_defaults_off/);
     expect(e2p).toMatch(/conn_e2p_no_tauri_does_not_fabricate_report/);
   });
@@ -422,7 +427,9 @@ describe('CONN-EXT · 扩展叶工厂 / 注销（≠ EL · ≠ 打开完成 · �
       ],
     });
 
-    render(<NoteLeafHost {...ctx({ params: { docId: 'doc-ext-drawer-test' } })} />);
+    render(
+      <NoteLeafHost {...ctx({ params: { docId: 'doc-ext-drawer-test' } })} />
+    );
     await screen.findByTestId('note-paper-strict-panel');
 
     // 抽屉中初始相对时间为 10 分钟前

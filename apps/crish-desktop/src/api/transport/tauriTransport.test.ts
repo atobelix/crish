@@ -105,13 +105,15 @@ describe('TauriTransport', () => {
   });
 
   it('request CoreError → 抛 `${kind}: ${message}`', async () => {
-    mockTauriError('core_run_task', {
+    const impl = vi.fn().mockRejectedValue({
       kind: 'InvalidInput',
       detail: 'bad payload',
     });
+    mockTauriCommand('core_run_task', impl);
     await expect(transport.request('core_run_task', {})).rejects.toThrow(
       'InvalidInput: bad payload'
     );
+    expect(impl).toHaveBeenCalledTimes(1);
   });
 
   it('request 暂态失败 → 自动重试一次并成功（C3.3 等价能力）', async () => {
@@ -120,7 +122,7 @@ describe('TauriTransport', () => {
       .mockRejectedValueOnce({
         status: 'error',
         kind: 'Internal',
-        message: 'busy',
+        message: 'restore in progress：等待重启恢复完成',
       })
       .mockResolvedValueOnce({ ok: true });
     mockTauriCommand('core_run_task', impl);
@@ -139,12 +141,12 @@ describe('TauriTransport', () => {
       .mockRejectedValueOnce({
         status: 'error',
         kind: 'Internal',
-        message: 'boom',
+        message: 'restore in progress：等待重启恢复完成',
       })
       .mockRejectedValueOnce({
         status: 'error',
         kind: 'Internal',
-        message: 'boom again',
+        message: 'restore in progress：等待重启恢复完成',
       });
     mockTauriCommand('core_run_task', impl);
     await expect(transport.request('core_run_task', {})).rejects.toThrow();
@@ -195,20 +197,32 @@ describe('TauriTransport', () => {
     expect(impl).not.toHaveBeenCalled();
   });
 
-  it('call 登记先行命令（registered=false）→ 显式 missing，不 invoke', async () => {
-    // workbench_open_workspace 为 §7.2 登记先行命令（manifest registered=false；
-    // config_profile_apply 已由 PE-07 T07.4 接线，不再作为登记先行样例）
-    const res = await transport.call('workbench_open_workspace', {});
-    expect(res).toEqual({ status: 'missing' });
+  it('call workbench_open_workspace → 已注册并将 RecentList 参数交给 Rust', async () => {
+    const impl = vi.fn((args: unknown) => ({
+      path: (args as { path: string }).path,
+    }));
+    mockTauriCommand('workbench_open_workspace', impl);
+
+    const res = await transport.call('workbench_open_workspace', {
+      path: 'D:/recent/project',
+    });
+
+    expect(impl).toHaveBeenCalledWith({ path: 'D:/recent/project' });
+    expect(res).toEqual({
+      status: 'ok',
+      data: { path: 'D:/recent/project' },
+    });
   });
 
   it('call CoreError → 返回结构化 error 三态（不抛）', async () => {
-    mockTauriError('core_run_task', {
+    const impl = vi.fn().mockRejectedValue({
       kind: 'InvalidInput',
       detail: 'bad payload',
     });
+    mockTauriCommand('core_run_task', impl);
     const res = await transport.call('core_run_task', {});
     expect(res.status).toBe('error');
+    expect(impl).toHaveBeenCalledTimes(1);
     if (res.status === 'error') {
       expect(res.kind).toBe('InvalidInput');
       expect(res.message).toBe('bad payload');
@@ -221,7 +235,7 @@ describe('TauriTransport', () => {
       .mockRejectedValueOnce({
         status: 'error',
         kind: 'Internal',
-        message: 'busy',
+        message: 'restore in progress：等待重启恢复完成',
       })
       .mockResolvedValueOnce({ ok: true });
     mockTauriCommand('core_run_task', impl);
@@ -231,24 +245,50 @@ describe('TauriTransport', () => {
     expect(res).toEqual({ status: 'ok', data: { ok: true } });
   });
 
-  it('call 暂态失败持续 → 重试一次后返回 error 三态（不抛）', async () => {
+  it('call restore gate 持续拒绝 → 重试一次后返回 error 三态（不抛）', async () => {
     const impl = vi
       .fn()
       .mockRejectedValueOnce({
         status: 'error',
         kind: 'Internal',
-        message: 'boom',
+        message: 'restore in progress：等待重启恢复完成',
       })
       .mockRejectedValueOnce({
         status: 'error',
         kind: 'Internal',
-        message: 'boom again',
+        message: 'restore in progress：等待重启恢复完成',
       });
     mockTauriCommand('core_run_task', impl);
 
     const res = await transport.call('core_run_task', {});
     expect(impl).toHaveBeenCalledTimes(2);
     expect(res.status).toBe('error');
+  });
+
+  it('call generic Internal error does not replay commands with possible side effects', async () => {
+    const impl = vi.fn().mockRejectedValue({
+      kind: 'Internal',
+      detail: 'git push failed after remote accepted the update',
+    });
+    mockTauriCommand('core_run_task', impl);
+
+    const res = await transport.call('core_run_task', {});
+
+    expect(res.status).toBe('error');
+    expect(impl).toHaveBeenCalledTimes(1);
+  });
+
+  it('call engine-not-ready error does not replay after launch assembly may have started', async () => {
+    const impl = vi.fn().mockRejectedValue({
+      kind: 'Internal',
+      detail: 'engine not ready（provider 配置缺失）',
+    });
+    mockTauriCommand('core_run_task', impl);
+
+    const res = await transport.call('core_run_task', {});
+
+    expect(res.status).toBe('error');
+    expect(impl).toHaveBeenCalledTimes(1);
   });
 
   // ── send（职责 6：fire-and-forget → invoke 命令）────────────

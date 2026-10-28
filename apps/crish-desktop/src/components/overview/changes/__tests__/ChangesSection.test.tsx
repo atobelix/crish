@@ -73,7 +73,7 @@ describe('ChangesSection — 会话改动面板组件化集成测试', () => {
     expect(headerBtn?.textContent).not.toContain('refactor/architecture');
 
     // 2. 呈现纯净空状态，而不是 51 个 Git 改动
-    expect(screen.getByText('当前对话暂无文件改动')).toBeTruthy();
+    expect(screen.getByText('暂无改动')).toBeTruthy();
     expect(screen.queryByText('src/modified_file_1.ts')).toBeNull();
 
     // 3. 界面纯净，不留多余下挂按钮
@@ -100,7 +100,9 @@ describe('ChangesSection — 会话改动面板组件化集成测试', () => {
     // 通过官方 Select 点击切换为未提交
     const selectTrigger = screen.getByRole('combobox');
     fireEvent.click(selectTrigger);
-    const unstagedOption = await screen.findByRole('option', { name: /未提交/i });
+    const unstagedOption = await screen.findByRole('option', {
+      name: /未提交/i,
+    });
     fireEvent.click(unstagedOption);
 
     // 此时展示 Git 仓库改动

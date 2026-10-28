@@ -152,7 +152,11 @@ export type DiscoverSkillsResult = {
 export async function discoverSkills(opts?: {
   workspacePath?: string | null;
 }): Promise<DiscoverSkillsResult> {
-  const workspace = (opts?.workspacePath ?? getWorkspacePath() ?? '').trim();
+  const initialWorkspace = getWorkspacePath().trim();
+  const isActiveWorkspace =
+    opts?.workspacePath == null ||
+    opts.workspacePath.trim() === initialWorkspace;
+  let workspace = (opts?.workspacePath ?? initialWorkspace).trim();
   pruneForeignExtraSkillDirs();
   const extraDirs = getExtraSkillDirs();
 
@@ -174,10 +178,13 @@ export async function discoverSkills(opts?: {
   // T-F 06 T6.1 / T5-5：invokeTyped 三态化（原 tryInvokeTauri 别名）——
   // missing/error → logInternalError 后走 legacy JS 发现 fallback
   // （错误不再被吞为 null，可观测性保留；fallback 语义与旧行为等价）
-  const res = await invokeTyped<RustSkillRow[]>('workbench_discover_skills', {
-    workspacePath: workspace || null,
-    extraDirs,
-  });
+  const res = await invokeTyped<RustSkillRow[]>(
+    'workbench_discover_skills',
+    () => {
+      if (isActiveWorkspace) workspace = getWorkspacePath().trim();
+      return { workspacePath: workspace || null, extraDirs };
+    }
+  );
   let rustSkills: unknown = null;
   if (res.status === 'error') {
     logInternalError('discoverSkills', res.message);

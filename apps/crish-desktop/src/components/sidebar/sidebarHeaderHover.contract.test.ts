@@ -58,7 +58,7 @@ describe('侧栏分组头 hover 无底色', () => {
 
   it('会话行 hover / 选中底色保持', () => {
     expect(blocksFor(/^\.sessionItem:hover$/).join('\n')).toMatch(
-      /background:\s*var\(--sidebar-hover\)/
+      /background:\s*var\(--state-hover\)/
     );
     expect(blocksFor(/^\.sessionItem\.active$/).join('\n')).toMatch(
       /background/

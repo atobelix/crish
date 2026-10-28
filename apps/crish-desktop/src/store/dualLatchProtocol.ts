@@ -308,6 +308,19 @@ export class DualLatchStateMachine {
     existing.phase = 'DRAINED';
     existing.updatedAt = Date.now();
     delete existing.cancelPendingDrain;
+
+    // 【P0 重构落地：终态排空即刻微任务释放】
+    // 同步清空文本，瞬间释放可能多达数 MB 的快照文本占用
+    existing.snapshotText = '';
+
+    // 排空微任务调度：在当前宏任务帧微任务阶段彻底物理剔除该条目，根绝无界内存泄漏
+    queueMicrotask(() => {
+      const rec = this.records.get(key);
+      if (rec && rec.phase === 'DRAINED') {
+        this.records.delete(key);
+      }
+    });
+
     return existing;
   }
 
@@ -374,19 +387,31 @@ export class DualLatchStateMachine {
     return this.records.get(makeDualLatchKey(sessionId, messageId));
   }
 
+  /**
+   * 刚性清理指定会话下的全部锁存记录与挂起排空定时器（会话销毁 / 级联取消专属）
+   */
   public abortSession(sessionId: string): void {
     if (!sessionId) return;
     const prefix = sessionMessageKeyPrefix(sessionId);
     for (const [key, rec] of this.records.entries()) {
       if (key.startsWith(prefix)) {
         rec.cancelPendingDrain?.();
+        rec.snapshotText = '';
         this.records.delete(key);
       }
     }
   }
 
+  /** 获取当前活跃锁存记录数（供测试断言与内存监控诊断） */
+  public getRecordCount(): number {
+    return this.records.size;
+  }
+
   public clearAll(): void {
-    for (const [, rec] of this.records) rec.cancelPendingDrain?.();
+    for (const [, rec] of this.records) {
+      rec.cancelPendingDrain?.();
+      rec.snapshotText = '';
+    }
     this.records.clear();
   }
 }

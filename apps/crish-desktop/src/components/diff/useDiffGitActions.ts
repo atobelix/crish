@@ -16,14 +16,16 @@ import {
 import { compactObj } from '../../utils/compactObj';
 import type { FileDiff } from '../../store/types';
 import type { DiffSourceMode } from '../../api/diffPanelHelpers';
-import { ConfirmDialog } from '../ui';
+import { ConfirmDialog } from '@/components/ui';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
 
 interface UseDiffGitActionsOptions {
   sessionWorkspacePath?: string;
   sourceMode: DiffSourceMode;
   stagedCount: number;
-  setDiffFiles: (files: FileDiff[] | ((prev: FileDiff[]) => FileDiff[])) => void;
+  setDiffFiles: (
+    files: FileDiff[] | ((prev: FileDiff[]) => FileDiff[])
+  ) => void;
   setActiveDiffSource: (diff: FileDiff | null) => void;
   setSourceMode: (mode: DiffSourceMode) => void;
   setPanelErr: (err: string) => void;
@@ -49,8 +51,8 @@ export function useDiffGitActions({
   setTurnKey,
 }: UseDiffGitActionsOptions) {
   const [gitLoading, setGitLoading] = useState(false);
-  const [branches, setBranches] = useState<string[]>(['main']);
-  const [currentBranch, setCurrentBranch] = useState<string>('main');
+  const [branches, setBranches] = useState<string[]>([]);
+  const [currentBranch, setCurrentBranch] = useState<string>('');
   const [commitMsg, setCommitMsg] = useState('');
   const [commitLoading, setCommitLoading] = useState(false);
   const [pushLoading, setPushLoading] = useState(false);
@@ -64,10 +66,14 @@ export function useDiffGitActions({
       const res = await fetchGitBranches(sessionWorkspacePath ?? '');
       setBranches(res.list);
       setCurrentBranch(res.current);
-    } catch {
-      /* silence fallback */
+    } catch (error) {
+      setBranches([]);
+      setCurrentBranch('');
+      toastFail(
+        error instanceof Error ? error.message : 'Git branch load failed'
+      );
     }
-  }, [sessionWorkspacePath]);
+  }, [sessionWorkspacePath, toastFail]);
 
   useEffect(() => {
     if (sourceMode === 'git') void loadBranches();
@@ -95,17 +101,28 @@ export function useDiffGitActions({
           setActiveDiffSource(null);
           return;
         }
-        const statusMap = new Map(status.files.map((gf) => [gf.path.replace(/\\/g, '/'), gf]));
-        const placeholders: FileDiff[] = status.files.slice(0, 45).map(
-          (gf): FileDiff => ({
+        const statusMap = new Map(
+          status.files.map((gf) => [gf.path.replace(/\\/g, '/'), gf])
+        );
+        const placeholders: FileDiff[] = status.files
+          .slice(0, 45)
+          .map((gf): FileDiff => ({
             filePath: gf.path,
             additions: 0,
             deletions: 0,
-            changes: [{ type: 'normal' as const, content: `（${gf.status}）加载 diff…` }],
+            changes: [
+              {
+                type: 'normal' as const,
+                content: `（${gf.status}）加载 diff…`,
+              },
+            ],
             gitStatus: gf.status,
-            ...compactObj({ staged: gf.staged, unstaged: gf.unstaged, untracked: gf.untracked }),
-          })
-        );
+            ...compactObj({
+              staged: gf.staged,
+              unstaged: gf.unstaged,
+              untracked: gf.untracked,
+            }),
+          }));
         if (!silent) {
           applyFiles(placeholders, 'git');
           setTurnKey('');
@@ -129,23 +146,24 @@ export function useDiffGitActions({
         }
         const slice = status.files.slice(0, 8);
         const settled = await Promise.all(
-          slice.map(async (gf) => {
-            try {
-              return (await fetchGitDiff({ path: gf.path })).files;
-            } catch {
-              return [] as FileDiff[];
-            }
-          })
+          slice.map(async (gf) => (await fetchGitDiff({ path: gf.path })).files)
         );
         const collected = settled.flat();
         if (collected.length > 0) {
-          const byPath = new Map(enrich(collected).map((f) => [f.filePath.replace(/\\/g, '/'), f]));
+          const byPath = new Map(
+            enrich(collected).map((f) => [f.filePath.replace(/\\/g, '/'), f])
+          );
           applyFiles(
             placeholders.map(
               (p) =>
                 byPath.get(p.filePath.replace(/\\/g, '/')) || {
                   ...p,
-                  changes: [{ type: 'normal' as const, content: '（已变更）暂无行级 diff' }],
+                  changes: [
+                    {
+                      type: 'normal' as const,
+                      content: '（已变更）暂无行级 diff',
+                    },
+                  ],
                 }
             ),
             'git'
@@ -153,13 +171,27 @@ export function useDiffGitActions({
         } else {
           applyFiles(placeholders, 'git');
         }
-      } catch {
-        toastFail('从 Git 载入失败');
+      } catch (error) {
+        if (!silent) {
+          setDiffFiles([]);
+          setActiveDiffSource(null);
+        }
+        toastFail(error instanceof Error ? error.message : '从 Git 载入失败');
       } finally {
         setGitLoading(false);
       }
     },
-    [applyFiles, dismissSoftHint, setActiveDiffSource, setDiffFiles, setPanelErr, setSourceMode, setTurnKey, showSoftHint, toastFail]
+    [
+      applyFiles,
+      dismissSoftHint,
+      setActiveDiffSource,
+      setDiffFiles,
+      setPanelErr,
+      setSourceMode,
+      setTurnKey,
+      showSoftHint,
+      toastFail,
+    ]
   );
 
   const handleSwitchBranch = async (branch: string) => {
@@ -193,7 +225,11 @@ export function useDiffGitActions({
     setPanelErr('');
     dismissSoftHint();
     try {
-      const res = await commitGitChanges(sessionWorkspacePath ?? '', msg, stagedCount > 0);
+      const res = await commitGitChanges(
+        sessionWorkspacePath ?? '',
+        msg,
+        stagedCount > 0
+      );
       if (!res.ok) {
         toastFail(res.error || '提交失败');
         return;
@@ -228,7 +264,11 @@ export function useDiffGitActions({
 
   const handleStageFile = async (filePath: string) => {
     setStagingPaths((prev) => ({ ...prev, [filePath]: true }));
-    setDiffFiles((prev) => prev.map((f) => (f.filePath === filePath ? { ...f, staged: true, unstaged: false } : f)));
+    setDiffFiles((prev) =>
+      prev.map((f) =>
+        f.filePath === filePath ? { ...f, staged: true, unstaged: false } : f
+      )
+    );
     try {
       const res = await stageGitPath(sessionWorkspacePath ?? '', filePath);
       if (!res.ok) {
@@ -247,7 +287,11 @@ export function useDiffGitActions({
 
   const handleUnstageFile = async (filePath: string) => {
     setStagingPaths((prev) => ({ ...prev, [filePath]: true }));
-    setDiffFiles((prev) => prev.map((f) => (f.filePath === filePath ? { ...f, staged: false, unstaged: true } : f)));
+    setDiffFiles((prev) =>
+      prev.map((f) =>
+        f.filePath === filePath ? { ...f, staged: false, unstaged: true } : f
+      )
+    );
     try {
       const res = await unstageGitPath(sessionWorkspacePath ?? '', filePath);
       if (!res.ok) {
@@ -283,7 +327,9 @@ export function useDiffGitActions({
   };
 
   const handleStageAll = async () => {
-    setDiffFiles((prev) => prev.map((f) => ({ ...f, staged: true, unstaged: false })));
+    setDiffFiles((prev) =>
+      prev.map((f) => ({ ...f, staged: true, unstaged: false }))
+    );
     try {
       const res = await stageAllGit(sessionWorkspacePath ?? '');
       if (!res.ok) {
@@ -299,7 +345,9 @@ export function useDiffGitActions({
   };
 
   const handleUnstageAll = async () => {
-    setDiffFiles((prev) => prev.map((f) => ({ ...f, staged: false, unstaged: true })));
+    setDiffFiles((prev) =>
+      prev.map((f) => ({ ...f, staged: false, unstaged: true }))
+    );
     try {
       const res = await unstageAllGit(sessionWorkspacePath ?? '');
       if (!res.ok) {

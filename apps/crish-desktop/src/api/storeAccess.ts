@@ -46,12 +46,12 @@ import {
   getSessionStoreState,
 } from '../store/sessionStore';
 import {
-  getPermissionMode as getPermissionModeFromFacade,
   getSettingsUiState,
   openSettings as openSettingsUi,
   closeSettings as closeSettingsUi,
   toggleSettingsOverlay as toggleSettingsOverlayUi,
 } from '../store/settingsUiStore';
+import { usePermissionStore } from '../store/permissionStore';
 import {
   focusExistingPanelCard,
   getActiveWorkspace,
@@ -67,6 +67,10 @@ import { normalizeSessionId } from './store-access/sessionAccess';
 // 直接引叶模块而非 layout-helpers barrel：避免经由 store-initializers 等重模块形成环。
 import { resolveWorkspacePanelKey } from '../store/layout-helpers/ui-panel';
 
+export function getPermissionMode() {
+  return usePermissionStore.getState().permissionMode;
+}
+
 export {
   getSessionById,
   getSessionStoreState,
@@ -77,7 +81,6 @@ export {
   closeSettingsUi as closeSettings,
   toggleSettingsOverlayUi as toggleSettingsOverlay,
   getSettingsUiState,
-  getPermissionModeFromFacade as getPermissionMode,
   getWorkspaceStoreState,
   getActiveWorkspace,
   getDropPreviewFromFacade as getDropPreview,
@@ -108,12 +111,7 @@ export {
   archiveSession,
 } from './store-access/sessionAccess';
 export { applyCompressionSummaryToStore } from '../store/sessionCompressionApply';
-export {
-  setAppSettings,
-  getAppSettings,
-  getCommandPermissions,
-  addCommandPermission,
-} from './store-access/settingsAccess';
+export { setAppSettings, getAppSettings } from './store-access/settingsAccess';
 export { reportRuntimeStatus } from '../store/sessionRuntimeStatusStore';
 export {
   setScheduledTasks,

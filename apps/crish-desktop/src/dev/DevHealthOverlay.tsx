@@ -17,7 +17,7 @@ import {
   formatControlMetricsLines,
   type ControlMetricsSnapshot,
 } from './devHealthFormat';
-import { Button } from '../components/ui';
+import { Button } from '@/components/ui';
 import styles from './DevHealthOverlay.module.css';
 
 const REFRESH_MS = 1500;
@@ -89,7 +89,10 @@ export const DevHealthOverlay: React.FC = () => {
       aria-label="Dev control metrics"
       data-testid="dev-health-overlay"
     >
-      <span className={styles.label} aria-label="controlMetrics snapshot (D2 lite)">
+      <span
+        className={styles.label}
+        aria-label="controlMetrics snapshot (D2 lite)"
+      >
         ctrl
       </span>
       <div className={styles.strip}>

@@ -1,6 +1,6 @@
 import React, { useCallback, useRef } from 'react';
 import styles from './FilesCard.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import { MarkdownDocumentView } from '../markdown/MarkdownDocumentView';
 
 import { parseCsvPreview, pathBasename } from '../../api/workspaceFsApi';
@@ -8,7 +8,7 @@ import { FileEditor } from './FileEditor';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
 import { FileAnnotationPopover } from './FileAnnotationPopover';
 import type { ViewMode } from './hooks/useFilePreview';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 /** files 叶内预览。禁止挂 document.body 或整屏覆盖层。 */
 
@@ -101,7 +101,6 @@ export const FilePreview = React.memo(function FilePreview({
       <div className={`${styles.filesDetail} ${styles.filesDetailPane}`}>
         <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>
           <div className={styles.filesEmptyTitle}>预览</div>
-          <div className={styles.filesEmptySub}>在左侧选择文件</div>
         </div>
       </div>
     );

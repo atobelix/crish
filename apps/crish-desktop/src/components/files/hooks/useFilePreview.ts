@@ -17,7 +17,7 @@ import {
   type HostOpener,
 } from '../../../api/hostOpenersApi';
 import { pathRelativeToRoot } from '../../../api/workspaceFsApi';
-import { ConfirmDialog } from '../../ui';
+import { ConfirmDialog } from '@/components/ui';
 import { useConfirmGate } from '../../../hooks/useConfirmGate';
 import { useWordWrapPreference } from './useWordWrapPreference';
 import { isJsonFileOrContent, formatJsonSafe } from '../jsonFormatUtils';

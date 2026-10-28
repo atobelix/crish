@@ -45,7 +45,7 @@ function entry(
 }
 
 /**
- * 内置快照：镜像 Rust `COMMAND_MANIFEST`（137 = 注册面 137 全实装；与
+ * 内置快照：镜像 Rust `COMMAND_MANIFEST`（162 = 注册面 162 全实装；与
  * command_manifest.rs 行注释及 manifest_count_matches_registered_surface 测试对齐）。
  * 维护规则与 Rust 侧一致：registered 子集 = `make_handlers!` 注册面；新命令经
  * §7.2 登记表登记后追加在表尾（registered 随接线状态翻转）；双端漂移由
@@ -98,6 +98,13 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('workbench_list_directory', 'workbench', 'gui'),
     entry('workbench_read_file_content', 'workbench', 'gui'),
     entry('workbench_write_file_content', 'workbench', 'gui'),
+    // PE-07：RecentList 复授权 + Rust 原生目录选择器；picker 命令无 path 入参
+    entry('workbench_open_workspace', 'workbench', 'gui'),
+    entry('workbench_open_workspaces', 'workbench', 'gui'),
+    entry('workbench_activate_default_workspace', 'workbench', 'gui'),
+    entry('workbench_list_workspaces', 'workbench', 'gui'),
+    entry('workbench_pick_workspace_folder', 'workbench', 'gui'),
+    entry('workbench_pick_workspace_folders', 'workbench', 'gui'),
     entry('workbench_discover_skills', 'workbench', 'gui'),
     entry('workbench_mutate_owned_skill', 'workbench', 'gui'),
     // workbench_http_request 已退役（四方同步移除；唯一调用点在 Rust 测试内）
@@ -154,6 +161,8 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('core_read_run_events', 'core', 'engine'),
     entry('core_run_task', 'core', 'engine'),
     entry('core_run_control', 'core', 'engine'),
+    // 运行时权限切换（子代理活单元经父链自动同步）
+    entry('core_set_run_permission_mode', 'core', 'engine'),
     // R1 撤回（统一输入流收敛战役）：复用 core_run_control L3 通道 +
     // 独立 retract 语义 wire（session 域，引擎面）
     entry('core_session_retract', 'session', 'engine'),
@@ -217,6 +226,16 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('browser_import_history', 'browser', 'engine'),
     entry('browser_list_bookmarks', 'browser', 'engine'),
     entry('browser_list_history', 'browser', 'engine'),
+    // ── 原生 Webview 浏览器命令（browser_webview_* 9 条）──
+    entry('browser_webview_create', 'browser', 'engine'),
+    entry('browser_webview_set_bounds', 'browser', 'engine'),
+    entry('browser_webview_set_visible', 'browser', 'engine'),
+    entry('browser_webview_navigate', 'browser', 'engine'),
+    entry('browser_webview_action', 'browser', 'engine'),
+    entry('browser_webview_close', 'browser', 'engine'),
+    entry('browser_webview_set_muted', 'browser', 'engine'),
+    entry('browser_webview_set_hit_test', 'browser', 'engine'),
+    entry('browser_webview_set_inspector', 'browser', 'engine'),
     // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc / noteMirrorIpc）──
     entry('note_document_apply_md', 'note', 'engine'),
     entry('note_query_blocks', 'note', 'engine'),

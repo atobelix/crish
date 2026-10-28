@@ -145,7 +145,7 @@
   min-width: 24px;
   min-height: 24px;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-circle, 50%);
   background: transparent;
   color: var(--text-faint);
   cursor: pointer;
@@ -306,7 +306,7 @@
   min-width: 24px;
   min-height: 24px;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-circle, 50%);
   background: transparent;
   color: var(--text-faint);
   cursor: pointer;
@@ -403,7 +403,7 @@
 }
 
 .sessionItem:hover {
-  background: var(--sidebar-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -413,7 +413,7 @@
 }
 
 .sessionItem.active {
-  background: var(--sidebar-active);
+  background: var(--state-strong);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium, 500);
   box-shadow: none;
@@ -421,11 +421,7 @@
 
 /* 按下介于 hover（tint-hover）与选中（tint-active）之间，且不改字重 */
 .sessionItem:active {
-  background: color-mix(
-    in srgb,
-    var(--sidebar-hover) 50%,
-    var(--sidebar-active)
-  );
+  background: color-mix(in srgb, var(--state-hover) 50%, var(--state-strong));
   color: var(--text-primary);
 }
 
@@ -441,8 +437,8 @@
 
 .sessionItem:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1px var(--tint-focus-ring);
-  background-color: var(--tint-hover);
+  box-shadow: 0 0 0 1px var(--state-focus-ring);
+  background-color: var(--state-hover);
 }
 
 .sessionItem.branchSession {
@@ -579,7 +575,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 1px;
+  gap: 2px;
   position: absolute;
   right: 0;
   top: 50%;
@@ -628,14 +624,14 @@
 .sessionItem .sessionActionsBtn,
 .sessionActionsBtn {
   --btn-icon-size: 14px;
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
-  min-height: 26px;
-  max-width: 26px;
-  max-height: 26px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  max-width: 24px;
+  max-height: 24px;
   padding: 0;
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--radius-circle, 50%);
   color: var(--text-tertiary);
   background: transparent;
   border: none;
@@ -646,7 +642,7 @@
   -webkit-app-region: no-drag;
   transition:
     color var(--transition-micro),
-    background var(--transition-micro);
+    background-color var(--transition-micro);
   --btn-hover-overlay: transparent;
   --btn-active-overlay: transparent;
 }
@@ -675,10 +671,14 @@
   pointer-events: auto;
 }
 
-.sessionActionsBtn:hover,
+.sessionActionsBtn:hover {
+  color: var(--text-primary);
+  background-color: var(--state-hover);
+}
+
 .sessionActionsBtn:active {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background-color: var(--state-active);
 }
 
 .sessionListWindowed {
@@ -708,7 +708,7 @@
 .sessionItem.isRenaming {
   padding: var(--space-1) var(--space-2) var(--space-1) var(--space-8);
   background: transparent;
-  box-shadow: 0 0 0 1px var(--tint-focus-ring);
+  box-shadow: 0 0 0 1px var(--state-focus-ring);
 }
 
 .sessionRunningSpinner {

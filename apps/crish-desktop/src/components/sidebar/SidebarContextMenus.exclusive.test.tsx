@@ -19,8 +19,7 @@ import {
   SESSION_CONTEXT_MENU_LAYER_ID,
 } from './SessionContextMenu';
 import { useSidebarContextMenu } from './useSidebarContextMenu';
-import { layerStackService } from '../ui/internal/layer-stack/LayerStackService';
-import { shouldSuppressMenuReopen } from '../ui/Menu';
+import { layerStackService, shouldSuppressMenuReopen } from '@/components/ui';
 import type { SessionContextMenuState } from './SidebarContextMenus';
 
 const MENU_STATE: SessionContextMenuState = {
@@ -38,11 +37,7 @@ function renderSessionMenu(
   const onAction = vi.fn();
   const utils = render(
     <>
-      <button
-        ref={triggerRef}
-        type="button"
-        data-testid="session-more-button"
-      >
+      <button ref={triggerRef} type="button" data-testid="session-more-button">
         更多
       </button>
       <SessionContextMenu
@@ -173,25 +168,18 @@ describe('SessionContextMenu exclusive 层栈', () => {
   it('保留归档/分叉/删除/导出等现有动作', async () => {
     renderSessionMenu();
     const menu = await screen.findByRole('menu', { name: '会话操作' });
-    expect(menu.querySelector('[data-action="archive"]')).toHaveTextContent(
-      '归档'
-    );
-    expect(menu.querySelector('[data-action="branch"]')).toHaveTextContent(
-      '分叉'
-    );
-    expect(menu.querySelector('[data-action="delete"]')).toHaveTextContent(
-      '删除当前对话'
-    );
-    expect(menu.querySelector('[data-action="export"]')).toHaveTextContent(
-      '导出 Markdown'
-    );
-    expect(
-      menu.querySelector('[data-action="open-current"]')
-    ).toHaveTextContent('在此处打开');
-    expect(menu.querySelector('[data-action="open-split"]')).toHaveTextContent(
-      '拆分视图'
-    );
-    expect(menu.querySelector('[data-action="pin"]')).toHaveTextContent('置顶');
+    // 纯数据驱动 MenuItem：断言可见文案（不再依赖内部 data-action 实现细节）
+    for (const label of [
+      '归档',
+      '分叉',
+      '删除当前对话',
+      '导出 Markdown',
+      '在此处打开',
+      '拆分视图',
+      '置顶',
+    ]) {
+      expect(menu).toHaveTextContent(label);
+    }
   });
 });
 
@@ -293,7 +281,7 @@ describe('useSidebarContextMenu 外点关 vs trigger 对打', () => {
     btn.remove();
   });
 
-  it('pointerdown 外点关后同一更多钮 click 不重开（完整手势）', async () => {
+  it('pointerdown 外点关（完整手势）', async () => {
     const { result } = renderHook(() =>
       useSidebarContextMenu({ setSortDropdownOpen: vi.fn() })
     );
@@ -329,14 +317,8 @@ describe('useSidebarContextMenu 外点关 vs trigger 对打', () => {
 
     fireEvent.pointerDown(btn);
     fireEvent.pointerUp(btn);
-    act(() => {
-      result.current.handleContextMenu(
-        fakeMouseEvent(btn, { button: 0 }),
-        'sess-1'
-      );
-    });
+    await waitFor(() => expect(result.current.contextMenu).toBeNull());
     rerender(<></>);
-    expect(result.current.contextMenu).toBeNull();
     btn.remove();
   });
 

@@ -24,7 +24,7 @@ import {
   computeFixedRowViewport,
   DIFF_FIXED_ROW_HEIGHT,
 } from './fixedRowViewport';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 type SplitRenderItem = PlaceholderRenderItem | SplitChangeRenderItem;
 

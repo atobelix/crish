@@ -7,7 +7,10 @@
  */
 
 import type { SessionAgent } from '../../store/layoutStore';
-import { parseSessionMessages, sanitizeMessagesForHydrate } from './sessionHydrationMessages';
+import {
+  parseSessionMessages,
+  sanitizeMessagesForHydrate,
+} from './sessionHydrationMessages';
 
 const AGENT_STATUSES = new Set<SessionAgent['status']>([
   'running',
@@ -66,7 +69,9 @@ export function parseSessionAgent(raw: unknown): SessionAgent | null {
     startedAt: startedAt != null ? startedAt : 0,
     depth: typeof o.depth === 'number' && o.depth >= 0 ? o.depth : 0,
     subagentPath: Array.isArray(o.subagentPath)
-      ? (o.subagentPath as unknown[]).filter((s): s is string => typeof s === 'string')
+      ? (o.subagentPath as unknown[]).filter(
+          (s): s is string => typeof s === 'string'
+        )
       : [id],
   };
 
@@ -74,6 +79,27 @@ export function parseSessionAgent(raw: unknown): SessionAgent | null {
   if (parentToolCallId) agent.parentToolCallId = parentToolCallId;
   if (typeof o.summary === 'string') agent.summary = o.summary;
   if (endedAt != null) agent.endedAt = endedAt;
+  // 后端持久化字段（v6/v9/v14）：不解析会在前端全量保存时被抹掉
+  const displayLabel = asNonEmptyString(o.displayLabel);
+  if (displayLabel) agent.displayLabel = displayLabel;
+  const taskType = asNonEmptyString(o.taskType);
+  if (taskType) agent.taskType = taskType;
+  const subSessionId = asNonEmptyString(o.subSessionId);
+  if (subSessionId) agent.subSessionId = subSessionId;
+  if (Array.isArray(o.allowedWritePaths)) {
+    const paths = o.allowedWritePaths.filter(
+      (p): p is string => typeof p === 'string'
+    );
+    if (paths.length) agent.allowedWritePaths = paths;
+  }
+  // v14 生命周期字段（P3）：显示能力档 / 模型 / 可恢复 / 心跳
+  if (typeof o.capabilityMode === 'string' && o.capabilityMode)
+    agent.capabilityMode = o.capabilityMode;
+  if (typeof o.modelOverride === 'string' && o.modelOverride)
+    agent.modelOverride = o.modelOverride;
+  if (o.resumable === true) agent.resumable = true;
+  const lastHeartbeatMs = asFiniteNumber(o.lastHeartbeatMs);
+  if (lastHeartbeatMs != null) agent.lastHeartbeatMs = lastHeartbeatMs;
 
   return agent;
 }

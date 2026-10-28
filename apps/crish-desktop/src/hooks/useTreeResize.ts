@@ -173,31 +173,21 @@ function paintFlatLayout(
   }
 }
 
-function getActiveCollapsedDomain(): 'tool' | undefined {
-  const root = getCompositionRoot();
-  const tab = root.shell.getState().getActiveTab();
-  const collapsed = tab?.dock
-    ? tab.dock.collapsed
-    : root.tree.getState().toolColumnCollapsed;
-  return collapsed ? 'tool' : undefined;
-}
-
 /** 按给定 ratio 本地重算 flatten 结果，写入 leaf / sash 的 inline style */
 function applyLiveLayout(branchId: string, ratio: number): void {
   const state = getCompositionRoot().tree.getState();
   const liveTree = resizeBranchTree(state.tree, branchId, ratio);
-  const flat = flattenTree(liveTree.root, {
-    collapsedDomain: getActiveCollapsedDomain(),
-  });
+  const flat = flattenTree(liveTree.root);
   paintFlatLayout(flat.leaves, flat.branches);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('crish:layout-live-resize'));
+  }
 }
 
 /** 用当前 store 树几何覆盖 DOM（取消手势时恢复，无 React re-render） */
 function restoreLayoutFromStore(): void {
   const state = getCompositionRoot().tree.getState();
-  const flat = flattenTree(state.tree.root, {
-    collapsedDomain: getActiveCollapsedDomain(),
-  });
+  const flat = flattenTree(state.tree.root);
   paintFlatLayout(flat.leaves, flat.branches);
 }
 

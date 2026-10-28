@@ -3,7 +3,7 @@
  * 代码路径不走本组件（仍 files / file-viewer 叶）。
  */
 import { useEffect, useRef, useState, type ReactElement } from 'react';
-import { Button } from '../../components/ui';
+import { Button } from '@/components/ui';
 import { ArtifactNotebookSurface } from './ArtifactNotebookSurface';
 import styles from './narrative.module.css';
 

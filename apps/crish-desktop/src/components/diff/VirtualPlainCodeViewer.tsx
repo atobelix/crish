@@ -28,7 +28,7 @@ import {
   tokenizeLineForHighlights,
   type HighlightTokenSpan,
 } from './diffChunkCachePool';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
 import styles from './DiffCard.module.css';
 

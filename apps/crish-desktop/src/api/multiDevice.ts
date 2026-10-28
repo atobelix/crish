@@ -15,7 +15,7 @@ export interface PairStartResult {
   firewall_hint: string;
 }
 
-/** 配对状态快照（状态机/剩余时间/失败次数/令牌数） */
+/** 配对状态快照（状态机/剩余时间/失败次数/令牌数 + 服务开关真值） */
 export interface PairStatus {
   state: string;
   pairing_enabled: boolean;
@@ -23,6 +23,8 @@ export interface PairStatus {
   code_remaining_ms: number | null;
   failed_attempts: number;
   token_count: number;
+  /** 多端服务总开关真值（后端回填；前端禁止维护本地副本） */
+  service_enabled: boolean;
 }
 
 /** 已配对设备条目（哈希仅截断展示，不泄露原文） */

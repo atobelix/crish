@@ -1,7 +1,7 @@
 import React from 'react';
-import { Button, Input } from '../ui';
+import { Button, Input } from '@/components/ui';
 import styles from './SidebarNav.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 
 import { openSettings } from '../../api/storeAccess';
@@ -15,7 +15,7 @@ export interface SidebarNavProps {
   onSearchChange?: ((val: string) => void) | undefined;
 }
 
-/** 顶部「新对话 / 定时任务 / 扩展」：与会话行同一套 --sidebar-hover，不走 Button 罩 */
+/** 顶部「新对话 / 定时任务 / 扩展」：与会话行同一套 --state-hover，不走 Button 罩 */
 export const SidebarNav: React.FC<SidebarNavProps> = ({
   activeNav,
   onNewSession,

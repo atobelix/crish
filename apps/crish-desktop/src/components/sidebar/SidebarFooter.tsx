@@ -2,14 +2,14 @@ import { useToast } from '../../services/toast/ToastContext';
 import React from 'react';
 
 import styles from './Sidebar.module.css';
-import { Button, IconButton, Tooltip } from '../ui';
+import { Button, IconButton, Tooltip } from '@/components/ui';
 import {
   selectShowSettingsOverlay,
   toggleSettingsOverlay,
   useSettingsUiStore,
 } from '../../store/storeAccess';
 import { UserProfileCard } from './UserProfileCard';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 
 export interface SettingsIconButtonProps {
@@ -92,7 +92,7 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
+                size="md"
                 aria-label={t('sidebar.installUpdate', '安装更新')}
                 onClick={() => {
                   void (async () => {

@@ -115,7 +115,7 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .pulse {
-    animation: flowPulse 1.6s ease-in-out infinite;
+    animation: flowPulse var(--transition-pulse, 1.6s ease-in-out) infinite;
   }
 }
 
@@ -186,7 +186,7 @@
 .pathBtn:hover,
 .chip:hover {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .pathBtn:focus-visible,
@@ -214,7 +214,9 @@
   margin: 0;
   padding: 8px 10px;
   border-radius: var(--radius-md);
-  background: var(--surface-outer); /* 三档：外层档（原 88% 半透明叠在主层上得到中间灰） */
+  background: var(
+    --surface-outer
+  ); /* 三档：外层档（原 88% 半透明叠在主层上得到中间灰） */
   color: var(--text-secondary);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: var(--font-size-xs, 12px);
@@ -366,7 +368,7 @@
 
 .nbBtn:hover {
   color: var(--text-secondary);
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .nbBtn:focus-visible {

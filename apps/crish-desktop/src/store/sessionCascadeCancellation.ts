@@ -12,7 +12,10 @@
  * - Tier 3 存储屏障级 (Storage Barrier Tier)：维护容量为 500 的 LRU 墓碑集合，拦截一切迟到落盘。
  */
 
-import { sharedSessionStreamManager } from '../hooks/chat-stream/sessionStreamManager';
+import {
+  sharedSessionStreamManager,
+  abortSessionRenderBuffer,
+} from '../hooks/chat-stream/sessionStreamManager';
 import {
   DEFAULT_TOMBSTONE_CAPACITY,
   bindSessionTombstoneOracle,
@@ -20,6 +23,9 @@ import {
   setSharedTombstoneCapacity,
 } from '../utils/lifecycle/ScopedLifecycleRegistry';
 import { useStreamingStore } from './streamingStore';
+import { dualLatchStateMachine } from './dualLatchProtocol';
+import { streamDirectEngine } from '../hooks/chat-stream/streamDirectDomEngine';
+import { streamDirectDomEngine } from '../api/streamDirectDomEngine';
 
 export { DEFAULT_TOMBSTONE_CAPACITY };
 
@@ -251,14 +257,42 @@ export class SessionCascadeCancellation {
       // 容错处理
     }
 
-    // 2. 清理前端流式状态缓冲（防追加）
+    // 2. 本地会话流式渲染缓冲重置与移除
+    try {
+      abortSessionRenderBuffer(sessionId);
+    } catch {
+      // 容错处理
+    }
+
+    // 3. 清理前端流式状态缓冲（防追加）
     try {
       useStreamingStore.getState().clearSession(sessionId);
     } catch {
       // 容错处理
     }
 
-    // 3. 通信级回调与订阅者通知
+    // 4. 【P0 重构落地：激活死代码，彻底清空 DualLatch 历史记录与挂起 rAF】
+    try {
+      dualLatchStateMachine.abortSession(sessionId);
+    } catch (err) {
+      console.error(
+        `[sessionCascadeCancellation:Tier2] DualLatch abort failed for ${sessionId}:`,
+        err
+      );
+    }
+
+    // 5. 【DOM 节点解引用：彻底解引用 DOM Text 节点与直写影子槽位，杜绝内存泄漏】
+    try {
+      streamDirectEngine.abortSession(sessionId);
+      streamDirectDomEngine.releaseSession(sessionId);
+    } catch (err) {
+      console.error(
+        `[sessionCascadeCancellation:Tier2] StreamDirect DOM abort failed for ${sessionId}:`,
+        err
+      );
+    }
+
+    // 6. 通信级回调与订阅者通知
     for (const cb of this.transportAbortCallbacks) {
       try {
         void cb(sessionId);

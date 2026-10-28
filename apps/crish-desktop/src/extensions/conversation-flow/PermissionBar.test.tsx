@@ -42,32 +42,15 @@ describe('PermissionBar', () => {
     expect(bar?.getAttribute('data-pending-count')).toBe('3');
     expect(screen.getByText('运行 rm x')).toBeTruthy();
     expect(screen.getByText('还有 2')).toBeTruthy();
-    expect(container.querySelector('[data-permission-bar]')?.innerHTML).not.toMatch(
-      /slot-timer/
-    );
+    expect(
+      container.querySelector('[data-permission-bar]')?.innerHTML
+    ).not.toMatch(/slot-timer/);
 
     fireEvent.click(screen.getByRole('button', { name: /^允许$/ }));
     expect(onAllow).toHaveBeenCalledWith('t1', 'm1', false);
 
     fireEvent.click(screen.getByRole('button', { name: '拒绝此操作' }));
     expect(onDeny).toHaveBeenCalledWith('t1', 'm1');
-  });
-
-  it('允许并记住带 remember=true', () => {
-    const onAllow = vi.fn();
-    render(
-      <PermissionBar
-        pendingCount={1}
-        firstToolId="t2"
-        firstMsgId="m2"
-        firstSummary="写文件"
-        onApprovalAllow={onAllow}
-        onApprovalDeny={vi.fn()}
-      />
-    );
-    expect(screen.queryByText(/还有/)).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '允许并记住命令前缀' }));
-    expect(onAllow).toHaveBeenCalledWith('t2', 'm2', true);
   });
 
   it('高风险二次确认：第一次不提交', () => {
@@ -83,7 +66,9 @@ describe('PermissionBar', () => {
         onApprovalDeny={vi.fn()}
       />
     );
-    fireEvent.click(screen.getByRole('button', { name: '准备允许（需再次确认）' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: '准备允许（需再次确认）' })
+    );
     expect(onAllow).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '再次确认允许' }));
     expect(onAllow).toHaveBeenCalledWith('t3', 'm3', false);

@@ -14,6 +14,7 @@ import React, { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
+import { AppMotionProvider } from './components/motion/AppMotionProvider';
 import { ToastProvider } from './services/toast/ToastContext';
 import { I18nProvider } from './i18n';
 import { initSsrGlobals } from './createSsrGlobals';
@@ -199,11 +200,13 @@ export class StartupCoordinator {
       root.render(
         <StrictMode>
           <I18nProvider>
-            <ToastProvider>
-              <AppErrorBoundary>
-                <App />
-              </AppErrorBoundary>
-            </ToastProvider>
+            <AppMotionProvider>
+              <ToastProvider>
+                <AppErrorBoundary>
+                  <App />
+                </AppErrorBoundary>
+              </ToastProvider>
+            </AppMotionProvider>
           </I18nProvider>
         </StrictMode>
       );
@@ -346,6 +349,20 @@ export class StartupCoordinator {
               /* 预热失败非致命：视图仍可在真实打开时按需加载 */
             });
         }
+
+        // 旧 localStorage 用量账本 → Rust DB 一次性迁移
+        // （设置 · 用量页只读 DB；迁移失败保留旧数据，下次启动重试）
+        staggeredIdleQueue
+          .enqueue(
+            async () => {
+              const m = await import('./api/usage/legacyUsageMigration');
+              await m.migrateLegacyUsageHistory();
+            },
+            { name: 'usage:legacy-migration', priority: 1, maxWaitMs }
+          )
+          .catch(() => {
+            /* 迁移失败非致命 */
+          });
 
         // bootstrap-full：与预热共享预算守卫，优先级 0
         staggeredIdleQueue

@@ -27,7 +27,10 @@ import {
 } from '../store/workspace-shell/openTool';
 import { useLayoutTreeStore, findNodeById } from '../store/layout-tree';
 import { isLeaf } from '../store/layout-tree/types';
-import type { RightToolDockState } from '../store/workspace-shell/types';
+import {
+  openToolInDock,
+  isDockTreeEmpty,
+} from '../store/layout-tree/dockLayoutModel';
 
 export function useTreePanelEvents(): void {
   useEffect(() => {
@@ -66,14 +69,18 @@ export function useTreePanelEvents(): void {
       if (!node || !isLeaf(node)) return;
       const dock = readLeafDock(node);
       const nextCollapsed = !dock.collapsed;
-      const patch: Partial<RightToolDockState> = { collapsed: nextCollapsed };
-      if (!nextCollapsed && !dock.activePanelId) {
-        patch.activePanelId = 'overview';
-        patch.openPanelIds = dock.openPanelIds.length
-          ? dock.openPanelIds
-          : ['overview'];
+      if (nextCollapsed) {
+        updateLeafDock(targetLeafId, { collapsed: true });
+        return;
       }
-      updateLeafDock(targetLeafId, patch);
+      if (isDockTreeEmpty(dock.tree)) {
+        const { tree: nextTree } = openToolInDock(dock.tree, {
+          viewId: 'overview',
+        });
+        updateLeafDock(targetLeafId, { collapsed: false, tree: nextTree });
+      } else {
+        updateLeafDock(targetLeafId, { collapsed: false });
+      }
     });
 
     const offAgent = onUiEvent('open-agent-panel', (detail) => {

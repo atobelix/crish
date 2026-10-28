@@ -1,12 +1,12 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 
 import { ChevronDownIcon } from '../../assets/icons';
 import { scheduleLabel } from '../../api/workflowApi';
 import type { CronJob } from '../../api/clientApi';
 import type { WorkflowDefinition } from '../../api/workflowApi';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 interface ScheduleSectionProps {
   open: boolean;
@@ -16,7 +16,10 @@ interface ScheduleSectionProps {
 }
 
 export const ScheduleSection = React.memo(function ScheduleSection({
-  open, workflows, cronJobs, onToggle,
+  open,
+  workflows,
+  cronJobs,
+  onToggle,
 }: ScheduleSectionProps) {
   const count = workflows.length + (cronJobs?.length || 0);
 
@@ -30,12 +33,14 @@ export const ScheduleSection = React.memo(function ScheduleSection({
         aria-expanded={open}
         onClick={onToggle}
       >
-        <AppIcon name="calendar-clock" size={15} aria-hidden />
+        <AppIcon name="calendar-clock" size={16} aria-hidden />
         <span>计划任务</span>
-        {count > 0 ? (
-          <span className={styles.pill}>{count}</span>
-        ) : null}
-        <ChevronDownIcon size={13} className={`${styles.chev} ${open ? styles.open : ''}`} aria-hidden />
+        {count > 0 ? <span className={styles.pill}>{count}</span> : null}
+        <ChevronDownIcon
+          size={13}
+          className={`${styles.chev} ${open ? styles.open : ''}`}
+          aria-hidden
+        />
       </Button>
       {open ? (
         <div className={styles.secB}>
@@ -49,10 +54,14 @@ export const ScheduleSection = React.memo(function ScheduleSection({
                   <li key={w.id}>
                     <div className={styles.cronRow}>
                       <div className={styles.cronInfo}>
-                        <span className={`${styles.dot} ${enabled ? styles.on : styles.off}`} />
+                        <span
+                          className={`${styles.dot} ${enabled ? styles.on : styles.off}`}
+                        />
                         <span className={styles.cronTitle}>{w.name}</span>
                       </div>
-                      <span className={styles.cronMeta}>{scheduleLabel(w.schedule)}</span>
+                      <span className={styles.cronMeta}>
+                        {scheduleLabel(w.schedule)}
+                      </span>
                     </div>
                   </li>
                 );
@@ -63,10 +72,14 @@ export const ScheduleSection = React.memo(function ScheduleSection({
                   <li key={job.id}>
                     <div className={styles.cronRow}>
                       <div className={styles.cronInfo}>
-                        <span className={`${styles.dot} ${active ? styles.on : styles.off}`} />
+                        <span
+                          className={`${styles.dot} ${active ? styles.on : styles.off}`}
+                        />
                         <span className={styles.cronTitle}>{job.prompt}</span>
                       </div>
-                      <span className={styles.cronMeta}>{job.cronExpression}</span>
+                      <span className={styles.cronMeta}>
+                        {job.cronExpression}
+                      </span>
                     </div>
                   </li>
                 );

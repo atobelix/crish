@@ -8,7 +8,7 @@
  */
 
 import React from 'react';
-import { Button, Tooltip } from '../../ui';
+import { Button, Tooltip } from '@/components/ui';
 import { OverviewChangesList } from '../OverviewChangesList';
 import { openGitDownloadPage, type GitStatusResult } from '../../../api/gitApi';
 import type { GitStatusFile, GitStatusCode } from '../../../api/gitTreeHelpers';
@@ -25,7 +25,9 @@ export interface WorkspaceGitChangesViewProps {
   onOpenTerminalPanel: () => void;
 }
 
-export const WorkspaceGitChangesView: React.FC<WorkspaceGitChangesViewProps> = ({
+export const WorkspaceGitChangesView: React.FC<
+  WorkspaceGitChangesViewProps
+> = ({
   git,
   gitLoading,
   openingPath,
@@ -53,7 +55,9 @@ export const WorkspaceGitChangesView: React.FC<WorkspaceGitChangesViewProps> = (
             {gitHelp.title}
           </div>
           {gitHelp.hint && (
-            <p className={`${styles.empty} ${styles.emptyQuiet}`}>{gitHelp.hint}</p>
+            <p className={`${styles.empty} ${styles.emptyQuiet}`}>
+              {gitHelp.hint}
+            </p>
           )}
           <div className={styles.gitActions}>
             {gitHelp.action === 'download-git' && (
@@ -108,7 +112,7 @@ export const WorkspaceGitChangesView: React.FC<WorkspaceGitChangesViewProps> = (
         />
       ) : !gitHelp && !gitLoading ? (
         <p className={`${styles.empty} ${styles.emptyQuiet}`} role="status">
-          {git?.found && git.clean ? '工作区干净，无未暂存改动' : '暂无改动'}
+          暂无改动
         </p>
       ) : gitLoading ? (
         <p className={`${styles.empty} ${styles.emptyQuiet}`} role="status">

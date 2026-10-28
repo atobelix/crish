@@ -1,13 +1,16 @@
-import { z } from 'zod';
 import { InvariantViolation } from './InvariantViolation';
 
 const CONFIG_PREFIX = 'crish_config_v2';
 type StorageBackend = 'localStorage' | 'sessionStorage' | 'memory';
 
 interface ConfigSchemaEntry<T> {
-  schema: z.ZodType<T>;
+  schema: ConfigValueParser<T>;
   default: T;
   storage: StorageBackend;
+}
+
+interface ConfigValueParser<T> {
+  parse(value: unknown): T;
 }
 
 class ConfigService {
@@ -21,7 +24,7 @@ class ConfigService {
 
   define<T>(
     key: string,
-    schema: z.ZodType<T>,
+    schema: ConfigValueParser<T>,
     defaultValue: T,
     storage: StorageBackend = 'localStorage'
   ): void {
@@ -107,20 +110,56 @@ class ConfigService {
 
 export const configService = new ConfigService();
 
+function parseShortcutOverrides(value: unknown): Record<string, string> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError('Shortcut overrides must be a string record');
+  }
+
+  const entries = Object.entries(value);
+  if (entries.some(([, entry]) => typeof entry !== 'string')) {
+    throw new TypeError('Shortcut override values must be strings');
+  }
+  return Object.fromEntries(entries) as Record<string, string>;
+}
+
+interface WorkspaceLayoutConfig {
+  sidebarWidth?: number;
+  [key: string]: unknown;
+}
+
+function parseWorkspaceLayout(value: unknown): WorkspaceLayoutConfig {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new TypeError('Workspace layout must be an object');
+  }
+
+  const layout = value as Record<string, unknown>;
+  const sidebarWidth = Object.hasOwn(layout, 'sidebarWidth')
+    ? layout.sidebarWidth
+    : undefined;
+  if (
+    sidebarWidth !== undefined &&
+    (typeof sidebarWidth !== 'number' || Number.isNaN(sidebarWidth))
+  ) {
+    throw new TypeError('Workspace sidebarWidth must be a number');
+  }
+
+  return { ...layout } as WorkspaceLayoutConfig;
+}
+
 // 内置配置键注册（随模块加载即生效，消费方无需关心初始化顺序）。
 // 根因：d00fbaaf1 删除了 registerConfigSchemas()，但 SettingsShortcutsTab /
 // ShortcutService / useSidebarResize 仍在 get/set 这两个键，未注册键一律抛
 // InvariantViolation → 快捷键改键永远「保存失败」、自定义键位与侧栏宽度从不恢复。
 configService.define(
   'shortcuts.overrides',
-  z.record(z.string(), z.string()),
+  { parse: parseShortcutOverrides },
   {},
   'localStorage'
 );
 // 侧栏宽度合法区间由 useSidebarResize（SIDEBAR_WIDTH_MIN/MAX）校验，这里只约束形状。
 configService.define(
   'workspace.layout',
-  z.object({ sidebarWidth: z.number().optional() }).passthrough(),
+  { parse: parseWorkspaceLayout },
   {},
   'localStorage'
 );

@@ -1,8 +1,8 @@
 import React from 'react';
 import type { SessionState } from '../../../store/types';
-import { Button, Tooltip } from '../../ui';
+import { Button, Tooltip } from '@/components/ui';
 import styles from '../SidebarSessionList.module.css';
-import { AppIcon } from '../../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../../i18n';
 
 export interface PinnedSectionProps {
@@ -118,9 +118,7 @@ export function PinnedSection({
                 className={`${styles.emptyHint} ${styles.subtle}`}
                 role="status"
               >
-                {filterType === 'pinned'
-                  ? t('sidebar.noPinnedYet', '还没有置顶的对话')
-                  : t('sidebar.pinnedWillAppearHere', '置顶的对话会出现在这里')}
+                {t('sidebar.noPinnedYet', '暂无置顶')}
               </div>
             )}
           </div>

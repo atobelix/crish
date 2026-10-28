@@ -219,8 +219,6 @@ describe('内存泄露断言 (Memory Leak Assertions)', () => {
       },
       flowControl: {
         hideThinkingBlock: false,
-        inPlanMode: false,
-        planApproved: false,
         lastAssistantId: null,
         showAllMessages: true,
       },

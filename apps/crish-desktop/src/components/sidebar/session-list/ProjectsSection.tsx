@@ -2,11 +2,16 @@ import React, { useState } from 'react';
 import type { SessionState } from '../../../store/types';
 import type { ProjectEntry } from '../../../api/projectStore';
 import { navigateToNewDraft } from '../../../store/storeAccess';
-import { Button, Tooltip } from '../../ui';
+import {
+  openAuthorizedProject,
+  WorkspaceAccessError,
+} from '../../../api/workspaceAccessApi';
+import { Button, Tooltip } from '@/components/ui';
 import styles from '../SidebarSessionList.module.css';
-import { AppIcon } from '../../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { ProjectManageModal } from './ProjectManageModal';
 import { useI18n } from '../../../i18n';
+import { toast } from '../../../services/toast';
 
 const PROJECT_FOLD_LIMIT = 6;
 
@@ -67,6 +72,21 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
     renderSessionItem,
   } = actions;
   void _onMoveSessionRealtime;
+
+  const handleNewSessionInProject = async (project: ProjectEntry) => {
+    try {
+      const opened = await openAuthorizedProject(project.id);
+      if (!opened) return;
+      onOpenProject(project.id);
+      navigateToNewDraft(project.id);
+    } catch (error) {
+      toast.error(
+        error instanceof WorkspaceAccessError // i18n-allow: 授权错误文案为透传的用户提示
+          ? error.message
+          : '该项目目录未获授权，请重新选择项目文件夹。'
+      );
+    }
+  };
 
   return (
     <section
@@ -227,8 +247,7 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
                         )}
                         onClick={(e) => {
                           e.stopPropagation();
-                          onOpenProject(p.id);
-                          navigateToNewDraft(p.id);
+                          void handleNewSessionInProject(p);
                         }}
                         icon={
                           <AppIcon name="file-plus" size={16} aria-hidden />
@@ -301,7 +320,7 @@ export function ProjectsSection({ data, actions }: ProjectsSectionProps) {
               style={{ cursor: 'pointer' }}
               onClick={() => setCreateProjectOpen(true)}
             >
-              {t('sidebar.clickPlusToNewProject', '点击分区旁 + 新建项目')}
+              {t('sidebar.noProjects', '暂无项目')}
             </div>
           )}
         </div>

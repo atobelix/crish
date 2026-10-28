@@ -10,24 +10,43 @@
  * Browser / missing-command: invoke returns { status: 'missing' }; event subscribe is a no-op.
  */
 
-import { invokeResult, type InvokeResult } from './tauriInvoke';
+import { invokeResult } from './tauriInvoke';
+import { getWorkspacePath } from './projectStore';
+import {
+  killPty,
+  mapPtyInvoke,
+  ptyAttach,
+  ptyDetach,
+  ptyPing,
+  ptyResize,
+  ptyWrite,
+  type PtyInvokeResult,
+} from './ptySessionCommands';
+import {
+  createPtyCreateArgs,
+  normalizePtyCreateOptions,
+  type PtyCreateOptions,
+  type PtyCreateResult,
+} from './ptyCreateArgs';
 import { logger } from '../services/LoggerService';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 // D0/U-BUDGET：环形缓冲预算定义收敛至 perfBudgets 镜像（仅 re-export，行为不变）
 import { PTY_HISTORY_MAX_BYTES } from './perfBudgets';
 
 export { PTY_HISTORY_MAX_BYTES };
+export { ptyAttach, ptyDetach, ptyPing, ptyResize, ptyWrite };
+export type {
+  PtyInvokeErr,
+  PtyInvokeMissing,
+  PtyInvokeOk,
+  PtyInvokeResult,
+} from './ptySessionCommands';
 
 // ── Types ────────────────────────────────────────────────────────────
 
-export type PtyCreateResult = { ptyId: string };
-export type PtyCreateOptions = { sessionKey: string; cols: number; rows: number; cwd?: string };
+export type { PtyCreateOptions, PtyCreateResult } from './ptyCreateArgs';
 export type PtyOutputPayload = { ptyId: string; data: string };
 export type PtyExitPayload = { ptyId: string; code?: number | null };
-export type PtyInvokeOk<T> = { status: 'ok'; data: T };
-export type PtyInvokeMissing = { status: 'missing' };
-export type PtyInvokeErr = { status: 'error'; message: string };
-export type PtyInvokeResult<T> = PtyInvokeOk<T> | PtyInvokeMissing | PtyInvokeErr;
 
 const EVENT_PTY_OUTPUT = 'workbench://pty-output';
 const EVENT_PTY_EXIT = 'workbench://pty-exit';
@@ -190,12 +209,6 @@ function coercePtyId(raw: unknown): string | null {
   return null;
 }
 
-function mapInvoke<T>(res: InvokeResult<T>): PtyInvokeResult<T> {
-  if (res.status === 'ok') return { status: 'ok', data: res.data };
-  if (res.status === 'missing') return { status: 'missing' };
-  return { status: 'error', message: res.message };
-}
-
 function normalizeExitCode(raw: unknown): number | null | undefined {
   if (raw === undefined) return undefined;
   if (raw === null) return null;
@@ -233,22 +246,15 @@ function parseExitPayload(raw: unknown): PtyExitPayload | null {
 export async function ptyCreate(
   opts: PtyCreateOptions
 ): Promise<PtyInvokeResult<PtyCreateResult>> {
-  const sessionKey = (opts.sessionKey || '').trim();
-  if (!sessionKey) {
+  const options = normalizePtyCreateOptions(opts);
+  if (!options) {
     return { status: 'error', message: 'sessionKey is empty' };
   }
-  const cols = Math.max(1, Math.floor(Number(opts.cols) || 80));
-  const rows = Math.max(1, Math.floor(Number(opts.rows) || 24));
-  const cwd = opts.cwd?.trim() || undefined;
+  const res = await invokeResult<unknown>('workbench_pty_create', () =>
+    createPtyCreateArgs(options, getWorkspacePath, false)
+  );
 
-  const res = await invokeResult<unknown>('workbench_pty_create', {
-    sessionKey,
-    cols,
-    rows,
-    ...(cwd ? { cwd } : {}),
-  });
-
-  if (res.status !== 'ok') return mapInvoke(res);
+  if (res.status !== 'ok') return mapPtyInvoke(res);
 
   const ptyId = coercePtyId(res.data);
   if (!ptyId) {
@@ -268,57 +274,9 @@ export async function ptyCreate(
   return { status: 'ok', data: { ptyId } };
 }
 
-/** Write raw bytes/text to a live PTY. */
-export async function ptyWrite(ptyId: string, data: string): Promise<PtyInvokeResult<void>> {
-  const id = (ptyId || '').trim();
-  if (!id) return { status: 'error', message: 'ptyId is empty' };
-  const res = await invokeResult<unknown>('workbench_pty_write', { ptyId: id, data: data ?? '' });
-  return res.status === 'ok' ? { status: 'ok', data: undefined } : mapInvoke(res);
-}
-
-/** Resize PTY window (cols × rows). */
-export async function ptyResize(ptyId: string, cols: number, rows: number): Promise<PtyInvokeResult<void>> {
-  const id = (ptyId || '').trim();
-  if (!id) return { status: 'error', message: 'ptyId is empty' };
-  const res = await invokeResult<unknown>('workbench_pty_resize', {
-    ptyId: id,
-    cols: Math.max(1, Math.floor(Number(cols) || 1)),
-    rows: Math.max(1, Math.floor(Number(rows) || 1)),
-  });
-  return res.status === 'ok' ? { status: 'ok', data: undefined } : mapInvoke(res);
-}
-
-/** Detach PTY to background (e.g. Tab switch / unmount). */
-export async function ptyDetach(ptyId: string): Promise<PtyInvokeResult<void>> {
-  const id = (ptyId || '').trim();
-  if (!id) return { status: 'error', message: 'ptyId is empty' };
-  const res = await invokeResult<unknown>('workbench_pty_detach', { ptyId: id });
-  return res.status === 'ok' ? { status: 'ok', data: undefined } : mapInvoke(res);
-}
-
-/** Re-attach PTY from background to foreground. */
-export async function ptyAttach(ptyId: string): Promise<PtyInvokeResult<void>> {
-  const id = (ptyId || '').trim();
-  if (!id) return { status: 'error', message: 'ptyId is empty' };
-  const res = await invokeResult<unknown>('workbench_pty_attach', { ptyId: id });
-  return res.status === 'ok' ? { status: 'ok', data: undefined } : mapInvoke(res);
-}
-
-/** Ping PTY session to refresh heartbeat. */
-export async function ptyPing(ptyId: string): Promise<PtyInvokeResult<void>> {
-  const id = (ptyId || '').trim();
-  if (!id) return { status: 'error', message: 'ptyId is empty' };
-  const res = await invokeResult<unknown>('workbench_pty_ping', { ptyId: id });
-  return res.status === 'ok' ? { status: 'ok', data: undefined } : mapInvoke(res);
-}
-
 /** Kill / dispose a PTY process. */
 export async function ptyKill(ptyId: string): Promise<PtyInvokeResult<void>> {
-  const id = (ptyId || '').trim();
-  if (!id) return { status: 'error', message: 'ptyId is empty' };
-  clearPtyOutputHistory(id);
-  const res = await invokeResult<unknown>('workbench_pty_kill', { ptyId: id });
-  return res.status === 'ok' ? { status: 'ok', data: undefined } : mapInvoke(res);
+  return killPty(ptyId, clearPtyOutputHistory);
 }
 
 // ── Event subscriptions (shared Tauri listen, multi-handler fan-out) ─
@@ -360,9 +318,10 @@ async function ensureTauriListen<T>(
             } catch (err) {
               logger.warn(`[ptySessionApi] handler error on ${eventName}`, {
                 module: 'ptySessionApi',
-                err: err instanceof Error
-                  ? { message: err.message, stack: err.stack, name: err.name }
-                  : { message: String(err) },
+                err:
+                  err instanceof Error
+                    ? { message: err.message, stack: err.stack, name: err.name }
+                    : { message: String(err) },
               });
             }
           }
@@ -433,6 +392,7 @@ export function subscribePtyGcKilled(
 export type PtySessionManagerOptions = {
   cols?: number;
   rows?: number;
+  /** 旧终端标签的路径快照；ptyCreate 会在授权后重新读取活动工作区。 */
   cwd?: string;
 };
 

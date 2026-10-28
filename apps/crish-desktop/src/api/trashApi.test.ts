@@ -34,15 +34,25 @@ describe('listTrashEntries', () => {
     expect(mockInvoke).toHaveBeenCalledWith('trash_list');
   });
 
-  it('missing / error：降级为空列表（面板空态，不抛）', async () => {
+  it('missing：降级为空列表（面板空态）', async () => {
     mockInvoke.mockResolvedValueOnce({ status: 'missing' });
     expect(await listTrashEntries()).toEqual({ entries: [], trashRoot: '' });
+  });
+
+  it('WorkspaceAccess / Io error：抛出读取错误，不伪装成空回收站', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      status: 'error',
+      kind: 'WorkspaceAccess',
+      message: '工作区授权尚未完成',
+    });
+    await expect(listTrashEntries()).rejects.toThrow('工作区授权尚未完成');
+
     mockInvoke.mockResolvedValueOnce({
       status: 'error',
       kind: 'Io',
-      message: 'boom',
+      message: '磁盘读取失败',
     });
-    expect(await listTrashEntries()).toEqual({ entries: [], trashRoot: '' });
+    await expect(listTrashEntries()).rejects.toThrow('磁盘读取失败');
   });
 });
 

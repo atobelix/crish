@@ -26,6 +26,17 @@
   z-index: var(--z-sticky, 20);
 }
 
+/* 侧栏折叠时：顶栏左侧避让折叠开关浮层空间，防止拖拽区（-webkit-app-region: drag）压制侧栏开关导致光标变为系统箭头 */
+:global([data-sidebar-collapsed='true']) .topBar {
+  left: var(--edge-reserve-left, 52px);
+}
+
+:global([data-platform='macos']:not([data-fullscreen='true']))
+  :global([data-sidebar-collapsed='true'])
+  .topBar {
+  left: var(--edge-reserve-left-macos, 106px);
+}
+
 .spacer {
   flex: 1 1 0%;
   min-width: 32px;

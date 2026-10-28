@@ -16,13 +16,15 @@ vi.mock('../../api/markdownRenderAsync', () => ({
 
 vi.mock('../diff/VirtualPlainCodeViewer', () => ({
   VirtualPlainCodeViewer: vi.fn(({ content, filePath, wordWrap }: any) => (
-    <div data-testid="virtual-code-viewer" data-filepath={filePath} data-wordwrap={String(wordWrap)}>
+    <div
+      data-testid="virtual-code-viewer"
+      data-filepath={filePath}
+      data-wordwrap={String(wordWrap)}
+    >
       {content}
     </div>
   )),
 }));
-
-
 
 describe('MarkdownDocumentView 架构契约与立体验证测试', () => {
   beforeEach(() => {
@@ -88,19 +90,23 @@ describe('MarkdownDocumentView 架构契约与立体验证测试', () => {
       );
 
       // 验证严格阻断：给 useAsyncMarkdownHtml 传递空串
-      expect(markdownRenderAsync.useAsyncMarkdownHtml).toHaveBeenCalledWith('', expect.anything());
+      expect(markdownRenderAsync.useAsyncMarkdownHtml).toHaveBeenCalledWith(
+        '',
+        expect.anything()
+      );
 
       // 验证挂载 VirtualPlainCodeViewer
-      const viewer = container.querySelector('[data-testid="virtual-code-viewer"]');
+      const viewer = container.querySelector(
+        '[data-testid="virtual-code-viewer"]'
+      );
       expect(viewer).toBeTruthy();
       expect(viewer?.getAttribute('data-filepath')).toBe('large-document.md');
       expect(viewer?.getAttribute('data-wordwrap')).toBe('true');
 
-      // 验证存在优雅的状态提示条
+      // 验证虚拟化视口仍渲染且无冗余提示横幅
       const banner = container.querySelector('[role="status"]');
-      expect(banner).toBeTruthy();
-      expect(banner?.textContent).toContain('大文件 Markdown');
-      expect(banner?.textContent).toContain('已启用虚拟化极速代码呈现');
+      expect(banner).toBeNull();
+      expect(container.querySelector('.md-large-file-banner')).toBeNull();
     });
 
     it('当 content 长度小于 threshold 时，正常调用 useAsyncMarkdownHtml 并渲染 HTML', () => {
@@ -112,7 +118,10 @@ describe('MarkdownDocumentView 架构契约与立体验证测试', () => {
         />
       );
 
-      expect(markdownRenderAsync.useAsyncMarkdownHtml).toHaveBeenCalledWith(normalContent, expect.anything());
+      expect(markdownRenderAsync.useAsyncMarkdownHtml).toHaveBeenCalledWith(
+        normalContent,
+        expect.anything()
+      );
       const rendered = container.querySelector('.md-rendered.conex-markdown');
       expect(rendered).toBeTruthy();
       expect(rendered?.innerHTML).toBe('<p>Hello world</p>');
@@ -129,11 +138,15 @@ describe('MarkdownDocumentView 架构契约与立体验证测试', () => {
         />
       );
 
-      const root = container.querySelector('.md-rendered.conex-markdown.custom-cls');
+      const root = container.querySelector(
+        '.md-rendered.conex-markdown.custom-cls'
+      );
       expect(root).toBeTruthy();
       expect(root?.getAttribute('data-md-variant')).toBe('chat');
       // CSS 原生 tab-size 替代
-      expect((root as HTMLElement)?.style.tabSize).toBe('var(--md-code-tab-size, 2)');
+      expect((root as HTMLElement)?.style.tabSize).toBe(
+        'var(--md-code-tab-size, 2)'
+      );
     });
 
     it('默认 variant 为 document', () => {
@@ -190,7 +203,10 @@ describe('MarkdownDocumentView 架构契约与立体验证测试', () => {
 
       const onCopyFeedback = vi.fn();
       const { container } = render(
-        <MarkdownDocumentView content="```js\nconsole.log('hello');\n```" onCopyFeedback={onCopyFeedback} />
+        <MarkdownDocumentView
+          content="```js\nconsole.log('hello');\n```"
+          onCopyFeedback={onCopyFeedback}
+        />
       );
 
       const copyBtn = container.querySelector('.md-code-copy') as HTMLElement;
@@ -202,8 +218,11 @@ describe('MarkdownDocumentView 架构契约与立体验证测试', () => {
 
       expect(writeTextMock).toHaveBeenCalledWith("console.log('hello');");
       expect(copyBtn.classList.contains('is-copied')).toBe(true);
-      expect(copyBtn.textContent).toBe('✓ 已复制');
-      expect(onCopyFeedback).toHaveBeenCalledWith('success', "console.log('hello');");
+      expect(copyBtn.textContent).toBe('已复制');
+      expect(onCopyFeedback).toHaveBeenCalledWith(
+        'success',
+        "console.log('hello');"
+      );
 
       // 1500ms 复位
       act(() => {
@@ -234,7 +253,10 @@ describe('MarkdownDocumentView 架构契约与立体验证测试', () => {
       });
 
       const { container } = render(
-        <MarkdownDocumentView content="`main.ts:42:10`" onOpenPath={onOpenPath} />
+        <MarkdownDocumentView
+          content="`main.ts:42:10`"
+          onOpenPath={onOpenPath}
+        />
       );
 
       const pathBtn = container.querySelector('.md-path-link') as HTMLElement;
@@ -353,7 +375,10 @@ describe('MarkdownDocumentView 架构契约与立体验证测试', () => {
 
       let defaultPrevented = false;
       await act(async () => {
-        const evt = new MouseEvent('click', { bubbles: true, cancelable: true });
+        const evt = new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+        });
         anchor.dispatchEvent(evt);
         defaultPrevented = evt.defaultPrevented;
       });
@@ -438,7 +463,9 @@ describe('MarkdownDocumentView 架构契约与立体验证测试', () => {
       const scrollRoot = container.querySelector('.md-document-scroll-root');
       expect(scrollRoot).toBeTruthy();
 
-      const innerRendered = scrollRoot?.querySelector('.md-rendered[data-md-variant="document"]');
+      const innerRendered = scrollRoot?.querySelector(
+        '.md-rendered[data-md-variant="document"]'
+      );
       expect(innerRendered).toBeTruthy();
     });
 
@@ -448,7 +475,9 @@ describe('MarkdownDocumentView 架构契约与立体验证测试', () => {
       );
 
       expect(container.querySelector('.md-document-scroll-root')).toBeNull();
-      expect(container.querySelector('.md-rendered[data-md-variant="chat"]')).toBeTruthy();
+      expect(
+        container.querySelector('.md-rendered[data-md-variant="chat"]')
+      ).toBeTruthy();
     });
 
     it('渲染 footerSlot 并支持 onScroll 事件监听', () => {
@@ -458,11 +487,17 @@ describe('MarkdownDocumentView 架构契约与立体验证测试', () => {
           content="# Title"
           variant="document"
           onScroll={onScroll}
-          footerSlot={<button type="button" data-testid="load-more-btn">加载更多</button>}
+          footerSlot={
+            <button type="button" data-testid="load-more-btn">
+              加载更多
+            </button>
+          }
         />
       );
 
-      const loadMoreBtn = container.querySelector('[data-testid="load-more-btn"]');
+      const loadMoreBtn = container.querySelector(
+        '[data-testid="load-more-btn"]'
+      );
       expect(loadMoreBtn).toBeTruthy();
 
       const viewport = container.querySelector('[class*="viewport"]');

@@ -56,7 +56,7 @@
 
 .changesItemBtn:hover,
 .changesItemBtn:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .changesItemBtn:focus-visible,

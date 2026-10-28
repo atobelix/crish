@@ -26,79 +26,115 @@ import {
 } from './ptySessionApi';
 
 const mockedInvoke = vi.mocked(invokeResult);
+let previousWorkspacePath: string | null = null;
 
 beforeEach(() => {
+  previousWorkspacePath = localStorage.getItem('crish_workspace');
+  localStorage.removeItem('crish_workspace');
   mockedInvoke.mockReset();
   resetPtyHistoryForTests();
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  if (previousWorkspacePath === null) {
+    localStorage.removeItem('crish_workspace');
+  } else {
+    localStorage.setItem('crish_workspace', previousWorkspacePath);
+  }
 });
 
 function okCreate(ptyId: string) {
   mockedInvoke.mockResolvedValueOnce({ status: 'ok', data: { ptyId } });
 }
 
+function lastCreateArgs(): Record<string, unknown> {
+  const call = mockedInvoke.mock.calls[mockedInvoke.mock.calls.length - 1];
+  const args = call?.[1];
+  return typeof args === 'function'
+    ? args()
+    : (args as Record<string, unknown>);
+}
+
 // ── ptyCreate ─────────────────────────────────────────────────────
 
 describe('ptyCreate', () => {
   it('rejects empty sessionKey without invoke', async () => {
-    await expect(ptyCreate({ sessionKey: '', cols: 80, rows: 24 })).resolves.toEqual({
+    await expect(
+      ptyCreate({ sessionKey: '', cols: 80, rows: 24 })
+    ).resolves.toEqual({
       status: 'error',
       message: 'sessionKey is empty',
     });
-    await expect(ptyCreate({ sessionKey: '   ', cols: 80, rows: 24 })).resolves.toEqual({
+    await expect(
+      ptyCreate({ sessionKey: '   ', cols: 80, rows: 24 })
+    ).resolves.toEqual({
       status: 'error',
       message: 'sessionKey is empty',
     });
     expect(mockedInvoke).not.toHaveBeenCalled();
   });
 
-  it('invokes workbench_pty_create with clamped cols/rows and optional cwd', async () => {
+  it('resolves the active workspace cwd lazily instead of trusting a stale tab cwd', async () => {
     okCreate('pty-1');
     // cols: 0 → falsy → default 80; rows: -3 → max(1, floor(-3)) = 1
-    const res = await ptyCreate({
+    localStorage.setItem('crish_workspace', 'D:/authorized-project');
+    const create = ptyCreate({
       sessionKey: '  sess-a  ',
       cols: 0,
       rows: -3,
-      cwd: '  C:/repo  ',
+      cwd: 'C:/old-terminal-tab-root',
     });
+    localStorage.setItem('crish_workspace', 'E:/authorized-after-gate');
+    const res = await create;
     expect(res).toEqual({ status: 'ok', data: { ptyId: 'pty-1' } });
-    expect(mockedInvoke).toHaveBeenCalledWith('workbench_pty_create', {
+    expect(mockedInvoke).toHaveBeenCalledWith(
+      'workbench_pty_create',
+      expect.any(Function)
+    );
+    expect(lastCreateArgs()).toEqual({
       sessionKey: 'sess-a',
       cols: 80,
       rows: 1,
-      cwd: 'C:/repo',
+      cwd: 'E:/authorized-after-gate',
+      isStandalone: false,
     });
   });
 
   it('omits empty cwd from args', async () => {
     okCreate('pty-2');
     await ptyCreate({ sessionKey: 's1', cols: 80, rows: 24, cwd: '  ' });
-    expect(mockedInvoke).toHaveBeenCalledWith('workbench_pty_create', {
+    expect(mockedInvoke).toHaveBeenCalledWith(
+      'workbench_pty_create',
+      expect.any(Function)
+    );
+    expect(lastCreateArgs()).toEqual({
       sessionKey: 's1',
       cols: 80,
       rows: 24,
+      isStandalone: false,
     });
   });
 
   it('coerces pty_id snake_case and bare string id', async () => {
-    mockedInvoke.mockResolvedValueOnce({ status: 'ok', data: { pty_id: 'pty-snake' } });
+    mockedInvoke.mockResolvedValueOnce({
+      status: 'ok',
+      data: { pty_id: 'pty-snake' },
+    });
     await expect(
-      ptyCreate({ sessionKey: 's1', cols: 80, rows: 24 }),
+      ptyCreate({ sessionKey: 's1', cols: 80, rows: 24 })
     ).resolves.toEqual({ status: 'ok', data: { ptyId: 'pty-snake' } });
 
     mockedInvoke.mockResolvedValueOnce({ status: 'ok', data: 'pty-bare' });
     await expect(
-      ptyCreate({ sessionKey: 's1', cols: 80, rows: 24 }),
+      ptyCreate({ sessionKey: 's1', cols: 80, rows: 24 })
     ).resolves.toEqual({ status: 'ok', data: { ptyId: 'pty-bare' } });
   });
 
   it('errors when create returns no ptyId', async () => {
     mockedInvoke.mockResolvedValueOnce({ status: 'ok', data: {} });
     await expect(
-      ptyCreate({ sessionKey: 's1', cols: 80, rows: 24 }),
+      ptyCreate({ sessionKey: 's1', cols: 80, rows: 24 })
     ).resolves.toEqual({
       status: 'error',
       message: 'workbench_pty_create returned no ptyId',
@@ -108,12 +144,15 @@ describe('ptyCreate', () => {
   it('maps missing / error from invoke', async () => {
     mockedInvoke.mockResolvedValueOnce({ status: 'missing' });
     await expect(
-      ptyCreate({ sessionKey: 's1', cols: 80, rows: 24 }),
+      ptyCreate({ sessionKey: 's1', cols: 80, rows: 24 })
     ).resolves.toEqual({ status: 'missing' });
 
-    mockedInvoke.mockResolvedValueOnce({ status: 'error', message: 'spawn failed' });
+    mockedInvoke.mockResolvedValueOnce({
+      status: 'error',
+      message: 'spawn failed',
+    });
     await expect(
-      ptyCreate({ sessionKey: 's1', cols: 80, rows: 24 }),
+      ptyCreate({ sessionKey: 's1', cols: 80, rows: 24 })
     ).resolves.toEqual({ status: 'error', message: 'spawn failed' });
   });
 
@@ -124,10 +163,15 @@ describe('ptyCreate', () => {
       cols: Number.NaN,
       rows: Number.NaN,
     });
-    expect(mockedInvoke).toHaveBeenCalledWith('workbench_pty_create', {
+    expect(mockedInvoke).toHaveBeenCalledWith(
+      'workbench_pty_create',
+      expect.any(Function)
+    );
+    expect(lastCreateArgs()).toEqual({
       sessionKey: 's1',
       cols: 80,
       rows: 24,
+      isStandalone: false,
     });
   });
 });
@@ -155,7 +199,9 @@ describe('ptyWrite', () => {
     });
 
     mockedInvoke.mockResolvedValueOnce({ status: 'missing' });
-    await expect(ptyWrite('pty-1', 'x')).resolves.toEqual({ status: 'missing' });
+    await expect(ptyWrite('pty-1', 'x')).resolves.toEqual({
+      status: 'missing',
+    });
   });
 });
 
@@ -187,8 +233,13 @@ describe('ptyKill', () => {
     });
 
     mockedInvoke.mockResolvedValueOnce({ status: 'ok', data: null });
-    await expect(ptyKill('pty-z')).resolves.toEqual({ status: 'ok', data: undefined });
-    expect(mockedInvoke).toHaveBeenCalledWith('workbench_pty_kill', { ptyId: 'pty-z' });
+    await expect(ptyKill('pty-z')).resolves.toEqual({
+      status: 'ok',
+      data: undefined,
+    });
+    expect(mockedInvoke).toHaveBeenCalledWith('workbench_pty_kill', {
+      ptyId: 'pty-z',
+    });
   });
 });
 
@@ -213,7 +264,11 @@ describe('PtySessionManager', () => {
   it('ensure creates once then reuses; write/resize/kill track session', async () => {
     const mgr = new PtySessionManager();
     okCreate('pty-m1');
-    const first = await mgr.ensure('  unit-1  ', { cols: 100, rows: 30, cwd: 'C:/ws' });
+    const first = await mgr.ensure('  unit-1  ', {
+      cols: 100,
+      rows: 30,
+      cwd: 'C:/ws',
+    });
     expect(first).toEqual({ status: 'ok', data: { ptyId: 'pty-m1' } });
     expect(mgr.getPtyId('unit-1')).toBe('pty-m1');
     expect(mockedInvoke).toHaveBeenCalledTimes(1);
@@ -240,7 +295,10 @@ describe('PtySessionManager', () => {
     });
 
     mockedInvoke.mockResolvedValueOnce({ status: 'ok', data: null });
-    await expect(mgr.kill('unit-1')).resolves.toEqual({ status: 'ok', data: undefined });
+    await expect(mgr.kill('unit-1')).resolves.toEqual({
+      status: 'ok',
+      data: undefined,
+    });
     expect(mgr.getPtyId('unit-1')).toBeUndefined();
   });
 
@@ -268,7 +326,7 @@ describe('PtySessionManager', () => {
       () =>
         new Promise((resolve) => {
           resolveInvoke = resolve as typeof resolveInvoke;
-        }),
+        })
     );
 
     const a = mgr.ensure('s-concurrent');
@@ -293,7 +351,9 @@ describe('PtySessionManager', () => {
     await mgr.disposeAll();
     expect(mgr.getPtyId('sA')).toBeUndefined();
     expect(mgr.getPtyId('sB')).toBeUndefined();
-    const killCalls = mockedInvoke.mock.calls.filter((c) => c[0] === 'workbench_pty_kill');
+    const killCalls = mockedInvoke.mock.calls.filter(
+      (c) => c[0] === 'workbench_pty_kill'
+    );
     expect(killCalls).toHaveLength(2);
   });
 });

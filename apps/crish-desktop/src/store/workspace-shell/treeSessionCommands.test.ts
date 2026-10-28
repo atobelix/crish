@@ -1,7 +1,18 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { useLayoutTreeStore } from '../layout-tree';
-import { createLeaf, createBranch, type LayoutTree } from '../layout-tree/types';
-import { createSessionTab, createDefaultDock } from '../layout-tree/sessionTabModel';
+import {
+  createLeaf,
+  createBranch,
+  type LayoutTree,
+} from '../layout-tree/types';
+import {
+  createSessionTab,
+  createDefaultDock,
+} from '../layout-tree/sessionTabModel';
+import {
+  openToolInDock,
+  getActiveDockTab,
+} from '../layout-tree/dockLayoutModel';
 import {
   treeFindTabBySessionId,
   treeFindTabByTabId,
@@ -29,7 +40,8 @@ function makeTab(sessionId: string, tabId: string, title = sessionId) {
 function resetLayout(tree: LayoutTree, activeLeafId?: string) {
   useLayoutTreeStore.setState({
     tree,
-    activeLeafId: activeLeafId ?? (tree.root.type === 'leaf' ? tree.root.id : null),
+    activeLeafId:
+      activeLeafId ?? (tree.root.type === 'leaf' ? tree.root.id : null),
     past: [],
     future: [],
     draggedSource: null,
@@ -103,13 +115,19 @@ describe('treeSessionCommands 核心命令流与多窗格状态机', () => {
   it('treeUpdateTabDock: 独立更新指定 Tab 的 Dock 状态，互不干扰', () => {
     const tabA = makeTab('s1', 't1', '会话1');
     const tabB = makeTab('s2', 't2', '会话2');
-    const leafA = createLeaf({ tabs: [tabA, tabB], activeTabId: 't1', id: 'leaf-a' });
+    const leafA = createLeaf({
+      tabs: [tabA, tabB],
+      activeTabId: 't1',
+      id: 'leaf-a',
+    });
     resetLayout({ version: 3, root: leafA }, 'leaf-a');
 
+    const nextTree = openToolInDock(tabA.dock.tree, {
+      viewId: 'terminal',
+    }).tree;
     treeUpdateTabDock('t1', {
       collapsed: false,
-      activePanelId: 'terminal',
-      openPanelIds: ['terminal'],
+      tree: nextTree,
       widthRatio: 0.4,
     });
 
@@ -118,11 +136,11 @@ describe('treeSessionCommands 核心命令流与多窗格状态机', () => {
     const t2 = chats[0]!.tabs.find((t) => t.tabId === 't2')!;
 
     expect(t1.dock.collapsed).toBe(false);
-    expect(t1.dock.activePanelId).toBe('terminal');
+    expect(getActiveDockTab(t1.dock.tree)?.viewId).toBe('terminal');
     expect(t1.dock.widthRatio).toBe(0.4);
 
     // t2 仍保持默认折叠，未被污染
     expect(t2.dock.collapsed).toBe(true);
-    expect(t2.dock.activePanelId).toBeNull();
+    expect(getActiveDockTab(t2.dock.tree)).toBeNull();
   });
 });

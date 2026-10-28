@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import styles from './overlay/FirstRunWizard.module.css';
-import { Switch } from './ui';
+import { Switch } from '@/components/ui';
 import { ManualAddForm } from './settings-models/ManualAddForm';
 import type { AddDraft } from './settings-models/useModelProfilesState';
 

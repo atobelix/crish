@@ -16,7 +16,7 @@ import {
   type FsDirEntry,
 } from '../api/workspaceFsApi';
 import { fetchGitStatus, type GitStatusFile } from '../api/gitApi';
-import { ConfirmDialog } from '../components/ui';
+import { ConfirmDialog } from '@/components/ui';
 import { useConfirmGate } from './useConfirmGate';
 import {
   DEFAULT_FILE_TREE_ROW_HEIGHT,

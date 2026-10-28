@@ -1,10 +1,10 @@
 import React, { useEffect } from 'react';
 
 import styles from './Sidebar.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import { SettingsQuickMenu } from '../settings/SettingsQuickMenu';
 import { useAuthField } from '../../store/storeAccess';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 
 export interface UserProfileCardProps {

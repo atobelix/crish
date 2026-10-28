@@ -280,7 +280,7 @@ export function treeReplaceActiveSessionInLeaf(
     sessionId,
     title: meta?.title ?? tab.title,
     workspaceKey: meta?.workspaceKey ?? tab.workspaceKey,
-  };
+  } as SessionTab;
   const nextTabs = leaf.tabs.map((t) =>
     t.tabId === tab.tabId ? updatedTab : t
   );

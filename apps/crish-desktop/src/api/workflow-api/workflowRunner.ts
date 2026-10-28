@@ -16,6 +16,7 @@
 
 import { invokeResult, invokeTyped } from '../tauriInvoke';
 import { logInternalError } from '../userFacingErrors';
+import { coercePermissionMode, type PermissionMode } from '../permissionModes';
 import type { WorkflowSchedule } from './workflowScheduler';
 
 export type WorkflowDefinition = {
@@ -24,6 +25,7 @@ export type WorkflowDefinition = {
   prompt: string;
   cwd?: string;
   mode?: string;
+  permissionMode?: PermissionMode;
   enabled?: boolean;
   schedule?: WorkflowSchedule;
   targetSessionId?: string | null;
@@ -42,6 +44,7 @@ export type WorkflowCreateInput = {
   prompt: string;
   schedule?: WorkflowSchedule;
   cwd?: string;
+  permissionMode?: PermissionMode;
   enabled?: boolean;
   targetSessionId?: string | null;
 };
@@ -52,6 +55,7 @@ export type WorkflowUpdatePatch = {
   schedule?: WorkflowSchedule;
   enabled?: boolean;
   cwd?: string;
+  permissionMode?: PermissionMode;
   targetSessionId?: string | null;
 };
 
@@ -62,6 +66,7 @@ type WorkflowWire = {
   prompt: string;
   cwd?: string | null;
   mode?: string | null;
+  permissionMode?: string | null;
   enabled: boolean;
   schedule?: WorkflowSchedule;
   targetSessionId?: string | null;
@@ -88,6 +93,9 @@ function parseWorkflowWire(
   };
   if (w.cwd != null) out.cwd = String(w.cwd);
   if (w.mode != null) out.mode = String(w.mode);
+  if (w.permissionMode != null && String(w.permissionMode).trim() !== '') {
+    out.permissionMode = coercePermissionMode(w.permissionMode);
+  }
   if (w.schedule != null) out.schedule = w.schedule as WorkflowSchedule;
   if (w.targetSessionId != null && String(w.targetSessionId).trim() !== '') {
     out.targetSessionId = String(w.targetSessionId);
@@ -133,6 +141,9 @@ export async function createWorkflow(input: WorkflowCreateInput): Promise<{
     prompt: input.prompt,
     schedule: input.schedule,
     ...(input.cwd !== undefined && { cwd: input.cwd }),
+    ...(input.permissionMode !== undefined && {
+      permissionMode: input.permissionMode,
+    }),
     ...(input.enabled !== undefined && { enabled: input.enabled }),
     ...(input.targetSessionId !== undefined && {
       targetSessionId: input.targetSessionId,
@@ -172,6 +183,9 @@ export async function updateWorkflow(
     ...(patch.schedule !== undefined && { schedule: patch.schedule }),
     ...(patch.enabled !== undefined && { enabled: patch.enabled }),
     ...(patch.cwd !== undefined && { cwd: patch.cwd }),
+    ...(patch.permissionMode !== undefined && {
+      permissionMode: patch.permissionMode,
+    }),
     ...(patch.targetSessionId !== undefined && {
       targetSessionId: patch.targetSessionId,
     }),

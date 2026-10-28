@@ -74,7 +74,7 @@
 }
 
 .filesNavBtn.isOn {
-  background: var(--tint-active);
+  background: var(--state-active);
   color: var(--text-primary);
 }
 
@@ -157,12 +157,12 @@
 
 .filesSegBtn:hover {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .filesSegBtn.isOn {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .filesLoadMore {
@@ -182,7 +182,7 @@
 
 .filesLoadMore:hover:not(:disabled) {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .filesLoadMore:disabled {
@@ -221,7 +221,7 @@
 .filesBcChip.isOpen,
 .filesBcChip:hover {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .filesBcSep {
@@ -303,7 +303,7 @@
 }
 
 .filesBcDirectOpenBtn:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -340,7 +340,7 @@
 
 .filesBcFlyoutItem.isActive,
 .filesBcFlyoutItem:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .filesBcFlyoutChev {
@@ -382,7 +382,7 @@
   height: 18px;
   padding: 0 5px;
   border-radius: var(--radius-md);
-  background: var(--bg-active);
+  background: var(--state-active);
   color: var(--text-secondary);
   font-size: var(--font-size-xxs);
   display: inline-flex;
@@ -442,7 +442,7 @@
 }
 
 .filesSoftBtn:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
   box-shadow: none;
 }
@@ -454,7 +454,7 @@
 }
 
 .filesSoftBtnEmphasis {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border: none;
   color: var(--text-primary);
   font-weight: var(--font-weight-normal);
@@ -462,7 +462,7 @@
 }
 
 .filesSoftBtnEmphasis:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   box-shadow: none;
 }
 
@@ -653,7 +653,7 @@
 }
 
 .filesOpenCapsule .filesOpenMain:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -677,7 +677,7 @@
 }
 
 .filesOpenCapsule .filesOpenChev:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -701,11 +701,11 @@
 }
 
 .filesRow:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .filesRow.isSelected {
-  background: var(--bg-active);
+  background: var(--state-active);
 }
 
 .filesRowIco {
@@ -837,7 +837,7 @@
 }
 
 .filesInlineErrDismiss:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -881,7 +881,7 @@
 }
 
 .filesActionHintDismiss:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -906,5 +906,6 @@
 }
 
 .isSelectedPulse {
-  animation: fileRowPulse 1.4s cubic-bezier(0.2, 0, 0, 1) forwards;
+  animation: fileRowPulse var(--transition-pulse, 1.4s)
+    var(--ease-in-out, cubic-bezier(0.2, 0, 0, 1)) forwards;
 }

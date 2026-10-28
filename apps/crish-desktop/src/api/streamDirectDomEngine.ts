@@ -170,7 +170,9 @@ export class StreamDirectDomEngine {
       this.evictOldestSlot();
     }
 
-    const doc = container.ownerDocument ?? document;
+    const doc =
+      container.ownerDocument ??
+      (typeof document !== 'undefined' ? document : undefined);
     let textNode: Text | null = null;
     for (let i = container.childNodes.length - 1; i >= 0; i -= 1) {
       const child = container.childNodes[i];

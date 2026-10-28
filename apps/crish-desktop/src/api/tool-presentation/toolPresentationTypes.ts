@@ -6,7 +6,7 @@ import type {
   MessageContextInjection,
   MessageToolCall,
 } from '../../store/layoutStore';
-import type { IconName } from '../../components/ui/icons';
+import type { IconName } from '@/components/ui/icons';
 import type { ToolCommandKind } from './toolCommandType';
 
 export type ToolRenderItem =
@@ -290,6 +290,25 @@ export interface ToolPresentation {
   kind: ToolCommandKind;
   /** 无障碍辅助朗读完整文本 */
   rowAriaLabel: string;
+}
+
+/** 单工具呈现注册项接口 */
+export interface ToolPresentationRegistration {
+  kind: ToolCommandKind;
+  iconName: string;
+  defaultAction: string;
+  resolveAction?: (
+    args: Record<string, unknown>,
+    tc: MessageToolCall
+  ) => string;
+  extractTarget: (
+    args: Record<string, unknown>,
+    tc: MessageToolCall
+  ) => ToolTarget | undefined;
+  extractMeta?: (
+    tc: MessageToolCall,
+    args: Record<string, unknown>
+  ) => readonly ToolMeta[];
 }
 
 /** 构建 ToolPresentation 的可选覆盖参数 */

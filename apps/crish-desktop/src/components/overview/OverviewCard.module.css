@@ -256,7 +256,7 @@
 }
 
 .itemBtn:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .itemBtn:disabled {
@@ -341,7 +341,7 @@ button.liveRow {
 }
 
 button.liveRow:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -450,7 +450,7 @@ button.liveRow:hover {
 }
 
 .iconBtn:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -471,7 +471,7 @@ button.liveRow:hover {
 /*        */
 .usageGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: var(--space-2);
   padding: 4px 2px;
 }
@@ -528,7 +528,7 @@ button.liveRow:hover {
 }
 
 .cronRow:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .cronInfo {

@@ -22,7 +22,11 @@ vi.mock('../../../../api/uiEvents', () => ({
 }));
 
 describe('侧栏所见即所得自然流式布局结构不变量 (WYSIWYG Flow Invariants)', () => {
-  const createMockSession = (id: string, title: string, isPinned = false): SessionState => ({
+  const createMockSession = (
+    id: string,
+    title: string,
+    isPinned = false
+  ): SessionState => ({
     id,
     title,
     isPinned,

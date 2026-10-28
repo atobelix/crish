@@ -1,11 +1,11 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
-import { Button } from '../ui';
+import { Button } from '@/components/ui';
 
 import { ChevronDownIcon } from '../../assets/icons';
 import { formatBgTaskMeta } from './helpers';
 import type { BackgroundTaskInfo } from '../../api/backgroundTasksApi';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 interface BackgroundSectionProps {
   open: boolean;
@@ -32,7 +32,7 @@ export const BackgroundSection = React.memo(function BackgroundSection({
         aria-expanded={open}
         onClick={onToggle}
       >
-        <AppIcon name="terminal" size={15} aria-hidden />
+        <AppIcon name="terminal" size={16} aria-hidden />
         <span>后台常驻</span>
         {bgTasks.length > 0 ? (
           <span className={styles.pill}>{bgTasks.length}</span>
@@ -65,7 +65,11 @@ export const BackgroundSection = React.memo(function BackgroundSection({
                       className={styles.itemBtn}
                       onClick={() => onOpenTask(t)}
                     >
-                      <AppIcon name="terminal" size={12} className={styles.ico} />
+                      <AppIcon
+                        name="terminal"
+                        size={12}
+                        className={styles.ico}
+                      />
                       <span className={styles.itemMain}>
                         <span className={styles.itemName}>{t.label}</span>
                         <em>{meta}</em>
