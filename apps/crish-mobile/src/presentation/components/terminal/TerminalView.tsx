@@ -1,11 +1,13 @@
 // 终端只读视图（R2UX-05-07：5000 行环形 + ANSI 白名单 + 固定行高；F3 §4.3 自动滚动/回到底部）
-// - 输入为纯文本行（ANSI 已在缓冲层按白名单剥离，本组件只渲染）；
+// - 输入为纯文本行（ANSI 已在缓冲层按白名单剥离，本组件只渲染）；渲染面统一脱敏
+//   （R4 批次5：sk-/Bearer/凭据键值打码，与桌面 redact 同规范，T-09 移动端侧）；
 // - 固定行高（TERMINAL_LINE_HEIGHT）getItemLayout 虚拟化（R2UX-05-07 滚动帧率预算数据面）；
 // - 自动滚底跟随（R2UX-05-03：吸底跟随阈值 40dp，上翻暂停，跟随恢复由「回到底部」触发）；
 // - 「已截断 N 行」顶部标记（F3 §4.3，ListHeader 不参与行键）；
 // - 空态（M4 §5.9：主文案 + 副文案，禁「0 误导」）。
 import { memo, useCallback, useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
+import { redactSecrets } from '@crish/shared-utils';
 import {
   FlatList,
   Platform,
@@ -140,6 +142,9 @@ const TerminalRow = memo(function TerminalRow({
   testID: string;
 }) {
   const theme = useTheme();
+  // 脱敏渲染（R4 批次5，T-09 移动端侧）：sk-/Bearer/凭据键值在渲染面统一打码，
+  // 与桌面 redact 同规范（shared-utils 单实现）；按行打码避免跨 chunk 拆分漏匹配
+  const safeText = redactSecrets(text);
   return (
     <View style={styles.row} testID={testID}>
       <Text
@@ -147,7 +152,7 @@ const TerminalRow = memo(function TerminalRow({
         selectable
         style={[styles.rowText, { color: theme.textPrimary }]}
       >
-        {text}
+        {safeText}
       </Text>
     </View>
   );

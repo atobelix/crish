@@ -14,6 +14,7 @@ import {
 } from '@/db/secureStore';
 import { authStore } from '@/domain/store/authStore';
 import { connectionStore } from '@/domain/store/connectionStore';
+import { resetObservationWiringForTest } from '@/adapters/wiring/observationWiring';
 import {
   getPairingWiring,
   PAIRING_META_DEVICE_ID_KEY,
@@ -36,6 +37,7 @@ const CRED = {
 
 beforeEach(() => {
   resetPairingWiringForTest();
+  resetObservationWiringForTest();
   configurePairingDriver(null);
   authStore.getState().clearPairing();
   connectionStore.setState({ phase: 'disconnected' });
@@ -43,6 +45,9 @@ beforeEach(() => {
 
 afterEach(() => {
   resetPairingWiringForTest();
+  // 冷启动恢复会拉起会话连接（observationWiring 单例 + mock socket + invoke 定时器）：
+  // 不复位则 10s 超时定时器挂住 jest worker（force-exit 告警源头）
+  resetObservationWiringForTest();
   configurePairingDriver(null);
   authStore.getState().clearPairing();
 });

@@ -135,8 +135,10 @@
 | 批次 | 状态 | 完成记录 |
 | --- | --- | --- |
 | 1 | ✅ 完成 | typecheck 全绿；jest 137 套件 / 2017 用例全绿（减 2 = 删除的兼容断言；首轮后台跑 3 失败为本机并行负载噪声，复跑 3 次稳定全绿）。清退兼容层 5 处（themeProjection+useAppTheme 别名 / terminalLineBuffer re-export / cxnCode 门面 / pairingWiring 门面 / retryCount 别名）+ conex:// 死 scheme + 深链死目标（/tasks、/usage、/diagnostics）；8 处深路径改包导入（jest mapper 补 @crish/shared-utils）；revokeLocal 合并进 clearPairing（D-7 提前）；测试资产归位（cxnCode/terminalLineBuffer/pairingWiring 三测试随实现移动）；删模板资产 ~450KB + 死样式 |
-| 2 | 待开始 | — |
-| 3 | 待开始 | — |
-| 4 | 待开始 | — |
-| 5 | 待开始 | — |
-| 6 | 待开始 | — |
+| 2 | ✅ 完成 | 设置持久化单真源：settingsStore 收敛为 appearance.theme + notification{masterOn,sceneFlags}（删 general/files/quiet/fontScale/listDensity 空转面）；themeModeStore 删除 → useTheme 直读 settingsStore（重启保留，含持久化往返测试）；设置页总开关 + 3 场景开关 + 权限联动接线（notifySwitchGate/requestPermissionOnEnable——原设计函数首次接入 UI）；删 settingsLocalStore + 缩略图假开关；prefsGate 通道→场景映射（approval/run→taskDone/general→message/security 恒放行）+ 总开关一票否决 |
+| 3 | ✅ 完成 | 审批历史页：app/approval-history.tsx 新路由（修复「已处理」入口导航崩）+ approvalHistoryScreen（倒序全量 + 拒绝理由副行 + 空态）+ ApprovalHistoryRow 抽出共用；仪表盘 F1 补全：DashboardStatusCard（相位/设备数/尝试次数/重试/统计行）+ DashboardFeedPreview（EventRow 复用 + 查看全部）+ useDashboardVm 重构（entries 改经 useEventStore 订阅响应式读取，删无消费 filter toggle） |
+| 4 | ✅ 完成 | cloudAuthStore 收编 adapters/cloud（client 注入 + 令牌闭包不进状态面 + pickOnlineDesktop 纯函数 + 7 用例）；一键直连诚实化（票据失败如实展示 / 不再伪造 onPaired / 删 Emoji 与虚假文案 / 硬编码色值 token 化）；配对端口持久化（PAIRING_META_PORT_KEY 全链：beginPairing→finalize→hydrate 恢复→unpair 清理，修复自定义端口配对后会话连接失联） |
+| 5 | ✅ 完成 | redactSecrets/redactDeep/maskSecretLast4 下沉 packages/shared-utils（桌面 3 消费方切包导入，12 用例随迁）；移动端接入：EventRow.clipSummary（脱敏先于截断）+ TerminalView 行渲染（T-09 移动端侧）；auth 错误帧投影（observationWiring：auth.expired/device_revoked/unknown_device/stale → markTokenExpired，含 dispose 生命周期与 3 用例）；auth.refresh 发送方维持跨端缺口登记（桌面 WS server 未实现，不单侧伪造） |
+| 6 | ✅ 完成 | WsPhase 归位 network（修复 network→domain 反向引用，5 处消费方改直采）；invokeCommand 统一执行链（filesRepository/quickRun/runControl 三处复制粘贴提炼，域错误类保持自有类型名）；createContextSingleton 工厂（4 处单例样板提炼）；jest worker 泄漏根修（pairingBootstrap.test 复位 observationWiring——冷启动恢复拉起的 mock socket + 10s invoke 定时器挂住 worker）；metaDao.test.ts 改名 settingsAndNotificationsDao.test.ts（名实相符） |
+
+**终态验证（2026-10-28）**：移动端 tsc 全绿；jest **141 套件 / 2041 用例全绿**（基线 137/2019）且 worker force-exit 告警消失；packages/shared-utils vitest 12/12 绿；桌面 tsc --noEmit 0 错（含 redact 三消费方切换）。

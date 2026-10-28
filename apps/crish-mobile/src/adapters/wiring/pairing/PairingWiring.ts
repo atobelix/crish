@@ -18,7 +18,7 @@ import { ReconnectingWsClient } from '@/network/ReconnectingWsClient';
 import type { WebSocketFactory } from '@/network/ReconnectingWsClient';
 import type { InboundEnvelope } from '@/network/WsEnvelope';
 import { resolveWsUrl, DEFAULT_GATEWAY_PORT } from '@/network/EndpointResolver';
-import type { WsPhase } from '@/domain/pure/selectors';
+import type { WsPhase } from '@/network/ReconnectingWsClient';
 import { connectionStore } from '@/domain/store/connectionStore';
 import type { ConnectionPhase } from '@/domain/store/connectionStore';
 import {
@@ -39,6 +39,7 @@ import {
   PAIRING_META_DEVICE_ID_KEY,
   PAIRING_META_DESKTOP_ID_KEY,
   PAIRING_META_HOST_KEY,
+  PAIRING_META_PORT_KEY,
   DEFAULT_DEVICE_NAME,
   engineTlsEnabled,
   buildAuthPersist,
@@ -246,10 +247,11 @@ export class PairingWiring {
   private async doHydrate(): Promise<boolean> {
     const cred = await loadPairingCredential(this.driver);
     if (!cred) return false;
-    const [deviceId, desktopId, host] = await Promise.all([
+    const [deviceId, desktopId, host, rawPort] = await Promise.all([
       this.driver.getItem(PAIRING_META_DEVICE_ID_KEY),
       this.driver.getItem(PAIRING_META_DESKTOP_ID_KEY),
       this.driver.getItem(PAIRING_META_HOST_KEY),
+      this.driver.getItem(PAIRING_META_PORT_KEY),
     ]);
     if (!deviceId || !desktopId || !host) {
       // 凭据在但身份元数据缺失（旧版本/写半截）→ 不可恢复 signer 上下文，自愈清空
@@ -261,12 +263,19 @@ export class PairingWiring {
       });
       return false;
     }
+    // 端口恢复（R4 批次4）：缺键（旧版本配对）→ 缺省 8765；非法值 → 缺省
+    const parsedPort = rawPort !== null ? Number(rawPort) : NaN;
+    const port =
+      Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort < 65536
+        ? parsedPort
+        : DEFAULT_GATEWAY_PORT;
+    this.pairingPort = port;
     await authStore
       .getState()
       .hydrate(this.persist, { deviceId, desktopId, host });
     // 冷启动已配对 → 直接连接（tokenKey 即持久化的会话密钥材料）
     this.connectSessionOnce({
-      url: resolveWsUrl(host, DEFAULT_GATEWAY_PORT, engineTlsEnabled()),
+      url: resolveWsUrl(host, port, engineTlsEnabled()),
       host,
       deviceId,
       desktopId,
@@ -376,6 +385,7 @@ export class PairingWiring {
       this.driver.deleteItem(PAIRING_META_DEVICE_ID_KEY),
       this.driver.deleteItem(PAIRING_META_DESKTOP_ID_KEY),
       this.driver.deleteItem(PAIRING_META_HOST_KEY),
+      this.driver.deleteItem(PAIRING_META_PORT_KEY),
     ]);
     this.detachRevokedHandler();
     getObservationWiring()?.client.disconnect();
@@ -639,10 +649,12 @@ export class PairingWiring {
       host: this.pairingHost,
     };
     try {
+      // 端口一并落库（R4 批次4）：冷启动恢复与 finalize 会话连接共用同一端口
       await Promise.all([
         this.driver.setItem(PAIRING_META_DEVICE_ID_KEY, deviceId),
         this.driver.setItem(PAIRING_META_DESKTOP_ID_KEY, ok.desktopId),
         this.driver.setItem(PAIRING_META_HOST_KEY, this.pairingHost),
+        this.driver.setItem(PAIRING_META_PORT_KEY, String(this.pairingPort)),
       ]);
       // authStore 收口：写 secure-store（persist+cred）+ 状态面（paired/身份/令牌）
       await authStore
@@ -660,6 +672,7 @@ export class PairingWiring {
         this.driver.deleteItem(PAIRING_META_DEVICE_ID_KEY),
         this.driver.deleteItem(PAIRING_META_DESKTOP_ID_KEY),
         this.driver.deleteItem(PAIRING_META_HOST_KEY),
+        this.driver.deleteItem(PAIRING_META_PORT_KEY),
       ]).catch(() => {
         // 清理失败不阻断错误上报（尽力而为）
       });
@@ -676,11 +689,7 @@ export class PairingWiring {
     this.connectSessionOnce({
       url:
         this.urlOverride ??
-        resolveWsUrl(
-          this.pairingHost,
-          DEFAULT_GATEWAY_PORT,
-          engineTlsEnabled()
-        ),
+        resolveWsUrl(this.pairingHost, this.pairingPort, engineTlsEnabled()),
       host: this.pairingHost,
       deviceId,
       desktopId: ok.desktopId,

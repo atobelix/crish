@@ -58,6 +58,16 @@ describe('clipSummary（F3 §3.4.2 折叠预览）', () => {
     expect(clipped).toHaveLength(60);
     expect(clipped.endsWith('…')).toBe(true);
   });
+
+  it('脱敏先于截断（R4 批次5）：sk-/Bearer/凭据键值打码（T-09 移动端侧）', () => {
+    expect(clipSummary('key=sk-abcd1234567890xyz done')).toBe('key=*** done');
+    expect(clipSummary('Authorization: Bearer abc.def')).toBe(
+      'Authorization: ***'
+    );
+    expect(clipSummary('apiKey=hunter2 status ok')).toBe(
+      'apiKey=*** status ok'
+    );
+  });
 });
 
 describe('summarizeEventFrame（F3 §6.3 人话摘要）', () => {

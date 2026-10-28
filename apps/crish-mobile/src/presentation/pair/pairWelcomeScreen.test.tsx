@@ -1,10 +1,16 @@
-// 配对引导首页组件测试（R2-03 部分 3）：
+// 配对引导首页组件测试（R2-03 部分 3 · R4 批次4 诚实化）：
 // 引导文案 + 双入口（手动输入/扫码配对）+ 入口回调（onOpenManual/onOpenScan）、
 // 已配对态（authStore hydrated 且 paired → 设备信息 + 进入应用 onEnterApp）、
-// 未配对不显示已配对卡片。
+// 未配对不显示已配对卡片；
+// 云端账号（R4 诚实化语义）：登录引导 / 一键直连申请票据失败如实展示错误、
+// **不写任何配对态**（配对态唯一入口 = PairingWiring 握手）。
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { authStore } from '@/domain/store/authStore';
-import { cloudAuthStore } from '@/domain/store/cloudAuthStore';
+import {
+  cloudAuthStore,
+  configureCloudAuthClient,
+} from '@/adapters/cloud/cloudAuthStore';
+import type { CloudAuthClient } from '@/network/cloudAuthClient';
 import PairWelcomeScreen from './pairWelcomeScreen';
 
 function seedPaired(): Promise<void> {
@@ -16,8 +22,42 @@ function seedPaired(): Promise<void> {
     );
 }
 
-beforeEach(async () => {
+/** 注入 fake 客户端（票据默认 404 失败——生产现状；用例按需覆盖实现） */
+function makeFakeClient(
+  ticketError = new Error('申请中继票据失败: Not Found')
+): CloudAuthClient & {
+  login: jest.Mock;
+  listDevices: jest.Mock;
+  getClientRelayTicket: jest.Mock;
+} {
+  return {
+    login: jest.fn(async () => ({
+      accessToken: 'at-1',
+      refreshToken: 'rt-1',
+      user: { id: 'u-1', email: 'test@flowbit.me' },
+    })),
+    listDevices: jest.fn(async () => []),
+    getClientRelayTicket: jest.fn(async () => {
+      throw ticketError;
+    }),
+  } as never;
+}
+
+function resetStores(): void {
   authStore.getState().clearPairing();
+  cloudAuthStore.setState({
+    isLoggedIn: false,
+    user: null,
+    devices: [],
+    onlineDesktop: null,
+    loading: false,
+    error: null,
+  });
+}
+
+beforeEach(async () => {
+  resetStores();
+  configureCloudAuthClient(makeFakeClient());
   await act(async () => {
     authStore.setState({ hydrated: true });
   });
@@ -106,9 +146,8 @@ describe('PairWelcomeScreen 已配对态（hydrated 且 paired）', () => {
   });
 });
 
-describe('PairWelcomeScreen 云端账号一键直连（免扫码免输码）', () => {
+describe('PairWelcomeScreen 云端账号（R4 批次4 诚实化语义）', () => {
   it('未登录时渲染登录引导卡片，点击打开登录输入框', async () => {
-    cloudAuthStore.getState().logout();
     await render(
       <PairWelcomeScreen
         onOpenManual={jest.fn()}
@@ -124,26 +163,23 @@ describe('PairWelcomeScreen 云端账号一键直连（免扫码免输码）', (
     expect(screen.getByTestId('pair-cloud-login-box')).toBeTruthy();
   });
 
-  it('已登录并检测到在线桌面时，显示一键直连按钮，点击完成配对并进入应用', async () => {
-    cloudAuthStore.setState({
-      isLoggedIn: true,
-      user: { id: 'u1', email: 'test@flowbit.me' },
-      onlineDesktop: {
+  it('已登录并检测到在线桌面 → 一键直连申请票据失败 → 错误如实展示 + 配对态不被伪造', async () => {
+    const client = makeFakeClient();
+    client.listDevices.mockResolvedValueOnce([
+      {
         id: 'desktop-pc-1',
         name: '工作电脑 (Windows)',
         platform: 'desktop',
         lastSeenAt: Date.now(),
         trusted: true,
       },
-    });
+    ]);
+    configureCloudAuthClient(client);
 
-    jest
-      .spyOn(cloudAuthStore.getState(), 'requestTicketForDesktop')
-      .mockResolvedValueOnce({
-        ticket: 'tkt-test',
-        relayUrl: 'wss://relay.flowbit.me',
-        exp: Math.floor(Date.now() / 1000) + 3600,
-      });
+    await act(async () => {
+      await cloudAuthStore.getState().login('test@flowbit.me', 'pw');
+      await cloudAuthStore.getState().fetchDevices();
+    });
 
     const onEnterApp = jest.fn();
     await render(
@@ -158,7 +194,11 @@ describe('PairWelcomeScreen 云端账号一键直连（免扫码免输码）', (
     expect(screen.getByText('发现我的电脑：工作电脑 (Windows)')).toBeTruthy();
 
     await fireEvent.press(screen.getByTestId('pair-one-click-connect'));
-    expect(onEnterApp).toHaveBeenCalledTimes(1);
-    expect(authStore.getState().pairState).toBe('paired');
+    const notice = screen.getByTestId('pair-connect-notice').props.children;
+    expect(String(notice)).toContain('直连暂不可用');
+    expect(String(notice)).toContain('Not Found');
+    // 诚实化核心断言：不写配对态、不进应用
+    expect(onEnterApp).not.toHaveBeenCalled();
+    expect(authStore.getState().pairState).toBe('unpaired');
   });
 });

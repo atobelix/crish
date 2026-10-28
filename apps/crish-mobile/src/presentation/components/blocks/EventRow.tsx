@@ -1,6 +1,8 @@
 // 事件流行（F3 §3.3 渲染面 / F1 §4.3 时间线行形态）：
 // - kind → 短标签 + 人话摘要（F3 §6.3 人话摘要语义的本地实现——toolHumanLabel 共享包
 //   未迁移，用简单映射 + 标注，摘要函数纯函数导出供单测）；
+// - 摘要渲染统一脱敏（R4 批次5：clipSummary 内 redactSecrets——sk-/Bearer/凭据键值
+//   打码，与桌面 redact 同规范，T-09 移动端侧；流式/终值共用同一出口）；
 // - 错误高亮（F3 §3.3.3：runtime-error / run-terminal failed / tool-end isError /
 //   task-failed / security-audit blocked——deriveErrorLevel 复用 eventReducers）；
 // - 流式渲染（R2UX-05-02）：流式增量类型（message-delta / tool-update / task-output）
@@ -10,6 +12,7 @@
 // - 固定行高（EVENT_ROW_HEIGHT）供 FlatList 虚拟化 getItemLayout。
 import { memo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { redactSecrets } from '@crish/shared-utils';
 import type {
   EventEnvelopeFrame,
   FeedEntry,
@@ -92,9 +95,10 @@ export function eventKindLabel(frame: EventEnvelopeFrame): string {
   }
 }
 
-/** 摘要截断（单行预览上限 60 字符，F3 §3.4.2 折叠预览语义的本地收窄） */
+/** 摘要截断（单行预览上限 60 字符，F3 §3.4.2 折叠预览语义的本地收窄；
+ * 脱敏先于截断（R4 批次5）：sk-/Bearer/凭据键值在进入摘要前打码） */
 export function clipSummary(text: string, maxLength = 60): string {
-  const trimmed = text.replace(/\s+/g, ' ').trim();
+  const trimmed = redactSecrets(text.replace(/\s+/g, ' ').trim());
   if (trimmed.length <= maxLength) return trimmed;
   return `${trimmed.slice(0, maxLength - 1)}…`;
 }

@@ -1,18 +1,23 @@
-// 配对引导首页（F6 首次启动引导 / M5 §2.1 pair/welcome.tsx，R2-03 部分 3 接线）：
-// - 云端统一账号支持（宗旨：“一切麻烦的东西在我们这，用户最好是点点就能完成的那种最好了”）：
-//   双端已登录同账号：手机开箱即见“我的电脑（在线）”，点击一键直连，零扫码零输码，300ms 建立 E2EE 隧道；
-// - 未登录/断网保底：友好提醒并引导登录，同时 100% 完整保留现有局域网扫码与 CXN 6 位码直连（本地优先）；
+// 配对引导首页（F6 首次启动引导 / M5 §2.1 pair/welcome.tsx · R4 批次4 诚实化收口）：
+// - 云端账号支持：登录同一账号 → 自动发现在线电脑（数据面就绪）；
+// - 一键直连（诚实化）：中继票据申请失败如实展示错误（服务端未上线时 404 文案透传）；
+//   **不再伪造配对态**——R4 前的实现把桌面 id 当本机 deviceId 写入 authStore.onPaired
+//   且不落任何凭据（重启即失配 + 连接必然失败），已根除：配对态唯一入口 =
+//   PairingWiring 配对握手（扫码/手动），云端直连待桌面中继链路上线后经完整握手接入；
+// - 本地优先兜底：手动输入与扫码配对入口完整保留；
 // - 已配对态兜底：authStore hydrated 且 paired → 展示已配对设备信息 + 进入应用。
-import { useState, useSyncExternalStore } from 'react';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuthStore } from '@/adapters/hooks/useAppStore';
 import { useTheme } from '@/adapters/platform/theme';
+import {
+  cloudAuthStore,
+  useCloudAuthStore,
+} from '@/adapters/cloud/cloudAuthStore';
 import Button from '@/presentation/components/ui/Button';
 import Input from '@/presentation/components/ui/Input';
 import HeaderBackButton from '@/presentation/components/ui/HeaderBackButton';
 import { dualHitSlop } from '@/presentation/components/ui/hitTargets';
-import { cloudAuthStore } from '@/domain/store/cloudAuthStore';
-import { authStore } from '@/domain/store/authStore';
 
 export interface PairWelcomeScreenProps {
   /** 手动输入入口（→ /pair/manual） */
@@ -39,14 +44,17 @@ export default function PairWelcomeScreen({
   const deviceId = useAuthStore((s) => s.deviceId);
   const paired = hydrated && pairState === 'paired';
 
-  const cloudAuth = useSyncExternalStore(cloudAuthStore.subscribe, () =>
-    cloudAuthStore.getState()
-  );
+  const isLoggedIn = useCloudAuthStore((s) => s.isLoggedIn);
+  const cloudError = useCloudAuthStore((s) => s.error);
+  const cloudLoading = useCloudAuthStore((s) => s.loading);
+  const onlineDesktop = useCloudAuthStore((s) => s.onlineDesktop);
+  const userEmail = useCloudAuthStore((s) => s.user?.email ?? null);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showLogin, setShowLogin] = useState(false);
-  const [connectingDesktop, setConnectingDesktop] = useState(false);
+  const [connectBusy, setConnectBusy] = useState(false);
+  const [connectNotice, setConnectNotice] = useState<string | null>(null);
 
   const handleCloudLogin = async () => {
     if (!email || !password) return;
@@ -54,37 +62,32 @@ export default function PairWelcomeScreen({
       await cloudAuthStore.getState().login(email, password);
       setPassword('');
       setShowLogin(false);
+      // 登录成功即拉设备列表（fire-and-forget；失败留痕 store.error）
+      void cloudAuthStore.getState().fetchDevices();
     } catch {
-      // 错误存入 cloudAuth.error
+      // 错误已存入 cloudAuthStore.error（登录失败原因如实展示）
     }
   };
 
+  // 一键直连（诚实化，R4 批次4）：申请中继票据 → 失败/成功均如实反馈；
+  // 不写任何配对态（中继握手链路未上线前，paired 只能来自真实配对握手）
   const handleOneClickConnect = async () => {
-    if (!cloudAuth.onlineDesktop) return;
-    setConnectingDesktop(true);
+    if (!onlineDesktop || connectBusy) return;
+    setConnectBusy(true);
+    setConnectNotice(null);
     try {
-      const ticketRes = await cloudAuthStore
-        .getState()
-        .requestTicketForDesktop();
-      const relayHost =
-        ticketRes.relayUrl.replace(/^wss?:\/\//, '').split('/')[0] ||
-        'relay.flowbit.me';
-      await authStore.getState().onPaired(
-        {
-          deviceId: cloudAuth.onlineDesktop.id,
-          desktopId: cloudAuth.onlineDesktop.id,
-          host: relayHost,
-        },
-        {
-          issuedAt: Date.now(),
-          ttlMs: (ticketRes.exp - Math.floor(Date.now() / 1000)) * 1000,
-        }
+      await cloudAuthStore.getState().requestTicketForDesktop();
+      setConnectNotice(
+        '中继票据已获取；桌面端中继链路尚未启用，请先使用扫码或手动输入完成配对。'
       );
-      onEnterApp();
-    } catch {
-      // 失败留痕
+    } catch (err: unknown) {
+      setConnectNotice(
+        err instanceof Error
+          ? `直连暂不可用：${err.message}`
+          : '直连暂不可用：请稍后重试或使用扫码/手动配对。'
+      );
     } finally {
-      setConnectingDesktop(false);
+      setConnectBusy(false);
     }
   };
 
@@ -108,8 +111,8 @@ export default function PairWelcomeScreen({
         </Text>
       </View>
 
-      {/* 云端免扫码直连区域 */}
-      {cloudAuth.isLoggedIn ? (
+      {/* 云端账号区域 */}
+      {isLoggedIn ? (
         <View
           testID="pair-cloud-desktop-card"
           style={[
@@ -118,42 +121,57 @@ export default function PairWelcomeScreen({
           ]}
         >
           <View style={styles.cloudCardHeader}>
-            <View style={styles.statusDot} />
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: theme.colorSuccess },
+              ]}
+            />
             <Text style={[styles.cloudCardTitle, { color: theme.textPrimary }]}>
-              {cloudAuth.onlineDesktop
-                ? `发现我的电脑：${cloudAuth.onlineDesktop.name}`
-                : `已登录 ${cloudAuth.user?.email}`}
+              {onlineDesktop
+                ? `发现我的电脑：${onlineDesktop.name}`
+                : `已登录 ${userEmail ?? ''}`}
             </Text>
           </View>
           <Text style={[styles.cloudCardDesc, { color: theme.textSecondary }]}>
-            {cloudAuth.onlineDesktop
-              ? '双端已登录同账号，可直接一键免扫码建立远程直连！'
+            {onlineDesktop
+              ? '双端已登录同一账号。免扫码直连需桌面端中继链路上线，当前请使用下方扫码或手动输入完成配对。'
               : '正在检测您的在线电脑…请确保电脑端已登录同一账号。'}
           </Text>
-          {cloudAuth.onlineDesktop ? (
+          {onlineDesktop ? (
             <Button
-              label={
-                connectingDesktop
-                  ? '正在建立安全直连…'
-                  : '⚡ 一键免扫码直连协同'
-              }
+              label={connectBusy ? '正在申请直连票据…' : '尝试免扫码直连'}
               testID="pair-one-click-connect"
               onPress={handleOneClickConnect}
-              disabled={connectingDesktop}
+              disabled={connectBusy}
               style={styles.cloudConnectBtn}
             />
+          ) : null}
+          {connectNotice ? (
+            <Text
+              testID="pair-connect-notice"
+              style={[styles.noticeText, { color: theme.colorWarning }]}
+            >
+              {connectNotice}
+            </Text>
+          ) : null}
+          {cloudError ? (
+            <Text style={[styles.errorText, { color: theme.colorError }]}>
+              {cloudError}
+            </Text>
           ) : null}
         </View>
       ) : (
         <View
           testID="pair-cloud-tip-card"
           style={[
-            styles.cloudTipCard,
+            styles.cloudCard,
             { backgroundColor: theme.bgCard, borderColor: theme.hairline },
           ]}
         >
-          <Text style={[styles.cloudTipText, { color: theme.textSecondary }]}>
-            💡 登录 Flowbit 账号，手机与电脑开箱即见、一键免扫码远程直连！
+          <Text style={[styles.cloudCardDesc, { color: theme.textSecondary }]}>
+            登录 Flowbit
+            账号，手机与电脑开箱即见在线状态（免扫码直连待中继服务上线）。
           </Text>
           {!showLogin ? (
             <Pressable
@@ -162,7 +180,9 @@ export default function PairWelcomeScreen({
               onPress={() => setShowLogin(true)}
               style={styles.openLoginBtn}
             >
-              <Text style={styles.openLoginText}>立即登录账号</Text>
+              <Text style={[styles.openLoginText, { color: theme.colorInfo }]}>
+                立即登录账号
+              </Text>
             </Pressable>
           ) : (
             <View testID="pair-cloud-login-box" style={styles.loginBox}>
@@ -180,15 +200,17 @@ export default function PairWelcomeScreen({
                 onChangeText={setPassword}
                 secureTextEntry
               />
-              {cloudAuth.error ? (
-                <Text style={styles.errorText}>{cloudAuth.error}</Text>
+              {cloudError ? (
+                <Text style={[styles.errorText, { color: theme.colorError }]}>
+                  {cloudError}
+                </Text>
               ) : null}
               <View style={styles.loginActions}>
                 <Button
-                  label={cloudAuth.loading ? '登录中…' : '登录并查找电脑'}
+                  label={cloudLoading ? '登录中…' : '登录并查找电脑'}
                   testID="pair-login-submit"
                   onPress={handleCloudLogin}
-                  disabled={cloudAuth.loading || !email || !password}
+                  disabled={cloudLoading || !email || !password}
                   style={styles.loginBtn}
                 />
                 <Pressable
@@ -207,7 +229,7 @@ export default function PairWelcomeScreen({
         </View>
       )}
 
-      {/* 本地优先兜底操作：100% 完整保留原有手动输入与扫码配对 */}
+      {/* 本地优先兜底操作：手动输入与扫码配对 */}
       <View style={styles.actions}>
         <Button
           label="手动输入配对信息"
@@ -299,7 +321,6 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#22c55e',
   },
   cloudCardTitle: {
     fontSize: 15,
@@ -312,17 +333,6 @@ const styles = StyleSheet.create({
   cloudConnectBtn: {
     marginTop: 6,
   },
-  cloudTipCard: {
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 10,
-    marginTop: 6,
-  },
-  cloudTipText: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
   openLoginBtn: {
     alignSelf: 'flex-start',
     paddingVertical: 4,
@@ -330,7 +340,6 @@ const styles = StyleSheet.create({
   openLoginText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#3b82f6',
   },
   loginBox: {
     gap: 8,
@@ -338,7 +347,10 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 12,
-    color: '#ef4444',
+  },
+  noticeText: {
+    fontSize: 12,
+    lineHeight: 18,
   },
   loginActions: {
     flexDirection: 'row',

@@ -12,7 +12,7 @@ import { WsGateway } from '@/network/WsGateway';
 import { resolveWsUrl } from '@/network/EndpointResolver';
 import { authStore } from '@/domain/store/authStore';
 import type { ReconnectProjection } from '@/network/ReconnectingWsClient';
-import type { WsPhase } from '@/domain/pure/selectors';
+import type { WsPhase } from '@/network/ReconnectingWsClient';
 import { FeedBridge, type ListSessionsRepository } from './feedBridge';
 import { TerminalWiring } from './terminalWiring';
 import { PushWiring } from '@/notifications/pushConsumer';
@@ -39,6 +39,8 @@ export interface ObservationWiring {
   push: PushWiring;
   /** 主动重连（连接死/离线时用户点重试，M4 §3.7 ConnectionBanner） */
   reconnect: () => void;
+  /** 认证错误帧订阅退订（装配生命周期收口用，R4 批次5） */
+  dispose: () => void;
 }
 
 /** 装配连接客户端 + 观测面桥（相位/投影回调接线 + 网关订阅） */
@@ -57,6 +59,20 @@ export function startObservationWiring(
   // 推送消费接线并挂（events.push 推送载荷 → 通知层：前台 ingest / 后台系统通知 + 去重）
   const push = new PushWiring({ gateway });
   push.attach();
+  // 认证错误帧投影（R4 批次5）：error 帧 auth.* 码 → authStore.markTokenExpired
+  // （令牌过期/吊销引导重新配对，M5 §4.3.5；此前 markTokenExpired 无任何触发点，
+  //  服务端错误帧被静默吞掉。auth.refresh 重发面为跨端缺口——桌面 WS server 未实现
+  //  auth.refresh 处理，登记 R4 方案 §2-E2，不在移动端单侧伪造）
+  const unsubAuthError = gateway.on('error', (frame) => {
+    const body =
+      typeof frame.body === 'object' && frame.body !== null
+        ? (frame.body as Record<string, unknown>)
+        : {};
+    const code = typeof body['code'] === 'string' ? body['code'] : '';
+    if (AUTH_EXPIRED_ERROR_CODES.has(code)) {
+      authStore.getState().markTokenExpired();
+    }
+  });
   const client = new ReconnectingWsClient({
     url: opts.url,
     ...(opts.token !== undefined ? { token: opts.token } : {}),
@@ -72,8 +88,17 @@ export function startObservationWiring(
     terminal,
     push,
     reconnect: () => client.connect(),
+    dispose: unsubAuthError,
   };
 }
+
+/** 认证失效错误码（crates/conex-types/src/device/error.rs auth 域；命中 → 令牌过期态） */
+const AUTH_EXPIRED_ERROR_CODES: ReadonlySet<string> = new Set([
+  'auth.expired',
+  'auth.device_revoked',
+  'auth.unknown_device',
+  'auth.stale',
+]);
 
 let singleton: ObservationWiring | null = null;
 
@@ -102,5 +127,6 @@ export function resetObservationWiringForTest(): void {
   singleton?.bridge.detach();
   singleton?.terminal.detach();
   singleton?.push.detach();
+  singleton?.dispose();
   singleton = null;
 }

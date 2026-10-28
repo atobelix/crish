@@ -76,7 +76,11 @@ export {
 export { LruCache, BoundedMapCache } from './cache';
 export type { CacheProvider, CacheBudget, SizeEstimator } from './cache';
 
-export { MemoryManager, memoryManager, DEFAULT_ABSOLUTE_LIMITS } from './memory-manager';
+export {
+  MemoryManager,
+  memoryManager,
+  DEFAULT_ABSOLUTE_LIMITS,
+} from './memory-manager';
 export type {
   MemoryPressureLevel,
   MemoryManagerOptions,
@@ -219,3 +223,6 @@ export {
   filterFeed,
 } from './event-filter';
 export type { FeedFilter } from './event-filter';
+
+// 脱敏（R4 批次5 下沉：桌面/移动端共用单实现，正则规范与 Rust redact.rs 对齐）
+export { redactSecrets, redactDeep, maskSecretLast4 } from './redact';

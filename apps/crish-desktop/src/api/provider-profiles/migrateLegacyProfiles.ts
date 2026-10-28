@@ -18,7 +18,7 @@
 import { configProfileApply } from './rustProfileStore';
 import { emitUiEvent } from '../uiEvents';
 import { logger } from '../../services/LoggerService';
-import { redactSecrets } from '../../utils/redact';
+import { redactSecrets } from '@crish/shared-utils';
 
 /** 幂等标记（AU-04 F5/D12 冻结名；置位 = 迁移已完成，跳过后续启动） */
 export const LEGACY_MIGRATION_FLAG_KEY = 'crish_profiles_secrets_migrated_v1';
@@ -119,7 +119,14 @@ function containsApiKeyField(value: unknown): boolean {
  */
 export async function migrateLegacyProfiles(): Promise<LegacyMigrationResult> {
   if (isLegacyMigrationDone()) {
-    return { skipped: true, migrated: 0, degraded: 0, failed: [], retried: false, residualKeys: [] };
+    return {
+      skipped: true,
+      migrated: 0,
+      degraded: 0,
+      failed: [],
+      retried: false,
+      residualKeys: [],
+    };
   }
 
   let result = await runMigrationPass();
@@ -138,7 +145,9 @@ export async function migrateLegacyProfiles(): Promise<LegacyMigrationResult> {
 /** 本次迁移是否未完成（有失败/降级/残留明文 → 不置幂等标记） */
 function hasIncomplete(result: LegacyMigrationResult): boolean {
   return (
-    result.failed.length > 0 || result.degraded > 0 || result.residualKeys.length > 0
+    result.failed.length > 0 ||
+    result.degraded > 0 ||
+    result.residualKeys.length > 0
   );
 }
 
@@ -213,7 +222,9 @@ async function runMigrationPass(): Promise<LegacyMigrationResult> {
   // 活动 profile 最后 apply：引擎最终持有活动 profile 的密钥（对齐旧启动同步语义）
   const keyed = profiles
     .map((p, index) => ({ p, index }))
-    .filter(({ p }) => typeof p.apiKey === 'string' && (p.apiKey as string).trim())
+    .filter(
+      ({ p }) => typeof p.apiKey === 'string' && (p.apiKey as string).trim()
+    )
     .sort((a, b) => {
       if (String(a.p.id) === activeId) return 1;
       if (String(b.p.id) === activeId) return -1;
@@ -229,7 +240,11 @@ async function runMigrationPass(): Promise<LegacyMigrationResult> {
       continue;
     }
     const res = await configProfileApply({ profileId, apiKey });
-    if (res.status === 'ok' && res.data?.ok === true && res.data.hasApiKey === true) {
+    if (
+      res.status === 'ok' &&
+      res.data?.ok === true &&
+      res.data.hasApiKey === true
+    ) {
       if (res.data.credentialPersistence === 'persisted') {
         // DPAPI 落盘确认 → 剥离明文（保留 hasKey 标记）
         delete p.apiKey;
@@ -253,10 +268,9 @@ async function runMigrationPass(): Promise<LegacyMigrationResult> {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       outcome.failed.push('<write-back>');
-      logger.warn(
-        redactSecrets(`migrateLegacyProfiles 写回失败：${message}`),
-        { module: 'provider-migration' }
-      );
+      logger.warn(redactSecrets(`migrateLegacyProfiles 写回失败：${message}`), {
+        module: 'provider-migration',
+      });
     }
   }
 

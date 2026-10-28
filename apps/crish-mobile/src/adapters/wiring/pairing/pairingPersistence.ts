@@ -16,6 +16,9 @@ export const PAIRING_META_DEVICE_ID_KEY = 'pairing.meta.device_id';
 export const PAIRING_META_DESKTOP_ID_KEY = 'pairing.meta.desktop_id';
 /** 桌面连接主机（冷启动恢复端点） */
 export const PAIRING_META_HOST_KEY = 'pairing.meta.host';
+/** 网关端口（用户自定义端口冷启动恢复源；R4 批次4——此前端口不持久化，
+ *  finalizePairing 会话连接硬编码缺省端口，自定义端口配对后连接即失联） */
+export const PAIRING_META_PORT_KEY = 'pairing.meta.port';
 
 /** 缺省设备名（pair.hello deviceName 兜底，对齐 pair/manual.tsx 占位） */
 export const DEFAULT_DEVICE_NAME = 'crish-mobile';

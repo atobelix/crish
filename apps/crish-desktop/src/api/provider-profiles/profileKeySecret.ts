@@ -5,7 +5,7 @@
  * 展示用掩码、以及密钥落 DPAPI 凭据槽的 setProfileKey。
  */
 
-import { maskSecretLast4 } from '../../utils/redact';
+import { maskSecretLast4 } from '@crish/shared-utils';
 import { configSecretClear, configSecretSet } from './rustProfileStore';
 import { profileHasKey } from './profileValidation';
 import type { ProviderProfile } from './profileCatalog';
