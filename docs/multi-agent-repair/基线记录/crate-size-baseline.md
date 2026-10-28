@@ -303,7 +303,7 @@ apps/agent-workbench/src-tauri/src/main.rs 1937
 apps/agent-workbench/src-tauri/src/multi_device/tls.rs 1196
 apps/agent-workbench/src-tauri/src/multi_device_network.rs 644
 apps/agent-workbench/src-tauri/src/note_commands_tests.rs 713
-apps/agent-workbench/src-tauri/src/outputs_config.rs 615
+apps/agent-workbench/src-tauri/src/outputs_config.rs 618
 apps/agent-workbench/src-tauri/src/preferences_commands.rs 622
 apps/agent-workbench/src-tauri/src/probe.rs 723
 apps/agent-workbench/src-tauri/src/pty/session.rs 880
