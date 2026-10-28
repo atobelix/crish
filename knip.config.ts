@@ -123,7 +123,6 @@ const config: KnipConfig = {
     'apps/crish-desktop/dev-server/previewBridgeScript.ts',
     'apps/crish-desktop/playground/mock/tauri-mock.ts',
     'crates/conex-browser/resources/inspector_runtime.js',
-    'scripts/check-existing-ui-imports.mjs',
     // UI 原语公共 barrel / 兼容 shim（叶实现被直接 import；barrel 保留稳定导出路径）
     'apps/crish-desktop/src/components/motion/index.ts',
     'apps/crish-desktop/src/components/ui/internal/positioner/index.ts',
