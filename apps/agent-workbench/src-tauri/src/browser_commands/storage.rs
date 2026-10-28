@@ -1,12 +1,12 @@
 use super::common::{invalid_input, map_browser_err, not_ready, slot};
-use crate::core_error::CoreError;
-use crate::core_run_commands::CoreRunState;
+use crate::browser::BrowserSlot;
 use conex_browser::cdp::domains::Cookie as CdpCookie;
 use conex_browser::import::storage_state::{
     build_import_plan, export_origins_from_cookies, export_storage_state,
     export_storage_state_with_origins, inject_origin_scripts, parse_storage_state,
     ExportAuthorization, ImportPlan, StorageStateError,
 };
+use conex_run::core_error::CoreError;
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -49,7 +49,7 @@ pub(crate) struct StorageImportPayload {
 #[tauri::command]
 pub(crate) async fn browser_export_storage_state(
     authorized: bool,
-    core: tauri::State<'_, Arc<CoreRunState>>,
+    core: tauri::State<'_, Arc<BrowserSlot>>,
 ) -> Result<String, CoreError> {
     // 授权先行：未授权直接拒绝，不执行实读（§5.2 显式授权，零副作用）
     if !authorized {
@@ -57,7 +57,7 @@ pub(crate) async fn browser_export_storage_state(
             "storage_state 导出未获显式授权（须授权对话框确认后 authorized=true）".to_string(),
         ));
     }
-    let ops = slot(core.inner()).storage_ops();
+    let ops = slot(&core).storage_ops();
     let cookies = ops
         .get_all_cookies()
         .await
@@ -72,7 +72,7 @@ pub(crate) async fn browser_export_storage_state(
             .map_err(|e| map_browser_err(invalid_input(e.to_string())))?
     } else {
         // 通道不可用（未连接/无活动标签）→ not_ready（storage 命令不触发惰性启动）
-        let channel = slot(core.inner())
+        let channel = slot(&core)
             .local_storage_channel()
             .map_err(|e| map_browser_err(not_ready(e)))?;
         export_storage_state_with_origins(
@@ -121,13 +121,13 @@ pub(crate) async fn browser_export_storage_state(
 #[tauri::command]
 pub(crate) async fn browser_import_storage_state(
     json: String,
-    core: tauri::State<'_, Arc<CoreRunState>>,
+    core: tauri::State<'_, Arc<BrowserSlot>>,
 ) -> Result<StorageImportPayload, CoreError> {
     let state =
         parse_storage_state(&json).map_err(|e| map_browser_err(invalid_input(e.to_string())))?;
     let plan = build_import_plan(&state);
     let params = plan.to_cdp_params();
-    let ops = slot(core.inner()).storage_ops();
+    let ops = slot(&core).storage_ops();
     ops.set_cookies(params)
         .await
         .map_err(|e| map_browser_err(not_ready(e)))?;
@@ -167,7 +167,7 @@ pub(crate) async fn browser_import_storage_state(
     let mut injected_scripts = 0usize;
     let mut injected_items = 0usize;
     if !plan.origin_scripts.is_empty() {
-        let channel = slot(core.inner())
+        let channel = slot(&core)
             .local_storage_channel()
             .map_err(|e| map_browser_err(not_ready(e)))?;
         let stats = inject_origin_scripts(channel.as_ref(), &plan)

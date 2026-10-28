@@ -1,5 +1,4 @@
-use crate::browser::StorageStateOps;
-use crate::core_run_commands::CoreRunState;
+use crate::browser::{BrowserSlot, StorageStateOps};
 use async_trait::async_trait;
 use conex_browser::cdp::domains::{Cookie as CdpCookie, SetCookieParam};
 use conex_browser::import::storage_state::{build_import_plan, parse_storage_state};
@@ -7,7 +6,7 @@ use serde_json::json;
 use std::sync::Arc;
 
 use super::fixtures::{
-    cdp_cookie, err_detail, inject_local_storage_mock, inject_mock, mock_core_state, ChannelCall,
+    cdp_cookie, err_detail, inject_local_storage_mock, inject_mock, mock_browser_slot, ChannelCall,
     MockLocalStorageChannel, MockStorageOps,
 };
 use crate::browser_commands::{browser_import_storage_state, verify_cookie_injection};
@@ -20,12 +19,12 @@ use crate::browser_commands::{browser_import_storage_state, verify_cookie_inject
 async fn import_injects_cdp_params_and_stats() {
     use tauri::Manager as _;
     let temp = tempfile::tempdir().expect("临时目录");
-    let state = mock_core_state(&temp);
+    let state = mock_browser_slot(&temp);
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let state_ref = app.state::<Arc<CoreRunState>>();
+    let state_ref = app.state::<Arc<BrowserSlot>>();
 
     inject_mock(&state, MockStorageOps::new(Vec::new()));
     // localStorage 注入通道 mock（§5.3 注入执行面）
@@ -85,12 +84,12 @@ async fn import_injects_cdp_params_and_stats() {
 async fn import_wire_params_reach_sender() {
     use tauri::Manager as _;
     let temp = tempfile::tempdir().expect("临时目录");
-    let state = mock_core_state(&temp);
+    let state = mock_browser_slot(&temp);
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let state_ref = app.state::<Arc<CoreRunState>>();
+    let state_ref = app.state::<Arc<BrowserSlot>>();
 
     let mock = MockStorageOps::new(Vec::new());
     // 保持句柄以读取注入记录
@@ -195,12 +194,12 @@ fn verify_cookie_injection_matches_and_reports_missing() {
 async fn import_verification_records_mismatch_without_failure() {
     use tauri::Manager as _;
     let temp = tempfile::tempdir().expect("临时目录");
-    let state = mock_core_state(&temp);
+    let state = mock_browser_slot(&temp);
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let state_ref = app.state::<Arc<CoreRunState>>();
+    let state_ref = app.state::<Arc<BrowserSlot>>();
 
     // 模拟浏览器拒绝面：注入成功但回读恒空（cookie 被浏览器拒绝，
     // 如 SameSite=None 未配 Secure）——回验应检测到全部缺失
@@ -223,10 +222,7 @@ async fn import_verification_records_mismatch_without_failure() {
         read_calls: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
     };
     let read_calls = Arc::clone(&ops.read_calls);
-    state
-        .engine()
-        .browser_slot()
-        .inject_storage_ops(Arc::new(ops));
+    state_ref.inject_storage_ops(Arc::new(ops));
 
     let json = r#"{
         "cookies": [
@@ -249,12 +245,12 @@ async fn import_verification_records_mismatch_without_failure() {
 async fn import_rejects_bad_json() {
     use tauri::Manager as _;
     let temp = tempfile::tempdir().expect("临时目录");
-    let state = mock_core_state(&temp);
+    let state = mock_browser_slot(&temp);
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let state_ref = app.state::<Arc<CoreRunState>>();
+    let state_ref = app.state::<Arc<BrowserSlot>>();
 
     let err = browser_import_storage_state("{ not json !!".to_string(), state_ref)
         .await
@@ -272,12 +268,12 @@ async fn import_rejects_bad_json() {
 async fn import_rejects_invalid_domain() {
     use tauri::Manager as _;
     let temp = tempfile::tempdir().expect("临时目录");
-    let state = mock_core_state(&temp);
+    let state = mock_browser_slot(&temp);
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let state_ref = app.state::<Arc<CoreRunState>>();
+    let state_ref = app.state::<Arc<BrowserSlot>>();
 
     let json = r#"{"cookies":[{"name":"n","value":"v","domain":"javascript:"}]}"#;
     let err = browser_import_storage_state(json.to_string(), state_ref)
@@ -296,12 +292,12 @@ async fn import_rejects_invalid_domain() {
 async fn import_not_ready_without_session() {
     use tauri::Manager as _;
     let temp = tempfile::tempdir().expect("临时目录");
-    let state = mock_core_state(&temp);
+    let state = mock_browser_slot(&temp);
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let state_ref = app.state::<Arc<CoreRunState>>();
+    let state_ref = app.state::<Arc<BrowserSlot>>();
 
     let err = browser_import_storage_state(
         r#"{"cookies":[{"name":"n","value":"v","domain":"example.com"}]}"#.to_string(),
@@ -323,12 +319,12 @@ async fn import_not_ready_without_session() {
 async fn import_storage_state_injects_local_storage_channel() {
     use tauri::Manager as _;
     let temp = tempfile::tempdir().expect("临时目录");
-    let state = mock_core_state(&temp);
+    let state = mock_browser_slot(&temp);
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let state_ref = app.state::<Arc<CoreRunState>>();
+    let state_ref = app.state::<Arc<BrowserSlot>>();
 
     inject_mock(&state, MockStorageOps::new(Vec::new()));
     let channel = MockLocalStorageChannel::default();
@@ -381,12 +377,12 @@ async fn import_storage_state_injects_local_storage_channel() {
 async fn import_storage_state_local_storage_not_ready_without_channel() {
     use tauri::Manager as _;
     let temp = tempfile::tempdir().expect("临时目录");
-    let state = mock_core_state(&temp);
+    let state = mock_browser_slot(&temp);
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let state_ref = app.state::<Arc<CoreRunState>>();
+    let state_ref = app.state::<Arc<BrowserSlot>>();
 
     // cookie 面注入 mock（通过），localStorage 通道未注入（未连接面）
     inject_mock(&state, MockStorageOps::new(Vec::new()));

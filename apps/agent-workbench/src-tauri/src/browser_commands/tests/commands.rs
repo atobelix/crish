@@ -1,16 +1,16 @@
 use crate::browser::panel_input::BrowserInputEvent;
-use crate::core_run_commands::CoreRunState;
+use crate::browser::BrowserSlot;
 use serde_json::json;
 use std::sync::Arc;
 
-use super::fixtures::mock_core_state;
+use super::fixtures::mock_browser_slot;
 use crate::browser_commands::{
     browser_frame_status, browser_input, browser_status, browser_stop, browser_stop_frames,
     start_payload,
 };
 
 /// G-5 补强：SensitiveCapabilities 剪贴板位默认关闭（红线语义，
-/// 17 §2.3——未开启时任何权限模式直接 Deny，含 full-access）。
+/// 17 §2.3——未开启时任何权限模式直接 Deny，含 full 模式）。
 /// 口径注记（M-7 + U-8 裁决，17 §3.1/§3.3）：
 /// - **纯文本粘贴不受影响**：文本经 `Input.insertText` 注入页面，
 ///   不经 evaluate——`insertText` 不需要 clipboard 能力位；
@@ -52,12 +52,12 @@ fn start_payload_maps_error_and_ok() {
 async fn status_and_stop_contract_on_idle_state() {
     use tauri::Manager as _;
     let temp = tempfile::tempdir().expect("临时目录");
-    let state = mock_core_state(&temp);
+    let state = mock_browser_slot(&temp);
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let state_ref = app.state::<Arc<CoreRunState>>();
+    let state_ref = app.state::<Arc<BrowserSlot>>();
 
     let status = browser_status(app.handle().clone(), state_ref.clone()).expect("status 不应失败");
     assert_eq!(status.state, "idle", "从未启动 = idle");
@@ -91,12 +91,12 @@ async fn status_and_stop_contract_on_idle_state() {
 async fn browser_input_returns_ok_without_session() {
     use tauri::Manager as _;
     let temp = tempfile::tempdir().expect("临时目录");
-    let state = mock_core_state(&temp);
+    let state = mock_browser_slot(&temp);
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let state_ref = app.state::<Arc<CoreRunState>>();
+    let state_ref = app.state::<Arc<BrowserSlot>>();
 
     let evt = serde_json::from_value(json!({
         "kind": "mouse",
@@ -142,12 +142,12 @@ fn browser_input_rejects_unknown_kind() {
 async fn frame_commands_idle_contract() {
     use tauri::Manager as _;
     let temp = tempfile::tempdir().expect("临时目录");
-    let state = mock_core_state(&temp);
+    let state = mock_browser_slot(&temp);
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let state_ref = app.state::<Arc<CoreRunState>>();
+    let state_ref = app.state::<Arc<BrowserSlot>>();
 
     let status = browser_frame_status(state_ref.clone()).expect("状态查询不应失败");
     assert_eq!(serde_json::to_value(status).unwrap(), json!("stopped"));

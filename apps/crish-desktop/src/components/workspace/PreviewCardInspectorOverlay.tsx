@@ -1,6 +1,6 @@
 import React from 'react';
 import styles from './PreviewCard.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import {
   buildInspectorElementLabel,
   hasInspectorComputedStyles,
@@ -9,7 +9,7 @@ import type {
   InspectHoverPayload,
   InspectSelectPayload,
 } from './previewProtocol';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface PreviewCardInspectorOverlayProps {
   isInspectorActive: boolean;
@@ -21,7 +21,9 @@ export interface PreviewCardInspectorOverlayProps {
   onClearSelected: () => void;
 }
 
-export const PreviewCardInspectorOverlay: React.FC<PreviewCardInspectorOverlayProps> = ({
+export const PreviewCardInspectorOverlay: React.FC<
+  PreviewCardInspectorOverlayProps
+> = ({
   isInspectorActive,
   hoverElement,
   selectedElement,
@@ -58,10 +60,12 @@ export const PreviewCardInspectorOverlay: React.FC<PreviewCardInspectorOverlayPr
           aria-label="DOM 拾取结果"
         >
           <div className={styles.inspectorResultText}>
-            <AppIcon name="scan-search" size={13}
+            <AppIcon
+              name="scan-search"
+              size={13}
               className={styles.inspectorResultIcon}
-              aria-hidden />
-            <span>已拾取 DOM 元素：</span>
+              aria-hidden
+            />
             <code className={styles.inspectorCode}>
               {`<${buildInspectorElementLabel(
                 selectedElement.tagName,

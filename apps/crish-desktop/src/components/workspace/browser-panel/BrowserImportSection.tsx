@@ -4,15 +4,19 @@
  */
 import React, { useState } from 'react';
 import styles from './BrowserImportSection.module.css';
-import { Button, Input, Tooltip } from '../../ui';
+import { Button, Input, Tooltip } from '@/components/ui';
 import { useBookmarksImport } from './import-hooks/useBookmarksImport';
 import { useHistoryImport } from './import-hooks/useHistoryImport';
 import { useStorageImport } from './import-hooks/useStorageImport';
 import { useExportAuth } from './import-hooks/useExportAuth';
 import { ExportAuthDialogs } from './ExportAuthDialogs';
-import { SettingsCard, SettingsRow, SettingsSection } from '../../settings/SettingsUI';
+import {
+  SettingsCard,
+  SettingsRow,
+  SettingsSection,
+} from '../../settings/SettingsUI';
 import type { BusyKind } from './import-hooks/browserImportShared';
-import { AppIcon } from '../../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface BrowserImportSectionProps {
   /** 浏览器是否运行中：登录态导出/导入需运行中会话。 */
@@ -39,7 +43,9 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
   const exportReady = browserRunning && busy !== 'storageExport';
 
   // 自动装载并执行书签导入
-  const handleBookmarksFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBookmarksFileChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (file) {
@@ -63,7 +69,6 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
           <SettingsRow
             icon={<AppIcon name="bookmark" size={16} />}
             title="书签"
-            desc="导入 Chrome 书签文件"
             control={
               <>
                 <Input
@@ -93,7 +98,6 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
           <SettingsRow
             icon={<AppIcon name="history" size={16} />}
             title="浏览历史"
-            desc="导入本地 Chrome 历史记录"
             control={
               <Button
                 type="button"
@@ -114,7 +118,6 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
           <SettingsRow
             icon={<AppIcon name="key" size={16} />}
             title="登录态"
-            desc="导入浏览器会话凭据"
             control={
               <>
                 <Input
@@ -156,7 +159,6 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
           <SettingsRow
             icon={<AppIcon name="download" size={16} />}
             title="导出登录态"
-            desc="备份当前浏览器会话凭据"
             control={
               <Tooltip
                 content={

@@ -5,9 +5,9 @@
 import React from 'react';
 
 import styles from './PreviewCard.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip } from '@/components/ui';
 import { previewDisplayHost } from '../../api/previewBrowserStore';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export type PreviewHistoryPanelProps = {
   history: string[];

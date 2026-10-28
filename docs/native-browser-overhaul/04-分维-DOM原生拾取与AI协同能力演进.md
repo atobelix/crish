@@ -274,7 +274,7 @@ sequenceDiagram
     Core->>Manager: 触发 WebMessageReceived 事件
     Manager->>Manager: 安全守卫: 校验 channel === 'crish:inspector'
     alt 消息格式合法且为拾取器数据
-        Manager->>UI: 经宿主特权通道发射 Tauri Event ("browser://inspector")
+        Manager->>UI: 经宿主特权通道发射 Tauri Event ("browser://inspector-event")
         UI->>UI: 更新 PreviewCardInspectorOverlay 坐标与高亮
     else 非法格式或恶意注入调用
         Manager->>Manager: 直接丢弃 (Drop silently, 记录审计日志)

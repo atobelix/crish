@@ -38,6 +38,8 @@
 //! attach 握手、29 工具枚举、`mcp_<server>__*` 命名空间隔离、只读工具
 //! 经 adapter 执行。
 
+#![allow(dead_code)]
+
 use agent_tools::definition::ToolError;
 use agent_tools::mcp::McpServerConfig;
 use conex_browser::CdpEndpoint;

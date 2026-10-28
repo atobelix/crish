@@ -1,8 +1,8 @@
 import React from 'react';
 
 import styles from './PreviewStartPage.module.css';
-import { AppIcon, ICON_SIZE } from '../ui/icons/index';
-import { Button } from '../ui';
+import { AppIcon, ICON_SIZE } from '@/components/ui/icons';
+import { Button, Tooltip } from '@/components/ui';
 import { useI18n } from '../../i18n';
 import { getPreviewFavicon } from '../../api/previewBrowserStore';
 
@@ -96,16 +96,20 @@ export const PreviewStartPage: React.FC<PreviewStartPageProps> = ({
       <div className={styles.list}>
         {/* 运行中的本地服务：有的话也只是显示一行而已，没有就是没有 */}
         {activePorts.map((port) => (
-          <Button
+          <Tooltip
             key={port}
-            variant="ghost"
-            className={styles.rowItem}
-            onClick={() => onNavigate(`http://localhost:${port}`)}
-            aria-label={t('workspace.preview.runningService', { port })}
+            content={t('workspace.preview.runningService', { port })}
           >
-            <span className={styles.liveDot} aria-hidden="true" />
-            <span className={styles.portText}>localhost:{port}</span>
-          </Button>
+            <Button
+              variant="ghost"
+              className={styles.rowItem}
+              onClick={() => onNavigate(`http://localhost:${port}`)}
+              aria-label={t('workspace.preview.runningService', { port })}
+            >
+              <span className={styles.liveDot} aria-hidden="true" />
+              <span className={styles.portText}>localhost:{port}</span>
+            </Button>
+          </Tooltip>
         ))}
 
         {/* 最近访问：按行规整排列 */}
@@ -118,16 +122,20 @@ export const PreviewStartPage: React.FC<PreviewStartPageProps> = ({
           const host = formatDisplayHost(url);
 
           return (
-            <Button
+            <Tooltip
               key={url}
-              variant="ghost"
-              className={styles.rowItem}
-              onClick={() => onNavigate(url)}
-              aria-label={t('workspace.preview.openRecent', { host })}
+              content={t('workspace.preview.openRecent', { host })}
             >
-              <RowFavicon url={url} host={host} />
-              <span className={styles.rowText}>{host}</span>
-            </Button>
+              <Button
+                variant="ghost"
+                className={styles.rowItem}
+                onClick={() => onNavigate(url)}
+                aria-label={t('workspace.preview.openRecent', { host })}
+              >
+                <RowFavicon url={url} host={host} />
+                <span className={styles.rowText}>{host}</span>
+              </Button>
+            </Tooltip>
           );
         })}
       </div>

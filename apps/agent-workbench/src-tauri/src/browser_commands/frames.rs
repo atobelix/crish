@@ -1,9 +1,9 @@
 use super::common::{map_browser_err, slot};
-use crate::browser::frame_stream::FrameStreamState;
 use crate::browser::panel_input::BrowserInputEvent;
-use crate::core_error::CoreError;
-use crate::core_run_commands::CoreRunState;
+use crate::browser::{frame_stream::FrameStreamState, BrowserSlot};
+use conex_run::core_error::CoreError;
 use std::sync::Arc;
+
 use tauri::ipc::Channel;
 
 /// 启动帧流（P1-B1）：注册前端帧通道（Uint8Array 二进制）→ 浏览器就绪 →
@@ -16,9 +16,9 @@ use tauri::ipc::Channel;
 pub(crate) async fn browser_start_frames<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     on_frame: Channel<tauri::ipc::Response>,
-    core: tauri::State<'_, Arc<CoreRunState>>,
+    core: tauri::State<'_, Arc<BrowserSlot>>,
 ) -> Result<FrameStreamState, CoreError> {
-    let slot = slot(core.inner());
+    let slot = slot(&core);
     slot.attach_emitter(Arc::new(crate::browser::TauriStateEmitter::new(app)));
     slot.start_frames(on_frame).await.map_err(map_browser_err)
 }
@@ -26,17 +26,17 @@ pub(crate) async fn browser_start_frames<R: tauri::Runtime>(
 /// 退订帧流（P1-B1；幂等）：停止帧泵 + stopScreencast + 状态 stopped。
 #[tauri::command]
 pub(crate) async fn browser_stop_frames(
-    core: tauri::State<'_, Arc<CoreRunState>>,
+    core: tauri::State<'_, Arc<BrowserSlot>>,
 ) -> Result<FrameStreamState, CoreError> {
-    Ok(slot(core.inner()).stop_frames().await)
+    Ok(slot(&core).stop_frames().await)
 }
 
 /// 帧流状态查询（P1-B1）：starting/active/stopped。
 #[tauri::command]
 pub(crate) fn browser_frame_status(
-    core: tauri::State<'_, Arc<CoreRunState>>,
+    core: tauri::State<'_, Arc<BrowserSlot>>,
 ) -> Result<FrameStreamState, CoreError> {
-    Ok(slot(core.inner()).frames().state())
+    Ok(slot(&core).frames().state())
 }
 
 /// 输入上行（P1-B1；U-13 裁决：输入走 Tauri invoke 而非 WS）。
@@ -50,8 +50,8 @@ pub(crate) fn browser_frame_status(
 #[tauri::command]
 pub(crate) async fn browser_input(
     event: BrowserInputEvent,
-    core: tauri::State<'_, Arc<CoreRunState>>,
+    core: tauri::State<'_, Arc<BrowserSlot>>,
 ) -> Result<(), CoreError> {
-    slot(core.inner()).forward_input(&event);
+    slot(&core).forward_input(&event);
     Ok(())
 }

@@ -1,8 +1,8 @@
-use crate::core_run_commands::CoreRunState;
+use crate::browser::BrowserSlot;
 use std::sync::Arc;
 
 use super::fixtures::{
-    cdp_cookie, err_detail, inject_local_storage_mock, inject_mock, mock_core_state, ChannelCall,
+    cdp_cookie, err_detail, inject_local_storage_mock, inject_mock, mock_browser_slot, ChannelCall,
     MockLocalStorageChannel, MockStorageOps,
 };
 use crate::browser_commands::browser_export_storage_state;
@@ -16,12 +16,12 @@ use crate::browser_commands::browser_export_storage_state;
 async fn export_returns_standard_json_with_authorization() {
     use tauri::Manager as _;
     let temp = tempfile::tempdir().expect("临时目录");
-    let state = mock_core_state(&temp);
+    let state = mock_browser_slot(&temp);
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let state_ref = app.state::<Arc<CoreRunState>>();
+    let state_ref = app.state::<Arc<BrowserSlot>>();
 
     let cookies = vec![
         cdp_cookie(|c| {
@@ -85,12 +85,12 @@ async fn export_returns_standard_json_with_authorization() {
 async fn export_requires_authorization_no_cdp_read() {
     use tauri::Manager as _;
     let temp = tempfile::tempdir().expect("临时目录");
-    let state = mock_core_state(&temp);
+    let state = mock_browser_slot(&temp);
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let state_ref = app.state::<Arc<CoreRunState>>();
+    let state_ref = app.state::<Arc<BrowserSlot>>();
 
     let mock = MockStorageOps::new(vec![cdp_cookie(|_| {})]);
     let get_calls = Arc::clone(&mock.get_calls);
@@ -125,12 +125,12 @@ async fn export_requires_authorization_no_cdp_read() {
 async fn export_not_ready_without_session() {
     use tauri::Manager as _;
     let temp = tempfile::tempdir().expect("临时目录");
-    let state = mock_core_state(&temp);
+    let state = mock_browser_slot(&temp);
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let state_ref = app.state::<Arc<CoreRunState>>();
+    let state_ref = app.state::<Arc<BrowserSlot>>();
 
     let err = browser_export_storage_state(true, state_ref)
         .await
@@ -148,12 +148,12 @@ async fn export_not_ready_without_session() {
 async fn export_local_storage_channel_unavailable_not_ready() {
     use tauri::Manager as _;
     let temp = tempfile::tempdir().expect("临时目录");
-    let state = mock_core_state(&temp);
+    let state = mock_browser_slot(&temp);
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let state_ref = app.state::<Arc<CoreRunState>>();
+    let state_ref = app.state::<Arc<BrowserSlot>>();
 
     // cookie 实读面成功（会话存储面 mock），但 localStorage 通道未注入
     inject_mock(
@@ -180,12 +180,12 @@ async fn export_local_storage_channel_unavailable_not_ready() {
 async fn export_aggregates_local_storage_origins() {
     use tauri::Manager as _;
     let temp = tempfile::tempdir().expect("临时目录");
-    let state = mock_core_state(&temp);
+    let state = mock_browser_slot(&temp);
     let app = tauri::test::mock_builder()
         .manage(Arc::clone(&state))
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("mock app");
-    let state_ref = app.state::<Arc<CoreRunState>>();
+    let state_ref = app.state::<Arc<BrowserSlot>>();
 
     inject_mock(
         &state,

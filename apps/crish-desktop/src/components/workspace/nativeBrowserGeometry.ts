@@ -11,111 +11,49 @@
  * 5. Hit-Test 状态机看门狗，防范手势中断穿透死锁。
  */
 
-import { useLayoutEffect, useEffect, useRef, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { useLayerStackModalActive } from '../ui/internal/layer-stack/LayerStackManager';
+import {
+  useLayoutEffect,
+  useEffect,
+  useRef,
+  useCallback,
+  type RefObject,
+  type MutableRefObject,
+} from 'react';
+import {
+  browserWebviewSetHitTest,
+  type NativeBrowserHitTestPayload,
+} from '../../api/nativeBrowserApi';
+import { logger } from '../../services/LoggerService';
+import { useLayerStackModalActive, useFloatingActive } from '@/components/ui';
 import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
+import {
+  SETTLE_DEBOUNCE_MS,
+  commitGeometrySnapshot,
+  enqueueGeometrySync,
+  resetGeometryStateForTabId,
+  type AppliedGeometryState,
+  type GeometrySnapshot,
+  type LogicalRect,
+  type PhysicalBounds,
+} from './nativeBrowserGeometrySync';
 
-export { useLayerStackModalActive };
+export { useLayerStackModalActive, useFloatingActive };
+export {
+  BOUNDS_EPSILON,
+  SETTLE_DEBOUNCE_MS,
+  computeSnappedPhysicalBounds,
+  isRectInViewport,
+  isSimilarBounds,
+  sendNativeBrowserBounds,
+  sendNativeBrowserVisible,
+} from './nativeBrowserGeometrySync';
+export type { LogicalRect, PhysicalBounds } from './nativeBrowserGeometrySync';
 
-// ── 类型定义 ─────────────────────────────────────────────────────────
-
-/**
- * 逻辑矩形（CSS 逻辑像素，相对主窗口视口客户区）
- */
-export interface LogicalRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-/**
- * 物理像素矩形（经设备像素比换算并严格网格规整）
- */
-export interface PhysicalBounds {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  scale: number;
-}
-
-/**
- * 几何同步负载
- */
 export interface NativeBoundsPayload {
   tabId: string;
   bounds: LogicalRect;
   physicalBounds: PhysicalBounds;
   visible: boolean;
-}
-
-export const BOUNDS_EPSILON = 0.5;
-export const SETTLE_DEBOUNCE_MS = 50;
-
-// ── 核心纯算法 ───────────────────────────────────────────────────────
-
-/**
- * 工业级物理外边界规整算法 (Boundary-Independent Grid Snapping)
- *
- * 对 left, top, right, bottom 四条物理外边界分别独立执行四舍五入：
- *   physLeft = round(left * dpr)
- *   physRight = round((left + width) * dpr)
- *   physWidth = max(0, physRight - physLeft)
- *
- * 数学证明保证：相邻面板 A 与 B (A.right === B.left) 其物理像素边界必然连续，
- * 彻底消除非整数 DPR 下加法累积产生的 1px 白线接缝与边框重叠。
- */
-export function computeSnappedPhysicalBounds(
-  rect: DOMRect,
-  dpr: number
-): PhysicalBounds {
-  const safeDpr = dpr > 0 ? dpr : 1;
-
-  const physLeft = Math.round(rect.left * safeDpr);
-  const physTop = Math.round(rect.top * safeDpr);
-  const physRight = Math.round(rect.right * safeDpr);
-  const physBottom = Math.round(rect.bottom * safeDpr);
-
-  return {
-    x: physLeft,
-    y: physTop,
-    width: Math.max(0, physRight - physLeft),
-    height: Math.max(0, physBottom - physTop),
-    scale: safeDpr,
-  };
-}
-
-/**
- * 差分脏矩形检测：判断位移或尺寸变化是否小于 epsilon 阈值
- */
-export function isSimilarBounds(
-  prev: { x: number; y: number; width: number; height: number },
-  next: { x: number; y: number; width: number; height: number },
-  epsilon = BOUNDS_EPSILON
-): boolean {
-  return (
-    Math.abs(prev.x - next.x) < epsilon &&
-    Math.abs(prev.y - next.y) < epsilon &&
-    Math.abs(prev.width - next.width) < epsilon &&
-    Math.abs(prev.height - next.height) < epsilon
-  );
-}
-
-/**
- * 判定 DOMRect 是否在当前宿主视口内有效可见
- */
-export function isRectInViewport(rect: DOMRect): boolean {
-  if (typeof window === 'undefined') return false;
-  return (
-    rect.width > 0 &&
-    rect.height > 0 &&
-    rect.top < window.innerHeight &&
-    rect.bottom > 0 &&
-    rect.left < window.innerWidth &&
-    rect.right > 0
-  );
 }
 
 /**
@@ -158,134 +96,113 @@ export function subscribeDevicePixelRatio(onChange: () => void): () => void {
   };
 }
 
-// ── IPC 传输桥 ───────────────────────────────────────────────────────
+type MutableRef<T> = MutableRefObject<T>;
 
-/**
- * 向 Rust 原生子 Webview 内核同步几何坐标
- */
-export async function sendNativeBrowserBounds(
+function useGeometryGenerationCleanup(
   tabId: string,
-  logical: LogicalRect,
-  physical: PhysicalBounds,
-  visible: boolean
-): Promise<void> {
-  try {
-    await invoke('browser_webview_set_bounds', {
-      tabId,
-      tab_id: tabId,
-      bounds: logical,
-    });
-  } catch {
-    // 兼容分维方案中的别名命令
-    try {
-      await invoke('workbench_sync_native_browser_bounds', {
-        payload: {
-          browserId: tabId,
-          tabId,
-          x: physical.x,
-          y: physical.y,
-          width: physical.width,
-          height: physical.height,
-          scale: physical.scale,
-          visible,
-        },
-      });
-    } catch {
-      // 容错吸收未就绪阶段调用
-    }
-  }
+  generationRef: MutableRef<number>,
+  isReadyRef: MutableRef<boolean>,
+  desiredStateRef: MutableRef<GeometrySnapshot | null>,
+  appliedStateRef: MutableRef<AppliedGeometryState | null>,
+  queuedSyncKeysRef: MutableRef<Set<string>>
+): void {
+  useEffect(() => {
+    const generation = generationRef.current;
+    const queuedSyncKeys = queuedSyncKeysRef.current;
+    return () => {
+      if (generationRef.current !== generation) return;
+      generationRef.current += 1;
+      isReadyRef.current = false;
+      desiredStateRef.current = null;
+      appliedStateRef.current = null;
+      queuedSyncKeys.clear();
+    };
+  }, [
+    appliedStateRef,
+    desiredStateRef,
+    generationRef,
+    isReadyRef,
+    queuedSyncKeysRef,
+    tabId,
+  ]);
 }
 
-/**
- * 向 Rust 原生子 Webview 内核同步显隐状态
- */
-export async function sendNativeBrowserVisible(
-  tabId: string,
-  visible: boolean
-): Promise<void> {
-  try {
-    await invoke('browser_webview_set_visible', {
-      tabId,
-      tab_id: tabId,
-      visible,
+function useGeometryLayoutObservers(
+  surfaceRef: React.RefObject<HTMLDivElement | null>,
+  scheduleSync: (immediate?: boolean) => void,
+  rafIdRef: MutableRef<number | null>,
+  settleTimerRef: MutableRef<ReturnType<typeof setTimeout> | null>
+): void {
+  useLayoutEffect(() => {
+    const el = surfaceRef.current;
+    if (!el) return;
+
+    const ro = ResizeObserverManager.getInstance();
+    const handleSync = () => scheduleSync(false);
+    ro.observe(el, handleSync);
+
+    const handleWindowResize = () => scheduleSync(false);
+    const handleScroll = () => scheduleSync(false);
+    const handleLiveResize = () => scheduleSync(false);
+    const handleSashSettled = () => scheduleSync(true);
+
+    window.addEventListener('app:window-resize-settled', handleWindowResize);
+    window.addEventListener('scroll', handleScroll, {
+      passive: true,
+      capture: true,
     });
-  } catch {
-    try {
-      await invoke('workbench_set_browser_visible', {
-        browserId: tabId,
-        tabId,
-        visible,
-      });
-    } catch {
-      // 容错吸收
-    }
-  }
+    window.addEventListener('crish:layout-live-resize', handleLiveResize);
+    window.addEventListener('dock-split-resizing-changed', handleSashSettled);
+
+    const unwatchDpr = subscribeDevicePixelRatio(() => {
+      scheduleSync(true);
+    });
+
+    scheduleSync(true);
+
+    return () => {
+      ro.unobserve(el, handleSync);
+      window.removeEventListener(
+        'app:window-resize-settled',
+        handleWindowResize
+      );
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('crish:layout-live-resize', handleLiveResize);
+      window.removeEventListener(
+        'dock-split-resizing-changed',
+        handleSashSettled
+      );
+      unwatchDpr();
+
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      if (settleTimerRef.current !== null) {
+        clearTimeout(settleTimerRef.current);
+        settleTimerRef.current = null;
+      }
+    };
+  }, [rafIdRef, scheduleSync, settleTimerRef, surfaceRef]);
 }
 
-/**
- * 向 Rust 原生子 Webview 内核切换鼠标穿透 (Hit-Test)
- */
+export type NativeBrowserHitTestResult =
+  | { status: 'queued' }
+  | NativeBrowserHitTestPayload
+  | { status: 'error'; reason: string };
+
+/** 请求原生命中测试，并将能力状态与 transport 故障分开返回。 */
 export async function sendNativeBrowserHitTest(
   tabId: string,
   hitTest: boolean
-): Promise<void> {
+): Promise<NativeBrowserHitTestResult> {
   try {
-    await invoke('browser_webview_set_hit_test', {
-      tabId,
-      tab_id: tabId,
-      hitTest,
-      hit_test: hitTest,
-    });
-  } catch {
-    try {
-      await invoke('workbench_set_browser_hit_test', {
-        browserId: tabId,
-        tabId,
-        hitTest,
-      });
-    } catch {
-      // 容错吸收
-    }
-  }
-}
-
-/**
- * 向 Rust 原生子 Webview 内核请求导航至指定 URL
- */
-export async function sendNativeBrowserNavigate(
-  tabId: string,
-  url: string
-): Promise<void> {
-  if (!url || url === 'about:blank') return;
-  try {
-    await invoke('browser_webview_navigate', {
-      tabId,
-      tab_id: tabId,
-      url,
-    });
-  } catch {
-    // 容错吸收
-  }
-}
-
-/**
- * 向 Rust 原生子 Webview 内核请求关闭并销毁实例
- */
-export async function sendNativeBrowserClose(tabId: string): Promise<void> {
-  try {
-    await invoke('browser_webview_close', {
-      tabId,
-      tab_id: tabId,
-    });
-  } catch {
-    try {
-      await invoke('workbench_destroy_browser', {
-        browserId: tabId,
-        tabId,
-      });
-    } catch {
-      // 容错吸收
-    }
+    return await browserWebviewSetHitTest(tabId, hitTest);
+  } catch (error) {
+    return {
+      status: 'error',
+      reason: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -294,6 +211,8 @@ export async function sendNativeBrowserClose(tabId: string): Promise<void> {
 export interface UseNativeBrowserGeometryOptions {
   tabId: string;
   surfaceRef: React.RefObject<HTMLDivElement | null>;
+  /** 原生子 Webview 创建成功后才允许发送几何与显隐命令。 */
+  isReady?: boolean;
   isActive?: boolean;
   isOccluded?: boolean;
   onBoundsChange?: (bounds: PhysicalBounds) => void;
@@ -310,64 +229,88 @@ export interface UseNativeBrowserGeometryResult {
 export function useNativeBrowserGeometry({
   tabId,
   surfaceRef,
+  isReady = true,
   isActive = true,
   isOccluded = false,
   onBoundsChange,
 }: UseNativeBrowserGeometryOptions): UseNativeBrowserGeometryResult {
-  const lastStateRef = useRef<{
-    logical: LogicalRect;
-    physical: PhysicalBounds;
-    visible: boolean;
-  } | null>(null);
+  const isReadyRef = useRef(isReady);
+  isReadyRef.current = isReady;
+
+  const desiredStateRef = useRef<GeometrySnapshot | null>(null);
+  const appliedStateRef = useRef<AppliedGeometryState | null>(null);
+  const revisionRef = useRef(0);
+  const generationRef = useRef(0);
+  const syncQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const queuedSyncKeysRef = useRef(new Set<string>());
+
+  // 当 tabId 发生切换时，必须重置上一次的状态缓存，确保新 Tab 能够无条件获得首帧几何与可见性同步
+  const currentTabIdRef = useRef(tabId);
+  resetGeometryStateForTabId(
+    tabId,
+    currentTabIdRef,
+    generationRef,
+    desiredStateRef,
+    appliedStateRef,
+    revisionRef,
+    syncQueueRef,
+    queuedSyncKeysRef
+  );
+
+  useGeometryGenerationCleanup(
+    tabId,
+    generationRef,
+    isReadyRef,
+    desiredStateRef,
+    appliedStateRef,
+    queuedSyncKeysRef
+  );
 
   const rafIdRef = useRef<number | null>(null);
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const enqueueSync = useCallback(
+    (snapshot: GeometrySnapshot, forceBounds: boolean, generation: number) =>
+      enqueueGeometrySync(
+        {
+          tabId,
+          currentTabIdRef,
+          generationRef,
+          isReadyRef,
+          desiredStateRef,
+          appliedStateRef,
+          syncQueueRef,
+          queuedSyncKeysRef,
+        },
+        snapshot,
+        forceBounds,
+        generation
+      ),
+    [tabId]
+  );
+
   const commitGeometry = useCallback(
-    (force = false) => {
-      const el = surfaceRef.current;
-      if (!el) return;
-
-      const rect = el.getBoundingClientRect();
-      const dpr =
-        typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-
-      const inViewport = isRectInViewport(rect);
-      const isVisible = Boolean(isActive) && !isOccluded && inViewport;
-
-      const physical = computeSnappedPhysicalBounds(rect, dpr);
-      const logical: LogicalRect = {
-        x: rect.left,
-        y: rect.top,
-        width: rect.width,
-        height: rect.height,
-      };
-
-      const prevState = lastStateRef.current;
-      if (!force && prevState) {
-        const isVisibilityChanged = prevState.visible !== isVisible;
-        if (!isVisibilityChanged) {
-          if (!isVisible) {
-            // 保持不可见状态，无需重复发送
-            return;
-          }
-          // 可见状态下，检查位移与尺寸变动量是否达到差分阈值
-          if (isSimilarBounds(prevState.logical, logical, BOUNDS_EPSILON)) {
-            return;
-          }
-        }
-      }
-
-      lastStateRef.current = { logical, physical, visible: isVisible };
-
-      onBoundsChange?.(physical);
-      void sendNativeBrowserBounds(tabId, logical, physical, isVisible);
-
-      if (!prevState || prevState.visible !== isVisible) {
-        void sendNativeBrowserVisible(tabId, isVisible);
-      }
-    },
-    [isActive, isOccluded, onBoundsChange, surfaceRef, tabId]
+    (force = false) =>
+      commitGeometrySnapshot(
+        {
+          tabId,
+          currentTabIdRef,
+          generationRef,
+          isReadyRef,
+          desiredStateRef,
+          appliedStateRef,
+          syncQueueRef,
+          queuedSyncKeysRef,
+          surfaceRef,
+          isActive,
+          isOccluded,
+          onBoundsChange,
+          revisionRef,
+        },
+        force,
+        enqueueSync
+      ),
+    [enqueueSync, isActive, isOccluded, onBoundsChange, surfaceRef, tabId]
   );
 
   const scheduleSync = useCallback(
@@ -405,58 +348,17 @@ export function useNativeBrowserGeometry({
     scheduleSync(true);
   }, [scheduleSync]);
 
-  // 布局与尺寸监听
-  useLayoutEffect(() => {
-    const el = surfaceRef.current;
-    if (!el) return;
-
-    const ro = ResizeObserverManager.getInstance();
-    const handleSync = () => scheduleSync(false);
-    ro.observe(el, handleSync);
-
-    const handleWindowResize = () => scheduleSync(false);
-    const handleScroll = () => scheduleSync(false);
-    const handleLiveResize = () => scheduleSync(false);
-
-    window.addEventListener('app:window-resize-settled', handleWindowResize);
-    window.addEventListener('scroll', handleScroll, {
-      passive: true,
-      capture: true,
-    });
-    window.addEventListener('crish:layout-live-resize', handleLiveResize);
-
-    const unwatchDpr = subscribeDevicePixelRatio(() => {
-      scheduleSync(true);
-    });
-
-    // 挂载首帧立即测量
-    scheduleSync(true);
-
-    return () => {
-      ro.unobserve(el, handleSync);
-      window.removeEventListener(
-        'app:window-resize-settled',
-        handleWindowResize
-      );
-      window.removeEventListener('scroll', handleScroll, true);
-      window.removeEventListener('crish:layout-live-resize', handleLiveResize);
-      unwatchDpr();
-
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-      if (settleTimerRef.current !== null) {
-        clearTimeout(settleTimerRef.current);
-        settleTimerRef.current = null;
-      }
-    };
-  }, [scheduleSync, surfaceRef]);
+  useGeometryLayoutObservers(
+    surfaceRef,
+    scheduleSync,
+    rafIdRef,
+    settleTimerRef
+  );
 
   // 显隐或遮挡突变时立即响应
   useEffect(() => {
     scheduleSync(true);
-  }, [isActive, isOccluded, scheduleSync]);
+  }, [isActive, isOccluded, isReady, scheduleSync]);
 
   return {
     scheduleSync,
@@ -467,32 +369,83 @@ export function useNativeBrowserGeometry({
 // ── Hit-Test 看门狗 Hook ──────────────────────────────────────────────
 
 export interface UseHitTestGuardResult {
-  setHitTest: (enabled: boolean) => void;
-  isMutedRef: React.RefObject<boolean>;
+  setHitTest: (
+    enabled: boolean
+  ) => NativeBrowserHitTestResult | Promise<NativeBrowserHitTestResult>;
+  isMutedRef: RefObject<boolean>;
 }
 
 /**
- * 原生视口鼠标穿透 (Hit-Test) 状态机与自愈看门狗
- *
- * 监听 pointercancel / blur / lostpointercapture / Escape，
- * 彻底防止手势中断时子 HWND 永久陷入透明穿透死锁。
+ * 原生视口鼠标穿透 (Hit-Test) 状态机与自愈看门狗。
+ * 创建完成前只记录目标状态，不发出可能早于 create 的 IPC。
  */
-export function useHitTestGuard(tabId: string): UseHitTestGuardResult {
+export function useHitTestGuard(
+  tabId: string,
+  isReady = true
+): UseHitTestGuardResult {
   const isMutedRef = useRef(false);
+  const isReadyRef = useRef(isReady);
+  const reportedHitTestIssueTabRef = useRef<string | null>(null);
+  isReadyRef.current = isReady;
+
+  const reportResult = useCallback(
+    (result: NativeBrowserHitTestResult) => {
+      if (
+        result.status !== 'queued' &&
+        reportedHitTestIssueTabRef.current !== tabId
+      ) {
+        reportedHitTestIssueTabRef.current = tabId;
+        logger.warn(
+          `Native browser hit-test ${result.status}: ${result.reason}`,
+          { module: 'nativeBrowserGeometry', sessionId: tabId }
+        );
+      }
+      return result;
+    },
+    [tabId]
+  );
 
   const setHitTest = useCallback(
     (enabled: boolean) => {
       isMutedRef.current = !enabled;
-      void sendNativeBrowserHitTest(tabId, enabled);
+      if (!isReadyRef.current) return { status: 'queued' } as const;
+      return sendNativeBrowserHitTest(tabId, enabled).then(reportResult);
     },
-    [tabId]
+    [reportResult, tabId]
   );
+
+  useEffect(() => {
+    if (isReady) {
+      // Ready 后重放创建期间累计的最新状态（通常为启用命中测试）。
+      void sendNativeBrowserHitTest(tabId, !isMutedRef.current).then(
+        reportResult
+      );
+    }
+  }, [isReady, reportResult, tabId]);
 
   useEffect(() => {
     const handleSelfHeal = () => {
       if (isMutedRef.current) {
         isMutedRef.current = false;
-        void sendNativeBrowserHitTest(tabId, true);
+        if (isReadyRef.current) {
+          void sendNativeBrowserHitTest(tabId, true).then(reportResult);
+        }
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') handleSelfHeal();
+    };
+
+    const handleResizingChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ resizing?: boolean }>;
+      if (customEvent.detail?.resizing) {
+        isMutedRef.current = true;
+        if (isReadyRef.current) {
+          void sendNativeBrowserHitTest(tabId, false).then(reportResult);
+        }
+      } else {
+        handleSelfHeal();
       }
     };
 
@@ -500,13 +453,11 @@ export function useHitTestGuard(tabId: string): UseHitTestGuardResult {
     window.addEventListener('lostpointercapture', handleSelfHeal);
     window.addEventListener('blur', handleSelfHeal);
     window.addEventListener('pointerup', handleSelfHeal);
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        handleSelfHeal();
-      }
-    };
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener(
+      'dock-split-resizing-changed',
+      handleResizingChange
+    );
 
     return () => {
       window.removeEventListener('pointercancel', handleSelfHeal);
@@ -514,17 +465,19 @@ export function useHitTestGuard(tabId: string): UseHitTestGuardResult {
       window.removeEventListener('blur', handleSelfHeal);
       window.removeEventListener('pointerup', handleSelfHeal);
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener(
+        'dock-split-resizing-changed',
+        handleResizingChange
+      );
 
-      // 卸载时恢复正常交互
       if (isMutedRef.current) {
         isMutedRef.current = false;
-        void sendNativeBrowserHitTest(tabId, true);
+        if (isReadyRef.current) {
+          void sendNativeBrowserHitTest(tabId, true).then(reportResult);
+        }
       }
     };
-  }, [tabId]);
+  }, [reportResult, tabId]);
 
-  return {
-    setHitTest,
-    isMutedRef,
-  };
+  return { setHitTest, isMutedRef };
 }

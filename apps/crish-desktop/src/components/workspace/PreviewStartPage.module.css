@@ -48,7 +48,7 @@
   border: none;
   border-radius: var(--radius-card);
   background: transparent;
-  color: var(--ink-label, var(--text-secondary));
+  color: var(--text-secondary);
   font-family: var(--font-family-ui);
   font-size: var(--font-size-body);
   cursor: pointer;
@@ -73,7 +73,8 @@
 
 .rowItem:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 var(--border-width-emphasis, 2px) var(--edge-focus);
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
   color: var(--text-primary);
 }
 

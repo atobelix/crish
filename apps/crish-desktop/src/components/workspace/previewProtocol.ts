@@ -15,15 +15,15 @@
 /** 宿主 → iframe 方向标识 */
 export const CRISH_PREVIEW_HOST_SOURCE = 'crish-preview-host' as const;
 /** iframe → 宿主方向标识 */
-export const CRISH_PREVIEW_INSPECTOR_SOURCE = 'crish-preview-inspector' as const;
+export const CRISH_PREVIEW_INSPECTOR_SOURCE =
+  'crish-preview-inspector' as const;
 
 /** 方向：宿主 → iframe 客户端 */
-export type PreviewHostToClientMessage =
-  | {
-      source: typeof CRISH_PREVIEW_HOST_SOURCE;
-      type: 'INSPECT_TOGGLE';
-      payload: { enabled: boolean };
-    };
+export type PreviewHostToClientMessage = {
+  source: typeof CRISH_PREVIEW_HOST_SOURCE;
+  type: 'INSPECT_TOGGLE';
+  payload: { enabled: boolean };
+};
 
 /** 方向：iframe 客户端 → 宿主 */
 export type PreviewClientToHostMessage =
@@ -83,6 +83,31 @@ export interface InspectSelectPayload {
   };
   outerHtmlSnippet: string;
   textContent: string;
+}
+
+/** 发送给会话的 DOM 引用契约，字段与 Inspector 选择结果保持一一映射。 */
+export interface DomReferenceChipPayload {
+  kind: 'dom_reference';
+  version: '1.0';
+  target: {
+    tagName: string;
+    id: string | null;
+    classes: string[];
+    attributes: Record<string, string>;
+    bestSelector: string;
+    xpath: string;
+    rect: InspectRect;
+  };
+  styles: InspectSelectPayload['computedStyles'];
+  snapshot: {
+    outerHtmlSnippet: string;
+    textContent: string;
+  };
+  meta: {
+    sourceUrl: string;
+    pageTitle: string;
+    timestamp: number;
+  };
 }
 
 /** 客户端 → 宿主消息的合法 type 清单（宿主订阅过滤用） */

@@ -1,11 +1,10 @@
 /**
- * PreviewCard 纯函数层：iframe 安全 src 判定 + 常量。
+ * PreviewCard 纯函数层：安全 URL 判定 + 常量与拾取辅助。
  * 从 PreviewCard.tsx 抽出，零副作用，可独立单测。
  *
- * audit-repair-202609 · T19 清退：`injectPreviewBridgeHtml`（与 dev-server/
- * previewBridgeScript.ts 双轨的 srcDoc 版桥，零调用方）、
- * `convertInspectedElementPayload`（legacy crish:dom-inspected 协议换轨层）、
- * `QUICK_LOCAL`（被 activePortDetector 取代）均已删除。
+ * 原生浏览器改造 Wave 2：
+ * - 彻底清退历史 Vite 代理（/__crish_preview_proxy 与 /v1/preview/proxy）；
+ * - 公网合法 URL（如 Google、GitHub）直接放行原始地址，不再做任何代理重定向。
  */
 import {
   isAboutBlank,
@@ -13,9 +12,13 @@ import {
   isEmbeddablePreviewUrl,
   validateBrowseUrl,
 } from '../../api/previewBrowserStore';
-import type { InspectSelectPayload } from './previewProtocol';
+import { t } from '../../i18n';
+import type {
+  DomReferenceChipPayload,
+  InspectSelectPayload,
+} from './previewProtocol';
 
-/** iframe 加载卡住时收 loading，避免转圈永驻（不 toast，状态条已反馈） */
+/** iframe / 网页加载卡住时收 loading，避免转圈永驻 */
 export const LOAD_TIMEOUT_MS = 20_000;
 
 export const HIST_PANEL_ID = 'preview-hist-panel';
@@ -46,38 +49,22 @@ export function isLocalDevUrl(url: string): boolean {
 }
 
 /**
- * 外部网站自动代理：当输入的 URL 为外部网站时自动转为同源代理端点；
- * 空白页、data: URL 或本地 dev server 直接加载。
- *
- * audit-repair-202609 · T20：代理是 dev server 中间件（configureServer），
- * 生产构建不存在该端点——非 dev 环境一律返回原 URL，走 canEmbed 判定
- * 与「禁止嵌入可外部打开」既有降级，不再打到必 404 的代理路径。
- */
-export function toProxyPreviewUrl(url: string): string {
-  if (!url || isAboutBlank(url)) return url;
-  if (url.startsWith('data:') || url.startsWith('file://')) return url;
-  if (url.startsWith('/__crish_preview_proxy')) return url;
-  if (url.startsWith('http://127.0.0.1:8765/v1/preview/proxy')) return url;
-  if (import.meta.env.DEV && /^https?:\/\//i.test(url)) {
-    if (!isLocalDevUrl(url)) {
-      return `/__crish_preview_proxy?url=${encodeURIComponent(url)}`;
-    }
-  }
-  return url;
-}
-
-/**
- * 仅当可安全内嵌时返回 iframe src；否则 null（禁止把危险/不可嵌 URL 写入 iframe）。
- * 外部网站自动转为 /__crish_preview_proxy 代理端点；本地 dev server 与 data: URL 直接加载。
+ * 仅当可安全内嵌或导航时返回安全 URL（用于原生子 Webview 或预览视口）。
+ * 非法/危险 scheme（javascript:, vbscript: 等）返回 null；
+ * 合法公网与本地 HTTP/HTTPS/data: 资源直接原样返回，不再做代理重定向。
  */
 export function safeIframeSrc(url: string): string | null {
   if (!url || isAboutBlank(url)) return null;
   if (url.startsWith('data:')) return url;
   const checked = validateBrowseUrl(url);
   if (!isBrowseUrlOk(checked)) return null;
-  if (!isEmbeddablePreviewUrl(checked.url) || isAboutBlank(checked.url)) return null;
-  return toProxyPreviewUrl(checked.url);
+  if (!isEmbeddablePreviewUrl(checked.url) || isAboutBlank(checked.url))
+    return null;
+  return checked.url;
 }
+
+/** 语义化别名：safeNativeUrl 与 safeIframeSrc 同义，用于原生 Webview 场景 */
+export const safeNativeUrl = safeIframeSrc;
 
 /**
  * 组装拾取元素的展示标签：`tag#id.class1.class2`（用于悬停/选中浮层）。
@@ -108,7 +95,63 @@ export function buildInspectorAiSnippet(
 ): string {
   const label = buildInspectorElementLabel(tagName, id, classes);
   const dim = `${Math.round(rect.width)}×${Math.round(rect.height)}`;
-  return `请分析并优化这个元素 [@DOM: ${label} (${dim})]，选择器：${bestSelector}`;
+  return t(
+    'workspace.inspector.optimizeElementPrompt',
+    '请分析并优化这个元素 [@DOM: {label} ({dim})]，选择器：{bestSelector}',
+    { label, dim, bestSelector }
+  );
+}
+
+/** 将一次 Inspector 选择复制为完整、可持久化的 DOM 引用契约。 */
+export function buildDomReferenceChipPayload(
+  element: InspectSelectPayload,
+  sourceUrl: string,
+  pageTitle: string,
+  timestamp = Date.now()
+): DomReferenceChipPayload {
+  const attributes = Object.fromEntries(
+    Object.entries(element.attributes).sort(([left], [right]) =>
+      left < right ? -1 : left > right ? 1 : 0
+    )
+  );
+
+  return {
+    kind: 'dom_reference',
+    version: '1.0',
+    target: {
+      tagName: element.tagName,
+      id: element.id,
+      classes: [...element.classes],
+      attributes,
+      bestSelector: element.bestSelector,
+      xpath: element.xpath,
+      rect: { ...element.rect },
+    },
+    styles: { ...element.computedStyles },
+    snapshot: {
+      outerHtmlSnippet: element.outerHtmlSnippet,
+      textContent: element.textContent,
+    },
+    meta: { sourceUrl, pageTitle, timestamp },
+  };
+}
+
+/** 生成 Composer 草稿文本，代码围栏内始终保留可解析的完整 JSON。 */
+export function serializeDomReferenceChipForComposer(
+  payload: DomReferenceChipPayload
+): string {
+  // JSON 字符串中的换行会转义；反引号也转义，避免内容闭合 Markdown 代码围栏。
+  const json = JSON.stringify(payload, null, 2).replace(/`/g, '\\u0060');
+  return [
+    t(
+      'workspace.inspector.optimizeElementHeader',
+      '请分析并优化以下网页元素。'
+    ),
+    'DOM_REFERENCE_PAYLOAD schema=DomReferenceChipPayload version=1.0',
+    '```json',
+    json,
+    '```',
+  ].join('\n');
 }
 
 /**
@@ -119,7 +162,6 @@ export function hasInspectorComputedStyles(
 ): boolean {
   const s = el?.computedStyles;
   return Boolean(
-    s &&
-      (s.display || s.position || s.fontSize || s.color || s.backgroundColor)
+    s && (s.display || s.position || s.fontSize || s.color || s.backgroundColor)
   );
 }

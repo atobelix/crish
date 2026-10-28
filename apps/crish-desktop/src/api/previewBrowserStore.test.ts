@@ -2,11 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyPreviewNavigation,
   BROWSE_URL_REASON,
+  buildSearchUrl,
   canOpenExternally,
+  clearPreviewBookmarks,
   clearPreviewHistory,
   dropHistoryUrl,
   getPreviewBookmarks,
+  getDefaultSearchEngine,
   getPreviewHistory,
+  getPreviewHomepage,
   getPreviewUrl,
   isAboutBlank,
   isBlockedBrowseScheme,
@@ -23,6 +27,8 @@ import {
   removePreviewBookmark,
   removePreviewHistory,
   sanitizeBrowseInput,
+  setDefaultSearchEngine,
+  setPreviewHomepage,
   setPreviewUrl,
   togglePreviewBookmark,
   validateBrowseUrl,
@@ -43,16 +49,26 @@ describe('previewBrowserStore', () => {
       expect(sanitizeBrowseInput('  https://a.com  ')).toBe('https://a.com');
       expect(sanitizeBrowseInput('https://a.com\r\n')).toBe('https://a.com');
       expect(sanitizeBrowseInput('\uFEFFhttps://a.com')).toBe('https://a.com');
-      expect(sanitizeBrowseInput('java\u0000script:alert(1)')).toBe('javascript:alert(1)');
+      expect(sanitizeBrowseInput('java\u0000script:alert(1)')).toBe(
+        'javascript:alert(1)'
+      );
     });
 
     it('strips zero-width / soft-hyphen / bidi overrides so scheme checks see real text', () => {
-      expect(sanitizeBrowseInput('java\u200Bscript:alert(1)')).toBe('javascript:alert(1)');
-      expect(sanitizeBrowseInput('\u200Bjavascript:alert(1)')).toBe('javascript:alert(1)');
-      expect(sanitizeBrowseInput('javascript\u200B:alert(1)')).toBe('javascript:alert(1)');
+      expect(sanitizeBrowseInput('java\u200Bscript:alert(1)')).toBe(
+        'javascript:alert(1)'
+      );
+      expect(sanitizeBrowseInput('\u200Bjavascript:alert(1)')).toBe(
+        'javascript:alert(1)'
+      );
+      expect(sanitizeBrowseInput('javascript\u200B:alert(1)')).toBe(
+        'javascript:alert(1)'
+      );
       expect(sanitizeBrowseInput('java\u00ADscript:x')).toBe('javascript:x');
       expect(sanitizeBrowseInput('javascript\u202E:x')).toBe('javascript:x');
-      expect(sanitizeBrowseInput('\u202Ejavascript:alert(1)')).toBe('javascript:alert(1)');
+      expect(sanitizeBrowseInput('\u202Ejavascript:alert(1)')).toBe(
+        'javascript:alert(1)'
+      );
       expect(sanitizeBrowseInput('about\u200B:blank')).toBe('about:blank');
     });
 
@@ -74,19 +90,27 @@ describe('previewBrowserStore', () => {
 
     it('keeps http(s) and about:blank', () => {
       expect(normalizeBrowseUrl('https://a.com/x')).toBe('https://a.com/x');
-      expect(normalizeBrowseUrl('http://localhost:5173')).toBe('http://localhost:5173');
+      expect(normalizeBrowseUrl('http://localhost:5173')).toBe(
+        'http://localhost:5173'
+      );
       expect(normalizeBrowseUrl('about:blank')).toBe('about:blank');
       expect(normalizeBrowseUrl('ABOUT:BLANK')).toBe('about:blank');
     });
 
     it('prefixes localhost / IP with http', () => {
-      expect(normalizeBrowseUrl('localhost:3000')).toBe('http://localhost:3000');
-      expect(normalizeBrowseUrl('127.0.0.1:8765/app')).toBe('http://127.0.0.1:8765/app');
+      expect(normalizeBrowseUrl('localhost:3000')).toBe(
+        'http://localhost:3000'
+      );
+      expect(normalizeBrowseUrl('127.0.0.1:8765/app')).toBe(
+        'http://127.0.0.1:8765/app'
+      );
     });
 
     it('port shorthand :5173 → localhost', () => {
       expect(normalizeBrowseUrl(':5173')).toBe('http://localhost:5173');
-      expect(normalizeBrowseUrl(':3000/path')).toBe('http://localhost:3000/path');
+      expect(normalizeBrowseUrl(':3000/path')).toBe(
+        'http://localhost:3000/path'
+      );
     });
 
     it('domain without scheme → https', () => {
@@ -100,8 +124,12 @@ describe('previewBrowserStore', () => {
     });
 
     it('protocol-relative //host → https://host (no origin-relative open redirect)', () => {
-      expect(normalizeBrowseUrl('//evil.example/path')).toBe('https://evil.example/path');
-      expect(normalizeBrowseUrl('//localhost:5173')).toBe('https://localhost:5173');
+      expect(normalizeBrowseUrl('//evil.example/path')).toBe(
+        'https://evil.example/path'
+      );
+      expect(normalizeBrowseUrl('//localhost:5173')).toBe(
+        'https://localhost:5173'
+      );
     });
 
     it('unknown explicit schemes collapse to about:blank (no https://ftp://…)', () => {
@@ -111,13 +139,21 @@ describe('previewBrowserStore', () => {
     });
 
     it('keeps file:// and local paths', () => {
-      expect(normalizeBrowseUrl('file:///C:/proj/index.html')).toBe('file:///C:/proj/index.html');
-      expect(normalizeBrowseUrl('C:\\Users\\x\\a.html')).toBe('C:\\Users\\x\\a.html');
-      expect(normalizeBrowseUrl('/var/www/index.html')).toBe('/var/www/index.html');
+      expect(normalizeBrowseUrl('file:///C:/proj/index.html')).toBe(
+        'file:///C:/proj/index.html'
+      );
+      expect(normalizeBrowseUrl('C:\\Users\\x\\a.html')).toBe(
+        'C:\\Users\\x\\a.html'
+      );
+      expect(normalizeBrowseUrl('/var/www/index.html')).toBe(
+        '/var/www/index.html'
+      );
     });
 
     it('strips control characters before normalize', () => {
-      expect(normalizeBrowseUrl('https://safe.test\u0001')).toBe('https://safe.test');
+      expect(normalizeBrowseUrl('https://safe.test\u0001')).toBe(
+        'https://safe.test'
+      );
     });
   });
 
@@ -125,9 +161,18 @@ describe('previewBrowserStore', () => {
     it('ok for empty and normal urls', () => {
       expect(validateBrowseUrl('')).toEqual({ ok: true, url: 'about:blank' });
       expect(validateBrowseUrl(null)).toEqual({ ok: true, url: 'about:blank' });
-      expect(validateBrowseUrl(undefined)).toEqual({ ok: true, url: 'about:blank' });
-      expect(validateBrowseUrl('https://x.test')).toEqual({ ok: true, url: 'https://x.test' });
-      expect(validateBrowseUrl('ABOUT:BLANK')).toEqual({ ok: true, url: 'about:blank' });
+      expect(validateBrowseUrl(undefined)).toEqual({
+        ok: true,
+        url: 'about:blank',
+      });
+      expect(validateBrowseUrl('https://x.test')).toEqual({
+        ok: true,
+        url: 'https://x.test',
+      });
+      expect(validateBrowseUrl('ABOUT:BLANK')).toEqual({
+        ok: true,
+        url: 'about:blank',
+      });
     });
 
     it('rejects dangerous schemes with stable reason', () => {
@@ -223,8 +268,15 @@ describe('previewBrowserStore', () => {
       const again = prependHistoryUrl(b, 'https://a.test');
       expect(again).toEqual(['https://a.test', 'https://b.test']);
 
-      const many = Array.from({ length: PREVIEW_HISTORY_MAX }, (_, i) => `https://n${i}.test`);
-      const capped = prependHistoryUrl(many, 'https://new.test', PREVIEW_HISTORY_MAX);
+      const many = Array.from(
+        { length: PREVIEW_HISTORY_MAX },
+        (_, i) => `https://n${i}.test`
+      );
+      const capped = prependHistoryUrl(
+        many,
+        'https://new.test',
+        PREVIEW_HISTORY_MAX
+      );
       expect(capped).toHaveLength(PREVIEW_HISTORY_MAX);
       expect(capped[0]).toBe('https://new.test');
       expect(capped).not.toContain(`https://n${PREVIEW_HISTORY_MAX - 1}.test`);
@@ -244,8 +296,12 @@ describe('previewBrowserStore', () => {
 
     it('dropHistoryUrl removes by trimmed url', () => {
       const list = ['https://a.test', 'https://b.test'];
-      expect(dropHistoryUrl(list, 'https://a.test')).toEqual(['https://b.test']);
-      expect(dropHistoryUrl(list, '  https://b.test  ')).toEqual(['https://a.test']);
+      expect(dropHistoryUrl(list, 'https://a.test')).toEqual([
+        'https://b.test',
+      ]);
+      expect(dropHistoryUrl(list, '  https://b.test  ')).toEqual([
+        'https://a.test',
+      ]);
       expect(dropHistoryUrl(list, '')).toEqual(list);
       expect(list).toEqual(['https://a.test', 'https://b.test']);
     });
@@ -293,7 +349,9 @@ describe('previewBrowserStore', () => {
       const calls = spy.mock.calls.length;
       setPreviewUrl('https://once.test');
       expect(spy.mock.calls.length).toBe(calls);
-      expect(getPreviewHistory().filter((u) => u === 'https://once.test')).toHaveLength(1);
+      expect(
+        getPreviewHistory().filter((u) => u === 'https://once.test')
+      ).toHaveLength(1);
     });
 
     it('broadcasts unless silent', () => {
@@ -301,14 +359,16 @@ describe('previewBrowserStore', () => {
       setPreviewUrl('https://loud.test');
       expect(spy).toHaveBeenCalled();
       const ev = spy.mock.calls.find(
-        (c) => (c[0] as CustomEvent).type === 'crish-preview-url',
+        (c) => (c[0] as CustomEvent).type === 'crish-preview-url'
       )?.[0] as CustomEvent;
       expect(ev?.detail?.url).toBe('https://loud.test');
 
       spy.mockClear();
       setPreviewUrl('https://quiet.test', { silent: true });
       expect(
-        spy.mock.calls.some((c) => (c[0] as CustomEvent).type === 'crish-preview-url'),
+        spy.mock.calls.some(
+          (c) => (c[0] as CustomEvent).type === 'crish-preview-url'
+        )
       ).toBe(false);
     });
 
@@ -316,18 +376,24 @@ describe('previewBrowserStore', () => {
       const spy = vi.spyOn(window, 'dispatchEvent');
       pushPreviewHistory('https://h1.test');
       expect(
-        spy.mock.calls.some((c) => (c[0] as CustomEvent).type === 'crish-preview-history'),
+        spy.mock.calls.some(
+          (c) => (c[0] as CustomEvent).type === 'crish-preview-history'
+        )
       ).toBe(true);
       spy.mockClear();
       removePreviewHistory('https://h1.test');
       expect(
-        spy.mock.calls.some((c) => (c[0] as CustomEvent).type === 'crish-preview-history'),
+        spy.mock.calls.some(
+          (c) => (c[0] as CustomEvent).type === 'crish-preview-history'
+        )
       ).toBe(true);
       pushPreviewHistory('https://h2.test');
       spy.mockClear();
       clearPreviewHistory();
       expect(
-        spy.mock.calls.some((c) => (c[0] as CustomEvent).type === 'crish-preview-history'),
+        spy.mock.calls.some(
+          (c) => (c[0] as CustomEvent).type === 'crish-preview-history'
+        )
       ).toBe(true);
       expect(getPreviewHistory()).toEqual([]);
     });
@@ -365,14 +431,23 @@ describe('previewBrowserStore', () => {
           'ABOUT:BLANK',
           'ftp://nope',
           '  https://spaced.test  ',
-        ]),
+        ])
       );
-      expect(getPreviewHistory()).toEqual(['https://ok.test', 'https://spaced.test']);
+      expect(getPreviewHistory()).toEqual([
+        'https://ok.test',
+        'https://spaced.test',
+      ]);
       localStorage.setItem(
         'crish_preview_bookmarks_v1',
-        JSON.stringify([{ url: 'https://b.test', title: 'B' }, { no: 'url' }, 'x']),
+        JSON.stringify([
+          { url: 'https://b.test', title: 'B' },
+          { no: 'url' },
+          'x',
+        ])
       );
-      expect(getPreviewBookmarks()).toEqual([{ url: 'https://b.test', title: 'B' }]);
+      expect(getPreviewBookmarks()).toEqual([
+        { url: 'https://b.test', title: 'B' },
+      ]);
     });
 
     it('getPreviewUrl treats corrupt / blocked stored values as about:blank', () => {
@@ -395,7 +470,10 @@ describe('previewBrowserStore', () => {
       expect(togglePreviewBookmark('https://bm.test', 'BM')).toBe(true);
       expect(isPreviewBookmarked('https://bm.test')).toBe(true);
       expect(isPreviewBookmarked('  https://bm.test  ')).toBe(true);
-      expect(getPreviewBookmarks()[0]).toMatchObject({ url: 'https://bm.test', title: 'BM' });
+      expect(getPreviewBookmarks()[0]).toMatchObject({
+        url: 'https://bm.test',
+        title: 'BM',
+      });
       expect(togglePreviewBookmark('https://bm.test')).toBe(false);
       expect(isPreviewBookmarked('https://bm.test')).toBe(false);
     });
@@ -411,8 +489,12 @@ describe('previewBrowserStore', () => {
     it('previewDisplayHost truncates path-aware label', () => {
       expect(previewDisplayHost('about:blank')).toBe('');
       expect(previewDisplayHost('ABOUT:BLANK')).toBe('');
-      expect(previewDisplayHost('https://localhost:5173/')).toBe('localhost:5173');
-      expect(previewDisplayHost('https://example.com/app')).toBe('example.com/app');
+      expect(previewDisplayHost('https://localhost:5173/')).toBe(
+        'localhost:5173'
+      );
+      expect(previewDisplayHost('https://example.com/app')).toBe(
+        'example.com/app'
+      );
       expect(previewDisplayLabel('https://foo.bar/x')).toBe('foo.bar');
     });
 
@@ -453,7 +535,8 @@ describe('previewBrowserStore', () => {
       setPreviewUrl('https://safe.test', { silent: true });
       const r = applyPreviewNavigation('javascript:alert(1)');
       expect(isBrowseUrlOk(r)).toBe(false);
-      if (!isBrowseUrlOk(r)) expect(r.reason).toBe(BROWSE_URL_REASON.blockedScheme);
+      if (!isBrowseUrlOk(r))
+        expect(r.reason).toBe(BROWSE_URL_REASON.blockedScheme);
       expect(getPreviewUrl()).toBe('https://safe.test');
     });
 
@@ -461,7 +544,8 @@ describe('previewBrowserStore', () => {
       setPreviewUrl('https://safe.test', { silent: true });
       const r = applyPreviewNavigation('mailto:a@b.c');
       expect(isBrowseUrlOk(r)).toBe(false);
-      if (!isBrowseUrlOk(r)) expect(r.reason).toBe(BROWSE_URL_REASON.blockedScheme);
+      if (!isBrowseUrlOk(r))
+        expect(r.reason).toBe(BROWSE_URL_REASON.blockedScheme);
       expect(getPreviewUrl()).toBe('https://safe.test');
     });
 
@@ -469,6 +553,46 @@ describe('previewBrowserStore', () => {
       const r = applyPreviewNavigation('//app.example/dash');
       expect(r).toEqual({ ok: true, url: 'https://app.example/dash' });
       expect(getPreviewUrl()).toBe('https://app.example/dash');
+    });
+  });
+
+  describe('clearPreviewBookmarks', () => {
+    it('清空所有已保存的书签并触发更新', () => {
+      togglePreviewBookmark('https://site-a.com', 'Site A');
+      togglePreviewBookmark('https://site-b.com', 'Site B');
+      expect(getPreviewBookmarks()).toHaveLength(2);
+
+      clearPreviewBookmarks();
+      expect(getPreviewBookmarks()).toHaveLength(0);
+    });
+  });
+
+  describe('搜索引擎与主页配置', () => {
+    it('默认搜索引擎为 Google，并支持切换至 Bing / DuckDuckGo / Baidu', () => {
+      expect(getDefaultSearchEngine()).toBe('google');
+      expect(buildSearchUrl('react')).toBe(
+        'https://www.google.com/search?q=react'
+      );
+
+      setDefaultSearchEngine('bing');
+      expect(getDefaultSearchEngine()).toBe('bing');
+      expect(buildSearchUrl('react')).toBe(
+        'https://www.bing.com/search?q=react'
+      );
+
+      setDefaultSearchEngine('duckduckgo');
+      expect(getDefaultSearchEngine()).toBe('duckduckgo');
+      expect(buildSearchUrl('react')).toBe('https://duckduckgo.com/?q=react');
+
+      setDefaultSearchEngine('baidu');
+      expect(getDefaultSearchEngine()).toBe('baidu');
+      expect(buildSearchUrl('react')).toBe('https://www.baidu.com/s?wd=react');
+    });
+
+    it('主页配置读写与兜底', () => {
+      expect(getPreviewHomepage()).toBe('about:blank');
+      setPreviewHomepage('https://news.ycombinator.com');
+      expect(getPreviewHomepage()).toBe('https://news.ycombinator.com');
     });
   });
 });

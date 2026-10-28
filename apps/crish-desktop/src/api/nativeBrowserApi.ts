@@ -12,13 +12,32 @@
  *   - browser_webview_action
  *   - browser_webview_close
  *   - browser_webview_set_muted
+ *   - browser_webview_set_hit_test
  * - 对应 Downstream Events:
  *   - browser://navigation-state
  *   - browser://download-progress
  */
 
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { invokeTyped } from './tauriInvoke';
+import { invokeTyped, type InvokeTypedResult } from './tauriInvoke';
+import {
+  acquireNativeBrowserLease,
+  closeNativeBrowserWebview,
+  createNativeBrowserWebview,
+  navigateNativeBrowser,
+  setNativeBrowserBounds,
+  setNativeBrowserVisible,
+} from './nativeBrowserLifecycle';
+
+declare global {
+  interface Window {
+    __TAURI_INTERNALS__?: unknown;
+  }
+}
+
+function isTauriEnvironment(): boolean {
+  return typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__);
+}
 
 // ──────────────────────────────────────────
 // 事件通道常量
@@ -48,8 +67,11 @@ export interface CreateWebviewArgs {
   tabId: string;
   initialUrl?: string;
   bounds: WebviewBounds;
+  /** 原生子 Webview 初始显隐；省略时遵循 Rust 的 visible=true 默认值。 */
   visible?: boolean;
   dataDirectory?: string;
+  /** 本地文件导航约束根；省略 = 公网上下文，`file:` 一律拒绝。 */
+  workspaceRoot?: string;
   muted?: boolean;
 }
 
@@ -59,6 +81,11 @@ export interface CreateWebviewArgs {
 export type BrowserActionKind =
   'back' | 'forward' | 'reload' | 'reload_ignoring_cache' | 'stop';
 
+export interface NativeBrowserHitTestPayload {
+  status: 'unsupported';
+  reason: string;
+}
+
 /**
  * 导航状态事件载荷
  */
@@ -66,8 +93,8 @@ export interface NavigationStatePayload {
   tabId: string;
   url: string;
   title: string;
-  canGoBack: boolean;
-  canGoForward: boolean;
+  canGoBack?: boolean;
+  canGoForward?: boolean;
   isLoading: boolean;
   faviconUrl?: string | null;
   httpStatus?: number | null;
@@ -79,12 +106,21 @@ export interface NavigationStatePayload {
  */
 export interface DownloadProgressPayload {
   tabId: string;
-  downloadId: string;
   url: string;
   filename: string;
   receivedBytes: number;
   totalBytes?: number | null;
-  state: 'progress' | 'completed' | 'cancelled' | 'interrupted';
+  state: 'progress' | 'completed' | 'interrupted';
+}
+
+function assertBrowserCommandSucceeded(
+  command: string,
+  result: InvokeTypedResult<void>
+): void {
+  if (result.status === 'error') throw new Error(result.message);
+  if (result.status === 'missing') {
+    throw new Error(`Tauri command is unavailable: ${command}`);
+  }
 }
 
 // ──────────────────────────────────────────
@@ -94,69 +130,67 @@ export interface DownloadProgressPayload {
 /**
  * 创建并初始化原生子 Webview 实例
  */
-export async function browserWebviewCreate(
-  args: CreateWebviewArgs
-): Promise<void> {
-  const res = await invokeTyped<void>('browser_webview_create', {
-    args,
-    ...args,
-    tabId: args.tabId,
-    tab_id: args.tabId,
-  });
-  if (res.status === 'error') {
-    throw new Error(res.message);
-  }
+export function browserWebviewCreate(args: CreateWebviewArgs): Promise<void> {
+  return createNativeBrowserWebview(args);
+}
+
+/** 声明一个 Hook 或组件对指定浏览器生命周期的所有权。 */
+export function browserWebviewAcquire(tabId: string): () => void {
+  return acquireNativeBrowserLease(tabId);
 }
 
 /**
  * 设置子 Webview 物理几何位置与尺寸（CSS 逻辑坐标）
  */
-export async function browserWebviewSetBounds(
+export function browserWebviewSetBounds(
   tabId: string,
   bounds: WebviewBounds
 ): Promise<void> {
-  const res = await invokeTyped<void>('browser_webview_set_bounds', {
-    tabId,
-    tab_id: tabId,
-    bounds,
-  });
-  if (res.status === 'error') {
-    throw new Error(res.message);
-  }
+  return setNativeBrowserBounds(tabId, bounds);
 }
 
 /**
  * 控制子 Webview 的可见性（激活与挂起休眠）
  */
-export async function browserWebviewSetVisible(
+export function browserWebviewSetVisible(
   tabId: string,
   visible: boolean
 ): Promise<void> {
-  const res = await invokeTyped<void>('browser_webview_set_visible', {
-    tabId,
-    tab_id: tabId,
-    visible,
-  });
-  if (res.status === 'error') {
-    throw new Error(res.message);
+  return setNativeBrowserVisible(tabId, visible);
+}
+
+/** 请求原生 Hit-Test，并保留后端明确返回的能力状态。 */
+export async function browserWebviewSetHitTest(
+  tabId: string,
+  hitTest: boolean
+): Promise<NativeBrowserHitTestPayload> {
+  const result = await invokeTyped<NativeBrowserHitTestPayload>(
+    'browser_webview_set_hit_test',
+    { tabId, hitTest }
+  );
+  if (result.status === 'error') throw new Error(result.message);
+  if (result.status === 'missing') {
+    throw new Error(
+      'Tauri command is unavailable: browser_webview_set_hit_test'
+    );
   }
+  if (
+    result.data?.status !== 'unsupported' ||
+    typeof result.data.reason !== 'string'
+  ) {
+    throw new Error('Invalid response from browser_webview_set_hit_test');
+  }
+  return result.data;
 }
 
 /**
  * 驱动子 Webview 导航至指定目标 URL
  */
-export async function browserWebviewNavigate(
+export function browserWebviewNavigate(
   tabId: string,
   url: string
 ): Promise<void> {
-  const res = await invokeTyped<void>('browser_webview_navigate', {
-    tabId,
-    tab_id: tabId,
-    url,
-  });
-  if (res.status === 'error') {
-    throw new Error(res.message);
-  }
+  return navigateNativeBrowser(tabId, url);
 }
 
 /**
@@ -168,25 +202,16 @@ export async function browserWebviewAction(
 ): Promise<void> {
   const res = await invokeTyped<void>('browser_webview_action', {
     tabId,
-    tab_id: tabId,
     action,
   });
-  if (res.status === 'error') {
-    throw new Error(res.message);
-  }
+  assertBrowserCommandSucceeded('browser_webview_action', res);
 }
 
 /**
  * 销毁指定 Tab 的子 Webview 并释放原生句柄资源
  */
-export async function browserWebviewClose(tabId: string): Promise<void> {
-  const res = await invokeTyped<void>('browser_webview_close', {
-    tabId,
-    tab_id: tabId,
-  });
-  if (res.status === 'error') {
-    throw new Error(res.message);
-  }
+export function browserWebviewClose(tabId: string): Promise<void> {
+  return closeNativeBrowserWebview(tabId);
 }
 
 /**
@@ -198,12 +223,9 @@ export async function browserWebviewSetMuted(
 ): Promise<void> {
   const res = await invokeTyped<void>('browser_webview_set_muted', {
     tabId,
-    tab_id: tabId,
     muted,
   });
-  if (res.status === 'error') {
-    throw new Error(res.message);
-  }
+  assertBrowserCommandSucceeded('browser_webview_set_muted', res);
 }
 
 // ──────────────────────────────────────────
@@ -236,7 +258,7 @@ export function onNativeBrowserNavigationState(
         }
       })
       .catch((err) => {
-        if ((window as any).__TAURI_INTERNALS__) {
+        if (isTauriEnvironment()) {
           console.warn('[nativeBrowserApi] 订阅 navigation-state 失败:', err);
         }
       });
@@ -282,7 +304,7 @@ export function onNativeBrowserDownloadProgress(
         }
       })
       .catch((err) => {
-        if ((window as any).__TAURI_INTERNALS__) {
+        if (isTauriEnvironment()) {
           console.warn('[nativeBrowserApi] 订阅 download-progress 失败:', err);
         }
       });

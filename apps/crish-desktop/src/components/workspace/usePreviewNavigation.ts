@@ -1,50 +1,46 @@
 /**
  * apps/crish-desktop/src/components/workspace/usePreviewNavigation.ts
  *
- * 内置预览浏览器导航 hook：原生子 Webview 驱动 + 导航栈 + 历史/书签状态 + 外部事件。
- * 收拢 PreviewCard 的全部状态副作用；渲染层（工具栏 / 历史面板 / 内容区）只消费返回值。
- *
- * 核心升级：
- * 1. 彻底移除 safeIframeSrc 对代理端点的依赖，activeUrl 100% 保持公网原始 URL；
- * 2. 导航指令直接由 browserWebviewNavigate / browserWebviewAction 驱动原生 Webview；
- * 3. 监听 onNativeBrowserNavigationState 事件实现响应式状态同步（SSOT 原则）。
+ * 预览浏览器导航 Hook：组合 useNativeBrowserInstance 实现原生 Webview 驱动，
+ * 收拢历史/书签状态、地址栏智能补全与工具栏联动。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from '../../services/toast/ToastContext';
+import { logger } from '../../services/LoggerService';
 import {
   canOpenExternally,
+  clearPreviewBookmarks,
   clearPreviewHistory,
   getPreviewBookmarks,
   getPreviewHistory,
-  getPreviewUrl,
+  getPreviewHomepage,
   isAboutBlank,
-  isBrowseUrlOk,
   isEmbeddablePreviewUrl,
   isPreviewBookmarked,
   previewDisplayHost,
   removePreviewBookmark,
   removePreviewHistory,
-  setPreviewUrl,
   togglePreviewBookmark,
-  validateBrowseUrl,
 } from '../../api/previewBrowserStore';
-import {
-  browserWebviewAction,
-  browserWebviewNavigate,
-  onNativeBrowserNavigationState,
-} from '../../api/nativeBrowserApi';
+import { useNativeBrowserInstance } from './useNativeBrowserInstance';
+import { usePreviewNavigationTransaction } from './usePreviewNavigationTransaction';
 import { LOAD_TIMEOUT_MS } from './previewCardLib';
+import { resolveBrowserTabId } from './nativeBrowserTabId';
 import {
   shouldConsumeScopedEvent,
   useLeafScope,
   useScopedSessionId,
 } from '../../contexts/LeafScopeContext';
 
+export { resolveBrowserTabId } from './nativeBrowserTabId';
+
 export type UsePreviewNavigationOptions = {
   tabId?: string | null;
   leafId?: string | null;
   sessionId?: string | null;
+  /** 初始 URL（参数直通，优先于全局历史） */
+  initialUrl?: string | null;
 };
 
 export type UsePreviewNavigationResult = {
@@ -59,7 +55,6 @@ export type UsePreviewNavigationResult = {
   setShowHist: (v: boolean) => void;
   history: string[];
   bookmarks: { url: string; title?: string }[];
-  iframeRef: React.RefObject<HTMLIFrameElement | null>;
   rootRef: React.RefObject<HTMLDivElement | null>;
   histRef: React.RefObject<HTMLDivElement | null>;
   blank: boolean;
@@ -81,11 +76,8 @@ export type UsePreviewNavigationResult = {
   pickHistory: (u: string) => void;
   removeBookmarkAt: (url: string) => void;
   clearHistoryAll: () => void;
+  clearBookmarksAll: () => void;
   removeHistoryAt: (url: string) => void;
-  /** iframe onLoad：收 loading + 清错误 */
-  onFrameLoad: () => void;
-  /** iframe onError：收 loading + 标错误（内嵌失败走状态条，不 toast） */
-  onFrameError: () => void;
 };
 
 export function usePreviewNavigation(
@@ -94,11 +86,37 @@ export function usePreviewNavigation(
   const leafScope = useLeafScope();
   const scopedSessionId = useScopedSessionId(opts.sessionId);
   const effectiveLeafId = opts.leafId ?? leafScope.leafId;
-  const effectiveTabId = useMemo(() => {
-    if (opts.tabId) return opts.tabId;
-    if (effectiveLeafId) return `browser-${effectiveLeafId}`;
-    return 'browser-default';
-  }, [opts.tabId, effectiveLeafId]);
+  const effectiveTabId = useMemo(
+    () => resolveBrowserTabId(opts.tabId, effectiveLeafId),
+    [opts.tabId, effectiveLeafId]
+  );
+
+  const initialUrl = useMemo(
+    () => opts.initialUrl?.trim() || 'about:blank',
+    [opts.initialUrl]
+  );
+
+  // 接入原生实例 Hook 作为底层驱动（单一真相源 SSOT）
+  const native = useNativeBrowserInstance({
+    tabId: effectiveTabId,
+    initialUrl,
+    autoCloseOnUnmount: false,
+  });
+  const nativeActionsRef = useRef(native);
+  nativeActionsRef.current = native;
+  const [loadingAttemptEpoch, setLoadingAttemptEpoch] = useState(0);
+  const lastTargetUrlRef = useRef<string | null>(initialUrl);
+  const markLoadingAttempt = useCallback(() => {
+    setLoadingAttemptEpoch((current) => current + 1);
+  }, []);
+  const navigateNative = useCallback(
+    (url: string) => {
+      lastTargetUrlRef.current = url;
+      markLoadingAttempt();
+      return nativeActionsRef.current.navigate(url);
+    },
+    [markLoadingAttempt]
+  );
 
   const scopeTargetRef = useRef({
     leafId: effectiveLeafId,
@@ -128,28 +146,13 @@ export function usePreviewNavigation(
     }
   }, []);
 
-  const [urlInput, setUrlInput] = useState(() => {
-    const u = getPreviewUrl();
-    return isAboutBlank(u) ? '' : u;
-  });
-  const [activeUrl, setActiveUrl] = useState(() => getPreviewUrl());
-  const [stack, setStack] = useState<string[]>(() => {
-    const u = getPreviewUrl();
-    return u && !isAboutBlank(u) ? [u] : [];
-  });
-  const [stackIdx, setStackIdx] = useState(0);
-  const [nativeCanBack, setNativeCanBack] = useState<boolean | null>(null);
-  const [nativeCanForward, setNativeCanForward] = useState<boolean | null>(
-    null
+  const [urlInput, setUrlInput] = useState(() =>
+    isAboutBlank(initialUrl) ? '' : initialUrl
   );
-  const [loadError, setLoadError] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [bookmarked, setBookmarked] = useState(() =>
-    isPreviewBookmarked(getPreviewUrl())
-  );
+  const [activeUrl, setActiveUrl] = useState(initialUrl);
   const [showHist, setShowHist] = useState(false);
   const [, setHistTick] = useState(0);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+
   const rootRef = useRef<HTMLDivElement>(null);
   const histRef = useRef<HTMLDivElement>(null);
   const toastRef = useRef((m: string) => toast.show(m));
@@ -158,85 +161,33 @@ export function usePreviewNavigation(
   const history = useMemo(() => getPreviewHistory(), []);
   const bookmarks = useMemo(() => getPreviewBookmarks(), []);
 
+  const navigate = usePreviewNavigationTransaction({
+    tabId: effectiveTabId,
+    initialUrl,
+    nativeUrl: native.url,
+    nativeNavigate: navigateNative,
+    clearNativeError: native.clearError,
+    setActiveUrl,
+    setUrlInput,
+    emitScopedUrlChange,
+  });
+
   const blank = isAboutBlank(activeUrl);
   const canEmbed = isEmbeddablePreviewUrl(activeUrl);
-  // 彻底移除代理前缀，原生 Webview 与 frameSrc 100% 直连目标 URL
   const frameSrc = useMemo(
     () => (isAboutBlank(activeUrl) ? null : activeUrl),
     [activeUrl]
   );
+  const loadError = Boolean(native.error);
   const showFrame = Boolean(frameSrc) && !loadError;
-  const canBack =
-    nativeCanBack !== null ? nativeCanBack : stackIdx > 0 && stack.length > 0;
-  const canForward =
-    nativeCanForward !== null ? nativeCanForward : stackIdx < stack.length - 1;
+  const canBack = native.canGoBack;
+  const canForward = native.canGoForward;
   const canExternal = canOpenExternally(activeUrl);
   const canBookmark = !blank && Boolean(activeUrl);
-
-  const navigate = useCallback(
-    (raw: string, fromExternal = false) => {
-      const checked = validateBrowseUrl(raw);
-      if (!isBrowseUrlOk(checked)) {
-        toastRef.current(checked.reason);
-        return;
-      }
-      const url = checked.url;
-      const nextBlank = isAboutBlank(url);
-      setUrlInput(nextBlank ? '' : url);
-      setActiveUrl((prev) => (prev === url ? prev : url));
-      setLoadError(false);
-      setLoading(!nextBlank && isEmbeddablePreviewUrl(url));
-      setBookmarked(isPreviewBookmarked(url));
-      emitScopedUrlChange(url);
-
-      // 下发原生 Webview 导航命令
-      browserWebviewNavigate(effectiveTabId, url).catch((err) => {
-        console.warn(
-          `[usePreviewNavigation] browserWebviewNavigate [${effectiveTabId}] error:`,
-          err
-        );
-      });
-
-      if (fromExternal) return;
-      setPreviewUrl(url, { silent: true });
-      setStack((prev) => {
-        const base = prev.slice(0, stackIdx + 1);
-        if (base[base.length - 1] === url) return base;
-        const next = [...base, url];
-        setStackIdx(next.length - 1);
-        return next;
-      });
-    },
-    [effectiveTabId, emitScopedUrlChange, stackIdx]
-  );
+  const bookmarked = isPreviewBookmarked(activeUrl);
 
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
-
-  // 监听原生 Webview 广播的细粒度导航状态事件
-  useEffect(() => {
-    const unsub = onNativeBrowserNavigationState((payload) => {
-      if (payload.tabId !== effectiveTabId) return;
-
-      const nextUrl = payload.url;
-      const nextBlank = isAboutBlank(nextUrl);
-
-      setActiveUrl((prev) => (prev === nextUrl ? prev : nextUrl));
-      setUrlInput(nextBlank ? '' : nextUrl);
-      setLoading(payload.isLoading);
-      setNativeCanBack(payload.canGoBack);
-      setNativeCanForward(payload.canGoForward);
-      setBookmarked(isPreviewBookmarked(nextUrl));
-      setLoadError(false);
-
-      if (!nextBlank) {
-        setPreviewUrl(nextUrl, { silent: true });
-        emitScopedUrlChange(nextUrl);
-      }
-    });
-
-    return unsub;
-  }, [effectiveTabId, emitScopedUrlChange]);
 
   // 外部全局事件监听
   useEffect(() => {
@@ -267,14 +218,49 @@ export function usePreviewNavigation(
     };
   }, []);
 
-  // 加载超时保护
+  // 加载超时兜底
+  const isNativeLoading = native.isLoading;
+  const stopNativeLoading = native.stop;
+  const currentTargetUrl = activeUrl || native.url;
+
   useEffect(() => {
-    if (!loading) return;
+    if (!isNativeLoading) {
+      lastTargetUrlRef.current = currentTargetUrl;
+      return;
+    }
+    // 加载过程中如果底层页面跳转至新的不同目标地址，递增 epoch 以重置超时计时
+    if (
+      native.url &&
+      !isAboutBlank(native.url) &&
+      lastTargetUrlRef.current &&
+      !isAboutBlank(lastTargetUrlRef.current) &&
+      native.url !== lastTargetUrlRef.current &&
+      `${native.url}/` !== lastTargetUrlRef.current &&
+      native.url !== `${lastTargetUrlRef.current}/`
+    ) {
+      lastTargetUrlRef.current = native.url;
+      markLoadingAttempt();
+    }
+  }, [isNativeLoading, markLoadingAttempt, native.url, currentTargetUrl]);
+
+  useEffect(() => {
+    if (!isNativeLoading) return;
     const t = window.setTimeout(() => {
-      setLoading(false);
+      stopNativeLoading().catch((error) => {
+        logger.warn(
+          'Preview navigation timeout could not stop native loading',
+          {
+            err: {
+              message: error instanceof Error ? error.message : String(error),
+            },
+          }
+        );
+      });
     }, LOAD_TIMEOUT_MS);
-    return () => window.clearTimeout(t);
-  }, [loading, activeUrl]);
+    return () => {
+      window.clearTimeout(t);
+    };
+  }, [isNativeLoading, loadingAttemptEpoch, stopNativeLoading]);
 
   // Esc 关历史浮层；点击外部关闭
   useEffect(() => {
@@ -305,87 +291,42 @@ export function usePreviewNavigation(
     };
   }, [showHist]);
 
-  const applyStackUrl = (url: string, idx: number) => {
-    const checked = validateBrowseUrl(url);
-    if (!isBrowseUrlOk(checked)) {
-      toastRef.current(checked.reason);
-      return;
-    }
-    const safe = checked.url;
-    const nextBlank = isAboutBlank(safe);
-    setStackIdx(idx);
-    setUrlInput(nextBlank ? '' : safe);
-    setActiveUrl(safe);
-    setPreviewUrl(safe, { silent: true });
-    emitScopedUrlChange(safe);
-    setLoadError(false);
-    setLoading(!nextBlank && isEmbeddablePreviewUrl(safe));
-    setBookmarked(isPreviewBookmarked(safe));
-
-    browserWebviewNavigate(effectiveTabId, safe).catch((err) => {
-      console.warn(
-        `[usePreviewNavigation] applyStackUrl [${effectiveTabId}] error:`,
-        err
-      );
-    });
-  };
-
+  // 原生 history 驱动动作（消除双发竞态）
   const goBack = useCallback(() => {
     if (!canBack) return;
-    browserWebviewAction(effectiveTabId, 'back').catch((err) => {
+    markLoadingAttempt();
+    nativeActionsRef.current.goBack().catch((err) => {
       console.warn(
         `[usePreviewNavigation] back [${effectiveTabId}] error:`,
         err
       );
     });
-    if (stackIdx > 0 && stack.length > 0) {
-      const i = stackIdx - 1;
-      const url = stack[i];
-      if (url) applyStackUrl(url, i);
-    }
-  }, [canBack, effectiveTabId, stackIdx, stack]);
+  }, [canBack, effectiveTabId, markLoadingAttempt]);
 
   const goForward = useCallback(() => {
     if (!canForward) return;
-    browserWebviewAction(effectiveTabId, 'forward').catch((err) => {
+    markLoadingAttempt();
+    nativeActionsRef.current.goForward().catch((err) => {
       console.warn(
         `[usePreviewNavigation] forward [${effectiveTabId}] error:`,
         err
       );
     });
-    if (stackIdx < stack.length - 1) {
-      const i = stackIdx + 1;
-      const url = stack[i];
-      if (url) applyStackUrl(url, i);
-    }
-  }, [canForward, effectiveTabId, stackIdx, stack]);
+  }, [canForward, effectiveTabId, markLoadingAttempt]);
 
   const reload = useCallback(() => {
     if (isAboutBlank(activeUrl)) return;
-    setLoadError(false);
-    setLoading(true);
-
-    browserWebviewAction(effectiveTabId, 'reload').catch((err) => {
+    markLoadingAttempt();
+    nativeActionsRef.current.reload().catch((err) => {
       console.warn(
         `[usePreviewNavigation] reload [${effectiveTabId}] error:`,
         err
       );
     });
-
-    const el = iframeRef.current;
-    if (el) {
-      try {
-        el.src = activeUrl;
-      } catch {
-        setLoadError(true);
-        setLoading(false);
-      }
-    }
-  }, [activeUrl, effectiveTabId]);
+  }, [activeUrl, effectiveTabId, markLoadingAttempt]);
 
   const stop = useCallback(() => {
-    setLoading(false);
-    browserWebviewAction(effectiveTabId, 'stop').catch((err) => {
+    nativeActionsRef.current.stop().catch((err) => {
       console.warn(
         `[usePreviewNavigation] stop [${effectiveTabId}] error:`,
         err
@@ -394,7 +335,7 @@ export function usePreviewNavigation(
   }, [effectiveTabId]);
 
   const goHome = useCallback(() => {
-    navigate('about:blank');
+    navigate(getPreviewHomepage());
   }, [navigate]);
 
   const openExternal = useCallback(() => {
@@ -415,11 +356,10 @@ export function usePreviewNavigation(
       toastRef.current('空白页无法加入书签');
       return;
     }
-    const on = togglePreviewBookmark(
+    togglePreviewBookmark(
       activeUrl,
       previewDisplayHost(activeUrl) || activeUrl
     );
-    setBookmarked(on);
     setHistTick((n) => n + 1);
   }, [activeUrl]);
 
@@ -431,14 +371,15 @@ export function usePreviewNavigation(
     [navigate]
   );
 
-  const removeBookmarkAt = useCallback(
-    (url: string) => {
-      removePreviewBookmark(url);
-      setBookmarked(isPreviewBookmarked(activeUrl));
-      setHistTick((n) => n + 1);
-    },
-    [activeUrl]
-  );
+  const removeBookmarkAt = useCallback((url: string) => {
+    removePreviewBookmark(url);
+    setHistTick((n) => n + 1);
+  }, []);
+
+  const clearBookmarksAll = useCallback(() => {
+    clearPreviewBookmarks();
+    setHistTick((n) => n + 1);
+  }, []);
 
   const clearHistoryAll = useCallback(() => {
     clearPreviewHistory();
@@ -450,29 +391,18 @@ export function usePreviewNavigation(
     setHistTick((n) => n + 1);
   }, []);
 
-  const onFrameLoad = useCallback(() => {
-    setLoading(false);
-    setLoadError(false);
-  }, []);
-
-  const onFrameError = useCallback(() => {
-    setLoading(false);
-    setLoadError(true);
-  }, []);
-
   return {
     tabId: effectiveTabId,
     urlInput,
     setUrlInput,
     activeUrl,
     loadError,
-    loading,
+    loading: native.isLoading,
     bookmarked,
     showHist,
     setShowHist,
     history,
     bookmarks,
-    iframeRef,
     rootRef,
     histRef,
     blank,
@@ -494,8 +424,7 @@ export function usePreviewNavigation(
     pickHistory,
     removeBookmarkAt,
     clearHistoryAll,
+    clearBookmarksAll,
     removeHistoryAt,
-    onFrameLoad,
-    onFrameError,
   };
 }

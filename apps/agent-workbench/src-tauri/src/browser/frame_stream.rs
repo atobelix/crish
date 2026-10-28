@@ -36,9 +36,9 @@
 //!   会话释放（shutdown：泵/监督任务终止，转发任务随 sink 关闭退出——
 //!   不留僵尸重连）。
 
-use crate::core_event_bridge::Emitter;
 use conex_browser::frames::{FrameOut, ScreencastConfig, ScreencastSession};
 use conex_browser::BrowserSession;
+use conex_run::core_event_bridge::Emitter;
 use serde::Serialize;
 use serde_json::json;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -319,7 +319,7 @@ impl FrameStreamController {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core_event_bridge::Emitter;
+    use conex_run::core_event_bridge::Emitter;
     use std::sync::mpsc as std_mpsc;
     use std::time::Duration;
 

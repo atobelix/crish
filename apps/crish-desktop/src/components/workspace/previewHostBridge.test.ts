@@ -19,7 +19,9 @@ import {
 } from './previewProtocol';
 
 /** 构造可投递的 iframe 引用（contentWindow 由外部 mock 注入） */
-function makeIframeRef(postMessageMock: ReturnType<typeof vi.fn>): InspectorIframeRef {
+function makeIframeRef(
+  postMessageMock: ReturnType<typeof vi.fn>
+): InspectorIframeRef {
   return {
     current: {
       contentWindow: {
@@ -174,6 +176,18 @@ describe('previewHostBridge', () => {
         source: CRISH_PREVIEW_INSPECTOR_SOURCE,
         type: 'INSPECT_TOGGLE',
         payload: { enabled: 'yes' },
+      });
+      expect(listener).not.toHaveBeenCalled();
+      unsubscribe();
+    });
+
+    it('INSPECT_TOGGLE 不允许网页把宿主拾取状态设为 active', () => {
+      const listener = vi.fn();
+      const unsubscribe = subscribeToInspector(listener);
+      dispatchClientMessage({
+        source: CRISH_PREVIEW_INSPECTOR_SOURCE,
+        type: 'INSPECT_TOGGLE',
+        payload: { enabled: true },
       });
       expect(listener).not.toHaveBeenCalled();
       unsubscribe();

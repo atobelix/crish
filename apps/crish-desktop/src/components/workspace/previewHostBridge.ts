@@ -111,11 +111,11 @@ export function parseClientToHostMessage(
   // 客户端 Esc 退出拾取：请求宿主复位工具栏拾取态（enabled 恒为 false）
   if (type === 'INSPECT_TOGGLE') {
     const payload = raw.payload as Record<string, unknown> | undefined;
-    if (!payload || typeof payload.enabled !== 'boolean') return null;
+    if (!payload || payload.enabled !== false) return null;
     return {
       source: CRISH_PREVIEW_INSPECTOR_SOURCE,
       type: 'INSPECT_TOGGLE',
-      payload: { enabled: payload.enabled },
+      payload: { enabled: false },
     };
   }
 

@@ -69,25 +69,40 @@ input.urlInput::placeholder {
   color: var(--text-tertiary);
 }
 
-/* 悬停态与获得焦点态：无边框无绿色，仅背景微加深（对齐侧边栏搜索框）。
- *
- * 特异性必须与共享 Input 的基础悬停规则**同形且更高**：
- *   Input.module.css 的 `.input:hover:not(:focus):not(:focus-visible):not(:disabled)`
- *   是 (0,5,0)；此处若只用 `:hover:not(:disabled)`（0,3,1）会被它压过 ——
- *   地址栏悬停就会冒出边框（实证缺陷 2026-09-15）。
- * 本组带 `input` 类型选择器 ⇒ (0,5,1)，不依赖样式表加载顺序，也无需 !important。 */
+/* 悬停态与获得焦点态：遵循 AGENTS.md §13 规范，杜绝粗深黑边，保持柔软浅灰与微混入设计 token（对比度混入 ≤10%）
+ * 特异性必须与共享 Input 的基础规则同形且更高，确保稳定生效 */
 .urlForm:hover input.urlInput:not(:focus):not(:focus-visible):not(:disabled),
 .urlForm input.urlInput:hover:not(:focus):not(:focus-visible):not(:disabled),
+input.urlInput:hover:not(:focus):not(:focus-visible):not(:disabled) {
+  outline: none;
+  background: var(--state-hover);
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+
 .urlForm input.urlInput:focus,
 .urlForm input.urlInput:focus-visible,
 .urlForm:focus-within input.urlInput,
-input.urlInput:hover:not(:focus):not(:focus-visible):not(:disabled),
 input.urlInput:focus,
 input.urlInput:focus-visible {
   outline: none;
-  background: var(--sidebar-hover, var(--bg-card-hover));
-  border: 1px solid transparent;
-  box-shadow: none;
+  background: var(--surface-input, var(--bg-card));
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--border-subtle, var(--border-color)) 94%,
+      var(--text-primary) 6%
+    );
+  box-shadow: 0 0 0 1px
+    color-mix(
+      in srgb,
+      var(--border-subtle, var(--border-color)) 96%,
+      var(--text-primary) 4%
+    );
+}
+
+.urlForm :global(.inputShell:has(.inputAction)) input.urlInput {
+  padding-right: 22px;
 }
 
 .urlForm input.urlInput::-webkit-search-cancel-button,
@@ -147,7 +162,7 @@ input.urlInput::-webkit-search-results-decoration {
   height: 6px;
   border-radius: 50%;
   background: var(--brand);
-  animation: pulseDot 1.5s ease-in-out infinite;
+  animation: pulseDot var(--transition-pulse, 1.5s ease-in-out) infinite;
 }
 
 @keyframes pulseDot {
@@ -203,7 +218,7 @@ input.urlInput::-webkit-search-results-decoration {
   background: var(--bg-elevated, var(--bg-card));
   border: var(--hairline-width, 1px) solid var(--border-color);
   border-radius: var(--radius-md);
-  box-shadow: 0 2px 8px var(--tint-strong);
+  box-shadow: 0 2px 8px var(--state-strong);
   font-size: var(--font-size-xs, 12px);
   color: var(--text-primary);
   pointer-events: auto;
@@ -256,11 +271,11 @@ input.urlInput::-webkit-search-results-decoration {
 }
 .inspectorCloseBtn:hover {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 .inspectorCloseBtn:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--state-focus-ring));
   color: var(--text-primary);
 }
 .inspectorDim {
@@ -314,7 +329,7 @@ input.urlInput::-webkit-search-results-decoration {
 }
 .inspectorActionBtn:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--state-focus-ring));
   color: var(--text-primary);
 }
 .inspectorHover {
@@ -361,7 +376,7 @@ input.urlInput::-webkit-search-results-decoration {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   background: var(--bg-primary);
   box-sizing: border-box;
   overflow-y: auto;
@@ -429,19 +444,14 @@ input.urlInput::-webkit-search-results-decoration {
 
 .pureTextLink:hover,
 .pureTextLink:hover {
-  background: var(--sidebar-hover, var(--tint-hover));
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
 .pureTextLink:focus-visible,
 .pureTextLink:focus-visible {
-  background: var(--sidebar-hover, var(--tint-active));
+  background: var(--state-hover, var(--state-active));
   color: var(--text-primary);
-}
-
-.portLabel {
-  color: var(--text-tertiary);
-  margin-right: 4px;
 }
 
 .portValue {
@@ -472,13 +482,13 @@ input.urlInput::-webkit-search-results-decoration {
 
 .pureTextLinkWithIcon:hover,
 .pureTextLinkWithIcon:hover {
-  background: var(--sidebar-hover, var(--tint-hover));
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
 .pureTextLinkWithIcon:focus-visible,
 .pureTextLinkWithIcon:focus-visible {
-  background: var(--sidebar-hover, var(--tint-active));
+  background: var(--state-hover, var(--state-active));
   color: var(--text-primary);
 }
 
@@ -584,7 +594,7 @@ input.urlInput::-webkit-search-results-decoration {
 }
 .quickChip:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--state-focus-ring));
   border-color: var(--border-color);
   color: var(--text-primary);
 }
@@ -649,7 +659,7 @@ input.urlInput::-webkit-search-results-decoration {
 }
 .histClear:hover {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 .histRow {
   display: flex;
@@ -675,14 +685,14 @@ input.urlInput::-webkit-search-results-decoration {
   font-family: inherit;
 }
 .histItem:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 .histItem:focus-visible {
   outline: none;
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--state-focus-ring));
 }
 .histX {
   border: none;
@@ -705,12 +715,12 @@ input.urlInput::-webkit-search-results-decoration {
 }
 .histX:hover {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 .histX:focus-visible {
   opacity: 1;
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--state-focus-ring));
   color: var(--text-primary);
 }
 .histEmpty {

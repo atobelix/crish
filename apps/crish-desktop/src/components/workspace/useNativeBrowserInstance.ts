@@ -4,14 +4,16 @@
  * 为特定 tabId 维护原生 Webview 实例的导航状态与动作控制 Hook。
  *
  * 核心保证：
- * 1. 响应式同步 URL、Title、Favicon、Loading、前进/后退、HttpStatus 与 Muted 状态；
- * 2. 挂载时安全注册事件订阅，卸载或切换 tabId 时平滑注销；
- * 3. 错误安全边界：动作执行失败时更新本地 error 状态并抛出，供上层 UI 捕获；
- * 4. 动作函数引用稳定（useCallback 封装），避免引起外部无关重新渲染。
+ * 1. 响应式同步 URL、Title、Favicon、Loading、前进/后退、HttpStatus 与 Muted 状态（SSOT 来源：Rust 广播）；
+ * 2. 统一 Tab ID 命名真理来源（SSOT）：通过 resolveBrowserTabId 严格收敛（opts.tabId 优先，无则基于 leafId 生成 `browser-${leafId}`，兜底 `browser-default`）；
+ * 3. 智能 URL 补全：无协议域名自动补全为 https://...，纯搜索词自动重定向至 Google 搜索；
+ * 4. 彻底消除加载死锁与错误处理：动作执行失败时清空 isLoading 并记录/抛出结构化 error；
+ * 5. 挂载时安全注册事件订阅，卸载或切换 tabId 时平滑注销；动作函数引用稳定（useCallback）。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  browserWebviewAcquire,
   browserWebviewAction,
   browserWebviewClose,
   browserWebviewNavigate,
@@ -23,9 +25,12 @@ import {
   type DownloadProgressPayload,
   type WebviewBounds,
 } from '../../api/nativeBrowserApi';
+import { smartResolveBrowseUrl } from '../../api/previewBrowserStore';
+import { resolveBrowserTabId } from './nativeBrowserTabId';
 
 export interface UseNativeBrowserInstanceOptions {
-  tabId: string;
+  tabId?: string | null;
+  leafId?: string | null;
   initialUrl?: string;
   autoCloseOnUnmount?: boolean;
 }
@@ -42,6 +47,7 @@ export interface UseNativeBrowserInstanceReturn {
   httpStatus: number | null;
   downloadProgress: DownloadProgressPayload | null;
   error: string | null;
+  clearError: () => void;
   navigate: (url: string) => Promise<void>;
   goBack: () => Promise<void>;
   goForward: () => Promise<void>;
@@ -54,14 +60,21 @@ export interface UseNativeBrowserInstanceReturn {
 }
 
 export function useNativeBrowserInstance(
-  tabIdOrOptions: string | UseNativeBrowserInstanceOptions
+  tabIdOrOptions?: string | UseNativeBrowserInstanceOptions | null
 ): UseNativeBrowserInstanceReturn {
-  const options =
-    typeof tabIdOrOptions === 'string'
-      ? { tabId: tabIdOrOptions }
-      : tabIdOrOptions;
+  const options: UseNativeBrowserInstanceOptions = useMemo(() => {
+    if (typeof tabIdOrOptions === 'string') {
+      return { tabId: tabIdOrOptions };
+    }
+    return tabIdOrOptions ?? {};
+  }, [tabIdOrOptions]);
 
-  const { tabId, initialUrl, autoCloseOnUnmount = false } = options;
+  const tabId = useMemo(
+    () => resolveBrowserTabId(options.tabId, options.leafId),
+    [options.tabId, options.leafId]
+  );
+
+  const { initialUrl, autoCloseOnUnmount = false } = options;
 
   const [url, setUrl] = useState<string>(initialUrl ?? '');
   const [title, setTitle] = useState<string>('');
@@ -74,6 +87,7 @@ export function useNativeBrowserInstance(
   const [downloadProgress, setDownloadProgress] =
     useState<DownloadProgressPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const clearError = useCallback(() => setError(null), []);
 
   // 当 tabId 变化时重置本地状态
   const prevTabIdRef = useRef(tabId);
@@ -93,16 +107,22 @@ export function useNativeBrowserInstance(
     }
   }, [tabId, initialUrl]);
 
-  // 订阅导航状态与下载进度事件
+  // 订阅导航状态与下载进度事件（SSOT 真理来源）
   useEffect(() => {
     if (!tabId) return;
+
+    const releaseLease = browserWebviewAcquire(tabId);
 
     const unsubNav = onNativeBrowserNavigationState((payload) => {
       if (payload.tabId !== tabId) return;
       setUrl(payload.url);
       setTitle(payload.title);
-      setCanGoBack(payload.canGoBack);
-      setCanGoForward(payload.canGoForward);
+      if (typeof payload.canGoBack === 'boolean') {
+        setCanGoBack(payload.canGoBack);
+      }
+      if (typeof payload.canGoForward === 'boolean') {
+        setCanGoForward(payload.canGoForward);
+      }
       setIsLoading(payload.isLoading);
       if (payload.faviconUrl !== undefined) {
         setFaviconUrl(payload.faviconUrl ?? null);
@@ -132,17 +152,19 @@ export function useNativeBrowserInstance(
           );
         });
       }
+      releaseLease();
     };
   }, [tabId, autoCloseOnUnmount]);
 
-  // 动作封装
+  // 动作封装：全部执行安全捕获并消除 loading 死锁
   const navigate = useCallback(
     async (targetUrl: string) => {
       if (!tabId) return;
+      const resolved = smartResolveBrowseUrl(targetUrl);
       try {
         setIsLoading(true);
         setError(null);
-        await browserWebviewNavigate(tabId, targetUrl);
+        await browserWebviewNavigate(tabId, resolved);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         setError(msg);
@@ -156,9 +178,11 @@ export function useNativeBrowserInstance(
   const goBack = useCallback(async () => {
     if (!tabId) return;
     try {
+      setIsLoading(true);
       setError(null);
       await browserWebviewAction(tabId, 'back');
     } catch (err) {
+      setIsLoading(false);
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
       throw err;
@@ -168,9 +192,11 @@ export function useNativeBrowserInstance(
   const goForward = useCallback(async () => {
     if (!tabId) return;
     try {
+      setIsLoading(true);
       setError(null);
       await browserWebviewAction(tabId, 'forward');
     } catch (err) {
+      setIsLoading(false);
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
       throw err;
@@ -181,12 +207,14 @@ export function useNativeBrowserInstance(
     async (ignoreCache = false) => {
       if (!tabId) return;
       try {
+        setIsLoading(true);
         setError(null);
         await browserWebviewAction(
           tabId,
           ignoreCache ? 'reload_ignoring_cache' : 'reload'
         );
       } catch (err) {
+        setIsLoading(false);
         const msg = err instanceof Error ? err.message : String(err);
         setError(msg);
         throw err;
@@ -197,10 +225,12 @@ export function useNativeBrowserInstance(
 
   const stop = useCallback(async () => {
     if (!tabId) return;
+    setIsLoading(false);
     try {
       setError(null);
       await browserWebviewAction(tabId, 'stop');
     } catch (err) {
+      setIsLoading(false);
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
       throw err;
@@ -278,6 +308,7 @@ export function useNativeBrowserInstance(
       httpStatus,
       downloadProgress,
       error,
+      clearError,
       navigate,
       goBack,
       goForward,
@@ -300,6 +331,7 @@ export function useNativeBrowserInstance(
       httpStatus,
       downloadProgress,
       error,
+      clearError,
       navigate,
       goBack,
       goForward,

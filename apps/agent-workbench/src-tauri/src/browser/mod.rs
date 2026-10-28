@@ -81,10 +81,30 @@
 //! [Self::drop_raw_session] 注记）。
 
 pub(crate) mod frame_stream;
+pub mod inspector_bridge;
 pub(crate) mod mcp_attach;
+pub mod native_commands;
+pub mod native_manager;
+pub mod native_tokens;
+pub mod native_types;
 pub(crate) mod panel_input;
+pub mod security;
 
-use crate::core_event_bridge::Emitter;
+#[allow(unused_imports)]
+pub use native_manager::NativeWebviewManager;
+#[allow(unused_imports)]
+pub use native_tokens::{ControllerTokenKind, CoreTokenKind, EventTokenRegistry, TokenEntry};
+#[allow(unused_imports)]
+pub use native_types::{
+    BrowserActionKind, BrowserStorageMode, CreateWebviewArgs, DownloadProgressPayload,
+    NavigationStatePayload, WebviewBounds,
+};
+#[allow(unused_imports)]
+pub use security::{
+    is_trusted_certificate_target, resolve_browser_udf_path, validate_navigation_url,
+    SecurityDenial,
+};
+
 use agent_tools::definition::ToolError;
 use async_trait::async_trait;
 use conex_browser::action::gate::{DomainGate, GateDenial};
@@ -109,6 +129,7 @@ use conex_browser_tools::policy::AllowAllPolicy;
 use conex_browser_tools::session::{
     ConsoleEntry, NetworkEntry, RealSession, SessionOps, SnapshotView,
 };
+use conex_run::core_event_bridge::Emitter;
 use frame_stream::{FrameStreamController, FrameStreamState};
 use mcp_attach::McpAttachEndpoint;
 use panel_input::{BrowserInputEvent, PanelInputRouter};
@@ -695,6 +716,7 @@ impl BrowserSlot {
     /// ——先经本守卫取端点，再 `mcp_attach::mcp_attach_server_config`
     /// 构建配置注入 `--browserUrl`（E-4 桥零改动；插件 mcpServers 装配
     /// 点为并行域 TODO 登记，见 engine.rs 该 seam 注释）。
+    #[allow(dead_code)]
     pub(crate) fn mcp_attach_endpoint(&self) -> Result<McpAttachEndpoint, ToolError> {
         let endpoint = self.manager.as_ref().and_then(|m| m.endpoint());
         mcp_attach::attach_exposure_decision(self.mcp_attach_allowed, endpoint.as_ref())

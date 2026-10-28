@@ -1,6 +1,5 @@
 use crate::browser::{BrowserSlot, StartPayload};
-use crate::core_error::CoreError;
-use crate::core_run_commands::CoreRunState;
+use conex_run::core_error::CoreError;
 use std::sync::Arc;
 
 /// 错误码前缀（J1b 结构化错误面）：未连接/恢复期。
@@ -29,9 +28,11 @@ pub(crate) fn map_browser_err(err: String) -> CoreError {
     }
 }
 
-/// 取引擎持有的浏览器会话槽（命令面与工具面共享同一进程级单例）。
-pub(crate) fn slot(core: &Arc<CoreRunState>) -> Arc<BrowserSlot> {
-    core.engine().browser_slot()
+/// 取宿主持有的浏览器会话槽（命令面与工具面共享同一进程级单例；
+/// main.rs manage `Arc<BrowserSlot>`，命令经 Tauri State 取用——
+/// `&core`（State）经 Deref 收敛为 `&Arc<BrowserSlot>`）。
+pub(crate) fn slot(core: &Arc<BrowserSlot>) -> Arc<BrowserSlot> {
+    Arc::clone(core)
 }
 
 /// 启动结果 → 契约载荷（Ok = running/starting；Err = error + reason）。

@@ -1,13 +1,8 @@
-use crate::browser::StorageStateOps;
-use crate::core_error::CoreError;
-use crate::core_event_bridge::{Emitter, EventBridge};
-use crate::core_run_commands::CoreRunState;
-use crate::status_diagnostics::StatusDiagnostics;
+use crate::browser::{BrowserSlot, StorageStateOps};
 use async_trait::async_trait;
 use conex_browser::cdp::domains::Cookie as CdpCookie;
 use conex_browser::cdp::domains::SetCookieParam;
-use orchestrator::persist::InMemoryStore;
-use orchestrator::restore::SnapshotFileStore;
+use conex_run::core_error::CoreError;
 use std::sync::Arc;
 
 /// `CoreError` → detail 文本（断言辅助：错误文案与旧 String 契约同形，
@@ -23,29 +18,10 @@ pub(crate) fn err_detail(err: CoreError) -> String {
     }
 }
 
-/// 单元测试专用内存事件接收器（实现 [Emitter] trait，记录信道与载荷）。
-pub(crate) struct TestEmitter(pub(crate) Arc<std::sync::Mutex<Vec<String>>>);
-
-impl Emitter for TestEmitter {
-    fn emit(&self, channel: &str, payload: &str) {
-        self.0
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .push(format!("{channel}:{payload}"));
-    }
-}
-
-/// 构造 mock 引擎状态（CoreRunState 可独立构造；浏览器槽随引擎
-/// 装配为真实惰性槽——单元测试不触发启动，仅查询/停止安全面）。
-pub(crate) fn mock_core_state(temp: &tempfile::TempDir) -> Arc<CoreRunState> {
-    let bridge = EventBridge::new("test", Arc::new(TestEmitter(Arc::new(Default::default()))));
-    Arc::new(CoreRunState::new(
-        Arc::new(InMemoryStore::new()),
-        Arc::new(SnapshotFileStore::new(temp.path().join("snapshot.json"))),
-        bridge,
-        Arc::new(StatusDiagnostics::new()),
-        None,
-    ))
+/// 构造 mock 浏览器槽（进程级惰性槽纯构造——单元测试不触发启动，
+/// 仅查询/停止安全面；temp 参数保留为签名兼容位，槽构造无 I/O）。
+pub(crate) fn mock_browser_slot(_temp: &tempfile::TempDir) -> Arc<BrowserSlot> {
+    Arc::new(BrowserSlot::new())
 }
 
 /// J1b mock storage 发送面：预设实读结果 + 记录注入参数（命令层
@@ -125,11 +101,8 @@ pub(crate) fn cdp_cookie(overrides: impl Fn(&mut CdpCookie)) -> CdpCookie {
 }
 
 /// 注入 mock storage 发送面（命令层断言面；未注入时槽为未连接面）。
-pub(crate) fn inject_mock(state: &Arc<CoreRunState>, mock: MockStorageOps) {
-    state
-        .engine()
-        .browser_slot()
-        .inject_storage_ops(Arc::new(mock));
+pub(crate) fn inject_mock(slot: &Arc<BrowserSlot>, mock: MockStorageOps) {
+    slot.inject_storage_ops(Arc::new(mock));
 }
 
 /// localStorage 注入通道调用记录（§5.3 注入执行面断言：调用序与参数）。
@@ -221,9 +194,6 @@ impl conex_browser::import::storage_state::LocalStorageChannel for MockLocalStor
 
 /// 注入 mock localStorage 通道（命令层断言面；未注入时访问器走
 /// 未连接路径 → not_ready）。
-pub(crate) fn inject_local_storage_mock(state: &Arc<CoreRunState>, mock: MockLocalStorageChannel) {
-    state
-        .engine()
-        .browser_slot()
-        .inject_local_storage_channel(Arc::new(mock));
+pub(crate) fn inject_local_storage_mock(slot: &Arc<BrowserSlot>, mock: MockLocalStorageChannel) {
+    slot.inject_local_storage_channel(Arc::new(mock));
 }

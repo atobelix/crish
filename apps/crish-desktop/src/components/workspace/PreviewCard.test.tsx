@@ -4,7 +4,7 @@
  * 1. 代理 URL 解析函数（外部 URL 走代理、本地 URL 直连、空白 URL）；
  * 2. 默认空态渲染与快捷地址导航；
  * 3. 书签与历史浮层切换；
- * 4. DOM 拾取器按钮点击切换状态与 postMessage 双向通信（previewProtocol 单轨契约）；
+ * 4. DOM 拾取器 Native command/event 通信与结果展示（previewProtocol 单轨契约）；
  * 5. 右上角 AI 协同指示与「停止」操作。
  *
  * 遵循测试资产保护铁律（UTF-8 无 BOM，中文注释）；仅随死代码清退同步删除
@@ -21,22 +21,109 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { PreviewCard } from './PreviewCard';
-import {
-  isLocalDevUrl,
-  safeIframeSrc,
-  toProxyPreviewUrl,
-} from './previewCardLib';
+import { isLocalDevUrl, safeIframeSrc } from './previewCardLib';
 import { ToastProvider } from '../../services/toast/ToastContext';
+import { ToastStore } from '../../services/toast/ToastStore';
 import { useSessionStore } from '../../store/sessionStore';
 import type { SessionState } from '../../store/types';
-import {
-  CRISH_PREVIEW_HOST_SOURCE,
-  CRISH_PREVIEW_INSPECTOR_SOURCE,
-} from './previewProtocol';
+import type { NativeBrowserInspectorEvent } from './nativeBrowserInspectorApi';
 import {
   setCachedActivePorts,
   clearActivePortCache,
 } from './activePortDetector';
+import { resetNativeBrowserLifecyclesForTesting } from '../../api/nativeBrowserLifecycle';
+
+const { mockInvoke, inspectorApiMock } = vi.hoisted(() => ({
+  mockInvoke: vi.fn().mockImplementation((command: string, args?: unknown) => {
+    if (command.includes('browser_webview_set_hit_test')) {
+      return Promise.resolve({
+        status: 'unsupported',
+        reason: 'Native browser hit-test is not implemented',
+      });
+    }
+    if (
+      command === 'browser_webview_create' ||
+      command === 'browser_webview_navigate'
+    ) {
+      const commandArgs = (args ?? {}) as Record<string, unknown>;
+      const tabId = commandArgs.tabId;
+      const url =
+        command === 'browser_webview_create'
+          ? commandArgs.initialUrl
+          : commandArgs.url;
+      queueMicrotask(() =>
+        emitNativeBrowserEvent('browser://navigation-state', {
+          tabId,
+          url: typeof url === 'string' ? url : 'about:blank',
+          title: '',
+          canGoBack: false,
+          canGoForward: false,
+          isLoading: false,
+        })
+      );
+    }
+    return Promise.resolve(undefined);
+  }),
+  inspectorApiMock: {
+    setInspector: vi.fn(),
+    listener: null as ((event: unknown) => void) | null,
+    nativeEvents: new Map<string, Set<(event: { payload: unknown }) => void>>(),
+  },
+}));
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: (...args: unknown[]) => mockInvoke(...args),
+}));
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn(
+    async (
+      eventName: string,
+      callback: (event: { payload: unknown }) => void
+    ) => {
+      const listeners =
+        inspectorApiMock.nativeEvents.get(eventName) ?? new Set();
+      listeners.add(callback);
+      inspectorApiMock.nativeEvents.set(eventName, listeners);
+      return () => {
+        listeners.delete(callback);
+      };
+    }
+  ),
+}));
+
+vi.mock('./nativeBrowserInspectorApi', () => ({
+  browserWebviewSetInspector: inspectorApiMock.setInspector,
+  onNativeBrowserInspectorEvent: (
+    callback: (event: unknown) => void,
+    observer?: { onReady?: () => void; onError?: (error: Error) => void }
+  ) => {
+    inspectorApiMock.listener = callback;
+    observer?.onReady?.();
+    return vi.fn();
+  },
+}));
+
+function emitInspectorEvent(event: NativeBrowserInspectorEvent) {
+  act(() => inspectorApiMock.listener?.(event));
+}
+
+function emitNativeBrowserEvent(eventName: string, payload: unknown) {
+  act(() => {
+    for (const listener of inspectorApiMock.nativeEvents.get(eventName) ?? []) {
+      listener({ payload });
+    }
+  });
+}
+
+function emitNativeBrowserNavigationSettled(url = 'http://localhost:5173') {
+  emitNativeBrowserEvent('browser://navigation-state', {
+    tabId: 'browser-default',
+    url,
+    title: '',
+    isLoading: false,
+  });
+}
 
 function renderCard(initialTarget?: string) {
   return render(
@@ -48,40 +135,45 @@ function renderCard(initialTarget?: string) {
 
 describe('PreviewCard 原生预览浏览器与透明代理', () => {
   beforeEach(() => {
+    (window as any).__TAURI_INTERNALS__ = {};
+    resetNativeBrowserLifecyclesForTesting();
     localStorage.clear();
     vi.clearAllMocks();
+    mockInvoke.mockClear();
+    ToastStore.clear();
+    inspectorApiMock.listener = null;
+    inspectorApiMock.nativeEvents.clear();
+    inspectorApiMock.setInspector.mockResolvedValue(undefined);
     setCachedActivePorts([5173]);
     useSessionStore.setState({
       activeSessionId: '',
       sessionsById: {},
+      composerDrafts: {},
     });
   });
 
   afterEach(() => {
+    delete (window as any).__TAURI_INTERNALS__;
+    resetNativeBrowserLifecyclesForTesting();
     cleanup();
     localStorage.clear();
     clearActivePortCache();
+    ToastStore.clear();
     useSessionStore.setState({
       activeSessionId: '',
       sessionsById: {},
+      composerDrafts: {},
     });
   });
 
-  describe('1. 代理 URL 解析函数 (toProxyPreviewUrl / safeIframeSrc / isLocalDevUrl)', () => {
-    it('外部 HTTP/HTTPS URL：自动重定向至 /__crish_preview_proxy 同源代理端点', () => {
-      const ext1 = 'https://example.com';
-      const ext2 = 'http://api.github.com/v1/docs';
-      const ext3 = 'https://sub.domain.org:8443/page?query=1&sort=desc';
-
-      expect(toProxyPreviewUrl(ext1)).toBe(
-        `/__crish_preview_proxy?url=${encodeURIComponent(ext1)}`
+  describe('1. 基础 URL 解析与验证 (safeIframeSrc / isLocalDevUrl)', () => {
+    it('安全 URL 判定放行与拦截', () => {
+      expect(safeIframeSrc('https://example.com')).toBe('https://example.com');
+      expect(safeIframeSrc('http://localhost:3000')).toBe(
+        'http://localhost:3000'
       );
-      expect(toProxyPreviewUrl(ext2)).toBe(
-        `/__crish_preview_proxy?url=${encodeURIComponent(ext2)}`
-      );
-      expect(toProxyPreviewUrl(ext3)).toBe(
-        `/__crish_preview_proxy?url=${encodeURIComponent(ext3)}`
-      );
+      expect(safeIframeSrc('javascript:void(0)')).toBeNull();
+      expect(safeIframeSrc('')).toBeNull();
     });
 
     it('本地开发服务 URL：直连不走代理', () => {
@@ -99,49 +191,19 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
 
       for (const loc of locals) {
         expect(isLocalDevUrl(loc)).toBe(true);
-        expect(toProxyPreviewUrl(loc)).toBe(loc);
       }
     });
 
-    it('空白与特殊协议 URL：保持原样或安全直连', () => {
-      expect(toProxyPreviewUrl('')).toBe('');
-      expect(toProxyPreviewUrl('about:blank')).toBe('about:blank');
-      expect(toProxyPreviewUrl('data:text/html,<h1>Test</h1>')).toBe(
-        'data:text/html,<h1>Test</h1>'
-      );
-    });
-
-    // audit-repair-202609 T19：injectPreviewBridgeHtml 已删除——桥脚本唯一
-    // 真源为 dev-server/previewBridgeScript.ts（由代理在服务端注入），
-    // 其契约断言见 previewBridgeScript.test.ts。
-
-    it('file 协议处理', () => {
-      expect(toProxyPreviewUrl('file:///path/to/page.html')).toBe(
-        'file:///path/to/page.html'
-      );
-    });
-
-    it('已是代理端点的 URL：幂等处理，不重复封装', () => {
-      const proxyUrl1 =
-        '/__crish_preview_proxy?url=https%3A%2F%2Fexample.com';
-      expect(toProxyPreviewUrl(proxyUrl1)).toBe(proxyUrl1);
-
-      const proxyUrl2 =
-        'http://127.0.0.1:8765/v1/preview/proxy?url=https%3A%2F%2Fexample.com';
-      expect(toProxyPreviewUrl(proxyUrl2)).toBe(proxyUrl2);
-    });
-
     // audit-repair-202609 T20：initialTarget（preview:<target> resolver 透传）
-    // 挂载时导航一次，iframe 加载该目标的代理地址
-    it('initialTarget 挂载时导航到目标（iframe src 为该目标的代理端点）', async () => {
+    // 挂载时导航一次，NativeBrowserSurface 加载该目标
+    it('initialTarget 挂载时导航到目标（NativeBrowserSurface 加载该目标）', async () => {
       renderCard('https://example.com/landing');
 
       await waitFor(() => {
-        const iframe = document.querySelector('iframe');
-        expect(iframe).toBeTruthy();
-        expect(iframe?.getAttribute('src')).toContain('/__crish_preview_proxy');
-        expect(iframe?.getAttribute('src')).toContain(
-          encodeURIComponent('https://example.com/landing')
+        const surface = document.querySelector('[data-native-surface="true"]');
+        expect(surface).toBeTruthy();
+        expect(surface?.getAttribute('data-initial-url')).toBe(
+          'https://example.com/landing'
         );
       });
     });
@@ -164,13 +226,13 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
       });
     });
 
-    it('safeIframeSrc 安全判定：对外部合法 URL 返回代理地址，对非法/危险 scheme 返回 null', () => {
-      // 外部合法 URL 走代理
-      expect(safeIframeSrc('https://example.com')).toBe(
-        `/__crish_preview_proxy?url=${encodeURIComponent('https://example.com')}`
-      );
+    it('safeIframeSrc 安全判定：对外部合法 URL 直接放行原样，对非法/危险 scheme 返回 null', () => {
+      // 外部合法 URL 直接放行原样
+      expect(safeIframeSrc('https://example.com')).toBe('https://example.com');
       // 本地合法 URL 直连
-      expect(safeIframeSrc('http://localhost:5173')).toBe('http://localhost:5173');
+      expect(safeIframeSrc('http://localhost:5173')).toBe(
+        'http://localhost:5173'
+      );
       // 空白 / 空串返回 null
       expect(safeIframeSrc('')).toBeNull();
       expect(safeIframeSrc('about:blank')).toBeNull();
@@ -203,28 +265,31 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
       const chip = await screen.findByRole('button', {
         name: /localhost:5173/,
       });
-      expect(chip.textContent).toContain('运行中的本地服务:');
-      expect(chip.textContent).toContain('localhost:5173');
+      expect(chip.textContent).toBe('localhost:5173');
       fireEvent.click(chip);
 
       await waitFor(() => {
-        const iframe = document.querySelector('iframe');
-        expect(iframe).toBeTruthy();
-        expect(iframe?.getAttribute('src')).toBe('http://localhost:5173');
+        const surface = document.querySelector('[data-native-surface="true"]');
+        expect(surface).toBeTruthy();
+        expect(surface?.getAttribute('data-initial-url')).toBe(
+          'http://localhost:5173'
+        );
       });
     });
 
-    it('外部网站自动转换为同源代理端点加载', async () => {
+    it('外部网站导航至 NativeBrowserSurface', async () => {
       renderCard();
       const input = screen.getByLabelText('预览地址');
-      fireEvent.change(input, { target: { value: 'https://example.com/demo' } });
+      fireEvent.change(input, {
+        target: { value: 'https://example.com/demo' },
+      });
       fireEvent.submit(input.closest('form')!);
 
       await waitFor(() => {
-        const iframe = document.querySelector('iframe');
-        expect(iframe).toBeTruthy();
-        expect(iframe?.getAttribute('src')).toBe(
-          `/__crish_preview_proxy?url=${encodeURIComponent('https://example.com/demo')}`
+        const surface = document.querySelector('[data-native-surface="true"]');
+        expect(surface).toBeTruthy();
+        expect(surface?.getAttribute('data-initial-url')).toBe(
+          'https://example.com/demo'
         );
       });
     });
@@ -252,149 +317,321 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
       expect(inspectorBtn).toBeDisabled();
     });
 
-    it('DOM 元素拾取器：点击切换激活态并向 iframe 发送 INSPECT_TOGGLE 指令', async () => {
+    it('Native surface 创建完成前禁用拾取，创建成功后启用', async () => {
+      const previousImplementation = mockInvoke.getMockImplementation();
+      let releaseCreate!: () => void;
+      const createGate = new Promise<void>((resolve) => {
+        releaseCreate = resolve;
+      });
+      mockInvoke.mockImplementation((command: string, args?: unknown) => {
+        if (command === 'browser_webview_create') return createGate;
+        return previousImplementation?.(command, args);
+      });
+
+      renderCard();
+      fireEvent.click(
+        await screen.findByRole('button', { name: /localhost:5173/ })
+      );
+      const inspectorBtn = screen.getByLabelText('拾取页面元素');
+      try {
+        await waitFor(() =>
+          expect(mockInvoke).toHaveBeenCalledWith(
+            'browser_webview_create',
+            expect.objectContaining({ tabId: 'browser-default' })
+          )
+        );
+        expect(inspectorBtn).toBeDisabled();
+
+        await act(async () => {
+          releaseCreate();
+          await createGate;
+        });
+        emitNativeBrowserNavigationSettled();
+        await waitFor(() => expect(inspectorBtn).toBeEnabled());
+      } finally {
+        releaseCreate();
+        if (previousImplementation) {
+          mockInvoke.mockImplementation(previousImplementation);
+        }
+      }
+    });
+
+    it('Native navigation loading 保留 Inspector 意图并在新文档 READY 后恢复探针', async () => {
+      renderCard();
+      fireEvent.click(
+        await screen.findByRole('button', { name: /localhost:5173/ })
+      );
+      emitNativeBrowserNavigationSettled();
+      const inspectorBtn = screen.getByLabelText('拾取页面元素');
+      await waitFor(() => expect(inspectorBtn).toBeEnabled());
+      fireEvent.click(inspectorBtn);
+      await waitFor(() =>
+        expect(inspectorBtn).toHaveAttribute('aria-pressed', 'true')
+      );
+      await waitFor(() =>
+        expect(inspectorApiMock.setInspector).toHaveBeenCalledWith(
+          'browser-default',
+          true
+        )
+      );
+
+      emitNativeBrowserEvent('browser://navigation-state', {
+        tabId: 'browser-default',
+        url: 'http://localhost:5173',
+        title: '',
+        isLoading: true,
+      });
+      expect(inspectorBtn).toBeDisabled();
+      expect(inspectorBtn.getAttribute('aria-pressed')).toBe('true');
+
+      emitInspectorEvent({
+        tabId: 'browser-default',
+        type: 'INSPECT_READY',
+      });
+      await waitFor(() =>
+        expect(inspectorApiMock.setInspector).toHaveBeenCalledTimes(2)
+      );
+      expect(inspectorApiMock.setInspector).toHaveBeenLastCalledWith(
+        'browser-default',
+        true
+      );
+      expect(inspectorBtn).toBeDisabled();
+
+      emitNativeBrowserEvent('browser://navigation-state', {
+        tabId: 'browser-default',
+        url: 'http://localhost:5173',
+        title: '',
+        isLoading: false,
+      });
+      await waitFor(() => expect(inspectorBtn).toBeEnabled());
+      expect(inspectorBtn.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('DOM 元素拾取器：点击切换激活态', async () => {
       renderCard();
       // 先加载一个本地页面
-      const chip = await screen.findByRole('button', { name: /localhost:5173/ });
+      const chip = await screen.findByRole('button', {
+        name: /localhost:5173/,
+      });
       fireEvent.click(chip);
 
       await waitFor(() => {
-        expect(document.querySelector('iframe')).toBeTruthy();
+        expect(
+          document.querySelector('[data-native-surface="true"]')
+        ).toBeTruthy();
       });
+      emitNativeBrowserNavigationSettled();
 
       const inspectorBtn = screen.getByLabelText('拾取页面元素');
-      expect(inspectorBtn).not.toBeDisabled();
+      await waitFor(() => expect(inspectorBtn).toBeEnabled());
       expect(inspectorBtn.getAttribute('aria-pressed')).toBe('false');
-
-      const iframe = document.querySelector('iframe')!;
-      const postMessageSpy = vi.fn();
-      Object.defineProperty(iframe, 'contentWindow', {
-        value: { postMessage: postMessageSpy },
-        writable: true,
-      });
 
       // 点击激活拾取器
       fireEvent.click(inspectorBtn);
       expect(inspectorBtn.getAttribute('aria-pressed')).toBe('true');
-      // §4.1 安全加固：targetOrigin 不再用通配 '*'，改为解析出的 iframe origin
-      // （previewHostBridge.ts resolveInspectorTargetOrigin：优先
-      // iframe.contentWindow.location.origin，跨域不可读则回落宿主 origin；
-      // 本用例以 { postMessage } 替身覆写 contentWindow ⇒ 无 location ⇒ 回落宿主 origin）
-      const expectedOrigin = window.location.origin;
-      expect(postMessageSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          source: CRISH_PREVIEW_HOST_SOURCE,
-          type: 'INSPECT_TOGGLE',
-          payload: { enabled: true },
-        }),
-        expectedOrigin
-      );
 
       // 再次点击退出拾取器
       fireEvent.click(inspectorBtn);
       expect(inspectorBtn.getAttribute('aria-pressed')).toBe('false');
-      expect(postMessageSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          source: CRISH_PREVIEW_HOST_SOURCE,
-          type: 'INSPECT_TOGGLE',
-          payload: { enabled: false },
-        }),
-        expectedOrigin
+      await waitFor(() =>
+        expect(inspectorApiMock.setInspector).toHaveBeenCalledTimes(2)
       );
-      // 反向锁定：任何一次投递都不得用通配 targetOrigin
-      for (const call of postMessageSpy.mock.calls) {
-        expect(call[1]).not.toBe('*');
-      }
+      expect(inspectorApiMock.setInspector).toHaveBeenNthCalledWith(
+        1,
+        'browser-default',
+        true
+      );
+      expect(inspectorApiMock.setInspector).toHaveBeenNthCalledWith(
+        2,
+        'browser-default',
+        false
+      );
     });
   });
 
-  describe('4. iframe 跨窗口消息与 DOM 拾取结果展示', () => {
-    it('接收 INSPECT_SELECT 消息：展示选中详情卡（标签/尺寸/复制/发送到 AI）', async () => {
+  describe('4. Native Inspector 事件与 DOM 拾取结果展示', () => {
+    it('接收 INSPECT_SELECT 事件：展示选中详情卡（标签/尺寸/复制/发送到 AI）', async () => {
       renderCard();
       // 加载页面
-      const chip = await screen.findByRole('button', { name: /localhost:5173/ });
+      const chip = await screen.findByRole('button', {
+        name: /localhost:5173/,
+      });
       fireEvent.click(chip);
 
       await waitFor(() => {
-        expect(document.querySelector('iframe')).toBeTruthy();
+        expect(
+          document.querySelector('[data-native-surface="true"]')
+        ).toBeTruthy();
       });
+      emitNativeBrowserNavigationSettled();
 
-      // 派发新协议 INSPECT_SELECT 消息
-      // §4.1：subscribeToInspector 先校验 origin 白名单
-      // （previewProtocol.ts:110 isAllowedPreviewMessageOrigin === window.location.origin）
-      // 再解析 source/type 防伪造；不带 origin 的 MessageEvent 会被直接丢弃。
-      act(() => {
-        window.dispatchEvent(
-          new MessageEvent('message', {
-            origin: window.location.origin,
-            data: {
-              source: CRISH_PREVIEW_INSPECTOR_SOURCE,
-              type: 'INSPECT_SELECT',
-              payload: {
-                tagName: 'button',
-                id: 'submit-btn',
-                classes: ['submit', 'primary'],
-                attributes: { 'data-testid': 'submit-btn' },
-                bestSelector: 'button.submit.primary',
-                xpath: '/html/body/button[1]',
-                rect: { x: 10, y: 20, width: 100, height: 40 },
-                computedStyles: {
-                  display: 'block',
-                  position: 'relative',
-                  color: '#fff',
-                  backgroundColor: '#2563eb',
-                  fontSize: '14px',
-                  margin: '0px',
-                  padding: '4px 8px',
-                },
-                outerHtmlSnippet: '<button>Go</button>',
-                textContent: 'Go',
-              },
-            },
-          })
-        );
+      const inspectorBtn = screen.getByLabelText('拾取页面元素');
+      await waitFor(() => expect(inspectorBtn).toBeEnabled());
+      fireEvent.click(inspectorBtn);
+      await waitFor(() =>
+        expect(inspectorApiMock.setInspector).toHaveBeenCalledWith(
+          'browser-default',
+          true
+        )
+      );
+
+      emitInspectorEvent({
+        tabId: 'browser-default',
+        type: 'INSPECT_SELECT',
+        payload: {
+          tagName: 'button',
+          id: 'submit-btn',
+          classes: ['submit', 'primary'],
+          attributes: { 'data-testid': 'submit-btn' },
+          bestSelector: 'button.submit.primary',
+          xpath: '/html/body/button[1]',
+          rect: { x: 10, y: 20, width: 100, height: 40 },
+          computedStyles: {
+            display: 'block',
+            position: 'relative',
+            color: '#fff',
+            backgroundColor: '#2563eb',
+            fontSize: '14px',
+            margin: '0px',
+            padding: '4px 8px',
+          },
+          outerHtmlSnippet: '<button>Go</button>',
+          textContent: 'Go',
+        },
       });
 
       await waitFor(() => {
-        expect(screen.getByText('已拾取 DOM 元素：')).toBeTruthy();
-        expect(screen.getByText('<button#submit-btn.submit.primary>')).toBeTruthy();
+        expect(
+          screen.getByText('<button#submit-btn.submit.primary>')
+        ).toBeTruthy();
       });
 
       // 选中详情卡带出尺寸与操作按钮
       expect(screen.getByText('100×40')).toBeTruthy();
       expect(screen.getByLabelText('复制选择器')).toBeTruthy();
       expect(screen.getByLabelText('发送到 AI')).toBeTruthy();
+
+      fireEvent.click(screen.getByLabelText('发送到 AI'));
+      await waitFor(() =>
+        expect(
+          ToastStore.getToasts().some((item) =>
+            String(item.message).includes('当前没有可用的对话')
+          )
+        ).toBe(true)
+      );
+      expect(
+        ToastStore.getToasts().some((item) =>
+          String(item.message).includes('已发送到对话输入框')
+        )
+      ).toBe(false);
+      expect(useSessionStore.getState().composerDrafts).toEqual({});
     });
 
-    it('接收 INSPECT_HOVER 消息：展示悬停浮层（Tag/选择器/坐标）', async () => {
+    it('发送 DOM 引用时将完整结构与真实页面来源写入会话草稿', async () => {
+      useSessionStore.setState({
+        activeSessionId: 'session-dom-reference',
+        sessionsById: {
+          'session-dom-reference': {} as SessionState,
+        },
+      });
       renderCard();
-      const chip = await screen.findByRole('button', { name: /localhost:5173/ });
+      fireEvent.click(
+        await screen.findByRole('button', { name: /localhost:5173/ })
+      );
+      await waitFor(() =>
+        expect(
+          document.querySelector('[data-native-surface="true"]')
+        ).toBeTruthy()
+      );
+      emitNativeBrowserEvent('browser://navigation-state', {
+        tabId: 'browser-default',
+        url: 'https://redirected.example/page',
+        title: 'Actual page title',
+        isLoading: false,
+      });
+      await waitFor(() =>
+        expect(screen.getByLabelText('预览地址')).toHaveValue(
+          'https://redirected.example/page'
+        )
+      );
+
+      const inspectorBtn = screen.getByLabelText('拾取页面元素');
+      await waitFor(() => expect(inspectorBtn).toBeEnabled());
+      fireEvent.click(inspectorBtn);
+      await waitFor(() =>
+        expect(inspectorApiMock.setInspector).toHaveBeenCalledWith(
+          'browser-default',
+          true
+        )
+      );
+      emitInspectorEvent({
+        tabId: 'browser-default',
+        type: 'INSPECT_SELECT',
+        payload: {
+          tagName: 'button',
+          id: 'submit-btn',
+          classes: ['primary'],
+          attributes: { 'data-testid': 'submit-btn' },
+          bestSelector: '#submit-btn',
+          xpath: '/html/body/button[1]',
+          rect: { x: 10, y: 20, width: 100, height: 40 },
+          computedStyles: {
+            display: 'block',
+            position: 'relative',
+            color: '#fff',
+            backgroundColor: '#2563eb',
+            fontSize: '14px',
+            margin: '0px',
+            padding: '4px 8px',
+          },
+          outerHtmlSnippet: '<button>Go</button>',
+          textContent: 'Go',
+        },
+      });
+      fireEvent.click(await screen.findByLabelText('发送到 AI'));
+
+      await waitFor(() => {
+        const draft =
+          useSessionStore.getState().composerDrafts['session-dom-reference'];
+        expect(draft).toContain(
+          'DOM_REFERENCE_PAYLOAD schema=DomReferenceChipPayload version=1.0'
+        );
+        expect(draft).toContain('"kind": "dom_reference"');
+        expect(draft).toContain('"xpath": "/html/body/button[1]"');
+        expect(draft).toContain(
+          '"sourceUrl": "https://redirected.example/page"'
+        );
+        expect(draft).toContain('"pageTitle": "Actual page title"');
+      });
+    });
+
+    it('接收 INSPECT_HOVER 事件：展示悬停浮层（Tag/选择器/坐标）', async () => {
+      renderCard();
+      const chip = await screen.findByRole('button', {
+        name: /localhost:5173/,
+      });
       fireEvent.click(chip);
 
       await waitFor(() => {
-        expect(document.querySelector('iframe')).toBeTruthy();
+        expect(
+          document.querySelector('[data-native-surface="true"]')
+        ).toBeTruthy();
       });
+      emitNativeBrowserNavigationSettled();
 
       // 激活拾取态后悬停消息才展示浮层
       const inspectorBtn = screen.getByLabelText('拾取页面元素');
+      await waitFor(() => expect(inspectorBtn).toBeEnabled());
       fireEvent.click(inspectorBtn);
 
-      act(() => {
-        window.dispatchEvent(
-          new MessageEvent('message', {
-            // §4.1：origin 白名单校验（同 INSPECT_SELECT 用例）
-            origin: window.location.origin,
-            data: {
-              source: CRISH_PREVIEW_INSPECTOR_SOURCE,
-              type: 'INSPECT_HOVER',
-              payload: {
-                tagName: 'div',
-                selector: 'div.card',
-                rect: { x: 4, y: 8, width: 120, height: 60 },
-              },
-            },
-          })
-        );
+      emitInspectorEvent({
+        tabId: 'browser-default',
+        type: 'INSPECT_HOVER',
+        payload: {
+          tagName: 'div',
+          selector: 'div.card',
+          rect: { x: 4, y: 8, width: 120, height: 60 },
+        },
       });
 
       await waitFor(() => {
@@ -403,6 +640,30 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
         expect(overlay?.textContent).toContain('div');
         expect(overlay?.textContent).toContain('div.card');
       });
+    });
+    it('Escape 停止拾取并发送 enabled:false', async () => {
+      renderCard();
+      fireEvent.click(
+        await screen.findByRole('button', { name: /localhost:5173/ })
+      );
+      emitNativeBrowserNavigationSettled();
+      const inspectorBtn = screen.getByLabelText('拾取页面元素');
+      await waitFor(() => expect(inspectorBtn).not.toBeDisabled());
+
+      fireEvent.click(inspectorBtn);
+      expect(inspectorBtn.getAttribute('aria-pressed')).toBe('true');
+      fireEvent.keyDown(window, { key: 'Escape' });
+
+      await waitFor(() =>
+        expect(inspectorBtn.getAttribute('aria-pressed')).toBe('false')
+      );
+      await waitFor(() =>
+        expect(inspectorApiMock.setInspector).toHaveBeenCalledTimes(2)
+      );
+      expect(inspectorApiMock.setInspector).toHaveBeenLastCalledWith(
+        'browser-default',
+        false
+      );
     });
     // audit-repair-202609 T19：legacy `crish:dom-inspected` 协议已随
     // previewDomInspector 双轨清退而删除；拾取 Badge 的行为由上方

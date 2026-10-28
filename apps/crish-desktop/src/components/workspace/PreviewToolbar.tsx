@@ -6,8 +6,8 @@
 import React from 'react';
 
 import styles from './PreviewCard.module.css';
-import { IconButton, Input } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { IconButton, Input } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 
 /** 预览状态（可回退/前进/空白/src/加载/地址/书签/历史/外部打开等收敛为单一子对象） */
 export interface PreviewToolbarPreviewProps {
@@ -24,14 +24,17 @@ export interface PreviewToolbarPreviewProps {
   canExternal: boolean;
   /** DOM 检查器是否处于激活状态 */
   isInspectorActive?: boolean;
+  /** Native Webview 创建完成且当前可接收 Inspector 命令 */
+  isInspectorAvailable?: boolean;
 }
 
-/** 导航操作域（后退/前进/主页/刷新/地址提交与变更/清空收敛为单一子对象） */
+/** 导航操作域（后退/前进/主页/刷新/停止/地址提交与变更/清空收敛为单一子对象） */
 export interface PreviewToolbarNavigationProps {
   onBack: () => void;
   onForward: () => void;
   onHome: () => void;
   onReload: () => void;
+  onStop?: () => void;
   onUrlSubmit: (raw: string) => void;
   onUrlChange: (v: string) => void;
   onClearUrl?: () => void;
@@ -76,15 +79,17 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
     showHist,
     canExternal,
     isInspectorActive,
+    isInspectorAvailable,
   } = preview;
   const {
     onBack,
     onForward,
     onHome,
     onReload,
+    onStop,
     onUrlSubmit,
     onUrlChange,
-    onClearUrl: _onClearUrl,
+    onClearUrl,
   } = navigation;
   const { onBookmark, onToggleHist, onOpenExternal, onToggleInspector } =
     actions;
@@ -129,11 +134,11 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
         type="button"
         variant="ghost"
         size="sm"
-        disabled={blank || !frameSrc}
-        onClick={onReload}
-        aria-label="刷新"
+        disabled={loading ? false : blank || !frameSrc}
+        onClick={loading ? (onStop ?? onReload) : onReload}
+        aria-label={loading ? '停止加载' : '刷新'}
         aria-busy={loading || undefined}
-        tooltip="刷新"
+        tooltip={loading ? '停止加载' : '刷新'}
         icon={
           loading ? (
             <AppIcon name="loader" size={iconSz} className={styles.spin} />
@@ -158,6 +163,29 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
           value={urlInput}
           placeholder="请输入网址"
           onChange={(e) => onUrlChange(e.target.value)}
+          clearable
+          onClear={() => {
+            if (onClearUrl) {
+              onClearUrl();
+            } else {
+              onUrlChange('');
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              // Esc 键快捷清空；若已为空则快捷重置为 about:blank
+              if (urlInput) {
+                if (onClearUrl) {
+                  onClearUrl();
+                } else {
+                  onUrlChange('');
+                }
+              } else {
+                onUrlSubmit('about:blank');
+              }
+            }
+          }}
           prefixIcon={<AppIcon name="globe" size={13} aria-hidden />}
           spellCheck={false}
           aria-label="预览地址"
@@ -176,11 +204,15 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
         active={isInspectorActive}
         className={isInspectorActive ? styles.inspectorActive : undefined}
         onClick={onToggleInspector}
-        disabled={blank || !frameSrc}
+        disabled={blank || !frameSrc || isInspectorAvailable === false}
         aria-label="拾取页面元素"
         aria-pressed={isInspectorActive}
         tooltip={
-          isInspectorActive ? '退出元素拾取 (Esc)' : '拾取页面元素 (Inspect)'
+          isInspectorAvailable === false
+            ? '原生页面尚未就绪'
+            : isInspectorActive
+              ? '退出元素拾取 (Esc)'
+              : '拾取页面元素 (Inspect)'
         }
         icon={<AppIcon name="mouse-pointer-click" size={iconSz} />}
       />

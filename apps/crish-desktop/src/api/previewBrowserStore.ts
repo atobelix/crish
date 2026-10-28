@@ -46,7 +46,9 @@ export type BrowseUrlErr = { ok: false; reason: BrowseUrlReason };
 export type NormalizeBrowseResult = BrowseUrlOk | BrowseUrlErr;
 
 /** 类型守卫：成功路径可读 result.url，失败路径可读 result.reason */
-export function isBrowseUrlOk(result: NormalizeBrowseResult): result is BrowseUrlOk {
+export function isBrowseUrlOk(
+  result: NormalizeBrowseResult
+): result is BrowseUrlOk {
   return result.ok === true;
 }
 
@@ -177,7 +179,10 @@ export type SetPreviewUrlOptions = {
   silent?: boolean;
 };
 
-export function setPreviewUrl(url: string, options?: SetPreviewUrlOptions): void {
+export function setPreviewUrl(
+  url: string,
+  options?: SetPreviewUrlOptions
+): void {
   const silent = options?.silent === true;
   // 写路径统一走校验：拒绝危险 scheme，避免脏数据落盘
   const checked = validateBrowseUrl(url);
@@ -202,7 +207,9 @@ export function setPreviewUrl(url: string, options?: SetPreviewUrlOptions): void
 function dispatchPreviewUrl(url: string): void {
   if (typeof window === 'undefined') return;
   try {
-    window.dispatchEvent(new CustomEvent('crish-preview-url', { detail: { url } }));
+    window.dispatchEvent(
+      new CustomEvent('crish-preview-url', { detail: { url } })
+    );
   } catch {
     /* swallow-ok: 预览 URL 事件分发失败不影响已跳转 */
   }
@@ -263,11 +270,12 @@ export function setPreviewFavicon(url: string, favicon: string): void {
 export function prependHistoryUrl(
   list: readonly string[],
   url: string,
-  max: number = MAX_HIST,
+  max: number = MAX_HIST
 ): string[] {
   const u = sanitizeBrowseInput(url);
   if (!u || isAboutBlank(u) || isBlockedScheme(u)) return list.slice();
-  if (hasExplicitScheme(u) && !isAllowedExplicitSchemeUrl(u)) return list.slice();
+  if (hasExplicitScheme(u) && !isAllowedExplicitSchemeUrl(u))
+    return list.slice();
   const cap = Number.isFinite(max) && max > 0 ? Math.floor(max) : MAX_HIST;
   const next = [u, ...list.filter((x) => x !== u)];
   return next.length > cap ? next.slice(0, cap) : next;
@@ -331,6 +339,11 @@ export function togglePreviewBookmark(url: string, title?: string): boolean {
   return true;
 }
 
+export function clearPreviewBookmarks(): void {
+  writeLs(BOOK_KEY, JSON.stringify([]));
+  dispatchBookmarksChanged();
+}
+
 export function removePreviewBookmark(url: string): void {
   const u = sanitizeBrowseInput(url);
   if (!u) return;
@@ -363,7 +376,10 @@ export function canOpenExternally(url: string): boolean {
 }
 
 // 展示工具函数拆至 previewBrowserDisplay（纯函数子文件）
-import { previewDisplayHost, previewDisplayLabel } from './previewBrowserDisplay';
+import {
+  previewDisplayHost,
+  previewDisplayLabel,
+} from './previewBrowserDisplay';
 export { previewDisplayHost, previewDisplayLabel };
 
 /**
@@ -389,17 +405,90 @@ export function validateBrowseUrl(raw: unknown): NormalizeBrowseResult {
   const url = normalizeBrowseUrl(t);
   if (isAboutBlank(url) && !isAboutBlank(t) && t !== '') {
     // normalize 将危险输入塌缩为 blank → 视为协议不支持
-    if (isBlockedScheme(t) || (hasExplicitScheme(t) && !isAllowedExplicitSchemeUrl(t))) {
+    if (
+      isBlockedScheme(t) ||
+      (hasExplicitScheme(t) && !isAllowedExplicitSchemeUrl(t))
+    ) {
       return { ok: false, reason: BROWSE_URL_REASON.blockedScheme };
     }
   }
   if (isBlockedScheme(url)) {
     return { ok: false, reason: BROWSE_URL_REASON.blockedScheme };
   }
-  if (hasExplicitScheme(url) && !isAllowedExplicitSchemeUrl(url) && !isAboutBlank(url)) {
+  if (
+    hasExplicitScheme(url) &&
+    !isAllowedExplicitSchemeUrl(url) &&
+    !isAboutBlank(url)
+  ) {
     return { ok: false, reason: BROWSE_URL_REASON.blockedScheme };
   }
   return { ok: true, url };
+}
+
+export type SearchEngineId = 'google' | 'bing' | 'duckduckgo' | 'baidu';
+
+export interface SearchEngineConfig {
+  id: SearchEngineId;
+  name: string;
+  searchUrl: (query: string) => string;
+}
+
+export const SEARCH_ENGINES: Record<SearchEngineId, SearchEngineConfig> = {
+  google: {
+    id: 'google',
+    name: 'Google',
+    searchUrl: (q: string) =>
+      `https://www.google.com/search?q=${encodeURIComponent(q)}`,
+  },
+  bing: {
+    id: 'bing',
+    name: 'Bing',
+    searchUrl: (q: string) =>
+      `https://www.bing.com/search?q=${encodeURIComponent(q)}`,
+  },
+  duckduckgo: {
+    id: 'duckduckgo',
+    name: 'DuckDuckGo',
+    searchUrl: (q: string) =>
+      `https://duckduckgo.com/?q=${encodeURIComponent(q)}`,
+  },
+  baidu: {
+    id: 'baidu',
+    name: 'Baidu',
+    searchUrl: (q: string) =>
+      `https://www.baidu.com/s?wd=${encodeURIComponent(q)}`,
+  },
+};
+
+const DEFAULT_SEARCH_ENGINE_KEY = 'crish_preview_default_search_engine';
+const DEFAULT_HOMEPAGE_KEY = 'crish_preview_homepage';
+
+export function getDefaultSearchEngine(): SearchEngineId {
+  const saved = readLs(DEFAULT_SEARCH_ENGINE_KEY);
+  if (saved && saved in SEARCH_ENGINES) {
+    return saved as SearchEngineId;
+  }
+  return 'google';
+}
+
+export function setDefaultSearchEngine(engine: SearchEngineId): void {
+  writeLs(DEFAULT_SEARCH_ENGINE_KEY, engine);
+}
+
+export function getPreviewHomepage(): string {
+  const saved = readLs(DEFAULT_HOMEPAGE_KEY);
+  if (saved && saved.trim()) return saved.trim();
+  return 'about:blank';
+}
+
+export function setPreviewHomepage(url: string): void {
+  writeLs(DEFAULT_HOMEPAGE_KEY, url.trim());
+}
+
+export function buildSearchUrl(query: string, engine?: SearchEngineId): string {
+  const target = engine ?? getDefaultSearchEngine();
+  const config = SEARCH_ENGINES[target] ?? SEARCH_ENGINES.google;
+  return config.searchUrl(query);
 }
 
 /** 规范化用户输入的地址（宽松；需要错误文案时用 validateBrowseUrl） */
@@ -421,12 +510,22 @@ export function normalizeBrowseUrl(raw: string): string {
   // 其它显式 scheme 不转 https，安全塌缩
   if (hasExplicitScheme(t)) return 'about:blank';
   // dev server 简写
-  if (/^localhost(:\d+)?(\/|$)/i.test(t) || /^\d+\.\d+\.\d+\.\d+(:\d+)?(\/|$)/.test(t)) {
+  if (
+    /^localhost(:\d+)?(\/|$)/i.test(t) ||
+    /^\d+\.\d+\.\d+\.\d+(:\d+)?(\/|$)/.test(t)
+  ) {
     return `http://${t}`;
   }
   // 端口简写 :5173 → localhost
   if (/^:\d{2,5}(\/|$)/.test(t)) {
     return `http://localhost${t}`;
+  }
+  // 纯搜索词智能识别：包含空格，或者是不包含点号（且无斜杠/冒号）的纯词汇，无缝使用默认搜索引擎检索
+  if (
+    /\s/.test(t) ||
+    (!t.includes('.') && !t.includes('/') && !t.includes(':'))
+  ) {
+    return buildSearchUrl(t);
   }
   if (/^[a-z0-9.-]+\.[a-z]{2,}([/:].*)?$/i.test(t)) {
     return `https://${t}`;
@@ -439,6 +538,9 @@ export function normalizeBrowseUrl(raw: string): string {
  * 成功静默；失败返回 reason，由调用方 toast。
  * 空串 / null → about:blank 并写入（空白预览）。
  */
+/** 智能规范化并补全用户输入的浏览地址或搜索词（SSOT 别名） */
+export const smartResolveBrowseUrl = normalizeBrowseUrl;
+
 export function applyPreviewNavigation(raw: unknown): NormalizeBrowseResult {
   const result = validateBrowseUrl(raw);
   if (!isBrowseUrlOk(result)) return result;

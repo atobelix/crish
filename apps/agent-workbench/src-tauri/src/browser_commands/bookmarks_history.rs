@@ -1,7 +1,7 @@
 use super::common::{invalid_input, map_browser_err};
-use crate::core_error::CoreError;
 use conex_browser::import::bookmarks::{parse_bookmarks, persist_bookmarks, BookmarksOptions};
 use conex_browser::import::history::{persist_history, read_history, HistoryOptions};
+use conex_run::core_error::CoreError;
 use serde::Serialize;
 use std::path::Path;
 

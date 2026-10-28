@@ -33,11 +33,12 @@
 .scrimPlaceholder {
   position: absolute;
   inset: 0;
-  background: var(--surface-translucent, hsla(0 0% 15% / 0.45));
+  background: var(--modal-scrim);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   pointer-events: none;
-  animation: fadeIn 150ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fadeIn var(--duration-normal, 150ms)
+    var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) forwards;
 }
 
 @keyframes fadeIn {

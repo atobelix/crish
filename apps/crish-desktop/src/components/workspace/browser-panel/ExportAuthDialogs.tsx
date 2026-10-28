@@ -5,7 +5,7 @@
  * ② 域名清单预览确认后才「另存为」写盘（§5.4 写盘仅走前端显式另存为路径））。
  */
 import React from 'react';
-import { ConfirmDialog } from '../../ui';
+import { ConfirmDialog } from '@/components/ui';
 import type { StorageStatePreview } from '../../../api/browserImportLib';
 import type { BusyKind } from './import-hooks/browserImportShared';
 
