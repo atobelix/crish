@@ -64,4 +64,33 @@ allow-git = [
 version = 2
 unmaintained = "all"
 yanked = "deny"
-ignore = []
+ignore = [
+    # ── 无维护传递依赖（复查日期 2026-10-28；下次复核 2027-01-31）──
+    # 均为上游传递依赖且 advisory 明确 "No safe upgrade is available"；
+    # 运行期仅消费其稳定 API，不处理不可信输入。解除条件：上游替换/归档移除。
+    { id = "RUSTSEC-2024-0320", reason = "yaml-rust：transitive（配置解析链），无安全升级；仅本地 YAML" },
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error：transitive 构建期宏依赖，无安全升级；不进运行时" },
+    { id = "RUSTSEC-2024-0436", reason = "paste：transitive 构建期宏依赖，无安全升级；不进运行时" },
+    { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml：transitive（yaml-rust 底层），无安全升级；仅本地 YAML" },
+    { id = "RUSTSEC-2025-0075", reason = "unic-char-range：transitive（IDNA/unicode 链），无安全升级；稳定只读表格" },
+    { id = "RUSTSEC-2025-0080", reason = "unic-common：transitive（IDNA/unicode 链），无安全升级；稳定只读表格" },
+    { id = "RUSTSEC-2025-0081", reason = "unic-char-property：transitive（IDNA/unicode 链），无安全升级；稳定只读表格" },
+    { id = "RUSTSEC-2025-0098", reason = "unic-ucd-version：transitive（IDNA/unicode 链），无安全升级；稳定只读表格" },
+    { id = "RUSTSEC-2025-0100", reason = "unic-ucd-ident：transitive（IDNA/unicode 链），无安全升级；稳定只读表格" },
+    { id = "RUSTSEC-2025-0134", reason = "rustls-pemfile：transitive（TLS 链），无安全升级；仅解析本地 PEM" },
+    { id = "RUSTSEC-2025-0141", reason = "bincode：transitive（Tauri IPC 序列化），无安全升级；仅本机进程间数据" },
+    { id = "RUSTSEC-2026-0215", reason = "smallstr：transitive（markup/HTML 链），无安全升级；只读解析" },
+    { id = "RUSTSEC-2026-0247", reason = "bitmaps：transitive（im 不可变容器链），无安全升级；只读内存容器" },
+    { id = "RUSTSEC-2026-0248", reason = "im：transitive（不可变容器链），无安全升级；只读内存容器" },
+    { id = "RUSTSEC-2026-0251", reason = "sized-chunks：transitive（im 底层），无安全升级；只读内存容器" },
+    { id = "RUSTSEC-2026-0370", reason = "zvariant：transitive（Linux zbus/D-Bus 链），无安全升级；Linux 桌面集成面" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names：transitive（Linux zbus/D-Bus 链），无安全升级；Linux 桌面集成面" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive：transitive（Linux zbus/D-Bus 链），无安全升级；Linux 桌面集成面" },
+    # ── zip 4.x（tauri-plugin-updater 2.12.0 传递依赖）──
+    # 直接依赖 conex-browser 已升级 zip 9.1.3 并剥离 SUID/SGID 位；插件侧
+    # 仅解压签名校验后的更新包（私钥签名 + TLS 下载），Windows 主发布面不受
+    # Unix SUID/symlink 语义影响。解除条件：tauri-plugin-updater 升级到 zip 9。
+    { id = "RUSTSEC-2026-0367", reason = "zip 4.6.1 仅经 tauri-plugin-updater；更新包先验签再解压，且 Windows 无 SUID 语义；上游升级即移除" },
+    { id = "RUSTSEC-2026-0368", reason = "zip 4.6.1 仅经 tauri-plugin-updater；更新包先验签再解压；上游升级即移除" },
+    { id = "RUSTSEC-2026-0369", reason = "zip 4.6.1 仅经 tauri-plugin-updater；更新包先验签再解压；上游升级即移除" },
+]

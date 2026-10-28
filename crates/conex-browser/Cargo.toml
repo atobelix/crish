@@ -54,8 +54,9 @@ url = { version = "2", features = ["serde"] }
 # CfT 下载（10 文档 §2.2）：workspace 0.13（json/rustls/stream），仅本模块消费
 reqwest = { workspace = true }
 # CfT zip 流式解压（10 文档 §2.2：enclosed_name 路径穿越防护 + 前缀剥离）：
-# zip 2.4 为稳定 API 线；default-features 关闭仅留 deflate 编解码器（Chrome 包只用 deflate）
-zip = { version = "2", default-features = false, features = ["deflate"] }
+# zip 9 为当前安全线（RUSTSEC-2026-0367/0368/0369 修复版本）；default-features
+# 关闭仅留 deflate 编解码器（Chrome 包只用 deflate）
+zip = { version = "9", default-features = false, features = ["deflate"] }
 # 受管 profile 删除走 conex-fs trash（R-2 裁决：用户资产不直接 remove，trash.rs 铁律）
 conex-fs = { path = "../conex-fs" }
 # 共享抽象层（05 文档 §6.1 接线级：FrameSource/InputBackend/ActionTargetGate 三 trait，

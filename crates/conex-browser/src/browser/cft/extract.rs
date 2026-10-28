@@ -44,6 +44,26 @@ pub(super) fn extract_zip_limited(
         let mut entry = archive
             .by_index(i)
             .map_err(|e| CftError::Extract(format!("读条目 {i} 失败：{e}")))?;
+        // 绝对路径 / 盘符前缀 / 上跳组件的原始名直接拒绝：zip 9 的
+        // enclosed_name 在 Windows 盘符形态下可能返回已净化相对路径，
+        // 单靠它不足以覆盖绝对路径注入（回归测试 extract_rejects_traversal）。
+        let raw_name = entry
+            .name()
+            .map_err(|e| CftError::Extract(format!("读条目 {i} 文件名失败：{e}")))?
+            .to_string();
+        let raw_bytes = raw_name.as_bytes();
+        if raw_name.starts_with('/')
+            || raw_name.starts_with('\\')
+            || raw_name.starts_with("//")
+            || raw_bytes.get(1) == Some(&b':')
+            || Path::new(&raw_name)
+                .components()
+                .any(|c| matches!(c, Component::Prefix(_) | Component::RootDir))
+        {
+            return Err(CftError::Extract(format!(
+                "条目 {i} 为绝对路径或盘符路径：{raw_name}"
+            )));
+        }
         let enclosed = entry
             .enclosed_name()
             .ok_or_else(|| CftError::Extract(format!("条目 {i} 路径穿越：enclosed_name 拒绝")))?;
@@ -98,12 +118,17 @@ pub(super) fn extract_zip_limited(
                     actual: extracted_bytes,
                 });
             }
-            // unix 权限位回写（install.rs 同款；Windows 无此语义）
+            // unix 权限位回写（install.rs 同款；Windows 无此语义）。
+            // 仅保留 rwx 位：剥离 SUID/SGID/sticky，防特权位随第三方包落盘
+            // （RUSTSEC-2026-0367 同型防护；zip 9 已修复，双保险）。
             #[cfg(unix)]
             {
                 if let Some(mode) = entry.unix_mode() {
                     use std::os::unix::fs::PermissionsExt;
-                    std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(mode))?;
+                    std::fs::set_permissions(
+                        &dest,
+                        std::fs::Permissions::from_mode(mode & 0o777),
+                    )?;
                 }
             }
         }
