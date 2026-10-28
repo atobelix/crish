@@ -113,7 +113,7 @@ pub(crate) fn cleanup_session_outputs(
     output_dir_meta: Option<&str>,
     output_root_meta: Option<&str>,
 ) -> Result<SessionOutputsCleanup, CoreError> {
-    let trash_root = crate::core_run_commands::trash_root_for(app)?;
+    let trash_root = crate::run_ipc::trash_root_for(app)?;
     let guard = crate::workspace::resolve_guard(app, "").map_err(|e| {
         CoreError::Internal(format!(
             "工作区不可用（产出目录清理）：{}: {}",

@@ -20,7 +20,7 @@ export interface RegisteredTauriCommand {
   owner?: string;
 }
 
-// 注册面（153 条 = 与 command_manifest.rs `COMMAND_MANIFEST`、
+// 注册面（162 条 = 与 command_manifest.rs `COMMAND_MANIFEST`、
 // main.rs `command_registry!` 及前端 `BUILTIN_COMMAND_MANIFEST` 四方对齐；
 // 条数与集合一致性由 scripts/check-provider-single-track.mjs 的 D11 防线守护）：
 // - 注册面：`command_registry!` 宏已注册的命令，status=implemented；
@@ -264,6 +264,54 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     status: 'implemented',
     feature: 'browser storage state import',
   },
+  // ── 原生子 Webview 浏览器（生命周期、导航及预览检查）──
+  {
+    command: 'browser_webview_create',
+    status: 'implemented',
+    feature: 'native browser webview creation',
+  },
+  {
+    command: 'browser_webview_set_bounds',
+    status: 'implemented',
+    feature: 'native browser webview geometry',
+  },
+  {
+    command: 'browser_webview_set_visible',
+    status: 'implemented',
+    feature: 'native browser webview visibility',
+  },
+  {
+    command: 'browser_webview_navigate',
+    status: 'implemented',
+    feature: 'native browser webview navigation',
+  },
+  {
+    command: 'browser_webview_action',
+    status: 'implemented',
+    feature: 'native browser navigation actions',
+  },
+  {
+    command: 'browser_webview_close',
+    status: 'implemented',
+    feature: 'native browser webview cleanup',
+  },
+  {
+    command: 'browser_webview_set_muted',
+    status: 'implemented',
+    feature: 'native browser audio mute control',
+  },
+  {
+    command: 'browser_webview_set_hit_test',
+    status: 'implemented',
+    capabilityStatus: UNSUPPORTED_CODE,
+    feature: 'native browser hit-test capability query',
+    reason: 'The current host reports hit-test control as unsupported.',
+  },
+  {
+    command: 'browser_webview_set_inspector',
+    status: 'implemented',
+    feature: 'native browser preview inspector toggle',
+  },
   // ── 多端互通（R1-07/R1-08 配对 + 设备管理 + R1-09 网络环境）──
   {
     command: 'multi_device_pair_start',
@@ -398,6 +446,11 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     command: 'core_run_control',
     status: 'implemented',
     feature: 'run control signal',
+  },
+  {
+    command: 'core_set_run_permission_mode',
+    status: 'implemented',
+    feature: 'runtime permission mode switch for active session run',
   },
   {
     command: 'core_session_retract',

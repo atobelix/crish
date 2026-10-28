@@ -10,7 +10,7 @@ use crate::auth::client::CloudAuthError;
 use crate::auth::{
     AuthManager, CloudDeviceItem, RelayTicketResponse, SessionSnapshot, UserProfile,
 };
-use crate::core_error::CoreError;
+use conex_run::core_error::CoreError;
 
 /// `CloudAuthError` → `CoreError`（kind 语义对齐 PE-03 §2.4.2 映射表）：
 /// - Unauthorized → InvalidInput（登录态失效属调用时机问题，前端可按 kind 分类，

@@ -1,15 +1,13 @@
 //! 模型配置宿主适配：持有一个核心存储，注册变更事件，不维护第二份配置树。
 mod credentials;
 pub(crate) mod persistence;
-pub(crate) mod run_policy;
 
 #[cfg(not(test))]
 use std::sync::OnceLock;
 use std::sync::{Arc, Mutex};
 
 use agent_provider::model_store::{
-    CommittedModels, ModelsChange, ModelsSnapshot, ModelsStore, ModelsStoreError,
-    ResolvedModelConfig,
+    ModelsChange, ModelsSnapshot, ModelsStore, ModelsStoreError, ResolvedModelConfig,
 };
 use tauri::{Emitter, Manager};
 
@@ -68,10 +66,6 @@ pub(crate) fn models_store() -> Result<Arc<ModelsStore>, ModelsStoreError> {
     }
 }
 
-pub(crate) fn current_snapshot() -> Result<Arc<CommittedModels>, ModelsStoreError> {
-    models_store()?.committed()
-}
-
 pub(crate) fn resolve_active_model() -> Result<Option<ResolvedModelConfig>, ModelsStoreError> {
     models_store()?.resolve_active()
 }
@@ -100,12 +94,12 @@ pub(crate) fn publish_snapshot(app: &tauri::AppHandle, snapshot: &mut ModelsSnap
 /// 无窗口依赖，供测试直接调用以验证修订恒等（见 `engine_provider/protocol.rs`
 /// 测试模块 `committed_refresh_keeps_snapshot_revision_in_lockstep`）。
 pub(crate) fn sync_runtime_after_commit() {
-    crate::engine_provider::protocol::reload_live_catalog();
+    conex_run::engine_provider::protocol::reload_live_catalog();
 }
 
 fn publish_change(app: &tauri::AppHandle, change: ModelsChange) -> Result<(), ModelsStoreError> {
     sync_runtime_after_commit();
-    if let Some(state) = app.try_state::<Arc<crate::core_run_commands::CoreRunState>>() {
+    if let Some(state) = app.try_state::<Arc<conex_run::run::CoreRunState>>() {
         state.reload_provider();
     }
     app.emit("models-config-changed", &change)

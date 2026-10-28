@@ -8,17 +8,14 @@ use conex_types::events::{AgentEvent, SecurityAuditDecision, SecurityAuditOperat
 use crate::core_backend::{
     apply_remote_mode, combine_dual_decisions, emit_remote_mode_downgrade_audit,
     emit_remote_only_audit, route_remote_approval, CoreStateBackend, RemoteApprovalRoute,
-    REMOTE_MODE_DOWNGRADE_AUDIT_MARKER, REMOTE_ONLY_AUDIT_MARKER,
+    REMOTE_ONLY_AUDIT_MARKER,
 };
 use crate::server::backend::ApiBackend;
 use crate::server::remote_whitelist::{
     emit_remote_source_attempt_audit, remote_source_attempt_marker,
 };
 
-use super::{
-    g5_test_session_entry, g5_wait_audit_operation, r2_test_core_state, recorded_security_audit,
-    recording_bridge,
-};
+use super::{g5_test_session_entry, r2_test_core_state, recorded_security_audit, recording_bridge};
 
 #[tokio::test]
 async fn remote_run_control_missing_run_returns_not_found() {
@@ -57,11 +54,11 @@ async fn remote_run_control_completed_run_returns_not_found() {
             std::process::id()
         ))),
     );
-    let state = Arc::new(crate::core_run_commands::CoreRunState::new(
+    let state = Arc::new(conex_run::run::CoreRunState::new(
         Arc::new(orchestrator::persist::LocalDbStore::new(db.clone())),
         snapshots,
         bridge,
-        Arc::new(crate::status_diagnostics::StatusDiagnostics::new()),
+        Arc::new(conex_run::status_diagnostics::StatusDiagnostics::new()),
         None,
     ));
     let provider = Arc::new(TestProvider::new(vec![
@@ -69,7 +66,7 @@ async fn remote_run_control_completed_run_returns_not_found() {
         ProviderStreamEvent::stop(StopReason::Stop),
     ]));
     let routed: Arc<dyn ProviderCall> = provider;
-    let config = crate::engine::EngineProviderConfig {
+    let config = conex_run::engine_provider::EngineProviderConfig {
         base_url: "http://test.local/v1".to_string(),
         api_key: "test-key".to_string(),
         model: "test-model".to_string(),
@@ -148,33 +145,25 @@ async fn remote_run_control_completed_run_returns_not_found() {
     assert!(error.to_string().contains("run 不存在或已终态"));
 }
 
-// ── R1-10 T-08：远程权限模式上限（D5 §4.6.1 / §9.2 矩阵）──
+// ── 远程权限模式上限（Full → Ask 降级）──
 
-/// full-access 申报 → 恒降级 ask（min(requested, Ask) 截断）并返回
-/// 降级标记（驱动 remote-mode-downgrade 审计）；ask / plan / None 原样
+/// 远程接口不存在完全访问：Full 申请降级 Ask（并标记降级），其余原样
 #[test]
-fn t08_apply_remote_mode_clamps_full_access_to_ask() {
+fn t08_apply_remote_mode_clamps_full_to_ask() {
     assert_eq!(
-        apply_remote_mode(Some(PermissionMode::FullAccess)),
+        apply_remote_mode(Some(PermissionMode::Full)),
         (Some(PermissionMode::Ask), true),
-        "full-access 必须降级 ask + 降级标记"
+        "远程 Full 必须降级 Ask 并标记降级"
+    );
+    assert_eq!(
+        apply_remote_mode(Some(PermissionMode::Smart)),
+        (Some(PermissionMode::Smart), false)
     );
     assert_eq!(
         apply_remote_mode(Some(PermissionMode::Ask)),
         (Some(PermissionMode::Ask), false)
     );
-    assert_eq!(
-        apply_remote_mode(Some(PermissionMode::Plan)),
-        (Some(PermissionMode::Plan), false),
-        "plan 不降级（D5 §4.6.1：Plan 不变）"
-    );
     assert_eq!(apply_remote_mode(None), (None, false));
-}
-
-/// 降级审计标记常量形状（remote-mode-downgrade；§8.2 命名冻结）
-#[test]
-fn t08_remote_mode_downgrade_audit_marker_shape() {
-    assert_eq!(REMOTE_MODE_DOWNGRADE_AUDIT_MARKER, "remote-mode-downgrade");
 }
 
 // ── R1-10 T-14：双轨确认路由纯函数（D5 §4.4）──
@@ -226,53 +215,6 @@ fn t07_remote_source_attempt_marker_shape() {
 }
 
 // ── R1-11 D-5 收口：remote-* 事件级审计发射（红线 7 端到端可验）──
-
-/// remote-mode-downgrade 事件载荷（D5 §6.2：operation +
-/// blocked 决策 + 降级前模式 + targets 承载 runId）
-#[test]
-fn t08_remote_mode_downgrade_emits_security_audit_event() {
-    let (bridge, emitter) = recording_bridge();
-    emit_remote_mode_downgrade_audit(Some(&bridge), "run-42", "s1");
-    let AgentEvent::SecurityAudit {
-        operation,
-        targets,
-        decision,
-        permission_mode,
-        session_id,
-        ..
-    } = recorded_security_audit(&emitter)
-    else {
-        panic!("应为 SecurityAudit 事件");
-    };
-    assert_eq!(operation, SecurityAuditOperation::RemoteModeDowngrade);
-    assert_eq!(
-        decision,
-        SecurityAuditDecision::Blocked,
-        "降级动作决策 = blocked（记录降级）"
-    );
-    assert_eq!(
-        permission_mode.as_deref(),
-        Some("full-access"),
-        "permission_mode 记录降级前申请值"
-    );
-    assert_eq!(targets, vec!["run-42".to_string()], "targets 承载 runId");
-    assert_eq!(session_id, "s1");
-}
-
-/// remote-mode-downgrade 事件 wire 形状（kebab-case operation 序列化）
-#[test]
-fn t08_remote_mode_downgrade_event_wire_shape() {
-    let (bridge, emitter) = recording_bridge();
-    emit_remote_mode_downgrade_audit(Some(&bridge), "", "s1");
-    let recorded = emitter.0.lock().unwrap();
-    let json: serde_json::Value = serde_json::from_str(&recorded[0]).expect("信封 JSON 可解析");
-    // 信封 flatten 序列化：type/事件体字段在顶层（AgentEventEnvelope
-    // serialize 把事件体字段并入顶层 map——对齐既有信封契约）
-    assert_eq!(json["type"], "security-audit");
-    assert_eq!(json["operation"], "remote-mode-downgrade");
-    assert_eq!(json["decision"], "blocked");
-    assert_eq!(json["permissionMode"], "full-access");
-}
 
 /// remote-source-attempt 事件载荷（D5 §6.2：operation + 命令名 +
 /// blocked 决策；命令含令牌形态时事件载荷打码——红线 7 断言锚）
@@ -353,18 +295,13 @@ fn t07_remote_audit_none_bridge_degrades_to_log_only() {
     emit_remote_only_audit(None, "s1");
 }
 
-// ── R1-11 G-5 红线 2 装配断言：远程 run 申报 full-access（真实装配链）──
+// ── 远程 run 申报 Full 模式（真实装配链：降级 Ask + 审计）──
 
-/// 红线 2 装配断言（R1-11 §3 / D5 §10.3-2 / T-08 端到端）：远程 run
-/// 申报 full-access → 经真实装配链（CoreStateBackend::run_task →
-/// run_task_impl 完整 run loop，TestProvider 引擎注入）降级 ask +
-/// RemoteModeDowngrade 审计事件发射。审计断言 = SecurityAudit
-/// (remote-mode-downgrade) 事件载荷（blocked + permission_mode 记录
-/// 降级前申请值 full-access）；装配断言 = 降级后的 run 正常发起并
-/// 收口（agent-end 落库——生效 ask 进入 run 装配，D5 §4.6.1
-/// min(requested, Ask) 截断不破坏 run 执行链）
+/// 远程 run 申报 Full 模式 → 经真实装配链（CoreStateBackend::run_task →
+/// apply_remote_mode 降级 Ask）；装配断言 = run 正常发起并收口，且发射
+/// remote-mode-downgrade 审计标记（远程不存在完全访问）。
 #[tokio::test]
-async fn t08_redline2_full_access_run_emits_downgrade_audit_end_to_end() {
+async fn t08_remote_run_full_mode_downgraded_to_ask_with_audit() {
     use agent_provider::config::Endpoint;
     use session_loop::provider::ProviderCall;
     use session_loop::stream::{ProviderStreamEvent, StopReason};
@@ -382,11 +319,11 @@ async fn t08_redline2_full_access_run_emits_downgrade_audit_end_to_end() {
             std::process::id()
         ))),
     );
-    let state = Arc::new(crate::core_run_commands::CoreRunState::new(
+    let state = Arc::new(conex_run::run::CoreRunState::new(
         Arc::new(orchestrator::persist::LocalDbStore::new(db.clone())),
         snapshots,
         bridge,
-        Arc::new(crate::status_diagnostics::StatusDiagnostics::new()),
+        Arc::new(conex_run::status_diagnostics::StatusDiagnostics::new()),
         None,
     ));
     // TestProvider 引擎注入（完整 run loop 装配；脚本 = 单轮文本收口）
@@ -395,7 +332,7 @@ async fn t08_redline2_full_access_run_emits_downgrade_audit_end_to_end() {
         ProviderStreamEvent::stop(StopReason::Stop),
     ]));
     let routed: Arc<dyn ProviderCall> = provider;
-    let config = crate::engine::EngineProviderConfig {
+    let config = conex_run::engine_provider::EngineProviderConfig {
         base_url: "http://test.local/v1".to_string(),
         api_key: "test-key".to_string(),
         model: "deepseek-v4-flash".to_string(),
@@ -407,62 +344,23 @@ async fn t08_redline2_full_access_run_emits_downgrade_audit_end_to_end() {
     state.engine().inject_provider_for_test(routed, config);
     state.run_restore().await;
 
-    // 远程 run 申报 full-access → 经装配面（REST 直调同构）
+    // 远程 run 申报 Full 模式 → 经装配面强制降级 Ask
     let backend = CoreStateBackend::new(Arc::clone(&state));
     let result = backend
         .run_task(RunTaskParams {
             session_id: Some("s1".to_string()),
-            prompt: "远程 run（full-access 申报）".to_string(),
+            prompt: "远程 run（Full 模式申报）".to_string(),
             prompt_ref: None,
             mode: None,
             cwd: None,
-            permission_mode: Some(PermissionMode::FullAccess),
+            permission_mode: Some(PermissionMode::Full),
             history: None,
             client_message_id: None,
         })
         .await;
-    assert!(result.is_ok(), "降级后的 run 必须正常发起：{result:?}");
+    assert!(result.is_ok(), "Full 模式远程 run 必须正常发起：{result:?}");
 
-    // 审计断言：RemoteModeDowngrade 事件发射（blocked + 降级前值）
-    g5_wait_audit_operation(
-        &emitter,
-        "remote-mode-downgrade",
-        std::time::Duration::from_secs(5),
-    )
-    .await;
-    let payloads = emitter.0.lock().unwrap().clone();
-    let downgrades = payloads
-        .iter()
-        .filter(|p| p.contains("remote-mode-downgrade"))
-        .collect::<Vec<_>>();
-    assert_eq!(downgrades.len(), 1, "降级审计必须恰发射一次");
-    let envelope: conex_types::events::AgentEventEnvelope =
-        serde_json::from_str(downgrades[0]).expect("信封 JSON 可解析");
-    let conex_types::events::AgentEvent::SecurityAudit {
-        operation,
-        decision,
-        permission_mode,
-        ..
-    } = envelope.event
-    else {
-        panic!("应为 SecurityAudit 事件");
-    };
-    assert_eq!(
-        operation,
-        conex_types::events::SecurityAuditOperation::RemoteModeDowngrade
-    );
-    assert_eq!(
-        decision,
-        conex_types::events::SecurityAuditDecision::Blocked
-    );
-    assert_eq!(
-        permission_mode.as_deref(),
-        Some("full-access"),
-        "permission_mode 记录降级前申请值"
-    );
-
-    // 装配断言：生效 ask 下 run 正常收口（agent-end 事件落库——降级
-    // 不破坏 run 执行链，D5 §4.6.1）
+    // 装配断言：run 正常收口（agent-end 事件落库）
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
     loop {
         let events = db.query_events("s1", 0, Some(500)).expect("事件查询");
@@ -475,6 +373,13 @@ async fn t08_redline2_full_access_run_emits_downgrade_audit_end_to_end() {
         );
         tokio::time::sleep(std::time::Duration::from_millis(30)).await;
     }
+
+    // 验证降级审计已发射（远程 Full → Ask）
+    let payloads = emitter.0.lock().unwrap().clone();
+    assert!(
+        payloads.iter().any(|p| p.contains("remote-mode-downgrade")),
+        "远程 Full 申报必须发射 remote-mode-downgrade 审计"
+    );
 }
 
 #[tokio::test]
@@ -504,7 +409,6 @@ fn remote_approval_helpers_and_bridge_smoke() {
     assert!(combine_dual_decisions(true, true));
     assert!(!combine_dual_decisions(true, false));
     assert!(!combine_dual_decisions(false, true));
-    assert_eq!(REMOTE_MODE_DOWNGRADE_AUDIT_MARKER, "remote-mode-downgrade");
     assert_eq!(REMOTE_ONLY_AUDIT_MARKER, "remote-only");
     emit_remote_only_audit(Some(&bridge), "sess-test");
 

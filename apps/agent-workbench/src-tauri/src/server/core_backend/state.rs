@@ -3,16 +3,16 @@ use std::sync::Arc;
 use conex_search::fuzzy::FuzzyMatcher;
 use conex_search::search::{search_files, search_files_parallel};
 use conex_types::device::{
-    ApproveParams, DenyParams, DeviceErrorCode, FileSearchHit, PermissionMode, RunTaskParams,
-    RunTaskResult, SearchFilesParams, SearchFilesResult,
+    ApproveParams, DenyParams, DeviceErrorCode, FileSearchHit, RunTaskParams, RunTaskResult,
+    SearchFilesParams, SearchFilesResult,
 };
 
 use crate::core_commands::SharedSearchState;
-use crate::core_run_commands::{
+use crate::server::ServerError;
+use conex_run::run::{
     find_run_by_pending_tool_call, generate_run_id, generate_session_id, list_active_runs_impl,
     list_pending_approval_summaries_impl, run_task_impl, CoreRunState, RunTaskOptions,
 };
-use crate::server::ServerError;
 
 use super::{apply_remote_mode, emit_remote_mode_downgrade_audit};
 
@@ -92,7 +92,7 @@ impl CoreStateBackend {
     /// 挂接 ServerState.audit_bridge——router 白名单拒绝分支（remote-source-
     /// attempt）与 run 装配面（remote-mode-downgrade）共用同一桥实例）
     #[cfg(test)]
-    pub(crate) fn event_bridge(&self) -> crate::core_event_bridge::EventBridge {
+    pub(crate) fn event_bridge(&self) -> conex_run::core_event_bridge::EventBridge {
         self.core.event_bridge()
     }
 
@@ -219,19 +219,13 @@ impl CoreStateBackend {
                 id
             }
         };
-        // R1-10 T-08：远程 run 权限模式装配——full-access 恒降级 ask
-        // （远程不存在 full-access，D5 §4.6.1 / TH-12 直接缓解）；降级发
-        // remote-mode-downgrade 审计标记。history 为既有 HistoryMessage
-        // 镜像（移动端一般省略，桌面 SessionHistoryCache 兜底）
+        // 远程 run 权限模式：Full 恒降级 ask（远程不存在完全访问；D5 §4.6.1 / TH-12）
+        // 降级必须发 remote-mode-downgrade 审计标记
         let (mode_clamped, mode_downgraded) = apply_remote_mode(params.permission_mode);
-        let permission_mode = mode_clamped.map(|mode| match mode {
-            PermissionMode::Ask => "ask".to_string(),
-            PermissionMode::Plan => "plan".to_string(),
-            PermissionMode::FullAccess => "full-access".to_string(),
-        });
         if mode_downgraded {
             emit_remote_mode_downgrade_audit(Some(&self.core.event_bridge()), "", &session_id);
         }
+        let permission_mode = mode_clamped.map(|mode| mode.as_str().to_string());
         let history = params
             .history
             .map(|values| {
@@ -255,6 +249,7 @@ impl CoreStateBackend {
             system_prompt: None,
             history,
             context_window: None,
+            max_turns: None,
             parent_run_id: None,
             subagent_config: None,
             // D5 §3.1：goal 三字段（远程 run 命令缺省 None，与旧命令面一致）

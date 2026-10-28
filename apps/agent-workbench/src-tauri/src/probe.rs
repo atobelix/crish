@@ -12,9 +12,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::core_error::CoreError;
 use agent_provider::model_store::ResolvedProviderConfig;
 use agent_provider::models::{ModelRef, ProtocolKind, ScannedModel};
+use conex_run::core_error::CoreError;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 
 const DEFAULT_PROBE_TIMEOUT_MS: u64 = 15_000;
@@ -201,12 +201,13 @@ pub async fn probe_ping_core(req: ProbePingRequest) -> ProbePingResult {
             limit.min(u64::from(PROBE_OUTPUT_BUDGET)) as u32
         });
     let secret = resolved.api_key.clone();
-    let provider_config = crate::engine_provider::engine_provider_config_from_resolved(&resolved);
-    let provider = crate::engine_provider::HttpProviderCall::new(client, provider_config);
+    let provider_config =
+        conex_run::engine_provider::engine_provider_config_from_resolved(&resolved);
+    let provider = conex_run::engine_provider::HttpProviderCall::new(client, provider_config);
     let messages = vec![Arc::new(AgentMessage {
         id: "provider-probe".into(),
         role: AgentMessageRole::User,
-        created_at: crate::engine_provider::now_iso_utc(),
+        created_at: conex_run::engine_provider::now_iso_utc(),
         blocks: vec![AgentMessageBlock::Text {
             text: "Reply with OK.".into(),
         }],
@@ -598,7 +599,7 @@ mod tests {
 
     #[tokio::test]
     async fn probe_ping_nonexistent_profile_returns_configuration_error() {
-        let _guard = crate::core_run_commands::CONFIG_TEST_LOCK
+        let _guard = crate::config_test_support::CONFIG_TEST_LOCK
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         let _fixture = Fixture::new("http://localhost:1");
@@ -614,7 +615,7 @@ mod tests {
 
     #[tokio::test]
     async fn probe_scan_models_nonexistent_profile_returns_error() {
-        let _guard = crate::core_run_commands::CONFIG_TEST_LOCK
+        let _guard = crate::config_test_support::CONFIG_TEST_LOCK
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         let _fixture = Fixture::new("http://localhost:1");
@@ -633,7 +634,7 @@ mod tests {
             routing::{get, post},
             Json, Router,
         };
-        let _guard = crate::core_run_commands::CONFIG_TEST_LOCK
+        let _guard = crate::config_test_support::CONFIG_TEST_LOCK
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         let app = Router::new()
@@ -678,7 +679,7 @@ mod tests {
     #[tokio::test]
     async fn http_200_with_error_event_is_not_successful_probe() {
         use axum::{routing::post, Router};
-        let _guard = crate::core_run_commands::CONFIG_TEST_LOCK
+        let _guard = crate::config_test_support::CONFIG_TEST_LOCK
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         let app = Router::new().route(
@@ -707,7 +708,7 @@ mod tests {
 
     #[test]
     fn resolve_probe_target_uses_committed_provider_only() {
-        let _guard = crate::core_run_commands::CONFIG_TEST_LOCK
+        let _guard = crate::config_test_support::CONFIG_TEST_LOCK
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         let fixture = Fixture::new("https://example.test/v1");

@@ -24,7 +24,7 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Runtime, State};
 use tauri_plugin_updater::UpdaterExt;
 
-use crate::core_error::CoreError;
+use conex_run::core_error::CoreError;
 
 /// 更新会话状态：`check → download → install` 三段式的进程内交接面。
 /// 由 main.rs setup 阶段 `app.manage` 注入，命令经 `State<UpdaterSession>` 取用。

@@ -44,7 +44,7 @@ const MEMORY_INTEGRATION_PINS: &[&str] = &[
 const PROD_INJECT_FILES: &[&str] = &[
     "src/note_runtime.rs",
     "src/engine_build.rs",
-    "src/core_run_commands.rs",
+    "src/run_ipc.rs",
     "src/main.rs",
     "src/note_commands.rs",
     "src/note_commands_apply.rs",
@@ -175,18 +175,22 @@ fn lr_t1_prod_inject_is_store_or_unwired() {
 
     let engine = production_code(&read_utf8(&manifest.join("src/engine_build.rs")));
     assert!(
-        engine.contains("note_runtime::try_backend()"),
-        "engine produce 必须注入 try_backend（Store 或 None）"
+        engine.contains("note_runtime::try_backend"),
+        "engine produce 必须注入 try_backend（Store 或 None；闭包或函数项均可）"
     );
     assert!(
         !contains_ident(&engine, MEMORY_IDENT),
         "engine_build 零 {MEMORY_IDENT}"
     );
 
-    let run = production_code(&read_utf8(&manifest.join("src/run/run_launch.rs")));
+    // run 域下沉 conex-run 后：装配消费面 = crate 侧注入槽（生产槽由壳层
+    // engine_build 的 note_runtime::try_backend() 注入，见上方断言）。
+    let run = production_code(&read_utf8(
+        &workspace_root().join("crates/conex-run/src/run/run_launch.rs"),
+    ));
     assert!(
-        run.contains("note_backend = crate::note_runtime::try_backend()"),
-        "core_run 必须同源 try_backend"
+        run.contains("note_backend = crate::engine_assembly::note_backend()"),
+        "core_run 必须经注入槽同源取 note backend（Store 或 None）"
     );
     assert!(
         !contains_ident(&run, MEMORY_IDENT),

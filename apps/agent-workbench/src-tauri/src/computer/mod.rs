@@ -53,7 +53,6 @@
 //! [ComputerSlot::on_run_stopped] 释放互斥门回 Idle → 关闭开启态并落盘 → 广播。
 //! 普通停止语义，不置急停旗，不叫急停。
 
-use crate::core_event_bridge::Emitter;
 #[cfg(test)]
 use agent_tools::definition::ToolError;
 #[cfg(test)]
@@ -65,6 +64,7 @@ use conex_computer_tools::session::ComputerOps;
 #[cfg(test)]
 use conex_computer_tools::{register_computer_tools, ComputerToolsConfig};
 use conex_db::LocalDb;
+use conex_run::core_event_bridge::Emitter;
 use serde::Serialize;
 use session_loop::AbortSignal;
 use std::sync::atomic::{AtomicBool, Ordering};

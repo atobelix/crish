@@ -1,5 +1,5 @@
-use crate::core_error::CoreError;
 use chardetng::EncodingDetector;
+use conex_run::core_error::CoreError;
 use encoding_rs::{Encoding, UTF_8};
 use serde::Serialize;
 

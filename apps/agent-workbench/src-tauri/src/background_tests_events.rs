@@ -16,8 +16,8 @@ use super::bg_commands::build_list_response;
 use super::bg_events::EventBridgeSink;
 use super::tests::*;
 use super::tests_resource::adopt_request_monitored;
-use crate::core_event_bridge::EventBridge;
 use agent_tools::BackgroundTaskManager;
+use conex_run::core_event_bridge::EventBridge;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -35,7 +35,7 @@ impl RecordingEmitter {
     }
 }
 
-impl crate::core_event_bridge::Emitter for RecordingEmitter {
+impl conex_run::core_event_bridge::Emitter for RecordingEmitter {
     fn emit(&self, channel: &str, payload: &str) {
         self.calls
             .lock()
@@ -49,7 +49,7 @@ fn recording_bridge() -> (EventBridge, Arc<RecordingEmitter>) {
     let emitter = Arc::new(RecordingEmitter::default());
     let bridge = EventBridge::new(
         "workbench-run-event",
-        Arc::clone(&emitter) as Arc<dyn crate::core_event_bridge::Emitter>,
+        Arc::clone(&emitter) as Arc<dyn conex_run::core_event_bridge::Emitter>,
     );
     (bridge, emitter)
 }
@@ -433,7 +433,7 @@ fn task_event_consumer_wired_into_sink_enqueues_wake() {
     let registry = test_registry();
     let (bridge, emitter) = recording_bridge();
     let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
-    let consumer = Arc::new(crate::task_event_consumer::TaskEventConsumer::new(
+    let consumer = Arc::new(conex_run::task_event_consumer::TaskEventConsumer::new(
         Arc::clone(&queue),
         bridge.clone(),
         String::new(),
@@ -452,7 +452,7 @@ fn task_event_consumer_wired_into_sink_enqueues_wake() {
     let sink = EventBridgeSink {
         bridge: EventBridge::new(
             "workbench-run-event",
-            Arc::new(RecordingEmitter::default()) as Arc<dyn crate::core_event_bridge::Emitter>,
+            Arc::new(RecordingEmitter::default()) as Arc<dyn conex_run::core_event_bridge::Emitter>,
         ),
         session_id: String::new(),
         consumer: Some(Arc::clone(&consumer)),

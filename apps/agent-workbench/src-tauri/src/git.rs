@@ -26,7 +26,7 @@ use std::process::Stdio;
 use tokio::process::Command as TokioCommand;
 use tokio::time::{timeout, Duration};
 
-use crate::core_error::CoreError;
+use conex_run::core_error::CoreError;
 
 /// 输出截断上限（每流 256KB）
 const MAX_OUTPUT_BYTES: usize = 256 * 1024;

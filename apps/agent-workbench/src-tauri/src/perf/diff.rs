@@ -1,4 +1,4 @@
-use crate::core_error::CoreError;
+use conex_run::core_error::CoreError;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]

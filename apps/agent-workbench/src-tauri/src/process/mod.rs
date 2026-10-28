@@ -161,6 +161,20 @@ pub(crate) async fn workbench_run_shell(
         .map_err(|e| CoreError::Internal(format!("failed to spawn {shell_label}: {e}")))?;
     let child_pid = child.id();
 
+    // Windows 平台挂载原生 Job Object 防孤儿第一防线（宿主崩溃/退出时内核自动杀树）：
+    #[cfg(windows)]
+    let _job_guard = if let Some(pid) = child_pid {
+        match ProcessJobGuard::new_for_pid(pid) {
+            Ok(guard) => guard,
+            Err(e) => {
+                tracing::warn!(target: "process::shell", pid, error = %e, "配置 Job Object 失败，优雅降级为显式进程树终止兜底");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     // wait_with_output 会拿走 child；超时后靠 kill_on_drop + taskkill 树杀
     let wait_fut = child.wait_with_output();
     let timed = timeout(Duration::from_millis(timeout_ms), wait_fut).await;

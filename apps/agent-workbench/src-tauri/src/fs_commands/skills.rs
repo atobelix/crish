@@ -1,7 +1,7 @@
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
-use crate::core_error::CoreError;
+use conex_run::core_error::CoreError;
 
 /// 技能发现命令（PE-07 T07.2 审计面：skills.rs）。
 ///
@@ -27,6 +27,10 @@ pub(crate) struct RustSkill {
     pub(crate) file_activation: Option<String>,
 }
 
+/// 只读访问器（C10 注入段渲染消费）：当前唯一消费方是壳层测试夹具
+/// （engine_tests 的 skill_context_injection）——生产注入段接线未落地，
+/// 故按测试面编译，避免生产二进制携带无用 API。
+#[cfg(test)]
 impl RustSkill {
     /// 技能名（C10 注入段条目用）
     pub(crate) fn name(&self) -> &str {

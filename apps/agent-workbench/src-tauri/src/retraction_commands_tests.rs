@@ -14,7 +14,7 @@
 //!   行归一）；
 //! - timeline-truncate 落库 sequence == boundary_seq + 1（只追加不变量）。
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use conex_db::{LocalDb, RunStatus};
@@ -28,16 +28,16 @@ use orchestrator::restore::{SnapshotFileStore, SnapshotStore};
 use orchestrator::run::RunHandle;
 use session_loop::{AbortSignal, ControlBus};
 
-use crate::core_event_bridge::{Emitter, EventBridge};
-use crate::core_run_commands::{ActiveRun, ApprovalGateImpl, CoreRunState};
-use crate::engine::BufferedRunEventBridge;
-use crate::status_diagnostics::StatusDiagnostics;
+use conex_run::core_event_bridge::{Emitter, EventBridge};
+use conex_run::engine_channels::BufferedRunEventBridge;
+use conex_run::run::{ActiveRun, ApprovalGateImpl, CoreRunState};
+use conex_run::status_diagnostics::StatusDiagnostics;
 
 use super::*;
 
 static TMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
-/// 测试会话条目（对齐 core_run_commands_tests.rs `subagent_test_session_entry` 口径）
+/// 测试会话条目（对齐 conex-run `run::tests` 的 `subagent_test_session_entry` 口径）
 fn session_entry(id: &str) -> SessionIndexEntry {
     SessionIndexEntry {
         id: id.to_string(),
@@ -285,12 +285,12 @@ async fn build_cancelled_active_run(
         h.end_reason = Some("cancelled".to_string());
     }
     let queue = Arc::new(tokio::sync::Mutex::new(EventQueue::new(
-        state.store.clone(),
+        state.store(),
         0,
         None,
     )));
     let bridge = Arc::new(BufferedRunEventBridge::new(
-        state.bridge.clone(),
+        state.bridge().clone(),
         run_id.to_string(),
     ));
     let broadcast_bridge = Arc::clone(&bridge);
@@ -306,24 +306,24 @@ async fn build_cancelled_active_run(
         None,
         broadcast,
         Arc::clone(&handle),
-        state.store.clone(),
+        state.store(),
         None,
     ));
-    Arc::new(ActiveRun {
-        session_id: session_id.to_string(),
-        run_id: run_id.to_string(),
+    Arc::new(ActiveRun::new(
+        session_id.to_string(),
+        run_id.to_string(),
         handle,
         queue,
-        control_bus: Arc::new(Mutex::new(ControlBus::new())),
-        abort_signal: AbortSignal::new(),
+        Arc::new(Mutex::new(ControlBus::new())),
+        AbortSignal::new(),
         approval,
         bridge,
-        delta_sink_active: true,
-        driver: Mutex::new(None),
-        user_touched: AtomicBool::new(false),
-        subagent: None,
-        audit_persist: Mutex::new(None),
-    })
+        true,
+        None,
+        None,
+        conex_types::PermissionMode::Full,
+        String::new(),
+    ))
 }
 
 /// K2：撤回命令（stop 收敛路径）触发 kill_all——事件层 cancelled 为准、
@@ -384,6 +384,10 @@ async fn retract_impl_stop_run_cascades_kill_all_cancelled_event_layer_rows_norm
         display_label: None,
         allowed_write_paths_json: None,
         sub_session_id: None,
+        capability_mode: None,
+        model_override: None,
+        resumable: false,
+        last_heartbeat_ms: None,
     });
     db.save_session_agents("s1", &rows).expect("保存子代理行");
     // ②b 消息持久层：预置 2 条消息（msg-user-1, msg-assistant-1）
@@ -424,7 +428,7 @@ async fn retract_impl_stop_run_cascades_kill_all_cancelled_event_layer_rows_norm
     // ③ 活动 run（子代理 run 挂 active_runs——stop_run 投 L3 的目标）
     let active = build_cancelled_active_run(&state, "s1", sub_run_id).await;
     state
-        .active_runs
+        .active_runs()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .insert(sub_run_id.to_string(), Arc::clone(&active));
@@ -551,11 +555,15 @@ async fn retract_impl_missing_target_fails_closed_without_kill_all() {
         display_label: None,
         allowed_write_paths_json: None,
         sub_session_id: None,
+        capability_mode: None,
+        model_override: None,
+        resumable: false,
+        last_heartbeat_ms: None,
     });
     db.save_session_agents("s1", &rows).expect("子代理行落库");
     let active = build_cancelled_active_run(&state, "s1", sub_run_id).await;
     state
-        .active_runs
+        .active_runs()
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .insert(sub_run_id.to_string(), Arc::clone(&active));
@@ -605,12 +613,12 @@ async fn retract_impl_waits_for_all_runs_and_subagents_to_converge() {
         RunStatus::Running,
     )));
     let sub2_queue = Arc::new(tokio::sync::Mutex::new(EventQueue::new(
-        state.store.clone(),
+        state.store(),
         0,
         None,
     )));
     let sub2_bridge = Arc::new(BufferedRunEventBridge::new(
-        state.bridge.clone(),
+        state.bridge().clone(),
         "run-sub-conv-2".to_string(),
     ));
     let sub2_approval = Arc::new(ApprovalGateImpl::new(
@@ -619,27 +627,27 @@ async fn retract_impl_waits_for_all_runs_and_subagents_to_converge() {
         None,
         Box::new(|_| {}),
         Arc::clone(&sub2_handle),
-        state.store.clone(),
+        state.store(),
         None,
     ));
-    let sub2_run = Arc::new(ActiveRun {
-        session_id: "s1".to_string(),
-        run_id: "run-sub-conv-2".to_string(),
-        handle: Arc::clone(&sub2_handle),
-        queue: sub2_queue,
-        control_bus: Arc::new(Mutex::new(ControlBus::new())),
-        abort_signal: AbortSignal::new(),
-        approval: sub2_approval,
-        bridge: sub2_bridge,
-        delta_sink_active: true,
-        driver: Mutex::new(None),
-        user_touched: AtomicBool::new(false),
-        subagent: None,
-        audit_persist: Mutex::new(None),
-    });
+    let sub2_run = Arc::new(ActiveRun::new(
+        "s1".to_string(),
+        "run-sub-conv-2".to_string(),
+        Arc::clone(&sub2_handle),
+        sub2_queue,
+        Arc::new(Mutex::new(ControlBus::new())),
+        AbortSignal::new(),
+        sub2_approval,
+        sub2_bridge,
+        true,
+        None,
+        None,
+        conex_types::PermissionMode::Full,
+        String::new(),
+    ));
 
     {
-        let mut active = state.active_runs.lock().unwrap();
+        let mut active = state.active_runs().lock().unwrap();
         active.insert("run-main-conv".to_string(), Arc::clone(&main_run));
         active.insert("run-sub-conv-1".to_string(), Arc::clone(&sub1_run));
         active.insert("run-sub-conv-2".to_string(), Arc::clone(&sub2_run));

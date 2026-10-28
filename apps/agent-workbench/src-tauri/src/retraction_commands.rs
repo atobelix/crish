@@ -36,8 +36,8 @@ use session_loop::{
     CONVERGE_TIMEOUT_MS,
 };
 
-use crate::core_error::CoreError;
-use crate::core_run_commands::{resolve_run_workspace_root, CoreRunState};
+use conex_run::core_error::CoreError;
+use conex_run::run::{resolve_run_workspace_root, CoreRunState};
 
 /// 撤回响应（wire camelCase；前端按 boundarySeq 做投影重放）
 #[derive(Debug, Clone, serde::Serialize)]
@@ -93,12 +93,12 @@ pub(crate) async fn retract_impl(
     let rollback_plan = Arc::new(std::sync::Mutex::new(None));
     let backend = ShellRetractionBackend {
         state: Arc::clone(state),
-        freeze: Arc::clone(&state.retraction_freeze),
+        freeze: Arc::clone(state.retraction_freeze()),
         rollback_plan: Arc::clone(&rollback_plan),
     };
     let protocol = RetractionProtocol::with_freeze_registry(
         Box::new(backend),
-        Arc::clone(&state.retraction_freeze),
+        Arc::clone(state.retraction_freeze()),
     );
 
     let outcome = protocol
@@ -179,7 +179,7 @@ impl ShellRetractionBackend {
     ) -> Result<Option<u64>, RetractionError> {
         let rows = self
             .state
-            .store
+            .store()
             .query_events(session_id, 0, None)
             .await
             .map_err(|e| RetractionError::Backend(e.message))?;
@@ -212,7 +212,7 @@ impl ShellRetractionBackend {
             )> = {
                 let active = self
                     .state
-                    .active_runs
+                    .active_runs()
                     .lock()
                     .unwrap_or_else(|e| e.into_inner());
                 active
@@ -262,7 +262,7 @@ impl RetractionBackend for ShellRetractionBackend {
     async fn session_max_sequence(&self, session_id: &str) -> Result<u64, RetractionError> {
         let rows = self
             .state
-            .store
+            .store()
             .query_events(session_id, 0, None)
             .await
             .map_err(|e| RetractionError::Backend(e.message))?;
@@ -277,10 +277,10 @@ impl RetractionBackend for ShellRetractionBackend {
         let reason = format!("retraction:{boundary_seq}");
         // 会话内运行中 run 逐一投 L3 force_cancel（复用既有控制总线；
         // 子代理 run 的 L3 由 kill_all 兜底投递）
-        let targets: Vec<(String, Arc<crate::core_run_commands::ActiveRun>)> = {
+        let targets: Vec<(String, Arc<conex_run::run::ActiveRun>)> = {
             let active = self
                 .state
-                .active_runs
+                .active_runs()
                 .lock()
                 .unwrap_or_else(|e| e.into_inner());
             active
@@ -324,7 +324,7 @@ impl RetractionBackend for ShellRetractionBackend {
         frozen_seq: u64,
     ) -> Result<(), RetractionError> {
         let operations = collect_post_boundary_write_operations(
-            self.state.store.as_ref(),
+            self.state.store().as_ref(),
             session_id,
             target_boundary_seq,
             frozen_seq,
@@ -347,13 +347,13 @@ impl RetractionBackend for ShellRetractionBackend {
             run_id,
             boundary_seq,
             target_message_id,
-            &crate::engine::now_iso_utc(),
+            &conex_run::engine_provider::now_iso_utc(),
         );
         // 经挂载冻结护栏的队列发射（timeline-truncate 为撤离事件放行；
         // 自身占 sequence = frozen_seq + 1）
         let base = self.state.base_sequence_for(session_id).await;
         let mut queue = orchestrator::events::EventQueue::new(
-            self.state.store.clone(),
+            self.state.store(),
             base,
             run_id.map(str::to_string),
         )

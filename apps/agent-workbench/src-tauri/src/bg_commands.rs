@@ -2,11 +2,11 @@
 //! workbench_* Tauri 命令）。结构拆分轮仅搬移，命令契约零改动。
 //! 接线：background.rs `mod bg_commands;`。
 
-use crate::core_error::CoreError;
 use agent_tools::background::{
     BackgroundTaskInfo, BackgroundTaskManager, BackgroundTaskStatus, KillResult, TaskState,
 };
 use agent_tools::definition::ToolError;
+use conex_run::core_error::CoreError;
 use conex_types::error::codes;
 use serde::Serialize;
 use std::sync::Arc;

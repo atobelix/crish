@@ -3,13 +3,13 @@
 //! 结构拆分轮仅搬移，七事件发射与健康判定语义零改动。接线：background.rs
 //! `mod bg_events;`。
 
-use crate::core_event_bridge::EventBridge;
 use crate::process::now_millis;
 use crate::resource::{
     cpu_percent_from_delta, judge_health, EventSink, ProcessHealth, RawUsage,
     ResourceMonitorConfig, TaskNotifier,
 };
 use agent_tools::background::{BackgroundTaskInfo, ResourceSample};
+use conex_run::core_event_bridge::EventBridge;
 use conex_types::events::{AgentEvent, AgentEventEnvelope};
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -95,7 +95,7 @@ pub(crate) struct EventBridgeSink {
     pub(crate) session_id: String,
     /// 30 方案 P3：任务事件消费器（set_event_bridge 构造时读取注册表
     /// 快照；None = 未接线——事件照常发射，仅不做消费面接线）
-    pub(crate) consumer: Option<Arc<crate::task_event_consumer::TaskEventConsumer>>,
+    pub(crate) consumer: Option<Arc<conex_run::task_event_consumer::TaskEventConsumer>>,
 }
 
 impl std::fmt::Debug for EventBridgeSink {
@@ -293,7 +293,7 @@ pub(crate) fn spawn_resource_monitor_loop(
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         // interval 首拍立即完成 → 跳过（对齐 spawn_snapshot_loop 范式，
-        // core_run_commands.rs:1156）；此后每拍 = sample_interval_ms
+        // 原 core_run_commands.rs:1156）；此后每拍 = sample_interval_ms
         let mut interval = tokio::time::interval(Duration::from_millis(
             config
                 .sample_interval_ms

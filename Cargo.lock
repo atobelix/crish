@@ -39,6 +39,7 @@ name = "agent-tools"
 version = "0.1.1"
 dependencies = [
  "async-trait",
+ "conex-agents",
  "conex-db",
  "conex-diff",
  "conex-fs",
@@ -1075,6 +1076,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "conex-agents"
+version = "0.1.1"
+dependencies = [
+ "conex-types",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "conex-browser"
 version = "0.1.1"
 dependencies = [
@@ -1236,6 +1246,7 @@ version = "0.1.1"
 dependencies = [
  "conex-doc-collab",
  "markdown",
+ "serde_json",
  "thiserror 2.0.20",
 ]
 
@@ -1269,6 +1280,35 @@ dependencies = [
  "tokio-tungstenite 0.29.0",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "conex-run"
+version = "0.1.1"
+dependencies = [
+ "agent-provider",
+ "agent-tools",
+ "anyhow",
+ "async-trait",
+ "conex-agents",
+ "conex-compaction",
+ "conex-db",
+ "conex-fs",
+ "conex-shared",
+ "conex-telemetry",
+ "conex-types",
+ "futures-util",
+ "getrandom 0.2.17",
+ "indexmap 2.14.2",
+ "orchestrator",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "session-loop",
+ "thiserror 2.0.20",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1490,6 +1530,7 @@ dependencies = [
  "conex-fs",
  "conex-markdown",
  "conex-note-runtime",
+ "conex-run",
  "conex-sandbox",
  "conex-search",
  "conex-shared",
@@ -1502,7 +1543,6 @@ dependencies = [
  "futures-util",
  "getrandom 0.2.17",
  "hex",
- "indexmap 2.14.2",
  "junction",
  "libc",
  "memmap2",
@@ -1538,8 +1578,10 @@ dependencies = [
  "tower",
  "tracing",
  "url",
+ "webview2-com",
  "window-vibrancy",
  "windows 0.62.2",
+ "windows-core 0.61.2",
  "windows-sys 0.61.2",
  "x509-parser",
  "zeroize",
@@ -5129,6 +5171,7 @@ version = "0.1.1"
 dependencies = [
  "agent-tools",
  "async-trait",
+ "conex-agents",
  "conex-compaction",
  "conex-db",
  "conex-shared",
@@ -6774,8 +6817,10 @@ version = "0.1.1"
 dependencies = [
  "agent-tools",
  "async-trait",
+ "conex-agents",
  "conex-compaction",
  "conex-fs",
+ "conex-sandbox",
  "conex-shared",
  "conex-telemetry",
  "conex-test-utils",

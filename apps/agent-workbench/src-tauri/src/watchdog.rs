@@ -19,8 +19,10 @@
 //! 构造器与 spawn，不直接持有 ControlBus）：
 //! - queue = [PendingMessageQueue]（与 TimerRegistry 同队列或独立队列由
 //!   A3 定夺；R-CF3 续 run 消费）；
-//! - store = [DispatchStore] 适配（session_meta `dispatch_*` 键读取；
-//!   默认内存实现 [MemoryDispatchStore]，conex-db 真适配在 R-CF3 接线）；
+//! - store = [conex_run::wait_channel::DispatchStore] 适配（session_meta
+//!   `dispatch_*` 键读取；实现真源在 conex-run：内存
+//!   [conex_run::wait_channel::MemoryWaitStore] / LocalDb
+//!   [conex_run::wait_channel::LocalDbWaitStore]，与 wait 通道共用数据面）；
 //! - last_wakeup = [LastWakeupTracker]（事件消费旁路点已接线：壳层
 //!   在事件收口处调用 `mark_wakeup`（R-CF3 核销），任何事件到达即
 //!   更新；None 仅存于从未有事件到达的冷启动窗口，视为超时触发）；
@@ -28,11 +30,21 @@
 //!   机制，抑制兜底——REQ-C05「既没有设置定时器」条件；A3 可在
 //!   TimerRegistry 装配点旁维护计数镜像，或经其他同步数据源注入）；
 //! - options = [WatchdogOptions]（N 分钟 / 周期 / 时钟均可注入便于测试）。
+//!
+//! **接线状态（2026-10-27 核查）**：本模块自引入起**未接入生产装配**
+//! （HEAD 时代 `EngineHost::create_session_watchdog` 即带 `allow(dead_code)`，
+//! 全仓无调用）。因此本文件整体 `#![allow(dead_code)]`：保留 REQ-C05 观测
+//! 兜底的实现与测试面，启用需先定夺会话级生命周期（每会话创建/回收时机）
+//! 与「10 分钟插话」产品语义——直接启用会改变生产行为，不属重构收尾范围。
+//! 无事件兜底的等效防线：wait_subagents 自带 10 分钟硬上限
+//! （MAX_WAIT_TIMEOUT_MS），到期必回主 agent。
+#![allow(dead_code)]
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use agent_tools::tools::wait_subagents::{DispatchDeclaration, MAX_WAIT_TIMEOUT_MS};
+use conex_run::wake_watcher::LastWakeupTracker;
 use orchestrator::steering_queue::SteeringInputEntry;
 use orchestrator::PendingMessageQueue;
 
@@ -72,90 +84,16 @@ fn format_duration_ms(ms: u64) -> String {
     }
 }
 
-// ── 事件唤醒跟踪（"无任何事件唤醒"判定数据源）──────────────────────
-
-/// 最近事件唤醒时刻跟踪器（引擎侧共享；事件消费旁路记录，
-/// T-CF-07 的旁路点复用）
-///
-/// 语义：`mark_wakeup` 由壳层在事件收口处调用（core_run_commands
-/// drive_run_loop 事件 emit 循环与子代理终态收口，任何事件到达即
-/// 视为一次唤醒）；`None` = 从未有事件到达（视为超时，触发兜底）。
-#[derive(Default)]
-pub(crate) struct LastWakeupTracker {
-    /// 最近唤醒时刻（epoch 毫秒；None = 从未）
-    last: Mutex<Option<u64>>,
-}
-
-impl LastWakeupTracker {
-    /// 新建跟踪器（初始 None = 从未有事件到达）
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
-
-    /// 标记一次事件唤醒（时刻取系统时钟；壳层事件收口处接线调用）
-    pub(crate) fn mark_wakeup(&self) {
-        self.mark_wakeup_at(now_ms());
-    }
-
-    /// 标记一次事件唤醒（指定时刻；测试与旁路接线共用）
-    pub(crate) fn mark_wakeup_at(&self, at_ms: u64) {
-        *self.last.lock().unwrap_or_else(|e| e.into_inner()) = Some(at_ms);
-    }
-
-    /// 最近唤醒时刻（None = 从未）
-    pub(crate) fn last_wakeup_ms(&self) -> Option<u64> {
-        *self.last.lock().unwrap_or_else(|e| e.into_inner())
-    }
-}
+// ── 最近事件唤醒时刻跟踪（单一真源：conex_run::wake_watcher）────────
+//
+// [LastWakeupTracker] 已随 run 域下沉 conex-run（wake_watcher.rs），
+// 壳层不再维护同形副本。
 
 // ── dispatch 声明读取适配（session_meta `dispatch_*` 键）──────────
 
-/// dispatch 声明读取适配（session_meta 键 → 声明列表）
-pub(crate) trait DispatchStore: Send + Sync {
-    /// 读取本会话的 dispatch 声明（无声明 → 空 Vec；fail-open 不 panic）
-    fn load_declarations(&self) -> Vec<DispatchDeclaration>;
-    /// 清理/核销历史 dispatch 声明（消除虚假超时报警风暴）
-    fn clear_declarations(&self) {}
-}
-
-/// 内存持久化适配（测试 + 引擎默认装配；conex-db session_meta 真适配
-/// 在 R-CF3 接线——键形状已冻结为 wait_subagents.rs:83-89 的 dispatch_*，
-/// 真适配用 `DispatchDeclaration::from_meta_pairs` 解析）
-#[derive(Default)]
-pub(crate) struct MemoryDispatchStore {
-    /// dispatch 声明列表（本会话；watchdog 每会话一个实例）
-    declarations: Mutex<Vec<DispatchDeclaration>>,
-}
-
-impl MemoryDispatchStore {
-    /// 新建内存存储
-    #[cfg_attr(not(test), allow(dead_code))] // R-CF3：wait 通道落库接线后移除
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
-
-    /// 写入声明（测试注入与 wait 通道落库共用；幂等覆盖）
-    #[allow(dead_code)] // R-CF3：wait 通道落库接线后移除
-    pub(crate) fn set_declarations(&self, declarations: Vec<DispatchDeclaration>) {
-        *self.declarations.lock().unwrap_or_else(|e| e.into_inner()) = declarations;
-    }
-}
-
-impl DispatchStore for MemoryDispatchStore {
-    fn load_declarations(&self) -> Vec<DispatchDeclaration> {
-        self.declarations
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
-    }
-
-    fn clear_declarations(&self) {
-        self.declarations
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clear();
-    }
-}
+// 单一真源：声明读取适配统一用 crate 的
+// [conex_run::wait_channel::DispatchStore]（内存/LocalDb 实现均在 crate，
+// 与 wait 通道共用同一数据面）；本模块不再维护同形本地 trait。
 
 // ── Watchdog（兜底唤醒判定与触发）──────────────────────────────────
 
@@ -189,15 +127,15 @@ pub(crate) struct Watchdog {
     session_id: String,
     /// steering 条目落点（PendingMessageQueue；R-CF3 续 run 消费）
     queue: Arc<Mutex<PendingMessageQueue>>,
-    /// dispatch 声明读取（session_meta 适配）
-    store: Arc<dyn DispatchStore>,
+    /// dispatch 声明读取（session_meta 适配；crate 单一真源 trait）
+    store: Arc<dyn conex_run::wait_channel::DispatchStore>,
     /// 最近事件唤醒时刻（None = 从未唤醒）
     last_wakeup: Arc<LastWakeupTracker>,
     /// 活跃定时器计数探测（>0 = AI 已设置定时器等待，抑制兜底；
     /// 缺省不抑制——A3 装配时注入真实计数）
     active_timer_probe: Arc<dyn Fn() -> usize + Send + Sync>,
     /// 子代理状态源（用于过滤已完成/已终止的子代理，消除虚假超时报警风暴）
-    agents_source: Option<Arc<dyn crish_agent_workbench::wait_channel::SubagentStatusSource>>,
+    agents_source: Option<Arc<dyn conex_run::wait_channel::SubagentStatusSource>>,
     /// 上次触发时刻（epoch 毫秒；触发后重置计时防风暴）
     last_fired_ms: Mutex<Option<u64>>,
     /// 配置（N 分钟 / 周期 / 时钟）
@@ -210,7 +148,7 @@ impl Watchdog {
     pub(crate) fn new(
         session_id: String,
         queue: Arc<Mutex<PendingMessageQueue>>,
-        store: Arc<dyn DispatchStore>,
+        store: Arc<dyn conex_run::wait_channel::DispatchStore>,
         last_wakeup: Arc<LastWakeupTracker>,
         active_timer_probe: Arc<dyn Fn() -> usize + Send + Sync>,
         options: WatchdogOptions,
@@ -231,7 +169,7 @@ impl Watchdog {
     #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn with_agents_source(
         mut self,
-        agents_source: Arc<dyn crish_agent_workbench::wait_channel::SubagentStatusSource>,
+        agents_source: Arc<dyn conex_run::wait_channel::SubagentStatusSource>,
     ) -> Self {
         self.agents_source = Some(agents_source);
         self
@@ -417,6 +355,7 @@ pub(crate) fn spawn_with_cancel(
 mod tests {
     use super::*;
     use agent_tools::tools::wait_subagents::WaitMode;
+    use conex_run::wait_channel::{DispatchStore, MemoryWaitStore, WaitStore};
     use std::sync::atomic::{AtomicU64, Ordering};
 
     /// 测试时钟（Arc 共享：闭包读取 + 测试推进）
@@ -438,13 +377,13 @@ mod tests {
     fn test_watchdog() -> (
         Arc<Watchdog>,
         Arc<Mutex<PendingMessageQueue>>,
-        Arc<MemoryDispatchStore>,
+        Arc<MemoryWaitStore>,
         Arc<LastWakeupTracker>,
         Arc<AtomicU64>,
     ) {
         let (clock, options) = test_clock();
         let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
-        let store = Arc::new(MemoryDispatchStore::new());
+        let store = Arc::new(MemoryWaitStore::new());
         let last_wakeup = Arc::new(LastWakeupTracker::new());
         let watchdog = Arc::new(Watchdog::new(
             "sess-1".to_string(),
@@ -482,10 +421,10 @@ mod tests {
     #[tokio::test]
     async fn watchdog_fires_after_n_minutes_idle() {
         let (watchdog, queue, store, _, clock) = test_watchdog();
-        store.set_declarations(vec![declaration(
+        store.save(&declaration(
             "sa-1",
             clock.load(Ordering::Relaxed) - 11 * 60_000,
-        )]);
+        ));
         watchdog.tick().await;
         let entries = drain_entries(&queue);
         assert_eq!(entries.len(), 1, "失联超过 N 分钟应触发兜底");
@@ -508,7 +447,7 @@ mod tests {
     async fn watchdog_no_fire_when_events_recent() {
         let (watchdog, queue, store, last_wakeup, clock) = test_watchdog();
         let base = clock.load(Ordering::Relaxed);
-        store.set_declarations(vec![declaration("sa-1", base.saturating_sub(30 * 60_000))]);
+        store.save(&declaration("sa-1", base.saturating_sub(30 * 60_000)));
         last_wakeup.mark_wakeup_at(base.saturating_sub(60_000));
         watchdog.tick().await;
         assert!(
@@ -521,7 +460,7 @@ mod tests {
     #[tokio::test]
     async fn watchdog_dedup_same_group() {
         let (watchdog, queue, store, _, _) = test_watchdog();
-        store.set_declarations(vec![declaration("sa-1", 100_000)]);
+        store.save(&declaration("sa-1", 100_000));
         watchdog.tick().await;
         watchdog.tick().await;
         let entries = drain_entries(&queue);
@@ -533,7 +472,7 @@ mod tests {
     #[tokio::test]
     async fn watchdog_resets_after_fire() {
         let (watchdog, queue, store, _, clock) = test_watchdog();
-        store.set_declarations(vec![declaration("sa-1", 100_000)]);
+        store.save(&declaration("sa-1", 100_000));
         // t0 触发（dispatched_at=100_000 → 已运行 15 分钟）
         watchdog.tick().await;
         let first = drain_entries(&queue);
@@ -573,8 +512,8 @@ mod tests {
     async fn watchdog_no_fire_when_active_timer() {
         let (_clock, options) = test_clock();
         let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
-        let store = Arc::new(MemoryDispatchStore::new());
-        store.set_declarations(vec![declaration("sa-1", 100_000)]);
+        let store = Arc::new(MemoryWaitStore::new());
+        store.save(&declaration("sa-1", 100_000));
         let watchdog = Arc::new(Watchdog::new(
             "sess-1".to_string(),
             Arc::clone(&queue),
@@ -594,10 +533,10 @@ mod tests {
     #[tokio::test]
     async fn watchdog_fires_when_never_woken() {
         let (watchdog, queue, store, _, clock) = test_watchdog();
-        store.set_declarations(vec![declaration(
+        store.save(&declaration(
             "sa-1",
             clock.load(Ordering::Relaxed) - 10 * 60_000 - 1_000,
-        )]);
+        ));
         watchdog.tick().await;
         assert_eq!(drain_entries(&queue).len(), 1, "从未唤醒应触发兜底");
     }
@@ -630,6 +569,10 @@ mod tests {
             display_label: None,
             allowed_write_paths_json: None,
             sub_session_id: None,
+            capability_mode: None,
+            model_override: None,
+            resumable: false,
+            last_heartbeat_ms: None,
         }
     }
 
@@ -639,9 +582,9 @@ mod tests {
     async fn watchdog_filters_completed_subagents_and_clears_declarations() {
         let (clock, options) = test_clock();
         let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
-        let store = Arc::new(MemoryDispatchStore::new());
+        let store = Arc::new(MemoryWaitStore::new());
         let last_wakeup = Arc::new(LastWakeupTracker::new());
-        let agent_source = Arc::new(crish_agent_workbench::wait_channel::MemoryAgentSource::new());
+        let agent_source = Arc::new(conex_run::wait_channel::MemoryAgentSource::new());
         agent_source.set_agents(vec![test_agent("sa-1", "completed")]);
 
         let watchdog = Arc::new(
@@ -653,15 +596,16 @@ mod tests {
                 Arc::new(|| 0),
                 options,
             )
-            .with_agents_source(Arc::clone(&agent_source)
-                as Arc<dyn crish_agent_workbench::wait_channel::SubagentStatusSource>),
+            .with_agents_source(
+                Arc::clone(&agent_source) as Arc<dyn conex_run::wait_channel::SubagentStatusSource>
+            ),
         );
 
         // 注入 11 分钟前的分发声明
-        store.set_declarations(vec![declaration(
+        store.save(&declaration(
             "sa-1",
             clock.load(Ordering::Relaxed) - 11 * 60_000,
-        )]);
+        ));
 
         // 周期扫描：检测到 sa-1 已 completed，自动核销声明并不触发报警
         watchdog.tick().await;
@@ -681,9 +625,9 @@ mod tests {
     async fn watchdog_fires_for_running_subagent() {
         let (clock, options) = test_clock();
         let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
-        let store = Arc::new(MemoryDispatchStore::new());
+        let store = Arc::new(MemoryWaitStore::new());
         let last_wakeup = Arc::new(LastWakeupTracker::new());
-        let agent_source = Arc::new(crish_agent_workbench::wait_channel::MemoryAgentSource::new());
+        let agent_source = Arc::new(conex_run::wait_channel::MemoryAgentSource::new());
         agent_source.set_agents(vec![test_agent("sa-1", "running")]);
 
         let watchdog = Arc::new(
@@ -695,14 +639,15 @@ mod tests {
                 Arc::new(|| 0),
                 options,
             )
-            .with_agents_source(Arc::clone(&agent_source)
-                as Arc<dyn crish_agent_workbench::wait_channel::SubagentStatusSource>),
+            .with_agents_source(
+                Arc::clone(&agent_source) as Arc<dyn conex_run::wait_channel::SubagentStatusSource>
+            ),
         );
 
-        store.set_declarations(vec![declaration(
+        store.save(&declaration(
             "sa-1",
             clock.load(Ordering::Relaxed) - 11 * 60_000,
-        )]);
+        ));
 
         watchdog.tick().await;
 
@@ -716,9 +661,9 @@ mod tests {
     async fn watchdog_fail_open_on_empty_agents_source() {
         let (clock, options) = test_clock();
         let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
-        let store = Arc::new(MemoryDispatchStore::new());
+        let store = Arc::new(MemoryWaitStore::new());
         let last_wakeup = Arc::new(LastWakeupTracker::new());
-        let agent_source = Arc::new(crish_agent_workbench::wait_channel::MemoryAgentSource::new());
+        let agent_source = Arc::new(conex_run::wait_channel::MemoryAgentSource::new());
 
         let watchdog = Arc::new(
             Watchdog::new(
@@ -729,14 +674,15 @@ mod tests {
                 Arc::new(|| 0),
                 options,
             )
-            .with_agents_source(Arc::clone(&agent_source)
-                as Arc<dyn crish_agent_workbench::wait_channel::SubagentStatusSource>),
+            .with_agents_source(
+                Arc::clone(&agent_source) as Arc<dyn conex_run::wait_channel::SubagentStatusSource>
+            ),
         );
 
-        store.set_declarations(vec![declaration(
+        store.save(&declaration(
             "sa-1",
             clock.load(Ordering::Relaxed) - 11 * 60_000,
-        )]);
+        ));
 
         watchdog.tick().await;
 

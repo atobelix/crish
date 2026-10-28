@@ -1,27 +1,22 @@
 //! R3-02 推送装配适配层（bin 侧：桥接 lib push 契约与 bin server 类型）
 //!
 //! lib 目标（push 决策/直推契约）与 bin 目标（main.rs 装配面）的模块树
-//! 分裂（lib.rs:1-22 注记）：`server`（WsRegistry）与 bin 侧
-//! `core_event_bridge`（Tauri 壳副本）只存在于 bin；`push` 只存在于 lib。
-//! 本模块是 R3-02 接线轮的**跨层装配面**，承担三类桥接：
+//! 分裂（lib.rs:1-22 注记）：`server`（WsRegistry）只存在于 bin；`push`
+//! 只存在于 lib。本模块是 R3-02 接线轮的**跨层装配面**，承担两类桥接：
 //!
-//! 1. **Emitter 双向适配**（D7 §9.2 方案 a 挂点）——lib 侧 Emitter 与
-//!    bin 侧 Emitter 为同名不同实例的 trait（lib.rs:14-18 注记），经本
-//!    模块双向桥接：
-//!    - bin Emitter for lib [PushAwareEmitter]（桥上行：push_aware 作为
-//!      bin `EventBridge::new` 的内层发射器挂进事件桥——转发原通道不变
-//!      + 旁路 push-core 决策与双轨分发）；
-//!    - lib Emitter for bin [crate::core_event_bridge::TauriEmitter]
-//!      （桥下行：TauriEmitter 作为 PushAwareEmitter 的内层面，webview
-//!      通道行为不变）。
-//! 2. **在线判定数据源**：[crate::server::ws::WsRegistry] →
+//! 1. **在线判定数据源**：[crate::server::ws::WsRegistry] →
 //!    [DevicePresenceSource]——连接快照（token_hash / label / 最近活动）
 //!    → 设备活跃表；在线/离线由分发器经 `is_device_online` 纯函数过滤
 //!    （push/online.rs 装配注记的接线轮交付）。
-//! 3. **直推通道**：[WsPushChannel]——[PushChannel] 的 WS 实现：
+//! 2. **直推通道**：[WsPushChannel]——[PushChannel] 的 WS 实现：
 //!    PushMessage → events.push 帧（schema::ws_push_body 载荷 + ws.rs
 //!    outbound_frame 信封）→ 注册表按令牌哈希定位连接 → 出站通道投递
 //!    （复用 R1 事件面 sender task 发送路径，M8 裁决修正 2）。
+//!
+//! 注：原「Emitter 双向适配」随 core_event_bridge 下沉 conex-run 合一为
+//! 单一 trait——PushAwareEmitter 直接实现 [conex_run::core_event_bridge::
+//! Emitter]（push/pusher.rs），TauriEmitter 同（tauri_emitter.rs），
+//! 本模块的桥接 impl 随双副本一并删除。
 //!
 //! 装配（main.rs ⑥ 事件桥处）：presence/channel 均基于**同一共享
 //! WsRegistry**（与配对协调器同一实例，main.rs ⑤b）——设备令牌哈希对齐
@@ -36,32 +31,12 @@
 
 use std::sync::Arc;
 
-use crish_agent_workbench::core_event_bridge::Emitter as LibEmitter;
 use crish_agent_workbench::push::{
     device_activity, DeviceActivity, DevicePresenceSource, PushChannel, PushChannelError,
     PushMessage,
 };
 
-use crate::core_event_bridge::Emitter;
 use crate::server::ws::WsRegistry;
-
-/// bin Emitter（EventBridge 构造参数面）for lib PushAwareEmitter——
-/// R3-02 事件桥装饰器挂点（D7 §9.2 方案 a：转发原通道 + 旁路推送决策）。
-impl Emitter for crish_agent_workbench::push::PushAwareEmitter {
-    fn emit(&self, channel: &str, payload: &str) {
-        // 委托 lib 侧 Emitter 实现（pusher.rs：内层转发 + on_event 决策分发）
-        LibEmitter::emit(self, channel, payload);
-    }
-}
-
-/// lib Emitter（PushAwareEmitter 内层面）for bin TauriEmitter——
-/// 原 webview 通道行为不变（lib.rs:14-18 注记的双侧同名模块适配）。
-impl LibEmitter for crate::core_event_bridge::TauriEmitter {
-    fn emit(&self, channel: &str, payload: &str) {
-        // 委托 bin 侧 Emitter 实现（app.emit，失败仅记录不阻断）
-        Emitter::emit(self, channel, payload);
-    }
-}
 
 /// WsRegistry → DevicePresenceSource（R3-02：连接快照 → 设备活跃表）
 ///
@@ -115,9 +90,7 @@ impl PushChannel for WsPushChannel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
 
-    use conex_types::events::{AgentEvent, AgentEventEnvelope, RunTerminalStatus};
     use tokio::sync::{mpsc, watch};
 
     use crish_agent_workbench::push::{DecisionOutcome, PayloadDigest, PushDecision, SceneId};
@@ -267,104 +240,5 @@ mod tests {
             "背压错误：{error:?}"
         );
         let _ = out_rx;
-    }
-
-    // ── Emitter 桥上行（bin Emitter for lib PushAwareEmitter）──
-
-    /// lib 侧记录发射器（PushAwareEmitter 内层面；实现 lib Emitter）
-    #[derive(Default)]
-    struct LibRecordingEmitter {
-        calls: Mutex<Vec<(String, String)>>,
-    }
-
-    impl LibRecordingEmitter {
-        fn calls(&self) -> Vec<(String, String)> {
-            self.calls.lock().unwrap().clone()
-        }
-    }
-
-    impl LibEmitter for LibRecordingEmitter {
-        fn emit(&self, channel: &str, payload: &str) {
-            self.calls
-                .lock()
-                .unwrap()
-                .push((channel.to_string(), payload.to_string()));
-        }
-    }
-
-    /// lib 侧记录通道（PushDispatcher 注入；实现 lib PushChannel）
-    #[derive(Default)]
-    struct RecordingLibChannel {
-        sent: Mutex<Vec<(String, PushMessage)>>,
-    }
-
-    impl RecordingLibChannel {
-        fn sent(&self) -> Vec<(String, PushMessage)> {
-            self.sent.lock().unwrap().clone()
-        }
-    }
-
-    impl PushChannel for RecordingLibChannel {
-        fn send(&self, device_key: &str, message: &PushMessage) -> Result<(), PushChannelError> {
-            self.sent
-                .lock()
-                .unwrap()
-                .push((device_key.to_string(), message.clone()));
-            Ok(())
-        }
-    }
-
-    /// 信封 JSON payload（runId/sequence 注入；sessionId 来自事件体）
-    fn envelope_payload(event: AgentEvent, run_id: Option<&str>, sequence: Option<u64>) -> String {
-        let envelope = AgentEventEnvelope::new(event, run_id.map(str::to_string), sequence);
-        serde_json::to_string(&envelope).expect("信封必须可序列化")
-    }
-
-    /// 推送事件（run 失败：S4 P0，直发）
-    fn run_failed_event() -> AgentEvent {
-        AgentEvent::RunTerminal {
-            session_id: "s-7".to_string(),
-            run_id: "run-42".to_string(),
-            timestamp: "2026-08-14T12:00:00Z".to_string(),
-            terminal: RunTerminalStatus::Failed,
-            error: Some("provider 401".to_string()),
-        }
-    }
-
-    /// 基准时刻：2026-08-09 12:00:00 UTC（与 pusher.rs 测试基准同值）
-    const T0: u64 = 1_786_276_800_000;
-
-    /// 桥上行：lib PushAwareEmitter 经 bin Emitter 面被消费（EventBridge
-    /// 装配形态）——转发原通道照常 + 旁路在线设备直推
-    #[test]
-    fn lib_push_aware_emitter_usable_as_bin_emitter() {
-        let inner = Arc::new(LibRecordingEmitter::default());
-        let presence = Arc::new(crish_agent_workbench::push::MemoryPresenceSource::new());
-        presence.set_devices(vec![device_activity("tok-a", "手机 A", T0 - 1_000)]);
-        let channel = Arc::new(RecordingLibChannel::default());
-        let dispatcher = Arc::new(crish_agent_workbench::push::PushDispatcher::new(
-            Arc::clone(&presence) as Arc<dyn DevicePresenceSource>,
-            Arc::clone(&channel) as Arc<dyn PushChannel>,
-        ));
-        let emitter = Arc::new(crish_agent_workbench::push::PushAwareEmitter::with_clock(
-            Arc::clone(&inner) as Arc<dyn LibEmitter>,
-            dispatcher,
-            Box::new(|| T0),
-        ));
-
-        // 经 bin Emitter 面调用（main.rs EventBridge::new 的装配形态）
-        let payload = envelope_payload(run_failed_event(), Some("run-42"), Some(7));
-        Emitter::emit(&*emitter, "workbench-run-event", &payload);
-
-        // 1. 转发原通道（lib 内层面）：同一 channel + 载荷
-        let calls = inner.calls();
-        assert_eq!(calls.len(), 1);
-        assert_eq!(calls[0].0, "workbench-run-event");
-        assert_eq!(calls[0].1, payload);
-        // 2. 旁路分发：在线设备收到直推（events.push 载荷形状）
-        let sent = channel.sent();
-        assert_eq!(sent.len(), 1, "在线设备收到直推");
-        assert_eq!(sent[0].0, "tok-a");
-        assert_eq!(sent[0].1.dedupe_key, "run-terminal:run-42:failed");
     }
 }

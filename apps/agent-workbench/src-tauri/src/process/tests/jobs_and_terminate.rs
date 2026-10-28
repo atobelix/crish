@@ -209,3 +209,62 @@ fn daemon_process_survives_pty_kill_all() {
         "清理后进程必须退出"
     );
 }
+
+/// W3-T2 验收测试：ProcessJobGuard 生命周期与内核级防孤儿强杀断言
+#[cfg(windows)]
+#[test]
+fn test_process_job_guard_kill_on_drop() {
+    let mut child = std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-Command", "Start-Sleep 30"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn test process for job guard");
+    let pid = child.id();
+
+    let guard = ProcessJobGuard::new_for_pid(pid).expect("create job guard");
+    if let Some(g) = guard {
+        assert!(!g.raw_handle().is_null(), "Job 句柄必须非空");
+        // 模拟句柄关闭（Drop 守卫）
+        drop(g);
+        // Windows 内核必须在 Job 关闭后强杀该进程
+        assert!(
+            wait_child_exit(&mut child, Duration::from_secs(5)),
+            "Drop ProcessJobGuard 后子进程必须被内核强杀（零孤儿逃逸）"
+        );
+    } else {
+        // 受限沙箱降级分支：显式清理
+        let _ = terminate_process_tree(pid);
+        let _ = wait_child_exit(&mut child, Duration::from_secs(5));
+    }
+}
+
+/// W3-T2 验收测试：ProcessJobGuard disarm 解除自动强杀验证
+#[cfg(windows)]
+#[test]
+fn test_process_job_guard_disarm() {
+    let mut child = std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-Command", "Start-Sleep 30"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn test process for disarm");
+    let pid = child.id();
+
+    let guard = ProcessJobGuard::new_for_pid(pid).expect("create job guard");
+    if let Some(g) = guard {
+        assert!(!g.raw_handle().is_null());
+        // 解除限制并释放句柄
+        g.disarm().expect("disarm must succeed");
+        // 进程应依然存活（未被连带强杀）
+        assert!(pid_is_alive(pid), "disarm 后进程必须依然存活");
+        // 显式清理
+        let _ = terminate_process_tree(pid);
+        let _ = wait_child_exit(&mut child, Duration::from_secs(5));
+    } else {
+        let _ = terminate_process_tree(pid);
+        let _ = wait_child_exit(&mut child, Duration::from_secs(5));
+    }
+}

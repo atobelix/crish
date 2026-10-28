@@ -31,7 +31,7 @@
 //!   （D5 §4.5「设备管理与服务配置命令（admin 面，仅桌面端）」）；
 //! - 任何以明文返回密钥/令牌/配对码的命令。
 
-use crate::core_event_bridge::EventBridge;
+use conex_run::core_event_bridge::EventBridge;
 use conex_types::events::{
     AgentEvent, AgentEventEnvelope, SecurityAuditDecision, SecurityAuditOperation,
 };

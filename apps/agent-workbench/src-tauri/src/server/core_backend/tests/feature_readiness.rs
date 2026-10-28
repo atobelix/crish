@@ -339,7 +339,7 @@ async fn p7_status_includes_active_runs_and_pending_approvals_end_to_end() {
         ProviderStreamEvent::stop(StopReason::Stop),
     ]));
     let routed: Arc<dyn ProviderCall> = provider;
-    let config = crate::engine::EngineProviderConfig {
+    let config = conex_run::engine_provider::EngineProviderConfig {
         base_url: "http://test.local/v1".to_string(),
         api_key: "test-key".to_string(),
         model: "deepseek-v4-flash".to_string(),

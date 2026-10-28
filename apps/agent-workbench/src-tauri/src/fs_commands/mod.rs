@@ -5,7 +5,7 @@ pub(crate) mod skills_owned;
 pub(crate) mod types;
 pub(crate) mod write;
 
-pub(crate) use crate::core_error::CoreError;
+pub(crate) use conex_run::core_error::CoreError;
 pub(crate) use types::FileCommandError;
 
 /// 列出目录（PE-07 T07.2：无 workspace_root 参数，根由 WorkspaceRegistry 解析）。

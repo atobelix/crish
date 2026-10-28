@@ -8,7 +8,6 @@
 //!
 //! **≠ EL**；禁删既有测试（测试资产保护铁律 §9）；禁重派 SR-04。
 
-use super::*;
 use agent_provider::request::cache::CacheMechanism;
 use conex_compaction::Summarizer;
 use conex_types::ContextBudget;
@@ -17,7 +16,6 @@ use session_loop::TestProvider;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use std::collections::BTreeMap;
-use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -39,6 +37,7 @@ use agent_tools::tools::wait_subagents::DispatchDeclaration;
 // （wait_channel.rs 是库模块，bin 目标自动依赖同包 lib）
 use async_trait::async_trait;
 use conex_db::LocalDb;
+use conex_run::wait_channel::ControlBusResolver;
 use conex_telemetry::cache::WARN_MISSED_TOKENS;
 use conex_types::denied_stats::DeniedStats;
 use conex_types::error::ProviderErrorKind;
@@ -47,16 +46,61 @@ use conex_types::events::{
 };
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::response::ClassifiedStreamError;
-use crish_agent_workbench::wait_channel::ControlBusResolver;
 use futures_util::StreamExt;
 use orchestrator::PendingMessageQueue;
 use session_loop::provider::{DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest};
 use session_loop::stream::{ProviderStreamEvent, ProviderUsage, StopReason as LoopStopReason};
 use session_loop::{CacheTrackingConfig, SessionLoopOptions, ToolBatchOptions};
 
-use crate::core_event_bridge::EventBridge;
+use conex_run::context_injection::{
+    push_subagent_role_constraint, ContextInjection, ContextInjectionKind, ContextInjector,
+    CONTEXT_INJECTION_ORDER, SUBAGENT_ROLE_CONSTRAINT_CONTENT, SUBAGENT_ROLE_CONSTRAINT_TITLE,
+};
+use conex_run::core_event_bridge::EventBridge;
+use conex_run::engine_assembly::{assemble_scheduler_registry, unix_millis_now};
+use conex_run::engine_channels::{
+    production_summarizer_factory, BufferedRunEventBridge, ContinuityChannelBoard,
+    ProviderSummarizer,
+};
+use conex_run::engine_handle::{
+    build_cache_tracking_config, cold_cache_warning_event, model_switched, waste_alert_event,
+    EngineHandle, SessionCacheState, SharedProvider,
+};
+
+/// C10 Skills 注入段（RustSkill 扫描结果 → `## Skill 定义` 注入段；RustSkill
+/// 为壳层技能扫描类型，本装配辅助留壳——渲染确定，同一技能集合两次构建
+/// 字节一致）。生产消费面 = run 装配 ContextInjector 挂载。
+fn skill_context_injection(skills: &[RustSkill]) -> ContextInjection {
+    let content = skills
+        .iter()
+        .map(|skill| {
+            format!(
+                "- {}{}（{}）：{}\n{}",
+                skill.name(),
+                if skill.is_system() {
+                    "（系统）"
+                } else {
+                    ""
+                },
+                skill.scope(),
+                skill.description(),
+                skill.content()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    ContextInjection::new(ContextInjectionKind::Skills, "Skill 定义", content)
+}
 use crate::fs_commands::skills::RustSkill;
-use crate::timers::AgentEventSink;
+use conex_run::engine_provider::protocol::HttpStreamParser;
+use conex_run::engine_provider::stream::{classify_stream_parse, to_classified, to_loop_event};
+use conex_run::engine_provider::{
+    build_http_client, effective_context_window, new_message_id, now_iso_utc, provider_url,
+    responses_endpoint_active, responses_supported, user_message, ClientConnectionConfig,
+    EngineProviderConfig, HttpProviderCall,
+};
+use conex_run::run_producer::SessionLoopProducer;
+use conex_run::timers::AgentEventSink;
 
 /// ISO8601 时间戳形状（毫秒精度 + Z 后缀）
 #[test]
@@ -193,7 +237,7 @@ fn test_provider_call(model: &str) -> HttpProviderCall {
 /// cacheControlFormat 全部从 yaml 长出，禁止 URL / 前缀启发式）。
 fn install_live_fixture() -> std::sync::MutexGuard<'static, ()> {
     let live = lock_live_catalog();
-    protocol::reload_live_catalog_from_yaml_str(
+    conex_run::engine_provider::reload_live_catalog_from_yaml_str(
         r#"
 version: 2
 providers:
@@ -541,7 +585,7 @@ fn responses_config(model: &str, endpoint: Endpoint) -> EngineProviderConfig {
 /// 协议剖面被跨轨污染（实证 2026-09-15：`request_body_dispatches_by_rail`
 /// 在并行全套下 chat 轨读到 Null 的 max_tokens——剖面被误判为 responses）。
 fn lock_live_catalog() -> std::sync::MutexGuard<'static, ()> {
-    crate::engine_provider::protocol::LIVE_CATALOG_TEST_LOCK
+    conex_run::engine_provider::protocol::LIVE_CATALOG_TEST_LOCK
         .lock()
         .unwrap_or_else(|poison| poison.into_inner())
 }
@@ -551,7 +595,7 @@ fn lock_live_catalog() -> std::sync::MutexGuard<'static, ()> {
 /// 各自命中一个 provider，剖面由 base_url 区分——**不依赖机器上的
 /// models.yaml**（此前依赖真实用户目录，是并行/换机即红的根因）。
 fn install_dual_rail_catalog() {
-    crate::engine_provider::protocol::reload_live_catalog_from_yaml_str(
+    conex_run::engine_provider::protocol::reload_live_catalog_from_yaml_str(
         r#"
 version: 2
 providers:
@@ -1110,7 +1154,7 @@ async fn produce_without_initial_conversation_stays_single_message() {
     assert_eq!(provider_empty.request_message_arcs(0).len(), 1);
 }
 
-/// T-30：context_budget 透传（core_run_commands 构造点 → options →
+/// T-30：context_budget 透传（run_task_impl 构造点 → options →
 /// 预算层）——窗口收紧到 12288 时 max_tokens 被钳到默认 8192 之下
 /// （clamp = min(requested, window - estimate - safety)，估算 > 0）
 #[tokio::test]
@@ -1407,7 +1451,7 @@ async fn provider_summarizer_missing_content_degrades_to_err() {
 /// 就绪 → 返回真实 ProviderSummarizer（模型 = 当前生效配置）
 #[test]
 fn production_factory_returns_real_summarizer_from_engine_config() {
-    use crate::core_run_commands::{isolate_config_store, CONFIG_TEST_LOCK};
+    use crate::config_test_support::{isolate_config_store, CONFIG_TEST_LOCK};
     let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1504,7 +1548,7 @@ fn sample_stats(warm_until_ms: Option<u64>, missed_tokens: u64) -> RunCacheStats
 #[test]
 fn cache_tracking_config_resolves_provider_model_ttl() {
     let _live = lock_live_catalog();
-    protocol::reload_live_catalog_from_yaml_str(
+    conex_run::engine_provider::reload_live_catalog_from_yaml_str(
         r#"
 version: 2
 providers:
@@ -2184,7 +2228,7 @@ async fn subagent_run_system_prompt_contains_frozen_constraint() {
 async fn main_agent_run_excludes_subagent_role_constraint() {
     // 主 Agent 装配面：仅常规注入段（Skills），无角色约束段
     let mut injector = ContextInjector::new();
-    injector.push(EngineHandle::skill_context_injection(&[sample_skill(
+    injector.push(skill_context_injection(&[sample_skill(
         "code-review",
         "代码评审",
         "按正确性优先评审。",
@@ -2234,7 +2278,7 @@ fn skill_injection_is_byte_stable_and_contains_skills() {
         sample_skill("code-review", "代码评审", "按正确性优先评审。"),
         sample_skill("conex-committer", "提交规范", "按仓库风格提交。"),
     ];
-    let injection = EngineHandle::skill_context_injection(&skills);
+    let injection = skill_context_injection(&skills);
     assert_eq!(injection.kind, ContextInjectionKind::Skills);
     let mut injector = ContextInjector::new();
     injector.push(injection);
@@ -2257,7 +2301,7 @@ fn skill_injection_is_byte_stable_and_contains_skills() {
     // system 标记技能带（系统）标注
     let mut sys = sample_skill("sys-skill", "系统技能", "系统正文");
     sys.system = true;
-    let inj = EngineHandle::skill_context_injection(&[sys]);
+    let inj = skill_context_injection(&[sys]);
     let mut injector_sys = ContextInjector::new();
     injector_sys.push(inj);
     let render = injector_sys.render(None).expect("必产出");
@@ -2284,7 +2328,7 @@ fn mcp_injection_is_byte_stable_and_lists_tools() {
             fatal_on_error: false,
         },
     ];
-    let injection = EngineHandle::mcp_context_injection(&defs);
+    let injection = conex_run::context_injection::mcp_context_injection(&defs);
     assert_eq!(injection.kind, ContextInjectionKind::Mcp);
     let mut injector = ContextInjector::new();
     injector.push(injection);
@@ -2306,15 +2350,15 @@ async fn produce_with_skill_injection_sends_skill_segment() {
         "按正确性优先评审。",
     )];
     let mut injector = ContextInjector::new();
-    injector
-        .push(EngineHandle::skill_context_injection(&skills))
-        .push(EngineHandle::mcp_context_injection(&[ToolDefinition {
+    injector.push(skill_context_injection(&skills)).push(
+        conex_run::context_injection::mcp_context_injection(&[ToolDefinition {
             name: "mcp_files__read".to_string(),
             description: "读文件".to_string(),
             input_schema: serde_json::json!({ "type": "object" }),
             dangerous: false,
             fatal_on_error: false,
-        }]));
+        }]),
+    );
     let (producer, provider) = test_producer(None, SessionLoopOptions::default());
     let mut producer = producer.with_context_injector(Some(injector));
     producer.produce().await;
@@ -2419,60 +2463,30 @@ async fn register_plugin_mcp_server_integration() {
 }
 
 /// 34 §5.2 E-1 装配注入断言 + E-4 消费路径（拒绝态，R-12 安全默认）：
-/// 默认装配（开关 false）经引擎 seam `browser_attach_mcp_server_config`
-/// 消费守卫 → 结构化 `tool.browser.capability_disabled`（端点零暴露；
-/// 若装配未把开关注入 BrowserSlot，守卫无法命中开关先行判定——装配
-/// 注入由错误码互斥背书）。
+/// 壳域装配（EngineHost hooks）默认 `BrowserToolsConfig.mcp_attach_allowed`
+/// = false → 槽以默认开关构造，seam 守卫 `mcp_attach_endpoint` → 结构化
+/// `tool.browser.capability_disabled`（端点零暴露；若装配未把开关注入
+/// BrowserSlot，守卫无法命中开关先行判定——装配注入由错误码互斥背书）。
 #[tokio::test]
 async fn mcp_attach_assembly_default_denies_zero_exposure() {
     use conex_browser_tools::codes::TOOL_BROWSER_CAPABILITY_DISABLED;
-    let engine = EngineHandle::new(None);
-    let err = engine
-        .browser_attach_mcp_server_config("browser-mcp")
-        .unwrap_err();
+    let slot = crate::browser::BrowserSlot::new().with_mcp_attach_allowed(
+        conex_browser_tools::BrowserToolsConfig::default().mcp_attach_allowed,
+    );
+    let err = slot.mcp_attach_endpoint().unwrap_err();
     assert_eq!(err.code(), TOOL_BROWSER_CAPABILITY_DISABLED);
 }
 
-/// 34 §5.2 E-1 装配注入断言（允许态，mock 配置）：经
-/// [EngineHandle::new_with_mcp_attach_allowed](true) 注入开关 →
-/// 引擎 seam 消费守卫 → `tool.browser.not_ready`（受管实例未启动；
-/// 若装配未注入开关会命中 capability_disabled——两态互斥区分装配
-/// 注入生效；就绪放行面由 browser 域单测以样例端点覆盖，引擎级不
-/// 触发真实浏览器启动）。
+/// 34 §5.2 E-1 装配注入断言（允许态，mock 配置）：开关 true 注入槽 →
+/// seam 守卫 → `tool.browser.not_ready`（受管实例未启动；若装配未注入
+/// 开关会命中 capability_disabled——两态互斥区分装配注入生效；就绪放行面
+/// 由 browser 域单测以样例端点覆盖，引擎级不触发真实浏览器启动）。
 #[tokio::test]
 async fn mcp_attach_assembly_enabled_requires_running_endpoint() {
     use conex_browser_tools::codes::TOOL_BROWSER_NOT_READY;
-    let engine = EngineHandle::new_with_mcp_attach_allowed(true);
-    let err = engine
-        .browser_attach_mcp_server_config("browser-mcp")
-        .unwrap_err();
+    let slot = crate::browser::BrowserSlot::new().with_mcp_attach_allowed(true);
+    let err = slot.mcp_attach_endpoint().unwrap_err();
     assert_eq!(err.code(), TOOL_BROWSER_NOT_READY);
-}
-
-impl EngineHandle {
-    /// 测试面：指定 attach 会话级开关的完整装配（34 §5.2 E-1 装配注入
-    /// 断言——mock 配置值直接注入装配路径，验证引擎将开关经
-    /// `BrowserSlot::with_mcp_attach_allowed` 注入槽并由消费 seam 命中）。
-    pub(crate) fn new_with_mcp_attach_allowed(mcp_attach_allowed: bool) -> Self {
-        Self::build(None, None, mcp_attach_allowed, None)
-    }
-
-    /// 测试面：注入 provider 适配层与生效配置并置就绪（T-D-13 端到端测试
-    /// 用——run_task_impl 完整装配不依赖磁盘 config，CI 确定性；经
-    /// [Self::cache_tracking_config] 同步生效——默认模型继承断言数据源）
-    pub(crate) fn inject_provider_for_test(
-        &self,
-        provider: Arc<dyn ProviderCall>,
-        config: EngineProviderConfig,
-    ) {
-        *self.provider.lock().unwrap_or_else(|e| e.into_inner()) = Some(provider);
-        *self
-            .provider_config
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()) = Some(config);
-        self.ready.store(true, Ordering::SeqCst);
-        *self.ready_reason.lock().unwrap_or_else(|e| e.into_inner()) = None;
-    }
 }
 
 /// T-CF-06 装配测试：EngineHandle 的 TimerRegistry 接线面。
@@ -2694,9 +2708,10 @@ mod wait_wiring_tests {
             .persist_declaration(&declaration)
             .await
             .expect("声明落库应成功");
-        // 桥接读面：watchdog 的 DispatchStore 看到同一数据
+        // 桥接读面：watchdog 的 DispatchStore（crate::wait_channel::DispatchStore
+        // trait 对象）看到同一数据
         let store = engine.dispatch_store();
-        let as_watchdog: Arc<dyn crate::watchdog::DispatchStore> = store;
+        let as_watchdog: Arc<dyn conex_run::wait_channel::DispatchStore> = store;
         let declarations = as_watchdog.load_declarations();
         assert_eq!(declarations.len(), 1);
         assert_eq!(declarations[0].subagent_ids, vec!["sa-1".to_string()]);
@@ -2713,8 +2728,8 @@ mod wait_wiring_tests {
 #[cfg(test)]
 mod store_assembly_tests {
     use super::*;
-    use crate::sched::CronTaskInput;
     use agent_tools::tools::wait_subagents::{WaitMode, DISPATCH_META_KEY_MODE};
+    use conex_run::sched::CronTaskInput;
     use conex_types::timer::TimerCondition;
 
     /// 定时器经 LocalDb 真适配 store 落库（`timer_<id>` 键 + `timer_ids`
@@ -2796,7 +2811,7 @@ mod store_assembly_tests {
         // watchdog 桥接面：DispatchStore 读回同一数据（T-CF-10/13 双
         // trait 注入，LocalDbWaitStore 桥接 impl）
         let store = engine.dispatch_store();
-        let as_watchdog: Arc<dyn crate::watchdog::DispatchStore> = store;
+        let as_watchdog: Arc<dyn conex_run::wait_channel::DispatchStore> = store;
         let declarations = as_watchdog.load_declarations();
         assert_eq!(declarations.len(), 1);
         assert_eq!(declarations[0].subagent_ids, vec!["sa-1".to_string()]);
@@ -2809,7 +2824,7 @@ mod store_assembly_tests {
     async fn engine_sched_store_assembly_branches() {
         let db = LocalDb::open_in_memory().expect("内存库打开应成功");
         let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
-        let sink = Arc::new(crate::sched::SchedEventSink::new());
+        let sink = Arc::new(conex_run::sched::SchedEventSink::new());
         // Some(db) → 真适配：注册 cron 后 sched_* 键落库
         let registry = assemble_scheduler_registry(&queue, sink.clone(), Some(db.clone()))
             .expect("装配应成功");
@@ -2833,7 +2848,7 @@ mod store_assembly_tests {
         // 已降级为 legacy 键（BATCH-SCHED-W1 重命名，仅存量收敛合并时读取，
         // 不再写入）。断言真源键，避免随重命名漂移。
         assert!(
-            db.get_session_meta(crate::sched::SESSION_META_SCHED_INDEX_KEY)
+            db.get_session_meta(conex_run::sched::SESSION_META_SCHED_INDEX_KEY)
                 .expect("db 读应成功")
                 .is_some(),
             "sched_index 索引应已写入"
@@ -2925,9 +2940,9 @@ mod http_client_config_tests {
 #[cfg(test)]
 mod event_drain_tests {
     use super::*;
-    use crate::core_event_bridge::Emitter;
-    use crate::sched::{CronEvent, EventSink as SchedEventSinkTrait};
-    use crate::timers::{EventSink as TimerEventSinkTrait, TimerEvent};
+    use conex_run::core_event_bridge::Emitter;
+    use conex_run::sched::{CronEvent, EventSink as SchedEventSinkTrait};
+    use conex_run::timers::{EventSink as TimerEventSinkTrait, TimerEvent};
     use conex_types::events::SecurityAuditOperation;
     use conex_types::timer::TimerCondition;
 
@@ -2983,12 +2998,12 @@ mod event_drain_tests {
             &sink,
             TimerEvent::Cancelled {
                 timer_id: "timer-1".to_string(),
-                reason: crate::timers::TimerCancelReason::EarlyExit,
+                reason: conex_run::timers::TimerCancelReason::EarlyExit,
                 cancelled_at_ms: 1_700_000_000_456,
             },
         );
         let (bridge, emitter) = recording_bridge();
-        let forwarded = forward_drained_timer_events(&sink, &bridge);
+        let forwarded = conex_run::engine_channels::forward_drained_timer_events(&sink, &bridge);
         assert_eq!(forwarded, 2, "两条缓冲事件应全部转发");
         let calls = emitter.calls();
         assert_eq!(calls.len(), 2);
@@ -3024,7 +3039,7 @@ mod event_drain_tests {
         assert_eq!(second["cancelledAtMs"], 1_700_000_000_456_u64);
         // 二次转发空缓冲 → 0（drain 已取走，不重复转发）
         assert_eq!(
-            forward_drained_timer_events(&sink, &bridge),
+            conex_run::engine_channels::forward_drained_timer_events(&sink, &bridge),
             0,
             "空缓冲转发应返回 0"
         );
@@ -3036,7 +3051,7 @@ mod event_drain_tests {
     /// runId="cron-<cronId>"，sequence 不注入）。
     #[test]
     fn drain_forward_scheduler_emits_envelopes_with_pseudo_runid() {
-        let sink = crate::sched::SchedEventSink::new();
+        let sink = conex_run::sched::SchedEventSink::new();
         SchedEventSinkTrait::emit(
             &sink,
             CronEvent::Fired {
@@ -3048,7 +3063,8 @@ mod event_drain_tests {
             },
         );
         let (bridge, emitter) = recording_bridge();
-        let forwarded = forward_drained_scheduler_events(&sink, &bridge);
+        let forwarded =
+            conex_run::engine_channels::forward_drained_scheduler_events(&sink, &bridge);
         assert_eq!(forwarded, 1, "一条缓冲事件应全部转发");
         let calls = emitter.calls();
         assert_eq!(calls.len(), 1);
@@ -3072,7 +3088,7 @@ mod event_drain_tests {
         assert_eq!(payload["firedAtMs"], 1_700_000_000_789_u64);
         // 二次转发空缓冲 → 0
         assert_eq!(
-            forward_drained_scheduler_events(&sink, &bridge),
+            conex_run::engine_channels::forward_drained_scheduler_events(&sink, &bridge),
             0,
             "空缓冲转发应返回 0"
         );
@@ -3117,7 +3133,7 @@ mod event_drain_tests {
         let registry = engine.scheduler_registry().expect("装配后应为 Some");
         registry.set_fire_override_ms(40);
         let cron_id = registry
-            .register(crate::sched::CronTaskInput {
+            .register(conex_run::sched::CronTaskInput {
                 expression: "* * * * *".to_string(),
                 prompt: "drain cron 检查".to_string(),
                 max_iterations: Some(1),
@@ -3130,7 +3146,10 @@ mod event_drain_tests {
         // runId 注入 cron-<cronId>）；payload 字段级断言即「同一缓冲
         // 实例」的功能性证明
         let (bridge, emitter) = recording_bridge();
-        let forwarded = forward_drained_scheduler_events(&engine.scheduler_event_sink(), &bridge);
+        let forwarded = conex_run::engine_channels::forward_drained_scheduler_events(
+            &engine.scheduler_event_sink(),
+            &bridge,
+        );
         assert_eq!(forwarded, 1, "cron 触发事件应经访问器转发到真实桥");
         let payload: serde_json::Value =
             serde_json::from_str(&emitter.calls()[0].1).expect("载荷应为合法 JSON");
@@ -3176,7 +3195,7 @@ mod event_drain_tests {
     /// 会话 tracing 兜底不 panic 不送达
     #[test]
     fn routing_audit_sink_dispatches_per_session() {
-        let sink = RoutingAuditSink::new(Arc::new(DeniedStats::new()));
+        let sink = conex_run::audit::RoutingAuditSink::new(Arc::new(DeniedStats::new()));
         let s1 = Arc::new(agent_tools::audit::RecordingAuditSink::new());
         let s2 = Arc::new(agent_tools::audit::RecordingAuditSink::new());
         sink.register("s1", Arc::clone(&s1) as AuditSink);
@@ -3207,7 +3226,7 @@ mod event_drain_tests {
     #[test]
     fn routing_audit_sink_counts_denied_globally() {
         let stats = Arc::new(DeniedStats::new());
-        let sink = RoutingAuditSink::new(Arc::clone(&stats));
+        let sink = conex_run::audit::RoutingAuditSink::new(Arc::clone(&stats));
         let s1 = Arc::new(agent_tools::audit::RecordingAuditSink::new());
         sink.register("s1", Arc::clone(&s1) as AuditSink);
         sink.emit(&routing_test_audit_event(
@@ -3230,7 +3249,7 @@ mod event_drain_tests {
     /// 收口注销：unregister 后路由不再送达；重复注销幂等；注册表无残留
     #[test]
     fn routing_audit_sink_unregister_is_idempotent() {
-        let sink = RoutingAuditSink::new(Arc::new(DeniedStats::new()));
+        let sink = conex_run::audit::RoutingAuditSink::new(Arc::new(DeniedStats::new()));
         let s1 = Arc::new(agent_tools::audit::RecordingAuditSink::new());
         sink.register("s1", Arc::clone(&s1) as AuditSink);
         assert_eq!(sink.route_count(), 1);
@@ -3251,7 +3270,7 @@ mod event_drain_tests {
     /// 与事件收口旁路点口径一致）
     #[test]
     fn routing_audit_sink_later_register_overwrites() {
-        let sink = RoutingAuditSink::new(Arc::new(DeniedStats::new()));
+        let sink = conex_run::audit::RoutingAuditSink::new(Arc::new(DeniedStats::new()));
         let old = Arc::new(agent_tools::audit::RecordingAuditSink::new());
         let new = Arc::new(agent_tools::audit::RecordingAuditSink::new());
         sink.register("s1", Arc::clone(&old) as AuditSink);
@@ -3279,7 +3298,7 @@ mod event_drain_tests {
     /// 修复前 provider 只在构造时加载一次，改配置后不生效）。
     #[test]
     fn reload_provider_rebuilds_provider_config_from_store() {
-        use crate::core_run_commands::{
+        use crate::config_test_support::{
             apply_single_provider, install_tree_models_store, isolate_config_store,
             CONFIG_TEST_LOCK, TEST_ENV_KEY,
         };
@@ -3320,7 +3339,7 @@ mod event_drain_tests {
     /// 与构造时降级语义一致（F4 F1-01 修复建议 4）。
     #[test]
     fn reload_provider_degrades_when_key_cleared_then_recovers() {
-        use crate::core_run_commands::{
+        use crate::config_test_support::{
             install_tree_models_store, isolate_config_store, CONFIG_TEST_LOCK, TEST_ENV_KEY,
         };
         let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -3490,7 +3509,7 @@ mod continuity_wiring_tests {
 #[cfg(test)]
 mod b1_5_poison_tests {
     use super::*;
-    use crate::core_event_bridge::Emitter;
+    use conex_run::core_event_bridge::Emitter;
     use session_loop::ControlBus;
     use tracing::field::{Field, Visit};
     use tracing::{Event, Level, Metadata, Subscriber};
@@ -3612,9 +3631,9 @@ mod b1_5_poison_tests {
     /// （不 panic）+ error 日志出现 + 毒丸恢复计数 +1（三要素）
     #[test]
     fn poisoned_routes_lock_register_recovers_with_log_and_count() {
-        let sink = RoutingAuditSink::new(Arc::new(DeniedStats::new()));
+        let sink = conex_run::audit::RoutingAuditSink::new(Arc::new(DeniedStats::new()));
         sink.poison_routes_for_test();
-        let before = audit_poison_recovery_count();
+        let before = conex_run::audit::audit_poison_recovery_count();
         let ((), lines) = with_capture(|| {
             // 毒化后写路径仍正常完成（恢复语义不变：不 panic、不传播）
             sink.register(
@@ -3629,7 +3648,7 @@ mod b1_5_poison_tests {
         );
         // 计数断言必须在再锁之前（route_count 同锁中毒，自身也会 +1）
         assert_eq!(
-            audit_poison_recovery_count(),
+            conex_run::audit::audit_poison_recovery_count(),
             before + 1,
             "routes 锁中毒恢复必须计数 +1"
         );
@@ -3647,7 +3666,7 @@ mod b1_5_poison_tests {
         );
         let buffered = BufferedRunEventBridge::new(bridge, "run-poison");
         buffered.poison_buffer_for_test();
-        let before = channels_poison_recovery_count();
+        let before = conex_run::engine_channels::channels_poison_recovery_count();
         let envelope = AgentEventEnvelope::new(
             AgentEvent::AgentStart {
                 session_id: "s-poison".to_string(),
@@ -3670,7 +3689,7 @@ mod b1_5_poison_tests {
         // 本文件两个 channels 毒化测并行共享同一计数器——用单调 ≥ 断言，
         // 本测试的 +1 由上方 error 日志行独立证明
         assert!(
-            channels_poison_recovery_count() > before,
+            conex_run::engine_channels::channels_poison_recovery_count() > before,
             "buffer 锁中毒恢复必须计数 +1"
         );
     }
@@ -3682,7 +3701,7 @@ mod b1_5_poison_tests {
     fn poisoned_control_bus_lock_bind_recovers_with_log_and_count() {
         let board = ContinuityChannelBoard::new();
         board.poison_control_bus_for_test();
-        let before = channels_poison_recovery_count();
+        let before = conex_run::engine_channels::channels_poison_recovery_count();
         // 毒化后绑定仍正常完成（恢复语义不变：不 panic、不传播）
         let ((), lines) = with_capture(|| {
             board.bind_control_bus(Arc::new(FakeBusResolver));
@@ -3696,7 +3715,7 @@ mod b1_5_poison_tests {
         // 且本文件两个 channels 毒化测并行共享同一计数器——用单调 ≥ 断言，
         // 本测试的 +1 由上方 error 日志行独立证明）
         assert!(
-            channels_poison_recovery_count() > before,
+            conex_run::engine_channels::channels_poison_recovery_count() > before,
             "control_bus 锁中毒恢复必须计数 +1"
         );
         // 绑定生效断言：读路径（同锁中毒状态）取回假解析器的总线
@@ -3712,7 +3731,7 @@ mod b1_5_poison_tests {
     fn poisoned_provider_lock_recovers_with_log_and_count() {
         let engine = EngineHandle::new(None);
         poison_std_lock(&engine.provider);
-        let before = build_poison_recovery_count();
+        let before = conex_run::engine_handle::build_poison_recovery_count();
         // 毒化后读路径仍正常返回（None 亦为合法降级，不 panic 不传播）
         let (result, lines) = with_capture(|| engine.provider());
         let _ = result;
@@ -3722,7 +3741,7 @@ mod b1_5_poison_tests {
             lines.join("\n")
         );
         assert_eq!(
-            build_poison_recovery_count(),
+            conex_run::engine_handle::build_poison_recovery_count(),
             before + 1,
             "provider 锁中毒恢复必须计数 +1"
         );
@@ -3745,7 +3764,7 @@ mod b1_5_poison_tests {
 #[cfg(test)]
 mod s3_hotspot_tests {
     use super::*;
-    use crate::core_event_bridge::Emitter;
+    use conex_run::core_event_bridge::Emitter;
     use tracing::field::{Field, Visit};
     use tracing::{Event, Level, Metadata, Subscriber};
 
@@ -3829,7 +3848,7 @@ mod s3_hotspot_tests {
     #[test]
     fn slow_event_serialize_warns_over_threshold() {
         let (_, lines) = with_capture_warn(|| {
-            super::super::engine_channels::warn_slow_event_serialize(
+            conex_run::engine_channels::warn_slow_event_serialize(
                 "run-s3-slow",
                 "message-delta",
                 Duration::from_millis(20),
@@ -3846,7 +3865,7 @@ mod s3_hotspot_tests {
     #[test]
     fn fast_event_serialize_stays_silent() {
         let (_, lines) = with_capture_warn(|| {
-            super::super::engine_channels::warn_slow_event_serialize(
+            conex_run::engine_channels::warn_slow_event_serialize(
                 "run-s3-fast",
                 "message-delta",
                 Duration::from_micros(500),
@@ -3869,7 +3888,7 @@ mod s3_hotspot_tests {
             Arc::clone(&emitter) as Arc<dyn Emitter>,
         );
         let buffered =
-            super::super::engine_channels::BufferedRunEventBridge::new(bridge, "run-s3-smoke");
+            conex_run::engine_channels::BufferedRunEventBridge::new(bridge, "run-s3-smoke");
         let envelope = AgentEventEnvelope::new(
             AgentEvent::MessageDelta {
                 session_id: "s-s3-smoke".to_string(),
@@ -3910,6 +3929,10 @@ mod s3_hotspot_tests {
 
     #[test]
     fn session_abort_signal_registry_lifecycle() {
+        use conex_run::engine_provider::stream::{
+            get_session_abort_signal, register_session_abort_signal,
+            unregister_session_abort_signal,
+        };
         let signal = session_loop::AbortSignal::new();
         register_session_abort_signal("sess-abort-test", signal.clone());
         assert!(get_session_abort_signal("sess-abort-test").is_some());

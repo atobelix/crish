@@ -1,13 +1,12 @@
-//! T-AB-05 禁 cd 语义层集成测试。
+//! 子进程 cd 与安全复合链合法放行集成测试。
 //!
 //! 覆盖验收断言：
-//! - cd x / Set-Location x / pushd x 命中 CdShape；
-//! - git -C src status 不命中；
-//! - echo "cd x" 不命中；
-//! - cd x && rm -rf y 同时命中 CdShape 与复合链 DeleteShape（删除优先，两条路径独立）；
+//! - cd x / Set-Location x / pushd x 合法判定为 Normal 放行；
+//! - git -C src status 判定为 Normal；
+//! - echo "cd x" 判定为 Normal；
+//! - cd x && rm -rf y 中 cd 段为 Normal，rm 段为 DeleteShape，复合链整体按 DeleteShape 处理；
+//! - cd sub && git status 全链判定为 Normal 放行；
 //! - 既有 S2/S6 删除形态测试不回归。
-//!
-//! 同族测试先例：lib.rs:229-393 的 S2/S6 段（门禁接线层），本文件聚焦语义层本身。
 
 use conex_sandbox::semantics::{analyze, CommandClass};
 use conex_sandbox::{classify_command_segments as root_classify, CommandClass as RootClass};
@@ -16,45 +15,43 @@ fn segs(list: &[&str]) -> Vec<String> {
     list.iter().map(|s| s.to_string()).collect()
 }
 
-// ===== 命中形态：cd 家族 =====
+// ===== 放行形态：cd 家族合法放行（Normal） =====
 
 #[test]
-fn cd_x_hits_cd_shape() {
+fn cd_x_allowed_as_normal() {
     // 语义层整体分类
     let a = analyze("cd x");
-    assert_eq!(a.overall_class, CommandClass::CdShape);
-    assert_eq!(a.segments[0].class, CommandClass::CdShape);
+    assert_eq!(a.overall_class, CommandClass::Normal);
+    assert_eq!(a.segments[0].class, CommandClass::Normal);
     // 公开入口（冻结签名）
-    assert_eq!(root_classify(&segs(&["cd x"])), RootClass::CdShape);
-    assert_eq!(root_classify(&segs(&["cd .."])), RootClass::CdShape);
-    assert_eq!(root_classify(&segs(&["cd /d C:\\"])), RootClass::CdShape);
+    assert_eq!(root_classify(&segs(&["cd x"])), RootClass::Normal);
+    assert_eq!(root_classify(&segs(&["cd .."])), RootClass::Normal);
+    assert_eq!(root_classify(&segs(&["cd /d C:\\"])), RootClass::Normal);
 }
 
 #[test]
-fn set_location_and_sl_hit_cd_shape() {
+fn set_location_and_sl_allowed_as_normal() {
     let a = analyze("Set-Location D:\\code");
-    assert_eq!(a.overall_class, CommandClass::CdShape);
-    assert_eq!(root_classify(&segs(&["sl sub"])), RootClass::CdShape);
-    // PowerShell 别名大小写不敏感（归一化处理）
+    assert_eq!(a.overall_class, CommandClass::Normal);
+    assert_eq!(root_classify(&segs(&["sl sub"])), RootClass::Normal);
     assert_eq!(
         root_classify(&segs(&["SET-LOCATION sub"])),
-        RootClass::CdShape
+        RootClass::Normal
     );
 }
 
 #[test]
-fn pushd_and_popd_hit_cd_shape() {
-    assert_eq!(analyze("pushd sub").overall_class, CommandClass::CdShape);
-    assert_eq!(analyze("popd").overall_class, CommandClass::CdShape);
-    assert_eq!(root_classify(&segs(&["pushd sub"])), RootClass::CdShape);
-    assert_eq!(root_classify(&segs(&["popd"])), RootClass::CdShape);
+fn pushd_and_popd_allowed_as_normal() {
+    assert_eq!(analyze("pushd sub").overall_class, CommandClass::Normal);
+    assert_eq!(analyze("popd").overall_class, CommandClass::Normal);
+    assert_eq!(root_classify(&segs(&["pushd sub"])), RootClass::Normal);
+    assert_eq!(root_classify(&segs(&["popd"])), RootClass::Normal);
 }
 
-// ===== 不命中形态 =====
+// ===== 不依赖进程内目录状态的形态 =====
 
 #[test]
-fn git_dash_c_not_cd_shape() {
-    // git -C 不依赖进程内目录状态，不命中
+fn git_dash_c_not_affected() {
     assert_eq!(
         analyze("git -C src status").overall_class,
         CommandClass::Normal
@@ -66,7 +63,7 @@ fn git_dash_c_not_cd_shape() {
 }
 
 #[test]
-fn npm_prefix_and_python_m_not_cd_shape() {
+fn npm_prefix_and_python_m_normal() {
     assert_eq!(
         analyze("npm --prefix ./sub run build").overall_class,
         CommandClass::Normal
@@ -82,30 +79,26 @@ fn npm_prefix_and_python_m_not_cd_shape() {
 }
 
 #[test]
-fn quoted_cd_inside_echo_not_cd_shape() {
-    // 引号感知：cd 出现在引号字符串内，是 echo 的参数，不命中
+fn quoted_cd_inside_echo_normal() {
     assert_eq!(analyze("echo \"cd x\"").overall_class, CommandClass::Normal);
     assert_eq!(root_classify(&segs(&["echo \"cd x\""])), RootClass::Normal);
     assert_eq!(analyze("echo 'cd x'").overall_class, CommandClass::Normal);
 }
 
 #[test]
-fn cd_as_argument_not_cd_shape() {
-    // 裸参数形态：命令名不是 cd 家族
+fn cd_as_argument_normal() {
     assert_eq!(analyze("echo cd x").overall_class, CommandClass::Normal);
 }
 
-// ===== 复合链：与删除形态独立判定 =====
+// ===== 复合链：与删除形态结合 =====
 
 #[test]
-fn cd_chain_with_delete_both_hit() {
-    // cd 段独立标记 CdShape，rm 段标记 DeleteShape，
-    // 整体分类删除优先（方案第 4 点：门禁 → 删除形态 → cd 形态 → 执行）
+fn cd_chain_with_delete_priority() {
+    // cd 段为 Normal，rm 段为 DeleteShape，复合链整体按 DeleteShape
     let a = analyze("cd x && rm -rf y");
-    assert_eq!(a.segments[0].class, CommandClass::CdShape);
+    assert_eq!(a.segments[0].class, CommandClass::Normal);
     assert_eq!(a.segments[1].class, CommandClass::DeleteShape);
     assert_eq!(a.overall_class, CommandClass::DeleteShape);
-    // 公开入口：已拆段与未拆段两种入参同口径
     assert_eq!(
         root_classify(&segs(&["cd x", "rm -rf y"])),
         RootClass::DeleteShape
@@ -114,7 +107,6 @@ fn cd_chain_with_delete_both_hit() {
         root_classify(&segs(&["cd x && rm -rf y"])),
         RootClass::DeleteShape
     );
-    // 删除在前的链同样删除优先
     assert_eq!(
         root_classify(&segs(&["rm -f tmp/f", "cd x"])),
         RootClass::DeleteShape
@@ -122,20 +114,19 @@ fn cd_chain_with_delete_both_hit() {
 }
 
 #[test]
-fn cd_chain_without_delete_overall_cd() {
+fn cd_chain_without_delete_overall_normal() {
     let a = analyze("cd sub && git status");
-    assert_eq!(a.overall_class, CommandClass::CdShape);
+    assert_eq!(a.overall_class, CommandClass::Normal);
     assert_eq!(
         root_classify(&segs(&["cd sub", "git status"])),
-        RootClass::CdShape
+        RootClass::Normal
     );
 }
 
 #[test]
 fn cd_segment_never_triggers_delete_shape() {
-    // 两条路径独立：cd 段不产生删除目标，不置间接删除标记
     let a = analyze("cd x");
-    assert_eq!(a.segments[0].class, CommandClass::CdShape);
+    assert_eq!(a.segments[0].class, CommandClass::Normal);
     assert!(a.delete_targets.is_empty());
     assert!(!a.has_indirect_delete);
 }
@@ -175,6 +166,4 @@ fn s2_s6_delete_shape_regression() {
         analyze("sudo bash -c 'rm -rf /'").overall_class,
         CommandClass::Redline
     );
-    // 根目录删除不会因 cd 新增变体误判为 cd 形态
-    assert_ne!(analyze("rm -rf /").overall_class, CommandClass::CdShape);
 }

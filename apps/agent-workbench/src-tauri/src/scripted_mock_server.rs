@@ -1,6 +1,6 @@
 //! C3 交付物:可脚本化 mock SSE/HTTP server(任务连续性测试基建)
 //!
-//! 背景:壳层测试域既有 `core_run_commands::tests::RequestCaptureServer`
+//! 背景:run 域测试既有 `conex_run::run::tests::RequestCaptureServer`
 //! 只回 200+SSE 头即关闭,无法脚本化瞬态错误;agent-provider 测试域
 //! `tests/common/mod.rs MockServer` 为闭包 handler 形态,不承载「响应序列
 //! 按请求序号消费」的声明式脚本语义。本模块补 C3 缺口
@@ -23,11 +23,11 @@
 //! 接入用例(本文件底部):真实 HttpProviderCall + 完整 run 装配走 mock wire
 //! ——① 429+Retry-After 等待;② 5xx 退避重试序列;③ 断流(已产出)→ 部分
 //! 保留 + providerErrorKind 标注消费(E1 续写拉起 / S2 熔断计数);④ 断流
-//! (未产出)→ 重试。装配辅助为最小自足替身(与 `core_run_commands::tests`
-//! 同构),避免共享文件写冲突(core_run_commands.rs 全期单写纪律)。
+//! (未产出)→ 重试。装配辅助为最小自足替身(与 `conex_run::run::tests`
+//! 同构),避免共享文件写冲突(run/tests.rs 全期单写纪律)。
 
 #![cfg(test)]
-// 测试域豁免:本地监听 / 写套接字属测试行为(对齐 core_run_commands 测试域)
+// 测试域豁免:本地监听 / 写套接字属测试行为(对齐引擎 run 域测试)
 #![allow(clippy::disallowed_methods)]
 
 use std::net::SocketAddr;
@@ -596,12 +596,12 @@ mod server_tests {
 #[allow(clippy::await_holding_lock)] // 单元测试持 LIVE_CATALOG_TEST_LOCK 跨网络 await
 mod integration_tests {
     use super::*;
-    use crate::core_event_bridge::EventBridge;
-    use crate::core_run_commands::{run_task_impl, BackoffDelayFn, CoreRunState, RunTaskOptions};
-    use crate::engine::{EngineProviderConfig, HttpProviderCall};
-    use crate::status_diagnostics::StatusDiagnostics;
     use agent_provider::config::Endpoint;
     use conex_db::LocalDb;
+    use conex_run::core_event_bridge::EventBridge;
+    use conex_run::engine_provider::{EngineProviderConfig, HttpProviderCall};
+    use conex_run::run::{run_task_impl, BackoffDelayFn, CoreRunState, RunTaskOptions};
+    use conex_run::status_diagnostics::StatusDiagnostics;
     use conex_types::message::AgentMessage;
     use conex_types::SessionIndexEntry;
     use orchestrator::persist::LocalDbStore;
@@ -609,11 +609,11 @@ mod integration_tests {
     use serde_json::json;
     use std::future::Future;
 
-    // 与 core_run_commands 键名镜像(键为契约,常量不可见处直接字面量)
+    // 与引擎 run 域键名镜像(键为契约,常量不可见处直接字面量)
     const RETRY_BACKOFF_KEY: &str = "provider_retry_backoff_ms";
     const FAIL_STREAK_KEY: &str = "provider_fail_streak";
 
-    /// 拉起器类型(与 core_run_commands::idle_resume::ResumeLauncher 同构;
+    /// 拉起器类型(与 conex_run::run::run_resume::ResumeLauncher 同构;
     /// 该处经私有 use 重导入遮蔽 pub(crate) 定义,无法跨模块引用——本地
     /// 等价类型别名,闭包底层类型一致即可传给 set_resume_launcher)
     type ResumeLauncher = Arc<
@@ -630,14 +630,14 @@ mod integration_tests {
     /// 忽略式事件发射器(装配 EventBridge 用;接入用例不消费事件面)
     struct IgnoreEmitter;
 
-    impl crate::core_event_bridge::Emitter for IgnoreEmitter {
+    impl conex_run::core_event_bridge::Emitter for IgnoreEmitter {
         fn emit(&self, _channel: &str, _payload: &str) {}
     }
 
     /// 测试临时快照文件序号(防并行冲突)
     static SNAPSHOT_SEQ: AtomicU32 = AtomicU32::new(0);
 
-    /// 会话条目(对齐 core_run_commands::tests::subagent_test_session_entry)
+    /// 会话条目(对齐 conex_run::run::tests::subagent_test_session_entry)
     fn session_entry(id: &str) -> SessionIndexEntry {
         SessionIndexEntry {
             id: id.to_string(),
@@ -657,7 +657,7 @@ mod integration_tests {
     }
 
     /// 构造真实 HttpProviderCall 注入的测试状态(mock server 走真实 wire;
-    /// 与 core_run_commands::tests::run_control_test_state 同构,自足独立)
+    /// 与 conex_run::run::tests::run_control_test_state 同构,自足独立)
     fn run_state_with_http_provider(
         provider: Arc<HttpProviderCall>,
         base_url: &str,
@@ -682,8 +682,8 @@ mod integration_tests {
         // 用户裁决：重试预算/上限可配置——本文件用例数请求次数不断言墙钟
         // 时长，统一注入 baseMs=1 快速策略，防缺省 750ms 指数退避把多次
         // 重试用例拖穿断言窗口。
-        state.set_run_policy(Some(crate::config::run_policy::RunPolicy {
-            retry_backoff: Some(crate::config::run_policy::RetryBackoffPolicy {
+        state.set_run_policy(Some(conex_run::run_policy::RunPolicy {
+            retry_backoff: Some(conex_run::run_policy::RetryBackoffPolicy {
                 base_ms: Some(1),
                 max_ms: Some(8),
                 total_budget_ms: Some(60_000),
@@ -704,7 +704,7 @@ mod integration_tests {
         (state, db)
     }
 
-    /// 测试选项(对齐 core_run_commands::tests::test_options)
+    /// 测试选项(对齐 conex_run::run::tests::test_options)
     fn test_options(run_id: &str, session_id: &str, prompt: &str) -> RunTaskOptions {
         RunTaskOptions {
             run_id: run_id.to_string(),
@@ -712,7 +712,7 @@ mod integration_tests {
             prompt: Some(prompt.to_string()),
             mode: Some("task".to_string()),
             cwd: None,
-            permission_mode: Some("full-access".to_string()),
+            permission_mode: Some("full".to_string()),
             client_message_id: None,
             assistant_client_message_id: None,
             system_prompt: None,
@@ -727,6 +727,7 @@ mod integration_tests {
             context_state: None,
             content: None,
             has_images: None,
+            max_turns: None,
         }
     }
 
@@ -835,7 +836,7 @@ mod integration_tests {
     /// response event`）。protocol.rs:486-489 的注释已声明该锁的共享契约，
     /// 此前只覆盖了 protocol / engine_provider 两处，本模块漏接。
     fn lock_live_catalog() -> std::sync::MutexGuard<'static, ()> {
-        crate::engine_provider::protocol::LIVE_CATALOG_TEST_LOCK
+        conex_run::engine_provider::protocol::LIVE_CATALOG_TEST_LOCK
             .lock()
             .unwrap_or_else(|poison| poison.into_inner())
     }
@@ -844,7 +845,7 @@ mod integration_tests {
     /// （protocol = Chat、max_tokens_field = MaxTokens）。本模块全部用例都走
     /// chat 轨，空树给出**确定性**剖面，不再依赖机器上真实 models.yaml 的内容。
     fn install_chat_catalog() {
-        crate::engine_provider::protocol::reload_live_catalog_from_yaml_str(
+        conex_run::engine_provider::protocol::reload_live_catalog_from_yaml_str(
             "version: 2\nproviders: {}\n",
         )
         .expect("空树夹具");

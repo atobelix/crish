@@ -19,7 +19,6 @@ pub(crate) use super::bg_log::{read_meta, strip_log_prefix};
 pub(crate) use super::bg_registry::MAX_BACKGROUND_TASKS;
 pub(crate) use super::bg_task::task_summary;
 use super::*;
-pub(crate) use crate::core_error::CoreError;
 pub(crate) use crate::resource::{
     cpu_percent_from_delta, sample_usage, EventSink, RawUsage, ResourceMonitorConfig, TaskNotifier,
 };
@@ -27,6 +26,7 @@ pub(crate) use agent_tools::background::{
     BackgroundAdoptRequest, BackgroundTaskInfo, BackgroundTaskManager, BackgroundTaskStatus,
     KillResult, TaskState,
 };
+pub(crate) use conex_run::core_error::CoreError;
 pub(crate) use conex_types::error::codes;
 pub(crate) use conex_types::events::{AgentEvent, AgentEventEnvelope};
 use std::collections::HashSet;

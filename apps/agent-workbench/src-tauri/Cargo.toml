@@ -17,11 +17,9 @@ tauri-build.workspace = true
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
-# EngineProviderConfig.thinking_map 与 ModelSpec.thinking 同型（IndexMap 保序）
-indexmap = { workspace = true }
 # protocol-asset：文件管理器图片/PDF 预览（convertFileSrc + asset://）；
 # test：壳测试（tauri::test 依赖，PE-11 测试策略）
-tauri = { workspace = true, features = ["protocol-asset", "test"] }
+tauri = { workspace = true, features = ["protocol-asset", "unstable", "test"] }
 tauri-plugin-dialog = "2"
 # 对话框授权需要持久化；fs 插件为 scope 提供注册点，但 capability 未授予前端 fs 命令权限。
 tauri-plugin-fs = "2"
@@ -87,6 +85,10 @@ session-loop = { path = "../../../crates/session-loop" }
 agent-provider = { path = "../../../crates/agent-provider" }
 agent-tools = { path = "../../../crates/agent-tools" }
 conex-telemetry = { path = "../../../crates/conex-telemetry" }
+# 运行编排域 crate（run 状态机 / 调度器 / 子代理派生 / 定时器 / 事件桥契约 /
+# 任务事件消费 / 唤醒链路 / provider 执行底座 / 统一错误协议——壳层只留
+# Tauri IPC 适配与宿主装配，业务逻辑全部下沉）
+conex-run = { path = "../../../crates/conex-run" }
 # 27 接线方案 S3/S6：浏览器进程管理（conex-browser）+ 工具族/门禁（conex-browser-tools）
 conex-browser = { path = "../../../crates/conex-browser" }
 conex-browser-tools = { path = "../../../crates/conex-browser-tools" }
@@ -135,11 +137,16 @@ ring = "0.17"
 # 贴靠布局热区（TrackMouseEvent 非客户区离开通知 / GetModuleHandleW 注册窗口类）
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_JobObjects", "Win32_System_Power", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_Threading", "Win32_System_Registry", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_LibraryLoader"] }
 windows = { version = "0.62", features = ["Win32_System_Com", "Win32_Storage_FileSystem", "Win32_UI_Shell"] }
+windows-core = "0.61"
+webview2-com = "0.38.2"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
 [dev-dependencies]
+# 跨 crate 测试钩子（poison/inject/catalog yaml 等 test-only API；发布构建不暴露）：
+# dev-dependency 的 feature 只在 cargo test 构建图内生效
+conex-run = { path = "../../../crates/conex-run", features = ["test-hooks"] }
 # 浏览器命令面测试：临时数据根（tempfile 3.27 已在锁内，conex-browser dev）
 tempfile = "3"
 # 服务路由测试（R1-02）：axum Router oneshot（tower util feature；tower

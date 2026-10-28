@@ -22,189 +22,32 @@
 use std::sync::Arc;
 
 use agent_provider::models::CredentialRef;
-use conex_types::events::{AgentEventEnvelope, RunCacheStats, EVENT_ENVELOPE_SCHEMA_VERSION};
-use serde::Serialize;
 use tauri::State;
 
 use crate::core_commands::{SharedCompactionState, SharedGatekeeper, SharedSearchState};
-use crate::core_error::{map_store_err, CoreError};
+use conex_run::core_error::{map_store_err, CoreError};
 
 // ⚠️ 依赖类型（由协作方定稿，当前缺失；接入后本文件即可编译）：
-// - `crate::status_diagnostics::StatusDiagnostics`：**R1 重写**（PE-04 T04.5）。
+// - `conex_run::status_diagnostics::StatusDiagnostics`：**R1 重写**（PE-04 T04.5）。
 //   本文件依赖其两个只读访问器（契约）：
 //   `entries() -> Vec<DiagnosticEntry>`（环形 20，最旧在前）、
 //   `last_error() -> Option<LastErrorEntry>`；
 // - `CoreRunState`（PE-08 T08.6 定稿；main.rs `app.manage(Arc::new(...))` 接线）。
 //   本文件依赖其访问器契约（见 [CoreRunState 访问器契约] 注释块）。
-use crate::status_diagnostics::StatusDiagnostics;
+use conex_run::status_diagnostics::StatusDiagnostics;
 
-// ===== 分页常量（S-15/S-16：显式上限，防无界查询）=====
+// ===== 查询契约类型与纯解析面（已下沉 conex-run::core_query）==========
+// 类型（CoreStatus / EventPage / RunUsage / RunSnapshot 族）与纯解析函数
+// （parse_envelopes / require_* / paginate 等）真源 = `conex_run::core_query`；
+// 本文件只保留 Tauri 命令薄壳与 build_status 组装（依赖宿主 log_dir /
+// 配置单例）。
 
-/// 默认每页事件数（对齐 daemon read-*-events 的 maxEvents 缺省）。
-pub const DEFAULT_PAGE_SIZE: u64 = 200;
-/// 每页事件数上限（超出按上限截断，不报错）。
-pub const MAX_PAGE_SIZE: u64 = 1000;
-/// 会话 / run id 长度上限（参数校验，S-15/S-16）。
-pub const ID_MAX_LEN: usize = 512;
-
-// ===== CoreStatus 字段集（AU-04 F2 冻结 v1）=====
-
-/// provider 配置状态（输出侧唯一名 `providerStatus`；前端解析层兼容 provider/config 只读路径）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProviderStatus {
-    /// 三态：null = store 未初始化/无法判定；false = 明确无 key
-    pub has_api_key: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub base_url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub credential_mode: Option<String>,
-}
-
-/// 诊断条目（PE-04 T04.5：{ts, level, message}，环形缓冲 20，最旧在前）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DiagnosticEntry {
-    /// epoch ms
-    pub ts: i64,
-    /// trace / debug / info / warn / error
-    pub level: String,
-    pub message: String,
-}
-
-/// 最近错误（PE-04 T04.5：{kind, detail, ts}，AtomicSlot 驱动）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LastErrorEntry {
-    /// CoreError kind（InvalidInput / Io / NotFound / Cancelled / Encoding / Internal）
-    pub kind: String,
-    /// 错误详情（人读）
-    pub detail: String,
-    /// epoch ms
-    pub ts: i64,
-}
-
-/// restore 域状态（PE-08 T08.6，F2 冻结形状）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RestoreStatus {
-    /// pending / done / failed（failed 不阻塞启动，run 命令照常可用）
-    pub state: &'static str,
-    /// full-replay / snapshot-incremental；pending 时为空串
-    pub mode: String,
-    /// 快照回退说明（None = 未回退/无说明）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub snapshot_note: Option<String>,
-    /// 本次恢复打断的 run 数（in-flight → interrupted）
-    pub interrupted_count: usize,
-    /// 事件流锚点（lastSequence 增量流；无事件时 0）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_sequence: Option<u64>,
-}
-
-/// snapshot 域状态（PE-08 T08.6，F2 冻结形状）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SnapshotStatus {
-    /// 已加载快照代数（无快照 = 0）
-    pub generation: u64,
-    /// 快照写入时间（epoch ms；未保存过 = None）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub written_at: Option<i64>,
-    /// 最近一次快照保存失败（P16 显式标记；None = 无失败）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_error: Option<String>,
-}
-
-/// 后台任务最近终态条目（T-AB-19：core_get_status.backgroundTasks.lastFinished）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LastTaskTerminal {
-    pub task_id: String,
-    /// 终态 wire 名（completed / failed / killed）
-    pub status: String,
-    /// 终态时间（epoch ms）
-    pub finished_at_ms: i64,
-}
-
-/// 崩溃台账条目（T5-1b：core_get_status.lastCrash；进程内 panic 崩溃
-/// 标记读出面——conex-telemetry panic hook 写崩溃文件后记录的「最后一次
-/// 崩溃」，前端心跳轮询一并读取，把死文件变成可读崩溃台账）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LastCrashInfo {
-    /// 崩溃文件名（`crash-YYYYMMDD-HHMMSS-<thread>.log`）
-    pub file_name: String,
-    /// 崩溃时刻（epoch ms）
-    pub timestamp_ms: u64,
-}
-
-/// 后台任务汇总域（T-AB-19 增量：core_get_status.backgroundTasks 数据源；
-/// 前端状态栏与诊断面板展示）。
-///
-/// 口径（与 core_run_commands.rs [RunAwareBackgroundManager::summary] 一致）：
-/// - `active_count`：活跃（Running）任务数——不含终态与已归档条目；
-/// - `daemon_count`：活跃守护进程数（is_daemon=true 且 Running）；
-/// - `last_finished`：最近终态（无终态任务时缺省）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct BackgroundTasksSummary {
-    pub active_count: usize,
-    pub daemon_count: usize,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_finished: Option<LastTaskTerminal>,
-}
-
-/// core_get_status 返回体（AU-04 F2 冻结 v1，serde camelCase）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CoreStatus {
-    /// setup 完成标记（PE-01 T01.2 真实化：setup 失败 = false，不假装成功）
-    pub initialized: bool,
-    /// 壳版本（CARGO_PKG_VERSION）
-    pub version: String,
-    /// 引擎（session-loop）就绪
-    pub engine_ready: bool,
-    /// 搜索索引就绪（真实化：文件数 > 0 推断）
-    pub search_index_ready: bool,
-    /// 会话数据库就绪（SharedDb 真实值）
-    pub db_ready: bool,
-    /// 压缩能力接线标记（PE-01 T01.2：未接线 = false）
-    pub compaction_ready: bool,
-    pub provider_status: ProviderStatus,
-    // ── PE-04 增量（T04.5-1）──
-    /// 当前生效日志级别（conex_telemetry::current_level 同源）
-    pub log_level: String,
-    /// 日志文件层目录（面板可展示路径）
-    pub log_dir: String,
-    /// 最近诊断（环形 20，最旧在前；前端展示时自行 reverse）
-    pub diagnostics: Vec<DiagnosticEntry>,
-    /// 最近错误（AtomicSlot；None = 无错误记录）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_error: Option<LastErrorEntry>,
-    // ── PE-08 增量（T08.6）──
-    pub restore: RestoreStatus,
-    pub snapshot: SnapshotStatus,
-    // ── T-AB-19 增量（run 生命周期整合）──
-    /// 后台任务汇总（活跃任务数 / 守护进程数 / 最近终态；未接线或
-    /// 查询失败 = 全零缺省——前端展示「无任务」）
-    pub background_tasks: BackgroundTasksSummary,
-    // ── P-7 增量（R2-07 D-02 收尾：/v1/status activeRuns/pendingApprovals
-    // 字段补全；M6 §4.1.1 形状，注册表 StatusResult 可选字段——桌面端
-    // 总是下发数组，空数组合法）──
-    /// 活动 run 摘要列表（运行时真源：活动注册表；prompt 兜底空串，
-    /// 见 core_run_commands::ActiveRunSummary）
-    pub active_runs: Vec<ActiveRunSummary>,
-    /// 待审批摘要列表（C13 对账投影 M6 摘要子集）
-    pub pending_approvals: Vec<PendingApprovalSummary>,
-    // ── T5-1b 增量（崩溃台账：进程内 panic 崩溃标记读出面）──
-    /// 最近崩溃标记（None = 进程内无 panic；前端心跳轮询读取，发现
-    /// 较上次查询新增崩溃文件 → errorStore 记录「检测到一次引擎崩溃」）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_crash: Option<LastCrashInfo>,
-}
+pub(crate) use conex_run::core_query::{
+    normalize_max_events, paginate, parse_envelopes, require_run_id, require_session_id,
+    warn_parse_stats, BackgroundTasksSummary, CoreStatus, DiagnosticEntry, EventPage,
+    LastCrashInfo, LastErrorEntry, ProviderStatus, RestoreStatus, RunSnapshot, RunSnapshotResponse,
+    SnapshotStatus,
+};
 
 /// 组装 CoreStatus（**唯一**组装函数；F2 串行序：PE-01 → PE-04 → PE-08 以追加参数并入，
 /// 与 Tauri 解耦，纯数据组装可单测）。
@@ -316,7 +159,7 @@ fn log_dir() -> String {
 // - `snapshot_status(&self) -> SnapshotStatus`：快照域状态（PE-08 T08.6）；
 // - `run_error(&self, run_id: &str) -> Option<String>`：run 终态错误文案（无则 None）；
 // - `run_usage(&self, run_id: &str) -> Option<RunUsage>`：usage 域（未接线时 None）。
-use crate::core_run_commands::{ActiveRunSummary, CoreRunState, PendingApprovalSummary};
+use conex_run::run::{ActiveRunSummary, CoreRunState, PendingApprovalSummary};
 
 /// core_get_status：核心状态查询（03 §3.2 B；无硬编码 true 字段）。
 ///
@@ -382,8 +225,8 @@ pub async fn core_get_status(
         core.background_tasks_summary().await,
         // P-7（R2-07 D-02 收尾）：activeRuns / pendingApprovals 摘要——
         // GUI 命令面与 /v1/status 共用同一组装函数，同步下发
-        crate::core_run_commands::list_active_runs_impl(&core).await,
-        crate::core_run_commands::list_pending_approval_summaries_impl(&core),
+        conex_run::run::list_active_runs_impl(&core).await,
+        conex_run::run::list_pending_approval_summaries_impl(&core),
         // T5-1b：崩溃台账读出面（conex-telemetry 进程内标记；leaf crate
         // 边界——不新增 Tauri State，标记本身即进程级真源）
         conex_telemetry::last_crash_marker().map(|marker| LastCrashInfo {
@@ -393,354 +236,7 @@ pub async fn core_get_status(
     ))
 }
 
-// ===== 事件分页（core_read_session_events / core_read_run_events）=====
-
-/// 事件分页返回（对齐 daemon read-*-events 协议：前端 `sessionEventHydrate.ts`
-/// `{events, nextAfterSequence, hasMore}` 消费面）。
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EventPage {
-    /// 本页事件（AgentEventEnvelope 扁平 JSON：`{type, runId, sequence, schemaVersion, ...}`，
-    /// 按 sequence 升序）
-    pub events: Vec<serde_json::Value>,
-    /// 下一页游标（本页最后一条事件 sequence；空页 = 入参 after_sequence）
-    pub next_after_sequence: u64,
-    /// 是否还有更多事件
-    pub has_more: bool,
-}
-
-/// run 执行统计（usage 域；前端 `parseRunSnapshotUsage` 消费面）。
-///
-/// P5 S5 / T-40：缓存字段扩展（cacheMissTokens / hitRatio / writeRatio /
-/// missedTokens / warmUntilMs，T-47 前端 `fetchRunSnapshotUsage` 透出面）。
-#[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RunUsage {
-    #[serde(default)]
-    pub prompt_tokens: u64,
-    #[serde(default)]
-    pub completion_tokens: u64,
-    #[serde(default)]
-    pub total_tokens: u64,
-    /// 有真实样本的次数（0 = 无真实样本，调用方回退估算）
-    #[serde(default)]
-    pub sample_count: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cache_read_tokens: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cache_write_tokens: Option<u64>,
-    /// 缓存未命中输入（服务端直报优先，否则按 C9 口径推导）
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cache_miss_tokens: Option<u64>,
-    /// 命中率 = cache_read / input_total（input_total == 0 → None，前端隐藏）
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub hit_ratio: Option<f64>,
-    /// 写入占比 = cache_write / input_total
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub write_ratio: Option<f64>,
-    /// 本 run 审计出的浪费量（detectMiss 累计；0 = 无浪费）
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub missed_tokens: Option<u64>,
-    /// 缓存温暖截止（epoch ms；前端据此驱动冷缓存提示；None = 无 TTL 数据）
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub warm_until_ms: Option<u64>,
-    /// 引擎微元账（plans/05 T5.3：唯一算费入口 = PricingEngine；None = 未定价）。
-    /// 与引擎 `CostBreakdown` 同形（serde camelCase），前端只渲染。
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cost: Option<agent_provider::pricing::CostBreakdown>,
-}
-
-impl RunUsage {
-    /// 从 run 级缓存统计映射为快照 usage（P5 S5 / T-40；数据源 =
-    /// `RunOutcome.cache_stats`（tracker.finish 产物）或 conex-db
-    /// `get_run_usage`（runs 表 v5 列，T-39）——两者同型）。
-    ///
-    /// - `sample_count == 0` → None（「无样本 → 前端隐藏而非 0% 误导」，
-    ///   P5 §3.1.2 / T-39 `get_run_usage` 同口径）；
-    /// - hit_ratio / write_ratio 不直接透传（DB 落库不存派生值，T-39），
-    ///   统一按 C9 恒等式重算：`input_total = miss + read + write`；
-    ///   `input_total == 0` → None。
-    ///
-    /// T-40 轮末合并已兑现：CoreRunState::run_usage 消费（core_run_commands.rs
-    /// get_run_usage 回退路径 + 测试），E1 过期 allow 已删除（13-T5 核销）。
-    pub fn from_run_cache_stats(
-        stats: RunCacheStats,
-        pricing: Option<&agent_provider::models::catalog_types::ModelPricingSpec>,
-    ) -> Option<RunUsage> {
-        if stats.sample_count == 0 {
-            return None;
-        }
-        let input_total = stats
-            .cache_miss_tokens
-            .saturating_add(stats.cache_read_tokens)
-            .saturating_add(stats.cache_write_tokens);
-        let ratio = |part: u64| (input_total != 0).then(|| part as f64 / input_total as f64);
-        // 唯一算费入口：PricingEngine 微元（扣 cache_read、不扣 cache_write；
-        // pricing None → cost None = 未定价，不是 0）
-        let cost = agent_provider::pricing::PricingEngine::calculate_cost(
-            &pricing.cloned(),
-            stats.prompt_tokens,
-            stats.completion_tokens,
-            stats.cache_read_tokens,
-            stats.cache_write_tokens,
-        );
-        Some(RunUsage {
-            prompt_tokens: stats.prompt_tokens,
-            completion_tokens: stats.completion_tokens,
-            total_tokens: stats.total_tokens,
-            sample_count: stats.sample_count,
-            cache_read_tokens: Some(stats.cache_read_tokens),
-            cache_write_tokens: Some(stats.cache_write_tokens),
-            cache_miss_tokens: Some(stats.cache_miss_tokens),
-            hit_ratio: ratio(stats.cache_read_tokens),
-            write_ratio: ratio(stats.cache_write_tokens),
-            missed_tokens: Some(stats.missed_tokens),
-            warm_until_ms: stats.warm_until_ms,
-            cost,
-        })
-    }
-}
-
-/// run 快照（`{snapshot: {...}}` 包装；对齐 daemon get-run-snapshot 协议——
-/// `StreamRecovery` / `parseRunSnapshotUsage` 均先读 `res.snapshot`）。
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RunSnapshotResponse {
-    pub snapshot: RunSnapshot,
-}
-
-/// run 快照本体（status 字面量对齐 conex-db `RunStatus::as_str`：queued / running /
-/// completed / failed / cancelled / ...）。
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RunSnapshot {
-    pub run_id: String,
-    pub session_id: String,
-    pub status: String,
-    /// 事件序列游标（已分配最大 sequence）
-    pub cursor: u64,
-    pub created_at: i64,
-    pub updated_at: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub end_reason: Option<String>,
-    /// 终态错误文案（failed 收场时）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-    /// usage 域（引擎未接线统计时缺省）
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage: Option<RunUsage>,
-}
-
-/// 参数校验：session_id 非空 + 长度上限（S-15/S-16，显式 InvalidInput）。
-fn require_session_id(session_id: &str) -> Result<(), CoreError> {
-    if session_id.trim().is_empty() {
-        return Err(CoreError::InvalidInput(
-            "session_id must not be empty".to_string(),
-        ));
-    }
-    if session_id.len() > ID_MAX_LEN {
-        return Err(CoreError::InvalidInput(format!(
-            "session_id too long (max {ID_MAX_LEN})"
-        )));
-    }
-    Ok(())
-}
-
-/// 参数校验：run_id 非空 + 长度上限。
-fn require_run_id(run_id: &str) -> Result<(), CoreError> {
-    if run_id.trim().is_empty() {
-        return Err(CoreError::InvalidInput(
-            "run_id must not be empty".to_string(),
-        ));
-    }
-    if run_id.len() > ID_MAX_LEN {
-        return Err(CoreError::InvalidInput(format!(
-            "run_id too long (max {ID_MAX_LEN})"
-        )));
-    }
-    Ok(())
-}
-
-/// 归一化 max_events：缺省 DEFAULT_PAGE_SIZE，夹紧到 [1, MAX_PAGE_SIZE]。
-fn normalize_max_events(max_events: Option<u64>) -> usize {
-    max_events
-        .unwrap_or(DEFAULT_PAGE_SIZE)
-        .clamp(1, MAX_PAGE_SIZE) as usize
-}
-
-/// 信封解析三态统计（DM-06 / D-01：消灭「库里躺着读不出」的静默丢弃）。
-///
-/// 计数供调用方告警/观测：corrupt 与 passthrough 是异常形状（磁盘损坏 /
-/// 不可合成行），synthesized 是正常兼容面（legacy / 直写镜像行合成透出）。
-/// 三态均**不抛错、不中断整批**读取（防御语义，写入时已校验的假设不成立
-/// 只能来自磁盘故障或历史直写，跳过/透出保证读面可用）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) struct EnvelopeParseStats {
-    /// 态 1：非法 JSON（无法解析为任何 JSON 值）——跳过
-    pub corrupt_skipped: usize,
-    /// 态 2：typed 信封（AgentEventEnvelope 反序列化成功）——正常解析 + sequence 回填
-    pub typed: usize,
-    /// 态 3a：合法 JSON 但缺 type 标签（run-interrupted / recovery-* 镜像 /
-    /// legacy 行）——D8 合成 fallback 透出（补 type 键路由 + 原始字段透传）
-    pub synthesized: usize,
-    /// 态 3b：合法 JSON 但非对象（数组/标量，无法合成事件对象）——
-    /// rawPayload 包装透出（显式保留原文，不静默丢弃）
-    pub passthrough: usize,
-}
-
-/// 把持久化事件行解析为 wire JSON（`{type, runId, sequence, schemaVersion, ...}`），
-/// 三态处理（DM-06 / D-01 完成定义 ①）：
-/// 1. **corrupt**：非法 JSON → 跳过 + 计数（保持既有
-///    `parse_envelopes_skips_corrupt_payloads` 语义，磁盘损坏不中断整页）；
-/// 2. **typed 信封**：正常 AgentEventEnvelope → 解析 + **sequence 回填**
-///    （行级 sequence 列 → 信封 sequence 字段，列 = sequence 权威，G-05）；
-/// 3. **无 type 标签的合法 JSON**（run-interrupted / recovery-* 镜像 / legacy
-///    行）→ [synthesize_fallback_wire] D8 合成 fallback 透出，**不丢弃**；
-///    非对象 JSON 经 rawPayload 包装显式透出。
-///
-/// 依赖记录（DM-06 接入点 → DM-07 P3 收口）：`PersistedEvent.run_id` 列
-/// 字段已就绪（DM-01 落库 + DM-03 随 SELECT 列集带出）——runId 取值顺序
-/// = **payload runId 字段 → run_id 列 → 镜像键推断**（DM-07 定案，与
-/// SQL 层 by_run 过滤的列权威口径一致；列仅作兜底，不覆盖 payload 既有
-/// runId，legacy 行行为与现状一致——诚实兼容，不回写）。态 2 与态 3
-/// 的接入点见 [parse_envelopes] / [synthesize_fallback_wire]。
-pub(crate) fn parse_envelopes(
-    events: &[orchestrator::persist::PersistedEvent],
-) -> (Vec<(u64, serde_json::Value)>, EnvelopeParseStats) {
-    let mut stats = EnvelopeParseStats::default();
-    let mut out = Vec::with_capacity(events.len());
-    for event in events {
-        let value: serde_json::Value = match serde_json::from_str(&event.payload) {
-            Ok(value) => value,
-            Err(_) => {
-                // 态 1：非法 JSON 跳过（磁盘损坏防御，不中断整批读取）
-                stats.corrupt_skipped += 1;
-                continue;
-            }
-        };
-        let wire = match serde_json::from_value::<AgentEventEnvelope>(value.clone()) {
-            Ok(mut envelope) => {
-                // 态 2：typed 信封——sequence 列权威回填（G-05，行级列恒存在）；
-                // DM-07 P3：runId 取值 = payload 信封优先，缺失时列值兜底
-                // （列 = 查询权威，与 SQL by_run 过滤口径一致；不覆盖 payload）
-                stats.typed += 1;
-                envelope.sequence = Some(event.sequence);
-                if envelope.run_id.is_none() {
-                    envelope.run_id = event.run_id.clone();
-                }
-                envelope_to_value(&envelope)
-            }
-            Err(_) => {
-                // 态 3：无 type 标签 → D8 合成 fallback（typed 优先顺序不变，
-                // 仅 typed 失败才走合成；对象行合成透出，非对象行 passthrough）
-                if value.is_object() {
-                    stats.synthesized += 1;
-                } else {
-                    stats.passthrough += 1;
-                }
-                Some(synthesize_fallback_wire(event, &value))
-            }
-        };
-        if let Some(wire) = wire {
-            out.push((event.sequence, wire));
-        }
-    }
-    (out, stats)
-}
-
-/// D8 合成 fallback（态 3）：缺 type 标签的合法 JSON（run-interrupted /
-/// recovery-* 镜像 / legacy 行）→ 按列与 payload 已知键合成 wire，原始字段
-/// 全量透传，**不丢弃**（消灭 G-02/G-20 读侧静默丢弃）。
-///
-/// 合成键优先级：
-/// - `type` = 行级 event_type 列（路由权威，镜像行无此键）；
-/// - `sequence` / `schemaVersion` / `sessionId` = 行级列（缺省补全，列权威）；
-/// - `runId` 取值顺序（DM-07 P3，与 [parse_envelopes] 态 2 同口径）：
-///   payload 已有 `runId` 键（透传不覆盖）→ `run_id` 列（列权威兜底）→
-///   镜像键推断（`run_id` snake_case / `subagentRunId`，如 InterruptedRun
-///   record / recovery-* 镜像）→ 均无则省略（前端按类型宽容消费）；
-/// - 其余 payload 键原样透传。
-///
-/// 非对象 JSON（数组/标量）无法合成事件对象 → 包装 `{type, sequence,
-/// schemaVersion, sessionId, rawPayload}` 显式透出原文（skippable 形态，
-/// 计数走 stats.passthrough）。
-fn synthesize_fallback_wire(
-    event: &orchestrator::persist::PersistedEvent,
-    payload: &serde_json::Value,
-) -> serde_json::Value {
-    let mut wire = serde_json::Map::new();
-    match payload {
-        serde_json::Value::Object(map) => {
-            // 原始字段透传（镜像/legacy 行的全部已知键）
-            wire.extend(map.clone());
-            // type 键路由：行级 event_type 列权威（镜像行无此键，列补全）
-            wire.insert("type".into(), serde_json::json!(event.event_type));
-            // 契约键缺省补全（列权威；镜像行无这些键；键显式 String——
-            // serde_json 1.0.151 entry<S: Into<String>> 泛型下 .into() 歧义）
-            wire.entry("schemaVersion".to_string())
-                .or_insert(serde_json::json!(EVENT_ENVELOPE_SCHEMA_VERSION));
-            wire.entry("sessionId".to_string())
-                .or_insert(serde_json::json!(event.session_id));
-            // runId 取值顺序（DM-07 P3）：payload runId 键透传优先 → 列兜底 →
-            // 镜像键推断（列已就绪，优先于 run_id/subagentRunId 键）
-            if !wire.contains_key("runId") {
-                let run_id = event.run_id.as_deref().or_else(|| {
-                    ["run_id", "subagentRunId"]
-                        .iter()
-                        .find_map(|key| map.get(*key).and_then(serde_json::Value::as_str))
-                });
-                if let Some(run_id) = run_id {
-                    wire.insert("runId".into(), serde_json::json!(run_id));
-                }
-            }
-            // sequence 列权威回填（G-05；镜像行无 sequence 键）
-            wire.insert("sequence".into(), serde_json::json!(event.sequence));
-        }
-        other => {
-            // 无法合成事件对象的行：显式透出原文（rawPayload），不静默丢弃
-            wire.insert("type".into(), serde_json::json!(event.event_type));
-            wire.insert("sequence".into(), serde_json::json!(event.sequence));
-            wire.insert(
-                "schemaVersion".into(),
-                serde_json::json!(EVENT_ENVELOPE_SCHEMA_VERSION),
-            );
-            wire.insert("sessionId".into(), serde_json::json!(event.session_id));
-            wire.insert("rawPayload".into(), other.clone());
-        }
-    }
-    serde_json::Value::Object(wire)
-}
-
-/// 信封 → 扁平 wire JSON（`{type, runId, sequence, schemaVersion, ...事件字段}`）。
-fn envelope_to_value(envelope: &AgentEventEnvelope) -> Option<serde_json::Value> {
-    serde_json::to_value(envelope).ok()
-}
-
-/// 解析防御统计告警（DM-06：corrupt 跳过与 passthrough 透出是异常形状——
-/// 磁盘损坏 / 不可合成行，告警不静默；synthesized 是正常兼容面不告警防噪音）。
-/// pub(crate)：run/run_commands.rs 两直调体（read_session/read_run_events_impl）
-/// 与 IPC 命令共用（DM-07 同口径）。
-pub(crate) fn warn_parse_stats(scope: &str, session_id: &str, stats: &EnvelopeParseStats) {
-    if stats.corrupt_skipped > 0 || stats.passthrough > 0 {
-        tracing::warn!(
-            scope = %scope,
-            session_id = %session_id,
-            corrupt_skipped = stats.corrupt_skipped,
-            synthesized = stats.synthesized,
-            passthrough = stats.passthrough,
-            "事件解析防御统计（corrupt 跳过 / 非对象行透出）"
-        );
-    }
-}
-
-/// 纯分页：从全量（已按 sequence 升序）切出前 `max_events` 条，返回 (页, hasMore)。
-fn paginate<T>(all: Vec<T>, max_events: usize) -> (Vec<T>, bool) {
-    if all.len() <= max_events {
-        return (all, false);
-    }
-    let page = all.into_iter().take(max_events).collect::<Vec<_>>();
-    (page, true)
-}
+// ===== 事件查询命令（分页契约类型与纯解析面已下沉 conex_run::core_query）=====
 
 /// core_read_session_events：分页读取会话事件流（03 §3.2 B；cursor = after_sequence）。
 ///
@@ -804,7 +300,7 @@ pub async fn core_read_session_events(
 ///
 /// F-03（DM-07）：**T-F 06 退役登记撤销——IPC 面恢复激活**（main.rs
 /// COMMAND_REGISTRY + command_manifest registered=true 同步恢复，注册态
-/// 不得静默再退役）。实现统一委托 [crate::core_run_commands::read_run_events_impl]
+/// 不得静默再退役）。实现统一委托 [conex_run::run::read_run_events_impl]
 /// （server 直调体同源，避免双实现漂移）：SQL 按 run_id 列过滤 + 全链含
 /// tail + goal-* 轮次域排除 + limit 下推 + 游标 = 页末全局 sequence。
 #[tauri::command]
@@ -816,7 +312,7 @@ pub async fn core_read_run_events(
     core: State<'_, Arc<CoreRunState>>,
 ) -> Result<EventPage, CoreError> {
     require_run_id(&run_id)?;
-    crate::core_run_commands::read_run_events_impl(
+    conex_run::run::read_run_events_impl(
         &core,
         &run_id,
         session_id.as_deref(),
@@ -877,8 +373,12 @@ pub async fn core_get_run_snapshot(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core_error::CoreError;
     use agent_provider::models::PricingUnit;
+    use conex_run::core_error::CoreError;
+    use conex_run::core_query::{
+        LastTaskTerminal, RunUsage, DEFAULT_PAGE_SIZE, ID_MAX_LEN, MAX_PAGE_SIZE,
+    };
+    use conex_types::events::RunCacheStats;
 
     #[test]
     fn build_status_serializes_to_camel_case() {
@@ -1470,7 +970,7 @@ mod tests {
             Some("r1".to_string()),
             Some(7),
         );
-        let value = envelope_to_value(&envelope).expect("序列化");
+        let value = conex_run::core_query::envelope_to_value(&envelope).expect("序列化");
         assert_eq!(value["type"], "agent-start");
         assert_eq!(value["runId"], "r1");
         assert_eq!(value["sequence"], 7);

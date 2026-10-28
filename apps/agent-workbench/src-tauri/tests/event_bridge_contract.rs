@@ -1,9 +1,8 @@
 //! 事件桥契约测试（03 §5.1 16 项硬依赖 + schemaVersion 锚定，AU-04 F1/F11 协作面）
 //!
-//! 本文件经 `#[path]` 独立编译 `src/core_event_bridge.rs`（该模块刻意保持
-//! **零 crate:: 内部引用**——AA-02 注记的「可经 #[path] 独立编译测试」先例），
-//! 以 RecordingEmitter 替身直调 `EventBridge`，锚定 emit 载荷的 16 项硬依赖
-//! 字段（03 §5.1）+ `schemaVersion` 注入（PE-03 T03.10 / PE-12 T12.5）。
+//! 事件桥契约真源已下沉 `conex-run`（`conex_run::core_event_bridge`）；
+//! 本测试以 RecordingEmitter 替身直调 `EventBridge`，锚定 emit 载荷的 16 项硬
+//! 依赖字段（03 §5.1）+ `schemaVersion` 注入（PE-03 T03.10 / PE-12 T12.5）。
 //!
 //! 承接：30-verification-checklist.md §4.1 逐项核对表原引用的
 //! `tests/event_bridge.rs` 文件不存在（断言漂移），由本文件承接锚定。
@@ -27,17 +26,14 @@
 
 #![allow(dead_code)]
 
-#[path = "../src/core_event_bridge.rs"]
-mod core_event_bridge;
-
 use std::sync::{Arc, Mutex};
 
+use conex_run::core_event_bridge::{Emitter, EventBridge};
 use conex_types::{
     AgentEndReason, AgentEvent, AgentEventEnvelope, AgentMessage, AgentMessageBlock,
     AgentMessageRole, ApprovalDecision, PermissionRequest, RunTerminalStatus, ToolBatchCall,
     ToolBatchResult, ToolCategory, ToolConcurrency, ToolMetadata, ToolOutput,
 };
-use core_event_bridge::{Emitter, EventBridge};
 use serde_json::Value;
 
 const TS: &str = "2026-07-31T00:00:00.000Z";

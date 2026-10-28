@@ -35,27 +35,23 @@ mod auth_commands;
 mod background;
 mod browser;
 mod browser_commands;
-mod buffer;
 // 浏览器书签/历史落库适配（3 方案 U4：browser_import_sinks.rs 由浏览器
 // 阵营交付，main.rs mod 声明缺失导致 crate 编译中断——R1-11 装配面顺手补齐）
 mod browser_import_sinks;
 mod command_manifest;
+// 统一配置单轨测试夹具（壳层域；probe / engine_tests 共用——cfg(test) only）
+#[cfg(test)]
+mod config_test_support;
 // 电脑操作会话槽（06 遗留⑨：ComputerSlot 命令面托管 + 工具装配接线面，
 // 接线点登记见 computer/mod.rs 模块头）
 mod computer;
 mod config;
 mod core_commands;
-mod core_error;
-mod core_event_bridge;
 mod core_query_commands;
-mod core_run_commands;
-// 计费取价适配（plans/05 T5.2：唯一取价源 = live yaml 投影）
-mod live_pricing;
 // R1 撤回命令（统一输入流收敛战役；命令面独立于 run/ 目录——I1-β 并行
 // 位在改 run_idle/run_launch/engine_build，避免争写）
 mod dev_mcp;
 mod engine;
-pub(crate) use engine::engine_provider;
 mod fs_commands;
 mod git;
 mod host_openers;
@@ -64,7 +60,6 @@ mod markdown_commands;
 mod mcp_commands;
 mod models_yaml;
 mod retraction_commands;
-mod task_event_consumer;
 // 多端互通模块族（R1-06：TLS + 自签证书 + 指纹固定，multi_device/tls.rs；
 // R1-07：配对命令面，multi_device_commands.rs；R1-09：单实例锁，
 // single_instance.rs——G-2 桌面多实例端口竞争）
@@ -82,7 +77,7 @@ mod process;
 mod pty;
 mod resource;
 // R3-02 推送装配适配层（bin 侧：lib push 契约 ↔ bin server/WsRegistry 桥接
-// ——Emitter 双向适配 + DevicePresenceSource 适配 + PushChannel WS 实现；
+// ——DevicePresenceSource 适配 + PushChannel WS 实现；
 // 见 push_wiring.rs 模块头注记）
 mod push_wiring;
 
@@ -93,30 +88,32 @@ mod session_commands;
 // b6：首条助手回复后的短标题。命令面独立于 run/，避免和运行生命周期争写。
 mod session_title_commands;
 mod single_instance;
-mod status_diagnostics;
 // ACT-101 / CON-01：原生窗口隐式创建 + 首绘握手唤醒（Stage 1）
+mod tauri_emitter;
 mod window_backdrop;
 mod window_handshake;
 // Win11 贴靠布局（Snap Layouts）：最大化按钮上的原生 HTMAXBUTTON 热区
 mod window_snap_overlay;
 // ACT-102：双 SQLite 并发装配（spawn_blocking + async 汇聚）
 mod db_setup;
-// T-D-13：子代理生产 spawner（SubagentSpawner 引擎侧接线；bin 模块，
-// 与 core_run_commands / engine 同目标，互引 crate:: 内部路径）
-mod sched;
-mod subagent_spawner;
+// sched / subagent_spawner / timers 已下沉 `conex-run` crate
+// （conex_run::{sched, subagent_spawner, timers}；壳层无独立 mod 声明）。
 mod system_power;
-mod timers;
 // 自动更新命令面（RUN-03/SEC-02/GAP-01：检查/下载/安装/重启四段命令 +
 // workbench_apply_update 一次编排；模块头登记链路与用户裁决 §3.4-3 出处）
 mod updater;
 mod usage_commands;
-mod wakeup_summary;
-mod workflow_commands;
+// workflow 业务后端已下沉 `conex-run`（conex_run::workflow）；壳层只留
+// Tauri IPC 薄壳（workflow_ipc.rs：六条命令 + AppHandle 事件发射 +
+// create_workflow 工具通道延迟绑定）。
+mod workflow_ipc;
+// run IPC 薄壳（十条命令 + 回收站根解析 + 设置域直调体；业务实现 =
+// conex_run::run 契约体）
+mod run_ipc;
 
 mod watchdog;
-// D6-②：无人值守唤醒 watcher（wake_watcher.rs 模块本体，任务连续性
-// 维度 D6）。装配点（壳层面批次接线，本批次只落模块声明）：
+// D6-②：无人值守唤醒 watcher（任务连续性维度 D6；本体已下沉 conex-run，
+// 壳层只做装配注入）。装配点（壳层面批次接线）：
 // - 每会话 spawn：run_restore 成功路径 / run_task_impl 会话首次出现处
 //   惰性 spawn（CoreRunState 新增 wake_watchers 幂等持有表，与
 //   watchdog 每会话任务同生命周期语义——run 收口不销毁）；
@@ -126,7 +123,6 @@ mod watchdog;
 // - user_stopped：run_control L2/L3 路径 set、用户新 run 装配 clear。
 #[cfg_attr(not(test), allow(dead_code))]
 mod outputs_config;
-mod wake_watcher;
 mod workspace;
 // C3 交付物(任务连续性测试基建):可脚本化 mock SSE/HTTP server——
 // 响应序列(429+Retry-After / 5xx / 发数据后断流 / 正常流)按请求序号
@@ -137,8 +133,9 @@ mod scripted_mock_server;
 
 use std::sync::Arc;
 
-use core_event_bridge::{Emitter, EventBridge, TauriEmitter};
+use conex_run::core_event_bridge::{Emitter, EventBridge};
 use tauri::Manager;
+use tauri_emitter::TauriEmitter;
 
 /// 命令注册面（编译期真源）
 ///
@@ -340,8 +337,12 @@ command_registry![
         "core_read_run_events",
         core_query_commands::core_read_run_events
     ),
-    ("core_run_task", core_run_commands::core_run_task),
-    ("core_run_control", core_run_commands::core_run_control),
+    ("core_run_task", run_ipc::core_run_task),
+    ("core_run_control", run_ipc::core_run_control),
+    (
+        "core_set_run_permission_mode",
+        run_ipc::core_set_run_permission_mode
+    ),
     // R1 撤回（统一输入流收敛战役）：用户撤回入口——复用 core_run_control
     // L3 通道 + 独立 retract 语义 wire（命令面独立于 run/ 目录）
     (
@@ -350,20 +351,17 @@ command_registry![
     ),
     // E2 F4（07 §3 卡 C）：手动压缩（slash /compact → 引擎命令；registered
     // 面 = make_handlers! 注册面不变量，command_manifest 同批翻 true）
-    ("core_compact_now", core_run_commands::core_compact_now),
+    ("core_compact_now", run_ipc::core_compact_now),
     // b6：首条助手回复后生成不超过 12 字的会话标题
     (
         "core_generate_session_title",
         session_title_commands::core_generate_session_title
     ),
-    ("core_cancel_run", core_run_commands::core_cancel_run),
+    ("core_cancel_run", run_ipc::core_cancel_run),
     // 会话级 Tier-2 中止（前端级联取消总线；desktopNativeFeatures 契约命名）
-    (
-        "workbench_abort_run",
-        core_run_commands::workbench_abort_run
-    ),
-    ("core_approve_tool", core_run_commands::core_approve_tool),
-    ("core_deny_tool", core_run_commands::core_deny_tool),
+    ("workbench_abort_run", run_ipc::workbench_abort_run),
+    ("core_approve_tool", run_ipc::core_approve_tool),
+    ("core_deny_tool", run_ipc::core_deny_tool),
     // ── 多端互通配对面（R1-07：四件套）──
     (
         "multi_device_pair_start",
@@ -453,17 +451,17 @@ command_registry![
     //    （__cmd__*）不随 core_query_commands 的 pub use 重导出，必须直引真源）──
     ("core_list_commands", command_manifest::core_list_commands),
     // ── 误删恢复（I2-S5：trash_list / trash_restore / trash_purge）──
-    ("trash_list", core_run_commands::trash_list),
-    ("trash_restore", core_run_commands::trash_restore),
-    ("trash_purge", core_run_commands::trash_purge),
+    ("trash_list", run_ipc::trash_list),
+    ("trash_restore", run_ipc::trash_restore),
+    ("trash_purge", run_ipc::trash_purge),
     // ── workflow 命令面（T-CF-14：六条实装，消除前端幽灵命令；
     //    wire 名 kebab-case，经 #[tauri::command(rename=...)] 对齐）──
-    ("create-workflow", workflow_commands::create_workflow),
-    ("list-workflows", workflow_commands::list_workflows),
-    ("update-workflow", workflow_commands::update_workflow),
-    ("delete-workflow", workflow_commands::delete_workflow),
-    ("trigger-workflow", workflow_commands::trigger_workflow),
-    ("list-workflow-runs", workflow_commands::list_workflow_runs),
+    ("create-workflow", workflow_ipc::create_workflow),
+    ("list-workflows", workflow_ipc::list_workflows),
+    ("update-workflow", workflow_ipc::update_workflow),
+    ("delete-workflow", workflow_ipc::delete_workflow),
+    ("trigger-workflow", workflow_ipc::trigger_workflow),
+    ("list-workflow-runs", workflow_ipc::list_workflow_runs),
     // ── 浏览器面板命令（27 方案 S6：browser_start/stop/status 代理到
     //    引擎会话槽；状态变更经 browser://state-changed 事件发射）──
     ("browser_start", browser_commands::browser_start),
@@ -504,6 +502,43 @@ command_registry![
     (
         "browser_list_history",
         browser_commands::browser_list_history
+    ),
+    // ── 原生多 Webview 浏览器重构命令（Native Browser Overhaul）──
+    (
+        "browser_webview_create",
+        browser::native_commands::browser_webview_create
+    ),
+    (
+        "browser_webview_set_bounds",
+        browser::native_commands::browser_webview_set_bounds
+    ),
+    (
+        "browser_webview_set_visible",
+        browser::native_commands::browser_webview_set_visible
+    ),
+    (
+        "browser_webview_navigate",
+        browser::native_commands::browser_webview_navigate
+    ),
+    (
+        "browser_webview_action",
+        browser::native_commands::browser_webview_action
+    ),
+    (
+        "browser_webview_close",
+        browser::native_commands::browser_webview_close
+    ),
+    (
+        "browser_webview_set_muted",
+        browser::native_commands::browser_webview_set_muted
+    ),
+    (
+        "browser_webview_set_hit_test",
+        browser::native_commands::browser_webview_set_hit_test
+    ),
+    (
+        "browser_webview_set_inspector",
+        browser::native_commands::browser_webview_set_inspector
     ),
     // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc / noteMirrorIpc）──
     (
@@ -593,24 +628,30 @@ pub(crate) mod lifecycle_commands {
     /// - InvalidState → `CoreError::InvalidInput`（参数或状态非法）；
     /// - PersistFailed → `CoreError::Io`（落库失败，detail 保留操作语义）；
     /// - Recovery → 按恢复域错误分类映射（预算耗尽等保持可观测）。
-    fn map_lifecycle_err(err: orchestrator::lifecycle::LifecycleError) -> core_error::CoreError {
+    fn map_lifecycle_err(
+        err: orchestrator::lifecycle::LifecycleError,
+    ) -> conex_run::core_error::CoreError {
         use orchestrator::lifecycle::LifecycleError;
         match err {
-            LifecycleError::NotFound { message } => core_error::CoreError::NotFound(message),
+            LifecycleError::NotFound { message } => {
+                conex_run::core_error::CoreError::NotFound(message)
+            }
             LifecycleError::InvalidState { message } => {
-                core_error::CoreError::InvalidInput(message)
+                conex_run::core_error::CoreError::InvalidInput(message)
             }
             LifecycleError::PersistFailed { message } => {
-                core_error::CoreError::Io(format!("store.lifecycle: {message}"))
+                conex_run::core_error::CoreError::Io(format!("store.lifecycle: {message}"))
             }
             LifecycleError::Recovery(err) => match err {
                 orchestrator::recovery::RecoveryError::NotFound { message } => {
-                    core_error::CoreError::NotFound(message)
+                    conex_run::core_error::CoreError::NotFound(message)
                 }
                 orchestrator::recovery::RecoveryError::PersistFailed { message } => {
-                    core_error::CoreError::Io(format!("store.recovery: {message}"))
+                    conex_run::core_error::CoreError::Io(format!("store.recovery: {message}"))
                 }
-                other => core_error::CoreError::InvalidInput(format!("恢复域失败：{other}")),
+                other => {
+                    conex_run::core_error::CoreError::InvalidInput(format!("恢复域失败：{other}"))
+                }
             },
         }
     }
@@ -619,20 +660,22 @@ pub(crate) mod lifecycle_commands {
     /// spawn_blocking，F2-27；tokio worker 不执行同步 SQLite）。
     #[tauri::command]
     pub(crate) async fn kill_subagent(
-        state: tauri::State<'_, Arc<core_run_commands::CoreRunState>>,
+        state: tauri::State<'_, Arc<conex_run::run::CoreRunState>>,
         session_id: String,
         subagent_id: String,
         reason: Option<String>,
-    ) -> Result<orchestrator::lifecycle::KillSubagentResult, core_error::CoreError> {
-        let service = state
-            .lifecycle_service()
-            .ok_or_else(|| core_error::CoreError::internal("LocalDb 不可用（测试替身 store）"))?;
+    ) -> Result<orchestrator::lifecycle::KillSubagentResult, conex_run::core_error::CoreError> {
+        let service = state.lifecycle_service().ok_or_else(|| {
+            conex_run::core_error::CoreError::internal("LocalDb 不可用（测试替身 store）")
+        })?;
         let reason = reason.unwrap_or_default();
         tokio::task::spawn_blocking(move || {
             service.kill_subagent(&session_id, &subagent_id, &reason)
         })
         .await
-        .map_err(|e| core_error::CoreError::internal(format!("kill_subagent 阻塞任务失败：{e}")))?
+        .map_err(|e| {
+            conex_run::core_error::CoreError::internal(format!("kill_subagent 阻塞任务失败：{e}"))
+        })?
         .map_err(map_lifecycle_err)
     }
 
@@ -640,17 +683,19 @@ pub(crate) mod lifecycle_commands {
     /// SQLite 面经 spawn_blocking，F2-27；批量语义保持 lifecycle 引擎侧）。
     #[tauri::command]
     pub(crate) async fn kill_all(
-        state: tauri::State<'_, Arc<core_run_commands::CoreRunState>>,
+        state: tauri::State<'_, Arc<conex_run::run::CoreRunState>>,
         session_id: String,
         reason: Option<String>,
-    ) -> Result<orchestrator::lifecycle::KillAllOutcome, core_error::CoreError> {
-        let service = state
-            .lifecycle_service()
-            .ok_or_else(|| core_error::CoreError::internal("LocalDb 不可用（测试替身 store）"))?;
+    ) -> Result<orchestrator::lifecycle::KillAllOutcome, conex_run::core_error::CoreError> {
+        let service = state.lifecycle_service().ok_or_else(|| {
+            conex_run::core_error::CoreError::internal("LocalDb 不可用（测试替身 store）")
+        })?;
         let reason = reason.unwrap_or_default();
         tokio::task::spawn_blocking(move || service.kill_all(&session_id, &reason))
             .await
-            .map_err(|e| core_error::CoreError::internal(format!("kill_all 阻塞任务失败：{e}")))?
+            .map_err(|e| {
+                conex_run::core_error::CoreError::internal(format!("kill_all 阻塞任务失败：{e}"))
+            })?
             .map_err(map_lifecycle_err)
     }
 
@@ -666,14 +711,14 @@ pub(crate) mod lifecycle_commands {
     ///   获取 L2 锁并 await 执行，零 block_on 违规）。
     #[tauri::command]
     pub(crate) async fn resume_subagent(
-        state: tauri::State<'_, Arc<core_run_commands::CoreRunState>>,
+        state: tauri::State<'_, Arc<conex_run::run::CoreRunState>>,
         session_id: String,
         subagent_id: String,
         prompt: Option<String>,
-    ) -> Result<orchestrator::lifecycle::ResumeOutcome, core_error::CoreError> {
-        let service = state
-            .lifecycle_service()
-            .ok_or_else(|| core_error::CoreError::internal("LocalDb 不可用（测试替身 store）"))?;
+    ) -> Result<orchestrator::lifecycle::ResumeOutcome, conex_run::core_error::CoreError> {
+        let service = state.lifecycle_service().ok_or_else(|| {
+            conex_run::core_error::CoreError::internal("LocalDb 不可用（测试替身 store）")
+        })?;
         // ① 同步准备段（F2-27：同步 SQLite 面经 spawn_blocking）
         let prepared = {
             let service = service.clone();
@@ -684,13 +729,17 @@ pub(crate) mod lifecycle_commands {
             })
             .await
             .map_err(|e| {
-                core_error::CoreError::internal(format!("resume 准备段阻塞任务失败：{e}"))
+                conex_run::core_error::CoreError::internal(format!(
+                    "resume 准备段阻塞任务失败：{e}"
+                ))
             })?
             .map_err(map_lifecycle_err)?
         };
         // ② fork 段：全异步获取 L2 锁并执行，零 block_on
         let coord = state.coordinator_for(&session_id).ok_or_else(|| {
-            core_error::CoreError::internal("恢复协调器未装配（D3 未接线，resume 暂不可用）")
+            conex_run::core_error::CoreError::internal(
+                "恢复协调器未装配（D3 未接线，resume 暂不可用）",
+            )
         })?;
 
         let mut coordinator = coord.lock().await;
@@ -767,7 +816,7 @@ fn main() {
 
     // 共享诊断（PE-04 T04.5）：CoreRunState 与 core_get_status 共用同一实例，
     // main.rs 先构造再注入，避免「写入侧与读取侧实例漂移」。
-    let diagnostics = Arc::new(status_diagnostics::StatusDiagnostics::new());
+    let diagnostics = Arc::new(conex_run::status_diagnostics::StatusDiagnostics::new());
     // setup 闭包为 'static：预克隆需要跨闭包持有的所有权
     let setup_diagnostics = Arc::clone(&diagnostics);
     let setup_log_dir = log_dir.clone();
@@ -898,14 +947,14 @@ fn main() {
                         error = %error,
                         "WorkspaceRegistry 初始化失败（文件命令按 outside_workspace 拒绝）"
                     );
-                    diagnostics.record("workspace", false, Some(error));
+                    diagnostics.record("workspace", false, Some(error.to_string()));
                 }
             }
 
             // ④b 回收站根注入（I2-S5：None = 未注入 → 命令侧回退活动
             // 工作区 `.crish-trash`，与删除工具兜底一致；对齐
             // BuiltinToolConfig.trash_root 语义）
-            app.manage(core_run_commands::TrashRootConfig::default());
+            app.manage(conex_run::run::TrashRootConfig::default());
 
             // ⑤ 共享状态：命令闸门 / 搜索索引 / 压缩能力标记
             app.manage(core_commands::SharedGatekeeper::new());
@@ -980,9 +1029,10 @@ fn main() {
                     as Arc<dyn crish_agent_workbench::push::PushChannel>,
             ));
             let push_aware = Arc::new(crish_agent_workbench::push::PushAwareEmitter::new(
-                // 桥下行（lib Emitter for bin TauriEmitter）在 push_wiring.rs
+                // PushAwareEmitter 直接实现 conex_run::core_event_bridge::Emitter
+                // （push/pusher.rs；双 trait 桥随 core_event_bridge 下沉合一删除）
                 Arc::new(TauriEmitter::new(app_handle.clone()))
-                    as Arc<dyn crish_agent_workbench::core_event_bridge::Emitter>,
+                    as Arc<dyn conex_run::core_event_bridge::Emitter>,
                 push_dispatcher,
             ));
             let bridge = EventBridge::new(
@@ -1004,8 +1054,15 @@ fn main() {
             // engine.rs:617（F1 轮末已装配 register_builtin_tools_with_config）。
             let background_tasks = Arc::new(background::BackgroundTaskRegistry::new());
 
+            // ⑥' 引擎宿主（browser/computer 槽 + workflow 创建通道绑定 +
+            // 全局注入：配置源 / runtime 句柄 / 应用数据目录 / 笔记后端）。
+            // **必须先于 CoreRunState::new**——引擎装配经 EngineHostHooks
+            // 消费宿主（browser 工具注册）；db 注入 timer/sched/wait/computer
+            // 四 store 真适配。
+            let engine_host = engine::EngineHost::new(Some(shared_db.local_db()));
+
             // 核心运行状态（store / 快照 / 事件桥 / 诊断 / 后台任务管理器注入）
-            let core_state = Arc::new(core_run_commands::CoreRunState::new(
+            let core_state = Arc::new(conex_run::run::CoreRunState::new(
                 Arc::clone(&store),
                 Arc::clone(&snapshots),
                 bridge.clone(),
@@ -1018,16 +1075,24 @@ fn main() {
             core_state.finalize_subagent_spawner();
             // 全局运行策略读入（用户裁决：重试预算/上限可配置，进
             // settings.json 不绑供应商；文件缺失/解析失败 → 缺省）
-            core_state.set_run_policy(config::run_policy::read_run_policy());
+            core_state.set_run_policy(
+                config::persistence::config_dir()
+                    .ok()
+                    .and_then(|dir| conex_run::run_policy::read_run_policy_from(&dir)),
+            );
             // 审计 01 W1（任务连续性推进轮）：kill_subagent / send_message
             // 三通道 + WaitChannel 控制总线解析器生产装配（与 spawner 同批
             // ——Arc 构造完成后经板卡绑定真实现，工具从 unsupported 升级为
             // 生产可用）
             core_state.finalize_continuity_channels();
+            // 引擎句柄绑定宿主（browser/computer/workflow 通道访问面）+
+            // MCP 自动拉起（auto_start 配置）
+            engine_host.bind_engine(core_state.engine());
+            engine_host.spawn_mcp_autostart();
 
             // ⑦ restore：run_in_runtime 在 manage(CoreRunState) 之前执行
             //（成功 seed_sequences + 立即快照；失败降级不阻断，门禁经
-            // restore_ready 放行——core_run_commands.rs:479-520 语义）
+            // restore_ready 放行——conex_run::run::run_snapshot 语义）
             {
                 let restore_state = Arc::clone(&core_state);
                 tauri::async_runtime::spawn(async move {
@@ -1045,22 +1110,27 @@ fn main() {
             // ⑧d 27 方案 S6：浏览器会话槽事件发射器接线——`browser://state-changed`
             // 状态迁移 → 前端面板（挂接幂等：命令面后续 attach 无副作用；
             // 启动前即挂订阅，首启 Launching→Running 迁移不丢事件）
-            core_state.engine().browser_slot().attach_emitter(Arc::new(
-                TauriEmitter::new(browser_emitter_handle),
-            ));
+            engine_host
+                .browser_slot()
+                .attach_emitter(Arc::new(TauriEmitter::new(browser_emitter_handle)));
 
             // ⑧e 06 遗留⑨：电脑操作会话槽装配——进程级单例托管
             // （ComputerSlot：session_meta `computer_use_enabled` 惰性恢复 +
             // 互斥门；命令面 computer_session_* 消费）。
             // 事件发射器接线：`computer://state-changed` 状态迁移 → 前端面板
             // （挂接幂等；启动前即挂订阅，enable/disable/on_run_stopped 不丢事件）。
-            // 引擎侧 computer_slot 字段已装配（维度 1 收敛接线点①②落地）；
-            // main.rs 取用同一实例托管给 Tauri State，命令访问面不变。
+            // 宿主持有同一实例；main.rs 取用托管给 Tauri State，命令访问面不变。
             {
-                let computer_slot = core_state.engine().computer_slot();
+                let computer_slot = engine_host.computer_slot();
                 app.manage(Arc::clone(&computer_slot));
                 computer_slot.attach_emitter(Arc::new(TauriEmitter::new(app_handle.clone())));
             }
+
+            // 浏览器槽托管给 Tauri State（browser_commands 命令访问面）
+            app.manage(engine_host.browser_slot());
+            let native_browser_manager =
+                crate::browser::NativeWebviewManager::new(setup_app_dir.clone());
+            app.manage(native_browser_manager);
 
             // ⑧b+ 30 方案 P2/P3 装配：后台任务事件面接线（生产发射链）——
             // ① 任务事件消费器注入（先于 set_event_bridge：EventBridgeSink
@@ -1075,15 +1145,22 @@ fn main() {
             // 队列双实例——trigger 注入真实落引擎队列，idle 续 run 消费
             // 唤醒）；SchedulerRegistry 委托经 set_registry 注入共享注册
             // 表（create 即真实注册调度，A5-H01b 生产转正））
-            let workflow_state = workflow_commands::WorkflowCommandState::new(
+            let workflow_state = workflow_ipc::WorkflowCommandState::new(
                 shared_db.local_db(),
                 core_state.steering_queue(),
             );
             let workflow_backend = workflow_state.backend_handle();
-            workflow_backend.set_app_context(setup_app_dir.clone(), Some(app_handle.clone()));
-            let scheduled_launcher: Arc<dyn sched::ScheduledTaskLauncher> =
-                Arc::new(workflow_commands::ProductionScheduledLauncher::new(
+            workflow_backend.set_app_context(
+                setup_app_dir.clone(),
+                Some(Arc::new(workflow_ipc::TauriWorkflowEventSink::new(
                     app_handle.clone(),
+                ))),
+            );
+            let scheduled_launcher: Arc<dyn conex_run::sched::ScheduledTaskLauncher> =
+                Arc::new(conex_run::workflow::ProductionScheduledLauncher::new(
+                    Arc::new(workflow_ipc::TauriWorkflowEventSink::new(
+                        app_handle.clone(),
+                    )),
                     Arc::clone(&core_state),
                     Arc::clone(&workflow_backend),
                     setup_app_dir.clone(),
@@ -1110,11 +1187,10 @@ fn main() {
                 tracing::info!(target: "setup", "历史孤儿运行记录自愈收割完成");
             });
             // 维度五（05 详案 §2.4 路径 A）：create_workflow 工具通道生产
-            // 转正——backend + AppHandle 注入引擎侧延迟绑定面（绑定前工具
+            // 转正——backend + AppHandle 注入延迟绑定面（绑定前工具
             // 返回 common.unsupported；注册链路复用 create-workflow 同一
             // 校验/注册后端，无第二套实现）
-            core_state
-                .engine()
+            engine_host
                 .workflow_creation_channel()
                 .bind(workflow_state.backend_handle(), app_handle.clone());
             app.manage(workflow_state);
@@ -1137,8 +1213,8 @@ fn main() {
                             _ = timer_notify.notified() => {}
                             _ = sched_notify.notified() => {}
                         }
-                        engine::forward_drained_timer_events(&timer_sink, &drain_bridge);
-                        engine::forward_drained_scheduler_events(&sched_sink, &drain_bridge);
+                        conex_run::engine_channels::forward_drained_timer_events(&timer_sink, &drain_bridge);
+                        conex_run::engine_channels::forward_drained_scheduler_events(&sched_sink, &drain_bridge);
                     }
                 });
             }
@@ -1174,6 +1250,11 @@ fn main() {
             // 轮仍停留 activeRuns → finalize_failed 补写终态——run panic
             // 无终态事件导致的卡死/孤儿条目消除。幂等，可随时启动）
             core_state.spawn_run_reaper_loop();
+
+            // P3：子代理心跳落库周期任务（默认检查 5s；实际节奏由会话级
+            // AgentPolicy.recovery.heartbeatIntervalMs 决定，SQL 条件写去重）。
+            // 幂等，可随时启动；无 DB 的测试路径自动跳过。
+            core_state.spawn_subagent_heartbeat_loop();
 
             // PTY GC：Stage 6 ACT-605——setup 不再盲启 30s 周期协程；
             // 首次 workbench_pty_create 成功后经 notify_pty_activity 惰性
@@ -1211,7 +1292,7 @@ fn main() {
                 }
                 let backend: Option<Arc<dyn server::backend::ApiBackend>> = Some(Arc::new(backend));
                 let fanout = Arc::new(server::fanout::FanOutEmitter::new(vec![]));
-                bridge.attach_fanout(Arc::clone(&fanout) as Arc<dyn core_event_bridge::Emitter>);
+                bridge.attach_fanout(Arc::clone(&fanout) as Arc<dyn conex_run::core_event_bridge::Emitter>);
 
                 // ⑪b 多端服务装配状态（单一真源：重启 / 开关命令 / 退出
                 // 钩子共用同一生命周期槽与依赖实例——重建后句柄自动更新）
@@ -1391,7 +1472,16 @@ fn main() {
                     server.shutdown();
                 }
                 pty::kill_all_sessions();
-                if let Some(core) = app_handle.try_state::<Arc<core_run_commands::CoreRunState>>() {
+                // 原生子 Webview 关闭：RunEvent::Exit 在 cleanup_before_exit 之前触发，
+                // 回调已回到主线程——Tauri 的 with_webview 在主线程走同步内联快路径，
+                // 因此 block_on 不会与事件循环互锁。close_all 同时注销 COM Token 并
+                // 删除 Ephemeral UDF 目录（强杀遗留由下次启动 GC 兜底）。
+                if let Some(native_browser) =
+                    app_handle.try_state::<crate::browser::NativeWebviewManager>()
+                {
+                    tauri::async_runtime::block_on(native_browser.close_all());
+                }
+                if let Some(core) = app_handle.try_state::<Arc<conex_run::run::CoreRunState>>() {
                     let core = Arc::clone(core.inner());
                     std::thread::spawn(move || core.save_snapshot_blocking());
                 }
@@ -1422,7 +1512,7 @@ pub(crate) struct MultiDeviceService {
     /// 生命周期槽（当前句柄 + serve task；与退出钩子共用）
     lifecycle: Arc<std::sync::Mutex<ServerLifecycle>>,
     /// 诊断（环形缓冲，core_get_status 可见）
-    diagnostics: Arc<status_diagnostics::StatusDiagnostics>,
+    diagnostics: Arc<conex_run::status_diagnostics::StatusDiagnostics>,
     /// 命令后端（CoreStateBackend 直调既有 *_impl 契约体；注入 router）
     backend: Option<Arc<dyn server::backend::ApiBackend>>,
     /// 事件扇出器（已挂 EventBridge 汇聚点；注入 ServerState.event_stream）
@@ -1430,7 +1520,7 @@ pub(crate) struct MultiDeviceService {
     /// 远程审计事件桥（R1-11：与引擎 run 上下文同一 EventBridge 实例——
     /// CoreStateBackend 经 core 透传；注入 ServerState.audit_bridge，
     /// remote-source-attempt 事件发射通道）
-    audit_bridge: Option<core_event_bridge::EventBridge>,
+    audit_bridge: Option<conex_run::core_event_bridge::EventBridge>,
     /// 配对协调器（实际端口经 set_port 注入；重绑钩子已装配）
     pairing: Arc<server::pairing::PairingCoordinator>,
     /// WS 连接注册表（P2-5 连接面共享接线：与配对协调器 / push presence /
@@ -1666,7 +1756,7 @@ mod tests {
         );
         Arc::new(MultiDeviceService {
             lifecycle: Arc::new(std::sync::Mutex::new(ServerLifecycle::default())),
-            diagnostics: Arc::new(status_diagnostics::StatusDiagnostics::new()),
+            diagnostics: Arc::new(conex_run::status_diagnostics::StatusDiagnostics::new()),
             backend: None,
             fanout: None,
             audit_bridge: None,

@@ -286,7 +286,7 @@ impl Renderer {
         // - Rust regex crate 不支持 lookbehind, 改用 find_iter + 检查前一个字符的方式
         //   实现 `(?<!["`>])` 等效语义 (避免在 HTML 属性内识别路径)。
         // - 路径段输出 button, 非路径段走 escape_html + wrap_cjk_text_segment。
-        let emoji_translated = translate_gfm_emoji_cow(text);
+        let emoji_translated = translate_gfm_emoji(text);
         wrap_bare_paths_and_escape_into(&emoji_translated, &mut self.output);
     }
 
@@ -1403,7 +1403,7 @@ pub fn lookup_gfm_emoji(name: &str) -> Option<&'static str> {
 /// 将文本中的 GFM Emoji 短代码转义为 Unicode 字符（受默认开关约束）。
 /// 默认关闭，对齐 AGENTS §21；显式开启请用 [`translate_gfm_emoji_with`]。
 pub fn translate_gfm_emoji(text: &str) -> String {
-    translate_gfm_emoji_cow(text).into_owned()
+    translate_gfm_emoji_with(text, GFM_EMOJI_SHORTCODES_DEFAULT)
 }
 
 /// 将文本中的 GFM Emoji 短代码转义为 Unicode 字符 — 零拷贝 Cow 版。

@@ -362,8 +362,8 @@ async fn retention_archives_finished() {
 /// 验收（会话级存活契约锚定）：run 终态收口**不清理 registry**——终态与
 /// 运行中任务在「模拟 run 终态」后均仍可查询。
 ///
-/// 只读验证（不改 core_run_commands.rs）：drive_run_loop 收口
-/// （core_run_commands.rs:1133-1183）无 registry 清理调用；registry 自身
+/// 只读验证（run loop 收口现位于 `conex-run` run 域）：drive_run_loop
+/// 收口无 registry 清理调用；registry 自身
 /// 不存在「run 级清理」入口（唯一终止入口为单任务 kill）。本测试锚定
 /// registry 侧行为：终态任务不因 run 结束被回收。
 #[tokio::test]
@@ -419,7 +419,7 @@ async fn run_end_keeps_tasks() {
 
 /// 验收（会话级存活契约锚定）：core_cancel_run 不级联杀任务（默认不联动，
 /// 职责单一）。无法直接驱动 core_cancel_run（需 CoreRunState 全量装配，
-/// 属 core_run_commands.rs 并行域，本侧不构造），按任务书替代方案：
+/// 属 `conex-run` run 域，本测试不装配 CoreRunState），按任务书替代方案：
 /// 「registry 清理函数不存在/不级联杀」的结构断言 + 进程存活最小断言。
 ///
 /// 结构断言（只读验证，回报说明）：BackgroundTaskManager 唯一终止入口为

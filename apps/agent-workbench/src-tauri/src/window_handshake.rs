@@ -19,8 +19,8 @@ use std::time::Duration;
 
 use tauri::{AppHandle, Manager, WebviewWindow};
 
-use crate::core_error::{map_internal_string, CoreError};
-use crate::status_diagnostics::StatusDiagnostics;
+use conex_run::core_error::{map_internal_string, CoreError};
+use conex_run::status_diagnostics::StatusDiagnostics;
 
 /// 原生兜底看门狗超时（RISK-MED-02：收窄至 1000ms，杜绝 1.5s 死寂）。
 pub const DEFAULT_WATCHDOG_TIMEOUT: Duration = Duration::from_millis(1000);

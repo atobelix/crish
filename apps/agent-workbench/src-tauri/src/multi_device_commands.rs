@@ -10,11 +10,11 @@ use std::sync::Arc;
 
 use tauri::State;
 
-use crate::core_error::{map_internal_string, CoreError};
 use crate::multi_device_network::NetworkEnvInfo;
 use crate::server::error::ServerError;
 use crate::server::pairing::{DeviceInfo, PairStartResult, PairStatus, PairingCoordinator};
 use crate::MultiDeviceService;
+use conex_run::core_error::{map_internal_string, CoreError};
 
 /// 配对失败 → `CoreError`：detail 逐字保留旧 String 契约的跨端错误码
 /// （`device_code()`，前端按码消费，文案不得漂移）；kind 按变体语义：
@@ -47,12 +47,19 @@ pub fn multi_device_pair_start(
     coordinator.start_pairing(now).map_err(map_pair_start_err)
 }
 
-/// 配对状态快照（状态机/剩余时间/失败次数/令牌数；服务开关语义衔接：
-/// enabled 关闭时服务无监听，本命令仍如实反映配对状态机）。
+/// 配对状态快照（状态机/剩余时间/失败次数/令牌数 + 服务开关真值）。
+///
+/// `service_enabled` 由本命令从 [MultiDeviceService] 回填：前端只认这一份
+/// 真值，切页 / 重新挂载后无需本地记忆即可恢复「服务运行中」状态。
 #[tauri::command]
-pub fn multi_device_pair_status(coordinator: State<'_, Arc<PairingCoordinator>>) -> PairStatus {
+pub fn multi_device_pair_status(
+    service: State<'_, Arc<MultiDeviceService>>,
+    coordinator: State<'_, Arc<PairingCoordinator>>,
+) -> PairStatus {
     let now = crate::server::now_ms();
-    coordinator.status(now)
+    let mut status = coordinator.status(now);
+    status.service_enabled = service.enabled();
+    status
 }
 
 /// 关闭配对（D2 §5.4 关闭动作 / R1-11 G-4）：关闭配对 = 撤销全部设备——

@@ -83,8 +83,6 @@ pub const SEARCH_INDEX_PATH: &str = "/v1/search/index";
 /// 移动端配对入口（POST /v1/pair；R1-11 G-2：body {code, label?} →
 /// {token, label?}，令牌仅此一次明文返回；免鉴权——配对端点无令牌可入）
 pub const PAIR_PATH: &str = "/v1/pair";
-/// 应用预览透明代理入口（GET /v1/preview/proxy；配对 Bearer 鉴权）
-pub const PREVIEW_PROXY_PATH: &str = "/v1/preview/proxy";
 
 /// 密钥/高危险命令面（R1-10 T-07 / D5 §4.5：显式不进远程白名单——矩阵外
 /// 命令）。REST 路由表即远程白名单：本清单条目一律不注册路由，触达时经
@@ -207,13 +205,6 @@ pub fn build_router(state: ServerState) -> Router {
         .route(ASSET_URL_PATH, get(handle_asset_url))
         .route(SETTINGS_CONFIRM_PATH, post(handle_settings_confirm))
         .route(PAUSE_AUTOMATION_PATH, post(handle_pause_automation))
-        // 透明预览可向任意 http(s) 地址发起出站请求（包含用户明确允许的
-        // localhost / 私网目标），因此 GET 响应必须位于配对 Bearer 鉴权组。
-        // OPTIONS 预检单独留在公开组；其处理器只返回空 204，不会执行代理。
-        .route(
-            PREVIEW_PROXY_PATH,
-            get(crate::server::preview_proxy::handle_preview_proxy),
-        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::server::auth::require_signed_request,
@@ -222,13 +213,8 @@ pub fn build_router(state: ServerState) -> Router {
             state.clone(),
             crate::server::auth::require_bearer_token,
         ));
-    let preview_preflight = Router::new().route(
-        PREVIEW_PROXY_PATH,
-        axum::routing::options(crate::server::preview_proxy::handle_preview_proxy_options),
-    );
     Router::new()
         .merge(info)
-        .merge(preview_preflight)
         .merge(ws_router)
         .merge(protected)
         .fallback(handle_not_found)

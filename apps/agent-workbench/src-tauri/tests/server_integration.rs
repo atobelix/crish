@@ -34,6 +34,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use conex_run::core_event_bridge::Emitter;
 use conex_types::device::{
     ApproveParams, ApproveResult, CancelRunParams, CancelRunResult, DenyParams, DeviceEndpoint,
     DeviceEnvelope, DeviceErrorCode, ErrorBody, EventPageParams, EventPageResult, EventsPush,
@@ -41,7 +42,6 @@ use conex_types::device::{
     ResumeDone, ResumePage, RunControlParams, RunControlResult, RunSnapshotParams,
     RunSnapshotResult, RunTaskParams, RunTaskResult,
 };
-use crish_agent_workbench::core_event_bridge::Emitter;
 use crish_agent_workbench::server::backend::ApiBackend;
 use crish_agent_workbench::server::pairing::PairingCoordinator;
 use crish_agent_workbench::server::{

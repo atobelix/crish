@@ -20,10 +20,25 @@ use crate::fs_commands::types::{
     path_is_same_or_child, strip_verbatim_prefix, FileCommandError, WorkspaceFsGuard, ERR_INTERNAL,
     ERR_NOT_FOUND, ERR_OUTSIDE_WORKSPACE, ERR_READ_FILE,
 };
+use conex_run::core_error::CoreError;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::Manager;
 use tauri_plugin_dialog::{DialogExt, FilePath};
+
+/// `FileCommandError` → `CoreError`（detail 逐字保留旧 String 契约的
+/// `"{code}: {message}"` 文案——前端 workspaceAccessApi 依赖
+/// `message.includes('workspace_not_granted')` 匹配，前缀不得丢失）；
+/// kind 按 code 语义映射：授权前置 → InvalidInput，资源缺失 → NotFound，
+/// 其余（内部/越界等系统层）→ Internal 兜底。
+fn map_registry_err(err: FileCommandError) -> CoreError {
+    let detail = format!("{}: {}", err.code, err.message);
+    match err.code.as_str() {
+        ERR_WORKSPACE_NOT_GRANTED => CoreError::InvalidInput(detail),
+        ERR_NOT_FOUND => CoreError::NotFound(detail),
+        _ => CoreError::Internal(detail),
+    }
+}
 
 /// 注册来源：决定该路径属于「新授权」还是「复授权」。
 ///
@@ -67,6 +82,8 @@ pub(crate) struct WorkspaceRegistry {
 #[derive(Debug)]
 struct RegisteredWorkspaceBatch {
     primary: PathBuf,
+    /// 规范化后的全部授权根（生产侧 sync_scope 已消费；测试断言批量授权结果）
+    #[cfg_attr(not(test), allow(dead_code))]
     roots: Vec<PathBuf>,
 }
 
@@ -79,13 +96,13 @@ pub(crate) const ERR_WORKSPACE_NOT_GRANTED: &str = "workspace_not_granted";
 impl WorkspaceRegistry {
     /// 启动初始化：加载 recent-workspaces.json + 注册默认应用根（DefaultAppRoot）。
     /// recent 文件损坏/缺失 → 空列表，不 panic（T07.2 用例 7）。
-    pub(crate) fn init() -> Result<Self, String> {
+    pub(crate) fn init() -> Result<Self, FileCommandError> {
         Self::init_with_config_dir(&workspace_config_dir())
     }
 
     /// 指定配置目录初始化（供测试注入临时目录；PS-04 T4.4 测试经
     /// `init_with_config_dir` 构造 mock 注册表，故对 crate 内测试可见）。
-    pub(crate) fn init_with_config_dir(config_dir: &Path) -> Result<Self, String> {
+    pub(crate) fn init_with_config_dir(config_dir: &Path) -> Result<Self, FileCommandError> {
         let recent = load_recent_list(config_dir);
         let mut roots: Vec<WorkspaceRoot> = Vec::new();
         // 默认应用根（monorepo 根）作为基础授权；canonicalize 失败则跳过
@@ -111,13 +128,20 @@ impl WorkspaceRegistry {
 
     /// 注册授权根。Dialog 为唯一新授权入口；RecentList/DefaultAppRoot 仅复授权
     /// （路径必须在 recent 列表内或等于默认应用根），否则 `workspace_not_granted`。
-    pub(crate) fn register(&self, path: &Path, source: RegisterSource) -> Result<PathBuf, String> {
+    #[cfg(test)]
+    pub(crate) fn register(
+        &self,
+        path: &Path,
+        source: RegisterSource,
+    ) -> Result<PathBuf, FileCommandError> {
         if source == RegisterSource::Dialog {
             return self
                 .register_dialog_paths(&[path.to_path_buf()], true)?
                 .into_iter()
                 .next()
-                .ok_or_else(|| format!("{ERR_WORKSPACE_NOT_GRANTED}: no selected workspace"));
+                .ok_or_else(|| {
+                    FileCommandError::new(ERR_WORKSPACE_NOT_GRANTED, "no selected workspace")
+                });
         }
         if source == RegisterSource::RecentList {
             return self
@@ -125,29 +149,38 @@ impl WorkspaceRegistry {
                 .map(|registered| registered.primary);
         }
         if path.as_os_str().is_empty() {
-            return Err(format!("{ERR_WORKSPACE_NOT_GRANTED}: path is empty"));
+            return Err(FileCommandError::new(
+                ERR_WORKSPACE_NOT_GRANTED,
+                "path is empty",
+            ));
         }
         let path_str = path.to_string_lossy();
         if path_str.contains('\0') {
-            return Err(format!(
-                "{ERR_WORKSPACE_NOT_GRANTED}: path contains NUL byte"
+            return Err(FileCommandError::new(
+                ERR_WORKSPACE_NOT_GRANTED,
+                "path contains NUL byte",
             ));
         }
         // 根不可达（盘符移除/无法解析）→ 明确拒绝，绝不裸用传入根（T07.2 用例 13）
         let canonical = canonicalize_root(path).map_err(|e| {
-            format!("{ERR_WORKSPACE_NOT_GRANTED}: cannot resolve workspace root `{path_str}`: {e}")
+            FileCommandError::new(
+                ERR_WORKSPACE_NOT_GRANTED,
+                format!("cannot resolve workspace root `{path_str}`: {}", e.message),
+            )
         })?;
         if !canonical.is_dir() {
-            return Err(format!(
-                "{ERR_WORKSPACE_NOT_GRANTED}: not a directory: `{}`",
-                canonical.display()
+            return Err(FileCommandError::new(
+                ERR_WORKSPACE_NOT_GRANTED,
+                format!("not a directory: `{}`", canonical.display()),
             ));
         }
 
-        let mut inner = self
-            .inner
-            .lock()
-            .map_err(|e| format!("{ERR_INTERNAL}: workspace registry lock poisoned: {e}"))?;
+        let mut inner = self.inner.lock().map_err(|e| {
+            FileCommandError::new(
+                ERR_INTERNAL,
+                format!("workspace registry lock poisoned: {e}"),
+            )
+        })?;
 
         match source {
             RegisterSource::Dialog => unreachable!("Dialog uses register_dialog_paths"),
@@ -155,9 +188,9 @@ impl WorkspaceRegistry {
             RegisterSource::DefaultAppRoot => {
                 // 复授权：仅默认应用根（启动内部注册使用）
                 if !is_default_app_root(&canonical) {
-                    return Err(format!(
-                        "{ERR_WORKSPACE_NOT_GRANTED}: not the default app root: `{}`",
-                        canonical.display()
+                    return Err(FileCommandError::new(
+                        ERR_WORKSPACE_NOT_GRANTED,
+                        format!("not the default app root: `{}`", canonical.display()),
                     ));
                 }
             }
@@ -187,14 +220,32 @@ impl WorkspaceRegistry {
 
     /// RecentList 批量复授权：先验证全部路径与 primary，再一次更新 roots。
     /// 不接受任何 Dialog 来源的新授权；路径必须已经在 recent 或等于默认应用根。
+    #[cfg(test)]
     fn register_recent_paths(
         &self,
         paths: &[PathBuf],
         primary_path: &Path,
         activate_primary: bool,
-    ) -> Result<RegisteredWorkspaceBatch, String> {
+    ) -> Result<RegisteredWorkspaceBatch, FileCommandError> {
+        self.register_recent_paths_with(paths, primary_path, activate_primary, |_| Ok(()))
+    }
+
+    /// 在近期列表提交前同步外部授权；回调失败时注册表与近期文件保持不变。
+    fn register_recent_paths_with<F>(
+        &self,
+        paths: &[PathBuf],
+        primary_path: &Path,
+        activate_primary: bool,
+        sync_scope: F,
+    ) -> Result<RegisteredWorkspaceBatch, FileCommandError>
+    where
+        F: FnOnce(&[PathBuf]) -> Result<(), FileCommandError>,
+    {
         if paths.is_empty() {
-            return Err(format!("{ERR_WORKSPACE_NOT_GRANTED}: path list is empty"));
+            return Err(FileCommandError::new(
+                ERR_WORKSPACE_NOT_GRANTED,
+                "path list is empty",
+            ));
         }
 
         // 显式 PathBuf 标注：首个使用点是 .iter()（paths_equal 形参 &Path），
@@ -202,23 +253,28 @@ impl WorkspaceRegistry {
         let mut canonical_paths: Vec<PathBuf> = Vec::with_capacity(paths.len());
         for path in paths {
             if path.as_os_str().is_empty() {
-                return Err(format!("{ERR_WORKSPACE_NOT_GRANTED}: path is empty"));
+                return Err(FileCommandError::new(
+                    ERR_WORKSPACE_NOT_GRANTED,
+                    "path is empty",
+                ));
             }
             let path_str = path.to_string_lossy();
             if path_str.contains('\0') {
-                return Err(format!(
-                    "{ERR_WORKSPACE_NOT_GRANTED}: path contains NUL byte"
+                return Err(FileCommandError::new(
+                    ERR_WORKSPACE_NOT_GRANTED,
+                    "path contains NUL byte",
                 ));
             }
             let canonical = canonicalize_root(path).map_err(|e| {
-                format!(
-                    "{ERR_WORKSPACE_NOT_GRANTED}: cannot resolve workspace root `{path_str}`: {e}"
+                FileCommandError::new(
+                    ERR_WORKSPACE_NOT_GRANTED,
+                    format!("cannot resolve workspace root `{path_str}`: {}", e.message),
                 )
             })?;
             if !canonical.is_dir() {
-                return Err(format!(
-                    "{ERR_WORKSPACE_NOT_GRANTED}: not a directory: `{}`",
-                    canonical.display()
+                return Err(FileCommandError::new(
+                    ERR_WORKSPACE_NOT_GRANTED,
+                    format!("not a directory: `{}`", canonical.display()),
                 ));
             }
             if !canonical_paths
@@ -230,31 +286,40 @@ impl WorkspaceRegistry {
         }
 
         let primary_canonical = canonicalize_root(primary_path).map_err(|e| {
-            format!(
-                "{ERR_WORKSPACE_NOT_GRANTED}: cannot resolve primary workspace root `{}`: {e}",
-                primary_path.display()
+            FileCommandError::new(
+                ERR_WORKSPACE_NOT_GRANTED,
+                format!(
+                    "cannot resolve primary workspace root `{}`: {}",
+                    primary_path.display(),
+                    e.message
+                ),
             )
         })?;
         if !canonical_paths
             .iter()
             .any(|path| paths_equal(path, &primary_canonical))
         {
-            return Err(format!(
-                "{ERR_WORKSPACE_NOT_GRANTED}: primary workspace is not in the path list: `{}`",
-                primary_canonical.display()
+            return Err(FileCommandError::new(
+                ERR_WORKSPACE_NOT_GRANTED,
+                format!(
+                    "primary workspace is not in the path list: `{}`",
+                    primary_canonical.display()
+                ),
             ));
         }
 
-        let mut inner = self
-            .inner
-            .lock()
-            .map_err(|e| format!("{ERR_INTERNAL}: workspace registry lock poisoned: {e}"))?;
+        let mut inner = self.inner.lock().map_err(|e| {
+            FileCommandError::new(
+                ERR_INTERNAL,
+                format!("workspace registry lock poisoned: {e}"),
+            )
+        })?;
         for canonical in &canonical_paths {
             let in_recent = inner.recent.iter().any(|item| paths_equal(item, canonical));
             if !in_recent && !is_default_app_root(canonical) {
-                return Err(format!(
-                    "{ERR_WORKSPACE_NOT_GRANTED}: workspace not in recent list: `{}`",
-                    canonical.display()
+                return Err(FileCommandError::new(
+                    ERR_WORKSPACE_NOT_GRANTED,
+                    format!("workspace not in recent list: `{}`", canonical.display()),
                 ));
             }
         }
@@ -270,6 +335,13 @@ impl WorkspaceRegistry {
                 next_recent.push(canonical.clone());
             }
         }
+
+        // 资源协议授权失败时必须在持久化近期列表或改动内存状态前返回。
+        // 注册表锁在同步期间保持，避免其他工作区命令穿插改变授权快照。
+        sync_scope(&canonical_paths)?;
+
+        // 可复授权路径仅来自已持久化的近期根或内部默认根；近期根不会新增记录，
+        // 默认根是注册表初始化时已登记的根。因此落盘失败时不会新增授权根。
         if next_recent != inner.recent {
             persist_recent_list(&inner.config_dir, &next_recent)?;
         }
@@ -307,33 +379,51 @@ impl WorkspaceRegistry {
     ///
     /// 多选先完整验证，再一次持锁更新根、recent 与活动根，避免部分注册。选择
     /// “添加文件夹”时 `activate_first=false`，保持当前活动根；创建项目时则激活首选根。
+    #[cfg(test)]
     fn register_dialog_paths(
         &self,
         paths: &[PathBuf],
         activate_first: bool,
-    ) -> Result<Vec<PathBuf>, String> {
+    ) -> Result<Vec<PathBuf>, FileCommandError> {
+        self.register_dialog_paths_with(paths, activate_first, |_| Ok(()))
+    }
+
+    fn register_dialog_paths_with<F>(
+        &self,
+        paths: &[PathBuf],
+        activate_first: bool,
+        sync_scope: F,
+    ) -> Result<Vec<PathBuf>, FileCommandError>
+    where
+        F: FnOnce(&[PathBuf]) -> Result<(), FileCommandError>,
+    {
         // 显式 PathBuf 标注：首个使用点是 .iter()（paths_equal 形参 &Path），
         // 无标注时推断会把元素类型统一成未加尺寸的 Path（编译错误）。
         let mut canonical_paths: Vec<PathBuf> = Vec::with_capacity(paths.len());
         for path in paths {
             if path.as_os_str().is_empty() {
-                return Err(format!("{ERR_WORKSPACE_NOT_GRANTED}: path is empty"));
+                return Err(FileCommandError::new(
+                    ERR_WORKSPACE_NOT_GRANTED,
+                    "path is empty",
+                ));
             }
             let path_str = path.to_string_lossy();
             if path_str.contains('\0') {
-                return Err(format!(
-                    "{ERR_WORKSPACE_NOT_GRANTED}: path contains NUL byte"
+                return Err(FileCommandError::new(
+                    ERR_WORKSPACE_NOT_GRANTED,
+                    "path contains NUL byte",
                 ));
             }
             let canonical = canonicalize_root(path).map_err(|e| {
-                format!(
-                    "{ERR_WORKSPACE_NOT_GRANTED}: cannot resolve workspace root `{path_str}`: {e}"
+                FileCommandError::new(
+                    ERR_WORKSPACE_NOT_GRANTED,
+                    format!("cannot resolve workspace root `{path_str}`: {}", e.message),
                 )
             })?;
             if !canonical.is_dir() {
-                return Err(format!(
-                    "{ERR_WORKSPACE_NOT_GRANTED}: not a directory: `{}`",
-                    canonical.display()
+                return Err(FileCommandError::new(
+                    ERR_WORKSPACE_NOT_GRANTED,
+                    format!("not a directory: `{}`", canonical.display()),
                 ));
             }
             canonical_paths.push(canonical);
@@ -343,10 +433,12 @@ impl WorkspaceRegistry {
             return Ok(canonical_paths);
         }
 
-        let mut inner = self
-            .inner
-            .lock()
-            .map_err(|e| format!("{ERR_INTERNAL}: workspace registry lock poisoned: {e}"))?;
+        let mut inner = self.inner.lock().map_err(|e| {
+            FileCommandError::new(
+                ERR_INTERNAL,
+                format!("workspace registry lock poisoned: {e}"),
+            )
+        })?;
         let previous_active = inner
             .active
             .and_then(|index| inner.roots.get(index))
@@ -357,8 +449,43 @@ impl WorkspaceRegistry {
                 next_recent.push(canonical.clone());
             }
         }
-        if next_recent != inner.recent {
-            persist_recent_list(&inner.config_dir, &next_recent)?;
+        // 先准备临时文件，不提前替换正式 recent；scope 同步失败时只需清理临时文件，
+        // 不需要尝试回滚已经提交的近期列表。
+        let recent_file_stage = if next_recent != inner.recent {
+            Some(prepare_recent_list(&inner.config_dir, &next_recent)?)
+        } else {
+            None
+        };
+
+        if let Err(sync_error) = sync_scope(&canonical_paths) {
+            if let Some(staged_path) = recent_file_stage.as_deref() {
+                if let Err(cleanup_error) = remove_recent_list_stage(staged_path) {
+                    return Err(FileCommandError::new(
+                        ERR_INTERNAL,
+                        format!(
+                            "工作区资源协议授权同步失败：{}；recent 临时文件清理失败：{}",
+                            sync_error.message, cleanup_error.message
+                        ),
+                    ));
+                }
+            }
+            return Err(sync_error);
+        }
+
+        if let Some(staged_path) = recent_file_stage.as_deref() {
+            if let Err(commit_error) = commit_recent_list(&inner.config_dir, staged_path) {
+                let cleanup_detail = remove_recent_list_stage(staged_path)
+                    .err()
+                    .map(|error| format!("；recent 临时文件清理失败：{}", error.message))
+                    .unwrap_or_default();
+                return Err(FileCommandError::new(
+                    ERR_INTERNAL,
+                    format!(
+                        "近期列表原子提交失败；本次原生选择的目录已同步进入资源访问范围，但注册表与近期列表未提交。请重试以完成授权。原因：{}{}",
+                        commit_error.message, cleanup_detail
+                    ),
+                ));
+            }
         }
 
         for canonical in &canonical_paths {
@@ -470,30 +597,55 @@ impl WorkspaceRegistry {
     }
 
     /// 激活已登记的默认应用工作区根，不接收 renderer 路径，也不创建新授权。
-    pub(crate) fn activate_default_root(&self) -> Result<PathBuf, String> {
-        let app_dir = crate::host_paths::app_dir()?;
+    fn activate_default_root_with<F>(&self, sync_scope: F) -> Result<PathBuf, FileCommandError>
+    where
+        F: FnOnce(&[PathBuf]) -> Result<(), FileCommandError>,
+    {
+        let app_dir =
+            crate::host_paths::app_dir().map_err(|e| FileCommandError::new(ERR_INTERNAL, e))?;
         let default_root = crate::host_paths::workspace_root(&app_dir);
-        self.activate_registered_root(&default_root)
+        self.activate_registered_root_with(&default_root, sync_scope)
     }
 
-    fn activate_registered_root(&self, path: &Path) -> Result<PathBuf, String> {
+    #[cfg(test)]
+    fn activate_registered_root(&self, path: &Path) -> Result<PathBuf, FileCommandError> {
+        self.activate_registered_root_with(path, |_| Ok(()))
+    }
+
+    fn activate_registered_root_with<F>(
+        &self,
+        path: &Path,
+        sync_scope: F,
+    ) -> Result<PathBuf, FileCommandError>
+    where
+        F: FnOnce(&[PathBuf]) -> Result<(), FileCommandError>,
+    {
         let canonical = canonicalize_root(path).map_err(|e| {
-            format!("{ERR_WORKSPACE_NOT_GRANTED}: cannot resolve default workspace root: {e}")
+            FileCommandError::new(
+                ERR_WORKSPACE_NOT_GRANTED,
+                format!("cannot resolve default workspace root: {}", e.message),
+            )
         })?;
-        let mut inner = self
-            .inner
-            .lock()
-            .map_err(|e| format!("{ERR_INTERNAL}: workspace registry lock poisoned: {e}"))?;
+        let mut inner = self.inner.lock().map_err(|e| {
+            FileCommandError::new(
+                ERR_INTERNAL,
+                format!("workspace registry lock poisoned: {e}"),
+            )
+        })?;
         let index = inner
             .roots
             .iter()
             .position(|root| paths_equal(&root.path, &canonical))
             .ok_or_else(|| {
-                format!(
-                    "{ERR_WORKSPACE_NOT_GRANTED}: default workspace root is not registered: `{}`",
-                    canonical.display()
+                FileCommandError::new(
+                    ERR_WORKSPACE_NOT_GRANTED,
+                    format!(
+                        "default workspace root is not registered: `{}`",
+                        canonical.display()
+                    ),
                 )
             })?;
+        sync_scope(std::slice::from_ref(&canonical))?;
         inner.active = Some(index);
         Ok(inner.roots[index].path.clone())
     }
@@ -520,10 +672,13 @@ fn active_root_path(inner: &RegistryInner) -> Result<PathBuf, FileCommandError> 
 
 /// 严格 canonicalize：失败即拒绝（不退化裸用传入路径，P-02 关闭）；
 /// Windows 下剥离 `\\?\` 前缀保证跨会话一致。
-fn canonicalize_root(path: &Path) -> Result<PathBuf, String> {
-    let canonical = path
-        .canonicalize()
-        .map_err(|e| format!("failed to canonicalize `{}`: {e}", path.display()))?;
+fn canonicalize_root(path: &Path) -> Result<PathBuf, FileCommandError> {
+    let canonical = path.canonicalize().map_err(|e| {
+        FileCommandError::new(
+            ERR_INTERNAL,
+            format!("failed to canonicalize `{}`: {e}", path.display()),
+        )
+    })?;
     Ok(strip_verbatim_prefix(&canonical))
 }
 
@@ -575,10 +730,14 @@ fn load_recent_list(config_dir: &Path) -> Vec<PathBuf> {
     list.into_iter().map(PathBuf::from).collect()
 }
 
-/// recent 列表落盘：tmp + rename（原子替换，损坏不会留下半截文件）。
-fn persist_recent_list(config_dir: &Path, recent: &[PathBuf]) -> Result<(), String> {
+/// 固定临时路径受 WorkspaceRegistry 内部互斥锁保护；只能在持锁事务中调用。
+/// 先把 recent 内容写入不会被启动加载的临时文件，供跨资源授权事务提交。
+fn prepare_recent_list(config_dir: &Path, recent: &[PathBuf]) -> Result<PathBuf, FileCommandError> {
     std::fs::create_dir_all(config_dir).map_err(|e| {
-        format!("{ERR_WORKSPACE_NOT_GRANTED}: cannot create workspace config directory: {e}")
+        FileCommandError::new(
+            ERR_WORKSPACE_NOT_GRANTED,
+            format!("cannot create workspace config directory: {e}"),
+        )
     })?;
     let target = config_dir.join(RECENT_FILE_NAME);
     let tmp = target.with_extension("json.tmp");
@@ -587,13 +746,58 @@ fn persist_recent_list(config_dir: &Path, recent: &[PathBuf]) -> Result<(), Stri
         .map(|p| p.to_string_lossy().into_owned())
         .collect();
     let text = serde_json::to_string_pretty(&list).map_err(|e| {
-        format!("{ERR_WORKSPACE_NOT_GRANTED}: cannot serialize workspace history: {e}")
+        FileCommandError::new(
+            ERR_WORKSPACE_NOT_GRANTED,
+            format!("cannot serialize workspace history: {e}"),
+        )
     })?;
-    std::fs::write(&tmp, text)
-        .map_err(|e| format!("{ERR_WORKSPACE_NOT_GRANTED}: cannot write workspace history: {e}"))?;
-    std::fs::rename(&tmp, &target).map_err(|e| {
-        format!("{ERR_WORKSPACE_NOT_GRANTED}: cannot commit workspace history: {e}")
+    std::fs::write(&tmp, text).map_err(|e| {
+        FileCommandError::new(
+            ERR_WORKSPACE_NOT_GRANTED,
+            format!("cannot write workspace history: {e}"),
+        )
     })?;
+    Ok(tmp)
+}
+
+/// 把已准备好的 recent 临时文件原子替换到正式路径。
+fn commit_recent_list(config_dir: &Path, tmp: &Path) -> Result<(), FileCommandError> {
+    let target = config_dir.join(RECENT_FILE_NAME);
+    std::fs::rename(tmp, &target).map_err(|e| {
+        FileCommandError::new(
+            ERR_WORKSPACE_NOT_GRANTED,
+            format!("cannot commit workspace history: {e}"),
+        )
+    })
+}
+
+#[allow(clippy::disallowed_methods)] // 原子落盘失败后的 staging 临时文件清理（非会话历史）
+fn remove_recent_list_stage(tmp: &Path) -> Result<(), FileCommandError> {
+    match std::fs::remove_file(tmp) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(FileCommandError::new(
+            ERR_INTERNAL,
+            format!("cannot remove staged workspace history: {error}"),
+        )),
+    }
+}
+
+/// recent 列表落盘：tmp + rename（原子替换，损坏不会留下半截文件）。
+fn persist_recent_list(config_dir: &Path, recent: &[PathBuf]) -> Result<(), FileCommandError> {
+    let tmp = prepare_recent_list(config_dir, recent)?;
+    if let Err(commit_error) = commit_recent_list(config_dir, &tmp) {
+        if let Err(cleanup_error) = remove_recent_list_stage(&tmp) {
+            return Err(FileCommandError::new(
+                ERR_INTERNAL,
+                format!(
+                    "workspace history commit failed: {}; temporary file cleanup failed: {}",
+                    commit_error.message, cleanup_error.message
+                ),
+            ));
+        }
+        return Err(commit_error);
+    }
     Ok(())
 }
 
@@ -622,9 +826,10 @@ pub(crate) fn resolve_guard(
 fn sync_asset_scope<R: tauri::Runtime, M: tauri::Manager<R>>(
     app: &M,
     roots: &[PathBuf],
-) -> Result<(), String> {
-    crate::asset_scope::allow_registered_workspace_roots(app, roots.iter().cloned())
-        .map_err(|error| format!("工作区已登记，但 asset 协议授权同步失败：{error}"))
+) -> Result<(), FileCommandError> {
+    crate::asset_scope::allow_registered_workspace_roots(app, roots.iter().cloned()).map_err(
+        |error| FileCommandError::new(ERR_INTERNAL, format!("工作区资源协议授权同步失败：{error}")),
+    )
 }
 
 /// 复授权命令：只接受 recent 列表或默认应用根；其 path 不产生新授权。
@@ -632,12 +837,16 @@ fn sync_asset_scope<R: tauri::Runtime, M: tauri::Manager<R>>(
 pub(crate) fn workbench_open_workspace(
     app: tauri::AppHandle,
     path: String,
-) -> Result<OpenWorkspaceResult, String> {
-    let reg = registry(&app).map_err(|e| format!("{}: {}", e.code, e.message))?;
-    let canonical = reg.register(Path::new(&path), RegisterSource::RecentList)?;
-    sync_asset_scope(&app, std::slice::from_ref(&canonical))?;
+) -> Result<OpenWorkspaceResult, CoreError> {
+    let reg = registry(&app).map_err(map_registry_err)?;
+    let path = PathBuf::from(path);
+    let registered = reg
+        .register_recent_paths_with(std::slice::from_ref(&path), &path, true, |roots| {
+            sync_asset_scope(&app, roots)
+        })
+        .map_err(map_registry_err)?;
     Ok(OpenWorkspaceResult {
-        path: canonical.to_string_lossy().into_owned(),
+        path: registered.primary.to_string_lossy().into_owned(),
     })
 }
 
@@ -649,12 +858,17 @@ pub(crate) fn workbench_open_workspaces(
     paths: Vec<String>,
     primary_path: String,
     activate_primary: bool,
-) -> Result<OpenWorkspaceResult, String> {
-    let reg = registry(&app).map_err(|e| format!("{}: {}", e.code, e.message))?;
+) -> Result<OpenWorkspaceResult, CoreError> {
+    let reg = registry(&app).map_err(map_registry_err)?;
     let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
-    let registered =
-        reg.register_recent_paths(&paths, Path::new(&primary_path), activate_primary)?;
-    sync_asset_scope(&app, &registered.roots)?;
+    let registered = reg
+        .register_recent_paths_with(
+            &paths,
+            Path::new(&primary_path),
+            activate_primary,
+            |roots| sync_asset_scope(&app, roots),
+        )
+        .map_err(map_registry_err)?;
     Ok(OpenWorkspaceResult {
         path: registered.primary.to_string_lossy().into_owned(),
     })
@@ -664,10 +878,11 @@ pub(crate) fn workbench_open_workspaces(
 #[tauri::command]
 pub(crate) fn workbench_activate_default_workspace(
     app: tauri::AppHandle,
-) -> Result<OpenWorkspaceResult, String> {
-    let reg = registry(&app).map_err(|e| format!("{}: {}", e.code, e.message))?;
-    let canonical = reg.activate_default_root()?;
-    sync_asset_scope(&app, std::slice::from_ref(&canonical))?;
+) -> Result<OpenWorkspaceResult, CoreError> {
+    let reg = registry(&app).map_err(map_registry_err)?;
+    let canonical = reg
+        .activate_default_root_with(|roots| sync_asset_scope(&app, roots))
+        .map_err(map_registry_err)?;
     Ok(OpenWorkspaceResult {
         path: canonical.to_string_lossy().into_owned(),
     })
@@ -675,8 +890,8 @@ pub(crate) fn workbench_activate_default_workspace(
 
 /// 列出当前已授权根，供 UI 状态同步。
 #[tauri::command]
-pub(crate) fn workbench_list_workspaces(app: tauri::AppHandle) -> Result<Vec<String>, String> {
-    let reg = registry(&app).map_err(|e| format!("{}: {}", e.code, e.message))?;
+pub(crate) fn workbench_list_workspaces(app: tauri::AppHandle) -> Result<Vec<String>, CoreError> {
+    let reg = registry(&app).map_err(map_registry_err)?;
     Ok(reg
         .roots()
         .into_iter()
@@ -698,7 +913,7 @@ async fn select_native_folder_paths(
     app: &tauri::AppHandle,
     title: &'static str,
     multiple: bool,
-) -> Result<Option<Vec<PathBuf>>, String> {
+) -> Result<Option<Vec<PathBuf>>, FileCommandError> {
     let (tx, rx) = tokio::sync::oneshot::channel::<Option<Vec<FilePath>>>();
     if multiple {
         app.dialog()
@@ -718,7 +933,7 @@ async fn select_native_folder_paths(
 
     let Some(selected) = rx
         .await
-        .map_err(|_| "原生文件夹选择器未返回结果".to_string())?
+        .map_err(|_| FileCommandError::new(ERR_INTERNAL, "原生文件夹选择器未返回结果"))?
     else {
         return Ok(None);
     };
@@ -726,19 +941,21 @@ async fn select_native_folder_paths(
     selected
         .into_iter()
         .map(|path| {
-            path.into_path()
-                .map_err(|e| format!("无法读取原生选择的文件夹路径: {e}"))
+            path.into_path().map_err(|e| {
+                FileCommandError::new(ERR_INTERNAL, format!("无法读取原生选择的文件夹路径: {e}"))
+            })
         })
         .collect::<Result<Vec<_>, _>>()
         .map(Some)
 }
 
 /// 只允许由原生 dialog 结果调用；None 代表取消且不改注册表。
+#[cfg(test)]
 fn register_native_dialog_selection(
     registry: &WorkspaceRegistry,
     selected: Option<Vec<PathBuf>>,
     activate_first: bool,
-) -> Result<Option<Vec<PathBuf>>, String> {
+) -> Result<Option<Vec<PathBuf>>, FileCommandError> {
     let Some(selected) = selected else {
         return Ok(None);
     };
@@ -752,22 +969,50 @@ fn register_native_dialog_selection_and_sync<R: tauri::Runtime, M: tauri::Manage
     registry: &WorkspaceRegistry,
     selected: Option<Vec<PathBuf>>,
     activate_first: bool,
-) -> Result<Option<Vec<PathBuf>>, String> {
-    let registered = register_native_dialog_selection(registry, selected, activate_first)?;
-    if let Some(roots) = registered.as_ref().filter(|paths| !paths.is_empty()) {
-        sync_asset_scope(app, roots)?;
-    }
-    Ok(registered)
+) -> Result<Option<Vec<PathBuf>>, FileCommandError> {
+    register_native_dialog_selection_and_sync_with(registry, selected, activate_first, |roots| {
+        sync_asset_scope(app, roots)
+    })
+}
+
+fn register_native_dialog_selection_and_sync_with<F>(
+    registry: &WorkspaceRegistry,
+    selected: Option<Vec<PathBuf>>,
+    activate_first: bool,
+    sync_scope: F,
+) -> Result<Option<Vec<PathBuf>>, FileCommandError>
+where
+    F: FnOnce(&[PathBuf]) -> Result<(), FileCommandError>,
+{
+    let Some(selected) = selected else {
+        return Ok(None);
+    };
+    registry
+        .register_dialog_paths_with(&selected, activate_first, |roots| {
+            sync_scope(roots).map_err(|error| {
+                FileCommandError::new(
+                    ERR_INTERNAL,
+                    format!(
+                        "{}；所选目录可能已有部分进入资源访问范围，注册表与近期列表未提交。请重试以完成授权。",
+                        error.message
+                    ),
+                )
+            })
+        })
+        .map(Some)
 }
 
 /// 用户在 Rust 侧原生目录选择器中选出的项目根；命令无 path 参数。
 #[tauri::command]
 pub(crate) async fn workbench_pick_workspace_folder(
     app: tauri::AppHandle,
-) -> Result<Option<String>, String> {
-    let selected = select_native_folder_paths(&app, "选择项目文件夹", false).await?;
-    let registry = registry(&app).map_err(|e| format!("{}: {}", e.code, e.message))?;
-    let paths = register_native_dialog_selection_and_sync(&app, &registry, selected, true)?;
+) -> Result<Option<String>, CoreError> {
+    let selected = select_native_folder_paths(&app, "选择项目文件夹", false)
+        .await
+        .map_err(map_registry_err)?;
+    let registry = registry(&app).map_err(map_registry_err)?;
+    let paths = register_native_dialog_selection_and_sync(&app, &registry, selected, true)
+        .map_err(map_registry_err)?;
     Ok(paths
         .and_then(|mut paths| paths.pop())
         .map(|path| path.to_string_lossy().into_owned()))
@@ -778,19 +1023,20 @@ pub(crate) async fn workbench_pick_workspace_folder(
 pub(crate) async fn workbench_pick_workspace_folders(
     app: tauri::AppHandle,
     activate_first: bool,
-) -> Result<Option<Vec<String>>, String> {
-    let selected = select_native_folder_paths(&app, "选择项目文件夹", true).await?;
-    let registry = registry(&app).map_err(|e| format!("{}: {}", e.code, e.message))?;
-    register_native_dialog_selection_and_sync(&app, &registry, selected, activate_first).map(
-        |paths| {
-            paths.map(|paths| {
-                paths
-                    .into_iter()
-                    .map(|path| path.to_string_lossy().into_owned())
-                    .collect()
-            })
-        },
-    )
+) -> Result<Option<Vec<String>>, CoreError> {
+    let selected = select_native_folder_paths(&app, "选择项目文件夹", true)
+        .await
+        .map_err(map_registry_err)?;
+    let registry = registry(&app).map_err(map_registry_err)?;
+    let paths =
+        register_native_dialog_selection_and_sync(&app, &registry, selected, activate_first)
+            .map_err(map_registry_err)?;
+    Ok(paths.map(|paths| {
+        paths
+            .into_iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect()
+    }))
 }
 
 #[cfg(test)]
@@ -901,9 +1147,47 @@ mod tests {
             .activate_registered_root(&unregistered_root)
             .expect_err("unregistered root must not be activated");
 
-        assert!(error.contains(ERR_WORKSPACE_NOT_GRANTED));
+        assert_eq!(error.code, ERR_WORKSPACE_NOT_GRANTED);
         assert_eq!(reg.roots(), roots_before);
         assert_eq!(reg.active_root(), active_before);
+    }
+
+    #[test]
+    fn default_root_scope_sync_failure_preserves_registry_and_recent_file() {
+        let temp = TestDir::new();
+        let default_root = temp.path().join("default-root");
+        let active_root = temp.path().join("active-project");
+        fs::create_dir(&default_root).expect("create default root");
+        fs::create_dir(&active_root).expect("create active root");
+        let config_dir = temp.path().join("config");
+        fs::create_dir(&config_dir).expect("create config dir");
+        let registry = make_root_registry(&default_root, &config_dir);
+        registry
+            .register_dialog_paths(std::slice::from_ref(&active_root), true)
+            .expect("register active project");
+        let recent_file = config_dir.join(RECENT_FILE_NAME);
+        let recent_before_bytes = fs::read(&recent_file).expect("snapshot recent file");
+        let (roots_before, active_before, recent_before) = {
+            let inner = registry.inner.lock().expect("lock registry");
+            (inner.roots.clone(), inner.active, inner.recent.clone())
+        };
+        let error = registry
+            .activate_registered_root_with(&default_root, |_| {
+                Err(FileCommandError::new(
+                    ERR_INTERNAL,
+                    "injected scope failure",
+                ))
+            })
+            .expect_err("scope synchronization failure must reject activation");
+        assert_eq!(error.code, ERR_INTERNAL);
+        let inner = registry.inner.lock().expect("lock registry after failure");
+        assert_eq!(inner.roots, roots_before);
+        assert_eq!(inner.active, active_before);
+        assert_eq!(inner.recent, recent_before);
+        assert_eq!(
+            fs::read(recent_file).expect("read recent after failure"),
+            recent_before_bytes
+        );
     }
 
     /// T07.2 用例 3：register(Dialog) 后根内读写成功（注册返回 canonical 路径）。
@@ -958,7 +1242,7 @@ mod tests {
         let err = reg
             .register(&unselected_root, RegisterSource::RecentList)
             .expect_err("arbitrary unselected root must not be reauthorized");
-        assert!(err.starts_with(ERR_WORKSPACE_NOT_GRANTED), "err: {err}");
+        assert_eq!(err.code, ERR_WORKSPACE_NOT_GRANTED, "err: {}", err.message);
         assert_eq!(
             reg.resolve_guard(&unselected_root.to_string_lossy())
                 .expect_err("unselected root must be outside the guard")
@@ -1115,7 +1399,7 @@ mod tests {
         )
         .expect_err("missing selected root must reject the batch");
 
-        assert!(err.starts_with(ERR_WORKSPACE_NOT_GRANTED), "err: {err}");
+        assert_eq!(err.code, ERR_WORKSPACE_NOT_GRANTED, "err: {}", err.message);
         assert_eq!(reg.roots(), roots_before);
         assert!(!config_dir.join(RECENT_FILE_NAME).exists());
         assert_eq!(
@@ -1148,15 +1432,221 @@ mod tests {
         )
         .expect_err("failed recent persistence must reject registration");
 
-        assert!(
-            error.starts_with(ERR_WORKSPACE_NOT_GRANTED),
-            "error: {error}"
+        assert_eq!(
+            error.code, ERR_WORKSPACE_NOT_GRANTED,
+            "error: {}",
+            error.message
         );
         assert_eq!(registry.roots(), roots_before);
         assert_eq!(
             app.asset_protocol_scope().allowed_patterns(),
             asset_scope_before
         );
+    }
+
+    #[test]
+    fn native_dialog_single_scope_failure_leaves_recent_and_registry_unchanged() {
+        let temp = TestDir::new();
+        let current_root = temp.path().join("current-root");
+        let selected_root = temp.path().join("selected-root");
+        fs::create_dir(&current_root).expect("create current root");
+        fs::create_dir(&selected_root).expect("create selected root");
+        let config_dir = temp.path().join("config");
+        fs::create_dir(&config_dir).expect("create config dir");
+        let registry = make_root_registry(&current_root, &config_dir);
+        registry
+            .register_dialog_paths(std::slice::from_ref(&current_root), true)
+            .expect("register current root");
+        let recent_file = config_dir.join(RECENT_FILE_NAME);
+        let recent_before_bytes = fs::read(&recent_file).expect("snapshot recent file");
+        let (roots_before, active_before, recent_before) = {
+            let inner = registry.inner.lock().expect("lock registry");
+            (inner.roots.clone(), inner.active, inner.recent.clone())
+        };
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("build mock Tauri app");
+        let scope_before = app.asset_protocol_scope().allowed_patterns();
+
+        let error = registry
+            .register_dialog_paths_with(std::slice::from_ref(&selected_root), true, |roots| {
+                fs::remove_dir_all(&roots[0]).expect("invalidate selected root before scope sync");
+                sync_asset_scope(app.handle(), roots)
+            })
+            .expect_err("scope failure must reject new dialog authorization");
+
+        assert_eq!(error.code, ERR_INTERNAL);
+        let inner = registry.inner.lock().expect("lock registry after failure");
+        assert_eq!(inner.roots, roots_before);
+        assert_eq!(inner.active, active_before);
+        assert_eq!(inner.recent, recent_before);
+        assert_eq!(
+            fs::read(&recent_file).expect("read recent after failure"),
+            recent_before_bytes
+        );
+        assert_eq!(app.asset_protocol_scope().allowed_patterns(), scope_before);
+        assert!(!app
+            .asset_protocol_scope()
+            .is_allowed(selected_root.join("secret.txt")));
+    }
+
+    #[test]
+    fn native_dialog_batch_scope_failure_leaves_recent_and_registry_unchanged() {
+        let temp = TestDir::new();
+        let current_root = temp.path().join("current-root");
+        let first_selected = temp.path().join("first-selected");
+        let second_selected = temp.path().join("second-selected");
+        fs::create_dir(&current_root).expect("create current root");
+        fs::create_dir(&first_selected).expect("create first selected root");
+        fs::create_dir(&second_selected).expect("create second selected root");
+        let config_dir = temp.path().join("config");
+        fs::create_dir(&config_dir).expect("create config dir");
+        let registry = make_root_registry(&current_root, &config_dir);
+        registry
+            .register_dialog_paths(std::slice::from_ref(&current_root), true)
+            .expect("register current root");
+        let recent_file = config_dir.join(RECENT_FILE_NAME);
+        let recent_before_bytes = fs::read(&recent_file).expect("snapshot recent file");
+        let (roots_before, active_before, recent_before) = {
+            let inner = registry.inner.lock().expect("lock registry");
+            (inner.roots.clone(), inner.active, inner.recent.clone())
+        };
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("build mock Tauri app");
+        let scope_before = app.asset_protocol_scope().allowed_patterns();
+        let selected = [first_selected.clone(), second_selected];
+
+        let error = registry
+            .register_dialog_paths_with(&selected, true, |roots| {
+                fs::remove_dir_all(&roots[1]).expect("invalidate second root before scope sync");
+                sync_asset_scope(app.handle(), roots)
+            })
+            .expect_err("scope failure must reject the entire dialog batch");
+
+        assert_eq!(error.code, ERR_INTERNAL);
+        let inner = registry.inner.lock().expect("lock registry after failure");
+        assert_eq!(inner.roots, roots_before);
+        assert_eq!(inner.active, active_before);
+        assert_eq!(inner.recent, recent_before);
+        assert_eq!(
+            fs::read(&recent_file).expect("read recent after failure"),
+            recent_before_bytes
+        );
+        assert_eq!(app.asset_protocol_scope().allowed_patterns(), scope_before);
+        assert!(!app
+            .asset_protocol_scope()
+            .is_allowed(first_selected.join("secret.txt")));
+    }
+
+    #[test]
+    fn native_dialog_partial_scope_failure_keeps_selection_out_of_registry_and_recent() {
+        let temp = TestDir::new();
+        let current_root = temp.path().join("current-root");
+        let first_selected = temp.path().join("first-selected");
+        let second_selected = temp.path().join("second-selected");
+        fs::create_dir(&current_root).expect("create current root");
+        fs::create_dir(&first_selected).expect("create first selected root");
+        fs::create_dir(&second_selected).expect("create second selected root");
+        let config_dir = temp.path().join("config");
+        fs::create_dir(&config_dir).expect("create config dir");
+        let registry = make_root_registry(&current_root, &config_dir);
+        registry
+            .register_dialog_paths(std::slice::from_ref(&current_root), true)
+            .expect("register current root");
+        let recent_file = config_dir.join(RECENT_FILE_NAME);
+        let recent_before_bytes = fs::read(&recent_file).expect("snapshot recent file");
+        let (roots_before, active_before, recent_before) = {
+            let inner = registry.inner.lock().expect("lock registry");
+            (inner.roots.clone(), inner.active, inner.recent.clone())
+        };
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("build mock Tauri app");
+
+        // Tauri 的 asset protocol scope 只有追加授权接口，没有移除 allow pattern 的接口。
+        // 模拟第一项已按用户原生选择成功授权、随后第二项同步失败。
+        let error = register_native_dialog_selection_and_sync_with(
+            &registry,
+            Some(vec![first_selected.clone(), second_selected.clone()]),
+            true,
+            |roots| {
+                sync_asset_scope(app.handle(), &roots[..1])?;
+                Err(FileCommandError::new(
+                    ERR_INTERNAL,
+                    "injected failure after first selected root was scoped",
+                ))
+            },
+        )
+        .unwrap_err();
+        assert!(error
+            .message
+            .contains("所选目录可能已有部分进入资源访问范围"));
+
+        assert_eq!(error.code, ERR_INTERNAL);
+        let inner = registry.inner.lock().expect("lock registry after failure");
+        assert_eq!(inner.roots, roots_before);
+        assert_eq!(inner.active, active_before);
+        assert_eq!(inner.recent, recent_before);
+        assert_eq!(
+            fs::read(&recent_file).expect("read recent after failure"),
+            recent_before_bytes
+        );
+        assert!(!recent_file.with_extension("json.tmp").exists());
+        assert!(app
+            .asset_protocol_scope()
+            .is_allowed(first_selected.join("secret.txt")));
+        assert!(!app
+            .asset_protocol_scope()
+            .is_allowed(second_selected.join("secret.txt")));
+    }
+
+    #[test]
+    fn native_dialog_recent_commit_failure_reports_completed_scope_and_preserves_registry() {
+        let temp = TestDir::new();
+        let current_root = temp.path().join("current-root");
+        let selected_root = temp.path().join("selected-root");
+        fs::create_dir(&current_root).expect("create current root");
+        fs::create_dir(&selected_root).expect("create selected root");
+        let config_dir = temp.path().join("config");
+        fs::create_dir(&config_dir).expect("create config dir");
+        let recent_file = config_dir.join(RECENT_FILE_NAME);
+        fs::create_dir(&recent_file).expect("make recent target a directory to reject rename");
+        let recent_sentinel = recent_file.join("preserve.txt");
+        fs::write(&recent_sentinel, "existing recent target").expect("write target sentinel");
+        let registry = make_root_registry(&current_root, &config_dir);
+        let (roots_before, active_before, recent_before) = {
+            let inner = registry.inner.lock().expect("lock registry");
+            (inner.roots.clone(), inner.active, inner.recent.clone())
+        };
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("build mock Tauri app");
+
+        let error = register_native_dialog_selection_and_sync_with(
+            &registry,
+            Some(vec![selected_root.clone()]),
+            true,
+            |roots| sync_asset_scope(app.handle(), roots),
+        )
+        .expect_err("recent rename failure must reject dialog registration");
+
+        assert_eq!(error.code, ERR_INTERNAL);
+        assert!(error.message.contains("已同步进入资源访问范围"));
+        assert!(error.message.contains("注册表与近期列表未提交"));
+        assert!(recent_file.is_dir());
+        assert_eq!(
+            fs::read(&recent_sentinel).expect("read preserved recent target sentinel"),
+            b"existing recent target"
+        );
+        assert!(!recent_file.with_extension("json.tmp").exists());
+        let inner = registry.inner.lock().expect("lock registry after failure");
+        assert_eq!(inner.roots, roots_before);
+        assert_eq!(inner.active, active_before);
+        assert_eq!(inner.recent, recent_before);
+        assert!(app
+            .asset_protocol_scope()
+            .is_allowed(selected_root.join("secret.txt")));
     }
 
     /// T07.2 用例 5：workbench_open_workspace("C:\")（不在 recent，非默认根）→ workspace_not_granted。
@@ -1167,7 +1657,7 @@ mod tests {
         let err = reg
             .register(Path::new(r"C:\"), RegisterSource::RecentList)
             .expect_err("non-recent path must be rejected");
-        assert!(err.starts_with(ERR_WORKSPACE_NOT_GRANTED), "err: {err}");
+        assert_eq!(err.code, ERR_WORKSPACE_NOT_GRANTED, "err: {}", err.message);
     }
 
     /// T07.2 用例 5 变体：恶意诱导路径（根盘符）不得授权。
@@ -1182,7 +1672,7 @@ mod tests {
         let err = reg
             .register(Path::new(evil), RegisterSource::RecentList)
             .expect_err("drive root must be rejected");
-        assert!(err.starts_with(ERR_WORKSPACE_NOT_GRANTED), "err: {err}");
+        assert_eq!(err.code, ERR_WORKSPACE_NOT_GRANTED, "err: {}", err.message);
     }
 
     /// T07.2 用例 6：workbench_open_workspace(recent 内路径) → 成功复授权。
@@ -1332,13 +1822,160 @@ mod tests {
             )
             .expect_err("one untrusted root must reject the entire batch");
 
-        assert!(err.starts_with(ERR_WORKSPACE_NOT_GRANTED), "err: {err}");
+        assert_eq!(err.code, ERR_WORKSPACE_NOT_GRANTED, "err: {}", err.message);
         assert_eq!(reg.roots(), roots_before);
         assert_eq!(reg.active_root(), active_before);
         assert_eq!(
             fs::read_to_string(recent_file).expect("read recent"),
             recent_json
         );
+    }
+
+    #[test]
+    fn recent_single_scope_sync_failure_leaves_registry_and_recent_file_unchanged() {
+        let temp = TestDir::new();
+        let active_root = temp.path().join("active-root");
+        let recent_root = temp.path().join("recent-root");
+        fs::create_dir(&active_root).expect("create active root");
+        fs::create_dir(&recent_root).expect("create recent root");
+        let active_root = strip_verbatim_prefix(
+            &active_root
+                .canonicalize()
+                .expect("canonicalize active root"),
+        );
+        let recent_root = strip_verbatim_prefix(
+            &recent_root
+                .canonicalize()
+                .expect("canonicalize recent root"),
+        );
+        let config_dir = temp.path().join("config");
+        fs::create_dir(&config_dir).expect("create config dir");
+        let recent_file = config_dir.join(RECENT_FILE_NAME);
+        let recent = vec![recent_root.clone()];
+        let recent_json = serde_json::to_string(
+            &recent
+                .iter()
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect::<Vec<_>>(),
+        )
+        .expect("serialize recent root");
+        fs::write(&recent_file, &recent_json).expect("write recent root");
+
+        let registry = WorkspaceRegistry {
+            inner: Mutex::new(RegistryInner {
+                roots: vec![WorkspaceRoot {
+                    path: active_root,
+                    source: RegisterSource::Dialog,
+                }],
+                active: Some(0),
+                recent,
+                config_dir,
+            }),
+        };
+        let (roots_before, active_before, recent_before) = {
+            let inner = registry.inner.lock().expect("lock registry");
+            (inner.roots.clone(), inner.active, inner.recent.clone())
+        };
+
+        let error = registry
+            .register_recent_paths_with(
+                std::slice::from_ref(&recent_root),
+                &recent_root,
+                true,
+                |_| {
+                    Err(FileCommandError::new(
+                        ERR_INTERNAL,
+                        "injected asset scope synchronization failure",
+                    ))
+                },
+            )
+            .expect_err("scope synchronization failure must reject registration");
+
+        assert_eq!(error.code, ERR_INTERNAL);
+        let inner = registry.inner.lock().expect("lock registry after failure");
+        assert_eq!(inner.roots, roots_before);
+        assert_eq!(inner.active, active_before);
+        assert_eq!(inner.recent, recent_before);
+        assert_eq!(
+            fs::read_to_string(&recent_file).expect("read recent after failure"),
+            recent_json
+        );
+        assert!(!recent_file.with_extension("json.tmp").exists());
+    }
+
+    #[test]
+    fn recent_batch_scope_sync_failure_leaves_registry_and_recent_file_unchanged() {
+        let temp = TestDir::new();
+        let active_root = temp.path().join("active-root");
+        let first_recent_root = temp.path().join("first-recent-root");
+        let primary_recent_root = temp.path().join("primary-recent-root");
+        fs::create_dir(&active_root).expect("create active root");
+        fs::create_dir(&first_recent_root).expect("create first recent root");
+        fs::create_dir(&primary_recent_root).expect("create primary recent root");
+        let active_root = strip_verbatim_prefix(
+            &active_root
+                .canonicalize()
+                .expect("canonicalize active root"),
+        );
+        let first_recent_root = strip_verbatim_prefix(
+            &first_recent_root
+                .canonicalize()
+                .expect("canonicalize first recent root"),
+        );
+        let primary_recent_root = strip_verbatim_prefix(
+            &primary_recent_root
+                .canonicalize()
+                .expect("canonicalize primary recent root"),
+        );
+        let config_dir = temp.path().join("config");
+        fs::create_dir(&config_dir).expect("create config dir");
+        let recent_file = config_dir.join(RECENT_FILE_NAME);
+        let recent = vec![first_recent_root.clone(), primary_recent_root.clone()];
+        let recent_json = serde_json::to_string(
+            &recent
+                .iter()
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect::<Vec<_>>(),
+        )
+        .expect("serialize recent roots");
+        fs::write(&recent_file, &recent_json).expect("write recent roots");
+
+        let registry = WorkspaceRegistry {
+            inner: Mutex::new(RegistryInner {
+                roots: vec![WorkspaceRoot {
+                    path: active_root,
+                    source: RegisterSource::Dialog,
+                }],
+                active: Some(0),
+                recent,
+                config_dir,
+            }),
+        };
+        let (roots_before, active_before, recent_before) = {
+            let inner = registry.inner.lock().expect("lock registry");
+            (inner.roots.clone(), inner.active, inner.recent.clone())
+        };
+        let requested_roots = [first_recent_root, primary_recent_root.clone()];
+
+        let error = registry
+            .register_recent_paths_with(&requested_roots, &primary_recent_root, true, |_| {
+                Err(FileCommandError::new(
+                    ERR_INTERNAL,
+                    "injected asset scope synchronization failure",
+                ))
+            })
+            .expect_err("scope synchronization failure must reject the batch");
+
+        assert_eq!(error.code, ERR_INTERNAL);
+        let inner = registry.inner.lock().expect("lock registry after failure");
+        assert_eq!(inner.roots, roots_before);
+        assert_eq!(inner.active, active_before);
+        assert_eq!(inner.recent, recent_before);
+        assert_eq!(
+            fs::read_to_string(&recent_file).expect("read recent after failure"),
+            recent_json
+        );
+        assert!(!recent_file.with_extension("json.tmp").exists());
     }
 
     /// T07.2 用例 7：recent-workspaces.json 损坏/缺失 → 空列表 + 不 panic。
@@ -1421,8 +2058,12 @@ mod tests {
         let err = reg
             .register(&missing, RegisterSource::Dialog)
             .expect_err("unreachable root must be rejected");
-        assert!(err.starts_with(ERR_WORKSPACE_NOT_GRANTED), "err: {err}");
-        assert!(err.contains("cannot resolve"), "err: {err}");
+        assert_eq!(err.code, ERR_WORKSPACE_NOT_GRANTED, "err: {}", err.message);
+        assert!(
+            err.message.contains("cannot resolve"),
+            "err: {}",
+            err.message
+        );
     }
 
     /// 相对路径解析：以活动根为基准，`..` 越界由守卫二次校验拒绝。

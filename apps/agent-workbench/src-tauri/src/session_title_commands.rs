@@ -16,12 +16,12 @@ use agent_provider::request::{
 };
 use conex_types::tool::SystemPromptWireMode;
 
-use crate::core_error::CoreError;
-use crate::core_run_commands::CoreRunState;
-use crate::engine::{
-    chat_provider_url, max_tokens_field, summary_content_from_response, user_message,
-    EngineProviderConfig,
+use conex_run::core_error::CoreError;
+use conex_run::engine_channels::summary_content_from_response;
+use conex_run::engine_provider::{
+    chat_provider_url, max_tokens_field, user_message, EngineProviderConfig,
 };
+use conex_run::run::CoreRunState;
 
 /// 标题正文上限（Unicode 标量值，不是字节）。
 pub(crate) const SESSION_TITLE_MAX_CHARS: usize = 12;
@@ -63,7 +63,7 @@ pub(crate) async fn generate_session_title_impl(
             "缺少可用于生成标题的对话文本".to_string(),
         ));
     }
-    let Some(config) = state.engine.provider_config() else {
+    let Some(config) = state.engine().provider_config() else {
         return Err(CoreError::InvalidInput(
             "LLM 标题不可用（请配置 provider 后重试）".to_string(),
         ));
@@ -76,7 +76,7 @@ pub(crate) async fn generate_session_title_impl(
     let body = build_session_title_request_body(&config, user_text, assistant_text);
     let url = chat_provider_url(&config);
     let api_key = config.api_key.clone();
-    let client = state.engine.http_client();
+    let client = state.engine().http_client();
     let response = client
         .post(&url)
         .header("Authorization", format!("Bearer {api_key}"))

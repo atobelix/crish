@@ -2,11 +2,11 @@
 //! OutputPreview + 构造注入面 + 事件桥/消费器接线 + 归档/容量生命周期）。
 //! 结构拆分轮仅搬移，注册表语义零改动。接线：background.rs `mod bg_registry;`。
 
-use crate::core_event_bridge::EventBridge;
 use crate::process::now_millis;
 use crate::resource::{sample_usage, ResourceMonitorConfig, TaskNotifier};
 use agent_tools::background::{BackgroundTaskInfo, TaskState};
 use agent_tools::definition::ToolError;
+use conex_run::core_event_bridge::EventBridge;
 use conex_types::error::codes;
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
@@ -70,7 +70,7 @@ pub struct BackgroundTaskRegistry {
     /// 快照；顺序契约：先 set_task_event_consumer 后 set_event_bridge——
     /// 批 3 main.rs 装配轮按此序，30 文档 §5 改动点 3）
     pub(crate) task_event_consumer:
-        Mutex<Option<Arc<crate::task_event_consumer::TaskEventConsumer>>>,
+        Mutex<Option<Arc<conex_run::task_event_consumer::TaskEventConsumer>>>,
 }
 
 impl std::fmt::Debug for BackgroundTaskRegistry {
@@ -318,7 +318,7 @@ impl BackgroundTaskRegistry {
     /// 顺序契约见 30 文档 §5 改动点 3；消费方 = main.rs 装配轮，已接线）
     pub(crate) fn set_task_event_consumer(
         &self,
-        consumer: Arc<crate::task_event_consumer::TaskEventConsumer>,
+        consumer: Arc<conex_run::task_event_consumer::TaskEventConsumer>,
     ) {
         *self
             .task_event_consumer

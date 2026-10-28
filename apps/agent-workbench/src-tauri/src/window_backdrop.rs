@@ -197,7 +197,7 @@ pub fn sync_backdrop_to_webview(window: &WebviewWindow, kind: WindowBackdropKind
 pub fn setup_window_backdrop(
     app: &tauri::App,
     main_window: &WebviewWindow,
-    diagnostics: &std::sync::Arc<crate::status_diagnostics::StatusDiagnostics>,
+    diagnostics: &std::sync::Arc<conex_run::status_diagnostics::StatusDiagnostics>,
 ) {
     let backdrop = WindowBackdropKind::None;
     sync_backdrop_to_webview(main_window, backdrop);

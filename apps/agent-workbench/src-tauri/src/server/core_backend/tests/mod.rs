@@ -3,8 +3,8 @@ use std::sync::Arc;
 use conex_types::events::{AgentEvent, AgentEventEnvelope};
 
 use crate::core_backend::CoreStateBackend;
-use crate::core_event_bridge::EventBridge;
-use crate::core_run_commands::CoreRunState;
+use conex_run::core_event_bridge::EventBridge;
+use conex_run::run::CoreRunState;
 
 mod feature_readiness;
 mod session_ops;
@@ -13,7 +13,7 @@ mod session_ops;
 #[derive(Default)]
 pub(super) struct RecordingEmitter(pub(super) std::sync::Mutex<Vec<String>>);
 
-impl crate::core_event_bridge::Emitter for RecordingEmitter {
+impl conex_run::core_event_bridge::Emitter for RecordingEmitter {
     fn emit(&self, _channel: &str, payload: &str) {
         self.0.lock().unwrap().push(payload.to_string());
     }
@@ -23,7 +23,7 @@ pub(super) fn recording_bridge() -> (EventBridge, Arc<RecordingEmitter>) {
     let emitter = Arc::new(RecordingEmitter::default());
     let bridge = EventBridge::new(
         "workbench-run-event",
-        Arc::clone(&emitter) as Arc<dyn crate::core_event_bridge::Emitter>,
+        Arc::clone(&emitter) as Arc<dyn conex_run::core_event_bridge::Emitter>,
     );
     (bridge, emitter)
 }
@@ -37,29 +37,6 @@ pub(super) fn recorded_security_audit(emitter: &RecordingEmitter) -> AgentEvent 
         serde_json::from_str(&recorded[0]).expect("信封 JSON 可解析");
     assert_eq!(envelope.run_id, None, "runId 不注入（run 创建前/无会话）");
     envelope.event
-}
-
-pub(super) async fn g5_wait_audit_operation(
-    emitter: &Arc<RecordingEmitter>,
-    operation: &str,
-    window: std::time::Duration,
-) {
-    let deadline = std::time::Instant::now() + window;
-    loop {
-        let payloads = emitter.0.lock().unwrap().clone();
-        if payloads
-            .iter()
-            .filter(|p| p.contains("security-audit"))
-            .any(|p| p.contains(operation))
-        {
-            return;
-        }
-        assert!(
-            std::time::Instant::now() < deadline,
-            "审计 {operation} 未在窗口内发射"
-        );
-        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
-    }
 }
 
 /// 会话索引条目（测试会话；对齐 core_run_commands 测试先例）
@@ -98,7 +75,7 @@ pub(super) fn r2_test_core_state() -> Arc<CoreRunState> {
         Arc::new(orchestrator::persist::LocalDbStore::new(db)),
         snapshots,
         bridge,
-        Arc::new(crate::status_diagnostics::StatusDiagnostics::new()),
+        Arc::new(conex_run::status_diagnostics::StatusDiagnostics::new()),
         None,
     ))
 }

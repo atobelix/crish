@@ -1,0 +1,54 @@
+[package]
+name = "conex-run"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# 跨 crate 测试钩子（壳层 dev-dependency 开启；发布构建不暴露这些 API）。
+# 覆盖：poison/inject 替身、catalog yaml 注入、scheduler fire override 等。
+test-hooks = []
+
+[dependencies]
+# 运行编排域 crate：run 状态机 / idle 续跑 / 重试熔断 / 审批 / 历史缓存 /
+# 调度器（sched）/ 子代理派生（subagent_spawner）/ 定时器（timers）/
+# 事件桥契约（core_event_bridge + buffer）/ 任务事件消费 / 唤醒链路 /
+# provider 执行底座（engine_provider + engine_channels）。
+# 依赖方向：壳层（Tauri bin）→ 本 crate → 各底层 crate，零反向依赖、零 tauri。
+agent-provider = { path = "../agent-provider" }
+agent-tools = { path = "../agent-tools" }
+conex-agents = { path = "../conex-agents" }
+conex-compaction = { path = "../conex-compaction" }
+conex-db = { path = "../conex-db" }
+conex-fs = { path = "../conex-fs" }
+conex-shared = { path = "../conex-shared" }
+conex-telemetry = { path = "../conex-telemetry" }
+conex-types = { path = "../conex-types" }
+orchestrator = { path = "../orchestrator" }
+session-loop = { path = "../session-loop" }
+# trash 服务契约（conex-fs::trash 返回 anyhow::Result）
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+futures-util = { workspace = true }
+getrandom = "0.2"
+indexmap = { workspace = true }
+reqwest = { workspace = true }
+# trash 服务 / sched session_meta 落盘（conex-db 同栈 0.31 bundled，零新增锁版本）
+rusqlite = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+# 部分内联测试使用多线程 runtime（spawn 语义断言）
+tokio = { workspace = true, features = ["rt-multi-thread", "test-util"] }

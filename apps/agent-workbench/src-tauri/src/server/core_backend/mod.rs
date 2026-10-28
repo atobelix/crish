@@ -25,7 +25,7 @@ use conex_types::events::{
 };
 use conex_types::impact::ImpactAssessment;
 
-use crate::core_event_bridge::EventBridge;
+use conex_run::core_event_bridge::EventBridge;
 
 // ── R1-10 安全测试面：远程装配与双轨路由纯函数（T-07 / T-08 / T-14）──
 //
@@ -34,25 +34,17 @@ use crate::core_event_bridge::EventBridge;
 // 不暴露 Tauri IPC」）；deviceId 身份注入（source=deviceId）留 §8.2
 // 装配层扩展，本面先落地远程/本地的行为边界。
 
-/// 远程权限模式上限装配（R1-10 T-08 / D5 §4.6.1）：min(requested, Ask)——
-/// 远程不存在 full-access（TH-12 直接缓解）；ask / plan 原样；None 原样。
-/// 返回（生效模式, 是否降级）——降级时调用方必须发 remote-mode-downgrade
-/// 审计标记（D5 §8.2 / §9.2 矩阵：approve/operate × full-access → ask 降级）。
+/// 远程权限模式上限装配（R1-10 T-08 / D5 §4.6.1）：min(requested, Ask)——远程不存在
+/// full；ask 原样；None 原样。返回（生效模式, 是否降级）——降级时调用方必须发
+/// remote-mode-downgrade 审计标记（D5 §8.2 / §9.2 矩阵：approve/operate × full → ask 降级）。
 pub(crate) fn apply_remote_mode(
     requested: Option<PermissionMode>,
 ) -> (Option<PermissionMode>, bool) {
     match requested {
-        Some(PermissionMode::FullAccess) => (Some(PermissionMode::Ask), true),
+        Some(PermissionMode::Full) => (Some(PermissionMode::Ask), true),
         other => (other, false),
     }
 }
-
-/// remote-mode-downgrade 审计标记常量（D5 §8.2：降级动作发该审计；
-/// R1-10 结构化日志先行，R1-11 D-5 收口后经
-/// [emit_remote_mode_downgrade_audit] 双写升级为 AgentEvent::SecurityAudit
-/// 事件发射——标记载荷形状不变，测试锁定）
-#[cfg(test)]
-pub(crate) const REMOTE_MODE_DOWNGRADE_AUDIT_MARKER: &str = "remote-mode-downgrade";
 
 /// remote-* 审计事件构造（R1-11 D-5 收口：D5 §6.2 载荷形状——operation +
 /// targets + decision + permission_mode；信封 runId/sequence 不注入，
@@ -67,7 +59,7 @@ fn remote_audit_event(
 ) -> AgentEvent {
     AgentEvent::SecurityAudit {
         session_id: session_id.to_string(),
-        timestamp: crate::engine::now_iso_utc(),
+        timestamp: conex_run::engine_provider::now_iso_utc(),
         operation,
         targets,
         impact: ImpactAssessment::default(),
@@ -108,11 +100,7 @@ fn emit_remote_audit(
     bridge.emit_envelope(&envelope);
 }
 
-/// 远程 run 权限模式降级审计发射（R1-10 T-08 → R1-11 事件级：full-access
-/// → ask 降级动作；双写：结构化日志 + SecurityAudit(remote-mode-downgrade)，
-/// targets 承载 runId（run 创建前为空串）、permission_mode 记录降级前
-/// 申请值 full-access——D5 §6.2 载荷形状 / §6.2「permission_mode 如实
-/// 记录（记录降级前申请值）」；decision 取 blocked 语义：降级动作已记录）
+/// remote-mode-downgrade 审计标记（远程 Full → Ask 降级；D5 §6.2 / TH-12）
 pub(crate) fn emit_remote_mode_downgrade_audit(
     bridge: Option<&EventBridge>,
     run_id: &str,
@@ -122,9 +110,9 @@ pub(crate) fn emit_remote_mode_downgrade_audit(
         bridge,
         session_id,
         SecurityAuditOperation::RemoteModeDowngrade,
-        vec![run_id.to_string()],
+        vec![run_id.to_string(), "full".to_string()],
         SecurityAuditDecision::Blocked,
-        Some("full-access".to_string()),
+        Some("full".to_string()),
     );
 }
 

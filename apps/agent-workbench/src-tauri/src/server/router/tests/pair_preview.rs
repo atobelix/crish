@@ -1,4 +1,4 @@
-//! router 测试：配对端点与预览代理
+//! router 测试：配对端点
 
 use super::*;
 
@@ -428,78 +428,4 @@ async fn pair_endpoint_rate_limit_success_consumes_window() {
         1,
         "成功请求必须计入窗口（成功与失败统一计）"
     );
-}
-
-// ── Preview Proxy 免鉴权端点测试 ──
-
-/// 预览代理缺少 url 参数或参数非法时返回 400 cmd.invalid
-#[tokio::test]
-async fn preview_proxy_without_url_param_returns_400_cmd_invalid() {
-    let state = test_state();
-    let token = issue_token(&state);
-    let app = build_router(state);
-
-    // 无查询参数
-    let response = app
-        .clone()
-        .oneshot(authed_get(PREVIEW_PROXY_PATH, &token))
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    let body = json_body(response).await;
-    assert_eq!(body["code"], "cmd.invalid");
-
-    // url 参数为空
-    let response = app
-        .clone()
-        .oneshot(authed_get(&format!("{PREVIEW_PROXY_PATH}?url="), &token))
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    let body = json_body(response).await;
-    assert_eq!(body["code"], "cmd.invalid");
-
-    // url 协议不支持（如 ftp）
-    let response = app
-        .clone()
-        .oneshot(authed_get(
-            &format!("{PREVIEW_PROXY_PATH}?url=ftp://example.com/test"),
-            &token,
-        ))
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    let body = json_body(response).await;
-    assert_eq!(body["code"], "cmd.invalid");
-}
-
-/// 预览代理 OPTIONS 预检请求返回 204 及 CORS 头部
-#[tokio::test]
-async fn preview_proxy_options_returns_204_with_cors_headers() {
-    let app = build_router(test_state());
-    let response = app
-        .oneshot(
-            axum::http::Request::builder()
-                .method("OPTIONS")
-                .uri(PREVIEW_PROXY_PATH)
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
-    assert_eq!(
-        response
-            .headers()
-            .get("access-control-allow-origin")
-            .unwrap(),
-        "*"
-    );
-    assert!(response
-        .headers()
-        .get("access-control-allow-methods")
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .contains("GET"));
 }

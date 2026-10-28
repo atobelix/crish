@@ -1,5 +1,5 @@
-use crate::core_error::CoreError;
 use base64::prelude::{Engine as _, BASE64_STANDARD, BASE64_URL_SAFE_NO_PAD};
+use conex_run::core_error::CoreError;
 use sha2::{Digest, Sha256};
 
 /// Compute SHA-256 hash of data and return as hex string.

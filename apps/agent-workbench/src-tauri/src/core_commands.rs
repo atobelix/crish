@@ -27,9 +27,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use tauri::State;
 
-use crate::core_error::CoreError;
 use crate::fs_commands::types::path_is_same_or_child;
 use crate::workspace::WorkspaceRegistry;
+use conex_run::core_error::CoreError;
 
 /// 并行搜索阈值（文件数 ≥ 该值走并行实现）。
 const SEARCH_PARALLEL_THRESHOLD: usize = 1000;

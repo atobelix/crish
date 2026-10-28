@@ -1829,11 +1829,11 @@ mod tests {
     #![allow(clippy::disallowed_methods)]
 
     use super::*;
-    use crate::core_event_bridge::Emitter;
     use crate::server::auth::{sha256_hex, TokenStore};
     use crate::server::backend::ApiBackend;
     use crate::server::fanout::FanOutEmitter;
     use crate::server::{router, ServerConfig, ServerHandle, ServerInstance, ServerState};
+    use conex_run::core_event_bridge::Emitter;
     use conex_types::device::version::MAX_FRAME_BYTES;
     use conex_types::device::{
         ApproveParams, ApproveResult, CancelRunParams, CancelRunResult, DenyParams,

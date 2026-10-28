@@ -8,9 +8,9 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::core_error::CoreError;
 use crate::fs_commands::skills::{canonicalize_within_roots, home_dir};
 use crate::fs_commands::types::{path_is_same_or_child, MAX_TEXT_FILE_BYTES};
+use conex_run::core_error::CoreError;
 
 #[derive(Debug, serde::Serialize, Clone)]
 #[serde(rename_all = "camelCase")]

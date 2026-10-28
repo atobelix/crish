@@ -4,7 +4,7 @@
 //! `BUILTIN_COMMAND_MANIFEST` 是本文件的**内置快照镜像**（启动拉取失败 / 非 Tauri
 //! 环境回退面），双端手工同步，条数由双端测试锁定：
 //! - Rust 侧：本文件 `manifest_*` 测试（条数公式化 / 幽灵命令排除 / 新增命令登记）；
-//! - 前端侧：`commandManifest.test.ts`（**153 = 注册面 153 + 登记先行 0**；
+//! - 前端侧：`commandManifest.test.ts`（**162 = 注册面 162 + 登记先行 0**；
 //!   条数与集合由该文件的动态对照断言直读本文件真源双向锁定）。
 //!
 //! 维护规则：
@@ -60,7 +60,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（**153 条 = 全部 registered=true 实装命令**；与前端
+/// 命令清单（**162 条 = 全部 registered=true 实装命令**；与前端
 /// `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `command_registry!` 注册一致；
@@ -84,7 +84,9 @@ const fn entry(
 /// b6：`core_generate_session_title` 追加后 135 → **136**。
 /// Win11 贴靠布局热区 `workbench_set_snap_overlay_rect` 追加后 136 → **137**；
 /// PE-07 工作区复授权与 Rust 原生目录选择五命令接线后 147 → **152**；
-/// 默认工作区激活命令追加后 152 → **153**。
+/// 默认工作区激活命令追加后 152 → **153**；原生子 Webview 七命令追加后
+/// 153 → 160；Hit-Test 能力查询命令追加后 160 → 161；Inspector 开关追加后
+/// 161 → **162**。
 pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     contract_version: COMMAND_MANIFEST_CONTRACT_VERSION,
     commands: &[
@@ -207,6 +209,8 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("core_read_run_events", "core", "engine", true),
         entry("core_run_task", "core", "engine", true),
         entry("core_run_control", "core", "engine", true),
+        // 运行时权限切换（子代理权限活单元经父链自动同步）
+        entry("core_set_run_permission_mode", "core", "engine", true),
         // R1 撤回（统一输入流收敛战役）：复用 core_run_control L3 通道 +
         // 独立 retract 语义 wire（session 域，引擎面）
         entry("core_session_retract", "session", "engine", true),
@@ -272,6 +276,16 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("browser_import_history", "browser", "engine", true),
         entry("browser_list_bookmarks", "browser", "engine", true),
         entry("browser_list_history", "browser", "engine", true),
+        // ── 原生多 Webview 浏览器重构命令（Native Browser Overhaul）──
+        entry("browser_webview_create", "browser", "engine", true),
+        entry("browser_webview_set_bounds", "browser", "engine", true),
+        entry("browser_webview_set_visible", "browser", "engine", true),
+        entry("browser_webview_navigate", "browser", "engine", true),
+        entry("browser_webview_action", "browser", "engine", true),
+        entry("browser_webview_close", "browser", "engine", true),
+        entry("browser_webview_set_muted", "browser", "engine", true),
+        entry("browser_webview_set_hit_test", "browser", "engine", true),
+        entry("browser_webview_set_inspector", "browser", "engine", true),
         // ── 电脑操作会话命令：computer_session_enable / computer_session_disable /
         //    computer_status 已退役并**物理删除**（四方同步移除 + 实现体
         //    computer_commands.rs 删除；computer-panel 前端面已物理删除，
@@ -383,12 +397,12 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 153,
-            "总数 147；PE-07 工作区授权五命令接线后 152，默认根激活命令追加后 153"
+            total, 163,
+            "总数 147；PE-07 工作区授权五命令接线后 152，默认根激活命令追加后 153，原生子 Webview 七命令追加后 160，Hit-Test 能力命令后 161，Inspector 后 162，运行时权限切换后 163"
         );
         assert_eq!(
-            registered, 153,
-            "注册面 153（全部为 registered=true 实装命令）"
+            registered, 163,
+            "注册面 163（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");
     }

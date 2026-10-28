@@ -54,7 +54,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use conex_types::events::AgentEvent;
 
-use crate::core_event_bridge::Emitter;
+use conex_run::core_event_bridge::Emitter;
 
 use super::copy::message_with_copy;
 use super::engine::{PushDecision, PushDecisionEngine};

@@ -24,7 +24,7 @@
 //! - 建窗 / 定位失败：`tracing::warn!` 记录并让命令返回 `Err`，前端记 warn 后保持普通点击实现；
 //! - 非 Windows：命令返回 `Ok(false)`（平台不提供该能力），前端同样走普通点击。
 
-use crate::core_error::{map_internal_string, CoreError};
+use conex_run::core_error::{map_internal_string, CoreError};
 use serde::{Deserialize, Serialize};
 use tauri::WebviewWindow;
 

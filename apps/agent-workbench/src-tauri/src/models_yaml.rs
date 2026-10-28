@@ -62,7 +62,7 @@ pub(crate) struct BundledCatalogSnapshot {
 /// 不做任何写盘或状态变更。
 #[tauri::command]
 pub(crate) fn workbench_read_capability_dictionary() -> BundledCatalogSnapshot {
-    let bundled = crate::engine_provider::protocol::bundled_catalog();
+    let bundled = conex_run::engine_provider::protocol::bundled_catalog();
     BundledCatalogSnapshot {
         version: bundled.version(),
         entries: bundled.iter_entries().map(|(_, e)| e.clone()).collect(),

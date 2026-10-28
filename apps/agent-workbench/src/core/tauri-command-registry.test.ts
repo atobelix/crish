@@ -170,6 +170,34 @@ describe('Tauri command registry', () => {
     }
   });
 
+  it('keeps native browser webview commands registered with hit-test capability explicit', () => {
+    const commands = [
+      'browser_webview_create',
+      'browser_webview_set_bounds',
+      'browser_webview_set_visible',
+      'browser_webview_navigate',
+      'browser_webview_action',
+      'browser_webview_close',
+      'browser_webview_set_muted',
+      'browser_webview_set_hit_test',
+      'browser_webview_set_inspector',
+    ];
+    const registered = new Set(
+      extractRegisteredTauriCommands(readFileSync(rustMainPath, 'utf8'))
+    );
+
+    for (const command of commands) {
+      expect(registered.has(command), `${command} must be registered`).toBe(
+        true
+      );
+      expect(TAURI_COMMAND_REGISTRY.get(command)?.status).toBe('implemented');
+    }
+
+    const hitTest = TAURI_COMMAND_REGISTRY.get('browser_webview_set_hit_test');
+    expect(hitTest?.capabilityStatus).toBe(UNSUPPORTED_CODE);
+    expect(isProductCapabilityCommand(hitTest!)).toBe(false);
+  });
+
   it('keeps all workspace authorization commands in the registered snapshot', () => {
     const rustMain = readFileSync(rustMainPath, 'utf8');
     const registered = new Set(extractRegisteredTauriCommands(rustMain));
@@ -210,7 +238,7 @@ describe('Tauri command registry', () => {
     expect(pending.map((entry) => entry.command).sort()).toEqual([]);
   });
 
-  it('keeps product run commands wired through core_run_commands', () => {
+  it('keeps product run commands wired through run_ipc', () => {
     const rustMain = readFileSync(rustMainPath, 'utf8');
     const registered = extractRegisteredTauriCommands(rustMain);
 
@@ -221,7 +249,7 @@ describe('Tauri command registry', () => {
       'core_approve_tool',
       'core_deny_tool',
     ]) {
-      expect(rustMain).toContain(`("${command}", core_run_commands::`);
+      expect(rustMain).toContain(`("${command}", run_ipc::`);
       expect(registered).toContain(command);
       expect(TAURI_COMMAND_REGISTRY.get(command)?.status).toBe('implemented');
     }
@@ -288,8 +316,9 @@ describe('Tauri command registry', () => {
       isProductCapabilityCommand
     );
 
-    // 校准：全量 153 条 registered 命令（含 models_yaml 三命令、usage 五命令，
-    // 以及 b6 core_generate_session_title）。
+    // 校准：162 条 registered 命令；其中原生 browser hit-test 命令会显式
+    // 回报 unsupported，因此有 161 条作为完整 product capability 计数。
+    // 包含 models_yaml 三命令、usage 五命令以及 b6 core_generate_session_title。
     // 2026-09-15 更正：131 为陈旧值——旧 config/catalog 命令族 5 条
     // （config_get / config_profile_apply / config_update / catalog_get /
     // catalog_refresh）随单轨收敛退役；另新增 workbench_apply_models_config、
@@ -305,7 +334,7 @@ describe('Tauri command registry', () => {
     // restart_app）在 manifest 与 main.rs 早已注册、本表漏登，D11 补齐后 143 → 147。
     // 工作区授权六命令漏登，D11 命中后补齐 147 → 153。
     // 条数与四方集合一致性由 scripts/check-provider-single-track.mjs 的 D11 守护。
-    expect(productCommands).toHaveLength(153);
+    expect(productCommands).toHaveLength(162);
     expect(
       productCommands.every(
         (entry) => commandCapabilityStatus(entry) !== UNSUPPORTED_CODE

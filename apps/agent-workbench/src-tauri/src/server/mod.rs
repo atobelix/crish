@@ -24,7 +24,7 @@
 //!   ws:// 握手在 TLS 层拒绝（D5 D-02a / T-04；accept 层见 [TlsListener]）。
 //!
 //! 可测试性架构（D2 §4.3）：本模块除 conex-types 外仅 fanout 引用
-//! `crate::core_event_bridge`（实现其 Emitter trait——D2 §11-A 融合点 A
+//! `conex_run::core_event_bridge`（实现其 Emitter trait——D2 §11-A 融合点 A
 //! 的既定例外，其余模块零 crate:: 内部引用；router 测试经 tower
 //! oneshot 驱动（无 Tauri 环境）。
 
@@ -38,9 +38,6 @@ pub mod limiter;
 pub mod pair;
 pub mod pair_endpoint;
 pub mod pairing;
-pub mod preview_headers;
-pub mod preview_injector;
-pub mod preview_proxy;
 pub mod remote_whitelist;
 pub mod router;
 pub mod ws;
@@ -251,7 +248,7 @@ impl ServerInstance {
         &self,
         backend: Option<Arc<dyn backend::ApiBackend>>,
         fanout: Option<Arc<fanout::FanOutEmitter>>,
-        audit_bridge: Option<crate::core_event_bridge::EventBridge>,
+        audit_bridge: Option<conex_run::core_event_bridge::EventBridge>,
         pairing: Option<Arc<pairing::PairingCoordinator>>,
         ws_registry: Option<Arc<ws::WsRegistry>>,
     ) -> Router {
@@ -421,10 +418,10 @@ pub struct ServerState {
     /// 订阅/续传/心跳仍可用）
     event_stream: Option<Arc<fanout::FanOutEmitter>>,
     /// 远程审计事件桥（R1-11：remote-* 审计 SecurityAudit 事件发射通道；
-    /// 与引擎 run 上下文同一 [crate::core_event_bridge::EventBridge] 实例
+    /// 与引擎 run 上下文同一 [conex_run::core_event_bridge::EventBridge] 实例
     /// ——main.rs 装配面经 CoreStateBackend::event_bridge 注入；None =
     /// 未接线，router 白名单拒绝分支降级为纯结构化日志）
-    audit_bridge: Option<crate::core_event_bridge::EventBridge>,
+    audit_bridge: Option<conex_run::core_event_bridge::EventBridge>,
     /// 配对协调器（R1-11 G-2：REST /v1/pair 与 WS pair.hello 消息链消费；
     /// 与命令面 / main.rs 装配共用同一 Arc 实例；None = 未装配，配对入口
     /// 返回 503 诚实降级）
@@ -469,7 +466,7 @@ impl ServerState {
     /// 通道；main.rs 装配面调用）
     // R1-11 备注：main.rs 装配消费——dead_code 静音
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn with_audit_bridge(mut self, bridge: crate::core_event_bridge::EventBridge) -> Self {
+    pub fn with_audit_bridge(mut self, bridge: conex_run::core_event_bridge::EventBridge) -> Self {
         self.audit_bridge = Some(bridge);
         self
     }
@@ -478,7 +475,7 @@ impl ServerState {
     /// 事件发射；None = 未接线，降级纯结构化日志）
     // R1-11 备注：router.rs fallback 消费——dead_code 静音
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn audit_bridge(&self) -> Option<crate::core_event_bridge::EventBridge> {
+    pub fn audit_bridge(&self) -> Option<conex_run::core_event_bridge::EventBridge> {
         self.audit_bridge.clone()
     }
 
@@ -728,7 +725,7 @@ mod tests {
         calls: std::sync::Mutex<Vec<(String, String)>>,
     }
 
-    impl crate::core_event_bridge::Emitter for RecordingEmitter {
+    impl conex_run::core_event_bridge::Emitter for RecordingEmitter {
         fn emit(&self, channel: &str, payload: &str) {
             self.calls
                 .lock()
@@ -824,7 +821,7 @@ mod tests {
         token: &str,
         fanout: &fanout::FanOutEmitter,
     ) -> serde_json::Value {
-        use crate::core_event_bridge::Emitter;
+        use conex_run::core_event_bridge::Emitter;
         use futures_util::{SinkExt, StreamExt};
         let ws_url = format!("ws://{addr}/v1/events?token={token}");
         let (mut ws, _) = tokio_tungstenite::connect_async(&ws_url)

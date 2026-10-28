@@ -34,7 +34,7 @@ use std::sync::{Arc, Mutex};
 use conex_types::events::{event_backpressure, AgentEvent, BackpressureLevel};
 use tokio::sync::Notify;
 
-use crate::core_event_bridge::Emitter;
+use conex_run::core_event_bridge::Emitter;
 
 /// 每连接缓冲队列容量（D2 §10.4：连接级缓冲 512；满则按分级丢帧）
 // R1-01 备注：R1-05 WS drain task 消费——dead_code 静音
@@ -926,7 +926,7 @@ mod tests {
     /// 收到与 webview 通道逐字节一致的载荷（mock bridge 事件 → fanout 收到）
     #[test]
     fn bridge_emit_reaches_fanout_subscriber() {
-        use crate::core_event_bridge::EventBridge;
+        use conex_run::core_event_bridge::EventBridge;
 
         // 桌面侧发射器（测试替身）
         let webview = Arc::new(RecordingEmitter::default());

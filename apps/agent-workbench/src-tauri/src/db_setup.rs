@@ -22,7 +22,7 @@ use tokio::task;
 
 use crate::note_runtime::{self, SharedNoteRuntime};
 use crate::session_commands::SharedDb;
-use crate::status_diagnostics::StatusDiagnostics;
+use conex_run::status_diagnostics::StatusDiagnostics;
 
 /// 并发装配完成后的微内核数据库集合。
 pub struct InitializedDatabases {

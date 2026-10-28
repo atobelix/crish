@@ -15,8 +15,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::State;
 
-use crate::core_error::{map_internal_string, CoreError};
-use crate::core_run_commands::CoreRunState;
+use conex_run::core_error::{map_internal_string, CoreError};
+use conex_run::run::CoreRunState;
 
 /// MCP 配置持久化失败 → `Io`（detail 携带 `mcp.config:` 操作名与原始文案，
 /// 对齐 map_store_err 风格；持久化错误码统一为 config.invalid，kind 取存储语义）。

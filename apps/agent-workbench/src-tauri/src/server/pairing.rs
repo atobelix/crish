@@ -73,6 +73,10 @@ pub struct PairStatus {
     pub code_remaining_ms: Option<u64>,
     pub failed_attempts: u32,
     pub token_count: usize,
+    /// 多端服务总开关真值（`multi_device_set_enabled` 的当前位置）。
+    /// 协调器不持有服务开关，由命令面 `multi_device_pair_status` 回填；
+    /// 前端以此为准，禁止再维护本地开关副本（防止切页/重挂载后显示失真）。
+    pub service_enabled: bool,
 }
 
 /// 已配对设备条目（list_devices 消费）
@@ -192,6 +196,8 @@ impl PairingCoordinator {
             code_remaining_ms: pair.active_code_remaining_ms(now_ms),
             failed_attempts: pair.failed_attempts(),
             token_count: tokens.token_count(),
+            // 真值由命令面回填（协调器不持有服务开关）
+            service_enabled: false,
         }
     }
 

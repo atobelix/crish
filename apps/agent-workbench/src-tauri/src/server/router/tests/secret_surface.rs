@@ -78,20 +78,20 @@ fn t07_secret_surface_detection_and_audit_marker() {
 #[derive(Default)]
 struct G5RecordingEmitter(std::sync::Mutex<Vec<String>>);
 
-impl crate::core_event_bridge::Emitter for G5RecordingEmitter {
+impl conex_run::core_event_bridge::Emitter for G5RecordingEmitter {
     fn emit(&self, _channel: &str, payload: &str) {
         self.0.lock().unwrap().push(payload.to_string());
     }
 }
 
 fn g5_recording_bridge() -> (
-    crate::core_event_bridge::EventBridge,
+    conex_run::core_event_bridge::EventBridge,
     Arc<G5RecordingEmitter>,
 ) {
     let emitter = Arc::new(G5RecordingEmitter::default());
-    let bridge = crate::core_event_bridge::EventBridge::new(
+    let bridge = conex_run::core_event_bridge::EventBridge::new(
         "workbench-run-event",
-        Arc::clone(&emitter) as Arc<dyn crate::core_event_bridge::Emitter>,
+        Arc::clone(&emitter) as Arc<dyn conex_run::core_event_bridge::Emitter>,
     );
     (bridge, emitter)
 }
@@ -251,11 +251,9 @@ fn g5_rest_routes_never_register_secret_surface() {
     }
 }
 
-// ── R1-10 T-08：远程 run 权限模式申报（装配面降级前置）──
+// ── 远程 run 权限模式申报（wire 层原样透传）──
 
-/// 远程申报 full-access 原样抵达后端装配面（路由层不拦截申报——
-/// 降级语义由装配面 apply_remote_mode 保证：D5 §9.2 operate ×
-/// full-access → ask 降级 + 审计）
+/// 远程申报 full 原样抵达后端装配面（路由层不拦截申报，原样透传到后端装配面）
 #[tokio::test]
 async fn t08_run_task_passes_permission_mode_wire() {
     let mock = Arc::new(MockBackend::new());
@@ -268,8 +266,8 @@ async fn t08_run_task_passes_permission_mode_wire() {
             RUNS_PATH,
             &token,
             serde_json::json!({
-                "prompt": "远程 run（full-access 申报）",
-                "permissionMode": "full-access",
+                "prompt": "远程 run（full 申报）",
+                "permissionMode": "full",
             }),
         ))
         .await
@@ -277,8 +275,8 @@ async fn t08_run_task_passes_permission_mode_wire() {
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(
         *mock.last_run_permission_mode.lock().unwrap(),
-        Some(conex_types::device::PermissionMode::FullAccess),
-        "远程申报 full-access 必须原样透传到后端装配面"
+        Some(conex_types::device::PermissionMode::Full),
+        "远程申报 full 必须原样透传到后端装配面"
     );
 }
 
