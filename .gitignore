@@ -193,6 +193,8 @@ target-tauri-smoke/
 /analysis/**/*.html
 /crates/**/tests/**/*.json
 /docs/**/*.json
+# UI 层级棘轮基线为门禁真源，必须入库（check-hierarchy-ssot）
+!/docs/visual-hierarchy-clarity-analysis/baseline/hierarchy-ratchet.json
 /docs/**/*.html
 /docs/**/*.mjs
 /docs/**/*.png
@@ -424,6 +426,8 @@ target-tauri-smoke/
 /analysis/**/*.html
 /crates/**/tests/**/*.json
 /docs/**/*.json
+# UI 层级棘轮基线为门禁真源，必须入库（check-hierarchy-ssot）
+!/docs/visual-hierarchy-clarity-analysis/baseline/hierarchy-ratchet.json
 /docs/**/*.html
 /docs/**/*.mjs
 /docs/**/*.png

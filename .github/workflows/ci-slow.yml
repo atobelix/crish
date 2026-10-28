@@ -61,6 +61,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm install -g npm@11.6.2 && npm ci
+      # TS 压力轨直接 import 生产模块（workspace 包经 dist 解析），先构建 packages
+      - run: npm run build:packages
       # TS 压力轨（stress-runner：AI 流 / diff 加载 / 会话切换）
       - run: npm run stress
 

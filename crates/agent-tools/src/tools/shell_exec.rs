@@ -365,7 +365,6 @@ pub(crate) async fn run_command_maybe_background(
     #[cfg(unix)]
     #[allow(unsafe_code)]
     unsafe {
-        use std::os::unix::process::CommandExt;
         child_cmd.pre_exec(|| {
             extern "C" {
                 fn setpgid(pid: i32, pgid: i32) -> i32;
@@ -565,7 +564,6 @@ pub(crate) async fn run_command_streaming(ctx: &ToolContext, c: PreparedCommand)
     #[cfg(unix)]
     #[allow(unsafe_code)]
     unsafe {
-        use std::os::unix::process::CommandExt;
         child_cmd.pre_exec(|| {
             extern "C" {
                 fn setpgid(pid: i32, pgid: i32) -> i32;

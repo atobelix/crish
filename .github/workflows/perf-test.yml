@@ -108,6 +108,10 @@ jobs:
         run: |
           npm install -g npm@11.6.2
           npm ci
+      # 压力轨直接 import 生产模块（@crish/shared-utils 等 workspace 包经
+      # dist 解析）：job 为独立干净 checkout，必须先构建 packages。
+      - name: Build packages
+        run: npm run build:packages
       - name: Run stress tests
         run: npx tsx tests/stress/run-all-stress.ts
 

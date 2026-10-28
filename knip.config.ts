@@ -42,6 +42,10 @@ const config: KnipConfig = {
       entry: [
         // 构建入口锚点（index.html → main.tsx 链路由 vite 插件解析）
         'index.html',
+        // UI 组件 DX playground（vite.ui.config.ts 独立 dev server；
+        // stories 经 import.meta.glob 动态装配，knip 无法静态追踪）
+        'vite.ui.config.ts',
+        'playground/**/*.{ts,tsx}',
         // 手动 perf 工具（npx tsx apps/crish-desktop/perf/run-frontend-bench.ts，
         // docs/chat-composer-plugin/survey/07 引用为真实压测工具，非 import 消费）
         'perf/*.ts',

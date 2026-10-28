@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "description": "Visual Hierarchy & Clarity Ratchet Baseline (H1 Typography, H2 Borders, H3 Themes/Accents)",
+  "updated_at": "2026-10-26T06:35:20.053Z",
+  "limits": {
+    "total_h1": 399,
+    "total_h2": 263,
+    "total_h3": 45
+  },
+  "directories": {
+    "chat-message-row": {
+      "h1": 85,
+      "h2": 58,
+      "h3": 25
+    },
+    "chat-message": {
+      "h1": 12,
+      "h2": 5,
+      "h3": 0
+    },
+    "chat-message-list": {
+      "h1": 22,
+      "h2": 11,
+      "h3": 1
+    },
+    "chat-tool-call": {
+      "h1": 129,
+      "h2": 57,
+      "h3": 0
+    },
+    "chat-composer": {
+      "h1": 99,
+      "h2": 71,
+      "h3": 6
+    },
+    "sidebar": {
+      "h1": 44,
+      "h2": 51,
+      "h3": 11
+    },
+    "top-bar": {
+      "h1": 0,
+      "h2": 0,
+      "h3": 0
+    },
+    "binary-tree/PaneHeader": {
+      "h1": 3,
+      "h2": 8,
+      "h3": 0
+    },
+    "chat-card/UnitChromeActions": {
+      "h1": 5,
+      "h2": 2,
+      "h3": 2
+    }
+  }
+}
