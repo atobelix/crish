@@ -130,7 +130,7 @@ async fn preflight_compaction_triggers_and_broadcasts_events() {
     .with_initial_conversation_arc(big_conversation());
 
     let outcome = loop_.run(user("继续")).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
 
     // 事件成对广播（既有 session-loop 事件机制：state.events 累加 → RunOutcome）
     let starts = outcome
@@ -205,7 +205,7 @@ async fn max_tokens_clamped_by_estimate_without_compaction() {
     .with_initial_conversation_arc(big_conversation());
 
     let outcome = loop_.run(user_long()).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
 
     // 未配置压缩策略 → 不预检（无压缩事件）
     assert!(
@@ -253,7 +253,7 @@ async fn max_tokens_not_clamped_below_floor() {
     .with_initial_conversation_arc(big_conversation());
 
     let outcome = loop_.run(user("继续")).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
 
     // 估算 50048 ≥ 窗口 10000 → 可用预算 = 0 低于下限 → 不钳制
     let requests = provider.requests();
@@ -283,7 +283,7 @@ async fn preflight_skipped_under_threshold_in_full_run() {
     });
     // 无历史对话：单条用户消息估算 ≈ 10 token，远低于 47616 阈值
     let outcome = loop_.run(user("你好")).await;
-    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(outcome.reason, AgentEndReason::YieldSuspended);
 
     assert!(
         outcome.events.iter().all(|e| !matches!(
