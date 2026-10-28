@@ -324,7 +324,7 @@ apps/agent-workbench/src-tauri/src/server/limiter.rs 663
 apps/agent-workbench/src-tauri/src/server/mod.rs 1444
 apps/agent-workbench/src-tauri/src/server/pair_endpoint.rs 673
 apps/agent-workbench/src-tauri/src/server/pairing.rs 966
-apps/agent-workbench/src-tauri/src/server/ws.rs 3868
+apps/agent-workbench/src-tauri/src/server/ws.rs 3878
 apps/agent-workbench/src-tauri/src/watchdog.rs 695
 apps/agent-workbench/src-tauri/src/workspace.rs 2154
 crates/agent-provider/src/error_tests.rs 712
