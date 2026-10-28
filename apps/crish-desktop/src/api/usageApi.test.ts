@@ -120,17 +120,17 @@ describe('布尔写命令', () => {
     await expect(recordUsageDelta(delta)).resolves.toBe(false);
   });
 
-  it('importLegacyUsageSnapshot：以 { snapshot } 包装；缺失与报错均返回 false', async () => {
+  it('importLegacyUsageSnapshot：以 { snapshot } 包装；缺失与报错均返回 failed', async () => {
     const snapshot = { v: 1, days: [] };
     const impl = vi.fn(() => true);
     mockTauriCommand('usage_import_legacy_snapshot', impl);
-    await expect(importLegacyUsageSnapshot(snapshot)).resolves.toBe(true);
+    await expect(importLegacyUsageSnapshot(snapshot)).resolves.toBe('imported');
     expect(impl).toHaveBeenCalledWith({ snapshot });
 
     mockTauriMissing('usage_import_legacy_snapshot');
-    await expect(importLegacyUsageSnapshot(snapshot)).resolves.toBe(false);
+    await expect(importLegacyUsageSnapshot(snapshot)).resolves.toBe('failed');
     mockTauriError('usage_import_legacy_snapshot', new Error('bad json'));
-    await expect(importLegacyUsageSnapshot(snapshot)).resolves.toBe(false);
+    await expect(importLegacyUsageSnapshot(snapshot)).resolves.toBe('failed');
   });
 
   it('报错时 clear/record 返回 false 而不抛', async () => {

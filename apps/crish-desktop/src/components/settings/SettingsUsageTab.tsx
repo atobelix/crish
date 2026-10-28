@@ -4,7 +4,12 @@ import { clearUsageHistory, getUsageDashboardData } from '../../api/usageApi';
 import type { UsageDashboardDto } from '../../api/usageContracts';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
 import { useToast } from '../../services/toast/ToastContext';
-import { Button, ConfirmDialog, SegmentedControl, Tooltip } from '../ui';
+import {
+  Button,
+  ConfirmDialog,
+  SegmentedControl,
+  Tooltip,
+} from '@/components/ui';
 import { PriceConfigModal } from './PriceConfigModal';
 import { SettingsHeadTools, SettingsPage } from './SettingsUI';
 import { ActivityMatrixHeatmap } from './usage/ActivityMatrixHeatmap';
@@ -12,7 +17,7 @@ import { ModelDistributionSection } from './usage/ModelDistributionSection';
 import { UsageSummaryHero } from './usage/UsageSummaryHero';
 import { UsageTrendChart } from './usage/UsageTrendChart';
 import styles from './SettingsUsageTab.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 
 interface Props {

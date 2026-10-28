@@ -1,5 +1,6 @@
 import React from 'react';
-import { formatCost, formatTokens } from './usageSpline';
+import { formatTokens } from './usageSpline';
+import { AnimatedCounter, SlotText } from '@/components/ui';
 import styles from './UsageSummaryHero.module.css';
 
 export interface UsageSummaryHeroProps {
@@ -21,7 +22,15 @@ export const UsageSummaryHero: React.FC<UsageSummaryHeroProps> = ({
       <div className={styles.heroColumn}>
         <div className={styles.columnTitle}>总用量</div>
         <div className={styles.metricRow}>
-          <span className={styles.metricNumber}>{formatTokens(totalTokens)}</span>
+          <span className={styles.metricNumber}>
+            {/* 支持 万/亿 文本与数字无缝滚轮形变 */}
+            <SlotText
+              value={totalTokens}
+              format={formatTokens}
+              duration={0.6}
+              stagger={0.03}
+            />
+          </span>
           <span className={styles.metricUnit}>tokens</span>
         </div>
       </div>
@@ -34,7 +43,9 @@ export const UsageSummaryHero: React.FC<UsageSummaryHeroProps> = ({
         <div className={styles.columnTitle}>预估金额</div>
         <div className={styles.metricRow}>
           <span className={styles.currencySymbol}>{currencySymbol}</span>
-          <span className={styles.metricNumber}>{formatCost(totalCost, '')}</span>
+          <span className={styles.metricNumber}>
+            <AnimatedCounter value={totalCost} decimals={2} locale="zh-CN" />
+          </span>
           <span className={styles.metricUnit}>{currency}</span>
         </div>
       </div>

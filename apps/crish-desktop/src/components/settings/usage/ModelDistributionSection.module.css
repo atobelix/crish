@@ -54,7 +54,7 @@
 
 .donutTrack {
   fill: none;
-  stroke: var(--tint-divider);
+  stroke: var(--border-color);
   stroke-width: 24;
 }
 
@@ -173,7 +173,7 @@
 
 .modelCapsuleRow:hover,
 .modelCapsuleRowHovered {
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 .capsuleBarBg {

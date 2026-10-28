@@ -49,15 +49,29 @@ describe('usageSpline 纯数学与几何插值库', () => {
     });
 
     it('getModelColor 正确映射语义配色且避免撞色与索引偏置错误', () => {
-      expect(getModelColor('deepseek-chat').stroke).toBe('var(--usage-color-brand)');
-      expect(getModelColor('claude-3-5-sonnet').stroke).toBe('var(--usage-color-claude)');
-      expect(getModelColor('minimax-abab6.5').stroke).toBe('var(--usage-color-minimax)');
-      expect(getModelColor('kimi-latest').stroke).toBe('var(--usage-color-kimi)');
+      expect(getModelColor('deepseek-chat').stroke).toBe(
+        'var(--usage-color-brand)'
+      );
+      expect(getModelColor('claude-3-5-sonnet').stroke).toBe(
+        'var(--usage-color-claude)'
+      );
+      expect(getModelColor('minimax-abab6.5').stroke).toBe(
+        'var(--usage-color-minimax)'
+      );
+      expect(getModelColor('kimi-latest').stroke).toBe(
+        'var(--usage-color-kimi)'
+      );
       expect(getModelColor('other', 4).stroke).toBe('var(--usage-color-other)');
-      expect(getModelColor('__others__').stroke).toBe('var(--usage-color-other)');
-      expect(getModelColor('gpt-4o').stroke).toBe('var(--usage-color-cost-total)');
+      expect(getModelColor('__others__').stroke).toBe(
+        'var(--usage-color-other)'
+      );
+      expect(getModelColor('gpt-4o').stroke).toBe(
+        'var(--usage-color-cost-total)'
+      );
       // fallbackIdx 4 映射到 other
-      expect(getModelColor('unknown-custom-model', 4).stroke).toBe('var(--usage-color-other)');
+      expect(getModelColor('unknown-custom-model', 4).stroke).toBe(
+        'var(--usage-color-other)'
+      );
     });
 
     it('computeDecimatedTicks 7d 完整保留 7 天日历刻度无遗漏', () => {

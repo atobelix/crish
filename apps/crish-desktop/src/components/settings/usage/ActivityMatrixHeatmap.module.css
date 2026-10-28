@@ -112,7 +112,7 @@
 .activityCell:hover,
 .activityCell:focus-visible {
   transform: scale(1.15);
-  box-shadow: 0 0 0 var(--hairline-width) var(--tint-highlight);
+  box-shadow: 0 0 0 var(--hairline-width) var(--state-highlight);
   position: relative;
   z-index: 2;
 }

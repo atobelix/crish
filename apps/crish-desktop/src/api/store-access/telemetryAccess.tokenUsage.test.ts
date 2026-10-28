@@ -118,45 +118,31 @@ describe('tokenUsage 并发增量不丢失（accumulateTokenUsage 串行化合�
   });
 });
 
-describe('D4 收敛：历史流水委托内建（recordUsageDelta 单点，同事件双写无丢失）', () => {
-  it('accumulateTokenUsage 委托 usageStore（model 透传 + 双 sink 不丢字段）', async () => {
-    // jsdom 无真实 localStorage 限制：usageStore 以 crish_usage_history_v1 落盘
+describe('历史流水归属：内核主轨（前端不再写 localStorage / IPC）', () => {
+  it('accumulateTokenUsage 只维护当前值，不写旧账本', async () => {
     await accumulateTokenUsage({
       input: 10,
       output: 20,
-      cost: 1.5,
+      costStatus: 'priced',
+      currency: 'CNY',
+      costMicros: 1_500_000,
       model: 'gpt-test',
     });
-    const raw = localStorage.getItem('crish_usage_history_v1');
-    expect(raw).toBeTruthy();
-    const snap = JSON.parse(raw as string) as {
-      totalInput: number;
-      totalOutput: number;
-      totalCost: number;
-      models: Array<{ model: string; input: number; output: number; cost: number }>;
-    };
-    expect(snap.totalInput).toBe(10);
-    expect(snap.totalOutput).toBe(20);
-    expect(snap.totalCost).toBe(1.5);
-    const row = snap.models.find((m) => m.model === 'gpt-test');
-    expect(row?.input).toBe(10);
+    const st = useSettingsStore.getState();
+    expect(st.tokenUsage.input).toBe(10);
+    expect(st.tokenUsage.output).toBe(20);
+    // 历史流水由 conex-run::write_back_cache_stats 落 usage_records
+    expect(localStorage.getItem('crish_usage_history_v1')).toBeNull();
   });
 
-  it('多次并发委托不丢失（settings 当前值 + usage 历史流水两 sink 一致）', async () => {
+  it('并发 10 路：settings 累计完整（历史流水由内核逐 run 落库）', async () => {
     await Promise.all(
-      Array.from({ length: 10 }, (_, i) =>
-        accumulateTokenUsage({ input: 1, output: 2, cost: 0, model: 'm1' })
+      Array.from({ length: 10 }, () =>
+        accumulateTokenUsage({ input: 1, output: 2, model: 'm1' })
       )
     );
     const st = useSettingsStore.getState();
     expect(st.tokenUsage.input).toBe(10);
     expect(st.tokenUsage.output).toBe(20);
-    const raw = localStorage.getItem('crish_usage_history_v1');
-    const snap = JSON.parse(raw as string) as {
-      totalInput: number;
-      totalOutput: number;
-    };
-    expect(snap.totalInput).toBe(10);
-    expect(snap.totalOutput).toBe(20);
   });
 });

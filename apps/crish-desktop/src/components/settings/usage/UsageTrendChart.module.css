@@ -63,13 +63,13 @@
 }
 
 .gridLine {
-  stroke: var(--tint-divider);
+  stroke: var(--border-color);
   stroke-width: var(--hairline-width);
   stroke-dasharray: 4 4;
 }
 
 .axisLine {
-  stroke: var(--tint-divider);
+  stroke: var(--border-color);
   stroke-width: var(--hairline-width);
 }
 
@@ -92,7 +92,7 @@
   top: var(--space-2_5);
   bottom: var(--space-6);
   width: var(--hairline-width);
-  background: var(--tint-strong);
+  background: var(--state-strong);
   pointer-events: none;
   border-left: var(--hairline-width) dashed var(--border-subtle);
 }
@@ -199,7 +199,7 @@
 }
 
 .legendItem:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 

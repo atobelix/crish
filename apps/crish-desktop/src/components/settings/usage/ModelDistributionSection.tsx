@@ -15,10 +15,9 @@ export interface ModelDistributionSectionProps {
 
 const CIRCUMFERENCE = 2 * Math.PI * 70; // 439.82
 
-export const ModelDistributionSection: React.FC<ModelDistributionSectionProps> = ({
-  models,
-  totalTokens,
-}) => {
+export const ModelDistributionSection: React.FC<
+  ModelDistributionSectionProps
+> = ({ models, totalTokens }) => {
   const [hoveredModel, setHoveredModel] = useState<string | null>(null);
 
   // 计算饼图切片与微型图例（顶格对齐 4 项 + 聚合“其他”，确保切片与图例 100% 封闭对齐）
@@ -129,8 +128,11 @@ export const ModelDistributionSection: React.FC<ModelDistributionSectionProps> =
       color: getModelColor(m.model, idx),
       isOthers: false,
     }));
-    const othersTokens = models.slice(4).reduce((acc, cur) => acc + cur.tokens, 0);
-    const othersRawRatio = totalTokens > 0 ? (othersTokens / totalTokens) * 100 : 0;
+    const othersTokens = models
+      .slice(4)
+      .reduce((acc, cur) => acc + cur.tokens, 0);
+    const othersRawRatio =
+      totalTokens > 0 ? (othersTokens / totalTokens) * 100 : 0;
     top4.push({
       key: '__others__',
       modelId: '__others__',
@@ -154,12 +156,7 @@ export const ModelDistributionSection: React.FC<ModelDistributionSectionProps> =
         <div className={styles.donutPanel}>
           <div className={styles.donutBox}>
             <svg className={styles.donutSvg} viewBox="0 0 200 200">
-              <circle
-                className={styles.donutTrack}
-                cx="100"
-                cy="100"
-                r="70"
-              />
+              <circle className={styles.donutTrack} cx="100" cy="100" r="70" />
               <g transform="rotate(-90 100 100)">
                 {donutSlices.map((slice) => {
                   const isMatch =
@@ -176,8 +173,12 @@ export const ModelDistributionSection: React.FC<ModelDistributionSectionProps> =
                       strokeDashoffset={slice.offset}
                       style={{
                         strokeWidth: isMatch && hoveredModel !== null ? 26 : 24,
-                        filter: isMatch && hoveredModel !== null ? 'brightness(1.08)' : 'none',
-                        transition: 'stroke-width 180ms ease, filter 180ms ease',
+                        filter:
+                          isMatch && hoveredModel !== null
+                            ? 'brightness(1.08)'
+                            : 'none',
+                        transition:
+                          'stroke-width 180ms ease, filter 180ms ease',
                       }}
                       onMouseEnter={() => setHoveredModel(slice.model)}
                       onMouseLeave={() => setHoveredModel(null)}
@@ -227,7 +228,10 @@ export const ModelDistributionSection: React.FC<ModelDistributionSectionProps> =
             <div className={styles.capsuleList}>
               {capsuleItems.map((item) => {
                 const normRatio = normalizeModelRatio(item.rawRatio);
-                const barWidth = normRatio > 0 ? Math.max(2, Math.min(100, normRatio * 100)) : 0;
+                const barWidth =
+                  normRatio > 0
+                    ? Math.max(2, Math.min(100, normRatio * 100))
+                    : 0;
                 const isHovered = hoveredModel === item.modelId;
 
                 return (
@@ -250,7 +254,9 @@ export const ModelDistributionSection: React.FC<ModelDistributionSectionProps> =
                         className={styles.modelDotIcon}
                         style={{ background: item.color.stroke }}
                       />
-                      <span className={styles.capsuleModelName}>{item.displayName}</span>
+                      <span className={styles.capsuleModelName}>
+                        {item.displayName}
+                      </span>
                     </div>
                     <div className={styles.capsuleRight}>
                       <span className={styles.capsuleTokenVal}>

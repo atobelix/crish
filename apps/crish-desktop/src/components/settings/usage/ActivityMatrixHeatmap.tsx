@@ -6,7 +6,7 @@ import type {
   UsageHeroStats,
 } from '../../../api/usageContracts';
 import { formatCost, formatTokens } from './usageSpline';
-import { SegmentedControl, Tooltip } from '../../ui';
+import { SegmentedControl, Tooltip } from '@/components/ui';
 import styles from './ActivityMatrixHeatmap.module.css';
 
 export interface ActivityMatrixHeatmapProps {
@@ -46,8 +46,16 @@ export const ActivityMatrixHeatmap: React.FC<ActivityMatrixHeatmapProps> = ({
     };
   }, [matrixRange, refreshKey]);
 
-  const rows =
-    matrixData?.rows ?? ['00-03', '03-06', '06-09', '09-12', '12-15', '15-18', '18-21', '21-24'];
+  const rows = matrixData?.rows ?? [
+    '00-03',
+    '03-06',
+    '06-09',
+    '09-12',
+    '12-15',
+    '15-18',
+    '18-21',
+    '21-24',
+  ];
   const cols = matrixData?.cols ?? [];
   const cells = matrixData?.cells ?? [];
 
@@ -107,7 +115,10 @@ export const ActivityMatrixHeatmap: React.FC<ActivityMatrixHeatmapProps> = ({
           {rows.map((rowName, rIdx) => {
             const { title, sub } = parseRowLabel(rowName);
             return (
-              <div key={`rowline_${rowName}_${rIdx}`} className={styles.matrixRowLine}>
+              <div
+                key={`rowline_${rowName}_${rIdx}`}
+                className={styles.matrixRowLine}
+              >
                 <div className={styles.yAxisRowHeader}>
                   <span className={styles.yAxisTitle}>{title}</span>
                   {sub && <span className={styles.yAxisSub}>{sub}</span>}
@@ -171,10 +182,16 @@ export const ActivityMatrixHeatmap: React.FC<ActivityMatrixHeatmapProps> = ({
                 const isFirst = cIdx === 0;
                 const isMid = cIdx === Math.floor(cols.length / 2);
                 const isLast = cIdx === cols.length - 1;
-                const shouldShow = isFirst || (cols.length > 4 && isMid) || isLast;
+                const shouldShow =
+                  isFirst || (cols.length > 4 && isMid) || isLast;
 
                 if (!shouldShow) {
-                  return <span key={`x_${colName}_${cIdx}`} className={styles.xAxisColEmpty} />;
+                  return (
+                    <span
+                      key={`x_${colName}_${cIdx}`}
+                      className={styles.xAxisColEmpty}
+                    />
+                  );
                 }
 
                 return (

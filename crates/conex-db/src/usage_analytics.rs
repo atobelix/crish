@@ -227,6 +227,25 @@ impl LocalDb {
         })
     }
 
+    /// 指定 run 是否已写入用量流水（收口幂等守卫：run 级最多一条）。
+    pub fn usage_record_exists_for_run(&self, run_id: &str) -> Result<bool, DbFailure> {
+        let conn = self.conn.lock().map_err(|e| DbFailure {
+            message: format!("lock poisoned: {e}"),
+            kind: DbFailureKind::Lock,
+        })?;
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM usage_records WHERE run_id = ?1 LIMIT 1;",
+                params![run_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| DbFailure {
+                message: format!("usage_record_exists_for_run: {e}"),
+                kind: DbFailureKind::Other("usage_record_exists_for_run".to_string()),
+            })?;
+        Ok(count > 0)
+    }
+
     /// 清空本机全部用量记录。经组提交 Writer。
     pub fn clear_usage_history(&self) -> Result<(), DbFailure> {
         self.write_blocking(move |conn| {

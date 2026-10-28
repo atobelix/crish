@@ -8,7 +8,7 @@ import {
   computeSeriesGeometry,
 } from './usageChartModel';
 import { clampViewportX, computeDecimatedTicks } from './usageSpline';
-import { SegmentedControl } from '../../ui';
+import { SegmentedControl } from '@/components/ui';
 import styles from './UsageTrendChart.module.css';
 
 /**

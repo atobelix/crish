@@ -28,7 +28,16 @@ vi.mock('../../../api/tauriInvoke', () => ({
         status: 'ok',
         data: {
           range: '30d',
-          rows: ['00-03', '03-06', '06-09', '09-12', '12-15', '15-18', '18-21', '21-24'],
+          rows: [
+            '00-03',
+            '03-06',
+            '06-09',
+            '09-12',
+            '12-15',
+            '15-18',
+            '18-21',
+            '21-24',
+          ],
           cols: ['09-01', '09-02', '09-03'],
           cells: [
             {
@@ -126,12 +135,7 @@ describe('用量控制台组件集成测试 (Usage Dashboard Components)', () =>
   });
 
   it('UsageSummaryHero: 渲染核心指标与格式化文本', () => {
-    render(
-      <UsageSummaryHero
-        totalTokens={100000}
-        totalCost={4.7}
-      />
-    );
+    render(<UsageSummaryHero totalTokens={100000} totalCost={4.7} />);
 
     expect(screen.getByText('总用量')).toBeDefined();
     expect(screen.getByText('10.0 万')).toBeDefined();
@@ -143,15 +147,16 @@ describe('用量控制台组件集成测试 (Usage Dashboard Components)', () =>
 
   it('ModelDistributionSection: 渲染饼图与同心圆角胶囊模型列表', () => {
     render(
-      <ModelDistributionSection
-        models={mockModels}
-        totalTokens={100000}
-      />
+      <ModelDistributionSection models={mockModels} totalTokens={100000} />
     );
 
     expect(screen.getByText('模型用量')).toBeDefined();
-    expect(screen.getAllByText('deepseek-chat').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('claude-3-5-sonnet').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('deepseek-chat').length).toBeGreaterThanOrEqual(
+      1
+    );
+    expect(
+      screen.getAllByText('claude-3-5-sonnet').length
+    ).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('60.0%')).toBeDefined();
     expect(screen.getByText('40.0%')).toBeDefined();
   });

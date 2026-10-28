@@ -169,9 +169,9 @@ export function mergeTokenUsageDelta(
  * 修复：模块级 promise 链串行化——每个 delta 在链上以「读最新状态 → 合并 →
  * 写回」原子完成；单次合并失败只影响该 delta（记 warn），不破坏后续累计。
  *
- * D4 收敛（T-E 批次 5）：历史流水 sink（usageStore.recordUsageDelta）委托内建——
- * 调用方（useStreamCallbacks）不再并列双写；同事件双 sink 单点完成，
- * usageStore 动态 import 失败静默（历史流水缺失不影响当前值累计）。
+ * 历史流水单源（2026-10-27）：历史流水唯一写入方 = Rust 内核
+ * （conex-run::write_back_cache_stats → usage_records）；本入口只维护
+ * settings 当前值累计。旧 localStorage 账本已退役，禁止复活。
  */
 let tokenUsageChain: Promise<void> = Promise.resolve();
 
@@ -187,18 +187,15 @@ export function accumulateTokenUsage(
     } catch (err) {
       logger.warn('[accumulateTokenUsage] tokenUsage 合并失败', {
         module: 'telemetryAccess',
-        err: err instanceof Error
-          ? { message: err.message, stack: err.stack, name: err.name }
-          : { message: String(err) },
+        err:
+          err instanceof Error
+            ? { message: err.message, stack: err.stack, name: err.name }
+            : { message: String(err) },
       });
     }
-    // 历史流水双 sink（口径不同：当前值 vs 日/模型历史）；失败静默
-    try {
-      const { recordUsageDelta } = await import('../usageStore');
-      recordUsageDelta(delta);
-    } catch {
-      /* ignore */
-    }
+    // 历史流水不再由前端写入：内核主轨在 run 收口直接落 usage_records
+    // （conex-run::write_back_cache_stats，覆盖桌面 / 手机端 / 定时任务），
+    // 前端只消费 `usage_get_dashboard_data`。此处仅维护当前值累计。
   });
   tokenUsageChain = next;
   return next;

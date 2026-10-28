@@ -35,7 +35,16 @@ export const FALLBACK_USAGE_DASHBOARD: UsageDashboardDto = {
 /** 空热力图矩阵安全兜底假体 */
 export const FALLBACK_ACTIVITY_MATRIX: ActivityMatrixDto = {
   range: '30d',
-  rows: ['00-03', '03-06', '06-09', '09-12', '12-15', '15-18', '18-21', '21-24'],
+  rows: [
+    '00-03',
+    '03-06',
+    '06-09',
+    '09-12',
+    '12-15',
+    '15-18',
+    '18-21',
+    '21-24',
+  ],
   cols: [],
   cells: [],
   maxTokens: 0,
@@ -99,13 +108,17 @@ export async function recordUsageDelta(
 }
 
 /**
- * 导入存量 LocalStorage 快照数据（幂等平滑导入）
+ * 导入存量 LocalStorage 快照数据（幂等平滑导入）。
+ *
+ * @returns 'imported' = 本次导入成功；'already' = 后端已有迁移标记；
+ *          'failed' = 命令不可用或执行失败（调用方应保留旧数据待重试）
  */
 export async function importLegacyUsageSnapshot(
   snapshot: unknown
-): Promise<boolean> {
+): Promise<'imported' | 'already' | 'failed'> {
   const res = await invokeTyped<boolean>('usage_import_legacy_snapshot', {
     snapshot,
   });
-  return res.status === 'ok' ? Boolean(res.data) : false;
+  if (res.status !== 'ok') return 'failed';
+  return res.data ? 'imported' : 'already';
 }

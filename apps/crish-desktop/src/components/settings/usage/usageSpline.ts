@@ -30,7 +30,8 @@ export function formatTokens(v: number): string {
  * 格式化费用（保留 2 位小数）
  */
 export function formatCost(v: number, prefix = '¥ '): string {
-  if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) return `${prefix}0.00`;
+  if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0)
+    return `${prefix}0.00`;
   return `${prefix}${v.toFixed(2)}`;
 }
 
@@ -52,7 +53,11 @@ export function normalizeModelRatio(rawVal: number): number {
  * 与现调用链相反，纯靠约定维护——更名消除语义换轨。
  */
 export function formatPercentValue(percent: number): string {
-  if (typeof percent !== 'number' || !Number.isFinite(percent) || percent <= 0) {
+  if (
+    typeof percent !== 'number' ||
+    !Number.isFinite(percent) ||
+    percent <= 0
+  ) {
     return '0.0%';
   }
   return `${percent.toFixed(1)}%`;
@@ -69,21 +74,33 @@ export const GLOBAL_MODEL_PALETTE: ModelColorTheme[] = [
   { stroke: 'var(--usage-color-minimax)', bg: 'var(--usage-color-minimax-bg)' },
   { stroke: 'var(--usage-color-kimi)', bg: 'var(--usage-color-kimi-bg)' },
   { stroke: 'var(--usage-color-other)', bg: 'var(--usage-color-other-bg)' },
-  { stroke: 'var(--usage-color-cost-total)', bg: 'var(--usage-color-cost-total-bg)' },
+  {
+    stroke: 'var(--usage-color-cost-total)',
+    bg: 'var(--usage-color-cost-total-bg)',
+  },
 ];
 
 /**
  * 全局统一的模型语义配色算法，杜绝跨组件颜色语义断层
  */
-export function getModelColor(modelName: string, fallbackIdx = 0): ModelColorTheme {
+export function getModelColor(
+  modelName: string,
+  fallbackIdx = 0
+): ModelColorTheme {
   const lower = (modelName || '').toLowerCase();
-  if (lower === 'other' || lower === '__others__') return GLOBAL_MODEL_PALETTE[4]!;
+  if (lower === 'other' || lower === '__others__')
+    return GLOBAL_MODEL_PALETTE[4]!;
   if (lower.includes('deepseek')) return GLOBAL_MODEL_PALETTE[0]!;
   if (lower.includes('claude')) return GLOBAL_MODEL_PALETTE[1]!;
   if (lower.includes('minimax')) return GLOBAL_MODEL_PALETTE[2]!;
-  if (lower.includes('kimi') || lower.includes('moonshot')) return GLOBAL_MODEL_PALETTE[3]!;
-  if (lower.includes('openai') || lower.includes('gpt')) return GLOBAL_MODEL_PALETTE[5]!;
-  return GLOBAL_MODEL_PALETTE[fallbackIdx % GLOBAL_MODEL_PALETTE.length] ?? GLOBAL_MODEL_PALETTE[0]!;
+  if (lower.includes('kimi') || lower.includes('moonshot'))
+    return GLOBAL_MODEL_PALETTE[3]!;
+  if (lower.includes('openai') || lower.includes('gpt'))
+    return GLOBAL_MODEL_PALETTE[5]!;
+  return (
+    GLOBAL_MODEL_PALETTE[fallbackIdx % GLOBAL_MODEL_PALETTE.length] ??
+    GLOBAL_MODEL_PALETTE[0]!
+  );
 }
 
 export interface DecimatedTick {
@@ -107,7 +124,14 @@ export function computeDecimatedTicks(
   const n = points.length;
   if (n === 0) return [];
   if (n === 1) {
-    return [{ index: 0, label: points[0]!.label, leftPercent: 50, transform: 'translateX(-50%)' }];
+    return [
+      {
+        index: 0,
+        label: points[0]!.label,
+        leftPercent: 50,
+        transform: 'translateX(-50%)',
+      },
+    ];
   }
 
   // 7d 且采样点少于等于 8 时（如 7 天），相邻点物理跨距已达 ~118px，无需套用抽稀，全部保留输出
@@ -269,7 +293,10 @@ export function getMonotoneSplinePath(points: SplinePoint[]): string {
  * @param points 带有 x, y 坐标的连续有序点集
  * @param bottomY 底边 Y 坐标
  */
-export function getAreaSplinePath(points: SplinePoint[], bottomY = 140): string {
+export function getAreaSplinePath(
+  points: SplinePoint[],
+  bottomY = 140
+): string {
   if (!points || points.length === 0) return '';
   const first = points[0];
   const last = points[points.length - 1];
