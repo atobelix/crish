@@ -1,8 +1,8 @@
 import React from 'react';
 
-import { Tooltip, Button } from '../ui';
+import { Tooltip, Button } from '@/components/ui';
 import styles from './LeafToolTabStrip.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface SidePanelNavToolbarProps {
   onRefresh?: () => void;

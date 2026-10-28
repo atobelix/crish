@@ -1,12 +1,12 @@
-import { AppIcon } from '../ui/icons';
-import { Button } from '../ui';
+import { AppIcon } from '@/components/ui/icons';
+import { Button } from '@/components/ui';
 /**
  * 二叉树叶子面板 — 声明式微内核叶子容器。
  *
  * 架构契约：
  * - 纯几何叶子空间容器，100% 剥离 switch(panelId) 静态硬编码；
  * - 依据 Rule G-08 规约，通过 tabViewAdapter 动态映射 UnifiedTab 视图；
- * - chat 叶：PaneHeader + 叶内抽屉头 LeafToolTabStrip；
+ * - 内部右坞完全委托给 DockSplitWorkspace（含 LeafToolTabStrip）渲染二叉空间分屏树；
  * - 仍禁止复活 ChatHeader / UnitSessionTabStrip / GlobalSessionTabBar。
  * 未提交的新对话不占标签；画面会话 = 本叶选中 tab，否则为本叶草稿哨兵。
  */
@@ -23,10 +23,10 @@ import React, {
 } from 'react';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { UnitChromeActions } from '../chat-card/UnitChromeActions';
-import { LeafToolTabStrip } from './LeafToolTabStrip';
 import { LeafDockResizer } from './LeafDockResizer';
 import { PaneHeader } from './PaneHeader';
 import { computePaneEdges } from './paneEdgeGeometry';
+import { DockSplitWorkspace } from './DockSplitWorkspace';
 import styles from './BinaryTreeWorkspace.module.css';
 import {
   openToolInLeaf,
@@ -36,6 +36,9 @@ import {
   useLayoutTreeStore,
   getCompositionRoot,
   isPendingDraft,
+  isDockTreeEmpty,
+  findSpatialNode,
+  type DockLeaf,
 } from '../../store/storeAccess';
 import { LeafScopeProvider } from '../../contexts/LeafScopeContext';
 import { resolveTabView } from './tabViewAdapter';
@@ -48,8 +51,6 @@ import {
   rectPropsEqual,
   resolveLeafSessionId,
   sessionShell,
-  killDockTerminalPty,
-  computeNextDockAfterClose,
   type TreeLeafPanelProps,
 } from './treeLeafPanelModel';
 import {
@@ -66,15 +67,6 @@ const isCloseTarget = (e?: React.SyntheticEvent) =>
       '[data-tab-close], [data-pane-close], [data-prevent-leaf-activate="true"], button[aria-label*="关闭"], button[title*="关闭"]'
     )
   );
-
-const dockPaneFlexStyle: React.CSSProperties = {
-  flex: '1 1 auto',
-  width: '100%',
-  height: '100%',
-  minHeight: 0,
-  minWidth: 0,
-  flexDirection: 'column',
-};
 
 export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
   ({ leaf, rect, isActive, isDragSource }) => {
@@ -111,12 +103,15 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
     const effectiveSessionId = tabResolution.sessionId ?? fallbackSessionId;
     const sessionForPanel = effectiveSessionId;
     const dock = activeTab?.dock ?? leaf.dock ?? COLLAPSED_DOCK;
+    const isTerminalTab = activeTab?.kind === 'terminal';
+    const isBrowserTab = activeTab?.kind === 'browser';
+    const isStandaloneTab = isTerminalTab || isBrowserTab;
     const dockOpen =
       isChatSurface &&
       !isLeafDraft &&
+      !isStandaloneTab &&
       dock.collapsed !== true &&
-      Boolean(dock.activePanelId);
-    const sessionTabId = activeTab?.tabId;
+      Boolean(dock.tree && !isDockTreeEmpty(dock.tree));
 
     const [isMaximized, setIsMaximized] = useState(false);
 
@@ -144,18 +139,22 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
 
         if (!isActive) {
           useLayoutTreeStore.getState().setActiveLeaf(leaf.id);
-          const sessionStore = useSessionStore.getState();
-          if (isPendingDraft(effectiveSessionId)) {
-            if (!isPendingDraft(sessionStore.activeSessionId)) {
-              sessionStore.enterDraftMode(
-                sessionStore.draftFolder || undefined,
-                {
-                  draftSessionId: effectiveSessionId,
-                }
-              );
+          // 🔒 铁律：只有 ChatTab 才允许触碰 sessionStore 状态机！
+          // 独立终端与独立浏览器绝不调用 setActiveSessionId 或 enterDraftMode，杜绝聊天会话指针污染
+          if (!isStandaloneTab) {
+            const sessionStore = useSessionStore.getState();
+            if (isPendingDraft(effectiveSessionId)) {
+              if (!isPendingDraft(sessionStore.activeSessionId)) {
+                sessionStore.enterDraftMode(
+                  sessionStore.draftFolder || undefined,
+                  {
+                    draftSessionId: effectiveSessionId,
+                  }
+                );
+              }
+            } else {
+              sessionStore.setActiveSessionId(effectiveSessionId);
             }
-          } else {
-            sessionStore.setActiveSessionId(effectiveSessionId);
           }
           const tabId = readActiveTabId(leaf);
           if (tabId) {
@@ -165,7 +164,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
           }
         }
       },
-      [chatMainSurface, effectiveSessionId, isActive, leaf]
+      [chatMainSurface, effectiveSessionId, isActive, isStandaloneTab, leaf]
     );
 
     const handleActivate = useCallback(
@@ -219,45 +218,16 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
       [leaf.id]
     );
 
-    const handleSelectToolTab = useCallback(
-      (panelId: string) => {
-        updateLeafDock(leaf.id, { activePanelId: panelId });
-      },
-      [leaf.id]
-    );
-
-    const handleCloseToolTab = useCallback(
-      (panelId: string) => {
-        killDockTerminalPty(panelId, sessionForPanel);
-        const next = computeNextDockAfterClose(
-          dock.openPanelIds,
-          dock.activePanelId,
-          panelId
-        );
-        updateLeafDock(leaf.id, next);
-      },
-      [dock.activePanelId, dock.openPanelIds, leaf.id, sessionForPanel]
-    );
-
     const handleToggleDock = useCallback(() => {
-      if (!isChatSurface) return;
+      if (!isChatSurface || isStandaloneTab) return;
       if (dockOpen) {
         updateLeafDock(leaf.id, { collapsed: true });
         return;
       }
       updateLeafDock(leaf.id, {
         collapsed: false,
-        activePanelId: dock.activePanelId || 'overview',
-        openPanelIds:
-          dock.openPanelIds.length > 0 ? dock.openPanelIds : ['overview'],
       });
-    }, [
-      dock.activePanelId,
-      dock.openPanelIds,
-      dockOpen,
-      isChatSurface,
-      leaf.id,
-    ]);
+    }, [dockOpen, isChatSurface, isStandaloneTab, leaf.id]);
 
     const registryVersion = useSyncExternalStore(
       (cb) => viewRegistry.subscribe(cb),
@@ -267,8 +237,6 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
 
     const mainViewId = tabResolution.viewId;
     const mainResolved = viewRegistry.resolveView(mainViewId);
-    const toolPanelId = dock.activePanelId || 'overview';
-    const toolResolved = viewRegistry.resolveView(toolPanelId);
 
     const mainParams = useMemo(() => {
       if (!mainResolved.params && !tabResolution.params) return undefined;
@@ -295,55 +263,19 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
       ]
     );
 
-    const toolCtx: ViewRenderContext = useMemo(
-      () => ({
-        panelId: toolPanelId,
-        leafId: leaf.id,
-        sessionId: sessionForPanel ?? undefined,
-        isActive,
-        openView: handleOpenTool,
-        params: toolResolved.params,
-      }),
-      [
-        toolPanelId,
-        leaf.id,
-        sessionForPanel,
-        isActive,
-        handleOpenTool,
-        toolResolved.params,
-      ]
-    );
+    const activeDockViewId = useMemo(() => {
+      if (!dock.tree) return null;
+      const activeLeafId = dock.tree.activeDockLeafId;
+      if (!activeLeafId) return null;
+      const leafNode = findSpatialNode(dock.tree.root, activeLeafId);
+      if (!leafNode || !('tabs' in leafNode)) return null;
+      const dLeaf = leafNode as DockLeaf;
+      const tab = dLeaf.tabs.find((t) => t.tabId === dLeaf.activeTabId);
+      return tab?.viewId ?? null;
+    }, [dock.tree]);
 
     const edges = useMemo(() => computePaneEdges(rect), [rect]);
     const tabCount = readLeafTabs(leaf).length;
-
-    const renderToolOutlet = (panelId: string) => {
-      const resolved = viewRegistry.resolveView(panelId);
-      const ctx: ViewRenderContext = {
-        ...toolCtx,
-        panelId,
-        params: resolved.params,
-      };
-      const note = panelId === 'note' || panelId.startsWith('note:');
-      if (!resolved.definition) {
-        return (
-          <div className={styles.emptyState}>
-            未知面板类型：{panelId}
-            {note ? '（笔记扩展未激活）' : null}
-          </div>
-        );
-      }
-      return (
-        <SlotOutlet
-          slotKey="workspace.leaf.panel"
-          context={ctx}
-          entryKey={resolved.definition.id}
-          fallback={
-            <div className={styles.emptyState}>未知面板类型：{panelId}</div>
-          }
-        />
-      );
-    };
 
     return (
       <div
@@ -393,7 +325,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
                   <UnitChromeActions
                     activeSessionId={sessionForPanel}
                     dockOpen={dockOpen}
-                    dockPanelId={dock.activePanelId}
+                    dockPanelId={activeDockViewId}
                     onOpenPreview={() => handleOpenTool('preview')}
                     onOpenFiles={() => handleOpenTool('files')}
                   />
@@ -438,56 +370,18 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
                   data-leaf-dock-drawer="true"
                   data-maximized={isMaximized ? 'true' : 'false'}
                 >
-                  <LeafToolTabStrip
+                  <DockSplitWorkspace
                     leafId={leaf.id}
                     sessionId={sessionForPanel}
-                    sessionTabId={sessionTabId}
-                    tabs={dock.openPanelIds}
-                    activeTab={dock.activePanelId ?? ''}
-                    onSelectTab={handleSelectToolTab}
-                    onCloseTab={handleCloseToolTab}
-                    onAddTab={handleOpenTool}
+                    dock={dock}
                     isMaximized={isMaximized}
                     onToggleMaximize={() => setIsMaximized((prev) => !prev)}
                   />
-                  <AppErrorBoundary
-                    compact
-                    title={`面板 [${toolPanelId}] 渲染异常`}
-                  >
-                    <Suspense
-                      fallback={
-                        <div className={styles.emptyState}>加载中…</div>
-                      }
-                    >
-                      {dock.openPanelIds.length > 0
-                        ? dock.openPanelIds.map((pid) => {
-                            const isPanelActive = pid === toolPanelId;
-                            return (
-                              <div
-                                key={pid}
-                                className={styles.dockPanelPane}
-                                style={{
-                                  ...dockPaneFlexStyle,
-                                  display: isPanelActive ? 'flex' : 'none',
-                                }}
-                                data-panel-id={pid}
-                                data-active-panel={
-                                  isPanelActive ? 'true' : 'false'
-                                }
-                                aria-hidden={!isPanelActive}
-                              >
-                                {renderToolOutlet(pid)}
-                              </div>
-                            );
-                          })
-                        : renderToolOutlet(toolPanelId)}
-                    </Suspense>
-                  </AppErrorBoundary>
                 </div>
               </>
             ) : null}
           </div>
-          {isChatSurface && !isLeafDraft && (
+          {isChatSurface && !isLeafDraft && !isStandaloneTab && (
             <Button
               type="button"
               variant="ghost"
@@ -497,7 +391,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
               aria-label={dockOpen ? '收起右侧工具栏' : '展开右侧工具栏'}
               onClick={handleToggleDock}
             >
-              <AppIcon name="sidebar-right" size={14} aria-hidden />
+              <AppIcon name="sidebar-right" size={16} aria-hidden />
             </Button>
           )}
         </LeafScopeProvider>

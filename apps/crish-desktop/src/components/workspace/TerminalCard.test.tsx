@@ -279,17 +279,19 @@ describe('TerminalCard', () => {
     expect(root.style.getPropertyValue('--user-surface-input')).toBeTruthy();
     expect(root.style.getPropertyValue('--terminal-bg')).toBe('');
 
-    // 4. --terminal-* 单点真源 = tokens.css（浅/深各一套派生链）
-    const tokensCss = fs.readFileSync(
-      path.resolve(__dirname, '../../styles/tokens.css'),
+    // 4. --terminal-* 单点真源 = tokens-components.css（浅/深各一套派生链）
+    const tokensComponentsCss = fs.readFileSync(
+      path.resolve(__dirname, '../../styles/tokens-components.css'),
       'utf-8'
     );
-    expect(tokensCss).toContain('--terminal-bg: var(--bg-card');
-    expect(tokensCss).toContain('--terminal-fg: var(--text-primary');
-    expect(tokensCss).toContain('--terminal-cmd: var(--text-primary');
-    expect(tokensCss.match(/--terminal-bg:\s*var\(--bg-card/g)).toHaveLength(2);
+    expect(tokensComponentsCss).toContain('--terminal-bg: var(--bg-card');
+    expect(tokensComponentsCss).toContain('--terminal-fg: var(--text-primary');
+    expect(tokensComponentsCss).toContain('--terminal-cmd: var(--text-primary');
     expect(
-      tokensCss.match(/--terminal-fg:\s*var\(--text-primary/g)
+      tokensComponentsCss.match(/--terminal-bg:\s*var\(--bg-card/g)
+    ).toHaveLength(2);
+    expect(
+      tokensComponentsCss.match(/--terminal-fg:\s*var\(--text-primary/g)
     ).toHaveLength(2);
   });
 

@@ -25,7 +25,6 @@ import {
 } from '../workspace-shell/openTool';
 import { ensureAdapterShape } from '../workspace-shell/adapterShape';
 
-
 /**
  * 在二叉树布局下聚焦或打开指定面板。
  *
@@ -34,10 +33,12 @@ import { ensureAdapterShape } from '../workspace-shell/adapterShape';
  *
  * @param panelId 目标面板
  * @param sessionId 可选；多 unit 时传入则打开该 session 的坞，否则活动 tab
+ * @param params 可选；下发给该面板的结构化参数
  */
 export function focusOrOpenTreePanel(
   panelId: string,
-  sessionId?: string | null
+  sessionId?: string | null,
+  params?: Record<string, unknown>
 ): void {
   if (panelId === 'chat' || isPrimaryPanel(panelId)) {
     ensureAdapterShape();
@@ -46,8 +47,8 @@ export function focusOrOpenTreePanel(
 
   const sid = (sessionId || '').trim();
   if (sid) {
-    openToolInSession(sid, panelId);
+    openToolInSession(sid, panelId, params);
   } else {
-    openToolInActiveTab(panelId);
+    openToolInActiveTab(panelId, params);
   }
 }

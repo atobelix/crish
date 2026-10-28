@@ -1,18 +1,16 @@
 /**
- * Layout Tree Store — 终端/浏览器标签构建与 PTY 进程确定性销毁。
+ * Layout Tree Store — 独立常规终端构建与 PTY 进程确定性销毁。
  */
 
 import type { LayoutTree } from './types';
 import { isLeaf } from './types';
 import { collectLeaves, findNodeById } from './operations';
 import {
+  type StandaloneTerminalTab,
   createTerminalTab,
-  createBrowserTab,
-  type TerminalTab,
-  type BrowserTab,
-  type RightToolDockState,
 } from './sessionTabModel';
-import { getWorkspacePath, getActiveProject } from '../../api/projectStore';
+
+export type { StandaloneTerminalTab };
 
 export function createTerminalTabForStore(opts?: {
   tabId?: string;
@@ -20,44 +18,8 @@ export function createTerminalTabForStore(opts?: {
   workspaceKey?: string;
   terminalKey?: string;
   cwd?: string;
-  dock?: Partial<RightToolDockState>;
-}): TerminalTab {
-  const cwd = (opts?.cwd || getWorkspacePath() || '').trim();
-  const activeProj = getActiveProject();
-  const projName =
-    activeProj?.name || (cwd ? cwd.split(/[/\\]/).filter(Boolean).pop() : '');
-  const dynamicTitle = projName ? `Terminal: ${projName}` : 'Terminal';
-  const title = opts?.title?.trim() || dynamicTitle;
-
-  return createTerminalTab({
-    tabId: opts?.tabId,
-    title,
-    workspaceKey: opts?.workspaceKey,
-    terminalKey: opts?.terminalKey,
-    cwd,
-    dock: opts?.dock,
-  });
-}
-
-export function createBrowserTabForStore(opts?: {
-  tabId?: string;
-  title?: string;
-  workspaceKey?: string;
-  url?: string;
-  favicon?: string;
-  dock?: Partial<RightToolDockState>;
-}): BrowserTab {
-  const title = opts?.title?.trim() || 'Browser';
-  const url = opts?.url?.trim() || 'about:blank';
-
-  return createBrowserTab({
-    tabId: opts?.tabId,
-    title,
-    workspaceKey: opts?.workspaceKey,
-    url,
-    favicon: opts?.favicon,
-    dock: opts?.dock,
-  });
+}): StandaloneTerminalTab {
+  return createTerminalTab(opts);
 }
 
 /**
@@ -119,5 +81,21 @@ export function killTerminalInLeafTab(
   if (target && isLeaf(target)) {
     const removing = target.tabs.find((t) => t.tabId === tabId);
     if (removing) killTerminalIfTabIsTerminal(removing);
+  }
+}
+
+export function closeBrowserInLeafTab(
+  tree: LayoutTree,
+  leafId: string,
+  tabId: string
+): void {
+  const target = findNodeById(tree.root, leafId);
+  if (target && isLeaf(target)) {
+    const removing = target.tabs.find((t) => t.tabId === tabId);
+    if (removing && (removing as { kind?: string }).kind === 'browser') {
+      void import('../../api/nativeBrowserApi').then((m) => {
+        void m.browserWebviewClose(tabId);
+      });
+    }
   }
 }

@@ -68,7 +68,6 @@ export {
   enterComposer,
   insertTab,
   insertTerminalTab,
-  insertBrowserTab,
   openSession,
   promoteDraftTab,
   updateTabTitle,
@@ -107,3 +106,57 @@ export {
   waitLayoutTreeHydration,
   layoutTreeStorageKey,
 } from './layoutTreeStore';
+
+// ── DockTree & SpatialTree 空间分屏几何模型 ─────────────────────────
+export {
+  clampRatio,
+  clampSpatialRatio,
+  collectSpatialLeaves,
+  createSpatialBranch,
+  findSpatialNode,
+  flattenSpatialTree,
+  isSpatialBranch,
+  isSpatialLeaf,
+  replaceSpatialNode,
+  removeSpatialBranch,
+} from './spatialTree';
+export type {
+  BaseSpatialLeaf,
+  SpatialBranch,
+  SpatialDirection,
+  SpatialNode,
+  SpatialTree,
+  NormalizedRect,
+  SashSegment,
+  FlattenedSpatialItem,
+  FlattenedSpatialBranch,
+  FlattenedSpatialTree,
+} from './spatialTree';
+
+export {
+  isDockTreeEmpty,
+  createDefaultDockTree,
+  createToolTab,
+  openToolInDock,
+  closeDockTab,
+  activateDockTab,
+  splitDockLeaf,
+  closeDockLeaf,
+  activateDockLeaf,
+  resizeDockBranch,
+  moveDockTab,
+  splitDockWithTab,
+} from './dockLayoutModel';
+export type {
+  DockLeaf,
+  DockTree,
+  ToolTab,
+  ToolViewId,
+  OpenToolInput,
+} from './dockLayoutModel';
+
+export {
+  DEFAULT_RIGHT_DOCK,
+  migrateLegacyDockStateToV2,
+  assertIsSessionLevelTab,
+} from './sessionTabModel';

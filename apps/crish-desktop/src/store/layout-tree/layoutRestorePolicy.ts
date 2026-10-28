@@ -40,16 +40,6 @@ function isSessionTabStructurallyValid(t: unknown): boolean {
   if (typeof o.tabId !== 'string' || !o.tabId) return false;
   if (typeof o.title !== 'string' || !o.title) return false;
   if (typeof o.workspaceKey !== 'string' || !o.workspaceKey) return false;
-  if (!o.dock || typeof o.dock !== 'object') return false;
-  const d = o.dock as Record<string, unknown>;
-  if (typeof d.collapsed !== 'boolean') return false;
-  if (!Array.isArray(d.openPanelIds)) return false;
-  if (typeof d.widthRatio !== 'number' || !Number.isFinite(d.widthRatio)) {
-    return false;
-  }
-  if (d.activePanelId !== null && typeof d.activePanelId !== 'string') {
-    return false;
-  }
 
   const kind = o.kind;
   if (kind === 'terminal') {
@@ -62,6 +52,18 @@ function isSessionTabStructurallyValid(t: unknown): boolean {
     if (o.favicon !== undefined && typeof o.favicon !== 'string') return false;
     return true;
   }
+
+  // Chat tab: must have valid dock state (V2 tree or legacy openPanelIds)
+  if (!o.dock || typeof o.dock !== 'object') return false;
+  const d = o.dock as Record<string, unknown>;
+  if (typeof d.collapsed !== 'boolean') return false;
+  if (typeof d.widthRatio !== 'number' || !Number.isFinite(d.widthRatio)) {
+    return false;
+  }
+  const hasTree = typeof d.tree === 'object' && d.tree !== null;
+  const hasLegacyPanels = Array.isArray(d.openPanelIds);
+  if (!hasTree && !hasLegacyPanels) return false;
+
   // Default/chat tab (kind === 'chat' or pre-UnifiedTab where kind is undefined)
   if (kind !== undefined && kind !== 'chat') return false;
   if (typeof o.sessionId !== 'string' || !o.sessionId) return false;

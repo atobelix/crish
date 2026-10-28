@@ -11,10 +11,7 @@
  * @see docs/architecture/multi-unit-layout-restore-adr.md
  */
 
-import {
-  listChatLeaves,
-  useLayoutTreeStore,
-} from '../layout-tree';
+import { listChatLeaves, useLayoutTreeStore } from '../layout-tree';
 import type { LayoutNode, LayoutTree } from '../layout-tree/types';
 import { isPendingDraft } from '../draftSession';
 import {
@@ -23,10 +20,7 @@ import {
   RESTORE_LAST_WORKSPACE_LS_KEY,
   RESTORE_LAST_WORKSPACE_SETTING_KEY,
 } from '../layout-tree/layoutRestorePolicy';
-import {
-  type RightToolDockState,
-  createDefaultDock,
-} from './types';
+import { type RightToolDockState, createDefaultDock } from './types';
 import { clampDockWidthRatio } from './adapterShape';
 import { getShellReadApi } from './shellReadBridge';
 
@@ -53,7 +47,7 @@ export function projectUnitDockState(
     return {
       ...createDefaultDock(),
       ...tab.dock,
-      widthRatio: clampDockWidthRatio(tab.dock.widthRatio),
+      widthRatio: clampDockWidthRatio(tab.dock?.widthRatio ?? 0.5),
     };
   }
   return createDefaultDock({ collapsed: true });

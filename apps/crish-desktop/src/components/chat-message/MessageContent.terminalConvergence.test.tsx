@@ -15,7 +15,13 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, act, fireEvent, cleanup } from '@testing-library/react';
+import {
+  render,
+  act,
+  fireEvent,
+  cleanup,
+  waitFor,
+} from '@testing-library/react';
 import React from 'react';
 import { expandMessageProcess } from './searchExpandBridge';
 import { MessageContent } from './MessageContent';
@@ -102,11 +108,16 @@ describe('终态收敛：总结抵达后只外露工作时长与总结正文', (
       blocks: [
         { type: 'tool_call', id: 't-1' },
         { type: 'tool_call', id: 't-2' },
-        { type: 'text', content: '已完成分析，读取了 main.rs 并全仓检索完毕。' },
+        {
+          type: 'text',
+          content: '已完成分析，读取了 main.rs 并全仓检索完毕。',
+        },
       ],
     };
 
-    rerender(<Harness msg={closedMsg} isThinkingMsg={false} sessionId={sessionId} />);
+    rerender(
+      <Harness msg={closedMsg} isThinkingMsg={false} sessionId={sessionId} />
+    );
 
     // 2026-09-19 用户裁决：彻底去除工作完成后的整体内容折叠，过程明细默认保持展开直出
     const slotAfter = container.querySelector('[data-testid^="process-slot-"]');
@@ -142,15 +153,22 @@ describe('终态收敛：总结抵达后只外露工作时长与总结正文', (
     );
 
     const bar = container.querySelector('[data-testid^="process-toggle-"]');
-    const sectionId = (bar?.getAttribute('data-testid') ?? '').replace('process-toggle-', '');
+    const sectionId = (bar?.getAttribute('data-testid') ?? '').replace(
+      'process-toggle-',
+      ''
+    );
     expect(sectionId).not.toBe('');
 
     // 用户先折叠、再手动展开 —— 显式交互即钉住
     act(() => {
-      fireEvent.click(container.querySelector(`[data-testid="process-toggle-${sectionId}"]`)!);
+      fireEvent.click(
+        container.querySelector(`[data-testid="process-toggle-${sectionId}"]`)!
+      );
     });
     act(() => {
-      fireEvent.click(container.querySelector(`[data-testid="process-toggle-${sectionId}"]`)!);
+      fireEvent.click(
+        container.querySelector(`[data-testid="process-toggle-${sectionId}"]`)!
+      );
     });
 
     const closedMsg: SessionMessage = {
@@ -164,10 +182,14 @@ describe('终态收敛：总结抵达后只外露工作时长与总结正文', (
       ],
     };
 
-    rerender(<Harness msg={closedMsg} isThinkingMsg={false} sessionId={sessionId} />);
+    rerender(
+      <Harness msg={closedMsg} isThinkingMsg={false} sessionId={sessionId} />
+    );
 
     // 断言：用户裁决优先，段保持展开（无 hidden）
-    const slotAfter = container.querySelector(`[data-testid="process-slot-${sectionId}"]`);
+    const slotAfter = container.querySelector(
+      `[data-testid="process-slot-${sectionId}"]`
+    );
     expect(slotAfter?.getAttribute('hidden')).toBeNull();
   });
 
@@ -176,7 +198,7 @@ describe('终态收敛：总结抵达后只外露工作时长与总结正文', (
    * 若改为「惰性键（用户交互才写）」，消息级检索展开命令将无处落键，
    * 段落永远打不开——这是本测试真正守住的回归面。
    */
-  it('检索穿透：手动收拢后消息级展开命令必须能重新打开该段', () => {
+  it('检索穿透：手动收拢后消息级展开命令必须能重新打开该段', async () => {
     cleanup();
     const sessionId = 'sess-conv-4';
     const msgId = 'msg-conv-4';
@@ -199,16 +221,23 @@ describe('终态收敛：总结抵达后只外露工作时长与总结正文', (
     );
 
     const bar = container.querySelector('[data-testid^="process-toggle-"]');
-    const sectionId = (bar?.getAttribute('data-testid') ?? '').replace('process-toggle-', '');
+    const sectionId = (bar?.getAttribute('data-testid') ?? '').replace(
+      'process-toggle-',
+      ''
+    );
     const slot = container.querySelector('[data-testid^="process-slot-"]');
     // 2026-09-19 用户裁决：终态默认展开直出
     expect(slot?.getAttribute('hidden')).toBeNull();
 
     // 用户手动收拢该段
     act(() => {
-      fireEvent.click(container.querySelector(`[data-testid="process-toggle-${sectionId}"]`)!);
+      fireEvent.click(
+        container.querySelector(`[data-testid="process-toggle-${sectionId}"]`)!
+      );
     });
-    expect(slot?.getAttribute('hidden')).toBe('until-found');
+    await waitFor(() =>
+      expect(slot?.getAttribute('hidden')).toBe('until-found')
+    );
 
     // 消息级展开命令重新打开
     act(() => {

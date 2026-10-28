@@ -12,11 +12,15 @@ import {
   TAB_WIDTH_MIN_PX,
 } from '../../utils/tabStripGeometry';
 
-/** 本叶条带成员：维 01 SessionTab 形状（含草稿） */
+/** 本叶条带成员：维 01 SessionTab 形状（含草稿与独立常规终端） */
 export interface LeafSessionTab {
   tabId: string;
-  sessionId: string;
+  sessionId?: string;
   title?: string;
+  kind?: 'chat' | 'terminal' | 'browser';
+  terminalKey?: string;
+  url?: string;
+  isStandalone?: boolean;
 }
 
 /** 关 active 时的邻居：优先左邻，否则右邻（与维 02 removeTab 一致），排除已在离场中的标签 */

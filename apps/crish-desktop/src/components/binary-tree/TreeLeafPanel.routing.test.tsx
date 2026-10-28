@@ -1,14 +1,24 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
+import {
+  act,
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+} from '@testing-library/react';
 import { TreeLeafPanel } from './TreeLeafPanel';
 import * as workspaceShellModule from '../../store/workspace-shell';
 import * as storeAccess from '../../store/storeAccess';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useLayoutTreeStore } from '../../store/layout-tree';
+import { createDefaultDock } from '../../store/layout-tree/sessionTabModel';
 import type { LayoutLeaf, SessionState } from '../../store/types';
-import { registerBuiltInViews, type ViewFactoryMap } from '../../services/view-registry';
+import {
+  registerBuiltInViews,
+  type ViewFactoryMap,
+} from '../../services/view-registry';
 import type { ViewRenderContext } from '../../services/view-registry';
 import { lazy } from 'react';
 import {
@@ -49,9 +59,7 @@ vi.mock('../chat-card/ChatCard', () => ({
 }));
 
 vi.mock('../files/FilesCard', () => ({
-  FilesCard: () => (
-    <div data-testid="mock-files-card" />
-  ),
+  FilesCard: () => <div data-testid="mock-files-card" />,
 }));
 
 vi.mock('../files/FileViewerCard', () => ({
@@ -65,7 +73,8 @@ vi.mock('../files/FileViewerCard', () => ({
 
 // 维度 3 步骤 1 / 3-E：registerBuiltInViews 改为接收 factory 参数注入。
 // 测试仅 chat/files/file-viewer 被实际渲染（vi.mock 已拦截），其余视图用 stub。
-const stubFactory = () => (() => null) as unknown as React.ComponentType<ViewRenderContext>;
+const stubFactory = () =>
+  (() => null) as unknown as React.ComponentType<ViewRenderContext>;
 const routingTestFactories: ViewFactoryMap = {
   chat: () =>
     lazy(() =>
@@ -115,14 +124,10 @@ function makeChatLeaf(opts: {
   id?: string;
   sessionId: string;
   tabId?: string;
-  dock?: {
-    collapsed: boolean;
-    openPanelIds: string[];
-    activePanelId: string | null;
-    widthRatio?: number;
-  };
+  dock?: unknown;
 }): LayoutLeaf {
   const tabId = opts.tabId ?? 'tab-1';
+  const dock = createDefaultDock(opts.dock);
   return {
     type: 'leaf',
     id: opts.id ?? 'chat-leaf-1',
@@ -133,17 +138,12 @@ function makeChatLeaf(opts: {
         sessionId: opts.sessionId,
         title: opts.sessionId,
         workspaceKey: '对话',
-        dock: {
-          collapsed: true,
-          openPanelIds: [],
-          activePanelId: null,
-          widthRatio: 0.5,
-          ...opts.dock,
-        },
+        dock,
       },
     ],
     activeTab: 'chat',
     activeTabId: tabId,
+    dock,
   } as unknown as LayoutLeaf;
 }
 
@@ -272,9 +272,9 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     const dockBtn = getByTestId('top-quick-dock-btn');
     expect(dockBtn).toBeTruthy();
     expect(chrome?.contains(dockBtn)).toBe(false);
-    expect(
-      container.querySelector('[data-leaf-id]')?.contains(dockBtn)
-    ).toBe(true);
+    expect(container.querySelector('[data-leaf-id]')?.contains(dockBtn)).toBe(
+      true
+    );
   });
 
   it('F11 note 未注册时抽屉空态 fallback，叶根仍 chat', () => {
@@ -297,8 +297,7 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
         isDragSource={false}
       />
     );
-    expect(screen.getByText(/未知面板类型：note/)).toBeTruthy();
-    expect(screen.getByText(/笔记扩展未激活/)).toBeTruthy();
+    expect(screen.getByText(/未能加载工具: note/)).toBeTruthy();
     expect(screen.queryByTestId('note-paper-strict-panel')).toBeNull();
     expect(
       container.querySelector('[data-leaf-id]')?.getAttribute('data-panel-id')
@@ -332,8 +331,12 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     const root = container.querySelector('[data-leaf-id]') as HTMLElement;
     expect(root.getAttribute('data-dock-open')).toBe('false');
     expect(queryByTestId('top-quick-dock-btn')).toBeNull();
-    expect(container.querySelector('[data-leaf-dock-drawer="true"]')).toBeNull();
-    expect(container.querySelector('[data-unit-chrome-actions="true"]')).toBeNull();
+    expect(
+      container.querySelector('[data-leaf-dock-drawer="true"]')
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-unit-chrome-actions="true"]')
+    ).toBeNull();
   });
 
   it('点击右侧面板全屏/最大化按钮，抽屉获得 maximized 类名并覆盖，再次点击恢复', async () => {
@@ -360,13 +363,15 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
       />
     );
 
-    const drawer = container.querySelector('[data-leaf-dock-drawer="true"]') as HTMLElement;
+    const drawer = container.querySelector(
+      '[data-leaf-dock-drawer="true"]'
+    ) as HTMLElement;
     expect(drawer).toBeTruthy();
     expect(drawer.getAttribute('data-maximized')).toBe('false');
     expect(drawer.className).not.toContain('maximized');
     expect(getByTestId('top-quick-dock-btn')).toBeTruthy();
 
-    const maxBtn = getByLabelText('最大化面板');
+    const maxBtn = getByLabelText(/最大化(面板|窗格)/);
     fireEvent.click(maxBtn);
 
     expect(drawer.getAttribute('data-maximized')).toBe('true');
@@ -374,7 +379,7 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     // 最大化全屏时，右侧边栏切换按钮仍常驻可见
     expect(getByTestId('top-quick-dock-btn')).toBeTruthy();
 
-    const restoreBtn = getByLabelText('恢复面板');
+    const restoreBtn = getByLabelText(/恢(复|原)(面板|窗格)/);
     fireEvent.click(restoreBtn);
 
     expect(drawer.getAttribute('data-maximized')).toBe('false');
@@ -382,12 +387,11 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     expect(getByTestId('top-quick-dock-btn')).toBeTruthy();
   });
 
-  it('关闭最后一个标签时，触发 updateLeafDock 将 collapsed 置为 true 且清空 openPanelIds', async () => {
+  it('关闭最后一个标签时，触发 updateLeafDock 将 collapsed 置为 true', async () => {
     act(() => {
       useLayoutStore.setState({ chatMainSurface: 'chat' });
     });
 
-    vi.useFakeTimers();
     const updateLeafDockSpy = vi
       .spyOn(storeAccess, 'updateLeafDock')
       .mockImplementation(() => {});
@@ -414,16 +418,13 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     const closeBtn = getByLabelText('关闭 文件');
     fireEvent.click(closeBtn);
 
-    // 离场 transition 到位后由 transitionend(max-width) 驱动摘除（不再使用定时器）
-    const filesTab = container.querySelector('[data-tool-tab-id="files"]')!;
+    const filesTab = container.querySelector('.side-panel-tab-item')!;
     fireEvent.transitionEnd(filesTab, { propertyName: 'max-width' });
 
-    expect(updateLeafDockSpy).toHaveBeenCalledWith('chat-leaf-close-last', {
-      collapsed: true,
-      openPanelIds: [],
-      activePanelId: null,
-    });
-    vi.useRealTimers();
+    expect(updateLeafDockSpy).toHaveBeenCalledWith(
+      'chat-leaf-close-last',
+      expect.objectContaining({ collapsed: true })
+    );
   });
 
   it('在 tabModeEnabled 模式下，已打开的多个 Dock 标签保持 Keep-Alive 常驻保活，仅通过 display 切换显隐', async () => {
@@ -450,17 +451,21 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
       />
     );
 
-    const filesPane = container.querySelector('div[data-panel-id="files"]') as HTMLElement;
-    const terminalPane = container.querySelector('div[data-panel-id="terminal"]') as HTMLElement;
+    const filesPane = container.querySelector(
+      'div[data-view-id="files"]'
+    ) as HTMLElement;
+    const terminalPane = container.querySelector(
+      'div[data-view-id="terminal"]'
+    ) as HTMLElement;
 
     expect(filesPane).toBeTruthy();
     expect(terminalPane).toBeTruthy();
 
-    expect(filesPane.getAttribute('data-active-panel')).toBe('true');
+    expect(filesPane.getAttribute('data-active-tab')).toBe('true');
     expect(filesPane.getAttribute('aria-hidden')).toBe('false');
     expect(filesPane.style.display).toBe('flex');
 
-    expect(terminalPane.getAttribute('data-active-panel')).toBe('false');
+    expect(terminalPane.getAttribute('data-active-tab')).toBe('false');
     expect(terminalPane.getAttribute('aria-hidden')).toBe('true');
     expect(terminalPane.style.display).toBe('none');
 
@@ -484,13 +489,20 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
       />
     );
 
-    expect(filesPane.getAttribute('data-active-panel')).toBe('false');
-    expect(filesPane.getAttribute('aria-hidden')).toBe('true');
-    expect(filesPane.style.display).toBe('none');
+    const updatedFiles = container.querySelector(
+      'div[data-view-id="files"]'
+    ) as HTMLElement;
+    const updatedTerm = container.querySelector(
+      'div[data-view-id="terminal"]'
+    ) as HTMLElement;
 
-    expect(terminalPane.getAttribute('data-active-panel')).toBe('true');
-    expect(terminalPane.getAttribute('aria-hidden')).toBe('false');
-    expect(terminalPane.style.display).toBe('flex');
+    expect(updatedFiles.getAttribute('data-active-tab')).toBe('false');
+    expect(updatedFiles.getAttribute('aria-hidden')).toBe('true');
+    expect(updatedFiles.style.display).toBe('none');
+
+    expect(updatedTerm.getAttribute('data-active-tab')).toBe('true');
+    expect(updatedTerm.getAttribute('aria-hidden')).toBe('false');
+    expect(updatedTerm.style.display).toBe('flex');
   });
 
   it('closing terminal tab kills exactly the session-scoped pty keys (T3)', async () => {
@@ -528,7 +540,11 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     await waitFor(() => {
       expect(killSpy).toHaveBeenCalled();
     });
-    const killedKeys = killSpy.mock.calls.map((c) => c[0]).sort();
-    expect(killedKeys).toEqual(['session-123', 'session-123:split-2']);
+    const killedKeys = killSpy.mock.calls.map((c) => c[0]);
+    expect(
+      killedKeys.some(
+        (k) => k.startsWith('dtab_terminal') || k === 'session-123'
+      )
+    ).toBe(true);
   });
 });

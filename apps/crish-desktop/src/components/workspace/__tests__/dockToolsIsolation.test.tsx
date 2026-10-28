@@ -4,14 +4,14 @@
  *
  * 覆盖核心断言：
  * 1. 双 PreviewCard 隔离：
- *    - postMessage 源窗口校验：仅 source === iframe.contentWindow 的预览消息被消费，阻断跨窗污染；
+ *    - Native Browser 导航状态与 Inspector 事件按 tabId 分发，阻断跨分屏污染；
  *    - 定址导航隔离：crish-preview-url 仅匹配目标 leafId / sessionId 的分屏跳转；
  *    - 停止生成定址化：handleStopAi 派发带本分屏 sessionId 与 leafId 的 stop-generation；
  *    - ToolTabFavicon 隔离：按 leafId 定址更新当前标签对应站点 URL 与 Favicon。
  * 2. 双 FilesCard / FileViewerCard 隔离：
  *    - 批注计数按叶隔离：sess-a 与 sess-b 批注互不渗透，FilesCard 徽章独立渲染；
  *    - 定址文件打开：crish-open-file 仅由匹配分屏响应；
- *    - FileViewerCard 模式切换隔离：conex:file-viewer-mode 按 leafId 定址切换 plain/diff。
+ *    - FileViewerCard 模式切换隔离：由 ToolTab.params / initialMode 独立下发，杜绝跨分屏联动。
  * 3. 双 OverviewCard / DiffCard / TerminalCard / AgentCard / TrashSection 隔离：
  *    - OverviewCard 独立读取本叶会话（标题、子智能体等），不受全局 activeSessionId 干扰；
  *    - TerminalCard 在当前分屏叶子新建终端；
@@ -34,8 +34,12 @@ import { LeafScopeProvider } from '../../../contexts/LeafScopeContext';
 import { ToastProvider } from '../../../services/toast/ToastContext';
 import { useSessionStore } from '../../../store/sessionStore';
 import type { SessionState, SessionAgent } from '../../../store/types';
+import * as nativeBrowserApi from '../../../api/nativeBrowserApi';
+import type { NavigationStatePayload } from '../../../api/nativeBrowserApi';
 
 import { PreviewCard } from '../PreviewCard';
+import * as nativeBrowserInspectorApi from '../nativeBrowserInspectorApi';
+import type { NativeBrowserInspectorEvent } from '../nativeBrowserInspectorApi';
 import { ToolTabFavicon } from '../../binary-tree/ToolTabFavicon';
 import { FilesCard } from '../../files/FilesCard';
 import { FileViewerCard } from '../../files/FileViewerCard';
@@ -44,10 +48,7 @@ import { TerminalCard } from '../TerminalCard';
 import { AgentCard } from '../../agent-card/AgentCard';
 import { TrashSection } from '../TrashSection';
 import { useNoteDocumentManager } from '../../note-paper/useNoteDocumentManager';
-import {
-  CRISH_PREVIEW_INSPECTOR_SOURCE,
-  type InspectSelectPayload,
-} from '../previewProtocol';
+import { type InspectSelectPayload } from '../previewProtocol';
 import * as openToolModule from '../../../store/workspace-shell/openTool';
 import * as trashApiModule from '../../../api/trashApi';
 import * as fileAnnotationsApi from '../../../api/fileAnnotations';
@@ -132,7 +133,78 @@ describe('维度 04：工具抽屉卡片与内置预览浏览器多实例天然�
   });
 
   describe('1. 内置预览浏览器与 Favicon 多实例隔离', () => {
-    it('双 PreviewCard 挂载时，MessageEvent 仅由源 iframe 匹配的分屏响应', async () => {
+    it('双 PreviewCard 仅消费本 tab 的导航状态与 Inspector 拾取事件', async () => {
+      const navigationListeners = new Set<
+        (payload: NavigationStatePayload) => void
+      >();
+      const inspectorListeners = new Set<
+        (event: NativeBrowserInspectorEvent) => void
+      >();
+      const emitNavigationState = (payload: NavigationStatePayload) => {
+        act(() => {
+          for (const listener of navigationListeners) listener(payload);
+        });
+      };
+      const emitInspectorEvent = (event: NativeBrowserInspectorEvent) => {
+        act(() => {
+          for (const listener of inspectorListeners) listener(event);
+        });
+      };
+
+      vi.spyOn(nativeBrowserApi, 'browserWebviewAcquire').mockReturnValue(
+        vi.fn()
+      );
+      vi.spyOn(nativeBrowserApi, 'browserWebviewCreate').mockResolvedValue();
+      vi.spyOn(nativeBrowserApi, 'browserWebviewNavigate').mockImplementation(
+        async (tabId, url) => {
+          emitNavigationState({
+            tabId,
+            url,
+            title: '',
+            canGoBack: false,
+            canGoForward: false,
+            isLoading: false,
+          });
+        }
+      );
+      vi.spyOn(nativeBrowserApi, 'browserWebviewSetBounds').mockResolvedValue();
+      vi.spyOn(
+        nativeBrowserApi,
+        'browserWebviewSetVisible'
+      ).mockResolvedValue();
+      vi.spyOn(nativeBrowserApi, 'browserWebviewSetHitTest').mockResolvedValue({
+        status: 'unsupported',
+        reason: 'Native browser hit-test is not implemented',
+      });
+      vi.spyOn(nativeBrowserApi, 'browserWebviewClose').mockResolvedValue();
+      vi.spyOn(
+        nativeBrowserApi,
+        'onNativeBrowserDownloadProgress'
+      ).mockReturnValue(vi.fn());
+      vi.spyOn(
+        nativeBrowserApi,
+        'onNativeBrowserNavigationState'
+      ).mockImplementation((callback) => {
+        navigationListeners.add(callback);
+        return () => {
+          navigationListeners.delete(callback);
+        };
+      });
+      vi.spyOn(
+        nativeBrowserInspectorApi,
+        'browserWebviewSetInspector'
+      ).mockResolvedValue();
+      vi.spyOn(
+        nativeBrowserInspectorApi,
+        'onNativeBrowserInspectorEvent'
+      ).mockImplementation((callback, observer) => {
+        inspectorListeners.add(callback);
+        observer?.onReady?.();
+        return () => {
+          inspectorListeners.delete(callback);
+        };
+      });
+
       const renderResult = render(
         <ToastProvider>
           <div data-testid="pane-a">
@@ -169,35 +241,35 @@ describe('维度 04：工具抽屉卡片与内置预览浏览器多实例天然�
       const paneA = renderResult.getByTestId('pane-a');
       const paneB = renderResult.getByTestId('pane-b');
 
-      const iframeA = paneA.querySelector('iframe');
-      const iframeB = paneB.querySelector('iframe');
-      expect(iframeA).toBeTruthy();
-      expect(iframeB).toBeTruthy();
-      expect(iframeA).not.toBe(iframeB);
-
-      // 向 window 派发来自 iframeA 的 preview:navigate 消息
-      act(() => {
-        window.dispatchEvent(
-          new MessageEvent('message', {
-            origin: window.location.origin,
-            source: iframeA?.contentWindow ?? undefined,
-            data: {
-              type: 'preview:navigate',
-              href: 'https://example.com/a-next',
-            },
-          })
-        );
+      const inputA = paneA.querySelector('input');
+      const inputB = paneB.querySelector('input');
+      expect(inputA).toBeTruthy();
+      expect(inputB).toBeTruthy();
+      await waitFor(() => {
+        expect(inputA?.value).toBe('https://example.com/a');
+        expect(inputB?.value).toBe('https://example.com/b');
+        expect(
+          paneA.querySelector('[data-native-surface="true"]')
+        ).toBeTruthy();
+        expect(
+          paneB.querySelector('[data-native-surface="true"]')
+        ).toBeTruthy();
       });
 
-      // 断言：分屏 A 的地址输入框跳转为 a-next，分屏 B 的输入框维持 https://example.com/b
+      // 原生导航广播按 tabId 更新 A，B 继续保留自己的地址。
+      emitNavigationState({
+        tabId: 'browser-leaf-a',
+        url: 'https://example.com/a-next',
+        title: 'A next',
+        canGoBack: true,
+        canGoForward: false,
+        isLoading: false,
+      });
       await waitFor(() => {
-        const inputA = paneA.querySelector('input');
-        const inputB = paneB.querySelector('input');
         expect(inputA?.value).toBe('https://example.com/a-next');
         expect(inputB?.value).toBe('https://example.com/b');
       });
 
-      // 派发 INSPECT_SELECT 拾取消息，source 仅为 iframeA
       const inspectPayload: InspectSelectPayload = {
         tagName: 'h1',
         id: 'title-a',
@@ -219,22 +291,34 @@ describe('维度 04：工具抽屉卡片与内置预览浏览器多实例天然�
         textContent: 'Title A',
       };
 
-      // 派发 INSPECT_SELECT 拾取消息，source 仅为当前已加载目标页的 iframeA
-      const currentIframeA = paneA.querySelector('iframe');
-      expect(currentIframeA).toBeTruthy();
+      const inspectorButtonA = paneA.querySelector<HTMLButtonElement>(
+        '[aria-label="拾取页面元素"]'
+      );
+      const inspectorButtonB = paneB.querySelector<HTMLButtonElement>(
+        '[aria-label="拾取页面元素"]'
+      );
+      expect(inspectorButtonA).toBeTruthy();
+      expect(inspectorButtonB).toBeTruthy();
+      await waitFor(() => {
+        expect(inspectorButtonA).toBeEnabled();
+        expect(inspectorButtonB).toBeEnabled();
+      });
+      fireEvent.click(inspectorButtonA!);
+      fireEvent.click(inspectorButtonB!);
+      await waitFor(() => {
+        expect(
+          nativeBrowserInspectorApi.browserWebviewSetInspector
+        ).toHaveBeenCalledWith('browser-leaf-a', true);
+        expect(
+          nativeBrowserInspectorApi.browserWebviewSetInspector
+        ).toHaveBeenCalledWith('browser-leaf-b', true);
+      });
 
-      act(() => {
-        window.dispatchEvent(
-          new MessageEvent('message', {
-            origin: window.location.origin,
-            source: currentIframeA?.contentWindow ?? undefined,
-            data: {
-              source: CRISH_PREVIEW_INSPECTOR_SOURCE,
-              type: 'INSPECT_SELECT',
-              payload: inspectPayload,
-            },
-          })
-        );
+      // Native Inspector 事件广播给订阅者后，由 tabId 只交给 A 的拾取卡。
+      emitInspectorEvent({
+        tabId: 'browser-leaf-a',
+        type: 'INSPECT_SELECT',
+        payload: inspectPayload,
       });
 
       // 断言：仅分屏 A 弹出 Inspector Overlay 卡片，分屏 B 零污染
@@ -444,17 +528,41 @@ describe('维度 04：工具抽屉卡片与内置预览浏览器多实例天然�
       const viewerA = renderResult.getByTestId('viewer-a');
       const viewerB = renderResult.getByTestId('viewer-b');
 
-      // 派发切换到 diff 模式，目标仅定向 leaf-b
+      // 分屏 B 独立更新 initialMode 切换为 diff 模式
       act(() => {
-        window.dispatchEvent(
-          new CustomEvent('conex:file-viewer-mode', {
-            detail: {
-              canonicalTabId: 'file-viewer:common.ts',
-              mode: 'diff',
-              leafId: 'leaf-b',
-              sessionId: 'sess-b',
-            },
-          })
+        renderResult.rerender(
+          <ToastProvider>
+            <div data-testid="viewer-a">
+              <LeafScopeProvider
+                leafId="leaf-a"
+                sessionId="sess-a"
+                isActive={true}
+                leafRootRef={rootRefA}
+              >
+                <FileViewerCard
+                  filePath="common.ts"
+                  initialMode="plain"
+                  sessionId="sess-a"
+                  leafId="leaf-a"
+                />
+              </LeafScopeProvider>
+            </div>
+            <div data-testid="viewer-b">
+              <LeafScopeProvider
+                leafId="leaf-b"
+                sessionId="sess-b"
+                isActive={false}
+                leafRootRef={rootRefB}
+              >
+                <FileViewerCard
+                  filePath="common.ts"
+                  initialMode="diff"
+                  sessionId="sess-b"
+                  leafId="leaf-b"
+                />
+              </LeafScopeProvider>
+            </div>
+          </ToastProvider>
         );
       });
 

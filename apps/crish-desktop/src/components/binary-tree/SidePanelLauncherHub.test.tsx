@@ -53,9 +53,7 @@ describe('SidePanelLauncherHub 空状态与运行中端口直达', () => {
 
     const activeServiceCard = getByTestId('launcher-card-active-service');
     expect(activeServiceCard).toBeTruthy();
-    expect(
-      getByText(/运行中的服务:\s*http:\/\/localhost:5173\s*\(点击在右侧预览\)/)
-    ).toBeTruthy();
+    expect(getByText('localhost:5173')).toBeTruthy();
 
     fireEvent.click(activeServiceCard);
     expect(setPreviewSpy).toHaveBeenCalledWith('http://localhost:5173');

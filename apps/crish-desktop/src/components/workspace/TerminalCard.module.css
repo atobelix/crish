@@ -15,7 +15,8 @@
   align-items: center;
   gap: var(--tab-gap, 3px);
   padding: var(--card-header-pad-y, 4px) var(--card-header-pad-x, 8px);
-  border-bottom: var(--hairline-width, 1px) solid var(--terminal-border, var(--hairline, var(--border-subtle)));
+  border-bottom: var(--hairline-width, 1px) solid
+    var(--terminal-border, var(--hairline, var(--border-subtle)));
   flex-shrink: 0;
   min-height: var(--card-header-min-height, 36px);
   box-sizing: border-box;
@@ -35,12 +36,12 @@
   color: var(--terminal-muted);
 }
 .toolbar :global(.files-icon-btn):hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--terminal-fg);
 }
 .toolbar :global(.files-icon-btn):focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--state-focus-ring));
   color: var(--text-primary);
 }
 
@@ -81,7 +82,7 @@
 
 .termTagActive {
   color: var(--text-primary);
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .termTagIcon {
@@ -111,16 +112,18 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  transition: background-color 100ms ease, color 100ms ease;
+  transition:
+    background-color var(--duration-micro, 100ms) var(--ease-standard),
+    color var(--duration-micro, 100ms) var(--ease-standard);
 }
 
 .termBranchItem:hover {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
 .termBranchActive {
-  background: var(--bg-active);
+  background: var(--state-active);
   color: var(--text-primary);
   font-weight: 600;
 }
@@ -170,7 +173,7 @@
 }
 
 .activeSplitPane {
-  outline: 1px solid var(--tint-focus-ring, transparent);
+  outline: 1px solid var(--state-focus-ring, transparent);
   outline-offset: -1px;
 }
 
@@ -196,7 +199,8 @@
   min-height: 0;
   min-width: 0;
   flex-shrink: 0;
-  border-bottom: var(--hairline-width, 1px) solid var(--terminal-border, var(--hairline, var(--border-subtle)));
+  border-bottom: var(--hairline-width, 1px) solid
+    var(--terminal-border, var(--hairline, var(--border-subtle)));
   box-sizing: border-box;
 }
 .mirrorStrip[data-expanded='true'] {
@@ -243,7 +247,7 @@
 }
 .mirrorToggle:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--state-focus-ring));
   border-radius: var(--radius-sm);
 }
 .mirrorTitle {
@@ -252,7 +256,10 @@
   white-space: nowrap;
 }
 .mirrorCount {
-  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-family:
+    'Segoe UI',
+    -apple-system,
+    var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
   color: var(--terminal-muted);
@@ -347,8 +354,10 @@
   display: flex;
   align-items: center;
   gap: var(--panel-gap, 8px);
-  padding: var(--card-header-pad-y, 4px) var(--panel-pad-x, 12px) var(--panel-pad-y, 10px);
-  border-top: var(--hairline-width, 1px) solid var(--terminal-border, var(--hairline, var(--border-subtle)));
+  padding: var(--card-header-pad-y, 4px) var(--panel-pad-x, 12px)
+    var(--panel-pad-y, 10px);
+  border-top: var(--hairline-width, 1px) solid
+    var(--terminal-border, var(--hairline, var(--border-subtle)));
   flex-shrink: 0;
   min-width: 0;
   min-height: var(--control-height, 32px);
@@ -388,7 +397,8 @@
   padding: var(--card-header-pad-y, 4px) var(--card-header-pad-x, 8px);
   min-height: var(--card-header-min-height, 36px);
   background: var(--terminal-bar-fill, var(--terminal-bg));
-  border-bottom: var(--hairline-width, 1px) solid var(--terminal-border, var(--hairline, var(--border-subtle)));
+  border-bottom: var(--hairline-width, 1px) solid
+    var(--terminal-border, var(--hairline, var(--border-subtle)));
   min-width: 0;
   box-sizing: border-box;
   flex-shrink: 0;
@@ -434,7 +444,7 @@
 }
 .bar :global(.files-nav-btn):hover:not(:disabled),
 .barBtn:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--state-hover);
   color: var(--terminal-fg);
 }
 .bar :global(.files-nav-btn):disabled,
@@ -444,7 +454,7 @@
 }
 .bar :global(.files-nav-btn):focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--state-focus-ring));
   color: var(--text-primary);
 }
 .empty {
@@ -480,7 +490,8 @@
   font-size: var(--font-size-xxs);
   padding: 1px 5px;
   border-radius: var(--radius-sm);
-  border: var(--hairline-width, 1px) solid var(--terminal-border, var(--hairline, var(--border-subtle)));
+  border: var(--hairline-width, 1px) solid
+    var(--terminal-border, var(--hairline, var(--border-subtle)));
   background: var(--terminal-bar-fill);
 }
 .searchRow {
@@ -488,7 +499,8 @@
   align-items: center;
   gap: var(--space-1_5);
   padding: 2px var(--panel-pad-x, 12px);
-  border-bottom: var(--hairline-width, 1px) solid var(--terminal-border, var(--hairline, var(--border-subtle)));
+  border-bottom: var(--hairline-width, 1px) solid
+    var(--terminal-border, var(--hairline, var(--border-subtle)));
   flex-shrink: 0;
   min-width: 0;
   min-height: 26px;
@@ -515,7 +527,10 @@
   opacity: 0.65;
 }
 .searchCount {
-  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-family:
+    'Segoe UI',
+    -apple-system,
+    var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
   font-size: var(--font-size-xxs);
@@ -598,7 +613,8 @@
   font-size: var(--font-size-xs);
   color: var(--terminal-muted);
   background: color-mix(in srgb, var(--terminal-bar-fill) 80%, transparent);
-  border-bottom: var(--hairline-width, 1px) solid var(--terminal-border, var(--hairline, var(--border-subtle)));
+  border-bottom: var(--hairline-width, 1px) solid
+    var(--terminal-border, var(--hairline, var(--border-subtle)));
   line-height: var(--line-height-ui, 1.35);
 }
 .fallbackBanner strong {

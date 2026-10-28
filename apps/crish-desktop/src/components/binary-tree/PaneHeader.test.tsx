@@ -16,6 +16,21 @@ const shellMocks = vi.hoisted(() => ({
   removeTab: vi.fn(),
 }));
 
+const openToolMocks = vi.hoisted(() => ({
+  openNewBrowserInLeaf: vi.fn(),
+}));
+
+vi.mock('../../store/workspace-shell/openTool', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('../../store/workspace-shell/openTool')
+    >();
+  return {
+    ...actual,
+    openNewBrowserInLeaf: openToolMocks.openNewBrowserInLeaf,
+  };
+});
+
 // ResizeObserverManager 单例 mock：捕获 observe 注册的回调供测试驱动
 const roManagerMock = vi.hoisted(() => {
   const state = { cb: null as ((entry: unknown) => void) | null };
@@ -94,6 +109,7 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     shellMocks.addTerminalTab.mockReset();
     shellMocks.addBrowserTab.mockReset();
     shellMocks.removeTab.mockReset();
+    openToolMocks.openNewBrowserInLeaf.mockReset();
     roManagerMock.state.cb = null;
     useSessionStore.setState({
       sessionsById: {
@@ -166,19 +182,19 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     expect(shellMocks.activateTab).not.toHaveBeenCalled();
   });
 
-  it('加号展开启动器且选择新建终端调 addTerminalTab(leafId)', () => {
+  it('加号展开启动器且选择新建常规终端调 addTerminalTab(leafId)', () => {
     const leaf = makeLeaf('leaf-b', [makeTab('tb2', 's2', '会话二')], 'tb2');
     const { getAllByLabelText, getByRole } = render(
       <PaneHeader leaf={leaf} isActive isChat />
     );
     fireEvent.click(getAllByLabelText('新对话')[0]!);
-    fireEvent.click(getByRole('button', { name: /新建终端/ }));
+    fireEvent.click(getByRole('button', { name: /新建.*终端/ }));
     expect(shellMocks.addTerminalTab).toHaveBeenCalledTimes(1);
     expect(shellMocks.addTerminalTab).toHaveBeenCalledWith('leaf-b');
     expect(shellMocks.activateTab).not.toHaveBeenCalled();
   });
 
-  it('加号展开启动器且选择新建浏览器调 addBrowserTab(leafId)', () => {
+  it('加号展开启动器且选择新建浏览器调 shell.addBrowserTab(leafId)', () => {
     const leaf = makeLeaf('leaf-b', [makeTab('tb2', 's2', '会话二')], 'tb2');
     const { getAllByLabelText, getByRole } = render(
       <PaneHeader leaf={leaf} isActive isChat />
@@ -186,8 +202,72 @@ describe('PaneHeader 叶子拥有会话标签', () => {
     fireEvent.click(getAllByLabelText('新对话')[0]!);
     fireEvent.click(getByRole('button', { name: /新建浏览器/ }));
     expect(shellMocks.addBrowserTab).toHaveBeenCalledTimes(1);
-    expect(shellMocks.addBrowserTab).toHaveBeenCalledWith('leaf-b');
+    expect(shellMocks.addBrowserTab).toHaveBeenCalledWith('leaf-b', {
+      url: 'about:blank',
+    });
     expect(shellMocks.activateTab).not.toHaveBeenCalled();
+  });
+
+  it('独立浏览器标签页显示地球图标，点击激活，点叉关闭触发 removeTab', () => {
+    const browserTab = {
+      tabId: 'tb-browser',
+      kind: 'browser',
+      title: 'Crish 浏览器',
+      url: 'https://example.com',
+      isStandalone: true,
+    };
+    const leaf = {
+      type: 'leaf',
+      id: 'leaf-browser',
+      panelId: 'chat',
+      tabs: [browserTab],
+      activeTab: 'chat',
+      activeTabId: 'tb-browser',
+    } as unknown as LayoutLeaf;
+
+    const { getByRole } = render(<PaneHeader leaf={leaf} isActive isChat />);
+
+    const tabEl = getByRole('tab', { name: 'Crish 浏览器' });
+    expect(tabEl).toBeInTheDocument();
+    expect(tabEl).toHaveAttribute('data-kind', 'browser');
+
+    // 含有地球图标
+    const icon = tabEl.querySelector('svg');
+    expect(icon).toBeInTheDocument();
+
+    // 点击激活标签页
+    fireEvent.click(tabEl);
+    expect(shellMocks.activateTab).toHaveBeenCalledWith(
+      'leaf-browser',
+      'tb-browser'
+    );
+
+    // 点叉关闭并触发 removeTab
+    const closeBtn = tabEl.querySelector(
+      'button[aria-label="关闭 Crish 浏览器"]'
+    );
+    expect(closeBtn).toBeInTheDocument();
+    fireEvent.click(closeBtn!);
+
+    fireEvent.transitionEnd(tabEl, { propertyName: 'flex-basis' });
+    expect(shellMocks.removeTab).toHaveBeenCalledWith(
+      'leaf-browser',
+      'tb-browser'
+    );
+  });
+
+  it('顶栏容器挂载立体防线属性，拒绝右坞工具并标识会话协议', () => {
+    const leaf = makeLeaf('leaf-b', [makeTab('tb2', 's2', '会话二')], 'tb2');
+    const { container } = render(<PaneHeader leaf={leaf} isActive isChat />);
+    const tabsContainer = container.querySelector('[role="tablist"]');
+    expect(tabsContainer).not.toBeNull();
+    expect(tabsContainer?.getAttribute('data-drop-boundary')).toBe(
+      'top-bar-session-strip'
+    );
+    expect(tabsContainer?.getAttribute('data-accept-protocol')).toBe(
+      'conex://drag-session-tab'
+    );
+    expect(tabsContainer?.getAttribute('data-reject-dock-tools')).toBe('true');
   });
 
   it('多分屏下空窗格兜底新对话标签处于选中态，点击标签自身关闭按钮触发 removeTab 收拢分屏', () => {

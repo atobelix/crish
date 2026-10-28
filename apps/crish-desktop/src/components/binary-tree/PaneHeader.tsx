@@ -65,11 +65,12 @@ export interface PaneHeaderProps {
   isTopRow?: boolean;
 }
 
-/** 维 03 门面：两实参 activateTab / addTab / removeTab */
+/** 维 03 门面：两实参 activateTab / addTab / removeTab / addBrowserTab */
 type SessionShellCommands = {
   activateTab: (leafId: string, tabId: string) => void;
   addTab: (leafId: string) => void;
   removeTab: (leafId: string, tabId: string) => void;
+  addBrowserTab?: (leafId: string, opts?: { url?: string }) => void;
 };
 
 function sessionShell(): SessionShellCommands {
@@ -448,19 +449,27 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
           style={paneTabStripVars(effectiveTabWidth)}
           data-locked={lockedTabWidth != null ? 'true' : 'false'}
           data-booted={booted ? 'true' : 'false'}
+          data-drop-boundary="top-bar-session-strip"
+          data-accept-protocol="conex://drag-session-tab"
+          data-reject-dock-tools="true"
           data-tauri-drag-region={isTopRow ? '' : undefined}
           onScroll={handleScroll}
           onMouseLeave={handleHeaderMouseLeave}
           onKeyDown={handleTablistKeyDown}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'none';
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
           onDoubleClick={(e) => {
-            if (
+            const isList =
               e.target === containerRef.current ||
-              (styles.tabsList
-                ? (e.target as HTMLElement).classList.contains(styles.tabsList)
-                : false)
-            ) {
-              handleNewTab();
-            }
+              (styles.tabsList &&
+                (e.target as HTMLElement).classList.contains(styles.tabsList));
+            if (isList) handleNewTab();
           }}
           role="tablist"
           aria-label="窗格会话标签"
@@ -471,7 +480,10 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
               const sessionTitle = tab.sessionId
                 ? sessionTitlesById[tab.sessionId]
                 : undefined;
-              const title = sessionTitle || tab.title || '新对话';
+              const title =
+                sessionTitle ||
+                tab.title ||
+                (tab.kind === 'browser' ? '浏览器' : '新对话');
 
               return (
                 <PaneTabItem

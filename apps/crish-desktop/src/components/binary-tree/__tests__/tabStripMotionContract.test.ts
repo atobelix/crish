@@ -144,4 +144,86 @@ describe('标签条动效单一真理路径契约', () => {
       /\.plusIconWrap[\s\S]{0,400}?app-region:\s*no-drag/
     );
   });
+
+  it('TS 侧弹簧与 tokens-base.css 原生 37 点 linear() 曲线双向锁定', () => {
+    // 1. 验证 37 点采样点严格一致
+    expect(tokensCss).toContain('--ease-spring: linear(0, 0.0213, 0.0739,');
+    expect(tokensCss).toContain('0.9955, 0.9963, 1);');
+    expect(motionTs).toContain('EASE_SPRING_LINEAR =');
+    expect(motionTs).toContain("'linear(0, 0.0213, 0.0739,");
+
+    // 2. 验证弹簧阶梯时长双向同步
+    expect(tokensCss).toContain('--duration-spring-snappy: 260ms');
+    expect(tokensCss).toContain('--duration-spring-smooth: 400ms');
+    expect(tokensCss).toContain('--duration-spring-morph: 420ms');
+    expect(tokensCss).toContain('--duration-spring: 580ms');
+
+    expect(motionTs).toContain('DURATION_SPRING_SNAPPY_MS = 260');
+    expect(motionTs).toContain('DURATION_SPRING_SMOOTH_MS = 400');
+    expect(motionTs).toContain('DURATION_SPRING_MORPH_MS = 420');
+    expect(motionTs).toContain('DURATION_SPRING_MS = 580');
+
+    // 3. 验证 MOTION_SPRING 对象的关键物理参数锁定
+    expect(motionTs).toContain(
+      "snappy: { type: 'spring', visualDuration: 0.26, bounce: 0 }"
+    );
+    expect(motionTs).toContain(
+      "smooth: { type: 'spring', visualDuration: 0.4, bounce: 0 }"
+    );
+    expect(motionTs).toContain(
+      "morph: { type: 'spring', visualDuration: 0.42, bounce: 0 }"
+    );
+  });
+
+  it('节能档与减弱动效全量覆盖归零契约（零幽灵漏网）', () => {
+    // 验证 eco 档清零
+    expect(tokensCss).toMatch(
+      /html\[data-perf-tier=['"]eco['"]\]\s*\{[\s\S]*?--duration-spring-snappy:\s*0ms;/
+    );
+    expect(tokensCss).toMatch(
+      /html\[data-perf-tier=['"]eco['"]\]\s*\{[\s\S]*?--transition-spring-morph:\s*0ms;/
+    );
+    expect(tokensCss).toMatch(
+      /html\[data-perf-tier=['"]eco['"]\]\s*\{[\s\S]*?--stagger-max:\s*0ms;/
+    );
+    expect(tokensCss).toMatch(
+      /html\[data-perf-tier=['"]eco['"]\]\s*\{[\s\S]*?--blur-subtle:\s*0px;/
+    );
+
+    // 验证 prefers-reduced-motion 媒体查询全量清零
+    expect(tokensCss).toMatch(
+      /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?--duration-spring-smooth:\s*0ms;/
+    );
+    expect(tokensCss).toMatch(
+      /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?--transition-spring:\s*0ms;/
+    );
+    expect(tokensCss).toMatch(
+      /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?--blur-soft:\s*0px;/
+    );
+  });
+
+  it('所有物理弹簧、交错步长与动态模糊 Token 均具备正典定义与契约锁定', () => {
+    const springTokens = [
+      '--ease-spring',
+      '--duration-spring-snappy',
+      '--duration-spring-smooth',
+      '--duration-spring-morph',
+      '--duration-spring',
+      '--transition-spring-snappy',
+      '--transition-spring-smooth',
+      '--transition-spring-morph',
+      '--transition-spring',
+      '--stagger-char',
+      '--stagger-item',
+      '--stagger-word',
+      '--stagger-line',
+      '--stagger-max',
+      '--blur-subtle',
+      '--blur-soft',
+      '--blur-text',
+    ];
+    for (const token of springTokens) {
+      expect(tokensCss).toContain(`${token}:`);
+    }
+  });
 });

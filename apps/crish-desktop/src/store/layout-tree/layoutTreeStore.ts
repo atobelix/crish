@@ -17,7 +17,6 @@ import {
   findNodeById,
   applyDrop,
   addTab as addTabOp,
-  insertTab as insertTabOp,
   openSession as openSessionOp,
   replaceActiveSessionInLeaf as replaceActiveSessionInLeafOp,
   materializeDraftSession as materializeDraftSessionOp,
@@ -36,18 +35,23 @@ import {
   findTabBySessionId,
   type TerminalTab,
   type BrowserTab,
+  createBrowserTab,
+  assertIsSessionLevelTab,
 } from './sessionTabModel';
 import {
   createTerminalTabForStore,
-  createBrowserTabForStore,
   killAllTerminalPtysInTree,
   killTerminalInLeafActiveTab,
   killTerminalInLeafTab,
+  closeBrowserInLeafTab,
 } from './layoutTreeTerminalOps';
 import {
   firstLeafId,
   resolveActiveLeaf,
   pushTreeWithHistory,
+  insertTabWithHistory,
+  performUndo,
+  performRedo,
   rehydrateLayoutTreeState,
 } from './layoutTreeHydrateHelpers';
 export type {
@@ -142,18 +146,9 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
       addTerminalTab: (leafId, opts) => {
         let createdTab!: TerminalTab;
         set((state) => {
-          const targetLeafId =
-            leafId || state.activeLeafId || firstLeafId(state.tree);
           const tab = createTerminalTabForStore(opts);
           createdTab = tab;
-          if (!targetLeafId) return {};
-          const result = insertTabOp(
-            state.tree,
-            targetLeafId,
-            tab,
-            opts?.insertIdx
-          );
-          return pushTreeWithHistory(state, result, targetLeafId);
+          return insertTabWithHistory(state, leafId, tab, opts?.insertIdx);
         });
         return createdTab;
       },
@@ -161,18 +156,9 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
       addBrowserTab: (leafId, opts) => {
         let createdTab!: BrowserTab;
         set((state) => {
-          const targetLeafId =
-            leafId || state.activeLeafId || firstLeafId(state.tree);
-          const tab = createBrowserTabForStore(opts);
+          const tab = createBrowserTab(opts);
           createdTab = tab;
-          if (!targetLeafId) return {};
-          const result = insertTabOp(
-            state.tree,
-            targetLeafId,
-            tab,
-            opts?.insertIdx
-          );
-          return pushTreeWithHistory(state, result, targetLeafId);
+          return insertTabWithHistory(state, leafId, tab, opts?.insertIdx);
         });
         return createdTab;
       },
@@ -272,12 +258,14 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
       removeTab: (leafId, tabId) =>
         set((state) => {
           killTerminalInLeafTab(state.tree, leafId, tabId);
+          closeBrowserInLeafTab(state.tree, leafId, tabId);
           const result = removeTabOp(state.tree, leafId, tabId);
           return pushTreeWithHistory(state, result, state.activeLeafId);
         }),
 
       moveTab: (srcLeafId, tabId, dstLeafId, insertIdx) =>
         set((state) => {
+          assertIsSessionLevelTab(tabId);
           const result = moveTabOp(
             state.tree,
             srcLeafId,
@@ -290,6 +278,7 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
 
       splitTab: (srcLeafId, tabId, dstLeafId, region) =>
         set((state) => {
+          assertIsSessionLevelTab(tabId);
           const result = splitTabOp(
             state.tree,
             srcLeafId,
@@ -411,29 +400,9 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
           future: [],
         })),
 
-      undo: () =>
-        set((state) => {
-          if (state.past.length === 0) return {};
-          const previous = state.past[state.past.length - 1]!;
-          return {
-            past: state.past.slice(0, -1),
-            future: [...state.future, state.tree].slice(-MAX_HISTORY),
-            tree: previous,
-            activeLeafId: resolveActiveLeaf(previous, state.activeLeafId),
-          };
-        }),
+      undo: () => set((state) => performUndo(state)),
 
-      redo: () =>
-        set((state) => {
-          if (state.future.length === 0) return {};
-          const next = state.future[state.future.length - 1]!;
-          return {
-            past: [...state.past, state.tree].slice(-MAX_HISTORY),
-            future: state.future.slice(0, -1),
-            tree: next,
-            activeLeafId: resolveActiveLeaf(next, state.activeLeafId),
-          };
-        }),
+      redo: () => set((state) => performRedo(state)),
 
       canUndo: () => get().past.length > 0,
       canRedo: () => get().future.length > 0,

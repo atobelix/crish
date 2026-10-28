@@ -20,11 +20,14 @@ import {
   isChatTab,
   mintDraftSessionId,
   normalizeSessionTab,
+  migrateLegacyDockStateToV2,
   PENDING_DRAFT_SESSION_ID,
   DEFAULT_WORKSPACE_KEY,
   type SessionTab,
   type RightToolDockState,
 } from './sessionTabModel';
+
+export { migrateLegacyDockStateToV2 } from './sessionTabModel';
 
 export interface LegacyOpenTab {
   sessionId: string;
@@ -310,7 +313,7 @@ function inferDockFromUnit(
   if (!toolSide) return null;
   const { openPanelIds, activePanelId } = collectToolPanelIds(toolSide);
   if (openPanelIds.length === 0 && !activePanelId) return null;
-  return {
+  return migrateLegacyDockStateToV2({
     collapsed: false,
     openPanelIds: openPanelIds.length
       ? openPanelIds
@@ -319,7 +322,7 @@ function inferDockFromUnit(
         : [],
     activePanelId: activePanelId ?? openPanelIds[0] ?? null,
     widthRatio: clampDockWidthRatio(toolWidthRatio),
-  };
+  });
 }
 
 function collectToolPanelIds(node: WorkNode): {
@@ -439,7 +442,9 @@ export function migrateToLeafOwnedTabs(
         for (const tab of leaf.tabs) {
           if (!isChatTab(tab)) continue;
           if (tab.sessionId === PENDING_DRAFT_SESSION_ID)
-            tab.sessionId = mintDraftSessionId(tab.tabId);
+            (tab as { sessionId: string }).sessionId = mintDraftSessionId(
+              tab.tabId
+            );
           if (isRealSessionId(tab.sessionId)) placed.add(tab.sessionId);
         }
       }
@@ -481,11 +486,13 @@ export function migrateToLeafOwnedTabs(
           (t) => (t.sessionId || '').trim() === tab.sessionId
         );
         if (fromOpen?.rightDock)
-          tab.dock = createDefaultDock(fromOpen.rightDock);
+          (tab as { dock: RightToolDockState }).dock = createDefaultDock(
+            fromOpen.rightDock
+          );
         const boundToThisLeaf =
           leaf.legacySid && tab.sessionId === leaf.legacySid;
         if (unitDock && (boundToThisLeaf || !leaf.legacySid))
-          tab.dock = unitDock;
+          (tab as { dock: RightToolDockState }).dock = unitDock;
       }
     }
 

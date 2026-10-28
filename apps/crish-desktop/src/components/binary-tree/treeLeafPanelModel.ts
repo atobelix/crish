@@ -1,8 +1,12 @@
 import type { LayoutLeaf } from '../../store/types';
 import {
+  DEFAULT_RIGHT_DOCK,
+  collectSpatialLeaves,
   isPendingDraftSessionId,
   mintDraftSessionId,
   getCompositionRoot,
+  type RightToolDockState,
+  type DockTree,
 } from '../../store/storeAccess';
 
 export { isPendingDraftSessionId as isDraftSessionId };
@@ -11,17 +15,13 @@ export interface LeafSessionTab {
   tabId: string;
   sessionId?: string;
   title?: string;
-  kind?: 'chat' | 'terminal' | 'browser' | string;
+  kind?: 'chat' | 'terminal' | 'browser';
   terminalKey?: string;
   cwd?: string;
+  isStandalone?: boolean;
   url?: string;
   favicon?: string;
-  dock?: {
-    collapsed: boolean;
-    openPanelIds: string[];
-    activePanelId: string | null;
-    widthRatio: number;
-  };
+  dock?: RightToolDockState;
 }
 
 export function readLeafTabs(leaf: LayoutLeaf): LeafSessionTab[] {
@@ -49,12 +49,7 @@ export function isLeafInDraftMode(leaf: LayoutLeaf): boolean {
   return readActiveTabId(leaf) === '' || readLeafTabs(leaf).length === 0;
 }
 
-export const COLLAPSED_DOCK = {
-  collapsed: true,
-  openPanelIds: [] as string[],
-  activePanelId: null as string | null,
-  widthRatio: 0.5,
-};
+export const COLLAPSED_DOCK: RightToolDockState = DEFAULT_RIGHT_DOCK;
 
 export function readActiveTab(
   leaf: LayoutLeaf,
@@ -85,14 +80,27 @@ export function resolveLeafSessionId(
     globalActiveSessionId?: string | null;
   }
 ): string {
-  const tabs = readLeafTabs(leaf);
   const activeTab = readActiveTab(leaf);
+
+  // 🔒 1. 独立常规终端专属隔离分支（ACT-04）
+  // 严格返回 activeTab.terminalKey（格式如 standalone:term_<tabId>）
+  // 绝不回退到 globalActiveSessionId！
+  if (activeTab?.kind === 'terminal') {
+    return activeTab.terminalKey || `standalone:${activeTab.tabId}`;
+  }
+
+  // 🔒 1.1 独立浏览器专属隔离分支
+  if (activeTab?.kind === 'browser') {
+    return activeTab.sessionId || activeTab.tabId;
+  }
+
+  // 2. ChatTab 正常返回 sessionId
   if (activeTab?.sessionId) {
     return activeTab.sessionId;
   }
-  if (activeTab?.terminalKey) {
-    return activeTab.terminalKey;
-  }
+
+  // 3. 空叶子兜底
+  const tabs = readLeafTabs(leaf);
   if (tabs.length === 0) {
     const isFocused = options?.isFocused ?? false;
     const globalId = options?.globalActiveSessionId;
@@ -113,17 +121,15 @@ export function rectPropsEqual(
 }
 
 function dockPropsEqual(
-  a?: LeafSessionTab['dock'],
-  b?: LeafSessionTab['dock']
+  a?: RightToolDockState,
+  b?: RightToolDockState
 ): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
   return (
     a.collapsed === b.collapsed &&
-    a.activePanelId === b.activePanelId &&
     a.widthRatio === b.widthRatio &&
-    a.openPanelIds.length === b.openPanelIds.length &&
-    a.openPanelIds.every((id, index) => id === b.openPanelIds[index])
+    a.tree === b.tree
   );
 }
 
@@ -142,6 +148,7 @@ export function leafPropsEqual(a: LayoutLeaf, b: LayoutLeaf): boolean {
       tab.kind === nextTab.kind &&
       tab.terminalKey === nextTab.terminalKey &&
       tab.cwd === nextTab.cwd &&
+      tab.isStandalone === nextTab.isStandalone &&
       tab.url === nextTab.url &&
       dockPropsEqual(tab.dock, nextTab.dock)
     );
@@ -170,36 +177,51 @@ export function sessionShell(): SessionShellCommands {
 
 export function killDockTerminalPty(
   panelId: string,
-  sessionForPanel: string
+  sessionForPanel?: string
 ): void {
-  if (panelId === 'terminal' || panelId.startsWith('terminal:')) {
-    void import('../../api/ptyRegistry').then((m) => {
-      const panelKey =
-        panelId === 'terminal'
-          ? sessionForPanel
-          : `${sessionForPanel}:${panelId}`;
-      void m.killPtyForSession(panelKey);
-      void m.killPtyForSession(`${panelKey}:split-2`);
-    });
-  }
+  void import('../../api/ptyRegistry').then((m) => {
+    // 1. 若为精确 tabId（非 'terminal' 且非 'terminal:'），直接按 tabId 精准析构 PTY
+    if (panelId && panelId !== 'terminal' && !panelId.startsWith('terminal:')) {
+      void m.killPtyForSession(panelId);
+      return;
+    }
+    // 2. 兼容历史伪 URI / 别名: 'terminal' 或 'terminal:X'
+    if (panelId === 'terminal' || panelId.startsWith('terminal:')) {
+      if (sessionForPanel) {
+        const panelKey =
+          panelId === 'terminal'
+            ? sessionForPanel
+            : `${sessionForPanel}:${panelId}`;
+        void m.killPtyForSession(panelKey);
+        void m.killPtyForSession(`${panelKey}:split-2`);
+      } else {
+        void m.killPtyForSession(panelId);
+      }
+    }
+  });
 }
 
-export function computeNextDockAfterClose(
-  openPanelIds: string[],
-  activePanelId: string | null,
-  closedPanelId: string
-): {
-  collapsed?: boolean;
-  openPanelIds: string[];
-  activePanelId: string | null;
-} {
-  const nextIds = openPanelIds.filter((id) => id !== closedPanelId);
-  if (nextIds.length === 0) {
-    return { collapsed: true, openPanelIds: [], activePanelId: null };
+/**
+ * 递归全量析构整棵 DockTree 下全部窗格与标签的底层物理资源（ConPTY 与原生 WebView2）
+ */
+export function teardownDockTree(
+  tree?: DockTree | null,
+  sessionId?: string | null
+): void {
+  if (!tree || !tree.root) return;
+  const leaves = collectSpatialLeaves(tree.root);
+  for (const leaf of leaves) {
+    for (const tab of leaf.tabs) {
+      if (tab.viewId === 'terminal' || tab.viewId.startsWith('terminal:')) {
+        killDockTerminalPty(tab.tabId, sessionId || undefined);
+      } else if (
+        tab.viewId === 'preview' ||
+        tab.viewId.startsWith('preview:')
+      ) {
+        void import('../../api/nativeBrowserApi').then((m) => {
+          void m.browserWebviewClose(tab.tabId);
+        });
+      }
+    }
   }
-  const nextActive =
-    activePanelId === closedPanelId
-      ? (nextIds[nextIds.length - 1] ?? null)
-      : activePanelId;
-  return { openPanelIds: nextIds, activePanelId: nextActive };
 }

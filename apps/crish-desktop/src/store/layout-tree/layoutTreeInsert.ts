@@ -20,19 +20,17 @@ import {
 import type {
   SessionTab,
   TerminalTab,
-  BrowserTab,
   RightToolDockState,
 } from './sessionTabModel';
 import {
   createSessionTab,
   createTerminalTab,
-  createBrowserTab,
   createDefaultDock,
   isChatTab,
   isTerminalTab,
-  isBrowserTab,
   isRealSessionId,
   sessionIdTaken,
+  assertIsSessionLevelTab,
 } from './sessionTabModel';
 import { findNodeById, collectLeaves } from './layoutTreeQuery';
 import { pruneEmptyLeaves, moveTab } from './layoutTreeMoveRemove';
@@ -91,7 +89,7 @@ export function mergeBranch(
 
 /**
  * 把已有 SessionTab 推进目标叶（openSession 用）。
- * 非 chat 标签（TerminalTab / BrowserTab）无须 sessionId 即可插入。
+ * 非 chat 标签（TerminalTab）无须 sessionId 即可插入。
  * ChatTab 则要求真实 sessionId 且防重复。
  */
 export function insertTab(
@@ -100,6 +98,8 @@ export function insertTab(
   tab: SessionTab,
   insertIdx?: number
 ): LayoutTree {
+  // 刚性内核门禁：非顶层合法会话标签直接抛错，拒绝修改树状态
+  assertIsSessionLevelTab(tab);
   const leaf = requireChatLeaf(tree.root, leafId);
   if (!leaf) return tree;
   if (!tab || !tab.tabId) return tree;
@@ -161,8 +161,6 @@ export function addTab(
         kind?: import('./sessionTabModel').TabKind;
         terminalKey?: string;
         cwd?: string;
-        url?: string;
-        favicon?: string;
       }
     | import('./sessionTabModel').UnifiedTab
 ): LayoutTree {
@@ -173,12 +171,6 @@ export function addTab(
           ? tabOrWorkspaceKey
           : createTerminalTab(tabOrWorkspaceKey);
         return insertTab(tree, leafId, terminalTab);
-      }
-      if (tabOrWorkspaceKey.kind === 'browser') {
-        const browserTab = isBrowserTab(tabOrWorkspaceKey)
-          ? tabOrWorkspaceKey
-          : createBrowserTab(tabOrWorkspaceKey);
-        return insertTab(tree, leafId, browserTab);
       }
     }
     const sid =
@@ -223,27 +215,6 @@ export function insertTerminalTab(
   return { tree: nextTree, tab };
 }
 
-/**
- * 插入浏览器标签到目标叶。
- */
-export function insertBrowserTab(
-  tree: LayoutTree,
-  leafId: string,
-  opts?: {
-    tabId?: string;
-    title?: string;
-    workspaceKey?: string;
-    url?: string;
-    favicon?: string;
-    dock?: Partial<RightToolDockState>;
-    insertIdx?: number;
-  }
-): { tree: LayoutTree; tab: BrowserTab } {
-  const tab = createBrowserTab(opts);
-  const nextTree = insertTab(tree, leafId, tab, opts?.insertIdx);
-  return { tree: nextTree, tab };
-}
-
 export type SplitRegion = 'left' | 'right' | 'top' | 'bottom' | 'center';
 
 /**
@@ -258,6 +229,8 @@ export function splitTab(
   region: SplitRegion,
   splitRatio?: number
 ): LayoutTree {
+  // 刚性内核门禁：右坞工具标签严禁进入顶层大窗口切分算子
+  assertIsSessionLevelTab(tabId);
   if (!srcLeafId || !tabId || !dstLeafId) return tree;
 
   if (region === 'center') {
@@ -272,9 +245,10 @@ export function splitTab(
   const tabIdx = src.tabs.findIndex((t) => t.tabId === tabId);
   if (tabIdx < 0) return tree;
 
-  if (srcLeafId === dstLeafId && src.tabs.length <= 1) return tree;
-
   const tab = src.tabs[tabIdx]!;
+  assertIsSessionLevelTab(tab);
+
+  if (srcLeafId === dstLeafId && src.tabs.length <= 1) return tree;
   if (sessionIdTaken(tree.root, tab.sessionId, tabId)) return tree;
 
   const newTabs = src.tabs.filter((t) => t.tabId !== tabId);

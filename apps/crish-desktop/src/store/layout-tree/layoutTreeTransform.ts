@@ -22,15 +22,23 @@ import {
   createSessionTab,
   isDraftSessionId,
   isRealSessionId,
-  findTabById,
-  findTabBySessionId,
   type ChatTab,
+  type SessionTab,
   type RightToolDockState,
 } from './sessionTabModel';
+import { findTabById, findTabBySessionId } from './sessionTabQuery';
 import type { DropZone } from './dropDetection';
 import { findNodeById, collectLeaves } from './layoutTreeQuery';
 import { replaceNode, splitTab, insertTab } from './layoutTreeInsert';
 import { moveTab } from './layoutTreeMoveRemove';
+import { activateTabInTree } from './layoutTreeSessionOps';
+
+export { activateTabInTree } from './layoutTreeSessionOps';
+export {
+  replaceActiveSessionInLeaf,
+  materializeDraftSession,
+} from './layoutTreeSessionReplace';
+export type { SessionTabMeta } from './layoutTreeSessionReplace';
 
 /** 调整分支的分割比例 */
 export function resizeBranch(
@@ -48,21 +56,7 @@ export function resizeBranch(
   return { ...tree, root: replaceNode(tree.root, branchId, updated) };
 }
 
-/** 设该叶 activeTabId。tab 不在该叶 / 已激活 → 原树。其它叶不动。 */
-export function activateTabInTree(
-  tree: LayoutTree,
-  leafId: string,
-  tabId: string
-): LayoutTree {
-  const target = findNodeById(tree.root, leafId);
-  if (!target || !isLeaf(target)) return tree;
-  if (!target.tabs.some((t) => t.tabId === tabId)) return tree;
-  if (target.activeTabId === tabId) return tree;
-  const updated: LayoutLeaf = { ...target, activeTabId: tabId };
-  return { ...tree, root: replaceNode(tree.root, leafId, updated) };
-}
-
-/** 只改该 SessionTab.dock，不改拓扑、不改 activeLeafId。 */
+/** 只改该 ChatTab.dock，不改拓扑、不改 activeLeafId。独立常规终端直接忽略。 */
 export function updateTabDock(
   tree: LayoutTree,
   tabId: string,
@@ -70,9 +64,9 @@ export function updateTabDock(
 ): LayoutTree {
   if (!tabId || !patch) return tree;
   const hit = findTabById(tree.root, tabId);
-  if (!hit) return tree;
+  if (!hit || hit.tab.kind === 'terminal') return tree;
   const nextDock = createDefaultDock({ ...hit.tab.dock, ...patch });
-  const nextTab = { ...hit.tab, dock: nextDock };
+  const nextTab: SessionTab = { ...hit.tab, dock: nextDock } as SessionTab;
   const newTabs = hit.leaf.tabs.map((t) => (t.tabId === tabId ? nextTab : t));
   const updated: LayoutLeaf = { ...hit.leaf, tabs: newTabs };
   return { ...tree, root: replaceNode(tree.root, hit.leaf.id, updated) };
@@ -133,7 +127,7 @@ export function promoteDraftTab(
         ? patch.title.trim() || targetTab.title
         : targetTab.title,
       workspaceKey: targetTab.workspaceKey,
-      dock: targetTab.dock,
+      dock: targetTab.dock ?? createDefaultDock(),
     };
     const nextTabs = leaf.tabs.map((t, i) => (i === idx ? promotedTab : t));
     const updated: LayoutLeaf = {
@@ -272,12 +266,6 @@ export function openSession(
     created: true,
   };
 }
-
-export type { SessionTabMeta } from './layoutTreeSessionReplace';
-export {
-  replaceActiveSessionInLeaf,
-  materializeDraftSession,
-} from './layoutTreeSessionReplace';
 
 function zoneTypeToRegion(
   zoneType: DropZone['type']

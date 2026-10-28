@@ -4,7 +4,7 @@
  * 核心契约：
  * 1. 336px Radix Popover 浮层，锚定于 PaneHeader 标签栏末尾 '+' 按钮；
  * 2. 遵循用户指令：简单清晰易懂，去除冗余次要标签与段落描述，让布局自己说话；
- * 3. 3 大核心操作：新建对话 (⌘N)、新建终端 (⌃`)、新建浏览器 (⌥B)；
+ * 3. 3 大核心操作：新建对话 (⌘N)、新建常规终端 (⌃`)、新建浏览器 (⌥B);
  * 4. 彻底清除虚假预制模板，若存在真实用户项目则动态展示，无则不展示；
  * 5. 全键盘漫游导航（ArrowDown/Up/Home/End/Enter/Esc），默认首项高亮（<100ms 即按即开）；
  * 6. 严格遵守 Conex §12（自定义 Tooltip，0 原生 title）、§13（克制软焦点、border: none）、§14（现代 CSS）；
@@ -13,21 +13,23 @@
 
 import React, { useCallback, useMemo, useState, useRef } from 'react';
 import * as Popover from '@radix-ui/react-popover';
-import { Button, Tooltip } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button, Tooltip, useLayerRegistration } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 import { useI18n } from '../../i18n';
 import { getCompositionRoot } from '../../app/compositionRoot';
-import { useLayoutTreeStore, collectLeaves } from '../../store/storeAccess';
-import { getSessionById } from '../../store/sessionStore';
 import {
+  collectLeaves,
+  getSessionById,
+  useLayoutTreeStore,
   useSessionExecutionTrackerStore,
   type SessionExecutionItem,
-} from '../../store/sessionExecutionTrackerStore';
+} from '../../store/storeAccess';
+import { listProjects, type ProjectEntry } from '../../api/projectStore';
 import {
-  listProjects,
-  openProject,
-  type ProjectEntry,
-} from '../../api/projectStore';
+  openAuthorizedProject,
+  WorkspaceAccessError,
+} from '../../api/workspaceAccessApi';
+import { toast } from '../../services/toast';
 import styles from './NewTabLauncherPopover.module.css';
 
 export interface NewTabLauncherPopoverProps {
@@ -43,6 +45,18 @@ export const NewTabLauncherPopover: React.FC<NewTabLauncherPopoverProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const contentRef = useRef<HTMLDivElement | null>(null);
+
+  useLayerRegistration(
+    {
+      id: `new-tab-launcher-${leafId}`,
+      type: 'popover',
+      elementRef: contentRef,
+      dismissible: true,
+      onDismiss: () => setIsOpen(false),
+      onEscapeKeyDown: () => setIsOpen(false),
+    },
+    isOpen
+  );
 
   // 1. 提取所有窗格当前处于激活展示态的 session 集合（前台排重，基于稳定字符串键防循环渲染）
   const visibleActiveSessionIdsKey = useLayoutTreeStore((s) => {
@@ -133,11 +147,11 @@ export const NewTabLauncherPopover: React.FC<NewTabLauncherPopoverProps> = ({
   const handleActionNewBrowser = useCallback(() => {
     setIsOpen(false);
     const shell = getCompositionRoot().shell as unknown as {
-      addBrowserTab?: (id: string) => void;
+      addBrowserTab?: (id: string, opts?: { url?: string }) => void;
       addTab: (id: string) => void;
     };
     if (typeof shell.addBrowserTab === 'function') {
-      shell.addBrowserTab(leafId);
+      shell.addBrowserTab(leafId, { url: 'about:blank' });
     } else {
       shell.addTab(leafId);
     }
@@ -149,14 +163,19 @@ export const NewTabLauncherPopover: React.FC<NewTabLauncherPopoverProps> = ({
   }, []);
 
   const handleLaunchProject = useCallback(
-    (project: ProjectEntry) => {
+    async (project: ProjectEntry) => {
       setIsOpen(false);
       try {
-        openProject(project.id);
-      } catch {
-        /* swallow-ok: 项目状态变更尽力而为 */
+        const opened = await openAuthorizedProject(project.id);
+        if (!opened) return;
+        getCompositionRoot().shell.addTab(leafId);
+      } catch (error) {
+        toast.error(
+          error instanceof WorkspaceAccessError // i18n-allow: 授权错误文案为透传的用户提示
+            ? error.message
+            : '该项目目录未获授权，请重新选择项目文件夹。'
+        );
       }
-      getCompositionRoot().shell.addTab(leafId);
     },
     [leafId]
   );
@@ -303,7 +322,7 @@ export const NewTabLauncherPopover: React.FC<NewTabLauncherPopoverProps> = ({
                 <AppIcon name="terminal" size={15} />
               </div>
               <span className={styles.actionLabel}>
-                {t('launcher.newTerminal', '新建终端')}
+                {t('launcher.newTerminal', '新建常规终端')}
               </span>
               <span className={styles.shortcutHint}>⌃`</span>
             </Button>
@@ -363,7 +382,9 @@ export const NewTabLauncherPopover: React.FC<NewTabLauncherPopoverProps> = ({
                     >
                       <div className={styles.pulseContainer}>
                         {isDone ? (
-                          <span className={styles.doneCheck}>✓</span>
+                          <span className={styles.doneCheck}>
+                            <AppIcon name="check" size={14} />
+                          </span>
                         ) : (
                           <>
                             <span

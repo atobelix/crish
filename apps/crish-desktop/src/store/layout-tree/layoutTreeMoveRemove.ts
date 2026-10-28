@@ -11,7 +11,7 @@ import type {
   SplitDirection,
 } from './types';
 import { createBranch, createFallbackDraftTree, isLeaf } from './types';
-import { sessionIdTaken } from './sessionTabModel';
+import { sessionIdTaken, assertIsSessionLevelTab } from './sessionTabModel';
 import { findNodeById, findParent, collectLeaves } from './layoutTreeQuery';
 import { removeBranch, replaceNode } from './layoutTreeNodeOps';
 
@@ -204,6 +204,8 @@ export function moveTab(
   dstLeafId: string,
   insertIdx: number
 ): LayoutTree {
+  // 刚性内核门禁：右坞工具标签严禁进入顶层大窗口移动算子
+  assertIsSessionLevelTab(tabId);
   if (!srcLeafId || !tabId || !dstLeafId) return tree;
   if (!Number.isFinite(insertIdx)) return tree;
 
@@ -212,6 +214,7 @@ export function moveTab(
   const fromIdx = src.tabs.findIndex((t) => t.tabId === tabId);
   if (fromIdx < 0) return tree;
   const tab = src.tabs[fromIdx]!;
+  assertIsSessionLevelTab(tab);
 
   if (srcLeafId === dstLeafId) {
     const tabs = [...src.tabs];

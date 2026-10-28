@@ -1,147 +1,104 @@
+/**
+ * apps/crish-desktop/src/components/binary-tree/LeafToolTabStrip.tsx
+ *
+ * 统一窗格头部组件（单一真源，支持单窗格与多分屏窗格）
+ * 对齐 Dock Split System Architecture V2 规范。
+ */
+
 import React, {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from 'react';
-
-import { SidePanelLauncherHub } from './SidePanelLauncherHub';
-import {
-  useLayoutStore,
-  selectTabModeEnabled,
-  openToolInSession,
-  openToolInActiveTab,
-  getCompositionRoot,
-  type LayoutLeaf,
-} from '../../store/storeAccess';
-import { Tooltip, Button } from '../ui';
-import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
+import type { ToolTab, ToolViewId } from '../../store/storeAccess';
+import { openToolInSession } from '../../store/storeAccess';
 import { viewRegistry } from '../../services/view-registry';
-import { SidePanelNavToolbar } from './SidePanelNavToolbar';
+import { Tooltip, Button } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
+import { useI18n } from '../../i18n';
 import { toolTabStripVars } from './tabStripVars';
-import { DURATION_FAST_MS, readTransitionMs } from '../../utils/motionTokens';
 import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
 import { useTablistKeyboard } from '../../hooks/useTablistKeyboard';
+import { useToolTabLifecycle } from '../../hooks/useToolTabLifecycle';
+import { useTabStripOverflow } from '../../hooks/useTabStripOverflow';
 import { isBrowserTabId, ToolTabFavicon } from './ToolTabFavicon';
 import { ToolTabAddButton } from './ToolTabAddButton';
+import { useDockTabDrag } from './dockTabDragContext';
+import { SidePanelNavToolbar } from './SidePanelNavToolbar';
+import { SidePanelLauncherHub } from './SidePanelLauncherHub';
 import styles from './LeafToolTabStrip.module.css';
-import { AppIcon } from '../ui/icons/index';
 
 export interface LeafToolTabStripProps {
-  leaf?: LayoutLeaf;
-  leafId?: string;
+  paneId?: string;
+  leafId: string;
   sessionId?: string | null;
-  /** 本叶 active SessionTab.tabId，写坞用 */
-  sessionTabId?: string;
-  tabs?: string[];
-  activeTab?: string;
-  onSelectTab?: (tabId: string) => void;
-  onCloseTab?: (tabId: string) => void;
-  onAddTab?: (panelId: string) => void;
-  onToggleMaximize?: () => void;
+  tabs: readonly ToolTab[];
+  activeTabId: string | null;
+  isSolo?: boolean;
   isMaximized?: boolean;
+  canClosePane?: boolean;
+  canSplitHorizontal?: boolean;
+  canSplitVertical?: boolean;
   showNavToolbar?: boolean;
+  onRefreshNav?: () => void;
+  onOpenExternalNav?: () => void;
+  showLauncherOnEmpty?: boolean;
+  onSelectTab?: (tabId: string) => void;
+  onCloseTab: (tabId: string) => void;
+  onAddTab?: (viewId: ToolViewId) => void;
+  onSplitRight?: () => void;
+  onSplitDown?: () => void;
+  onToggleSolo?: () => void;
+  onToggleMaximize?: () => void;
+  onClosePane?: () => void;
   className?: string;
-}
-
-type DockPatch = {
-  collapsed?: boolean;
-  openPanelIds?: string[];
-  activePanelId?: string | null;
-};
-
-function updateTabDock(tabId: string, patch: DockPatch): void {
-  const fn = (
-    getCompositionRoot().shell as unknown as {
-      updateTabDock?: (id: string, p: DockPatch) => void;
-    }
-  ).updateTabDock;
-  fn?.(tabId, patch);
-}
-
-function readDockFromLeaf(leaf: LayoutLeaf | undefined): {
-  openPanelIds: string[];
-  activePanelId: string;
-  sessionId: string | null;
-  sessionTabId: string;
-} | null {
-  if (!leaf) return null;
-  const raw = leaf.tabs as unknown;
-  if (!Array.isArray(raw)) return null;
-  const sessionTabs = raw.filter(
-    (
-      t
-    ): t is {
-      tabId: string;
-      sessionId: string;
-      dock?: { openPanelIds?: string[]; activePanelId?: string | null };
-    } =>
-      typeof t === 'object' &&
-      t !== null &&
-      typeof (t as { tabId?: string }).tabId === 'string'
-  );
-  if (sessionTabs.length === 0) return null;
-  const activeTabId = (leaf as LayoutLeaf & { activeTabId?: string })
-    .activeTabId;
-  const tab =
-    sessionTabs.find((t) => t.tabId === activeTabId) ?? sessionTabs[0];
-  if (!tab) return null;
-  return {
-    openPanelIds: tab.dock?.openPanelIds ?? [],
-    activePanelId: tab.dock?.activePanelId ?? '',
-    sessionId: tab.sessionId ?? null,
-    sessionTabId: tab.tabId,
-  };
 }
 
 export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
   ({
-    leaf,
-    leafId: propLeafId,
-    sessionId: propSessionId,
-    sessionTabId: propSessionTabId,
-    tabs: propTabs,
-    activeTab: propActiveTab,
+    paneId,
+    leafId,
+    sessionId,
+    tabs: rawTabs,
+    activeTabId: propActiveTabId,
+    isSolo,
+    isMaximized,
+    canClosePane,
+    canSplitHorizontal,
+    canSplitVertical,
+    showNavToolbar,
+    onRefreshNav,
+    onOpenExternalNav,
+    showLauncherOnEmpty,
     onSelectTab,
     onCloseTab,
     onAddTab,
+    onSplitRight,
+    onSplitDown,
+    onToggleSolo,
     onToggleMaximize,
-    isMaximized: propIsMaximized,
-    showNavToolbar,
+    onClosePane,
     className,
+    ...restProps
   }) => {
-    const dockFromLeaf = readDockFromLeaf(leaf);
-    const leafId = propLeafId ?? leaf?.id ?? '';
-    const sessionId = propSessionId ?? dockFromLeaf?.sessionId ?? null;
-    const sessionTabId = propSessionTabId ?? dockFromLeaf?.sessionTabId ?? '';
-    const rawTabs = propTabs ?? dockFromLeaf?.openPanelIds ?? [];
-    const tabs = useMemo(() => rawTabs, [rawTabs]);
-    const activeTab =
-      propActiveTab ?? dockFromLeaf?.activePanelId ?? (tabs[0] || '');
+    const { t } = useI18n();
+    // 兼容可能传入的扁平 tabs（如单测或过渡期）并统一为结构化 ToolTab
+    const tabs = useMemo(() => {
+      if (!Array.isArray(rawTabs)) return [];
+      return rawTabs.map((t): ToolTab =>
+        typeof t === 'string' ? { tabId: t, viewId: t as ToolViewId } : t
+      );
+    }, [rawTabs]);
 
-    const tabModeEnabled = useLayoutStore(selectTabModeEnabled);
+    const activeTabId =
+      propActiveTabId ??
+      (restProps as { activeTab?: string }).activeTab ??
+      tabs[0]?.tabId ??
+      null;
 
-    const registryVersion = useSyncExternalStore(
-      (cb) => viewRegistry.subscribe(cb),
-      () => viewRegistry.getVersion()
-    );
-    void registryVersion;
-
-    const [isMaximizedLocal, setIsMaximizedLocal] = useState(false);
-    const isMaximized =
-      propIsMaximized !== undefined ? propIsMaximized : isMaximizedLocal;
-
-    const [hasOverflow, setHasOverflow] = useState(false);
     const [booted, setBooted] = useState(false);
-    const closingIdsRef = useRef<Set<string>>(new Set());
-    const [closingTabIds, setClosingTabIds] = useState<Set<string>>(
-      () => new Set()
-    );
-    const fuseTimersRef = useRef<Map<string, number>>(new Map());
-
     const tabsTrackRef = useRef<HTMLDivElement>(null);
     const tabsListRef = useRef<HTMLDivElement>(null);
 
@@ -150,35 +107,14 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
       setBooted(true);
     }, []);
 
-    // 组件卸载：清保险丝计时
-    useEffect(
-      () => () => {
-        fuseTimersRef.current.forEach((t) => window.clearTimeout(t));
-        fuseTimersRef.current.clear();
-      },
-      []
-    );
+    // 1. 生命周期状态机与溢出检测
+    const { closingTabIds, triggerCloseTab, finalizeClose } =
+      useToolTabLifecycle({
+        onFinalizeClose: onCloseTab,
+      });
+    const { hasOverflow } = useTabStripOverflow(tabsTrackRef, tabs.length);
 
-    // 溢出检测
-    const checkOverflow = useCallback(() => {
-      const el = tabsTrackRef.current;
-      if (!el) return;
-      const isOverflow = el.scrollWidth > el.clientWidth + 2;
-      setHasOverflow(isOverflow);
-    }, []);
-
-    useLayoutEffect(() => {
-      checkOverflow();
-      const el = tabsTrackRef.current;
-      if (!el) return;
-      const ro = ResizeObserverManager.getInstance();
-      ro.observe(el, checkOverflow);
-      return () => {
-        ro.unobserve(el, checkOverflow);
-      };
-    }, [checkOverflow, tabs.length]);
-
-    // 滚轮横向滑动（原生非被动监听，preventDefault 无告警）
+    // 2. 滚轮水平滚动与键盘漫游
     const handleTrackWheel = useCallback((e: WheelEvent) => {
       const el = tabsTrackRef.current;
       if (!el) return;
@@ -187,144 +123,78 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
         e.preventDefault();
       }
     }, []);
-
     useNonPassiveWheel(tabsTrackRef, handleTrackWheel);
-
-    const handleActivate = useCallback(
-      (tabId: string) => {
-        if (tabId !== activeTab) {
-          if (onSelectTab) {
-            onSelectTab(tabId);
-          } else if (sessionTabId) {
-            updateTabDock(sessionTabId, { activePanelId: tabId });
-          }
-        }
-      },
-      [activeTab, onSelectTab, sessionTabId]
-    );
 
     const handleTablistKeyDown = useTablistKeyboard(tabsListRef, {
       tabSelector: '[role="tab"]',
       readTabId: (el) => el.getAttribute('data-tool-tab-id'),
-      onActivate: handleActivate,
+      onActivate: (id) => onSelectTab?.(id),
     });
 
-    const finalizeClose = useCallback(
-      (tabId: string) => {
-        if (!closingIdsRef.current.has(tabId)) return;
-        closingIdsRef.current.delete(tabId);
-        setClosingTabIds(new Set(closingIdsRef.current));
-        const fuse = fuseTimersRef.current.get(tabId);
-        if (fuse != null) {
-          window.clearTimeout(fuse);
-          fuseTimersRef.current.delete(tabId);
-        }
-        if (onCloseTab) {
-          onCloseTab(tabId);
-          return;
-        }
-        if (!sessionTabId) return;
-        const nextIds = tabs.filter((id) => id !== tabId);
-        if (nextIds.length === 0) {
-          updateTabDock(sessionTabId, {
-            collapsed: true,
-            openPanelIds: [],
-            activePanelId: null,
-          });
-        } else {
-          updateTabDock(sessionTabId, {
-            openPanelIds: nextIds,
-          });
-        }
-      },
-      [onCloseTab, sessionTabId, tabs]
-    );
-
-    const triggerCloseTab = useCallback(
+    // 3. 触发关闭标签（优先零延迟切向相邻 Tab）
+    const handleTriggerClose = useCallback(
       (tabId: string, e?: React.MouseEvent) => {
-        if (e) {
-          e.stopPropagation();
-        }
-        if (closingIdsRef.current.has(tabId)) return;
-
-        // 关闭的是激活工具 tab：先切 dock.activePanelId（轻量 display 切换，保持零延迟）
-        if (tabId === activeTab && tabs.length > 1) {
-          const idx = tabs.indexOf(tabId);
+        if (tabId === activeTabId && tabs.length > 1) {
+          const idx = tabs.findIndex((t) => t.tabId === tabId);
           const nextActive = tabs[idx === 0 ? 1 : idx - 1];
-          if (nextActive) {
-            if (onSelectTab) {
-              onSelectTab(nextActive);
-            } else if (sessionTabId) {
-              updateTabDock(sessionTabId, { activePanelId: nextActive });
-            }
-          }
+          if (nextActive) onSelectTab?.(nextActive.tabId);
         }
-
-        closingIdsRef.current.add(tabId);
-        setClosingTabIds(new Set(closingIdsRef.current));
-
-        // 保险丝：transitionend 万一丢失，按真实 computed 时长 ×3 兜底摘除
         const tabEl = e
           ? (e.currentTarget as HTMLElement).closest('[role="tab"]')
           : null;
-        const ms =
-          (tabEl instanceof HTMLElement
-            ? readTransitionMs(tabEl, 'max-width')
-            : 0) || DURATION_FAST_MS;
-        const fuse = window.setTimeout(() => finalizeClose(tabId), ms * 3);
-        fuseTimersRef.current.set(tabId, fuse);
+        triggerCloseTab(tabId, e, tabEl as HTMLElement | null);
       },
-      [activeTab, finalizeClose, onSelectTab, sessionTabId, tabs]
+      [activeTabId, onSelectTab, tabs, triggerCloseTab]
     );
 
-    const openPanel = useCallback(
+    const tabViewIds = useMemo(() => tabs.map((t) => t.viewId), [tabs]);
+
+    // 4. 添加面板通道（优先 onAddTab，兜底 openToolInSession）
+    const handleAddTab = useCallback(
       (pid: string) => {
-        if (onAddTab) {
-          onAddTab(pid);
-        } else if (sessionId) {
-          openToolInSession(sessionId, pid);
-        } else {
-          openToolInActiveTab(pid);
-        }
+        if (onAddTab) onAddTab(pid as ToolViewId);
+        else if (sessionId) openToolInSession(sessionId, pid);
       },
-      [sessionId, onAddTab]
+      [onAddTab, sessionId]
     );
 
-    const handleToggleMaximize = useCallback(() => {
-      if (onToggleMaximize) {
-        onToggleMaximize();
-      } else {
-        setIsMaximizedLocal((prev) => !prev);
-      }
-    }, [onToggleMaximize]);
+    const isMaxOrSolo = Boolean(isSolo || isMaximized);
+    const handleToggleMaximize = onToggleSolo || onToggleMaximize;
+    const maximizeLabel = isSolo
+      ? isMaxOrSolo
+        ? t('workspace.pane.restorePane')
+        : t('workspace.pane.maximizePane')
+      : isMaxOrSolo
+        ? t('workspace.pane.restorePanel')
+        : t('workspace.pane.maximizePanel');
+    const maximizeTooltip = isSolo
+      ? isMaxOrSolo
+        ? t('workspace.pane.restoreSplitTooltip')
+        : t('workspace.pane.maximizePaneTooltip')
+      : isMaxOrSolo
+        ? t('workspace.pane.restoreDockTooltip')
+        : t('workspace.pane.maximizePanelTooltip');
 
-    const isEmpty = tabs.length === 0;
-    const shouldShowNavToolbar = !isEmpty && Boolean(showNavToolbar);
+    const { startDockDrag } = useDockTabDrag();
+    const shouldShowLauncher =
+      tabs.length === 0 && (showLauncherOnEmpty ?? !paneId);
 
     return (
       <header
-        className={`${styles.container} ${
-          className || ''
-        } ${hasOverflow ? styles.hasOverflow : ''} ${
-          isEmpty ? styles.isEmpty : ''
-        } chat-side-panel`}
+        className={`${styles.container} ${className || ''} ${hasOverflow ? styles.hasOverflow : ''} ${shouldShowLauncher ? styles.isEmpty : ''} chat-side-panel`}
         data-leaf-tool-tab-strip="true"
+        data-dock-tab-strip="true"
+        data-dock-leaf-id={leafId}
         data-tab-strip-leaf-id={leafId}
         data-tab-count={tabs.length}
-        data-tab-mode={tabModeEnabled ? 'on' : 'off'}
         data-has-overflow={hasOverflow ? 'true' : 'false'}
-        data-is-maximized={isMaximized ? 'true' : 'false'}
-        data-is-empty={isEmpty ? 'true' : 'false'}
+        data-is-maximized={isMaxOrSolo ? 'true' : 'false'}
+        data-is-solo={isSolo ? 'true' : 'false'}
         data-tauri-drag-region="false"
         data-booted={booted ? 'true' : 'false'}
         style={toolTabStripVars()}
       >
-        {/* Row 1: Tab Strip（高度与全局顶栏同源） */}
-        <div
-          className={`${styles.header} ${
-            hasOverflow ? styles.hasOverflow : ''
-          } side-panel-tab-header`}
-        >
+        <div className={`${styles.header} side-panel-tab-header`}>
           {/* 左侧可滚动 Track 区域 */}
           <div
             ref={tabsTrackRef}
@@ -334,14 +204,16 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
               ref={tabsListRef}
               className={`${styles.tabsList} side-panel-tabs-list`}
               role="tablist"
-              aria-label="工具面板标签栏"
+              aria-label={t('workspace.pane.tablistAria')}
               onKeyDown={handleTablistKeyDown}
               data-tauri-drag-region="false"
             >
-              {tabs.map((tabId) => {
-                const label = viewRegistry.getTitle(tabId);
-                const iconName = viewRegistry.getIcon(tabId);
-                const isActive = tabId === activeTab;
+              {tabs.map((tab) => {
+                const { tabId, viewId } = tab;
+                const label =
+                  tab.title || viewRegistry.getTitle(viewId) || viewId;
+                const iconName = viewRegistry.getIcon(viewId);
+                const isActive = tabId === activeTabId;
                 const isLeaving = closingTabIds.has(tabId);
 
                 return (
@@ -350,54 +222,71 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                     role="tab"
                     aria-selected={isActive}
                     tabIndex={isActive ? 0 : -1}
-                    className={`${styles.tab} ${
-                      isActive ? styles.tabActive : ''
-                    } side-panel-tab-item`}
+                    className={`${styles.tab} ${isActive ? styles.tabActive : ''} side-panel-tab-item`}
                     data-leaving={isLeaving || undefined}
-                    onClick={() => handleActivate(tabId)}
+                    data-tool-tab-id={tabId}
+                    data-tab-id={tabId}
+                    data-tauri-drag-region="false"
+                    onClick={() => !isActive && onSelectTab?.(tabId)}
                     onAuxClick={(e) => {
                       if (e.button === 1) {
                         e.preventDefault();
                         e.stopPropagation();
-                        triggerCloseTab(tabId);
+                        handleTriggerClose(tabId, e);
                       }
                     }}
-                    onMouseDown={(e) => {
-                      if (e.button === 1) e.preventDefault();
-                    }}
+                    onMouseDown={(e) => e.button === 1 && e.preventDefault()}
                     onPointerDown={(e) => {
-                      // 工具 tab 不再切会话树；顺序走 updateTabDock
                       e.stopPropagation();
+                      startDockDrag({
+                        sourceLeafId: leafId,
+                        tabId,
+                        title: label,
+                        e,
+                      });
                     }}
                     onTransitionEnd={(e) => {
-                      if (!isLeaving) return;
-                      if (e.target !== e.currentTarget) return;
-                      if (e.propertyName !== 'max-width') return;
-                      if (!closingIdsRef.current.has(tabId)) return;
+                      if (
+                        !isLeaving ||
+                        e.target !== e.currentTarget ||
+                        e.propertyName !== 'max-width'
+                      )
+                        return;
                       finalizeClose(tabId);
                     }}
-                    data-tauri-drag-region="false"
-                    data-tool-tab-id={tabId}
-                    data-tab-id={tabId}
                   >
-                    {(iconName || isBrowserTabId(tabId)) && (
+                    {(iconName ||
+                      isBrowserTabId(viewId) ||
+                      isBrowserTabId(tabId)) && (
                       <span
                         className={`${styles.tabIcon} side-panel-tab-icon`}
                         data-testid="tool-icon"
                       >
-                        <ToolTabFavicon tabId={tabId} iconName={iconName} />
+                        <ToolTabFavicon
+                          tabId={tabId}
+                          iconName={iconName}
+                          isBrowser={
+                            isBrowserTabId(viewId) || isBrowserTabId(tabId)
+                          }
+                        />
                       </span>
                     )}
-                    <span className={`${styles.tabLabel} tab-item-title`}>
-                      {label}
-                    </span>
-                    <Tooltip content={`关闭 ${label}`}>
+                    <Tooltip content={label} side="bottom">
+                      <span className={`${styles.tabLabel} tab-item-title`}>
+                        {label}
+                      </span>
+                    </Tooltip>
+                    <Tooltip
+                      content={t('workspace.pane.closeTabWithLabel', { label })}
+                    >
                       <Button
                         type="button"
                         variant="ghost"
                         className={`${styles.tabCloseBtn} tab-item-close-btn`}
-                        onClick={(e) => triggerCloseTab(tabId, e)}
-                        aria-label={`关闭 ${label}`}
+                        onClick={(e) => handleTriggerClose(tabId, e)}
+                        aria-label={t('workspace.pane.closeTabWithLabel', {
+                          label,
+                        })}
                       >
                         <AppIcon name="x" size={10} />
                       </Button>
@@ -405,47 +294,105 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                   </div>
                 );
               })}
-              {!hasOverflow && (
-                <ToolTabAddButton tabs={tabs} isInFlow openPanel={openPanel} />
-              )}
+              <ToolTabAddButton
+                tabs={tabViewIds}
+                isInFlow
+                openPanel={handleAddTab}
+              />
             </div>
           </div>
 
-          {/* 右侧固定操作区 */}
+          {/* 右侧固定窗格操作集群 */}
           <div
             className={`${styles.fixedCluster} side-panel-tab-fixed-cluster`}
           >
             <ToolTabAddButton
-              tabs={tabs}
+              tabs={tabViewIds}
               isInFlow={false}
-              openPanel={openPanel}
+              openPanel={handleAddTab}
             />
-            <Tooltip
-              content={isMaximized ? '恢复面板' : '最大化面板'}
-              side="bottom"
-            >
-              <Button
-                type="button"
-                variant="ghost"
-                className={`${styles.sideBtn} side-panel-btn side-panel-btn-maximize`}
-                onClick={handleToggleMaximize}
-                aria-label={isMaximized ? '恢复面板' : '最大化面板'}
+            {onSplitRight && (
+              <Tooltip
+                content={
+                  canSplitHorizontal
+                    ? t('workspace.pane.splitRightTooltip')
+                    : t('workspace.pane.splitRightDisabledTooltip')
+                }
+                side="bottom"
               >
-                {isMaximized ? (
-                  <AppIcon name="minimize" size={14} />
-                ) : (
-                  <AppIcon name="maximize" size={14} />
-                )}
-              </Button>
-            </Tooltip>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={`${styles.sideBtn} ${styles.paneActionBtn} side-panel-btn`}
+                  disabled={!canSplitHorizontal}
+                  onClick={onSplitRight}
+                  aria-label={t('workspace.pane.splitRight')}
+                >
+                  <AppIcon name="split-horizontal" size={12} />
+                </Button>
+              </Tooltip>
+            )}
+            {onSplitDown && (
+              <Tooltip
+                content={
+                  canSplitVertical
+                    ? t('workspace.pane.splitDownTooltip')
+                    : t('workspace.pane.splitDownDisabledTooltip')
+                }
+                side="bottom"
+              >
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={`${styles.sideBtn} ${styles.paneActionBtn} side-panel-btn`}
+                  disabled={!canSplitVertical}
+                  onClick={onSplitDown}
+                  aria-label={t('workspace.pane.splitDown')}
+                >
+                  <AppIcon name="split-vertical" size={12} />
+                </Button>
+              </Tooltip>
+            )}
+            {handleToggleMaximize && (
+              <Tooltip content={maximizeTooltip} side="bottom">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={`${styles.sideBtn} ${styles.paneActionBtn} side-panel-btn side-panel-btn-maximize`}
+                  onClick={handleToggleMaximize}
+                  aria-label={maximizeLabel}
+                >
+                  <AppIcon
+                    name={isMaxOrSolo ? 'minimize' : 'maximize'}
+                    size={12}
+                  />
+                </Button>
+              </Tooltip>
+            )}
+            {canClosePane && onClosePane && (
+              <Tooltip content={t('workspace.pane.closePane')} side="bottom">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={`${styles.sideBtn} ${styles.paneActionBtn} ${styles.paneCloseBtn} side-panel-btn side-panel-btn-close`}
+                  onClick={onClosePane}
+                  aria-label={t('workspace.pane.closePane')}
+                >
+                  <AppIcon name="x" size={12} />
+                </Button>
+              </Tooltip>
+            )}
           </div>
         </div>
-
-        {/* Row 2: 导航工具条 (仅在显式开启时展示) */}
-        {shouldShowNavToolbar && <SidePanelNavToolbar />}
-
-        {/* 空态 Launcher Hub 居中卡片 (0 个 Tab 时展示) */}
-        {isEmpty && <SidePanelLauncherHub onOpenPanel={openPanel} />}
+        {showNavToolbar && (
+          <SidePanelNavToolbar
+            onRefresh={onRefreshNav}
+            onOpenExternal={onOpenExternalNav}
+          />
+        )}
+        {shouldShowLauncher && (
+          <SidePanelLauncherHub onOpenPanel={handleAddTab} />
+        )}
       </header>
     );
   }

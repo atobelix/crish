@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { getPreviewUrl, setPreviewUrl } from '../../api/previewBrowserStore';
 import styles from './LeafToolTabStrip.module.css';
-import { Button } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface SidePanelLauncherHubProps {
   onOpenPanel: (panelId: string) => void;
@@ -127,10 +127,14 @@ export const SidePanelLauncherHub: React.FC<SidePanelLauncherHubProps> = ({
                 <span
                   className={`${styles.launcherCardTitle} launcher-card-title`}
                 >
-                  运行中的服务: http://localhost:{activePort} (点击在右侧预览)
+                  localhost:{activePort}
                 </span>
               </div>
-              <AppIcon name="arrow-right" size={14} className={styles.activePortArrow} />
+              <AppIcon
+                name="arrow-right"
+                size={14}
+                className={styles.activePortArrow}
+              />
             </Button>
           )}
           <Button

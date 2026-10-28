@@ -7,6 +7,7 @@
 import type { LayoutTree, DropDirection, TreeDragSource } from './types';
 import type { SplitRegion } from './layoutTreeInsert';
 import type { DropZone } from './dropDetection';
+import type { BrowserTab } from './sessionTabModel';
 
 export interface LayoutTreeStoreState {
   /** 当前布局树 */
@@ -92,7 +93,7 @@ export interface LayoutTreeStoreActions {
       insertIdx?: number;
     }
   ) => import('./sessionTabModel').TerminalTab;
-  /** 在指定叶子（或当前活动叶）新增浏览器标签。推历史。 */
+  /** 在指定叶子（或当前活动叶）新增浏览器标签，自动绑定 url 与标题。推历史。 */
   addBrowserTab: (
     leafId?: string,
     opts?: {
@@ -100,11 +101,9 @@ export interface LayoutTreeStoreActions {
       title?: string;
       workspaceKey?: string;
       url?: string;
-      favicon?: string;
-      dock?: Partial<import('./sessionTabModel').RightToolDockState>;
       insertIdx?: number;
     }
-  ) => import('./sessionTabModel').BrowserTab;
+  ) => BrowserTab;
   /** 打开或聚焦会话（已存在则激活，否则插入新 tab 并激活）。推历史（新建时）。 */
   openSession: (
     sessionId: string,

@@ -1,34 +1,20 @@
 /**
  * ToolTabAddButton — 工具条双态加号（随流位 + 溢出固定位）与「添加面板」菜单。
  *
- * 菜单项来自 viewRegistry 工具视图；preview / terminal 允许无限多开，
- * 已存在时自动追加序号后缀（preview:2 / terminal:2 ...）。
+ * 菜单项来自 viewRegistry 工具视图；单例与多实例工具由 openToolInDock 统一分配独立 tabId。
  */
 
 import React from 'react';
-import { Tooltip, Button } from '../ui';
-import {
-  SmartExpandablePanel,
-  type MenuItem,
-} from '../ui/SmartExpandablePanel';
+import { Tooltip, Button } from '@/components/ui';
+import { SmartExpandablePanel, type MenuItem } from '@/components/ui';
 import { viewRegistry } from '../../services/view-registry';
 import styles from './LeafToolTabStrip.module.css';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface ToolTabAddButtonProps {
   tabs: string[];
   isInFlow: boolean;
   openPanel: (pid: string) => void;
-}
-
-/** 为可多开的浏览器/终端标签推导下一个未占用 id */
-export function nextMultiOpenTabId(tabs: string[], base: string): string {
-  if (!tabs.includes(base)) return base;
-  let nextIdx = 2;
-  while (tabs.includes(`${base}:${nextIdx}`)) {
-    nextIdx++;
-  }
-  return `${base}:${nextIdx}`;
 }
 
 export const ToolTabAddButton: React.FC<ToolTabAddButtonProps> = ({
@@ -73,13 +59,11 @@ export const ToolTabAddButton: React.FC<ToolTabAddButtonProps> = ({
     return {
       id: pid,
       label: viewRegistry.getTitle(pid),
-      icon: iconName ? <AppIcon name={iconName} size={13} aria-hidden /> : undefined,
+      icon: iconName ? (
+        <AppIcon name={iconName} size={13} aria-hidden />
+      ) : undefined,
       onSelect: () => {
-        if (pid === 'preview' || pid === 'terminal') {
-          openPanel(nextMultiOpenTabId(tabs, pid));
-        } else {
-          openPanel(pid);
-        }
+        openPanel(pid);
       },
     };
   });

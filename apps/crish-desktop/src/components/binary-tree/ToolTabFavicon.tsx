@@ -6,16 +6,12 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import {
-  getPreviewFavicon,
-  getPreviewUrl,
-  isAboutBlank,
-} from '../../api/previewBrowserStore';
+import { getPreviewFavicon, isAboutBlank } from '../../api/previewBrowserStore';
 import {
   shouldConsumeScopedEvent,
   useLeafScope,
 } from '../../contexts/LeafScopeContext';
-import { AppIcon, type IconName } from '../ui/icons';
+import { AppIcon, type IconName } from '@/components/ui/icons';
 
 export function isBrowserTabId(tabId: string): boolean {
   return (
@@ -49,16 +45,18 @@ function resolveBrowserTabUrl(
 ): string | null {
   const pinned = resolvePinnedBrowserTabUrl(tabId);
   if (pinned) return pinned;
-  const candidate = scopedUrl ?? getPreviewUrl();
+  const candidate = scopedUrl?.trim() || null;
   return candidate && !isAboutBlank(candidate) ? candidate : null;
 }
 
 export function ToolTabFavicon({
   tabId,
   iconName,
+  isBrowser,
 }: {
   tabId: string;
   iconName?: IconName | null;
+  isBrowser?: boolean;
 }) {
   const [faviconUrl, setFaviconUrl] = useState<string | null>(null);
   const leafScope = useLeafScope();
@@ -66,7 +64,8 @@ export function ToolTabFavicon({
   scopeRef.current = leafScope;
   const scopedUrlRef = useRef<string | null>(null);
 
-  const isBrowserTab = isBrowserTabId(tabId);
+  const isBrowserTab =
+    isBrowser ?? (isBrowserTabId(tabId) || iconName === 'globe');
 
   useEffect(() => {
     if (!isBrowserTab) return;

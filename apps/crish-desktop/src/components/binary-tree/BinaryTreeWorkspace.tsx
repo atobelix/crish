@@ -47,21 +47,13 @@ function dockIdentityEqual(a: unknown, b: unknown): boolean {
   if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
   const da = a as {
     collapsed?: boolean;
-    activePanelId?: string | null;
-    openPanelIds?: string[];
     widthRatio?: number;
+    tree?: unknown;
   };
   const db = b as typeof da;
   if (da.collapsed !== db.collapsed) return false;
-  if (da.activePanelId !== db.activePanelId) return false;
   if (da.widthRatio !== db.widthRatio) return false;
-  const pa = da.openPanelIds ?? [];
-  const pb = db.openPanelIds ?? [];
-  if (pa.length !== pb.length) return false;
-  for (let i = 0; i < pa.length; i++) {
-    if (pa[i] !== pb[i]) return false;
-  }
-  return true;
+  return da.tree === db.tree;
 }
 
 function tabsIdentityEqual(a: unknown, b: unknown): boolean {

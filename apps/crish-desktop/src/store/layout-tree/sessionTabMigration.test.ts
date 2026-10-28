@@ -19,7 +19,11 @@ import {
   listChatLeaves,
   listRealSessionIds,
 } from './sessionTabModel';
-import { migrateToLeafOwnedTabs } from './sessionTabMigration';
+import {
+  migrateToLeafOwnedTabs,
+  migrateLegacyDockStateToV2,
+} from './sessionTabMigration';
+import { collectSpatialLeaves } from './dockLayoutModel';
 import { validateRestorableLayoutTree } from './layoutRestorePolicy';
 import { collectLeaves } from './layoutTreeQuery';
 
@@ -158,9 +162,9 @@ describe('migrateToLeafOwnedTabs', () => {
     expect(root.direction).toBe('horizontal');
     const chats = listChatLeaves(result.tree.root);
     expect(chats).toHaveLength(2);
-    expect(collectLeaves(result.tree.root).every((l) => l.panelId === 'chat')).toBe(
-      true
-    );
+    expect(
+      collectLeaves(result.tree.root).every((l) => l.panelId === 'chat')
+    ).toBe(true);
     const a = chats.find((l) => l.tabs.some((t) => t.sessionId === 's1'))!;
     const b = chats.find((l) => l.tabs.some((t) => t.sessionId === 's2'))!;
     expect(a.tabs).toHaveLength(1);
@@ -168,10 +172,14 @@ describe('migrateToLeafOwnedTabs', () => {
     expect(a).not.toHaveProperty('sessionId');
     const dock = a.tabs[0]!.dock;
     expect(dock.collapsed).toBe(false);
-    expect(dock.openPanelIds).toContain('terminal');
-    expect(dock.activePanelId).toBe('terminal');
+    expect((dock as any).openPanelIds).toBeUndefined();
+    expect((dock as any).activePanelId).toBeUndefined();
+    expect(dock.tree).toBeDefined();
+    const leaf = dock.tree.root as any;
+    expect(leaf.tabs.map((t: any) => t.viewId)).toContain('terminal');
     expect(dock.widthRatio).toBeCloseTo(0.38);
     expect(b.tabs[0]!.dock.collapsed).toBe(true);
+    expect((b.tabs[0]!.dock as any).openPanelIds).toBeUndefined();
     const v = validateRestorableLayoutTree(result.tree);
     expect(v.ok).toBe(true);
     if (v.ok) {
@@ -244,7 +252,16 @@ describe('migrateToLeafOwnedTabs', () => {
 
   it('6.6 tool-only / 损坏 → 回退', () => {
     const cases: unknown[] = [
-      { version: 2, root: { type: 'leaf', id: 't', panelId: 'terminal', tabs: ['terminal'], activeTab: 'terminal' } },
+      {
+        version: 2,
+        root: {
+          type: 'leaf',
+          id: 't',
+          panelId: 'terminal',
+          tabs: ['terminal'],
+          activeTab: 'terminal',
+        },
+      },
       {
         version: 2,
         root: {
@@ -252,7 +269,15 @@ describe('migrateToLeafOwnedTabs', () => {
           id: 'b',
           direction: 'horizontal',
           splitRatio: 0.5,
-          children: [{ type: 'leaf', id: 'only-one', panelId: 'chat', tabs: ['chat'], activeTab: 'chat' }],
+          children: [
+            {
+              type: 'leaf',
+              id: 'only-one',
+              panelId: 'chat',
+              tabs: ['chat'],
+              activeTab: 'chat',
+            },
+          ],
         },
       },
       null,
@@ -453,8 +478,18 @@ describe('validateRestorableLayoutTree v3', () => {
         id: 'L1',
         panelId: 'chat',
         tabs: [
-          { tabId: 'tab-auto-1', sessionId: 'sess-auto-1', title: '会话1', workspaceKey: 'conex' },
-          { tabId: 'tab-auto-2', sessionId: 'sess-auto-2', title: '会话2', workspaceKey: 'conex' },
+          {
+            tabId: 'tab-auto-1',
+            sessionId: 'sess-auto-1',
+            title: '会话1',
+            workspaceKey: 'conex',
+          },
+          {
+            tabId: 'tab-auto-2',
+            sessionId: 'sess-auto-2',
+            title: '会话2',
+            workspaceKey: 'conex',
+          },
         ],
         activeTabId: '', // 破坏态：有 Tab 但无激活
       },
@@ -465,5 +500,77 @@ describe('validateRestorableLayoutTree v3', () => {
       const leaves = collectLeaves(res.tree.root);
       expect(leaves[0]!.activeTabId).toBe('tab-auto-1');
     }
+  });
+});
+
+describe('migrateLegacyDockStateToV2 一次性冷迁移', () => {
+  it('带有旧 openPanelIds: [terminal, files] 的数据一次性转换后，dock.tree 包含 2 个 ToolTab 且无旧字段残留', () => {
+    const legacy = {
+      collapsed: false,
+      widthRatio: 0.45,
+      openPanelIds: ['terminal', 'files'],
+      activePanelId: 'files',
+    };
+
+    const migrated = migrateLegacyDockStateToV2(legacy);
+
+    // 结构验证
+    expect(migrated.collapsed).toBe(false);
+    expect(migrated.widthRatio).toBe(0.45);
+    expect(migrated.tree).toBeDefined();
+
+    // 严格断言：旧字段彻底清退
+    expect((migrated as any).openPanelIds).toBeUndefined();
+    expect((migrated as any).activePanelId).toBeUndefined();
+
+    // 树内容验证：包含 2 个 ToolTab
+    const leaves = collectSpatialLeaves(migrated.tree.root);
+    expect(leaves).toHaveLength(1);
+    const leaf = leaves[0]!;
+    expect(leaf.tabs).toHaveLength(2);
+    expect(leaf.tabs[0]!.viewId).toBe('terminal');
+    expect(leaf.tabs[1]!.viewId).toBe('files');
+
+    // activePanelId = 'files' 正确激活对应 Tab
+    expect(leaf.activeTabId).toBe(leaf.tabs[1]!.tabId);
+    expect(migrated.tree.activeDockLeafId).toBe(leaf.id);
+  });
+
+  it('若输入已包含合法 DockTree，保留该 tree 并严格剥离旧字段', () => {
+    const rawWithTree = {
+      collapsed: false,
+      widthRatio: 0.6,
+      openPanelIds: ['terminal'],
+      activePanelId: 'terminal',
+      tree: {
+        root: {
+          type: 'leaf',
+          id: 'custom_leaf',
+          tabs: [{ tabId: 'dtab_diff_1', viewId: 'diff' }],
+          activeTabId: 'dtab_diff_1',
+        },
+        activeDockLeafId: 'custom_leaf',
+        version: 2,
+      },
+    };
+
+    const migrated = migrateLegacyDockStateToV2(rawWithTree);
+    expect(migrated.collapsed).toBe(false);
+    expect(migrated.widthRatio).toBe(0.6);
+    expect(migrated.tree.version).toBe(2);
+    expect((migrated as any).openPanelIds).toBeUndefined();
+    expect((migrated as any).activePanelId).toBeUndefined();
+    const leaves = collectSpatialLeaves(migrated.tree.root);
+    expect(leaves[0]!.id).toBe('custom_leaf');
+    expect(leaves[0]!.tabs[0]!.viewId).toBe('diff');
+  });
+
+  it('空或无效输入返回合法默认 V2 右坞', () => {
+    const emptyResult = migrateLegacyDockStateToV2(null);
+    expect(emptyResult.collapsed).toBe(true);
+    expect(emptyResult.widthRatio).toBe(0.5);
+    expect(emptyResult.tree).toBeDefined();
+    expect((emptyResult as any).openPanelIds).toBeUndefined();
+    expect((emptyResult as any).activePanelId).toBeUndefined();
   });
 });

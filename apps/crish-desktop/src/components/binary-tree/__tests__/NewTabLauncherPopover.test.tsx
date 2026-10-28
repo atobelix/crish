@@ -12,6 +12,7 @@ import { NewTabLauncherPopover } from '../NewTabLauncherPopover';
 import { useSessionExecutionTrackerStore } from '../../../store/sessionExecutionTrackerStore';
 import { useSessionStore } from '../../../store/sessionStore';
 import { useLayoutTreeStore } from '../../../store/layout-tree';
+import { layerStackManager } from '@/components/ui';
 import styles from '../NewTabLauncherPopover.module.css';
 
 const shellMocks = vi.hoisted(() => ({
@@ -36,6 +37,7 @@ describe('NewTabLauncherPopover Interaction & Visual Guardrail Suite (R2 / M5)',
 
   beforeEach(() => {
     vi.clearAllMocks();
+    layerStackManager.dispose();
     useSessionExecutionTrackerStore.getState().clearAllRuns();
 
     useSessionStore.setState({
@@ -90,6 +92,7 @@ describe('NewTabLauncherPopover Interaction & Visual Guardrail Suite (R2 / M5)',
   afterEach(() => {
     act(() => {
       useSessionExecutionTrackerStore.getState().clearAllRuns();
+      layerStackManager.dispose();
     });
   });
 
@@ -110,7 +113,7 @@ describe('NewTabLauncherPopover Interaction & Visual Guardrail Suite (R2 / M5)',
     expect(screen.getByText('新建对话')).toBeInTheDocument();
     expect(screen.getByText('⌘N')).toBeInTheDocument();
 
-    expect(screen.getByText('新建终端')).toBeInTheDocument();
+    expect(screen.getByText('新建常规终端')).toBeInTheDocument();
     expect(screen.getByText('⌃`')).toBeInTheDocument();
 
     expect(screen.getByText('新建浏览器')).toBeInTheDocument();
@@ -141,25 +144,40 @@ describe('NewTabLauncherPopover Interaction & Visual Guardrail Suite (R2 / M5)',
     expect(popoverContent).toBeInTheDocument();
 
     const newChatBtn = screen.getByText('新建对话').closest('button')!;
-    const newTerminalBtn = screen.getByText('新建终端').closest('button')!;
+    const newTerminalBtn = screen.getByText('新建常规终端').closest('button')!;
     const newBrowserBtn = screen.getByText('新建浏览器').closest('button')!;
 
     // 初始高亮在第 0 项（新建对话）
     expect(newChatBtn).toHaveAttribute('data-focused', 'true');
     expect(newTerminalBtn).toHaveAttribute('data-focused', 'false');
+    expect(newBrowserBtn).toHaveAttribute('data-focused', 'false');
 
-    // 按下 ArrowDown -> 聚焦移动至第 1 项（新建终端）
+    // 按下 ArrowDown -> 聚焦移动至第 1 项（新建常规终端）
     fireEvent.keyDown(popoverContent, { key: 'ArrowDown' });
     expect(newChatBtn).toHaveAttribute('data-focused', 'false');
     expect(newTerminalBtn).toHaveAttribute('data-focused', 'true');
+    expect(newBrowserBtn).toHaveAttribute('data-focused', 'false');
 
-    // 按下 ArrowDown -> 聚焦移动至第 2 项（新建浏览器）
+    // 再次按下 ArrowDown -> 聚焦移动至第 2 项（新建浏览器）
     fireEvent.keyDown(popoverContent, { key: 'ArrowDown' });
+    expect(newChatBtn).toHaveAttribute('data-focused', 'false');
     expect(newTerminalBtn).toHaveAttribute('data-focused', 'false');
     expect(newBrowserBtn).toHaveAttribute('data-focused', 'true');
 
-    // 按下 ArrowUp -> 聚焦返回第 1 项（新建终端）
+    // 按下 ArrowUp -> 聚焦返回第 1 项（新建常规终端）
     fireEvent.keyDown(popoverContent, { key: 'ArrowUp' });
+    expect(newChatBtn).toHaveAttribute('data-focused', 'false');
+    expect(newTerminalBtn).toHaveAttribute('data-focused', 'true');
+    expect(newBrowserBtn).toHaveAttribute('data-focused', 'false');
+
+    // 按下 ArrowUp -> 聚焦返回第 0 项（新建对话）
+    fireEvent.keyDown(popoverContent, { key: 'ArrowUp' });
+    expect(newChatBtn).toHaveAttribute('data-focused', 'true');
+    expect(newTerminalBtn).toHaveAttribute('data-focused', 'false');
+    expect(newBrowserBtn).toHaveAttribute('data-focused', 'false');
+
+    // 再次按下 ArrowDown -> 聚焦第 1 项（新建常规终端）
+    fireEvent.keyDown(popoverContent, { key: 'ArrowDown' });
     expect(newTerminalBtn).toHaveAttribute('data-focused', 'true');
 
     // 按下 Enter -> 触发新建终端，调用 shell.addTerminalTab，并关闭 Popover
@@ -369,14 +387,14 @@ describe('NewTabLauncherPopover Interaction & Visual Guardrail Suite (R2 / M5)',
     expect(screen.getByText('⌥B')).toHaveClass(styles.shortcutHint);
   });
 
-  it('Test 9: 独立直接触发新建终端与新建浏览器动作分发与浮层关闭', async () => {
+  it('Test 9: 独立直接触发新建常规终端动作分发与浮层关闭', async () => {
     render(<NewTabLauncherPopover leafId={leafId} />);
 
     const plusTrigger = screen.getByRole('button', { name: '新对话' });
 
-    // 9.1 点击新建终端 -> 调用 shell.addTerminalTab(leafId)
+    // 9.1 点击新建常规终端 -> 调用 shell.addTerminalTab(leafId)
     fireEvent.click(plusTrigger);
-    const newTerminalBtn = screen.getByText('新建终端').closest('button')!;
+    const newTerminalBtn = screen.getByText('新建常规终端').closest('button')!;
     fireEvent.click(newTerminalBtn);
     expect(shellMocks.addTerminalTab).toHaveBeenCalledWith(leafId);
 
@@ -385,17 +403,87 @@ describe('NewTabLauncherPopover Interaction & Visual Guardrail Suite (R2 / M5)',
         document.querySelector(`.${styles.popoverContent}`)
       ).not.toBeInTheDocument();
     });
+  });
 
-    // 9.2 点击新建浏览器 -> 调用 shell.addBrowserTab(leafId)
+  it('Test 10: 独立直接点击触发新建浏览器动作分发与浮层关闭', async () => {
+    render(<NewTabLauncherPopover leafId={leafId} />);
+
+    const plusTrigger = screen.getByRole('button', { name: '新对话' });
     fireEvent.click(plusTrigger);
+
     const newBrowserBtn = screen.getByText('新建浏览器').closest('button')!;
     fireEvent.click(newBrowserBtn);
-    expect(shellMocks.addBrowserTab).toHaveBeenCalledWith(leafId);
+    expect(shellMocks.addBrowserTab).toHaveBeenCalledWith(leafId, {
+      url: 'about:blank',
+    });
 
     await waitFor(() => {
       expect(
         document.querySelector(`.${styles.popoverContent}`)
       ).not.toBeInTheDocument();
+    });
+  });
+
+  it('Test 11: 键盘漫游至新建浏览器并按 Enter 触发动作分发与浮层关闭', async () => {
+    render(<NewTabLauncherPopover leafId={leafId} />);
+
+    const plusTrigger = screen.getByRole('button', { name: '新对话' });
+    fireEvent.click(plusTrigger);
+
+    const popoverContent = document.querySelector(
+      `.${styles.popoverContent}`
+    ) as HTMLElement;
+
+    // ArrowDown 两次移动到第 2 项（新建浏览器）
+    fireEvent.keyDown(popoverContent, { key: 'ArrowDown' });
+    fireEvent.keyDown(popoverContent, { key: 'ArrowDown' });
+    const newBrowserBtn = screen.getByText('新建浏览器').closest('button')!;
+    expect(newBrowserBtn).toHaveAttribute('data-focused', 'true');
+
+    fireEvent.keyDown(popoverContent, { key: 'Enter' });
+    expect(shellMocks.addBrowserTab).toHaveBeenCalledWith(leafId, {
+      url: 'about:blank',
+    });
+
+    await waitFor(() => {
+      expect(
+        document.querySelector(`.${styles.popoverContent}`)
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it('Test 12: 浮层展开时向 LayerStack 注册 popover 层，收起时自动注销', async () => {
+    render(<NewTabLauncherPopover leafId={leafId} />);
+
+    const plusTrigger = screen.getByRole('button', { name: '新对话' });
+    expect(
+      layerStackManager
+        .getLayers()
+        .some((l) => l.id === `new-tab-launcher-${leafId}`)
+    ).toBe(false);
+
+    // 展开 Popover -> 自动注册至 LayerStack
+    fireEvent.click(plusTrigger);
+    expect(
+      layerStackManager
+        .getLayers()
+        .some((l) => l.id === `new-tab-launcher-${leafId}`)
+    ).toBe(true);
+
+    const layer = layerStackManager
+      .getLayers()
+      .find((l) => l.id === `new-tab-launcher-${leafId}`);
+    expect(layer?.type).toBe('popover');
+    expect(layer?.dismissible).toBe(true);
+
+    // 关闭 Popover -> 自动从 LayerStack 注销
+    fireEvent.click(plusTrigger);
+    await waitFor(() => {
+      expect(
+        layerStackManager
+          .getLayers()
+          .some((l) => l.id === `new-tab-launcher-${leafId}`)
+      ).toBe(false);
     });
   });
 });

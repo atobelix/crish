@@ -4,7 +4,7 @@
  *
  * 遵循 Conex UI 铁律：
  * - §12: 0 原生 title，统一 Tooltip
- * - §13: 软焦点边界混入比 ≤ 8%~10%，禁止粗黑实线；操作项 border: none，仅用 var(--tint-hover)
+ * - §13: 软焦点边界混入比 ≤ 8%~10%，禁止粗黑实线；操作项 border: none，仅用 var(--state-hover)
  * - §14: 纯现代 CSS，HSLA / color-mix 语法，零旧式 rgba()
  * - Color SSOT: 严禁假 Token 兜底（禁止 var(--token, fallback)），直接使用 Design Tokens
  * - G-04: 零非法 radius-full / 9999px 药丸圆角，圆点采用标准 50%
@@ -18,8 +18,8 @@
   max-height: min(480px, calc(100vh - 80px));
   box-sizing: border-box;
   padding: 6px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-panel, var(--border-color));
   border-radius: var(--sep-radius-outer);
   box-shadow: var(--sep-shadow);
   display: flex;
@@ -46,19 +46,22 @@
   }
 }
 
-/* 顶栏加号按钮 (PaneHeader 嵌入) */
+/* 顶栏加号按钮 (PaneHeader 嵌入 · 28x28px, 8px 圆角矩形金标) */
 .newTabBtn {
   position: relative;
-  width: var(--pane-tab-height);
-  height: var(--pane-tab-height);
-  min-width: var(--pane-tab-height);
+  width: var(--pane-tab-height, 28px);
+  height: var(--pane-tab-height, 28px);
+  min-width: var(--pane-tab-height, 28px);
+  max-width: var(--pane-tab-height, 28px);
+  min-height: var(--pane-tab-height, 28px);
+  max-height: var(--pane-tab-height, 28px);
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   margin-left: 2px;
   color: var(--text-secondary);
-  border-radius: var(--sep-item-radius);
+  border-radius: var(--radius-control, 8px);
   border: none;
   background: transparent;
   outline: none;
@@ -73,7 +76,7 @@
 .newTabBtn:hover,
 .newTabBtn[data-active='true'] {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background: transparent;
 }
 
 .plusIconWrap {
@@ -101,7 +104,7 @@
 
 .plusLiveDot[data-urgent='true'] {
   background: var(--accent-orange);
-  animation: urgentBlink 1.2s infinite ease-in-out;
+  animation: urgentBlink var(--transition-pulse, 1.2s ease-in-out) infinite;
 }
 
 @keyframes urgentBlink {
@@ -144,7 +147,7 @@
 
 .actionItem:hover,
 .actionItem[data-focused='true'] {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border: none;
   outline: none;
 }
@@ -242,7 +245,7 @@
 
 .runningItem:hover,
 .runningItem[data-focused='true'] {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border: none;
   outline: none;
 }
@@ -276,7 +279,8 @@
   height: 100%;
   border-radius: 50%;
   background: color-mix(in srgb, var(--color-active) 35%, transparent);
-  animation: launcherPulse 1.8s infinite cubic-bezier(0.24, 0, 0.38, 1);
+  animation: launcherPulse var(--transition-pulse, 1.8s) infinite
+    var(--ease-in-out, cubic-bezier(0.24, 0, 0.38, 1));
 }
 
 .pulseHalo[data-urgent='true'] {
@@ -353,7 +357,7 @@
 
 .projectItem:hover,
 .projectItem[data-focused='true'] {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border: none;
   outline: none;
 }

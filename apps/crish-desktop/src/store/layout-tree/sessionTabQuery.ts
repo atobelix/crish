@@ -5,11 +5,15 @@
 import type { LayoutLeaf, LayoutNode } from './types';
 import { collectLeaves } from './layoutTreeTraversal';
 import {
-  type SessionTab,
+  collectUniqueSessionTabIds,
+  findDuplicateSessionTabIds,
+} from './sessionTabDuplicateIndex';
+import type { SessionTab } from './sessionTabModel';
+import {
   isChatTab,
   isRealSessionId,
   mintDraftSessionId,
-} from './sessionTabModel';
+} from './sessionTabIdentity';
 
 export interface TabLocation {
   leaf: LayoutLeaf;
@@ -55,72 +59,37 @@ export function findLeafByTabId(
 }
 
 export function listChatLeaves(root: LayoutNode): LayoutLeaf[] {
-  return collectLeaves(root).filter((l) => l.panelId === 'chat');
+  return collectLeaves(root).filter((leaf) => leaf.panelId === 'chat');
 }
 
 export function listAllSessionTabs(root: LayoutNode): SessionTab[] {
-  const out: SessionTab[] = [];
+  const tabs: SessionTab[] = [];
   for (const leaf of collectLeaves(root)) {
-    out.push(...leaf.tabs);
+    tabs.push(...leaf.tabs);
   }
-  return out;
+  return tabs;
 }
 
 export function listRealSessionIds(root: LayoutNode): string[] {
-  const ids: string[] = [];
-  const seen = new Set<string>();
-  for (const tab of listAllSessionTabs(root)) {
-    if (
-      !isChatTab(tab) ||
-      !isRealSessionId(tab.sessionId) ||
-      seen.has(tab.sessionId)
-    ) {
-      continue;
-    }
-    seen.add(tab.sessionId);
-    ids.push(tab.sessionId);
-  }
-  return ids;
+  return collectUniqueSessionTabIds(listAllSessionTabs(root), (tab) =>
+    isChatTab(tab) && isRealSessionId(tab.sessionId) ? tab.sessionId : undefined
+  );
 }
 
 export function findDuplicateRealSessionIds(
   root: LayoutNode
 ): Map<string, Array<{ leafId: string; tabId: string }>> {
-  const bySid = new Map<string, Array<{ leafId: string; tabId: string }>>();
-  for (const leaf of collectLeaves(root)) {
-    for (const tab of leaf.tabs) {
-      if (!isChatTab(tab) || !isRealSessionId(tab.sessionId)) continue;
-      const list = bySid.get(tab.sessionId);
-      const loc = { leafId: leaf.id, tabId: tab.tabId };
-      if (list) list.push(loc);
-      else bySid.set(tab.sessionId, [loc]);
-    }
-  }
-  const dups = new Map<string, Array<{ leafId: string; tabId: string }>>();
-  for (const [sid, locs] of bySid) {
-    if (locs.length >= 2) dups.set(sid, locs);
-  }
-  return dups;
+  return findDuplicateSessionTabIds(collectLeaves(root), (tab) =>
+    isChatTab(tab) && isRealSessionId(tab.sessionId) ? tab.sessionId : undefined
+  );
 }
 
 export function findDuplicateSessionIds(
   root: LayoutNode
 ): Map<string, Array<{ leafId: string; tabId: string }>> {
-  const bySid = new Map<string, Array<{ leafId: string; tabId: string }>>();
-  for (const leaf of collectLeaves(root)) {
-    for (const tab of leaf.tabs) {
-      if (!isChatTab(tab) || !tab.sessionId) continue;
-      const list = bySid.get(tab.sessionId);
-      const loc = { leafId: leaf.id, tabId: tab.tabId };
-      if (list) list.push(loc);
-      else bySid.set(tab.sessionId, [loc]);
-    }
-  }
-  const dups = new Map<string, Array<{ leafId: string; tabId: string }>>();
-  for (const [sid, locs] of bySid) {
-    if (locs.length >= 2) dups.set(sid, locs);
-  }
-  return dups;
+  return findDuplicateSessionTabIds(collectLeaves(root), (tab) =>
+    isChatTab(tab) && tab.sessionId ? tab.sessionId : undefined
+  );
 }
 
 /** 本叶未提交新对话所用的草稿哨兵（按叶 id，不进 tabs） */
@@ -134,12 +103,12 @@ export function isComposingLeaf(leaf: {
   activeTabId: string;
 }): boolean {
   if (!leaf.activeTabId) return true;
-  return !leaf.tabs.some((t) => t.tabId === leaf.activeTabId);
+  return !leaf.tabs.some((tab) => tab.tabId === leaf.activeTabId);
 }
 
 export function activeSessionIdOf(leaf: LayoutLeaf): string {
-  const hit = leaf.tabs.find((t) => t.tabId === leaf.activeTabId);
-  if (hit && isChatTab(hit)) return hit.sessionId;
+  const activeTab = leaf.tabs.find((tab) => tab.tabId === leaf.activeTabId);
+  if (activeTab && isChatTab(activeTab)) return activeTab.sessionId;
   return leafDraftSessionId(leaf.id);
 }
 
@@ -151,9 +120,14 @@ export function sessionIdTaken(
 ): boolean {
   if (!sessionId) return false;
   for (const leaf of collectLeaves(root)) {
-    for (const t of leaf.tabs) {
-      if (isChatTab(t) && t.sessionId === sessionId && t.tabId !== exceptTabId)
+    for (const tab of leaf.tabs) {
+      if (
+        isChatTab(tab) &&
+        tab.sessionId === sessionId &&
+        tab.tabId !== exceptTabId
+      ) {
         return true;
+      }
     }
   }
   return false;

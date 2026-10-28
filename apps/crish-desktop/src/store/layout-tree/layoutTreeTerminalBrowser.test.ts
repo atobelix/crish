@@ -10,9 +10,9 @@ import {
 } from '../../api/ptyRegistry';
 import { findNodeById } from './operations';
 import type { LayoutLeaf } from './types';
-import type { TerminalTab, BrowserTab } from './sessionTabModel';
+import type { TerminalTab } from './sessionTabModel';
 
-describe('LayoutTreeStore & Shell: Terminal and Browser Tab First-Class Integration', () => {
+describe('LayoutTreeStore & Shell: Terminal Tab First-Class Integration', () => {
   const killedPtys: { ptyId: string; sessionId: string }[] = [];
 
   beforeEach(() => {
@@ -33,7 +33,7 @@ describe('LayoutTreeStore & Shell: Terminal and Browser Tab First-Class Integrat
     resetPtyRegistryForTests();
   });
 
-  describe('addTerminalTab & addBrowserTab in layoutTreeStore', () => {
+  describe('addTerminalTab in layoutTreeStore', () => {
     it('addTerminalTab creates first-class TerminalTab and pushes to history', () => {
       const activeLeafId = useLayoutTreeStore.getState().activeLeafId!;
       const beforePast = useLayoutTreeStore.getState().past.length;
@@ -59,26 +59,53 @@ describe('LayoutTreeStore & Shell: Terminal and Browser Tab First-Class Integrat
       expect(leaf.activeTabId).toBe(created.tabId);
       expect(useLayoutTreeStore.getState().past.length).toBe(beforePast + 1);
     });
+  });
 
-    it('addBrowserTab creates first-class BrowserTab with default and custom options', () => {
+  describe('addBrowserTab in layoutTreeStore', () => {
+    it('addBrowserTab creates first-class StandaloneBrowserTab and pushes to history', () => {
       const activeLeafId = useLayoutTreeStore.getState().activeLeafId!;
+      const beforePast = useLayoutTreeStore.getState().past.length;
+
       const created = useLayoutTreeStore
         .getState()
         .addBrowserTab(activeLeafId, {
-          url: 'https://example.com',
-          title: '示例网页',
+          url: 'https://github.com',
+          title: 'GitHub',
         });
 
       expect(created.kind).toBe('browser');
-      expect(created.url).toBe('https://example.com');
-      expect(created.title).toBe('示例网页');
+      expect(created.isStandalone).toBe(true);
+      expect(created.title).toBe('GitHub');
+      expect(created.url).toBe('https://github.com');
+      expect(created.dock).toBeUndefined();
 
       const leaf = findNodeById(
         useLayoutTreeStore.getState().tree.root,
         activeLeafId
       ) as LayoutLeaf;
-      expect(leaf.tabs.some((t) => t.tabId === created.tabId)).toBe(true);
+      expect(leaf.tabs).toHaveLength(1);
+      expect(leaf.tabs[0].tabId).toBe(created.tabId);
       expect(leaf.activeTabId).toBe(created.tabId);
+      expect(useLayoutTreeStore.getState().past.length).toBe(beforePast + 1);
+    });
+
+    it('removeTab on a browser tab invokes browserWebviewClose', async () => {
+      const browserApi = await import('../../api/nativeBrowserApi');
+      const closeSpy = vi
+        .spyOn(browserApi, 'browserWebviewClose')
+        .mockResolvedValue(undefined);
+
+      const activeLeafId = useLayoutTreeStore.getState().activeLeafId!;
+      const tab = useLayoutTreeStore.getState().addBrowserTab(activeLeafId, {
+        url: 'https://example.com',
+      });
+
+      useLayoutTreeStore.getState().removeTab(activeLeafId, tab.tabId);
+
+      await vi.waitFor(() => {
+        expect(closeSpy).toHaveBeenCalledWith(tab.tabId);
+      });
+      closeSpy.mockRestore();
     });
   });
 
@@ -145,7 +172,7 @@ describe('LayoutTreeStore & Shell: Terminal and Browser Tab First-Class Integrat
   });
 
   describe('WorkspaceShellStore & CompositionRoot Facades', () => {
-    it('workspaceShellStore.addTerminalTab and addBrowserTab work seamlessly', () => {
+    it('workspaceShellStore.addTerminalTab works seamlessly', () => {
       const shell = useWorkspaceShellStore.getState();
       const termTab = shell.addTerminalTab(undefined, {
         title: '终端集成测试',
@@ -153,29 +180,40 @@ describe('LayoutTreeStore & Shell: Terminal and Browser Tab First-Class Integrat
       expect(termTab).toBeDefined();
       expect(termTab.kind).toBe('terminal');
       expect(termTab.title).toBe('终端集成测试');
+    });
 
+    it('workspaceShellStore.addBrowserTab works seamlessly', () => {
+      const shell = useWorkspaceShellStore.getState();
       const browserTab = shell.addBrowserTab(undefined, {
-        url: 'https://github.com',
+        title: '独立浏览器测试',
+        url: 'https://example.com',
       });
       expect(browserTab).toBeDefined();
       expect(browserTab.kind).toBe('browser');
-      expect(browserTab.url).toBe('https://github.com');
+      expect(browserTab.title).toBe('独立浏览器测试');
+      expect(browserTab.url).toBe('https://example.com');
     });
 
-    it('compositionRoot.shell exposes addTerminalTab and addBrowserTab', () => {
+    it('compositionRoot.shell exposes addTerminalTab', () => {
       const root = getCompositionRoot();
       expect(typeof root.shell.addTerminalTab).toBe('function');
-      expect(typeof root.shell.addBrowserTab).toBe('function');
 
       const termTab = root.shell.addTerminalTab(undefined, {
         title: 'Facade终端',
       });
       expect(termTab.title).toBe('Facade终端');
+    });
+
+    it('compositionRoot.shell exposes addBrowserTab', () => {
+      const root = getCompositionRoot();
+      expect(typeof root.shell.addBrowserTab).toBe('function');
 
       const browserTab = root.shell.addBrowserTab(undefined, {
         title: 'Facade浏览器',
+        url: 'https://conex.dev',
       });
       expect(browserTab.title).toBe('Facade浏览器');
+      expect(browserTab.url).toBe('https://conex.dev');
     });
   });
 });

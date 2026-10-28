@@ -292,7 +292,7 @@ async function tryDirectCreate(
   if (res.status === 'error') {
     onStatus('error', res.message);
     try {
-      term.writeln(`\x1b[31m✗ ${res.message}\x1b[0m`);
+      term.writeln(`\x1b[31mError: ${res.message}\x1b[0m`);
     } catch {
       /* ignore */
     }

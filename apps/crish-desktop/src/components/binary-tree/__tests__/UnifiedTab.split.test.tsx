@@ -97,7 +97,7 @@ describe('UnifiedTab Model, G-08 Dynamic Resolution & 4-Direction Split Suite (R
     vi.restoreAllMocks();
   });
 
-  it('Test 1: resolveTabView 纯函数声明式解析 (G-08 规约遵从，零 switch 硬编码)', () => {
+  it('Test 1: resolveTabView 纯函数声明式解析 (G-08 规约遵从，零 switch 硬编码，二元顶栏收敛)', () => {
     const chatTab: UnifiedTab = {
       kind: 'chat',
       tabId: 't-chat',
@@ -111,12 +111,6 @@ describe('UnifiedTab Model, G-08 Dynamic Resolution & 4-Direction Split Suite (R
       cwd: 'C:/Software/conex',
       title: '终端: conex',
     };
-    const browserTab: UnifiedTab = {
-      kind: 'browser',
-      tabId: 't-web',
-      url: 'http://localhost:5173',
-      title: 'Crish Preview',
-    };
 
     // Chat tab resolution
     expect(resolveTabView(chatTab)).toEqual({
@@ -127,15 +121,12 @@ describe('UnifiedTab Model, G-08 Dynamic Resolution & 4-Direction Split Suite (R
     // Terminal tab resolution (binds terminalKey and cwd)
     expect(resolveTabView(termTab)).toEqual({
       viewId: 'terminal',
-      params: { terminalKey: 'term-alpha', cwd: 'C:/Software/conex' },
+      params: {
+        terminalKey: 'term-alpha',
+        cwd: 'C:/Software/conex',
+        isStandalone: true,
+      },
       sessionId: 'term-alpha',
-    });
-
-    // Browser tab resolution (unified into preview view per Decision 1)
-    expect(resolveTabView(browserTab)).toEqual({
-      viewId: 'preview',
-      params: { target: 'http://localhost:5173' },
-      sessionId: 't-web',
     });
 
     // Backwards-compatible legacy tab without kind property
@@ -156,7 +147,7 @@ describe('UnifiedTab Model, G-08 Dynamic Resolution & 4-Direction Split Suite (R
     });
   });
 
-  it('Test 2: 窗格支持 Chat、Terminal 与 Browser 混合混排与同级顺畅切换', async () => {
+  it('Test 2: 窗格支持 Chat 与 Terminal 二元大窗口顺畅切换', async () => {
     const leafId = 'leaf-mixed-1';
     useLayoutTreeStore.setState({
       tree: {
@@ -194,20 +185,6 @@ describe('UnifiedTab Model, G-08 Dynamic Resolution & 4-Direction Split Suite (R
                 widthRatio: 0.5,
               },
             } as any,
-            {
-              kind: 'browser',
-              tabId: 't-web',
-              sessionId: 't-web',
-              url: 'http://localhost:3000',
-              title: '本地服务',
-              workspaceKey: '默认',
-              dock: {
-                collapsed: true,
-                openPanelIds: [],
-                activePanelId: null,
-                widthRatio: 0.5,
-              },
-            } as any,
           ],
           dock: {
             collapsed: true,
@@ -231,17 +208,6 @@ describe('UnifiedTab Model, G-08 Dynamic Resolution & 4-Direction Split Suite (R
       'C:/Software/conex'
     );
 
-    // 切换至 Browser Tab ('t-web')
-    await act(async () => {
-      useLayoutTreeStore.getState().activateTab(leafId, 't-web');
-    });
-
-    await waitFor(() => {
-      expect(
-        screen.getByTestId('view-preview-http://localhost:3000')
-      ).toBeInTheDocument();
-    });
-
     // 切换至 Chat Tab ('t-chat')
     await act(async () => {
       useLayoutTreeStore.getState().activateTab(leafId, 't-chat');
@@ -251,12 +217,12 @@ describe('UnifiedTab Model, G-08 Dynamic Resolution & 4-Direction Split Suite (R
       expect(screen.getByTestId('view-chat-sess-1')).toBeInTheDocument();
     });
 
-    // 确认所有标签都在同窗格完整保留 (length = 3)
+    // 确认所有标签都在同窗格完整保留 (length = 2)
     const leaf = findLeafInTree(
       useLayoutTreeStore.getState().tree.root,
       leafId
     );
-    expect(leaf?.tabs).toHaveLength(3);
+    expect(leaf?.tabs).toHaveLength(2);
   });
 
   it('Test 3: 拖拽 Terminal 与 Browser 标签，支持 4 方向 (bottom/right/top/left) 独立切分二叉树', async () => {
@@ -281,6 +247,7 @@ describe('UnifiedTab Model, G-08 Dynamic Resolution & 4-Direction Split Suite (R
               } as any,
               {
                 kind: 'terminal',
+                isStandalone: true,
                 tabId: 't-term',
                 terminalKey: 'term-1',
                 cwd: 'C:/Software/conex',
@@ -334,6 +301,7 @@ describe('UnifiedTab Model, G-08 Dynamic Resolution & 4-Direction Split Suite (R
               } as any,
               {
                 kind: 'terminal',
+                isStandalone: true,
                 tabId: 't-term',
                 terminalKey: 'term-1',
                 cwd: 'C:/Software/conex',
@@ -385,6 +353,7 @@ describe('UnifiedTab Model, G-08 Dynamic Resolution & 4-Direction Split Suite (R
               } as any,
               {
                 kind: 'terminal',
+                isStandalone: true,
                 tabId: 't-term',
                 terminalKey: 'term-1',
                 cwd: 'C:/Software/conex',
@@ -436,6 +405,7 @@ describe('UnifiedTab Model, G-08 Dynamic Resolution & 4-Direction Split Suite (R
               } as any,
               {
                 kind: 'terminal',
+                isStandalone: true,
                 tabId: 't-term',
                 terminalKey: 'term-1',
                 cwd: 'C:/Software/conex',
@@ -487,6 +457,7 @@ describe('UnifiedTab Model, G-08 Dynamic Resolution & 4-Direction Split Suite (R
               } as any,
               {
                 kind: 'browser',
+                isStandalone: true,
                 tabId: 't-web',
                 url: 'https://github.com',
                 title: 'GitHub',
@@ -537,6 +508,7 @@ describe('UnifiedTab Model, G-08 Dynamic Resolution & 4-Direction Split Suite (R
               } as any,
               {
                 kind: 'browser',
+                isStandalone: true,
                 tabId: 't-web',
                 url: 'https://github.com',
                 title: 'GitHub',
@@ -587,6 +559,7 @@ describe('UnifiedTab Model, G-08 Dynamic Resolution & 4-Direction Split Suite (R
               } as any,
               {
                 kind: 'browser',
+                isStandalone: true,
                 tabId: 't-web',
                 url: 'https://github.com',
                 title: 'GitHub',
@@ -637,6 +610,7 @@ describe('UnifiedTab Model, G-08 Dynamic Resolution & 4-Direction Split Suite (R
               } as any,
               {
                 kind: 'browser',
+                isStandalone: true,
                 tabId: 't-web',
                 url: 'https://docs.rs',
                 title: 'Docs',

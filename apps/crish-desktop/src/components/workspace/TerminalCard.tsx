@@ -1,9 +1,13 @@
 /**
- * 终端面板：VS Code 式交互式 PTY + xterm。
- * 纯终端：无顶栏 / 无镜像条 / 无搜索壳；仅 xterm 全屏 + PTY 不可用时的简短提示。
+ * 终端卡片组件 (V2 纯净重构版)
  *
- * sessionId prop 优先（TreeLeafPanel 注入 leaf.sessionId）。
+ * 遵循 dock-split-system V2 架构准则：
+ * 1. 单一职责：仅负责渲染单个与 tabId 强绑定的 xterm.js 交互式终端实例；
+ * 2. 彻底清退内部假分屏：删除所有 `:split-2`、内部分割线与副格状态；
+ * 3. 实例标识与 PTY 绑定：从注入的 context.panelId / tabId 获取唯一的 sessionKey；
+ * 4. 容器适配：消费父级 ResizeObserver 触发 xterm fit，保持轻量高响应。
  */
+
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import styles from './TerminalCard.module.css';
 import {
@@ -20,66 +24,93 @@ import {
   type InteractiveXtermHandle,
   type InteractiveXtermStatus,
 } from './TerminalCard.xterm';
-import { TerminalToolbar, type TerminalSplitMode } from './TerminalToolbar';
+import { TerminalToolbar } from './TerminalToolbar';
+import { ResizeObserverManager } from '../../utils/ResizeObserverManager';
 
-export type TerminalCardProps = {
-  /** leaf 绑定的 session；多 unit 时必须传入，避免串到 activeSessionId */
-  sessionId?: string | null;
-  /** 面板 ID（多终端标签支持，如 'terminal', 'terminal:2' 等） */
+export interface TerminalCardProps {
+  /** 标签页唯一实例标识（直接作为 ConPTY 会话 Key） */
+  tabId?: string | null;
+  /** 面板 ID（兼容易有 context.panelId 透传） */
   panelId?: string | null;
+  /** 会话 ID 标识 */
+  sessionId?: string | null;
+  /** 所在分屏叶子 ID */
   leafId?: string | null;
+  /** 初始工作目录 */
   initialCwd?: string;
-};
+  /** 终端自定义标题 */
+  title?: string;
+  /** 组件卸载时是否销毁 PTY 进程（可选） */
+  killOnUnmount?: boolean;
+  /** 是否为独立常规终端（直通用户 Home 目录，无工作区锁定） */
+  isStandalone?: boolean;
+}
 
 export const TerminalCard: React.FC<TerminalCardProps> = ({
-  sessionId: sessionIdProp,
+  tabId: tabIdProp,
   panelId: panelIdProp,
+  sessionId: sessionIdProp,
   leafId: leafIdProp,
   initialCwd,
+  title: titleProp,
+  killOnUnmount = false,
+  isStandalone: isStandaloneProp,
 }) => {
   const scope = useLeafScope();
   const scopedSessionId = useScopedSessionId(sessionIdProp);
   const effectiveLeafId = leafIdProp ?? scope.leafId;
   const boundSessionId = (scopedSessionId || '').trim() || null;
   const baseKey = boundSessionId || '_global';
-  const sessionKey =
-    panelIdProp && panelIdProp !== 'terminal'
-      ? `${baseKey}:${panelIdProp}`
-      : baseKey;
+
+  // 实例标识与 PTY 生命周期统一绑定：
+  // 1. 优先使用注入的 tabId；
+  // 2. 其次使用 context.panelId（若非 'terminal'，则其本身即为唯一的 tabId）；
+  // 3. 兜底使用 boundSessionId 或 '_global'；
+  // 彻底杜绝历史字符串自增拼接与 `:split-2` 伪 key
+  const effectiveTabId =
+    tabIdProp ||
+    (panelIdProp && panelIdProp !== 'terminal' ? panelIdProp : null);
+  const sessionKey = effectiveTabId || baseKey;
 
   const [cwdTick, setCwdTick] = useState(0);
   const [ptyStatus, setPtyStatus] = useState<InteractiveXtermStatus>('idle');
   const [ptyError, setPtyError] = useState('');
-  // 分屏副格（pane 2）独立状态：失败可见，不与主格互相覆盖（T5）
-  const [pane2Status, setPane2Status] =
-    useState<InteractiveXtermStatus>('idle');
-  const [pane2Error, setPane2Error] = useState('');
   const [restartToken] = useState(0);
-
-  // 标签页内分屏状态
-  const [splitMode, setSplitMode] = useState<TerminalSplitMode>('none');
-  const [activePaneIndex, setActivePaneIndex] = useState(0);
 
   const reactId = useId();
   const titleId = `${reactId}-term-title`;
-  const termHandleRef1 = useRef<InteractiveXtermHandle | null>(null);
-  const termHandleRef2 = useRef<InteractiveXtermHandle | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const termHandleRef = useRef<InteractiveXtermHandle | null>(null);
 
-  const fitAll = useCallback(() => {
+  // 容器尺寸适配：双帧调度确保 xterm fit 铺满字符网格
+  const fitTerminal = useCallback(() => {
     requestAnimationFrame(() => {
-      termHandleRef1.current?.fit();
-      termHandleRef2.current?.fit();
+      termHandleRef.current?.fit();
       requestAnimationFrame(() => {
-        termHandleRef1.current?.fit();
-        termHandleRef2.current?.fit();
+        termHandleRef.current?.fit();
       });
     });
   }, []);
 
+  // 监听宿主容器 ResizeObserver 事件
   useEffect(() => {
-    fitAll();
-  }, [fitAll, splitMode]);
+    const el = containerRef.current;
+    if (!el) return;
 
+    fitTerminal();
+
+    const ro = ResizeObserverManager.getInstance();
+    const handleResize = () => {
+      fitTerminal();
+    };
+    ro.observe(el, handleResize);
+
+    return () => {
+      ro.unobserve(el, handleResize);
+    };
+  }, [fitTerminal]);
+
+  // 项目工作空间路径变更响应
   useEffect(() => {
     const onProj = () => setCwdTick((n) => n + 1);
     window.addEventListener('crish-project-changed', onProj);
@@ -89,12 +120,28 @@ export const TerminalCard: React.FC<TerminalCardProps> = ({
   useEffect(() => {
     setPtyStatus('idle');
     setPtyError('');
-    setPane2Status('idle');
-    setPane2Error('');
-  }, [boundSessionId]);
+  }, [sessionKey]);
+
+  // 卸载生命周期钩子：若配置 killOnUnmount 则彻底析构 PTY
+  useEffect(() => {
+    return () => {
+      if (killOnUnmount && sessionKey) {
+        void import('../../api/ptyRegistry').then((m) => {
+          void m.killPtyForSession(sessionKey);
+        });
+      }
+    };
+  }, [killOnUnmount, sessionKey]);
+
+  const isStandalone =
+    isStandaloneProp === true || sessionKey.startsWith('standalone:');
 
   const fullCwd = (() => {
     void cwdTick;
+    // 独立常规终端模式下绝不读取 getWorkspacePath()，未指定时保持空，直通 ConPTY 解析为家目录
+    if (isStandalone) {
+      return initialCwd || '';
+    }
     return initialCwd || getWorkspacePath() || '';
   })();
 
@@ -111,20 +158,7 @@ export const TerminalCard: React.FC<TerminalCardProps> = ({
     setPtyStatus('missing');
   }, []);
 
-  const handlePane2Status = useCallback(
-    (status: InteractiveXtermStatus, detail?: string) => {
-      setPane2Status(status);
-      if (status === 'error' && detail) setPane2Error(detail);
-      else if (status === 'ready') setPane2Error('');
-    },
-    []
-  );
-
-  const handlePane2Missing = useCallback(() => {
-    setPane2Status('missing');
-  }, []);
-
-  // 工具栏动作
+  // 工具栏动作：新建终端与清屏
   const handleNewTerminal = useCallback(() => {
     if (effectiveLeafId) {
       openNewTerminalInLeaf(effectiveLeafId);
@@ -133,70 +167,40 @@ export const TerminalCard: React.FC<TerminalCardProps> = ({
     }
   }, [effectiveLeafId]);
 
-  const handleSplitHorizontal = useCallback(() => {
-    setSplitMode((prev) => (prev === 'horizontal' ? 'none' : 'horizontal'));
-    setActivePaneIndex(1);
-    fitAll();
-  }, [fitAll]);
-
-  const handleSplitVertical = useCallback(() => {
-    setSplitMode((prev) => (prev === 'vertical' ? 'none' : 'vertical'));
-    setActivePaneIndex(1);
-    fitAll();
-  }, [fitAll]);
-
   const handleClear = useCallback(() => {
-    if (activePaneIndex === 1 && termHandleRef2.current) {
-      termHandleRef2.current.clear();
-    } else {
-      termHandleRef1.current?.clear();
-    }
-  }, [activePaneIndex]);
-
-  const handleCloseSplit = useCallback(() => {
-    setSplitMode('none');
-    setActivePaneIndex(0);
-    void import('../../api/ptyRegistry').then((m) => {
-      void m.killPtyForSession(`${sessionKey}:split-2`);
-    });
-    fitAll();
-  }, [fitAll, sessionKey]);
+    termHandleRef.current?.clear();
+  }, []);
 
   const ptyMissing = ptyStatus === 'missing';
-  const isSplit = splitMode !== 'none';
   const toolbarTitle =
-    panelIdProp && panelIdProp !== 'terminal'
-      ? `pwsh ${panelIdProp.replace('terminal:', '')}`
-      : 'pwsh';
+    titleProp ||
+    (effectiveTabId && effectiveTabId !== 'terminal'
+      ? `pwsh ${effectiveTabId.replace('terminal:', '')}`
+      : 'pwsh');
 
   return (
     <div
+      ref={containerRef}
       className={`${styles.panel} chat-side-panel side-panel-body term-card`}
       role="region"
       aria-labelledby={titleId}
       aria-label="终端"
+      data-tab-id={effectiveTabId || ''}
       data-session-id={boundSessionId || ''}
       data-session-key={sessionKey}
       data-ux-mode="interactive"
       data-interactive-pty={ptyMissing ? 'false' : 'true'}
       data-pty-status={ptyStatus}
-      data-split-mode={splitMode}
     >
       <span id={titleId} className={styles.srOnly}>
         终端
       </span>
 
-      {/* 终端顶部操作工具栏（对齐截图要求） */}
+      {/* 顶部操作工具栏：仅负责触发高层新终端或清屏操作 */}
       <TerminalToolbar
-        splitMode={splitMode}
-        activePaneIndex={activePaneIndex}
-        onSelectPane={setActivePaneIndex}
-        onNewTerminal={handleNewTerminal}
-        onSplitHorizontal={handleSplitHorizontal}
-        onSplitVertical={handleSplitVertical}
-        onClear={handleClear}
-        onCloseSplit={handleCloseSplit}
         title={toolbarTitle}
+        onNewTerminal={handleNewTerminal}
+        onClear={handleClear}
       />
 
       <div
@@ -212,57 +216,16 @@ export const TerminalCard: React.FC<TerminalCardProps> = ({
             </span>
             {ptyError ? <span> {ptyError}</span> : null}
           </div>
-        ) : !isSplit ? (
+        ) : (
           <div className={styles.xtermWrap}>
             <InteractiveXtermTerminal
-              ref={termHandleRef1}
+              ref={termHandleRef}
               sessionKey={sessionKey}
               cwd={fullCwd || undefined}
               restartToken={restartToken}
               onStatusChange={handlePtyStatus}
               onPtyMissing={handlePtyMissing}
             />
-          </div>
-        ) : (
-          <div className={styles.splitContainer} data-direction={splitMode}>
-            <div
-              className={`${styles.splitPane} ${
-                activePaneIndex === 0 ? styles.activeSplitPane : ''
-              }`}
-              onClick={() => setActivePaneIndex(0)}
-            >
-              <InteractiveXtermTerminal
-                ref={termHandleRef1}
-                sessionKey={sessionKey}
-                cwd={fullCwd || undefined}
-                restartToken={restartToken}
-                onStatusChange={handlePtyStatus}
-                onPtyMissing={handlePtyMissing}
-              />
-            </div>
-            <div className={styles.splitDivider} />
-            <div
-              className={`${styles.splitPane} ${
-                activePaneIndex === 1 ? styles.activeSplitPane : ''
-              }`}
-              onClick={() => setActivePaneIndex(1)}
-            >
-              {pane2Status === 'missing' ? (
-                <div className={styles.fallbackBanner} role="status">
-                  <span>分屏终端不可用（需桌面应用 PTY）。</span>
-                  {pane2Error ? <span> {pane2Error}</span> : null}
-                </div>
-              ) : (
-                <InteractiveXtermTerminal
-                  ref={termHandleRef2}
-                  sessionKey={`${sessionKey}:split-2`}
-                  cwd={fullCwd || undefined}
-                  restartToken={restartToken}
-                  onStatusChange={handlePane2Status}
-                  onPtyMissing={handlePane2Missing}
-                />
-              )}
-            </div>
           </div>
         )}
       </div>

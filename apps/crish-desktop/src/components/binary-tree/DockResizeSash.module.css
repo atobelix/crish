@@ -1,0 +1,94 @@
+/**
+ * apps/crish-desktop/src/components/binary-tree/DockResizeSash.module.css
+ * 右坞内部分屏分割线样式（DockResizeSash — Dock Split Architecture V2）
+ *
+ * 遵循设计纪律：
+ * - 严守 AGENTS.md §13：无厚重阴影，克制高亮；
+ * - 严守 AGENTS.md §14：现代色彩语法 hsl(h s l / a)；
+ * - 静态呈现为 1px 细线（var(--border-subtle)）；
+ * - 8px 绝对居中的透明触控命中区（Hitbox: ::after 伪元素扩大命中）；
+ * - 悬浮与拖拽时柔和高亮主题色（var(--accent-primary)）；
+ * - body.dock-split-resizing 呈现全局 cursor 锁定与 iframe 防劫持。
+ */
+
+.sash {
+  position: absolute;
+  z-index: var(--z-resizer, 100);
+  background: var(--border-subtle);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
+  transition:
+    background-color var(--duration-fast, 150ms) var(--ease-standard),
+    box-shadow var(--duration-fast, 150ms) var(--ease-standard);
+}
+
+/* 水平分屏分割线（调节左右窗格宽度，静态 1px 居中） */
+.horizontal,
+.sashHorizontal {
+  width: 1px;
+  cursor: col-resize;
+  transform: translateX(-0.5px);
+}
+
+/* 垂直分屏分割线（调节上下窗格高度，静态 1px 居中） */
+.vertical,
+.sashVertical {
+  height: 1px;
+  cursor: row-resize;
+  transform: translateY(-0.5px);
+}
+
+/* 8px 绝对居中的透明触控命中区（Hitbox: ::after 伪元素扩大命中） */
+.sash::after {
+  content: '';
+  position: absolute;
+  background: transparent;
+  pointer-events: auto;
+}
+
+.horizontal::after,
+.sashHorizontal::after {
+  top: 0;
+  bottom: 0;
+  left: -3.5px;
+  width: 8px;
+}
+
+.vertical::after,
+.sashVertical::after {
+  left: 0;
+  right: 0;
+  top: -3.5px;
+  height: 8px;
+}
+
+/* 悬停与拖拽高亮主题色（柔和微光，克制无厚重阴影） */
+.sash:hover,
+.sash:focus-visible,
+.sash[data-resizing='true'] {
+  background: color-mix(in srgb, var(--accent-primary) 70%, transparent);
+  box-shadow: 0 0 2px color-mix(in srgb, var(--accent-primary) 40%, transparent);
+}
+
+/* 全局拖拽激活态联动与 cursor 锁定 */
+:global(body.dock-split-resizing) {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+:global(body.dock-split-resizing) * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+:global(body.dock-split-resizing) .sash,
+:global(body.dock-split-resizing) .sash::after {
+  transition: none;
+}
+
+:global(body.dock-split-resizing) iframe,
+:global(body.dock-split-resizing) webview {
+  pointer-events: none;
+}

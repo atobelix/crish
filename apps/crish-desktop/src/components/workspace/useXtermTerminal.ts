@@ -294,6 +294,13 @@ export function useXtermTerminal({
 
     const loadWebglAddon = () => {
       if (disposed) return;
+      // jsdom 无 xterm coreBrowserService.requestAnimationFrame；WebGL 渲染不在单元测试面。
+      if (
+        typeof process !== 'undefined' &&
+        (process.env?.NODE_ENV === 'test' || Boolean(process.env?.VITEST))
+      ) {
+        return;
+      }
       try {
         const webgl = new WebglAddon();
         webglAddon = webgl;

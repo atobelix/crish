@@ -8,8 +8,8 @@
 import React from 'react';
 import type { LeafSessionTab } from './paneHeaderGeometry';
 import styles from './PaneHeader.module.css';
-import { Button } from '../ui';
-import { AppIcon } from '../ui/icons/index';
+import { Button } from '@/components/ui';
+import { AppIcon } from '@/components/ui/icons';
 
 export interface PaneTabItemProps {
   tab: LeafSessionTab;
@@ -72,19 +72,33 @@ export const PaneTabItem: React.FC<PaneTabItemProps> = React.memo(
             onDragStart(e, tab);
           }
         }}
-          onTransitionEnd={(e) => {
+        onTransitionEnd={(e) => {
           if (isLeaving) {
             onLeaveTransitionEnd(e, tab);
           }
         }}
-          role="tab"
-          aria-selected={isSelected}
-          aria-label={title}
-          data-tauri-drag-region="false"
-          data-tab-id={tab.tabId}
+        role="tab"
+        aria-selected={isSelected}
+        aria-label={title}
+        data-tauri-drag-region="false"
+        data-tab-id={tab.tabId}
         data-session-id={tab.sessionId || undefined}
+        data-kind={tab.kind || 'chat'}
+        data-standalone={tab.isStandalone ? 'true' : undefined}
       >
         <div className={styles.tabItemInner}>
+          {tab.kind === 'browser' && (
+            <span
+              className={styles.tabIcon}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                marginRight: '6px',
+              }}
+            >
+              <AppIcon name="globe" size={13} aria-hidden />
+            </span>
+          )}
           <span className={styles.tabTitle}>{title}</span>
           <Button
             type="button"

@@ -4,8 +4,13 @@
 
 import type { LayoutTree } from './types';
 import { createDefaultTree } from './types';
-import { collectLeaves, findNodeById } from './operations';
+import {
+  collectLeaves,
+  findNodeById,
+  insertTab as insertTabOp,
+} from './operations';
 import type { LayoutTreeStoreState } from './layoutTreeStoreTypes';
+import type { SessionTab } from './sessionTabModel';
 import {
   validateRestorableLayoutTree,
   RESTORE_LAST_WORKSPACE_LS_KEY,
@@ -47,6 +52,46 @@ export function pushTreeWithHistory(
     ...(nextActiveLeafId !== undefined
       ? { activeLeafId: resolveActiveLeaf(nextTree, nextActiveLeafId) }
       : {}),
+  };
+}
+
+export function insertTabWithHistory(
+  state: LayoutTreeStoreState,
+  leafId: string | undefined,
+  tab: SessionTab,
+  insertIdx?: number
+): Partial<LayoutTreeStoreState> {
+  const targetLeafId = leafId || state.activeLeafId || firstLeafId(state.tree);
+  if (!targetLeafId) return {};
+  const result = insertTabOp(state.tree, targetLeafId, tab, insertIdx);
+  return pushTreeWithHistory(state, result, targetLeafId);
+}
+
+export function performUndo(
+  state: LayoutTreeStoreState,
+  maxHistory = MAX_HISTORY
+): Partial<LayoutTreeStoreState> {
+  if (state.past.length === 0) return {};
+  const previous = state.past[state.past.length - 1]!;
+  return {
+    past: state.past.slice(0, -1),
+    future: [...state.future, state.tree].slice(-maxHistory),
+    tree: previous,
+    activeLeafId: resolveActiveLeaf(previous, state.activeLeafId),
+  };
+}
+
+export function performRedo(
+  state: LayoutTreeStoreState,
+  maxHistory = MAX_HISTORY
+): Partial<LayoutTreeStoreState> {
+  if (state.future.length === 0) return {};
+  const next = state.future[state.future.length - 1]!;
+  return {
+    past: [...state.past, state.tree].slice(-maxHistory),
+    future: state.future.slice(0, -1),
+    tree: next,
+    activeLeafId: resolveActiveLeaf(next, state.activeLeafId),
   };
 }
 

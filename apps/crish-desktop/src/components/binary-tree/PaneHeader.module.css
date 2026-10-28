@@ -40,20 +40,22 @@
 }
 
 /* 声明式避让规则：让位值来自壳几何 token（tokens.css --edge-reserve-*） */
-/* 顶行最左叶子：侧栏收起时让出悬浮按钮空间（SidebarToggle 仍 absolute 浮在 main-layout 左缘） */
+/* 顶行最左叶子：侧栏收起时让出悬浮按钮空间（使用 margin-left 彻底退出 0-52px 区域，防止 data-tauri-drag-region 压制按钮光标） */
 :global([data-top-row='true'][data-left-edge='true']) .paneHeader {
   padding-left: 0px;
 }
 :global([data-sidebar-collapsed='true'])
   :global([data-top-row='true'][data-left-edge='true'])
   .paneHeader {
-  padding-left: var(--edge-reserve-left);
+  margin-left: var(--edge-reserve-left);
+  padding-left: 0px;
 }
 :global([data-platform='macos']:not([data-fullscreen='true']))
   :global([data-sidebar-collapsed='true'])
   :global([data-top-row='true'][data-left-edge='true'])
   .paneHeader {
-  padding-left: var(--edge-reserve-left-macos);
+  margin-left: var(--edge-reserve-left-macos);
+  padding-left: 0px;
 }
 
 /* 右缘：恢复顶行最右叶子节点的右缘避让规则，严格引用 Design Tokens，严禁裸写魔术数字 */
@@ -83,7 +85,9 @@
 .launcherWrapper {
   display: inline-flex;
   align-items: center;
-  height: 100%;
+  height: var(--pane-tab-height, 28px);
+  min-height: var(--pane-tab-height, 28px);
+  border-radius: var(--radius-control, 8px);
   flex-shrink: 0;
   -webkit-app-region: no-drag;
   app-region: no-drag;
@@ -93,7 +97,9 @@
   display: flex;
   align-items: center;
   gap: var(--pane-tab-gap);
-  height: 100%;
+  height: var(--pane-tab-height, 28px);
+  min-height: var(--pane-tab-height, 28px);
+  border-radius: var(--radius-control, 8px);
   flex: 0 0 auto;
   min-width: 0;
   -webkit-app-region: no-drag;
@@ -192,18 +198,22 @@
 }
 
 .tabItemActive {
-  background: var(--surface-card);
+  background: var(--tab-active-surface);
   color: var(--text-primary);
   /* 与未选中同字重。切标签若改字重，字形宽度变化会让省略号和文字跳动。 */
   font-weight: 400;
   border: 1px solid transparent;
-  box-shadow: var(--edge-rim), var(--shadow-lift-card);
+  box-shadow: var(--shadow-lift-card);
 }
 
 .tabItemActive:hover {
-  background: var(--surface-card);
+  background: color-mix(
+    in srgb,
+    var(--tab-active-surface) 88%,
+    var(--text-primary) 12%
+  );
   border: 1px solid transparent;
-  box-shadow: var(--edge-rim), var(--shadow-lift-raised);
+  box-shadow: var(--shadow-lift-raised);
 }
 
 /* 入场：@starting-style 首帧以左侧实际落地位置为锚点展开，无纵向浮动漂移；首轮挂载由 data-booted 关闭。
@@ -241,6 +251,14 @@
   transition: opacity var(--duration-micro) var(--ease-standard);
 }
 
+.tabIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
 .tabTitle {
   flex: 1 1 auto;
   min-width: 0;
@@ -274,7 +292,7 @@
     background-color var(--duration-micro) var(--ease-standard),
     opacity var(--duration-micro) var(--ease-standard),
     color var(--duration-micro) var(--ease-standard),
-    transform 100ms var(--ease-standard);
+    transform var(--duration-micro, 100ms) var(--ease-standard);
 }
 
 /* 隐形扩大点击热区：纯透明图层，严禁任何着色 */
@@ -312,14 +330,16 @@
   background: var(--state-active);
 }
 
-/* 新建标签按钮（加号）：26x26px、var(--radius-control, 8px) 圆角，纯流式紧贴末尾标签 */
+/* 新建标签按钮（加号）：28x28px、var(--radius-control, 8px) 圆角，纯流式紧贴末尾标签 */
 .newTabBtn,
 .newTabBtn {
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
-  min-height: unset;
-  flex: 0 0 26px;
+  width: var(--pane-tab-height, 28px);
+  height: var(--pane-tab-height, 28px);
+  min-width: var(--pane-tab-height, 28px);
+  max-width: var(--pane-tab-height, 28px);
+  min-height: var(--pane-tab-height, 28px);
+  max-height: var(--pane-tab-height, 28px);
+  flex: 0 0 var(--pane-tab-height, 28px);
   padding: 0;
   border-radius: var(--radius-control, 8px);
   border: 1px solid transparent;
@@ -340,7 +360,7 @@
 }
 
 .newTabBtn:hover {
-  background: var(--state-hover);
+  background: transparent;
   border-color: transparent;
   box-shadow: none;
   color: var(--text-primary);

@@ -3,7 +3,7 @@ import { isPendingDraft } from '../../store/storeAccess';
 import type { LeafSessionTab } from './paneHeaderGeometry';
 import { isLeafInDraftMode } from './treeLeafPanelModel';
 
-/** PaneHeader 的标签模型读取：仅保留已提交会话，草稿由视图层按叶状态补位。 */
+/** PaneHeader 的标签模型读取：仅保留已提交会话与独立常规终端，草稿由视图层按叶状态补位。 */
 export function readCommittedLeafTabs(leaf: LayoutLeaf): LeafSessionTab[] {
   const raw = leaf.tabs as unknown;
   if (!Array.isArray(raw)) return [];
@@ -12,7 +12,9 @@ export function readCommittedLeafTabs(leaf: LayoutLeaf): LeafSessionTab[] {
       typeof tab === 'object' &&
       tab !== null &&
       typeof (tab as LeafSessionTab).tabId === 'string' &&
-      !isPendingDraft((tab as LeafSessionTab).sessionId)
+      ((tab as LeafSessionTab).kind === 'terminal' ||
+        (tab as LeafSessionTab).kind === 'browser' ||
+        !isPendingDraft((tab as LeafSessionTab).sessionId))
   );
 }
 
@@ -23,7 +25,7 @@ export function readActiveTabId(leaf: LayoutLeaf): string {
 
 const DEFAULT_DRAFT_TITLE = '新对话';
 
-/** 条带成员计算：已提交会话 tabs，草稿态下动态追加草稿标签；分屏下若无真会话但有草稿保留草稿以支持关闭 */
+/** 条带成员计算：已提交会话与常规终端 tabs，草稿态下动态追加草稿标签；分屏下若无真会话但有草稿保留草稿以支持关闭 */
 export function computeVisibleLeafTabs(
   leaf: LayoutLeaf,
   isMultiPane: boolean
@@ -43,6 +45,7 @@ export function computeVisibleLeafTabs(
           tabId: existingDraft?.tabId || `draft-${leaf.id}`,
           sessionId: existingDraft?.sessionId || '',
           title: existingDraft?.title || DEFAULT_DRAFT_TITLE,
+          kind: 'chat',
         },
       ];
     }
@@ -56,11 +59,19 @@ export function computeVisibleLeafTabs(
         tabId: first.tabId || `draft-${leaf.id}`,
         sessionId: first.sessionId || '',
         title: DEFAULT_DRAFT_TITLE,
+        kind: 'chat',
       },
     ];
   }
   return isMultiPane
-    ? [{ tabId: `pane-${leaf.id}`, sessionId: '', title: DEFAULT_DRAFT_TITLE }]
+    ? [
+        {
+          tabId: `pane-${leaf.id}`,
+          sessionId: '',
+          title: DEFAULT_DRAFT_TITLE,
+          kind: 'chat',
+        },
+      ]
     : [];
 }
 

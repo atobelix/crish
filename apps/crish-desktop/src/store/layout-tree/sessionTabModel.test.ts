@@ -9,14 +9,23 @@ import {
 import {
   createDraftTab,
   createSessionTab,
+  createTerminalTab,
+  createBrowserTab,
+  createDefaultDock,
+  DEFAULT_RIGHT_DOCK,
+  normalizeSessionTab,
   mintDraftTab,
   mintDraftSessionId,
   isDraftSessionId,
   isRealSessionId,
+  isChatTab,
+  isTerminalTab,
+  isBrowserTab,
   PENDING_DRAFT_SESSION_ID,
   listRealSessionIds,
   findDuplicateRealSessionIds,
 } from './sessionTabModel';
+import { collectSpatialLeaves } from './dockLayoutModel';
 
 describe('createLeaf / createDefaultTree 工厂', () => {
   it('F1 createLeaf() 单 chat 叶、无标签的新对话界面', () => {
@@ -119,3 +128,132 @@ describe('I1 扫描', () => {
   });
 });
 
+describe('Phase 1 任务 3: 会话标签模型彻底收敛与一次性冷迁移', () => {
+  it('RightToolDockState 唯一单一真理源收敛为 tree: DockTree，彻底删除 openPanelIds 与 activePanelId', () => {
+    expect(DEFAULT_RIGHT_DOCK.collapsed).toBe(true);
+    expect(DEFAULT_RIGHT_DOCK.widthRatio).toBe(0.5);
+    expect(DEFAULT_RIGHT_DOCK.tree).toBeDefined();
+    expect(DEFAULT_RIGHT_DOCK.tree.version).toBe(2);
+
+    // 绝对禁止残留旧字段
+    expect((DEFAULT_RIGHT_DOCK as any).openPanelIds).toBeUndefined();
+    expect((DEFAULT_RIGHT_DOCK as any).activePanelId).toBeUndefined();
+
+    const created = createDefaultDock();
+    expect(created.collapsed).toBe(true);
+    expect(created.tree).toBeDefined();
+    expect((created as any).openPanelIds).toBeUndefined();
+    expect((created as any).activePanelId).toBeUndefined();
+  });
+
+  it('确立 SessionTab = ChatTab | StandaloneTerminalTab | StandaloneBrowserTab 正交类型体系', () => {
+    // 1. ChatTab
+    const chat = createSessionTab({ sessionId: 'session-123', title: '对话A' });
+    expect(isChatTab(chat)).toBe(true);
+    expect(isTerminalTab(chat)).toBe(false);
+    expect(isBrowserTab(chat)).toBe(false);
+    expect(chat.kind).toBe('chat');
+    expect(chat.sessionId).toBe('session-123');
+    expect(chat.dock).toBeDefined();
+    expect((chat.dock as any).openPanelIds).toBeUndefined();
+
+    // 2. StandaloneTerminalTab
+    const term = createTerminalTab({ cwd: 'C:\\Users\\orange' });
+    expect(isTerminalTab(term)).toBe(true);
+    expect(isChatTab(term)).toBe(false);
+    expect(isBrowserTab(term)).toBe(false);
+    expect(term.kind).toBe('terminal');
+    expect(term.isStandalone).toBe(true);
+    expect(term.terminalKey).toMatch(/^standalone:term_/);
+    expect(term.cwd).toBe('C:\\Users\\orange');
+    expect(term.dock).toBeUndefined();
+    expect(term.sessionId).toBeUndefined();
+
+    // 3. StandaloneBrowserTab
+    const browser = createBrowserTab({
+      url: 'https://example.com',
+      title: '示例',
+    });
+    expect(isBrowserTab(browser)).toBe(true);
+    expect(isChatTab(browser)).toBe(false);
+    expect(isTerminalTab(browser)).toBe(false);
+    expect(browser.kind).toBe('browser');
+    expect(browser.isStandalone).toBe(true);
+    expect(browser.url).toBe('https://example.com');
+    expect(browser.title).toBe('示例');
+    expect(browser.dock).toBeUndefined();
+    expect(browser.sessionId).toBeUndefined();
+  });
+
+  it('normalizeSessionTab 将 kind === browser 规范化为 StandaloneBrowserTab', () => {
+    const legacyBrowser = {
+      kind: 'browser',
+      tabId: 'browser-tab-1',
+      url: 'https://example.com',
+      title: '独立浏览器',
+      workspaceKey: '对话',
+    };
+
+    const normalized = normalizeSessionTab(legacyBrowser);
+    expect(normalized.kind).toBe('browser');
+    expect(isBrowserTab(normalized)).toBe(true);
+    expect(normalized.tabId).toBe('browser-tab-1');
+    if (normalized.kind === 'browser') {
+      expect(normalized.url).toBe('https://example.com');
+      expect(normalized.isStandalone).toBe(true);
+      expect(normalized.dock).toBeUndefined();
+      expect(normalized.title).toBe('独立浏览器');
+    }
+  });
+
+  it('normalizeSessionTab 将 kind === terminal 规范化为 isStandalone: true 且无 dock', () => {
+    const legacyTerminal = {
+      kind: 'terminal',
+      tabId: 'term-tab-1',
+      terminalKey: 'term_123',
+      cwd: 'C:\\Software',
+      title: '旧终端',
+      dock: { collapsed: false, openPanelIds: ['files'] }, // 错误挂载的 dock
+    };
+
+    const normalized = normalizeSessionTab(legacyTerminal);
+    expect(normalized.kind).toBe('terminal');
+    if (normalized.kind === 'terminal') {
+      expect(normalized.isStandalone).toBe(true);
+      expect(normalized.terminalKey).toBe('standalone:term_123');
+      expect(normalized.cwd).toBe('C:\\Software');
+      expect(normalized.dock).toBeUndefined(); // 绝不允许挂载右坞！
+    }
+  });
+
+  it('normalizeSessionTab 对旧版 dock 扁平数据进行一次性冷迁移升水为 DockTree，并彻底清除旧字段', () => {
+    const legacyTab = {
+      kind: 'chat',
+      tabId: 'chat-tab-1',
+      sessionId: 'sess-real-1',
+      title: '真实对话',
+      dock: {
+        collapsed: false,
+        widthRatio: 0.42,
+        openPanelIds: ['terminal', 'files'],
+        activePanelId: 'files',
+      },
+    };
+
+    const normalized = normalizeSessionTab(legacyTab);
+    expect(normalized.kind).toBe('chat');
+    if (normalized.kind === 'chat') {
+      expect(normalized.dock.collapsed).toBe(false);
+      expect(normalized.dock.widthRatio).toBe(0.42);
+      expect((normalized.dock as any).openPanelIds).toBeUndefined();
+      expect((normalized.dock as any).activePanelId).toBeUndefined();
+
+      const leaves = collectSpatialLeaves(normalized.dock.tree.root);
+      expect(leaves).toHaveLength(1);
+      const leaf = leaves[0]!;
+      expect(leaf.tabs).toHaveLength(2);
+      expect(leaf.tabs.map((t) => t.viewId)).toEqual(['terminal', 'files']);
+      expect(leaf.activeTabId).toBe(leaf.tabs[1]!.tabId); // files 激活
+    }
+  });
+});
