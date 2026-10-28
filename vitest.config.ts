@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 // vitest 3.2.7 覆盖率门禁配置（2026-08-03 审计修复）。
@@ -13,6 +14,11 @@ import { defineConfig } from 'vitest/config';
 // 环境性失败文件通过后会追加覆盖率，余量只增不减）。
 // 由 ci.yml vitest-fast 带 --coverage 强制执行；低于阈值即失败。
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': resolve(__dirname, 'apps/crish-desktop/src'),
+    },
+  },
   test: {
     globals: true,
     globalSetup: ['./vitest.globalSetup.ts'],
@@ -59,6 +65,14 @@ export default defineConfig({
     },
     projects: [
       {
+        resolve: {
+          alias: [
+            {
+              find: '@',
+              replacement: resolve(__dirname, 'apps/crish-desktop/src'),
+            },
+          ],
+        },
         test: {
           name: 'unit',
           environment: 'node',

@@ -16,7 +16,11 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
-import { typeIntoComposer, expectComposerText, startNewSession } from './helpers/boot';
+import {
+  typeIntoComposer,
+  expectComposerText,
+  startNewSession,
+} from './helpers/boot';
 import {
   installMockEngine,
   fullJourneyRunEvents,
@@ -32,7 +36,9 @@ async function openApp(
   await installMockEngine(page, config);
   await page.goto('/');
   await expect(page.locator('#root')).toBeVisible({ timeout: 20000 });
-  await expect(page.locator('[data-testid="sidebar"]')).toBeVisible({ timeout: 20000 });
+  await expect(page.locator('[data-testid="sidebar"]')).toBeVisible({
+    timeout: 20000,
+  });
   // 引擎门闩：应用容器 data-engine-ready 属性由 useEngineBootstrap 驱动
   await expect(page.locator('[data-engine-ready="true"]')).toBeVisible({
     timeout: 8000,
@@ -74,7 +80,8 @@ test.describe('E2E-L2 完整旅程（full-journey）', () => {
             const key = Object.keys(byId)[0];
             return {
               runCount: h?.getState?.().runCount ?? 0,
-              sessionCreated: typeof key === 'string' && key.startsWith('sess-'),
+              sessionCreated:
+                typeof key === 'string' && key.startsWith('sess-'),
               hasUserMsg: (byId[key]?.messages ?? []).some(
                 (m: { sender: string }) => m.sender === 'user'
               ),
@@ -179,8 +186,8 @@ test.describe('E2E-L2 完整旅程（full-journey）', () => {
     // runId 为前端自管并随请求下发（ConnectionLifecycle 语义）
     expect(String(lastRun.runId || '')).toMatch(/^run-/);
     expect(String(lastRun.sessionId || '')).toBeTruthy();
-    expect(['ask', 'deep', 'full', 'plan']).toContain(
-      String(lastRun.permissionMode || 'ask')
+    expect(['ask', 'smart', 'full']).toContain(
+      String(lastRun.permissionMode || 'smart')
     );
   });
 });

@@ -16,7 +16,8 @@ async function readSessionAndSettingsState(page: Page) {
     const w = window as any;
     const sessionStore = w.__CRISH_SESSION_STORE__ ?? w.useSessionStore;
     const settingsUiStorePath = '/src/store/settingsUiStore.ts';
-    const settingsUiStore = (await import(settingsUiStorePath)).useSettingsUiStore;
+    const settingsUiStore = (await import(settingsUiStorePath))
+      .useSettingsUiStore;
     const session = sessionStore?.getState?.();
     const settings = settingsUiStore?.getState?.();
     if (!session || !settings) return null;
@@ -67,8 +68,15 @@ async function clickAndAssertInvariants(
       (window as any).useSessionStore;
     const permissionStore = (window as any).usePermissionStore;
     const settingsUiStorePath = '/src/store/settingsUiStore.ts';
-    const settingsUiStore = (await import(settingsUiStorePath)).useSettingsUiStore;
-    if (!layout || !workspace || !sessionStore || !permissionStore || !settingsUiStore) {
+    const settingsUiStore = (await import(settingsUiStorePath))
+      .useSettingsUiStore;
+    if (
+      !layout ||
+      !workspace ||
+      !sessionStore ||
+      !permissionStore ||
+      !settingsUiStore
+    ) {
       return {
         updateCount,
         updateCounts: (window as any).__storeUpdateCounts ?? {},
@@ -85,13 +93,13 @@ async function clickAndAssertInvariants(
       updateCounts: (window as any).__storeUpdateCounts ?? {},
       state: {
         permissionMode: permState.permissionMode,
-        planModeEnabled: permState.planModeEnabled,
         workspacesLength: workspaceState.workspaces?.length ?? 0,
         activeWorkspaceIndex: workspaceState.activeWorkspaceIndex,
         sidebarCollapsed: state.sidebarCollapsed,
         activeSessionId: sessionState.activeSessionId,
         activeSessionIsValid:
-          (!sessionState.hydrationComplete && sessionState.activeSessionId === '') ||
+          (!sessionState.hydrationComplete &&
+            sessionState.activeSessionId === '') ||
           sessionState.activeSessionId?.startsWith('__pending_draft__') ||
           Boolean(sessionState.sessionsById?.[sessionState.activeSessionId]),
         showSettingsOverlay: settingsState.showSettingsOverlay,
@@ -119,8 +127,8 @@ async function clickAndAssertInvariants(
     'window.useLayoutStore 必须挂载并就绪'
   ).not.toBeNull();
 
-  // 6a. 绝无 permissionMode 状态污染 ('ask' | 'deep' | 'full' | 'plan')
-  const validModes = ['ask', 'deep', 'full', 'plan'];
+  // 6a. 绝无 permissionMode 状态污染 ('ask' | 'smart' | 'full')
+  const validModes = ['ask', 'smart', 'full'];
   expect(
     validModes,
     `[${actionName}] permissionMode 遭到污染：${storeStats.state!.permissionMode}`
@@ -167,7 +175,8 @@ test.describe('L2 UI 交互与 Store 防无限循环 E2E 测试套件', () => {
       const w = window as any;
       const sessionStore = w.__CRISH_SESSION_STORE__ ?? w.useSessionStore;
       const settingsUiStorePath = '/src/store/settingsUiStore.ts';
-      const settingsUiStore = (await import(settingsUiStorePath)).useSettingsUiStore;
+      const settingsUiStore = (await import(settingsUiStorePath))
+        .useSettingsUiStore;
       const stores = [
         ['layout', w.useLayoutStore],
         ['workspace', w.__CRISH_WORKSPACE_STORE__],
@@ -188,8 +197,7 @@ test.describe('L2 UI 交互与 Store 防无限循环 E2E 测试套件', () => {
       w.__storeInvariantSubscriptions = stores.map(([name, store]) =>
         store.subscribe(() => {
           w.__storeUpdateCount = (w.__storeUpdateCount || 0) + 1;
-          w.__storeUpdateCounts[name] =
-            (w.__storeUpdateCounts[name] || 0) + 1;
+          w.__storeUpdateCounts[name] = (w.__storeUpdateCounts[name] || 0) + 1;
         })
       );
     });
@@ -203,7 +211,8 @@ test.describe('L2 UI 交互与 Store 防无限循环 E2E 测试套件', () => {
       const store = (window as any).useLayoutStore;
       const sessionStore = w.__CRISH_SESSION_STORE__ ?? w.useSessionStore;
       const settingsUiStorePath = '/src/store/settingsUiStore.ts';
-      const settingsUiStore = (await import(settingsUiStorePath)).useSettingsUiStore;
+      const settingsUiStore = (await import(settingsUiStorePath))
+        .useSettingsUiStore;
       if (!store || !sessionStore || !settingsUiStore) return null;
       const state = store.getState();
       const workspace = (window as any).__CRISH_WORKSPACE_STORE__?.getState?.();
@@ -216,7 +225,8 @@ test.describe('L2 UI 交互与 Store 防无限循环 E2E 测试套件', () => {
           .permissionMode,
         activeSessionId: sessionState.activeSessionId,
         activeSessionIsValid:
-          (!sessionState.hydrationComplete && sessionState.activeSessionId === '') ||
+          (!sessionState.hydrationComplete &&
+            sessionState.activeSessionId === '') ||
           sessionState.activeSessionId?.startsWith('__pending_draft__') ||
           Boolean(sessionState.sessionsById?.[sessionState.activeSessionId]),
         showSettingsOverlay: settingsState.showSettingsOverlay,
@@ -225,9 +235,7 @@ test.describe('L2 UI 交互与 Store 防无限循环 E2E 测试套件', () => {
     });
 
     expect(initialState).not.toBeNull();
-    expect(['ask', 'deep', 'full', 'plan']).toContain(
-      initialState.permissionMode
-    );
+    expect(['ask', 'smart', 'full']).toContain(initialState.permissionMode);
     expect(initialState.workspacesLength).toBeGreaterThan(0);
     expect(initialState.activeWorkspaceIndex).toBeGreaterThanOrEqual(0);
     expect(initialState.activeWorkspaceIndex).toBeLessThan(
@@ -295,9 +303,11 @@ test.describe('L2 UI 交互与 Store 防无限循环 E2E 测试套件', () => {
       '点击添加面板按钮'
     );
 
-    const terminalItem = page.locator('[role="menuitem"]', {
-      hasText: '终端',
-    }).first();
+    const terminalItem = page
+      .locator('[role="menuitem"]', {
+        hasText: '终端',
+      })
+      .first();
     await expect(terminalItem).toBeVisible({ timeout: 5000 });
     await clickAndAssertInvariants(
       page,
@@ -393,6 +403,6 @@ test.describe('L2 UI 交互与 Store 防无限循环 E2E 测试套件', () => {
     const finalPermissionMode = await page.evaluate(() => {
       return (window as any).usePermissionStore?.getState?.()?.permissionMode;
     });
-    expect(['ask', 'deep', 'full', 'plan']).toContain(finalPermissionMode);
+    expect(['ask', 'smart', 'full']).toContain(finalPermissionMode);
   });
 });

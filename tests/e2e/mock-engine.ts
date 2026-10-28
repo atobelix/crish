@@ -79,8 +79,6 @@ export interface MockEngineConfig {
   getSettings?: Record<string, unknown>;
   /** list_models 返回 */
   listModels?: unknown[];
-  /** get_command_permissions 返回 */
-  commandPermissions?: unknown[];
   /** get_providers 返回 */
   providers?: unknown[];
   /** 模型配置读取回执；默认提供已配置的 mock 模型 */
@@ -351,6 +349,11 @@ function buildMockEngineInitScript(): string {
 
     var handlers = {
       'core_list_commands': function () { return MANIFEST; },
+      'workbench_activate_default_workspace': function () {
+        // 启动工作区门闩：Rust 真实命令返回已登记默认根；mock 提供稳定根，
+        // 避免 workspaceAccessGate 以 null 启动而阻断 core_run_task。
+        return { path: 'C:/e2e/workspace' };
+      },
       'core_get_status': function () {
         if (cfg.status) return cfg.status;
         // 默认引擎持钥态（E1.1 终态语义：Rust 真源持有 provider/model/hasApiKey，
@@ -428,7 +431,6 @@ function buildMockEngineInitScript(): string {
       'list_models': function () {
         return cfg.listModels || [{ id: 'gpt-4o', name: 'GPT-4o' }];
       },
-      'get_command_permissions': function () { return cfg.commandPermissions || []; },
       'get_providers': function () { return cfg.providers || []; },
       'workbench_read_models_yaml': function () {
         return cfg.modelsCatalog || DEFAULT_MODELS_CATALOG;
@@ -521,10 +523,7 @@ export async function installMockEngine(
 }
 
 /** 测试句柄：手动推送一条引擎事件（流式编排补充用） */
-async function emitEngineEvent(
-  page: Page,
-  payload: MockEvent
-): Promise<void> {
+async function emitEngineEvent(page: Page, payload: MockEvent): Promise<void> {
   await page.evaluate(
     ([handle, ev]) => {
       (window as any)[handle].emit(ev);
@@ -620,8 +619,7 @@ export function fenceRunEvents(): MockEvent[] {
         blocks: [
           {
             type: 'text',
-            text:
-              '# 流式 Markdown\n\n- **列表项**\n\n示例代码：\n```ts\nconst x = 1;\nconst y = x + 1;\n```',
+            text: '# 流式 Markdown\n\n- **列表项**\n\n示例代码：\n```ts\nconst x = 1;\nconst y = x + 1;\n```',
           },
         ],
       },
@@ -1083,9 +1081,7 @@ export function zeroCacheReadRunEvents(): MockEvent[] {
  * runId/sessionId/sequence 由引擎自动补齐）。
  * 供 T-48 cache-telemetry.spec.ts 组合多 run 命中率上升等场景复用。
  */
-function cacheStatsUpdatedEvent(
-  stats: Record<string, unknown>
-): MockEvent {
+function cacheStatsUpdatedEvent(stats: Record<string, unknown>): MockEvent {
   return {
     type: 'cache-stats-updated',
     timestamp: new Date().toISOString(),
