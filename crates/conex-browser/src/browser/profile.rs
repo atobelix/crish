@@ -506,7 +506,7 @@ mod platform_lock {
     /// kill(pid, 0) 返回码 → 存活判定（纯函数，可脱离 libc 单测）：
     /// 与 unix.rs killpg_result 的 errno 语义同源——ESRCH（目标不存在）
     /// 为唯一「已死」判定，其余（EPERM 等）保守存活。
-    fn pid_alive_result(ret: i32, errno: i32) -> bool {
+    pub(super) fn pid_alive_result(ret: i32, errno: i32) -> bool {
         if ret == 0 {
             return true;
         }

@@ -18,6 +18,7 @@ fn unsupported<T>() -> Result<T, String> {
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn browser_webview_create(
     app: AppHandle,
     state: State<'_, NativeWebviewManager>,
