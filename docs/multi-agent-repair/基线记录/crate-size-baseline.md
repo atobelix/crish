@@ -298,7 +298,7 @@ apps/agent-workbench/src-tauri/src/engine_tests.rs 3972
 apps/agent-workbench/src-tauri/src/fs_commands/mod.rs 638
 apps/agent-workbench/src-tauri/src/git.rs 1028
 apps/agent-workbench/src-tauri/src/host_openers/discovery.rs 609
-apps/agent-workbench/src-tauri/src/host_openers/execute.rs 874
+apps/agent-workbench/src-tauri/src/host_openers/execute.rs 875
 apps/agent-workbench/src-tauri/src/main.rs 1937
 apps/agent-workbench/src-tauri/src/multi_device/tls.rs 1196
 apps/agent-workbench/src-tauri/src/multi_device_network.rs 644

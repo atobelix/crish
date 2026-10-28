@@ -216,7 +216,7 @@ mod tests {
             let d = TempDir::new("cycle");
             d.write("real.txt", "x");
             let _ = symlink(&d.0, d.0.join("loop"));
-            let a = assess(&[d.0.clone()]);
+            let a = assess(std::slice::from_ref(&d.0));
             // 符号链接按单条计，不递归展开（防环）：real.txt + loop 共 2 条
             assert_eq!(a.file_count, 2, "顶层 symlink 必须计 1 条且不递归");
             assert!(a.total_size_bytes >= 1);
@@ -232,7 +232,7 @@ mod tests {
             let d = TempDir::new("cycle_sub");
             d.write("sub/inner.txt", "inner");
             let _ = symlink(&d.0, d.0.join("sub/loop"));
-            let a = assess(&[d.0.clone()]);
+            let a = assess(std::slice::from_ref(&d.0));
             // 递归层（walk_dir）的 symlink 指向祖先目录：不得无限递归
             assert_eq!(
                 a.file_count, 2,
