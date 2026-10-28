@@ -68,7 +68,9 @@ impl BrowserManager {
 
     /// 测试钩子：注入驱动内部确定性 panic（M5 回归专用；注入点写入共享 Inner，
     /// 触发后自清除——`maybe_panic_driver` 在共享态上清除，恢复路径不被污染）。
+    /// 仅 Windows 驱动回归用例调用；Linux/macOS 测试构建下保留 API 但不使用。
     #[cfg(test)]
+    #[allow(dead_code)]
     pub(super) fn inject_driver_panic(&self, point: DriverPanicPoint) {
         self.lock().driver_panic_point = Some(point);
     }
