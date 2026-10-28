@@ -152,10 +152,11 @@ describe('专项 1：400px~1200px 极限视口与碰撞翻折守卫矩阵 (GEO-V
     fireEvent.click(screen.getByText('选择模型'));
 
     const menuitem = (await screen.findAllByRole('menuitem'))[0]!;
-    const popover =
-      menuitem.closest('[data-radix-popper-content-wrapper]') ||
+    const positioner =
+      menuitem.closest('[class*="positioner"]') ||
+      menuitem.closest('[data-side]') ||
       menuitem.parentElement!;
-    const rect = popover.getBoundingClientRect();
+    const rect = positioner.getBoundingClientRect();
 
     expect(rect.top).toBeGreaterThanOrEqual(42);
     expect(rect.bottom).toBeLessThanOrEqual(388);
@@ -294,7 +295,7 @@ describe('专项 1：400px~1200px 极限视口与碰撞翻折守卫矩阵 (GEO-V
   it('GEO-VP-08: 800x600 右上角关闭按钮 Tooltip 坐标强制钳制在视口内部', async () => {
     engine.setViewport({ width: 800, height: 600 });
     render(
-      <Tooltip content="关闭窗口" side="top">
+      <Tooltip content="关闭窗口" side="top" delayShow={0}>
         <button type="button" data-mock-rect="770,5,25,25">
           ×
         </button>

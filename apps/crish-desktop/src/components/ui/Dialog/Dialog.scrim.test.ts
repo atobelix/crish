@@ -8,7 +8,7 @@ import { resolve } from 'node:path';
 
 const css = readFileSync(resolve(__dirname, './Dialog.module.css'), 'utf8');
 const tokens = readFileSync(
-  resolve(__dirname, '../../../styles/tokens.css'),
+  resolve(__dirname, '../../../styles/tokens-surface.css'),
   'utf8'
 );
 

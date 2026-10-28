@@ -1,6 +1,6 @@
 import React from 'react';
 import type { CSSProperties } from 'react';
-import { motion, useTransform } from 'motion/react';
+import { m, useTransform } from 'motion/react';
 import { clamp } from '../../../utils/color/colorMath';
 import { stepFor, useFollow, usePad } from './types';
 import styles from './ColorPicker.module.css';
@@ -47,7 +47,7 @@ export function ColorPickerSlider({
       style={style}
       {...pad}
     >
-      <motion.div
+      <m.div
         className={styles.sliderThumb}
         role="slider"
         tabIndex={0}

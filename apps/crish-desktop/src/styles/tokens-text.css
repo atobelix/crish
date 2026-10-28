@@ -11,7 +11,7 @@ html[data-theme='light'] {
   --text-step-tertiary: 62%;
   --text-step-decor: 45%;
 
-  --text-primary: var(--text-base);
+  --text-primary: var(--text-base, #121212);
   --text-secondary: color-mix(
     in srgb,
     var(--text-base) var(--text-step-secondary),
@@ -27,17 +27,6 @@ html[data-theme='light'] {
     var(--text-base) var(--text-step-decor),
     var(--surface-base, #ffffff)
   );
-
-  /* 与排版角色成对的墨色角色（Ink Roles · P2 §6.3） */
-  --ink-prose: var(--text-primary);
-  --ink-process: var(--text-tertiary);
-  --ink-label: var(--text-secondary);
-  --ink-meta: var(--text-tertiary);
-  --ink-caption: var(--text-tertiary);
-  --ink-card-title: var(--text-primary);
-  --ink-heading: var(--text-primary);
-  --ink-title: var(--text-primary);
-  --ink-code: var(--text-primary);
 
   /* 反色前景与浮层前景 */
   --text-inverse: var(--text-on-accent);
@@ -60,7 +49,7 @@ html[data-theme='dark'] {
   --text-step-tertiary: 58%;
   --text-step-decor: 40%;
 
-  --text-primary: var(--text-base);
+  --text-primary: var(--text-base, #f5f5f5);
   --text-secondary: color-mix(
     in srgb,
     var(--text-base) var(--text-step-secondary),
@@ -76,17 +65,6 @@ html[data-theme='dark'] {
     var(--text-base) var(--text-step-decor),
     var(--surface-base, #141414)
   );
-
-  /* 与排版角色成对的墨色角色（Ink Roles · P2 §6.3） */
-  --ink-prose: var(--text-primary);
-  --ink-process: var(--text-tertiary);
-  --ink-label: var(--text-secondary);
-  --ink-meta: var(--text-tertiary);
-  --ink-caption: var(--text-tertiary);
-  --ink-card-title: var(--text-primary);
-  --ink-heading: var(--text-primary);
-  --ink-title: var(--text-primary);
-  --ink-code: var(--text-primary);
 
   /* 反色前景与浮层前景 */
   --text-inverse: var(--text-on-accent);

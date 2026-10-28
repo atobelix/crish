@@ -168,6 +168,8 @@ import {
   IconSidebarLeft,
   IconSidebarRight,
   IconCompass,
+  IconSplitHorizontal,
+  IconSplitVertical,
 } from './customIcons';
 
 export type HugeIconEntry = { kind: 'hugeicons'; icon: IconSvgElement };
@@ -285,6 +287,7 @@ export const iconMap = {
   locate: h(LocateIcon),
   logout: h(Logout01Icon),
   maximize: c(IconMaximize2),
+  'maximize-2': c(IconMaximize2),
   menu: h(Menu01Icon),
   'message-circle': h(MessageCircleIcon),
   'message-circle-plus': h(MessageCirclePlusIcon),
@@ -292,6 +295,7 @@ export const iconMap = {
   'message-square-plus': h(MessageSquarePlusIcon),
   'message-square-quote': h(MessageSquareQuoteIcon),
   minimize: c(IconMinimize2),
+  'minimize-2': c(IconMinimize2),
   minus: h(MinusIcon),
   'minus-circle': h(PlusMinusCircleIcon),
   'more-horizontal': h(MoreHorizontalIcon),
@@ -339,6 +343,8 @@ export const iconMap = {
   sliders: h(SlidersHorizontalIcon),
   smartphone: h(SmartPhone01Icon),
   sparkles: h(SparklesIcon),
+  'split-horizontal': c(IconSplitHorizontal),
+  'split-vertical': c(IconSplitVertical),
   square: h(SquareIcon),
   'square-pen': h(Note04Icon),
   star: h(StarIcon),

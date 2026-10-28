@@ -21,7 +21,14 @@ function readFile(relPath: string): string {
   // 模板字面量先赋给中间变量再进 new URL——
   // 内联在 new URL 参数中的模板会被 vitest transform 破坏（资产 URL 重写）。
   const target = `../../${relPath}`;
-  return readFileSync(new URL(target, import.meta.url), 'utf8');
+  let content = readFileSync(new URL(target, import.meta.url), 'utf8');
+  if (relPath.endsWith('tokens.css') && content.includes('@import')) {
+    content = content.replace(/@import\s+['"]\.\/([^'"]+)['"];/g, (_, file) => {
+      const sub = `../../src/styles/${file}`;
+      return readFileSync(new URL(sub, import.meta.url), 'utf8');
+    });
+  }
+  return content;
 }
 
 const TOKENS_CSS = 'src/styles/tokens.css';
@@ -224,11 +231,15 @@ describe('密度矩阵 space token 契约（BATCH-01 §4.5）', () => {
       /(^|,)\s*:root\s*(,|$)/.test(b.selector) &&
       declaresToken(b.body, '--space-1')
   );
-  const smallBlock = allBlocks.find((b) =>
-    /\[data-ui-size=['"]small['"]\]/.test(b.selector)
+  const smallBlock = allBlocks.find(
+    (b) =>
+      /\[data-ui-size=['"]small['"]\]/.test(b.selector) &&
+      declaresToken(b.body, '--space-1')
   );
-  const largeBlock = allBlocks.find((b) =>
-    /\[data-ui-size=['"]large['"]\]/.test(b.selector)
+  const largeBlock = allBlocks.find(
+    (b) =>
+      /\[data-ui-size=['"]large['"]\]/.test(b.selector) &&
+      declaresToken(b.body, '--space-1')
   );
 
   it('基础块存在且包含全部关键 --space-* token', () => {
@@ -332,24 +343,21 @@ describe('G-CASCADE · 密度档层叠生效契约（防「定义正确却被压
   });
 
   it('large 档级联计算值必须等于 large 档声明值（F5 回归锚点：--space-1 曾为 4px≠6px）', () => {
-    const largeBlock = allBlocks.find((b) =>
-      /data-ui-size=['"]large['"]/.test(b.selector)
-    );
-    expect(largeBlock).toBeDefined();
     for (const token of DENSITY_SAMPLE_TOKENS) {
-      expect(
-        declaresToken(largeBlock!.body, token),
-        `large 档缺少 ${token}`
-      ).toBe(true);
+      const declaringBlock = allBlocks.find(
+        (b) =>
+          /data-ui-size=['"]large['"]/.test(b.selector) &&
+          declaresToken(b.body, token)
+      );
+      expect(declaringBlock, `large 档缺少 ${token}`).toBeDefined();
       for (const theme of THEMES) {
         const w = resolveWinner(allBlocks, token, { theme, uiSize: 'large' });
-        const declared = largeBlock!.body
-          .match(
-            new RegExp(
-              `(?:^|;)\\s*${token.replace(/[-]/g, '\\$&')}\\s*:\\s*([^;]+);`
-            )
-          )![1]
-          .trim();
+        const match = stripCssComments(declaringBlock!.body).match(
+          new RegExp(
+            `(?<![\\w-])${token.replace(/[-]/g, '\\$&')}\\s*:\\s*([^;]+);`
+          )
+        );
+        const declared = match![1].trim();
         expect(
           w!.value.replace(/\s+/g, ' '),
           `${token} @ ${theme}/large 级联值应等于 large 声明值`

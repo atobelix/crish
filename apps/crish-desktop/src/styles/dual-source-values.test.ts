@@ -22,7 +22,14 @@ import { readFileSync } from 'node:fs';
 
 function readFile(relPath: string): string {
   const target = `../../${relPath}`;
-  return readFileSync(new URL(target, import.meta.url), 'utf8');
+  let content = readFileSync(new URL(target, import.meta.url), 'utf8');
+  if (relPath.endsWith('tokens.css') && content.includes('@import')) {
+    content = content.replace(/@import\s+['"]\.\/([^'"]+)['"];/g, (_, file) => {
+      const sub = `../../src/styles/${file}`;
+      return readFileSync(new URL(sub, import.meta.url), 'utf8');
+    });
+  }
+  return content;
 }
 
 /** 从 tokens.css 顶层提取某 token 的声明值（先剥注释，取最后一次声明） */

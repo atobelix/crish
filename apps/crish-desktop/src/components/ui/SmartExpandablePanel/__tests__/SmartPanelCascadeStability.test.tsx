@@ -18,7 +18,6 @@ import {
   estimateCascadeWidth,
   MAX_CASCADE_PANEL_HEIGHT,
 } from '../PositionEngine';
-import { SafeAimEngine } from '../../internal/SafeAimEngine';
 import { SmartExpandablePanel } from '../SmartExpandablePanel';
 import type { MenuItem } from '../types';
 
@@ -38,7 +37,7 @@ describe('级联展开面板稳定性与几何对齐专项测试', () => {
       expect(width).toBe(160);
     });
 
-    it('向左展开时 left 精确计算，使子菜单右边界严格紧贴主菜单左边界 (gap 6px)', () => {
+    it('向左展开时 left 精确计算，使子菜单右边界向内覆盖主菜单左侧 padding 5px (overlap 5px)', () => {
       const panelRect = { left: 1000, right: 1200 };
       const viewportWidth = 1280;
       const viewportHeight = 800;
@@ -53,30 +52,33 @@ describe('级联展开面板稳定性与几何对齐专项测试', () => {
       );
 
       expect(placed.side).toBe('left');
-      // left = 1000 - 6 - 160 = 834px，其右边界为 834 + 160 = 994px，与 panelRect.left 相差正好是 gap 6px
-      expect(placed.left).toBe(834);
+      // left = 1000 + 5 - 160 = 845px，其右边界为 845 + 160 = 1005px，向内覆盖 panelRect.left 5px
+      expect(placed.left).toBe(845);
+      expect(placed.top).toBe(196); // 200 - 4
 
       const style = cascadeStyle(placed);
-      expect(style.left).toBe('834px');
+      expect(style.left).toBe('845px');
       expect(style.right).toBe('auto');
       expect(style.transformOrigin).toBe('top right');
     });
 
-    it('向右展开时输出 left 坐标且 right 为 auto', () => {
+    it('向右展开时输出 left 坐标且向内覆盖主菜单右侧 padding 5px (overlap 5px)', () => {
       const panelRect = { left: 200, right: 400 };
       const placed = placeCascadeSubmenu(panelRect, 200, 160, 100, 1280, 800);
 
       expect(placed.side).toBe('right');
-      expect(placed.left).toBe(400 + 6);
+      // left = 400 - 5 = 395px，覆盖 panelRect.right 5px
+      expect(placed.left).toBe(395);
+      expect(placed.top).toBe(196);
 
       const style = cascadeStyle(placed);
-      expect(style.left).toBe('406px');
+      expect(style.left).toBe('395px');
       expect(style.right).toBe('auto');
       expect(style.transformOrigin).toBe('top left');
     });
   });
 
-  describe('2. 图 2 场景：跨面板安全桥 data-side 契约', () => {
+  describe('2. 图 2 场景：跨面板安全桥 data-side 契约与父项激活态', () => {
     it('展开二级子菜单时在 DOM 上挂载对应 data-side 属性', async () => {
       const items: MenuItem[] = [
         {
@@ -109,125 +111,49 @@ describe('级联展开面板稳定性与几何对齐专项测试', () => {
       const submenu = screen.getByRole('menu', { name: '使用 skill' });
       expect(submenu).toBeInTheDocument();
       expect(submenu).toHaveAttribute('data-side');
+      expect(submenu).toHaveAttribute('data-state', 'open');
       expect(['left', 'right']).toContain(submenu.getAttribute('data-side'));
     });
   });
 
   describe('3. 图 3 场景：长菜单单源高度与视口安全钳制', () => {
-    it('超长子项列表估算高度严格钳制在 MAX_CASCADE_PANEL_HEIGHT (360px)', () => {
-      const veryLongChildren = Array.from({ length: 15 }, (_, i) => ({
+    it('12-30 项长列表估算高度受控钳制在 MAX_CASCADE_PANEL_HEIGHT (300px)，防止冲上天际', () => {
+      const mediumChildren = Array.from({ length: 12 }, (_, i) => ({
         id: `skill-${i}`,
-        type: i === 13 ? 'divider' : 'item',
+        type: i === 10 ? 'divider' : 'item',
       }));
 
-      const estHeight = estimateCascadeHeight(veryLongChildren);
-      expect(estHeight).toBe(MAX_CASCADE_PANEL_HEIGHT);
+      const estMedium = estimateCascadeHeight(mediumChildren);
+      expect(estMedium).toBe(MAX_CASCADE_PANEL_HEIGHT);
+
+      const veryLongChildren = Array.from({ length: 30 }, (_, i) => ({
+        id: `skill-${i}`,
+        type: 'item',
+      }));
+      const estVeryLong = estimateCascadeHeight(veryLongChildren);
+      expect(estVeryLong).toBe(MAX_CASCADE_PANEL_HEIGHT);
     });
 
-    it('底部空间不足时只上移真实高度，避免将子菜单顶飞出触发行视线', () => {
+    it('底部空间不足时长列表（300px）上移自适应，严格保持 12px 视口呼吸底边距（绝不切断底部的管理技能）', () => {
       const panelRect = { left: 100, right: 300 };
-      const itemTop = 650;
-      const viewportHeight = 700; // 较紧凑的视口
+      const itemTop = 600;
+      const viewportHeight = 800; // 常见视口高度
+      const realSubmenuHeight = 300; // 限制高度 300px
 
       const placed = placeCascadeSubmenu(
         panelRect,
         itemTop,
-        200,
-        MAX_CASCADE_PANEL_HEIGHT, // 360px
+        220,
+        realSubmenuHeight,
         1200,
         viewportHeight
       );
 
-      // maxTop = 700 - 8 - 360 = 332px
-      expect(placed.top).toBe(332);
-      expect(placed.top).toBeGreaterThan(0);
-    });
-  });
-
-  describe('4. 图 4 场景：斜向下划动到底部选项的轨迹保护', () => {
-    let engine: SafeAimEngine;
-
-    beforeEach(() => {
-      const oldOverlay = document.getElementById('sepSafeAimOverlay');
-      if (oldOverlay) oldOverlay.remove();
-      engine = SafeAimEngine.getInstance({ enabled: true, timeoutMs: 300 });
-      engine.initSvgOverlay();
-    });
-
-    afterEach(() => {
-      engine.clearSubmenu();
-      engine.destroy();
-    });
-
-    it('光标从主菜单项向右下方的「管理技能...」斜切移动时，安全区不被误杀释放', () => {
-      const triggerEl = document.createElement('button');
-      const submenuEl = document.createElement('div');
-      document.body.appendChild(triggerEl);
-      document.body.appendChild(submenuEl);
-
-      // 模拟图 4 场景：主菜单项在左侧 (y=600)，子菜单在右侧 (left: 200, right: 380, top: 400, bottom: 760)
-      // 子菜单的几何中心在 (290, 580)
-      submenuEl.getBoundingClientRect = () => ({
-        left: 200,
-        top: 400,
-        right: 380,
-        bottom: 760,
-        width: 180,
-        height: 360,
-        x: 200,
-        y: 400,
-        toJSON: () => {},
-      });
-
-      engine.setSubmenu(triggerEl, submenuEl, 'right');
-
-      // 帧 1：鼠标在主项触发点 (100, 600)
-      engine.onMouseMove({ clientX: 100, clientY: 600 });
-      // 帧 2：鼠标斜向右下方移动 (140, 650)，朝着底部的管理技能 (y=740) 划去
-      engine.onMouseMove({ clientX: 140, clientY: 650 });
-
-      // 此时 vx = +40 (向右)，vy = +50 (向下)
-      // 目标点在斜向右下方 (160, 680)
-      const isProtected = engine.isPointerInSafeZone({ x: 160, y: 680 });
-      expect(isProtected).toBe(true);
-
-      // 帧 3：鼠标直接进入子菜单矩形内部 (220, 740)
-      engine.onMouseMove({ clientX: 220, clientY: 740 });
-      expect(engine.isPointerInSafeZone({ x: 220, y: 740 })).toBe(true);
-
-      triggerEl.remove();
-      submenuEl.remove();
-    });
-
-    it('当光标明确向左倒退反向离开右侧子菜单时，安全区立即释放', () => {
-      const triggerEl = document.createElement('button');
-      const submenuEl = document.createElement('div');
-      document.body.appendChild(triggerEl);
-      document.body.appendChild(submenuEl);
-
-      submenuEl.getBoundingClientRect = () => ({
-        left: 200,
-        top: 400,
-        right: 380,
-        bottom: 760,
-        width: 180,
-        height: 360,
-        x: 200,
-        y: 400,
-        toJSON: () => {},
-      });
-
-      engine.setSubmenu(triggerEl, submenuEl, 'right');
-
-      // 鼠标向左倒退远离：从 (150, 500) 移至 (120, 500)
-      engine.onMouseMove({ clientX: 150, clientY: 500 });
-      engine.onMouseMove({ clientX: 120, clientY: 500 });
-
-      // vx = -30 < -2，判定为反向倒退远离
-      expect(engine.isPointerInSafeZone({ x: 130, y: 500 })).toBe(false);
-
-      triggerEl.remove();
-      submenuEl.remove();
+      // bounds.bottom = 800 - 12 = 788px
+      // 理想放置 600 + 300 = 900 > 788，触发底边对齐：top = 788 - 300 = 488px
+      expect(placed.top).toBe(488);
+      // 验证底部严格与视口底边保持 12px 刚性间隙
+      expect(placed.top + realSubmenuHeight).toBe(viewportHeight - 12);
     });
   });
 });

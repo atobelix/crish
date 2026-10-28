@@ -9,10 +9,10 @@
   min-width: 180px;
   max-width: 360px;
   padding: 6px;
-  border-radius: var(--sep-radius-outer, 14px);
-  background: var(--sep-bg-panel-solid, var(--bg-elevated));
-  border: 1px solid var(--border-color);
-  box-shadow: var(--sep-shadow);
+  border-radius: var(--radius-menu-outer, 18px);
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-panel, var(--border-color));
+  box-shadow: var(--shadow-popover, var(--shadow-lg));
   color: var(--text-primary);
   font-family: var(--font-sans, sans-serif);
   box-sizing: border-box;
@@ -39,7 +39,7 @@
 .panelTitle {
   font-size: var(--font-size-micro);
   font-weight: 500;
-  color: var(--sep-text-muted);
+  color: var(--text-tertiary);
   padding: 2px 6px 4px;
 }
 
@@ -190,7 +190,7 @@
   min-height: var(--sep-item-height, 32px);
   padding: 5px 10px;
   border: none;
-  border-radius: var(--sep-item-radius, 8px);
+  border-radius: var(--radius-menu-inner, 12px);
   background: transparent;
   color: var(--text-primary);
   font-family: inherit;
@@ -212,7 +212,7 @@
 .item:hover,
 .item.focused,
 .item.parentActive {
-  background-color: var(--tint-hover);
+  background-color: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -221,7 +221,7 @@
 }
 
 .item.selected {
-  background-color: var(--tint-hover);
+  background-color: var(--state-hover);
 }
 
 .item.disabled {
@@ -303,11 +303,11 @@
 .shortcut {
   font-size: 10.5px;
   font-family: var(--sep-font-mono, monospace);
-  color: var(--sep-text-muted);
+  color: var(--text-tertiary);
 }
 
 .submenuChevron {
-  color: var(--sep-text-muted);
+  color: var(--text-tertiary);
 }
 
 .checkIcon {
@@ -359,7 +359,7 @@
   }
 }
 
-/* 二级子菜单卡片（14px 外圆角 / 6px 内衬 / 8px 条目，Shell-Body-Footer 解耦） */
+/* 二级子菜单卡片（18px 外圆角 / 6px 内衬 / 12px 条目，Shell-Body-Footer 解耦） */
 .cascadeSubmenu {
   position: fixed;
   margin: 0;
@@ -368,18 +368,18 @@
   max-width: min(280px, calc(100vw - 24px));
   height: auto;
   overflow: visible; /* 外层卡片绝不出现滚动条，圆角与阴影保持 100% 纯净 */
-  border-radius: var(--sep-radius-outer, 14px);
-  border: 1px solid var(--border-color);
-  background: var(--sep-bg-panel-solid, var(--bg-elevated));
-  box-shadow: var(--sep-shadow);
+  border-radius: var(--radius-menu-outer, 18px);
+  border: 1px solid var(--border-panel, var(--border-color));
+  background: var(--surface-overlay);
+  box-shadow: var(--shadow-popover, var(--shadow-lg));
   padding: 6px;
   display: flex;
   flex-direction: column;
   z-index: var(--z-dropdown-menu, 310);
   outline: none;
   transform-origin: top left;
-  animation: cascadeSubmenuEnterRight 0.18s cubic-bezier(0.16, 1, 0.3, 1)
-    forwards;
+  animation: cascadeSubmenuEnterRight var(--duration-moderate, 180ms)
+    var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) forwards;
   will-change: transform, opacity;
 }
 
@@ -396,7 +396,7 @@
 @media (prefers-reduced-motion: reduce) {
   .cascadeSubmenu {
     animation: none;
-    transition: opacity 100ms ease;
+    transition: opacity var(--duration-micro, 100ms) var(--ease-standard);
   }
 }
 
@@ -432,7 +432,7 @@ html[data-perf-tier='eco'] .cascadeSubmenu {
 }
 
 .cascadeListBody::-webkit-scrollbar-thumb:hover {
-  background: var(--border-hover, var(--border-color));
+  background: var(--border-color);
 }
 
 .cascadeListBody::-webkit-scrollbar-button {
@@ -472,7 +472,7 @@ html[data-perf-tier='eco'] .cascadeSubmenu {
 .cascadeSubmenu [role='menuitem'] {
   width: auto;
   min-width: 100%;
-  border-radius: var(--sep-item-radius, 8px);
+  border-radius: var(--radius-menu-inner, 12px);
   min-height: var(--sep-item-height, 32px);
   padding: 5px 10px;
 }

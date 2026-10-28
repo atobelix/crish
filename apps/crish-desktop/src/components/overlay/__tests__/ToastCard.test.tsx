@@ -7,6 +7,7 @@ import {
   fireEvent,
   act,
   renderHook,
+  cleanup,
 } from '@testing-library/react';
 import type { AppToast } from '../../../services/toast/types';
 import { ToastCard } from '../ToastCard';
@@ -35,9 +36,10 @@ describe('ToastCard & ToastViewport 现代化 3D 层叠通知套件测试', () =
   afterEach(() => {
     act(() => {
       vi.runOnlyPendingTimers();
+      ToastStore.clear();
     });
+    cleanup();
     vi.useRealTimers();
-    ToastStore.clear();
     vi.restoreAllMocks();
   });
 

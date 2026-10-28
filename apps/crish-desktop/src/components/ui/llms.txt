@@ -1,0 +1,4604 @@
+# Conex UI Primitives — Machine-Readable Contract (llms.txt)
+# Generated automatically by scripts/generate-ui-contracts.mjs. DO NOT EDIT DIRECTLY.
+# Last Updated: 2026-10-27
+
+## Quick Index
+- Button: import { Button, type ButtonProps } from '@/components/ui'
+- IconButton: import { IconButton, type IconButtonProps } from '@/components/ui'
+- Input: import { Input, type InputProps } from '@/components/ui'
+- Textarea: import { Textarea, type TextareaProps } from '@/components/ui'
+- Field: import { Field, type FieldProps } from '@/components/ui'
+- FormItem: import { FormItem } from '@/components/ui'
+- Tooltip: import { Tooltip, type TooltipProps } from '@/components/ui'
+- Dialog: import { Dialog, type DialogProps } from '@/components/ui'
+- ConfirmDialog: import { ConfirmDialog, type ConfirmDialogProps } from '@/components/ui'
+- Switch: import { Switch, type SwitchProps } from '@/components/ui'
+- SegmentedControl: import { SegmentedControl, type SegmentedControlProps } from '@/components/ui'
+- Badge: import { Badge, type BadgeProps } from '@/components/ui'
+- Slider: import { Slider, type SliderProps } from '@/components/ui'
+- Select: import { Select, type SelectRootProps } from '@/components/ui'
+- Combobox: import { Combobox, type ComboboxRootProps } from '@/components/ui'
+- Tabs: import { Tabs, type TabsProps } from '@/components/ui'
+- Card: import { Card, type CardProps } from '@/components/ui'
+- Row: import { Row, type RowProps } from '@/components/ui'
+- ScrollArea: import { ScrollArea, type ScrollAreaProps } from '@/components/ui'
+- DisclosureAffordance: import { DisclosureAffordance, type DisclosureAffordanceProps } from '@/components/ui'
+- ContextMenu: import { ContextMenu, type ContextMenuProps } from '@/components/ui'
+- PreviewCard: import { PreviewCard, type PreviewCardProps } from '@/components/ui'
+- SmartExpandablePanel: import { SmartExpandablePanel, type SmartPanelProps } from '@/components/ui'
+- SmartModelBadge: import { SmartModelBadge, type SmartModelBadgeProps } from '@/components/ui'
+- AnimatedCounter: import { AnimatedCounter, type AnimatedCounterProps } from '@/components/ui'
+- ColorPicker: import { ColorPicker, type ColorPickerProps } from '@/components/ui'
+- TextMorph: import { TextMorph, type TextMorphProps } from '@/components/ui'
+- AppIcon: import { AppIcon, type AppIconProps } from '@/components/ui'
+- CheckIcon: import { CheckIcon } from '@/components/ui'
+- ChevronRightIcon: import { ChevronRightIcon } from '@/components/ui'
+- ChevronUpDownIcon: import { ChevronUpDownIcon } from '@/components/ui'
+- ClearIcon: import { ClearIcon } from '@/components/ui'
+- CloseIcon: import { CloseIcon } from '@/components/ui'
+- ColorPickerArea: import { ColorPickerArea, type ColorPickerAreaProps } from '@/components/ui'
+- ColorPickerContrast: import { ColorPickerContrast, type ColorPickerContrastProps } from '@/components/ui'
+- ColorPickerSlider: import { ColorPickerSlider, type ColorPickerSliderProps } from '@/components/ui'
+- ColorPickerSwatches: import { ColorPickerSwatches, type ColorPickerSwatchesProps } from '@/components/ui'
+- ComboboxChip: import { ComboboxChip, type ComboboxChipProps } from '@/components/ui'
+- ComboboxChips: import { ComboboxChips, type ComboboxChipsProps } from '@/components/ui'
+- ComboboxContent: import { ComboboxContent, type ComboboxContentProps } from '@/components/ui'
+- ComboboxEmpty: import { ComboboxEmpty, type ComboboxEmptyProps } from '@/components/ui'
+- ComboboxGroup: import { ComboboxGroup, type ComboboxGroupProps } from '@/components/ui'
+- ComboboxInput: import { ComboboxInput, type ComboboxInputProps } from '@/components/ui'
+- ComboboxItem: import { ComboboxItem, type ComboboxItemProps } from '@/components/ui'
+- ComboboxLabel: import { ComboboxLabel, type ComboboxLabelProps } from '@/components/ui'
+- ComboboxList: import { ComboboxList, type ComboboxListProps } from '@/components/ui'
+- ComboboxRoot: import { ComboboxRoot, type ComboboxRootProps } from '@/components/ui'
+- ComboboxSeparator: import { ComboboxSeparator, type ComboboxSeparatorProps } from '@/components/ui'
+- ContextMenuCheckboxItem: import { ContextMenuCheckboxItem, type ContextMenuCheckboxItemProps } from '@/components/ui'
+- ContextMenuContent: import { ContextMenuContent, type ContextMenuContentProps } from '@/components/ui'
+- ContextMenuGroup: import { ContextMenuGroup, type ContextMenuGroupProps } from '@/components/ui'
+- ContextMenuItem: import { ContextMenuItem, type ContextMenuItemProps } from '@/components/ui'
+- ContextMenuLabel: import { ContextMenuLabel, type ContextMenuLabelProps } from '@/components/ui'
+- ContextMenuRadioGroup: import { ContextMenuRadioGroup, type ContextMenuRadioGroupProps } from '@/components/ui'
+- ContextMenuRadioItem: import { ContextMenuRadioItem, type ContextMenuRadioItemProps } from '@/components/ui'
+- ContextMenuSeparator: import { ContextMenuSeparator } from '@/components/ui'
+- ContextMenuShortcut: import { ContextMenuShortcut, type ContextMenuShortcutProps } from '@/components/ui'
+- ContextMenuSub: import { ContextMenuSub, type ContextMenuSubProps } from '@/components/ui'
+- ContextMenuSubContent: import { ContextMenuSubContent, type ContextMenuSubContentProps } from '@/components/ui'
+- ContextMenuSubTrigger: import { ContextMenuSubTrigger, type ContextMenuSubTriggerProps } from '@/components/ui'
+- ContextMenuTrigger: import { ContextMenuTrigger, type ContextMenuTriggerProps } from '@/components/ui'
+- CopyIcon: import { CopyIcon, type CopyIconProps } from '@/components/ui'
+- DialogBackdrop: import { DialogBackdrop, type DialogBackdropProps } from '@/components/ui'
+- DialogBody: import { DialogBody, type DialogBodyProps } from '@/components/ui'
+- DialogClose: import { DialogClose, type DialogCloseProps } from '@/components/ui'
+- DialogContent: import { DialogContent, type DialogContentProps } from '@/components/ui'
+- DialogDescription: import { DialogDescription, type DialogDescriptionProps } from '@/components/ui'
+- DialogFooter: import { DialogFooter, type DialogFooterProps } from '@/components/ui'
+- DialogHeader: import { DialogHeader, type DialogHeaderProps } from '@/components/ui'
+- DialogOverlay: import { DialogOverlay, type DialogOverlayProps } from '@/components/ui'
+- DialogPopup: import { DialogPopup } from '@/components/ui'
+- DialogPortal: import { DialogPortal, type DialogPortalProps } from '@/components/ui'
+- DialogRoot: import { DialogRoot } from '@/components/ui'
+- DialogTitle: import { DialogTitle, type DialogTitleProps } from '@/components/ui'
+- DialogTrigger: import { DialogTrigger, type DialogTriggerProps } from '@/components/ui'
+- DialogViewport: import { DialogViewport, type DialogViewportProps } from '@/components/ui'
+- DotIcon: import { DotIcon } from '@/components/ui'
+- DropdownMenu: import { DropdownMenu, type DropdownMenuProps } from '@/components/ui'
+- DropdownMenuArrow: import { DropdownMenuArrow } from '@/components/ui'
+- DropdownMenuCheckboxItem: import { DropdownMenuCheckboxItem, type DropdownMenuCheckboxItemProps } from '@/components/ui'
+- DropdownMenuContent: import { DropdownMenuContent, type DropdownMenuContentProps } from '@/components/ui'
+- DropdownMenuGroup: import { DropdownMenuGroup } from '@/components/ui'
+- DropdownMenuGroupLabel: import { DropdownMenuGroupLabel } from '@/components/ui'
+- DropdownMenuItem: import { DropdownMenuItem, type DropdownMenuItemProps } from '@/components/ui'
+- DropdownMenuLabel: import { DropdownMenuLabel } from '@/components/ui'
+- DropdownMenuPopup: import { DropdownMenuPopup } from '@/components/ui'
+- DropdownMenuPortal: import { DropdownMenuPortal, type DropdownMenuPortalProps } from '@/components/ui'
+- DropdownMenuPositioner: import { DropdownMenuPositioner } from '@/components/ui'
+- DropdownMenuRadioGroup: import { DropdownMenuRadioGroup } from '@/components/ui'
+- DropdownMenuRadioItem: import { DropdownMenuRadioItem } from '@/components/ui'
+- DropdownMenuRoot: import { DropdownMenuRoot } from '@/components/ui'
+- DropdownMenuSeparator: import { DropdownMenuSeparator } from '@/components/ui'
+- DropdownMenuShortcut: import { DropdownMenuShortcut } from '@/components/ui'
+- DropdownMenuSub: import { DropdownMenuSub } from '@/components/ui'
+- DropdownMenuSubContent: import { DropdownMenuSubContent, type DropdownMenuSubContentProps } from '@/components/ui'
+- DropdownMenuSubmenu: import { DropdownMenuSubmenu } from '@/components/ui'
+- DropdownMenuSubTrigger: import { DropdownMenuSubTrigger, type DropdownMenuSubTriggerProps } from '@/components/ui'
+- DropdownMenuTrigger: import { DropdownMenuTrigger, type DropdownMenuTriggerProps } from '@/components/ui'
+- FieldControl: import { FieldControl } from '@/components/ui'
+- FieldDescription: import { FieldDescription } from '@/components/ui'
+- FieldError: import { FieldError } from '@/components/ui'
+- FieldHint: import { FieldHint } from '@/components/ui'
+- FieldLabel: import { FieldLabel } from '@/components/ui'
+- FieldRequiredIndicator: import { FieldRequiredIndicator } from '@/components/ui'
+- FieldRoot: import { FieldRoot } from '@/components/ui'
+- FocusTrap: import { FocusTrap, type FocusTrapProps } from '@/components/ui'
+- IconChevronDown: import { IconChevronDown } from '@/components/ui'
+- IconChevronLeft: import { IconChevronLeft } from '@/components/ui'
+- IconChevronRight: import { IconChevronRight } from '@/components/ui'
+- IconChevronUp: import { IconChevronUp } from '@/components/ui'
+- IconCompass: import { IconCompass } from '@/components/ui'
+- IconEditPen: import { IconEditPen } from '@/components/ui'
+- IconFolder: import { IconFolder } from '@/components/ui'
+- IconFolderOpen: import { IconFolderOpen } from '@/components/ui'
+- IconGitBranch: import { IconGitBranch } from '@/components/ui'
+- IconGitCommit: import { IconGitCommit } from '@/components/ui'
+- IconGitFork: import { IconGitFork } from '@/components/ui'
+- IconGlobe: import { IconGlobe } from '@/components/ui'
+- IconMaximize2: import { IconMaximize2 } from '@/components/ui'
+- IconMinimize2: import { IconMinimize2 } from '@/components/ui'
+- IconNewChatPen: import { IconNewChatPen } from '@/components/ui'
+- IconRefreshCw: import { IconRefreshCw } from '@/components/ui'
+- IconSettings: import { IconSettings } from '@/components/ui'
+- IconSidebarLeft: import { IconSidebarLeft } from '@/components/ui'
+- IconSidebarRight: import { IconSidebarRight } from '@/components/ui'
+- IconSplitHorizontal: import { IconSplitHorizontal } from '@/components/ui'
+- IconSplitVertical: import { IconSplitVertical } from '@/components/ui'
+- LayerProvider: import { LayerProvider, type LayerProviderProps } from '@/components/ui'
+- Menu: import { Menu, type MenuProps } from '@/components/ui'
+- MenuCollectionProvider: import { MenuCollectionProvider, type MenuCollectionProviderProps } from '@/components/ui'
+- MinusIcon: import { MinusIcon } from '@/components/ui'
+- PencilIcon: import { PencilIcon, type PencilIconProps } from '@/components/ui'
+- PinIcon: import { PinIcon, type PinIconProps } from '@/components/ui'
+- PinOffIcon: import { PinOffIcon, type PinOffIconProps } from '@/components/ui'
+- Popover: import { Popover, type PopoverProps } from '@/components/ui'
+- PreviewCardArrow: import { PreviewCardArrow, type PreviewCardArrowProps } from '@/components/ui'
+- PreviewCardContent: import { PreviewCardContent, type PreviewCardContentProps } from '@/components/ui'
+- PreviewCardDescription: import { PreviewCardDescription, type PreviewCardDescriptionProps } from '@/components/ui'
+- PreviewCardTitle: import { PreviewCardTitle, type PreviewCardTitleProps } from '@/components/ui'
+- PreviewCardTrigger: import { PreviewCardTrigger, type PreviewCardTriggerProps } from '@/components/ui'
+- ScrollAreaScrollBar: import { ScrollAreaScrollBar, type ScrollAreaScrollBarProps } from '@/components/ui'
+- SearchIcon: import { SearchIcon } from '@/components/ui'
+- SelectClearButton: import { SelectClearButton, type SelectClearButtonProps } from '@/components/ui'
+- SelectContent: import { SelectContent, type SelectContentProps } from '@/components/ui'
+- SelectGroup: import { SelectGroup, type SelectGroupProps } from '@/components/ui'
+- SelectGroupLabel: import { SelectGroupLabel, type SelectGroupLabelProps } from '@/components/ui'
+- SelectIcon: import { SelectIcon, type SelectIconProps } from '@/components/ui'
+- SelectItem: import { SelectItem, type SelectItemProps } from '@/components/ui'
+- SelectLabel: import { SelectLabel } from '@/components/ui'
+- SelectRoot: import { SelectRoot, type SelectRootProps } from '@/components/ui'
+- SelectSeparator: import { SelectSeparator, type SelectSeparatorProps } from '@/components/ui'
+- SelectTrigger: import { SelectTrigger, type SelectTriggerProps } from '@/components/ui'
+- SelectValue: import { SelectValue, type SelectValueProps } from '@/components/ui'
+- SlotText: import { SlotText, type SlotTextProps } from '@/components/ui'
+- SmartCollapsibleSection: import { SmartCollapsibleSection, type SmartCollapsibleSectionProps } from '@/components/ui'
+- SmartItemRow: import { SmartItemRow, type SmartItemRowProps } from '@/components/ui'
+- SmartPanel: import { SmartPanel, type SmartPanelProps } from '@/components/ui'
+- SmartPanelCascadeSubmenu: import { SmartPanelCascadeSubmenu, type SmartPanelCascadeSubmenuProps } from '@/components/ui'
+- SmartPanelHeader: import { SmartPanelHeader, type SmartPanelHeaderProps } from '@/components/ui'
+- SmartPanelItem: import { SmartPanelItem, type SmartPanelItemProps } from '@/components/ui'
+- SmartPanelList: import { SmartPanelList, type SmartPanelListProps } from '@/components/ui'
+- SmartSearchHeader: import { SmartSearchHeader, type SmartSearchHeaderProps } from '@/components/ui'
+- SmartSubmenu: import { SmartSubmenu, type SmartSubmenuProps } from '@/components/ui'
+- StandardDialog: import { StandardDialog } from '@/components/ui'
+- StepperArrowDownIcon: import { StepperArrowDownIcon } from '@/components/ui'
+- StepperArrowLeftIcon: import { StepperArrowLeftIcon } from '@/components/ui'
+- StepperArrowRightIcon: import { StepperArrowRightIcon } from '@/components/ui'
+- StepperArrowUpIcon: import { StepperArrowUpIcon } from '@/components/ui'
+- TabsContent: import { TabsContent, type TabsContentProps } from '@/components/ui'
+- TabsList: import { TabsList, type TabsListProps } from '@/components/ui'
+- TabsTrigger: import { TabsTrigger, type TabsTriggerProps } from '@/components/ui'
+- TabStrip: import { TabStrip, type TabStripProps } from '@/components/ui'
+- TooltipArrow: import { TooltipArrow } from '@/components/ui'
+- TooltipPopup: import { TooltipPopup } from '@/components/ui'
+- TooltipPortal: import { TooltipPortal } from '@/components/ui'
+- TooltipPositioner: import { TooltipPositioner } from '@/components/ui'
+- TooltipProvider: import { TooltipProvider } from '@/components/ui'
+- TooltipRoot: import { TooltipRoot } from '@/components/ui'
+- TooltipTrigger: import { TooltipTrigger } from '@/components/ui'
+
+---
+
+## Component: Button
+Path: apps/crish-desktop/src/components/ui/Button/Button.tsx
+Description: 原子按钮（React 19 纯函数实现） 彻底废除 bare 临时逃逸口，正式引入第一公民变体 variant="unstyled"； 当且仅当 variant="unstyled" 时，剥离一切内置尺寸与动效类，仅保留原生 a11y 与纯语义化交互； 接入 CVA + cn 工具函数，确保外部 className 具备确定性覆盖优先级。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| ref | `React.Ref<HTMLButtonElement>` | - | No | - |
+| variant | `\| NonNullable<VariantProps<typeof buttonVariants>['variant']> \| 'unstyled'` | 'secondary' | No | 视觉变体：default \| primary \| secondary \| danger \| ghost \| outline \| plain \| unstyled |
+| size | `ButtonSize` | 'md' | No | 尺寸：xs(24px) \| sm(28px) \| md(32px) \| lg(40px) \| icon |
+| icon | `React.ReactNode` | - | No | 图标位（置于文字前/后，aria-hidden 由组件内部保证） |
+| iconPosition | `'left' \| 'right'` | 'left' | No | 图标位置：left（默认）或 right |
+| loading | `boolean` | false | No | 加载态：自动 disabled + aria-busy，内容前置旋转指示 |
+| isLoading | `boolean` | false | No | 加载态别名（对齐标准 UI 契约） |
+| block | `boolean` | false | No | 通栏按钮（宽度 100%） |
+| active | `boolean` | false | No | 激活态 |
+| bare | `boolean` | - | No | - |
+| align | `'center' \| 'start'` | - | No | 对齐方式：center（默认居中）\| start（靠左对齐，专供通栏导航条目等） |
+| static | `boolean` | - | No | 静态模式：禁用 :active 按压缩放微触感 |
+
+### Verified Code Example
+```tsx
+import { Button } from '@/components/ui';
+
+export function Example() {
+  return (
+    <Button variant="primary" size="md" onClick={() => {}}>
+      主要操作
+    </Button>
+  );
+}
+```
+
+---
+
+## Component: IconButton
+Path: apps/crish-desktop/src/components/ui/Button/IconButton.tsx
+Description: ui/IconButton 原子图标按钮组件（P4 T-P4-04 就地升级） 正方形图标按钮，强制要求 aria-label 属性以确保屏幕阅读器无障碍可访问性。 可选支持声明式 Tooltip 绑定（内部使用 ui/Tooltip 包裹）。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| icon | `React.ReactNode` | - | Yes | 图标元素 |
+| 'aria-label' | `string` | - | Yes | 强制无障碍命名，确保无障碍屏幕阅读器可识别 |
+| size | `StandardIconButtonSize \| 'xs' \| 'sm' \| 'md' \| 'lg'` | 'list' | No | 尺寸档位：dense(24) \| list(28) \| control(32) \| chrome(36)，兼容 xs/sm/md/lg，默认 'list' |
+| tooltip | `React.ReactNode` | - | No | 声明式 Tooltip 浮层文案（可选） |
+| shortcut | `string \| string[]` | - | No | 快捷键组合：单个字符串（如 '?'）或按键数组 |
+
+### Verified Code Example
+```tsx
+import { IconButton } from '@/components/ui';
+import { PlayIcon } from '@hugeicons/react';
+
+export function Example() {
+  return (
+    <IconButton aria-label="运行任务" size="md" onClick={() => {}}>
+      <PlayIcon />
+    </IconButton>
+  );
+}
+```
+
+---
+
+## Component: Input
+Path: apps/crish-desktop/src/components/ui/Input/Input.tsx
+Description: ui/Input 原子输入组件（CVA 架构升级版 / React 19 纯函数） 遵循同心几何标尺与四档标准化尺寸矩阵（24/28/32/40px）， 装配 IME 组合输入守卫状态机（拦截拼音/日文回车提前提交），
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| ref | `React.Ref<HTMLInputElement>` | - | No | - |
+| variant | `'text' \| 'search' \| 'password' \| 'default'` | 'text' | No | 视觉型别：search 增加放大镜前缀位；password 内置明文切换；default/text 普通输入 |
+| size | `InputSize` | 'md' | No | 尺寸：xs(24px) / sm(28px) / md(32px) / lg(40px) |
+| label | `React.ReactNode` | - | No | 字段标签（渲染 <label>，自动关联 input id） |
+| hint | `React.ReactNode` | - | No | 辅助说明文案（aria-describedby 关联） |
+| error | `React.ReactNode` | - | No | 校验错误文案（aria-invalid + aria-describedby 关联） |
+| clearable | `boolean` | false | No | 可清空：受控 value 非空时显示清空按钮，触发原生 input 事件或 onClear 回调 |
+| onClear | `() => void` | - | No | 清空回调 |
+| prefixIcon | `React.ReactNode` | - | No | 前缀图标位（置于输入框左侧） |
+| suffix | `React.ReactNode` | - | No | 后缀插槽（置于右侧，清空/密码切换之前） |
+| onEnter | `(value: string) => void` | - | No | 回车提交回调（受 IME 组合输入锁保护，拼音选词回车不触发） |
+| bare | `boolean` | false | No | 裸核心模式（不应用外部 wrapper/container，专供隐藏文件输入框或就地编辑场景） |
+
+### Verified Code Example
+```tsx
+import { Input } from '@/components/ui';
+
+export function Example() {
+  return (
+    <Input
+      variant="default"
+      size="md"
+      placeholder="请输入内容..."
+      clearable
+    />
+  );
+}
+```
+
+---
+
+## Component: Textarea
+Path: apps/crish-desktop/src/components/ui/Input/Textarea.tsx
+Description: ui/Textarea 原子多行文本输入组件（CVA 架构升级版 / React 19 纯函数） 接入现代 CSS `field-sizing: content` 零 JS 回流自适应高度， 装配 IME 组合输入守卫状态机（彻底拦截拼音/日文回车提前提交），
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| ref | `React.Ref<HTMLTextAreaElement>` | - | No | - |
+| size | `'sm' \| 'md' \| 'lg'` | 'md' | No | 尺寸：sm(紧凑) / md(标准) / lg(突出) |
+| label | `React.ReactNode` | - | No | 字段标签（渲染 <label>，自动关联 textarea id） |
+| hint | `React.ReactNode` | - | No | 辅助说明文案（aria-describedby 关联） |
+| error | `React.ReactNode` | - | No | 校验错误文案（aria-invalid + aria-describedby 关联） |
+| onEnter | `(value: string) => void` | - | No | 回车提交回调（受 IME 组合输入锁保护，拼音选词回车不触发；按 Enter 且不按 Shift 时触发） |
+| maxHeight | `number \| string` | - | No | 自定义最大高度（超出滚动） |
+| bare | `boolean` | false | No | 裸核心模式（不渲染外层 wrap/shell/label/hint 装饰，保留 IME 守卫与属性透传，专供代码编辑器等复杂舞台） |
+
+### Verified Code Example
+```tsx
+import { Textarea } from '@/components/ui';
+
+export function Example() {
+  return (
+    <Textarea
+      size="md"
+      placeholder="输入多行文本..."
+      rows={4}
+    />
+  );
+}
+```
+
+---
+
+## Component: Field
+Path: apps/crish-desktop/src/components/ui/Field.tsx
+Description: Field UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| size | `'sm' \| 'md' \| 'lg'` | - | No | - |
+| layout | `'vertical' \| 'horizontal'` | - | No | - |
+| disabled | `boolean` | - | No | - |
+| required | `boolean` | - | No | - |
+| invalid | `boolean` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { Field, FieldLabel, FieldControl, FieldHint, Input } from '@/components/ui';
+
+export function Example() {
+  return (
+    <Field>
+      <FieldLabel>用户名</FieldLabel>
+      <FieldControl>
+        <Input placeholder="请输入用户名" />
+      </FieldControl>
+      <FieldHint>支持字母与数字</FieldHint>
+    </Field>
+  );
+}
+```
+
+---
+
+## Component: FormItem
+Path: apps/crish-desktop/src/components/ui/Field.tsx
+Description: FormItem UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { FormItem, FieldLabel, FieldControl, Input } from '@/components/ui';
+
+export function Example() {
+  return (
+    <FormItem label="邮箱">
+      <Input placeholder="请输入常用邮箱" />
+    </FormItem>
+  );
+}
+```
+
+---
+
+## Component: Tooltip
+Path: apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx
+Description: ui/Tooltip 原子提示（Headless Base UI 重构版） 遵循 docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.2 & §3.2 1. 接入 @base-ui/react/tooltip 原语
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| content | `React.ReactNode` | - | Yes | - |
+| children | `React.ReactElement` | - | Yes | - |
+| shortcut | `string \| string[]` | - | No | 快捷键组合：单个字符串（如 'Ctrl+N'）或按键数组（如 ['Ctrl', 'N']） |
+| side | `'top' \| 'bottom' \| 'left' \| 'right'` | 'top' | No | - |
+| align | `'start' \| 'center' \| 'end'` | 'center' | No | - |
+| disabled | `boolean` | false | No | - |
+| delayShow | `number` | DEFAULT_DELAY_SHOW_MS | No | 意图停留；未满此时长离开则从未显示。默认 350ms |
+| delayHide | `number` | - | No | - |
+| contentClassName | `string` | - | No | - |
+| portalClassName | `string` | - | No | - |
+| contentStyle | `React.CSSProperties` | - | No | - |
+| portalStyle | `React.CSSProperties` | - | No | - |
+| interactive | `boolean` | false | No | - |
+| arrow | `boolean` | true | No | - |
+| sideOffset | `number` | 6 | No | - |
+| alignOffset | `number` | 0 | No | - |
+| portalContainer | `HTMLElement \| null` | - | No | - |
+| collisionBoundary | `Element \| Element[] \| null` | - | No | - |
+| collisionPadding | `number \| Record<string, number>` | - | No | - |
+| collisionAvoidance | `any` | - | No | - |
+| positionMethod | `'absolute' \| 'fixed'` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { Tooltip, Button } from '@/components/ui';
+
+export function Example() {
+  return (
+    <Tooltip content="操作提示文案">
+      <Button variant="ghost">悬停查看</Button>
+    </Tooltip>
+  );
+}
+```
+
+---
+
+## Component: Dialog
+Path: apps/crish-desktop/src/components/ui/Dialog/Dialog.tsx
+Description: ui/Dialog 弹窗基座与复合原语体系（原生 inert 模态栈与现代 Headless 架构） 方案依据: - docs/frontend-systemic-refactor/plans/05-ui-primitives-and-headless-refactor.md §3.2 与 §4.2
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| open | `boolean` | false | No | 受控开关 |
+| defaultOpen | `boolean` | - | No | 非受控默认开启 |
+| onClose | `() => void` | - | No | 关闭回调（Esc/backdrop/关闭按钮统一归口） |
+| onOpenChange | `(open: boolean) => void` | - | No | 开关状态变化回调 |
+| title | `React.ReactNode` | - | No | 标题（aria-labelledby 关联；可传带图标的 ReactNode） |
+| description | `React.ReactNode` | - | No | 描述文案（aria-describedby 关联） |
+| role | `'dialog' \| 'alertdialog'` | 'dialog' | No | 语义角色：alertdialog 供危险操作确认 |
+| size | `'sm' \| 'md' \| 'lg' \| 'xl' \| '2xl' \| 'auto'` | 'md' | No | 尺寸档（classNames.panel 可再以 --dialog-width / 自定尺寸覆盖） |
+| initialFocusRef | `React.RefObject<HTMLElement \| null>` | - | No | 初始聚焦元素；不传则聚焦弹窗内首个可交互元素 |
+| dismissible | `boolean` | true | No | 是否允许 Esc/backdrop 关闭（向导强制步进时置 false） |
+| closeOnBackdropClick | `boolean` | dismissible | No | 点击本弹窗自身遮罩是否关闭，默认随 dismissible。 |
+| showCloseButton | `boolean` | true | No | 是否渲染头部关闭按钮 |
+| ariaLabel | `string` | - | No | 无 title 时的可访问名称（aria-label） |
+| portalTarget | `HTMLElement \| null` | - | No | Portal 挂载目标；默认 document.body |
+| footer | `React.ReactNode` | - | No | 底部操作区 |
+| children | `React.ReactNode` | - | No | 内容区 |
+| classNames | `{ panel?: string; overlay?: string; body?: string }` | - | No | 自定义类名收敛对象： - panel 追加到弹窗面板 - overlay 追加到遮罩壳 - body 追加到内容区 |
+| className | `string` | - | No | 面板自定义类名快捷属性 |
+| overlayClassName | `string` | - | No | 遮罩自定义类名快捷属性 |
+| onEscapeKeyDown | `(event: KeyboardEvent) => boolean \| void` | - | No | LayerStack 到达本层时的 Esc 钩子。 返回 true / preventDefault 则中枢不再走默认 dismiss。 |
+| modal | `boolean \| 'trap-focus'` | true | No | 是否模态（锁定背景与焦点限制），默认 true |
+
+### Verified Code Example
+```tsx
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogBody,
+  DialogFooter,
+  Button,
+} from '@/components/ui';
+
+export function Example({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>对话框标题</DialogTitle>
+        </DialogHeader>
+        <DialogBody>对话框正文内容...</DialogBody>
+        <DialogFooter>
+          <Button variant="secondary" onClick={onClose}>取消</Button>
+          <Button variant="primary" onClick={onClose}>确定</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+```
+
+---
+
+## Component: ConfirmDialog
+Path: apps/crish-desktop/src/components/ui/ConfirmDialog/ConfirmDialog.tsx
+Description: ui/ConfirmDialog 确认对话框基座（02-E3 改语义 · C-7 裁决 · 03-detail T15，批次 4.0） 契约（04-detail §2.1.1，实现与验收基线）： - 基于 ui/Dialog 封装确认语义：role="alertdialog" + title→aria-labelledby
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| open | `boolean` | false | No | 受控开合（基座不管理 open 状态，不设内部状态机）。 直接受控使用时必传；经 hooks/useConfirmGate Promise 桥使用时由桥注入。 |
+| title | `React.ReactNode` | - | No | 标题（→ aria-labelledby；动词短语文案模板） |
+| description | `React.ReactNode` | - | No | 正文（→ aria-describedby；原 confirm 全文入此，含「不可逆/永久丢失」后果说明） |
+| confirmLabel | `React.ReactNode` | '确认' | No | 确认钮文案（危险项「确认删除/确认放弃/确认清空/确认强制取消」…） |
+| cancelLabel | `React.ReactNode` | '取消' | No | 取消钮文案 |
+| danger | `boolean` | false | No | 危险变体：确认钮 variant="danger"，且不默认聚焦（初始焦点仍落取消钮） |
+| onConfirm | `() => void` | - | No | 确认回调。直接受控使用时必传；经 useConfirmGate 桥使用时由桥注入。 |
+| onCancel | `() => void` | - | No | 取消回调（Esc / 取消钮 / 遮罩统一归口）。直接受控使用时必传；经桥使用由桥注入。 |
+| disabled | `boolean` | false | No | 确认钮 disabled（异步进行中防重复提交，对齐 BgTaskActions busyAny 语义） |
+| size | `'sm' \| 'md' \| 'lg' \| 'xl' \| '2xl' \| 'auto'` | 'md' | No | 尺寸档透传 ui/Dialog |
+| className | `string` | - | No | 自定义类名（透传 Dialog 面板） |
+| overlayClassName | `string` | - | No | 自定义类名（透传 Dialog 遮罩壳） |
+| portalTarget | `HTMLElement \| null` | - | No | Portal 挂载目标（透传 Dialog；默认 document.body） |
+
+### Verified Code Example
+```tsx
+import { ConfirmDialog } from '@/components/ui';
+
+export function Example({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <ConfirmDialog
+      open={open}
+      title="确认删除"
+      description="此操作不可逆，确定继续？"
+      confirmText="删除"
+      cancelText="取消"
+      variant="danger"
+      onConfirm={() => onClose()}
+      onCancel={() => onClose()}
+    />
+  );
+}
+```
+
+---
+
+## Component: Switch
+Path: apps/crish-desktop/src/components/ui/Switch/Switch.tsx
+Description: ui/Switch 现代化原子开关组件（0ms 乐观响应与防死锁加固） 特性： - 100% 纯净自研，零外部 npm 动画库依赖；
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| checked | `boolean` | - | No | 受控选中状态 |
+| defaultChecked | `boolean` | false | No | 非受控初始选中状态 |
+| onCheckedChange | `(checked: boolean) => void \| Promise<unknown>` | - | No | 状态变更回调（支持同步回调或返回 Promise 供异常回滚） |
+| size | `'sm' \| 'md' \| 'lg'` | 'md' | No | 尺寸档位（默认 'md'） |
+| loading | `boolean` | false | No | 加载中状态（展示滑块内微型 Spinner 并锁定交互） |
+| disabled | `boolean` | false | No | 是否禁用 |
+| optimistic | `boolean` | true | No | 是否启用 0ms 乐观响应状态机（默认 true） |
+| optimisticTimeout | `number` | 5000 | No | 乐观状态超时对齐防死锁窗口毫秒数（默认 5000ms，设为 0 可关闭超时回滚） |
+| label | `React.ReactNode` | - | No | 前缀/后缀说明文案（点击可关联切换） |
+| labelPlacement | `'start' \| 'end'` | 'start' | No | 标签位置（默认 'start' 即前缀） |
+| 'aria-label' | `string` | - | No | 无 label 时的屏幕阅读器命名 |
+| className | `string` | - | No | 自定义类名（仅用于外部布局与间距微调） |
+
+### Verified Code Example
+```tsx
+import { Switch } from '@/components/ui';
+
+export function Example({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return <Switch checked={checked} onCheckedChange={onChange} size="md" />;
+}
+```
+
+---
+
+## Component: SegmentedControl
+Path: apps/crish-desktop/src/components/ui/SegmentedControl/SegmentedControl.tsx
+Description: apps/crish-desktop/src/components/ui/SegmentedControl/SegmentedControl.tsx ui/SegmentedControl 原子分段选择器 (v2.1 连续物理弹簧与 FLIP 共享布局版) 核心特性：
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| options | `(SegmentedControlOption<T> \| T)[]` | - | Yes | - |
+| value | `T` | - | No | - |
+| defaultValue | `T` | - | No | - |
+| onChange | `(value: T) => void` | - | No | - |
+| variant | `'pill' \| 'line'` | - | No | - |
+| size | `'xs' \| 'sm' \| 'md' \| 'lg'` | - | No | - |
+| orientation | `'horizontal' \| 'vertical'` | - | No | - |
+| block | `boolean` | - | No | - |
+| disabled | `boolean` | - | No | - |
+| className | `string` | - | No | - |
+| style | `React.CSSProperties` | - | No | - |
+| 'aria-label' | `string` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { SegmentedControl } from '@/components/ui';
+
+export function Example({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <SegmentedControl
+      value={value}
+      onChange={onChange}
+      options={[
+        { label: '全部', value: 'all' },
+        { label: '活跃', value: 'active' },
+        { label: '归档', value: 'archived' },
+      ]}
+    />
+  );
+}
+```
+
+---
+
+## Component: Badge
+Path: apps/crish-desktop/src/components/ui/Badge/Badge.tsx
+Description: ui/Badge 原子徽标组件（CVA 架构升级版 / React 19 纯函数） 遵循展示型容器 0 描边铁律（border: none）， 圆角采用角色圆角 --radius-row (6px)，
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| ref | `React.Ref<HTMLSpanElement>` | - | No | - |
+| tone | `\| StandardBadgeTone \| 'brand' \| 'info' \| 'error'` | - | No | 严格受限的语义 tone：neutral / accent / warning / danger / success（兼容旧 brand/info/error 别名） |
+| variant | `\| StandardBadgeTone \| 'brand' \| 'info' \| 'error'` | - | No | 兼容 variant 别名 |
+| size | `BadgeSize` | 'sm' | No | 尺寸：xs(18px) / sm(20px) / md(24px)，默认 'sm' |
+| dot | `boolean` | false | No | 是否展示前置微圆点状态指示 |
+| icon | `React.ReactNode` | - | No | 图标位 |
+| onRemove | `() => void` | - | No | 移除按钮回调（传入时渲染右侧 × 按钮，作为 Chip/Tag 语义） |
+| removeAriaLabel | `string` | '移除' | No | 移除按钮无障碍标签 |
+
+### Verified Code Example
+```tsx
+import { Badge } from '@/components/ui';
+
+export function Example() {
+  return <Badge tone="accent" size="sm">运行中</Badge>;
+}
+```
+
+---
+
+## Component: Slider
+Path: apps/crish-desktop/src/components/ui/Slider/Slider.tsx
+Description: ui/Slider 原子滑动条组件（RED-DETAILED-02 / T-ATOM-07） 遵循 2px 发丝轨道与 44px 隐式命中区（Fitts's Law）， 12px 正圆滑块（50% 白名单），支持鼠标拖拽、滚轮与键盘无障碍漫游。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| value | `number` | - | No | 当前数值（受控） |
+| defaultValue | `number` | 0 | No | 默认初始值（非受控） |
+| onChange | `(value: number) => void` | - | No | 数值变更回调 |
+| min | `number` | 0 | No | 最小值（默认 0） |
+| max | `number` | 100 | No | 最大值（默认 100） |
+| step | `number` | 1 | No | 步长（默认 1） |
+| disabled | `boolean` | false | No | 是否禁用 |
+| 'aria-label' | `string` | - | No | 无障碍名称 |
+
+### Verified Code Example
+```tsx
+import { Slider } from '@/components/ui';
+
+export function Example({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return <Slider value={value} min={0} max={100} step={1} onChange={onChange} />;
+}
+```
+
+---
+
+## Component: Select
+Path: apps/crish-desktop/src/components/ui/Select/Select.tsx
+Description: Select UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| value | `string \| string[] \| null` | - | No | 当前选值（受控）；单选为 string \| null，多选为 string[] |
+| defaultValue | `string \| string[] \| null` | - | No | 初始默认选值（非受控） |
+| onValueChange | `(value: any) => void` | - | No | 选值变更回调 |
+| open | `boolean` | - | No | 浮层展开状态（受控） |
+| defaultOpen | `boolean` | - | No | 初始展开状态（非受控） |
+| onOpenChange | `(open: boolean) => void` | - | No | 浮层展开状态变更回调 |
+| size | `'sm' \| 'md' \| 'lg'` | - | No | 尺寸档位 |
+| variant | `'outline' \| 'soft'` | - | No | 外观风格 |
+| multiple | `boolean` | - | No | 是否开启多选 |
+| clearable | `boolean` | - | No | 是否开启一键清除 |
+| disabled | `boolean` | - | No | 是否禁用 |
+| children | `React.ReactNode` | - | No | 复合子节点，或传 options 开启快捷单组件声明 |
+| options | `SelectOption[]` | - | No | 快捷 options 模式（可选） |
+| placeholder | `string` | - | No | 快捷 placeholder 模式（可选） |
+| id | `string` | - | No | 快捷 id（可选） |
+| className | `string` | - | No | 快捷 className（可选） |
+| align | `'start' \| 'center' \| 'end'` | - | No | 快捷 align（可选） |
+| side | `'top' \| 'bottom'` | - | No | 快捷 side（可选） |
+| portalContainer | `HTMLElement \| null` | - | No | 浮层传送门容器（可选） |
+| onChange | `(value: string) => void` | - | No | 快捷 onChange 别名 |
+
+### Verified Code Example
+```tsx
+import { Select } from '@/components/ui';
+
+export function Example({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <Select
+      value={value}
+      onChange={onChange}
+      options={[
+        { label: '选项一', value: 'opt1' },
+        { label: '选项二', value: 'opt2' },
+      ]}
+    />
+  );
+}
+```
+
+---
+
+## Component: Combobox
+Path: apps/crish-desktop/src/components/ui/Select/Combobox.tsx
+Description: Combobox UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| items | `T[]` | - | No | 待检索过滤的项目原始列表 |
+| value | `string \| string[] \| null` | - | No | 当前选值（受控）；单选为 string \| null，多选为 string[] |
+| defaultValue | `string \| string[] \| null` | - | No | 初始默认选值（非受控） |
+| onValueChange | `(value: any) => void` | - | No | 选值变更回调 |
+| query | `string` | - | No | 搜索过滤词（受控） |
+| defaultQuery | `string` | - | No | 初始搜索过滤词（非受控） |
+| onQueryChange | `(query: string) => void` | - | No | 搜索过滤词变更回调 |
+| filter | `(item: T, query: string) => boolean` | - | No | 自定义单项过滤函数 |
+| itemToString | `(item: T) => string` | - | No | 项提取文本函数（用于默认模糊匹配） |
+| itemToValue | `(item: T) => string` | - | No | 项提取 Value 函数 |
+| open | `boolean` | - | No | 浮层展开状态（受控） |
+| defaultOpen | `boolean` | - | No | 初始展开状态（非受控） |
+| onOpenChange | `(open: boolean) => void` | - | No | 浮层展开状态变更回调 |
+| size | `'sm' \| 'md' \| 'lg'` | - | No | 尺寸档位 |
+| variant | `'outline' \| 'soft'` | - | No | 外观风格 |
+| multiple | `boolean` | - | No | 是否开启多选 |
+| clearable | `boolean` | - | No | 是否开启一键清除 |
+| grid | `boolean` | - | No | 是否为多列网格布局 |
+| cols | `number` | '1' | No | 网格列数 (默认 1) |
+| disabled | `boolean` | - | No | 是否禁用 |
+| children | `React.ReactNode` | - | No | 子节点 |
+
+### Verified Code Example
+```tsx
+import { Combobox } from '@/components/ui';
+
+export function Example({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <Combobox
+      value={value}
+      onChange={onChange}
+      placeholder="搜索或选择..."
+    />
+  );
+}
+```
+
+---
+
+## Component: Tabs
+Path: apps/crish-desktop/src/components/ui/Tabs/Tabs.tsx
+Description: Tabs UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| value | `string` | - | No | 受控选中值 |
+| defaultValue | `string` | - | No | 非受控默认选中值 |
+| onValueChange | `(value: string) => void` | - | No | 选中变更回调 |
+| variant | `'pill' \| 'line'` | - | No | 外观变体：pill(胶囊卡片) \| line(下划线指示条) |
+| size | `'xs' \| 'sm' \| 'md' \| 'lg'` | - | No | 尺寸档位 |
+| orientation | `'horizontal' \| 'vertical'` | - | No | 排布方向 |
+| block | `boolean` | - | No | 撑满父容器 |
+| className | `string` | - | No | 自定义外层类名 |
+| style | `React.CSSProperties` | - | No | 自定义行内样式 |
+| children | `React.ReactNode` | - | Yes | - |
+
+### Verified Code Example
+```tsx
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui';
+
+export function Example() {
+  return (
+    <Tabs defaultValue="tab1">
+      <TabsList>
+        <TabsTrigger value="tab1">概览</TabsTrigger>
+        <TabsTrigger value="tab2">配置</TabsTrigger>
+      </TabsList>
+      <TabsContent value="tab1">概览面板内容</TabsContent>
+      <TabsContent value="tab2">配置面板内容</TabsContent>
+    </Tabs>
+  );
+}
+```
+
+---
+
+## Component: Card
+Path: apps/crish-desktop/src/components/ui/Card/Card.tsx
+Description: ui/Card 内容容器原子基元（CVA 架构升级版 / React 19 纯函数） 承载报告卡、Diff 卡片、文件卡片、终端卡片与设置卡片等内容容器。 严格遵循展示型容器 0 描边铁律（border: none），以表面明度差（--surface-card）建立层级，
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| ref | `React.Ref<HTMLDivElement>` | - | No | - |
+| children | `React.ReactNode` | - | No | - |
+| padding | `CardPadding` | 'md' | No | 内边距档位：none(0) \| sm(8px) \| md(12px) \| lg(16px)，默认 'md' |
+| rim | `boolean` | false | No | 是否需要极弱边缘轮廓光（仅在复杂背景/低反差环境下兜底） |
+| interactive | `boolean` | - | No | 可选点击交互 |
+
+### Verified Code Example
+```tsx
+import { Card } from '@/components/ui';
+
+export function Example() {
+  return (
+    <Card padding="md">
+      卡片内容区域
+    </Card>
+  );
+}
+```
+
+---
+
+## Component: Row
+Path: apps/crish-desktop/src/components/ui/Row/Row.tsx
+Description: ui/Row 单行条目原子基元（P4 T-P4-01） 承载侧栏会话项、工具调用行、思考行、列表项等单行条目。 遵循展示型容器 0 描边铁律（border: none），高度锁定 4 档标尺，
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| height | `'dense' \| 'list' \| 'control' \| 'chrome'` | 'list' | No | 行高档位：dense(24px) \| list(28px) \| control(32px) \| chrome(36px)，默认 'list' |
+| leading | `React.ReactNode` | - | No | 前置槽位：图标、状态指示点、折叠指示 |
+| children | `React.ReactNode` | - | No | 主标题或正文内容（自适应占据剩余宽度） |
+| trailing | `React.ReactNode` | - | No | 后置槽位：时间戳、快捷键、操作图标、Badge |
+| selected | `boolean` | false | No | 是否选中态（背景注入 --state-selected，文字提升） |
+| interactive | `boolean` | - | No | 是否可交互（开启 hover/active 响应，cursor: pointer） |
+| onClick | `(event: React.MouseEvent<HTMLDivElement>) => void` | - | No | 点击回调（若提供，默认 interactive=true，且注入语义 role="button"） |
+
+### Verified Code Example
+```tsx
+import { Row } from '@/components/ui';
+
+export function Example() {
+  return (
+    <Row height="md" hoverable>
+      列表行项目
+    </Row>
+  );
+}
+```
+
+---
+
+## Component: ScrollArea
+Path: apps/crish-desktop/src/components/ui/ScrollArea/ScrollArea.tsx
+Description: ScrollArea UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| size | `'xs' \| 'sm' \| 'md' \| 'lg'` | 'md' | No | 尺寸分级（严格从 Token 体系选取，严禁裸写 px） - 'xs': 超细纤薄型（默认无按钮，允许显式开启） - 'sm': 紧凑型 - 'md': 标准默认基准型 (SSOT) - 'lg': 宽屏大视口型 |
+| showButtons | `boolean` | size !== 'xs' | No | 是否在轨道两端渲染端点安全护栏（带微圆角等腰三角箭头） 规则：showButtons ?? (size !== 'xs') (M04 闭环) - 未显式指定时：xs 默认关闭按钮，sm/md/lg 默认开启按钮； - 显式指定 boolean 时：严格遵循传入值，允许 size='xs' 显式开启按钮。 |
+| radius | `number` | 0 | No | 容器外层圆角半径 (px)，用于驱动 calculateSafeAreaInset 动态避让 (M02 闭环) 彻底消除 8px/12px/14px 弹窗圆角截断顶部与底部安全箭头 |
+| trackMargin | `number` | 2 | No | 滚动条侧柱距离容器外边缘间距 (px) 严格保留 2px 物理透明防误触间隙 |
+| orientation | `'vertical' \| 'horizontal' \| 'both'` | 'vertical' | No | 滚动方向契约 |
+| scrollbarGutter | `'auto' \| 'stable'` | 'auto' | No | 滚动条占位避免布局位移策略 |
+| type | `'auto' \| 'always' \| 'hover' \| 'scroll'` | 'hover' | No | 滚动条显隐机制 - 'hover': 悬浮时显现，静止时隐匿（默认推荐） - 'always': 始终常驻显示 - 'scroll': 滚动中显现，静止 150ms 后渐隐 - 'auto': 依据内容是否溢出自动决定 |
+| stepSize | `number \| 'auto'` | 'auto' | No | 单步步进距离 (px) - number: 固定像素 - 'auto': 黄金视口比例自适应算法（默认 40px，在极小视口自适应） |
+| as | `React.ElementType` | 'div' | No | 多态根容器 HTML 标签 |
+| viewportClassName | `string` | - | No | 视口容器类名与样式覆盖 |
+| viewportStyle | `React.CSSProperties` | - | No | - |
+| contentClassName | `string` | - | No | 内容包裹层类名与样式覆盖 |
+| contentStyle | `React.CSSProperties` | - | No | - |
+| viewportRef | `React.Ref<HTMLDivElement>` | - | No | 原生 Viewport DOM Ref 转发引用 |
+| onScroll | `(event: React.UIEvent<HTMLDivElement>) => void` | - | No | 滚动监听回调 |
+| onScrollIdle | `() => void` | - | No | 滚动停止（静止）防抖 150ms 触发回调 |
+| ariaLabel | `string` | - | No | 可访问性无障碍区域标签描述 |
+| children | `React.ReactNode` | - | No | 子节点 |
+
+### Verified Code Example
+```tsx
+import { ScrollArea } from '@/components/ui';
+
+export function Example() {
+  return (
+    <ScrollArea style={{ maxHeight: 300 }}>
+      <div>长列表滚动内容...</div>
+    </ScrollArea>
+  );
+}
+```
+
+---
+
+## Component: DisclosureAffordance
+Path: apps/crish-desktop/src/components/ui/DisclosureAffordance/DisclosureAffordance.tsx
+Description: ui/DisclosureAffordance 展开指示原子基元（P4 T-P4-05） 用于收敛工具调用折叠、思考块折叠、侧栏分组等处的常驻 chevron 尖角。 默认静止态低权，hover/展开状态平滑淡入并旋转 90 度。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| expanded | `boolean` | - | Yes | 当前展开状态：true(已展开，顺时针旋转 90deg) \| false(收起，0deg) |
+| ariaControls | `string` | - | No | 控制的目标容器 DOM id，注入 aria-controls |
+| disabled | `boolean` | false | No | 是否禁用折叠 |
+| alwaysVisible | `boolean` | false | No | 是否常显（跳过 hover 隐式淡入，始终显示） |
+
+### Verified Code Example
+```tsx
+import { DisclosureAffordance } from '@/components/ui';
+
+export function Example({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return <DisclosureAffordance open={open} onClick={onToggle} />;
+}
+```
+
+---
+
+## Component: ContextMenu
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenu.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenu.tsx 现代化声明式 ContextMenu 复合组件体系轻量级装配入口 零外部 Heavy UI 依赖，完全基于自研 positioner / roving-focus / presence 基础设施闭环
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `React.ReactNode` | - | Yes | - |
+| open | `boolean` | - | No | 外部受控打开状态 |
+| onOpenChange | `(open: boolean) => void` | - | No | 打开状态变更回调 |
+| anchor | `PositionerAnchor` | - | No | 外部传入锚点 |
+| size | `'sm' \| 'md' \| 'lg'` | - | No | 尺寸档位，默认 'md' |
+| modal | `boolean` | - | No | 是否模态（锁定背景交互），默认 false |
+
+### Verified Code Example
+```tsx
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+} from '@/components/ui';
+
+export function Example() {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger>右键点击此区域</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={() => {}}>复制</ContextMenuItem>
+        <ContextMenuItem onSelect={() => {}}>粘贴</ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+```
+
+---
+
+## Component: PreviewCard
+Path: apps/crish-desktop/src/components/ui/PreviewCard/PreviewCard.tsx
+Description: apps/crish-desktop/src/components/ui/PreviewCard/PreviewCard.tsx 原生 PreviewCard / RichTooltip
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `React.ReactNode` | - | Yes | - |
+| side | `'top' \| 'bottom' \| 'left' \| 'right'` | - | No | - |
+| align | `'start' \| 'center' \| 'end'` | - | No | - |
+| sideOffset | `number` | - | No | - |
+| alignOffset | `number` | - | No | - |
+| arrow | `boolean` | - | No | - |
+| delayShow | `number` | - | No | - |
+| delayHide | `number` | - | No | - |
+| disabled | `boolean` | - | No | - |
+| open | `boolean` | - | No | - |
+| defaultOpen | `boolean` | - | No | - |
+| onOpenChange | `(open: boolean) => void` | - | No | - |
+
+### Verified Code Example
+```tsx
+import {
+  PreviewCard,
+  PreviewCardTrigger,
+  PreviewCardContent,
+} from '@/components/ui';
+
+export function Example() {
+  return (
+    <PreviewCard>
+      <PreviewCardTrigger>悬停预览</PreviewCardTrigger>
+      <PreviewCardContent>预览卡片详情信息</PreviewCardContent>
+    </PreviewCard>
+  );
+}
+```
+
+---
+
+## Component: SmartExpandablePanel
+Path: apps/crish-desktop/src/components/ui/SmartExpandablePanel/SmartExpandablePanel.tsx
+Description: SmartExpandablePanel UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| items | `Array<MenuItem \| MenuGroup>` | - | Yes | - |
+| open | `boolean` | - | Yes | - |
+| trigger | `ReactNode` | - | No | - |
+| triggerRef | `RefObject<HTMLElement \| null>` | - | No | - |
+| anchor | `RefObject<HTMLElement \| null>` | - | No | - |
+| point | `Point2D \| null` | - | No | - |
+| searchPlaceholder | `string` | - | No | - |
+| enableSearch | `boolean` | - | No | - |
+| searchRightActions | `ReactNode` | - | No | - |
+| enableDivider | `boolean` | - | No | - |
+| enableTriangleAim | `boolean` | - | No | - |
+| position | `PositionOptions` | - | No | - |
+| maxPanelHeight | `number \| string` | - | No | - |
+| useContainerBoundary | `boolean` | - | No | - |
+| containerBoundaryRef | `RefObject<HTMLElement \| null>` | - | No | - |
+| container | `HTMLElement \| null` | - | No | - |
+| title | `string` | - | No | - |
+| header | `ReactNode` | - | No | - |
+| footer | `ReactNode` | - | No | - |
+| ariaLabel | `string` | - | No | - |
+| role | `string` | - | No | - |
+| className | `string` | - | No | - |
+| style | `CSSProperties` | - | No | - |
+| panelRef | `RefObject<HTMLDivElement \| null>` | - | No | - |
+| dataTestId | `string` | - | No | - |
+| 'data-testid' | `string` | - | No | - |
+| onSelect | `(item: MenuItem, event?: MouseEvent \| KeyboardEvent) => void` | - | No | - |
+| onOpen | `() => void` | - | No | - |
+| onClose | `() => void` | - | No | - |
+| onOpenChange | `(open: boolean) => void` | - | No | - |
+| renderItem | `(item: MenuItem, index: number, isFocused: boolean) => ReactNode` | - | No | - |
+| children | `ReactNode` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { SmartExpandablePanel } from '@/components/ui';
+
+export function Example({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <SmartExpandablePanel open={open} onClose={onClose}>
+      面板扩展内容
+    </SmartExpandablePanel>
+  );
+}
+```
+
+---
+
+## Component: SmartModelBadge
+Path: apps/crish-desktop/src/components/ui/SmartModelBadge.tsx
+Description: 现代零重排智能模型徽标组件（SmartModelBadge） 核心设计： 1. 采用原生 CSS 容器查询（@container），零 JS 测距开销，杜绝 Layout Thrashing； 2. 内部渲染三段式真实文本 Span，保持原生可复制、划词选中与无障碍支持； 3. 严格遵循 AGENTS.md §12 规范，悬停通过自定义 <Tooltip> 无损溯源原始 ID。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| modelId | `string` | - | Yes | 模型原始 ID（如 meta/muse-spark-1.2-contributor, deepseek-ai/deepseek-v4-flash-0731） |
+| displayName | `string \| null` | - | No | 可选自定义展示名称（如果用户已显式配置） |
+| showDot | `boolean` | false | No | 是否展示绿色在线就绪圆点，默认为 false |
+| className | `string` | '' | No | 附加外层 CSS 类名 |
+| forceTier | `'standard' \| 'compact' \| 'micro'` | - | No | 固定强制显示某一档位（缺省则交由 CSS |
+
+### Verified Code Example
+```tsx
+import { SmartModelBadge } from '@/components/ui';
+
+export function Example() {
+  return <SmartModelBadge model="claude-3-5-sonnet" />;
+}
+```
+
+---
+
+## Component: AnimatedCounter
+Path: apps/crish-desktop/src/components/ui/AnimatedCounter/AnimatedCounter.tsx
+Description: AnimatedCounter UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| value | `number` | - | Yes | 目标数值 |
+| label | `string` | - | No | 可选顶部标签（切换时伴随微动效） |
+| prefix | `string` | - | No | 前缀符号（如 "¥", "$", "+"） |
+| suffix | `string` | - | No | 后缀符号（如 "tokens", "%", "CNY"） |
+| decimals | `number` | - | No | 小数保留位数，默认 0 |
+| locale | `string` | - | No | 格式化区域，默认 'en-US' |
+| animateOnView | `boolean` | - | No | 是否在滚动进入视口时才触发滚轮入场动效，默认 false |
+| isStreaming | `boolean` | - | No | 是否为流式模式（自动配合轻量更新） |
+| disabled | `boolean` | - | No | 是否强制直接显示终值，跳过滚轮（适用于极端省电档） |
+| className | `string` | - | No | 自定义样式类名 |
+| style | `CSSProperties` | - | No | 内联样式 |
+
+### Verified Code Example
+```tsx
+import { AnimatedCounter } from '@/components/ui/AnimatedCounter/AnimatedCounter';
+
+export function Example({ value }: { value: number }) {
+  return <AnimatedCounter value={value} />;
+}
+```
+
+---
+
+## Component: ColorPicker
+Path: apps/crish-desktop/src/components/ui/ColorPicker/ColorPicker.tsx
+Description: 专业级 ColorPicker 高精交互取色器 解耦微架构主控制盒：弹层物理展开、格式切流伪装遮罩、全链路无障碍守卫
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| value | `string` | - | No | Any color the picker can read: hex, rgb(), hsl(), or oklch(). |
+| defaultValue | `string` | - | No | - |
+| onValueChange | `(hex: string) => void` | - | No | Receives the color as hex, with two alpha digits when it is not opaque. |
+| background | `string` | - | No | The background the color will sit on, for the contrast readout. |
+| label | `string` | - | No | Name shown on the swatch, such as "Accent". |
+| swatches | `ColorSwatch[]` | - | No | - |
+| defaultSwatches | `ColorSwatch[]` | - | No | - |
+| onSwatchesChange | `(swatches: ColorSwatch[]) => void` | - | No | - |
+| maxSwatches | `number` | - | No | Most saved swatches. Saving past it drops the oldest. |
+| defaultFormat | `ColorFormat` | - | No | - |
+| className | `string` | - | No | - |
+| style | `CSSProperties` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { ColorPicker } from '@/components/ui/ColorPicker/ColorPicker';
+
+export function Example({ color, onChange }: { color: string; onChange: (c: string) => void }) {
+  return <ColorPicker value={color} onChange={onChange} />;
+}
+```
+
+---
+
+## Component: TextMorph
+Path: apps/crish-desktop/src/components/ui/TextMorph/TextMorph.tsx
+Description: TextMorph 原子组件：字形平滑形变与临界阻尼弹性容器。 核心机制： 1. 共有字符维持 DOM 节点 key 不变，沿 layout="position" 弹簧轨道平滑滑动； 2. 新增字符阶梯入场（stagger），旧字符景深模糊消散（blur）； 3. 双层容器架构：外层 .frame 弹簧过渡尺寸，内层 .track 自然排版测量； 4. 内置 ResizeObserver 响应式监听与全链路无障碍 srOnly 脱模。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `string` | - | Yes | - |
+| as | `'span' \| 'div' \| 'p' \| 'strong' \| 'h1' \| 'h2' \| 'h3'` | 'span' | No | - |
+| className | `string` | - | No | - |
+| id | `string` | - | No | - |
+| style | `React.CSSProperties` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { TextMorph } from '@/components/ui/TextMorph/TextMorph';
+
+export function Example({ text }: { text: string }) {
+  return <TextMorph text={text} />;
+}
+```
+
+---
+
+## Component: AppIcon
+Path: apps/crish-desktop/src/components/ui/icons/AppIcon.tsx
+Description: AppIcon — 全应用图标唯一入口。 禁止业务直接 import lucide-react / @hugeicons/*。 size 经 snapIconSize：面板内统一 14/16（≥20 空态保留）。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| name | `IconName` | - | Yes | - |
+| size | `number \| string` | - | No | - |
+| stroke | `IconStrokeKey \| number` | - | No | 默认 ui；chrome 与 ui 同粗细 |
+| className | `string` | - | No | - |
+| style | `React.CSSProperties` | - | No | - |
+| color | `string` | - | No | - |
+| fill | `string` | - | No | - |
+| 'aria-hidden' | `boolean \| 'true' \| 'false'` | true | No | - |
+| 'aria-label' | `string` | - | No | - |
+| 'data-icon' | `string` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { AppIcon } from '@/components/ui';
+
+export function Example() {
+  return <AppIcon />;
+}
+```
+
+---
+
+## Component: CheckIcon
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx ContextMenu 菜单项体系：标准项、复选勾选项、单选项及级联子菜单触发项 遵循无障碍规范（WAI-ARIA Menu 模式）、600ms Typeahead 字符检索与高亮漫游联动
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { CheckIcon } from '@/components/ui';
+
+export function Example() {
+  return <CheckIcon />;
+}
+```
+
+---
+
+## Component: ChevronRightIcon
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx ContextMenu 菜单项体系：标准项、复选勾选项、单选项及级联子菜单触发项 遵循无障碍规范（WAI-ARIA Menu 模式）、600ms Typeahead 字符检索与高亮漫游联动
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { ChevronRightIcon } from '@/components/ui';
+
+export function Example() {
+  return <ChevronRightIcon />;
+}
+```
+
+---
+
+## Component: ChevronUpDownIcon
+Path: apps/crish-desktop/src/components/ui/Select/internal/SelectIcons.tsx
+Description: ChevronUpDownIcon UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { ChevronUpDownIcon } from '@/components/ui';
+
+export function Example() {
+  return <ChevronUpDownIcon />;
+}
+```
+
+---
+
+## Component: ClearIcon
+Path: apps/crish-desktop/src/components/ui/Select/internal/SelectIcons.tsx
+Description: ClearIcon UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { ClearIcon } from '@/components/ui';
+
+export function Example() {
+  return <ClearIcon />;
+}
+```
+
+---
+
+## Component: CloseIcon
+Path: apps/crish-desktop/src/components/ui/Dialog/DialogClose.tsx
+Description: CloseIcon UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { CloseIcon } from '@/components/ui';
+
+export function Example() {
+  return <CloseIcon />;
+}
+```
+
+---
+
+## Component: ColorPickerArea
+Path: apps/crish-desktop/src/components/ui/ColorPicker/ColorPickerArea.tsx
+Description: 2D Saturation-Value 拾色面板组件 横向为饱和度 [0, 1]，纵向为倒置明度 [1, 0]
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| hsva | `Hsva` | - | Yes | - |
+| onChange | `(hsva: Hsva) => void` | - | Yes | - |
+| active | `boolean` | - | Yes | - |
+| onActive | `(active: boolean) => void` | - | Yes | - |
+| reduced | `boolean` | - | Yes | - |
+| thumbRef | `React.Ref<HTMLDivElement>` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { ColorPickerArea } from '@/components/ui';
+
+export function Example() {
+  return <ColorPickerArea />;
+}
+```
+
+---
+
+## Component: ColorPickerContrast
+Path: apps/crish-desktop/src/components/ui/ColorPicker/ColorPickerContrast.tsx
+Description: 120fps 零重渲染实时对比度指示仪组件 采用 useFollow 弹簧数值逼近 + useTransform 直写 DOM textContent， 避免在拾色拖拽高刷场景下触发整体组件树的 Reconciliation。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| ratio | `number` | - | Yes | - |
+| reduced | `boolean` | - | Yes | - |
+
+### Verified Code Example
+```tsx
+import { ColorPickerContrast } from '@/components/ui';
+
+export function Example() {
+  return <ColorPickerContrast />;
+}
+```
+
+---
+
+## Component: ColorPickerSlider
+Path: apps/crish-desktop/src/components/ui/ColorPicker/ColorPickerSlider.tsx
+Description: 物理阻尼滑块组件（用于 Hue 与 Alpha 调节）
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| label | `string` | - | Yes | - |
+| value | `number` | - | Yes | - |
+| valueText | `string` | - | Yes | - |
+| max | `number` | - | Yes | - |
+| unit | `number` | - | Yes | - |
+| onChange | `(value: number) => void` | - | Yes | - |
+| className | `string` | - | No | - |
+| style | `CSSProperties` | - | No | - |
+| reduced | `boolean` | - | Yes | - |
+| fill | `string` | - | Yes | - |
+| active | `boolean` | - | Yes | - |
+| onActive | `(active: boolean) => void` | - | Yes | - |
+
+### Verified Code Example
+```tsx
+import { ColorPickerSlider } from '@/components/ui';
+
+export function Example() {
+  return <ColorPickerSlider />;
+}
+```
+
+---
+
+## Component: ColorPickerSwatches
+Path: apps/crish-desktop/src/components/ui/ColorPicker/ColorPickerSwatches.tsx
+Description: 预设与自定义色板管理组件 支持 Reorder 手势拖拽重排、Alt + 方向键键盘微调移动与 Delete 移除
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| swatches | `ColorSwatch[]` | - | Yes | - |
+| currentHex | `string` | - | Yes | - |
+| onSelect | `(color: string) => void` | - | Yes | - |
+| onReorder | `(swatches: ColorSwatch[]) => void` | - | Yes | - |
+| onAdd | `() => void` | - | Yes | - |
+| reduced | `boolean` | - | Yes | - |
+| inputRef | `React.RefObject<HTMLInputElement \| null>` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { ColorPickerSwatches } from '@/components/ui';
+
+export function Example() {
+  return <ColorPickerSwatches />;
+}
+```
+
+---
+
+## Component: ComboboxChip
+Path: apps/crish-desktop/src/components/ui/Select/ComboboxChip.tsx
+Description: ComboboxChip UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| value | `string` | - | Yes | 胶囊对应选值 |
+| label | `React.ReactNode` | - | No | 胶囊文案（缺省从 itemMap/label 解析） |
+| onRemove | `() => void` | - | No | 点击删除回调（缺省自动调用 removeChip） |
+| disabled | `boolean` | - | No | 是否禁用 |
+| className | `string` | - | No | 自定义类名 |
+| children | `React.ReactNode` | - | No | 子节点 |
+
+### Verified Code Example
+```tsx
+import { ComboboxChip } from '@/components/ui';
+
+export function Example() {
+  return <ComboboxChip />;
+}
+```
+
+---
+
+## Component: ComboboxChips
+Path: apps/crish-desktop/src/components/ui/Select/ComboboxChips.tsx
+Description: ComboboxChips UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| placeholder | `string` | - | No | 空白时的占位文案 |
+| inputProps | `React.InputHTMLAttributes<HTMLInputElement>` | - | No | 透传给内联原生 input 的属性 |
+| clearable | `boolean` | - | No | 是否开启一键清除所有选值 |
+| startSlot | `React.ReactNode` | - | No | 前置自定义插槽 |
+| children | `React.ReactNode` | - | No | 子节点 |
+
+### Verified Code Example
+```tsx
+import { ComboboxChips } from '@/components/ui';
+
+export function Example() {
+  return <ComboboxChips />;
+}
+```
+
+---
+
+## Component: ComboboxContent
+Path: apps/crish-desktop/src/components/ui/Select/ComboboxContent.tsx
+Description: ComboboxContent UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| className | `string` | - | No | 自定义类名 |
+| align | `'start' \| 'center' \| 'end'` | - | No | 浮层水平对齐方式 |
+| side | `'bottom' \| 'top'` | - | No | 浮层垂直弹出方向 |
+| sideOffset | `number` | - | No | 与输入框的间距偏移量 (px) |
+| edgePadding | `number` | - | No | 与视口边界的安全距离 (px) |
+| portalContainer | `HTMLElement \| null` | - | No | 自定义 Portal 挂载容器 |
+| children | `React.ReactNode` | - | No | 子节点 |
+
+### Verified Code Example
+```tsx
+import { ComboboxContent } from '@/components/ui';
+
+export function Example() {
+  return <ComboboxContent />;
+}
+```
+
+---
+
+## Component: ComboboxEmpty
+Path: apps/crish-desktop/src/components/ui/Select/ComboboxEmpty.tsx
+Description: ComboboxEmpty UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| className | `string` | - | No | - |
+| children | `React.ReactNode` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { ComboboxEmpty } from '@/components/ui';
+
+export function Example() {
+  return <ComboboxEmpty />;
+}
+```
+
+---
+
+## Component: ComboboxGroup
+Path: apps/crish-desktop/src/components/ui/Select/ComboboxGroup.tsx
+Description: ComboboxGroup UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| className | `string` | - | No | - |
+| children | `React.ReactNode` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { ComboboxGroup } from '@/components/ui';
+
+export function Example() {
+  return <ComboboxGroup />;
+}
+```
+
+---
+
+## Component: ComboboxInput
+Path: apps/crish-desktop/src/components/ui/Select/ComboboxInput.tsx
+Description: ComboboxInput UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| startSlot | `React.ReactNode` | - | No | 前置自定义插槽（如放大镜搜索图标） |
+| endSlot | `React.ReactNode` | - | No | 后置自定义插槽 |
+| clearable | `boolean` | - | No | 是否开启内嵌清除按钮 |
+| icon | `boolean \| React.ReactNode` | - | No | 是否展示后置展开指示箭头 |
+| wrapperClassName | `string` | - | No | 外层容器自定义类名 |
+
+### Verified Code Example
+```tsx
+import { ComboboxInput } from '@/components/ui';
+
+export function Example() {
+  return <ComboboxInput />;
+}
+```
+
+---
+
+## Component: ComboboxItem
+Path: apps/crish-desktop/src/components/ui/Select/ComboboxItem.tsx
+Description: ComboboxItem UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| value | `string` | - | Yes | 唯一标识值 |
+| label | `string` | - | No | 文本标签（用于高亮匹配与 aria） |
+| disabled | `boolean` | - | No | 是否禁用 |
+| icon | `React.ReactNode` | - | No | 前置图标 |
+| hint | `React.ReactNode` | - | No | 辅助说明文案 |
+| shortcut | `string` | - | No | 快捷键提示 |
+| autoHighlight | `boolean` | 'true' | No | 是否自动高亮匹配文本 (默认 true) |
+| className | `string` | - | No | 自定义类名 |
+| children | `React.ReactNode` | - | No | 子节点 |
+| onClick | `(e: React.MouseEvent<HTMLButtonElement>) => void` | - | No | 点击回调 |
+
+### Verified Code Example
+```tsx
+import { ComboboxItem } from '@/components/ui';
+
+export function Example() {
+  return <ComboboxItem />;
+}
+```
+
+---
+
+## Component: ComboboxLabel
+Path: apps/crish-desktop/src/components/ui/Select/ComboboxLabel.tsx
+Description: ComboboxLabel UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| className | `string` | - | No | - |
+| children | `React.ReactNode` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { ComboboxLabel } from '@/components/ui';
+
+export function Example() {
+  return <ComboboxLabel />;
+}
+```
+
+---
+
+## Component: ComboboxList
+Path: apps/crish-desktop/src/components/ui/Select/ComboboxList.tsx
+Description: ComboboxList UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| cols | `number` | '1' | No | 网格列数 (默认 1) |
+| className | `string` | - | No | 自定义类名 |
+| children | `\| React.ReactNode \| ((item: T, index: number) => React.ReactNode)` | - | No | 子节点或渲染函数 |
+
+### Verified Code Example
+```tsx
+import { ComboboxList } from '@/components/ui';
+
+export function Example() {
+  return <ComboboxList />;
+}
+```
+
+---
+
+## Component: ComboboxRoot
+Path: apps/crish-desktop/src/components/ui/Select/ComboboxRoot.tsx
+Description: ComboboxRoot UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| items | `T[]` | - | No | 待检索过滤的项目原始列表 |
+| value | `string \| string[] \| null` | - | No | 当前选值（受控）；单选为 string \| null，多选为 string[] |
+| defaultValue | `string \| string[] \| null` | - | No | 初始默认选值（非受控） |
+| onValueChange | `(value: any) => void` | - | No | 选值变更回调 |
+| query | `string` | - | No | 搜索过滤词（受控） |
+| defaultQuery | `string` | - | No | 初始搜索过滤词（非受控） |
+| onQueryChange | `(query: string) => void` | - | No | 搜索过滤词变更回调 |
+| filter | `(item: T, query: string) => boolean` | - | No | 自定义单项过滤函数 |
+| itemToString | `(item: T) => string` | - | No | 项提取文本函数（用于默认模糊匹配） |
+| itemToValue | `(item: T) => string` | - | No | 项提取 Value 函数 |
+| open | `boolean` | - | No | 浮层展开状态（受控） |
+| defaultOpen | `boolean` | - | No | 初始展开状态（非受控） |
+| onOpenChange | `(open: boolean) => void` | - | No | 浮层展开状态变更回调 |
+| size | `'sm' \| 'md' \| 'lg'` | - | No | 尺寸档位 |
+| variant | `'outline' \| 'soft'` | - | No | 外观风格 |
+| multiple | `boolean` | - | No | 是否开启多选 |
+| clearable | `boolean` | - | No | 是否开启一键清除 |
+| grid | `boolean` | - | No | 是否为多列网格布局 |
+| cols | `number` | '1' | No | 网格列数 (默认 1) |
+| disabled | `boolean` | - | No | 是否禁用 |
+| children | `React.ReactNode` | - | No | 子节点 |
+
+### Verified Code Example
+```tsx
+import { ComboboxRoot } from '@/components/ui';
+
+export function Example() {
+  return <ComboboxRoot />;
+}
+```
+
+---
+
+## Component: ComboboxSeparator
+Path: apps/crish-desktop/src/components/ui/Select/ComboboxSeparator.tsx
+Description: ComboboxSeparator UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| className | `string` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { ComboboxSeparator } from '@/components/ui';
+
+export function Example() {
+  return <ComboboxSeparator />;
+}
+```
+
+---
+
+## Component: ContextMenuCheckboxItem
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx ContextMenu 菜单项体系：标准项、复选勾选项、单选项及级联子菜单触发项 遵循无障碍规范（WAI-ARIA Menu 模式）、600ms Typeahead 字符检索与高亮漫游联动
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| checked | `boolean \| 'indeterminate'` | - | No | 选中状态，支持半选态 'indeterminate' |
+| onCheckedChange | `(checked: boolean) => void` | - | No | 勾选状态变更回调 |
+
+### Verified Code Example
+```tsx
+import { ContextMenuCheckboxItem } from '@/components/ui';
+
+export function Example() {
+  return <ContextMenuCheckboxItem />;
+}
+```
+
+---
+
+## Component: ContextMenuContent
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuContent.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuContent.tsx ContextMenu 内容面板与容器体系：主浮层 (ContextMenuContent) 与二级子浮层 (ContextMenuSubContent) 集成自研 positioner (2-Phase 真实 DOM 探测)、useModernPresence 进退场动效与 WAI-ARIA 键盘漫游
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `React.ReactNode` | - | Yes | - |
+| anchor | `PositionerAnchor` | - | No | 显式指定定位锚点（优先于 Trigger 捕获的 VirtualPoint 虚拟光标） |
+| portalContainer | `HTMLElement \| null` | 'document.body' | No | 自定义挂载 Portal 容器（默认为 document.body） |
+| side | `'top' \| 'bottom' \| 'left' \| 'right'` | - | No | 偏好主轴方向，默认 'bottom' |
+| align | `'start' \| 'center' \| 'end'` | - | No | 偏好次轴对齐方向，默认 'start' |
+| sideOffset | `number` | - | No | 与光标主轴的微量间隙 (px)，默认 2 |
+| alignOffset | `number` | - | No | 沿次轴的次级偏移 (px)，默认 0 |
+| avoidCollisions | `boolean` | - | No | 是否启用视口边界碰撞自动翻转，默认 true |
+| loop | `boolean` | - | No | 键盘漫游是否首尾循环，默认 true |
+| autoFocus | `boolean` | - | No | 打开时是否自动将焦点移入首个可用项，默认 true |
+| restoreFocus | `boolean` | - | No | 关闭后是否自动还原焦点，默认 true |
+| onPointerDownOutside | `(event: PointerEvent) => void` | - | No | 点击浮层外部时的回调 |
+| onEscapeKeyDown | `(event: KeyboardEvent) => void` | - | No | 按下 Escape 键时的回调 |
+
+### Verified Code Example
+```tsx
+import { ContextMenuContent } from '@/components/ui';
+
+export function Example() {
+  return <ContextMenuContent />;
+}
+```
+
+---
+
+## Component: ContextMenuGroup
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenu.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenu.tsx 现代化声明式 ContextMenu 复合组件体系轻量级装配入口 零外部 Heavy UI 依赖，完全基于自研 positioner / roving-focus / presence 基础设施闭环
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `React.ReactNode` | - | Yes | - |
+
+### Verified Code Example
+```tsx
+import { ContextMenuGroup } from '@/components/ui';
+
+export function Example() {
+  return <ContextMenuGroup />;
+}
+```
+
+---
+
+## Component: ContextMenuItem
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx ContextMenu 菜单项体系：标准项、复选勾选项、单选项及级联子菜单触发项 遵循无障碍规范（WAI-ARIA Menu 模式）、600ms Typeahead 字符检索与高亮漫游联动
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `React.ReactNode` | - | Yes | - |
+| disabled | `boolean` | - | No | 是否禁用 |
+| variant | `'default' \| 'danger' \| 'destructive'` | - | No | 视觉变体：默认或危险 |
+| inset | `boolean` | - | No | 是否保留左侧对齐缩进（与 checkbox / radio 项平齐） |
+| shortcut | `string` | - | No | 快捷键展示文本（如 '⌘C', 'Ctrl+V'） |
+| textValue | `string` | - | No | 文本值（用于 600ms Typeahead 字符检索，未传时自动提取 children 纯文本） |
+| onSelect | `(event: Event) => void` | - | No | 选择动作触发回调（点击或 Enter 触发） |
+| preventCloseOnSelect | `boolean` | - | No | 是否在选中后阻止菜单自动关闭，默认 false |
+
+### Verified Code Example
+```tsx
+import { ContextMenuItem } from '@/components/ui';
+
+export function Example() {
+  return <ContextMenuItem />;
+}
+```
+
+---
+
+## Component: ContextMenuLabel
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenu.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenu.tsx 现代化声明式 ContextMenu 复合组件体系轻量级装配入口 零外部 Heavy UI 依赖，完全基于自研 positioner / roving-focus / presence 基础设施闭环
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `React.ReactNode` | - | Yes | - |
+| inset | `boolean` | - | No | 是否保留左侧缩进 |
+
+### Verified Code Example
+```tsx
+import { ContextMenuLabel } from '@/components/ui';
+
+export function Example() {
+  return <ContextMenuLabel />;
+}
+```
+
+---
+
+## Component: ContextMenuRadioGroup
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx ContextMenu 菜单项体系：标准项、复选勾选项、单选项及级联子菜单触发项 遵循无障碍规范（WAI-ARIA Menu 模式）、600ms Typeahead 字符检索与高亮漫游联动
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `React.ReactNode` | - | Yes | - |
+| value | `string` | - | No | 当前选中的单选值 |
+| onValueChange | `(value: string) => void` | - | No | 单选值变更回调 |
+
+### Verified Code Example
+```tsx
+import { ContextMenuRadioGroup } from '@/components/ui';
+
+export function Example() {
+  return <ContextMenuRadioGroup />;
+}
+```
+
+---
+
+## Component: ContextMenuRadioItem
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx ContextMenu 菜单项体系：标准项、复选勾选项、单选项及级联子菜单触发项 遵循无障碍规范（WAI-ARIA Menu 模式）、600ms Typeahead 字符检索与高亮漫游联动
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| value | `string` | - | Yes | 单选项对应的值 |
+
+### Verified Code Example
+```tsx
+import { ContextMenuRadioItem } from '@/components/ui';
+
+export function Example() {
+  return <ContextMenuRadioItem />;
+}
+```
+
+---
+
+## Component: ContextMenuSeparator
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenu.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenu.tsx 现代化声明式 ContextMenu 复合组件体系轻量级装配入口 零外部 Heavy UI 依赖，完全基于自研 positioner / roving-focus / presence 基础设施闭环
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { ContextMenuSeparator } from '@/components/ui';
+
+export function Example() {
+  return <ContextMenuSeparator />;
+}
+```
+
+---
+
+## Component: ContextMenuShortcut
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenu.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenu.tsx 现代化声明式 ContextMenu 复合组件体系轻量级装配入口 零外部 Heavy UI 依赖，完全基于自研 positioner / roving-focus / presence 基础设施闭环
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `React.ReactNode` | - | Yes | - |
+
+### Verified Code Example
+```tsx
+import { ContextMenuShortcut } from '@/components/ui';
+
+export function Example() {
+  return <ContextMenuShortcut />;
+}
+```
+
+---
+
+## Component: ContextMenuSub
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenu.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenu.tsx 现代化声明式 ContextMenu 复合组件体系轻量级装配入口 零外部 Heavy UI 依赖，完全基于自研 positioner / roving-focus / presence 基础设施闭环
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `React.ReactNode` | - | Yes | - |
+| open | `boolean` | - | No | 外部受控子菜单打开状态 |
+| onOpenChange | `(open: boolean) => void` | - | No | 子菜单打开状态变更回调 |
+
+### Verified Code Example
+```tsx
+import { ContextMenuSub } from '@/components/ui';
+
+export function Example() {
+  return <ContextMenuSub />;
+}
+```
+
+---
+
+## Component: ContextMenuSubContent
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuContent.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuContent.tsx ContextMenu 内容面板与容器体系：主浮层 (ContextMenuContent) 与二级子浮层 (ContextMenuSubContent) 集成自研 positioner (2-Phase 真实 DOM 探测)、useModernPresence 进退场动效与 WAI-ARIA 键盘漫游
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `React.ReactNode` | - | Yes | - |
+| sideOffset | `number` | - | No | 与父菜单的水平重叠偏移量 (px)，遵循负 5px 重叠规范，默认 -5 |
+| side | `'top' \| 'bottom' \| 'left' \| 'right'` | - | No | 偏好弹出方位，默认 'right' |
+| align | `'start' \| 'center' \| 'end'` | - | No | 偏好对齐方位，默认 'start' |
+
+### Verified Code Example
+```tsx
+import { ContextMenuSubContent } from '@/components/ui';
+
+export function Example() {
+  return <ContextMenuSubContent />;
+}
+```
+
+---
+
+## Component: ContextMenuSubTrigger
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx ContextMenu 菜单项体系：标准项、复选勾选项、单选项及级联子菜单触发项 遵循无障碍规范（WAI-ARIA Menu 模式）、600ms Typeahead 字符检索与高亮漫游联动
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `React.ReactNode` | - | Yes | - |
+
+### Verified Code Example
+```tsx
+import { ContextMenuSubTrigger } from '@/components/ui';
+
+export function Example() {
+  return <ContextMenuSubTrigger />;
+}
+```
+
+---
+
+## Component: ContextMenuTrigger
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenu.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenu.tsx 现代化声明式 ContextMenu 复合组件体系轻量级装配入口 零外部 Heavy UI 依赖，完全基于自研 positioner / roving-focus / presence 基础设施闭环
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `React.ReactNode` | - | Yes | - |
+| disabled | `boolean` | - | No | 是否禁用右键上下文菜单唤起 |
+| asChild | `boolean` | - | No | 是否透传给唯一的子元素渲染 |
+
+### Verified Code Example
+```tsx
+import { ContextMenuTrigger } from '@/components/ui';
+
+export function Example() {
+  return <ContextMenuTrigger />;
+}
+```
+
+---
+
+## Component: CopyIcon
+Path: apps/crish-desktop/src/components/ui/animated-icons/CopyIcon.tsx
+Description: CopyIcon UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| size | `number` | 24 | No | - |
+| duration | `number` | 1 | No | - |
+| isAnimated | `boolean` | true | No | - |
+| color | `string` | - | No | - |
+| isHovered | `boolean` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { CopyIcon } from '@/components/ui';
+
+export function Example() {
+  return <CopyIcon />;
+}
+```
+
+---
+
+## Component: DialogBackdrop
+Path: apps/crish-desktop/src/components/ui/Dialog/DialogPortal.tsx
+Description: DialogBackdrop UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| ref | `React.Ref<HTMLDivElement>` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DialogBackdrop } from '@/components/ui';
+
+export function Example() {
+  return <DialogBackdrop />;
+}
+```
+
+---
+
+## Component: DialogBody
+Path: apps/crish-desktop/src/components/ui/Dialog/DialogBody.tsx
+Description: DialogBody UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| ref | `React.Ref<HTMLDivElement>` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DialogBody } from '@/components/ui';
+
+export function Example() {
+  return <DialogBody />;
+}
+```
+
+---
+
+## Component: DialogClose
+Path: apps/crish-desktop/src/components/ui/Dialog/DialogClose.tsx
+Description: DialogClose UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| 'aria-label' | `string` | '关闭弹窗' | No | - |
+| ref | `React.Ref<HTMLButtonElement>` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DialogClose } from '@/components/ui';
+
+export function Example() {
+  return <DialogClose />;
+}
+```
+
+---
+
+## Component: DialogContent
+Path: apps/crish-desktop/src/components/ui/Dialog/DialogContent.tsx
+Description: DialogContent UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| size | `'sm' \| 'md' \| 'lg' \| 'xl' \| '2xl' \| 'auto'` | - | No | - |
+| role | `'dialog' \| 'alertdialog'` | - | No | - |
+| ariaLabel | `string` | - | No | - |
+| initialFocus | `React.RefObject<HTMLElement \| null>` | - | No | - |
+| ref | `React.Ref<HTMLDivElement>` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DialogContent } from '@/components/ui';
+
+export function Example() {
+  return <DialogContent />;
+}
+```
+
+---
+
+## Component: DialogDescription
+Path: apps/crish-desktop/src/components/ui/Dialog/DialogDescription.tsx
+Description: DialogDescription UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| ref | `React.Ref<HTMLParagraphElement>` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DialogDescription } from '@/components/ui';
+
+export function Example() {
+  return <DialogDescription />;
+}
+```
+
+---
+
+## Component: DialogFooter
+Path: apps/crish-desktop/src/components/ui/Dialog/DialogFooter.tsx
+Description: DialogFooter UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| ref | `React.Ref<HTMLDivElement>` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DialogFooter } from '@/components/ui';
+
+export function Example() {
+  return <DialogFooter />;
+}
+```
+
+---
+
+## Component: DialogHeader
+Path: apps/crish-desktop/src/components/ui/Dialog/DialogHeader.tsx
+Description: DialogHeader UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| ref | `React.Ref<HTMLDivElement>` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DialogHeader } from '@/components/ui';
+
+export function Example() {
+  return <DialogHeader />;
+}
+```
+
+---
+
+## Component: DialogOverlay
+Path: apps/crish-desktop/src/components/ui/Dialog/DialogPortal.tsx
+Description: DialogOverlay UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| ref | `React.Ref<HTMLDivElement>` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DialogOverlay } from '@/components/ui';
+
+export function Example() {
+  return <DialogOverlay />;
+}
+```
+
+---
+
+## Component: DialogPopup
+Path: apps/crish-desktop/src/components/ui/Dialog/DialogContent.tsx
+Description: DialogPopup UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { DialogPopup } from '@/components/ui';
+
+export function Example() {
+  return <DialogPopup />;
+}
+```
+
+---
+
+## Component: DialogPortal
+Path: apps/crish-desktop/src/components/ui/Dialog/DialogPortal.tsx
+Description: DialogPortal UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| container | `HTMLElement \| null` | - | No | - |
+| keepMounted | `boolean` | - | No | - |
+| children | `ReactNode` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DialogPortal } from '@/components/ui';
+
+export function Example() {
+  return <DialogPortal />;
+}
+```
+
+---
+
+## Component: DialogRoot
+Path: apps/crish-desktop/src/components/ui/Dialog/Dialog.tsx
+Description: ui/Dialog 弹窗基座与复合原语体系（原生 inert 模态栈与现代 Headless 架构） 方案依据: - docs/frontend-systemic-refactor/plans/05-ui-primitives-and-headless-refactor.md §3.2 与 §4.2
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { DialogRoot } from '@/components/ui';
+
+export function Example() {
+  return <DialogRoot />;
+}
+```
+
+---
+
+## Component: DialogTitle
+Path: apps/crish-desktop/src/components/ui/Dialog/DialogTitle.tsx
+Description: DialogTitle UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| as | `'h1' \| 'h2' \| 'h3' \| 'h4' \| 'h5' \| 'h6' \| 'div' \| 'span'` | 'h2' | No | - |
+| ref | `React.Ref<HTMLHeadingElement>` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DialogTitle } from '@/components/ui';
+
+export function Example() {
+  return <DialogTitle />;
+}
+```
+
+---
+
+## Component: DialogTrigger
+Path: apps/crish-desktop/src/components/ui/Dialog/DialogTrigger.tsx
+Description: DialogTrigger UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| ref | `React.Ref<HTMLButtonElement>` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DialogTrigger } from '@/components/ui';
+
+export function Example() {
+  return <DialogTrigger />;
+}
+```
+
+---
+
+## Component: DialogViewport
+Path: apps/crish-desktop/src/components/ui/Dialog/DialogPortal.tsx
+Description: DialogViewport UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| ref | `React.Ref<HTMLDivElement>` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DialogViewport } from '@/components/ui';
+
+export function Example() {
+  return <DialogViewport />;
+}
+```
+
+---
+
+## Component: DotIcon
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx ContextMenu 菜单项体系：标准项、复选勾选项、单选项及级联子菜单触发项 遵循无障碍规范（WAI-ARIA Menu 模式）、600ms Typeahead 字符检索与高亮漫游联动
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { DotIcon } from '@/components/ui';
+
+export function Example() {
+  return <DotIcon />;
+}
+```
+
+---
+
+## Component: DropdownMenu
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenu.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenu.tsx ui/DropdownMenu 下拉菜单（现代化 Headless Base UI 复合原语版） 方案依据: docs/frontend-systemic-refactor/plans/05-ui-primitives-and-headless-refactor.md §3.3 / §4.3 / §7
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| trigger | `React.ReactNode` | - | No | 触发器元素 |
+| anchor | `React.RefObject<HTMLElement \| null> \| HTMLElement \| null` | - | No | 外部显式锚点 |
+| options | `SelectOptionItem[]` | - | No | 选项列表（扁平模式） |
+| renderItem | `( option: SelectOptionItem, index: number, isFocused: boolean ) => React.ReactNode` | - | No | 自定义条目渲染 |
+| onSelect | `(id: string, option: SelectOptionItem) => void` | - | No | 选项选择回调 |
+| searchable | `boolean` | - | No | 是否可搜索（保留扩展字段） |
+| position | `DropdownMenuPositionConfig` | - | No | 定位配置 |
+| openState | `DropdownMenuOpenState` | - | No | 开关状态对象 |
+| panel | `DropdownMenuPanelConfig` | - | No | 面板样式配置 |
+| outsideHandlers | `DropdownMenuOutsideHandlers` | - | No | 外侧交互回调 |
+| cascade | `{ onSubmenuExpand?: (index: number, optionOrElement: unknown) => void; onSubmenuCollapse?: () => void; }` | - | No | 级联子菜单展开/收起钩子 |
+| onKeyDown | `(e: React.KeyboardEvent<HTMLDivElement>) => void` | - | No | 键盘事件透传 |
+| children | `React.ReactNode` | - | No | 子节点（复合组件模式） |
+| open | `boolean` | - | No | 受控开关 |
+| defaultOpen | `boolean` | - | No | 默认非受控开关 |
+| onOpenChange | `( open: boolean, eventDetails?: BaseMenu.Root.ChangeEventDetails ) => void` | - | No | 开关状态变化回调 |
+| modal | `boolean` | - | No | 是否模态（默认 false，桌面端不锁死外部滚动与点击） |
+| loopFocus | `boolean` | - | No | 键盘漫游循环 |
+| disabled | `boolean` | - | No | 是否禁用 |
+| portalContainer | `HTMLElement \| null` | - | No | Portal 挂载容器（默认为 #popover-root ?? document.body） |
+
+### Verified Code Example
+```tsx
+import { DropdownMenu } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenu />;
+}
+```
+
+---
+
+## Component: DropdownMenuArrow
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx ui/DropdownMenu 条目、分组、子菜单与选择器复合部件
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuArrow } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuArrow />;
+}
+```
+
+---
+
+## Component: DropdownMenuCheckboxItem
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx ui/DropdownMenu 条目、分组、子菜单与选择器复合部件
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| icon | `React.ReactNode` | - | No | - |
+| shortcut | `string` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuCheckboxItem } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuCheckboxItem />;
+}
+```
+
+---
+
+## Component: DropdownMenuContent
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuCore.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuCore.tsx ui/DropdownMenu 浮层定位、挂载与卡片核心原语
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| side | `'top' \| 'bottom' \| 'left' \| 'right'` | - | No | - |
+| align | `'start' \| 'center' \| 'end'` | - | No | - |
+| sideOffset | `number` | - | No | - |
+| alignOffset | `number` | - | No | - |
+| container | `HTMLElement \| null` | - | No | - |
+| positionerClassName | `string` | - | No | - |
+| maxHeight | `number \| string` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuContent } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuContent />;
+}
+```
+
+---
+
+## Component: DropdownMenuGroup
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx ui/DropdownMenu 条目、分组、子菜单与选择器复合部件
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuGroup } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuGroup />;
+}
+```
+
+---
+
+## Component: DropdownMenuGroupLabel
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx ui/DropdownMenu 条目、分组、子菜单与选择器复合部件
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuGroupLabel } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuGroupLabel />;
+}
+```
+
+---
+
+## Component: DropdownMenuItem
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx ui/DropdownMenu 条目、分组、子菜单与选择器复合部件
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| icon | `React.ReactNode` | - | No | - |
+| hint | `React.ReactNode` | - | No | - |
+| description | `React.ReactNode` | - | No | - |
+| danger | `boolean` | - | No | - |
+| selected | `boolean` | - | No | - |
+| asChild | `boolean` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuItem } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuItem />;
+}
+```
+
+---
+
+## Component: DropdownMenuLabel
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx ui/DropdownMenu 条目、分组、子菜单与选择器复合部件
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuLabel } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuLabel />;
+}
+```
+
+---
+
+## Component: DropdownMenuPopup
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuCore.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuCore.tsx ui/DropdownMenu 浮层定位、挂载与卡片核心原语
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuPopup } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuPopup />;
+}
+```
+
+---
+
+## Component: DropdownMenuPortal
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuCore.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuCore.tsx ui/DropdownMenu 浮层定位、挂载与卡片核心原语
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| container | `HTMLElement \| ShadowRoot \| React.RefObject<HTMLElement \| ShadowRoot \| null> \| null` | - | No | - |
+| children | `React.ReactNode` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuPortal } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuPortal />;
+}
+```
+
+---
+
+## Component: DropdownMenuPositioner
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuCore.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuCore.tsx ui/DropdownMenu 浮层定位、挂载与卡片核心原语
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuPositioner } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuPositioner />;
+}
+```
+
+---
+
+## Component: DropdownMenuRadioGroup
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx ui/DropdownMenu 条目、分组、子菜单与选择器复合部件
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuRadioGroup } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuRadioGroup />;
+}
+```
+
+---
+
+## Component: DropdownMenuRadioItem
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx ui/DropdownMenu 条目、分组、子菜单与选择器复合部件
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuRadioItem } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuRadioItem />;
+}
+```
+
+---
+
+## Component: DropdownMenuRoot
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenu.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenu.tsx ui/DropdownMenu 下拉菜单（现代化 Headless Base UI 复合原语版） 方案依据: docs/frontend-systemic-refactor/plans/05-ui-primitives-and-headless-refactor.md §3.3 / §4.3 / §7
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuRoot } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuRoot />;
+}
+```
+
+---
+
+## Component: DropdownMenuSeparator
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx ui/DropdownMenu 条目、分组、子菜单与选择器复合部件
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuSeparator } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuSeparator />;
+}
+```
+
+---
+
+## Component: DropdownMenuShortcut
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx ui/DropdownMenu 条目、分组、子菜单与选择器复合部件
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuShortcut } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuShortcut />;
+}
+```
+
+---
+
+## Component: DropdownMenuSub
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx ui/DropdownMenu 条目、分组、子菜单与选择器复合部件
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuSub } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuSub />;
+}
+```
+
+---
+
+## Component: DropdownMenuSubContent
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx ui/DropdownMenu 条目、分组、子菜单与选择器复合部件
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| side | `'top' \| 'bottom' \| 'left' \| 'right'` | - | No | - |
+| align | `'start' \| 'center' \| 'end'` | - | No | - |
+| sideOffset | `number` | - | No | - |
+| alignOffset | `number` | - | No | - |
+| container | `HTMLElement \| null` | - | No | - |
+| positionerClassName | `string` | - | No | - |
+| maxHeight | `number \| string` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuSubContent } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuSubContent />;
+}
+```
+
+---
+
+## Component: DropdownMenuSubmenu
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx ui/DropdownMenu 条目、分组、子菜单与选择器复合部件
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuSubmenu } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuSubmenu />;
+}
+```
+
+---
+
+## Component: DropdownMenuSubTrigger
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenuParts.tsx ui/DropdownMenu 条目、分组、子菜单与选择器复合部件
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| asChild | `boolean` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuSubTrigger } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuSubTrigger />;
+}
+```
+
+---
+
+## Component: DropdownMenuTrigger
+Path: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenu.tsx
+Description: apps/crish-desktop/src/components/ui/DropdownMenu/DropdownMenu.tsx ui/DropdownMenu 下拉菜单（现代化 Headless Base UI 复合原语版） 方案依据: docs/frontend-systemic-refactor/plans/05-ui-primitives-and-headless-refactor.md §3.3 / §4.3 / §7
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| asChild | `boolean` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { DropdownMenuTrigger } from '@/components/ui';
+
+export function Example() {
+  return <DropdownMenuTrigger />;
+}
+```
+
+---
+
+## Component: FieldControl
+Path: apps/crish-desktop/src/components/ui/Field.tsx
+Description: FieldControl UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { FieldControl } from '@/components/ui';
+
+export function Example() {
+  return <FieldControl />;
+}
+```
+
+---
+
+## Component: FieldDescription
+Path: apps/crish-desktop/src/components/ui/Field.tsx
+Description: FieldDescription UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { FieldDescription } from '@/components/ui';
+
+export function Example() {
+  return <FieldDescription />;
+}
+```
+
+---
+
+## Component: FieldError
+Path: apps/crish-desktop/src/components/ui/Field.tsx
+Description: FieldError UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { FieldError } from '@/components/ui';
+
+export function Example() {
+  return <FieldError />;
+}
+```
+
+---
+
+## Component: FieldHint
+Path: apps/crish-desktop/src/components/ui/Field.tsx
+Description: FieldHint UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { FieldHint } from '@/components/ui';
+
+export function Example() {
+  return <FieldHint />;
+}
+```
+
+---
+
+## Component: FieldLabel
+Path: apps/crish-desktop/src/components/ui/Field.tsx
+Description: FieldLabel UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { FieldLabel } from '@/components/ui';
+
+export function Example() {
+  return <FieldLabel />;
+}
+```
+
+---
+
+## Component: FieldRequiredIndicator
+Path: apps/crish-desktop/src/components/ui/Field.tsx
+Description: FieldRequiredIndicator UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { FieldRequiredIndicator } from '@/components/ui';
+
+export function Example() {
+  return <FieldRequiredIndicator />;
+}
+```
+
+---
+
+## Component: FieldRoot
+Path: apps/crish-desktop/src/components/ui/Field.tsx
+Description: FieldRoot UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { FieldRoot } from '@/components/ui';
+
+export function Example() {
+  return <FieldRoot />;
+}
+```
+
+---
+
+## Component: FocusTrap
+Path: apps/crish-desktop/src/components/ui/internal/focusTrap.ts
+Description: ui/internal/focusTrap.ts 现代化 FocusTrap 与原生 inert 模态栈中枢 核心架构进化:
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `ReactNode` | - | Yes | - |
+| active | `boolean` | true | No | 是否启用焦点锁定与模态隔离 |
+| initialFocusRef | `RefObject<HTMLElement \| null>` | - | No | 初始聚焦元素；不传或无效时回退到容器内第一个可交互元素 |
+| restoreFocus | `boolean` | true | No | 弹窗退出时是否归还原焦点，默认为 true |
+| className | `string` | - | No | 根容器自定义类名 |
+
+### Verified Code Example
+```tsx
+import { FocusTrap } from '@/components/ui';
+
+export function Example() {
+  return <FocusTrap />;
+}
+```
+
+---
+
+## Component: IconChevronDown
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 展开折叠：居中细折线（比通用 chevron 更干净）
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconChevronDown } from '@/components/ui';
+
+export function Example() {
+  return <IconChevronDown />;
+}
+```
+
+---
+
+## Component: IconChevronLeft
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 品牌 / 回退观感图标（AppIcon custom 轨）。 统一 currentColor + round cap/join；默认描边由 AppIcon iconTokens 注入。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconChevronLeft } from '@/components/ui';
+
+export function Example() {
+  return <IconChevronLeft />;
+}
+```
+
+---
+
+## Component: IconChevronRight
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 品牌 / 回退观感图标（AppIcon custom 轨）。 统一 currentColor + round cap/join；默认描边由 AppIcon iconTokens 注入。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconChevronRight } from '@/components/ui';
+
+export function Example() {
+  return <IconChevronRight />;
+}
+```
+
+---
+
+## Component: IconChevronUp
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 品牌 / 回退观感图标（AppIcon custom 轨）。 统一 currentColor + round cap/join；默认描边由 AppIcon iconTokens 注入。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconChevronUp } from '@/components/ui';
+
+export function Example() {
+  return <IconChevronUp />;
+}
+```
+
+---
+
+## Component: IconCompass
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 品牌 / 回退观感图标（AppIcon custom 轨）。 统一 currentColor + round cap/join；默认描边由 AppIcon iconTokens 注入。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconCompass } from '@/components/ui';
+
+export function Example() {
+  return <IconCompass />;
+}
+```
+
+---
+
+## Component: IconEditPen
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 编辑笔：圆润微弧钢笔尖与笔身（24 网格原生，93% 黄金尺寸对齐 Copy/Pin，1.5 细线笔帽缝）
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconEditPen } from '@/components/ui';
+
+export function Example() {
+  return <IconEditPen />;
+}
+```
+
+---
+
+## Component: IconFolder
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 品牌 / 回退观感图标（AppIcon custom 轨）。 统一 currentColor + round cap/join；默认描边由 AppIcon iconTokens 注入。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconFolder } from '@/components/ui';
+
+export function Example() {
+  return <IconFolder />;
+}
+```
+
+---
+
+## Component: IconFolderOpen
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 品牌 / 回退观感图标（AppIcon custom 轨）。 统一 currentColor + round cap/join；默认描边由 AppIcon iconTokens 注入。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconFolderOpen } from '@/components/ui';
+
+export function Example() {
+  return <IconFolderOpen />;
+}
+```
+
+---
+
+## Component: IconGitBranch
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 品牌 / 回退观感图标（AppIcon custom 轨）。 统一 currentColor + round cap/join；默认描边由 AppIcon iconTokens 注入。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconGitBranch } from '@/components/ui';
+
+export function Example() {
+  return <IconGitBranch />;
+}
+```
+
+---
+
+## Component: IconGitCommit
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 品牌 / 回退观感图标（AppIcon custom 轨）。 统一 currentColor + round cap/join；默认描边由 AppIcon iconTokens 注入。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconGitCommit } from '@/components/ui';
+
+export function Example() {
+  return <IconGitCommit />;
+}
+```
+
+---
+
+## Component: IconGitFork
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 品牌 / 回退观感图标（AppIcon custom 轨）。 统一 currentColor + round cap/join；默认描边由 AppIcon iconTokens 注入。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconGitFork } from '@/components/ui';
+
+export function Example() {
+  return <IconGitFork />;
+}
+```
+
+---
+
+## Component: IconGlobe
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 浏览器 / 万维网
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconGlobe } from '@/components/ui';
+
+export function Example() {
+  return <IconGlobe />;
+}
+```
+
+---
+
+## Component: IconMaximize2
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 面板最大化（对角向外，历史 Maximize2）
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconMaximize2 } from '@/components/ui';
+
+export function Example() {
+  return <IconMaximize2 />;
+}
+```
+
+---
+
+## Component: IconMinimize2
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 面板最小化（对角向内，历史 Minimize2）
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconMinimize2 } from '@/components/ui';
+
+export function Example() {
+  return <IconMinimize2 />;
+}
+```
+
+---
+
+## Component: IconNewChatPen
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 新建对话：历史软圆角开口方 + 钢笔（右上留缺口）
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconNewChatPen } from '@/components/ui';
+
+export function Example() {
+  return <IconNewChatPen />;
+}
+```
+
+---
+
+## Component: IconRefreshCw
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 刷新 / 重新生成：顺时针双弧线 + 箭头，与用户提供的 SVG 契约对齐
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconRefreshCw } from '@/components/ui';
+
+export function Example() {
+  return <IconRefreshCw />;
+}
+```
+
+---
+
+## Component: IconSettings
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 设置齿轮：经典 8 齿圆角对称几何（光学居中，与 Lucide 契约对齐，消除厚重毛刺与大面积黑色堆积）
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconSettings } from '@/components/ui';
+
+export function Example() {
+  return <IconSettings />;
+}
+```
+
+---
+
+## Component: IconSidebarLeft
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 品牌 / 回退观感图标（AppIcon custom 轨）。 统一 currentColor + round cap/join；默认描边由 AppIcon iconTokens 注入。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconSidebarLeft } from '@/components/ui';
+
+export function Example() {
+  return <IconSidebarLeft />;
+}
+```
+
+---
+
+## Component: IconSidebarRight
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 品牌 / 回退观感图标（AppIcon custom 轨）。 统一 currentColor + round cap/join；默认描边由 AppIcon iconTokens 注入。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconSidebarRight } from '@/components/ui';
+
+export function Example() {
+  return <IconSidebarRight />;
+}
+```
+
+---
+
+## Component: IconSplitHorizontal
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 左右向右水平分屏（垂直中线切分）
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconSplitHorizontal } from '@/components/ui';
+
+export function Example() {
+  return <IconSplitHorizontal />;
+}
+```
+
+---
+
+## Component: IconSplitVertical
+Path: apps/crish-desktop/src/components/ui/icons/customIcons.tsx
+Description: 上下向下垂直分屏（水平中线切分）
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { IconSplitVertical } from '@/components/ui';
+
+export function Example() {
+  return <IconSplitVertical />;
+}
+```
+
+---
+
+## Component: LayerProvider
+Path: apps/crish-desktop/src/components/ui/internal/layer-stack/LayerContext.tsx
+Description: 浮层层级上下文 Provider 放置在 Dialog, Menu, Popover, Select 等浮层外层或 Portal 内部，供子浮层自动建立树形拓扑关系。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| layerId | `string` | - | Yes | - |
+| tier | `'modal' \| 'popover' \| 'overlay'` | - | Yes | - |
+| children | `ReactNode` | - | Yes | - |
+
+### Verified Code Example
+```tsx
+import { LayerProvider } from '@/components/ui';
+
+export function Example() {
+  return <LayerProvider />;
+}
+```
+
+---
+
+## Component: Menu
+Path: apps/crish-desktop/src/components/ui/Menu/Menu.tsx
+Description: ui/Menu 菜单基座（现代化 Headless 升级版） 方案依据: docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.3-2.4 & §3.4 底层原语: @base-ui/react/menu
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| trigger | `React.ReactNode` | - | No | - |
+| anchor | `React.RefObject<HTMLElement \| null>` | - | No | - |
+| options | `SelectOptionItem[]` | [] | No | - |
+| renderItem | `( option: SelectOptionItem, index: number, isFocused: boolean ) => React.ReactNode` | - | No | - |
+| children | `React.ReactNode` | - | No | - |
+| onSelect | `(id: string, option: SelectOptionItem) => void` | - | No | - |
+| searchable | `boolean` | - | No | - |
+| position | `MenuPositionConfig` | - | No | - |
+| openState | `MenuOpenState` | - | No | - |
+| panel | `MenuPanelConfig` | - | No | - |
+| outsideHandlers | `MenuOutsideHandlers` | - | No | - |
+| onKeyDown | `(e: React.KeyboardEvent<HTMLDivElement>) => void` | - | No | - |
+| cascade | `{ onSubmenuExpand?: (index: number, optionOrElement: unknown) => void; onSubmenuCollapse?: () => void; }` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { Menu } from '@/components/ui';
+
+export function Example() {
+  return (
+    <Menu
+      options={[
+        { label: '菜单项 1', value: 'item1' },
+        { label: '菜单项 2', value: 'item2' },
+      ]}
+      onSelect={() => {}}
+    />
+  );
+}
+```
+
+---
+
+## Component: MenuCollectionProvider
+Path: apps/crish-desktop/src/components/ui/internal/roving-focus/MenuCollectionContext.tsx
+Description: 声明式 JSX 子项自动注册收集器 Provider 收集挂载的所有子项，基于 compareDocumentPosition 严格按 DOM 物理顺序排序
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `React.ReactNode` | - | Yes | - |
+
+### Verified Code Example
+```tsx
+import { MenuCollectionProvider } from '@/components/ui';
+
+export function Example() {
+  return <MenuCollectionProvider />;
+}
+```
+
+---
+
+## Component: MinusIcon
+Path: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx
+Description: apps/crish-desktop/src/components/ui/ContextMenu/ContextMenuItem.tsx ContextMenu 菜单项体系：标准项、复选勾选项、单选项及级联子菜单触发项 遵循无障碍规范（WAI-ARIA Menu 模式）、600ms Typeahead 字符检索与高亮漫游联动
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { MinusIcon } from '@/components/ui';
+
+export function Example() {
+  return <MinusIcon />;
+}
+```
+
+---
+
+## Component: PencilIcon
+Path: apps/crish-desktop/src/components/ui/animated-icons/PencilIcon.tsx
+Description: PencilIcon UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| size | `number` | 24 | No | - |
+| duration | `number` | 1 | No | - |
+| isAnimated | `boolean` | true | No | - |
+| color | `string` | - | No | - |
+| isHovered | `boolean` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { PencilIcon } from '@/components/ui';
+
+export function Example() {
+  return <PencilIcon />;
+}
+```
+
+---
+
+## Component: PinIcon
+Path: apps/crish-desktop/src/components/ui/animated-icons/PinIcon.tsx
+Description: PinIcon UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| size | `number` | 24 | No | - |
+| duration | `number` | 1 | No | - |
+| isAnimated | `boolean` | true | No | - |
+| color | `string` | - | No | - |
+| isHovered | `boolean` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { PinIcon } from '@/components/ui';
+
+export function Example() {
+  return <PinIcon />;
+}
+```
+
+---
+
+## Component: PinOffIcon
+Path: apps/crish-desktop/src/components/ui/animated-icons/PinOffIcon.tsx
+Description: PinOffIcon UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| size | `number` | 24 | No | - |
+| duration | `number` | 1 | No | - |
+| isAnimated | `boolean` | true | No | - |
+| color | `string` | - | No | - |
+| isHovered | `boolean` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { PinOffIcon } from '@/components/ui';
+
+export function Example() {
+  return <PinOffIcon />;
+}
+```
+
+---
+
+## Component: Popover
+Path: apps/crish-desktop/src/components/ui/Popover/Popover.tsx
+Description: ui/Popover 浮层弹出原语（现代化 Headless 基座） 方案依据: docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.3-2.4 底层原语: @base-ui/react/popover
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| open | `boolean` | - | No | 受控开关 |
+| defaultOpen | `boolean` | false | No | 默认非受控开关 |
+| onOpenChange | `(open: boolean, eventDetails?: { reason?: string; event?: Event }) => void` | - | No | 开关状态变化回调 |
+| trigger | `React.ReactNode` | - | No | 触发器元素 |
+| anchor | `React.RefObject<Element \| null> \| Element \| null` | - | No | 显式锚点（RefObject 或 Element） |
+| content | `React.ReactNode` | - | No | 弹出内容区（content 或 children 任一即可） |
+| children | `React.ReactNode` | - | No | 弹出子内容 |
+| side | `'top' \| 'bottom' \| 'left' \| 'right'` | 'bottom' | No | 弹出方向 |
+| align | `'start' \| 'center' \| 'end'` | 'center' | No | 对齐方式 |
+| sideOffset | `number` | 6 | No | 侧边偏移量 (px) |
+| alignOffset | `number` | 0 | No | 对齐偏移量 (px) |
+| className | `string` | - | No | Popup 自定义类名 |
+| positionerClassName | `string` | - | No | Positioner 自定义类名 |
+| portalContainer | `HTMLElement \| null` | - | No | Portal 挂载目标容器 |
+| modal | `boolean` | false | No | 是否进入模态隔离状态（默认 false，允许与外部交互） |
+| disabled | `boolean` | false | No | 是否禁用 |
+| onInteractOutside | `(event: Event) => void` | - | No | 点击外部回调 |
+| onEscapeKeyDown | `(event: KeyboardEvent) => void` | - | No | 按下 Esc 回调 |
+| showArrow | `boolean` | false | No | 是否渲染指示箭头 |
+
+### Verified Code Example
+```tsx
+import { Popover } from '@/components/ui';
+
+export function Example() {
+  return <Popover />;
+}
+```
+
+---
+
+## Component: PreviewCardArrow
+Path: apps/crish-desktop/src/components/ui/PreviewCard/PreviewCardArrow.tsx
+Description: apps/crish-desktop/src/components/ui/PreviewCard/PreviewCardArrow.tsx 双层贝塞尔平滑小三角渲染器
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| side | `'top' \| 'bottom' \| 'left' \| 'right'` | - | Yes | - |
+| offset | `number` | - | No | - |
+| className | `string` | - | No | - |
+| style | `React.CSSProperties` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { PreviewCardArrow } from '@/components/ui';
+
+export function Example() {
+  return <PreviewCardArrow />;
+}
+```
+
+---
+
+## Component: PreviewCardContent
+Path: apps/crish-desktop/src/components/ui/PreviewCard/PreviewCard.tsx
+Description: apps/crish-desktop/src/components/ui/PreviewCard/PreviewCard.tsx 原生 PreviewCard / RichTooltip
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `React.ReactNode` | - | Yes | - |
+| width | `number \| string` | - | No | - |
+| minWidth | `number \| string` | - | No | - |
+| maxWidth | `number \| string` | - | No | - |
+| className | `string` | - | No | - |
+| style | `React.CSSProperties` | - | No | - |
+| container | `HTMLElement \| null` | - | No | 是否挂载到指定 container DOM 节点，默认 document.body |
+
+### Verified Code Example
+```tsx
+import { PreviewCardContent } from '@/components/ui';
+
+export function Example() {
+  return <PreviewCardContent />;
+}
+```
+
+---
+
+## Component: PreviewCardDescription
+Path: apps/crish-desktop/src/components/ui/PreviewCard/PreviewCard.tsx
+Description: apps/crish-desktop/src/components/ui/PreviewCard/PreviewCard.tsx 原生 PreviewCard / RichTooltip
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `React.ReactNode` | - | Yes | - |
+
+### Verified Code Example
+```tsx
+import { PreviewCardDescription } from '@/components/ui';
+
+export function Example() {
+  return <PreviewCardDescription />;
+}
+```
+
+---
+
+## Component: PreviewCardTitle
+Path: apps/crish-desktop/src/components/ui/PreviewCard/PreviewCard.tsx
+Description: apps/crish-desktop/src/components/ui/PreviewCard/PreviewCard.tsx 原生 PreviewCard / RichTooltip
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `React.ReactNode` | - | Yes | - |
+
+### Verified Code Example
+```tsx
+import { PreviewCardTitle } from '@/components/ui';
+
+export function Example() {
+  return <PreviewCardTitle />;
+}
+```
+
+---
+
+## Component: PreviewCardTrigger
+Path: apps/crish-desktop/src/components/ui/PreviewCard/PreviewCard.tsx
+Description: apps/crish-desktop/src/components/ui/PreviewCard/PreviewCard.tsx 原生 PreviewCard / RichTooltip
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| children | `React.ReactElement` | - | Yes | - |
+| asChild | `boolean` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { PreviewCardTrigger } from '@/components/ui';
+
+export function Example() {
+  return <PreviewCardTrigger />;
+}
+```
+
+---
+
+## Component: ScrollAreaScrollBar
+Path: apps/crish-desktop/src/components/ui/ScrollArea/ScrollAreaScrollBar.tsx
+Description: ScrollAreaScrollBar UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| orientation | `'vertical' \| 'horizontal'` | - | Yes | - |
+| visible | `boolean` | - | Yes | - |
+| isDragging | `boolean` | - | Yes | - |
+| trackMargin | `number` | - | Yes | - |
+| insetStart | `number` | - | Yes | - |
+| insetEnd | `number` | - | Yes | - |
+| shouldRenderButtons | `boolean` | - | Yes | - |
+| isAtStart | `boolean` | - | Yes | - |
+| isAtEnd | `boolean` | - | Yes | - |
+| thumbSizePx | `number` | - | Yes | - |
+| thumbOffsetPx | `number` | - | Yes | - |
+| thumbRef | `React.RefObject<HTMLDivElement \| null>` | - | Yes | - |
+| onPointerDown | `(e: React.PointerEvent<HTMLDivElement>) => void` | - | Yes | - |
+| onPointerMove | `(e: React.PointerEvent<HTMLDivElement>) => void` | - | Yes | - |
+| onPointerUp | `(e: React.PointerEvent<HTMLDivElement>) => void` | - | Yes | - |
+| onButtonPointerDown | `( dir: 'up' \| 'down' \| 'left' \| 'right' ) => (e: React.PointerEvent<HTMLButtonElement>) => void` | - | Yes | - |
+| onButtonPointerUpOrLeave | `(e: React.SyntheticEvent) => void` | - | Yes | - |
+
+### Verified Code Example
+```tsx
+import { ScrollAreaScrollBar } from '@/components/ui';
+
+export function Example() {
+  return <ScrollAreaScrollBar />;
+}
+```
+
+---
+
+## Component: SearchIcon
+Path: apps/crish-desktop/src/components/ui/Select/internal/SelectIcons.tsx
+Description: SearchIcon UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { SearchIcon } from '@/components/ui';
+
+export function Example() {
+  return <SearchIcon />;
+}
+```
+
+---
+
+## Component: SelectClearButton
+Path: apps/crish-desktop/src/components/ui/Select/SelectClearButton.tsx
+Description: SelectClearButton UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| className | `string` | - | No | - |
+| onClick | `(e: React.MouseEvent<HTMLButtonElement>) => void` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { SelectClearButton } from '@/components/ui';
+
+export function Example() {
+  return <SelectClearButton />;
+}
+```
+
+---
+
+## Component: SelectContent
+Path: apps/crish-desktop/src/components/ui/Select/SelectContent.tsx
+Description: SelectContent UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| className | `string` | - | No | 自定义类名 |
+| align | `'start' \| 'center' \| 'end'` | - | No | 浮层水平对齐方式 |
+| side | `'bottom' \| 'top'` | - | No | 浮层垂直弹出方向 |
+| sideOffset | `number` | - | No | 与触发器的间距偏移量 (px) |
+| edgePadding | `number` | - | No | 与视口边界的安全距离 (px) |
+| portalContainer | `HTMLElement \| null` | - | No | 自定义 Portal 挂载容器 |
+| alignItemWithTrigger | `boolean` | - | No | 是否开启原位对齐模式（Appica / Base UI 规范，默认 true） |
+| children | `React.ReactNode` | - | No | 子节点 |
+
+### Verified Code Example
+```tsx
+import { SelectContent } from '@/components/ui';
+
+export function Example() {
+  return <SelectContent />;
+}
+```
+
+---
+
+## Component: SelectGroup
+Path: apps/crish-desktop/src/components/ui/Select/SelectGroup.tsx
+Description: SelectGroup UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| className | `string` | - | No | - |
+| children | `React.ReactNode` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { SelectGroup } from '@/components/ui';
+
+export function Example() {
+  return <SelectGroup />;
+}
+```
+
+---
+
+## Component: SelectGroupLabel
+Path: apps/crish-desktop/src/components/ui/Select/SelectGroup.tsx
+Description: SelectGroupLabel UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| className | `string` | - | No | - |
+| children | `React.ReactNode` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { SelectGroupLabel } from '@/components/ui';
+
+export function Example() {
+  return <SelectGroupLabel />;
+}
+```
+
+---
+
+## Component: SelectIcon
+Path: apps/crish-desktop/src/components/ui/Select/SelectIcon.tsx
+Description: SelectIcon UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| className | `string` | - | No | - |
+| children | `React.ReactNode` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { SelectIcon } from '@/components/ui';
+
+export function Example() {
+  return <SelectIcon />;
+}
+```
+
+---
+
+## Component: SelectItem
+Path: apps/crish-desktop/src/components/ui/Select/SelectItem.tsx
+Description: SelectItem UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| value | `string` | - | Yes | 项唯一标识值 |
+| disabled | `boolean` | - | No | 是否禁用 |
+| icon | `React.ReactNode` | - | No | 前置图标 |
+| hint | `React.ReactNode` | - | No | 辅助说明文案（次级文本） |
+| shortcut | `string` | - | No | 快捷键提示（如 ⌘K） |
+| className | `string` | - | No | 自定义类名 |
+| children | `React.ReactNode` | - | No | 选项内容 |
+| onClick | `(e: React.MouseEvent<HTMLButtonElement>) => void` | - | No | 点击回调 |
+
+### Verified Code Example
+```tsx
+import { SelectItem } from '@/components/ui';
+
+export function Example() {
+  return <SelectItem />;
+}
+```
+
+---
+
+## Component: SelectLabel
+Path: apps/crish-desktop/src/components/ui/Select/SelectGroup.tsx
+Description: SelectLabel UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { SelectLabel } from '@/components/ui';
+
+export function Example() {
+  return <SelectLabel />;
+}
+```
+
+---
+
+## Component: SelectRoot
+Path: apps/crish-desktop/src/components/ui/Select/SelectRoot.tsx
+Description: SelectRoot UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| value | `string \| string[] \| null` | - | No | 当前选值（受控）；单选为 string \| null，多选为 string[] |
+| defaultValue | `string \| string[] \| null` | - | No | 初始默认选值（非受控） |
+| onValueChange | `(value: any) => void` | - | No | 选值变更回调 |
+| open | `boolean` | - | No | 浮层展开状态（受控） |
+| defaultOpen | `boolean` | - | No | 初始展开状态（非受控） |
+| onOpenChange | `(open: boolean) => void` | - | No | 浮层展开状态变更回调 |
+| size | `'sm' \| 'md' \| 'lg'` | - | No | 尺寸档位 |
+| variant | `'outline' \| 'soft'` | - | No | 外观风格 |
+| multiple | `boolean` | - | No | 是否开启多选 |
+| clearable | `boolean` | - | No | 是否开启一键清除 |
+| disabled | `boolean` | - | No | 是否禁用 |
+| children | `React.ReactNode` | - | No | 复合子节点，或传 options 开启快捷单组件声明 |
+| options | `SelectOption[]` | - | No | 快捷 options 模式（可选） |
+| placeholder | `string` | - | No | 快捷 placeholder 模式（可选） |
+| id | `string` | - | No | 快捷 id（可选） |
+| className | `string` | - | No | 快捷 className（可选） |
+| align | `'start' \| 'center' \| 'end'` | - | No | 快捷 align（可选） |
+| side | `'top' \| 'bottom'` | - | No | 快捷 side（可选） |
+| portalContainer | `HTMLElement \| null` | - | No | 浮层传送门容器（可选） |
+| onChange | `(value: string) => void` | - | No | 快捷 onChange 别名 |
+
+### Verified Code Example
+```tsx
+import { SelectRoot } from '@/components/ui';
+
+export function Example() {
+  return <SelectRoot />;
+}
+```
+
+---
+
+## Component: SelectSeparator
+Path: apps/crish-desktop/src/components/ui/Select/SelectSeparator.tsx
+Description: SelectSeparator UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| className | `string` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { SelectSeparator } from '@/components/ui';
+
+export function Example() {
+  return <SelectSeparator />;
+}
+```
+
+---
+
+## Component: SelectTrigger
+Path: apps/crish-desktop/src/components/ui/Select/SelectTrigger.tsx
+Description: SelectTrigger UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| startSlot | `React.ReactNode` | - | No | 前置自定义插槽（如图标） |
+| endSlot | `React.ReactNode` | - | No | 后置自定义插槽 |
+| clearable | `boolean` | - | No | 是否覆盖父级的 clearable |
+| children | `React.ReactNode` | - | No | 子节点（如 <SelectValue />） |
+
+### Verified Code Example
+```tsx
+import { SelectTrigger } from '@/components/ui';
+
+export function Example() {
+  return <SelectTrigger />;
+}
+```
+
+---
+
+## Component: SelectValue
+Path: apps/crish-desktop/src/components/ui/Select/SelectValue.tsx
+Description: SelectValue UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| placeholder | `string` | - | No | 未选择时的占位文案 |
+| className | `string` | - | No | 自定义类名 |
+| children | `\| React.ReactNode \| ((value: string \| string[] \| null) => React.ReactNode)` | - | No | 自定义值渲染函数或静态内容 |
+
+### Verified Code Example
+```tsx
+import { SelectValue } from '@/components/ui';
+
+export function Example() {
+  return <SelectValue />;
+}
+```
+
+---
+
+## Component: SlotText
+Path: apps/crish-desktop/src/components/ui/AnimatedCounter/SlotText.tsx
+Description: SlotText UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| value | `string \| number` | - | Yes | 待展示的文本或数值 |
+| format | `(value: number) => string` | - | No | 数值格式化函数，默认 toLocaleString('en-US') |
+| duration | `number` | - | No | 基础转动持续时间（秒），默认 0.8 |
+| stagger | `number` | - | No | 逐列停止交错步长（秒），默认 0.04 |
+| spins | `number` | - | No | 额外空转圈数，默认 0 |
+| align | `'start' \| 'end'` | - | No | 增减位数对齐基准（'start' \| 'end'），数字默认 'end' |
+| announce | `boolean` | - | No | 无障碍屏幕阅读器朗读，默认 false |
+| className | `string` | - | No | - |
+| style | `CSSProperties` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { SlotText } from '@/components/ui';
+
+export function Example() {
+  return <SlotText />;
+}
+```
+
+---
+
+## Component: SmartCollapsibleSection
+Path: apps/crish-desktop/src/components/ui/SmartPanel/SmartCollapsibleSection.tsx
+Description: SmartCollapsibleSection UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| item | `MenuItem` | - | Yes | - |
+| isFocused | `boolean` | false | No | - |
+| focusedItemId | `string` | - | No | - |
+| onSelect | `(item: MenuItem, event?: MouseEvent \| KeyboardEvent) => void` | - | No | - |
+| onToggle | `(expanded: boolean, item: MenuItem) => void` | - | No | - |
+| renderItem | `(item: MenuItem, index: number, isFocused: boolean) => ReactNode` | - | No | - |
+| itemRefMap | `(id: string, el: HTMLButtonElement \| null) => void` | - | No | - |
+| onMouseEnterItem | `(item: MenuItem, el: HTMLElement) => void` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { SmartCollapsibleSection } from '@/components/ui';
+
+export function Example() {
+  return <SmartCollapsibleSection />;
+}
+```
+
+---
+
+## Component: SmartItemRow
+Path: apps/crish-desktop/src/components/ui/SmartPanel/SmartItemRow.tsx
+Description: SmartItemRow UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| item | `MenuItem` | - | Yes | - |
+| isFocused | `boolean` | false | No | - |
+| onSelect | `(item: MenuItem, event?: MouseEvent \| KeyboardEvent) => void` | - | No | - |
+| onToggle | `(expanded: boolean, item: MenuItem) => void` | - | No | - |
+| onMouseEnter | `(e: MouseEvent<HTMLButtonElement>) => void` | - | No | - |
+| onMouseLeave | `(e: MouseEvent<HTMLButtonElement>) => void` | - | No | - |
+| itemRef | `(el: HTMLButtonElement \| null) => void` | - | No | - |
+| hasSubmenu | `boolean` | false | No | - |
+| className | `string` | '' | No | - |
+| style | `React.CSSProperties` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { SmartItemRow } from '@/components/ui';
+
+export function Example() {
+  return <SmartItemRow />;
+}
+```
+
+---
+
+## Component: SmartPanel
+Path: apps/crish-desktop/src/components/ui/SmartPanel/SmartPanel.tsx
+Description: SmartPanel UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| items | `Array<MenuItem \| MenuGroup>` | - | Yes | - |
+| open | `boolean` | - | Yes | - |
+| trigger | `ReactNode` | - | No | - |
+| triggerRef | `RefObject<HTMLElement \| null>` | - | No | - |
+| anchor | `RefObject<HTMLElement \| null>` | - | No | - |
+| point | `Point2D \| null` | - | No | - |
+| searchPlaceholder | `string` | - | No | - |
+| enableSearch | `boolean` | - | No | - |
+| searchRightActions | `ReactNode` | - | No | - |
+| enableDivider | `boolean` | - | No | - |
+| enableTriangleAim | `boolean` | - | No | - |
+| position | `PositionOptions` | - | No | - |
+| maxPanelHeight | `number \| string` | - | No | - |
+| useContainerBoundary | `boolean` | - | No | - |
+| containerBoundaryRef | `RefObject<HTMLElement \| null>` | - | No | - |
+| container | `HTMLElement \| null` | - | No | - |
+| title | `string` | - | No | - |
+| header | `ReactNode` | - | No | - |
+| footer | `ReactNode` | - | No | - |
+| ariaLabel | `string` | - | No | - |
+| role | `string` | - | No | - |
+| className | `string` | - | No | - |
+| style | `CSSProperties` | - | No | - |
+| panelRef | `RefObject<HTMLDivElement \| null>` | - | No | - |
+| dataTestId | `string` | - | No | - |
+| 'data-testid' | `string` | - | No | - |
+| onSelect | `(item: MenuItem, event?: MouseEvent \| KeyboardEvent) => void` | - | No | - |
+| onOpen | `() => void` | - | No | - |
+| onClose | `() => void` | - | No | - |
+| onOpenChange | `(open: boolean) => void` | - | No | - |
+| renderItem | `(item: MenuItem, index: number, isFocused: boolean) => ReactNode` | - | No | - |
+| children | `ReactNode` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { SmartPanel } from '@/components/ui';
+
+export function Example() {
+  return <SmartPanel />;
+}
+```
+
+---
+
+## Component: SmartPanelCascadeSubmenu
+Path: apps/crish-desktop/src/components/ui/SmartExpandablePanel/SmartPanelCascadeSubmenu.tsx
+Description: 二级级联子菜单 (Shell - Body - Footer 三段式解耦架构) - Shell (.cascadeSubmenu): 纯粹负责外层 14px 圆角、6px 统一内衬、背景与阴影，绝对无滚动条； - Body (.cascadeListBody): 限制最大高度约 240px，仅在条目超出时在内部展示 4px 微调滚动条； - Footer (.cascadeFooter): 将尾部常驻操作（如管理技能...）吸附在卡片底端，不随滚动移出视野。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| parent | `MenuItem & { children: MenuItem[] }` | - | Yes | 当前展开的父条目（必须带 children）。 |
+| ariaLabel | `string` | - | Yes | 子菜单的无障碍名称（父条目 label，缺省由调用方给出兜底文案）。 |
+| style | `React.CSSProperties` | - | Yes | - |
+| side | `'left' \| 'right'` | - | Yes | - |
+| submenuRef | `React.RefObject<HTMLDivElement \| null>` | - | Yes | - |
+| container | `Element \| DocumentFragment` | - | Yes | Portal 挂载点：对话框覆盖层内优先，否则 document.body。 |
+| onPointerEnter | `() => void` | - | Yes | 指针进入子菜单：取消 Safe-Aim 的延迟关闭。 |
+| onPointerLeave | `() => void` | - | No | 指针离开子菜单：触发平滑缓冲延迟关闭。 |
+| onSelect | `(item: MenuItem) => void` | - | Yes | - |
+| onRequestClose | `() => void` | - | Yes | 选中后关闭整个面板（closeOnSelect !== false 时）。 |
+
+### Verified Code Example
+```tsx
+import { SmartPanelCascadeSubmenu } from '@/components/ui';
+
+export function Example() {
+  return <SmartPanelCascadeSubmenu />;
+}
+```
+
+---
+
+## Component: SmartPanelHeader
+Path: apps/crish-desktop/src/components/ui/SmartExpandablePanel/SmartPanelHeader.tsx
+Description: SmartPanelHeader UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| query | `string` | - | Yes | - |
+| onQueryChange | `(q: string) => void` | - | Yes | - |
+| placeholder | `string` | '搜索...' | No | - |
+| inputRef | `RefObject<HTMLInputElement \| null>` | - | No | - |
+| onKeyDown | `(e: React.KeyboardEvent<HTMLInputElement>) => void` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { SmartPanelHeader } from '@/components/ui';
+
+export function Example() {
+  return <SmartPanelHeader />;
+}
+```
+
+---
+
+## Component: SmartPanelItem
+Path: apps/crish-desktop/src/components/ui/SmartExpandablePanel/SmartPanelItem.tsx
+Description: SmartPanelItem UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| item | `MenuItem` | - | Yes | - |
+| index | `number` | 0 | No | - |
+| isFocused | `boolean` | false | No | - |
+| activeSubmenuId | `string` | - | No | - |
+| renderItem | `(item: MenuItem, index: number, isFocused: boolean) => ReactNode` | - | No | - |
+| onSelect | `(item: MenuItem, event?: MouseEvent) => void` | - | No | - |
+| onHoverSubmenu | `(item: MenuItem, el: HTMLElement) => void` | - | No | - |
+| onHoverItem | `(item: MenuItem, el: HTMLElement) => void` | - | No | - |
+| onToggleCollapsible | `(expanded: boolean, item: MenuItem) => void` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { SmartPanelItem } from '@/components/ui';
+
+export function Example() {
+  return <SmartPanelItem />;
+}
+```
+
+---
+
+## Component: SmartPanelList
+Path: apps/crish-desktop/src/components/ui/SmartExpandablePanel/SmartPanelList.tsx
+Description: SmartPanelList UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| filteredGroups | `Array<MenuItem \| MenuGroup>` | - | Yes | - |
+| flatNavItems | `MenuItem[]` | - | Yes | - |
+| focusedIndex | `number` | - | Yes | - |
+| enableDivider | `boolean` | true | No | - |
+| onSelect | `(item: MenuItem, event?: MouseEvent \| KeyboardEvent) => void` | - | Yes | - |
+| onMouseEnterItem | `(item: MenuItem, el: HTMLElement) => void` | - | Yes | - |
+| renderItem | `(item: MenuItem, index: number, isFocused: boolean) => ReactNode` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { SmartPanelList } from '@/components/ui';
+
+export function Example() {
+  return <SmartPanelList />;
+}
+```
+
+---
+
+## Component: SmartSearchHeader
+Path: apps/crish-desktop/src/components/ui/SmartPanel/SmartSearchHeader.tsx
+Description: SmartSearchHeader UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| value | `string` | - | Yes | - |
+| onChange | `(value: string) => void` | - | Yes | - |
+| placeholder | `string` | '搜索...' | No | - |
+| rightActions | `ReactNode` | - | No | - |
+| inputRef | `RefObject<HTMLInputElement \| null>` | - | No | - |
+| onKeyDown | `(e: KeyboardEvent<HTMLInputElement>) => void` | - | No | - |
+| autoFocus | `boolean` | true | No | - |
+
+### Verified Code Example
+```tsx
+import { SmartSearchHeader } from '@/components/ui';
+
+export function Example() {
+  return <SmartSearchHeader />;
+}
+```
+
+---
+
+## Component: SmartSubmenu
+Path: apps/crish-desktop/src/components/ui/SmartPanel/SmartSubmenu.tsx
+Description: SmartSubmenu UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| parentItem | `MenuItem` | - | Yes | - |
+| parentRect | `DOMRect \| null` | - | Yes | - |
+| items | `MenuItem[]` | - | Yes | - |
+| isOpen | `boolean` | - | Yes | - |
+| onClose | `() => void` | - | Yes | - |
+| onSelect | `(item: MenuItem, event?: MouseEvent \| KeyboardEvent) => void` | - | No | - |
+| onMouseEnter | `() => void` | - | No | - |
+| onMouseLeave | `() => void` | - | No | - |
+| renderItem | `(item: MenuItem, index: number, isFocused: boolean) => ReactNode` | - | No | - |
+| focusedChildId | `string` | - | No | - |
+| submenuRef | `React.RefObject<HTMLDivElement \| null>` | - | No | - |
+
+### Verified Code Example
+```tsx
+import { SmartSubmenu } from '@/components/ui';
+
+export function Example() {
+  return <SmartSubmenu />;
+}
+```
+
+---
+
+## Component: StandardDialog
+Path: apps/crish-desktop/src/components/ui/Dialog/Dialog.tsx
+Description: ui/Dialog 弹窗基座与复合原语体系（原生 inert 模态栈与现代 Headless 架构） 方案依据: - docs/frontend-systemic-refactor/plans/05-ui-primitives-and-headless-refactor.md §3.2 与 §4.2
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { StandardDialog } from '@/components/ui';
+
+export function Example() {
+  return <StandardDialog />;
+}
+```
+
+---
+
+## Component: StepperArrowDownIcon
+Path: apps/crish-desktop/src/components/ui/ScrollArea/ScrollAreaHelpers.tsx
+Description: 底部向下大圆角贝塞尔矢量等腰三角 (宽 8px 高 7px，顶角与两底角均带平滑圆润曲率，宽度严格对齐滑块)
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { StepperArrowDownIcon } from '@/components/ui';
+
+export function Example() {
+  return <StepperArrowDownIcon />;
+}
+```
+
+---
+
+## Component: StepperArrowLeftIcon
+Path: apps/crish-desktop/src/components/ui/ScrollArea/ScrollAreaHelpers.tsx
+Description: 左侧向左大圆角贝塞尔矢量等腰三角 (宽 7px 高 8px，顶角与两底角均带平滑圆润曲率，高度严格对齐滑块)
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { StepperArrowLeftIcon } from '@/components/ui';
+
+export function Example() {
+  return <StepperArrowLeftIcon />;
+}
+```
+
+---
+
+## Component: StepperArrowRightIcon
+Path: apps/crish-desktop/src/components/ui/ScrollArea/ScrollAreaHelpers.tsx
+Description: 右侧向右大圆角贝塞尔矢量等腰三角 (宽 7px 高 8px，顶角与两底角均带平滑圆润曲率，高度严格对齐滑块)
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { StepperArrowRightIcon } from '@/components/ui';
+
+export function Example() {
+  return <StepperArrowRightIcon />;
+}
+```
+
+---
+
+## Component: StepperArrowUpIcon
+Path: apps/crish-desktop/src/components/ui/ScrollArea/ScrollAreaHelpers.tsx
+Description: 顶部向上大圆角贝塞尔矢量等腰三角 (宽 8px 高 7px，顶角与两底角均带平滑圆润曲率，宽度严格对齐滑块)
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { StepperArrowUpIcon } from '@/components/ui';
+
+export function Example() {
+  return <StepperArrowUpIcon />;
+}
+```
+
+---
+
+## Component: TabsContent
+Path: apps/crish-desktop/src/components/ui/Tabs/Tabs.tsx
+Description: TabsContent UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| value | `string` | - | Yes | 对应 Tab 触发器的唯一标识 |
+| keepMounted | `boolean` | - | No | 是否在未激活时保留 DOM 节点（通过 hidden 隐藏而非卸载） |
+| className | `string` | - | No | 自定义类名 |
+| style | `React.CSSProperties` | - | No | 自定义行内样式 |
+| children | `React.ReactNode` | - | Yes | - |
+
+### Verified Code Example
+```tsx
+import { TabsContent } from '@/components/ui';
+
+export function Example() {
+  return <TabsContent />;
+}
+```
+
+---
+
+## Component: TabsList
+Path: apps/crish-desktop/src/components/ui/Tabs/Tabs.tsx
+Description: TabsList UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| 'aria-label' | `string` | - | No | 无障碍标签 |
+| className | `string` | - | No | 自定义类名 |
+| style | `React.CSSProperties` | - | No | 自定义行内样式 |
+| role | `string` | - | No | 自定义无障碍角色（默认 role="tablist"） |
+| children | `React.ReactNode` | - | Yes | - |
+
+### Verified Code Example
+```tsx
+import { TabsList } from '@/components/ui';
+
+export function Example() {
+  return <TabsList />;
+}
+```
+
+---
+
+## Component: TabsTrigger
+Path: apps/crish-desktop/src/components/ui/Tabs/Tabs.tsx
+Description: TabsTrigger UI 原子交互基元。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| value | `string` | - | Yes | 选项值唯一标识 |
+| icon | `React.ReactNode` | - | No | 可选前置图标 |
+| badge | `React.ReactNode` | - | No | 可选尾部徽标/数量 |
+| disabled | `boolean` | - | No | 禁用态 |
+| className | `string` | - | No | 自定义类名 |
+| style | `React.CSSProperties` | - | No | 自定义行内样式 |
+| role | `string` | - | No | 自定义无障碍角色（默认 role="tab"） |
+| 'aria-label' | `string` | - | No | 显式无障碍标签 |
+| children | `React.ReactNode` | - | Yes | - |
+
+### Verified Code Example
+```tsx
+import { TabsTrigger } from '@/components/ui';
+
+export function Example() {
+  return <TabsTrigger />;
+}
+```
+
+---
+
+## Component: TabStrip
+Path: apps/crish-desktop/src/components/ui/TabStrip/TabStrip.tsx
+Description: 受控标签条：内部只管理 roving tabindex 与溢出状态，数据与激活完全受控。
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| tabs | `TabStripItem[]` | - | Yes | 标签数据模型（受控 items 协议） |
+| activeId | `string \| null` | - | Yes | 激活项 id；null = 无激活（如草稿态不点亮任何标签） |
+| onActiveChange | `(id: string) => void` | - | Yes | 激活变更回调（点击 / Enter / Space / 方向键激活均经此上报） |
+| onClose | `(id: string, e: React.MouseEvent \| React.KeyboardEvent) => void` | - | No | 关闭回调（关闭钮 / Delete / Backspace）；缺省 = 标签不可关 |
+| appearance | `TabStripAppearance` | - | No | 外观与无障碍属性组（类名/aria/data/role） |
+| slots | `TabStripSlots` | - | No | 插槽组（renderTab/leading/trailing/wrapTrailing/拖拽入口） |
+
+### Verified Code Example
+```tsx
+import { TabStrip } from '@/components/ui';
+
+export function Example({ activeId, onSelect }: { activeId: string; onSelect: (id: string) => void }) {
+  return (
+    <TabStrip
+      items={[
+        { id: '1', title: '标签页 1' },
+        { id: '2', title: '标签页 2' },
+      ]}
+      activeId={activeId}
+      onSelect={onSelect}
+    />
+  );
+}
+```
+
+---
+
+## Component: TooltipArrow
+Path: apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx
+Description: ui/Tooltip 原子提示（Headless Base UI 重构版） 遵循 docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.2 & §3.2 1. 接入 @base-ui/react/tooltip 原语
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { TooltipArrow } from '@/components/ui';
+
+export function Example() {
+  return <TooltipArrow />;
+}
+```
+
+---
+
+## Component: TooltipPopup
+Path: apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx
+Description: ui/Tooltip 原子提示（Headless Base UI 重构版） 遵循 docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.2 & §3.2 1. 接入 @base-ui/react/tooltip 原语
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { TooltipPopup } from '@/components/ui';
+
+export function Example() {
+  return <TooltipPopup />;
+}
+```
+
+---
+
+## Component: TooltipPortal
+Path: apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx
+Description: ui/Tooltip 原子提示（Headless Base UI 重构版） 遵循 docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.2 & §3.2 1. 接入 @base-ui/react/tooltip 原语
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { TooltipPortal } from '@/components/ui';
+
+export function Example() {
+  return <TooltipPortal />;
+}
+```
+
+---
+
+## Component: TooltipPositioner
+Path: apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx
+Description: ui/Tooltip 原子提示（Headless Base UI 重构版） 遵循 docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.2 & §3.2 1. 接入 @base-ui/react/tooltip 原语
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { TooltipPositioner } from '@/components/ui';
+
+export function Example() {
+  return <TooltipPositioner />;
+}
+```
+
+---
+
+## Component: TooltipProvider
+Path: apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx
+Description: ui/Tooltip 原子提示（Headless Base UI 重构版） 遵循 docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.2 & §3.2 1. 接入 @base-ui/react/tooltip 原语
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { TooltipProvider } from '@/components/ui';
+
+export function Example() {
+  return <TooltipProvider />;
+}
+```
+
+---
+
+## Component: TooltipRoot
+Path: apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx
+Description: ui/Tooltip 原子提示（Headless Base UI 重构版） 遵循 docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.2 & §3.2 1. 接入 @base-ui/react/tooltip 原语
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { TooltipRoot } from '@/components/ui';
+
+export function Example() {
+  return <TooltipRoot />;
+}
+```
+
+---
+
+## Component: TooltipTrigger
+Path: apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx
+Description: ui/Tooltip 原子提示（Headless Base UI 重构版） 遵循 docs/ui-infra-evolution/plans/03-headless-primitives-and-stability.md §2.2 & §3.2 1. 接入 @base-ui/react/tooltip 原语
+
+### Props
+| Prop | Type | Default | Required | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| - | `Record<string, unknown>` | - | No | 继承标准 HTML 或无特定 Props 声明 |
+
+### Verified Code Example
+```tsx
+import { TooltipTrigger } from '@/components/ui';
+
+export function Example() {
+  return <TooltipTrigger />;
+}
+```
+
+---

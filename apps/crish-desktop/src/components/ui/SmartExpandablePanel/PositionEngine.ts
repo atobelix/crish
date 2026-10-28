@@ -9,7 +9,7 @@ export class PositionEngine {
   private readonly hysteresisY: number;
   private readonly maxPanelHeight: number;
   private readonly sideOffset: number;
-  private readonly preferredSide?: 'top' | 'bottom';
+  private readonly preferredSide?: 'top' | 'bottom' | 'left' | 'right';
   private readonly preferredAlign?: 'start' | 'center' | 'end';
   private currentDirY: 'up' | 'down' | null = null;
 
@@ -231,16 +231,19 @@ export class PositionEngine {
     const subWidth = submenuEl.offsetWidth || 230;
     const subHeight = submenuEl.offsetHeight || 180;
 
-    let targetX = itemRect.right + 4;
+    const overlap = 5;
+    let targetX = itemRect.right - overlap;
     let isFlipLeft = false;
     if (targetX + subWidth > bounds.right) {
-      targetX = Math.max(bounds.left, itemRect.left - subWidth - 4);
+      targetX = Math.max(bounds.left, itemRect.left + overlap - subWidth);
       isFlipLeft = true;
     }
 
     let targetY = itemRect.top - 4;
     if (targetY + subHeight > bounds.bottom) {
       targetY = Math.max(bounds.top, bounds.bottom - subHeight - 8);
+    } else {
+      targetY = Math.max(bounds.top, targetY);
     }
 
     return { x: targetX, y: targetY, isFlipLeft };
@@ -254,8 +257,8 @@ export interface CascadePlacement {
   transformOrigin: 'top left' | 'top right';
 }
 
-/** 级联子菜单最大限制高度（与 CSS .cascadeSubmenu 契约单源一致） */
-export const MAX_CASCADE_PANEL_HEIGHT = 360;
+/** 级联子菜单最大限制高度（约 7 项可滚动条目 240px + 尾部动作 44px + 内衬 12px，避免冲上天际） */
+export const MAX_CASCADE_PANEL_HEIGHT = 300;
 
 /** 按子项内容估算级联面板宽度（min: 160px, max: 280px），消除盲猜 200px 导致的向左展开空洞 */
 export function estimateCascadeWidth(
@@ -279,37 +282,44 @@ export function estimateCascadeWidth(
  */
 export function readCascadeSize(
   el: HTMLElement,
-  fallbackHeight: number
+  fallbackHeight: number,
+  viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1280,
+  viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 800
 ): { width: number; height: number } {
-  const maxW = Math.max(160, window.innerWidth - 32);
+  const pad = 12;
+  const maxW = Math.max(160, viewportWidth - pad * 2);
   const maxH = Math.min(
     MAX_CASCADE_PANEL_HEIGHT,
-    Math.max(44, window.innerHeight - 32)
+    Math.max(44, viewportHeight - pad * 2)
   );
   const width =
     el.offsetWidth > 0 && el.offsetWidth <= maxW ? el.offsetWidth : 160;
   const height =
     el.offsetHeight > 0 && el.offsetHeight <= maxH
       ? el.offsetHeight
-      : Math.min(fallbackHeight, MAX_CASCADE_PANEL_HEIGHT);
+      : Math.min(fallbackHeight, maxH);
   return { width, height };
 }
 
-/** 按子项行数估算级联高度，严格钳制在 MAX_CASCADE_PANEL_HEIGHT 内，避免用虚高把短菜单顶离触发行。 */
+/** 按子项行数估算级联高度，根据视口与 MAX_CASCADE_PANEL_HEIGHT 弹性自适应，避免用虚高把短菜单顶离触发行。 */
 export function estimateCascadeHeight(
-  children: Array<{ type?: string }> | undefined
+  children: Array<{ type?: string }> | undefined,
+  maxAllowed = MAX_CASCADE_PANEL_HEIGHT
 ): number {
   const list = children ?? [];
   let height = 12;
   for (const child of list) {
-    height += child.type === 'divider' ? 9 : 34;
+    height += child.type === 'divider' ? 9 : 36;
   }
-  return Math.max(44, Math.min(height, MAX_CASCADE_PANEL_HEIGHT));
+  return Math.max(44, Math.min(height, maxAllowed));
 }
 
 /**
- * 级联面板贴在主面板外侧，顶边与触发行对齐。
- * 底部放不下时只上移超出的那一段；左右哪边放得下就开向哪边。
+ * 级联面板贴在主面板外侧，带有 5px 负重叠覆盖父级选项 padding 区域，顶边与触发行对齐。
+ * 核心特性：
+ * - 负重叠 overlap = 5px，留白 pad = 12px
+ * - 向右展开为 panelRect.right - overlap，向左展开为 panelRect.left + overlap - width
+ * - 垂直对齐 top = itemTop - 4，并在视口边界安全贴边钳位
  */
 export function placeCascadeSubmenu(
   panelRect: { left: number; right: number },
@@ -319,26 +329,38 @@ export function placeCascadeSubmenu(
   viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1280,
   viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 800
 ): CascadePlacement {
-  const gap = 6;
-  const pad = 8;
+  const overlap = 5;
+  const pad = 12;
   const width = Math.max(1, submenuWidth);
+  const bounds = {
+    left: pad,
+    top: pad,
+    right: viewportWidth - pad,
+    bottom: viewportHeight - pad,
+  };
   const height = Math.min(
     Math.max(1, submenuHeight),
-    Math.max(44, viewportHeight - pad * 2)
+    Math.max(44, bounds.bottom - bounds.top)
   );
-  const spaceRight = viewportWidth - pad - (panelRect.right + gap);
-  const spaceLeft = panelRect.left - gap - pad;
-  const side: 'left' | 'right' =
-    spaceRight >= width || spaceRight >= spaceLeft ? 'right' : 'left';
-  let left =
-    side === 'right' ? panelRect.right + gap : panelRect.left - gap - width;
-  const maxLeft = Math.max(pad, viewportWidth - pad - width);
-  left = Math.min(Math.max(pad, left), maxLeft);
 
-  let top = itemTop;
-  const maxTop = Math.max(pad, viewportHeight - pad - height);
-  if (top > maxTop) top = maxTop;
-  if (top < pad) top = pad;
+  const spaceRight = bounds.right - panelRect.right;
+  const spaceLeft = panelRect.left - bounds.left;
+  const side: 'left' | 'right' =
+    spaceRight >= width - overlap || spaceRight >= spaceLeft ? 'right' : 'left';
+
+  let left: number;
+  if (side === 'right') {
+    left = Math.min(bounds.right - width, panelRect.right - overlap);
+  } else {
+    left = Math.max(bounds.left, panelRect.left + overlap - width);
+  }
+
+  let top = itemTop - 4;
+  if (top + height > bounds.bottom) {
+    top = Math.max(bounds.top, bounds.bottom - height);
+  } else {
+    top = Math.max(bounds.top, top);
+  }
 
   return {
     left,

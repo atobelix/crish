@@ -7,6 +7,8 @@
  * 分层契约：本组件只依赖 react 与 tokens CSS 变量，不依赖任何业务模块。
  */
 import React, { useCallback, useRef, useState } from 'react';
+import { m } from 'motion/react';
+import { SPRING_SWITCH_SLIDER } from '../../../utils/motionTokens';
 import styles from './Slider.module.css';
 
 export interface SliderProps extends Omit<
@@ -56,6 +58,7 @@ export const Slider = React.forwardRef<HTMLDivElement, SliderProps>(
 
     const trackRef = useRef<HTMLDivElement | null>(null);
     const isDraggingRef = useRef(false);
+    const [isDragging, setIsDragging] = useState(false);
 
     const percentage =
       max > min
@@ -94,6 +97,7 @@ export const Slider = React.forwardRef<HTMLDivElement, SliderProps>(
     const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
       if (disabled) return;
       isDraggingRef.current = true;
+      setIsDragging(true);
       e.currentTarget.setPointerCapture(e.pointerId);
       updateFromPointer(e.clientX);
     };
@@ -107,6 +111,7 @@ export const Slider = React.forwardRef<HTMLDivElement, SliderProps>(
     const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
       if (isDraggingRef.current) {
         isDraggingRef.current = false;
+        setIsDragging(false);
         try {
           e.currentTarget.releasePointerCapture(e.pointerId);
         } catch {
@@ -173,14 +178,18 @@ export const Slider = React.forwardRef<HTMLDivElement, SliderProps>(
         {...restProps}
       >
         <div className={styles.track}>
-          <div
+          <m.div
             className={styles.filledTrack}
-            style={{ width: `${percentage}%` }}
+            initial={false}
+            animate={{ width: `${percentage}%` }}
+            transition={isDragging ? { duration: 0 } : SPRING_SWITCH_SLIDER}
           />
         </div>
-        <div
+        <m.div
           className={styles.thumb}
-          style={{ left: `${percentage}%` }}
+          initial={false}
+          animate={{ left: `${percentage}%` }}
+          transition={isDragging ? { duration: 0 } : SPRING_SWITCH_SLIDER}
           aria-hidden="true"
         />
       </div>

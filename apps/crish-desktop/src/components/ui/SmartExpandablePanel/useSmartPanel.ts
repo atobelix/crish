@@ -18,7 +18,7 @@ export function useSmartPanel(defaultOpen = false): UseSmartPanelReturn {
   }, []);
 
   const toggle = useCallback(() => {
-    setIsOpen(prev => !prev);
+    setIsOpen((prev) => !prev);
   }, []);
 
   const openAtPoint = useCallback((pt: Point2D) => {

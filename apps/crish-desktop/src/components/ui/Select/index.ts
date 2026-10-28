@@ -40,16 +40,11 @@ export {
 } from './Combobox';
 
 // ── 浮层解算 Hook ──
-export {
-  useFloatingPosition,
-  computeFloatingPosition,
-} from './useFloatingPosition';
+export { computeFloatingPosition } from './internal/positionGeometry';
 export type {
-  UseFloatingPositionOptions,
-  FloatingPositionResult,
   ComputeFloatingPositionOptions,
   ComputedFloatingPlacement,
-} from './useFloatingPosition';
+} from './internal/positionGeometry';
 
 // ── 内部图标与高亮算法 ──
 export {
@@ -90,4 +85,3 @@ export type {
   ComboboxSeparatorProps,
   ComboboxContextValue,
 } from './types';
-

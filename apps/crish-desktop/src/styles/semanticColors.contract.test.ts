@@ -8,17 +8,39 @@ import { resolve } from 'node:path';
  * 浅色、深色各一套固定纯色 hex；不得 color-mix、不得透明、运行时皮肤不覆盖。
  */
 const ROOT = resolve(__dirname, '..');
-const css = readFileSync(resolve(ROOT, 'styles/tokens.css'), 'utf8').replace(
-  /\r\n/g,
-  '\n'
-);
+const rawTokensCss = readFileSync(
+  resolve(ROOT, 'styles/tokens.css'),
+  'utf8'
+).replace(/\r\n/g, '\n');
+let light = '';
+let dark = '';
+if (rawTokensCss.includes('@import')) {
+  const imports = [
+    ...rawTokensCss.matchAll(/@import\s+['"]\.\/([^'"]+)['"];/g),
+  ].map((m) => m[1]);
+  for (const file of imports) {
+    const fcontent = readFileSync(
+      resolve(ROOT, 'styles', file),
+      'utf8'
+    ).replace(/\r\n/g, '\n');
+    const dStart = fcontent.indexOf("html[data-theme='dark']");
+    if (dStart !== -1) {
+      light += '\n' + fcontent.slice(0, dStart);
+      dark += '\n' + fcontent.slice(dStart);
+    } else {
+      light += '\n' + fcontent;
+    }
+  }
+} else {
+  const darkStart = rawTokensCss.indexOf("html[data-theme='dark'] {");
+  light = rawTokensCss.slice(0, darkStart);
+  dark = rawTokensCss.slice(darkStart);
+}
+const css = `${light}\n${dark}`;
 const runtime = readFileSync(
   resolve(ROOT, 'services/TokenRuntimeController.ts'),
   'utf8'
 );
-const darkStart = css.indexOf("html[data-theme='dark'] {");
-const light = css.slice(0, darkStart);
-const dark = css.slice(darkStart);
 const decl = (block: string, name: string) =>
   block
     .match(new RegExp(`\\n\\s*${name}:\\s*([^;]+);`))?.[1]

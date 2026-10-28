@@ -1,4 +1,11 @@
-import type { ReactNode, MouseEvent, KeyboardEvent, CSSProperties, RefObject } from 'react';
+import type {
+  ReactNode,
+  MouseEvent,
+  KeyboardEvent,
+  CSSProperties,
+  RefObject,
+} from 'react';
+import type { PositionAlign, PositionSide } from '../internal/positioner/types';
 
 /** 2D coordinate point */
 export interface Point2D {
@@ -62,8 +69,8 @@ export interface PositionOptions {
   hysteresisY?: number;
   maxHeight?: number;
   sideOffset?: number;
-  side?: 'top' | 'bottom';
-  align?: 'start' | 'center' | 'end';
+  side?: PositionSide;
+  align?: PositionAlign;
 }
 
 export type SmartPanelPositionConfig = PositionOptions;

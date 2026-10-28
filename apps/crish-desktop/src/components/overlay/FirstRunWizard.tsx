@@ -9,7 +9,7 @@
 import React, { useEffect, useId, useRef } from 'react';
 
 import styles from './FirstRunWizard.module.css';
-import { Button, Dialog } from '../ui';
+import { Button, Dialog } from '@/components/ui';
 import { useFirstRunWizard } from '../useFirstRunWizard';
 import { WizardKeyStep } from '../WizardKeyStep';
 import { WizardModelStep } from '../WizardModelStep';
@@ -20,7 +20,7 @@ import {
   wizardStepMeta,
   type WizardStep,
 } from '../firstRunWizardLib';
-import { AppIcon } from '../ui/icons/index';
+import { AppIcon } from '@/components/ui/icons';
 
 type Props = {
   onDone: () => void;
@@ -114,8 +114,11 @@ export const FirstRunWizard: React.FC<Props> = ({
       title={
         <div className={styles.firstRunHeader}>
           <span className={styles.firstRunHeaderTitle}>{activeMeta.title}</span>
-          <span className={styles.firstRunStepBadge}>
-            {`步骤 ${step + 1} / ${WIZARD_STEP_META.length}`}
+          <span
+            className={styles.firstRunStepBadge}
+            aria-label={`第 ${step + 1} 步，共 ${WIZARD_STEP_META.length} 步`}
+          >
+            {`${step + 1} / ${WIZARD_STEP_META.length}`}
           </span>
         </div>
       }

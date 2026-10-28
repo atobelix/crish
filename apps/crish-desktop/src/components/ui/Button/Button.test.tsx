@@ -438,10 +438,10 @@ describe('ui/Button 样式与物理动效契约 (Button.module.css)', () => {
     expect(cssContent).toContain('min-height: 40px;');
   });
 
-  it('按钮激活态清退硬编码黑框、深黑边与厚重阴影，统一接入 var(--tint-active) 微背景', () => {
-    expect(cssContent).toContain('--btn-bg: var(--tint-active);');
+  it('按钮激活态清退硬编码黑框、深黑边与厚重阴影，统一接入 var(--state-active) 微背景', () => {
+    expect(cssContent).toContain('--btn-bg: var(--state-active);');
     expect(cssContent).toMatch(
-      /\.buttonActive,\s*\.button\[data-active='true'\]\s*\{[^}]*--btn-bg:\s*var\(--tint-active\);/
+      /\.buttonActive,\s*\.button\[data-active='true'\]\s*\{[^}]*--btn-bg:\s*var\(--state-active\);/
     );
     expect(cssContent).toMatch(
       /\.buttonActive,\s*\.button\[data-active='true'\]\s*\{[^}]*border-color:\s*transparent;/

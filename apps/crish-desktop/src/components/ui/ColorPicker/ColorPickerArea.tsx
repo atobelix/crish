@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion, useTransform } from 'motion/react';
+import { m, useTransform } from 'motion/react';
 import type { Hsva } from '../../../utils/color/colorMath';
 import { clamp } from '../../../utils/color/colorMath';
 import { stepFor, useFollow, usePad } from './types';
@@ -38,7 +38,7 @@ export function ColorPickerArea({
 
   return (
     <div className={styles.area} data-active={active || undefined} {...areaPad}>
-      <motion.div
+      <m.div
         ref={thumbRef}
         className={styles.areaThumb}
         role="slider"

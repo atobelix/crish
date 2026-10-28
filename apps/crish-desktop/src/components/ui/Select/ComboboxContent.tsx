@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import { DialogOverlayContext } from '../Dialog/dialogOverlayContext';
 import { useComboboxContext } from './ComboboxRoot';
-import { useFloatingPosition } from './useFloatingPosition';
+import { usePositioner } from '../internal/positioner/usePositioner';
 import type { ComboboxContentProps } from './types';
 import styles from './SelectContent.module.css';
 
@@ -24,21 +24,25 @@ export function ComboboxContent({
     dialogOverlay ??
     (typeof document !== 'undefined' ? document.body : null);
 
-  const handleDismiss = useCallback(() => {
-    ctx.setOpen(false);
-  }, [ctx]);
-
-  const position = useFloatingPosition({
+  const posReturn = usePositioner({
     open: ctx.open,
-    triggerRef: ctx.triggerRef,
-    contentRef: ctx.contentRef,
+    anchor: ctx.triggerRef,
+    contentRef: ctx.contentRef as React.RefObject<HTMLElement | null>,
     side,
     align,
     sideOffset,
     edgePadding,
     portalContainer: resolvedContainer,
-    onDismiss: handleDismiss,
   });
+
+  const position = {
+    x: posReturn.result?.x ?? 0,
+    y: posReturn.result?.y ?? 0,
+    transformOrigin: posReturn.result?.transformOrigin ?? 'top left',
+    isPositioned: posReturn.isPositioned,
+    side: posReturn.result?.actualSide ?? side,
+    align: posReturn.result?.actualAlign ?? align,
+  };
 
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     e.stopPropagation();

@@ -5,7 +5,7 @@
  */
 /* eslint-disable max-lines-per-function */
 import React from 'react';
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   render,
   screen,
@@ -19,15 +19,10 @@ import {
   PreviewCardContent,
   PreviewCardTitle,
   PreviewCardDescription,
-  PreviewCardArrow,
   computePreviewCardPosition,
   PREVIEW_CARD_EDGE_PAD,
-} from './index';
-import {
-  crossProduct,
-  isPointInTriangle,
-  SafeTriangleTracker,
-} from '../internal/SafeTriangle';
+} from './PreviewCard';
+import { PreviewCardArrow } from './PreviewCardArrow';
 import { layerStackManager } from '../internal/layer-stack/LayerStackManager';
 
 afterEach(() => {
@@ -98,76 +93,6 @@ describe('PreviewCardArrow (双层贝塞尔平滑小三角)', () => {
       '[data-slot="preview-card-arrow"]'
     ) as HTMLElement;
     expect(arrowContainer.style.top).toBe('calc(50% - 9px)');
-  });
-});
-
-describe('Safe-Aim 2D 向量几何与 SafeTriangleTracker', () => {
-  it('crossProduct 2D 向量叉积符号面积判定', () => {
-    const p1 = { x: 0, y: 0 };
-    const p2 = { x: 10, y: 0 };
-    const p3 = { x: 0, y: 10 };
-
-    // 逆时针旋向面积为正
-    expect(crossProduct(p1, p2, p3)).toBe(100);
-    // 顺时针旋向面积为负
-    expect(crossProduct(p1, p3, p2)).toBe(-100);
-    // 共线点面积为 0
-    expect(crossProduct(p1, p2, { x: 20, y: 0 })).toBe(0);
-  });
-
-  it('isPointInTriangle 准确判定点在三角形内部、外部及边界', () => {
-    const a = { x: 0, y: 0 };
-    const b = { x: 100, y: 0 };
-    const c = { x: 50, y: 80 };
-
-    // 重心内部点
-    expect(isPointInTriangle({ x: 50, y: 30 }, a, b, c)).toBe(true);
-    // 顶点重合
-    expect(isPointInTriangle({ x: 0, y: 0 }, a, b, c)).toBe(true);
-    expect(isPointInTriangle({ x: 100, y: 0 }, a, b, c)).toBe(true);
-    expect(isPointInTriangle({ x: 50, y: 80 }, a, b, c)).toBe(true);
-    // 边缘上点
-    expect(isPointInTriangle({ x: 50, y: 0 }, a, b, c)).toBe(true);
-    // 外部点
-    expect(isPointInTriangle({ x: 50, y: -10 }, a, b, c)).toBe(false);
-    expect(isPointInTriangle({ x: 120, y: 50 }, a, b, c)).toBe(false);
-    expect(isPointInTriangle({ x: -10, y: 50 }, a, b, c)).toBe(false);
-  });
-
-  it('SafeTriangleTracker 管理进入、持续追踪与重置状态机', () => {
-    const tracker = new SafeTriangleTracker(300);
-    expect(tracker.isGraceActive()).toBe(false);
-
-    // 模拟光标从 Trigger (50, 20) 指向卡片下方包围盒 (0, 40) - (200, 160)
-    tracker.enter(
-      { x: 50, y: 20 },
-      { left: 0, top: 40, right: 200, bottom: 160 },
-      'bottom'
-    );
-    expect(tracker.isGraceActive()).toBe(true);
-
-    // 安全锥区内部点检测
-    expect(tracker.check({ x: 60, y: 35 })).toBe(true);
-    expect(tracker.isGraceActive()).toBe(true);
-
-    // 光标成功触达目标包围盒
-    tracker.reach();
-    expect(tracker.isGraceActive()).toBe(false);
-  });
-
-  it('SafeTriangleTracker 在光标离开安全区时自动重置', () => {
-    const tracker = new SafeTriangleTracker(300);
-    tracker.enter(
-      { x: 50, y: 20 },
-      { left: 0, top: 40, right: 200, bottom: 160 },
-      'bottom'
-    );
-    expect(tracker.isGraceActive()).toBe(true);
-
-    // 移出锥区 (向左远方滑出)
-    const inRange = tracker.check({ x: -50, y: 30 });
-    expect(inRange).toBe(false);
-    expect(tracker.isGraceActive()).toBe(false);
   });
 });
 

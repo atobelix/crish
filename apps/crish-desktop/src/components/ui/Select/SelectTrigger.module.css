@@ -21,7 +21,7 @@
 }
 
 .trigger:hover:not(:disabled) {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border-color: color-mix(
     in srgb,
     var(--border-subtle) 98%,
@@ -89,7 +89,7 @@
 
 .triggerSoft:hover:not(:disabled),
 .variant-soft:hover:not(:disabled) {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border-color: transparent;
 }
 
@@ -148,7 +148,7 @@
 }
 
 .clearBtn:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 

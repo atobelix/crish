@@ -1,4 +1,10 @@
-export { Tabs, TabsList, TabsTrigger, TabsContent, useTabsContext } from './Tabs';
+export {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+  useTabsContext,
+} from './Tabs';
 export type {
   TabsProps,
   TabsListProps,
@@ -8,7 +14,4 @@ export type {
   TabsSize,
   TabsOrientation,
   TabsContextValue,
-  SegmentedControlOption,
-  SegmentedControlProps,
-  SegmentedControlSize,
 } from './types';

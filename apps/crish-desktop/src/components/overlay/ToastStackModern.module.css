@@ -54,11 +54,26 @@
 }
 
 /* ==========================================================================
+   连续悬停画布容器 (Continuous Hover Canvas)
+   高度由 layoutStack 驱动，完全覆盖展开间隙，形成单连通拓扑域彻底消除悬停抖动
+   ========================================================================== */
+
+.list {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  pointer-events: auto;
+  will-change: height;
+  transition: height var(--duration-smooth, 300ms)
+    var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+}
+
+/* ==========================================================================
    Toast Card Base & Physics Variables
    ========================================================================== */
 
 .toastCard {
-  --gap: var(--space-2_5, 10px);
   --peek: var(--space-2_5, 10px);
   --scale: calc(max(0, 1 - (var(--toast-index, 0) * 0.08)));
   --shrink: calc(1 - var(--scale));
@@ -86,7 +101,7 @@
   /* 大气舒展的通知尺寸：锁定单行 48px，严格限制最大高度杜绝变长失控 */
   height: auto;
   min-height: var(--height);
-  max-height: 64px;
+  max-height: 84px;
   overflow: hidden;
 
   /* 背景与发丝边框适配：纯净磨砂中性底色，告别廉价大色块 */
@@ -125,7 +140,7 @@
   bottom: 0;
   left: 0;
   right: 0;
-  transform-origin: bottom center;
+  transform-origin: 50% 100%;
 
   /* 堆叠态 Transform */
   transform: translateX(var(--swipe-x))
@@ -143,7 +158,7 @@
 .viewport:not([data-position^='top'])[data-expanded='true'] .toastCard {
   height: auto;
   min-height: 48px;
-  max-height: 64px;
+  max-height: 84px;
   transform: translateX(var(--swipe-x))
     translateY(calc(-1 * var(--toast-offset-y, 0px) + var(--swipe-y))) scale(1);
   box-shadow: var(
@@ -160,7 +175,7 @@
   top: 0;
   left: 0;
   right: 0;
-  transform-origin: top center;
+  transform-origin: 50% 0;
 
   /* 堆叠态 Transform */
   transform: translateX(var(--swipe-x))
@@ -180,7 +195,7 @@
 .viewport[data-position^='top'][data-expanded='true'] .toastCard {
   height: auto;
   min-height: 48px;
-  max-height: 64px;
+  max-height: 84px;
   transform: translateX(var(--swipe-x))
     translateY(calc(var(--toast-offset-y, 0px) + var(--swipe-y))) scale(1);
   box-shadow: var(
@@ -190,23 +205,22 @@
 }
 
 /* ==========================================================================
-   防闪烁 Hover 桥接伪元素 (Hover Bridge)
+   折叠态规整对齐与内容遮蔽 (彻底清除 ::after 伪元素补丁)
    ========================================================================== */
 
-.toastCard::after {
-  content: '';
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  height: calc(var(--gap, 12px) + 2px);
-  pointer-events: auto;
+/* 折叠态后排卡片：高度归一化对齐首张卡片，下边缘平整严丝合缝 */
+.viewport:not([data-expanded='true']) .toastCard:not([data-front='true']),
+.toastCard[data-expanded='false']:not([data-front='true']) {
+  height: var(--toast-frontmost-height, 48px);
 }
 
-.viewport[data-position^='top'] .toastCard::after {
-  top: 100%;
-  bottom: auto;
-  height: calc(var(--gap, 12px) + 4px);
+/* 折叠态后排卡片：内容遮蔽 (contentOpacity: 0)，杜绝磨砂透字与视觉噪点 */
+.viewport:not([data-expanded='true'])
+  .toastCard:not([data-front='true'])
+  .cardBody,
+.toastCard[data-expanded='false']:not([data-front='true']) .cardBody {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ==========================================================================
@@ -238,6 +252,7 @@
     opacity var(--duration-fast) var(--ease-accelerate);
 }
 
+.toastCard[data-dragging='true'],
 .viewport[data-expanded] .toastCard[data-state='swiping'],
 .viewport .toastCard[data-state='swiping'],
 .toastCard[data-state='swiping'] {
@@ -248,12 +263,8 @@
 .viewport .toastCard[data-state='swiping-dismiss'],
 .toastCard[data-state='swiping-dismiss'] {
   opacity: 0;
-  transform: translateX(calc(var(--swipe-x) * 1.8 + 120px))
-    translateY(var(--swipe-y));
   pointer-events: none;
-  transition:
-    transform var(--duration-normal) var(--ease-accelerate),
-    opacity var(--duration-fast) var(--ease-accelerate);
+  transition: opacity var(--duration-fast) var(--ease-accelerate);
 }
 
 /* ==========================================================================
@@ -353,6 +364,7 @@
   gap: 10px;
   width: 100%;
   height: 100%;
+  transition: opacity var(--duration-fast, 0.16s) var(--ease-standard, ease);
 }
 
 .iconWrapper {
@@ -362,6 +374,14 @@
   flex-shrink: 0;
   width: 18px;
   height: 18px;
+  position: relative;
+}
+
+.glyph {
+  grid-area: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .contentWrapper {
@@ -378,6 +398,10 @@
   line-height: 1.25;
   margin-bottom: 2px;
   color: inherit;
+}
+
+.line {
+  display: block;
 }
 
 .message {
@@ -404,10 +428,17 @@
   margin-left: auto;
 }
 
+.actionSlot {
+  display: flex;
+  align-items: center;
+  flex: none;
+  overflow: hidden;
+}
+
 .undoButton,
 .undoButton {
   /* 默认态：消费 Token 原生 2.5% 微叠层，透亮清爽杜绝脏灰 */
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border: none;
   padding: 0 var(--space-3, 12px);
   height: 28px;
@@ -430,13 +461,13 @@
 .undoButton:hover {
   /* hover 态：消费 Token 原生 3% 微叠层，极其柔软轻盈，告别发黑 */
   opacity: 1;
-  background-color: var(--tint-active);
+  background-color: var(--state-active);
   color: var(--text-primary);
 }
 
 .undoButton:active,
 .undoButton:active {
-  background-color: var(--tint-strong);
+  background-color: var(--state-strong);
 }
 
 .actionButton,
@@ -449,7 +480,7 @@
   font-weight: var(--font-weight-medium, 500);
   border-radius: var(--toast-btn-radius, var(--radius-md, 8px));
   cursor: pointer;
-  background-color: var(--tint-hover);
+  background-color: var(--state-hover);
   color: var(--text-primary);
   white-space: nowrap;
   display: inline-flex;
@@ -462,13 +493,13 @@
 
 .actionButton:hover,
 .actionButton:hover {
-  background-color: var(--tint-active);
+  background-color: var(--state-active);
   color: var(--text-primary);
 }
 
 .actionButton:active,
 .actionButton:active {
-  background-color: var(--tint-strong);
+  background-color: var(--state-strong);
 }
 
 .closeButton,
@@ -502,14 +533,14 @@
 .closeButton:hover,
 .closeButton:hover {
   /* 默认 hover 态：消费 2.5% 微灰圆环与首选正文色，高级无脏感 */
-  background-color: var(--tint-hover);
+  background-color: var(--state-hover);
   color: var(--text-primary);
   border: none;
 }
 
 .closeButton:active,
 .closeButton:active {
-  background-color: var(--tint-active);
+  background-color: var(--state-active);
 }
 
 /* ==========================================================================

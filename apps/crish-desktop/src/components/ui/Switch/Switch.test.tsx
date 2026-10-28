@@ -476,12 +476,14 @@ describe('ui/Switch (v2.0.0 纯白流体胶囊与中轴对称版)', () => {
   describe('8. CSS Modules 物理动效与 Design Tokens 规范静态断言', () => {
     const css = readFileSync(join(DIR, 'Switch.module.css'), 'utf8');
 
-    it('滑块只做平移，交互后用减速曲线到位，不做拉伸形变', () => {
+    it('滑块采用解耦分层动效：外层保持连续平移过渡，内层执行若有若无的微流体拉伸', () => {
       expect(css).toMatch(
         /\.hasInteracted \.thumb\s*\{[^}]*transition:\s*transform var\(--duration-fast\) var\(--ease-decelerate\)/
       );
+      expect(css).toMatch(/@keyframes fluid-stretch-to-on/);
+      expect(css).toMatch(/@keyframes fluid-stretch-to-off/);
+      expect(css).toMatch(/scale\(1\.12,\s*0\.96\)/);
       expect(css).not.toMatch(/@keyframes thumb-stretch/);
-      expect(css).not.toMatch(/scaleX\(/);
     });
 
     it('彻底移除对勾图标以保证视觉纯净度（无 checkmark-draw 与 checkIcon）', () => {

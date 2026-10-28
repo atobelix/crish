@@ -4,354 +4,356 @@
    内层由伪元素承载克制若有若无的微流体拉伸与紧致阻尼收敛。
    ========================================================================== */
 
-.container {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  user-select: none;
-}
+@layer components {
+  .container {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    user-select: none;
+  }
 
-.container[data-disabled] {
-  opacity: var(--opacity-disabled);
-  cursor: not-allowed;
-}
+  .container[data-disabled] {
+    opacity: var(--opacity-disabled);
+    cursor: not-allowed;
+  }
 
-.label {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  cursor: pointer;
-  line-height: var(--line-height-ui);
-  transition: color var(--transition-micro);
-}
+  .label {
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    line-height: var(--line-height-ui);
+    transition: color var(--transition-micro);
+  }
 
-.container:hover:not([data-disabled]) .label {
-  color: var(--text-primary);
-}
+  .container:hover:not([data-disabled]) .label {
+    color: var(--text-primary);
+  }
 
-/* --- 轨道基底（Track） --- */
-.track {
-  appearance: none;
-  -webkit-appearance: none;
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-  line-height: 0;
-  font-size: 0;
-  vertical-align: middle;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border-subtle);
-  background: var(--switch-track-bg);
-  box-sizing: border-box;
-  cursor: pointer;
-  flex-shrink: 0;
-  outline: none;
-  overflow: visible;
-  transition:
-    background-color var(--duration-fast) cubic-bezier(0.4, 0, 0.2, 1),
-    border-color var(--duration-fast) cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow var(--duration-fast) cubic-bezier(0.4, 0, 0.2, 1);
-}
+  /* --- 轨道基底（Track） --- */
+  .track {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+    line-height: 0;
+    font-size: 0;
+    vertical-align: middle;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border-subtle);
+    background: var(--switch-track-bg);
+    box-sizing: border-box;
+    cursor: pointer;
+    flex-shrink: 0;
+    outline: none;
+    overflow: visible;
+    transition:
+      background-color var(--duration-fast) var(--ease-standard),
+      border-color var(--duration-fast) var(--ease-standard),
+      box-shadow var(--duration-fast) var(--ease-standard);
+  }
 
-/* 消除鼠标点击残留黑圈 */
-.track:focus:not(:focus-visible) {
-  outline: none;
-  box-shadow: none;
-}
+  /* 消除鼠标点击残留黑圈 */
+  .track:focus:not(:focus-visible) {
+    outline: none;
+    box-shadow: none;
+  }
 
-/* 尺寸规格与 CSS 变量矩阵（严格 2px 绝对对称等距留白） */
-.size-sm {
-  --track-w: 30px;
-  --track-h: 18px;
-  --thumb-d: 12px;
-  --thumb-pad: 2px;
-  --thumb-travel: 12px;
-  --spinner-size: 9px;
-  width: var(--track-w);
-  height: var(--track-h);
-}
+  /* 尺寸规格与 CSS 变量矩阵（严格 2px 绝对对称等距留白） */
+  .size-sm {
+    --track-w: 30px;
+    --track-h: 18px;
+    --thumb-d: 12px;
+    --thumb-pad: 2px;
+    --thumb-travel: 12px;
+    --spinner-size: 9px;
+    width: var(--track-w);
+    height: var(--track-h);
+  }
 
-.size-md {
-  --track-w: 38px;
-  --track-h: 22px;
-  --thumb-d: 16px;
-  --thumb-pad: 2px;
-  --thumb-travel: 16px;
-  --spinner-size: 12px;
-  width: var(--track-w);
-  height: var(--track-h);
-}
+  .size-md {
+    --track-w: 38px;
+    --track-h: 22px;
+    --thumb-d: 16px;
+    --thumb-pad: 2px;
+    --thumb-travel: 16px;
+    --spinner-size: 12px;
+    width: var(--track-w);
+    height: var(--track-h);
+  }
 
-.size-lg {
-  --track-w: 46px;
-  --track-h: 26px;
-  --thumb-d: 20px;
-  --thumb-pad: 2px;
-  --thumb-travel: 20px;
-  --spinner-size: 14px;
-  width: var(--track-w);
-  height: var(--track-h);
-}
+  .size-lg {
+    --track-w: 46px;
+    --track-h: 26px;
+    --thumb-d: 20px;
+    --thumb-pad: 2px;
+    --thumb-travel: 20px;
+    --spinner-size: 14px;
+    width: var(--track-w);
+    height: var(--track-h);
+  }
 
-/* 未选中态 Hover：保持纯净发丝边框，微调背景 */
-.track:hover:not(:disabled) {
-  border-color: var(--border-subtle);
-  background-color: color-mix(
-    in srgb,
-    var(--tint-hover) 60%,
-    var(--switch-track-bg)
-  );
-}
+  /* 未选中态 Hover：保持纯净发丝边框，微调背景 */
+  .track:hover:not(:disabled) {
+    border-color: var(--border-subtle);
+    background-color: color-mix(
+      in srgb,
+      var(--state-hover) 60%,
+      var(--switch-track-bg)
+    );
+  }
 
-/* 选中状态（Checked）：纯色无界胶囊，彻底清退 --brand-deep */
-.track[data-state='checked'] {
-  background: var(--brand);
-  border-color: var(--brand);
-}
+  /* 选中状态（Checked）：纯色无界胶囊，彻底清退 --brand-deep */
+  .track[data-state='checked'] {
+    background: var(--brand);
+    border-color: var(--brand);
+  }
 
-/* 选中态 Hover：微光高亮，杜绝变暗塌陷 */
-.track[data-state='checked']:hover:not(:disabled) {
-  background: color-mix(
-    in srgb,
-    var(--cover-card-bg, var(--bg-card)) 8%,
-    var(--brand)
-  );
-  border-color: color-mix(
-    in srgb,
-    var(--cover-card-bg, var(--bg-card)) 8%,
-    var(--brand)
-  );
-}
+  /* 选中态 Hover：微光高亮，杜绝变暗塌陷 */
+  .track[data-state='checked']:hover:not(:disabled) {
+    background: color-mix(
+      in srgb,
+      var(--cover-card-bg, var(--bg-card)) 8%,
+      var(--brand)
+    );
+    border-color: color-mix(
+      in srgb,
+      var(--cover-card-bg, var(--bg-card)) 8%,
+      var(--brand)
+    );
+  }
 
-/* 焦点环：严格遵守 AGENTS.md §13 (3%~6% 克制软灰 / 品牌柔和光晕) */
-.track:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 1.5px
-    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 90%,
-    var(--text-primary) 10%
-  );
-}
+  /* 焦点环：严格遵守 AGENTS.md §13 (3%~6% 克制软灰 / 品牌柔和光晕) */
+  .track:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 1.5px
+      color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+    border-color: color-mix(
+      in srgb,
+      var(--border-color) 90%,
+      var(--text-primary) 10%
+    );
+  }
 
-.track[data-state='checked']:focus-visible {
-  outline: none;
-  border-color: var(--brand);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 25%, transparent);
-}
+  .track[data-state='checked']:focus-visible {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 25%, transparent);
+  }
 
-.track:disabled {
-  opacity: var(--opacity-disabled);
-  cursor: not-allowed;
-}
+  .track:disabled {
+    opacity: var(--opacity-disabled);
+    cursor: not-allowed;
+  }
 
-.track.loading {
-  cursor: wait;
-}
+  .track.loading {
+    cursor: wait;
+  }
 
-/* --- 滑块本体（Thumb：解耦分层架构）
+  /* --- 滑块本体（Thumb：解耦分层架构）
    - 外层 .thumb：垂直中轴定位与水平平移位移，由 CSS transition 掌控连续位置，彻底杜绝打断瞬移；
    - 内层实体 ::before：承载圆角胶囊、发丝微收边、环境漫反射阴影，并在交互时呈现极微流体拉伸与若有若无的紧致阻尼收敛。
    ========================================================================== */
-.thumb {
-  position: absolute;
-  top: 50%;
-  left: var(--thumb-pad);
-  width: var(--thumb-d);
-  height: var(--thumb-d);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  transform: translateY(-50%) translateX(0);
-  will-change: transform;
-}
+  .thumb {
+    position: absolute;
+    top: 50%;
+    left: var(--thumb-pad);
+    width: var(--thumb-d);
+    height: var(--thumb-d);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    transform: translateY(-50%) translateX(0);
+    will-change: transform;
+  }
 
-/* 内层水滴实体（承载发丝微收边、漫反射阴影与微流体拉伸） */
-.thumb::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: var(--radius-full);
-  background: var(--switch-thumb-bg);
-  box-shadow:
+  /* 内层水滴实体（承载发丝微收边、漫反射阴影与微流体拉伸） */
+  .thumb::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-full);
+    background: var(--switch-thumb-bg);
+    box-shadow:
     /* Layer 1: 0.5px 发丝微收边，界定边缘轮廓 */
-    0 0 0 0.5px color-mix(in srgb, var(--border-color) 30%, transparent),
-    /* Layer 2: 各向同性柔和漫反射环境光，四周均匀 2px 透光缝隙 */
-    var(--switch-thumb-shadow, var(--shadow-sm));
-  transform: scale(1, 1);
-  transform-origin: center center;
-  will-change: transform, box-shadow;
-  transition:
-    transform var(--duration-fast) ease,
-    box-shadow var(--duration-fast) ease;
-}
+      0 0 0 0.5px color-mix(in srgb, var(--border-color) 30%, transparent),
+      /* Layer 2: 各向同性柔和漫反射环境光，四周均匀 2px 透光缝隙 */
+        var(--switch-thumb-shadow, var(--shadow-sm));
+    transform: scale(1, 1);
+    transform-origin: center center;
+    will-change: transform, box-shadow;
+    transition:
+      transform var(--duration-fast) ease,
+      box-shadow var(--duration-fast) ease;
+  }
 
-/* 悬停微张力（Hover Micro-Tension）：若有若无的 2.5% 微膨胀与微漫反射柔化 */
-.track:hover:not(:disabled) .thumb::before {
-  transform: scale(1.025);
-  box-shadow:
-    0 0 0 0.5px color-mix(in srgb, var(--border-color) 38%, transparent),
-    var(--switch-thumb-shadow, var(--shadow-md));
-}
+  /* 悬停微张力（Hover Micro-Tension）：若有若无的 2.5% 微膨胀与微漫反射柔化 */
+  .track:hover:not(:disabled) .thumb::before {
+    transform: scale(1.025);
+    box-shadow:
+      0 0 0 0.5px color-mix(in srgb, var(--border-color) 38%, transparent),
+      var(--switch-thumb-shadow, var(--shadow-md));
+  }
 
-/* 按压微蓄力（Active Micro-Squash）：按下瞬间微扁 4%，提供即时力反馈 */
-.track:active:not(:disabled) .thumb::before {
-  transform: scale(1.05, 0.96);
-  transition-duration: 70ms;
-}
+  /* 按压微蓄力（Active Micro-Squash）：按下瞬间微扁 4%，提供即时力反馈 */
+  .track:active:not(:disabled) .thumb::before {
+    transform: scale(1.05, 0.96);
+    transition-duration: var(--duration-micro);
+  }
 
-/* 静态归位态（挂载时：瞬时满血就位，零动画、零延迟、Zero-FOUC） */
-.track[data-state='checked'] .thumb {
-  transform: translateY(-50%) translateX(var(--thumb-travel));
-}
+  /* 静态归位态（挂载时：瞬时满血就位，零动画、零延迟、Zero-FOUC） */
+  .track[data-state='checked'] .thumb {
+    transform: translateY(-50%) translateX(var(--thumb-travel));
+  }
 
-/* 仅交互之后外层才过渡平移。快速干脆，打断连续平滑无瞬移 */
-.hasInteracted .thumb {
-  transition: transform var(--duration-fast) var(--ease-decelerate);
-}
+  /* 仅交互之后外层才过渡平移。快速干脆，打断连续平滑无瞬移 */
+  .hasInteracted .thumb {
+    transition: transform var(--duration-fast) var(--ease-decelerate);
+  }
 
-/* 解耦式微流体拉伸与若有若无的紧致阻尼收敛（Micro Fluid Stretch & Subtle Snap）
+  /* 解耦式微流体拉伸与若有若无的紧致阻尼收敛（Micro Fluid Stretch & Subtle Snap）
    - 形变仅作用于相对 scale，完全解耦绝对像素坐标，彻底杜绝打断瞬移穿帮；
    - 峰值仅延展约 12%，高度微缩 4%（体积近似守恒），严格克制、若有若无；
    - 随平移快速完成（var(--duration-fast) 即 150ms），尾段 0.99 紧致收敛，利落干脆。 */
-@keyframes fluid-stretch-to-on {
-  0% {
+  @keyframes fluid-stretch-to-on {
+    0% {
+      transform: scale(1, 1);
+      transform-origin: left center;
+    }
+    38% {
+      transform: scale(1.12, 0.96);
+      transform-origin: left center;
+    }
+    78% {
+      transform: scale(0.99, 1.005);
+      transform-origin: right center;
+    }
+    100% {
+      transform: scale(1, 1);
+      transform-origin: center center;
+    }
+  }
+
+  @keyframes fluid-stretch-to-off {
+    0% {
+      transform: scale(1, 1);
+      transform-origin: right center;
+    }
+    38% {
+      transform: scale(1.12, 0.96);
+      transform-origin: right center;
+    }
+    78% {
+      transform: scale(0.99, 1.005);
+      transform-origin: left center;
+    }
+    100% {
+      transform: scale(1, 1);
+      transform-origin: center center;
+    }
+  }
+
+  .hasInteracted[data-state='checked'] .thumb::before {
+    animation: fluid-stretch-to-on var(--duration-fast) var(--ease-decelerate);
+  }
+
+  .hasInteracted[data-state='unchecked'] .thumb::before {
+    animation: fluid-stretch-to-off var(--duration-fast) var(--ease-decelerate);
+  }
+
+  /* 加载中与禁用状态锁定，禁止形变动画 */
+  .track.loading .thumb::before,
+  .track:disabled .thumb::before,
+  .track.hasInteracted.loading .thumb::before,
+  .track.hasInteracted:disabled .thumb::before {
+    animation: none;
     transform: scale(1, 1);
-    transform-origin: left center;
   }
-  38% {
-    transform: scale(1.12, 0.96);
-    transform-origin: left center;
-  }
-  78% {
-    transform: scale(0.99, 1.005);
-    transform-origin: right center;
-  }
-  100% {
-    transform: scale(1, 1);
-    transform-origin: center center;
-  }
-}
 
-@keyframes fluid-stretch-to-off {
-  0% {
-    transform: scale(1, 1);
-    transform-origin: right center;
+  /* --- 加载指示器：Spinner (高对比度符合 WCAG AA 4.5:1) --- */
+  .spinner {
+    position: relative;
+    z-index: 1;
+    width: var(--spinner-size);
+    height: var(--spinner-size);
+    color: var(--text-secondary);
+    animation: switch-spin var(--transition-spin) infinite;
   }
-  38% {
-    transform: scale(1.12, 0.96);
-    transform-origin: right center;
+
+  @keyframes switch-spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
   }
-  78% {
-    transform: scale(0.99, 1.005);
-    transform-origin: left center;
+
+  /* --- 减弱动态偏好（Reduced Motion）与 Eco Tier 节能降级 --- */
+  @media (prefers-reduced-motion: reduce) {
+    .track,
+    .thumb,
+    .spinner,
+    .label {
+      transition-duration: 0ms;
+      animation-duration: 0ms;
+      animation: none;
+    }
+
+    .thumb::before,
+    .track .thumb::before,
+    .track.hasInteracted .thumb::before,
+    .track.hasInteracted[data-state='checked'] .thumb::before,
+    .track.hasInteracted[data-state='unchecked'] .thumb::before {
+      transition-duration: 0ms;
+      animation: none;
+      transform: scale(1, 1);
+    }
+
+    .track[data-state='checked'] .thumb {
+      transform: translateY(-50%) translateX(var(--thumb-travel));
+      width: var(--thumb-d);
+    }
+
+    .track[data-state='unchecked'] .thumb {
+      transform: translateY(-50%) translateX(0);
+      width: var(--thumb-d);
+    }
   }
-  100% {
-    transform: scale(1, 1);
-    transform-origin: center center;
-  }
-}
 
-.hasInteracted[data-state='checked'] .thumb::before {
-  animation: fluid-stretch-to-on var(--duration-fast) var(--ease-decelerate);
-}
-
-.hasInteracted[data-state='unchecked'] .thumb::before {
-  animation: fluid-stretch-to-off var(--duration-fast) var(--ease-decelerate);
-}
-
-/* 加载中与禁用状态锁定，禁止形变动画 */
-.track.loading .thumb::before,
-.track:disabled .thumb::before,
-.track.hasInteracted.loading .thumb::before,
-.track.hasInteracted:disabled .thumb::before {
-  animation: none;
-  transform: scale(1, 1);
-}
-
-/* --- 加载指示器：Spinner (高对比度符合 WCAG AA 4.5:1) --- */
-.spinner {
-  position: relative;
-  z-index: 1;
-  width: var(--spinner-size);
-  height: var(--spinner-size);
-  color: var(--text-secondary);
-  animation: switch-spin 750ms linear infinite;
-}
-
-@keyframes switch-spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-/* --- 减弱动态偏好（Reduced Motion）与 Eco Tier 节能降级 --- */
-@media (prefers-reduced-motion: reduce) {
-  .track,
-  .thumb,
-  .spinner,
-  .label {
+  html[data-perf-tier='eco'] .track,
+  html[data-perf-tier='eco'] .thumb,
+  html[data-perf-tier='eco'] .spinner,
+  html[data-perf-tier='eco'] .label {
     transition-duration: 0ms;
     animation-duration: 0ms;
     animation: none;
   }
 
-  .thumb::before,
-  .track .thumb::before,
-  .track.hasInteracted .thumb::before,
-  .track.hasInteracted[data-state='checked'] .thumb::before,
-  .track.hasInteracted[data-state='unchecked'] .thumb::before {
+  html[data-perf-tier='eco'] .thumb::before,
+  html[data-perf-tier='eco'] .track .thumb::before,
+  html[data-perf-tier='eco'] .track.hasInteracted .thumb::before,
+  html[data-perf-tier='eco']
+    .track.hasInteracted[data-state='checked']
+    .thumb::before,
+  html[data-perf-tier='eco']
+    .track.hasInteracted[data-state='unchecked']
+    .thumb::before {
     transition-duration: 0ms;
     animation: none;
     transform: scale(1, 1);
   }
 
-  .track[data-state='checked'] .thumb {
+  html[data-perf-tier='eco'] .track[data-state='checked'] .thumb {
     transform: translateY(-50%) translateX(var(--thumb-travel));
     width: var(--thumb-d);
   }
 
-  .track[data-state='unchecked'] .thumb {
+  html[data-perf-tier='eco'] .track[data-state='unchecked'] .thumb {
     transform: translateY(-50%) translateX(0);
     width: var(--thumb-d);
   }
-}
-
-html[data-perf-tier='eco'] .track,
-html[data-perf-tier='eco'] .thumb,
-html[data-perf-tier='eco'] .spinner,
-html[data-perf-tier='eco'] .label {
-  transition-duration: 0ms;
-  animation-duration: 0ms;
-  animation: none;
-}
-
-html[data-perf-tier='eco'] .thumb::before,
-html[data-perf-tier='eco'] .track .thumb::before,
-html[data-perf-tier='eco'] .track.hasInteracted .thumb::before,
-html[data-perf-tier='eco']
-  .track.hasInteracted[data-state='checked']
-  .thumb::before,
-html[data-perf-tier='eco']
-  .track.hasInteracted[data-state='unchecked']
-  .thumb::before {
-  transition-duration: 0ms;
-  animation: none;
-  transform: scale(1, 1);
-}
-
-html[data-perf-tier='eco'] .track[data-state='checked'] .thumb {
-  transform: translateY(-50%) translateX(var(--thumb-travel));
-  width: var(--thumb-d);
-}
-
-html[data-perf-tier='eco'] .track[data-state='unchecked'] .thumb {
-  transform: translateY(-50%) translateX(0);
-  width: var(--thumb-d);
 }

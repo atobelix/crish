@@ -20,8 +20,7 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import type { AppToast } from '../../../services/toast/types';
 import { ToastContainer } from '../../../services/toast/ToastContainer';
 import { ToastViewport } from '../ToastViewport';
-import { Dialog } from '../../ui/Dialog/Dialog';
-import { layerStackService } from '../../ui/internal/layer-stack/LayerStackService';
+import { Dialog, layerStackService } from '@/components/ui';
 
 const DIR =
   typeof import.meta.dirname === 'string'
@@ -114,6 +113,49 @@ describe('顶部通知命中契约：模态弹窗下仍可交互', () => {
     expect(toastRoot).not.toHaveAttribute('inert');
     expect(toastRoot).not.toHaveAttribute('aria-hidden');
   });
+
+  it('ToastViewport 注册至 layerStackService，模态弹窗存在时 Esc 仅关闭 Dialog，不误伤 Toast', () => {
+    const onCloseDialog = vi.fn();
+    const onDismissToast = vi.fn();
+
+    render(
+      <>
+        <ToastViewport
+          toasts={[mockToast('persist-toast')]}
+          onDismiss={onDismissToast}
+        />
+        <Dialog open title="确认对话框" onClose={onCloseDialog}>
+          <button type="button">确定</button>
+        </Dialog>
+      </>
+    );
+
+    expect(layerStackService.hasActiveModal()).toBe(true);
+    const layers = layerStackService.getLayers();
+    const toastLayer = layers.find((l) => l.id === 'toast-viewport');
+    expect(toastLayer).toBeDefined();
+    expect(toastLayer?.type).toBe('toast');
+    expect(toastLayer?.dismissible).toBe(false);
+
+    // 触发全局 Esc 按键
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    // Dialog 响应 Esc 关闭，Toast 坚挺常驻
+    expect(onCloseDialog).toHaveBeenCalled();
+    expect(onDismissToast).not.toHaveBeenCalled();
+  });
+
+  it('ToastViewport portal 属性可独立将视图挂载至 #toast-root', () => {
+    render(
+      <ToastViewport
+        portal
+        toasts={[mockToast('portal-toast')]}
+        onDismiss={vi.fn()}
+      />
+    );
+    const toastRoot = document.getElementById('toast-root')!;
+    expect(toastRoot.querySelector('section[role="region"]')).not.toBeNull();
+  });
 });
 
 describe('顶部通知交互契约：悬停暂停', () => {
@@ -173,5 +215,22 @@ describe('顶部通知交互契约：悬停暂停', () => {
       vi.advanceTimersByTime(2400);
     });
     expect(onDismiss).toHaveBeenCalledWith('b');
+  });
+
+  it('窗口 blur 失焦事件触发时自动解除悬停暂停', () => {
+    const { container } = render(
+      <ToastViewport toasts={[mockToast('blur-test')]} onDismiss={vi.fn()} />
+    );
+    const viewport = container.querySelector('section[role="region"]')!;
+
+    act(() => {
+      fireEvent.mouseEnter(viewport);
+    });
+    expect(viewport).toHaveAttribute('data-paused', 'true');
+
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+    });
+    expect(viewport).toHaveAttribute('data-paused', 'false');
   });
 });

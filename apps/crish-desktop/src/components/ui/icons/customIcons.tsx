@@ -210,6 +210,50 @@ export function IconMinimize2({
   );
 }
 
+/** 左右向右水平分屏（垂直中线切分） */
+export function IconSplitHorizontal({
+  size = 24,
+  className,
+  strokeWidth = 1.75,
+  style,
+}: CustomIconProps) {
+  return (
+    <svg {...baseProps(size, className, style)}>
+      <rect
+        x="3"
+        y="3"
+        width="18"
+        height="18"
+        rx="3"
+        strokeWidth={strokeWidth}
+      />
+      <path d="M12 3v18" strokeWidth={strokeWidth} />
+    </svg>
+  );
+}
+
+/** 上下向下垂直分屏（水平中线切分） */
+export function IconSplitVertical({
+  size = 24,
+  className,
+  strokeWidth = 1.75,
+  style,
+}: CustomIconProps) {
+  return (
+    <svg {...baseProps(size, className, style)}>
+      <rect
+        x="3"
+        y="3"
+        width="18"
+        height="18"
+        rx="3"
+        strokeWidth={strokeWidth}
+      />
+      <path d="M3 12h18" strokeWidth={strokeWidth} />
+    </svg>
+  );
+}
+
 export function IconGitBranch({
   size = 24,
   className,

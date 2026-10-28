@@ -70,7 +70,7 @@
     var(--border-color) 92%,
     var(--text-primary) 8%
   );
-  background: var(--bg-hover);
+  background: var(--state-hover);
 }
 
 .firstRunChip.isActive {
@@ -139,7 +139,7 @@
   padding: 9px 12px;
   font-size: var(--font-size-base);
   font-family: inherit;
-  background: var(--control-soft-bg, var(--bg-secondary));
+  background: var(--state-hover, var(--bg-secondary));
   color: var(--text-primary);
   outline: none;
   box-shadow: none;
@@ -147,7 +147,7 @@
 }
 
 .firstRunInput:focus {
-  background: var(--control-soft-bg-hover, var(--bg-hover));
+  background: var(--state-hover);
 }
 
 .firstRunHint {

@@ -29,7 +29,8 @@ export function useSmartKeyboardNav({
       return;
     }
     const firstValid = items.findIndex(
-      (item) => item.type !== 'divider' && item.type !== 'group' && !item.disabled
+      (item) =>
+        item.type !== 'divider' && item.type !== 'group' && !item.disabled
     );
     setFocusedIndex(firstValid >= 0 ? firstValid : -1);
   }, [isOpen, items]);
@@ -59,7 +60,9 @@ export function useSmartKeyboardNav({
 
       const validIndices = items
         .map((item, idx) =>
-          item.type !== 'divider' && item.type !== 'group' && !item.disabled ? idx : -1
+          item.type !== 'divider' && item.type !== 'group' && !item.disabled
+            ? idx
+            : -1
         )
         .filter((idx) => idx !== -1);
 
@@ -69,7 +72,8 @@ export function useSmartKeyboardNav({
 
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        const nextPos = currentPos < 0 ? 0 : (currentPos + 1) % validIndices.length;
+        const nextPos =
+          currentPos < 0 ? 0 : (currentPos + 1) % validIndices.length;
         const nextIdx = validIndices[nextPos];
         if (nextIdx !== undefined) {
           setFocusedIndex(nextIdx);
@@ -98,7 +102,11 @@ export function useSmartKeyboardNav({
         }
       } else if (e.key === 'ArrowRight') {
         const curItem = items[focusedIndex];
-        if (curItem && (curItem.type === 'submenu' || (curItem.children && curItem.children.length > 0))) {
+        if (
+          curItem &&
+          (curItem.type === 'submenu' ||
+            (curItem.children && curItem.children.length > 0))
+        ) {
           e.preventDefault();
           onSubmenuExpand?.(curItem);
         }
@@ -111,7 +119,10 @@ export function useSmartKeyboardNav({
         const curItem = items[focusedIndex];
         if (curItem && !curItem.disabled) {
           e.preventDefault();
-          if (curItem.type === 'submenu' || (curItem.children && curItem.children.length > 0)) {
+          if (
+            curItem.type === 'submenu' ||
+            (curItem.children && curItem.children.length > 0)
+          ) {
             onSubmenuExpand?.(curItem);
           } else {
             curItem.onSelect?.(curItem);

@@ -1,437 +1,484 @@
 /* apps/crish-desktop/src/components/ui/Button/Button.module.css
  * 100% 遵守 Design Tokens 单一真源
- * Secondary 按钮纯白实体卡片重塑
+ * 外部覆盖保证：全量样式封装于 @layer components 中，实现 W3C 规范级确定性胜出权
  */
 
-/* 1. 基座样式定义 */
-.button {
-  --btn-h: 32px;
-  --btn-px: 12px;
-  --btn-fs: var(--font-size-base);
-  --btn-radius: var(--button-radius);
-  --btn-icon-size: 16px;
-  --btn-gap: var(--space-1_5);
-
-  --btn-bg: transparent;
-  --btn-fg: var(--text-primary);
-  --btn-border: transparent;
-  --btn-shadow: none;
-  --btn-hover-overlay: var(--tint-hover);
-  --btn-active-overlay: var(--tint-active);
-
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  height: var(--btn-h);
-  padding: 0 var(--btn-px);
-  gap: var(--btn-gap);
-  font-size: var(--btn-fs);
-  border-radius: var(--btn-radius);
-  background-color: var(--btn-bg);
-  color: var(--btn-fg);
-  border: var(--hairline-width) solid var(--btn-border);
-  box-shadow: var(--btn-shadow);
-  font-family: var(--font-sans);
-  font-weight: var(--font-weight-normal);
-  line-height: 1;
-  user-select: none;
-  white-space: nowrap;
-  cursor: pointer;
-  outline: none;
-  transition:
-    border-color var(--transition-micro),
-    box-shadow var(--transition-micro);
-}
-
-/* 物理微光交互层 (Opacity Transition) */
-.button::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  border-radius: inherit;
-  background-color: var(--btn-hover-overlay);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--transition-micro);
-}
-
-.button:where(:hover:not(:disabled):not([aria-disabled='true']))::before {
-  opacity: 1;
-}
-
-.button:where(:active:not(:disabled):not([aria-disabled='true']))::before {
-  background-color: var(--btn-active-overlay);
-  opacity: 1;
-}
-
-/* 焦点环：严格遵循 AGENTS.md §13 (3%~10% 克制软灰) */
-.button:where(:focus-visible) {
-  outline: none;
-  box-shadow: 0 0 0 1.5px
-    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 90%,
-    var(--text-primary) 10%
-  );
-}
-
-.button:where(:disabled, [aria-disabled='true']) {
-  cursor: not-allowed;
-  opacity: var(--opacity-disabled);
-  box-shadow: none;
-}
-
-.button:where(:disabled, [aria-disabled='true'])::before {
-  display: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
+@layer components {
+  /* 1. 基座样式定义 */
   .button {
-    transition: none;
+    --btn-h: 32px;
+    --btn-px: 12px;
+    --btn-fs: var(--font-size-base);
+    --btn-radius: var(--button-radius);
+    --btn-icon-size: 16px;
+    --btn-gap: var(--space-1_5);
+
+    --btn-bg: transparent;
+    --btn-fg: var(--text-primary);
+    --btn-border: transparent;
+    --btn-shadow: none;
+    --btn-hover-overlay: var(--state-hover);
+    --btn-active-overlay: var(--state-active);
+
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    height: var(--btn-h);
+    padding: 0 var(--btn-px);
+    gap: var(--btn-gap);
+    font-size: var(--btn-fs);
+    border-radius: var(--btn-radius);
+    background-color: var(--btn-bg);
+    color: var(--btn-fg);
+    border: var(--hairline-width) solid var(--btn-border);
+    box-shadow: var(--btn-shadow);
+    font-family: var(--font-sans);
+    font-weight: var(--font-weight-normal);
+    line-height: 1;
+    user-select: none;
+    white-space: nowrap;
+    cursor: pointer;
+    outline: none;
+    transition:
+      border-color var(--transition-micro),
+      box-shadow var(--transition-micro);
   }
-}
 
-/* 2. 尺寸规格 */
-.button:where(.buttonXs, [data-size='xs']) {
-  --btn-h: 24px;
-  --btn-px: 6px;
-  --btn-fs: var(--font-size-xs);
-  --btn-radius: var(--radius-sm);
-  --btn-icon-size: 14px;
-  --btn-gap: var(--space-1);
-}
+  /* 物理微光交互层 (Opacity Transition) */
+  .button::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    background-color: var(--btn-hover-overlay);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition-micro);
+  }
 
-.button:where(.buttonSm, [data-size='sm']) {
-  --btn-h: 28px;
-  --btn-px: 10px;
-  --btn-fs: var(--font-size-sm);
-  --btn-radius: var(--button-radius);
-  --btn-icon-size: 14px;
-  --btn-gap: var(--space-1_5);
-}
+  .button:where(:hover:not(:disabled):not([aria-disabled='true']))::before {
+    opacity: 1;
+  }
 
-.button:where(.buttonMd, [data-size='md']) {
-  --btn-h: 32px;
-  --btn-px: 12px;
-  --btn-fs: var(--font-size-base);
-  --btn-radius: var(--button-radius);
-  --btn-icon-size: 16px;
-  --btn-gap: var(--space-1_5);
-}
+  .button:where(:active:not(:disabled):not([aria-disabled='true']))::before {
+    background-color: var(--btn-active-overlay);
+    opacity: 1;
+  }
 
-.button:where(.buttonLg, [data-size='lg']) {
-  --btn-h: 40px;
-  --btn-px: 16px;
-  --btn-fs: var(--font-size-md);
-  --btn-radius: var(--radius-lg);
-  --btn-icon-size: 18px;
-  --btn-gap: var(--space-2);
-}
+  /* 焦点环：严格遵循 AGENTS.md §13 (3%~10% 克制软灰) */
+  .button:where(:focus-visible) {
+    outline: none;
+    box-shadow: 0 0 0 1.5px
+      color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+    border-color: color-mix(
+      in srgb,
+      var(--border-color) 90%,
+      var(--text-primary) 10%
+    );
+  }
 
-/* 3. 变体设计 */
-.button:where(.buttonPrimary, [data-variant='primary']) {
-  --btn-bg: var(--brand);
-  --btn-fg: var(--text-on-accent);
-  --btn-border: var(--brand);
-  --btn-shadow: 0 1px 2px
-    color-mix(in srgb, var(--shadow-color) 12%, transparent);
-  --btn-hover-overlay: color-mix(
-    in srgb,
-    var(--text-on-accent) 15%,
-    transparent
-  );
-  --btn-active-overlay: color-mix(
-    in srgb,
-    var(--shadow-color) 15%,
-    transparent
-  );
-}
+  .button:where(:disabled, [aria-disabled='true']) {
+    cursor: not-allowed;
+    opacity: var(--opacity-disabled);
+    box-shadow: none;
+  }
 
-/* Secondary：纯白实体卡片 + 精致发丝边框 + 低空微阴影
- * 边框降调：旧值 var(--border-color) 属"强描边"档，在白卡上存在感过重。
- * 改用 --hairline（--border-subtle），与全应用分隔线同档，视觉更轻盈。 */
-.button:where(.buttonSecondary, [data-variant='secondary']) {
-  --btn-bg: var(--cover-card-bg, var(--bg-card));
-  --btn-fg: var(--text-primary);
-  --btn-border: var(--hairline, var(--border-subtle));
-  --btn-shadow:
-    0 1px 2px color-mix(in srgb, var(--shadow-color) 4%, transparent),
-    0 1px 1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
-  --btn-hover-overlay: var(--tint-hover);
-  --btn-active-overlay: var(--tint-active);
-}
+  .button:where(:disabled, [aria-disabled='true'])::before {
+    display: none;
+  }
 
-/* 深色模式：精准抬升灰度明度，塑造清晰高对比度的暗色实体纸片感知 */
-:global(html[data-theme='dark'])
+  @media (prefers-reduced-motion: reduce) {
+    .button {
+      transition: none;
+    }
+  }
+
+  /* 2. 尺寸规格 */
+  .button:where(.buttonXs, [data-size='xs']) {
+    --btn-h: 24px;
+    --btn-px: 6px;
+    --btn-fs: var(--font-size-xs);
+    --btn-radius: var(--radius-sm);
+    --btn-icon-size: 14px;
+    --btn-gap: var(--space-1);
+  }
+
+  .button:where(.buttonSm, [data-size='sm']) {
+    --btn-h: 28px;
+    --btn-px: 10px;
+    --btn-fs: var(--font-size-sm);
+    --btn-radius: var(--button-radius);
+    --btn-icon-size: 14px;
+    --btn-gap: var(--space-1_5);
+  }
+
+  .button:where(.buttonMd, [data-size='md']) {
+    --btn-h: 32px;
+    --btn-px: 12px;
+    --btn-fs: var(--font-size-base);
+    --btn-radius: var(--button-radius);
+    --btn-icon-size: 16px;
+    --btn-gap: var(--space-1_5);
+  }
+
+  .button:where(.buttonLg, [data-size='lg']) {
+    --btn-h: 40px;
+    --btn-px: 16px;
+    --btn-fs: var(--font-size-md);
+    --btn-radius: var(--radius-lg);
+    --btn-icon-size: 18px;
+    --btn-gap: var(--space-2);
+  }
+
+  .button:where(.buttonSizeIcon, [data-size='icon']) {
+    width: var(--btn-h);
+    padding: 0;
+  }
+
+  /* 3. 变体设计 */
+  .button:where(.buttonPrimary, [data-variant='primary']) {
+    --btn-bg: var(--brand);
+    --btn-fg: var(--text-on-accent);
+    --btn-border: var(--brand);
+    --btn-shadow: 0 1px 2px
+      color-mix(in srgb, var(--shadow-color) 12%, transparent);
+    --btn-hover-overlay: color-mix(
+      in srgb,
+      var(--text-on-accent) 15%,
+      transparent
+    );
+    --btn-active-overlay: color-mix(
+      in srgb,
+      var(--shadow-color) 15%,
+      transparent
+    );
+  }
+
+  /* Secondary：纯白实体卡片 + 精致发丝边框 + 低空微阴影
+   * 边框降调：旧值 var(--border-color) 属"强描边"档，在白卡上存在感过重。
+   * 改用 --hairline（--border-subtle），与全应用分隔线同档，视觉更轻盈。 */
   .button:where(.buttonSecondary, [data-variant='secondary']),
-:global(.theme-dark)
-  .button:where(.buttonSecondary, [data-variant='secondary']) {
-  /* 次级按钮底色走主题 token（深色稍亮于所在层，heson 2026-10-11；浅色 = bg-card 不变） */
-  --btn-bg: var(--button-secondary-bg, var(--cover-card-bg, var(--bg-card)));
-  --btn-fg: var(--text-primary);
-  --btn-border: var(--border-color);
-  --btn-shadow: 0 1px 3px hsl(0 0% 0% / 0.35);
-  --btn-hover-overlay: var(--tint-hover);
-  --btn-active-overlay: var(--tint-active);
-}
-
-/* 禁用态：深色模式下实体暗底退回透明，明确切断可点击实体感 */
-.button:where(.buttonSecondary, [data-variant='secondary']):disabled {
-  opacity: var(--opacity-disabled);
-  box-shadow: none;
-  border-color: var(--border-subtle);
-  background-color: transparent;
-}
-
-.button:where(.buttonGhost, [data-variant='ghost']) {
-  --btn-bg: transparent;
-  --btn-fg: var(--text-secondary);
-  --btn-border: transparent;
-  --btn-shadow: none;
-  --btn-hover-overlay: var(--tint-hover);
-  --btn-active-overlay: var(--tint-active);
-}
-
-.button:where(.buttonPlain, [data-variant='plain']) {
-  --btn-bg: transparent;
-  --btn-fg: var(--text-tertiary);
-  --btn-border: transparent;
-  --btn-shadow: none;
-  --btn-hover-overlay: var(--tint-hover);
-  --btn-active-overlay: var(--tint-active);
-}
-
-.button:where(.buttonDanger, [data-variant='danger']) {
-  --btn-bg: transparent;
-  --btn-fg: var(--danger-fg);
-  --btn-border: transparent;
-  --btn-shadow: none;
-  --btn-hover-overlay: color-mix(in srgb, var(--danger-fg) 10%, transparent);
-  --btn-active-overlay: color-mix(in srgb, var(--danger-fg) 18%, transparent);
-}
-
-/* 选中激活态：彻底消除硬编码黑框、硬黑边与厚重投影，统一接入柔和的 var(--tint-active) 微背景 */
-.buttonActive,
-.button[data-active='true'] {
-  --btn-bg: var(--tint-active);
-  --btn-fg: var(--text-primary);
-  --btn-border: transparent;
-  --btn-shadow: none;
-  border-color: transparent;
-  box-shadow: none;
-  outline: none;
-}
-
-/* 激活态焦点防御：消除点击或激活获得焦点时的生硬深黑边框/黑圈与厚重阴影 */
-.buttonActive:focus,
-.buttonActive:focus-visible,
-.button[data-active='true']:focus,
-.button[data-active='true']:focus-visible {
-  border-color: transparent;
-  box-shadow: none;
-  outline: none;
-}
-
-.buttonBlock {
-  width: 100%;
-}
-
-/* 排版对齐控制 */
-.button:where([data-align='start']),
-:where([data-align='start']) {
-  justify-content: flex-start;
-  text-align: left;
-}
-
-.button:where([data-align='start']) .buttonLabel {
-  flex: 1 1 auto;
-}
-
-.buttonLoading {
-  cursor: progress;
-}
-
-.buttonIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: var(--btn-icon-size);
-  height: var(--btn-icon-size);
-}
-
-.buttonIcon svg {
-  width: 100%;
-  height: 100%;
-}
-
-.buttonLabel,
-.buttonIcon,
-.spinner,
-.button > * {
-  position: relative;
-  z-index: 1;
-}
-
-.buttonLabel {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 纯 CSS 光学微调：首尾图符 2px 边距内缩补偿（纯 CSS :has 零 TSX 侵入） */
-.button:has(> :is(.buttonIcon, .spinner):first-child):has(> .buttonLabel) {
-  padding-inline-start: max(0px, calc(var(--btn-px) - 2px));
-}
-
-.button:has(> .buttonLabel):has(> :is(.buttonIcon, .spinner):last-child) {
-  padding-inline-end: max(0px, calc(var(--btn-px) - 2px));
-}
-
-.iconButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  width: var(--btn-h);
-  padding: 0;
-  border: none;
-  background-color: transparent;
-  color: var(--text-secondary);
-  border-radius: var(--radius-control);
-  cursor: pointer;
-  flex-shrink: 0;
-  --btn-hover-overlay: var(--state-hover);
-  --btn-active-overlay: var(--state-active);
-  transition:
-    color var(--transition-fast),
-    background-color var(--transition-fast),
-    box-shadow var(--transition-micro);
-}
-
-/* 4 档尺寸：对齐 --row-h-{dense,list,control,chrome} */
-.dense,
-.iconButton:where(.dense, [data-size='dense'], [data-size='xs']) {
-  width: var(--row-h-dense);
-  height: var(--row-h-dense);
-  min-width: var(--row-h-dense);
-  min-height: var(--row-h-dense);
-  --btn-h: var(--row-h-dense);
-}
-
-.list,
-.iconButton:where(.list, [data-size='list'], [data-size='sm']) {
-  width: var(--row-h-list);
-  height: var(--row-h-list);
-  min-width: var(--row-h-list);
-  min-height: var(--row-h-list);
-  --btn-h: var(--row-h-list);
-}
-
-.control,
-.iconButton:where(.control, [data-size='control'], [data-size='md']) {
-  width: var(--row-h-control);
-  height: var(--row-h-control);
-  min-width: var(--row-h-control);
-  min-height: var(--row-h-control);
-  --btn-h: var(--row-h-control);
-}
-
-.chrome,
-.iconButton:where(.chrome, [data-size='chrome'], [data-size='lg']) {
-  width: var(--row-h-chrome);
-  height: var(--row-h-chrome);
-  min-width: var(--row-h-chrome);
-  min-height: var(--row-h-chrome);
-  --btn-h: var(--row-h-chrome);
-}
-
-/* 状态走 --state-* 交互叠加量：
- * 1. 继承 .button 基类的 IconButton 统一由 .button::before 伪元素承载单层物理微光，彻底消除本体 background-color 双层叠加翻倍发黑；
- * 2. 悬浮时平滑加深图标前景色至 var(--text-primary)；
- * 3. 对无 .button 基类的孤立 .iconButton 退化单层 background-color 兜底，确保仅单层微光生效。
- */
-.iconButton:where(:hover:not(:disabled):not([aria-disabled='true'])) {
-  color: var(--text-primary);
-}
-
-.iconButton:not(.button):where(
-    :hover:not(:disabled):not([aria-disabled='true'])
-  ) {
-  background-color: var(--state-hover);
-}
-
-.iconButton:not(.button):where(
-    :active:not(:disabled):not([aria-disabled='true'])
-  ) {
-  background-color: var(--state-active);
-}
-
-/* 焦点态：混入 ≤10%（AGENTS §13） */
-.iconButton:where(:focus-visible) {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--edge-focus);
-}
-
-.iconButton:where(:disabled, [aria-disabled='true']) {
-  opacity: 0.38;
-  cursor: not-allowed;
-}
-
-.touchExpand {
-}
-
-/* 触控热区安全管理：常规紧凑按钮采用 inset: -2px 0 垂直轻量外延，杜绝左右互叠 */
-.buttonXs::after,
-.buttonSm::after {
-  content: '';
-  position: absolute;
-  inset: -2px 0;
-  pointer-events: auto;
-}
-
-/* 孤立图标按钮显式声明 touchExpand 开启 40×40px 安全触控热区 */
-.iconButton.touchExpand::after,
-.button.touchExpand::after,
-.button[data-touch-expand='true']::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  min-width: 40px;
-  min-height: 40px;
-  width: 100%;
-  height: 100%;
-  inset: auto;
-  pointer-events: auto;
-  border-radius: inherit;
-  z-index: 1;
-}
-
-.button:disabled::after {
-  display: none;
-  pointer-events: none;
-}
-
-.spinner {
-  width: var(--btn-icon-size);
-  height: var(--btn-icon-size);
-  border-radius: 50%;
-  border: var(--border-width-emphasis) solid currentColor;
-  border-top-color: transparent;
-  animation: button-spin var(--transition-spin) infinite;
-  flex-shrink: 0;
-}
-
-@keyframes button-spin {
-  from {
-    transform: rotate(0deg);
+  .button:where(.buttonDefault, [data-variant='default']) {
+    --btn-bg: var(--cover-card-bg, var(--bg-card));
+    --btn-fg: var(--text-primary);
+    --btn-border: var(--hairline, var(--border-subtle));
+    --btn-shadow:
+      0 1px 2px color-mix(in srgb, var(--shadow-color) 4%, transparent),
+      0 1px 1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
+    --btn-hover-overlay: var(--state-hover);
+    --btn-active-overlay: var(--state-active);
   }
-  to {
-    transform: rotate(360deg);
+
+  /* 深色模式：精准抬升灰度明度，塑造清晰高对比度的暗色实体纸片感知 */
+  :global(html[data-theme='dark'])
+    .button:where(.buttonSecondary, [data-variant='secondary']),
+  :global(html[data-theme='dark'])
+    .button:where(.buttonDefault, [data-variant='default']),
+  :global(.theme-dark)
+    .button:where(.buttonSecondary, [data-variant='secondary']),
+  :global(.theme-dark) .button:where(.buttonDefault, [data-variant='default']) {
+    /* 次级按钮底色走主题 token（深色稍亮于所在层，heson 2026-10-11；浅色 = bg-card 不变） */
+    --btn-bg: var(--bg-card, var(--cover-card-bg, var(--bg-card)));
+    --btn-fg: var(--text-primary);
+    --btn-border: var(--border-color);
+    --btn-shadow: var(--shadow-sm);
+    --btn-hover-overlay: var(--state-hover);
+    --btn-active-overlay: var(--state-active);
+  }
+
+  /* 禁用态：深色模式下实体暗底退回透明，明确切断可点击实体感 */
+  .button:where(.buttonSecondary, [data-variant='secondary']):disabled,
+  .button:where(.buttonDefault, [data-variant='default']):disabled {
+    opacity: var(--opacity-disabled);
+    box-shadow: none;
+    border-color: var(--border-subtle);
+    background-color: transparent;
+  }
+
+  .button:where(.buttonGhost, [data-variant='ghost']) {
+    --btn-bg: transparent;
+    --btn-fg: var(--text-secondary);
+    --btn-border: transparent;
+    --btn-shadow: none;
+    --btn-hover-overlay: var(--state-hover);
+    --btn-active-overlay: var(--state-active);
+  }
+
+  .button:where(.buttonPlain, [data-variant='plain']) {
+    --btn-bg: transparent;
+    --btn-fg: var(--text-tertiary);
+    --btn-border: transparent;
+    --btn-shadow: none;
+    --btn-hover-overlay: var(--state-hover);
+    --btn-active-overlay: var(--state-active);
+  }
+
+  .button:where(.buttonOutline, [data-variant='outline']) {
+    --btn-bg: transparent;
+    --btn-fg: var(--text-primary);
+    --btn-border: var(--border-color);
+    --btn-shadow: none;
+    --btn-hover-overlay: var(--state-hover);
+    --btn-active-overlay: var(--state-active);
+  }
+
+  .button:where(.buttonDanger, [data-variant='danger']) {
+    --btn-bg: transparent;
+    --btn-fg: var(--danger-fg);
+    --btn-border: transparent;
+    --btn-shadow: none;
+    --btn-hover-overlay: color-mix(in srgb, var(--danger-fg) 10%, transparent);
+    --btn-active-overlay: color-mix(in srgb, var(--danger-fg) 18%, transparent);
+  }
+
+  /* 纯净无样式按钮类（零尺寸、零 padding、零内联 flex 污染，仅保留 CSS reset 与 :focus-visible 柔和聚焦环） */
+  .buttonUnstyled {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    text-align: inherit;
+    outline: none;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .buttonUnstyled:where(:focus-visible) {
+    outline: none;
+    box-shadow: 0 0 0 1.5px
+      color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  }
+
+  .buttonUnstyled:where(:disabled, [aria-disabled='true']) {
+    cursor: not-allowed;
+    opacity: var(--opacity-disabled);
+  }
+
+  /* 选中激活态：彻底消除硬编码黑框、硬黑边与厚重投影，统一接入柔和的 var(--state-active) 微背景 */
+  .buttonActive,
+  .button[data-active='true'] {
+    --btn-bg: var(--state-active);
+    --btn-fg: var(--text-primary);
+    --btn-border: transparent;
+    --btn-shadow: none;
+    border-color: transparent;
+    box-shadow: none;
+    outline: none;
+  }
+
+  /* 激活态焦点防御：消除点击或激活获得焦点时的生硬深黑边框/黑圈与厚重阴影 */
+  .buttonActive:focus,
+  .buttonActive:focus-visible,
+  .button[data-active='true']:focus,
+  .button[data-active='true']:focus-visible {
+    border-color: transparent;
+    box-shadow: none;
+    outline: none;
+  }
+
+  .buttonBlock {
+    width: 100%;
+  }
+
+  /* 排版对齐控制 */
+  .button:where([data-align='start']),
+  :where([data-align='start']) {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .button:where([data-align='start']) .buttonLabel {
+    flex: 1 1 auto;
+  }
+
+  .buttonLoading {
+    cursor: progress;
+  }
+
+  .buttonIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: var(--btn-icon-size);
+    height: var(--btn-icon-size);
+  }
+
+  .buttonIcon svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .buttonLabel,
+  .buttonIcon,
+  .spinner,
+  .button > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .buttonLabel {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 纯 CSS 光学微调：首尾图符 2px 边距内缩补偿（纯 CSS :has 零 TSX 侵入） */
+  .button:has(> :is(.buttonIcon, .spinner):first-child):has(> .buttonLabel) {
+    padding-inline-start: max(0px, calc(var(--btn-px) - 2px));
+  }
+
+  .button:has(> .buttonLabel):has(> :is(.buttonIcon, .spinner):last-child) {
+    padding-inline-end: max(0px, calc(var(--btn-px) - 2px));
+  }
+
+  .iconButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: var(--btn-h);
+    padding: 0;
+    border: none;
+    background-color: transparent;
+    color: var(--text-secondary);
+    border-radius: var(--radius-control);
+    cursor: pointer;
+    flex-shrink: 0;
+    --btn-hover-overlay: var(--state-hover);
+    --btn-active-overlay: var(--state-active);
+    transition:
+      color var(--transition-fast),
+      background-color var(--transition-fast),
+      box-shadow var(--transition-micro);
+  }
+
+  /* 4 档尺寸：对齐 --row-h-{dense,list,control,chrome} */
+  .dense,
+  .iconButton:where(.dense, [data-size='dense'], [data-size='xs']) {
+    width: var(--row-h-dense);
+    height: var(--row-h-dense);
+    min-width: var(--row-h-dense);
+    min-height: var(--row-h-dense);
+    --btn-h: var(--row-h-dense);
+  }
+
+  .list,
+  .iconButton:where(.list, [data-size='list'], [data-size='sm']) {
+    width: var(--row-h-list);
+    height: var(--row-h-list);
+    min-width: var(--row-h-list);
+    min-height: var(--row-h-list);
+    --btn-h: var(--row-h-list);
+  }
+
+  .control,
+  .iconButton:where(.control, [data-size='control'], [data-size='md']) {
+    width: var(--row-h-control);
+    height: var(--row-h-control);
+    min-width: var(--row-h-control);
+    min-height: var(--row-h-control);
+    --btn-h: var(--row-h-control);
+  }
+
+  .chrome,
+  .iconButton:where(.chrome, [data-size='chrome'], [data-size='lg']) {
+    width: var(--row-h-chrome);
+    height: var(--row-h-chrome);
+    min-width: var(--row-h-chrome);
+    min-height: var(--row-h-chrome);
+    --btn-h: var(--row-h-chrome);
+  }
+
+  /* 状态走 --state-* 交互叠加量：
+   * 1. 继承 .button 基类的 IconButton 统一由 .button::before 伪元素承载单层物理微光，彻底消除本体 background-color 双层叠加翻倍发黑；
+   * 2. 悬浮时平滑加深图标前景色至 var(--text-primary)；
+   * 3. 对无 .button 基类的孤立 .iconButton 退化单层 background-color 兜底，确保仅单层微光生效。
+   */
+  .iconButton:where(:hover:not(:disabled):not([aria-disabled='true'])) {
+    color: var(--text-primary);
+  }
+
+  .iconButton:not(.button):where(
+      :hover:not(:disabled):not([aria-disabled='true'])
+    ) {
+    background-color: var(--state-hover);
+  }
+
+  .iconButton:not(.button):where(
+      :active:not(:disabled):not([aria-disabled='true'])
+    ) {
+    background-color: var(--state-active);
+  }
+
+  /* 焦点态：混入 ≤10%（AGENTS §13） */
+  .iconButton:where(:focus-visible) {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--edge-focus);
+  }
+
+  .iconButton:where(:disabled, [aria-disabled='true']) {
+    opacity: 0.38;
+    cursor: not-allowed;
+  }
+
+  .touchExpand {
+  }
+
+  /* 触控热区安全管理：常规紧凑按钮采用 inset: -2px 0 垂直轻量外延，杜绝左右互叠 */
+  .buttonXs::after,
+  .buttonSm::after {
+    content: '';
+    position: absolute;
+    inset: -2px 0;
+    pointer-events: auto;
+  }
+
+  /* 孤立图标按钮显式声明 touchExpand 开启 40×40px 安全触控热区 */
+  .iconButton.touchExpand::after,
+  .button.touchExpand::after,
+  .button[data-touch-expand='true']::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 40px;
+    min-height: 40px;
+    width: 100%;
+    height: 100%;
+    inset: auto;
+    pointer-events: auto;
+    border-radius: inherit;
+    z-index: 1;
+  }
+
+  .button:disabled::after {
+    display: none;
+    pointer-events: none;
+  }
+
+  .spinner {
+    width: var(--btn-icon-size);
+    height: var(--btn-icon-size);
+    border-radius: 50%;
+    border: var(--border-width-emphasis) solid currentColor;
+    border-top-color: transparent;
+    animation: button-spin var(--transition-spin) infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes button-spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
 }

@@ -22,6 +22,7 @@
   border-left: var(--scrollbar-track-safe-gap, 2px) solid transparent;
   border-right: var(--scrollbar-track-safe-gap, 2px) solid transparent;
   border-radius: var(--scrollbar-thumb-radius);
+  transition: background-color var(--transition-fast);
 }
 
 ::-webkit-scrollbar-thumb:horizontal {
@@ -182,7 +183,7 @@
  * ========================================================================== */
 [data-scrollbar-visibility='hover']::-webkit-scrollbar-thumb {
   background-color: transparent;
-  transition: background-color var(--transition-fast);
+  transition: background-color var(--duration-normal) var(--ease-emphasized);
 }
 
 [data-scrollbar-visibility='hover']::-webkit-scrollbar-button:vertical:start:decrement,
@@ -196,6 +197,8 @@
   [data-scrollbar-visibility='hover']::-webkit-scrollbar-thumb,
 [data-scrollbar-visibility='hover']:hover::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb-bg, var(--tint-scrollbar-thumb));
+  transition: background-color var(--duration-fast) var(--ease-decelerate)
+    var(--duration-micro);
 }
 
 [data-scrollbar-hover-host]:hover
@@ -291,7 +294,7 @@
 [data-nav-scroll]::-webkit-scrollbar-thumb,
 [role='tablist']::-webkit-scrollbar-thumb {
   background-color: transparent;
-  transition: background-color var(--transition-fast);
+  transition: background-color var(--duration-normal) var(--ease-emphasized);
 }
 
 .navScroll::-webkit-scrollbar-button:vertical:start:decrement,
@@ -316,6 +319,8 @@
 [data-nav-scroll]:hover::-webkit-scrollbar-thumb,
 [role='tablist']:hover::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb-bg, var(--tint-scrollbar-thumb));
+  transition: background-color var(--duration-fast) var(--ease-decelerate)
+    var(--duration-micro);
 }
 
 /* 仅当指针直接 hover/active 左侧滚动条滑块本身时，才加深为激活色 */
@@ -483,7 +488,7 @@
 [role='tabpanel']::-webkit-scrollbar-thumb,
 [role='tabpanel'] ::-webkit-scrollbar-thumb {
   background-color: transparent;
-  transition: background-color var(--transition-fast);
+  transition: background-color var(--duration-normal) var(--ease-emphasized);
 }
 
 .settingsMain .coverContent::-webkit-scrollbar-button:vertical:start:decrement,
@@ -551,6 +556,8 @@
 [role='tabpanel']:hover::-webkit-scrollbar-thumb,
 [role='tabpanel']:hover ::-webkit-scrollbar-thumb {
   background-color: var(--scrollbar-thumb-bg, var(--tint-scrollbar-thumb));
+  transition: background-color var(--duration-fast) var(--ease-decelerate)
+    var(--duration-micro);
 }
 
 /* 仅当指针直接 hover/active 右侧滚动条滑块本身（::-webkit-scrollbar-thumb:hover/:active）时，才加深为激活色 */

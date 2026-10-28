@@ -9,6 +9,7 @@ export interface SmartPanelItemProps {
   item: MenuItem;
   index?: number;
   isFocused?: boolean;
+  activeSubmenuId?: string;
   renderItem?: (item: MenuItem, index: number, isFocused: boolean) => ReactNode;
   onSelect?: (item: MenuItem, event?: MouseEvent) => void;
   onHoverSubmenu?: (item: MenuItem, el: HTMLElement) => void;
@@ -20,6 +21,7 @@ export const SmartPanelItem: React.FC<SmartPanelItemProps> = ({
   item,
   index = 0,
   isFocused = false,
+  activeSubmenuId,
   renderItem,
   onSelect,
   onHoverSubmenu,
@@ -124,10 +126,12 @@ export const SmartPanelItem: React.FC<SmartPanelItemProps> = ({
   const hasSubmenu =
     item.type === 'submenu' ||
     Boolean(item.children && item.children.length > 0);
+  const isParentActive = hasSubmenu && activeSubmenuId === item.id;
 
   const itemClassNames = [
     menuStyles.menuItem,
     styles.item,
+    isParentActive ? styles.parentActive : '',
     item.selected ? styles.selected : '',
     item.disabled ? `${menuStyles.menuItemDisabled} ${styles.disabled}` : '',
     item.danger ? `${menuStyles.menuItemDanger} ${styles.danger}` : '',

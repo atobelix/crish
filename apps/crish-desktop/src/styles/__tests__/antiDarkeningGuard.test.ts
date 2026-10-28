@@ -13,7 +13,14 @@ import { fileURLToPath } from 'node:url';
 
 function readFile(relPath: string): string {
   const target = `../../../${relPath}`;
-  return readFileSync(new URL(target, import.meta.url), 'utf8');
+  let content = readFileSync(new URL(target, import.meta.url), 'utf8');
+  if (relPath.endsWith('tokens.css') && content.includes('@import')) {
+    content = content.replace(/@import\s+['"]\.\/([^'"]+)['"];/g, (_, file) => {
+      const sub = `../../../src/styles/${file}`;
+      return readFileSync(new URL(sub, import.meta.url), 'utf8');
+    });
+  }
+  return content;
 }
 
 function getSrcRoot(): string {

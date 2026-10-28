@@ -4,14 +4,22 @@
 
 import type React from 'react';
 
+export type LayerTier = 'modal' | 'popover' | 'overlay';
+
 export type LayerType =
+  // 1. Modal 层：全屏遮罩、模态对话框、二次确认弹窗、抽屉等
   | 'modal-dialog' // 全局模态弹窗（SettingsPanel, SkillEditorModal, FirstRunWizard）
   | 'confirm-dialog' // 二次确认对话框（ConfirmDialog）
+  | 'alertdialog' // 警报对话框
   | 'drawer' // 抽屉浮层（ChatStatusRibbons, PlanDrawer）
-  | 'context-menu' // 右键上下文菜单（SessionContextMenu, SidebarMenu）
-  | 'dropdown-menu' // 下拉菜单（Menu, Select, ModelPicker）
-  | 'cascade-submenu' // 级联二级子菜单（ContextMenuFlyout, Submenu）
+  // 2. Popover/Menu 层：下拉菜单、气泡框、选择框、右键菜单、级联子菜单
+  | 'dropdown-menu' // 下拉菜单（Menu, ModelPicker）
   | 'popover' // 普通气泡（TiptapSlashMenu, Popover）
+  | 'select' // 下拉选择框（Select）
+  | 'combobox' // 复合输入检索框（Combobox）
+  | 'context-menu' // 右键上下文菜单（SessionContextMenu, SidebarMenu）
+  | 'cascade-submenu' // 级联二级子菜单（ContextMenuFlyout, Submenu）
+  // 3. Overlay/Toast 层：全局通知、悬浮提示、顶层虚拟拦截器
   | 'tooltip' // 悬浮提示（Tooltip）
   | 'toast' // 全局通知（ToastViewport，顶部）
   | 'virtual-interceptor'; // 虚拟拦截器（快捷键录制态、分屏拖拽态）
@@ -29,6 +37,8 @@ export interface LayerRegistration {
   id: string;
   /** 浮层语义类型 */
   type: LayerType;
+  /** 浮层所属架构分层（Modal / Popover / Overlay） */
+  tier?: LayerTier;
   /** 父浮层 ID（用于三层级联拓扑追踪） */
   parentId?: string;
   /** 浮层容器的 DOM 引用（虚拟拦截层为 undefined） */
@@ -62,6 +72,7 @@ export interface LayerRegistration {
 export interface LayerTraceRecord {
   id: string;
   type: LayerType;
+  tier?: LayerTier;
   parentId?: string;
   mountedAt: number;
   dismissedAt: number;
@@ -76,14 +87,65 @@ export interface DismissedByPointerSnapshot {
   timestamp: number;
 }
 
+export const LAYER_TIER_PRIORITY: Record<LayerTier, number> = {
+  modal: 10,
+  popover: 30,
+  overlay: 60,
+};
+
+export const LAYER_TIER_MAP: Record<LayerType, LayerTier> = {
+  // Modal Tier
+  'modal-dialog': 'modal',
+  'confirm-dialog': 'modal',
+  alertdialog: 'modal',
+  drawer: 'modal',
+
+  // Popover / Menu Tier
+  'dropdown-menu': 'popover',
+  popover: 'popover',
+  select: 'popover',
+  combobox: 'popover',
+  'context-menu': 'popover',
+  'cascade-submenu': 'popover',
+
+  // Overlay / Toast Tier
+  tooltip: 'overlay',
+  toast: 'overlay',
+  'virtual-interceptor': 'overlay',
+};
+
+export function getLayerTier(type: LayerType): LayerTier {
+  return LAYER_TIER_MAP[type] ?? 'popover';
+}
+
+export function isModalLayer(type: LayerType): boolean {
+  return getLayerTier(type) === 'modal';
+}
+
+export function isPopoverMenuLayer(type: LayerType): boolean {
+  return getLayerTier(type) === 'popover';
+}
+
+export function isOverlayToastLayer(type: LayerType): boolean {
+  return getLayerTier(type) === 'overlay';
+}
+
 export const LAYER_TYPE_PRIORITY: Record<LayerType, number> = {
+  // Modal Tier (10-29)
   'modal-dialog': 10,
   'confirm-dialog': 15,
+  alertdialog: 15,
   drawer: 20,
+
+  // Popover / Menu Tier (30-59)
   popover: 30,
+  select: 35,
+  combobox: 35,
   'dropdown-menu': 40,
   'context-menu': 40,
   'cascade-submenu': 50,
+
+  // Overlay / Toast Tier (60-100)
   tooltip: 60,
   toast: 70,
   'virtual-interceptor': 100,
@@ -95,6 +157,8 @@ export const EXCLUSIVE_PEER_LAYER_TYPES: ReadonlySet<LayerType> = new Set([
   'context-menu',
   'cascade-submenu',
   'popover',
+  'select',
+  'combobox',
 ]);
 
 export function isExclusivePeerLayerType(type: LayerType): boolean {

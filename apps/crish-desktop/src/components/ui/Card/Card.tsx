@@ -1,5 +1,5 @@
 /**
- * ui/Card 内容容器原子基元（P4 T-P4-02）
+ * ui/Card 内容容器原子基元（CVA 架构升级版 / React 19 纯函数）
  *
  * 承载报告卡、Diff 卡片、文件卡片、终端卡片与设置卡片等内容容器。
  * 严格遵循展示型容器 0 描边铁律（border: none），以表面明度差（--surface-card）建立层级，
@@ -8,11 +8,38 @@
  * 分层契约：本组件只依赖 react 与 CSS 变量，严禁反向依赖任何业务模块。
  */
 import React from 'react';
+import { cva, cn, type VariantProps } from '../internal/cn';
 import styles from './Card.module.css';
 
-export type CardPadding = 'none' | 'sm' | 'md' | 'lg';
+export const cardVariants = cva(styles.card, {
+  variants: {
+    padding: {
+      none: styles.padNone,
+      sm: styles.padSm,
+      md: styles.padMd,
+      lg: styles.padLg,
+    },
+    rim: {
+      true: styles.rim,
+    },
+    interactive: {
+      true: styles.interactive,
+    },
+  },
+  defaultVariants: {
+    padding: 'md',
+  },
+});
 
-export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+export type CardPadding = NonNullable<
+  VariantProps<typeof cardVariants>['padding']
+>;
+
+export interface CardProps
+  extends
+    React.HTMLAttributes<HTMLDivElement>,
+    VariantProps<typeof cardVariants> {
+  ref?: React.Ref<HTMLDivElement>;
   children?: React.ReactNode;
   /** 内边距档位：none(0) | sm(8px) | md(12px) | lg(16px)，默认 'md' */
   padding?: CardPadding;
@@ -22,28 +49,19 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   interactive?: boolean;
 }
 
-const PADDING_CLASS_MAP: Record<CardPadding, string | undefined> = {
-  none: styles.padNone,
-  sm: styles.padSm,
-  md: styles.padMd,
-  lg: styles.padLg,
-};
-
-export const Card = React.forwardRef<HTMLDivElement, CardProps>(function Card(
-  {
-    padding = 'md',
-    rim = false,
-    interactive,
-    onClick,
-    onKeyDown,
-    role,
-    tabIndex,
-    className,
-    children,
-    ...restProps
-  },
-  ref
-) {
+export function Card({
+  ref,
+  padding = 'md',
+  rim = false,
+  interactive,
+  onClick,
+  onKeyDown,
+  role,
+  tabIndex,
+  className,
+  children,
+  ...restProps
+}: CardProps) {
   const isInteractive = Boolean(interactive || onClick);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -61,20 +79,15 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(function Card(
   const resolvedRole = role ?? (isInteractive ? 'button' : undefined);
   const resolvedTabIndex = tabIndex ?? (isInteractive ? 0 : undefined);
 
-  const classNames = [
-    styles.card,
-    PADDING_CLASS_MAP[padding],
-    rim && styles.rim,
-    isInteractive && styles.interactive,
-    className,
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const resolvedClassName = cn(
+    cardVariants({ padding, rim, interactive: isInteractive }),
+    className
+  );
 
   return (
     <div
       ref={ref}
-      className={classNames}
+      className={resolvedClassName}
       role={resolvedRole}
       tabIndex={resolvedTabIndex}
       data-padding={padding}
@@ -87,6 +100,4 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(function Card(
       {children}
     </div>
   );
-});
-
-Card.displayName = 'Card';
+}

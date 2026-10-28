@@ -7,7 +7,7 @@
 html[data-theme='default'],
 html[data-theme='light'] {
   /* SmartExpandablePanel tokens (Light) */
-  --sep-item-radius: var(--radius-row);
+  --sep-item-radius: var(--radius-menu-inner, 12px);
   --sep-badge-radius: var(--radius-row);
   --sep-item-height: 28px;
   --sep-item-gap: 2px;
@@ -28,7 +28,6 @@ html[data-theme='light'] {
     Menlo,
     monospace
   );
-  --sep-bg-panel-solid: var(--surface-raised);
   --sep-bg-item-hover: var(--state-hover);
   --sep-bg-input: var(--surface-card);
   --sep-border-color: var(--border-color);
@@ -133,6 +132,9 @@ html[data-theme='light'] {
     var(--border-color) 70%,
     transparent
   );
+
+  /* Slash Menu (Light) */
+  --slash-menu-bg: var(--surface-overlay);
   --composer-attach-name-size: 11px;
   --composer-attach-name-color: var(--text-secondary);
   --composer-attach-progress-color: var(--accent-primary, #10b981);
@@ -180,7 +182,7 @@ html[data-theme='light'] {
 
   --md-heading-font-weight: var(--fw-strong, 700);
   --md-heading-line-height: var(--lh-ui, 1.35);
-  --md-heading-color: var(--ink-heading, var(--text-primary));
+  --md-heading-color: var(--text-primary);
   --md-heading-margin-top: 0.65em;
   --md-heading-margin-bottom: 0.28em;
 
@@ -356,11 +358,10 @@ html[data-theme='light'] {
 
 html[data-theme='dark'] {
   /* SmartExpandablePanel tokens (Dark) */
-  --sep-item-radius: var(--radius-row);
+  --sep-item-radius: var(--radius-menu-inner, 12px);
   --sep-badge-radius: var(--radius-row);
   --sep-item-height: 28px;
   --sep-item-gap: 2px;
-  --sep-bg-panel-solid: var(--surface-raised);
   --sep-bg-item-hover: var(--state-hover);
   --sep-bg-input: var(--surface-card);
   --sep-border-color: var(--border-color);
@@ -450,6 +451,9 @@ html[data-theme='dark'] {
   --composer-attach-name-color: var(--text-secondary);
   --composer-attach-progress-color: var(--accent-primary, #10b981);
 
+  /* Slash Menu (Dark): 外壳层底色 (10.5%)，比输入坞 (13%) 柔和微降 2.5 点 */
+  --slash-menu-bg: var(--surface-shell);
+
   /* Markdown Typography & Streaming Extension (Dark) */
   --md-font-family: var(
     --font-sans,
@@ -493,7 +497,7 @@ html[data-theme='dark'] {
 
   --md-heading-font-weight: var(--fw-strong, 700);
   --md-heading-line-height: var(--lh-ui, 1.35);
-  --md-heading-color: var(--ink-heading, var(--text-primary));
+  --md-heading-color: var(--text-primary);
   --md-heading-margin-top: 0.65em;
   --md-heading-margin-bottom: 0.28em;
 

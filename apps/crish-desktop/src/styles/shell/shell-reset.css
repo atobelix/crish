@@ -6,138 +6,142 @@
     transform: scale(0.96);
   }
 }
-/* --- BASICS --- */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+@layer reset {
+  /* --- BASICS --- */
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
-html {
-  /* Windows ClearType: do not force grayscale antialiased (fringing) */
-  -webkit-font-smoothing: auto;
-  -moz-osx-font-smoothing: auto;
-  text-rendering: optimizeLegibility;
-  font-synthesis: none;
-  font-optical-sizing: auto;
-  font-kerning: normal;
-}
+  html {
+    /* Windows ClearType: do not force grayscale antialiased (fringing) */
+    -webkit-font-smoothing: auto;
+    -moz-osx-font-smoothing: auto;
+    text-rendering: optimizeLegibility;
+    font-synthesis: none;
+    font-optical-sizing: auto;
+    font-kerning: normal;
+  }
 
-body {
-  font-family: var(--font-sans);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-normal);
-  line-height: 1.5;
-  background-color: var(--bg-workspace, var(--bg-primary));
-  color: var(--text-primary);
-  overflow: hidden;
-  height: 100vh;
-  width: 100vw;
-  user-select: none;
-  -webkit-font-smoothing: auto;
-  -moz-osx-font-smoothing: auto;
-  text-rendering: optimizeLegibility;
-  font-synthesis: none;
-  font-feature-settings: "kern" 1, "liga" 1;
-  font-variant-ligatures: common-ligatures;
-}
+  body {
+    font-family: var(--font-sans);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.5;
+    background-color: var(--bg-workspace, var(--bg-primary));
+    color: var(--text-primary);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    user-select: none;
+    -webkit-font-smoothing: auto;
+    -moz-osx-font-smoothing: auto;
+    text-rendering: optimizeLegibility;
+    font-synthesis: none;
+    font-feature-settings:
+      'kern' 1,
+      'liga' 1;
+    font-variant-ligatures: common-ligatures;
+  }
 
-/* 三级表面：侧栏壳 = chrome 灰底；对话画布 = paper；工具卡/输入 = card 白 */
-.sidebar-wrapper {
-  background-color: var(--shell-chrome-bg, var(--bg-secondary));
-}
+  /* 三级表面：侧栏壳 = chrome 灰底；对话画布 = paper；工具卡/输入 = card 白 */
+  .sidebar-wrapper {
+    background-color: var(--shell-chrome-bg, var(--bg-secondary));
+  }
 
-.sidebar-wrapper.collapsed {
-  background-color: transparent;
-}
+  .sidebar-wrapper.collapsed {
+    background-color: transparent;
+  }
 
-/* 系统窗口材质分层适配 (Win11 Mica 云母 / Win10 Acrylic / 纯实色 Solid 阶梯回退) */
-/* 外层唯一着色点：body = 外层色 α 叠在云母上；侧栏/顶栏/分栏缝透明（review P1-2） */
-html[data-backdrop='mica'] body {
-  background-color: var(--outer-layer-bg);
-}
+  /* 系统窗口材质分层适配 (Win11 Mica 云母 / Win10 Acrylic / 纯实色 Solid 阶梯回退) */
+  /* 外层唯一着色点：body = 外层色 α 叠在云母上；侧栏/顶栏/分栏缝透明（review P1-2） */
+  html[data-backdrop='mica'] body {
+    background-color: var(--outer-layer-bg);
+  }
 
-html[data-backdrop='mica'] .sidebar-wrapper:not(.collapsed) {
-  /* 子层透明，透出 body 的唯一外层着色（原为第二条 68% 着色链） */
-  background-color: var(--outer-layer-child-bg);
-}
+  html[data-backdrop='mica'] .sidebar-wrapper:not(.collapsed) {
+    /* 子层透明，透出 body 的唯一外层着色（原为第二条 68% 着色链） */
+    background-color: var(--outer-layer-child-bg);
+  }
 
-html[data-backdrop='mica'] .workspaces-column {
-  background-color: transparent;
-}
+  html[data-backdrop='mica'] .workspaces-column {
+    background-color: transparent;
+  }
 
-html[data-backdrop='acrylic'] body {
-  background-color: var(--outer-layer-bg);
-}
+  html[data-backdrop='acrylic'] body {
+    background-color: var(--outer-layer-bg);
+  }
 
-html[data-backdrop='acrylic'] .sidebar-wrapper:not(.collapsed) {
-  background-color: var(--outer-layer-child-bg);
-}
+  html[data-backdrop='acrylic'] .sidebar-wrapper:not(.collapsed) {
+    background-color: var(--outer-layer-child-bg);
+  }
 
-html[data-backdrop='acrylic'] .workspaces-column {
-  background-color: transparent;
-}
+  html[data-backdrop='acrylic'] .workspaces-column {
+    background-color: transparent;
+  }
 
-/*           400      UI 500    */
-code,
-pre,
-kbd,
-samp,
-.font-mono,
-[class*='diff-line'],
-[class*='diff-code'],
-[class*='git-diff-line'],
-.terminal-output-text,
-.tool-result-pre,
-.md-code-block,
-.md-code-pre,
-.md-inline-code {
-  font-weight: var(--font-weight-code, 400);
-  tab-size: var(--md-code-tab-size, 2);
-  -moz-tab-size: var(--md-code-tab-size, 2);
-}
+  /*           400      UI 500    */
+  code,
+  pre,
+  kbd,
+  samp,
+  .font-mono,
+  [class*='diff-line'],
+  [class*='diff-code'],
+  [class*='git-diff-line'],
+  .terminal-output-text,
+  .tool-result-pre,
+  .md-code-block,
+  .md-code-pre,
+  .md-inline-code {
+    font-weight: var(--font-weight-code, 400);
+    tab-size: var(--md-code-tab-size, 2);
+    -moz-tab-size: var(--md-code-tab-size, 2);
+  }
 
-/*            32     16 */
-.icon-btn,
-.header-btn,
-.files-nav-btn,
-.preview-nav-btn,
-.win-btn,
-.card-action-btn,
-.plus-btn,
-.mpick-icon-btn {
-  min-width: var(--control-height);
-  height: var(--control-height);
-  box-sizing: border-box;
-}
-.icon-btn svg,
-.header-btn svg,
-.files-nav-btn svg,
-.preview-nav-btn svg,
-.plus-btn svg,
-.card-action-btn svg,
-.mpick-icon-btn svg,
-.files-icon-btn svg,
-.session-actions-btn svg,
-.cplus-item-icon svg,
-.rt-row-ico {
-  width: var(--icon-size);
-  height: var(--icon-size);
-  flex-shrink: 0;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
+  /*            32     16 */
+  .icon-btn,
+  .header-btn,
+  .files-nav-btn,
+  .preview-nav-btn,
+  .win-btn,
+  .card-action-btn,
+  .plus-btn,
+  .mpick-icon-btn {
+    min-width: var(--control-height);
+    height: var(--control-height);
+    box-sizing: border-box;
+  }
+  .icon-btn svg,
+  .header-btn svg,
+  .files-nav-btn svg,
+  .preview-nav-btn svg,
+  .plus-btn svg,
+  .card-action-btn svg,
+  .mpick-icon-btn svg,
+  .files-icon-btn svg,
+  .session-actions-btn svg,
+  .cplus-item-icon svg,
+  .rt-row-ico {
+    width: var(--icon-size);
+    height: var(--icon-size);
+    flex-shrink: 0;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
 
-/* 拖拽 Resizer 期间：封锁所有 iframe / webview 的 pointer-events，防粘手 */
-body.is-resizing iframe,
-body.is-resizing webview,
-body.is-resizing object,
-body.is-resizing embed {
-  pointer-events: none !important;
-}
+  /* 拖拽 Resizer 期间：封锁所有 iframe / webview 的 pointer-events，防粘手 */
+  body.is-resizing iframe,
+  body.is-resizing webview,
+  body.is-resizing object,
+  body.is-resizing embed {
+    pointer-events: none !important;
+  }
 
-/* 拖拽期间强制 col-resize 光标，不被子元素覆盖 */
-body.leaf-dock-resizing,
-body.leaf-dock-resizing * {
-  cursor: col-resize !important;
+  /* 拖拽期间强制 col-resize 光标，不被子元素覆盖 */
+  body.leaf-dock-resizing,
+  body.leaf-dock-resizing * {
+    cursor: col-resize !important;
+  }
 }

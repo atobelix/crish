@@ -1,205 +1,47 @@
 /**
- * ui 原子设计系统统一出口（Single Truth Barrel）
+ * @crish/ui 原子设计系统统一入口（Single Truth Barrel）
  *
- * 分层契约：ui/ 原子层不依赖业务 store/hooks/api/services；
- * 业务组件层 100% 依赖本出口，作为全仓唯一合法交互基元桥接层（Primitive Bridge）。
- * 详见 RED-DETAILED-02《原子设计系统与同心几何维度详案》。
+ * [AUTO-GENERATED FILE] 本文件由 scripts/sync-ui-exports.mjs 自动生成。
+ * 严禁手工编辑！新增组件或原语请遵循命名空间规范落盘，运行 `npm run sync:ui-exports` 自动同步。
  */
 
-export { Button } from './Button/Button';
-export type { ButtonProps, ButtonVariant, ButtonSize } from './Button/Button';
+// ─── Namespace: components (精准公开表面收敛) ───────────────────
+export * from './animated-icons/index';
+export * from './AnimatedCounter/index';
+export * from './Badge/index';
+export * from './Button/index';
+export * from './Card/index';
+export * from './ColorPicker/index';
+export * from './ConfirmDialog/index';
+export * from './ContextMenu/index';
+export * from './Dialog/index';
+export * from './DisclosureAffordance/index';
+export * from './DropdownMenu/index';
+export * from './Field';
+export * from './Input/index';
+export * from './Menu/index';
+export * from './Popover/index';
+export * from './PreviewCard/index';
+export * from './Row/index';
+export * from './ScrollArea/index';
+export * from './SegmentedControl/index';
+export * from './Select/index';
+export * from './Slider/index';
+export * from './SmartExpandablePanel/index';
+export * from './SmartModelBadge';
+export * from './Switch/index';
+export * from './Tabs/index';
+export * from './TabStrip/index';
+export * from './TextMorph/index';
+export * from './Tooltip/index';
 
-export { IconButton } from './Button/IconButton';
-export type {
-  IconButtonProps,
-  IconButtonSize,
-  StandardIconButtonSize,
-} from './Button/IconButton';
+// ─── Namespace: icons (精准公开表面收敛) ───────────────────
+export * from './icons/index';
 
-export { Input } from './Input/Input';
-export type { InputProps, InputVariant, InputSize } from './Input/Input';
+// ─── Namespace: layer-stack (精准公开表面收敛) ───────────────────
+export * from './layer/index';
 
-export { Textarea } from './Input/Textarea';
-export type { TextareaProps, TextareaSize } from './Input/Textarea';
-
-export { Menu } from './Menu/Menu';
-export type { MenuProps } from './Menu/Menu';
-export type { SelectOptionItem } from './Menu/types';
-
-export {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-  SelectGroup,
-  SelectGroupLabel,
-  SelectLabel,
-  SelectSeparator,
-  SelectClearButton,
-  SelectIcon,
-  Combobox,
-  ComboboxInput,
-  ComboboxChips,
-  ComboboxChip,
-  ComboboxContent,
-  ComboboxList,
-  ComboboxItem,
-  ComboboxEmpty,
-  ComboboxGroup,
-  ComboboxLabel,
-  ComboboxSeparator,
-  highlightMatches,
-} from './Select';
-export type {
-  SelectProps,
-  SelectOption,
-  SelectSize,
-  SelectVariant,
-  SelectRootProps,
-  SelectTriggerProps,
-  SelectValueProps,
-  SelectContentProps,
-  SelectItemProps,
-  ComboboxRootProps,
-  ComboboxInputProps,
-  ComboboxChipsProps,
-  ComboboxChipProps,
-  ComboboxContentProps,
-  ComboboxListProps,
-  ComboboxItemProps,
-  ComboboxEmptyProps,
-} from './Select';
-
-export { Dialog } from './Dialog/Dialog';
-export type { DialogProps, DialogSize, DialogRole } from './Dialog/Dialog';
-
-export { ConfirmDialog } from './ConfirmDialog/ConfirmDialog';
-export type { ConfirmDialogProps } from './ConfirmDialog/ConfirmDialog';
-
-export { Tooltip } from './Tooltip/Tooltip';
-export type { TooltipProps, TooltipSide } from './Tooltip/Tooltip';
-
-export { Switch } from './Switch/Switch';
-export type { SwitchProps, SwitchSize } from './Switch/Switch';
-
-export { SegmentedControl } from './SegmentedControl/SegmentedControl';
-export type {
-  SegmentedControlProps,
-  SegmentedControlOption,
-  SegmentedControlSize,
-} from './SegmentedControl/SegmentedControl';
-
-export { Badge } from './Badge/Badge';
-export type {
-  BadgeProps,
-  BadgeTone,
-  BadgeSize,
-  StandardBadgeTone,
-} from './Badge/Badge';
-
-export { Slider } from './Slider/Slider';
-export type { SliderProps } from './Slider/Slider';
-
-export { TabStrip } from './TabStrip/TabStrip';
-export type {
-  TabStripProps,
-  TabStripItem,
-  TabStripRenderCtx,
-} from './TabStrip/TabStrip';
-
-export {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-  useTabsContext,
-} from './Tabs';
-export type {
-  TabsProps,
-  TabsListProps,
-  TabsTriggerProps,
-  TabsContentProps,
-  TabsVariant,
-  TabsSize,
-  TabsOrientation,
-  TabsContextValue,
-} from './Tabs';
-
-export {
-  PreviewCard,
-  PreviewCardTrigger,
-  PreviewCardContent,
-  PreviewCardTitle,
-  PreviewCardDescription,
-  PreviewCardArrow,
-  usePreviewCardContext,
-  computePreviewCardPosition,
-  PREVIEW_CARD_EDGE_PAD,
-} from './PreviewCard';
-export type {
-  PreviewCardProps,
-  PreviewCardTriggerProps,
-  PreviewCardContentProps,
-  PreviewCardTitleProps,
-  PreviewCardDescriptionProps,
-  PreviewCardArrowProps,
-  PreviewCardSide,
-  PreviewCardAlign,
-  PreviewCardContextValue,
-  PreviewCardPositionResult,
-} from './PreviewCard';
-
-export {
-  SmartExpandablePanel,
-  SmartPanel,
-  useSmartPanel,
-  MenuAdapter,
-  SelectAdapter,
-  convertMenuOptionToSmartItem,
-  convertMenuOptionsToSmartItems,
-  convertSmartItemToMenuOption,
-  convertSmartItemsToMenuOptions,
-  convertSelectOptionToSmartItem,
-  convertSelectOptionsToSmartItems,
-  convertSmartItemToSelectOption,
-  convertSmartItemsToSelectOptions,
-} from './SmartExpandablePanel';
-export type {
-  MenuItem,
-  MenuGroup,
-  MenuItemType,
-  SmartPanelProps,
-  UseSmartPanelReturn,
-  PositionResult,
-  SubmenuPositionResult,
-  BoundingBox,
-} from './SmartExpandablePanel';
-
-export {
-  ScrollArea,
-  calculateSafeAreaInset,
-  StepperArrowUpIcon,
-  StepperArrowDownIcon,
-} from './ScrollArea';
-export type {
-  ScrollAreaProps,
-  ScrollAreaHandle,
-  ScrollAreaSize,
-  ScrollAreaOrientation,
-  ScrollAreaGutter,
-  ScrollAreaType,
-  ScrollMetrics,
-} from './ScrollArea';
-
-export { SmartModelBadge } from './SmartModelBadge';
-export type { SmartModelBadgeProps } from './SmartModelBadge';
-
-export { Row } from './Row';
-export type { RowProps, RowHeight } from './Row';
-
-export { Card } from './Card';
-export type { CardProps, CardPadding } from './Card';
-
-export { DisclosureAffordance } from './DisclosureAffordance';
-export type { DisclosureAffordanceProps } from './DisclosureAffordance';
+// ─── Namespace: utils (精准公开表面收敛) ───────────────────
+export * from './utils/cn';
+export * from './utils/mergeRefs';
+export * from './utils/modelAbbreviation';

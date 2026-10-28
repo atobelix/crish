@@ -1,5 +1,5 @@
 /* ==========================================================================
-   tokens-type.css — 字体栈、6 档字阶、2 档字重、4 档行高与 8 个排版角色 (--type-*)
+   tokens-type.css — 字体栈、6 档字阶、2 档字重、3 档行高（SSOT）
    ========================================================================== */
 
 :root,
@@ -10,10 +10,6 @@ html[data-theme='light'] {
     'Segoe UI Variable Text', -apple-system, BlinkMacSystemFont,
     'HarmonyOS Sans SC', 'HarmonyOS Sans', 'PingFang SC', 'Hiragino Sans GB',
     'Noto Sans SC', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
-  --font-family-mono:
-    'Cascadia Code', 'Cascadia Mono', 'JetBrains Mono', 'Segoe UI Mono',
-    'SF Mono', 'Consolas', 'Liberation Mono', 'Courier New', ui-monospace,
-    monospace;
 
   --font-sans: var(
     --user-font-sans,
@@ -64,27 +60,6 @@ html[data-theme='light'] {
   --lh-dense: 1.2;
   --lh-ui: 1.35;
   --lh-prose: 1.55;
-  --lh-row: 24px;
-
-  /* 8 个核心排版角色（font 简写属性规范） */
-  --type-prose: var(--fw-regular) var(--font-size-body)/var(--lh-prose)
-    var(--font-family-ui);
-  --type-process: var(--fw-regular) var(--font-size-meta)/var(--lh-row)
-    var(--font-family-ui);
-  --type-label: var(--fw-regular) var(--font-size-body)/var(--lh-ui)
-    var(--font-family-ui);
-  --type-meta: var(--fw-regular) var(--font-size-meta)/var(--lh-ui)
-    var(--font-family-ui);
-  --type-caption: var(--fw-regular) var(--font-size-caption)/var(--lh-dense)
-    var(--font-family-ui);
-  --type-card-title: var(--fw-strong) var(--font-size-subhead)/var(--lh-ui)
-    var(--font-family-ui);
-  --type-heading: var(--fw-strong) var(--font-size-heading)/var(--lh-ui)
-    var(--font-family-ui);
-  --type-title: var(--fw-strong) var(--font-size-title)/var(--lh-dense)
-    var(--font-family-ui);
-  --type-code: var(--fw-regular) var(--font-size-meta)/var(--lh-ui)
-    var(--font-family-mono);
 
   /* 字距刻度 */
   --letter-spacing-tight: -0.01em;
@@ -119,6 +94,7 @@ html[data-theme='light'] {
   --line-height-compact: var(--lh-ui); /* [WAVE2-DEPRECATED-ALIAS] */
   --line-height-ui: var(--lh-ui); /* [WAVE2-DEPRECATED-ALIAS] */
   --line-height-base: var(--lh-ui); /* [WAVE2-DEPRECATED-ALIAS] */
+  --line-height-normal: var(--lh-ui); /* [WAVE2-DEPRECATED-ALIAS] */
   --line-height-body: var(--lh-prose); /* [WAVE2-DEPRECATED-ALIAS] */
   --line-height-none: 1; /* [WAVE2-DEPRECATED-ALIAS] */
 }

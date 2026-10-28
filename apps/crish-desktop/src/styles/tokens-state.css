@@ -5,10 +5,10 @@
 :root,
 html[data-theme='default'],
 html[data-theme='light'] {
-  /* 3 档状态透明叠加阶梯（SSOT · 浅色 3.5% / 6% / 8% 纯净轻中性微光） */
-  --state-hover-pct: 3.5%;
-  --state-active-pct: 6%;
-  --state-selected-pct: 8%;
+  /* 3 档状态透明叠加阶梯（SSOT · 浅色 2.5% / 3% / 7% 纯净轻中性微光，封顶 7% 严禁脏灰） */
+  --state-hover-pct: 2.5%;
+  --state-active-pct: 3%;
+  --state-selected-pct: 7%;
   --state-hover: color-mix(
     in srgb,
     var(--text-primary) var(--state-hover-pct),
@@ -25,9 +25,16 @@ html[data-theme='light'] {
     transparent
   );
 
+  /* 正典交互与半透明微光 Token (SSOT) */
+  --state-focus-ring: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --state-subtle: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  --state-quiet: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  --state-strong: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --state-overlay: color-mix(in srgb, var(--text-primary) 25%, transparent);
+  --state-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
+
   /* 控件混合色与焦点环 */
   --user-control-mix-color: #121212;
-  --control-mix-color: var(--user-control-mix-color, #121212);
   --focus-ring-color: color-mix(
     in srgb,
     var(--border-color) 92%,
@@ -41,12 +48,13 @@ html[data-theme='light'] {
   --switch-thumb-shadow: 0 1px 2px
     color-mix(in srgb, var(--shadow-color) 8%, transparent);
   --seg-track-bg: var(--surface-shell);
-  --seg-slider-bg: var(--surface-card);
+  --seg-slider-bg: var(--surface-input);
+  --tab-active-bg: var(--surface-input); /* 对齐输入档 */
 
   /* 统一滚动条二元色彩与几何尺寸体系（Light） */
   --scrollbar-track-safe-gap: var(--space-0_5, 2px);
   --scrollbar-thumb-bg: #dedddc;
-  --scrollbar-thumb-active: #6b6a69;
+  --scrollbar-thumb-active: #c8c7c6;
   --scrollbar-button-up: var(
     --user-scrollbar-button-up,
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%23dedddc'/%3E%3C/svg%3E")
@@ -65,19 +73,19 @@ html[data-theme='light'] {
   );
   --scrollbar-button-up-active: var(
     --user-scrollbar-button-up-active,
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%236b6a69'/%3E%3C/svg%3E")
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%23c8c7c6'/%3E%3C/svg%3E")
   );
   --scrollbar-button-down-active: var(
     --user-scrollbar-button-down-active,
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%236b6a69'/%3E%3C/svg%3E")
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%23c8c7c6'/%3E%3C/svg%3E")
   );
   --scrollbar-button-left-active: var(
     --user-scrollbar-button-left-active,
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%236b6a69'/%3E%3C/svg%3E")
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%23c8c7c6'/%3E%3C/svg%3E")
   );
   --scrollbar-button-right-active: var(
     --user-scrollbar-button-right-active,
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%236b6a69'/%3E%3C/svg%3E")
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%23c8c7c6'/%3E%3C/svg%3E")
   );
   --scrollbar-track-bg: transparent;
   --scrollbar-width-xs: 5px;
@@ -89,69 +97,13 @@ html[data-theme='light'] {
   --scrollbar-thumb-radius: var(--radius-pill);
   --tint-scrollbar-thumb: var(--scrollbar-thumb-bg);
   --tint-scrollbar-track: transparent;
-
-  /* [WAVE2-DEPRECATED-ALIAS] 旧交互态、半透明染色与抬升别名桥接层（Wave 2 Codemod 后一键清除） */
-  --element-ink: var(--text-primary); /* [WAVE2-DEPRECATED-ALIAS] */
-  --elevate-step-1: var(--state-hover-pct); /* [WAVE2-DEPRECATED-ALIAS] */
-  --elevate-step-1-active: var(
-    --state-active-pct
-  ); /* [WAVE2-DEPRECATED-ALIAS] */
-  --elevate-step-2: var(--state-active-pct); /* [WAVE2-DEPRECATED-ALIAS] */
-  --elevate-step-3: var(--state-selected-pct); /* [WAVE2-DEPRECATED-ALIAS] */
-  --elevate-1: var(--state-hover); /* [WAVE2-DEPRECATED-ALIAS] */
-  --elevate-1-active: var(--state-active); /* [WAVE2-DEPRECATED-ALIAS] */
-  --elevate-2: var(--state-active); /* [WAVE2-DEPRECATED-ALIAS] */
-  --elevate-3: var(--state-selected); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-hover: var(--state-hover); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-active: var(--state-active); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-strong: var(--state-selected); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-subtle: color-mix(
-    in srgb,
-    var(--text-primary) 2%,
-    transparent
-  ); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-quiet: color-mix(
-    in srgb,
-    var(--text-primary) 3%,
-    transparent
-  ); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-focus-ring: color-mix(
-    in srgb,
-    var(--text-primary) 10%,
-    transparent
-  ); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-divider: var(--border-color); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-overlay: color-mix(
-    in srgb,
-    var(--text-primary) 25%,
-    transparent
-  ); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-highlight: color-mix(
-    in srgb,
-    var(--text-primary) 28%,
-    transparent
-  ); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-hover: var(--state-hover); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-active: var(--state-active); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-card-hover: var(--state-hover); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-card-active: var(--state-active); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tab-active-bg: var(--state-selected); /* [WAVE2-DEPRECATED-ALIAS] */
-  --button-secondary-bg: var(--state-active); /* [WAVE2-DEPRECATED-ALIAS] */
-  --control-soft-bg: var(--state-hover); /* [WAVE2-DEPRECATED-ALIAS] */
-  --control-soft-bg-hover: var(--state-hover); /* [WAVE2-DEPRECATED-ALIAS] */
-  --control-soft-bg-active: var(--state-active); /* [WAVE2-DEPRECATED-ALIAS] */
-  --sidebar-hover: var(--state-hover); /* [WAVE2-DEPRECATED-ALIAS] */
-  --sidebar-active: var(--state-selected); /* [WAVE2-DEPRECATED-ALIAS] */
-  --composer-control-hover-bg: var(
-    --state-hover
-  ); /* [WAVE2-DEPRECATED-ALIAS] */
 }
 
 html[data-theme='dark'] {
-  /* 3 档状态透明叠加阶梯（SSOT · 深色 5% / 8% / 10% 纯净轻中性微光） */
-  --state-hover-pct: 5%;
-  --state-active-pct: 8%;
-  --state-selected-pct: 10%;
+  /* 3 档状态透明叠加阶梯（SSOT · 深色 3.5% / 6% / 7% 纯净轻中性微光，封顶 7% 严禁脏灰） */
+  --state-hover-pct: 3.5%;
+  --state-active-pct: 6%;
+  --state-selected-pct: 7%;
   --state-hover: color-mix(
     in srgb,
     var(--text-primary) var(--state-hover-pct),
@@ -168,9 +120,16 @@ html[data-theme='dark'] {
     transparent
   );
 
+  /* 正典交互与半透明微光 Token (SSOT - Dark) */
+  --state-focus-ring: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --state-subtle: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  --state-quiet: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  --state-strong: color-mix(in srgb, var(--user-text-primary) 10%, transparent);
+  --state-overlay: color-mix(in srgb, var(--text-primary) 25%, transparent);
+  --state-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
+
   /* 控件混合色与焦点环 */
   --user-control-mix-color: var(--user-text-primary);
-  --control-mix-color: var(--user-control-mix-color, #f5f5f5);
   --focus-ring-color: color-mix(
     in srgb,
     var(--border-color) 92%,
@@ -185,120 +144,65 @@ html[data-theme='dark'] {
     color-mix(in srgb, var(--shadow-color) 40%, transparent);
   --seg-track-bg: var(--surface-shell);
   --seg-slider-bg: var(--state-selected);
+  --tab-active-bg: var(--surface-raised); /* 对齐 e4 浮起层 */
 
   /* 统一滚动条二元色彩与几何尺寸体系（Dark） */
   --scrollbar-thumb-bg: color-mix(
     in srgb,
-    var(--user-text-primary, #f5f5f5) 16%,
+    var(--user-text-primary, #f5f5f5) 15%,
     transparent
   );
   --scrollbar-thumb-active: color-mix(
     in srgb,
-    var(--user-text-primary, #f5f5f5) 48%,
+    var(--user-text-primary, #f5f5f5) 25%,
     transparent
   );
   --scrollbar-button-up: var(
     --user-scrollbar-button-up,
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%23cccccc' fill-opacity='0.16'/%3E%3C/svg%3E")
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%23cccccc' fill-opacity='0.15'/%3E%3C/svg%3E")
   );
   --scrollbar-button-down: var(
     --user-scrollbar-button-down,
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%23cccccc' fill-opacity='0.16'/%3E%3C/svg%3E")
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%23cccccc' fill-opacity='0.15'/%3E%3C/svg%3E")
   );
   --scrollbar-button-left: var(
     --user-scrollbar-button-left,
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%23cccccc' fill-opacity='0.16'/%3E%3C/svg%3E")
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%23cccccc' fill-opacity='0.15'/%3E%3C/svg%3E")
   );
   --scrollbar-button-right: var(
     --user-scrollbar-button-right,
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%23cccccc' fill-opacity='0.16'/%3E%3C/svg%3E")
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%23cccccc' fill-opacity='0.15'/%3E%3C/svg%3E")
   );
   --scrollbar-button-up-active: var(
     --user-scrollbar-button-up-active,
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%23cccccc' fill-opacity='0.48'/%3E%3C/svg%3E")
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 6.2 C 0.6 6.2 0.0 5.3 0.6 4.3 L 3.8 1.4 C 4.4 0.5 5.6 0.5 6.2 1.4 L 9.4 4.3 C 10.0 5.3 9.4 6.2 8.0 6.2 Z' fill='%23cccccc' fill-opacity='0.25'/%3E%3C/svg%3E")
   );
   --scrollbar-button-down-active: var(
     --user-scrollbar-button-down-active,
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%23cccccc' fill-opacity='0.48'/%3E%3C/svg%3E")
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 7' preserveAspectRatio='none'%3E%3Cpath d='M 2.0 0.8 C 0.6 0.8 0.0 1.7 0.6 2.7 L 3.8 5.6 C 4.4 6.5 5.6 6.5 6.2 5.6 L 9.4 2.7 C 10.0 1.7 9.4 0.8 8.0 0.8 Z' fill='%23cccccc' fill-opacity='0.25'/%3E%3C/svg%3E")
   );
   --scrollbar-button-left-active: var(
     --user-scrollbar-button-left-active,
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%23cccccc' fill-opacity='0.48'/%3E%3C/svg%3E")
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 6.2 2.0 C 6.2 0.6 5.3 0.0 4.3 0.6 L 1.4 3.8 C 0.5 4.4 0.5 5.6 1.4 6.2 L 4.3 9.4 C 5.3 10.0 6.2 9.4 6.2 8.0 Z' fill='%23cccccc' fill-opacity='0.25'/%3E%3C/svg%3E")
   );
   --scrollbar-button-right-active: var(
     --user-scrollbar-button-right-active,
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%23cccccc' fill-opacity='0.48'/%3E%3C/svg%3E")
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 10' preserveAspectRatio='none'%3E%3Cpath d='M 0.8 2.0 C 0.8 0.6 1.7 0.0 2.7 0.6 L 5.6 3.8 C 6.5 4.4 6.5 5.6 5.6 6.2 L 2.7 9.4 C 1.7 10.0 0.8 9.4 0.8 8.0 Z' fill='%23cccccc' fill-opacity='0.25'/%3E%3C/svg%3E")
   );
   --scrollbar-track-bg: transparent;
   --tint-scrollbar-thumb: var(--scrollbar-thumb-bg);
   --tint-scrollbar-track: transparent;
-
-  /* [WAVE2-DEPRECATED-ALIAS] 旧交互态、半透明染色与抬升别名桥接层（深色同构） */
-  --element-ink: var(--text-primary); /* [WAVE2-DEPRECATED-ALIAS] */
-  --elevate-step-1: var(--state-hover-pct); /* [WAVE2-DEPRECATED-ALIAS] */
-  --elevate-step-1-active: var(
-    --state-active-pct
-  ); /* [WAVE2-DEPRECATED-ALIAS] */
-  --elevate-step-2: var(--state-active-pct); /* [WAVE2-DEPRECATED-ALIAS] */
-  --elevate-step-3: var(--state-selected-pct); /* [WAVE2-DEPRECATED-ALIAS] */
-  --elevate-1: var(--state-hover); /* [WAVE2-DEPRECATED-ALIAS] */
-  --elevate-1-active: var(--state-active); /* [WAVE2-DEPRECATED-ALIAS] */
-  --elevate-2: var(--state-active); /* [WAVE2-DEPRECATED-ALIAS] */
-  --elevate-3: var(--state-selected); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-hover: var(--state-hover); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-active: var(--state-active); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-strong: var(--state-selected); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-subtle: color-mix(
-    in srgb,
-    var(--text-primary) 2%,
-    transparent
-  ); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-quiet: color-mix(
-    in srgb,
-    var(--text-primary) 3%,
-    transparent
-  ); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-focus-ring: color-mix(
-    in srgb,
-    var(--text-primary) 10%,
-    transparent
-  ); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-divider: var(--border-color); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-overlay: color-mix(
-    in srgb,
-    var(--text-primary) 25%,
-    transparent
-  ); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tint-highlight: color-mix(
-    in srgb,
-    var(--text-primary) 28%,
-    transparent
-  ); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-hover: var(--state-hover); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-active: var(--state-active); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-card-hover: var(--state-hover); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-card-active: var(--state-active); /* [WAVE2-DEPRECATED-ALIAS] */
-  --tab-active-bg: var(--state-selected); /* [WAVE2-DEPRECATED-ALIAS] */
-  --button-secondary-bg: var(--state-active); /* [WAVE2-DEPRECATED-ALIAS] */
-  --control-soft-bg: var(--state-hover); /* [WAVE2-DEPRECATED-ALIAS] */
-  --control-soft-bg-hover: var(--state-hover); /* [WAVE2-DEPRECATED-ALIAS] */
-  --control-soft-bg-active: var(--state-active); /* [WAVE2-DEPRECATED-ALIAS] */
-  --sidebar-hover: var(--state-hover); /* [WAVE2-DEPRECATED-ALIAS] */
-  --sidebar-active: var(--state-selected); /* [WAVE2-DEPRECATED-ALIAS] */
-  --composer-control-hover-bg: var(
-    --state-hover
-  ); /* [WAVE2-DEPRECATED-ALIAS] */
 }
 
 :root[data-scrollbar-tint] {
   --scrollbar-thumb-bg: color-mix(
     in srgb,
-    var(--user-scrollbar-fg, #6b6a69) 13%,
+    var(--user-scrollbar-fg, #6b6a69) 15%,
     transparent
   );
   --scrollbar-thumb-active: color-mix(
     in srgb,
-    var(--user-scrollbar-fg, #6b6a69) 58%,
+    var(--user-scrollbar-fg, #6b6a69) 25%,
     transparent
   );
 }
@@ -306,12 +210,12 @@ html[data-theme='dark'] {
 .theme-dark[data-scrollbar-tint] {
   --scrollbar-thumb-bg: color-mix(
     in srgb,
-    var(--user-scrollbar-fg, #cccccc) 16%,
+    var(--user-scrollbar-fg, #cccccc) 15%,
     transparent
   );
   --scrollbar-thumb-active: color-mix(
     in srgb,
-    var(--user-scrollbar-fg, #cccccc) 48%,
+    var(--user-scrollbar-fg, #cccccc) 25%,
     transparent
   );
 }

@@ -12,7 +12,6 @@ import { SmartPanelList } from './SmartPanelList';
 import { SmartSubmenu } from './SmartSubmenu';
 import { usePanelPosition } from './hooks/usePanelPosition';
 import { useKeyboardNav } from './hooks/useKeyboardNav';
-import { useSafeAim } from './hooks/useSafeAim';
 import { useWheelIsolation } from './hooks/useWheelIsolation';
 import styles from './SmartPanel.module.css';
 
@@ -36,7 +35,6 @@ export const SmartPanel: React.FC<SmartPanelProps> = (props) => {
     enableSearch = false,
     searchRightActions,
     enableDivider = true,
-    enableTriangleAim = true,
     position: positionConfig,
     useContainerBoundary,
     containerBoundaryRef,
@@ -67,9 +65,8 @@ export const SmartPanel: React.FC<SmartPanelProps> = (props) => {
   const panelRef = panelRefProp || internalPanelRef;
   const listRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const { isPointerInSafeZone, clearSubmenu } = useSafeAim({
-    enabled: enableTriangleAim,
-  });
+  const isPointerInSafeZone = (_pt?: any) => false;
+  const clearSubmenu = () => {};
 
   useWheelIsolation(listRef, open);
 

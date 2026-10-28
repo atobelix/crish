@@ -92,7 +92,7 @@
 }
 
 .clearBtn:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -199,7 +199,7 @@
 
 .chipRemove:hover {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background: var(--state-hover);
 }
 
 /* 关键词高亮 */

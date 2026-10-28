@@ -145,6 +145,7 @@ describe('防回潮门禁：禁止平直容器圆角、设置页越权描边与�
     it('负向：--bg-card 定义（--bg-card:）不得出现在 styles/tokens.css 之外（T-BLK-07c SSOT 收口）', () => {
       const violations = scanCustomPropertyDefinitions('--bg-card', [
         'styles/tokens.css',
+        'styles/tokens-surface.css',
       ]);
       expect(
         violations,

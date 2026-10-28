@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  useId,
 } from 'react';
 import type {
   CSSProperties,
@@ -11,6 +12,7 @@ import type {
   PointerEvent as ReactPointerEvent,
   RefObject,
 } from 'react';
+import { useLayerRegistration } from '../internal/layer-registration/useLayerRegistration';
 import {
   animate,
   useMotionValue,
@@ -204,22 +206,23 @@ export function useDismissListener(
   rootRef: RefObject<HTMLDivElement | null>,
   onDismiss: (returnFocus?: boolean) => void
 ) {
-  useEffect(() => {
-    if (!open) return;
-    const listener = (event: Event) => {
-      if (event instanceof KeyboardEvent && event.key === 'Escape') {
-        onDismiss(!!rootRef.current?.contains(document.activeElement));
-      } else if (!rootRef.current?.contains(event.target as Node)) {
-        onDismiss(false);
-      }
-    };
-    document.addEventListener('pointerdown', listener, true);
-    document.addEventListener('keydown', listener);
-    return () => {
-      document.removeEventListener('pointerdown', listener, true);
-      document.removeEventListener('keydown', listener);
-    };
-  }, [open, rootRef, onDismiss]);
+  const layerId = useId();
+  useLayerRegistration(
+    {
+      id: layerId,
+      type: 'popover',
+      elementRef: rootRef,
+      dismissible: true,
+      onDismiss: (reason) => {
+        onDismiss(reason === 'escape');
+      },
+      onEscapeKeyDown: () => {
+        onDismiss(true);
+        return true;
+      },
+    },
+    Boolean(open)
+  );
 }
 
 export function useFormatMorph(

@@ -16,7 +16,7 @@
   border: none;
   border-radius: var(--radius-row);
   background-color: transparent;
-  color: var(--ink-label, var(--text-secondary));
+  color: var(--text-secondary);
   transition:
     background-color var(--transition-fast),
     color var(--transition-fast);

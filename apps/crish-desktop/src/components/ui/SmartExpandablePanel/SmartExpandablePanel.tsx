@@ -6,7 +6,6 @@ import { SmartPanelList } from './SmartPanelList';
 import { SmartPanelCascadeSubmenu } from './SmartPanelCascadeSubmenu';
 import { filterSmartPanelItems } from './smartPanelFilter';
 import { renderSmartPanelTrigger } from './smartPanelTrigger';
-import { SafeAimEngine } from '../internal/SafeAimEngine';
 import { useLayerRegistration } from '../internal/layer-registration/useLayerRegistration';
 import { layerStackService } from '../internal/layer-stack/LayerStackManager';
 import { shouldSuppressMenuReopen } from '../Menu/menuOpenGuard';
@@ -31,7 +30,6 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   searchPlaceholder = '搜索...',
   enableSearch = false,
   enableDivider = true,
-  enableTriangleAim = true,
   position,
   avoidCollisions = true,
   onCloseAutoFocus,
@@ -45,6 +43,8 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   triggerMode = 'click',
   renderItem,
   children,
+  panelRef: externalPanelRef,
+  dataTestId,
 }) => {
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = externalOpen !== undefined;
@@ -83,8 +83,13 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   }, []);
 
   const safeAim = useMemo(
-    () => SafeAimEngine.getInstance({ enabled: enableTriangleAim }),
-    [enableTriangleAim]
+    () => ({
+      clearSubmenu: () => {},
+      isPointerInSafeZone: (_pos?: any, _side?: any) => false,
+      getRecentMousePos: () => ({ x: 0, y: 0 }),
+      setSubmenu: (..._args: any[]) => {},
+    }),
+    []
   );
   const dialogOverlay = React.useContext(DialogOverlayContext);
 
@@ -161,6 +166,10 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
 
   const handleContentMouseEnter = useCallback(() => {
     clearHoverTimers();
+    if (safeAimTimeoutRef.current) {
+      clearTimeout(safeAimTimeoutRef.current);
+      safeAimTimeoutRef.current = null;
+    }
   }, [clearHoverTimers]);
 
   const handleContentMouseLeave = useCallback(() => {
@@ -206,6 +215,7 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
         safeAim.clearSubmenu();
       },
       elementRef: cascadeSubmenuRef,
+      anchorRef: contentRef,
     },
     Boolean(isOpen && activeSubmenu?.children && submenuStyle)
   );
@@ -239,30 +249,50 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
         const itemRect = el.getBoundingClientRect();
         const panelRect =
           contentRef.current?.getBoundingClientRect() ?? itemRect;
+        const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
+        const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
         const estWidth = estimateCascadeWidth(item.children);
         const estHeight = estimateCascadeHeight(item.children);
         const placed = placeCascadeSubmenu(
           panelRect,
           itemRect.top,
           estWidth,
-          estHeight
+          estHeight,
+          vw,
+          vh
         );
 
         setActiveSubmenu(item);
         setSubmenuSide(placed.side);
         setSubmenuStyle(cascadeStyle(placed));
 
+        // 帧 0 立即激活 Safe Aim 保护区，消除 16~32ms rAF 异步时间黑洞导致的斜切闪退
+        safeAim.setSubmenu(el, null, placed.side, {
+          left: placed.left,
+          top: placed.top,
+          right: placed.left + estWidth,
+          bottom: placed.top + estHeight,
+          width: estWidth,
+          height: estHeight,
+        });
+
         // 按真实宽高同步校准，短菜单贴着触发行，长菜单视口钳制
         requestAnimationFrame(() => {
           const sub = cascadeSubmenuRef.current;
           const panel = contentRef.current;
           if (!sub || !panel) return;
-          const box = readCascadeSize(sub, estHeight);
+          const curVw =
+            typeof window !== 'undefined' ? window.innerWidth : 1280;
+          const curVh =
+            typeof window !== 'undefined' ? window.innerHeight : 800;
+          const box = readCascadeSize(sub, estHeight, curVw, curVh);
           const next = placeCascadeSubmenu(
             panel.getBoundingClientRect(),
             itemRect.top,
             box.width,
-            box.height
+            box.height,
+            curVw,
+            curVh
           );
           setSubmenuSide(next.side);
           setSubmenuStyle(cascadeStyle(next));
@@ -307,8 +337,14 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
         return;
       }
 
-      setActiveSubmenu(null);
-      safeAim.clearSubmenu();
+      // 给予 150ms 缓冲防抖，避免光标微颤擦边相邻项时被 0ms 瞬间秒杀
+      if (!safeAimTimeoutRef.current) {
+        safeAimTimeoutRef.current = setTimeout(() => {
+          setActiveSubmenu(null);
+          safeAim.clearSubmenu();
+          safeAimTimeoutRef.current = null;
+        }, 150);
+      }
     },
     [activeSubmenu, safeAim, submenuSide]
   );
@@ -354,7 +390,15 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
       {renderedTrigger}
       <Popover.Portal container={dialogOverlay ?? undefined}>
         <Popover.Content
-          ref={contentRef}
+          ref={(node) => {
+            (contentRef as any).current = node;
+            if (externalPanelRef) {
+              if (typeof externalPanelRef === 'function')
+                (externalPanelRef as any)(node);
+              else (externalPanelRef as any).current = node;
+            }
+          }}
+          data-testid={dataTestId}
           align={align}
           side={side}
           sideOffset={sideOffset}
@@ -415,6 +459,7 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
                 items={filteredItems}
                 enableDivider={enableDivider}
                 query={query}
+                activeSubmenuId={activeSubmenu?.id}
                 renderItem={renderItem}
                 onSelect={(item, _ev) => {
                   onSelect?.(item);

@@ -13,20 +13,37 @@
 import { useEffect, useRef } from 'react';
 import {
   layerStackService,
+  useLayerContext,
   type LayerRegistration,
   type DismissReason,
 } from '../layer-stack/LayerStackService';
 
+export {
+  LayerContext,
+  LayerProvider,
+  useLayerContext,
+  type LayerContextValue,
+  type LayerProviderProps,
+} from '../layer-stack/LayerStackService';
+
 /**
  * 注册标准 UI 浮层 Hook
- * 采用 dynamic getter 与 Ref 同步，消除 React StrictMode 与初始挂载阶段的 Stale Ref 缺陷
+ * 采用 dynamic getter 与 Ref 同步，消除 React StrictMode 与初始挂载阶段的 Stale Ref 缺陷。
+ * 自动从 LayerContext 继承父级 layerId（若未显式指定 parentId）。
  */
 export function useLayerRegistration(
   layer: Omit<LayerRegistration, 'mountedAt'>,
   active = true
 ): void {
+  const parentContext = useLayerContext();
+  const effectiveParentId =
+    layer.parentId ?? parentContext.layerId ?? undefined;
+
   const layerRef = useRef(layer);
-  layerRef.current = layer;
+  layerRef.current = {
+    ...layer,
+    parentId: effectiveParentId,
+  };
 
   useEffect(() => {
     if (!active) return;
@@ -34,7 +51,8 @@ export function useLayerRegistration(
     const unregister = layerStackService.register({
       id: layer.id,
       type: layer.type,
-      parentId: layer.parentId,
+      tier: layer.tier,
+      parentId: effectiveParentId,
       get elementRef() {
         return layerRef.current.elementRef;
       },
@@ -61,7 +79,7 @@ export function useLayerRegistration(
     });
 
     return unregister;
-  }, [active, layer.id, layer.type, layer.parentId]);
+  }, [active, layer.id, layer.type, layer.tier, effectiveParentId]);
 }
 
 /**

@@ -1,5 +1,5 @@
 /**
- * ui/Badge 原子徽标组件（P4 T-P4-03 就地升级）
+ * ui/Badge 原子徽标组件（CVA 架构升级版 / React 19 纯函数）
  *
  * 遵循展示型容器 0 描边铁律（border: none），
  * 圆角采用角色圆角 --radius-row (6px)，
@@ -9,17 +9,46 @@
  * 分层契约：本组件只依赖 react 与 CSS 变量，严禁反向依赖任何业务模块。
  */
 import React from 'react';
+import { cva, cn, type VariantProps } from '../internal/cn';
 import styles from './Badge.module.css';
 import { ICON_STROKE } from '../icons/iconTokens';
+
+export const badgeVariants = cva(styles.badge, {
+  variants: {
+    tone: {
+      neutral: styles.toneNeutral,
+      accent: styles.toneAccent,
+      warning: styles.toneWarning,
+      danger: styles.toneDanger,
+      success: styles.toneSuccess,
+      brand: styles.toneBrand ?? styles.toneAccent,
+      info: styles.toneInfo ?? styles.toneNeutral,
+      error: styles.toneDanger,
+    },
+    size: {
+      xs: styles.sizeXs,
+      sm: styles.sizeSm,
+      md: styles.sizeMd,
+    },
+  },
+  defaultVariants: {
+    tone: 'neutral',
+    size: 'sm',
+  },
+});
 
 export type StandardBadgeTone =
   'neutral' | 'accent' | 'warning' | 'danger' | 'success';
 
 export type BadgeTone = StandardBadgeTone | 'brand' | 'info' | 'error';
 
-export type BadgeSize = 'xs' | 'sm' | 'md';
+export type BadgeSize = NonNullable<VariantProps<typeof badgeVariants>['size']>;
 
-export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
+export interface BadgeProps
+  extends
+    React.HTMLAttributes<HTMLSpanElement>,
+    VariantProps<typeof badgeVariants> {
+  ref?: React.Ref<HTMLSpanElement>;
   /** 严格受限的语义 tone：neutral / accent / warning / danger / success（兼容旧 brand/info/error 别名） */
   tone?: BadgeTone;
   /** 兼容 variant 别名 */
@@ -36,92 +65,65 @@ export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   removeAriaLabel?: string;
 }
 
-const TONE_CLASS_MAP: Record<BadgeTone, string | undefined> = {
-  neutral: styles.toneNeutral,
-  accent: styles.toneAccent,
-  warning: styles.toneWarning,
-  danger: styles.toneDanger,
-  success: styles.toneSuccess,
-  brand: styles.toneBrand ?? styles.toneAccent,
-  info: styles.toneInfo ?? styles.toneNeutral,
-  error: styles.toneDanger,
-};
+export function Badge({
+  ref,
+  tone,
+  variant,
+  size = 'sm',
+  dot = false,
+  icon,
+  onRemove,
+  removeAriaLabel = '移除',
+  className,
+  children,
+  ...restProps
+}: BadgeProps) {
+  const rawTone: BadgeTone = tone ?? variant ?? 'neutral';
 
-const SIZE_CLASS_MAP: Record<BadgeSize, string | undefined> = {
-  xs: styles.sizeXs,
-  sm: styles.sizeSm,
-  md: styles.sizeMd,
-};
+  const resolvedClassName = cn(
+    badgeVariants({ tone: rawTone, size }),
+    className
+  );
 
-export const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
-  function Badge(
-    {
-      tone,
-      variant,
-      size = 'sm',
-      dot = false,
-      icon,
-      onRemove,
-      removeAriaLabel = '移除',
-      className,
-      children,
-      ...restProps
-    },
-    ref
-  ) {
-    const rawTone: BadgeTone = tone ?? variant ?? 'neutral';
-
-    const classNames = [
-      styles.badge,
-      TONE_CLASS_MAP[rawTone],
-      SIZE_CLASS_MAP[size],
-      className,
-    ]
-      .filter(Boolean)
-      .join(' ');
-
-    return (
-      <span
-        ref={ref}
-        className={classNames}
-        data-tone={rawTone}
-        data-size={size}
-        {...restProps}
-      >
-        {dot && <span className={styles.dot} aria-hidden="true" />}
-        {icon && (
-          <span className={styles.icon} aria-hidden="true">
-            {icon}
-          </span>
-        )}
-        {children != null && <span className={styles.label}>{children}</span>}
-        {onRemove && (
-          <button
-            type="button"
-            className={styles.removeButton}
-            aria-label={removeAriaLabel}
-            onClick={() => {
-              onRemove();
-            }}
+  return (
+    <span
+      ref={ref}
+      className={resolvedClassName}
+      data-tone={rawTone}
+      data-size={size}
+      {...restProps}
+    >
+      {dot && <span className={styles.dot} aria-hidden="true" />}
+      {icon && (
+        <span className={styles.icon} aria-hidden="true">
+          {icon}
+        </span>
+      )}
+      {children != null && <span className={styles.label}>{children}</span>}
+      {onRemove && (
+        <button
+          type="button"
+          className={styles.removeButton}
+          aria-label={removeAriaLabel}
+          onClick={() => {
+            onRemove();
+          }}
+        >
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={ICON_STROKE.ui}
+            strokeLinecap="round"
+            aria-hidden="true"
           >
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={ICON_STROKE.ui}
-              strokeLinecap="round"
-              aria-hidden="true"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        )}
-      </span>
-    );
-  }
-);
-
-Badge.displayName = 'Badge';
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      )}
+    </span>
+  );
+}

@@ -8,23 +8,35 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const css = readFileSync(resolve(__dirname, 'tokens.css'), 'utf8').replace(
+const rawCss = readFileSync(resolve(__dirname, 'tokens.css'), 'utf8').replace(
   /\r\n/g,
   '\n'
 );
-const block = (selectorStart: string): string => {
-  const i = css.indexOf(selectorStart);
-  expect(i, selectorStart).toBeGreaterThanOrEqual(0);
-  const open = css.indexOf('{', i);
-  let depth = 0;
-  for (let k = open; k < css.length; k++) {
-    if (css[k] === '{') depth++;
-    else if (css[k] === '}' && --depth === 0) return css.slice(open, k + 1);
+let light = '';
+let dark = '';
+if (rawCss.includes('@import')) {
+  const imports = [...rawCss.matchAll(/@import\s+['"]\.\/([^'"]+)['"];/g)].map(
+    (m) => m[1]
+  );
+  for (const file of imports) {
+    const fcontent = readFileSync(resolve(__dirname, file), 'utf8').replace(
+      /\r\n/g,
+      '\n'
+    );
+    const dStart = fcontent.indexOf("html[data-theme='dark']");
+    if (dStart !== -1) {
+      light += '\n' + fcontent.slice(0, dStart);
+      dark += '\n' + fcontent.slice(dStart);
+    } else {
+      light += '\n' + fcontent;
+    }
   }
-  throw new Error('unterminated block');
-};
-const light = block(":root,\nhtml[data-theme='default']");
-const dark = block("html[data-theme='dark']");
+} else {
+  const darkStart = rawCss.indexOf("html[data-theme='dark'] {");
+  light = rawCss.slice(0, darkStart);
+  dark = rawCss.slice(darkStart);
+}
+const css = `${light}\n${dark}`;
 const decl = (b: string, name: string): string | null =>
   b
     .match(new RegExp(`\\n\\s*${name}:\\s*([^;]+);`))?.[1]
@@ -71,7 +83,7 @@ describe('三档底色契约', () => {
 
     it(`${theme}: 旧 surface/bg 别名全部落在三档上`, () => {
       const tier =
-        /^var\(--(surface-(outer|main|input|chrome|paper|card|elevated|sunken)|bg-(primary|secondary|card|tertiary))\)/;
+        /^var\(--(surface-(outer|main|input|chrome|paper|card|elevated|sunken|overlay)|bg-(primary|secondary|card|tertiary))\)/;
       for (const name of [
         '--surface-chrome',
         '--surface-paper',
@@ -93,30 +105,41 @@ describe('三档底色契约', () => {
     });
 
     it(`${theme}: hover/active 是统一叠加`, () => {
-      for (const name of [
-        '--bg-hover',
-        '--control-soft-bg',
-        '--control-soft-bg-hover',
-      ]) {
+      // 验证 hover / active / selected 统一叠加到正典 --state-* (SSOT)
+      expect(decl(b, '--state-hover'), `${theme} --state-hover`).toBe(
+        'color-mix(in srgb, var(--text-primary) var(--state-hover-pct), transparent)'
+      );
+      expect(decl(b, '--state-active'), `${theme} --state-active`).toBe(
+        'color-mix(in srgb, var(--text-primary) var(--state-active-pct), transparent)'
+      );
+      expect(decl(b, '--state-selected'), `${theme} --state-selected`).toBe(
+        'color-mix(in srgb, var(--text-primary) var(--state-selected-pct), transparent)'
+      );
+
+      // 组件 hover/active 统一收敛至正典 state tokens
+      for (const [name, expected] of [
+        ['--filetree-node-hover-bg', 'var(--state-hover)'],
+        ['--artifact-btn-hover-bg', 'var(--state-hover)'],
+        ['--artifact-btn-active-bg', 'var(--state-active)'],
+        ['--md-code-copy-hover-bg', 'var(--state-hover)'],
+        ['--md-table-row-hover-bg', 'var(--state-hover)'],
+      ] as const) {
         expect(decl(b, name) ?? decl(light, name), `${theme} ${name}`).toBe(
-          'var(--tint-hover)'
+          expected
         );
       }
-      // 卡片 hover/active 与 tint 同为「text-primary 透明叠加」，保留补丁前增量
-      for (const name of [
-        '--bg-card-hover',
-        '--bg-card-active',
-        '--tint-hover',
-        '--tint-active',
-      ]) {
-        expect(decl(b, name), `${theme} ${name}`).toMatch(
-          /^(color-mix\(in srgb, var\(--text-primary\) [\d.]+%, transparent\)|var\(--elevate-1(-active)?\))$/
-        );
-      }
+
+      // 卡片 hover/active 属于 text-primary 透明叠加
+      expect(decl(light, '--bg-card-hover')).toMatch(
+        /^color-mix\(in srgb, var\(--text-primary\) [\d.]+%, transparent\)$/
+      );
+      expect(decl(light, '--bg-card-active')).toMatch(
+        /^color-mix\(in srgb, var\(--text-primary\) [\d.]+%, transparent\)$/
+      );
     });
   }
 
-  it('浅色三档 = heson 实测值；激活标签 = 输入档', () => {
+  it('浅色三档 = heson 实测值；激活态正典接线', () => {
     // T-BLK-07b：字面实测值现在钉在 --user-surface-* 参数声明上
     expect(decl(light, '--user-surface-outer')).toBe('#f7f6f5');
     expect(decl(light, '--user-bubble-bg')).toBe(
@@ -129,35 +152,36 @@ describe('三档底色契约', () => {
     expect(decl(light, '--user-surface-main')).toBe('#ffffff');
     expect(decl(light, '--user-surface-input')).toBe('#ffffff');
     expect(decl(light, '--tab-active-bg')).toBe('var(--surface-input)');
-    // 深色元素底色：一律「所在层 + 提亮墨」派生，随皮肤走，纯净不偏色（2026-10-12 净化收敛）
-    expect(decl(dark, '--element-ink')).toBe('var(--user-text-primary)');
-    // 深色元素提亮阶梯：全部是 element-ink 透明叠加（任何层上相对增量一致）
-    // 阶梯值集中在 --elevate-step-*：只断言结构与单调递增，不钉死百分比（heson 会逐步微调）
-    for (const s of ['1', '1-active', '2', '3']) {
-      expect(decl(dark, `--elevate-${s}`)).toBe(
-        'color-mix(in srgb, var(--element-ink) var(' +
-          `--elevate-step-${s}), transparent)`
+
+    // 状态透明叠加阶梯单调递增验证（纯净轻中性微光，严禁倒挂）
+    for (const [theme, b] of [
+      ['light', light],
+      ['dark', dark],
+    ] as const) {
+      const hoverPct = parseFloat(decl(b, '--state-hover-pct') ?? 'NaN');
+      const activePct = parseFloat(decl(b, '--state-active-pct') ?? 'NaN');
+      const selectedPct = parseFloat(decl(b, '--state-selected-pct') ?? 'NaN');
+      expect(hoverPct, `${theme} hover < active`).toBeLessThan(activePct);
+      expect(activePct, `${theme} active <= selected`).toBeLessThanOrEqual(
+        selectedPct
       );
     }
-    const pct = (s: string) =>
-      parseFloat(decl(dark, `--elevate-step-${s}`) ?? 'NaN');
-    expect(pct('1')).toBeLessThan(pct('1-active'));
-    expect(pct('1-active')).toBeLessThan(pct('2'));
-    expect(pct('2')).toBeLessThan(pct('3'));
-    for (const [n, step] of [
-      ['--tint-hover', 1],
-      ['--bg-card-hover', 1],
-      ['--composer-control-hover-bg', 1],
-      ['--filetree-node-hover-bg', 1],
-      ['--tint-active', '1-active'],
-      ['--bg-card-active', '1-active'],
-      ['--button-secondary-bg', 2],
-      ['--tab-active-bg', 3],
-      ['--seg-slider-bg', 3],
-      ['--sidebar-active', 3],
+
+    // 深色激活态正典接线：收敛至 --state-selected 与 --state-active
+    for (const [n, expected] of [
+      ['--tab-active-bg', 'var(--state-selected)'],
+      ['--seg-slider-bg', 'var(--state-selected)'],
+      ['--sidebar-active', 'var(--state-selected)'],
+      ['--button-secondary-bg', 'var(--state-active)'],
     ] as const) {
-      expect(decl(dark, n), n).toBe('var(' + `--elevate-${step}` + ')');
+      expect(decl(dark, n), n).toBe(expected);
     }
+
+    // 浅色激活态正典接线
+    expect(decl(light, '--seg-slider-bg')).toBe('var(--surface-input)');
+    expect(decl(light, '--button-secondary-bg')).toBe('var(--bg-card)');
+
+    // 动态层底色严禁硬编码字面颜色
     for (const n of [
       '--user-bubble-bg',
       '--tab-active-bg',
@@ -166,8 +190,6 @@ describe('三档底色契约', () => {
     ]) {
       expect(decl(dark, n), n).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(|hsl\(/i);
     }
-    expect(decl(light, '--seg-slider-bg')).toBe('var(--surface-input)');
-    expect(decl(light, '--button-secondary-bg')).toBe('var(--bg-card)');
   });
 
   it('布局模型：通底 = 外层，输入框 = 输入档；渐变只引用主层 token', () => {

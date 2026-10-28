@@ -133,13 +133,13 @@
 
 .item:hover:not(.itemDisabled),
 .itemHighlighted:not(.itemDisabled) {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
 .itemSelected,
 .item[aria-selected='true'] {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium);
 }
@@ -251,7 +251,7 @@
 @media (prefers-reduced-motion: reduce) {
   .content {
     animation: none;
-    transition: opacity 100ms ease;
+    transition: opacity var(--duration-micro) var(--ease-standard);
   }
 }
 

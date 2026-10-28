@@ -15,7 +15,6 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useAnimatedPresence } from '../Dialog/useAnimatedPresence';
-import { SafeTriangleTracker } from '../internal/SafeTriangle';
 import {
   isValidDOMRect,
   isTriggerOffscreen,
@@ -296,7 +295,6 @@ export const PreviewCardTrigger = forwardRef<
     disabled,
     cardId,
     contentEl,
-    effectiveSide,
   } = usePreviewCardContext();
 
   const showTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -304,9 +302,6 @@ export const PreviewCardTrigger = forwardRef<
   );
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined
-  );
-  const safeAimTrackerRef = useRef<SafeTriangleTracker>(
-    new SafeTriangleTracker(300)
   );
   const triggerRef = useRef<HTMLElement | null>(null);
   const isOpenRef = useRef(isOpen);
@@ -342,7 +337,6 @@ export const PreviewCardTrigger = forwardRef<
   useEffect(() => {
     return () => {
       clearTimers();
-      safeAimTrackerRef.current.reset();
     };
   }, [clearTimers]);
 
@@ -370,7 +364,7 @@ export const PreviewCardTrigger = forwardRef<
     scheduleOpen(e.currentTarget);
   };
 
-  const handleMouseLeave = (e: React.MouseEvent<HTMLElement>) => {
+  const handleMouseLeave = () => {
     if (showTimerRef.current) {
       clearTimeout(showTimerRef.current);
       showTimerRef.current = undefined;
@@ -381,33 +375,10 @@ export const PreviewCardTrigger = forwardRef<
       return;
     }
 
-    // Safe-Aim 保护锥形区检测
-    const cursor = { x: e.clientX, y: e.clientY };
-    const contentRect = contentEl.getBoundingClientRect();
-    safeAimTrackerRef.current.enter(cursor, contentRect, effectiveSide);
-
-    if (mouseMoveListenerRef.current) {
-      window.removeEventListener('mousemove', mouseMoveListenerRef.current);
-    }
-
-    const onWindowMouseMove = (moveEvent: MouseEvent) => {
-      const p = { x: moveEvent.clientX, y: moveEvent.clientY };
-      if (safeAimTrackerRef.current.check(p)) {
-        return;
-      }
-      // 离开安全区：移除监听并启动 hideTimer
-      if (mouseMoveListenerRef.current) {
-        window.removeEventListener('mousemove', mouseMoveListenerRef.current);
-        mouseMoveListenerRef.current = null;
-      }
-      hideTimerRef.current = setTimeout(() => {
-        hideTimerRef.current = undefined;
-        setIsOpen(false);
-      }, delayHide);
-    };
-
-    mouseMoveListenerRef.current = onWindowMouseMove;
-    window.addEventListener('mousemove', onWindowMouseMove);
+    hideTimerRef.current = setTimeout(() => {
+      hideTimerRef.current = undefined;
+      setIsOpen(false);
+    }, delayHide);
   };
 
   const handleFocus = (e: React.FocusEvent<HTMLElement>) => {
@@ -464,7 +435,7 @@ export const PreviewCardTrigger = forwardRef<
         restProps.onMouseLeave as
           ((e: React.MouseEvent<HTMLElement>) => void) | undefined
       )?.(e);
-      handleMouseLeave(e);
+      handleMouseLeave();
     },
     onFocus: (e: React.FocusEvent<HTMLElement>) => {
       (

@@ -19,27 +19,21 @@
   box-sizing: border-box;
   padding: 6px;
   border-radius: 18px;
-  border: 1px solid
-    var(--border-panel, var(--border-color, rgba(255, 255, 255, 0.08)));
+  border: 1px solid var(--border-color);
   background: var(--surface-overlay);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  box-shadow: var(
-    --shadow-popover,
-    var(
-      --shadow-lg,
-      0 14px 36px -6px rgba(0, 0, 0, 0.45),
-      0 0 0 1px rgba(255, 255, 255, 0.05)
-    )
-  );
+  box-shadow: var(--shadow-popover);
   outline: none;
   font-family: inherit;
-  color: var(--text-primary, #ffffff);
+  color: var(--text-primary);
   user-select: none;
   transform-origin: var(--transform-origin, top left);
   transition:
-    opacity 150ms cubic-bezier(0.16, 1, 0.3, 1),
-    scale 150ms cubic-bezier(0.16, 1, 0.3, 1);
+    opacity var(--duration-normal, 150ms)
+      var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
+    scale var(--duration-normal, 150ms)
+      var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
   will-change: transform, opacity, scale;
 }
 
@@ -65,14 +59,7 @@
 .subContent {
   composes: content;
   z-index: calc(var(--z-popover) + 1);
-  box-shadow: var(
-    --shadow-popover,
-    var(
-      --shadow-xl,
-      0 18px 42px -8px rgba(0, 0, 0, 0.55),
-      0 0 0 1px rgba(255, 255, 255, 0.06)
-    )
-  );
+  box-shadow: var(--shadow-popover);
 }
 
 /* 尺寸规格扩展 */
@@ -115,31 +102,27 @@
   font-size: 13px;
   font-weight: 450;
   line-height: 1.4;
-  color: var(--text-primary, #ffffff);
+  color: var(--text-primary);
   cursor: pointer;
   outline: none;
   border: 1px solid transparent;
   background-color: transparent;
   transition:
-    background-color 100ms ease,
-    color 100ms ease,
-    border-color 100ms ease;
+    background-color var(--duration-micro, 100ms) var(--ease-standard),
+    color var(--duration-micro, 100ms) var(--ease-standard),
+    border-color var(--duration-micro, 100ms) var(--ease-standard);
   user-select: none;
 }
 
 .item:focus-visible,
 .item[data-highlighted='true'] {
-  background-color: var(--tint-hover, rgba(255, 255, 255, 0.08));
-  color: var(--text-primary, #ffffff);
-  border-color: color-mix(
-    in srgb,
-    var(--border-color, rgba(255, 255, 255, 0.1)) 94%,
-    var(--text-primary, #ffffff) 6%
-  );
+  background-color: var(--state-hover);
+  color: var(--text-primary);
+  border-color: var(--edge-focus);
 }
 
 .item:hover:not([data-disabled='true']) {
-  background-color: var(--tint-hover, rgba(255, 255, 255, 0.08));
+  background-color: var(--state-hover);
 }
 
 .item[data-disabled='true'] {
@@ -151,20 +134,16 @@
 /* 危险操作项 */
 .item[data-variant='danger'],
 .item[data-variant='destructive'] {
-  color: var(--color-danger, #ff453a);
+  color: var(--color-danger);
 }
 
 .item[data-variant='danger']:focus-visible,
 .item[data-variant='danger'][data-highlighted='true'],
 .item[data-variant='destructive']:focus-visible,
 .item[data-variant='destructive'][data-highlighted='true'] {
-  background-color: var(--color-danger-subtle, rgba(255, 69, 58, 0.14));
-  color: var(--color-danger, #ff453a);
-  border-color: color-mix(
-    in srgb,
-    var(--color-danger, #ff453a) 25%,
-    transparent
-  );
+  background-color: var(--danger-soft-bg);
+  color: var(--color-danger);
+  border-color: var(--color-error-border);
 }
 
 /* Inset 缩进对齐 */
@@ -181,7 +160,7 @@
   left: 8px;
   width: 16px;
   height: 16px;
-  color: var(--text-primary, #ffffff);
+  color: var(--text-primary);
   pointer-events: none;
 }
 
@@ -209,13 +188,13 @@
   margin-left: auto;
   width: 14px;
   height: 14px;
-  color: var(--text-tertiary, rgba(255, 255, 255, 0.45));
+  color: var(--text-tertiary);
   pointer-events: none;
-  transition: transform 120ms ease;
+  transition: transform var(--duration-fast, 120ms) var(--ease-standard);
 }
 
 .item[data-highlighted='true'] .subTriggerIcon {
-  color: var(--text-primary, #ffffff);
+  color: var(--text-primary);
 }
 
 /* 快捷键徽标 */
@@ -232,7 +211,7 @@
     Consolas,
     monospace
   );
-  color: var(--text-tertiary, rgba(255, 255, 255, 0.45));
+  color: var(--text-tertiary);
   letter-spacing: 0.05em;
   user-select: none;
 }
@@ -241,7 +220,7 @@
 .separator {
   height: 1px;
   margin: 4px 2px;
-  background-color: var(--border-color, rgba(255, 255, 255, 0.08));
+  background-color: var(--border-subtle);
   box-sizing: border-box;
 }
 
@@ -257,7 +236,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text-tertiary, rgba(255, 255, 255, 0.45));
+  color: var(--text-tertiary);
   user-select: none;
 }
 

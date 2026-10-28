@@ -425,7 +425,7 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
     expect(blackRingViolation.length).toBeGreaterThan(0);
 
     const cleanButtonActive = analyzeButtonActiveBorder(`
-      background-color: var(--tint-hover);
+      background-color: var(--state-hover);
       border-color: var(--border-subtle);
     `);
     expect(cleanButtonActive).toEqual([]);

@@ -29,12 +29,22 @@
   text-overflow: ellipsis;
   user-select: text;
   cursor: default;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition:
+    border-color var(--duration-normal, 150ms) var(--ease-standard),
+    background-color var(--duration-normal, 150ms) var(--ease-standard);
 }
 
 .capsule:hover {
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
-  background: color-mix(in srgb, var(--surface-scrim) 90%, var(--surface-chrome));
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 90%,
+    var(--text-primary) 10%
+  );
+  background: color-mix(
+    in srgb,
+    var(--surface-scrim) 90%,
+    var(--surface-chrome)
+  );
 }
 
 /* 状态小圆点 */

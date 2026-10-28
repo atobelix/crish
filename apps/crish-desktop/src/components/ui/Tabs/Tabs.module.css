@@ -4,7 +4,7 @@
 
 /* ── 1. 基础变量与尺寸几何映射 ── */
 .root {
-  --tab-spring-bezier: cubic-bezier(0.2, 0, 0, 1);
+  --tab-spring-bezier: var(--ease-spring);
   --tab-duration: 250ms;
 
   display: flex;
@@ -122,7 +122,7 @@
     transform var(--tab-duration) var(--tab-spring-bezier),
     width var(--tab-duration) var(--tab-spring-bezier),
     height var(--tab-duration) var(--tab-spring-bezier),
-    opacity 120ms ease;
+    opacity var(--duration-fast) var(--ease-standard);
 }
 
 /* pill 滑块：纯白卡片 + 发丝边框 + 柔和低空微阴影 */
@@ -131,9 +131,7 @@
   background-color: var(--bg-card);
   background-color: var(--tab-active-bg, var(--bg-card));
   border: none;
-  box-shadow:
-    0 1px 2px hsl(0 0% 0% / 0.05),
-    0 1px 1px hsl(0 0% 0% / 0.02);
+  box-shadow: var(--shadow-sm);
 }
 
 /* line 滑块：圆角高光线条 */
@@ -173,7 +171,7 @@
   white-space: nowrap;
   outline: none;
   box-sizing: border-box;
-  transition: color 120ms ease;
+  transition: color var(--duration-fast) var(--ease-standard);
 }
 
 .list[data-block='true'] .trigger {
@@ -228,10 +226,10 @@
   position: absolute;
   inset: 0;
   border-radius: var(--tab-inner-radius);
-  background-color: var(--tint-hover);
+  background-color: var(--state-hover);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 120ms ease;
+  transition: opacity var(--duration-fast) var(--ease-standard);
 }
 
 .triggerIcon {
@@ -257,7 +255,7 @@
   line-height: 1;
   padding: 1px 4px;
   border-radius: var(--radius-sm);
-  background-color: var(--tint-strong);
+  background-color: var(--state-strong);
   color: var(--text-tertiary);
 }
 

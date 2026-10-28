@@ -8,7 +8,7 @@ import React, {
 import {
   AnimatePresence,
   animate,
-  motion,
+  m,
   useReducedMotion,
   type AnimationPlaybackControls,
 } from 'motion/react';
@@ -155,7 +155,7 @@ export function TextMorph({
             {glyphs.map(({ char, key }) => {
               const order = kept.has(key) ? 0 : entering++;
               return (
-                <motion.span
+                <m.span
                   key={key}
                   layout="position"
                   className={styles.glyph}
@@ -200,7 +200,7 @@ export function TextMorph({
                   }
                 >
                   {char === ' ' ? '\u00a0' : char}
-                </motion.span>
+                </m.span>
               );
             })}
           </AnimatePresence>

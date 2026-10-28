@@ -18,6 +18,11 @@ import type {
   RegisteredItemData,
 } from './types';
 import { extractItemsFromChildren } from './internal/extractChildrenItems';
+import {
+  useLayerRegistration,
+  LayerProvider,
+  useLayerContext,
+} from '../internal/layer-registration/useLayerRegistration';
 
 export function SelectRoot({
   value: controlledValue,
@@ -41,9 +46,9 @@ export function SelectRoot({
   options,
   children,
 }: SelectRootProps) {
-  const [uncontrolledVal, setUncontrolledVal] = useState<string | string[] | null>(
-    defaultValue ?? (multiple ? [] : null)
-  );
+  const [uncontrolledVal, setUncontrolledVal] = useState<
+    string | string[] | null
+  >(defaultValue ?? (multiple ? [] : null));
   const isValControlled = controlledValue !== undefined;
   const value = isValControlled ? controlledValue : uncontrolledVal;
 
@@ -79,6 +84,26 @@ export function SelectRoot({
 
   const triggerRef = useRef<HTMLElement | null>(null);
   const contentRef = useRef<HTMLElement | null>(null);
+
+  const parentLayer = useLayerContext();
+
+  useLayerRegistration(
+    {
+      id: listboxId,
+      type: 'select',
+      parentId: parentLayer.layerId ?? undefined,
+      dismissible: true,
+      elementRef: contentRef,
+      anchorRef: triggerRef,
+      onDismiss: () => handleOpenChange(false),
+      onEscapeKeyDown: () => {
+        handleOpenChange(false);
+        (triggerRef.current as HTMLElement | null)?.focus();
+        return true;
+      },
+    },
+    Boolean(open)
+  );
 
   const [items, setItems] = useState<RegisteredItemData[]>([]);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
@@ -116,7 +141,12 @@ export function SelectRoot({
   }, [options, children]);
 
   const registerItem = useCallback(
-    (itemId: string, itemValue: string, itemDisabled = false, itemLabel = '') => {
+    (
+      itemId: string,
+      itemValue: string,
+      itemDisabled = false,
+      itemLabel = ''
+    ) => {
       const newItem: RegisteredItemData = {
         id: itemId,
         value: itemValue,
@@ -242,14 +272,22 @@ export function SelectRoot({
 
   // 快捷 options 渲染或复合 children 渲染
   const currentSelectedOption =
-    options && typeof value === 'string' ? options.find((o) => o.id === value) : undefined;
+    options && typeof value === 'string'
+      ? options.find((o) => o.id === value)
+      : undefined;
 
   const content = children ?? (
     <>
       <SelectTrigger className={className}>
         <SelectValue placeholder={placeholder}>
           {currentSelectedOption ? (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
               {currentSelectedOption.icon && (
                 <span style={{ display: 'inline-flex', alignItems: 'center' }}>
                   {currentSelectedOption.icon}
@@ -260,7 +298,11 @@ export function SelectRoot({
           ) : null}
         </SelectValue>
       </SelectTrigger>
-      <SelectContent align={align} side={side} portalContainer={portalContainer}>
+      <SelectContent
+        align={align}
+        side={side}
+        portalContainer={portalContainer}
+      >
         {options?.map((opt) => (
           <SelectItem
             key={opt.id}
@@ -278,7 +320,9 @@ export function SelectRoot({
 
   return (
     <SelectContext.Provider value={contextValue}>
-      {content}
+      <LayerProvider layerId={listboxId} tier="popover">
+        {content}
+      </LayerProvider>
     </SelectContext.Provider>
   );
 }

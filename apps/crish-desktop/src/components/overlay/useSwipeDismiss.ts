@@ -107,16 +107,12 @@ export function useSwipeDismiss({
       const isDismissedX =
         (Math.abs(x) >= threshold ||
           (Math.abs(x) >= minFlingDistance && vx > 0.45)) &&
-        (x > 0
-          ? allowedAxes.includes('right')
-          : allowedAxes.includes('left'));
+        (x > 0 ? allowedAxes.includes('right') : allowedAxes.includes('left'));
 
       const isDismissedY =
         (Math.abs(y) >= threshold ||
           (Math.abs(y) >= minFlingDistance && vy > 0.45)) &&
-        (y > 0
-          ? allowedAxes.includes('down')
-          : allowedAxes.includes('up'));
+        (y > 0 ? allowedAxes.includes('down') : allowedAxes.includes('up'));
 
       const isDismissed = isDismissedX || isDismissedY;
 

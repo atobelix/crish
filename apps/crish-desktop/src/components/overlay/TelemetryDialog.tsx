@@ -7,7 +7,7 @@
  */
 import { useMemo } from 'react';
 import { telemetry } from '../../services/TelemetryService';
-import { Button, Dialog } from '../ui';
+import { Button, Dialog } from '@/components/ui';
 import styles from './TelemetryDialog.module.css';
 
 interface TelemetryDialogProps {

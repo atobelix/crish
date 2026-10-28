@@ -58,11 +58,10 @@ describe('ui/Dialog', () => {
   it('渲染到 body portal，带 dialog 角色与 aria-modal', () => {
     render(<DialogHarness title="设置" />);
     const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveAttribute('role', 'dialog');
     expect(dialog).toHaveAttribute('aria-modal', 'true');
-    // portal 结构：body > FocusTrap 容器 > 遮罩壳 > 面板
-    expect(dialog.parentElement?.parentElement?.parentElement).toBe(
-      document.body
-    );
+    // 语义化 Portal 挂载断言：确保脱离父级并渲染进 document.body
+    expect(document.body.contains(dialog)).toBe(true);
   });
 
   it('标题经 aria-labelledby 关联', () => {
@@ -109,10 +108,14 @@ describe('ui/Dialog', () => {
   it('Esc 关闭并回调 onClose', async () => {
     const onClose = vi.fn();
     render(<DialogHarness title="测试" onClose={onClose} />);
-    fireEvent.keyDown(document, { key: 'Escape' });
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Escape' });
+    });
     expect(onClose).toHaveBeenCalledTimes(1);
     // 退出动画结束后卸载
-    await new Promise((r) => setTimeout(r, 300));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 200));
+    });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
@@ -130,8 +133,10 @@ describe('ui/Dialog', () => {
     const onClose = vi.fn();
     render(<DialogHarness title="遮罩" onClose={onClose} />);
     const dialog = screen.getByRole('dialog');
-    const overlay = dialog.parentElement!;
-    const backdrop = overlay.firstElementChild as HTMLElement;
+    const overlay = document.querySelector('[data-dialog-overlay]');
+    expect(overlay).not.toBeNull();
+    const backdrop = (document.querySelector('[data-dialog-backdrop]') ||
+      overlay?.firstElementChild) as HTMLElement;
 
     fireEvent.click(dialog); // 面板内点击：不关闭
     expect(onClose).not.toHaveBeenCalled();
@@ -140,7 +145,7 @@ describe('ui/Dialog', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('Tab 循环：焦点在首尾元素间循环', () => {
+  it('Tab 循环：焦点在首尾元素间循环并注入 focus guard', () => {
     render(
       <DialogHarness title="循环">
         <button type="button">第一</button>
@@ -151,6 +156,12 @@ describe('ui/Dialog', () => {
     const closeBtn = screen.getByRole('button', { name: '关闭弹窗' });
     const first = screen.getByText('第一');
     const third = screen.getByText('第三');
+
+    // 校验 Base UI / Focus Sentinel focus guard 存在
+    const focusGuards = document.querySelectorAll(
+      '[data-base-ui-focus-guard], [data-focus-sentinel]'
+    );
+    expect(focusGuards.length).toBeGreaterThanOrEqual(2);
 
     // 可聚焦序：[关闭按钮, 第一, 第二, 第三]；初始聚焦关闭按钮
     expect(document.activeElement).toBe(closeBtn);
@@ -177,12 +188,16 @@ describe('ui/Dialog', () => {
 
   it('inert 旁路：打开时对 body 兄弟节点设置 aria-hidden，关闭后还原', () => {
     const { unmount } = render(<DialogHarness title="旁路" />);
-    const trapContainer =
-      screen.getByRole('dialog').parentElement!.parentElement!;
-    expect(trapContainer.parentElement).toBe(document.body);
+    const dialog = screen.getByRole('dialog');
+    expect(document.body.contains(dialog)).toBe(true);
+
+    const portalContainer = Array.from(document.body.children).find((c) =>
+      c.contains(dialog)
+    )!;
+    expect(portalContainer).toBeDefined();
 
     const hiddenSiblings = Array.from(document.body.children).filter(
-      (c) => c !== trapContainer
+      (c) => c !== portalContainer
     );
     expect(hiddenSiblings.length).toBeGreaterThan(0);
     for (const s of hiddenSiblings) {
@@ -207,10 +222,16 @@ describe('ui/Dialog', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     const opener = screen.getByText('打开弹窗');
     opener.focus();
-    fireEvent.click(opener);
+    act(() => {
+      fireEvent.click(opener);
+    });
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    fireEvent.keyDown(document, { key: 'Escape' });
-    await new Promise((r) => setTimeout(r, 300));
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Escape' });
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 200));
+    });
     expect(document.activeElement).toBe(opener);
   });
 
@@ -227,10 +248,12 @@ describe('ui/Dialog', () => {
       />
     );
     const overlay = document.querySelector('[data-dialog-overlay]')!;
+    const backdrop = (document.querySelector('[data-dialog-backdrop]') ||
+      overlay.firstElementChild) as HTMLElement;
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onEscapeKeyDown).toHaveBeenCalledTimes(1);
     expect(onClose).not.toHaveBeenCalled();
-    fireEvent.click(overlay.firstElementChild as HTMLElement);
+    fireEvent.click(backdrop);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -240,7 +263,9 @@ describe('ui/Dialog', () => {
       <DialogHarness ariaLabel="向导" dismissible={false} onClose={onClose} />
     );
     const overlay = document.querySelector('[data-dialog-overlay]')!;
-    fireEvent.click(overlay.firstElementChild as HTMLElement);
+    const backdrop = (document.querySelector('[data-dialog-backdrop]') ||
+      overlay.firstElementChild) as HTMLElement;
+    fireEvent.click(backdrop);
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -297,9 +322,10 @@ describe('ui/Dialog', () => {
     render(
       <DialogHarness title="层级" classNames={{ overlay: 'custom-overlay' }} />
     );
-    const overlay = screen.getByRole('dialog').parentElement!;
-    expect(overlay.classList.contains('custom-overlay')).toBe(true);
-    expect(overlay).toHaveAttribute('data-dialog-overlay');
+    const overlay = document.querySelector('[data-dialog-overlay]');
+    expect(overlay).not.toBeNull();
+    expect(overlay!.classList.contains('custom-overlay')).toBe(true);
+    expect(overlay!.contains(screen.getByRole('dialog'))).toBe(true);
   });
 
   it('dismissible=false 时 onEscapeKeyDown 仍由 LayerStack 调用', () => {
@@ -366,14 +392,18 @@ describe('ui/Dialog', () => {
       );
     }
     render(<NestedHarness />);
-    fireEvent.keyDown(document, { key: 'Escape' });
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Escape' });
+    });
     expect(onCloseInner).toHaveBeenCalledTimes(1);
     expect(onCloseOuter).not.toHaveBeenCalled();
     // 等内层退出动画卸载后，外层恢复为最顶层
     await act(async () => {
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise((r) => setTimeout(r, 200));
     });
-    fireEvent.keyDown(document, { key: 'Escape' });
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Escape' });
+    });
     expect(onCloseOuter).toHaveBeenCalledTimes(1);
   });
 
@@ -403,10 +433,14 @@ describe('ui/Dialog', () => {
     try {
       const onClose = vi.fn();
       render(<DialogHarness title="时长" onClose={onClose} />);
-      fireEvent.keyDown(window, { key: 'Escape' });
+      act(() => {
+        fireEvent.keyDown(document, { key: 'Escape' });
+      });
       expect(onClose).toHaveBeenCalledTimes(1);
       // CSS --duration-exit = 150ms：动画结束后即应卸载，不留 50ms 空窗
-      act(() => vi.advanceTimersByTime(150));
+      act(() => {
+        vi.advanceTimersByTime(150);
+      });
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();

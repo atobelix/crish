@@ -160,7 +160,15 @@ describe('契约测试：同心几何圆角与物理动效防回潮门禁 (DIM-0
     const tokensPath = join(SRC_DIR, 'styles', 'tokens.css');
     expect(existsSync(tokensPath), 'tokens.css 必须物理存在').toBe(true);
 
-    const tokensContent = readFileSync(tokensPath, 'utf8');
+    let tokensContent = readFileSync(tokensPath, 'utf8');
+    if (tokensContent.includes('@import')) {
+      tokensContent = tokensContent.replace(
+        /@import\s+['"]\.\/([^'"]+)['"];/g,
+        (_, file) => {
+          return readFileSync(join(SRC_DIR, 'styles', file), 'utf8');
+        }
+      );
+    }
 
     // 按钮圆角基础档校验
     const buttonRadiusLiteral = tokensContent.match(

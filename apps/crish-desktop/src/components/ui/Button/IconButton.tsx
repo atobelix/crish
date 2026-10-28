@@ -5,7 +5,7 @@
  * 可选支持声明式 Tooltip 绑定（内部使用 ui/Tooltip 包裹）。
  * 尺寸遵循 dense(24) / list(28) / control(32) / chrome(36px) 四档标准化行高对齐标尺，
  * 同时向后兼容旧 xs / sm / md / lg 别名（默认 'list'）。
- * 状态统一走 --state-*，焦点态遵循混入 ≤10% 规范。
+ * 状态统一走 --state-*（单层 ::before 物理微光交互，杜绝双层叠合发黑），焦点态遵循混入 ≤10% 规范。
  */
 import React from 'react';
 import { Button, type ButtonProps, type ButtonSize } from './Button';

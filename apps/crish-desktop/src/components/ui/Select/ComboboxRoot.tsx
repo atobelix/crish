@@ -14,6 +14,11 @@ import type {
   RegisteredItemData,
 } from './types';
 import { extractItemsFromChildren } from './internal/extractChildrenItems';
+import {
+  useLayerRegistration,
+  LayerProvider,
+  useLayerContext,
+} from '../internal/layer-registration/useLayerRegistration';
 
 export const ComboboxContext = createContext<ComboboxContextValue | null>(null);
 
@@ -100,6 +105,26 @@ export function ComboboxRoot<T = any>({
   const contentRef = useRef<HTMLElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const isComposingRef = useRef(false);
+
+  const parentLayer = useLayerContext();
+
+  useLayerRegistration(
+    {
+      id: listboxId,
+      type: 'combobox',
+      parentId: parentLayer.layerId ?? undefined,
+      dismissible: true,
+      elementRef: contentRef,
+      anchorRef: triggerRef,
+      onDismiss: () => handleOpenChange(false),
+      onEscapeKeyDown: () => {
+        handleOpenChange(false);
+        (inputRef.current as HTMLElement | null)?.focus();
+        return true;
+      },
+    },
+    Boolean(open)
+  );
 
   const [items, setItems] = useState<RegisteredItemData[]>([]);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
@@ -305,7 +330,9 @@ export function ComboboxRoot<T = any>({
 
   return (
     <ComboboxContext.Provider value={contextValue}>
-      {children}
+      <LayerProvider layerId={listboxId} tier="popover">
+        {children}
+      </LayerProvider>
     </ComboboxContext.Provider>
   );
 }

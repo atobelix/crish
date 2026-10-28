@@ -1,11 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import {
-  animate,
-  motion,
-  useMotionValue,
-  useReducedMotion,
-} from 'motion/react';
+import { animate, m, useMotionValue, useReducedMotion } from 'motion/react';
 import {
   clamp,
   round,
@@ -236,7 +231,7 @@ export function ColorPicker({
 
       {shown && (
         <div className={styles.float} data-open={open || undefined}>
-          <motion.div
+          <m.div
             ref={panelRef}
             id={`${uid}-panel`}
             role="dialog"
@@ -251,7 +246,7 @@ export function ColorPicker({
                 <span className={styles.name}>{label}</span>
                 <span className={styles.hex}>{hex}</span>
               </span>
-              <motion.span
+              <m.span
                 className={styles.headActions}
                 style={{ opacity: contentOpacity }}
               >
@@ -298,10 +293,10 @@ export function ColorPicker({
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 </button>
-              </motion.span>
+              </m.span>
             </div>
 
-            <motion.div
+            <m.div
               className={styles.body}
               style={{ opacity: contentOpacity, y: contentY }}
             >
@@ -340,7 +335,7 @@ export function ColorPicker({
                 onActive={(on) => setActive(on ? 'alpha' : null)}
               />
 
-              <motion.div
+              <m.div
                 className={styles.field}
                 data-invalid={invalid || undefined}
                 style={{ x: fieldX }}
@@ -395,7 +390,7 @@ export function ColorPicker({
                     </span>
                   )}
                 </span>
-              </motion.div>
+              </m.div>
               <p
                 id={`${uid}-error`}
                 className={styles.error}
@@ -418,8 +413,8 @@ export function ColorPicker({
                 reduced={reduced}
                 inputRef={inputRef}
               />
-            </motion.div>
-          </motion.div>
+            </m.div>
+          </m.div>
         </div>
       )}
     </div>

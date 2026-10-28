@@ -1,23 +1,23 @@
 /* ColorPicker 专业高精取色器 */
 
 .root {
-  --picker-fill: var(--bg-card, #ffffff);
+  --picker-fill: var(--bg-card);
   --picker-width: min(19rem, calc(100vw - 32px));
   --checker: repeating-conic-gradient(
-      color-mix(in srgb, var(--border-subtle, #e5e7eb) 40%, #ffffff) 0 25%,
+      color-mix(in srgb, var(--border-subtle) 40%, var(--surface-overlay)) 0 25%,
       transparent 0 50%
     )
     0 0 / 10px 10px;
   position: relative;
   display: inline-block;
   font-family: inherit;
-  color: var(--text-primary, #111827);
+  color: var(--text-primary);
 }
 
 :global(:root[data-theme='dark']) .root {
-  --picker-fill: var(--bg-card, #1f2937);
+  --picker-fill: var(--bg-card);
   --checker: repeating-conic-gradient(
-      color-mix(in srgb, var(--border-subtle, #374151) 60%, #111827) 0 25%,
+      color-mix(in srgb, var(--border-subtle) 60%, var(--surface-overlay)) 0 25%,
       transparent 0 50%
     )
     0 0 / 10px 10px;
@@ -33,19 +33,19 @@
 }
 
 .trigger {
-  border: 1px solid var(--border-subtle, #e5e7eb);
+  border: 1px solid var(--border-subtle);
   border-radius: 20px;
   background: var(--picker-fill);
   color: inherit;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+    border-color var(--duration-normal, 150ms) var(--ease-standard),
+    box-shadow var(--duration-normal, 150ms) var(--ease-standard);
 }
 
 .trigger:hover {
-  border-color: var(--border-color, #9ca3af);
+  border-color: var(--border-color);
 }
 
 .triggerText {
@@ -56,7 +56,7 @@
 }
 
 .name {
-  color: var(--text-tertiary, #6b7280);
+  color: var(--text-tertiary);
   font-size: 11px;
 }
 
@@ -76,6 +76,7 @@
   overflow: hidden;
   border-radius: 50%;
   background: var(--checker);
+  /* ssot-color-ignore: ColorPicker 物理交互图元与滑轨微投影 */
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
@@ -83,6 +84,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
+  /* ssot-color-ignore: ColorPicker 物理交互图元与滑轨微投影 */
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
 }
 
@@ -108,7 +110,7 @@
 .panel {
   width: var(--picker-width);
   padding-bottom: 12px;
-  border: 1px solid var(--border-subtle, #e5e7eb);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md, 14px);
   background: var(--picker-fill);
   will-change: clip-path;
@@ -137,21 +139,21 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--text-secondary, #4b5563);
+  color: var(--text-secondary);
   cursor: pointer;
   transition:
-    background-color 0.15s ease,
-    color 0.15s ease,
-    transform 0.15s ease;
+    background-color var(--duration-normal, 150ms) var(--ease-standard),
+    color var(--duration-normal, 150ms) var(--ease-standard),
+    transform var(--duration-normal, 150ms) var(--ease-standard);
 }
 
 .iconButton:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.05));
-  color: var(--text-primary, #111827);
+  background: var(--state-hover);
+  color: var(--text-primary);
 }
 
 .iconButton:active {
-  background: var(--tint-active, rgba(0, 0, 0, 0.1));
+  background: var(--state-active);
 }
 
 .body {
@@ -168,9 +170,11 @@
   border-radius: 12px;
   cursor: crosshair;
   touch-action: none;
+  /* ssot-color-ignore: ColorPicker 物理取色板 2D 光谱黑白投影底板 */
   background:
     linear-gradient(to top, #000, transparent),
     linear-gradient(to right, #fff, transparent), var(--picker-hue);
+  /* ssot-color-ignore: ColorPicker 物理交互图元与滑轨微投影 */
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
@@ -182,11 +186,12 @@
   border-radius: 50%;
   transform: translate(-50%, -50%);
   cursor: grab;
+  /* ssot-color-ignore: ColorPicker 物理取色器滑块微投影 */
   box-shadow:
     0 0 0 2px #fff,
     0 2px 6px rgba(0, 0, 0, 0.3),
     inset 0 0 0 1px rgba(0, 0, 0, 0.12);
-  transition: transform 0.15s ease;
+  transition: transform var(--duration-normal, 150ms) var(--ease-standard);
 }
 
 .areaThumb {
@@ -214,6 +219,7 @@
   inset: 0 -10px;
   border-radius: inherit;
   background: var(--track);
+  /* ssot-color-ignore: ColorPicker 物理交互图元与滑轨微投影 */
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
@@ -231,6 +237,7 @@
 }
 
 .hue {
+  /* ssot-color-ignore: ColorPicker 物理光谱色相渐变轨道 */
   --track: linear-gradient(
     to right,
     #f00 10px,
@@ -259,14 +266,14 @@
   align-items: stretch;
   overflow: hidden;
   margin-top: 2px;
-  border: 1px solid var(--border-subtle, #e5e7eb);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
-  background: var(--bg-hover, rgba(0, 0, 0, 0.02));
-  transition: border-color 0.15s ease;
+  background: var(--state-hover);
+  transition: border-color var(--duration-normal, 150ms) var(--ease-standard);
 }
 
 .field[data-invalid] {
-  border-color: var(--accent-red, #ef4444);
+  border-color: var(--color-error);
 }
 
 .format {
@@ -276,18 +283,19 @@
   justify-content: center;
   padding: 0 8px;
   border: 0;
-  border-right: 1px solid var(--border-subtle, #e5e7eb);
+  border-right: 1px solid var(--border-subtle);
   background: transparent;
-  color: var(--text-primary, #111827);
+  color: var(--text-primary);
   font: inherit;
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color var(--duration-normal, 150ms)
+    var(--ease-standard);
 }
 
 .format:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.05));
+  background: var(--state-hover);
 }
 
 .inputWrap {
@@ -311,8 +319,8 @@
   min-width: 0;
   border: 0;
   background: transparent;
-  color: var(--text-primary, #111827);
-  caret-color: var(--text-primary, #111827);
+  color: var(--text-primary);
+  caret-color: var(--text-primary);
 }
 
 .input:focus {
@@ -329,7 +337,7 @@
   display: flex;
   align-items: center;
   overflow: hidden;
-  color: var(--text-primary, #111827);
+  color: var(--text-primary);
   pointer-events: none;
   white-space: nowrap;
 }
@@ -337,7 +345,7 @@
 .error {
   min-height: 0;
   margin: -8px 2px -2px;
-  color: var(--accent-red, #ef4444);
+  color: var(--color-danger);
   font-size: 11px;
 }
 
@@ -358,7 +366,7 @@
   height: 24px;
   flex: none;
   place-items: center;
-  border: 1px solid var(--border-subtle, #e5e7eb);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   background: var(--picker-bg);
   color: var(--picker-color);
@@ -376,7 +384,7 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  color: var(--text-tertiary, #6b7280);
+  color: var(--text-tertiary);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -393,23 +401,23 @@
   font-weight: 600;
   white-space: nowrap;
   transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
+    background-color var(--transition-normal),
+    color var(--transition-normal);
 }
 
 .grade[data-grade='pass'] {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
+  background: var(--success-soft-bg);
+  color: var(--text-success);
 }
 
 .grade[data-grade='large'] {
-  background: rgba(245, 158, 11, 0.16);
-  color: #f59e0b;
+  background: var(--warning-soft-bg);
+  color: var(--text-warning-strong);
 }
 
 .grade[data-grade='fail'] {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+  background: var(--danger-soft-bg);
+  color: var(--text-danger);
 }
 
 .swatches {
@@ -426,20 +434,20 @@
   flex: none;
   place-items: center;
   padding: 0;
-  border: 1px dashed var(--border-color, #9ca3af);
+  border: 1px dashed var(--border-color);
   border-radius: 50%;
   background: transparent;
-  color: var(--text-secondary, #4b5563);
+  color: var(--text-secondary);
   cursor: pointer;
   transition:
-    color 0.15s ease,
-    border-color 0.15s ease,
-    transform 0.15s ease;
+    color var(--duration-normal, 150ms) var(--ease-standard),
+    border-color var(--duration-normal, 150ms) var(--ease-standard),
+    transform var(--duration-normal, 150ms) var(--ease-standard);
 }
 
 .add:hover {
-  border-color: var(--text-primary, #111827);
-  color: var(--text-primary, #111827);
+  border-color: var(--text-primary);
+  color: var(--text-primary);
 }
 
 .add:active {
@@ -474,11 +482,11 @@
 .swatchChip {
   width: 22px;
   height: 22px;
-  transition: transform 0.15s ease;
+  transition: transform var(--duration-normal, 150ms) var(--ease-standard);
 }
 
 .swatch[data-current] {
-  box-shadow: inset 0 0 0 2px var(--text-primary, #111827);
+  box-shadow: inset 0 0 0 2px var(--text-primary);
 }
 
 .swatch[data-current] .swatchChip {

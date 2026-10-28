@@ -12,6 +12,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Crish · AI 工作台</title>
     
+    <!-- CSS Cascade Layers 唯一层序定标：严守 W3C 规范第一规则（reset < base < components < overrides），先于一切 CSS 加载 -->
+    <style>@layer reset, base, components, overrides;</style>
+
     <!-- 首屏单图标加载屏 CSS & 多主题适配 (0ms 无缝加载；生产构建经 cspPlugin 内联为 #crish-critical-css) -->
     <link rel="stylesheet" href="/loader.css" />
 

@@ -87,7 +87,7 @@ export interface PositionOptions {
   hysteresisY?: number;
   maxHeight?: number;
   sideOffset?: number;
-  side?: 'top' | 'bottom';
+  side?: 'top' | 'bottom' | 'left' | 'right';
   align?: 'start' | 'center' | 'end';
 }
 
@@ -146,6 +146,10 @@ export interface SmartPanelProps {
   triggerRef?: RefObject<HTMLElement | null>;
   /** 外部浮动锚点（虚拟锚点） */
   anchor?: RefObject<HTMLElement | null>;
+  /** 面板挂载的容器 DOM 元素 Ref */
+  panelRef?: RefObject<HTMLDivElement | null>;
+  /** 测试用 ID */
+  dataTestId?: string;
   /** 面板是否处于展开状态 */
   open?: boolean;
   /** 受控开关变更回调 */

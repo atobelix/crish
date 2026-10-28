@@ -4,11 +4,7 @@
 
 /* ── 步长常量（P1 SSOT 定值，定义于一处） ── */
 :root {
-  --elev-step-sunken: 20%; /* e0 下潜混合比例 */
-  --elev-step-shell: 3.5%; /* e2 外壳浮起比例 */
-  --elev-step-card: 7%; /* e3 卡片浮起比例 */
   --elev-step-raised: 13%; /* e4 交互浮起比例 */
-  --elev-step-overlay: 17%; /* e5 弹层浮起比例 */
 }
 
 /* ── 浅色主题表面派生 (Light Surface Ladder) ── */
@@ -22,11 +18,7 @@ html[data-theme='light'] {
   --elev-direction: var(--user-elev-direction, -1);
 
   /* e0 下凹：向深混合 3.5% 形成清爽浅下凹槽 */
-  --surface-sunken: color-mix(
-    in oklab,
-    var(--surface-base),
-    var(--surface-deep-target) 3.5%
-  );
+  --surface-sunken: var(--surface-outer);
 
   /* e1 画布：柔和高明度清爽基准地平面（灰度下调 2~3 点） */
   --surface-canvas: var(--surface-base);
@@ -38,12 +30,8 @@ html[data-theme='light'] {
     var(--surface-deep-target) 0.8%
   );
 
-  /* e3 卡片：向白提升，在暖灰底板上自浮起 */
-  --surface-card: color-mix(
-    in oklab,
-    var(--surface-base),
-    var(--surface-tint-target) 60%
-  );
+  /* e3 卡片：在暖灰底板上自浮起 */
+  --surface-card: var(--surface-main);
 
   /* e4 浮起：交互中心（输入坞）向白进一步提升 */
   --surface-raised: color-mix(
@@ -61,13 +49,10 @@ html[data-theme='light'] {
 
   /* 边缘光与三级抬升阴影（Light） */
   --edge-rim: 0 0 0 1px hsl(0 0% 0% / 0.04);
-  --edge-rim-subtle: 0 0 0 1px hsl(0 0% 0% / 0.02);
 
   --shadow-lift-card: 0 1px 3px hsl(0 0% 0% / 0.05);
   --shadow-lift-raised:
     0 4px 16px -2px hsl(0 0% 0% / 0.08), 0 1px 2px hsl(0 0% 0% / 0.04);
-  --shadow-lift-overlay:
-    0 12px 32px -4px hsl(0 0% 0% / 0.15), 0 4px 8px -2px hsl(0 0% 0% / 0.06);
 
   /* 遮罩与通用阴影基底 */
   --shadow-color: #000;
@@ -90,37 +75,55 @@ html[data-theme='light'] {
   --chat-footer-fade: linear-gradient(
     to bottom,
     transparent 0%,
-    color-mix(in srgb, var(--surface-canvas) 55%, transparent) 42%,
-    color-mix(in srgb, var(--surface-canvas) 92%, transparent) 78%,
-    var(--surface-canvas) 100%
+    color-mix(in srgb, var(--surface-main) 55%, transparent) 42%,
+    color-mix(in srgb, var(--surface-main) 92%, transparent) 78%,
+    var(--surface-main) 100%
   );
+  --bg-card-hover: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+  --bg-card-active: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  --tab-active-bg: var(--surface-input);
 
   /* [WAVE2-DEPRECATED-ALIAS] 旧表面与背景别名桥接层（Wave 2 Codemod 后一键清除） */
   --user-surface-outer: #f7f6f5; /* [WAVE2-DEPRECATED-ALIAS] */
   --user-surface-main: #ffffff; /* [WAVE2-DEPRECATED-ALIAS] */
   --user-surface-input: #ffffff; /* [WAVE2-DEPRECATED-ALIAS] */
-  --surface-outer: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
-  --surface-main: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
-  --surface-input: var(--surface-raised); /* [WAVE2-DEPRECATED-ALIAS] */
-  --surface-chrome: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
-  --surface-paper: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
-  --surface-elevated: var(--surface-overlay); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-primary: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-secondary: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-outer: var(
+    --user-surface-outer,
+    #f7f6f5
+  ); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-main: var(
+    --user-surface-main,
+    #ffffff
+  ); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-input: var(
+    --user-surface-input,
+    #ffffff
+  ); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-chrome: var(--surface-outer); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-paper: var(--surface-main); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-card: var(--surface-main); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-elevated: var(--surface-main); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-sunken: var(--surface-outer); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-primary: var(--surface-paper); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-secondary: var(--surface-chrome); /* [WAVE2-DEPRECATED-ALIAS] */
   --bg-tertiary: var(--surface-sunken); /* [WAVE2-DEPRECATED-ALIAS] */
   --bg-card: var(--surface-card); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-elevated: var(--surface-overlay); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-elevated: var(--surface-elevated); /* [WAVE2-DEPRECATED-ALIAS] */
   --bg-canvas: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
   --bg-page: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-workspace: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-subtle: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-card-subtle: var(--surface-sunken); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-workspace: var(--surface-outer); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-subtle: var(--surface-chrome); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-card-subtle: var(--surface-outer); /* [WAVE2-DEPRECATED-ALIAS] */
   --leaf-card-bg: var(--surface-card); /* [WAVE2-DEPRECATED-ALIAS] */
   --workspace-surface-bg: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
   --shell-chrome-bg: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
   --shell-inset-bg: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
-  --composer-bg: var(--surface-raised); /* [WAVE2-DEPRECATED-ALIAS] */
-  --user-bubble-bg: var(--surface-card); /* [WAVE2-DEPRECATED-ALIAS] */
+  --composer-bg: var(--surface-input); /* [WAVE2-DEPRECATED-ALIAS] */
+  --tab-active-bg: var(--surface-input);
+  --tab-active-surface: var(--surface-input);
+  --seg-slider-bg: var(--surface-input);
+  --button-secondary-bg: var(--bg-card);
+  --user-bubble-bg: color-mix(in srgb, var(--text-primary) 5.5%, transparent);
   --content-frame-border: #ebeae9; /* [WAVE2-DEPRECATED-ALIAS] */
 }
 
@@ -133,28 +136,20 @@ html[data-theme='dark'] {
   --elev-direction: var(--user-elev-direction, 1);
 
   /* e0 下凹：与深色目标混合（负向深入，消除倒挂） */
-  --surface-sunken: color-mix(
-    in oklab,
-    var(--surface-base),
-    var(--surface-deep-target) var(--elev-step-sunken)
-  );
+  --surface-sunken: var(--surface-outer);
 
   /* e1 画布：基准地平面 */
   --surface-canvas: var(--surface-base);
 
-  /* e2 外壳：微弱抬升，勾勒侧栏与视窗帽檐 */
+  /* e2 外壳：大背景温和收敛为深沉炭黑（亮度下调至 90% 深邃基线，避免夜间发飘） */
   --surface-shell: color-mix(
     in oklab,
     var(--surface-base),
-    var(--surface-tint-target) var(--elev-step-shell)
+    var(--surface-tint-target) 8%
   );
 
   /* e3 卡片：坚决抬升，形成容积感（无需描边即可靠明度场区分） */
-  --surface-card: color-mix(
-    in oklab,
-    var(--surface-base),
-    var(--surface-tint-target) var(--elev-step-card)
-  );
+  --surface-card: var(--surface-main);
 
   /* e4 浮起：交互中心（输入坞）沉着悬浮 */
   --surface-raised: color-mix(
@@ -163,20 +158,22 @@ html[data-theme='dark'] {
     var(--surface-tint-target) var(--elev-step-raised)
   );
 
-  /* e5 弹层：顶层悬浮（菜单与对话框） */
+  /* e5 弹层：11.5% 柔和抬升（微调提亮几个点），深邃高级且不发灰，消除 17% 过亮发灰与纯黑无底色 */
   --surface-overlay: color-mix(
-    in oklab,
+    in srgb,
     var(--surface-base),
-    var(--surface-tint-target) var(--elev-step-overlay)
+    var(--surface-tint-target) 11.5%
   );
 
+  /* 描边比背景色大概亮 5% 左右，加强物理质感发丝线 */
+  --border-panel: color-mix(in srgb, var(--surface-overlay) 95%, #ffffff 5%);
+  --border-color: var(--border-panel);
+
   /* 边缘光与三级抬升阴影（Dark） */
-  --edge-rim: 0 0 0 1px hsl(0 0% 100% / 0.05);
-  --edge-rim-subtle: 0 0 0 1px hsl(0 0% 100% / 0.03);
+  --edge-rim: 0 0 0 1px var(--border-panel);
 
   --shadow-lift-card: 0 1px 3px hsl(0 0% 0% / 0.25);
   --shadow-lift-raised: var(--edge-rim), 0 4px 16px -2px hsl(0 0% 0% / 0.45);
-  --shadow-lift-overlay: var(--edge-rim), 0 12px 32px -4px hsl(0 0% 0% / 0.65);
 
   /* 遮罩与通用阴影基底 */
   --shadow-color: #000;
@@ -198,28 +195,48 @@ html[data-theme='dark'] {
   --user-surface-outer: #1e1e1e; /* [WAVE2-DEPRECATED-ALIAS] */
   --user-surface-main: #141414; /* [WAVE2-DEPRECATED-ALIAS] */
   --user-surface-input: #232323; /* [WAVE2-DEPRECATED-ALIAS] */
-  --surface-outer: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
-  --surface-main: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
-  --surface-input: var(--surface-raised); /* [WAVE2-DEPRECATED-ALIAS] */
-  --surface-chrome: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
-  --surface-paper: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
-  --surface-elevated: var(--surface-overlay); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-primary: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-secondary: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-outer: var(
+    --user-surface-outer,
+    #1e1e1e
+  ); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-main: var(
+    --user-surface-main,
+    #141414
+  ); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-input: var(
+    --user-surface-input,
+    #232323
+  ); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-chrome: var(--surface-outer); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-paper: var(--surface-main); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-card: var(--surface-main); /* [WAVE2-DEPRECATED-ALIAS] */
+  --surface-elevated: var(--surface-overlay); /* 弹层刚性对齐 e5 overlay */
+  --surface-sunken: var(--surface-outer); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-primary: var(--surface-paper); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-secondary: var(--surface-outer); /* [WAVE2-DEPRECATED-ALIAS] */
   --bg-tertiary: var(--surface-sunken); /* [WAVE2-DEPRECATED-ALIAS] */
   --bg-card: var(--surface-card); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-elevated: var(--surface-overlay); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-elevated: var(--surface-elevated); /* 刚性对齐 e5 overlay */
   --bg-canvas: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
   --bg-page: var(--surface-canvas); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-workspace: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-workspace: var(--surface-outer); /* [WAVE2-DEPRECATED-ALIAS] */
   --bg-subtle: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
-  --bg-card-subtle: var(--surface-sunken); /* [WAVE2-DEPRECATED-ALIAS] */
+  --bg-card-subtle: var(--surface-outer); /* [WAVE2-DEPRECATED-ALIAS] */
   --leaf-card-bg: var(--surface-card); /* [WAVE2-DEPRECATED-ALIAS] */
   --workspace-surface-bg: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
   --shell-chrome-bg: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
   --shell-inset-bg: var(--surface-shell); /* [WAVE2-DEPRECATED-ALIAS] */
-  --composer-bg: var(--surface-raised); /* [WAVE2-DEPRECATED-ALIAS] */
-  --user-bubble-bg: var(--surface-card); /* [WAVE2-DEPRECATED-ALIAS] */
+  --composer-bg: var(--surface-input); /* [WAVE2-DEPRECATED-ALIAS] */
+  --tab-active-bg: var(--state-selected);
+  --tab-active-surface: color-mix(in srgb, var(--surface-base), #ffffff 16%);
+  --seg-slider-bg: var(--state-selected);
+  --sidebar-active: var(--state-selected);
+  --button-secondary-bg: var(--state-active);
+  --user-bubble-bg: color-mix(
+    in srgb,
+    var(--user-text-primary) 9%,
+    transparent
+  );
   --content-frame-border: #222121; /* [WAVE2-DEPRECATED-ALIAS] */
 }
 

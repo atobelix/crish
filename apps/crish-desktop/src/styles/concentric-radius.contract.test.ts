@@ -28,59 +28,83 @@ function readDesktopFile(...segments: string[]): string {
 }
 
 describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', () => {
-  // 1. Token 完备性与 --radius-2xl 断言
+  // 1. Token 完备性与 --radius-2xl 平反及现代浮层同心断言
   it('契约 1：Token 完备性与 --radius-2xl 平反断言', () => {
-    const tokens = readDesktopFile('styles', 'tokens.css');
+    const tokens = readDesktopFile('styles', 'tokens-radius.css');
 
     // 1.1 断言 --radius-2xl 必须定义为 20px（严禁为 12px 或 var(--radius-l)）
-    expect(tokens, 'tokens.css 必须显式声明 --radius-2xl: 20px;').toMatch(
-      /--radius-2xl:\s*20px;/
-    );
     expect(
       tokens,
-      'tokens.css 严禁将 --radius-2xl 映射为 var(--radius-l)'
+      'tokens-radius.css 必须显式声明 --radius-2xl: 20px;'
+    ).toMatch(/--radius-2xl:\s*20px;/);
+    expect(
+      tokens,
+      'tokens-radius.css 严禁将 --radius-2xl 映射为 var(--radius-l)'
     ).not.toMatch(/--radius-2xl:\s*var\(--radius-l\);/);
     expect(
       tokens,
-      'tokens.css 严禁将 --radius-2xl 定义为 12px 坍塌值'
+      'tokens-radius.css 严禁将 --radius-2xl 定义为 12px 坍塌值'
     ).not.toMatch(/--radius-2xl:\s*12px;/);
 
-    // 1.2 断言 --sep-radius-outer 必须为 14px
-    expect(tokens, 'tokens.css 必须显式声明 --sep-radius-outer: 14px;').toMatch(
-      /--sep-radius-outer:\s*14px;/
-    );
-
-    // 1.3 断言 --radius-sm 必须为 6px，--radius-xl 必须为 16px
+    // 1.2 断言 --sep-radius-outer 必须绑定现代浮层外大圆角 18px
     expect(
       tokens,
-      'tokens.css 必须定义 --radius-sm: 6px; 补齐偶数闭包'
+      'tokens-radius.css 必须显式声明 --sep-radius-outer: var(--radius-menu-outer, 18px);'
+    ).toMatch(
+      /--sep-radius-outer:\s*(?:var\(--radius-menu-outer,\s*18px\)|18px);/
+    );
+
+    // 1.3 断言现代同心圆角角色标尺
+    expect(
+      tokens,
+      'tokens-radius.css 必须显式声明 --radius-menu-outer: 18px;'
+    ).toMatch(/--radius-menu-outer:\s*18px;/);
+    expect(
+      tokens,
+      'tokens-radius.css 必须显式声明 --radius-menu-inner: 12px;'
+    ).toMatch(/--radius-menu-inner:\s*12px;/);
+    expect(
+      tokens,
+      'tokens-radius.css 必须显式声明 --radius-dock: 20px;'
+    ).toMatch(/--radius-dock:\s*20px;/);
+    expect(
+      tokens,
+      'tokens-radius.css 必须显式声明 --radius-modal: 24px;'
+    ).toMatch(/--radius-modal:\s*24px;/);
+
+    // 1.4 断言 --radius-sm 必须为 6px，--radius-xl 必须为 16px
+    expect(
+      tokens,
+      'tokens-radius.css 必须定义 --radius-sm: 6px; 补齐偶数闭包'
     ).toMatch(/--radius-sm:\s*6px;/);
     expect(
       tokens,
-      'tokens.css 必须定义 --radius-xl: 16px; 补齐卡片外壳阶梯'
+      'tokens-radius.css 必须定义 --radius-xl: 16px; 补齐卡片外壳阶梯'
     ).toMatch(/--radius-xl:\s*16px;/);
   });
 
   // 2. 全仓 9996px 荒谬算式清零断言
   it('契约 2：全仓 9996px 荒谬算式清零断言（禁止 pill 变量参与数学减法）', () => {
-    const tokens = readDesktopFile('styles', 'tokens.css');
+    const tokens = readDesktopFile('styles', 'tokens-radius.css');
+    const tokensComp = readDesktopFile('styles', 'tokens-components.css');
+    const allTokens = `${tokens}\n${tokensComp}`;
 
     // 拦截任何使用 calc(var(--radius-pill) - 3px) 或类似将 pill 扣减成 9996px 的代码
     expect(
-      tokens,
-      'tokens.css 严禁出现 calc(var(--radius-pill) - ...) 扣减算式'
+      allTokens,
+      'tokens-radius.css 严禁出现 calc(var(--radius-pill) - ...) 扣减算式'
     ).not.toMatch(/calc\(\s*var\(--radius-pill\)\s*-\s*[^)]+\)/);
 
     expect(
-      tokens,
-      'tokens.css 严禁出现 calc(var(--usage-capsule-outer-radius) - ...) 扣减算式'
+      allTokens,
+      'tokens-components.css 严禁出现 calc(var(--usage-capsule-outer-radius) - ...) 扣减算式'
     ).not.toMatch(/calc\(\s*var\(--usage-capsule-outer-radius\)\s*-\s*[^)]+\)/);
 
     // 剥离注释后断言绝不存在 9996px 声明代码
-    const codeWithoutComments = tokens.replace(/\/\*[\s\S]*?\*\//g, '');
+    const codeWithoutComments = allTokens.replace(/\/\*[\s\S]*?\*\//g, '');
     expect(
       codeWithoutComments,
-      'tokens.css 代码中严禁出现 9996px 荒谬声明'
+      'tokens 代码中严禁出现 9996px 荒谬声明'
     ).not.toMatch(/9996px/);
   });
 
@@ -174,7 +198,7 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       'Dialog.module.css'
     );
 
-    const dialogMatch = dialogCss.match(/\.dialog\s*\{[^}]+\}/);
+    const dialogMatch = dialogCss.match(/\.dialog[^{]*\{[^}]+\}/);
     expect(
       dialogMatch,
       'Dialog.module.css 中必须包含 .dialog 规则块'
@@ -206,7 +230,9 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
     expect(
       multilineBlock,
       '.composerCard.isMultiline 必须绑定 20px 圆角'
-    ).toMatch(/border-radius:\s*var\(--composer-radius-multi,\s*20px\)/);
+    ).toMatch(
+      /border-radius:\s*(?:var\(--composer-radius-multi,\s*20px\)|var\(--radius-dock,\s*20px\)|var\(--radius-dock\)|20px)/
+    );
   });
 
   // 7. Dialog 底部无分割线契约（去除横线和虚高边距）
@@ -218,7 +244,7 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       'Dialog.module.css'
     );
 
-    const footerMatch = dialogCss.match(/\.dialogFooter\s*\{[^}]+\}/);
+    const footerMatch = dialogCss.match(/\.dialogFooter[^{]*\{[^}]+\}/);
     expect(
       footerMatch,
       'Dialog.module.css 中必须包含 .dialogFooter 规则块'
@@ -323,5 +349,25 @@ describe('CONCENTRIC-RADIUS-UNIFICATION 同心契约自动化防回归测试', (
       inputMatch![0],
       '.schedFieldInput 的 border-radius 必须为 var(--radius-md)'
     ).toMatch(/border-radius:\s*var\(--radius-md/);
+  });
+
+  // 11. 全局浮层菜单外大圆角 18px 与内同心 12px 契约断言
+  it('契约 11：全局浮层菜单外大圆角 18px 与内同心 12px 刚性断言', () => {
+    const tokens = readDesktopFile('styles', 'tokens-radius.css');
+    const tokensComp = readDesktopFile('styles', 'tokens-components.css');
+
+    // 1. 断言全局浮层 Token 声明正确
+    expect(
+      tokens,
+      'tokens-radius.css 必须显式声明 --radius-menu-outer: 18px;'
+    ).toMatch(/--radius-menu-outer:\s*18px;/);
+    expect(
+      tokens,
+      'tokens-radius.css 必须显式声明 --radius-menu-inner: 12px;'
+    ).toMatch(/--radius-menu-inner:\s*12px;/);
+    expect(
+      tokensComp,
+      'tokens-components.css 必须显式绑定 --sep-item-radius: var(--radius-menu-inner, 12px);'
+    ).toMatch(/--sep-item-radius:\s*var\(--radius-menu-inner,\s*12px\);/);
   });
 });

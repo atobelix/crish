@@ -129,7 +129,7 @@
 }
 /* 行悬停极微反馈 */
 :is(.conex-markdown, .md-rendered) tbody :is(.md-tr:hover, tr:hover) {
-  background-color: var(--tint-subtle);
+  background-color: var(--state-subtle);
   transition: background-color var(--transition-fast, 120ms ease);
 }
 /* 表格容器查询响应式适配 (Container Queries) */
@@ -585,7 +585,7 @@
   font-size: var(--font-size-xs, 12px);
   font-weight: var(--font-weight-normal, 400);
   color: var(--text-tertiary);
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border-bottom: 1px solid var(--border-subtle);
   user-select: none;
   white-space: nowrap;
@@ -653,7 +653,7 @@
   pointer-events: none;
   padding: 1px 6px;
   border-radius: var(--radius-sm);
-  background: var(--tint-active);
+  background: var(--state-active);
   line-height: 1.3;
 }
 :is(.conex-markdown, .md-rendered) .md-code-header-left .md-code-lang {
@@ -732,7 +732,7 @@
   opacity: 1;
 }
 :is(.conex-markdown, .md-rendered) .md-code-copy:hover {
-  background: var(--md-code-copy-hover-bg, var(--tint-hover));
+  background: var(--md-code-copy-hover-bg, var(--state-hover));
   color: var(--text-primary);
   border-color: var(--border-subtle);
   opacity: 1;

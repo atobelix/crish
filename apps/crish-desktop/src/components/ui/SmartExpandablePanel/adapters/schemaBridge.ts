@@ -6,14 +6,29 @@ import type { MenuItem } from '../types';
  * 将单个 ui/Menu 的 SelectOptionItem 转换为 SmartExpandablePanel 的 MenuItem
  */
 export function convertMenuOptionToSmartItem(opt: SelectOptionItem): MenuItem {
-  const { id, label, icon, hint, disabled, danger, onClick, sublabel, ...rest } = opt;
+  const {
+    id,
+    label,
+    icon,
+    hint,
+    disabled,
+    danger,
+    onClick,
+    sublabel,
+    ...rest
+  } = opt;
   return {
     ...rest,
     id,
     label,
     icon,
     shortcut: typeof hint === 'string' ? hint : undefined,
-    sublabel: typeof sublabel === 'string' ? sublabel : (typeof hint === 'string' ? hint : undefined),
+    sublabel:
+      typeof sublabel === 'string'
+        ? sublabel
+        : typeof hint === 'string'
+          ? hint
+          : undefined,
     disabled,
     danger,
     onSelect: (_item, _e) => {
@@ -36,7 +51,17 @@ export function convertMenuOptionsToSmartItems(
  * 将单个 SmartExpandablePanel 的 MenuItem 转换为 ui/Menu 的 SelectOptionItem
  */
 export function convertSmartItemToMenuOption(item: MenuItem): SelectOptionItem {
-  const { id, label, icon, shortcut, sublabel, disabled, danger, onSelect, ...rest } = item;
+  const {
+    id,
+    label,
+    icon,
+    shortcut,
+    sublabel,
+    disabled,
+    danger,
+    onSelect,
+    ...rest
+  } = item;
   return {
     ...rest,
     id,

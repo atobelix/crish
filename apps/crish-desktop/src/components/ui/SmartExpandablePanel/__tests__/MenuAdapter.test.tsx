@@ -1,12 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import {
-  render,
-  screen,
-  fireEvent,
-  cleanup,
-} from '@testing-library/react';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { MenuAdapter } from '../adapters/MenuAdapter';
 import { Dialog } from '../../Dialog/Dialog';
 import { layerStackService } from '../../internal/layer-stack/LayerStackService';

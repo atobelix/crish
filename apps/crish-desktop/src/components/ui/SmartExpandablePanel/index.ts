@@ -1,4 +1,7 @@
-export { SmartExpandablePanel, SmartExpandablePanel as SmartPanel } from './SmartExpandablePanel';
+export {
+  SmartExpandablePanel,
+  SmartExpandablePanel as SmartPanel,
+} from './SmartExpandablePanel';
 export { SmartPanelHeader } from './SmartPanelHeader';
 export { SmartPanelItem } from './SmartPanelItem';
 export { SmartPanelList } from './SmartPanelList';
@@ -6,7 +9,6 @@ export { useSmartPanel } from './useSmartPanel';
 export { useSmartKeyboardNav } from './useSmartKeyboardNav';
 export { useWheelIsolation } from './useWheelIsolation';
 export { PositionEngine } from './PositionEngine';
-export { SafeAimEngine } from '../internal/SafeAimEngine';
 export {
   MenuAdapter,
   SelectAdapter,

@@ -1,12 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import {
-  render,
-  screen,
-  fireEvent,
-  cleanup,
-} from '@testing-library/react';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { SmartExpandablePanel } from '../SmartExpandablePanel';
 import { MenuAdapter } from '../adapters/MenuAdapter';
 import { SelectAdapter } from '../adapters/SelectAdapter';
@@ -63,10 +58,7 @@ describe('SmartExpandablePanel 工业级架构魔鬼用例与核心交互', () =
   // DEVIL-04: SelectAdapter 的 combobox / listbox / option 语义一致性
   it('DEVIL-04 [SelectAdapter A11y]: SelectAdapter 必须严格维持 listbox 语义，绝不能篡改为 menu', async () => {
     render(
-      <SelectAdapter
-        options={[{ id: 'opt1', label: '选项一' }]}
-        value="opt1"
-      />
+      <SelectAdapter options={[{ id: 'opt1', label: '选项一' }]} value="opt1" />
     );
     const trigger = screen.getByRole('combobox');
     fireEvent.click(trigger);
@@ -89,7 +81,9 @@ describe('SmartExpandablePanel 工业级架构魔鬼用例与核心交互', () =
     const searchInput = screen.getByPlaceholderText(/搜索/);
     fireEvent.change(searchInput, { target: { value: '自定义内容' } });
     fireEvent.keyDown(searchInput, { key: 'Enter' });
-    expect(onSelect).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'item1' }));
+    expect(onSelect).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'item1' })
+    );
   });
 
   // DEVIL-06: 列表尾部操作按钮点击冒泡隔离测试
@@ -104,7 +98,11 @@ describe('SmartExpandablePanel 工业级架构魔鬼用例与核心交互', () =
             id: 'proj1',
             label: '项目一',
             onSelect,
-            trailingAction: <button type="button" onClick={onDelete}>删除</button>,
+            trailingAction: (
+              <button type="button" onClick={onDelete}>
+                删除
+              </button>
+            ),
           },
         ]}
       />
@@ -155,6 +153,9 @@ describe('SmartExpandablePanel 工业级架构魔鬼用例与核心交互', () =
     const trigger = screen.getByText('高级设置');
     fireEvent.click(trigger);
     expect(screen.getByText('子配置项')).toBeInTheDocument();
-    expect(onToggle).toHaveBeenCalledWith(true, expect.objectContaining({ id: 'folder1' }));
+    expect(onToggle).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({ id: 'folder1' })
+    );
   });
 });

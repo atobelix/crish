@@ -364,7 +364,7 @@ describe('ui/Menu children 模式键盘漫游（08-步5 T4-4，P2-8）', () => {
     const first = await screen.findByRole('menuitem', { name: /子项甲/ });
     first.focus();
     // children 模式内容本身为 Radix Popover.Content（role=dialog）
-    return first.closest('[role="dialog"]') as HTMLElement;
+    return first.closest('[role="menu"], [role="dialog"]') as HTMLElement;
   }
 
   it('ArrowDown/ArrowUp 循环漫游 + Home/End', async () => {
@@ -424,7 +424,9 @@ describe('ui/Menu children 模式键盘漫游（08-步5 T4-4，P2-8）', () => {
     fireEvent.click(screen.getByText(TRIGGER_TEXT));
     const input = await screen.findByLabelText('搜索项目');
     input.focus();
-    const content = input.closest('[role="dialog"]') as HTMLElement;
+    const content = input.closest(
+      '[role="menu"], [role="dialog"]'
+    ) as HTMLElement;
     fireEvent.keyDown(content, { key: 'ArrowDown' });
     expect(input).toHaveFocus();
   });

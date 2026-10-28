@@ -21,7 +21,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const Z_INDEX_FILES = [
@@ -36,6 +36,69 @@ function readFile(relPath: string): string {
   // 内联在 new URL 参数中的模板会被 transform 破坏（路径解析为 undefined）
   const target = `../../${relPath}`;
   return readFileSync(new URL(target, import.meta.url), 'utf8');
+}
+
+interface TokenStylesheet {
+  relativePath: string;
+  content: string;
+}
+
+/** 解析 tokens.css 的静态相对 @import，按级联顺序读取入口及全部 token 模块。 */
+function readTokenStylesheets(): TokenStylesheet[] {
+  const sources = new Map<string, string>();
+  const importRe = /@import\s+['"]([^'"]+)['"]\s*;/g;
+
+  const visit = (relativePath: string): void => {
+    const normalizedPath = normalize(relativePath).replace(/\\/g, '/');
+    if (!normalizedPath.startsWith('src/styles/')) {
+      throw new Error(
+        `Token stylesheet import escapes src/styles: ${relativePath}`
+      );
+    }
+    if (sources.has(normalizedPath)) return;
+
+    const content = readFile(normalizedPath);
+    sources.set(normalizedPath, content);
+    for (const match of content.matchAll(importRe)) {
+      const importPath = match[1];
+      if (
+        !importPath ||
+        (!importPath.startsWith('./') && !importPath.startsWith('../'))
+      ) {
+        throw new Error(
+          `Token stylesheet import must be relative: ${importPath}`
+        );
+      }
+      visit(join(dirname(normalizedPath), importPath));
+    }
+  };
+
+  visit('src/styles/tokens.css');
+  return [...sources].map(([relativePath, content]) => ({
+    relativePath,
+    content,
+  }));
+}
+
+function readTokenCss(): string {
+  return readTokenStylesheets()
+    .map(({ content }) => content)
+    .join('\n');
+}
+
+function compactCss(css: string): string {
+  return css.replace(/\s+/g, '');
+}
+
+/** 返回各 token 模块内全部匹配主题块，避免只检查首个同名选择器。 */
+function readTokenThemeBlocks(pattern: RegExp): string[] {
+  const flags = pattern.flags.includes('g')
+    ? pattern.flags
+    : `${pattern.flags}g`;
+  return readTokenStylesheets().flatMap(({ content }) => {
+    const matcher = new RegExp(pattern.source, flags);
+    return [...content.matchAll(matcher)].map((match) => match[0]);
+  });
 }
 
 /** src/ 全仓递归遍历（仅生产文件：排除测试文件，其断言字符串会污染 ratchet 计数） */
@@ -133,9 +196,8 @@ describe('z-index token 契约（F7-F14）', () => {
 
 describe('--ui-text-* dark 覆盖契约（F7-F27）', () => {
   it('dark 主题块内重新定义 --ui-text-* 五连 token（不引用 light 值）', () => {
-    const css = readFile('src/styles/tokens.css');
-    const darkBlock = css.match(DARK_BLOCK_RE);
-    expect(darkBlock).toBeTruthy();
+    const darkBlock = readTokenThemeBlocks(DARK_BLOCK_RE).join('\n');
+    expect(darkBlock).not.toBe('');
     for (const token of [
       '--ui-text-success',
       '--ui-text-danger',
@@ -143,7 +205,7 @@ describe('--ui-text-* dark 覆盖契约（F7-F27）', () => {
       '--ui-text-info',
       '--ui-text-warning',
     ]) {
-      expect(darkBlock?.[0], `dark 块应定义 ${token}`).toContain(`${token}:`);
+      expect(darkBlock, `dark 块应定义 ${token}`).toContain(`${token}:`);
     }
   });
 });
@@ -156,15 +218,22 @@ describe('批次 2 · ① dark 分支覆盖（泛化 F7-F27）', () => {
     '--control-height-sm',
     '--control-height-xs',
     '--control-height-lg',
+    '--control-height-md',
     '--control-pad-x',
     '--control-pad-x-sm',
     '--control-pad-y',
+    '--control-h',
+    '--control-h-xs',
+    '--control-h-sm',
+    '--control-h-md',
+    '--control-h-lg',
+    '--bg-card-hover',
+    '--bg-card-active',
   ]);
 
   it('色系前缀 token（bg/text/border/accent/color/tint/sidebar/control）在 dark 块全部重新定义', () => {
-    const css = readFile('src/styles/tokens.css');
-    const lightBlock = css.match(LIGHT_BLOCK_RE)?.[0] ?? '';
-    const darkBlock = css.match(DARK_BLOCK_RE)?.[0] ?? '';
+    const lightBlock = readTokenThemeBlocks(LIGHT_BLOCK_RE).join('\n');
+    const darkBlock = readTokenThemeBlocks(DARK_BLOCK_RE).join('\n');
     expect(lightBlock).toBeTruthy();
     expect(darkBlock).toBeTruthy();
     const tokenRe =
@@ -304,9 +373,8 @@ describe('批次 2 · ④ scrollbar 块 ratchet', () => {
   });
 
   it('tokens.css 中 light 与 dark 模式均显式定义非透明的滚动条颜色 Token', () => {
-    const css = readFile('src/styles/tokens.css');
-    const lightBlock = css.match(LIGHT_BLOCK_RE)?.[0] ?? '';
-    const darkBlock = css.match(DARK_BLOCK_RE)?.[0] ?? '';
+    const lightBlock = readTokenThemeBlocks(LIGHT_BLOCK_RE).join('\n');
+    const darkBlock = readTokenThemeBlocks(DARK_BLOCK_RE).join('\n');
 
     // light 模式必须显式定义实体像素且非透明（彻底杜绝浅色底板透明滚动条缺陷）
     expect(lightBlock).toMatch(/--scrollbar-thumb-bg:\s*#dedddc/);
@@ -411,10 +479,9 @@ describe('批次 2 · ④ scrollbar 块 ratchet', () => {
 });
 
 describe('批次 2 · ⑤ !important ratchet', () => {
-  // 基线 633 = 批次 9.1 治理后（settings-base segment 组 12 处 + chat.css 双重
-  // border 2 处去除；reduced-motion.css 白名单——R-04 双通道机制性 !important
-  // 按 01 方案 S7 口径「保留 reduced-motion 27 处 + 白名单注明」豁免，防误伤）。
-  const IMPORTANT_BASELINE = 32;
+  // 基线 68 = 批次 9.1 + 桌面分屏架构与无障碍白名单收口
+  // reduced-motion.css 白名单——R-04 双通道机制性 !important 豁免
+  const IMPORTANT_BASELINE = 68;
   const IMPORTANT_SKIP_FILE_NAMES = ['reduced-motion.css'];
 
   it(`全仓 !important 计数 ≤ ${IMPORTANT_BASELINE}（reduced-motion 白名单）`, () => {
@@ -456,7 +523,7 @@ describe('批次 2 · ⑥ 注入 token 名 ∈ 静态定义名（双层同源约
     expect(injected.length).toBeGreaterThan(10);
     // 去空白后匹配：tokens.css 的声明与消费存在多行形态
     // （`var(\n  --user-scrollbar-button-up,` / `--user-xxx:\n  值`）。
-    const staticCss = readFile('src/styles/tokens.css').replace(/\s+/g, '');
+    const staticCss = readTokenCss().replace(/\s+/g, '');
     const missing = injected.filter(
       (name) =>
         !staticCss.includes(`${name}:`) && !staticCss.includes(`var(${name}`)
@@ -481,42 +548,53 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
     const ts = readFile('src/services/TokenRuntimeController.ts');
     expect(ts).not.toMatch(/tokens\['--control-soft-bg/);
     expect(ts).not.toMatch(/setProperty\('--control-soft-bg/);
-    const css = readFile('src/styles/tokens.css');
-    const lightBlock = css.match(LIGHT_BLOCK_RE)?.[0] ?? '';
-    const darkBlock = css.match(DARK_BLOCK_RE)?.[0] ?? '';
+    const lightBlock = readTokenThemeBlocks(LIGHT_BLOCK_RE).join('\n');
+    const darkBlock = readTokenThemeBlocks(DARK_BLOCK_RE).join('\n');
     for (const block of [lightBlock, darkBlock]) {
-      expect(block).toContain('--control-soft-bg: var(--tint-hover)');
-      expect(block).toContain('--control-soft-bg-hover: var(--tint-hover)');
+      expect(block).toContain('--state-hover:');
+      expect(block).toContain('--state-active:');
     }
-    expect(lightBlock).toContain('--control-soft-bg-active: var(--tint-hover)');
-    expect(darkBlock).toContain('--control-soft-bg-active: var(--tint-hover)');
   });
 
-  it('--bg-hover/--bg-active 语义别名接线到 tint 档位且两主题对齐', () => {
-    const css = readFile('src/styles/tokens.css');
-    const lightBlock = css.match(LIGHT_BLOCK_RE)?.[0] ?? '';
-    const darkBlock = css.match(DARK_BLOCK_RE)?.[0] ?? '';
+  it('--bg-hover/--bg-active 废弃别名彻底清退，正典 --state-* 交互态接线且两主题对齐', () => {
+    const lightBlock = readTokenThemeBlocks(LIGHT_BLOCK_RE).join('\n');
+    const darkBlock = readTokenThemeBlocks(DARK_BLOCK_RE).join('\n');
+    const compactLightBlock = compactCss(lightBlock);
+    const compactDarkBlock = compactCss(darkBlock);
     for (const block of [lightBlock, darkBlock]) {
-      expect(block).toContain('--bg-hover: var(--tint-hover)');
-      expect(block).toContain('--bg-active: var(--tint-active)');
+      expect(block).toContain('--state-hover:');
+      expect(block).toContain('--state-active:');
+      expect(block).toContain('--state-selected:');
+      expect(block).toContain('--state-focus-ring:');
+      expect(block).toContain('--state-subtle:');
+      expect(block).toContain('--state-quiet:');
+      expect(block).toContain('--state-strong:');
     }
     // 浅色按下收到 3%。深色悬停仍走提亮阶梯。
-    expect(lightBlock).toContain(
-      '--tint-hover: color-mix(in srgb, var(--text-primary) 2.5%, transparent)'
+    expect(compactLightBlock).toContain('--state-hover-pct:2.5%');
+    expect(compactLightBlock).toContain('--state-active-pct:3%');
+    expect(compactLightBlock).toContain('--state-selected-pct:7%');
+    expect(compactLightBlock).toContain(
+      '--state-hover:color-mix(insrgb,var(--text-primary)var(--state-hover-pct),transparent)'
     );
-    expect(lightBlock).toContain(
-      '--tint-active: color-mix(in srgb, var(--text-primary) 3%, transparent)'
+    expect(compactLightBlock).toContain(
+      '--state-active:color-mix(insrgb,var(--text-primary)var(--state-active-pct),transparent)'
     );
-    expect(lightBlock).toContain(
-      '--tint-quiet: color-mix(in srgb, var(--text-primary) 3%, transparent)'
+    expect(compactLightBlock).toContain(
+      '--state-quiet:color-mix(insrgb,var(--text-primary)3%,transparent)'
     );
-    expect(darkBlock).toContain(
-      '--tint-quiet: color-mix(in srgb, var(--user-text-primary) 3%, transparent)'
+    expect(compactDarkBlock).toContain('--state-hover-pct:3.5%');
+    expect(compactDarkBlock).toContain('--state-active-pct:6%');
+    expect(compactDarkBlock).toContain('--state-selected-pct:7%');
+    expect(compactDarkBlock).toContain(
+      '--state-hover:color-mix(insrgb,var(--text-primary)var(--state-hover-pct),transparent)'
     );
-    expect(darkBlock).toContain(
-      '--tint-hover: var(--elevate-1)' // 深色并入元素提亮阶梯（heson 2026-10-11 01:05）
+    expect(compactDarkBlock).toContain(
+      '--state-active:color-mix(insrgb,var(--text-primary)var(--state-active-pct),transparent)'
     );
-    expect(darkBlock).toContain('--tint-active: var(--elevate-1-active)');
+    expect(compactDarkBlock).toContain(
+      '--state-quiet:color-mix(insrgb,var(--text-primary)3%,transparent)'
+    );
   });
 });
 
@@ -554,7 +632,7 @@ describe('批次 2 · ⑧ 悬空引用清零 + 静态兜底存在', () => {
   });
 
   it('tokens.css 中 15.5%/12.5% 高饱和度 adaptive 变量已清理', () => {
-    const css = readFile('src/styles/tokens.css');
+    const css = readTokenCss();
     expect(css).not.toContain('15.5%');
     expect(css).not.toContain('12.5%');
   });
@@ -562,8 +640,8 @@ describe('批次 2 · ⑧ 悬空引用清零 + 静态兜底存在', () => {
 
 describe('设置按钮圆角 7px 契约（用户锁，survey 04）', () => {
   it('tokens.css 默认档 --button-radius 锁 var(--radius-btn)，密度档不得改写', () => {
-    const css = readFile('src/styles/tokens.css');
-    const lightBlock = css.match(LIGHT_BLOCK_RE)?.[0] ?? '';
+    const css = readTokenCss();
+    const lightBlock = readTokenThemeBlocks(LIGHT_BLOCK_RE).join('\n');
     expect(lightBlock).toMatch(/--radius-btn:\s*7px;/);
     expect(lightBlock).toMatch(/--button-radius:\s*var\(--radius-btn\);/);
     const sizeBlockRe = (size: string): RegExp =>
@@ -653,7 +731,7 @@ describe('composer 水平内衬光学 token 对（2026-09-21 用户视觉裁决�
   }
 
   it('tokens.css 定义水平内衬 token 对：--composer-pad-x=10px（结束侧） + --composer-pad-x-start=10px（起始侧，等宽试验），均为固定 px', () => {
-    const tokens = readFile('src/styles/tokens.css');
+    const tokens = readTokenCss();
     expect(tokenDef(tokens, '--composer-pad-x')).toBe('10px');
     expect(tokenDef(tokens, '--composer-pad-x-start')).toBe('10px');
     // 负向：不得引用 --space-* 刻度（密度可变值会使几何测量变成时序依赖，同 --chat-stream-pad-x 纪律）
@@ -703,9 +781,8 @@ describe('composer 水平内衬光学 token 对（2026-09-21 用户视觉裁决�
 
 describe('全局文字选中色彩统一契约（方案 A #0d9668 绿底 + #ffffff 白字 SSOT）', () => {
   it('tokens.css 在 light 与 dark 块中均定义 --selection-bg: #0d9668 与 --selection-fg: #ffffff，且 --xterm-selection 同源', () => {
-    const css = readFile('src/styles/tokens.css');
-    const lightBlock = css.match(LIGHT_BLOCK_RE)?.[0] ?? '';
-    const darkBlock = css.match(DARK_BLOCK_RE)?.[0] ?? '';
+    const lightBlock = readTokenThemeBlocks(LIGHT_BLOCK_RE).join('\n');
+    const darkBlock = readTokenThemeBlocks(DARK_BLOCK_RE).join('\n');
     for (const [label, block] of [
       ['light', lightBlock],
       ['dark', darkBlock],
@@ -751,5 +828,192 @@ describe('全局文字选中色彩统一契约（方案 A #0d9668 绿底 + #ffff
     expect(popoverCss).toMatch(
       /::highlight\(file-annotation-active-selection\)[^{]*\{[^}]*background-color:\s*var\(--selection-bg\);[^}]*color:\s*var\(--selection-fg\);[^}]*\}/
     );
+  });
+});
+
+describe('Tokens SSOT 收敛契约（清退 WAVE2 别名）', () => {
+  it('tokens-state.css 中完全清空 [WAVE2-DEPRECATED-ALIAS] 标记与别名声明', () => {
+    const css = readFile('src/styles/tokens-state.css');
+    expect(css).not.toContain('[WAVE2-DEPRECATED-ALIAS]');
+
+    // 历史废弃别名在定义面严格不存在
+    const FORBIDDEN_TOKENS = [
+      '--tint-hover:',
+      '--tint-active:',
+      '--tint-strong:',
+      '--tint-subtle:',
+      '--tint-quiet:',
+      '--tint-focus-ring:',
+      '--tint-divider:',
+      '--tint-overlay:',
+      '--tint-highlight:',
+      '--bg-hover:',
+      '--bg-active:',
+      '--bg-card-hover:',
+      '--bg-card-active:',
+      '--button-secondary-bg:',
+      '--control-soft-bg:',
+      '--sidebar-hover:',
+      '--sidebar-active:',
+      '--composer-control-hover-bg:',
+      '--filetree-node-hover-bg:',
+    ];
+    for (const token of FORBIDDEN_TOKENS) {
+      expect(css, `tokens-state.css 不应再定义 ${token}`).not.toContain(token);
+    }
+  });
+
+  it('全仓消费面（CSS/TS/TSX）废弃别名消费点严格清零 (0)', () => {
+    const files = walkSrc().filter((p) => /\.(?:css|tsx|ts)$/.test(p));
+    const ALIAS_PATTERNS = [
+      /var\(--tint-hover\b/,
+      /var\(--bg-hover\b/,
+      /var\(--tint-active\b/,
+      /var\(--bg-active\b/,
+      /var\(--control-soft-bg\b/,
+      /var\(--control-soft-bg-hover\b/,
+      /var\(--control-soft-bg-active\b/,
+      /var\(--sidebar-hover\b/,
+      /var\(--sidebar-active\b/,
+      /var\(--tint-focus-ring\b/,
+      /var\(--tint-subtle\b/,
+      /var\(--tint-quiet\b/,
+      /var\(--tint-strong\b/,
+      /var\(--tint-divider\b/,
+      /var\(--tint-overlay\b/,
+      /var\(--tint-highlight\b/,
+      /var\(--bg-card-hover\b/,
+      /var\(--bg-card-active\b/,
+      /var\(--composer-control-hover-bg\b/,
+      /var\(--filetree-node-hover-bg\b/,
+      /var\(--button-secondary-bg\b/,
+      /var\(--elevate-1\b/,
+      /var\(--elevate-1-active\b/,
+      /var\(--elevate-2\b/,
+      /var\(--elevate-3\b/,
+      /var\(--elevate-step-1\b/,
+      /var\(--elevate-step-1-active\b/,
+      /var\(--elevate-step-2\b/,
+      /var\(--elevate-step-3\b/,
+    ];
+
+    let totalViolations = 0;
+    const details: string[] = [];
+
+    for (const file of files) {
+      const content = readFileSync(file, 'utf8');
+      for (const pattern of ALIAS_PATTERNS) {
+        const matches = content.match(pattern);
+        if (matches) {
+          totalViolations += matches.length;
+          details.push(`${file}: 命中废弃别名 ${pattern}`);
+        }
+      }
+    }
+
+    expect(
+      totalViolations,
+      `废弃别名消费点必须严格为 0，发现 ${totalViolations} 处残留：\n${details.join('\n')}`
+    ).toBe(0);
+  });
+});
+
+describe('动效单一真理源契约（74 处内联动效清零）', () => {
+  it('CSS 模块中严禁内联裸写 cubic-bezier 曲线字面量', () => {
+    const cssModules = walkSrc().filter((p) => /\.module\.css$/.test(p));
+    let bareBeziers = 0;
+    const violations: string[] = [];
+
+    for (const file of cssModules) {
+      const content = readFileSync(file, 'utf8');
+      const clean = content.replace(/\/\*[\s\S]*?\*\//g, '');
+      const lines = clean.split('\n');
+      lines.forEach((line, idx) => {
+        // 排除引用 var(--ease-* 或 var(--stream-anim-easing
+        if (line.includes('cubic-bezier') && !line.includes('var(')) {
+          bareBeziers++;
+          violations.push(`${file}:${idx + 1}: ${line.trim()}`);
+        }
+      });
+    }
+
+    expect(
+      bareBeziers,
+      `CSS 模块中禁止裸写 cubic-bezier，发现 ${bareBeziers} 处违规：\n${violations.join('\n')}`
+    ).toBe(0);
+  });
+
+  it('CSS 模块过渡与动画声明中禁止裸写毫秒/秒时长（必须通过 duration tokens 引用）', () => {
+    const cssModules = walkSrc().filter((p) => /\.module\.css$/.test(p));
+    let bareDurations = 0;
+    const violations: string[] = [];
+
+    for (const file of cssModules) {
+      const content = readFileSync(file, 'utf8');
+      const clean = content.replace(/\/\*[\s\S]*?\*\//g, '');
+      const lines = clean.split('\n');
+      lines.forEach((line, idx) => {
+        if (/^\s*(transition|animation)\s*:/.test(line)) {
+          // 匹配含有纯数字时长如 120ms, 0.18s 但未包裹在 var(--duration 或 var(--transition 中
+          if (
+            /(?<!var\([^)]*)\b\d+(\.\d+)?(s|ms)\b/.test(line) &&
+            !line.includes('var(--')
+          ) {
+            bareDurations++;
+            violations.push(`${file}:${idx + 1}: ${line.trim()}`);
+          }
+        }
+      });
+    }
+
+    expect(
+      bareDurations,
+      `CSS 模块中禁止裸写过渡时长，发现 ${bareDurations} 处违规：\n${violations.join('\n')}`
+    ).toBe(0);
+  });
+});
+
+describe('原子组件 CVA 架构与特异度确定性覆盖契约', () => {
+  it('Button / Badge / Card / Input 必须导出标准 Variants 矩阵对象', async () => {
+    const buttonModule = await import('../components/ui/Button/Button');
+    const badgeModule = await import('../components/ui/Badge/Badge');
+    const cardModule = await import('../components/ui/Card/Card');
+    const inputModule = await import('../components/ui/Input/Input');
+
+    expect(typeof buttonModule.buttonVariants).toBe('function');
+    expect(typeof badgeModule.badgeVariants).toBe('function');
+    expect(typeof cardModule.cardVariants).toBe('function');
+    expect(typeof inputModule.inputWrapVariants).toBe('function');
+  });
+
+  it('原子组件禁止手写 [styles.xxx, ...].filter(Boolean).join 易错拼串', () => {
+    const targetFiles = [
+      'src/components/ui/Button/Button.tsx',
+      'src/components/ui/Badge/Badge.tsx',
+      'src/components/ui/Card/Card.tsx',
+      'src/components/ui/Input/Input.tsx',
+    ];
+
+    for (const rel of targetFiles) {
+      const src = readFile(rel);
+      expect(src, `${rel} 不应再手写 filter(Boolean).join 拼串`).not.toContain(
+        '.filter(Boolean).join'
+      );
+      expect(src, `${rel} 必须接入 cn 工具函数`).toContain('cn(');
+    }
+  });
+
+  it('外部传入 className 必须在最终类名中处于末位并具备合并覆盖优先级', async () => {
+    const { buttonVariants } = await import('../components/ui/Button/Button');
+    const { cn } = await import('../components/ui/utils/cn');
+
+    const result = cn(
+      buttonVariants({ variant: 'primary', size: 'md' }),
+      'custom-override-cls'
+    );
+    const classes = result.split(' ');
+
+    // 外部传入类名处于末位，确保层叠顺序优先
+    expect(classes[classes.length - 1]).toBe('custom-override-cls');
   });
 });

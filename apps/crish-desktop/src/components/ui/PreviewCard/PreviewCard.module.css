@@ -120,10 +120,10 @@
 /* 减弱动态适配 */
 @media (prefers-reduced-motion: reduce) {
   .enter {
-    animation: previewCardFadeIn 60ms linear forwards;
+    animation: previewCardFadeIn var(--duration-micro, 60ms) linear forwards;
   }
   .exit {
-    animation: previewCardFadeOut 60ms linear forwards;
+    animation: previewCardFadeOut var(--duration-micro, 60ms) linear forwards;
   }
 }
 

@@ -74,13 +74,15 @@
   align-items: center;
   pointer-events: auto;
   opacity: 0;
-  transition: opacity var(--duration-fast) var(--ease-standard);
+  transition: opacity var(--duration-normal) var(--ease-emphasized);
   z-index: 2;
   user-select: none;
 }
 
 .stepperTrackColumn.visible {
   opacity: 1;
+  transition: opacity var(--duration-fast) var(--ease-decelerate)
+    var(--duration-micro);
 }
 
 /* 三段式水平底栏：绝对定位悬浮于容器内侧底端，严格保留 2px 物理透明隔离间隙 */
@@ -93,19 +95,21 @@
   align-items: center;
   pointer-events: auto;
   opacity: 0;
-  transition: opacity var(--duration-fast) var(--ease-standard);
+  transition: opacity var(--duration-normal) var(--ease-emphasized);
   z-index: 2;
   user-select: none;
 }
 
 .stepperTrackRow.visible {
   opacity: 1;
+  transition: opacity var(--duration-fast) var(--ease-decelerate)
+    var(--duration-micro);
 }
 
 /* 端点安全护栏步进按钮：透明无底框，饱满 8px 包围盒 */
 .stepperButton {
   width: var(--scrollbar-width);
-  height: var(--scrollbar-button-height, 8px);
+  height: var(--scrollbar-button-height);
   min-height: 8px;
   padding: 0;
   margin: 0;
@@ -121,8 +125,8 @@
   outline: none;
   border-radius: var(--radius-xs);
   transition:
-    color 120ms ease,
-    opacity 120ms ease;
+    color var(--transition-fast),
+    opacity var(--transition-fast);
   user-select: none;
   touch-action: none;
 }
@@ -158,7 +162,7 @@
   position: relative;
   flex: 1;
   width: 100%;
-  background: var(--scrollbar-track-bg, transparent);
+  background: var(--scrollbar-track-bg);
   overflow: hidden;
 }
 
@@ -170,7 +174,7 @@
   width: 100%;
   border-radius: var(--scrollbar-thumb-radius);
   background: var(--scrollbar-thumb-bg);
-  transition: background 120ms ease;
+  transition: background-color var(--transition-fast);
   cursor: grab;
   user-select: none;
   touch-action: none;
@@ -192,7 +196,7 @@
 /* 水平端点步进按钮 */
 .leftButton,
 .rightButton {
-  width: var(--scrollbar-button-height, 8px);
+  width: var(--scrollbar-button-height);
   height: var(--scrollbar-width);
   min-width: 8px;
 }
@@ -209,7 +213,7 @@
   position: relative;
   flex: 1;
   height: 100%;
-  background: var(--scrollbar-track-bg, transparent);
+  background: var(--scrollbar-track-bg);
   overflow: hidden;
 }
 
@@ -221,7 +225,7 @@
   height: 100%;
   border-radius: var(--scrollbar-thumb-radius);
   background: var(--scrollbar-thumb-bg);
-  transition: background 120ms ease;
+  transition: background-color var(--transition-fast);
   cursor: grab;
   user-select: none;
   touch-action: none;

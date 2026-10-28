@@ -4,151 +4,160 @@
  * 语义 tone 收敛为 5 类：neutral / accent / warning / danger / success。
  */
 
-.badge {
-  --badge-h: 20px;
-  --badge-px: 6px;
-  --badge-fs: var(--font-size-xs);
-  --badge-radius: var(--radius-row);
-  --badge-bg: var(--surface-raised);
-  --badge-fg: var(--text-secondary);
+@layer components {
+  .badge {
+    --badge-h: 20px;
+    --badge-px: 6px;
+    --badge-fs: var(--font-size-xs);
+    --badge-radius: var(--radius-row);
+    --badge-bg: var(--surface-raised);
+    --badge-fg: var(--text-secondary);
 
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  height: var(--badge-h);
-  padding: 0 var(--badge-px);
-  gap: var(--space-1);
-  font-family:
-    'Segoe UI',
-    -apple-system,
-    var(--font-sans);
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum' 1;
-  font-size: var(--badge-fs);
-  font-weight: var(--font-weight-normal);
-  line-height: 1;
-  color: var(--badge-fg);
-  background-color: var(--badge-bg);
-  border: none; /* 彻底移除旧边框，展示型容器 0 描边 */
-  border-radius: var(--badge-radius);
-  user-select: none;
-  white-space: nowrap;
-  vertical-align: middle;
-}
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    height: var(--badge-h);
+    padding: 0 var(--badge-px);
+    gap: var(--space-1);
+    font-family:
+      'Segoe UI',
+      -apple-system,
+      var(--font-sans);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+    font-size: var(--badge-fs);
+    font-weight: var(--font-weight-normal);
+    line-height: 1;
+    color: var(--badge-fg);
+    background-color: var(--badge-bg);
+    border: none; /* 彻底移除旧边框，展示型容器 0 描边 */
+    border-radius: var(--badge-radius);
+    user-select: none;
+    white-space: nowrap;
+    vertical-align: middle;
+  }
 
-/* 尺寸阶梯 */
-.sizeXs,
-.badge[data-size='xs'] {
-  --badge-h: 18px;
-  --badge-px: 5px;
-  --badge-fs: var(--font-size-xxs);
-}
+  /* 尺寸阶梯 */
+  .sizeXs,
+  .badge[data-size='xs'] {
+    --badge-h: 18px;
+    --badge-px: 5px;
+    --badge-fs: var(--font-size-xxs);
+  }
 
-.sizeSm,
-.badge[data-size='sm'] {
-  --badge-h: 20px;
-  --badge-px: 6px;
-  --badge-fs: var(--font-size-xs);
-}
+  .sizeSm,
+  .badge[data-size='sm'] {
+    --badge-h: 20px;
+    --badge-px: 6px;
+    --badge-fs: var(--font-size-xs);
+  }
 
-.sizeMd,
-.badge[data-size='md'] {
-  --badge-h: 24px;
-  --badge-px: 8px;
-  --badge-fs: var(--font-size-sm);
-}
+  .sizeMd,
+  .badge[data-size='md'] {
+    --badge-h: 24px;
+    --badge-px: 8px;
+    --badge-fs: var(--font-size-sm);
+  }
 
-/* 5 类受限语义语气 (Tone) */
-.toneNeutral,
-.badge[data-tone='neutral'] {
-  --badge-bg: var(--surface-raised);
-  --badge-fg: var(--text-secondary);
-}
+  /* 5 类受限语义语气 (Tone) */
+  .toneNeutral,
+  .badge[data-tone='neutral'] {
+    --badge-bg: var(--surface-raised);
+    --badge-fg: var(--text-secondary);
+    --badge-border: transparent;
+  }
 
-.toneAccent,
-.badge[data-tone='accent'] {
-  --badge-bg: color-mix(in srgb, var(--accent) 12%, transparent);
-  --badge-fg: var(--accent);
-}
+  .toneAccent,
+  .badge[data-tone='accent'] {
+    --badge-bg: color-mix(in srgb, var(--accent) 12%, transparent);
+    --badge-fg: var(--accent);
+    --badge-border: transparent;
+  }
 
-.toneWarning,
-.badge[data-tone='warning'] {
-  --badge-bg: color-mix(in srgb, var(--color-warning) 12%, transparent);
-  --badge-fg: var(--color-warning);
-}
+  .toneWarning,
+  .badge[data-tone='warning'] {
+    --badge-bg: color-mix(in srgb, var(--color-warning) 12%, transparent);
+    --badge-fg: var(--color-warning);
+    --badge-border: transparent;
+  }
 
-.toneDanger,
-.badge[data-tone='danger'] {
-  --badge-bg: color-mix(in srgb, var(--color-danger) 12%, transparent);
-  --badge-fg: var(--color-danger);
-}
+  .toneDanger,
+  .badge[data-tone='danger'] {
+    --badge-bg: color-mix(in srgb, var(--color-danger) 12%, transparent);
+    --badge-fg: var(--color-danger);
+    --badge-border: transparent;
+  }
 
-.toneSuccess,
-.badge[data-tone='success'] {
-  --badge-bg: color-mix(in srgb, var(--color-success) 12%, transparent);
-  --badge-fg: var(--color-success);
-}
+  .toneSuccess,
+  .badge[data-tone='success'] {
+    --badge-bg: color-mix(in srgb, var(--color-success) 12%, transparent);
+    --badge-fg: var(--color-success);
+    --badge-border: transparent;
+  }
 
-/* 向后兼容旧 tone 别名（映射至 accent/neutral） */
-.toneBrand,
-.badge[data-tone='brand'] {
-  --badge-bg: color-mix(in srgb, var(--accent) 12%, transparent);
-  --badge-fg: var(--accent);
-}
+  /* 向后兼容旧 tone 别名（映射至 accent/neutral） */
+  .toneBrand,
+  .badge[data-tone='brand'] {
+    --badge-bg: color-mix(in srgb, var(--accent) 12%, transparent);
+    --badge-fg: var(--accent);
+    --badge-border: transparent;
+  }
 
-.toneInfo,
-.badge[data-tone='info'] {
-  --badge-bg: var(--surface-raised);
-  --badge-fg: var(--text-secondary);
-}
+  .toneInfo,
+  .badge[data-tone='info'] {
+    --badge-bg: var(--surface-raised);
+    --badge-fg: var(--text-secondary);
+    --badge-border: transparent;
+  }
 
-.badge[data-tone='error'] {
-  --badge-bg: color-mix(in srgb, var(--color-danger) 12%, transparent);
-  --badge-fg: var(--color-danger);
-}
+  .badge[data-tone='error'] {
+    --badge-bg: color-mix(in srgb, var(--color-danger) 12%, transparent);
+    --badge-fg: var(--color-danger);
+  }
 
-/* 内部指示元素 */
-.dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: currentColor;
-  flex-shrink: 0;
-}
+  /* 内部指示元素 */
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: currentColor;
+    flex-shrink: 0;
+  }
 
-.icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  font-size: 1em;
-}
+  .icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1em;
+  }
 
-.label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+  .label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
-/* 移除按钮（Chip/Tag 语义） */
-.removeButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  padding: 0;
-  margin-left: var(--space-0_5);
-  margin-right: -2px;
-  border: none;
-  border-radius: var(--radius-row);
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  opacity: 0.7;
-  transition: opacity var(--transition-micro);
-}
+  /* 移除按钮（Chip/Tag 语义） */
+  .removeButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    margin-left: var(--space-0_5);
+    margin-right: -2px;
+    border: none;
+    border-radius: var(--radius-row);
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity var(--transition-micro);
+  }
 
-.removeButton:hover {
-  opacity: 1;
+  .removeButton:hover {
+    opacity: 1;
+  }
 }

@@ -8,6 +8,7 @@ export interface SmartPanelListProps {
   items: Array<MenuItem | MenuGroup>;
   enableDivider?: boolean;
   query?: string;
+  activeSubmenuId?: string;
   renderItem?: (item: MenuItem, index: number, isFocused: boolean) => ReactNode;
   onSelect?: (item: MenuItem, event?: MouseEvent) => void;
   onHoverSubmenu?: (item: MenuItem, el: HTMLElement) => void;
@@ -20,6 +21,7 @@ export const SmartPanelList: React.FC<SmartPanelListProps> = ({
   items,
   enableDivider = true,
   query = '',
+  activeSubmenuId,
   renderItem,
   onSelect,
   onHoverSubmenu,
@@ -33,7 +35,14 @@ export const SmartPanelList: React.FC<SmartPanelListProps> = ({
 
   if (items.length === 0) {
     return (
-      <div style={{ padding: '14px 10px', textAlign: 'center', color: 'var(--sep-text-muted)', fontSize: '12px' }}>
+      <div
+        style={{
+          padding: '14px 10px',
+          textAlign: 'center',
+          color: 'var(--sep-text-muted)',
+          fontSize: '12px',
+        }}
+      >
         未找到匹配结果
       </div>
     );
@@ -45,14 +54,24 @@ export const SmartPanelList: React.FC<SmartPanelListProps> = ({
         if ('items' in entry) {
           const group = entry as MenuGroup;
           return (
-            <div key={group.id || `group-${idx}`} className={styles.groupSection}>
-              {group.title && !query && <div className={styles.groupHeader}>{group.title}</div>}
-              <div className={group.isSelectableList ? styles.selectableList : undefined}>
+            <div
+              key={group.id || `group-${idx}`}
+              className={styles.groupSection}
+            >
+              {group.title && !query && (
+                <div className={styles.groupHeader}>{group.title}</div>
+              )}
+              <div
+                className={
+                  group.isSelectableList ? styles.selectableList : undefined
+                }
+              >
                 {group.items.map((item, itemIdx) => (
                   <SmartPanelItem
                     key={item.id}
                     item={item}
                     index={itemIdx}
+                    activeSubmenuId={activeSubmenuId}
                     renderItem={renderItem}
                     onSelect={onSelect}
                     onHoverSubmenu={onHoverSubmenu}
@@ -61,7 +80,9 @@ export const SmartPanelList: React.FC<SmartPanelListProps> = ({
                   />
                 ))}
               </div>
-              {enableDivider && !query && idx < items.length - 1 && <div className={styles.divider} />}
+              {enableDivider && !query && idx < items.length - 1 && (
+                <div className={styles.divider} />
+              )}
             </div>
           );
         }
@@ -72,6 +93,7 @@ export const SmartPanelList: React.FC<SmartPanelListProps> = ({
             key={item.id}
             item={item}
             index={idx}
+            activeSubmenuId={activeSubmenuId}
             renderItem={renderItem}
             onSelect={onSelect}
             onHoverSubmenu={onHoverSubmenu}

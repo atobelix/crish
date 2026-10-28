@@ -19,7 +19,8 @@ export function useWheelIsolation(
       const deltaY = e.deltaY;
 
       const isAtTop = scrollTop <= 0;
-      const isAtBottom = Math.ceil(scrollTop + clientHeight) >= scrollHeight - 1;
+      const isAtBottom =
+        Math.ceil(scrollTop + clientHeight) >= scrollHeight - 1;
 
       if ((isAtTop && deltaY < 0) || (isAtBottom && deltaY > 0)) {
         e.preventDefault();

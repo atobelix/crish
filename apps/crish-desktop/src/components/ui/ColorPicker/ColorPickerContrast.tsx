@@ -1,5 +1,5 @@
 import React from 'react';
-import { AnimatePresence, motion, useTransform } from 'motion/react';
+import { AnimatePresence, m, useTransform } from 'motion/react';
 import { getWcagGrade } from '../../../utils/color/colorMath';
 import { useFollow } from './types';
 import styles from './ColorPicker.module.css';
@@ -32,7 +32,7 @@ export function ColorPickerContrast({
         Aa
       </span>
       <span className={styles.ratio}>
-        <motion.span>{ratioText}</motion.span>:1
+        <m.span>{ratioText}</m.span>:1
       </span>
       <span className={styles.against}>against background</span>
       <span
@@ -42,7 +42,7 @@ export function ColorPickerContrast({
         }
       >
         <AnimatePresence mode="popLayout" initial={false}>
-          <motion.span
+          <m.span
             key={grade}
             initial={hidden}
             animate={{ opacity: 1, y: '0em', filter: 'blur(0px)' }}
@@ -54,7 +54,7 @@ export function ColorPickerContrast({
             }
           >
             {grade}
-          </motion.span>
+          </m.span>
         </AnimatePresence>
       </span>
       <span className={styles.srOnly}>

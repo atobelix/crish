@@ -3,7 +3,7 @@
  *
  * 特性：
  * - 100% 纯净自研，零外部 npm 动画库依赖；
- * - 0ms 乐观状态机（optimisticChecked）：点击后滑块沿轨道平移并减速落定，不做挤压形变；
+ * - 0ms 乐观状态机（optimisticChecked）：解耦分层动效架构，外层平滑平移，内层微流体拉伸与若有若无紧致阻尼收敛；
  * - 受控与非受控双模严格权威收敛，外部真源更新时平滑对齐；
  * - 四层异常回滚与防死锁架构：同步捕获、Promise 异步守护、TTL 守卫定时器与双击原点快速收敛；
  * - 彻底移除 Checkmark 图标，滑块保持圆形，只做平移；
@@ -23,10 +23,19 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { m } from 'motion/react';
 import styles from './Switch.module.css';
 import { ICON_STROKE } from '../icons/iconTokens';
+import { SPRING_SWITCH_SLIDER } from '../../../utils/motionTokens';
 
 export type SwitchSize = 'sm' | 'md' | 'lg';
+
+/** 各尺寸滑块横向位移距离（像素）：严格与 Switch.module.css --thumb-travel 对齐 */
+const TRAVEL_BY_SIZE: Record<SwitchSize, number> = {
+  sm: 12,
+  md: 16,
+  lg: 20,
+};
 
 export interface SwitchProps extends Omit<
   React.ButtonHTMLAttributes<HTMLButtonElement>,
@@ -155,6 +164,7 @@ export const Switch = forwardRef<HTMLButtonElement, SwitchProps>(
       };
     }, [clearRollbackTimer]);
 
+    const travel = TRAVEL_BY_SIZE[size] ?? 16;
     const isInteractive = !disabled && !loading;
 
     // 6. 核心切换状态机算子
@@ -261,7 +271,16 @@ export const Switch = forwardRef<HTMLButtonElement, SwitchProps>(
         onClick={handleToggle}
         onKeyDown={handleKeyDown}
       >
-        <span className={styles.thumb} aria-hidden="true">
+        <m.span
+          className={styles.thumb}
+          aria-hidden="true"
+          initial={false}
+          animate={{
+            x: checked ? travel : 0,
+          }}
+          style={{ y: '-50%', transition: 'none' }}
+          transition={SPRING_SWITCH_SLIDER}
+        >
           {loading && (
             <svg
               className={styles.spinner}
@@ -281,7 +300,7 @@ export const Switch = forwardRef<HTMLButtonElement, SwitchProps>(
               />
             </svg>
           )}
-        </span>
+        </m.span>
       </button>
     );
 

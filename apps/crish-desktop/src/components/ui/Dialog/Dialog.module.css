@@ -1,220 +1,297 @@
-/* ui/Dialog        PE-05 T05.1.3
- *      tokens.css / z-index.css       hex/rgba
- *        --transition-modal-enter / --duration-exit    */
+/* ui/Dialog — Base UI Headless & @starting-style Modern Architecture
+ * tokens.css / z-index.css
+ * --duration-enter / --duration-exit / --modal-scrim
+ */
 
-/*    +
- *       overlayClassName   --dialog-z      SettingsPanel/Cheatsheet    */
-.overlayEnter,
-.overlayExit {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--dialog-z, var(--z-modal));
-}
+@layer components {
+  .overlayEnter,
+  .overlayExit {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: var(--dialog-z, var(--z-modal));
+  }
 
-/* 遮罩：全部弹窗共用一个轻压暗 token（--modal-scrim，浅/深各一份，见 tokens.css），不做模糊 */
-.backdrop {
-  position: absolute;
-  inset: 0;
-  background: var(--modal-scrim);
-  transition: background-color var(--duration-enter) var(--ease-standard);
-}
+  /* 遮罩：全部弹窗共用一个轻压暗 token（--modal-scrim，浅/深各一份，见 tokens.css），不做模糊 */
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    background: var(--modal-scrim);
+    z-index: 0;
+    opacity: 1;
+    transition: opacity var(--duration-enter) var(--ease-standard);
+  }
 
-/* 弹窗叠弹窗（如设置弹窗里再开模型配置）：只保留最上层遮罩，下层遮罩让位，避免两层叠暗。
+  @starting-style {
+    .backdrop {
+      opacity: 0;
+    }
+  }
+
+  .backdrop[data-ending-style] {
+    opacity: 0;
+    transition: opacity var(--duration-exit) var(--ease-accelerate);
+  }
+
+  /* 多层弹窗嵌套时，被覆盖的底层遮罩自动透明，绝不发黑 */
+  .backdrop[data-nested-dialog-open] {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* 弹窗叠弹窗（如设置弹窗里再开模型配置）：只保留最上层遮罩，下层遮罩让位，避免两层叠暗。
  * 结构：portal 目标 > [data-focus-trap] > [data-dialog-overlay] > .backdrop，后开的弹窗是后面的兄弟。
  * 上层退场中（data-dialog-state=exiting）即把遮罩交还下层，与上层淡出交叉过渡 */
-[data-focus-trap]:has(
-    ~ [data-focus-trap]
-      > [data-dialog-overlay]:not([data-dialog-state='exiting'])
-  )
-  > [data-dialog-overlay]
-  > .backdrop {
-  background: transparent;
-}
+  [data-focus-trap]:has(
+      ~ [data-focus-trap]
+        > [data-dialog-overlay]:not([data-dialog-state='exiting'])
+    )
+    > [data-dialog-overlay]
+    > .backdrop {
+    background: transparent;
+  }
 
-.dialog {
-  position: relative;
-  margin: auto;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-  max-width: calc(100vw - var(--space-8));
-  max-height: calc(100vh - var(--space-8));
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-2xl);
-  box-shadow:
-    0 24px 48px -12px color-mix(in srgb, var(--shadow-color) 16%, transparent),
-    0 8px 16px -4px color-mix(in srgb, var(--shadow-color) 6%, transparent);
-  outline: none;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
-}
+  /* Base UI 视口居中层 */
+  .viewport {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: calc(var(--dialog-z, var(--z-modal)) + 1);
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    padding: var(--space-4);
+  }
 
-.dialogSm {
-  --dialog-width: 320px;
-  width: min(var(--dialog-width), calc(100vw - var(--space-8)));
-}
+  .dialog,
+  .panel {
+    position: relative;
+    z-index: 1;
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    max-width: calc(100vw - var(--space-8));
+    max-height: calc(100vh - var(--space-8));
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-2xl);
+    box-shadow:
+      0 24px 48px -12px color-mix(in srgb, var(--shadow-color) 16%, transparent),
+      0 8px 16px -4px color-mix(in srgb, var(--shadow-color) 6%, transparent);
+    outline: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    opacity: 1;
+    transform: scale(1);
+    transition:
+      opacity var(--duration-enter) var(--ease-standard),
+      transform var(--duration-enter) var(--ease-standard);
+  }
 
-.dialogMd {
-  --dialog-width: 480px;
-  width: min(var(--dialog-width), calc(100vw - var(--space-8)));
-}
+  @starting-style {
+    .dialog,
+    .panel {
+      opacity: 0;
+      transform: scale(0.985);
+    }
+  }
 
-.dialogLg {
-  --dialog-width: 640px;
-  width: min(var(--dialog-width), calc(100vw - var(--space-8)));
-}
-
-.dialogXl {
-  --dialog-width: 800px;
-  width: min(var(--dialog-width), calc(100vw - var(--space-8)));
-}
-
-.dialog2xl {
-  --dialog-width: 1040px;
-  width: min(var(--dialog-width), calc(100vw - var(--space-8)));
-}
-
-.dialogAuto {
-  --dialog-width: auto;
-  width: fit-content;
-  max-width: min(calc(100vw - var(--space-8)), 1100px);
-  min-width: min(380px, calc(100vw - var(--space-8)));
-}
-
-/*         --transition-modal-enter/exit     */
-.dialogEnter {
-  animation: dialog-enter var(--transition-modal-enter) forwards;
-  transform-origin: center center;
-}
-
-.dialogExit {
-  animation: dialog-exit var(--duration-exit) var(--ease-accelerate) forwards;
-  transform-origin: center center;
-}
-
-.overlayEnter {
-  animation: overlay-enter var(--duration-enter) var(--ease-decelerate) forwards;
-}
-
-.overlayExit {
-  animation: overlay-exit var(--duration-exit) var(--ease-accelerate) forwards;
-}
-
-@keyframes dialog-enter {
-  from {
+  .dialog[data-ending-style],
+  .panel[data-ending-style] {
     opacity: 0;
     transform: scale(0.985);
+    transition:
+      opacity var(--duration-exit) var(--ease-accelerate),
+      transform var(--duration-exit) var(--ease-accelerate);
   }
-  to {
-    opacity: 1;
-    transform: none;
+
+  .dialogSm,
+  .size-sm {
+    --dialog-width: 320px;
+    width: min(var(--dialog-width), calc(100vw - var(--space-8)));
   }
-}
 
-@keyframes dialog-exit {
-  from {
-    opacity: 1;
-    transform: none;
+  .dialogMd,
+  .size-md {
+    --dialog-width: 480px;
+    width: min(var(--dialog-width), calc(100vw - var(--space-8)));
   }
-  to {
-    opacity: 0;
-    transform: scale(0.985);
+
+  .dialogLg,
+  .size-lg {
+    --dialog-width: 640px;
+    width: min(var(--dialog-width), calc(100vw - var(--space-8)));
   }
-}
 
-@keyframes overlay-enter {
-  from {
-    opacity: 0;
+  .dialogXl,
+  .size-xl {
+    --dialog-width: 800px;
+    width: min(var(--dialog-width), calc(100vw - var(--space-8)));
   }
-  to {
-    opacity: 1;
+
+  .dialog2xl,
+  .size-2xl {
+    --dialog-width: 1040px;
+    width: min(var(--dialog-width), calc(100vw - var(--space-8)));
   }
-}
 
-@keyframes overlay-exit {
-  from {
-    opacity: 1;
+  .dialogAuto,
+  .size-auto {
+    --dialog-width: auto;
+    width: fit-content;
+    max-width: min(calc(100vw - var(--space-8)), 1100px);
+    min-width: min(380px, calc(100vw - var(--space-8)));
   }
-  to {
-    opacity: 0;
+
+  /* 兼容存量动画类 */
+  .dialogEnter {
+    animation: dialog-enter var(--transition-modal-enter) forwards;
+    transform-origin: center center;
   }
-}
 
-.dialogHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-4) var(--space-2);
-}
+  .dialogExit {
+    animation: dialog-exit var(--duration-exit) var(--ease-accelerate) forwards;
+    transform-origin: center center;
+  }
 
-.dialogTitle {
-  margin: 0;
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-content);
-  color: var(--text-primary);
-}
+  .overlayEnter {
+    animation: overlay-enter var(--duration-enter) var(--ease-decelerate)
+      forwards;
+  }
 
-.dialogClose {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: auto;
-  width: var(--control-height-sm);
-  height: var(--control-height-sm);
-  border: none;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  transition:
-    background var(--transition-micro),
-    color var(--transition-micro);
-  flex-shrink: 0;
-}
+  .overlayExit {
+    animation: overlay-exit var(--duration-exit) var(--ease-accelerate) forwards;
+  }
 
-.dialogClose:hover {
-  background: var(--tint-hover);
-  color: var(--text-primary);
-}
+  @keyframes dialog-enter {
+    from {
+      opacity: 0;
+      transform: scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
 
-.dialogClose:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 1.5px
-    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 90%,
-    var(--text-primary) 10%
-  );
-}
+  @keyframes dialog-exit {
+    from {
+      opacity: 1;
+      transform: none;
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.985);
+    }
+  }
 
-.dialogDescription {
-  margin: 0;
-  padding: 0 var(--space-4) var(--space-2);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-body);
-  color: var(--text-secondary);
-}
+  @keyframes overlay-enter {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 
-.dialogBody {
-  box-sizing: border-box;
-  padding: var(--space-1) var(--space-4);
-  overflow-y: auto;
-  overflow-x: hidden;
-  color: var(--text-primary);
-  flex: 1 1 auto;
-}
+  @keyframes overlay-exit {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
 
-.dialogFooter {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  padding: 0 var(--space-4) var(--space-4);
+  .dialogHeader,
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-4) var(--space-2);
+    flex-shrink: 0;
+  }
+
+  .dialogTitle,
+  .title {
+    margin: 0;
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-content);
+    color: var(--text-primary);
+    line-height: var(--line-height-normal);
+  }
+
+  .dialogClose,
+  .closeBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+    width: var(--control-height-sm);
+    height: var(--control-height-sm);
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition:
+      background var(--transition-micro),
+      color var(--transition-micro);
+    flex-shrink: 0;
+  }
+
+  .dialogClose:hover,
+  .closeBtn:hover {
+    background: var(--state-hover);
+    color: var(--text-primary);
+  }
+
+  .dialogClose:focus-visible,
+  .closeBtn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 1.5px
+      color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+    border-color: color-mix(
+      in srgb,
+      var(--border-color) 90%,
+      var(--text-primary) 10%
+    );
+  }
+
+  .dialogDescription,
+  .description {
+    margin: 0;
+    padding: 0 var(--space-4) var(--space-2);
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-body);
+    color: var(--text-secondary);
+  }
+
+  .dialogBody,
+  .body {
+    box-sizing: border-box;
+    padding: var(--space-1) var(--space-4);
+    overflow-y: auto;
+    overflow-x: hidden;
+    color: var(--text-primary);
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .dialogFooter,
+  .footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    padding: 0 var(--space-4) var(--space-4);
+    flex-shrink: 0;
+  }
 }

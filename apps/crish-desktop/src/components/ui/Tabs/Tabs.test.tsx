@@ -315,7 +315,7 @@ describe('ui/Tabs', () => {
 
   it('物理动效与同心圆角 CSS 规范验证', () => {
     // 1. Appica 物理微回弹动效参数
-    expect(CSS_SRC).toContain('cubic-bezier(0.2, 0, 0, 1)');
+    expect(CSS_SRC).toContain('--tab-spring-bezier: var(--ease-spring)');
     expect(CSS_SRC).toContain('--tab-duration: 250ms');
     expect(CSS_SRC).not.toContain('--tab-press-duration');
 

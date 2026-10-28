@@ -38,10 +38,18 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
       path.resolve(desktopSrc, 'components/sidebar/SidebarNav.module.css'),
       'utf-8'
     );
-    expect(sidebarNavCss).toMatch(/\.navItem\[role=['"]search['"]\]\s*\{[^}]*background:\s*transparent/);
-    expect(sidebarNavCss).toMatch(/\.navItem\[role=['"]search['"]\]\s*\{[^}]*border:\s*none/);
-    expect(sidebarNavCss).toMatch(/\.navItem input\[type=['"]search['"]\][^{]*\{[^}]*border:\s*none/);
-    expect(sidebarNavCss).toMatch(/\.navItem input\[type=['"]search['"]\][^{]*\{[^}]*box-shadow:\s*none/);
+    expect(sidebarNavCss).toMatch(
+      /\.navItem\[role=['"]search['"]\]\s*\{[^}]*background:\s*transparent/
+    );
+    expect(sidebarNavCss).toMatch(
+      /\.navItem\[role=['"]search['"]\]\s*\{[^}]*border:\s*none/
+    );
+    expect(sidebarNavCss).toMatch(
+      /\.navItem input\[type=['"]search['"]\][^{]*\{[^}]*border:\s*none/
+    );
+    expect(sidebarNavCss).toMatch(
+      /\.navItem input\[type=['"]search['"]\][^{]*\{[^}]*box-shadow:\s*none/
+    );
   });
 
   it('形态 ① 防御：设置侧边栏搜索框必须与主侧栏 100% 共享无边框纯透明形式', () => {
@@ -49,7 +57,9 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
       path.resolve(desktopSrc, 'components/settings/SettingsPanel.module.css'),
       'utf-8'
     );
-    expect(settingsPanelCss).toMatch(/\.searchWrap\s*\{[^}]*background:\s*transparent/);
+    expect(settingsPanelCss).toMatch(
+      /\.searchWrap\s*\{[^}]*background:\s*transparent/
+    );
     expect(settingsPanelCss).toMatch(/\.searchWrap\s*\{[^}]*border:\s*none/);
     expect(settingsPanelCss).toMatch(/\.search[^{]*\{[^}]*border:\s*none/);
     expect(settingsPanelCss).toMatch(/\.search[^{]*\{[^}]*box-shadow:\s*none/);
@@ -57,21 +67,31 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
 
   it('形态 ④ 防御：下拉菜单与浮层搜索框必须是“纯光标极简型”（只有光标闪烁，其他全无变化）', () => {
     const pickerMenuCss = fs.readFileSync(
-      path.resolve(desktopSrc, 'components/provider/ModelBadgePickerMenu.module.css'),
+      path.resolve(
+        desktopSrc,
+        'components/provider/ModelBadgePickerMenu.module.css'
+      ),
       'utf-8'
     );
     expect(pickerMenuCss).toContain('.searchInput:focus');
     expect(pickerMenuCss).toContain('.searchInput:focus-visible');
     expect(pickerMenuCss).toMatch(/\.searchInput[^{]*\{[^}]*border:\s*none/);
-    expect(pickerMenuCss).toMatch(/\.searchInput[^{]*\{[^}]*box-shadow:\s*none/);
+    expect(pickerMenuCss).toMatch(
+      /\.searchInput[^{]*\{[^}]*box-shadow:\s*none/
+    );
     expect(pickerMenuCss).toMatch(/\.searchInput[^{]*\{[^}]*outline:\s*none/);
 
     const fontSelectCss = fs.readFileSync(
-      path.resolve(desktopSrc, 'components/settings/FontSelectField.module.css'),
+      path.resolve(
+        desktopSrc,
+        'components/settings/FontSelectField.module.css'
+      ),
       'utf-8'
     );
     expect(fontSelectCss).toMatch(/\.searchInput[^{]*\{[^}]*border:\s*none/);
-    expect(fontSelectCss).toMatch(/\.searchInput[^{]*\{[^}]*box-shadow:\s*none/);
+    expect(fontSelectCss).toMatch(
+      /\.searchInput[^{]*\{[^}]*box-shadow:\s*none/
+    );
   });
 
   it('形态 ④ 防御：DiffCard 与 FilesCard 搜索/筛选框必须保持纯光标极简型（全态无框无阴影）', () => {
@@ -81,14 +101,18 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
     );
     expect(diffCardCss).toMatch(/\.searchInput[^{]*\{[^}]*border:\s*none/);
     expect(diffCardCss).toMatch(/\.searchInput[^{]*\{[^}]*box-shadow:\s*none/);
-    expect(diffCardCss).not.toMatch(/\.searchInput:focus[^{]*\{[^}]*border-color:/);
+    expect(diffCardCss).not.toMatch(
+      /\.searchInput:focus[^{]*\{[^}]*border-color:/
+    );
 
     const filesCardCss = fs.readFileSync(
       path.resolve(desktopSrc, 'components/files/FilesCard.module.css'),
       'utf-8'
     );
     expect(filesCardCss).toMatch(/\.filesPathFilter[^{]*\{[^}]*border:\s*none/);
-    expect(filesCardCss).toMatch(/\.filesPathFilter[^{]*\{[^}]*box-shadow:\s*none/);
+    expect(filesCardCss).toMatch(
+      /\.filesPathFilter[^{]*\{[^}]*box-shadow:\s*none/
+    );
   });
 
   it('全局防御：focus-visible.css 必须阻断全局焦点阴影对形态 ① 与形态 ④ 的穿透污染', () => {
@@ -96,9 +120,13 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
       path.resolve(desktopSrc, 'styles/focus-visible.css'),
       'utf-8'
     );
-    expect(focusVisibleCss).toMatch(/role=['"]search['"][\s\S]*?role=['"]menu['"][\s\S]*?role=['"]listbox['"]/);
+    expect(focusVisibleCss).toMatch(
+      /role=['"]search['"][\s\S]*?role=['"]menu['"][\s\S]*?role=['"]listbox['"]/
+    );
     expect(focusVisibleCss).toContain('box-shadow: none !important;');
-    expect(focusVisibleCss).toMatch(/(?:\.searchInput|\[class\*=['"]searchInput['"]\]):is\(:focus,\s*:focus-visible\)/);
+    expect(focusVisibleCss).toMatch(
+      /(?:\.searchInput|\[class\*=['"]searchInput['"]\]):is\(:focus,\s*:focus-visible\)/
+    );
   });
 
   it('全局焦点软灰规范：focus-visible.css 混入文本色严格 <= 10%，阴影投影严格 <= 1.5px (AGENTS.md §13)', () => {
@@ -113,7 +141,9 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
     expect(focusVisibleCss).not.toContain('0 0 0 3px');
 
     // 验证严格 10% 混入与 1.5px 软焦点环
-    expect(focusVisibleCss).toMatch(/--focus-visible-ring:\s*color-mix\(\s*in srgb,\s*var\(--border-color\)\s*90%,\s*var\(--text-primary\)\s*10%\s*\)/);
+    expect(focusVisibleCss).toMatch(
+      /--focus-visible-ring:\s*color-mix\(\s*in srgb,\s*var\(--border-color\)\s*90%,\s*var\(--text-primary\)\s*10%\s*\)/
+    );
     expect(focusVisibleCss).toMatch(/0 0 0 1\.5px var\(--focus-visible-ring\)/);
   });
 
@@ -123,7 +153,9 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
       'utf-8'
     );
     expect(inputCss).toContain('border: 1px solid var(--border-subtle);');
-    expect(inputCss).toMatch(/border-radius:\s*var\(--radius-md(?:\s*,\s*6px)?\);/);
+    expect(inputCss).toMatch(
+      /border-radius:\s*var\(--radius-md(?:\s*,\s*6px)?\);/
+    );
     expect(inputCss).toMatch(/\.input:focus[^{]*\{[^}]*box-shadow:\s*none;/);
   });
 
@@ -133,8 +165,12 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
       'utf-8'
     );
     expect(textareaCss).toContain('border: 1px solid var(--border-subtle);');
-    expect(textareaCss).toMatch(/border-radius:\s*var\(--radius-md(?:\s*,\s*6px)?\);/);
-    expect(textareaCss).toMatch(/\.nativeTextarea:focus[^{]*\{[^}]*box-shadow:\s*none;/);
+    expect(textareaCss).toMatch(
+      /border-radius:\s*var\(--radius-md(?:\s*,\s*6px)?\);/
+    );
+    expect(textareaCss).toMatch(
+      /\.nativeTextarea:focus[^{]*\{[^}]*box-shadow:\s*none;/
+    );
   });
 
   // --- AST 守卫刚性拦截单元测试 ---
@@ -144,21 +180,29 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
       border-color: color-mix(in srgb, var(--border-color) 40%, var(--text-primary) 60%);
     `);
     expect(violations60.length).toBeGreaterThan(0);
-    expect(violations60.some(v => v.type === 'COLOR_MIX_EXCEEDS_10' && v.percent === 60)).toBe(true);
+    expect(
+      violations60.some(
+        (v) => v.type === 'COLOR_MIX_EXCEEDS_10' && v.percent === 60
+      )
+    ).toBe(true);
 
     // 40% 违规
     const violations40 = analyzeFocusDarkMix(`
       border-color: color-mix(in srgb, var(--border-color) 60%, var(--text-primary) 40%);
     `);
     expect(violations40.length).toBeGreaterThan(0);
-    expect(violations40.some(v => v.type === 'COLOR_MIX_EXCEEDS_10' && v.percent === 40)).toBe(true);
+    expect(
+      violations40.some(
+        (v) => v.type === 'COLOR_MIX_EXCEEDS_10' && v.percent === 40
+      )
+    ).toBe(true);
 
     // 裸写 var(--text-primary) 纯黑硬框违规 (100%)
     const rawViolations = analyzeFocusDarkMix(`
       border: 1px solid var(--text-primary);
     `);
     expect(rawViolations.length).toBeGreaterThan(0);
-    expect(rawViolations.some(v => v.type === 'RAW_DARK_BORDER')).toBe(true);
+    expect(rawViolations.some((v) => v.type === 'RAW_DARK_BORDER')).toBe(true);
 
     // 合规 10% 与 6% 软灰必须放行
     const allowed10 = analyzeFocusDarkMix(`
@@ -178,14 +222,22 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
       box-shadow: 0 0 0 1px var(--bg-card), 0 0 0 3px var(--focus-visible-ring);
     `);
     expect(violations3px.length).toBeGreaterThan(0);
-    expect(violations3px.some(v => v.type === 'SHADOW_EXCEEDS_1_5PX' && v.spread === 3)).toBe(true);
+    expect(
+      violations3px.some(
+        (v) => v.type === 'SHADOW_EXCEEDS_1_5PX' && v.spread === 3
+      )
+    ).toBe(true);
 
     // 2px 粗黑环违规
     const violations2px = analyzeBoxShadowSpread(`
       box-shadow: 0 0 0 2px #000;
     `);
     expect(violations2px.length).toBeGreaterThan(0);
-    expect(violations2px.some(v => v.type === 'SHADOW_EXCEEDS_1_5PX' && v.spread === 2)).toBe(true);
+    expect(
+      violations2px.some(
+        (v) => v.type === 'SHADOW_EXCEEDS_1_5PX' && v.spread === 2
+      )
+    ).toBe(true);
 
     // 合规 1.5px 与 1px 软微阴影必须放行
     const allowed1_5px = analyzeBoxShadowSpread(`
@@ -201,26 +253,39 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
 
   it('AST 刚性拦截：强制形态 ④（搜索/筛选输入框）必须为无边框极简型，严禁出现非透明 border 或深色焦点外框', () => {
     // 常态声明非透明边框违规
-    const borderViolation = analyzeFormFourMinimalist('.searchInput', `
+    const borderViolation = analyzeFormFourMinimalist(
+      '.searchInput',
+      `
       border: 1px solid var(--border-subtle);
       background: transparent;
-    `);
+    `
+    );
     expect(borderViolation.length).toBeGreaterThan(0);
-    expect(borderViolation.some(v => v.type === 'FORM_FOUR_NON_TRANSPARENT_BORDER')).toBe(true);
+    expect(
+      borderViolation.some((v) => v.type === 'FORM_FOUR_NON_TRANSPARENT_BORDER')
+    ).toBe(true);
 
     // 焦点态声明外框阴影违规
-    const focusShadowViolation = analyzeFormFourMinimalist('.searchInput:focus', `
+    const focusShadowViolation = analyzeFormFourMinimalist(
+      '.searchInput:focus',
+      `
       box-shadow: 0 0 0 1.5px var(--focus-border-color);
-    `);
+    `
+    );
     expect(focusShadowViolation.length).toBeGreaterThan(0);
-    expect(focusShadowViolation.some(v => v.type === 'FORM_FOUR_FOCUS_SHADOW')).toBe(true);
+    expect(
+      focusShadowViolation.some((v) => v.type === 'FORM_FOUR_FOCUS_SHADOW')
+    ).toBe(true);
 
     // 合规纯光标极简型（border: none, box-shadow: none）必须放行
-    const cleanFormFour = analyzeFormFourMinimalist('.searchInput:focus', `
+    const cleanFormFour = analyzeFormFourMinimalist(
+      '.searchInput:focus',
+      `
       border: none;
       box-shadow: none;
       outline: none;
-    `);
+    `
+    );
     expect(cleanFormFour).toEqual([]);
   });
 
@@ -245,45 +310,79 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
 
     // 激活态使用标准 Design Token 或无边框必须放行
     const cleanButtonActive = analyzeButtonActiveBorder(`
-      background-color: var(--tint-hover);
+      background-color: var(--state-hover);
       border-color: var(--border-subtle);
     `);
     expect(cleanButtonActive).toEqual([]);
   });
 
   it('容器联动防御：形态 ④ 容器严禁声明 border 与 box-shadow', () => {
-    const borderViolation = analyzeFormFourContainer('.titleContainer', 'border: 1px solid var(--border-color);');
+    const borderViolation = analyzeFormFourContainer(
+      '.titleContainer',
+      'border: 1px solid var(--border-color);'
+    );
     expect(borderViolation.length).toBeGreaterThan(0);
-    expect(borderViolation.some(v => v.type === 'FORM_FOUR_CONTAINER_BORDER')).toBe(true);
+    expect(
+      borderViolation.some((v) => v.type === 'FORM_FOUR_CONTAINER_BORDER')
+    ).toBe(true);
 
-    const shadowViolation = analyzeFormFourContainer('.renameContainer', 'box-shadow: 0 4px 12px rgba(0,0,0,0.1);');
+    const shadowViolation = analyzeFormFourContainer(
+      '.renameContainer',
+      'box-shadow: 0 4px 12px rgba(0,0,0,0.1);'
+    );
     expect(shadowViolation.length).toBeGreaterThan(0);
-    expect(shadowViolation.some(v => v.type === 'FORM_FOUR_CONTAINER_SHADOW')).toBe(true);
+    expect(
+      shadowViolation.some((v) => v.type === 'FORM_FOUR_CONTAINER_SHADOW')
+    ).toBe(true);
 
-    const clean = analyzeFormFourContainer('.titleContainer', 'padding: 4px; display: flex;');
+    const clean = analyzeFormFourContainer(
+      '.titleContainer',
+      'padding: 4px; display: flex;'
+    );
     expect(clean).toEqual([]);
   });
 
   it('AST 刚性拦截：形态 ④ 基础规则缺失 4 项强制声明（border: none, background: transparent, box-shadow: none, outline: none）刚性报错', () => {
-    const missing = analyzeFormFourMinimalist('.renameInput', 'background: transparent;');
+    const missing = analyzeFormFourMinimalist(
+      '.renameInput',
+      'background: transparent;'
+    );
     expect(missing.length).toBeGreaterThan(0);
-    expect(missing.some(v => v.type === 'FORM_FOUR_MISSING_BORDER_NONE')).toBe(true);
-    expect(missing.some(v => v.type === 'FORM_FOUR_MISSING_BOX_SHADOW_NONE')).toBe(true);
-    expect(missing.some(v => v.type === 'FORM_FOUR_MISSING_OUTLINE_NONE')).toBe(true);
+    expect(
+      missing.some((v) => v.type === 'FORM_FOUR_MISSING_BORDER_NONE')
+    ).toBe(true);
+    expect(
+      missing.some((v) => v.type === 'FORM_FOUR_MISSING_BOX_SHADOW_NONE')
+    ).toBe(true);
+    expect(
+      missing.some((v) => v.type === 'FORM_FOUR_MISSING_OUTLINE_NONE')
+    ).toBe(true);
 
-    const full = analyzeFormFourMinimalist('.renameInput', 'border: none; background: transparent; box-shadow: none; outline: none;');
+    const full = analyzeFormFourMinimalist(
+      '.renameInput',
+      'border: none; background: transparent; box-shadow: none; outline: none;'
+    );
     expect(full).toEqual([]);
   });
 
   it('AST 刚性拦截：输入框默认边框未重置拦截分析器 analyzeMissingBorderReset', () => {
-    const unreset = analyzeMissingBorderReset('.customInput', 'height: 32px; padding: 4px; background: #fff;');
+    const unreset = analyzeMissingBorderReset(
+      '.customInput',
+      'height: 32px; padding: 4px; background: #fff;'
+    );
     expect(unreset.length).toBeGreaterThan(0);
-    expect(unreset.some(v => v.type === 'MISSING_BORDER_RESET')).toBe(true);
+    expect(unreset.some((v) => v.type === 'MISSING_BORDER_RESET')).toBe(true);
 
-    const resetNone = analyzeMissingBorderReset('.customInput', 'height: 32px; padding: 4px; border: none;');
+    const resetNone = analyzeMissingBorderReset(
+      '.customInput',
+      'height: 32px; padding: 4px; border: none;'
+    );
     expect(resetNone).toEqual([]);
 
-    const resetBorder = analyzeMissingBorderReset('.customInput', 'height: 32px; padding: 4px; border: 1px solid var(--border-subtle);');
+    const resetBorder = analyzeMissingBorderReset(
+      '.customInput',
+      'height: 32px; padding: 4px; border: 1px solid var(--border-subtle);'
+    );
     expect(resetBorder).toEqual([]);
   });
 

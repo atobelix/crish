@@ -65,7 +65,9 @@ describe('shell-layout 高度链骨架', () => {
 describe('入口与画布刚性', () => {
   it('index.css 在 reset 后 import layout，不引其它 shell 皮表', () => {
     const indexCss = readBeside(indexRel);
-    expect(indexCss).toContain("@import './styles/shell/shell-layout.css';");
+    expect(indexCss).toMatch(
+      /@import '\.\/styles\/shell\/shell-layout\.css'(?: layer\(base\))?;/
+    );
     expect(indexCss).not.toMatch(/shell-workspace/);
     expect(indexCss).not.toMatch(/shell-polish/);
     expect(indexCss).not.toMatch(/shell-menus/);

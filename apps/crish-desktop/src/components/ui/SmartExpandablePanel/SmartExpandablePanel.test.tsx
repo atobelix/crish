@@ -5,7 +5,6 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import {
   SmartExpandablePanel,
   PositionEngine,
-  SafeAimEngine,
   useWheelIsolation,
   useSmartPanel,
   type MenuItem,
@@ -197,8 +196,8 @@ describe('SmartExpandablePanel Foundation & Core Engines', () => {
         760
       );
       expect(placed.side).toBe('right');
-      expect(placed.left).toBe(406);
-      expect(placed.top).toBe(640);
+      expect(placed.left).toBe(395);
+      expect(placed.top).toBe(636);
     });
 
     it('底部放不下时只上移超出的高度', () => {
@@ -210,8 +209,8 @@ describe('SmartExpandablePanel Foundation & Core Engines', () => {
         1200,
         760
       );
-      expect(placed.top).toBe(760 - 8 - 120);
-      expect(placed.left).toBe(406);
+      expect(placed.top).toBe(760 - 12 - 120);
+      expect(placed.left).toBe(395);
     });
 
     it('右侧空间不够时翻到主面板左侧', () => {
@@ -224,8 +223,8 @@ describe('SmartExpandablePanel Foundation & Core Engines', () => {
         800
       );
       expect(placed.side).toBe('left');
-      expect(placed.left).toBe(900 - 6 - 200);
-      expect(placed.top).toBe(200);
+      expect(placed.left).toBe(900 + 5 - 200);
+      expect(placed.top).toBe(196);
     });
 
     it('calculates submenu position and flips horizontally when right boundary is exceeded', () => {
@@ -255,7 +254,7 @@ describe('SmartExpandablePanel Foundation & Core Engines', () => {
       });
 
       expect(res.isFlipLeft).toBe(true);
-      expect(res.x).toBe(900 - 200 - 4);
+      expect(res.x).toBe(900 - 200 + 5);
     });
 
     it('calculates point position for context menus', () => {
@@ -279,139 +278,6 @@ describe('SmartExpandablePanel Foundation & Core Engines', () => {
       expect(res.x).toBe(300);
       expect(res.y).toBe(400);
       expect(res.directionY).toBe('down');
-    });
-  });
-
-  describe('SafeAimEngine', () => {
-    it('correctly tests point in triangle using barycentric coordinates', () => {
-      const engine = new SafeAimEngine({ enabled: true, debug: false });
-      const triggerEl = document.createElement('div');
-      const submenuEl = document.createElement('div');
-
-      vi.spyOn(submenuEl, 'getBoundingClientRect').mockReturnValue({
-        left: 300,
-        top: 100,
-        right: 500,
-        bottom: 300,
-        width: 200,
-        height: 200,
-        x: 300,
-        y: 100,
-        toJSON: () => {},
-      });
-
-      engine.setSubmenu(triggerEl, submenuEl);
-
-      // Simulate moving towards submenu: previous at (100, 200), current at (150, 200)
-      window.dispatchEvent(
-        new MouseEvent('mousemove', { clientX: 100, clientY: 200 })
-      );
-      window.dispatchEvent(
-        new MouseEvent('mousemove', { clientX: 150, clientY: 200 })
-      );
-
-      // Point inside triangle (e.g. 200, 200)
-      expect(engine.isPointerInSafeZone({ x: 200, y: 200 })).toBe(true);
-
-      // Point outside triangle (e.g. 50, 50)
-      expect(engine.isPointerInSafeZone({ x: 50, y: 50 })).toBe(false);
-
-      engine.destroy();
-    });
-
-    it('releases safe zone immediately when cursor moves in reverse direction (v · d <= 0)', () => {
-      const engine = new SafeAimEngine({ enabled: true });
-      const triggerEl = document.createElement('div');
-      const submenuEl = document.createElement('div');
-
-      vi.spyOn(submenuEl, 'getBoundingClientRect').mockReturnValue({
-        left: 300,
-        top: 100,
-        right: 500,
-        bottom: 300,
-        width: 200,
-        height: 200,
-        x: 300,
-        y: 100,
-        toJSON: () => {},
-      });
-
-      engine.setSubmenu(triggerEl, submenuEl);
-
-      // Move leftwards away from submenu: (200, 200) -> (150, 200)
-      window.dispatchEvent(
-        new MouseEvent('mousemove', { clientX: 200, clientY: 200 })
-      );
-      window.dispatchEvent(
-        new MouseEvent('mousemove', { clientX: 150, clientY: 200 })
-      );
-
-      // Reverse motion should instantly release protection
-      expect(engine.isPointerInSafeZone({ x: 200, y: 200 })).toBe(false);
-
-      engine.destroy();
-    });
-
-    it('melts safe zone when cursor lingers for > 300ms (safety timeout)', () => {
-      const engine = new SafeAimEngine({ enabled: true, timeoutMs: 300 });
-      const triggerEl = document.createElement('div');
-      const submenuEl = document.createElement('div');
-
-      vi.spyOn(submenuEl, 'getBoundingClientRect').mockReturnValue({
-        left: 300,
-        top: 100,
-        right: 500,
-        bottom: 300,
-        width: 200,
-        height: 200,
-        x: 300,
-        y: 100,
-        toJSON: () => {},
-      });
-
-      engine.setSubmenu(triggerEl, submenuEl);
-
-      window.dispatchEvent(
-        new MouseEvent('mousemove', { clientX: 100, clientY: 200 })
-      );
-      window.dispatchEvent(
-        new MouseEvent('mousemove', { clientX: 150, clientY: 200 })
-      );
-
-      // First check: in safe zone
-      expect(engine.isPointerInSafeZone({ x: 200, y: 200 })).toBe(true);
-
-      // Advance time by 350ms without entering submenu
-      act(() => {
-        vi.advanceTimersByTime(350);
-      });
-
-      // Timeout should have melted the zone
-      expect(engine.isPointerInSafeZone({ x: 200, y: 200 })).toBe(false);
-
-      engine.destroy();
-    });
-
-    it('supports submenu stack push and pop', () => {
-      const engine = new SafeAimEngine({ enabled: true });
-      const t1 = document.createElement('div');
-      const s1 = document.createElement('div');
-      const t2 = document.createElement('div');
-      const s2 = document.createElement('div');
-
-      engine.pushSubmenu(t1, s1);
-      expect(engine.getActiveSubmenu()?.submenuEl).toBe(s1);
-
-      engine.pushSubmenu(t2, s2);
-      expect(engine.getActiveSubmenu()?.submenuEl).toBe(s2);
-
-      engine.popSubmenu();
-      expect(engine.getActiveSubmenu()?.submenuEl).toBe(s1);
-
-      engine.clearSubmenu();
-      expect(engine.getActiveSubmenu()).toBeNull();
-
-      engine.destroy();
     });
   });
 

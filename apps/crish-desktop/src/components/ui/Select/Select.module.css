@@ -22,7 +22,7 @@
 }
 
 .trigger:hover:not(:disabled) {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border-color: var(--border-color);
 }
 
@@ -86,7 +86,7 @@
 
 .triggerSoft:hover:not(:disabled),
 .variant-soft:hover:not(:disabled) {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   border-color: transparent;
 }
 
@@ -145,7 +145,7 @@
 }
 
 .clearBtn:hover {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
@@ -267,13 +267,13 @@
 
 .item:hover:not(.itemDisabled),
 .itemHighlighted:not(.itemDisabled) {
-  background: var(--tint-hover);
+  background: var(--state-hover);
   color: var(--text-primary);
 }
 
 .itemSelected,
 .item[aria-selected='true'] {
-  background: var(--tint-active);
+  background: var(--state-active);
   color: var(--text-primary);
   font-weight: 500;
 }
@@ -389,7 +389,7 @@
 @media (prefers-reduced-motion: reduce) {
   .content {
     animation: none;
-    transition: opacity 100ms ease;
+    transition: opacity var(--duration-micro) var(--ease-standard);
   }
 }
 

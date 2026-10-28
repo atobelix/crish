@@ -28,7 +28,7 @@ import {
   ComboboxEmpty,
   highlightMatches,
 } from './Combobox';
-import { computeFloatingPosition } from './useFloatingPosition';
+import { computeFloatingPosition } from './internal/positionGeometry';
 
 const MODEL_ITEMS = [
   { id: 'gpt-4o', label: 'GPT-4o (Omni)' },

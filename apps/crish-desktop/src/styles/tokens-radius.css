@@ -12,11 +12,14 @@ html[data-theme='light'] {
   --row-h-chrome: 36px;
   --badge-h: 20px;
 
-  /* 5 档圆角角色（SSOT · P4 圆角语义化） */
+  /* 5 档圆角角色（SSOT · P4 圆角语义化）与现代浮层/模态标尺 */
   --radius-row: 6px;
   --radius-control: 8px;
   --radius-card: 12px;
+  --radius-menu-inner: 12px;
+  --radius-menu-outer: 18px;
   --radius-dock: 20px;
+  --radius-modal: 24px;
   --radius-pill: 9999px;
   --radius-circle: 50%;
 
@@ -30,36 +33,36 @@ html[data-theme='light'] {
   --hairline-strong: var(--border-color);
   --border-width-emphasis: 2px;
 
-  /* 3 类合法描边预算（P4 §4.3 · AGENTS.md §13 焦点混入 <= 10%） */
+  /* 合法描边预算（P4 §4.3 · AGENTS.md §13 焦点混入 <= 10%） */
   --edge-control: var(--border-color);
   --edge-focus: color-mix(
     in srgb,
     var(--border-color) 90%,
     var(--text-primary) 10%
   );
-  --edge-semantic-danger: var(--color-error-border);
-  --edge-semantic-warning: var(--color-warning-border);
-  --edge-semantic-success: var(--color-success-border);
 
   /* [WAVE2-DEPRECATED-ALIAS] 旧圆角尺寸梯度别名桥接层（Wave 2 Codemod 后一键清除） */
-  --radius-xs: var(--radius-row); /* [WAVE2-DEPRECATED-ALIAS] */
+  --radius-xs: 4px; /* [WAVE2-DEPRECATED-ALIAS] */
   --radius-s: var(--radius-row); /* [WAVE2-DEPRECATED-ALIAS] */
-  --radius-sm: var(--radius-row); /* [WAVE2-DEPRECATED-ALIAS] */
-  --radius-md: var(--radius-row); /* [WAVE2-DEPRECATED-ALIAS] */
-  --radius-m: var(--radius-row); /* [WAVE2-DEPRECATED-ALIAS] */
-  --radius-btn: var(--radius-control); /* [WAVE2-DEPRECATED-ALIAS] */
-  --radius-input: var(--radius-control); /* [WAVE2-DEPRECATED-ALIAS] */
-  --button-radius: var(--radius-control); /* [WAVE2-DEPRECATED-ALIAS] */
-  --radius-lg: var(--radius-control); /* [WAVE2-DEPRECATED-ALIAS] */
-  --radius-l: var(--radius-control); /* [WAVE2-DEPRECATED-ALIAS] */
-  --radius-xl: var(--radius-card); /* [WAVE2-DEPRECATED-ALIAS] */
-  --radius-2xl: var(--radius-card); /* [WAVE2-DEPRECATED-ALIAS] */
-  --radius-3xl: var(--radius-dock); /* [WAVE2-DEPRECATED-ALIAS] */
+  --radius-sm: 6px; /* [WAVE2-DEPRECATED-ALIAS] 偶数闭包契约 */
+  --radius-md: 8px; /* [WAVE2-DEPRECATED-ALIAS] 恢复 8px 标准控件语义 */
+  --radius-m: 8px; /* [WAVE2-DEPRECATED-ALIAS] 8px */
+  --radius-btn: 7px; /* 契约：Button 圆角 7px 用户锁单一权威定义 (layout-contract.test.ts) */
+  --btn-radius: var(--radius-control); /* [WAVE2-DEPRECATED-ALIAS] 8px */
+  --button-radius: var(--radius-btn);
+  --radius-lg: 10px; /* [WAVE2-DEPRECATED-ALIAS] 过渡衔接次级卡片 */
+  --radius-l: 12px; /* [WAVE2-DEPRECATED-ALIAS] 12px */
+  --radius-xl: 16px; /* [WAVE2-DEPRECATED-ALIAS] 契约 1.3 */
+  --radius-2xl: 20px; /* [WAVE2-DEPRECATED-ALIAS] 契约 1.1 */
+  --radius-3xl: 24px; /* [WAVE2-DEPRECATED-ALIAS] 契约 4/8/9 modal 外框 */
   --radius-full: var(--radius-pill); /* [WAVE2-DEPRECATED-ALIAS] */
-  --sep-radius-outer: var(--radius-card); /* [WAVE2-DEPRECATED-ALIAS] */
-  --composer-radius-single: var(--radius-dock); /* [WAVE2-DEPRECATED-ALIAS] */
-  --composer-radius-multi: var(--radius-dock); /* [WAVE2-DEPRECATED-ALIAS] */
-  --chat-bubble-radius: var(--radius-dock); /* [WAVE2-DEPRECATED-ALIAS] */
+  --sep-radius-outer: var(
+    --radius-menu-outer,
+    18px
+  ); /* 彻底解绑 12px 锁死，单源绑定 18px 现代浮层外角 */
+  --composer-radius-single: var(--radius-2xl); /* [WAVE2-DEPRECATED-ALIAS] */
+  --composer-radius-multi: var(--radius-2xl); /* [WAVE2-DEPRECATED-ALIAS] */
+  --chat-bubble-radius: var(--radius-2xl); /* [WAVE2-DEPRECATED-ALIAS] */
 }
 
 html[data-theme='dark'] {
@@ -73,14 +76,11 @@ html[data-theme='dark'] {
   --hairline-strong: var(--border-color);
   --border-width-emphasis: 2px;
 
-  /* 3 类合法描边预算（深色同构） */
+  /* 合法描边预算（深色同构） */
   --edge-control: var(--border-color);
   --edge-focus: color-mix(
     in srgb,
     var(--border-color) 90%,
     var(--text-primary) 10%
   );
-  --edge-semantic-danger: var(--color-error-border);
-  --edge-semantic-warning: var(--color-warning-border);
-  --edge-semantic-success: var(--color-success-border);
 }

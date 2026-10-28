@@ -1,37 +1,57 @@
 /**
- * ui/Dialog 弹窗基座（PE-05 T05.1.3）
+ * ui/Dialog 弹窗基座与复合原语体系（原生 inert 模态栈与现代 Headless 架构）
  *
- * 后续 7 套核心弹窗（TelemetryDialog/CheatsheetModal/
- * SkillEditorModal/SettingsPanel/FirstRunWizard/SettingsRulesTab 编辑器）
- * 的收敛锚点（T05.2）。内部装配 = 私有 FocusTrap 三件套 + Esc 关闭 +
- * backdrop 点击关闭 + aria-modal/labelledby/describedby + 进出场动画
- * （时长由 --duration-* token 驱动）。
+ * 方案依据:
+ * - docs/frontend-systemic-refactor/plans/05-ui-primitives-and-headless-refactor.md §3.2 与 §4.2
+ * - docs/frontend-systemic-refactor/01-前端系统性重构与架构根治总方案.md
  *
- * 与旧三件套（components/FocusTrap.tsx + hooks/useAnimatedPresence +
- * hooks/useRestoreFocus）行为对齐；本目录内的私有实现见 focusTrap.ts /
- * useAnimatedPresence.ts / useRestoreFocus.ts（原子层禁止依赖 hooks/）。
- *
- * 分层契约：只依赖 react/react-dom 与 tokens CSS 变量。
+ * 核心架构进化:
+ * 1. 单一真理底座: 全面接入 FocusTrap 原生 inert 模态栈中枢与 internal/modal.ts 正交分层模型；
+ * 2. 彻底拔除 FocusTrap 白名单: 物理清退 35+ 选择器硬编码，由 HTML 原生 inert 属性接管焦点隔离；
+ * 3. 根除 AST 探测与多程渲染: 淘汰 Children.toArray 动态探测与 registerTitle 状态倒灌，静态 Context 单程渲染；
+ * 4. 纯 CSS 进出场与原生退场状态机: 基于 useAnimatedPresence (150ms) 与 data-dialog-state，出场平滑过渡后卸载；
+ * 5. 复合组件（Compound Components）+ 平铺式兼容 API:
+ *    Dialog.Root, Dialog.Trigger, Dialog.Portal, Dialog.Backdrop, Dialog.Viewport,
+ *    Dialog.Content, Dialog.Title, Dialog.Description, Dialog.Close,
+ *    Dialog.Header, Dialog.Body, Dialog.Footer, Dialog.Overlay
  */
-import React, { useId, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import * as DismissableLayer from '@radix-ui/react-dismissable-layer';
-import styles from './Dialog.module.css';
-import { ICON_STROKE } from '../icons/iconTokens';
-import { DialogOverlayContext } from './dialogOverlayContext';
-import { FocusTrap } from './focusTrap';
+import React, { useId, useRef, useState, useCallback } from 'react';
+import { cn } from '../internal/cn';
+import {
+  useLayerRegistration,
+  LayerProvider,
+} from '../internal/layer-registration/useLayerRegistration';
 import { useAnimatedPresence } from './useAnimatedPresence';
-import { useRestoreFocus } from './useRestoreFocus';
-import { useLayerRegistration } from '../internal/layer-registration/useLayerRegistration';
-
-export type DialogSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'auto';
-export type DialogRole = 'dialog' | 'alertdialog';
+import {
+  DialogContext,
+  type DialogSize,
+  type DialogRole,
+  type DialogContextValue,
+} from './dialogContext';
+import {
+  DialogPortal,
+  DialogBackdrop,
+  DialogViewport,
+  DialogOverlay,
+} from './DialogPortal';
+import { DialogContent, DialogPopup } from './DialogContent';
+import { DialogHeader } from './DialogHeader';
+import { DialogTitle } from './DialogTitle';
+import { DialogDescription } from './DialogDescription';
+import { DialogBody } from './DialogBody';
+import { DialogFooter } from './DialogFooter';
+import { DialogClose } from './DialogClose';
+import { DialogTrigger } from './DialogTrigger';
 
 export interface DialogProps {
   /** 受控开关 */
-  open: boolean;
-  /** 关闭回调（Esc/backdrop/关闭按钮均收敛于此） */
-  onClose: () => void;
+  open?: boolean;
+  /** 非受控默认开启 */
+  defaultOpen?: boolean;
+  /** 关闭回调（Esc/backdrop/关闭按钮统一归口） */
+  onClose?: () => void;
+  /** 开关状态变化回调 */
+  onOpenChange?: (open: boolean) => void;
   /** 标题（aria-labelledby 关联；可传带图标的 ReactNode） */
   title?: React.ReactNode;
   /** 描述文案（aria-describedby 关联） */
@@ -42,18 +62,15 @@ export interface DialogProps {
   size?: DialogSize;
   /** 初始聚焦元素；不传则聚焦弹窗内首个可交互元素 */
   initialFocusRef?: React.RefObject<HTMLElement | null>;
-  /** 是否允许 Esc/backdrop 关闭（FirstRunWizard 强制步进时置 false） */
+  /** 是否允许 Esc/backdrop 关闭（向导强制步进时置 false） */
   dismissible?: boolean;
   /**
    * 点击本弹窗自身遮罩是否关闭，默认随 dismissible。
-   * 设置弹窗用 dismissible=false + closeOnBackdropClick：LayerStack 不把它当作
-   * 「外部点击即退栈」层（portal 进 overlay 的下拉、嵌套弹窗遮罩上的点击不会级联关掉设置），
-   * 只有点在它自己的遮罩上才关闭；Esc 经 onEscapeKeyDown 处理。
    */
   closeOnBackdropClick?: boolean;
-  /** 是否渲染头部关闭按钮（危险操作确认弹窗设计上无关闭按钮，置 false） */
+  /** 是否渲染头部关闭按钮 */
   showCloseButton?: boolean;
-  /** 无 title 时的可访问名称（aria-label；无标题弹窗用，如设置弹窗） */
+  /** 无 title 时的可访问名称（aria-label） */
   ariaLabel?: string;
   /** Portal 挂载目标；默认 document.body */
   portalTarget?: HTMLElement | null;
@@ -62,31 +79,32 @@ export interface DialogProps {
   /** 内容区 */
   children?: React.ReactNode;
   /**
-   * 自定义类名收敛对象（T4-9c Props 收敛）：
-   * - panel 追加到弹窗面板（可设 --dialog-width 等覆盖变量）
-   * - overlay 追加到遮罩壳（可设 --dialog-z 覆盖层级）
-   * - body 追加到内容区（自带布局的弹窗用来去掉默认内边距 / 滚动）
+   * 自定义类名收敛对象：
+   * - panel 追加到弹窗面板
+   * - overlay 追加到遮罩壳
+   * - body 追加到内容区
    */
   classNames?: { panel?: string; overlay?: string; body?: string };
+  /** 面板自定义类名快捷属性 */
+  className?: string;
+  /** 遮罩自定义类名快捷属性 */
+  overlayClassName?: string;
   /**
-   * LayerStack 到达本层时的 Esc 钩子（设置壳：先清搜索再关页）。
+   * LayerStack 到达本层时的 Esc 钩子。
    * 返回 true / preventDefault 则中枢不再走默认 dismiss。
    */
   onEscapeKeyDown?: (event: KeyboardEvent) => boolean | void;
+  /** 是否模态（锁定背景与焦点限制），默认 true */
+  modal?: boolean | 'trap-focus';
 }
 
-// noUncheckedIndexedAccess 下 CSS Modules 取值类型为 string | undefined
-const SIZE_CLASS: Record<DialogSize, string | undefined> = {
-  sm: styles.dialogSm,
-  md: styles.dialogMd,
-  lg: styles.dialogLg,
-  xl: styles.dialogXl,
-  '2xl': styles.dialog2xl,
-  auto: styles.dialogAuto,
-};
-
+/* -------------------------------------------------------------------------- */
+/* 核心控制器与根组件: Dialog / Dialog.Root                                    */
+/* -------------------------------------------------------------------------- */
 export function Dialog({
-  open,
+  open = false,
+  defaultOpen,
+  onOpenChange,
   onClose,
   title,
   description,
@@ -101,146 +119,188 @@ export function Dialog({
   footer,
   children,
   classNames,
+  className,
+  overlayClassName,
   onEscapeKeyDown,
+  modal = true,
 }: DialogProps) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(
+    defaultOpen ?? false
+  );
+  const isControlled = open !== undefined;
+  const isOpen = isControlled ? open : uncontrolledOpen;
+
+  const handleClose = useCallback(() => {
+    if (!isControlled) {
+      setUncontrolledOpen(false);
+    }
+    onClose?.();
+    onOpenChange?.(false);
+  }, [isControlled, onClose, onOpenChange]);
+
+  const { state, isMounted } = useAnimatedPresence({
+    visible: Boolean(isOpen),
+    exitDurationMs: 150,
+  });
+
   const titleId = useId();
   const descriptionId = useId();
   const dialogId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [overlayEl, setOverlayEl] = useState<HTMLElement | null>(null);
 
-  // 三件套：进出场动画 + 焦点归还 + 焦点圈定
-  // exitDurationMs 与 CSS --duration-exit（150ms）对齐（F7 F5），
-  // 退出动画结束即卸载，不留 50ms 空窗
-  const { state, isMounted } = useAnimatedPresence({
-    visible: open,
-    exitDurationMs: 150,
-  });
-  useRestoreFocus(open);
+  const mergedClassNames = {
+    ...classNames,
+    ...(className ? { panel: cn(classNames?.panel, className) } : {}),
+    ...(overlayClassName
+      ? { overlay: cn(classNames?.overlay, overlayClassName) }
+      : {}),
+  };
 
   useLayerRegistration(
     {
       id: dialogId,
       type: role === 'alertdialog' ? 'confirm-dialog' : 'modal-dialog',
-      modal: true,
+      modal: Boolean(modal),
       dismissible,
       elementRef: panelRef,
-      onDismiss: () => onClose(),
+      onDismiss: () => handleClose(),
       onEscapeKeyDown,
     },
-    open && isMounted
+    Boolean(isOpen)
   );
 
-  if (!isMounted) return null;
+  const ctxValue: DialogContextValue = {
+    open: Boolean(isOpen),
+    state,
+    isMounted,
+    onClose: handleClose,
+    titleId,
+    descriptionId,
+    role,
+    size,
+    dismissible,
+    closeOnBackdropClick,
+    showCloseButton,
+    ariaLabel,
+    panelRef,
+    overlayEl,
+    setOverlayEl,
+    classNames: mergedClassNames,
+    initialFocusRef,
+    portalTarget,
+    description,
+  };
 
-  const target =
-    portalTarget ??
-    (typeof document !== 'undefined'
-      ? (document.getElementById('modal-root') ?? document.body)
-      : null);
-  if (!target) return null;
+  if (!isMounted) {
+    return null;
+  }
 
-  const panelClasses = [
-    styles.dialog,
-    SIZE_CLASS[size],
-    state === 'exiting' ? styles.dialogExit : styles.dialogEnter,
-    classNames?.panel,
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  const overlayClasses = [
-    state === 'exiting' ? styles.overlayExit : styles.overlayEnter,
-    classNames?.overlay,
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  return createPortal(
-    // FocusTrap 容器直接挂在 body 下：兄弟节点（应用主体）被 aria-hidden 旁路
-    <DismissableLayer.Branch asChild>
-      <FocusTrap active={open} initialFocusRef={initialFocusRef}>
-        <div
-          ref={setOverlayEl}
-          className={overlayClasses}
-          data-dialog-overlay=""
-          data-dialog-state={state === 'exiting' ? 'exiting' : 'open'}
-        >
-          <DialogOverlayContext.Provider value={overlayEl}>
-            <div
-              className={styles.backdrop}
-              aria-hidden="true"
-              onClick={closeOnBackdropClick ? onClose : undefined}
-            />
-            <div
-              ref={panelRef}
-              role={role}
-              aria-modal="true"
-              aria-label={title == null ? ariaLabel : undefined}
-              aria-labelledby={title != null ? titleId : undefined}
-              aria-describedby={description != null ? descriptionId : undefined}
-              className={panelClasses}
-            >
-              {title != null || (dismissible && showCloseButton) ? (
-                <div className={styles.dialogHeader}>
-                  {title != null ? (
-                    <h2 className={styles.dialogTitle} id={titleId}>
-                      {title}
-                    </h2>
-                  ) : null}
-                  {dismissible && showCloseButton ? (
-                    <button
-                      type="button"
-                      className={styles.dialogClose}
-                      aria-label="关闭弹窗"
-                      onClick={onClose}
-                    >
-                      <CloseIcon />
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {description != null ? (
-                <p className={styles.dialogDescription} id={descriptionId}>
-                  {description}
-                </p>
-              ) : null}
-
-              <div
-                className={[styles.dialogBody, classNames?.body]
-                  .filter(Boolean)
-                  .join(' ')}
-              >
-                {children}
-              </div>
-
-              {footer != null ? (
-                <div className={styles.dialogFooter}>{footer}</div>
-              ) : null}
-            </div>
-          </DialogOverlayContext.Provider>
-        </div>
-      </FocusTrap>
-    </DismissableLayer.Branch>,
-    target
+  // 检测直接传入的复合原语
+  const childrenArray = React.Children.toArray(children);
+  const hasDirectOverlay = childrenArray.some(
+    (c) =>
+      React.isValidElement(c) &&
+      (c.type === DialogOverlay || (c.type as any) === Dialog.Overlay)
   );
-}
+  const hasDirectContent = childrenArray.some(
+    (c) =>
+      React.isValidElement(c) &&
+      (c.type === DialogContent || (c.type as any) === Dialog.Content)
+  );
+  const hasDirectPortal = childrenArray.some(
+    (c) =>
+      React.isValidElement(c) &&
+      (c.type === DialogPortal || (c.type as any) === Dialog.Portal)
+  );
 
-function CloseIcon() {
   return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={ICON_STROKE.ui}
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
+    <LayerProvider layerId={dialogId} tier="modal">
+      <DialogContext.Provider value={ctxValue}>
+        {hasDirectPortal ? (
+          children
+        ) : (
+          <DialogPortal container={portalTarget ?? undefined}>
+            {hasDirectOverlay ? (
+              children
+            ) : hasDirectContent ? (
+              <DialogOverlay>{children}</DialogOverlay>
+            ) : (
+              <DialogOverlay>
+                <DialogContent>
+                  {(title != null || (dismissible && showCloseButton)) && (
+                    <DialogHeader>
+                      {title != null && <DialogTitle>{title}</DialogTitle>}
+                      {dismissible && showCloseButton && <DialogClose />}
+                    </DialogHeader>
+                  )}
+                  {description != null && (
+                    <DialogDescription>{description}</DialogDescription>
+                  )}
+                  <DialogBody>{children}</DialogBody>
+                  {footer != null && <DialogFooter>{footer}</DialogFooter>}
+                </DialogContent>
+              </DialogOverlay>
+            )}
+          </DialogPortal>
+        )}
+      </DialogContext.Provider>
+    </LayerProvider>
   );
 }
+
+// 复合原语绑定导出
+Dialog.Root = Dialog;
+Dialog.Trigger = DialogTrigger;
+Dialog.Portal = DialogPortal;
+Dialog.Backdrop = DialogBackdrop;
+Dialog.Viewport = DialogViewport;
+Dialog.Content = DialogContent;
+Dialog.Popup = DialogPopup;
+Dialog.Title = DialogTitle;
+Dialog.Description = DialogDescription;
+Dialog.Close = DialogClose;
+Dialog.Header = DialogHeader;
+Dialog.Body = DialogBody;
+Dialog.Footer = DialogFooter;
+Dialog.Overlay = DialogOverlay;
+
+export const DialogRoot = Dialog;
+export const StandardDialog = Dialog;
+
+// 浮层层叠上下文导出，供局部提权消费
+export { DialogOverlayContext } from './dialogOverlayContext';
+
+// 导出所有子组件与类型契约（100% 向后兼容）
+export {
+  DialogContext,
+  useDialogContext,
+  type DialogSize,
+  type DialogRole,
+  type DialogContextValue,
+} from './dialogContext';
+export {
+  DialogPortal,
+  DialogBackdrop,
+  DialogViewport,
+  DialogOverlay,
+  type DialogPortalProps,
+  type DialogBackdropProps,
+  type DialogViewportProps,
+  type DialogOverlayProps,
+} from './DialogPortal';
+export {
+  DialogContent,
+  DialogPopup,
+  type DialogContentProps,
+} from './DialogContent';
+export { DialogHeader, type DialogHeaderProps } from './DialogHeader';
+export { DialogTitle, type DialogTitleProps } from './DialogTitle';
+export {
+  DialogDescription,
+  type DialogDescriptionProps,
+} from './DialogDescription';
+export { DialogBody, type DialogBodyProps } from './DialogBody';
+export { DialogFooter, type DialogFooterProps } from './DialogFooter';
+export { DialogClose, type DialogCloseProps } from './DialogClose';
+export { DialogTrigger, type DialogTriggerProps } from './DialogTrigger';
