@@ -15,7 +15,7 @@
  */
 
 import { readFileSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // ── --guide（T-DEBT-08：正确做法指引 · 五元规约） ─────────────────────────────
@@ -45,6 +45,49 @@ const TOKENS_CSS_PATH = resolve(
   'apps/crish-desktop/src/styles/tokens.css'
 );
 
+/**
+ * 递归展开所有 @import 依赖并收集全部声明的 CSS Token
+ * @param {string} entryFilePath 入口 CSS 文件绝对路径
+ * @returns {Set<string>} 收集到的 CSS 变量集合
+ */
+function collectDeclaredTokens(entryFilePath) {
+  const declaredTokens = new Set();
+  const visitedFiles = new Set();
+
+  function traverse(currentPath) {
+    const absPath = resolve(currentPath);
+    if (visitedFiles.has(absPath) || !existsSync(absPath)) return;
+    visitedFiles.add(absPath);
+
+    const rawContent = readFileSync(absPath, 'utf-8');
+    // 移除 CSS 注释，避免注释中的 @import 或伪变量声明干扰
+    const content = rawContent.replace(/\/\*[\s\S]*?\*\//g, '');
+    const baseDir = dirname(absPath);
+
+    // 1. 递归解析当前文件的所有 @import 依赖
+    // 支持 @import '...'; @import "..."; @import url('...'); @import url("..."); 及带 layer/media 声明
+    const importRegex = /@import\s+(?:url\(\s*(?:['"]([^'"]+)['"]|([^'")\s]+))\s*\)|['"]([^'"]+)['"]|(\S+))\s*[^;]*;/g;
+    let importMatch;
+    while ((importMatch = importRegex.exec(content)) !== null) {
+      const relImportPath = (importMatch[1] || importMatch[2] || importMatch[3] || importMatch[4] || '').trim();
+      if (relImportPath) {
+        const targetPath = resolve(baseDir, relImportPath);
+        traverse(targetPath);
+      }
+    }
+
+    // 2. 提取当前文件内所有以 -- 开头的变量声明
+    const tokenDeclRegex = /(--[a-zA-Z0-9_-]+)\s*:/g;
+    let tokenMatch;
+    while ((tokenMatch = tokenDeclRegex.exec(content)) !== null) {
+      declaredTokens.add(tokenMatch[1]);
+    }
+  }
+
+  traverse(entryFilePath);
+  return declaredTokens;
+}
+
 function runComplianceCheck() {
   const errors = [];
   const warnings = [];
@@ -61,16 +104,10 @@ function runComplianceCheck() {
     process.exit(1);
   }
 
-  // 2. 解析 tokens.css 中声明的全部 CSS 变量白名单
-  const tokensContent = readFileSync(TOKENS_CSS_PATH, 'utf-8');
-  const declaredTokens = new Set();
-  const tokenDeclRegex = /(--[a-zA-Z0-9_-]+)\s*:/g;
-  let tokenMatch;
-  while ((tokenMatch = tokenDeclRegex.exec(tokensContent)) !== null) {
-    declaredTokens.add(tokenMatch[1]);
-  }
+  // 2. 递归解析 tokens.css 及其 @import 依赖中声明的全部 CSS 变量白名单
+  const declaredTokens = collectDeclaredTokens(TOKENS_CSS_PATH);
 
-  console.log(`📋 从 tokens.css 解析到 ${declaredTokens.size} 个有效 Design Token 声明。`);
+  console.log(`📋 从 tokens.css 依赖链递归解析到 ${declaredTokens.size} 个有效 Design Token 声明。`);
 
   // 3. 读取 markdown-typography.css
   const mdCssRaw = readFileSync(MARKDOWN_CSS_PATH, 'utf-8');

@@ -246,11 +246,10 @@ const FACADE_REQUIRED = [
     patterns: [
       { re: /export\s+const\s+useSettingsUiStore\b/, label: 'useSettingsUiStore' },
       { re: /export\s+function\s+getSettingsUiState\b/, label: 'getSettingsUiState' },
-      { re: /export\s+function\s+getPermissionMode\b/, label: 'getPermissionMode' },
+      // 权限状态由 permissionStore 独占（settingsUiStore 禁止代理 permissionMode）
       { re: /export\s+function\s+openSettings\b/, label: 'openSettings' },
       { re: /export\s+function\s+closeSettings\b/, label: 'closeSettings' },
       { re: /export\s+function\s+toggleSettingsOverlay\b/, label: 'toggleSettingsOverlay' },
-      { re: /export\s+function\s+setPermissionMode\b/, label: 'setPermissionMode' },
       { re: /export\s+function\s+setSettingsActiveTab\b/, label: 'setSettingsActiveTab' },
       { re: /export\s+function\s+useSettingsUiField\b/, label: 'useSettingsUiField' },
     ],
@@ -504,7 +503,7 @@ for (const facade of FACADE_REQUIRED) {
       { re: /export\s+(?:function|\{[^}]*\b)getActiveSession\b/, label: 'getActiveSession' },
       { re: /export\s+(?:function|\{[^}]*\b)getActiveSessionId\b/, label: 'getActiveSessionId' },
       { re: /export\s+(?:function|\{[^}]*\b)getSessionAgent\b/, label: 'getSessionAgent' },
-      { re: /export\s+(?:function|\{[^}]*\b)getPermissionMode\b/, label: 'getPermissionMode' },
+      { re: /export\s+(?:function\s+|\{[^}]*\b)getPermissionMode\b/, label: 'getPermissionMode' },
       { re: /export\s+(?:function|\{[^}]*\b)getDropPreview\b/, label: 'getDropPreview' },
       { re: /export\s+(?:function|\{[^}]*\b)setGroupActiveCard\b/, label: 'setGroupActiveCard' },
       { re: /export\s+function\s+unarchiveSession\b/, label: 'unarchiveSession' },
@@ -513,9 +512,8 @@ for (const facade of FACADE_REQUIRED) {
       { re: /export\s+function\s+pushDiffFile\b/, label: 'pushDiffFile' },
       { re: /export\s+function\s+setAppSettings\b/, label: 'setAppSettings' },
       { re: /export\s+function\s+getAppSettings\b/, label: 'getAppSettings' },
-      { re: /export\s+function\s+getCommandPermissions\b/, label: 'getCommandPermissions' },
-      { re: /export\s+function\s+addCommandPermission\b/, label: 'addCommandPermission' },
-      { re: /export\s+function\s+setPlanApproved\b/, label: 'setPlanApproved' },
+      // 命令白名单 / plan 审批已物理剥离（权限唯一真源 = 引擎 + permissionStore），
+      // 旧 getCommandPermissions/addCommandPermission/setPlanApproved 不再以 store 门面存在。
       { re: /export\s+function\s+updateMessageToolCall\b/, label: 'updateMessageToolCall' },
       { re: /export\s+function\s+updateMessageThinking\b/, label: 'updateMessageThinking' },
       { re: /export\s+function\s+createSession\b/, label: 'createSession' },
@@ -532,10 +530,6 @@ for (const facade of FACADE_REQUIRED) {
         re: /useSettingsStore\.getState\(\)\.(?:syncTelemetryData|setAppSettings|setScheduledTasks)\b/,
         label: 'settings 域写走 useSettingsStore.getState()',
       },
-      {
-        re: /usePermissionStore\.getState\(\)\.addCommandPermission\b/,
-        label: 'permission 域写走 usePermissionStore.getState()',
-      },
       { re: /from\s+['"]\.\.\/store\/sessionStore['"]/, label: 'import sessionStore facade' },
       { re: /from\s+['"]\.\.\/store\/workspaceStore['"]/, label: 'import workspaceStore facade' },
       { re: /from\s+['"]\.\.\/store\/settingsUiStore['"]/, label: 'import settingsUiStore facade' },
@@ -549,7 +543,7 @@ for (const facade of FACADE_REQUIRED) {
     // store/storeAccess.ts（T11 新域读面）同样纳入该门禁。
     const accessForbidden = [
       {
-        re: /useLayoutStore\.getState\(\)\.(?:pushDiffFile|setActiveDiffSource|syncTelemetryData|setAppSettings|setScheduledTasks|addCommandPermission)\b/,
+        re: /useLayoutStore\.getState\(\)\.(?:pushDiffFile|setActiveDiffSource|syncTelemetryData|setAppSettings|setScheduledTasks)\b/,
         label: 'god-object domain write via useLayoutStore.getState() (use domain store)',
       },
     ];

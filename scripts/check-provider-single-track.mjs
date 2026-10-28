@@ -774,6 +774,8 @@ const D8_KNOWN_DEBT = new Map([
     'apps/crish-desktop/src/api/SessionRuntimeRegistry.ts',
     'apps/crish-desktop/src/api/agentProfiles.ts',
     'apps/crish-desktop/src/api/beforeunloadFlush.ts',
+    // 浏览器设置本地偏好（browserSettingsLib）：仅 UI 局部开关，非模型/凭据档案
+    'apps/crish-desktop/src/api/browserSettingsLib.ts',
     'apps/crish-desktop/src/api/cache/runtimeCache.ts',
     'apps/crish-desktop/src/api/clientApiSettings.ts',
     'apps/crish-desktop/src/api/engineConfigIO.ts',
@@ -783,6 +785,10 @@ const D8_KNOWN_DEBT = new Map([
     'apps/crish-desktop/src/api/modelCatalogMeta.ts',
     'apps/crish-desktop/src/api/modelPricingSource.ts',
     'apps/crish-desktop/src/api/modelsLsImport.ts',
+    // 权限模式三态持久化（crish_permission_mode）：引擎权限选择，非模型档案
+    'apps/crish-desktop/src/api/permissionModes.ts',
+    // 旧用量账本一次性迁移读取标记（迁移完成后只读 Rust usage_records）
+    'apps/crish-desktop/src/api/usage/legacyUsageMigration.ts',
     'apps/crish-desktop/src/api/previewBrowserStore.ts',
     'apps/crish-desktop/src/api/pricingStore.ts',
     'apps/crish-desktop/src/api/projectStore.ts',

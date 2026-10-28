@@ -50,9 +50,9 @@ const initWhitelist = args.includes('--init-whitelist');
 const dirtyCheck = args.includes('--whitelist-dirty-check');
 const strict = args.includes('--strict');
 
-/** 层 3 特征字表（实跑统计所得：GBK 乱码固化常见字 + 片假名段；不含 ASCII） */
+/** 层 3 特征字表（实跑统计所得：GBK 乱码固化常见字 + 片假名段；不含 ASCII/常用汉字） */
 const FEATURE_CHARS =
-  '閳ユ柡鈧姘顒烽敍妞ょ數鐎鏂鍙鍘鍦鎻鎷鎸鍗鍐鍑鍔鈥鈧锛濠婃艾濮╅崠鐚寸窗鈹€';
+  '閳ユ柡鈧姘顒烽敍妞ょ數鐎鏂鍙鍘鍦鎻鎷鎸鍗鍐鍑鍔鈥鈧锛濠婃艾濮╅崠鐚鈹€';
 const FEATURE_SET = new Set(FEATURE_CHARS.split(''));
 const KATAKANA_RE = /[\u30a0-\u30ff]/;
 

@@ -19,3 +19,5 @@ node scripts/check-tool-pairing-invariants.mjs
 node scripts/check-db-write-bypass.mjs
 # 前端重构终极收敛门禁（G-01 ~ G-15）
 node scripts/check-frontend-convergence.mjs
+# UI Subpath / internal 封装边界（E3-03 / PE-05）
+node scripts/check-ui-subpath-imports.mjs

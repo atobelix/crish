@@ -536,6 +536,9 @@ orchestrator-snapshot.json.prev
 !crates/conex-types/contracts/*.json
 !packages/protocol-core/contracts/*.json
 !scripts/generate-protocol-bindings.mjs
+!scripts/generate-ui-contracts.mjs
+!scripts/sync-ui-exports.mjs
+!scripts/gatekeeper-codemod.mjs
 !apps/crish-mobile/jest.config.*
 !apps/crish-mobile/babel.config.*
 
@@ -618,3 +621,10 @@ scripts/process_heritage_data.py
 scripts/generate_routes.py
 
 .conex/
+
+# 用户裁决（2026-10-27）：reference/ 仅为本地参考材料，整个目录不纳入 Git。
+# 此末尾规则覆盖上方历史遗留的所有 reference 子目录白名单。
+reference/
+
+# Native browser profile data is runtime user state, not source assets.
+apps/agent-workbench/browser-storage/

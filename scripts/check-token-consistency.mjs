@@ -139,6 +139,7 @@ const EXTERNALLY_INJECTED = new Set([
   // Radix UI 浮层：在目标元素上写 style 属性提供定位/可用高度，不入本仓 CSS
   '--radix-popover-content-available-height',
   '--radix-popover-content-transform-origin',
+  '--radix-popover-trigger-width',
 ]);
 
 /**

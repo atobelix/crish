@@ -274,6 +274,19 @@ export default tseslint.config(
       },
     },
   },
+  // 原生浏览器 Inspector 注入运行时：由 Rust 侧读取后注入 WebView 执行，
+  // 运行上下文是浏览器（document/window/CSS/Element），不是 Node 模块。
+  // 预算常量由宿主在注入前替换，按只读全局声明。
+  {
+    files: ['crates/conex-browser/resources/**/*.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: {
+        ...globals.browser,
+        __CONEX_INSPECTOR_MAX_MESSAGE_BYTES__: 'readonly',
+      },
+    },
+  },
   // 静态站点（sites/**，如 sites/crish-launch 产品落地页）：由 index.html 以经典
   // <script src> 直接加载、运行在浏览器里（document/window/history/location/
   // requestAnimationFrame/navigator），不是 Node 模块，也不经打包器。根 JS 块默认的

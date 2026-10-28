@@ -1294,6 +1294,7 @@ export function scanTsxForBespokeInputs(dir, targetErrors = errors) {
           relPath.includes('MirrorDriftStatusBar') ||
           relPath.includes('EditableTitle') ||
           relPath.includes('NotePaperStrictHeader') ||
+          relPath.includes('ColorPicker') ||
           relPath.includes('NoteSidebarDrawer');
 
         if (!isAllowedForm) {

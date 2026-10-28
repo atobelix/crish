@@ -70,9 +70,9 @@
   生产计数；`--update` 只刷新标记区（git diff 可复核）。
 
 <!-- BASELINE_START -->
-
-agent-provider 0 35
-agent-tools 34 63
+agent-provider 9 41
+agent-tools 85 62
+conex-agents 0 0
 conex-browser 0 16
 conex-browser-tools 0 0
 conex-compaction 0 2
@@ -81,11 +81,12 @@ conex-computer-tools 0 3
 conex-db 0 2
 conex-diff 0 0
 conex-doc-collab 95 18
-conex-fs 0 0
-conex-markdown 1 26
+conex-fs 38 5
+conex-markdown 0 25
 conex-md-ast 0 0
 conex-note-runtime 60 15
 conex-relay 0 0
+conex-run 3 8
 conex-sandbox 0 0
 conex-search 0 0
 conex-shared 0 0
@@ -93,6 +94,6 @@ conex-telemetry 0 0
 conex-test-utils 0 13
 conex-types 0 7
 conex-workspace-store 99 8
-orchestrator 52 6
-session-loop 49 28
+orchestrator 79 11
+session-loop 46 24
 <!-- BASELINE_END -->

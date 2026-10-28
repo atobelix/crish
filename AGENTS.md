@@ -309,6 +309,10 @@ _2026-08-13 主调度订正 · 附录 B 取代附录 A §3 的旧口径（16 上
 
 **§4 第 6 条「输出目录清理约定」现状勘误（追加说明，不改动原条款）**：原条款称「完整链路由 T-EG-12 扩展落地」——实测现状为：清理链**已实现**（`cleanup_session_outputs` / `cleanup_session_outputs_at`，`apps/agent-workbench/src-tauri/src/outputs_config.rs:155/190`；conex-fs trash 接管，回收站登记 + 用户通知，三分支测试 `apps/agent-workbench/src-tauri/src/session_commands.rs:710/742/800`），但**生产接线未完成**——当前生产删除路径不存在任何 `cleanup_session_outputs` 调用点（`db.delete_session` 仅出现在测试 helper `session_commands.rs:168-182`），删除会话暂不触发产出目录清理。生产接线任务 = **T-RUN-07**（`docs/fix-campaign-20261020/02-统一修复任务账本.md`）；接线完成后本勘误自动失效，以代码实际调用点为准。
 
+### 2026-10-27 · `reference/` 仅本地参考，不纳入 Git（用户裁决）
+
+**取代 §9 中要求 `reference/markdown-editor` 源码与测试入库的口径**：整个 `reference/` 目录只作为本机参考材料，Git 一律忽略；已跟踪文件仅从索引解除跟踪，保留工作区文件，不物理删除。`tests/`、`apps/` 等目录中的项目测试资产仍按原保护规则处理。CI、类型检查与默认测试入口不得要求检出 `reference/` 才能通过；引用该目录的历史参考用例应保持非默认状态，若需要恢复执行，先将所需固定样例迁移到受跟踪的测试夹具目录并解除对 `reference/` 的运行时依赖。
+
 ---
 
 ## 19. UI：输入框四态体系与全生命周期防倒退铁律（2026-09-05 用户裁决）
@@ -376,3 +380,15 @@ _2026-08-13 主调度订正 · 附录 B 取代附录 A §3 的旧口径（16 上
 2. **代码修改必须使用原生修改工具**：
    - 任何生产代码、测试用例与配置文件的创建与修改，**必须且只能使用系统平台提供的原生工具（`edit_file` / `write_file`）执行**。
    - 每次代码修改必须基于确凿的文本靶向匹配与原子替换，确保每一次改动在上下文和审计中完全透明可见，杜绝黑盒脚本批处理导致的静默误伤。
+
+---
+
+## 22. 动效 strict 与数据面单一真源铁律（2026-10-27 用户裁决）
+
+背景：设置 · 用量页因 `LazyMotion(strict)` 下渲染 `motion.*` 整页崩溃；多端互通开启服务后的 Toast 触发同一错误把整个应用打成白屏；同时用量历史存在「前端写 localStorage / 后端读 SQLite」双轨账本，页面永远为空。三条铁律自此生效：
+
+1. **动效 strict 单轨**：生产代码只允许 `import { m } from 'motion/react'` 并使用 `<m.*>`；**禁止** `motion.*` JSX、`motion.create(...)` 与 `framer-motion` 双包导入。全局 `AppMotionProvider` 已注入 `domAnimation` features。门禁：`npm run check:motion-strict`（零违规阈值，注入自检可红）。
+2. **用量历史单一真源**：唯一写入方 = Rust 内核 `conex-run::write_back_cache_stats`（run 收口 → `usage_records`，含 run 级幂等守卫）；前端**只读** `usage_get_dashboard_data`，禁止再引入 localStorage 账本（唯一例外：`api/usage/legacyUsageMigration.ts` 的一次性旧数据迁移读取）。门禁：`npm run check:usage-ssot`。
+3. **后端状态真值回传**：后端拥有的状态（多端服务开关、配对态等）必须由状态 DTO 回传（如 `PairStatus.service_enabled`），前端只允许乐观更新并在下一次轮询被真值覆盖；**禁止**把组件生命周期内的本地记忆当作唯一真值（事故：切页返回后「服务运行中」显示为未开启）。
+
+任何 Agent 修改上述领域时，必须先跑对应门禁；门禁不可用或为红时按 §7 正面修复，禁止绕过。

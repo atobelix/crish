@@ -86,6 +86,10 @@ function isWhitelisted(abs) {
     join(SRC_DIR, 'store', 'index'),
     join(SRC_DIR, 'store', 'storeAccess'),
     join(SRC_DIR, 'store', 'types'),
+    // layout-tree 是纯几何/树模型域 barrel（无 zustand 状态），Dock 组件消费其
+    // 纯函数与类型；仍禁止直引域内叶文件，统一经 barrel 收敛。
+    join(SRC_DIR, 'store', 'layout-tree'),
+    join(SRC_DIR, 'store', 'layout-tree', 'index'),
   ].map((x) => toPosix(x));
   return whitelist.includes(target);
 }

@@ -66,8 +66,7 @@ const MEMORY_INTEGRATION_PINS = [
 const PROD_INJECT_FILES = [
   'src/note_runtime.rs',
   'src/engine_build.rs',
-  'src/core_run_commands.rs',
-  'src/run/run_launch.rs',
+  'src/run_ipc.rs',
   'src/main.rs',
   'src/note_commands.rs',
   'src/note_commands_apply.rs',
@@ -182,14 +181,16 @@ function checkInjectStoreOrUnwired() {
   }
 
   const engine = productionCode(readUtf8(join(workbenchRoot, 'src/engine_build.rs')));
-  if (!engine.includes('note_runtime::try_backend()')) {
-    fail('engine produce 必须注入 try_backend（Store 或 None）');
+  if (!engine.includes('note_runtime::try_backend')) {
+    fail('engine produce 必须注入 try_backend（Store 或 None；闭包或函数项均可）');
   }
   if (containsIdent(engine, MEMORY_IDENT)) fail(`engine_build 零 ${MEMORY_IDENT}`);
 
-  const run = productionCode(readUtf8(join(workbenchRoot, 'src/run/run_launch.rs')));
-  if (!run.includes('note_backend = crate::note_runtime::try_backend()')) {
-    fail('core_run 必须同源 try_backend');
+  // run 域下沉 conex-run 后：装配消费面 = crate 侧注入槽（生产槽由壳层
+  // engine_build 的 note_runtime::try_backend() 注入，见上方断言）。
+  const run = productionCode(readUtf8(join(root, 'crates/conex-run/src/run/run_launch.rs')));
+  if (!run.includes('note_backend = crate::engine_assembly::note_backend()')) {
+    fail('core_run 必须经注入槽同源取 note backend（Store 或 None）');
   }
   if (containsIdent(run, MEMORY_IDENT)) fail(`run_launch 零 ${MEMORY_IDENT}`);
 

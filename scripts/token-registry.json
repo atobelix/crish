@@ -10,7 +10,31 @@
   "aClass": {
     "source": "apps/crish-desktop/src/styles/tokens.css",
     "authorizedExtraSources": ["apps/crish-desktop/src/styles/z-index.css"],
-    "forbidJsWrite": true
+    "forbidJsWrite": true,
+    "canonicalStateTokens": [
+      "--state-hover",
+      "--state-active",
+      "--state-selected",
+      "--state-focus-ring",
+      "--state-subtle",
+      "--state-quiet",
+      "--state-strong",
+      "--state-overlay",
+      "--state-highlight"
+    ]
+  },
+  "canonicalTokens": {
+    "state": [
+      "--state-hover",
+      "--state-active",
+      "--state-selected",
+      "--state-focus-ring",
+      "--state-subtle",
+      "--state-quiet",
+      "--state-strong",
+      "--state-overlay",
+      "--state-highlight"
+    ]
   },
   "authorizedExtraSources": ["apps/crish-desktop/src/styles/z-index.css"],
   "bClass": [
@@ -530,9 +554,6 @@
       "--border-subtle",
       "--composer-bg",
       "--control-mix-color",
-      "--control-soft-bg",
-      "--control-soft-bg-active",
-      "--control-soft-bg-hover",
       "--font-size-adjust",
       "--shell-chrome-bg",
       "--shell-inset-bg",

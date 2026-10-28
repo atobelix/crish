@@ -119,6 +119,22 @@ const config: KnipConfig = {
     // 跨轮次预留资产：shared-types 类型已确认有真实 import 消费，
     // 仅保留仍未被引用的 thinking-intensity.ts
     'packages/shared-types/src/thinking-intensity.ts',
+    // 运行时注入/非 import 消费资产（Rust 读取 / Vite alias / 源码门禁读取）
+    'apps/crish-desktop/dev-server/previewBridgeScript.ts',
+    'apps/crish-desktop/playground/mock/tauri-mock.ts',
+    'crates/conex-browser/resources/inspector_runtime.js',
+    'scripts/check-existing-ui-imports.mjs',
+    // UI 原语公共 barrel / 兼容 shim（叶实现被直接 import；barrel 保留稳定导出路径）
+    'apps/crish-desktop/src/components/motion/index.ts',
+    'apps/crish-desktop/src/components/ui/internal/positioner/index.ts',
+    'apps/crish-desktop/src/components/ui/internal/presence/index.ts',
+    'apps/crish-desktop/src/components/ui/internal/roving-focus/index.ts',
+    'apps/crish-desktop/src/store/chat/index.ts',
+    'apps/crish-desktop/src/components/binary-tree/TerminalCard.tsx',
+    // 存量兼容组件（当前无生产者；保留一轮观察，后续统一清理）
+    'apps/crish-desktop/src/components/agent-card/ApprovalCountdown.tsx',
+    'apps/crish-desktop/src/components/chat-composer/useChatApproval.ts',
+    'apps/crish-desktop/src/components/ui/Dialog/useRestoreFocus.ts',
   ],
   ignoreBinaries: [
     // PS-02 T2.6：warn 级处置（不阻塞门禁，登记理由防回归）

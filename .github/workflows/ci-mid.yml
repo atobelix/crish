@@ -114,14 +114,10 @@ jobs:
       - run: cargo machete
 
   # e2e 冒烟子集（PS-02 T2.7 / D3 裁决：进 PR 门禁；全量仍归 ci-slow nightly）。
-  # 子集 = 5 个冒烟 spec：3 个 markdown-editor 专项（ast-block-tables /
-  # format-checker / wysiwyg-interaction，AGENTS.md 保护名单，驱动 5173
-  # reference/markdown-editor dev server，见 playwright.config.ts 第二
-  # webServer）+ cache-telemetry / cache-metrics（缓存链路健康锚点）。
-  # 偏差登记（F-005）：保护名单中的 ime-composition / keyboard-navigation 依赖
-  # pre-M3/M4 交互模型（空文本编辑器常驻 + textarea），当前引擎（f772eb99）
-  # 空文本卸载编辑器——两 spec 确定性失败，需编辑器域适配（另立任务），
-  # 不入冒烟子集；cursor-debug / editor-fuzz-thrash 亦为既存失败（非保护名单）。
+  # 子集 = package.json 中明确列出的 5 个 Conex L2 spec：full-journey、
+  # error-path、session-restore、cache-metrics、cache-telemetry。根 Playwright
+  # config 启动 apps/crish-desktop dev server，并注入 L2 mock IPC；不依赖
+  # reference/ 下的本地参考材料。退役 markdown-editor spec 不属于此门禁。
   # vitest 面已不收集 tests/e2e（T2.1），Playwright 唯一拥有者，无重复冲突。
   e2e:
     runs-on: ubuntu-24.04
@@ -198,6 +194,8 @@ jobs:
       # 设计 Token / 样式契约类
       - run: node scripts/check-icon-ssot.mjs
       - run: node scripts/check-input-guardrails.mjs
+      - run: node scripts/check-motion-strict.mjs
+      - run: node scripts/check-usage-ssot.mjs
       - run: node scripts/check-layout-geometry.mjs
       - run: node scripts/check-layout-tokens.mjs
       - run: node scripts/check-markdown-style-compliance.mjs
@@ -207,6 +205,7 @@ jobs:
       # Token SSOT / 样式收敛类（DEBT-09 收口 2026-10-20：三条已实测 PASS，
       # 从 check-guard-system UNWIRED_ALLOWLIST 移除并接入本 job）
       - run: node scripts/check-color-ssot.mjs
+      - run: node scripts/check-hierarchy-ssot.mjs
       - run: node scripts/check-line-width-ssot.mjs
       - run: node scripts/check-frontend-convergence.mjs
       # 架构 / SSOT 类

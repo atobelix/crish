@@ -384,7 +384,11 @@ if (entries.length === 0) {
 const budgetBytes = Math.round(budgetKb * 1024);
 const staticGraphBudgetBytes = Math.round(staticGraphKb * 1024);
 const known = rows.filter((r) => r.bytes != null && staticVisited.has(r.key));
-const totalBytes = known.reduce((s, r) => s + r.bytes, 0);
+// 静态图合计只统计 import 依赖，entry 产物本身已由 entryFileBytes 单独约束
+// （避免同一条 359 KiB 在两项预算中被重复计算）。
+const totalBytes = known
+  .filter((r) => !r.isEntry)
+  .reduce((s, r) => s + r.bytes, 0);
 // 主预算锚定：isEntry 产物文件本身（对齐 check-dist 主入口）
 const entryFileBytes = rows
   .filter((r) => r.isEntry && r.bytes != null)

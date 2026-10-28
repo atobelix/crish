@@ -63,8 +63,8 @@ if (UPDATE && LIST) {
   process.exit(1);
 }
 
-// ── tokens.css 默认 --space-* 解析 ─────────────────────────────────────────
-const TOKENS_CSS = resolve(DESKTOP_SRC, 'styles/tokens.css');
+// ── tokens-space.css 默认 --space-* 解析（Token 9 模块拆分后的空间域真源）──
+const TOKENS_CSS = resolve(DESKTOP_SRC, 'styles/tokens-space.css');
 
 /**
  * 从 tokens.css 的 :root 块提取 `--space-*: <px>` 默认表。
